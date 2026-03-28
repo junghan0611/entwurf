@@ -21,6 +21,29 @@
  */
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import * as fs from "fs";
+import * as path from "path";
+
+/**
+ * Load env var from ~/.env.local directly.
+ * Cannot rely on env-loader extension — session_start race condition.
+ * Ref: andenken/index.ts loadEnvKey()
+ */
+function loadEnvVar(key: string): string {
+  const fromEnv = process.env[key];
+  if (fromEnv) return fromEnv;
+  try {
+    const envPath = path.join(process.env.HOME ?? "", ".env.local");
+    const content = fs.readFileSync(envPath, "utf-8");
+    for (const line of content.split("\n")) {
+      const stripped = line.trim().replace(/^export\s+/, "");
+      const re = new RegExp(`^${key}=["']?([^"'\\s]+)["']?`);
+      const match = stripped.match(re);
+      if (match) return match[1];
+    }
+  } catch { /* file not found */ }
+  return "";
+}
 
 // ============================================================================
 // Helpers
@@ -162,15 +185,12 @@ export default function (pi: ExtensionAPI) {
 
     savedCtx = ctx;  // ctx 보관
 
-    // env-loader(심링크 extension)가 .env.local을 로드할 시간을 준다.
-    // 패키지 extension은 심링크보다 먼저 session_start를 받을 수 있음.
-    await new Promise((r) => setTimeout(r, 500));
-
-    const botToken = process.env.PI_TELEGRAM_BOT_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN ?? "";
-    const allowedChatId = parseInt(process.env.PI_TELEGRAM_CHAT_ID ?? process.env.TELEGRAM_CHAT_ID ?? "0", 10);
+    // env-loader와 session_start race condition 회피 — 직접 ~/.env.local 읽기
+    const botToken = loadEnvVar("PI_TELEGRAM_BOT_TOKEN") || loadEnvVar("TELEGRAM_BOT_TOKEN");
+    const allowedChatId = parseInt(loadEnvVar("PI_TELEGRAM_CHAT_ID") || loadEnvVar("TELEGRAM_CHAT_ID") || "0", 10);
 
     if (!botToken) {
-      log("no PI_TELEGRAM_BOT_TOKEN — skipping (env-loader may not have run yet)");
+      log("no PI_TELEGRAM_BOT_TOKEN in process.env or ~/.env.local — skipping");
       return;
     }
     log(`token: ${botToken.slice(0, 10)}... chatId: ${allowedChatId}`);
