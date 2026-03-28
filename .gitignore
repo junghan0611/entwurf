@@ -1,17 +1,2 @@
-# System files
-.DS_Store
-.idea
-*.log
-tmp/
-
-# Private files (synced via Syncthing, not committed to git)
-# These files contain personal data, templates, and local content
-# Anyone can manage similar private local files alongside their public config
-.claude/
-*__human.org
-templates/
-*.dat
-
-# Security - DO NOT COMMIT
-# Sensitive information that should never be in version control
-var/sensitive-strings.txt
+node_modules/
+dist/

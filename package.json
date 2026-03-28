@@ -1,0 +1,22 @@
+{
+  "name": "entwurf",
+  "version": "0.1.0",
+  "type": "module",
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./dist/telegram.js"]
+  },
+  "scripts": {
+    "build": "tsc",
+    "prebuild": "rm -rf dist"
+  },
+  "dependencies": {
+    "grammy": "^1.41.1"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
