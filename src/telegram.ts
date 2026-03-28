@@ -74,6 +74,7 @@ export default function (pi: ExtensionAPI) {
   let isConnected = false;
   let messageCount = 0;
   let startTime = 0;
+  let savedCtx: any = null;  // UI ctx를 extension 스코프에 보관
 
   // --- 봇 시작 (session_start에서 호출) ---
   async function startBot(botToken: string, allowedChatId: number, ctx?: any) {
@@ -126,8 +127,9 @@ export default function (pi: ExtensionAPI) {
               isConnected = true;
               startTime = Date.now();
               log(`✅ polling as @${info.username}`);
-              if (ctx?.hasUI) {
-                ctx.ui.setStatus("telegram", ctx.ui.theme.fg("dim", `📱 @${info.username}`));
+              const uiCtx = ctx || savedCtx;
+              if (uiCtx?.hasUI) {
+                uiCtx.ui.setStatus("telegram", `📱 @${info.username}`);
               }
             },
           });
@@ -157,6 +159,8 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     // --telegram 플래그가 있을 때만 시작 (분신 세션 전용)
     if (pi.getFlag("telegram") !== true) return;
+
+    savedCtx = ctx;  // ctx 보관
 
     const botToken = process.env.PI_TELEGRAM_BOT_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN ?? "";
     const allowedChatId = parseInt(process.env.PI_TELEGRAM_CHAT_ID ?? process.env.TELEGRAM_CHAT_ID ?? "0", 10);
