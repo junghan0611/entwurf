@@ -162,11 +162,15 @@ export default function (pi: ExtensionAPI) {
 
     savedCtx = ctx;  // ctx 보관
 
+    // env-loader(심링크 extension)가 .env.local을 로드할 시간을 준다.
+    // 패키지 extension은 심링크보다 먼저 session_start를 받을 수 있음.
+    await new Promise((r) => setTimeout(r, 500));
+
     const botToken = process.env.PI_TELEGRAM_BOT_TOKEN ?? process.env.TELEGRAM_BOT_TOKEN ?? "";
     const allowedChatId = parseInt(process.env.PI_TELEGRAM_CHAT_ID ?? process.env.TELEGRAM_CHAT_ID ?? "0", 10);
 
     if (!botToken) {
-      log("no PI_TELEGRAM_BOT_TOKEN — skipping");
+      log("no PI_TELEGRAM_BOT_TOKEN — skipping (env-loader may not have run yet)");
       return;
     }
     log(`token: ${botToken.slice(0, 10)}... chatId: ${allowedChatId}`);
