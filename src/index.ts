@@ -160,7 +160,11 @@ export default function (pi: ExtensionAPI) {
         } catch (err: any) {
           if (err?.error_code === 409) {
             const delay = Math.min(1000 * attempt, 15000);
-            log(`409 Conflict, retrying in ${delay / 1000}s`);
+            // TUI 방해하지 않도록 상태바에만 표시
+            const uiCtx = ctx || savedCtx;
+            if (uiCtx?.hasUI) {
+              uiCtx.ui.setStatus("telegram", `📱 409 retry ${Math.round(delay/1000)}s...`);
+            }
             await new Promise((r) => setTimeout(r, delay));
             continue;
           }
