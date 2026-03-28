@@ -4,7 +4,7 @@
   "type": "module",
   "keywords": ["pi-package"],
   "pi": {
-    "extensions": ["./dist/telegram.js"]
+    "extensions": ["./dist/index.js"]
   },
   "scripts": {
     "build": "tsc",
