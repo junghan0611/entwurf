@@ -22,6 +22,7 @@
 
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import * as fs from "fs";
+import * as https from "https";
 import * as path from "path";
 
 /**
@@ -105,7 +106,15 @@ export default function (pi: ExtensionAPI) {
 
     const { Bot } = await import("grammy");
 
-    bot = new Bot(botToken);
+    // ★ IPv6 ETIMEDOUT 방지: NixOS 등 듀얼스택 환경에서 IPv6가 라우팅 안 되면
+    // grammy(node-fetch)가 IPv6로 시도 → 타임아웃. IPv4 강제로 해결.
+    // Ref: api.telegram.org는 IPv4/IPv6 듀얼스택, NixOS thinkpad는 IPv6 불안정
+    const agent = new https.Agent({ keepAlive: true, family: 4 });
+    bot = new Bot(botToken, {
+      client: {
+        baseFetchConfig: { agent, compress: true },
+      },
+    });
 
     // ★ 핵심: grammy 기본 에러 핸들러는 bot.stop() + rethrow.
     // 이걸 오버라이드하지 않으면 핸들러 에러 시 polling 영구 중단.
