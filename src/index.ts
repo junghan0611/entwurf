@@ -152,7 +152,7 @@ export default function (pi: ExtensionAPI) {
               log(`✅ polling as @${info.username}`);
               const uiCtx = ctx || savedCtx;
               if (uiCtx?.hasUI) {
-                uiCtx.ui.setStatus("telegram", `📱 @${info.username}`);
+                uiCtx.ui.setStatus("telegram", `✈`);
               }
             },
           });
@@ -163,7 +163,7 @@ export default function (pi: ExtensionAPI) {
             // TUI 방해하지 않도록 상태바에만 표시
             const uiCtx = ctx || savedCtx;
             if (uiCtx?.hasUI) {
-              uiCtx.ui.setStatus("telegram", `📱 409 retry ${Math.round(delay/1000)}s...`);
+              uiCtx.ui.setStatus("telegram", `✈⏳`);
             }
             await new Promise((r) => setTimeout(r, delay));
             continue;
