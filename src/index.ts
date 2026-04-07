@@ -106,6 +106,26 @@ export default function (pi: ExtensionAPI) {
 
     const { Bot } = await import("grammy");
 
+    // ★ 세션 충돌 방지: grammy 시작 전 기존 polling 세션 강제 정리
+    // 이전 pi-home이 비정상 종료된 경우 Telegram 서버에 long-poll이 남아 409 발생.
+    // deleteWebhook: 혹시 모를 webhook 제거
+    // getUpdates(timeout=0): 기존 long-poll 연결을 non-blocking으로 선점(종료 유도)
+    // Ref: pi-telegram의 안전 패턴 (deleteWebhook + getUpdates offset=-1)
+    try {
+      const baseUrl = `https://api.telegram.org/bot${botToken}`;
+      await fetch(`${baseUrl}/deleteWebhook`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ drop_pending_updates: false }),
+        signal: AbortSignal.timeout(5000),
+      });
+      await fetch(`${baseUrl}/getUpdates?offset=-1&limit=1&timeout=0`, {
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch {
+      // 실패해도 계속 진행 (네트워크 문제 등)
+    }
+
     // ★ IPv6 ETIMEDOUT 방지: NixOS 등 듀얼스택 환경에서 IPv6가 라우팅 안 되면
     // grammy(node-fetch)가 IPv6로 시도 → 타임아웃. IPv4 강제로 해결.
     // Ref: api.telegram.org는 IPv4/IPv6 듀얼스택, NixOS thinkpad는 IPv6 불안정
@@ -167,13 +187,24 @@ export default function (pi: ExtensionAPI) {
           });
           return; // bot.stop() 호출 시 여기로 도달
         } catch (err: any) {
-          if (err?.error_code === 409) {
+          // 409 감지: grammy 버전에 따라 에러 구조가 다를 수 있으므로 범위 확장
+          const is409 =
+            err?.error_code === 409 ||
+            err?.cause?.error_code === 409 ||
+            (typeof err?.message === "string" && err.message.includes("409")) ||
+            (typeof err?.description === "string" && err.description.includes("Conflict"));
+          if (is409) {
+            if (attempt >= 10) {
+              log("409 retry limit reached (10 attempts) — giving up");
+              return;
+            }
             const delay = Math.min(1000 * attempt, 15000);
             // TUI 방해하지 않도록 상태바에만 표시
             const uiCtx = ctx || savedCtx;
             if (uiCtx?.hasUI) {
-              uiCtx.ui.setStatus("telegram", `✈⏳`);
+              uiCtx.ui.setStatus("telegram", `✈⏳ retry ${attempt}/10`);
             }
+            log(`409 conflict, retrying in ${delay}ms (attempt ${attempt}/10)...`);
             await new Promise((r) => setTimeout(r, delay));
             continue;
           }
