@@ -50,8 +50,8 @@ Agent → agent_end → bot.api.sendMessage() → Phone
 ## Build
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm build
 ```
 
 ## License
