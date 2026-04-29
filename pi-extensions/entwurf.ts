@@ -39,7 +39,12 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Type } from "@mariozechner/pi-ai";
-import type { AgentToolResult, ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type {
+	AgentToolResult,
+	AgentToolUpdateCallback,
+	ExtensionAPI,
+	ExtensionContext,
+} from "@mariozechner/pi-coding-agent";
 import {
 	analyzeSessionFileLike,
 	cwdToSessionDir,
@@ -397,6 +402,19 @@ export default function (pi: ExtensionAPI) {
 		mode: Type.Optional(entwurfModeSchema),
 	});
 
+	// The schema (runtime) and the params type (compile-time) describe the same
+	// contract. Same TS2589 rationale as registerSessionTool in entwurf-control.ts:
+	// schema-driven inference would push past TypeScript's recursion budget, so we
+	// write both explicitly. Revisit conditions identical to registerSessionTool.
+	type EntwurfParams = {
+		task: string;
+		host?: string;
+		cwd?: string;
+		provider?: string;
+		model?: string;
+		mode?: "sync" | "async";
+	};
+
 	// TS2589 workaround — 0.70.0's registerTool generic couples typebox
 	// `Static<TParameters>` with `TDetails` inference, and our parameter
 	// schemas (Optional + nested Union) push TypeScript past its recursion
@@ -426,18 +444,24 @@ export default function (pi: ExtensionAPI) {
 		],
 		parameters: entwurfParameters,
 
-		async execute(_toolCallId, params, signal, onUpdate, _ctx): Promise<AgentToolResult<unknown>> {
+		async execute(
+			_toolCallId: string,
+			params: EntwurfParams,
+			signal: AbortSignal | undefined,
+			onUpdate: AgentToolUpdateCallback<unknown> | undefined,
+			_ctx: ExtensionContext,
+		): Promise<AgentToolResult<unknown>> {
 			const mode = params.mode ?? "sync";
 
 			const guardSessionId = getParentSessionId(pi);
-			const guardTargetKey = resolveGuardTargetKey((params as { provider?: string }).provider, params.model);
+			const guardTargetKey = resolveGuardTargetKey(params.provider, params.model);
 			ensureEntwurfOncePerTarget(guardSessionId, guardTargetKey);
 
 			if (mode === "async") {
 				const result = await runEntwurfAsync(pi, params.task, {
 					host: params.host,
 					cwd: params.cwd,
-					provider: (params as { provider?: string }).provider,
+					provider: params.provider,
 					model: params.model,
 				});
 				markEntwurfTargetUsed(guardSessionId, guardTargetKey);
@@ -471,7 +495,7 @@ export default function (pi: ExtensionAPI) {
 			const result = await runEntwurfSync(params.task, {
 				host: params.host,
 				cwd: params.cwd,
-				provider: (params as { provider?: string }).provider,
+				provider: params.provider,
 				model: params.model,
 				signal: signal ?? undefined,
 				onUpdate: (text) => {
@@ -526,7 +550,13 @@ export default function (pi: ExtensionAPI) {
 			taskId: Type.Optional(Type.String({ description: "Specific entwurf task ID. Omit to list all." })),
 		}),
 
-		async execute(_toolCallId, params, _signal, _onUpdate, _ctx): Promise<AgentToolResult<unknown>> {
+		async execute(
+			_toolCallId: string,
+			params: { taskId?: string },
+			_signal: AbortSignal | undefined,
+			_onUpdate: AgentToolUpdateCallback<unknown> | undefined,
+			_ctx: ExtensionContext,
+		): Promise<AgentToolResult<unknown>> {
 			if (params.taskId) {
 				const info = activeEntwurfs.get(params.taskId);
 				if (!info) {
@@ -706,6 +736,15 @@ export default function (pi: ExtensionAPI) {
 	// surfaces on what the docs always claimed ("short sync turn"); async stays
 	// available as explicit opt-in for long-running resumes. See AGENTS.md
 	// § Entwurf Orchestration § Phase 0.5.
+
+	// Same TS2589 schema-vs-type-source rationale as EntwurfParams above.
+	type EntwurfResumeParams = {
+		taskId: string;
+		prompt: string;
+		host?: string;
+		mode?: "sync" | "async";
+	};
+
 	registerTool({
 		name: "entwurf_resume",
 		label: "Resume Entwurf",
@@ -730,7 +769,13 @@ export default function (pi: ExtensionAPI) {
 			),
 		}),
 
-		async execute(_toolCallId, params, signal, onUpdate, _ctx): Promise<AgentToolResult<unknown>> {
+		async execute(
+			_toolCallId: string,
+			params: EntwurfResumeParams,
+			signal: AbortSignal | undefined,
+			onUpdate: AgentToolUpdateCallback<unknown> | undefined,
+			_ctx: ExtensionContext,
+		): Promise<AgentToolResult<unknown>> {
 			const mode = params.mode ?? "sync";
 
 			// Phase 0.5 sync branch — entwurf to core, return inline (mirrors the

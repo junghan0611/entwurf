@@ -4,7 +4,12 @@
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
 		"types": ["node"],
-		"strict": false,
+		// strict: true is the agent-facing safety floor. Pi-shell-acp is a tool
+		// other agents call; weak typing lets bad shapes flow silently and an
+		// agent will accept the fallout rather than report the bug. Anything
+		// that requires `unknown`-narrowing or non-null assertion is a real
+		// fence — keep it visible. See AGENTS.md § Crash, Don't Warn.
+		"strict": true,
 		"skipLibCheck": true
 	},
 	// mcp/* is type-checked under mcp/tsconfig.json (strip-types-friendly

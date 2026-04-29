@@ -77,7 +77,15 @@ import * as path from "node:path";
 // inside pi-coding-agent), which silently widens StringEnum-typed parameters
 // to `unknown` and broke renderCall/execute narrowing. Single-source-of-typebox.
 import { StringEnum, type TextContent, Type } from "@mariozechner/pi-ai";
-import type { ExtensionAPI, ExtensionContext, MessageRenderer, TurnEndEvent } from "@mariozechner/pi-coding-agent";
+import type {
+	AgentToolResult,
+	AgentToolUpdateCallback,
+	ExtensionAPI,
+	ExtensionContext,
+	MessageRenderer,
+	ToolRenderResultOptions,
+	TurnEndEvent,
+} from "@mariozechner/pi-coding-agent";
 import { getMarkdownTheme } from "@mariozechner/pi-coding-agent";
 import { Box, Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";
 
@@ -787,14 +795,17 @@ async function sendRpcCommand(
 							continue;
 						}
 						if (msg.command === command.type) {
-							response = msg;
-							// If not waiting for event, we're done
+							// If not waiting for event, we're done — resolve directly with msg
+							// so the response value is statically non-null (avoids TS2322 on
+							// the `response: RpcResponse | null` declaration). Only the
+							// event-waiting branch needs to stash the response for later.
 							if (!waitForEvent) {
 								cleanup();
 								socket.end();
-								resolve({ response });
+								resolve({ response: msg });
 								return;
 							}
+							response = msg;
 						}
 						continue;
 					}
@@ -1301,7 +1312,11 @@ Messages include sender session info for replies.`,
 			return new Text(header, 0, 0);
 		},
 
-		renderResult(result, { expanded }, theme) {
+		renderResult(
+			result: AgentToolResult<unknown>,
+			{ expanded }: ToolRenderResultOptions,
+			theme: { fg: (k: string, s: string) => string; bold: (s: string) => string },
+		) {
 			const details = result.details as Record<string, unknown> | undefined;
 			// `isError` is a runtime-only property: pi-agent-core tracks it
 			// alongside the AgentToolResult and the interactive harness spreads
@@ -1395,7 +1410,13 @@ function registerListSessionsTool(pi: ExtensionAPI): void {
 		description:
 			"List live sessions that expose a control socket. Returns sessionIds only — addressing is sessionId-only since 0.5.0 (no name aliases). Use this for discovery; for the current session id in shell/bash use $PI_SESSION_ID.",
 		parameters: Type.Object({}),
-		async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {
+		async execute(
+			_toolCallId: string,
+			_params: Record<string, never>,
+			_signal: AbortSignal | undefined,
+			_onUpdate: AgentToolUpdateCallback<unknown> | undefined,
+			_ctx: ExtensionContext,
+		): Promise<AgentToolResult<unknown>> {
 			const sessions = await getLiveSessions();
 
 			if (sessions.length === 0) {
