@@ -67,25 +67,19 @@
  *   Events are JSON objects with { type: "event", event, data?, subscriptionId? }
  */
 
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-	TurnEndEvent,
-	MessageRenderer,
-} from "@mariozechner/pi-coding-agent";
-import { getMarkdownTheme } from "@mariozechner/pi-coding-agent";
-import { type TextContent } from "@mariozechner/pi-ai";
+import { promises as fs } from "node:fs";
+import * as net from "node:net";
+import * as os from "node:os";
+import * as path from "node:path";
 // Use pi-ai's re-exports of typebox so the schema universe matches what
 // pi-coding-agent.registerTool consumes. Importing Type from @sinclair/typebox
 // directly mixes typebox 0.34 (Type.*) with typebox 1.x (StringEnum, TSchema
 // inside pi-coding-agent), which silently widens StringEnum-typed parameters
 // to `unknown` and broke renderCall/execute narrowing. Single-source-of-typebox.
-import { StringEnum, Type } from "@mariozechner/pi-ai";
+import { StringEnum, type TextContent, Type } from "@mariozechner/pi-ai";
+import type { ExtensionAPI, ExtensionContext, MessageRenderer, TurnEndEvent } from "@mariozechner/pi-coding-agent";
+import { getMarkdownTheme } from "@mariozechner/pi-coding-agent";
 import { Box, Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";
-import { promises as fs } from "node:fs";
-import * as net from "node:net";
-import * as os from "node:os";
-import * as path from "node:path";
 
 const ENTWURF_FLAG = "entwurf-control";
 const ENTWURF_SESSION_FLAG = "entwurf-session";
@@ -313,11 +307,7 @@ async function getLiveSessionsWithInfo(): Promise<EnrichedSession[]> {
 	const enriched: EnrichedSession[] = [];
 	for (const session of sessions) {
 		try {
-			const result = await sendRpcCommand(
-				session.socketPath,
-				{ type: "get_info" },
-				{ timeout: 1500 },
-			);
+			const result = await sendRpcCommand(session.socketPath, { type: "get_info" }, { timeout: 1500 });
 			if (!result.response.success) {
 				enriched.push({
 					...session,
@@ -595,9 +585,7 @@ async function handleCommand(
 	// Get session metadata (cwd, model, idle) — used by /entwurf-sessions enrichment.
 	if (command.type === "get_info") {
 		const sessionId = ctx.sessionManager.getSessionId();
-		const modelInfo = ctx.model
-			? { id: ctx.model.id, provider: ctx.model.provider }
-			: null;
+		const modelInfo = ctx.model ? { id: ctx.model.id, provider: ctx.model.provider } : null;
 		respond(true, "get_info", {
 			sessionId,
 			cwd: ctx.cwd,
@@ -1086,7 +1074,6 @@ function registerSessionTool(pi: ExtensionAPI, state: SocketState): void {
 		wait_until?: "turn_end" | "message_processed";
 	};
 
-	// biome-ignore lint/suspicious/noExplicitAny: see TS2589 note above
 	const registerTool = pi.registerTool as (def: any) => void;
 
 	registerTool({
@@ -1195,9 +1182,9 @@ Messages include sender session info for replies.`,
 				const senderSessionName = state.context?.sessionManager.getSessionName()?.trim();
 				const senderInfo = senderSessionId
 					? `\n\n<sender_info>${JSON.stringify({
-						sessionId: senderSessionId,
-						sessionName: senderSessionName || undefined,
-					})}</sender_info>`
+							sessionId: senderSessionId,
+							sessionName: senderSessionName || undefined,
+						})}</sender_info>`
 					: "";
 
 				const sendCommand: RpcSendCommand = {
@@ -1308,11 +1295,7 @@ Messages include sender session info for replies.`,
 				// Handle multi-line messages
 				const firstLine = preview.split("\n")[0];
 				const hasMore = preview.includes("\n") || msg.length > 80;
-				return new Text(
-					header + "\n  " + theme.fg("dim", `"${firstLine}${hasMore ? "..." : ""}"`),
-					0,
-					0,
-				);
+				return new Text(header + "\n  " + theme.fg("dim", `"${firstLine}${hasMore ? "..." : ""}"`), 0, 0);
 			}
 
 			return new Text(header, 0, 0);
@@ -1362,9 +1345,7 @@ Messages include sender session info for replies.`,
 				}
 
 				// Collapsed view - show preview
-				const preview = message.content.length > 200
-					? message.content.slice(0, 200) + "..."
-					: message.content;
+				const preview = message.content.length > 200 ? message.content.slice(0, 200) + "..." : message.content;
 				const lines = preview.split("\n").slice(0, 5);
 				let text = icon + theme.fg("muted", " Message received");
 				if (hasTurnIndex) text += theme.fg("dim", ` (turn #${details.turnIndex})`);
@@ -1407,12 +1388,12 @@ Messages include sender session info for replies.`,
 function registerListSessionsTool(pi: ExtensionAPI): void {
 	// Same TS2589 workaround as registerSessionTool — see the comment block
 	// in that function for the revisit conditions.
-	// biome-ignore lint/suspicious/noExplicitAny: see TS2589 note above
 	const registerTool = pi.registerTool as (def: any) => void;
 	registerTool({
 		name: "entwurf_peers",
 		label: "List Sessions",
-		description: "List live sessions that expose a control socket. Returns sessionIds only — addressing is sessionId-only since 0.5.0 (no name aliases). Use this for discovery; for the current session id in shell/bash use $PI_SESSION_ID.",
+		description:
+			"List live sessions that expose a control socket. Returns sessionIds only — addressing is sessionId-only since 0.5.0 (no name aliases). Use this for discovery; for the current session id in shell/bash use $PI_SESSION_ID.",
 		parameters: Type.Object({}),
 		async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {
 			const sessions = await getLiveSessions();
@@ -1508,7 +1489,11 @@ function parseStartupControlSendOptions(pi: ExtensionAPI): { options?: StartupCo
 	};
 }
 
-function reportStartupControlSend(ctx: ExtensionContext, message: string, level: "info" | "warning" | "error" = "info"): void {
+function reportStartupControlSend(
+	ctx: ExtensionContext,
+	message: string,
+	level: "info" | "warning" | "error" = "info",
+): void {
 	if (ctx.hasUI) {
 		ctx.ui.notify(message, level);
 		return;
@@ -1531,11 +1516,7 @@ async function maybeHandleStartupControlSend(pi: ExtensionAPI, ctx: ExtensionCon
 
 	const { target, message, mode, waitUntil, includeSenderInfo } = parsed.options;
 	if (!isSafeSessionId(target)) {
-		reportStartupControlSend(
-			ctx,
-			`Invalid target session id: ${target} (sessionId-only since 0.5.0)`,
-			"error",
-		);
+		reportStartupControlSend(ctx, `Invalid target session id: ${target} (sessionId-only since 0.5.0)`, "error");
 		return;
 	}
 	const targetSessionId = target;
@@ -1549,15 +1530,15 @@ async function maybeHandleStartupControlSend(pi: ExtensionAPI, ctx: ExtensionCon
 
 	const senderInfo = includeSenderInfo
 		? (() => {
-			const senderSessionId = ctx.sessionManager.getSessionId();
-			const senderSessionName = ctx.sessionManager.getSessionName()?.trim();
-			return senderSessionId
-				? `\n\n<sender_info>${JSON.stringify({
-					sessionId: senderSessionId,
-					sessionName: senderSessionName || undefined,
-				})}</sender_info>`
-				: "";
-		})()
+				const senderSessionId = ctx.sessionManager.getSessionId();
+				const senderSessionName = ctx.sessionManager.getSessionName()?.trim();
+				return senderSessionId
+					? `\n\n<sender_info>${JSON.stringify({
+							sessionId: senderSessionId,
+							sessionName: senderSessionName || undefined,
+						})}</sender_info>`
+					: "";
+			})()
 		: "";
 
 	const sendCommand: RpcSendCommand = {
@@ -1610,10 +1591,7 @@ async function maybeHandleStartupControlSend(pi: ExtensionAPI, ctx: ExtensionCon
 	}
 }
 
-function registerControlSessionsCommand(
-	pi: ExtensionAPI,
-	setSessions: (sessions: EnrichedSession[]) => void,
-): void {
+function registerControlSessionsCommand(pi: ExtensionAPI, setSessions: (sessions: EnrichedSession[]) => void): void {
 	pi.registerCommand("entwurf-sessions", {
 		description: "List controllable sessions (from entwurf-control sockets)",
 		handler: async (_args, ctx) => {
@@ -1651,12 +1629,9 @@ function registerControlSessionsCommand(
 				} else {
 					lines.push(`    cwd:   ${abbreviateHome(s.cwd)}`);
 					const modelLabel =
-						s.modelProvider && s.modelId
-							? `${s.modelProvider}/${s.modelId}`
-							: (s.modelId ?? "(unknown)");
+						s.modelProvider && s.modelId ? `${s.modelProvider}/${s.modelId}` : (s.modelId ?? "(unknown)");
 					lines.push(`    model: ${modelLabel}`);
-					const idleLabel =
-						s.idle === undefined ? "?" : s.idle ? "yes" : "no  (turn in progress)";
+					const idleLabel = s.idle === undefined ? "?" : s.idle ? "yes" : "no  (turn in progress)";
 					lines.push(`    idle:  ${idleLabel}`);
 				}
 				lines.push("");
@@ -1713,14 +1688,9 @@ function resolveSendTarget(
 	return { error: `Cannot resolve target: ${raw}` };
 }
 
-function registerEntwurfSendCommand(
-	pi: ExtensionAPI,
-	state: SocketState,
-	getSessions: () => EnrichedSession[],
-): void {
+function registerEntwurfSendCommand(pi: ExtensionAPI, state: SocketState, getSessions: () => EnrichedSession[]): void {
 	pi.registerCommand("entwurf-send", {
-		description:
-			"Send a message to another entwurf session — /entwurf-send <index|sessionId> <message>",
+		description: "Send a message to another entwurf session — /entwurf-send <index|sessionId> <message>",
 		handler: async (args, ctx) => {
 			if (pi.getFlag(ENTWURF_FLAG) !== true) {
 				if (ctx.hasUI) {
@@ -1732,10 +1702,7 @@ function registerEntwurfSendCommand(
 			const trimmed = (args ?? "").trim();
 			if (!trimmed) {
 				if (ctx.hasUI) {
-					ctx.ui.notify(
-						"Usage: /entwurf-send <index|sessionId> <message>",
-						"warning",
-					);
+					ctx.ui.notify("Usage: /entwurf-send <index|sessionId> <message>", "warning");
 				}
 				return;
 			}
@@ -1782,10 +1749,7 @@ function registerEntwurfSendCommand(
 			});
 			if (!result.response.success) {
 				if (ctx.hasUI) {
-					ctx.ui.notify(
-						`Failed to send to ${resolved.label}: ${result.response.error ?? "unknown error"}`,
-						"error",
-					);
+					ctx.ui.notify(`Failed to send to ${resolved.label}: ${result.response.error ?? "unknown error"}`, "error");
 				}
 				return;
 			}

@@ -404,7 +404,6 @@ export default function (pi: ExtensionAPI) {
 	// so the runtime contract is locked; this cast only relaxes the registration
 	// boundary. Revisit when pi-coding-agent exposes a type helper that
 	// short-circuits the depth (or when typebox narrows Static).
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const registerTool = pi.registerTool as (def: any) => void;
 
 	registerTool({

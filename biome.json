@@ -7,7 +7,7 @@
 	},
 	"files": {
 		"ignoreUnknown": true,
-		"includes": ["**", "!node_modules", "!.git", "!.tmp-verify-models", "!pi-extensions/entwurf-control.ts"]
+		"includes": ["**", "!node_modules", "!.git", "!.tmp-verify-models"]
 	},
 	"formatter": {
 		"enabled": true,
