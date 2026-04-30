@@ -4,6 +4,36 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.4.6 — 2026-04-30
+
+### Fixed
+
+- **Restored Hard Rule #2 (`resume > load > new`) on the resume path.** Since SDK 0.20.0 promoted `resumeSession` out of the `unstable_*` namespace, every call to `(session.connection as any).unstable_resumeSession({...})` had thrown `TypeError: ... is not a function`, been silently caught by the bootstrap fallback, and routed every session to `loadSession` instead. Capability check still advertised resume support, but Hard Rule #2 was quietly violated. The bridge now calls the typed `resumeSession` / `closeSession` methods directly. This matters because claude-agent-acp's `loadSession` replays the entire session JSONL back to the bridge as `sessionUpdate` notifications which the bridge discards under Hard Rule #8 (no transcript hydration); resume skips the replay entirely. The longer the session, the larger the wasted bootstrap; openclaw-style long-running sessions would have made the cost user-visible.
+- **Dropped five redundant `as any` casts on typed SDK methods.** `prompt`, `cancel`, and `unstable_setSessionModel` (×2) on `ClientSideConnection` are typed by the SDK; the casts were leftover from when those methods were experimental. With strict mode on, dropping them means tsc will fail on the next SDK rename instead of shipping a dead call.
+
+### Changed
+
+- **Bumped ACP SDK pins.** `@agentclientprotocol/claude-agent-acp` 0.31.0 → 0.31.4 and `@agentclientprotocol/sdk` 0.20.0 → 0.21.0. Tracks the upstream stable surface and the `@anthropic-ai/claude-agent-sdk` 0.2.121 transitive.
+
+### Internal — Static gate against ACP SDK casts
+
+- **New `./run.sh check-sdk-surface` (and `pnpm check-sdk-surface`).** Static awk gate over `acp-bridge.ts` that requires every `(connection as any)` cast to have a `SDK_CAST_OK` (permanent gap) or `SDK_CAST_DEBT` (tracked for removal) marker on the same line or the immediately preceding line. Wired into `pnpm check` and the husky pre-commit hook. The 0.20.0 `unstable_resumeSession` rename would have been caught by tsc if the original code hadn't used `as any`; this gate makes the bypass visible at code-review time so the next class-of-bug doesn't ship silently.
+- **AGENTS.md Hard Rule #10 documents the principle.** "SDK surface calls must use the typed connection." Markers are required, not optional. The fix is structural, not vigilance.
+
+### Internal — Strict typing fence
+
+- **Flipped root tsconfig `strict: false` → `strict: true`.** First run surfaced 24 errors: 23 implicit-any warnings on `registerTool` executor callbacks plus one real `RpcResponse | null` narrowing bug in `sendRpcCommand` that strict-false had been hiding. Pi-shell-acp tools are called by other agents that will silently accept malformed shapes; strict-on is the right floor.
+- **Extended the `EntwurfSendParams` pattern to four more sites.** `entwurf`, `entwurf_status`, `entwurf_resume`, `entwurf_peers` now each define a local params type alongside their schema and type the `execute` signature explicitly (`_toolCallId: string`, `params: <Specific>`, `_signal: AbortSignal | undefined`, `_onUpdate: AgentToolUpdateCallback<unknown> | undefined`, `_ctx: ExtensionContext`). TS2589 on `pi.registerTool`'s generic keeps schema-to-type inference blocked; explicit annotation is the workaround.
+- **Typed `entwurf_send`'s `renderResult`** with `AgentToolResult<unknown>`, `ToolRenderResultOptions`, and the same theme shape its sibling `renderCall` already used.
+- **Dropped two `(params as { provider?: string }).provider` runtime casts** in `entwurf`'s execute body — `EntwurfParams` declares `provider` directly.
+- **Fixed `sendRpcCommand`'s `RpcResponse | null` narrowing.** Resolves directly with the just-received message on the no-event path; only the event-waiting branch stashes the response. Behavior preserved; the type now narrows correctly.
+- **Brought `pi-extensions/entwurf-control.ts` into the biome formatter fence.** Removed the `!pi-extensions/entwurf-control.ts` exclude from `biome.json`. Auto-fix surface was tiny (import organize + format); three dead suppression comments (`biome-ignore` / `eslint-disable` for `noExplicitAny`, which is project-wide off) were removed.
+
+### Internal — Single-source `protocol.js`
+
+- **Deleted `protocol.ts`; `protocol.js` is now the only source for the shared `<project-context` wire marker.** The duplication carried no sync invariant — an export added to one would have silently missed the other. With only one string-literal export, JSDoc types are unnecessary; `.js` can serve as the single source.
+- **Added `allowJs: true` to root tsconfig** so `protocol.js` enters the tsc program and is emitted through `check-models`. `checkJs` is intentionally left off — the file's surface is a single string-literal export with nothing for strict-check to gain.
+
 ### Internal — fence consolidation
 
 Every `.ts` source file in the repo is now reached by `pnpm typecheck`. Previously two surfaces lived outside the fence:
