@@ -370,6 +370,8 @@ export type EnsureBridgeSessionParams = {
 	bootstrapPromptAugment?: string;
 	/** Codex identity carrier — see AcpBridgeSession.codexDeveloperInstructions. Required-for-codex when an engraving is configured; ignored by the claude adapter. */
 	codexDeveloperInstructions?: string;
+	/** Optional Emacs socket hint propagated to the ACP child as PI_EMACS_AGENT_SOCKET. */
+	emacsAgentSocket?: string;
 	settingSources: ClaudeSettingSource[];
 	strictMcpConfig: boolean;
 	mcpServers: McpServer[];
@@ -2086,6 +2088,7 @@ async function createBridgeProcess(params: EnsureBridgeSessionParams): Promise<A
 		...bridgeEnvDefaults,
 		...(claudeCodeExe ? { CLAUDE_CODE_EXECUTABLE: claudeCodeExe } : {}),
 		...process.env,
+		...(params.emacsAgentSocket ? { PI_EMACS_AGENT_SOCKET: params.emacsAgentSocket } : {}),
 	};
 	const child = spawn(launch.command, launch.args, {
 		cwd: params.cwd,

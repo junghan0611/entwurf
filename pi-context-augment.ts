@@ -53,6 +53,7 @@ export interface PiContextAugmentParams {
 	backend: AcpBackend;
 	cwd: string;
 	mcpServerNames: string[];
+	emacsAgentSocket?: string;
 }
 
 /**
@@ -90,6 +91,17 @@ export function buildPiContextAugment(params: PiContextAugmentParams): string {
 			"- MCP/custom tools are usable only when they appear in the actual tool schema for this session.",
 		].join("\n"),
 	);
+
+	if (params.emacsAgentSocket) {
+		sections.push(
+			[
+				"Emacs integration:",
+				`- Agent Emacs socket: ${params.emacsAgentSocket}`,
+				'- When using emacsclient from shell/Bash, prefer `emacsclient -s "$PI_EMACS_AGENT_SOCKET" --eval ...`.',
+				"- Do not hardcode `-s server` unless the user explicitly asks for that socket.",
+			].join("\n"),
+		);
+	}
 
 	const projectContextParts: string[] = [];
 	const homeAgents = path.join(homedir(), "AGENTS.md");

@@ -4,6 +4,13 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.5.0 — 2026-04-30
+
+### Added
+
+- **Added optional Emacs agent socket support.** `--emacs-agent-socket <name>` tells pi-shell-acp which Emacs server socket an agent should use for Emacs operations. The value is propagated to ACP children as `PI_EMACS_AGENT_SOCKET`, added to the first-user pi context augment, and folded into the bridge config signature so switching between terminal (`server`) and Emacs-internal (`pi`) sessions cannot accidentally reuse a child with stale socket context.
+- **Documented Doom Emacs / pi-coding-agent usage.** README now shows the Emacs frontend shape `(setq pi-coding-agent-extra-args '("--entwurf-control" "--emacs-agent-socket" "pi"))` and includes a Doom Emacs demo GIF.
+
 ## 0.4.6 — 2026-04-30
 
 ### Fixed

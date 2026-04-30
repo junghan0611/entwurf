@@ -34,6 +34,7 @@ import { buildPiContextAugment } from "./pi-context-augment.js";
 
 const PROVIDER_ID = "pi-shell-acp";
 const REGISTERED_SYMBOL = Symbol.for("pi-shell-acp:registered");
+const EMACS_AGENT_SOCKET_FLAG = "emacs-agent-socket";
 
 function debugLoggingEnabled(): boolean {
 	const value = process.env.PI_SHELL_ACP_DEBUG?.trim().toLowerCase();
@@ -57,6 +58,26 @@ function markRegisteredOnRuntime(pi: ExtensionAPI): void {
 		writable: false,
 	});
 }
+
+function getStringFlag(pi: ExtensionAPI, name: string): string | undefined {
+	const value = pi.getFlag?.(name);
+	if (typeof value === "string" && value.trim()) return value.trim();
+	const argv = process.argv.slice(2);
+	const flag = `--${name}`;
+	for (let i = 0; i < argv.length; i++) {
+		const arg = argv[i];
+		if (arg === flag) {
+			const next = argv[i + 1];
+			return next && !next.startsWith("--") ? next.trim() || undefined : undefined;
+		}
+		if (arg.startsWith(`${flag}=`)) {
+			const inline = arg.slice(flag.length + 1).trim();
+			return inline || undefined;
+		}
+	}
+	return undefined;
+}
+
 const GLOBAL_SETTINGS_PATH = join(homedir(), ".pi", "agent", "settings.json");
 
 type ProviderSettings = {
@@ -672,6 +693,7 @@ function mapPromptStopReason(stopReason: string | undefined): AssistantMessage["
 }
 
 function streamShellAcp(
+	pi: ExtensionAPI,
 	model: Model<any>,
 	context: Context,
 	options?: SimpleStreamOptions,
@@ -683,6 +705,11 @@ function streamShellAcp(
 		const cwd = (options as { cwd?: string } | undefined)?.cwd ?? process.cwd();
 		const sessionKey = resolveSessionKey(options, cwd);
 		const providerSettings = loadProviderSettings(cwd, model);
+		const emacsAgentSocket = getStringFlag(pi, EMACS_AGENT_SOCKET_FLAG);
+		const bridgeConfigSignature = JSON.stringify({
+			base: providerSettings.bridgeConfigSignature,
+			emacsAgentSocket: emacsAgentSocket ?? null,
+		});
 		let bridgeSession: Awaited<ReturnType<typeof ensureBridgeSession>> | undefined;
 
 		const streamState: AcpPiStreamState = {
@@ -749,6 +776,7 @@ function streamShellAcp(
 				backend: providerSettings.backend,
 				cwd,
 				mcpServerNames: providerSettings.mcpServers.map((s) => s.name),
+				emacsAgentSocket,
 			});
 
 			bridgeSession = await ensureBridgeSession({
@@ -759,6 +787,7 @@ function streamShellAcp(
 				systemPromptAppend: mergedSystemPromptAppend,
 				bootstrapPromptAugment,
 				codexDeveloperInstructions,
+				emacsAgentSocket,
 				settingSources: providerSettings.settingSources,
 				strictMcpConfig: providerSettings.strictMcpConfig,
 				mcpServers: providerSettings.mcpServers,
@@ -767,7 +796,7 @@ function streamShellAcp(
 				permissionAllow: providerSettings.permissionAllow,
 				disallowedTools: providerSettings.disallowedTools,
 				codexDisabledFeatures: providerSettings.codexDisabledFeatures,
-				bridgeConfigSignature: providerSettings.bridgeConfigSignature,
+				bridgeConfigSignature,
 				contextMessageSignatures: getContextMessageSignatures(context),
 			});
 			logBridgeDiagnostic("session", {
@@ -894,6 +923,12 @@ export default function (pi: ExtensionAPI) {
 		return;
 	}
 	markRegisteredOnRuntime(pi);
+	(
+		pi as ExtensionAPI & { registerFlag?: (name: string, options: { description: string; type: "string" }) => void }
+	).registerFlag?.(EMACS_AGENT_SOCKET_FLAG, {
+		description: "Optional Emacs server socket name for agent Emacs operations (exported as PI_EMACS_AGENT_SOCKET)",
+		type: "string",
+	});
 
 	const on = pi.on as unknown as (
 		event: string,
@@ -940,6 +975,6 @@ export default function (pi: ExtensionAPI) {
 		apiKey: "ANTHROPIC_API_KEY",
 		api: "pi-shell-acp",
 		models: MODELS,
-		streamSimple: streamShellAcp,
+		streamSimple: (model, context, options) => streamShellAcp(pi, model, context, options),
 	});
 }

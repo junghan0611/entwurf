@@ -9,6 +9,8 @@ Use Claude Code through the official Agent Client Protocol (ACP) path inside pi.
 
 ![pi-shell-acp demo](docs/assets/pi-shell-acp-demo.gif)
 
+![pi-shell-acp in Doom Emacs](docs/assets/pi-shell-acp-doomemacs.gif)
+
 `pi-shell-acp` connects pi to Claude Code and Codex through the same ACP path used by Zed's Claude Code integration — no OAuth proxy, no CLI transcript scraping, no Claude Code emulation. The bridge respects each backend's minimum identity boundary (the model is Claude or Codex) while shaping the pi-facing operating surface on top.
 
 ```text
@@ -86,6 +88,23 @@ pnpm add -g @zed-industries/codex-acp@0.12.0
 ```
 
 Backend is inferred from the model: Anthropic models → `claude`, OpenAI models → `codex`. Set `backend` explicitly only when you want to pin it.
+
+### Emacs frontends
+
+pi-shell-acp works from ordinary terminals and from Emacs frontends that launch [pi-coding-agent](https://github.com/dnouri/pi-coding-agent). If your Emacs setup runs a dedicated server socket for agent work, pass the socket name with `--emacs-agent-socket`:
+
+```elisp
+(setq pi-coding-agent-extra-args
+      '("--entwurf-control" "--emacs-agent-socket" "pi"))
+```
+
+The bridge exports the value to ACP children as `PI_EMACS_AGENT_SOCKET` and includes it in the first-user context augment. Skills can then call Emacs without hardcoding a socket name:
+
+```bash
+emacsclient -s "${PI_EMACS_AGENT_SOCKET:-server}" --eval '(... )'
+```
+
+For terminal sessions, omit the flag or pass `--emacs-agent-socket server` explicitly.
 
 ### Settings
 
