@@ -1789,8 +1789,7 @@ async function enforceRequestedSessionModel(
 ): Promise<void> {
 	if (!requestedModelId) return;
 	const fromModel = session.modelId;
-	// SDK_CAST_DEBT(deps-bump 0.4.6): unstable_setSessionModel is typed on ClientSideConnection (sdk@0.20+ acp.d.ts:369). Cast is redundant; drop with deps bump.
-	const setModel = (session.connection as any).unstable_setSessionModel;
+	const setModel = session.connection.unstable_setSessionModel;
 	if (typeof setModel !== "function") {
 		logBridgeModelSwitch(session, {
 			path: "bootstrap",
@@ -1883,8 +1882,7 @@ async function destroyBridgeSession(
 	let closedRemote: "ok" | "fail" | "skip" = "skip";
 	if (options.closeRemote && session.capabilities.closeSession && session.acpSessionId) {
 		try {
-			// SDK_CAST_DEBT(deps-bump 0.4.6): sdk@0.20.0 promoted closeSession out of unstable_*. Current call is dead (TypeError caught silently). Rename to closeSession + drop cast with deps bump.
-			await (session.connection as any).unstable_closeSession?.({ sessionId: session.acpSessionId });
+			await session.connection.closeSession({ sessionId: session.acpSessionId });
 			closedRemote = "ok";
 		} catch {
 			closedRemote = "fail";
@@ -2279,8 +2277,7 @@ async function bootstrapPersistedBridgeSession(
 	try {
 		if (session.capabilities.resumeSession) {
 			try {
-				// SDK_CAST_DEBT(deps-bump 0.4.6): sdk@0.20.0 promoted resumeSession out of unstable_*. Current call is dead — every bootstrap silently falls back to load, violating Hard Rule #2 (resume > load > new). Rename to resumeSession + drop cast with deps bump.
-				const resumed = await (session.connection as any).unstable_resumeSession({
+				const resumed = await session.connection.resumeSession({
 					sessionId: record.acpSessionId,
 					cwd: params.cwd,
 					mcpServers: [...params.mcpServers],
@@ -2378,8 +2375,7 @@ export async function ensureBridgeSession(params: EnsureBridgeSessionParams): Pr
 		if (params.modelId && existing.modelId !== params.modelId) {
 			const fromModel = existing.modelId;
 			const toModel = params.modelId;
-			// SDK_CAST_DEBT(deps-bump 0.4.6): see enforceRequestedSessionModel; same redundant cast.
-			const setModel = (existing.connection as any).unstable_setSessionModel;
+			const setModel = existing.connection.unstable_setSessionModel;
 			if (typeof setModel !== "function") {
 				logBridgeModelSwitch(existing, {
 					path: "reuse",
@@ -2520,16 +2516,14 @@ export async function sendPrompt(session: AcpBridgeSession, prompt: PromptConten
 		return { ...block, text: ensurePromptSeparator(text) };
 	});
 	const effectivePrompt = effectivePending && effectivePending.length > 0 ? [...effectivePending, ...prompt] : prompt;
-	// SDK_CAST_DEBT(deps-bump 0.4.6): prompt() is typed on ClientSideConnection (sdk@0.20+ acp.d.ts:410). Cast is redundant; drop with deps bump.
-	return await (session.connection as any).prompt({
+	return await session.connection.prompt({
 		sessionId: session.acpSessionId,
 		prompt: effectivePrompt,
 	});
 }
 
 export async function cancelActivePrompt(session: AcpBridgeSession): Promise<CancelOutcome> {
-	// SDK_CAST_DEBT(deps-bump 0.4.6): cancel() is typed on ClientSideConnection (sdk@0.20+ acp.d.ts:424). Cast is redundant; drop with deps bump.
-	const cancel = (session.connection as any).cancel;
+	const cancel = session.connection.cancel;
 	if (typeof cancel !== "function") {
 		logBridgeCancel(session, "unsupported");
 		return "unsupported";

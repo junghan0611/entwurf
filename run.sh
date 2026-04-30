@@ -812,7 +812,7 @@ smoke_model_switch() {
   echo "[smoke-model-switch] project: $project_dir"
   echo "[smoke-model-switch] repo:    $REPO_DIR"
 
-  smoke_model_switch_single "$project_dir" claude claude-sonnet-4-6 claude-haiku-4-5-20251001
+  smoke_model_switch_single "$project_dir" claude claude-sonnet-4-6 claude-opus-4-7
   smoke_model_switch_single "$project_dir" codex gpt-5.2 gpt-5.2-codex
   echo "[smoke-model-switch] Claude + Codex model switch observability: ok"
 }
@@ -1948,7 +1948,7 @@ check_sdk_surface() {
   # Background: in 0.4.5 we discovered that `(session.connection as any)
   # .unstable_resumeSession({...})` had been a dead call ever since SDK
   # 0.20.0 promoted resumeSession/closeSession out of the `unstable_*`
-  # namespace. Capability check passed, method call threw TypeError,
+  # namespace; sdk@0.21.0 keeps those stable names. Capability check passed, method call threw TypeError,
   # bootstrap fallback caught it, every session silently took the load
   # path instead of resume — Hard Rule #2 ("resume > load > new") quietly
   # violated for months. The `as any` cast hid the rename from tsc.
@@ -1998,6 +1998,24 @@ check_sdk_surface() {
     echo "    // SDK_CAST_OK: <reason>"
     echo "    // SDK_CAST_DEBT: <reason>"
     return 1
+  fi
+
+  local dead_names
+  dead_names=$(grep -nE "unstable_(resumeSession|closeSession)" "$file" 2>/dev/null || true)
+  if [ -n "$dead_names" ]; then
+    echo "[check-sdk-surface] FAIL: dead ACP SDK unstable method names:"
+    echo "$dead_names"
+    echo ""
+    echo "  sdk@0.20+ promoted these methods to stable names."
+    echo "  Use session.connection.resumeSession / closeSession directly."
+    return 1
+  fi
+
+  local sdk_surface
+  sdk_surface=$(grep -nE "^[[:space:]]+(resumeSession|closeSession|unstable_setSessionModel|prompt|cancel)\(" "$REPO_DIR/node_modules/@agentclientprotocol/sdk/dist/acp.d.ts" 2>/dev/null || true)
+  if [ -n "$sdk_surface" ]; then
+    echo "[check-sdk-surface] ACP SDK typed surface:"
+    echo "$sdk_surface"
   fi
 
   # grep -c always prints the count and exits 0 when matches > 0, 1 when 0.
@@ -2084,9 +2102,16 @@ check_claude_sessions() {
 
   (cd "$REPO_DIR" && PROJECT_DIR="$project_dir" node --input-type=module <<'EOF'
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { listSessions } from './node_modules/@agentclientprotocol/claude-agent-acp/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const claudeAcpPkg = require.resolve('@agentclientprotocol/claude-agent-acp/package.json');
+const claudeAcpRoot = dirname(claudeAcpPkg);
+const claudeSdkUrl = pathToFileURL(join(claudeAcpRoot, '..', '..', '@anthropic-ai', 'claude-agent-sdk', 'sdk.mjs')).href;
+const { listSessions } = await import(claudeSdkUrl);
 
 const projectDir = process.env.PROJECT_DIR;
 if (!projectDir) {
@@ -2133,7 +2158,7 @@ EOF
 verify_resume() {
   local project_dir session_file model prompt_a prompt_b
   project_dir=$(normalize_project_dir "$1")
-  model=${PI_SHELL_ACP_VERIFY_MODEL:-claude-3-5-haiku-latest}
+  model=${PI_SHELL_ACP_VERIFY_MODEL:-claude-sonnet-4-6}
   prompt_a=${PI_SHELL_ACP_VERIFY_PROMPT_A:-'Remember this exact secret token for later: test-token-123. Reply only READY.'}
   prompt_b=${PI_SHELL_ACP_VERIFY_PROMPT_B:-'What was the secret token? Reply with the token only.'}
   session_file=$(mktemp /tmp/pi-shell-acp-verify-XXXXXX.jsonl)
@@ -2157,7 +2182,7 @@ verify_resume() {
   check_claude_sessions "$project_dir"
 }
 
-CLAUDE_ACP_REQUIRED_VERSION="0.31.0"
+CLAUDE_ACP_REQUIRED_VERSION="0.31.4"
 CODEX_ACP_REQUIRED_VERSION="0.12.0"
 
 check_global_claude_acp() {
