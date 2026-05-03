@@ -1,7 +1,7 @@
 {
 	"name": "pi-shell-acp",
-	"version": "0.4.7",
-	"description": "ACP bridge providing Claude Code and Codex backends to pi-coding-agent, with the entwurf orchestration surface for cross-session delegation.",
+	"version": "0.4.8",
+	"description": "ACP bridge providing Claude Code, Codex, and Gemini CLI backends to pi-coding-agent, with the entwurf orchestration surface for cross-session delegation.",
 	"license": "MIT",
 	"author": "Junghan Kim",
 	"repository": {
@@ -17,6 +17,8 @@
 		"acp",
 		"claude-code",
 		"codex",
+		"gemini",
+		"gemini-cli",
 		"agent-client-protocol",
 		"mcp"
 	],

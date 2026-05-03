@@ -26,7 +26,8 @@ Usage:
   ./run.sh smoke [project-dir]        # Claude runtime smoke (backward-compatible default)
   ./run.sh smoke-claude [project-dir] # explicit Claude runtime smoke
   ./run.sh smoke-codex [project-dir]  # explicit Codex runtime smoke
-  ./run.sh smoke-all [project-dir]    # required dual-backend runtime smoke gate
+  ./run.sh smoke-gemini [project-dir] # explicit Gemini runtime smoke (requires `gemini` on PATH)
+  ./run.sh smoke-all [project-dir]    # required triple-backend runtime smoke gate (gemini auto-skips if absent)
   ./run.sh smoke-continuity [project-dir] # strict dual-backend persisted bootstrap gate (Claude=resume, Codex=load)
   ./run.sh smoke-cancel [project-dir] # strict cancel/abort cleanup observability gate (Claude + Codex)
   ./run.sh smoke-model-switch [project-dir] # strict dual-backend model switch observability gate (reuse 3 branches)
@@ -301,6 +302,9 @@ smoke_test() {
       codex)
         model="pi-shell-acp/gpt-5.2"
         ;;
+      gemini)
+        model="pi-shell-acp/gemini-3-flash-preview"
+        ;;
       *)
         echo "[smoke] unknown backend: $backend" >&2
         exit 1
@@ -385,10 +389,19 @@ smoke_all() {
   local project_dir
   project_dir=$(normalize_project_dir "$1")
 
-  echo "[smoke-all] required dual-backend runtime verification starting"
+  echo "[smoke-all] required triple-backend runtime verification starting"
   smoke_test "$project_dir" claude
   smoke_test "$project_dir" codex
-  echo "[smoke-all] Claude + Codex runtime smokes: ok"
+  # Gemini smoke is best-effort: skip with a clear notice if `gemini` CLI is
+  # not installed (some operators may opt out of the gemini path entirely).
+  # When present, it joins the required gate alongside Claude/Codex.
+  if command -v gemini >/dev/null 2>&1; then
+    smoke_test "$project_dir" gemini
+    echo "[smoke-all] Claude + Codex + Gemini runtime smokes: ok"
+  else
+    echo "[smoke-all] gemini CLI not on PATH — skipping gemini smoke (install: pnpm add -g @google/gemini-cli)"
+    echo "[smoke-all] Claude + Codex runtime smokes: ok (gemini skipped)"
+  fi
 }
 
 smoke_continuity_single() {
@@ -1108,7 +1121,7 @@ EOF
 check_backends() {
   (cd "$REPO_DIR" && node --input-type=module <<'EOF'
 import { strict as assert } from 'node:assert';
-import { buildSessionMetaForBackend, CLAUDE_CONFIG_OVERLAY_DIR, CODEX_CONFIG_OVERLAY_DIR, ensureClaudeConfigOverlay, ensureCodexConfigOverlay, resolveAcpBackendLaunch, resolveBridgeEnvDefaults } from './acp-bridge.ts';
+import { buildSessionMetaForBackend, CLAUDE_CONFIG_OVERLAY_DIR, CODEX_CONFIG_OVERLAY_DIR, ensureClaudeConfigOverlay, ensureCodexConfigOverlay, ensureGeminiConfigOverlay, GEMINI_CONFIG_OVERLAY_DIR, GEMINI_CONFIG_OVERLAY_HOME, GEMINI_OVERLAY_ADMIN_POLICY_PATH, GEMINI_OVERLAY_SYSTEM_MD_PATH, resolveAcpBackendLaunch, resolveBridgeEnvDefaults } from './acp-bridge.ts';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -1682,6 +1695,177 @@ try {
     rmSync(codexOverlayTestRoot, { recursive: true, force: true });
   }
 
+  // Gemini config overlay — mirror of the Claude/Codex overlays.
+  //
+  // Path-resolution invariant: gemini-cli swaps `homedir()` to
+  // `process.env.GEMINI_CLI_HOME` (paths.ts:22) and then computes the real
+  // config dir as `${homedir()}/.gemini` (storage.ts:54). The overlay
+  // therefore needs TWO directories — `fakeHome` that GEMINI_CLI_HOME
+  // points at, and `configDir = fakeHome/.gemini` where settings/system.md/
+  // policies/oauth-symlinks/empty-dirs all actually live.
+  //
+  // Closed leak channels (mirror Claude/Codex isolation):
+  //   - operator settings.json (model/UI prefs) → overlay-authored replacement
+  //   - history/ + projects.json (cwd → shortId map) → overlay-private empty dirs
+  //   - tmp/<shortId>/memory/MEMORY.md per-cwd memory → overlay-private empty dir
+  //   - trustedFolders.json workspace trust state → folderTrust.enabled:false
+  //   - native "Instruction and Memory Files" body → GEMINI_SYSTEM_MD replace
+  //   - native tool registry advertise + invoke → tools.core allowlist + admin-policy
+  //   - GEMINI.md hierarchical discovery → context.fileName sentinel + boundaries[]
+  //   - unsanctioned MCP servers → mcp.allowed whitelist + mcp.excluded:["*"]
+  //   - subagents (codebase_investigator, tracker_*, browser, ...) → agents.overrides
+  //   - skills/hooks/extensions auto-load → settings flags
+  assert.equal(typeof GEMINI_CONFIG_OVERLAY_HOME, 'string');
+  assert.ok(GEMINI_CONFIG_OVERLAY_HOME.endsWith('gemini-config-overlay'),
+    'overlay home constant must point at the pi-owned gemini-config-overlay path');
+  assert.equal(typeof GEMINI_CONFIG_OVERLAY_DIR, 'string');
+  assert.ok(GEMINI_CONFIG_OVERLAY_DIR.endsWith(join('gemini-config-overlay', '.gemini')),
+    'overlay configDir constant must be fakeHome/.gemini (Storage.getGlobalGeminiDir contract)');
+
+  const geminiOverlayTestRoot = join(tmpdir(), `pi-shell-acp-gemini-overlay-${Date.now()}`);
+  const geminiRealDir = join(geminiOverlayTestRoot, 'real');
+  const geminiFakeHome = join(geminiOverlayTestRoot, 'fakehome');
+  const geminiConfigDir = join(geminiFakeHome, '.gemini');
+  try {
+    mkdirSync(geminiRealDir, { recursive: true });
+    // Seed the synthetic real ~/.gemini/ dir with shapes the production
+    // overlay must mirror or reject:
+    writeFileSync(join(geminiRealDir, 'oauth_creds.json'), '{"refresh_token":"test"}', 'utf8');
+    writeFileSync(join(geminiRealDir, 'google_accounts.json'), '{"active":"test@example.com"}', 'utf8');
+    writeFileSync(join(geminiRealDir, 'installation_id'), 'test-install-id', 'utf8');
+    writeFileSync(join(geminiRealDir, 'mcp-oauth-tokens-v2.json'), '{"server":"token"}', 'utf8');
+    writeFileSync(join(geminiRealDir, 'settings.json'), JSON.stringify({ model: { name: 'operator-pref' } }), 'utf8');
+    mkdirSync(join(geminiRealDir, 'tmp', 'operator-cwd-slug', 'memory'), { recursive: true });
+    writeFileSync(join(geminiRealDir, 'tmp', 'operator-cwd-slug', 'memory', 'MEMORY.md'), 'OPERATOR-MEMORY-LEAK-CANARY', 'utf8');
+    mkdirSync(join(geminiRealDir, 'history'), { recursive: true });
+    writeFileSync(join(geminiRealDir, 'history', 'session.log'), 'OPERATOR-HISTORY-LEAK', 'utf8');
+    writeFileSync(join(geminiRealDir, 'projects.json'), '{"/operator/cwd":"id"}', 'utf8');
+    writeFileSync(join(geminiRealDir, 'trustedFolders.json'), '{"/operator/cwd":"trusted"}', 'utf8');
+
+    // Pre-seed the fakeHome ROOT with leftover entries that earlier overlay
+    // shapes wrote there by mistake (settings.json/oauth-symlinks/tmp/...).
+    // These must be cleaned by ensureGeminiConfigOverlay's fake-home sweep —
+    // the binary ignores them anyway (production paths read from
+    // fakeHome/.gemini/), but they pollute the overlay filesystem.
+    mkdirSync(geminiFakeHome, { recursive: true });
+    writeFileSync(join(geminiFakeHome, 'settings.json'), '{"stale":true}', 'utf8');
+    writeFileSync(join(geminiFakeHome, 'system.md'), 'STALE SYSTEM MD AT ROOT', 'utf8');
+    mkdirSync(join(geminiFakeHome, 'tmp'), { recursive: true });
+    writeFileSync(join(geminiFakeHome, 'tmp', 'stale.txt'), 'STALE', 'utf8');
+
+    const engravingForOverlay = 'You are pi-shell-acp gemini test session. Engraving canary 0xCAFE.';
+    ensureGeminiConfigOverlay(engravingForOverlay, geminiRealDir, geminiFakeHome, geminiConfigDir);
+
+    // Fake-home root must contain ONLY the .gemini directory after the
+    // sweep — no leftover settings.json / system.md / tmp / etc. Earlier
+    // (buggy) overlay versions wrote to root; cleanup must scrub those.
+    const fakeHomeEntries = readdirSync(geminiFakeHome).sort();
+    assert.deepEqual(fakeHomeEntries, ['.gemini'],
+      'fake-home root must contain only the .gemini configDir after cleanup');
+
+    // settings.json — overlay-authored at configDir (NOT fakeHome root).
+    const settingsStat = lstatSync(join(geminiConfigDir, 'settings.json'));
+    assert.equal(settingsStat.isSymbolicLink(), false,
+      'overlay settings.json must be a regular file authored by pi-shell-acp, not a symlink');
+    const overlaySettings = JSON.parse(readFileSync(join(geminiConfigDir, 'settings.json'), 'utf8'));
+    assert.equal(overlaySettings.advanced?.autoConfigureMemory, false,
+      'overlay settings.json must opt out of gemini relaunch-for-memory codepath');
+    assert.equal(overlaySettings.security?.auth?.selectedType, 'oauth-personal',
+      'overlay settings.json must hint oauth-personal so symlinked oauth_creds.json is consumed');
+    assert.equal(overlaySettings.security?.folderTrust?.enabled, false,
+      'overlay settings.json must disable folder trust prompt');
+    assert.equal(overlaySettings.context?.fileName, '__pi_shell_acp_disabled_context__',
+      'overlay settings.json must set context.fileName to the sentinel (no GEMINI.md discovery)');
+    assert.equal(overlaySettings.context?.includeDirectoryTree, false,
+      'overlay settings.json must disable cwd directory tree auto-attach');
+    assert.deepEqual(overlaySettings.context?.memoryBoundaryMarkers, [],
+      'overlay settings.json must set memoryBoundaryMarkers to [] (kill parent traversal)');
+    assert.deepEqual(overlaySettings.context?.includeDirectories, []);
+    assert.equal(overlaySettings.context?.loadMemoryFromIncludeDirectories, false);
+    assert.deepEqual(overlaySettings.tools?.core, ['read_file', 'list_directory', 'glob', 'grep_search', 'write_file', 'replace', 'run_shell_command'],
+      'overlay settings.json tools.core must restrict the registry to the pi baseline by capability class (Read-class split into 4: read_file/list_directory/glob/grep_search; Write/Edit/Bash 1:1)');
+    assert.equal(overlaySettings.useWriteTodos, false,
+      'overlay settings.json must disable write_todos tool');
+    assert.equal(overlaySettings.skills?.enabled, false,
+      'overlay settings.json must disable agent skills (Claude skillPlugins:[] equivalent)');
+    assert.equal(overlaySettings.hooksConfig?.enabled, false,
+      'overlay settings.json must disable the hooks system');
+    assert.deepEqual(overlaySettings.mcp?.allowed, ['pi-tools-bridge', 'session-bridge'],
+      'overlay settings.json mcp.allowed must whitelist the bridge MCP servers');
+    assert.deepEqual(overlaySettings.mcp?.excluded, ['*'],
+      'overlay settings.json mcp.excluded must catch-all-block any other MCP server');
+    assert.equal('model' in overlaySettings, false,
+      'overlay settings.json must NOT inherit operator model preference');
+
+    // system.md must be authored with the engraving body at configDir.
+    const systemMdStat = lstatSync(join(geminiConfigDir, 'system.md'));
+    assert.equal(systemMdStat.isSymbolicLink(), false,
+      'overlay system.md must be a regular file authored by pi-shell-acp, not a symlink');
+    const systemMdContent = readFileSync(join(geminiConfigDir, 'system.md'), 'utf8');
+    assert.ok(systemMdContent.includes('Engraving canary 0xCAFE'),
+      'overlay system.md must contain the operator engraving body (carrier delivery)');
+    assert.ok(systemMdContent.includes('GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1'),
+      'overlay system.md must always include the carrier-isolation canary line so baseline can verify GEMINI_SYSTEM_MD reaches the model surface');
+
+    // policies/admin.toml — at configDir/policies/admin.toml.
+    const adminPolicyStat = lstatSync(join(geminiConfigDir, 'policies', 'admin.toml'));
+    assert.equal(adminPolicyStat.isSymbolicLink(), false,
+      'overlay policies/admin.toml must be a regular file authored by pi-shell-acp');
+    const adminPolicyContent = readFileSync(join(geminiConfigDir, 'policies', 'admin.toml'), 'utf8');
+    assert.ok(adminPolicyContent.includes('toolName = "*"') && adminPolicyContent.includes('decision = "deny"'),
+      'admin.toml must include a deny-all catch-all rule');
+    for (const allowedToolName of ['read_file', 'list_directory', 'glob', 'grep_search', 'write_file', 'replace', 'run_shell_command']) {
+      assert.ok(adminPolicyContent.includes(`"${allowedToolName}"`),
+        `admin.toml must allow ${allowedToolName} — read-class split (read_file/list_directory/glob/grep_search) + write/edit/exec`);
+    }
+    assert.ok(adminPolicyContent.includes('"pi-tools-bridge"') && adminPolicyContent.includes('"session-bridge"'),
+      'admin.toml must allow the bridge MCP servers (pi-tools-bridge, session-bridge)');
+
+    // Whitelisted entries pass through as symlinks at configDir level.
+    for (const entry of ['oauth_creds.json', 'google_accounts.json', 'installation_id', 'mcp-oauth-tokens-v2.json']) {
+      const entryStat = lstatSync(join(geminiConfigDir, entry));
+      assert.equal(entryStat.isSymbolicLink(), true,
+        `overlay ${entry} must be a symlink to the operator's real ~/.gemini/`);
+      assert.equal(readlinkSync(join(geminiConfigDir, entry)), join(geminiRealDir, entry));
+    }
+
+    // Empty dirs at configDir level — overlay-private.
+    for (const entry of ['tmp', 'history', 'projects']) {
+      const entryStat = lstatSync(join(geminiConfigDir, entry));
+      assert.equal(entryStat.isSymbolicLink(), false,
+        `overlay ${entry}/ must be an overlay-private directory, not a symlink to operator data`);
+      assert.equal(entryStat.isDirectory(), true);
+      assert.deepEqual(readdirSync(join(geminiConfigDir, entry)), [],
+        `overlay ${entry}/ must start empty — operator data must not leak through`);
+    }
+    assert.equal(existsSync(join(geminiConfigDir, 'tmp', 'operator-cwd-slug', 'memory', 'MEMORY.md')), false,
+      'operator-side MEMORY.md must not be reachable through the overlay');
+
+    // Non-whitelisted entries (e.g. trustedFolders.json) must NOT appear.
+    assert.equal(existsSync(join(geminiConfigDir, 'trustedFolders.json')), false,
+      'overlay must not expose operator trustedFolders.json — workspace trust state leak');
+
+    // Idempotence: a second call must succeed and preserve shape.
+    ensureGeminiConfigOverlay(engravingForOverlay, geminiRealDir, geminiFakeHome, geminiConfigDir);
+    assert.equal(readlinkSync(join(geminiConfigDir, 'oauth_creds.json')), join(geminiRealDir, 'oauth_creds.json'));
+    assert.equal(existsSync(join(geminiConfigDir, 'trustedFolders.json')), false,
+      'second-call idempotence must not let operator trustedFolders.json leak back in');
+    assert.deepEqual(readdirSync(join(geminiConfigDir, 'tmp')), [],
+      'second-call idempotence must keep tmp/ empty');
+
+    // Empty / undefined engraving still authors a non-empty system.md.
+    ensureGeminiConfigOverlay(undefined, geminiRealDir, geminiFakeHome, geminiConfigDir);
+    const systemMdNoEngraving = readFileSync(join(geminiConfigDir, 'system.md'), 'utf8');
+    assert.ok(systemMdNoEngraving.trim().length > 0,
+      'overlay system.md must be non-empty even without engraving — gemini falls back to native body otherwise');
+    assert.equal(systemMdNoEngraving.includes('Engraving canary 0xCAFE'), false,
+      'overlay system.md must reflect the latest engraving argument (no stale content)');
+    assert.ok(systemMdNoEngraving.includes('GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1'),
+      'overlay system.md must include the carrier-isolation canary even in the empty-engraving placeholder branch');
+  } finally {
+    rmSync(geminiOverlayTestRoot, { recursive: true, force: true });
+  }
+
   // resolveBridgeEnvDefaults — compaction toggle vs identity isolation.
   // PI_SHELL_ACP_ALLOW_COMPACTION=1 must drop only the compaction-guard
   // keys (DISABLE_AUTO_COMPACT, DISABLE_COMPACT). Identity-isolation
@@ -1718,7 +1902,95 @@ try {
   assert.equal(codexEnvAllowCompaction?.CODEX_SQLITE_HOME, CODEX_CONFIG_OVERLAY_DIR,
     'codex bridge env must keep CODEX_SQLITE_HOME even when compaction is allowed');
 
-  console.log('[check-backends] 110 assertions ok');
+  // Gemini launch — PATH path (no override). Must resolve to
+  // `gemini --acp --admin-policy <overlay>/policies/admin.toml`. The admin-
+  // policy flag loads our deny-all-then-explicit-allow TOML at priority
+  // tier 5.x (Admin > User > Workspace > Extension > Default), narrowing
+  // the gemini native tool surface to the pi baseline (read_file/write_file/
+  // replace/run_shell_command) plus a whitelist of injected MCP servers.
+  // Override: GEMINI_ACP_COMMAND with bridge args appended (Codex pattern).
+  const prevGemini = process.env.GEMINI_ACP_COMMAND;
+  delete process.env.GEMINI_ACP_COMMAND;
+  try {
+    const geminiLaunch = resolveAcpBackendLaunch('gemini');
+    assert.equal(geminiLaunch.command, 'gemini',
+      'gemini launch (PATH path) must invoke `gemini` directly');
+    assert.deepEqual(geminiLaunch.args, ['--acp', '--admin-policy', GEMINI_OVERLAY_ADMIN_POLICY_PATH],
+      'gemini launch must pin `--acp --admin-policy <overlay>/policies/admin.toml` for tool-surface narrowing');
+    assert.equal(geminiLaunch.source, 'PATH:gemini --acp --admin-policy <overlay>');
+
+    // Override path mirrors Codex: bash -lc with `${override} ${ourFlags}`
+    // so the bridge admin-policy always wins against an operator command.
+    // Used for `gemini --acp --debug` and wrapper scripts.
+    process.env.GEMINI_ACP_COMMAND = 'node /tmp/fake-gemini-acp.js';
+    const geminiLaunchOverride = resolveAcpBackendLaunch('gemini');
+    assert.equal(geminiLaunchOverride.command, 'bash');
+    assert.equal(geminiLaunchOverride.args.length, 2);
+    assert.equal(geminiLaunchOverride.args[0], '-lc');
+    assert.ok(geminiLaunchOverride.args[1].startsWith('node /tmp/fake-gemini-acp.js '),
+      'gemini override must keep the operator command at the head of the bash -lc string');
+    assert.ok(geminiLaunchOverride.args[1].includes('--admin-policy'),
+      'gemini override must append `--admin-policy` so bridge tool surface narrowing is not bypassed (Codex pattern mirror)');
+    assert.ok(geminiLaunchOverride.args[1].includes(GEMINI_OVERLAY_ADMIN_POLICY_PATH),
+      'gemini override admin-policy path must be the overlay constant');
+    assert.equal(geminiLaunchOverride.source, 'env:GEMINI_ACP_COMMAND');
+  } finally {
+    if (prevGemini === undefined) delete process.env.GEMINI_ACP_COMMAND;
+    else process.env.GEMINI_ACP_COMMAND = prevGemini;
+  }
+
+  // Gemini bridge env — operator-config isolation overlay.
+  //   GEMINI_CLI_HOME → overlay's fakeHome (NOT the .gemini configDir).
+  //     Gemini-cli swaps `homedir()` to this value and reads its real
+  //     config from `${homedir()}/.gemini/...` (paths.ts:22 + storage.ts:54).
+  //     Pinning the fakeHome closes operator config / history /
+  //     projects.json / tmp memory / trust state leaks.
+  //   GEMINI_SYSTEM_MD → overlay's `${configDir}/system.md`, fully
+  //     replacing gemini's bundled "Instruction and Memory Files" body
+  //     with the operator engraving. Equivalent in role to Claude's
+  //     `_meta.systemPrompt` and Codex's `-c developer_instructions`.
+  // Both pins survive the compaction toggle — they are operator-config-
+  // isolation invariants, not policy choices.
+  const geminiEnvFull = resolveBridgeEnvDefaults('gemini');
+  assert.equal(geminiEnvFull?.GEMINI_CLI_HOME, GEMINI_CONFIG_OVERLAY_HOME,
+    'gemini bridge env must pin GEMINI_CLI_HOME to the overlay fakeHome (operator-state isolation)');
+  assert.equal(geminiEnvFull?.GEMINI_SYSTEM_MD, GEMINI_OVERLAY_SYSTEM_MD_PATH,
+    'gemini bridge env must pin GEMINI_SYSTEM_MD to the overlay system.md (native body replacement)');
+  const geminiEnvAllowCompaction = resolveBridgeEnvDefaults('gemini', { allowCompaction: true });
+  assert.equal(geminiEnvAllowCompaction?.GEMINI_CLI_HOME, GEMINI_CONFIG_OVERLAY_HOME,
+    'gemini bridge env must keep GEMINI_CLI_HOME even when compaction is allowed');
+  assert.equal(geminiEnvAllowCompaction?.GEMINI_SYSTEM_MD, GEMINI_OVERLAY_SYSTEM_MD_PATH,
+    'gemini bridge env must keep GEMINI_SYSTEM_MD even when compaction is allowed');
+
+  // Constants relationship: configDir is fakeHome + "/.gemini", and the
+  // overlay-authored system.md / admin-policy paths live inside configDir.
+  assert.equal(GEMINI_CONFIG_OVERLAY_DIR, join(GEMINI_CONFIG_OVERLAY_HOME, '.gemini'),
+    'GEMINI_CONFIG_OVERLAY_DIR must be GEMINI_CONFIG_OVERLAY_HOME + ".gemini" (Storage.getGlobalGeminiDir contract)');
+  assert.equal(GEMINI_OVERLAY_SYSTEM_MD_PATH, join(GEMINI_CONFIG_OVERLAY_DIR, 'system.md'));
+  assert.equal(GEMINI_OVERLAY_ADMIN_POLICY_PATH, join(GEMINI_CONFIG_OVERLAY_DIR, 'policies', 'admin.toml'));
+
+  // Gemini session meta — adapter returns undefined. Gemini ACP newSession
+  // does not honor `_meta.systemPrompt` (no carrier slot exists), so the
+  // bridge must not synthesize one. The engraving travels via
+  // GEMINI_SYSTEM_MD (system.md file) instead — verified by the env pins
+  // above.
+  const geminiMeta = buildSessionMetaForBackend(
+    'gemini',
+    {
+      modelId: 'gemini-3-flash-preview',
+      settingSources: [],
+      strictMcpConfig: true,
+      tools: [],
+      skillPlugins: [],
+      permissionAllow: [],
+      disallowedTools: [],
+    },
+    'engraving body that would be a carrier on claude',
+  );
+  assert.equal(geminiMeta, undefined,
+    'gemini buildSessionMeta must return undefined — engraving travels via GEMINI_SYSTEM_MD (overlay system.md) instead');
+
+  console.log('[check-backends] 124 assertions ok');
 } finally {
   if (prevClaude === undefined) delete process.env.CLAUDE_AGENT_ACP_COMMAND;
   else process.env.CLAUDE_AGENT_ACP_COMMAND = prevClaude;
@@ -1793,6 +2065,7 @@ async function collectModels(envOverride) {
     'gpt-5.4',
     'gpt-5.4-mini',
     'gpt-5.5',
+    'gemini-3-flash-preview',
   ].sort();
   const actualIds = [...models.keys()].sort();
   assert.deepEqual(
@@ -1864,7 +2137,22 @@ async function collectModels(envOverride) {
     'gpt-5.5 at 1,050,000 context = openai source bug (should be openai-codex 400,000)',
   );
 
-  console.log('[check-models] pass 1 (curated surface + Claude defaults + codex source): ok');
+  // Gemini context metadata — source is `google` (no separate gemini-cli
+  // tier in pi-ai). pi-ai 0.70.2 reports 1,048,576 for gemini-3-flash-preview.
+  // Update this gate when the upstream registry shifts.
+  const GEMINI_EXPECTED_CTX = {
+    'gemini-3-flash-preview': 1048576,
+  };
+  for (const [id, expected] of Object.entries(GEMINI_EXPECTED_CTX)) {
+    const m = models.get(id);
+    assert.ok(m, `curated Gemini model missing: ${id}`);
+    assert.equal(
+      m.contextWindow, expected,
+      `${id} contextWindow must come from google source: expected ${expected}, got ${m.contextWindow}`,
+    );
+  }
+
+  console.log('[check-models] pass 1 (curated surface + Claude defaults + codex source + gemini source): ok');
 }
 
 // --- Pass 2: explicit override respected ---
@@ -2586,6 +2874,9 @@ case "$cmd" in
     ;;
   smoke-codex)
     smoke_test "$TARGET_PROJECT_DIR" codex
+    ;;
+  smoke-gemini)
+    smoke_test "$TARGET_PROJECT_DIR" gemini
     ;;
   smoke-all)
     smoke_all "$TARGET_PROJECT_DIR"

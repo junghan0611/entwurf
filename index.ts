@@ -177,21 +177,32 @@ const DEFAULT_CLAUDE_DISALLOWED_TOOLS: readonly string[] = [
 
 // pi-shell-acp is an ACP BRIDGE provider, not a general-purpose OpenAI/Anthropic
 // provider. It should NOT expose the full pi-ai model registry. Users who pick
-// `pi-shell-acp/<model>` are choosing a specific bridge path (Claude Code ACP
-// or codex-acp), so the surface is intentionally curated:
+// `pi-shell-acp/<model>` are choosing a specific bridge path (Claude Code ACP,
+// codex-acp, or gemini --acp), so the surface is intentionally curated:
 //
 // - Claude backend: the two current frontier sonnet/opus we actually test against.
 // - Codex backend: only the "agentic coding" gpt-5.x line in the openai-codex
 //   source, which is what codex-acp spawns — NOT the openai source, whose
 //   context/cost values reflect the Chat Completions API, not codex.
+// - Gemini backend: the current daily-driver preview — `gemini-3-flash-preview`.
+//   This is also what `gemini --acp` defaults to when the bridge does not
+//   force a model via `unstable_setSessionModel` (verified at smoke time:
+//   the bootstrap log emits `fromModel=gemini-3-flash-preview` before the
+//   bridge applies the requested model). 2.5 Pro / 2.5 Flash are intentionally
+//   omitted — Gemini CLI 0.40.x lands on the 3.x line for the agentic ACP
+//   surface and 2.5 routing through ACP is not what operators encounter
+//   today. Other 2.5/3.1/preview/lite variants stay reachable via the
+//   broader pi-ai registry fallback in inferBackendFromModel.
 //
 // Adding a model here means we commit to checking it across both Axis 1
 // (protocol smoke) and Axis 2 (agent interview). Do not extend casually.
 const SUPPORTED_ANTHROPIC_MODEL_IDS: readonly string[] = ["claude-sonnet-4-6", "claude-opus-4-7"] as const;
 const SUPPORTED_CODEX_MODEL_IDS: readonly string[] = ["gpt-5.2", "gpt-5.4", "gpt-5.4-mini", "gpt-5.5"] as const;
+const SUPPORTED_GEMINI_MODEL_IDS: readonly string[] = ["gemini-3-flash-preview"] as const;
 
 const SUPPORTED_ANTHROPIC_SET = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);
 const SUPPORTED_CODEX_SET = new Set(SUPPORTED_CODEX_MODEL_IDS);
+const SUPPORTED_GEMINI_SET = new Set(SUPPORTED_GEMINI_MODEL_IDS);
 
 // Codex metadata must come from `openai-codex` (not `openai`). The two sources
 // diverge: `openai/gpt-5.5` declares 1,050,000 context (Chat Completions tier),
@@ -202,9 +213,18 @@ const SUPPORTED_CODEX_SET = new Set(SUPPORTED_CODEX_MODEL_IDS);
 // --list-models.
 const ANTHROPIC_MODELS_ALL = getModels("anthropic");
 const CODEX_MODELS_ALL = getModels("openai-codex");
+// Gemini metadata comes from the `google` source — pi-ai does not split the
+// Gemini line into a separate `google-acp` registry the way it splits openai
+// into openai vs openai-codex. The context window pi-ai reports (1,048,576 ≈
+// 1M) reflects the underlying model capacity; gemini --acp does not narrow
+// it the way codex-acp narrows gpt-5.x to 272K. Operators who hit the cap in
+// practice can still inline a tighter override via PI_SHELL_ACP_GEMINI_CONTEXT
+// (mirrors PI_SHELL_ACP_CLAUDE_CONTEXT — see resolveGeminiModelContextWindow).
+const GEMINI_MODELS_ALL = getModels("google");
 
 const ANTHROPIC_MODEL_IDS = new Set(ANTHROPIC_MODELS_ALL.map((m) => m.id));
 const CODEX_MODEL_IDS = new Set(CODEX_MODELS_ALL.map((m) => m.id));
+const GEMINI_MODEL_IDS = new Set(GEMINI_MODELS_ALL.map((m) => m.id));
 
 // Anthropic's registry reports 1_000_000 for Claude 4.6+ models, but our
 // public pi-shell-acp surface deliberately distinguishes Sonnet vs Opus:
@@ -227,10 +247,34 @@ function resolveClaudeModelContextWindow(model: { id: string; contextWindow: num
 	return Math.min(model.contextWindow, defaultCap);
 }
 
+// Gemini context cap mirror of the Claude resolver. The pi-ai `google` source
+// reports the underlying model capacity (1,048,576 ≈ 1M for the 3-flash and
+// 2.5 lines), and gemini --acp does not narrow it the way codex-acp narrows
+// gpt-5.x. The default surface therefore exposes the full model capacity;
+// operators who want a tighter ceiling for cost / context-management reasons
+// inline PI_SHELL_ACP_GEMINI_CONTEXT=<integer> at process start. Same shape
+// as PI_SHELL_ACP_CLAUDE_CONTEXT — invalid / non-positive values fall through
+// silently to the model default.
+function resolveGeminiContextCap(): number | null {
+	const raw = process.env.PI_SHELL_ACP_GEMINI_CONTEXT?.trim();
+	if (!raw) return null;
+	const parsed = Number.parseInt(raw, 10);
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+const GEMINI_CONTEXT_OVERRIDE = resolveGeminiContextCap();
+function resolveGeminiModelContextWindow(model: { id: string; contextWindow: number }): number {
+	if (GEMINI_CONTEXT_OVERRIDE) return Math.min(model.contextWindow, GEMINI_CONTEXT_OVERRIDE);
+	return model.contextWindow;
+}
+
 type AnthropicRegistryModel = (typeof ANTHROPIC_MODELS_ALL)[number];
 type CodexRegistryModel = (typeof CODEX_MODELS_ALL)[number];
+type GeminiRegistryModel = (typeof GEMINI_MODELS_ALL)[number];
 
-function requireRegistryModel<T extends AnthropicRegistryModel | CodexRegistryModel>(models: T[], id: string): T {
+function requireRegistryModel<T extends AnthropicRegistryModel | CodexRegistryModel | GeminiRegistryModel>(
+	models: T[],
+	id: string,
+): T {
 	const model = models.find((m) => m.id === id);
 	if (!model) throw new Error(`Required base model is missing from pi-ai registry: ${id}`);
 	return model;
@@ -264,12 +308,34 @@ function curatedCodexModels(): CodexRegistryModel[] {
 	return models;
 }
 
+function curatedGeminiModels(): GeminiRegistryModel[] {
+	const models = GEMINI_MODELS_ALL.filter((m) => SUPPORTED_GEMINI_SET.has(m.id));
+	// gemini-3-flash-preview is present in pi-ai 0.70.2's google source. If a
+	// future pi-ai bump drops it (the way the openai source occasionally
+	// retires snapshots), inject a placeholder so pi-shell-acp's curated
+	// surface stays stable. Mirrors the claude-opus-4-7 / gpt-5.5
+	// placeholders above. Base falls back to gemini-2.5-flash because it
+	// shares context window (1,048,576) and the same google-generative-ai
+	// API shape — a safe stand-in until the registry catches up.
+	if (!models.some((m) => m.id === "gemini-3-flash-preview")) {
+		const base = requireRegistryModel(GEMINI_MODELS_ALL, "gemini-2.5-flash");
+		models.push({
+			...base,
+			id: "gemini-3-flash-preview",
+			name: "Gemini 3 Flash Preview",
+			contextWindow: 1_048_576,
+		});
+	}
+	return models;
+}
+
 const CURATED_ANTHROPIC_MODELS = curatedAnthropicModels();
 const CURATED_CODEX_MODELS = curatedCodexModels();
+const CURATED_GEMINI_MODELS = curatedGeminiModels();
 
 const MODELS = Array.from(
 	new Map(
-		[...CURATED_ANTHROPIC_MODELS, ...CURATED_CODEX_MODELS].map((model) => [
+		[...CURATED_ANTHROPIC_MODELS, ...CURATED_CODEX_MODELS, ...CURATED_GEMINI_MODELS].map((model) => [
 			model.id,
 			{
 				id: model.id,
@@ -279,7 +345,9 @@ const MODELS = Array.from(
 				cost: model.cost,
 				contextWindow: SUPPORTED_ANTHROPIC_SET.has(model.id)
 					? resolveClaudeModelContextWindow(model)
-					: model.contextWindow,
+					: SUPPORTED_GEMINI_SET.has(model.id)
+						? resolveGeminiModelContextWindow(model)
+						: model.contextWindow,
 				maxTokens: model.maxTokens,
 			},
 		]),
@@ -376,8 +444,8 @@ function readSettingsFile(filePath: string): ProviderSettings {
 
 	const settings = settingsBlock as Record<string, unknown>;
 	const backend = settings["backend"];
-	if (backend !== undefined && backend !== "claude" && backend !== "codex") {
-		throw settingsConfigError(filePath, "backend must be one of: claude, codex");
+	if (backend !== undefined && backend !== "claude" && backend !== "codex" && backend !== "gemini") {
+		throw settingsConfigError(filePath, "backend must be one of: claude, codex, gemini");
 	}
 
 	const appendSystemPrompt = assertOptionalBoolean(settings, "appendSystemPrompt", filePath);
@@ -467,12 +535,19 @@ function inferBackendFromModel(model: Model<any>): AcpBackend {
 	// Curated-first: the allowlist determines routing deterministically.
 	if (SUPPORTED_CODEX_SET.has(model.id)) return "codex";
 	if (SUPPORTED_ANTHROPIC_SET.has(model.id)) return "claude";
+	if (SUPPORTED_GEMINI_SET.has(model.id)) return "gemini";
 	// Fallback: if an ID outside the allowlist somehow reaches here (e.g. a
 	// non-curated model was passed via explicit settings), consult the broader
 	// pi-ai registry. This is a safety net, not the primary path.
 	if (CODEX_MODEL_IDS.has(model.id)) return "codex";
 	if (ANTHROPIC_MODEL_IDS.has(model.id)) return "claude";
-	return model.id.startsWith("gpt-") || model.id.startsWith("o") || model.id.startsWith("codex") ? "codex" : "claude";
+	if (GEMINI_MODEL_IDS.has(model.id)) return "gemini";
+	// Last-resort prefix routing — keeps explicit-backend operators productive
+	// when they pass a model id outside any registered source. gpt-/o-/codex-
+	// → codex; gemini- → gemini; everything else → claude.
+	if (model.id.startsWith("gpt-") || model.id.startsWith("o") || model.id.startsWith("codex")) return "codex";
+	if (model.id.startsWith("gemini-")) return "gemini";
+	return "claude";
 }
 
 function loadProviderSettings(cwd: string, model: Model<any>): ResolvedProviderSettings {
@@ -742,26 +817,38 @@ function streamShellAcp(
 			//   `apps` / `skills` instruction blocks. codex-acp does not
 			//   honor `_meta.systemPrompt`, so this is the highest stable
 			//   carrier the codex stack exposes.
+			// - Gemini: written into the overlay's `system.md` (target of
+			//   `GEMINI_SYSTEM_MD` env), which gemini-cli's
+			//   `getCoreSystemPrompt` reads as a full replacement of the
+			//   native "Instruction and Memory Files" body
+			//   (packages/core/src/prompts/promptProvider.ts:111). Equivalent
+			//   in role to Claude's `_meta.systemPrompt` replacement — fully
+			//   shadows the bundled native body so the operator's identity
+			//   text is the only system-level content the model sees.
 			//
 			// The rendered engraving is stable across turns (pure function of
 			// template × backend × mcpServerNames). On Claude it travels in
 			// `systemPromptAppend`; on Codex it travels in
-			// `codexDeveloperInstructions`. Both fields are part of session
-			// compatibility checks — changing either forces a fresh bridge
-			// session so the new engraving is actually delivered to the
-			// model.
+			// `codexDeveloperInstructions`; on Gemini it travels in
+			// `geminiSystemPromptText` (written into the overlay's system.md
+			// by ensureGeminiConfigOverlay at every spawn). All three fields
+			// are part of session compatibility checks — changing any forces
+			// a fresh bridge session so the new engraving is actually
+			// delivered to the model.
 			const engraving = loadEngraving({
 				backend: providerSettings.backend,
 				mcpServerNames: providerSettings.mcpServers.map((s) => s.name),
 			});
 			const claudeEngraving = providerSettings.backend === "claude" ? engraving : null;
 			const codexEngraving = providerSettings.backend === "codex" ? engraving : null;
+			const geminiEngraving = providerSettings.backend === "gemini" ? engraving : null;
 
 			const systemPromptParts = [baseSystemPrompt, claudeEngraving ?? undefined].filter(
 				(part): part is string => typeof part === "string" && part.length > 0,
 			);
 			const mergedSystemPromptAppend = systemPromptParts.length > 0 ? systemPromptParts.join("\n\n") : undefined;
 			const codexDeveloperInstructions = codexEngraving && codexEngraving.length > 0 ? codexEngraving : undefined;
+			const geminiSystemPromptText = geminiEngraving && geminiEngraving.length > 0 ? geminiEngraving : undefined;
 
 			// pi-context augment — bridge identity narrative + pi base intro +
 			// ~/AGENTS.md + cwd/AGENTS.md + date/cwd. Delivered as a
@@ -771,7 +858,10 @@ function streamShellAcp(
 			// Anthropic subscription billing while still giving the agent
 			// project context. Entwurf-spawned sessions skip the prepend
 			// (de-dup check in `acp-bridge.ts:sendPrompt` against the
-			// caller-supplied `<project-context>` block).
+			// caller-supplied `<project-context>` block). Same shape on all
+			// three backends now: the engraving rides the system-prompt-shape
+			// carrier (per-backend; see above), the augment rides the
+			// first-user message.
 			const bootstrapPromptAugment = buildPiContextAugment({
 				backend: providerSettings.backend,
 				cwd,
@@ -787,6 +877,7 @@ function streamShellAcp(
 				systemPromptAppend: mergedSystemPromptAppend,
 				bootstrapPromptAugment,
 				codexDeveloperInstructions,
+				geminiSystemPromptText,
 				emacsAgentSocket,
 				settingSources: providerSettings.settingSources,
 				strictMcpConfig: providerSettings.strictMcpConfig,

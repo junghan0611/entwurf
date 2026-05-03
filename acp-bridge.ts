@@ -45,7 +45,7 @@ export type BridgePromptEvent =
 type PendingPromptHandler = (event: BridgePromptEvent) => Promise<void> | void;
 
 export type ClaudeSettingSource = "user" | "project" | "local";
-export type AcpBackend = "claude" | "codex";
+export type AcpBackend = "claude" | "codex" | "gemini";
 
 type EnvKvInput = Record<string, string> | Array<{ name: string; value: string }>;
 
@@ -310,6 +310,7 @@ type PersistedBridgeSessionRecord = {
 	systemPromptAppend?: string | null;
 	bootstrapPromptAugment?: string | null;
 	codexDeveloperInstructions?: string | null;
+	geminiSystemPromptText?: string | null;
 	bridgeConfigSignature: string;
 	contextMessageSignatures: string[];
 	updatedAt: string;
@@ -343,6 +344,8 @@ export type AcpBridgeSession = {
 	bootstrapPromptAugmentPending?: PromptContentBlock[];
 	/** Codex identity carrier — rendered engraving delivered as `-c developer_instructions="<...>"` at codex-acp child spawn time. Codex ACP exposes no `_meta.systemPrompt` surface; the codex `developer` role is the highest stable config layer pi-shell-acp can populate. Pinned on the session because changing it requires respawning the codex-acp child (launch-time arg). Compatibility checks include this field — see `isSessionCompatible`. The claude adapter ignores it. */
 	codexDeveloperInstructions?: string;
+	/** Gemini identity carrier — rendered engraving written into the overlay's `system.md` (target of the `GEMINI_SYSTEM_MD` env var) at every gemini-acp spawn by ensureGeminiConfigOverlay. Gemini-only. Pinned on the session for the same reason as codexDeveloperInstructions: the carrier is materialized at spawn time (here, a file the child reads on launch), so reusing an existing child against a changed engraving would surface the previous identity to the model. Compatibility checks include this field — see `isSessionCompatible`. The claude/codex adapters ignore it. */
+	geminiSystemPromptText?: string;
 	settingSources: ClaudeSettingSource[];
 	strictMcpConfig: boolean;
 	mcpServers: McpServer[];
@@ -385,6 +388,8 @@ export type EnsureBridgeSessionParams = {
 	disallowedTools: string[];
 	/** codex-rs feature keys (e.g. "image_generation", "tool_suggest", "multi_agent", "apps") materialized as `-c features.<key>=false` flags at codex-acp launch. Codex-only — the claude adapter ignores this. Mirror of `disallowedTools` on the codex side: the sole operator-tunable knob for the codex tool surface. Defaults to `DEFAULT_CODEX_DISABLED_FEATURES` (defined in acp-bridge.ts). Set to `[]` in pi-shell-acp settings.json to opt fully out of bridge feature gating. */
 	codexDisabledFeatures: string[];
+	/** Gemini identity carrier — rendered engraving written into the overlay's `system.md` (`GEMINI_SYSTEM_MD` target) at spawn time by ensureGeminiConfigOverlay. Gemini-only — the claude/codex adapters ignore this. When omitted/empty, the overlay still authors a non-empty placeholder so gemini's `getCoreSystemPrompt` always takes the override branch (replacing the native "Instruction and Memory Files" body). */
+	geminiSystemPromptText?: string;
 	bridgeConfigSignature: string;
 	contextMessageSignatures: string[];
 };
@@ -840,6 +845,68 @@ function resolveCodexAcpLaunch(launchParams: AcpBackendLaunchParams): AcpLaunchS
 		command: "codex-acp",
 		args: allArgs,
 		source: "PATH:codex-acp",
+	};
+}
+
+/**
+ * Resolve the Gemini CLI ACP launch spec.
+ *
+ * Gemini CLI exposes ACP via its `--acp` flag (PATH:gemini --acp), launching
+ * the same CLI binary in stdio JSON-RPC mode. Unlike Claude/Codex, this is
+ * NOT a separate `*-acp` server package; the gemini CLI itself is the ACP
+ * server. We therefore resolve from PATH only — there is no node-package
+ * fallback like `@google/gemini-cli` to unpack into our dependency graph.
+ *
+ * Operators install via:
+ *   pnpm add -g @google/gemini-cli
+ *   # or: npm i -g @google/gemini-cli
+ *
+ * Override path: GEMINI_ACP_COMMAND lets operators inline a different
+ * launch (e.g. `gemini --acp --debug`, or a wrapper script). The override
+ * runs through `bash -lc` so shell tokenization matches the operator's
+ * shell environment, mirroring CODEX_ACP_COMMAND.
+ *
+ * Identity carrier: gemini-cli does not honor ACP's `_meta.systemPrompt` and
+ * has no `-c developer_instructions` equivalent, but it does honor a path-
+ * valued env var `GEMINI_SYSTEM_MD` that fully replaces the native system-
+ * prompt body when the file exists (packages/core/src/prompts/promptProvider.ts:111).
+ * The overlay (ensureGeminiConfigOverlay) authors that file with the operator
+ * engraving as body and `GEMINI_CLI_HOME` + `GEMINI_SYSTEM_MD` are pinned at
+ * spawn through the adapter's `bridgeEnvDefaults` — equivalent in role to
+ * Claude's `_meta.systemPrompt` replacement and Codex's `developer_instructions`.
+ *
+ * Tool surface narrowing: `--admin-policy <path>` loads a TOML rule file at
+ * priority tier 5.x, beating every other tier (Default<Extension<Workspace<
+ * User<Admin). The overlay authors `policies/admin.toml` with a deny-all
+ * catch-all plus explicit allows for the pi baseline (read_file = Read,
+ * write_file = Write, replace = Edit, run_shell_command = Bash) and a
+ * whitelist of MCP servers we inject through `mcpServers`. The flag
+ * accepts comma-separated paths and may also be repeated (gemini --help).
+ *
+ * The launchParams are accepted for adapter signature compatibility but
+ * deliberately unused on the gemini backend (no operator-tunable knobs
+ * surface here yet — codexDeveloperInstructions and codexDisabledFeatures
+ * are codex-only).
+ */
+function resolveGeminiAcpLaunch(_launchParams: AcpBackendLaunchParams): AcpLaunchSpec {
+	const override = process.env.GEMINI_ACP_COMMAND?.trim();
+	// Bridge args we always pin — `--admin-policy` loads the overlay's TOML
+	// at priority tier 5.x (Admin > User > Workspace > Extension > Default),
+	// so even with the override path the tool-surface narrowing wins. Mirror
+	// of the Codex `${override} ${ourFlags}` pattern in resolveCodexAcpLaunch.
+	const bridgeArgs = ["--admin-policy", GEMINI_OVERLAY_ADMIN_POLICY_PATH];
+	if (override) {
+		const command = `${override} ${bridgeArgs.map(shellQuote).join(" ")}`;
+		return {
+			command: "bash",
+			args: ["-lc", command],
+			source: "env:GEMINI_ACP_COMMAND",
+		};
+	}
+	return {
+		command: "gemini",
+		args: ["--acp", ...bridgeArgs],
+		source: "PATH:gemini --acp --admin-policy <overlay>",
 	};
 }
 
@@ -1500,6 +1567,458 @@ export function ensureCodexConfigOverlay(
 	}
 }
 
+// ============================================================================
+// Gemini config overlay — isolate gemini --acp's config + memory + tool surface
+// from the operator's `~/.gemini/`.
+// ============================================================================
+//
+// Path-resolution invariant (verified against gemini-cli 0.40.x source):
+//
+//   homedir()              = process.env.GEMINI_CLI_HOME ?? os.homedir()
+//                            (packages/core/src/utils/paths.ts:22-28)
+//   Storage.getGlobalGeminiDir() = path.join(homedir(), ".gemini")
+//                                  (packages/core/src/config/storage.ts:54)
+//
+// → Setting GEMINI_CLI_HOME swaps `homedir()` *itself*, and the binary
+//   then constructs its real config dir as `${homedir()}/.gemini`. The
+//   overlay therefore needs TWO directories:
+//
+//     fakeHome  = ~/.pi/agent/gemini-config-overlay        (= GEMINI_CLI_HOME)
+//     configDir = ~/.pi/agent/gemini-config-overlay/.gemini (= what the
+//                 binary actually reads via Storage.getGlobalGeminiDir())
+//
+//   All overlay state — settings.json, system.md, policies/admin.toml,
+//   oauth symlinks, empty tmp/history/projects — lives under `configDir`,
+//   not under `fakeHome`. (Earlier overlay shapes wrote to fakeHome root;
+//   the binary silently ignored those files because production code paths
+//   take the `${homedir()}/.gemini/...` route, not `${homedir()}/...`.)
+//
+// This isolation closes four leak channels at the same level Claude and
+// Codex backends do:
+//
+//  ① Operator config dir leak — `~/.gemini/settings.json` (model/UI prefs),
+//    `history/` (per-cwd command history), `projects.json` (cwd → shortId
+//    map exposing every directory the operator opened gemini in),
+//    `trustedFolders.json` (workspace trust prompts), and `tmp/<shortId>/
+//    memory/MEMORY.md` (per-cwd persisted memory). Closed by GEMINI_CLI_HOME
+//    redirect + overlay-authored settings.json + overlay-private empty
+//    tmp/history/projects directories. Note: `tmp/<shortId>/` segments come
+//    from `Storage.getProjectIdentifier()` which slugs the cwd, not the
+//    operator username — the 2026-05-01 baseline `tmp/junghan/` was the
+//    `/home/junghan` cwd's slug, not a username field.
+//
+//  ② Native system-prompt body leak — `getCoreSystemPrompt`
+//    (packages/core/src/prompts/promptProvider.ts:47-119) embeds the
+//    bundled "Instruction and Memory Files" body (and ~30 KB of native
+//    rules) by default. The 2026-05-01 baseline captured the model
+//    quoting that body verbatim. With overlay we set
+//    `GEMINI_SYSTEM_MD=<configDir>/system.md` and write our own engraving-
+//    derived prompt; gemini's `if (systemMdResolution.value)` branch then
+//    completely replaces the native body with our file. Equivalent in
+//    role to Claude's `_meta.systemPrompt` replacement and Codex's
+//    `-c developer_instructions=<...>`.
+//
+//  ③ Native tool registry advertise-and-invoke surface — gemini's bundled
+//    tool surface includes (at minimum) read_file, write_file, replace,
+//    run_shell_command, glob, grep_search, list_directory, web_fetch,
+//    google_web_search, save_memory, write_todos, ask_user, enter/exit_
+//    plan_mode, plus subagents (`codebase_investigator`, `cli_help`,
+//    `tracker_*`, `update_topic`, ...) and `activate_skill` /
+//    `read_mcp_resource` / `list_mcp_resources`. Without narrowing, the
+//    agent sees every one of these in its tool list. We close the surface
+//    on TWO layers (mirroring Claude's `tools` + `disallowedTools` split):
+//      - **registry layer** (advertise side): `tools.core` allowlist in
+//        settings.json restricts the *built-in* registry to the four
+//        pi-baseline names (read_file/write_file/replace/run_shell_command)
+//        → Claude's `tools: ["Read","Bash","Edit","Write"]` analog
+//      - **policy layer** (invoke side): `--admin-policy <path>` at spawn
+//        loads a deny-all-then-explicit-allow TOML at priority tier 5.x
+//        (Admin > User > Workspace > Extension > Default). Defense in
+//        depth — even if a future binary ignores `tools.core`, the policy
+//        engine still blocks the call.
+//    Plus complementary settings flags: `useWriteTodos: false`,
+//    `skills.enabled: false`, `hooksConfig.enabled: false`,
+//    `agents.overrides.<id>.enabled: false` for the subagents pi does
+//    not want to surface, `mcp.allowed: [...]` whitelisting only the
+//    bridge-injected MCP servers, `mcp.excluded: ["*"]` for everything
+//    else — the gemini equivalent of Codex's `codexDisabledFeatures`.
+//
+//  ④ Hierarchical GEMINI.md discovery — by default gemini walks cwd → its
+//    parents (stopping at `.git`) → user home, picking up every `GEMINI.md`
+//    on the way (packages/core/src/utils/memoryDiscovery.ts:loadServer
+//    HierarchicalMemory). Closed by `context.fileName` set to a sentinel
+//    string that no real file uses + `memoryBoundaryMarkers: []` to kill
+//    parent traversal entirely + `includeDirectoryTree: false` so the
+//    cwd dir-tree is not auto-attached to the model's first request.
+//    (Equivalent to Claude not auto-loading `CLAUDE.md` in pi-shell-acp.)
+//
+// The overlay layout that results, mirroring the Claude/Codex shape:
+//
+//   ~/.pi/agent/gemini-config-overlay/                      (= fakeHome)
+//   └── .gemini/                                            (= configDir)
+//       ├── settings.json         (overlay-authored)
+//       ├── system.md             (overlay-authored — GEMINI_SYSTEM_MD)
+//       ├── policies/
+//       │   └── admin.toml        (overlay-authored — --admin-policy)
+//       ├── oauth_creds.json      → ~/.gemini/oauth_creds.json (symlink)
+//       ├── google_accounts.json  → ~/.gemini/google_accounts.json
+//       ├── installation_id       → ~/.gemini/installation_id
+//       ├── mcp-oauth-tokens-v2.json → ~/.gemini/...
+//       ├── tmp/                  (empty, overlay-private)
+//       ├── history/              (empty, overlay-private)
+//       └── projects/             (empty, overlay-private)
+//
+// The overlay is rebuilt on every gemini session bootstrap (idempotent), so
+// new auth files appearing in ~/.gemini/ later (e.g. operator re-auth)
+// surface on the next launch without manual intervention.
+const GEMINI_REAL_CONFIG_DIR = join(homedir(), ".gemini");
+export const GEMINI_CONFIG_OVERLAY_HOME = join(homedir(), ".pi", "agent", "gemini-config-overlay");
+export const GEMINI_CONFIG_OVERLAY_DIR = join(GEMINI_CONFIG_OVERLAY_HOME, ".gemini");
+export const GEMINI_OVERLAY_SYSTEM_MD_PATH = join(GEMINI_CONFIG_OVERLAY_DIR, "system.md");
+export const GEMINI_OVERLAY_ADMIN_POLICY_PATH = join(GEMINI_CONFIG_OVERLAY_DIR, "policies", "admin.toml");
+
+// Whitelist: only auth + runtime credential entries are surfaced from the
+// operator's ~/.gemini/ via symlink. Operator personal config (settings.json
+// with model/UI prefs), session history, project-id maps, and trust state
+// are NOT exposed.
+const GEMINI_OVERLAY_PASSTHROUGH = new Set([
+	"oauth_creds.json", // Google OAuth credentials for `gemini --acp`
+	"google_accounts.json", // active account selection (oauth)
+	"installation_id", // stable per-install identifier
+	"mcp-oauth-tokens-v2.json", // operator's MCP OAuth tokens (auth)
+]);
+
+// Empty directories owned by the overlay. The gemini CLI auto-creates per-cwd
+// state under these paths (memory subtree, command history, project-id
+// mappings). Owning them as empty trees scoped to the overlay means the
+// operator's `~/.gemini/{tmp,history,projects.json}` is never read.
+const GEMINI_OVERLAY_EMPTY_DIRS = new Set(["tmp", "history", "projects"]);
+
+// Entries the gemini CLI may create inside the overlay itself once it runs
+// against `GEMINI_CLI_HOME=<fakeHome>`. Plus the overlay-authored entries —
+// listed here so the stale-cleanup loop never deletes them. Mirrors the
+// claude/codex `OVERLAY_BINARY_OWNED` exemption pattern.
+const GEMINI_OVERLAY_BINARY_OWNED = new Set([
+	"settings.json", // overlay-authored
+	"system.md", // overlay-authored (GEMINI_SYSTEM_MD target)
+	"policies", // overlay-authored directory
+	"state.json", // gemini-binary-owned runtime state
+	"projects.json", // gemini-binary-owned project map
+	"google_accounts.json", // may also appear as binary-rewritten regular file
+]);
+
+// Subagents we explicitly disable in addition to keeping them off the
+// `tools.core` allowlist. The CLI may register subagents via channels other
+// than `tools.core` (settings-time subagent loaders), so a defensive
+// `agents.overrides.<id>.enabled = false` keeps them out regardless.
+const GEMINI_DISABLED_SUBAGENTS = [
+	"codebase_investigator",
+	"cli_help",
+	"tracker_create_task",
+	"tracker_update_task",
+	"tracker_get_task",
+	"tracker_list_tasks",
+	"tracker_add_dependency",
+	"tracker_visualize",
+	"update_topic",
+	"browser",
+] as const;
+
+// Built-in tools we want the model to actually see and call — pi baseline.
+// Mapped to Claude's `tools: ["Read","Bash","Edit","Write"]` by *capability
+// class*, not by literal name. Gemini splits the Read class into four
+// concrete tools (read_file for files, list_directory for directories, glob
+// for shell-glob enumeration, grep_search for content search); the other
+// three classes stay 1:1. The pi-context augment already advertises tool
+// naming as backend-specific ("Read 또는 read_file" framing), so the rule is
+// **same operating-surface classes, not same literal names**.
+//   Read-class:  read_file / list_directory / glob / grep_search ↔ Read
+//   Write-class: write_file                                       ↔ Write
+//   Edit-class:  replace                                          ↔ Edit
+//   Exec-class:  run_shell_command                                ↔ Bash
+//
+// Allowing all four read-class tools removes the "visible but deny'd"
+// asymmetry that would otherwise show: with a 4-name allowlist the model
+// would still see the 7 native tools (Gemini's fine-tuned tool advertise
+// surface; not narrowed by `tools.core` in the binaries we tested), but
+// `list_directory` / `glob` / `grep_search` would deny at invoke. Cleaner
+// to admit the read-class split honestly.
+const GEMINI_TOOLS_CORE_ALLOWLIST = [
+	"read_file",
+	"list_directory",
+	"glob",
+	"grep_search",
+	"write_file",
+	"replace",
+	"run_shell_command",
+] as const;
+
+// MCP servers we explicitly allow at the gemini level. Only the two stdio
+// servers pi-shell-acp injects through `mcpServers`. Anything else (operator-
+// configured stdio MCPs in their personal `~/.gemini/settings.json`,
+// http/sse servers in extensions, etc.) is filtered out by gemini before
+// the policy engine even sees it.
+const GEMINI_MCP_ALLOWLIST = ["pi-tools-bridge", "session-bridge"] as const;
+
+// Sentinel filename for `context.fileName`. Chosen so no real file in the
+// universe matches — neutralizes hierarchical GEMINI.md discovery without
+// disabling the discovery machinery itself (which the binary still wires up).
+const GEMINI_CONTEXT_FILENAME_SENTINEL = "__pi_shell_acp_disabled_context__";
+
+// Minimal settings.json for the overlay. Authored as a tight allowlist —
+// every operator preference for model/UI/memory/skills/extensions/agents is
+// closed off. Mirrors the Claude `tools` + `permissionAllow` +
+// `disallowedTools` + `skillPlugins` + `settingSources: []` shape and the
+// Codex `codexDisabledFeatures` + `-c features.<key>=false` feature gates.
+function geminiOverlaySettingsJson(): string {
+	const agentsOverrides: Record<string, { enabled: boolean }> = {};
+	for (const id of GEMINI_DISABLED_SUBAGENTS) agentsOverrides[id] = { enabled: false };
+	return `${JSON.stringify(
+		{
+			advanced: { autoConfigureMemory: false },
+			security: {
+				auth: { selectedType: "oauth-personal" },
+				folderTrust: { enabled: false }, // disable trust prompt + trustedFolders.json read
+			},
+			context: {
+				fileName: GEMINI_CONTEXT_FILENAME_SENTINEL,
+				includeDirectoryTree: false,
+				memoryBoundaryMarkers: [], // kill parent traversal
+				includeDirectories: [],
+				loadMemoryFromIncludeDirectories: false,
+			},
+			tools: {
+				core: [...GEMINI_TOOLS_CORE_ALLOWLIST], // Claude `tools` analog
+			},
+			useWriteTodos: false, // disable write_todos tool
+			skills: { enabled: false }, // disable agent skills (Claude `skillPlugins: []` analog)
+			hooksConfig: { enabled: false }, // disable hooks system
+			extensions: { disabled: [] }, // we do not pre-blacklist extensions; extensions auto-load is gated by `--extensions` flag and we do not pass it
+			agents: { overrides: agentsOverrides }, // disable subagents we do not surface
+			mcp: {
+				allowed: [...GEMINI_MCP_ALLOWLIST],
+				excluded: ["*"], // catch-all — only allowed[] survives
+			},
+		},
+		null,
+		2,
+	)}\n`;
+}
+
+// Admin-policy TOML written into the overlay. Loaded by gemini at spawn time
+// via `--admin-policy <path>` (priority tier 5.x — overrides Default,
+// Extension, Workspace, and User policies unconditionally; see
+// packages/core/src/policy/config.ts).
+//
+// Defense-in-depth: even if `tools.core` ever stops shrinking the registry
+// in a future gemini binary, the policy engine still blocks the call.
+function geminiOverlayAdminPolicyToml(): string {
+	const allowedTools = GEMINI_TOOLS_CORE_ALLOWLIST.map((n) => JSON.stringify(n)).join(", ");
+	const allowedMcp = GEMINI_MCP_ALLOWLIST.map((n) => JSON.stringify(n)).join(", ");
+	return [
+		"# pi-shell-acp admin policy (priority tier 5.x — beats every other tier).",
+		"# Authored by acp-bridge.ts geminiOverlayAdminPolicyToml(); do not edit by hand.",
+		"# Strategy: deny-all catch-all, then explicit allows for the pi baseline",
+		"# capability classes (Read/Write/Edit/Bash) — read-class is split into",
+		"# Gemini's four concrete read tools so visible-but-deny'd asymmetry does",
+		"# not show. Plus a whitelist of injected MCP servers.",
+		"",
+		"# Catch-all DENY — every native tool, every MCP, blocked unless re-allowed below.",
+		"[[rule]]",
+		'toolName = "*"',
+		'decision = "deny"',
+		"priority = 50",
+		"",
+		"# pi baseline native tools by capability class (Read/Write/Edit/Bash):",
+		"# Read-class  = read_file / list_directory / glob / grep_search",
+		"# Write-class = write_file",
+		"# Edit-class  = replace",
+		"# Exec-class  = run_shell_command",
+		"[[rule]]",
+		`toolName = [${allowedTools}]`,
+		'decision = "allow"',
+		"priority = 100",
+		"",
+		"# MCP catch-all DENY — any MCP server we did not inject is blocked.",
+		"[[rule]]",
+		'toolName = "*"',
+		'mcpName = "*"',
+		'decision = "deny"',
+		"priority = 50",
+		"",
+		"# MCP whitelist — pi-shell-acp's two injected stdio servers.",
+		"[[rule]]",
+		'toolName = "*"',
+		`mcpName = [${allowedMcp}]`,
+		'decision = "allow"',
+		"priority = 100",
+		"",
+	].join("\n");
+}
+
+// Carrier-isolation canary appended to system.md. A baseline operator can
+// ask the model to quote this string (and only this string) to confirm
+// `GEMINI_SYSTEM_MD` actually replaced the bundled native "Instruction and
+// Memory Files" body — i.e. that the file we author here reaches the same
+// prompt slot as Claude's `_meta.systemPrompt` and Codex's
+// `-c developer_instructions`. If the model can't see the canary, the
+// carrier is not landing where we think it is, regardless of what stale
+// AGENTS / augment text the model otherwise repeats.
+const GEMINI_OVERLAY_SYSTEM_MD_CANARY = "GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1";
+
+// system.md content for the overlay. Receives the operator engraving (when
+// configured) as the body, plus the carrier-isolation canary line. Empty
+// engraving still produces a non-empty placeholder file so gemini's
+// `getCoreSystemPrompt` takes the override branch (replacing the native
+// "Instruction and Memory Files" body) instead of falling back to the
+// bundled default.
+//
+// The bridge identity narrative + pi context + ~/AGENTS.md + cwd/AGENTS.md
+// + date/cwd ride the first-user augment (pi-context-augment.ts), not this
+// system-prompt carrier — same split as claude (`_meta.systemPrompt`) and
+// codex (`-c developer_instructions`). Keeping system.md small avoids the
+// metered-billing routing risk that motivated the same split on Claude.
+function geminiOverlaySystemMd(engravingText: string | undefined): string {
+	const engraving = (engravingText ?? "").trim();
+	const canaryLine = `[carrier-canary] ${GEMINI_OVERLAY_SYSTEM_MD_CANARY}`;
+	if (engraving.length > 0) {
+		return `${engraving}\n\n${canaryLine}\n`;
+	}
+	// Placeholder when no operator engraving — file must exist non-empty so
+	// gemini's `if (systemMdResolution.value)` branch is taken. The canary
+	// line both keeps the file non-empty and gives baseline a deterministic
+	// quote target.
+	return `You are an agent operating under pi-shell-acp. Follow the operating context delivered in the first user message.\n\n${canaryLine}\n`;
+}
+
+// Sweep the fake-home root (one level above configDir) of any leftover
+// entries from earlier overlay shapes that wrote settings/oauth/tmp/etc. at
+// fakeHome top level rather than inside `.gemini/`. Those files were
+// silently ignored by the binary (production code paths take the
+// `${homedir()}/.gemini/...` route) but they still pollute the overlay
+// filesystem and confuse anyone inspecting it. Best-effort: anything that
+// is not the `.gemini/` directory itself is removed.
+function cleanFakeHomeRoot(fakeHome: string, configDirName: string): void {
+	let entries: string[];
+	try {
+		entries = readdirSync(fakeHome);
+	} catch {
+		return;
+	}
+	for (const entry of entries) {
+		if (entry === configDirName) continue;
+		const target = join(fakeHome, entry);
+		try {
+			rmSync(target, { recursive: true, force: true });
+		} catch {
+			// Best-effort; a stuck stale entry is annoying but not fatal.
+		}
+	}
+}
+
+export function ensureGeminiConfigOverlay(
+	engravingText?: string,
+	realDir: string = GEMINI_REAL_CONFIG_DIR,
+	fakeHome: string = GEMINI_CONFIG_OVERLAY_HOME,
+	configDir: string = join(fakeHome, ".gemini"),
+): void {
+	mkdirSync(fakeHome, { recursive: true });
+	cleanFakeHomeRoot(fakeHome, ".gemini");
+	mkdirSync(configDir, { recursive: true });
+	mkdirSync(join(configDir, "policies"), { recursive: true });
+
+	// Overlay-authored files — always rewritten. Cheap, unconditional rewrite
+	// ensures the overrides are in place even if a prior process or operator
+	// edited them. Paths are derived from the supplied configDir so the
+	// function is testable against a synthetic root.
+	writeFileSync(join(configDir, "settings.json"), geminiOverlaySettingsJson(), "utf8");
+	writeFileSync(join(configDir, "system.md"), geminiOverlaySystemMd(engravingText), "utf8");
+	writeFileSync(join(configDir, "policies", "admin.toml"), geminiOverlayAdminPolicyToml(), "utf8");
+
+	// Empty dirs — overlay-private, replace any prior symlink to operator data.
+	for (const entry of GEMINI_OVERLAY_EMPTY_DIRS) {
+		const overlayPath = join(configDir, entry);
+		try {
+			const existing = lstatSync(overlayPath);
+			if (existing.isSymbolicLink() || !existing.isDirectory()) {
+				rmSync(overlayPath, { recursive: true, force: true });
+				mkdirSync(overlayPath, { recursive: true });
+			}
+		} catch {
+			mkdirSync(overlayPath, { recursive: true });
+		}
+	}
+
+	// Symlinked passthrough — only entries on the whitelist, only if they
+	// exist in the operator's real ~/.gemini/. Idempotent: keeps correct
+	// symlinks, replaces wrong ones, removes stale entries cleanly.
+	if (existsSync(realDir)) {
+		for (const entry of GEMINI_OVERLAY_PASSTHROUGH) {
+			const realPath = join(realDir, entry);
+			const overlayPath = join(configDir, entry);
+
+			if (!existsSync(realPath)) {
+				try {
+					lstatSync(overlayPath);
+					rmSync(overlayPath, { recursive: true, force: true });
+				} catch {
+					// Doesn't exist — fine.
+				}
+				continue;
+			}
+
+			try {
+				const existing = lstatSync(overlayPath);
+				if (existing.isSymbolicLink()) {
+					if (readlinkSync(overlayPath) === realPath) continue;
+					unlinkSync(overlayPath);
+				} else {
+					rmSync(overlayPath, { recursive: true, force: true });
+				}
+			} catch {
+				// Doesn't exist — fall through to symlink.
+			}
+
+			try {
+				symlinkSync(realPath, overlayPath);
+			} catch (error) {
+				console.error(
+					`[pi-shell-acp:gemini-overlay] symlink failed for ${entry}: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			}
+		}
+	}
+
+	// Stale entry cleanup — remove anything not on the current allowlist.
+	// Mirrors the claude/codex cleanup: any pre-overlay symlink pointing at
+	// operator state (e.g. a stale `history` symlink to ~/.gemini/history
+	// from a prior iteration) is torn down so the overlay reverts to the
+	// authored shape on every session.
+	for (const entry of readdirSync(configDir)) {
+		if (GEMINI_OVERLAY_PASSTHROUGH.has(entry)) continue;
+		if (GEMINI_OVERLAY_EMPTY_DIRS.has(entry)) continue;
+		const overlayPath = join(configDir, entry);
+
+		if (GEMINI_OVERLAY_BINARY_OWNED.has(entry)) {
+			try {
+				const stat = lstatSync(overlayPath);
+				if (stat.isSymbolicLink()) {
+					rmSync(overlayPath, { force: true });
+				}
+			} catch {
+				// Doesn't exist — fine; binary will create it on first launch.
+			}
+			continue;
+		}
+
+		try {
+			rmSync(overlayPath, { recursive: true, force: true });
+		} catch {
+			// Best-effort cleanup; a stuck stale entry is annoying but not fatal.
+		}
+	}
+}
+
 const ACP_BACKEND_ADAPTERS: Record<AcpBackend, AcpBackendAdapter> = {
 	claude: {
 		id: "claude",
@@ -1528,6 +2047,47 @@ const ACP_BACKEND_ADAPTERS: Record<AcpBackend, AcpBackendAdapter> = {
 			// ensureClaudeConfigOverlay below). process.env wins, so an operator who
 			// explicitly exports CLAUDE_CONFIG_DIR keeps full control.
 			CLAUDE_CONFIG_DIR: CLAUDE_CONFIG_OVERLAY_DIR,
+		},
+	},
+	gemini: {
+		id: "gemini",
+		stderrLabel: "gemini --acp stderr",
+		resolveLaunch: resolveGeminiAcpLaunch,
+		// Gemini ACP newSession does not expose a `_meta.systemPrompt` carrier,
+		// but Gemini CLI exposes `GEMINI_SYSTEM_MD=<path>` which fully replaces
+		// the native "Instruction and Memory Files" body with the file content
+		// (packages/core/src/prompts/promptProvider.ts:111). pi-shell-acp uses
+		// that env var to point at the overlay's `system.md` (authored by
+		// ensureGeminiConfigOverlay with the operator engraving as body). The
+		// engraving therefore reaches gemini through the same kind of replace-
+		// the-system-prompt carrier as Claude (`_meta.systemPrompt`) and codex
+		// (`-c developer_instructions`) — not via the first-user augment any
+		// more. The richer context (bridge narrative + pi base + ~/AGENTS.md +
+		// cwd/AGENTS.md + date/cwd) still rides the first-user augment, same
+		// split as the other two backends.
+		buildSessionMeta: () => undefined,
+		buildBootstrapPromptAugment: (text) => [{ type: "text", text }],
+		bridgeEnvDefaults: {
+			// Redirect gemini-cli's `homedir()` (packages/core/src/utils/paths.ts:22)
+			// to the overlay's fakeHome. The binary then resolves
+			// `Storage.getGlobalGeminiDir() = path.join(homedir(), ".gemini")`
+			// (storage.ts:54) → `<fakeHome>/.gemini/`, where ensureGeminiConfigOverlay
+			// has authored settings.json / system.md / policies/admin.toml and
+			// symlinked oauth credentials. The operator's real ~/.gemini/ — with
+			// model/UI prefs, history/, projects.json (cwd → shortId map exposing
+			// every directory the operator opened gemini in), trustedFolders.json,
+			// and tmp/<shortId>/memory/MEMORY.md per-cwd memory — is never read.
+			// process.env wins, so an operator who explicitly exports
+			// GEMINI_CLI_HOME keeps full control.
+			GEMINI_CLI_HOME: GEMINI_CONFIG_OVERLAY_HOME,
+			// Replace the gemini native system prompt body. Without this, the
+			// model surfaces native "Instruction and Memory Files" rules verbatim
+			// (observed L1 baseline 2026-05-01). With this, the overlay-authored
+			// system.md (operator engraving) is the only system-level content the
+			// model sees; substitutions like ${EDIT_TOOL_NAME} are applied to our
+			// file too — that is intentional, the bound names match the admin-
+			// policy allowlist (read_file/write_file/replace/run_shell_command).
+			GEMINI_SYSTEM_MD: GEMINI_OVERLAY_SYSTEM_MD_PATH,
 		},
 	},
 	codex: {
@@ -1575,7 +2135,7 @@ export function resolveAcpBackendAdapter(backend: AcpBackend): AcpBackendAdapter
 	}
 	const adapter = ACP_BACKEND_ADAPTERS[backend];
 	if (!adapter) {
-		throw new Error(`Unknown ACP backend: ${String(backend)}. Expected one of: claude, codex`);
+		throw new Error(`Unknown ACP backend: ${String(backend)}. Expected one of: claude, codex, gemini`);
 	}
 	return adapter;
 }
@@ -1642,6 +2202,8 @@ function parsePersistedSessionRecord(raw: unknown, sessionKey: string): Persiste
 	if (!(bootstrapPromptAugment == null || typeof bootstrapPromptAugment === "string")) return undefined;
 	const codexDeveloperInstructions = record["codexDeveloperInstructions"];
 	if (!(codexDeveloperInstructions == null || typeof codexDeveloperInstructions === "string")) return undefined;
+	const geminiSystemPromptText = record["geminiSystemPromptText"];
+	if (!(geminiSystemPromptText == null || typeof geminiSystemPromptText === "string")) return undefined;
 	return {
 		sessionKey,
 		acpSessionId: record["acpSessionId"] as string,
@@ -1649,6 +2211,7 @@ function parsePersistedSessionRecord(raw: unknown, sessionKey: string): Persiste
 		systemPromptAppend: (systemPromptAppend ?? null) as string | null,
 		bootstrapPromptAugment: (bootstrapPromptAugment ?? null) as string | null,
 		codexDeveloperInstructions: (codexDeveloperInstructions ?? null) as string | null,
+		geminiSystemPromptText: (geminiSystemPromptText ?? null) as string | null,
 		bridgeConfigSignature: record["bridgeConfigSignature"] as string,
 		contextMessageSignatures: [...(record["contextMessageSignatures"] as string[])],
 		updatedAt: record["updatedAt"] as string,
@@ -1685,6 +2248,7 @@ function persistBridgeSessionRecord(session: AcpBridgeSession): void {
 		systemPromptAppend: session.systemPromptAppend ?? null,
 		bootstrapPromptAugment: session.bootstrapPromptAugment ?? null,
 		codexDeveloperInstructions: session.codexDeveloperInstructions ?? null,
+		geminiSystemPromptText: session.geminiSystemPromptText ?? null,
 		bridgeConfigSignature: session.bridgeConfigSignature,
 		contextMessageSignatures: [...session.contextMessageSignatures],
 		updatedAt: new Date().toISOString(),
@@ -1736,6 +2300,13 @@ function detectSessionCapabilities(initializeResult: InitializeResponse): Bridge
 // against a changed engraving would surface the *previous* identity carrier
 // to the model — exactly the leak we are closing. Including the field here
 // forces a fresh codex-acp spawn whenever the engraving changes.
+//
+// geminiSystemPromptText IS part of compatibility checks for the same
+// reason: it is materialized as a file the gemini child reads at launch
+// (`GEMINI_SYSTEM_MD=<overlay>/system.md`, written by ensureGeminiConfigOverlay
+// at spawn time). Reusing an existing gemini child against a changed
+// engraving would leave the previously-written system.md content in front
+// of the model.
 function isSessionCompatible(
 	session: Pick<
 		AcpBridgeSession,
@@ -1743,6 +2314,7 @@ function isSessionCompatible(
 		| "backend"
 		| "systemPromptAppend"
 		| "codexDeveloperInstructions"
+		| "geminiSystemPromptText"
 		| "bridgeConfigSignature"
 		| "contextMessageSignatures"
 	>,
@@ -1754,6 +2326,7 @@ function isSessionCompatible(
 		session.backend === params.backend &&
 		session.systemPromptAppend === normalizedSystemPrompt &&
 		normalizeText(session.codexDeveloperInstructions) === normalizeText(params.codexDeveloperInstructions) &&
+		normalizeText(session.geminiSystemPromptText) === normalizeText(params.geminiSystemPromptText) &&
 		session.bridgeConfigSignature === params.bridgeConfigSignature &&
 		hasPrefix(session.contextMessageSignatures, params.contextMessageSignatures)
 	);
@@ -1768,6 +2341,7 @@ function isPersistedSessionCompatible(
 		record.cwd === params.cwd &&
 		normalizeText(record.systemPromptAppend) === normalizedSystemPrompt &&
 		normalizeText(record.codexDeveloperInstructions) === normalizeText(params.codexDeveloperInstructions) &&
+		normalizeText(record.geminiSystemPromptText) === normalizeText(params.geminiSystemPromptText) &&
 		record.bridgeConfigSignature === params.bridgeConfigSignature &&
 		hasPrefix(record.contextMessageSignatures, params.contextMessageSignatures)
 	);
@@ -2074,6 +2648,21 @@ async function createBridgeProcess(params: EnsureBridgeSessionParams): Promise<A
 			);
 		}
 	}
+	// Refresh the gemini config overlay before every gemini session bootstrap.
+	// Idempotent — picks up any new auth files appearing in ~/.gemini/ since
+	// the last run (e.g. operator re-auth) without manual intervention. The
+	// engraving is rewritten into system.md every spawn; keeping the file
+	// content fresh matches the codex `developer_instructions` / claude
+	// `_meta.systemPrompt` re-delivery cadence (one per spawn).
+	if (params.backend === "gemini" && bridgeEnvDefaults?.GEMINI_CLI_HOME === GEMINI_CONFIG_OVERLAY_HOME) {
+		try {
+			ensureGeminiConfigOverlay(params.geminiSystemPromptText);
+		} catch (error) {
+			console.error(
+				`[pi-shell-acp:gemini-overlay] failed to prepare overlay; falling back to operator's GEMINI_CLI_HOME if any: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+	}
 	// claude-agent-acp 0.31.0 (dist/acp-agent.js:1298) reads
 	// `process.env.CLAUDE_CODE_EXECUTABLE` only and ignores the
 	// `_meta.claudeCode.options.pathToClaudeCodeExecutable` we pass. Without
@@ -2179,6 +2768,7 @@ async function createBridgeProcess(params: EnsureBridgeSessionParams): Promise<A
 		systemPromptAppend: normalizeText(params.systemPromptAppend),
 		bootstrapPromptAugment: normalizeText(params.bootstrapPromptAugment),
 		codexDeveloperInstructions: normalizeText(params.codexDeveloperInstructions),
+		geminiSystemPromptText: normalizeText(params.geminiSystemPromptText),
 		settingSources: [...params.settingSources],
 		strictMcpConfig: params.strictMcpConfig,
 		mcpServers: [...params.mcpServers],
