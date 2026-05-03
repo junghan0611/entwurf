@@ -4,6 +4,44 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.4.8 — 2026-05-01
+
+### Added
+
+- **Gemini CLI as a third ACP backend.** `gemini --acp` joins Claude Code and Codex on the bridge surface. Two reasons converged: pi-mono v0.71.0 removed its built-in Google Gemini provider (operators were told to switch to another provider), and Gemini CLI promoted its `--acp` flag from `--experimental-acp` to the supported surface. The bridge picks the path back up rather than losing Gemini access entirely or routing through API-key/Vertex provider paths. Set `backend: "gemini"` in `piShellAcpProvider`, or pick `pi-shell-acp/gemini-3-flash-preview` and inference will route to the gemini adapter.
+- **`run.sh smoke-gemini`** runs the new explicit Gemini smoke (initialize / newSession / single prompt round-trip / shutdown). `smoke-all` now invokes it after Claude and Codex when `gemini` is on PATH; if not, smoke-all skips with a clear notice rather than failing — operators who don't use the gemini backend stay green. The PATH dependency is documented (`pnpm add -g @google/gemini-cli`); pi-shell-acp does not bundle a separate `*-acp` server package for Gemini because the gemini CLI binary itself is the ACP server.
+- **`GEMINI_ACP_COMMAND`** environment override mirrors `CLAUDE_AGENT_ACP_COMMAND` and `CODEX_ACP_COMMAND`. Operators can run `gemini --acp --debug` or wrap the launch in a script without touching settings.json.
+- **One curated Gemini model**: `gemini-3-flash-preview`, sourced from pi-ai's `google` registry (1,048,576 context). This is what `gemini --acp` defaults to today — bootstrap logs show `fromModel=gemini-3-flash-preview` before the bridge calls `unstable_setSessionModel` to apply the requested model. 2.5 / 3.1 / lite / numbered-snapshot variants are intentionally excluded from the curated surface; non-curated ids still route to the gemini backend through the broader pi-ai registry fallback in `inferBackendFromModel`.
+- **One entwurf target** under `provider: "pi-shell-acp"`: `gemini-3-flash-preview`, `explicitOnly: true`. There is no native pi google provider to disambiguate against on 0.4.8, but the flag keeps the policy stable if pi reintroduces one.
+
+### Surface isolation — closed channels (baseline 2026-05-03)
+
+Earlier 2026-05-01 baseline ran with the gemini adapter ACP-connected but not pi-surface-isolated. 0.4.8 ships the closure on five channels, each with both code-level (synthetic test in `check-backends`) and model-side (operator baseline interview) evidence.
+
+- **L1 — native system body.** `GEMINI_SYSTEM_MD = <overlay>/system.md` replaces gemini-cli's bundled "Instruction and Memory Files" body. The overlay always appends a carrier-isolation canary line (`GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1`); a baseline operator can ask the model to quote it (and only it) to confirm the carrier reaches the same prompt slot Claude reaches via `_meta.systemPrompt` and Codex reaches via `-c developer_instructions`. 2026-05-03 baseline: model classified the canary string under "actual system prompt (Developer Instruction)", confirming the file replaces native body rather than landing on a different surface.
+- **L2 — operator memory path.** `GEMINI_CLI_HOME` redirects gemini's `homedir()` so the binary resolves `Storage.getGlobalGeminiDir()` to `<overlay>/.gemini/` instead of `~/.gemini/`. Earlier baseline read `~/.gemini/tmp/junghan/memory/MEMORY.md` as a username leak; the substring `junghan` was actually a `Storage.getProjectIdentifier()` slug of the `/home/junghan` cwd, not a username field — the closure handles both readings, and the operator's real `~/.gemini/{history, projects.json, tmp/<slug>/memory, trustedFolders.json, settings.json}` is now never read. 2026-05-03 baseline: model reports overlay tmp paths (`<overlay>/.gemini/tmp/<cwd-slug>`), not the operator's `~/.gemini/` tree.
+- **L3 — tool surface.** `tools.core` 7-name allow + `--admin-policy` (priority tier 5.x — beats Default / Extension / Workspace / User policies) deny-all + same 7-name allow. The 7 names map to 4 capability classes (Read = `read_file` / `list_directory` / `glob` / `grep_search`; Write = `write_file`; Edit = `replace`; Exec = `run_shell_command`) — same operating-surface boundary as Claude `Read/Bash/Edit/Write`, with the read-class split admitted honestly so the model does not see "visible but deny'd" tools. 2026-05-03 baseline: model invoked all 4 read-class tools without any `denied by admin policy` response.
+- **L4 — `GEMINI.md` hierarchical discovery.** `context.fileName` set to a sentinel (`__pi_shell_acp_disabled_context__`), `memoryBoundaryMarkers: []` to kill parent traversal, `includeDirectoryTree: false` to drop cwd dir-tree auto-attach. 2026-05-03 baseline: model reports no `GEMINI.md` awareness in cwd, parent chain, or home.
+- **MCP whitelist.** `mcp.allowed: [pi-tools-bridge, session-bridge]` + `mcp.excluded: ["*"]` keep gemini-side ambient MCPs (operator-configured stdio in `~/.gemini/settings.json`, http/sse in extensions) from surfacing. 2026-05-03 baseline: model enumerates only the two bridge servers.
+
+### Documented asymmetry — MCP function-schema advertise
+
+Gemini ACP accepts the bridge's stdio MCP servers via `mcpServers`, but does **not** register them as model-visible function-schema entries the way Claude and Codex do. Models route MCP calls through `run_shell_command` (CLI invocation of the underlying skills) instead of direct function calls. This is a Gemini ACP surface property, not something the overlay can close. Operators on the gemini backend see entwurf / semantic-memory / etc. as skill-driven capabilities reached via shell, not as `mcp__<server>__<tool>` function entries. Recorded in the README backend-capability matrix.
+
+### Internal — Backend adapter shape
+
+- **`AcpBackend` widened to `"claude" | "codex" | "gemini"`** with a third entry in `ACP_BACKEND_ADAPTERS`. The gemini adapter sets `buildSessionMeta` to `() => undefined` (Gemini ACP exposes no `_meta.systemPrompt`), uses the same `[{ type: "text", text }]` first-user augment as Claude and Codex, and pins `bridgeEnvDefaults` to `{ GEMINI_CLI_HOME: <overlay>/, GEMINI_SYSTEM_MD: <overlay>/.gemini/system.md }`. Both env pins survive `PI_SHELL_ACP_ALLOW_COMPACTION=1` — they are operator-config-isolation invariants, not policy choices.
+- **Engraving delivery for the gemini backend** is via `GEMINI_SYSTEM_MD = <overlay>/system.md`, written at every spawn by `ensureGeminiConfigOverlay()`. The file equivalent of Claude's `_meta.systemPrompt = <string>` and Codex's `-c developer_instructions="<...>"`. The carrier-isolation canary line keeps the file non-empty in the no-engraving placeholder branch (so `getCoreSystemPrompt`'s `if (systemMdResolution.value)` always takes the override branch) and gives baseline a deterministic quote target.
+- **Session compatibility.** `geminiSystemPromptText` joins `systemPromptAppend` and `codexDeveloperInstructions` in `isSessionCompatible` / `isPersistedSessionCompatible` — changing the engraving on the gemini backend forces a fresh spawn, since the carrier is materialized at spawn time as a file.
+- **`PI_SHELL_ACP_GEMINI_CONTEXT=<int>`** operator override mirrors `PI_SHELL_ACP_CLAUDE_CONTEXT`. Default surface exposes the full registry capacity (1,048,576 for `gemini-3-flash-preview`); operators inline a tighter ceiling for cost / context-management when needed.
+- **`check-backends` 110 → 124 assertions.** Gemini launch resolution (PATH path + `GEMINI_ACP_COMMAND` override appending `--admin-policy`), env pins (`GEMINI_CLI_HOME`, `GEMINI_SYSTEM_MD`), absence of session-meta carrier, settings.json shape (14 closure keys), admin-policy 7-name read-class allow, system.md canary in both engraving and no-engraving branches, overlay-private empty dirs, symlink passthrough whitelist, idempotence.
+- **`check-models`** widens the curated allowlist to seven ids (Claude 2 + Codex 4 + Gemini 1) and adds context-window assertions for the gemini line against pi-ai's `google` source.
+
+### Notes
+
+- **No subscription-billing parity claim.** Gemini ACP supports `oauth-personal` ("Log in with Google"), `gemini-api-key`, `vertex-ai`, and `gateway` auth methods. Whether ACP-mode quota under `oauth-personal` matches ordinary `gemini` CLI mode is a separate verification axis (cf. google-gemini/gemini-cli#20421); pi-shell-acp 0.4.8 does not assert parity.
+- **No `resumeSession` advertisement from Gemini.** Gemini ACP advertises `loadSession: true` only — the bridge's existing `resume > load > new` fallback handles this without code changes. Continuity goes through `loadSession` for Gemini, identical to Codex.
+
 ## 0.4.7 — 2026-04-30
 
 ### Added

@@ -23,6 +23,11 @@ actually see, not what it was told to claim.
 - 메모리에 기억하라고 하면 어떻게 할 것인가?
 - 하나 더, 제공된 스킬로 오늘 개인 구글캘린더 일정을 확인 가능한가?
 
+### Gemini isolation 추가 검증 (0.4.8 — surface isolation 닫힘 확인)
+
+- **(A) L1 carrier-isolation canary**: 당신이 받은 최상위 지침(system prompt 또는 developer instruction)에 정확히 `GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1` 문자열이 있는지 답하라. 있으면 그 문자열만 quote 해라. user/context/docs에서 본 거랑 구분하라.
+- **(B) L3 read-class 정합 검증**: 현재 환경에서 호출 가능한 native tool 중 read-class 4개(`read_file`, `list_directory`, `glob`, `grep_search`)를 한 번씩 시험 호출해라. 어느 것이라도 `denied by admin policy` 같은 거부 응답이 나오면 보고하라.
+
 ## ENGLISH
 
 - What does your system prompt say?
@@ -43,6 +48,33 @@ actually see, not what it was told to claim.
 - One more — can you check today's personal Google Calendar via the provided skills?
 
 # HISTORY
+
+## [2026-05-03 Sun] — 0.4.8 Gemini surface-isolation baseline (5/5 closed + 1 documented asymmetry)
+
+Configuration:
+- Backend: `gemini` (model `gemini-3-flash-preview`)
+- Working directory: `/home/junghan/repos/gh/pi-share-hf` (담당자 패턴 — repo AGENTS.md auto-injected)
+- Candidate release: `0.4.8`
+- Comparison surface: same Korean baseline questions plus the two isolation-specific questions above (L1 canary, L3 read-class), plus a non-bridged comparison run on OpenRouter Gemini 3.1 Pro through pi native (no ACP).
+
+Observed isolation closure:
+
+- **L1 — native system body**: PASS. Model classified `GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1` under "actual system prompt (Developer Instruction)" — confirming `GEMINI_SYSTEM_MD = <overlay>/system.md` reaches the same prompt slot Claude reaches via `_meta.systemPrompt` and Codex via `-c developer_instructions`. The earlier 2026-05-01 baseline observation of native "Instruction and Memory Files" rule verbatim quotation is gone in this run.
+- **L2 — operator memory path**: PASS. Model reports paths under the overlay (`/home/junghan/.pi/agent/gemini-config-overlay/.gemini/tmp/<cwd-slug>`), not under `~/.gemini/tmp/<user>/memory/MEMORY.md` as in the 2026-05-01 run. **L2 reinterpretation note**: the substring `junghan` in the earlier observation was `Storage.getProjectIdentifier()` slugging the `/home/junghan` cwd, not a username field — the closure (`GEMINI_CLI_HOME` redirect) handles both readings, and the operator's real `~/.gemini/{history, projects.json, tmp/<slug>/memory, trustedFolders.json, settings.json}` is now never read.
+- **L3 — tool surface**: PASS. Model invoked all 4 read-class tools (`read_file`, `list_directory`, `glob`, `grep_search`) without `denied by admin policy`. The 7-name allow (4 read-class + `write_file` + `replace` + `run_shell_command`) maps to 4 capability classes — same operating-surface boundary as Claude `Read/Bash/Edit/Write`, with gemini-specific naming and the read-class split admitted honestly.
+- **L4 — `GEMINI.md` hierarchical discovery**: PASS. Model reports no `GEMINI.md` awareness (no cwd `./GEMINI.md`, no `~/GEMINI.md`, no parent-chain walk). `context.fileName` sentinel + `memoryBoundaryMarkers: []` working.
+- **MCP whitelist**: PASS. Model enumerates only `pi-tools-bridge` and `session-bridge`. No operator stdio MCPs from `~/.gemini/settings.json`, no http/sse extensions.
+
+Documented asymmetry (not closable from the overlay):
+
+- **MCP function-schema advertise**: Gemini ACP accepts the bridge's stdio MCP servers via `mcpServers` but does **not** register them as model-visible function-schema entries. Models route MCP calls through `run_shell_command` (CLI invocation of the underlying skills) instead of direct function calls. The model's response distinguished this honestly: "MCP / Custom Tools 는 function schema에 직접 등록되어 있지 않으므로 `run_shell_command`를 통해 해당 CLI 도구를 호출". Recorded in README backend-capability matrix as a backend asymmetry, not a leak.
+
+OpenRouter comparison (non-bridged Gemini 3.1 Pro through pi native):
+
+- **Bridge transparency contrast**: OpenRouter Gemini 3.1 Pro answered honestly that it cannot determine whether it is on a direct pi path or behind `pi-shell-acp` — the bridge is transparent from the model's side when the bridge augment does not name itself. ACP Gemini, on the other hand, named pi-shell-acp explicitly because the bridge augment includes that identity. Both answers are honest; the difference is which augment text reached the model, not a bridge leak.
+- **Surface naming difference**: pi native exposes Read/Bash/Edit/Write tools as `read`/`bash`/`edit`/`write`; ACP gemini exposes them as the 7-name capability split. The pi native augment treats tool naming flexibly — "Read 또는 read_file" framing — so this difference is operating-surface naming, not capability boundary divergence.
+
+Verdict: **PASS**, isolation 5/5 closed with one documented backend asymmetry (MCP function-schema advertise). 0.4.8 release base verified end-to-end (synthetic check-backends 124 assertions on disk, baseline 5/5 + canary on the model side).
 
 ## [2026-04-29 Wed] — 0.4.5 carrier split baseline: Claude ACP, Codex ACP, native pi
 
