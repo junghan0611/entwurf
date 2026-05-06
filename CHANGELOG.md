@@ -4,6 +4,10 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Changed
+
+- Hardened `.pi/prompts/make-release.md` release-note extraction: replaced the fragile `awk` range snippet with a small Python block keyed by `VERSION="$ARGUMENTS"`, so slash-command release runs do not fail with empty `--notes-file` output on a valid `## <version> — YYYY-MM-DD` section.
+
 ## 0.4.9 — 2026-05-06
 
 ### L5 — Memory containment (gemini)

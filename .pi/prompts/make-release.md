@@ -179,15 +179,31 @@ Stamp failure is best-effort — log and proceed.
 VERSION="$ARGUMENTS"
 NOTES_FILE="/tmp/release-notes-v${VERSION}.md"
 
-awk -v ver="${VERSION}" '
-  $0 ~ "^## " ver "\\b" { p=1; next }
-  p && /^## / { exit }
-  p { print }
-' CHANGELOG.md > "$NOTES_FILE"
+VERSION="$ARGUMENTS" python - <<'PY'
+import os
+from pathlib import Path
+version = os.environ["VERSION"]
+text = Path("CHANGELOG.md").read_text()
+lines = text.splitlines()
+out = []
+inside = False
+for line in lines:
+    if line.startswith(f"## {version} ") or line == f"## {version}":
+        inside = True
+        continue
+    if inside and line.startswith("## "):
+        break
+    if inside:
+        out.append(line)
+Path(f"/tmp/release-notes-v{version}.md").write_text("\n".join(out).strip() + "\n")
+PY
 
 test -s "$NOTES_FILE" || { echo "ABORT: empty release notes"; rm -f "$NOTES_FILE"; exit 1; }
 cat "$NOTES_FILE"
 ```
+
+Use Python here rather than a fragile one-liner `awk` range expression.
+The release step must be boring and deterministic.
 
 If the CHANGELOG body needs flattening / tightening for the GitHub
 release surface (e.g. internal cross-references trimmed), edit the
