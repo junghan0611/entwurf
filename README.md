@@ -79,7 +79,7 @@ gemini   # one-time interactive login (oauth-personal) or set GEMINI_API_KEY
 ./run.sh smoke-gemini /path/to/your-project
 ```
 
-The `gemini` binary is the ACP server; `GEMINI_ACP_COMMAND` may override launch, with bridge args (`--acp`, `--admin-policy`) appended. Overlay/evidence details live in the Gemini operating-surface section, CHANGELOG 0.4.8/0.4.9, and BASELINE.md.
+The `gemini` binary is the ACP server; `GEMINI_ACP_COMMAND` may override launch, with bridge args (`--acp`, `--admin-policy`) appended. The curated Gemini ACP model is subscription-backed `pi-shell-acp/gemini-3.1-pro-preview`. Overlay/evidence details live in the Gemini operating-surface section, CHANGELOG 0.4.8/0.4.9, and BASELINE.md.
 
 Backend is inferred from the model: Anthropic → `claude`, OpenAI → `codex`, Gemini → `gemini`; set `backend` only to pin.
 
@@ -186,7 +186,7 @@ Gemini exposes neither `_meta.systemPrompt` nor `developer_instructions`, but ho
 
 Gemini symlinks only auth/runtime files (`oauth_creds.json`, `google_accounts.json`, `installation_id`, `mcp-oauth-tokens-v2.json`) from real `~/.gemini/`; history, projects, tmp memory, prefs, and trust state are overlay-private. Overlay rebuilds every bootstrap. Exported `GEMINI_CLI_HOME` wins.
 
-`PI_SHELL_ACP_GEMINI_CONTEXT=<int>` lets operators inline a tighter context cap when the registry's reported window (1M for `gemini-3-flash-preview`) is more than the workflow needs. Mirrors `PI_SHELL_ACP_CLAUDE_CONTEXT`.
+`PI_SHELL_ACP_GEMINI_CONTEXT=<int>` lets operators inline a tighter context cap when the registry's reported window (1M for `gemini-3.1-pro-preview`) is more than the workflow needs. Mirrors `PI_SHELL_ACP_CLAUDE_CONTEXT`.
 
 Tool/permission notifications are on in reference config for ACP debugging; set `showToolNotifications:false` for quiet sessions. `compaction.enabled:false` hides pi auto-compaction UI; the provider also blocks compaction below. Auth stays with the backend; pi-shell-acp adds no auth layer.
 

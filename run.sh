@@ -303,7 +303,7 @@ smoke_test() {
         model="pi-shell-acp/gpt-5.2"
         ;;
       gemini)
-        model="pi-shell-acp/gemini-3-flash-preview"
+        model="pi-shell-acp/gemini-3.1-pro-preview"
         ;;
       *)
         echo "[smoke] unknown backend: $backend" >&2
@@ -2071,7 +2071,7 @@ try {
   const geminiMeta = buildSessionMetaForBackend(
     'gemini',
     {
-      modelId: 'gemini-3-flash-preview',
+      modelId: 'gemini-3.1-pro-preview',
       settingSources: [],
       strictMcpConfig: true,
       tools: [],
@@ -2159,7 +2159,7 @@ async function collectModels(envOverride) {
     'gpt-5.4',
     'gpt-5.4-mini',
     'gpt-5.5',
-    'gemini-3-flash-preview',
+    'gemini-3.1-pro-preview',
   ].sort();
   const actualIds = [...models.keys()].sort();
   assert.deepEqual(
@@ -2179,6 +2179,8 @@ async function collectModels(envOverride) {
     'gpt-5', 'gpt-5-chat-latest',
     'gpt-5.1', 'gpt-5.1-codex-max', 'gpt-5.3-codex',
     'codex-mini-latest',
+    'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview',
+    'gemini-3.1-pro-preview-customtools',
   ];
   for (const id of FORBIDDEN) {
     assert.ok(!models.has(id), `non-curated model ${id} must not be exposed by pi-shell-acp`);
@@ -2232,10 +2234,10 @@ async function collectModels(envOverride) {
   );
 
   // Gemini context metadata — source is `google` (no separate gemini-cli
-  // tier in pi-ai). pi-ai 0.70.2 reports 1,048,576 for gemini-3-flash-preview.
-  // Update this gate when the upstream registry shifts.
+  // tier in pi-ai). pi-ai 0.73.0 reports 1,048,576 for the curated Gemini
+  // ACP Pro preview. Update this gate when the upstream registry shifts.
   const GEMINI_EXPECTED_CTX = {
-    'gemini-3-flash-preview': 1048576,
+    'gemini-3.1-pro-preview': 1048576,
   };
   for (const [id, expected] of Object.entries(GEMINI_EXPECTED_CTX)) {
     const m = models.get(id);

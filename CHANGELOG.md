@@ -4,8 +4,11 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.4.10 — 2026-05-06
+
 ### Changed
 
+- Added `gemini-3.1-pro-preview` as the only curated pi-shell-acp Gemini ACP model and explicit-only Entwurf target. Flash is intentionally removed from the curated surface; 3.1 Pro is the subscription-backed high-quality Gemini ACP route.
 - Hardened `.pi/prompts/make-release.md` release-note extraction: replaced the fragile `awk` range snippet with a small Python block keyed by `VERSION="$ARGUMENTS"`, so slash-command release runs do not fail with empty `--notes-file` output on a valid `## <version> — YYYY-MM-DD` section.
 - Entwurf Codex surface narrowed to `gpt-5.4` + `gpt-5.5` only. `DEFAULT_ENTWURF_MODEL` is now `openai-codex/gpt-5.4`, and the target registry drops `gpt-5.2` / `gpt-5.4-mini` on both the native `openai-codex` and ACP-routed `pi-shell-acp` paths. This makes the natural no-model default match current policy instead of relying on callers to remember a preferred model.
 

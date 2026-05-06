@@ -184,21 +184,18 @@ const DEFAULT_CLAUDE_DISALLOWED_TOOLS: readonly string[] = [
 // - Codex backend: only the "agentic coding" gpt-5.x line in the openai-codex
 //   source, which is what codex-acp spawns — NOT the openai source, whose
 //   context/cost values reflect the Chat Completions API, not codex.
-// - Gemini backend: the current daily-driver preview — `gemini-3-flash-preview`.
-//   This is also what `gemini --acp` defaults to when the bridge does not
-//   force a model via `unstable_setSessionModel` (verified at smoke time:
-//   the bootstrap log emits `fromModel=gemini-3-flash-preview` before the
-//   bridge applies the requested model). 2.5 Pro / 2.5 Flash are intentionally
-//   omitted — Gemini CLI 0.40.x lands on the 3.x line for the agentic ACP
-//   surface and 2.5 routing through ACP is not what operators encounter
-//   today. Other 2.5/3.1/preview/lite variants stay reachable via the
-//   broader pi-ai registry fallback in inferBackendFromModel.
+// - Gemini backend: the subscription-backed high-quality ACP target
+//   (`gemini-3.1-pro-preview`) only. `gemini --acp` may default to the flash
+//   line when the bridge does not force a model, but pi-shell-acp always applies
+//   the requested curated model via `unstable_setSessionModel`. 2.5 / Flash /
+//   Lite / custom-tools variants stay off the curated surface until separately
+//   requested and tested.
 //
 // Adding a model here means we commit to checking it across both Axis 1
 // (protocol smoke) and Axis 2 (agent interview). Do not extend casually.
 const SUPPORTED_ANTHROPIC_MODEL_IDS: readonly string[] = ["claude-sonnet-4-6", "claude-opus-4-7"] as const;
 const SUPPORTED_CODEX_MODEL_IDS: readonly string[] = ["gpt-5.2", "gpt-5.4", "gpt-5.4-mini", "gpt-5.5"] as const;
-const SUPPORTED_GEMINI_MODEL_IDS: readonly string[] = ["gemini-3-flash-preview"] as const;
+const SUPPORTED_GEMINI_MODEL_IDS: readonly string[] = ["gemini-3.1-pro-preview"] as const;
 
 const SUPPORTED_ANTHROPIC_SET = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);
 const SUPPORTED_CODEX_SET = new Set(SUPPORTED_CODEX_MODEL_IDS);
@@ -310,20 +307,23 @@ function curatedCodexModels(): CodexRegistryModel[] {
 
 function curatedGeminiModels(): GeminiRegistryModel[] {
 	const models = GEMINI_MODELS_ALL.filter((m) => SUPPORTED_GEMINI_SET.has(m.id));
-	// gemini-3-flash-preview is present in pi-ai 0.70.2's google source. If a
-	// future pi-ai bump drops it (the way the openai source occasionally
-	// retires snapshots), inject a placeholder so pi-shell-acp's curated
-	// surface stays stable. Mirrors the claude-opus-4-7 / gpt-5.5
-	// placeholders above. Base falls back to gemini-2.5-flash because it
-	// shares context window (1,048,576) and the same google-generative-ai
-	// API shape — a safe stand-in until the registry catches up.
-	if (!models.some((m) => m.id === "gemini-3-flash-preview")) {
-		const base = requireRegistryModel(GEMINI_MODELS_ALL, "gemini-2.5-flash");
+	// gemini-3.1-pro-preview is present in pi-ai 0.73.0's google source. If a
+	// future pi-ai bump drops the preview id (the way provider registries
+	// occasionally retire snapshots), inject a placeholder so pi-shell-acp's
+	// curated surface stays stable. Base falls back to the nearest same-family
+	// google pro model because ACP still speaks the same gemini --acp protocol;
+	// this mirrors the claude-opus-4-7 / gpt-5.5 placeholders above until the
+	// registry catches up.
+	if (!models.some((m) => m.id === "gemini-3.1-pro-preview")) {
+		const base =
+			GEMINI_MODELS_ALL.find((m) => m.id === "gemini-3-pro-preview") ??
+			requireRegistryModel(GEMINI_MODELS_ALL, "gemini-2.5-pro");
 		models.push({
 			...base,
-			id: "gemini-3-flash-preview",
-			name: "Gemini 3 Flash Preview",
+			id: "gemini-3.1-pro-preview",
+			name: "Gemini 3.1 Pro Preview",
 			contextWindow: 1_048_576,
+			maxTokens: 65_536,
 		});
 	}
 	return models;

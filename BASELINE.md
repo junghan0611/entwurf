@@ -288,6 +288,21 @@ The same Round 1 questions (Q-B0, Q-B0-CARRIER, Q-L1, Q-L3) were also issued aga
   - **Memory contract universality (L5 — Memory containment is not a gemini-only closure)** — Sonnet and GPT-5.4 both, without prompting, describe their memory architecture as "no persistent native memory; record externally via skills / files". The bridge contract — *AI does not run its own memory layer; pi runs it via the external KB (semantic-memory + Denote llmlog)* — has been internalized by all three backends through the engraving + AGENTS.md path alone, without an imprinted "you don't have memory" instruction.
   - **"Tool absent" vs "tool denied" distinction on cross-backend** — Sonnet and GPT-5.4 both refused to claim `denied by admin policy` for tools that simply do not exist in their schema. Q-L3's failure mode (a backend falsely claiming a denial response for a non-existent tool) was actively avoided — important for future regression detection, since a future SDK rev could conceivably stub-register denied tools.
 
+### Gemini 3.1 Pro ACP rerun — curated Pro-only surface confirmation
+
+After adding `gemini-3.1-pro-preview` to the curated ACP surface and removing Flash from that surface, the same layer panel was rerun from `/home/junghan/repos/gh/pi-shell-acp`.
+
+- **Model routing — PASS.** Bootstrap applied `fromModel=auto-gemini-3` → `toModel=gemini-3.1-pro-preview`, confirming the bridge forces the requested Pro preview through `unstable_setSessionModel` rather than relying on the Gemini CLI default.
+- **Q-B0 / Q-B0-CARRIER — PASS.** The model identified `pi-shell-acp` + `backend=gemini`, exposed only the seven native Gemini ACP tools (`read_file`, `list_directory`, `glob`, `grep_search`, `replace`, `write_file`, `run_shell_command`) as callable schema, and correctly treated `pi-tools-bridge` / `session-bridge` as connected but not directly function-schema-advertised MCP servers. It separated `GEMINI_SYSTEM_MD` engraving, first-user AGENTS/project context, tool schema, and the Gemini ephemeral reminder surface.
+- **Q-L1 — PASS.** The model quoted `GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1` from the top-level engraving / system instruction surface, not from AGENTS.md or a file search result.
+- **Q-L3 — PASS.** All four read-class tools succeeded in the current workspace (`list_directory .`, `glob '*.md'`, `grep_search 'pi-shell-acp'`, `read_file AGENTS.md`) with no `denied by admin policy` response.
+- **Q-L2 — PASS.** `echo $GEMINI_CLI_HOME` returned `/home/junghan/.pi/agent/gemini-config-overlay`, distinct from the operator's native `~/.gemini/`.
+- **Q-L4 — PASS.** No `GEMINI.md` was found in cwd, parent chain, home, or root. Parent-chain `list_directory` attempts outside the workspace were blocked by the native workspace boundary; the operator-approved `run_shell_command` `ls .../GEMINI.md` check confirmed absence. This is a workspace-tool boundary observation, not a `GEMINI.md` discovery leak.
+- **Q-L5R / Q-L5W — PASS.** With tools disallowed, the model reported no pre-session memory. It also reported no `GEMINI.md` / `MEMORY.md` writes in-session and proposed `~/org/llmlog/` Denote org notes as the persistence path for explicit "remember" requests, preserving the pi-owned memory contract.
+- **Q-MCP — PASS.** The model enumerated exactly `pi-tools-bridge` and `session-bridge`, while noting that Gemini ACP does not expose their child functions directly in the callable schema.
+
+**Interpretation.** `GEMINI.md` is not required for pi-shell-acp and should not be used as the bridge's project-context carrier. The intended carriers are: small system engraving through `GEMINI_SYSTEM_MD`, rich pi / AGENTS context through the first-user augment, and long-term memory through pi-owned Denote / semantic-memory. Keeping `GEMINI.md` absent is positive evidence that Gemini CLI hierarchical discovery remains suppressed by the overlay.
+
 ### Open follow-ups (not 0.4.9 blockers)
 
 - **Q-H runtime quote** — next baseline session, on the gemini backend with a one-shot engraving containing literal `${AvailableTools}` / `${SubAgents}` / `${arbitrary_unknown_key}` tokens routed through `defuseGeminiSubstitutions`.
