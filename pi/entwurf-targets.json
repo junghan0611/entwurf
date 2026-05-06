@@ -1,7 +1,7 @@
 {
 	"$comment": "Entwurf Target Registry — exact (provider, model) allowlist. SSOT for what can be spawned via entwurf. See pi-shell-acp/AGENTS.md Entwurf Orchestration. Resume path intentionally bypasses this registry per Identity Preservation Rule.",
 	"$notes": {
-		"gpt-5.5": "High-end frontier target with 400K native codex context. Cost: ~$5 input / $30 output per 1M tokens on this tier — ~6x gpt-5.4 and ~30x gpt-5.4-mini. Do not make it the default. Use explicitly for long-context / high-quality work only. ACP-routed entries are `explicitOnly`: caller must pass provider=pi-shell-acp to route through the ACP bridge, otherwise bare `gpt-5.5` resolves to native openai-codex.",
+		"gpt-5.5": "High-end frontier target with 400K native codex context. Cost: ~$5 input / $30 output per 1M tokens on this tier — ~6x gpt-5.4. Do not make it the default. Use explicitly for long-context / high-quality work only. ACP-routed entries are `explicitOnly`: caller must pass provider=pi-shell-acp to route through the ACP bridge, otherwise bare `gpt-5.5` resolves to native openai-codex.",
 		"bareResolution": "Each bare model id resolves unambiguously because only the native openai-codex entry is non-explicitOnly. Bare `gpt-5.5` -> openai-codex/gpt-5.5. ACP route requires explicit provider.",
 		"gemini": "Gemini 3 Flash Preview is routed exclusively through pi-shell-acp's `gemini --acp` backend; the host pi removed its built-in google provider in v0.71.0. ACP entry is `explicitOnly` to keep the entwurf surface honest — there is currently no native pi alternative to disambiguate against, but the flag keeps the policy stable if pi reintroduces a google provider later. The 3.x preview line is what `gemini --acp` defaults to today; 2.5 routing through ACP is intentionally not on this surface."
 	},
@@ -9,14 +9,10 @@
 		{ "provider": "pi-shell-acp", "model": "claude-sonnet-4-6", "enabled": true },
 		{ "provider": "pi-shell-acp", "model": "claude-opus-4-7", "enabled": true },
 
-		{ "provider": "openai-codex", "model": "gpt-5.2", "enabled": true },
 		{ "provider": "openai-codex", "model": "gpt-5.4", "enabled": true },
-		{ "provider": "openai-codex", "model": "gpt-5.4-mini", "enabled": true },
 		{ "provider": "openai-codex", "model": "gpt-5.5", "enabled": true },
 
-		{ "provider": "pi-shell-acp", "model": "gpt-5.2", "enabled": true, "explicitOnly": true },
 		{ "provider": "pi-shell-acp", "model": "gpt-5.4", "enabled": true, "explicitOnly": true },
-		{ "provider": "pi-shell-acp", "model": "gpt-5.4-mini", "enabled": true, "explicitOnly": true },
 		{ "provider": "pi-shell-acp", "model": "gpt-5.5", "enabled": true, "explicitOnly": true },
 
 		{ "provider": "pi-shell-acp", "model": "gemini-3-flash-preview", "enabled": true, "explicitOnly": true }

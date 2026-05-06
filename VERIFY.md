@@ -164,7 +164,7 @@ pi --model pi-shell-acp/claude-sonnet-4-6 -p 'ok만 답하세요'
 Expected:
 - step 1 — pi prints package install messages; `pi list` afterwards shows `git:github.com/junghan0611/pi-shell-acp` under `User packages` with a path under `~/.pi/agent/git/github.com/junghan0611/pi-shell-acp`.
 - step 2 — `install: added piShellAcpProvider.mcpServers.pi-tools-bridge` + `install: added piShellAcpProvider.mcpServers.session-bridge` + `install: updated <project>/.pi/settings.json`.
-- step 3 — curated model surface prints (claude-sonnet-4-6, claude-opus-4-7, gpt-5.2, gpt-5.4, gpt-5.4-mini, gpt-5.5).
+- step 3 — curated model surface prints (claude-sonnet-4-6, claude-opus-4-7, gpt-5.4, gpt-5.5).
 - step 4 — bridge response of `ok`.
 
 Notes:
@@ -259,7 +259,7 @@ When §3 → §4 → §8 → §1A.4 are run sequentially against a single target
 | 9 | §1A.1 | Self-awareness |
 | 10 | §1A.4 | Multi-fact recall (uses turns 3–5 facts) |
 
-If the verifier strictly needs a fresh ACP session inside this sequence, switch to a different target (e.g. `claude-opus-4-7` or `gpt-5.2`) at the section boundary — see §3 operational note on the per-`(provider, model)` uniqueness gate.
+If the verifier strictly needs a fresh ACP session inside this sequence, switch to a different target (e.g. `claude-opus-4-7` or `gpt-5.5`) at the section boundary — see §3 operational note on the per-`(provider, model)` uniqueness gate.
 
 ### 1.7 Cross-install / cross-backend parity (optional but high-value)
 
@@ -439,7 +439,7 @@ Note:
 
 One sync `entwurf` call for the `pi-shell-acp/claude-sonnet-4-6` target.
 
-> **Operational note — `entwurf` uniqueness per (provider, model, session).** The MCP bridge enforces one live `entwurf` per (provider, model) tuple within a verifier session. Strictly speaking §3.1 and §3.2 are two separate single-turn intents, but the second one cannot be a fresh `entwurf` to the same target — it must be the **first `entwurf_resume` of the same `taskId`**. This is operationally fine: §3.1 verifies hook prompt extraction (turn 1), §3.2 verifies tool-call mapping (turn 2 = first resume). Fact injection (§4) then begins from turn 3 onward. If the verifier strictly needs a fresh ACP session for §3.2, run it against a different target (e.g., `claude-opus-4-7` or `gpt-5.2`).
+> **Operational note — `entwurf` uniqueness per (provider, model, session).** The MCP bridge enforces one live `entwurf` per (provider, model) tuple within a verifier session. Strictly speaking §3.1 and §3.2 are two separate single-turn intents, but the second one cannot be a fresh `entwurf` to the same target — it must be the **first `entwurf_resume` of the same `taskId`**. This is operationally fine: §3.1 verifies hook prompt extraction (turn 1), §3.2 verifies tool-call mapping (turn 2 = first resume). Fact injection (§4) then begins from turn 3 onward. If the verifier strictly needs a fresh ACP session for §3.2, run it against a different target (e.g., `claude-opus-4-7` or `gpt-5.5`).
 
 ### 3.1 SessionStart Hook Regression Check
 

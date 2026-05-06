@@ -44,7 +44,7 @@ const AGENT_DIR = path.join(os.homedir(), ".pi", "agent");
 const PI_SETTINGS_PATH = path.join(AGENT_DIR, "settings.json");
 const SESSIONS_BASE = path.join(AGENT_DIR, "sessions");
 const ENTWURF_TARGETS_PATH = process.env.PI_ENTWURF_TARGETS_PATH ?? path.join(AGENT_DIR, "entwurf-targets.json");
-export const DEFAULT_ENTWURF_MODEL = "openai-codex/gpt-5.2";
+export const DEFAULT_ENTWURF_MODEL = "openai-codex/gpt-5.4";
 export const ENTWURF_CODEX_ACP_ENV = "PI_ENTWURF_ACP_FOR_CODEX";
 
 // ============================================================================

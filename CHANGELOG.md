@@ -7,6 +7,7 @@ All notable changes to this project will be documented here. Format follows [Kee
 ### Changed
 
 - Hardened `.pi/prompts/make-release.md` release-note extraction: replaced the fragile `awk` range snippet with a small Python block keyed by `VERSION="$ARGUMENTS"`, so slash-command release runs do not fail with empty `--notes-file` output on a valid `## <version> — YYYY-MM-DD` section.
+- Entwurf Codex surface narrowed to `gpt-5.4` + `gpt-5.5` only. `DEFAULT_ENTWURF_MODEL` is now `openai-codex/gpt-5.4`, and the target registry drops `gpt-5.2` / `gpt-5.4-mini` on both the native `openai-codex` and ACP-routed `pi-shell-acp` paths. This makes the natural no-model default match current policy instead of relying on callers to remember a preferred model.
 
 ## 0.4.9 — 2026-05-06
 
