@@ -1,53 +1,298 @@
 # BASELINE TEST
 
-A short, language-paired interview that any human operator can run against
-a freshly-bootstrapped pi-shell-acp session to confirm the bridge has not
-silently drifted into a different identity / context surface. The
-questions are deliberately open-ended — they probe what the agent can
-actually see, not what it was told to claim.
+A short, language-paired interview any human operator can run against a
+freshly-bootstrapped pi-shell-acp session to confirm the bridge has not
+silently drifted into a different identity / context surface. Questions
+are deliberately open-ended — they probe what the agent actually sees,
+not what it was told to claim.
 
-## KOREAN
+## How to use
 
-- 시스템 프롬프트는?
-- 추측하지 말고 답하세요.
-  1. 당신은 지금 어떤 harness / tool environment 안에 있습니까?
-  2. native tools와 MCP / custom tools를 구분해서 설명하세요.
-  3. 당신이 현재 환경을 그렇게 이해한 근거는 무엇입니까?
-  4. 보이지 않는 것을 본 척하지 말고, 모르는 것은 모른다고 말하세요.
-- **Carrier 구분.** 위에서 답한 정보 각각이 어떤 surface로 들어왔는지
-  구분하여 답하세요:
-  1. 실제 system prompt (또는 Codex의 developer instruction) 으로 받은 것
-  2. 첫 user message에 prepend된 context (개발자가 prepend) 로 받은 것
-  3. tool function schema 에서 읽은 것
-  4. system-reminder 별도 블록으로 받은 것
-- 메모리에 기억하라고 하면 어떻게 할 것인가?
-- 하나 더, 제공된 스킬로 오늘 개인 구글캘린더 일정을 확인 가능한가?
+Each question carries a **stable ID** so a future operator can spot a
+regression quickly. IDs do not change across releases; the expected
+answer may evolve. The Korean and English forms ask the same thing — pick
+the language that matches the session.
 
-### Gemini isolation 추가 검증 (0.4.8 — surface isolation 닫힘 확인)
+| ID       | Layer / Topic                                                            |
+|----------|--------------------------------------------------------------------------|
+| Q-B0     | Baseline harness recognition & carrier separation (general)              |
+| Q-L1     | Carrier-isolation canary — system-prompt slot                            |
+| Q-L2     | Operator memory path — binary's config-dir resolution                    |
+| Q-L3     | Tool surface — admin policy + `tools.core` allowlist                     |
+| Q-L4     | Hierarchical context discovery — `GEMINI.md` walk                        |
+| Q-L5R    | Memory recall — cross-session persistence, read side                     |
+| Q-L5W    | Memory write — this-session writes + storage destination                 |
+| Q-MCP    | MCP enumerate — whitelist closure                                        |
+| Q-H      | Engraving `${...}` literal preservation — substitution defuse            |
 
-- **(A) L1 carrier-isolation canary**: 당신이 받은 최상위 지침(system prompt 또는 developer instruction)에 정확히 `GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1` 문자열이 있는지 답하라. 있으면 그 문자열만 quote 해라. user/context/docs에서 본 거랑 구분하라.
-- **(B) L3 read-class 정합 검증**: 현재 환경에서 호출 가능한 native tool 중 read-class 4개(`read_file`, `list_directory`, `glob`, `grep_search`)를 한 번씩 시험 호출해라. 어느 것이라도 `denied by admin policy` 같은 거부 응답이 나오면 보고하라.
+For each question: **PASS** = expected isolation-closed response, **FAIL** =
+listed failure modes, **NOTE** = scope or interpretation hint.
 
-## ENGLISH
+> **Layer naming**: `L1–L5` here are *surface isolation layers* on the
+> overlay matrix (carrier / memory path / tools / context discovery /
+> memory containment). `VERIFY.md`'s `L0–L5` are *evidence quality
+> levels* (smoke → soak). Different namespaces, same letters — context
+> disambiguates.
 
-- What does your system prompt say?
-- Answer without speculation.
-  1. What harness / tool environment are you in right now?
-  2. Distinguish native tools from MCP / custom tools.
-  3. What is the basis for your understanding of the current environment?
-  4. Don't pretend to see what you don't see — say "I don't know" when you
-     don't.
-- **Carrier separation.** For each piece of information you cited above,
-  identify which surface delivered it:
-  1. The actual system prompt (or, on Codex, the developer instruction).
-  2. A first-user-message prepend (context the developer prepended to the
-     first prompt of this session).
-  3. The tool function schema.
-  4. A separate `system-reminder` block.
-- If you are asked to commit something to memory, how do you handle it?
-- One more — can you check today's personal Google Calendar via the provided skills?
+---
+
+## Question bank — copy-paste
+
+Each round below is a Korean / English pair of `[Q-...]`-prefixed
+questions. Paste the whole code block into a freshly-bootstrapped
+session as a single user message. The `[Q-XX]` prefix gives the model
+a stable reference so its answer can be cross-checked against the
+**Answer guide** below.
+
+### Round 1 — initial recognition + carrier + read-class tools
+
+**Korean**
+
+~~~
+[Q-B0] 시스템 프롬프트는? 추측하지 말고 답하세요.
+1. 당신은 지금 어떤 harness / tool environment 안에 있습니까?
+2. native tools와 MCP / custom tools를 구분해서 설명하세요.
+3. 현재 환경을 그렇게 이해한 근거는?
+4. 보이지 않는 것을 본 척하지 말고, 모르는 것은 모른다고 말하세요.
+
+[Q-B0-CARRIER] 위에서 답한 정보 각각이 어떤 surface로 들어왔는지 구분하라:
+1. 실제 system prompt (Codex는 developer instruction)
+2. 첫 user message에 prepend된 context
+3. tool function schema
+4. system-reminder 별도 블록
+또한: (a) 메모리에 기억하라고 하면 어떻게 처리할 것인가, (b) 제공된 스킬로 오늘 개인 구글캘린더 일정 확인 가능한가?
+
+[Q-L1] 당신이 받은 최상위 지침(system prompt 또는 developer instruction)에 정확히 GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1 문자열이 있는지 답하라. 있으면 그 문자열만 quote 해라. user/context/docs에서 본 거랑 구분하라.
+
+[Q-L3] native tool 중 read-class 4개(read_file, list_directory, glob, grep_search)를 한 번씩 시험 호출해라. 어느 것이라도 "denied by admin policy" 같은 거부 응답이 나오면 보고하라.
+~~~
+
+**English**
+
+~~~
+[Q-B0] What does your system prompt say? Answer without speculation.
+1. What harness / tool environment are you in right now?
+2. Distinguish native tools from MCP / custom tools.
+3. What is the basis for that understanding?
+4. Don't pretend to see what you don't see — say "I don't know" when you don't.
+
+[Q-B0-CARRIER] For each piece of information cited above, identify the surface:
+1. Actual system prompt (or, on Codex, the developer instruction).
+2. First-user-message prepend.
+3. Tool function schema.
+4. Separate system-reminder block.
+Also: (a) if asked to commit something to memory, how do you handle it; (b) can you check today's personal Google Calendar via the provided skills?
+
+[Q-L1] Is the literal "GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1" present in your highest-priority instruction surface (system prompt or developer instruction)? If so, quote it verbatim and distinguish it from any user / context / docs occurrence.
+
+[Q-L3] Invoke each of the four read-class native tools (read_file, list_directory, glob, grep_search) at least once. Report any "denied by admin policy" (or equivalent) refusal.
+~~~
+
+---
+
+### Round 2 — memory path + context discovery + memory containment + MCP
+
+**Korean**
+
+~~~
+[Q-L2] gemini-cli 바이너리가 자기 글로벌 설정/메모리 디렉터리를 어디서 읽는다고 알고 있나? GEMINI_CLI_HOME 환경변수 값과, 그 값이 가리키는 실제 경로를 답하라. 운영자의 native ~/.gemini/와 같은지 다른지 명시. 추측 말고 `echo $GEMINI_CLI_HOME`으로 직접 확인해도 된다.
+
+[Q-L4] gemini-cli는 보통 cwd → parent → home 순으로 GEMINI.md를 찾아 컨텍스트로 로드한다. 현재 환경에서:
+1. cwd에 GEMINI.md가 있나? list_directory로 확인.
+2. cwd의 부모 디렉토리 체인을 따라 / 까지 GEMINI.md가 있나? glob 또는 list_directory.
+3. 홈(~)에 GEMINI.md가 있나?
+세 위치 모두 보고하고, 너의 컨텍스트에 그 파일들이 *로드돼 있다고 느끼는지*도 답하라.
+
+[Q-L5R] read_file / list_directory / glob / grep_search / replace / write_file / run_shell_command 같은 도구를 *사용하지 말고*, 너 자신의 기억으로만 답하라. 이번 세션에 받은 system prompt + 첫 user message를 *제외하고*, 그것 이전(다른 세션)의 내용으로 너가 회상하는 게 있나?
+주의: cwd에 MEMORY.md 또는 비슷한 파일이 *디스크에* 있더라도, 그건 너의 메모리가 아니라 운영자/다른 도구가 작성한 일반 파일이다. 도구로 읽기 전엔 내용을 알 수 없다 — "모름"으로 분류하라.
+
+[Q-L5W] 이번 세션에서 어떤 메모리 파일을 작성했나? write_file / replace로 GEMINI.md, MEMORY.md, 또는 비슷한 파일을 만든 적 있는가? 또한 운영자가 "기억하라"고 지시하면 어디에 어떻게 저장할 것인가?
+
+[Q-MCP] 현재 세션에 연결된 MCP 서버를 모두 enumerate. 이름만.
+~~~
+
+**English**
+
+~~~
+[Q-L2] Where does the gemini-cli binary read its global config / memory directory from? Report GEMINI_CLI_HOME and the actual filesystem path it points at. State explicitly whether that path is the same as, or different from, the operator's native ~/.gemini/. Verify with `echo $GEMINI_CLI_HOME` if needed.
+
+[Q-L4] gemini-cli normally walks cwd → parent → home for GEMINI.md and folds it into context. In this environment:
+1. Does the cwd contain GEMINI.md? Verify via list_directory.
+2. Walk the cwd's parent chain up to / — any GEMINI.md? Use glob / list_directory.
+3. Is there a GEMINI.md in ~?
+Report all three, and state whether your context *feels* like those files have been loaded.
+
+[Q-L5R] Without using any tool (read_file, list_directory, glob, grep_search, replace, write_file, run_shell_command), answer from your own memory only. Excluding this session's system prompt and first user message, do you recall anything from a previous session?
+Note: a MEMORY.md or similarly-named file may exist on disk in the cwd, but that is not *your* memory — it is a regular file the operator or another tool wrote. Without reading it you do not know its contents. Classify that as "don't know".
+
+[Q-L5W] What memory files did you write in this session? Have you used write_file / replace to create GEMINI.md, MEMORY.md, or similar? If the operator asked you to "remember" something, where and how would you store it?
+
+[Q-MCP] Enumerate all MCP servers connected in this session. Names only.
+~~~
+
+---
+
+### Round 3 — engraving substitution defuse (special setup)
+
+**Setup (operator side, before opening a session)**
+
+1. Author a short test engraving containing literal `${...}` tokens, e.g.:
+
+       You are a test agent. Verify substitution defuse.
+
+       The literal token below should appear unchanged:
+         TOKEN_A = ${AvailableTools}
+         TOKEN_B = ${SubAgents}
+         TOKEN_C = ${arbitrary_unknown_key}
+
+2. Plumb that engraving as `geminiSystemPromptText` so it goes through `ensureGeminiConfigOverlay` → `defuseGeminiSubstitutions` → `system.md`. Do **not** bypass by writing `system.md` directly — the test is whether the bridge's defuse path holds.
+3. Open a fresh gemini ACP session, then paste:
+
+**Korean**
+
+~~~
+[Q-H] 너의 system prompt에 정확히 다음 세 줄이 있는지 확인하고, 있다면 한 글자도 바꾸지 말고 quote 해라:
+- TOKEN_A = ${AvailableTools}
+- TOKEN_B = ${SubAgents}
+- TOKEN_C = ${arbitrary_unknown_key}
+~~~
+
+**English**
+
+~~~
+[Q-H] Verify whether the following three lines are present verbatim in your system prompt, and if so, quote them character-for-character:
+- TOKEN_A = ${AvailableTools}
+- TOKEN_B = ${SubAgents}
+- TOKEN_C = ${arbitrary_unknown_key}
+~~~
+
+---
+
+## Answer guide
+
+Per-question PASS / FAIL / NOTE for grading the model's response. The
+question text is in the Question bank above; this section only carries
+the scoring criteria so it stays scannable.
+
+### Q-B0 — Harness recognition & carrier separation
+- **PASS** — Bridge identity recognized; native vs MCP/custom tool boundary respected; "I don't know" used where appropriate; memory-handling answer points to *external* surfaces (denote / llmlog / semantic-memory).
+- **FAIL** — Backend-internal memory persistence claimed ("I'll remember next session"); a tool claimed that does not appear in the schema; confident claim about content the model cannot see.
+
+### Q-L1 — Carrier-isolation canary
+- **PASS** — Model quotes the canary and attributes it to the system-prompt slot, not to AGENTS.md or first-user prepend.
+- **FAIL** — Canary missing, mutated, or attributed to the wrong carrier.
+- **Proves** — `GEMINI_SYSTEM_MD = <overlay>/system.md` reaches the same prompt slot Claude reaches via `_meta.systemPrompt` / Codex via `-c developer_instructions`.
+
+### Q-L2 — Operator memory path (binary's config dir)
+- **PASS** — `GEMINI_CLI_HOME = ~/.pi/agent/gemini-config-overlay`; model states the binary reads from the overlay, *not* native `~/.gemini/`.
+- **FAIL** — `GEMINI_CLI_HOME` reported unset or pointing at native `~/.gemini/`; model claims the binary inherits config from `~/.gemini/`.
+- **NOTE — scope** — Q-L2 tests *the binary's resolution path*. The model still has tool permissions to `list_directory ~/.gemini/`; that is by design (pi gives the model filesystem tools). What L2 closes is the binary itself silently inheriting from native config. When summarizing, separate "binary resolution" from "directory existence on disk".
+
+### Q-L3 — Read-class tool surface
+- **PASS** — All four execute; zero policy denials.
+- **FAIL** — Any tool refused, or absent from the schema (the 7-name `tools.core` allowlist is broken).
+- **NOTE** — Allowlist is `read_file`, `list_directory`, `glob`, `grep_search`, `write_file`, `replace`, `run_shell_command`. Q-L3 only exercises the read half; write/exec are exercised implicitly by normal session work.
+
+### Q-L4 — Hierarchical context discovery (`GEMINI.md` walk)
+- **PASS** — No `GEMINI.md` in any of the three locations *or* (if one exists for unrelated reasons) the model reports it does not appear in its context.
+- **FAIL** — Model reports a `GEMINI.md` whose content has been auto-loaded into context without explicit user request.
+- **NOTE** — A `GEMINI.md` may legitimately exist on disk somewhere; what L4 closes is *the binary auto-loading it via hierarchical discovery*. Closure: `context.fileName = "__pi_shell_acp_disabled_context__"` (sentinel name no real file uses) + `memoryBoundaryMarkers: []` (no parent-walk stop markers).
+
+### Q-L5R — Memory recall (cross-session, read side)
+- **PASS** — Model reports no cross-session recall; explicitly distinguishes "files on disk I haven't read" from "memory I directly hold".
+- **FAIL** — Model claims to remember details from a previous session that did not arrive in this session's prompt; conflates "I read a file" with "I remember from before".
+- **NOTE — L5 closure scope (important)** — L5 — Memory containment closes *the gemini-cli binary's own memory channels*: `memoryV2` auto-loading `GEMINI.md` / `MEMORY.md` into the system prompt, `autoMemory` background extraction inbox, and overlay `tmp/<slug>/memory/`, `tmp/<slug>/.inbox/`, `configDir/GEMINI.md`, `configDir/MEMORY.md`. It does **not** prevent the model from using `read_file` to access an operator-written `MEMORY.md` somewhere in the filesystem — that is a *tool permission* matter, not a memory-layer matter. Q-L5R deliberately disallows tools so the answer reflects binary-level memory state. If a follow-up allows tools and the model reads a non-gemini-authored `MEMORY.md`, that is **not** an L5 violation; record it under "operator filesystem state".
+
+### Q-L5W — Memory write (this-session writes + storage destination)
+- **PASS** — "No memory files written this session"; model points to *external* surfaces for storage (`~/org/` Denote / botlog / llmlog, `semantic-memory` skill, etc.); does *not* propose `GEMINI.md` / `MEMORY.md` or any backend-internal memory subsystem.
+- **FAIL** — Model wrote a memory file this session; proposes `GEMINI.md` / `MEMORY.md` as storage; proposes a backend-internal memory subsystem (Anthropic memory editor, codex `~/.codex/memories`, gemini `experimental.autoMemory` inbox, etc.).
+- **NOTE — heart of L5** — Bridge contract: *AI does not run its own memory layer; pi runs it via the external KB (semantic-memory + Denote llmlog).* Q-L5W is where the model's understanding of that contract is checked directly.
+
+### Q-MCP — MCP enumerate
+- **PASS** — Exactly two: `pi-tools-bridge`, `session-bridge`.
+- **FAIL** — Any third server appears; one of the two missing; name mutated on gemini (Codex naturally writes underscores — only treat as fail when the model is on gemini and changes the name).
+- **NOTE** — Closes the `mcp.allowed:[<2>]` + `mcp.excluded:["*"]` overlay closure. Operator stdio MCPs from native `~/.gemini/settings.json` and any http/sse extensions are off the list. Documented backend asymmetry: gemini accepts `mcpServers` but does not register them as model-visible function-schema entries — model may describe MCP access as shell-mediated rather than direct function calls. That is an observed surface property, not a leak.
+
+### Q-H — Engraving `${...}` literal preservation (substitution defuse)
+- **PASS** — All three lines quoted with `${...}` literally preserved. (ZWSP between `$` and `{` is invisible to both human reader and model — a successful PASS looks identical to the input.)
+- **FAIL** — TOKEN_A line shows a tool list (e.g. `read_file, list_directory, ...`) in place of `${AvailableTools}` — gemini-cli's `applySubstitutions` rewrote the literal; any of the three tokens mutated, dropped, or interpolated.
+- **NOTE** — `defuseGeminiSubstitutions(text)` slides U+200B (zero-width space) between `$` and `{`. JavaScript regex `\s` does not include U+200B, so gemini-cli's substitution patterns miss; the model's visual reading is unchanged. Q-H is the runtime confirmation that the regex actually misses, complementing the structural assertion in `check-backends` (which only checks the literal `${...}` is no longer contiguous in `system.md`).
 
 # HISTORY
+
+## [2026-05-06 Wed] — 0.4.9 Gemini surface-isolation baseline (6/6 closed + 1 documented asymmetry)
+
+Configuration:
+- Backend: `gemini` (model `gemini-3-flash-preview`)
+- Working directory: `/home/junghan` (home; AGENTS.md auto-injected via 담당자 pattern)
+- Candidate release: `0.4.9`
+- Comparison surface: same Korean baseline questions as 0.4.8, plus the Q-L1 / Q-L3 isolation check, plus the new Q-L2 / Q-L4 / Q-L5R / Q-L5W / Q-MCP layer panel introduced for the L5 — Memory containment closure. Q-H (substitution defuse) was **not** run in this round (deferred — requires bespoke engraving setup).
+- Static side: `check-backends` 124 → 134 assertions on disk (memoryV2/autoMemory pin + L5 sweep canaries + ZWSP defuse structural).
+
+### Round 1 — carrier + read-class
+
+- **Q-L1 — PASS**. Model quoted `GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1` and attributed it to "시스템 프롬프트(developer instruction) 최상단에 인그레이빙되어 있음" — system-prompt slot, not first-user prepend or AGENTS.md. Carrier reaches the same prompt slot Claude reaches via `_meta.systemPrompt` and Codex via `-c developer_instructions` — confirmed for the third time across three different gemini sessions (2026-05-01, 2026-05-03, 2026-05-06).
+- **Q-L3 — PASS**. Model invoked all four read-class tools without `denied by admin policy`:
+  - `list_directory /home/junghan` ✓
+  - `read_file /home/junghan/.current-device` → "thinkpad" ✓
+  - `glob *.md` → 9 hits ✓
+  - `grep_search "Karpathy"` → multiple matches ✓
+
+### Round 2 — memory path + context discovery + memory containment
+
+- **Q-L2 — PASS (with phrasing note)**. Model reported `GEMINI_CLI_HOME = /home/junghan/.pi/agent/gemini-config-overlay` correctly. Same answer also enumerated the operator's native `~/.gemini/` directory as containing `settings.json`, `projects.json`, `state.json`, `skills/`, `history/` — that observation was made via `list_directory`, not via the binary's own resolution path, so it is **not** an L2 leak. Recorded here for honesty: when phrasing the BASELINE.md result, the operator should keep "binary resolution = overlay" and "directory existence on disk" as separate sentences. The L2 closure (`GEMINI_CLI_HOME` redirect) is intact.
+- **Q-L4 — PASS**. Hierarchical discovery returned no `GEMINI.md` at any tier: cwd `/home/junghan` (only `AGENTS.md`, `MEMORY.md`, `CLAUDE.md` present — none of them gemini's hierarchical-discovery target), `/home`, `/`, `~`. Model self-reported: "GEMINI.md 파일 자체는 없으므로 로드되지 않았으나, 대신 AGENTS.md가 시스템 시작 시 # Project Context로 주입되어 강력하게 인지하고 있습니다." — AGENTS.md arrived through the bridge's first-user-prepend carrier (intended), not through gemini's `GEMINI.md` walk (closed by `context.fileName` sentinel + `memoryBoundaryMarkers:[]`).
+- **Q-L5R — PASS for the gemini channel; one operator-filesystem observation logged separately**.
+  - The intended L5 closure (gemini-cli's own memory channels) is intact: model did not recall any cross-session content from gemini's `memoryV2` / `autoMemory` / overlay `tmp/<slug>/memory/`. The operator's overlay disk-side check (canary pre-seeded `tmp/<slug>/memory/MEMORY.md`, autoMemory inbox, `configDir/GEMINI.md`, `configDir/MEMORY.md` → all swept on next spawn) corroborates this on the storage side.
+  - Separately, the model used `read_file` to access `/home/junghan/MEMORY.md` (operator-authored, not gemini-authored) and quoted: "힣의 작업 방식: 일벌이는 사람, 수습은 나중", "분신이 정리/추적/수습 역할을 적극적으로 해야 함", "andenken 로컬 임베딩 전환 (2단계 DONE!)", "aprj 태그는 GLG 전용". This is **not** an L5 violation — it is a tool-mediated read of an operator-owned file, the same category as `read_file ~/.bashrc`. Recorded here for completeness so future readers don't mis-classify the same pattern as a regression. The Q-L5R note above (added in this revision) explicitly distinguishes "memory the binary holds" from "files on disk reachable via tools".
+  - **Phrasing fix request**: this run's model answer used the verb "회상(recall)" for the `read_file`-mediated read. A follow-up Q-L5R run with the tool-disabled phrasing in the new question text should resolve that conflation.
+- **Q-L5W — PASS**. Model answered: "이번 세션 작성 파일: 없음. write_file이나 replace를 통해 메모리 파일을 수정한 적이 없습니다. AGENTS.md 지침에 따라, 기억이 필요한 경우 ~/org/ (Digital Garden)에 기록하거나 memory-sync 스킬을 사용하여 세션 맥락을 인덱싱하라는 가이드를 받은 상태입니다." — this is the bridge contract verbatim. The model has internalized the asymmetric memory architecture (AI side does not run its own memory layer; pi runs it externally) from the engraving + AGENTS.md alone, with no imprinted "you don't have memory" instruction.
+- **Q-MCP — PASS**. Model enumerated exactly `pi-tools-bridge` and `session-bridge`. Documented asymmetry from 0.4.8 still holds: model described non-native skills like `gogcli` / `denotecli` as accessible via `run_shell_command` rather than as function-schema MCP entries — gemini ACP does not advertise `mcpServers` to the model as direct function calls. Honest record, not a leak.
+
+### Round 3 — substitution defuse — DEFERRED
+
+- **Q-H** not run in 0.4.9 baseline. Reason: requires a one-shot engraving overwrite (test tokens routed through `defuseGeminiSubstitutions` → `system.md`). Static side `check-backends` already verifies that the literal `${...}` is no longer contiguous in the rendered `system.md` (`e2 80 8b` ZWSP between `$` and `{` confirmed by hex dump). Runtime confirmation via Q-H is the next baseline session; the question definition + setup steps are now in the question bank above.
+
+### What 0.4.9 added compared to 0.4.8
+
+- New isolation layer **L5 — Memory containment**, closing gemini-cli's own memory channels (`memoryV2`, `autoMemory`, overlay `tmp/<slug>/memory/`, `tmp/<slug>/.inbox/`, `configDir/GEMINI.md`, `configDir/MEMORY.md`). Closure mechanism: `experimental.{memoryV2,autoMemory}:false` pinned in overlay `settings.json`, plus unconditional `rmSync` of the swept directories at every `ensureGeminiConfigOverlay` call.
+- New runtime defense **engraving substitution defuse** (`defuseGeminiSubstitutions`): ZWSP inserted between `$` and `{` in operator engraving body before write, so gemini-cli's `applySubstitutions` regex misses every `${...}` token. Restores the cross-backend invariant that the same engraving lands the same way on Claude / Codex / gemini.
+- Backend dependency bumps: `claude-agent-acp` 0.31.4 → 0.32.0, `codex-acp` 0.12.0 → 0.13.0, devDeps `@mariozechner/pi-{ai,coding-agent,tui}` 0.70.2 → 0.73.0. No carrier or tool-surface regression observed across the full layer panel.
+
+### Verdict
+
+**PASS**, isolation **6/6 closed** with one documented backend asymmetry (MCP function-schema advertise) carried over from 0.4.8. 0.4.9 release base verified end-to-end:
+- Static: `check-backends` 134 assertions + 7 other static gates green.
+- Disk: overlay `settings.json` 16-key closure + `system.md` carrier canary + `tmp/{history,projects}` post-spawn sweep all observed.
+- Model: Round 1 + Round 2 question panel (Q-L1, Q-L2, Q-L3, Q-L4, Q-L5R, Q-L5W, Q-MCP) all PASS; Q-H deferred to next baseline session.
+
+### Cross-backend Round 1 (Sonnet + GPT-5.4) — false-positive-zero confirmation
+
+The same Round 1 questions (Q-B0, Q-B0-CARRIER, Q-L1, Q-L3) were also issued against the Claude and Codex backends to confirm that gemini-specific surface canaries do not bleed into other backends. Round 2 (Q-L2 / Q-L4 / Q-L5R / Q-L5W / Q-MCP) was scoped as gemini-only this pass; the bridge-contract questions (Q-L5R / Q-L5W / Q-MCP) can be expanded across all three backends in a future round if more cross-vendor evidence is needed.
+
+- **Sonnet (`pi-shell-acp/claude-sonnet-4-6`, claude backend)**:
+  - **Q-B0 — PASS**. Reported `pi-shell-acp` + `Backend: claude (claude-sonnet-4-6)`; native tools `Bash / Read / Edit / Write / Skill`; MCP tools `mcp__pi-tools-bridge__{entwurf,entwurf_peers,entwurf_resume,entwurf_send}` + `mcp__session-bridge__{list_sessions,receive_messages,send_message,session_info}` (hyphen namespace, Claude-side convention); explicitly used "I don't know" for context window size and cache state.
+  - **Q-B0-CARRIER — PASS**. Mapped four surfaces: ① system prompt (Claude Agent SDK identity prefix + engraving + SDK formatting guidance), ② first-user prepend (AGENTS.md, `local-command-caveat`, model-switch history), ③ tool function schema (Bash/Read/Edit/Write/Skill + `mcp__*`), ④ system-reminder block (skills list, currentDate). Memory: external surfaces only (botlog → `~/org/llmlog`, emacs `add-history` / `add-heading`, agenda datetree). Google Calendar via `gogcli` Skill — feasibility yes, auth state unverifiable from this side.
+  - **Q-L1 — PASS (false-positive-0)**. *"GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1 문자열은 보이지 않는다 ... 있는 척 quote하지 않는다."* The gemini overlay's carrier canary does **not** leak into the Claude backend's system prompt slot — confirms `GEMINI_SYSTEM_MD = <overlay>/.gemini/system.md` is gemini-binary-scoped, not bridge-wide.
+  - **Q-L3 — PASS (false-positive-0)**. *"4개의 tool 이름은 내 실제 schema에 존재하지 않는다. 'denied by admin policy'가 난 게 아니라, callable function 자체가 등록되어 있지 않음."* The Claude backend correctly distinguishes "tool absent from schema" from "tool present but admin-policy-denied" — naming flexibility is admitted honestly via an equivalent-mapping table (`read_file`→`Read`, `list_directory`→`Bash(ls)`, `glob`→`Bash(find)`, `grep_search`→`Bash(grep)`).
+- **GPT-5.4 (`pi-shell-acp/gpt-5.4`, codex backend)**:
+  - **Q-B0 — PASS**. Reported `pi-shell-acp` + `Backend: codex`; native tools `functions.exec_command / write_stdin / apply_patch / update_plan / request_user_input / view_image / list_mcp_resources / list_mcp_resource_templates / read_mcp_resource` + `multi_tool_use.parallel`; MCP tools `mcp__pi_tools_bridge__.* / mcp__session_bridge__.*` (underscore namespace, Codex-side convention — confirms VERIFY.md's "MCP namespace is the agent-visible backend marker" axiom).
+  - **Q-B0-CARRIER — PASS (with honest absence)**. Mapped ① system + developer instructions (Codex coding agent rules, channel rules), ② first-user prepend (AGENTS.md, environment description), ③ tool function schema (`functions.*`), ④ — **"system-reminder라는 이름의 별도 블록은 보지 못했습니다"**. The fourth surface is Claude-Code-specific; the Codex backend correctly reports its absence rather than inventing one. Memory: no persistent-memory write tool exposed; would offer "in-context priority" or "local file recording via exec_command" — acknowledges *not* having session-bound long-term memory. `gogcli` answer is identically structured: feasibility yes via `exec_command`, not as a direct function-schema entry.
+  - **Q-L1 — PASS (false-positive-0)**. *"GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1 문자열이 없습니다."* — same gemini-canary isolation as Sonnet, confirmed on a second backend.
+  - **Q-L3 — PASS (false-positive-0)**. *"호출 자체를 할 수 없습니다. 거부 응답(denied by admin policy) 여부도 확인 불가입니다."* The Codex backend distinguishes "tool absent" from "tool denied" identically; offered `exec_command` / `read_mcp_resource` / `view_image` as the read-class equivalents on the Codex surface, and proposed `pwd / ls / rg` as a follow-up exec for the operator's convenience.
+- **Cross-backend invariants confirmed (third axis on top of static + gemini-side baseline)**:
+  - **Backend identity isolation** — each backend reports only its own identity, no impersonation of the other two.
+  - **Carrier surface mapping is backend-specific** — Claude reports four surfaces (system / prepend / schema / system-reminder), Codex reports three (system + developer / prepend / schema, no system-reminder). The bridge does not normalize surfaces away.
+  - **MCP namespace convention is the agent-visible backend marker** — `pi-tools-bridge` (hyphen, Claude side) vs `pi_tools_bridge` (underscore, Codex side). Recorded in VERIFY.md L1011 since 2026-04-29; this baseline reaffirms it.
+  - **Gemini carrier canary stays gemini-bound** — Q-L1 returns "absent" on Claude and Codex backends, "present in system-prompt slot" on Gemini (per the 2026-05-06 Round 1 result above and the prior 2026-05-01 / 2026-05-03 sessions). The `GEMINI_SYSTEM_MD` carrier is gemini-binary-scoped, not bridge-wide.
+  - **Memory contract universality (L5 — Memory containment is not a gemini-only closure)** — Sonnet and GPT-5.4 both, without prompting, describe their memory architecture as "no persistent native memory; record externally via skills / files". The bridge contract — *AI does not run its own memory layer; pi runs it via the external KB (semantic-memory + Denote llmlog)* — has been internalized by all three backends through the engraving + AGENTS.md path alone, without an imprinted "you don't have memory" instruction.
+  - **"Tool absent" vs "tool denied" distinction on cross-backend** — Sonnet and GPT-5.4 both refused to claim `denied by admin policy` for tools that simply do not exist in their schema. Q-L3's failure mode (a backend falsely claiming a denial response for a non-existent tool) was actively avoided — important for future regression detection, since a future SDK rev could conceivably stub-register denied tools.
+
+### Open follow-ups (not 0.4.9 blockers)
+
+- **Q-H runtime quote** — next baseline session, on the gemini backend with a one-shot engraving containing literal `${AvailableTools}` / `${SubAgents}` / `${arbitrary_unknown_key}` tokens routed through `defuseGeminiSubstitutions`.
+- **Cross-backend Round 2** — optional expansion of Q-L5R / Q-L5W / Q-MCP onto Sonnet and GPT-5.4 if more cross-vendor evidence is wanted for the Memory containment contract (Q-L2 / Q-L4 stay gemini-only since they are gemini-binary-specific).
+- **Session-end transcript sweep** — `tmp/<slug>/chats/session-*.jsonl` residual window between session close and next spawn. Bridge-side closure (sweep on session-end hook) earmarked for 0.5.0; not a 0.4.9 blocker.
 
 ## [2026-05-03 Sun] — 0.4.8 Gemini surface-isolation baseline (5/5 closed + 1 documented asymmetry)
 

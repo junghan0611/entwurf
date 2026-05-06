@@ -4,6 +4,34 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.4.9 — 2026-05-06
+
+### L5 — Memory containment (gemini)
+
+The 0.4.8 surface-isolation matrix closed five Gemini channels (native body, operator memory path, tool surface, GEMINI.md hierarchical discovery, MCP whitelist). 0.4.9 closes a sixth — **memory persistence**. pi-shell-acp is the canonical memory authority on the pi side (semantic-memory + Denote llmlog); no backend may run a parallel memory layer that survives across sessions. The Claude and Codex sides already enforce this (Claude via `CLAUDE_CONFIG_DIR` overlay + `disallowedTools` + `skillPlugins:[]`, Codex via `-c memories.{generate,use}_memories=false` + `-c history.persistence="none"` + `-c features.memories=false`). 0.4.9 adds the matching closure for Gemini.
+
+- **`experimental.memoryV2:false` + `experimental.autoMemory:false` pinned in overlay `settings.json`.** memoryV2 is Gemini's "edit `GEMINI.md` / `MEMORY.md` directly via `edit/write_file`" mode (default `true` upstream); autoMemory is the background extraction agent that writes `.patch` files into a project memory inbox (default `false` upstream). The `GEMINI_SYSTEM_MD` override already replaces Gemini's system prompt body, so memoryV2's prompt steering never reaches the model — but the explicit pin holds even if the override path ever breaks (defense in depth). The overlay `settings.json` closure widens from 14 keys to 16.
+- **`<configDir>/{tmp,history,projects}/` swept at every spawn.** `ensureGeminiConfigOverlay` now unconditionally `rmSync`s these three subtrees and recreates them empty, so any `tmp/<slug>/memory/MEMORY.md`, `tmp/<slug>/.inbox/<kind>/*.patch`, command history, or stale project map written by a previous gemini session does not carry. The L4 closure (`context.fileName` sentinel + `memoryBoundaryMarkers:[]`) already keeps Gemini from *reading* these files; the L5 sweep is filesystem hygiene + defense-in-depth in case L4 ever breaks. The constant is renamed from `GEMINI_OVERLAY_EMPTY_DIRS` to `GEMINI_OVERLAY_SWEPT_DIRS` to reflect the stronger contract.
+- **Root-level `<configDir>/GEMINI.md` and `<configDir>/MEMORY.md` swept by the existing stale-entry cleanup.** Neither name is on `GEMINI_OVERLAY_BINARY_OWNED`, so the cleanup loop's fall-through `rmSync` removes them at every spawn. The model can still try to write these files within a session via `write_file`, but they cannot survive into the next one.
+- **`check-backends` 124 → 134 assertions.** Two assertions for the new `experimental.{memoryV2,autoMemory}` keys; five for the L5 sweep behaviour (pre-seed `tmp/<slug>/memory/MEMORY.md`, autoMemory inbox patch, root `GEMINI.md`, root `MEMORY.md` → confirm none survive the next `ensureGeminiConfigOverlay` call); three for the engraving substitution defuse below.
+
+### Engraving substitution defuse (gemini)
+
+Recent gemini-cli (post 0.42-nightly, [`packages/core/src/prompts/utils.ts`](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/prompts/utils.ts) `applySubstitutions`) walks the `GEMINI_SYSTEM_MD` override file and rewrites `${AgentSkills}`, `${SubAgents}`, `${AvailableTools}`, and `${<toolName>_ToolName}` with their runtime values. The substitution is intended for gemini-shipped templates, but the same pass runs over the operator-supplied override file — so any `${...}` literal inside an engraving (e.g. a shell example) silently mutates on the gemini backend only, while landing verbatim on Claude (`_meta.systemPrompt`) and Codex (`-c developer_instructions`).
+
+- `defuseGeminiSubstitutions` slides the `$` and `{` apart with a zero-width joiner (U+200B) before writing `system.md`. Every substitution regex misses; the model still reads the same visual string. Restores the cross-backend invariant that the same engraving lands the same way on all three backends. Documented inline at the function definition with the gemini-cli source pointer.
+
+### Internal — Backend dependency bumps
+
+- **`@agentclientprotocol/claude-agent-acp` 0.31.4 → 0.32.0.** SDK pin stays at `@agentclientprotocol/sdk@0.21.0`; transitive `@anthropic-ai/claude-agent-sdk` advances 0.2.121 → 0.2.126. Visible bridge-side change: Claude session updates may now carry `_meta._claude/origin` on `usage_update` notifications when the underlying message is a task-notification followup (autonomous work triggered by a system message rather than the user prompt). The bridge's event-mapper passes `_meta` through unchanged, so the new field flows to pi without code change. Internal `toolUpdateFromEditToolResponse` → `toolUpdateFromDiffToolResponse` rename is consumed inside claude-agent-acp; bridge does not import the symbol.
+- **`@zed-industries/codex-acp` 0.12.0 → 0.13.0.** Codex 0.124 → 0.128.0. Rust agent-client-protocol pin stays at `=0.11.1` (same as Zed and the TS SDK 0.21.0 wire). codex-acp internals shifted to async `AuthManager` + `EnvironmentManager` and added a `ThreadGoalUpdated` event — emitted as plain agent text via `client.send_agent_text("Goal updated (active): …")` and forwarded by the bridge as ordinary text. Mode IDs (`read-only` / `auto` / `full-access`) and the `-c features.<key>=false` gating surface are unchanged.
+- **devDeps `@mariozechner/pi-{ai,coding-agent,tui}` 0.70.2 → 0.73.0.** Aligns the typecheck fence with the version operators are running. pi-mono 0.71.0 removed the built-in `gemini-cli` *provider* (Token Plan API route), not the `google` API source — `getModels("google")` still ships `gemini-3-flash-preview` (1,048,576 context, 65,536 maxTokens), so `check-models` assertions hold. ExtensionAPI gained `getEditorComponent()` accessor + `thinking_level_select` event + `ProviderConfig.name` + `MessageEndEventResult` — all additive; the bridge does not subscribe to any of these surfaces.
+
+### Documentation
+
+- AGENTS.md Hard Rule #9 widens the surface-isolation matrix to include L5 — Memory containment (per backend), and re-states pi-shell-acp's role as the canonical memory authority.
+- Comment drift fix in `acp-bridge.ts`: the placeholder note "`if (systemMdResolution.value)` always takes the override branch" now reflects the upstream `value && !isDisabled` semantic gemini-cli adopted along with the prompt-provider refactor.
+
 ## 0.4.8 — 2026-05-03
 
 ### Added

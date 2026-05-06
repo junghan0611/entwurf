@@ -1,6 +1,33 @@
 import type { AssistantMessage, AssistantMessageEventStream } from "@mariozechner/pi-ai";
 import type { BridgePromptEvent } from "./acp-bridge.js";
 
+// Backend-emitted notifications that flow through this mapper untransformed.
+// The bridge does not filter or rewrite these — they reach pi as raw agent
+// text or pass-through `_meta` payloads. Logged here so a future operator
+// reading a transcript with one of these tokens does not assume the bridge
+// injected it.
+//
+//  - claude-agent-acp 0.32.0+: `usage_update` notifications may carry
+//    `_meta._claude/origin = { kind: "task-notification" | ... }`. Set when a
+//    Claude session-level task-notification autonomously triggered an
+//    assistant turn (the user did not prompt). The bridge passes `_meta`
+//    through unchanged. Cost still lands in pi accounting via `usage_update`,
+//    but the upstream stop_reason is suppressed for task-notification
+//    followups so the user-visible turn lifecycle stays anchored to the
+//    user prompt.
+//
+//  - codex-acp 0.13.0+: a new `ThreadGoalUpdated` event is forwarded as
+//    plain agent text via `client.send_agent_text("Goal updated (active|paused|...): <objective>")`.
+//    Reaches pi as ordinary streaming text, NOT a structured tool/state
+//    event. Operators may see the literal string in transcripts.
+//
+//  - gemini-cli (post 0.42-nightly): when ACP approval mode changes mid-
+//    session the binary emits an `agent_message_chunk` with the literal text
+//    `[MODE_UPDATE] <approval_mode>`. The bridge's overlay admin-policy
+//    pins the tool surface, so workflow-level mode changes are usually
+//    operator-driven via the gemini UI; the text is informational, not
+//    actionable, but it appears in pi transcripts as raw text.
+
 type ObservedToolState = {
 	title: string;
 	status?: string;

@@ -84,7 +84,7 @@ pi install ./
 ### Codex backend
 
 ```bash
-pnpm add -g @zed-industries/codex-acp@0.12.0
+pnpm add -g @zed-industries/codex-acp@0.13.0
 ./run.sh smoke-codex /path/to/your-project
 ```
 
@@ -98,7 +98,7 @@ gemini   # one-time interactive login (oauth-personal) or set GEMINI_API_KEY
 
 The Gemini CLI is an **external runtime dependency** — the `gemini` binary itself is the ACP server (no separate `*-acp` package). Use `GEMINI_ACP_COMMAND` to override the launch command; bridge args (`--acp`, `--admin-policy`) are appended either way.
 
-Operator-config isolation overlay shape: see `### Operating-surface contract — Gemini backend` below. Closure evidence and the 2026-05-03 baseline run: see [CHANGELOG.md 0.4.8](./CHANGELOG.md) and [BASELINE.md](./BASELINE.md).
+Operator-config isolation overlay shape: see `### Operating-surface contract — Gemini backend` below. Closure evidence: 2026-05-03 baseline (5/5 channels closed) in [CHANGELOG.md 0.4.8](./CHANGELOG.md) + 2026-05-06 baseline (6/6 — adds **L5 memory containment**) in [CHANGELOG.md 0.4.9](./CHANGELOG.md), with both rounds recorded in [BASELINE.md](./BASELINE.md).
 
 Backend is inferred from the model: Anthropic → `claude`, OpenAI → `codex`, Gemini → `gemini`. Set `backend` explicitly only when you want to pin it.
 
@@ -202,7 +202,8 @@ Gemini ACP exposes neither `_meta.systemPrompt` nor a `-c developer_instructions
 | Tool registry + policy | `tools.core` 7-name allow + `--admin-policy` deny-all + same 7-name allow | 4 capability classes (Read-class split into `read_file`/`list_directory`/`glob`/`grep_search`, plus `write_file` / `replace` / `run_shell_command`) — defense in depth at registry and policy layers |
 | Memory / context | `context.fileName: <sentinel>` + `memoryBoundaryMarkers: []` + `includeDirectoryTree: false` | Suppress `GEMINI.md` cwd → parent → home discovery and cwd dir-tree auto-attach |
 | MCP allowlist | `mcp.allowed: ["pi-tools-bridge","session-bridge"]` + `mcp.excluded: ["*"]` | Only bridge-injected stdio MCPs surface to the model |
-| Misc closure | subagents / skills / hooks / folder-trust / write_todos / auto-memory all off via `settings.json` | Close gemini surfaces pi does not surface (full key list in CHANGELOG 0.4.8) |
+| Memory containment (L5) | `experimental.memoryV2: false` + `experimental.autoMemory: false` in `settings.json` + `<configDir>/{tmp,history,projects}/` swept on every spawn + root `<configDir>/GEMINI.md` / `MEMORY.md` swept by stale-entry cleanup + `defuseGeminiSubstitutions` for engraving `${...}` literals | pi-shell-acp is the canonical memory authority on the pi side (semantic-memory + Denote llmlog); the gemini backend must not run a parallel memory layer. memoryV2 prompt steering off, autoMemory inbox off, gemini-side memory files do not survive across sessions. Engraving substitutions defused so the same engraving lands the same way on all three backends |
+| Misc closure | subagents / skills / hooks / folder-trust / write_todos / auto-memory all off via `settings.json` | Close gemini surfaces pi does not surface (full 16-key list in CHANGELOG 0.4.9) |
 
 Auth files (`oauth_creds.json`, `google_accounts.json`, `installation_id`, `mcp-oauth-tokens-v2.json`) are surfaced via symlink from the operator's real `~/.gemini/`; everything else (history, projects.json, tmp memory, settings.json with operator prefs, trustedFolders.json) is overlay-private. The overlay is rebuilt on every gemini session bootstrap (idempotent). Explicit `GEMINI_CLI_HOME` export wins, mirroring `CLAUDE_CONFIG_DIR` / `CODEX_HOME`.
 
@@ -321,13 +322,15 @@ The three backends share the same operating-surface shape (carrier, overlay, too
 | ACP subprocess | `claude-agent-acp` | `codex-acp` | `gemini --acp` (CLI binary's own ACP mode) |
 | Continuity path | `resumeSession` when available | `loadSession` when available | `loadSession` when available |
 | Engraving carrier | `_meta.systemPrompt` (string, in-protocol) | `-c developer_instructions` (child arg) | `GEMINI_SYSTEM_MD` (file replacing native body) |
-| Config overlay | `CLAUDE_CONFIG_DIR` | `CODEX_HOME` + `CODEX_SQLITE_HOME` | `GEMINI_CLI_HOME` + `settings.json` 14-key closure (also suppresses `GEMINI.md` discovery) |
+| Config overlay | `CLAUDE_CONFIG_DIR` | `CODEX_HOME` + `CODEX_SQLITE_HOME` | `GEMINI_CLI_HOME` + `settings.json` 16-key closure (suppresses `GEMINI.md` discovery + L5 memory containment) |
 | Tool surface narrowing | `tools` allowlist + `disallowedTools` | `codexDisabledFeatures` + `-c features.*` | `tools.core` allowlist + `--admin-policy` deny-all + class allow (4 Read-class names + Write/Edit/Exec) |
 | MCP injection | `piShellAcpProvider.mcpServers` | `piShellAcpProvider.mcpServers` | `piShellAcpProvider.mcpServers` (transport accepted; see asymmetry below) |
 | Backend auto-compaction | `DISABLE_AUTO_COMPACT=1` + `DISABLE_COMPACT=1` | `-c model_auto_compact_token_limit=i64::MAX` | n/a — no equivalent toggle |
 | Operator context cap override | `PI_SHELL_ACP_CLAUDE_CONTEXT=<int>` | covered by codex-acp's own narrowing (272K) | `PI_SHELL_ACP_GEMINI_CONTEXT=<int>` |
 
 **Documented asymmetry — Gemini MCP function-schema advertise.** Gemini ACP accepts MCP servers via `mcpServers` but does not register them as model-visible function-schema entries the way Claude and Codex do. Models route MCP calls through `run_shell_command` instead. Not closable from the overlay; see CHANGELOG 0.4.8 + BASELINE.md for the verification context.
+
+**Memory containment (L5).** The same baseline pass that confirmed L1–L4 + MCP for Gemini in 0.4.8 now also confirms a sixth surface — *memory persistence does not flow through the backend*. Claude / Codex / Gemini each have their own memory features upstream; pi-shell-acp keeps memory persistence on the pi side (semantic-memory + Denote llmlog) and silences each backend's parallel layer (Claude via `disallowedTools` + `skillPlugins:[]` + small carrier; Codex via `-c memories.{generate,use}_memories=false` + `-c history.persistence="none"` + `-c features.memories=false`; Gemini via `experimental.{memoryV2,autoMemory}:false` + per-spawn sweep of `<configDir>/{tmp,history,projects}/` + root `GEMINI.md`/`MEMORY.md` cleanup + `${...}` engraving defuse). Documented in CHANGELOG 0.4.9 with the 2026-05-06 baseline evidence in BASELINE.md.
 
 `PI_SHELL_ACP_ALLOW_COMPACTION=1` strips only the compaction-guard env vars (`DISABLE_AUTO_COMPACT`, `DISABLE_COMPACT`); identity-isolation env (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CODEX_SQLITE_HOME`, `GEMINI_CLI_HOME`, `GEMINI_SYSTEM_MD`) stays regardless — those are invariants required by the operator-config-isolation design, not policy choices the compaction toggle controls.
 

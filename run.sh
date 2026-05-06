@@ -1797,6 +1797,20 @@ try {
     assert.equal('model' in overlaySettings, false,
       'overlay settings.json must NOT inherit operator model preference');
 
+    // L5 — Memory containment. pi owns memory persistence (semantic-memory +
+    // Denote llmlog); the gemini backend must not run a parallel memory layer.
+    // memoryV2 (default true upstream) flips the system prompt into "edit
+    // GEMINI.md / MEMORY.md directly via edit/write_file" — overridden by
+    // GEMINI_SYSTEM_MD anyway, but pinned false here as defense-in-depth so
+    // the prompt steering is also off if the override path ever breaks.
+    // autoMemory (default false upstream) is the background extraction agent
+    // that writes .patch files into a project memory inbox; pinned false to
+    // make absence explicit and survive any future default flip.
+    assert.equal(overlaySettings.experimental?.memoryV2, false,
+      'overlay settings.json must pin experimental.memoryV2:false — memory persistence belongs to pi, not gemini');
+    assert.equal(overlaySettings.experimental?.autoMemory, false,
+      'overlay settings.json must pin experimental.autoMemory:false — no background memory extraction inbox in the overlay');
+
     // system.md must be authored with the engraving body at configDir.
     const systemMdStat = lstatSync(join(geminiConfigDir, 'system.md'));
     assert.equal(systemMdStat.isSymbolicLink(), false,
@@ -1852,6 +1866,84 @@ try {
       'second-call idempotence must not let operator trustedFolders.json leak back in');
     assert.deepEqual(readdirSync(join(geminiConfigDir, 'tmp')), [],
       'second-call idempotence must keep tmp/ empty');
+
+    // L5 sweep — gemini-side memory written in a previous session must not
+    // survive into the next spawn. Three vectors covered:
+    //   1. tmp/<slug>/memory/MEMORY.md (memoryV2 per-project memory)
+    //   2. tmp/<slug>/.inbox/<kind>/*.patch (autoMemory background extraction)
+    //   3. configDir/GEMINI.md (memoryV2 global memory written via write_file)
+    //   4. configDir/MEMORY.md (rare; some prompts steer here)
+    // Pre-seed each vector then call ensureGeminiConfigOverlay and confirm
+    // the file is gone. The L4 closure (context.fileName sentinel + empty
+    // memoryBoundaryMarkers) already keeps gemini from READING these files;
+    // the L5 sweep is filesystem hygiene + defense-in-depth in case the L4
+    // closure ever breaks.
+    mkdirSync(join(geminiConfigDir, 'tmp', 'session-N-slug', 'memory'), { recursive: true });
+    writeFileSync(
+      join(geminiConfigDir, 'tmp', 'session-N-slug', 'memory', 'MEMORY.md'),
+      'GEMINI-WROTE-PROJECT-MEMORY-CANARY',
+      'utf8',
+    );
+    mkdirSync(join(geminiConfigDir, 'tmp', 'session-N-slug', '.inbox', 'memory'), { recursive: true });
+    writeFileSync(
+      join(geminiConfigDir, 'tmp', 'session-N-slug', '.inbox', 'memory', 'patch-1.patch'),
+      'AUTO-MEMORY-INBOX-CANARY',
+      'utf8',
+    );
+    writeFileSync(join(geminiConfigDir, 'GEMINI.md'), 'GEMINI-WROTE-GLOBAL-MEMORY-CANARY', 'utf8');
+    writeFileSync(join(geminiConfigDir, 'MEMORY.md'), 'GEMINI-WROTE-ROOT-MEMORY-CANARY', 'utf8');
+    ensureGeminiConfigOverlay(engravingForOverlay, geminiRealDir, geminiFakeHome, geminiConfigDir);
+    assert.equal(
+      existsSync(join(geminiConfigDir, 'tmp', 'session-N-slug', 'memory', 'MEMORY.md')),
+      false,
+      'L5 sweep: previous-session MEMORY.md under tmp/<slug>/memory/ must not survive',
+    );
+    assert.equal(
+      existsSync(join(geminiConfigDir, 'tmp', 'session-N-slug', '.inbox', 'memory', 'patch-1.patch')),
+      false,
+      'L5 sweep: previous-session autoMemory inbox patches must not survive',
+    );
+    assert.deepEqual(
+      readdirSync(join(geminiConfigDir, 'tmp')),
+      [],
+      'L5 sweep: tmp/ must be wiped clean of all per-session subtrees',
+    );
+    assert.equal(
+      existsSync(join(geminiConfigDir, 'GEMINI.md')),
+      false,
+      'L5 sweep: configDir/GEMINI.md (memoryV2 global memory) must not survive across spawns',
+    );
+    assert.equal(
+      existsSync(join(geminiConfigDir, 'MEMORY.md')),
+      false,
+      'L5 sweep: configDir/MEMORY.md must not survive across spawns',
+    );
+
+    // Engraving substitution defuse — gemini-cli applies `${...}` regex
+    // substitution to the override file (applySubstitutions in
+    // packages/core/src/prompts/utils.ts). Operator engravings with literal
+    // `${...}` text would silently mutate on the gemini backend only,
+    // breaking the cross-backend invariant that the same engraving lands the
+    // same way on all three. defuseGeminiSubstitutions inserts a zero-width
+    // joiner between `$` and `{` so the regex misses while the model reads
+    // the same visual string.
+    const engravingWithSubst = 'Use ${AvailableTools} for the task. Cost: ${PriceList}.';
+    ensureGeminiConfigOverlay(engravingWithSubst, geminiRealDir, geminiFakeHome, geminiConfigDir);
+    const systemMdDefused = readFileSync(join(geminiConfigDir, 'system.md'), 'utf8');
+    assert.equal(
+      systemMdDefused.includes('${AvailableTools}'),
+      false,
+      'L5 substitution defuse: literal ${AvailableTools} must be defused (no contiguous "${" remaining for gemini regex)',
+    );
+    assert.equal(
+      systemMdDefused.includes('${PriceList}'),
+      false,
+      'L5 substitution defuse: arbitrary ${...} literals in engraving must also be defused',
+    );
+    assert.ok(
+      systemMdDefused.includes('AvailableTools') && systemMdDefused.includes('PriceList'),
+      'L5 substitution defuse: engraving content beyond `${` must remain visible to the model',
+    );
 
     // Empty / undefined engraving still authors a non-empty system.md.
     ensureGeminiConfigOverlay(undefined, geminiRealDir, geminiFakeHome, geminiConfigDir);
@@ -1990,7 +2082,7 @@ try {
   assert.equal(geminiMeta, undefined,
     'gemini buildSessionMeta must return undefined — engraving travels via GEMINI_SYSTEM_MD (overlay system.md) instead');
 
-  console.log('[check-backends] 124 assertions ok');
+  console.log('[check-backends] 134 assertions ok');
 } finally {
   if (prevClaude === undefined) delete process.env.CLAUDE_AGENT_ACP_COMMAND;
   else process.env.CLAUDE_AGENT_ACP_COMMAND = prevClaude;
@@ -2472,8 +2564,8 @@ verify_resume() {
   check_claude_sessions "$project_dir"
 }
 
-CLAUDE_ACP_REQUIRED_VERSION="0.31.4"
-CODEX_ACP_REQUIRED_VERSION="0.12.0"
+CLAUDE_ACP_REQUIRED_VERSION="0.32.0"
+CODEX_ACP_REQUIRED_VERSION="0.13.0"
 
 check_global_claude_acp() {
   local installed

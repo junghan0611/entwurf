@@ -388,7 +388,7 @@ export type EnsureBridgeSessionParams = {
 	disallowedTools: string[];
 	/** codex-rs feature keys (e.g. "image_generation", "tool_suggest", "multi_agent", "apps") materialized as `-c features.<key>=false` flags at codex-acp launch. Codex-only — the claude adapter ignores this. Mirror of `disallowedTools` on the codex side: the sole operator-tunable knob for the codex tool surface. Defaults to `DEFAULT_CODEX_DISABLED_FEATURES` (defined in acp-bridge.ts). Set to `[]` in pi-shell-acp settings.json to opt fully out of bridge feature gating. */
 	codexDisabledFeatures: string[];
-	/** Gemini identity carrier — rendered engraving written into the overlay's `system.md` (`GEMINI_SYSTEM_MD` target) at spawn time by ensureGeminiConfigOverlay. Gemini-only — the claude/codex adapters ignore this. When omitted/empty, the overlay still authors a non-empty placeholder so gemini's `getCoreSystemPrompt` always takes the override branch (replacing the native "Instruction and Memory Files" body). */
+	/** Gemini identity carrier — rendered engraving written into the overlay's `system.md` (`GEMINI_SYSTEM_MD` target) at spawn time by ensureGeminiConfigOverlay. Gemini-only — the claude/codex adapters ignore this. When omitted/empty, the overlay still authors a non-empty placeholder so gemini's `getCoreSystemPrompt` takes the override branch (replacing the native "Instruction and Memory Files" body). The override branch is gated by `systemMdResolution.value && !systemMdResolution.isDisabled` post the prompt-provider refactor — `isDisabled` is only ever true for the literal switch values `0`/`false`, which the bridge never uses (we always set `GEMINI_SYSTEM_MD` to a real path). Operator engravings with literal `${...}` text are run through `defuseGeminiSubstitutions` before write so gemini's `applySubstitutions` does not mutate them. */
 	geminiSystemPromptText?: string;
 	bridgeConfigSignature: string;
 	contextMessageSignatures: string[];
@@ -1613,10 +1613,13 @@ export function ensureCodexConfigOverlay(
 //    rules) by default. The 2026-05-01 baseline captured the model
 //    quoting that body verbatim. With overlay we set
 //    `GEMINI_SYSTEM_MD=<configDir>/system.md` and write our own engraving-
-//    derived prompt; gemini's `if (systemMdResolution.value)` branch then
-//    completely replaces the native body with our file. Equivalent in
-//    role to Claude's `_meta.systemPrompt` replacement and Codex's
-//    `-c developer_instructions=<...>`.
+//    derived prompt; gemini's `systemMdResolution.value && !systemMdResolution.isDisabled`
+//    branch (post the prompt-provider refactor that landed alongside
+//    0.42-nightly) then completely replaces the native body with our file.
+//    `isDisabled` is only ever true for the switch values `0`/`false`, which
+//    the bridge never sets — we always point at a real overlay path.
+//    Equivalent in role to Claude's `_meta.systemPrompt` replacement and
+//    Codex's `-c developer_instructions=<...>`.
 //
 //  ③ Native tool registry advertise-and-invoke surface — gemini's bundled
 //    tool surface includes (at minimum) read_file, write_file, replace,
@@ -1688,11 +1691,19 @@ const GEMINI_OVERLAY_PASSTHROUGH = new Set([
 	"mcp-oauth-tokens-v2.json", // operator's MCP OAuth tokens (auth)
 ]);
 
-// Empty directories owned by the overlay. The gemini CLI auto-creates per-cwd
-// state under these paths (memory subtree, command history, project-id
-// mappings). Owning them as empty trees scoped to the overlay means the
-// operator's `~/.gemini/{tmp,history,projects.json}` is never read.
-const GEMINI_OVERLAY_EMPTY_DIRS = new Set(["tmp", "history", "projects"]);
+// Cross-session-swept directories owned by the overlay. The gemini CLI
+// auto-creates per-cwd state under these paths (memory subtree, command
+// history, project-id mappings). Owning them as empty trees scoped to the
+// overlay means the operator's `~/.gemini/{tmp,history,projects.json}` is
+// never read; nuking the overlay copies at every spawn (L5 — Memory
+// containment) means whatever gemini wrote in the previous session does not
+// survive into the next one. pi-shell-acp owns memory persistence on the pi
+// side (semantic-memory + Denote llmlog); the backend must not accumulate a
+// parallel memory layer. tmp/ holds the per-project memory subtree, the
+// .inbox/ patch files when autoMemory is on, plus checkpoints / plans /
+// tracker / chats / shell_history — none of which pi relies on, so a clean
+// nuke is preferable to selective sweeping.
+const GEMINI_OVERLAY_SWEPT_DIRS = new Set(["tmp", "history", "projects"]);
 
 // Entries the gemini CLI may create inside the overlay itself once it runs
 // against `GEMINI_CLI_HOME=<fakeHome>`. Plus the overlay-authored entries —
@@ -1799,6 +1810,20 @@ function geminiOverlaySettingsJson(): string {
 				allowed: [...GEMINI_MCP_ALLOWLIST],
 				excluded: ["*"], // catch-all — only allowed[] survives
 			},
+			// L5 — Memory containment. pi-shell-acp owns memory persistence on the
+			// pi side (semantic-memory + Denote llmlog); the backend must not run
+			// its own parallel memory layer. memoryV2 (default true) flips the
+			// system prompt into "edit GEMINI.md / MEMORY.md directly via
+			// edit/write_file" mode — overridden by GEMINI_SYSTEM_MD anyway, but
+			// pinned here as defense-in-depth so the prompt steering is also off if
+			// the override path ever breaks. autoMemory (default false) is the
+			// background extraction agent that writes .patch files into a project
+			// memory inbox; pinned false to make absence explicit. Both are
+			// experimental keys — schema lives at packages/cli/src/config/settingsSchema.ts.
+			experimental: {
+				memoryV2: false,
+				autoMemory: false,
+			},
 		},
 		null,
 		2,
@@ -1866,6 +1891,24 @@ function geminiOverlayAdminPolicyToml(): string {
 // AGENTS / augment text the model otherwise repeats.
 const GEMINI_OVERLAY_SYSTEM_MD_CANARY = "GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1";
 
+// Defuse `${...}` literals in engraving body before writing system.md.
+//
+// gemini-cli (packages/core/src/prompts/utils.ts: applySubstitutions, post
+// 0.42-nightly) walks the override file and rewrites `${AgentSkills}`,
+// `${SubAgents}`, `${AvailableTools}`, and `${<toolName>_ToolName}` with their
+// runtime values. That substitution is intended for gemini-shipped templates
+// — but the same pass runs over the operator-supplied `GEMINI_SYSTEM_MD`
+// override file, so any `${...}` literal inside an engraving (e.g. a shell
+// example) silently mutates on the gemini backend only, while landing
+// verbatim on Claude (`_meta.systemPrompt`) and Codex (`developer_instructions`).
+// pi-shell-acp's invariant is that the same engraving lands the same way on
+// all three backends; sliding the `$` and `{` apart with a zero-width joiner
+// stops every substitution regex without changing what the model visually
+// reads.
+function defuseGeminiSubstitutions(text: string): string {
+	return text.replace(/\$\{/g, "$​{");
+}
+
 // system.md content for the overlay. Receives the operator engraving (when
 // configured) as the body, plus the carrier-isolation canary line. Empty
 // engraving still produces a non-empty placeholder file so gemini's
@@ -1879,15 +1922,17 @@ const GEMINI_OVERLAY_SYSTEM_MD_CANARY = "GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1";
 // codex (`-c developer_instructions`). Keeping system.md small avoids the
 // metered-billing routing risk that motivated the same split on Claude.
 function geminiOverlaySystemMd(engravingText: string | undefined): string {
-	const engraving = (engravingText ?? "").trim();
+	const engraving = defuseGeminiSubstitutions((engravingText ?? "").trim());
 	const canaryLine = `[carrier-canary] ${GEMINI_OVERLAY_SYSTEM_MD_CANARY}`;
 	if (engraving.length > 0) {
 		return `${engraving}\n\n${canaryLine}\n`;
 	}
 	// Placeholder when no operator engraving — file must exist non-empty so
-	// gemini's `if (systemMdResolution.value)` branch is taken. The canary
-	// line both keeps the file non-empty and gives baseline a deterministic
-	// quote target.
+	// gemini's `getCoreSystemPrompt` override branch is taken
+	// (`systemMdResolution.value && !systemMdResolution.isDisabled`, which the
+	// bridge satisfies because GEMINI_SYSTEM_MD is set to a real path, not the
+	// disable-switch values "0"/"false"). The canary line both keeps the file
+	// non-empty and gives baseline a deterministic quote target.
 	return `You are an agent operating under pi-shell-acp. Follow the operating context delivered in the first user message.\n\n${canaryLine}\n`;
 }
 
@@ -1935,18 +1980,18 @@ export function ensureGeminiConfigOverlay(
 	writeFileSync(join(configDir, "system.md"), geminiOverlaySystemMd(engravingText), "utf8");
 	writeFileSync(join(configDir, "policies", "admin.toml"), geminiOverlayAdminPolicyToml(), "utf8");
 
-	// Empty dirs — overlay-private, replace any prior symlink to operator data.
-	for (const entry of GEMINI_OVERLAY_EMPTY_DIRS) {
+	// L5 — Memory containment. Sweep the gemini-side ephemeral state dirs at
+	// every spawn so no MEMORY.md / GEMINI.md / memory inbox patch survives
+	// across sessions. pi owns memory persistence (semantic-memory + Denote
+	// llmlog); the backend must not run a parallel memory layer. Unconditional
+	// rmSync — replaces any prior symlink to operator data, plus discards any
+	// gemini-written content (tmp/<slug>/memory/MEMORY.md,
+	// tmp/<slug>/.inbox/<kind>/*.patch, history, projects map). Then recreate
+	// empty so the gemini binary can repopulate within-session as needed.
+	for (const entry of GEMINI_OVERLAY_SWEPT_DIRS) {
 		const overlayPath = join(configDir, entry);
-		try {
-			const existing = lstatSync(overlayPath);
-			if (existing.isSymbolicLink() || !existing.isDirectory()) {
-				rmSync(overlayPath, { recursive: true, force: true });
-				mkdirSync(overlayPath, { recursive: true });
-			}
-		} catch {
-			mkdirSync(overlayPath, { recursive: true });
-		}
+		rmSync(overlayPath, { recursive: true, force: true });
+		mkdirSync(overlayPath, { recursive: true });
 	}
 
 	// Symlinked passthrough — only entries on the whitelist, only if they
@@ -1996,7 +2041,7 @@ export function ensureGeminiConfigOverlay(
 	// authored shape on every session.
 	for (const entry of readdirSync(configDir)) {
 		if (GEMINI_OVERLAY_PASSTHROUGH.has(entry)) continue;
-		if (GEMINI_OVERLAY_EMPTY_DIRS.has(entry)) continue;
+		if (GEMINI_OVERLAY_SWEPT_DIRS.has(entry)) continue;
 		const overlayPath = join(configDir, entry);
 
 		if (GEMINI_OVERLAY_BINARY_OWNED.has(entry)) {
