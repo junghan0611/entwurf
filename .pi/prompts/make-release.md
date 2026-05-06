@@ -94,11 +94,37 @@ check-backends / check-registration / check-dep-versions /
 check-sdk-surface) must pass. If any fail, fix the underlying issue —
 do not bypass.
 
-### 6. gh + git authenticated
+### 6. GitHub auth + target consistency
 
 ```bash
 gh auth status
+
+REMOTE=$(git remote get-url origin)
+EXPECTED_REPO=$(printf '%s\n' "$REMOTE" | sed -E 's#^git@github.com:##; s#^https://github.com/##; s#\.git$##')
+
+GH_REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+GH_PERM=$(gh repo view --json viewerPermission --jq .viewerPermission)
+
+test "$GH_REPO" = "$EXPECTED_REPO"
+case "$GH_PERM" in
+  ADMIN|MAINTAIN|WRITE) ;;
+  *) echo "ABORT: GitHub viewerPermission is $GH_PERM (need WRITE+)"; exit 1 ;;
+esac
 ```
+
+If `gh` is authenticated against the wrong account/host or is pointed at a
+repo different from `origin`, abort before tagging.
+
+### 7. Push dry-run
+
+```bash
+VERSION="$ARGUMENTS"
+git push --dry-run origin main
+git push --dry-run origin "HEAD:refs/tags/v${VERSION}"
+```
+
+This is the real permission/network/divergence check. `gh auth status`
+alone proves login, not pushability.
 
 ## Steps
 
