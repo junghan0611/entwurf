@@ -7,22 +7,18 @@ You are running a standard release for pi-shell-acp.
 
 User-supplied version: $ARGUMENTS
 
-This command does **not** bump `package.json`, commit, or run `npm
-publish`. Those are operator actions performed before invoking this
-command. It tags HEAD, pushes, stamps, extracts release notes from
+This command is **execution-only**. It does **not** prepare the tree.
+Preparation belongs to `/prepare-release <version>`.
+
+`/make-release <version>` assumes the repo is already release-ready:
+- `CHANGELOG.md` already has `## <version> — YYYY-MM-DD`
+- `package.json` already matches `<version>`
+- release-prep changes are already committed
+- `git diff-index --quiet HEAD --` already passes
+
+This command tags HEAD, pushes, stamps, extracts release notes from
 `CHANGELOG.md`, creates the GitHub release, verifies, and notifies.
-
-## Operator pre-work (before invoking this command)
-
-1. Refresh `CHANGELOG.md` (use `update-changelog` skill from
-   agent-config) to draft new entries into `## Unreleased` based on
-   `git log v<last-tag>..HEAD`.
-2. Promote `## Unreleased` to `## <version> — YYYY-MM-DD`. Add a fresh
-   empty `## Unreleased` above it.
-3. Bump version: `npm version <version> --no-git-tag-version && pnpm install --lockfile-only`.
-4. Commit the bump + CHANGELOG promotion together.
-
-After those four are done, invoke `/make-release <version>`.
+It does **not** bump `package.json`, commit, or run `npm publish`.
 
 ## Variable contract
 
@@ -46,6 +42,9 @@ esac
 
 ### 1. Working tree clean
 
+A staged-but-uncommitted tree is **not** release-ready. If this fails,
+finish `/prepare-release <version>` first.
+
 ```bash
 git diff-index --quiet HEAD --
 ```
@@ -65,6 +64,8 @@ partially done. See **Recovery** at the bottom.
 
 ### 3. CHANGELOG has the section
 
+If this fails, run `/prepare-release <version>` first.
+
 ```bash
 VERSION="$ARGUMENTS"
 grep -q "^## ${VERSION}\b" CHANGELOG.md
@@ -74,6 +75,8 @@ If missing, the operator pre-work step 2 (promote `## Unreleased`)
 was not done. Abort.
 
 ### 4. package.json version matches
+
+If this fails, run `/prepare-release <version>` first.
 
 ```bash
 VERSION="$ARGUMENTS"

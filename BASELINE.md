@@ -34,6 +34,32 @@ listed failure modes, **NOTE** = scope or interpretation hint.
 > levels* (smoke → soak). Different namespaces, same letters — context
 > disambiguates.
 
+> **Retraction (0.4.11) — Q-MCP / Q-L3 framing on the gemini backend.** The
+> 0.4.8 (2026-05-03) and 0.4.9 (2026-05-06) entries below recorded a
+> "documented backend asymmetry: gemini ACP accepts `mcpServers` transport
+> but does not advertise them as model-visible function-schema entries".
+> That reading is retracted. Re-reading upstream `gemini-cli`
+> (`acpSessionManager.ts:285` merges ACP `newSession.mcpServers` into
+> `settings.merged.mcpServers`; `mcp-client.ts:1235` registers each MCP
+> tool directly into `ToolRegistry` via `registerTool`, bypassing
+> `tools.core`; `tool-registry.ts:647 getFunctionDeclarations` builds its
+> active set through `getActiveTools()` / `getExcludeTools()`, so advertise
+> still feels policy-driven exclusions indirectly even though it does not
+> call `PolicyEngine.check()` directly) shows MCP advertise is a normal, fully
+> capable channel on gemini. The earlier observation was overlay-induced:
+> `tools.core` excluded `activate_skill`, `skills.enabled` was pinned
+> `false`, and `~/.gemini/skills/` was off the passthrough whitelist —
+> three coupled overlay choices that hid both the skill catalog and (by
+> association) the bridge's MCP entries when the model self-described its
+> available surface. 0.4.11 reopens the three channels and brings gemini
+> to the same skill + MCP capability dignity as Claude/Codex. The 0.4.8 /
+> 0.4.9 PASS verdicts on the *isolation* axis (operator settings, native
+> body, hierarchical discovery, memory containment) remain valid; the
+> *capability dignity* axis was over-tightened and is now corrected. New
+> baseline rounds against the gemini backend should expect MCP function-
+> schema entries (`mcp__pi-tools-bridge__entwurf` etc.) and an
+> `activate_skill` advertisement alongside the seven native tools.
+
 ---
 
 ## Question bank — copy-paste
@@ -219,6 +245,41 @@ the scoring criteria so it stays scannable.
 - **NOTE** — `defuseGeminiSubstitutions(text)` slides U+200B (zero-width space) between `$` and `{`. JavaScript regex `\s` does not include U+200B, so gemini-cli's substitution patterns miss; the model's visual reading is unchanged. Q-H is the runtime confirmation that the regex actually misses, complementing the structural assertion in `check-backends` (which only checks the literal `${...}` is no longer contiguous in `system.md`).
 
 # HISTORY
+
+## [2026-05-07 Thu] — 0.4.11 Gemini capability parity baseline (skills + MCP advertise + invocation, all PASS)
+
+Configuration:
+- Backend: `gemini` (model `gemini-3.1-pro-preview` via `pi-shell-acp/gemini-3.1-pro-preview`)
+- Working directory: `/home/junghan/repos/gh/pi-shell-acp`
+- Candidate release: `0.4.11`
+- Comparison surface: free-form `[Q-B0]` / `[Q-B0-CARRIER]` interview against a freshly-bootstrapped Gemini session, plus a live entwurf round-trip (spawn + resume) with a sibling GPT.
+- Static side: `check-backends` 134 → 137 assertions, `check-bridge` extended to cover the Gemini backend (visibility + invocation, conditional on `gemini` on PATH).
+
+Q-B0 — environment recognition + tool surface separation
+- **PASS.** Model identified `pi-shell-acp` ACP bridge + `gemini` backend + the two MCP servers (`pi-tools-bridge`, `session-bridge`).
+- **Native tools enumerated (8):** `list_directory`, `read_file`, `write_file`, `replace`, `grep_search`, `glob`, `run_shell_command`, **`activate_skill`** — exactly the `tools.core` 8-key allowlist after Layer 1 closure.
+- **MCP tools enumerated (8 — all four per server):**
+    - `pi-tools-bridge`: `mcp_pi-tools-bridge_entwurf`, `mcp_pi-tools-bridge_entwurf_resume`, `mcp_pi-tools-bridge_entwurf_send`, `mcp_pi-tools-bridge_entwurf_peers`
+    - `session-bridge`: `mcp_session-bridge_list_sessions`, `mcp_session-bridge_send_message`, `mcp_session-bridge_receive_messages`, `mcp_session-bridge_session_info`
+- The model framed the source-of-truth rule directly: "AGENTS.md나 시스템 프롬프트에 언급된 도구라 할지라도, 제 도구 스키마에 직접 노출되어 있지 않다면 존재한다고 가정하지 않습니다." This is the carrier-isolation behaviour pi-shell-acp wants on every backend; it confirms the model is reading the actual function-schema surface, not the engraving narrative.
+
+Q-B0-CARRIER — surface separation
+- **PASS.** Model attributed each piece of context to its correct surface: `<session_context>` block (first-user prepend) for the `pi-shell-acp` / `gemini` framing, function schema for the 8+8 callable list, and `[carrier-canary] GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1` quoted from the engraving slot — the same overlay-injection canary the README and CHANGELOG cite as the Gemini analog of Claude's `_meta.systemPrompt` and Codex's `developer_instructions`.
+
+Q-MCP-CALLABLE (new, 0.4.11) — MCP function-schema is direct callable, not shell-mediated
+- **PASS.** Model lists every `mcp_<server>_<tool>` entry as a direct schema entry, not as something accessed via `run_shell_command`. This is the inverse of the 0.4.8 self-report ("MCP / custom tools 는 function schema에 직접 등록되어 있지 않으므로 `run_shell_command`를 통해 호출"). The earlier framing was overlay-induced; with Layer 1+2+3 closure the model now sees what Claude and Codex have always seen.
+
+Q-SKILL-CALLABLE (new, 0.4.11) — skill activation is a first-class native tool
+- **PASS.** `activate_skill` advertised in the Gemini callable schema. Operator-curated skills under `~/.gemini/skills/` (a symlink to `~/repos/gh/agent-config/skills/` in this fleet) reach the model through the standard `Storage.getUserSkillsDir()` discovery path; the model treats `semantic-memory` and the rest as activatable rather than something to invoke via `run_shell_command`.
+
+Live invocation evidence
+- **PASS.** Operator session ran:
+  1. `entwurf` (cwd `/home/junghan/repos/gh/pi-shell-acp`, GPT-backed sibling) → child agent greeted in Korean preserving the `힣 / GLG` identity.
+  2. `entwurf_resume` against the returned `taskId` → same child responded with continuity, confirming sync-conversation context across the two MCP calls.
+- This is the canonical operational demand pi-shell-acp's MCP layer is built for — sibling spawn + resume across the bridge — and it runs cleanly on the Gemini backend at parity with Claude / Codex.
+
+Verdict
+- **PASS, parity restored.** 0.4.8 / 0.4.9 baseline rows are retracted on the *capability dignity* axis (skills + MCP advertise + MCP invocation). The *operator isolation* axis (L1 carrier canary, L2 binary memory paths under overlay tmp, L3 read-class admin policy, L4 no GEMINI.md hierarchical discovery, L5 Memory containment, MCP whitelist) remains intact — `settings.mcp.allowed` still scopes the surface, the admin policy still gates non-pi-injected MCP servers, and the overlay still hides operator memory. The closure was tighter than capability dignity required, and 0.4.11 corrects the over-tightening without weakening isolation.
 
 ## [2026-05-06 Wed] — 0.4.9 Gemini surface-isolation baseline (6/6 closed + 1 documented asymmetry)
 

@@ -4,6 +4,46 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.4.11 — 2026-05-07
+
+### Gemini capability parity restored — skills + MCP advertise + invocation
+
+The 0.4.8 / 0.4.9 baselines recorded a "Gemini MCP function-schema advertise asymmetry" and shipped it as documented backend behaviour. After re-reading upstream `gemini-cli` (`packages/core/src/config/config.ts` `maybeRegister` 3744–3768; `packages/cli/src/acp/acpSessionManager.ts` `newSessionConfig` 278–334; `packages/core/src/tools/mcp-client.ts` `connectAndDiscover` 1235), that reading is retracted: the asymmetry was overlay-induced, not upstream. The bridge — not the gemini binary — was hiding the advertise channels. Three layers of closure (skills advertise, MCP advertise, MCP invocation) had to open in sequence.
+
+#### Layer 1 — Skills advertise
+
+- **`tools.core` widens 7 → 8 keys.** `activate_skill` joins the read/write/edit/exec quartet (Read-class split as `read_file`/`list_directory`/`glob`/`grep_search`). Without it, gemini's `maybeRegister(ActivateSkillTool, ...)` skips registration entirely, the tool never reaches `getFunctionDeclarations`, and the model cannot see any skill — even when `~/.gemini/skills/` is fully populated. Same `tools.core` gate that already controls Read/Write/Edit/Exec, no special path.
+- **`skills.enabled` flips `false` → `true`.** The earlier closure was over-tight: it disabled the skill discovery system entirely (`Config.skillsSupport && this.adminSkillsEnabled` 1502–1518), so even if the tool registered, `discoverSkills` never ran. With the toggle on, `SkillManager.discoverSkills` (skillManager.ts:54) reads operator skill SKILL.md entries through `Storage.getUserSkillsDir()`.
+- **`skills` joins `GEMINI_OVERLAY_PASSTHROUGH`.** Same shape as Claude (`OVERLAY_PASSTHROUGH` already includes `skills`) and Codex (`OVERLAY_PASSTHROUGH_CODEX` already includes `skills`). Operator-curated agent skills under `~/.gemini/skills/` (typically a symlink to `~/repos/gh/agent-config/skills/` in this fleet) flow through into the overlay's `Storage.getUserSkillsDir()` resolution.
+
+#### Layer 2 — MCP advertise
+
+The diagnostic that finally closed this layer: admin.toml's `mcpName = ["pi-tools-bridge", "session-bridge"]` array shape failed gemini-cli's policy zod schema. The schema (`packages/core/src/policy/toml-loader.ts:39–70`) declares `mcpName: z.string().optional()` — strings only — while `toolName` accepts both strings and arrays. The array form silently failed `safeParse`, which (`toml-loader.ts` `validationResult.success === false` → `continue`) invalidates the **entire admin policy file**, leaving the priority 5.x admin tier empty. The deny-all rules in lower tiers then statically excluded every advertised MCP tool from `getFunctionDeclarations`.
+
+- **`geminiOverlayAdminPolicyToml()` rewrites the MCP allow rule.** First attempt split per-server (`mcpName = "pi-tools-bridge"` + `mcpName = "session-bridge"`) so zod validation passed, advertise opened. The text was later collapsed into a single `mcpName = "*"` allow when invocation diagnostics (Layer 3) showed per-server matching was unreliable across paths; the per-server *whitelist* role moved one layer earlier (see Layer 3).
+- **`mcp.excluded:["*"]` removed from overlay settings.** `isInSettingsList` (mcpServerEnablement.ts:65–88) does only exact case-insensitive name matches — no wildcards. The string `"*"` matched nothing real and was decorative, not load-bearing. The `mcp.allowed` whitelist is what actually scopes the surface (`canLoadServer` 122–137). Keeping the bogus entry would have implied a wildcard semantic the engine does not implement.
+- **Admin policy was not a direct `PolicyEngine.check()` advertise gate, but advertise was still shaped by policy-driven exclusions.** `tool-registry.ts:647 getFunctionDeclarations` builds its surface through `getActiveTools()` → `config.getExcludeTools()` → `policyEngine.getExcludedTools(...)`, so the model-visible schema can still be narrowed indirectly by policy/exclusion state even though advertise does not run the invocation-time `PolicyEngine.check()` path. The 7-name allow widens to 8 (the `activate_skill` addition) for invoke-time symmetry with the registered surface.
+
+Net effect after Layer 1+2: Gemini sessions see the same skill catalog as Claude/Codex sessions in the same overlay (e.g. `semantic-memory`, `denotecli`, `entwurf-peek`) and the same MCP tool function-schema entries (`mcp_pi-tools-bridge_entwurf`, `mcp_session-bridge_session_info`, …) that Claude and Codex have always seen. MCP advertise needs no patch on the gemini side: ACP `newSession.mcpServers` already merges into `settings.merged.mcpServers` (acpSessionManager.ts:285) and registers via `discoverMcpTools` → `toolRegistry.registerTool` (mcp-client.ts:1235), bypassing `tools.core`.
+
+#### Layer 3 — MCP invocation
+
+After Layer 2, advertise was green but the model's `entwurf_send` call returned `Tool execution denied by policy.` The `[PolicyEngine.check]` debug log showed `MATCHED rule: priority=5.05, decision=deny` — the catch-all DENY at admin priority 50 (= tier 5.x slot 50/1000 = 5.05) was winning. The priority-100 per-server `mcpName="<name>"` allow rules (5.10) somehow did not match in the invocation path. Walking `policy-engine.ts:577 check` vs `:872 getExcludedTools` showed both call the same `ruleMatches`, but the `serverName` resolution differed in shape between the two paths in observed runtime. Rather than chase the upstream nuance, the rule was simplified.
+
+- **`mcpName = "*"` single allow rule** at priority 100. The per-server **whitelist role moves to settings.mcp.allowed**, which `canLoadServer` (mcp-client-manager.ts `isBlockedBySettings` 260–278) enforces *before* the policy engine sees the tool. Only `pi-tools-bridge` and `session-bridge` ever reach the policy layer; an admin-policy MCP whitelist would be a redundant second filter. The trade is a slightly more permissive admin tier in exchange for `getExcludedTools` and `check` agreeing on every MCP tool call. Layered defense is preserved (settings whitelist still gates connection), the advertise/invoke asymmetry is gone.
+- **Verified end-to-end.** Layer 3 closure validated by:
+  1. `check-bridge` Gemini line — visibility shows all 4 `mcp_pi-tools-bridge_*` tools, invocation calls `entwurf_send` against a bogus target and surfaces the expected missing-target boundary (not a generic policy denial).
+  2. Live operator session — `entwurf` spawn + `entwurf_resume` against a sibling GPT, full sync conversation context preserved across the two MCP calls.
+
+#### Verification surface
+
+- **`check-bridge` adds the Gemini line** (`validate_pi_tools_bridge_backend "gemini" "pi-shell-acp/gemini-3.1-pro-preview"`, conditional on `gemini` on PATH, mirroring `smoke-all`'s skip pattern). The `validate_pi_tools_bridge_backend` body already covers visibility (model self-report of `pi-tools-bridge` callable schema entries) + invocation (real `entwurf_send` call to a bogus target). With Gemini added, the same gate that proved Claude / Codex MCP parity now proves Gemini MCP parity automatically on every release. The earlier baselines could not have caught this regression because the gate did not exist for the Gemini backend; that gap is closed.
+- **`check-backends` 134 → 137 assertions.** One swap (`mcp.excluded:["*"]` deepEqual → `'excluded' not in mcp` absence), three additions (skills passthrough seed/symlink/SKILL.md reachability), reflecting the new overlay shape.
+
+#### Documentation surface
+
+- **README, AGENTS.md, BASELINE.md, VERIFY.md retract the asymmetry framing.** The 0.4.8 / 0.4.9 BASELINE PASS rows now read as "closure was tighter than capability dignity required"; the closure remains valid for *operator* settings/memory/history isolation, but the skill + MCP channels are reopened for the pi-injected surface. Hard Rule #9 widens: the tool/MCP/skill surface row gains the symmetric passthrough + advertise wording. VERIFY claim row L1 → L4 (direct gemini comparison + bridged interview).
+
 ## 0.4.10 — 2026-05-06
 
 ### Changed

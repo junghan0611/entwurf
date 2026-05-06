@@ -1712,9 +1712,18 @@ try {
   //   - native "Instruction and Memory Files" body → GEMINI_SYSTEM_MD replace
   //   - native tool registry advertise + invoke → tools.core allowlist + admin-policy
   //   - GEMINI.md hierarchical discovery → context.fileName sentinel + boundaries[]
-  //   - unsanctioned MCP servers → mcp.allowed whitelist + mcp.excluded:["*"]
+  //   - unsanctioned MCP servers → mcp.allowed whitelist (canLoadServer rejects anything not on the list)
   //   - subagents (codebase_investigator, tracker_*, browser, ...) → agents.overrides
-  //   - skills/hooks/extensions auto-load → settings flags
+  //   - hooks/extensions auto-load → settings flags
+  //
+  // Open advertise channels (mirror Claude/Codex capability parity):
+  //   - operator agent skills under ~/.gemini/skills/ → passthrough symlink
+  //     (matches Claude `OVERLAY_PASSTHROUGH` and Codex `OVERLAY_PASSTHROUGH_CODEX`)
+  //   - activate_skill native tool → tools.core allowlist
+  //   - bridge stdio MCP servers (pi-tools-bridge, session-bridge) → ACP `newSession.mcpServers`
+  //     merged into settings.merged.mcpServers by acpSessionManager.newSessionConfig
+  //     and registered into the ToolRegistry by discoverMcpTools
+  //     (mcp-client.ts:1235 — bypasses the tools.core gate)
   assert.equal(typeof GEMINI_CONFIG_OVERLAY_HOME, 'string');
   assert.ok(GEMINI_CONFIG_OVERLAY_HOME.endsWith('gemini-config-overlay'),
     'overlay home constant must point at the pi-owned gemini-config-overlay path');
@@ -1735,6 +1744,13 @@ try {
     writeFileSync(join(geminiRealDir, 'installation_id'), 'test-install-id', 'utf8');
     writeFileSync(join(geminiRealDir, 'mcp-oauth-tokens-v2.json'), '{"server":"token"}', 'utf8');
     writeFileSync(join(geminiRealDir, 'settings.json'), JSON.stringify({ model: { name: 'operator-pref' } }), 'utf8');
+    // operator's curated skills directory — the bridge passes this through
+    // verbatim, same surface policy as Claude (`~/.claude/skills/`) and Codex
+    // (`~/.codex/skills/`). The fleet's typical resolution is a symlink to
+    // `~/repos/gh/agent-config/skills`, but the overlay does not care: it
+    // mirrors whatever shape the operator chose.
+    mkdirSync(join(geminiRealDir, 'skills', 'operator-skill-x'), { recursive: true });
+    writeFileSync(join(geminiRealDir, 'skills', 'operator-skill-x', 'SKILL.md'), '---\nname: operator-skill-x\n---\nbody', 'utf8');
     mkdirSync(join(geminiRealDir, 'tmp', 'operator-cwd-slug', 'memory'), { recursive: true });
     writeFileSync(join(geminiRealDir, 'tmp', 'operator-cwd-slug', 'memory', 'MEMORY.md'), 'OPERATOR-MEMORY-LEAK-CANARY', 'utf8');
     mkdirSync(join(geminiRealDir, 'history'), { recursive: true });
@@ -1782,18 +1798,18 @@ try {
       'overlay settings.json must set memoryBoundaryMarkers to [] (kill parent traversal)');
     assert.deepEqual(overlaySettings.context?.includeDirectories, []);
     assert.equal(overlaySettings.context?.loadMemoryFromIncludeDirectories, false);
-    assert.deepEqual(overlaySettings.tools?.core, ['read_file', 'list_directory', 'glob', 'grep_search', 'write_file', 'replace', 'run_shell_command'],
-      'overlay settings.json tools.core must restrict the registry to the pi baseline by capability class (Read-class split into 4: read_file/list_directory/glob/grep_search; Write/Edit/Bash 1:1)');
+    assert.deepEqual(overlaySettings.tools?.core, ['read_file', 'list_directory', 'glob', 'grep_search', 'write_file', 'replace', 'run_shell_command', 'activate_skill'],
+      'overlay settings.json tools.core must include the pi baseline native classes (Read-class split into 4: read_file/list_directory/glob/grep_search; Write/Edit/Bash 1:1) plus activate_skill (Claude `Skill` analog)');
     assert.equal(overlaySettings.useWriteTodos, false,
       'overlay settings.json must disable write_todos tool');
-    assert.equal(overlaySettings.skills?.enabled, false,
-      'overlay settings.json must disable agent skills (Claude skillPlugins:[] equivalent)');
+    assert.equal(overlaySettings.skills?.enabled, true,
+      'overlay settings.json must enable agent skills (matches Claude `tools` containing `Skill` and Codex `OVERLAY_PASSTHROUGH_CODEX` containing `skills`)');
     assert.equal(overlaySettings.hooksConfig?.enabled, false,
       'overlay settings.json must disable the hooks system');
     assert.deepEqual(overlaySettings.mcp?.allowed, ['pi-tools-bridge', 'session-bridge'],
       'overlay settings.json mcp.allowed must whitelist the bridge MCP servers');
-    assert.deepEqual(overlaySettings.mcp?.excluded, ['*'],
-      'overlay settings.json mcp.excluded must catch-all-block any other MCP server');
+    assert.equal('excluded' in (overlaySettings.mcp ?? {}), false,
+      'overlay settings.json must NOT carry mcp.excluded — `isInSettingsList` (mcpServerEnablement.ts:65) does only exact-match, no wildcards, so `["*"]` was decorative and misleading');
     assert.equal('model' in overlaySettings, false,
       'overlay settings.json must NOT inherit operator model preference');
 
@@ -1832,16 +1848,21 @@ try {
       assert.ok(adminPolicyContent.includes(`"${allowedToolName}"`),
         `admin.toml must allow ${allowedToolName} — read-class split (read_file/list_directory/glob/grep_search) + write/edit/exec`);
     }
-    assert.ok(adminPolicyContent.includes('"pi-tools-bridge"') && adminPolicyContent.includes('"session-bridge"'),
-      'admin.toml must allow the bridge MCP servers (pi-tools-bridge, session-bridge)');
+    assert.ok(/mcpName\s*=\s*"\*"[\s\S]*?decision\s*=\s*"allow"/.test(adminPolicyContent),
+      'admin.toml must include a `mcpName = "*"` allow rule — the per-server MCP whitelist is enforced one layer earlier by `settings.mcp.allowed` / canLoadServer, so this layer admits whatever survives. A per-server `mcpName = "<name>"` allow rule was rejected for invocation-time mismatch (advertise PASS but invocation DENY) when serverName resolved to a different shape between paths.');
 
     // Whitelisted entries pass through as symlinks at configDir level.
-    for (const entry of ['oauth_creds.json', 'google_accounts.json', 'installation_id', 'mcp-oauth-tokens-v2.json']) {
+    for (const entry of ['oauth_creds.json', 'google_accounts.json', 'installation_id', 'mcp-oauth-tokens-v2.json', 'skills']) {
       const entryStat = lstatSync(join(geminiConfigDir, entry));
       assert.equal(entryStat.isSymbolicLink(), true,
         `overlay ${entry} must be a symlink to the operator's real ~/.gemini/`);
       assert.equal(readlinkSync(join(geminiConfigDir, entry)), join(geminiRealDir, entry));
     }
+    // Skills passthrough must also resolve so SkillManager.discoverSkills
+    // (gemini-cli `packages/core/src/skills/skillManager.ts:54`) reads operator
+    // SKILL.md entries through the symlinked `Storage.getUserSkillsDir()`.
+    assert.equal(existsSync(join(geminiConfigDir, 'skills', 'operator-skill-x', 'SKILL.md')), true,
+      'operator skill files under the passthrough symlink must be reachable through the overlay');
 
     // Empty dirs at configDir level — overlay-private.
     for (const entry of ['tmp', 'history', 'projects']) {
@@ -2084,7 +2105,7 @@ try {
   assert.equal(geminiMeta, undefined,
     'gemini buildSessionMeta must return undefined — engraving travels via GEMINI_SYSTEM_MD (overlay system.md) instead');
 
-  console.log('[check-backends] 134 assertions ok');
+  console.log('[check-backends] 137 assertions ok');
 } finally {
   if (prevClaude === undefined) delete process.env.CLAUDE_AGENT_ACP_COMMAND;
   else process.env.CLAUDE_AGENT_ACP_COMMAND = prevClaude;
@@ -2787,6 +2808,11 @@ JS
   # pin, but it documents intent at the call site.
   validate_pi_tools_bridge_backend "claude" "pi-shell-acp/claude-sonnet-4-6" || return 1
   validate_pi_tools_bridge_backend "codex" "pi-shell-acp/gpt-5.2" || return 1
+  if command -v gemini >/dev/null 2>&1; then
+    validate_pi_tools_bridge_backend "gemini" "pi-shell-acp/gemini-3.1-pro-preview" || return 1
+  else
+    echo "[check-bridge] gemini CLI not on PATH — skipping gemini validation (install: pnpm add -g @google/gemini-cli)"
+  fi
 }
 
 # pi-native async entwurf spawn smoke. Loads the native entwurf.ts directly

@@ -1684,11 +1684,19 @@ export const GEMINI_OVERLAY_ADMIN_POLICY_PATH = join(GEMINI_CONFIG_OVERLAY_DIR, 
 // operator's ~/.gemini/ via symlink. Operator personal config (settings.json
 // with model/UI prefs), session history, project-id maps, and trust state
 // are NOT exposed.
+//
+// `skills` is passthrough — same policy as Claude (`OVERLAY_PASSTHROUGH`)
+// and Codex (`OVERLAY_PASSTHROUGH_CODEX`): operator-curated agent skills
+// are a surface pi-shell-acp deliberately wants the agent to see, not
+// "operator personal config" in the leak-surface sense. The operator's
+// `~/.gemini/skills` typically symlinks to `~/repos/gh/agent-config/skills`
+// in this fleet; passthrough preserves whatever resolution they chose.
 const GEMINI_OVERLAY_PASSTHROUGH = new Set([
 	"oauth_creds.json", // Google OAuth credentials for `gemini --acp`
 	"google_accounts.json", // active account selection (oauth)
 	"installation_id", // stable per-install identifier
 	"mcp-oauth-tokens-v2.json", // operator's MCP OAuth tokens (auth)
+	"skills", // operator-curated agent skills (matches Claude/Codex passthrough)
 ]);
 
 // Cross-session-swept directories owned by the overlay. The gemini CLI
@@ -1736,24 +1744,27 @@ const GEMINI_DISABLED_SUBAGENTS = [
 ] as const;
 
 // Built-in tools we want the model to actually see and call — pi baseline.
-// Mapped to Claude's `tools: ["Read","Bash","Edit","Write"]` by *capability
-// class*, not by literal name. Gemini splits the Read class into four
-// concrete tools (read_file for files, list_directory for directories, glob
-// for shell-glob enumeration, grep_search for content search); the other
-// three classes stay 1:1. The pi-context augment already advertises tool
-// naming as backend-specific ("Read 또는 read_file" framing), so the rule is
-// **same operating-surface classes, not same literal names**.
+// Mapped to Claude's `tools: ["Read","Bash","Edit","Write"]` (+ `Skill`) by
+// *capability class*, not by literal name. Gemini splits the Read class into
+// four concrete tools (read_file for files, list_directory for directories,
+// glob for shell-glob enumeration, grep_search for content search); the
+// other three classes stay 1:1, plus `activate_skill` for skill activation
+// — Claude's `Skill` tool analog. The pi-context augment already advertises
+// tool naming as backend-specific ("Read 또는 read_file" framing), so the
+// rule is **same operating-surface classes, not same literal names**.
 //   Read-class:  read_file / list_directory / glob / grep_search ↔ Read
 //   Write-class: write_file                                       ↔ Write
 //   Edit-class:  replace                                          ↔ Edit
 //   Exec-class:  run_shell_command                                ↔ Bash
+//   Skill-class: activate_skill                                   ↔ Skill
 //
-// Allowing all four read-class tools removes the "visible but deny'd"
-// asymmetry that would otherwise show: with a 4-name allowlist the model
-// would still see the 7 native tools (Gemini's fine-tuned tool advertise
-// surface; not narrowed by `tools.core` in the binaries we tested), but
-// `list_directory` / `glob` / `grep_search` would deny at invoke. Cleaner
-// to admit the read-class split honestly.
+// `tools.core` is the gate that decides what `maybeRegister(...)` registers
+// in the ToolRegistry (gemini-cli `packages/core/src/config/config.ts`
+// `maybeRegister` 3744–3768). Tools missing from this list are not even
+// registered, so they never reach `getFunctionDeclarations()` — closing the
+// schema-advertise channel for the agent. MCP tools register via a separate
+// path (`discoverMcpTools` → `toolRegistry.registerTool`, mcp-client.ts
+// 1235) that bypasses `tools.core`, so MCP advertise does not need the list.
 const GEMINI_TOOLS_CORE_ALLOWLIST = [
 	"read_file",
 	"list_directory",
@@ -1762,6 +1773,7 @@ const GEMINI_TOOLS_CORE_ALLOWLIST = [
 	"write_file",
 	"replace",
 	"run_shell_command",
+	"activate_skill",
 ] as const;
 
 // MCP servers we explicitly allow at the gemini level. Only the two stdio
@@ -1802,13 +1814,24 @@ function geminiOverlaySettingsJson(): string {
 				core: [...GEMINI_TOOLS_CORE_ALLOWLIST], // Claude `tools` analog
 			},
 			useWriteTodos: false, // disable write_todos tool
-			skills: { enabled: false }, // disable agent skills (Claude `skillPlugins: []` analog)
+			skills: { enabled: true }, // agent skills enabled — `tools.core` includes activate_skill, passthrough surfaces operator's curated `~/.gemini/skills/`. Same surface as Claude (`OVERLAY_PASSTHROUGH` includes `skills` + `Skill` in `tools`) and Codex (`OVERLAY_PASSTHROUGH_CODEX` includes `skills`).
 			hooksConfig: { enabled: false }, // disable hooks system
 			extensions: { disabled: [] }, // we do not pre-blacklist extensions; extensions auto-load is gated by `--extensions` flag and we do not pass it
 			agents: { overrides: agentsOverrides }, // disable subagents we do not surface
 			mcp: {
+				// Allowlist of MCP server names. `canLoadServer` (mcp-client
+				// `mcpServerEnablement.ts:122–137`) rejects any server not in this
+				// list when an allowlist is present, so this scopes MCP exposure to
+				// pi-shell-acp's two injected stdio servers and shuts out anything
+				// the operator might have configured in their personal `~/.gemini/`.
+				// Note: `excluded` is intentionally omitted — `mcp.excluded: ["*"]`
+				// would suggest a wildcard catch-all, but `isInSettingsList`
+				// (mcpServerEnablement.ts:65–88) does only exact case-insensitive
+				// name matches, no wildcards. The string `"*"` would block a
+				// server literally named `*`, which does not exist in this fleet,
+				// so the entry was decorative rather than load-bearing. The
+				// `allowed` whitelist is what actually scopes the surface.
 				allowed: [...GEMINI_MCP_ALLOWLIST],
-				excluded: ["*"], // catch-all — only allowed[] survives
 			},
 			// L5 — Memory containment. pi-shell-acp owns memory persistence on the
 			// pi side (semantic-memory + Denote llmlog); the backend must not run
@@ -1839,42 +1862,44 @@ function geminiOverlaySettingsJson(): string {
 // in a future gemini binary, the policy engine still blocks the call.
 function geminiOverlayAdminPolicyToml(): string {
 	const allowedTools = GEMINI_TOOLS_CORE_ALLOWLIST.map((n) => JSON.stringify(n)).join(", ");
-	const allowedMcp = GEMINI_MCP_ALLOWLIST.map((n) => JSON.stringify(n)).join(", ");
 	return [
 		"# pi-shell-acp admin policy (priority tier 5.x — beats every other tier).",
 		"# Authored by acp-bridge.ts geminiOverlayAdminPolicyToml(); do not edit by hand.",
-		"# Strategy: deny-all catch-all, then explicit allows for the pi baseline",
-		"# capability classes (Read/Write/Edit/Bash) — read-class is split into",
-		"# Gemini's four concrete read tools so visible-but-deny'd asymmetry does",
-		"# not show. Plus a whitelist of injected MCP servers.",
+		"# Strategy: deny-all catch-all for native tools, allow the 8-name pi",
+		"# baseline class (Read-class split + Write/Edit/Exec + activate_skill);",
+		"# allow-all for MCP because the per-server whitelist is enforced one",
+		"# layer earlier by `canLoadServer` (gemini-cli mcpServerEnablement.ts)",
+		"# against `settings.mcp.allowed`. Only `pi-tools-bridge` and",
+		"# `session-bridge` ever reach the policy engine; an admin-policy MCP",
+		"# whitelist would be a redundant second filter.",
 		"",
-		"# Catch-all DENY — every native tool, every MCP, blocked unless re-allowed below.",
+		"# Native catch-all DENY — every non-MCP tool blocked unless re-allowed below.",
 		"[[rule]]",
 		'toolName = "*"',
 		'decision = "deny"',
 		"priority = 50",
 		"",
-		"# pi baseline native tools by capability class (Read/Write/Edit/Bash):",
+		"# pi baseline native tools by capability class (Read/Write/Edit/Bash + Skill):",
 		"# Read-class  = read_file / list_directory / glob / grep_search",
 		"# Write-class = write_file",
 		"# Edit-class  = replace",
 		"# Exec-class  = run_shell_command",
+		"# Skill-class = activate_skill",
 		"[[rule]]",
 		`toolName = [${allowedTools}]`,
 		'decision = "allow"',
 		"priority = 100",
 		"",
-		"# MCP catch-all DENY — any MCP server we did not inject is blocked.",
+		"# MCP allow — the whitelist is enforced by `settings.mcp.allowed`",
+		"# (canLoadServer rejects any server not on the list before the policy",
+		"# engine sees it), so this layer just needs to admit the surviving",
+		'# servers. A per-server `mcpName = "<name>"` rule was tried first but',
+		"# turned out to require duplicate rules and surprised the runtime when",
+		"# `serverName` resolved to a different shape between advertise and",
+		'# invocation paths; `mcpName = "*"` matches both consistently.',
 		"[[rule]]",
 		'toolName = "*"',
 		'mcpName = "*"',
-		'decision = "deny"',
-		"priority = 50",
-		"",
-		"# MCP whitelist — pi-shell-acp's two injected stdio servers.",
-		"[[rule]]",
-		'toolName = "*"',
-		`mcpName = [${allowedMcp}]`,
 		'decision = "allow"',
 		"priority = 100",
 		"",
