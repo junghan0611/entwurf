@@ -1901,10 +1901,11 @@ const GEMINI_OVERLAY_SYSTEM_MD_CANARY = "GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1";
 // override file, so any `${...}` literal inside an engraving (e.g. a shell
 // example) silently mutates on the gemini backend only, while landing
 // verbatim on Claude (`_meta.systemPrompt`) and Codex (`developer_instructions`).
-// pi-shell-acp's invariant is that the same engraving lands the same way on
-// all three backends; sliding the `$` and `{` apart with a zero-width joiner
-// stops every substitution regex without changing what the model visually
-// reads.
+// pi-shell-acp's invariant is that Gemini must not semantically interpolate
+// engraving literals differently from Claude/Codex; sliding the `$` and `{`
+// apart with a zero-width space (U+200B) stops every substitution regex without
+// changing what the model visually reads. Byte-level identity is intentionally
+// not claimed for affected `${...}` literals on the Gemini carrier.
 function defuseGeminiSubstitutions(text: string): string {
 	return text.replace(/\$\{/g, "$​{");
 }
@@ -2129,9 +2130,9 @@ const ACP_BACKEND_ADAPTERS: Record<AcpBackend, AcpBackendAdapter> = {
 			// model surfaces native "Instruction and Memory Files" rules verbatim
 			// (observed L1 baseline 2026-05-01). With this, the overlay-authored
 			// system.md (operator engraving) is the only system-level content the
-			// model sees; substitutions like ${EDIT_TOOL_NAME} are applied to our
-			// file too — that is intentional, the bound names match the admin-
-			// policy allowlist (read_file/write_file/replace/run_shell_command).
+			// model sees. gemini-cli may apply template substitutions to this file;
+			// operator engraving literals are defused with U+200B before write so
+			// backend-only interpolation does not mutate them.
 			GEMINI_SYSTEM_MD: GEMINI_OVERLAY_SYSTEM_MD_PATH,
 		},
 	},

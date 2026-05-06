@@ -1,10 +1,10 @@
 # AGENTS.md — Maintainer Guidelines for pi-shell-acp
 
-For agents that own this repo. Invariant principles + reproducible verification, not specs that change.
+For agents that own this repo: invariant principles + reproducible verification, not release-story drift.
 
 ## North Star — One Forged Screwdriver
 
-Hold this shape before editing code or docs: `pi-shell-acp` is not a Swiss-army knife and not a second harness. It is a forged screwdriver — small, explicit, and strong at the contact points it owns.
+Hold this shape before editing: `pi-shell-acp` is not a Swiss-army knife and not a second harness. It is a forged screwdriver — small, explicit, strong at the contact points it owns.
 
 - **pi is the harness.** This repo must not compete with pi's session model, transcript, UI, or tool semantics.
 - **Backends keep identity.** Claude Code, Codex, and Gemini remain themselves. The bridge does not impersonate them or normalize away their native surfaces.
@@ -13,22 +13,22 @@ Hold this shape before editing code or docs: `pi-shell-acp` is not a Swiss-army 
 - **Entwurf opens siblings, not workers.** A spawned/resumed session is a runtime-isolated peer with identity-preservation rules, not a subagent accessory whose authority boundary disappears.
 - **Evidence disciplines language.** If README / AGENTS / CHANGELOG / VERIFY / BASELINE / runtime smoke do not support a claim, weaken or remove it.
 
-When reviewing docs, do not let the latest release story take over the whole project. Gemini, Claude, Codex, external projects, and migration history all have a place — but the center is the thin bridge / explicit MCP / sibling-based entwurf / observability / semantic continuity / evidence-first axis. Preserve that center.
+When reviewing docs, keep release stories in orbit. The center is thin bridge / explicit MCP / sibling-based entwurf / observability / semantic continuity / evidence-first language.
 
 ## What This Repo Is
 
-ACP bridge provider that connects pi to ACP backends (Claude Code, Codex, Gemini). Pi stays the harness; each backend keeps its own identity. Two layers:
+ACP bridge provider connecting pi to Claude Code, Codex, and Gemini. Pi stays the harness; each backend keeps identity.
 
-- **Layer A — ACP bridge**: provider registration, ACP subprocess lifecycle, session bootstrap (`resume > load > new`), prompt forwarding, event mapping, MCP injection
-- **Layer B — Entwurf orchestration**: spawn/resume, target registry, identity preservation, MCP adapter (`pi-tools-bridge`), session bridge (`session-bridge`)
+- **ACP bridge**: provider registration, subprocess lifecycle, `resume > load > new`, prompt forwarding, event mapping, MCP injection.
+- **Entwurf orchestration**: spawn/resume, target registry, identity preservation, `pi-tools-bridge`, `session-bridge`.
 
 ## Code Principle — Crash, Don't Warn
 
-Code in this repo is used as a tool by agents. Core invariant:
+Code in this repo is used by agents as infrastructure.
 
 > **Never warn. Throw.**
 
-When an agent sees a warning, it interprets it as "I did something wrong" and starts flailing — rewording prompts, building workarounds, apologizing. The actual problem is the tool is broken, but the agent blames itself.
+Warnings make agents blame themselves and flail. Broken tool state must surface as broken tool state.
 
 - Bad config → throw (e.g. `McpServerConfigError`); same for bad path / bad model id. No fallback.
 - `catch {}` only for environment probing (optional package detection, ldd exit code variance).
@@ -44,14 +44,12 @@ When an agent sees a warning, it interprets it as "I did something wrong" and st
 6. **Shutdown → preserve mapping**: ordinary process exit keeps persisted mapping intact.
 7. **Backend-claim → backend-verification (per backend on the README surface)**: if the repo claims Claude + Codex + Gemini support, each must pass `./run.sh smoke-<backend>` and the relevant slice of `check-backends` / `check-models`. `smoke-all` runs Claude + Codex unconditionally and Gemini when `gemini` is on PATH; absence is documented as a skip, not silent green.
 8. **This bridge is not a second harness**: no prompt reconstruction, no transcript hydration, no tool result ledger, no Claude Code emulation.
-9. **Identity carrier + whitelist overlay design** (per backend): pi-shell-acp borrows each backend's *model API behavior and tool implementations*, but shapes the pi-facing operating surface explicitly. The model remains Claude, codex GPT-5, or Gemini; pi-shell-acp owns the bridge carrier, MCP/tool exposure, and operator-config overlay design.
-   - **Carrier**: Claude gets `_meta.systemPrompt = <engraving>` (preset replacement, in-protocol). Codex gets `-c developer_instructions=<engraving>` (developer-role injection at child-spawn, child arg). Gemini gets `GEMINI_SYSTEM_MD = <overlay-home>/.gemini/system.md` (file replacement of native body, env+file). All three are full-replacement carriers reaching the same prompt slot kind in the model — string vs file is a delivery shape difference, not an authority difference. Do not append hidden identity copy elsewhere on any backend.
-   - **Overlay**: Claude uses `CLAUDE_CONFIG_DIR=~/.pi/agent/claude-config-overlay/`; Codex uses `CODEX_HOME` and `CODEX_SQLITE_HOME` under `~/.pi/agent/codex-config-overlay/`; Gemini uses `GEMINI_CLI_HOME=~/.pi/agent/gemini-config-overlay/` (`<overlay-home>`), which gemini-cli reads as `<overlay-home>/.gemini/` (`<configDir>`). Whitelist only auth/runtime state via symlink; hide operator memory, history, rules, hooks, agents, sessions, project maps, trust state, and personal config by default. Gemini overlay also authors `<configDir>/system.md` (carrier), `<configDir>/policies/admin.toml` (tool surface narrowing at priority tier 5.x), and a 16-key `settings.json` closure (subagents off, skills/hooks/folder-trust/write_todos off, `tools.core` 7-name capability split, `mcp.allowed` 2 + `excluded:["*"]`, `context.fileName` sentinel + `memoryBoundaryMarkers:[]` to suppress `GEMINI.md` hierarchical discovery, `experimental.memoryV2:false` + `experimental.autoMemory:false` for L5 memory containment). At every spawn `ensureGeminiConfigOverlay` also nukes `<configDir>/{tmp,history,projects}/` so any per-project `MEMORY.md`, autoMemory inbox patches, or other gemini-side ephemeral state from a previous session does not survive — pi owns memory persistence (semantic-memory + Denote llmlog), the backend must not run a parallel memory layer.
-   - **Tool surface**: Claude tools are explicit (`Read`, `Bash`, `Edit`, `Write`, plus `Skill` when configured) with deferred Claude tools disallowed by default. Codex mode/feature gates are pinned via `-c` flags and `codexDisabledFeatures`. Gemini ships `tools.core` 7-name allow + `--admin-policy` deny-all + same 7-name allow at priority tier 5.x — defense in depth at registry and policy layers. The 7 names are 4 capability classes (Read = `read_file`/`list_directory`/`glob`/`grep_search`, Write = `write_file`, Edit = `replace`, Exec = `run_shell_command`); naming is backend-specific, the operating-surface boundary is the same. MCP enters only through `piShellAcpProvider.mcpServers` for all three backends. Gemini also accepts http/sse MCP transports natively, but the bridge's stdio MCPs flow through the same `mcpServers` parameter.
-   - **Memory containment (L5)**: pi-shell-acp is the canonical memory authority on the pi side (semantic-memory + Denote llmlog). No backend may run a parallel memory layer that survives across sessions. Claude's hooks/skills/memory editor surfaces are kept off by `CLAUDE_CONFIG_DIR` overlay + `disallowedTools` + `skillPlugins:[]` (the engraving carrier itself stays small to avoid Anthropic's metered-usage routing). Codex's memory features are pinned off by `-c memories.generate_memories=false` + `-c memories.use_memories=false` + `-c history.persistence="none"` + `-c features.memories=false`. Gemini's memoryV2 / autoMemory toggles are pinned off in the overlay `settings.json`, and `<configDir>/{tmp,history,projects}/` is nuked at every spawn so any `GEMINI.md` / `MEMORY.md` / autoMemory inbox patch the model wrote in a previous session does not carry. Engraving body is also defused for gemini's `${...}` substitution before being written to `system.md`, so the same engraving lands the same way on all three backends.
-   - **MCP function-schema asymmetry (Gemini)**: Gemini ACP accepts MCP servers via `mcpServers` but does not register them as model-visible function-schema entries the way Claude and Codex do. Models route MCP calls through `run_shell_command` instead. This is a Gemini ACP surface property, not closable from the overlay — record it honestly in user-facing docs rather than papering over.
-   - **Compaction vs isolation**: `PI_SHELL_ACP_ALLOW_COMPACTION=1` may relax compaction guards, but must not drop identity-isolation env (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CODEX_SQLITE_HOME`, `GEMINI_CLI_HOME`, `GEMINI_SYSTEM_MD`). All five are operator-config-isolation invariants, not policy choices the compaction toggle controls.
-   - **Evidence discipline**: README/AGENTS claims must not outrun [VERIFY.md](./VERIFY.md)'s Evidence Levels and Claims Ledger. If a statement is design intent rather than verified behaviour, say so.
+9. **Identity carrier + whitelist overlay design**: borrow each backend's model/API/tools; shape only the pi-facing surface.
+   - **Carrier**: Claude `_meta.systemPrompt=<engraving>`, Codex `-c developer_instructions=<engraving>`, Gemini `GEMINI_SYSTEM_MD=<overlay>/.gemini/system.md`. All are full-replacement identity carriers; string vs file is delivery shape, not authority. Do not append hidden identity elsewhere.
+   - **Overlay**: Claude `CLAUDE_CONFIG_DIR`, Codex `CODEX_HOME` + `CODEX_SQLITE_HOME`, Gemini `GEMINI_CLI_HOME`. Whitelist auth/runtime state; hide operator memory, history, rules, hooks, agents, sessions, project maps, trust, and personal config. Gemini also authors `system.md`, `policies/admin.toml`, and a 16-key `settings.json` closure; `ensureGeminiConfigOverlay` sweeps `<configDir>/{tmp,history,projects}/` every spawn.
+   - **Tool/MCP surface**: Claude exposes explicit `Read/Bash/Edit/Write` (+ `Skill` when configured); Codex is narrowed by `-c` flags + `codexDisabledFeatures`; Gemini uses `tools.core` 7-name allow + deny-all admin policy. MCP enters only through `piShellAcpProvider.mcpServers`. Gemini's MCP function-schema asymmetry is observed backend behaviour: accepted transport, shell-mediated use, no direct function-schema advertise.
+   - **Memory containment (L5)**: pi owns persistence (semantic-memory + Denote llmlog). Claude, Codex, and Gemini native memory layers are pinned off; Gemini also sweeps memory dirs and defuses `${...}` engraving literals with U+200B before `system.md` write.
+   - **Compaction / evidence**: `PI_SHELL_ACP_ALLOW_COMPACTION=1` may relax compaction guards, never identity-isolation env. README/AGENTS claims must fit VERIFY/BASELINE/runtime evidence; weaken unbacked claims.
 10. **SDK surface calls must use the typed connection.** `(session.connection as any).METHOD()` is debt, not a workaround. ACP SDK methods (`prompt`, `cancel`, `loadSession`, `resumeSession`, `closeSession`, `unstable_setSessionModel`, …) are typed on `ClientSideConnection`; an `as any` cast there silently survives an SDK rename and ships a dead call. We learned this the hard way in 0.4.5 when SDK 0.20.0's `resumeSession` rename meant every bootstrap silently fell through to `load`, violating Hard Rule #2 for months. The fix is structural, not vigilance:
     - Prefer `session.connection.method(...)` directly. Let tsc fail on rename.
     - If a method genuinely isn't typed yet (rare, transitional), annotate the cast site with `// SDK_CAST_OK: <reason>` (permanent gap) or `// SDK_CAST_DEBT: <reason>` (tracked for removal at next deps bump).
@@ -73,37 +71,30 @@ pnpm typecheck && ./run.sh check-backends && ./run.sh check-models && ./run.sh c
 ./run.sh session-messaging /path/to/project # 4-case cross-session messaging
 ```
 
-**Agent-driven verification** ([VERIFY.md](./VERIFY.md), Evidence Levels L0–L5): self-recognition and transcript agreement are usually L1; objective MCP calls are L2; on-disk/process corroboration is L3; direct-native comparison is L4; long-haul soak is L5.
+**Agent-driven verification** ([VERIFY.md](./VERIFY.md)): self-recognition/transcript agreement ≈ L1; objective MCP calls L2; on-disk/process L3; direct-native L4; soak L5.
 
-If any gate fails, or a claim drops below the evidence level it needs, do not commit. Pipes can be connected and the water can still taste wrong.
+If a gate fails or a claim drops below its needed evidence level, do not commit. Pipes can be connected and the water can still taste wrong.
 
 ## Context Carriers
 
 ### Engraving
 
-Optional operator-authored personal text delivered at session bootstrap. Lives in [`prompts/engraving.md`](./prompts/engraving.md). Keep it short; empty/missing files are skipped.
+Optional short operator-authored personal text in [`prompts/engraving.md`](./prompts/engraving.md); empty/missing files are skipped. Delivered through Claude `_meta.systemPrompt`, Codex `developer_instructions`, or Gemini `GEMINI_SYSTEM_MD` (with carrier canary `GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1`). Template variables: `{{backend}}`, `{{mcp_servers}}`.
 
-- Claude: `_meta.systemPrompt = <engraving>` (string-form preset replacement)
-- Codex: `-c developer_instructions=<engraving>` at child spawn (developer-role injection — codex-acp has no `_meta.systemPrompt` surface)
-- Gemini: `GEMINI_SYSTEM_MD = <overlay-home>/.gemini/system.md` written by `ensureGeminiConfigOverlay()` at every spawn; gemini-cli reads it as the full replacement of the native "Instruction and Memory Files" body. File equivalent of Claude's string carrier. The overlay always appends a carrier-isolation canary line (`GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1`) so a baseline operator can verify `GEMINI_SYSTEM_MD` actually reaches the model's system prompt slot.
-- Template variables: `{{backend}}`, `{{mcp_servers}}` — injected dynamically when present
-
-Do not put AGENTS.md, bridge identity narrative, tool catalogs, or long pi operating context here. Large Claude system-prompt carriers can route Claude Code OAuth sessions to metered "extra usage" billing.
+Do not put AGENTS.md, bridge narrative, tool catalogs, or long pi context here. Large Claude carriers can route OAuth sessions to metered "extra usage" billing.
 
 ### First-user pi context augment
 
-Bridge identity, pi operating context, `~/AGENTS.md`, `cwd/AGENTS.md`, and date/cwd ride a one-shot first user-message prepend (`pi-context-augment.ts`), not the system/developer carrier. The actual callable tool schema exposed by the backend remains the source of truth; the augment describes capabilities and tells agents not to assume a tool exists merely because docs mention it.
-
-Entwurf-spawned first prompts already contain `cwd/AGENTS.md` in `<project-context ...>` tags. The bridge removes only that duplicate cwd AGENTS section from its augment while preserving home AGENTS, bridge narrative, pi base, and date/cwd.
+Bridge identity, pi context, `~/AGENTS.md`, `cwd/AGENTS.md`, and date/cwd ride a one-shot first-user prepend (`pi-context-augment.ts`), not the system/developer carrier. Callable schema remains source of truth. Entwurf prompts already carry `cwd/AGENTS.md` in `<project-context ...>`; the augment removes only that duplicate.
 
 ## Entwurf
 
-Uses `entwurf` instead of `delegate` to avoid collisions with existing pi ecosystem delegation terms.
+Uses `entwurf` instead of `delegate` to avoid ecosystem collisions.
 
-- Spawning creates a sibling, not a worker
-- Default mode is `sync`; async is opt-in (Phase 0.5)
-- Target registry: `pi/entwurf-targets.json` (SSOT — bare model IDs auto-resolve here, native preferred; ACP route requires explicit `provider="pi-shell-acp"`)
-- Identity Preservation Rule: model override is not allowed on resume
+- Spawning creates a sibling, not a worker.
+- Default mode is `sync`; async is opt-in.
+- Target registry: `pi/entwurf-targets.json`; native preferred, ACP route explicit with `provider="pi-shell-acp"`.
+- Identity Preservation Rule: no model override on resume.
 
 > **Naming pair.** *Entwurf* (기투, projection-of-self) lives here in pi-shell-acp — the mechanism by which a resident agent throws siblings forward (spawn / resume / messaging). The resident-side counterpart is *Mitsein* (공존, being-with), defined in the resident's own knowledge base (cwd-scoped, not a global persona). pi-shell-acp owns the entwurf surface; resident-side conventions live where the resident wakes.
 
@@ -111,9 +102,7 @@ Uses `entwurf` instead of `delegate` to avoid collisions with existing pi ecosys
 
 Messages are thrown, not awaited.
 
-- `entwurf_send`: fire-and-forget. No `wait_until` on the MCP bridge.
-- If you need a reply, say so in the message itself.
-- If you need to own the outcome, use `entwurf(mode=async)` + `entwurf_resume`.
+- `entwurf_send` is fire-and-forget: no `wait_until` on the MCP bridge. If you need a reply, say so in the message; if you need to own the outcome, use `entwurf(mode=async)` + `entwurf_resume`.
 
 ## File Structure
 
@@ -124,7 +113,7 @@ Messages are thrown, not awaited.
 | `event-mapper.ts` | ACP events → pi events |
 | `engraving.ts` + `prompts/engraving.md` | optional operator personal engraving carrier |
 | `pi-context-augment.ts` | first-user pi context augment (`~/AGENTS.md`, cwd AGENTS, bridge narrative, date/cwd) |
-| `protocol.js` | dependency-free shared wire constants (`<project-context` marker). Single source for both tsc-emit (root `allowJs: true`) and Node `--experimental-strip-types` (MCP bridges) paths. Authored as `.js` because strip-types resolves literal `.js` imports and root tsc cannot enable `allowImportingTsExtensions` without losing emit. |
+| `protocol.js` | dependency-free shared wire constants (`<project-context` marker), single source for tsc emit + strip-types MCP paths |
 | `run.sh` | install, smoke, verify, sentinel |
 | `pi-extensions/` | entwurf spawn + control plane + shared core |
 | `pi/entwurf-targets.json` | spawn target allowlist |

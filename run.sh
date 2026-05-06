@@ -1923,10 +1923,12 @@ try {
     // substitution to the override file (applySubstitutions in
     // packages/core/src/prompts/utils.ts). Operator engravings with literal
     // `${...}` text would silently mutate on the gemini backend only,
-    // breaking the cross-backend invariant that the same engraving lands the
-    // same way on all three. defuseGeminiSubstitutions inserts a zero-width
-    // joiner between `$` and `{` so the regex misses while the model reads
-    // the same visual string.
+    // breaking the cross-backend invariant that Gemini must not semantically
+    // interpolate engraving literals differently from Claude/Codex.
+    // defuseGeminiSubstitutions inserts a zero-width space (U+200B) between
+    // `$` and `{` so the regex misses while the model reads the same visual
+    // string; byte-level identity is intentionally not claimed for affected
+    // literals on the Gemini carrier.
     const engravingWithSubst = 'Use ${AvailableTools} for the task. Cost: ${PriceList}.';
     ensureGeminiConfigOverlay(engravingWithSubst, geminiRealDir, geminiFakeHome, geminiConfigDir);
     const systemMdDefused = readFileSync(join(geminiConfigDir, 'system.md'), 'utf8');

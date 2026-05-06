@@ -140,7 +140,7 @@ Note: a MEMORY.md or similarly-named file may exist on disk in the cwd, but that
 
        You are a test agent. Verify substitution defuse.
 
-       The literal token below should appear unchanged:
+       The literal token below should appear visually unchanged (byte-level audit of `system.md` will show U+200B between `$` and `{`):
          TOKEN_A = ${AvailableTools}
          TOKEN_B = ${SubAgents}
          TOKEN_C = ${arbitrary_unknown_key}
@@ -160,7 +160,7 @@ Note: a MEMORY.md or similarly-named file may exist on disk in the cwd, but that
 **English**
 
 ~~~
-[Q-H] Verify whether the following three lines are present verbatim in your system prompt, and if so, quote them character-for-character:
+[Q-H] Verify whether the following three lines are visually present in your system prompt, and if so, quote the visible text exactly. Note: byte-level inspection of `system.md` may contain U+200B between `$` and `{`.
 - TOKEN_A = ${AvailableTools}
 - TOKEN_B = ${SubAgents}
 - TOKEN_C = ${arbitrary_unknown_key}
@@ -214,7 +214,7 @@ the scoring criteria so it stays scannable.
 - **NOTE** — Closes the `mcp.allowed:[<2>]` + `mcp.excluded:["*"]` overlay closure. Operator stdio MCPs from native `~/.gemini/settings.json` and any http/sse extensions are off the list. Documented backend asymmetry: gemini accepts `mcpServers` but does not register them as model-visible function-schema entries — model may describe MCP access as shell-mediated rather than direct function calls. That is an observed surface property, not a leak.
 
 ### Q-H — Engraving `${...}` literal preservation (substitution defuse)
-- **PASS** — All three lines quoted with `${...}` literally preserved. (ZWSP between `$` and `{` is invisible to both human reader and model — a successful PASS looks identical to the input.)
+- **PASS** — All three lines quoted with `${...}` visually preserved. (ZWSP between `$` and `{` is invisible to both human reader and model — a successful PASS looks identical to the input, but byte-level equality is not claimed.)
 - **FAIL** — TOKEN_A line shows a tool list (e.g. `read_file, list_directory, ...`) in place of `${AvailableTools}` — gemini-cli's `applySubstitutions` rewrote the literal; any of the three tokens mutated, dropped, or interpolated.
 - **NOTE** — `defuseGeminiSubstitutions(text)` slides U+200B (zero-width space) between `$` and `{`. JavaScript regex `\s` does not include U+200B, so gemini-cli's substitution patterns miss; the model's visual reading is unchanged. Q-H is the runtime confirmation that the regex actually misses, complementing the structural assertion in `check-backends` (which only checks the literal `${...}` is no longer contiguous in `system.md`).
 
@@ -256,7 +256,7 @@ Configuration:
 ### What 0.4.9 added compared to 0.4.8
 
 - New isolation layer **L5 — Memory containment**, closing gemini-cli's own memory channels (`memoryV2`, `autoMemory`, overlay `tmp/<slug>/memory/`, `tmp/<slug>/.inbox/`, `configDir/GEMINI.md`, `configDir/MEMORY.md`). Closure mechanism: `experimental.{memoryV2,autoMemory}:false` pinned in overlay `settings.json`, plus unconditional `rmSync` of the swept directories at every `ensureGeminiConfigOverlay` call.
-- New runtime defense **engraving substitution defuse** (`defuseGeminiSubstitutions`): ZWSP inserted between `$` and `{` in operator engraving body before write, so gemini-cli's `applySubstitutions` regex misses every `${...}` token. Restores the cross-backend invariant that the same engraving lands the same way on Claude / Codex / gemini.
+- New runtime defense **engraving substitution defuse** (`defuseGeminiSubstitutions`): ZWSP inserted between `$` and `{` in operator engraving body before write, so gemini-cli's `applySubstitutions` regex misses every `${...}` token. Restores the cross-backend invariant that Gemini does not semantically interpolate engraving literals differently from Claude / Codex; affected Gemini carrier bytes intentionally differ while the visual text remains stable.
 - Backend dependency bumps: `claude-agent-acp` 0.31.4 → 0.32.0, `codex-acp` 0.12.0 → 0.13.0, devDeps `@mariozechner/pi-{ai,coding-agent,tui}` 0.70.2 → 0.73.0. No carrier or tool-surface regression observed across the full layer panel.
 
 ### Verdict
@@ -292,7 +292,7 @@ The same Round 1 questions (Q-B0, Q-B0-CARRIER, Q-L1, Q-L3) were also issued aga
 
 - **Q-H runtime quote** — next baseline session, on the gemini backend with a one-shot engraving containing literal `${AvailableTools}` / `${SubAgents}` / `${arbitrary_unknown_key}` tokens routed through `defuseGeminiSubstitutions`.
 - **Cross-backend Round 2** — optional expansion of Q-L5R / Q-L5W / Q-MCP onto Sonnet and GPT-5.4 if more cross-vendor evidence is wanted for the Memory containment contract (Q-L2 / Q-L4 stay gemini-only since they are gemini-binary-specific).
-- **Session-end transcript sweep** — `tmp/<slug>/chats/session-*.jsonl` residual window between session close and next spawn. Bridge-side closure (sweep on session-end hook) earmarked for 0.5.0; not a 0.4.9 blocker.
+- **Session-end backend-residue sweep** — residual window between session close and next spawn for Gemini overlay-private state observed in production (`tmp/<slug>/chats/session-*.jsonl`, `history/<slug>/.project_root`, `projects.json`). The next spawn sweep removes `tmp/`, `history/`, and `projects/`, but not `projects.json`; bridge-side closure (session-end cleanup with an explicit policy for `projects.json`) is earmarked for 0.5.0 and is not a 0.4.9 blocker.
 
 ## [2026-05-03 Sun] — 0.4.8 Gemini surface-isolation baseline (5/5 closed + 1 documented asymmetry)
 
