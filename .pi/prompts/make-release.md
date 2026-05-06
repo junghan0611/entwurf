@@ -1,73 +1,267 @@
 ---
-description: Cut a release of pi-shell-acp (orchestration; mechanics in scripts/release.sh)
+description: Cut a release of pi-shell-acp — pre-flight → tag → push → stamp → notes → release → verify → notify
+argument-hint: "<version>  (e.g. 0.4.9 — no leading 'v', digits and dots only)"
 ---
 
-Make a release of this repository.
+You are running a standard release for pi-shell-acp.
 
-Version or release type: "$ARGUMENTS"
+User-supplied version: $ARGUMENTS
 
-## Step-by-Step Process
+This command does **not** bump `package.json`, commit, or run `npm
+publish`. Those are operator actions performed before invoking this
+command. It tags HEAD, pushes, stamps, extracts release notes from
+`CHANGELOG.md`, creates the GitHub release, verifies, and notifies.
 
-### 1. Determine the target version
+## Operator pre-work (before invoking this command)
 
-`$ARGUMENTS` can be either:
-- An explicit version number (e.g., `0.2.1`) — **recommended** since aborted releases can be retried without bumping the counter.
-- A release type: `patch`, `minor`, or `major` — bumped from the current version in `package.json`.
+1. Refresh `CHANGELOG.md` (use `update-changelog` skill from
+   agent-config) to draft new entries into `## Unreleased` based on
+   `git log v<last-tag>..HEAD`.
+2. Promote `## Unreleased` to `## <version> — YYYY-MM-DD`. Add a fresh
+   empty `## Unreleased` above it.
+3. Bump version: `npm version <version> --no-git-tag-version && pnpm install --lockfile-only`.
+4. Commit the bump + CHANGELOG promotion together.
 
-If `$ARGUMENTS` is an explicit version: use it as `$NEW_VERSION`.
+After those four are done, invoke `/make-release <version>`.
 
-If `$ARGUMENTS` is a release type:
+## Variable contract
 
-```bash
-CURRENT_VERSION=$(node -p "require('./package.json').version")
-NEW_VERSION=$(npm version $ARGUMENTS --no-git-tag-version | sed 's/^v//')
-git checkout package.json pnpm-lock.yaml  # revert
-echo "Will release version: $NEW_VERSION"
-```
+Slash command bash invocations are not guaranteed to share state. Each
+step below restates `VERSION="$ARGUMENTS"` and re-derives any other
+variables it needs (`REMOTE`, `REPO_URL`, `REPO_NAME`, `REPO_TAG`).
 
-If no argument is provided, ask the user.
+Do not assume any variable from a prior step is still defined.
 
-### 2. Refresh the changelog
+## Pre-flight (must all pass — abort on first failure)
 
-Use the `update-changelog` skill (it auto-loads from agent-config) to draft new entries into `## Unreleased` based on `git log v<last-tag>..HEAD`.
-
-### 3. Verify the version number
-
-Double-check `$NEW_VERSION` before proceeding.
-
-### 4. Promote the Unreleased section
-
-Edit `CHANGELOG.md`:
-- Rename `## Unreleased` to `## $NEW_VERSION — YYYY-MM-DD`
-- Add a fresh empty `## Unreleased` section at the top
-
-### 5. Run the release script
+### 0. Argument shape
 
 ```bash
-./scripts/release.sh $NEW_VERSION
+case "$ARGUMENTS" in
+  "" )       echo "ABORT: version required (e.g. 0.4.9)"; exit 1 ;;
+  v* )       echo "ABORT: drop leading 'v' (use 0.4.9 not v0.4.9)"; exit 1 ;;
+  *[!0-9.]*) echo "ABORT: version must be digits + dots only"; exit 1 ;;
+esac
 ```
 
-Pass the explicit version (e.g. `0.2.1`), NOT the release type.
-
-The script will:
-- Verify the working tree is clean.
-- Verify `CHANGELOG.md` has a `## $NEW_VERSION` section.
-- Run `pnpm check` (lint + typecheck + check-mcp/models/backends/registration/dep-versions).
-- Bump `package.json` and `pnpm-lock.yaml` if needed.
-- Create a `Release v$NEW_VERSION` commit and a `v$NEW_VERSION` tag.
-
-### 6. Push and create the GitHub release
-
-The script does NOT push. Show the user:
+### 1. Working tree clean
 
 ```bash
-git push origin main && git push origin v$NEW_VERSION
-gh release create v$NEW_VERSION --notes-from-tag --title v$NEW_VERSION
+git diff-index --quiet HEAD --
 ```
 
-**Important:** Do not auto-push. Let the user review the commit and tag first.
+If exit non-zero, abort. Commit or stash first.
 
-## Notes
+### 2. Tag does not already exist
 
-- The `commit` skill governs everyday commits; this command only governs the special `Release vX.Y.Z` commit.
-- The release script intentionally rejects dirty working trees and missing CHANGELOG sections — fix the underlying issue rather than bypassing.
+```bash
+VERSION="$ARGUMENTS"
+test -z "$(git tag -l "v${VERSION}")"
+test -z "$(git ls-remote --tags origin "v${VERSION}")"
+```
+
+If either is non-empty, abort — the release was already done or
+partially done. See **Recovery** at the bottom.
+
+### 3. CHANGELOG has the section
+
+```bash
+VERSION="$ARGUMENTS"
+grep -q "^## ${VERSION}\b" CHANGELOG.md
+```
+
+If missing, the operator pre-work step 2 (promote `## Unreleased`)
+was not done. Abort.
+
+### 4. package.json version matches
+
+```bash
+VERSION="$ARGUMENTS"
+test "$(node -p "require('./package.json').version")" = "${VERSION}"
+```
+
+If mismatch, the operator pre-work step 3 (npm version bump) was not
+done. Abort.
+
+### 5. Quality gate
+
+```bash
+pnpm check
+```
+
+All eight static gates (lint / typecheck / check-mcp / check-models /
+check-backends / check-registration / check-dep-versions /
+check-sdk-surface) must pass. If any fail, fix the underlying issue —
+do not bypass.
+
+### 6. gh + git authenticated
+
+```bash
+gh auth status
+```
+
+## Steps
+
+### Step 1 — Tag at HEAD
+
+```bash
+VERSION="$ARGUMENTS"
+SHA=$(git rev-parse HEAD)
+git tag "v${VERSION}" "$SHA"
+git tag -l "v${VERSION}"
+```
+
+Lightweight tag is fine — release notes come from `--notes-file`, not
+from tag annotation, so `--notes-from-tag` would just produce empty
+release bodies. Do not use `--notes-from-tag`.
+
+### Step 2 — Push main + tag
+
+```bash
+VERSION="$ARGUMENTS"
+git push origin main
+git push origin "v${VERSION}"
+```
+
+If push fails (network / auth / divergence), abort before stamp /
+release / notify. Do not leave a half-released state.
+
+### Step 3 — Agenda stamp
+
+After push, the GitHub release URL resolves. Stamp links to the
+release page (operator clicks → GitHub release in Emacs), and uses
+the `pi:release:` tag (org-agenda can filter releases separately
+from regular `pi:commit:` stamps).
+
+```bash
+VERSION="$ARGUMENTS"
+REMOTE=$(git remote get-url origin)
+REPO_URL=$(echo "$REMOTE" | sed 's|git@github.com:|https://github.com/|;s|\.git$||')
+REPO_NAME=$(basename "$REMOTE" .git)
+REPO_TAG=$(echo "$REPO_NAME" | sed 's/[-.]//g')
+
+~/.pi/agent/skills/pi-skills/agenda/scripts/agenda-stamp.sh \
+  "${REPO_NAME}: release v${VERSION} [[${REPO_URL}/releases/tag/v${VERSION}][v${VERSION}]]" \
+  "pi:release:${REPO_TAG}"
+```
+
+Stamp failure is best-effort — log and proceed.
+
+### Step 4 — Extract release notes from CHANGELOG
+
+```bash
+VERSION="$ARGUMENTS"
+NOTES_FILE="/tmp/release-notes-v${VERSION}.md"
+
+awk -v ver="${VERSION}" '
+  $0 ~ "^## " ver "\\b" { p=1; next }
+  p && /^## / { exit }
+  p { print }
+' CHANGELOG.md > "$NOTES_FILE"
+
+test -s "$NOTES_FILE" || { echo "ABORT: empty release notes"; rm -f "$NOTES_FILE"; exit 1; }
+cat "$NOTES_FILE"
+```
+
+If the CHANGELOG body needs flattening / tightening for the GitHub
+release surface (e.g. internal cross-references trimmed), edit the
+**temp file** — do not edit `CHANGELOG.md` itself. CHANGELOG is the
+canonical record; release body is the public-surface render.
+
+### Step 5 — GitHub release
+
+```bash
+VERSION="$ARGUMENTS"
+NOTES_FILE="/tmp/release-notes-v${VERSION}.md"
+
+gh release create "v${VERSION}" \
+  --title "v${VERSION}" \
+  --notes-file "$NOTES_FILE"
+```
+
+Title is fixed `v${VERSION}`. Release theme lives in the body's first
+H3 (e.g. `### L5 — Memory containment`) and in the notify message
+below. Title proliferation is what produces low-quality releases —
+do not invent a title here.
+
+If `gh release create` fails, abort before notify. Notification with
+a broken link is worse than no notification.
+
+### Step 6 — Verify
+
+```bash
+VERSION="$ARGUMENTS"
+gh release view "v${VERSION}" --json tagName,name,url
+```
+
+Must return non-empty JSON with the correct `tagName`. If missing,
+re-run Step 5. Do not proceed to notify with an unverified release.
+
+### Step 7 — Notify Google Chat
+
+```bash
+VERSION="$ARGUMENTS"
+REMOTE=$(git remote get-url origin)
+REPO_URL=$(echo "$REMOTE" | sed 's|git@github.com:|https://github.com/|;s|\.git$||')
+REPO_NAME=$(basename "$REMOTE" .git)
+
+source ~/.env.local && gog chat messages send "$GOG_CHAT_SPACE_ID" \
+  --account "$GOG_CHAT_ACCOUNT" \
+  --text "🔨 *${REPO_NAME}* v${VERSION} released
+→ ${REPO_URL}/releases/tag/v${VERSION}"
+```
+
+Optionally append a one-line theme summary (e.g. "L5 — Memory
+Containment + claude-acp 0.32.0 / codex-acp 0.13.0") before sending.
+Notify failure is best-effort — release is already published.
+
+### Step 8 — Cleanup
+
+```bash
+VERSION="$ARGUMENTS"
+rm -f "/tmp/release-notes-v${VERSION}.md"
+```
+
+## What this does NOT do
+
+- **Does not bump `package.json`** — operator pre-work step 3.
+- **Does not commit anything** — the agent's commit cycle is separate;
+  this command does not author a "Release v..." commit. The release
+  is identified by the tag, not by a marker commit.
+- **Does not run `npm publish`** — operator decides separately.
+  pi-shell-acp 0.4.x has not been published to the npm registry; first
+  publish would be a deliberate decision, not a reflex.
+- **Does not auto-author release titles** — title is always
+  `v<version>`, theme stays in the CHANGELOG body.
+- **Does not bump downstream consumers** — `agent-config` pins
+  pi-shell-acp by tag (`package.json` / `pi/settings.server.json` /
+  `run.sh`'s `PI_SHELL_ACP_VERSION` / `CHANGELOG.md`). See
+  agent-config's own `AGENTS.md § Release` for the consumer bump
+  procedure.
+- **Does not delete or move tags on failure** — operator inspects and
+  retries. Force-pushing a moved tag to remote is out of scope here.
+
+## Failure modes
+
+| Failure | Action |
+|---|---|
+| pre-flight fail | abort, report which check failed |
+| push fail (network / auth) | abort before stamp / release / notify |
+| stamp fail | log, proceed (best-effort) |
+| `gh release create` fail | abort before notify (broken-link prevention) |
+| `gh release view` returns missing | abort, re-run Step 5 |
+| notify fail | log (release already published) |
+
+## Recovery if half-released
+
+| State | Recovery |
+|---|---|
+| local tag exists, push failed | retry Step 2 |
+| tag pushed, gh release missing | run Steps 4–7 |
+| gh release exists, notify failed | run Step 7 only |
+| local tag pointing at wrong commit, NOT pushed | `git tag -d v<version>`, fix HEAD, redo Step 1 |
+| pushed tag pointing at wrong commit | out of scope — requires force-push, ask operator |
+
+## Why no `scripts/release.sh`
+
+Earlier releases used `scripts/release.sh` + `--notes-from-tag --title v<version>`. That combination is the cause of v0.4.7 / v0.4.6 / v0.4.1 / v0.3.x being published with empty release bodies and bare-version titles. The script created lightweight tags (no message), then `--notes-from-tag` produced empty bodies. Removed in 0.4.9. This prompt is now self-contained.
