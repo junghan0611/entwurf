@@ -398,6 +398,10 @@ Tracked issues:
 |---|---|---|---|---|
 | 2026-04-29 | `@agentclientprotocol/claude-agent-acp@0.31.0 → 0.33.1` | `Read` tool maps `input.offset` into ACP `locations[].line` without coercion. When the model emits a non-numeric offset (e.g. string range `"1010, 1075"`), the notification fails ACP SDK 0.20.0 zod validation (`-32602 Invalid params`) and is silently dropped by the SDK. Session survives; operator follow-along on that tool call breaks. | re-checked 2026-05-08 against `0.33.1`: `src/tools.ts:181` still emits `line: input.offset ?? 1` with no coercion; no upstream issue or PR filed. mitigation TODO marker in `acp-bridge.ts` at the transport creation site retained. | 1 |
 
+## Next
+
+Current priority and open decisions live in [NEXT.md](./NEXT.md). Read it at session start so this repo always knows what comes next.
+
 ## Status
 
 Public, active development. The maintainer uses pi as his primary coding environment; this ACP bridge is working code, but it is still being proven through daily use.

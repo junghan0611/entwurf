@@ -179,6 +179,10 @@ Versions follow the pins in `package.json` / `run.sh`. Mismatches are caught by 
 - Keep docs calibrated: strong language is fine; unbacked language is not.
 - Resist the urge to make the bridge more magical than necessary.
 
+## Next
+
+Current priority + open decisions: [NEXT.md](./NEXT.md). Read it at session start. recap restores the past axis; NEXT.md fixes the future axis. 둘이 한 쌍.
+
 ## References
 
 - [VERIFY.md](./VERIFY.md) — agent-driven verification guide. Carries two distinct frameworks: **Evidence Levels L0–L5** (cross-doc rung ladder for any claim — narrative / transcript / MCP call / on-disk / direct-native / soak) and the **§1A Layer 0–4 interview** (main-agent evaluation: self-awareness / native-tool use / MCP boundary / focus / direct-Claude comparison). Do not conflate them — a claim's evidence-level rung and a §1A layer are independent axes.
