@@ -8,67 +8,207 @@
 이 문서는 그 옆에서 "다음에 뭐하지"를 고정한다.
 두 축이 같이 있을 때 세션 시작이 자연스럽다.
 
-급한 일이 들어와도 이 자리는 비워두지 않는다.
-치고 들어온 일이 끝나면 이 문서를 읽고 본궤도로 돌아온다.
+---
+
+## Current Priority — 0.5.0: backend-native compaction escape hatch
+
+Single focus until done: **separate pi-side compaction from ACP backend-native compaction.**
+
+We do **not** implement compact→new-session handoff in 0.5.0. That is still the cleaner long-term model, but it is not a small bridge patch. For OpenClaw compatibility, the smaller ACP-native path is:
+
+```text
+pi-side /compact or pi auto compaction  → blocked by default
+ACP backend native compaction           → optionally allowed and verified
+ACP usage_update / command output       → observed by client, as agent-shell does
+```
+
+Research notes:
+
+- `~/org/llmlog/20260510T181532--pishellacp-compact-핸드오프-연구__llmlog_pishellacp_compaction_openclaw.org`
+- agent-shell finding: no dedicated compact RPC was found. `/compact` appears to be a backend-advertised slash command (`available_commands_update`) that the client sends as an ordinary `session/prompt`. The client tracks `usage_update` and command/message results; it does not run its own compaction engine.
+
+### Decision
+
+0.5.0 should not claim pi-shell-acp has safe pi-side compaction or recap handoff.
+
+0.5.0 should provide a **small, explicit backend-native compaction mode**:
+
+- keep pi `session_before_compact` blocked unless a separate pi-side override is set
+- allow removing Claude/Codex backend auto-compaction guards with a separate env knob
+- document that OpenClaw long-chat viability depends on backend-native compaction, not pi JSONL compaction
+- verify at least that the guard split behaves as intended; deeper OpenClaw tuning moves to 0.6.0
+
+### Why split the knobs?
+
+Current `PI_SHELL_ACP_ALLOW_COMPACTION=1` is too broad: it relaxes both pi-side and backend-side guards.
+
+But those are different responsibilities:
+
+| Layer | Safe default | Why |
+|---|---|---|
+| pi-side compaction | blocked | pi compaction summary is stored in pi JSONL, but pi-shell-acp forwards only the latest prompt to the existing ACP session, so the backend does not receive the summary |
+| backend-native compaction | guarded today, but should be separately opt-in | ACP backends own their session transcript; agent-shell-style clients rely on backend commands/usage updates rather than client-side compact rewriting |
+
+Therefore the likely minimal interface is:
+
+```text
+PI_SHELL_ACP_ALLOW_BACKEND_COMPACTION=1  # remove backend native compaction guards only
+PI_SHELL_ACP_ALLOW_PI_COMPACTION=1       # optional/debug escape hatch for pi-side compaction; not recommended
+```
+
+Compatibility note: keep `PI_SHELL_ACP_ALLOW_COMPACTION=1` only if needed as a legacy alias, but avoid documenting it as the preferred OpenClaw path because it conflates both layers.
 
 ---
 
-## Current Priority — 0.5.0: compact-replacing recap mechanism
+## Evidence so far
 
-Single focus until done: **replace silent compaction with an explicit new-session + caller-supplied hint slot mechanism.**
+### agent-shell compact/command flow
 
-This is a turning-point release, so the wording matters: do not let shallow summaries turn it into “a recap engine”, “a second harness”, or “same tools everywhere”.
+- `agent-shell-completion.el` — command completion reads `agent-shell--state :available-commands`.
+- `agent-shell.el` — `available_commands_update` stores backend-provided slash commands.
+- `agent-shell.el` + `acp.el` — prompt sending uses ordinary `session/prompt`; no dedicated `session/compact` surface was found.
+- `agent-shell-usage.el` — `usage_update` stores `used`, `size`, and `cost`; agent-shell observes context pressure rather than compacting locally.
 
-### Why
+Interpretation: ACP clients can stay thin. Backend-native `/compact` is just a backend command/behavior surfaced through normal prompt/update flow.
 
-Claude Code의 자동 compaction은 lossy + 시점 제어 불가 + 품질 일정치 않음. pi-shell-acp는 그 자리를 더 영리한 요약기로 채우지 않는다. 이 repo가 맡을 일은 더 작다.
+### pi-shell-acp current guard coupling
 
-1. silent compaction을 기본으로 막는다.
-2. 새 세션 첫 prepend에 짧은 recap hint가 들어갈 **빈 slot**을 제공한다.
-3. slot의 내용은 호출자가 만든다.
+- `index.ts` — `session_before_compact` currently checks `PI_SHELL_ACP_ALLOW_COMPACTION` and otherwise cancels pi compaction.
+- `acp-bridge.ts` — the same `PI_SHELL_ACP_ALLOW_COMPACTION` affects backend guards:
+  - Claude: strips `DISABLE_AUTO_COMPACT` / `DISABLE_COMPACT`
+  - Codex: omits `-c model_auto_compact_token_limit=9223372036854775807`
 
-Ownership 분리 (참조: [llmlog/20260508T090911 — recap v2 노트](file:///home/junghan/sync/org/llmlog/20260508T090911--recap-v2-다축-맥락-복원-—-codex가-남긴-raw-evidence__agent_llmlog_memory_recap_session.org)):
+Interpretation: the existing knob proves the mechanism is small, but the policy is too coarse for OpenClaw.
 
-- pi-shell-acp = **mechanism** (compact 막기 + prepend slot)
-- agent-config = **policy** (slot에 무엇을 채울지, 다축 hydration workflow)
-- 우리는 mechanism만. policy 침범 금지.
+### Runtime smoke — explicit backend `/compact` works (2026-05-10)
 
-### Tasks
+Direct bridge smoke, not pi host `/compact`: with current broad `PI_SHELL_ACP_ALLOW_COMPACTION=1`, send `"/compact"` as an ordinary ACP prompt to backend sessions.
 
-#### Task 1 — compact 비활성화 contract로 굳히기
+- Claude / `claude-sonnet-4-6`:
+  - warmup `usage_update`: `used=5328→5331`, `size=200000`
+  - `/compact` returned normal `stopReason=end_turn`
+  - message chunks: `Compacting...` then `Compacting completed.`
+  - post-compact `usage_update`: `used=0`, cost update followed
+- Codex / `gpt-5.4`:
+  - `available_commands_update` included `compact`
+  - warmup `usage_update`: `used=18816`, `size=258400`
+  - `/compact` returned normal `stopReason=end_turn`
+  - message chunk: `Context compacted`
+  - post-compact `usage_update`: `used=5711`
 
-- verified: `PI_SHELL_ACP_ALLOW_COMPACTION=1` opt-in 가드 존재. env가 없으면 `session_before_compact`에서 cancel한다.
-- 목표: README/AGENTS Hard Rule에 **default non-compaction**을 명시하고, 코드 주석/검증이 그 문장과 맞는지 정렬한다.
-- 비용: 거의 0 (문서 정리 + 필요 시 1~2줄 코드/검증 보강)
+This confirms the minimum OpenClaw premise: backend-native compact can be invoked explicitly through normal ACP prompt/update flow and returns observable result/usage. Remaining work is to split the env knobs so this path can be enabled without enabling unsafe pi-side compaction.
 
-#### Task 2 — prev-session hint slot
+---
 
-- `pi-context-augment.ts`에 새 세션 첫 prepend slot 1개 추가
-- pi-shell-acp 자체는 비워둠 (default empty)
-- 호출자(agent-config 등)가 채울 수 있게 hook/path만 노출
-- 비용: 소 (1 hook point + 문서 + 최소 검증)
+## Tasks
 
-### Open Decisions (시작 전 결정 필요)
+### Task 0 — discard abandoned hint-slot patch ✅
 
-1. **prepend slot 인터페이스**:
-   - `PI_SHELL_ACP_RECAP_HINT=<text>` (env)
-   - `PI_SHELL_ACP_RECAP_HINT_FILE=~/.pi/agent/recap-hint.md` (file path)
-   - 둘 다
-   - → 결정 후 pi-context-augment.ts 변경
+The `PI_SHELL_ACP_RECAP_HINT(_FILE)` patch was reverted. It may return later only as an operator/debug hook, not as the center of 0.5.0.
 
-### Out of Scope (0.5.0 아님)
+### Task 1 — research / source audit ✅
 
-다음은 0.5.0에서 손대지 않는다 — agent-config / 후속 release / 영역 외.
-If a task sounds useful but needs policy, hidden transcript hydration, backend cleanup, or a new provider, it is not this release.
+Completed via entwurf `eb8d8219` + resumed investigation `d698cbdb`.
 
-- recap 내용 생성 정책: session-recap, semantic-memory, day-query, llmlog/§ marker 해석
-- `docs/recap.md` 같은 recap policy 문서 추가
-- provider handoff UX 전체 설계
-- Gemini backend residue cleanup
-- BASELINE에 새 layer 추가
-- entwurf cross-session structured marker
-- timezone/device metadata invariant
-- openclaw 백엔드 어댑터 / native provider
+Result:
+
+- ordinary pi compaction is not sufficient for ACP sessions
+- compact→new-session handoff is not small enough for 0.5.0
+- agent-shell suggests the smaller ACP-native path: backend slash command + usage updates, not client-side compaction
+- next implementation should be guard split, not recap engine
+
+### Task 2 — implement guard split (small)
+
+Goal: separate pi-side and backend-side compaction toggles.
+
+Likely code points:
+
+- `index.ts`
+  - replace pi-side check with `PI_SHELL_ACP_ALLOW_PI_COMPACTION` (or legacy alias decision)
+  - default remains cancel
+  - error message should point to the pi-side override and explain backend-native compaction separately
+- `acp-bridge.ts`
+  - backend guard removal should check `PI_SHELL_ACP_ALLOW_BACKEND_COMPACTION`
+  - update comments naming backend-native compaction
+  - keep identity-isolation env untouched
+- `run.sh`
+  - update check-backends assertions for split knobs
+  - verify backend toggle drops only compaction guards, not overlay env
+
+Keep implementation surgical. No session handoff. No recap generation.
+
+### Task 2.5 — operator-facing backend compact trigger (small, required for testing)
+
+Need an explicit way for GLG to test backend-native compaction during a normal pi-shell-acp session, e.g. while working with Opus/Sonnet/Codex:
+
+```text
+/backend-compact   # or similarly named pi-shell-acp command
+→ send literal "/compact" to the current ACP backend session as a normal backend prompt/command
+→ return/display backend message chunks and PromptResponse normally
+→ observe subsequent usage_update in footer/logs
+```
+
+Rules:
+
+- This must **not** invoke pi host `/compact`.
+- This must require backend-native compaction to be enabled or clearly explain if guards are still active.
+- It should be test/ops surface, not a recap engine.
+- If pi slash-command registration from provider extension is not available, provide an equivalent minimal CLI/RPC/debug command and document exact usage.
+- Record result shape: message text (`Compacting completed.`, `Context compacted`), `stopReason`, and `usage_update` before/after.
+
+Open naming decision: prefer a name that cannot be confused with pi host `/compact`, e.g. `/backend-compact`, `/acp-compact`, or `/compact-backend`.
+
+### Task 3 — docs alignment
+
+- README Compaction policy:
+  - pi-side compaction blocked by default because pi JSONL summary is not delivered to ACP backend session
+  - backend-native compaction can be allowed via `PI_SHELL_ACP_ALLOW_BACKEND_COMPACTION=1`
+  - OpenClaw path: rely on backend-native compaction first; tune in 0.6.0
+- AGENTS:
+  - Hard Rule / Compaction bullet should mention split responsibilities
+  - do not claim recap/new-session exists
+- VERIFY:
+  - evidence target for split guard behavior and usage-update observation
+- CHANGELOG:
+  - 0.5.0 = compaction guard split / OpenClaw preparation, not recap engine
+
+### Task 4 — minimal verification
+
+Before commit:
+
+- `pnpm typecheck`
+- `./run.sh check-backends`
+- if cheap: `./run.sh check-models`
+
+Required runtime smoke before calling 0.5.0 OpenClaw-ready:
+
+- launch with `PI_SHELL_ACP_ALLOW_BACKEND_COMPACTION=1` after guard split
+- confirm Claude/Codex backend guard is absent while pi-side compaction remains blocked
+- repeat the explicit backend `/compact` smoke above under the split knob
+- confirm post-compact `usage_update` still appears and context usage drops or otherwise reflects backend compaction
+- record which backends expose `/compact` through `available_commands_update` and which do not
+
+### Task 5 — commit / push / stamp
+
+After GLG review only.
+
+Remember: after commit + push, agenda stamp and Google Chat notification are required by repo policy.
+
+---
+
+## Explicit non-goals for 0.5.0
+
+Do not do these now:
+
+- implement compact→new-session handoff
+- call `ctx.newSession()` / `switchSession()` from `session_before_compact`
+- create a hidden session manager in pi-shell-acp
+- read backend transcript files
+- hydrate ACP backend from pi JSONL manually
+- add semantic-memory/day-query/llmlog recap policy
+- change OpenClaw
+- add `PI_SHELL_ACP_RECAP_HINT(_FILE)` as public 0.5.0 interface
+- spend more time designing a grand recap engine
 
 ---
 
@@ -77,7 +217,6 @@ If a task sounds useful but needs policy, hidden transcript hydration, backend c
 | 시점 | 행동 |
 |---|---|
 | 새 세션 시작 | recap 후 이 문서 읽기. 다른 일이 우선순위 같으면 그 일부터, 아니면 NEXT.md 따라 진행 |
-| Open Decision 결정됨 | Tasks 본문으로 흡수, Open Decision 항목 제거 |
 | Task 완료 | 한 줄 strikeout 또는 항목 자체 삭제. 다음 Task로 |
 | Current Priority 완료 | 다음 우선순위로 통째로 갱신 |
 | 우선순위 자체가 바뀜 | 드물다. 흔들리면 이 문서 의미 사라진다. 의식적으로만 |
