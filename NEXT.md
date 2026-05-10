@@ -137,12 +137,21 @@ Likely code points:
 
 Keep implementation surgical. No session handoff. No recap generation.
 
-### Task 2.5 — operator-facing backend compact trigger (small, required for testing)
+### Task 2.5 — developer-only ACP compact resilience smoke hook
 
-Need an explicit way for GLG to test backend-native compaction during a normal pi-shell-acp session, e.g. while working with Opus/Sonnet/Codex:
+Need an explicit way for GLG to test backend-native compaction during a normal pi-shell-acp session, e.g. while working with Opus/Sonnet/Codex. This is **not** an end-user command and not an OpenClaw-facing workflow. It is a developer smoke hook for the bridge's durable-execution invariant:
 
 ```text
-/backend-compact   # or similarly named pi-shell-acp command
+pi session must survive backend-native compaction even if the ACP backend
+compacts in place, rotates/respawns its backend session, or breaks the current
+ACP child process. The bridge may reconnect, resume/load, or start a fresh ACP
+session as needed, but pi must remain the durable shell.
+```
+
+Preferred name:
+
+```text
+/acp-compact
 → send literal "/compact" to the current ACP backend session as a normal backend prompt/command
 → return/display backend message chunks and PromptResponse normally
 → observe subsequent usage_update in footer/logs
@@ -151,12 +160,20 @@ Need an explicit way for GLG to test backend-native compaction during a normal p
 Rules:
 
 - This must **not** invoke pi host `/compact`.
+- This must not be documented as something OpenClaw users should call.
 - This must require backend-native compaction to be enabled or clearly explain if guards are still active.
-- It should be test/ops surface, not a recap engine.
+- It is a test/dev surface, not a recap engine and not user-facing session management.
 - If pi slash-command registration from provider extension is not available, provide an equivalent minimal CLI/RPC/debug command and document exact usage.
-- Record result shape: message text (`Compacting completed.`, `Context compacted`), `stopReason`, and `usage_update` before/after.
+- Record result shape: message text (`Compacting completed.`, `Context compacted`), `stopReason`, `usage_update` before/after, and whether the next pi turn reuses/resumes/loads/creates the ACP backend session.
 
-Open naming decision: prefer a name that cannot be confused with pi host `/compact`, e.g. `/backend-compact`, `/acp-compact`, or `/compact-backend`.
+Resilience question to answer before promoting the OpenClaw story:
+
+- If `/acp-compact` succeeds in place, does the existing `acpSessionId` continue to accept prompts?
+- If the backend rotates its internal session or child process, does pi-shell-acp recover on the next turn via `resume > load > new` without losing the pi session?
+- If the compact command breaks the current ACP prompt/child, does the error close only the bridge child while preserving the pi session and persisted mapping for recovery?
+- If recovery falls back to `new`, is the behavior explicit in diagnostics (`bootstrap-fallback`, `bootstrap-invalidate`, `bootstrap path=new`) rather than silent transcript hydration?
+
+This is the durable-execution test: ACP may compact, respawn, change, or fail; pi-shell-acp should keep pi alive and reattach or restart the backend side without becoming a hidden transcript manager.
 
 ### Task 3 — docs alignment
 
