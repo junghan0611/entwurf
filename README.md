@@ -25,12 +25,21 @@ pi
 
 If words like *entwurf* or *engraving* feel unusual for a coding tool, this is the map.
 
-- **Problem**: Claude Code subscribers had no official way to use that subscription inside pi. Proxy / CLI-wrapper paths were fragile or policy-sensitive.
+- **Problem**: Claude Code subscribers had no stable, protocol-backed way to use that subscription inside pi. Proxy / CLI-wrapper paths were fragile or policy-sensitive.
 - **Solution**: use ACP, the protocol path Zed uses for Claude Code. Pi stays the harness; each backend stays itself.
-- **Codex / Gemini**: Codex verifies the ACP boundary against a non-Anthropic backend; Gemini CLI contributes its own `--acp` server. Release migration detail belongs in CHANGELOG, not the README top.
+- **Codex / Gemini**: not because pi cannot run other models. Codex support is an intentional quality probe for the ACP backend path itself: if the bridge only feels correct with Claude, the bridge is not proven. Non-Claude backends keep each backend's native identity and asymmetry visible while testing the same pi-facing operating-surface discipline. Gemini CLI contributes its own `--acp` server. Release migration detail belongs in CHANGELOG, not the README top.
 - **Entwurf**: not “delegate.” It means projection/draft: a sibling with its own runtime boundary, not a worker under a master.
-- **Engraving**: optional short operator text in the backend's highest identity carrier. Rich pi context now rides the first-user augment to keep subscription-sensitive carriers small.
+- **Engraving**: optional short operator text in the backend's highest identity carrier. It is not a giant hidden prompt and not a tool catalog. Rich pi context now rides the first-user augment to keep subscription-sensitive carriers small.
+- **MCP**: explicit bridge-injected tool servers only. MCP is not ambient context scanning, not automatic retrieval, and not proof that every backend exposes identical literal tool names.
 - **Daily use**: friction compounds over a workday, so VERIFY.md records edge cases instead of relying on vibes.
+
+### Common misreads to avoid
+
+- `pi-shell-acp` is **not** the harness runtime; pi is the harness. This repo is a thin ACP provider/bridge.
+- ACP here means a protocol path and backend subprocess contract, not a marketing claim that every behavior is “official” or interchangeable.
+- Session persistence re-attaches pi to an ACP session; it does not hydrate backend transcripts into pi or make hidden memory authoritative.
+- “Same operating surface” means comparable capability classes and explicit boundaries, not identical implementation, identical tools, or forced backend sameness.
+- 0.5.0 is not a recap engine. It is only compact guard + caller-supplied recap hint slot.
 
 ## History — How We Got Here
 
@@ -315,7 +324,7 @@ Backend guards mirror that policy:
 - Claude Code: `DISABLE_AUTO_COMPACT=1` and `DISABLE_COMPACT=1`
 - Codex: `-c model_auto_compact_token_limit=9223372036854775807`
 
-The footer uses ACP `usage_update.used / size` (backend prompt/tools/cache/session included), with `[pi-shell-acp:usage] ...` diagnostics. Near limit, choose a visible action: clear, opt into compaction, switch model, or in 0.5.0 use recap-as-new-question.
+The footer uses ACP `usage_update.used / size` (backend prompt/tools/cache/session included), with `[pi-shell-acp:usage] ...` diagnostics. Near limit, choose a visible action: clear, opt into compaction, switch model, or in 0.5.0 start a new session with a caller-supplied recap hint slot.
 
 ### Backend capability notes
 
@@ -372,8 +381,8 @@ The maintainer uses pi-shell-acp for most pi work unless a task needs a differen
 ## Roadmap
 
 - **0.4.x — Documentation / evidence calibration.** Keep README, AGENTS.md, CHANGELOG.md, BASELINE.md, and VERIFY.md aligned. Publish redacted session-level evidence to [`junghanacs/pi-shell-acp-sessions`](https://huggingface.co/datasets/junghanacs/pi-shell-acp-sessions) via [`junghan0611/pi-share-hf`](https://github.com/junghan0611/pi-share-hf).
-- **0.5.0 — Visible recap-as-new-question, provider handoff, and backend residue cleanup.** Replace silent compaction with explicit, operator-visible recaps. Cover long sessions and `native → pi-shell-acp` provider switches without hidden transcript hydration. Close the Gemini session-end residual window (`tmp/<slug>/chats/session-*.jsonl`, `history/<slug>/.project_root`, overlay-private `projects.json`) with an explicit cleanup path rather than waiting for the next spawn sweep.
-- **0.6.0 — OpenClaw native provider.** Drop-in native pi provider; no extra ACP command surface and no entwurf needed.
+- **0.5.0 — Compact-replacing recap mechanism.** Keep silent compaction off by default and add one explicit new-session prepend slot for caller-supplied recap hints. pi-shell-acp provides only the mechanism: a compact guard plus an empty hint slot. Recap policy/content generation stays in consumer configuration such as `agent-config`.
+- **Later — Provider handoff, backend residue cleanup, and OpenClaw.** These are real follow-up areas, but not 0.5.0. Do not let them dilute the compact-replacement work.
 
 ## Verification surfaces
 
@@ -400,7 +409,7 @@ Tracked issues:
 
 ## Next
 
-Current priority and open decisions live in [NEXT.md](./NEXT.md). Read it at session start so this repo always knows what comes next.
+Current priority and open decisions live in [NEXT.md](./NEXT.md). Read it at session start so this repo always knows what comes next. For 0.5.0, NEXT.md is authoritative: compact guard + recap hint slot only.
 
 ## Status
 

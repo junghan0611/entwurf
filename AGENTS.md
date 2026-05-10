@@ -35,6 +35,11 @@ For agents that own this repo: invariant principles + reproducible verification,
 - 어떤 tool이 schema에 직접 안 보인다고 해서, 곧바로 “이 backend는 여기까지”라고 결론내리는 것
 - surface 차이를 capability 포기로 번역하는 것
 - 문서에 적힌 asymmetry를 면책조항처럼 사용하는 것
+- `pi-shell-acp`를 하네스 런타임이나 범용 AI 작업실로 설명하는 것 — pi가 하네스고, 이 repo는 bridge다
+- ACP를 “모든 것이 공식/동일/플러그앤플레이”라는 말로 납작하게 만드는 것 — protocol path일 뿐 backend 차이는 유지된다
+- MCP를 자동 맥락 검색이나 ambient tool scanning처럼 설명하는 것 — explicit injection만 허용된다
+- Codex ACP 경로를 “원래 안 되니 감싼 것”으로 말하는 것 — 목적은 ACP backend 연결 퀄리티를 일부러 시험하는 것이다. Claude에서만 그럴듯하면 bridge는 아직 증명된 게 아니다
+- 0.5.0을 recap engine / provider handoff / Gemini cleanup / OpenClaw로 확장하는 것 — compact guard + caller-supplied hint slot만
 - 사용자가 이미 철학과 방향을 준 문제를 다시 사용자에게 되묻는 것
 
 릴리즈 이야기와 개별 기능은 주변을 돈다.
@@ -182,6 +187,8 @@ Versions follow the pins in `package.json` / `run.sh`. Mismatches are caught by 
 ## Next
 
 Current priority + open decisions: [NEXT.md](./NEXT.md). Read it at session start. recap restores the past axis; NEXT.md fixes the future axis. 둘이 한 쌍.
+
+For 0.5.0, keep the work narrow: compact guard + caller-supplied recap hint slot. Do not implement recap policy, day/semantic hydration, provider handoff UX, Gemini residue cleanup, or OpenClaw under this release.
 
 ## References
 

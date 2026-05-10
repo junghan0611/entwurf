@@ -15,11 +15,17 @@
 
 ## Current Priority — 0.5.0: compact-replacing recap mechanism
 
-Single focus until done.
+Single focus until done: **replace silent compaction with an explicit new-session + caller-supplied hint slot mechanism.**
+
+This is a turning-point release, so the wording matters: do not let shallow summaries turn it into “a recap engine”, “a second harness”, or “same tools everywhere”.
 
 ### Why
 
-Claude Code의 자동 compaction은 lossy + 시점 제어 불가 + 품질 일정치 않음. pi-shell-acp는 그 자리에서 **명시적 새 세션 + 이전 세션 짧은 hint prepend** 흐름을 받쳐준다.
+Claude Code의 자동 compaction은 lossy + 시점 제어 불가 + 품질 일정치 않음. pi-shell-acp는 그 자리를 더 영리한 요약기로 채우지 않는다. 이 repo가 맡을 일은 더 작다.
+
+1. silent compaction을 기본으로 막는다.
+2. 새 세션 첫 prepend에 짧은 recap hint가 들어갈 **빈 slot**을 제공한다.
+3. slot의 내용은 호출자가 만든다.
 
 Ownership 분리 (참조: [llmlog/20260508T090911 — recap v2 노트](file:///home/junghan/sync/org/llmlog/20260508T090911--recap-v2-다축-맥락-복원-—-codex가-남긴-raw-evidence__agent_llmlog_memory_recap_session.org)):
 
@@ -29,23 +35,22 @@ Ownership 분리 (참조: [llmlog/20260508T090911 — recap v2 노트](file:///h
 
 ### Tasks
 
-#### Task 1 — compact 비활성화 굳히기
+#### Task 1 — compact 비활성화 contract로 굳히기
 
-- 현재: `PI_SHELL_ACP_ALLOW_COMPACTION=1` opt-in 가드 존재 (의도적 opt-in 외 compact 안 일어남이 의도된 default)
-- 목표: 그 default를 README/AGENTS Hard Rule로 격상하고 코드에서 명시
-- 비용: 거의 0 (문서 정리 + 1~2줄 코드)
+- verified: `PI_SHELL_ACP_ALLOW_COMPACTION=1` opt-in 가드 존재. env가 없으면 `session_before_compact`에서 cancel한다.
+- 목표: README/AGENTS Hard Rule에 **default non-compaction**을 명시하고, 코드 주석/검증이 그 문장과 맞는지 정렬한다.
+- 비용: 거의 0 (문서 정리 + 필요 시 1~2줄 코드/검증 보강)
 
 #### Task 2 — prev-session hint slot
 
 - `pi-context-augment.ts`에 새 세션 첫 prepend slot 1개 추가
 - pi-shell-acp 자체는 비워둠 (default empty)
 - 호출자(agent-config 등)가 채울 수 있게 hook/path만 노출
-- 비용: 소 (1 hook point + 문서)
+- 비용: 소 (1 hook point + 문서 + 최소 검증)
 
 ### Open Decisions (시작 전 결정 필요)
 
-1. **compact guard default 상태 verify** — 코드에서 ALLOW_COMPACTION default off 맞는지 직접 확인
-2. **prepend slot 인터페이스**:
+1. **prepend slot 인터페이스**:
    - `PI_SHELL_ACP_RECAP_HINT=<text>` (env)
    - `PI_SHELL_ACP_RECAP_HINT_FILE=~/.pi/agent/recap-hint.md` (file path)
    - 둘 다
@@ -54,12 +59,16 @@ Ownership 분리 (참조: [llmlog/20260508T090911 — recap v2 노트](file:///h
 ### Out of Scope (0.5.0 아님)
 
 다음은 0.5.0에서 손대지 않는다 — agent-config / 후속 release / 영역 외.
+If a task sounds useful but needs policy, hidden transcript hydration, backend cleanup, or a new provider, it is not this release.
 
-- agent-config의 다축 hydration recap workflow 자체 (agent-config 영역)
-- BASELINE에 새 layer 추가 (후속)
-- entwurf cross-session structured marker (후속)
-- timezone/device metadata invariant (후속)
-- openclaw 백엔드 어댑터 (0.6.0 이후, 격락 명시 필요)
+- recap 내용 생성 정책: session-recap, semantic-memory, day-query, llmlog/§ marker 해석
+- `docs/recap.md` 같은 recap policy 문서 추가
+- provider handoff UX 전체 설계
+- Gemini backend residue cleanup
+- BASELINE에 새 layer 추가
+- entwurf cross-session structured marker
+- timezone/device metadata invariant
+- openclaw 백엔드 어댑터 / native provider
 
 ---
 
