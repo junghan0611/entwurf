@@ -16,6 +16,10 @@ CHECKLIST.md
 *.html
 *.cast
 
+# demo/ recordings — script + README are tracked; recorded artifacts are not.
+demo/*.gif
+demo/*.log
+
 # Local agent incident reports / handoff notes (not for GitHub)
 .agent-reports/
 

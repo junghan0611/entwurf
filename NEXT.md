@@ -92,9 +92,36 @@ This is a pi-shell-acp-internal rendering/context split, not a pi-mono protocol 
 
 ---
 
+## Blocker before 0.5.0 — `entwurf_resume` transcript hydration regression ([#9](https://github.com/junghan0611/pi-shell-acp/issues/9))
+
+**0.5.0 cannot start until this is fixed.** A backend-native compaction guard split presumes `resumeSession` continuity is intact. It currently is not.
+
+### Symptom
+
+`entwurf_resume` keeps the same Task ID, the same model, and correctly appends the new turn to the saved session JSONL — but the resumed sibling has no memory of its own prior assistant turn. Identity Preservation Rule is satisfied at the routing layer and broken at the transcript layer.
+
+### Evidence pinned
+
+- demo flow: `demo/demo.sh` Scene 1 (spawn, stores "tempered indigo") → Scene 2 (resume, recall asks for the color) returns `"모르겠습니다 — 현재 컨텍스트에 해당 정보가 없습니다"`.
+- saved session: `~/.pi/agent/sessions/--home-junghan-repos-gh-pi-shell-acp--/2026-05-11T08-56-18-077Z_entwurf-a3dce62b.jsonl`. 7 lines: line 5 holds the fact in an assistant turn; line 7's thinking confesses *"Looking through the AGENTS.md and system context provided, I don't have it"* — proof the model never saw line 5.
+- 0.4.5 precedent: AGENTS.md Hard Rule #10 documents the same silhouette (SDK rename caused silent `resume → load` fallthrough). Fix must be structural, not vigilance.
+
+### Acceptance
+
+- `./run.sh verify-resume` covers **fact recall**, not just session-id continuity. A scripted spawn that plants a unique sentinel in turn 1 must read it back via `entwurf_resume` in turn 2 before the gate goes green.
+- `demo/demo.sh` Scene 2 returns `tempered indigo` without further prompt edits.
+- `check-sdk-surface` keeps its static gate on `resumeSession` and grows a runtime smoke that confirms the SDK method was actually invoked (counter or echo).
+- Child `entwurf` stderr is captured (debug knob), not silently lost — the demo's `sender-debug.log` only showed the parent's bootstrap, not the spawned sibling's, which is why the regression hid through release.
+
+### Out of scope here
+
+- Inventing an alternate hydration path through extra `entwurf_resume` params. Saved JSONL is the carrier; fix the actual resume RPC, do not paper over it.
+
+---
+
 ## Next — 0.5.0: backend-native compaction escape hatch
 
-Single focus until done: **separate pi-side compaction from ACP backend-native compaction.**
+Single focus until done: **separate pi-side compaction from ACP backend-native compaction.** Gated by the resume-hydration fix above.
 
 We do **not** implement compact→new-session handoff in 0.5.0. That is still the cleaner long-term model, but it is not a small bridge patch. For OpenClaw compatibility, the smaller ACP-native path is:
 
