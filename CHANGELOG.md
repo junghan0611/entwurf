@@ -4,6 +4,10 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Changed
+
+- Align README / AGENTS 0.5.0 direction with NEXT.md: the next release is a compaction guard split / backend-native compaction escape hatch, not a caller-supplied recap hint slot or compact→new-session handoff.
+
 ## 0.4.14 — 2026-05-11
 
 ### Changed — issue #7 surface unification (session-bridge retracted)

@@ -39,7 +39,7 @@ If words like *entwurf* or *engraving* feel unusual for a coding tool, this is t
 - ACP here means a protocol path and backend subprocess contract, not a marketing claim that every behavior is “official” or interchangeable.
 - Session persistence re-attaches pi to an ACP session; it does not hydrate backend transcripts into pi or make hidden memory authoritative.
 - “Same operating surface” means comparable capability classes and explicit boundaries, not identical implementation, identical tools, or forced backend sameness.
-- 0.5.0 is not a recap engine. It is only compact guard + caller-supplied recap hint slot.
+- 0.5.0 is not a recap engine and not a compact→new-session handoff. Current focus: split pi-side compaction guards from backend-native compaction guards so backend-owned compaction can be tested without enabling unsafe pi-side JSONL compaction.
 
 ## History — How We Got Here
 
@@ -113,7 +113,7 @@ For terminal sessions, omit the flag or pass `--emacs-agent-socket server` expli
 
 ### Settings
 
-Recommended reference shape for a pi-shell-acp development session lives in [`pi/settings.reference.json`](./pi/settings.reference.json):
+Recommended reference shape for a pi-shell-acp development session lives in [`pi/settings.reference.json`](./pi/settings.reference.json) (minimal — see the reference file for the full canonical shape including `disallowedTools` and `codexDisabledFeatures`):
 
 ```json
 {
@@ -277,6 +277,8 @@ The minimum install for skills is documented in §Custom Skills above. For an ex
 
 Live peer messaging (`entwurf_send`, `/entwurf-send`, in-process tool) now carries a sender envelope by default: `{ sessionId, agentId, cwd, timestamp }`. `PI_SESSION_ID` and `PI_AGENT_ID` are routed structurally into the backend child and the MCP stdio entry, so Codex/Gemini do not depend on ambient env inheritance. Startup one-shot CLI keeps sender info opt-in (`--entwurf-send-include-sender-info`) because the sender process exits immediately and should not imply a reply path.
 
+Reply hint marker is now `wants_reply` (renamed from `reply_requested`, default flipped from true to false): an etiquette field on the message, not a transport contract — no wait, no polling. Receiver renders a `(wants reply)` badge only when sender opts in.
+
 The human-greeted 담당자 pattern is first-class in this release: the operator may open a pi-shell-acp session in repo B, greet it directly, then pass that `sessionId` to another session via `entwurf_send`. Spawned siblings and human-opened peers share the same messaging semantics; only the creation sequence differs.
 
 Model switch on the reuse path now respawns instead of mutating in place. School × model is one identity, so a reused MCP child with stale `PI_AGENT_ID` is invalid by construction.
@@ -326,8 +328,9 @@ Backend guards mirror that policy:
 
 - Claude Code: `DISABLE_AUTO_COMPACT=1` and `DISABLE_COMPACT=1`
 - Codex: `-c model_auto_compact_token_limit=9223372036854775807`
+- Gemini CLI: n/a — no equivalent toggle
 
-The footer uses ACP `usage_update.used / size` (backend prompt/tools/cache/session included), with `[pi-shell-acp:usage] ...` diagnostics. Near limit, choose a visible action: clear, opt into compaction, switch model, or in 0.5.0 start a new session with a caller-supplied recap hint slot.
+The footer uses ACP `usage_update.used / size` (backend prompt/tools/cache/session included), with `[pi-shell-acp:usage] ...` diagnostics. Near limit, choose a visible action: clear, switch model, or opt into the appropriate compaction layer. 0.5.0's current focus is splitting pi-side compaction guards from backend-native compaction guards so backend-owned compaction can be tested without enabling unsafe pi-side JSONL compaction.
 
 ### Backend capability notes
 
@@ -383,8 +386,8 @@ The maintainer uses pi-shell-acp for most pi work unless a task needs a differen
 ## Roadmap
 
 - **0.4.x — Documentation / evidence calibration.** Keep README, AGENTS.md, CHANGELOG.md, BASELINE.md, and VERIFY.md aligned. Publish redacted session-level evidence to [`junghanacs/pi-shell-acp-sessions`](https://huggingface.co/datasets/junghanacs/pi-shell-acp-sessions) via [`junghan0611/pi-share-hf`](https://github.com/junghan0611/pi-share-hf).
-- **0.5.0 — Compact-replacing recap mechanism.** Keep silent compaction off by default and add one explicit new-session prepend slot for caller-supplied recap hints. pi-shell-acp provides only the mechanism: a compact guard plus an empty hint slot. Recap policy/content generation stays in consumer configuration such as `agent-config`.
-- **Later — Provider handoff, backend residue cleanup, and OpenClaw.** These are real follow-up areas, but not 0.5.0. Do not let them dilute the compact-replacement work.
+- **0.5.0 — Backend-native compaction escape hatch.** Keep unsafe pi-side JSONL compaction blocked by default, split the current broad compaction knob into pi-side vs backend-native guards, and verify backend-owned compaction through normal ACP prompt/update flow. This is not a recap engine and not compact→new-session handoff.
+- **Later — Compact→new-session handoff, provider handoff, backend residue cleanup, and deeper OpenClaw tuning.** These are real follow-up areas, but not 0.5.0. Do not let them dilute the guard-split work.
 
 ## Verification surfaces
 
@@ -411,7 +414,7 @@ Tracked issues:
 
 ## Next
 
-Current priority and open decisions live in [NEXT.md](./NEXT.md). Read it at session start so this repo always knows what comes next. For 0.5.0, NEXT.md is authoritative: compact guard + recap hint slot only.
+Current priority and open decisions live in [NEXT.md](./NEXT.md). Read it at session start so this repo always knows what comes next. For 0.5.0, NEXT.md is authoritative: compaction guard split / backend-native compaction escape hatch, not recap hint slot.
 
 ## Status
 
