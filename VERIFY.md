@@ -195,7 +195,7 @@ npm run check-mcp
 npm run check-backends
 npm run check-registration
 
-# 5. dual-backend runtime smoke gate
+# 5. triple-backend runtime smoke gate (Gemini auto-skips when absent)
 ./run.sh smoke-all /path/to/consumer-project
 ```
 
@@ -203,7 +203,7 @@ Expected:
 - step 2 — the checkout path is added to `~/.pi/agent/settings.json#packages`; `pi list` shows it under `User packages`.
 - step 3 — same log lines as Path A step 2.
 - step 4 — each `check-*` gate prints `[check-*] N assertions ok` (typecheck emits nothing on success).
-- step 5 — `[smoke-all] Claude + Codex runtime smokes: ok`.
+- step 5 — `[smoke-all] Claude + Codex + Gemini runtime smokes: ok`, or the same Claude + Codex success line with an explicit Gemini skip notice when `gemini` is not on PATH.
 
 Re-running step 3 is idempotent. User-authored `mcpServers.<name>` overrides with a different command survive the re-run and are annotated `preserved (user override: …)`. `./run.sh remove /path/to/consumer-project` deletes only entries whose command matches the repo-authored launcher path; user overrides stay.
 
@@ -229,7 +229,7 @@ cd "$REPO_DIR"
 ./run.sh setup "$PROJECT_DIR"
 ```
 
-`setup` is a convenience that runs `install` + `smoke-all` in sequence, so a green `setup` implies both the settings.json wiring and the dual-backend runtime are healthy.
+`setup` is a convenience that runs `install` + `smoke-all` in sequence, so a green `setup` implies both the settings.json wiring and the triple-backend runtime surface are healthy (with Gemini explicitly skipped when its CLI is absent).
 
 ### 1.5 Pre-verification snapshot — capture once, before §3
 

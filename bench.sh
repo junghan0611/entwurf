@@ -6,7 +6,7 @@ set -euo pipefail
 # This is NOT part of the public install or verification flow. It exists for the
 # repo maintainer to spot-check direct API vs pi-shell-acp (ACP bridge) latency
 # and quality drift on a local machine. Consumers and contributors should ignore
-# it — `./run.sh smoke-all` is the real dual-backend gate.
+# it — `./run.sh smoke-all` is the real triple-backend gate (Gemini auto-skips when absent).
 #
 # Test prompts are deliberately kept in Korean because they reflect the
 # maintainer's working language. Translating them would not make this script

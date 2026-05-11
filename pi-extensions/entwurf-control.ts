@@ -86,8 +86,9 @@ import type {
 	ToolRenderResultOptions,
 	TurnEndEvent,
 } from "@mariozechner/pi-coding-agent";
-import { getMarkdownTheme } from "@mariozechner/pi-coding-agent";
+import { getMarkdownTheme, type Theme } from "@mariozechner/pi-coding-agent";
 import { Box, Container, Markdown, Spacer, Text } from "@mariozechner/pi-tui";
+import { ENTWURF_SENT_MESSAGE_TYPE } from "../protocol.js";
 
 const ENTWURF_FLAG = "entwurf-control";
 const ENTWURF_SESSION_FLAG = "entwurf-session";
@@ -98,6 +99,14 @@ const ENTWURF_SEND_INCLUDE_SENDER_FLAG = "entwurf-send-include-sender-info";
 const ENTWURF_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
 const SOCKET_SUFFIX = ".sock";
 const SESSION_MESSAGE_TYPE = "entwurf-message";
+// Sender-side UI marker. Layer B (ACP path) emits a CustomMessage with this
+// customType so the operator sees a first-class [entwurf sent →] box paired
+// with the receive-side [entwurf received ⟵] box. The provider-level context
+// filter in index.ts drops this customType before the LLM sees it — colocated
+// with the emitter so sessions without --entwurf-control are still protected.
+// Layer A (native path) reuses the same Box builder via renderSentMessage() but
+// does NOT emit a CustomMessage; the native tool result already lives in the
+// toolResult role and never enters LLM context as a user message.
 const SENDER_INFO_PATTERN = /<sender_info>[\s\S]*?<\/sender_info>/g;
 
 // ============================================================================
@@ -651,6 +660,113 @@ const renderSessionMessage: MessageRenderer = (message, { expanded }, theme) => 
 	return box;
 };
 
+// Sender-side payload — what renderSentMessage needs to draw the [entwurf sent →]
+// box. Carried verbatim by both Layer A (native renderResult) and Layer B
+// (CustomMessage details for ACP path). All four envelope fields are intentionally
+// echoed in the box even though the sender is "this same session" — operators
+// reading a busy multi-session transcript should be able to verify at a glance
+// which 담당자 is on the wire (cwd) and which model identity (agentId) actually
+// signed the message, without scrolling up to find the session header.
+//
+// timestamp is captured at execute() / send-emit time, not at render time, so
+// re-renders (resize, expand toggle) keep showing the moment the message was
+// actually delivered rather than drifting forward to "now".
+//
+// wants_reply mirrors the receive-side etiquette badge. Native schema does not
+// yet expose it (see registerSessionTool's entwurfSendParameters); leave undefined
+// from the native call site until the schema grows the field.
+interface SentBoxData {
+	to: string; // target sessionId
+	from?: string; // sender agentId, e.g. "pi-shell-acp/claude-opus-4-7"
+	cwd?: string; // sender cwd (raw, abbreviateHome applied at render)
+	timestamp?: string; // ISO 8601 UTC; rendered in KST
+	mode?: string; // "steer" | "follow_up" | string passed through
+	wants_reply?: boolean;
+	deliveredAs?: string; // RPC echo — surfaces when receiver remapped (e.g. queued as followUp)
+	body: string; // message text the operator sent
+}
+
+// Visual mirror of renderSessionMessage. Same Box / Markdown / theme tokens —
+// the two boxes must share the customMessageBg / customMessageLabel /
+// customMessageText surface so they are pixel-equivalent in any theme. The
+// only deliberate visual differences are:
+//   - label: [entwurf sent →]   vs  [entwurf received ⟵]
+//   - "to:" leads, "from:" follows  vs  "from:" only
+//   - mode: line                  (no equivalent on receive side — receiver
+//                                   doesn't see how the sender queued it)
+//
+// `expanded` truncates the body the same way as renderSessionMessage so a
+// large send shows the same preview shape as a large receive. operators
+// reading the transcript should not need different mental models.
+const buildSentMessageBox = (data: SentBoxData, expanded: boolean, theme: Theme): Container => {
+	let body = data.body || "(no content)";
+	if (!expanded) {
+		const lines = body.split("\n");
+		if (lines.length > 5) {
+			body = `${lines.slice(0, 5).join("\n")}\n...`;
+		}
+	}
+
+	const box = new Box(1, 1, (t) => theme.bg("customMessageBg", t));
+	const labelBase = theme.fg("customMessageLabel", `\x1b[1m[entwurf sent →]\x1b[22m`);
+
+	// Header line: label + KST + optional (wants reply) badge — matches the
+	// receive-side header layout 1:1.
+	const kst = formatTimestampKst(data.timestamp) ?? "(unknown time)";
+	const replyBadge = data.wants_reply === true ? "  (wants reply)" : "";
+	const headerLine = `${labelBase} ${theme.fg("dim", `${kst}${replyBadge}`)}`;
+	box.addChild(new Text(headerLine, 0, 0));
+
+	// to: <sessionId>  — target peer
+	box.addChild(new Text(theme.fg("dim", `to:   ${data.to || "(unknown sessionId)"}`), 0, 0));
+
+	// from: <agentId> @ <cwd>  — self identity. Shown even though it's "us"
+	// because in a multi-session human-greeted topology the operator is
+	// switching between several pi sessions and needs to confirm which one
+	// signed this send.
+	const fromAgent = data.from ?? "(unknown agent)";
+	const fromCwd = data.cwd ? abbreviateHome(data.cwd) : "(unknown cwd)";
+	box.addChild(new Text(theme.fg("dim", `from: ${fromAgent} @ ${fromCwd}`), 0, 0));
+
+	// mode: <mode>[ → deliveredAs]  — show RPC remap when it differs from
+	// what the caller asked for (e.g. caller said "steer" but receiver was
+	// idle so it became a direct prompt). Silent when they agree.
+	if (data.mode) {
+		const remap = data.deliveredAs && data.deliveredAs !== data.mode ? theme.fg("muted", ` → ${data.deliveredAs}`) : "";
+		box.addChild(new Text(theme.fg("dim", `mode: ${data.mode}${remap}`), 0, 0));
+	}
+
+	box.addChild(new Spacer(1));
+	box.addChild(
+		new Markdown(body, 0, 0, getMarkdownTheme(), {
+			color: (value: string) => theme.fg("customMessageText", value),
+		}),
+	);
+	return box;
+};
+
+// CustomMessageRenderer adapter for Layer B (ACP path). The CustomMessage
+// carries the SentBoxData under `details` (set by index.ts streamShellAcp
+// when a completed mcp__pi-tools-bridge__entwurf_send is observed). `content`
+// holds the raw message body too, but we prefer details.body because the
+// content channel may have been routed through string-only persistence and
+// trimmed.
+const renderSentMessage: MessageRenderer = (message, { expanded }, theme) => {
+	const details = (message.details ?? {}) as Partial<SentBoxData>;
+	const fallbackBody = extractTextContent(message.content);
+	const data: SentBoxData = {
+		to: details.to ?? "(unknown sessionId)",
+		from: details.from,
+		cwd: details.cwd,
+		timestamp: details.timestamp,
+		mode: details.mode,
+		wants_reply: details.wants_reply,
+		deliveredAs: details.deliveredAs,
+		body: details.body ?? fallbackBody,
+	};
+	return buildSentMessageBox(data, expanded, theme);
+};
+
 // ============================================================================
 // Command Handlers
 // ============================================================================
@@ -1151,6 +1267,12 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	pi.registerMessageRenderer(SESSION_MESSAGE_TYPE, renderSessionMessage);
+	// Layer B (ACP path) sender-side UI box. Registered unconditionally — even
+	// in a session that is not exposing a control socket (no `--entwurf-control`),
+	// an ACP backend may still use the MCP `entwurf_send` to message OTHER
+	// sessions. The renderer is needed here for the [entwurf sent →] box to
+	// appear in this session's transcript when it sends.
+	pi.registerMessageRenderer(ENTWURF_SENT_MESSAGE_TYPE, renderSentMessage);
 
 	// Cached session list from the most recent /entwurf-sessions invocation.
 	// /entwurf-send uses it to resolve numeric indices like `1` or `[1]`.
@@ -1415,7 +1537,15 @@ Messages include sender session info for replies.`,
 					}
 					return {
 						content: [{ type: "text", text: "Message delivered to session" }],
-						details: result.response.data,
+						// `sender` is preserved on success so renderResult can
+						// draw the [entwurf sent →] box with from / cwd / timestamp.
+						// `delivered: true` is the marker renderResult uses to
+						// distinguish "send result" from "get_message result".
+						details: {
+							...(result.response.data as Record<string, unknown> | undefined),
+							sender,
+							delivered: true,
+						},
 					};
 				}
 
@@ -1454,13 +1584,24 @@ Messages include sender session info for replies.`,
 					return {
 						content: [{ type: "text", text: `Failed: ${result.response.error ?? "unknown error"}` }],
 						isError: true,
+						// Even on failure, the renderer needs to fall through to
+						// the error path; no sender envelope inject here because
+						// the [entwurf sent →] box is reserved for actual sends.
+
 						details: result,
 					};
 				}
 
 				return {
 					content: [{ type: "text", text: `Message sent to session ${displayTarget || targetSessionId}` }],
-					details: result.response.data,
+					// Same shape as the message_processed branch above —
+					// renderResult keys on `delivered` and reads `sender` to
+					// draw the [entwurf sent →] box.
+					details: {
+						...(result.response.data as Record<string, unknown> | undefined),
+						sender,
+						delivered: true,
+					},
 				};
 			} catch (error) {
 				const message = error instanceof Error ? error.message : "Unknown error";
@@ -1513,7 +1654,8 @@ Messages include sender session info for replies.`,
 		renderResult(
 			result: AgentToolResult<unknown>,
 			{ expanded }: ToolRenderResultOptions,
-			theme: { fg: (k: string, s: string) => string; bold: (s: string) => string },
+			theme: Theme,
+			ctx?: { args?: EntwurfSendParams },
 		) {
 			const details = result.details as Record<string, unknown> | undefined;
 			// `isError` is a runtime-only property: pi-agent-core tracks it
@@ -1578,12 +1720,39 @@ Messages include sender session info for replies.`,
 			}
 
 			// send result (no wait or message_processed)
+			//
+			// First-class [entwurf sent →] box. Mirrors the receive-side
+			// [entwurf received ⟵] customMessage region so directionality is
+			// unambiguous in a busy multi-session transcript. We pull input args
+			// (sessionId, message, mode) from `ctx.args` — ToolRenderContext
+			// surfaces them per the pi-coding-agent ToolDefinition signature
+			// (extensions/types.ts:467-472) — and the sender envelope from
+			// `details.sender` which execute() populates from
+			// buildLocalSenderEnvelope(state.context).
+			//
+			// The execute() success content[0].text ("Message delivered to
+			// session ...") is intentionally still returned for the LLM as the
+			// tool's textual result; only the operator-facing render is
+			// upgraded. No LLM context pollution because the toolResult role
+			// stays the toolResult role.
 			if (details && "delivered" in details) {
-				const mode = details.mode as string | undefined;
-				const icon = theme.fg("success", "✓");
-				let text = icon + theme.fg("muted", " Message delivered");
-				if (mode) text += theme.fg("dim", ` (${mode})`);
-				return new Text(text, 0, 0);
+				const sender = details.sender as
+					| { agentId?: string; cwd?: string; sessionId?: string; timestamp?: string }
+					| undefined;
+				const args = ctx?.args;
+				const data: SentBoxData = {
+					to: args?.sessionId ?? "(unknown sessionId)",
+					from: sender?.agentId,
+					cwd: sender?.cwd,
+					timestamp: sender?.timestamp,
+					mode: args?.mode,
+					deliveredAs: typeof details.deliveredAs === "string" ? details.deliveredAs : undefined,
+					// wants_reply: native schema does not expose this field yet
+					// — see registerSessionTool's entwurfSendParameters. Will
+					// activate automatically once the schema grows it.
+					body: args?.message ?? "(no message in args)",
+				};
+				return buildSentMessageBox(data, expanded, theme);
 			}
 
 			// Fallback - just show the text content

@@ -10,40 +10,89 @@
 
 ---
 
-## Current Priority — 0.4.15: ACP `entwurf_send` sent UX (issue #8)
+## 0.4.15 — ACP `entwurf_send` sent UX (issue #8) ✓
 
 [Issue #8](https://github.com/junghan0611/pi-shell-acp/issues/8) — ACP `entwurf_send` sent messages are visually buried in tool logs vs received custom-message regions.
+
+Release status:
+
+- Native path: `[entwurf sent →]` via native `renderResult`. ✓
+- ACP path: Armin-style customMessage + provider-level context filter. ✓
+- All three ACP backends (Claude / Codex / Gemini) verified — visual parity with `[entwurf received ⟵]`. ✓
+- Gemini integration is source-grounded:
+  - args from `tool_call.content[].content.text` cached as `startContent`
+  - result from `tool_call_update.content[].content.text` via `firstTextContent` fallback
+  - evidence: `~/org/llmlog/20260511T152235--gemini-cli-acp-tool-call-실증__llmlog_pishellacp_gemini.org`
+- Active stale model refs (`gpt-5.2`) removed from smoke/sentinel surfaces; `smoke-gemini` npm script added.
+
+Known minor follow-up: Gemini transcript can show MCP args JSON inline before the box. The sent box itself is correct; the args echo is a separate cosmetic follow-up, not an issue #8 blocker.
 
 ### Why this is next
 
 0.4.14 made cross-session messaging first-class on the **receive** side (`[entwurf received ⟵]` custom-message region with envelope header). The **send** side, when going through ACP, still falls into tool-log text — because `pi-shell-acp/event-mapper.ts` converts ACP tool updates into assistant text chunks via `pushNotice`. So in the human-greeted multi-session topology that 0.4.14 is supposed to support, the operator keeps losing track of which messages were sent from this session. Functional, but it undermines the very pattern 0.4.14 enables.
 
-### Approach — UI-only structured notice event (cross-repo)
+### Approach — pi-mono untouched, Armin-style UI/context split inside pi-shell-acp
 
-Earlier framing put the fix at the pi TUI layer only. GPT review on issue #8 corrected this: ACP tool notifications currently arrive as **assistant text**, not as pi tool rows, so a TUI-layer-only renderer match cannot catch them. The cleaner path is a new pi stream event class that the UI renders directly while keeping the LLM context clean.
+Do **not** PR pi-mono for 0.4.15. The right boundary is not "make ACP look native by routing MCP through native pi" — that dirties pi. ACP sends must stay MCP sends. Native sends should use native tool rendering. The two paths are intentionally asymmetric because their surfaces are different.
 
-Touch surface (likely):
+Armin's extension pattern in `/home/junghan/repos/3rd/agent-stuff/extensions/` is the model:
 
-- `pi-mono/packages/ai` — extend `AssistantMessageEvent` with a UI-only notice variant (e.g. `ui_notice` with `kind: "external_tool" | "entwurf_sent"`).
-- `pi-mono/packages/agent` — forward the UI-only event as `AgentEvent`; do not put it into `AssistantMessage.content` (no LLM context pollution).
-- `pi-mono/packages/coding-agent` — render the new event as a first-class component (`entwurf_sent` gets the same visual weight as `[entwurf received ⟵]`).
-- `pi-shell-acp/event-mapper.ts` — when an ACP `tool_call`/`tool_call_update` belongs to `mcp__pi-tools-bridge__entwurf_send` (completed), emit the structured UI notice instead of `pushNotice` text.
+- `control.ts` — custom message renderer uses `Box` / `Markdown` for visible session messages.
+- `goal.ts` — `pi.sendMessage({ customType, content, display: true }, { triggerTurn: false })` creates a visible UI message, then `pi.on("context")` filters that `customType` out of LLM context.
+- `btw.ts`, `review.ts`, `loop.ts` — `appendEntry` is for durable extension state, not for making a message visibly render like a conversation event.
+
+Key correction: `pi.sendMessage` is not automatically context pollution if the extension also owns a `context` hook that removes the UI-only `customType`. This gives pi-shell-acp a pi-mono-compatible way to show first-class UI notices without changing upstream.
+
+#### Layer A — native in-process path
+
+Use the surface native tools already have:
+
+- `pi-extensions/entwurf-control.ts`
+- `entwurf_send.renderResult(...)`
+- add a `renderSentMessage(...)` helper that mirrors `renderSessionMessage(...)`:
+  - label: `[entwurf sent →]`
+  - target: `to: <sessionId>`
+  - source: `from: <agentId> @ <cwd>` from `buildLocalSenderEnvelope(ctx)`
+  - mode / optional `(wants reply)` if native schema grows that field later
+  - message body as Markdown
+
+Do not use `pi.sendMessage` for the native tool result. Tool-result rendering is already the clean channel here.
+
+Implementation note: `renderResult` is `(result, options, theme, ctx)` per `ToolDefinition` in `pi-mono/coding-agent/.../extensions/types.ts:467-472`. `ctx: ToolRenderContext` exposes `args: TArgs`, so original input params are reachable. The current `entwurf-control.ts` `renderResult` only destructures the first three parameters — extend it to take the 4th and read `ctx.args` for `sessionId` / `message` / `mode` / `wants_reply`. Values that come from the RPC response (`deliveredAs`, computed sender envelope) belong in `execute()` success `details` and stay there. `ctx.args` is the canonical channel; `details` is the fallback for fields that are no longer authoritative on input.
+
+Evidence pin (so future sessions don't re-derive): `pi-mono/agent/src/agent-loop.ts:282-289` runs `transformContext` before `convertToLlm`. The `pi.on("context")` filter therefore catches our custom UI message while `customType` is still intact, and the message never reaches the LLM-shape `Message[]`. This is the structural reason Layer B's UI/context split actually works without a `CustomMessage.excludeFromContext` field.
+
+#### Layer B — ACP/MCP path
+
+Do not route ACP `entwurf_send` through native `entwurf_send`. ACP tool calls are MCP calls and must remain MCP calls.
+
+Preferred direction is Armin-style UI/context split inside pi-shell-acp:
+
+1. Detect completed MCP `entwurf_send` in `event-mapper.ts` / bridge event handling.
+2. Extract the existing MCP result body from `mcp/pi-tools-bridge/src/index.ts` (`[entwurf sent →] ...`).
+3. Emit a pi-shell-acp-owned custom UI message, e.g. `customType: "entwurf-sent"`, `display: true`, `triggerTurn: false`.
+4. Register a renderer for that custom type that uses the same `Box` visual language as `renderSessionMessage(...)`.
+5. Add a `pi.on("context")` filter that removes `customType === "entwurf-sent"` from LLM context, following `agent-stuff/extensions/goal.ts`.
+6. Suppress ordinary `[tool:start]` / `[tool:done]` notice spam for successful `entwurf_send`; keep failed/cancelled surfaces visible. Optionally expose start/done under `PI_SHELL_ACP_DEBUG=1`.
+
+Fallback if the bridge event layer cannot access `ExtensionAPI` cleanly in the first cut: special-case `entwurf_send` in `event-mapper.ts` and render the full result body as an emphasized ANSI notice. That is acceptable as a short-lived stepping stone, but the target design is the Armin-style custom message + context filter.
 
 ### Acceptance
 
-- Sent peer messages visually distinguishable in ACP transcripts as first-class regions, not generic tool log.
-- Sent echo does **not** enter LLM context as a user message (no `pi.sendMessage` injection).
-- Directionality unambiguous in busy transcripts (`sent →` vs `received ⟵`).
-- Works consistently for Claude, Codex, Gemini ACP backends.
-- Generic notice channel — extensible to other transparency-bound tools later, not a one-off `entwurf_send` hardcode.
+- No pi-mono changes / no upstream PR required.
+- ACP sends remain MCP sends; native sends remain native tool results.
+- Sent peer messages are visually first-class (`[entwurf sent →]`) and directionally paired with `[entwurf received ⟵]`.
+- Sent UI echo does **not** enter LLM context: either it is a native tool result, or it is a custom UI message filtered by `pi.on("context")`.
+- ACP `entwurf_send` no longer appears as buried generic `[tool:start]` / `[tool:done]` noise on successful sends.
+- Claude/Codex/Gemini promotion works on verified paths. Gemini must never emit an empty late sent box; if args/body cannot be recovered, fall back to raw visibility instead of inventing fields.
 
 ### Scope warning
 
-Event-protocol extension across two repos, not a one-liner. Cross-repo PR + verification across all three ACP backends. Plan for one focused session per repo + integration.
+This is a pi-shell-acp-internal rendering/context split, not a pi-mono protocol extension. The main design risk is finding the clean injection point from ACP event handling to `ExtensionAPI.sendMessage` plus a repo-owned context filter. If that seam is too large for the first cut, land the ANSI `event-mapper.ts` fallback first and keep the Armin-style custom-message path as the target.
 
 ---
 
-## After 0.4.15 — 0.5.0: backend-native compaction escape hatch
+## Next — 0.5.0: backend-native compaction escape hatch
 
 Single focus until done: **separate pi-side compaction from ACP backend-native compaction.**
 

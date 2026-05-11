@@ -31,6 +31,7 @@ import {
 import { loadEngraving } from "./engraving.js";
 import { type AcpPiStreamState, applyBridgePromptEvent, finalizeAcpStreamState } from "./event-mapper.js";
 import { buildPiContextAugment } from "./pi-context-augment.js";
+import { ENTWURF_SENT_MESSAGE_TYPE } from "./protocol.js";
 
 const PROVIDER_ID = "pi-shell-acp";
 const REGISTERED_SYMBOL = Symbol.for("pi-shell-acp:registered");
@@ -194,7 +195,7 @@ const DEFAULT_CLAUDE_DISALLOWED_TOOLS: readonly string[] = [
 // Adding a model here means we commit to checking it across both Axis 1
 // (protocol smoke) and Axis 2 (agent interview). Do not extend casually.
 const SUPPORTED_ANTHROPIC_MODEL_IDS: readonly string[] = ["claude-sonnet-4-6", "claude-opus-4-7"] as const;
-const SUPPORTED_CODEX_MODEL_IDS: readonly string[] = ["gpt-5.2", "gpt-5.4", "gpt-5.4-mini", "gpt-5.5"] as const;
+const SUPPORTED_CODEX_MODEL_IDS: readonly string[] = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.5"] as const;
 const SUPPORTED_GEMINI_MODEL_IDS: readonly string[] = ["gemini-3.1-pro-preview"] as const;
 
 const SUPPORTED_ANTHROPIC_SET = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);
@@ -837,10 +838,74 @@ function streamShellAcp(
 		});
 		let bridgeSession: Awaited<ReturnType<typeof ensureBridgeSession>> | undefined;
 
+		// Layer B sender-side UI hook for ACP entwurf_send. event-mapper
+		// observes a completed `mcp__pi-tools-bridge__entwurf_send` and hands
+		// us the ACP-visible bits (target sessionId, message body, mode). We
+		// buffer them during the provider stream and emit the customMessage only
+		// after stream.end() has been handed back to pi.
+		//
+		// Important: pi.sendMessage() while AgentSession.isStreaming is true is
+		// not a passive append — agent-session.ts routes it through steer/followUp
+		// unless deliverAs is nextTurn. That would create an unintended LLM turn
+		// for a sender-side UI echo. So the callback below only records observed
+		// sends; the post-stream setTimeout emits them when triggerTurn:false is
+		// a true no-turn append.
+		//
+		// The matching pi.on("context") filter in
+		// pi-extensions/entwurf-control.ts strips this customType before
+		// convertToLlm — see the Armin pattern note there. Net effect: the
+		// operator sees the box, the LLM sees nothing extra.
+		const pendingEntwurfSent: import("./event-mapper.js").EntwurfSentObserved[] = [];
+		const onEntwurfSent = (observed: import("./event-mapper.js").EntwurfSentObserved) => {
+			pendingEntwurfSent.push(observed);
+		};
+		const emitPendingEntwurfSent = () => {
+			if (pendingEntwurfSent.length === 0) return;
+			const items = pendingEntwurfSent.splice(0);
+			setTimeout(() => {
+				// agentId preference order matches buildLocalSenderEnvelope in
+				// entwurf-control.ts: PI_AGENT_ID env first, then `<provider>/<id>`
+				// from the live model.
+				const envAgent = process.env.PI_AGENT_ID?.trim();
+				const fallbackAgent = `${model.provider}/${model.id}`;
+				const agentId = envAgent && envAgent.length > 0 ? envAgent : fallbackAgent;
+				for (const observed of items) {
+					const timestamp = new Date().toISOString();
+					try {
+						pi.sendMessage(
+							{
+								customType: ENTWURF_SENT_MESSAGE_TYPE,
+								content: observed.body,
+								display: true,
+								details: {
+									to: observed.to,
+									from: agentId,
+									cwd,
+									timestamp,
+									mode: observed.mode,
+									wants_reply: observed.wants_reply,
+									deliveredAs: observed.deliveredAs,
+									body: observed.body,
+								},
+							},
+							{ triggerTurn: false },
+						);
+					} catch (err) {
+						// Post-stream UI echo failure must be visible, but cannot fall
+						// back to event-mapper's [tool:done] notice anymore because the
+						// provider stream has already closed.
+						const message = err instanceof Error ? err.message : String(err);
+						console.error(`[pi-shell-acp] entwurf-sent UI emit failed: ${message}`);
+					}
+				}
+			}, 0);
+		};
+
 		const streamState: AcpPiStreamState = {
 			stream,
 			output,
 			showToolNotifications: providerSettings.showToolNotifications,
+			onEntwurfSent,
 		};
 
 		// Start the pi stream before ACP bootstrap. Resume/load can take noticeable
@@ -998,6 +1063,7 @@ function streamShellAcp(
 				finalizeAcpStreamState(streamState);
 				stream.push({ type: "error", reason: "aborted", error: output });
 				stream.end();
+				emitPendingEntwurfSent();
 				return;
 			}
 
@@ -1016,6 +1082,7 @@ function streamShellAcp(
 				output.errorMessage = "Operation aborted";
 				stream.push({ type: "error", reason: "aborted", error: output });
 				stream.end();
+				emitPendingEntwurfSent();
 				return;
 			}
 
@@ -1025,6 +1092,7 @@ function streamShellAcp(
 				message: output,
 			});
 			stream.end();
+			emitPendingEntwurfSent();
 		} catch (error) {
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = getBridgeErrorDetails(error, bridgeSession);
@@ -1035,6 +1103,7 @@ function streamShellAcp(
 				error: output,
 			});
 			stream.end();
+			emitPendingEntwurfSent();
 			if (output.stopReason === "error" && bridgeSession) {
 				try {
 					await closeBridgeSession(bridgeSession.key, {
@@ -1074,8 +1143,25 @@ export default function (pi: ExtensionAPI) {
 
 	const on = pi.on as unknown as (
 		event: string,
-		handler: (event: Record<string, unknown>, ctx: { sessionManager?: { getSessionId?: () => string } }) => void,
+		handler: (
+			event: Record<string, unknown>,
+			ctx: { sessionManager?: { getSessionId?: () => string } },
+		) => unknown | Promise<unknown>,
 	) => void;
+
+	// Provider-owned context filter for ACP sender-side UI echoes. The bridge
+	// itself emits ENTWURF_SENT_MESSAGE_TYPE, so the filter must live here too —
+	// not only in the optional --entwurf-control extension. Otherwise a
+	// pi-shell-acp session without --entwurf-control could append the UI echo and
+	// let convertToLlm see it on the next turn.
+	on("context", async (event) => ({
+		messages: Array.isArray(event.messages)
+			? event.messages.filter((m) => {
+					const cm = m as { customType?: string };
+					return cm.customType !== ENTWURF_SENT_MESSAGE_TYPE;
+				})
+			: event.messages,
+	}));
 
 	on("session_shutdown", async (_event, ctx) => {
 		const sessionId = ctx?.sessionManager?.getSessionId?.();

@@ -93,13 +93,19 @@ record() {
 
 case_native() {
   local case_name="$1" target="$2"
-  local out rc
-  out=$(timeout 20 pi -p --entwurf-control --entwurf-session "$target" \
+  local full out rc
+  # tail -1 used to be enough but pi --provider warmup now prints vLLM rate
+  # banners on every spawn, which crowd out the real status line. Capture the
+  # full stream and grep for the delivery marker; keep a short tail summary
+  # for the FAIL evidence so the artifact stays small.
+  full=$(timeout 20 pi -p --entwurf-control --entwurf-session "$target" \
         --entwurf-send-message "sms:$case_name" \
         --entwurf-send-mode follow_up \
-        --entwurf-send-wait message_processed 2>&1 | tail -1)
+        --entwurf-send-wait message_processed 2>&1)
   rc=$?
-  if [ "$rc" -eq 0 ] && echo "$out" | grep -q "message processed"; then
+  out=$(printf '%s\n' "$full" | grep -E "message processed|delivered|fail|error" | tail -3 | tr '\n' ' ')
+  [ -z "$out" ] && out=$(printf '%s\n' "$full" | tail -1)
+  if [ "$rc" -eq 0 ] && echo "$full" | grep -qiE "message processed|delivered"; then
     record "$case_name" "PASS" "$out"
   else
     record "$case_name" "FAIL" "rc=$rc out=$out"
@@ -112,9 +118,15 @@ case_mcp() {
   raw=$({
     printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"sms","version":"0"}}}'
     printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/initialized"}'
-    printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"entwurf_send\",\"arguments\":{\"target\":\"$target\",\"message\":\"sms:$case_name\"}}}"
+    # 0.4.14 sessionId-only addressing: the field used to be `target` but was
+    # renamed at the same time entwurf_peers + entwurf_send standardized on
+    # UUID sessionIds (no name aliases). The MCP schema lives in
+    # mcp/pi-tools-bridge/src/index.ts:312 and is the source of truth.
+    printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"entwurf_send\",\"arguments\":{\"sessionId\":\"$target\",\"message\":\"sms:$case_name\"}}}"
     sleep 2
-  } | timeout 15 "$BRIDGE" 2>/dev/null | grep '"id":2')
+  } | PI_SESSION_ID="00000000-0000-4000-8000-000000000000" \
+      PI_AGENT_ID="pi-shell-acp/session-messaging-smoke" \
+      timeout 15 "$BRIDGE" 2>/dev/null | grep '"id":2')
   parsed=$(printf '%s' "$raw" | python3 -c '
 import json, sys
 try:

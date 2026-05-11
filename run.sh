@@ -5,7 +5,7 @@
 #     (e.g. `pi-shell-acp/claude-sonnet-4-6`); the prefix routes to this provider
 #     so `--provider` is redundant and is dropped in docs.
 #   - Smoke helpers that feed `ensureBridgeSession({modelId})` directly (cancel,
-#     model-switch) pass BARE backend ids (`claude-sonnet-4-6`, `gpt-5.2`)
+#     model-switch) pass BARE backend ids (`claude-sonnet-4-6`, `gpt-5.4`)
 #     because the bridge library contract is bare. Smoke helpers that invoke pi
 #     via the CLI still pin `--provider pi-shell-acp` and can accept either
 #     bare or qualified model, but we keep bare here to match the bridge-level
@@ -52,7 +52,7 @@ Usage:
 Notes:
   - project-dir defaults to current directory
   - Claude Code login should already exist (e.g. ~/.claude.json)
-  - smoke-all is the operator-facing dual-backend verification path and is what setup runs
+  - smoke-all is the operator-facing triple-backend verification path (Gemini auto-skips when absent) and is what setup runs
   - API key is optional; this bridge is intended to work with Claude Code auth
 EOF
 }
@@ -370,7 +370,7 @@ smoke_test() {
         model="pi-shell-acp/claude-sonnet-4-6"
         ;;
       codex)
-        model="pi-shell-acp/gpt-5.2"
+        model="pi-shell-acp/gpt-5.4"
         ;;
       gemini)
         model="pi-shell-acp/gemini-3.1-pro-preview"
@@ -535,7 +535,7 @@ smoke_continuity() {
   echo "[smoke-continuity] repo:    $REPO_DIR"
 
   smoke_continuity_single "$project_dir" claude claude-sonnet-4-6 resume
-  smoke_continuity_single "$project_dir" codex gpt-5.2 load
+  smoke_continuity_single "$project_dir" codex gpt-5.4 load
   echo "[smoke-continuity] Claude(resume) + Codex(load) continuity: ok"
 }
 
@@ -727,7 +727,7 @@ smoke_cancel() {
   echo "[smoke-cancel] repo:    $REPO_DIR"
 
   smoke_cancel_single "$project_dir" claude claude-sonnet-4-6
-  smoke_cancel_single "$project_dir" codex gpt-5.2
+  smoke_cancel_single "$project_dir" codex gpt-5.4
   echo "[smoke-cancel] Claude + Codex cancel cleanup: ok"
 }
 
@@ -849,7 +849,7 @@ smoke_model_switch() {
   echo "[smoke-model-switch] repo:    $REPO_DIR"
 
   smoke_model_switch_single "$project_dir" claude claude-sonnet-4-6 claude-opus-4-7
-  smoke_model_switch_single "$project_dir" codex gpt-5.2 gpt-5.4
+  smoke_model_switch_single "$project_dir" codex gpt-5.4 gpt-5.5
   echo "[smoke-model-switch] Claude + Codex model switch respawn observability: ok"
 }
 
@@ -1005,7 +1005,7 @@ smoke_entwurf_resume() {
   echo "                         This smoke validates BRIDGE carry only; orchestration is validated separately."
 
   smoke_entwurf_resume_single "$project_dir" claude claude-sonnet-4-6 resume "bridge continuity (Claude → resumeSession)"
-  smoke_entwurf_resume_single "$project_dir" codex  gpt-5.2           load   "bridge continuity (Codex → loadSession)"
+  smoke_entwurf_resume_single "$project_dir" codex  gpt-5.4           load   "bridge continuity (Codex → loadSession)"
 
   echo "[smoke-entwurf-resume] Claude(resume) + Codex(load) bridge continuity: ok"
 }
@@ -2199,7 +2199,6 @@ async function collectModels(envOverride) {
   const EXPECTED_IDS = [
     'claude-sonnet-4-6',
     'claude-opus-4-7',
-    'gpt-5.2',
     'gpt-5.4',
     'gpt-5.4-mini',
     'gpt-5.5',
@@ -2256,7 +2255,6 @@ async function collectModels(envOverride) {
   // Values below must match @mariozechner/pi-ai getModels("openai-codex") —
   // if upstream updates a context, update this gate with it.
   const CODEX_EXPECTED_CTX = {
-    'gpt-5.2':      272000,
     'gpt-5.4':      272000,
     'gpt-5.4-mini': 272000,
     'gpt-5.5':      272000,
@@ -2508,14 +2506,17 @@ assert.deepEqual(providerCalls.map((call) => call.label), ['runtime-a', 'runtime
 assert.deepEqual(providerCalls.map((call) => call.providerId), ['pi-shell-acp', 'pi-shell-acp']);
 assert.ok(providerCalls.every((call) => Array.isArray(call.provider.models) && call.provider.models.length > 0), 'models must be registered');
 
-// Two handlers per runtime: session_shutdown (bridge cleanup) and
-// session_before_compact (compaction policy gate). Both attach exactly
-// once per runtime — the second registerProviderExtension(runtimeA)
-// call is guarded by isRegisteredOnRuntime/markRegisteredOnRuntime.
-assert.equal(eventCalls.length, 4, 'lifecycle handlers should be attached once per runtime');
+// Three handlers per runtime: context (sender-side UI echo filter),
+// session_shutdown (bridge cleanup), and session_before_compact (compaction
+// policy gate). All attach exactly once per runtime — the second
+// registerProviderExtension(runtimeA) call is guarded by
+// isRegisteredOnRuntime/markRegisteredOnRuntime.
+assert.equal(eventCalls.length, 6, 'lifecycle handlers should be attached once per runtime');
 assert.deepEqual(eventCalls.map((call) => `${call.label}:${call.event}`), [
+  'runtime-a:context',
   'runtime-a:session_shutdown',
   'runtime-a:session_before_compact',
+  'runtime-b:context',
   'runtime-b:session_shutdown',
   'runtime-b:session_before_compact',
 ]);
@@ -2839,7 +2840,7 @@ JS
   # The prefix stays redundant with the function's internal `--provider pi-shell-acp`
   # pin, but it documents intent at the call site.
   validate_pi_tools_bridge_backend "claude" "pi-shell-acp/claude-sonnet-4-6" || return 1
-  validate_pi_tools_bridge_backend "codex" "pi-shell-acp/gpt-5.2" || return 1
+  validate_pi_tools_bridge_backend "codex" "pi-shell-acp/gpt-5.4" || return 1
   if command -v gemini >/dev/null 2>&1; then
     validate_pi_tools_bridge_backend "gemini" "pi-shell-acp/gemini-3.1-pro-preview" || return 1
   else

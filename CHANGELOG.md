@@ -4,9 +4,19 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.4.15 — 2026-05-11
+
 ### Changed
 
 - Align README / AGENTS 0.5.0 direction with NEXT.md: the next release is a compaction guard split / backend-native compaction escape hatch, not a caller-supplied recap hint slot or compact→new-session handoff.
+- Promote ACP `entwurf_send` success echoes into first-class `[entwurf sent →]` UI messages using the Armin-style custom message + context-filter pattern, while keeping MCP sends on the MCP path and native sends on native tool rendering. Claude, Codex, and Gemini are covered through backend-specific ACP payload shapes.
+- Remove remaining active `gpt-5.2` smoke/sentinel references in favor of `gpt-5.4`, add the `smoke-gemini` npm script, and refresh stale verification comments around triple-backend smoke and typecheck coverage.
+
+### Fixed
+
+- Prevent `entwurf-sent` UI echoes from leaking into LLM context in pi-shell-acp sessions that do not load `--entwurf-control`, and avoid empty late Gemini sent boxes when ACP tool arguments cannot be recovered.
+- Make ACP `entwurf_send` detection robust across Claude/Codex/Gemini title shapes and permission-result labels rely on ACP option `kind` instead of backend-specific optionId substrings.
+- Repair `scripts/session-messaging-smoke.sh` for the 0.4.14 `sessionId` schema and sender-envelope requirement so the 4-case matrix is self-contained again.
 
 ## 0.4.14 — 2026-05-11
 

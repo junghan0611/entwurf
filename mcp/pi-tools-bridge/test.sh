@@ -273,9 +273,9 @@ fi
 
 # 4f. Static guard against the PM-flagged blocker class: runEntwurfAsync in
 #     pi-extensions/entwurf.ts must reference the local `routing` variable, not
-#     the legacy `explicitExtensions` (which was renamed). Catches a regression
-#     class that the bridge's tsconfig cannot see (pi-extensions is outside its
-#     include path, so a stale name compiles silently and only fails at runtime).
+#     the legacy `explicitExtensions` (which was renamed). This file is now
+#     covered by the root tsconfig, but the guard remains useful as a focused
+#     regression assertion with a clearer failure than a broad typecheck error.
 echo "[4d2] static guard: runEntwurfAsync uses 'routing' (no stale name)"
 NATIVE_FILE="$HERE/../../pi-extensions/entwurf.ts"
 if [ ! -f "$NATIVE_FILE" ]; then

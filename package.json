@@ -1,6 +1,6 @@
 {
 	"name": "pi-shell-acp",
-	"version": "0.4.14",
+	"version": "0.4.15",
 	"description": "ACP bridge providing Claude Code, Codex, and Gemini CLI backends to pi-coding-agent, with the entwurf orchestration surface for cross-session delegation.",
 	"license": "MIT",
 	"author": "Junghan Kim",
@@ -54,6 +54,7 @@
 		"smoke": "./run.sh smoke",
 		"smoke-claude": "./run.sh smoke-claude",
 		"smoke-codex": "./run.sh smoke-codex",
+		"smoke-gemini": "./run.sh smoke-gemini",
 		"smoke-all": "./run.sh smoke-all",
 		"check-mcp": "./run.sh check-mcp",
 		"check-models": "./run.sh check-models",

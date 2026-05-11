@@ -21,3 +21,11 @@
  * AGENTS.md section from its own pi-context augment.
  */
 export const ENTWURF_PROJECT_CONTEXT_OPEN_TAG = "<project-context";
+
+/**
+ * Sender-side UI echo custom message type for successful entwurf_send calls.
+ * The bridge emits it, the control renderer draws it, and the provider-level
+ * context filter removes it before LLM conversion. Keep as one SSOT: a typo
+ * here otherwise becomes a silent UI/context split.
+ */
+export const ENTWURF_SENT_MESSAGE_TYPE = "entwurf-sent";
