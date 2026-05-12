@@ -452,6 +452,54 @@ export function parseMessages(messages: AssistantMessageLike[]): string {
 }
 
 /**
+ * Read the pi session JSONL header (first non-empty line, `type:"session"`).
+ *
+ * Returns the structural identity carried in the header: pi `id` (sessionId UUID)
+ * and original `cwd`. This is the durable carrier for resume-time identity —
+ * unlike the filename's `entwurf-<taskId>` marker, which is a lookup convenience.
+ *
+ * Why this exists (issue #9):
+ *   `runEntwurfResumeSync` originally fell back to `process.cwd()` when no
+ *   explicit `cwd` was passed. Through the MCP `entwurf_resume` surface, the
+ *   resumer is a different process from the original spawner, so its cwd is
+ *   unrelated to the saved session's cwd. The child pi then started in the
+ *   resumer's cwd, the pi-shell-acp bridge persisted that cwd in its session
+ *   cache, and on lookup `isPersistedSessionCompatible` saw a cwd mismatch
+ *   against the Scene 1 record. The bridge discarded the record, started a
+ *   `newSession`, and the backend lost all prior-turn memory — even though the
+ *   pi JSONL itself was hydrated correctly.
+ *
+ *   Reading the header cwd here lets `runEntwurfResumeSync` align the child's
+ *   spawn cwd with the original spawn, which keeps the bridge's
+ *   `pi:<sessionId>` -> `acpSessionId` continuity intact.
+ *
+ * Invariant (see issue #10): the single identity carrier is `sessionId`. This
+ * helper returns `id` alongside `cwd` so future peer-handle work can reuse it
+ * without re-reading the file.
+ */
+export function readSessionHeader(sessionFile: string): { id?: string; cwd?: string } | null {
+	try {
+		const content = fs.readFileSync(sessionFile, "utf-8");
+		for (const line of content.split("\n")) {
+			const trimmed = line.trim();
+			if (!trimmed) continue;
+			try {
+				const entry = JSON.parse(trimmed) as { type?: string; id?: unknown; cwd?: unknown };
+				if (entry.type !== "session") return null;
+				const id = typeof entry.id === "string" && entry.id.length > 0 ? entry.id : undefined;
+				const cwd = typeof entry.cwd === "string" && entry.cwd.length > 0 ? entry.cwd : undefined;
+				return { id, cwd };
+			} catch {
+				return null;
+			}
+		}
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Parse a pi session JSONL file and extract the latest assistant state.
  * Pure file I/O — safe to use from MCP bridge or pi runtime.
  */
@@ -940,6 +988,21 @@ export async function runEntwurfResumeSync(
 	piArgs.push("--model", explicitExtensions.modelOverride ?? effectiveModel);
 	piArgs.push(prompt);
 
+	// Resume must align the child's spawn cwd with the original spawn cwd, not
+	// the resumer's cwd. The pi-shell-acp bridge keys persistence by
+	// `pi:<sessionId>` but `isPersistedSessionCompatible` also requires
+	// `record.cwd === params.cwd`. If the cwds diverge the bridge silently
+	// drops the persisted `acpSessionId` and starts a `newSession`, losing
+	// backend-side memory of every prior turn. This is the regression that
+	// issue #9 traces. The header is the durable carrier; options.cwd remains
+	// the explicit operator override; process.cwd() is only the last resort
+	// for malformed/missing headers. The remote SSH branch keeps its prior
+	// `~` fallback for now — remote resume is in an unverified state already
+	// (see runEntwurfResumeSync block header) and the bridge cwd-mismatch
+	// silhouette has only been observed locally.
+	const headerCwd = isRemote ? undefined : (readSessionHeader(sessionFile)?.cwd ?? undefined);
+	const effectiveCwd = options.cwd ?? headerCwd;
+
 	let command: string;
 	let args: string[];
 	if (isRemote) {
@@ -974,7 +1037,7 @@ export async function runEntwurfResumeSync(
 	return collectPiRun({
 		command,
 		args,
-		cwd: isRemote ? undefined : options.cwd,
+		cwd: isRemote ? undefined : effectiveCwd,
 		signal: options.signal,
 		onUpdate: options.onUpdate,
 		result,

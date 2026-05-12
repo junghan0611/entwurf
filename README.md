@@ -285,6 +285,19 @@ Model switch on the reuse path now respawns instead of mutating in place. School
 
 Agent MCP tools auto-attach; operator slash commands require `--entwurf-control` (`/entwurf`, `/entwurf-status`, `/entwurf-sessions`, `/entwurf-send`). Full narrative: [`AGENTS.md` § Entwurf](./AGENTS.md).
 
+### Recorded demo
+
+A two-pane tmux session covers the entwurf surface end-to-end: Scene 1 spawns a sibling and plants a fact, Scene 2 resumes it via MCP `entwurf_resume` (cross-process, cross-cwd) and recalls the fact, Scene 3 sends a greeting to a live peer with `entwurf_send`. This recording is also the regression evidence for [#9](https://github.com/junghan0611/pi-shell-acp/issues/9) — the cross-cwd resume hydration fix verified through the same flow.
+
+<details>
+<summary>Watch (518×1030 GIF, click to expand)</summary>
+
+![entwurf demo](./docs/assets/pi-shell-acp-entwurf.gif)
+
+</details>
+
+Reproduce + debug docs: [`demo/README.md`](./demo/README.md).
+
 ## Context carriers
 
 pi-shell-acp intentionally separates **system/developer carriers** from **rich pi context**.

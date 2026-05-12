@@ -96,6 +96,15 @@ This is a pi-shell-acp-internal rendering/context split, not a pi-mono protocol 
 
 **0.5.0 cannot start until this is fixed.** A backend-native compaction guard split presumes `resumeSession` continuity is intact. It currently is not.
 
+### Scope decision (2026-05-12)
+
+Two layers surfaced under #9. We are doing the **narrow fix only** in this slot:
+
+- **Narrow (this item, gated 0.5.0)**: restore `entwurf_resume` fact recall. Diagnose where the cold-pi `sessionId → bridge sessionKey → persisted acpSessionId → resumeSession` pipeline drops the UUID. Strengthen `verify-resume` to assert fact recall, not just session-id continuity. Add child entwurf stderr capture (debug knob) so the next silent fallthrough cannot hide through a release.
+- **Broader (parked → [#10](https://github.com/junghan0611/pi-shell-acp/issues/10))**: collapse `entwurf` / `entwurf_send` / `entwurf_resume` into a single peer-contact verb with `sessionId` as the only identity carrier; `taskId` strictly demoted to UI/job label; caller-held peer handle as contact authority (live discovery is candidates, not authority). Scenario surface is not clear yet (existing taskId markers, MCP surface contract, human-greeted 담당자 mix). Parked until #9 is shipped and a focused RFC slot opens.
+
+**Invariant the narrow fix must not violate**: `acpSessionId` continuity stays keyed off `pi:<sessionId>` — the single identity carrier #10 converges on. Do not introduce a `taskId`-keyed lookup path even as a convenience; that would harden the very fragmentation #10 is meant to remove.
+
 ### Symptom
 
 `entwurf_resume` keeps the same Task ID, the same model, and correctly appends the new turn to the saved session JSONL — but the resumed sibling has no memory of its own prior assistant turn. Identity Preservation Rule is satisfied at the routing layer and broken at the transcript layer.
@@ -106,16 +115,33 @@ This is a pi-shell-acp-internal rendering/context split, not a pi-mono protocol 
 - saved session: `~/.pi/agent/sessions/--home-junghan-repos-gh-pi-shell-acp--/2026-05-11T08-56-18-077Z_entwurf-a3dce62b.jsonl`. 7 lines: line 5 holds the fact in an assistant turn; line 7's thinking confesses *"Looking through the AGENTS.md and system context provided, I don't have it"* — proof the model never saw line 5.
 - 0.4.5 precedent: AGENTS.md Hard Rule #10 documents the same silhouette (SDK rename caused silent `resume → load` fallthrough). Fix must be structural, not vigilance.
 
-### Acceptance
+### Root cause (2026-05-12)
 
-- `./run.sh verify-resume` covers **fact recall**, not just session-id continuity. A scripted spawn that plants a unique sentinel in turn 1 must read it back via `entwurf_resume` in turn 2 before the gate goes green.
-- `demo/demo.sh` Scene 2 returns `tempered indigo` without further prompt edits.
-- `check-sdk-surface` keeps its static gate on `resumeSession` and grows a runtime smoke that confirms the SDK method was actually invoked (counter or echo).
-- Child `entwurf` stderr is captured (debug knob), not silently lost — the demo's `sender-debug.log` only showed the parent's bootstrap, not the spawned sibling's, which is why the regression hid through release.
+`runEntwurfResumeSync` in `pi-extensions/lib/entwurf-core.ts` spawned the resume child with `cwd: options.cwd` (line 977 of the pre-fix file). When called via the MCP `entwurf_resume` surface (i.e., the demo's Scene 2 shape), `options.cwd` is `undefined`, so Node fell back to `process.cwd()` of the resumer — typically `$HOME`, never the original spawn cwd. The child pi then started in the resumer's cwd, `pi-shell-acp` recomputed `params.cwd` from `process.cwd()`, and `isPersistedSessionCompatible` in `acp-bridge.ts:2480` failed the `record.cwd === params.cwd` check. The bridge silently discarded the persisted `acpSessionId`, called `newSession`, and the backend lost all prior-turn memory. The pi JSONL was hydrated correctly the whole time; only the ACP-side transcript was orphaned.
+
+Identity Preservation Rule (routing) was intact. The break was in the cwd carrier that the bridge keys session-equivalence on.
+
+### Narrow fix shape
+
+- `readSessionHeader(sessionFile): { id?, cwd? } | null` helper in `entwurf-core.ts` reads the durable carrier from the JSONL header.
+- `runEntwurfResumeSync` resolves spawn cwd as `options.cwd ?? readSessionHeader(file)?.cwd ?? undefined`. The async-resume branch in `pi-extensions/entwurf.ts` mirrors the same fallback.
+- The bridge persistence keys (`pi:<sessionId>` -> `acpSessionId`) are NOT touched. `taskId` is NOT promoted to identity. Both are #10 invariants the narrow fix must preserve.
+
+### Acceptance — completion criteria for #9
+
+- [x] `./run.sh verify-resume` covers **fact recall**, not just session-id continuity. Phase 2 (`scripts/cross-cwd-resume-smoke.ts`) plants a unique sentinel from `$project_dir` cwd, resumes from `$HOME` (or mktemp fallback when project_dir == $HOME), and asserts the sentinel is recalled in the appended assistant turn. Negative-test verified: with the fix reverted, the same gate fails with the canonical "정보가 없습니다" shape.
+- [x] Child `entwurf` stderr is captured. Phase 2 wires the existing `PI_ENTWURF_CHILD_STDERR_LOG` knob (already honored by `mirrorChildStderr` in `entwurf-core.ts`) — no new env name introduced. Sibling bootstrap markers and any thrown errors now land in a mktemp log instead of being lost, which is the gap that hid this regression through release.
+- [x] `demo/demo.sh` Scene 2 returns the planted sentinel without further prompt edits. (Implied by Phase 2 positive smoke; full `demo/demo.sh` rerun is a separate confirmation step.)
+
+### Follow-ups (NOT blocking 0.5.0)
+
+- **`check-sdk-surface` runtime smoke for `resumeSession`.** Static gate already passes; runtime confirmation (counter / echo proving the SDK method was actually invoked) is a separate observability hardening. The cwd carrier is the carrier we actually had to fix here — the SDK-rename silhouette (0.4.5 Hard Rule #10) was a hypothesis the diagnosis ruled out. A runtime gate is still worth doing, but it does not need to land alongside #9.
+- **`demo/demo.sh` automation.** The script is currently operator-driven (tmux + asciinema). Adding a non-recording smoke variant that runs Scenes 1+2 unattended would replace the bespoke `cross-cwd-resume-smoke.ts` with a true demo-flow gate; until then, the two coexist with overlapping coverage.
 
 ### Out of scope here
 
 - Inventing an alternate hydration path through extra `entwurf_resume` params. Saved JSONL is the carrier; fix the actual resume RPC, do not paper over it.
+- Removing `entwurf-<taskId>` from filenames or promoting `sessionId` to a single peer-contact verb's only identity carrier. That is the broader [#10](https://github.com/junghan0611/pi-shell-acp/issues/10) reframe; parked deliberately.
 
 ---
 

@@ -56,6 +56,7 @@ import {
 	getRegistryRouting,
 	markEntwurfTargetUsed,
 	mirrorChildStderr,
+	readSessionHeader,
 	resolveEntwurfTarget,
 	resolveGuardTargetKey,
 	runEntwurfResumeSync,
@@ -906,7 +907,12 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			const resumeTaskId = crypto.randomUUID().slice(0, 8);
-			const cwd = info?.cwd ?? process.cwd();
+			// Same rationale as runEntwurfResumeSync — see "Resume must align…"
+			// block there and issue #9. `info?.cwd` is populated when spawn and
+			// resume run in the same pi process; the JSONL header is the
+			// cross-process carrier; process.cwd() is the last-resort fallback
+			// for malformed sessions only.
+			const cwd = info?.cwd ?? readSessionHeader(sessionFile)?.cwd ?? process.cwd();
 
 			const proc = spawn(command, args, {
 				cwd: isRemote ? undefined : cwd,

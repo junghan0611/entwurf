@@ -1,0 +1,23 @@
+{
+	// Sub-config for verification scripts. Same shape as mcp/tsconfig.json:
+	// these files run under Node's `--experimental-strip-types` resolver, so
+	// they import sibling .ts files with explicit `.ts` extensions. tsc pairs
+	// allowImportingTsExtensions with noEmit, which matches the typecheck-only
+	// role of these scripts. See AGENTS.md § Typecheck Boundary for the full
+	// fence policy — every .ts in this repo must be reached by exactly one
+	// `tsc --noEmit` pass.
+	//
+	// Why scripts/ is split off from the root config:
+	//   - Root config is emit-capable (`./run.sh check-models` tsc-emits the
+	//     project entry). It cannot enable allowImportingTsExtensions.
+	//   - These scripts must use explicit .ts on the wire (strip-types runtime).
+	//   - Same trade-off mcp/* already resolved. This split is the smallest
+	//     expression that covers the runtime modes without weakening the fence.
+	"extends": "../tsconfig.json",
+	"compilerOptions": {
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"rootDir": ".."
+	},
+	"include": ["./**/*.ts", "../pi-extensions/lib/**/*.ts"]
+}

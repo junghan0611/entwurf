@@ -154,14 +154,15 @@ Messages are thrown, not awaited.
 
 ## Typecheck Boundary
 
-Single fence — every `.ts` source file in this repo is reached by some `tsc --noEmit` pass. No opt-out file. The fence is composed of two configs because the two surfaces run under different runtime models:
+Single fence — every `.ts` source file in this repo is reached by some `tsc --noEmit` pass. No opt-out file. The fence is composed of three configs because the surfaces run under different runtime models:
 
 | Config | Covers | Runtime model |
 |---|---|---|
 | `tsconfig.json` (root) | `index.ts`, `acp-bridge.ts`, `engraving.ts`, `event-mapper.ts`, `pi-extensions/**` | emit-capable. `./run.sh check-models` tsc-emits the project entry into `.tmp-verify-models/` for runtime introspection, so the root config must not set `noEmit`. |
 | `mcp/tsconfig.json` (extends root) | `mcp/pi-tools-bridge/**`, plus the `pi-extensions/lib/*` it imports | `node --experimental-strip-types`. Adds `allowImportingTsExtensions` + `noEmit` because the bridge imports the shared lib with explicit `.ts` suffixes — Node's strip-types resolver requires the suffix on the wire. |
+| `scripts/tsconfig.json` (extends root) | `scripts/**` (verification scripts; e.g. `cross-cwd-resume-smoke.ts`), plus the `pi-extensions/lib/*` it imports | `node --experimental-strip-types`. Same trade-off as `mcp/tsconfig.json`: explicit `.ts` imports + `allowImportingTsExtensions` + `noEmit`. Scripts are runtime gates, not build inputs. |
 
-`pnpm typecheck` runs both passes. `pnpm check` runs both as part of the release gate; the husky pre-commit hook does too. Adding a new `.ts` file outside both configs is a fence breach — either include it or split a third config with a documented runtime model, but never extend the root `exclude`. The historical exclude entries (`pi-extensions/entwurf-control.ts`, `mcp/*`) hid real type drift; do not reintroduce them.
+`pnpm typecheck` runs all three passes. `pnpm check` runs them as part of the release gate; the husky pre-commit hook does too. Adding a new `.ts` file outside all three configs is a fence breach — either include it or split a fourth config with a documented runtime model, but never extend the root `exclude` beyond the existing `node_modules` / `mcp` / `scripts` triplet. The historical exclude entries (`pi-extensions/entwurf-control.ts`, `mcp/*`) hid real type drift; do not reintroduce that pattern.
 
 Code-level invariants pinned at the same time:
 

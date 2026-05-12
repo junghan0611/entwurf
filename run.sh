@@ -2587,16 +2587,32 @@ EOF
 }
 
 verify_resume() {
-  local project_dir session_file model prompt_a prompt_b
+  local project_dir session_file model prompt_a prompt_b other_dir
   project_dir=$(normalize_project_dir "$1")
   model=${PI_SHELL_ACP_VERIFY_MODEL:-claude-sonnet-4-6}
   prompt_a=${PI_SHELL_ACP_VERIFY_PROMPT_A:-'Remember this exact secret token for later: test-token-123. Reply only READY.'}
   prompt_b=${PI_SHELL_ACP_VERIFY_PROMPT_B:-'What was the secret token? Reply with the token only.'}
   session_file=$(mktemp /tmp/pi-shell-acp-verify-XXXXXX.jsonl)
 
+  # Cross-cwd target. The same-cwd verify-resume below would not have caught
+  # issue #9 — the bug needs cwd(turn2) != cwd(turn1) so the pi-shell-acp
+  # bridge's `isPersistedSessionCompatible` cwd-strictness invalidates the
+  # Scene 1 record. $HOME is the usual override and reliably differs from a
+  # project_dir; if the operator runs verify-resume *against* $HOME itself
+  # (project_dir == $HOME) we fall back to a fresh mktemp dir so the gate
+  # still exercises a true cross-cwd path. PI_SHELL_ACP_VERIFY_OTHER_DIR
+  # explicit override wins over both.
+  other_dir=${PI_SHELL_ACP_VERIFY_OTHER_DIR:-$HOME}
+  if [[ "$(cd "$other_dir" && pwd -P)" == "$(cd "$project_dir" && pwd -P)" ]]; then
+    other_dir=$(mktemp -d /tmp/pi-shell-acp-verify-other-XXXXXX)
+    echo "[verify-resume] project_dir == \$HOME; using fresh other-dir: $other_dir"
+  fi
+
   require_cmd pi
+  require_cmd node
 
   echo "[verify-resume] project:      $project_dir"
+  echo "[verify-resume] other-dir:    $other_dir   (cross-cwd resumer cwd)"
   echo "[verify-resume] repo:         $REPO_DIR"
   echo "[verify-resume] model:        $model"
   echo "[verify-resume] session-file: $session_file"
@@ -2611,6 +2627,36 @@ verify_resume() {
     PI_SHELL_ACP_DEBUG=1 pi -e "$REPO_DIR" --session "$session_file" --provider pi-shell-acp --model "$model" -p "$prompt_b"
   )
   check_claude_sessions "$project_dir"
+
+  # ----------------------------------------------------------------------
+  # Phase 2 — cross-cwd fact-recall through entwurf_resume (issue #9 gate).
+  #
+  # Phase 1 above checks acpSessionId continuity but runs both turns from
+  # the same cwd, so the cwd-mismatch branch of
+  # `isPersistedSessionCompatible` is never exercised. Phase 2 reproduces
+  # the regression shape: spawn at $project_dir, resume from $other_dir
+  # via runEntwurfResumeSync with options.cwd=undefined (the MCP shape).
+  # The fix in pi-extensions/lib/entwurf-core.ts must read the session
+  # header cwd to keep child spawn cwd aligned with the original.
+  # ----------------------------------------------------------------------
+  # Capture child entwurf stderr so a future silent regression cannot hide
+  # through release. Phase 2 spawns sibling pi processes via runEntwurfSync /
+  # runEntwurfResumeSync, both of which call entwurf-core's
+  # `mirrorChildStderr()` — that helper only writes when
+  # PI_ENTWURF_CHILD_STDERR_LOG is set in the parent env. We point it at a
+  # mktemp file so child-side `[pi-shell-acp:bootstrap]` lines and any thrown
+  # errors land somewhere visible on smoke failure; on success the file is
+  # left in /tmp for one-shot inspection. This is the same env that
+  # scripts/sentinel-runner.sh already drives — no new knob.
+  local phase2_child_stderr
+  phase2_child_stderr=$(mktemp /tmp/pi-shell-acp-verify-phase2-child-XXXXXX.log)
+  echo "[verify-resume] phase2: cross-cwd fact-recall via entwurf_resume"
+  echo "[verify-resume] phase2: child stderr -> $phase2_child_stderr"
+  PI_ENTWURF_CHILD_STDERR_LOG="$phase2_child_stderr" node --experimental-strip-types \
+    "$REPO_DIR/scripts/cross-cwd-resume-smoke.ts" \
+    --project-dir "$project_dir" \
+    --other-dir "$other_dir" \
+    --model "$model"
 }
 
 CLAUDE_ACP_REQUIRED_VERSION="0.32.0"

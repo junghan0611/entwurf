@@ -23,6 +23,9 @@
 		"skipLibCheck": true
 	},
 	// mcp/* is type-checked under mcp/tsconfig.json (strip-types-friendly
-	// options). See pnpm typecheck for the two-config invocation.
-	"exclude": ["node_modules", "mcp"]
+	// options). scripts/* is type-checked under scripts/tsconfig.json for the
+	// same reason — both run under Node `--experimental-strip-types` and need
+	// `allowImportingTsExtensions`, which the emit-capable root config cannot
+	// enable. See pnpm typecheck for the three-config invocation.
+	"exclude": ["node_modules", "mcp", "scripts"]
 }
