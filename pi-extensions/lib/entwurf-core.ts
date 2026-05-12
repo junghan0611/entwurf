@@ -773,11 +773,15 @@ export function findEntwurfSessionFile(taskId: string): string | null {
 
 export interface EntwurfResumeOptions {
 	host?: string;
+	// cwd is a debug/migration escape hatch only. The authority for cold resume
+	// is the saved session header cwd (see INVARIANT block in
+	// runEntwurfResumeSync and #9). Passing options.cwd routinely forfeits
+	// backend continuity. The resumer's `process.cwd()` is NEVER a fallback.
 	cwd?: string;
 	// Identity Preservation Rule (see AGENTS.md): the resume API intentionally
 	// does NOT accept a `model` override. The model identity is locked to the
-	// session's recorded value. Execution environment (host, cwd) may change;
-	// identity may not.
+	// session's recorded value. host may change (resume from a different
+	// machine); model may not; cwd is bound to the saved session header.
 	signal?: AbortSignal;
 	onUpdate?: (text: string) => void;
 }
@@ -988,19 +992,40 @@ export async function runEntwurfResumeSync(
 	piArgs.push("--model", explicitExtensions.modelOverride ?? effectiveModel);
 	piArgs.push(prompt);
 
-	// Resume must align the child's spawn cwd with the original spawn cwd, not
-	// the resumer's cwd. The pi-shell-acp bridge keys persistence by
-	// `pi:<sessionId>` but `isPersistedSessionCompatible` also requires
-	// `record.cwd === params.cwd`. If the cwds diverge the bridge silently
-	// drops the persisted `acpSessionId` and starts a `newSession`, losing
-	// backend-side memory of every prior turn. This is the regression that
-	// issue #9 traces. The header is the durable carrier; options.cwd remains
-	// the explicit operator override; process.cwd() is only the last resort
-	// for malformed/missing headers. The remote SSH branch keeps its prior
-	// `~` fallback for now — remote resume is in an unverified state already
-	// (see runEntwurfResumeSync block header) and the bridge cwd-mismatch
-	// silhouette has only been observed locally.
+	// INVARIANT (#9 / #10): saved session header cwd is the authority for cold
+	// resume. The pi-shell-acp bridge keys persistence by `pi:<sessionId>` but
+	// `isPersistedSessionCompatible` also requires `record.cwd === params.cwd`.
+	// If the cwds diverge the bridge silently drops the persisted `acpSessionId`
+	// and starts a `newSession`, losing backend-side memory of every prior turn —
+	// the regression #9 traces. `options.cwd` is a debug/migration escape hatch
+	// only; passing it routinely forfeits backend continuity. Caller's
+	// `process.cwd()` is NEVER a fallback — if Node spawn receives `cwd:
+	// undefined` it inherits the resumer's cwd, which re-introduces #9 silently.
+	// We fail-fast here instead so the failure cannot be confused with a
+	// successful resume into the wrong cwd. The remote SSH branch keeps its
+	// prior `~` fallback — remote resume is in an unverified state already
+	// (see runEntwurfResumeSync block header) and this silhouette has only
+	// been observed locally.
 	const headerCwd = isRemote ? undefined : (readSessionHeader(sessionFile)?.cwd ?? undefined);
+	if (!isRemote && !options.cwd && !headerCwd) {
+		return {
+			task: prompt,
+			host,
+			exitCode: 1,
+			output:
+				`Cannot resume taskId "${taskId}": saved session header has no cwd ` +
+				`and no explicit cwd override was provided. The header cwd is the ` +
+				`authority for cold resume (see #9). Re-spawn from the original cwd, ` +
+				`or pass an explicit options.cwd if you are intentionally migrating.`,
+			turns: 0,
+			cost: 0,
+			taskId,
+			sessionFile,
+			explicitExtensions: [],
+			warnings: [],
+			error: "session_cwd_missing",
+		};
+	}
 	const effectiveCwd = options.cwd ?? headerCwd;
 
 	let command: string;

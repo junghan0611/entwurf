@@ -488,8 +488,11 @@ server.tool(
 		"Identity Preservation Rule: this tool intentionally does NOT accept a `model` " +
 		"parameter. The model is locked to whatever the saved session recorded at first " +
 		"spawn — resuming under a different model is treated as splicing a new identity " +
-		"onto someone else's transcript and is refused at the API layer. host and cwd may " +
-		"change (execution environment is not identity); model may not. " +
+		"onto someone else's transcript and is refused at the API layer. host may change " +
+		"(a session can be resumed from a different machine). cwd does NOT change at will — " +
+		"cold resume uses the saved session header cwd as authority. An explicit cwd " +
+		"override is a debug/migration escape hatch and may forfeit backend continuity " +
+		"(see pi-shell-acp#9). Model may not. " +
 		"Async resume is intentionally not exposed on this MCP surface; " +
 		'the pi-native entwurf_resume exposes mode="async" for long-running resumes ' +
 		"with followUp delivery into the parent session (see Phase 0.5 in AGENTS.md).",

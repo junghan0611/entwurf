@@ -5,63 +5,112 @@
 
 ---
 
-## Current Priority — #10 호명 ontology 방향 정리 (no implementation)
+## Current Priority — 0.5.0 backend-native compaction guard split
 
-#12 resume poison mapping invalidation은 구현/검증 완료. 이제 #10은 **코드 구현이 아니라 설계 경계선 정리**만 한다.
-
-목표:
-
-- GitHub issue #10에 현재 합의 방향을 남긴다.
-- `contact_peer` / peer handle / state machine을 지금 구현하지 않는다는 결정을 명확히 한다.
-- #10을 0.5.0 blocker로 키우지 않는다.
-
-### Direction
-
-- identity carrier는 `sessionId` 하나다.
-- `taskId`는 UI/job label 및 기존 saved-session lookup compat marker다.
-- caller의 현재 cwd는 peer identity가 아니다.
-- saved session/header/미래 handle이 가진 cwd가 peer의 실행 터전이다.
-- live discovery는 candidates일 뿐 authority가 아니다.
-- poisoned인 것은 peer가 아니라 backend persisted mapping / transcript resume path다. #12를 peer state로 승격하지 않는다.
-
-### 하지 않을 것
-
-- `PeerHandle` / `PeerState` 타입 추가.
-- `contact_peer(handle, message)` 단일 verb 도입.
-- `entwurf_peers` semantics 변경.
-- ambient peer registry 도입.
-- taskId filename marker 제거.
-- operator-visible `Task ID: <8-char>` 변경.
-- 0.5.0 compaction guard split 작업을 #10 안에 섞기.
-
-### Acceptance
-
-- #10 issue comment에 위 방향과 non-goals가 정리됨.
-- 필요하면 README/AGENTS/NEXT 중 문서 한 군데만 최소 보정.
-- 코드 변경 없음.
-- #10 정리 후 current priority를 0.5.0 guard split로 되돌림.
-
----
-
-## After #10 — 0.5.0 backend-native compaction guard split
+Goal: `PI_SHELL_ACP_ALLOW_COMPACTION=1`의 과도한 의미를 둘로 분리한다.
 
 | Knob | Meaning | Default |
 |---|---|---|
 | `PI_SHELL_ACP_ALLOW_PI_COMPACTION=1` | pi JSONL compaction 허용 | blocked |
 | `PI_SHELL_ACP_ALLOW_BACKEND_COMPACTION=1` | Claude/Codex backend-native compaction guard 제거 | opt-in |
 
-원칙:
+Principle:
 
 - pi-side compaction은 ACP backend transcript에 summary가 전달되지 않으므로 기본 차단 유지.
 - OpenClaw long-chat 생존은 backend-native compaction 경로에 의존.
-- 0.5.0은 **guard split only**.
-- recap engine, compact→new-session handoff, hidden transcript hydration, provider handoff UX, Gemini residue cleanup, OpenClaw 튜닝 전부 금지.
+- 0.5.0은 **guard split only**. recap engine, compact→new-session handoff, hidden transcript hydration, provider handoff UX, Gemini residue cleanup, OpenClaw 튜닝 전부 금지.
+
+### Next Steps
+
+#### 1. Source audit before edit
+
+- `index.ts`
+  - `session_before_compact` currently checks `PI_SHELL_ACP_ALLOW_COMPACTION`.
+  - Replace policy with `PI_SHELL_ACP_ALLOW_PI_COMPACTION`.
+  - Error/cancel message should explain pi-side vs backend-native split.
+- `acp-bridge.ts`
+  - Claude guard: `DISABLE_AUTO_COMPACT` / `DISABLE_COMPACT` handling.
+  - Codex guard: `model_auto_compact_token_limit=9223372036854775807` handling.
+  - Replace backend guard policy with `PI_SHELL_ACP_ALLOW_BACKEND_COMPACTION`.
+  - Never weaken identity-isolation / overlay containment env.
+- `run.sh`
+  - Extend `check-backends` assertions for split knobs.
+
+#### 2. Implement guard split surgically
+
+- Add small helper names if useful, but avoid broad config refactor.
+- Keep legacy `PI_SHELL_ACP_ALLOW_COMPACTION` only if needed as a temporary compatibility alias; do not document it as preferred OpenClaw path.
+- Diagnostics must make fallback/blocked states explicit. No silent warning-only behavior.
+
+#### 3. Developer smoke hook for backend compact
+
+Need a developer-only way to send literal backend `/compact` through the ACP session without invoking pi host `/compact`.
+
+Preferred shape:
+
+```text
+/acp-compact
+→ send literal "/compact" to current ACP backend as a normal backend prompt/command
+→ display backend result and usage updates normally
+```
+
+Rules:
+
+- Not an OpenClaw user workflow.
+- Must require/mention `PI_SHELL_ACP_ALLOW_BACKEND_COMPACTION=1`.
+- If provider slash-command registration is awkward, use a minimal debug command/CLI and document exact usage.
+
+Questions this smoke should answer:
+
+- After backend compact succeeds in place, does the same `acpSessionId` accept the next prompt?
+- If backend rotates/respawns internally, does bridge recovery remain explicit (`resume > load > new` diagnostics)?
+- If compact breaks the ACP child, does only the bridge child close while pi session survives?
+
+#### 4. Verification
+
+Minimum before commit:
+
+```bash
+pnpm typecheck
+./run.sh check-backends
+./run.sh check-models
+```
+
+Runtime smoke before calling 0.5.0 ready:
+
+- Launch with `PI_SHELL_ACP_ALLOW_BACKEND_COMPACTION=1`.
+- Confirm backend guard is absent while pi-side compaction remains blocked.
+- Send backend `/compact` through the developer hook.
+- Confirm message result + `usage_update` behavior for Claude and Codex.
+- Record whether context usage drops and whether next turn reuses/resumes/loads/creates the ACP session.
+
+#### 5. Docs / release prep
+
+Update only after behavior is verified:
+
+- `README.md`: compaction policy and env split.
+- `AGENTS.md`: compaction responsibility split; no recap/new-session claims.
+- `VERIFY.md`: split guard evidence target + usage-update observation.
+- `CHANGELOG.md`: 0.5.0 = compaction guard split / OpenClaw preparation.
+
+### Explicit non-goals for 0.5.0
+
+- compact→new-session handoff
+- `ctx.newSession()` / `switchSession()` from `session_before_compact`
+- hidden session manager inside pi-shell-acp
+- reading backend transcript files
+- manual ACP hydration from pi JSONL
+- semantic-memory/day-query/llmlog recap policy
+- OpenClaw changes
+- public `PI_SHELL_ACP_RECAP_HINT(_FILE)` interface
+- #10 peer-handle / contact_peer / sessionId-only carrier RFC implementation (parked; cwd-authority portion landed in 0.4.17)
 
 ---
 
 ## Parked, not current
 
 - **#11** remote SSH resume cwd alignment — 나중에. 0.4.x 영역 아님.
+- **#10** broader ontology RFC (peer handle, `contact_peer` verb, registry) — cwd-authority 부분은 0.4.17에서 닫음. 나머지는 새 evidence가 쌓일 때 재논의.
 - **#8** ACP `entwurf_send` 메시지 UX visibility — #10 재논의 이후.
 - **#2** pi-first context meter — 0.5.0 이후 영역.
 
@@ -69,4 +118,4 @@
 
 ## Completion rule
 
-#10 방향 정리 → 0.5.0 guard split 순서. 각 단계 완료 시 해당 섹션 삭제하고 다음 priority를 current로 승격한다.
+0.5.0 guard split이 끝나면 NEXT.md 전체를 다음 actual priority로 교체. 릴리즈 로그는 여기 남기지 않는다.

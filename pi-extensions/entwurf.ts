@@ -110,7 +110,12 @@ interface AsyncEntwurfInfo {
 	pid: number;
 	host: string;
 	task: string;
-	cwd: string;
+	// Optional: for local spawn/resume this is the saved-session-header cwd
+	// (the authority for cold resume — see entwurf-core.ts INVARIANT block
+	// and #9). For remote spawn/resume the spawn-side cwd is ssh-internal and
+	// not always knowable here; we record it when present rather than fall
+	// back to the resumer's `process.cwd()`, which would re-introduce #9.
+	cwd?: string;
 	model?: string;
 	startTime: number;
 	status: "running" | "completed" | "failed";
@@ -755,7 +760,10 @@ export default function (pi: ExtensionAPI) {
 			"- sync (default): wait for completion, return result inline. Matches MCP bridge surface.\n" +
 			"- async: spawn detached, deliver completion as followUp message to this session. For long-running resumes.\n\n" +
 			"Identity Preservation Rule: model is locked to the saved session — this tool does NOT accept a model override. " +
-			"host/cwd may change (execution environment is not identity); model may not. " +
+			"host may change (a session can be resumed from a different machine). " +
+			"cwd does NOT change at will — cold resume uses the saved session header cwd as authority. " +
+			"An explicit cwd override is a debug/migration escape hatch and may forfeit backend continuity (see #9). " +
+			"Model may not change. " +
 			"If the session has no recorded model the resume is refused rather than falling back to a default.",
 		parameters: Type.Object({
 			taskId: Type.String({ description: "Entwurf task ID to resume" }),
@@ -907,12 +915,22 @@ export default function (pi: ExtensionAPI) {
 			}
 
 			const resumeTaskId = crypto.randomUUID().slice(0, 8);
-			// Same rationale as runEntwurfResumeSync — see "Resume must align…"
-			// block there and issue #9. `info?.cwd` is populated when spawn and
-			// resume run in the same pi process; the JSONL header is the
-			// cross-process carrier; process.cwd() is the last-resort fallback
-			// for malformed sessions only.
-			const cwd = info?.cwd ?? readSessionHeader(sessionFile)?.cwd ?? process.cwd();
+			// Same INVARIANT as runEntwurfResumeSync (see entwurf-core.ts and
+			// issue #9). `info?.cwd` is the in-process carrier (spawn + resume
+			// in the same pi process); the JSONL header is the cross-process
+			// carrier. Neither falls back to `process.cwd()` — the resumer's
+			// cwd is NOT a valid authority for cold resume, and a silent
+			// fallback re-introduces #9. Local fail-fast when both carriers
+			// are absent.
+			const headerCwd = readSessionHeader(sessionFile)?.cwd;
+			const cwd = info?.cwd ?? headerCwd;
+			if (!isRemote && !cwd) {
+				throw new Error(
+					`Cannot resume taskId "${params.taskId}": saved session header has no cwd ` +
+						`and no in-process cwd carrier was available. The header cwd is the ` +
+						`authority for cold resume (see #9).`,
+				);
+			}
 
 			const proc = spawn(command, args, {
 				cwd: isRemote ? undefined : cwd,
