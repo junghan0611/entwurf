@@ -44,6 +44,7 @@ Usage:
   ./run.sh check-models               # local deterministic check of MODELS contextWindow defaults (sonnet 200K, opus 1M) + override
   ./run.sh check-claude-sessions [project-dir]  # compare pi persisted sessions vs Claude SDK session visibility
   ./run.sh verify-resume [project-dir] # exact pi -> ACP -> Claude continuity check with visible acpSessionId diagnostics
+  ./run.sh verify-transcript-poison   # deterministic smoke for #12 (classifier + persisted-record invalidation, no API)
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to pi-shell-acp alias
   ./run.sh install [project-dir]      # install this local package into project .pi/settings.json
   ./run.sh setup:links [--force]      # repair ~/.pi/agent/entwurf-targets.json link (use --force to replace a stale operator file or wrong symlink; a .bak is taken)
@@ -3133,6 +3134,14 @@ case "$cmd" in
     ;;
   verify-resume)
     verify_resume "$TARGET_PROJECT_DIR"
+    ;;
+  verify-transcript-poison)
+    # Deterministic smoke for issue #12: no API call, no bridge spawn.
+    # Exercises isTranscriptPoisonError classifier + closeBridgeSession
+    # persisted-record invalidation side-effect against the canonical
+    # cache path. Live runtime repro (poisoned JSONL + claude-agent-acp)
+    # is documented as a manual recipe in VERIFY.md §12.6.
+    node --experimental-strip-types "$REPO_DIR/scripts/transcript-poison-smoke.ts"
     ;;
   sync-auth)
     sync_auth

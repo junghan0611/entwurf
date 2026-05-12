@@ -3342,3 +3342,28 @@ export function getBridgeErrorDetails(error: unknown, session?: AcpBridgeSession
 	const stderrBlock = stderrTail ? `\n\n[${session?.stderrLabel ?? "acp stderr"}]\n${stderrTail}` : "";
 	return `${message}${diagnostic}${stderrBlock}`;
 }
+
+// Match the Anthropic API 400 surfaces that classify a resumed/loaded ACP
+// session's transcript as unusable. Two known shapes today:
+//
+//   1. "cache_control cannot be set for empty text blocks" — an empty text
+//      content block carries a cache breakpoint placed by the SDK.
+//   2. "API Error: 400 messages: text content blocks must be non-empty" —
+//      an empty user/text content block survives in the transcript and the
+//      validator rejects every send. Caught via demo-style synthetic repro
+//      on 2026-05-12.
+//
+// Both share the same failure mode: the persisted backend transcript is
+// permanently rejected, every resume of the same acpSessionId collides with
+// the same poison until the persisted record is dropped. Keep this narrow —
+// the second surface is gated by an `API Error: 400 messages` prefix check
+// so transient/network/auth/non-400 errors that happen to mention "text
+// content blocks" do not trigger invalidation.
+export function isTranscriptPoisonError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+	if (message.includes("cache_control cannot be set for empty text blocks")) {
+		return true;
+	}
+	const isMessages400 = message.includes("API Error: 400 messages") || message.includes("400 messages:");
+	return isMessages400 && message.includes("text content blocks must be non-empty");
+}

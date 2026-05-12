@@ -23,6 +23,7 @@ import {
 	describeBridgeSession,
 	ensureBridgeSession,
 	getBridgeErrorDetails,
+	isTranscriptPoisonError,
 	type McpServerInputMap,
 	normalizeMcpServers,
 	sendPrompt,
@@ -1105,10 +1106,28 @@ function streamShellAcp(
 			stream.end();
 			emitPendingEntwurfSent();
 			if (output.stopReason === "error" && bridgeSession) {
+				// When a resumed/loaded session's prompt fails with an
+				// Anthropic transcript-validity 400 (cache_control on empty
+				// text block, or "text content blocks must be non-empty"),
+				// the saved persisted record points at a backend transcript
+				// that will reject every subsequent resume the same way.
+				// Drop the mapping so any subsequent bootstrap — including
+				// host re-entry within the same CLI invocation — fires the
+				// existing resume → load → new ladder against an empty
+				// persisted record and lands on path=new naturally. The
+				// bridge does NOT force a same-turn retry on its own; that
+				// recovery is the host's normal re-entry pattern. See
+				// pi-shell-acp#12.
+				const transcriptPoison = isTranscriptPoisonError(error) && bridgeSession.bootstrapPath !== "new";
+				if (transcriptPoison) {
+					console.error(
+						`[pi-shell-acp:prompt-error] reason=transcript_poison sessionKey=${bridgeSession.key} bootstrapPath=${bridgeSession.bootstrapPath} acpSessionId=${bridgeSession.acpSessionId}`,
+					);
+				}
 				try {
 					await closeBridgeSession(bridgeSession.key, {
 						closeRemote: true,
-						invalidatePersisted: false,
+						invalidatePersisted: transcriptPoison,
 					});
 				} catch {
 					// best-effort cleanup; already reported via stream error

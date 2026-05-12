@@ -822,7 +822,7 @@ The following are documented but observability/automation is still insufficient.
    Without this, §5/§7 can only judge **semantic continuity** — `bridge continuity` (sessionKey/acpSessionId/bootstrap path) remains unverified.
 
    > **Self-spawn limitation.** This env must be present in the bridge process at startup. If you run VERIFY.md from inside a pi-shell-acp session (verifier already bound to the bridge), `export` from the running shell does **not** propagate into that bridge — restart the parent session with `PI_ENTWURF_CHILD_STDERR_LOG` already exported, or run VERIFY.md from a plain shell that has not yet bound the bridge. This is a known operational corner of replicant-testing-replicant runs (see "Why this document exists" at the top).
-2. When persisted session incompatibility occurs, operators reading the invalidation reason quickly
+2. When persisted session incompatibility occurs, operators reading the invalidation reason quickly — partially covered for the transcript-poison class via the `[pi-shell-acp:prompt-error] reason=transcript_poison` line and §12.6. The general incompatibility-reason gap remains.
 3. ~~Clearly observing the `unstable_setSessionModel` path vs new session fallback path on model switch~~ — see §12.3
 4. ~~Observing how cleanly bridge and child process are cleaned up on cancel/abort~~ — see §12.4
 5. Checking stream shape stability as tool notices / thinking / text blocks accumulate in long sessions
@@ -873,7 +873,7 @@ The cancel/abort path flows 3 types of diagnostic lines so operators can read th
 Cleanup invariant (actual rules, not just observability):
 
 - `onAbort` only calls `cancelActivePrompt()` and does not destroy bridge/child (session must remain reusable after abort)
-- In the `streamShellAcp` catch block, for `stopReason === "error"` cases (= actual error, not user abort), explicitly clean up with `closeBridgeSession(..., {closeRemote:true, invalidatePersisted:false})`
+- In the `streamShellAcp` catch block, for `stopReason === "error"` cases (= actual error, not user abort), explicitly clean up with `closeBridgeSession(..., {closeRemote:true, invalidatePersisted:<transcript_poison ? true : false>})`. The flag is `true` only when `isTranscriptPoisonError(error)` matches an Anthropic transcript-validity 400 — currently the `cache_control cannot be set for empty text blocks` surface or the `API Error: 400 messages: text content blocks must be non-empty` surface — AND `bridgeSession.bootstrapPath !== "new"` (the persisted record was actually used to bootstrap this session). See §12.6 and pi-shell-acp#12. All other error classes keep `invalidatePersisted:false` so the persisted mapping remains reusable.
 - `destroyBridgeSession` waits up to 2 seconds for child exit, printing `orphan-kill` line if needed
 
 Smoke:
@@ -920,9 +920,68 @@ Pass criteria:
 
 This smoke is not promoted to `setup` / baseline exit criteria. Maintained only as additional evidence gate.
 
----
+### 12.6 Transcript-Poison Invalidation (#12)
 
-## 13. Evidence to Always Preserve on Failure
+A poisoned backend transcript — an empty user/text content block, with or without a `cache_control` breakpoint placed on it by the Anthropic SDK — survives every `resumeSession` of the same `acpSessionId` and returns the same Anthropic transcript-validity 400 forever. Two known surfaces today:
+
+- `API Error: 400 messages.<i>.content.<j>.text: cache_control cannot be set for empty text blocks` — empty text block at a cache breakpoint.
+- `API Error: 400 messages: text content blocks must be non-empty` — empty user/text content block, no cache breakpoint required.
+
+The bridge classifies both as `transcript_poison` and drops the persisted `pi:<sessionId>` → `acpSessionId` mapping. The poison failure itself is surfaced via `[pi-shell-acp:prompt-error] reason=transcript_poison`. Recovery is left to the existing bootstrap ladder running against the now-empty persisted record — if the host re-enters `ensureBridgeSession` (even within the same CLI invocation), the next bootstrap fires as `path=new` instead of resuming the poisoned `acpSessionId`. The bridge does not implement a force-new retry of its own; the same-invocation recovery observed in live repro is the host's normal re-entry pattern, not a bridge-driven retry.
+
+```text
+[pi-shell-acp:prompt-error] reason=transcript_poison sessionKey=... bootstrapPath=resume|load|reuse acpSessionId=...
+```
+
+This complements the §12.4 cleanup invariant: `invalidatePersisted` is `true` only on this poison class, `false` for every other error class.
+
+**Deterministic smoke** (free, no API call, no bridge spawn):
+
+```bash
+./run.sh verify-transcript-poison
+```
+
+Pass criteria:
+
+- `[poison-smoke] classifier: ok` line — `isTranscriptPoisonError` matches both documented poison surfaces and only those (positive cases include the cache_control 400 from the 2026-05-12 `homeagent-config` regression AND the `text content blocks must be non-empty` 400 from demo-style synthetic repro; negative cases include unrelated 4xx, transient network failures, non-string inputs, and adjacent-string traps such as a 401 that happens to share the "text content blocks must be non-empty" substring — the prefix guard rejects those).
+- `[poison-smoke] invalidate: ok` line — `closeBridgeSession(..., { invalidatePersisted: true })` removes the persisted record file at the canonical cache path (`~/.pi/agent/cache/pi-shell-acp/sessions/<sha256(sessionKey)>.json`).
+- `[poison-smoke] preserve: ok` line — `invalidatePersisted: false` leaves the record intact, guarding against an accidental always-true regression.
+- Final `[poison-smoke] PASS`.
+
+This smoke is intentionally narrow — it does NOT spawn a bridge or call Anthropic. The wiring from `streamShellAcp`'s prompt-error catch block to `closeBridgeSession` is a single conditional expression and verified by code review against `index.ts`. The end-to-end wiring (resume → poison error → invalidation → next bootstrap goes `path=new`) was separately confirmed on 2026-05-12 via demo-style synthetic empty-user poison:
+
+```text
+[pi-shell-acp:bootstrap]    path=resume   ... acpSessionId=<poisoned>
+[pi-shell-acp:prompt-error] reason=transcript_poison ... bootstrapPath=resume acpSessionId=<poisoned>
+[pi-shell-acp:shutdown]     ... acpSessionId=<poisoned> invalidatePersisted=true
+[pi-shell-acp:bootstrap]    path=new      ... acpSessionId=<fresh>
+```
+
+That observation is the source of the §12.4 invariant correction and the §12.6 phrasing — same-invocation recovery is host-driven re-entry against an empty persisted record, not a bridge-driven force-new retry.
+
+**Manual live repro** (one billable Claude turn, requires a local poisoned JSONL):
+
+The 2026-05-12 incident left an artifact at:
+
+```
+~/.pi/agent/claude-config-overlay/projects/-home-junghan-repos-gh-homeagent-config/db0b36ea-d64e-40bc-9496-985cf108a599.jsonl
+```
+
+containing four user turns with empty text content blocks (`content[0].text == ""`). Any resume that lands on this `acpSessionId` will hit the poison 400 on the first prompt.
+
+If a future incident produces a similar artifact and you want end-to-end evidence of the invalidation path:
+
+1. Spawn a fresh pi-shell-acp claude session in the cwd that owns the poisoned JSONL so the persisted record's `cwd`, `bridgeConfigSignature`, and context signatures match what the next bootstrap will compute.
+2. After the first valid turn, locate the persisted record at `~/.pi/agent/cache/pi-shell-acp/sessions/<sha256(sessionKey)>.json` and patch `acpSessionId` to the poisoned id (e.g. `db0b36ea-...`).
+3. Stop the bridge child without invalidating the persisted record (`./run.sh smoke-cancel`-style abort, or close the host pi session and let `cleanupBridgeSessionProcess` run — it passes `invalidatePersisted: false`).
+4. Send a fresh prompt with the same `sessionKey`. The bridge will resume the patched `acpSessionId`, claude-agent-acp will load the poisoned JSONL, the first API call will return the 400, and the prompt-error branch should:
+   - Emit one `[pi-shell-acp:prompt-error] reason=transcript_poison ...` stderr line.
+   - Remove the persisted record file.
+5. Send the next prompt. `[pi-shell-acp:bootstrap] path=new` should fire — the dead `acpSessionId` is no longer reused.
+
+If step 4 instead emits `[pi-shell-acp:bootstrap-invalidate] reason=incompatible_config`, the persisted record's config drifted from the current bridge config and the poison branch is never reached — re-run from step 1 in the original cwd / model / system-prompt combination.
+
+This live repro is documented but not wired as an automated smoke. Per NEXT.md, smokes stay small and deterministic; a billable API turn against an external artifact does not meet that bar.
 
 When a problem occurs, at minimum preserve the following:
 
