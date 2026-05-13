@@ -11,9 +11,13 @@
  *
  * Six steps prove the surface:
  *
- *   01  spawn intent has no backend compaction guard by default
+ *   01  spawn intent has no backend compaction guard, ever
  *       (Claude env DISABLE_AUTO_COMPACT/DISABLE_COMPACT absent,
  *        Codex argv `model_auto_compact_token_limit=…` absent).
+ *       The bridge does not implement compaction — backend-native
+ *       auto-compaction is always allowed; there is no bridge knob
+ *       to opt out. Operators who need a specific backend's auto-
+ *       compaction off export the backend's native env/argv directly.
  *
  *   02  pi-side guard message is honest about the boundary
  *       — it tells the operator that pi-side compact does not
@@ -35,29 +39,23 @@
  *   04  live: same driver against the Codex adapter.
  *
  *   05  legacy `PI_SHELL_ACP_ALLOW_COMPACTION=1` is a hard throw
- *       with a next-action message (split into ALLOW_PI_COMPACTION
- *       and DISABLE_BACKEND_COMPACTION).
+ *       with a next-action message pointing at PI_SHELL_ACP_ALLOW_PI_COMPACTION
+ *       (the only remaining bridge knob — backend compaction is no
+ *       longer a bridge concern).
  *
- *   06  `PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1` escape hatch
- *       restores 0.4.x guards (Claude env keys reappear, Codex
- *       argv pin reappears) so an operator with a misbehaving
- *       backend has a documented way back.
+ *   06  live: same driver against the Gemini adapter (exploratory —
+ *       Gemini ACP does not advertise `/compact`; this step records
+ *       the actual observation, not a release claim).
  *
- * Steps 01, 02, 05, 06 are deterministic — they exercise pure spawn
- * intent + message strings against the bridge module. Steps 03 and 04
- * are live and require LIVE=1; they spawn a real ACP child via the
- * entwurf path (the same infrastructure used by cross-cwd-resume-smoke)
- * and send three prompts in sequence. Cost is a few cents per backend
- * and the script touches the operator's authenticated state, so the
- * step is gated behind LIVE=1 and does not run as part of the default
- * pre-commit smoke. Steps 03 and 04 do NOT introduce a user-facing
- * `/acp-compact` command — they are a release-evidence probe, not a
- * product surface.
- *
- * Gemini is intentionally not covered here. Whether Gemini's ACP
- * surface treats a literal `/compact` prompt as a native compaction
- * command is unverified, so 0.5.0 limits its survives-compact claim to
- * Claude + Codex. Gemini coverage lives in BASELINE follow-up.
+ * Steps 01, 02, 05 are deterministic — they exercise pure spawn intent
+ * + message strings against the bridge module. Steps 03, 04, 06 are
+ * live and require LIVE=1; they spawn a real ACP child via the entwurf
+ * path (the same infrastructure used by cross-cwd-resume-smoke) and
+ * send three prompts in sequence. Cost is a few cents per backend and
+ * the script touches the operator's authenticated state, so the step is
+ * gated behind LIVE=1 and does not run as part of the default pre-commit
+ * smoke. Steps 03, 04, 06 do NOT introduce a user-facing `/acp-compact`
+ * command — they are a release-evidence probe, not a product surface.
  *
  * Output:
  *   - Every step emits a single human-readable block followed by a
@@ -82,11 +80,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-	isBackendCompactionDisabledByOperator,
-	resolveAcpBackendLaunch,
-	resolveBridgeEnvDefaults,
-} from "../acp-bridge.ts";
+import { resolveAcpBackendLaunch, resolveBridgeEnvDefaults } from "../acp-bridge.ts";
 import { analyzeSessionFileLike, runEntwurfResumeSync, runEntwurfSync } from "../pi-extensions/lib/entwurf-core.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -102,7 +96,7 @@ interface StepResult {
 	detail: string;
 }
 
-const ALL_STEPS = ["01", "02", "03", "04", "05", "06", "07"] as const;
+const ALL_STEPS = ["01", "02", "03", "04", "05", "06"] as const;
 type StepId = (typeof ALL_STEPS)[number];
 
 const args = process.argv.slice(2);
@@ -135,20 +129,15 @@ function withClearedEnv<T>(keys: readonly string[], overrides: Record<string, st
 	}
 }
 
-const COMPACTION_ENV_KEYS = [
-	"PI_SHELL_ACP_ALLOW_COMPACTION",
-	"PI_SHELL_ACP_ALLOW_PI_COMPACTION",
-	"PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION",
-] as const;
+const COMPACTION_ENV_KEYS = ["PI_SHELL_ACP_ALLOW_COMPACTION", "PI_SHELL_ACP_ALLOW_PI_COMPACTION"] as const;
 
 function step01_noGuardInjection(): StepResult {
-	const title = "01  spawn intent has no backend compaction guard by default";
+	const title = "01  spawn intent has no backend compaction guard, ever";
 	return withClearedEnv(
 		COMPACTION_ENV_KEYS,
 		{
 			PI_SHELL_ACP_ALLOW_COMPACTION: undefined,
 			PI_SHELL_ACP_ALLOW_PI_COMPACTION: undefined,
-			PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION: undefined,
 		},
 		() => {
 			const claudeEnv = resolveBridgeEnvDefaults("claude") ?? {};
@@ -692,21 +681,21 @@ async function step04_codexSurvivesCompact(): Promise<StepResult> {
  * Gemini to the official survives-/compact claim or to extend the
  * dual classifier with a Gemini-specific signal.
  */
-async function step07_geminiSurvivesCompact(): Promise<StepResult> {
-	const title = "07  live: Gemini ACP — literal /compact wire-trigger probe (exploratory, not part of 0.5.0 claim)";
+async function step06_geminiSurvivesCompact(): Promise<StepResult> {
+	const title = "06  live: Gemini ACP — literal /compact wire-trigger probe (exploratory, not part of 0.5.0 claim)";
 	if (!LIVE) {
 		console.log(`\n[${title}]`);
 		console.log("  skipped — set LIVE=1 to spawn a real Gemini ACP session.");
 		console.log("            Cost: a few cents on gemini-3.1-pro-preview. Exploratory only.");
 		return {
-			id: "07",
+			id: "06",
 			title,
 			outcome: "observed",
 			detail: "skipped (LIVE!=1) — exploratory Gemini probe; not part of the 0.5.0 ready claim",
 		};
 	}
 	return await runLiveCompactSurvival({
-		id: "07",
+		id: "06",
 		title,
 		backend: "gemini",
 		provider: "pi-shell-acp",
@@ -715,13 +704,12 @@ async function step07_geminiSurvivesCompact(): Promise<StepResult> {
 }
 
 function step05_legacyKnobThrows(): StepResult {
-	const title = "05  legacy PI_SHELL_ACP_ALLOW_COMPACTION=1 throws on both wrapper and production paths";
+	const title = "05  legacy PI_SHELL_ACP_ALLOW_COMPACTION=1 throws at wrapper path and guards production spawn entry";
 	return withClearedEnv(
 		COMPACTION_ENV_KEYS,
 		{
 			PI_SHELL_ACP_ALLOW_COMPACTION: "1",
 			PI_SHELL_ACP_ALLOW_PI_COMPACTION: undefined,
-			PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION: undefined,
 		},
 		() => {
 			console.log(`\n[${title}]`);
@@ -741,9 +729,7 @@ function step05_legacyKnobThrows(): StepResult {
 			if (wrapperThrew) {
 				console.log(`     message: ${wrapperMessage.slice(0, 200)}${wrapperMessage.length > 200 ? "…" : ""}`);
 			}
-			const namesSplitKnobs =
-				wrapperMessage.includes("PI_SHELL_ACP_ALLOW_PI_COMPACTION") &&
-				wrapperMessage.includes("PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION");
+			const namesNextAction = wrapperMessage.includes("PI_SHELL_ACP_ALLOW_PI_COMPACTION");
 
 			// 5b — production path (createBridgeProcess). This is the ACP child
 			//      spawn entry, NOT the wrapper. createBridgeProcess intentionally
@@ -751,9 +737,9 @@ function step05_legacyKnobThrows(): StepResult {
 			//      normalization local), so the wrapper assert is bypassed. The
 			//      assert must therefore be present at createBridgeProcess's
 			//      entry as a separate call. Spawning a real ACP child here would
-			//      be expensive and would touch the operator's auth state, so we
-			//      verify the contract at the source level — the same shape as
-			//      step 02 — for a zero-cost L3 evidence.
+			//      be expensive and would touch the operator's auth state, so this
+			//      step verifies the production guard at source level — not by
+			//      runtime spawn — the same shape as step 02.
 			const bridgeSrc = readFileSync(join(REPO_DIR, "acp-bridge.ts"), "utf8");
 			const createBridgeProcessStart = bridgeSrc.indexOf("async function createBridgeProcess(");
 			const createBridgeProcessEnd =
@@ -767,7 +753,7 @@ function step05_legacyKnobThrows(): StepResult {
 					: "";
 			const productionCallsAssert = /assertLegacyCompactionKnobUnset\s*\(\s*\)/.test(createBridgeProcessBody);
 			console.log(
-				`  5b production path (createBridgeProcess) source calls assertLegacyCompactionKnobUnset() = ${productionCallsAssert ? "yes" : "no"}`,
+				`  5b production spawn entry (createBridgeProcess) source calls assertLegacyCompactionKnobUnset() = ${productionCallsAssert ? "yes" : "no"}`,
 			);
 
 			// Verdict
@@ -780,13 +766,13 @@ function step05_legacyKnobThrows(): StepResult {
 						"5a: wrapper path resolveAcpBackendLaunch is still silently accepting PI_SHELL_ACP_ALLOW_COMPACTION=1",
 				};
 			}
-			if (!namesSplitKnobs) {
+			if (!namesNextAction) {
 				return {
 					id: "05",
 					title,
 					outcome: "fail",
 					detail:
-						"5a: wrapper throw fired but message does not name both split knobs (ALLOW_PI_COMPACTION and DISABLE_BACKEND_COMPACTION) — operator has no next action",
+						"5a: wrapper throw fired but message does not name PI_SHELL_ACP_ALLOW_PI_COMPACTION — operator has no next action",
 				};
 			}
 			if (!productionCallsAssert) {
@@ -802,55 +788,8 @@ function step05_legacyKnobThrows(): StepResult {
 				id: "05",
 				title,
 				outcome: "pass",
-				detail: "5a wrapper path throws with next-action message; 5b production path source carries the same assert",
-			};
-		},
-	);
-}
-
-function step06_escapeHatchRestoresGuards(): StepResult {
-	const title = "06  PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1 restores 0.4.x guards";
-	return withClearedEnv(
-		COMPACTION_ENV_KEYS,
-		{
-			PI_SHELL_ACP_ALLOW_COMPACTION: undefined,
-			PI_SHELL_ACP_ALLOW_PI_COMPACTION: undefined,
-			PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION: "1",
-		},
-		() => {
-			// Production path: resolveBridgeEnvDefaults is called with
-			// disableBackendCompaction = isBackendCompactionDisabledByOperator().
-			// Simulate that here so we are verifying the actual injection
-			// path the bridge takes at spawn time, not a hypothetical one.
-			const claudeEnv =
-				resolveBridgeEnvDefaults("claude", {
-					disableBackendCompaction: isBackendCompactionDisabledByOperator(),
-				}) ?? {};
-			const codexLaunch = resolveAcpBackendLaunch("codex");
-			const codexArgs = codexLaunch.args.join(" ");
-			const claudeHasDisableAuto = claudeEnv.DISABLE_AUTO_COMPACT === "1";
-			const claudeHasDisable = claudeEnv.DISABLE_COMPACT === "1";
-			const codexHasTokenLimit = codexArgs.includes("model_auto_compact_token_limit=9223372036854775807");
-
-			console.log(`\n[${title}]`);
-			console.log(`  isBackendCompactionDisabledByOperator() = ${isBackendCompactionDisabledByOperator()}`);
-			console.log(`  claude env DISABLE_AUTO_COMPACT = ${claudeEnv.DISABLE_AUTO_COMPACT ?? "(absent)"}`);
-			console.log(`  claude env DISABLE_COMPACT      = ${claudeEnv.DISABLE_COMPACT ?? "(absent)"}`);
-			console.log(`  codex argv has model_auto_compact_token_limit=i64::MAX = ${codexHasTokenLimit ? "yes" : "no"}`);
-
-			if (claudeHasDisableAuto && claudeHasDisable && codexHasTokenLimit) {
-				return {
-					id: "06",
-					title,
-					outcome: "pass",
-					detail: "escape hatch restores Claude env keys + Codex argv pin",
-				};
-			}
-			return {
-				id: "06",
-				title,
-				outcome: "fail",
-				detail: "escape hatch does not restore 0.4.x guards (knob not honored or partial)",
+				detail:
+					"5a wrapper path throws with next-action message; 5b production spawn entry is source-guarded by the same assert",
 			};
 		},
 	);
@@ -862,8 +801,7 @@ const REGISTRY: Record<StepId, () => Promise<StepResult> | StepResult> = {
 	"03": step03_claudeSurvivesCompact,
 	"04": step04_codexSurvivesCompact,
 	"05": step05_legacyKnobThrows,
-	"06": step06_escapeHatchRestoresGuards,
-	"07": step07_geminiSurvivesCompact,
+	"06": step06_geminiSurvivesCompact,
 };
 
 async function main(): Promise<void> {

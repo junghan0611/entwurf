@@ -1165,23 +1165,18 @@ try {
   assert.deepEqual(claudeLaunch.args, ['-lc', claudeOverride]);
   assert.equal(claudeLaunch.source, 'env:CLAUDE_AGENT_ACP_COMMAND');
 
-  // Codex override path appends two argument groups in order:
-  //   1. Codex mode flags (-c approval_policy=… -c sandbox_mode=…) chosen
-  //      by resolveCodexMode(). Default = "full-access" — pi-YOLO parity
-  //      with the Claude side and the only preset that lets workspace-
-  //      external files (e.g. ~/.gnupg/ for gogcli) reach the agent.
-  //   2. Auto-compaction guard (-c model_auto_compact_token_limit=i64::MAX),
-  //      so silent backend compaction stays disabled even when
-  //      CODEX_ACP_COMMAND replaces the launch command. Order matters:
-  //      operators who set CODEX_ACP_COMMAND can re-pass earlier `-c`
-  //      flags to override our mode while we still pin the compact guard
-  //      after.
+  // Codex override path appends mode flags (-c approval_policy=…
+  // -c sandbox_mode=…) chosen by resolveCodexMode(). Default = "full-access" —
+  // pi-YOLO parity with the Claude side and the only preset that lets
+  // workspace-external files (e.g. ~/.gnupg/ for gogcli) reach the agent.
+  // Order matters: operators who set CODEX_ACP_COMMAND can re-pass earlier
+  // `-c` flags but ours come after, so pi-shell-acp's mode policy always
+  // wins.
+  //
+  // 0.5.0: the bridge does NOT pin `model_auto_compact_token_limit`.
+  // Codex's native auto-compaction runs on its default threshold.
   const codexLaunch = resolveAcpBackendLaunch('codex');
   assert.equal(codexLaunch.command, 'bash');
-  // 0.5.0 default: NO `model_auto_compact_token_limit=…` pin.
-  // Codex's native auto-compaction runs on its default threshold.
-  // The escape hatch PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1
-  // re-injects the i64::MAX pin (verified separately below).
   assert.deepEqual(codexLaunch.args, [
     '-lc',
     `${codexOverride} '-c' 'approval_policy=never' '-c' 'sandbox_mode=danger-full-access' '-c' 'web_search="disabled"' '-c' 'tools.view_image=false' '-c' 'memories.generate_memories=false' '-c' 'memories.use_memories=false' '-c' 'history.persistence="none"' '-c' 'features.image_generation=false' '-c' 'features.tool_suggest=false' '-c' 'features.tool_search=false' '-c' 'features.multi_agent=false' '-c' 'features.apps=false' '-c' 'features.memories=false'`,
@@ -1232,9 +1227,8 @@ try {
   );
 
   // PI_SHELL_ACP_CODEX_MODE=auto opts into codex-rs's standard mode
-  // (workspace-write sandbox, on-request approvals). 0.5.0: NO
-  // model_auto_compact_token_limit pin (backend-native compaction is
-  // allowed by default). Mode flags are independent of compaction.
+  // (workspace-write sandbox, on-request approvals). The bridge does not
+  // touch compaction; mode flags are the only -c args we inject.
   const prevMode = process.env.PI_SHELL_ACP_CODEX_MODE;
   process.env.PI_SHELL_ACP_CODEX_MODE = 'auto';
   try {
@@ -1263,19 +1257,20 @@ try {
     else process.env.PI_SHELL_ACP_CODEX_MODE = prevMode;
   }
 
-  // 0.5.0 compaction policy: split into two knobs + legacy throw.
+  // 0.5.0 compaction policy: legacy single knob throws; pi-side block by
+  // default; backend-native compaction always allowed (no bridge knob).
   //
-  // Path A — legacy single knob is rejected at spawn intent.
-  //   PI_SHELL_ACP_ALLOW_COMPACTION=1 must throw a next-action error
-  //   from resolveAcpBackendLaunch. The message must name both new
-  //   knobs so the operator can pick the side they meant.
+  // PI_SHELL_ACP_ALLOW_COMPACTION=1 must throw a next-action error from
+  // resolveAcpBackendLaunch. The message must surface that backend-native
+  // compaction is always allowed and that the pi-side opt-in lives behind
+  // PI_SHELL_ACP_ALLOW_PI_COMPACTION.
   const prevAllow = process.env.PI_SHELL_ACP_ALLOW_COMPACTION;
   process.env.PI_SHELL_ACP_ALLOW_COMPACTION = '1';
   try {
     assert.throws(
       () => resolveAcpBackendLaunch('codex'),
-      /no longer accepted.*PI_SHELL_ACP_ALLOW_PI_COMPACTION.*PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION/s,
-      'legacy PI_SHELL_ACP_ALLOW_COMPACTION=1 must be rejected at spawn intent with a next-action message naming both split knobs',
+      /no longer accepted.*PI_SHELL_ACP_ALLOW_PI_COMPACTION/s,
+      'legacy PI_SHELL_ACP_ALLOW_COMPACTION=1 must be rejected at spawn intent with a next-action message pointing at PI_SHELL_ACP_ALLOW_PI_COMPACTION',
     );
     assert.throws(
       () => resolveAcpBackendLaunch('claude'),
@@ -1285,24 +1280,6 @@ try {
   } finally {
     if (prevAllow === undefined) delete process.env.PI_SHELL_ACP_ALLOW_COMPACTION;
     else process.env.PI_SHELL_ACP_ALLOW_COMPACTION = prevAllow;
-  }
-
-  // Path B — escape hatch restores the 0.4.x Codex argv pin.
-  //   PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1 re-injects the
-  //   model_auto_compact_token_limit=i64::MAX pin so an operator with
-  //   a misbehaving backend has a documented way back. Mode flags and
-  //   feature gates are unaffected.
-  const prevHatch = process.env.PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION;
-  process.env.PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION = '1';
-  try {
-    const codexLaunchHatch = resolveAcpBackendLaunch('codex');
-    assert.ok(
-      codexLaunchHatch.args.some((arg) => arg.includes('model_auto_compact_token_limit=9223372036854775807')),
-      'PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1 must restore the codex auto-compact i64::MAX pin (0.4.x escape hatch)',
-    );
-  } finally {
-    if (prevHatch === undefined) delete process.env.PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION;
-    else process.env.PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION = prevHatch;
   }
 
   // codexDisabledFeatures launch param — explicit empty list opts fully out
@@ -2041,49 +2018,27 @@ try {
     rmSync(geminiOverlayTestRoot, { recursive: true, force: true });
   }
 
-  // resolveBridgeEnvDefaults — 0.5.0 compaction policy vs identity isolation.
+  // resolveBridgeEnvDefaults — 0.5.0 identity-isolation only.
   //
-  // The function's contract is:
-  //   default path:                     drop DISABLE_AUTO_COMPACT / DISABLE_COMPACT,
-  //                                     keep isolation pins.
-  //   disableBackendCompaction=true:    keep both compaction guard keys AND
-  //                                     isolation pins (escape hatch — 0.4.x guards).
-  //
-  // Identity-isolation pins (CLAUDE_CONFIG_DIR, CODEX_HOME,
-  // CODEX_SQLITE_HOME, GEMINI_CLI_HOME, GEMINI_SYSTEM_MD) must hold
-  // regardless of the compaction option. Conflating compaction with
-  // isolation would silently leak the operator's ~/.codex or ~/.claude
-  // into the bridge child process — exactly the regression this guards.
-  //
-  // Claude — 0.5.0 default: compaction keys absent, isolation present.
+  // The bridge does not implement compaction. The adapter's
+  // bridgeEnvDefaults contains operator-config-isolation pins only
+  // (CLAUDE_CONFIG_DIR, CODEX_HOME, CODEX_SQLITE_HOME, GEMINI_CLI_HOME,
+  // GEMINI_SYSTEM_MD); no DISABLE_AUTO_COMPACT, no DISABLE_COMPACT.
+  // Conflating compaction with isolation would silently leak the
+  // operator's ~/.codex or ~/.claude into the bridge child process —
+  // these assertions guard the boundary.
   const claudeEnvFull = resolveBridgeEnvDefaults('claude');
   assert.equal(claudeEnvFull?.CLAUDE_CONFIG_DIR, CLAUDE_CONFIG_OVERLAY_DIR,
     'claude bridge env must pin CLAUDE_CONFIG_DIR to the overlay');
   assert.equal(claudeEnvFull?.DISABLE_AUTO_COMPACT, undefined,
-    '0.5.0 default: claude bridge env must NOT inject DISABLE_AUTO_COMPACT (backend-native compaction is allowed)');
+    '0.5.0: claude bridge env must NOT inject DISABLE_AUTO_COMPACT (bridge does not implement compaction)');
   assert.equal(claudeEnvFull?.DISABLE_COMPACT, undefined,
-    '0.5.0 default: claude bridge env must NOT inject DISABLE_COMPACT');
-  // Claude — escape hatch: compaction guards reappear, isolation stays.
-  const claudeEnvHatch = resolveBridgeEnvDefaults('claude', { disableBackendCompaction: true });
-  assert.equal(claudeEnvHatch?.CLAUDE_CONFIG_DIR, CLAUDE_CONFIG_OVERLAY_DIR,
-    'claude bridge env must keep CLAUDE_CONFIG_DIR under the escape hatch');
-  assert.equal(claudeEnvHatch?.DISABLE_AUTO_COMPACT, '1',
-    'escape hatch must restore DISABLE_AUTO_COMPACT');
-  assert.equal(claudeEnvHatch?.DISABLE_COMPACT, '1',
-    'escape hatch must restore DISABLE_COMPACT');
-  // Codex defaults — both passes must keep the isolation pins. Codex's
-  // compaction guard is a launch-arg threshold (model_auto_compact_token_limit),
-  // not an env var, so the compaction option does not affect codex env directly.
+    '0.5.0: claude bridge env must NOT inject DISABLE_COMPACT');
   const codexEnvFull = resolveBridgeEnvDefaults('codex');
   assert.equal(codexEnvFull?.CODEX_HOME, CODEX_CONFIG_OVERLAY_DIR,
     'codex bridge env must pin CODEX_HOME to the overlay');
   assert.equal(codexEnvFull?.CODEX_SQLITE_HOME, CODEX_CONFIG_OVERLAY_DIR,
     'codex bridge env must pin CODEX_SQLITE_HOME to the overlay (state_5.sqlite isolation)');
-  const codexEnvHatch = resolveBridgeEnvDefaults('codex', { disableBackendCompaction: true });
-  assert.equal(codexEnvHatch?.CODEX_HOME, CODEX_CONFIG_OVERLAY_DIR,
-    'codex bridge env must keep CODEX_HOME under the escape hatch');
-  assert.equal(codexEnvHatch?.CODEX_SQLITE_HOME, CODEX_CONFIG_OVERLAY_DIR,
-    'codex bridge env must keep CODEX_SQLITE_HOME under the escape hatch');
 
   // Gemini launch — PATH path (no override). Must resolve to
   // `gemini --acp --admin-policy <overlay-home>/.gemini/policies/admin.toml`. The admin-
@@ -2132,18 +2087,13 @@ try {
   //     replacing gemini's bundled "Instruction and Memory Files" body
   //     with the operator engraving. Equivalent in role to Claude's
   //     `_meta.systemPrompt` and Codex's `-c developer_instructions`.
-  // Both pins survive the compaction toggle — they are operator-config-
-  // isolation invariants, not policy choices.
+  // These pins are operator-config-isolation invariants — the bridge
+  // does not implement compaction, so there is no toggle to survive.
   const geminiEnvFull = resolveBridgeEnvDefaults('gemini');
   assert.equal(geminiEnvFull?.GEMINI_CLI_HOME, GEMINI_CONFIG_OVERLAY_HOME,
     'gemini bridge env must pin GEMINI_CLI_HOME to the overlay fakeHome (operator-state isolation)');
   assert.equal(geminiEnvFull?.GEMINI_SYSTEM_MD, GEMINI_OVERLAY_SYSTEM_MD_PATH,
     'gemini bridge env must pin GEMINI_SYSTEM_MD to the overlay system.md (native body replacement)');
-  const geminiEnvHatch = resolveBridgeEnvDefaults('gemini', { disableBackendCompaction: true });
-  assert.equal(geminiEnvHatch?.GEMINI_CLI_HOME, GEMINI_CONFIG_OVERLAY_HOME,
-    'gemini bridge env must keep GEMINI_CLI_HOME under the escape hatch');
-  assert.equal(geminiEnvHatch?.GEMINI_SYSTEM_MD, GEMINI_OVERLAY_SYSTEM_MD_PATH,
-    'gemini bridge env must keep GEMINI_SYSTEM_MD under the escape hatch');
 
   // Constants relationship: configDir is fakeHome + "/.gemini", and the
   // overlay-authored system.md / admin-policy paths live inside configDir.
@@ -3024,7 +2974,7 @@ session_messaging_run() {
 
 # smoke-compaction-policy — 0.5.0 compaction-policy verification.
 #
-# Six steps: 01/02/05/06 deterministic gate, 03/04 live observation
+# Six steps: 01/02/05 deterministic gate, 03/04/06 live observation
 # (require LIVE=1). See demo/compaction-policy-smoke/README.md for the
 # full surface declaration. Exits non-zero iff any deterministic step
 # fails; observed-only rows do not gate.

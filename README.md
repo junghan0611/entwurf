@@ -165,7 +165,7 @@ Codex has no `_meta.systemPrompt`, so pi-shell-acp uses codex-rs `-c` flags. Eng
 |---|---|---|
 | `approval_policy` | `never` | Autonomous pi-style operation. |
 | `sandbox_mode` | `danger-full-access` | Let pi skills read workspace-external state when needed. |
-| `model_auto_compact_token_limit` | unset (0.5.0 default — backend-native compaction allowed) | Escape hatch `PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1` re-pins to `i64::MAX` for 0.4.x parity. |
+| `model_auto_compact_token_limit` | unset (0.5.0 — bridge does not pin) | Bridge does not implement compaction. If you need Codex auto-compact off, set the limit yourself via `CODEX_ACP_COMMAND`, or export `CODEX_HOME` so Codex reads your own config tree instead of the bridge overlay. |
 | `web_search` | `disabled` | Use pi's explicit web surfaces instead. |
 | `codexDisabledFeatures` | `image_generation`, `tool_suggest`, `tool_search`, `multi_agent`, `apps`, `memories` | Fail closed on tools/memory surfaces that would bypass pi's declared MCP/tool model. |
 
@@ -340,16 +340,16 @@ Only `pi:<sessionId>` mappings are persisted at `~/.pi/agent/cache/pi-shell-acp/
 | Layer | Default | Knob |
 |---|---|---|
 | pi JSONL compaction | blocked — pi-side summary does not reduce the backend transcript | `PI_SHELL_ACP_ALLOW_PI_COMPACTION=1` to opt back in |
-| backend-native compaction | **allowed (no guard injected)** | `PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1` to restore the 0.4.x guards (escape hatch) |
-| legacy `PI_SHELL_ACP_ALLOW_COMPACTION` | — | **fail-fast** at spawn intent with a next-action message naming both new knobs |
+| backend-native compaction | **always allowed (no bridge knob)** | — set the backend's own native env/argv directly if you need it off (`DISABLE_AUTO_COMPACT=1` for Claude; for Codex, inline `-c model_auto_compact_token_limit=…` via `CODEX_ACP_COMMAND`, or export `CODEX_HOME` so Codex reads your own config tree instead of the bridge overlay); `process.env` wins |
+| legacy `PI_SHELL_ACP_ALLOW_COMPACTION` | — | **fail-fast** at spawn intent with a next-action message pointing at `PI_SHELL_ACP_ALLOW_PI_COMPACTION` |
 
 `session_before_compact` returns `{cancel: true}` by default for ACP sessions. The cancel message tells the operator that pi-side compact does not reduce the backend transcript and points at the backend-native path (send `/compact` as a backend prompt, or let the backend auto-compact). Tone matches the rest of the repo — same shape as `entwurf already exists → use entwurf_resume`: not "you did it wrong", but "here is the next action".
 
 The footer uses ACP `usage_update.used / size` (backend prompt/tools/cache/session included), with `[pi-shell-acp:usage] ...` diagnostics. Near limit, choose a visible action: clear, switch model, or let the backend compact on its own.
 
-Identity-isolation env (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CODEX_SQLITE_HOME`, `GEMINI_CLI_HOME`, `GEMINI_SYSTEM_MD`) is **never** touched by the compaction policy — it stays under both default and escape-hatch paths. Conflating compaction with isolation would silently leak the operator's `~/.codex` or `~/.claude` into the bridge child; that regression is guarded by `check-backends` and `smoke-compaction-policy`.
+Identity-isolation env (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CODEX_SQLITE_HOME`, `GEMINI_CLI_HOME`, `GEMINI_SYSTEM_MD`) is unrelated to compaction and ships unconditionally. Conflating compaction with isolation would silently leak the operator's `~/.codex` or `~/.claude` into the bridge child; that regression is guarded by `check-backends` and `smoke-compaction-policy`.
 
-Verification: `./run.sh smoke-compaction-policy` (deterministic 4-step gate). `LIVE=1 ./run.sh smoke-compaction-policy` adds steps 03/04: live release-evidence probe that spawns a real ACP child per backend (Claude + Codex), plants a sentinel, sends literal `/compact` as a backend prompt, and judges backend-compact via a dual classifier — text reply ("Context compacted") OR wire-level usage signal (`used=0` compact_boundary). Both backends pass under this path. The probe is not a product surface — there is no user-facing `/acp-compact` command. Gemini is out of scope at 0.5.0 (native `/compact` semantics on Gemini ACP unverified). See [`demo/compaction-policy-smoke/README.md`](./demo/compaction-policy-smoke/README.md).
+Verification: `./run.sh smoke-compaction-policy` (deterministic 3-step gate). `LIVE=1 ./run.sh smoke-compaction-policy` adds steps 03/04/06: live release-evidence probe that spawns a real ACP child per backend (Claude + Codex + Gemini), plants a sentinel, sends literal `/compact` as a backend prompt, and judges backend-compact via a dual classifier — text reply ("Context compacted") OR wire-level usage signal (`used=0` compact_boundary). Claude + Codex pass under this path; Gemini step 06 is exploratory (Gemini ACP does not advertise `/compact` — the probe records the actual observation, not a release claim). The probe is not a product surface — there is no user-facing `/acp-compact` command. See [`demo/compaction-policy-smoke/README.md`](./demo/compaction-policy-smoke/README.md).
 
 ### Backend capability notes
 
@@ -365,14 +365,14 @@ The three backends share the same operating-surface shape (carrier, overlay, too
 | Skill install surface (declarative) | `skillPlugins` → `.claude-plugin/plugin.json` plugin roots (see §Custom Skills) | not exposed by pi-shell-acp — use `~/.codex/skills/` passthrough | not exposed by pi-shell-acp — use `~/.gemini/skills/` passthrough |
 | Skill runtime callable surface | `Skill` tool + `~/.claude/skills/` passthrough | `~/.codex/skills/` passthrough | `activate_skill` + `~/.gemini/skills/` passthrough |
 | MCP injection | `piShellAcpProvider.mcpServers` | `piShellAcpProvider.mcpServers` | `piShellAcpProvider.mcpServers` (merged into `settings.merged.mcpServers` by `acpSessionManager.newSessionConfig`; advertised by `discoverMcpTools` via the same path as native `tools.core`) |
-| Backend auto-compaction | allowed by default (0.5.0); escape hatch re-injects `DISABLE_AUTO_COMPACT=1` + `DISABLE_COMPACT=1` | allowed by default (0.5.0); escape hatch re-injects `-c model_auto_compact_token_limit=i64::MAX` | allowed by default (no equivalent toggle) |
+| Backend auto-compaction | always allowed (0.5.0 — bridge does not inject any guard) | always allowed (0.5.0 — bridge does not inject any guard) | always allowed (no equivalent toggle) |
 | Operator context cap override | `PI_SHELL_ACP_CLAUDE_CONTEXT=<int>` | covered by codex-acp's own narrowing (272K) | `PI_SHELL_ACP_GEMINI_CONTEXT=<int>` |
 
 **Capability parity restored — Gemini skill + MCP advertise (0.4.11).** Earlier baselines (0.4.8 / 0.4.9) recorded a "Gemini MCP function-schema advertise asymmetry"; that reading has been retracted. The asymmetry was overlay-induced, not upstream: `tools.core` excluded `activate_skill`, `skills.enabled` was pinned `false`, and `~/.gemini/skills/` was not on the passthrough whitelist. MCP parity also needed a Gemini admin-policy fix: `mcpName` had to match gemini-cli's string-only schema, and invocation ultimately converged on `mcpName = "*"` with the real per-server whitelist enforced one layer earlier by `settings.mcp.allowed` / `canLoadServer`. With the advertise + invocation channels reopened, Gemini gets the same skill + MCP capability dignity as Claude and Codex through its own native surfaces — `activate_skill` for skill activation, `discoverMcpTools` for MCP function-schema registration, and direct MCP invocation through the bridged path. See CHANGELOG 0.4.11 + BASELINE 2026-05-07 for the verification context.
 
 **Memory containment (L5).** Backend memory persistence is silenced; pi owns memory (semantic-memory + Denote llmlog). Gemini's sixth channel closure is in CHANGELOG 0.4.9 + BASELINE 2026-05-06.
 
-The 0.5.0 compaction knobs (`PI_SHELL_ACP_ALLOW_PI_COMPACTION`, `PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION`) never touch identity-isolation env (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CODEX_SQLITE_HOME`, `GEMINI_CLI_HOME`, `GEMINI_SYSTEM_MD`). The legacy single knob `PI_SHELL_ACP_ALLOW_COMPACTION` is removed and now throws at spawn intent.
+The single 0.5.0 compaction knob (`PI_SHELL_ACP_ALLOW_PI_COMPACTION`) does not touch identity-isolation env (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CODEX_SQLITE_HOME`, `GEMINI_CLI_HOME`, `GEMINI_SYSTEM_MD`) — those ship unconditionally. The legacy single knob `PI_SHELL_ACP_ALLOW_COMPACTION` is removed and now throws at spawn intent.
 
 ## Repository Layout
 
@@ -405,7 +405,7 @@ The maintainer uses pi-shell-acp for most pi work unless a task needs a differen
 ## Roadmap
 
 - **0.4.x — Documentation / evidence calibration.** Keep README, AGENTS.md, CHANGELOG.md, BASELINE.md, and VERIFY.md aligned. Publish redacted session-level evidence to [`junghanacs/pi-shell-acp-sessions`](https://huggingface.co/datasets/junghanacs/pi-shell-acp-sessions) via [`junghan0611/pi-share-hf`](https://github.com/junghan0611/pi-share-hf).
-- **0.5.0 — Bridge does not implement compaction (declaration).** Backend-native compaction is allowed by default; pi-side JSONL compaction stays blocked because pi-side summary does not reduce the backend transcript. Legacy `PI_SHELL_ACP_ALLOW_COMPACTION` rejected at spawn intent with a next-action message. Escape hatch `PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1` restores 0.4.x guards for a misbehaving backend. Verification via `./run.sh smoke-compaction-policy`. This is not a recap engine and not compact→new-session handoff.
+- **0.5.0 — Bridge does not implement compaction (declaration).** Backend-native compaction is always allowed (no bridge knob); pi-side JSONL compaction stays blocked because pi-side summary does not reduce the backend transcript. Legacy `PI_SHELL_ACP_ALLOW_COMPACTION` rejected at spawn intent with a next-action message pointing at `PI_SHELL_ACP_ALLOW_PI_COMPACTION`. Operators who need a specific backend's auto-compaction off export the backend's own native env/argv (`process.env` wins). Verification via `./run.sh smoke-compaction-policy`. This is not a recap engine and not compact→new-session handoff.
 - **0.6.x candidate — Public npm / pi.dev package surface.** After 0.5.0, revisit whether pi-shell-acp is ready to be raised from git-installable bridge to an early public Pi package. The intent is to publish only after the npm tarball/install UX, peer dependency namespace, README positioning, and verification story are deliberately prepared; this is not a promise to publish before the bridge feels ready.
 - **Later — Compact→new-session handoff, provider handoff, backend residue cleanup, and deeper OpenClaw tuning.** These are real follow-up areas, but not 0.5.0. Do not let them dilute the guard-split work.
 
@@ -434,7 +434,7 @@ Tracked issues:
 
 ## Next
 
-Current priority and open decisions live in [NEXT.md](./NEXT.md). Read it at session start so this repo always knows what comes next. For 0.5.0, NEXT.md is authoritative: compaction guard split / backend-native compaction escape hatch, not recap hint slot.
+Current priority and open decisions live in [NEXT.md](./NEXT.md). Read it at session start so this repo always knows what comes next. For 0.5.0, NEXT.md is authoritative: the bridge does not implement compaction (backend-native compaction always allowed, no bridge knob), not a recap hint slot.
 
 ## Status
 

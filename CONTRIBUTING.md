@@ -4,7 +4,7 @@ This is a daily-driver bridge. Correctness beats feature breadth. Read this befo
 
 ## What this repo is
 
-`pi-shell-acp` is a **thin ACP bridge** that lets pi talk to Claude Code and Codex. It borrows each backend's identity (system prompt preset, model behavior, tool implementations) and shapes the *operating surface* — what tools, MCP, skills, and permissions are visible — to match pi's own policy. That is the entire scope.
+`pi-shell-acp` is a **thin ACP bridge** that lets pi talk to Claude Code, Codex, and Gemini. It borrows each backend's identity (system prompt preset, model behavior, tool implementations) and shapes the *operating surface* — what tools, MCP, skills, and permissions are visible — to match pi's own policy. That is the entire scope.
 
 If a change moves the bridge toward "second harness" — prompt reconstruction, transcript hydration, ambient discovery, silent fallback — it does not belong here.
 
@@ -17,8 +17,8 @@ These are enforced by code, gates, and review. Do not weaken them in a PR; if yo
 3. **MCP injection**: only via `piShellAcpProvider.mcpServers`. No ambient `~/.mcp.json` scanning, no `~/.claude/settings.json` MCP inheritance.
 4. **Operating surface, not config inheritance**: the user's filesystem Claude Code config (`~/.claude/settings.json` hooks, env, plugins, `permissions.defaultMode`) is intentionally *not* inherited. Skills come from `skillPlugins`, permissions from `permissionAllow`, deferred-tool surface from `disallowedTools`. The `CLAUDE_CONFIG_DIR` overlay enforces this even where the SDK reads filesystem independently of `settingSources`.
 5. **Codex sandbox**: defaults to `full-access` (the only preset that lets pi-baseline skills like `gogcli` reach `~/.gnupg/`). Tightening is opt-in via `PI_SHELL_ACP_CODEX_MODE`. Invalid values throw, never fall back.
-6. **Bridge does not implement compaction (0.5.0)**: ACP backends compact natively; the pi session survives that. Default — pi JSONL compaction blocked (pi-side summary does not reduce the backend transcript), backend-native compaction allowed (no guard injected). Knobs — `PI_SHELL_ACP_ALLOW_PI_COMPACTION=1` opts back into pi-side compact; `PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1` restores the 0.4.x backend guards as an escape hatch. Legacy `PI_SHELL_ACP_ALLOW_COMPACTION=1` is rejected at spawn intent with a next-action message.
-7. **Dual-backend parity**: changes to operating surface, session lifecycle, or persistence must be verified against both Claude and Codex. A claim that only one backend works is a regression.
+6. **Bridge does not implement compaction (0.5.0)**: ACP backends compact natively; the pi session survives that. Default — pi JSONL compaction blocked (pi-side summary does not reduce the backend transcript), backend-native compaction **always allowed (no bridge knob)**. Single knob — `PI_SHELL_ACP_ALLOW_PI_COMPACTION=1` opts back into pi-side compact. Operators who need a specific backend's auto-compaction off export the backend's own native env/argv directly (`DISABLE_AUTO_COMPACT=1` for Claude; for Codex, inline `-c model_auto_compact_token_limit=…` via `CODEX_ACP_COMMAND`, or export `CODEX_HOME` so Codex reads your own config tree instead of the bridge overlay). `process.env` wins. Legacy `PI_SHELL_ACP_ALLOW_COMPACTION=1` is rejected at spawn intent with a next-action message pointing at `PI_SHELL_ACP_ALLOW_PI_COMPACTION`.
+7. **Three-backend equality**: changes to operating surface, session lifecycle, or persistence must be verified against Claude, Codex, and Gemini. A claim that silently drops one backend is a regression; if one backend is genuinely not covered, record that carve-out explicitly.
 8. **This bridge is not a second harness**: no prompt reconstruction, no transcript hydration, no tool result ledger, no Claude Code emulation.
 
 ## Required gate before opening a PR
@@ -44,7 +44,7 @@ These need a real ACP subprocess, so they stay manual — the hook does not run 
 - inherits user / project / local backend config by default (i.e. flips `settingSources` away from `[]`, drops the `CLAUDE_CONFIG_DIR` overlay, removes the codex `-c` config flags)
 - weakens `resume > load > new` (e.g. silently downgrading to `new` without a logged invalidation reason)
 - introduces `console.warn` / silent fallback where the bridge should `throw` (see `AGENTS.md` "Never warn. Throw.")
-- changes the Claude or Codex operating surface (tools, skills, MCP, permissions, sandbox) without a paired update on the other backend or an explicit "Claude-only" / "Codex-only" justification
+- changes the Claude, Codex, or Gemini operating surface (tools, skills, MCP, permissions, sandbox) without accounting for all three backends or recording an explicit carve-out
 - adds a second transcript ledger, a prompt reconstruction layer, or any state that competes with pi's session as the source of truth
 - skews version pins across `package.json`, `run.sh`, and `README.md` (the `check-dep-versions` gate catches this; if it complains, fix all three)
 

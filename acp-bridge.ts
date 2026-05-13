@@ -637,8 +637,6 @@ function resolveClaudeAcpLaunch(_launchParams: AcpBackendLaunchParams): AcpLaunc
 	};
 }
 
-const CODEX_DISABLE_AUTO_COMPACT_ARGS = ["-c", "model_auto_compact_token_limit=9223372036854775807"] as const;
-
 // Codex tool surface alignment — defense in depth.
 //
 // Pi advertises a fixed 4-tool baseline (Read/Bash/Edit/Write, mapped to
@@ -805,74 +803,44 @@ const CODEX_MODE_ARGS: Record<CodexMode, readonly string[]> = {
 	"full-access": ["-c", "approval_policy=never", "-c", "sandbox_mode=danger-full-access"],
 };
 
-// Backend compaction guards — env-side (Claude) and argv-side (Codex).
+// Compaction policy (0.5.0).
 //
-// 0.4.x defaulted these ON: the bridge injected DISABLE_AUTO_COMPACT /
-// DISABLE_COMPACT into the Claude child env and pinned
-// model_auto_compact_token_limit=i64::MAX into Codex argv, effectively
-// disabling backend-native compaction across the board. That was a
-// deliberate, temporary expedient: keep the bridge surface small and
-// knowable while we reasoned about identity carriage, MCP injection,
-// and entwurf orchestration.
+// The bridge does not implement compaction. ACP backends compact natively;
+// the pi session survives that. The bridge boundary stays explicit.
 //
-// 0.5.0 pays the debt back. The bridge does not implement compaction.
-// ACP backends compact natively; the pi session survives that. The
-// bridge boundary stays explicit.
+//   - pi JSONL compaction        → blocked (host-side, see index.ts).
+//                                  Opt-in: PI_SHELL_ACP_ALLOW_PI_COMPACTION=1.
+//   - backend-native compaction  → always allowed. The bridge does not
+//                                  inject any guard env or argv. Backends
+//                                  manage their own context-pressure path.
 //
-// Defaults (0.5.0):
-//   - pi JSONL compaction        → blocked (host-side, see index.ts)
-//   - backend-native compaction  → allowed (no guard injected)
+// Operators who need a backend's auto-compaction off for a specific
+// reason can export the backend's own native env/argv directly (e.g.
+// DISABLE_AUTO_COMPACT=1 for Claude); process.env wins over adapter
+// defaults, so the operator's shell always carries through.
 //
-// Escape hatch: PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1 restores the
-// 0.4.x guards for debug / a misbehaving backend. Documented, not the
-// preferred path.
-//
-// Identity-isolation keys in adapter.bridgeEnvDefaults — CODEX_HOME,
-// CODEX_SQLITE_HOME, CLAUDE_CONFIG_DIR, GEMINI_CLI_HOME, GEMINI_SYSTEM_MD —
-// are NEVER touched by the compaction policy. They are invariants of
-// the operator-config-isolation design; conflating them with compaction
-// would silently leak the operator's ~/.codex or ~/.claude into the
-// bridge child process. resolveBridgeEnvDefaults preserves them across
-// both default and escape-hatch paths.
-const COMPACTION_GUARD_ENV_KEYS: ReadonlySet<string> = new Set(["DISABLE_AUTO_COMPACT", "DISABLE_COMPACT"]);
+// Identity-isolation keys in adapter.bridgeEnvDefaults (CODEX_HOME,
+// CODEX_SQLITE_HOME, CLAUDE_CONFIG_DIR, GEMINI_CLI_HOME, GEMINI_SYSTEM_MD)
+// are unrelated to compaction. They are operator-config-isolation
+// invariants and ship to every spawn unconditionally.
 
 /**
  * Materialize the spawned child's env defaults for a backend.
  *
- * - disableBackendCompaction === true: keep the adapter's full env,
- *   including the legacy compaction guard keys (Claude:
- *   DISABLE_AUTO_COMPACT, DISABLE_COMPACT). This is the
- *   PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1 escape hatch.
- * - disableBackendCompaction === false / unset: strip the compaction
- *   guard keys so the backend can run its native auto-compaction.
- *   Identity-isolation keys stay regardless.
- *
- * Exported for check-backends so the contract is verified at unit-test
- * time, not just at production startup.
+ * 0.5.0: identity-isolation pins only. Compaction is not the bridge's
+ * concern. Exported for check-backends so the contract is verified at
+ * unit-test time, not just at production startup.
  */
-export function resolveBridgeEnvDefaults(
-	backend: AcpBackend,
-	options?: { disableBackendCompaction?: boolean },
-): Record<string, string> | undefined {
+export function resolveBridgeEnvDefaults(backend: AcpBackend): Record<string, string> | undefined {
 	const adapter = ACP_BACKEND_ADAPTERS[backend];
-	const adapterEnv = adapter?.bridgeEnvDefaults;
-	if (!adapterEnv) return undefined;
-	if (options?.disableBackendCompaction) return adapterEnv;
-	// Default path (0.5.0): drop the compaction guard keys; keep all
-	// identity-isolation keys verbatim.
-	return Object.fromEntries(Object.entries(adapterEnv).filter(([key]) => !COMPACTION_GUARD_ENV_KEYS.has(key)));
-}
-
-export function isBackendCompactionDisabledByOperator(): boolean {
-	const v = process.env.PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION?.trim().toLowerCase();
-	return v === "1" || v === "true" || v === "yes";
+	return adapter?.bridgeEnvDefaults;
 }
 
 /**
  * Legacy knob refusal — 0.5.0 throws when an operator still sets
  * PI_SHELL_ACP_ALLOW_COMPACTION=1. Tone matches the rest of the bridge
  * (entwurf already exists → use entwurf_resume): not "you did it wrong",
- * but "this split into two knobs; here is the next action for each".
+ * but "here is the next action".
  *
  * Invoked at every spawn intent (resolveAcpBackendLaunch). Any path
  * that lands an ACP child crosses this surface, so the operator hits
@@ -886,34 +854,25 @@ export function assertLegacyCompactionKnobUnset(): void {
 	if (v === "" || (v !== "1" && v !== "true" && v !== "yes")) return;
 	throw new Error(
 		[
-			`${LEGACY_COMPACTION_KNOB}=${raw} is no longer accepted — it was split in 0.5.0.`,
+			`${LEGACY_COMPACTION_KNOB}=${raw} is no longer accepted.`,
 			"",
-			"  pi JSONL compaction:",
+			"  0.5.0: backend-native compaction is always allowed — the bridge does",
+			"  not implement compaction and does not inject any guard. Backends",
+			"  manage their own context-pressure path. There is no bridge knob",
+			"  for backend compaction; if you need a specific backend's auto-",
+			"  compaction off, export the backend's own native env/argv directly",
+			"  (e.g. DISABLE_AUTO_COMPACT=1 for Claude).",
+			"",
+			"  pi JSONL compaction stays blocked by default:",
 			"    PI_SHELL_ACP_ALLOW_PI_COMPACTION=1",
 			"    (only useful if you accept that pi-side summaries do not reduce",
 			"     the ACP backend transcript)",
-			"",
-			"  backend-native compaction:",
-			"    bridge no longer blocks it by default — Claude/Codex compact",
-			"    on their own. Set PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1",
-			"    only if you need the 0.4.x guards back as an escape hatch.",
-			"",
-			"Pick whichever you actually meant. The single combined knob is gone.",
 		].join("\n"),
 	);
 }
 
 function shellQuote(value: string): string {
 	return `'${value.replace(/'/g, `'"'"'`)}'`;
-}
-
-function codexAutoCompactArgs(): string[] {
-	// 0.5.0 default: bridge does not pin Codex's
-	// model_auto_compact_token_limit. Codex's native auto-compaction is
-	// allowed to run. The escape hatch
-	// PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1 pins it back to i64::MAX,
-	// matching the 0.4.x behavior for operators who need the old guard.
-	return isBackendCompactionDisabledByOperator() ? [...CODEX_DISABLE_AUTO_COMPACT_ARGS] : [];
 }
 
 export function resolveCodexMode(): CodexMode {
@@ -937,28 +896,28 @@ function codexModeArgs(): string[] {
 function resolveCodexAcpLaunch(launchParams: AcpBackendLaunchParams): AcpLaunchSpec {
 	const override = process.env.CODEX_ACP_COMMAND?.trim();
 	// codex-rs merges `-c key=value` flags left-to-right, with later values
-	// for the same key winning. We append our mode + compaction args *after*
-	// the operator's CODEX_ACP_COMMAND override (see the override branch
-	// below: `${override} ${ourFlags}`), so pi-shell-acp's policy always wins
-	// against any `-c approval_policy=…` / `-c sandbox_mode=…` /
-	// `-c model_auto_compact_token_limit=…` the operator may have inlined.
-	// This is intentional — the env knobs are the supported way to change
-	// these policies, not CODEX_ACP_COMMAND:
-	//   - PI_SHELL_ACP_CODEX_MODE                       (sandbox + approval policy)
-	//   - PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION       (0.4.x escape hatch — re-pins
-	//                                                    model_auto_compact_token_limit
-	//                                                    to i64::MAX; default 0.5.0 is
-	//                                                    no pin)
-	//   - PI_SHELL_ACP_ALLOW_COMPACTION                 (legacy single knob; rejected
-	//                                                    at spawn intent via
-	//                                                    assertLegacyCompactionKnobUnset)
+	// for the same key winning. We append our mode args *after* the operator's
+	// CODEX_ACP_COMMAND override (see the override branch below:
+	// `${override} ${ourFlags}`), so pi-shell-acp's policy always wins against
+	// any `-c approval_policy=…` / `-c sandbox_mode=…` the operator may have
+	// inlined. This is intentional — the env knobs are the supported way to
+	// change these policies, not CODEX_ACP_COMMAND:
+	//   - PI_SHELL_ACP_CODEX_MODE       (sandbox + approval policy)
+	//   - PI_SHELL_ACP_ALLOW_COMPACTION (legacy single knob; rejected at
+	//                                    spawn intent via
+	//                                    assertLegacyCompactionKnobUnset)
+	// 0.5.0: the bridge does NOT inject Codex's
+	// `-c model_auto_compact_token_limit=…`. Backend-native auto-compaction
+	// runs on its own; if you need it off, set the codex-side knob directly
+	// (e.g. inline via CODEX_ACP_COMMAND, or by exporting CODEX_HOME so Codex
+	// reads your own config tree instead of the bridge overlay).
+	//
 	// The feature-gate args are built from the launch param so operators who
 	// set `codexDisabledFeatures` in settings.json control the policy from
 	// there, mirroring how Claude's `disallowedTools` is operator-tunable on
 	// the other side.
 	const allArgs = [
 		...codexModeArgs(),
-		...codexAutoCompactArgs(),
 		...CODEX_STATIC_TOOL_SURFACE_ARGS,
 		...CODEX_OPERATOR_ISOLATION_ARGS,
 		...codexFeatureGateArgs(launchParams.codexDisabledFeatures),
@@ -2241,16 +2200,12 @@ const ACP_BACKEND_ADAPTERS: Record<AcpBackend, AcpBackendAdapter> = {
 		// `pi-context-augment.ts` for the rationale.
 		buildBootstrapPromptAugment: (text) => [{ type: "text", text }],
 		bridgeEnvDefaults: {
-			// 0.4.x compaction guards — kept here as the escape-hatch
-			// payload only. By default (0.5.0), resolveBridgeEnvDefaults
-			// strips both keys before they reach the spawned child; backend-
-			// native compaction is allowed. The operator must explicitly set
-			// PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1 to restore them.
-			// Stored on the adapter (not inline at the call site) so the
-			// escape-hatch payload stays per-backend and authoritative —
-			// Claude's compaction surface is env, Codex's is argv.
-			DISABLE_AUTO_COMPACT: "1",
-			DISABLE_COMPACT: "1",
+			// 0.5.0: identity-isolation only. No compaction guards — the
+			// bridge does not implement compaction (backend-native auto-
+			// compaction is always allowed). If you need Claude's auto-compact
+			// off for a specific reason, export DISABLE_AUTO_COMPACT=1 from
+			// your shell; process.env wins over adapter defaults.
+			//
 			// Redirect claude-agent-acp's SettingsManager away from
 			// ~/.claude/settings.json so the operator's native `permissions.defaultMode`
 			// (often "auto") does not silently apply to pi-shell-acp sessions. The
@@ -2332,14 +2287,11 @@ const ACP_BACKEND_ADAPTERS: Record<AcpBackend, AcpBackendAdapter> = {
 			// codex backend (codex-rs/state/runtime.rs).
 			CODEX_SQLITE_HOME: CODEX_CONFIG_OVERLAY_DIR,
 		},
-		// codex-rs does not expose a boolean/env auto-compaction toggle like
-		// Claude Code. It exposes the same behavior as a config threshold:
-		// model_auto_compact_token_limit. 0.4.x raised that threshold to
-		// i64::MAX by default, disabling Codex auto-compaction at the bridge
-		// surface. 0.5.0 does NOT pin it by default — Codex's native
-		// auto-compaction is allowed. The escape hatch
-		// PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1 re-injects the i64::MAX
-		// pin in codexAutoCompactArgs() for operators who need the old guard.
+		// 0.5.0: the bridge does NOT pin codex-rs's
+		// `model_auto_compact_token_limit`. Codex's native auto-compaction
+		// runs on its own. If you need it off, set the codex-side knob
+		// directly via CODEX_ACP_COMMAND, or export CODEX_HOME so Codex
+		// reads your own config tree instead of the bridge overlay.
 	},
 };
 
@@ -2846,21 +2798,12 @@ async function createBridgeProcess(params: EnsureBridgeSessionParams): Promise<A
 	});
 	// Adapter defaults first, process.env last → operator's shell always wins.
 	//
-	// 0.5.0 compaction policy:
-	//   - Default: bridge does NOT inject backend compaction guards.
-	//     Claude DISABLE_AUTO_COMPACT / DISABLE_COMPACT are absent;
-	//     Codex model_auto_compact_token_limit is absent (handled in
-	//     resolveCodexAcpLaunch via codexAutoCompactArgs).
-	//   - Escape hatch: PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1
-	//     restores the 0.4.x guards (for debug or a misbehaving backend).
-	//
-	// Identity-isolation keys (CODEX_HOME, CODEX_SQLITE_HOME,
-	// CLAUDE_CONFIG_DIR, GEMINI_CLI_HOME, GEMINI_SYSTEM_MD) are NEVER
-	// dropped by either path — they are invariants of the operator-config-
-	// isolation design, not policy choices the compaction knob can affect.
-	const bridgeEnvDefaults = resolveBridgeEnvDefaults(params.backend, {
-		disableBackendCompaction: isBackendCompactionDisabledByOperator(),
-	});
+	// 0.5.0: identity-isolation pins only (CODEX_HOME, CODEX_SQLITE_HOME,
+	// CLAUDE_CONFIG_DIR, GEMINI_CLI_HOME, GEMINI_SYSTEM_MD). The bridge
+	// does not inject backend compaction guards — backend-native auto-
+	// compaction is always allowed. Operators who need a backend's auto-
+	// compaction off can export the backend's own native env/argv.
+	const bridgeEnvDefaults = resolveBridgeEnvDefaults(params.backend);
 	// Refresh the claude config overlay before every claude session bootstrap.
 	// Idempotent — picks up any new entries that appeared in ~/.claude/ since
 	// the last run (e.g. a freshly created project) without manual intervention.
