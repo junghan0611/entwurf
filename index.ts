@@ -1188,31 +1188,49 @@ export default function (pi: ExtensionAPI) {
 		await cleanupBridgeSessionProcess(`pi:${sessionId}`);
 	});
 
-	// Block all compaction at the host (pi) level.
+	// Block pi-side (host) compaction at session_before_compact.
 	//
-	// pi runs four compaction paths today, and three of them are silent:
-	//   1. silent overflow recovery (`isContextOverflow` Case 2 — input + cacheRead > window)
-	//   2. threshold compaction (`shouldCompact(contextTokens, contextWindow, settings)`)
+	// pi runs four compaction paths, all going through this event:
+	//   1. silent overflow recovery (`isContextOverflow` Case 2)
+	//   2. threshold compaction (`shouldCompact(...)`)
 	//   3. explicit error overflow recovery
 	//   4. manual `/compact` invoked by the operator
 	//
-	// All four go through `session_before_compact`, so returning `{ cancel: true }`
-	// here covers them as a group. That removes the need for the operator to
-	// remember to set `compaction.enabled=false` in their pi settings — this
-	// repo is the one with the policy ("non-compaction is the autonomous-
-	// operation invariant"), so the gate belongs here, not in agent-config.
+	// 0.5.0 policy: pi-side compact stays blocked by default for ACP
+	// sessions. The reason is honest and worth surfacing — pi-side
+	// summaries do NOT reduce the ACP backend transcript. The backend
+	// has its own session and its own compaction interface; running a
+	// pi-side summary just shrinks pi's view of the conversation while
+	// the backend keeps growing. That is not what the operator wants
+	// when they hit context pressure on an ACP session.
 	//
-	// Manual `/compact` users get a clear "Compaction cancelled" surface from
-	// agent-session.js, so the intent stays observable. If an operator really
-	// wants pi-side compaction back (e.g. a long-running maintenance session),
-	// `PI_SHELL_ACP_ALLOW_COMPACTION=1` opts out of this guard at process level.
+	// Backend-native compaction is no longer blocked by the bridge
+	// (see acp-bridge.ts). Claude/Codex compact themselves; the pi
+	// session survives that. If the operator types `/compact` and
+	// actually wants the backend to compact, they should send it as a
+	// backend prompt (or let the backend auto-compact). The message
+	// below names this next action — same tone as
+	// "entwurf already exists → use entwurf_resume".
+	//
+	// Escape: `PI_SHELL_ACP_ALLOW_PI_COMPACTION=1` opts back into pi-
+	// side compaction (rare; useful only when the operator accepts
+	// that the backend transcript will stay untouched).
 	on("session_before_compact", () => {
-		const allow = process.env.PI_SHELL_ACP_ALLOW_COMPACTION?.trim().toLowerCase();
-		if (allow === "1" || allow === "true" || allow === "yes") {
+		if (isPiCompactionAllowedByOperator()) {
 			return;
 		}
 		console.error(
-			"[pi-shell-acp:compaction] blocked at session_before_compact — pi-shell-acp keeps pi as the single context-management authority. Set PI_SHELL_ACP_ALLOW_COMPACTION=1 to opt out.",
+			[
+				"[pi-shell-acp:compaction] pi-side compact is blocked for ACP sessions —",
+				"  it does not reduce the backend transcript (only pi's local JSONL view).",
+				"",
+				"  Backend-native compaction is handled by the ACP backend itself.",
+				"  Send `/compact` to the backend as a regular prompt, or let the",
+				"  backend auto-compact when it hits its own threshold.",
+				"",
+				"  To opt back into pi-side compact anyway (accepting that the",
+				"  backend transcript stays untouched), set PI_SHELL_ACP_ALLOW_PI_COMPACTION=1.",
+			].join("\n"),
 		);
 		return { cancel: true };
 	});
@@ -1224,4 +1242,9 @@ export default function (pi: ExtensionAPI) {
 		models: MODELS,
 		streamSimple: (model, context, options) => streamShellAcp(pi, model, context, options),
 	});
+}
+
+function isPiCompactionAllowedByOperator(): boolean {
+	const v = process.env.PI_SHELL_ACP_ALLOW_PI_COMPACTION?.trim().toLowerCase();
+	return v === "1" || v === "true" || v === "yes";
 }

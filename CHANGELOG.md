@@ -4,6 +4,47 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Changed — 0.5.0 declaration: bridge does not implement compaction
+
+The bridge no longer implements compaction. ACP backends compact natively; the pi session survives that. The bridge boundary stays explicit. This pays back the 0.4.x debt where both Claude (`DISABLE_AUTO_COMPACT=1` + `DISABLE_COMPACT=1`) and Codex (`-c model_auto_compact_token_limit=9223372036854775807`) auto-compaction were disabled at the bridge surface — a deliberate, temporary expedient while the bridge surface was being shaped, now removed.
+
+| Layer | Default | Knob |
+|---|---|---|
+| pi JSONL compaction | blocked — pi-side summary does not reduce the backend transcript | `PI_SHELL_ACP_ALLOW_PI_COMPACTION=1` opts back in |
+| backend-native compaction | **allowed (no guard injected)** | `PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1` restores 0.4.x guards (escape hatch) |
+| legacy `PI_SHELL_ACP_ALLOW_COMPACTION` | — | **fail-fast** at spawn intent with a next-action message naming both new knobs |
+
+#### Surface changes
+
+- `acp-bridge.ts`
+  - Claude `bridgeEnvDefaults` no longer ships `DISABLE_AUTO_COMPACT` / `DISABLE_COMPACT` into the spawned child by default. `resolveBridgeEnvDefaults(backend, { disableBackendCompaction })` strips both keys on the default path; the escape hatch keeps them.
+  - Codex `resolveCodexAcpLaunch` no longer emits `-c model_auto_compact_token_limit=9223372036854775807` by default. `codexAutoCompactArgs()` returns `[]` on the default path; the escape hatch re-emits the i64::MAX pin.
+  - `resolveAcpBackendLaunch` calls `assertLegacyCompactionKnobUnset()` on entry. Every spawn path (Claude, Codex, Gemini) crosses this surface, so the legacy single knob is rejected before any ACP child can launch on stale semantics. The error message names both new knobs and tells the operator to pick the side they meant — same tone as `entwurf already exists → use entwurf_resume`.
+  - `resolveBridgeEnvDefaults`'s second-argument option key is renamed from `allowCompaction` to `disableBackendCompaction`; the meaning inverts (option=true now keeps the 0.4.x guard keys, option=false/unset strips them).
+  - Identity-isolation env (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CODEX_SQLITE_HOME`, `GEMINI_CLI_HOME`, `GEMINI_SYSTEM_MD`) is never touched by either knob — pinned at `check-backends` as a hard contract.
+
+- `index.ts`
+  - `session_before_compact` cancels by default and emits an honest message: "pi-side compact does not reduce the backend transcript; backend-native compaction is handled by the ACP backend itself; send `/compact` as a backend prompt or let the backend auto-compact". The `PI_SHELL_ACP_ALLOW_PI_COMPACTION=1` opt-back-in path is documented in the same message.
+
+- `run.sh`
+  - `check-backends` assertions inverted to the 0.5.0 contract: default Codex launch must NOT contain `model_auto_compact_token_limit`; default Claude env must NOT contain `DISABLE_AUTO_COMPACT`/`DISABLE_COMPACT`; legacy `PI_SHELL_ACP_ALLOW_COMPACTION=1` must throw at spawn intent; `PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1` must restore the 0.4.x guards. 137 assertions ok.
+  - New `./run.sh smoke-compaction-policy [--step=NN]` runner that wraps `scripts/compaction-policy-smoke.ts`. Six steps total: 01/02/05/06 form the deterministic gate (no spawn, no network); 03/04 form the live release-evidence probe — under `LIVE=1` they drive a real ACP child per backend via `runEntwurfSync` + `runEntwurfResumeSync` (same infrastructure as cross-cwd-resume-smoke), plant a unique sentinel, send literal `/compact` as a backend prompt (NOT pi-host `/compact` — entwurf delivers the string as a normal user message into the ACP child), then send a recall prompt and assert the sentinel survives. Same `taskId` across all three turns, so persisted-mapping reuse is also covered. The probe uses a **dual-classifier** for backend-compact evidence: a text classifier over the (b)-turn reply (`compacted` / `summarized` / `context reduced`) AND a wire classifier over the bridge stderr's `[pi-shell-acp:usage]` lines (explicit `used=0` compact_boundary, or >=50% used drop). Pass requires positive evidence from EITHER classifier plus sentinel recall — survival alone is necessary but not sufficient. The dual shape exists because the two supported backends signal compaction on different ACP wire surfaces: codex-acp emits "Context compacted" in the assistant text, while claude-agent-acp suppresses the textual ack and posts an explicit `used=0` synthetic usage_update via the SDK's `compact_boundary` event (acp-agent.js:477-498). Text-only or wire-only would mis-judge one of them; both run together and either suffices. Cost a few cents per backend. This is NOT a product surface — there is no user-facing `/acp-compact` command; the probe is release evidence, not a feature. Gemini is out of scope at 0.5.0 (native `/compact` semantics on Gemini ACP unverified). Step 05 verifies both call sites (5a wrapper `resolveAcpBackendLaunch` throws; 5b production `createBridgeProcess` source carries the same `assertLegacyCompactionKnobUnset()` call) — bypass between the two paths was a reviewer-found regression and the smoke now guards against it.
+
+#### Migration
+
+`PI_SHELL_ACP_ALLOW_COMPACTION=1` in 0.4.x meant two things at once: pi-side compact was allowed AND the backend guards were stripped (so backend-native compact could run). 0.5.0 splits the two so the operator can pick the side they actually meant.
+
+- **0.4.x `PI_SHELL_ACP_ALLOW_COMPACTION=1` → 0.5.0 `PI_SHELL_ACP_ALLOW_PI_COMPACTION=1`.** Backend-native compaction is already allowed by default in 0.5.0 (no knob needed), so the only piece of the old broad semantic that still needs an opt-in is the pi-side one. Setting just `ALLOW_PI_COMPACTION=1` reproduces the full 0.4.x `ALLOW_COMPACTION=1` behavior.
+- **Do NOT also set `PI_SHELL_ACP_DISABLE_BACKEND_COMPACTION=1`.** That knob restores the 0.4.x backend guards (Claude env + Codex argv), which is the opposite of what `ALLOW_COMPACTION=1` did. Use it only as a debug escape hatch for a misbehaving backend — not as part of the 0.4.x migration.
+- **Bridge will refuse to spawn while `PI_SHELL_ACP_ALLOW_COMPACTION=1` is still set.** The throw at spawn intent names both new knobs and explains which one corresponds to the side the operator likely meant. No silent acceptance.
+
+#### Docs
+
+- README §Compaction policy rewritten around the declaration; the backend-auto-compaction matrix row inverted; `model_auto_compact_token_limit` reference settings row updated; roadmap 0.5.0 line restated as declaration rather than guard split.
+- AGENTS §Hard Rule #9 §Compaction / evidence rewritten with the two-knob model and the legacy-throw contract; §Forbidden misreads line updated; §Next paragraph restated.
+- VERIFY §1A.4 compaction-policy note rewritten; new `0.5.0 compaction policy` evidence row at L3 backed by `smoke-compaction-policy`; the 0.4.x long-session fact-retention baseline annotated as needing a 0.5.0 re-baseline; cross-vendor §13 paragraph adjusted to reflect that the no-excuse-for-forgetting framing is 0.4.x-specific.
+- New `demo/compaction-policy-smoke/README.md` documenting the six-step surface.
+
 ## 0.4.17 — 2026-05-12
 
 ### Fixed
