@@ -1,0 +1,5 @@
+# Fixture jsonl files are real operator transcripts (see README.md
+# §Sensitivity). The index README ships in the public repo; the captured
+# `.jsonl` does not, so the directory stays auditable without exposing
+# the full live garden content.
+*.jsonl

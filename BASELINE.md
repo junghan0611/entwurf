@@ -252,6 +252,62 @@ the scoring criteria so it stays scannable.
 
 # HISTORY
 
+## [2026-05-13 Wed] — 0.5.0 Claude organic context-pressure continuity (probe-confirmed)
+
+The first BASELINE row for 0.5.0's "bridge does not implement compaction"
+declaration. Closes Claude's `Axis 1 last column` and `Axis 3` of
+`NEXT.md`'s three-backend continuity table at scenario-C level. The
+question this row answers is not "does literal `/compact` work?" (that
+was LIVE 03) but the GLG original question: *when a Claude ACP backend
+actually fills its context, what happens, and does pi-shell-acp stay a
+thin bridge across that event?*
+
+| Field | Value |
+|---|---|
+| Fixture / session | `demo/compaction-policy-smoke/fixtures/pre-backend-compact--019e19e0--org-sonnet-97pct.jsonl` (operator capture, 2026-05-12 12:14 KST close; the directory's `.gitignore` keeps the captured `.jsonl` untracked, only the index README ships) |
+| Backend | `claude-agent-acp` / `claude-sonnet-4-6` (high) |
+| cwd | `~/sync/org` |
+| Before | `used ~ 97.4 % / 200k` (footer at fixture capture) |
+| Trigger | `pias --session <fixture-copy> -p "READY?"` where `pias = PI_SHELL_ACP_DEBUG=1 pi --model pi-shell-acp/claude-sonnet-4-6 --entwurf-control --emacs-agent-socket server` |
+| Bootstrap | `path=resume` (NOT new) — the persisted mapping was honored |
+| acpSessionId | reused — `a01cb05f-786a-4f9d-89c8-139a95506440` across the event |
+| persistedAcpSessionId | === acpSessionId — mapping not invalidated |
+| User-visible signal | leading `Compacting...\n\nCompacting completed.` chunks in pi stdout (ordinary `agent_message_chunk` text) |
+| Wire signal | 97 % → 7.3 % `used` drop (`used=14675 / 200000`, raw `output=1437 cacheRead=19952 cacheWrite=6889`); **no** synthetic `used=0` boundary on the organic path — that artifact is explicit `/compact` only (LIVE 03 via `compact_boundary` SDK event) |
+| Shutdown | `closeRemote=false invalidatePersisted=false childExit=exited` |
+| Conclusion | Claude backend owns auto-compact; pi-shell-acp does not hydrate or rewrite transcript; the existing pi session continues on the same `acpSessionId`. |
+
+**Failure mode discovered during the probe.** The operator alias `pias`
+already carries `--emacs-agent-socket server`. The first probe attempt
+was run *without* that flag and triggered
+`bootstrap-invalidate reason=incompatible_config` — the flag is folded
+into `bridgeConfigSignature` (`index.ts:836` wraps the providerSettings
+base as `{ base, emacsAgentSocket }`). Omitting it silently dropped the
+resume to a fresh `new` session and lost the 97 % context. The fixture
+README's recipe pins the alias shape to prevent recurrence.
+
+**What this closes for 0.5.0.** GLG's three release-gating questions, on
+the Claude axis:
+
+1. *Context full → how does Claude continue?* → SDK token-threshold
+   organic auto-compact fires before prompt processing. No bridge / user
+   intervention. Visible signal: `Compacting...` chunks + 90 %+ `used`
+   drop.
+2. *Backend-side compaction → what happens to pi-shell-acp mapping?* →
+   `bootstrapPath=resume`, same `acpSessionId`, no
+   `invalidatePersisted`, ordinary shutdown preserves the mapping.
+3. *Summary forwarded → what does pi need to do?* → **nothing**. The
+   bridge surfaces backend chunks as-is. `Compacting...` /
+   `Compacting completed.` land in pi stdout / JSONL the same way any
+   other assistant text does; no hidden hydration, no second-harness
+   reconstruction. Backend continues against its own self-summarized
+   context.
+
+**What remains for 0.5.0 tag.** Codex organic auto-compact (same fixture
+pattern with a saturated Codex pi-shell-acp session) and Gemini
+context-pressure ACP surface (stop reason / error / silent truncation /
+new-session required) — `NEXT.md` tracks both.
+
 ## [2026-05-07 Thu] — 0.4.11 Gemini capability parity baseline (skills + MCP advertise + invocation, all PASS)
 
 Configuration:
