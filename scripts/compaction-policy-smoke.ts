@@ -9,15 +9,12 @@
  *   explicit. pi-side JSONL compaction stays blocked (it would not
  *   reduce the backend transcript).
  *
- * Six steps prove the surface:
- *
- *   01  spawn intent has no backend compaction guard, ever
- *       (Claude env DISABLE_AUTO_COMPACT/DISABLE_COMPACT absent,
- *        Codex argv `model_auto_compact_token_limit=…` absent).
- *       The bridge does not implement compaction — backend-native
- *       auto-compaction is always allowed; there is no bridge knob
- *       to opt out. Operators who need a specific backend's auto-
- *       compaction off export the backend's native env/argv directly.
+ * Five steps prove the surface (step 01 was removed in the 0.5.0
+ * maintainer cleanup — see CHANGELOG; a negative assertion that names
+ * backend-specific compaction strings is itself an awareness of those
+ * internals and violates the bridge thesis. LIVE steps 03/04/06 catch
+ * the same regression by observing that backend-native compaction still
+ * runs end-to-end):
  *
  *   02  pi-side guard message is honest about the boundary
  *       — it tells the operator that pi-side compact does not
@@ -47,7 +44,7 @@
  *       Gemini ACP does not advertise `/compact`; this step records
  *       the actual observation, not a release claim).
  *
- * Steps 01, 02, 05 are deterministic — they exercise pure spawn intent
+ * Steps 02, 05 are deterministic — they exercise pure spawn intent
  * + message strings against the bridge module. Steps 03, 04, 06 are
  * live and require LIVE=1; they spawn a real ACP child via the entwurf
  * path (the same infrastructure used by cross-cwd-resume-smoke) and
@@ -80,7 +77,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { resolveAcpBackendLaunch, resolveBridgeEnvDefaults } from "../acp-bridge.ts";
+import { resolveAcpBackendLaunch } from "../acp-bridge.ts";
 import { analyzeSessionFileLike, runEntwurfResumeSync, runEntwurfSync } from "../pi-extensions/lib/entwurf-core.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -96,7 +93,7 @@ interface StepResult {
 	detail: string;
 }
 
-const ALL_STEPS = ["01", "02", "03", "04", "05", "06"] as const;
+const ALL_STEPS = ["02", "03", "04", "05", "06"] as const;
 type StepId = (typeof ALL_STEPS)[number];
 
 const args = process.argv.slice(2);
@@ -131,44 +128,15 @@ function withClearedEnv<T>(keys: readonly string[], overrides: Record<string, st
 
 const COMPACTION_ENV_KEYS = ["PI_SHELL_ACP_ALLOW_COMPACTION", "PI_SHELL_ACP_ALLOW_PI_COMPACTION"] as const;
 
-function step01_noGuardInjection(): StepResult {
-	const title = "01  spawn intent has no backend compaction guard, ever";
-	return withClearedEnv(
-		COMPACTION_ENV_KEYS,
-		{
-			PI_SHELL_ACP_ALLOW_COMPACTION: undefined,
-			PI_SHELL_ACP_ALLOW_PI_COMPACTION: undefined,
-		},
-		() => {
-			const claudeEnv = resolveBridgeEnvDefaults("claude") ?? {};
-			const codexLaunch = resolveAcpBackendLaunch("codex");
-			const codexArgs = codexLaunch.args.join(" ");
-
-			const claudeHasDisableAuto = claudeEnv.DISABLE_AUTO_COMPACT !== undefined;
-			const claudeHasDisable = claudeEnv.DISABLE_COMPACT !== undefined;
-			const codexHasTokenLimit = codexArgs.includes("model_auto_compact_token_limit");
-
-			const lines = [
-				`  claude env DISABLE_AUTO_COMPACT = ${claudeEnv.DISABLE_AUTO_COMPACT ?? "(absent)"}`,
-				`  claude env DISABLE_COMPACT      = ${claudeEnv.DISABLE_COMPACT ?? "(absent)"}`,
-				`  codex argv contains model_auto_compact_token_limit = ${codexHasTokenLimit ? "yes" : "no"}`,
-			];
-			console.log(`\n[${title}]`);
-			for (const l of lines) console.log(l);
-
-			const guardsPresent = claudeHasDisableAuto || claudeHasDisable || codexHasTokenLimit;
-			if (guardsPresent) {
-				return {
-					id: "01",
-					title,
-					outcome: "fail",
-					detail: "bridge still injects backend compaction guards by default — 0.4.x behavior; 0.5.0 must drop them",
-				};
-			}
-			return { id: "01", title, outcome: "pass", detail: "no guard env / argv injected by default" };
-		},
-	);
-}
+// Step 01 (spawn-intent has no backend compaction guard) was removed in
+// the 0.5.0 maintainer cleanup. The negative assertion named backend-
+// specific compaction strings, and knowing those names is itself a
+// violation of the "bridge does not implement compaction" thesis. LIVE
+// steps 03/04/06 cover the same regression surface: if the bridge ever
+// re-injects a backend-side compaction guard, backend-native compaction
+// stops working end-to-end and those live probes turn red. See CHANGELOG
+// for the historical context (0.4.x → 0.5.0 transition) and how to
+// restore the assertion if it is ever needed again.
 
 function step02_piBlockMessageHonest(): StepResult {
 	const title = "02  pi-side guard message is honest about the backend boundary";
@@ -796,7 +764,6 @@ function step05_legacyKnobThrows(): StepResult {
 }
 
 const REGISTRY: Record<StepId, () => Promise<StepResult> | StepResult> = {
-	"01": step01_noGuardInjection,
 	"02": step02_piBlockMessageHonest,
 	"03": step03_claudeSurvivesCompact,
 	"04": step04_codexSurvivesCompact,

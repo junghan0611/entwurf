@@ -814,10 +814,9 @@ const CODEX_MODE_ARGS: Record<CodexMode, readonly string[]> = {
 //                                  inject any guard env or argv. Backends
 //                                  manage their own context-pressure path.
 //
-// Operators who need a backend's auto-compaction off for a specific
-// reason can export the backend's own native env/argv directly (e.g.
-// DISABLE_AUTO_COMPACT=1 for Claude); process.env wins over adapter
-// defaults, so the operator's shell always carries through.
+// Operators who need to alter a backend's auto-compaction for a specific
+// reason configure that backend through its own native interface. The
+// bridge intentionally does not surface backend-specific compaction names.
 //
 // Identity-isolation keys in adapter.bridgeEnvDefaults (CODEX_HOME,
 // CODEX_SQLITE_HOME, CLAUDE_CONFIG_DIR, GEMINI_CLI_HOME, GEMINI_SYSTEM_MD)
@@ -859,9 +858,10 @@ export function assertLegacyCompactionKnobUnset(): void {
 			"  0.5.0: backend-native compaction is always allowed — the bridge does",
 			"  not implement compaction and does not inject any guard. Backends",
 			"  manage their own context-pressure path. There is no bridge knob",
-			"  for backend compaction; if you need a specific backend's auto-",
-			"  compaction off, export the backend's own native env/argv directly",
-			"  (e.g. DISABLE_AUTO_COMPACT=1 for Claude).",
+			"  for backend compaction; if you need to alter a specific backend's",
+			"  auto-compaction, configure that backend through its own native",
+			"  interface. The bridge intentionally does not surface backend-",
+			"  specific compaction names.",
 			"",
 			"  pi JSONL compaction stays blocked by default:",
 			"    PI_SHELL_ACP_ALLOW_PI_COMPACTION=1",
@@ -906,11 +906,11 @@ function resolveCodexAcpLaunch(launchParams: AcpBackendLaunchParams): AcpLaunchS
 	//   - PI_SHELL_ACP_ALLOW_COMPACTION (legacy single knob; rejected at
 	//                                    spawn intent via
 	//                                    assertLegacyCompactionKnobUnset)
-	// 0.5.0: the bridge does NOT inject Codex's
-	// `-c model_auto_compact_token_limit=…`. Backend-native auto-compaction
-	// runs on its own; if you need it off, set the codex-side knob directly
-	// (e.g. inline via CODEX_ACP_COMMAND, or by exporting CODEX_HOME so Codex
-	// reads your own config tree instead of the bridge overlay).
+	// 0.5.0: the bridge does not pin any backend-side compaction knob.
+	// Backend-native auto-compaction runs on its own; if a specific
+	// backend's auto-compaction needs to be disabled, configure the
+	// backend through its own native interface (the bridge does not
+	// surface backend-specific compaction names).
 	//
 	// The feature-gate args are built from the launch param so operators who
 	// set `codexDisabledFeatures` in settings.json control the policy from
@@ -1467,9 +1467,9 @@ export const CODEX_CONFIG_OVERLAY_DIR = join(homedir(), ".pi", "agent", "codex-c
 // We do NOT inherit the operator's personal config.toml (model,
 // personality, model_reasoning_effort, projects.trust_level, etc.).
 // pi-shell-acp pins every operating-surface value it cares about via `-c`
-// CLI overrides at launch (approval_policy, sandbox_mode,
-// model_auto_compact_token_limit, model where needed). Anything not pinned
-// falls through to codex-rs's own hard-coded defaults — by design.
+// CLI overrides at launch (approval_policy, sandbox_mode, model where
+// needed). Anything not pinned falls through to codex-rs's own hard-coded
+// defaults — by design.
 //
 // The header is the only required content; codex-rs accepts an effectively
 // empty TOML file. We keep the comment so an operator who inspects the
@@ -2208,9 +2208,10 @@ const ACP_BACKEND_ADAPTERS: Record<AcpBackend, AcpBackendAdapter> = {
 		bridgeEnvDefaults: {
 			// 0.5.0: identity-isolation only. No compaction guards — the
 			// bridge does not implement compaction (backend-native auto-
-			// compaction is always allowed). If you need Claude's auto-compact
-			// off for a specific reason, export DISABLE_AUTO_COMPACT=1 from
-			// your shell; process.env wins over adapter defaults.
+			// compaction is always allowed). Operators who need to alter
+			// Claude's auto-compaction configure Claude through its own
+			// native interface; the bridge intentionally does not surface
+			// backend-specific compaction names.
 			//
 			// Redirect claude-agent-acp's SettingsManager away from
 			// ~/.claude/settings.json so the operator's native `permissions.defaultMode`
@@ -2293,11 +2294,11 @@ const ACP_BACKEND_ADAPTERS: Record<AcpBackend, AcpBackendAdapter> = {
 			// codex backend (codex-rs/state/runtime.rs).
 			CODEX_SQLITE_HOME: CODEX_CONFIG_OVERLAY_DIR,
 		},
-		// 0.5.0: the bridge does NOT pin codex-rs's
-		// `model_auto_compact_token_limit`. Codex's native auto-compaction
-		// runs on its own. If you need it off, set the codex-side knob
-		// directly via CODEX_ACP_COMMAND, or export CODEX_HOME so Codex
-		// reads your own config tree instead of the bridge overlay.
+		// 0.5.0: the bridge does not pin any codex-side compaction knob.
+		// Codex's native auto-compaction runs on its own. Operators who
+		// need to alter it configure codex through its own native
+		// interface — the bridge intentionally does not surface
+		// backend-specific compaction names.
 	},
 };
 

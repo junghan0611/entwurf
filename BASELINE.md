@@ -19,13 +19,27 @@ the language that matches the session.
 > `entwurf_self`. Older rows below that mention `session-bridge` or an
 > 8-tool MCP surface are preserved as historical baselines.
 
+> **Backend scope of the question bank.** `Q-B0`, `Q-L1`, and `Q-MCP` are
+> cross-backend (they exercise carrier separation, system-prompt slot
+> isolation, and MCP whitelist closure — concepts shared by Claude,
+> Codex, and Gemini). `Q-L2`, `Q-L3`, `Q-L4`, `Q-L5R`, `Q-L5W`, and `Q-H`
+> are **gemini-specific** surface checks (admin policy, `tools.core`
+> read-class allowlist, `GEMINI.md` hierarchical walk, `memoryV2` /
+> `autoMemory`, engraving `${...}` substitution defuse). Applying those
+> rows verbatim to a Claude or Codex session will produce "name not
+> recognized" answers — which is correct behavior for those backends,
+> not a failure. When reusing this bank on Claude/Codex, swap to that
+> backend's equivalent surface (Claude: `Read/Bash/Edit/Write` +
+> `~/.claude/skills/` + `CLAUDE_CONFIG_DIR` overlay; Codex: `-c` flag
+> set + `~/.codex/skills/` + `CODEX_HOME` / `CODEX_SQLITE_HOME`).
+
 | ID       | Layer / Topic                                                            |
 |----------|--------------------------------------------------------------------------|
 | Q-B0     | Baseline harness recognition & carrier separation (general)              |
 | Q-L1     | Carrier-isolation canary — system-prompt slot                            |
 | Q-L2     | Operator memory path — binary's config-dir resolution                    |
-| Q-L3     | Tool surface — admin policy + `tools.core` allowlist                     |
-| Q-L4     | Hierarchical context discovery — `GEMINI.md` walk                        |
+| Q-L3     | Tool surface — admin policy + `tools.core` allowlist (gemini-specific)   |
+| Q-L4     | Hierarchical context discovery — `GEMINI.md` walk (gemini-specific)      |
 | Q-L5R    | Memory recall — cross-session persistence, read side                     |
 | Q-L5W    | Memory write — this-session writes + storage destination                 |
 | Q-MCP    | MCP enumerate — whitelist closure                                        |
@@ -324,10 +338,14 @@ the Claude axis:
    reconstruction. Backend continues against its own self-summarized
    context.
 
-**What remains for 0.5.0 tag.** Codex organic auto-compact (same fixture
-pattern with a saturated Codex pi-shell-acp session) and Gemini
-context-pressure ACP surface (stop reason / error / silent truncation /
-new-session required) — `NEXT.md` tracks both.
+**Superseded status (2026-05-14).** The Codex organic auto-compact cell
+that was still open when this Claude row was written is now closed by
+`demo/compaction-policy-smoke/probes/2026-05-14-codex-B-saturation/`:
+GPT-5.4 reached native-window pressure, codex-rs auto-compact fired, the
+turn answered substantively, the sentinel survived, and the same
+`acpSessionId` mapping continued. The remaining 0.5.0 release-blocking
+cell is Gemini's context-pressure ACP surface (stop reason / error /
+silent truncation / new-session required), tracked in `NEXT.md`.
 
 ## [2026-05-07 Thu] — 0.4.11 Gemini capability parity baseline (skills + MCP advertise + invocation, all PASS)
 

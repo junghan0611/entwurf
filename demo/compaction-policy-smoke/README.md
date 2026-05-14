@@ -20,25 +20,31 @@
 | `PI_SHELL_ACP_ALLOW_COMPACTION=1` (legacy) | — | **fail-fast throw at spawn intent** |
 
 If a specific backend's auto-compaction must be turned off for a debugging
-reason, export the backend's own native env/argv directly from your shell
-(`DISABLE_AUTO_COMPACT=1` for Claude; for Codex, inline `-c model_auto_compact_token_limit=…`
-via `CODEX_ACP_COMMAND`, or export `CODEX_HOME` so Codex reads your own
-config tree instead of the bridge overlay). `process.env` wins over adapter defaults,
-so the operator's shell always carries through. The bridge does not carry
-a knob for this — it is not the bridge's policy to make.
+reason, configure that backend through its own native interface — the
+bridge intentionally does not surface backend-specific compaction names
+or knob shapes, because doing so would silently teach an asymmetric
+"how to disable compact" recipe per backend and re-anchor the bridge as
+something that owns the compaction concern.
 
-## Six steps
+## Five steps
+
+(Step 01 was retired in the 0.5.0 maintainer cleanup — a negative
+assertion that names backend-specific compaction strings is itself an
+awareness of those internals and violates the bridge thesis. LIVE steps
+03/04/06 cover the regression surface: if the bridge ever re-injects a
+backend-side compaction guard, backend-native compaction stops working
+end-to-end and the live probes turn red. Exact historical knob names live
+only in CHANGELOG / raw probe evidence.)
 
 | # | What it proves | Mode |
 |---|---|---|
-| 01 | Bridge does **not** inject backend compaction guards (Claude env `DISABLE_AUTO_COMPACT`/`DISABLE_COMPACT` absent; Codex argv `model_auto_compact_token_limit=…` absent). The bridge has no knob to opt out — backend-native compaction is always allowed. | deterministic |
 | 02 | `session_before_compact` message honestly tells the operator: pi-side compact does **not** reduce the backend transcript, and points at the backend-native compaction path. Tone matches "entwurf already exists → use entwurf_resume". | deterministic |
 | 03 | **Live**: Claude ACP session survives a backend `/compact`. Spawns a real ACP child via `runEntwurfSync`, plants a unique sentinel + asserts READY, sends literal `/compact` as a backend prompt (NOT pi-host `/compact`), then sends a recall prompt and asserts the sentinel survives. Same `taskId` across all three prompts, so persisted-mapping reuse is also covered. Cost a few cents on `claude-sonnet-4-6`. | LIVE=1 (real spawn) |
 | 04 | **Live**: same 3-prompt driver against the Codex adapter, routed through pi-shell-acp ACP via `PI_ENTWURF_ACP_FOR_CODEX=1` so 0.5.0's bridge claim is what is exercised (not native codex CLI). Cost a few cents on `gpt-5.4`. | LIVE=1 (real spawn) |
 | 05 | Legacy `PI_SHELL_ACP_ALLOW_COMPACTION=1` is rejected at spawn intent with a next-action message pointing at `PI_SHELL_ACP_ALLOW_PI_COMPACTION` (the only remaining bridge knob; backend compaction is no longer a bridge concern). | deterministic |
 | 06 | **Live (exploratory)**: same 3-prompt driver against the Gemini adapter. Gemini ACP does not advertise `/compact` — the probe records the actual observation, not a release claim. | LIVE=1 (real spawn) |
 
-Steps 01, 02, 05 form the **deterministic gate** for 0.5.0 (no network,
+Steps 02, 05 form the **deterministic gate** for 0.5.0 (no network,
 no real spawn). Steps 03, 04, 06 are the **live release-evidence probe**
 — they exercise the exact pi-shell-acp prompt boundary the declaration
 is about: ACP child spawn, three-turn flow with a literal `/compact` in
@@ -109,7 +115,7 @@ From repo root:
 Single step:
 
 ```bash
-node --experimental-strip-types scripts/compaction-policy-smoke.ts --step=01
+node --experimental-strip-types scripts/compaction-policy-smoke.ts --step=02
 ```
 
 Run the full surface including the live probe (spawns a real ACP child

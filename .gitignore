@@ -20,6 +20,14 @@ CHECKLIST.md
 demo/*.gif
 demo/*.log
 
+# compaction-policy-smoke probes — raw turn captures (stdout/stderr/sentinel/
+# session-jsonl-path) are local evidence used to write the per-probe narrative
+# and the higher-level CHANGELOG / NEXT / VERIFY entries. The narrative is
+# tracked; the captures are not, both because they are large and because they
+# reference operator session state. Per-probe artifacts stay reproducible from
+# the smoke driver + the documented probe shape.
+demo/compaction-policy-smoke/probes/
+
 # Local agent incident reports / handoff notes (not for GitHub)
 .agent-reports/
 

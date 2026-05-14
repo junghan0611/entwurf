@@ -1173,8 +1173,12 @@ try {
   // `-c` flags but ours come after, so pi-shell-acp's mode policy always
   // wins.
   //
-  // 0.5.0: the bridge does NOT pin `model_auto_compact_token_limit`.
-  // Codex's native auto-compaction runs on its default threshold.
+  // 0.5.0: the bridge does not pin any codex-side compaction knob.
+  // Codex's native auto-compaction runs on its own default. The argv
+  // deepEqual below is the single source of truth — anything not in
+  // that expected list is not pinned. (The earlier explicit negative
+  // assertion on a specific knob name was removed in the 0.5.0
+  // maintainer cleanup; see CHANGELOG.)
   const codexLaunch = resolveAcpBackendLaunch('codex');
   assert.equal(codexLaunch.command, 'bash');
   assert.deepEqual(codexLaunch.args, [
@@ -1182,10 +1186,6 @@ try {
     `${codexOverride} '-c' 'approval_policy=never' '-c' 'sandbox_mode=danger-full-access' '-c' 'web_search="disabled"' '-c' 'tools.view_image=false' '-c' 'memories.generate_memories=false' '-c' 'memories.use_memories=false' '-c' 'history.persistence="none"' '-c' 'features.image_generation=false' '-c' 'features.tool_suggest=false' '-c' 'features.tool_search=false' '-c' 'features.multi_agent=false' '-c' 'features.apps=false' '-c' 'features.memories=false'`,
   ]);
   assert.equal(codexLaunch.source, 'env:CODEX_ACP_COMMAND');
-  assert.ok(
-    !codexLaunch.args.some((arg) => arg.includes('model_auto_compact_token_limit')),
-    '0.5.0 default: codex launch must NOT pin model_auto_compact_token_limit (backend-native compaction is allowed by default)',
-  );
   // Defense-in-depth: pin web_search=disabled, tools.view_image=false, and
   // four `features.*=false` flags even though the CODEX_HOME overlay
   // already strips operator config. codex-rs lets later -c values for the
@@ -1498,6 +1498,8 @@ try {
       'overlay settings.json must pin permissions.defaultMode to "default"');
     assert.equal(overlaySettings.autoMemoryEnabled, false,
       'overlay settings.json must opt out of the SDK auto-memory subsystem');
+    assert.deepEqual(overlaySettings.hooks, {},
+      'overlay settings.json must carry configured-empty hooks without inheriting operator hook definitions');
 
     // Whitelisted entries pass through as symlinks to the operator's real dir.
     const credStat = lstatSync(join(overlayDir, '.credentials.json'));
@@ -2023,22 +2025,22 @@ try {
   // The bridge does not implement compaction. The adapter's
   // bridgeEnvDefaults contains operator-config-isolation pins only
   // (CLAUDE_CONFIG_DIR, CODEX_HOME, CODEX_SQLITE_HOME, GEMINI_CLI_HOME,
-  // GEMINI_SYSTEM_MD); no DISABLE_AUTO_COMPACT, no DISABLE_COMPACT.
-  // Conflating compaction with isolation would silently leak the
-  // operator's ~/.codex or ~/.claude into the bridge child process —
-  // these assertions guard the boundary.
+  // GEMINI_SYSTEM_MD). Conflating compaction with isolation would
+  // silently leak the operator's ~/.codex or ~/.claude into the bridge
+  // child process — these assertions guard the boundary without naming
+  // backend-specific compaction knobs.
   const claudeEnvFull = resolveBridgeEnvDefaults('claude');
   assert.equal(claudeEnvFull?.CLAUDE_CONFIG_DIR, CLAUDE_CONFIG_OVERLAY_DIR,
     'claude bridge env must pin CLAUDE_CONFIG_DIR to the overlay');
-  assert.equal(claudeEnvFull?.DISABLE_AUTO_COMPACT, undefined,
-    '0.5.0: claude bridge env must NOT inject DISABLE_AUTO_COMPACT (bridge does not implement compaction)');
-  assert.equal(claudeEnvFull?.DISABLE_COMPACT, undefined,
-    '0.5.0: claude bridge env must NOT inject DISABLE_COMPACT');
+  assert.deepEqual(Object.keys(claudeEnvFull ?? {}).sort(), ['CLAUDE_CONFIG_DIR'],
+    'claude bridge env defaults must contain identity-isolation keys only');
   const codexEnvFull = resolveBridgeEnvDefaults('codex');
   assert.equal(codexEnvFull?.CODEX_HOME, CODEX_CONFIG_OVERLAY_DIR,
     'codex bridge env must pin CODEX_HOME to the overlay');
   assert.equal(codexEnvFull?.CODEX_SQLITE_HOME, CODEX_CONFIG_OVERLAY_DIR,
     'codex bridge env must pin CODEX_SQLITE_HOME to the overlay (state_5.sqlite isolation)');
+  assert.deepEqual(Object.keys(codexEnvFull ?? {}).sort(), ['CODEX_HOME', 'CODEX_SQLITE_HOME'],
+    'codex bridge env defaults must contain identity-isolation keys only');
 
   // Gemini launch — PATH path (no override). Must resolve to
   // `gemini --acp --admin-policy <overlay-home>/.gemini/policies/admin.toml`. The admin-
@@ -2123,7 +2125,7 @@ try {
   assert.equal(geminiMeta, undefined,
     'gemini buildSessionMeta must return undefined — engraving travels via GEMINI_SYSTEM_MD (overlay system.md) instead');
 
-  console.log('[check-backends] 137 assertions ok');
+  console.log('[check-backends] 136 assertions ok');
 } finally {
   if (prevClaude === undefined) delete process.env.CLAUDE_AGENT_ACP_COMMAND;
   else process.env.CLAUDE_AGENT_ACP_COMMAND = prevClaude;
@@ -2974,7 +2976,7 @@ session_messaging_run() {
 
 # smoke-compaction-policy — 0.5.0 compaction-policy verification.
 #
-# Six steps: 01/02/05 deterministic gate, 03/04/06 live observation
+# Five steps: 02/05 deterministic gate, 03/04/06 live observation
 # (require LIVE=1). See demo/compaction-policy-smoke/README.md for the
 # full surface declaration. Exits non-zero iff any deterministic step
 # fails; observed-only rows do not gate.

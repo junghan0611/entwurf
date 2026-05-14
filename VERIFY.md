@@ -22,8 +22,8 @@ VERIFY.md is the **agent-driven** verification surface (BASELINE.md is the opera
 A run is meaningful when it satisfies three conditions at once:
 
 1. **Same harness invariant**: the verifier and the subject agree on what they see — same MCP servers enumerated, same tool boundary, same operator-config isolation. Disagreement here means the bridge is leaking different views to different identities, which is a regression even when individual smoke gates pass.
-2. **Cross-process session reuse**: a single `(sessionKey, backend, modelId, bridgeConfigSignature)` tuple maps to one ACP child for the whole verification run. `pgrep -af claude-agent-acp` delta should be 0 for a verifier already holding a bridge session — see §10.3 for the formula.
-3. **Long-turn fact retention**: 8+ turns / 3+ early facts / verbatim recall, including a string injected before turn 5. This is `usage_update`-driven occupancy plus disabled compaction working as one — if either layer regresses, this gate breaks first.
+2. **Cross-process session reuse**: a single `(sessionKey, backend, modelId, bridgeConfigSignature)` tuple maps to one ACP child for the whole verification run. Process deltas must be checked for every backend under test (`claude-agent-acp`, `codex-acp`, `gemini --acp`) — see §10.3 for the formula.
+3. **Long-turn fact retention**: 8+ turns / 3+ early facts / verbatim recall, including a string injected before turn 5. Under the 0.5.0 policy backend-native compaction is allowed by default, so this gate checks whether continuity and recall survive backend-owned compaction events instead of assuming compaction is disabled.
 
 Anything weaker than this — single-turn smoke, individual-turn tool calls, or self-recognition without a peer to compare against — confirms wiring but not bridge faithfulness. The replicant pair is the smallest unit that exercises the bridge invariant end-to-end.
 
@@ -46,7 +46,7 @@ Every claim in this document — and every History entry — implicitly sits on 
 | **L1** | Transcript cross-check | Two or more bridged identities agree on what they see | Echo chamber risk (shared prompt, shared carrier) |
 | **L2** | Objective MCP tool call | Real on-disk / on-socket payload returned through the bridge | Shared-implementation corruption (same buggy bridge for both sides) |
 | **L3** | On-disk / process / socket corroboration outside the bridge | What the bridge says ↔ what `ls`, `pgrep`, `lsof`, raw socket connect, session JSONL on disk say | Time-extended drift (auth, version, cache, memory) |
-| **L4** | Human or direct-native side-by-side comparison | A real person (or a non-bridged direct Claude/Codex) reaches the same answer the bridge does for matched prompts | Production-shape workload (long sessions, tool bursts, fault injection) |
+| **L4** | Human or direct-native side-by-side comparison | A real person (or a non-bridged direct Claude/Codex/Gemini path) reaches the same answer the bridge does for matched prompts | Production-shape workload (long sessions, tool bursts, fault injection) |
 | **L5** | Long-haul soak | The bridge stays correct under hours-to-days of real use, including partial failures and concurrent multi-session pressure | Nothing higher proposed yet — this is the operational ceiling for now |
 
 The History rows so far reach **L1** (intra-Anthropic, 2026-04-27) and **L2** (cross-vendor + reverse-direction MCP calls, 2026-04-29). L3 is partially exercised by §10 process snapshots and §11 session-file checks but not as a coherent verifier loop. L4 needs the operator (BASELINE.md territory) or a separate non-bridged path. L5 has not been run.
@@ -160,14 +160,14 @@ cd /path/to/consumer-project
 pi --list-models pi-shell-acp
 
 # 4. one-turn smoke
-pi --model pi-shell-acp/claude-sonnet-4-6 -p 'ok만 답하세요'
+~/.pi/agent/git/github.com/junghan0611/pi-shell-acp/run.sh smoke-all .
 ```
 
 Expected:
 - step 1 — pi prints package install messages; `pi list` afterwards shows `git:github.com/junghan0611/pi-shell-acp` under `User packages` with a path under `~/.pi/agent/git/github.com/junghan0611/pi-shell-acp`.
 - step 2 — `install: added piShellAcpProvider.mcpServers.pi-tools-bridge` + `install: updated <project>/.pi/settings.json`.
-- step 3 — curated model surface prints (claude-sonnet-4-6, claude-opus-4-7, gpt-5.4, gpt-5.5).
-- step 4 — bridge response of `ok`.
+- step 3 — curated model surface prints (claude-sonnet-4-6, claude-opus-4-7, gpt-5.4, gpt-5.5, gemini-3.1-pro-preview).
+- step 4 — Claude + Codex + Gemini one-turn smokes pass, or Claude + Codex pass with an explicit Gemini skip notice when `gemini` is not on PATH.
 
 Notes:
 - The checkout path `~/.pi/agent/git/github.com/junghan0611/pi-shell-acp` is pi-managed. Do not edit files there on a consumer machine — `pi update` would overwrite local edits.
@@ -181,7 +181,7 @@ Use when you will edit this repo and want a fast inner loop (`npm run typecheck`
 # 1. clone + deps
 git clone https://github.com/junghan0611/pi-shell-acp /path/to/pi-shell-acp
 cd /path/to/pi-shell-acp
-npm install   # or: pnpm install
+pnpm install   # or: npm install (pnpm is the project's pinned packageManager)
 
 # 2. register the local checkout with pi (relative or absolute path both fine)
 pi install ./
@@ -239,10 +239,11 @@ Every verification run produces evidence by **comparing state before and after**
 export BEFORE_CACHE=$(find "$CACHE_DIR" -maxdepth 1 -type f | wc -l)
 export BEFORE_ACP=$(pgrep -af claude-agent-acp | wc -l)
 export BEFORE_CODEX=$(pgrep -af codex-acp | wc -l)
-echo "before: cache=$BEFORE_CACHE claude-agent-acp=$BEFORE_ACP codex-acp=$BEFORE_CODEX"
+export BEFORE_GEMINI=$(pgrep -af 'gemini .*--acp|gemini --acp' | wc -l)
+echo "before: cache=$BEFORE_CACHE claude-agent-acp=$BEFORE_ACP codex-acp=$BEFORE_CODEX gemini-acp=$BEFORE_GEMINI"
 ```
 
-Preserve these three numbers in your verification log. §5.1 (cache delta), §10 (process delta) all reference them.
+Preserve these four numbers in your verification log. §5.1 (cache delta), §10 (process delta) all reference them. If `gemini` is not installed or not under test, `BEFORE_GEMINI=0` with an explicit skip note is the correct record.
 
 ### 1.6 Turn map (sequential run)
 
@@ -268,16 +269,16 @@ If the verifier strictly needs a fresh ACP session inside this sequence, switch 
 Three axes to compare a fresh self-awareness report against:
 
 1. **Same backend, different install path.** Path A (`pi install git:…`) on one machine vs Path B (`git clone + pi install ./`) on another. Same answer expected — the install path must be invisible to the bridged model.
-2. **Same backend, different machine.** Two `pi-shell-acp/claude-sonnet-4-6` instances (e.g. local + Oracle). Identical native tool list, identical MCP server list, identical 5 MCP tool functions.
-3. **Different backend, same bridge.** `pi-shell-acp/claude-sonnet-4-6` vs `pi-shell-acp/gpt-5.4` (or any Codex target). Same harness identification (`pi-shell-acp`), same MCP server (`pi-tools-bridge`), same 5 MCP tool functions — but **different** native tool surface (Claude: `Bash/Read/Edit/Write/Skill`; Codex: `exec_command/write_stdin/apply_patch/update_plan/request_user_input/list_mcp_resources/read_mcp_resource/...`) and **different** MCP namespace convention (`pi-tools-bridge` with hyphens vs `pi_tools_bridge` with underscores — see §8.4 verified property).
+2. **Same backend, different machine.** Two `pi-shell-acp/claude-sonnet-4-6` instances (e.g. local + Oracle), or the same exercise for Codex / Gemini when those backends are available. Identical native tool list for the same backend, identical MCP server list, identical 5 MCP tool functions.
+3. **Different backend, same bridge.** Compare `pi-shell-acp/claude-sonnet-4-6`, `pi-shell-acp/gpt-5.4`, and `pi-shell-acp/gemini-3.1-pro-preview`. Same harness identification (`pi-shell-acp`), same MCP server (`pi-tools-bridge`), same 5 MCP tool functions — but **different** native tool surface (Claude: `Bash/Read/Edit/Write/Skill`; Codex: `exec_command/write_stdin/apply_patch/update_plan/request_user_input/list_mcp_resources/read_mcp_resource/...`; Gemini: `read_file/list_directory/glob/grep_search/write_file/replace/run_shell_command/activate_skill`) and **different** backend carrier / namespace conventions where the backend exposes them.
 
 Pass:
 
 - Axes 1 + 2: structurally identical reports.
-- Axis 3: harness + MCP server names + MCP tool function count match; backend-native tool surfaces are **backend-specific**, not normalized. If a Claude session reports `apply_patch` as native (or a Codex session reports `Bash` as native), the bridge has accidentally normalized the tool surface — that is a fail, not a feature.
+- Axis 3: harness + MCP server names + MCP tool function count match; backend-native tool surfaces are **backend-specific**, not normalized. If a Claude session reports `apply_patch` as native, a Codex session reports `Bash` as native, or a Gemini session reports Claude/Codex native tools as its own, the bridge has accidentally normalized the tool surface — that is a fail, not a feature.
 - Axis 3 reverse-direction evidence: a Codex verifier can call `entwurf` against a Claude target (or vice versa), the spawn succeeds, taskId is issued, and the verifier can parse the subject's self-report into a comparison table. Confirmed empirically 2026-04-29 — Codex on Oracle spawned Claude via entwurf, captured the self-report, and produced its own meta-analysis matching the §14 pass criterion 11 axis. This is bidirectional cross-vendor orchestration working through one bridge.
 
-This is the matrix described under "Diversifying the verifier matrix" near the end of this document. Both axis-3 directions (Anthropic verifier × Codex subject and the reverse) are now closed; only intra-Codex remains, with marginal added value.
+This is the matrix described under "Diversifying the verifier matrix" near the end of this document. Claude/Codex bidirectional checks are closed; Gemini has separate baseline/operator evidence plus `check-bridge` visibility/invocation, but its context-pressure path remains open.
 
 ---
 
@@ -373,7 +374,7 @@ Fail:
 - Unnecessarily repeats the same file exploration
 - Paraphrases an early-turn fact instead of returning the verbatim string
 
-Note: pi-shell-acp does not implement compaction (0.5.0 declaration). The provider registers a `session_before_compact` handler that cancels every pi-side compaction trigger (silent overflow, threshold, explicit-error overflow, and manual `/compact`) — pi-side summary does not reduce the backend transcript, so leaving it on would be a quiet lie. Backend-native auto-compaction is **always allowed** (0.5.0 — the bridge does not inject any guard env or argv); Claude/Codex compact themselves and the pi session survives that. Single bridge knob: `PI_SHELL_ACP_ALLOW_PI_COMPACTION=1` opts back into pi-side compact (rare). Operators who need a specific backend's auto-compaction off export the backend's own native env/argv directly (`DISABLE_AUTO_COMPACT=1` for Claude; for Codex, inline `-c model_auto_compact_token_limit=…` via `CODEX_ACP_COMMAND`, or export `CODEX_HOME` so Codex reads your own config tree instead of the bridge overlay). `process.env` wins over adapter defaults. Legacy single knob `PI_SHELL_ACP_ALLOW_COMPACTION=1` is rejected at spawn intent with a next-action message pointing at `PI_SHELL_ACP_ALLOW_PI_COMPACTION`. For long sessions, the footer percentage shows the backend's own `usage_update.used / size` value, the same signal peer ACP clients (zed, obsidian-agent-client, openclaw-acpx) display. Claude and Codex emit the per-turn occupancy signals used by this probe: claude-agent-acp via `input + output + cache_read + cache_creation` of the last assistant result, codex-acp via `tokens_in_context_window()`. Gemini's context-pressure / usage behavior remains tracked separately in the 0.5.0 three-backend table. The `[pi-shell-acp:usage] meter=acpUsageUpdate|componentSum source=backend|promptResponse backend=… used=… size=… raw: input=… output=… cacheRead=… cacheWrite=…` diagnostic line carries the per-component breakdown and the meter mode for audit. Near limit, choose a visible action: `/clear`, switch model, or let the backend auto-compact on its own. Verification: `./run.sh smoke-compaction-policy` (3 deterministic steps; `LIVE=1` adds 3-prompt survives-compact probe steps 03/04/06 against Claude + Codex + Gemini — real ACP spawn, literal `/compact` as backend prompt, sentinel recall on the other side; Gemini step 06 is exploratory, the other two are release evidence).
+Note: pi-shell-acp does not implement compaction (0.5.0 declaration). The provider registers a `session_before_compact` handler that cancels every pi-side compaction trigger (silent overflow, threshold, explicit-error overflow, and manual `/compact`) — pi-side summary does not reduce the backend transcript, so leaving it on would be a quiet lie. Backend-native auto-compaction is **always allowed** (0.5.0 — the bridge does not inject any guard env or argv); Claude/Codex compact themselves and the pi session survives that. Single bridge knob: `PI_SHELL_ACP_ALLOW_PI_COMPACTION=1` opts back into pi-side compact (rare). Operators who need to alter a specific backend's auto-compaction configure that backend through its own native interface — the bridge intentionally does not surface backend-specific compaction names. Legacy single knob `PI_SHELL_ACP_ALLOW_COMPACTION=1` is rejected at spawn intent with a next-action message pointing at `PI_SHELL_ACP_ALLOW_PI_COMPACTION`. For long sessions, the footer percentage shows the backend's own `usage_update.used / size` value, the same signal peer ACP clients (zed, obsidian-agent-client, openclaw-acpx) display. Claude and Codex emit the per-turn occupancy signals used by this probe: claude-agent-acp via `input + output + cache_read + cache_creation` of the last assistant result, codex-acp via `tokens_in_context_window()`. Gemini's context-pressure / usage behavior remains tracked separately in the 0.5.0 three-backend table. The `[pi-shell-acp:usage] meter=acpUsageUpdate|componentSum source=backend|promptResponse backend=… used=… size=… raw: input=… output=… cacheRead=… cacheWrite=…` diagnostic line carries the per-component breakdown and the meter mode for audit. Near limit, choose a visible action: `/clear`, switch model, or let the backend auto-compact on its own. Verification: `./run.sh smoke-compaction-policy` (2 deterministic steps after the 0.5.0 maintainer cleanup — steps 02 + 05; `LIVE=1` adds 3-prompt survives-compact probe steps 03/04/06 against Claude + Codex + Gemini — real ACP spawn, literal `/compact` as backend prompt, sentinel recall on the other side; Gemini step 06 is exploratory, the other two are release evidence).
 
 > **Semantic difference vs native pi.** In pi-shell-acp the footer follows the ACP backend's `usage_update.used / size`, not pi's visible-transcript estimate. This may differ from native pi because the backend counts its own prompt / cache / tool / session state on top of the visible transcript. A small pi conversation can show a large ACP footer; that is a backend overflow-risk signal, not a meter bug. The bridge does not maintain an extra meter sidecar to "correct" this — it surfaces the backend's own number and labels it as such.
 
@@ -406,7 +407,7 @@ Judgment:
 
 - Layers 0–2 healthy → basic qualifications as a main coding agent are confirmed
 - Layer 2 weak → review tool description / MCP visibility explanation / operating contract candidates
-- Layer 3 weak → strengthen prompt shape and long-session observation (no in-bridge compaction; rely on pi's manual flow + `[pi-shell-acp:usage]` diagnostic)
+- Layer 3 weak → strengthen prompt shape and long-session observation; distinguish pi-side compaction (blocked by default) from backend-native compaction (allowed), then corroborate with `[pi-shell-acp:usage]`, bootstrap logs, process state, and sentinel recall
 - Layer 4 significantly weaker than direct → revisit bridge handoff or capability framing
 
 This questionnaire does not replace smoke.
@@ -694,7 +695,7 @@ When `piShellAcpProvider.mcpServers` changes, `bridgeConfigSignature` changes, c
 
 Pass: New configuration reflected immediately (no stale capabilities).
 
-Under the current operational standard, this visibility check is run for **both Claude and Codex**, and at least one bridged MCP tool call is actually passed through. The most stable automation path is a negative-path `entwurf_send` call. If a `No pi control socket ...` error surfaces for a nonexistent target, it means the `ACP host → MCP bridge → pi-side RPC` call path is actually alive.
+Under the current operational standard, this visibility check is run for **Claude, Codex, and Gemini** when the backend is available, and at least one bridged MCP tool call is actually passed through. The most stable automation path is a negative-path `entwurf_send` call. If a `No pi control socket ...` error surfaces for a nonexistent target, it means the `ACP host → MCP bridge → pi-side RPC` call path is actually alive.
 
 ---
 
@@ -718,19 +719,19 @@ Pass:
 ### 10.1 Pre-observation
 
 ```bash
-pgrep -af claude-agent-acp || true
+pgrep -af 'claude-agent-acp|codex-acp|gemini .*--acp|gemini --acp' || true
 find "$CACHE_DIR" -maxdepth 1 -type f | sort
 ```
 
 ### 10.2 Re-observation After Multiple Tests
 
 ```bash
-pgrep -af claude-agent-acp || true
+pgrep -af 'claude-agent-acp|codex-acp|gemini .*--acp|gemini --acp' || true
 find "$CACHE_DIR" -maxdepth 1 -type f | sort
 ```
 
 Expected results:
-- Running many tests does not cause `claude-agent-acp` processes to multiply indefinitely
+- Running many tests does not cause backend ACP processes (`claude-agent-acp`, `codex-acp`, `gemini --acp`) to multiply indefinitely
 - Cache records do not explode meaninglessly
 - No garbage records unrelated to `pi:<sessionId>` are created
 
@@ -738,30 +739,33 @@ Note:
 - An increase in cache file count can be natural when creating new sessions
 - What matters is **whether boundaries are maintained** and **whether orphans remain**
 
-### 10.3 Expected `claude-agent-acp` count formula
+### 10.3 Expected backend ACP process count formula
 
-When checking process hygiene, `BEFORE_ACP` (captured in §1.5) sets the baseline. The bound during verification is:
+When checking process hygiene, the per-backend baselines from §1.5 set the
+starting point: `BEFORE_ACP` for Claude, `BEFORE_CODEX` for Codex, and
+`BEFORE_GEMINI` for Gemini. Apply the same bound independently to each
+backend under test:
 
 ```
-AFTER_ACP ≤ BEFORE_ACP
-          + (number of distinct alive
-             (sessionKey, backend, modelId, bridgeConfigSignature) tuples
-             that this verifier run is currently holding open)
+AFTER_<BACKEND> ≤ BEFORE_<BACKEND>
+                + (number of distinct alive
+                   (sessionKey, backend, modelId, bridgeConfigSignature) tuples
+                   for that backend that this verifier run is currently holding open)
 ```
 
-This is an **upper bound**, not an equation. Two effects can push `AFTER_ACP` below the prediction:
+This is an **upper bound**, not an equation. Two effects can push `AFTER_<BACKEND>` below the prediction:
 
-1. **Child reuse** (`acp-bridge.ts:2340` — `bridgeSessions.get(params.sessionKey)` plus `isSessionCompatible(...)`). A single `entwurf` + N `entwurf_resume` calls on the same `(provider, model)` reuse **one** child for the whole sequence. Delta=0 against `BEFORE_ACP` is the **expected** state when the verifier was already holding that bridge session at snapshot time.
-2. **Idle reaping.** Long-idle child processes that no caller is actively holding can exit between snapshots, so `AFTER_ACP` can be **less than** `BEFORE_ACP`. Confirmed empirically — the 2026-04-29 axis-3 reverse run observed `claude-agent-acp` 4 → 2 and `codex-acp` 4 → 3 across the verification window without any explicit close. Both deltas are consistent with reaping plus reuse, not regression.
+1. **Child reuse** (`acp-bridge.ts:2340` — `bridgeSessions.get(params.sessionKey)` plus `isSessionCompatible(...)`). A single `entwurf` + N `entwurf_resume` calls on the same `(provider, model)` reuse **one** child for the whole sequence. Delta=0 against that backend's baseline is the **expected** state when the verifier was already holding that bridge session at snapshot time.
+2. **Idle reaping.** Long-idle child processes that no caller is actively holding can exit between snapshots, so `AFTER_<BACKEND>` can be **less than** `BEFORE_<BACKEND>`. Confirmed empirically — the 2026-04-29 axis-3 reverse run observed `claude-agent-acp` 4 → 2 and `codex-acp` 4 → 3 across the verification window without any explicit close. Both deltas are consistent with reaping plus reuse, not regression.
 
-Settings changes that mutate `bridgeConfigSignature` (`mcpServers`, `tools`, `skillPlugins`, `permissionAllow`, `disallowedTools`, `codexDisabledFeatures`, `appendSystemPrompt`, `settingSources`, `strictMcpConfig`) — or a `(provider, model)` switch — close the existing child and spawn a new one, so they push `AFTER_ACP` up by 1 per switch.
+Settings changes that mutate `bridgeConfigSignature` (`mcpServers`, `tools`, `skillPlugins`, `permissionAllow`, `disallowedTools`, `codexDisabledFeatures`, `appendSystemPrompt`, `settingSources`, `strictMcpConfig`) — or a `(provider, model)` switch — close the existing child and spawn a new one, so they push the relevant `AFTER_<BACKEND>` up by 1 per switch.
 
-"+1 verifier own" is **not** a separate term. If `BEFORE_ACP` was captured **before** the verifier spawned its first bridge session, the verifier's own child is part of the alive-tuples count above. If `BEFORE_ACP` was captured **after**, the verifier's own child is already in the baseline and not added again. Whichever side it falls on, do not double-count.
+"+1 verifier own" is **not** a separate term. If `BEFORE_<BACKEND>` was captured **before** the verifier spawned its first bridge session for that backend, the verifier's own child is part of the alive-tuples count above. If `BEFORE_<BACKEND>` was captured **after**, the verifier's own child is already in the baseline and not added again. Whichever side it falls on, do not double-count.
 
-`AFTER_ACP > BEFORE_ACP + alive_tuples` is the actionable signal — that means an unexpected child appeared. If that happens, walk the parent chain to identify the source:
+`AFTER_<BACKEND> > BEFORE_<BACKEND> + alive_tuples` is the actionable signal — that means an unexpected child appeared. If that happens, walk the parent chain to identify the source:
 
 ```bash
-for pid in $(pgrep claude-agent-acp); do
+for pid in $(pgrep -f 'claude-agent-acp|codex-acp|gemini .*--acp|gemini --acp'); do
   echo "=== $pid ==="
   ps -o pid,ppid,etime,cmd -p $pid | tail -1
   PARENT=$(ps -o ppid= -p $pid | tr -d ' ')
@@ -770,7 +774,10 @@ for pid in $(pgrep claude-agent-acp); do
 done
 ```
 
-A `claude-agent-acp` whose parent `pi` process has already exited is an **orphan** — flag and preserve as evidence (§13). If the parent is alive but does not match any verifier-controlled taskId, it's likely a **prior verification cycle's leftover**; identify and close before continuing.
+Any backend ACP child whose parent `pi` process has already exited is an
+**orphan** — flag and preserve as evidence (§13). If the parent is alive
+but does not match any verifier-controlled taskId, it's likely a **prior
+verification cycle's leftover**; identify and close before continuing.
 
 ---
 
@@ -826,7 +833,7 @@ The following are documented but observability/automation is still insufficient.
 3. ~~Clearly observing the `unstable_setSessionModel` path vs new session fallback path on model switch~~ — see §12.3
 4. ~~Observing how cleanly bridge and child process are cleaned up on cancel/abort~~ — see §12.4
 5. Checking stream shape stability as tool notices / thinking / text blocks accumulate in long sessions
-6. Entwurf-style continuity (see §12.5) — for both Claude and Codex backends, the bridge's resume/load path continues for the same spawn shape as entwurf. Entwurf orchestration itself (which target to spawn for, taskId / async completion / resume identity lock) now lives in this repo's `pi-extensions/entwurf.ts` + `pi/entwurf-targets.json` + `mcp/pi-tools-bridge/`. (Previously owned by agent-config. Migration history in AGENTS.md `§Entwurf Orchestration`.)
+6. Entwurf-style continuity (see §12.5) — for every backend covered by the smoke, the bridge's resume/load path continues for the same spawn shape as entwurf. Entwurf orchestration itself (which target to spawn for, taskId / async completion / resume identity lock) now lives in this repo's `pi-extensions/entwurf.ts` + `pi/entwurf-targets.json` + `mcp/pi-tools-bridge/`. (Previously owned by agent-config. Migration history in AGENTS.md `§Entwurf Orchestration`.)
 7. Separating observability of `bridge continuity` (sessionKey/acpSessionId/bootstrap path) and `semantic continuity` (retrieving previous turn facts) — the two layers can pass/fail independently. The rule is only in §0A, but there's no automated smoke that judges them separately yet.
 
 In other words, this document is not a completion declaration but an **operational document that exposes the next improvement points**.
@@ -852,7 +859,7 @@ Smoke:
 ./run.sh smoke-model-switch /path/to/consumer-project
 ```
 
-Pass criteria (both Claude/Codex per backend):
+Pass criteria (for every backend covered by `smoke-model-switch`; currently Claude/Codex, with Gemini added when the gate covers that adapter):
 
 - `[pi-shell-acp:model-switch] path=reuse outcome=respawn ... fallback=new_session reason=pi_agent_id_env_requires_respawn` line exists
 - A following `[pi-shell-acp:bootstrap] path=new` line exists, confirming the fresh spawn actually happened
@@ -914,7 +921,7 @@ Pass criteria:
 
 **Scope (retired narrative warning):**
 
-- For both Claude / Codex, the bridge continues sessions in the backend-native way. Claude uses ACP `resumeSession`, Codex uses `loadSession` (codex-acp capability difference — `resumeSession: false, loadSession: true`). This smoke only verifies that the bridge correctly routes both paths.
+- For each backend covered by this smoke, the bridge continues sessions in the backend-native way. Claude uses ACP `resumeSession`; Codex uses `loadSession` (codex-acp capability difference — `resumeSession: false, loadSession: true`). Gemini must be recorded according to the ACP capabilities it advertises when this smoke includes it. This smoke only verifies that the bridge correctly routes the advertised continuity path.
 - This smoke no longer uses labels like "shape-equivalent vs real e2e." That distinction came from a past state where entwurf spawn authority was env-var (`PI_ENTWURF_ACP_FOR_CODEX=1`) based. The current spawn authority is this repo's `pi/entwurf-targets.json` registry, and the bridge does not read the registry. That env var is legacy and will be cleaned up as the registry stabilizes.
 - The entire entwurf orchestration (parent × target positive matrix, async completion, resume identity lock) is the responsibility of this repo's entwurf surface (`pi-extensions/entwurf.ts` + `lib/entwurf-core.ts` + `pi/entwurf-targets.json` + `mcp/pi-tools-bridge`). This `smoke-entwurf-resume` only verifies bridge-level continuity — the orchestration gate is handled by `mcp/pi-tools-bridge/test.sh` + `scripts/session-messaging-smoke.sh`.
 
@@ -986,7 +993,7 @@ This live repro is documented but not wired as an automated smoke. Per NEXT.md, 
 When a problem occurs, at minimum preserve the following:
 
 ```bash
-pgrep -af claude-agent-acp || true
+pgrep -af 'claude-agent-acp|codex-acp|gemini .*--acp|gemini --acp' || true
 find "$CACHE_DIR" -maxdepth 1 -type f | sort
 # resolve taskId(s) to entwurf-child session files (see §11 path pattern)
 ls ~/.pi/agent/sessions/--*--/*_entwurf-${TASK_ID}.jsonl 2>/dev/null
@@ -1035,7 +1042,7 @@ The minimum passing bar is:
 8. No excessive orphan processes / garbage records
 9. pi session transcript is usable as a shared memory axis
 10. pi-facing MCP injection is reflected only as configured in `piShellAcpProvider.mcpServers`, visibility is identical across resume/load/new paths, sessions are correctly invalidated on config change, and invalid configs fail-fast with `McpServerConfigError`
-11. **Identity boundary preservation across backends and machines** — for both Claude and Codex backends, regardless of install path or host, the bridged model honestly identifies the harness as `pi-shell-acp`, names the backend as `claude` or `codex` accordingly, lists the same MCP servers and the same MCP tool function set, presents a **backend-native** (not normalized) tool surface, and uses the correct MCP namespace convention (`pi-tools-bridge` for Claude, `pi_tools_bridge` for Codex). Confabulation about pi internals or cross-backend tool surface contamination is a fail.
+11. **Identity boundary preservation across backends and machines** — for Claude, Codex, and Gemini backends, regardless of install path or host, the bridged model honestly identifies the harness as `pi-shell-acp`, names its backend accordingly (`claude`, `codex`, `gemini`), lists the same configured MCP server (`pi-tools-bridge`) and MCP tool function set, and presents a **backend-native** (not normalized) tool surface. Confabulation about pi internals or cross-backend tool surface contamination is a fail.
 
 Passing all 11 establishes a **release verification floor**, not a full 8-hours-a-day operational guarantee. The floor says: protocol smoke holds, the agent honestly recognizes its environment, no tool surface is normalized away, no cross-backend identity leaks, no orphan processes. What it does **not** say: that a real-day workload (50–100+ turns, tool-heavy bursts, partial MCP failures, auth/version drift over weeks) survives. That guarantee needs L3–L5 evidence — see "Evidence Levels" and "Next experimental directions".
 
@@ -1047,14 +1054,14 @@ Each load-bearing claim this document or its parent docs make, with the highest 
 
 | Claim | Level reached | Current evidence | Remaining blind spot | Next test |
 |---|---|---|---|---|
-| Bridge identity (`pi-shell-acp`) is recognized correctly across Claude / Codex / multiple hosts | **L1** | History 2026-04-27, 2026-04-29 (both axis-3 directions) | Same prompt carrier on both sides — could share a uniform error | L4: ask a non-bridged direct Claude / Codex the same questions in parallel |
+| Bridge identity (`pi-shell-acp`) is recognized correctly across Claude / Codex / Gemini / multiple hosts | **L1–L4 mixed** | History 2026-04-27, 2026-04-29 (Claude/Codex axis-3 directions), BASELINE 2026-05-03 / 2026-05-06 / 2026-05-07 for Gemini carrier + tool-surface parity, and `check-bridge` visibility/invocation across Claude/Codex/Gemini | Same bridge / prompt carrier can still share uniform errors; Gemini context-pressure remains a separate open row | L4/L5: direct-native side-by-side panel including direct Gemini CLI; long-haul soak per backend |
 | MCP server (`pi-tools-bridge`) and its 5 tool functions are wired and operational | **L2** | 2026-05-11 live gate: `entwurf_peers` + `entwurf_self` returned real on-disk payloads and `check-bridge` passed visibility+invocation on Claude/Codex/Gemini | Bridge implementation could be uniformly wrong for both sides | L3: corroborate `controlDir` listing, socket aliveness via `lsof`, session JSONL contents directly from a non-bridge shell |
-| Native tool surface stays backend-specific (no normalization) | **L1** | All 4 reports list backend-native tools only; no Claude session reports `apply_patch`, no Codex session reports `Bash` | Could be self-reporting fluency, not actual tool wiring | L2 / L3: invoke a backend-specific tool through the bridge and confirm a backend-specific side effect |
-| MCP namespace convention is the agent-visible backend marker (`pi-tools-bridge` for Claude, `pi_tools_bridge` for Codex) | **L1 / L2 mixed** | Self-report (L1) plus literal callable identifier in tool-call notices (L2) | Same as above — could be cosmetic | L3: cross-check with claude-agent-acp / codex-acp source / debug logs |
+| Native tool surface stays backend-specific (no normalization) | **L1** | Current baseline reports list backend-native tools only: Claude reports `Bash`/`Read`/`Edit`/`Write`/`Skill`, Codex reports its own shell/patch tool surface, and Gemini reports `read_file`/`list_directory`/`glob`/`grep_search`/`replace`/`write_file`/`run_shell_command`/`activate_skill`. No backend reports another backend's native tool names as its own callable surface. | Could be self-reporting fluency, not actual tool wiring | L2 / L3: invoke a backend-specific tool through the bridge and confirm a backend-specific side effect |
+| MCP callable identity stays backend-shaped without bridge normalization | **L1 / L2 mixed** | Self-report (L1) plus literal callable identifiers in tool-call notices (L2): Claude and Codex expose their native naming conventions; Gemini's MCP visibility/invocation is verified through `check-bridge` / BASELINE rather than by forcing the same namespace spelling. | Same as above — could be cosmetic | L3: cross-check with claude-agent-acp / codex-acp / gemini-cli ACP source and debug logs |
 | Bidirectional cross-vendor entwurf orchestration works | **L2** | 2026-04-29 reverse: Codex spawned Claude via `entwurf`, taskId issued, Claude transcript recovered | Spawn ledger consistency under failure / cancellation not exercised | L3: kill the spawned child mid-run, verify cleanup; L5: 100+ spawns over hours |
-| 0.5.0 compaction policy: bridge does not implement compaction. Backend-native compaction always allowed (no bridge knob); pi-side blocked; legacy single knob throws at spawn intent; ACP backend (Claude + Codex) survives a backend `/compact` with the bridge alive | **L3 deterministic + L4 live (dual-classifier)** | `./run.sh smoke-compaction-policy` 3-step deterministic gate (no guard env / argv injected, ever; pi-block message names the boundary and points at the backend-native path; legacy `PI_SHELL_ACP_ALLOW_COMPACTION=1` throws on wrapper `resolveAcpBackendLaunch`, and the production spawn entry `createBridgeProcess` is separately guarded by the same `assertLegacyCompactionKnobUnset()` call verified at source level with a next-action message pointing at `PI_SHELL_ACP_ALLOW_PI_COMPACTION`) PLUS `LIVE=1` adds steps 03/04/06 — real ACP spawn via `runEntwurfSync`, plant sentinel, send literal `/compact` as backend prompt, recall sentinel. Dual-classifier evidence path: text classifier ("compacted"/"summarized"/"context reduced" in (b)-turn reply) OR wire classifier (bridge stderr `[pi-shell-acp:usage]` shows explicit `used=0` compact_boundary, or >=50% used drop). codex-acp signals on text ("Context compacted"); claude-agent-acp signals on wire (`used=0` synthetic usage_update per acp-agent.js:477-498). Both backends pass under this dual path with the bridge persisted-mapping reused across all three turns. Gemini step 06 is exploratory (`/compact` not advertised on Gemini ACP — observation, not claim) | Live steps require operator-authenticated Claude/Codex (Gemini if probed) and cost a few cents per backend, so they do not run as part of pre-commit `pnpm check` | L5: 50-turn run per backend with periodic `/compact` and sentinel recall under varying compaction triggers; close the Gemini ACP context-pressure path with an organic-full probe |
+| 0.5.0 compaction policy: bridge does not implement compaction. Backend-native compaction is always allowed (no bridge knob); pi-side compaction is blocked by default; the legacy single knob throws at spawn intent; Claude and Codex survive backend-owned compaction with the bridge alive | **L3 deterministic + L4 live (dual-classifier)** | `./run.sh smoke-compaction-policy` 2-step deterministic gate after maintainer cleanup (step 02 pi-block message names the boundary and points at backend-native ownership; step 05 legacy `PI_SHELL_ACP_ALLOW_COMPACTION=1` throws on wrapper `resolveAcpBackendLaunch`, and the production spawn entry `createBridgeProcess` is separately guarded by the same `assertLegacyCompactionKnobUnset()` call verified at source level with a next-action message pointing at `PI_SHELL_ACP_ALLOW_PI_COMPACTION`) PLUS `LIVE=1` adds steps 03/04/06 — real ACP spawn via `runEntwurfSync`, plant sentinel, send literal `/compact` as backend prompt, recall sentinel. Dual-classifier evidence path: text classifier ("compacted"/"summarized"/"context reduced" in (b)-turn reply) OR wire classifier (bridge stderr `[pi-shell-acp:usage]` shows explicit `used=0` compact_boundary, or >=50% used drop). Codex signals on text for explicit `/compact`; Claude signals on wire for explicit `/compact`; Claude organic saturation and Codex real GPT-5.4 saturation both preserve sentinel, substantive answer, and persisted mapping. Gemini step 06 is exploratory (`/compact` not advertised on Gemini ACP — observation, not claim); Gemini context-pressure remains the release-blocking open cell. | Live steps require operator-authenticated backends and cost a few cents per backend, so they do not run as part of pre-commit `pnpm check`; Gemini's ACP context-pressure path has not yet been closed | L5: 50-turn run per backend with periodic sentinel recall under varying compaction triggers; close the Gemini ACP context-pressure path with an organic-full probe |
 | Long-session fact retention holds across 8+ turns under the 0.5.0 policy (backend-native compaction allowed) | **L1 (0.4.x baseline)** | 2026-04-29 intra run: 4 facts across 9 turns, verbatim including a 27-character timestamp string. **Note: this baseline was recorded with backend auto-compaction disabled (0.4.x); the 0.5.0 policy lets the backend compact on its own, which is a different long-session shape and needs a new baseline.** | One run, one length range, one model — and the 0.5.0 policy has not yet been re-baselined here | L3: examine `usage_update` payloads through a 0.5.0 LIVE smoke; L5: 50+ turn run with periodic recall under 0.5.0 defaults |
-| `claude-agent-acp` / `codex-acp` child reuse + idle reaping holds within `AFTER ≤ BEFORE + alive_tuples` upper bound | **L2 / L3 partial** | `pgrep` snapshots (`acp-bridge.ts:2340` reuse logic + observed reaping) | No fault-injection or concurrent pressure; orphan parent walk not automated | L3: scripted parent-walk + orphan kill check; L5: parallel verifier sessions stressing the same `(provider, model)` |
+| Backend ACP child reuse + idle reaping holds within `AFTER_<BACKEND> ≤ BEFORE_<BACKEND> + alive_tuples` upper bound | **L2 / L3 partial** | `pgrep` snapshots for Claude/Codex (`acp-bridge.ts:2340` reuse logic + observed reaping); VERIFY now requires the same baseline/delta accounting for Gemini (`gemini --acp`) when that backend is under test | Gemini process hygiene has not yet had the same repeated long-run / orphan-walk coverage as Claude/Codex; no fault-injection or concurrent pressure; orphan parent walk not automated | L3: scripted parent-walk + orphan kill check across Claude/Codex/Gemini; L5: parallel verifier sessions stressing the same `(provider, model)` |
 | `pi-shell-acp` performs at native or near-native quality on 8-hour-a-day workloads | **NOT YET MEASURED** | Anecdotal operator report only; the official verification surface (this document) has not exercised L4 / L5 | Almost everything that matters at production scale | L4: side-by-side native vs bridged on identical task batches; L5: 2–4 hour soak with fault injection |
 | Gemini backend operator-config isolation overlay closes 6 channels (0.4.9): native system body, operator memory paths, native tool surface, `GEMINI.md` hierarchical discovery, MCP whitelist, **memory containment (L5)** | **L2 + L3** | BASELINE.md 2026-05-03 entry (closes 5/5) + 2026-05-06 entry (closes the 6th — memory containment) — model classified canary string under "actual system prompt", invoked all 4 read-class tools without `denied by admin policy`, reported overlay-only memory paths, no `GEMINI.md` awareness, only the 2 bridge MCP servers, no recall of prior-session memory + acknowledged that pi (semantic-memory + Denote llmlog) is the canonical memory authority. Plus on-disk: `check-backends` 134 assertions (124 → 134 across 0.4.9; settings.json `experimental.{memoryV2,autoMemory}:false` pin + `tmp/`/`history/`/`projects/` sweep across spawns + root `GEMINI.md`/`MEMORY.md` sweep + ZWSP defuse for `${...}` substitution) + `~/.pi/agent/gemini-config-overlay/` operational sweep verification (4 planted memory canaries removed across spawns). | BASELINE Q-H (model-side runtime quote of a `${AvailableTools}` engraving to confirm gemini-cli's `applySubstitutions` regex actually misses) deferred to next baseline session — static side is closed (`acp-bridge.ts:1908` writes bytes `e2 80 8b` = U+200B between `$` and `{`; gemini-cli's `\${...}` literal regex cannot match the ZWSP-split form). Subscription-billing parity still unverified. | L4: side-by-side direct `gemini --acp` (no overlay) vs bridged to confirm the upstream MCP function-schema asymmetry is not bridge-induced; L5: 50+ turns under the gemini backend with periodic canary recheck + Q-H runtime quote |
 | ~~Gemini backend's MCP function-schema asymmetry is an observed Gemini ACP surface asymmetry, not a closable overlay leak~~ — **RETRACTED 0.4.11.** Gemini reaches the same skill + MCP capability dignity as Claude/Codex on three layers (skills advertise, MCP advertise, MCP invocation). Layer 1: `activate_skill` joins the `tools.core` allowlist + `skills.enabled:true` + `~/.gemini/skills/` passthrough mirror Claude (`OVERLAY_PASSTHROUGH` already includes `skills`) and Codex (`OVERLAY_PASSTHROUGH_CODEX` already includes `skills`). Layer 2: `geminiOverlayAdminPolicyToml()`'s `mcpName = [array]` was failing zod validation (`packages/core/src/policy/toml-loader.ts:39–70` schema has `mcpName: z.string().optional()` — single string only) which `safeParse → continue` was invalidating the entire admin policy file, leaving deny-all rules to statically exclude every MCP tool from `getFunctionDeclarations`; collapsing to `mcpName = "*"` allow restored advertise. Layer 3: per-server allow rules matched in advertise (`getExcludedTools` 872–944) but not in invocation (`check` 503–620) when `serverName` resolved differently across paths; the `mcpName = "*"` form matches both consistently, with the per-server whitelist role moved one layer earlier to `settings.mcp.allowed` + `canLoadServer` (mcp-client-manager.ts `isBlockedBySettings` 260–278). | **L4** | Combined evidence: (a) direct `gemini --acp` interview (operator-side, 2026-05-06) showed advertise channel parity; (b) bridged interview (BASELINE 2026-05-07 0.4.11 entry) showed model enumerating all 8 native tools (incl. `activate_skill`) + all 8 MCP tool function-schema entries; (c) `check-bridge` Gemini line passes both visibility and invocation against `entwurf_send` to a bogus target; (d) live operator session ran `entwurf` + `entwurf_resume` round-trip against a sibling GPT with conversation context preserved across the two MCP calls. Static side: `acp-bridge.ts` `GEMINI_TOOLS_CORE_ALLOWLIST` 8 keys + `GEMINI_OVERLAY_PASSTHROUGH` includes `skills` + `geminiOverlaySettingsJson` `skills.enabled:true` + no `mcp.excluded` + admin.toml `mcpName = "*"` allow. `check-backends` 134 → 137 assertions; `check-bridge` extends to 3 backends (claude + codex + gemini, conditional skip when `gemini` not on PATH). | Subscription-billing parity for Gemini ACP-routed sessions still unverified separately from the capability surface. | L5: 50+ turns under the gemini backend with periodic canary recheck and a re-asked Q-MCP-CALLABLE / Q-SKILL-CALLABLE round to confirm the parity is stable across long sessions, not only at session start |
@@ -1099,6 +1106,8 @@ Run the same prompt batch (15–25 prompts spanning self-awareness, tool use, mu
 - direct Claude Code (no bridge)
 - `pi-shell-acp/gpt-5.4`
 - direct Codex (no bridge)
+- `pi-shell-acp/gemini-3.1-pro-preview`
+- direct Gemini CLI (no bridge, when available)
 
 Quality scoring stays semantic, not string-equality. Pass = bridged path's quality is within the run-to-run noise of the matching direct path. This is the only test that can actually back the claim "pi-shell-acp is native-quality".
 
