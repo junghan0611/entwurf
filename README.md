@@ -200,7 +200,7 @@ Bridge identity, pi context, `~/AGENTS.md`, `cwd/AGENTS.md`, and date/cwd ride a
 
 ## Compaction policy
 
-**pi-shell-acp does not implement compaction.** ACP backends compact natively; the pi session survives that.
+**pi-shell-acp does not implement compaction.** When a backend compacts natively, the pi session and mapping survive that.
 
 Pi-side JSONL compaction is blocked by default — `session_before_compact` returns `{cancel: true}` because pi-side summary does not reduce the backend transcript. Opt back in only with `PI_SHELL_ACP_ALLOW_PI_COMPACTION=1`.
 
@@ -208,7 +208,7 @@ Backend-native compaction is always allowed. The bridge does not surface backend
 
 The legacy single knob `PI_SHELL_ACP_ALLOW_COMPACTION` is rejected at spawn intent with a next-action message pointing at `PI_SHELL_ACP_ALLOW_PI_COMPACTION`.
 
-The footer uses ACP `usage_update.used / size` (backend prompt/tools/cache/session included) with `[pi-shell-acp:usage] ...` diagnostics. Near limit, choose a visible action: clear, switch model, or let the backend compact on its own.
+The footer uses ACP `usage_update.used / size` (backend prompt/tools/cache/session included) with `[pi-shell-acp:usage] ...` diagnostics. Near limit, choose a visible action: clear, open a new session with a different model, or let the backend compact on its own.
 
 Identity-isolation env (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CODEX_SQLITE_HOME`, `GEMINI_CLI_HOME`, `GEMINI_SYSTEM_MD`) is unrelated to compaction and ships unconditionally.
 

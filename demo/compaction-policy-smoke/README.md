@@ -4,10 +4,10 @@
 
 ## What 0.5.0 declares
 
-> `pi-shell-acp` does not implement compaction. ACP backends compact
-> natively; the pi session survives that. The bridge boundary stays
-> explicit. pi-side JSONL compaction stays blocked — it would not
-> reduce the backend transcript anyway.
+> `pi-shell-acp` does not implement compaction. When a backend
+> compacts natively, the pi session and mapping survive that. The
+> bridge boundary stays explicit. pi-side JSONL compaction stays
+> blocked — it would not reduce the backend transcript anyway.
 
 | Layer | Default |
 |---|---|
@@ -107,7 +107,7 @@ with `SUMMARY: P pass, F fail, O observed`. Exit code is non-zero iff
 any deterministic step fails. `observed` rows are records, not gate
 failures.
 
-## Release-grade probe outcomes (0.5.0)
+## Release-evidence probe outcomes (0.5.0)
 
 | Date | Backend | Pattern | Result |
 |---|---|---|---|
