@@ -405,20 +405,11 @@ export type EnsureBridgeSessionParams = {
 	backend: AcpBackend;
 	modelId?: string;
 	/**
-	 * Raw pi session UUID (NOT the `pi:<id>` sessionKey form). Forwarded to the
-	 * backend child as `PI_SESSION_ID` so MCP children (notably pi-tools-bridge)
-	 * can populate the entwurf sender envelope without depending on
-	 * `process.env.PI_SESSION_ID` propagation from the entwurf-control extension.
-	 *
-	 * 0.4.13 and earlier relied on entwurf-control writing `process.env.PI_SESSION_ID`
-	 * before the backend child was spawned. The dependency was an ordering
-	 * accident: backend spawn happens inside streamShellAcp before — or
-	 * concurrently with — the extension's session-start hook, so the env key
-	 * was missing on the wire. Synthetic launcher tests passed because the
-	 * test harness injected the env manually; live `./run.sh check-bridge`
-	 * caught the gap. 0.4.14 fixes this by routing piSessionId structurally,
-	 * not through ambient env. See issue #7 comment trail for the full
-	 * forensics.
+	 * Raw pi session UUID (NOT the `pi:<id>` sessionKey form). Routed structurally
+	 * to the backend child as `PI_SESSION_ID` so MCP children (notably
+	 * pi-tools-bridge) can populate the entwurf sender envelope without depending
+	 * on ambient `process.env.PI_SESSION_ID` propagation, which has unreliable
+	 * ordering against backend spawn (see issue #7).
 	 *
 	 * Optional because smoke embed scripts call ensureBridgeSession directly
 	 * without a pi session backing them; in that path the MCP envelope is
@@ -1292,11 +1283,6 @@ function overlaySettingsJson(): string {
 // personal config, and pi-shell-acp injects its own plugin set via
 // `claudeCodeOptions.plugins` (see buildClaudeSessionMeta), not via
 // filesystem inheritance.
-//
-// 0.4.14: `session-bridge` was removed from this list when the session-bridge
-// MCP was retracted in favor of a single entwurf-control messaging surface
-// (issue #7). Claude Code no longer needs ~/.claude/session-bridge/ visibility
-// because nothing in the bridge produces that directory anymore.
 const OVERLAY_PASSTHROUGH = new Set([
 	".credentials.json",
 	"cache",
@@ -1970,10 +1956,9 @@ function geminiOverlayAdminPolicyToml(): string {
 		"# baseline class (Read-class split + Write/Edit/Exec + activate_skill);",
 		"# allow-all for MCP because the per-server whitelist is enforced one",
 		"# layer earlier by `canLoadServer` (gemini-cli mcpServerEnablement.ts)",
-		"# against `settings.mcp.allowed`. Only `pi-tools-bridge` (the sole MCP",
-		"# in the 0.4.14 surface; session-bridge was retracted in this release —",
-		"# see CHANGELOG 0.4.14 / issue #7) ever reaches the policy engine; an",
-		"# admin-policy MCP whitelist would be a redundant second filter.",
+		"# against `settings.mcp.allowed`. Only `pi-tools-bridge` ever reaches the",
+		"# policy engine; an admin-policy MCP whitelist would be a redundant",
+		"# second filter.",
 		"",
 		"# Native catch-all DENY — every non-MCP tool blocked unless re-allowed below.",
 		"[[rule]]",
@@ -2703,12 +2688,10 @@ function logBridgeBootstrapInvalidate(
 
 export type CancelOutcome = "dispatched" | "unsupported" | "failed";
 
-// 0.5.x — `"locked"` outcome (replaces 0.4.14 `"respawn"`):
-//
-// pi-shell-acp refuses live reuse-path model mismatch BEFORE closing the old
-// ACP child or bootstrapping a new backend session. This is the bridge-side
-// guard against silent backend handoff and MCP identity drift (the
-// "looks like resume, behaves like fresh handoff" case).
+// `"locked"` outcome — bridge-side guard against silent backend handoff and
+// MCP identity drift (the "looks like resume, behaves like fresh handoff"
+// case). pi-shell-acp refuses live reuse-path model mismatch BEFORE closing
+// the old ACP child or bootstrapping a new backend session.
 //
 // Bridge-side scope (what this guard actually does):
 //   - prevents `closeBridgeSession` of the live backend
@@ -2721,13 +2704,8 @@ export type CancelOutcome = "dispatched" | "unsupported" | "failed";
 // `appendModelChange()` before the provider stream is invoked. A fully clean
 // refusal requires a pi-core model-switch preflight/hook (out of this repo).
 //
-// Native pi sessions never reach this code path.
-//
-// Wire-level evidence the silent respawn was real: see
-// `[pi-shell-acp:debug-ensure]` + `[pi-shell-acp:shutdown]` +
-// `[pi-shell-acp:bootstrap] path=new backend=codex` triad captured during
-// the issue #14 investigation (Claude sonnet → Codex gpt-5.4 in the same
-// pi session).
+// Native pi sessions never reach this code path. See issue #14 for the
+// silent-respawn forensics that motivated the lock.
 export type ModelSwitchOutcome = "applied" | "unsupported" | "failed" | "locked";
 export type ModelSwitchPath = "bootstrap" | "reuse";
 
@@ -2921,19 +2899,15 @@ async function createBridgeProcess(params: EnsureBridgeSessionParams): Promise<A
 	// Inject only when modelId is concrete. A trailing-slash partial
 	// ("pi-shell-acp/") would still pass the MCP-side non-empty check and
 	// produce a half-attributed envelope at the receiver — exactly the silent
-	// drift the 0.4.14 transparency contract is meant to prevent. Skipping
-	// inject here lets the MCP child's EntwurfEnvelopeWiringError surface the
-	// gap at the next entwurf_send / entwurf_self call. Crash-loud beats
-	// trailing-slash transparency.
+	// drift the transparency contract is meant to prevent. Skipping inject
+	// here lets the MCP child's EntwurfEnvelopeWiringError surface the gap at
+	// the next entwurf_send / entwurf_self call. Crash-loud beats trailing-
+	// slash transparency.
 	const piAgentId = params.modelId ? `pi-shell-acp/${params.modelId}` : undefined;
 	// Structurally route the entwurf-envelope env keys (PI_SESSION_ID +
-	// PI_AGENT_ID) instead of relying on `...process.env` propagation. The
-	// pre-0.4.14 path assumed the entwurf-control extension had already
-	// written PI_SESSION_ID into the pi process env by the time backend spawn
-	// happened — but the ordering depends on extension hooks vs streamShellAcp
-	// flow, which broke in practice (GPT review on issue #7 caught the live
-	// `./run.sh check-bridge` failure that synthetic tests false-greened).
-	// piSessionId comes in as a direct param now; piAgentId is derived from
+	// PI_AGENT_ID) instead of relying on `...process.env` propagation —
+	// extension-hook ordering against backend spawn is unreliable (issue #7).
+	// piSessionId comes in as a direct param; piAgentId is derived from
 	// modelId. Both are injected AFTER `...process.env` so an operator's shell
 	// PI_SESSION_ID does not silently override the actual pi session value
 	// (which would route an entwurf_send to the wrong peer).

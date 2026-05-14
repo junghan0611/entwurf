@@ -189,7 +189,7 @@ function firstTextItem(arr: unknown[]): string | undefined {
 }
 
 // Robust extraction of MCP tool result text across the shapes ACP backends
-// surface. Empirically observed (verified during 0.4.15 entwurf_send UX work):
+// surface. Empirically observed:
 //
 //   Claude ACP: `update.rawOutput` is a `Array<{type:"text", text:"..."}>`
 //               (the bridge unwraps MCP CallToolResult.content into rawOutput)

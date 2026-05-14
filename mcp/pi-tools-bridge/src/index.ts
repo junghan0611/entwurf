@@ -5,17 +5,6 @@
  * entwurf orchestration surface (pi-extensions/entwurf.ts + lib/entwurf-core.ts +
  * pi/entwurf-targets.json). See AGENTS.md §Entwurf Orchestration.
  *
- * Historical note: this adapter previously lived in agent-config under the
- * "thin bridge, orchestration elsewhere" boundary. That boundary was superseded
- * during the entwurf migration — entwurf/registry/identity-lock all consolidated
- * into pi-shell-acp. agent-config is now a consumer, not the owner.
- *
- * 0.4.14: the formerly-bundled `mcp/session-bridge/` was retracted (issue #7).
- * It introduced a second "session" addressing namespace that confused agents
- * into looking up pi entwurf-control session ids in the wrong directory. With
- * Claude Code, Codex, and Gemini all reaching pi through pi-shell-acp ACP now,
- * the entwurf-control surface is the single cross-session messaging path.
- *
  * Wiring: registered only via piShellAcpProvider.mcpServers in pi settings.
  * No ambient discovery. The bridge never auto-promotes pi extension tools.
  *
@@ -225,7 +214,7 @@ function textErr(msg: string) {
 
 const server = new McpServer({ name: "pi-tools-bridge", version: "0.1.0" });
 
-// 0.4.14 transparency envelope.
+// Transparency envelope.
 //
 // Every entwurf_send carries a structured sender envelope so the receiver
 // renders WHO (agentId, sessionId), FROM WHERE (cwd), and WHEN (timestamp UTC,
@@ -305,7 +294,7 @@ server.tool(
 		"when you genuinely want a conversational response back — it shows as '(wants reply)' on " +
 		"the receiver render. It is not a delivery flag, not a wait/poll, not a contract; whether " +
 		"the receiver replies is decided by the message body. " +
-		"0.4.14: the sender envelope (agentId / sessionId / cwd / timestamp) is attached " +
+		"The sender envelope (agentId / sessionId / cwd / timestamp) is attached " +
 		"automatically from PI_AGENT_ID + PI_SESSION_ID + cwd + now; the receiver renders all " +
 		"four fields so the operator immediately sees who sent and from where.",
 	{

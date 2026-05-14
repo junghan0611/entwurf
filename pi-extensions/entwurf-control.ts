@@ -39,16 +39,12 @@
  *     [--entwurf-send-include-sender-info]
  *   (startup send is one-way by default; use --entwurf-send-wait turn_end to capture response on stdout)
  *
- * Addressing is sessionId-only since 0.5.0. The previous alias surface
- * (`<sessionName>.alias` symlinks under ~/.pi/entwurf-control/, plus a 1s
- * polling timer that mirrored pi's SessionManager.sessionName into those
- * symlinks) was removed: it added per-process polling overhead and a Race
- * surface around concurrent symlink updates, while the only stable identity
- * a peer needs is the UUIDv7 sessionId. Use entwurf_peers (or
- * /entwurf-sessions) to discover live sessions; pass the sessionId to
- * entwurf_send. Note that this is independent of agent-config's
- * --session-control extension, which lives under ~/.pi/session-control/
- * and may keep its own alias surface.
+ * Addressing is sessionId-only. The UUIDv7 sessionId is the only stable
+ * identity a peer needs; alias / sessionName surfaces are deliberately not
+ * exposed. Use entwurf_peers (or /entwurf-sessions) to discover live
+ * sessions; pass the sessionId to entwurf_send. Note that this is independent
+ * of agent-config's --session-control extension, which lives under
+ * ~/.pi/session-control/ and may keep its own alias surface.
  *
  * Environment:
  *   Sets PI_SESSION_ID when enabled, allowing child processes to discover
@@ -131,8 +127,8 @@ interface RpcEvent {
 
 // Unified command structure
 //
-// `sender` carries the 0.4.14 transparency envelope (agentId / sessionId / cwd
-// / timestamp). All four fields are mandatory whenever `sender` is present —
+// `sender` carries the transparency envelope (agentId / sessionId / cwd /
+// timestamp). All four fields are mandatory whenever `sender` is present —
 // see handleCommand("send") for the reject path. `wants_reply` is a separate
 // etiquette marker (NOT part of the envelope), default false — see
 // handleCommand("send") + parseSenderInfo and the SenderInfo block below for
@@ -462,15 +458,13 @@ function stripSenderInfo(text: string): string {
 
 // Sender envelope — what the <sender_info> JSON inside an entwurf-message carries.
 //
-// Addressing on this surface has been sessionId-only since 0.5.0 (see header).
-// Envelope fields are display-only — they never feed address resolution. The
-// 0.4.14 transparency rewrite expanded the envelope from "{sessionId, sessionName}"
-// to a fully attributed shape so the operator immediately sees WHO sent (agentId,
-// sessionId), FROM WHERE (cwd), and WHEN (timestamp). cwd serves the role
-// sessionName used to play — "which 담당자 is this" — but anchored to the
-// physical workspace rather than a free-form alias. agentId is the single
-// identity field ("pi-shell-acp/<model>"); different school × model = different
-// agent, never split into two fields.
+// Addressing is sessionId-only (see header). Envelope fields are display-only —
+// they never feed address resolution. The fully attributed shape lets the
+// operator immediately see WHO sent (agentId, sessionId), FROM WHERE (cwd),
+// and WHEN (timestamp). cwd anchors "which 담당자 is this" to the physical
+// workspace rather than a free-form alias. agentId is the single identity
+// field ("pi-shell-acp/<model>"); different school × model = different agent,
+// never split into two fields.
 //
 // wants_reply is an etiquette marker (default false). It is NOT a transport
 // contract — no wait, no polling, no delivery tracking. The sender is saying
@@ -561,7 +555,7 @@ function parseSenderInfo(text: string): SenderInfo | null {
 // rather than synthesize partial envelopes that would render as "(unknown ...)"
 // at the receiver. The MCP-side bridge (mcp/pi-tools-bridge entwurf_send) is
 // strict — it throws when its own env wiring is incomplete — because it
-// represents the public 0.4.14 transparency contract.
+// represents the public transparency contract.
 //
 // agentId preference order:
 //   1. PI_AGENT_ID env (injected by pi-shell-acp acp-bridge.ts as "pi-shell-acp/<model>")
@@ -1509,7 +1503,7 @@ Messages include sender session info for replies.`,
 					};
 				}
 
-				// 0.4.14 envelope path: sender metadata travels in the RPC `sender`
+				// Envelope path: sender metadata travels in the RPC `sender`
 				// field; the receiver synthesizes the canonical <sender_info> JSON
 				// from it. Body stays clean. When the local pi context cannot supply
 				// a complete envelope (missing model, etc.) we send without one and
@@ -1615,7 +1609,7 @@ Messages include sender session info for replies.`,
 
 		renderCall(args: EntwurfSendParams, theme: { fg: (k: string, s: string) => string; bold: (s: string) => string }) {
 			const action = args.action ?? "send";
-			// sessionId-only since 0.5.0 — alias surface is gone, and
+			// sessionId-only addressing — alias surface is gone, and
 			// renderCall is the operator's first peek at where this tool is
 			// pointing, so we render the raw UUID (truncated) and never look
 			// up a name that no longer exists.
@@ -1775,7 +1769,7 @@ function registerListSessionsTool(pi: ExtensionAPI): void {
 		name: "entwurf_peers",
 		label: "List Sessions",
 		description:
-			"List live sessions that expose a control socket. Returns sessionIds only — addressing is sessionId-only since 0.5.0 (no name aliases). Use this for discovery; for the current session id in shell/bash use $PI_SESSION_ID.",
+			"List live sessions that expose a control socket. Returns sessionIds only — addressing is sessionId-only (no name aliases). Use this for discovery; for the current session id in shell/bash use $PI_SESSION_ID.",
 		parameters: Type.Object({}),
 		async execute(
 			_toolCallId: string,
@@ -1904,7 +1898,7 @@ async function maybeHandleStartupControlSend(pi: ExtensionAPI, ctx: ExtensionCon
 
 	const { target, message, mode, waitUntil, includeSenderInfo } = parsed.options;
 	if (!isSafeSessionId(target)) {
-		reportStartupControlSend(ctx, `Invalid target session id: ${target} (sessionId-only since 0.5.0)`, "error");
+		reportStartupControlSend(ctx, `Invalid target session id: ${target} (sessionId-only — no name aliases)`, "error");
 		return;
 	}
 	const targetSessionId = target;
@@ -1916,9 +1910,9 @@ async function maybeHandleStartupControlSend(pi: ExtensionAPI, ctx: ExtensionCon
 		return;
 	}
 
-	// 0.4.14: --entwurf-send-include-sender-info is retained as an opt-in toggle
-	// for the startup CLI path so existing scripts that explicitly disabled the
-	// header keep behaving identically. When enabled, the sender envelope is
+	// --entwurf-send-include-sender-info is an opt-in toggle for the startup
+	// CLI path so existing scripts that explicitly disable the header keep
+	// behaving identically. When enabled, the sender envelope is
 	// built from local context (sessionId / agentId / cwd / timestamp) and
 	// passed structurally — the receiver synthesizes the <sender_info> JSON. No
 	// body mangling here either.
@@ -2115,7 +2109,7 @@ function registerEntwurfSendCommand(pi: ExtensionAPI, state: SocketState, getSes
 				return;
 			}
 
-			// 0.4.14 envelope path — see buildLocalSenderEnvelope above. The
+			// Envelope path — see buildLocalSenderEnvelope above. The
 			// /entwurf-send slash command is a human-initiated peer message, so
 			// we always attempt to attach the envelope (no opt-out toggle here);
 			// when local context can't supply every field we send without one.
