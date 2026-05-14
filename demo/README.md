@@ -6,12 +6,9 @@ One-shot recorded GIF of the pi-shell-acp entwurf flow:
 2. **Resume** that same sibling (memory recall — identity preservation).
 3. **Cross-session greeting** via `entwurf_send` (sent box ↔ received box).
 
-> ⚠️ **Scene 2 currently fails** — see [#9](https://github.com/junghan0611/pi-shell-acp/issues/9).
-> The resumed sibling answers *"모르겠습니다 — 현재 컨텍스트에 해당 정보가 없습니다"*
-> instead of `tempered indigo`. The session JSONL preserves the prior turn
-> correctly; the backend just never sees it on resume. This demo is now also
-> the regression reproducer and one of the green-path acceptance gates for the
-> fix. Do not "fix" the prompts to pass — fix the resume RPC path.
+Scene 2 is the #9 regression guard: the resumed sibling must recall
+`tempered indigo` from the first turn. If it does not, inspect the resume
+bootstrap path before changing the prompts.
 
 Two pi sessions run side-by-side in a single tmux window. A background
 driver types the scene prompts into the sender pane with `tmux send-keys`.
