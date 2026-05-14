@@ -171,8 +171,8 @@ Source columns intentionally separated so each row stays honest about *where* th
 
 - **Claude axis is closed after the hooks-empty overlay fix.** Pattern A (explicit `/compact`) remains clean; Pattern B (organic auto-compact) now answers the triggering prompt in the compacting turn. The observed prompt-sacrifice was caused by the overlay `settings.json` omitting `hooks`, not by a backend-native compaction limitation. `hooks: {}` is now an overlay invariant and does not inherit operator hooks.
 - Codex `/compact` (explicit) and organic auto-compact are closed for the release claim. The lowered-threshold cheap stand-in proved path reachability; the real GPT-5.4 saturation probe proved default-threshold behavior at ~245k with wire drop + substantive compacting turn + sentinel preservation.
-- Gemini `/compact` is closed as a **negative** (no ACP adapter surface) — sufficient. Gemini's actual context-pressure continuation path on the ACP wire (Axis 1 last column, Axis 3) is still the unverified row that blocks "all three backends honest" for the tag.
-- Release tag is gated on Gemini's context-pressure ACP surface (stop reason / error / silent / new-session required). Claude and Codex no longer block the tag; both have explicit and organic/default-threshold evidence with mapping survival.
+- Gemini `/compact` is closed as a **negative** (no ACP adapter surface) and the ACP context-pressure surface is characterized as far as the current release needs: silent organic compression may continue the turn, and unresolved pressure surfaces as `max_tokens`. This is sufficient for "all three backends honest" because it records the real Gemini ACP asymmetry rather than forcing a fake pass.
+- Release tag is no longer gated on Gemini compaction. Claude and Codex have explicit and organic/default-threshold evidence with mapping survival; Gemini has source-confirmed negative evidence plus operator-facing `max_tokens` UX wording. A real 1M saturation run remains optional L5 evidence, not a 0.5.0 blocker.
 
 ### Immediate next steps
 

@@ -235,36 +235,31 @@ function titleForTool(update: any, previousTitle?: string, toolCallId?: string):
 }
 
 // Match the `entwurf_send` MCP tool across the three ACP backend naming
-// conventions we currently support. Each backend formats the visible title
-// differently — both the namespace prefix AND a possible trailing server
-// label suffix:
+// conventions we currently support. This must be narrower than "title contains
+// the token `entwurf_send`": Terminal/Bash titles can legitimately include that
+// string (e.g. `grep -r "entwurf_send" ...`) and must not be promoted into a
+// fake sender-side [entwurf sent →] box.
+//
+// Each backend formats the visible MCP title differently — both the namespace
+// prefix AND a possible trailing server label suffix:
 //
 //   Claude: mcp__pi-tools-bridge__entwurf_send                  (double underscore, dash in server, no suffix)
 //   Codex:  mcp__pi_tools_bridge__.entwurf_send                 (double underscore + dot, underscore in server, no suffix)
 //   Gemini: entwurf_send (pi-tools-bridge MCP Server)           (server label suffix in parens — discovered from real session)
 //   (also Gemini registry name: mcp_pi-tools-bridge_entwurf_send — single underscore namespace)
 //
-// The earlier `endsWith` form silently dropped Gemini back to `[tool:start]` /
-// `[tool:done]` because `entwurf_send` was followed by " (pi-tools-bridge MCP
-// Server)" instead of being at the end of the string. Token-style matching
-// fixes this — `entwurf_send` must appear as a complete identifier, not part
-// of a longer name like `entwurf_send_v2` or `entwurf_sender`:
-//
-//   Leading boundary  : start-of-string OR any non-alphanumeric (so `_`, `-`,
-//                       `.`, ` ` all count as separator — Claude double-`_`,
-//                       Codex `__.`, Gemini single `_`, etc.)
-//   Trailing boundary : end-of-string OR any non-word char (so space, `(`,
-//                       `)`, `.` all count; `_` and alphanumerics are
-//                       rejected so `entwurf_send_v2` and `entwurf_sender`
-//                       are NOT mismatched as `entwurf_send`)
-//
-// We check both the visible `title` and Claude Code's `_meta.claudeCode.toolName`
-// hint so a future backend that surfaces only one of those still resolves.
-const ENTWURF_SEND_TOKEN = /(^|[^a-zA-Z0-9])entwurf_send($|[^a-zA-Z0-9_])/;
+// The matcher intentionally accepts only MCP-shaped names. A bare token match is
+// too broad because command titles are arbitrary user/tool text.
+const ENTWURF_SEND_TOOL_PATTERNS = [
+	/^mcp__pi-tools-bridge__entwurf_send$/,
+	/^mcp__pi_tools_bridge__\.?entwurf_send$/,
+	/^mcp_pi-tools-bridge_entwurf_send$/,
+	/^entwurf_send\s+\(pi-tools-bridge MCP Server\)$/,
+] as const;
 function isEntwurfSendTool(title: string, update?: any): boolean {
 	const claudeName = update?._meta?.claudeCode?.toolName;
 	const candidates = [title, claudeName].filter((v): v is string => typeof v === "string" && v.length > 0);
-	return candidates.some((name) => ENTWURF_SEND_TOKEN.test(name));
+	return candidates.some((name) => ENTWURF_SEND_TOOL_PATTERNS.some((pattern) => pattern.test(name.trim())));
 }
 
 // Coerce ACP rawInput (typed as unknown by the ACP SDK because the MCP
