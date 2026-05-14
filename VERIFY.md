@@ -266,19 +266,21 @@ If the verifier strictly needs a fresh ACP session inside this sequence, switch 
 
 ### 1.7 Cross-install / cross-backend parity (optional but high-value)
 
-Three axes to compare a fresh self-awareness report against:
+Four axes to compare a fresh self-awareness report against:
 
 1. **Same backend, different install path.** Path A (`pi install git:…`) on one machine vs Path B (`git clone + pi install ./`) on another. Same answer expected — the install path must be invisible to the bridged model.
 2. **Same backend, different machine.** Two `pi-shell-acp/claude-sonnet-4-6` instances (e.g. local + Oracle), or the same exercise for Codex / Gemini when those backends are available. Identical native tool list for the same backend, identical MCP server list, identical 5 MCP tool functions.
 3. **Different backend, same bridge.** Compare `pi-shell-acp/claude-sonnet-4-6`, `pi-shell-acp/gpt-5.4`, and `pi-shell-acp/gemini-3.1-pro-preview`. Same harness identification (`pi-shell-acp`), same MCP server (`pi-tools-bridge`), same 5 MCP tool functions — but **different** native tool surface (Claude: `Bash/Read/Edit/Write/Skill`; Codex: `exec_command/write_stdin/apply_patch/update_plan/request_user_input/list_mcp_resources/read_mcp_resource/...`; Gemini: `read_file/list_directory/glob/grep_search/write_file/replace/run_shell_command/activate_skill`) and **different** backend carrier / namespace conventions where the backend exposes them.
+4. **Native pi routing vs ACP-bridged routing, same backend model.** Compare an entwurf target spawned via the native pi provider (e.g. `openai-codex/gpt-5.4`, no `provider="pi-shell-acp"` argument) against the ACP-bridged equivalent (`pi-shell-acp/gpt-5.4`). The pair shares a model identity but takes two structurally different paths to it. They are expected to **differ**, not match — and the shape of the difference is itself a verified property.
 
 Pass:
 
 - Axes 1 + 2: structurally identical reports.
 - Axis 3: harness + MCP server names + MCP tool function count match; backend-native tool surfaces are **backend-specific**, not normalized. If a Claude session reports `apply_patch` as native, a Codex session reports `Bash` as native, or a Gemini session reports Claude/Codex native tools as its own, the bridge has accidentally normalized the tool surface — that is a fail, not a feature.
 - Axis 3 reverse-direction evidence: a Codex verifier can call `entwurf` against a Claude target (or vice versa), the spawn succeeds, taskId is issued, and the verifier can parse the subject's self-report into a comparison table. Confirmed empirically 2026-04-29 — Codex on Oracle spawned Claude via entwurf, captured the self-report, and produced its own meta-analysis matching the §14 pass criterion 11 axis. This is bidirectional cross-vendor orchestration working through one bridge.
+- Axis 4: the native target reports **no `pi-tools-bridge` MCP server** (capability is delivered via pi's extension surface on the native path, not as an MCP), and presents pi's unified tool surface (`functions.read/bash/edit/write` + `multi_tool_use.parallel` under Codex's `functions.*` namespace, or the corresponding native pi shape on other backends). The ACP-routed target reports `pi-tools-bridge` as the single MCP server, exposes the 5 entwurf tools in the backend's namespace convention, and presents the backend-native tool surface (Codex: `exec_command/apply_patch/update_plan/...`). A native target that hallucinates `pi-tools-bridge` as visible is a fail; an ACP target that fails to expose it is a fail. Honest "ACP bridge or native: I cannot tell from what I see" hedging on the native side is **PASS**, not failure — it reflects the real ambiguity native pi presents on its developer-instructions slot, where the bridge identity narrative is not part of the native augment. The carrier-surface separation in §1A.1.0 applies; native pi-context-augment carries only the cwd `<project-context>`, not the bridge identity line or `~/AGENTS.md`.
 
-This is the matrix described under "Diversifying the verifier matrix" near the end of this document. Claude/Codex bidirectional checks are closed; Gemini has separate baseline/operator evidence plus `check-bridge` visibility/invocation, but its context-pressure path remains open.
+This is the matrix described under "Diversifying the verifier matrix" near the end of this document. Claude/Codex bidirectional checks are closed (axes 1–3); the native-vs-ACP routing comparison on the same Codex model (axis 4) closed 2026-05-14 — see the corresponding History row. Gemini has separate baseline/operator evidence plus `check-bridge` visibility/invocation; its context-pressure path remains open, and its axis-4 native-vs-ACP comparison is the next experimental cell.
 
 ---
 
@@ -311,6 +313,33 @@ Fail:
 - Claims a tool exists that does not
 - Conflates pi custom tools and native tools in explanations
 - Hallucinates MCP visibility
+- **Conflates the engraving carrier with the pi-context-augment surface** (see §1A.1.0)
+
+#### 1A.1.0 Two carrier surfaces — engraving vs pi-context-augment
+
+`pi-shell-acp` delivers identity-relevant text into the bridged session through **two structurally distinct surfaces**. A faithful self-report must keep them separated; collapsing them into "the system prompt" is the most common verifier-side mistake under 0.5.0, and replicant-testing-replicant runs exist precisely to surface this kind of carrier-surface confusion.
+
+| Surface | Source | Delivery shape | Default 0.5.0 content |
+|---|---|---|---|
+| **Engraving carrier** | `prompts/engraving.md` (or `PI_SHELL_ACP_ENGRAVING_PATH`) via `engraving.ts` | Claude `_meta.systemPrompt` / Codex `-c developer_instructions=` / Gemini `GEMINI_SYSTEM_MD` — all full-replacement identity slots, string vs file is shape, not authority | **Operator-authored, optional, empty by default.** The repo ships `# Engraving Here` as a placeholder. Empty/placeholder is silently skipped by `engraving.ts`; that is the intended steady state for a new install. |
+| **pi-context-augment** | `pi-context-augment.ts`; concatenates bridge identity narrative + `~/AGENTS.md` + `cwd/AGENTS.md` (`<project-context path="...">`) + date/cwd | First-user-message prepend (`enrichTaskWithProjectContext` → first user turn). Not the system slot. | **Always populated on ACP-routed targets** under 0.5.0. Three components must arrive: (1) the line `You are operating through pi-shell-acp, an ACP bridge between pi (the harness) and the underlying model.`, (2) the user-level `~/AGENTS.md` body, (3) the cwd repo's `AGENTS.md` wrapped in a `<project-context path="…">` block. |
+
+Historical note: prior to the 0.5.0 prompt-pipeline fix, the engraving carrier was the only path that reliably reached the bridged backend — the pi-context-augment surface was incomplete, so `~/AGENTS.md` and the bridge identity narrative were silently dropped on some routes. After the fix, the engraving carrier became truly optional (placeholder is fine) because the pi-context-augment surface now carries the bridge identity reliably. A subject that says "engraving has nothing pi-shell-acp-related, but pi-context-augment has the three components" is reporting the **correct steady state**, not a regression.
+
+Pass — extended for §1A.1 carrier honesty:
+
+- The subject distinguishes engraving from pi-context-augment by name (or by structural description — system slot vs first-user prepend) without being prompted to.
+- On ACP-routed targets, the subject confirms that **all three pi-context-augment components arrived** when asked. A subject that only sees `<project-context>` and not the bridge identity narrative or `~/AGENTS.md` is reporting a pipeline regression and the run should stop.
+- If `prompts/engraving.md` is the default placeholder, the subject reports the engraving carrier as empty/placeholder and does not invent content for it. Treating the placeholder as absent text is fine; quoting the placeholder verbatim is fine. Either is PASS.
+- Verifier-side: if your own answer to Q-L1 quotes the bridge-identity line as if it came from the system prompt, that is a verifier mistake. Re-read your inputs and split the two surfaces before reporting.
+
+Fail:
+
+- Subject attributes the bridge identity narrative to the engraving carrier.
+- Subject claims pi-context-augment is empty when the run is ACP-routed (real 0.5.0 regression signal).
+- Subject invents engraving content that the placeholder does not contain.
+
+> **Native pi routing exception.** On native (non-ACP) entwurf targets, pi-context-augment runs through a different code path: the cwd `<project-context>` block is delivered as a normal `enrichTaskWithProjectContext` prepend, but the bridge-identity narrative line and `~/AGENTS.md` body are not part of the native augment — the host pi may surface them through its own developer-instructions slot or not at all, depending on the backend. The PASS criterion on native targets is **honesty about what arrived**, not the three-component checklist above. A native Codex target that reports "I see the cwd `<project-context>` and a `pi`-identifying developer instruction but no `~/AGENTS.md` and no `pi-shell-acp` identity narrative" is correct for native routing — see §1.7 axis-4.
 
 #### 1A.1.1 Codex objective wiring check (when backend = codex)
 
