@@ -68,7 +68,7 @@
  *
  * Usage:
  *   node --experimental-strip-types scripts/compaction-policy-smoke.ts
- *   node --experimental-strip-types scripts/compaction-policy-smoke.ts --step=01
+ *   node --experimental-strip-types scripts/compaction-policy-smoke.ts --step=02
  *   LIVE=1 node --experimental-strip-types scripts/compaction-policy-smoke.ts
  */
 
@@ -635,7 +635,7 @@ async function step04_codexSurvivesCompact(): Promise<StepResult> {
 }
 
 /**
- * Step 07 — exploratory Gemini probe.
+ * Step 06 — exploratory Gemini probe.
  *
  * Gemini ACP is intentionally OUT of the 0.5.0 ready claim (the
  * declaration is limited to Claude + Codex). Pre-step research

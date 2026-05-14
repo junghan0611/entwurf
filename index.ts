@@ -1205,7 +1205,7 @@ export default function (pi: ExtensionAPI) {
 	// when they hit context pressure on an ACP session.
 	//
 	// Backend-native compaction is no longer blocked by the bridge
-	// (see acp-bridge.ts). Claude/Codex compact themselves; the pi
+	// (see acp-bridge.ts). When a backend can compact natively, the pi
 	// session survives that. If the operator types `/compact` and
 	// actually wants the backend to compact, they should send it as a
 	// backend prompt (or let the backend auto-compact). The message

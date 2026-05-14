@@ -1258,7 +1258,7 @@ try {
   // wins.
   //
   // 0.5.0: the bridge does not pin any codex-side compaction knob.
-  // Codex's native auto-compaction runs on its own default. The argv
+  // Codex's native context management runs on its own default. The argv
   // deepEqual below is the single source of truth — anything not in
   // that expected list is not pinned. (The earlier explicit negative
   // assertion on a specific knob name was removed in the 0.5.0
@@ -1271,7 +1271,7 @@ try {
   ]);
   assert.equal(codexLaunch.source, 'env:CODEX_ACP_COMMAND');
   // Defense-in-depth: pin web_search=disabled, tools.view_image=false, and
-  // four `features.*=false` flags even though the CODEX_HOME overlay
+  // the `features.*=false` flags even though the CODEX_HOME overlay
   // already strips operator config. codex-rs lets later -c values for the
   // same key win, so these flags hold even if the operator inlines
   // counter-values (e.g. `-c features.multi_agent=true`) via
@@ -1312,7 +1312,8 @@ try {
 
   // PI_SHELL_ACP_CODEX_MODE=auto opts into codex-rs's standard mode
   // (workspace-write sandbox, on-request approvals). The bridge does not
-  // touch compaction; mode flags are the only -c args we inject.
+  // touch compaction; mode args swap approval_policy + sandbox_mode while
+  // the defense-in-depth -c args above stay constant.
   const prevMode = process.env.PI_SHELL_ACP_CODEX_MODE;
   process.env.PI_SHELL_ACP_CODEX_MODE = 'auto';
   try {
