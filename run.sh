@@ -30,7 +30,7 @@ Usage:
   ./run.sh smoke-all [project-dir]    # required triple-backend runtime smoke gate (gemini auto-skips if absent)
   ./run.sh smoke-continuity [project-dir] # strict dual-backend persisted bootstrap gate (Claude=resume, Codex=load)
   ./run.sh smoke-cancel [project-dir] # strict cancel/abort cleanup observability gate (Claude + Codex)
-  ./run.sh smoke-model-switch [project-dir] # strict dual-backend model switch observability gate (reuse mismatch -> respawn)
+  ./run.sh smoke-model-switch [project-dir] # strict model-switch lock gate — same-backend + cross-backend reuse mismatch must throw ModelSwitchLockedError (issue #14)
   ./run.sh smoke-entwurf-resume [project-dir] # bridge-level entwurf-style continuity gate (Claude=resume, Codex=load)
   ./run.sh check-bridge               # pi-tools-bridge direct MCP smoke + test.sh + ACP visibility/invocation (claude+codex+gemini)
   ./run.sh check-native-async         # pi-native async entwurf spawn smoke (pi -e pi-extensions/entwurf.ts)
@@ -38,6 +38,7 @@ Usage:
   ./run.sh session-messaging [args...] # 4-case session-messaging smoke (native/ACP cross-matrix)
   ./run.sh smoke-compaction-policy [--step=NN] # 0.5.0 compaction-policy verification (LIVE=1 to include backend observation steps)
   ./run.sh check-mcp                  # local deterministic check of normalizeMcpServers() — no Claude/ACP subprocess
+  ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-backends             # local deterministic check of backend launch resolution + backend-specific _meta shape
   ./run.sh check-registration         # local deterministic check of per-runtime provider registration semantics
   ./run.sh check-dep-versions         # local deterministic check that version pins (package.json/run.sh/README.md) agree
@@ -735,11 +736,17 @@ smoke_cancel() {
 
 smoke_model_switch_single() {
   local project_dir=$1
-  local backend=$2
+  local backend_a=$2
   local model_a=$3
-  local model_b=$4
+  local backend_b=${4:-$backend_a}
+  local model_b=$5
 
-  echo "[smoke-model-switch/$backend] models: $model_a -> $model_b"
+  local label="$backend_a"
+  if [[ "$backend_a" != "$backend_b" ]]; then
+    label="$backend_a->$backend_b"
+  fi
+
+  echo "[smoke-model-switch/$label] models: $model_a -> $model_b"
 
   local log_file
   log_file=$(mktemp /tmp/pi-shell-acp-model-switch-XXXXXX.log)
@@ -747,8 +754,9 @@ smoke_model_switch_single() {
   local rc=0
   (
     cd "$REPO_DIR"
-    PI_SHELL_ACP_SMOKE_BACKEND="$backend" \
+    PI_SHELL_ACP_SMOKE_BACKEND_A="$backend_a" \
     PI_SHELL_ACP_MODEL_A="$model_a" \
+    PI_SHELL_ACP_SMOKE_BACKEND_B="$backend_b" \
     PI_SHELL_ACP_MODEL_B="$model_b" \
       node --input-type=module 2>"$log_file" <<'EOF'
 import {
@@ -757,15 +765,19 @@ import {
   setActivePromptHandler,
   closeBridgeSession,
   normalizeMcpServers,
+  ModelSwitchLockedError,
 } from './acp-bridge.ts';
 
-const backend = process.env.PI_SHELL_ACP_SMOKE_BACKEND;
+const backendA = process.env.PI_SHELL_ACP_SMOKE_BACKEND_A;
+const backendB = process.env.PI_SHELL_ACP_SMOKE_BACKEND_B;
 const modelA = process.env.PI_SHELL_ACP_MODEL_A;
 const modelB = process.env.PI_SHELL_ACP_MODEL_B;
-if (!backend || !modelA || !modelB) throw new Error('backend/modelA/modelB required');
+if (!backendA || !backendB || !modelA || !modelB) {
+  throw new Error('backendA/backendB/modelA/modelB required');
+}
 
 const emptyMcpHash = normalizeMcpServers(undefined).hash;
-const makeParams = (sessionKey, modelId) => ({
+const makeParams = (sessionKey, backend, modelId) => ({
   sessionKey,
   cwd: process.cwd(),
   backend,
@@ -799,44 +811,105 @@ async function runOneTurn(session, label) {
   console.error(`[smoke-model-switch] ${label} turn ok`);
 }
 
-const sessionKey = `smoke-ms-respawn:${backend}`;
-const sessionA = await ensureBridgeSession(makeParams(sessionKey, modelA));
-await runOneTurn(sessionA, 'respawn/turn1');
-const sessionB = await ensureBridgeSession(makeParams(sessionKey, modelB));
-if (sessionB === sessionA) {
-  throw new Error('respawn scenario: expected new session but got same reference');
+// 0.5.x — pi-shell-acp session locks its model for lifetime (issue #14).
+// Scenario:
+//   1. ensureBridgeSession(backendA/modelA) -> session A bootstrap (path=new)
+//   2. one turn on session A succeeds
+//   3. ensureBridgeSession(backendB/modelB) on the SAME sessionKey -> bridge
+//      MUST throw ModelSwitchLockedError, regardless of whether backendA ==
+//      backendB. Pre-0.5.x behavior fell through isSessionCompatible on
+//      cross-backend mismatch and silent-respawned the new backend — the
+//      cross-backend case covers that hole.
+//   4. session A is still alive and serves one more turn under modelA
+const sessionKey = `smoke-ms-locked:${backendA}-${backendB}`;
+const sessionA = await ensureBridgeSession(makeParams(sessionKey, backendA, modelA));
+await runOneTurn(sessionA, 'locked/turn1');
+
+let lockedError;
+try {
+  await ensureBridgeSession(makeParams(sessionKey, backendB, modelB));
+} catch (err) {
+  lockedError = err;
 }
-await runOneTurn(sessionB, 'respawn/turn2-post-respawn');
+if (!(lockedError instanceof ModelSwitchLockedError)) {
+  throw new Error(
+    `locked scenario: expected ModelSwitchLockedError, got ${lockedError ? lockedError.constructor?.name : 'no throw'}`,
+  );
+}
+if (lockedError.fromModel !== modelA || lockedError.toModel !== modelB) {
+  throw new Error(
+    `locked scenario: error payload mismatch from=${lockedError.fromModel} to=${lockedError.toModel}`,
+  );
+}
+if (lockedError.fromBackend !== backendA || lockedError.toBackend !== backendB) {
+  throw new Error(
+    `locked scenario: backend payload mismatch from=${lockedError.fromBackend} to=${lockedError.toBackend}`,
+  );
+}
+console.error('[smoke-model-switch] locked/throw observed as expected');
+
+// Lock means the existing session is still serving — confirm with a second
+// turn under the original (backendA, modelA).
+await runOneTurn(sessionA, 'locked/turn2-post-refusal-same-model');
+
 await closeBridgeSession(sessionKey, { closeRemote: true, invalidatePersisted: true });
-console.error('[smoke-model-switch] respawn scenario done');
+console.error('[smoke-model-switch] locked scenario done');
 EOF
   ) || rc=$?
 
   if [[ "$rc" != "0" ]]; then
-    echo "[smoke-model-switch/$backend] node subprocess failed rc=$rc" >&2
+    echo "[smoke-model-switch/$label] node subprocess failed rc=$rc" >&2
     cat "$log_file" >&2
     rm -f "$log_file"
     exit 1
   fi
 
-  local pattern="^\\[pi-shell-acp:model-switch\\] path=reuse outcome=respawn .*backend=$backend .*toModel=$model_b .*fallback=new_session .*reason=pi_agent_id_env_requires_respawn"
+  # 0.5.x locked-policy expected log line — the lock fires BEFORE the compat
+  # check, so backend=$backend_a (the live session's backend) is what shows
+  # up on the model-switch log line even for a cross-backend attempt.
+  local pattern="^\\[pi-shell-acp:model-switch\\] path=reuse outcome=locked .*backend=$backend_a .*fromModel=$model_a toModel=$model_b reason=pi_shell_acp_session_locked_to_starting_model"
   if ! grep -qE "$pattern" "$log_file"; then
-    echo "[smoke-model-switch/$backend] missing log matching: $pattern" >&2
+    echo "[smoke-model-switch/$label] missing log matching: $pattern" >&2
     cat "$log_file" >&2
     rm -f "$log_file"
     exit 1
   fi
 
-  local new_bootstraps
-  new_bootstraps=$(grep -cE "^\\[pi-shell-acp:bootstrap\\] path=new backend=$backend" "$log_file" || true)
-  if [[ "$new_bootstraps" -lt 2 ]]; then
-    echo "[smoke-model-switch/$backend] expected >=2 bootstrap path=new lines, got $new_bootstraps" >&2
+  # Lock policy: exactly one bootstrap (path=new) for backend_a — the
+  # refused second ensureBridgeSession must NOT trigger a second bootstrap.
+  # A regression to the old "respawn" semantics would show >=2.
+  local new_bootstraps_a
+  new_bootstraps_a=$(grep -cE "^\\[pi-shell-acp:bootstrap\\] path=new backend=$backend_a" "$log_file" || true)
+  if [[ "$new_bootstraps_a" -ne 1 ]]; then
+    echo "[smoke-model-switch/$label] expected exactly 1 bootstrap path=new backend=$backend_a, got $new_bootstraps_a" >&2
     cat "$log_file" >&2
     rm -f "$log_file"
     exit 1
   fi
 
-  echo "[smoke-model-switch/$backend] ok (reuse mismatch respawned and re-bootstrapped)"
+  # No legacy "respawn" outcome anywhere — guards against partial revert.
+  if grep -qE "^\\[pi-shell-acp:model-switch\\] .*outcome=respawn" "$log_file"; then
+    echo "[smoke-model-switch/$label] legacy outcome=respawn line found — locked policy violated" >&2
+    cat "$log_file" >&2
+    rm -f "$log_file"
+    exit 1
+  fi
+
+  # Cross-backend regression guard: a backend-changing switch must NOT
+  # bootstrap a fresh session for $backend_b. Pre-0.5.x behavior fell
+  # through isSessionCompatible and silently bootstrapped the other backend
+  # — this is the exact wire-level evidence captured during the issue #14
+  # investigation (Claude sonnet → Codex gpt-5.4).
+  if [[ "$backend_a" != "$backend_b" ]]; then
+    if grep -qE "^\\[pi-shell-acp:bootstrap\\] path=new backend=$backend_b" "$log_file"; then
+      echo "[smoke-model-switch/$label] cross-backend regression: backend=$backend_b session was bootstrapped despite lock" >&2
+      cat "$log_file" >&2
+      rm -f "$log_file"
+      exit 1
+    fi
+  fi
+
+  echo "[smoke-model-switch/$label] ok (reuse mismatch locked, ModelSwitchLockedError thrown, existing session continues)"
   rm -f "$log_file"
 }
 
@@ -850,9 +923,12 @@ smoke_model_switch() {
   echo "[smoke-model-switch] project: $project_dir"
   echo "[smoke-model-switch] repo:    $REPO_DIR"
 
-  smoke_model_switch_single "$project_dir" claude claude-sonnet-4-6 claude-opus-4-7
-  smoke_model_switch_single "$project_dir" codex gpt-5.4 gpt-5.5
-  echo "[smoke-model-switch] Claude + Codex model switch respawn observability: ok"
+  # Within-backend model switch (same backend, different model).
+  smoke_model_switch_single "$project_dir" claude claude-sonnet-4-6 claude claude-opus-4-7
+  smoke_model_switch_single "$project_dir" codex  gpt-5.4            codex  gpt-5.5
+  # Cross-backend switch — pre-0.5.x silent-respawn hole, now locked.
+  smoke_model_switch_single "$project_dir" claude claude-sonnet-4-6 codex  gpt-5.4
+  echo "[smoke-model-switch] Claude + Codex model-switch lock observability: ok"
 }
 
 smoke_entwurf_resume_single() {
@@ -1010,6 +1086,14 @@ smoke_entwurf_resume() {
   smoke_entwurf_resume_single "$project_dir" codex  gpt-5.4           load   "bridge continuity (Codex → loadSession)"
 
   echo "[smoke-entwurf-resume] Claude(resume) + Codex(load) bridge continuity: ok"
+}
+
+check_model_lock() {
+  # Deterministic policy unit test for pi-extensions/model-lock.ts.
+  # No pi process, no network, no API cost. Mocks ExtensionAPI/Context and
+  # drives the model_select handler through every quadrant + edge case
+  # (see scripts/check-model-lock.ts header for the full matrix).
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-model-lock.ts)
 }
 
 check_mcp() {
@@ -3128,6 +3212,9 @@ case "$cmd" in
     ;;
   check-mcp)
     check_mcp
+    ;;
+  check-model-lock)
+    check_model_lock
     ;;
   check-backends)
     check_backends

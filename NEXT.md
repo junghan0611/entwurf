@@ -214,6 +214,42 @@ Source columns intentionally separated so each row stays honest about *where* th
 
 ---
 
+## Session model lock — closed for 0.5.0 (issue #14)
+
+**Policy**: after a session is anchored, any model switch that touches `pi-shell-acp` is refused by immediate revert. Native-to-native switching remains free. Fresh startup/new sessions with no messages stay unlocked until the first prompt, so pre-turn model selector changes and CLI `--model` override remain configuration.
+
+### Final coverage
+
+| Scenario | Result | Guard |
+|---|---|---|
+| fresh startup/new before first prompt | free | `sessionLocked=false` |
+| first prompt sent (`agent_start`) | lock begins | extension |
+| resume/fork | locked immediately | extension |
+| reload with existing messages | locked | extension |
+| reload after already locked module state | locked | extension |
+| native -> native | free | `touchesPiShellAcp=false` |
+| native -> pi-shell-acp | reverted to native | extension |
+| pi-shell-acp -> native | reverted to pi-shell-acp | extension |
+| pi-shell-acp/X -> pi-shell-acp/Y | reverted to X on normal path | extension; bridge fallback if direct/reuse mismatch reaches `ensureBridgeSession` |
+
+### Evidence
+
+- `scripts/check-model-lock.ts` + `./run.sh check-model-lock`: **18/18 pass**. Covers the four provider quadrants, same-model no-op, first selection, pre-turn freedom, `agent_start`, resume/fork, reload, reentry, and defensive lock if entries cannot be read.
+- `./run.sh smoke-model-switch`: bridge fallback A remains green for within-backend Claude, within-backend Codex, and cross-backend Claude -> Codex. In normal UX B fires first, so A is a fallback/direct-call boundary, not the happy path.
+- GLG direct UX verification completed on 2026-05-14. The important cases are now covered: pre-turn selection free, post-turn switch reverted, resume switch reverted, `pi-shell-acp -> native` reverted, `native -> pi-shell-acp` reverted, native-to-native free.
+
+### Honest limit
+
+This is **not transcript-clean**. pi-core mutates `agent.state.model` and appends `model_change` before the extension/provider boundary can refuse:
+
+- Extension revert leaves `X -> Y -> X`.
+- Bridge fallback leaves attempted `X -> Y`.
+- Clean refusal needs a pi-core cancellable preflight hook; that is intentionally outside this repo for 0.5.0.
+
+Release docs now need only stay calibrated to this split: B extension guard is primary, A bridge guard is fallback, native-to-native is free, and transcript dirt is explicit.
+
+---
+
 ## Parked, not current
 
 - **#11** remote SSH resume cwd alignment — 나중에. 0.4.x 영역 아님.

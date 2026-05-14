@@ -4,6 +4,75 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Changed — pi-shell-acp session model lock
+
+pi-shell-acp sessions are now locked to their starting model after the session starts. The lock has two layers:
+
+- `pi-extensions/model-lock.ts` is the primary UX guard. Once a conversation is anchored (`agent_start`, resume/fork, reload with messages, or startup with existing messages), `model_select` transitions that touch `pi-shell-acp` are immediately reverted to the previous model. This covers `pi-shell-acp -> native`, `native -> pi-shell-acp`, and `pi-shell-acp/X -> pi-shell-acp/Y`. Native-to-native switching remains free.
+- `ensureBridgeSession` is the bridge fallback/direct-call guard. If a live pi-shell-acp bridge session is asked to serve a different model, it throws `ModelSwitchLockedError` before closing the old ACP child, invalidating persisted state, or bootstrapping a new backend session.
+
+Fresh startup/new sessions with no messages stay unlocked until the first prompt. Pre-turn model selector changes and CLI `--model` overrides are configuration, not violations. Resume/fork sessions lock immediately because their model identity was already anchored by the original session.
+
+**Wire-level evidence the bridge fallback matters.** A live pi session that switched from Claude sonnet to Codex gpt-5.4 produced — *before* this change —
+
+```text
+[pi-shell-acp:shutdown]  closeRemote=true invalidatePersisted=true closedRemote=ok childExit=exited
+[pi-shell-acp:bootstrap] path=new backend=codex acpSessionId=019e2481-...
+```
+
+The Claude backend was reaped and a fresh Codex backend bootstrapped, while pi JSONL still pointed at the original Sonnet conversation. With the bridge fallback active, the same direct/reuse-path flow produces
+
+```text
+[pi-shell-acp:model-switch] path=reuse outcome=locked
+                            fromModel=claude-sonnet-4-6 toModel=gpt-5.4
+                            reason=pi_shell_acp_session_locked_to_starting_model
+```
+
+— no `shutdown` line, no `bootstrap path=new`. The next prompt reuses the original ACP session (`path=reuse backend=claude`).
+
+**This is not transcript-clean.** pi-core (`AgentSession.setModel()` in `packages/coding-agent/src/core/agent-session.ts`) mutates `agent.state.model` and calls `appendModelChange()` before the extension or provider boundary can refuse. Extension-side revert therefore leaves `model_change` as `X -> Y -> X`; bridge fallback leaves the attempted `X -> Y` record. A fully clean refusal requires a pi-core model-switch preflight/hook that this repo intentionally does not patch.
+
+#### Surface changes
+
+- `pi-extensions/model-lock.ts` + `package.json`
+  - New extension-side model lock. It tracks when the session is anchored with `session_start`, `agent_start`, and existing message entries.
+  - `startup` / `new` with no messages: unlocked until first prompt.
+  - `resume` / `fork`: immediately locked.
+  - `reload`: preserves an already locked module state or reconstructs lock from existing message entries.
+  - Defensive fallback: if reading entries fails, lock rather than silently allowing a handoff.
+  - Reentry guard prevents loops when the extension calls `pi.setModel(previousModel)` to revert.
+
+- `acp-bridge.ts`
+  - New exported `ModelSwitchLockedError` carrying `{ sessionKey, fromBackend, toBackend, fromModel, toModel }`.
+  - `ModelSwitchOutcome` type: `"respawn"` → `"locked"`. The earlier `"respawn"` outcome is retired.
+  - `ensureBridgeSession` reuse-path mismatch (previously: close + invalidate persisted + `startNewBridgeSession`) now logs `path=reuse outcome=locked reason=pi_shell_acp_session_locked_to_starting_model` and throws `ModelSwitchLockedError`.
+  - The lock fires **above** `isSessionCompatible` so it catches same-backend AND cross-backend switches identically. An earlier prototype that lived inside the `existingCompatible` branch silently let cross-backend switches fall through to the incompatible-fallback and spawn a fresh session — the wire-level evidence above is exactly that hole.
+  - `enforceRequestedSessionModel` (bootstrap path) is unchanged. Bootstrap is the lifetime starting point, not a mid-life switch.
+
+- `run.sh`
+  - New `check-model-lock` deterministic gate. `scripts/check-model-lock.ts` covers the 18-case policy matrix: four provider quadrants, same-model no-op, pre-turn free selection, post-`agent_start` lock, resume/fork immediate lock, reload with entries, reload preserving prior lock, and defensive lock on entry-read failure.
+  - `smoke-model-switch` rewritten and generalized to four-argument form (`backend_a model_a backend_b model_b`). Three cases now run: within-backend Claude (sonnet → opus), within-backend Codex (gpt-5.4 → gpt-5.5), and cross-backend (Claude sonnet → Codex gpt-5.4). Pass criteria assert `outcome=locked`, exactly one `[pi-shell-acp:bootstrap] path=new backend=<backend_a>` line, `ModelSwitchLockedError instanceof` check, no `outcome=respawn` anywhere, no `path=new backend=<backend_b>` on cross-backend, and a successful post-refusal turn on the original session.
+
+- Docs
+  - AGENTS.md / README.md / VERIFY.md now describe the two-layer lock: extension-side revert as the normal path, bridge-side refusal as fallback, and the transcript-dirty caveat.
+
+#### Scenarios covered by this guard
+
+- Fresh startup/new before the first prompt: free. This preserves CLI `--model` override and pre-turn model selector configuration.
+- After first prompt: any switch touching `pi-shell-acp` is reverted by the extension.
+- Resume/fork: locked immediately, even before the next prompt.
+- Reload: lock is preserved or reconstructed from existing message entries.
+- Native-to-native switches: free.
+- Direct bridge/reuse-path mismatch: refused by `ensureBridgeSession`. This is the fallback for direct calls or missing/failed extension coverage and prevents the silent-respawn hole.
+- Bootstrap-time model resolution (`enforceRequestedSessionModel` after new/resume/load): unaffected — bootstrap is the lifetime starting point, not a mid-life switch.
+- entwurf resume model override: already blocked separately by the Identity Preservation Rule (no `model` parameter on the entwurf resume surface).
+- Different-process reopen of a saved JSONL under a different `--model`: out of scope by design. Saved persistent records do not carry `modelId`; lock applies only to live bridge sessions in this process.
+
+#### Migration
+
+- Operators who switched models mid-session by relying on the old respawn behavior must now open a new pi session for the new model once the current session is anchored. There is no in-process knob; this is the policy.
+- Tooling that grepped for `outcome=respawn` on the model-switch log line must look for `outcome=locked` instead. The legacy outcome value is gone; any occurrence in fresh logs after the upgrade is a regression signal.
+
 ### Changed — 0.5.0 declaration: bridge does not implement compaction
 
 The bridge no longer implements compaction. ACP backends compact natively; the pi session survives that. The bridge boundary stays explicit. This pays back the 0.4.x debt where both Claude (`DISABLE_AUTO_COMPACT=1` + `DISABLE_COMPACT=1`) and Codex (`-c model_auto_compact_token_limit=9223372036854775807`) auto-compaction were disabled at the bridge surface — a deliberate, temporary expedient while the bridge surface was being shaped, now removed.

@@ -838,34 +838,93 @@ The following are documented but observability/automation is still insufficient.
 
 In other words, this document is not a completion declaration but an **operational document that exposes the next improvement points**.
 
-### 12.3 Model Switch Observability (green)
+### 12.3 Model Switch Observability (green, 0.5.x — locked, partial fix)
 
-Model mismatch on the **reuse path** no longer attempts in-place `unstable_setSessionModel`. 0.4.14 treats school × model as one identity; a reused MCP child would keep its old `PI_AGENT_ID` env and broadcast stale identity through `entwurf_send` / `entwurf_self`. The required outcome is explicit respawn.
+pi-shell-acp sessions are locked to their starting model after the session starts. The normal path is the extension-side guard in `pi-extensions/model-lock.ts`: once the conversation is anchored, any `model_select` transition that touches `pi-shell-acp` is reverted to the previous model. Native-to-native switching remains free.
+
+The bridge-side guard in `ensureBridgeSession` remains load-bearing as a fallback/direct-call boundary: if a live pi-shell-acp bridge session is asked to serve a different model, it throws `ModelSwitchLockedError` before closing the old ACP child or bootstrapping a new backend session. This prevents the operator-dangerous "looks like resume, behaves like fresh handoff" failure.
+
+**This does not make the UX transcript-clean.** pi-core (`AgentSession.setModel()` in `packages/coding-agent/src/core/agent-session.ts`) mutates `agent.state.model` and calls `appendModelChange()` before the extension or provider boundary can refuse. Extension-side revert leaves `model_change` as `X -> Y -> X`; bridge fallback leaves the attempted `X -> Y` record. A fully clean refusal requires a pi-core model-switch preflight/hook that this repo intentionally does not patch.
+
+Wire-level evidence the failure mode was real (captured during the issue #14 investigation): a same pi session that switched from Claude sonnet to Codex gpt-5.4 produced
 
 ```text
-[pi-shell-acp:model-switch] path=bootstrap|reuse outcome=applied|unsupported|failed|respawn sessionKey=... backend=... acpSessionId=... fromModel=... toModel=... reason=... fallback=new_session|none
+[pi-shell-acp:debug-ensure] requestedModelId=gpt-5.4 backend=codex
+                            existingModelId=claude-sonnet-4-6 existingBackend=claude
+[pi-shell-acp:shutdown]     closeRemote=true invalidatePersisted=true
+                            closedRemote=ok childExit=exited
+[pi-shell-acp:bootstrap]    path=new backend=codex acpSessionId=019e2481-...
+```
+
+— the Claude backend was reaped and a fresh Codex backend bootstrapped, while pi JSONL still pointed at the original Sonnet conversation. After the 0.5.x bridge fallback, the second `ensureBridgeSession` call throws `ModelSwitchLockedError` and no `[pi-shell-acp:shutdown]` / `[pi-shell-acp:bootstrap] path=new backend=codex` lines appear.
+
+Extension policy matrix:
+
+| Scenario | Expected |
+|---|---|
+| fresh startup/new before first prompt | free; pre-turn model choice is configuration |
+| first `agent_start` has fired | locked |
+| resume/fork | locked immediately |
+| reload with existing messages | locked |
+| reload after previous module state was already locked | locked |
+| `native -> native` | free |
+| `native -> pi-shell-acp` | revert + UI notify |
+| `pi-shell-acp -> native` | revert + UI notify |
+| `pi-shell-acp/X -> pi-shell-acp/Y` | revert + UI notify on the normal path; bridge fallback also refuses direct/reuse mismatch |
+
+Diagnostic format:
+
+```text
+[pi-shell-acp:model-switch] path=bootstrap|reuse outcome=applied|unsupported|failed|locked sessionKey=... backend=... acpSessionId=... fromModel=... toModel=... reason=...
 ```
 
 Semantics (actual rules, not just observability):
 
-- `path=bootstrap` — the `enforceRequestedSessionModel` path immediately after new/resume/load. If `requestedModelId` is present, enforcement is always attempted. `resolveModelIdFromSessionResponse()` uses requested as fallback when the backend does not return currentModelId, so skipping with "current == requested" judgment is wrong. Here, `outcome=failed` still throws as before and fails the entire bootstrap (fail-fast maintained).
-- `path=reuse` — when `modelId` changes in a compatible existing session in `ensureBridgeSession`.
-  - `outcome=respawn fallback=new_session reason=pi_agent_id_env_requires_respawn`: required 0.4.14 path. Close the old bridge session, invalidate the persisted mapping, then start a fresh bridge session.
-  - In-place `outcome=applied|unsupported|failed` on the reuse path is now stale for release verification.
+- `path=bootstrap` — the `enforceRequestedSessionModel` path immediately after new/resume/load. This is the lifetime starting point, NOT a mid-life switch, and the bridge fallback does not apply here. If `requestedModelId` is present, enforcement is always attempted. `resolveModelIdFromSessionResponse()` uses requested as fallback when the backend does not return currentModelId, so skipping with "current == requested" judgment is wrong. `outcome=failed` still throws and fails the entire bootstrap (fail-fast maintained).
+- `path=reuse` — fallback when `modelId` changes against a live existing session in `ensureBridgeSession`. The lock fires **above** `isSessionCompatible` so it catches same-backend AND cross-backend switches identically.
+  - `outcome=locked reason=pi_shell_acp_session_locked_to_starting_model`: required 0.5.x path. The bridge throws `ModelSwitchLockedError` (exported from `acp-bridge.ts`, carries `{ sessionKey, fromBackend, toBackend, fromModel, toModel }`). No close, no persisted invalidation, no fresh spawn. The existing session continues to serve the saved model.
+  - In-place `outcome=applied|unsupported|failed` on the reuse path is invalid for 0.5.x — would indicate a partial regression.
+  - Legacy `outcome=respawn` on the reuse path is invalid for 0.5.x and is treated as a smoke failure (see `smoke-model-switch` legacy guard).
 
-Smoke:
+Deterministic extension gate:
+
+```bash
+./run.sh check-model-lock
+```
+
+Pass criteria — `check-model-lock` covers the 18-case extension matrix:
+
+- all four provider quadrants (`native/native`, `native/pi-shell-acp`, `pi-shell-acp/native`, `pi-shell-acp/pi-shell-acp`)
+- same-model no-op
+- fresh startup/new pre-turn freedom
+- `agent_start` anchoring
+- resume/fork immediate lock
+- reload with existing entries
+- reload preserving an already locked module state
+- defensive lock if reading entries throws
+
+Bridge fallback smoke:
 
 ```bash
 ./run.sh smoke-model-switch /path/to/consumer-project
 ```
 
-Pass criteria (for every backend covered by `smoke-model-switch`; currently Claude/Codex, with Gemini added when the gate covers that adapter):
+Pass criteria — `smoke-model-switch` runs three cases:
 
-- `[pi-shell-acp:model-switch] path=reuse outcome=respawn ... fallback=new_session reason=pi_agent_id_env_requires_respawn` line exists
-- A following `[pi-shell-acp:bootstrap] path=new` line exists, confirming the fresh spawn actually happened
-- A short one-turn prompt with the post-respawn session succeeds with `stopReason=end_turn`
+1. within-backend Claude (sonnet → opus)
+2. within-backend Codex (gpt-5.4 → gpt-5.5)
+3. cross-backend (Claude sonnet → Codex gpt-5.4) — the issue #14 silent-respawn case
 
-Operational default is resilient (stderr diagnostic + explicit respawn, pi session continues); smoke is fail-fast (any violation causes total failure).
+For every case:
+
+- `[pi-shell-acp:model-switch] path=reuse outcome=locked ... reason=pi_shell_acp_session_locked_to_starting_model` line exists.
+- Exactly one `[pi-shell-acp:bootstrap] path=new backend=<backend_a>` line — a second bootstrap line indicates the old respawn semantics regressed.
+- No `outcome=respawn` line anywhere.
+- For cross-backend: no `[pi-shell-acp:bootstrap] path=new backend=<backend_b>` line — the lock must prevent the silent handoff.
+- The second `ensureBridgeSession` throws `ModelSwitchLockedError` with `fromBackend`/`toBackend`/`fromModel`/`toModel` matching the smoke parameters.
+- A second prompt on the original session under the original model still completes with `stopReason=end_turn` — the lock does not poison the live session.
+
+Operational default is resilient (stderr diagnostic + preflight throw, pi session continues serving the locked model); smoke is fail-fast (any violation causes total failure).
 
 ### 12.4 Cancel / Abort Cleanup Observability (green)
 

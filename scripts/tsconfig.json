@@ -19,5 +19,5 @@
 		"noEmit": true,
 		"rootDir": ".."
 	},
-	"include": ["./**/*.ts", "../pi-extensions/lib/**/*.ts"]
+	"include": ["./**/*.ts", "../pi-extensions/lib/**/*.ts", "../pi-extensions/model-lock.ts"]
 }

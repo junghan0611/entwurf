@@ -280,7 +280,7 @@ Reply hint marker is now `wants_reply` (renamed from `reply_requested`, default 
 
 The human-greeted 담당자 pattern is first-class in this release: the operator may open a pi-shell-acp session in repo B, greet it directly, then pass that `sessionId` to another session via `entwurf_send`. Spawned siblings and human-opened peers share the same messaging semantics; only the creation sequence differs.
 
-Model switch on the reuse path now respawns instead of mutating in place. School × model is one identity, so a reused MCP child with stale `PI_AGENT_ID` is invalid by construction.
+pi-shell-acp sessions are locked to their starting model after the session starts. The extension-side guard reverts any in-session model switch that touches `pi-shell-acp` (`pi-shell-acp -> native`, `native -> pi-shell-acp`, or `pi-shell-acp/X -> pi-shell-acp/Y`); native-to-native switching remains free. Fresh startup/new sessions stay unlocked until the first prompt, so pre-turn model selection is still configuration. The bridge also refuses live reuse-path mismatches with `ModelSwitchLockedError` before closing or bootstrapping a backend as a fallback/direct-call guard. This is not transcript-clean: pi-core may already append `model_change` before the guard runs.
 
 Agent MCP tools auto-attach; operator slash commands require `--entwurf-control` (`/entwurf`, `/entwurf-status`, `/entwurf-sessions`, `/entwurf-send`). Full narrative: [`AGENTS.md` § Entwurf](./AGENTS.md).
 

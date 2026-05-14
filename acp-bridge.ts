@@ -2703,13 +2703,66 @@ function logBridgeBootstrapInvalidate(
 
 export type CancelOutcome = "dispatched" | "unsupported" | "failed";
 
-// "respawn" is 0.4.14 new — covers the case where the reuse path deliberately
-// refuses in-place `unstable_setSessionModel` because it would leave the MCP
-// child's PI_AGENT_ID env stale. school × model is one identity (see
-// enrichMcpServersWithEnvelope comment), so a model change requires a fresh
-// MCP child, which means a fresh bridge spawn.
-export type ModelSwitchOutcome = "applied" | "unsupported" | "failed" | "respawn";
+// 0.5.x — `"locked"` outcome (replaces 0.4.14 `"respawn"`):
+//
+// pi-shell-acp refuses live reuse-path model mismatch BEFORE closing the old
+// ACP child or bootstrapping a new backend session. This is the bridge-side
+// guard against silent backend handoff and MCP identity drift (the
+// "looks like resume, behaves like fresh handoff" case).
+//
+// Bridge-side scope (what this guard actually does):
+//   - prevents `closeBridgeSession` of the live backend
+//   - prevents `startNewBridgeSession` under the new model
+//   - prevents new ACP wire (resume/load/newSession) under the new model
+//   - keeps MCP child's PI_AGENT_ID anchored to the original model
+//
+// This does NOT make the UX transcript-clean: pi-core
+// (`AgentSession.setModel()`) already mutated `agent.state.model` and called
+// `appendModelChange()` before the provider stream is invoked. A fully clean
+// refusal requires a pi-core model-switch preflight/hook (out of this repo).
+//
+// Native pi sessions never reach this code path.
+//
+// Wire-level evidence the silent respawn was real: see
+// `[pi-shell-acp:debug-ensure]` + `[pi-shell-acp:shutdown]` +
+// `[pi-shell-acp:bootstrap] path=new backend=codex` triad captured during
+// the issue #14 investigation (Claude sonnet → Codex gpt-5.4 in the same
+// pi session).
+export type ModelSwitchOutcome = "applied" | "unsupported" | "failed" | "locked";
 export type ModelSwitchPath = "bootstrap" | "reuse";
+
+export class ModelSwitchLockedError extends Error {
+	readonly sessionKey: string;
+	readonly fromBackend: AcpBackend | undefined;
+	readonly toBackend: AcpBackend;
+	readonly fromModel: string | undefined;
+	readonly toModel: string;
+	constructor(
+		sessionKey: string,
+		fromBackend: AcpBackend | undefined,
+		toBackend: AcpBackend,
+		fromModel: string | undefined,
+		toModel: string,
+	) {
+		const from = fromBackend ? `${fromBackend}/${fromModel ?? "<unknown>"}` : `<unknown>/${fromModel ?? "<unknown>"}`;
+		const to = `${toBackend}/${toModel}`;
+		super(
+			[
+				"pi-shell-acp session is locked to its starting model.",
+				`Live session: ${from}.`,
+				`Requested switch to ${to} was refused at the bridge boundary`,
+				"(prevents silent backend handoff and MCP identity drift).",
+				"Start a new pi session for a different model.",
+			].join(" "),
+		);
+		this.name = "ModelSwitchLockedError";
+		this.sessionKey = sessionKey;
+		this.fromBackend = fromBackend;
+		this.toBackend = toBackend;
+		this.fromModel = fromModel;
+		this.toModel = toModel;
+	}
+}
 
 function logBridgeModelSwitch(
 	session: AcpBridgeSession,
@@ -3176,37 +3229,55 @@ export async function ensureBridgeSession(params: EnsureBridgeSessionParams): Pr
 		bootstrapPromptAugment: normalizedBootstrapAugment,
 	};
 	const existing = bridgeSessions.get(params.sessionKey);
+	const existingAlive = !!existing && !existing.closed && isChildAlive(existing.child);
+
+	// 0.5.x — pi-shell-acp session is locked to its starting model for its
+	// lifetime. The lock fires BEFORE isSessionCompatible / config-compat
+	// branching so a backend-changing switch (Claude → Codex) is refused at
+	// the same boundary as a same-backend model switch. Without the hoist,
+	// cross-backend switches fall through `isSessionCompatible == false` to
+	// the incompatible-fallback below, which would close the old child and
+	// spawn a fresh one under the new backend — the exact silent-handoff
+	// case wire-level evidence captured during the issue #14 investigation
+	// (Claude sonnet → Codex gpt-5.4 produced
+	// `[pi-shell-acp:shutdown] closeRemote=ok` followed by
+	// `[pi-shell-acp:bootstrap] path=new backend=codex`).
+	//
+	// Refusal is preflight: NO close, NO persisted invalidation, NO
+	// `resume/load/newSession` under the new model, NO ACP turn dispatched.
+	// The existing session stays alive and continues to serve the saved
+	// model. Reaches the operator via the pi-core provider error surface
+	// (stderr / showError).
+	//
+	// Out of repo surface (NOT cleaned by this guard): pi-core has already
+	// mutated `agent.state.model` and appended `model_change` to the pi
+	// JSONL inside `AgentSession.setModel()` before the provider stream is
+	// invoked. Transcript-clean refusal requires a pi-core model-switch
+	// preflight hook. The bridge-side guard nevertheless owns the
+	// load-bearing part — backend touch and MCP identity drift — which is
+	// the most operator-dangerous half of issue #14.
+	//
+	// Saved persistent records do NOT carry modelId, so a different-process
+	// reopen with a different `--model` is not caught here by design — the
+	// scope is "live bridge session in this process". Native pi sessions
+	// never reach this code path at all.
+	if (existingAlive && params.modelId && existing.modelId !== params.modelId) {
+		const fromBackend = existing.backend;
+		const toBackend = params.backend;
+		const fromModel = existing.modelId;
+		const toModel = params.modelId;
+		logBridgeModelSwitch(existing, {
+			path: "reuse",
+			outcome: "locked",
+			fromModel,
+			toModel,
+			reason: "pi_shell_acp_session_locked_to_starting_model",
+		});
+		throw new ModelSwitchLockedError(params.sessionKey, fromBackend, toBackend, fromModel, toModel);
+	}
+
 	const existingCompatible = existing ? isSessionCompatible(existing, normalizedParams, normalizedSystemPrompt) : false;
-	if (existing && existingCompatible && !existing.closed && isChildAlive(existing.child)) {
-		if (params.modelId && existing.modelId !== params.modelId) {
-			// 0.4.14: Model change on the reuse path forces a fresh bridge spawn
-			// rather than in-place `unstable_setSessionModel`. The MCP child was
-			// spawned with PI_AGENT_ID=pi-shell-acp/<old_model> in its env (via
-			// enrichMcpServersWithEnvelope) and cannot be retro-edited; an
-			// in-place setModel would leave entwurf_send / entwurf_self
-			// broadcasting the previous agent identity even though the backend
-			// is now answering as a different model. Caught by GPT review on
-			// issue #7.
-			//
-			// closeRemote: true + invalidatePersisted: true — the persisted
-			// session was wired to the old model's MCP env; restoring it as-is
-			// after a model switch would resurrect the same identity drift.
-			const fromModel = existing.modelId;
-			const toModel = params.modelId;
-			logBridgeModelSwitch(existing, {
-				path: "reuse",
-				outcome: "respawn",
-				fromModel,
-				toModel,
-				fallback: "new_session",
-				reason: "pi_agent_id_env_requires_respawn",
-			});
-			await closeBridgeSession(params.sessionKey, {
-				closeRemote: true,
-				invalidatePersisted: true,
-			});
-			return await startNewBridgeSession(normalizedParams);
-		}
+	if (existing && existingCompatible && existingAlive) {
 		existing.settingSources = [...params.settingSources];
 		existing.strictMcpConfig = params.strictMcpConfig;
 		existing.tools = [...params.tools];

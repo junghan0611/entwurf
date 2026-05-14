@@ -72,7 +72,8 @@
 		"extensions": [
 			"./index.ts",
 			"./pi-extensions/entwurf-control.ts",
-			"./pi-extensions/entwurf.ts"
+			"./pi-extensions/entwurf.ts",
+			"./pi-extensions/model-lock.ts"
 		]
 	}
 }
