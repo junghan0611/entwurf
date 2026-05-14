@@ -4,6 +4,8 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.5.0 — 2026-05-14
+
 ### Changed — pi-shell-acp session model lock
 
 pi-shell-acp sessions are now locked to their starting model after the session starts. The lock has two layers:
