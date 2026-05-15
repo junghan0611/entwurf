@@ -13,7 +13,7 @@ pi
       → Claude Code | Codex | Gemini CLI
 ```
 
-`pi-shell-acp` is a thin ACP provider for pi: no OAuth proxy, no CLI transcript scraping, no Claude Code emulation. Each backend keeps its own model, API, and tool semantics; the bridge shapes only the pi-facing operating surface.
+`pi-shell-acp` is a thin ACP provider for pi: no OAuth proxy, no CLI transcript scraping, no Claude Code emulation. It connects pi to locally authenticated ACP backends with no core patch and no bypass. Each backend keeps its own model, API, and tool semantics; the bridge shapes only the pi-facing operating surface.
 
 > **Direction.** Inverse of [`pi-acp`](https://github.com/svkozak/pi-acp). `pi-acp` lets external ACP clients talk *to* pi; `pi-shell-acp` lets pi talk *to* ACP backends.
 
@@ -21,9 +21,9 @@ pi
 
 A few words that look unusual for a coding tool.
 
-- **Entwurf** (기투, projection-of-self) — sibling sessions with their own runtime boundary. Not "delegate," not "worker." Spawn, resume, and live peer messaging are first-class.
+- **Entwurf** (기투, projection-of-self) — sibling sessions with their own runtime boundary. Not "delegate," not "worker," not "sub-agent." Spawn, resume, and live peer messaging are first-class.
 - **Engraving** — optional short operator text delivered through each backend's native identity carrier. Not a giant hidden prompt, not a tool catalog.
-- **MCP** — explicit bridge-injected tool servers only, through `piShellAcpProvider.mcpServers`. No ambient `~/.mcp.json` scanning. No automatic retrieval.
+- **MCP** — in this repo, MCP is just the transport by which ACP-backed sessions receive pi capabilities that native pi exposes directly as extensions. It is not a general MCP platform. Explicit `piShellAcpProvider.mcpServers` only; no ambient `~/.mcp.json` scanning, no automatic retrieval.
 - **Session persistence** — re-attaches pi to the same remote ACP session. Does not hydrate backend transcripts into pi history.
 
 ## Install
@@ -110,7 +110,7 @@ Reference shape lives in [`pi/settings.reference.json`](./pi/settings.reference.
 }
 ```
 
-`mcpServers` is the only ACP MCP injection path. Invalid entries throw `McpServerConfigError` — broken tool state surfaces as broken tool state. `./run.sh install` writes the bundled `pi-tools-bridge` entry and prunes the legacy bundled `session-bridge` entry from older installs.
+`mcpServers` is the only ACP MCP injection path. In practice this repo is about the bundled `pi-tools-bridge`, which carries pi capabilities into ACP-backed sessions — not about being a general MCP catalog. Invalid entries throw `McpServerConfigError` — broken tool state surfaces as broken tool state. `./run.sh install` writes the bundled `pi-tools-bridge` entry and prunes the legacy bundled `session-bridge` entry from older installs.
 
 `appendSystemPrompt: false` is intentional. Pi / AGENTS context rides the first-user augment; putting it into the Claude `_meta.systemPrompt` carrier can route OAuth sessions to metered "extra usage" billing.
 
@@ -169,7 +169,9 @@ For a real consumer arranging many skills, see [agent-config](https://github.com
 
 ## Entwurf orchestration
 
-pi-shell-acp owns **entwurf**: sync/async spawn, resume, target registry, identity preservation, and MCP/Unix-socket bridges between pi and ACP sessions. Spawning creates a sibling, not a worker — the spawned session has its own runtime boundary and its own pi-shell-acp identity. Resume preserves model identity (no override). Default mode is `sync`; `async` is opt-in.
+**Entwurf is a pi capability with two surfaces.** Native pi exposes it directly as an extension tool; ACP-backed sessions reach the same capability through pi-shell-acp's MCP/Unix-socket bridge. The purpose is not to invent a different sub-agent system, but to preserve the same sibling-based model across backends.
+
+Spawning creates a sibling, not a worker, delegate, or sub-agent — the spawned session has its own runtime boundary and its own provider/model identity. Resume preserves model identity (no override). Default mode is `sync`; `async` is opt-in.
 
 A two-pane recording covers the surface end-to-end — sibling spawn, cross-process MCP resume across a different cwd, and a live peer greeting through `entwurf_send`:
 
@@ -182,7 +184,7 @@ A two-pane recording covers the surface end-to-end — sibling spawn, cross-proc
 
 Live peer messaging (`entwurf_send`, `/entwurf-send`, in-process tool) carries a sender envelope `{ sessionId, agentId, cwd, timestamp }` by default; `entwurf_self` returns the same envelope for the current session. `wants_reply` is an etiquette marker rendered as a `(wants reply)` badge — not a transport contract, no wait, no polling.
 
-Agent MCP tools (`entwurf`, `entwurf_resume`, `entwurf_send`, `entwurf_peers`, `entwurf_self`) auto-attach through `pi-tools-bridge`. Operator slash commands (`/entwurf`, `/entwurf-status`, `/entwurf-sessions`, `/entwurf-send`) require `--entwurf-control`. The spawn target allowlist is [`pi/entwurf-targets.json`](./pi/entwurf-targets.json).
+In ACP-backed sessions, agent tools (`entwurf`, `entwurf_resume`, `entwurf_send`, `entwurf_peers`, `entwurf_self`) auto-attach through `pi-tools-bridge`; in native pi sessions, the same capability is available directly through the extension surface. Operator slash commands (`/entwurf`, `/entwurf-status`, `/entwurf-sessions`, `/entwurf-send`) require `--entwurf-control`. The spawn target allowlist is [`pi/entwurf-targets.json`](./pi/entwurf-targets.json).
 
 The human-greeted 담당자 pattern is first-class: the operator opens a pi-shell-acp session in repo B, greets it directly, then passes that `sessionId` to another session via `entwurf_send`. Spawned siblings and human-opened peers share the same messaging semantics; only the creation sequence differs.
 
@@ -216,7 +218,7 @@ Verification: `./run.sh smoke-compaction-policy` (deterministic). `LIVE=1 ./run.
 
 ## What this repo owns, and does not
 
-Owns: provider registration (`pi-shell-acp/...`), ACP subprocess lifecycle + `resume > load > new`, prompt forwarding + ACP event mapping, entwurf orchestration, pi-facing MCP injection via `piShellAcpProvider.mcpServers`, and bridge-local cleanup and diagnostics.
+Owns: provider registration (`pi-shell-acp/...`), ACP subprocess lifecycle + `resume > load > new`, prompt forwarding + ACP event mapping, the bridge surface that exposes pi capabilities such as entwurf to ACP-backed sessions, pi-facing MCP injection via `piShellAcpProvider.mcpServers`, and bridge-local cleanup and diagnostics.
 
 Does not: reconstruct full history, hydrate backend transcripts into pi history, emulate Claude Code or Codex, run broad multi-agent orchestration (entwurf is narrow, registry-gated, identity-locked), or run a second session model competing with pi.
 
