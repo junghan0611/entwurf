@@ -32,6 +32,17 @@
 >
 > 시간 압박: pi-shell-acp 동작 보면 누가 먼저 OpenClaw 에 올릴 수도 있다. 지금은 pi.dev 등록 안 되어 몰라서 안 쓸 뿐.
 
+### Install 모델 — 두 단계 분리 (agent-config 담당자 발견, 2026-05-15)
+
+GLG 의 비전 ("`openclaw plugins install pi-shell-acp` 한 줄") 은 최종 목표. 현재는 사전 단계.
+
+| 단계 | Install 모델 | 사용자 경험 |
+|------|-------------|------------|
+| **Phase 1 (현재 prerelease)** | **혼합 install** — "OpenClaw adapter → child `pi` → pi-shell-acp" 구조. plugin 자체는 standalone JS (`dependencies: {}`), child `pi` binary 를 spawn. container 에 `pi binary` + `pi install git:...pi-shell-acp` 별도 사전 설치 필요 | Docker image 빌드 시 3-layer 설치, plugin 설치는 그 위에. GLG 한 줄 비전 *아님* |
+| **Phase 3 (최종 UX)** | **self-contained plugin** — plugin package 가 bridge runtime 을 직접 품음. `acp-bridge.ts` workspace dep import, child `pi` binary 의존 제거 | `openclaw plugins install @junghan0611/openclaw-pi-shell-acp` 한 줄로 끝. GLG 한 줄 비전 |
+
+→ **Phase 1.4 (ts refactor) 의 long-term goal = self-contained 으로 가는 첫 발걸음**. 그 단계가 끝나야 Phase 3 의 UX 가능. 현재 Phase 1 결과를 "self-contained UX 가 안 됨" 으로 읽지 말 것 — 단계 정의상 아직 아님.
+
 | Phase | 이름 | 진입 조건 | 산출물 |
 |-------|------|----------|--------|
 | **0** | Validation 닻 | — | 6축 GREEN + 5.12 baseline GREEN + install scanner trust model + dep bump (`ffdf192`) — 완료 |
@@ -145,7 +156,7 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 | 1.6 | `plugins/openclaw/README.md` — acpx alternative narrative. **pi 단어 마케팅 zero**, 클로드코드 구독 멘트 금지. 사용자가 본인 API key 사용한다는 명시 | 공개면 가드레일 |
 | 1.7 | 수동설치 가이드 정리 — `openclaw plugins install <local-path>` with `--dangerously-force-unsafe-install` 필요 (5.12 install scanner block 회피). **이건 PoC / Oracle 검증용 only**. Phase 3 ClawHub 등록 후엔 flag 불필요 | 5.12 trust gate 사실 명시 |
 | **1.7.1** | **Docker auth boundary + 잔여 housekeeping** — (a) `plugins/openclaw/README.md` 에 새 "Docker boundary" 섹션 (host passthrough vs in-container login, public default = in-container login). (b) `plugins/openclaw/AGENTS.md` maintainer 룰 갱신. (c) 잔여 housekeeping: R1 `stream/` 빈 dir 제거, R3 AGENTS "Purpose" 현재 vs Phase 1.4 layout 명시, R5 README Limitations 의 DIAGNOSTIC stdout 한 줄, R6 `src/index.js:60` `_EventStream` 의 Phase 1.4 교체 주석, R7 manifest `piBinaryPath` description 정확화. (d) 루트 README/AGENTS 의 monorepo + deployment-surface-agnostic 한 줄씩 (별도 commit). **§Docker auth boundary 참고** | Oracle = Docker 환경 발견 (2026-05-15) + Claude Code 리뷰 R1/R3/R5/R6/R7 흡수 |
-| 1.8 | Oracle install + daily-use 시작 — pi-shell-acp 본체와 openclaw plugin 동시 install. 일상 사용 중 발견 문제 → llmlog / NEXT 로 환류 | **Phase 1 의 keystone**. **사전조건 (Oracle 측, 우리 영역 아님)**: Docker image 의 3-layer install — (1) `pi` binary, (2) `pi install git:github.com/junghan0611/pi-shell-acp`, (3) `pnpm add -g @zed-industries/codex-acp @google/gemini-cli` + `git` system pkg. compose volume = 세 backend (`~/.claude`, `~/.codex`, `~/.gemini`) 모두 in-container login 또는 host passthrough 정책 일관 적용. 자세한 layout 은 plugin AGENTS.md §Install layers 참고 |
+| 1.8 | Oracle install + daily-use 시작 — pi-shell-acp 본체와 openclaw plugin 동시 install. 일상 사용 중 발견 문제 → llmlog / NEXT 로 환류 | **Phase 1 의 keystone**. **사전조건 (Oracle 측, 우리 영역 아님)**: Docker image 의 4-layer install — (1) `pi` binary, (2) `pi install git:github.com/junghan0611/pi-shell-acp`, (3) `pnpm add -g @zed-industries/codex-acp @google/gemini-cli` + `git` system pkg, **(4a) `~/.pi` named volume (recommended)**. compose volume — 세 backend (`~/.claude`, `~/.codex`, `~/.gemini`) 의 in-container login 또는 host passthrough 정책 일관 적용. 자세한 layout 은 plugin AGENTS.md §Install layers + NEXT §Pi agent overlay boundary 참고. **갈래 α (bare, public default) 또는 β (4b host overlay passthrough, advanced) 어느 쪽으로 검증할지 사전 결정 필수** — α 의 검증 통과선과 β 의 검증 통과선이 다름 |
 | 1.9 | Opus turn lifecycle 재검증 (Phase 0 dep bump 결과 확인) — Oracle 에서 Opus 모델로 짧은 대화 가능한지 | 어제 Sonnet 만 검증, Opus 는 dep bump 후 미확인 |
 | 1.10 | OpenClaw SDK 의 sanctioned spawn helper 존재 여부 확인 (`@openclaw/plugin-sdk/*`) | Phase 3 의 ClawHub trust path 입력 |
 
@@ -214,6 +225,38 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 
 이 섹션은 **설치 에이전트가 작업 시 SSOT** — README/AGENTS 갱신할 때 위 표 + invariant 문구 그대로 옮긴다. 새 invariant 만들지 말 것, 기존 #15 의 boundary 가 deployment surface 무관임을 명시하는 갱신만.
 
+### §Pi agent overlay boundary (어제 OpenClaw 담당자 + 오늘 agent-config 담당자 합본)
+
+> **배경.** 어제 Phase 0 검증의 base 가 호스트 thinkpad 의 `~/.pi/agent/` 풀세트 환경. Oracle Docker default 는 그 overlay 없는 bare runtime. 즉 어제 6축 GREEN 중 일부는 갈래 가정 하에 작동. §Docker auth boundary 와 동일 격의 별도 boundary.
+
+#### 두 axis 분리
+
+| Axis | 내용 | 책임 | 어디 |
+|------|------|------|------|
+| **4a. Runtime overlay 보존** (recommended default) | child `pi` 가 `~/.pi/agent/*` 에 backend config overlay / session JSONL / resolver cache 자동 생성. named volume `~/.pi:/home/node/.pi` 로 영속화. 없으면 매 cold start 마다 regenerate (작동하지만 cache 손실) | 컨테이너 image / compose | 모든 non-throwaway 배포 |
+| **4b. Host overlay passthrough** (advanced opt-in) | 호스트의 `~/.pi/agent/` 를 컨테이너에 bind-mount (ro 권장). capability 확장 — 호스트의 skill 카탈로그 / entwurf registry / journal index 접근 | 호스트 → 컨테이너 trust boundary | trusted single-user, pi 정식 사용자만 |
+
+#### 어제 6축 검증의 갈래 가정
+
+| 축 | 갈래 α (bare, public default) | 갈래 β (4b 활성) |
+|----|-----------------------------|----------------|
+| 1, 1b — E2E reply | ✅ | ✅ |
+| 2 — workspace 인식 (OpenClaw 의 workspace-lab) | ✅ | ✅ |
+| 세션 자기인식 | ✅ | ✅ |
+| 3a — skill manifest 인식 | 🔴 `~/.pi/agent/skills/` 비면 자식이 "스킬 없음" 자기 보고 | ✅ |
+| 3b — skill invocation | 🔴 manifest 없으니 호출 불가 | ✅ |
+| 재귀적 자기 인식 (저널 인용) | **N/A** — 공개 사용자에 의미 없는 축 | ✅ GLG 본인 setup 만 |
+| entwurf orchestration | **자연 차단 (의도된 invariant)** — `--no-tools --no-session`, §Entwurf scope | 같음 |
+
+→ 갈래 α 의 진짜 작동 표면은 **dropdown 모델 + 기본 대화 + workspace persona**. skill 표면은 N/A. 이게 OpenClaw 사용자에게 정직한 default — §3.4 narrative 가드레일 (pi 단어 zero) 와 정합.
+
+#### Trigger
+
+설치 에이전트 / install 가이드 작성자가 SSOT. README/AGENTS 의 plugin Docker boundary 갱신 시 위 두 axis 표 + 갈래 가정 표 그대로 옮긴다. Phase 1.8 의 검증은 **α 먼저, β 별도 advanced smoke** 로 분리.
+
+- Public default = 4a (named volume), backend auth = in-container login. **갈래 α 가정** — 검증 통과선은 1/1b/2/세션 자기인식 만.
+- Advanced opt-in = 4b (host passthrough), backend auth = host passthrough. **갈래 β 가정** — 검증 통과선이 풀세트 (어제 6축).
+
 ---
 
 ## Phase 2 — pi.dev 패키징 준비 (Phase 1 의 Oracle 검증 안정 후)
@@ -261,8 +304,8 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 | 3.3 | `@openclaw/plugin-sdk/*` sanctioned spawn helper 확인 + 필요시 SDK enhancement PR | OpenClaw 측 협업 |
 | 3.4 | `@junghan0611/openclaw-pi-shell-acp` npm publish 준비 — Phase 1 의 pack verification gate 동일 적용 | Phase 2 의 Oracle baseline 안정 |
 | 3.5 | ClawHub 정식 등록 → `trustedSourceLinkedOfficialInstall` 경로 통과 | 3.4 완료 |
-| 3.6 | `openclaw plugins install @junghan0611/openclaw-pi-shell-acp` 한 줄로 끝나는 사용자 UX 검증 | 3.5 완료 |
-| 3.7 | CHANGELOG 0.6.x entry + VERIFY 갱신 + invariant 보강 ("consumer 평면과 backend 평면 분리") | 3.6 완료 |
+| 3.6 | `openclaw plugins install @junghan0611/openclaw-pi-shell-acp` 한 줄로 끝나는 사용자 UX 검증 — **self-contained install 모델**. plugin package 가 `acp-bridge.ts` 를 직접 import 하여 bridge runtime 을 품음. child `pi` binary 의존 제거 (Phase 1.4 ts refactor 의 long-term goal). 4-layer install 사라지고 plugin 한 줄로 끝 | 3.5 완료 + Phase 1.4 self-contained 작업 |
+| 3.7 | CHANGELOG 0.6.x entry + VERIFY 갱신 + invariant 보강 ("consumer 평면과 backend 평면 분리" + "Phase 1 혼합 install → Phase 3 self-contained 전환 framing") | 3.6 완료 |
 
 ---
 

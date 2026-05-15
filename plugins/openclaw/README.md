@@ -77,9 +77,26 @@ installed against that `pi`, and the backend ACP executables —
 responsible for layering these in; this plugin assumes they are
 present at runtime.
 
+### Pi agent overlay (`~/.pi`)
+
+There is one more Docker concern, separate from backend auth. The
+child `pi` process writes runtime state into `~/.pi/agent/`
+(backend config overlays, session JSONLs, cached resolver state).
+Two operator policies cover it:
+
+| Option | What | When |
+|---|---|---|
+| **Persist runtime state (recommended)** | Mount a named volume at `/home/node/.pi`, so the overlay survives container restarts. | All non-throwaway deployments. The child `pi` regenerates an overlay on first use either way; the volume just keeps it across restarts. |
+| **Host `~/.pi/agent` passthrough** (advanced opt-in) | Bind-mount the host `~/.pi/agent` read-only into the container. | Trusted single-user deployments where the operator also runs `pi` on the host and wants the container to see the same skill catalog, entwurf registry, and journal index. Same trust boundary as host backend-auth passthrough. |
+
+The plugin does not write to `~/.pi` itself. It only spawns `pi`,
+and `pi` (via pi-shell-acp running inside it) is what touches the
+overlay. If you skip both options, the child `pi` will still
+function, but each container restart starts from a blank overlay.
+
 Native (non-Docker) installs do not need any of this — the
-official CLIs are already authenticated and present on the host
-where OpenClaw runs.
+official CLIs are already authenticated and `~/.pi` is already
+populated on the host where OpenClaw runs.
 
 ## Install (manual, prerelease)
 
@@ -111,7 +128,7 @@ node /path/to/openclaw.mjs plugins list --json
 # Look for "pi-shell-acp" with status "loaded".
 
 node /path/to/openclaw.mjs models list --provider pi-shell-acp --json
-# Should show the three models above.
+# Should show the five models above.
 ```
 
 Recommended `openclaw.json` hygiene:

@@ -194,10 +194,32 @@ documented here for the install agent.
    PATH-only to `require.resolve` first, PATH fallback, the same
    shape Claude uses today.
 
+4. **Pi agent overlay (`~/.pi`).** Two sub-policies, both optional:
+
+   - **4a. Persist runtime state (recommended default).** Mount a
+     named volume at `/home/node/.pi`. The child `pi` writes
+     backend config overlays, session JSONLs, and cached resolver
+     state under `~/.pi/agent/*`; the volume just keeps them
+     across container restarts. Without it the overlay is
+     regenerated on every cold start.
+   - **4b. Host overlay passthrough (advanced opt-in).**
+     Bind-mount the host `~/.pi/agent` read-only into the
+     container. This gives the child `pi` the operator's skill
+     catalog, entwurf registry, and journal index. Same trust
+     boundary as host backend-auth passthrough — only for trusted
+     single-user deployments where the operator also runs `pi` on
+     the host. Public deployments do NOT use 4b.
+
+   The plugin does not touch `~/.pi`. The overlay is generated and
+   read entirely inside the child `pi` (by pi-shell-acp running in
+   it). 4a is just about whether that overlay survives restarts;
+   4b is about whether it starts from the operator's existing
+   pi setup. Neither is required for a basic working install.
+
 The plugin itself does not build a Docker image, does not ship a
 Dockerfile, and does not assume any specific compose topology. It
-only assumes the three layers above are present in whatever
-process spawns it.
+only assumes the layers above are present in whatever process
+spawns it.
 
 ## Configuration Knobs
 
