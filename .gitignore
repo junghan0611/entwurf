@@ -33,3 +33,7 @@ demo/compaction-policy-smoke/fixtures/
 # Husky 9+ auto-managed hook plumbing — only the hook scripts under .husky/
 # (pre-commit, etc.) are committed; .husky/_/ is regenerated on `pnpm prepare`.
 .husky/_/
+
+# plugins/* — workspace sibling packages. Build artifacts not tracked.
+plugins/*/dist/
+plugins/*/node_modules/
