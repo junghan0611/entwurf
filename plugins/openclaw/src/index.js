@@ -434,25 +434,82 @@ function realStreamFn(model, context, options, factoryCtx) {
 		return stream;
 	}
 
+	console.log(
+		`[pi-shell-acp DIAG] child spawned pid=${child.pid || "-"}` +
+			` model=${modelId}` +
+			` deliveryViaMessageTool=${deliveryViaMessageTool ? "1" : "0"}` +
+			` timeoutMs=${spawnTimeoutMs}`,
+	);
+
+	let finalized = false;
+	let exitFallbackTimer = null;
+	let buffer = "";
+	let finalMessage = null;
+	let started = false;
+	let stderrBuf = "";
+
+	function finalizeChild(kind, code, sigSignal) {
+		if (finalized) return;
+		finalized = true;
+		clearTimeout(spawnTimer);
+		if (exitFallbackTimer) clearTimeout(exitFallbackTimer);
+		console.log(
+			`[pi-shell-acp DIAG] child finalize kind=${kind}` +
+				` code=${String(code)}` +
+				` signal=${String(sigSignal)}` +
+				` hasFinal=${finalMessage ? "1" : "0"}` +
+				` stderrTail=${JSON.stringify(stderrBuf.slice(-500))}`,
+		);
+		if (finalMessage) {
+			if (deliveryViaMessageTool) {
+				const replyText = extractAssistantText(finalMessage);
+				const toolMessage = buildMessageToolCallAssistantMessage(model, userText, replyText);
+				stream.push({ type: "start", partial: toolMessage });
+				stream.push({ type: "done", reason: toolMessage.stopReason, message: toolMessage });
+				stream.end(toolMessage);
+				return;
+			}
+			stream.push({ type: "done", message: finalMessage });
+			stream.end(finalMessage);
+			return;
+		}
+		const fallback = buildEmptyAssistantMessage(model);
+		fallback.stopReason = "error";
+		fallback.errorMessage =
+			"pi exited without final message (kind=" +
+			String(kind) +
+			" code=" +
+			String(code) +
+			" signal=" +
+			String(sigSignal) +
+			"). stderr=" +
+			stderrBuf.slice(-2000);
+		if (!started) {
+			stream.push({ type: "start", partial: fallback });
+		}
+		stream.push({ type: "error", error: fallback });
+		stream.end(fallback);
+	}
+
 	// spawnTimeoutSeconds — bound the child lifetime. PoC stub treats this as
 	// a turn-level cap; the real plugin will use it strictly for ACP bootstrap.
 	const spawnTimer = setTimeout(() => {
+		console.log(`[pi-shell-acp DIAG] child timeout pid=${child.pid || "-"} timeoutMs=${spawnTimeoutMs}`);
 		try {
 			child.kill("SIGTERM");
 		} catch {}
+		setTimeout(() => finalizeChild("timeout", null, "SIGTERM"), 1000).unref?.();
 	}, spawnTimeoutMs);
 
 	if (signal && typeof signal.addEventListener === "function") {
 		signal.addEventListener("abort", () => {
+			console.log(`[pi-shell-acp DIAG] options.signal abort pid=${child.pid || "-"}`);
 			try {
 				child.kill("SIGTERM");
 			} catch {}
+			setTimeout(() => finalizeChild("abort", null, "SIGTERM"), 1000).unref?.();
 		});
 	}
-
-	let buffer = "";
-	let finalMessage = null;
-	let started = false;
 
 	child.stdout.setEncoding("utf8");
 	child.stdout.on("data", (chunk) => {
@@ -504,53 +561,31 @@ function realStreamFn(model, context, options, factoryCtx) {
 		}
 	});
 
-	let stderrBuf = "";
 	child.stderr.setEncoding("utf8");
 	child.stderr.on("data", (chunk) => {
 		stderrBuf += chunk;
 	});
 
 	child.on("error", (err) => {
-		clearTimeout(spawnTimer);
-		const fallback = buildEmptyAssistantMessage(model);
-		fallback.stopReason = "error";
-		fallback.errorMessage = "pi child error: " + String(err && err.message ? err.message : err);
-		if (!started) {
-			stream.push({ type: "start", partial: fallback });
-		}
-		stream.push({ type: "error", error: fallback });
-		stream.end(fallback);
+		stderrBuf += "\n[child error] " + String(err && err.message ? err.message : err);
+		finalizeChild("error", null, null);
+	});
+
+	// Some backend children may exit while inherited stdio keeps `close` from
+	// firing promptly. Finish on `exit` after a short grace period so OpenClaw's
+	// turn does not stay `processing` forever with a defunct pi child.
+	child.on("exit", (code, sigSignal) => {
+		console.log(
+			`[pi-shell-acp DIAG] child exit pid=${child.pid || "-"}` +
+				` code=${String(code)}` +
+				` signal=${String(sigSignal)}`,
+		);
+		exitFallbackTimer = setTimeout(() => finalizeChild("exit", code, sigSignal), 500);
+		exitFallbackTimer.unref?.();
 	});
 
 	child.on("close", (code, sigSignal) => {
-		clearTimeout(spawnTimer);
-		if (finalMessage) {
-			if (deliveryViaMessageTool) {
-				const replyText = extractAssistantText(finalMessage);
-				const toolMessage = buildMessageToolCallAssistantMessage(model, userText, replyText);
-				stream.push({ type: "start", partial: toolMessage });
-				stream.push({ type: "done", reason: toolMessage.stopReason, message: toolMessage });
-				stream.end(toolMessage);
-				return;
-			}
-			stream.push({ type: "done", message: finalMessage });
-			stream.end(finalMessage);
-			return;
-		}
-		const fallback = buildEmptyAssistantMessage(model);
-		fallback.stopReason = "error";
-		fallback.errorMessage =
-			"pi exited without final message (code=" +
-			String(code) +
-			" signal=" +
-			String(sigSignal) +
-			"). stderr=" +
-			stderrBuf.slice(-2000);
-		if (!started) {
-			stream.push({ type: "start", partial: fallback });
-		}
-		stream.push({ type: "error", error: fallback });
-		stream.end(fallback);
+		finalizeChild("close", code, sigSignal);
 	});
 
 	return stream;
