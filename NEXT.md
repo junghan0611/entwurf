@@ -284,6 +284,7 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 - **OpenClaw SDK sanctioned spawn helper 확인**: `@openclaw/plugin-sdk/*` 정식 entrypoints 에 있는지. 없으면 enhancement PR 후보
 - **`ctx.messages` SSOT 모델 공식화**: plugin spec 으로 명시 가치 — 다른 backend (Codex/Gemini) 도 같은 모양 plug-in 가능
 - **OpenClaw compose default 검토** (Docker auth boundary §): 공개 install 가이드의 기본 권장이 in-container login 인지 host passthrough 인지. Claude Code auth refresh 가 read-only mount 에서 동작하는지 검증. 우리 측 의견은 Phase 1 §Docker auth boundary 의 표 참고
+- **Long-lived session 시 entwurf scope (Phase 1.4 또는 이후)**: plugin path 가 현재 `--no-session` 으로 entwurf 표면을 자연 차단. 미래 long-lived ACP session 으로 가면 두 갈래 결정 필요 — (I) entwurf 를 plugin 의 child pi 안에서 그대로 활성화 (isolated topology, root AGENTS.md #9 정합) vs (II) entwurf 호출을 OpenClaw peer API 로 forward (host-coupled, #9 위반). 현재 정책 = I. (II) 는 OpenClaw SDK enhancement 필요, 지금 결정 안 함. plugin AGENTS.md §Entwurf scope 참고
 
 ---
 

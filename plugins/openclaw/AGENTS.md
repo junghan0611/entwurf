@@ -91,6 +91,37 @@ only supported entry point.
 - The two are not migration paths for each other. Short-term they
   coexist.
 
+## Entwurf scope
+
+Entwurf (sibling-session orchestration) is a **native pi consumer
+capability** — pi exposes it directly as an extension to pi users,
+and ACP-backed sessions reach the same capability through
+pi-shell-acp's MCP bridge. The OpenClaw plugin path is a third
+surface, and it intentionally does **not** carry entwurf:
+
+- The plugin spawns child `pi` processes with `--no-tools
+  --no-session --offline`. That cuts off the tool registry, the
+  long-lived session that entwurf needs, and outbound calls in one
+  step. Entwurf tools are never registered on the OpenClaw side.
+- OpenClaw users who need sibling-session topology use OpenClaw's
+  own peer system (the same surface that gives them `openclaw`
+  peers in normal use). The plugin does not bridge entwurf into
+  that surface — that bridging would couple the plugin to a
+  host-specific peer model, against root AGENTS.md hard rule #9
+  (auth boundary is deployment-surface-agnostic; adapters do not
+  bend the bridge around host surfaces).
+
+A future direction question, captured for later (not now):
+
+If a later phase relaxes the spawn flags above and the plugin path
+gains a long-lived ACP session, the question becomes whether
+entwurf inside that child pi runs as an isolated sibling topology
+of its own (option I) or proxies onto OpenClaw's peer system
+(option II). Option I keeps the deployment-surface-agnostic
+invariant. Option II crosses it. The current policy is I by
+default; option II would require explicit OpenClaw-side SDK
+support and is not part of any current phase.
+
 ## Docker auth boundary (maintainer rule)
 
 This plugin is deployment-surface-agnostic. It spawns a child `pi`
