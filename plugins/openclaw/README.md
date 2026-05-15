@@ -14,12 +14,19 @@ Adds a single new provider, `pi-shell-acp`, to your OpenClaw setup.
 Models appear in the picker as:
 
 - `pi-shell-acp/claude-sonnet-4-6`
+- `pi-shell-acp/claude-opus-4-7`
 - `pi-shell-acp/gpt-5.4`
+- `pi-shell-acp/gpt-5.5`
 - `pi-shell-acp/gemini-3.1-pro-preview`
 
 Each model routes through the ACP backend of your choice (Claude,
 Codex, or Gemini) using credentials you have already set up locally
 for those tools.
+
+The curated list mirrors pi-shell-acp's own `SUPPORTED_*_MODEL_IDS`
+in the bridge runtime. Other model IDs in the same families may
+work through the plugin's generic fallback path but are not part of
+this prerelease's tested surface.
 
 ## What it is not
 

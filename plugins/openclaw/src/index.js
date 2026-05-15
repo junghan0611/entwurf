@@ -6,6 +6,15 @@
 
 const PROVIDER_ID = "pi-shell-acp";
 
+// Curated to match pi-shell-acp's SUPPORTED_*_MODEL_IDS in root index.ts.
+// Claude: claude-sonnet-4-6, claude-opus-4-7 (Opus surfaces at 1M context
+// per root index.ts §"opus-4-6 / opus-4-7 surface at 1M by default").
+// Codex: gpt-5.4, gpt-5.5 (no -mini in the bridge's curated surface).
+// Gemini: gemini-3.1-pro-preview only.
+// contextWindow / maxTokens / cost are placeholder values for OpenClaw's
+// dropdown display only — the real routing values come from pi-shell-acp's
+// runtime resolver. Tightening these to match the bridge exactly is a
+// Phase 1.4 ts refactor item.
 const STUB_MODELS = [
 	{
 		id: "claude-sonnet-4-6",
@@ -19,8 +28,30 @@ const STUB_MODELS = [
 		reasoning: false,
 	},
 	{
+		id: "claude-opus-4-7",
+		name: "claude-opus-4-7",
+		api: PROVIDER_ID,
+		provider: PROVIDER_ID,
+		input: ["text"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 1000000,
+		maxTokens: 8192,
+		reasoning: false,
+	},
+	{
 		id: "gpt-5.4",
 		name: "gpt-5.4",
+		api: PROVIDER_ID,
+		provider: PROVIDER_ID,
+		input: ["text"],
+		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+		contextWindow: 200000,
+		maxTokens: 8192,
+		reasoning: false,
+	},
+	{
+		id: "gpt-5.5",
+		name: "gpt-5.5",
 		api: PROVIDER_ID,
 		provider: PROVIDER_ID,
 		input: ["text"],
