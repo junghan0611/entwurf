@@ -156,7 +156,7 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 | 1.6 | `plugins/openclaw/README.md` — acpx alternative narrative. **pi 단어 마케팅 zero**, 클로드코드 구독 멘트 금지. 사용자가 본인 API key 사용한다는 명시 | 공개면 가드레일 |
 | 1.7 | 수동설치 가이드 정리 — `openclaw plugins install <local-path>` with `--dangerously-force-unsafe-install` 필요 (5.12 install scanner block 회피). **이건 PoC / Oracle 검증용 only**. Phase 3 ClawHub 등록 후엔 flag 불필요 | 5.12 trust gate 사실 명시 |
 | **1.7.1** | **Docker auth boundary + 잔여 housekeeping** — (a) `plugins/openclaw/README.md` 에 새 "Docker boundary" 섹션 (host passthrough vs in-container login, public default = in-container login). (b) `plugins/openclaw/AGENTS.md` maintainer 룰 갱신. (c) 잔여 housekeeping: R1 `stream/` 빈 dir 제거, R3 AGENTS "Purpose" 현재 vs Phase 1.4 layout 명시, R5 README Limitations 의 DIAGNOSTIC stdout 한 줄, R6 `src/index.js:60` `_EventStream` 의 Phase 1.4 교체 주석, R7 manifest `piBinaryPath` description 정확화. (d) 루트 README/AGENTS 의 monorepo + deployment-surface-agnostic 한 줄씩 (별도 commit). **§Docker auth boundary 참고** | Oracle = Docker 환경 발견 (2026-05-15) + Claude Code 리뷰 R1/R3/R5/R6/R7 흡수 |
-| 1.8 | Oracle install + daily-use 시작 — pi-shell-acp 본체와 openclaw plugin 동시 install. 일상 사용 중 발견 문제 → llmlog / NEXT 로 환류 | **Phase 1 의 keystone**. **사전조건 (Oracle 측, 우리 영역 아님)**: Docker image 의 4-layer install — (1) `pi` binary, (2) `pi install git:github.com/junghan0611/pi-shell-acp`, (3) `pnpm add -g @zed-industries/codex-acp @google/gemini-cli` + `git` system pkg, **(4a) `~/.pi` named volume (recommended)**. compose volume — 세 backend (`~/.claude`, `~/.codex`, `~/.gemini`) 의 in-container login 또는 host passthrough 정책 일관 적용. 자세한 layout 은 plugin AGENTS.md §Install layers + NEXT §Pi agent overlay boundary 참고. **갈래 α (bare, public default) 또는 β (4b host overlay passthrough, advanced) 어느 쪽으로 검증할지 사전 결정 필수** — α 의 검증 통과선과 β 의 검증 통과선이 다름 |
+| 1.8 | Oracle install + daily-use 시작 — pi-shell-acp 본체와 openclaw plugin 동시 install. 일상 사용 중 발견 문제 → llmlog / NEXT 로 환류 | **Phase 1 의 keystone**. **사전조건 (Oracle 측, 우리 영역 아님)**: Docker image 의 4-layer install — (1) `pi` binary, (2) `pi install git:github.com/junghan0611/pi-shell-acp`, (3) `pnpm add -g @zed-industries/codex-acp @google/gemini-cli` + `git` system pkg, **(4a) `~/.pi` named volume (recommended)**. compose volume — 세 backend (`~/.claude`, `~/.codex`, `~/.gemini`) 의 in-container login 또는 host passthrough 정책 일관 적용. 자세한 layout 은 plugin AGENTS.md §Install layers + NEXT §Pi agent overlay boundary 참고. **갈래 α (bare, public default) 또는 β (4b host overlay passthrough, advanced) 어느 쪽으로 검증할지 사전 결정 필수** — α 의 검증 통과선과 β 의 검증 통과선이 다름. **호스트 pi update 자동화 (β 사전조건)**: agent-config server-mode `5f17d70` 의 main 추적 정책으로 우리 push 가 Oracle 호스트 `~/.pi/agent/git/...pi-shell-acp/` 에 자동 도착 (`./run.sh setup`). UID 매핑 확인 (`id junghan` uid vs 컨테이너 node uid) 5초 작업 |
 | 1.9 | Opus turn lifecycle 재검증 (Phase 0 dep bump 결과 확인) — Oracle 에서 Opus 모델로 짧은 대화 가능한지 | 어제 Sonnet 만 검증, Opus 는 dep bump 후 미확인 |
 | 1.10 | OpenClaw SDK 의 sanctioned spawn helper 존재 여부 확인 (`@openclaw/plugin-sdk/*`) | Phase 3 의 ClawHub trust path 입력 |
 
@@ -257,6 +257,16 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 - Public default = 4a (named volume), backend auth = in-container login. **갈래 α 가정** — 검증 통과선은 1/1b/2/세션 자기인식 만.
 - Advanced opt-in = 4b (host passthrough), backend auth = host passthrough. **갈래 β 가정** — 검증 통과선이 풀세트 (어제 6축).
 
+#### β 사전조건 (2026-05-15 Oracle 라이브 검수 결과)
+
+| # | 사전조건 | 상태 |
+|---|---------|------|
+| 1 | **호스트 pi-shell-acp 최신 commit** | ✅ 자동화됨 — `agent-config 5f17d70` 가 server-mode main 추적 정책 도입. 우리 push → `./run.sh setup` → Oracle 호스트 `~/.pi/agent/git/...pi-shell-acp/` 자동 follow. 검증 시점 Oracle 호스트 = commit `8476104` |
+| 2 | **UID 매핑** — `id junghan` uid 가 컨테이너 node user uid 와 일치 | 🟡 미확인 — 호스트 5초 (`id junghan`). 보통 1000:1000 일치 |
+| 3 | **Docker compose 갱신** — 4b bind-mount + 3-backend auth volume (`~/.codex`, `~/.gemini` 추가; `~/.claude` 는 이미 rw mount) + image 3-layer (pi binary + codex-acp + gemini-cli + git) | 🟡 Oracle 측 (담당자) |
+| 4 | **4b mount mode** — rw 권장 (trust boundary 정의상). ro 는 child pi 의 cache/resolver write 시 첫 turn 깨질 risk | 🟡 결정 박힘, 작업은 #3 안에서 |
+| 5 | **검증 통과선 풀세트 6축 합의** | ✅ NEXT §Pi agent overlay boundary 의 갈래 β 표 박음 |
+
 ---
 
 ## Phase 2 — pi.dev 패키징 준비 (Phase 1 의 Oracle 검증 안정 후)
@@ -331,6 +341,7 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 - **Long-lived session 시 entwurf scope (Phase 1.4 또는 이후)**: plugin path 가 현재 `--no-session` 으로 entwurf 표면을 자연 차단. 미래 long-lived ACP session 으로 가면 두 갈래 결정 필요 — (I) entwurf 를 plugin 의 child pi 안에서 그대로 활성화 (isolated topology, root AGENTS.md #9 정합) vs (II) entwurf 호출을 OpenClaw peer API 로 forward (host-coupled, #9 위반). 현재 정책 = I. (II) 는 OpenClaw SDK enhancement 필요, 지금 결정 안 함. plugin AGENTS.md §Entwurf scope 참고
 - **Oracle Docker image 3-layer install (Oracle config repo 측)**: openclaw-gateway 컨테이너에 `pi`, `pi-shell-acp`, `codex-acp`, `gemini` 추가. `git` system pkg + pnpm global. 자세한 layout 은 plugin AGENTS.md §Install layers. Phase 1.8 의 사전조건 — Oracle 측이 진행, 우리 측 plugin code 변경 없음
 - **Codex resolve fallback (우리 측 — Phase 2 stabilization)**: 현재 root `AGENTS.md` Runtime Dependencies 는 `codex-acp` PATH-only. Claude 는 `package dep first, PATH fallback`. 비대칭 — invariant #7 (three-backend equality) 의 미세 위반. Codex 도 `require.resolve("@zed-industries/codex-acp/package.json")` 우선, PATH fallback 패턴으로 정렬. Docker 운영 단순화 부수 효과. Phase 2 의 #15 hardening 안에 흡수 (no-feature refactor 정신과 정합)
+- **agent-config server-mode pi-shell-acp ref 복귀 (Phase 3 release 후)**: 현재 `agent-config 5f17d70` 가 server-mode 에서 main 추적 정책 도입 — Oracle 호스트가 우리 push 를 자동 follow. **0.6.0 prerelease / Oracle 검증 동안 임시**. Phase 3 의 pi.dev 또는 ClawHub 등록 후 release tag (`git:...pi-shell-acp@v0.6.0` 등) 로 다시 ref pinning 으로 복귀. 잊으면 server 가 영원히 main 추적 — release 후엔 안 좋은 정책
 
 ---
 
