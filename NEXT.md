@@ -334,7 +334,9 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 
 ## Cross-repo follow-ups (별도 추적)
 
-- **Issue #17 live validation (Oracle bbot)**: outbound message boundary normalize + plugin TS migration + workspace check guard landed on `main` (commits `6cea5c3` fix / `918f5ef` ci). 남은 건 nixos-config 측 컨테이너 plugin 갱신 후 Telegram `glg-b-bot` direct DM 으로 tool/turn cycle live 검증 → issue close
+- **Issue #17 live validation (Oracle bbot)**: outbound message boundary normalize + plugin TS migration + workspace check guard + dist build pipeline + two-layer boundary fix (final-role guard / abnormal-flag 확장 / outbound text-only) landed on `main` (commits `6cea5c3` fix / `918f5ef` ci / `1c73569` dist / `fa3b8f7` two-layer). 1단계 streaming off 검증 통과 — DIAG 의 finalRole/finalTextLen/finalTextHead/partialTextLen/partialOverridesFinal/abnormal/timeoutFired 7필드 모두 정상 fire (정상 turn 에선 가드 unfire, role flip / SIGTERM 케이스용으로 잘 박힘). 남은 건 (a) 2단계 streaming on 검증 (partial 누적과 final 일치성) + (b) `[tool:trace]` inline 해소 (별도 항목 참고) → close
+- **plugin spawn-level `showToolNotifications` invariant (0.6.0 publish 전 강화)**: child pi 의 ACP path 에서 `event-mapper.ts:166` 의 `pushNotice` 가 `[tool:start|done|failed|running|cancelled] {title}` 를 stream 의 text block 에 append — `showToolNotifications` true 일 때만 promote. default 는 `index.ts:621` 의 `merged.showToolNotifications ?? false`. Oracle 의 child pi global settings 에서 어딘가 true 가 들어와 trace 가 bot 답글 본문에 inline 되는 회귀. 임시 cover: Oracle workspace `.pi/settings.json` 의 `piShellAcpProvider.showToolNotifications: false` project override (nixos-config 측 처리). 정공법 follow-up: pi-shell-acp 의 settings resolver 에 env override 추가 (`PI_SHELL_ACP_SHOW_TOOL_NOTIFICATIONS=0` 등), plugin spawn 시 env 강제 set. 0.6.0 publish 후 외부 사용자의 global settings 가 어떤 값이든 plugin path 는 trace 안 보임 invariant 보장
+- **Gemini bot usage 측정 OpenClaw 표시 갭**: bbot DIAG stderr 에 `meter=acpUsageUpdate ... used=24315 size=1000000 raw: input=13 output=591 cacheRead=54834 cacheWrite=14346` 가 정상 도착 — plugin 으로 usage 데이터 흘러옴. 그러나 OpenClaw status bar 의 `📚 Context: ?/200k` 로 표시 (`?`). 분석 영역: (a) plugin streamSimple 의 final message.usage 에 정확히 전달되는지, (b) OpenClaw status renderer 의 model picker 가 plugin provider 의 usage 매칭하는지 (provider id `pi-shell-acp` 로 lookup 시 missing 인가). 사용자 메모: "어제도 봤던 버그" — 알려진 잔존 이슈
 - **pi CLI `--new-session` 표면 검토**: `pi -p "..." --session <new-id>` lookup-only. pi 자체 시멘틱 갭. pi-ai / pi-coding-agent 레벨 issue 후보
 - **OpenClaw SDK sanctioned spawn helper 확인**: `@openclaw/plugin-sdk/*` 정식 entrypoints 에 있는지. 없으면 enhancement PR 후보
 - **`ctx.messages` SSOT 모델 공식화**: plugin spec 으로 명시 가치 — 다른 backend (Codex/Gemini) 도 같은 모양 plug-in 가능
@@ -374,6 +376,6 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 
 - **#11** remote SSH resume cwd alignment
 - **#10** broader ontology RFC (`peer handle`, `contact_peer`, registry). cwd-authority 부분은 0.4.17 landed
-- **#8** ACP `entwurf_send` message visibility UX, after #10 revisited
+- **#8** ACP `entwurf_send` message visibility UX — 2026-05-16 commit `e31823c` 로 ACP path 의 late `[entwurf sent →]` customMessage 승격 비활성화 (post-stream box 가 sync tool 호출 후에 도착해 fresh send 처럼 보이는 회귀 정공). in-stream `[tool:start]/[tool:done]` notice 로 회귀. 재진입 조건: pi 가 in-stream passive UI append/update path 를 마련하면 다시 검토. native/tool-result path 의 receive-side renderer + `ENTWURF_SENT_MESSAGE_TYPE` context filter 는 유지
 - **#2** pi-first context meter, post-0.5.0
 - **L5 long soak** with repeated context-pressure events and sentinel recall, likely 0.6.x
