@@ -334,6 +334,7 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 
 ## Cross-repo follow-ups (별도 추적)
 
+- **Issue #17 live validation (Oracle bbot)**: outbound message boundary normalize + plugin TS migration + workspace check guard landed on `main` (commits `6cea5c3` fix / `918f5ef` ci). 남은 건 nixos-config 측 컨테이너 plugin 갱신 후 Telegram `glg-b-bot` direct DM 으로 tool/turn cycle live 검증 → issue close
 - **pi CLI `--new-session` 표면 검토**: `pi -p "..." --session <new-id>` lookup-only. pi 자체 시멘틱 갭. pi-ai / pi-coding-agent 레벨 issue 후보
 - **OpenClaw SDK sanctioned spawn helper 확인**: `@openclaw/plugin-sdk/*` 정식 entrypoints 에 있는지. 없으면 enhancement PR 후보
 - **`ctx.messages` SSOT 모델 공식화**: plugin spec 으로 명시 가치 — 다른 backend (Codex/Gemini) 도 같은 모양 plug-in 가능
