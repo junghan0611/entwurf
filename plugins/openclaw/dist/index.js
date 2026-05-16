@@ -212,6 +212,23 @@ function normalizeContentBlocks(content) {
     const one = normalizeContentBlock(content);
     return one ? [one] : [];
 }
+// Outbound assistant content policy — child-emitted tool_use / tool_result /
+// thinking blocks (and any non-text block) get stripped before the message
+// crosses into OpenClaw's visible chat surface. OpenClaw's downstream
+// renderer treats unknown typed blocks as code-block / trace artifacts, so
+// passing them through leaks tool internals into the bot reply body. The
+// only visible body we surface is type:"text". Synthetic message-tool
+// deliveries are built in buildMessageToolCallAssistantMessage() and pushed
+// without going through this normalizer, so the message-tool delivery path
+// is unaffected.
+function normalizeVisibleTextBlocks(content) {
+    return normalizeContentBlocks(content).flatMap((block) => {
+        if (block.type === "text" && typeof block.text === "string") {
+            return [{ type: "text", text: block.text }];
+        }
+        return [];
+    });
+}
 function normalizeAssistantMessage(raw, model) {
     const defaults = buildEmptyAssistantMessage(model);
     if (!raw || typeof raw !== "object")
@@ -219,7 +236,7 @@ function normalizeAssistantMessage(raw, model) {
     const r = raw;
     const out = {
         role: "assistant",
-        content: normalizeContentBlocks(r.content),
+        content: normalizeVisibleTextBlocks(r.content),
         api: typeof r.api === "string" && r.api ? r.api : defaults.api,
         provider: typeof r.provider === "string" && r.provider ? r.provider : defaults.provider,
         model: typeof r.model === "string" && r.model ? r.model : defaults.model,
@@ -485,8 +502,10 @@ function realStreamFn(model, context, options, factoryCtx) {
     let buffer = "";
     let finalMessage = null;
     let lastPartial = null;
+    let lastFinalRole = null;
     let started = false;
     let stderrBuf = "";
+    let timeoutFired = false;
     function finalizeChild(kind, code, sigSignal) {
         if (finalized)
             return;
@@ -496,6 +515,29 @@ function realStreamFn(model, context, options, factoryCtx) {
             clearTimeout(exitFallbackTimer);
         if (zombiePollTimer)
             clearInterval(zombiePollTimer);
+        // abnormal indicator — any signal that the child did not exit cleanly,
+        // including the SIGTERM-driven `kind="close"` case where the spawnTimer
+        // fires but the close listener wins the race (Node reports code=143 or
+        // code=null + signal="SIGTERM"). When abnormal we treat finalMessage
+        // with suspicion: if a longer partial buffer exists, that visible text
+        // is almost certainly closer to what the user actually saw streamed.
+        const abnormal = timeoutFired ||
+            kind === "timeout" ||
+            kind === "abort" ||
+            kind === "error" ||
+            kind.startsWith("poll:") ||
+            (typeof code === "number" && code !== 0) ||
+            sigSignal != null;
+        const partialText = lastPartial ? extractTextFromMessage(lastPartial) : "";
+        const finalText = finalMessage ? extractTextFromMessage(finalMessage) : "";
+        const partialOverridesFinal = abnormal && partialText.length > finalText.length;
+        if (partialOverridesFinal && lastPartial) {
+            finalMessage = normalizeAssistantMessage({
+                ...lastPartial,
+                stopReason: lastPartial.stopReason || "end_turn",
+                timestamp: lastPartial.timestamp || Date.now(),
+            }, model);
+        }
         // Trace artifact recovery: if child died without a message_end but a
         // partial snapshot has useful text, promote it to the final message so
         // OpenClaw still surfaces visible assistant text. Issue #17 success
@@ -509,11 +551,19 @@ function realStreamFn(model, context, options, factoryCtx) {
                 timestamp: lastPartial.timestamp || Date.now(),
             }, model);
         }
+        const visibleFinalText = finalMessage ? extractTextFromMessage(finalMessage) : "";
         console.log(`[pi-shell-acp DIAG] child finalize kind=${kind}` +
             ` code=${String(code)}` +
             ` signal=${String(sigSignal)}` +
             ` hasFinal=${finalMessage ? "1" : "0"}` +
+            ` finalRole=${lastFinalRole ?? "(none)"}` +
+            ` finalTextLen=${visibleFinalText.length}` +
+            ` finalTextHead=${JSON.stringify(visibleFinalText.slice(0, 80))}` +
+            ` partialTextLen=${partialText.length}` +
+            ` partialOverridesFinal=${partialOverridesFinal ? "1" : "0"}` +
             ` recoveredFromPartial=${recoveredFromPartial ? "1" : "0"}` +
+            ` abnormal=${abnormal ? "1" : "0"}` +
+            ` timeoutFired=${timeoutFired ? "1" : "0"}` +
             ` stderrTail=${JSON.stringify(stderrBuf.slice(-500))}`);
         if (finalMessage) {
             if (deliveryViaMessageTool) {
@@ -548,6 +598,7 @@ function realStreamFn(model, context, options, factoryCtx) {
     // spawnTimeoutSeconds — bound the child lifetime. PoC stub treats this as
     // a turn-level cap; the real plugin will use it strictly for ACP bootstrap.
     const spawnTimer = setTimeout(() => {
+        timeoutFired = true;
         console.log(`[pi-shell-acp DIAG] child timeout pid=${child.pid || "-"} timeoutMs=${spawnTimeoutMs}`);
         try {
             child.kill("SIGTERM");
@@ -646,9 +697,22 @@ function realStreamFn(model, context, options, factoryCtx) {
                     }
                     continue;
                 }
-                // message_end / turn_end carry the final AssistantMessage.
+                // message_end / turn_end carry the final AssistantMessage. The pi
+                // child has been observed (Oracle bbot, 2026-05-16) to emit a
+                // message_end whose event.message echoes a user-role metadata
+                // message from the input prompt when the child gets SIGTERM'd
+                // before finishing a real response. normalizeAssistantMessage
+                // would silently re-stamp role="assistant" and ship that echo
+                // as the visible reply. Gate the assignment on the original
+                // role so non-assistant finals leave finalMessage null — the
+                // lastPartial recovery path in finalizeChild then surfaces the
+                // streamed body the user actually saw.
                 if ((event.type === "message_end" || event.type === "turn_end") && event.message) {
-                    finalMessage = normalizeAssistantMessage(event.message, model);
+                    const rawRole = event.message && typeof event.message === "object" ? event.message.role : undefined;
+                    lastFinalRole = typeof rawRole === "string" ? rawRole : "(missing)";
+                    if (rawRole === "assistant") {
+                        finalMessage = normalizeAssistantMessage(event.message, model);
+                    }
                 }
             }
         });
