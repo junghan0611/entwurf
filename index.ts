@@ -839,74 +839,21 @@ function streamShellAcp(
 		});
 		let bridgeSession: Awaited<ReturnType<typeof ensureBridgeSession>> | undefined;
 
-		// Layer B sender-side UI hook for ACP entwurf_send. event-mapper
-		// observes a completed `mcp__pi-tools-bridge__entwurf_send` and hands
-		// us the ACP-visible bits (target sessionId, message body, mode). We
-		// buffer them during the provider stream and emit the customMessage only
-		// after stream.end() has been handed back to pi.
-		//
-		// Important: pi.sendMessage() while AgentSession.isStreaming is true is
-		// not a passive append — agent-session.ts routes it through steer/followUp
-		// unless deliverAs is nextTurn. That would create an unintended LLM turn
-		// for a sender-side UI echo. So the callback below only records observed
-		// sends; the post-stream setTimeout emits them when triggerTurn:false is
-		// a true no-turn append.
-		//
-		// The matching pi.on("context") filter in
-		// pi-extensions/entwurf-control.ts strips this customType before
-		// convertToLlm — see the Armin pattern note there. Net effect: the
-		// operator sees the box, the LLM sees nothing extra.
-		const pendingEntwurfSent: import("./event-mapper.js").EntwurfSentObserved[] = [];
-		const onEntwurfSent = (observed: import("./event-mapper.js").EntwurfSentObserved) => {
-			pendingEntwurfSent.push(observed);
-		};
-		const emitPendingEntwurfSent = () => {
-			if (pendingEntwurfSent.length === 0) return;
-			const items = pendingEntwurfSent.splice(0);
-			setTimeout(() => {
-				// agentId preference order matches buildLocalSenderEnvelope in
-				// entwurf-control.ts: PI_AGENT_ID env first, then `<provider>/<id>`
-				// from the live model.
-				const envAgent = process.env.PI_AGENT_ID?.trim();
-				const fallbackAgent = `${model.provider}/${model.id}`;
-				const agentId = envAgent && envAgent.length > 0 ? envAgent : fallbackAgent;
-				for (const observed of items) {
-					const timestamp = new Date().toISOString();
-					try {
-						pi.sendMessage(
-							{
-								customType: ENTWURF_SENT_MESSAGE_TYPE,
-								content: observed.body,
-								display: true,
-								details: {
-									to: observed.to,
-									from: agentId,
-									cwd,
-									timestamp,
-									mode: observed.mode,
-									wants_reply: observed.wants_reply,
-									deliveredAs: observed.deliveredAs,
-									body: observed.body,
-								},
-							},
-							{ triggerTurn: false },
-						);
-					} catch (err) {
-						// Post-stream UI echo failure must be visible, but cannot fall
-						// back to event-mapper's [tool:done] notice anymore because the
-						// provider stream has already closed.
-						const message = err instanceof Error ? err.message : String(err);
-						console.error(`[pi-shell-acp] entwurf-sent UI emit failed: ${message}`);
-					}
-				}
-			}, 0);
-		};
-
+		// Issue #8 note (2026-05-16): ACP sender-side `[entwurf sent →]`
+		// customMessage promotion is intentionally disabled. The 0.4.15 attempt
+		// buffered observed entwurf_send calls during the ACP stream and appended a
+		// customMessage after stream.end(), because pi.sendMessage() is not a
+		// passive append while AgentSession.isStreaming is true. That preserved LLM
+		// context hygiene but made sync sends appear *after* the long tool call and
+		// final assistant response, which reads like a fresh late send. Keep the
+		// receive-side renderer and context filter below for native/tool results and
+		// old transcripts; revisit ACP in #8 only after pi has an in-stream passive
+		// UI append/update path. Until then ACP entwurf_send stays as ordinary tool
+		// notification text at the tool event position.
 		const streamState: AcpPiStreamState = {
 			stream,
 			output,
 			showToolNotifications: providerSettings.showToolNotifications,
-			onEntwurfSent,
 		};
 
 		// Start the pi stream before ACP bootstrap. Resume/load can take noticeable
@@ -1064,7 +1011,6 @@ function streamShellAcp(
 				finalizeAcpStreamState(streamState);
 				stream.push({ type: "error", reason: "aborted", error: output });
 				stream.end();
-				emitPendingEntwurfSent();
 				return;
 			}
 
@@ -1083,7 +1029,6 @@ function streamShellAcp(
 				output.errorMessage = "Operation aborted";
 				stream.push({ type: "error", reason: "aborted", error: output });
 				stream.end();
-				emitPendingEntwurfSent();
 				return;
 			}
 
@@ -1093,7 +1038,6 @@ function streamShellAcp(
 				message: output,
 			});
 			stream.end();
-			emitPendingEntwurfSent();
 		} catch (error) {
 			output.stopReason = options?.signal?.aborted ? "aborted" : "error";
 			output.errorMessage = getBridgeErrorDetails(error, bridgeSession);
@@ -1104,7 +1048,6 @@ function streamShellAcp(
 				error: output,
 			});
 			stream.end();
-			emitPendingEntwurfSent();
 			if (output.stopReason === "error" && bridgeSession) {
 				// When a resumed/loaded session's prompt fails with an
 				// Anthropic transcript-validity 400 (cache_control on empty

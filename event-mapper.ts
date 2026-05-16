@@ -416,13 +416,12 @@ function renderToolUpdate(state: AcpPiStreamState, update: any): void {
 	const isEntwurfSend = isEntwurfSendTool(title, update);
 
 	if (update.sessionUpdate === "tool_call") {
-		// entwurf_send start is suppressed unconditionally — its UI is
-		// promoted to the [entwurf sent →] customMessage box on completion,
-		// and showing both would double-noise the transcript precisely on
-		// the messages the operator already cares most about. Failures still
-		// surface below via [tool:failed]; the customMessage box only covers
-		// the success path.
-		if (isEntwurfSend) return;
+		// Only suppress the start notice when a caller explicitly wires the dormant
+		// sender-side customMessage promotion hook. The ACP provider path no longer
+		// wires it (issue #8): post-stream `[entwurf sent →]` boxes appeared too
+		// late after sync tool calls, so ordinary in-stream tool notices now keep
+		// the temporal order honest.
+		if (isEntwurfSend && state.onEntwurfSent) return;
 		pushNotice(state, `\n[tool:start] ${title}\n`);
 		return;
 	}
@@ -446,8 +445,10 @@ function renderToolUpdate(state: AcpPiStreamState, update: any): void {
 		// `[entwurf sent →] ...` block).
 		const summary = firstTextContent(update?.rawOutput) ?? firstTextContent(updateContent);
 		if (status === "completed") {
-			// Promote a completed entwurf_send to a customMessage box via the
-			// pi.sendMessage callback wired in index.ts.
+			// Promote a completed entwurf_send only when a caller explicitly wires
+			// the dormant sender-side customMessage callback. The ACP provider path
+			// intentionally does not wire it anymore (issue #8) because post-stream
+			// boxes appeared late and confused sync-send chronology.
 			//
 			// Earlier this gate required `looksLikeEntwurfSendSuccess(summary)`
 			// — i.e. the result text had to literally contain `[entwurf sent →]`
@@ -576,22 +577,27 @@ function applyAcpSessionUpdate(state: AcpPiStreamState, update: any): void {
 			// structured tool_call_update. Promote that marker to the same custom
 			// sender box and suppress the textual tool log. The actual post-tool
 			// assistant prose, if any, arrives in later chunks and remains visible.
-			if (isGeminiEntwurfDoneNotice(delta)) {
+			if (isGeminiEntwurfDoneNotice(delta) && state.onEntwurfSent) {
 				const args = coerceEntwurfSendArgs(state.geminiEntwurfSendArgsCandidate);
 				state.geminiEntwurfSendArgsCandidate = undefined;
 				// Only promote when we actually recovered the invocation args. An
 				// empty post-stream [entwurf sent →] box is worse than the original
 				// Gemini text notice because it appears late and with unknown fields.
 				// If Gemini did not expose args, fall through and render the textual
-				// notice normally.
+				// notice normally. ACP provider sessions leave onEntwurfSent unset so
+				// the textual notice remains in-place instead of becoming a late box.
 				if (args.sessionId || args.message) {
-					state.onEntwurfSent?.({
-						to: args.sessionId ?? "",
-						mode: args.mode,
-						wants_reply: args.wants_reply,
-						body: args.message ?? "",
-					});
-					return;
+					try {
+						state.onEntwurfSent({
+							to: args.sessionId ?? "",
+							mode: args.mode,
+							wants_reply: args.wants_reply,
+							body: args.message ?? "",
+						});
+						return;
+					} catch {
+						// Fall through to render the original textual notice.
+					}
 				}
 			}
 			const index = ensureTextBlock(state);
