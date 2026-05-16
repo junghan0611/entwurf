@@ -15,8 +15,18 @@
 		"url": "https://github.com/junghan0611/pi-shell-acp/issues"
 	},
 	"type": "module",
-	"main": "./src/index.ts",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist/",
+		"src/",
+		"openclaw.plugin.json",
+		"README.md",
+		"AGENTS.md",
+		"LICENSE"
+	],
 	"scripts": {
+		"build": "tsc -p tsconfig.build.json",
 		"check": "tsc --noEmit -p ."
 	},
 	"dependencies": {},
@@ -24,6 +34,9 @@
 	"openclaw": {
 		"extensions": [
 			"./src/index.ts"
+		],
+		"runtimeExtensions": [
+			"./dist/index.js"
 		],
 		"install": {
 			"defaultChoice": "local",

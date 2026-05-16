@@ -34,6 +34,15 @@ demo/compaction-policy-smoke/fixtures/
 # (pre-commit, etc.) are committed; .husky/_/ is regenerated on `pnpm prepare`.
 .husky/_/
 
-# plugins/* — workspace sibling packages. Build artifacts not tracked.
-plugins/*/dist/
+# plugins/* — workspace sibling packages.
+#
+# dist/ is intentionally NOT ignored during prerelease: OpenClaw 5.12
+# installed-plugin classification requires a JS runtime artifact (see
+# `package-entry-resolution.ts` + `openclaw.runtimeExtensions` manifest
+# key), and Phase 1 distributes via git-source install — so the dist/
+# tree must travel inside the repo until publish ships.
+#
+# Switch to `plugins/*/dist/` ignore + `prepublishOnly: pnpm build`
+# when Phase 2 npm/ClawHub publish lands (tarball owns dist via the
+# package `files` allowlist).
 plugins/*/node_modules/
