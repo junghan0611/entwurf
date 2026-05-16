@@ -27,5 +27,8 @@
 	// same reason — both run under Node `--experimental-strip-types` and need
 	// `allowImportingTsExtensions`, which the emit-capable root config cannot
 	// enable. See pnpm typecheck for the three-config invocation.
-	"exclude": ["node_modules", "mcp", "scripts"]
+	// plugins/* is a workspace sibling — each plugin owns its own
+	// tsconfig and check pipeline (see pnpm check:plugins). Excluding here
+	// keeps root typecheck scoped to the bridge runtime.
+	"exclude": ["node_modules", "mcp", "scripts", "plugins"]
 }

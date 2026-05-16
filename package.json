@@ -66,7 +66,8 @@
 		"typecheck": "tsc --noEmit && tsc -p mcp/tsconfig.json && tsc -p scripts/tsconfig.json",
 		"lint": "biome check .",
 		"format": "biome check --write .",
-		"check": "pnpm lint && pnpm typecheck && ./run.sh check-mcp && ./run.sh check-models && ./run.sh check-backends && ./run.sh check-registration && ./run.sh check-dep-versions && ./run.sh check-sdk-surface"
+		"check:plugins": "pnpm -r --filter \"./plugins/*\" run check",
+		"check": "pnpm lint && pnpm typecheck && pnpm check:plugins && ./run.sh check-mcp && ./run.sh check-models && ./run.sh check-backends && ./run.sh check-registration && ./run.sh check-dep-versions && ./run.sh check-sdk-surface"
 	},
 	"pi": {
 		"extensions": [
