@@ -2590,6 +2590,7 @@ check_pack() {
   local forbidden_patterns=(
     'pi-session-.*\.html$'
     '\.log$'
+    '\.cast$'
     '^bench\.sh$'
     '^biome\.json$'
     '^tsconfig\.json$'
@@ -2687,7 +2688,7 @@ check_pack_install() {
   done
 
   local tar_forbidden=(
-    'pi-session-.*\.html$' '\.log$'
+    'pi-session-.*\.html$' '\.log$' '\.cast$'
     '^bench\.sh$' '^biome\.json$' '^tsconfig\.json$'
     '^pnpm-(lock\.yaml|workspace\.yaml)$' '^NEXT\.md$'
     '^plugins/' '^node_modules/'
