@@ -2551,7 +2551,8 @@ check_pack() {
   #
   # Scope: this is the first of four checks in #13's publish gate.
   # The remaining three — actual `npm pack`, `tar -tf`, and local
-  # install smoke from the packed tarball — land in Phase 2.3.
+  # install smoke from the packed tarball — are covered by
+  # check_pack_install() below (commit 9e2a2ca, Phase 2.3 closeout).
   # Intent + policy live in NEXT.md Phase 2.3.
   section "pack invariants (dry-run)"
 

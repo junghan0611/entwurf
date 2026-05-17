@@ -67,14 +67,25 @@ pi install ./
 
 ### Backend prerequisites
 
-Codex backend:
+Claude / Codex backends ship as pinned `dependencies` of `pi-shell-acp`. Once the bridge is installed, the resolver picks the ACP server in this order:
+
+1. **`CLAUDE_AGENT_ACP_COMMAND` / `CODEX_ACP_COMMAND` env override** — explicit override for an alternative binary or a wrapper command.
+2. **`require.resolve(...)` against the bundled package dependency** — `@agentclientprotocol/claude-agent-acp` for Claude, `@zed-industries/codex-acp` for Codex. This is the default path; no extra global install needed.
+3. **`PATH:claude-agent-acp` / `PATH:codex-acp` fallback** — used when the package resolution fails (e.g. a hand-edited `node_modules`).
+
+Codex smoke (no global install required — the codex-acp pinned in `dependencies` is resolved automatically):
 
 ```bash
-pnpm add -g @zed-industries/codex-acp@0.14.0
 ./run.sh smoke-codex /path/to/your-project
 ```
 
-Gemini backend (the `gemini` binary is itself the ACP server; curated model is `pi-shell-acp/gemini-3.1-pro-preview`):
+To force a global `codex-acp` (PATH fallback or development override):
+
+```bash
+pnpm add -g @zed-industries/codex-acp@0.14.0
+```
+
+Gemini is different — the `gemini` CLI binary is itself the ACP server, not a separate `*-acp` server package. It must be installed and authenticated on the operator's machine. Curated model: `pi-shell-acp/gemini-3.1-pro-preview`.
 
 ```bash
 pnpm add -g @google/gemini-cli
