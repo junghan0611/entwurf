@@ -30,7 +30,19 @@ A few words that look unusual for a coding tool.
 
 ## Install
 
-Consumer:
+`pi-shell-acp` is a thin ACP bridge — it connects pi to a local Claude/Codex/Gemini backend the operator has already installed and authenticated. The bridge does not provide Claude credentials, tokens, or subscription access, and does not bypass any backend auth. Whatever the operator's local `claude` / `codex` / `gemini` already trusts is what pi-shell-acp uses.
+
+Three install paths, in order of stability. After any of them, copy the `piShellAcpProvider` block from [`pi/settings.reference.json`](./pi/settings.reference.json) into your project settings — see [Settings](#settings) below.
+
+### From npm (stable, once published)
+
+```bash
+pi install npm:pi-shell-acp     # Phase 3 target — not on npm yet, use source install below
+```
+
+Tracked in [#13](https://github.com/junghan0611/pi-shell-acp/issues/13). Until then, the source path is the supported install.
+
+### From source via pi (current recommended)
 
 ```bash
 pi install git:github.com/junghan0611/pi-shell-acp
@@ -40,7 +52,7 @@ pi --list-models pi-shell-acp
 ~/.pi/agent/git/github.com/junghan0611/pi-shell-acp/run.sh smoke-all .
 ```
 
-Developer:
+### Local development clone
 
 ```bash
 git clone https://github.com/junghan0611/pi-shell-acp ~/repos/gh/pi-shell-acp
@@ -50,6 +62,10 @@ pi install ./
 ./run.sh install /path/to/your-project
 ./run.sh smoke-all /path/to/your-project
 ```
+
+> The OpenClaw plugin sibling lives at [`plugins/openclaw`](./plugins/openclaw) and ships as its own npm package (`@junghan0611/openclaw-pi-shell-acp`). It is not part of the root `pi-shell-acp` install above — see [Host adapters](#host-adapters).
+
+### Backend prerequisites
 
 Codex backend:
 
