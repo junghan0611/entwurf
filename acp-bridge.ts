@@ -926,6 +926,30 @@ function resolveCodexAcpLaunch(launchParams: AcpBackendLaunchParams): AcpLaunchS
 		};
 	}
 
+	// Package-dep first, PATH fallback — mirrors the Claude resolver above
+	// (resolveClaudeAcpLaunch). Three-backend equality (invariant #7): the
+	// bridge should not require operators to globally install codex-acp when
+	// it is already pinned in this package's dependencies. Side effect: the
+	// publish path stops needing a separate `pnpm add -g @zed-industries/codex-acp`
+	// step in Docker / fresh installs.
+	const require = createRequire(import.meta.url);
+	try {
+		const packageJsonPath = require.resolve("@zed-industries/codex-acp/package.json");
+		const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+			bin?: string | Record<string, string>;
+		};
+		const binPath = typeof packageJson.bin === "string" ? packageJson.bin : packageJson.bin?.["codex-acp"];
+		if (binPath) {
+			return {
+				command: process.execPath,
+				args: [join(dirname(packageJsonPath), binPath), ...allArgs],
+				source: "package:@zed-industries/codex-acp",
+			};
+		}
+	} catch {
+		// fall through to PATH
+	}
+
 	return {
 		command: "codex-acp",
 		args: allArgs,

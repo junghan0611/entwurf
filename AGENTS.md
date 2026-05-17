@@ -174,7 +174,7 @@ When a future change requires extending the schema-to-type inference (TS2589 pat
 ## Runtime Dependencies
 
 - `@agentclientprotocol/claude-agent-acp` — resolved from this package dependency first; `claude-agent-acp` on PATH is fallback.
-- `codex-acp` — resolved from PATH. Install globally when using Codex.
+- `@zed-industries/codex-acp` — resolved from this package dependency first; `codex-acp` on PATH is fallback. Three-backend equality (Hard Rule #7) — operators no longer need to globally install `codex-acp` separately when `pi-shell-acp` is installed.
 - `claude` CLI — Claude Code authentication, managed separately.
 
 Versions follow the pins in `package.json` / `run.sh`. Mismatches are caught by `check-dep-versions`.
