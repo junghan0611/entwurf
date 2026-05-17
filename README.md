@@ -89,7 +89,7 @@ pi install ./
 
 ### Backend prerequisites
 
-Claude / Codex backends ship as pinned `dependencies` of `pi-shell-acp`. Once the bridge is installed, the resolver picks the ACP server in this order:
+Claude / Codex ACP server packages (`@agentclientprotocol/claude-agent-acp`, `@zed-industries/codex-acp`) ship as pinned `dependencies` of `pi-shell-acp`; backend authentication still belongs to the operator's local CLI / runtime. Once the bridge is installed, the resolver picks the ACP server in this order:
 
 1. **`CLAUDE_AGENT_ACP_COMMAND` / `CODEX_ACP_COMMAND` env override** — explicit override for an alternative binary or a wrapper command.
 2. **`require.resolve(...)` against the bundled package dependency** — `@agentclientprotocol/claude-agent-acp` for Claude, `@zed-industries/codex-acp` for Codex. This is the default path; no extra global install needed.

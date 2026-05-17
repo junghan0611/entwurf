@@ -489,12 +489,12 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 
 ### Phase 2 작업 묶음 (#15 + #13 + packages.md)
 
-> **Status snapshot (2026-05-17 EOD)** — 9 patches landed across 9 commits (`050f66f .. 5af72cc`; doc-drift cleanup follows in a 10th).
-> - ✅ Closed: 2.1 (`050f66f`), 2.3 (`050f66f` + `9e2a2ca`), 2.4 (`050f66f` + `9e2a2ca` + `87fbd6e`), 2.5 (`d85e022`), 2.6 (`94d1f9d`), 2.10 (정책 유지), 2.11 (`8efd39d`)
+> **Status snapshot (2026-05-17 EOD)** — 12 patches landed across 12 commits (`050f66f .. 9899330`).
+> - ✅ Closed: 2.1 (`050f66f` + `316b349` cast leak fix), 2.3 (`050f66f` dry-run + `9e2a2ca` actual/tar/install + `9899330` pi loader smoke), 2.4 (`050f66f` + `9e2a2ca` + `87fbd6e` test:pack alias), 2.5 (`d85e022` 3-path draft + `0212e4a` packages.md 4-path final + filter warning), 2.6 (`94d1f9d`), 2.9 (`5af72cc` release invariant checklist), 2.10 (정책 유지), 2.11 (`8efd39d`)
 > - ↩️ Reverted to dense maintain: 2.2 (Node type-stripping `.js`→`.ts` gap vs `allowImportingTsExtensions` / `check_models` emit conflict; decision note in `74e92fb`)
-> - ⏳ In progress: 2.9 (release invariant checklist landed in CHANGELOG Unreleased — human-eye half of the publish gate)
 > - 🐛 Bug fix: tarball `.cast` leak (`316b349`) — reviewer cross-check caught `docs/` directory allowlist pulling git-ignored asciinema recordings into npm pack
-> - ⏸ Pending (operational, separate sprint): 2.7, 2.8, 2.12
+> - 🧹 Doc drift cleanup: `55178ce` (README codex + run.sh stale comments + NEXT count fix)
+> - ⏸ Pending (operational, separate sprint): 2.7 (tmux/baseline/replicant/OpenClaw validation), 2.8 (#16 잔여 gate), 2.12 (smoke-external-mcp packaging verification)
 
 | # | 작업 | 출처 |
 |---|------|------|
