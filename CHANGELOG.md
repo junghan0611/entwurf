@@ -4,6 +4,20 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+Phase 2 packaging-surface refactor in progress. No publish yet; the 0.7.0 cut happens when the full Phase 2 gate (#13 publish checklist + #15 stabilization invariants) is clean.
+
+### Added
+
+- Dry-run tarball invariant gate: `./run.sh check-pack` (also `pnpm check-pack`). Runs `npm pack --dry-run --json`, then asserts that runtime-critical files and the public verification/docs surface are present and that private/dev residue is absent. First of four checks in #13's publish gate; the remaining three (actual `npm pack`, `tar -tf`, local install smoke from the packed tarball) land in Phase 2.3.
+- `prepublishOnly` package script wires `pnpm run check` (which now includes `check-pack`) so any future `npm publish` fails closed if either the existing nine gates or the new tarball invariants regress.
+
+### Changed
+
+- `package.json` metadata aligned with pi package gallery conventions (sample cross-check against `pi-synthetic-provider`, `pi-firecrawl`, `pi-exa-mcp`, `pi-claude-code-use`, `pi-telegram`):
+  - `keywords` expanded to include `pi`, `pi-extension`, `pi-coding-agent`, `ai-provider`, `acp-bridge` for gallery discoverability.
+  - Explicit `files` allowlist added — runtime sources (`index.ts`, `acp-bridge.ts`, `event-mapper.ts`, `engraving.ts`, `pi-context-augment.ts`, `protocol.js`, `pi-extensions/`, `mcp/`), public verification surface (`run.sh`, `scripts/`, `prompts/`, curated `demo/` entries, `docs/`, `pi/{entwurf-targets.json, settings.reference.json, skill-plugin-example/}`), and operator docs (`AGENTS.md`, `BASELINE.md`, `VERIFY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`). The OpenClaw plugin sibling (`plugins/openclaw/`, published separately as `@junghan0611/openclaw-pi-shell-acp`) is excluded.
+  - `typebox` added to `peerDependencies` (`"*"` range) — `pi-extensions/entwurf.ts` uses `Type.Object` / `Type.Union` / `Type.Literal` and pi packages.md requires this peer.
+
 ## 0.6.0 — 2026-05-17
 
 Development release. Phase 1 feature-freeze closeout: OpenClaw plugin prerelease (Oracle daily-use verified) + Asymmetric Mitsein workflow surface (external MCP `entwurf_send`) shipped together ahead of the 2026-06-15 Anthropic third-party agent billing split. Phase 2/3 are refactor-only.

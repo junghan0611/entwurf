@@ -13,16 +13,46 @@
 		"url": "https://github.com/junghan0611/pi-shell-acp/issues"
 	},
 	"keywords": [
+		"pi",
 		"pi-package",
+		"pi-extension",
+		"pi-coding-agent",
+		"ai-provider",
 		"acp",
+		"acp-bridge",
+		"agent-client-protocol",
 		"claude-code",
 		"codex",
 		"gemini",
 		"gemini-cli",
-		"agent-client-protocol",
 		"mcp"
 	],
 	"type": "module",
+	"files": [
+		"index.ts",
+		"acp-bridge.ts",
+		"event-mapper.ts",
+		"engraving.ts",
+		"pi-context-augment.ts",
+		"protocol.js",
+		"pi-extensions/",
+		"mcp/",
+		"scripts/",
+		"prompts/",
+		"demo/README.md",
+		"demo/demo.sh",
+		"demo/compaction-policy-smoke/",
+		"docs/",
+		"pi/entwurf-targets.json",
+		"pi/settings.reference.json",
+		"pi/skill-plugin-example/",
+		"run.sh",
+		"AGENTS.md",
+		"BASELINE.md",
+		"VERIFY.md",
+		"CONTRIBUTING.md",
+		"CHANGELOG.md"
+	],
 	"engines": {
 		"node": ">=22.6.0"
 	},
@@ -37,7 +67,8 @@
 	"peerDependencies": {
 		"@earendil-works/pi-ai": "*",
 		"@earendil-works/pi-coding-agent": "*",
-		"@earendil-works/pi-tui": "*"
+		"@earendil-works/pi-tui": "*",
+		"typebox": "*"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.13",
@@ -50,6 +81,7 @@
 	},
 	"scripts": {
 		"prepare": "husky || true",
+		"prepublishOnly": "pnpm run check",
 		"setup": "./run.sh setup",
 		"smoke": "./run.sh smoke",
 		"smoke-claude": "./run.sh smoke-claude",
@@ -62,12 +94,13 @@
 		"check-registration": "./run.sh check-registration",
 		"check-dep-versions": "./run.sh check-dep-versions",
 		"check-sdk-surface": "./run.sh check-sdk-surface",
+		"check-pack": "./run.sh check-pack",
 		"check-claude-sessions": "./run.sh check-claude-sessions",
 		"typecheck": "tsc --noEmit && tsc -p mcp/tsconfig.json && tsc -p scripts/tsconfig.json",
 		"lint": "biome check .",
 		"format": "biome check --write .",
 		"check:plugins": "pnpm -r --filter \"./plugins/*\" run check",
-		"check": "pnpm lint && pnpm typecheck && pnpm check:plugins && ./run.sh check-mcp && ./run.sh check-models && ./run.sh check-backends && ./run.sh check-registration && ./run.sh check-dep-versions && ./run.sh check-sdk-surface"
+		"check": "pnpm lint && pnpm typecheck && pnpm check:plugins && ./run.sh check-mcp && ./run.sh check-models && ./run.sh check-backends && ./run.sh check-registration && ./run.sh check-dep-versions && ./run.sh check-sdk-surface && ./run.sh check-pack"
 	},
 	"pi": {
 		"extensions": [

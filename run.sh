@@ -43,6 +43,7 @@ Usage:
   ./run.sh check-registration         # local deterministic check of per-runtime provider registration semantics
   ./run.sh check-dep-versions         # local deterministic check that version pins (package.json/run.sh/README.md) agree
   ./run.sh check-sdk-surface          # static gate: every (connection as any) cast in acp-bridge.ts is annotated SDK_CAST_OK or SDK_CAST_DEBT
+  ./run.sh check-pack                 # publish gate: npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-models               # local deterministic check of MODELS contextWindow defaults (sonnet 200K, opus 1M) + override
   ./run.sh check-claude-sessions [project-dir]  # compare pi persisted sessions vs Claude SDK session visibility
   ./run.sh verify-resume [project-dir] # exact pi -> ACP -> Claude continuity check with visible acpSessionId diagnostics
@@ -2537,6 +2538,98 @@ check_sdk_surface() {
   echo "[check-sdk-surface] $total cast(s) present, $ok_count OK + $debt_count DEBT — all annotated"
 }
 
+check_pack() {
+  # Dry-run tarball invariant gate for the public npm surface.
+  #
+  # Runs `npm pack --dry-run --json`, then asserts:
+  #   - runtime-critical files and the public verification/docs
+  #     surface (run.sh, scripts/, docs/, demo/) are present;
+  #   - private/dev residue is absent (session dumps, debug logs,
+  #     dev configs, workspace metadata, the OpenClaw plugin
+  #     monorepo sibling that ships as its own npm package).
+  #
+  # Scope: this is the first of four checks in #13's publish gate.
+  # The remaining three — actual `npm pack`, `tar -tf`, and local
+  # install smoke from the packed tarball — land in Phase 2.3.
+  # Intent + policy live in NEXT.md Phase 2.3.
+  section "pack invariants (dry-run)"
+
+  local json
+  json=$(cd "$REPO_DIR" && npm pack --dry-run --json 2>/dev/null) || {
+    fail "[check-pack] npm pack --dry-run failed"
+    return 1
+  }
+
+  local file_list
+  file_list=$(node -e '
+    const data = JSON.parse(require("fs").readFileSync(0, "utf8"));
+    if (!Array.isArray(data) || data.length !== 1) {
+      console.error("[check-pack] expected single tarball entry, got " +
+        (Array.isArray(data) ? data.length : "non-array"));
+      process.exit(2);
+    }
+    for (const f of data[0].files) console.log(f.path);
+  ' <<<"$json") || {
+    fail "[check-pack] failed to parse npm pack output"
+    return 1
+  }
+
+  local required=(
+    "package.json" "README.md" "LICENSE" "CHANGELOG.md"
+    "index.ts" "acp-bridge.ts" "event-mapper.ts" "engraving.ts"
+    "pi-context-augment.ts" "protocol.js" "run.sh"
+    "pi-extensions/entwurf.ts" "pi-extensions/entwurf-control.ts"
+    "pi-extensions/model-lock.ts" "pi-extensions/lib/entwurf-core.ts"
+    "mcp/pi-tools-bridge/src/index.ts"
+  )
+
+  # Patterns that must NOT appear in the tarball. Anchored where the
+  # match should be exact (e.g. ^bench\.sh$); loose where the residue
+  # may appear under any path (e.g. \.log$).
+  local forbidden_patterns=(
+    'pi-session-.*\.html$'
+    '\.log$'
+    '^bench\.sh$'
+    '^biome\.json$'
+    '^tsconfig\.json$'
+    '^pnpm-(lock\.yaml|workspace\.yaml)$'
+    '^NEXT\.md$'
+    '^plugins/'
+    '^node_modules/'
+    '\.tmp-verify/'
+    '\.agent-(reports|shell)/'
+  )
+
+  local pass=1 f pat hit
+
+  for f in "${required[@]}"; do
+    if ! grep -qxF "$f" <<<"$file_list"; then
+      fail "[check-pack] MISSING required: $f"
+      pass=0
+    fi
+  done
+
+  for pat in "${forbidden_patterns[@]}"; do
+    hit=$(grep -E "$pat" <<<"$file_list" || true)
+    if [ -n "$hit" ]; then
+      fail "[check-pack] FORBIDDEN matches pattern $pat:"
+      echo "$hit" | sed 's/^/    /' >&2
+      pass=0
+    fi
+  done
+
+  local total
+  total=$(printf '%s\n' "$file_list" | wc -l | tr -d ' ')
+  echo "[check-pack] $total files in tarball"
+
+  if [ "$pass" = "1" ]; then
+    ok "[check-pack] invariants pass"
+    return 0
+  fi
+  fail "[check-pack] invariants violated"
+  return 1
+}
+
 check_registration() {
   local verify_dir
   verify_dir="$REPO_DIR/.tmp-verify"
@@ -3231,6 +3324,9 @@ case "$cmd" in
     ;;
   check-sdk-surface)
     check_sdk_surface
+    ;;
+  check-pack)
+    check_pack
     ;;
   check-claude-sessions)
     check_claude_sessions "$TARGET_PROJECT_DIR"
