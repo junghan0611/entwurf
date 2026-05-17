@@ -489,6 +489,13 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 
 ### Phase 2 작업 묶음 (#15 + #13 + packages.md)
 
+> **Status snapshot (2026-05-17 EOD)** — 9 patches landed across 8 commits (`050f66f .. 316b349`).
+> - ✅ Closed: 2.1 (`050f66f`), 2.3 (`050f66f` + `9e2a2ca`), 2.4 (`050f66f` + `9e2a2ca` + `87fbd6e`), 2.5 (`d85e022`), 2.6 (`94d1f9d`), 2.10 (정책 유지), 2.11 (`8efd39d`)
+> - ↩️ Reverted to dense maintain: 2.2 (Node type-stripping `.js`→`.ts` gap vs `allowImportingTsExtensions` / `check_models` emit conflict; decision note in `74e92fb`)
+> - ⏳ In progress: 2.9 (release invariant checklist landed in CHANGELOG Unreleased — human-eye half of the publish gate)
+> - 🐛 Bug fix: tarball `.cast` leak (`316b349`) — reviewer cross-check caught `docs/` directory allowlist pulling git-ignored asciinema recordings into npm pack
+> - ⏸ Pending (operational, separate sprint): 2.7, 2.8, 2.12
+
 | # | 작업 | 출처 |
 |---|------|------|
 | 2.1 | 위 4-axis gap 메우기 — `pi.extensions` / `files` / `typebox` / (선택) gallery | packages.md |
