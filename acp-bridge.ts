@@ -1218,6 +1218,29 @@ function buildClaudeSessionMeta(
 }
 
 // ============================================================================
+// Backend config overlays — intentionally dense (#15).
+//
+// Phase 2 (2026-05-17) attempted splitting the three overlay regions below
+// into acp/overlays/{claude,codex,gemini}.ts. tsc passed, but Node 24's
+// type-stripping resolver does not fall back .js -> .ts for nested
+// subdirectory imports, and the fix required allowImportingTsExtensions
+// (which conflicts with check-models's tsc --outDir emit pipeline in
+// run.sh). The tooling cost exceeded the auditability gain — exactly the
+// #15 case where "splitting only where it improves auditability" calls
+// for keeping the dense boundary file.
+//
+// The three overlay regions share a common contract:
+//   - {BACKEND}_CONFIG_DIR / CODEX_HOME / GEMINI_CLI_HOME redirect
+//   - minimal pi-authored settings/config (override-only, no inheritance)
+//   - passthrough whitelist of operator entries (symlinked)
+//   - empty per-cwd directories (memory/sessions leak closure)
+//   - binary-owned cleanup pass (preserve binary-authored state)
+//
+// Keeping the three implementations adjacent makes cross-backend invariant
+// comparison cheap. Section dividers below mark each backend's region.
+// ============================================================================
+
+// ============================================================================
 // Claude config overlay — isolate claude-agent-acp's SettingsManager from
 // the operator's `~/.claude/settings.json` permissionMode pickup.
 // ============================================================================
