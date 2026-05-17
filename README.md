@@ -233,6 +233,8 @@ In ACP-backed sessions, agent tools (`entwurf`, `entwurf_resume`, `entwurf_send`
 
 The human-greeted 담당자 pattern is first-class: the operator opens a pi-shell-acp session in repo B, greets it directly, then passes that `sessionId` to another session via `entwurf_send`. Spawned siblings and human-opened peers share the same messaging semantics; only the creation sequence differs.
 
+**Asymmetric Mitsein** (비대칭 공존) — the cross-harness counterpart. Pi may collaborate with an external interactive coding session (Claude Code, Codex, Gemini CLI used as a human terminal) without spawning it. The two channels are deliberately asymmetric: outbound `pi → external` rides whatever the operator already uses (tmux send-keys, manual paste, any interactive input path), while inbound `external → pi` returns through this bridge's `entwurf_send`. The pi-side sessionId travels inside the task instruction itself, so no second harness, no control daemon, and no transcript scraping are introduced. This is a workflow pattern, not a product surface — the bridge stays thin; the asymmetry is an honest acknowledgment of the limit, not a defect.
+
 After a session is anchored, pi-shell-acp locks its model identity: switches that touch `pi-shell-acp` are reverted; native-to-native and pre-turn selection remain free. `ensureBridgeSession` refuses direct reuse-path mismatches before backend handoff.
 
 Reproduce + debug: [`demo/README.md`](./demo/README.md).
@@ -268,6 +270,8 @@ Owns: provider registration (`pi-shell-acp/...`), ACP subprocess lifecycle + `re
 Does not: reconstruct full history, hydrate backend transcripts into pi history, emulate Claude Code or Codex, run broad multi-agent orchestration (entwurf is narrow, registry-gated, identity-locked), or run a second session model competing with pi.
 
 Only `pi:<sessionId>` mappings are persisted (`~/.pi/agent/cache/pi-shell-acp/sessions/`) — enough to re-attach pi to the same remote ACP session, never enough to act as a second harness. Backend stores (`~/.claude/`, `~/.codex/`, `~/.gemini/`) are interoperability side effects, not authority.
+
+This repo also doubles as the maintainer's working laboratory for agent-harness boundaries — new workflow patterns (e.g. Asymmetric Mitsein) land here first as low-level instruments, before crystallizing into invariants or graduating into more polished surfaces elsewhere.
 
 ## Verification surfaces
 

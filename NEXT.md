@@ -15,10 +15,60 @@
 
 ---
 
-## Immediate Priority — 2026-05-17
+## Immediate Priority — 2026-05-17 (한 달 sprint)
 
-- **External MCP `entwurf_send` unblock** — Claude Code / Codex / Gemini 같은 외부 MCP host 가 live pi session 으로 메시지를 보낼 수 있게 한다. `entwurf_self` 는 pi-session identity required 로 유지. `entwurf_send` 는 identity-enhanced 로 낮춰 외부 sender 는 `origin=external-mcp`, `replyable=false`; `wants_reply=true` 는 외부 sender 에서 거부. 목적: 2026-06-15 Anthropic billing 전환 전에 pi Claude 와 Claude Code 를 한 달간 섞어 쓰며 터지는 지점을 미리 잡기.
-- **다음 한 걸음** — 실제 Claude Code MCP catalog 에 `pi-tools-bridge` 를 wiring 해서 live pi session 으로 송신 smoke. 그 뒤 Phase 2 pi.dev 패키징 작업으로 복귀.
+> **트리거**: 2026-06-15 Anthropic third-party agent billing split.
+> **목적**: 분기점 전 pi Claude 와 Claude Code Opus 사이의 **비대칭 공존
+> (Asymmetric Mitsein)** 워크플로우를 실사용으로 정착시키기. 정공법 — "선 박고
+> 쓰면서 다듬기". Release packaging 없이 main 에 먼저 박고 실사용으로 검증.
+
+### Step 1 — 코드 surface (✅ 완료, commit `5217e6c`)
+
+- External MCP `entwurf_send` unblock. `entwurf_self` 는 pi-session
+  identity-required 유지. `entwurf_send` 는 identity-enhanced 로 격하 — 외부
+  sender 는 `origin=external-mcp` / `replyable=false`, `wants_reply=true`
+  거부 (crash-loud, no silent coerce).
+- AGENTS.md sender envelope contract 갱신 + canonical-carrier trust boundary
+  명시 (cross-process env injection = operator scope, no cryptographic
+  non-forgery).
+- README billing note + Wiring subsection + Entwurf 섹션 wording.
+- `mcp/pi-tools-bridge/test.sh` 18/18 passed.
+
+### Step 2 — 워크플로우 패턴 정립: Asymmetric Mitsein
+
+코드 surface 아닌 **운영 패턴**. 6/15 이후 pi → Claude Code Opus 협업 모양:
+
+```text
+pi GPT힣  ─[사람 손 / tmux send-keys, fragile OK]─→  Claude Code Opus interactive
+   ↑                                                       │
+   └─[MCP entwurf_send, sessionId in task spec]────────────┘
+```
+
+- **출구** (pi → external): tmux / 복붙. OS-level 도구. 우리 repo 책임 0.
+- **입구** (external → pi): `entwurf_send` (이미 박힘). stable, replyable=false.
+- **trick**: pi 가 보내는 task spec 안에 "결과는 pi sessionId=X 로
+  entwurf_send 해줘" 한 줄. Claude Code 는 자기 작업의 마지막 단계로 자연스럽게
+  그 줄을 따름. 별도 control socket / wrapper / daemon 없음.
+- **invariant 정합**: #7 (three-backend equality), #8 (not a second harness),
+  #9 (auth boundary), #10 (carrier dignity) 모두 ✅. wrapper 만들면 #8 위반.
+
+### Step 3 — 4단계 실사용 smoke (현재 priority)
+
+1. Claude Code MCP catalog 등록 — README Wiring 섹션 명령
+   ```bash
+   claude mcp add --scope user pi-tools-bridge \
+     bash /home/junghan/repos/gh/pi-shell-acp/mcp/pi-tools-bridge/start.sh
+   ```
+2. pi sessionId 포함 task spec 템플릿 정립 (정한 본인 손에 잡혀야 함)
+3. tmux 또는 복붙으로 Claude Code Opus 에 던지기
+4. Opus 가 entwurf_send 로 pi 에 결과 보내는지 실사용 — 한 달 fast iteration
+
+각 단계에서 터지는 표면 발견 → 본 섹션 또는 follow-up 으로 누적. 패턴이 굳으면
+(예: 한 달 후) README / AGENTS.md 로 승격.
+
+### Step 4 — 다음 한 걸음
+
+위 4단계 실사용. 안정되면 Phase 2 (pi.dev 패키징) 작업으로 복귀.
 
 ## Strategic Frame — 정공법 4-Phase (2026-05-15 재정렬)
 
