@@ -4,14 +4,56 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.6.0 — 2026-05-17
+
+Development release. Phase 1 feature-freeze closeout: OpenClaw plugin prerelease (Oracle daily-use verified) + Asymmetric Mitsein workflow surface (external MCP `entwurf_send`) shipped together ahead of the 2026-06-15 Anthropic third-party agent billing split. Phase 2/3 are refactor-only.
+
+### Added
+
+- **`entwurf_send` accepts identity-enhanced sender envelopes from external MCP hosts** (commit `5217e6c`). The pi-tools-bridge MCP surface previously required a pi session sender envelope from both `entwurf_self` and `entwurf_send`. The send path is now relaxed: when this MCP is wired into an external host (Claude Code, Codex, Gemini CLI), `entwurf_send` delivers into live pi sessions with `origin="external-mcp"` and `replyable=false`. The receive (`entwurf_self`) path still requires a pi session sender envelope — fail-loud, no silent coerce. `wants_reply=true` is rejected from external senders because there is no pi-session address to reply to. Receivers render `from: ... [external MCP]` and `sessionId: external-mcp (non-replyable)`. The asymmetry is by design: external hosts can push into pi, but receiving a reply requires being a pi session. See AGENTS.md "Entwurf Orchestration" and README "Entwurf" sections.
+
+- **OpenClaw plugin (prerelease)** at `plugins/openclaw/`. New monorepo-lite sibling package — `pnpm-workspace.yaml` `packages: ["plugins/*"]`. Surfaces `pi-shell-acp/<model-id>` as a first-class OpenClaw provider; five curated models route through Claude / Codex / Gemini ACP backends via the upstream pi-shell-acp bridge:
+  - `pi-shell-acp/claude-sonnet-4-6`, `pi-shell-acp/claude-opus-4-7`
+  - `pi-shell-acp/gpt-5.4`, `pi-shell-acp/gpt-5.5`
+  - `pi-shell-acp/gemini-3.1-pro-preview`
+
+  Phase 1.8/1.9 verification on Oracle Docker (2026-05-15): `glg-b-bot` direct DM GREEN under both Sonnet and Opus, workspace/SOUL/USER/memory read, Telegram delivery (`sendMessage ok`), child pi clean exit/finalize. Manual install only — `openclaw plugins install <path> --dangerously-force-unsafe-install` until ClawHub registration. Not published to npm. Docker boundary, pi agent overlay (`~/.pi`) volume policies, Docker repro lab (`examples/docker-lab/`), and entwurf scope (`--no-tools --no-session --offline`) documented in `plugins/openclaw/README.md` and `AGENTS.md`. Plugin npm name reserved: `@junghan0611/openclaw-pi-shell-acp`.
+
+- **Asymmetric Mitsein workflow pattern**. Documented operating shape between pi GPT힣 (Mattering, slow context-rich) and Claude Code Opus (fast effort surface) ahead of the 2026-06-15 Anthropic third-party agent billing split. tmux / copy-paste is the egress (operating-system tool, repo-zero); `entwurf_send` is the ingress (already implemented). External MCP caller patterns landed in `~/repos/gh/agent-config/home/AGENTS.md` "External MCP caller patterns" section. See NEXT.md "Immediate Priority — 2026-05-17 sprint" for the SSOT.
+
 ### Fixed
 
-- Bumped `@agentclientprotocol/claude-agent-acp` from `0.32.0` to `0.33.1`, picking up upstream origin-aware handling for `task-notification` followups so autonomous background-task results no longer bleed into the user-turn lifecycle. This is the first fix candidate for issue #16's background-notification / human-turn boundary failure.
+- Bumped `@agentclientprotocol/claude-agent-acp` from `0.32.0` to `0.33.1`, picking up upstream origin-aware handling for `task-notification` followups so autonomous background-task results no longer bleed into the user-turn lifecycle. First fix candidate for issue #16's background-notification / human-turn boundary failure.
+- **ACP `entwurf_send` message visibility regression** (`e31823c`). Disabled the late `customMessage` promotion on the ACP path — the post-stream box arrived after sync tool calls, making the message look like a fresh send. In-stream `[tool:start]/[tool:done]` notice carries the visibility instead. Native and tool-result paths preserve the receive-side renderer + `ENTWURF_SENT_MESSAGE_TYPE` context filter. Re-entry condition: when pi gains an in-stream passive UI append/update path, this is reconsidered (parked as issue #8).
 
 ### Changed
 
 - Bumped `@zed-industries/codex-acp` from `0.13.0` to `0.14.0`, aligning the bridge with the current Codex ACP release and its Codex 0.129 / exec-output handling updates.
 - Reconfirmed the external `gemini-cli` `0.42.0` path-resolution invariant used by the Gemini overlay; pi-shell-acp still treats Gemini as a PATH runtime rather than a package dependency.
+- README "External MCP wiring" split into two options: (A) `claude mcp add` registration (host-managed) vs (B) `~/.mcp.json` declarative (operator-managed). Both surface the same `pi-tools-bridge` entry. `entwurf_self` requires a pi session sender envelope; `entwurf_send` delivers from explicitly wired external MCP hosts, replyable only for pi-session senders.
+- Root README gains an "Anthropic subscription billing" note framing the 2026-06-15 third-party agent billing split. `pi-shell-acp` respects that distinction — no bypass, no emulation — and preserves capability dignity across all three backends (invariants #7, #9, #10). The recommended runtime mix leans toward paths outside Anthropic's Agent SDK metering (Codex / Gemini); Claude remains a strong coding worker invoked when its quality is worth the credit cost.
+
+### Plugin — `plugins/openclaw/` development trail (prerelease history, 2026-05-14 ~ 2026-05-16)
+
+Documented here for replay; not part of the public 0.6.0 surface beyond the README/AGENTS files inside `plugins/openclaw/`.
+
+- TS migration: `src/index.js` → `src/index.ts` (commit `6cea5c3`). Single-file TS stub; multi-file split (`src/provider.ts`, `src/stream/*`) is Phase 1.4 work.
+- Compiled runtime shipped at `dist/` (commit `1c73569`). OpenClaw's `runtimeExtensions` slot consumes `dist/index.js`; source ships via `extensions: ["./src/index.ts"]`. `dist/` intentionally committed during prerelease (see `.gitignore` SSOT comment); transitions to `prepublishOnly: pnpm build` + `plugins/*/dist/` ignore at Phase 2 npm/ClawHub publish gate.
+- Issue #17 outbound boundary hardening (`6cea5c3` fix, `918f5ef` ci guard, `1c73569` dist, `fa3b8f7` two-layer): outbound message boundary normalize + final-role guard + abnormal-flag fan-out + outbound text-only. DIAG 7-field probe (`finalRole`, `finalTextLen`, `finalTextHead`, `partialTextLen`, `partialOverridesFinal`, `abnormal`, `timeoutFired`) for telemetry. 1-stage streaming-off validation GREEN at release; 2-stage streaming-on validation and `[tool:trace]` inline resolution remain open follow-ups.
+- Pre-install hardening (`340e58f`), Docker repro lab (`4e8237c`), Telegram delivery bridge shim (`98c8741` + `7071f4d` + `02c9c36`), curated catalog expansion to include `claude-opus-4-7` and `gpt-5.5` (`950e11b`), Docker install layers + three-backend auth (`169fa0b`), entwurf scope under invariant #9 (`635012b`), host-adapter pointer + auth boundary invariant in root (`b66e358`), Docker auth boundary R1/R3/R5/R6/R7 closeout (`61cfd4c`), install model split (prerelease vs self-contained) + pi agent overlay boundary (`8476104`).
+
+### Docs
+
+- AGENTS.md: "Entwurf Orchestration" section formalizes the sender envelope contract — `replyable=true` requires a pi sender envelope (`PI_AGENT_ID` / `PI_SESSION_ID`); `external-mcp` sender envelope is delivery-only.
+- `plugins/openclaw/README.md`: Docker boundary section (in-container login default vs host passthrough advanced opt-in) + pi agent overlay (`~/.pi`) volume policies (4a persist runtime state vs 4b host overlay passthrough).
+- NEXT.md realigned 2026-05-17: Phase 1 = 0.6.0 dev release (OpenClaw verification ✅ Phase 1.8/1.9 + Asymmetric Mitsein sprint); Phase 2/3 = refactor-only. Open question — endpoint envelope beyond pi sessions — and Design archive — receiver wake path via MCP mailbox + Claude Code `asyncRewake` — captured as design input for the operational-validation iteration.
+
+### Known limitations (post-release operational validation continues)
+
+- Asymmetric Mitsein workflow validation (Immediate Priority sprint Step 3a) is a 1-month fast iteration in progress at release time. Real-use trigger phrases, friction patterns, and frequency data are being captured ahead of `./run.sh smoke-external-mcp` automation (Step 3b) and demo materials (Step 3c). Step 3 work is **operational validation, not feature work** — 0.6.0 is the feature freeze; Step 3 outputs flow into Phase 2 4-axis verification.
+- OpenClaw plugin remains manual-install-only; ClawHub registration is Phase 3.
+- Plugin `mcpInjection`, `lockConflictPolicy`, `entwurfTargetsPath` configSchema keys are reserved (not yet wired); they land in Phase 1.4 ts refactor.
+- Claude Code receiver wake path (MCP mailbox + `asyncRewake`) is design archive only — no implementation in 0.6.0. Real demand measurement happens during Step 3a; implementation considered only if friction accumulates.
 
 ## 0.5.0 — 2026-05-14
 

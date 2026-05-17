@@ -316,7 +316,7 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 
 ---
 
-## Phase 1 — 0.6.0 개발 release: OpenClaw 검증 ✅ + Claude Code 연동 sprint (현재)
+## Phase 1 — 0.6.0 개발 release: OpenClaw 검증 ✅ + Claude Code 연동 sprint (✅ 0.6.0 cut 2026-05-17 · Step 3 operational validation 계속)
 
 > 결정: **0.6.0 = 개발 release**. 두 축이 합쳐서 닫힘:
 > 1. **OpenClaw plugin 프리릴리즈** — 수동설치 (git-local / tarball), npmjs publish 안 함, Oracle daily-use 검증 (✅ Phase 1.8/1.9, 2026-05-15)

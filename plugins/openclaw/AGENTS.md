@@ -36,11 +36,13 @@ pi process). This plugin contains *only* the OpenClaw-side glue.
 
 - `openclaw.plugin.json` — manifest declaring `providers: ["pi-shell-acp"]`
   and the plugin's configSchema.
-- `src/index.js` — single-file plain-JS stub. Registers the provider,
-  serializes `ctx.messages` into a single prompt for `pi -p`, spawns a
-  child `pi` process per turn, and proxies its `--mode json` stream back
-  to OpenClaw. Each (b3a) GREEN observation from 2026-05-14/15 flowed
-  through this file. Wire artifact, not the final shape.
+- `src/index.ts` — single-file TS stub (migrated from JS 2026-05-16;
+  compiled to `dist/index.js` for OpenClaw's `runtimeExtensions` slot).
+  Registers the provider, serializes `ctx.messages` into a single prompt
+  for `pi -p`, spawns a child `pi` process per turn, and proxies its
+  `--mode json` stream back to OpenClaw. Each (b3a) GREEN observation
+  from 2026-05-14/15 flowed through this file. Wire artifact, not the
+  final shape.
 - `README.md`, `AGENTS.md` — user-facing and maintainer-facing docs.
 
 **Target shape after Phase 1.4 ts refactor:**
@@ -53,7 +55,7 @@ pi process). This plugin contains *only* the OpenClaw-side glue.
 - `src/stream/identity.ts` — env / control socket fd propagation.
 - `src/stream/model-lock.ts` — entwurf identity preservation enforcement.
 
-Until Phase 1.4 lands, the single `src/index.js` carries all of the above
+Until Phase 1.4 lands, the single `src/index.ts` carries all of the above
 inline. Treat the target layout as plan, not as missing files.
 
 ## Plugin Path (not config path)
