@@ -56,6 +56,106 @@ pi GPT힣  ─[사람 손 / tmux send-keys, fragile OK]─→  Claude Code Opus 
 - **invariant 정합**: #7 (three-backend equality), #8 (not a second harness),
   #9 (auth boundary), #10 (carrier dignity) 모두 ✅. wrapper 만들면 #8 위반.
 
+#### Open question — endpoint envelope beyond pi sessions
+
+2026-05-17 Claude Code 조사 입력:
+
+- `~/.claude/sessions/<pid>.json` 의 `peerProtocol: 1` 은 transport 가 아니라
+  Claude Code 세션 파일 schema version 으로 보임.
+- 실제 receive transport 후보는 `messagingSocketPath`. 코드상 live peer scan 은
+  UDS connect test (`net.connect({ path })`) 로 addressable peer 만 필터.
+- 현재 interactive Claude Code 세션은 `kind: "interactive"`, `entrypoint: "cli"`,
+  `peerProtocol: 1` 로 visible 하지만 `messagingSocketPath` 없음 — **visible peer,
+  not addressable peer**.
+- `kind` 후보 `interactive | bg | daemon | daemon-worker`, 그리고 `tmux`,
+  `bridgeSessionId`, `agent`, `jobId` 필드 존재는 Endpoint Envelope 모델과 정합:
+  identity/location 과 receive transport 를 분리해야 함.
+
+설계 함의:
+
+- 현재 `entwurf_self` 는 pi control socket 이 있는 replyable pi session identity.
+- 다음 추상화 후보는 `entwurf_self` 를 "current endpoint descriptor" 로 확장하는
+  것: `{ harness, sessionId, cwd, kind, transport?, returnHint?, replyable }`.
+- Claude Code interactive session 은 `claude --resume <id>` 같은 returnable 좌표를
+  가질 수 있지만, `messagingSocketPath` 나 tmux pane 같은 명시 receive transport
+  없이는 programmatic replyable 이 아님.
+- Anthropic CLI surface 자체도 visible/addressable 분리를 암시: `claude
+  --remote-control [name]` 은 interactive opt-in addressable mode, `claude
+  agents` 는 bg manager, `--brief` 는 `SendUserMessage` tool 을 여는 client API
+  축으로 보임. 단 `--remote-control` / `claude agents` 는 TUI/interactive 표면이라
+  이 repo 의 자동 smoke 가 아니라 operator-hand validation 축.
+- UDS wire (`peerProtocol=1` 계열)는 line-delimited JSON (`type: "user" |
+  "control"`, connect → write `\n` → close) 로 보임. Primitive 자체는 pi
+  entwurf-control socket 과 닮았지만, Claude Code process 가 실제로 소비하는
+  `messagingSocketPath` 를 소유해야 addressable 이다.
+- 중요한 경계: `~/.claude/sessions/<pid>.json` 만 보고 우리가 임의 socket 을
+  만들어도 Claude Code 가 그 socket 을 읽지 않는다. 그것은 identity/registry 를
+  합성할 수는 있어도 receive transport 를 만들지는 못한다. 임의 proxy/daemon 으로
+  메시지를 받아 tmux/PTY 에 주입하기 시작하면 #8 second-harness 경계로 들어간다.
+- UDS protocol reverse engineering 은 gray / brittle. 우선순위는 낮음. 먼저
+  operator-hand validation 으로 bg/daemon/remote-control 모드에서
+  `messagingSocketPath` 가 실제로 생기는지 짧게 확인하고, 발견은 design input
+  으로만 다룬다. 현재 방향은 UDS receive transport 를 직접 쓰는 것이 아니라,
+  Claude Code 공식 hook surface 를 경유하는 wake path — 아래 Design archive.
+
+#### Design archive — receiver wake path: MCP mailbox + Claude Code `asyncRewake`
+
+2026-05-17 추가 조사 입력:
+
+- Claude Code hooks 의 command hook 에는 `asyncRewake: true` + exit code `2`
+  패턴이 공식 wake primitive 로 존재. Idle Claude Code 세션을 깨우고
+  hook stdout/stderr 를 system reminder 로 전달한다. 단 command hook 한정,
+  async hook dedupe 없음 → watcher singleton lock 필수.
+- Prior art: `sanztheo/claude-intercom` 은 MCP server + filesystem inbox watcher +
+  `asyncRewake` 로 Claude Code instance 간 messaging 을 구현. 그대로 복사하지
+  말고 pi-shell-acp invariant 에 맞춰 구조만 검토.
+- Mental model 정정: "every harness owns its input boundary" 는 유지된다. 다만
+  Anthropic 이 Claude Code owner 로서 hook `asyncRewake` 라는 공식 ingress 를 이미
+  열어둔 것. 우리가 PTY 키 주입 / transcript JSONL 직접 수정 / `claude --resume`
+  별도 프로세스 주입을 하지 않는 한 #8 second-harness 위반이 아니다.
+
+안전한 구조 후보:
+
+```text
+entwurf_send(target=claude-code:<id>)
+  -> MCP server writes JSON message into target mailbox
+  -> Claude Code command hook watcher sees unread file
+  -> watcher exits 2 with minimal reminder (no message body)
+  -> Claude wakes and calls MCP peek
+  -> Claude handles message, then ack/reply
+```
+
+원칙:
+
+- **Hook = wake only, MCP = content authority.** Hook stdout/stderr 에 메시지 본문을
+  싣지 않는다. Reminder 는 "MCP peek 를 호출하라" 는 최소 신호만.
+- **Transcript JSONL direct write 금지.** 관측/복구/세션 식별용이지 입력 큐가
+  아니다.
+- **`claude --resume` 별도 프로세스 주입 금지.** 같은 세션 transcript interleave
+  위험 + 현재 떠 있는 세션 wake 목적과 다름.
+- **Stop `decision:block` 은 좁게.** 모든 unread 에 block 을 걸면 stop loop 위험.
+  후보: `wants_reply: true` / high-priority message 에만 block, 나머지는 watcher
+  wake 로 처리.
+- **PreToolUse 는 noisy.** `matcher: "*"` 는 high-frequency tool loop 에 system
+  reminder 잡음을 만든다. 후보: 생략하거나 `mcp__pi-tools-bridge__*` 류로 좁힘.
+- **Global hook merge 주의.** agent-config 의 기존 Claude hooks (`peon.sh`,
+  `hook-handle-use.sh`, PreCompact 등) 와 exit code / matcher 충돌 없이 설치해야 함.
+
+Endpoint Envelope dispatch 후보:
+
+```text
+entwurf_send(target)
+  ├─ pi:<sessionId>           -> ~/.pi/entwurf-control/<sessionId>.sock
+  └─ claude-code:<sessionId>  -> mailbox write + asyncRewake watcher
+```
+
+`transport.kind` 가 dispatch key. `entwurf_self` 의 미래형은 current endpoint
+identity 를 반환하되, `replyable` / `wakeable` / `returnHint` 를 분리한다.
+
+타이밍: 지금 바로 구현하지 않는다. Step 3a 한 달 fast iteration 으로 push receive
+실수요를 먼저 측정한다. 실제로 "편지함이 없어서 막힌" 사례가 누적되면 prior art
+검토 → 최소 experimental surface 로 구현. 실수요가 약하면 design archive 로 보존.
+
 ### Step 3 — 실사용 + 반복 검증으로 박기 (현재 priority)
 
 원칙: **"한 두 번 검증" 으로 끝내지 않는다.** 1차 실사용에서 발견한 패턴을 즉시
