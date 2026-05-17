@@ -19,6 +19,7 @@ Phase 2 packaging-surface refactor in progress. No publish yet; the 0.7.0 cut ha
   - `keywords` expanded to include `pi`, `pi-extension`, `pi-coding-agent`, `ai-provider`, `acp-bridge` for gallery discoverability.
   - Explicit `files` allowlist added — runtime sources (`index.ts`, `acp-bridge.ts`, `event-mapper.ts`, `engraving.ts`, `pi-context-augment.ts`, `protocol.js`, `pi-extensions/`, `mcp/`), public verification surface (`run.sh`, `scripts/`, `prompts/`, curated `demo/` entries, `docs/`, `pi/{entwurf-targets.json, settings.reference.json, skill-plugin-example/}`), and operator docs (`AGENTS.md`, `BASELINE.md`, `VERIFY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`). The OpenClaw plugin sibling (`plugins/openclaw/`, published separately as `@junghan0611/openclaw-pi-shell-acp`) is excluded.
   - `typebox` added to `peerDependencies` (`"*"` range) — `pi-extensions/entwurf.ts` uses `Type.Object` / `Type.Union` / `Type.Literal` and pi packages.md requires this peer.
+- **peerDependencies range** confirmed at `"*"` for all peers (`@earendil-works/pi-{ai,coding-agent,tui}`, `typebox`) per the pi `packages.md` rule (L166: "list them in `peerDependencies` with a `"*"` range and do not bundle them"). Same pattern across every sample inspected (`pi-firecrawl`, `pi-exa-mcp`, `pi-claude-code-use`, `pi-synthetic-provider`, `pi-telegram`). No tightening to `^0.74.0` / `>=0.74.0 <0.75.0` — pi peer compat is tracked through the documented 0.74.x baseline, not through range pins.
 
 ## 0.6.0 — 2026-05-17
 
