@@ -119,18 +119,32 @@
 
 - ✅ **1단계+D — client-side close-before-response landed** (commit `d563743`, 2026-05-18 14:41). `sendRpcCommand` 가 close 이전 timeout 만 reject 신호로 가졌음. settled guard + `socket.on("close", ...)` 추가 — server 가 응답 전 connection 끊으면 즉시 `connection closed before response` 로 reject (5분 wait 안 기다림). 정상 resolve 후 자연 close 는 settled guard 가 no-op 처리.
 
-- ✅ **2단계 — reproduce smoke landed** (commit `048ba61`, 2026-05-18 14:45). `scripts/check-entwurf-send-stuck.ts` + `./run.sh check-entwurf-stuck` (또는 `pnpm check-entwurf-stuck`). **manual gate** — `pnpm check` chain 에 안 들어감. 실 receiver pi + 실 API 비용. operator 가 receiver 띄우고 sessionId 전달.
-  - 사용: `./run.sh check-entwurf-stuck --target <sessionId> [--trials N] [--phase A|B|both] [--variant back-to-back|ack-first|both]`
+- ✅ **2단계 — reproduce smoke landed** (commit `048ba61` manual + commit `0a43ddf` `--auto-receiver`, 2026-05-18 14:45–15:06). `scripts/check-entwurf-send-stuck.ts` + `./run.sh check-entwurf-stuck`. **manual gate** — `pnpm check` chain 에 안 들어감. 실 pi spawn + 실 API 비용.
+  - 사용 (auto, 권장): `./run.sh check-entwurf-stuck --auto-receiver [--auto-receiver-provider openai-codex] [--auto-receiver-model gpt-5.4] [--trials N] [--phase A|B|both] [--variant back-to-back|ack-first|both]`
+  - 사용 (manual, 옛 경로): `./run.sh check-entwurf-stuck --target <sessionId> ...`
+  - auto-receiver 가 tmux 로 `pi --no-extensions -e <repo>/pi-extensions/entwurf-control.ts --entwurf-control --provider ... --model ...` 띄움 — installed stale 회피, working tree 코드 검증. exit/SIGINT/SIGTERM 에서 tmux kill cleanup.
   - measure: connect / subscribeAck / sendAck / turnEnd / settled milestones + receiver jsonl 의 nonce persist 검증.
-  - 진단 골격:
-    - Phase A 가 timeout/closed/persist=❌ → send handler/socket 갭 (후보 1+2 의 잔여 또는 별도 root cause)
-    - Phase A 성공, Phase B 만 timeout → completion 갭 (후보 3+4)
-    - back-to-back vs ack-first 차이 → race 후보 #2 확인 → per-socket queue 정공법 진입
-  - **다음 한 걸음 — operator 손에서 1차 reproduce 실행**. `pi --entwurf-control --provider pi-shell-acp --model claude-opus-4-7` 띄우고 sessionId 받아 `--trials 5 --phase both --variant both` 1회. 결과 패턴 보고 N 확장 또는 fix 추가.
 
-- ☐ **3단계 — server-side instrumentation** (reproduce 가 RED 잡히면) — `entwurf-control.ts:1019` connection handler + `handleCommand` entry/exit/error 에 `console.error` 한 줄 임시 박아 reproduce 시 trace.
+- ✅ **2단계 — 1차 자동 reproduce 결과 (2026-05-18 15:01)**: **RED — 1단계+D fix 가 second root cause 못 잡음.**
+  - `--auto-receiver --phase B --variant back-to-back --trials 2`:
+    - trial 1: success, turnEnd 5031ms (정상 첫 turn)
+    - trial 2: **timeout 60s**, connect/subAck/sendAck 모두 0ms 도착 (RPC 정상 수신), turn_end event 만 영원히 안 옴
+  - 패턴 분석:
+    - send handler 갭 (후보 1+2) 은 1단계 fix 가 잡음 — Phase A 3/3 success.
+    - **두 번째 trial 의 stuck = completion 갭** (후보 #3 또는 #4). 같은 receiver 의 첫 turn 은 정상, 두 번째 turn 의 turn_end 만 fire 안 됨.
+    - 강력 의심: 후보 #3 **`isIdle` direct promote 검출 갭**. 첫 turn 후 receiver internal state 가 idle 처럼 보이지만 두 번째 follow_up send 가 turn 시작 trigger 못 함.
+    - 차순위: 후보 #4 ACP backend turn_end → pi-level turn_end 사상 갭 (하지만 이번 receiver 는 native openai-codex/gpt-5.4 라 ACP path 무관 — 후보 #4 가능성 낮음. native pi 자체의 turn lifecycle 갭일 수 있음).
+  - 또 한 가지: receiver 의 jsonl 파일이 첫 turn 후에도 생성 안 됨 (persist 검증 불가). `--no-extensions -e <ec>` 로 띄운 receiver 는 session jsonl 가 default extension/agent 책임이라 안 생성될 가능성. fresh-extension 강제 패턴의 trade-off — 진단 측면 한계, fix scope 와 직교.
 
-- ☐ **4단계 — 회귀 게이트 stable 화 + publish preflight 재진입** — `check-entwurf-stuck` 의 baseline 결과 (예: trials 100 × phase both = 200/200 success/persist) 가 정착되면 publish preflight 5 항목 재진입. 단 `check-entwurf-stuck` 는 manual gate 유지 (실 receiver + API 비용).
+- ☐ **3단계 — server-side instrumentation (NEXT 한 걸음)**: `entwurf-control.ts:1019` connection handler + `handleCommand` 의 `send` case + turn_end emitter (line 1341-1363) 에 `console.error("[stuck-instr] ...")` 임시 박아 trial 2 stuck 시점에 server 가 어디까지 진행하는지 trace. 후보:
+  - send handler 가 정상 처리되어 message 큐잉됨? → `isIdle` 판단은 어디서?
+  - direct promote 가 실제로 trigger 됐는가?
+  - 또는 큐잉만 되고 turn 시작 trigger 안 됨 → 그게 갭.
+  - turn_end event 가 fire 됐는데 subscription broadcast 가 fail? (가능성 낮음 — turnEndSubscriptions 가 in-process map 이라)
+  
+  instrumentation 박은 채 `--auto-receiver --phase B --trials 2` 한 번 더 돌리면 정확한 stuck point 잡힘. 그 후 진짜 fix 박을 위치 결정.
+
+- ☐ **4단계 — fix 적용 + 회귀 게이트 stable 화 + publish preflight 재진입** — 3단계 instrumentation 으로 정확한 stuck point 찾고 (`isIdle` 검출 / direct promote / turn_end fire 중 어느 것) 정공법 fix 박음. 그 후 `--auto-receiver --trials 20 --phase B --variant both` 같은 baseline 으로 `40/40 success` 같은 결과 정착 후 publish preflight 5 항목 재진입.
 
 > 이 항목은 closed 될 때까지 NEXT 의 맨 앞 자리 유지. Cross-repo follow-up
 > 의 (a)~(e) 와 별도 — 그 항목들은 운영 가능, 이건 send path 자체의 정합성.
