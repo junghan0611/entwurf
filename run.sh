@@ -40,7 +40,6 @@ Usage:
   ./run.sh check-mcp                  # local deterministic check of normalizeMcpServers() — no Claude/ACP subprocess
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
-  ./run.sh check-entwurf-delivery --target <sessionId> [...]  # MANUAL delivery-ack gate (send RPC + jsonl persist) for in-pi entwurf_send. Send-is-throw — no turn-completion wait. Needs live receiver — not in pnpm check
   ./run.sh check-backends             # local deterministic check of backend launch resolution + backend-specific _meta shape
   ./run.sh check-registration         # local deterministic check of per-runtime provider registration semantics
   ./run.sh check-dep-versions         # local deterministic check that version pins (package.json/run.sh/README.md) agree
@@ -1107,16 +1106,6 @@ check_shell_quote() {
   # payload classes that caused the 2026-05-18 remote entwurf incident
   # (backtick / $(...) / $VAR / korean tokens). No process spawn, no SSH.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-shell-quote.ts)
-}
-
-check_entwurf_delivery() {
-  # Manual delivery-ack gate for in-pi entwurf_send. NOT in pnpm check chain
-  # — requires a live receiver pi session. Verifies (1) send RPC ack and
-  # (2) jsonl persist on the receiver. Nothing else. Send-is-throw: turn
-  # completion / assistant output capture is intentionally out of scope.
-  #   ./run.sh check-entwurf-delivery [--target <sessionId> | --auto-receiver] [--trials N]
-  # See scripts/check-entwurf-delivery.ts header.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-delivery.ts "$@")
 }
 
 check_mcp() {
@@ -3494,10 +3483,6 @@ case "$cmd" in
     ;;
   check-shell-quote)
     check_shell_quote
-    ;;
-  check-entwurf-delivery)
-    shift
-    check_entwurf_delivery "$@"
     ;;
   check-backends)
     check_backends

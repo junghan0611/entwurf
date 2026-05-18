@@ -92,7 +92,6 @@
 		"smoke-all": "./run.sh smoke-all",
 		"check-mcp": "./run.sh check-mcp",
 		"check-shell-quote": "./run.sh check-shell-quote",
-		"check-entwurf-delivery": "./run.sh check-entwurf-delivery",
 		"check-models": "./run.sh check-models",
 		"check-backends": "./run.sh check-backends",
 		"check-registration": "./run.sh check-registration",
