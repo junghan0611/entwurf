@@ -17,6 +17,16 @@
 
 ## Immediate Priority — 2026-05-17 (한 달 sprint)
 
+> **Status (2026-05-18 EOD)** — remote SSH shell-quote incident **closed**
+> (commits `632306c` fix + `996a175` docs, GPT힣 PM review accepted).
+> `check-shell-quote` smoke gate (16 assertions) in `pnpm check` chain.
+> Remote entwurf follow-ups (a)~(e) parked in §Cross-repo follow-ups.
+>
+> **Next focus** — return to **Phase 2 publish preflight** (5 항목, line ~518
+> below: npm name 재확인 / `pi.image` gallery preview / 새 데모 GIF / 프로젝트
+> 이미지 (GLGMAN) / 다른 기기 실제 설치 테스트). Asymmetric Mitsein sprint Step
+> 3a/3b 는 publish 와 병행 가능 — 자연 도착 데이터 누적 기다림.
+>
 > **위치**: Phase 1 의 **0.6.0 개발 release** 안의 한 축. OpenClaw 검증
 > (✅ Phase 1.8/1.9) 과 함께 0.6.0 에 묶여 닫힘. 0.6.0 = 기능 추가 종료점 —
 > Phase 2/3 는 리팩토링/정리 위주.
@@ -517,7 +527,8 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 
 ### Publish preflight — pi.dev / npm 직전 보류 항목
 
-> 오늘 처리하지 않음. 0.7.0 cut / npm publish 직전 다시 열 것.
+> **← 다음 진입점 (2026-05-18 이후)**. 0.6.0 cut + remote SSH shell-quote
+> incident closed. 0.7.0 cut / npm publish 직전 열어 5 항목 진행.
 
 - **npm name 재확인**: `npm view pi-shell-acp` 는 2026-05-17 현재 `E404 Not Found` 로 비어 있음. publish 직전 다시 확인 — bare name `pi-shell-acp` 유지가 README 설치면이 가장 깔끔하나, 선점되면 `@junghan0611/pi-shell-acp` 로 즉시 전환해야 함.
 - **pi gallery preview**: `package.json#pi.image` 또는 `pi.video` 추가. `packages.md` 기준 `pi-package` gallery card 에 노출되는 첫인상. 기존 `docs/assets/pi-shell-acp-demo.gif` 는 임시로 가능하지만, 공개면에서는 새 이미지/데모로 교체 예정.
