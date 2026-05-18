@@ -1045,9 +1045,10 @@ async function createServer(pi: ExtensionAPI, state: SocketState, socketPath: st
 				// because per-command ordering is enforced by the client (subscribe
 				// before send) and the server-side handlers themselves are
 				// independent. If a future change requires strict per-connection
-				// serialization, switch to a per-socket command queue rather than
-				// awaiting in this data handler (await here would block other
-				// connections' data events until the active handler resolves).
+				// serialization, a per-socket command queue is the cleaner move
+				// than awaiting in this data handler — awaiting here would
+				// serialize subsequent commands on the same socket and tangle
+				// teardown ordering during socket close.
 				const commandName = parsed.command?.type ?? "unknown";
 				void handleCommand(pi, state, parsed.command!, socket).catch((error) => {
 					const message = error instanceof Error ? error.message : String(error);
@@ -1101,10 +1102,34 @@ async function sendRpcCommand(
 		// already running when we subscribed and is NOT the answer to our send.
 		let baselineTurnIndex: number | undefined;
 		let baselineResolved = false;
+		// settled guard: a single Promise can only be resolved or rejected
+		// once. close/error/timeout/data can all race to terminate the RPC,
+		// so every terminal path goes through doResolve/doReject which
+		// short-circuits if we have already settled. Without this, the
+		// natural close event that follows a clean resolve would try to
+		// reject a settled promise (silent under V8) or — worse — duplicate
+		// listeners would attempt to write on a destroyed socket.
+		let settled = false;
 
-		const cleanup = () => {
+		const doResolve = (value: {
+			response: RpcResponse;
+			event?: { message?: ExtractedMessage; turnIndex?: number };
+		}) => {
+			if (settled) return;
+			settled = true;
 			clearTimeout(timeoutHandle);
 			socket.removeAllListeners();
+			socket.end();
+			resolve(value);
+		};
+
+		const doReject = (error: Error) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timeoutHandle);
+			socket.removeAllListeners();
+			socket.destroy();
+			reject(error);
 		};
 
 		socket.on("connect", () => {
@@ -1150,9 +1175,7 @@ async function sendRpcCommand(
 							// the `response: RpcResponse | null` declaration). Only the
 							// event-waiting branch needs to stash the response for later.
 							if (!waitForEvent) {
-								cleanup();
-								socket.end();
-								resolve({ response: msg });
+								doResolve({ response: msg });
 								return;
 							}
 							response = msg;
@@ -1176,13 +1199,11 @@ async function sendRpcCommand(
 							continue;
 						}
 
-						cleanup();
-						socket.end();
 						if (!response) {
-							reject(new Error("Received event before response"));
+							doReject(new Error("Received event before response"));
 							return;
 						}
-						resolve({ response, event: msg.data || {} });
+						doResolve({ response, event: msg.data || {} });
 						return;
 					}
 				} catch {
@@ -1191,9 +1212,19 @@ async function sendRpcCommand(
 			}
 		});
 
+		// Server closed the connection before any response arrived. Without
+		// this branch the caller's only failure signal would be the
+		// configured wait timeout (5s default, 5 minutes for
+		// waitForEvent=turn_end), which is exactly the failure mode of the
+		// 2026-05-18 receiver-side stuck incident. The settled guard makes
+		// this a no-op when we already resolved cleanly — every successful
+		// RPC ends with socket.end() and triggers a natural close.
+		socket.on("close", () => {
+			doReject(new Error("connection closed before response"));
+		});
+
 		socket.on("error", (error) => {
-			cleanup();
-			reject(error);
+			doReject(error);
 		});
 	});
 }
