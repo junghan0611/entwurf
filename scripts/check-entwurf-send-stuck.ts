@@ -389,8 +389,22 @@ async function spawnAutoReceiver(args: Args): Promise<SpawnedReceiver> {
 
 	const baseline = listExistingSockets();
 	const tmuxSession = `stuck-smoke-${crypto.randomUUID().slice(0, 8)}`;
+	// Spawn the receiver from os.tmpdir() with --no-context-files /
+	// --no-skills / --no-extensions so the first prompt does not pull in
+	// the host repo's AGENTS.md, skills, or other extensions as context.
+	// Without this the receiver burned ~$0.04 per Phase-B trial reading
+	// pi-shell-acp's AGENTS — fine for one-off runs, ruinous for the
+	// 100-trial baselines we want from this gate. -e still loads our
+	// working-tree entwurf-control.ts so the actual code under test is
+	// fresh, not the globally-installed extension.
+	const tmpReceiverCwd = fs.mkdtempSync(path.join(os.tmpdir(), "stuck-smoke-receiver-"));
 	const piCmd = [
+		"cd",
+		tmpReceiverCwd,
+		"&&",
 		"pi",
+		"--no-context-files",
+		"--no-skills",
 		"--no-extensions",
 		"-e",
 		ENTWURF_CONTROL_TS,
@@ -403,6 +417,7 @@ async function spawnAutoReceiver(args: Args): Promise<SpawnedReceiver> {
 
 	stdout.write(
 		`[stuck-smoke] auto-receiver: spawning in tmux session ${tmuxSession}\n` +
+			`              cwd: ${tmpReceiverCwd}\n` +
 			`              cmd: ${piCmd}\n` +
 			`              extension: ${ENTWURF_CONTROL_TS}\n`,
 	);
@@ -515,7 +530,7 @@ interface PhaseSummary {
 
 async function runTrial(
 	socketPath: string,
-	jsonlPath: string | null,
+	sessionId: string,
 	phase: "A" | "B",
 	variant: "back-to-back" | "ack-first",
 	idx: number,
@@ -534,10 +549,14 @@ async function runTrial(
 				};
 	const trial = await rpcSend(socketPath, message, nonce, opts);
 
-	// Persist check — best-effort. Wait briefly for the receiver to flush
-	// the jsonl entry before grepping.
+	// Persist check — best-effort. Re-resolve the jsonl path every trial:
+	// auto-receiver does not create the session jsonl until the first
+	// message arrives, so a path captured before run start is permanently
+	// null and persist verification becomes a false RED. Brief sleep gives
+	// the receiver time to flush before grep.
+	await new Promise((r) => setTimeout(r, 200));
+	const jsonlPath = findReceiverJsonl(sessionId);
 	if (jsonlPath && fs.existsSync(jsonlPath)) {
-		await new Promise((r) => setTimeout(r, 200));
 		trial.persisted = jsonlContainsNonce(jsonlPath, nonce);
 		trial.persistCheckedAt = Date.now();
 	}
@@ -566,7 +585,7 @@ function renderTrial(t: TrialResult, idx: number, total: number): string {
 
 async function runPhase(
 	socketPath: string,
-	jsonlPath: string | null,
+	sessionId: string,
 	phase: "A" | "B",
 	variant: "back-to-back" | "ack-first",
 	args: Args,
@@ -575,7 +594,7 @@ async function runPhase(
 	stdout.write(`\n[stuck-smoke] ${label} × ${args.trials}\n`);
 	const trials: TrialResult[] = [];
 	for (let i = 0; i < args.trials; i += 1) {
-		const trial = await runTrial(socketPath, jsonlPath, phase, variant, i, args.trials, args);
+		const trial = await runTrial(socketPath, sessionId, phase, variant, i, args.trials, args);
 		stdout.write(`${renderTrial(trial, i, args.trials)}\n`);
 		trials.push(trial);
 	}
@@ -661,13 +680,14 @@ async function main(): Promise<void> {
 				`         follow_up + idle direct-promote path the incident reproduces from.\n`,
 		);
 	}
-	const jsonlPath = findReceiverJsonl(target);
+	// jsonl path is re-resolved every trial inside runTrial — auto-receiver
+	// does not create the jsonl until the first message arrives, so a path
+	// captured here would be permanently null for the first run.
 	stdout.write(
 		`[stuck-smoke] target sessionId=${target}\n` +
 			`              cwd=${info.cwd ?? "(unknown)"}\n` +
 			`              model=${info.model?.provider ?? "?"}/${info.model?.id ?? "?"}\n` +
 			`              idle=${info.idle === true ? "yes" : info.idle === false ? "NO" : "?"}\n` +
-			`              jsonl=${jsonlPath ?? "(not found — persist check disabled)"}\n` +
 			`              trials=${args.trials} phase=${args.phase} variant=${args.variant}\n` +
 			`              timeouts: msg_proc=${args.messageProcessedTimeoutMs}ms turn_end=${args.turnEndTimeoutMs}ms\n`,
 	);
@@ -675,14 +695,14 @@ async function main(): Promise<void> {
 	const summaries: PhaseSummary[] = [];
 
 	if (args.phase === "A" || args.phase === "both") {
-		summaries.push(await runPhase(socketPath, jsonlPath, "A", "back-to-back", args));
+		summaries.push(await runPhase(socketPath, target, "A", "back-to-back", args));
 	}
 
 	if (args.phase === "B" || args.phase === "both") {
 		const variants: ("back-to-back" | "ack-first")[] =
 			args.variant === "both" ? ["back-to-back", "ack-first"] : [args.variant];
 		for (const v of variants) {
-			summaries.push(await runPhase(socketPath, jsonlPath, "B", v, args));
+			summaries.push(await runPhase(socketPath, target, "B", v, args));
 		}
 	}
 
