@@ -572,18 +572,7 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 - **Oracle Docker image 3-layer install (Oracle config repo 측)**: openclaw-gateway 컨테이너에 `pi`, `pi-shell-acp`, `codex-acp`, `gemini` 추가. `git` system pkg + pnpm global. 자세한 layout 은 plugin AGENTS.md §Install layers. Phase 1.8 의 사전조건 — Oracle 측이 진행, 우리 측 plugin code 변경 없음
 - **Codex resolve fallback (우리 측 — Phase 2 stabilization)**: 현재 root `AGENTS.md` Runtime Dependencies 는 `codex-acp` PATH-only. Claude 는 `package dep first, PATH fallback`. 비대칭 — invariant #7 (three-backend equality) 의 미세 위반. Codex 도 `require.resolve("@zed-industries/codex-acp/package.json")` 우선, PATH fallback 패턴으로 정렬. Docker 운영 단순화 부수 효과. Phase 2 의 #15 hardening 안에 흡수 (no-feature refactor 정신과 정합)
 - **agent-config server-mode pi-shell-acp ref 복귀 (Phase 3 release 후)**: 현재 `agent-config 5f17d70` 가 server-mode 에서 main 추적 정책 도입 — Oracle 호스트가 우리 push 를 자동 follow. **0.6.0 prerelease / Oracle 검증 동안 임시**. Phase 3 의 pi.dev 또는 ClawHub 등록 후 release tag (`git:...pi-shell-acp@v0.6.0` 등) 로 다시 ref pinning 으로 복귀. 잊으면 server 가 영원히 main 추적 — release 후엔 안 좋은 정책
-
----
-
-## 폐기 항목 (과거 framing 잔재)
-
-- ~~OpenClaw upstream PR-1/2/3/aux~~ — 외부 플러그인이라 upstream 무관
-- ~~`extensions/acpx/AGENTS.md` cross-ref~~ — upstream 안 건드림
-- ~~labeler.yml / docs/plugins / CHANGELOG entry on OpenClaw side~~ — 전부 불필요
-- ~~별도 repo (openclaw-pi-shell-acp)~~ — monorepo lite 로 결정. 동기화 비용 회피
-- ~~"OpenClaw 담당자 측으로 ownership 전수"~~ — monorepo lite 라 ownership 이 pi-shell-acp 내부에 머무름. plugin code owner = pi-shell-acp maintainer (junghan0611). README narrative 가드레일만 OpenClaw user 시야 우선
-- ~~`@mariozechner/pi-ai@0.73.0` pin~~ — 5.12 baseline 으로 `@earendil-works/*@0.74.0`
-- ~~Phase 1 = pi.dev hardening 먼저~~ — 2026-05-15 GLG 재정렬. **검증된 것을 패키징한다**. Phase 1 = OpenClaw 프리릴리즈 + Oracle 검증 → Phase 2 = pi.dev 패키징 준비
+- **remote entwurf follow-up cleanup**: 2026-05-18 remote shell-quote 긴급 패치 후 남은 정리. (a) `shellQuote` 3중 중복을 `pi-extensions/lib/shell-quote.ts` 등으로 통합하고 `acp-bridge.ts` 기존 quote 헬퍼와 정렬 — `check-shell-quote` 게이트는 이미 두 site source-parity 를 강제. (b) async remote resume 에도 `PARENT_SESSION_ID` carrier 전달 여부 결정. (c) #11 remote resume saved-header cwd 정렬 smoke/fix. (d) **remote home parity 제거** — 이번 패치는 `os.homedir()` 로 로컬 home 을 absolute 화해서 SSH 너머 전달 (단일 quote 환경에서 `$HOME` literal 이 expand 안 되므로 불가피한 임시 해결). NixOS 균질 환경 (`/home/junghan` 모든 호스트 동일) 에선 깨지지 않으나 mixed-OS / 다계정 환경 확장 시 깨짐 — 진짜 해결은 remote `$HOME` query 또는 absolute-only 강제. (e) **remote 자동 smoke 게이트** — 현재 native/ACP × sync/async × spawn/resume remote 경로의 자동 회귀 게이트 없음. `check-shell-quote` 가 quote 함수 자체는 잡지만 실제 SSH transport 회귀는 oracle 손검증 의존. `./run.sh check-remote-entwurf <host>` 식 manual gate 추가 검토. 이번 패치 scope 는 prompt shell injection + completion 판정 보정 + 원격 extension path home-parity 임시 처리까지.
 
 ---
 
