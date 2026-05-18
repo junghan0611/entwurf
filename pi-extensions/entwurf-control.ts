@@ -1036,7 +1036,28 @@ async function createServer(pi: ExtensionAPI, state: SocketState, socketPath: st
 					continue;
 				}
 
-				handleCommand(pi, state, parsed.command!, socket);
+				// handleCommand is async; without explicit catch the rejection floats
+				// silently and the client only sees a 5-minute timeout (no response,
+				// no jsonl persist trace on the receiver). Surface any handler
+				// failure as an explicit error response so callers can distinguish
+				// "handler exploded" from "wait timed out". Parallel execution
+				// across the same connection is preserved — we do not await —
+				// because per-command ordering is enforced by the client (subscribe
+				// before send) and the server-side handlers themselves are
+				// independent. If a future change requires strict per-connection
+				// serialization, switch to a per-socket command queue rather than
+				// awaiting in this data handler (await here would block other
+				// connections' data events until the active handler resolves).
+				const commandName = parsed.command?.type ?? "unknown";
+				void handleCommand(pi, state, parsed.command!, socket).catch((error) => {
+					const message = error instanceof Error ? error.message : String(error);
+					writeResponse(socket, {
+						type: "response",
+						command: commandName,
+						success: false,
+						error: `handler failed: ${message}`,
+					});
+				});
 			}
 		});
 	});
