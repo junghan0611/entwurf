@@ -6,9 +6,10 @@
  * one session. Local and SSH-remote spawns follow the same pattern.
  *
  * Modes:
- *   sync  — block until completion, return the result. (default)
  *   async — spawn and return immediately; notify the caller session on
- *           completion. The entwurf session persists and is resumable.
+ *           completion. The entwurf session persists and is resumable. (default)
+ *   sync  — block until completion, return the result. Opt in only for
+ *           short status checks.
  *
  * The sync path lives in `./lib/entwurf-core.js` so the same core can be
  * re-exposed by `mcp/pi-tools-bridge` as an MCP tool — single logic, two
