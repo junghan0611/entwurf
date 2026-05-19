@@ -85,7 +85,7 @@ pi install ./
 
 > **First time on a clean Ubuntu / Debian / macOS host?** See the [clean-host walk-through](./docs/setup-clean-host.md) — Stages 0–4b verified end-to-end: `nvm` + `pnpm` + `pi` install, `pi install git:...`, `run.sh install .`, missing-auth boundary surface, and authenticated runtime smoke for Claude / Codex / Gemini.
 
-> The OpenClaw plugin sibling lives at [`plugins/openclaw`](./plugins/openclaw) and ships as its own npm package (`@junghanacs/openclaw-pi-shell-acp`). It is not part of the root `pi-shell-acp` install above — see [Host adapters](#host-adapters).
+> The OpenClaw plugin sibling lives at [`plugins/openclaw`](https://github.com/junghan0611/pi-shell-acp/tree/main/plugins/openclaw) and ships as its own npm package (`@junghanacs/openclaw-pi-shell-acp`). It is not part of the root `pi-shell-acp` install above — see [Host adapters](#host-adapters).
 
 > **Extension set — do not filter.** `pi-shell-acp` ships four `pi.extensions` entries as a single set: the provider extension (`index.ts`) plus three `pi-extensions/*.ts` modules (entwurf, entwurf-control, model-lock). Filtering some out via pi's object-form package configuration can leave the model lock or entwurf surface in a broken state. Disable the entire package or none of it unless you know precisely which boundary you are turning off.
 
@@ -123,7 +123,7 @@ Backend is inferred from the model — Anthropic → `claude`, OpenAI → `codex
 
 This repo also carries `plugins/*` — sibling packages that adapt the same bridge to non-pi hosts. Currently:
 
-- [`plugins/openclaw`](./plugins/openclaw) — OpenClaw plugin, prerelease (manual install only; not published to npm or ClawHub yet).
+- [`plugins/openclaw`](https://github.com/junghan0611/pi-shell-acp/tree/main/plugins/openclaw) — OpenClaw plugin, prerelease (manual install only; not published to npm or ClawHub yet).
 
 Each adapter has its own `README.md`. They do not change the pi-facing surface above.
 
@@ -349,7 +349,7 @@ Use both. Either one alone leaves a blind spot the other closes.
 ## References
 
 - File map + code-level invariants: [AGENTS.md](./AGENTS.md)
-- Current priority + open decisions: [NEXT.md](./NEXT.md)
+- Current priority + open decisions: [NEXT.md](https://github.com/junghan0611/pi-shell-acp/blob/main/NEXT.md)
 - Release record: [CHANGELOG.md](./CHANGELOG.md)
 - [xenodium/agent-shell](https://github.com/xenodium/agent-shell) — Emacs ACP client, `resume > load > new` idea origin
 - [agentclientprotocol/claude-agent-acp](https://github.com/agentclientprotocol/claude-agent-acp) — canonical ACP server for Claude Code
