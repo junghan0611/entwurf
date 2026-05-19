@@ -586,13 +586,23 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 
 가장 가까운 패턴 = **`@benvargas/pi-synthetic-provider`** (provider extension, scope 패키지, `files: ["extensions/", "README.md", "LICENSE"]`). 향후 multi-resource (skills + themes + commands) 가 되면 **mitsupi** 패턴 참고.
 
-### Publish preflight — pi.dev / npm 직전 보류 항목
+### Publish preflight — pi.dev / npm publish 라운드
 
-> **← 다음 진입점 (2026-05-19 이후)**. 0.7.0 scoped npm package cut 완료
-> (어제 `@junghan0611` 시점에 일단 박혔다가, 2026-05-19 `@junghanacs` 로
-> force-push rewrite + host info sanitize 동반 정정 — old hash 들은
-> `backup/pre-sanitize-f4eeed1` local 브랜치에 안전망 보존).
-> 남은 것은 실제 `npm publish` 와 publish 후 npm install path 재현.
+> **Status (2026-05-19 EOD)** — npm publish 완료. `@junghanacs/pi-shell-acp@0.7.1`
+> 가 npm registry 에 박힘 (web UI: https://www.npmjs.com/package/@junghanacs/pi-shell-acp,
+> `npm dist-tags`: `latest: 0.7.1`). 다음 세션 진입점 = registry propagation
+> 확인 + clean-host 재현 + pi.dev gallery indexing 확인.
+>
+> **0.7.0 → 0.7.1 release 흐름 요약**:
+> - 0.7.0 (`@junghan0611` initial cut) → host info sanitize + scope rename
+>   `@junghan0611` → `@junghanacs` force-push rewrite (old hash `backup/pre-sanitize-f4eeed1`
+>   local 브랜치 안전망 보존) → GitHub release v0.7.0 tag pushed (npm 미발행)
+> - publish dry-run 에서 `prepublishOnly` 의 nested `check-pack-install` 가
+>   `npm_config_dry_run=true` 환경 변수 inherit 으로 fail → 0.7.1 로 bump,
+>   `run.sh` 의 nested pack 을 `npm pack --dry-run=false` 로 override
+> - 0.7.1 npm publish 진입 ✅ — `npm publish --access public` 통과
+>
+> **다음 세션 시작점** — `## 남은 publish 후 검증` 섹션 (아래) 의 step 1 부터.
 
 - **npm name / scope 확정 (2026-05-19 final)**: **`@junghanacs/pi-shell-acp`** — bare name 안 함. 이유: (1) 출처 일관성 (`@junghanacs/openclaw-pi-shell-acp` 와 같은 패밀리), (2) npm `@junghanacs` user-scope 라 책임 명확 + 자동 권한, (3) scope 는 unique 라 선점 우려 무관. 어제 (2026-05-18) `@junghan0611` 로 일단 박혔다가, npm username 이 실제 `junghanacs` (브랜드 네임) 임이 드러나 2026-05-19 force-push rewrite 와 함께 rename (host info sanitize 와 같은 라운드). `package.json` name + version `0.7.0`, `run.sh` `PACKAGE_NAME`, README npm install 면, `check-pack-install` scoped tarball/import/path 모두 갱신 완료. 검증: `pnpm check` + `pnpm test:pack` green (`junghanacs-pi-shell-acp-0.7.0.tgz`, 42 files, scoped pi loader smoke pass).
 - **pi gallery preview**: `package.json#pi.image` 또는 `pi.video` 추가. `packages.md` 기준 `pi-package` gallery card 에 노출되는 첫인상. 기존 `docs/assets/pi-shell-acp-demo.gif` 는 임시로 가능하지만, 공개면에서는 새 이미지/데모로 교체 예정.
@@ -611,16 +621,64 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
     - **Stage 4b — authenticated runtime smoke verified ✅** (`smoke-claude` `claude-sonnet-4-6` / `smoke-codex` `gpt-5.4` / `smoke-gemini` `gemini-3.1-pro-preview` / `smoke-all` 4종 모두 exit 0 — bootstrap → ACP session → bridge response → bridge prompt → clean shutdown 풀 round-trip. **npm publish 진입선 통과**).
     - **Stage 5 — entwurf two-session smoke deferred** — optional, publish 비차단. 별도 라운드.
   - **산출물**: `docs/setup-clean-host.md` (clean-host walk-through, Stages 0–4b 모두 verified inline 박힘) — README install section 은 1-table 표면 그대로 유지. Stage 5 라운드 시 같은 문서에 verified block 추가.
-- **npm publish 라운드 (← 다음 진입점)**: `0.7.0` scoped artifact 를 실제 registry 에 올리기 전 GLG 손검.
-  1. `git status --short` clean + `git log -1` = 최신 scope rename + sanitize commit 확인.
-  2. `npm whoami` = `junghanacs` 확인 (user-scope 자동 권한). ✅ (2026-05-19 로그인됨)
-  3. `npm view @junghanacs/pi-shell-acp` 가 미발행이면 OK. ✅ (2026-05-19 E404 확인됨)
-  4. `pnpm check` + `pnpm test:pack` 재실행.
-  5. CHANGELOG `0.7.0` 의 **Release invariant checklist** 7박스 GLG 손검. 자동 체크하지 말 것.
-  6. `pnpm publish --access public`.
-  7. publish 후 `npm view @junghanacs/pi-shell-acp@0.7.0` 확인.
-- **npm install path 재현 (publish 후)**: 다른 clean host 또는 cleanhost teardown/reinstall 로 `pi install npm:@junghanacs/pi-shell-acp@0.7.0` → `run.sh install .` → `pi --list-models pi-shell-acp` → 인증된 backend smoke 최소 1개(가능하면 `smoke-all`) 확인. 결과는 `docs/setup-clean-host.md` / CHANGELOG patch 또는 follow-up note 로 반영.
-- **agent-config 소비자 리뷰 반영**: agent-config 담당자 리뷰 결과는 긍정. `npm name` 결정은 완료. 남은 공개면 작은 결정은 `pi.image` / 데모 GIF 축.
+- **npm publish 라운드** ✅ **완료 (2026-05-19 EOD, v0.7.1)**:
+  1. ✅ `git status --short` clean + `git log -1` = `db45782` (publish dry-run fix)
+  2. ✅ `npm whoami` = `junghanacs` (user-scope 자동 권한)
+  3. ✅ `npm view @junghanacs/pi-shell-acp` E404 확인됨 (publish 전)
+  4. ✅ `pnpm check` + `pnpm test:pack` green
+  5. ✅ CHANGELOG `0.7.0` Release invariant checklist 7박스 GLG 손검 — GPT힣 + sibling GPT-5.4 cross-review 통과 (4 라운드)
+  6. ✅ `pnpm publish --access public` — v0.7.1 progress (0.7.0 prepublishOnly dry-run race → bump)
+  7. ✅ web UI 확인 (`npmjs.com/package/@junghanacs/pi-shell-acp`), `npm dist-tags ls` = `latest: 0.7.1`. `npm view` CLI 는 propagation lag — 다음 세션 재확인.
+
+### 남은 publish 후 검증 (← 다음 세션 진입점)
+
+> 사용자 plan (2026-05-19 EOD): `10~30분 기다렸다가 npm view → pi install 검증 → NEXT.md 정리`. 이 섹션은 그 정리 anchor.
+
+1. **npm registry propagation 확인**:
+   ```bash
+   npm view @junghanacs/pi-shell-acp@0.7.1 version
+   npm view @junghanacs/pi-shell-acp dist-tags
+   curl -sI https://registry.npmjs.org/@junghanacs/pi-shell-acp
+   ```
+   `dist-tags: latest: 0.7.1` 이미 확인됨; `npm view <pkg>@<ver>` 가 정상 응답할 때 propagation 완료.
+
+2. **실제 `pi install` 검증** — clean host 또는 fresh tmp project:
+   ```bash
+   # 다른 clean host 또는 cleanhost teardown/reinstall
+   pi install npm:@junghanacs/pi-shell-acp@0.7.1
+   # 또는 fresh project (project scope):
+   mkdir -p /tmp/pi-shell-acp-publish-smoke && cd /tmp/pi-shell-acp-publish-smoke
+   pi install -l npm:@junghanacs/pi-shell-acp@0.7.1
+   ```
+
+3. **설치 후 loader 검증**:
+   ```bash
+   pi --list-models pi-shell-acp   # claude-sonnet-4-6 anchor 포함되어야
+   "$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" install .   # global path
+   ```
+
+4. **Google Chat publish 알림** (회사 채널) — v0.7.0 알림은 이미 갔으니 이번에는 "npm first publish v0.7.1" 짧게.
+
+5. **pi.dev gallery indexing 확인**:
+   - https://pi.dev/packages?q=pi-shell-acp
+   - 안 뜨면 몇 시간 대기. `pi-package` keyword 기반 자동 indexing 이 SSOT (packages.md L132).
+
+6. **결과 반영**: `docs/setup-clean-host.md` 의 Stage 2 를 git → npm path 로 retake 하거나, CHANGELOG follow-up note, 또는 0.7.1 release notes 갱신.
+
+### Publish 후 추가 후속 (별도 라운드)
+
+- **agenda stamp 정정 + 새 commits stamp**: 어제 force push 로 `~/org/diary.org` 의 4개 stamp commit URL 이 invalid. 오늘 라운드 8 commits (`097bf98` ~ `db45782`) 의 stamp 도 일부 missing. publish 후 한 번에 정리 라운드.
+- **backup branch 삭제 시점**: publish 후 며칠 안정 확인 → `git branch -D backup/pre-sanitize-f4eeed1` (force-push 의 안전망 회수).
+- **agent-config 소비자 ref 갱신**: agent-config 가 현재 `git:` 로 pi-shell-acp 추적. publish 후 release tag 또는 npm path 로 정합 ref 복귀 결정 (또는 main 추적 유지).
+- **새 데모 GIF / pi.video MP4** (선택): 현재 `pi.image` GIF (baseline+entwurf) 가 gallery preview 로 충분. MP4 video 추가하면 호버 autoplay UX 가능 — packages.md L146 ("If both are set, video takes precedence").
+- **GLGMAN 대표 이미지** (선택): pi.dev 카드용. 입력 자료 + 보강 요구는 위 §프로젝트 이미지 항목 참고.
+- **README 다이어트** (post-publish 문서 라운드): pi.dev gallery card 에 표시되는 정보 vs README 본문의 중복 제거. publish 후 어떻게 표시되는지 보고 결정.
+
+### 닫힌 사실 (2026-05-19 EOD)
+
+- **agent-config 소비자 리뷰 반영**: 긍정. `npm name` 결정 완료 (`@junghanacs/pi-shell-acp`).
+- **scope rename + sanitize 라운드**: force-push history rewrite 로 깨끗하게 박힘 (`backup/pre-sanitize-f4eeed1` local).
+- **publish-prep 4 라운드 검토**: 7박스 invariant + README/tarball 정합 4 라운드 + entwurf default flip (R6/R7) + dry-run race fix (R8). GPT힣 + sibling GPT-5.4 cross-review.
 
 ---
 
