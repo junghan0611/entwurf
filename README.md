@@ -39,19 +39,19 @@ After installing the package, run `run.sh install .` in your target project. The
 ### From npm — global (Phase 3 target)
 
 ```bash
-pi install npm:pi-shell-acp     # not on npm yet — tracked in #13
+pi install npm:@junghanacs/pi-shell-acp     # not on npm yet — 0.7.0 publish pending
 cd /path/to/your-project
-"$(npm root -g)/pi-shell-acp/run.sh" install .
-"$(npm root -g)/pi-shell-acp/run.sh" smoke-all .
+"$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" install .
+"$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" smoke-all .
 ```
 
 ### From npm — project (`-l` flag, Phase 3 target)
 
 ```bash
 cd /path/to/your-project
-pi install -l npm:pi-shell-acp
-./.pi/npm/node_modules/pi-shell-acp/run.sh install .
-./.pi/npm/node_modules/pi-shell-acp/run.sh smoke-all .
+pi install -l npm:@junghanacs/pi-shell-acp
+./.pi/npm/node_modules/@junghanacs/pi-shell-acp/run.sh install .
+./.pi/npm/node_modules/@junghanacs/pi-shell-acp/run.sh smoke-all .
 ```
 
 ### From source via pi — global (current recommended)
@@ -83,7 +83,7 @@ pi install ./
 ./run.sh smoke-all /path/to/your-project
 ```
 
-> The OpenClaw plugin sibling lives at [`plugins/openclaw`](./plugins/openclaw) and ships as its own npm package (`@junghan0611/openclaw-pi-shell-acp`). It is not part of the root `pi-shell-acp` install above — see [Host adapters](#host-adapters).
+> The OpenClaw plugin sibling lives at [`plugins/openclaw`](./plugins/openclaw) and ships as its own npm package (`@junghanacs/openclaw-pi-shell-acp`). It is not part of the root `pi-shell-acp` install above — see [Host adapters](#host-adapters).
 
 > **Extension set — do not filter.** `pi-shell-acp` ships four `pi.extensions` entries as a single set: the provider extension (`index.ts`) plus three `pi-extensions/*.ts` modules (entwurf, entwurf-control, model-lock). Filtering some out via pi's object-form package configuration can leave the model lock or entwurf surface in a broken state. Disable the entire package or none of it unless you know precisely which boundary you are turning off.
 

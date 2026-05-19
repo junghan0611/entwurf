@@ -13,7 +13,7 @@ This file applies to work under `plugins/openclaw/` in the
 ## Canonical Owner
 
 - **Authoritative repo**: https://github.com/junghan0611/pi-shell-acp
-- **Plugin npm name**: `@junghan0611/openclaw-pi-shell-acp` (publish path
+- **Plugin npm name**: `@junghanacs/openclaw-pi-shell-acp` (publish path
   reserved; prerelease phase does NOT publish to npm).
 - **Position**: host adapter — surfaces `pi-shell-acp` as a first-class
   OpenClaw provider. The bridge logic, identity envelope protocol, ACP

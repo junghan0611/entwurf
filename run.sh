@@ -16,7 +16,17 @@ set -euo pipefail
 REPO_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_DIR_DEFAULT=$(pwd)
 TARGET_PROJECT_DIR=${2:-$PROJECT_DIR_DEFAULT}
-PACKAGE_NAME="pi-shell-acp"
+# npm publish identity. Scoped 2026-05-18 — bare `pi-shell-acp` was not on npm
+# and we adopted the same `@junghanacs` scope as the OpenClaw plugin sibling
+# (`@junghanacs/openclaw-pi-shell-acp`) for source-of-origin parity. This
+# variable documents intent; check-pack-install hardcodes the tarball name
+# and install path against the same scope for traceability.
+PACKAGE_NAME="@junghanacs/pi-shell-acp"
+# Runtime provider id — DO NOT change. Embedded in model strings
+# (`pi-shell-acp/claude-sonnet-4-6`), settings keys (`piShellAcpProvider`),
+# log prefixes (`[pi-shell-acp:bootstrap]`), and the `--provider pi-shell-acp`
+# CLI surface. Renaming this would break every consumer transcript and every
+# saved session anchor.
 PROVIDER_ID="pi-shell-acp"
 
 usage() {
@@ -2651,7 +2661,7 @@ check_pack_install() {
   #   2. actual `npm pack` — produces the real tarball
   #   3. `tar -tf` — cross-checks contents against dry-run invariants
   #   4. fresh-temp project local install smoke — pnpm add the tarball
-  #      with required peers, then import('pi-shell-acp/package.json')
+  #      with required peers, then import('@junghanacs/pi-shell-acp/package.json')
   #      to confirm the installed shape resolves end-to-end.
   #
   # Excluded from the default `pnpm check` because the install smoke
@@ -2662,7 +2672,11 @@ check_pack_install() {
 
   local version tgz_name tgz_path
   version=$(node -p "require('${REPO_DIR}/package.json').version")
-  tgz_name="pi-shell-acp-${version}.tgz"
+  # Scoped npm packages produce a tarball named "<scope>-<name>-<version>.tgz"
+  # where the `@` is stripped and `/` becomes `-`. For `@junghanacs/pi-shell-acp`
+  # that lands as `junghanacs-pi-shell-acp-<version>.tgz`. Hardcoded against
+  # the scope above so a name change cannot silently slide past this gate.
+  tgz_name="junghanacs-pi-shell-acp-${version}.tgz"
   tgz_path="${REPO_DIR}/${tgz_name}"
   rm -f "$tgz_path"
 
@@ -2755,7 +2769,7 @@ check_pack_install() {
   # consumer pi runtime would fail to register any extension.
   local probe
   probe=$(cd "$tmp" && node --input-type=module -e "
-    const m = await import('pi-shell-acp/package.json', { with: { type: 'json' } });
+    const m = await import('@junghanacs/pi-shell-acp/package.json', { with: { type: 'json' } });
     const pkg = m.default;
     const exts = Array.isArray(pkg.pi?.extensions) ? pkg.pi.extensions.length : 0;
     if (exts === 0) { console.error('pi.extensions missing or empty'); process.exit(1); }
@@ -2780,7 +2794,7 @@ check_pack_install() {
   fi
 
   local loader_out
-  loader_out=$(cd "$tmp" && pi -e "$tmp/node_modules/pi-shell-acp" --list-models pi-shell-acp 2>&1) || {
+  loader_out=$(cd "$tmp" && pi -e "$tmp/node_modules/@junghanacs/pi-shell-acp" --list-models pi-shell-acp 2>&1) || {
     fail "[check-pack-install] pi loader smoke failed (exit non-zero):"
     echo "$loader_out" | tail -10 | sed 's/^/    /' >&2
     return 1
