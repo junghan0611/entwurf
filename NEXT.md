@@ -900,15 +900,98 @@ turn 부터는 model 이미 switch 끝났고 KV cache warm → 안정.
      - turn 결과: `timeoutFired=0`, `code!=143`, final/visible reply 정상
      - 첫 turn 이 60s 안에 끝나도 `timeoutMs=600000` 만 확인되면 propagation
        fix 는 증명됨.
-2. **3.3 SDK sanctioned spawn helper 확인** — 3.2 안정 후
-   - `@openclaw/plugin-sdk/*` 의 spawn helper entrypoint 점검
-   - 없으면 enhancement PR 후보 작성
-3. **3.4 plugin npm publish 준비** — 3.3 결과 반영
-   - `plugins/openclaw/package.json` files / scripts / pi metadata 정합
-   - pi-shell-acp 0.7.x 의 publish gate 패턴 재사용 (`check-pack`, `check-pack-install`,
-     `.sh` mode regression gate, postinstall chmod 필요성 검토)
-   - peer range / version bump 정책 결정
-4. **3.5 ClawHub 등록 → 3.6 self-contained UX → 3.7 docs** — 순차
+   - **Status (2026-05-19 PM)** — `cc0c033` (plugin RC fix) + `14c3187`
+     (NEXT 진단 정합) landed → oracle 텔레그램 답변 GREEN (bbot 정상 응답).
+     A/B/B+/D/E 모두 closed. C (default 60s 재검토) 는 별도 라운드 유지.
+
+### 부수 회귀 — tool-notice fence swallowing — closed (2026-05-19 PM, `d4f5772`)
+
+RC fix 검증 직후 oracle 텔레그램 답변에서 부수 회귀 발견. `[tool:done]` notice
+의 summary 가 unclosed Markdown fence (` ```console\n...`) 를 포함해서 텔레그램
+이 코드블록 시작으로 해석 → 다음 `[tool:start]` 까지 swallowing. surface 가
+expanded 된 게 0.7.x publish-prep 의 `showToolNotifications` default `true`
+flip (`e0c4410`).
+
+- **위치**: `event-mapper.ts` (pi-shell-acp **코어** — plugin 아님). 모든
+  backend (Claude/Codex/Gemini) + 모든 consumer 가 통과하는 path.
+- **Fix (`d4f5772`)**: `sanitizeNoticeFragment()` helper — whitespace collapse
+  + triple-backtick → `[fence]` + single backtick → `'` + ellipsis truncate.
+  모든 `[tool:start/running/done/failed/cancelled]` + `[permission:*]` notice
+  의 title/summary/decision/fallback optionId 에 uniform 적용.
+- **gpt-5.5 분신 cross-check**: 1차 (RC fix 정합) + 2차 (같은 묶음 hits 점검)
+  + 3차 (B 옵션 GO 판정) 3 turn. 누적 $2.33.
+- **의도적 out-of-scope**: assistant body fence 보존, entwurf sent/received
+  box body (의도된 Markdown), Gemini textual `[tool:done]` fallback
+  (entwurf-specific path).
+
+### oracle Stage 1 검증 매트릭스 (2026-05-19 PM) — 모두 ✅
+
+oracle 측에서 Stage 1 검증 매트릭스 7항목 완성, 모두 GREEN:
+
+1. `cc0c033` spawnTimeoutSeconds gap fix (#18) — `timeoutMs=60000→600000` propagate, DIAG 키 3종 출력
+2. `d4f5772` event-mapper fence sanitize — 코드블록 fence 정합, 회귀 없음
+3. bbot β path 회귀 검증 — workspace read 풀 응답, cold turn 60s 죽음 없음
+4. MCP surface 라이브 (`pi-tools-bridge`) — `entwurf_self` / `entwurf_peers` 실제 호출, envelope 반환
+5. Host alias 컨테이너 누수 — **0% (4중 격리, plugin raw spawn, settings 차원 활성)**
+6. `entwurf` spawn (`openai-codex/gpt-5.4`) — Task `023b435a`, $0.0522, registry routing 정확
+7. `entwurf_resume` + self-check — $0.0574, GPT-5.4 정체성 재검증 확정
+
+**Item #5 의 의미**: host alias `pi='pi --entwurf-control ...'` 는 컨테이너 안 안 들어감. 그럼에도 entwurf 가 작동 — OpenClaw container 가 자체적으로 settings 차원 (별도 wire) 으로 pi-tools-bridge + entwurf-control 환경을 deploy. 즉 우리 plugin 만의 책임이 아니라 oracle 측 deploy 정책이 같이 wire.
+
+**Phase 1.8 β keystone**: 모델 + entwurf workflow + MCP surface + registry routing 모두 라이브. 텔레그램 채널 안에서 spawn → resume → 분석 → 결론 풀 end-to-end 동작.
+
+### 결정적 새 발견 — Envelope identity sanitation (issue #19)
+
+oracle Stage 1 검증 turn 의 bbot 의 schema-level 단서 분석으로 **envelope identity 의 SSOT 정합 회귀 3건** 발견. 세 발견 모두 의도되지 않은 동작이므로 버그.
+
+| # | 회귀 | 영향 |
+|---|---|---|
+| 1 | `PI_AGENT_ID` env 상속 — entwurf spawn 시 child 의 새 (provider/model) 로 override 안 함 | 분신 self-report hallucination (Codex 가 자기를 Claude 라 보고) |
+| 2 | `PI_SESSION_ID` stale — MCP bridge child 가 spawn 시점 env 캐싱, 부모 갱신 catch 안 함 | `entwurf_self.sessionId` 가 부모 실제와 불일치, reply target 정합 깨짐 |
+| 3 | `socketPath` fictional — `entwurf_self` 가 control socket 활성 검증 없이 path 반환 | 비활성 세션도 socketPath 반환 → caller 가 잘못 trust 시 `entwurf_send` fail |
+
+→ 세 발견 모두 같은 surface (envelope identity). 묶어서 [issue #19](https://github.com/junghan0611/pi-shell-acp/issues/19). 0.7.3 publish 와 분리, 별도 sprint (0.7.4 또는 Phase 3.4 entry).
+
+**bbot 의 reasoning quality 발견 가치**: schema-level 단서 (`multi_tool_use.parallel` / system prompt preamble) 로 분신 self-report hallucination 자체 식별. 그러나 envelope identity 의 SSOT 정합은 **agent quality 에 의존하면 안 되는 invariant**. 평범한 분신은 못 잡을 수 있음.
+
+### 다음 — 0.7.3 release cut
+
+`d4f5772` 가 코어 수정이라 npm 새 release 없이는 oracle 이외 사용자 (npm
+install path) 가 못 받음. oracle 은 npm latest 자동 update 라 0.7.3 cut 으로
+자동 검증 진입.
+
+- **0.7.3 entry 후보**: `fix(event-mapper)`: tool-notice fence sanitization
+  (`d4f5772`)
+- **envelope sanitation (#19) 은 분리** — 0.7.3 은 외부 사용자 visible 회귀
+  (텔레그램 fence swallowing) 만 cut. envelope 정합은 내부 SSOT 회귀라 별도
+  sprint. agent quality 로 catch 가능, immediate user impact 낮음.
+- **Phase 1.4 ts refactor 와 분리**: 0.7.3 은 단일 fix 위주 patch cut. Phase 2
+  packaging-surface refactor 처럼 큰 scope 아님.
+- **순서**: CHANGELOG 0.7.3 entry 추가 → package.json version bump → `pnpm
+  check` + `pnpm test:pack` → commit + tag `v0.7.3` → `pnpm publish --access
+  public` (OTP). pi-shell-acp 0.7.2 → 0.7.3 release 흐름은 cd092b7 cut 의
+  pattern 그대로 재현.
+
+### Phase 3.4 진입 전 — plugin ↔ 본체 버전 정합 정책
+
+현재 plugin 은 `dependencies: {}` (child `pi` binary spawn 방식) — 즉 본체와
+별도 lifecycle. plugin npm publish 진입 시 다음 ambiguity 결정 필요:
+
+- plugin 이 어떤 본체 버전을 expect 하는지 declarative 표현이 없음
+- oracle 처럼 npm latest 자동 받는 환경은 OK, 다른 사용자가 plugin 받았는데
+  본체가 stale 이면 silent 회귀 (예: `event-mapper.ts` 의 새 sanitizer 가 없는
+  본체에 plugin 만 갱신 시 문제 재현 가능)
+
+옵션:
+
+| 옵션 | 내용 | Trade-off |
+|---|---|---|
+| **(i)** plugin README / docs 에 권장 본체 버전 명시 (`>=0.7.3`) | 가장 가벼움. install 시 사용자가 직접 확인 | declarative 아님, runtime check 없음 |
+| **(ii)** plugin spawn 단계에서 child pi 버전 probe — `pi --version` 출력 parse, `minPiShellAcpVersion` 미만이면 throw | runtime check, silent 회귀 차단 | plugin 코드 추가 + version string parse 의 fragility |
+| **(iii)** plugin version 을 본체와 sync (예: plugin 0.7.3 = 본체 0.7.3) — monorepo lite 라 자연 | 사용자 시각 단순함, install path 정합 명확 | plugin 만의 변경에도 본체 release 필요 |
+
+**현재 잠정**: (iii) 권장 (monorepo lite 의 본의), (i) 보조. (ii) 는 spawn check
+add 가 의미 있을 만큼 사용자 증가 시. **Phase 3.4 entry 에서 GLG 결정**.
 
 ---
 
