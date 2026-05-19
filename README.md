@@ -36,16 +36,16 @@ A few words that look unusual for a coding tool.
 
 After installing the package, run `run.sh install .` in your target project. The script writes the `piShellAcpProvider` block into `.pi/settings.json` with the correct absolute path for `pi-tools-bridge/start.sh` — no hand-editing required. The exact location of `run.sh` depends on which install path was used (each section below shows it). For manual configuration, [`pi/settings.reference.json`](./pi/settings.reference.json) is the reference shape — see [Settings](#settings) below.
 
-### From npm — global (Phase 3 target)
+### From npm — global
 
 ```bash
-pi install npm:@junghanacs/pi-shell-acp     # not on npm yet — 0.7.0 publish pending
+pi install npm:@junghanacs/pi-shell-acp
 cd /path/to/your-project
 "$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" install .
 "$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" smoke-all .
 ```
 
-### From npm — project (`-l` flag, Phase 3 target)
+### From npm — project (`-l` flag)
 
 ```bash
 cd /path/to/your-project
@@ -54,7 +54,7 @@ pi install -l npm:@junghanacs/pi-shell-acp
 ./.pi/npm/node_modules/@junghanacs/pi-shell-acp/run.sh smoke-all .
 ```
 
-### From source via pi — global (current recommended)
+### From source via pi — global (alternative)
 
 ```bash
 pi install git:github.com/junghan0611/pi-shell-acp

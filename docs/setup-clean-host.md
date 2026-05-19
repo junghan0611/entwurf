@@ -344,14 +344,16 @@ console.log(fs.readFileSync(path, "utf8"));
 '
 ```
 
-Why: `showToolNotifications` defaults to `false`
-(`index.ts:621`). Without it the bridge silently performs tool calls
-under the hood and a watching operator sees long idle stretches with
-no progress signal — the same surface our top-bug investigation
-flagged earlier (NEXT.md `Cross-repo follow-ups`). The PM-agreed
-posture is `true` for interactive / debugging / real work; leave
-filtering to delivery-layer surfaces (plugins / bots) instead of
-flipping this flag.
+Why: `showToolNotifications` defaults to `true` since 0.7.0
+(`index.ts:621`). Setting it explicitly here pins the value for this
+walk-through's reproducibility — `pi install` does not write the key,
+so a project's `.pi/settings.json` does not carry it forward unless
+the operator (or this snippet) writes it. Without progress visibility
+a watching operator sees long idle stretches with no signal, the same
+surface our top-bug investigation flagged earlier (NEXT.md
+`Cross-repo follow-ups`). The PM-agreed posture is `true` for
+interactive / debugging / real work; leave filtering to delivery-layer
+surfaces (plugins / bots) instead of flipping this flag.
 
 Other piShellAcpProvider keys you might see on a developer machine
 (`appendSystemPrompt`, `skillPlugins`, custom `permissionAllow`,

@@ -618,7 +618,14 @@ function loadProviderSettings(cwd: string, model: Model<any>): ResolvedProviderS
 	// `mcpServers` reach the backend. The user's `~/.mcp.json`, project
 	// `.mcp.json`, and `~/.claude/settings.json` MCP entries are ignored.
 	const strictMcpConfig = merged.strictMcpConfig ?? true;
-	const showToolNotifications = merged.showToolNotifications ?? false;
+	// Default `true` since 0.7.0 — interactive pi / debugging / day-to-day work
+	// benefits from progress visibility. NEXT.md "plugin spawn-level
+	// tool-notification trace handling" entry records the rationale: forcing
+	// `false` to hide `[tool:*]` lines from downstream channels (OpenClaw
+	// final-answer, Telegram bot, etc.) is a downstream-delivery concern, not
+	// a bridge-default concern. Callers that need final-text-only output
+	// should filter at the delivery layer instead of darkening the source.
+	const showToolNotifications = merged.showToolNotifications ?? true;
 	// Tool surface defaults to the pi baseline so the system prompt's
 	// "Available tools:" line and the SDK's actual tools align (Read, Bash,
 	// Edit, Write). MCP tools (mcp__*) are exposed independently via
