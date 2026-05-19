@@ -1,6 +1,6 @@
 {
 	"name": "@junghanacs/pi-shell-acp",
-	"version": "0.7.2",
+	"version": "0.7.3",
 	"description": "ACP bridge providing Claude Code, Codex, and Gemini CLI backends to pi-coding-agent, with the entwurf orchestration surface for cross-session delegation.",
 	"license": "MIT",
 	"author": {

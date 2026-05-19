@@ -4,6 +4,19 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.7.3 — 2026-05-19
+
+Patch release for the OpenClaw / Telegram operational validation path. The root npm artifact change is intentionally narrow: ACP tool and permission notices are now rendered as safe one-line fragments, so backend-provided titles or summaries containing Markdown fences / newlines cannot make Telegram treat the rest of the turn as one giant code block. The source tree also records the prerelease OpenClaw plugin #18 config-resolution fix and oracle Stage 1 GREEN evidence, but `plugins/openclaw/` remains a separate unpublished package and is not shipped in the root `@junghanacs/pi-shell-acp` tarball.
+
+### Fixed
+
+- **Tool / permission notice fragments are Markdown-safe and one-line.** `event-mapper.ts` now sanitizes the text used in `[tool:start]`, `[tool:running]`, `[tool:done]`, `[tool:failed]`, `[tool:cancelled]`, and `[permission:*]` notices: whitespace collapses to a single space, triple-backtick runs become an explicit `[fence]` placeholder, remaining backticks become ordinary quotes, and titles / summaries are truncated after sanitation. This closes the Telegram renderer failure where a sliced tool summary containing an unclosed code fence swallowed following `[tool:start]` notices and assistant text.
+
+### Repository / plugin prerelease trail
+
+- `plugins/openclaw` source now resolves plugin-scoped config from OpenClaw's nested `config.plugins.entries["pi-shell-acp"].config` path and validates configured `spawnTimeoutSeconds` / `piBinaryPath` fail-loud. Oracle Stage 1 confirmed the #18 bootstrap-timeout RC fix (`timeoutMs=60000→600000`) and the bbot β path cold turn. This is recorded for monorepo continuity only; the plugin is still installed from source / future sibling package, not from the root npm package.
+- Envelope identity sanitation (#19) is explicitly deferred to a separate sprint (`0.7.4` or Phase 3.4). 0.7.3 does not attempt to change the sender-envelope contract.
+
 ## 0.7.2 — 2026-05-19
 
 Patch release for a registry-artifact regression discovered after the first `npm publish`. Source repo tracks `100755` on `run.sh`, `mcp/pi-tools-bridge/start.sh`, the `demo/*.sh` pair, and `scripts/*.sh`, and the locally produced `npm pack` tarball preserved those modes. The artifact uploaded to the registry, however, normalized every `.sh` to `0644` — fresh `pi install npm:@junghanacs/pi-shell-acp@0.7.1` left the README-documented direct entry point (`"$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" install .`) and the `pi-tools-bridge` MCP startup script non-executable, surfacing as `Permission denied` and a silent MCP launch failure on the consumer side. 0.7.2 restores the executable bit through a `postinstall` hook and locks the regression with a new dry-run gate.
