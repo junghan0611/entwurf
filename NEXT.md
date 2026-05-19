@@ -972,26 +972,58 @@ install path) 가 못 받음. oracle 은 npm latest 자동 update 라 0.7.3 cut 
   public` (OTP). pi-shell-acp 0.7.2 → 0.7.3 release 흐름은 cd092b7 cut 의
   pattern 그대로 재현.
 
-### Phase 3.4 진입 전 — plugin ↔ 본체 버전 정합 정책
+### Phase 3.4 진입 전 — plugin ↔ 본체 버전 정합 정책 (결정 박힘 2026-05-19 PM)
 
-현재 plugin 은 `dependencies: {}` (child `pi` binary spawn 방식) — 즉 본체와
-별도 lifecycle. plugin npm publish 진입 시 다음 ambiguity 결정 필요:
+**결정 (GLG, 2026-05-19 PM)**: **plugin 별도 lifecycle** + **첫 publish 0.1.0 reset**.
 
-- plugin 이 어떤 본체 버전을 expect 하는지 declarative 표현이 없음
-- oracle 처럼 npm latest 자동 받는 환경은 OK, 다른 사용자가 plugin 받았는데
-  본체가 stale 이면 silent 회귀 (예: `event-mapper.ts` 의 새 sanitizer 가 없는
-  본체에 plugin 만 갱신 시 문제 재현 가능)
+이유:
+- 이미 별도 진화 중 (0.6.0 vs 본체 0.7.3) — partial sync 가 가장 혼란 (사용자가 매번 매트릭스 머릿속에 그림)
+- 0.6.0 은 본체 trajectory 의 "0.6.0 개발 release" framing 안에서의 작위적 숫자. plugin 자체로 보면 **first publish 라 0.1.0 이 honest**
+- cadence 자체가 다른 게 정합 — 본체는 자주 release (Phase 1.4 ts refactor / Phase 2 packaging 등), plugin 은 stub 안정 후 거의 안 건드림
+- 호환 매트릭스 명시는 한 번 만 박으면 한참 안정
 
-옵션:
+#### 호환 매트릭스 (SSOT)
 
-| 옵션 | 내용 | Trade-off |
+| plugin version | pi-shell-acp 본체 version | 비고 |
 |---|---|---|
-| **(i)** plugin README / docs 에 권장 본체 버전 명시 (`>=0.7.3`) | 가장 가벼움. install 시 사용자가 직접 확인 | declarative 아님, runtime check 없음 |
-| **(ii)** plugin spawn 단계에서 child pi 버전 probe — `pi --version` 출력 parse, `minPiShellAcpVersion` 미만이면 throw | runtime check, silent 회귀 차단 | plugin 코드 추가 + version string parse 의 fragility |
-| **(iii)** plugin version 을 본체와 sync (예: plugin 0.7.3 = 본체 0.7.3) — monorepo lite 라 자연 | 사용자 시각 단순함, install path 정합 명확 | plugin 만의 변경에도 본체 release 필요 |
+| **0.1.x** (planned first publish) | **>=0.7.3** | 현재 stub. event-mapper fence sanitize / spawnTimeoutSeconds propagation 정합 필요 |
+| 0.2.x (예정) | >=0.8.0 (예정) | Phase 1.4 SDK 도입 후 swap 시점 |
 
-**현재 잠정**: (iii) 권장 (monorepo lite 의 본의), (i) 보조. (ii) 는 spawn check
-add 가 의미 있을 만큼 사용자 증가 시. **Phase 3.4 entry 에서 GLG 결정**.
+→ plugin 0.6.0 (현재 `private: true`) 은 미발행 작위 숫자라 0.1.0 reset 정합. monorepo lite 의 framing 도 "같은 repo / 다른 trajectory" 로 update.
+
+#### 폐기된 옵션들 (참고)
+
+| 옵션 | 폐기 이유 |
+|---|---|
+| (iii) plugin version 본체와 sync — 잠정 권장이었음 | partial sync 가 가장 안 좋은 패턴. plugin 만의 변경에도 본체 release 필요. cadence 강제 묶임 |
+| (ii) runtime probe (`pi --version` parse) | spawn check add 가 의미 있을 만큼 사용자 증가 시. 0.1.x 단계 over-engineering |
+
+(i) docs 권장 본체 버전 명시 + 호환 매트릭스 = 채택된 안.
+
+### Phase 3.4 entry checklist (별도 라운드)
+
+publish 진입 전 결정/작업 항목:
+
+1. **plugin version reset** — `plugins/openclaw/package.json` `0.6.0 → 0.1.0`, `private: true → false`
+2. **prerelease tag 정책** — 잠정 `(a)` 0.1.0 일반 publish + README "prerelease/alpha" 명시. ClawHub 정식 등록 (#3.5) 까지가 진짜 trust gate
+3. **publish gate 재사용**:
+   - ✅ `check-pack` (dry-run, files 목록 검증)
+   - ✅ `check-pack-install` (fresh-temp install smoke)
+   - ❌ `.sh` mode regression gate — plugin tarball 에 `.sh` 없음
+   - ❌ `scripts/postinstall-chmod.cjs` — 동일 이유
+   - ✅ `prepublishOnly` nested pack smoke (0.7.1 fix 패턴 재사용)
+4. **README publish-ready 정합**:
+   - 자기-자백 (L1-10 "End-to-end smoke stub — NOT the real pi-shell-acp transport. Phase 1.4 ts refactor swaps these for SDK types proper.") 유지 — honest
+   - alpha/prerelease badge + 본체 정합 안내 (호환 매트릭스 명시)
+   - oracle Stage 1 검증 매트릭스 7항목 reference 가능
+5. **OpenClaw host 측 deploy 의존 명시** (Stage 1 item #5 의 함의):
+   - host (OpenClaw container) 측 entwurf-control / pi-tools-bridge wire 정책 안내
+   - 본체 `@junghanacs/pi-shell-acp@>=0.7.3` 사전 install 필요
+   - minimum OpenClaw container image 버전 명시 (`2026.5.12+`)
+
+### Phase 3.3 SDK helper sanity check (별도 5분 라운드)
+
+`@openclaw/plugin-sdk/*` 의 sanctioned spawn helper grep — `~/repos/3rd/openclaw/packages/plugin-sdk/`. oracle Stage 1 에서 raw spawn 으로 작동 확인됐으니 SDK helper 는 polish 차원. enhancement PR 후보는 SDK 에 없으면.
 
 ---
 
