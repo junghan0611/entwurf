@@ -624,25 +624,35 @@ Stages 0–3, Stage 4a (missing-auth boundary), the Stage 4 prep settings
 work (interactive + standalone YOLO), and Stage 4b (authenticated
 runtime smoke for Claude / Codex / Gemini) are all verified end-to-end
 on `cleanhost` (2026-05-18). Stage 5 (entwurf two-session) is the only
-remaining optional gate. The publish-prep patch series below is no
-longer blocked:
+remaining optional gate. This walk-through is the **verification floor**
+underneath every downstream publish step — not the trigger.
 
-1. **scope migration patch** — `package.json` `name` → `@junghanacs/pi-shell-acp`,
-   `run.sh` `PACKAGE_NAME` updated, README install table swapped from
-   `pi install npm:pi-shell-acp` to `pi install npm:@junghanacs/pi-shell-acp`,
-   `check-pack` gate confirmed to handle the scope path
-   (`node_modules/@junghanacs/pi-shell-acp/`). Version bumps **`0.6.x` → `0.7.0`**
-   in the same patch; CHANGELOG `0.7.0` entry framed as "scope adoption +
-   publish-ready".
+The publish-prep patch series below is the historical sequence that
+walked the package from the verified git surface to the registry. Steps
+1 and 2 have landed; only the optional gallery polish in step 3 remains.
 
-2. **npm publish** — `pnpm publish` against the `@junghanacs` scope, then
-   re-run `Stage 2` with `pi install npm:@junghanacs/pi-shell-acp@0.7.0`
-   on a *different* clean host to confirm the published tarball behaves the
-   same as the git path verified here.
+1. **scope migration patch** ✅ landed (`0.7.0`, 2026-05-18). `package.json`
+   `name` → `@junghanacs/pi-shell-acp`, `run.sh` `PACKAGE_NAME` updated,
+   README install table swapped from `pi install npm:pi-shell-acp` to
+   `pi install npm:@junghanacs/pi-shell-acp`, `check-pack` gate confirmed
+   to handle the scope path (`node_modules/@junghanacs/pi-shell-acp/`).
+   Version bumped **`0.6.x` → `0.7.0`** in the same patch; CHANGELOG
+   `0.7.0` entry framed as "scope adoption + publish-ready".
 
-3. **pi.dev gallery card** — `package.json#pi.image` / `pi.video` populated,
-   demo GIF re-recorded against the verified `0.7.0` surface (not the older
-   asset currently shipped).
+2. **npm publish** ✅ landed. `pnpm publish` against the `@junghanacs`
+   scope cut `0.7.1` as the first registry artifact (`0.7.0` stayed on
+   GitHub only — the `prepublishOnly` dry-run race needed `0.7.1`'s
+   `--dry-run=false` fix on the nested pack smoke). `0.7.2` followed
+   immediately as a registry-artifact patch: `pnpm pack` normalizes
+   shipped `.sh` files to `0644`, so `0.7.1` left `run.sh` and the
+   `pi-tools-bridge` MCP start script non-executable on a fresh
+   `pi install`; `0.7.2` restores the executable bit through a
+   `scripts/postinstall-chmod.cjs` hook and locks the regression with a
+   new `.sh` mode gate in `./run.sh check-pack`. Stage 2 re-run on a
+   different clean host should target `0.7.2` (or whatever is current
+   at `latest`); `0.7.1` is deprecated on npm.
 
-The pi.dev push itself is GLG's call — this walk-through is the verification
-floor it sits on, not the trigger.
+3. **pi.dev gallery card** — `package.json#pi.image` is populated and
+   indexed (the gif at `docs/assets/pi-shell-acp-demo.gif`). `pi.video`
+   stays optional; an MP4 hover preview is the next polish but not a
+   blocker. The pi.dev push itself is GLG's call.

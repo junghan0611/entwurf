@@ -16,6 +16,10 @@ CHECKLIST.md
 *.html
 *.cast
 
+# Local `pnpm pack` / `npm pack` artifacts produced by `./run.sh check-pack-install`
+# and the publish-prep smoke flow. The real publish artifact is fetched from npm.
+*.tgz
+
 # demo/ recordings — script + README are tracked; recorded artifacts are not.
 demo/*.gif
 demo/*.log

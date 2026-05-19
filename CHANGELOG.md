@@ -4,6 +4,19 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.7.2 — 2026-05-19
+
+Patch release for a registry-artifact regression discovered after the first `npm publish`. Source repo tracks `100755` on `run.sh`, `mcp/pi-tools-bridge/start.sh`, the `demo/*.sh` pair, and `scripts/*.sh`, and the locally produced `npm pack` tarball preserved those modes. The artifact uploaded to the registry, however, normalized every `.sh` to `0644` — fresh `pi install npm:@junghanacs/pi-shell-acp@0.7.1` left the README-documented direct entry point (`"$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" install .`) and the `pi-tools-bridge` MCP startup script non-executable, surfacing as `Permission denied` and a silent MCP launch failure on the consumer side. 0.7.2 restores the executable bit through a `postinstall` hook and locks the regression with a new dry-run gate.
+
+### Fixed
+
+- **Executable bit restored on every shipped `.sh` after install.** New `scripts/postinstall-chmod.cjs` runs at `postinstall` time and `chmod 0755` `run.sh`, `mcp/pi-tools-bridge/start.sh`, `mcp/pi-tools-bridge/test.sh`, `demo/demo.sh`, `demo/demo-baseline.sh`, and every `*.sh` under `scripts/`. Hand-written in CJS so it runs regardless of the consumer's package `type` and never depends on resolving its own `package.json`. Each `chmod` is wrapped in its own `try` — Windows, read-only mounts, or any other filesystem refusal logs a warning and continues, so an install can never fail because of a chmod refusal.
+
+### Added
+
+- **`.sh` mode regression gate in `./run.sh check-pack`.** The dry-run inspector now reads each entry's `mode` from `npm pack --dry-run --json` and fails closed if any tracked `.sh` ships without the executable bit. The repo's source files already track `100755` and the local pack preserves that, but a contributor's umask or a `git update-index --chmod=-x` would silently drop the bit; this gate makes that case fail at `pnpm check` time. The registry-side mode normalization (the actual root cause behind 0.7.1's break) remains outside our control — the `postinstall` hook above is the defense for that.
+- `scripts/postinstall-chmod.cjs` added to the `check_pack` / `check_pack_install` required-file lists so an accidental drop of the chmod script itself is caught at publish gate time.
+
 ## 0.7.1 — 2026-05-19
 
 Patch release for the first npm publish path. `v0.7.0` was tagged on GitHub but intentionally not published to npm after the final dry-run found a lifecycle-script interaction; 0.7.1 carries the same public package surface with the publish guard fixed.

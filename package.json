@@ -1,9 +1,12 @@
 {
 	"name": "@junghanacs/pi-shell-acp",
-	"version": "0.7.1",
+	"version": "0.7.2",
 	"description": "ACP bridge providing Claude Code, Codex, and Gemini CLI backends to pi-coding-agent, with the entwurf orchestration surface for cross-session delegation.",
 	"license": "MIT",
-	"author": "Junghan Kim",
+	"author": {
+		"name": "Junghan Kim",
+		"url": "https://junghanacs.com/"
+	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/junghan0611/pi-shell-acp.git"
@@ -85,6 +88,7 @@
 	},
 	"scripts": {
 		"prepare": "husky || true",
+		"postinstall": "node scripts/postinstall-chmod.cjs",
 		"prepublishOnly": "pnpm run check && pnpm run check-pack-install",
 		"setup": "./run.sh setup",
 		"smoke": "./run.sh smoke",

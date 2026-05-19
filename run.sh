@@ -2597,6 +2597,28 @@ check_pack() {
     return 1
   }
 
+  # .sh mode regression gate. The repo tracks 100755 in git, but if a
+  # contributor's umask or a stray `git update-index --chmod=-x` drops
+  # the bit the tarball will ship 0644 — and pi install hands the
+  # tarball straight to `npm install`, so the bit needs to survive the
+  # whole publish pipeline. Catch it here at dry-run time.
+  local sh_mode_violations
+  sh_mode_violations=$(node -e '
+    const data = JSON.parse(require("fs").readFileSync(0, "utf8"));
+    const bad = data[0].files
+      .filter(f => f.path.endsWith(".sh"))
+      .filter(f => (f.mode & 0o111) === 0);
+    for (const f of bad) console.log(f.path + " mode=0" + (f.mode || 0).toString(8));
+  ' <<<"$json") || {
+    fail "[check-pack] failed to inspect tarball modes"
+    return 1
+  }
+  if [ -n "$sh_mode_violations" ]; then
+    fail "[check-pack] .sh files missing executable bit in tarball:"
+    echo "$sh_mode_violations" | sed 's/^/    /' >&2
+    return 1
+  fi
+
   local required=(
     "package.json" "README.md" "LICENSE" "CHANGELOG.md"
     "index.ts" "acp-bridge.ts" "event-mapper.ts" "engraving.ts"
@@ -2604,6 +2626,7 @@ check_pack() {
     "pi-extensions/entwurf.ts" "pi-extensions/entwurf-control.ts"
     "pi-extensions/model-lock.ts" "pi-extensions/lib/entwurf-core.ts"
     "mcp/pi-tools-bridge/src/index.ts"
+    "scripts/postinstall-chmod.cjs"
   )
 
   # Patterns that must NOT appear in the tarball. Anchored where the
@@ -2711,6 +2734,7 @@ check_pack_install() {
     "pi-extensions/entwurf.ts" "pi-extensions/entwurf-control.ts"
     "pi-extensions/model-lock.ts" "pi-extensions/lib/entwurf-core.ts"
     "mcp/pi-tools-bridge/src/index.ts"
+    "scripts/postinstall-chmod.cjs"
   )
   for f in "${tar_required[@]}"; do
     if ! grep -qxF "$f" <<<"$tar_files"; then
