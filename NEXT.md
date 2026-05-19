@@ -67,7 +67,7 @@ peer reply 가 필요하면 message body 에 명시하고 receiver 가 별도 `e
 
 ### 차단 풀림
 
-- publish preflight 는 2026-05-18 `0.7.0` scoped npm package cut (`76d8d04`) 까지 진행됨.
+- publish preflight 는 2026-05-19 `@junghanacs/pi-shell-acp@0.7.0` cut 까지 진행됨 (force-push history rewrite + host info sanitize 동반).
 - 다음 차단선은 **실제 `npm publish` + npm install path 재현**. Cross-repo follow-up 의 (a)~(e) 와 충돌 없음.
 
 ---
@@ -83,8 +83,9 @@ peer reply 가 필요하면 message body 에 명시하고 receiver 가 별도 `e
 > 였다. 해당 surface 제거 (§Closed 참고). publish preflight 진입 가능.
 >
 > **Next focus** — `npm publish` 별도 라운드 + npm install path 재현.
-> Scope migration + 0.7.0 bump patch 는 `76d8d04` 로 완료. publish 전
-> release invariant checklist 를 GLG 손검하고, publish 후 다른 clean host 에서
+> Scope migration + 0.7.0 bump patch + host info sanitize 는 2026-05-19 force-push
+> rewrite 로 완료 (`@junghanacs` user-scope). publish 전 release invariant checklist
+> 를 GLG 손검하고, publish 후 다른 clean host 에서
 > `pi install npm:@junghanacs/pi-shell-acp@0.7.0` 재현. 자세한 단계는 §Publish preflight.
 >
 > **위치**: Phase 1 의 **0.6.0 개발 release** 안의 한 축. OpenClaw 검증
@@ -588,10 +589,12 @@ issue #16 turn lifecycle bug 처방으로 ACP backend dep 일괄 갱신 — Phas
 ### Publish preflight — pi.dev / npm 직전 보류 항목
 
 > **← 다음 진입점 (2026-05-19 이후)**. 0.7.0 scoped npm package cut 완료
-> (`76d8d04` `@junghan0611` 시점 → 2026-05-19 `@junghanacs` 로 rename).
+> (어제 `@junghan0611` 시점에 일단 박혔다가, 2026-05-19 `@junghanacs` 로
+> force-push rewrite + host info sanitize 동반 정정 — old hash 들은
+> `backup/pre-sanitize-f4eeed1` local 브랜치에 안전망 보존).
 > 남은 것은 실제 `npm publish` 와 publish 후 npm install path 재현.
 
-- **npm name / scope 확정 (2026-05-19 final)**: **`@junghanacs/pi-shell-acp`** — bare name 안 함. 이유: (1) 출처 일관성 (`@junghanacs/openclaw-pi-shell-acp` 와 같은 패밀리), (2) npm `@junghanacs` user-scope 라 책임 명확 + 자동 권한, (3) scope 는 unique 라 선점 우려 무관. 어제 (2026-05-18 `76d8d04`) `@junghan0611` 로 일단 박혔다가, npm username 이 실제 `junghanacs` (브랜드 네임) 임이 드러나 2026-05-19 rename. `package.json` name + version `0.7.0`, `run.sh` `PACKAGE_NAME`, README npm install 면, `check-pack-install` scoped tarball/import/path 모두 갱신 완료. 검증: `pnpm check` + `pnpm test:pack` green (`junghanacs-pi-shell-acp-0.7.0.tgz`, 42 files, scoped pi loader smoke pass).
+- **npm name / scope 확정 (2026-05-19 final)**: **`@junghanacs/pi-shell-acp`** — bare name 안 함. 이유: (1) 출처 일관성 (`@junghanacs/openclaw-pi-shell-acp` 와 같은 패밀리), (2) npm `@junghanacs` user-scope 라 책임 명확 + 자동 권한, (3) scope 는 unique 라 선점 우려 무관. 어제 (2026-05-18) `@junghan0611` 로 일단 박혔다가, npm username 이 실제 `junghanacs` (브랜드 네임) 임이 드러나 2026-05-19 force-push rewrite 와 함께 rename (host info sanitize 와 같은 라운드). `package.json` name + version `0.7.0`, `run.sh` `PACKAGE_NAME`, README npm install 면, `check-pack-install` scoped tarball/import/path 모두 갱신 완료. 검증: `pnpm check` + `pnpm test:pack` green (`junghanacs-pi-shell-acp-0.7.0.tgz`, 42 files, scoped pi loader smoke pass).
 - **pi gallery preview**: `package.json#pi.image` 또는 `pi.video` 추가. `packages.md` 기준 `pi-package` gallery card 에 노출되는 첫인상. 기존 `docs/assets/pi-shell-acp-demo.gif` 는 임시로 가능하지만, 공개면에서는 새 이미지/데모로 교체 예정.
 - **새 데모 GIF 생성**: 예전 `demo/` 의 tmux 방식으로 재녹화. 현재 0.6.x/0.7.0 설치면과 실제 동작을 보여주는 GIF 로 만들 것. README 가 참조하는 `docs/assets/pi-shell-acp-demo.gif` 교체 시 `files` allowlist / `check-pack` forbidden pattern 유지 확인.
 - **프로젝트 이미지 / GLGMAN 세계관**: pi.dev 카드용 대표 이미지도 별도 생성 후보. 입력 자료:
