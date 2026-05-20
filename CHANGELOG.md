@@ -4,6 +4,10 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Changed
+
+- pi package gallery / README hero surface now uses `docs/assets/pi-shell-acp-hero.jpg` instead of the runtime demo loop. `package.json#pi.image` points the pi.dev gallery card at the GLGMAN hero shot, and the README places the same hero image above the npm badge so the package detail page is more likely to pick the intended header image first.
+
 ## 0.7.3 — 2026-05-19
 
 Patch release for the OpenClaw / Telegram operational validation path. The root npm artifact change is intentionally narrow: ACP tool and permission notices are now rendered as safe one-line fragments, so backend-provided titles or summaries containing Markdown fences / newlines cannot make Telegram treat the rest of the turn as one giant code block. The source tree also records the prerelease OpenClaw plugin #18 config-resolution fix and oracle Stage 1 GREEN evidence, but `plugins/openclaw/` remains a separate unpublished package and is not shipped in the root `@junghanacs/pi-shell-acp` tarball.
@@ -761,3 +765,84 @@ First public release. Used daily by the maintainer; not promised to work elsewhe
 - `@agentclientprotocol/claude-agent-acp@0.31.0`
 - `@zed-industries/codex-acp@0.12.0`
 - `@agentclientprotocol/sdk@0.20.0`
+
+## Before 0.2.0 — chronicle of work before the first public release
+
+This section is added retroactively so the repository's release axis carries the full chronicle, not only what shipped after the public surface was named. The two phases below are distinct in authorship and design intent.
+
+- **2026-02-01 ~ 2026-03-21** — original `claude-agent-sdk-pi` era. Before the current maintainer took over. About 30 commits by external contributors (prateekmedia, w-winter, gwynnnplaine) under a bespoke-shim design that called `claude-agent-sdk` directly from pi. Versions 1.0.1 ~ 1.0.16 in that lineage.
+- **2026-04-09 ~ 2026-04-27** — maintainer takeover, ACP pivot, repository rename. Eighteen days from the takeover commit (`f31367d`) to the 0.2.0 public release. No public version cuts in this window; all changes go into the 0.2.0 base.
+
+### 2026-02-01 ~ 2026-03-21 — original `claude-agent-sdk-pi` era (not by current maintainer)
+
+Documented for chronological completeness; the design intent and code authority belong to other contributors. The repository was named `claude-agent-sdk-pi` and shipped a bespoke shim that called `claude-agent-sdk` directly from pi. The core unsolved problem of this era — stateless HTTP-shaped sessions that re-sent the full payload every turn, causing accumulated quality degradation as conversations grew — is precisely what the later ACP pivot would address.
+
+External-contributor highlights pinned by commit:
+
+- `149d0cc 2026-02-01 init provider` — first commit. Provider registration shape.
+- `2026-02-01 ~ 02-06 — 1.0.x patches` (`f352cc6`, `9efacba`, `d8c4e99`, `9f63241`, `0c9a212`, `224ca00`, `b7285fb`, `395625c`, `fc7c31a`, `011ca8d`, `829e8f4`, `ee39b7f`, `27fcd80`, `8a84df6`, `19e0c3f`, `1883737`, `3e8088c`): caching block ordering, TTL, abort handler, cost updates, demo screenshot, install doc.
+- `6ec6c8f 2026-02-03 feat: add strict MCP config + configurable setting sources` (w-winter, merged via PR #1) — first external feature contribution.
+- `34038c5 2026-02-06 fix sdk tool-result resume flow` + `94644e2 move pi deps to peer/dev and refine fork pending-tool replay` — early attempts to fix what would later be described as "matching stateful tool execution shape against a stateless transport".
+- `c5d5f8e 2026-02-09 feat(claude-agent-sdk-pi): map opus-4-6 high thinking to xhigh budget` (w-winter, PR #2).
+- `fbbc066 2026-02-13 fix(claude-agent-sdk-pi): persist tool execution ledger to recover missing tool results` + `b85bffb 2026-02-13 chore: bump patch version to 1.0.16` — the tool execution ledger the current maintainer would later remove during the bespoke→ACP pivot.
+- `7d2e167 2026-03-21 fix(provider): pass selected model to SDK query` (gwynnnplaine, PR #4) — last commit of this era.
+
+### 2026-04-09 ~ 2026-04-27 — maintainer takeover and ACP pivot
+
+Eighteen days from takeover to the first cut. No public release in this window; every change goes into the 0.2.0 base.
+
+#### Phase A — takeover and pi-native stabilization (2026-04-09)
+
+`f31367d feat: add harness-first setup workflow` (08:29 +0900) is the takeover. The day's commits establish the new authoring axis: `773c1d8 disable SDK session persistence — pi manages its own sessions`, `c4281f4 pi-native stability — edit args, toolwatch kill, re-registration guard`, `e3c1c5f convert TypeBox schemas to Zod for MCP custom tools (E2 fix)`, `68cc7e7 pin SDK to latest stable — claude-agent-sdk 0.2.97, sdk 0.86.1`, `f68864d direct Anthropic API path — multi-turn parity with pi-mono`. The bespoke-shim design is preserved in this phase; the question of whether to keep it is the next phase's subject.
+
+#### Phase B — ACP pivot, archive, reactivation, rename (2026-04-10 ~ 2026-04-16)
+
+The pivot lands in a single day: `50328a4 pivot provider to claude-agent-acp bridge` (10:00), `835f517 align ACP bridge docs with non-append model`, `afcb55b add ACP tool visibility and session invalidation`, `669e929 add non-append settings surface`, `61d9649 fix: select real prompt after pi hook messages`, `1435afb add benchmark snapshot and rename note`. Same day evening: `c3b3310 archive repository — ben approach wins over ACP bridge` (15:10). The repo is briefly archived because `@benvargas/pi-claude-code-use` (a third-party OAuth-rewrite path) was technically smoother on first comparison.
+
+Five days later, `de7dc47 reactivate ACP bridge status` (2026-04-15 18:38). The recorded reason is policy-shape: even when a workaround is technically better, a path that has to disguise itself to a vendor cannot be carried by this repository. The archive → reactivation pair stays in the git log as the most honest single beat of the entire pre-0.2.0 arc.
+
+The renaming finishes on 2026-04-16:
+
+- `5747fc9 add agent-shell-like ACP session continuity` — `resume > load > new` bootstrap order, which becomes Hard Rule #2 in 0.2.0.
+- `6477129 rename provider surface to pi-shell-acp` — this is when the repo name and the provider id become what they are today.
+- `02a392d remove legacy ACP naming compatibility`, `b1b6584 rewrite repo guide for pi-shell-acp owner`, `a3ccb1c add ACP reference implementations and local paths`, `7417a7e add ACP verification guide`.
+
+#### Phase C — MCP injection scope and dual-backend (2026-04-17 ~ 2026-04-20)
+
+- `cfec410 feat(mcp): explicit mcpServers pass-through via settings` (2026-04-17). MCP servers are passed through pi-shell-acp settings rather than scanned from ambient `~/.mcp.json`. The decision becomes Hard Rule #4 in 0.2.0.
+- `f6f0c3f refactor(mcp): pi-facing injection scope — hash-only sig, fail-fast, check-mcp gate` (2026-04-18). Adds the `check-mcp` gate that catches MCP-injection drift before runtime.
+- `1731865 feat: add dual ACP backend support` (2026-04-20) + `8682c90 chore: pin codex-acp runtime version` + `d3dff4f test: add dual-backend smoke gate`. Codex joins Claude as a second backend — the wire-level basis for "siblings from different schools" the bridge's design narrative carries forward.
+- `5b9a043 docs: clarify codex MCP visibility checks`, `99df34d feat(bridge): strict bootstrap diagnostics + continuity smoke`, `753ba52 feat: add cancel cleanup diagnostics and smoke gate`, `66d2089 feat: log model switch branches and add smoke gate`, `b99d0d0 test: add delegate-style continuity smoke gate`.
+
+#### Phase D — bridge-vs-harness boundary and entwurf ingestion (2026-04-21 ~ 2026-04-24)
+
+The "what belongs in the bridge vs what belongs in the resident" question gets its first explicit boundary in this phase, and the entwurf surface gets ingested from agent-config.
+
+- `cec3e13 docs: adopt qualified model-id convention + refresh §12.5 Codex boundary` (2026-04-21).
+- `67d2369 docs: fix the bridge-vs-harness boundary in product docs` (2026-04-21).
+- `c5ea241 docs: retire opt-in env narrative, point at agent-config registry as spawn authority` (2026-04-22).
+- `b9f642b chore: bump claude-agent-acp 0.30.0, pi 0.69.0, cap claude ctx to 200K` (2026-04-23) — the dependency 0.6.0 will later bump again to 0.33.1 for issue #16.
+- `7acd7f6 feat: project pi-side compaction summary into new claude session` (2026-04-23). The early shape of the compaction handoff 0.5.0 will retire entirely with the "bridge does not implement compaction" declaration.
+- `56be590 docs: add transparent step-by-step verify policy`, `4707e97 docs: VERIFY rewrite — intent and pass criteria, delegate orchestration as default`, `8c3da78 docs: VERIFY — wording guide and bridge-vs-semantic continuity split`, `c0aebbb docs: VERIFY §12 — cross-ref agent-config sentinel as integration-side bootstrap-path gate` (2026-04-23). VERIFY.md is built as a parallel document to README/AGENTS — the verifier-side axis.
+- `97593a3 docs: carve Entwurf Orchestration mirror for agent-config migration` (2026-04-24). The naming pivot — `delegate` → `entwurf` (기투, projection-of-self) — is decided on the prior day's strategy review and now lands in docs.
+- `3c2780b docs: two-axis verification — protocol smoke + agent interview, both required` (2026-04-24). The two-axis verification frame later codified in VERIFY.md.
+- `768baf4 feat: ingest entwurf surface from agent-config (step 5 verbatim)` (2026-04-24). Entwurf physically moves from agent-config into pi-shell-acp. The verbatim ingest means agent-config's previous `delegate/` extension and entwurf MCP enter the bridge repo without alteration; refactor follows in 0.2.x patches.
+- `da97fa9 chore: align pi runtime deps to 0.70.0 exact + adapt delegate.ts API`, `060c412 fix: curate pi-shell-acp model surface + switch codex metadata source`, `9269771 chore: add gpt-5.5 to delegate target registry (native + explicitOnly ACP)`, `6939e7e docs: record release baseline — pi 0.70.0, curated models, gpt-5.5 at 400K`, `57338a6 fix: make pi-native delegate failures throw under pi 0.70`, `2b1b7e5 docs: remove stale agent-config ownership refs + English pass on VERIFY.md` (2026-04-24).
+- `3d6800d chore: ingest sentinel-runner.sh from agent-config (step 5 follow-up)`, `3bf5f8f chore: migrate from npm to pnpm`, `a70500a feat: Phase 5 — Axis 1 interview-prerequisite gates in run.sh`, `3ed8baa chore: trim install footprint + frozen-lockfile`, `4fc99b8 chore: regenerate pnpm-lock.yaml`, `bc79bda docs: Phase 5 evidence — Axis 1 gates green end-to-end on fresh install` (2026-04-24).
+- `035254b refactor: flatten MCP, strip-types runtime, narrow tool scope, public-repo env hygiene` (2026-04-24). MCP surface flattened; node `--experimental-strip-types` runtime adopted. Tool scope narrowed for the public repo.
+- `9116ea9 docs: align README / AGENTS / VERIFY with the flatten + narrow-scope changes`, `d6e2579 docs: genericize personal paths in README/AGENTS/VERIFY examples`, `9e04b31 feat: install auto-registers bundled mcpServers for in-repo MCP bridges`, `db5b0de docs: document consumer vs developer install paths in VERIFY §1` (2026-04-24).
+- `f74dd6a feat: own session-control extension — drop runtime dep on consumer repos` (2026-04-24). The session-control extension earlier consumers depended on through agent-config is now owned in this repo.
+- `baa608a fix(session-control): correlate turn_end to caller's send via baseline turnIndex` (2026-04-24).
+- `a36ffde docs(delegate): translate remaining Korean comments to English` (2026-04-24). The bridge's code surface is English-only.
+- `8e98872 docs(messaging): codify Send-is-throw at tool + AGENTS level` (2026-04-24). The decision that `entwurf_send` is fire-and-forget. 0.4.14 later sharpens this with the `wants_reply` etiquette marker.
+- `3a4dedf feat(models): differentiate Claude context defaults — sonnet 200K, opus 1M` (2026-04-24).
+- `8b96b4a docs: record pi footer context% upstream issue (cacheRead-inclusive)`, `bcf3252 fix: context-metric overreport on ACP routes — local correction` (2026-04-24). The first round of footer-percentage corrections; the 0.4.x context meter narrative will refine this further.
+- `6b5aff8 feat: externalize engraving prompt to prompts/engraving.md` (2026-04-24). The engraving moves from inline code constant to an operator-editable file.
+
+#### Phase E — pre-release polish (2026-04-25 ~ 2026-04-26)
+
+Two more days of incremental fixes (model-switch observability rounding, smoke-delegate-resume continuity gate, context-meter PR-A/B debate that ends with PR-B discarded) culminate in the first public cut on 2026-04-27.
+
+The `[pi-shell-acp:model-switch]` diagnostic and `smoke-delegate-resume` continuity smoke both land in this phase. PR-B (the `PiOccupancy = prefixOverhead + visibleTranscript` sidecar design) is discarded in favor of the simpler "footer follows ACP `usage_update.used/size` directly" shape — which lands in 0.2.0 as "per-turn `usage_update` drives the pi footer context meter; the bridge does not maintain a separate meter".
+
+0.2.0 then ships on 2026-04-27 as the first public release under the `pi-shell-acp` name.

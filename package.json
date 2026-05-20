@@ -47,6 +47,7 @@
 		"demo/demo-baseline.sh",
 		"demo/compaction-policy-smoke/",
 		"docs/setup-clean-host.md",
+		"docs/assets/pi-shell-acp-hero.jpg",
 		"docs/assets/pi-shell-acp-demo.gif",
 		"docs/assets/pi-shell-acp-doomemacs.gif",
 		"docs/assets/pi-shell-acp-entwurf.gif",
@@ -120,6 +121,6 @@
 			"./pi-extensions/entwurf.ts",
 			"./pi-extensions/model-lock.ts"
 		],
-		"image": "https://raw.githubusercontent.com/junghan0611/pi-shell-acp/main/docs/assets/pi-shell-acp-demo.gif"
+		"image": "https://raw.githubusercontent.com/junghan0611/pi-shell-acp/main/docs/assets/pi-shell-acp-hero.jpg"
 	}
 }
