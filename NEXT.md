@@ -30,7 +30,7 @@ Root prerequisite is closed: `@junghanacs/pi-shell-acp@0.7.4` is released and pu
 - OpenClaw `@openclaw/plugin-package-contract` code requires only `openclaw.compat.pluginApi` and `openclaw.build.openclawVersion`. It normalizes `compat.minGatewayVersion` from `install.minHostVersion` when absent. `build.pluginSdkVersion` is optional metadata, and `@openclaw/plugin-sdk` is not published on npm; decide whether to add it as explicit canonical metadata (`2026.5.18`) or omit because this external stub cannot depend on SDK.
 
 **3.4 decision lock (GPT ↔ Claude 합의, 2026-05-20):**
-- D1 owner pre-flight: 새 Claude 가 `clawhub whoami`부터 확인. owner 미존재/권한 없음이면 stop & report; GLG 가 owner 등록.
+- D1 owner pre-flight: 새 Claude 가 `clawhub whoami`부터 확인. owner 미존재/권한 없음이면 stop & report; GLG 가 owner 등록. **현재 상태 (2026-05-20)**: `@junghanacs` handle 이 ConvexError 로 점유 중 — § "ClawHub owner `@junghanacs` handle status" 참조.
 - D2 publish toggles: 이번 라운드는 dry-run only. `release.publishToClawHub=false`, `release.publishToNpm=false` 유지. 실제 publish 는 별도 라운드.
 - D3 `build.pluginSdkVersion`: 생략. 외부 stub 은 SDK npm dependency 가 없고 `@openclaw/plugin-sdk` 도 npm 미공개라 honest 반영. README 에 의도적 생략 사유 한 줄 추가.
 - D4 `compat.minGatewayVersion`: 명시 추가. 값은 `2026.5.12` 후보 — compatibility floor 를 reader 가 fallback 추적 없이 읽게 한다.
@@ -38,6 +38,26 @@ Root prerequisite is closed: `@junghanacs/pi-shell-acp@0.7.4` is released and pu
 - D6 publish surface order: 최종 publish 는 npm + ClawHub 양쪽 dry-run pass 후 같은 라운드에서 진행. 어느 bare install path 가 우세하든 UX 일관성 확보.
 - D7 NEXT commit: 이 NEXT 정렬은 별도 self-contained commit 후보 (`docs(next): phase 3.4 entry — clawhub pre-flight + dual dry-run`). 실제 metadata 변경과 섞지 않는다.
 - D8 upstream doc conflict: 우리 publish 와 분리. 양쪽 surface 를 모두 만족시키므로 block 아님. 별도 sprint 로 OpenClaw docs issue/PR 후보.
+
+**ClawHub owner `@junghanacs` handle status (2026-05-20, GLG pending):**
+
+GLG 가 `clawhub publisher create junghanacs --display-name "junghanacs (Junghan Kim — digital garden)"` 시도 결과 ConvexError: `Handle "@junghanacs" is already used by a user or personal publisher`. 과거 `junghanacs` GitHub 계정 (현재 살아있음, 계속 사용 예정) 으로 ClawHub 가입한 personal publisher 가 handle 을 점유 중. GLG 가 ClawHub web 에서 delete account 시도했으나 즉시 반영 안 됨 — handle release 가 지연인지 운영팀 contact 필요인지 미확정. 이후 GLG 가 delete 재시도 또는 운영팀 contact 진행 (별도 follow-up).
+
+clawhub CLI 는 본 머신에 pnpm global install 완료 (`/home/junghan/.local/share/pnpm/clawhub`, v0.17.0) — `npx -y` prefix 불필요. 현재 GLG personal owner = `junghan0611` (`whoami` 검증됨), GitHub `junghanacs` 도 살아있음 (`github.com/junghanacs` 200).
+
+npm 컨텍스트: GLG 의 npm username 이 `junghanacs` 이라 `@junghanacs/*` 가 personal scope 로 살아있음 (root `@junghanacs/pi-shell-acp@0.7.4` 가 publish 됨). 따라서 root 와 plugin scope 정합 유지 = `@junghanacs` ClawHub handle release 받는 게 0-cost 길.
+
+**새 Claude 세션 행동 (D1 lock 의 구체적 분기):**
+
+1. `clawhub whoami` 로 로그인 상태 확인 (예상: `junghan0611`).
+2. `clawhub publisher create junghanacs --display-name "junghanacs (Junghan Kim — digital garden)"` 재시도.
+3. **성공 시**: D1 lock 대로 진행, `@junghanacs/openclaw-pi-shell-acp` 그대로.
+4. **여전히 ConvexError**: **STOP & report**. 임시 handle (예: `junghan-garden`) 으로 멋대로 fallback **금지** — identity 분열 + 향후 transfer 비용 + GLG 결정 영역. GLG 가 handle release 받을 때까지 대기.
+
+**대체 옵션 — GLG 가 임시 unblock 결정할 때만 (새 Claude 자동 선택 금지):**
+
+- `clawhub publisher create junghan-garden --display-name "junghan-garden (temporary — awaiting @junghanacs release)"` 후 plugin package scope 임시 변경. 향후 `clawhub package transfer @junghan-garden/openclaw-pi-shell-acp --to junghanacs` 로 정합 복구.
+- `@junghan0611` scope 는 npm org 새로 만드는 추가 비용 (`npm org create junghan0611`) + root/plugin scope 분열이라 비추천.
 
 **Phase 3.3 skipped — false premise.** SDK helper check already showed `@openclaw/plugin-sdk/process-runtime` is private/workspace-only, so external npm plugin cannot depend on it. Raw `spawn` remains acceptable for the prerelease stub; Phase 1.4 removes the child-`pi` spawn surface anyway.
 
@@ -62,8 +82,8 @@ publish 진입 전 결정/작업:
 1. **Plugin version reset** — `plugins/openclaw/package.json` `0.6.0 → 0.1.0`, `private: true → false`. 결정 근거는 § "Plugin ↔ 본체 버전 정합" 표 참고.
 2. **Prerelease tag 정책** — 잠정 `(a)` 0.1.0 일반 publish + README "prerelease/alpha" 명시. ClawHub 정식 등록 (3.5) 까지가 진짜 trust gate.
 3. **ClawHub pre-flight**:
-   - `npx -y clawhub@0.17.0 whoami` / `clawhub login` 로 계정 확인.
-   - ClawHub owner `@junghanacs` 존재/등록 가능 여부 확인. 불가하면 stop & report; GLG 가 owner 등록 또는 package scope/name 재결정.
+   - `clawhub whoami` 로 계정 확인 (clawhub CLI 이미 pnpm global install 됨 — `npx -y` prefix 불필요).
+   - `clawhub publisher create junghanacs --display-name "junghanacs (Junghan Kim — digital garden)"` 재시도. **여전히 `Handle "@junghanacs" is already used by ...` ConvexError 면 STOP & report** — § "ClawHub owner `@junghanacs` handle status" 참조. 임시 handle 자동 fallback **금지**.
    - 이번 라운드는 dry-run only. `release.publishToClawHub=false`, `release.publishToNpm=false` 유지. OpenClaw repo 내부 build script 는 `publishToNpm === true` 만 publishable plugin package 로 취급하지만, 외부 package 에서 ClawHub CLI 가 이 값을 어떻게 해석하는지 dry-run으로 확인.
 4. **Metadata canonical 정렬**:
    - 현재 required는 충족: `openclaw.compat.pluginApi`, `openclaw.build.openclawVersion`.
