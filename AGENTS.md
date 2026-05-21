@@ -95,7 +95,7 @@ pnpm typecheck && ./run.sh check-backends && ./run.sh check-models && ./run.sh c
 ./run.sh smoke-all /path/to/project         # Claude + Codex runtime (Gemini joins when `gemini` is on PATH)
 ./run.sh verify-resume /path/to/project     # cross-process continuity
 ./run.sh check-bridge /path/to/project      # MCP bridge visibility + invocation
-./run.sh sentinel /path/to/project          # 6-cell entwurf matrix
+./run.sh sentinel [cells]                   # 6-cell entwurf matrix (omit cells = all 6; no project arg)
 ./run.sh session-messaging /path/to/project # 4-case cross-session messaging
 ```
 

@@ -24,6 +24,7 @@ Dependency-audit-driven patch release. Absorbs three concurrent upstream upgrade
 
 - All bumps land with `pnpm check` GREEN across 12 gates (`check-mcp`, `check-shell-quote`, `check-plugin-empty-final-recovery`, `check-plugin-prompt-format`, `check-models`, `check-backends`, `check-registration`, `check-dep-versions`, `check-sdk-surface`, `check-pack` plus lint + typecheck). `check-pack` reports the same 48-files invariant; the typed-surface gate stays at zero unannotated casts.
 - NEXT.md realigned: new top-priority box for the 0.7.5 dep-audit round with a baseline-preservation cross-check table keyed to issue #24's 2026-05-21 baseline cmt. The prior Phase 3.4 box demoted to Phase 3.4/3.5 with the #23 RFC-bound split decision — ClawHub `@junghanacs` handle release deferred to RFC #2320 / #2333 outcome (weeks-months timeline per ClawSweeper v3 review), Phase 3.4 npm publish proceeds independently. Plugin-side env-preparation code fix (#21) moved to a post-0.7.5 follow-up (0.7.6 candidate) so it does not block the dep-audit release; the nixos-config consumer-side workaround (3477206) keeps operators unblocked in the meantime.
+- AGENTS.md verification command list now records the actual sentinel runner shape: `./run.sh sentinel [cells]` (omit cells = all six), not the older project-path form. This matches the Tier B 6-cell validation path used for 0.7.5.
 
 ## 0.7.4 — 2026-05-20
 
