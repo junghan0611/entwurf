@@ -47,7 +47,7 @@ Trigger: [#24 dep audit](https://github.com/junghan0611/pi-shell-acp/issues/24).
 
 **0.7.5 RELEASE CLOSED ✅** — `@junghanacs/pi-shell-acp@0.7.5` published 2026-05-21 (commit `412cc50`, tag `v0.7.5`, registry latest, Google Chat thread `ZtpDz4j2UxQ`). Tier B full verification (smoke-all + verify-resume + check-bridge + sentinel 6/6 + session-messaging 4/4) all GREEN.
 
-**Phase 3.4 (plugin publish) — unblocked 2026-05-21 by scope pivot to `@junghan0611`** (next box).
+**Phase 3.4 (plugin publish) — ✅ closed 2026-05-21 via scope pivot to `@junghan0611`** (`@junghan0611/openclaw-pi-shell-acp@0.0.1` published to npm + ClawHub source-linked). 자세한 trail 다음 박스.
 
 ---
 
@@ -61,20 +61,17 @@ Landed in the Phase 3.4 publish-prep batch (`91561a6` + follow-up polish):
 - `plugins/openclaw/README.md` — user-facing two-scope rationale, non-pi bootstrap path, npm/ClawHub install paths, hero image
 - `plugins/openclaw/AGENTS.md` — removed; root `AGENTS.md` remains the maintainer SSOT and public tarball stays user-facing
 
-**Remaining Phase 3.4 next turn:**
+**Phase 3.4 publish result (2026-05-21):**
 
-> Run dry-runs from `plugins/openclaw/`:
-> ```
-> npm pack --dry-run --json
-> npm publish --dry-run --access public
-> clawhub package publish . --dry-run --json --owner junghan0611
-> ```
-> All clean → live publish:
-> ```
-> npm publish --access public                           # → @junghan0611/openclaw-pi-shell-acp@0.0.1
-> clawhub package publish . --owner junghan0611         # → ClawHub publisher = junghan0611
-> ```
-> No `publisher create` step needed first — `clawhub whoami` already returns `junghan0611` (GitHub login). `publishToClawHub`/`publishToNpm` flags in `openclaw.release` left at `false` because we publish via the CLIs directly. Post-publish: README install section update (npm + ClawHub install paths), Phase 3.5 marked closed.
+- **npm**: `@junghan0611/openclaw-pi-shell-acp@0.0.1` published by `junghanacs` account. Registry detail propagation 진행 중 (`npm search` 즉시 출력, `npm view` 는 몇 분 지연).
+- **ClawHub**: source-linked release at commit `568a4996...`, family `code-plugin`, channel `community`, owner `junghan0611`. ClawHub 가 npm tarball 의 sha256/sha512/shasum cross-verify 완료 (`Verification: source-linked / artifact-only`).
+- **Compatibility manifest (ClawHub side)**: `pluginApi=>=2026.5.12, builtWith=2026.5.18, minGateway=2026.5.12` — D4 결정 정합 확인.
+- **Artifact**: 907.5 KB (npm pack 929 kB 와 비슷, ClawHub 자체 정규화 결과).
+
+**Post-publish 후속 (별개 라운드 가능):**
+- ClawHub 측 `trustedSourceLinkedOfficialInstall` trust mark elevation 은 review propagation 따라 자동 또는 manual upgrade. 현재 `community` channel.
+- `openclaw plugins install clawhub:@junghan0611/openclaw-pi-shell-acp` 명령은 review 통과 후 normal install surface 에 노출.
+- README install 섹션은 publish 전부터 3-path (ClawHub / npm / source) 모두 명시되어 있어서 추가 갱신 불필요.
 
 **Fresh ClawHub findings (2026-05-20):**
 - Two install paths exist. `openclaw plugins install clawhub:<package>` is the official ClawHub/trust path; bare `openclaw plugins install <package>` is npm/cutover or ClawHub-first depending on doc page. **Doc conflict to resolve:** `docs/plugins/manage-plugins.md` says bare tries ClawHub first then npm fallback, while `docs/plugins/building-plugins.md` / `docs/cli/plugins.md` still describe npm-by-default launch cutover. Npm publish alone is not the final OpenClaw-native distribution.
@@ -114,8 +111,8 @@ Landed in the Phase 3.4 publish-prep batch (`91561a6` + follow-up polish):
 | 3.1 | pi-shell-acp pi.dev 등록 push | ✅ closed (2026-05-19, gallery card 등장; 2026-05-20 hero 이미지 surface 정합) |
 | 3.2 | bbot active-memory empty-final fix + role-preserving prompt (#20) | ✅ closed (2026-05-20, `e7eefeb` + `8b25c1e`; oracle bbot GREEN) |
 | 3.3 | `@openclaw/plugin-sdk/*` sanctioned spawn helper 확인 | ⏭ skipped (2026-05-20, SDK `private: true` / `workspace:*` only — 우리가 reach 못함) |
-| 3.4 | `@junghan0611/openclaw-pi-shell-acp` npm publish | 🔥 **active** (commit `91561a6` landed scope pivot + version reset; version downshifted to `0.0.1` 직전 publish; remaining = re-dry-run + publish — [#23](https://github.com/junghan0611/pi-shell-acp/issues/23)) |
-| 3.5 | ClawHub 정식 등록 (publisher `junghan0611`) → `trustedSourceLinkedOfficialInstall` 경로 통과 | 3.4 publish 직후 — `clawhub package publish . --owner junghan0611` |
+| 3.4 | `@junghan0611/openclaw-pi-shell-acp` npm publish | ✅ closed (2026-05-21, `0.0.1` published; `npm search` confirms registry entry; full propagation 진행 중) |
+| 3.5 | ClawHub 정식 등록 (publisher `junghan0611`) → `trustedSourceLinkedOfficialInstall` 경로 통과 | 🟢 source-linked (2026-05-21, ClawHub `inspect` 결과 `Verification: source-linked / artifact-only`, source commit `568a4996...`, npm tarball cross-verified). official install trust mark elevation 은 ClawHub 측 review propagation 따라 |
 | 3.6 | Self-contained install — `openclaw plugins install @junghan0611/openclaw-pi-shell-acp` 한 줄 UX. plugin package 가 `acp-bridge.ts` 를 직접 import 하여 bridge runtime 을 품음. child `pi` binary 의존 제거 | 3.5 + Phase 1.4 ts refactor 완료 후 |
 | 3.7 | CHANGELOG plugin entry + VERIFY 갱신 + invariant 보강 | 3.6 완료 후 |
 
@@ -147,7 +144,7 @@ publish 진입 전 결정/작업:
 | | npm scope | first publishable version | pi-shell-acp 본체 version | 비고 |
 |---|---|---|---|---|
 | **Root** | `@junghanacs` | `0.7.5` (published) | — | npm only, ClawHub 등록 무관 |
-| **Plugin** | `@junghan0611` ← 2026-05-21 pivot | **0.0.1** (in flight; was 0.1.0 candidate, downshifted publish 직전) | **>=0.7.5** | npm + ClawHub. publisher `junghan0611` (GitHub login) |
+| **Plugin** | `@junghan0611` ← 2026-05-21 pivot | **0.0.1** ✅ published 2026-05-21 (npm + ClawHub source-linked) | **>=0.7.5** | npm + ClawHub. publisher `junghan0611` (GitHub login) |
 | Plugin 0.1.x (예정) | `@junghan0611` | 0.1.x | >=0.7.5 | 첫 실험 공개 통과 후 안정 표시 |
 | Plugin 0.2.x (예정) | `@junghan0611` | 0.2.x | >=0.8.0 (예정) | Phase 1.4 SDK 도입 후 swap 시점 |
 
