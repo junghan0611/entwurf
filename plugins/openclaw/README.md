@@ -68,11 +68,15 @@ pi --version
 # 2. Install the pi-shell-acp bridge into pi.
 pi install npm:@junghanacs/pi-shell-acp
 
-# 3. Smoke the bridge from a throwaway workspace.
+# 3. Wire and smoke the bridge from a throwaway workspace.
 mkdir -p ~/pi-shell-acp-smoke
 cd ~/pi-shell-acp-smoke
 "$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" install .
-"$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" smoke-all .
+
+# Pick the backend you actually installed and authenticated.
+"$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" smoke-claude .
+# or: "$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" smoke-codex .
+# or: "$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" smoke-gemini .
 ```
 
 At least one backend must also be installed and authenticated in that
