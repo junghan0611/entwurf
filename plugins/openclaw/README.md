@@ -4,6 +4,8 @@ OpenClaw plugin that adds a `pi-shell-acp` provider — an ACP bridge
 to Claude Code, Codex, and Gemini CLI backends, using your own
 locally authenticated credentials.
 
+![openclaw-pi-shell-acp — OpenClaw gateway for the pi-shell-acp bridge](docs/assets/openclaw-pi-shell-acp-hero.jpg)
+
 > **Status: prerelease.** Manual install only. Not published to npm
 > or ClawHub yet. Treat this as a development artifact, not a
 > released package.

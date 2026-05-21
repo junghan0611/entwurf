@@ -22,6 +22,7 @@
 	"files": [
 		"dist/",
 		"src/",
+		"docs/",
 		"openclaw.plugin.json",
 		"README.md",
 		"AGENTS.md",
