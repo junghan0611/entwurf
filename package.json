@@ -121,6 +121,6 @@
 			"./pi-extensions/entwurf.ts",
 			"./pi-extensions/model-lock.ts"
 		],
-		"image": "https://raw.githubusercontent.com/junghan0611/pi-shell-acp/main/docs/assets/pi-shell-acp-hero.jpg"
+		"image": "https://raw.githubusercontent.com/junghan0611/pi-shell-acp/main/docs/assets/pi-shell-acp-demo.gif"
 	}
 }
