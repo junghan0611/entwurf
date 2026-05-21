@@ -1,7 +1,7 @@
 {
 	"name": "@junghan0611/openclaw-pi-shell-acp",
 	"version": "0.1.0",
-	"description": "OpenClaw plugin surfacing pi-shell-acp as a first-class provider — host adapter for Claude Code / Codex / Gemini ACP backends via the upstream pi-shell-acp bridge. Prerelease: manual install only.",
+	"description": "OpenClaw plugin surfacing pi-shell-acp as a first-class provider — host adapter for Claude Code / Codex / Gemini ACP backends via the upstream pi-shell-acp bridge. Prerelease package.",
 	"license": "MIT",
 	"author": "Junghan Kim",
 	"repository": {
@@ -25,7 +25,6 @@
 		"docs/",
 		"openclaw.plugin.json",
 		"README.md",
-		"AGENTS.md",
 		"LICENSE"
 	],
 	"scripts": {

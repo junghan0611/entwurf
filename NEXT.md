@@ -55,11 +55,11 @@ Trigger: [#24 dep audit](https://github.com/junghan0611/pi-shell-acp/issues/24).
 
 **Status (2026-05-21, RESOLVED):** ClawHub `@junghanacs` handle release remains RFC-bound (timeline weeks-months, [openclaw/clawhub#2346](https://github.com/openclaw/clawhub/issues/2346) ClawSweeper v3 + RFC [#2320](https://github.com/openclaw/clawhub/issues/2320) / [#2333](https://github.com/openclaw/clawhub/issues/2333)), so the plugin pivots to a new owner identity instead of waiting. Decision ([#23](https://github.com/junghan0611/pi-shell-acp/issues/23)): **plugin npm scope = `@junghan0611`, ClawHub publisher = `junghan0611`** — one npm account (`junghanacs`) now holds two scopes (`@junghanacs` for root, `@junghan0611` free public org for plugin). Root `@junghanacs/pi-shell-acp` untouched (pi has no equivalent registration constraint).
 
-Landed in this commit batch (commit `91561a6`):
+Landed in the Phase 3.4 publish-prep batch (`91561a6` + follow-up polish):
 - `plugins/openclaw/package.json` — `name` → `@junghan0611/openclaw-pi-shell-acp`, `version` → `0.1.0`, `private` removed, `publishConfig.access: public` added, `openclaw.compat.minGatewayVersion: 2026.5.12` added (D4)
 - `plugins/openclaw/LICENSE` — MIT, copy of root (was listed in files but missing on disk)
-- `plugins/openclaw/README.md` — user-facing "A note on the two npm scopes" section
-- `plugins/openclaw/AGENTS.md` — "Scope Divergence Rationale" maintainer section + updated Canonical Owner
+- `plugins/openclaw/README.md` — user-facing two-scope rationale, non-pi bootstrap path, npm/ClawHub install paths, hero image
+- `plugins/openclaw/AGENTS.md` — removed; root `AGENTS.md` remains the maintainer SSOT and public tarball stays user-facing
 
 **Remaining Phase 3.4 next turn:**
 
@@ -208,7 +208,7 @@ publish 진입 전 결정/작업:
 
 - **Telegram delivery bridge 정식화** (Phase 1.4) — Phase 1.8 응급 다리로 child pi final text → synthetic OpenClaw `message` toolCall 변환을 stub 에 넣음 (`pi-shell-acp-message-*`, toolResult 후 즉시 `end_turn`). 정식 작업에서 OpenClaw `context.tools` / provider tool surface 를 pi-shell-acp transport 에 연결하는 **일반 tool bridge** 로 승격. 지금 패치는 Telegram/message-tool-only path 를 뚫기 위한 prerelease shim. 남은 UX debt: tool trace 노출, `<system-reminder>`류 prompt hygiene, `HEARTBEAT_OK` 같은 session sentinel 이 child prompt 에 섞이는 문제.
 
-- **Oracle Docker image 3-layer install** (Oracle config repo 측) — openclaw-gateway 컨테이너에 `pi`, `pi-shell-acp`, `codex-acp`, `gemini` 추가. `git` system pkg + pnpm global. 자세한 layout 은 `plugins/openclaw/AGENTS.md` § Install layers. Oracle 측 작업, 우리 측 plugin 코드 변경 없음.
+- **Oracle Docker image 3-layer install** (Oracle config repo 측) — openclaw-gateway 컨테이너에 `pi`, `pi-shell-acp`, `codex-acp`, `gemini` 추가. `git` system pkg + pnpm global. 자세한 layout 은 `plugins/openclaw/README.md` § Requirements / Docker boundary / If you do not already use pi. Oracle 측 작업, 우리 측 plugin 코드 변경 없음.
 
 - **agent-config server-mode `pi-shell-acp` ref 복귀** (Phase 3 release 후) — 현재 `agent-config 5f17d70` 가 server-mode 에서 main 추적 정책. Oracle 호스트가 우리 push 를 자동 follow. **prerelease / Oracle 검증 동안 임시**. Phase 3 의 ClawHub 등록 후 release tag (`git:...pi-shell-acp@v0.x.y` 등) 로 다시 ref pinning 으로 복귀. 잊으면 server 가 영원히 main 추적 — release 후엔 안 좋은 정책.
 

@@ -6,9 +6,11 @@ locally authenticated credentials.
 
 ![openclaw-pi-shell-acp — OpenClaw gateway for the pi-shell-acp bridge](docs/assets/openclaw-pi-shell-acp-hero.jpg)
 
-> **Status: prerelease.** Manual install only. Not published to npm
-> or ClawHub yet. Treat this as a development artifact, not a
-> released package.
+> **Status: prerelease 0.1.x.** Published package path for early
+> adopters. The plugin is usable, but the current implementation is
+> still a child-`pi` stub; the self-contained ACP transport lands in a
+> later phase. ClawHub releases may remain hidden from normal install
+> surfaces until review completes.
 
 ## What it does
 
@@ -48,6 +50,39 @@ this prerelease's tested surface.
   remote machine). See [Docker boundary](#docker-boundary) below.
 - `pi` binary on `PATH` (this plugin spawns a child `pi` process per
   turn to handle ACP framing).
+- `@junghanacs/pi-shell-acp` installed into that same `pi` runtime
+  (see [If you do not already use pi](#if-you-do-not-already-use-pi)).
+
+## If you do not already use pi
+
+This plugin is only the OpenClaw adapter. It does **not** bundle the
+`pi` runtime, `pi-shell-acp`, or backend credentials. Install these in
+the same runtime where OpenClaw runs — the host for native OpenClaw, or
+inside the OpenClaw container for Docker deployments.
+
+```bash
+# 1. Install the pi binary.
+npm i -g @earendil-works/pi-coding-agent
+pi --version
+
+# 2. Install the pi-shell-acp bridge into pi.
+pi install npm:@junghanacs/pi-shell-acp
+
+# 3. Smoke the bridge from a throwaway workspace.
+mkdir -p ~/pi-shell-acp-smoke
+cd ~/pi-shell-acp-smoke
+"$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" install .
+"$(npm root -g)/@junghanacs/pi-shell-acp/run.sh" smoke-all .
+```
+
+At least one backend must also be installed and authenticated in that
+same runtime: Claude Code, Codex, or Gemini CLI. `pi-shell-acp` ships
+the Claude/Codex ACP server packages it needs, but it never provides
+Claude/Codex/Gemini credentials or subscription access.
+
+For Docker, run the commands above in the OpenClaw gateway container or
+bake them into the image that runs the gateway. Then apply the Docker
+auth / `~/.pi` overlay policy below.
 
 ## Docker boundary
 
@@ -166,36 +201,53 @@ publisher handle must match the package scope; the root bridge
 has no equivalent constraint (pi has its own provider ecosystem).
 Routine maintenance follows one account, two scopes.
 
-## Install (manual, prerelease)
+## Install
 
-This plugin is currently distributed only as source from this
-repository. Public install (`openclaw plugins install <pkg>`) will
-come later; for now:
+### From ClawHub (preferred when review is available)
 
 ```bash
-# 1. Clone the parent repo somewhere local.
-git clone https://github.com/junghan0611/pi-shell-acp.git
-cd pi-shell-acp/plugins/openclaw
-
-# 2. Manual install into OpenClaw's extensions directory.
-node /path/to/openclaw.mjs plugins install "$(pwd)" \
-  --dangerously-force-unsafe-install
+openclaw plugins install clawhub:@junghan0611/openclaw-pi-shell-acp
+openclaw gateway restart
+openclaw plugins inspect pi-shell-acp --runtime --json
 ```
 
-The `--dangerously-force-unsafe-install` flag is required during
-prerelease because OpenClaw's `install-security-scan.runtime.ts`
-rejects extensions that use `child_process` unless they come from a
-trusted source (ClawHub registration or marketplace). Once this
-plugin lands on ClawHub, the flag goes away. **Do not use this
-flag for arbitrary third-party plugins.**
+ClawHub is OpenClaw's native discovery surface. Immediately after a new
+publish, the release may still be under ClawHub review and hidden from
+normal install/download surfaces. If this command cannot find the
+package yet, use the npm path below or wait for review to complete.
+
+### From npm
+
+```bash
+openclaw plugins install npm:@junghan0611/openclaw-pi-shell-acp
+openclaw gateway restart
+openclaw plugins inspect pi-shell-acp --runtime --json
+```
+
+Use the explicit `npm:` prefix when you want to skip ClawHub lookup and
+force npm resolution.
+
+### From source (development / emergency fallback)
+
+```bash
+git clone https://github.com/junghan0611/pi-shell-acp.git
+cd pi-shell-acp/plugins/openclaw
+openclaw plugins install "$(pwd)" --dangerously-force-unsafe-install
+openclaw gateway restart
+```
+
+The `--dangerously-force-unsafe-install` flag is required only for
+untrusted local source installs because this prerelease spawns a child
+process. Do **not** use this flag for arbitrary third-party plugins.
+Prefer ClawHub or npm for normal installs.
 
 After install:
 
 ```bash
-node /path/to/openclaw.mjs plugins list --json
+openclaw plugins list --json
 # Look for "pi-shell-acp" with status "loaded".
 
-node /path/to/openclaw.mjs models list --provider pi-shell-acp --json
+openclaw models list --provider pi-shell-acp --json
 # Should show the five models above.
 ```
 
@@ -232,12 +284,11 @@ when the stub is rewritten as a real ACP plugin.
 
 ## Limitations (prerelease)
 
-- Manual install only; no `openclaw plugins install <pkg>` yet.
-- Requires `--dangerously-force-unsafe-install` until ClawHub
-  registration.
-- Tool dispatch ergonomics are still evolving — the child `pi`
-  binary owns its own tool surface; OpenClaw-side tool routing
-  for ACP backends is being tuned.
+- ClawHub releases may be unavailable until review completes; use the
+  explicit `npm:` install path as the fallback.
+- The current implementation is a child-`pi` process stub, not the final
+  embedded ACP transport. The child `pi` binary owns its own tool
+  surface; OpenClaw-side tool routing for ACP backends is being tuned.
 - Tested under Sonnet against the OpenClaw `2026.5.18` production baseline.
   The compatibility floor remains `>=2026.5.12 <2026.6.0`; other models work but are less exercised.
 - Each turn emits a `[pi-shell-acp DIAG] ...` line to the gateway's
