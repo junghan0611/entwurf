@@ -23,7 +23,9 @@ Trigger: [#24 dep audit](https://github.com/junghan0611/pi-shell-acp/issues/24).
 - `c57121f` ✅ `docs(openclaw): document child skill PATH + emacs socket env contract` ([#21](https://github.com/junghan0611/pi-shell-acp/issues/21) docs portion)
 - **남은 작업** (이 라운드 안에서):
   - [#24](https://github.com/junghan0611/pi-shell-acp/issues/24) §2~§5 의 흡수 자리들 — `event-mapper.ts` `agent_end` + `willRetry`, `engraving.ts` / `pi-context-augment.ts` vs pi 0.75 XML boundary, sdk 0.22 schema v0.13.2 + event ordering, claude-agent-acp 0.35 plan-state hook + SDK settings resolution + 0.36 session delete experimental + `additionalDirectories`
-  - [#21](https://github.com/junghan0611/pi-shell-acp/issues/21) plugin-side env preparation 코드 fix — PATH augmentation + emacs socket detection on ACP child spawn
+
+**Post-0.7.5 follow-up (이 라운드에 포함 안 됨):**
+- [#21](https://github.com/junghan0611/pi-shell-acp/issues/21) plugin-side env preparation 코드 fix — PATH augmentation + emacs socket detection on ACP child spawn. docs portion (`c57121f`) 은 이 라운드에 landed; 코드 fix 는 별도 라운드 (0.7.6 candidate). nixos-config consumer workaround ([3477206](https://github.com/junghan0611/nixos-config/commit/3477206)) 가 동작 중이므로 0.7.5 release blocker 아님. dep audit release 빠르게 닫는 우선.
 
 **작업 순서 ([#24](https://github.com/junghan0611/pi-shell-acp/issues/24) §8):** Step 1 (codex-acp zero-risk + MCP SDK floats) → Step 2 (sdk 0.22) → Step 3 (pi 0.75) → Step 4 (claude-agent-acp 0.36). 각 step 후 `pnpm check` + 가능하면 small reproducer.
 
@@ -60,7 +62,7 @@ Root prerequisite: `@junghanacs/pi-shell-acp@0.7.4` is released and published (p
 **Fresh ClawHub findings (2026-05-20):**
 - Two install paths exist. `openclaw plugins install clawhub:<package>` is the official ClawHub/trust path; bare `openclaw plugins install <package>` is npm/cutover or ClawHub-first depending on doc page. **Doc conflict to resolve:** `docs/plugins/manage-plugins.md` says bare tries ClawHub first then npm fallback, while `docs/plugins/building-plugins.md` / `docs/cli/plugins.md` still describe npm-by-default launch cutover. Npm publish alone is not the final OpenClaw-native distribution.
 - ClawHub publish is owner-scoped. Package scope must match selected owner. For `@junghanacs/openclaw-pi-shell-acp`, ClawHub owner `@junghanacs` must exist / be publishable before finalizing the package name. `curl -I https://clawhub.ai/junghanacs` currently returns 404; CLI auth/owner check still required.
-- `clawhub` CLI is not installed globally on this host. `npx -y clawhub@0.17.0 ...` works for help/dry-run. `clawhub whoami` requires login.
+- `clawhub` CLI is now installed globally on this host (`/home/junghan/.local/share/pnpm/clawhub`, v0.17.0) — `npx -y` prefix 불필요. `clawhub whoami` requires login. (어제 fresh finding 시점엔 미설치였음.)
 - Current plugin dry-run shape before edits: `npx -y clawhub@0.17.0 package publish plugins/openclaw --dry-run --json` succeeds locally and reports source `github:junghan0611/pi-shell-acp@v0.7.4:plugins/openclaw`, name `@junghanacs/openclaw-pi-shell-acp`, version `0.6.0`, 9 files, 44333 bytes. This proves local packaging shape only; it does **not** prove owner permission/review/security outcome.
 - OpenClaw `@openclaw/plugin-package-contract` code requires only `openclaw.compat.pluginApi` and `openclaw.build.openclawVersion`. It normalizes `compat.minGatewayVersion` from `install.minHostVersion` when absent. `build.pluginSdkVersion` is optional metadata, and `@openclaw/plugin-sdk` is not published on npm; decide whether to add it as explicit canonical metadata (`2026.5.18`) or omit because this external stub cannot depend on SDK.
 
