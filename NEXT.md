@@ -45,19 +45,36 @@ Trigger: [#24 dep audit](https://github.com/junghan0611/pi-shell-acp/issues/24).
 - nixos-config consumer-side workaround ([3477206](https://github.com/junghan0611/nixos-config/commit/3477206)) 가 새 dep set + pi 0.75 lifecycle script hardening 과 정합 유지 확인
 - npm publish `@junghanacs/pi-shell-acp@0.7.5` — 본인 npm scope, blocker zero
 
-**Phase 3.4 (plugin publish) 와 분리** — plugin `@junghanacs/openclaw-pi-shell-acp@0.1.0` prerelease 는 ClawHub handle RFC outcome 후 별도 라운드. 0.7.5 publish 후 plugin scope 정합 재확인은 가능하나 publish 자체는 다음 박스 참조.
+**0.7.5 RELEASE CLOSED ✅** — `@junghanacs/pi-shell-acp@0.7.5` published 2026-05-21 (commit `412cc50`, tag `v0.7.5`, registry latest, Google Chat thread `ZtpDz4j2UxQ`). Tier B full verification (smoke-all + verify-resume + check-bridge + sentinel 6/6 + session-messaging 4/4) all GREEN.
+
+**Phase 3.4 (plugin publish) — unblocked 2026-05-21 by scope pivot to `@junghan0611`** (next box).
 
 ---
 
-## Phase 3.4/3.5 — OpenClaw plugin publish ([#23](https://github.com/junghan0611/pi-shell-acp/issues/23): RFC 의존 분리)
+## Phase 3.4/3.5 — OpenClaw plugin publish ([#23](https://github.com/junghan0611/pi-shell-acp/issues/23): RESOLVED via scope pivot)
 
-**Status (2026-05-21):** ClawHub `@junghanacs` handle release 가 [openclaw/clawhub#2346](https://github.com/openclaw/clawhub/issues/2346) ClawSweeper v3 review 에서 test-locked conflict (`convex/publishers.test.ts:1746`) 로 잡혀 RFC [#2320](https://github.com/openclaw/clawhub/issues/2320) / [#2333](https://github.com/openclaw/clawhub/issues/2333) 의존으로 재분류 — timeline **수주~수개월**. [#23](https://github.com/junghan0611/pi-shell-acp/issues/23) 결정: **분리 publish** — Phase 3.4 npm path 진행, Phase 3.5 ClawHub trust mark 는 RFC outcome 후. NEXT D6 ("npm + ClawHub 같은 라운드") 의도적 위반.
+**Status (2026-05-21, RESOLVED):** ClawHub `@junghanacs` handle release remains RFC-bound (timeline weeks-months, [openclaw/clawhub#2346](https://github.com/openclaw/clawhub/issues/2346) ClawSweeper v3 + RFC [#2320](https://github.com/openclaw/clawhub/issues/2320) / [#2333](https://github.com/openclaw/clawhub/issues/2333)), so the plugin pivots to a new owner identity instead of waiting. Decision ([#23](https://github.com/junghan0611/pi-shell-acp/issues/23)): **plugin npm scope = `@junghan0611`, ClawHub publisher = `junghan0611`** — one npm account (`junghanacs`) now holds two scopes (`@junghanacs` for root, `@junghan0611` free public org for plugin). Root `@junghanacs/pi-shell-acp` untouched (pi has no equivalent registration constraint).
 
-Root prerequisite: `@junghanacs/pi-shell-acp@0.7.4` is released and published (post-#20 stable baseline; **0.7.5 dep-audit patch in progress, see above box**).
+Landed in this commit batch (commit `91561a6`):
+- `plugins/openclaw/package.json` — `name` → `@junghan0611/openclaw-pi-shell-acp`, `version` → `0.1.0`, `private` removed, `publishConfig.access: public` added, `openclaw.compat.minGatewayVersion: 2026.5.12` added (D4)
+- `plugins/openclaw/LICENSE` — MIT, copy of root (was listed in files but missing on disk)
+- `plugins/openclaw/README.md` — user-facing "A note on the two npm scopes" section
+- `plugins/openclaw/AGENTS.md` — "Scope Divergence Rationale" maintainer section + updated Canonical Owner
 
-**Phase 3.4 next turn (npm-only path, after 0.7.5 publish):**
+**Remaining Phase 3.4 next turn:**
 
-> Read `plugins/openclaw/AGENTS.md`, `plugins/openclaw/package.json`, `plugins/openclaw/README.md`, `plugins/openclaw/openclaw.plugin.json`, and OpenClaw docs `docs/plugins/building-plugins.md`, `docs/plugins/sdk-provider-plugins.md`, `docs/clawhub/publishing.md`, `docs/plugins/manage-plugins.md`. Prepare `@junghanacs/openclaw-pi-shell-acp` for first prerelease distribution on the **npm path only** ([#23](https://github.com/junghan0611/pi-shell-acp/issues/23) RFC-bound split — ClawHub trust mark deferred to Phase 3.5). Reset package version to `0.1.0`, set `private: false`, align docs/metadata to root `@junghanacs/pi-shell-acp@>=0.7.5` (post dep-audit patch) and OpenClaw validated baseline `2026.5.18` while preserving compatibility floor `>=2026.5.12 <2026.6.0`. Run npm dry-run first, then npm publish if dry-run is clean. ClawHub dry-run intentionally skipped this round.
+> Run dry-runs from `plugins/openclaw/`:
+> ```
+> npm pack --dry-run --json
+> npm publish --dry-run --access public
+> clawhub package publish . --dry-run --json --owner junghan0611
+> ```
+> All clean → live publish:
+> ```
+> npm publish --access public                           # → @junghan0611/openclaw-pi-shell-acp@0.1.0
+> clawhub package publish . --owner junghan0611         # → ClawHub publisher = junghan0611
+> ```
+> No `publisher create` step needed first — `clawhub whoami` already returns `junghan0611` (GitHub login). `publishToClawHub`/`publishToNpm` flags in `openclaw.release` left at `false` because we publish via the CLIs directly. Post-publish: README install section update (npm + ClawHub install paths), Phase 3.5 marked closed.
 
 **Fresh ClawHub findings (2026-05-20):**
 - Two install paths exist. `openclaw plugins install clawhub:<package>` is the official ClawHub/trust path; bare `openclaw plugins install <package>` is npm/cutover or ClawHub-first depending on doc page. **Doc conflict to resolve:** `docs/plugins/manage-plugins.md` says bare tries ClawHub first then npm fallback, while `docs/plugins/building-plugins.md` / `docs/cli/plugins.md` still describe npm-by-default launch cutover. Npm publish alone is not the final OpenClaw-native distribution.
@@ -67,43 +84,24 @@ Root prerequisite: `@junghanacs/pi-shell-acp@0.7.4` is released and published (p
 - OpenClaw `@openclaw/plugin-package-contract` code requires only `openclaw.compat.pluginApi` and `openclaw.build.openclawVersion`. It normalizes `compat.minGatewayVersion` from `install.minHostVersion` when absent. `build.pluginSdkVersion` is optional metadata, and `@openclaw/plugin-sdk` is not published on npm; decide whether to add it as explicit canonical metadata (`2026.5.18`) or omit because this external stub cannot depend on SDK.
 
 **3.4 decision lock (GPT ↔ Claude 합의, 2026-05-20):**
-- D1 owner pre-flight: 새 Claude 가 `clawhub whoami`부터 확인. owner 미존재/권한 없음이면 stop & report; GLG 가 owner 등록. **현재 상태 (2026-05-20)**: `@junghanacs` handle 이 ConvexError 로 점유 중 — § "ClawHub owner `@junghanacs` handle status" 참조.
-- D2 publish toggles: ⚠️ **갱신 (2026-05-21, [#23](https://github.com/junghan0611/pi-shell-acp/issues/23))** — 분리 publish 결정으로 npm path 는 실제 publish 까지 진행 (`release.publishToNpm=true` 또는 직접 `npm publish`); ClawHub path 는 RFC outcome 까지 dry-run 도 보류.
+- D1 owner pre-flight: ✅ **resolved 2026-05-21 ([#23](https://github.com/junghan0611/pi-shell-acp/issues/23))** — plugin owner pivoted to `junghan0611` (npm org + ClawHub publisher); `clawhub whoami` already returns `junghan0611`, no `publisher create` needed.
+- D2 publish toggles: ⚠️ **갱신 (2026-05-21, [#23](https://github.com/junghan0611/pi-shell-acp/issues/23))** — 직접 `npm publish` + `clawhub package publish . --owner junghan0611` 호출. `release.publishTo*` flags 둘 다 `false` 유지 (CLI 직접 호출 패턴 사용).
 - D3 `build.pluginSdkVersion`: 생략. 외부 stub 은 SDK npm dependency 가 없고 `@openclaw/plugin-sdk` 도 npm 미공개라 honest 반영. README 에 의도적 생략 사유 한 줄 추가.
 - D4 `compat.minGatewayVersion`: 명시 추가. 값은 `2026.5.12` 후보 — compatibility floor 를 reader 가 fallback 추적 없이 읽게 한다.
 - D5 provider manifest extras: 새 Claude 가 `sdk-provider-plugins.md` 읽고 `modelSupport` / `providerRequest` / auth metadata 필요성을 판단한 뒤 patch proposal → GLG 결정.
-- D6 publish surface order: ⚠️ **overridden 2026-05-21 ([#23](https://github.com/junghan0611/pi-shell-acp/issues/23))** — 원래 결정 (npm + ClawHub 같은 라운드) 은 ClawHub handle RFC 의존 (weeks-months) 이 명확해진 시점에 의도적 분리. Phase 3.4 = npm path, Phase 3.5 = ClawHub trust mark (RFC outcome 후).
+- D6 publish surface order: ✅ **restored 2026-05-21 ([#23](https://github.com/junghan0611/pi-shell-acp/issues/23))** — scope pivot to `@junghan0611` removed the RFC dependency, so npm + ClawHub publish can land in the same round again. Phase 3.4 = npm + ClawHub (`junghan0611` owner), Phase 3.5 = trustedSourceLinkedOfficialInstall verification.
 - D7 NEXT commit: 이 NEXT 정렬은 별도 self-contained commit 후보 (`docs(next): phase 3.4 entry — clawhub pre-flight + dual dry-run`). 실제 metadata 변경과 섞지 않는다.
 - D8 upstream doc conflict: 우리 publish 와 분리. 양쪽 surface 를 모두 만족시키므로 block 아님. 별도 sprint 로 OpenClaw docs issue/PR 후보.
 
-**ClawHub owner `@junghanacs` handle status (2026-05-20 → 2026-05-21 RFC-bound):**
+**Owner identity status (2026-05-21, RESOLVED via scope pivot):**
 
-**2026-05-21 갱신 ([#23](https://github.com/junghan0611/pi-shell-acp/issues/23)):** ClawSweeper v3 (2026-05-20 13:41 UTC) 가 `fix-shape-clear` label 회수 — test-locked conflict (`convex/publishers.test.ts:1746`) 발견. 단순 admin migration 으로 안 풀림. 4-tuple 작업 (RFC 결정 + 코드 + 테스트 + 신원 검증) 필요. Timeline **수주~수개월**. RFC outcome 추적: [#2320](https://github.com/openclaw/clawhub/issues/2320), [#2333](https://github.com/openclaw/clawhub/issues/2333). 본 repo 케이스를 RFC cross-ref 후보로 둠 (자세한 trace [#23](https://github.com/junghan0611/pi-shell-acp/issues/23)).
+**Plugin owner = `junghan0611`** (npm scope + ClawHub publisher). One npm account (`junghanacs@gmail.com`) holds two orgs: `@junghanacs` (personal — root) and `@junghan0611` (free public, admin = `junghanacs` — plugin). `npm org ls junghan0611 --json` → `{ "junghanacs": "owner" }`. `clawhub whoami` → `junghan0611` (GitHub login already valid). No `publisher create` step needed; the personal-owner mapping is sufficient for ClawHub publish via `--owner junghan0611`.
 
-**과거 trace (2026-05-20):** GLG 가 `clawhub publisher create junghanacs --display-name "junghanacs (Junghan Kim — digital garden)"` 시도 결과 ConvexError: `Handle "@junghanacs" is already used by a user or personal publisher`. 과거 `junghanacs` GitHub 계정 (현재 살아있음, 계속 사용 예정) 으로 ClawHub 가입한 personal publisher 가 handle 을 점유 중. GLG 가 ClawHub web 에서 delete account 시도했으나 즉시 반영 안 됨 — 그 시점엔 handle release 지연인지 운영팀 contact 필요인지 미확정이었으나, ClawSweeper v3 review 가 test-locked + RFC 의존 으로 후속 정정.
+**Root owner = `@junghanacs` unchanged** — root never required ClawHub registration. Root namespace stays on `@junghanacs/pi-shell-acp` indefinitely; only the plugin pivoted to satisfy ClawHub's "scope must match selected owner" rule.
 
-clawhub CLI 는 본 머신에 pnpm global install 완료 (`/home/junghan/.local/share/pnpm/clawhub`, v0.17.0) — `npx -y` prefix 불필요. 현재 GLG personal owner = `junghan0611` (`whoami` 검증됨), GitHub `junghanacs` 도 살아있음 (`github.com/junghanacs` 200).
+**Why pivot beat waiting:** ClawHub `@junghanacs` handle release was bound to RFC outcome (weeks-months, [openclaw/clawhub#2346](https://github.com/openclaw/clawhub/issues/2346) ClawSweeper v3 + [#2320](https://github.com/openclaw/clawhub/issues/2320) / [#2333](https://github.com/openclaw/clawhub/issues/2333) test-locked conflict at `convex/publishers.test.ts:1746`). Pivot is reversible later via `clawhub package transfer @junghan0611/openclaw-pi-shell-acp --to junghanacs` once the RFC lands and `@junghanacs` becomes claimable; this is recorded as a Cross-repo follow-up rather than a blocker on Phase 3.4.
 
-npm 컨텍스트: GLG 의 npm username 이 `junghanacs` 이라 `@junghanacs/*` 가 personal scope 로 살아있음 (root `@junghanacs/pi-shell-acp@0.7.4` 가 publish 됨). 따라서 root 와 plugin scope 정합 유지 = `@junghanacs` ClawHub handle release 받는 게 0-cost 길.
-
-**새 Claude 세션 행동 (2026-05-21 update, RFC-bound):**
-
-ClawHub publisher creation retry 는 ⏸ **PARKED — RFC outcome 후 진입**. RFC [#2320](https://github.com/openclaw/clawhub/issues/2320) / [#2333](https://github.com/openclaw/clawhub/issues/2333) 결정이 나거나 GLG 가 ClawHub ops 로부터 handle release 받기 전엔 `clawhub publisher create` 시도 안 함.
-
-진입 trigger (둘 중 하나):
-- RFC outcome stamp + handle 정책 확정
-- GLG 명시적 unblock 결정 (예: 임시 handle pivot — **자동 fallback 금지**)
-
-진입 후 참고 순서:
-1. `clawhub whoami` 로 로그인 상태 확인 (예상: `junghan0611`).
-2. `clawhub publisher create junghanacs --display-name "junghanacs (Junghan Kim — digital garden)"` 재시도.
-3. 성공 시: D1 lock 대로 진행, `@junghanacs/openclaw-pi-shell-acp` 그대로.
-4. 여전히 ConvexError: STOP & report (자동 fallback 금지 — identity 분열 + 향후 transfer 비용 + GLG 결정 영역).
-
-**대체 옵션 — GLG 가 임시 unblock 결정할 때만 (새 Claude 자동 선택 금지):**
-
-- `clawhub publisher create junghan-garden --display-name "junghan-garden (temporary — awaiting @junghanacs release)"` 후 plugin package scope 임시 변경. 향후 `clawhub package transfer @junghan-garden/openclaw-pi-shell-acp --to junghanacs` 로 정합 복구.
-- `@junghan0611` scope 는 npm org 새로 만드는 추가 비용 (`npm org create junghan0611`) + root/plugin scope 분열이라 비추천.
+**Historical trace (2026-05-20):** GLG attempted `clawhub publisher create junghanacs ...` → ConvexError: `Handle "@junghanacs" is already used by a user or personal publisher` (legacy account, soft-deleted). Treated as RFC-bound for ~24 hours, then resolved 2026-05-21 by accepting the divergence and creating npm org `junghan0611` (web UI; `npm org create` CLI does not exist).
 
 **Phase 3.3 skipped — false premise.** SDK helper check already showed `@openclaw/plugin-sdk/process-runtime` is private/workspace-only, so external npm plugin cannot depend on it. Raw `spawn` remains acceptable for the prerelease stub; Phase 1.4 removes the child-`pi` spawn surface anyway.
 
@@ -116,55 +114,49 @@ ClawHub publisher creation retry 는 ⏸ **PARKED — RFC outcome 후 진입**. 
 | 3.1 | pi-shell-acp pi.dev 등록 push | ✅ closed (2026-05-19, gallery card 등장; 2026-05-20 hero 이미지 surface 정합) |
 | 3.2 | bbot active-memory empty-final fix + role-preserving prompt (#20) | ✅ closed (2026-05-20, `e7eefeb` + `8b25c1e`; oracle bbot GREEN) |
 | 3.3 | `@openclaw/plugin-sdk/*` sanctioned spawn helper 확인 | ⏭ skipped (2026-05-20, SDK `private: true` / `workspace:*` only — 우리가 reach 못함) |
-| 3.4 | `@junghanacs/openclaw-pi-shell-acp` npm publish 준비 | 🟡 분리 (npm path 진행, 0.7.5 publish 후 — [#23](https://github.com/junghan0611/pi-shell-acp/issues/23)) |
-| 3.5 | ClawHub 정식 등록 → `trustedSourceLinkedOfficialInstall` 경로 통과 | ⏳ RFC [#2320](https://github.com/openclaw/clawhub/issues/2320) / [#2333](https://github.com/openclaw/clawhub/issues/2333) outcome 후 (weeks-months — [#23](https://github.com/junghan0611/pi-shell-acp/issues/23)) |
-| 3.6 | Self-contained install — `openclaw plugins install @junghanacs/openclaw-pi-shell-acp` 한 줄 UX. plugin package 가 `acp-bridge.ts` 를 직접 import 하여 bridge runtime 을 품음. child `pi` binary 의존 제거 | 3.5 + Phase 1.4 ts refactor 완료 후 |
+| 3.4 | `@junghan0611/openclaw-pi-shell-acp` npm publish | 🔥 **active** (commit `91561a6` landed scope pivot + 0.1.0 reset; remaining = dry-run + publish — [#23](https://github.com/junghan0611/pi-shell-acp/issues/23)) |
+| 3.5 | ClawHub 정식 등록 (publisher `junghan0611`) → `trustedSourceLinkedOfficialInstall` 경로 통과 | 3.4 publish 직후 — `clawhub package publish . --owner junghan0611` |
+| 3.6 | Self-contained install — `openclaw plugins install @junghan0611/openclaw-pi-shell-acp` 한 줄 UX. plugin package 가 `acp-bridge.ts` 를 직접 import 하여 bridge runtime 을 품음. child `pi` binary 의존 제거 | 3.5 + Phase 1.4 ts refactor 완료 후 |
 | 3.7 | CHANGELOG plugin entry + VERIFY 갱신 + invariant 보강 | 3.6 완료 후 |
 
 ### 3.4 entry checklist (별도 라운드)
 
 publish 진입 전 결정/작업:
 
-1. **Plugin version reset** — `plugins/openclaw/package.json` `0.6.0 → 0.1.0`, `private: true → false`. 결정 근거는 § "Plugin ↔ 본체 버전 정합" 표 참고.
-2. **Prerelease tag 정책** — 잠정 `(a)` 0.1.0 일반 publish + README "prerelease/alpha" 명시. ClawHub 정식 등록 (3.5) 까지가 진짜 trust gate.
-3. **ClawHub pre-flight** — ⏸ **PARKED, RFC outcome 후 진입** ([#23](https://github.com/junghan0611/pi-shell-acp/issues/23) 참조):
-   - `clawhub whoami` 로 계정 확인 (clawhub CLI 이미 pnpm global install 됨 — `npx -y` prefix 불필요). 이 step 만은 비파괴라 PARKED 무관하게 가능.
-   - `clawhub publisher create junghanacs ...` 재시도는 RFC [#2320](https://github.com/openclaw/clawhub/issues/2320) / [#2333](https://github.com/openclaw/clawhub/issues/2333) outcome 후. 자동 fallback **금지**.
-   - npm path 만 진행하는 경우 ClawHub dry-run 은 건너뛰고 npm dry-run + npm publish 로 끝낼 수 있음. ClawHub dry-run 은 RFC outcome 후 별도 라운드.
-4. **Metadata canonical 정렬**:
-   - 현재 required는 충족: `openclaw.compat.pluginApi`, `openclaw.build.openclawVersion`.
-   - `compat.minGatewayVersion` 은 `install.minHostVersion` fallback 으로 normalize 되지만, canonical snippet 정합을 위해 명시 추가 (`2026.5.12` 후보).
-   - `build.pluginSdkVersion` 은 생략. SDK npm 미공개 / external stub dependency 없음이 honest. README 에 의도적 생략 사유 한 줄 추가.
-   - `openclaw.plugin.json` provider plugin manifest: `providers` 있음. `contracts.tools` 는 비해당. `modelSupport` / `providerRequest` / auth metadata 는 provider plugin UX에 필요한지 새 Claude 가 doc 근거로 판단 후 patch proposal.
-5. **Plugin publish gate 구성**:
-   - plugin `package.json` 에 `prepublishOnly` 후보 추가 검토: `pnpm run build && pnpm run check` + plugin-only pack audit.
-   - root `check-pack` 는 root package 검증용이라 plugin tarball 검증을 대신하지 않는다.
-   - plugin tarball 에 `.sh` 없음 → root 의 `.sh` mode regression / `postinstall-chmod.cjs` 패턴은 불필요.
-   - npm dry-run 필수: `cd plugins/openclaw && npm pack --dry-run --json && npm publish --dry-run --access public`.
-   - ClawHub dry-run 필수: `npx -y clawhub@0.17.0 package publish plugins/openclaw --dry-run --json` (필요 시 `--owner junghanacs`, `--source-repo junghan0611/pi-shell-acp`, `--source-ref v0.7.4`, `--source-path plugins/openclaw`).
-6. **README publish-ready 정합**:
-   - Status 를 prerelease/alpha 로 유지하되 npm package install path 를 추가.
-   - 자기-자백 유지: child `pi` spawned stub, not real embedded pi-shell-acp transport; Phase 1.4 ts refactor swaps this shape.
-   - 호환 매트릭스 명시: plugin `0.1.x` ↔ root `@junghanacs/pi-shell-acp@>=0.7.4` ↔ OpenClaw validated `2026.5.18`, floor `>=2026.5.12 <2026.6.0`.
-7. **OpenClaw host 측 deploy 의존 명시** — host/container 에 root `@junghanacs/pi-shell-acp@>=0.7.4`, `pi`, `codex-acp`, `gemini` 가 있어야 함. Plugin `0.1.x` 는 아직 bridge runtime 을 품지 않고 child `pi` 를 호출한다.
+1. **Plugin version reset** — ✅ landed (commit `91561a6`): `0.6.0 → 0.1.0`, `private` removed, `@junghan0611` scope.
+2. **Prerelease tag 정책** — 잠정 `0.1.0` 일반 publish + README "prerelease/alpha" 명시 유지. ClawHub 정식 등록 (3.5) 이 진짜 trust gate.
+3. **ClawHub pre-flight** — ✅ resolved via pivot ([#23](https://github.com/junghan0611/pi-shell-acp/issues/23)):
+   - `clawhub whoami` → `junghan0611` (GitHub login, 이미 valid)
+   - `clawhub package publish . --owner junghan0611` 직접 호출 — `publisher create` 별도 step 불필요 (personal owner mapping)
+4. **Metadata canonical 정렬** — ✅ landed (commit `91561a6`): `compat.minGatewayVersion: 2026.5.12` 명시 추가. `build.pluginSdkVersion` 의도적 생략 유지. `openclaw.plugin.json` publisher/owner field 는 schema 확인 전엔 손대지 않음 (GPT 검토 권고).
+5. **Plugin publish gate** — 다음 라운드:
+   - `cd plugins/openclaw && npm pack --dry-run --json` (10 files 정합 확인)
+   - `npm publish --dry-run --access public`
+   - `clawhub package publish . --dry-run --json --owner junghan0611`
+   - 셋 다 클린 → 실제 publish
+6. **README publish-ready 정합** — 부분 landed (scope divergence note 추가됨); publish 후 추가:
+   - Install 섹션에 `npm install @junghan0611/openclaw-pi-shell-acp` + `openclaw plugins install clawhub:@junghan0611/openclaw-pi-shell-acp` 경로 추가
+   - Status 를 "prerelease/alpha" → "released prerelease" 로 갱신
+   - 호환 매트릭스 갱신: plugin `0.1.x` ↔ root `@junghanacs/pi-shell-acp@>=0.7.5` ↔ OpenClaw validated `2026.5.18`, floor `>=2026.5.12 <2026.6.0`
+7. **OpenClaw host 측 deploy 의존** — 명시는 publish-time 별도 round: host/container 에 root `@junghanacs/pi-shell-acp@>=0.7.5`, `pi`, `codex-acp`, `gemini` 필요. Plugin `0.1.x` 는 child `pi` 호출 형태 (Phase 1.4 에서 embedded 로 swap).
 
-### Plugin ↔ 본체 버전 정합 (SSOT, 결정 박힘 2026-05-19 PM)
+### Plugin ↔ 본체 scope / 버전 정합 (SSOT)
 
-**결정**: plugin 별도 lifecycle + 첫 publish `0.1.0` reset.
+**결정 (2026-05-19 PM)**: plugin 별도 lifecycle + 첫 publish `0.1.0` reset. **결정 (2026-05-21 [#23](https://github.com/junghan0611/pi-shell-acp/issues/23))**: plugin scope pivot — `@junghanacs` → `@junghan0611`.
 
-| plugin version | pi-shell-acp 본체 version | 비고 |
-|---|---|---|
-| **0.1.x** (planned first publish) | **>=0.7.4** | 현재 stub. #20 empty-final + role-preserving prompt sealed; event-mapper fence sanitize + spawnTimeoutSeconds propagation 정합 포함 |
-| 0.2.x (예정) | >=0.8.0 (예정) | Phase 1.4 SDK 도입 후 swap 시점 |
+| | npm scope | first publishable version | pi-shell-acp 본체 version | 비고 |
+|---|---|---|---|---|
+| **Root** | `@junghanacs` | `0.7.5` (published) | — | npm only, ClawHub 등록 무관 |
+| **Plugin** | `@junghan0611` ← 2026-05-21 pivot | **0.1.0** (in flight) | **>=0.7.5** | npm + ClawHub. publisher `junghan0611` (GitHub login) |
+| Plugin 0.2.x (예정) | `@junghan0611` | 0.2.x | >=0.8.0 (예정) | Phase 1.4 SDK 도입 후 swap 시점 |
 
 이유 (한 줄씩):
 
-- 이미 별도 진화 중 (plugin 0.6.0 vs 본체 0.7.4). partial sync 가 가장 혼란.
-- 0.6.0 은 본체 trajectory 안의 작위적 숫자. plugin 자체로 보면 first publish 라 0.1.0 이 honest.
-- Cadence 자체가 다르다 — 본체는 자주 release, plugin 은 stub 안정 후 거의 안 건드림.
-- 호환 매트릭스 명시는 한 번 박으면 한참 안정.
+- Plugin 별도 lifecycle: 이미 별도 진화 중 (plugin 0.6.0 vs 본체 0.7.5). partial sync 가 가장 혼란. 0.6.0 은 본체 trajectory 안의 작위적 숫자였고 first publish 라 `0.1.0` 이 honest.
+- Plugin scope `@junghan0611`: ClawHub publisher handle (`junghan0611`) 과 npm scope 정합 필요 (ClawHub rule "scope must match owner"); `@junghanacs` ClawHub handle 이 RFC 의존 (weeks-months) 이라 pivot.
+- Root scope `@junghanacs` 유지: ClawHub 등록 무관이라 pivot 비용 zero benefit. 0.7.5 stable baseline 보존.
 
-폐기된 옵션 (참고): (ii) runtime probe `pi --version` parse — 0.1.x 단계 over-engineering. (iii) plugin version 본체와 sync — partial sync 가 가장 안 좋은 패턴.
+폐기된 옵션 (참고): (i) `@junghanacs` ClawHub handle release 대기 — RFC 의존 weeks-months. (ii) `@junghan-garden` 임시 handle + 향후 transfer — identity 분열 + transfer 비용. (iii) plugin version 본체와 sync — partial sync 가 가장 안 좋은 패턴.
 
 ---
 
@@ -186,7 +178,8 @@ publish 진입 전 결정/작업:
 
 ## 확정 사실 모음
 
-- **Plugin npm 이름**: `@junghanacs/openclaw-pi-shell-acp` (scope = 출처 + 책임 명확)
+- **Plugin npm 이름**: `@junghan0611/openclaw-pi-shell-acp` (2026-05-21 pivot from `@junghanacs/...` — see [#23](https://github.com/junghan0611/pi-shell-acp/issues/23) and § "Plugin ↔ 본체 scope / 버전 정합" table for rationale)
+- **Plugin ClawHub publisher**: `junghan0611` (GitHub login, matches npm scope)
 - **Plugin 디렉토리**: `plugins/openclaw/` — monorepo lite, `pnpm-workspace.yaml` `packages: ["plugins/*"]`. 의미: `pi-shell-acp` = pi 의 *extension*, `plugins/openclaw` = host 어댑터. `packages/` 어휘 충돌 회피.
 - **OpenClaw peer**: `>=2026.5.12 <2026.6.0`. Validated baseline `2026.5.18`; 5.7~5.11 호환 포기.
 - **pi-ai dep (plugin)**: `@earendil-works/pi-ai@0.74.0` (5.12 align).
@@ -198,6 +191,8 @@ publish 진입 전 결정/작업:
 ---
 
 ## Cross-repo follow-ups (별도 추적)
+
+- **ClawHub `@junghanacs` handle RFC outcome 추적 + future scope re-unification** — RFC [#2320](https://github.com/openclaw/clawhub/issues/2320) / [#2333](https://github.com/openclaw/clawhub/issues/2333) outcome 박힐 때 `@junghanacs` ClawHub handle 이 claimable 해지면 plugin scope 를 `@junghan0611` → `@junghanacs` 로 재정렬 가능. 경로: `clawhub package transfer @junghan0611/openclaw-pi-shell-acp --to junghanacs` + npm 측 deprecation/redirect (`npm deprecate @junghan0611/openclaw-pi-shell-acp "moved to @junghanacs/..."`). 이건 weeks-months 후의 옵션이고, 0.7.x 동안엔 진행 X — 분열을 maintain 하는 게 더 cheap. [#23](https://github.com/junghan0611/pi-shell-acp/issues/23) 참조.
 
 - **Gemini bot usage 측정 OpenClaw 표시 갭** — bbot DIAG stderr 에 `meter=acpUsageUpdate ... used=24315 size=1000000 raw: input=13 output=591 cacheRead=54834 cacheWrite=14346` 정상 도착. 그러나 OpenClaw status bar 의 `📚 Context: ?/200k` 로 표시 (`?`). 분석 영역: (a) plugin `streamSimple` 의 final `message.usage` 에 정확히 전달되는지, (b) OpenClaw status renderer 의 model picker 가 plugin provider 의 usage 매칭하는지 (provider id `pi-shell-acp` 로 lookup 시 missing 인가). "어제도 봤던 버그" — 알려진 잔존 이슈.
 
