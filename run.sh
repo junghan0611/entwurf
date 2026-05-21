@@ -2810,13 +2810,13 @@ check_pack_install() {
 
   printf '%s\n' '{ "name": "pi-shell-acp-install-smoke", "version": "0.0.0", "private": true }' > "$tmp/package.json"
 
-  echo "[check-pack-install] pnpm add into $tmp (with 0.74.x peers + typebox)"
+  echo "[check-pack-install] pnpm add into $tmp (with 0.75.x peers + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.74.0" \
-    "@earendil-works/pi-coding-agent@0.74.0" \
-    "@earendil-works/pi-tui@0.74.0" \
+    "@earendil-works/pi-ai@0.75.4" \
+    "@earendil-works/pi-coding-agent@0.75.4" \
+    "@earendil-works/pi-tui@0.75.4" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
