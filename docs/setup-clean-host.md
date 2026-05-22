@@ -559,6 +559,253 @@ Expected drift points:
 > pipe (Gemini shape). To turn any of these green: install the backend
 > CLI, complete its own auth flow, and re-run the matching smoke.
 
+## Stage 4c — OpenClaw native plugin smoke (0.0.1 practice)
+
+This stage is not part of the original clean-host pi-shell-acp smoke. It
+records the first native OpenClaw plugin install practice after
+`@junghan0611/openclaw-pi-shell-acp@0.0.1` was published. The live run was
+on an internal Ubuntu SSH host that already had Claude / Codex / Gemini
+auth directories and an existing pi operator config. Treat this trail as a
+local verification record, not a public install recipe.
+
+Goal: prove that a non-Docker OpenClaw install can load the published plugin
+and drive a turn through pi-shell-acp. Docker credential-boundary concerns do
+not apply here because OpenClaw, `pi`, and the backend CLIs all run as the
+same Unix user on the same host.
+
+### Stage 4c pins
+
+```bash
+pnpm add -g \
+  openclaw@2026.5.18 \
+  @earendil-works/pi-coding-agent@0.75.4 \
+  @junghanacs/pi-shell-acp@0.7.5 \
+  @zed-industries/codex-acp@0.14.0 \
+  @google/gemini-cli@0.42.0
+
+openclaw --version   # OpenClaw 2026.5.18
+pi --version         # 0.75.4
+gemini --version     # 0.42.0
+pnpm list -g --depth 0 | grep -E 'openclaw|pi-shell-acp|pi-coding-agent|codex-acp|gemini-cli'
+```
+
+Observed:
+
+```text
+OpenClaw 2026.5.18 (50a2481)
+@earendil-works/pi-coding-agent 0.75.4
+@google/gemini-cli 0.42.0
+@junghanacs/pi-shell-acp 0.7.5
+@zed-industries/codex-acp 0.14.0
+openclaw 2026.5.18
+```
+
+If an old `@mariozechner/pi-coding-agent` install is still present, remove it
+and reinstall the current package so the `pi` shim points at
+`@earendil-works/pi-coding-agent`:
+
+```bash
+pnpm remove -g @mariozechner/pi-coding-agent || true
+pnpm add -g @earendil-works/pi-coding-agent@0.75.4
+pi --version
+```
+
+### Stage 4c setup
+
+Create the native OpenClaw state and workspace:
+
+```bash
+openclaw setup
+# writes ~/.openclaw/openclaw.json and ~/.openclaw/workspace/
+```
+
+The baseline config shape after `openclaw setup`:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "workspace": "/home/<user>/.openclaw/workspace"
+    }
+  },
+  "gateway": {
+    "mode": "local"
+  }
+}
+```
+
+Then install the OpenClaw plugin. Immediately after the 0.0.1 publish,
+ClawHub review/trust propagation may not yet make the package available on the
+normal `clawhub:` install surface, so the explicit npm path is the reliable
+practice route:
+
+```bash
+openclaw plugins install npm:@junghan0611/openclaw-pi-shell-acp@0.0.1
+```
+
+Observed: the plain npm install was blocked by OpenClaw's
+built-in dangerous-code scanner because this prerelease intentionally spawns a
+child `pi` process via `child_process`. For the maintainer's own published
+plugin on a trusted practice host, the break-glass flag was required:
+
+```bash
+openclaw plugins install npm:@junghan0611/openclaw-pi-shell-acp@0.0.1 \
+  --dangerously-force-unsafe-install \
+  --force
+```
+
+The important observed warning:
+
+```text
+Plugin "pi-shell-acp" contains dangerous code patterns: Shell command execution detected (child_process)
+Plugin "pi-shell-acp" installation forced despite dangerous code patterns via --dangerously-force-unsafe-install
+Installed plugin: pi-shell-acp
+```
+
+Do not normalize this as a public-user recommendation. It is acceptable only
+for the maintainer's own 0.0.1 smoke while ClawHub review/trust is still
+propagating. Normal docs should prefer the ClawHub install once available.
+
+Pin the plugin allowlist to remove the non-bundled auto-load warning:
+
+```bash
+openclaw config set plugins.allow '["pi-shell-acp"]' --strict-json
+```
+
+Set the default model:
+
+```bash
+openclaw models set pi-shell-acp/gpt-5.4
+```
+
+Resulting relevant config shape:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "workspace": "/home/<user>/.openclaw/workspace",
+      "model": {
+        "primary": "pi-shell-acp/gpt-5.4"
+      },
+      "models": {
+        "pi-shell-acp/gpt-5.4": {}
+      }
+    }
+  },
+  "gateway": {
+    "mode": "local"
+  },
+  "plugins": {
+    "entries": {
+      "pi-shell-acp": {
+        "enabled": true
+      }
+    },
+    "allow": ["pi-shell-acp"]
+  }
+}
+```
+
+### Stage 4c pi package wiring caveat
+
+The cleanest future path should be: `pi install npm:@junghanacs/pi-shell-acp`
+then use that installed package from OpenClaw. On this practice host we
+found a runtime caveat that must be fixed or documented before making that
+the public
+recipe: loading the current npm package directly from a `node_modules` path can
+trip Node's TypeScript stripping boundary:
+
+```text
+Error [ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING]: Stripping types is currently unsupported for files under node_modules, for .../node_modules/@junghanacs/pi-shell-acp/acp-bridge.ts
+```
+
+The practice run therefore used the existing source checkout outside
+`node_modules` (`~/repos/gh/pi-shell-acp`) as the pi extension source. It also
+removed duplicate pi-shell-acp package entries from the user pi settings to
+avoid double registration conflicts.
+
+Duplicate-load symptoms look like this:
+
+```text
+Flag "--emacs-agent-socket" conflicts with .../pi-shell-acp/index.ts
+Tool "entwurf" conflicts with .../pi-shell-acp/pi-extensions/entwurf.ts
+```
+
+Operational reading:
+
+- One pi-shell-acp extension source must be active in a given pi runtime.
+- A source checkout outside `node_modules` works with Node's TS loader.
+- The npm package path is still useful for package distribution, but the
+  current TS-entry loading behavior needs a follow-up before it can be the
+  clean OpenClaw-native recipe.
+
+### Stage 4c verification
+
+First verify the direct pi path from the OpenClaw workspace:
+
+```bash
+cd ~/.openclaw/workspace
+~/repos/gh/pi-shell-acp/run.sh smoke-codex .
+```
+
+Observed:
+
+```text
+[smoke] backend:     codex
+[smoke] model:       pi-shell-acp/gpt-5.4
+[smoke] provider models: ok
+[pi-shell-acp:bootstrap] path=new backend=codex ...
+[smoke] bridge response (codex/gpt-5.4): ok
+[pi-shell-acp:shutdown] ... childExit=exited
+[smoke] bridge prompt: ok
+```
+
+Then verify OpenClaw's provider path through the plugin:
+
+```bash
+openclaw agent \
+  --local \
+  --agent main \
+  --model pi-shell-acp/gpt-5.4 \
+  --message "READY만 답해" \
+  --json \
+  --timeout 180
+```
+
+Observed:
+
+```json
+{
+  "payloads": [
+    { "text": "READY", "mediaUrl": null }
+  ],
+  "meta": {
+    "agentMeta": {
+      "provider": "pi-shell-acp",
+      "model": "gpt-5.4",
+      "agentHarnessId": "pi",
+      "usage": { "total": 21804 }
+    }
+  }
+}
+```
+
+The gateway log also showed the plugin-resolved context and child process path:
+
+```text
+[pi-shell-acp DIAG] turn msgs=1 roles=user ... workspaceDir=/home/<user>/.openclaw/workspace ... model=gpt-5.4
+[pi-shell-acp DIAG] child spawned ... model=gpt-5.4
+[pi-shell-acp DIAG] child finalize ... finalTextHead="READY" ... abnormal=0 timeoutFired=0
+```
+
+Known 0.0.1 observation: `openclaw models set pi-shell-acp/gpt-5.4` works, but
+`openclaw models list --provider pi-shell-acp` returned `No models found` in
+this practice run even though the runtime plugin registered provider
+`pi-shell-acp` and the direct pi catalog listed the models. Treat that as a
+follow-up for the plugin/OpenClaw model-list integration surface, not as a
+failed turn-path smoke.
+
 ## Stage 5 — entwurf surface (optional, two-session)
 
 > **Do not run Stage 5 until Stage 4b (authenticated runtime smoke) is
