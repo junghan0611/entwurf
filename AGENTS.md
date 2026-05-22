@@ -125,6 +125,8 @@ Uses `entwurf` instead of `delegate` to avoid ecosystem collisions.
 - Target registry: `pi/entwurf-targets.json`; native preferred, ACP route explicit with `provider="pi-shell-acp"`.
 - Identity Preservation Rule: no model override on resume.
 
+> **Source-agnostic does not mean harness-agnostic.** 어디서 던지든 — GLG / sibling / external MCP host — entwurf 의 *target* 은 YOLO 하네스 프로세스다. 현재 bridge spawn baseline 은 `pi`; `claude-code` 는 YOLO 하네스 후보 / 직접 하네스 surface (이 bridge 의 entwurf path 로는 아직 실측되지 않음). 백엔드 CLI (`codex exec`, `gemini -p`) 는 같은 frontier 모델에 도달하지만 default sandbox + approval mode 가 ask-on-permission 이라, 분신이 첫 write/exec 에서 yes/no 에 멈춘다 — "던졌다고 생각했는데 실은 dead branch". bridge 의 entwurf surface 는 pi 자식 프로세스만 spawn 한다. 외부 MCP host 가 sync-only 한계를 우회해야 할 때는 `pi -p ... --provider <backend> --model <id>` 안에서 한다 — 백엔드 CLI 직접 호출은 entwurf 가 아니다. *Model* 은 free axis (어느 형제 학교 모델이든 빌려옴), *spawn target* 은 harness 정합 axis.
+
 > **Naming pair.** *Entwurf* (기투, projection-of-self) lives here in pi-shell-acp — the mechanism by which a resident agent throws siblings forward (spawn / resume / messaging). The resident-side counterpart is *Mitsein* (공존, being-with), defined in the resident's own knowledge base (cwd-scoped, not a global persona). pi-shell-acp owns the entwurf surface; resident-side conventions live where the resident wakes.
 
 ### Send-is-throw

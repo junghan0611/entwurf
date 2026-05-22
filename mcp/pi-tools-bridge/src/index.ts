@@ -458,6 +458,9 @@ server.tool(
 		"to pi-shell-acp; bare `gpt-5.4` resolves to native openai-codex (the pi-shell-acp/gpt-5.4 " +
 		"entry is marked explicitOnly and skipped from auto-resolution). " +
 		"Async spawn + entwurf_status are not exposed here yet (deferred to a separate design round). " +
+		"Spawn target is always a pi child (YOLO harness); backend CLIs (codex, gemini) are model carriers, " +
+		"not entwurf spawn targets. Do not run `codex exec` / `gemini -p` directly for delegation — " +
+		"select those models through `provider` / `model` so pi remains the YOLO harness. " +
 		`Default model when omitted: ${DEFAULT_ENTWURF_MODEL}.`,
 	{
 		task: z.string().min(1).describe("The task to entwurf (plain text prompt)"),
