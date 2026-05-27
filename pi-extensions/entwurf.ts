@@ -37,7 +37,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { Type } from "@earendil-works/pi-ai";
 import type {
@@ -46,6 +45,14 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
+import {
+	type AsyncEntwurfInfo,
+	activeEntwurfs,
+	ENTWURF_ENTRY_TYPE,
+	findEntwurfSession,
+	isProcessAlive,
+	spawnEntwurfResumeAsync,
+} from "./lib/entwurf-async.js";
 import {
 	analyzeSessionFileLike,
 	cwdToSessionDir,
@@ -57,7 +64,6 @@ import {
 	getRegistryRouting,
 	markEntwurfTargetUsed,
 	mirrorChildStderr,
-	readSessionHeader,
 	resolveEntwurfTarget,
 	resolveGuardTargetKey,
 	runEntwurfResumeSync,
@@ -74,85 +80,13 @@ function shellQuote(value: string): string {
 }
 
 // ============================================================================
-// Constants (async-only)
-// ============================================================================
-
-const ENTWURF_ENTRY_TYPE = "entwurf-task";
-const SESSIONS_BASE = path.join(os.homedir(), ".pi", "agent", "sessions");
-
-/** Find the entwurf session file for the given taskId by scanning sessions/. */
-function findEntwurfSession(taskId: string): string | null {
-	const active = activeEntwurfs.get(taskId);
-	if (active?.sessionFile) return active.sessionFile;
-
-	try {
-		for (const dir of fs.readdirSync(SESSIONS_BASE)) {
-			const dirPath = path.join(SESSIONS_BASE, dir);
-			try {
-				if (!fs.statSync(dirPath).isDirectory()) continue;
-				for (const file of fs.readdirSync(dirPath)) {
-					if (file.includes(`entwurf-${taskId}`)) {
-						return path.join(dirPath, file);
-					}
-				}
-			} catch {
-				/* skip inaccessible dirs */
-			}
-		}
-	} catch {
-		/* sessions base not found */
-	}
-	return null;
-}
-
-// ============================================================================
-// Types (async-only)
-// ============================================================================
-
-interface AsyncEntwurfInfo {
-	taskId: string;
-	sessionFile: string;
-	pid: number;
-	host: string;
-	task: string;
-	// Optional: for local spawn/resume this is the saved-session-header cwd
-	// (the authority for cold resume — see entwurf-core.ts INVARIANT block
-	// and #9). For remote spawn/resume the spawn-side cwd is ssh-internal and
-	// not always knowable here; we record it when present rather than fall
-	// back to the resumer's `process.cwd()`, which would re-introduce #9.
-	cwd?: string;
-	model?: string;
-	startTime: number;
-	status: "running" | "completed" | "failed";
-	exitCode?: number;
-	output?: string;
-	error?: string;
-	stopReason?: string;
-	explicitExtensions?: string[];
-	warnings?: string[];
-}
-
-// ============================================================================
-// State
-// ============================================================================
-
-const activeEntwurfs = new Map<string, AsyncEntwurfInfo & { proc?: ChildProcess }>();
-
-// ============================================================================
-// Helpers (async-only)
+// Async resume/spawn — state, types, and helpers live in lib/entwurf-async.ts
+// (Phase B Step 1). entwurf-control RPC dispatch (Phase B Step 2) and the
+// MCP bridge surface (Phase B Step 3) share the same `activeEntwurfs` map
+// and the same `spawnEntwurfResumeAsync` launcher via that lib — SSOT.
 // ============================================================================
 
 const analyzeSessionFile = analyzeSessionFileLike;
-
-/** Cheap liveness check for a given pid. */
-function isProcessAlive(pid: number): boolean {
-	try {
-		process.kill(pid, 0);
-		return true;
-	} catch {
-		return false;
-	}
-}
 
 // ============================================================================
 // Async entwurf (entwurf-control peer pattern)
@@ -907,274 +841,22 @@ export default function (pi: ExtensionAPI) {
 				};
 			}
 
-			// Async branch — unchanged pre-Phase-0.5 behavior. Detached spawn,
-			// immediate return, completion delivered as followUp message.
-			const info = activeEntwurfs.get(params.taskId);
-
-			let sessionFile: string | null = null;
-			let host = params.host ?? "local";
-
-			if (info) {
-				sessionFile = info.sessionFile;
-				host = params.host ?? info.host;
-			} else {
-				sessionFile = findEntwurfSession(params.taskId);
-			}
-
-			if (!sessionFile) {
-				// Fail-fast: caller asked to resume a taskId that has no traceable
-				// session (not in this session's active-entwurfs map, no match on
-				// disk). Throw so the agent stops trying to continue this task.
-				throw new Error(
-					`Cannot resume entwurf_resume async: session not found for taskId=${params.taskId}. ` +
-						`The task may belong to a different pi session, have been cleaned up, ` +
-						`or the id may be wrong. Call entwurf_status to list active entwurfs.`,
-				);
-			}
-
-			const isRemote = host !== "local";
-			if (!isRemote && !fs.existsSync(sessionFile)) {
-				throw new Error(
-					`Cannot resume entwurf_resume async: session file missing at ${sessionFile} ` +
-						`(taskId=${params.taskId}, host=${host}). ` +
-						`The session record exists in memory but the JSONL on disk is gone — ` +
-						`likely cleaned up or deleted externally.`,
-				);
-			}
-
-			const sessionAnalysis = !isRemote && fs.existsSync(sessionFile) ? analyzeSessionFile(sessionFile) : null;
-			// Identity Preservation Rule: prefer in-process spawn-time record (most
-			// accurate), then session JSONL recorded model. Refuse if neither — we
-			// never invent an identity for a resume.
-			const resumeModel = info?.model ?? sessionAnalysis?.lastModel ?? null;
-			if (!resumeModel) {
-				// Identity Preservation Rule (throwing form). Refuse to resume when
-				// neither the in-memory record nor the on-disk session can tell us
-				// *which model* this entwurf was. Inventing an identity is worse
-				// than stopping — this is the whole point of the rule.
-				throw new Error(
-					`Cannot resume ${params.taskId}: session has no recorded model ` +
-						`(file empty, corrupted, or never reached an assistant turn). ` +
-						`Start a fresh entwurf instead — identity must come from the session.`,
-				);
-			}
-			// Pass recorded provider so ACP-routed spawns get re-injected with the
-			// pi-shell-acp bridge on resume (otherwise pi cannot resolve the provider
-			// and the resume dies silently — see getEntwurfExplicitExtensions guard).
-			const explicitExtensions = getEntwurfExplicitExtensions(
-				resumeModel,
-				isRemote,
-				sessionAnalysis?.lastProvider ?? undefined,
+			// Async branch — body lives in `lib/entwurf-async.ts` (Phase B Step 1).
+			// The entwurf-control `spawn_async_resume` RPC (Phase B Step 2) and the
+			// MCP bridge surface (Phase B Step 3) share the same launcher + state
+			// map there, so `/entwurf-status` sees every async task regardless of
+			// which surface spawned it. ExtensionAPI touchpoints (entry append +
+			// completion delivery) are wired through callbacks at this callsite.
+			const ack = await spawnEntwurfResumeAsync(
+				{ taskId: params.taskId, prompt: params.prompt, host: params.host },
+				{
+					appendActiveEntry: (data) => pi.appendEntry(ENTWURF_ENTRY_TYPE, data),
+					deliverCompletion: (message) => pi.sendMessage(message, { triggerTurn: true, deliverAs: "followUp" }),
+				},
 			);
-			const resumeProvider = explicitExtensions.provider ?? sessionAnalysis?.lastProvider ?? undefined;
-
-			const piArgs = ["--mode", "json", "-p", "--no-extensions", ...explicitExtensions.args];
-			if (resumeProvider) piArgs.push("--provider", resumeProvider);
-			piArgs.push("--model", explicitExtensions.modelOverride ?? resumeModel, "--session", sessionFile, params.prompt);
-
-			let command: string;
-			let args: string[];
-			if (isRemote) {
-				command = "ssh";
-				const remoteCmd = `pi ${piArgs.map(shellQuote).join(" ")}`;
-				args = [host, remoteCmd];
-			} else {
-				command = "pi";
-				args = piArgs;
-			}
-
-			const resumeTaskId = crypto.randomUUID().slice(0, 8);
-			// Same INVARIANT as runEntwurfResumeSync (see entwurf-core.ts and
-			// issue #9). `info?.cwd` is the in-process carrier (spawn + resume
-			// in the same pi process); the JSONL header is the cross-process
-			// carrier. Neither falls back to `process.cwd()` — the resumer's
-			// cwd is NOT a valid authority for cold resume, and a silent
-			// fallback re-introduces #9. Local fail-fast when both carriers
-			// are absent.
-			const headerCwd = readSessionHeader(sessionFile)?.cwd;
-			const cwd = info?.cwd ?? headerCwd;
-			if (!isRemote && !cwd) {
-				throw new Error(
-					`Cannot resume taskId "${params.taskId}": saved session header has no cwd ` +
-						`and no in-process cwd carrier was available. The header cwd is the ` +
-						`authority for cold resume (see #9).`,
-				);
-			}
-
-			const proc = spawn(command, args, {
-				cwd: isRemote ? undefined : cwd,
-				shell: false,
-				detached: true,
-				stdio: ["ignore", "ignore", "pipe"],
-			});
-			// Same rationale as runEntwurfAsync — see the comment there.
-			proc.unref();
-			mirrorChildStderr(proc);
-
-			const pid = proc.pid ?? 0;
-
-			const resumeInfo: AsyncEntwurfInfo & { proc?: ChildProcess } = {
-				taskId: resumeTaskId,
-				sessionFile,
-				pid,
-				host,
-				task: `resume:${params.taskId} — ${params.prompt.slice(0, 60)}`,
-				cwd,
-				model: resumeModel,
-				startTime: Date.now(),
-				status: "running",
-				explicitExtensions: [...explicitExtensions.names],
-				warnings: [...explicitExtensions.warnings],
-				proc,
-			};
-			activeEntwurfs.set(resumeTaskId, resumeInfo);
-
-			pi.appendEntry(ENTWURF_ENTRY_TYPE, {
-				taskId: resumeTaskId,
-				sessionFile,
-				pid,
-				host,
-				task: resumeInfo.task,
-				cwd,
-				startTime: resumeInfo.startTime,
-				model: resumeInfo.model,
-				explicitExtensions: resumeInfo.explicitExtensions,
-				warnings: resumeInfo.warnings,
-			});
-
-			let stderr = "";
-			proc.stderr?.on("data", (data: Buffer) => {
-				stderr += data.toString();
-			});
-
-			proc.on("close", (code) => {
-				resumeInfo.exitCode = code ?? 0;
-				resumeInfo.status = code === 0 ? "completed" : "failed";
-				delete resumeInfo.proc;
-
-				if (!isRemote && fs.existsSync(sessionFile!)) {
-					const analysis = analyzeSessionFile(sessionFile!);
-					if (analysis.lastModel) resumeInfo.model = analysis.lastModel;
-					resumeInfo.stopReason = analysis.lastStopReason ?? undefined;
-					resumeInfo.error = analysis.lastError ?? undefined;
-					if (!resumeInfo.error && resumeInfo.stopReason === "error") {
-						resumeInfo.error = "Entwurf model returned stopReason=error";
-					}
-					if ((resumeInfo.error || resumeInfo.stopReason === "error") && resumeInfo.exitCode === 0) {
-						resumeInfo.exitCode = 1;
-					}
-					if (resumeInfo.error || resumeInfo.stopReason === "error") resumeInfo.status = "failed";
-
-					resumeInfo.output = analysis.lastAssistantText ?? resumeInfo.error ?? stderr ?? "(no output)";
-					const summaryText = analysis.lastAssistantText ?? resumeInfo.error ?? `exit code ${resumeInfo.exitCode}`;
-					const summary =
-						summaryText.slice(0, 2000) + (summaryText.length > 2000 ? "\n(truncated, full: session-recap)" : "");
-					const meta = [
-						resumeInfo.explicitExtensions?.length ? `Compat: ${resumeInfo.explicitExtensions.join(", ")}` : null,
-						resumeInfo.warnings?.length ? `Warnings: ${resumeInfo.warnings.join(" | ")}` : null,
-					]
-						.filter(Boolean)
-						.join("\n");
-
-					pi.sendMessage(
-						{
-							customType: "entwurf-complete",
-							content: [
-								`${resumeInfo.status === "failed" ? "❌" : "🏁"} resume \`${resumeTaskId}\` (← ${params.taskId}) ${resumeInfo.status} (${analysis.turns} turns, $${analysis.cost.toFixed(4)})`,
-								meta || null,
-								summary,
-							]
-								.filter(Boolean)
-								.join("\n\n"),
-							display: true,
-							details: {
-								taskId: resumeTaskId,
-								originalTaskId: params.taskId,
-								status: resumeInfo.status,
-								error: resumeInfo.error,
-								stopReason: resumeInfo.stopReason,
-								explicitExtensions: resumeInfo.explicitExtensions,
-								warnings: resumeInfo.warnings,
-							},
-						},
-						{ triggerTurn: true, deliverAs: "followUp" },
-					);
-				} else if (isRemote) {
-					resumeInfo.status = resumeInfo.exitCode === 0 ? "completed" : "failed";
-					resumeInfo.error =
-						resumeInfo.exitCode === 0 ? undefined : stderr.slice(0, 500) || `exit code ${resumeInfo.exitCode}`;
-					resumeInfo.output = resumeInfo.error ?? `Remote session: ${sessionFile}`;
-					const stderrNote = stderr ? `stderr:\n${stderr.slice(0, 1000)}` : null;
-					pi.sendMessage(
-						{
-							customType: "entwurf-complete",
-							content: [
-								`${resumeInfo.status === "failed" ? "❌" : "🏁"} resume \`${resumeTaskId}\` (← ${params.taskId}) ${resumeInfo.status} (${host}, remote)`,
-								`Session: ${sessionFile}`,
-								stderrNote,
-							]
-								.filter(Boolean)
-								.join("\n\n"),
-							display: true,
-							details: {
-								taskId: resumeTaskId,
-								originalTaskId: params.taskId,
-								status: resumeInfo.status,
-								exitCode: resumeInfo.exitCode,
-								error: resumeInfo.error,
-								explicitExtensions: resumeInfo.explicitExtensions,
-								warnings: resumeInfo.warnings,
-							},
-						},
-						{ triggerTurn: true, deliverAs: "followUp" },
-					);
-				} else if (stderr || resumeInfo.exitCode !== 0) {
-					resumeInfo.status = "failed";
-					resumeInfo.error = stderr.slice(0, 500) || `exit code ${resumeInfo.exitCode} (no session file)`;
-					resumeInfo.output = resumeInfo.error;
-					pi.sendMessage(
-						{
-							customType: "entwurf-complete",
-							content: `❌ resume \`${resumeTaskId}\` (← ${params.taskId}) failed (${host}, no session file): ${resumeInfo.error}`,
-							display: true,
-							details: {
-								taskId: resumeTaskId,
-								originalTaskId: params.taskId,
-								status: "failed",
-								exitCode: resumeInfo.exitCode,
-								error: resumeInfo.error,
-								explicitExtensions: resumeInfo.explicitExtensions,
-								warnings: resumeInfo.warnings,
-							},
-						},
-						{ triggerTurn: true, deliverAs: "followUp" },
-					);
-				}
-			});
-
-			proc.on("error", (err) => {
-				resumeInfo.status = "failed";
-				resumeInfo.error = err.message;
-				resumeInfo.output = err.message;
-				delete resumeInfo.proc;
-			});
-
 			return {
-				content: [
-					{
-						type: "text",
-						text: [
-							`🔄 Resume spawned (async)`,
-							`Resume ID: ${resumeTaskId}`,
-							`Original: ${params.taskId}`,
-							`Session: ${sessionFile}`,
-							`PID: ${pid}`,
-							"",
-							"Use entwurf_status to check progress. You'll be notified on completion.",
-						].join("\n"),
-					},
-				],
-				details: { taskId: resumeTaskId, originalTaskId: params.taskId, sessionFile, pid },
+				content: [{ type: "text", text: ack.text }],
+				details: ack.details,
 			};
 		},
 	});
