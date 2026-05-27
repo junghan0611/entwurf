@@ -1148,6 +1148,36 @@ check_plugin_prompt_format() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-plugin-prompt-format.ts)
 }
 
+smoke_async_resume() {
+  # Live 3-backend × 3-case smoke for the async-resume regression repair
+  # (Phase A + Phase B). Inception condition (acceptance test):
+  #
+  #   pi-shell-acp Claude / sibling pi-session callers omit `mode` → async
+  #   ack returns immediately → parent turn is free → completion arrives
+  #   later as a followUp message.
+  #
+  # Hard Rule #7 — three-backend equality. Claude, Codex, and Gemini all
+  # exercise the same MCP → control-RPC → native-launcher chain. Gemini
+  # falls into an honest-skip record when `gemini` CLI is not on PATH
+  # (same convention as smoke-all). A single-backend GREEN does NOT
+  # constitute "release ready" — Codex and Gemini must also land in PASS
+  # (or honest SKIP for Gemini).
+  #
+  # Cases:
+  #   A — MCP replyable async (per backend): tmux pi session with --entwurf-
+  #       control, prompt backend to call entwurf+entwurf_resume(mode=async),
+  #       assert async ack AND completion followUp in the pane.
+  #   B — external non-replyable + explicit mode='async' → reject. Stdio
+  #       call to the MCP bridge without PI_SESSION_ID/PI_AGENT_ID env.
+  #   C — external + auto-sync shape reachability. Stdio call with mode
+  #       omitted; auto-resolution picks sync; assertion is that the
+  #       sync path is REACHED (not gated by replyable check).
+  #
+  # Cost: ~$0.15–$0.30 per full Claude+Codex+Gemini run. Required before
+  # 0.7.6 release per AGENTS.md Hard Rule #7.
+  (cd "$REPO_DIR" && ./scripts/smoke-async-resume.sh "$@")
+}
+
 check_async_resume_gate() {
   # Deterministic gate for the MCP `entwurf_resume` mode resolution (Phase B
   # Step 3 of the async-resume regression repair). The handler at mcp/pi-
@@ -3579,6 +3609,10 @@ case "$cmd" in
     ;;
   check-async-resume-gate)
     check_async_resume_gate
+    ;;
+  smoke-async-resume)
+    shift
+    smoke_async_resume "$@"
     ;;
   check-backends)
     check_backends

@@ -97,6 +97,7 @@
 		"smoke-codex": "./run.sh smoke-codex",
 		"smoke-gemini": "./run.sh smoke-gemini",
 		"smoke-all": "./run.sh smoke-all",
+		"smoke-async-resume": "./run.sh smoke-async-resume",
 		"check-mcp": "./run.sh check-mcp",
 		"check-shell-quote": "./run.sh check-shell-quote",
 		"check-models": "./run.sh check-models",
