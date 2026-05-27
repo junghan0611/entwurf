@@ -779,17 +779,18 @@ export default function (pi: ExtensionAPI) {
 			onUpdate: AgentToolUpdateCallback<unknown> | undefined,
 			_ctx: ExtensionContext,
 		): Promise<AgentToolResult<unknown>> {
-			// Default `async` since 0.7.x — long-running resume (review / research /
+			// Default `async` since 0.7.6 — long-running resume (review / research /
 			// build) dominates this surface, and blocking the parent turn reads as
 			// "stuck" to the operator. Sync stays available as opt-in for short
-			// status-check resumes (<5s). The MCP bridge surface still exposes
-			// sync-only; Phase B (NEXT.md "Top regression") will add a
-			// replyable-gated async path there via control-RPC delegation back to
-			// this same async branch.
+			// status-check resumes (<5s). The MCP bridge surface also exposes a
+			// conditional-default `entwurf_resume` since 0.7.6 (replyable pi-session
+			// → async via spawn_async_resume RPC; external host → sync; explicit
+			// async + non-replyable → reject); both surfaces converge on the same
+			// async launcher in lib/entwurf-async.ts.
 			const mode = params.mode ?? "async";
 
 			// Sync branch — entwurf to core, return inline (mirrors the MCP bridge
-			// surface which uses runEntwurfResumeSync directly).
+			// surface which uses runEntwurfResumeSync directly for sync resumes).
 			if (mode === "sync") {
 				const info = activeEntwurfs.get(params.taskId);
 				const syncHost = params.host ?? info?.host;

@@ -13,8 +13,14 @@
  *   - entwurf_send    — pi control.ts Unix-socket RPC, transparency envelope
  *   - entwurf_peers   — active pi control sockets only (see control.ts getLiveSessions)
  *   - entwurf_self    — own session identity envelope (sessionId, agentId, cwd, timestamp)
- *   - entwurf         → pi-extensions/lib/entwurf-core (sync mode only)
- *   - entwurf_resume  — saved entwurf session revival by taskId (sync only)
+ *   - entwurf         → pi-extensions/lib/entwurf-core (sync mode only on the MCP surface)
+ *   - entwurf_resume  — saved entwurf session revival by taskId; conditional-default
+ *                       mode since 0.7.6: replyable pi-session callers (PI_SESSION_ID +
+ *                       PI_AGENT_ID present) default to async via `spawn_async_resume`
+ *                       control RPC delegation; external non-replyable MCP hosts default
+ *                       to sync; explicit `mode="async"` from a non-replyable caller is
+ *                       rejected because no followUp address exists. See
+ *                       `resume-mode.ts` + `scripts/check-async-resume-gate.ts`.
  *
  * Not here on purpose: semantic memory / session search / knowledge-base search.
  * Those are personal-workflow surfaces and live as Claude Code / Codex skills
@@ -22,9 +28,14 @@
  * embedding CLI). Keeping them out of the MCP bridge is what lets pi-shell-acp
  * be a generic public package rather than a reflection of one operator's setup.
  *
- * Phase-2b deferred to a separate design round:
- *   - entwurf_status + mode=async — couples with completion-notification contract that MCP
- *     currently has no surface for; design after the resume contract has settled in use.
+ * Still deferred to a separate design round (NOT closed by 0.7.6):
+ *   - entwurf spawn + mode=async — same followUp-channel question as resume had,
+ *     but spawn has no taskId continuity yet (the saved-session-after-spawn pattern
+ *     differs from saved-session-revival). Resume async on MCP was the higher-
+ *     pressure UX path; spawn async on MCP can be evaluated after resume async
+ *     settles in use.
+ *   - entwurf_status on MCP — needs a corresponding completion-notification contract
+ *     that external hosts can subscribe to; not yet designed.
  *
  * Layer separation (PM-mandated, do not blur):
  *   - entwurf_peers     = active control-socket discovery (control.ts world)

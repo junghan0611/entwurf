@@ -185,7 +185,8 @@ case_a_for_backend() {
 	# CustomMessage with customType=entwurf-complete, rendered in the pane
 	# with either "🏁 resume" (success) or "❌ resume" (failure). Either
 	# pattern proves the followUp delivery channel reached the parent
-	# session — the inception condition for the regression repair.
+	# session, but the smoke must distinguish them: a delivery-succeeds-
+	# execution-fails ❌ result is NOT a release gate PASS. Fail-closed.
 	if ! "$WAIT_FOR_TEXT" -t "$tmux_name" -p "🏁 resume|❌ resume" -T "$COMPLETE_TIMEOUT" >/dev/null 2>&1; then
 		local pane_dump
 		pane_dump=$(tmux capture-pane -t "$tmux_name" -p -S -200 | tail -30)
@@ -193,11 +194,22 @@ case_a_for_backend() {
 		return
 	fi
 
-	# Evidence: extract the completion line + any error marker.
+	# Extract the completion line. PASS only on 🏁 (success). ❌ means the
+	# followUp arrived but the resume child failed — surface that as FAIL
+	# with the error line as evidence so a regression in the resume body
+	# does not get a green check.
 	local evidence
 	evidence=$(tmux capture-pane -t "$tmux_name" -p -S -300 | grep -E "🏁 resume|❌ resume" | head -1)
 	[ -z "$evidence" ] && evidence="(completion line missing in capture)"
-	record "$case_name" "PASS" "$evidence"
+	if echo "$evidence" | grep -q "❌ resume"; then
+		record "$case_name" "FAIL" "followUp delivered with execution failure: $evidence"
+		return
+	fi
+	if echo "$evidence" | grep -q "🏁 resume"; then
+		record "$case_name" "PASS" "$evidence"
+	else
+		record "$case_name" "FAIL" "no recognizable completion marker: $evidence"
+	fi
 }
 
 # ─── Case D — direct stdio with PI_SESSION_ID env (handler proof) ──────────

@@ -221,7 +221,7 @@ Prerequisites on the host running the external MCP client:
 
 From an external MCP host:
 
-- `entwurf`, `entwurf_resume`, `entwurf_peers` work directly.
+- `entwurf`, `entwurf_resume`, `entwurf_peers` work directly. `entwurf_resume` defaults to sync for external non-replyable hosts; explicit `mode="async"` is rejected because completion followUp has no pi-session address.
 - `entwurf_send` delivers with `origin: "external-mcp"` / `replyable: false`; `wants_reply: true` is rejected.
 - `entwurf_self` refuses to return — it requires a pi session sender envelope (`PI_SESSION_ID` + `PI_AGENT_ID`).
 
@@ -286,7 +286,7 @@ For a real consumer arranging many skills, see [agent-config](https://github.com
 
 **Entwurf is a pi capability with two surfaces.** Native pi exposes it directly as an extension tool; ACP-backed sessions reach the same capability through pi-shell-acp's MCP/Unix-socket bridge. The purpose is not to invent a different sub-agent system, but to preserve the same sibling-based model across backends.
 
-Spawning creates a sibling, not a worker, delegate, or sub-agent — the spawned session has its own runtime boundary and its own provider/model identity. Resume preserves model identity (no override). Native pi `entwurf` defaults to `async`; `sync` is opt-in for short status checks (<5s). The external MCP bridge remains sync-only for now.
+Spawning creates a sibling, not a worker, delegate, or sub-agent — the spawned session has its own runtime boundary and its own provider/model identity. Resume preserves model identity (no override). Native pi `entwurf` / `entwurf_resume` default to `async`; `sync` is opt-in for short status checks (<5s). On the MCP bridge, `entwurf` spawn remains sync-only, while `entwurf_resume` uses a conditional default: replyable pi-session callers get async followUp delivery, external non-replyable MCP hosts get sync and cannot request async.
 
 A two-pane recording covers the surface end-to-end — sibling spawn, cross-process MCP resume across a different cwd, and a live peer greeting through `entwurf_send`:
 

@@ -35,7 +35,7 @@ Async-resume regression repair. Closes the most awkward intermediate state on th
 
 ### Verification
 
-- `pnpm check` — 13 deterministic gates pass (`check-mcp`, `check-shell-quote` 17 (3 source-parity sites + reference body + 13 behavior cases), `check-plugin-empty-final-recovery` 34, `check-plugin-prompt-format` 22, `check-async-resume-gate` 16, `check-models` 3 passes, `check-backends` 136, `check-registration` 8, `check-dep-versions` 6, `check-sdk-surface` 0 unannotated casts, `check-pack` 52-file invariant — was 49 in 0.7.5, +3 for `pi-extensions/lib/entwurf-async.ts`, `mcp/pi-tools-bridge/src/resume-mode.ts`, `scripts/check-async-resume-gate.ts`).
+- `pnpm check` — 13 deterministic gates pass (`check-mcp`, `check-shell-quote` 17 (3 source-parity sites + reference body + 13 behavior cases), `check-plugin-empty-final-recovery` 34, `check-plugin-prompt-format` 22, `check-async-resume-gate` 16, `check-models` 3 passes, `check-backends` 136, `check-registration` 8, `check-dep-versions` 6, `check-sdk-surface` 0 unannotated casts, `check-pack` 52-file invariant — was 48 in 0.7.5, +4 for `pi-extensions/lib/entwurf-async.ts`, `mcp/pi-tools-bridge/src/resume-mode.ts`, `scripts/check-async-resume-gate.ts`, `scripts/smoke-async-resume.sh`).
 - `./run.sh smoke-async-resume` — 6 PASS / 0 FAIL / 0 SKIP across Claude + Codex + Gemini (baseline reference run above).
 - Three-backend equality (Hard Rule #7) — Claude, Codex, Gemini all GREEN with live evidence.
 

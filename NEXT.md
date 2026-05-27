@@ -45,7 +45,7 @@ No active stance held in this section right now. Pick up from the backlog below.
 
 성공 기준:
 - 각 시나리오에서 “누가 outcome 을 소유하는가”가 명확하다.
-- replyable / non-replyable, send-is-throw, sync-only MCP surface 가 agent 발화에 정확히 반영된다.
+- replyable / non-replyable, send-is-throw, MCP `entwurf_resume` 조건부 async default(0.7.6)와 external non-replyable sync-default/reject 경계가 agent 발화에 정확히 반영된다.
 - 필요한 경우 README / AGENTS / VERIFY 중 한 곳에 운영 패턴으로 정리한다.
 
 ---
