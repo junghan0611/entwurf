@@ -5,61 +5,11 @@
 
 ## Current stance — 2026-05-27
 
-**Top regression — restore async resume workflow.** `entwurf_resume`의 운영 퇴행을 두 단계로 복원한다. 예전 강점은 "spawn은 sync로 담당자/맥락을 붙잡고, 이후 긴 작업은 resume async로 던져 부모 턴을 풀어두는" 패턴이었다. Phase 0.5(`agent-config e5aa5a1`, 2026-04-24)에서 pi-native resume 기본값이 async→sync로 바뀌었고, 0.7.0(`ad4413e`, 2026-05-19)에서 spawn만 async로 되돌아오면서 가장 어색한 상태(짧은 spawn은 async, 긴 resume은 sync)가 만들어졌다. 비대칭 공존은 "MCP surface 전체 async 금지"가 아니라 "caller가 replyable pi-session인지 구분"이라는 패턴이고, 그 discriminator는 이미 `mcp/pi-tools-bridge/src/index.ts:266-281` (`buildSendSenderEnvelope`)에 살아 있다. 같은 분류기로 MCP async도 게이팅 가능하다.
+**Async-resume regression repair: closed in 0.7.6 ✅**. Phase A (native default flip) + Phase B (MCP mode + conditional default + replyable gate + spawn_async_resume RPC + async launcher extraction + deterministic gate + 3-backend live smoke) all landed in commit chain `ff85fa9 → 4b89b81 → 0107ce4 → 684c97b → 69ff04b → b28d1bb → b6ef765`. Live smoke baseline `/tmp/smoke-async-resume-20260527-191248.json` records 6 PASS / 0 FAIL / 0 SKIP across Claude + Codex + Gemini. See CHANGELOG 0.7.6 for full surface description and the static / live gate split.
 
-### Phase A — native default async 복원 ✅ (`ff85fa9`, local, 미푸시)
-- `pi-extensions/entwurf.ts` — `entwurf_resume` schema default + runtime fallback을 `"sync"` → `"async"`로 복원. async branch 코드는 그대로 살아 있었고 default만 뒤집힌 상태였다.
-- `VERIFY.md §0A` — 검증 turn은 짧은 inline 응답이 필요하므로 `entwurf_resume(mode="sync", taskId=...)`를 명시하도록 갱신.
-- CHANGELOG `## Unreleased`에 기록. 0.7.0 spawn flip이 마무리하지 못한 절반을 이번에 닫는다.
-- 푸시는 Phase B까지 묶어서 0.7.6 릴리즈와 같이.
+### Next focus — TBD
 
-### 사전 smoke (2026-05-27, claude-sonnet-4-6, $0.082) — Phase B 필요성 empirical confirm
-tmux pi 세션 (`--entwurf-control --provider pi-shell-acp --model claude-sonnet-4-6`)에서 backend가 entwurf+resume 시퀀스 수행:
-- MCP `entwurf(sync, claude)` ✅ GREEN — taskId `dde9327f`
-- MCP `entwurf_resume(sync, claude)` ✅ GREEN — 1 turn
-- backend 직접 발화: *"The resume ran synchronously here — **no mode parameter on entwurf_resume at the MCP surface** — it executed and returned inline"*
-- → Phase B 필요성이 이론 아닌 실측으로 confirmed. GLG의 주된 use case(pi-shell-acp claude → entwurf_resume)는 MCP를 타고, MCP는 mode가 없다.
-- native async resume의 backend asymmetry 검증은 Phase B Step 5의 `smoke-async-resume` 3-backend axis에서.
-
-### Phase B — MCP `entwurf_resume(mode="async")` (진입 중, 2026-05-27)
-
-pi-shell-acp Claude가 보는 MCP surface가 sync-only인 상태가 핵심 UX 손실. external MCP host(Claude Code 단독 등)는 non-replyable이라 sync-only가 유지되어야 하지만, PI_SESSION_ID/PI_AGENT_ID가 주입된 replyable pi-session caller에는 async를 열어야 한다.
-
-**Phase B 핵심 invariant — 조건부 default**:
-```ts
-const sender = buildSendSenderEnvelope();
-const effectiveMode = mode ?? (sender.replyable === true ? "async" : "sync");
-if (effectiveMode === "async" && sender.replyable === false) {
-    return textErr("entwurf_resume async requires a replyable pi-session caller...");
-}
-```
-정적 `default: "async"`는 버그. 조건부 default가 비대칭 공존 원칙과 부합. 이건 Step 3에서 깨면 그 자리에서 멈춤.
-
-**5 commit 분할 (각 위험 신호 기준)**:
-1. ✅ `refactor(entwurf): extract async launcher + state to lib` — 실측 이동 350 + 신규 80 (lib 437라인). launcher 본체 + `activeEntwurfs` Map + `findEntwurfSession` + `isProcessAlive` + `ENTWURF_ENTRY_TYPE` + `AsyncEntwurfInfo`를 `pi-extensions/lib/entwurf-async.ts` 한 자리에. ExtensionAPI 의존은 `AsyncResumeCallbacks` 인터페이스로 추상. `check-shell-quote` 3rd source site 등록. 위험선 500+ 아래 ✓.
-2. `feat(entwurf-control): add spawn_async_resume RPC` — ~50. dispatcher에 신규 case 추가, launcher 호출 + 자기 ExtensionAPI의 `pi.sendMessage(...)` callback 주입. 위험: 100+ → handler에 비즈니스 로직 들어간 신호.
-3. `feat(mcp): entwurf_resume mode + conditional default + replyable gate` — ~40. schema에 mode 추가, `buildSendSenderEnvelope()` discriminator로 effective mode 결정, replyable async-explicit이면 control socket의 `spawn_async_resume` 위임. 위험: 100+ → "second harness" 신호.
-4. `test: add check-async-resume-gate (deterministic)` — ~80. external reject + 분기 결정 검증, spawn 안 함. `check-mcp` / `check-plugin-prompt-format` 패턴.
-5. `test+docs: smoke-async-resume (3-backend) + sentinel async cells + VERIFY §0B + CHANGELOG + NEXT.md 마감` — ~250. Hard Rule #7 적용 (Claude/Codex/Gemini axis).
-
-**구현 원칙 (뺄셈 기준)**:
-1. 새 개념 만들지 않기 — queue, poller, event channel, second registry 금지.
-2. MCP handler는 "replyable 판정 + control RPC 위임"만.
-3. 완료 전달은 parent pi extension의 기존 `pi.sendMessage({deliverAs: "followUp"})` 재사용.
-4. async launcher는 하나 — native tool과 control RPC가 같은 launcher 호출.
-
-**Phase B 인수 시험** (이거 GREEN 안 나오면 미완):
-> pi-shell-acp Claude에서 `entwurf_resume` mode 생략 → async ack 즉시 반환 → 부모 턴 free → 완료 followUp 도착. 같은 시험이 Claude/Codex/Gemini 각각에서 GREEN.
-
-**위험 신호 (진행 중 멈출 조건)**:
-- 백엔드별 async resume followUp lifecycle이 다름 → GLG 호출
-- launcher 500+ 라인 → state machine 만들고 있음
-- MCP handler 100+ 라인 → 두 번째 하네스
-- 신규 파일 3개 이상 → 분리 과잉
-
-**오늘 안에 못 끝내면**: 이 NEXT.md가 다음 세션 anchor. 5 step 어디까지 진행됐는지 commit hash로 기록.
-
-**Phase B 완료 시**: 모든 문서 정렬 후 0.7.6 릴리즈.
+No active stance held in this section right now. Pick up from the backlog below.
 
 **OpenClaw 쪽은 당분간 진행하지 않는다.** `3a65072 docs(openclaw): recommend native lanes for Claude/Codex, narrow plugin to Gemini` 로 정리한 대로, OpenClaw 5.22 native `claude-cli` 가 Pro/Max 결제 + 1M ctx + workspace skill + live-session 재사용까지 충분히 동작함을 확인했다. Claude/Codex lane 은 OpenClaw native 를 쓰면 되고, 우리 OpenClaw plugin 은 더 밀 필요가 없다.
 

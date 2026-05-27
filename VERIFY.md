@@ -64,8 +64,12 @@ This document records only **verification intent (what we're looking at) and pas
 ### Default Execution Shape — entwurf orchestration
 
 - Single-turn verification: one `entwurf(provider="pi-shell-acp", model="<M>", mode="sync")` call
-- Multi-turn verification: first turn via `entwurf(mode="sync")`, subsequent turns via `entwurf_resume(mode="sync", taskId=...)`. Both surfaces default to `async` since 0.7.x (spawn from 0.7.0, resume from the next release); pass `mode="sync"` explicitly for verification turns because the operator needs inline answers, not detached followUp delivery.
+- Multi-turn verification: first turn via `entwurf(mode="sync")`, subsequent turns via `entwurf_resume(mode="sync", taskId=...)`. Both surfaces default to `async` since 0.7.x (spawn from 0.7.0, resume from 0.7.6); pass `mode="sync"` explicitly for verification turns because the operator needs inline answers, not detached followUp delivery.
 - Different backend verification: same pattern with only provider/model changed (e.g., `pi-shell-acp/codex-...`)
+
+### Async resume — separate live gate
+
+The async path is verified by `./run.sh smoke-async-resume` (scripts/smoke-async-resume.sh, added in 0.7.6). The smoke covers the Phase B inception condition — replyable pi-session caller omits `mode` → async ack returns immediately → parent turn stays free → completion arrives later as a followUp message — across Claude, Codex, and Gemini (Hard Rule #7 three-backend equality). It is NOT in the deterministic `pnpm check` chain because it requires live ACP turns and a small token spend (~$0.20). Run it before any release that touches the entwurf surface, and after any change to `pi-extensions/lib/entwurf-async.ts`, `mcp/pi-tools-bridge/src/{index,resume-mode}.ts`, or `pi-extensions/entwurf-control.ts` (the entwurf-control RPC dispatcher). The deterministic `./run.sh check-async-resume-gate` (16 assertions) pins the conditional-default + cwd-silent-ignore logic in the `pnpm check` chain — that is the static counterpart and runs every commit.
 
 ### What NOT to Do — Bypassing the Operational Path
 
