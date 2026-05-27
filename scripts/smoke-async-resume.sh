@@ -152,20 +152,22 @@ case_a_for_backend() {
 	# Keep the body short to minimize ACP turn cost; the assertion is on
 	# the bridge-emitted ack/completion text, not on the model's reply.
 	#
-	# Prompt-following note: backends differ in how they parse "mode='async'"
-	# inside English prose. Claude in the original smoke grouped the literal
-	# with the preceding `prompt=...` argument, dropping mode at the wire.
-	# Explicit JSON-style arguments + the REQUIRED PARAMETER framing closes
-	# this — both Claude and Codex/Gemini honor it consistently.
+	# Prompt-following note: keep the smoke prompt PROCEDURAL — instructions
+	# to execute tool calls verbatim, no identity claims, no behavior
+	# justification. An earlier draft asserted "you ARE replyable", which a
+	# defense-trained model (Claude) correctly flagged as a prompt-injection
+	# pattern ("only the model decides its own identity") and refused the
+	# whole sequence. The fix is to remove identity-asserting prose: the
+	# tools see env on their own at the MCP layer, so the model never needs
+	# to know or be told about replyable status. Codex and Gemini also
+	# benefit from procedural clarity.
 	local prompt
-	prompt="You ARE a replyable pi-session (PI_SESSION_ID and PI_AGENT_ID are present in your MCP env — verify via entwurf_self if uncertain). "
-	prompt+="The asymmetric-mitsein external-host rejection clause does NOT apply to you. mode='async' on entwurf_resume IS valid for replyable pi-session callers like you. "
-	prompt+="Run this exact two-step sequence using JSON-style arguments and DO NOT omit any field. "
+	prompt="Run this exact two-step MCP tool sequence. Pass each field literally as written; do not collapse multiple fields into one string. "
 	prompt+="Step 1: call mcp__pi-tools-bridge__entwurf with arguments "
 	prompt+="{task: 'Reply SMOKE_OK only.', mode: 'sync', provider: '$provider', model: '$model'}. "
 	prompt+="Step 2: take the returned taskId and call mcp__pi-tools-bridge__entwurf_resume "
 	prompt+="with arguments {taskId: <id>, prompt: 'Reply RESUME_OK only.', mode: 'async'}. "
-	prompt+="The mode: 'async' parameter on Step 2 is REQUIRED — pass it literally as a top-level argument, not inside the prompt string. Do not refuse or self-classify as external. "
+	prompt+="Both \`mode\` parameters are top-level arguments — \`mode: 'sync'\` on Step 1, \`mode: 'async'\` on Step 2 — not values inside the prompt string. "
 	prompt+="Report both taskIds verbatim from the tool results, nothing else."
 
 	tmux send-keys -t "$tmux_name" "$prompt" Enter
