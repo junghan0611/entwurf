@@ -49,7 +49,6 @@ import {
 	type AsyncEntwurfInfo,
 	activeEntwurfs,
 	ENTWURF_ENTRY_TYPE,
-	findEntwurfSession,
 	isProcessAlive,
 	spawnEntwurfResumeAsync,
 } from "./lib/entwurf-async.js";
@@ -60,7 +59,6 @@ import {
 	enrichTaskWithProjectContext,
 	ensureEntwurfOncePerTarget,
 	formatSyncSummary,
-	getEntwurfExplicitExtensions,
 	getRegistryRouting,
 	markEntwurfTargetUsed,
 	mirrorChildStderr,

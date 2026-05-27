@@ -68,6 +68,14 @@
  *   - { type: "get_info" }
  *   - { type: "clear", summarize?: boolean }
  *   - { type: "abort" }
+ *   - { type: "spawn_async_resume", taskId: "...", prompt: "...", host?: "..." }
+ *     — Phase B Step 2 of the async-resume regression repair. Calls the
+ *     `spawnEntwurfResumeAsync` launcher (from lib/entwurf-async.ts) with the
+ *     control extension's own pi ExtensionAPI, so completion lands in the
+ *     parent pi session as a followUp message — same as if a native pi tool
+ *     had called the launcher directly. Lets the MCP bridge surface (Step 3)
+ *     dispatch async resumes by delegating to this RPC instead of cloning
+ *     the launcher body ("this bridge is not a second harness" invariant).
  *
  *   Responses are JSON objects with { type: "response", command, success, data?, error? }
  *   (No event channel — the turn_end subscribe surface was removed with the
@@ -95,6 +103,7 @@ import type {
 import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { Box, Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { ENTWURF_SENT_MESSAGE_TYPE } from "../protocol.js";
+import { ENTWURF_ENTRY_TYPE, spawnEntwurfResumeAsync } from "./lib/entwurf-async.js";
 
 const ENTWURF_FLAG = "entwurf-control";
 const ENTWURF_SESSION_FLAG = "entwurf-session";
@@ -179,7 +188,21 @@ interface RpcGetInfoCommand {
 	id?: string;
 }
 
-type RpcCommand = RpcSendCommand | RpcGetMessageCommand | RpcClearCommand | RpcAbortCommand | RpcGetInfoCommand;
+interface RpcSpawnAsyncResumeCommand {
+	type: "spawn_async_resume";
+	taskId: string;
+	prompt: string;
+	host?: string;
+	id?: string;
+}
+
+type RpcCommand =
+	| RpcSendCommand
+	| RpcGetMessageCommand
+	| RpcClearCommand
+	| RpcAbortCommand
+	| RpcGetInfoCommand
+	| RpcSpawnAsyncResumeCommand;
 
 // ============================================================================
 // Server State
@@ -939,6 +962,47 @@ async function handleCommand(
 			deliveredAs: isIdle ? "direct" : mode === "follow_up" ? "followUp" : "steer",
 			wants_reply: wantsReply,
 		});
+		return;
+	}
+
+	// Spawn async resume — Phase B Step 2. Calls the shared launcher in
+	// lib/entwurf-async.ts with this control extension's pi ExtensionAPI;
+	// completion lands in the parent pi session as a followUp message via
+	// `pi.sendMessage(..., { triggerTurn: true, deliverAs: "followUp" })`,
+	// identical to what the native entwurf_resume tool does. Lets the MCP
+	// bridge surface (Step 3) dispatch async resumes by delegating to this
+	// RPC instead of cloning the launcher body. "this bridge is not a
+	// second harness" invariant: the launcher stays in one place; both
+	// surfaces (native tool + MCP-via-RPC) reach the same code path.
+	if (command.type === "spawn_async_resume") {
+		const taskId = command.taskId;
+		const prompt = command.prompt;
+		if (typeof taskId !== "string" || taskId.trim().length === 0) {
+			respond(false, "spawn_async_resume", undefined, "Missing taskId");
+			return;
+		}
+		if (typeof prompt !== "string" || prompt.trim().length === 0) {
+			respond(false, "spawn_async_resume", undefined, "Missing prompt");
+			return;
+		}
+		try {
+			const ack = await spawnEntwurfResumeAsync(
+				{ taskId, prompt, host: command.host },
+				{
+					appendActiveEntry: (data) => pi.appendEntry(ENTWURF_ENTRY_TYPE, data),
+					deliverCompletion: (message) => pi.sendMessage(message, { triggerTurn: true, deliverAs: "followUp" }),
+				},
+			);
+			respond(true, "spawn_async_resume", {
+				taskId: ack.details.taskId,
+				originalTaskId: ack.details.originalTaskId,
+				sessionFile: ack.details.sessionFile,
+				pid: ack.details.pid,
+				text: ack.text,
+			});
+		} catch (err) {
+			respond(false, "spawn_async_resume", undefined, err instanceof Error ? err.message : String(err));
+		}
 		return;
 	}
 
