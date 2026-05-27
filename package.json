@@ -112,7 +112,8 @@
 		"lint": "biome check .",
 		"format": "biome check --write .",
 		"check:plugins": "pnpm -r --filter \"./plugins/*\" run check",
-		"check": "pnpm lint && pnpm typecheck && pnpm check:plugins && ./run.sh check-mcp && ./run.sh check-shell-quote && ./run.sh check-plugin-empty-final-recovery && ./run.sh check-plugin-prompt-format && ./run.sh check-models && ./run.sh check-backends && ./run.sh check-registration && ./run.sh check-dep-versions && ./run.sh check-sdk-surface && ./run.sh check-pack"
+		"check-async-resume-gate": "./run.sh check-async-resume-gate",
+		"check": "pnpm lint && pnpm typecheck && pnpm check:plugins && ./run.sh check-mcp && ./run.sh check-shell-quote && ./run.sh check-plugin-empty-final-recovery && ./run.sh check-plugin-prompt-format && ./run.sh check-async-resume-gate && ./run.sh check-models && ./run.sh check-backends && ./run.sh check-registration && ./run.sh check-dep-versions && ./run.sh check-sdk-surface && ./run.sh check-pack"
 	},
 	"pi": {
 		"extensions": [

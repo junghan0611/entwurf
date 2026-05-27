@@ -19,5 +19,10 @@
 		"noEmit": true,
 		"rootDir": ".."
 	},
-	"include": ["./**/*.ts", "../pi-extensions/lib/**/*.ts", "../pi-extensions/model-lock.ts"]
+	"include": [
+		"./**/*.ts",
+		"../pi-extensions/lib/**/*.ts",
+		"../pi-extensions/model-lock.ts",
+		"../mcp/pi-tools-bridge/src/resume-mode.ts"
+	]
 }

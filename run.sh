@@ -1148,6 +1148,19 @@ check_plugin_prompt_format() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-plugin-prompt-format.ts)
 }
 
+check_async_resume_gate() {
+  # Deterministic gate for the MCP `entwurf_resume` mode resolution (Phase B
+  # Step 3 of the async-resume regression repair). The handler at mcp/pi-
+  # tools-bridge/src/index.ts uses `resolveEntwurfResumeMode` (extracted into
+  # mcp/pi-tools-bridge/src/resume-mode.ts) to apply the asymmetric-mitsein
+  # discriminator: async if the caller is replyable, sync if external, reject
+  # if external + explicit async. This gate pins the resolution against the
+  # 6 input cases plus 3 invariants so a future edit cannot silently turn the
+  # discriminator back into a static default (which would invert the external
+  # MCP host UX). No process spawn, no socket, no API cost.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-async-resume-gate.ts)
+}
+
 check_mcp() {
   (cd "$REPO_DIR" && node --input-type=module <<'EOF'
 import { normalizeMcpServers, McpServerConfigError } from './acp-bridge.ts';
@@ -3563,6 +3576,9 @@ case "$cmd" in
     ;;
   check-plugin-prompt-format)
     check_plugin_prompt_format
+    ;;
+  check-async-resume-gate)
+    check_async_resume_gate
     ;;
   check-backends)
     check_backends

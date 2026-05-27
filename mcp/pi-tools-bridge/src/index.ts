@@ -70,6 +70,7 @@ import {
 	runEntwurfResumeSync,
 	runEntwurfSync,
 } from "../../../pi-extensions/lib/entwurf-core.ts";
+import { resolveEntwurfResumeMode } from "./resume-mode.ts";
 
 const HOME = os.homedir();
 const DEFAULT_ENTWURF_DIR = path.join(HOME, ".pi", "entwurf-control");
@@ -554,21 +555,16 @@ server.tool(
 	},
 	async ({ taskId, prompt, host, cwd, mode }) => {
 		try {
-			// Phase B Step 3 — asymmetric-mitsein discriminator. Same `buildSendSenderEnvelope`
-			// gate that entwurf_send uses for wants_reply (line 344 in this file): the
-			// replyable status is the criterion, not a static default. A static
-			// `default: "async"` would silently reject every external MCP host turn
-			// despite the description claiming "default async", which is the UX
-			// inversion we are fixing.
+			// Phase B Step 3 — asymmetric-mitsein discriminator. The mode
+			// resolution is in `resolveEntwurfResumeMode` so the deterministic
+			// gate (Step 4) can pin it without spawning. Same buildSendSender-
+			// Envelope replyable status that entwurf_send uses for wants_reply
+			// (line 344). A static `default: "async"` would silently reject
+			// every external MCP host turn — the UX inversion this Step closes.
 			const sender = buildSendSenderEnvelope();
-			const effectiveMode = mode ?? (sender.replyable === true ? "async" : "sync");
-			if (effectiveMode === "async" && sender.replyable !== true) {
-				return textErr(
-					"entwurf_resume async requires a replyable pi-session caller " +
-						"(PI_SESSION_ID + PI_AGENT_ID present). External MCP hosts cannot " +
-						"receive followUp delivery and must use mode='sync' (or omit mode and " +
-						"the auto-resolution picks sync).",
-				);
+			const { mode: effectiveMode, rejectReason } = resolveEntwurfResumeMode(sender, mode);
+			if (rejectReason) {
+				return textErr(rejectReason);
 			}
 
 			if (effectiveMode === "async") {
