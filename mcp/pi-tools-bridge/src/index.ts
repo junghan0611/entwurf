@@ -542,7 +542,17 @@ server.tool(
 					"NOTE: remote SSH path is implemented but not yet end-to-end verified — " +
 					"use with care until the remote rollout phase.",
 			),
-		cwd: z.string().min(1).optional().describe("Working directory override for the resume spawn"),
+		cwd: z
+			.string()
+			.min(1)
+			.optional()
+			.describe(
+				"Working directory override for the resume spawn. SYNC ONLY — passing `cwd` " +
+					"alongside (effective) mode='async' is rejected explicitly because the async " +
+					"launcher would silently ignore it. Async resume uses the saved session " +
+					"header cwd as the authority (see #9); if you really need a cwd override, " +
+					"use mode='sync'.",
+			),
 		mode: z
 			.enum(["sync", "async"])
 			.optional()
@@ -562,7 +572,7 @@ server.tool(
 			// (line 344). A static `default: "async"` would silently reject
 			// every external MCP host turn — the UX inversion this Step closes.
 			const sender = buildSendSenderEnvelope();
-			const { mode: effectiveMode, rejectReason } = resolveEntwurfResumeMode(sender, mode);
+			const { mode: effectiveMode, rejectReason } = resolveEntwurfResumeMode(sender, mode, cwd);
 			if (rejectReason) {
 				return textErr(rejectReason);
 			}

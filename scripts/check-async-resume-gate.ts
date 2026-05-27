@@ -42,6 +42,7 @@
 import assert from "node:assert/strict";
 
 import {
+	ENTWURF_RESUME_ASYNC_CWD_REJECT_REASON,
 	ENTWURF_RESUME_ASYNC_REJECT_REASON,
 	type ResumeModeSenderEnvelope,
 	resolveEntwurfResumeMode,
@@ -150,6 +151,69 @@ check("9. sender envelope { replyable: undefined } resolves as non-replyable", (
 
 	const explicitAsync = resolveEntwurfResumeMode(undef, "async");
 	assert.equal(explicitAsync.rejectReason, ENTWURF_RESUME_ASYNC_REJECT_REASON);
+});
+
+// ─── 3 cwd silent-ignore guard cases ─────────────────────────────────────
+
+check("10. replyable + mode='async' + cwd → REJECT (silent-ignore guard)", () => {
+	// The async launcher uses the saved session header cwd as authority (#9);
+	// accepting cwd here while the launcher ignores it would mislead the
+	// caller. Surface that as an explicit error.
+	const r = resolveEntwurfResumeMode(replyable, "async", "/some/override/path");
+	assert.equal(r.mode, "async");
+	assert.equal(
+		r.rejectReason,
+		ENTWURF_RESUME_ASYNC_CWD_REJECT_REASON,
+		"rejectReason must be the canonical cwd-async-conflict text",
+	);
+});
+
+check("11. replyable + mode omitted + cwd → REJECT (auto-async still rejects cwd)", () => {
+	// Conditional default lands on async for a replyable caller; cwd guard
+	// then fires. This is the practical scenario for pi-shell-acp Claude
+	// callers who absent-mindedly pass cwd.
+	const r = resolveEntwurfResumeMode(replyable, undefined, "/foo");
+	assert.equal(r.mode, "async");
+	assert.equal(r.rejectReason, ENTWURF_RESUME_ASYNC_CWD_REJECT_REASON);
+});
+
+check("12. replyable + mode='sync' + cwd → sync, no reject (cwd is sync-only)", () => {
+	// The cwd override is a debug/migration escape hatch on the sync path
+	// only — see #9. Sync path must allow it.
+	const r = resolveEntwurfResumeMode(replyable, "sync", "/foo");
+	assert.equal(r.mode, "sync");
+	assert.equal(r.rejectReason, null);
+});
+
+check("13. external + mode='sync' + cwd → sync, no reject", () => {
+	// External MCP hosts may also use cwd on the sync path.
+	const r = resolveEntwurfResumeMode(external, "sync", "/foo");
+	assert.equal(r.mode, "sync");
+	assert.equal(r.rejectReason, null);
+});
+
+check("14. external + mode omitted + cwd → sync (auto), no reject", () => {
+	// Auto-sync for external + cwd present is fine because cwd is sync-only.
+	const r = resolveEntwurfResumeMode(external, undefined, "/foo");
+	assert.equal(r.mode, "sync");
+	assert.equal(r.rejectReason, null);
+});
+
+check("15. cwd reject reason names sync-only + #9", () => {
+	assert.match(ENTWURF_RESUME_ASYNC_CWD_REJECT_REASON, /sync-only/i);
+	assert.match(ENTWURF_RESUME_ASYNC_CWD_REJECT_REASON, /#9/);
+	// And the two reject reasons must be distinct so callers can tell which
+	// guard fired.
+	assert.notEqual(ENTWURF_RESUME_ASYNC_CWD_REJECT_REASON, ENTWURF_RESUME_ASYNC_REJECT_REASON);
+});
+
+check("16. replyable guard fires BEFORE cwd guard when both could apply", () => {
+	// Order of checks: if a non-replyable caller asks for explicit async
+	// WITH cwd, the more fundamental wiring break (replyable) should
+	// surface, not the cwd detail. Otherwise the caller would fix cwd,
+	// retry, and hit replyable next — two round trips for one bug.
+	const r = resolveEntwurfResumeMode(external, "async", "/foo");
+	assert.equal(r.rejectReason, ENTWURF_RESUME_ASYNC_REJECT_REASON, "replyable check must come first");
 });
 
 // ─── Summary ─────────────────────────────────────────────────────────────

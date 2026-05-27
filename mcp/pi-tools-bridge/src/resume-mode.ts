@@ -8,11 +8,15 @@
  * without triggering the MCP server's `main()` side effect at module load.
  *
  * Rules:
- *   - explicit mode wins (after the reject check below)
- *   - omitted mode auto-resolves: async if replyable, sync if external
- *   - mode === "async" + non-replyable sender → reject (rejectReason set)
- *     mirrors entwurf_send's `wants_reply=true` rejection — external MCP
- *     hosts cannot receive followUp delivery and must not silently downgrade.
+ *   1. explicit mode wins (after the reject checks below)
+ *   2. omitted mode auto-resolves: async if replyable, sync if external
+ *   3. mode === "async" + non-replyable sender → reject (replyable gate)
+ *      mirrors entwurf_send's `wants_reply=true` rejection — external MCP
+ *      hosts cannot receive followUp delivery and must not silently downgrade.
+ *   4. effective mode === "async" + cwd is set → reject (cwd silent-ignore
+ *      guard). The async launcher uses the saved session header cwd as
+ *      authority (#9); accepting cwd here while the launcher ignores it
+ *      would mislead the caller into thinking their override applied.
  *
  * Pure function. No env reads, no process spawn, no socket touch.
  */
@@ -27,13 +31,22 @@ export const ENTWURF_RESUME_ASYNC_REJECT_REASON =
 	"receive followUp delivery and must use mode='sync' (or omit mode and " +
 	"the auto-resolution picks sync).";
 
+export const ENTWURF_RESUME_ASYNC_CWD_REJECT_REASON =
+	"entwurf_resume: cwd override is sync-only. Async resume uses the saved " +
+	"session header cwd as authority (#9). Either drop cwd, or pass " +
+	"mode='sync' to apply the override on the sync path.";
+
 export function resolveEntwurfResumeMode(
 	sender: ResumeModeSenderEnvelope,
 	explicit?: "sync" | "async",
+	cwd?: string,
 ): { mode: "sync" | "async"; rejectReason: string | null } {
 	const mode = explicit ?? (sender.replyable === true ? "async" : "sync");
 	if (mode === "async" && sender.replyable !== true) {
 		return { mode, rejectReason: ENTWURF_RESUME_ASYNC_REJECT_REASON };
+	}
+	if (mode === "async" && typeof cwd === "string" && cwd.length > 0) {
+		return { mode, rejectReason: ENTWURF_RESUME_ASYNC_CWD_REJECT_REASON };
 	}
 	return { mode, rejectReason: null };
 }
