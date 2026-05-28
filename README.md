@@ -181,7 +181,26 @@ Reference shape lives in [`pi/settings.reference.json`](./pi/settings.reference.
 
 ### Wiring `pi-tools-bridge` into an external MCP host
 
-The same `pi-tools-bridge` entry shape is accepted by other MCP-aware hosts (Claude Code, Codex, Gemini CLI, …). For Claude Code, two equivalent paths — both result in the same loaded server:
+`pi-tools-bridge` can also be registered in a separate MCP-aware harness (Claude Code, Codex CLI, Antigravity/`agy`, …). That host does **not** become a pi session and does **not** need to be ACP-backed. This is the Asymmetric Mitsein path: the external harness calls pi tools over MCP, while outcome ownership stays honest.
+
+Observed 2026-05-28: Claude Code, Codex CLI, and Antigravity CLI all successfully called `entwurf` and then `entwurf_resume` through this MCP bridge against `gpt-5.4`. In all three external-host cases, sync result delivery was the correct baseline.
+
+Prerequisites on the host running the external MCP client:
+
+- `pi` on PATH (for `entwurf` / `entwurf_resume` spawn paths).
+- `~/.pi/agent/entwurf-targets.json` (target registry) when calling `entwurf`.
+- A live pi session launched with `--entwurf-control` populates `~/.pi/entwurf-control/<sessionId>.sock`; required for `entwurf_send` and `entwurf_peers`.
+
+External-host semantics:
+
+- `entwurf` works directly and returns the sync spawn result inline.
+- `entwurf_resume` defaults to sync for external non-replyable hosts; explicit `mode="async"` is rejected because completion followUp has no pi-session address.
+- `entwurf_send` delivers with `origin: "external-mcp"` / `replyable: false`; `wants_reply: true` is rejected.
+- `entwurf_self` refuses to return — it requires a pi session sender envelope (`PI_SESSION_ID` + `PI_AGENT_ID`).
+
+#### Claude Code
+
+Claude Code supports both CLI registration and a separated global MCP config. The separated file is recommended for dotfile / `agent-config` workflows because `~/.claude.json` also carries OAuth-bearing state.
 
 **Option A — CLI add:**
 
@@ -190,9 +209,9 @@ claude mcp add --scope user pi-tools-bridge \
   bash /absolute/path/to/pi-shell-acp/mcp/pi-tools-bridge/start.sh
 ```
 
-This writes the entry into `~/.claude.json`'s top-level `mcpServers`. `~/.claude.json` also holds OAuth tokens and cache, so it is not safe to share or version-control. Good for one-off setup.
+This writes the entry into `~/.claude.json`'s top-level `mcpServers`. Good for one-off setup; do not version-control the resulting `~/.claude.json`.
 
-**Option B — separated `~/.mcp.json` (recommended for SSOT / dotfile workflows):**
+**Option B — separated `~/.mcp.json`:**
 
 ```json
 {
@@ -211,23 +230,48 @@ This writes the entry into `~/.claude.json`'s top-level `mcpServers`. `~/.claude
 }
 ```
 
-Claude Code reads `~/.mcp.json` in addition to `~/.claude.json`'s top-level `mcpServers`. Keeping the entry in `~/.mcp.json` makes it shareable and version-controllable (e.g. via a dotfiles or `agent-config` repo) without exposing the OAuth-bearing `~/.claude.json`. The `env` block identifies the calling host on the receiver render — omit it and `entwurf_send` shows `external-mcp/unknown-host`.
+Claude Code reads `~/.mcp.json` in addition to `~/.claude.json`'s top-level `mcpServers`. The `env` block identifies the calling host on the receiver render — omit it and `entwurf_send` shows `external-mcp/unknown-host`. If Claude Code permissions are locked down, allow `mcp__*` or `mcp__pi-tools-bridge__*` in `~/.claude/settings.json`.
 
-Prerequisites on the host running the external MCP client:
+#### Codex CLI
 
-- `pi` on PATH (for `entwurf` / `entwurf_resume` spawn paths).
-- `~/.pi/agent/entwurf-targets.json` (target registry) when calling `entwurf`.
-- A live pi session launched with `--entwurf-control` populates `~/.pi/entwurf-control/<sessionId>.sock`; required for `entwurf_send` and `entwurf_peers`.
+Add the server to `~/.codex/config.toml`:
 
-From an external MCP host:
+```toml
+[mcp_servers.pi-tools-bridge]
+command = "/absolute/path/to/pi-shell-acp/mcp/pi-tools-bridge/start.sh"
+```
 
-- `entwurf`, `entwurf_resume`, `entwurf_peers` work directly. `entwurf_resume` defaults to sync for external non-replyable hosts; explicit `mode="async"` is rejected because completion followUp has no pi-session address.
-- `entwurf_send` delivers with `origin: "external-mcp"` / `replyable: false`; `wants_reply: true` is rejected.
-- `entwurf_self` refuses to return — it requires a pi session sender envelope (`PI_SESSION_ID` + `PI_AGENT_ID`).
+#### Antigravity CLI (`agy`)
 
-For external MCP hosts with a primary instruction file (`CLAUDE.md` for Claude Code, `AGENTS.md` for Codex, `GEMINI.md` for Gemini CLI), propagating the Asymmetric Mitsein workflow rules into that file lets the host auto-apply them without per-call clarification — which entwurf tools are valid from outside a pi session, the default `mode` / `wants_reply`, and the natural-language-to-tool-call mapping. On Claude Code, the `mcp__*` permission wildcard (or per-tool entries) in `permissions.allow` removes the first-call trust prompt friction.
+Documented global config path:
 
-See the MCP entry in [Concept primer](#concept-primer) and the sender envelope contract in [AGENTS.md](./AGENTS.md).
+```text
+~/.gemini/antigravity-cli/mcp_config.json
+```
+
+Current runtime-compatible path also observed:
+
+```text
+~/.gemini/config/mcp_config.json
+```
+
+Use the same server entry in either file:
+
+```json
+{
+  "mcpServers": {
+    "pi-tools-bridge": {
+      "command": "/absolute/path/to/pi-shell-acp/mcp/pi-tools-bridge/start.sh"
+    }
+  }
+}
+```
+
+#### External-host skills and commands
+
+MCP registration gives the external harness the tools; the host still needs workflow guidance. Put the Asymmetric Mitsein rules in that host's instruction file or, when supported, as a host-native skill. Do not assume pi slash commands are portable across external hosts — if a workflow must work across Claude Code, Codex CLI, Antigravity, and future hosts, make it a skill or MCP tool rather than a command shortcut.
+
+For the maintained multi-harness setup and skill/command packaging details, see `agent-config`. See also the MCP entry in [Concept primer](#concept-primer), the sender envelope contract in [AGENTS.md](./AGENTS.md), and [Custom skills](#custom-skills) for the in-pi ACP skill surface.
 
 ## Per-backend operating surface
 
