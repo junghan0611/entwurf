@@ -7,9 +7,26 @@
 
 **Async-resume regression repair: closed in 0.7.6 ✅**. Phase A (native default flip) + Phase B (MCP mode + conditional default + replyable gate + spawn_async_resume RPC + async launcher extraction + deterministic gate + 3-backend live smoke) all landed in commit chain `ff85fa9 → 4b89b81 → 0107ce4 → 684c97b → 69ff04b → b28d1bb → b6ef765 → 24ee129 → b98774b → d198da0`. Final live smoke baseline `/tmp/smoke-async-resume-20260527-194013.json` records 6 PASS / 0 FAIL / 0 SKIP across Claude + Codex + Gemini with strict fail-closed completion handling and procedural (non-identity-asserting) prompt. See CHANGELOG 0.7.6 for full surface description and the static / live gate split.
 
-### Next focus — TBD
+### Next focus — pi 0.76.0 maintenance / context hygiene
 
-No active stance held in this section right now. Pick up from the backlog below.
+pi host is already updated to `0.76.0` on the working machine. Follow-up items:
+
+1. **devDependency alignment — do next**
+   - `package.json` devDeps still pin `@earendil-works/pi-ai`, `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui` at `0.75.4` while runtime pi is `0.76.0`.
+   - Update them to `0.76.0`, run `pnpm install`, then at least `pnpm typecheck`, `./run.sh check-registration`, `./run.sh check-dep-versions`.
+   - If cheap, continue into the usual focused smoke for the touched surface.
+
+2. **`--session-id` — consider later, not urgent**
+   - New pi CLI flag can create/resume an exact project-local session id.
+   - Current entwurf code intentionally uses `--session <absolute sessionFile>` because `_entwurf-<taskId>.jsonl` naming and lookup depend on file identity.
+   - Do not rewrite the entwurf path just because the flag exists. Possible pilot surface: small `run.sh` automation/smoke where project-local fixed IDs improve determinism.
+   - This does **not** solve ACP backend continuity footguns caused by bridge config signature drift (`--emacs-agent-socket`, MCP/settings changes, etc.).
+
+3. **RPC `bash.excludeFromContext` — investigate for context pollution control**
+   - pi 0.76.0 lets RPC clients run bash while keeping output out of the next model prompt.
+   - This matters beyond tokens: noisy command output pollutes transcript, future recall, and semantic-memory embeddings.
+   - Audit any pi-shell-acp / helper / MCP / future session-control paths that use pi RPC bash or equivalent pre-prompt command execution.
+   - Principle to capture if adopted: operational probes (`git status`, process checks, large logs, health checks) should be observable to the caller without automatically becoming model/embedding context unless explicitly useful.
 
 **OpenClaw 쪽은 당분간 진행하지 않는다.** `3a65072 docs(openclaw): recommend native lanes for Claude/Codex, narrow plugin to Gemini` 로 정리한 대로, OpenClaw 5.22 native `claude-cli` 가 Pro/Max 결제 + 1M ctx + workspace skill + live-session 재사용까지 충분히 동작함을 확인했다. Claude/Codex lane 은 OpenClaw native 를 쓰면 되고, 우리 OpenClaw plugin 은 더 밀 필요가 없다.
 
