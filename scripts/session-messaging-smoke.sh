@@ -127,6 +127,14 @@ case_mcp() {
   } | PI_SESSION_ID="00000000-0000-4000-8000-000000000000" \
       PI_AGENT_ID="pi-shell-acp/session-messaging-smoke" \
       timeout 15 "$BRIDGE" 2>/dev/null | grep '"id":2')
+  # Determine delivery success from the FULL response text, not the truncated
+  # evidence: the send-side preview block ("[entwurf sent →]" + to/from/mode/
+  # preview, since 0.4.14) puts the "✓ delivered" confirmation at the very end,
+  # past a fixed truncation window. The window length the confirmation lands in
+  # depends on the sender cwd path length (abbreviateHomeMcp shortens $HOME paths
+  # but not e.g. /tmp scratch dirs), so a truncate-then-grep made the assertion
+  # cwd-dependent. Emit a delivered flag computed on the full text; keep the
+  # truncated slice only as small artifact evidence.
   parsed=$(printf '%s' "$raw" | python3 -c '
 import json, sys
 try:
@@ -134,15 +142,17 @@ try:
   r=d["result"]
   err=r.get("isError")
   text=r["content"][0]["text"]
-  print(f"{err}|{text[:200]}")
+  print(f"{err}|{'"'"'delivered'"'"' in text}|{text[:200]}")
 except Exception as e:
-  print(f"PARSE_ERR|{e}")' 2>/dev/null)
+  print(f"PARSE_ERR|False|{e}")' 2>/dev/null)
   err="${parsed%%|*}"
-  evidence="${parsed#*|}"
-  if [ "$err" != "True" ] && [ "$err" != "PARSE_ERR" ] && echo "$evidence" | grep -q "delivered"; then
+  local rest="${parsed#*|}"
+  local delivered="${rest%%|*}"
+  evidence="${rest#*|}"
+  if [ "$err" != "True" ] && [ "$err" != "PARSE_ERR" ] && [ "$delivered" = "True" ]; then
     record "$case_name" "PASS" "$evidence"
   else
-    record "$case_name" "FAIL" "isError=$err evidence=$evidence"
+    record "$case_name" "FAIL" "isError=$err delivered=$delivered evidence=$evidence"
   fi
 }
 
