@@ -33,6 +33,7 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # pnpm install + sync auth + install + smoke-all + Axis 1 gates (bridge, native async, session-messaging, sentinel)
+  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE 0.8.0 gate: full static (pnpm check) + every live per-invariant gate across 3 backends + one PASS/FAIL/SKIP summary. gemini SKIP=FAIL at release (dev override: --allow-skip-gemini). xt-tool-surface is fail-closed until the -xt fix lands; final cut authorization is GLG's.
   ./run.sh smoke [project-dir]        # Claude runtime smoke (backward-compatible default)
   ./run.sh smoke-claude [project-dir] # explicit Claude runtime smoke
   ./run.sh smoke-codex [project-dir]  # explicit Codex runtime smoke
@@ -3573,10 +3574,122 @@ setup_all() {
   echo "DONE: pi-shell-acp setup + Axis 1 gates green. Axis 2 interview may proceed."
 }
 
+# release-gate — the single command that, when GREEN, is sufficient to cut
+# 0.8.0. Runs the full static floor (`pnpm check`, which now folds in
+# check-model-lock + verify-transcript-poison) followed by every live
+# per-invariant gate across all three backends, then emits one PASS/FAIL/SKIP
+# summary. Everything is invoked through run.sh subcommands — never a script in
+# scripts/ directly.
+#
+# Design invariants (NEXT Step 1e + GPT-5.5 reviews):
+#   - Gemini SKIP = FAIL at release (backend availability). --allow-skip-gemini
+#     is a DEV override only; the default release path requires all three.
+#   - smoke-continuity is intentionally NOT here: smoke-entwurf-resume is its
+#     superset (asserts acpSessionId identity + turn count + blank/invalidate
+#     guards). smoke-continuity stays a dev quick-smoke.
+#   - smoke-compaction-policy runs LIVE=1 (else backend-observation steps skip).
+#   - The xt-tool-surface step is a RELEASE-BLOCKING fail-closed stub: until the
+#     ACP-backend exclude-tools policy + gate lands, release-gate stays RED by
+#     design. This prevents a "passing release-gate" illusion before the -xt fix.
+#   - Final "0.8.0 releasable" authorization is GLG's, not this script's: a green
+#     run is necessary, and the operator closes the decision.
+release_gate() {
+  local allow_skip_gemini=0
+  local -a positional=()
+  local a
+  for a in "$@"; do
+    case "$a" in
+      --allow-skip-gemini) allow_skip_gemini=1 ;;
+      *) positional+=("$a") ;;
+    esac
+  done
+  local project_dir
+  project_dir=$(normalize_project_dir "${positional[0]:-$PROJECT_DIR_DEFAULT}")
+
+  local pass=0 failc=0 skip=0
+  local -a results=()
+
+  run_step() {
+    local name="$1"; shift
+    section "release-gate step: $name"
+    if "$@"; then
+      ok "$name: PASS"
+      results+=("PASS  $name"); pass=$((pass + 1))
+    else
+      fail "$name: FAIL"
+      results+=("FAIL  $name"); failc=$((failc + 1))
+    fi
+  }
+
+  # 1. Static floor (deterministic; includes the two folded gates).
+  section "release-gate step: static (pnpm check)"
+  if (cd "$REPO_DIR" && pnpm check); then
+    ok "static (pnpm check): PASS"
+    results+=("PASS  static (pnpm check)"); pass=$((pass + 1))
+  else
+    fail "static (pnpm check): FAIL"
+    results+=("FAIL  static (pnpm check)"); failc=$((failc + 1))
+  fi
+
+  # 2. Gemini availability — three-backend claim. SKIP = FAIL at release.
+  section "release-gate step: gemini-availability"
+  if command -v gemini >/dev/null 2>&1; then
+    ok "gemini CLI present — three-backend claim is verifiable"
+    results+=("PASS  gemini-availability"); pass=$((pass + 1))
+  elif [ "$allow_skip_gemini" -eq 1 ]; then
+    warn "gemini absent + --allow-skip-gemini (DEV) — three-backend claim NOT verified"
+    results+=("SKIP  gemini-availability (dev override)"); skip=$((skip + 1))
+  else
+    fail "gemini CLI absent — release requires all three backends (dev: --allow-skip-gemini)"
+    results+=("FAIL  gemini-availability"); failc=$((failc + 1))
+  fi
+
+  # 3. Live per-invariant gates (each is a run.sh subcommand).
+  run_step "smoke-all (3-backend runtime)"  bash "$0" smoke-all "$project_dir"
+  run_step "smoke-async-resume"             bash "$0" smoke-async-resume
+  run_step "smoke-cancel"                   bash "$0" smoke-cancel "$project_dir"
+  run_step "smoke-model-switch"             bash "$0" smoke-model-switch "$project_dir"
+  run_step "smoke-entwurf-resume"           bash "$0" smoke-entwurf-resume "$project_dir"
+  run_step "check-bridge"                   bash "$0" check-bridge
+  run_step "check-native-async"             bash "$0" check-native-async
+  run_step "sentinel"                       bash "$0" sentinel
+  run_step "session-messaging"              bash "$0" session-messaging
+  run_step "smoke-compaction-policy (LIVE)" env LIVE=1 bash "$0" smoke-compaction-policy
+  run_step "verify-resume"                  bash "$0" verify-resume "$project_dir"
+
+  # 4. -xt tool-surface truthfulness — RELEASE-BLOCKING fail-closed stub.
+  section "release-gate step: xt-tool-surface (ACP backend exclude-tools policy)"
+  fail "xt-tool-surface: FAIL (release-blocking) — policy + gate not implemented yet"
+  log "pi 0.77 --exclude-tools can desync pi's declared surface from the backend's"
+  log "actual tools (declared != actual). Until the per-backend exclude-tools"
+  log "policy + gate lands (NEXT Step 1e fix), release-gate stays RED by design."
+  results+=("FAIL  xt-tool-surface (release-blocking stub)"); failc=$((failc + 1))
+
+  # 5. Summary.
+  section "release-gate summary"
+  printf '  %s\n' "${results[@]}"
+  echo ""
+  echo "  PASS=$pass  FAIL=$failc  SKIP=$skip"
+  echo "  (per-step artifact paths are printed in each step's output above)"
+  if [ "$failc" -gt 0 ]; then
+    echo ""
+    fail "release-gate NOT green — $failc step(s) failed. 0.8.0 is NOT releasable."
+    echo "  Reminder: the xt-tool-surface stub is intentionally fail-closed until the"
+    echo "  -xt fix lands; a green release-gate is necessary but GLG closes the call."
+    return 1
+  fi
+  ok "release-gate all steps green — necessary condition met (GLG authorizes the cut)"
+  return 0
+}
+
 cmd=${1:-}
 case "$cmd" in
   setup)
     setup_all "$TARGET_PROJECT_DIR"
+    ;;
+  release-gate)
+    shift || true
+    release_gate "$@"
     ;;
   smoke)
     smoke_test "$TARGET_PROJECT_DIR" claude
