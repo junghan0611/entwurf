@@ -1185,9 +1185,22 @@ export default function (pi: ExtensionAPI) {
 		return { cancel: true };
 	});
 
+	// #26 auth-boundary correction. pi-shell-acp is a no-auth ACP bridge at the
+	// pi provider layer: pi.registerProvider requires apiKey/oauth when defining
+	// custom models, but streamShellAcp never consumes options.apiKey — backend
+	// auth belongs to the official Claude/Codex/Gemini CLI child process. The old
+	// value "ANTHROPIC_API_KEY" was an uppercase legacy-ENV reference: under pi
+	// 0.77 it (a) prints a deprecation warning and (b) makes entwurf/child-spawn
+	// paths fail preflight with "No API key found for pi-shell-acp" when the env
+	// var is unset — falsely presenting the bridge as Anthropic-key dependent even
+	// for Codex/Gemini routes. This explicit no-auth sentinel is lowercase+hyphen,
+	// so it is NOT detected as an ENV reference (no warning) yet still satisfies
+	// the custom-model auth-present check. Do NOT change to "$ANTHROPIC_API_KEY":
+	// that silences the warning but keeps the wrong auth-boundary shape.
+	const PI_SHELL_ACP_NO_AUTH_SENTINEL = "pi-shell-acp-no-auth";
 	pi.registerProvider(PROVIDER_ID, {
 		baseUrl: "pi-shell-acp",
-		apiKey: "ANTHROPIC_API_KEY",
+		apiKey: PI_SHELL_ACP_NO_AUTH_SENTINEL,
 		api: "pi-shell-acp",
 		models: MODELS,
 		streamSimple: (model, context, options) => streamShellAcp(pi, model, context, options),

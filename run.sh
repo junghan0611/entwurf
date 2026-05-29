@@ -57,7 +57,8 @@ Usage:
   ./run.sh smoke-async-resume [backends...] # live async-resume smoke (Claude+Codex+Gemini + handler/external cases), required before entwurf releases
   ./run.sh check-backends             # local deterministic check of backend launch resolution + backend-specific _meta shape
   ./run.sh check-registration         # local deterministic check of per-runtime provider registration semantics
-  ./run.sh check-dep-versions         # local deterministic check that version pins (package.json/run.sh/README.md) agree
+  ./run.sh check-dep-versions         # local deterministic check that version pins (package.json/run.sh/README.md + pi devDeps/peer pins) agree
+  ./run.sh check-auth-boundary        # local deterministic guard (#26): no legacy-ENV apiKey literal (e.g. "ANTHROPIC_API_KEY") in root bridge code (index.ts/acp-bridge.ts)
   ./run.sh check-sdk-surface          # static gate: every (connection as any) cast in acp-bridge.ts is annotated SDK_CAST_OK or SDK_CAST_DEBT
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.74.x peers
@@ -2579,6 +2580,36 @@ EOF
   )
 }
 
+check_auth_boundary() {
+  # #26 auth-boundary guard. pi-shell-acp is a no-auth ACP bridge at the pi
+  # provider layer; the registration must NOT assign a bare-uppercase legacy-ENV
+  # string (e.g. "ANTHROPIC_API_KEY") to apiKey in root bridge code. That value
+  # trips pi 0.77's legacy-env deprecation AND makes entwurf/child-spawn paths
+  # fail preflight with "No API key found for pi-shell-acp", falsely presenting
+  # the bridge as API-key dependent even for Codex/Gemini routes (issue #26).
+  #
+  # Scope: index.ts + acp-bridge.ts ONLY (root bridge runtime). Mentions of the
+  # literal in NEXT/CHANGELOG/issue prose — and in the fix's own explanatory
+  # comment — are intentionally allowed: the regex matches only an `apiKey:`
+  # field assigned a quoted ALL-CAPS env name, so the comment and the no-auth
+  # sentinel identifier (`PI_SHELL_ACP_NO_AUTH_SENTINEL`) both pass.
+  (cd "$REPO_DIR" && node --input-type=module <<'EOF'
+import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
+const offenders = [];
+for (const f of ['index.ts', 'acp-bridge.ts']) {
+  const src = readFileSync(f, 'utf8');
+  const re = /apiKey:\s*"([A-Z][A-Z0-9_]*)"/g;
+  let m;
+  while ((m = re.exec(src)) !== null) offenders.push(`${f}: apiKey: "${m[1]}"`);
+}
+assert.equal(offenders.length, 0,
+  `#26: root bridge apiKey must be a no-auth sentinel, not a legacy-ENV reference. Offenders:\n  ${offenders.join('\n  ')}`);
+console.log('[check-auth-boundary] ok — no legacy-ENV apiKey literal in index.ts / acp-bridge.ts (#26)');
+EOF
+  )
+}
+
 check_sdk_surface() {
   # Static gate against silently-broken ACP SDK calls.
   #
@@ -3769,6 +3800,9 @@ case "$cmd" in
     ;;
   check-dep-versions)
     check_dep_versions
+    ;;
+  check-auth-boundary)
+    check_auth_boundary
     ;;
   check-sdk-surface)
     check_sdk_surface
