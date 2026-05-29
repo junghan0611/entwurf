@@ -100,11 +100,13 @@
 		"smoke-async-resume": "./run.sh smoke-async-resume",
 		"check-mcp": "./run.sh check-mcp",
 		"check-shell-quote": "./run.sh check-shell-quote",
+		"check-model-lock": "./run.sh check-model-lock",
 		"check-models": "./run.sh check-models",
 		"check-backends": "./run.sh check-backends",
 		"check-registration": "./run.sh check-registration",
 		"check-dep-versions": "./run.sh check-dep-versions",
 		"check-sdk-surface": "./run.sh check-sdk-surface",
+		"verify-transcript-poison": "./run.sh verify-transcript-poison",
 		"check-pack": "./run.sh check-pack",
 		"check-pack-install": "./run.sh check-pack-install",
 		"test:pack": "pnpm run check-pack && pnpm run check-pack-install",
@@ -114,7 +116,7 @@
 		"format": "biome check --write .",
 		"check:plugins": "pnpm -r --filter \"./plugins/*\" run check",
 		"check-async-resume-gate": "./run.sh check-async-resume-gate",
-		"check": "pnpm lint && pnpm typecheck && pnpm check:plugins && ./run.sh check-mcp && ./run.sh check-shell-quote && ./run.sh check-plugin-empty-final-recovery && ./run.sh check-plugin-prompt-format && ./run.sh check-async-resume-gate && ./run.sh check-models && ./run.sh check-backends && ./run.sh check-registration && ./run.sh check-dep-versions && ./run.sh check-sdk-surface && ./run.sh check-pack"
+		"check": "pnpm lint && pnpm typecheck && pnpm check:plugins && ./run.sh check-mcp && ./run.sh check-shell-quote && ./run.sh check-plugin-empty-final-recovery && ./run.sh check-plugin-prompt-format && ./run.sh check-async-resume-gate && ./run.sh check-model-lock && ./run.sh check-models && ./run.sh check-backends && ./run.sh check-registration && ./run.sh check-dep-versions && ./run.sh check-sdk-surface && ./run.sh verify-transcript-poison && ./run.sh check-pack"
 	},
 	"pi": {
 		"extensions": [

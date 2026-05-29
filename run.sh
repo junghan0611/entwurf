@@ -2546,7 +2546,34 @@ const readmeCodex = readme.match(/@zed-industries\/codex-acp@([0-9.]+)/)?.[1];
 assert.equal(readmeCodex, codexPinned,
   `README.md @zed-industries/codex-acp install pin (${readmeCodex}) must match package.json (${codexPinned})`);
 
-console.log('[check-dep-versions] 6 assertions ok');
+// pi peer/dev alignment (#26 / 0.8.0 dep-alignment gate). The three
+// @earendil-works/pi-* devDeps must pin one identical version, and that
+// version must match the check-pack-install peer-install pins below
+// (`pnpm add @earendil-works/pi-ai@X ...`). Without this, a pi bump could
+// drift package.json devDeps away from the fresh-temp install smoke and
+// the "dependency alignment gate" would not actually verify pi.
+const piAi = pkg.devDependencies?.['@earendil-works/pi-ai'];
+const piCoding = pkg.devDependencies?.['@earendil-works/pi-coding-agent'];
+const piTui = pkg.devDependencies?.['@earendil-works/pi-tui'];
+assert.ok(piAi, 'package.json devDependencies must pin @earendil-works/pi-ai');
+assert.equal(piCoding, piAi,
+  `@earendil-works/pi-coding-agent (${piCoding}) must match @earendil-works/pi-ai (${piAi})`);
+assert.equal(piTui, piAi,
+  `@earendil-works/pi-tui (${piTui}) must match @earendil-works/pi-ai (${piAi})`);
+
+// check-pack-install peer-install pins (quoted `@earendil-works/pi-*@<ver>`
+// args; the `\d`-anchored version avoids matching this regex literal itself).
+const peerAi = runSh.match(/"@earendil-works\/pi-ai@(\d[\d.]*)"/)?.[1];
+const peerCoding = runSh.match(/"@earendil-works\/pi-coding-agent@(\d[\d.]*)"/)?.[1];
+const peerTui = runSh.match(/"@earendil-works\/pi-tui@(\d[\d.]*)"/)?.[1];
+assert.equal(peerAi, piAi,
+  `run.sh check-pack-install pi-ai peer pin (${peerAi}) must match package.json devDep (${piAi})`);
+assert.equal(peerCoding, piAi,
+  `run.sh check-pack-install pi-coding-agent peer pin (${peerCoding}) must match (${piAi})`);
+assert.equal(peerTui, piAi,
+  `run.sh check-pack-install pi-tui peer pin (${peerTui}) must match (${piAi})`);
+
+console.log('[check-dep-versions] 12 assertions ok');
 EOF
   )
 }
