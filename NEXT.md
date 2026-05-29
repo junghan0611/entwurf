@@ -5,11 +5,41 @@
 
 ## Top priority — 0.8.0 release campaign (dependency alignment + full test gate)
 
-**Baseline:** 0.7.6 released (async-resume regression closed; see CHANGELOG 0.7.6 + commit chain `ff85fa9 → … → d198da0`). pi host is now `0.77.0`. GPT-5.5 reviewed pi 0.77.0 release notes **and** this NEXT plan twice (see reference below); all four follow-up reinforcements folded into the steps. Target: **bump every dependency to latest, consolidate a single all-pass release gate, then cut 0.8.0.**
+**Baseline:** 0.7.6 released (async-resume regression closed; see CHANGELOG 0.7.6 + commit chain `ff85fa9 → … → d198da0`). pi host is now `0.77.0`. GPT-5.5 reviewed three times (pi 0.77.0 release notes → NEXT 1차 → this hardened plan via sync entwurf); all reinforcements folded into the steps (see reference below). Target: **bump every dependency to latest, consolidate a single all-pass release gate, then cut 0.8.0.**
 
 Sequenced — each step verified before the next. **GLG makes the final commit.** Execution model: GPT-5.5 (sync) for design review, GPT-5.4 for test cycles, GLG + Claude for final verification. Test invocation is ALWAYS through `run.sh` subcommands — never call a script in `scripts/` directly.
 
-### Step 1 — Dependency bump (latest, confirmed 2026-05-29)
+> **Order note (GPT-5.5 third review, reinforcement 5):** gate plumbing comes FIRST, before the dependency bump — otherwise the bump has no consolidated gate to be verified against. Steps are: **gate hardening → dep bump → opus 4.8 → docs → final full-gate run + cut.**
+
+### Step 1 — Gate hardening & consolidation (plumbing FIRST)
+
+Build the single release gate *before* touching dependencies, so every later step is verified by it. Deliverable: **one `run.sh` subcommand that, when green, is sufficient to release.** Nothing in `scripts/` is ever called directly — always via `run.sh`.
+
+**1a. Name the two axes clearly** (this is the "smoke vs check 뭐가 다른가" confusion — the `check-`/`smoke-` prefix does NOT currently separate static from live):
+- **Static / deterministic** (no API, no backend subprocess; fast, free, pre-commit safe): `lint`, `typecheck`, `check:plugins`, `check-mcp`, `check-shell-quote`, `check-plugin-empty-final-recovery`, `check-plugin-prompt-format`, `check-async-resume-gate`, `check-models`, `check-backends`, `check-registration`, `check-dep-versions`, `check-sdk-surface`, `check-pack`, **`check-model-lock`**, **`verify-transcript-poison`**. → `pnpm check`'s job. (Confirmed 2026-05-29: pre-commit hook already runs `pnpm check` and it passes — so this set is the existing pre-commit floor.)
+- **Live / runtime** (spawns a real backend, costs tokens — fine, all subscription): `smoke-all` (3-backend), `smoke-async-resume`, `smoke-continuity`, `smoke-cancel`, `smoke-model-switch`, `smoke-entwurf-resume`, `check-bridge`, `check-native-async`, `sentinel`, `session-messaging`, `smoke-compaction-policy`, `verify-resume`.
+- **Naming smell to fix:** `check-bridge` / `check-native-async` are `check-`-prefixed but are LIVE. Rename or document so the prefix is honest.
+
+**1b. Fold the two missing deterministic gates into `pnpm check`:** `check-model-lock` + `verify-transcript-poison` (both no-API per their usage text). The static set must be honestly complete.
+
+**1c. Extend `check-dep-versions` (reinforcement 2):** today it only asserts `claude-agent-acp`, `codex-acp`, README codex pin (`run.sh:2515`, "6 assertions"). It does NOT check `@earendil-works/pi-{ai,coding-agent,tui}` nor the `check-pack-install` peer-install pin. Add those assertions BEFORE the bump so Step 2's bump is actually gated. (Doing 1c first means the bump can't drift silently.)
+
+**1d. Dedup audit, then bundle** — GPT-5.5 third-review verdict on overlap:
+- **`smoke-continuity` vs `smoke-entwurf-resume` → real overlap.** `smoke-entwurf-resume` is the superset (asserts `acpSessionId` identity + assistant turn count + blank-assistant guard + fallback/invalidate guard). Keep `smoke-entwurf-resume` in the release gate; demote `smoke-continuity` to a dev quick-smoke.
+- **NOT duplicates — each a unique invariant, keep all:** `smoke-entwurf-resume` (bridge same-session ACP-id continuity) vs `sentinel` (real entwurf spawn/resume orchestration + target registry + identity + semantic recall matrix); `smoke-async-resume` (MCP replyable async resume + followUp + external non-replyable reject) vs `sentinel` (sync spawn/resume matrix); `check-bridge` (pi-tools-bridge MCP visibility/invocation across ACP backends) vs `check-native-async` (native extension async spawn, stale `explicitExtensions` regression class).
+- **`verify-resume` (reinforcement 3):** carries a cross-cwd resume regression gate — NOT covered by the above. Either add it to the release gate or document explicitly that `smoke-entwurf-resume`/`sentinel` subsume it (they don't fully — keep it).
+
+**1e. Build `./run.sh release-gate`** (working name): `pnpm check` (full static) → every surviving live gate → one consolidated PASS/FAIL/SKIP summary with artifact paths, fail-closed.
+- **Gemini skip = FAIL at release (reinforcement 1), applied to EVERY skip-capable subcommand:** `smoke-all`, `check-bridge`, `smoke-async-resume` all currently exit 0 on Gemini SKIP. 0.8.0 makes a three-backend claim → release-gate must treat SKIP>0 as FAIL (via an internal `--require-gemini` mode or summary-artifact parsing). A dev-only `--allow-skip-gemini` may exist for iteration; the default release path does NOT skip.
+- **Coverage is per-invariant, not "all live across 3 backends" (reinforcement 2):** `sentinel` is a 6-cell diagonal with no Gemini cell; `session-messaging`'s ACP target is Claude-only. So state it precisely: *backend-runtime* invariants (`smoke-all` etc.) must PASS on Claude/Codex/Gemini; *orchestration* invariants (`sentinel`, `session-messaging`) PASS on their current matrix, and any Gemini-absent matrix is either documented-with-reason or gets a cell added — not silently labeled "3-backend".
+- **`smoke-compaction-policy` must run LIVE (reinforcement 4):** pin `LIVE=1 ./run.sh smoke-compaction-policy` inside the gate, else its backend-observation steps are skipped.
+- **`-xt` / `--exclude-tools` tool-surface truthfulness gate (reinforcement 6 + pi 0.77 review):** pi 0.77's `--exclude-tools` can hide tools, but the Claude backend hands Read/Bash/Edit/Write to Claude Code itself — so `pi --provider pi-shell-acp -xt Bash` may make pi's *declared* surface diverge from the backend's *actual* surface, breaking our "declared == actual" invariant. Add a focused gate; preferred policy is **throw/reject, not warn**, when the exclusion isn't truthful. Likely needs to be live (deterministic alone won't catch the Claude-Code-native handoff). Joins the release gate.
+
+**1f. `prepublishOnly` decision (reinforcement 6/clarification):** decide explicitly whether `prepublishOnly` runs the full live gate or a static+pack subset. Live gate depends on auth/Gemini/tmux and may be too heavy for the `npm publish` lifecycle. If subset: document "publish lifecycle = static+pack; full `release-gate` is a mandatory manual pre-publish step." Either way, write it down — no implicit shortcut.
+
+> Principle: **a release is valid only when the full set passed.** Adding a feature adds a test; the test joins the release gate. No backend-specific or sync-only shortcut counts as "tested."
+
+### Step 2 — Dependency bump (verified by the Step-1 gate)
 
 | Package | Current pin | Latest | Where |
 |---|---|---|---|
@@ -22,67 +52,40 @@ Pin sites to update in lockstep (grep `0.75.4` / `0.14.0` / `0.36.1`):
 - `package.json` deps + devDeps.
 - `run.sh` `CLAUDE_ACP_REQUIRED_VERSION` / `CODEX_ACP_REQUIRED_VERSION` (separate hardcoded pins, `run.sh` ~check-pack-install region).
 - `README.md:113` install snippet (`@zed-industries/codex-acp@0.14.0`) + any pi-version prose in docs.
+- After `pnpm install`, confirm **`pnpm-lock.yaml`** updated (reinforcement 5 extra).
 
-**`check-dep-versions` is currently incomplete — extend it (GPT-5.5 reinforcement 2):** today it only asserts `claude-agent-acp`, `codex-acp`, and the README codex pin (`run.sh:2515`, "6 assertions"). It does NOT verify `@earendil-works/pi-{ai,coding-agent,tui}` at all, nor the `check-pack-install` peer-install pin. Add assertions so the three pi devDeps agree across `package.json` + `check-pack-install` peer pin — otherwise it is not really a "dependency alignment gate".
+`claude-agent-acp 0.36.1 → 0.38.0` and `codex-acp 0.14.0 → 0.15.0` are minor backend-SDK bumps — the Step-1 gate (`check-sdk-surface` + live `smoke-all` + 3-backend) is exactly what proves the bridge cast annotations and runtime still hold. The strengthened `check-dep-versions` (1c) now fails if any pin drifts.
 
-- `claude-agent-acp 0.36.1 → 0.38.0` and `codex-acp 0.14.0 → 0.15.0` are minor bumps across backend SDKs — run `check-sdk-surface` + live `smoke-all` to confirm bridge cast annotations and 3-backend runtime still hold.
-
-### Step 2 — Opus 4.7 → 4.8 (REPLACE — 4.8 only)
+### Step 3 — Opus 4.7 → 4.8 (REPLACE — 4.8 only)
 
 **Decision (GLG, 2026-05-29): support 4.8 only.** Live surfaces replace `claude-opus-4-7` → `claude-opus-4-8`; VERIFY/CHANGELOG history rows keep `4-7` as historical evidence (do not rewrite history).
 
 pi 0.77 added `claude-opus-4-8` metadata, but pi-shell-acp is a **curated surface** — it does NOT auto-expose. All live sites change in lockstep (grep `claude-opus-4-7`, ~20 sites):
 
-- `index.ts:198` `SUPPORTED_ANTHROPIC_MODEL_IDS` + `:284`/`:288` placeholder injection (+ comment `:231`, `:317`)
+- `index.ts:198` `SUPPORTED_ANTHROPIC_MODEL_IDS` + `:284`/`:288` placeholder injection (+ comments `:231`, `:317`)
 - `pi/entwurf-targets.json` entry
 - `run.sh` model gates: `:944` model-switch smoke, `:2382` / `:2422` / `:2480` `check-models` lists
 - `scripts/check-model-lock.ts:214` `PSA_OPUS`
-- `plugins/openclaw/src/index.ts:245-267` **AND `plugins/openclaw/dist/index.js:69-91`** — plugin `main` is `dist/index.js`, so source-only edits leave the runtime stale (GPT-5.5 reinforcement 4). Either `pnpm --filter ./plugins/openclaw build` to regenerate dist, or hand-sync both; `check:plugins` should catch type drift but not a stale literal — verify dist matches source after.
+- `plugins/openclaw/src/index.ts:245-267` **AND `plugins/openclaw/dist/index.js:69-91`** — plugin `main` is `dist/index.js`, so source-only edits leave the runtime stale (reinforcement 4). Either `pnpm --filter ./plugins/openclaw build` to regenerate dist, or hand-sync both; `check:plugins` catches type drift but NOT a stale literal — verify `dist` matches `src` after (consider adding a src/dist literal-drift check).
 - `plugins/openclaw/README.md`, `plugins/openclaw/examples/docker-lab/*` (README + `config/openclaw.json`)
 - docs surfaces: `demo/README.md:115`, `docs/setup-clean-host.md:199/228`
-- **`check-models` must prove 4.8 is real, not a placeholder (GPT-5.5 reinforcement 5):** the `index.ts` placeholder-injection path can mask a missing 0.77 registry entry. Update `check-models` to assert `claude-opus-4-8` exists in the pi 0.77 model registry AND surfaces at 1M context — so a silent metadata gap fails the gate instead of being papered over by the injected placeholder.
+- **`check-models` must prove 4.8 is real, not a placeholder (reinforcement 5):** `index.ts`'s placeholder-injection path can mask a missing 0.77 registry entry. Assert `claude-opus-4-8` exists in the pi 0.77 registry AND surfaces at 1M context — a silent metadata gap must FAIL the gate, not be papered over.
 - Add Claude runtime smoke / interview evidence on 4-8 before release.
-
-### Step 3 — ONE release gate (the real ask: "다 통과해야 릴리즈, run.sh 명령 하나")
-
-**The deliverable: a single `run.sh` subcommand that, when green, is sufficient to release. No script in `scripts/` is ever called directly — everything goes through `run.sh`.**
-
-**First, name the two axes clearly (this is the "smoke vs check 뭐가 다른가" confusion).** The `check-`/`smoke-` prefix does NOT currently separate static from live:
-
-- **Static / deterministic (no API, no backend subprocess)** — fast, free, pre-commit safe: `lint`, `typecheck`, `check:plugins`, `check-mcp`, `check-shell-quote`, `check-plugin-empty-final-recovery`, `check-plugin-prompt-format`, `check-async-resume-gate`, `check-models`, `check-backends`, `check-registration`, `check-dep-versions`, `check-sdk-surface`, `check-pack`, **`check-model-lock`**, **`verify-transcript-poison`**. → this set is `pnpm check`'s job.
-- **Live / runtime (spawns a real backend, costs tokens — fine, all subscription)**: `smoke-all` (3-backend), `smoke-async-resume`, `smoke-continuity`, `smoke-cancel`, `smoke-model-switch`, `smoke-entwurf-resume`, `check-bridge`, `check-native-async`, `sentinel`, `session-messaging`, `smoke-compaction-policy`.
-- **Naming smell to fix:** `check-bridge` and `check-native-async` are `check-`-prefixed but are actually LIVE. Rename or document so the prefix is honest, OR drop the prefix as a signal and rely on the gate grouping. Decide during dedup.
-
-**Problems to fix:**
-1. `pnpm check` MISSES two deterministic gates that belong in it: **`check-model-lock`** and **`verify-transcript-poison`** (both no-API per their usage text). Fold them in — the static set must be honestly complete.
-2. There is **no single "run everything" gate.** The live smokes are scattered and never bundled → "Claude만 / sync만 통과" is structurally possible today.
-
-**Work:**
-1. Fold `check-model-lock` + `verify-transcript-poison` into `pnpm check`.
-2. **Dedup FIRST, then bundle** (so the single command isn't bloated with redundant work). Audit overlap and either collapse or document why both must exist:
-   - `smoke-entwurf-resume` vs `smoke-async-resume` vs `sentinel` — all touch entwurf continuity. What does each prove uniquely?
-   - `check-bridge` vs `check-native-async` — both exercise the bridge/MCP live.
-   - `smoke-continuity` vs `smoke-entwurf-resume` — both are resume/bootstrap gates.
-   - Goal: no redundant or orphaned script in the release set; we can *prove* every distinct invariant ran exactly once.
-3. **Add the single target — `./run.sh release-gate`** (working name): runs `pnpm check` (full static) → every surviving live smoke across **all 3 backends** → emits one consolidated PASS/FAIL/SKIP summary, fail-closed.
-   - **Gemini skip policy (GPT-5.5 reinforcement 1):** the FINAL release gate must NOT skip Gemini — 0.8.0 makes a three-backend claim, so Claude/Codex/Gemini must all actually PASS (skip = FAIL). A dev-only `--allow-skip-gemini` flag may exist for iteration, but the default release path treats a missing Gemini as failure, not a silent pass. (Current `smoke-all` silently best-effort-skips Gemini — that's the dev behavior, not the release behavior.)
-4. **Add a `-xt` / `--exclude-tools` tool-surface truthfulness smoke (GPT-5.5 reinforcement 6 + pi 0.77 review):** pi 0.77's `--exclude-tools` can hide tools, but the Claude backend hands Read/Bash/Edit/Write to Claude Code itself — so `pi --provider pi-shell-acp -xt Bash` may make pi's *declared* tool surface diverge from the backend's *actual* surface, violating our "declared tools == actual tools" invariant. At least one focused gate (deterministic if possible, else live) must verify pi-shell-acp does not lie about its tool surface under `-xt`. This joins the release gate.
-5. Wire the consolidated gate into `prepublishOnly` (or document precisely why publish runs a subset vs the full local release gate).
-
-> Principle: **a release is valid only when the full set passed.** Adding a feature adds a test; the test joins the release gate. No backend-specific or sync-only shortcut counts as "tested."
 
 ### Step 4 — README / docs / OpenClaw metadata corrections
 
-OpenClaw publish status is currently self-contradictory across three files (GPT-5.5 reinforcement 3). `@junghan0611/openclaw-pi-shell-acp@0.0.1` IS live on npm (confirmed 2026-05-29) but parked. Separate the two axes — **npm: published-but-parked** vs **ClawHub: not published**:
+OpenClaw publish status is self-contradictory across three files (reinforcement 3). `@junghan0611/openclaw-pi-shell-acp@0.0.1` IS live on npm (confirmed 2026-05-29) but parked. Separate the two axes — **npm: published-but-parked** vs **ClawHub: not published**:
 
 - **`README.md:130`** says "not published to npm or ClawHub yet" — wrong on the npm half. Fix to: published to npm as `0.0.1` (parked, no work since), not on ClawHub.
 - **`README.md:92`** already says "ships as its own npm package" — reconcile so :92 and :130 tell the same story.
-- **`plugins/openclaw/package.json`** has `openclaw.release.publishToNpm: false` while 0.0.1 is actually on npm. Re-examine this field's meaning: either it's stale (flip to reflect reality) or it means "do not auto-publish from CI" (then document that intent). `publishToClawHub: false` stays correct.
-- Reconcile any version strings touched in Steps 1–2 (`check-dep-versions` will enforce most).
+- **`plugins/openclaw/package.json`** has `openclaw.release.publishToNpm: false` while 0.0.1 is on npm. Re-examine: either stale (flip) or means "no CI auto-publish" (document that). `publishToClawHub: false` stays correct.
+- Reconcile any version strings touched in Steps 2–3 (`check-dep-versions` enforces most).
 
-### Step 5 — Cut 0.8.0
+### Step 5 — Final full release-gate run + cut 0.8.0
 
-Only after Step 3's consolidated gate is green end-to-end: version bump, CHANGELOG, publish, agenda stamp.
+- Run `./run.sh release-gate` end-to-end with **no skips** (Gemini included) — this is the gate that authorizes the release.
+- Record live evidence in `CHANGELOG.md` / `VERIFY.md` / `BASELINE.md` (3-backend PASS + artifact paths).
+- Version bump, CHANGELOG 0.8.0, publish, agenda stamp + Google Chat notify.
 
 ---
 
@@ -104,7 +107,20 @@ Verdict: NEXT adoptable; four reinforcements needed. All four folded into the st
 1. **Release gate must NOT skip Gemini at final release** — three-backend claim ⇒ all three actually PASS; `--allow-skip-gemini` is dev-only, default = skip-is-fail. → Step 3.3.
 2. **`check-dep-versions` doesn't check pi devDeps** — only claude-agent-acp/codex-acp/README codex pin today; add `@earendil-works/pi-{ai,coding-agent,tui}` + `check-pack-install` peer pin. → Step 1.
 3. **OpenClaw metadata conflict** — README:92 vs :130 vs `package.json publishToNpm:false`; split "ClawHub not published / npm published-but-parked". → Step 4.
-4. **Opus 4.8 must sync generated dist** — `plugins/openclaw/dist/index.js` still has `claude-opus-4-7`; plugin main is dist, so source-only edit drifts. Also `check-models` must verify 4.8 registry presence + 1M context, not let placeholder injection hide a metadata gap. → Step 2.
+4. **Opus 4.8 must sync generated dist** — `plugins/openclaw/dist/index.js` still has `claude-opus-4-7`; plugin main is dist, so source-only edit drifts. Also `check-models` must verify 4.8 registry presence + 1M context, not let placeholder injection hide a metadata gap. → Step 3.
+
+### GPT-5.5 third review — of the hardened plan (2026-05-29, sync entwurf `a7c28e15`, 11 turns / $0.76)
+
+Verdict: adoptable; **6 more fixes**. All folded into Steps 1–5 above:
+
+1. **Gemini skip=fail must apply to EVERY skip-capable subcommand** (`smoke-all`, `check-bridge`, `smoke-async-resume` all exit 0 on SKIP today), not just the abstract "final gate". → Step 1e.
+2. **"all live across 3 backends" is inaccurate** — `sentinel` is a 6-cell diagonal (no Gemini), `session-messaging` is Claude-only ACP. Restate as per-invariant coverage. → Step 1e.
+3. **`verify-resume` is a missing audit candidate** — carries a cross-cwd resume regression gate not subsumed by `smoke-entwurf-resume`/`sentinel`. → Step 1a/1d.
+4. **`smoke-compaction-policy` must be pinned `LIVE=1`** in the gate, else backend-observation steps skip. → Step 1e.
+5. **Order: gate hardening BEFORE dep bump** — otherwise the bump isn't verified by the new gate. → step reordering (now Step 1 = gate, Step 2 = bump). Also: confirm `pnpm-lock.yaml`, add src/dist literal-drift check.
+6. **`prepublishOnly` scope must be explicit** — full live gate vs static+pack subset; live gate is auth/Gemini/tmux-heavy for the publish lifecycle. → Step 1f.
+
+Dedup verdict (Step 1d): only `smoke-continuity` is a real overlap (subset of `smoke-entwurf-resume`); all other pairs are distinct invariants — keep them.
 
 ---
 
