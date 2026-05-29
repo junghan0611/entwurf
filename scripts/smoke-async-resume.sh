@@ -143,7 +143,10 @@ case_a_for_backend() {
 
 	local pre new_sid
 	pre=$(snapshot_sockets)
-	tmux new -d -s "$tmux_name" "pi --entwurf-control --provider $provider --model $model" \
+	# -c "$PWD": pin the tmux session cwd to the caller's cwd (scratch project
+	# when run via release-gate). Without it, the tmux SERVER's default cwd
+	# (often the repo) leaks in and the pi session dir is created there.
+	tmux new -d -s "$tmux_name" -c "$PWD" "pi --entwurf-control --provider $provider --model $model" \
 		|| { record "$case_name" "FAIL" "tmux new failed"; return; }
 
 	new_sid=$(wait_for_new_socket "$pre") || {
@@ -175,15 +178,45 @@ case_a_for_backend() {
 	prompt+="Both \`mode\` parameters are top-level arguments — \`mode: 'sync'\` on Step 1, \`mode: 'async'\` on Step 2 — not values inside the prompt string. "
 	prompt+="Report both taskIds verbatim from the tool results, nothing else."
 
-	tmux send-keys -t "$tmux_name" "$prompt" Enter
-
-	# Wait for the async ack — bridge emits "Resume spawned (async)" plus a
-	# Resume ID line. This proves the MCP→control-RPC→native-launcher chain
-	# returned an ack immediately (the parent-turn-free property).
-	if ! "$WAIT_FOR_TEXT" -t "$tmux_name" -p "Resume spawned \(async\)|Resume ID" -T "$ACK_TIMEOUT" >/dev/null 2>&1; then
-		local pane_dump
-		pane_dump=$(tmux capture-pane -t "$tmux_name" -p -S -100 | tail -20)
-		record "$case_name" "FAIL" "no async ack within ${ACK_TIMEOUT}s. pane tail: $pane_dump"
+	# Case A is a REPLYABLE pi-session: spawned with --entwurf-control above, so
+	# the MCP child receives PI_SESSION_ID + PI_AGENT_ID (verified out-of-band
+	# via mcp__pi-tools-bridge__entwurf_self — 3/3 sessions reported a present
+	# envelope; this is NOT an asymmetric-coexistence external caller). Per the
+	# resume mode contract, a replyable caller with mode:async (or omitted) MUST
+	# resolve to async; mode:async + non-replyable would REJECT, not sync. So a
+	# SYNC summary here is never a valid async outcome — it means the model
+	# emitted mode:'sync' on step 2 (model tool-arg variance; the prompt names
+	# 'sync' for step 1 and 'async' for step 2, which sonnet occasionally
+	# crosses). That is a MODEL_ARG_OR_ENVELOPE_MISMATCH, NOT an async-resume
+	# product failure. Allow one bounded retry; if the retry also goes sync, FAIL
+	# with the classification so a real async regression is never masked.
+	#
+	# The async ack ("Resume spawned (async)" / "Resume ID") is emitted
+	# immediately and never appears on a sync path, so waiting on it cannot
+	# stale-match a prior attempt. "RESUME_OK" (the resumed entwurf's reply) in
+	# the pane with NO ack means step 2 executed synchronously.
+	local attempt acked=0 pane_dump=""
+	for attempt in 1 2; do
+		tmux clear-history -t "$tmux_name" 2>/dev/null || true
+		tmux send-keys -t "$tmux_name" "$prompt" Enter
+		if "$WAIT_FOR_TEXT" -t "$tmux_name" -p "Resume spawned \(async\)|Resume ID" -T "$ACK_TIMEOUT" >/dev/null 2>&1; then
+			acked=1
+			break
+		fi
+		pane_dump=$(tmux capture-pane -t "$tmux_name" -p -S -150 | tail -25)
+		if echo "$pane_dump" | grep -q "RESUME_OK"; then
+			log "  [$case_name] attempt $attempt: sync summary, no async ack — MODEL_ARG_OR_ENVELOPE_MISMATCH"
+		else
+			log "  [$case_name] attempt $attempt: no async ack within ${ACK_TIMEOUT}s (no sync summary either)"
+		fi
+		[ "$attempt" -lt 2 ] && log "  [$case_name] bounded retry (1) …"
+	done
+	if [ "$acked" -ne 1 ]; then
+		if echo "$pane_dump" | grep -q "RESUME_OK"; then
+			record "$case_name" "FAIL" "MODEL_ARG_OR_ENVELOPE_MISMATCH after bounded retry: replyable caller (--entwurf-control; envelope verified) required async, but step-2 resume ran sync (model emitted mode:sync). pane tail: $pane_dump"
+		else
+			record "$case_name" "FAIL" "no async ack within ${ACK_TIMEOUT}s (x2 attempts). pane tail: $pane_dump"
+		fi
 		return
 	fi
 	log "  [$case_name] async ack received"
@@ -236,7 +269,7 @@ case_d_direct_stdio_async() {
 	tmux_name="smars-d-$$"
 	TMUX_SESSIONS+=("$tmux_name")
 	pre=$(snapshot_sockets)
-	tmux new -d -s "$tmux_name" "pi --entwurf-control --provider pi-shell-acp --model gpt-5.4" \
+	tmux new -d -s "$tmux_name" -c "$PWD" "pi --entwurf-control --provider pi-shell-acp --model gpt-5.4" \
 		|| { record "$case_name" "FAIL" "tmux new failed"; return; }
 	target_sid=$(wait_for_new_socket "$pre") || {
 		record "$case_name" "FAIL" "target session socket did not appear in ${BOOT_TIMEOUT}s"

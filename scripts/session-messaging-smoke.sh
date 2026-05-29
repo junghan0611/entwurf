@@ -163,14 +163,14 @@ echo
 
 log "→ Target-N (native: $NATIVE_PROVIDER/$NATIVE_MODEL) in tmux $TMUX_N"
 pre=$(snapshot_sockets)
-tmux new -d -s "$TMUX_N" "pi --entwurf-control --provider $NATIVE_PROVIDER --model $NATIVE_MODEL" \
+tmux new -d -s "$TMUX_N" -c "$PWD" "pi --entwurf-control --provider $NATIVE_PROVIDER --model $NATIVE_MODEL" \
   || { log "FATAL: tmux new Target-N failed"; exit 1; }
 TGT_N=$(wait_for_new_socket "$pre") || { log "FATAL: Target-N socket did not appear in ${BOOT_TIMEOUT}s"; exit 1; }
 log "  Target-N: $TGT_N"
 
 log "→ Target-A (ACP: $ACP_PROVIDER/$ACP_MODEL) in tmux $TMUX_A"
 pre=$(snapshot_sockets)
-tmux new -d -s "$TMUX_A" "pi --entwurf-control --provider $ACP_PROVIDER --model $ACP_MODEL" \
+tmux new -d -s "$TMUX_A" -c "$PWD" "pi --entwurf-control --provider $ACP_PROVIDER --model $ACP_MODEL" \
   || { log "FATAL: tmux new Target-A failed"; exit 1; }
 TGT_A=$(wait_for_new_socket "$pre") || { log "FATAL: Target-A socket did not appear in ${BOOT_TIMEOUT}s"; exit 1; }
 log "  Target-A: $TGT_A"
