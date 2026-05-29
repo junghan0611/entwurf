@@ -33,7 +33,8 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # pnpm install + sync auth + install + smoke-all + Axis 1 gates (bridge, native async, session-messaging, sentinel)
-  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE 0.8.0 gate: full static (pnpm check) + every live per-invariant gate across 3 backends + one PASS/FAIL/SKIP summary. gemini SKIP=FAIL at release (dev override: --allow-skip-gemini). xt-tool-surface is fail-closed until the -xt fix lands; final cut authorization is GLG's.
+  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE 0.8.0 gate: full static (pnpm check) + every live per-invariant gate across 3 backends + one PASS/FAIL/SKIP summary. gemini SKIP=FAIL at release (dev override: --allow-skip-gemini). final cut authorization is GLG's.
+  ./run.sh xt-tool-surface             # ACP backend exclude-tools policy: -xt <builtin> fail-fast per backend (declared==actual), extension exclusion honored
   ./run.sh smoke [project-dir]        # Claude runtime smoke (backward-compatible default)
   ./run.sh smoke-claude [project-dir] # explicit Claude runtime smoke
   ./run.sh smoke-codex [project-dir]  # explicit Codex runtime smoke
@@ -3605,6 +3606,81 @@ setup_all() {
   echo "DONE: pi-shell-acp setup + Axis 1 gates green. Axis 2 interview may proceed."
 }
 
+# ---------------------------------------------------------------------------
+# xt-tool-surface — ACP backend exclude-tools policy gate (NEXT Step 1e).
+#
+# pi 0.77 --exclude-tools/-xt removes a tool from pi's active set + "Available
+# tools:" system prompt, but the ACP backend CLI keeps its own tool surface that
+# pi-shell-acp does NOT gate per-tool (Claude gets providerSettings.tools;
+# Codex/Gemini expose native shell+file tools regardless). The 0.8.0 policy is
+# truthfulness-first FAIL-FAST: excluding a backend-backed built-in
+# (read/bash/edit/write) is rejected up front (index.ts assertExcludeToolsHonored)
+# rather than silently letting the backend keep the tool (declared != actual).
+#
+# This gate asserts, per backend, that `pi --provider pi-shell-acp -xt <builtin>`
+# is rejected before backend launch with the policy error and runs NO tool — and
+# (positive control) that excluding an EXTENSION tool (entwurf) is NOT rejected,
+# because extension tools are pi-side and never reach the backend.
+# ---------------------------------------------------------------------------
+xt_tool_surface_single() {
+  local backend=$1 model=$2 excluded=$3
+  local out
+  out=$(timeout 120 pi --mode json -p -e "$REPO_DIR" \
+    --provider pi-shell-acp --model "$model" -xt "$excluded" \
+    "say hi" 2>&1) || true
+  if ! echo "$out" | grep -q "cannot honor --exclude-tools ($excluded) on the $backend backend"; then
+    fail "xt-tool-surface[$backend]: expected fail-fast on -xt $excluded, got none"
+    echo "$out" | tail -5
+    return 1
+  fi
+  # Fail-fast fires before backend launch, so no tool may have executed.
+  if echo "$out" | grep -q '"type":"tool_execution_start"'; then
+    fail "xt-tool-surface[$backend]: policy error present BUT a tool still executed — not fail-fast"
+    return 1
+  fi
+  ok "xt-tool-surface[$backend]: -xt $excluded rejected up front (declared==actual upheld)"
+  return 0
+}
+
+xt_tool_surface_extension_honored() {
+  # Positive control: excluding an EXTENSION tool is honored (pi-side), so the
+  # policy guard must NOT trip — the backend launches normally.
+  local backend=$1 model=$2
+  local out
+  out=$(timeout 120 pi --mode json -p -e "$REPO_DIR" \
+    --provider pi-shell-acp --model "$model" -xt entwurf \
+    "reply with the single word ok" 2>&1) || true
+  if echo "$out" | grep -q "cannot honor --exclude-tools"; then
+    fail "xt-tool-surface[$backend]: -xt entwurf wrongly tripped the guard (extension tools must be exempt)"
+    echo "$out" | tail -5
+    return 1
+  fi
+  ok "xt-tool-surface[$backend]: -xt entwurf honored (extension exclusion not blocked)"
+  return 0
+}
+
+xt_tool_surface() {
+  local failc=0
+  section "xt-tool-surface: claude backend (-xt bash)"
+  xt_tool_surface_single claude claude-sonnet-4-6 bash || failc=$((failc + 1))
+  section "xt-tool-surface: codex backend (-xt bash)"
+  xt_tool_surface_single codex gpt-5.4 bash || failc=$((failc + 1))
+  section "xt-tool-surface: gemini backend (-xt write)"
+  if command -v gemini >/dev/null 2>&1; then
+    xt_tool_surface_single gemini gemini-3.1-pro-preview write || failc=$((failc + 1))
+  else
+    warn "xt-tool-surface[gemini]: gemini CLI absent — skipped here (release-gate's gemini-availability step enforces three-backend at release)"
+  fi
+  section "xt-tool-surface: extension-tool exemption (positive control)"
+  xt_tool_surface_extension_honored claude claude-sonnet-4-6 || failc=$((failc + 1))
+  if [ "$failc" -gt 0 ]; then
+    fail "xt-tool-surface: $failc check(s) failed"
+    return 1
+  fi
+  ok "xt-tool-surface: all backends fail-fast on built-in -xt; extension exclusion honored"
+  return 0
+}
+
 # release-gate — the single command that, when GREEN, is sufficient to cut
 # 0.8.0. Runs the full static floor (`pnpm check`, which now folds in
 # check-model-lock + verify-transcript-poison) followed by every live
@@ -3619,9 +3695,8 @@ setup_all() {
 #     superset (asserts acpSessionId identity + turn count + blank/invalidate
 #     guards). smoke-continuity stays a dev quick-smoke.
 #   - smoke-compaction-policy runs LIVE=1 (else backend-observation steps skip).
-#   - The xt-tool-surface step is a RELEASE-BLOCKING fail-closed stub: until the
-#     ACP-backend exclude-tools policy + gate lands, release-gate stays RED by
-#     design. This prevents a "passing release-gate" illusion before the -xt fix.
+#   - xt-tool-surface asserts the ACP-backend exclude-tools policy: `-xt <builtin>`
+#     is fail-fast rejected per backend (declared==actual), extension exclusion honored.
 #   - Final "0.8.0 releasable" authorization is GLG's, not this script's: a green
 #     run is necessary, and the operator closes the decision.
 release_gate() {
@@ -3688,13 +3763,8 @@ release_gate() {
   run_step "smoke-compaction-policy (LIVE)" env LIVE=1 bash "$0" smoke-compaction-policy
   run_step "verify-resume"                  bash "$0" verify-resume "$project_dir"
 
-  # 4. -xt tool-surface truthfulness — RELEASE-BLOCKING fail-closed stub.
-  section "release-gate step: xt-tool-surface (ACP backend exclude-tools policy)"
-  fail "xt-tool-surface: FAIL (release-blocking) — policy + gate not implemented yet"
-  log "pi 0.77 --exclude-tools can desync pi's declared surface from the backend's"
-  log "actual tools (declared != actual). Until the per-backend exclude-tools"
-  log "policy + gate lands (NEXT Step 1e fix), release-gate stays RED by design."
-  results+=("FAIL  xt-tool-surface (release-blocking stub)"); failc=$((failc + 1))
+  # 4. -xt tool-surface truthfulness — now a real fail-fast policy gate.
+  run_step "xt-tool-surface (exclude-tools policy)" xt_tool_surface
 
   # 5. Summary.
   section "release-gate summary"
@@ -3705,8 +3775,7 @@ release_gate() {
   if [ "$failc" -gt 0 ]; then
     echo ""
     fail "release-gate NOT green — $failc step(s) failed. 0.8.0 is NOT releasable."
-    echo "  Reminder: the xt-tool-surface stub is intentionally fail-closed until the"
-    echo "  -xt fix lands; a green release-gate is necessary but GLG closes the call."
+    echo "  A green release-gate is necessary but not sufficient; GLG closes the call."
     return 1
   fi
   ok "release-gate all steps green — necessary condition met (GLG authorizes the cut)"
@@ -3721,6 +3790,9 @@ case "$cmd" in
   release-gate)
     shift || true
     release_gate "$@"
+    ;;
+  xt-tool-surface)
+    xt_tool_surface
     ;;
   smoke)
     smoke_test "$TARGET_PROJECT_DIR" claude

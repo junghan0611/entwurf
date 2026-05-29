@@ -131,6 +131,53 @@ const DEFAULT_CLAUDE_TOOLS: readonly string[] = ["Read", "Bash", "Edit", "Write"
 // or `auto` mode lets these tools through without prompts.
 const DEFAULT_CLAUDE_PERMISSION_ALLOW: readonly string[] = ["Read(*)", "Bash(*)", "Edit(*)", "Write(*)", "mcp__*"];
 
+// pi built-in tool names (lowercase) that map 1:1 onto a backend capability the
+// ACP child process always provides. Extension tools (entwurf, entwurf_send, …)
+// are pi-side and never reach the backend, so excluding THEM is honest — they are
+// deliberately not listed here.
+const PI_BUILTIN_BACKED_TOOLS: readonly string[] = ["read", "bash", "edit", "write"];
+
+/**
+ * Fail-fast on a tool-surface lie (pi-shell-acp ACP backend exclude-tools policy).
+ *
+ * pi 0.77's `--exclude-tools` / `-xt` removes a tool from pi's active set + the
+ * "Available tools:" system prompt, but the ACP backend CLI runs with its own
+ * tool surface that pi-shell-acp does NOT gate per-tool:
+ *   - Claude: receives exactly `providerSettings.tools` (default Read/Bash/Edit/Write).
+ *   - Codex / Gemini: ignore the tools list and always expose their native
+ *     shell+file tools (exec_command/apply_patch, run_shell_command/…).
+ *
+ * So if pi has excluded a built-in tool the backend will still expose, pi's
+ * DECLARED surface diverges from the backend's ACTUAL surface — the model is told
+ * a tool is gone while the backend can still run it. The 0.8.0 policy is
+ * truthfulness-first: reject up front rather than silently lie. (A per-backend
+ * exclusion mapping is deferred — each backend names and denies tools differently;
+ * fail-fast is the thin, honest stance for this release.)
+ *
+ * Extension-tool exclusion (`-xt entwurf`) is honored correctly and never trips
+ * this guard, because extension tools are not part of the backend surface.
+ */
+function assertExcludeToolsHonored(activeToolNames: string[], providerSettings: ResolvedProviderSettings): void {
+	const active = new Set(activeToolNames);
+	// What the backend will actually expose, expressed in pi built-in names.
+	const backendBuiltins =
+		providerSettings.backend === "claude"
+			? providerSettings.tools.map((t) => t.toLowerCase()).filter((t) => PI_BUILTIN_BACKED_TOOLS.includes(t))
+			: [...PI_BUILTIN_BACKED_TOOLS];
+	const unhonored = backendBuiltins.filter((t) => !active.has(t));
+	if (unhonored.length > 0) {
+		const many = unhonored.length > 1;
+		throw new Error(
+			`pi-shell-acp cannot honor --exclude-tools (${unhonored.join(", ")}) on the ${providerSettings.backend} backend: ` +
+				`the backend CLI still exposes ${many ? "these capabilities" : "this capability"} natively, so excluding ` +
+				`${many ? "them" : "it"} from pi's surface would make the declared tool set diverge from what the backend can ` +
+				`actually do. Restrict ${many ? "them" : "it"} via the backend's own tool config instead` +
+				(providerSettings.backend === "claude" ? " (provider settings 'tools' / 'disallowedTools')" : "") +
+				". Extension tools (entwurf, entwurf_send) can be excluded freely — they are pi-side and never reach the backend.",
+		);
+	}
+}
+
 // SDK 0.2.119 advertises a set of deferred tools via a system-reminder
 // block ("The following deferred tools are now available via ToolSearch").
 // `Options.tools` only filters the immediate function list — the deferred
@@ -869,6 +916,12 @@ function streamShellAcp(
 		stream.push({ type: "start", partial: output });
 
 		try {
+			// Tool-surface truthfulness: reject up front if `-xt` excluded a built-in
+			// the backend will still expose (declared != actual). See
+			// assertExcludeToolsHonored. Inside the try so it surfaces as a clean
+			// stream error (rc!=0), not an unhandled rejection.
+			assertExcludeToolsHonored(pi.getActiveTools(), providerSettings);
+
 			const baseSystemPrompt = providerSettings.appendSystemPrompt ? context.systemPrompt : undefined;
 
 			// Engraving — self-recognition prompt from prompts/engraving.md,
