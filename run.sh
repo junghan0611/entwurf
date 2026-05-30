@@ -55,6 +55,8 @@ Usage:
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
   ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
+  ./run.sh check-package-source-routing # deterministic gate (#29): package-source -> install-root mapping + fail-fast routing (local/git/npm/missing/project/no-source × local+remote, self-root, resume), no backend
+  ./run.sh smoke-installed-entwurf-acp # live counterpart (#29): git-installed package source resolves + a --no-extensions child registers provider pi-shell-acp (credential-free --list-models proof)
   ./run.sh smoke-async-resume [backends...] # live async-resume smoke (Claude+Codex+Gemini + handler/external cases), required before entwurf releases
   ./run.sh check-backends             # local deterministic check of backend launch resolution + backend-specific _meta shape
   ./run.sh check-registration         # local deterministic check of per-runtime provider registration semantics
@@ -1203,6 +1205,101 @@ check_async_resume_gate() {
   # discriminator back into a static default (which would invert the external
   # MCP host UX). No process spawn, no socket, no API cost.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-async-resume-gate.ts)
+}
+
+check_package_source_routing() {
+  # Deterministic gate for #29 (package-installed Entwurf ACP routing). Pins
+  # resolveExplicitExtensionSpec()'s package-source -> install-root mapping and
+  # the fail-fast routing contract through the two public routing surfaces
+  # (getRegistryRouting spawn path, getEntwurfExplicitExtensions resume path).
+  # Covers the install matrix: local path / git user / npm user (+version) /
+  # install-missing / project-scope-unseen / no-source, across local + remote,
+  # plus self-root fallback and the resume unresolvedAcpIntent signal. Isolated
+  # via a temp PI_CODING_AGENT_DIR — the real ~/.pi/agent is never touched. No
+  # backend, no spawn, no API cost. The live counterpart that actually spawns a
+  # package-installed Entwurf ACP child is smoke-installed-entwurf-acp.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-package-source-routing.ts)
+}
+
+smoke_installed_entwurf_acp() {
+  # Live counterpart to check-package-source-routing (#29). Reproduces a Pi
+  # settings package-install topology (git user source) in an isolated agent dir,
+  # drives entwurf-core's REAL resolver to compute the bridge -e, then spawns an
+  # actual pi child with that -e to prove the exact failing boundary is closed:
+  # a `--no-extensions --provider pi-shell-acp` child must recognize the provider
+  # rather than dying with `Unknown provider "pi-shell-acp"`.
+  #
+  # Credential-free: the runtime proof uses `pi --list-models pi-shell-acp`, which
+  # registers the provider via the injected bridge but does NOT spawn a backend —
+  # no auth, no token cost. The deterministic gate covers the resolver math across
+  # the full matrix; this gate covers the one thing it cannot: a real pi process
+  # loading the git-installed bridge under --no-extensions.
+  section "smoke: installed Entwurf ACP routing (#29 git package source)"
+  if ! command -v pi >/dev/null 2>&1; then
+    fail "[smoke-installed-entwurf-acp] pi binary not on PATH — cannot run runtime proof"
+    return 1
+  fi
+
+  local tmp_agent
+  tmp_agent=$(mktemp -d -t psa-installed-entwurf.XXXXXX)
+  trap 'rm -rf "$tmp_agent"' RETURN
+
+  # The "git-installed" package == this repo's code, reached via the canonical
+  # user-scope git install path (~/.pi/agent/git/<host>/<path>) under the isolated
+  # agent dir. A symlink keeps it pointing at the real bridge source.
+  local git_root="$tmp_agent/git/github.com/junghan0611/pi-shell-acp"
+  mkdir -p "$(dirname "$git_root")"
+  ln -s "$REPO_DIR" "$git_root"
+  printf '%s\n' '{ "packages": ["git:github.com/junghan0611/pi-shell-acp"] }' > "$tmp_agent/settings.json"
+
+  # 1. Resolver step — entwurf-core's own routing under the git topology. Throws
+  #    (non-zero) if the bridge cannot be resolved, which is itself a failure here.
+  local bridge
+  bridge=$(cd "$REPO_DIR" && PI_CODING_AGENT_DIR="$tmp_agent" \
+    node --experimental-strip-types scripts/resolve-acp-bridge.ts) || {
+    fail "[smoke-installed-entwurf-acp] resolver threw under git-installed topology (bridge unresolved)"
+    return 1
+  }
+  if [ -z "$bridge" ]; then
+    fail "[smoke-installed-entwurf-acp] resolver injected no -e bridge under git topology"
+    return 1
+  fi
+  if [ "$bridge" != "$git_root" ]; then
+    fail "[smoke-installed-entwurf-acp] resolver -e ($bridge) != git install root ($git_root)"
+    return 1
+  fi
+  echo "[smoke-installed-entwurf-acp] resolver injected git-source bridge: -e $bridge"
+
+  # 2. Runtime proof — a --no-extensions child with the resolver's -e must
+  #    register provider pi-shell-acp. This is the precise #29 boundary.
+  local out
+  out=$(PI_CODING_AGENT_DIR="$tmp_agent" pi --no-extensions -e "$bridge" --list-models pi-shell-acp 2>&1) || {
+    fail "[smoke-installed-entwurf-acp] pi --no-extensions -e <git bridge> --list-models exited non-zero:"
+    echo "$out" | tail -10 | sed 's/^/    /' >&2
+    return 1
+  }
+  # Unresolved provider surfaces two ways: `Unknown provider` on the spawn path,
+  # or `No models matching "pi-shell-acp"` on --list-models. Reject both. The real
+  # teeth is the curated-model anchor: claude-sonnet-4-6 only appears when the
+  # injected git bridge actually registers the pi-shell-acp provider (without it,
+  # --list-models prints "No models matching" and the anchor is absent).
+  if grep -qi "Unknown provider" <<<"$out"; then
+    fail "[smoke-installed-entwurf-acp] child reports Unknown provider (regression — #29 reopened):"
+    echo "$out" | tail -10 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if grep -qi "No models matching" <<<"$out"; then
+    fail "[smoke-installed-entwurf-acp] provider pi-shell-acp not registered from git bridge (No models matching):"
+    echo "$out" | tail -10 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! grep -q "claude-sonnet-4-6" <<<"$out"; then
+    fail "[smoke-installed-entwurf-acp] pi-shell-acp model surface missing claude-sonnet-4-6 anchor:"
+    echo "$out" | tail -10 | sed 's/^/    /' >&2
+    return 1
+  fi
+  ok "[smoke-installed-entwurf-acp] git-installed source resolves + child recognizes provider pi-shell-acp"
+  return 0
 }
 
 check_mcp() {
@@ -3778,6 +3875,13 @@ release_gate() {
   # 3. Live per-invariant gates (each is a run.sh subcommand). Every one runs
   #    with PWD=project_dir (via gate()) so cwd-derived pi session dirs land in
   #    the scratch project, never the repo — see the note above.
+  #
+  #    install-topology first: the deterministic resolver matrix
+  #    (check-package-source-routing) already ran inside `pnpm check` above; this
+  #    is its live counterpart, proving a real pi child loads the git-installed
+  #    bridge under --no-extensions (#29). It must pass before the Entwurf live
+  #    gates, which assume package-source routing resolves.
+  run_step "smoke-installed-entwurf-acp (#29)" gate bash "$self" smoke-installed-entwurf-acp
   run_step "smoke-all (3-backend runtime)"  gate bash "$self" smoke-all "$project_dir"
   run_step "smoke-async-resume"             gate bash "$self" smoke-async-resume
   run_step "smoke-cancel"                   gate bash "$self" smoke-cancel "$project_dir"
@@ -3883,6 +3987,12 @@ case "$cmd" in
     ;;
   check-async-resume-gate)
     check_async_resume_gate
+    ;;
+  check-package-source-routing)
+    check_package_source_routing
+    ;;
+  smoke-installed-entwurf-acp)
+    smoke_installed_entwurf_acp
     ;;
   smoke-async-resume)
     shift
