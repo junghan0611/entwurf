@@ -20,6 +20,11 @@ public install surface as an outside user would experience it.
 >   shutdown round-trip green on every backend.
 > - **Stage 5 — entwurf two-session surface — still deferred**. Optional
 >   next round; not on the publish-prep critical path.
+> - **Stage 5 — package-source Entwurf ACP routing (#29) — credential-free**.
+>   `run.sh smoke-installed-entwurf-acp` proves a git/npm-installed bridge
+>   resolves so a `provider=pi-shell-acp` Entwurf child does not die with
+>   `Unknown provider`. Distinct from the two-session `entwurf_send` surface
+>   (peer messaging) — this one is child extension injection and needs no auth.
 
 ## Reference target
 
@@ -159,10 +164,13 @@ Expected drift points:
   `pi install -l git:...` if you want it inside the project cwd
   (`./.pi/git/...`) instead.
 - `pi install` runs `npm install` inside the clone, which fires our
-  `prepare` script (`husky || true`). On the target host `husky` is not
-  present, so the script reports `sh: 1: husky: not found` and exits 0
-  via the `|| true` guard. This is intentional — `husky` is a dev-only
-  hook installer and has no runtime role in the installed package.
+  `prepare` script (`husky 2>/dev/null || true`). On the target host
+  `husky` is not present (it is a dev-only dependency), so the script
+  silently exits 0 — the `2>/dev/null` swallows the `husky: not found`
+  line and `|| true` swallows the exit code. Older releases used a bare
+  `husky || true`, which still exited 0 but printed `sh: 1: husky: not
+  found`; that cosmetic line is gone as of 0.8.1. `husky` has no runtime
+  role in the installed package.
 - `npm audit` reports `3 moderate severity vulnerabilities` against
   transitive deps; nothing in the bridge surface itself.
 
@@ -814,6 +822,29 @@ failed turn-path smoke.
 > `Authentication required` / `EPIPE` noise from Stage 4 dressed up in
 > session-control clothing. Land at least one authenticated `smoke-*`
 > first; then exercise this.
+
+### Package-source Entwurf ACP routing (#29) — auth-free, run this first
+
+The two-session flow below exercises *peer messaging*. It does **not** cover
+the bug where a package-installed `pi-shell-acp` (a `git:` / `npm:` settings
+source, not a local checkout) failed to inject the bridge into a
+`--no-extensions` Entwurf child — the child died with `Unknown provider
+"pi-shell-acp"` before any turn. That boundary is now gated separately and is
+credential-free:
+
+```bash
+# from the installed bridge root (e.g. ~/.pi/agent/git/github.com/junghan0611/pi-shell-acp)
+./run.sh smoke-installed-entwurf-acp
+```
+
+It reproduces a git-installed package source in an isolated agent dir, drives
+the real resolver to compute the bridge `-e`, then spawns a `pi --no-extensions
+-e <bridge> --list-models pi-shell-acp` child and asserts the provider is
+registered (no `Unknown provider`, no `No models matching`). The resolver math
+across the full install matrix is pinned by `./run.sh
+check-package-source-routing` (no backend), which also runs inside `pnpm check`
+and the release gate. Run this whenever you intend to delegate to a
+`provider=pi-shell-acp` Entwurf target from a package-installed host.
 
 If the host runs a long-lived pi session you want to address from another
 session (or from an external MCP host like Claude Code), open it with

@@ -4,6 +4,29 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+Hotfix track for #29 — package-installed Entwurf ACP routing.
+
+### Fixed
+
+- **Entwurf ACP routing now resolves package-installed `pi-shell-acp` (#29).** When `pi-shell-acp` was installed via a Pi settings package source (`git:github.com/junghan0611/pi-shell-acp` or `npm:@junghanacs/pi-shell-acp`), Entwurf's bridge resolver returned null for `git:` / `npm:` sources, so a `provider=pi-shell-acp` target spawned a `pi --no-extensions --provider pi-shell-acp` child that died with `Unknown provider "pi-shell-acp"` before any session file existed. `resolveExplicitExtensionSpec` now maps user-scope `git:`/`npm:` sources to their installed roots (`~/.pi/agent/git/<host>/<path>`, `~/.pi/agent/npm/node_modules/<name>` — the latter keyed on the bare package name with any `@version` stripped), matching pi PackageManager's layout without importing pi internals. Local checkout sources keep their prior behavior.
+- **Unresolved `pi-shell-acp` routing fails fast instead of warning-then-spawning.** The spawn path (`getRegistryRouting`) now throws `EntwurfRoutingError` before launching a guaranteed-broken child, and the resume paths (sync + async) surface an explicit `acp_bridge_unresolved` failure, rather than emitting a warning and spawning anyway. Fail-fast scope is explicit ACP intent only — registry `provider=pi-shell-acp`, resume `recordedProvider=pi-shell-acp`, and opt-in Codex-via-ACP; the Claude-only heuristic keeps its warning-only `pi-claude-code-use` fallback.
+
+### Added
+
+- **`run.sh check-package-source-routing`** — deterministic gate (no backend, no spawn) pinning the package-source → install-root mapping and the fail-fast routing contract across the full matrix (local path / git user / npm user with and without a version spec / install-missing / project-scope-unseen / no-source, over local and remote), plus the local self-root fallback and the resume `unresolvedAcpIntent` signal. Wired into `pnpm check`.
+- **`run.sh smoke-installed-entwurf-acp`** — credential-free live counterpart that reproduces a git-installed package source in an isolated agent dir, drives the real resolver to compute the bridge `-e`, then spawns a `pi --no-extensions -e <bridge> --list-models pi-shell-acp` child and asserts the provider registers (no `Unknown provider`, no `No models matching`). Wired into `release-gate` ahead of the Entwurf live gates so a green repo-checkout gate can no longer hide a broken official install path.
+- **Local self-root bridge fallback.** When settings package-source resolution misses on a local spawn (e.g. a dev `pi -e /abs/path/pi-shell-acp` with no matching settings source), the resolver falls back to the loaded module's own package root via `import.meta.url`. Remote (SSH) spawn is excluded — a local path cannot cross SSH — and continues to require settings/source mapping.
+- **`PI_CODING_AGENT_DIR` is now honored by the Entwurf resolver**, matching pi's `getAgentDir()`, so an isolated install-topology smoke can point both pi and the resolver at the same temp agent dir. Remote root construction stays on the plain `~/.pi/agent` layout so a local override never leaks into an SSH path.
+
+### Documentation
+
+- README install section distinguishes the provider-registration smoke (`smoke-all`) from the Entwurf ACP-routing smoke (`smoke-installed-entwurf-acp` / `check-package-source-routing`).
+- `docs/setup-clean-host.md` Stage 5 adds the credential-free package-source Entwurf ACP routing check, distinct from the two-session `entwurf_send` peer-messaging surface.
+
+### Changed
+
+- **`prepare` script is `husky 2>/dev/null || true`.** The bare `husky || true` still exited 0 on consumer/git-install machines (husky is dev-only) but printed a cosmetic `husky: command not found` line. Redirecting stderr drops the noise; behavior is otherwise unchanged.
+
 ## 0.8.0 — 2026-05-29
 
 Release-gate consolidation and pi 0.77 alignment. This release makes the full static + live verification path a single command, fixes the pi-provider auth boundary exposed by pi 0.77, aligns ACP dependencies, and moves the curated Claude Opus surface to Opus 4.8 only. The OpenClaw plugin remains a parked sibling track and is intentionally not migrated in this cut.
