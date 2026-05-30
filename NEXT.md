@@ -5,25 +5,106 @@
 
 ## Hotfix before 0.9.0 — 0.8.1 package-installed Entwurf ACP routing (#29)
 
-Oracle surfaced a current-release bug: when `pi-shell-acp` is installed in Pi settings as `git:github.com/junghan0611/pi-shell-acp`, Entwurf ACP spawn cannot resolve the bridge extension for the child `pi --no-extensions` process. `resolveExplicitExtensionSpec()` currently returns null for `git:` / `npm:` sources, so `provider=pi-shell-acp` child exits with `Unknown provider "pi-shell-acp"` before any session file exists.
+Oracle surfaced a current-release bug: when `pi-shell-acp` is installed in Pi settings as `git:github.com/junghan0611/pi-shell-acp`, Entwurf ACP spawn cannot resolve the bridge extension for the child `pi --no-extensions` process. `resolveExplicitExtensionSpec()` returns null for `git:` / `npm:` sources, so `provider=pi-shell-acp` child exits with `Unknown provider "pi-shell-acp"` before any session file exists.
 
-Fix before leaning on Entwurf for #28 implementation work:
+Independent from #28 (0.9.0 session identity). This blocks reliable Entwurf routing on every package-installed machine and must ship in 0.8.1. Fix it before leaning on Entwurf for #28 implementation work.
 
-- Support git-installed package source resolution: `git:github.com/junghan0611/pi-shell-acp` → `~/.pi/agent/git/github.com/junghan0611/pi-shell-acp`.
-- Audit/pin npm package-source behavior.
-- If ACP target cannot resolve an extension path, fail before spawn; warning-only guaranteed-fail path is not allowed.
-- Add deterministic package-source resolution test/smoke.
-- Documentation/repro matrix must cover all official install paths, not just local checkout:
-  - npm global: `pi install npm:@junghanacs/pi-shell-acp`
-  - npm project: `pi install -l npm:@junghanacs/pi-shell-acp`
-  - git global: `pi install git:github.com/junghan0611/pi-shell-acp`
-  - git project: `pi install -l git:github.com/junghan0611/pi-shell-acp`
-  - pi.dev/gallery path: document the exact source/layout it writes, then map it to the same smoke.
-- The guard must be Entwurf ACP target spawn, not only `pi --list-models` / `smoke-all`; the failing path is child `pi --no-extensions` needing `-e <bridge>` from package-source resolution.
-- **Release-gate must include this topology.** `./run.sh release-gate <scratch>` is the cut condition, so 0.8.1 must add an install-topology step there. Current `check-pack-install` proves tarball shape + `pi -e <node_modules> --list-models`, but does not simulate Pi settings package sources (`git:` / `npm:`) and does not call Entwurf. Add either:
-  - deterministic `check-package-source-routing` covering local/git/npm/global/project/missing, plus
-  - live `smoke-installed-entwurf-acp` for at least one package-installed topology,
-  - then wire into `release-gate` as a named step before the Entwurf live gates.
+### Root cause (code-confirmed)
+
+- `pi-extensions/lib/entwurf-core.ts:573` — `resolveExplicitExtensionSpec()`:
+  ```ts
+  if (!source || source.startsWith("git:") || source.startsWith("npm:")) return null;
+  ```
+  Only local-path package sources are resolved; `git:` / `npm:` early-return null.
+- `getRegistryRouting()` (entwurf-core.ts:696-703, spawn path) then only pushes a **warning** and spawns the child anyway → `pi --no-extensions --provider pi-shell-acp` → `Unknown provider`.
+- `getEntwurfExplicitExtensions()` (entwurf-core.ts:658-664, **resume path** via `wantsAcpByRecordedProvider`) has the same warning-only hole — resume of a recorded `provider=pi-shell-acp` session also dies on git installs. Both paths must be fixed.
+- `resolveConfiguredPackageSource()` (entwurf-core.ts:557) reads only user `~/.pi/agent/settings.json` (`PI_SETTINGS_PATH`, hardcoded at line 44). Project `-l` sources live in `./.pi/settings.json` and are never even seen — a separate scope gap, handle explicitly (resolve or fail-fast, never silent).
+
+### Install-path mapping (from pi substrate, user scope)
+
+Verified in `~/repos/3rd/pi-mono/packages/coding-agent/src/core/package-manager.ts` (`getGitInstallPath` / `getNpmInstallPath` / `getManagedNpmInstallPath`). Replicate the minimal equivalent locally — do **not** import pi internals into entwurf-core:
+
+| source | installed root |
+|---|---|
+| `git:github.com/junghan0611/pi-shell-acp` | `~/.pi/agent/git/github.com/junghan0611/pi-shell-acp` (`agentDir/git/<host>/<path>`) |
+| `npm:@junghanacs/pi-shell-acp` | `~/.pi/agent/npm/node_modules/@junghanacs/pi-shell-acp` (managed); if absent, pnpm/npm-global legacy fallback |
+| git project `-l` | `./.pi/git/<host>/<path>` |
+| npm project `-l` | `./.pi/npm/node_modules/<name>` |
+
+### A. Code fix — entwurf-core.ts resolver
+
+- In `resolveExplicitExtensionSpec`, compute `localRoot`/`remoteRoot` per source kind (local / `git:` / `npm:`), then reuse the existing candidate-probe loop (index.ts / extensions/index.ts / dist/... at line 580-601) unchanged.
+- `git:` → strip prefix, `path.join(AGENT_DIR, "git", rest)`. `npm:` → managed `node_modules` root first, then decide legacy-global candidate vs explicit unsupported.
+- Keep the no-pi-internals-import policy: implement the tiny host/path + node_modules mapping inline.
+
+### B. Fail-fast routing (no warning-only)
+
+- `getRegistryRouting()`: when `provider === "pi-shell-acp"` and bridge unresolved → **throw before spawn**, not warn. Message must list what was checked (local path / git install / npm install) and refuse the unknown-provider child.
+- Source present in settings but install dir missing → also fail-fast.
+- Apply the same to the resume path (`getEntwurfExplicitExtensions` recorded-provider branch).
+
+### C. Deterministic test — `check-package-source-routing` (no backend, 0 tokens)
+
+Exercise the resolver in isolation with a temp `PI_SETTINGS_PATH` + synthetic install trees. Cover the full matrix:
+- local checkout → resolves
+- git user, installed → `~/.pi/agent/git/<host>/<path>`
+- git user, **install missing → fail-fast**
+- npm user → managed root, or explicit unsupported
+- project `-l` git/npm → mapped or **explicit unsupported-scope error** (never silent `Unknown provider`)
+- no source → null
+
+Consider making `PI_SETTINGS_PATH` env-overridable (like `PI_ENTWURF_TARGETS_PATH`) so the test needn't touch the real settings file.
+
+### D. Live gate — `smoke-installed-entwurf-acp`
+
+One package-installed topology (git user), real Entwurf ACP spawn, assert child no longer dies with `Unknown provider`. Isolate with temp `HOME`/`PI_CODING_AGENT_DIR` so the operator's real `~/.pi/agent/settings.json` is untouched. Use one cheap ACP target.
+
+### E. Release-gate wiring (cut condition)
+
+`./run.sh release-gate <scratch>` is the cut condition, so install-topology must run there — `run.sh` `release_gate()` (line 3712-3810). Add both steps **before** the Entwurf live gates (after step 3 / before `smoke-all`):
+```bash
+run_step "check-package-source-routing"  gate bash "$self" check-package-source-routing
+run_step "smoke-installed-entwurf-acp"    gate bash "$self" smoke-installed-entwurf-acp "$project_dir"
+```
+Why: current `check-pack-install` (run.sh:2845+) proves tarball shape + `pi -e <node_modules> --list-models` but does NOT simulate Pi settings package sources (`git:` / `npm:`) and never calls Entwurf (`--ignore-scripts` even skips prepare, line 2919). That blind spot is exactly why this bug shipped. Keep `check-pack-install` as-is; add the topology gates alongside.
+
+### F. Docs / repro matrix
+
+Cover all official install paths, not just local checkout:
+- npm global `pi install npm:@junghanacs/pi-shell-acp`; npm project `-l`; git global `pi install git:github.com/junghan0611/pi-shell-acp`; git project `-l`; pi.dev/gallery (document exact source/layout, map to the same smoke).
+- README install section: distinguish provider-registration smoke (`--list-models` / `smoke-all`) from Entwurf ACP-routing smoke.
+- `docs/setup-clean-host.md` Stage 5: promote from two-session `entwurf_send` to a package-source Entwurf ACP spawn check (the bug is child extension injection, not peer messaging).
+
+### G. husky prepare noise (fold in here)
+
+`package.json:91` `"prepare": "husky 2>/dev/null || true"` — no behavior change, just silences the `husky: command not found` stderr on consumer/git-install machines (husky is dev-only; `|| true` already handles exit code, this drops the cosmetic line). Bundle into the same PR.
+
+### Pre-implementation correction checklist (GPT-힣 review, code-verified)
+
+Five corrections to fold into the A–F work so we don't backtrack. All verified against current code.
+
+1. **Respect `PI_CODING_AGENT_DIR` / `PI_SETTINGS_PATH` env — required for the isolated smoke (D).** pi's `getAgentDir()` (pi-mono `config.ts:485`, `ENV_AGENT_DIR = PI_CODING_AGENT_DIR`) reads the env (expand-tilde) before falling back to `~/.pi/agent`. entwurf-core hardcodes `os.homedir()/.pi/agent` at **both line 43 (AGENT_DIR) and line 579 (remoteRoot)**. Make local resolution env-aware:
+   ```ts
+   const AGENT_DIR = process.env.PI_CODING_AGENT_DIR ?? path.join(os.homedir(), ".pi", "agent");
+   const PI_SETTINGS_PATH = process.env.PI_SETTINGS_PATH ?? path.join(AGENT_DIR, "settings.json");
+   ```
+   Without this, `smoke-installed-entwurf-acp`'s temp-HOME isolation can't point the resolver at the synthetic install tree. (Keep remoteRoot on the *remote* homedir — env override is a local-resolution concern; don't leak local env into the SSH path.)
+
+2. **npm root from parsed package name, not `source.slice(4)`.** `npm:@junghanacs/pi-shell-acp` may carry a version/spec (`npm:@scope/name@1.2.3`). Root must be `agentDir/npm/node_modules/<parsed.name>`, so a minimal parser must split `@scope/name` from optional `@version`/spec. Raw-slice would build a wrong path.
+
+3. **Project `-l` gap includes local-path sources, not just git/npm.** pi resolves project local package sources against `cwd/.pi` too; the resolver reads only user `~/.pi/agent/settings.json`, so it misses *all three* project-scope kinds (git/npm/local). 0.8.1 decision: support project scope OR explicit unsupported-scope fail-fast — but **never silent `Unknown provider`**.
+
+4. **Define fail-fast as "explicit ACP intent" — and decide the Claude legacy fallback.** Throw-before-spawn applies to: registry target `provider === "pi-shell-acp"`; resume `recordedProvider === "pi-shell-acp"`; opt-in Codex-via-ACP (`ENTWURF_CODEX_ACP_ENV`). Separately decide the Claude path: `entwurf-core.ts:20-21` says "Claude models always routed through pi-shell-acp, falls back to pi-claude-code-use, then warns" (fallback at line 644-655). Warning-only there is slightly off-principle — choose keep-as-warning vs promote-to-fail-fast explicitly, don't leave it implicit.
+
+5. **Add an `import.meta.url` self-root fallback for local spawn (safety against fail-fast regressions).** entwurf.ts/index.ts currently have NO `import.meta`/`fileURLToPath` self-detection (confirmed). For a local-dev `pi -e /abs/path/pi-shell-acp` where settings has no matching source, fail-fast alone would now throw. The parent extension already knows its own load path: derive the loaded pi-shell-acp root from `import.meta.url` and add it as a resolution candidate — for **local** spawn this is more accurate than settings. Remote spawn still needs settings/source mapping (can't use a local self-root across SSH).
+
+Implementation order (unchanged, with the 5 folded in):
+1. resolver: env-aware AGENT_DIR/SETTINGS (1) + git/npm root mapping (2) + self-root candidate (5)
+2. spawn + resume warning-only → fail-fast with explicit-intent scope (4), project-scope decision (3)
+3. deterministic `check-package-source-routing`
+4. live `smoke-installed-entwurf-acp` (relies on 1)
+5. release-gate wiring
+6. prepare stderr noise
 
 Issue: https://github.com/junghan0611/pi-shell-acp/issues/29
 
