@@ -34,13 +34,30 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { ENTWURF_PROJECT_CONTEXT_OPEN_TAG } from "../../protocol.js";
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const AGENT_DIR = path.join(os.homedir(), ".pi", "agent");
+// Expand a leading ~ like pi's expandTildePath, so PI_CODING_AGENT_DIR=~/foo
+// resolves the same way pi's getAgentDir() would.
+function expandTilde(p: string): string {
+	if (p === "~") return os.homedir();
+	if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
+	return p;
+}
+
+// Local agent dir honors PI_CODING_AGENT_DIR — the same env pi's getAgentDir()
+// reads (config.ts: ENV_AGENT_DIR). Without this, an isolated install-topology
+// smoke that points pi at a temp agent dir could not steer the entwurf resolver
+// at the same synthetic install tree (#29 correction). Remote (SSH) roots are
+// deliberately NOT env-derived — see packageSourceToRoots: a local override must
+// not leak into the remote host's path.
+const AGENT_DIR = process.env.PI_CODING_AGENT_DIR
+	? expandTilde(process.env.PI_CODING_AGENT_DIR)
+	: path.join(os.homedir(), ".pi", "agent");
 const PI_SETTINGS_PATH = path.join(AGENT_DIR, "settings.json");
 const SESSIONS_BASE = path.join(AGENT_DIR, "sessions");
 const ENTWURF_TARGETS_PATH = process.env.PI_ENTWURF_TARGETS_PATH ?? path.join(AGENT_DIR, "entwurf-targets.json");
@@ -178,6 +195,17 @@ export class EntwurfRegistryError extends Error {
 	constructor(message: string) {
 		super(message);
 		this.name = "EntwurfRegistryError";
+	}
+}
+
+// Raised when a spawn is routed to provider=pi-shell-acp but the bridge extension
+// cannot be resolved from settings package sources or the loaded module self-root.
+// Fail-fast before spawning a child with `--no-extensions --provider pi-shell-acp`,
+// which would otherwise die with `Unknown provider "pi-shell-acp"` (#29).
+export class EntwurfRoutingError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "EntwurfRoutingError";
 	}
 }
 
@@ -568,35 +596,119 @@ function resolveConfiguredPackageSource(packageNeedle: string): string | null {
 	return null;
 }
 
-function resolveExplicitExtensionSpec(packageNeedle: string): ExplicitExtensionSpec | null {
-	const source = resolveConfiguredPackageSource(packageNeedle);
-	if (!source || source.startsWith("git:") || source.startsWith("npm:")) return null;
+// Strip an optional trailing @version from an npm spec while preserving a leading
+// @scope. "@junghanacs/pi-shell-acp@0.8.0" → "@junghanacs/pi-shell-acp";
+// "pi-shell-acp@1.2.3" → "pi-shell-acp". The install root keys on the bare name,
+// not the raw source string (#29 correction: never slice the version into the path).
+function parseNpmPackageName(spec: string): string | null {
+	const trimmed = spec.trim();
+	if (!trimmed) return null;
+	if (trimmed.startsWith("@")) {
+		const slash = trimmed.indexOf("/");
+		if (slash < 0) return null; // malformed scoped spec — no "/name"
+		const versionAt = trimmed.indexOf("@", slash); // version separator sits after scope/name
+		return versionAt < 0 ? trimmed : trimmed.slice(0, versionAt);
+	}
+	const versionAt = trimmed.indexOf("@");
+	return versionAt < 0 ? trimmed : trimmed.slice(0, versionAt);
+}
 
-	const localRoot = path.resolve(AGENT_DIR, source);
-	// Remote commands now single-quote every argument, so `$HOME` can no longer
-	// be left for the remote shell to expand. Resolve relative package sources
-	// against the canonical agent dir path before crossing SSH.
-	const remoteRoot = source.startsWith("/") ? source : path.posix.resolve(os.homedir(), ".pi", "agent", source);
+// Map a Pi settings package source to its installed root, replicating pi
+// PackageManager's USER-scope layout WITHOUT importing pi internals (entwurf-core
+// is pi-runtime-free by contract). Verified against pi-mono package-manager.ts
+// getGitInstallPath / getNpmInstallPath (#29):
+//   git:<host>/<path>      → <agentDir>/git/<host>/<path>
+//   npm:@scope/name[@ver]  → <agentDir>/npm/node_modules/@scope/name
+//   <relative-or-abs path> → resolved against the agent dir (legacy local source)
+// Project (-l) scope (cwd/.pi/git|npm/...) is intentionally NOT resolved here —
+// resolveConfiguredPackageSource only reads the user settings.json, so project
+// sources are never even seen. Callers fail-fast rather than silently misroute.
+function packageSourceToRoots(source: string): { localRoot: string; remoteRoot: string } | null {
+	// Remote roots use the plain ~/.pi/agent layout (NOT the PI_CODING_AGENT_DIR
+	// override) — a local agent-dir override must not leak into the SSH host path.
+	const remoteAgent = path.posix.join(os.homedir(), ".pi", "agent");
+	if (source.startsWith("git:")) {
+		const rest = source.slice("git:".length).replace(/^\/+/, "");
+		if (!rest) return null;
+		const segs = rest.split("/");
+		return {
+			localRoot: path.join(AGENT_DIR, "git", ...segs),
+			remoteRoot: path.posix.join(remoteAgent, "git", ...segs),
+		};
+	}
+	if (source.startsWith("npm:")) {
+		const name = parseNpmPackageName(source.slice("npm:".length));
+		if (!name) return null;
+		const segs = name.split("/");
+		return {
+			localRoot: path.join(AGENT_DIR, "npm", "node_modules", ...segs),
+			remoteRoot: path.posix.join(remoteAgent, "npm", "node_modules", ...segs),
+		};
+	}
+	// Local path package source, relative to the agent dir. Remote commands now
+	// single-quote every argument, so `$HOME` can no longer be left for the remote
+	// shell to expand — resolve relative sources against the canonical agent path.
+	return {
+		localRoot: path.resolve(AGENT_DIR, source),
+		remoteRoot: source.startsWith("/") ? source : path.posix.resolve(remoteAgent, source),
+	};
+}
+
+// Probe a candidate package root for a loadable extension entry. Shared by the
+// settings-source path and the self-root fallback so both honor the same layout
+// (root itself, index.ts, extensions/index.ts, dist/* for built packages).
+function probeExtensionRoot(name: string, localRoot: string, remoteRoot: string): ExplicitExtensionSpec | null {
 	const candidates = [
 		{ localPath: localRoot, remotePath: remoteRoot },
 		{ localPath: path.join(localRoot, "index.ts"), remotePath: `${remoteRoot}/index.ts` },
-		{
-			localPath: path.join(localRoot, "extensions", "index.ts"),
-			remotePath: `${remoteRoot}/extensions/index.ts`,
-		},
+		{ localPath: path.join(localRoot, "extensions", "index.ts"), remotePath: `${remoteRoot}/extensions/index.ts` },
 		{
 			localPath: path.join(localRoot, "dist", "extensions", "index.js"),
 			remotePath: `${remoteRoot}/dist/extensions/index.js`,
 		},
-		{
-			localPath: path.join(localRoot, "dist", "index.js"),
-			remotePath: `${remoteRoot}/dist/index.js`,
-		},
+		{ localPath: path.join(localRoot, "dist", "index.js"), remotePath: `${remoteRoot}/dist/index.js` },
 	];
-
 	for (const candidate of candidates) {
 		if (fs.existsSync(candidate.localPath)) {
-			return { name: packageNeedle, localPath: candidate.localPath, remotePath: candidate.remotePath };
+			return { name, localPath: candidate.localPath, remotePath: candidate.remotePath };
+		}
+	}
+	return null;
+}
+
+// <pkgroot>/pi-extensions/lib/entwurf-core.ts → <pkgroot>. entwurf-core runs from
+// source in every surface (pi native + MCP, both via --experimental-strip-types),
+// so import.meta.url always points at this source file, never a bundled copy.
+function resolveSelfRoot(): string | null {
+	try {
+		const here = path.dirname(fileURLToPath(import.meta.url));
+		return path.resolve(here, "..", "..");
+	} catch {
+		return null;
+	}
+}
+
+function resolveExplicitExtensionSpec(packageNeedle: string, isRemote: boolean): ExplicitExtensionSpec | null {
+	const source = resolveConfiguredPackageSource(packageNeedle);
+	if (source) {
+		const roots = packageSourceToRoots(source);
+		if (roots) {
+			const spec = probeExtensionRoot(packageNeedle, roots.localRoot, roots.remoteRoot);
+			if (spec) return spec;
+		}
+	}
+
+	// Self-root fallback — LOCAL spawn only. When settings package-source
+	// resolution misses (e.g. local-dev `pi -e /abs/path/pi-shell-acp` with no
+	// matching settings source), the parent pi-shell-acp extension is still loaded
+	// from disk and our own module path is a more accurate bridge root than
+	// settings (#29 correction #5). Remote spawn cannot reach a local path across
+	// SSH, so it is excluded — remote must rely on settings/source mapping.
+	if (!isRemote && packageNeedle === "pi-shell-acp") {
+		const selfRoot = resolveSelfRoot();
+		if (selfRoot) {
+			const spec = probeExtensionRoot(packageNeedle, selfRoot, selfRoot);
+			if (spec) return spec;
 		}
 	}
 	return null;
@@ -606,7 +718,18 @@ export function getEntwurfExplicitExtensions(
 	model: string | undefined,
 	isRemote: boolean,
 	recordedProvider?: string,
-): { args: string[]; names: string[]; warnings: string[]; provider?: string; modelOverride?: string } {
+): {
+	args: string[];
+	names: string[];
+	warnings: string[];
+	provider?: string;
+	modelOverride?: string;
+	/** Set when an explicit ACP intent (recorded provider=pi-shell-acp, or opt-in
+	 *  Codex-via-ACP) cannot resolve the bridge. Resume callers MUST fail-fast on
+	 *  this rather than spawning a guaranteed-broken `--provider pi-shell-acp`
+	 *  child (#29). Claude-only heuristic stays warning-only (legacy fallback). */
+	unresolvedAcpIntent?: boolean;
+} {
 	const args: string[] = [];
 	const names: string[] = [];
 	const warnings: string[] = [];
@@ -624,7 +747,7 @@ export function getEntwurfExplicitExtensions(
 		return { args, names, warnings };
 	}
 
-	const acpBridge = resolveExplicitExtensionSpec("pi-shell-acp");
+	const acpBridge = resolveExplicitExtensionSpec("pi-shell-acp", isRemote);
 	if (acpBridge) {
 		args.push("-e", isRemote ? acpBridge.remotePath : acpBridge.localPath);
 		names.push(acpBridge.name);
@@ -641,30 +764,43 @@ export function getEntwurfExplicitExtensions(
 		};
 	}
 
-	if (wantsClaudeBridge) {
-		const compat = resolveExplicitExtensionSpec("pi-claude-code-use");
-		if (compat) {
-			args.push("-e", isRemote ? compat.remotePath : compat.localPath);
-			names.push(compat.name);
-			return { args, names, warnings };
-		}
-
-		warnings.push(
-			"Claude entwurf requested but pi-shell-acp could not be resolved. Claude entwurfs may fail without an explicit provider bridge.",
-		);
-		return { args, names, warnings };
-	}
-
+	// Bridge unresolved. Explicit ACP intent — recorded provider=pi-shell-acp on
+	// resume, or opt-in Codex-via-ACP — cannot degrade: the child would be spawned
+	// with `--provider pi-shell-acp` and die with `Unknown provider`. Signal
+	// fail-fast to the caller (#29 correction #4: fail-fast scope = explicit ACP
+	// intent). Checked BEFORE the Claude heuristic so a Claude model that also
+	// recorded provider=pi-shell-acp fails fast instead of silently falling back
+	// to the unrelated pi-claude-code-use bridge.
 	if (wantsAcpByRecordedProvider) {
 		warnings.push(
-			"Resume recorded provider=pi-shell-acp but the bridge extension could not be resolved. " +
-				"Resume will likely fail because pi cannot load the pi-shell-acp provider without its extension.",
+			"Resume recorded provider=pi-shell-acp but the bridge extension could not be resolved " +
+				"(checked settings package source: local path / git install / npm install, plus module self-root). " +
+				"Refusing to resume with an unknown provider.",
 		);
+		return { args, names, warnings, unresolvedAcpIntent: true };
+	}
+
+	if (wantsCodexBridge) {
+		warnings.push(
+			`Codex entwurf requested with ${ENTWURF_CODEX_ACP_ENV}=1 but pi-shell-acp could not be resolved. ` +
+				"Refusing to spawn with --provider pi-shell-acp.",
+		);
+		return { args, names, warnings, unresolvedAcpIntent: true };
+	}
+
+	// Claude model heuristic with no recorded ACP signal: the legacy secondary
+	// bridge pi-claude-code-use may be installed independently. Keep this as
+	// warning-only graceful degradation (#29 correction #4 decision: do NOT
+	// promote to fail-fast — a different provider package owns this path).
+	const compat = resolveExplicitExtensionSpec("pi-claude-code-use", isRemote);
+	if (compat) {
+		args.push("-e", isRemote ? compat.remotePath : compat.localPath);
+		names.push(compat.name);
 		return { args, names, warnings };
 	}
 
 	warnings.push(
-		`Codex entwurf requested with ${ENTWURF_CODEX_ACP_ENV}=1 but pi-shell-acp could not be resolved. Codex entwurfs will fall back to the default provider path.`,
+		"Claude entwurf requested but pi-shell-acp could not be resolved. Claude entwurfs may fail without an explicit provider bridge.",
 	);
 	return { args, names, warnings };
 }
@@ -692,14 +828,23 @@ export function getRegistryRouting(
 		return { args, names, warnings, provider: target.provider };
 	}
 
-	// pi-shell-acp targets need the bridge extension injected.
-	const acpBridge = resolveExplicitExtensionSpec("pi-shell-acp");
+	// pi-shell-acp targets need the bridge extension injected. If it can't be
+	// resolved, fail-fast — NOT warning-only. A warning-then-spawn path puts a
+	// child on `pi --no-extensions --provider pi-shell-acp`, which dies with
+	// `Unknown provider "pi-shell-acp"` before any session file exists (#29). The
+	// throw is caught by the same tool-surface try/catch that handles
+	// EntwurfRegistryError, and surfaces as a failed entwurf.
+	const acpBridge = resolveExplicitExtensionSpec("pi-shell-acp", isRemote);
 	if (!acpBridge) {
-		warnings.push(
-			"pi-shell-acp target requested but extension spec could not be resolved. " +
-				"Spawn may fail without the bridge extension.",
+		throw new EntwurfRoutingError(
+			`pi-shell-acp target requested (provider=${target.provider}, model=${target.model}) but the ` +
+				"bridge extension could not be resolved. Checked settings package source: local path / " +
+				"git install (~/.pi/agent/git/...) / npm install (~/.pi/agent/npm/node_modules/...)" +
+				(isRemote ? "" : " / loaded module self-root") +
+				". Refusing to spawn a child with `--no-extensions --provider pi-shell-acp` (it would die " +
+				'with `Unknown provider "pi-shell-acp"`). Install pi-shell-acp in pi settings packages, or ' +
+				"check that the configured source's install directory exists.",
 		);
-		return { args, names, warnings, provider: "pi-shell-acp" };
 	}
 
 	args.push("-e", isRemote ? acpBridge.remotePath : acpBridge.localPath);
@@ -992,6 +1137,25 @@ export async function runEntwurfResumeSync(
 	// original spawn went through it (registry is bypassed on resume per Identity
 	// Preservation Rule — so the bridge signal must come from the session itself).
 	const explicitExtensions = getEntwurfExplicitExtensions(effectiveModel, isRemote, recordedProvider);
+	// Explicit ACP intent that can't resolve the bridge — fail-fast rather than
+	// spawn a guaranteed-broken `--provider pi-shell-acp` child (#29). Returned as
+	// an error result to match this function's other pre-spawn guards (session
+	// identity / cwd), which the tool surface renders as a failed resume.
+	if (explicitExtensions.unresolvedAcpIntent) {
+		return {
+			task: prompt,
+			host,
+			exitCode: 1,
+			output: explicitExtensions.warnings.join(" "),
+			turns: 0,
+			cost: 0,
+			taskId,
+			sessionFile,
+			explicitExtensions: [],
+			warnings: explicitExtensions.warnings,
+			error: "acp_bridge_unresolved",
+		};
+	}
 	const resumeProvider = explicitExtensions.provider ?? recordedProvider;
 
 	const piArgs = ["--mode", "json", "-p", "--no-extensions", ...explicitExtensions.args, "--session", sessionFile];

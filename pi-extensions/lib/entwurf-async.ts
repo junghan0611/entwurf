@@ -283,6 +283,17 @@ export async function spawnEntwurfResumeAsync(
 		isRemote,
 		sessionAnalysis?.lastProvider ?? undefined,
 	);
+	// Explicit ACP intent that can't resolve the bridge — fail-fast (matches the
+	// throw pattern this async resume path already uses for the cwd/identity
+	// guards below). Spawning `--provider pi-shell-acp` here would die with
+	// Unknown provider before any turn is appended (#29).
+	if (explicitExtensions.unresolvedAcpIntent) {
+		throw new Error(
+			`Cannot resume ${params.taskId}: recorded provider=pi-shell-acp but the pi-shell-acp ` +
+				`bridge extension could not be resolved (checked settings package source: local path / ` +
+				`git install / npm install). Refusing to resume with an unknown provider.`,
+		);
+	}
 	const resumeProvider = explicitExtensions.provider ?? sessionAnalysis?.lastProvider ?? undefined;
 
 	const piArgs = ["--mode", "json", "-p", "--no-extensions", ...explicitExtensions.args];
