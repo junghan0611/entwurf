@@ -3,7 +3,105 @@
 > 다음에 할 일만 남긴다. 로그가 아니다.
 > 결정 trace 와 evidence 는 commit history / CHANGELOG / VERIFY / BASELINE / README / AGENTS / 코드로 보낸다.
 
-## Top priority — 0.8.0 cut (awaiting GLG)
+## Hotfix before 0.9.0 — 0.8.1 package-installed Entwurf ACP routing (#29)
+
+Oracle surfaced a current-release bug: when `pi-shell-acp` is installed in Pi settings as `git:github.com/junghan0611/pi-shell-acp`, Entwurf ACP spawn cannot resolve the bridge extension for the child `pi --no-extensions` process. `resolveExplicitExtensionSpec()` currently returns null for `git:` / `npm:` sources, so `provider=pi-shell-acp` child exits with `Unknown provider "pi-shell-acp"` before any session file exists.
+
+Fix before leaning on Entwurf for #28 implementation work:
+
+- Support git-installed package source resolution: `git:github.com/junghan0611/pi-shell-acp` → `~/.pi/agent/git/github.com/junghan0611/pi-shell-acp`.
+- Audit/pin npm package-source behavior.
+- If ACP target cannot resolve an extension path, fail before spawn; warning-only guaranteed-fail path is not allowed.
+- Add deterministic package-source resolution test/smoke.
+- Documentation/repro matrix must cover all official install paths, not just local checkout:
+  - npm global: `pi install npm:@junghanacs/pi-shell-acp`
+  - npm project: `pi install -l npm:@junghanacs/pi-shell-acp`
+  - git global: `pi install git:github.com/junghan0611/pi-shell-acp`
+  - git project: `pi install -l git:github.com/junghan0611/pi-shell-acp`
+  - pi.dev/gallery path: document the exact source/layout it writes, then map it to the same smoke.
+- The guard must be Entwurf ACP target spawn, not only `pi --list-models` / `smoke-all`; the failing path is child `pi --no-extensions` needing `-e <bridge>` from package-source resolution.
+- **Release-gate must include this topology.** `./run.sh release-gate <scratch>` is the cut condition, so 0.8.1 must add an install-topology step there. Current `check-pack-install` proves tarball shape + `pi -e <node_modules> --list-models`, but does not simulate Pi settings package sources (`git:` / `npm:`) and does not call Entwurf. Add either:
+  - deterministic `check-package-source-routing` covering local/git/npm/global/project/missing, plus
+  - live `smoke-installed-entwurf-acp` for at least one package-installed topology,
+  - then wire into `release-gate` as a named step before the Entwurf live gates.
+
+Issue: https://github.com/junghan0611/pi-shell-acp/issues/29
+
+---
+
+## Top priority — 0.9.0 Entwurf garden-native session identity (#28)
+
+Pi 0.76.0 `--session-id` + Pi 0.78.0 `--name` 가 준비되었으므로 Entwurf 세션을 더 이상 특수 `entwurf-*.jsonl` 파일종으로 만들지 않는다.
+
+> **Sessions are born as garden citizens.**
+
+### Non-negotiable direction
+
+- **Breaking change allowed / intended.** 기존 `taskId` / `*entwurf-<taskId>*.jsonl` saved-session 호환은 유지하지 않는다. 이미 필요한 세션은 semantic-memory 축에 임베딩되었다고 보고, 잘못된 구버전 handle 은 깨져야 한다.
+- **Public handle = `sessionId`.** `taskId` 는 public schema, help text, result text, docs, tests, comments 에서 제거한다. 필요하면 내부 process-run 식별자는 `runId` 같은 별도 이름으로만 둔다.
+- **Spawn uses Pi primitives.** Entwurf spawn 은 직접 session file path 를 만들거나 `--session <file>` 을 넘기지 않고 `pi --session-id <id> --name <displayName>` 을 넘긴다.
+- **Resume uses `--session-id`.** Resume 은 먼저 JSONL header scan 으로 `sessionId` 의 saved session file / header cwd / recorded provider+model 을 찾고, child cwd 를 header cwd 에 맞춘 뒤 `pi --session-id <sessionId>` 로 이어붙인다. `--session <file>` 은 0.9.0 Entwurf path 에서 제거한다.
+- **Session file is diagnostic only.** API/문서/테스트의 primary handle 로 `sessionFile` 을 쓰지 않는다. 있으면 디버그 출력에만 둔다.
+- **No compatibility comments.** 구버전 taskId / filename convention 을 설명하는 주석·문서가 남아 있으면 agent 가 우회한다. 구현 버전에 맞는 주석·테스트·문서만 남긴다.
+
+### Proposed identity / name grammar
+
+- `sessionId`: timestamp-first, collision-safe, Pi validator compatible.
+  - 추천: `YYYYMMDDTHHMMSS-xxxx` (예: `20260530T120912-a3f8`)
+  - 이유: garden sort/link 감각 유지 + 병렬 spawn collision 방지. 순수 second timestamp 만 쓰면 Pi `--session-id` 의 “있으면 open” 동작 때문에 race/collision 이 조용히 이어붙을 수 있다.
+- `displayName`: Entwurf meaning layer.
+  - 예: `entwurf · gpt-5.4 · from 20260530T120000 · review release gate`
+  - 포함 축: `entwurf`, model, caller/session hint, short task hint. 너무 길면 task hint truncate.
+
+### Implementation touch points to specify before coding
+
+- `pi-extensions/lib/entwurf-core.ts`
+  - `EntwurfResult.taskId` → `sessionId` 중심으로 타입/formatter 변경.
+  - `runEntwurfSync` 에서 `crypto.randomUUID().slice(0,8)` taskId + `cwdToSessionDir()` + `${timestamp}_entwurf-${taskId}.jsonl` 제거.
+  - `findEntwurfSessionFile(taskId)` 제거, `findSessionFileById(sessionId)` / header scan helper 로 교체.
+  - `runEntwurfResumeSync(taskId, ...)` → `runEntwurfResumeSync(sessionId, ...)` 로 contract 변경.
+  - resume invocation 은 `--session-id <sessionId>` 사용. cwd authority 는 saved header cwd 유지 (#9 invariant).
+  - `formatSyncSummary` 는 `Session ID:` 를 primary 로 출력. `Task ID:` 제거.
+- `pi-extensions/entwurf.ts`
+  - async spawn 도 `--session-id` + `--name` 사용.
+  - active map key / tool schema / result details / status display 를 `sessionId` 로 변경.
+  - `entwurf_status` 는 sessionId 기준으로 조회. process 실행 식별이 필요하면 내부 `runId` 로 분리.
+  - `entwurf_resume` schema 의 `taskId` 제거 → `sessionId`.
+- `pi-extensions/lib/entwurf-async.ts`
+  - `AsyncEntwurfInfo.taskId` public field 제거/변경.
+  - `findEntwurfSession(taskId)` filename scan 제거 → header id scan.
+  - async resume ack/completion text 의 `Resume ID` / `Original` 표현 재검토: durable handle 은 같은 `sessionId`; 새 실행 구분이 필요하면 `runId` 만 내부/diagnostic 으로 표시.
+- `mcp/pi-tools-bridge/src/index.ts`
+  - `entwurf_resume` schema `taskId` → `sessionId`.
+  - MCP help text 에서 “Task ID from prior entwurf”, “saved entwurf session by taskId”, “`*entwurf-<taskId>*` lookup” 제거.
+  - `entwurf` result text도 `Session ID` 를 후속 resume handle 로 안내.
+- Tests / smokes
+  - `scripts/sentinel-runner.sh`: `*entwurf-*.jsonl` 검색·taskId regex 파싱 제거. tool result / JSON details 에서 `sessionId` 를 파싱.
+  - `scripts/cross-cwd-resume-smoke.ts`: `spawn.taskId` → `spawn.sessionId`.
+  - `scripts/compaction-policy-smoke.ts`: 동일.
+  - `scripts/smoke-async-resume.sh`: taskId 중심 prompt/parsing/negative path 제거.
+  - `mcp/pi-tools-bridge/test.sh`: unknown taskId negative → unknown sessionId negative.
+  - `run.sh` smoke prose 중 Entwurf resume/taskId 문구 정리.
+- Docs / comments
+  - AGENTS.md Entwurf section, README, VERIFY, CHANGELOG, MCP descriptions, tool promptGuidelines 에서 taskId/file convention 제거.
+  - “legacy fallback” 류 문구 금지. 0.9.0 기준으로만 설명.
+
+### Pre-implementation review evidence
+
+Opus review completed on oracle (code read only, no repo edits):
+
+- Review sessionId: `20260530T123336-opus28`
+- Review JSONL: `~/.pi/agent/sessions/--home-junghan-repos-gh-pi-shell-acp--/2026-05-30T03-33-38-357Z_20260530T123336-opus28.jsonl`
+- Review stdout log: `/tmp/pi-shell-acp-28-opus-review-20260530T123336-opus28.jsonl`
+- Derived llmlog note: `~/org/llmlog/20260530T123824--entwurf-090-가든네이티브-세션정체성-구현전-리뷰__entwurf_llmlog_pishellacp_review_session.org`
+
+핵심 판정: Pi substrate 는 가능하나 `--session-id` cwd-local lookup 때문에 resume cwd 가 틀리면 조용히 새 세션을 만들 수 있다. 0.9.0 의 가장 중요한 guard 는 “resume 이 기존 세션에 append 하는가, 새 세션을 만들지 않는가”다. Async spawn 때문에 sessionId 는 부모가 생성해야 하며, durable `sessionId` 와 per-process `runId` 를 분리해야 한다.
+
+0.9.0 방향 메모: llmlog 는 파생 artifact 일 뿐, garden-native Entwurf 에서는 **세션 자체가 llmlog** 가 된다. 세션 끝에 기록/요약을 남기고, 나중에 sessionId/name/header metadata 로 해당 session JSONL 위치를 찾아오는 기능이 필요하다. 그래야 리뷰/구현 세션을 직접 열어 “제대로 조사했는지”, “무엇을 실수했는지”를 판단할 수 있다.
+
+---
+
+## Ready but parked — 0.8.0 cut (awaiting GLG)
 
 모든 게이트·문서·버전 작업 완료, 프리릴리즈 가능 상태. 결정 trace 와 evidence 는 CHANGELOG 0.8.0 / VERIFY / BASELINE / commit history 에 있다 (여기 로그로 다시 쓰지 않는다). 남은 것은 GLG 승인 후 릴리즈 시퀀스뿐:
 
