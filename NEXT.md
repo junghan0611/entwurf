@@ -3,15 +3,136 @@
 > 다음에 할 일만 남긴다. 로그가 아니다.
 > 결정 trace 와 evidence 는 commit history / CHANGELOG / VERIFY / BASELINE / README / AGENTS / 코드로 보낸다.
 
-## Active — start 0.9.0 Entwurf garden-native session identity (#28)
+## Active — plan 0.9.0 Entwurf garden-native session identity (#28), with 1.0.0 axis in view (#30)
 
-0.8.x hotfix line is closed. Next main work is 0.9.0: make Entwurf sessions garden-native by replacing public `taskId` / `*entwurf-<taskId>*` handles with Pi `--session-id` + `--name` primitives. Detailed direction and touch points live in the **Top priority — 0.9.0** section below.
+0.8.x hotfix line is closed. 0.8.2 plus the #31 field report showed the runtime is strong enough for real 5-way async Opus Entwurf teams. The next work is not "can Entwurf run?" but **how Entwurf sessions are born, found, resumed, and later joined by external native sessions without faking transcript ownership**.
 
-Immediate next steps:
-1. Re-read the 0.9.0 section below and the Opus review evidence before editing code.
-2. Implement in small slices: sync spawn/resume core first, then async/MCP/test/doc surfaces.
-3. Preserve the key guard from the review: resume must append to the existing `sessionId` session file from the saved header cwd; wrong cwd must not silently create a new session.
-4. Keep `sessionId` public and `runId` internal/diagnostic if a per-process execution id is needed.
+Read #28 + #30 + #31 as one set:
+- **#28 / 0.9.0**: Pi-native Entwurf sessions become garden citizens: public handle `sessionId`, spawn with `--session-id` + `--name`, resume by header-scanned `sessionId` + saved header cwd.
+- **#30 / 1.0.0**: external native sessions become garden citizens through opaque meta-session records, not fake Pi transcripts. The top-level concept is **garden session id**; Pi sessions are the first backend that can use it directly.
+- **#31 field proof**: current 0.8.2 sustained 5 parallel Opus vision workers with repeated async resume. 0.9.0 must preserve this worker-team pattern while replacing `taskId` with `sessionId`.
+
+### Current mode — planning only until unknowns close
+
+Do **not** start implementation until the action plan below is closed enough that no hidden unknown can derail the rewrite. The largest guard remains:
+
+> Resume must append to the existing `sessionId` session file from the saved header cwd; wrong cwd must not silently create a new session.
+
+### Decisions to carry unless GLG overrides
+
+1. `sessionId` grammar: `YYYYMMDDTHHMMSS-xxxxxx` (6 hex suffix) + parent-side collision pre-check against `*_<id>.jsonl` before spawn.
+2. `displayName`: `entwurf · {model} · from {caller-session-or-host} · {task-hint}`; set on spawn only, never on resume.
+3. Resume model identity: re-supply recorded `--provider/--model` on resume for 0.9.0. Inherit-without-model is a later stretch only after live smoke.
+4. Async state: `activeEntwurfs` keyed by durable `sessionId`; add internal/diagnostic `runId` for per-process runs and resume notifications.
+5. Public schema/result/help text: remove `taskId` as a handle. `sessionFile` is diagnostic only. No legacy fallback prose in docs/tool descriptions.
+6. #28 issue body currently has a stale Compatibility Plan. Leave it visibly stale for trace; do **not** silently rewrite history. Local plan/NEXT governs implementation, and any later GitHub comment should explicitly say “stale / superseded by 0.9.0 breaking decision,” not pretend compatibility remains.
+
+### Execution strategy — Phase 1 must prove Pi substrate before Entwurf rewrite
+
+The previous slice plan is too large for the first move. The first milestone is smaller and stricter:
+
+> Before changing Entwurf identity, prove that Pi 0.76 `--session-id` and Pi 0.78 `--name` behave exactly as needed under the normal pi-shell-acp release gate.
+
+**Phase 1 — substrate proof, no Entwurf contract rewrite**
+
+Goal: show that an ordinary Pi session born with explicit `--session-id` + `--name` is a safe foundation. This phase should not rename `taskId`, should not change public Entwurf schemas, and should not remove `entwurf-*.jsonl` yet.
+
+What to add:
+1. A small substrate smoke, likely `./run.sh smoke-session-id-name <scratch>`.
+2. It should run one or a few direct `pi` invocations using the current bridge extension, not the Entwurf tools:
+   - `pi --session-id <id> --name <name> --provider pi-shell-acp --model claude-sonnet-4-6 --mode json -p 'ok'`
+   - verify exactly one JSONL session with header `id == <id>` in the expected cwd session dir
+   - verify header `cwd` is the launch cwd
+   - verify session name is persisted / discoverable in the JSONL. Per the Opus review (llmlog `20260530T123824` §1) the actual mechanism is a `session_info` entry appended at the first assistant turn, read back by Pi's `getSessionName()` (latest `session_info` wins) — parse that entry, and let the probe confirm it rather than assuming header-level name.
+   - run a second turn with the same `--session-id` from the same cwd and verify it appends, not recreates
+   - run or simulate wrong-cwd behavior to confirm the known footgun: same id from a different cwd can create a different local session unless caller aligns cwd. Record this as evidence, not failure.
+3. Add a deterministic/static check for Pi version dependency:
+   - package/dev peer pins are ready for Pi `0.78.0`
+   - docs mention 0.9.0 requires Pi `>=0.78.0` for `--name`
+4. Wire only this substrate smoke into release-gate first, before Entwurf live gates.
+5. Run the release-gate with this addition. Passing means “the new Pi primitives do not poison existing behavior.” It does **not** mean the Entwurf rewrite is done.
+
+Expected checks for Phase 1:
+- `pnpm typecheck`
+- `./run.sh smoke-session-id-name <scratch>`
+- `./run.sh release-gate <scratch>` when GLG approves time/cost
+
+Phase 1 acceptance:
+- Existing Entwurf `taskId` flow still works unchanged.
+- Explicit `--session-id` + `--name` direct Pi sessions pass under pi-shell-acp.
+- Append behavior is proven for same cwd.
+- Wrong-cwd create-if-missing behavior is observed/documented so the later resume control routine knows exactly what it must prevent.
+
+Phase 1 substrate notes (Claude review boost, fold into the smoke before writing it):
+- **This smoke is inherently LIVE (token + auth), not credential-free.** Because the session file only persists at the first assistant turn (review §1 F2), every assertion — header `id`, persisted name, append-not-recreate — needs a real model turn. The `--list-models` credential-free trick used by `smoke-installed-entwurf-acp` (#29) does **not** apply here. Use one cheap turn (`claude-sonnet-4-6`, `-p 'ok'`); accept the per-gate token cost, consistent with the existing live backend smokes already in `release-gate`.
+- **One cheap backend is enough for Phase 1.** `--session-id` / `--name` / header / append are pure Pi session-manager behavior, backend-agnostic. Do not pull Hard Rule #7 (Claude+Codex+Gemini) into Phase 1 — multi-backend identity preservation is Phase 3's concern. One sonnet turn proves the substrate.
+- **The smoke harness must guarantee the bridge extension is loaded for the direct `pi` call.** A bare `pi --provider pi-shell-acp` only resolves if pi-shell-acp is installed in the scratch settings or injected with `-e <bridge>`. Mirror `smoke-installed-entwurf-acp`'s bridge-loading (resolve the bridge root, pass `-e`) so the substrate proof also confirms the bridge and the new primitives coexist, rather than silently testing a bridge-less `pi`.
+- **Grammar-agnostic:** Phase 1 may use any literal valid test id (e.g. `20260601T000000-test01`); it does **not** commit to the production `sessionId` grammar (decision #1) or the 1.0.0 garden-id namespace question. Those stay in Phase 2+.
+
+**Phase 2 — control routines on top of proven substrate**
+
+Only after Phase 1 is green:
+- add helper routines for generating ids, resolving sessions by header id, collision pre-check, duplicate fail-fast, and displayName grammar;
+- test those helpers deterministically;
+- still avoid public schema rename until helpers are proven.
+
+**Phase 3 — Entwurf sync path pilot**
+
+Only after Phase 2:
+- pilot sync spawn/resume using `--session-id` + `--name` behind the internal core path;
+- prove append-not-recreate (T4) and cross-cwd authority (T5);
+- then decide whether async/MCP/docs migration is safe.
+
+Later phases remain: async state (`sessionId` + internal `runId`), MCP/control schema rename, sentinel/async-resume/compaction migration, docs/#31 recipe, and consumer lockstep (`entwurf-peek`, semantic-memory). But those are not Phase 1.
+
+### Action plan before implementation
+
+**A. Evidence refresh / source map**
+- Re-read llmlog `20260530T123824` sections 2–8 before code.
+- Fresh symbol scan only; ignore stale line numbers. Current quick scan after 0.8.2: `taskId` refs ≈ 180 across runtime/tests/docs.
+- Produce a current touchpoint map by symbol: `runEntwurfSync`, `runEntwurfResumeSync`, `findEntwurfSessionFile`, `spawnEntwurfResumeAsync`, `activeEntwurfs`, MCP `entwurf_resume`, sentinel, async-resume, cross-cwd, compaction, VERIFY/README/CHANGELOG.
+
+**B. Substrate / dependency gate**
+- Bump `@earendil-works/pi-*` dev/peer pins and release-gate pack-install expectations to Pi `0.78.0` because `--name` is required.
+- Document runtime requirement: pi `>=0.78.0` for 0.9.0 Entwurf identity.
+- Run the 1-call substrate probe once before implementation: `pi --session-id <new-id> --name <test> --provider pi-shell-acp --model claude-sonnet-4-6 --mode json -p 'ok'`; verify header `id`, header `cwd`, persisted name, and file count.
+
+**C. Test-gate design — map T1–T10 to concrete gates**
+- Add deterministic gate, likely `./run.sh check-entwurf-session-identity`:
+  - T1 grammar validator round-trip against Pi validator
+  - T2 parent-side collision pre-check
+  - T6 duplicate header-id fail-fast
+  - T8 name-on-spawn/no-name-on-resume static or synthetic assertion
+  - T10 MCP schema negative renamed to `sessionId`
+- Add/extend live gate, likely `./run.sh smoke-entwurf-session-identity <project>`:
+  - T3 sync spawn writes exactly one header-id file
+  - T4 resume appends, never recreates (**F1 linchpin**)
+  - T5 cross-cwd resume uses saved header cwd (#9 guard)
+  - T7 identity preservation on resume
+  - T9 async spawn has parent-known `sessionId` without stdout
+- Wire the new deterministic gate into `pnpm check`/release-gate; wire the live gate into `release-gate` before sentinel/async-resume so identity breakage fails early.
+- Update existing smokes instead of duplicating where possible: `cross-cwd-resume-smoke.ts`, `compaction-policy-smoke.ts`, `smoke-async-resume.sh`, `sentinel-runner.sh`, `mcp/pi-tools-bridge/test.sh`.
+
+**D. Consumer blast radius / lockstep updates**
+- `agent-config` must be handled in the same campaign or explicitly accepted as broken for new sessions:
+  - `skills/entwurf-peek/scripts/entwurf-peek.py` currently discovers children by `entwurf-*.jsonl`.
+  - `skills/semantic-memory/SKILL.md` mentions `--session-file-contains _entwurf-`.
+- New discovery direction: session header id + session name beginning `entwurf ·`, not filename species.
+- This is also the bridge toward #30: discovery should be “garden session metadata” flavored, not Pi filename flavored.
+
+**E. Implementation slices after plan is green**
+1. Core identity helpers: generate `sessionId`, collision pre-check, `findSessionFileById` header scan, duplicate fail-fast, recorded provider/model extraction.
+2. Sync spawn/resume in `entwurf-core.ts`: `--session-id`/`--name`; resume cwd = header cwd; no `--session <file>` in Entwurf path.
+3. Async spawn/resume/status in `entwurf.ts` + `entwurf-async.ts`: sessionId-keyed active map, internal `runId`, lazy diagnostic `sessionFile` resolution.
+4. MCP/control surfaces: `taskId` → `sessionId`, unknown-session negative, async replyable resume payloads.
+5. Tests/smokes/release-gate wiring.
+6. Docs and prompts: README/AGENTS/VERIFY/CHANGELOG/tool descriptions; add #31 “parallel Entwurf team” recipe using `sessionId`.
+7. Consumer lockstep: update `entwurf-peek` and semantic-memory guidance or record an explicit break decision.
+
+**F. Explicit scope boundaries**
+- Remote resume/header discovery (#11) remains out of 0.9.0 unless GLG reopens. Do not pretend local header scan solves remote FS.
+- 1.0.0 meta-bridge is not implemented in 0.9.0, but naming and docs must not block it: avoid saying `sessionId` is only a Pi transcript id; prefer garden-native session identity language where accurate.
+- Do not build a generic worker-pool orchestrator from #31. Document the advanced pattern; keep the bridge thin.
 
 ## Released — 0.8.2 Claude Opus 4.8 transcript poison hotfix
 
