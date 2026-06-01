@@ -3365,7 +3365,7 @@ verify_resume() {
     --model "$model"
 }
 
-CLAUDE_ACP_REQUIRED_VERSION="0.38.0"
+CLAUDE_ACP_REQUIRED_VERSION="0.39.0"
 CODEX_ACP_REQUIRED_VERSION="0.15.0"
 
 check_global_claude_acp() {

@@ -56,6 +56,15 @@ async function main(): Promise<void> {
 		// repro 2026-05-12).
 		new Error("API Error: 400 messages: text content blocks must be non-empty"),
 		new Error("Internal error: API Error: 400 messages: text content blocks must be non-empty"),
+		// Surface 3: Opus 4.8 signed thinking-block replay rejection
+		// (observed through claude-agent-acp 0.38.0 / SDK 0.3.154 on
+		// 2026-06-01; upstream Claude Code 2.1.156 fixed the same class).
+		new Error(
+			"Internal error: API Error: 400 messages.1.content.7: `thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified. These blocks must remain as they were in the original response.",
+		),
+		new Error(
+			'Internal error: API Error: 400 messages.1.content.17: `thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified. These blocks must remain as they were in the original response.\n\n[pi-shell-acp session]\n{"bootstrapPath":"resume","acpSessionId":"97bb0791-dc8e-4301-b66c-1e1e102acd60"}',
+		),
 	];
 	const nonPoisonCases: Array<unknown> = [
 		new Error("network ECONNRESET"),
@@ -68,6 +77,13 @@ async function main(): Promise<void> {
 		new Error("Internal error: API Error: 401 text content blocks must be non-empty"),
 		new Error("local validation: text content blocks must be non-empty"),
 		new Error("Internal error: API Error: 400 stream: text content blocks must be non-empty"),
+		new Error(
+			"local validation: `thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified",
+		),
+		new Error(
+			"Internal error: API Error: 401 messages.1.content.7: `thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified",
+		),
+		new Error("Internal error: API Error: 400 messages.1.content.7: thinking blocks changed somewhere else"),
 		new Error(""),
 		"plain string error",
 		undefined,

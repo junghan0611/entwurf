@@ -22,7 +22,8 @@ Release-ready means all of the following are true:
 - `CHANGELOG.md` contains `## <version> — YYYY-MM-DD`
 - `package.json` version equals `<version>`
 - `pnpm-lock.yaml` is refreshed if needed
-- `pnpm check` passes
+- `pnpm check` passes as the deterministic/static floor
+- a fresh `./run.sh release-gate <scratch-project-dir>` passes and its log/artifact paths are recorded in `CHANGELOG.md` or the operator handoff
 - all release-prep changes are committed
 - `git diff-index --quiet HEAD --` succeeds
 
@@ -90,15 +91,32 @@ npm version "$VERSION" --no-git-tag-version
 pnpm install --lockfile-only
 ```
 
-### 4. Quality gate
+### 4. Static quality gate
 
 ```bash
 pnpm check
 ```
 
-All eight static gates must pass.
+The deterministic/static floor must pass. The exact gate set evolves with the repo; do not summarize it as a fixed count.
 
-### 5. Commit release prep
+### 5. Live release gate
+
+Run the official release prerequisite from a fresh scratch project and preserve the evidence paths:
+
+```bash
+SCRATCH=$(mktemp -d /tmp/psa-release-gate-${VERSION}.XXXXXX)
+./run.sh release-gate "$SCRATCH"
+```
+
+Expected summary:
+
+```text
+PASS=15  FAIL=0  SKIP=0
+```
+
+If the gate fails, stop at the failing axis and fix or explicitly classify it before committing release prep. Do not replace this with `pnpm check`; the live gate is the release floor.
+
+### 6. Commit release prep
 
 Commit the bump + changelog promotion together. Use a concise Conventional
 Commits-style subject, for example:
@@ -109,7 +127,7 @@ chore(release): prepare v<version>
 
 Stage only release-prep files.
 
-### 6. Final readiness check
+### 7. Final readiness check
 
 ```bash
 VERSION="$ARGUMENTS"
@@ -124,6 +142,7 @@ Report:
 - prepared version
 - commit SHA
 - whether `pnpm check` passed
+- release-gate log/artifact/scratch paths and `PASS=15 FAIL=0 SKIP=0`
 - whether the tree is clean
 - explicit final line:
 

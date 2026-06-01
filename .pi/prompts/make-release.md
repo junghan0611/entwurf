@@ -14,11 +14,13 @@ Preparation belongs to `/prepare-release <version>`.
 - `CHANGELOG.md` already has `## <version> — YYYY-MM-DD`
 - `package.json` already matches `<version>`
 - release-prep changes are already committed
+- a fresh `./run.sh release-gate <scratch-project-dir>` artifact is recorded in `CHANGELOG.md` / the operator notes
 - `git diff-index --quiet HEAD --` already passes
 
 This command tags HEAD, pushes, stamps, extracts release notes from
 `CHANGELOG.md`, creates the GitHub release, verifies, and notifies.
-It does **not** bump `package.json`, commit, or run `npm publish`.
+It does **not** bump `package.json`, commit, run the live release gate,
+or run `npm publish`.
 
 ## Variable contract
 
@@ -86,15 +88,26 @@ test "$(node -p "require('./package.json').version")" = "${VERSION}"
 If mismatch, the operator pre-work step 3 (npm version bump) was not
 done. Abort.
 
-### 5. Quality gate
+### 5. Static sanity gate
 
 ```bash
 pnpm check
 ```
 
-The full static release floor in `pnpm check` must pass. The exact gate set evolves with the repo (today it includes lint / typecheck / plugin checks / MCP, shell-quote, prompt-format, async-resume, package-source-routing, model-lock, models, backends, registration, dep-version, auth-boundary, SDK-surface, transcript-poison, and pack checks). If any fail, fix the underlying issue — do not bypass.
+`pnpm check` is the deterministic/static floor and a cheap last-minute sanity check. The release prerequisite is stricter: `/prepare-release <version>` or the operator must already have run a fresh `./run.sh release-gate <scratch-project-dir>` and recorded the evidence. Do **not** rerun the live release gate from `/make-release`; this command is execution-only and should not spend another full live-gate cycle after HEAD is already release-ready.
 
-### 6. GitHub auth + target consistency
+### 6. Release-gate evidence is recorded
+
+Confirm manually (do not invent paths) that the version's `CHANGELOG.md` section or the operator handoff records the fresh release-gate evidence:
+
+```text
+./run.sh release-gate <scratch-project-dir>
+PASS=15 FAIL=0 SKIP=0
+```
+
+If missing, abort and return to `/prepare-release <version>` / the release-prep session.
+
+### 7. GitHub auth + target consistency
 
 ```bash
 gh auth status
@@ -115,7 +128,7 @@ esac
 If `gh` is authenticated against the wrong account/host or is pointed at a
 repo different from `origin`, abort before tagging.
 
-### 7. Push dry-run
+### 8. Push dry-run
 
 ```bash
 VERSION="$ARGUMENTS"

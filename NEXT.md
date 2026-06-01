@@ -3,6 +3,25 @@
 > 다음에 할 일만 남긴다. 로그가 아니다.
 > 결정 trace 와 evidence 는 commit history / CHANGELOG / VERIFY / BASELINE / README / AGENTS / 코드로 보낸다.
 
+## Active — close 0.8.2 hotfix release (2026-06-01 KST)
+
+0.8.2 본류는 Claude Opus 4.8 signed thinking-block 400 → poisoned ACP mapping invalidation hotfix다. `@agentclientprotocol/claude-agent-acp` 0.39.0 / `@anthropic-ai/sdk` 0.100.1 peer 정합과 `verify-transcript-poison` 가드가 들어갔다.
+
+Current state:
+- Commit `f9ce35a chore(release): prepare v0.8.2` exists and branch is ahead of origin.
+- Uncommitted release-facing doc/sentinel hardening remains in `CHANGELOG.md`, `VERIFY.md`, `BASELINE.md`, `NEXT.md`, `.pi/prompts/{prepare-release,make-release}.md`, and `scripts/sentinel-runner.sh`.
+- Full sentinel evidence: `/tmp/sentinel-20260601-120416.json` → 6/6 PASS, log `/tmp/pi-tmux-sentinel-082.log`. Ready-gate retry did **not** fire in that green run; the restored purpose-driven prompt's natural warmup was enough. The ready-gate remains a bounded 1× backup for the ACP-Claude MCP cold-start race.
+- Full release-gate evidence: `/tmp/pi-tmux-release-gate-082.log` → `PASS=15 FAIL=0 SKIP=0`, scratch `/tmp/claude-1000/psa-rg-082.HVwOvk`, sentinel artifact `/tmp/sentinel-20260601-121604.json`.
+
+Next actions:
+1. Review the doc alignment diff, then commit/amend the release-facing hardening into the 0.8.2 release prep according to GLG release policy.
+2. Run the standard release sequence (`/make-release 0.8.2` / tag + push + GitHub release; GLG handles npm publish).
+3. Record upstream follow-up separately: `claude-agent-acp`/Claude agent SDK `newSession({mcpServers})` returns before injected MCP servers have deterministic connected/failed status. pi-shell-acp should not add a runtime probe barrier; deterministic readiness belongs upstream (`mcpServerStatus()` or equivalent). Avoid the earlier overclaim that the model retried a tool 39× — raw streaming partials inflated that count.
+
+## Released — 0.8.1 package-installed Entwurf ACP routing (#29)
+
+0.8.1 was released/published from `62c3714` / `v0.8.1` on 2026-05-31 KST. The historical prep board below is retained as trace only, not active next work.
+
 ## Hotfix before 0.9.0 — 0.8.1 package-installed Entwurf ACP routing (#29)
 
 Oracle surfaced a current-release bug: when `pi-shell-acp` is installed in Pi settings as `git:github.com/junghan0611/pi-shell-acp`, Entwurf ACP spawn cannot resolve the bridge extension for the child `pi --no-extensions` process. `resolveExplicitExtensionSpec()` returns null for `git:` / `npm:` sources, so `provider=pi-shell-acp` child exits with `Unknown provider "pi-shell-acp"` before any session file exists.

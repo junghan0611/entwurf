@@ -4,6 +4,23 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.8.2 — 2026-06-01
+
+### Fixed
+
+- **Release-gate sentinel hardened against full-run-only false failures (project-scoped fallback + bounded MCP warmup grace).** The S2 session-file fallback now searches only the current project session dir instead of all of `~/.pi/agent/sessions`, preventing unrelated live `entwurf-*.jsonl` files from another cwd from being mistaken for this cell's worker. The ACP-Claude parent path also documents and bounds a test-harness cold-start race: on a brand-new ACP child, the first prompt can reach for the `entwurf` MCP tool before the backend's pi-tools-bridge child has finished registering it (`No such tool available`, so no worker spawned), especially when prompts remove the natural warmup work a model would normally do before the tool call. Spawn/resume now give exactly one short warmup-grace re-run when no worker turn exists and the raw stream shows that uncallable-tool signal (`SENTINEL_READY_RETRIES`/`SENTINEL_READY_BACKOFF`, default 1×3s), then fail hard. The 2026-06-01 green full sentinel did not need that retry; deterministic runtime readiness still belongs upstream (e.g. waiting for injected MCP servers to reach a terminal `mcpServerStatus`). Test-only change; no runtime behavior change.
+- **Claude Opus 4.8 signed thinking-block 400 now invalidates poisoned ACP mappings.** A resumed Claude ACP session can fail with `API Error: 400 messages.<i>.content.<j>: \`thinking\` or \`redacted_thinking\` blocks in the latest assistant message cannot be modified` after Opus 4.8 tool-use turns. The bridge now classifies that narrow Anthropic transcript-validity surface as transcript poison, logs the existing `[pi-shell-acp:prompt-error] reason=transcript_poison`, closes the backend child, and drops the persisted `pi:<sessionId> → acpSessionId` mapping so the next turn naturally lands on `path=new` instead of retrying the same broken Claude transcript forever. `verify-transcript-poison` covers the raw API error, the pi-shell-acp diagnostic-attached form observed on hejdev6, and adjacent negative cases.
+
+### Changed
+
+- **Bumped `@agentclientprotocol/claude-agent-acp` 0.38.0 → 0.39.0.** The upstream diff is intentionally small: 0.39.0 mainly adds `--hide-claude-auth` behavior and, more importantly for this incident, advances transitive `@anthropic-ai/claude-agent-sdk` 0.3.154 → 0.3.156. That SDK version corresponds to Claude Code 2.1.156, whose upstream version history says it fixed the Opus 4.8 "thinking blocks were modified" API error. Added direct `@anthropic-ai/sdk@0.100.1` to satisfy the newer SDK peer (`>=0.93.0`) without relying on pi's older devDependency copy.
+
+### Verification
+
+- Final release-gate evidence before cut: `/tmp/pi-tmux-release-gate-082.log` — `PASS=15 FAIL=0 SKIP=0`, run from the repo cwd against scratch project `/tmp/claude-1000/psa-rg-082.HVwOvk` with no `--allow-skip-gemini`.
+- Sentinel evidence: `/tmp/sentinel-20260601-121604.json` passed 6/6 inside the release gate; earlier focused full sentinel `/tmp/sentinel-20260601-120416.json` also passed 6/6. The bounded MCP warmup grace did not fire in the green run.
+- Continuity / messaging evidence: `verify-resume` passed cross-cwd recall, and `/tmp/session-messaging-smoke-20260601-121843.json` passed 4/4.
+
 ## 0.8.1 — 2026-05-31
 
 Hotfix track for #29 — package-installed Entwurf ACP routing.

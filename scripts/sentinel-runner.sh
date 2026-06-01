@@ -32,10 +32,29 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 REPOS="${REPOS:-$HOME/repos/gh}"
 SESSIONS_BASE="$HOME/.pi/agent/sessions"
+PROJECT_CWD="$(pwd -P)"
+PROJECT_SESSION_SLUG="--${PROJECT_CWD#/}--"
+PROJECT_SESSION_DIR="$SESSIONS_BASE/${PROJECT_SESSION_SLUG//\//-}"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 ARTIFACT="${SENTINEL_ARTIFACT:-/tmp/sentinel-${TIMESTAMP}.json}"
 TIMEOUT="${SENTINEL_TIMEOUT:-240}"
 WAIT_BUDGET="${SENTINEL_WAIT:-180}"
+# Cold-start ready-gate (ACP parents only). When an ACP backend + its
+# pi-tools-bridge MCP child are still warming up, the parent can try to call the
+# entwurf tool before it is registered and get "No such tool available", so no
+# worker is spawned. That is a one-shot startup race; normal prompts often hide
+# it because the model does a little natural warmup work before the tool call.
+# Policy: ONE warmup-grace retry after a short backoff, then fail hard. A
+# deterministic error like "No such tool" must never be retried in a loop. One
+# grace re-run for the warmup window, then fail. (The raw --mode json spawn log
+# balloons with streaming partials on this path — grepping it wholesale is what
+# flooded an earlier investigation's context, so keep diagnostics scoped to
+# final messages.) The 2026-06-01 green full sentinel did not need this retry;
+# it remains a bounded backup until upstream exposes/awaits deterministic MCP
+# readiness. If the tool is still uncallable on the retry, the normal checks
+# fail and surface a real readiness gap rather than masking it.
+READY_RETRIES="${SENTINEL_READY_RETRIES:-1}"
+READY_BACKOFF="${SENTINEL_READY_BACKOFF:-3}"
 LOG_DIR="/tmp/sentinel-${TIMESTAMP}"
 mkdir -p "$LOG_DIR"
 
@@ -153,7 +172,10 @@ parent_spawn() {
       # `spawn_async_resume` RPC, which needs this session's control socket
       # (mcp/pi-tools-bridge/src/index.ts throws "No pi control socket" without it).
       # Native parents (cells 1/3) use the in-process callback and don't need it.
-      # The operator's real-use alias always passes --entwurf-control, so this matches prod.
+      # The operator's real-use alias (`pia`) always passes --entwurf-control, so this
+      # matches prod. The flag is passed explicitly here — this script never relies on a
+      # shell alias (non-interactive bash does not expand aliases, and `pi` resolves to the
+      # pnpm binary), so renaming the alias `pi`→`pia` does not affect the sentinel.
       timeout "$TIMEOUT" pi --mode json -p --entwurf-control \
         -e "$REPOS/pi-shell-acp" \
         --provider pi-shell-acp --model claude-sonnet-4-6 \
@@ -215,22 +237,31 @@ extract_task_id() {
   grep -oE 'Task ID: [a-f0-9]{8}' "$1" | head -1 | awk '{print $3}'
 }
 
-find_session_file() {
-  local task_id="$1"
-  find "$SESSIONS_BASE" -type f -name "*entwurf-${task_id}*.jsonl" 2>/dev/null | head -1
+# Cold-start readiness signal: the parent's raw stream shows the entwurf MCP
+# tool was uncallable ("No such tool available"), so the call never reached the
+# core and no worker was spawned. Used by the ready-gate to distinguish an
+# infra-warmup race (retry) from a genuine outcome (see READY_RETRIES).
+entwurf_tool_uncallable() {
+  grep -q 'No such tool available' "$1" 2>/dev/null
 }
 
-# S2 fallback: find the most recent entwurf-*.jsonl created after $1 (epoch).
-# Needed when the parent surface does not echo tool_result text into the raw
-# --mode json assistant content (observed with ACP Codex parent, where
-# `[tool:done]` is emitted but the structured result lives outside the
-# captured content stream). The filesystem is the ground truth — a new
-# session file means the spawn did reach the entwurf core.
+find_session_file() {
+  local task_id="$1"
+  find "$PROJECT_SESSION_DIR" -type f -name "*entwurf-${task_id}*.jsonl" 2>/dev/null | head -1
+}
+
+# S2 fallback: find the most recent project-local entwurf-*.jsonl created
+# after $1 (epoch). Needed when the parent surface does not echo tool_result
+# text into the raw --mode json assistant content (observed with ACP Codex
+# parent, where `[tool:done]` is emitted but the structured result lives
+# outside the captured content stream). Keep the search scoped to the current
+# project session dir; a global search can pick up an unrelated live user's
+# entwurf and turn a tool-call omission into a false identity failure.
 # Emits: "<taskId>\t<session_file>" on stdout, empty on miss.
 find_new_entwurf_session() {
   local threshold_ts="$1"
   local newest
-  newest=$(find "$SESSIONS_BASE" -type f -name '*entwurf-*.jsonl' \
+  newest=$(find "$PROJECT_SESSION_DIR" -type f -name '*entwurf-*.jsonl' \
            -newermt "@$threshold_ts" 2>/dev/null |
            xargs -r -I{} stat -c '%Y {}' "{}" 2>/dev/null |
            sort -nr | head -1 | awk '{ $1=""; sub(/^ /, ""); print }')
@@ -404,36 +435,60 @@ run_cell() {
   local spawn_child_log="$LOG_DIR/cell${CELL_ID}-spawn-child.log"
   spawn_prompt=$(build_spawn_prompt "$CELL_TP" "$CELL_TM" "$CELL_TOKEN")
 
-  # Snapshot the pre-spawn wall clock (minus a second for race safety).
-  # Used by the S2 fallback to find a freshly-created entwurf session file
-  # if the parent's raw stream doesn't carry the Task ID text.
-  local spawn_threshold=$(( $(date +%s) - 1 ))
+  # Spawn with a cold-start ready-gate. Retry ONLY when no worker was spawned
+  # AND the parent hit "No such tool available" (entwurf MCP not yet callable).
+  # A successful spawn breaks immediately — structural evidence (Task ID or the
+  # project-local session-file fallback) wins even if the raw stream also
+  # contains an earlier uncallable-tool diagnostic. A genuine omission (no
+  # such-tool signal at all) is not retried. See READY_RETRIES.
+  local spawn_attempt=0 rc=0
+  while : ; do
+    spawn_attempt=$((spawn_attempt + 1))
 
-  local rc=0
-  parent_spawn "$CELL_PARENT" "$spawn_prompt" "$spawn_log" "$spawn_child_log" || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    CELL_FCODE="S1"
-    CELL_NOTE="parent exit rc=$rc (timeout or crash) — see $spawn_log"
-    finalize_cell; return
-  fi
+    # Snapshot the pre-spawn wall clock (minus a second for race safety) for the
+    # S2 session-file fallback. Re-taken each attempt so a retry's fallback only
+    # matches files this attempt created.
+    local spawn_threshold=$(( $(date +%s) - 1 ))
 
-  SPAWN_TASK_ID=$(extract_task_id "$spawn_log")
-  if [ -z "$SPAWN_TASK_ID" ]; then
-    # S2 fallback — parent surfaces that don't echo tool_result into their
-    # raw stream (ACP Codex) still write a session file. The fs is truth.
-    local fb
-    if fb=$(find_new_entwurf_session "$spawn_threshold"); then
-      SPAWN_TASK_ID="${fb%%$'\t'*}"
-      SPAWN_SESSION="${fb##*$'\t'}"
-      log "  [fallback] taskId=$SPAWN_TASK_ID from session-file delta"
+    rc=0
+    parent_spawn "$CELL_PARENT" "$spawn_prompt" "$spawn_log" "$spawn_child_log" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      CELL_FCODE="S1"
+      CELL_NOTE="parent exit rc=$rc (timeout or crash) — see $spawn_log"
+      finalize_cell; return
     fi
-  fi
 
-  if [ -z "$SPAWN_TASK_ID" ]; then
+    SPAWN_TASK_ID=$(extract_task_id "$spawn_log")
+    if [ -z "$SPAWN_TASK_ID" ]; then
+      # S2 fallback — parent surfaces that don't echo tool_result into their
+      # raw stream (ACP Codex) still write a session file. The fs is truth.
+      local fb
+      if fb=$(find_new_entwurf_session "$spawn_threshold"); then
+        SPAWN_TASK_ID="${fb%%$'\t'*}"
+        SPAWN_SESSION="${fb##*$'\t'}"
+        log "  [fallback] taskId=$SPAWN_TASK_ID from session-file delta"
+      fi
+    fi
+
+    # Worker spawned → success.
+    [ -n "$SPAWN_TASK_ID" ] && break
+
+    # No worker. Cold-start race? Back off and re-run, up to READY_RETRIES.
+    if entwurf_tool_uncallable "$spawn_log" && [ "$spawn_attempt" -le "$READY_RETRIES" ]; then
+      log "  [ready-gate] entwurf MCP tool not yet callable (No such tool); backoff ${READY_BACKOFF}s, retry ${spawn_attempt}/${READY_RETRIES}"
+      SPAWN_SESSION=""
+      sleep "$READY_BACKOFF"
+      continue
+    fi
+
     CELL_FCODE="S2"
-    CELL_NOTE="no 'Task ID:' in raw stream and no new entwurf session file after parent exit — see $spawn_log"
+    if entwurf_tool_uncallable "$spawn_log"; then
+      CELL_NOTE="entwurf MCP tool stayed uncallable ('No such tool') after the warmup-grace retry — real backend-readiness defect, not a warmup race — see $spawn_log"
+    else
+      CELL_NOTE="no 'Task ID:' in raw stream and no new entwurf session file after parent exit — see $spawn_log"
+    fi
     finalize_cell; return
-  fi
+  done
   log "  spawn taskId=$SPAWN_TASK_ID"
 
   # Reuse session file from fallback if already resolved; otherwise look it up.
@@ -442,7 +497,7 @@ run_cell() {
   fi
   if [ -z "$SPAWN_SESSION" ] || [ ! -f "$SPAWN_SESSION" ]; then
     CELL_FCODE="S3"
-    CELL_NOTE="no session JSONL found for entwurf-$SPAWN_TASK_ID under $SESSIONS_BASE"
+    CELL_NOTE="no session JSONL found for entwurf-$SPAWN_TASK_ID under $PROJECT_SESSION_DIR"
     finalize_cell; return
   fi
 
@@ -485,13 +540,32 @@ run_cell() {
   local resume_child_log="$LOG_DIR/cell${CELL_ID}-resume-child.log"
   resume_prompt=$(build_resume_prompt "$SPAWN_TASK_ID")
 
-  rc=0
-  parent_spawn "$CELL_PARENT" "$resume_prompt" "$resume_log" "$resume_child_log" || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    CELL_FCODE="R1"
-    CELL_NOTE="resume parent exit rc=$rc — see $resume_log"
-    finalize_cell; return
-  fi
+  # Resume with the same cold-start ready-gate as the spawn stage. Retry fast
+  # (before spending WAIT_BUDGET) only when the entwurf_resume tool was
+  # uncallable AND the worker's turn has not landed — the warmup race. A normal
+  # sync resume has the worker turn appended by the time the parent returns, so
+  # it breaks on the first pass and proceeds to the R6/turn-growth checks below.
+  local resume_attempt=0 rc=0
+  while : ; do
+    resume_attempt=$((resume_attempt + 1))
+    rc=0
+    parent_spawn "$CELL_PARENT" "$resume_prompt" "$resume_log" "$resume_child_log" || rc=$?
+    if [ "$rc" -ne 0 ]; then
+      CELL_FCODE="R1"
+      CELL_NOTE="resume parent exit rc=$rc — see $resume_log"
+      finalize_cell; return
+    fi
+    if entwurf_tool_uncallable "$resume_log" && [ "$resume_attempt" -le "$READY_RETRIES" ]; then
+      local quick_turns
+      quick_turns=$(analyze_session "$SPAWN_SESSION" | jq -r '.turns')
+      if [ "${quick_turns:-0}" -le "$RESUME_TB" ]; then
+        log "  [ready-gate] entwurf_resume MCP tool not yet callable (No such tool); backoff ${READY_BACKOFF}s, retry ${resume_attempt}/${READY_RETRIES}"
+        sleep "$READY_BACKOFF"
+        continue
+      fi
+    fi
+    break
+  done
 
   # Tool-omission guard (R6) — classify a no-op parent immediately instead of
   # blocking the full WAIT_BUDGET on a turn that will never grow. The resume
@@ -753,6 +827,7 @@ main() {
 
   log "log dir: $LOG_DIR"
   log "artifact: $ARTIFACT"
+  log "project session dir: $PROJECT_SESSION_DIR"
   log "running ${#selected[@]} cell(s): $(printf '%s ' "${selected[@]%%|*}")"
 
   local cell id parent tp tm

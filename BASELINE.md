@@ -251,6 +251,24 @@ the scoring criteria so it stays scannable.
 
 # HISTORY
 
+## [2026-06-01 Mon] — 0.8.2 release-gate baseline
+
+Release-facing baseline for the 0.8.2 hotfix cut: the single `./run.sh release-gate /tmp/claude-1000/psa-rg-082.HVwOvk` command remains the full static + live verification floor. It was invoked from the repo cwd and completed with **15 PASS / 0 FAIL / 0 SKIP** with Gemini present and no `--allow-skip-gemini`.
+
+| Axis | Baseline result |
+|---|---|
+| Static floor | `pnpm check` passed on version `0.8.2`, including the transcript-poison guard and the package-source routing/static pack gates. |
+| Install topology | **PASS** — `smoke-installed-entwurf-acp (#29)` still passed for git source, npm source, and packed-tarball routing. |
+| Runtime backends | `smoke-all` passed across Claude, Codex, and Gemini. |
+| Async resume | `smoke-async-resume` passed across the release-gate matrix. |
+| Orchestration | `sentinel` passed 6/6 inside the release gate (`/tmp/sentinel-20260601-121604.json`); the earlier focused full sentinel `/tmp/sentinel-20260601-120416.json` also passed 6/6. The bounded MCP warmup grace did not fire in the green run; it remains a 1× backup for the documented ACP-Claude MCP cold-start race. |
+| Messaging / continuity | `session-messaging` passed 4/4; `verify-resume` cross-cwd recall passed (`cross-cwd-mpun5963-pvqffz`). |
+| Compaction policy | `LIVE=1 smoke-compaction-policy` passed the release contract; Gemini remained an observed backend property row where `/compact` acknowledgement did not imply sentinel recall. |
+| Tool-surface truthfulness | `xt-tool-surface` rejected backend built-in `-xt` requests up front and honored the extension-tool exemption. |
+| Scratch cwd hygiene | Sentinel and session-messaging artifacts point at the scratch project session dir (`--tmp-claude-1000-psa-rg-082.HVwOvk--`), not the repo session dir. |
+
+Evidence: `/tmp/pi-tmux-release-gate-082.log`, `/tmp/sentinel-20260601-121604.json`, `/tmp/sentinel-20260601-120416.json`, `/tmp/session-messaging-smoke-20260601-121843.json`, scratch `/tmp/claude-1000/psa-rg-082.HVwOvk`.
+
 ## [2026-05-31 Sun] — 0.8.1 release-gate baseline
 
 Release-facing baseline for the 0.8.1 hotfix cut: the single `./run.sh release-gate /tmp/psa-release-gate-0811c.Z7L4VB` command remains the full static + live verification floor. It was invoked from the repo cwd and completed with **15 PASS / 0 FAIL / 0 SKIP** with Gemini present and no `--allow-skip-gemini`.

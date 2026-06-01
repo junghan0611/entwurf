@@ -3511,7 +3511,7 @@ export function getBridgeErrorDetails(error: unknown, session?: AcpBridgeSession
 }
 
 // Match the Anthropic API 400 surfaces that classify a resumed/loaded ACP
-// session's transcript as unusable. Two known shapes today:
+// session's transcript as unusable. Known shapes today:
 //
 //   1. "cache_control cannot be set for empty text blocks" — an empty text
 //      content block carries a cache breakpoint placed by the SDK.
@@ -3519,18 +3519,26 @@ export function getBridgeErrorDetails(error: unknown, session?: AcpBridgeSession
 //      an empty user/text content block survives in the transcript and the
 //      validator rejects every send. Caught via demo-style synthetic repro
 //      on 2026-05-12.
+//   3. "`thinking` or `redacted_thinking` blocks in the latest assistant
+//      message cannot be modified" — Opus 4.8 signed thinking-block replay
+//      rejection observed through claude-agent-acp on 2026-06-01.
 //
-// Both share the same failure mode: the persisted backend transcript is
-// permanently rejected, every resume of the same acpSessionId collides with
-// the same poison until the persisted record is dropped. Keep this narrow —
-// the second surface is gated by an `API Error: 400 messages` prefix check
-// so transient/network/auth/non-400 errors that happen to mention "text
-// content blocks" do not trigger invalidation.
+// All share the same recovery shape: the persisted backend transcript is
+// rejected on resume/load, and every reuse of the same acpSessionId collides
+// with the same poison until the persisted record is dropped. Keep this
+// narrow — surfaces 2 and 3 are gated by an `API Error: 400 messages` prefix
+// check so transient/network/auth/non-400 errors that happen to mention the
+// adjacent substrings do not trigger invalidation.
 export function isTranscriptPoisonError(error: unknown): boolean {
 	const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
 	if (message.includes("cache_control cannot be set for empty text blocks")) {
 		return true;
 	}
 	const isMessages400 = message.includes("API Error: 400 messages") || message.includes("400 messages:");
-	return isMessages400 && message.includes("text content blocks must be non-empty");
+	if (!isMessages400) return false;
+	if (message.includes("text content blocks must be non-empty")) return true;
+	return (
+		message.includes("`thinking` or `redacted_thinking` blocks") &&
+		message.includes("latest assistant message cannot be modified")
+	);
 }
