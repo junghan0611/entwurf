@@ -64,7 +64,7 @@ Usage:
   ./run.sh check-auth-boundary        # local deterministic guard (#26): no legacy-ENV apiKey literal (e.g. "ANTHROPIC_API_KEY") in root bridge code (index.ts/acp-bridge.ts)
   ./run.sh check-sdk-surface          # static gate: every (connection as any) cast in acp-bridge.ts is annotated SDK_CAST_OK or SDK_CAST_DEBT
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
-  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.77.x peers
+  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.78.x peers
   ./run.sh check-models               # local deterministic check of MODELS contextWindow defaults (sonnet 200K, opus 1M) + override
   ./run.sh check-claude-sessions [project-dir]  # compare pi persisted sessions vs Claude SDK session visibility
   ./run.sh verify-resume [project-dir] # exact pi -> ACP -> Claude continuity check with visible acpSessionId diagnostics
@@ -3087,7 +3087,7 @@ check_pack_install() {
   # repo packages with; --ignore-workspace stops it from re-attaching
   # to our pnpm-workspace.yaml; --ignore-scripts blocks the husky
   # prepare hook (and any future install scripts) from running inside
-  # the consumer project. Peer deps are pinned to the 0.77.x release
+  # the consumer project. Peer deps are pinned to the 0.78.x release
   # baseline so the smoke matches the same shape an external pi user
   # would have after `pi install`.
   local tmp
@@ -3096,13 +3096,13 @@ check_pack_install() {
 
   printf '%s\n' '{ "name": "pi-shell-acp-install-smoke", "version": "0.0.0", "private": true }' > "$tmp/package.json"
 
-  echo "[check-pack-install] pnpm add into $tmp (with 0.77.x peers + typebox)"
+  echo "[check-pack-install] pnpm add into $tmp (with 0.78.x peers + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.77.0" \
-    "@earendil-works/pi-coding-agent@0.77.0" \
-    "@earendil-works/pi-tui@0.77.0" \
+    "@earendil-works/pi-ai@0.78.0" \
+    "@earendil-works/pi-coding-agent@0.78.0" \
+    "@earendil-works/pi-tui@0.78.0" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"

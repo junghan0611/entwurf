@@ -74,16 +74,16 @@
 		"zod": "^3.25.0 || ^4.0.0"
 	},
 	"peerDependencies": {
-		"@earendil-works/pi-ai": "*",
-		"@earendil-works/pi-coding-agent": "*",
-		"@earendil-works/pi-tui": "*",
+		"@earendil-works/pi-ai": ">=0.78.0",
+		"@earendil-works/pi-coding-agent": ">=0.78.0",
+		"@earendil-works/pi-tui": ">=0.78.0",
 		"typebox": "*"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.13",
-		"@earendil-works/pi-ai": "0.77.0",
-		"@earendil-works/pi-coding-agent": "0.77.0",
-		"@earendil-works/pi-tui": "0.77.0",
+		"@earendil-works/pi-ai": "0.78.0",
+		"@earendil-works/pi-coding-agent": "0.78.0",
+		"@earendil-works/pi-tui": "0.78.0",
 		"@types/node": "^24.3.0",
 		"husky": "^9.1.7",
 		"typescript": "^6.0.2"
