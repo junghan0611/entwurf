@@ -61,7 +61,7 @@ const AGENT_DIR = process.env.PI_CODING_AGENT_DIR
 const PI_SETTINGS_PATH = process.env.PI_SETTINGS_PATH
 	? expandTilde(process.env.PI_SETTINGS_PATH)
 	: path.join(AGENT_DIR, "settings.json");
-const SESSIONS_BASE = path.join(AGENT_DIR, "sessions");
+export const SESSIONS_BASE = path.join(AGENT_DIR, "sessions");
 const ENTWURF_TARGETS_PATH = process.env.PI_ENTWURF_TARGETS_PATH ?? path.join(AGENT_DIR, "entwurf-targets.json");
 export const DEFAULT_ENTWURF_MODEL = "openai-codex/gpt-5.4";
 export const ENTWURF_CODEX_ACP_ENV = "PI_ENTWURF_ACP_FOR_CODEX";
@@ -511,25 +511,38 @@ export function parseMessages(messages: AssistantMessageLike[]): string {
  * helper returns `id` alongside `cwd` so future peer-handle work can reuse it
  * without re-reading the file.
  */
+const SESSION_HEADER_READ_BYTES = 8192;
+
 export function readSessionHeader(sessionFile: string): { id?: string; cwd?: string } | null {
+	let fd: number | undefined;
 	try {
-		const content = fs.readFileSync(sessionFile, "utf-8");
-		for (const line of content.split("\n")) {
-			const trimmed = line.trim();
-			if (!trimmed) continue;
-			try {
-				const entry = JSON.parse(trimmed) as { type?: string; id?: unknown; cwd?: unknown };
-				if (entry.type !== "session") return null;
-				const id = typeof entry.id === "string" && entry.id.length > 0 ? entry.id : undefined;
-				const cwd = typeof entry.cwd === "string" && entry.cwd.length > 0 ? entry.cwd : undefined;
-				return { id, cwd };
-			} catch {
-				return null;
-			}
-		}
-		return null;
+		fd = fs.openSync(sessionFile, "r");
+		const buffer = Buffer.alloc(SESSION_HEADER_READ_BYTES);
+		const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+		if (bytesRead <= 0) return null;
+
+		// Session header is the first JSONL line. Read only a bounded prefix so
+		// header scans over many large transcripts cannot load/split whole files.
+		const prefix = buffer.subarray(0, bytesRead).toString("utf8");
+		const newlineIdx = prefix.indexOf("\n");
+		const trimmed = (newlineIdx >= 0 ? prefix.slice(0, newlineIdx) : prefix).trim();
+		if (!trimmed) return null;
+
+		const entry = JSON.parse(trimmed) as { type?: string; id?: unknown; cwd?: unknown };
+		if (entry.type !== "session") return null;
+		const id = typeof entry.id === "string" && entry.id.length > 0 ? entry.id : undefined;
+		const cwd = typeof entry.cwd === "string" && entry.cwd.length > 0 ? entry.cwd : undefined;
+		return { id, cwd };
 	} catch {
 		return null;
+	} finally {
+		if (fd !== undefined) {
+			try {
+				fs.closeSync(fd);
+			} catch {
+				/* best-effort close */
+			}
+		}
 	}
 }
 
@@ -923,6 +936,277 @@ export function findEntwurfSessionFile(taskId: string): string | null {
 		/* sessions base missing */
 	}
 	return null;
+}
+
+// ============================================================================
+// Garden session identity & name grammar (0.9.0 / 1.0.0) — locked SSOT
+//
+// See NEXT.md "Locked — session identity & name grammar". This block is the
+// ONLY place that assembles or parses a session name; nothing builds it by hand.
+//
+// Authority separation (do not blur):
+//   - lookup / resume authority  = JSONL header `id` + header `cwd`. Filenames
+//     are a Pi artifact and are NEVER parsed for logic.
+//   - model authority            = JSONL first `model_change` + the
+//     provider/model re-supplied on resume.
+//   - session name               = display / search / integrity-mirror only.
+//     title and tags carry zero logic. A name's provider/model mismatch is NOT
+//     a routing signal — it is corrupt-metadata, surfaced via fail-fast.
+//
+// Grammar:
+//   sessionId = YYYYMMDDTHHMMSS-[0-9a-f]{6}          (= JSONL header id)
+//   name      = {sessionId}=={provider}/{model}--{titleSlug}__{tag}_{tag}
+//     ==  signature delimiter | --  title delimiter
+//     __  tag-section start   | _   tag separator
+//   provider/model = entwurf-targets.json EXACT tuple (no regex model
+//                    invention; `.`-bearing models gpt-5.5 / gemini-3.1-pro-preview
+//                    are real).
+//   titleSlug      = ascii slug, lowercase, hyphen ok, NO underscore. Raw title
+//                    is free input; the builder canonicalizes it.
+//   tags           = lowercase alnum, `_`-separated. `entwurf` tag ⇒ Entwurf.
+// ============================================================================
+
+export class SessionIdentityError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "SessionIdentityError";
+	}
+}
+
+/** `YYYYMMDDTHHMMSS-[0-9a-f]{6}`. Anchored; no surrounding slop. */
+export const SESSION_ID_RE = /^\d{8}T\d{6}-[0-9a-f]{6}$/;
+
+const SESSION_TAG_RE = /^[a-z0-9]+$/;
+/** Canonical titleSlug: lowercase-alnum words joined by single hyphens, no edges. */
+const TITLE_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function isValidSessionId(value: unknown): value is string {
+	return typeof value === "string" && SESSION_ID_RE.test(value);
+}
+
+/**
+ * Local (KST on operator machines) denote-style timestamp `YYYYMMDDTHHMMSS`.
+ * Garden sort sense. Local components on purpose — the denote corpus is local.
+ */
+export function formatSessionTimestamp(now: Date = new Date()): string {
+	const p = (n: number, w = 2) => String(n).padStart(w, "0");
+	return (
+		`${p(now.getFullYear(), 4)}${p(now.getMonth() + 1)}${p(now.getDate())}` +
+		`T${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`
+	);
+}
+
+/**
+ * Parent generates the durable sessionId before spawn (async spawn means the
+ * child cannot self-report it back). 6 hex suffix defeats same-second parallel
+ * spawn collision; the parent still header-scan pre-checks (assertSessionIdAvailableForSpawn).
+ */
+export function generateSessionId(now: Date = new Date()): string {
+	return `${formatSessionTimestamp(now)}-${crypto.randomBytes(3).toString("hex")}`;
+}
+
+/**
+ * Canonicalize a human/agent raw title into an ascii slug. lowercase; every
+ * non-`[a-z0-9]` run (spaces, unicode, punctuation, `_`, `__`) collapses to a
+ * single `-`; trimmed. Empty → fallback (`untitled`). underscore is destroyed
+ * here so a raw title can never smuggle a tag delimiter into the slug.
+ */
+export function slugifyTitle(rawTitle: string | undefined, fallback = "untitled"): string {
+	const norm = (s: string) =>
+		s
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, "-")
+			.replace(/^-+|-+$/g, "");
+	return norm(rawTitle ?? "") || norm(fallback) || "untitled";
+}
+
+/**
+ * Exact-tuple membership against the entwurf target registry. Existence, not
+ * `enabled` — a session may have been spawned while the target was enabled and
+ * later disabled; its name must still validate. Integrity mirror, not a routing gate.
+ */
+export function isKnownProviderModel(provider: string, model: string): boolean {
+	let targets: EntwurfTarget[];
+	try {
+		targets = loadEntwurfTargets().entwurfTargets;
+	} catch {
+		return false;
+	}
+	return targets.some((t) => t.provider === provider && t.model === model);
+}
+
+export interface BuildSessionNameInput {
+	sessionId: string;
+	provider: string;
+	model: string;
+	/** Free human/agent input; canonicalized to a slug by the builder. */
+	rawTitle?: string;
+	/** lowercase-alnum tags. `entwurf` marks an Entwurf session. */
+	tags?: string[];
+}
+
+export interface ParsedSessionName {
+	sessionId: string;
+	provider: string;
+	model: string;
+	titleSlug: string;
+	tags: string[];
+}
+
+/**
+ * Assemble a canonical session name — the ONLY way to produce a `--name` value.
+ * Validates sessionId grammar, registry tuple, tag charset; canonicalizes title.
+ * Throws SessionIdentityError on any violation; corrupt metadata must never reach `--name`.
+ */
+export function buildSessionName(input: BuildSessionNameInput): string {
+	const { sessionId, provider, model, rawTitle, tags = [] } = input;
+
+	if (!isValidSessionId(sessionId)) {
+		throw new SessionIdentityError(`Invalid sessionId "${sessionId}": expected YYYYMMDDTHHMMSS-[0-9a-f]{6}.`);
+	}
+	if (!provider || provider.includes("/") || provider.includes("=") || provider.includes("--")) {
+		throw new SessionIdentityError(`Invalid provider "${provider}" for session name.`);
+	}
+	if (!model || model.includes("/") || model.includes("=") || model.includes("--")) {
+		throw new SessionIdentityError(`Invalid model "${model}" for session name.`);
+	}
+	if (!isKnownProviderModel(provider, model)) {
+		throw new SessionIdentityError(
+			`provider/model "${provider}/${model}" is not an exact tuple in the entwurf target registry. ` +
+				`Session names mirror a real (provider, model); do not invent one.`,
+		);
+	}
+	for (const tag of tags) {
+		if (!SESSION_TAG_RE.test(tag)) {
+			throw new SessionIdentityError(`Invalid tag "${tag}": tags must match /^[a-z0-9]+$/.`);
+		}
+	}
+
+	const titleSlug = slugifyTitle(rawTitle);
+	const base = `${sessionId}==${provider}/${model}--${titleSlug}`;
+	return tags.length > 0 ? `${base}__${tags.join("_")}` : base;
+}
+
+/**
+ * Parse a canonical session name into its fields. Returns `null` on any
+ * structural violation. Pure string work — does NOT consult the registry, so it
+ * stays usable for diagnostics on a name whose target was later removed.
+ */
+export function parseSessionName(name: string): ParsedSessionName | null {
+	if (typeof name !== "string") return null;
+
+	const sigIdx = name.indexOf("==");
+	if (sigIdx < 0) return null;
+	const sessionId = name.slice(0, sigIdx);
+	if (!isValidSessionId(sessionId)) return null;
+
+	const rest = name.slice(sigIdx + 2);
+
+	// First `--` is the title delimiter. provider/model and titleSlug each carry
+	// only single hyphens (registry models have no `--`; slugify collapses runs),
+	// so the first `--` is unambiguous.
+	const titleIdx = rest.indexOf("--");
+	if (titleIdx < 0) return null;
+	const providerModel = rest.slice(0, titleIdx);
+	const titleAndTags = rest.slice(titleIdx + 2);
+
+	const slashIdx = providerModel.indexOf("/");
+	if (slashIdx < 0) return null;
+	const provider = providerModel.slice(0, slashIdx);
+	const model = providerModel.slice(slashIdx + 1);
+	if (!provider || !model || model.includes("/")) return null;
+
+	let titleSlug = titleAndTags;
+	let tags: string[] = [];
+	const tagIdx = titleAndTags.indexOf("__");
+	if (tagIdx >= 0) {
+		titleSlug = titleAndTags.slice(0, tagIdx);
+		tags = titleAndTags.slice(tagIdx + 2).split("_");
+		if (tags.some((t) => !SESSION_TAG_RE.test(t))) return null;
+	}
+	// canonical-only: a parseable name must carry a slug the builder could emit
+	// (lowercase-alnum + single hyphens). Rejects spaces/uppercase/unicode and
+	// any raw delimiter that slipped through.
+	if (!TITLE_SLUG_RE.test(titleSlug)) return null;
+
+	return { sessionId, provider, model, titleSlug, tags };
+}
+
+/** `entwurf` tag present ⇒ Entwurf session. Reads name as a discovery hint only. */
+export function isEntwurfSessionName(name: string): boolean {
+	const parsed = parseSessionName(name);
+	return parsed ? parsed.tags.includes("entwurf") : false;
+}
+
+/**
+ * All session files whose JSONL header `id` equals `sessionId`, across every
+ * cwd-encoded session dir. Header is the sole authority — every `.jsonl` header
+ * is read; the filename is NOT used to pre-filter (a renamed/relocated file with
+ * the right header still matches, a filename-only match with a different header
+ * does not). Returns `[]` on invalid id or missing base.
+ */
+export function findSessionFilesById(sessionId: string): string[] {
+	if (!isValidSessionId(sessionId)) return [];
+	let dirs: string[];
+	try {
+		dirs = fs.readdirSync(SESSIONS_BASE);
+	} catch {
+		return [];
+	}
+	const matches: string[] = [];
+	for (const dir of dirs) {
+		const dirPath = path.join(SESSIONS_BASE, dir);
+		let files: string[];
+		try {
+			if (!fs.statSync(dirPath).isDirectory()) continue;
+			files = fs.readdirSync(dirPath);
+		} catch {
+			continue;
+		}
+		for (const file of files) {
+			if (!file.endsWith(".jsonl")) continue;
+			const full = path.join(dirPath, file);
+			if (readSessionHeader(full)?.id === sessionId) matches.push(full);
+		}
+	}
+	return matches;
+}
+
+/**
+ * Resolve a sessionId to its single session file by header scan. `null` if none,
+ * the path if exactly one, and **throws** `SessionIdentityError` if the same
+ * header id exists in more than one session (the wrong-cwd duplicate footgun) —
+ * resume must never silently pick one of several ambiguous sessions.
+ */
+export function findSessionFileById(sessionId: string): string | null {
+	const matches = findSessionFilesById(sessionId);
+	if (matches.length === 0) return null;
+	if (matches.length > 1) {
+		throw new SessionIdentityError(
+			`sessionId "${sessionId}" is ambiguous: ${matches.length} sessions carry this header id ` +
+				`(${matches.join(", ")}). This is the wrong-cwd duplicate footgun; refuse rather than guess.`,
+		);
+	}
+	return matches[0] ?? null;
+}
+
+/**
+ * Parent-side collision pre-check before spawning with `--session-id`. Throws if
+ * any existing session (in ANY cwd dir) already carries this header id —
+ * `--session-id` would otherwise silently open/append to it. Duplicate-across-cwd
+ * is included on purpose (the wrong-cwd footgun).
+ */
+export function assertSessionIdAvailableForSpawn(sessionId: string): void {
+	if (!isValidSessionId(sessionId)) {
+		throw new SessionIdentityError(`Refusing to spawn with invalid sessionId "${sessionId}".`);
+	}
+	const existing = findSessionFilesById(sessionId);
+	if (existing.length > 0) {
+		throw new SessionIdentityError(
+			`sessionId "${sessionId}" already exists (${existing.length}): ${existing.join(", ")}. ` +
+				`Spawning with this id would append to an existing session, not create a new one.`,
+		);
+	}
 }
 
 export interface EntwurfResumeOptions {

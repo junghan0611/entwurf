@@ -52,6 +52,7 @@ Usage:
   ./run.sh check-mcp                  # local deterministic check of normalizeMcpServers() — no Claude/ACP subprocess
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
+  ./run.sh check-entwurf-session-identity # deterministic gate for locked garden session identity & name grammar (sessionId/buildSessionName/parse/collision), no API
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
   ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
@@ -1128,6 +1129,16 @@ check_shell_quote() {
   # payload classes that caused the 2026-05-18 remote entwurf incident
   # (backtick / $(...) / $VAR / korean tokens). No process spawn, no SSH.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-shell-quote.ts)
+}
+
+check_entwurf_session_identity() {
+  # Deterministic gate for the locked garden session identity & name grammar
+  # (NEXT.md "Locked — session identity & name grammar"): sessionId validator,
+  # buildSessionName/parseSessionName round-trip incl. `.`-bearing registry
+  # models, titleSlug canonicalization, registry exact-tuple membership, name=
+  # info-only invariants, and header-scan collision pre-check. Isolates registry
+  # + sessions base to a temp dir. No backend, no API, no spawn.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-session-identity.ts)
 }
 
 check_plugin_empty_final_recovery() {
@@ -3957,6 +3968,9 @@ case "$cmd" in
     ;;
   check-shell-quote)
     check_shell_quote
+    ;;
+  check-entwurf-session-identity)
+    check_entwurf_session_identity
     ;;
   check-plugin-empty-final-recovery)
     check_plugin_empty_final_recovery

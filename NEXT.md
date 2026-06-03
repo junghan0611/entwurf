@@ -69,21 +69,30 @@ Phase 1 substrate notes (Claude review boost, fold into the smoke before writing
 - **The smoke harness must guarantee the bridge extension is loaded for the direct `pi` call.** A bare `pi --provider pi-shell-acp` only resolves if pi-shell-acp is installed in the scratch settings or injected with `-e <bridge>`. Mirror `smoke-installed-entwurf-acp`'s bridge-loading (resolve the bridge root, pass `-e`) so the substrate proof also confirms the bridge and the new primitives coexist, rather than silently testing a bridge-less `pi`.
 - **Grammar-agnostic:** Phase 1 may use any literal valid test id (e.g. `20260601T000000-test01`); it does **not** commit to the production `sessionId` grammar (decision #1) or the 1.0.0 garden-id namespace question. Those stay in Phase 2+.
 
-**Phase 2 — control routines on top of proven substrate**
+**Phase 2 — control routines on top of proven substrate — ✅ LANDED (helpers + deterministic gate)**
 
-Only after Phase 1 is green:
-- add helper routines for generating ids, resolving sessions by header id, collision pre-check, duplicate fail-fast, and the `buildSessionName(...)` builder/parser (see locked grammar);
-- test those helpers deterministically;
-- still avoid public schema rename until helpers are proven.
+Done in `entwurf-core.ts` (locked-grammar SSOT, merged here because it is the only strip-types-safe core that already owns SESSIONS_BASE / readSessionHeader / registry):
+- `generateSessionId` / `isValidSessionId` / `formatSessionTimestamp`;
+- `slugifyTitle` (raw → canonical slug; `_`/`__`/unicode destroyed);
+- `isKnownProviderModel` (registry **exact tuple**, `.`-bearing models real);
+- `buildSessionName(...)` (only assembly surface, fail-fast on bad id/tuple/tag) + `parseSessionName(...)` (canonical-only via `TITLE_SLUG_RE`) + `isEntwurfSessionName`;
+- `findSessionFilesById` / `findSessionFileById` (header scan = authority, **throws on duplicate-across-cwd**) + `assertSessionIdAvailableForSpawn`;
+- `readSessionHeader` hardened to a bounded 8192-byte prefix read (no whole-transcript load — Gemini OOM catch).
+- Gate `check-entwurf-session-identity` (80 assertions, no backend) wired into `pnpm check` + `pnpm run` alias.
+- Still NO public schema rename; `taskId` execution path untouched.
 
-**Phase 3 — Entwurf sync path pilot**
+**Phase 3 — Entwurf sync path pilot — ← CURRENT NEXT**
 
-Only after Phase 2:
-- pilot sync spawn/resume using `--session-id` + `--name` behind the internal core path;
+Now that helpers are proven:
+- wire `runEntwurfSync` to `generateSessionId` + `assertSessionIdAvailableForSpawn` + `buildSessionName` + `--session-id`/`--name` (drop `${ts}_entwurf-${taskId}.jsonl` species);
+- wire `runEntwurfResumeSync` to `findSessionFileById` (header scan) + header-cwd authority + `--session-id`;
+- live 3-turn `smoke-session-id-name` (B): same-cwd append, spawn-only name, wrong-cwd footgun-as-evidence;
 - prove append-not-recreate (T4) and cross-cwd authority (T5);
 - then decide whether async/MCP/docs migration is safe.
 
-Later phases remain: async state (`sessionId` + internal `runId`), MCP/control schema rename, sentinel/async-resume/compaction migration, docs/#31 recipe, and consumer lockstep (`entwurf-peek`, semantic-memory). But those are not Phase 1.
+Later phases remain: async state (`sessionId` + internal `runId`), MCP/control schema rename, sentinel/async-resume/compaction migration, docs/#31 recipe, and consumer lockstep (`entwurf-peek`, semantic-memory).
+
+**Residual note (not a blocker):** `readSessionHeader`'s bounded read returns `null` if a header's first line exceeds 8192 bytes (truncated JSON.parse fails silently). Real pi headers are <1KB so this is 8x margin, but if ever tightened: when `newlineIdx < 0 && bytesRead === buffer.length`, treat as "header did not fit" explicitly (grow or error) rather than silent null.
 
 ### Action plan before implementation
 
