@@ -58,6 +58,7 @@ Usage:
   ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
   ./run.sh check-package-source-routing # deterministic gate (#29): package-source -> install-root mapping + fail-fast routing (local/git/npm/missing/project/no-source × local+remote, self-root, resume), no backend
   ./run.sh smoke-installed-entwurf-acp # live counterpart (#29): git+npm package sources plus packed tarball resolve + a --no-extensions child registers provider pi-shell-acp (credential-free --list-models proof)
+  ./run.sh smoke-session-id-name      # live 3-turn substrate smoke (Phase 3a): Pi 0.78 --session-id/--name through the bridge — header id/cwd, session_info name, append-not-recreate, spawn-only name, wrong-cwd footgun evidence
   ./run.sh smoke-async-resume [backends...] # live async-resume smoke (Claude+Codex+Gemini + handler/external cases), required before entwurf releases
   ./run.sh check-backends             # local deterministic check of backend launch resolution + backend-specific _meta shape
   ./run.sh check-registration         # local deterministic check of per-runtime provider registration semantics
@@ -1382,6 +1383,26 @@ smoke_installed_entwurf_acp() {
     "$pack_agent" || return 1
 
   ok "[smoke-installed-entwurf-acp] git+npm symlink + npm-packed package sources pass"
+  return 0
+}
+
+smoke_session_id_name() {
+  # LIVE 3-turn substrate smoke (Phase 3a) for Pi 0.78 --session-id/--name,
+  # exercised through the bridge but NOT through the Entwurf tool surface, so it
+  # lands independently of the taskId->sessionId migration. Spawns real cheap
+  # sonnet turns (auth + tokens) and asserts: header id/cwd, session_info name as
+  # info layer, append-not-recreate, spawn-only name, and the wrong-cwd footgun
+  # as documented evidence. Isolated via a temp PI_CODING_AGENT_DIR.
+  section "smoke: --session-id / --name substrate (direct pi, no Entwurf API)"
+  if ! command -v pi >/dev/null 2>&1; then
+    fail "[smoke-session-id-name] pi binary not on PATH — cannot run live substrate proof"
+    return 1
+  fi
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-session-id-name.ts) || {
+    fail "[smoke-session-id-name] live substrate smoke failed"
+    return 1
+  }
+  ok "[smoke-session-id-name] --session-id/--name substrate proven (append + spawn-only name + wrong-cwd footgun)"
   return 0
 }
 
@@ -3986,6 +4007,9 @@ case "$cmd" in
     ;;
   smoke-installed-entwurf-acp)
     smoke_installed_entwurf_acp
+    ;;
+  smoke-session-id-name)
+    smoke_session_id_name
     ;;
   smoke-async-resume)
     shift

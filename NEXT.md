@@ -87,10 +87,11 @@ Before leaning on resume as a hot path, harden the second whole-file reader (ses
 - `analyzeSessionFileLike` still does `readFileSync` + `content.trim().split("\n")`. Convert to a **sync chunked line reader** (fs.readSync loop, byte-level `\n` split, per-line utf8 decode so chunk boundaries never corrupt multibyte chars). **Keep the sync signature** — 5+ sync call sites (entwurf.ts, entwurf-async.ts, cross-cwd/compaction smokes; sentinel re-implements in bash). Behavior must stay byte-for-byte equal; existing cross-cwd/compaction smokes assert its output.
 - Add a deterministic "1 MB+ body analysis stays bounded + correct" assertion to `check-entwurf-session-identity` (it already covers the bounded `readSessionHeader`).
 
-**Phase 3a — direct-pi substrate smoke (no public API change)**
-- live 3-turn `smoke-session-id-name` (B): same-cwd append, spawn-only name, wrong-cwd footgun-as-evidence. Direct `pi --session-id`/`--name` through the bridge; **does not touch the Entwurf tool surface**, so it is safe to land alone.
+**Phase 3a — direct-pi substrate smoke (no public API change) — ✅ LANDED**
+- `scripts/smoke-session-id-name.ts` + `./run.sh smoke-session-id-name`: live 3-turn smoke dogfooding the locked helpers against a real `pi` process. Proven live: T1 header id==sessionId + header cwd==launch cwd + `session_info.name`==denote name (info layer); T2 append-not-recreate (turns 1→2, same file, name unchanged without `--name` = spawn-only); T3 wrong-cwd footgun (same id → 2 sessions under different cwds) recorded as evidence. Pi names the file `<created-at>_<sessionId>.jsonl` natively. Does NOT touch the Entwurf tool surface.
+- TODO: wire `smoke-session-id-name` into `release-gate` before the Entwurf live gates (LIVE / token-costing — GLG decides placement).
 
-**Phase 3b — atomic Entwurf sync migration (lockstep, single slice)**
+**Phase 3b — atomic Entwurf sync migration (lockstep, single slice) — ← CURRENT NEXT**
 - wire `runEntwurfSync` → `generateSessionId` + `assertSessionIdAvailableForSpawn` + `buildSessionName` + `--session-id`/`--name` (drop `${ts}_entwurf-${taskId}.jsonl` species);
 - wire `runEntwurfResumeSync` → `findSessionFileById` (header scan) + header-cwd authority + `--session-id`;
 - prove append-not-recreate (T4) and cross-cwd authority (T5).
