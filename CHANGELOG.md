@@ -2,7 +2,11 @@
 
 All notable changes to this project will be documented here. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). The repo uses semver.
 
+## Unreleased
+
 ## 0.9.0 — 2026-06-04
+
+0.9.0 is the garden-native identity release. This is not just an Entwurf handle rename: the garden's own denote-style naming scheme is imported into the session layer so Entwurf sessions stop being treated as a separate species of worker artifact. Resident sessions, Entwurf children, and the later 1.0.0 meta-bridge direction all converge on the same garden session ontology — one durable `sessionId`, one human-readable and machine-parseable name surface, one rule that the session comes first and the transcript file is only its trace.
 
 ### Changed (breaking — Entwurf public handle)
 
@@ -31,8 +35,9 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Verification
 
-- Pre-`/gnew` 0.9.0 release-gate green evidence is recorded in `BASELINE.md`; `/gnew` invalidated that baseline, so final publish requires a fresh authoritative `./run.sh release-gate <scratch>`.
+- The authoritative `/gnew`-inclusive 0.9.0 release-gate is green and recorded in `BASELINE.md`: a cut-time pi-session `./run.sh release-gate` run, **17 PASS / 0 FAIL / 0 SKIP** (Gemini present, no `--allow-skip-gemini`), with the resident garden guard at 31/0 (negative + replacement + `/gnew` 0-token E2E + positive/T3) and `check-entwurf-session-identity` at 158 assertions. It supersedes the earlier pre-`/gnew` Claude Code sweep that `/gnew` had invalidated.
 - The async-resume repair was confirmed in isolation (6 PASS / 0 FAIL across Claude/Codex/Gemini + direct-stdio + external negative paths) before the full gate cycle; `/gnew` adds its own deterministic writer coverage plus live resident-guard smoke coverage.
+- Backend-axis note (Hard Rule #7): `/gnew` T3 backend identity was live-measured on the release-gate default Claude lane (`claude-sonnet-4-6`) only. Codex/Gemini `/gnew` T3 runs are carried forward in `NEXT.md`; the general runtime matrix still remains covered by `smoke-all` across all three backends.
 
 ## 0.8.2 — 2026-06-01
 

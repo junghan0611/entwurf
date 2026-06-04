@@ -253,25 +253,27 @@ the scoring criteria so it stays scannable.
 
 ## [2026-06-04 Thu] — 0.9.0 release-gate baseline
 
-Release-facing baseline for the 0.9.0 garden-native session identity cut (#28). The single `./run.sh release-gate /tmp/claude-1000/psa-rg-090c.LFmaa4` command completed with **17 PASS / 0 FAIL / 0 SKIP** with Gemini present and no `--allow-skip-gemini`. This run is the first to include the two newly-wired garden-native identity gates ahead of the Entwurf live gates.
+Release-facing baseline for the 0.9.0 garden-native session identity cut (#28). The authoritative cut-time run is the pi-session `./run.sh release-gate /tmp/psa-rg-gnew.bmj5BU` command, completed with **17 PASS / 0 FAIL / 0 SKIP** with Gemini present and no `--allow-skip-gemini`. This is the `/gnew`-inclusive gate: it supersedes the earlier pre-`/gnew` Claude Code necessary-condition sweep (`/tmp/claude-1000/psa-rg-090c.LFmaa4`, 125-assertion identity floor), which `/gnew` invalidated. It is the first run to include the garden-native identity gates **with** the `/gnew` in-process-birth coverage ahead of the Entwurf live gates.
 
 | Axis | Baseline result |
 |---|---|
-| Static floor | `pnpm check` passed on version `0.9.0`, including the transcript-poison guard, `check-entwurf-session-identity` (125 assertions), `check-sdk-surface` (0 casts), and the package-source routing/static pack gates. |
+| Static floor | `pnpm check` passed on version `0.9.0`, including the transcript-poison guard, `check-entwurf-session-identity` (158 assertions — now covering the `/gnew` writer's fail-closed guarantees: `wx`, collision refusal, absolute cwd/sessionDir, full read-back incl. timestamp, guarded orphan cleanup), `check-sdk-surface` (0 casts), and the package-source routing/static pack gates. |
 | Identity substrate (3a) | **PASS** — `smoke-session-id-name` proved Pi `--session-id`/`--name` through the bridge: T1 header id/cwd + `session_info` name, T2 append + spawn-only name, T3 wrong-cwd footgun evidence. Fully isolated under `os.tmpdir()`. |
-| Resident guard (3c) | **PASS** — `smoke-resident-garden-guard` negative path: a non-garden (`uuidv7`) `--entwurf-control` session hard-exits before any model turn (nonzero exit, guard reason on stderr, no socket, no session file, **0 tokens**). |
+| Resident guard (3c) | **PASS (31/0)** — `smoke-resident-garden-guard` full sweep: negative path (non-garden `uuidv7` `--entwurf-control` session hard-exits before any model turn — nonzero exit, guard reason on stderr, no socket, no session file, **0 tokens**); replacement safety (builtin `/new` / `/clone` cancelled in-process, not hard-exit); `/gnew` 0-token in-process garden birth (new garden id ≠ old, no agent_start, no-rewrite-mint, socket rebound + old dropped + no uuid leak); and the opt-in positive 1-turn + `/gnew` T3 backend-identity turn (`entwurf_self` reports the new garden id). |
 | Install topology | **PASS** — `smoke-installed-entwurf-acp (#29)` passed for git source, npm source, and packed-tarball routing. |
 | Runtime backends | `smoke-all` passed across Claude, Codex, and Gemini. |
 | Async resume | `smoke-async-resume` passed across the release-gate matrix (Claude/Codex/Gemini + direct-stdio + external negatives). Completion detection now re-resolves the lazily-persisted parent session file each tick (fail-closed preserved). |
 | Native async | `check-native-async` passed via a LOCAL async spawn (remote/SSH is out of scope and fails fast in 0.9.0, #11). |
-| Orchestration | `sentinel` passed 6/6 inside the release gate (`/tmp/sentinel-20260604-104113.json`). |
+| Orchestration | `sentinel` passed 6/6 inside the release gate (`/tmp/sentinel-20260604-145958.json`). |
 | Messaging / continuity | `session-messaging` and `verify-resume` cross-cwd recall passed. |
 | Compaction policy | `LIVE=1 smoke-compaction-policy` passed the release contract. |
 | Tool-surface truthfulness | `xt-tool-surface` rejected backend built-in `-xt` requests up front and honored the extension-tool exemption. |
 
-Evidence: `/tmp/psa-release-gate-090c.log`, `/tmp/sentinel-20260604-104113.json`, scratch `/tmp/claude-1000/psa-rg-090c.LFmaa4`. Async-resume repair confirmed in isolation first (`/tmp/psa-smoke-async-resume-090-fix.log`, 6 PASS / 0 FAIL).
+Evidence (authoritative `/gnew`-inclusive gate): `/tmp/pi-tmux-release-gate-gnew.log`, `/tmp/sentinel-20260604-145958.json`, `/tmp/session-messaging-smoke-20260604-150300.json`, scratch `/tmp/psa-rg-gnew.bmj5BU`. Prior pre-`/gnew` Claude Code sweep evidence: `/tmp/psa-release-gate-090c.log`, scratch `/tmp/claude-1000/psa-rg-090c.LFmaa4`. Async-resume repair confirmed in isolation first (`/tmp/psa-smoke-async-resume-090-fix.log`, 6 PASS / 0 FAIL).
 
-> **Note — final cut gate is GLG/GPT's.** This baseline is the necessary-condition green from the Claude Code sweep (pi all off, no self-test interference). The authoritative pre-publish `release-gate` is re-run from a pi session at cut time.
+> **Backend-axis note (Hard Rule #7).** `/gnew` T3 backend identity (`PI_SESSION_ID` → backend MCP child after the in-process switch) was live-measured on the release-gate default Claude lane (`claude-sonnet-4-6`) only. Codex/Gemini `/gnew` T3 runs are carried forward in NEXT.md; the switchSession rebind is backend-agnostic at the bridge level, and the general runtime matrix stays covered by `smoke-all` across all three backends.
+
+> **Note — final cut gate is GLG/GPT's.** The pre-`/gnew` Claude Code sweep was the necessary-condition green (pi all off, no self-test interference); the authoritative pre-publish `release-gate` above was then re-run from a pi session at cut time with `/gnew` landed. GLG owns the publish/tag decision.
 
 ## [2026-06-01 Mon] — 0.8.2 release-gate baseline
 
