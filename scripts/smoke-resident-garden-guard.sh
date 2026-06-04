@@ -17,12 +17,28 @@
 #     hard-exits via process.exit(1); this smoke locks that guarantee so a
 #     regression to shutdown-only (silent token leak) fails the gate.
 #
+#   REPLACEMENT (0 tokens): builtin /new + /clone (RPC) must be CANCELLED — they
+#     would mint a non-garden uuid in-process; the pre-switch guard cancels them.
+#
+#   GNEW (0 tokens): /gnew is the garden-native in-process replacement for the
+#     blocked /new. Driven via RPC `prompt "/gnew"` (session.prompt intercepts the
+#     slash → the registered command, BEFORE any model turn). It pre-creates an
+#     empty garden session file and ctx.switchSession()es into it, so the new
+#     session is born on a garden id (header / control socket / PI_SESSION_ID),
+#     with no torn uuid. Asserts: new garden id ≠ old, 0 tokens, messageCount 0 /
+#     no conversation messages, no-rewrite-mint, socket rebound to the new id +
+#     old dropped + no uuid leak.
+#
 #   POSITIVE (opt-in, ~1 cheap turn; set SMOKE_RGG_POSITIVE=1): garden
 #     --session-id "$(./run.sh new-session-id)" → guard passes, the session file
 #     header id is the garden id, and the resident name carries the `control`
 #     tag (NEVER `entwurf` — that tag is the entwurf_resume marker).
 #
-# Cost: NEGATIVE = 0 tokens (exits before the turn). POSITIVE = ~1 cheap turn.
+#   GNEW T3 (opt-in, ~1 turn; under SMOKE_RGG_POSITIVE=1): after /gnew, one turn
+#     calls entwurf_self; the backend MCP child must report the NEW garden id —
+#     proving PI_SESSION_ID propagated through the in-process switch end to end.
+#
+# Cost: NEGATIVE + REPLACEMENT + GNEW = 0 tokens. POSITIVE + GNEW T3 = ~2 cheap turns.
 #
 set -euo pipefail
 
@@ -144,6 +160,138 @@ else
 	ok "no uuid control socket leaked"
 fi
 rm -f "$rep_err"
+
+# ─── GNEW — /gnew births a NEW garden session IN-PROCESS (RPC, 0 tokens) ─────
+# Builtin /new stays blocked (REPLACEMENT above); /gnew is its garden-native
+# replacement. /gnew pre-creates an EMPTY garden session file and ctx.switchSession()es
+# into it — switchSession→SessionManager.open() reads the garden header id BEFORE
+# session_start, so the identity (file header, control socket, PI_SESSION_ID) is the
+# garden id from the first bind: no torn uuid (unlike ctx.newSession, which mints a
+# uuid first). Driven headless via RPC prompt "/gnew" — session.prompt intercepts the
+# leading slash and runs the registered command BEFORE any model turn, so 0 tokens.
+echo "[smoke-resident-garden-guard] GNEW: /gnew in-process garden birth (RPC prompt, 0 tokens)"
+GARDEN_RE='^[0-9]{8}T[0-9]{6}-[0-9a-f]{6}$'
+gnew_sid=$(bash "$REPO/run.sh" new-session-id)
+gnew_json=$(node --experimental-strip-types "$REPO/scripts/gnew-rpc-drive.ts" "$gnew_sid" "$PROVIDER" "$MODEL" "$((TIMEOUT * 1000))") || true
+
+jstr() { printf '%s' "$gnew_json" | grep -o "\"$1\":\"[^\"]*\"" | head -1 | sed 's/.*:"//;s/"$//'; }
+g_before=$(jstr before)
+g_after=$(jstr after)
+
+if [ "$g_before" = "$gnew_sid" ]; then
+	ok "/gnew: session started on the launched garden id ($gnew_sid)"
+else
+	bad "/gnew: before id ('$g_before') != launched ($gnew_sid)"
+fi
+
+if [ -n "$g_after" ] && [ "$g_after" != "$g_before" ] && [[ "$g_after" =~ $GARDEN_RE ]]; then
+	ok "/gnew: switched to a NEW garden id ($g_after)"
+else
+	bad "/gnew: after id ('$g_after') is not a fresh garden id"
+fi
+
+if printf '%s' "$gnew_json" | grep -q '"promptOk":true'; then
+	ok "/gnew: prompt accepted (slash command intercepted, not modeled)"
+else
+	bad "/gnew: prompt not acknowledged — command may not be registered"
+fi
+
+if printf '%s' "$gnew_json" | grep -q '"agentStartSeen":true'; then
+	bad "/gnew: agent_start seen — a model turn RAN (should be a 0-token command)"
+else
+	ok "/gnew: no agent_start — 0-token command path"
+fi
+
+if printf '%s' "$gnew_json" | grep -q '"afterMsgCount":0'; then
+	ok "/gnew: new session is empty (messageCount 0, no turn)"
+else
+	bad "/gnew: new session not empty — afterMsgCount != 0"
+fi
+
+if printf '%s' "$gnew_json" | grep -q '"extensionErrors":\[\]'; then
+	ok "/gnew: no extension error (handler did not throw)"
+else
+	bad "/gnew: extension error surfaced — handler threw (switch likely did not happen)"
+fi
+
+# New session file on disk: header id IS the garden id (no-rewrite-mint). The file
+# may carry session-metadata entries (model_change / session_info) but NEVER a
+# conversation message — that is asserted separately below.
+gfile=$(find "$SESSIONS_BASE" -name "*_${g_after}.jsonl" 2>/dev/null | head -1)
+if [ -n "$gfile" ] && head -1 "$gfile" | grep -q "\"type\":\"session\"[^}]*\"id\":\"$g_after\""; then
+	ok "/gnew: new session file header id == $g_after (no uuid re-mint)"
+else
+	bad "/gnew: garden header id not found on disk for $g_after"
+fi
+# no conversation ran: the file may carry session-metadata entries
+# (model_change / session_info) but NEVER a user/assistant message.
+if [ -n "$gfile" ] && ! grep -qE '"type":"(message|user_message)"|"role":"assistant"' "$gfile"; then
+	ok "/gnew: new session carries no conversation messages (clean birth)"
+else
+	bad "/gnew: new session has conversation messages — a turn leaked"
+fi
+# /gnew sessions are first-class residents: the control-tagged garden name is set
+# at switch (the file already exists), and it must NEVER carry the entwurf tag.
+if [ -n "$gfile" ] && grep -q "\"name\":\"${g_after}==[^\"]*__control\"" "$gfile"; then
+	ok "/gnew: new session carries the 'control' resident name"
+else
+	bad "/gnew: new session missing the 'control' resident name"
+fi
+if [ -n "$gfile" ] && grep -oE "\"name\":\"${g_after}==[^\"]*\"" "$gfile" | grep -q "entwurf"; then
+	bad "/gnew: new session name carries 'entwurf' — would be resumable as a child"
+else
+	ok "/gnew: new session name does NOT carry 'entwurf'"
+fi
+
+# Control socket rebound to the new garden id; old one dropped; no uuid leak.
+# (socketsAfterSwitch is snapshotted by the driver while pi is still alive.)
+if printf '%s' "$gnew_json" | grep -q "\"${g_after}.sock\""; then
+	ok "/gnew: control socket rebound to the new garden id"
+else
+	bad "/gnew: no control socket for the new garden id after switch"
+fi
+if printf '%s' "$gnew_json" | grep -q "\"${g_before}.sock\""; then
+	bad "/gnew: old garden socket still present — switch did not drop it"
+else
+	ok "/gnew: old garden socket dropped after switch"
+fi
+if printf '%s' "$gnew_json" | grep -qE '"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.sock"'; then
+	bad "/gnew: a uuid-shaped control socket exists — torn identity"
+else
+	ok "/gnew: no uuid-shaped control socket (garden identity intact)"
+fi
+# clean up the empty garden session file /gnew created (litter hygiene)
+[ -n "$gfile" ] && rm -f "$gfile"
+
+# ─── GNEW T3 — backend identity after /gnew (entwurf_self, opt-in ~1 turn) ───
+if [ "${SMOKE_RGG_POSITIVE:-0}" = "1" ]; then
+	echo "[smoke-resident-garden-guard] GNEW T3: backend identity after /gnew (entwurf_self, 1 turn)"
+	gself_sid=$(bash "$REPO/run.sh" new-session-id)
+	self_prompt='Call the entwurf_self tool now, then reply with only the sessionId it returned.'
+	gself_json=$(node --experimental-strip-types "$REPO/scripts/gnew-rpc-drive.ts" "$gself_sid" "$PROVIDER" "$MODEL" "$((TIMEOUT * 1000))" "$self_prompt") || true
+	gs_after=$(printf '%s' "$gself_json" | grep -o '"after":"[^"]*"' | head -1 | sed 's/.*:"//;s/"$//')
+	gs_ids=$(printf '%s' "$gself_json" | grep -o '"selfEnvelopeSessionIds":\[[^]]*\]' | head -1)
+
+	if printf '%s' "$gself_json" | grep -q '"selfTurnEnded":true'; then
+		ok "/gnew T3: entwurf_self turn completed"
+	else
+		bad "/gnew T3: entwurf_self turn did not complete (timeout?)"
+	fi
+	# The envelope sessionId the backend MCP child reports MUST be the NEW garden
+	# id — proves PI_SESSION_ID propagated through streamShellAcp after the switch.
+	if [ -n "$gs_after" ] && printf '%s' "$gs_ids" | grep -q "\"$gs_after\""; then
+		ok "/gnew T3: backend entwurf_self sessionId == new garden id ($gs_after)"
+	else
+		bad "/gnew T3: backend identity mismatch — envelope did not report $gs_after (got $gs_ids)"
+	fi
+	# ...and NOT the pre-switch launched id (that would mean a torn/stale identity).
+	if printf '%s' "$gs_ids" | grep -q "\"$gself_sid\""; then
+		bad "/gnew T3: backend reported the PRE-switch id ($gself_sid) — torn identity"
+	else
+		ok "/gnew T3: backend did not report the pre-switch id (no torn identity)"
+	fi
+	[ -n "$gs_after" ] && find "$SESSIONS_BASE" -name "*_${gs_after}.jsonl" -delete 2>/dev/null || true
+fi
 
 # ─── POSITIVE — garden session passes + control name (opt-in, costs a turn) ──
 if [ "${SMOKE_RGG_POSITIVE:-0}" = "1" ]; then

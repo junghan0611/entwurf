@@ -860,6 +860,13 @@ pi --session-id "$(/path/to/pi-shell-acp/run.sh new-session-id)" \
 # socket is at ~/.pi/entwurf-control/<sessionId>.sock
 ```
 
+Inside such a session, builtin `/new` / `/fork` / `/clone` are blocked because
+those in-process paths would mint a non-garden uuid. Use `/gnew` (alias
+`/garden-new`) for a same-terminal fresh garden session; it is a zero-token
+extension command that switches into a pre-created garden session file. If you
+quit immediately, that empty session may still appear in resume lists with
+message count 0 — the switch succeeded, so the file is intentionally kept.
+
 From any other pi session on the same host:
 
 ```bash

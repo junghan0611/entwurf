@@ -387,6 +387,22 @@ pia() { pi --session-id "$(/path/to/pi-shell-acp/run.sh new-session-id)" \
             --entwurf-control --emacs-agent-socket server "$@"; }
 ```
 
+**Resuming an existing garden session.** `--session-id` is idempotent — pi documents it as *"exact id, creating it if missing"*, so passing an **existing** garden id resumes (appends to) that session, guard and all. Resume by reusing the id, NOT pi's `--session` / `--resume` pickers: those are a separate, mutually-exclusive flag (`--session-id cannot be combined with --session`) and bypass the garden-id discipline. Same flag for new and resume; only the id source differs (a fresh `new-session-id` vs an existing id):
+
+```bash
+# resume an existing garden session under --entwurf-control
+piar() {
+  local sid="$1"; shift
+  [ -n "$sid" ] || { echo "usage: piar <garden-session-id> [pi args]" >&2; return 1; }
+  pi --session-id "$sid" --entwurf-control --emacs-agent-socket server "$@"
+}
+piar 20260603T191245-a3f09c
+```
+
+The resumed session keeps its garden header id (so the guard passes) and carries over the recorded model/identity. In-process `/new`, `/fork`, `/clone` are **blocked** under `--entwurf-control` (they would mint a non-garden uuid — pi's pre-switch hook can only `cancel`, it cannot inject an id).
+
+**Starting a new garden session in-process — `/gnew`.** Instead of the blocked `/new`, type `/gnew` (alias `/garden-new`) to birth a fresh garden-native session in the SAME terminal, at zero tokens. It pre-creates an empty garden session file and `switchSession()`es into it, so the new session is born on a garden id from the first bind — header, control socket, and `PI_SESSION_ID` all garden, no torn uuid (the trap `/new`'s `ctx.newSession()` falls into, where the uuid is minted before the id could be re-stamped). The new session immediately carries the `control` resident name and a fresh control socket; the old session's socket is dropped. If you `/gnew` and quit before sending a turn, the empty session remains visible in resume lists with message count 0; that is intentional, because the switch succeeded and the file is now a legitimate resident session. Gate: `run.sh smoke-resident-garden-guard` GNEW section (0-token RPC E2E + a backend-identity `entwurf_self` turn).
+
 Enforcement (no uuid / back-compat path): a `--entwurf-control` session whose id is not garden-native is refused at `session_start` and the process **hard-exits before any model turn** (a `uuidv7` from a raw `pi --entwurf-control` blows up immediately — nonzero exit, no socket, no tokens). The status bar reads `🪛 ready` until the first assistant turn writes the session file (model still changeable), then `🪛 <gardenId>` (model locked). The resident session name is set lazily on that first turn, tagged `control` (never `entwurf`, so it is not resumable as an Entwurf child). Gates: `run.sh check-entwurf-session-identity` (deterministic) + `run.sh smoke-resident-garden-guard` (live).
 
 The human-greeted 담당자 pattern is first-class: the operator opens a pi-shell-acp session in repo B, greets it directly, then passes that `sessionId` to another session via `entwurf_send`. Spawned siblings and human-opened peers share the same messaging semantics; only the creation sequence differs.

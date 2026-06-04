@@ -1476,6 +1476,166 @@ export function assertSessionIdAvailableForSpawn(sessionId: string): void {
 	}
 }
 
+// ============================================================================
+// In-process garden-native session birth (/gnew)
+// ============================================================================
+
+/**
+ * pi's `CURRENT_SESSION_VERSION` at our pinned dep (0.78). This module MUST NOT
+ * import pi (see file header), so the version is mirrored here. A header written
+ * at the current version avoids a migrate-on-open rewrite; if pi later bumps the
+ * version, the dep-bump track owns this constant. The garden id survives a
+ * migration rewrite either way (migration preserves the header id), so a stale
+ * version is a cosmetic rewrite, never a torn identity.
+ */
+export const GARDEN_SESSION_FILE_VERSION = 3;
+
+export interface CreateGardenSessionFileInput {
+	/** Absolute cwd recorded in the header. Must be the live session cwd. */
+	cwd: string;
+	/**
+	 * The live session dir to write into — pass `ctx.sessionManager.getSessionDir()`,
+	 * NOT a value recomputed from cwd. The live dir is the authority; recomputing it
+	 * risks a mismatch with where pi actually keeps this session family.
+	 */
+	sessionDir: string;
+	/** Test seam — a fixed id to force the collision path. Defaults to a fresh one. */
+	sessionId?: string;
+	/** Test seam for the file timestamp / id stamp. Defaults to now. */
+	now?: Date;
+}
+
+export interface CreatedGardenSessionFile {
+	sessionId: string;
+	sessionFile: string;
+}
+
+/**
+ * Pre-create an EMPTY garden-native session JSONL (header only) that
+ * `ctx.switchSession(file)` can adopt in-process WITHOUT a torn identity.
+ *
+ * Why a precreated file + switchSession, and not `ctx.newSession({setup})`:
+ * pi's `newSession()` runs `SessionManager.create()` (which mints a fresh uuid)
+ * and fires `session_start` BEFORE the `setup` callback could re-stamp the id —
+ * so the backend/bridge identity (PI_SESSION_ID, control socket, ACP stream
+ * sessionId) binds to the uuid first and a later header rewrite only tears it.
+ * `switchSession()` instead runs `SessionManager.open(file)`, which reads the
+ * header id BEFORE `session_start`, so the garden id is the identity from the
+ * very first bind. No uuid moment ever exists.
+ *
+ * THE TRAP this guards: `SessionManager.setSessionFile()` silently calls
+ * `newSession()` (→ a fresh uuid, and rewrites the file) if it opens a file whose
+ * header is empty/invalid. So the ONLY thing standing between us and a torn
+ * identity is this header being perfectly valid. We therefore write with `wx`
+ * (never overwrite), then read the bytes back and assert they parse to the exact
+ * header — unlinking and throwing on ANY mismatch so a corrupt header can never
+ * reach `switchSession`. Fail-closed: a broken write yields no session, not a uuid.
+ *
+ * Filename mirrors pi's own convention (`<iso-with-:.replaced>_<id>.jsonl`) so the
+ * file is indistinguishable from a launcher-born garden session on disk.
+ */
+export function createGardenSessionFile(input: CreateGardenSessionFileInput): CreatedGardenSessionFile {
+	const { cwd, sessionDir, now = new Date() } = input;
+	const sessionId = input.sessionId ?? generateSessionId(now);
+
+	if (!isValidSessionId(sessionId)) {
+		throw new SessionIdentityError(`Refusing to create garden session file with invalid id "${sessionId}".`);
+	}
+	if (!cwd || !path.isAbsolute(cwd)) {
+		throw new SessionIdentityError(`createGardenSessionFile requires an absolute cwd, got "${cwd}".`);
+	}
+	if (!sessionDir || !path.isAbsolute(sessionDir)) {
+		throw new SessionIdentityError(
+			`createGardenSessionFile requires an absolute sessionDir (ctx.sessionManager.getSessionDir()), got "${sessionDir}".`,
+		);
+	}
+
+	// Collision pre-check (header scan across ALL cwd dirs): switching into an id
+	// that already exists would APPEND to that session, not create a new one.
+	assertSessionIdAvailableForSpawn(sessionId);
+
+	const timestamp = now.toISOString();
+	const fileTimestamp = timestamp.replace(/[:.]/g, "-"); // pi's filename convention
+	const sessionFile = path.join(sessionDir, `${fileTimestamp}_${sessionId}.jsonl`);
+
+	const header = { type: "session", version: GARDEN_SESSION_FILE_VERSION, id: sessionId, timestamp, cwd };
+	const line = `${JSON.stringify(header)}\n`;
+
+	fs.mkdirSync(sessionDir, { recursive: true });
+
+	// wx — never overwrite. A file already at this exact path is a hard refuse (an
+	// in-flight same-ms collision the header scan could miss). Fail-closed.
+	try {
+		fs.writeFileSync(sessionFile, line, { flag: "wx" });
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException)?.code === "EEXIST") {
+			throw new SessionIdentityError(
+				`Garden session file already exists at ${sessionFile}; refusing to overwrite (wx).`,
+			);
+		}
+		throw err;
+	}
+
+	// Fail-closed read-back: parse the bytes we just wrote and assert the full
+	// header shape. ANY mismatch → unlink + throw, so switchSession never opens a
+	// header that would re-mint a uuid (the setSessionFile trap above).
+	let readBack: { type?: unknown; version?: unknown; id?: unknown; cwd?: unknown; timestamp?: unknown };
+	try {
+		const raw = fs.readFileSync(sessionFile, "utf8");
+		const firstLine = raw.split("\n", 1)[0] ?? "";
+		readBack = JSON.parse(firstLine) as typeof readBack;
+	} catch (err) {
+		try {
+			fs.unlinkSync(sessionFile);
+		} catch {
+			/* best-effort */
+		}
+		throw new SessionIdentityError(
+			`Garden session file read-back failed for ${sessionFile}: ${err instanceof Error ? err.message : String(err)}.`,
+		);
+	}
+	if (
+		readBack.type !== "session" ||
+		readBack.version !== GARDEN_SESSION_FILE_VERSION ||
+		readBack.id !== sessionId ||
+		readBack.cwd !== cwd ||
+		readBack.timestamp !== timestamp
+	) {
+		try {
+			fs.unlinkSync(sessionFile);
+		} catch {
+			/* best-effort */
+		}
+		throw new SessionIdentityError(
+			`Garden session file read-back mismatch for ${sessionFile}: wrote ` +
+				`{type:session,version:${GARDEN_SESSION_FILE_VERSION},id:${sessionId},timestamp:${timestamp},cwd:${cwd}} but read ` +
+				`${JSON.stringify(readBack)}. Refusing to switch into a header that would re-mint a uuid.`,
+		);
+	}
+
+	return { sessionId, sessionFile };
+}
+
+/**
+ * Best-effort removal of a garden session file we created but never adopted —
+ * the `switchSession` was cancelled or threw, so the file is an orphan. Guarded:
+ * only unlinks if the file STILL carries our header id AND has no entries beyond
+ * the header, so we never delete a session that meanwhile gained content or a
+ * different identity (a successful switch leaves a legitimate empty session that
+ * we keep, exactly like a launcher-born session quit before its first turn).
+ */
+export function removeUnadoptedGardenSessionFile(sessionFile: string, sessionId: string): void {
+	try {
+		if (readSessionHeader(sessionFile)?.id !== sessionId) return; // not ours / re-minted — leave it
+		const raw = fs.readFileSync(sessionFile, "utf8");
+		const nonEmptyLines = raw.split("\n").filter((l) => l.trim().length > 0);
+		if (nonEmptyLines.length > 1) return; // gained entries — it's a real session now
+		fs.unlinkSync(sessionFile);
+	} catch {
+		/* best-effort; an orphan header-only file is harmless litter, not a leak */
+	}
+}
+
 /**
  * Scope lock for 0.9.0 garden-native session identity: spawn/resume/status are
  * local-FS only. The sessionId collision pre-check (`assertSessionIdAvailableForSpawn`)

@@ -109,10 +109,12 @@ import {
 	assertGardenNativeSessionId,
 	buildGardenSessionName,
 	computeResidentStatusLabel,
+	createGardenSessionFile,
 	isValidSessionId,
 	parseSessionName,
 	RESIDENT_SESSION_TAG,
 	readSessionHeader,
+	removeUnadoptedGardenSessionFile,
 } from "./lib/entwurf-core.js";
 
 const ENTWURF_FLAG = "entwurf-control";
@@ -1363,6 +1365,7 @@ export default function (pi: ExtensionAPI) {
 		lastDisplayedSessions = sessions;
 	});
 	registerEntwurfSendCommand(pi, state, () => lastDisplayedSessions);
+	registerGardenNewCommand(pi);
 
 	// Session-replacement identity invariant (0.9.0): under --entwurf-control you
 	// cannot birth or enter a non-garden resident session IN-PROCESS. /new, /fork,
@@ -1375,9 +1378,9 @@ export default function (pi: ExtensionAPI) {
 	const refuseInProcessMint = (ctx: ExtensionContext, what: string, why: string) => {
 		const msg =
 			`[entwurf-control] ${what} is blocked under --entwurf-control — ${why} ` +
-			`Start/resume a garden session from the launcher (pia / pit / pihome — they ` +
-			`pass --session-id) in a new shell, or run ` +
-			`pi --session-id "$(run.sh new-session-id)" --entwurf-control ...`;
+			`Use /gnew (or /garden-new) for a same-terminal fresh garden session. ` +
+			`To launch/resume from a shell, use the garden launcher (pia / pit / pihome — they pass --session-id), ` +
+			`or run pi --session-id "$(run.sh new-session-id)" --entwurf-control ...`;
 		// stderr ALWAYS — the durable record even if the TUI swallows the notify.
 		process.stderr.write(`${msg}\n`);
 		if (ctx.hasUI) ctx.ui.notify(`🪛 ${msg}`, "error");
@@ -2148,6 +2151,74 @@ function resolveSendTarget(
 	}
 
 	return { error: `Cannot resolve target: ${raw}` };
+}
+
+// /gnew (+ /garden-new) — birth a NEW garden-native session IN-PROCESS, same
+// terminal, without the uuid that /new would mint. Builtin /new stays blocked
+// under --entwurf-control (it cannot be made garden-native: the pre-switch hook
+// result carries only { cancel }, no id injection). /gnew instead pre-creates an
+// empty garden-native session file and ctx.switchSession()es into it: switchSession
+// runs SessionManager.open(file), which reads the garden header id BEFORE
+// session_start, so the backend/bridge identity (PI_SESSION_ID, control socket,
+// ACP stream sessionId) binds to the garden id from the first moment — no torn
+// identity. The whole path runs at 0 tokens (it's a command, not a model turn) and
+// is headless-testable via RPC `prompt "/gnew"` (session.prompt intercepts the
+// leading slash → the registered command handler, whose ctx has switchSession).
+function registerGardenNewCommand(pi: ExtensionAPI): void {
+	const register = (name: string) => {
+		pi.registerCommand(name, {
+			description: "Birth a NEW garden-native session in-process (garden id; --entwurf-control safe)",
+			handler: async (_args, ctx) => {
+				if (pi.getFlag(ENTWURF_FLAG) !== true) {
+					if (ctx.hasUI) {
+						ctx.ui.notify(`/${name} only applies under --entwurf-control — relaunch with the flag`, "warning");
+					}
+					return;
+				}
+				// Never replace the session mid-turn.
+				await ctx.waitForIdle();
+
+				let created: { sessionId: string; sessionFile: string } | undefined;
+				try {
+					created = createGardenSessionFile({
+						cwd: ctx.cwd,
+						sessionDir: ctx.sessionManager.getSessionDir(),
+					});
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err);
+					process.stderr.write(`[entwurf-control] /${name} could not create garden session file: ${msg}\n`);
+					if (ctx.hasUI) ctx.ui.notify(`🪛 garden-new failed: ${msg}`, "error");
+					return;
+				}
+
+				try {
+					const result = await ctx.switchSession(created.sessionFile);
+					if (result.cancelled) {
+						// A garden header should pass the pre-switch guard, so a cancel is
+						// unexpected — remove the orphan rather than leave litter, and report.
+						removeUnadoptedGardenSessionFile(created.sessionFile, created.sessionId);
+						process.stderr.write(`[entwurf-control] /${name} switch cancelled for ${created.sessionId}\n`);
+						if (ctx.hasUI) ctx.ui.notify("🪛 garden-new switch cancelled", "warning");
+						return;
+					}
+				} catch (err) {
+					// Switch threw (e.g. cwd vanished): the file we wrote is an unadopted
+					// orphan — clean it up. try/catch keeps the failure path leak-free.
+					removeUnadoptedGardenSessionFile(created.sessionFile, created.sessionId);
+					const msg = err instanceof Error ? err.message : String(err);
+					process.stderr.write(`[entwurf-control] /${name} switch failed for ${created.sessionId}: ${msg}\n`);
+					if (ctx.hasUI) ctx.ui.notify(`🪛 garden-new switch failed: ${msg}`, "error");
+					return;
+				}
+				// Switch succeeded → the session is REPLACED. `ctx` now refers to the old
+				// session and must not be touched; the new session's name, control socket
+				// and PI_SESSION_ID are bound by the session_start handler on the garden id.
+				// The 🪛 status bar flipping to the new id is the confirmation. Return now.
+			},
+		});
+	};
+	register("gnew");
+	register("garden-new");
 }
 
 function registerEntwurfSendCommand(pi: ExtensionAPI, state: SocketState, getSessions: () => EnrichedSession[]): void {
