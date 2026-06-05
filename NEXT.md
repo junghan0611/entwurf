@@ -3,37 +3,94 @@
 > 다음에 할 일만 남긴다. 로그가 아니다.
 > 결정 trace 와 evidence 는 commit history / CHANGELOG / VERIFY / BASELINE / README / AGENTS / 코드로 보낸다.
 
-## Active — 1.0.0 axis: external native sessions as garden citizens (#30)
+## Active — 1.0.0: garden-native meta-bridge, entwurf-fronted (#30)
 
-0.9.0 closed the pi-native half of garden-native session identity: pi Entwurf sessions
-and the resident `--entwurf-control` operator session are born on a **garden session id**
-(`YYYYMMDDTHHMMSS-[0-9a-f]{6}`), spawned with `--session-id` + `--name`, resumed by
-header-scanned id + saved header cwd, and the resident session hard-exits if its id is not
-garden-native. Grammar + enforcement live in code + AGENTS.md §Entwurf — do **not** re-derive
-them here.
+Design is **grounded + pinned**, ready for an implementation session. SSOT for the full trace —
+do NOT re-derive here:
+- **#30** grounding-pass + refinements comments (2026-06-05) — architecture, idempotent
+  create-or-attach, header/record-scan authority, doorbell.
+- **`DELIVERY.md`** — native async-delivery capability levels `D0–D8` per backend.
+- **`scripts/raw-async-delivery/README.md` §Gotchas** — 10 hard-won traps; re-read before touching
+  delivery code (idle-wake = `FileChanged` not `Stop`; plugin-not-bare-skill; stderr-only doorbell;
+  infinite-loop guard; cost line; liveness SSOT = `pid.json` not WAL; …).
 
-1.0.0 (#30) extends the same top-level concept — **garden session id** — to *external native*
-sessions (Claude Code / Codex / Gemini standalone), so they become garden citizens without
-faking pi transcript ownership.
+**Targets — 3 native backends, prove in order.** Claude Code = #1 (MVP). Antigravity/agy = #2.
+Codex = #3. Each has a *different* native layout — that difference is exactly what forces the thin
+per-backend adapter seam (uniform garden layer + thin adapter). Capability today (see DELIVERY.md):
+Claude `D6` (D7/D8 partial), agy `D6+` native push, Codex embedded-TUI `D0` partial /
+app-server-backed `D6+D7`; pi-native Entwurf is the reference.
 
-**Non-negotiable direction:**
-- The garden session id is the top-level identity; pi sessions were the *first* backend to use
-  it directly. External backends get it through **opaque meta-session records**, NOT
-  reconstructed pi JSONL (Hard Rule #8: this bridge is not a second harness — no transcript
-  hydration, no tool-result ledger).
-- lookup / resume authority stays = header `id` + header `cwd`. Never filename parsing. The
-  meta-session record is an opaque pointer, not a hydrated transcript.
-- naming/docs must not regress to "sessionId is only a pi transcript id" — keep garden-native
-  language where accurate.
+**Two entry scenarios (both grounded + live-verified this session):**
 
-**Open questions to settle before coding 1.0.0:**
-- meta-session record shape + storage + discovery (the header-scan analog for a backend that has
-  no pi JSONL).
-- how an external native session registers a garden id without a pi session file.
-- cross-backend continuity surface that stays honest (pointer/record, never fake ownership).
+1. **pi is the entry point → handoff (self-transform).** pi launches/resumes a meta claude session:
+   pre-mint garden-id + native UUID, write the meta-record, then `exec` self-replace into
+   `claude --session-id <uuid>` (new) / `claude --resume <uuid>` (resume). pi exits; claude takes the
+   terminal. SessionStart fires → scan by `native_session_id` → **attach** (idempotent). Verified:
+   `--session-id <uuid>` forces the jsonl id; SessionStart stdin carries
+   `source`/`session_id`/`cwd`/`transcript_path` (`model`/`permission_mode` null under `-p`). Risk:
+   write the record BEFORE exec (crash-safe); handoff `exec` is a **different verb** from entwurf
+   spawn (sibling) — keep them separate.
+
+2. **meta-session is the addressee → async entwurf delivery.** Registering an external session as a
+   meta-session promotes it from non-replyable to **replyable** (garden-id = address, mailbox =
+   inbox) — this is the answer to the Standing-focus asymmetry question below. `entwurf_send` →
+   mailbox enqueue (append-only, delivery marker). Delivery is **turn-boundary only** (never
+   mid-turn — structurally guaranteed: every event is edge-bound), via a per-backend **trusted data
+   line**:
+   - **Claude:** idle → `FileChanged`+`watchPaths` (armed at SessionStart, plugin bundle); active →
+     `Stop` `asyncRewake` doorbell. Both deliver a **notice only** (stderr); the woken model
+     **self-fetches** the body via its own MCP tool. Imperatives get refused as injection — notice
+     framing only. (hook = untrusted *signal* line; MCP tool = *trusted data* line.)
+   - **agy:** native event-loop — push to the message queue; the system daemon wakes it at the turn
+     boundary and injects `<SYSTEM_MESSAGE>`. No watcher needed (1st-class native; trusts its own
+     queue, so direct inject, no doorbell).
+   - **Codex:** app-server `turn/start` (threadId + text). Direct TUI has **no** delivery surface.
+   Cost: delivery/wake is **free** (continuation of a running subscription session); only `claude -p`
+   spawn is metered — free async delivery is the meta-bridge's economic survival path.
+
+**Fixed decisions:**
+- create/attach trigger = backend `SessionStart` hook; **idempotent `upsert`, keyed on meta-record
+  existence — NOT `source`** (record present → attach + refresh `last_seen`; absent → mint + write).
+  Absorbs duplicate fires / re-entry; neutralizes per-backend source-field differences. Name the CLI
+  `upsert` (not `create | attach`) so no one re-introduces `source` branching.
+- garden-id = reuse `generateSessionId` (`YYYYMMDDTHHMMSS-[0-9a-f]{6}`), minted at true birth.
+- meta-record = opaque `.meta.json` pointer at `~/.pi/meta-sessions/<garden-id>.meta.json`
+  (proposed); `backend` field discriminates. body = SSOT. **lookup authority = top-level record
+  scan by `native_session_id`** (symmetric with 0.9.0 `findSessionFileById`; `.meta.json` is single
+  JSON, so "scan record bodies by top-level field", not "header-scan"). Any native→garden index is a
+  derived cache, NEVER authority — "needs a DB" = the denote-instinct tripwire.
+- liveness = best-effort hint (per-backend mechanism differs; Claude `pid.json` SSOT, NOT db-wal —
+  WAL drops on checkpoint = false dead/alive). Authority for alive/recent = `last_seen` + native
+  presence. No backend reliability assumption imported.
+- entwurf-fronting = extend `entwurf_*` to a meta-session peer *kind* (non-replyable). ACP demoted to
+  one transport. `entwurf_resume` → launch pointer, `entwurf_send` → mailbox + inbox-read tool:
+  **post-MVP**.
+
+**Evidence grade (stay honest at commit time):** capability is **LIVE-verified** (separate
+Claude/agy/Codex probe sessions + binary cross-validation) and **repro scripts exist**
+(`scripts/raw-async-delivery/repro-*.sh`, `DELIVERY.md` D-levels). It is **NOT** yet promoted to a
+repo `run.sh smoke-*` regression gate — that promotion is implementation step 1. Do not collapse
+"L-evidence quality" into "D-delivery capability" (VERIFY.md namespace note).
+
+**MVP implementation order (Claude Code only; record authority FIRST, hook LAST):**
+1. promote the ad-hoc probes into a repo deterministic capability gate (`run.sh smoke-meta-async`
+   or similar) — make the green reproducible inside the repo before building on it.
+2. meta-record schema + pure functions (mint / build / parse / scan-by-native-id) + temp-dir
+   deterministic test. Cut the per-backend adapter seam — do not bake "hook = Claude Code" in.
+3. idempotent `pi-shell-acp meta-session upsert` CLI (scan → attach | create). No `source` branching.
+4. Claude `SessionStart` create/attach hook + idle-wake `watchPaths` arm, shipped as a **plugin
+   bundle** (a bare skill cannot arm the watch at startup). agent-config owns the wiring; core owns CLI.
+5. `entwurf_peers(includeMeta)` surfaces the meta-session kind with an honest backend glyph (no
+   conflation with socket-peers). Dogfood subject: this Claude Code session.
+
+**Consumer track (agent-config, NOT this repo):** statusline `garden-id · backend · status`,
+theme/config parity across pi / Claude / agy / Codex. Both Claude and agy already expose a custom
+`statusLine` command. The honest knot core↔consumer is the shared garden-id; do NOT pull theming into
+core (re-bloats the screwdriver).
 
 **Scope guard:** do NOT build a generic worker-pool orchestrator out of #31 — document the
-parallel-team pattern, keep the bridge thin.
+parallel-team pattern, keep the bridge thin. Doorbell delivery is notice-only + self-fetch; never
+inject imperatives through a hook channel.
 
 ## Recently landed — evidence closure on the 0.9.0 substrate (under CHANGELOG `## Unreleased`)
 
