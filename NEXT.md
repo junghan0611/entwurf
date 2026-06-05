@@ -28,26 +28,23 @@ becomes a garden citizen entirely through its own `SessionStart` hook. Thinner, 
 North Star — the bridge does not compete with pi's session picker / resume UX (forcing handoff into
 the pi picker is "build a second harness"). The pi-entry handoff scenario (pi pre-mints garden-id +
 native UUID, then `exec`-replaces into `claude --resume`) is **removed from 1.0.0**; reopen only if
-GLG asks. It leaves exactly one consequence — the load-bearing concern below.
+GLG asks. It left exactly one consequence — the load-bearing concern below — and that concern is now closed for Claude Code.
 
-> **⚠ LOAD-BEARING — reliable meta-record creation on native open.** Dropping pi-entry removes the
-> pre-mint safety net, so meta-session *creation* is now **100 % the backend `SessionStart` hook's
-> job**. "Open Claude Code → a meta-record reliably exists, every time" must be a *proven guarantee*,
-> not a hope. A silent miss = a native session that never became a garden citizen = invisible to
-> entwurf = the async-delivery address simply does not exist. This is the **success criterion of step
-> 4**, not an afterthought. Open question to resolve there: what happens when the hook fails / the
-> plugin isn't loaded — fail-loud, or best-effort + backfill on next turn?
+> **✅ CLOSED — reliable meta-record creation on native open.** Dropping pi-entry removed the
+> pre-mint safety net, so meta-session *creation* became **100 % the backend `SessionStart` hook's
+> job**. This is now live-proven for Claude Code through the global plugin: normal native open
+> (`--plugin-dir` 없음) → `SessionStart` → `upsertMetaSession` →
+> `<pi-agent-dir>/meta-sessions/<garden-id>.meta.json` + garden mailbox watch. Runtime hook remains
+> best-effort + log (no terminal scream); doctor is the fail-loud surface; `UserPromptSubmit` is only
+> degraded *record* backfill (cannot re-arm the watch).
 >
-> **⚠ LOAD-BEARING — install/doctor, not tribal setup knowledge.** Opening the native async door is
-> useless if users must hand-edit Claude hook/plugin settings. A friend already bounced off
-> `pi-shell-acp` setup; meta-bridge adds *more* native wiring, so 1.0.0 must ship an operator-grade
-> **Claude installer + doctor**. Supported platforms are **Linux + macOS only**; Windows is unsupported
-> and must fail fast (no "untested but maybe works" posture). The installer should make the exact
-> settings changes required for meta-bridge (or move that responsibility from `agent-config` into this
-> repo if needed); user memory/manual `--plugin-dir` is not a setup strategy. The success criterion is:
-> after install, a normal user can open Claude Code and `doctor-meta-bridge` can prove the meta-record
-> path, hook/plugin auto-load, delivery surface, and silent-miss failure policy. This is core UX, not a
-> consumer afterthought.
+> **✅ CLOSED — install/doctor, not tribal setup knowledge.** 1.0.0 now has the operator-grade Claude
+> global installer + doctor surface: `./run.sh install-meta-bridge` assembles a repo-stable local
+> marketplace, bakes the home/profile `node` path, and installs `entwurf-meta-receive@meta-bridge-local`
+> with `--scope user`; `./run.sh doctor-meta-bridge` fails loud on toolchain/plugin/node-path/store/
+> SessionStart evidence gaps. Supported platforms stay **Linux + macOS only**; Windows fails fast.
+> Global install is intentionally left live on GLG's machine for dogfooding; uninstall with
+> `claude plugin uninstall entwurf-meta-receive@meta-bridge-local` if needed.
 
 **Async delivery to a registered meta-session (the addressee path):** Registering an external session as a
    meta-session promotes it from external/non-addressable to **addressable + wakeable** (garden-id =
@@ -110,7 +107,7 @@ sentinel into a repo smoke (`./run.sh smoke-meta-async-drift`); it is still **no
 because it depends on the host's installed Claude binary. Do not collapse "L-evidence quality" into
 "D-delivery capability" (VERIFY.md namespace note).
 
-**MVP implementation order (Claude Code only; record authority FIRST, hook LAST):**
+**MVP implementation order (Claude Code only; current restart point = step 6):**
 1. **DONE — drift sentinel + capability gate.** `./run.sh smoke-meta-async-drift`
    (`scripts/smoke-meta-async-drift.sh`). Deterministic default: **major.minor** version pins
    (**Claude 2.1.x / codex-cli 0.136.x / agy 1.0.x** — patch NOT pinned: Claude ships ~weekly
@@ -149,29 +146,25 @@ because it depends on the host's installed Claude binary. Do not collapse "L-evi
    isolated installs/tests isolate, symmetric with pi's own sessions. It lives IN meta-session.ts (not
    a sibling `*-store.ts`): the typecheck fence makes a separate root-config lib that imports another
    `.ts` lib un-unit-testable under strip-types; only node builtins were added, so the gate stays
-   strip-types clean. **Deferred to step 4:** the thin CLI/argv shell that invokes this — its stdin
-   contract couples to the Claude `SessionStart` payload and its shipped runtime/entry shape is
-   resolved with the hook deploy. No `source` branching anywhere.
-4. **Claude `SessionStart` create/attach hook — THE load-bearing step (see ⚠ above).** Fires the
-   idempotent `upsert` at startup so "open Claude Code → meta-record exists" is guaranteed; arms the
-   idle-wake `watchPath` in the same hook. Shipped as a **plugin bundle** (a bare skill cannot arm the
-   watch at startup; verified). Success criterion (NOT optional): a live smoke proves that opening a
-   native Claude Code session deterministically lands a `<pi-agent-dir>/meta-sessions/<garden-id>.meta.json` —
-   no silent miss — and decides the failure policy (plugin not loaded / hook errored → fail-loud vs
-   best-effort + next-turn backfill). Plugin must auto-load on *every* session (global install /
-   settings.json hooks), not depend on a manual `--plugin-dir`. Core owns the required meta-bridge
-   wiring/CLI/creation-guarantee smoke; `agent-config` may integrate preferences around it, but it is
-   not the authority for whether meta-bridge works.
-5. **Claude installer + doctor — make the native wiring survivable for real users.** Add a core
-   command surface such as `./run.sh install-meta-bridge claude` and `./run.sh doctor-meta-bridge`.
-   Platform policy: Linux + macOS only; Windows fail-fast. The installer must not rely on tribal
-   memory or a manual `--plugin-dir`: it makes the exact Claude plugin/global auto-load + settings
-   changes needed by this repo. If `agent-config` currently owns part of that wiring, either
-   coordinate with it or move the required meta-bridge setting here — core owns the guarantee. The
-   doctor checks OS, Claude binary/version, config paths, plugin/hook auto-load, meta-record dir
-   writability, SessionStart upsert evidence, wake/delivery capability, and the chosen failure policy;
-   it must fail loud on silent-miss risk. This is what makes the morning's raw async breakthrough
-   usable instead of a lab demo.
+   strip-types clean. Step 4 consumed this contract through `pi-extensions/meta-bridge-hook.ts`; no
+   `source` branching anywhere.
+4. **DONE — Claude `SessionStart` create/attach hook (load-bearing path).**
+   `pi-extensions/meta-bridge-hook.ts` is the thin entry shell: Claude hook stdin
+   (`session_id` / `transcript_path` / `cwd`) → `upsertMetaSession(claude-code)` → garden-id mailbox
+   watch at `<pi-agent-dir>/meta-mailbox/<garden-id>/inbox.signal`. Runtime failure policy is
+   best-effort + log (`<pi-agent-dir>/meta-bridge-hook.log`), never terminal scream. `SessionStart`
+   and `CwdChanged` arm the watch; `UserPromptSubmit` only backfills the record because it cannot emit
+   `watchPaths`. Live-proven 2026-06-05: a normal interactive Claude Code session with no manual
+   `--plugin-dir` created a real record (`20260605T164744-aef73e.meta.json`) from real hook stdin,
+   including native session id + real `transcript_path`, and armed the mailbox.
+5. **DONE — Claude global installer + fail-loud doctor.**
+   `./run.sh install-meta-bridge` assembles `pi/meta-bridge/.assembled/` (entry + lib bundled,
+   node path baked), validates the repo-stable marketplace, then installs
+   `entwurf-meta-receive@meta-bridge-local --scope user` so every native Claude Code session auto-loads
+   the plugin. `./run.sh doctor-meta-bridge` checks Linux/macOS policy, Claude/node toolchain, global
+   plugin enabled, baked-node path survival (NixOS churn guard), meta-record store writability, hook
+   log, and at least one Claude meta-record. Live result: doctor PASS. The global install is
+   intentionally left in place for dogfooding; uninstall only if GLG chooses to stop the experiment.
 6. **Claude `entwurf_send` mailbox delivery + inbox-read receipt.** Implement the actual bridge path:
    sender enqueues by garden-id, pokes the addressed Claude signal, the hook emits a notice-only
    doorbell, the model self-fetches through its MCP inbox-read tool, and that read call marks
@@ -180,12 +173,12 @@ because it depends on the host's installed Claude binary. Do not collapse "L-evi
 7. `entwurf_peers(includeMeta)` surfaces the meta-session kind with an honest backend glyph (no
    conflation with socket-peers). Dogfood subject: this Claude Code session.
 
-**Restart anchor (new Claude Code session):** start at step 4, not by re-opening the already-solved
-record work. Implement the thin CLI/argv/stdin shell together with the Claude `SessionStart` plugin
-because their contract is one shape; prove native open → meta-record creation with a live smoke.
-Then do installer/doctor, then `entwurf_send`, then peers. The carried 0.9 follow-ups, dep bump,
-`incompatible_config`, and #25 bridge-hygiene tracks below were re-reviewed and remain **non-cut
-tracks** while 1.0.0 meta-bridge is active; do not pull them into this release unless GLG reopens them.
+**Restart anchor:** start at **step 6**, not by re-opening the now-proven hook/install work.
+Step 4/5 are live and globally installed; only revisit them if doctor fails or the global dogfood
+surfaces a concrete bug. Next implementation is `entwurf_send` mailbox delivery + inbox-read receipt,
+then `entwurf_peers(includeMeta)`. The carried 0.9 follow-ups, dep bump, `incompatible_config`, and
+#25 bridge-hygiene tracks remain **non-cut tracks** while 1.0.0 meta-bridge is active; do not pull
+them into this release unless GLG reopens them.
 
 **Consumer track (agent-config, NOT this repo):** statusline `garden-id · backend · status`,
 theme/config parity across pi / Claude now, agy / Codex later. Both Claude and agy already expose a

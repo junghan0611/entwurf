@@ -1,0 +1,12 @@
+{
+	"name": "meta-bridge-local",
+	"owner": { "name": "junghan0611" },
+	"description": "Local marketplace for the pi-shell-acp garden-native meta-bridge. Shipped in-repo (repo-stable, NOT /tmp — an ephemeral source breaks `claude plugin marketplace update`). The installer (./run.sh install-meta-bridge) assembles a self-contained copy under .assembled/ (entry + lib + node-path-baked hooks) and runs `marketplace add` + `install --scope user`.",
+	"plugins": [
+		{
+			"name": "entwurf-meta-receive",
+			"source": "./entwurf-meta-receive",
+			"description": "SessionStart upsert + per-garden idle-wake arm for native Claude Code sessions."
+		}
+	]
+}

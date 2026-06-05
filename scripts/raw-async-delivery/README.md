@@ -1,8 +1,5 @@
 # raw-async-delivery — RAW async message delivery into LIVE Claude Code / agy / Codex sessions
 
-Reproducible scripts behind the llmlog
-`20260605T102604--라이브-claude-code-agy-세션-비동기-통신-raw-방법-실측`.
-
 Goal: deliver an async message INTO an already-running **subscription** session,
 free, with no `claude -p` / backend CLI prompt spawn — and in particular wake an
 **IDLE** session with zero typing (agy `send-message` parity).

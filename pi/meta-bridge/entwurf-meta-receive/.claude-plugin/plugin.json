@@ -1,0 +1,5 @@
+{
+	"name": "entwurf-meta-receive",
+	"version": "0.1.0",
+	"description": "Garden-native meta-bridge receive for Claude Code (pi-shell-acp 1.0.0). On every native session open the SessionStart hook idempotently upserts a meta-record at <pi-agent-dir>/meta-sessions/<garden-id>.meta.json (making the native session a garden citizen addressable by garden id) and arms a per-garden idle-wake watch at <pi-agent-dir>/meta-mailbox/<garden-id>/inbox.signal. CwdChanged re-arms; UserPromptSubmit backfills the record only (cannot re-arm). FileChanged is the addressed doorbell that wakes an idle session when a sender pokes its signal. Installed via the meta-bridge local marketplace with --scope user; do NOT hand-edit — use ./run.sh install-meta-bridge / doctor-meta-bridge."
+}

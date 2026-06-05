@@ -55,3 +55,6 @@ demo/compaction-policy-smoke/fixtures/
 # when Phase 2 npm/ClawHub publish lands (tarball owns dist via the
 # package `files` allowlist).
 plugins/*/node_modules/
+
+# meta-bridge installer assembles a self-contained, node-baked plugin copy here
+pi/meta-bridge/.assembled/

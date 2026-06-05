@@ -64,6 +64,8 @@ Usage:
   ./run.sh new-session-id             # print one fresh garden-native session id for operator launchers (--session-id)
   ./run.sh smoke-resident-garden-guard # live resident --entwurf-control garden guard (negative 0-token; SMOKE_RGG_POSITIVE=1 for positive)
   ./run.sh smoke-meta-async-drift     # 1.0.0 meta-bridge step 1: drift sentinel — version pins + Claude binary undocumented-behavior markers (LIVE=1 adds plugin watch-arm probe)
+  ./run.sh install-meta-bridge        # 1.0.0 meta-bridge step 5: GLOBAL install (marketplace add + install --scope user) of the garden-native receive plugin — node-baked, self-contained, idempotent (Linux/macOS only)
+  ./run.sh doctor-meta-bridge         # 1.0.0 meta-bridge step 5: fail-loud doctor — toolchain + baked-node-path resolves + global plugin install + meta-record creation evidence (silent-miss => non-zero)
   ./run.sh check-backends             # local deterministic check of backend launch resolution + backend-specific _meta shape
   ./run.sh check-registration         # local deterministic check of per-runtime provider registration semantics
   ./run.sh check-dep-versions         # local deterministic check that version pins (package.json/run.sh/README.md + pi devDeps/peer pins) agree
@@ -4050,6 +4052,21 @@ case "$cmd" in
     # undocumented-behavior marker cross-validation; SCREAMS on drift. LIVE=1 adds
     # the plugin SessionStart watch-arm probe (spawns one metered claude -p).
     (cd "$REPO_DIR" && bash scripts/smoke-meta-async-drift.sh)
+    ;;
+  install-meta-bridge)
+    # 1.0.0 meta-bridge step 5: operator-grade GLOBAL install of the garden-native
+    # receive plugin. Assembles a self-contained, node-path-baked copy under
+    # pi/meta-bridge/.assembled and runs marketplace add + install --scope user, so
+    # every native Claude Code session auto-loads it (no manual --plugin-dir).
+    # Idempotent; Linux/macOS only (Windows fail-fast).
+    (cd "$REPO_DIR" && bash scripts/meta-bridge-install.sh "$@")
+    ;;
+  doctor-meta-bridge)
+    # 1.0.0 meta-bridge step 5: the FAIL-LOUD surface. Proves toolchain + baked
+    # node path (NixOS store-churn guard) + global plugin install + meta-record
+    # dir + actual SessionStart creation evidence. A plugin present with zero
+    # claude-code meta-records is a SILENT MISS -> non-zero exit.
+    (cd "$REPO_DIR" && bash scripts/meta-bridge-doctor.sh "$@")
     ;;
   check-plugin-empty-final-recovery)
     check_plugin_empty_final_recovery

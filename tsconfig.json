@@ -30,5 +30,12 @@
 	// plugins/* is a workspace sibling — each plugin owns its own
 	// tsconfig and check pipeline (see pnpm check:plugins). Excluding here
 	// keeps root typecheck scoped to the bridge runtime.
-	"exclude": ["node_modules", "mcp", "scripts", "plugins"]
+	//
+	// pi-extensions/meta-bridge-hook.ts is the meta-bridge entry shell: it runs
+	// under Node --experimental-strip-types and imports its sibling lib with an
+	// explicit `.ts` extension (the installed plugin self-locates ./lib/ via
+	// ${CLAUDE_PLUGIN_ROOT}), which the emit-capable root config cannot allow. It
+	// is typechecked by scripts/tsconfig.json instead (allowImportingTsExtensions),
+	// same fence split as mcp/pi-tools-bridge/src/resume-mode.ts.
+	"exclude": ["node_modules", "mcp", "scripts", "plugins", "pi-extensions/meta-bridge-hook.ts"]
 }

@@ -472,6 +472,18 @@ function expandTilde(p: string): string {
 }
 
 /**
+ * The pi agent dir — the persistence root pi owns. `PI_CODING_AGENT_DIR` lets an
+ * isolated install / test relocate it (symmetric with how pi's own sessions
+ * isolate); otherwise it is the fixed `~/.pi/agent`. A stable `~/` path, so the
+ * meta-bridge hook never needs this baked into config — it resolves at runtime.
+ */
+function piAgentDir(): string {
+	return process.env.PI_CODING_AGENT_DIR
+		? path.resolve(expandTilde(process.env.PI_CODING_AGENT_DIR))
+		: path.join(os.homedir(), ".pi", "agent");
+}
+
+/**
  * Where meta-records live. Under the pi agent dir (pi owns persistence), so an
  * isolated install / test that sets `PI_CODING_AGENT_DIR` gets isolated
  * meta-sessions too — symmetric with how pi's own sessions isolate. A direct
@@ -479,10 +491,21 @@ function expandTilde(p: string): string {
  */
 export function defaultMetaSessionsDir(): string {
 	if (process.env.PI_META_SESSIONS_DIR) return path.resolve(expandTilde(process.env.PI_META_SESSIONS_DIR));
-	const agentDir = process.env.PI_CODING_AGENT_DIR
-		? path.resolve(expandTilde(process.env.PI_CODING_AGENT_DIR))
-		: path.join(os.homedir(), ".pi", "agent");
-	return path.join(agentDir, "meta-sessions");
+	return path.join(piAgentDir(), "meta-sessions");
+}
+
+/**
+ * Where per-garden-id idle-wake mailboxes live: `<pi-agent-dir>/meta-mailbox`.
+ * Deliberately a SIBLING of meta-sessions, not nested inside it — the record
+ * store is the authority (scanned for identity) while the mailbox is volatile
+ * signal/body traffic; keeping them apart means a mailbox poke never risks a
+ * record-dir readdir picking up a non-record file. The watched signal for a
+ * session is `<this>/<gardenId>/inbox.signal`. Same runtime resolution as
+ * meta-sessions (no config baking); `PI_META_MAILBOX_DIR` overrides for tests.
+ */
+export function defaultMetaMailboxDir(): string {
+	if (process.env.PI_META_MAILBOX_DIR) return path.resolve(expandTilde(process.env.PI_META_MAILBOX_DIR));
+	return path.join(piAgentDir(), "meta-mailbox");
 }
 
 export interface UpsertMetaSessionOptions {

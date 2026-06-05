@@ -1,0 +1,50 @@
+{
+	"hooks": {
+		"SessionStart": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "__NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/meta-bridge-hook.ts"
+					}
+				]
+			}
+		],
+		"CwdChanged": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "__NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/meta-bridge-hook.ts"
+					}
+				]
+			}
+		],
+		"UserPromptSubmit": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "__NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/meta-bridge-hook.ts"
+					}
+				]
+			}
+		],
+		"FileChanged": [
+			{
+				"matcher": "",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "${CLAUDE_PLUGIN_ROOT}/scripts/doorbell.sh",
+						"asyncRewake": true,
+						"timeout": 20
+					}
+				]
+			}
+		]
+	}
+}
