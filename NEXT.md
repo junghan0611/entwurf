@@ -7,8 +7,8 @@
 
 Design is **grounded + pinned**, ready for an implementation session. SSOT for the full trace —
 do NOT re-derive here:
-- **#30** grounding-pass + refinements comments (2026-06-05) — architecture, idempotent
-  create-or-attach, header/record-scan authority, doorbell.
+- **#30** — 4 time-axis comments (2026-06-05): grounding pass · three refinements · live-verified
+  async delivery + handoff · bbot review (read-receipt observability + drift sentinel).
 - **`DELIVERY.md`** — native async-delivery capability levels `D0–D8` per backend.
 - **`scripts/raw-async-delivery/README.md` §Gotchas** — 10 hard-won traps; re-read before touching
   delivery code (idle-wake = `FileChanged` not `Stop`; plugin-not-bare-skill; stderr-only doorbell;
@@ -63,8 +63,15 @@ app-server-backed `D6+D7`; pi-native Entwurf is the reference.
   WAL drops on checkpoint = false dead/alive). Authority for alive/recent = `last_seen` + native
   presence. No backend reliability assumption imported.
 - entwurf-fronting = extend `entwurf_*` to a meta-session peer *kind* (non-replyable). ACP demoted to
-  one transport. `entwurf_resume` → launch pointer, `entwurf_send` → mailbox + inbox-read tool:
-  **post-MVP**.
+  one transport. `entwurf_resume` → launch pointer, `entwurf_send` → mailbox: **post-MVP** — **BUT
+  the read-receipt aspect is pulled into MVP** (bbot review #4). The Claude doorbell self-fetches, so
+  a model that ignores the notice never reads the body, and `.delivered` marks "doorbell rang", not
+  "model read". Fix: **the inbox-read MCP call IS the read-receipt** — it closes the doorbell
+  observability gap and makes `D7` real. Sender contract: uniform on garden-id + queue; honest on
+  `wakeMode` / `deliveryLevel` peer metadata (self-fetch vs direct-inject). Never abstract away the
+  delivery "last 1cm" — covering it turns "sent but unread?" into a debugging hell (0.9.0 "uniform
+  id + honest meta"). agy/codex direct-inject have no gap; ironically the weakest-looking Claude
+  doorbell needs the most observability work.
 
 **Evidence grade (stay honest at commit time):** capability is **LIVE-verified** (separate
 Claude/agy/Codex probe sessions + binary cross-validation) and **repro scripts exist**
@@ -73,10 +80,16 @@ repo `run.sh smoke-*` regression gate — that promotion is implementation step 
 "L-evidence quality" into "D-delivery capability" (VERIFY.md namespace note).
 
 **MVP implementation order (Claude Code only; record authority FIRST, hook LAST):**
-1. promote the ad-hoc probes into a repo deterministic capability gate (`run.sh smoke-meta-async`
-   or similar) — make the green reproducible inside the repo before building on it.
+1. promote the ad-hoc probes into a repo deterministic **capability gate + drift sentinel**
+   (`run.sh smoke-meta-async` or similar): make the green reproducible inside the repo, AND assert the
+   undocumented behaviors it rides on still hold (stderr-only payload, `asyncRewake`
+   `Stop hook feedback:` prefix, `FileChanged` watch arming) — claude ships ~weekly. Pin versions
+   (Claude 2.1.163, agy 0.136, codex 0.136) and let the gate scream on drift. Direct lineage of the
+   0.8.x fail-fast tool-surface gates (bbot review #4).
 2. meta-record schema + pure functions (mint / build / parse / scan-by-native-id) + temp-dir
-   deterministic test. Cut the per-backend adapter seam — do not bake "hook = Claude Code" in.
+   deterministic test. **Pre-drill a read-receipt field now** — adding it later (when inbox-read
+   lands) touches the schema twice (bbot review #4). Cut the per-backend adapter seam — do not bake
+   "hook = Claude Code" in.
 3. idempotent `pi-shell-acp meta-session upsert` CLI (scan → attach | create). No `source` branching.
 4. Claude `SessionStart` create/attach hook + idle-wake `watchPaths` arm, shipped as a **plugin
    bundle** (a bare skill cannot arm the watch at startup). agent-config owns the wiring; core owns CLI.
