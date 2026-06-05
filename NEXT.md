@@ -8,7 +8,7 @@
 Design is **grounded + pinned**, ready for an implementation session. SSOT for the full trace —
 do NOT re-derive here:
 - **#30** — 4 time-axis comments (2026-06-05): grounding pass · three refinements · live-verified
-  async delivery + handoff · bbot review (read-receipt observability + drift sentinel).
+  async delivery · dropped pi-entry handoff decision · bbot review (read-receipt observability + drift sentinel).
 - **`DELIVERY.md`** — native async-delivery capability levels `D0–D8` per backend.
 - **`scripts/raw-async-delivery/README.md` §Gotchas** — 10 hard-won traps; re-read before touching
   delivery code (idle-wake = `FileChanged` not `Stop`; plugin-not-bare-skill; stderr-only doorbell;
@@ -20,21 +20,27 @@ per-backend adapter seam (uniform garden layer + thin adapter). Capability today
 Claude `D6` (D7/D8 partial), agy `D6+` native push, Codex embedded-TUI `D0` partial /
 app-server-backed `D6+D7`; pi-native Entwurf is the reference.
 
-**Two entry scenarios (both grounded + live-verified this session):**
+**Entry model — just open the native backend (pi-entry handoff DROPPED 2026-06-05).** No pi launcher
+step, no self-transform `exec`. The operator opens Claude Code (or agy / Codex) directly; the session
+becomes a garden citizen entirely through its own `SessionStart` hook. Thinner, and it honors the
+North Star — the bridge does not compete with pi's session picker / resume UX (forcing handoff into
+the pi picker is "build a second harness"). The pi-entry handoff scenario (pi pre-mints garden-id +
+native UUID, then `exec`-replaces into `claude --resume`) is **removed from 1.0.0**; reopen only if
+GLG asks. It leaves exactly one consequence — the load-bearing concern below.
 
-1. **pi is the entry point → handoff (self-transform).** pi launches/resumes a meta claude session:
-   pre-mint garden-id + native UUID, write the meta-record, then `exec` self-replace into
-   `claude --session-id <uuid>` (new) / `claude --resume <uuid>` (resume). pi exits; claude takes the
-   terminal. SessionStart fires → scan by `native_session_id` → **attach** (idempotent). Verified:
-   `--session-id <uuid>` forces the jsonl id; SessionStart stdin carries
-   `source`/`session_id`/`cwd`/`transcript_path` (`model`/`permission_mode` null under `-p`). Risk:
-   write the record BEFORE exec (crash-safe); handoff `exec` is a **different verb** from entwurf
-   spawn (sibling) — keep them separate.
+> **⚠ LOAD-BEARING — reliable meta-record creation on native open.** Dropping pi-entry removes the
+> pre-mint safety net, so meta-session *creation* is now **100 % the backend `SessionStart` hook's
+> job**. "Open Claude Code → a meta-record reliably exists, every time" must be a *proven guarantee*,
+> not a hope. A silent miss = a native session that never became a garden citizen = invisible to
+> entwurf = the async-delivery address simply does not exist. This is the **success criterion of step
+> 4**, not an afterthought. Open question to resolve there: what happens when the hook fails / the
+> plugin isn't loaded — fail-loud, or best-effort + backfill on next turn?
 
-2. **meta-session is the addressee → async entwurf delivery.** Registering an external session as a
-   meta-session promotes it from non-replyable to **replyable** (garden-id = address, mailbox =
-   inbox) — this is the answer to the Standing-focus asymmetry question below. `entwurf_send` →
-   mailbox enqueue (append-only, delivery marker). Delivery is **turn-boundary only** (never
+**Async delivery to a registered meta-session (the addressee path):** Registering an external session as a
+   meta-session promotes it from external/non-addressable to **addressable + wakeable** (garden-id =
+   address, mailbox = inbox). Full "replyable" semantics require the later outbox/read-receipt path;
+   do not hide that last-1cm distinction. `entwurf_send` → mailbox enqueue (append-only, delivery
+   marker). Delivery is **turn-boundary only** (never
    mid-turn — structurally guaranteed: every event is edge-bound), via a per-backend **trusted data
    line**:
    - **Claude:** idle → `FileChanged`+`watchPaths` (armed at SessionStart, plugin bundle); active →
@@ -62,9 +68,11 @@ app-server-backed `D6+D7`; pi-native Entwurf is the reference.
 - liveness = best-effort hint (per-backend mechanism differs; Claude `pid.json` SSOT, NOT db-wal —
   WAL drops on checkpoint = false dead/alive). Authority for alive/recent = `last_seen` + native
   presence. No backend reliability assumption imported.
-- entwurf-fronting = extend `entwurf_*` to a meta-session peer *kind* (non-replyable). ACP demoted to
-  one transport. `entwurf_resume` → launch pointer, `entwurf_send` → mailbox: **post-MVP** — **BUT
-  the read-receipt aspect is pulled into MVP** (bbot review #4). The Claude doorbell self-fetches, so
+- entwurf-fronting = extend `entwurf_*` to a meta-session peer *kind* (addressable/wakeable, not yet
+  fully replyable). ACP demoted to one transport. `entwurf_send` → mailbox is the delivery axis;
+  `entwurf_resume` launch-pointer / pi-picker handoff is **out of 1.0.0 unless GLG reopens it** — do
+  not let the dropped scenario re-enter through a resume abstraction. Mailbox delivery itself is
+  **post-MVP** — **BUT the read-receipt aspect is pulled into MVP** (bbot review #4). The Claude doorbell self-fetches, so
   a model that ignores the notice never reads the body, and `.delivered` marks "doorbell rang", not
   "model read". Fix: **the inbox-read MCP call IS the read-receipt** — it closes the doorbell
   observability gap and makes `D7` real. Sender contract: uniform on garden-id + queue; honest on
@@ -80,19 +88,30 @@ repo `run.sh smoke-*` regression gate — that promotion is implementation step 
 "L-evidence quality" into "D-delivery capability" (VERIFY.md namespace note).
 
 **MVP implementation order (Claude Code only; record authority FIRST, hook LAST):**
-1. promote the ad-hoc probes into a repo deterministic **capability gate + drift sentinel**
-   (`run.sh smoke-meta-async` or similar): make the green reproducible inside the repo, AND assert the
-   undocumented behaviors it rides on still hold (stderr-only payload, `asyncRewake`
-   `Stop hook feedback:` prefix, `FileChanged` watch arming) — claude ships ~weekly. Pin versions
-   (Claude 2.1.163, agy 0.136, codex 0.136) and let the gate scream on drift. Direct lineage of the
-   0.8.x fail-fast tool-surface gates (bbot review #4).
+1. **DONE — drift sentinel + capability gate.** `./run.sh smoke-meta-async-drift`
+   (`scripts/smoke-meta-async-drift.sh`). Deterministic default: version pins (measured
+   **Claude 2.1.163 / codex-cli 0.136.0 / agy 1.0.5** — note: bbot's "agy 0.136" was a conflation
+   with codex; gate pins measured truth) + 9 undocumented-behavior marker strings cross-validated
+   against the installed Claude binary (`asyncRewake`, `stop_hook_active`, `watchPaths`,
+   `flushPendingAsyncRewakeHooks`, `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`, `FileChanged`, `rewakeMessage`,
+   `hookSpecificOutput`, `CwdChanged`). `LIVE=1` adds the plugin `SessionStart` watch-arm probe.
+   Negative-tested (moved pin / vanished marker → `DRIFT DETECTED` + exit 1). NOT in `release-gate`
+   yet (asserts on host's installed Claude binary → not hermetic for `pnpm check`); promote at 1.0.0
+   cut. Lineage: 0.8.x fail-fast tool-surface gates (bbot review #4).
 2. meta-record schema + pure functions (mint / build / parse / scan-by-native-id) + temp-dir
    deterministic test. **Pre-drill a read-receipt field now** — adding it later (when inbox-read
    lands) touches the schema twice (bbot review #4). Cut the per-backend adapter seam — do not bake
    "hook = Claude Code" in.
 3. idempotent `pi-shell-acp meta-session upsert` CLI (scan → attach | create). No `source` branching.
-4. Claude `SessionStart` create/attach hook + idle-wake `watchPaths` arm, shipped as a **plugin
-   bundle** (a bare skill cannot arm the watch at startup). agent-config owns the wiring; core owns CLI.
+4. **Claude `SessionStart` create/attach hook — THE load-bearing step (see ⚠ above).** Fires the
+   idempotent `upsert` at startup so "open Claude Code → meta-record exists" is guaranteed; arms the
+   idle-wake `watchPath` in the same hook. Shipped as a **plugin bundle** (a bare skill cannot arm the
+   watch at startup; verified). Success criterion (NOT optional): a live smoke proves that opening a
+   native Claude Code session deterministically lands a `~/.pi/meta-sessions/<garden-id>.meta.json` —
+   no silent miss — and decides the failure policy (plugin not loaded / hook errored → fail-loud vs
+   best-effort + next-turn backfill). Plugin must auto-load on *every* session (global install /
+   settings.json hooks), not depend on a manual `--plugin-dir`. agent-config owns the wiring; core
+   owns the CLI + the creation-guarantee smoke.
 5. `entwurf_peers(includeMeta)` surfaces the meta-session kind with an honest backend glyph (no
    conflation with socket-peers). Dogfood subject: this Claude Code session.
 

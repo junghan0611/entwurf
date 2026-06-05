@@ -4,7 +4,11 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
-Evidence-closure work on top of 0.9.0's garden-native identity. No runtime behavior change: it strengthens two live gates so 0.9.0's guarantees are proven *directly* rather than indirectly, and trims a stale follow-up.
+Evidence-closure work on top of 0.9.0's garden-native identity, plus the first concrete step of the 1.0.0 meta-bridge (#30). No runtime behavior change to the bridge: it strengthens two live gates so 0.9.0's guarantees are proven *directly* rather than indirectly, trims a stale follow-up, and lands a new deterministic drift sentinel that protects the (still undocumented) async-delivery substrate before any meta-record/hook code is built on it.
+
+### Added (1.0.0 meta-bridge — step 1 drift sentinel)
+
+- **`./run.sh smoke-meta-async-drift` — drift sentinel + capability gate (#30 step 1).** The Claude async-delivery path rides on *undocumented* Claude Code behavior (`asyncRewake` force-prepends `Stop hook feedback:` and ignores `rewakeMessage`; the payload channel is stderr-only; `watchPaths` arms from only `SessionStart`/`CwdChanged`/`FileChanged`). Claude ships ~weekly, so the path can break silently on any bump. This gate makes it *scream* instead — direct lineage of the 0.8.x fail-fast tool-surface gates. Two tiers, mirroring `smoke-compaction-policy`: the **deterministic default** (offline, free, CI/pre-commit safe) asserts (A) the three backends are at their pinned versions — measured **Claude 2.1.163 / codex-cli 0.136.0 / agy 1.0.5** (the `#30` prose "agy 0.136" was a conflation with codex's version; the gate pins the measured truth) — and (B) nine undocumented-behavior marker strings are still present in the installed Claude binary (binary cross-validation; a marker dropping to zero = the behavior was renamed/removed = the delivery path is dead). **LIVE=1** adds (C) the plugin `SessionStart` watch-arm probe (`repro-plugin-idle-wake.sh probe`, one metered `claude -p`). Negative-tested: a moved pin or a vanished marker yields `DRIFT DETECTED` + exit 1. Not yet wired into `release-gate` — it asserts on the host's installed Claude binary (environment-dependent), so it stays out of the hermetic `pnpm check` floor; promotion into the aggregate gate waits for the 1.0.0 cut.
 
 ### Added (verification docs)
 

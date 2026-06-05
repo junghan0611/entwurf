@@ -62,6 +62,7 @@ Usage:
   ./run.sh smoke-async-resume [backends...] # live async-resume smoke (Claude+Codex+Gemini + handler/external cases), required before entwurf releases
   ./run.sh new-session-id             # print one fresh garden-native session id for operator launchers (--session-id)
   ./run.sh smoke-resident-garden-guard # live resident --entwurf-control garden guard (negative 0-token; SMOKE_RGG_POSITIVE=1 for positive)
+  ./run.sh smoke-meta-async-drift     # 1.0.0 meta-bridge step 1: drift sentinel — version pins + Claude binary undocumented-behavior markers (LIVE=1 adds plugin watch-arm probe)
   ./run.sh check-backends             # local deterministic check of backend launch resolution + backend-specific _meta shape
   ./run.sh check-registration         # local deterministic check of per-runtime provider registration semantics
   ./run.sh check-dep-versions         # local deterministic check that version pins (package.json/run.sh/README.md + pi devDeps/peer pins) agree
@@ -4028,6 +4029,13 @@ case "$cmd" in
     # must blow up before any turn. POSITIVE (SMOKE_RGG_POSITIVE=1): garden id
     # passes + control-tagged name.
     (cd "$REPO_DIR" && bash scripts/smoke-resident-garden-guard.sh)
+    ;;
+  smoke-meta-async-drift)
+    # 1.0.0 meta-bridge step 1 (#30): drift sentinel + capability gate. DEFAULT is
+    # deterministic/offline — version pins (Claude/codex/agy) + Claude-binary
+    # undocumented-behavior marker cross-validation; SCREAMS on drift. LIVE=1 adds
+    # the plugin SessionStart watch-arm probe (spawns one metered claude -p).
+    (cd "$REPO_DIR" && bash scripts/smoke-meta-async-drift.sh)
     ;;
   check-plugin-empty-final-recovery)
     check_plugin_empty_final_recovery
