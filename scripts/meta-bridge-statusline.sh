@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # meta-bridge-statusline — Claude Code native statusline with garden identity.
 #
-# Repo-owned Phase-3 statusline. It preserves GLG's current UX shape
-# (device | cwd[branch] | model | context usage) and adds the one core truth
-# surface: `🪛 <garden-id> cc`, looked up by scanning meta-record BODIES via the
-# native Claude `session_id`. No cache, no filename authority, no DB.
+# Repo-owned Phase-3 statusline. It preserves GLG's current UX data
+# (device, cwd[branch], model, context usage) while rendering it as a two-row
+# Claude Code status area: row 1 = work context, row 2 = garden identity. The
+# garden id is looked up by scanning meta-record BODIES via the native Claude
+# `session_id`. No cache, no filename authority, no DB.
 #
 # Runtime dependency: python3 (already gated by install-meta-bridge/doctor).
 set -euo pipefail
@@ -16,7 +17,8 @@ input=$(cat)
 # itself dies, `|| true` keeps the shell alive with whatever (possibly empty) it
 # wrote. doctor/smoke are the fail-LOUD surfaces; this surface stays silent.
 if ! command -v python3 >/dev/null 2>&1; then
-  printf '%s 🪛 ? cc' "$(cat "$HOME/.current-device" 2>/dev/null || echo UNKNOWN)"
+  device="$(cat "$HOME/.current-device" 2>/dev/null || echo UNKNOWN)"
+  printf '%s ?\n🪛 ? cc' "$device"
   exit 0
 fi
 STATUSLINE_INPUT="$input" python3 - <<'PY' || true
@@ -176,14 +178,13 @@ def main() -> None:
 
     native_session_id = data.get("session_id")
     garden = garden_lookup(native_session_id if isinstance(native_session_id, str) else "")
-    meta = f"🪛 {garden} cc"
-
-    out = (
-        f"{DIM}{device_label()} {meta} {cwd_dir}{RESET}"
+    line1 = (
+        f"{DIM}{device_label()} {cwd_dir}{RESET}"
         f"{CYAN_BOLD}{cwd_tail}{RESET}"
-        f"{DIM}{git_branch(str(raw_cwd))} | {model}{vterm}{context_info(data)}{RESET}"
+        f"{DIM}{git_branch(str(raw_cwd))}{RESET}"
     )
-    sys.stdout.write(out)
+    line2 = f"{DIM}🪛 {garden} cc | {model}{vterm}{context_info(data)}{RESET}"
+    sys.stdout.write(f"{line1}\n{line2}")
 
 
 if __name__ == "__main__":

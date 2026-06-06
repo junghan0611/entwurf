@@ -239,15 +239,11 @@ Landed: `meta-bridge-state.py` state manager, stateful `install-meta-bridge`, ne
 `session_id`가 hook `session_id`/meta-record `nativeSessionId`와 일치함을 확인
 (`f232cc4a-29a9-42d9-8295-e4e3707c0c40` → `20260606T133915-418d94`).
 `meta-bridge-statusline.sh`가 매 실행 meta-record **body scan**으로 garden-id를 찾는다(캐시/DB 없음).
-install이 `statusLine` 키를 state로 관리하고 doctor/smoke가 wiring + fallback을 검증한다.
+Claude Code 문서상 statusLine은 multiple lines를 공식 지원하므로 기본 레이아웃은 2줄:
+1행 `<device> <cwd> [branch]`, 2행 `🪛 <garden-id> cc | <model> | <context>`.
+install이 `statusLine` 키를 state로 관리하고 doctor/smoke가 wiring + fallback + 2줄 출력을 검증한다.
 **색/테마/개인취향은 agent-config 영역.** 지금은 통째로 pi-shell-acp가 소유하고, 나중에 풀기능에서
 agent-config로 일부 이관한다.
-
-**Phase 3 follow-up — Claude statusLine multi-line live probe.** 현재 구현은 release-safe single-line.
-Claude Code `statusLine`은 pi TUI footer API와 달리 "command output" 한 표면이라 newline 보존/높이
-처리가 공식적으로 닫힌 증거가 없다. GLG 요청: `🪛 <garden-id>` 때문에 한 줄이 길다. 다음에 실제
-Claude session에서 newline 출력이 보존되는지 먼저 실측하고, 안전하면 opt-in/two-line layout을 추가한다.
-실측 전에는 multi-line을 기본값으로 만들지 말 것.
 
 **Phase 4 — NEXT: GC (블로커 3, post-release).** abandoned/duplicate meta-record 누적 + corrupt/duplicate가
 그 nativeId registration을 영구 차단하는 문제. 자동삭제 금지(authority ambiguity 정직성). 1.0.0은

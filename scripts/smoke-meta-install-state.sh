@@ -283,7 +283,8 @@ STATUS_INPUT_MATCH='{"session_id":"native-a","workspace":{"current_dir":"/tmp"},
 STATUS_INPUT_MISS='{"session_id":"native-missing","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-opus-4-8"}}'
 STATUS_INPUT_READY='{"workspace":{"current_dir":"/tmp"},"model":{"id":"claude-haiku-4-5"}}'
 STATUS_OUT_MATCH="$(printf '%s' "$STATUS_INPUT_MATCH" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
-if printf '%s' "$STATUS_OUT_MATCH" | grep -q '🪛 20260606T000000-aaaaaa cc'; then ok "statusline body-scan maps native session_id to garden-id"; else bad "statusline did not show garden-id for native-a: $STATUS_OUT_MATCH"; fi
+if [ "$(printf '%s\n' "$STATUS_OUT_MATCH" | wc -l | tr -d ' ')" = "2" ]; then ok "statusline renders exactly two rows"; else bad "statusline should render two rows: $STATUS_OUT_MATCH"; fi
+if printf '%s\n' "$STATUS_OUT_MATCH" | sed -n '1p' | grep -q 'tmp' && printf '%s\n' "$STATUS_OUT_MATCH" | sed -n '2p' | grep -q '🪛 20260606T000000-aaaaaa cc | s'; then ok "statusline keeps row-1 work context and maps native session_id to row-2 garden-id"; else bad "statusline did not show expected two-row content for native-a: $STATUS_OUT_MATCH"; fi
 STATUS_OUT_MISS="$(printf '%s' "$STATUS_INPUT_MISS" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
 if printf '%s' "$STATUS_OUT_MISS" | grep -q '🪛 ? cc'; then ok "statusline no-record fallback is ?"; else bad "statusline no-record fallback wrong: $STATUS_OUT_MISS"; fi
 STATUS_OUT_READY="$(printf '%s' "$STATUS_INPUT_READY" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
