@@ -17,6 +17,8 @@ MKT_NAME="meta-bridge-local"
 PLUGIN="entwurf-meta-receive"
 CLAUDE_CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/meta-bridge-hook-log.sh
+source "$REPO/scripts/meta-bridge-hook-log.sh"
 
 fail=0
 ok()   { echo "  ok    $*"; }
@@ -44,10 +46,22 @@ esac
 
 echo "[toolchain]"
 if command -v claude >/dev/null; then ok "claude: $(claude --version 2>/dev/null | head -1)"; else bad "claude not on PATH"; fi
+if command -v python3 >/dev/null; then ok "python3: $(python3 --version 2>/dev/null | head -1) (doorbell JSON parser)"; else bad "python3 not on PATH — FileChanged wake runtime would silently die"; fi
 if command -v node >/dev/null; then
   NV="$(node -p 'process.versions.node' 2>/dev/null || echo 0)"; MJ="${NV%%.*}"; MN="$(printf '%s' "$NV" | cut -d. -f2)"
   if [ "${MJ:-0}" -gt 22 ] || { [ "${MJ:-0}" -eq 22 ] && [ "${MN:-0}" -ge 6 ]; }; then ok "node $NV (>= 22.6 strip-types)"; else bad "node $NV too old (need >= 22.6)"; fi
 else bad "node not on PATH"; fi
+
+echo "[managed config state]"
+if command -v python3 >/dev/null; then
+  if python3 "$REPO/scripts/meta-bridge-state.py" check --repo "$REPO" --asm "$REPO/pi/meta-bridge/.assembled" >/dev/null 2>&1; then
+    ok "state file present and managed settings/MCP keyset is installed"
+  else
+    bad "state file missing or managed settings/MCP keyset drifted — run ./run.sh install-meta-bridge (stateful Phase 2 installer)"
+  fi
+else
+  bad "cannot validate stateful install without python3"
+fi
 
 echo "[plugin install (global / --scope user)]"
 if claude plugin list 2>/dev/null | grep -q "$PLUGIN@$MKT_NAME"; then
@@ -91,11 +105,35 @@ fi
 echo "[meta-record store]"
 mkdir -p "$META_SESSIONS" 2>/dev/null || true
 if [ -d "$META_SESSIONS" ] && [ -w "$META_SESSIONS" ]; then ok "writable: $META_SESSIONS"; else bad "meta-sessions dir not writable: $META_SESSIONS"; fi
+if command -v node >/dev/null; then
+  if node --experimental-strip-types "$REPO/scripts/meta-bridge-store-doctor.ts" "$META_SESSIONS" >/dev/null 2>&1; then
+    ok "full store scan: no corrupt records, duplicate nativeSessionId, body/filename drift, or backend↔wakeMode contradiction"
+  else
+    bad "full store scan failed — corrupt/duplicate/drift meta-record(s) present. Inspect with: node --experimental-strip-types $REPO/scripts/meta-bridge-store-doctor.ts $META_SESSIONS"
+  fi
+else
+  bad "cannot scan meta-record store without node"
+fi
 
 echo "[SessionStart creation evidence (silent-miss guard)]"
-REC_COUNT="$(ls "$META_SESSIONS"/*.meta.json 2>/dev/null | wc -l | tr -d ' ')"
 CC_COUNT="$(grep -l '"backend": "claude-code"' "$META_SESSIONS"/*.meta.json 2>/dev/null | wc -l | tr -d ' ')"
-if [ -f "$HOOK_LOG" ]; then ok "hook log present: $HOOK_LOG ($(wc -l < "$HOOK_LOG" | tr -d ' ') lines)"; else warn "no hook log yet ($HOOK_LOG) — open a Claude Code session first"; fi
+if [ -f "$HOOK_LOG" ]; then
+  ok "hook log present: $HOOK_LOG ($(wc -l < "$HOOK_LOG" | tr -d ' ') lines)"
+  # ERROR is sticky in an append-only log: a one-time miss that was later recovered
+  # must NOT keep the doctor red forever. Recovery is deliberately narrow: only a
+  # later `INFO armed watch` proves a real SessionStart/CwdChanged wake path is
+  # back. A later UserPromptSubmit `INFO attach record` is degraded record
+  # backfill and must NOT clear an arm/upsert failure.
+  if hook_status="$(meta_bridge_hook_log_status "$HOOK_LOG")"; then
+    if [ "$hook_status" = "no-error" ]; then
+      ok "hook log contains no ERROR line(s)"
+    else
+      ok "hook log has past ERROR(s) but a later INFO armed watch recovered the wake path"
+    fi
+  else
+    bad "unrecovered hook ERROR (no later INFO armed watch) — last ERROR: $hook_status"
+  fi
+else warn "no hook log yet ($HOOK_LOG) — open a Claude Code session first"; fi
 if [ "${CC_COUNT:-0}" -ge 1 ]; then
   ok "$CC_COUNT claude-code meta-record(s) landed (garden citizen proven)"
 else

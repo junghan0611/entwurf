@@ -122,7 +122,7 @@
 		"check:plugins": "pnpm -r --filter \"./plugins/*\" run check",
 		"check-async-resume-gate": "./run.sh check-async-resume-gate",
 		"check-package-source-routing": "./run.sh check-package-source-routing",
-		"check": "pnpm lint && pnpm typecheck && pnpm check:plugins && ./run.sh check-mcp && ./run.sh check-shell-quote && ./run.sh check-entwurf-session-identity && ./run.sh check-meta-session && ./run.sh smoke-meta-honesty && ./run.sh check-plugin-empty-final-recovery && ./run.sh check-plugin-prompt-format && ./run.sh check-async-resume-gate && ./run.sh check-package-source-routing && ./run.sh check-model-lock && ./run.sh check-models && ./run.sh check-backends && ./run.sh check-registration && ./run.sh check-dep-versions && ./run.sh check-auth-boundary && ./run.sh check-sdk-surface && ./run.sh verify-transcript-poison && ./run.sh check-pack"
+		"check": "pnpm lint && pnpm typecheck && pnpm check:plugins && ./run.sh check-mcp && ./run.sh check-shell-quote && ./run.sh check-entwurf-session-identity && ./run.sh check-meta-session && ./run.sh smoke-meta-honesty && ./run.sh smoke-meta-install-state && ./run.sh check-plugin-empty-final-recovery && ./run.sh check-plugin-prompt-format && ./run.sh check-async-resume-gate && ./run.sh check-package-source-routing && ./run.sh check-model-lock && ./run.sh check-models && ./run.sh check-backends && ./run.sh check-registration && ./run.sh check-dep-versions && ./run.sh check-auth-boundary && ./run.sh check-sdk-surface && ./run.sh verify-transcript-poison && ./run.sh check-pack"
 	},
 	"pi": {
 		"extensions": [

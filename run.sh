@@ -65,9 +65,11 @@ Usage:
   ./run.sh smoke-resident-garden-guard # live resident --entwurf-control garden guard (negative 0-token; SMOKE_RGG_POSITIVE=1 for positive)
   ./run.sh smoke-meta-async-drift     # 1.0.0 meta-bridge step 1: drift sentinel — version pins + Claude binary undocumented-behavior markers (LIVE=1 adds plugin watch-arm probe)
   ./run.sh smoke-meta-honesty         # 1.0.0 meta-bridge: honesty regression gate (#30 blockers) — doorbell counts ALL msgs honestly + hook logs failures as ERROR (best-effort, no scream). Offline/deterministic (deps: bash+node+python3)
+  ./run.sh smoke-meta-install-state   # 1.0.0 meta-bridge Phase 2: stateful install/uninstall + store-doctor regression gate. Offline/deterministic (deps: bash+node+python3)
 
-  ./run.sh install-meta-bridge        # 1.0.0 meta-bridge step 5: GLOBAL install (marketplace add + install --scope user) of the garden-native receive plugin — node-baked, self-contained, idempotent (Linux/macOS only)
-  ./run.sh doctor-meta-bridge         # 1.0.0 meta-bridge step 5: fail-loud doctor — toolchain + baked-node-path resolves + global plugin install + meta-record creation evidence (silent-miss => non-zero)
+  ./run.sh install-meta-bridge        # 1.0.0 meta-bridge Phase 2: stateful GLOBAL install (plugin + USER MCP + settings keyset, honest uninstall state)
+  ./run.sh uninstall-meta-bridge      # 1.0.0 meta-bridge Phase 2: stateful GLOBAL uninstall (restore only keys/items captured in install-state)
+  ./run.sh doctor-meta-bridge         # 1.0.0 meta-bridge Phase 2: fail-loud doctor — toolchain + state + plugin/MCP + store scan + hook errors + SessionStart evidence
   ./run.sh check-backends             # local deterministic check of backend launch resolution + backend-specific _meta shape
   ./run.sh check-registration         # local deterministic check of per-runtime provider registration semantics
   ./run.sh check-dep-versions         # local deterministic check that version pins (package.json/run.sh/README.md + pi devDeps/peer pins) agree
@@ -4064,6 +4066,13 @@ case "$cmd" in
     # CI/pnpm-check safe.
     (cd "$REPO_DIR" && bash scripts/smoke-meta-honesty.sh)
     ;;
+  smoke-meta-install-state)
+    # 1.0.0 meta-bridge Phase 2 regression gate: state file captures pre-install
+    # values, install/uninstall touches only the managed keyset, uninstall refuses
+    # to guess without state, and the doctor store scan fails on corrupt/
+    # duplicate/drift records. Offline + deterministic (deps bash+node+python3).
+    (cd "$REPO_DIR" && bash scripts/smoke-meta-install-state.sh)
+    ;;
   install-meta-bridge)
     # 1.0.0 meta-bridge step 5: operator-grade GLOBAL install of the garden-native
     # receive plugin. Assembles a self-contained, node-path-baked copy under
@@ -4072,11 +4081,18 @@ case "$cmd" in
     # Idempotent; Linux/macOS only (Windows fail-fast).
     (cd "$REPO_DIR" && bash scripts/meta-bridge-install.sh "$@")
     ;;
+  uninstall-meta-bridge)
+    # 1.0.0 meta-bridge Phase 2: honest inverse of install-meta-bridge. Uses the
+    # install-state file to restore original scalar/map values and remove only the
+    # permission-array entries pi-shell-acp added; without state it refuses to guess.
+    (cd "$REPO_DIR" && bash scripts/meta-bridge-uninstall.sh "$@")
+    ;;
   doctor-meta-bridge)
-    # 1.0.0 meta-bridge step 5: the FAIL-LOUD surface. Proves toolchain + baked
-    # node path (NixOS store-churn guard) + global plugin install + meta-record
-    # dir + actual SessionStart creation evidence. A plugin present with zero
-    # claude-code meta-records is a SILENT MISS -> non-zero exit.
+    # 1.0.0 meta-bridge Phase 2: the FAIL-LOUD surface. Proves toolchain (incl.
+    # python3), stateful managed config, baked node path (NixOS store-churn guard),
+    # global plugin install, USER MCP reach, meta-record store integrity, hook log
+    # no-ERROR, and actual SessionStart creation evidence. A plugin present with
+    # zero claude-code meta-records is a SILENT MISS -> non-zero exit.
     (cd "$REPO_DIR" && bash scripts/meta-bridge-doctor.sh "$@")
     ;;
   check-plugin-empty-final-recovery)

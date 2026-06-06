@@ -42,6 +42,7 @@ esac
 
 # --- toolchain gate ---------------------------------------------------------
 command -v claude >/dev/null || die "'claude' CLI not on PATH. Install Claude Code first."
+command -v python3 >/dev/null || die "'python3' not on PATH. The FileChanged doorbell parses hook JSON with python3; install refuses a silently-dead wake runtime."
 NODE_BIN="$(command -v node)" || die "'node' not on PATH (the hook needs it to run the entry shell)."
 # Need TypeScript type-stripping: native default >= 23.6, --experimental-strip-types >= 22.6.
 NODE_VER="$(node -p 'process.versions.node')"
@@ -50,7 +51,13 @@ NODE_MINOR="$(printf '%s' "$NODE_VER" | cut -d. -f2)"
 if [ "$NODE_MAJOR" -lt 22 ] || { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -lt 6 ]; }; then
   die "node $NODE_VER too old; meta-bridge entry needs >= 22.6.0 (TypeScript strip-types)."
 fi
-echo "[meta-bridge-install] platform=$(uname -s) node=$NODE_VER ($NODE_BIN)"
+echo "[meta-bridge-install] platform=$(uname -s) node=$NODE_VER ($NODE_BIN) python3=$(command -v python3)"
+
+# Capture the user's pre-install values BEFORE any Claude CLI helper can mutate
+# settings.json / ~/.claude.json. Re-runs preserve the first snapshot, so
+# uninstall restores the true pre-pi-shell-acp state rather than the last install
+# run's already-managed values.
+python3 "$REPO/scripts/meta-bridge-state.py" prepare --repo "$REPO" --asm "$ASM"
 
 # --- 1. assemble a self-contained, node-baked plugin ------------------------
 rm -rf "$ASM"
@@ -69,8 +76,16 @@ chmod +x "$ASM/$PLUGIN/scripts/doorbell.sh"
 # tool is NOT the plugin's job. It comes from USER-scope pi-tools-bridge MCP
 # wiring (`claude mcp add -s user ...`), never a plugin .mcp.json duplicate.
 HOOKS="$ASM/$PLUGIN/hooks/hooks.json"
-ESC_NODE="$(printf '%s' "$NODE_BIN" | sed -e 's/[\\&|]/\\&/g')"
-sed -i "s|__NODE_BIN__|$ESC_NODE|g" "$HOOKS"
+HOOKS_PATH="$HOOKS" NODE_PATH_TO_BAKE="$NODE_BIN" python3 - <<'PY'
+from pathlib import Path
+import os
+hooks = Path(os.environ["HOOKS_PATH"])
+node = os.environ["NODE_PATH_TO_BAKE"]
+text = hooks.read_text(encoding="utf-8")
+if "__NODE_BIN__" not in text:
+    raise SystemExit(f"node-path bake failed before replacement (placeholder absent in {hooks})")
+hooks.write_text(text.replace("__NODE_BIN__", node), encoding="utf-8")
+PY
 grep -q "__NODE_BIN__" "$HOOKS" && die "node-path bake failed (placeholder still present in $HOOKS)."
 echo "[meta-bridge-install] assembled $ASM (node baked, entry+lib bundled; MCP wiring is NOT plugin-owned)"
 
@@ -97,6 +112,11 @@ claude mcp add -s user pi-tools-bridge \
 (cd /tmp && claude mcp get pi-tools-bridge 2>/dev/null | grep -q "Scope: User config") || \
   die "post-install: pi-tools-bridge is not reachable as USER-scope MCP from /tmp"
 echo "[meta-bridge-install] installed pi-tools-bridge MCP (scope: user = global receiver tools)"
+
+# Re-assert the repo-owned keyset through our stateful manager. The Claude CLI
+# calls above are allowed to maintain their cache/registry files, but the
+# operator-facing JSON keys are owned here so uninstall can be honest.
+python3 "$REPO/scripts/meta-bridge-state.py" apply --repo "$REPO" --asm "$ASM"
 
 # --- evidence ---------------------------------------------------------------
 echo "--- claude plugin list ---"

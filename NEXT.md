@@ -202,23 +202,31 @@ because it depends on the host's installed Claude binary. Do not collapse "L-evi
 - honesty gate: `scripts/smoke-meta-honesty.sh` (17 assertions, deps **bash+node+python3**), `pnpm
   check` 편입(`check-meta-session` 뒤). fresh/backlog/empty count + degraded 레벨 경계 커버.
 
-**Phase 2 — NEXT (분신 작업 가능): install / uninstall / doctor — state 파일 기반 키셋 in/out.**
+**Phase 2 — DONE (2026-06-06): install / uninstall / doctor — state 파일 기반 키셋 in/out.**
 원칙: **파일 덮어쓰기 금지. 우리 키셋만 넣고, uninstall은 state로 정직하게 원복.** Claude Code only.
+Landed: `meta-bridge-state.py` state manager, stateful `install-meta-bridge`, new `uninstall-meta-bridge`,
+`doctor-meta-bridge` hardening, `meta-bridge-store-doctor.ts`, and offline gate
+`smoke-meta-install-state` in `pnpm check`. Live on GLG machine: install PASS + doctor PASS.
 - **관리 키셋 (`~/.claude/settings.json`):**
   - A (메타브릿지 wiring, 필수): `enabledPlugins["entwurf-meta-receive@meta-bridge-local"]=true`;
     `extraKnownMarketplaces["meta-bridge-local"]`=host-resolved `.assembled` 절대경로; USER-scope
     `pi-tools-bridge` MCP.
-  - B-lite (single-driver 정책): `permissions.allow/deny`; 자동/메모리/요약/제안/compact 계열 false
-    토글; `env.DISABLE_AUTOCOMPACT`; `statusLine`(Phase 3).
+  - B-lite (single-driver 정책): `permissions.allow/deny`; `env.DISABLE_AUTOCOMPACT`;
+    `cleanupPeriodDays=365`; `promptSuggestionEnabled=false`; `awaySummaryEnabled=false`;
+    `autoMemoryEnabled=false`; `skipDangerousModePermissionPrompt=true`; `verbose=false`;
+    `autoCompactEnabled=false`; `showTurnDuration=false`; `terminalProgressBarEnabled=false`;
+    `useAutoModeDuringPlan=false`; `statusLine`(Phase 3).
   - **흡수 금지:** agent-config의 peon-ping/hooks/keybindings/개인취향 — agent-config 영역.
 - **state 파일 (핵심, GPT힣 지적):** `${CLAUDE_CONFIG_DIR:-~/.claude}/pi-shell-acp.install-state.json`.
   install이 touched key의 **기존 값**을 저장(없던 key는 absent 마킹; 배열은 "우리가 추가한 항목"만).
   uninstall: 원래 없던 key→제거, 있던 key→원값 복원, 배열→우리가 넣은 항목만 제거. **단순 jq merge로
   scalar false 토글을 빼면 사용자 원값을 망가뜨림 — state 없이는 정직한 uninstall 불가.**
+  wrapper도 state preflight 통과 전에는 Claude plugin/MCP remove를 절대 호출하지 않음(무상태 side-effect 금지).
 - **python3 toolchain gate (install + doctor 둘 다, GPT힣 최종):** doorbell FileChanged가 python3로
   JSON 파싱. install 성공해도 python3 없으면 wake runtime만 조용히 죽음 → install·doctor 모두
   fail-fast(공식 runtime dependency로 선언, "대부분 있으니까" 금지).
-- **doctor 강화 (블로커 2 소비 + 블로커 3 감지):** `meta-bridge-hook.log`의 ` ERROR ` 라인을 fail로;
+- **doctor 강화 (블로커 2 소비 + 블로커 3 감지):** `meta-bridge-hook.log`의 미회복 ` ERROR `를 fail로
+  (회복 기준은 이후 `INFO armed watch`; UserPromptSubmit backfill INFO는 회복 아님);
   meta-session store 전수 스캔으로 corrupt record / duplicate `nativeSessionId` / body·filename drift
   / backend↔wakeMode contradiction을 fail-loud(**자동삭제 금지**). 기존 platform/toolchain/plugin/
   baked-node/USER-MCP/store/hook-log 체크 유지 + python3 추가.
@@ -226,7 +234,7 @@ because it depends on the host's installed Claude binary. Do not collapse "L-evi
   plugin install` / `claude mcp add` CLI에 위임하는 부분이 settings.json 두 키를 박는데, 그 정직성
   (state 기록·원복)을 우리가 통제하도록 전환. **uninstall 스크립트는 신규.** smoke 게이트 동반.
 
-**Phase 3 — statusline:** 현 Claude statusline 베이스(GLG 만족)에 pi 스타일 `🪛 <garden-id>` +
+**Phase 3 — NEXT: statusline.** 현 Claude statusline 베이스(GLG 만족)에 pi 스타일 `🪛 <garden-id>` +
 backend만 덧붙인 repo-owned 판. statusline이 native session_id로 meta-store를 scan해 garden-id 조회
 (scan이 authority; 무거우면 derived cache는 추후). install이 `statusLine` 키를 키셋으로 관리.
 **색/테마/개인취향은 agent-config 영역.** (이전 "statusline 전적 consumer track" 결정은 오늘 방향
