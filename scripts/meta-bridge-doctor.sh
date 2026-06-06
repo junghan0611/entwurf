@@ -82,6 +82,28 @@ else
   warn "no installed hooks.json in cache (plugin not installed?)"
 fi
 
+echo "[statusline — garden identity visible in native Claude]"
+if command -v python3 >/dev/null; then
+  STATUSLINE_CMD="$(python3 - <<'PY'
+import json, os
+p=os.path.expanduser('~/.claude/settings.json') if not os.environ.get('CLAUDE_CONFIG_DIR') else os.path.join(os.environ['CLAUDE_CONFIG_DIR'], 'settings.json')
+try:
+    d=json.load(open(p))
+    sl=d.get('statusLine') if isinstance(d, dict) else None
+    print(sl.get('command','') if isinstance(sl, dict) else '')
+except Exception:
+    print('')
+PY
+)"
+  EXPECTED_STATUSLINE="$REPO/scripts/meta-bridge-statusline.sh"
+  if [ "$STATUSLINE_CMD" = "$EXPECTED_STATUSLINE" ]; then ok "statusLine.command is repo-owned: $STATUSLINE_CMD"; else bad "statusLine.command drifted (got '$STATUSLINE_CMD', expected '$EXPECTED_STATUSLINE')"; fi
+  if [ -x "$EXPECTED_STATUSLINE" ]; then ok "statusline executable"; else bad "statusline script not executable: $EXPECTED_STATUSLINE"; fi
+  SAMPLE_STATUSLINE_OUT="$(printf '%s' '{"session_id":"doctor-no-record","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-sonnet-4-6"},"context_window":{"context_window_size":200000,"used_percentage":1,"current_usage":{"input_tokens":1}}}' | "$EXPECTED_STATUSLINE" 2>/dev/null || true)"
+  if printf '%s' "$SAMPLE_STATUSLINE_OUT" | grep -q '🪛' && printf '%s' "$SAMPLE_STATUSLINE_OUT" | grep -q ' cc'; then ok "statusline synthetic execution emits 🪛 + backend"; else bad "statusline synthetic execution failed or omitted identity marker"; fi
+else
+  bad "cannot validate statusline without python3"
+fi
+
 echo "[receiver MCP reach — entwurf_inbox_read in EVERY native session, NOT plugin-owned]"
 # The plugin owns ONLY the wake/record hooks. The receiver self-fetch tool
 # (entwurf_inbox_read) comes from the user's pi-tools-bridge MCP wiring — a Claude

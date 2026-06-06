@@ -44,6 +44,10 @@ cat > "$CLAUDE_CONFIG_DIR/settings.json" <<'JSON'
     "DISABLE_AUTOCOMPACT": "0",
     "KEEP_ME": "yes"
   },
+  "statusLine": {
+    "type": "command",
+    "command": "/old/user/statusline.sh"
+  },
   "promptSuggestionEnabled": true,
   "skipDangerousModePermissionPrompt": false,
   "showTurnDuration": true
@@ -78,6 +82,7 @@ s=json.load(open(path))
 assert s['files']['settings']['keys']['enabledPlugins.entwurf-meta-receive@meta-bridge-local']['original']['value'] is False
 assert s['files']['settings']['keys']['cleanupPeriodDays']['original']['value'] == 30
 assert s['files']['settings']['keys']['env.DISABLE_AUTOCOMPACT']['original']['value'] == '0'
+assert s['files']['settings']['keys']['statusLine']['original']['value']['command'] == '/old/user/statusline.sh'
 assert s['files']['settings']['keys']['promptSuggestionEnabled']['original']['value'] is True
 assert s['files']['settings']['keys']['autoCompactEnabled']['original']['existed'] is False
 assert s['files']['claudeRoot']['keys']['mcpServers.pi-tools-bridge']['original']['value']['command'] == 'old'
@@ -96,6 +101,7 @@ assert settings['extraKnownMarketplaces']['meta-bridge-local']['source']['path']
 assert settings['cleanupPeriodDays'] == 365
 assert settings['env']['DISABLE_AUTOCOMPACT'] == '1'
 assert settings['env']['KEEP_ME'] == 'yes'
+assert settings['statusLine']['command'] == os.environ['REPO'] + '/scripts/meta-bridge-statusline.sh'
 for key in ['promptSuggestionEnabled','awaySummaryEnabled','autoMemoryEnabled','verbose','autoCompactEnabled','showTurnDuration','terminalProgressBarEnabled','useAutoModeDuringPlan']:
     assert settings[key] is False, key
 assert settings['skipDangerousModePermissionPrompt'] is True
@@ -117,6 +123,7 @@ s=json.load(open(os.environ['CLAUDE_CONFIG_DIR'] + '/pi-shell-acp.install-state.
 assert s['files']['settings']['keys']['enabledPlugins.entwurf-meta-receive@meta-bridge-local']['original']['value'] is False
 assert s['files']['settings']['keys']['cleanupPeriodDays']['original']['value'] == 30
 assert s['files']['settings']['keys']['env.DISABLE_AUTOCOMPACT']['original']['value'] == '0'
+assert s['files']['settings']['keys']['statusLine']['original']['value']['command'] == '/old/user/statusline.sh'
 assert s['files']['settings']['keys']['promptSuggestionEnabled']['original']['value'] is True
 PY
 then ok "rerun preserves first pre-install snapshot"; else bad "rerun overwrote original snapshot"; fi
@@ -141,6 +148,7 @@ assert settings['enabledPlugins']['entwurf-meta-receive@meta-bridge-local'] is F
 assert 'meta-bridge-local' not in settings.get('extraKnownMarketplaces', {})
 assert settings['env']['DISABLE_AUTOCOMPACT'] == '0'
 assert settings['env']['KEEP_ME'] == 'yes'
+assert settings['statusLine']['command'] == '/old/user/statusline.sh'
 assert settings['promptSuggestionEnabled'] is True
 assert settings['skipDangerousModePermissionPrompt'] is False
 assert settings['showTurnDuration'] is True
@@ -270,6 +278,21 @@ JSON
 STORE="$TMP/store"; export STORE; mkdir -p "$STORE"
 valid_record "20260606T000000-aaaaaa" "native-a" > "$STORE/20260606T000000-aaaaaa.meta.json"
 valid_record "20260606T000001-bbbbbb" "native-b" > "$STORE/20260606T000001-bbbbbb.meta.json"
+
+STATUS_INPUT_MATCH='{"session_id":"native-a","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-sonnet-4-6"},"context_window":{"context_window_size":200000,"used_percentage":2,"current_usage":{"input_tokens":10}}}'
+STATUS_INPUT_MISS='{"session_id":"native-missing","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-opus-4-8"}}'
+STATUS_INPUT_READY='{"workspace":{"current_dir":"/tmp"},"model":{"id":"claude-haiku-4-5"}}'
+STATUS_OUT_MATCH="$(printf '%s' "$STATUS_INPUT_MATCH" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+if printf '%s' "$STATUS_OUT_MATCH" | grep -q '🪛 20260606T000000-aaaaaa cc'; then ok "statusline body-scan maps native session_id to garden-id"; else bad "statusline did not show garden-id for native-a: $STATUS_OUT_MATCH"; fi
+STATUS_OUT_MISS="$(printf '%s' "$STATUS_INPUT_MISS" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+if printf '%s' "$STATUS_OUT_MISS" | grep -q '🪛 ? cc'; then ok "statusline no-record fallback is ?"; else bad "statusline no-record fallback wrong: $STATUS_OUT_MISS"; fi
+STATUS_OUT_READY="$(printf '%s' "$STATUS_INPUT_READY" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+if printf '%s' "$STATUS_OUT_READY" | grep -q '🪛 ready cc'; then ok "statusline no-session_id fallback is ready"; else bad "statusline ready fallback wrong: $STATUS_OUT_READY"; fi
+cp "$STORE/20260606T000000-aaaaaa.meta.json" "$STORE/20260606T000003-dddddd.meta.json"
+STATUS_OUT_DUP="$(printf '%s' "$STATUS_INPUT_MATCH" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+if printf '%s' "$STATUS_OUT_DUP" | grep -q '🪛 ! cc'; then ok "statusline duplicate nativeSessionId fallback is !"; else bad "statusline duplicate fallback wrong: $STATUS_OUT_DUP"; fi
+rm "$STORE/20260606T000003-dddddd.meta.json"
+
 if node --experimental-strip-types "$STORE_DOCTOR" "$STORE" >/dev/null; then ok "store doctor accepts valid records"; else bad "store doctor rejected valid records"; fi
 cp "$STORE/20260606T000000-aaaaaa.meta.json" "$STORE/20260606T000002-cccccc.meta.json"
 if node --experimental-strip-types "$STORE_DOCTOR" "$STORE" >/dev/null 2>&1; then bad "store doctor missed body/filename drift + duplicate"; else ok "store doctor fails on body/filename drift and duplicate nativeSessionId"; fi

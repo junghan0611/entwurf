@@ -234,13 +234,22 @@ Landed: `meta-bridge-state.py` state manager, stateful `install-meta-bridge`, ne
   plugin install` / `claude mcp add` CLI에 위임하는 부분이 settings.json 두 키를 박는데, 그 정직성
   (state 기록·원복)을 우리가 통제하도록 전환. **uninstall 스크립트는 신규.** smoke 게이트 동반.
 
-**Phase 3 — NEXT: statusline.** 현 Claude statusline 베이스(GLG 만족)에 pi 스타일 `🪛 <garden-id>` +
-backend만 덧붙인 repo-owned 판. statusline이 native session_id로 meta-store를 scan해 garden-id 조회
-(scan이 authority; 무거우면 derived cache는 추후). install이 `statusLine` 키를 키셋으로 관리.
-**색/테마/개인취향은 agent-config 영역.** (이전 "statusline 전적 consumer track" 결정은 오늘 방향
-전환으로 garden-id 표시 최소판만 core로 이동 — theming은 여전히 consumer.)
+**Phase 3 — DONE (2026-06-06): statusline.** 현 Claude statusline 베이스(GLG 만족)에 pi 스타일
+`🪛 <garden-id> cc`를 덧붙인 repo-owned 판. 구현 전 실측: Claude Code statusline input의
+`session_id`가 hook `session_id`/meta-record `nativeSessionId`와 일치함을 확인
+(`f232cc4a-29a9-42d9-8295-e4e3707c0c40` → `20260606T133915-418d94`).
+`meta-bridge-statusline.sh`가 매 실행 meta-record **body scan**으로 garden-id를 찾는다(캐시/DB 없음).
+install이 `statusLine` 키를 state로 관리하고 doctor/smoke가 wiring + fallback을 검증한다.
+**색/테마/개인취향은 agent-config 영역.** 지금은 통째로 pi-shell-acp가 소유하고, 나중에 풀기능에서
+agent-config로 일부 이관한다.
 
-**Phase 4 — GC (블로커 3, post-release):** abandoned/duplicate meta-record 누적 + corrupt/duplicate가
+**Phase 3 follow-up — Claude statusLine multi-line live probe.** 현재 구현은 release-safe single-line.
+Claude Code `statusLine`은 pi TUI footer API와 달리 "command output" 한 표면이라 newline 보존/높이
+처리가 공식적으로 닫힌 증거가 없다. GLG 요청: `🪛 <garden-id>` 때문에 한 줄이 길다. 다음에 실제
+Claude session에서 newline 출력이 보존되는지 먼저 실측하고, 안전하면 opt-in/two-line layout을 추가한다.
+실측 전에는 multi-line을 기본값으로 만들지 말 것.
+
+**Phase 4 — NEXT: GC (블로커 3, post-release).** abandoned/duplicate meta-record 누적 + corrupt/duplicate가
 그 nativeId registration을 영구 차단하는 문제. 자동삭제 금지(authority ambiguity 정직성). 1.0.0은
 doctor 감지 + 수동 prune까지. 실제 GC는 **글로벌 설치 스킬로 에이전트가 뒷정리**(동작 로직 방해 금지)
 하거나 TTL/liveness 코드화 — 간단히 시작 후 코드화. 참고: `agent-config/.claude/skills/agent-config/`.

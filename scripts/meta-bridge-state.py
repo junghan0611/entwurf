@@ -265,6 +265,10 @@ def desired_mcp(repo: Path) -> dict[str, Any]:
     }
 
 
+def desired_statusline(repo: Path) -> dict[str, Any]:
+    return {"type": "command", "command": str((repo / "scripts" / "meta-bridge-statusline.sh").resolve())}
+
+
 def prepare(repo: Path, asm: Path) -> None:
     existing = load_state(required=False)
     state = existing if existing is not None else init_state(repo, asm)
@@ -301,6 +305,15 @@ def prepare(repo: Path, asm: Path) -> None:
     snapshot_array_items(state, "settings", "permissions.deny", settings, ["permissions", "deny"], PERMISSION_DENY)
     for name, path_, _desired in MANAGED_SETTINGS_SCALARS:
         snapshot_value(state, "settings", name, settings, path_, "scalar")
+    snapshot_value(
+        state,
+        "settings",
+        "statusLine",
+        settings,
+        ["statusLine"],
+        "map-entry",
+        legacy_absent_if_equal=desired_statusline(repo),
+    )
     snapshot_value(
         state,
         "claudeRoot",
@@ -342,6 +355,7 @@ def apply(repo: Path, asm: Path) -> None:
         set_nested(settings, path_, append_unique(value if isinstance(value, list) else [], desired))
     for _name, path_, desired in MANAGED_SETTINGS_SCALARS:
         set_nested(settings, path_, desired)
+    set_nested(settings, ["statusLine"], desired_statusline(repo))
     set_nested(root, ["mcpServers", "pi-tools-bridge"], desired_mcp(repo))
 
     state["updatedAt"] = iso_now()
@@ -426,6 +440,7 @@ def check(repo: Path, asm: Path) -> None:
     checks = [
         (["enabledPlugins", PLUGIN_REF], True, "enabled plugin"),
         (["extraKnownMarketplaces", MARKETPLACE], desired_marketplace(asm), "known marketplace"),
+        (["statusLine"], desired_statusline(repo), "statusLine"),
     ] + [(path_, desired, name) for name, path_, desired in MANAGED_SETTINGS_SCALARS]
     for path_, expected, label in checks:
         existed, value = get_nested(settings, path_)
