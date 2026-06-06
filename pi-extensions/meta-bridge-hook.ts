@@ -37,13 +37,26 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { defaultMetaMailboxDir, defaultMetaSessionsDir, upsertMetaSession } from "./lib/meta-session.ts";
 
-/** Append a best-effort diagnostic line; swallow even its own failure (never throw from the hook). */
-function logLine(message: string): void {
+/**
+ * Append a best-effort diagnostic line; swallow even its own failure (never throw
+ * from the hook). Every line carries a LEVEL token so the doctor — the fail-loud
+ * surface — can mechanically tell a silent miss from routine noise:
+ *   - ERROR: this session did NOT become a garden citizen (or lost its wake).
+ *            The doctor must treat a recent ERROR as a failure (blocker #2).
+ *   - WARN : the session registered, but something nearby is off (a corrupt
+ *            neighbour record skipped during scan, or a degraded UserPromptSubmit
+ *            backfill — note a degraded SessionStart/CwdChanged is ERROR, since
+ *            those are the events that actually establish/refresh citizenship).
+ *   - INFO : normal create/attach/arm.
+ * The token sits right after the ISO timestamp, so ` ERROR ` is a clean grep.
+ */
+type LogLevel = "INFO" | "WARN" | "ERROR";
+function logLine(level: LogLevel, message: string): void {
 	try {
 		// dirname(meta-sessions) == the pi agent dir — no extra resolver export needed.
 		const file = path.join(path.dirname(defaultMetaSessionsDir()), "meta-bridge-hook.log");
 		fs.mkdirSync(path.dirname(file), { recursive: true });
-		fs.appendFileSync(file, `${new Date().toISOString()} ${message}\n`);
+		fs.appendFileSync(file, `${new Date().toISOString()} ${level} ${message}\n`);
 	} catch {
 		/* logging is best-effort; a broken log must not break the session */
 	}
@@ -60,7 +73,7 @@ function main(): void {
 	try {
 		raw = fs.readFileSync(0, "utf8"); // fd 0 = stdin (the Claude hook envelope)
 	} catch (err) {
-		logLine(`stdin read failed: ${err instanceof Error ? err.message : String(err)}`);
+		logLine("ERROR", `stdin read failed: ${err instanceof Error ? err.message : String(err)}`);
 		emit({});
 	}
 
@@ -70,7 +83,7 @@ function main(): void {
 		if (typeof parsed !== "object" || parsed === null) throw new Error("envelope is not an object");
 		env = parsed as Record<string, unknown>;
 	} catch (err) {
-		logLine(`envelope parse failed: ${err instanceof Error ? err.message : String(err)}`);
+		logLine("ERROR", `envelope parse failed: ${err instanceof Error ? err.message : String(err)}`);
 		emit({});
 	}
 
@@ -82,8 +95,14 @@ function main(): void {
 
 	if (!sessionId || !transcriptPath) {
 		// A degraded envelope: cannot mint an honest reference record. Log + no-op
-		// rather than write a half-record or guess a transcript path.
+		// rather than write a half-record or guess a transcript path. LEVEL depends
+		// on the event: a degraded SessionStart / CwdChanged means the session FAILED
+		// to become (or refresh) a garden citizen — that is the silent registration
+		// miss the doctor must catch (blocker #2), so ERROR. UserPromptSubmit only
+		// ever does a best-effort record backfill, so a degraded one is just WARN.
+		const degradedLevel = eventName === "UserPromptSubmit" ? "WARN" : "ERROR";
 		logLine(
+			degradedLevel,
 			`degraded envelope (event=${eventName}, session_id=${sessionId ? "set" : "MISSING"}, transcript_path=${transcriptPath ? "set" : "MISSING"})`,
 		);
 		emit({});
@@ -93,14 +112,17 @@ function main(): void {
 	try {
 		const result = upsertMetaSession({
 			input: { backend: "claude-code", nativeSessionId: sessionId, transcriptPath, cwd },
-			onSkip: (filename, e) => logLine(`scan skipped ${filename}: ${e.message}`),
+			onSkip: (filename, e) => logLine("WARN", `scan skipped ${filename}: ${e.message}`),
 		});
 		gardenId = result.record.gardenId;
-		logLine(`${result.action} record ${path.basename(result.path)} (event=${eventName}, native=${sessionId})`);
+		logLine("INFO", `${result.action} record ${path.basename(result.path)} (event=${eventName}, native=${sessionId})`);
 	} catch (err) {
 		// Best-effort: a broken record store must surface via the doctor, not by
-		// breaking the user's session open. Log and continue with no arm.
+		// breaking the user's session open. Log and continue with no arm. This is
+		// the silent-registration-miss (blocker #2): the session opened fine but is
+		// NOT a garden citizen — the doctor catches it via this ERROR line.
 		logLine(
+			"ERROR",
 			`upsert failed (event=${eventName}, native=${sessionId}): ${err instanceof Error ? err.message : String(err)}`,
 		);
 		emit({});
@@ -118,7 +140,7 @@ function main(): void {
 		fs.mkdirSync(mailbox, { recursive: true });
 		const signal = path.join(mailbox, "inbox.signal");
 		if (!fs.existsSync(signal)) fs.writeFileSync(signal, "", { mode: 0o600 });
-		logLine(`armed watch ${signal}`);
+		logLine("INFO", `armed watch ${signal}`);
 		emit({
 			hookSpecificOutput: {
 				hookEventName: eventName,
@@ -126,7 +148,10 @@ function main(): void {
 			},
 		});
 	} catch (err) {
-		logLine(`arm failed (event=${eventName}, garden=${gardenId}): ${err instanceof Error ? err.message : String(err)}`);
+		logLine(
+			"ERROR",
+			`arm failed (event=${eventName}, garden=${gardenId}): ${err instanceof Error ? err.message : String(err)}`,
+		);
 		emit({}); // record landed; only the arm failed — the doctor will flag the missing watch.
 	}
 }

@@ -64,6 +64,8 @@ Usage:
   ./run.sh new-session-id             # print one fresh garden-native session id for operator launchers (--session-id)
   ./run.sh smoke-resident-garden-guard # live resident --entwurf-control garden guard (negative 0-token; SMOKE_RGG_POSITIVE=1 for positive)
   ./run.sh smoke-meta-async-drift     # 1.0.0 meta-bridge step 1: drift sentinel — version pins + Claude binary undocumented-behavior markers (LIVE=1 adds plugin watch-arm probe)
+  ./run.sh smoke-meta-honesty         # 1.0.0 meta-bridge: honesty regression gate (#30 blockers) — doorbell counts ALL msgs honestly + hook logs failures as ERROR (best-effort, no scream). Offline/deterministic (deps: bash+node+python3)
+
   ./run.sh install-meta-bridge        # 1.0.0 meta-bridge step 5: GLOBAL install (marketplace add + install --scope user) of the garden-native receive plugin — node-baked, self-contained, idempotent (Linux/macOS only)
   ./run.sh doctor-meta-bridge         # 1.0.0 meta-bridge step 5: fail-loud doctor — toolchain + baked-node-path resolves + global plugin install + meta-record creation evidence (silent-miss => non-zero)
   ./run.sh check-backends             # local deterministic check of backend launch resolution + backend-specific _meta shape
@@ -4052,6 +4054,15 @@ case "$cmd" in
     # undocumented-behavior marker cross-validation; SCREAMS on drift. LIVE=1 adds
     # the plugin SessionStart watch-arm probe (spawns one metered claude -p).
     (cd "$REPO_DIR" && bash scripts/smoke-meta-async-drift.sh)
+    ;;
+  smoke-meta-honesty)
+    # 1.0.0 meta-bridge HONESTY regression gate (#30 bbot release blockers): the
+    # doorbell must count EVERY queued message honestly (blocker #1), and the
+    # runtime hook must log a silent registration miss as ` ERROR ` for the doctor
+    # to catch while staying best-effort (blocker #2). Offline + deterministic (no
+    # claude binary; deps bash+node+python3), so unlike the drift sentinel it is
+    # CI/pnpm-check safe.
+    (cd "$REPO_DIR" && bash scripts/smoke-meta-honesty.sh)
     ;;
   install-meta-bridge)
     # 1.0.0 meta-bridge step 5: operator-grade GLOBAL install of the garden-native
