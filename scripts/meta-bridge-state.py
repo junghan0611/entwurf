@@ -261,7 +261,15 @@ def desired_mcp(repo: Path) -> dict[str, Any]:
         "type": "stdio",
         "command": "bash",
         "args": [str((repo / "mcp" / "pi-tools-bridge" / "start.sh").resolve())],
-        "env": {"PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID": "external-mcp/claude-code"},
+        "env": {
+            "PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID": "external-mcp/claude-code",
+            # Anonymous sends are forbidden on the Claude Code install path: a send
+            # with no pi-session identity AND no meta-sender marker is refused, not
+            # delivered as an unidentified external. The SessionStart hook writes
+            # the marker (parent-pid keyed), so a normally-opened session always has
+            # an authoritative garden-id sender.
+            "PI_TOOLS_BRIDGE_REQUIRE_META_SENDER": "1",
+        },
     }
 
 
@@ -424,6 +432,33 @@ def uninstall() -> None:
     print("[meta-bridge-state] restored managed keyset and removed install state")
 
 
+def managed_keys() -> dict[str, Any]:
+    """The SSOT of settings.json / ~/.claude.json keys pi-shell-acp OWNS.
+
+    Derived from the same constants install/apply/check use, so there is one
+    source of truth for "which keys are ours". Cross-repo consumers (the keyset
+    overlap guard, agent-config's fragment) read THIS to know which keys they
+    must NOT also set — the keyset-owner invariant ("each side sets only its own
+    keys, never breaks the other's"). Paths are dotted; a parent path (e.g.
+    `statusLine`) owns the whole subtree below it.
+    """
+    return {
+        "owner": OWNER,
+        "settings": {
+            "scalar": [name for name, _path, _desired in MANAGED_SETTINGS_SCALARS],
+            "array-items": ["permissions.allow", "permissions.deny"],
+            "map-entry": [
+                f"enabledPlugins.{PLUGIN_REF}",
+                f"extraKnownMarketplaces.{MARKETPLACE}",
+                "statusLine",
+            ],
+        },
+        "claudeRoot": {
+            "map-entry": ["mcpServers.pi-tools-bridge"],
+        },
+    }
+
+
 def check(repo: Path, asm: Path) -> None:
     state = load_state(required=True)
     assert state is not None
@@ -467,7 +502,10 @@ def check(repo: Path, asm: Path) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="pi-shell-acp meta-bridge state manager")
-    parser.add_argument("command", choices=["prepare", "apply", "preflight-uninstall", "uninstall", "check"])
+    parser.add_argument(
+        "command",
+        choices=["prepare", "apply", "preflight-uninstall", "uninstall", "check", "managed-keys"],
+    )
     parser.add_argument("--repo", default=Path(__file__).resolve().parents[1], type=Path)
     parser.add_argument("--asm", default=None, type=Path)
     args = parser.parse_args()
@@ -484,6 +522,8 @@ def main() -> int:
             uninstall()
         elif args.command == "check":
             check(repo, asm)
+        elif args.command == "managed-keys":
+            print(json.dumps(managed_keys(), indent=2))
     except StateError as exc:
         print(f"meta-bridge-state: {exc}", file=sys.stderr)
         return 1

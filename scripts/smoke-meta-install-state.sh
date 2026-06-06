@@ -113,6 +113,33 @@ assert root['mcpServers']['pi-tools-bridge']['env']['PI_TOOLS_BRIDGE_EXTERNAL_AG
 PY
 then ok "apply installs managed keyset without clobbering unrelated keys"; else bad "apply keyset check failed"; fi
 
+# Keyset-survival guard (B1): once installed, `state.py check` is the
+# effect-based survival assertion doctor consumes. If another consumer
+# (agent-config merge, hand edit) overwrites a pi-owned key, check must fail loud
+# AND name the drifted key so doctor can surface which one. Adversarial flips
+# below; restore with apply afterward so the later cases see a clean keyset.
+if py check >/dev/null 2>&1; then ok "survival check passes on a freshly applied keyset"; else bad "survival check failed right after apply"; fi
+SURVIVAL_SNAP="$TMP/settings-survival-snapshot.json"
+cp "$CLAUDE_CONFIG_DIR/settings.json" "$SURVIVAL_SNAP"  # exact restore point (array-replace below would drop user items)
+python3 - <<'PY'
+import json, os
+p=os.environ['CLAUDE_CONFIG_DIR'] + '/settings.json'
+d=json.load(open(p)); d['verbose']=True  # a consumer/user clobbers a pi scalar
+json.dump(d, open(p,'w'), indent=2)
+PY
+ERR_SCALAR="$(py check 2>&1 >/dev/null || true)"
+if printf '%s' "$ERR_SCALAR" | grep -q 'verbose'; then ok "survival check fails and names an overwritten pi scalar (verbose)"; else bad "survival check did not name clobbered scalar: $ERR_SCALAR"; fi
+python3 - <<'PY'
+import json, os
+p=os.environ['CLAUDE_CONFIG_DIR'] + '/settings.json'
+d=json.load(open(p)); d['verbose']=False; d['permissions']['allow']=['OnlyUserTool']  # array REPLACE drops pi items
+json.dump(d, open(p,'w'), indent=2)
+PY
+ERR_ARRAY="$(py check 2>&1 >/dev/null || true)"
+if printf '%s' "$ERR_ARRAY" | grep -qi 'allow'; then ok "survival check fails when permissions.allow is array-replaced (pi items dropped)"; else bad "survival check did not catch dropped permissions.allow items: $ERR_ARRAY"; fi
+cp "$SURVIVAL_SNAP" "$CLAUDE_CONFIG_DIR/settings.json"  # exact restore so later cases see the clean installed keyset
+if py check >/dev/null 2>&1; then ok "survival check passes again after restoring the keyset"; else bad "keyset not restored after adversarial survival cases"; fi
+
 # Re-run prepare/apply after install: the original snapshot must remain the
 # pre-install values, not the already-managed values.
 py prepare >/dev/null
@@ -226,7 +253,7 @@ settings={
   'permissions': {'allow': ['Read'], 'deny': ['Agent']},
   'env': {'DISABLE_AUTOCOMPACT': '1'}
 }
-root={'mcpServers': {'pi-tools-bridge': {'type':'stdio','command':'bash','args':[repo + '/mcp/pi-tools-bridge/start.sh'],'env': {'PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID':'external-mcp/claude-code'}}}}
+root={'mcpServers': {'pi-tools-bridge': {'type':'stdio','command':'bash','args':[repo + '/mcp/pi-tools-bridge/start.sh'],'env': {'PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID':'external-mcp/claude-code','PI_TOOLS_BRIDGE_REQUIRE_META_SENDER':'1'}}}}
 json.dump(settings, open(cfg + '/settings.json','w'), indent=2); open(cfg + '/settings.json','a').write('\n')
 json.dump(root, open(home + '/.claude.json','w'), indent=2); open(home + '/.claude.json','a').write('\n')
 PY
@@ -304,6 +331,60 @@ p=os.environ['STORE'] + '/20260606T000001-bbbbbb.meta.json'
 d=json.load(open(p)); d['delivery']['wakeMode']='direct-inject'; json.dump(d, open(p,'w'), indent=2); open(p,'a').write('\n')
 PY
 if node --experimental-strip-types "$STORE_DOCTOR" "$STORE" >/dev/null 2>&1; then bad "store doctor missed backend↔wakeMode contradiction"; else ok "store doctor fails on backend↔wakeMode contradiction"; fi
+
+# Doctor fail-loud regression (B1'): meta-bridge-doctor.sh must surface a managed-
+# config drift, NOT die silently at the "[managed config state]" header. A bare
+# CHECK_ERR="$(state.py check)" assignment under `set -e` exited the doctor the
+# instant check returned nonzero — so the operator saw the header and nothing
+# else; the very "which key drifted" detail the section exists to print was lost,
+# and every later section ([plugin install], [meta-record store], the SILENT-MISS
+# guard) never ran. The fix wraps the substitution as an `if` condition so its
+# nonzero status is consumed instead of tripping set -e. This gate forces a real
+# state drift behind a fully-faked claude toolchain (no real claude, no real
+# install-meta-bridge) and proves the doctor (a) still exits 1, (b) prints
+# "Drift detail:", (c) names the concrete drifted key, and (d) runs the WHOLE
+# chain to its final summary line — i.e. no early set -e death anywhere.
+DOC_HOME="$TMP/doctor-home"; DOC_CFG="$DOC_HOME/.claude"
+DOC_AGENT="$TMP/doctor-agent"; DOC_STORE="$DOC_AGENT/meta-sessions"
+DOC_BIN="$TMP/doctor-bin"; DOC_ASM="$REPO/pi/meta-bridge/.assembled"  # SAME asm the doctor's check uses, so only the MCP drifts
+mkdir -p "$DOC_CFG" "$DOC_STORE" "$DOC_BIN"
+echo '{}' > "$DOC_CFG/settings.json"
+echo '{}' > "$DOC_HOME/.claude.json"
+# A healthy claude-code meta-record so the SessionStart-evidence section is green
+# and the ONLY failure of record is the deliberate MCP drift.
+valid_record "20260606T120000-eeeeee" "doctor-native" > "$DOC_STORE/20260606T120000-eeeeee.meta.json"
+# Fake claude: a healthy toolchain so the doctor sails past every other section.
+cat > "$DOC_BIN/claude" <<'SH'
+#!/usr/bin/env bash
+case "$1${2:+ $2}" in
+  "--version") echo "2.1.167 (Claude Code)" ;;
+  "plugin list") printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
+  "mcp get") printf '%s\n' "Scope: User config" "Status: ✔ Connected" ;;
+  *) : ;;
+esac
+exit 0
+SH
+chmod +x "$DOC_BIN/claude"
+# Build a valid install-state + managed keyset, then drift ONLY the user MCP.
+env HOME="$DOC_HOME" CLAUDE_CONFIG_DIR="$DOC_CFG" python3 "$STATE" prepare --repo "$REPO" --asm "$DOC_ASM" >/dev/null
+env HOME="$DOC_HOME" CLAUDE_CONFIG_DIR="$DOC_CFG" python3 "$STATE" apply   --repo "$REPO" --asm "$DOC_ASM" >/dev/null
+env HOME="$DOC_HOME" python3 - <<'PY'
+import json, os
+p = os.path.join(os.environ['HOME'], '.claude.json')
+d = json.load(open(p))
+d.setdefault('mcpServers', {})['pi-tools-bridge'] = {'type': 'stdio', 'command': 'CLOBBERED-BY-ANOTHER-CONSUMER'}
+json.dump(d, open(p, 'w'), indent=2)
+PY
+# Capture without tripping THIS script's own set -e (the very trap under test).
+set +e
+DOC_OUT="$(env HOME="$DOC_HOME" CLAUDE_CONFIG_DIR="$DOC_CFG" PI_CODING_AGENT_DIR="$DOC_AGENT" PI_META_SESSIONS_DIR="$DOC_STORE" PATH="$DOC_BIN:$PATH" bash "$REPO/scripts/meta-bridge-doctor.sh" 2>&1)"
+DOC_CODE=$?
+set -e
+if [ "$DOC_CODE" -eq 1 ]; then ok "doctor exits 1 on a managed-config drift"; else bad "doctor exit on drift was $DOC_CODE, want 1:"$'\n'"$DOC_OUT"; fi
+if printf '%s\n' "$DOC_OUT" | grep -q 'Drift detail:'; then ok "doctor prints 'Drift detail:' instead of dying at the managed-config header"; else bad "doctor did not print Drift detail — silent early death?:"$'\n'"$DOC_OUT"; fi
+if printf '%s\n' "$DOC_OUT" | grep -q 'user MCP pi-tools-bridge'; then ok "doctor names the concrete drifted key (user MCP pi-tools-bridge)"; else bad "doctor did not name the drifted MCP key:"$'\n'"$DOC_OUT"; fi
+if printf '%s\n' "$DOC_OUT" | grep -q '\[plugin install'; then ok "doctor continues to a later section after the drift (no early set -e death)"; else bad "doctor did not reach a later section header after the drift:"$'\n'"$DOC_OUT"; fi
+if printf '%s\n' "$DOC_OUT" | grep -q 'meta-bridge doctor: FAIL'; then ok "doctor runs the whole chain to its final summary line"; else bad "doctor did not reach its final summary line (mid-run death):"$'\n'"$DOC_OUT"; fi
 
 echo
 if [ "$fail" -eq 0 ]; then echo "smoke-meta-install-state: PASS"; else echo "smoke-meta-install-state: FAIL (see above)"; exit 1; fi

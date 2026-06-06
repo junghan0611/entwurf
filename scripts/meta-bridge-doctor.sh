@@ -54,10 +54,22 @@ else bad "node not on PATH"; fi
 
 echo "[managed config state]"
 if command -v python3 >/dev/null; then
-  if python3 "$REPO/scripts/meta-bridge-state.py" check --repo "$REPO" --asm "$REPO/pi/meta-bridge/.assembled" >/dev/null 2>&1; then
-    ok "state file present and managed settings/MCP keyset is installed"
+  # state.py check is the effect-based keyset-survival guard: it asserts every
+  # pi-owned key (scalar policy, permissions items, plugin/marketplace,
+  # statusLine, user MCP) still holds its expected value. If another consumer
+  # (agent-config merge, hand edit) overwrote one, this fails. Surface WHICH key
+  # drifted — a blanket "keyset drifted" sends the operator hunting.
+  # NB: branch on the exit code, NOT on empty stderr. A bare CHECK_ERR="$(...)"
+  # assignment dies under `set -e` the moment state.py exits nonzero (drift), so
+  # the doctor would print "[managed config state]" and exit 1 BEFORE showing
+  # which key drifted — silent instead of fail-loud. As an `if` condition the
+  # substitution's nonzero status is consumed (set -e suspended), so we always
+  # reach the detail. stderr (drift detail) is captured via `2>&1 >/dev/null`.
+  if CHECK_ERR="$(python3 "$REPO/scripts/meta-bridge-state.py" check --repo "$REPO" --asm "$REPO/pi/meta-bridge/.assembled" 2>&1 >/dev/null)"; then
+    ok "state file present and managed settings/MCP keyset survives intact"
   else
-    bad "state file missing or managed settings/MCP keyset drifted — run ./run.sh install-meta-bridge (stateful Phase 2 installer)"
+    bad "managed settings/MCP keyset missing or overwritten — another consumer may have clobbered a pi-owned key. Re-run ./run.sh install-meta-bridge. Drift detail:"
+    printf '%s\n' "$CHECK_ERR" | sed 's/^/        /'
   fi
 else
   bad "cannot validate stateful install without python3"
@@ -154,6 +166,11 @@ if [ -f "$HOOK_LOG" ]; then
     fi
   else
     bad "unrecovered hook ERROR (no later INFO armed watch) — last ERROR: $hook_status"
+  fi
+  if grep -q ' INFO sender marker ' "$HOOK_LOG"; then
+    ok "sender marker evidence present (native meta-session can send as replyable garden-id)"
+  else
+    bad "no sender marker evidence in hook log — native sessions may receive mail but send as anonymous external-mcp. Re-run ./run.sh install-meta-bridge, then trigger a Claude prompt/SessionStart so the updated hook writes the marker."
   fi
 else warn "no hook log yet ($HOOK_LOG) — open a Claude Code session first"; fi
 if [ "${CC_COUNT:-0}" -ge 1 ]; then
