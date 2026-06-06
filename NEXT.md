@@ -108,7 +108,20 @@ sentinel into a repo smoke (`./run.sh smoke-meta-async-drift`); it is still **no
 because it depends on the host's installed Claude binary. Do not collapse "L-evidence quality" into
 "D-delivery capability" (VERIFY.md namespace note).
 
-**MVP implementation order (Claude Code only; current restart point = step 7):**
+**작업 모델 (2026-06-06 방향 전환 — 메타 쉘 브릿지 / Claude Code only):**
+
+오늘 #30 bbot 릴리즈 리뷰 + GLG·GPT힣 자문으로 1.0.0 정체성이 정리됨:
+
+- **정체성 = 메타 쉘 브릿지.** ACP/pi를 넘어선다. pi-native GPT 사용은 GLG 한정 usage라 다른
+  사용자(GPT 구독 없음)에겐 의미 없음 → pi 의존을 1.0.0의 전제로 두지 않는다. pi 철학은 계승:
+  **single 드라이버 하나만 건네준다** = 하네스별 도구세트 제한(`xt-tool-surface` 베이스라인 자산).
+- **Claude Code only.** 멀티하네스 이관은 1.0.0에 없다. 백엔드 추가는 추후, 그때 설정값을 추상화
+  (websearch on/off, codex/agy 내장 이미지툴 등 사용자별 선호). 지금 install 표면을 넓히지 말 것.
+- **agent-config 분담 재확정.** 심볼릭 링크 폐기. pi-shell-acp = Claude Code를 single-driver로 만드는
+  bridge-owned 설정(install/uninstall/doctor). agent-config = 스킬세트 익스텐션만. 서로 자기 관심사
+  키만 세팅하고 상대 설정을 깨지 않는다 (키셋 owner 모델).
+
+**Phase 0 — LANDED substrate (step 1–6 below). 재오픈 금지** (doctor 실패 / 구체 버그만 예외):
 1. **DONE — drift sentinel + capability gate.** `./run.sh smoke-meta-async-drift`
    (`scripts/smoke-meta-async-drift.sh`). Deterministic default: **major.minor** version pins
    (**Claude 2.1.x / codex-cli 0.136.x / agy 1.0.x** — patch NOT pinned: Claude ships ~weekly
@@ -179,21 +192,54 @@ because it depends on the host's installed Claude binary. Do not collapse "L-evi
    is not invented at read time. Live-proven 2026-06-05: plugin `.mcp.json` removed, canonical
    user-scope MCP visible from `/tmp`, autonomous doorbell → `entwurf_inbox_read` call → `lastReadAt`
    stamped.
-7. `entwurf_peers(includeMeta)` surfaces the meta-session kind with an honest backend glyph (no
-   conflation with socket-peers). Dogfood subject: this Claude Code session.
+**Phase 1 — DONE (commit `9992043`): #30 릴리즈 블로커 + honesty gate.**
+- 블로커 1 (doorbell 거짓 카운트): `doorbell.sh` — fresh `*.msg` 전부 deliver 후 전체
+  `*.msg.delivered`(backlog 미독 포함 = read tool이 실제 drain하는 수) 기준 정직 카운트, 단/복수,
+  "available".
+- 블로커 2 (silent registration miss): `meta-bridge-hook.ts` — INFO/WARN/ERROR 레벨 로깅. citizen
+  실패(upsert/arm/stdin/parse, degraded SessionStart/CwdChanged)=ERROR, UserPromptSubmit backfill
+  =WARN. hook은 best-effort 유지(exit 0, no terminal scream); ERROR는 doctor가 소비(Phase 2).
+- honesty gate: `scripts/smoke-meta-honesty.sh` (17 assertions, deps **bash+node+python3**), `pnpm
+  check` 편입(`check-meta-session` 뒤). fresh/backlog/empty count + degraded 레벨 경계 커버.
 
-**Restart anchor:** start at **step 7**, not by re-opening the now-proven hook/install/send/read work.
-Step 4/5/6 are live and globally installed; only revisit them if doctor fails or the global dogfood
-surfaces a concrete bug. Next implementation is `entwurf_peers(includeMeta)` so the meta-session kind
-is discoverable with honest backend/delivery metadata. The carried 0.9 follow-ups, dep bump,
-`incompatible_config`, and #25 bridge-hygiene tracks remain **non-cut tracks** while 1.0.0 meta-bridge
-is active; do not pull them into this release unless GLG reopens them.
+**Phase 2 — NEXT (분신 작업 가능): install / uninstall / doctor — state 파일 기반 키셋 in/out.**
+원칙: **파일 덮어쓰기 금지. 우리 키셋만 넣고, uninstall은 state로 정직하게 원복.** Claude Code only.
+- **관리 키셋 (`~/.claude/settings.json`):**
+  - A (메타브릿지 wiring, 필수): `enabledPlugins["entwurf-meta-receive@meta-bridge-local"]=true`;
+    `extraKnownMarketplaces["meta-bridge-local"]`=host-resolved `.assembled` 절대경로; USER-scope
+    `pi-tools-bridge` MCP.
+  - B-lite (single-driver 정책): `permissions.allow/deny`; 자동/메모리/요약/제안/compact 계열 false
+    토글; `env.DISABLE_AUTOCOMPACT`; `statusLine`(Phase 3).
+  - **흡수 금지:** agent-config의 peon-ping/hooks/keybindings/개인취향 — agent-config 영역.
+- **state 파일 (핵심, GPT힣 지적):** `${CLAUDE_CONFIG_DIR:-~/.claude}/pi-shell-acp.install-state.json`.
+  install이 touched key의 **기존 값**을 저장(없던 key는 absent 마킹; 배열은 "우리가 추가한 항목"만).
+  uninstall: 원래 없던 key→제거, 있던 key→원값 복원, 배열→우리가 넣은 항목만 제거. **단순 jq merge로
+  scalar false 토글을 빼면 사용자 원값을 망가뜨림 — state 없이는 정직한 uninstall 불가.**
+- **python3 toolchain gate (install + doctor 둘 다, GPT힣 최종):** doorbell FileChanged가 python3로
+  JSON 파싱. install 성공해도 python3 없으면 wake runtime만 조용히 죽음 → install·doctor 모두
+  fail-fast(공식 runtime dependency로 선언, "대부분 있으니까" 금지).
+- **doctor 강화 (블로커 2 소비 + 블로커 3 감지):** `meta-bridge-hook.log`의 ` ERROR ` 라인을 fail로;
+  meta-session store 전수 스캔으로 corrupt record / duplicate `nativeSessionId` / body·filename drift
+  / backend↔wakeMode contradiction을 fail-loud(**자동삭제 금지**). 기존 platform/toolchain/plugin/
+  baked-node/USER-MCP/store/hook-log 체크 유지 + python3 추가.
+- **출발점:** `scripts/meta-bridge-install.sh` / `meta-bridge-doctor.sh`. installer가 지금 `claude
+  plugin install` / `claude mcp add` CLI에 위임하는 부분이 settings.json 두 키를 박는데, 그 정직성
+  (state 기록·원복)을 우리가 통제하도록 전환. **uninstall 스크립트는 신규.** smoke 게이트 동반.
 
-**Consumer track (agent-config, NOT this repo):** statusline `garden-id · backend · status`,
-theme/config parity across pi / Claude now, agy / Codex later. Both Claude and agy already expose a
-custom `statusLine` command. The honest knot core↔consumer is the shared garden-id; do NOT pull
-**theming** into core. Do pull the required meta-bridge setup/doctor into core — that is not theming,
-it is the bridge working.
+**Phase 3 — statusline:** 현 Claude statusline 베이스(GLG 만족)에 pi 스타일 `🪛 <garden-id>` +
+backend만 덧붙인 repo-owned 판. statusline이 native session_id로 meta-store를 scan해 garden-id 조회
+(scan이 authority; 무거우면 derived cache는 추후). install이 `statusLine` 키를 키셋으로 관리.
+**색/테마/개인취향은 agent-config 영역.** (이전 "statusline 전적 consumer track" 결정은 오늘 방향
+전환으로 garden-id 표시 최소판만 core로 이동 — theming은 여전히 consumer.)
+
+**Phase 4 — GC (블로커 3, post-release):** abandoned/duplicate meta-record 누적 + corrupt/duplicate가
+그 nativeId registration을 영구 차단하는 문제. 자동삭제 금지(authority ambiguity 정직성). 1.0.0은
+doctor 감지 + 수동 prune까지. 실제 GC는 **글로벌 설치 스킬로 에이전트가 뒷정리**(동작 로직 방해 금지)
+하거나 TTL/liveness 코드화 — 간단히 시작 후 코드화. 참고: `agent-config/.claude/skills/agent-config/`.
+
+**비-cut 트랙 (1.0.0 메타브릿지 active 동안 끌어오지 말 것):** step 7 `entwurf_peers(includeMeta)`
+(메타세션 발견성 — 가치 있으나 릴리즈는 install/doctor 우선), 0.9 follow-ups, dep bump,
+`incompatible_config`, #25 bridge-hygiene. GLG가 재오픈할 때만.
 
 **Scope guard:** do NOT build a generic worker-pool orchestrator out of #31 — document the
 parallel-team pattern, keep the bridge thin. Doorbell delivery is notice-only + self-fetch; never
