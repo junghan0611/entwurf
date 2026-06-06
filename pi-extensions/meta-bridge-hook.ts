@@ -35,7 +35,13 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { defaultMetaMailboxDir, defaultMetaSessionsDir, upsertMetaSession } from "./lib/meta-session.ts";
+import {
+	defaultMetaMailboxDir,
+	defaultMetaSessionsDir,
+	parentPid,
+	upsertMetaSession,
+	writeMetaSenderMarker,
+} from "./lib/meta-session.ts";
 
 /**
  * Append a best-effort diagnostic line; swallow even its own failure (never throw
@@ -126,6 +132,32 @@ function main(): void {
 			`upsert failed (event=${eventName}, native=${sessionId}): ${err instanceof Error ? err.message : String(err)}`,
 		);
 		emit({});
+	}
+
+	// Sender marker, keyed by the shared Claude Code parent pid: the user-scope
+	// MCP child (same parent) reads it at entwurf_send time to promote this
+	// session from anonymous external-mcp to a REPLYABLE meta-session sender —
+	// process ancestry, not cwd inference (same repo + multiple sessions would be
+	// ambiguous). Best-effort: a failed marker only costs reply-addressability
+	// (WARN), it does not break the session or the receiver path.
+	// Write to BOTH the direct parent and its parent: depending on whether Claude
+	// runs the hook command directly or through a shell wrapper, the ancestor the
+	// MCP child shares may be process.ppid OR one step up. Each marker carries that
+	// pid's start-key so a reader only trusts a still-live owner — writing two never
+	// grants a wrong identity, it only widens the chance the right one is found.
+	const senderOwners = [process.ppid, parentPid(process.ppid)].filter(
+		(p): p is number => typeof p === "number" && p > 0,
+	);
+	for (const ownerPid of senderOwners) {
+		try {
+			writeMetaSenderMarker({ backend: "claude-code", gardenId, nativeSessionId: sessionId, cwd, ownerPid });
+			logLine("INFO", `sender marker ${ownerPid} -> ${gardenId} (event=${eventName})`);
+		} catch (err) {
+			logLine(
+				"WARN",
+				`sender marker write failed (event=${eventName}, pid=${ownerPid}, garden=${gardenId}): ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
 	}
 
 	// watchPaths is emittable only from SessionStart / CwdChanged / FileChanged.

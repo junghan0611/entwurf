@@ -198,7 +198,7 @@ case_a_for_backend() {
 	# Case A is a REPLYABLE pi-session: spawned with --entwurf-control above, so
 	# the MCP child receives PI_SESSION_ID + PI_AGENT_ID (verified out-of-band
 	# via mcp__pi-tools-bridge__entwurf_self — 3/3 sessions reported a present
-	# envelope; this is NOT an asymmetric-coexistence external caller). Per the
+	# envelope; this is NOT a non-replyable external caller). Per the
 	# resume mode contract, a replyable caller with mode:async (or omitted) MUST
 	# resolve to async; mode:async + non-replyable would REJECT, not sync. So a
 	# SYNC summary here is never a valid async outcome — it means the model

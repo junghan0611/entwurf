@@ -22,11 +22,11 @@
  *                       A rung doorbell is a wake attempt; this read is the receipt.
  *   - entwurf         → pi-extensions/lib/entwurf-core (sync mode only on the MCP surface)
  *   - entwurf_resume  — saved entwurf session revival by sessionId; conditional-default
- *                       mode since 0.7.6: replyable pi-session callers (PI_SESSION_ID +
- *                       PI_AGENT_ID present) default to async via `spawn_async_resume`
- *                       control RPC delegation; external non-replyable MCP hosts default
- *                       to sync; explicit `mode="async"` from a non-replyable caller is
- *                       rejected because no followUp address exists. See
+ *                       mode since 0.7.6: pi-session callers with PI_SESSION_ID +
+ *                       PI_AGENT_ID default to async via `spawn_async_resume` control
+ *                       RPC delegation; plain external hosts and garden-native
+ *                       meta-sessions default to sync; explicit `mode="async"` from a
+ *                       non-pi-session caller is rejected because no followUp channel exists. See
  *                       `resume-mode.ts` + `scripts/check-async-resume-gate.ts`.
  *
  * Not here on purpose: semantic memory / session search / knowledge-base search.
@@ -89,7 +89,14 @@ import {
 	runEntwurfResumeSync,
 	runEntwurfSync,
 } from "../../../pi-extensions/lib/entwurf-core.ts";
-import { enqueueMetaMessage, readMetaInbox } from "../../../pi-extensions/lib/meta-session.ts";
+import {
+	enqueueMetaMessage,
+	type MetaSenderMarker,
+	parentPid,
+	readMetaInbox,
+	readMetaRecordByGardenId,
+	readMetaSenderMarker,
+} from "../../../pi-extensions/lib/meta-session.ts";
 import { resolveEntwurfResumeMode } from "./resume-mode.ts";
 
 const HOME = os.homedir();
@@ -237,14 +244,14 @@ const server = new McpServer({ name: "pi-tools-bridge", version: "0.1.0" });
 
 // Transparency envelope.
 //
-// pi-session senders carry a structured sender envelope so the receiver renders
-// WHO (agentId, sessionId), FROM WHERE (cwd), and WHEN (timestamp UTC,
-// displayed in KST). `entwurf_self` is identity-required and therefore stays
-// strict: missing PI_SESSION_ID / PI_AGENT_ID is a wiring break. `entwurf_send`
-// is identity-enhanced, not identity-required: an explicitly wired external MCP
-// host (Claude Code, Codex, Gemini, …) may deliver into live pi sessions even
-// though it has no replyable pi session identity. In that case we attach an
-// external, non-replyable envelope so the receiver sees the origin honestly.
+// pi-session and trusted meta-session senders carry a structured sender envelope
+// so the receiver renders WHO (agentId, sessionId), FROM WHERE (cwd), and WHEN
+// (timestamp UTC, displayed in KST). `entwurf_self` is identity-required and
+// therefore stays strict: missing PI_SESSION_ID / PI_AGENT_ID is a wiring break.
+// `entwurf_send` is identity-enhanced, not identity-required: a native Claude Code
+// meta-session with a live sender marker is replyable by garden id; an explicitly
+// wired external MCP host with no marker may still deliver (unless REQUIRE is set)
+// but is marked external/non-replyable so the receiver sees the origin honestly.
 class EntwurfEnvelopeWiringError extends Error {
 	constructor(missing: string[]) {
 		super(
@@ -261,8 +268,40 @@ interface SenderEnvelope {
 	agentId: string;
 	cwd: string;
 	timestamp: string;
-	origin?: "pi-session" | "external-mcp";
+	origin?: "pi-session" | "external-mcp" | "meta-session";
 	replyable?: boolean;
+}
+
+// REQUIRE_META_SENDER closes the "anonymous send" hole: when set (the Claude Code
+// user-scope install sets it), a send with no pi-session identity AND no trusted
+// meta-sender marker is refused rather than going out as anonymous external-mcp.
+// "If we don't know who sent it, we don't send it."
+class EntwurfSenderIdentityError extends Error {
+	constructor() {
+		super(
+			"pi-tools-bridge refused: no authoritative sender identity. " +
+				"PI_TOOLS_BRIDGE_REQUIRE_META_SENDER=1 forbids anonymous external sends, and no live meta-sender " +
+				"marker was found for this process. The native SessionStart hook writes that marker (keyed by the " +
+				"Claude Code parent pid + start-time) — open this session through the installed meta-bridge so your " +
+				"garden-id is registered, then retry.",
+		);
+	}
+}
+
+// Resolve the meta-sender marker for THIS MCP process. PI_META_SENDER_MARKER is an
+// explicit override (test / wiring). Otherwise try the shared ancestor: process.ppid
+// first, then one step up (Claude may run the hook through a shell wrapper, shifting
+// the shared ancestor). readMetaSenderMarker's pid+start-key guard rejects a
+// dead/reused owner, so a wrong marker is never trusted on any candidate.
+function resolveMetaSenderMarker(): MetaSenderMarker | null {
+	const explicit = process.env.PI_META_SENDER_MARKER?.trim();
+	if (explicit) return readMetaSenderMarker({ markerPath: explicit });
+	const candidates = [process.ppid, parentPid(process.ppid)].filter((p): p is number => typeof p === "number" && p > 0);
+	for (const ownerPid of candidates) {
+		const marker = readMetaSenderMarker({ backend: "claude-code", ownerPid });
+		if (marker) return marker;
+	}
+	return null;
 }
 
 function buildStrictPiSenderEnvelope(): SenderEnvelope {
@@ -289,6 +328,42 @@ function buildSendSenderEnvelope(): SenderEnvelope {
 	const agentId = process.env.PI_AGENT_ID?.trim();
 	const cwd = process.cwd();
 	if (sessionId && agentId && cwd) return buildStrictPiSenderEnvelope();
+
+	// No pi-session identity. Try the meta-sender marker: a native backend that
+	// minted a garden-id via its SessionStart hook. The marker is keyed by the
+	// shared parent pid — this MCP child's process.ppid IS the Claude Code process
+	// the hook ran under (NOT cwd inference). PI_META_SENDER_MARKER overrides the
+	// lookup for explicit wiring / tests. A trusted marker promotes this send to a
+	// REPLYABLE meta-session sender addressed by its garden-id.
+	const marker = resolveMetaSenderMarker();
+	if (marker) {
+		// Validate the marker against its backing meta-record: a stale marker
+		// (record deleted, or backend/nativeSessionId drift) must NOT grant a
+		// replyable identity — fall through to the REQUIRE reject / external path.
+		// The record store is the authority; the marker is only a pid→garden hint.
+		let backed = false;
+		try {
+			const rec = readMetaRecordByGardenId(marker.gardenId);
+			backed = rec.backend === marker.backend && rec.nativeSessionId === marker.nativeSessionId;
+		} catch {
+			backed = false;
+		}
+		if (backed) {
+			return {
+				sessionId: marker.gardenId,
+				agentId: `meta-session/${marker.backend}`,
+				cwd: marker.cwd || cwd,
+				timestamp: new Date().toISOString(),
+				origin: "meta-session",
+				replyable: true,
+			};
+		}
+	}
+
+	// No marker. Anonymous external is allowed ONLY when not explicitly forbidden.
+	if (process.env.PI_TOOLS_BRIDGE_REQUIRE_META_SENDER === "1") {
+		throw new EntwurfSenderIdentityError();
+	}
 	return {
 		sessionId: "external-mcp",
 		agentId: process.env.PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID?.trim() || "external-mcp/unknown-host",
@@ -337,8 +412,9 @@ function previewBody(body: string, maxLines = 5): string {
 // Mirrors the "[entwurf received ⟵]" render used for live control-socket delivery.
 function formatMetaMailboxBody(sender: SenderEnvelope, message: string, wantsReply: boolean): string {
 	const replyable = sender.replyable === true;
+	const kind = sender.origin === "meta-session" ? "meta-session, " : "";
 	const sessionLine = replyable
-		? `${sender.sessionId} (replyable — reply with entwurf_send to this sessionId)`
+		? `${sender.sessionId} (${kind}replyable — reply with entwurf_send to this sessionId)`
 		: `${sender.sessionId} (external, non-replyable)`;
 	return (
 		`[entwurf received ⟵]\n` +
@@ -368,10 +444,12 @@ server.tool(
 		"the receiver render. It is not a delivery flag, not a wait/poll, not a contract; whether " +
 		"the receiver replies is decided by the message body. " +
 		"When called from inside a pi session, a replyable sender envelope is attached " +
-		"automatically from PI_AGENT_ID + PI_SESSION_ID + cwd + now. When called from an " +
-		"explicitly wired external MCP host, delivery is still allowed but the envelope is " +
-		"marked external/non-replyable; wants_reply=true is rejected because there is no pi " +
-		"session address to reply to.",
+		"automatically from PI_AGENT_ID + PI_SESSION_ID + cwd + now. When called from a " +
+		"garden-native meta-session (native Claude Code whose SessionStart hook wrote a " +
+		"trusted sender marker), the envelope is also replyable by garden id. When called " +
+		"from an explicitly wired external MCP host with no trusted marker, delivery is " +
+		"still allowed but the envelope is marked external/non-replyable; wants_reply=true " +
+		"is rejected because there is no reply address.",
 	{
 		sessionId: z.string().min(1).describe("Target session id (garden id or pi-assigned uuid)"),
 		message: z.string().min(1).describe("Message text to deliver"),
@@ -390,8 +468,8 @@ server.tool(
 			const effectiveWantsReply = wants_reply === true;
 			if (effectiveWantsReply && sender.replyable === false) {
 				return textErr(
-					"entwurf_send error: wants_reply=true requires a replyable pi-session sender envelope; " +
-						"external MCP hosts can deliver messages but cannot request a reply path.",
+					"entwurf_send error: wants_reply=true requires a replyable sender envelope " +
+						"(pi-session or trusted meta-session). This MCP process resolved as external/non-replyable.",
 				);
 			}
 			// Transport 1: a live pi control socket. Transport 2 (fallback): the
@@ -638,13 +716,14 @@ server.tool(
 		"forces the child cwd to the header cwd (the wrong cwd would create a new session). An explicit cwd " +
 		"override is a debug/migration escape hatch and may forfeit backend continuity " +
 		"(see pi-shell-acp#9). Model may not. " +
-		"`mode` follows the asymmetric-mitsein discriminator: when omitted, this MCP child " +
-		"resolves the effective mode automatically from the caller's PI_SESSION_ID / " +
-		"PI_AGENT_ID env — a replyable pi-session caller (pi-shell-acp Claude, sibling pi " +
-		"sessions) gets async by default; an external MCP host (Claude Code standalone, " +
-		"Codex CLI, Gemini CLI) gets sync, because there is no replyable pi address to " +
-		"deliver a completion followUp to. Explicit `mode='async'` from an external host " +
-		"is rejected with the same pattern as entwurf_send's `wants_reply=true` rejection. " +
+		"`mode` follows the async-followUp discriminator: when omitted, this MCP child " +
+		"resolves the effective mode from whether the caller can host a completion followUp — " +
+		"async only for a pi-session caller (pi-shell-acp Claude, sibling pi sessions) that " +
+		"owns a pi control socket; an external MCP host (Claude Code standalone, Codex CLI, " +
+		"Gemini CLI) and a garden-native meta-session both get sync, because neither has a pi " +
+		"control socket for the followUp (a meta-session is entwurf_send-replyable by garden-id, " +
+		"but that mailbox is not a followUp channel). Explicit `mode='async'` from a non-pi-session " +
+		"caller is rejected with the same pattern as entwurf_send's `wants_reply=true` rejection. " +
 		"Async resumes delegate back into the parent pi session via the entwurf-control " +
 		"`spawn_async_resume` RPC, so completion lands as a followUp message in the same " +
 		"session — preserves the `this bridge is not a second harness` invariant.",
@@ -671,20 +750,23 @@ server.tool(
 			.enum(["sync", "async"])
 			.optional()
 			.describe(
-				"auto resolution by caller — async for replyable pi-session callers " +
-					"(PI_SESSION_ID/PI_AGENT_ID present), sync for external MCP hosts. " +
-					"Override with explicit 'sync' or 'async'. Explicit 'async' requires " +
-					"a replyable caller; external hosts get reject.",
+				"auto resolution by caller — async only for a pi-session caller " +
+					"(PI_SESSION_ID/PI_AGENT_ID + a pi control socket), sync for external MCP " +
+					"hosts AND garden-native meta-session senders. Override with explicit " +
+					"'sync' or 'async'. Explicit 'async' requires a pi-session caller; " +
+					"external hosts and meta-sessions get reject.",
 			),
 	},
 	async ({ sessionId, prompt, host, cwd, mode }) => {
 		try {
-			// Phase B Step 3 — asymmetric-mitsein discriminator. The mode
+			// Phase B Step 3 — async-followUp discriminator. The mode
 			// resolution is in `resolveEntwurfResumeMode` so the deterministic
-			// gate (Step 4) can pin it without spawning. Same buildSendSender-
-			// Envelope replyable status that entwurf_send uses for wants_reply
-			// (line 344). A static `default: "async"` would silently reject
-			// every external MCP host turn — the UX inversion this Step closes.
+			// gate (Step 4) can pin it without spawning. It consumes the same
+			// sender envelope as entwurf_send, but the async discriminant is
+			// origin === "pi-session" (control socket), NOT replyable=true
+			// (meta-sessions are send-replyable by mailbox). A static
+			// `default: "async"` would silently reject every external/meta turn —
+			// the UX inversion this Step closes.
 			const sender = buildSendSenderEnvelope();
 			const { mode: effectiveMode, rejectReason } = resolveEntwurfResumeMode(sender, mode, cwd);
 			if (rejectReason) {

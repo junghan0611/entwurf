@@ -2,14 +2,15 @@
  * check-async-resume-gate — deterministic gate for the MCP `entwurf_resume`
  * mode resolution (Phase B Step 3).
  *
- * Pins the asymmetric-mitsein discriminator:
+ * Pins the async-followUp discriminator:
  *
  *   - explicit `mode` wins (after the reject check)
- *   - omitted `mode` auto-resolves: async if replyable, sync if external
- *   - explicit `mode="async"` + non-replyable sender → reject with the
- *     canonical `ENTWURF_RESUME_ASYNC_REJECT_REASON` text. Mirrors
- *     entwurf_send's `wants_reply=true` rejection at line 344 of the MCP
- *     module.
+ *   - omitted `mode` auto-resolves: async ONLY for a pi-session caller (it owns
+ *     a control socket for followUp); sync for external AND meta-session. The
+ *     async discriminant is `origin === "pi-session"`, NOT `replyable` — a
+ *     meta-session is entwurf_send-replyable but has no control socket.
+ *   - explicit `mode="async"` + not async-capable (external OR meta-session) →
+ *     reject with the canonical `ENTWURF_RESUME_ASYNC_REJECT_REASON` text.
  *
  * Why this gate exists: the Phase B Step 3 invariant is that the MCP
  * surface MUST NOT use a static `default: "async"` schema. A static default
@@ -48,8 +49,12 @@ import {
 	resolveEntwurfResumeMode,
 } from "../mcp/pi-tools-bridge/src/resume-mode.ts";
 
-const external: ResumeModeSenderEnvelope = { replyable: false };
-const replyable: ResumeModeSenderEnvelope = { replyable: true };
+const external: ResumeModeSenderEnvelope = { replyable: false, origin: "external-mcp" };
+const replyable: ResumeModeSenderEnvelope = { replyable: true, origin: "pi-session" };
+// A meta-session is entwurf_send-replyable (garden-id mailbox) but has NO pi
+// control socket, so it must NOT auto-route to async resume — replyable alone is
+// not the discriminant, origin === "pi-session" is.
+const metaSession: ResumeModeSenderEnvelope = { replyable: true, origin: "meta-session" };
 
 let pass = 0;
 const fail: string[] = [];
@@ -214,6 +219,34 @@ check("16. replyable guard fires BEFORE cwd guard when both could apply", () => 
 	// retry, and hit replyable next — two round trips for one bug.
 	const r = resolveEntwurfResumeMode(external, "async", "/foo");
 	assert.equal(r.rejectReason, ENTWURF_RESUME_ASYNC_REJECT_REASON, "replyable check must come first");
+});
+
+// ─── meta-session: replyable for entwurf_send, but NOT async-capable ─────────
+
+check("17. meta-session + mode omitted → sync (replyable but no control socket)", () => {
+	// The 0.10.0 blocker: a meta-session sender is replyable=true for
+	// entwurf_send (garden-id mailbox), but has no pi control socket, so omitted
+	// mode MUST resolve to sync, not async. Conflating replyable with
+	// async-capability routed it into a control-socket lookup that always failed.
+	const r = resolveEntwurfResumeMode(metaSession, undefined);
+	assert.equal(r.mode, "sync", `meta-session omitted must be sync, got ${r.mode}`);
+	assert.equal(r.rejectReason, null);
+});
+
+check("18. meta-session + mode='async' → async + REJECT (no followUp channel)", () => {
+	const r = resolveEntwurfResumeMode(metaSession, "async");
+	assert.equal(r.mode, "async", "mode reports the explicit ask verbatim");
+	assert.equal(
+		r.rejectReason,
+		ENTWURF_RESUME_ASYNC_REJECT_REASON,
+		"meta-session explicit async must be rejected like an external host",
+	);
+});
+
+check("19. meta-session + mode='sync' → sync, no reject", () => {
+	const r = resolveEntwurfResumeMode(metaSession, "sync");
+	assert.equal(r.mode, "sync");
+	assert.equal(r.rejectReason, null);
 });
 
 // ─── Summary ─────────────────────────────────────────────────────────────

@@ -48,6 +48,7 @@
  * `MetaRecordError`. A broken meta-record must surface as a broken meta-record.
  */
 
+import { execFileSync } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -507,6 +508,182 @@ export function defaultMetaSessionsDir(): string {
 export function defaultMetaMailboxDir(): string {
 	if (process.env.PI_META_MAILBOX_DIR) return path.resolve(expandTilde(process.env.PI_META_MAILBOX_DIR));
 	return path.join(piAgentDir(), "meta-mailbox");
+}
+
+/**
+ * Where native-backend SENDER markers live: `<pi-agent-dir>/meta-senders`.
+ *
+ * The problem this closes: a native Claude Code session that SENDS via the
+ * user-scope pi-tools-bridge MCP has no `PI_SESSION_ID` — at tool-call time the
+ * MCP process does not know which garden-id session it belongs to, so the sender
+ * envelope degrades to anonymous `external-mcp` and the receiver has no reply
+ * address. The hook DOES know the garden-id (it just minted the record), and the
+ * hook + the MCP child run under the SAME Claude Code parent process. So the hook
+ * writes a marker keyed by that parent pid; the MCP reads the marker for its OWN
+ * `process.ppid` and promotes itself to a replyable meta-session sender. This
+ * uses process ancestry, NOT cwd inference (same repo / multiple sessions would
+ * make cwd ambiguous). `PI_META_SENDERS_DIR` overrides for tests.
+ */
+export function defaultMetaSendersDir(): string {
+	if (process.env.PI_META_SENDERS_DIR) return path.resolve(expandTilde(process.env.PI_META_SENDERS_DIR));
+	return path.join(piAgentDir(), "meta-senders");
+}
+
+/**
+ * A boot-unique identity for a live process: pid is reused, but pid + start-time
+ * is unique within a boot. Linux reads `/proc/<pid>/stat` field 22 (starttime in
+ * clock ticks); macOS/BSD falls back to `ps -o lstart=`. Returns "" when the pid
+ * is gone or unreadable — a "" key never matches, so a dead/reused owner fails
+ * the marker check. This is what stops a stale marker (process exited, pid reused
+ * by a new Claude session) from granting the wrong garden-id sender identity.
+ */
+export function processStartKey(pid: number): string {
+	if (!Number.isInteger(pid) || pid <= 0) return "";
+	try {
+		const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+		// comm (field 2) is parenthesized and may contain spaces/parens — split AFTER the last ')'.
+		const fields = stat
+			.slice(stat.lastIndexOf(")") + 1)
+			.trim()
+			.split(/\s+/);
+		// after comm: index 0 = state(f3), 1 = ppid(f4), … 19 = starttime(f22).
+		const starttime = fields[19];
+		if (starttime && /^\d+$/.test(starttime)) return `linux:${starttime}`;
+	} catch {
+		// not Linux / no procfs
+	}
+	try {
+		const out = execFileSync("ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8" }).trim();
+		if (out) return `ps:${out}`;
+	} catch {
+		// pid gone or ps unavailable
+	}
+	return "";
+}
+
+/** The parent pid of a pid (one ancestry step), or null when unknown. */
+export function parentPid(pid: number): number | null {
+	if (!Number.isInteger(pid) || pid <= 0) return null;
+	try {
+		const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+		const fields = stat
+			.slice(stat.lastIndexOf(")") + 1)
+			.trim()
+			.split(/\s+/);
+		const ppid = Number(fields[1]); // f4
+		if (Number.isInteger(ppid) && ppid > 0) return ppid;
+	} catch {
+		// not Linux
+	}
+	try {
+		const out = execFileSync("ps", ["-o", "ppid=", "-p", String(pid)], { encoding: "utf8" }).trim();
+		const ppid = Number(out);
+		if (Number.isInteger(ppid) && ppid > 0) return ppid;
+	} catch {
+		// pid gone
+	}
+	return null;
+}
+
+export interface MetaSenderMarker {
+	backend: MetaBackend;
+	gardenId: string;
+	nativeSessionId: string;
+	cwd: string;
+	/** The pid this marker is keyed to (the shared native runner / Claude parent). */
+	ownerPid: number;
+	/** processStartKey(ownerPid) at write time — the pid-reuse guard. */
+	ownerStartKey: string;
+	updatedAt: string;
+}
+
+/** `<sendersDir>/<backend>/<ownerPid>.json` — keyed by the shared parent pid. */
+export function metaSenderMarkerPath(
+	backend: MetaBackend,
+	ownerPid: number,
+	sendersDir: string = defaultMetaSendersDir(),
+): string {
+	return path.join(sendersDir, backend, `${ownerPid}.json`);
+}
+
+export interface WriteMetaSenderMarkerOptions {
+	backend: MetaBackend;
+	gardenId: string;
+	nativeSessionId: string;
+	cwd: string;
+	ownerPid: number;
+	sendersDir?: string;
+	now?: Date;
+}
+
+/** Write (atomically) the sender marker for a native session's parent pid. */
+export function writeMetaSenderMarker(opts: WriteMetaSenderMarkerOptions): string {
+	const backend = requireBackend(opts.backend);
+	const gardenId = requireGardenId(opts.gardenId);
+	const file = metaSenderMarkerPath(backend, opts.ownerPid, opts.sendersDir ?? defaultMetaSendersDir());
+	fs.mkdirSync(path.dirname(file), { recursive: true });
+	const marker: MetaSenderMarker = {
+		backend,
+		gardenId,
+		nativeSessionId: requireNonEmptyString(opts.nativeSessionId, "nativeSessionId"),
+		cwd: requireNonEmptyString(opts.cwd, "cwd"),
+		ownerPid: opts.ownerPid,
+		ownerStartKey: processStartKey(opts.ownerPid),
+		updatedAt: isoNow(opts.now ?? new Date()),
+	};
+	const tmp = `${file}.${crypto.randomBytes(4).toString("hex")}.tmp`;
+	fs.writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`, { mode: 0o600 });
+	fs.renameSync(tmp, file);
+	return file;
+}
+
+export interface ReadMetaSenderMarkerOptions {
+	/** Explicit marker file (test / explicit wiring). Wins over backend+ownerPid. */
+	markerPath?: string;
+	backend?: MetaBackend;
+	ownerPid?: number;
+	sendersDir?: string;
+	/** Run the pid-reuse guard (verify the owner pid is still live). Default true —
+	 * set false only for unit assertions that exercise the marker without a live owner. */
+	verifyOwner?: boolean;
+}
+
+/**
+ * Read the sender marker for this MCP process's owner. Returns null when absent
+ * or corrupt — a marker we cannot trust means "no authoritative sender", which
+ * the caller turns into external-non-replyable (or a hard reject under
+ * REQUIRE_META_SENDER). Never throws: an unreadable marker must not break a send.
+ */
+export function readMetaSenderMarker(opts: ReadMetaSenderMarkerOptions): MetaSenderMarker | null {
+	let file = opts.markerPath;
+	if (!file && opts.backend && typeof opts.ownerPid === "number") {
+		file = metaSenderMarkerPath(opts.backend, opts.ownerPid, opts.sendersDir ?? defaultMetaSendersDir());
+	}
+	if (!file || !fs.existsSync(file)) return null;
+	try {
+		const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+		const marker: MetaSenderMarker = {
+			backend: requireBackend(raw.backend),
+			gardenId: requireGardenId(raw.gardenId),
+			nativeSessionId: requireNonEmptyString(raw.nativeSessionId, "nativeSessionId"),
+			cwd: requireNonEmptyString(raw.cwd, "cwd"),
+			ownerPid: typeof raw.ownerPid === "number" ? raw.ownerPid : Number.NaN,
+			ownerStartKey: requireNonEmptyString(raw.ownerStartKey, "ownerStartKey"),
+			updatedAt: requireNonEmptyString(raw.updatedAt, "updatedAt"),
+		};
+		// pid-reuse guard (unless explicitly disabled): the owner pid must STILL be
+		// the same process that wrote the marker. A bare pid is reused; pid+startKey
+		// is boot-unique, so a stale marker from a dead session fails here instead of
+		// granting a wrong-identity send.
+		if (opts.verifyOwner !== false) {
+			if (!Number.isInteger(marker.ownerPid)) return null;
+			const liveKey = processStartKey(marker.ownerPid);
+			if (!liveKey || liveKey !== marker.ownerStartKey) return null;
+		}
+		return marker;
+	} catch {
+		return null;
+	}
 }
 
 export interface UpsertMetaSessionOptions {

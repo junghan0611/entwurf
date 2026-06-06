@@ -166,7 +166,7 @@ export interface SenderEnvelope {
 	agentId: string;
 	cwd: string;
 	timestamp: string; // ISO 8601 UTC
-	origin?: "pi-session" | "external-mcp";
+	origin?: "pi-session" | "external-mcp" | "meta-session";
 	replyable?: boolean;
 }
 
@@ -498,7 +498,7 @@ interface SenderInfo {
 	cwd?: string;
 	timestamp?: string; // ISO 8601 UTC; rendered in KST
 	wants_reply?: boolean;
-	origin?: "pi-session" | "external-mcp";
+	origin?: "pi-session" | "external-mcp" | "meta-session";
 	replyable?: boolean;
 }
 
@@ -541,7 +541,10 @@ function parseSenderInfo(text: string): SenderInfo | null {
 				cwd: pickString(parsed.cwd),
 				timestamp: pickString(parsed.timestamp),
 				wants_reply: wantsReplyRaw,
-				origin: originRaw === "pi-session" || originRaw === "external-mcp" ? originRaw : undefined,
+				origin:
+					originRaw === "pi-session" || originRaw === "external-mcp" || originRaw === "meta-session"
+						? originRaw
+						: undefined,
 				replyable: typeof parsed.replyable === "boolean" ? parsed.replyable : undefined,
 			};
 			// Return only when at least one field carries a value; otherwise let
@@ -661,7 +664,12 @@ const renderSessionMessage: MessageRenderer = (message, { expanded }, theme) => 
 
 		const agentId = senderInfo.agentId ?? "(unknown agent)";
 		const cwd = senderInfo.cwd ? abbreviateHome(senderInfo.cwd) : "(unknown cwd)";
-		const originBadge = senderInfo.origin === "external-mcp" ? "  [external MCP]" : "";
+		const originBadge =
+			senderInfo.origin === "external-mcp"
+				? "  [external MCP]"
+				: senderInfo.origin === "meta-session"
+					? "  [meta-session]"
+					: "";
 		box.addChild(new Text(theme.fg("dim", `from: ${agentId} @ ${cwd}${originBadge}`), 0, 0));
 
 		const sessionId = senderInfo.sessionId ?? "(unknown sessionId)";

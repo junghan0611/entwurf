@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # pi-tools-bridge smoke tests.
 #
-# Exercises the five tools the bridge is allowed to expose (narrow scope —
+# Exercises the six tools the bridge is allowed to expose (narrow scope —
 # anything the MCP bridge doesn't strictly need to bridge pi lives as a skill
 # instead):
 #   - entwurf_send
 #   - entwurf_peers
 #   - entwurf
 #   - entwurf_resume
-#   - entwurf_self   (0.4.14 — own session identity envelope)
+#   - entwurf_self        (0.4.14 — own session identity envelope)
+#   - entwurf_inbox_read  (0.10.0 meta-bridge — receiver half of the mailbox path)
 #
 # Layers:
 #   1. tools/list parity
@@ -26,7 +27,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-EXPECTED_TOOLS=("entwurf_send" "entwurf_peers" "entwurf" "entwurf_resume" "entwurf_self")
+EXPECTED_TOOLS=("entwurf_send" "entwurf_peers" "entwurf" "entwurf_resume" "entwurf_self" "entwurf_inbox_read")
 PASS=0
 FAIL=0
 
@@ -140,8 +141,8 @@ SEND_EXTERNAL_REPLY=$(
   '
 )
 if echo "$SEND_EXTERNAL_REPLY" | grep -q '"isError":true' \
-   && echo "$SEND_EXTERNAL_REPLY" | grep -q 'wants_reply=true requires a replyable pi-session sender envelope'; then
-  ok "external MCP send cannot request reply path"
+   && echo "$SEND_EXTERNAL_REPLY" | grep -q 'wants_reply=true requires a replyable sender envelope'; then
+  ok "external MCP send without pi/meta identity cannot request reply path"
 else
   fail "external MCP wants_reply guard did not surface: ${SEND_EXTERNAL_REPLY:0:300}"
 fi

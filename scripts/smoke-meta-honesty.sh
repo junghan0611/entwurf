@@ -9,11 +9,13 @@
 #     hard-coded "1 unread" — a lying count, which for a project whose core value
 #     is honesty is a release blocker.
 #
-#   PART B — hook level logging (blocker #2). A silent registration miss is the
-#     dangerous case: the session opens fine but never becomes a garden citizen.
-#     The runtime hook must STAY best-effort (no terminal scream), but it must log
-#     a failure as ` ERROR ` so the doctor — the fail-loud surface — can grep it.
-#     A normal create/attach must NOT emit ERROR (no false alarm).
+#   PART B — hook level logging (blocker #2) + sender-marker evidence. A silent
+#     registration miss is the dangerous case: the session opens fine but never
+#     becomes a garden citizen. The runtime hook must STAY best-effort (no terminal
+#     scream), but it must log a failure as ` ERROR ` so the doctor — the fail-loud
+#     surface — can grep it. A normal create/attach must NOT emit ERROR (no false
+#     alarm), and must log sender-marker evidence so send-side replyable identity
+#     is not silently lost.
 #
 # Deterministic + offline (no `claude -p`, no network). Safe for pnpm check /
 # pre-commit. Isolates its store via PI_CODING_AGENT_DIR in a temp dir.
@@ -110,6 +112,7 @@ run_hook() { echo "$1" | "$NODE_BIN" --experimental-strip-types "$HOOK" >/dev/nu
 rm -f "$HOOK_LOG"
 run_hook "{\"hook_event_name\":\"SessionStart\",\"session_id\":\"native-ok-1\",\"transcript_path\":\"$TMP/t.jsonl\",\"cwd\":\"$TMP\"}"
 if grep -q ' INFO .*create record' "$HOOK_LOG" 2>/dev/null; then ok "normal create logs INFO"; else bad "normal create did not log INFO ($HOOK_LOG)"; fi
+if grep -q ' INFO sender marker ' "$HOOK_LOG" 2>/dev/null; then ok "normal create writes sender marker evidence (send-side replyable meta-session)"; else bad "normal create did not log sender marker evidence ($HOOK_LOG)"; fi
 if grep -q ' ERROR ' "$HOOK_LOG" 2>/dev/null; then bad "normal create emitted a FALSE ERROR: $(grep ' ERROR ' "$HOOK_LOG")"; else ok "normal create emits no ERROR (no false alarm)"; fi
 
 # Silent-miss path: duplicate nativeSessionId in the store makes scanByNativeId
