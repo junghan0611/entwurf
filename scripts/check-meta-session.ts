@@ -473,6 +473,76 @@ check("readMetaInbox: drains a doorbell-rung .msg.delivered too", () => {
 	}
 });
 
+check("readMetaInbox: ONE drain returns ALL queued bodies in order (level-triggered body state; #34 D8 basis)", () => {
+	const fx = mailboxFixture();
+	try {
+		// Three messages land while the session is idle. The wake SIGNAL
+		// (inbox.signal) is edge-triggered and can coalesce N rapid pokes into a
+		// single FileChanged. Each BODY is a separate level-state file on disk, so
+		// a later wake/read drains the whole directory instead of trusting the number
+		// of signal edges. A fully lost doorbell can still leave an idle-forever
+		// unread backlog; #34 tracks that heartbeat/re-poke backstop separately.
+		// This gate asserts the deterministic robustness basis: once the receiver
+		// self-fetches, it gets every queued body, including both fresh .msg and
+		// doorbell-rung .msg.delivered files.
+		const t1 = new Date("2026-06-05T06:30:00.000Z");
+		const t2 = new Date("2026-06-05T06:31:00.000Z");
+		const t3 = new Date("2026-06-05T06:32:00.000Z");
+		const t4 = new Date("2026-06-05T06:33:00.000Z");
+		enqueueMetaMessage({
+			gardenId: fx.gardenId,
+			body: "first",
+			sessionsDir: fx.sessionsDir,
+			mailboxDir: fx.mailboxDir,
+			now: t1,
+		});
+		enqueueMetaMessage({
+			gardenId: fx.gardenId,
+			body: "second",
+			sessionsDir: fx.sessionsDir,
+			mailboxDir: fx.mailboxDir,
+			now: t2,
+		});
+		// The third one's doorbell DID ring: FileChanged moved .msg -> .msg.delivered.
+		const third = enqueueMetaMessage({
+			gardenId: fx.gardenId,
+			body: "third",
+			sessionsDir: fx.sessionsDir,
+			mailboxDir: fx.mailboxDir,
+			now: t3,
+		});
+		fs.renameSync(third.messagePath, `${third.messagePath}.delivered`);
+
+		const read = readMetaInbox({
+			gardenId: fx.gardenId,
+			sessionsDir: fx.sessionsDir,
+			mailboxDir: fx.mailboxDir,
+			now: t4,
+		});
+		assert.equal(read.messages.length, 3, "a single read drains all three queued bodies");
+		assert.deepEqual(
+			read.messages.map((m) => m.body),
+			["first", "second", "third"],
+			"timestamp-distinct bodies drain in deterministic filename order",
+		);
+		// One batch, one honest receipt — NOT one-per-message.
+		const rec = readMetaRecordByGardenId(fx.gardenId, fx.sessionsDir);
+		assert.equal(rec.delivery.lastReadAt, t4.toISOString(), "a single lastReadAt receipt for the whole batch");
+		// Every body archived to .read; nothing unread remains; re-read is empty.
+		const dir = path.join(fx.mailboxDir, fx.gardenId);
+		const stillUnread = fs.readdirSync(dir).filter((f) => f.endsWith(".msg") || f.endsWith(".msg.delivered"));
+		assert.equal(stillUnread.length, 0, "no unread body remains after the batch drain (all archived to .read)");
+		assert.equal(
+			readMetaInbox({ gardenId: fx.gardenId, sessionsDir: fx.sessionsDir, mailboxDir: fx.mailboxDir, now: t4 }).messages
+				.length,
+			0,
+			"re-read after the batch drain is empty (idempotent consume)",
+		);
+	} finally {
+		fx.cleanup();
+	}
+});
+
 check("readMetaInbox: empty inbox returns nothing AND mutates no receipt; re-read after drain is empty", () => {
 	const fx = mailboxFixture();
 	try {

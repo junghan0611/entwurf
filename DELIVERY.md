@@ -68,7 +68,7 @@ partial levels.
 | **D5** | Context injection | A unique token / message body reaches model-visible context via an official hook/API path; the model can acknowledge it. | Hook logs show activity, but the model never sees the message. |
 | **D6** | Same session/model continuity | The response comes from the same native session/conversation and same model/subscription path. | A new conversation/process handles the message; model changed silently. |
 | **D7** | Completion / reply observation | Completion or reply can be observed without transcript scraping: Stop/SessionEnd/PostInvocation, outbox, MCP reply, API result, etc. | Wake and context work, but the garden side cannot know when the turn finished except by watching the UI. |
-| **D8** | Operational robustness | Duplicate suppression, delivery markers, loop guards, ordering, stale-session handling, and crash recovery are implemented/tested. | Demo works once but can loop, duplicate, reorder, or lose messages. |
+| **D8** | Operational robustness | Duplicate suppression, delivery markers, loop guards, level-triggered body drain, ordering policy, stale-session handling, and crash recovery are implemented/tested. | Demo works once but can loop, duplicate, reorder, leave unread backlogs, or lose messages. |
 
 ### Script result contract
 
@@ -102,7 +102,7 @@ updated when a backend version changes the delivery surface.
 | Harness / surface | Highest current level | Transport | Notes |
 |---|---:|---|---|
 | **pi native Entwurf** | D7+ | Unix control socket + pi followUp/custom messages | Replyable pi session. This is the resident baseline, not an external meta-session. |
-| **Claude Code interactive 2.1.163** | D6, D7 partial, D8 partial | Plugin/global `SessionStart` arms `watchPaths`; external write triggers `FileChanged`; `asyncRewake` wakes idle session | Active idle wake proven without pty. `Stop` alone is piggyback-only. `asyncRewake` is a doorbell; body should be self-fetched from mailbox. |
+| **Claude Code interactive 2.1.163** | D6, D7 partial, D8 partial | Plugin/global `SessionStart` arms `watchPaths`; external write triggers `FileChanged`; `asyncRewake` wakes idle session | Active idle wake proven without pty. `Stop` alone is piggyback-only. `asyncRewake` is a doorbell; body is self-fetched from mailbox. D8 partial: duplicate/read idempotence, honest unread counts, and level-triggered body drain are gated; empirical wake-edge bounds and unread-heartbeat backstop remain open (#34). |
 | **Antigravity / agy** | D6+ | Native LS gRPC `agentapi send-message` | Active push into live conversation. Same judgement levels; transport differs from Claude. |
 | **Codex embedded TUI 0.136.0** | D0 partial | Native state DB / rollout transcript only | Standalone Embedded TUI binds no socket; no `FileChanged`/`asyncRewake` in Codex hooks; not retrofittable. Identify-only via state DB / rollout. |
 | **Codex app-server-backed TUI 0.136.0** | D6, D7 (status) | WebSocket-over-UDS `turn/start` into the live `threadId` | **Demonstrated, no managed standalone, no cloud.** `codex app-server --listen unix://<owned 0700 dir>` + plain `codex` auto-attach (or `--remote unix://`). Full message injection (agy-like, not a doorbell); `thread/status/changed` gives completion observation. D8 robustness (dedupe / crash recovery / ordering policy) is not tested. `turn/steer` is active-turn steering, not idle wake. |
@@ -121,6 +121,23 @@ Claude Code interactive can be woken by a supported filesystem-event path:
 4. `FileChanged` fires while the session is idle;
 5. the hook exits with `asyncRewake` and writes the doorbell to **stderr**;
 6. the same session/model wakes and self-fetches the message body.
+
+#### D8 partial — signal/body separation is level-triggered
+
+Claude's `FileChanged` signal is an edge: rapid signal writes may coalesce, and a
+true missed edge can leave an idle session with unread mail until another wake or
+backstop occurs. The body is not carried in that edge. Bodies are durable mailbox
+files (`*.msg` before the doorbell, `*.msg.delivered` after the doorbell), and
+`entwurf_inbox_read` drains the whole unread set in one read and archives them as
+`*.read`. Therefore a coalesced doorbell does not drop message bodies: once the
+receiver self-fetches, it consumes all queued bodies, not "one event = one body".
+
+Deterministic gates: `check-meta-session` asserts mixed fresh/delivered bodies are
+drained together and re-read is empty; `smoke-meta-honesty` asserts the doorbell's
+unread count matches what the inbox reader will drain. Remaining D8 work is still
+honest/open in #34: empirical FileChanged coalescing bounds, active-turn arrival,
+watchPath edge cases, compact-window re-arm gaps, and a heartbeat/re-poke backstop
+for live sessions with unread mail.
 
 Important gotchas live in [`scripts/raw-async-delivery/README.md`](./scripts/raw-async-delivery/README.md):
 `Stop` hooks do not wake idle sessions, bare skills cannot arm startup watches,
