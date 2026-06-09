@@ -295,6 +295,101 @@ active-turn arrival / watchPath 고갈 / compact-window) + unread-mailbox heartb
 parallel-team pattern, keep the bridge thin. Doorbell delivery is notice-only + self-fetch; never
 inject imperatives through a hook channel.
 
+## Next — 0.11.0: entwurf tmux-live lifecycle, pi = 4번째 메타 백엔드 (#35)
+
+> **상태: 설계 동결 (2026-06-09, GLG + GPT힣 + Claude 3자 수렴). 각 요소 실측 완료 — 구현 세션
+> 진입 시 설계 재탐색 불필요.** 아래 검증 원장의 항목은 다시 찌르지 말 것(doctor 실패/구체 버그만 예외).
+> 구현 세션은 각 요소의 regression gate를 먼저 만들고, 그 다음 빌드 + 연결한다.
+
+**개념 닻 = #35 (SSOT, workshop≠factory).**
+bbot가 일부러 컨셉만 담았다. 아래는 그 frame 위에서 GLG와 동결한 *설계*다.
+
+### 왜 0.11.0인가 — 전략 전환
+- 현 entwurf spawn은 `pi -p` headless 전용 → **pi만 분신이 된다.** Claude를 분신으로 부르려면 Claude
+  Code를 *live interactive* 로 띄워야 하고, native는 headless live 불가 → **tmux가 launch surface**
+  (`claude -p`/`pi -p`는 fresh-context·disposable이라 live 분신 surface 아님).
+- **ACP 중심에서 내림(유지·관리는 계속).** 6/15 이후 ACP 사실상 미사용(antigravity 미지원, claude/gemini
+  미사용, pi codex 네이티브). 1.0.0 = pi-shell-acp는 `plugins/`로, 프로젝트 중심은 **meta-bridge entwurf**.
+- **pi = 4번째 메타 백엔드.** `META_BACKENDS += "pi"`. THE 하네스에서 garden-id 동료 시민으로 (North
+  Star "no backend is privileged" 현금화). **순서: pi headless/tmux-live 먼저 + 테스트 → 그 다음 Claude
+  Code ↔ Claude Code live.**
+
+### 넘으면 안 되는 선 (전부 #35)
+- **Workshop, not factory.** 살아있는 소수 도제 = 재질문 가능, 상태는 세션 안 → 외부 DB(beads/dolt) 금지.
+- **GC = tmux 프로세스 자원 회수만, 데이터 삭제 절대 아님.** meta-record/transcript(denote-id 기억층)는
+  남김. Phase 4 data prune(listing-only)과 **별개 cleaner 표면** — collapse 금지.
+- **garden-id = authority, tmux = ephemeral.** 세션명=path(grouping), window 번호 renumber.
+- **Factory 작업 OUT.** worktree·merge-wall fan-out 없음 → 백엔드 자체 orchestrator로 위임.
+
+### 핵심 아키텍처 — 데이터 4분리 + 한 동사
+- **record(누구였나)** / **capabilities(무엇·어떻게 깨움)** / **mailbox(메시지·receipt)** /
+  **probe(지금 살아있나, 저장 안 함 — 매번 계산)**. 상태를 저장하면 거짓말이 된다(denote-instinct 함정).
+- **두 레인 둘 다 KEEP:** `pi -p` headless(오케스트레이션, 가벼움) + tmux-live(`--entwurf-control`
+  소켓, 도제). resume/send는 세션 type이 아니라 **현재 liveness의 함수** — dormant→resume, live→send.
+- **entwurf = 한 동사.** spawn/resume/send는 probe 결과의 내부 디스패치. low-level primitive는 숨기되 유지.
+- **브레인 ↔ 핸드 분리.** 브레인=`entwurfcli`(Go, 하네스 중립 fact-provider) — `activeEntwurfs` Map은
+  pi 프로세스 1개의 기억이라 형제가 못 봄(= 현 pi 분신 비가시성의 근본). 핸드=기계적 실행(Stage 0은
+  기존 TS primitive 재사용). **최종 형제 선택은 에이전트, Go는 근거 제공.**
+
+### 검증 원장 — 실측 완료 (2026-06-09, 설계 재탐색 불필요)
+| 요소 | 실측 결과 |
+|---|---|
+| tmux 3.6a | `@garden_id` 유저옵션 `list-panes -a -F` 라운드트립 OK. **`pane_title`은 셸이 덮어써 휘발성 → correlation 금지.** 안전 필드만: `@garden_id`+`pane_id`+`pane_pid` |
+| go 1.25.9 | 단일 바이너리 `entwurfcli` 구현 toolchain OK |
+| pi 0.79 trust | `pi -p`는 **trust에서 안 멈춤**(비대화 미결정→`false` degraded). `--approve`(`trustOverride=true`)가 맨 앞 short-circuit. store=`~/.pi/agent/trust.json`(canonical cwd→bool) |
+| trust input 정의 | cwd→root 상향 walk: `.pi/`\|`AGENTS.md`/`CLAUDE.md`\|`.agents/skills`. **`~/AGENTS.md` 때문에 ~ 아래 전부 trust-input → prefix+`--approve`가 유일 메커니즘** |
+| meta v1 | schemaVersion=1, `lastSeen`+`delivery{}` 있음, `model`/`parentGardenId`/`isEntwurf` 없음. 디스크 claude-code v1 10+개 |
+| **model@birth 없음** | Claude SessionStart stdin=`{session_id,transcript_path,cwd}`, `MetaMintInput`에 model 없음 → **v2 model/transcriptPath는 nullable** |
+| pi liveness | `~/.pi/entwurf-control/<gid>.sock` 존재+pid alive(stale sweep) |
+| pi tmux 부팅 | 강제 `--session-id <gid>` + `--entwurf-control` → 소켓 생성 OK, no prompt. **correlation=소켓파일명+@garden_id (environ PI_SESSION_ID는 상속/exec-snapshot이라 폐기)** |
+| pi 확장 API | `SessionStartEvent` 존재 → pi가 session_start에 meta-record upsert 가능(4th backend 경로) |
+
+### meta-record v2 (nullable-at-birth)
+```jsonc
+{ "schemaVersion": 2, "gardenId":"…", "backend":"pi|claude-code|codex|antigravity",
+  "nativeSessionId":"…", "cwd":"…",
+  "model": null, "transcriptPath": null, "parentGardenId": null, "isEntwurf": false,
+  "createdAt":"…", "recordUpdatedAt":"…" }
+// 제거: status·lifecycle·wakeMode·deliveryLevel·delivery.*·trusted·tmuxTarget
+// recordUpdatedAt = record touch time(이름으로 못 박음), liveness 아님
+```
+
+### 동결 결정 7개
+1. 능력 레지스트리 = 새 파일 `entwurf-capabilities.json` (targets=launch allowlist와 별 관심사)
+2. v1→v2 = `parseMetaRecordV1/V2`→`normalizeMetaIdentity` dual-read + lazy normalize, 새 write는 v2.
+   v1 receipt 필드는 읽되 v2에선 mailbox state로 이동
+3. correlation = 소켓파일명 + tmux `@garden_id`. **env probe 폐기 + launcher가 identity env scrub/명시
+   override**(상속 누수 차단; lineage는 `PARENT_SESSION_ID`를 launcher gid로 명시 set)
+4. Go = Stage 0 **fact-provider**(`peers`/`who-can`/`preflight --json`), TS=hand/executor.
+   `plan` JSON은 explicit target일 때만(최종 선택자로 만들지 말 것)
+5. untrusted controlled launch = **fail-fast** (조용한 `--no-approve` degraded 금지)
+6. `project_trust` handler `remember` = **false** (prefix policy = SSOT, trust.json 안 더럽힘)
+7. prefix auto-approve roots = `~/repos/gh`, `~/repos/work`, `~/org` (**`~/repos/3rd` 제외**)
+
+### Trust 2층 (구현 형태)
+- **사람이 직접 여는 pi** = global `project_trust` 확장이 prefix policy로 `{trusted:"yes",remember:false}`
+  / unknown은 `{trusted:"undecided"}`. (안전망)
+- **entwurfcli/launcher가 여는 controlled session** = handler에 의존 금지(`--no-extensions`면 안 돎).
+  `preflight(cwd)`가 trust.json+prefix로 판단 → trusted면 `--approve`, untrusted면 fail-fast.
+
+### Go packaging (운영)
+`cmd/entwurfcli` Go source + `run.sh build-entwurfcli` + `ENTWURFCLI_BIN`/PATH 탐색 + doctor fail-loud.
+**npm package가 Go build를 암묵 요구하면 안 됨** — 기존 TS primitive는 fallback/compat 유지.
+1.0.0서 Nix/binary release로 승격.
+
+### Stage 0 순서 (pi only)
+1. **trust preflight** — prefix policy + controlled launch 내부 `--approve` + untrusted fail-fast
+2. **meta-record v2** — pi backend 포함, identity-only, golden fixture, v1 dual-read+normalize
+3. **entwurfcli Go 3 fact-verb** — `preflight` / `who-can` / `peers`(record 스캔 + 소켓/tmux probe)
+4. **상위 entwurf 단일 표면** — entwurfcli 근거 → pi bg(`pi -p --no-extensions --approve`) 또는 tmux-live,
+   primitive 내부 유지
+→ **각 요소는 테스트 코드로 먼저 검증, 연결은 그 다음.** Stage 1 = Claude Code ↔ Claude Code live.
+
+### 0.10.0과의 관계
+0.10.0 cut(meta-bridge delivery/install/doctor)은 #35 frame을 배신하지 않음(workshop-safe). cut을 막지
+않으며 0.11.0은 그 substrate(SessionStart 훅·mailbox·doorbell·소켓) 위에서 launch surface를 tmux-live로
+통일 + pi를 4th backend로 편입한다.
+
 ## Recently landed — evidence closure on the 0.9.0 substrate (under CHANGELOG `## Unreleased`)
 
 Closes two 0.9.0 carried follow-ups by making indirect proofs direct, plus one stale-item trim.
