@@ -246,6 +246,21 @@ trusted 전에는 cwd 아래 어떤 project-local 파일도 읽지 않는다 —
   v2 writer 금지(디스크 v1 10+개 역호환이 여기 걸림).
 - ② 깨진 게이트 update **직후 = GPT 리뷰.** "정당한 update vs 진짜 regression" 혼동 최다 구간.
 
+**체감 단위 분해 (3A–3D, 2026-06-09 GLG+GPT힣) — step 3를 한 번에 하지 말 것:**
+step 1·2는 안전장치/토대라 체감이 없었다. step 3부터는 **관찰 가능한 결과 단위**로 끊는다. 각 단위마다
+새/수정 gate + 관찰 가능한 결과를 낸다. 아래는 위 "구현 순서(고정)"의 재배열·명시화이지 새 결정이 아니다
+(특히 3B·3C를 3D writer **앞**에 두는 건 위 4·5의 "먼저 못박음" 제약을 순서로 박은 것).
+- **3A. v1→v2 normalize gate** (= 고정순서 1·2). 결과: 기존 v1 meta-record를 읽고 v2 identity로 normalize
+  = "옛 시민을 잃지 않음". 검증: synthetic v1 fixture → normalized v2 golden GREEN. → **끊을 지점 ①.**
+- **3B. mailbox receipt state** (= 고정순서 4). 첫 체감점. 결과: read receipt가 `record.delivery`가 아니라
+  mailbox state로 이동 → `inbox_read` 후 state에 `readAt`이 남음. (delivery 제거 **전** 이 schema 먼저.)
+- **3C. capability source** (= 고정순서 5). 결과: wakeMode/deliveryLevel이 record가 아니라 capability source
+  (`entwurf-capabilities.json` 신설 vs transitional descriptor 중 gate로 고정)에서 나옴 → "이 시민은
+  self-fetch 가능한가 / pi는 control-socket live 가능한가"를 capability가 답함. (wakeMode 제거 **전** 먼저.)
+- **3D. v2 writer + dual-read** (= 고정순서 3). 3A·3B·3C 끝난 뒤. 결과: 새 record = schemaVersion 2,
+  backend에 pi 포함, `model`/`parentGardenId`/`isEntwurf` 자리 생김 = pi가 meta backend citizen으로 기록될
+  준비. 이후 고정순서 6(게이트 update) → **끊을 지점 ②** → 고정순서 7(MCP wording).
+
 ### 0.10.0과의 관계
 0.10.0(meta-bridge delivery/install/doctor)은 #35 frame을 배신하지 않음(workshop-safe). 0.11.0은 그
 substrate(SessionStart 훅·mailbox·doorbell·소켓) 위에서 launch surface를 tmux-live로 통일 + pi를 4th
