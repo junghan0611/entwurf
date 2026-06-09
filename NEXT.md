@@ -217,8 +217,20 @@ trusted 전에는 cwd 아래 어떤 project-local 파일도 읽지 않는다 —
 > coverage==META_BACKENDS_V2 + 기존 3 backend ≡ `META_BACKEND_DESCRIPTORS` drift guard +
 > `check-entwurf-capabilities` 15 assertions, **pi wakeMode=direct-inject** = control-socket triggerTurn
 > 직접 주입, packaging `files`+check-pack 등재) = 이번 커밋 (GPT 리뷰 통과, parser/gate-only — live
-> consumer 갈아엎기·record wakeMode 제거는 3D). **다음 = step 3D(v2 writer + dual-read + 깨진 게이트
-> update + 끊을 지점 ②).** (push 아직 안 함 — local 누적.)
+> consumer 갈아엎기·record wakeMode 제거는 3D). **step 3D-1**(pure v2 write shape `serializeMetaIdentity`
+> + dual-read dispatcher `parseMetaRecordAny`(schemaVersion peek→V1/V2) + `parseMetaIdentity`(dual-read→
+> normalized identity) + `check-meta-dual-read` 14 assertions) = 이번 커밋 (GPT 리뷰 통과, pure-only —
+> FS upsert·live·delivery 제거 전부 없음). **다음 = step 3D-2(live receipt dual-write).** (push 아직 안 함.)
+>
+> **3D 4-조각 분해 (GPT 2026-06-09, live path라 한 덩어리 금지):**
+> - **3D-1 ✅** pure dual-read/writer (serializer + dispatcher + identity path, FS 연결 없음) = 이번 커밋.
+> - **3D-2** live receipt dual-write — `enqueueMetaMessage`/`readMetaInbox`가 기존 `record.delivery.*`
+>   stamp 유지하면서 mailbox receipt state(3B)도 stamp. **additive only**, delivery 제거 금지, v2 writer/
+>   capability consumer 연결 금지, `smoke-meta-mailbox` 안 깨짐. 여기서 새 state live 체감.
+> - **3D-3** capability-backed metadata — live descriptor 소비처를 capability registry(3C)로 전환,
+>   기존 3 backend drift guard 유지, record 안 wakeMode 제거 준비.
+> - **3D-4** v2 writer/upsert + gate update — 새 write=v2, v1 read 유지, `check-meta-session`/
+>   `smoke-meta-mailbox`/store-doctor 정당 update. **여기서 끊을 지점 ②(GPT 큰 리뷰).**
 
 ### Stage 0 step 3 entry map — meta-record v2 (정찰 완료 2026-06-09, 구현은 다음 세션)
 

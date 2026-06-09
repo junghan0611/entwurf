@@ -522,6 +522,70 @@ export function normalizeMetaIdentity(record: MetaRecord | MetaIdentity): MetaId
 }
 
 // ---------------------------------------------------------------------------
+// v2 write shape + dual-read dispatcher (0.11 Stage 0 step 3D-1)
+//
+// Pure functions only: the canonical v2 serializer and the version-dispatching
+// reader. NO fs upsert, NO live readMetaInbox/enqueueMetaMessage change, NO
+// record.delivery removal — those are 3D-2/3/4. This step just makes "write a v2
+// identity" and "read any version into an identity" exist + gated, so 3D-4 can
+// wire the FS upsert onto a proven writer.
+// ---------------------------------------------------------------------------
+
+/**
+ * Canonical serialization of a v2 identity: stable key order (the frozen ledger
+ * jsonc order), 2-space indent, trailing newline. Deterministic — re-serializing
+ * the same identity is byte-identical, and the output round-trips through
+ * parseMetaRecordV2. This is the v2 WRITE shape; the FS upsert that uses it is
+ * step 3D-4, not here.
+ */
+export function serializeMetaIdentity(identity: MetaIdentity): string {
+	const ordered = {
+		schemaVersion: identity.schemaVersion,
+		gardenId: identity.gardenId,
+		backend: identity.backend,
+		nativeSessionId: identity.nativeSessionId,
+		cwd: identity.cwd,
+		model: identity.model,
+		transcriptPath: identity.transcriptPath,
+		parentGardenId: identity.parentGardenId,
+		isEntwurf: identity.isEntwurf,
+		createdAt: identity.createdAt,
+		recordUpdatedAt: identity.recordUpdatedAt,
+	};
+	return `${JSON.stringify(ordered, null, 2)}\n`;
+}
+
+/**
+ * Dual-read dispatcher: peek schemaVersion on untrusted JSON and route to the
+ * matching strict parser (v1 record or v2 identity). The lazy-normalize seam — a
+ * consumer reads either on-disk version through ONE call. Returns the parsed
+ * record in its OWN shape (v1 keeps delivery; v2 is identity); compose with
+ * normalizeMetaIdentity, or use parseMetaIdentity, to collapse to identity.
+ */
+export function parseMetaRecordAny(json: string): MetaRecord | MetaIdentity {
+	let raw: unknown;
+	try {
+		raw = JSON.parse(json);
+	} catch (err) {
+		throw new MetaRecordError(`meta-record is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+	}
+	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+		throw new MetaRecordError(`meta-record must be a JSON object (got ${describe(raw)}).`);
+	}
+	const version = (raw as Record<string, unknown>).schemaVersion;
+	if (version === META_SCHEMA_VERSION) return parseMetaRecordV1(json);
+	if (version === META_SCHEMA_VERSION_V2) return parseMetaRecordV2(json);
+	throw new MetaRecordError(
+		`meta-record "schemaVersion" must be ${META_SCHEMA_VERSION} or ${META_SCHEMA_VERSION_V2} (got ${describe(version)}).`,
+	);
+}
+
+/** Dual-read straight to a normalized v2 identity (parse any version, normalize). */
+export function parseMetaIdentity(json: string): MetaIdentity {
+	return normalizeMetaIdentity(parseMetaRecordAny(json));
+}
+
+// ---------------------------------------------------------------------------
 // capability source — backend capability registry (0.11 Stage 0 step 3C)
 //
 // v2 identity (step 3A) drops the backend honesty metadata (wakeMode /

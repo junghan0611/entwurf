@@ -57,6 +57,7 @@ Usage:
   ./run.sh check-meta-record-v2        # deterministic golden gate (0.11 Stage 0 step 3A): synthetic v1 fixture → normalizeMetaIdentity v2 identity golden + dual-read version fences, no API
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
+  ./run.sh check-meta-dual-read        # deterministic gate (0.11 Stage 0 step 3D-1): v2 write shape (serializeMetaIdentity) + dual-read dispatcher (parseMetaRecordAny/parseMetaIdentity) + write→read round-trip, pure, no API
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
   ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
@@ -1201,6 +1202,16 @@ check_entwurf_capabilities() {
   # strict keyset/coverage/field crashes. Parser/gate only — no live routing,
   # no record/descriptor consumer change (that is 3D). No backend, no API.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-capabilities.ts)
+}
+
+check_meta_dual_read() {
+  # Deterministic gate for 0.11 Stage 0 step 3D-1: the v2 write shape
+  # (serializeMetaIdentity) + the dual-read dispatcher (parseMetaRecordAny /
+  # parseMetaIdentity). Canonical serialize + round-trip + version dispatch +
+  # unknown-version crash. Pure functions only — no fs upsert wiring, no
+  # readMetaInbox/enqueueMetaMessage change, no record.delivery removal (3D-2/3/4).
+  # No backend, no hook, no API.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-dual-read.ts)
 }
 
 check_plugin_empty_final_recovery() {
@@ -4168,6 +4179,9 @@ case "$cmd" in
     ;;
   check-entwurf-capabilities)
     check_entwurf_capabilities
+    ;;
+  check-meta-dual-read)
+    check_meta_dual_read
     ;;
   new-session-id)
     # Garden launcher helper: print one fresh garden sessionId (SSOT:
