@@ -54,6 +54,7 @@ Usage:
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
   ./run.sh check-entwurf-session-identity # deterministic gate for locked garden session identity & name grammar (sessionId/buildSessionName/parse/collision), no API
   ./run.sh check-meta-session          # deterministic gate (#30 step 2): meta-record mint/serialize/parse + scanByNativeId body-authority + idempotent decideUpsert, no API
+  ./run.sh check-meta-record-v2        # deterministic golden gate (0.11 Stage 0 step 3A): synthetic v1 fixture → normalizeMetaIdentity v2 identity golden + dual-read version fences, no API
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
   ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
@@ -1167,6 +1168,16 @@ check_meta_session() {
   # refusal, and the pre-drilled read-receipt mutators. Pure functions; no
   # backend, no hook, no API.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-session.ts)
+}
+
+check_meta_record_v2() {
+  # Deterministic golden gate for 0.11 Stage 0 step 3A: the v1→v2 identity
+  # normalize seam. A synthetic, sanitized v1 fixture normalizes to a
+  # hand-written v2 identity literal (golden), plus dual-read version fences
+  # and v2 field-contract crashes. Reader/normalizer only — no v2 writer yet.
+  # Kept separate from check-meta-session so 3D's v1-gate rewrites leave this
+  # back-compat golden untouched. Pure functions; no backend, no hook, no API.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-record-v2.ts)
 }
 
 check_plugin_empty_final_recovery() {
@@ -4123,6 +4134,9 @@ case "$cmd" in
     ;;
   check-meta-session)
     check_meta_session
+    ;;
+  check-meta-record-v2)
+    check_meta_record_v2
     ;;
   new-session-id)
     # Garden launcher helper: print one fresh garden sessionId (SSOT:

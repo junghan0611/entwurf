@@ -338,6 +338,189 @@ export function parseMetaRecord(json: string): MetaRecord {
 	};
 }
 
+// ---------------------------------------------------------------------------
+// meta-record v2 — identity-only shape (0.11 Stage 0 step 3A)
+//
+// v2 strips the delivery/read-receipt aspect OUT of the record (it moves to a
+// separate mailbox state file in step 3B) and keeps only IDENTITY: who this
+// citizen is, never its delivery bookkeeping. The deltas vs v1 (verified
+// against the frozen ledger in NEXT.md):
+//   - backend gains `pi` (the 4th meta backend — pi sessions become citizens)
+//   - transcriptPath required → nullable (pi birth may not know it yet)
+//   - new nullable identity fields: model, parentGardenId, isEntwurf
+//   - lastSeen → recordUpdatedAt (a record touch time, NOT liveness)
+//   - delivery{} removed entirely
+//
+// This block is READER + NORMALIZER ONLY. There is deliberately NO v2 writer /
+// serializer / disk upsert here yet: step 3A's gate is "synthetic v1 fixture →
+// normalized v2 identity golden GREEN", and 3A must not introduce a v2 writer
+// before that golden + its GPT review (NEXT.md 끊을 지점 ①).
+// ---------------------------------------------------------------------------
+
+/** Bump only on a breaking v2 identity-shape change; the v2 parser refuses other versions. */
+export const META_SCHEMA_VERSION_V2 = 2 as const;
+
+/** v2 backends = the three v1 backends + `pi` (pi joins as the 4th meta citizen). */
+export const META_BACKENDS_V2 = ["claude-code", "antigravity", "codex", "pi"] as const;
+export type MetaBackendV2 = (typeof META_BACKENDS_V2)[number];
+
+/**
+ * The v2 identity-only record. Field order mirrors the frozen ledger's jsonc so
+ * a future serializer stays byte-stable. No delivery aspect — that is mailbox
+ * state (step 3B), referenced by gardenId, never embedded in identity.
+ */
+export interface MetaIdentity {
+	schemaVersion: typeof META_SCHEMA_VERSION_V2;
+	gardenId: string;
+	backend: MetaBackendV2;
+	nativeSessionId: string;
+	cwd: string;
+	model: string | null;
+	transcriptPath: string | null;
+	parentGardenId: string | null;
+	isEntwurf: boolean;
+	createdAt: string;
+	recordUpdatedAt: string;
+}
+
+function requireBackendV2(value: unknown): MetaBackendV2 {
+	if (typeof value !== "string" || !META_BACKENDS_V2.includes(value as MetaBackendV2)) {
+		throw new MetaRecordError(
+			`meta-record "backend" must be one of ${META_BACKENDS_V2.join(" | ")} (got ${describe(value)}).`,
+		);
+	}
+	return value as MetaBackendV2;
+}
+
+function requireBoolean(value: unknown, field: string): boolean {
+	if (typeof value !== "boolean") {
+		throw new MetaRecordError(`meta-record field "${field}" must be a boolean (got ${describe(value)}).`);
+	}
+	return value;
+}
+
+function requireNullableGardenId(value: unknown, field: string): string | null {
+	if (value === null) return null;
+	const id = requireNonEmptyString(value, field);
+	if (!SESSION_ID_RE.test(id)) {
+		throw new MetaRecordError(
+			`meta-record "${field}" must be null or match YYYYMMDDTHHMMSS-[0-9a-f]{6} (got "${id}").`,
+		);
+	}
+	return id;
+}
+
+/**
+ * Explicit v1 name for the dual-read pair. `parseMetaRecord` predates the v2
+ * split and stays the canonical v1 parser (existing callers untouched); this
+ * alias makes the V1/V2 symmetry legible at call sites.
+ */
+export const parseMetaRecordV1 = parseMetaRecord;
+
+/**
+ * The EXACT key set a v2 identity record may carry. v2 is a fresh schema, so the
+ * parser is strict: any key outside this set — including stale v1 fields like
+ * `delivery` or `lastSeen` — is a half-migrated / corrupt record and must
+ * fail-fast, never be silently normalized away. Frozen against the ledger jsonc.
+ */
+const META_IDENTITY_V2_KEYS: readonly string[] = [
+	"schemaVersion",
+	"gardenId",
+	"backend",
+	"nativeSessionId",
+	"cwd",
+	"model",
+	"transcriptPath",
+	"parentGardenId",
+	"isEntwurf",
+	"createdAt",
+	"recordUpdatedAt",
+];
+
+/** Parse + fully validate untrusted JSON into a v2 MetaIdentity. Throws on any drift. */
+export function parseMetaRecordV2(json: string): MetaIdentity {
+	let raw: unknown;
+	try {
+		raw = JSON.parse(json);
+	} catch (err) {
+		throw new MetaRecordError(`meta-record is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+	}
+	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+		throw new MetaRecordError(`meta-record must be a JSON object (got ${describe(raw)}).`);
+	}
+	const obj = raw as Record<string, unknown>;
+	if (obj.schemaVersion !== META_SCHEMA_VERSION_V2) {
+		throw new MetaRecordError(
+			`meta-record "schemaVersion" must be ${META_SCHEMA_VERSION_V2} (got ${describe(obj.schemaVersion)}).`,
+		);
+	}
+	// Strict keyset: reject stale v1 fields (delivery/lastSeen) and any unknown
+	// key. A v2 record carrying v1 leftovers is half-migrated/corrupt — surface
+	// it, do not silently drop it during normalize.
+	const stray = Object.keys(obj).filter((k) => !META_IDENTITY_V2_KEYS.includes(k));
+	if (stray.length > 0) {
+		throw new MetaRecordError(
+			`v2 meta-record carries unexpected key(s) ${stray.map((k) => `"${k}"`).join(", ")} ` +
+				`(allowed: ${META_IDENTITY_V2_KEYS.join(", ")}). Stale v1 fields (delivery/lastSeen) or unknown keys are rejected.`,
+		);
+	}
+	return {
+		schemaVersion: META_SCHEMA_VERSION_V2,
+		gardenId: requireGardenId(obj.gardenId),
+		backend: requireBackendV2(obj.backend),
+		nativeSessionId: requireNonEmptyString(obj.nativeSessionId, "nativeSessionId"),
+		cwd: requireNonEmptyString(obj.cwd, "cwd"),
+		model: requireNullableString(obj.model, "model"),
+		transcriptPath: requireNullableString(obj.transcriptPath, "transcriptPath"),
+		parentGardenId: requireNullableGardenId(obj.parentGardenId, "parentGardenId"),
+		isEntwurf: requireBoolean(obj.isEntwurf, "isEntwurf"),
+		createdAt: requireNonEmptyString(obj.createdAt, "createdAt"),
+		recordUpdatedAt: requireNonEmptyString(obj.recordUpdatedAt, "recordUpdatedAt"),
+	};
+}
+
+/**
+ * Lazy-normalize a parsed v1 OR v2 record into the v2 identity shape. The dual-
+ * read seam: consumers read either disk version and normalize to ONE identity
+ * type. Discriminates on `schemaVersion` (TS narrows the union):
+ *   - v1: lastSeen → recordUpdatedAt, delivery dropped, model/parentGardenId
+ *     default null, isEntwurf default false, transcriptPath carried (v1 always
+ *     has one).
+ *   - v2: already identity — returned as a fresh, key-stable copy.
+ * v1 identity is LOSSLESS through this (the golden gate proves it); the only v1
+ * data not carried is delivery, which is intentionally out of identity.
+ */
+export function normalizeMetaIdentity(record: MetaRecord | MetaIdentity): MetaIdentity {
+	if (record.schemaVersion === META_SCHEMA_VERSION_V2) {
+		return {
+			schemaVersion: META_SCHEMA_VERSION_V2,
+			gardenId: record.gardenId,
+			backend: record.backend,
+			nativeSessionId: record.nativeSessionId,
+			cwd: record.cwd,
+			model: record.model,
+			transcriptPath: record.transcriptPath,
+			parentGardenId: record.parentGardenId,
+			isEntwurf: record.isEntwurf,
+			createdAt: record.createdAt,
+			recordUpdatedAt: record.recordUpdatedAt,
+		};
+	}
+	return {
+		schemaVersion: META_SCHEMA_VERSION_V2,
+		gardenId: record.gardenId,
+		backend: record.backend,
+		nativeSessionId: record.nativeSessionId,
+		cwd: record.cwd,
+		model: null,
+		transcriptPath: record.transcriptPath,
+		parentGardenId: null,
+		isEntwurf: false,
+		createdAt: record.createdAt,
+		recordUpdatedAt: record.lastSeen,
+	};
+}
+
 /** Denote-sortable on-disk filename. Body is SSOT; do NOT parse this for authority. */
 export function metaRecordFilename(record: MetaRecord): string {
 	return `${record.gardenId}.meta.json`;
