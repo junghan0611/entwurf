@@ -212,8 +212,13 @@ trusted 전에는 cwd 아래 어떤 project-local 파일도 읽지 않는다 —
 > strict v2 keyset + `check-meta-record-v2` 17 assertions 골든) = 커밋 `ed58102` (GPT 끊을 지점 ① 통과).
 > **step 3B**(mailbox receipt state schema+store `MailboxReceiptState`·`stampMailboxReceipt` +
 > body/path gardenId drift fail-fast + field 런타임 검증 + `check-mailbox-receipt-state` 19 assertions)
-> = 이번 커밋 (GPT 리뷰 통과, schema/store-only — live dual-write·delivery 제거는 3D). **다음 = step 3C
-> (capability source).** (push 아직 안 함 — local 누적.)
+> = 커밋 `7d69691` (GPT 리뷰 통과, schema/store-only — live dual-write·delivery 제거는 3D).
+> **step 3C**(backend capability source `pi/entwurf-capabilities.json` + `parseMetaCapabilityRegistry`
+> coverage==META_BACKENDS_V2 + 기존 3 backend ≡ `META_BACKEND_DESCRIPTORS` drift guard +
+> `check-entwurf-capabilities` 15 assertions, **pi wakeMode=direct-inject** = control-socket triggerTurn
+> 직접 주입, packaging `files`+check-pack 등재) = 이번 커밋 (GPT 리뷰 통과, parser/gate-only — live
+> consumer 갈아엎기·record wakeMode 제거는 3D). **다음 = step 3D(v2 writer + dual-read + 깨진 게이트
+> update + 끊을 지점 ②).** (push 아직 안 함 — local 누적.)
 
 ### Stage 0 step 3 entry map — meta-record v2 (정찰 완료 2026-06-09, 구현은 다음 세션)
 

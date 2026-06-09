@@ -521,6 +521,135 @@ export function normalizeMetaIdentity(record: MetaRecord | MetaIdentity): MetaId
 	};
 }
 
+// ---------------------------------------------------------------------------
+// capability source — backend capability registry (0.11 Stage 0 step 3C)
+//
+// v2 identity (step 3A) drops the backend honesty metadata (wakeMode /
+// deliveryLevel / nativeIdLabel) out of the per-session record: it is NOT per
+// session, it is per BACKEND. Its new home is a registry data file
+// `pi/entwurf-capabilities.json` (frozen decision 1 — a registry FILE, sibling
+// concern to the launch-allowlist `entwurf-targets.json`). "이 시민은 self-fetch
+// 인가 / pi 는 어떻게 깨우나" is answered by capability, not by identity.
+//
+// This block is the SCHEMA + PARSER + path resolver only. It does NOT re-wire
+// the live consumers: `META_BACKEND_DESCRIPTORS` stays the authority that mint/
+// parse read today, and nothing here touches record writer/upsert/readMetaInbox/
+// enqueueMetaMessage. Cutting the live const over to this registry (and removing
+// wakeMode from the record) lands in step 3D. For the transition, the 3C gate
+// asserts the JSON AGREES with the live const for the three existing backends
+// (a drift guard) and COVERS exactly META_BACKENDS_V2 (pi included).
+//
+// pi's wakeMode = direct-inject (NOT self-fetch): pi's live wake path is the
+// entwurf-control socket — `pi.sendMessage(... triggerTurn ...)` injects the
+// body straight into the model-visible turn, which is direct-inject by the
+// WakeMode definition (the last-1cm: who puts the body in front of the model).
+// self-fetch is Claude's mailbox path (the model must call its inbox-read MCP).
+// pi's dormant→resume→mailbox path is self-fetch-shaped, so pi is really
+// BIMODAL; a single wakeMode field cannot express both. Splitting it
+// (mailboxWakeMode vs controlSocketWakeMode) is out of 3C scope — for now the
+// single field reports pi's primary live capability (direct-inject) honestly.
+// ---------------------------------------------------------------------------
+
+/** Bump only on a breaking capability-registry shape change; the parser refuses other versions. */
+export const CAPABILITY_SCHEMA_VERSION = 1 as const;
+
+/** One backend's capability — the honesty metadata that leaves the v2 record. */
+export interface MetaCapability {
+	wakeMode: WakeMode;
+	deliveryLevel: string;
+	nativeIdLabel: string;
+}
+
+/** The whole registry: schema version + one capability per v2 backend. */
+export interface MetaCapabilityRegistry {
+	schemaVersion: typeof CAPABILITY_SCHEMA_VERSION;
+	backends: Record<MetaBackendV2, MetaCapability>;
+}
+
+const CAPABILITY_TOP_KEYS: readonly string[] = ["schemaVersion", "backends"];
+const CAPABILITY_ENTRY_KEYS: readonly string[] = ["wakeMode", "deliveryLevel", "nativeIdLabel"];
+
+function requireWakeMode(value: unknown, field: string): WakeMode {
+	if (value !== "self-fetch" && value !== "direct-inject") {
+		throw new MetaRecordError(`capability "${field}" must be self-fetch | direct-inject (got ${describe(value)}).`);
+	}
+	return value;
+}
+
+function parseCapabilityEntry(value: unknown, backend: string): MetaCapability {
+	if (typeof value !== "object" || value === null || Array.isArray(value)) {
+		throw new MetaRecordError(`capability for "${backend}" must be an object (got ${describe(value)}).`);
+	}
+	const obj = value as Record<string, unknown>;
+	const stray = Object.keys(obj).filter((k) => !CAPABILITY_ENTRY_KEYS.includes(k));
+	if (stray.length > 0) {
+		throw new MetaRecordError(
+			`capability for "${backend}" carries unexpected key(s) ${stray.map((k) => `"${k}"`).join(", ")} ` +
+				`(allowed: ${CAPABILITY_ENTRY_KEYS.join(", ")}).`,
+		);
+	}
+	return {
+		wakeMode: requireWakeMode(obj.wakeMode, `${backend}.wakeMode`),
+		deliveryLevel: requireNonEmptyString(obj.deliveryLevel, `${backend}.deliveryLevel`),
+		nativeIdLabel: requireNonEmptyString(obj.nativeIdLabel, `${backend}.nativeIdLabel`),
+	};
+}
+
+/**
+ * Parse + fully validate untrusted JSON into a capability registry. Strict:
+ * schemaVersion fence, top-level + per-entry keyset, and COVERAGE — the backend
+ * keys must be exactly META_BACKENDS_V2 (no missing, no extra). A registry that
+ * forgets pi, or smuggles an unknown backend, is rejected.
+ */
+export function parseMetaCapabilityRegistry(json: string): MetaCapabilityRegistry {
+	let raw: unknown;
+	try {
+		raw = JSON.parse(json);
+	} catch (err) {
+		throw new MetaRecordError(
+			`capability registry is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+		);
+	}
+	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+		throw new MetaRecordError(`capability registry must be a JSON object (got ${describe(raw)}).`);
+	}
+	const obj = raw as Record<string, unknown>;
+	if (obj.schemaVersion !== CAPABILITY_SCHEMA_VERSION) {
+		throw new MetaRecordError(
+			`capability registry "schemaVersion" must be ${CAPABILITY_SCHEMA_VERSION} (got ${describe(obj.schemaVersion)}).`,
+		);
+	}
+	const topStray = Object.keys(obj).filter((k) => !CAPABILITY_TOP_KEYS.includes(k));
+	if (topStray.length > 0) {
+		throw new MetaRecordError(
+			`capability registry carries unexpected key(s) ${topStray.map((k) => `"${k}"`).join(", ")} ` +
+				`(allowed: ${CAPABILITY_TOP_KEYS.join(", ")}).`,
+		);
+	}
+	const backends = obj.backends;
+	if (typeof backends !== "object" || backends === null || Array.isArray(backends)) {
+		throw new MetaRecordError(`capability registry "backends" must be an object (got ${describe(backends)}).`);
+	}
+	const present = Object.keys(backends).sort();
+	const expected = [...META_BACKENDS_V2].sort();
+	if (present.length !== expected.length || !expected.every((b, i) => b === present[i])) {
+		throw new MetaRecordError(
+			`capability registry must cover exactly ${expected.join(", ")} (got ${present.join(", ")}).`,
+		);
+	}
+	const entries = backends as Record<string, unknown>;
+	const out = {} as Record<MetaBackendV2, MetaCapability>;
+	for (const backend of META_BACKENDS_V2) {
+		out[backend] = parseCapabilityEntry(entries[backend], backend);
+	}
+	return { schemaVersion: CAPABILITY_SCHEMA_VERSION, backends: out };
+}
+
+/** The packaged capability registry path: `<repo>/pi/entwurf-capabilities.json`. */
+export function metaCapabilitiesFilePath(): string {
+	return path.join(import.meta.dirname, "..", "..", "pi", "entwurf-capabilities.json");
+}
+
 /** Denote-sortable on-disk filename. Body is SSOT; do NOT parse this for authority. */
 export function metaRecordFilename(record: MetaRecord): string {
 	return `${record.gardenId}.meta.json`;

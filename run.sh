@@ -56,6 +56,7 @@ Usage:
   ./run.sh check-meta-session          # deterministic gate (#30 step 2): meta-record mint/serialize/parse + scanByNativeId body-authority + idempotent decideUpsert, no API
   ./run.sh check-meta-record-v2        # deterministic golden gate (0.11 Stage 0 step 3A): synthetic v1 fixture → normalizeMetaIdentity v2 identity golden + dual-read version fences, no API
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
+  ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
   ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
@@ -1189,6 +1190,17 @@ check_mailbox_receipt_state() {
   # dir. Schema/store only — no live enqueue/read dual-write (that is 3D). No
   # backend, no hook, no API.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-mailbox-receipt-state.ts)
+}
+
+check_entwurf_capabilities() {
+  # Deterministic gate for 0.11 Stage 0 step 3C: the backend capability source
+  # (pi/entwurf-capabilities.json) — the new home for wakeMode/deliveryLevel/
+  # nativeIdLabel before v2 drops them from the record (frozen decision 1).
+  # Asserts coverage == META_BACKENDS_V2 (pi included), agreement with the live
+  # META_BACKEND_DESCRIPTORS for the three existing backends (drift guard), and
+  # strict keyset/coverage/field crashes. Parser/gate only — no live routing,
+  # no record/descriptor consumer change (that is 3D). No backend, no API.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-capabilities.ts)
 }
 
 check_plugin_empty_final_recovery() {
@@ -3104,6 +3116,7 @@ check_pack() {
     "pi-extensions/model-lock.ts" "pi-extensions/lib/entwurf-core.ts"
     "mcp/pi-tools-bridge/src/index.ts"
     "scripts/postinstall-chmod.cjs"
+    "pi/entwurf-capabilities.json"
   )
 
   # Patterns that must NOT appear in the tarball. Anchored where the
@@ -3212,6 +3225,7 @@ check_pack_install() {
     "pi-extensions/model-lock.ts" "pi-extensions/lib/entwurf-core.ts"
     "mcp/pi-tools-bridge/src/index.ts"
     "scripts/postinstall-chmod.cjs"
+    "pi/entwurf-capabilities.json"
   )
   for f in "${tar_required[@]}"; do
     if ! grep -qxF "$f" <<<"$tar_files"; then
@@ -4151,6 +4165,9 @@ case "$cmd" in
     ;;
   check-mailbox-receipt-state)
     check_mailbox_receipt_state
+    ;;
+  check-entwurf-capabilities)
+    check_entwurf_capabilities
     ;;
   new-session-id)
     # Garden launcher helper: print one fresh garden sessionId (SSOT:

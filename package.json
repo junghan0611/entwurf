@@ -52,6 +52,7 @@
 		"docs/assets/pi-shell-acp-doomemacs.gif",
 		"docs/assets/pi-shell-acp-entwurf.gif",
 		"pi/entwurf-targets.json",
+		"pi/entwurf-capabilities.json",
 		"pi/settings.reference.json",
 		"pi/skill-plugin-example/",
 		"run.sh",
@@ -106,6 +107,7 @@
 		"check-meta-session": "./run.sh check-meta-session",
 		"check-meta-record-v2": "./run.sh check-meta-record-v2",
 		"check-mailbox-receipt-state": "./run.sh check-mailbox-receipt-state",
+		"check-entwurf-capabilities": "./run.sh check-entwurf-capabilities",
 		"check-model-lock": "./run.sh check-model-lock",
 		"check-models": "./run.sh check-models",
 		"check-backends": "./run.sh check-backends",
@@ -124,7 +126,7 @@
 		"check:plugins": "pnpm -r --filter \"./plugins/*\" run check",
 		"check-async-resume-gate": "./run.sh check-async-resume-gate",
 		"check-package-source-routing": "./run.sh check-package-source-routing",
-		"check": "pnpm lint && pnpm typecheck && pnpm check:plugins && ./run.sh check-mcp && ./run.sh check-shell-quote && ./run.sh check-entwurf-session-identity && ./run.sh check-meta-session && ./run.sh check-meta-record-v2 && ./run.sh check-mailbox-receipt-state && ./run.sh smoke-meta-honesty && ./run.sh smoke-meta-install-state && ./run.sh smoke-meta-prune && ./run.sh smoke-meta-keyset-guard && ./run.sh smoke-meta-mailbox && ./run.sh smoke-meta-sender-identity && ./run.sh check-plugin-empty-final-recovery && ./run.sh check-plugin-prompt-format && ./run.sh check-async-resume-gate && ./run.sh check-package-source-routing && ./run.sh check-model-lock && ./run.sh check-models && ./run.sh check-backends && ./run.sh check-registration && ./run.sh check-dep-versions && ./run.sh check-pi-import-surface && ./run.sh check-pi-runtime-version && ./run.sh check-pi-preflight && ./run.sh check-auth-boundary && ./run.sh check-sdk-surface && ./run.sh verify-transcript-poison && ./run.sh check-pack"
+		"check": "pnpm lint && pnpm typecheck && pnpm check:plugins && ./run.sh check-mcp && ./run.sh check-shell-quote && ./run.sh check-entwurf-session-identity && ./run.sh check-meta-session && ./run.sh check-meta-record-v2 && ./run.sh check-mailbox-receipt-state && ./run.sh check-entwurf-capabilities && ./run.sh smoke-meta-honesty && ./run.sh smoke-meta-install-state && ./run.sh smoke-meta-prune && ./run.sh smoke-meta-keyset-guard && ./run.sh smoke-meta-mailbox && ./run.sh smoke-meta-sender-identity && ./run.sh check-plugin-empty-final-recovery && ./run.sh check-plugin-prompt-format && ./run.sh check-async-resume-gate && ./run.sh check-package-source-routing && ./run.sh check-model-lock && ./run.sh check-models && ./run.sh check-backends && ./run.sh check-registration && ./run.sh check-dep-versions && ./run.sh check-pi-import-surface && ./run.sh check-pi-runtime-version && ./run.sh check-pi-preflight && ./run.sh check-auth-boundary && ./run.sh check-sdk-surface && ./run.sh verify-transcript-poison && ./run.sh check-pack"
 	},
 	"pi": {
 		"extensions": [
