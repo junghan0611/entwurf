@@ -23,10 +23,10 @@
 - **하드 게이트 통과 필수.** 모든 코드는 이 repo `pnpm check`(biome lint + tsc + 전 smoke/check
   게이트)를 전부 넘어야 한다. 새 표면마다 게이트 동반.
 
-**▶ 다음 한 걸음 (재검증 불필요, 바로 코드):** Stage 0 (1) **pi deps 0.79 bump + public-import 가드 +
-TS preflight 모듈** 부터. (Go/entwurfcli 아님 — 순수 TS.)
+**▶ 다음 한 걸음:** Stage 0 **step 1·2 완료**(아래 "진행" 줄 참조) → **다음 = step 3 (meta-record v2)**,
+아래 "Stage 0 step 3 entry map" 순서 그대로. 구현은 새 세션, entry map의 끊을 지점 2개 준수. (순수 TS.)
 다음 구현 세션 계약 — 이 7개는 본문 동결결정/Trust 2층/Stage 0의 재확인이며 다시 흔들지 말 것:
-1. **Stage 0 (1) = pi deps 0.79 bump + public-import 가드 + TS preflight 모듈/게이트 부터 시작.**
+1. **Stage 0 step 1·2 = pi 0.79 bump/import/runtime guard + TS preflight module/gate 완료.**
 2. **설계 재탐색 금지** — 검증 원장 항목 다시 찌르지 말 것(doctor 실패/구체 버그만 예외).
 3. **regression gate 먼저 작성** (각 요소 테스트가 빌드보다 선행).
 4. **그 다음 구현** (각 요소 gate→build→연결).
@@ -205,6 +205,46 @@ trusted 전에는 cwd 아래 어떤 project-local 파일도 읽지 않는다 —
    primitive 내부 유지.
 → **각 요소는 테스트 코드로 먼저 검증, 연결은 그 다음.** Stage 1 = Claude Code ↔ Claude Code live
 (그때의 trust는 pi가 아니라 Claude 모델 → 별도 backend preflight, 0.11 Stage 0 범위 밖).
+
+> **진행 (2026-06-09):** step 1(pi 0.79 bump + import/runtime 가드) = 커밋 `be6ccde`. step 2(TS
+> preflight 모듈 `pi-extensions/lib/entwurf-preflight.ts` + `check-pi-preflight` 10 assertions) = 커밋
+> `b2c7824`. **다음 = step 3(아래 entry map).**
+
+### Stage 0 step 3 entry map — meta-record v2 (정찰 완료 2026-06-09, 구현은 다음 세션)
+
+정찰 + GPT 리뷰 + 코드 재검수 완료. 구현 전 순서 고정 — 어기면 dual-read 역호환 또는 receipt 증거가 깨진다.
+
+**현 authority 위치 (코드 검수 확정 — 대체 없이 제거 금지):**
+- **receipt authority = `record.delivery.lastReadAt`** (`markRead` stamp, Claude D7 observable). 파일 마커
+  `.msg`/`.msg.delivered`는 doorbell이지 read-receipt 아님. **별도 mailbox `state.json` 미존재.**
+- **capability source = `META_BACKEND_DESCRIPTORS`** (meta-session.ts: wakeMode/deliveryLevel/nativeIdLabel).
+  **`entwurf-capabilities.json` 파일 미존재.**
+
+**v1→v2 델타 (검증원장 대조 확정):** backend `+=pi` · transcriptPath required→nullable · 신규
+`model:null`/`parentGardenId:null`/`isEntwurf:false` · `lastSeen`→`recordUpdatedAt` rename · `delivery{}`
+통째 제거. (검증원장이 "제거"라 적은 `status·lifecycle·trusted·tmuxTarget`은 **현 v1에 이미 없음** —
+실제 제거 대상은 `delivery{}` + `lastSeen` rename 둘뿐.)
+
+**구현 순서 (고정):**
+1. **synthetic/sanitized v1 fixture**를 golden으로 고정. 실제 디스크 meta-record(real cwd/transcriptPath)를
+   public repo에 커밋 **금지**.
+2. `parseMetaRecordV1/V2` + `normalizeMetaIdentity` 먼저. v1→normalized v2 identity golden GREEN 전엔
+   v2 writer **금지**.
+3. v2 write shape = 위 델타. 새 write는 v2, 읽기는 v1/v2 dual-read.
+4. **delivery 제거 전 mailbox receipt state schema 먼저 못박음** — `record.delivery.lastReadAt`가 현
+   receipt authority라 대체 state(예: `meta-mailbox/<gardenId>/state.json`) 없이 제거 금지.
+5. **wakeMode 제거 전 capability source 먼저 못박음** — `entwurf-capabilities.json`(동결결정 1) 신설 vs
+   transitional descriptor 유지 중 하나를 gate로 고정.
+6. **정당하게 update될 게이트(= regression 아님):** `check-meta-session`(delivery.*/lastSeen/wakeMode +
+   backend↔wakeMode contradiction 단언) · `smoke-meta-mailbox`(receipt assertion 위치) · store-doctor
+   (contradiction check). dual-read 경로엔 v1 fixture 게이트 별도 유지.
+7. **MCP `pi-tools-bridge`는 구조 비의존**(`readMetaInbox()`만 호출, index.ts:661) → 코드 무변경. 단
+   주석/description의 `lastReadAt` wording + doctor/error wording은 update 대상.
+
+**구현 전 반드시 끊을 지점 (2):**
+- ① v1 fixture → `normalizeMetaIdentity` golden GREEN **직후 = GPT 리뷰.** v1 무손실 normalize 증명 전
+  v2 writer 금지(디스크 v1 10+개 역호환이 여기 걸림).
+- ② 깨진 게이트 update **직후 = GPT 리뷰.** "정당한 update vs 진짜 regression" 혼동 최다 구간.
 
 ### 0.10.0과의 관계
 0.10.0(meta-bridge delivery/install/doctor)은 #35 frame을 배신하지 않음(workshop-safe). 0.11.0은 그
