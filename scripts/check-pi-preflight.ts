@@ -35,12 +35,23 @@ const prefixRoot = path.join(tmpRoot, "repos");
 fs.mkdirSync(agentDir, { recursive: true });
 fs.mkdirSync(prefixRoot, { recursive: true });
 
+// Seed a trust-gated project input. We use a `.pi/` config dir, NOT an
+// AGENTS.md: pi 0.79.1 dropped AGENTS.md/CLAUDE.md from hasProjectTrustInputs
+// (they are now always-loaded context files, not trust-gated inputs), leaving
+// `.pi` (cwd-only) and `.agents/skills` (walked to root). `.pi` is cwd-scoped,
+// so each fixture is an independent trust input with no walk-to-root bleed, and
+// it reads as a trust input on BOTH 0.79.0 and 0.79.1 — this fixture swap is
+// version-agnostic and lands green before the pi bump.
+function seedTrustInput(dir: string): void {
+	fs.mkdirSync(path.join(dir, ".pi"), { recursive: true });
+}
+
 // A real cwd must exist for ProjectTrustStore's realpathSync canonicalization
 // and for hasProjectTrustInputs' filesystem walk.
-function mkCwd(name: string, withAgents = false): string {
+function mkCwd(name: string, withTrustInput = false): string {
 	const dir = path.join(prefixRoot, name);
 	fs.mkdirSync(dir, { recursive: true });
-	if (withAgents) fs.writeFileSync(path.join(dir, "AGENTS.md"), "# trust input\n");
+	if (withTrustInput) seedTrustInput(dir);
 	return dir;
 }
 
@@ -72,7 +83,7 @@ try {
 
 	// 3. undecided + prefix match → approve; evidence names the matched root AND
 	//    still reports hasTrustInputs (the fact surface explains what it may load).
-	const cwd3 = mkCwd("prefix-hit", true); // has inputs, yet prefix wins over fail-fast
+	const cwd3 = mkCwd("prefix-hit", true); // has a trust input, yet prefix wins over fail-fast
 	const d3 = preflight({ cwd: cwd3, agentDir, prefixRoots: [prefixRoot] });
 	ok(
 		"null + prefix match → approve/prefix-match + matchedPrefixRoot + hasTrustInputs",
@@ -84,7 +95,7 @@ try {
 	);
 
 	// 4. undecided + no trust inputs + no prefix → trusted-no-arg, no launch arg.
-	const cwd4 = path.join(tmpRoot, "no-inputs"); // OUTSIDE prefixRoot, no AGENTS.md
+	const cwd4 = path.join(tmpRoot, "no-inputs"); // OUTSIDE prefixRoot, no trust input
 	fs.mkdirSync(cwd4, { recursive: true });
 	const d4 = preflight({ cwd: cwd4, agentDir, prefixRoots: [prefixRoot] });
 	ok(
@@ -98,7 +109,7 @@ try {
 	// 5. undecided + trust inputs + no prefix → fail-fast.
 	const cwd5 = path.join(tmpRoot, "lonely-inputs"); // OUTSIDE prefixRoot
 	fs.mkdirSync(cwd5, { recursive: true });
-	fs.writeFileSync(path.join(cwd5, "AGENTS.md"), "# trust input\n");
+	seedTrustInput(cwd5);
 	const d5 = preflight({ cwd: cwd5, agentDir, prefixRoots: [prefixRoot] });
 	ok(
 		"null + trust inputs + no prefix → deny/fail-fast",
@@ -118,7 +129,7 @@ try {
 	//    match; canonical + sep boundary must not.
 	const sibling = path.join(tmpRoot, "repos-sibling");
 	fs.mkdirSync(sibling, { recursive: true });
-	fs.writeFileSync(path.join(sibling, "AGENTS.md"), "# trust input\n");
+	seedTrustInput(sibling);
 	const d7 = preflight({ cwd: sibling, agentDir, prefixRoots: [prefixRoot] });
 	ok(
 		"prefix `/repos` does NOT match sibling `/repos-sibling` (sep boundary)",
@@ -140,7 +151,7 @@ try {
 	try {
 		const tildeProj = path.join(tmpRoot, "repos", "gh", "proj");
 		fs.mkdirSync(tildeProj, { recursive: true });
-		fs.writeFileSync(path.join(tildeProj, "AGENTS.md"), "# trust input\n");
+		seedTrustInput(tildeProj);
 		const dTilde = preflight({ cwd: tildeProj, agentDir, prefixRoots: ["~/repos"] });
 		ok(
 			"`~/repos` operator root expands and matches cwd under it",
