@@ -58,6 +58,7 @@ Usage:
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-meta-dual-read        # deterministic gate (0.11 Stage 0 step 3D-1): v2 write shape (serializeMetaIdentity) + dual-read dispatcher (parseMetaRecordAny/parseMetaIdentity) + write→read round-trip, pure, no API
+  ./run.sh check-meta-mailbox-dualwrite # deterministic gate (0.11 Stage 0 step 3D-2): LIVE receipt dual-write — enqueue/read stamp BOTH record.delivery AND mailbox state (byte-identical, same now); empty inbox no-op on both; state drift surfaces; additive only, no API
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
   ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
@@ -1214,6 +1215,19 @@ check_meta_dual_read() {
   # readMetaInbox/enqueueMetaMessage change, no record.delivery removal (3D-2/3/4).
   # No backend, no hook, no API.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-dual-read.ts)
+}
+
+check_meta_mailbox_dualwrite() {
+  # Deterministic gate for 0.11 Stage 0 step 3D-2: the LIVE receipt dual-write.
+  # enqueueMetaMessage/readMetaInbox now stamp the mailbox receipt state store
+  # (3B) IN ADDITION to record.delivery (v1 home), additively. Asserts the
+  # dual-write invariant (record and state stamps byte-identical, same `now`),
+  # the enqueue receipt surviving a read, an empty inbox being a no-op on BOTH
+  # stores (record untouched AND state.json never created), and a state-store
+  # drift SURFACING (read throws, never swallows). Additive only — no
+  # record.delivery removal, no v2 writer, no capability switch (3D-3/3D-4). A
+  # temp sessions+mailbox dir. No backend, no hook, no API.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-mailbox-dualwrite.ts)
 }
 
 check_socket_probe() {
@@ -4207,6 +4221,9 @@ case "$cmd" in
     ;;
   check-meta-dual-read)
     check_meta_dual_read
+    ;;
+  check-meta-mailbox-dualwrite)
+    check_meta_mailbox_dualwrite
     ;;
   check-socket-probe)
     check_socket_probe

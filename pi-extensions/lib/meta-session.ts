@@ -1197,6 +1197,22 @@ export function enqueueMetaMessage(opts: EnqueueMetaMessageOptions): EnqueueMeta
 	fs.writeFileSync(messagePath, opts.body, { mode: 0o600 });
 
 	atomicWriteRecord(recordFile, markEnqueued(record, now));
+	// 0.11 Stage 0 3D-2: dual-write the SAME receipt to the mailbox state store
+	// (the v2 home for delivery timestamps), additive to record.delivery. Same
+	// record.gardenId (NOT opts.gardenId — the reader normalizes), same mailboxDir
+	// (the base dir whose <gardenId>/ holds the .msg traffic), same `now` (markEnqueued
+	// and stampMailboxReceipt both isoNow(now), so the two stamps are byte-identical).
+	// Adjacent to and AFTER the record stamp, no try/catch — a state-stamp throw
+	// (e.g. a 3B body/path drift guard) surfaces fail-loud. 3D-2 does NOT implement
+	// rollback/all-or-nothing: the record stamp and the .msg may already be written,
+	// but the caller never gets a silent success. Stamped before the signal poke so
+	// all state is settled before the watch fires.
+	stampMailboxReceipt({
+		gardenId: record.gardenId,
+		mailboxDir: opts.mailboxDir ?? defaultMetaMailboxDir(),
+		field: "lastEnqueuedAt",
+		now,
+	});
 
 	// Poke LAST. Writing the timestamp changes the file's content+mtime, which is
 	// what the plugin's FileChanged watch fires on.
@@ -1230,8 +1246,9 @@ export interface ReadMetaInboxResult {
  * Drain a garden citizen's mailbox: read every unread message (a fresh `.msg`
  * read before its doorbell, or a doorbell-rung `.msg.delivered`), archive each to
  * `*.read` so a re-read never double-returns, and — only if at least one message
- * was read — stamp `lastReadAt` (and backfill `lastDeliveredAt` if the doorbell
- * never got to). An empty inbox mutates nothing: reading nothing is not a receipt.
+ * was read — stamp `lastReadAt` (NOT `lastDeliveredAt`: the doorbell owns
+ * delivery-time, see the stamp-site note below). An empty inbox mutates nothing:
+ * reading nothing is not a receipt.
  */
 export function readMetaInbox(opts: ReadMetaInboxOptions): ReadMetaInboxResult {
 	const now = opts.now ?? new Date();
@@ -1264,6 +1281,23 @@ export function readMetaInbox(opts: ReadMetaInboxOptions): ReadMetaInboxResult {
 	// therefore means "delivery-time not recorded", NOT "read before delivered".
 	const updated = markRead(record, now);
 	atomicWriteRecord(recordFile, updated);
+	// 0.11 Stage 0 3D-2: dual-write lastReadAt to the mailbox state store, same
+	// record.gardenId / mailboxDir / now as the record stamp. This sits INSIDE the
+	// messages.length>0 branch by construction — an empty inbox already early-returned
+	// above (record untouched, readAt:null), so the state stays untouched too, keeping
+	// the two stamps' meaning a mirror image ("read nothing" = no receipt on either
+	// store). lastDeliveredAt is NOT backfilled here — the doorbell owns delivery-time
+	// (see the record-stamp note above); stamping it would report read-time as
+	// delivery-time. Adjacent to and AFTER the record stamp, no try/catch — a state
+	// throw surfaces fail-loud. 3D-2 does NOT implement rollback/all-or-nothing: the
+	// messages are already archived (.read) and the record already stamped, but the
+	// caller never gets a silent success.
+	stampMailboxReceipt({
+		gardenId: record.gardenId,
+		mailboxDir: opts.mailboxDir ?? defaultMetaMailboxDir(),
+		field: "lastReadAt",
+		now,
+	});
 	return { gardenId: record.gardenId, messages, readAt: updated.delivery.lastReadAt, recordPath: recordFile };
 }
 
