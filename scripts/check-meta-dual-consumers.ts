@@ -6,8 +6,8 @@
  * the v2 upsert's existence scan in commit2) survive the v2 cut. Pure + a real temp
  * dir; no backend, no network, no hook. Safe in the `pnpm check` static floor.
  *
- * Proves (additive — scanByNativeId/readMetaRecordByGardenId stay wired into the still-v1
- * write/enqueue path until commit2):
+ * Proves the dual-read identity seam (the live path + scanIdentityByNativeId now read
+ * v1 AND v2; the v1-only raw readers remain for v1-fixture gates):
  *  - readMetaIdentityByGardenId normalizes a v1 file (lastSeen→recordUpdatedAt,
  *    transcriptPath carried, model/parentGardenId null, isEntwurf false) and reads a v2
  *    file as-is; body/filename gardenId drift fails-fast.

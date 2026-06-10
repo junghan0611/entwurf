@@ -23,6 +23,7 @@ import {
 	enqueueMetaMessage,
 	META_BACKEND_DESCRIPTORS,
 	META_SCHEMA_VERSION,
+	META_SCHEMA_VERSION_V2,
 	type MetaMintInput,
 	MetaRecordError,
 	markDelivered,
@@ -30,9 +31,11 @@ import {
 	markRead,
 	metaRecordFilename,
 	mintMetaRecord,
+	parseMetaIdentity,
 	parseMetaRecord,
+	readMailboxReceiptState,
 	readMetaInbox,
-	readMetaRecordByGardenId,
+	readMetaRecordV1ByGardenId,
 	scanByNativeId,
 	serializeMetaRecord,
 	upsertMetaSession,
@@ -232,16 +235,40 @@ check("decideUpsert: absent → create, fresh garden id", () => {
 	assert.match(dec.record.gardenId, SESSION_ID_RE);
 });
 
-check("decideUpsert: present → attach, identity preserved, lastSeen refreshed", () => {
+check("decideUpsert: present → attach, identity preserved, recordUpdatedAt refreshed (v2)", () => {
 	const created = decideUpsert(null, claudeInput(), T0).record;
 	const moved = claudeInput({ transcriptPath: "/new/path.jsonl", cwd: "/new/cwd" });
 	const dec = decideUpsert(created, moved, T1);
 	assert.equal(dec.action, "attach");
+	assert.equal(dec.record.schemaVersion, META_SCHEMA_VERSION_V2); // v2 identity
 	assert.equal(dec.record.gardenId, created.gardenId); // same id
 	assert.equal(dec.record.createdAt, created.createdAt); // birth preserved
-	assert.equal(dec.record.lastSeen, T1.toISOString()); // refreshed
-	assert.equal(dec.record.transcriptPath, "/new/path.jsonl"); // cheap pointer updated
+	assert.equal(dec.record.recordUpdatedAt, T1.toISOString()); // refreshed (NOT lastSeen)
+	assert.equal(dec.record.transcriptPath, "/new/path.jsonl"); // string set
 	assert.equal(dec.record.cwd, "/new/cwd");
+});
+
+check("decideUpsert: 3-value attach merge — undefined keeps, null clears, string sets (G5)", () => {
+	const created = decideUpsert(null, claudeInput({ transcriptPath: "/orig.jsonl" }), T0).record;
+	assert.equal(created.transcriptPath, "/orig.jsonl");
+	// undefined transcriptPath → KEEP existing (a pi-birth caller must not wipe it)
+	const kept = decideUpsert(
+		created,
+		{ backend: "claude-code", nativeSessionId: created.nativeSessionId, cwd: "/c" },
+		T1,
+	);
+	assert.equal(kept.record.transcriptPath, "/orig.jsonl", "undefined keeps existing");
+	// explicit null → CLEAR
+	const cleared = decideUpsert(
+		created,
+		{ backend: "claude-code", nativeSessionId: created.nativeSessionId, cwd: "/c", transcriptPath: null },
+		T1,
+	);
+	assert.equal(cleared.record.transcriptPath, null, "explicit null clears");
+});
+
+expectThrows("decideUpsert: non-boolean isEntwurf throws (runtime guard, not coerced)", () => {
+	decideUpsert(null, { ...claudeInput(), isEntwurf: "yes" as unknown as boolean }, T0);
 });
 
 check("decideUpsert: idempotent — create then attach never mints a 2nd id", () => {
@@ -314,16 +341,17 @@ check("upsertMetaSession: first call creates a record on disk", () => {
 	try {
 		const res = upsertMetaSession({ dir, input: claudeInput(), now: T0 });
 		assert.equal(res.action, "create");
+		assert.equal(res.record.schemaVersion, META_SCHEMA_VERSION_V2); // writes v2
 		assert.equal(res.path, path.join(dir, `${res.record.gardenId}.meta.json`));
 		assert.ok(fs.existsSync(res.path));
-		// on-disk bytes parse back to the same record
-		assert.deepEqual(parseMetaRecord(fs.readFileSync(res.path, "utf8")), res.record);
+		// on-disk bytes parse back (dual-read) to the same v2 identity
+		assert.deepEqual(parseMetaIdentity(fs.readFileSync(res.path, "utf8")), res.record);
 	} finally {
 		fs.rmSync(dir, { recursive: true, force: true });
 	}
 });
 
-check("upsertMetaSession: second call attaches — same file/id, lastSeen refreshed, no 2nd file", () => {
+check("upsertMetaSession: second call attaches — same file/id, recordUpdatedAt refreshed, no 2nd file", () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-session-store-"));
 	try {
 		const first = upsertMetaSession({ dir, input: claudeInput(), now: T0 });
@@ -333,7 +361,7 @@ check("upsertMetaSession: second call attaches — same file/id, lastSeen refres
 		assert.equal(second.record.gardenId, first.record.gardenId); // same id
 		assert.equal(second.path, first.path); // same file, rewritten in place
 		assert.equal(second.record.createdAt, T0.toISOString()); // birth preserved
-		assert.equal(second.record.lastSeen, T1.toISOString()); // refreshed
+		assert.equal(second.record.recordUpdatedAt, T1.toISOString()); // refreshed (NOT lastSeen)
 		assert.equal(second.record.transcriptPath, "/moved/path.jsonl");
 		// exactly ONE .meta.json on disk (idempotent — no shadow record)
 		const metas = fs.readdirSync(dir).filter((f) => f.endsWith(".meta.json"));
@@ -414,9 +442,9 @@ check("enqueueMetaMessage: writes a .msg, pokes inbox.signal, stamps lastEnqueue
 		});
 		assert.ok(fs.existsSync(r.messagePath) && r.messagePath.endsWith(".msg"), "a .msg body is written");
 		assert.ok(fs.existsSync(r.signalPath) && r.signalPath.endsWith("inbox.signal"), "inbox.signal is poked");
-		const rec = readMetaRecordByGardenId(fx.gardenId, fx.sessionsDir);
-		assert.equal(rec.delivery.lastEnqueuedAt, T1.toISOString(), "lastEnqueuedAt stamped at enqueue time");
-		assert.equal(rec.delivery.lastReadAt, null, "not read yet");
+		const st = readMailboxReceiptState({ gardenId: fx.gardenId, mailboxDir: fx.mailboxDir });
+		assert.equal(st.lastEnqueuedAt, T1.toISOString(), "lastEnqueuedAt stamped in mailbox state at enqueue time");
+		assert.equal(st.lastReadAt, null, "not read yet");
 	} finally {
 		fx.cleanup();
 	}
@@ -441,14 +469,10 @@ check("readMetaInbox: drains a fresh .msg, returns the body, stamps lastReadAt (
 		assert.equal(read.messages.length, 1, "one message read");
 		assert.equal(read.messages[0]?.body, "drain me", "body intact");
 		assert.equal(read.readAt, T1.toISOString(), "readAt returned");
-		const rec = readMetaRecordByGardenId(fx.gardenId, fx.sessionsDir);
-		assert.equal(rec.delivery.lastReadAt, T1.toISOString(), "lastReadAt stamped = the honest read receipt");
+		const st = readMailboxReceiptState({ gardenId: fx.gardenId, mailboxDir: fx.mailboxDir });
+		assert.equal(st.lastReadAt, T1.toISOString(), "lastReadAt stamped in mailbox state = the honest read receipt");
 		// #5 honesty: lastDeliveredAt is the doorbell's to stamp; readMetaInbox must NOT invent it.
-		assert.equal(
-			rec.delivery.lastDeliveredAt,
-			null,
-			"lastDeliveredAt left null (read does not record a delivery time)",
-		);
+		assert.equal(st.lastDeliveredAt, null, "lastDeliveredAt left null (read does not record a delivery time)");
 	} finally {
 		fx.cleanup();
 	}
@@ -526,8 +550,8 @@ check("readMetaInbox: ONE drain returns ALL queued bodies in order (level-trigge
 			"timestamp-distinct bodies drain in deterministic filename order",
 		);
 		// One batch, one honest receipt — NOT one-per-message.
-		const rec = readMetaRecordByGardenId(fx.gardenId, fx.sessionsDir);
-		assert.equal(rec.delivery.lastReadAt, t4.toISOString(), "a single lastReadAt receipt for the whole batch");
+		const st = readMailboxReceiptState({ gardenId: fx.gardenId, mailboxDir: fx.mailboxDir });
+		assert.equal(st.lastReadAt, t4.toISOString(), "a single lastReadAt receipt for the whole batch");
 		// Every body archived to .read; nothing unread remains; re-read is empty.
 		const dir = path.join(fx.mailboxDir, fx.gardenId);
 		const stillUnread = fs.readdirSync(dir).filter((f) => f.endsWith(".msg") || f.endsWith(".msg.delivered"));
@@ -556,9 +580,9 @@ check("readMetaInbox: empty inbox returns nothing AND mutates no receipt; re-rea
 		assert.equal(empty.messages.length, 0, "empty inbox: no messages");
 		assert.equal(empty.readAt, null, "empty inbox: no receipt stamped");
 		assert.equal(
-			readMetaRecordByGardenId(fx.gardenId, fx.sessionsDir).delivery.lastReadAt,
+			readMailboxReceiptState({ gardenId: fx.gardenId, mailboxDir: fx.mailboxDir }).lastReadAt,
 			null,
-			"empty read leaves lastReadAt null",
+			"empty read leaves lastReadAt null (state.json not created)",
 		);
 		// enqueue + drain, then re-read must be empty (archived to .read, not double-returned)
 		enqueueMetaMessage({
@@ -615,7 +639,7 @@ expectThrows("enqueueMetaMessage: empty body fails loud", () => {
 	}
 });
 
-expectThrows("readMetaRecordByGardenId: body/filename gardenId drift is corruption (body is SSOT)", () => {
+expectThrows("readMetaRecordV1ByGardenId: body/filename gardenId drift is corruption (body is SSOT)", () => {
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), "meta-drift-"));
 	try {
 		const sessionsDir = path.join(root, "meta-sessions");
@@ -624,7 +648,7 @@ expectThrows("readMetaRecordByGardenId: body/filename gardenId drift is corrupti
 		const rec = mintMetaRecord(claudeInput({ nativeSessionId: "drift" }), T0);
 		const wrongName = "20200101T000000-bbbbbb.meta.json"; // filename id != rec.gardenId
 		fs.writeFileSync(path.join(sessionsDir, wrongName), serializeMetaRecord(rec));
-		readMetaRecordByGardenId("20200101T000000-bbbbbb", sessionsDir);
+		readMetaRecordV1ByGardenId("20200101T000000-bbbbbb", sessionsDir);
 	} finally {
 		fs.rmSync(root, { recursive: true, force: true });
 	}

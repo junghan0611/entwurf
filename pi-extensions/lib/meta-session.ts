@@ -562,6 +562,47 @@ export function serializeMetaIdentity(identity: MetaIdentity): string {
 }
 
 /**
+ * Fields a v2 caller supplies; garden id + timestamps are derived. The nullable
+ * identity axes (model/transcriptPath/parentGardenId) are OPTIONAL at the input
+ * boundary so attach can distinguish three intents (3D-4 G5): `undefined` = keep
+ * the existing value, `null` = explicit unknown/clear, a string = set/refresh.
+ * mint (create) has no existing value, so undefined collapses to null.
+ */
+export interface MetaIdentityMintInput {
+	backend: MetaBackendV2;
+	nativeSessionId: string;
+	cwd: string;
+	model?: string | null;
+	transcriptPath?: string | null;
+	parentGardenId?: string | null;
+	isEntwurf?: boolean;
+}
+
+/**
+ * Mint a brand-new v2 identity at the session's true birth (3D-4). The v2 analog
+ * of mintMetaRecord — generates the garden id, stamps createdAt == recordUpdatedAt,
+ * and carries identity only (no delivery; the receipt lives in mailbox state).
+ * Omitted nullable axes default to null / isEntwurf false.
+ */
+export function mintMetaIdentity(input: MetaIdentityMintInput, now: Date = new Date()): MetaIdentity {
+	const backend = requireBackendV2(input.backend);
+	const ts = isoNow(now);
+	return {
+		schemaVersion: META_SCHEMA_VERSION_V2,
+		gardenId: generateSessionId(now),
+		backend,
+		nativeSessionId: requireNonEmptyString(input.nativeSessionId, "nativeSessionId"),
+		cwd: requireNonEmptyString(input.cwd, "cwd"),
+		model: requireNullableString(input.model ?? null, "model"),
+		transcriptPath: requireNullableString(input.transcriptPath ?? null, "transcriptPath"),
+		parentGardenId: requireNullableGardenId(input.parentGardenId ?? null, "parentGardenId"),
+		isEntwurf: input.isEntwurf === undefined ? false : requireBoolean(input.isEntwurf, "isEntwurf"),
+		createdAt: ts,
+		recordUpdatedAt: ts,
+	};
+}
+
+/**
  * Dual-read dispatcher: peek schemaVersion on untrusted JSON and route to the
  * matching strict parser (v1 record or v2 identity). The lazy-normalize seam — a
  * consumer reads either on-disk version through ONE call. Returns the parsed
@@ -764,8 +805,8 @@ export function metaCapabilityFor(
 	return registry.backends[backend];
 }
 
-/** Denote-sortable on-disk filename. Body is SSOT; do NOT parse this for authority. */
-export function metaRecordFilename(record: MetaRecord): string {
+/** Denote-sortable on-disk filename. Body is SSOT; do NOT parse this for authority. Accepts v1 record or v2 identity. */
+export function metaRecordFilename(record: MetaRecord | MetaIdentity): string {
 	return `${record.gardenId}.meta.json`;
 }
 
@@ -821,12 +862,10 @@ export function scanByNativeId(
  * lookup authority as scanByNativeId — scan the BODIES, match on top-level
  * `nativeSessionId`, fail-fast on duplicates — but reads v1 AND v2 records (via
  * parseMetaIdentity) and returns normalized identity. This is the scan the v2
- * upsert will use in commit2: once upsert starts writing v2, the existence check
- * MUST recognize v2 records or it would mint a duplicate id for an existing
- * citizen (G1). It is purely ADDITIVE here — scanByNativeId stays wired into the
- * still-v1 upsert until commit2 swaps it, so this only needs a gate proving it
- * matches across both schemas. Identity-only: it reads backend/nativeSessionId,
- * never delivery, so it is safe before the delivery cut.
+ * upsert uses (3D-4): once upsert writes v2, the existence check MUST recognize v2
+ * records or it would mint a duplicate id for an existing citizen (G1). scanByNativeId
+ * remains the v1-only raw scan for v1-fixture gates. Identity-only: it reads
+ * backend/nativeSessionId, never delivery.
  */
 export function scanIdentityByNativeId(
 	entries: readonly string[],
@@ -861,39 +900,44 @@ export type UpsertAction = "create" | "attach";
 
 export interface UpsertDecision {
 	action: UpsertAction;
-	record: MetaRecord;
+	record: MetaIdentity;
 }
 
 /**
- * The pure core of the step-3 `upsert` CLI. Keyed on RECORD EXISTENCE, never on a
- * backend `source` field:
- *   - existing record present → ATTACH: keep the identity (gardenId, createdAt,
- *     nativeSessionId), refresh lastSeen, and refresh the cheap mutable pointers
- *     (transcriptPath, cwd) in case the backend moved them. Identity drift (a
- *     different backend for the same nativeSessionId) is corruption → throw.
- *   - absent → CREATE: mint a fresh record.
+ * The pure core of the `upsert` CLI (3D-4: v2 identity). Keyed on RECORD
+ * EXISTENCE, never on a backend `source` field:
+ *   - existing present → ATTACH: keep identity (gardenId, createdAt,
+ *     nativeSessionId), bump recordUpdatedAt, and apply the 3-value merge to the
+ *     nullable axes + always-refresh cwd. Identity drift (a different backend for
+ *     the same nativeSessionId) is corruption → throw.
+ *   - absent → CREATE: mint a fresh v2 identity.
+ *
+ * 3-value attach merge (G5): for model/transcriptPath/parentGardenId an input of
+ * `undefined` KEEPS the existing value (a pi-birth caller that does not know the
+ * transcript must not wipe a previously-recorded one), `null` explicitly clears
+ * it, a string sets it. cwd is required and always refreshed.
  *
  * Idempotent by construction: calling it twice with the same input yields one
- * attach after the first create, never a second id.
+ * attach after the first create, never a second id. `existing` is the normalized
+ * identity from scanIdentityByNativeId (dual-read v1+v2).
  */
 export function decideUpsert(
-	existing: MetaRecord | null,
-	input: MetaMintInput,
+	existing: MetaIdentity | null,
+	input: MetaIdentityMintInput,
 	now: Date = new Date(),
 ): UpsertDecision {
-	const backend = requireBackend(input.backend);
+	const backend = requireBackendV2(input.backend);
 	const nativeSessionId = requireNonEmptyString(input.nativeSessionId, "nativeSessionId");
-	const transcriptPath = requireNonEmptyString(input.transcriptPath, "transcriptPath");
 	const cwd = requireNonEmptyString(input.cwd, "cwd");
 
 	if (existing === null) {
-		return { action: "create", record: mintMetaRecord({ backend, nativeSessionId, transcriptPath, cwd }, now) };
+		return { action: "create", record: mintMetaIdentity(input, now) };
 	}
 	if (existing.nativeSessionId !== nativeSessionId) {
 		throw new MetaRecordError(
 			`decideUpsert called with existing record for a different nativeSessionId ` +
 				`(existing="${existing.nativeSessionId}", input="${nativeSessionId}"). ` +
-				`The caller must pass the record found by scanByNativeId(input.nativeSessionId).`,
+				`The caller must pass the record found by scanIdentityByNativeId(input.nativeSessionId).`,
 		);
 	}
 	if (existing.backend !== backend) {
@@ -902,18 +946,33 @@ export function decideUpsert(
 				`"${existing.backend}" but upsert input says "${backend}". A native session cannot change backend.`,
 		);
 	}
+	// 3-value merge (G5): undefined keeps existing, null clears, string sets. The
+	// nullable axes are validated the same way mint validates them.
+	const model = input.model === undefined ? existing.model : requireNullableString(input.model, "model");
+	const transcriptPath =
+		input.transcriptPath === undefined
+			? existing.transcriptPath
+			: requireNullableString(input.transcriptPath, "transcriptPath");
+	const parentGardenId =
+		input.parentGardenId === undefined
+			? existing.parentGardenId
+			: requireNullableGardenId(input.parentGardenId, "parentGardenId");
+	const isEntwurf = input.isEntwurf === undefined ? existing.isEntwurf : requireBoolean(input.isEntwurf, "isEntwurf");
 	return {
 		action: "attach",
-		record: { ...existing, transcriptPath, cwd, lastSeen: isoNow(now) },
+		record: { ...existing, cwd, model, transcriptPath, parentGardenId, isEntwurf, recordUpdatedAt: isoNow(now) },
 	};
 }
 
 // ---------------------------------------------------------------------------
-// read-receipt mutators (pre-drilled; mailbox path is post-MVP but these keep
-// the schema untouched when it lands)
+// read-receipt mutators — V1-RECORD ONLY (3D-4 H3). These mutate record.delivery,
+// which exists only on the v1 schema. The LIVE enqueue/read path no longer calls
+// them (3D-4 the cut: the receipt lives in the mailbox state store, stamped by
+// stampMailboxReceipt). They are retained for the v1-fixture / dual-read gates that
+// still exercise a raw v1 record; do NOT re-wire them into the live path.
 // ---------------------------------------------------------------------------
 
-/** A sender enqueued a body to this peer's mailbox. */
+/** A sender enqueued a body to this peer's mailbox. (v1-record only — see section note.) */
 export function markEnqueued(record: MetaRecord, now: Date = new Date()): MetaRecord {
 	return { ...record, delivery: { ...record.delivery, lastEnqueuedAt: isoNow(now) } };
 }
@@ -1154,50 +1213,65 @@ export function readMetaSenderMarker(opts: ReadMetaSenderMarkerOptions): MetaSen
 }
 
 export interface UpsertMetaSessionOptions {
-	input: MetaMintInput;
+	input: MetaIdentityMintInput;
 	/** Override the store directory (defaults to {@link defaultMetaSessionsDir}). */
 	dir?: string;
+	/** Override the mailbox dir (defaults to {@link defaultMetaMailboxDir}) — only the v1→v2 receipt migration touches it. */
+	mailboxDir?: string;
 	now?: Date;
 	onSkip?: (filename: string, err: Error) => void;
 }
 
 export interface UpsertMetaSessionResult {
 	action: UpsertAction;
-	record: MetaRecord;
+	record: MetaIdentity;
 	dir: string;
 	/** Absolute path of the written record. */
 	path: string;
 }
 
 /**
- * Idempotent fs upsert: scan the store by `nativeSessionId`, decide create vs
- * attach on record EXISTENCE, and write atomically. On attach the file is the
- * existing garden id's record (same path, rewritten in place); on create it is a
- * fresh `<gardenId>.meta.json`. A duplicate `nativeSessionId` in the store throws
- * (via `scanByNativeId`) rather than silently picking one. The write is
- * tmp-file + rename so a crash never leaves a half-written record (the #30
- * "write the record before the session takes over" crash-safety gate).
+ * Idempotent fs upsert (3D-4: writes v2 identity). Scan the store by
+ * `nativeSessionId` with the dual-read identity scan (sees v1 AND v2, so an
+ * existing citizen is found regardless of schema — never duplicate-mint, G1),
+ * decide create vs attach on EXISTENCE, and write atomically as v2. On attach the
+ * file is the existing garden id's record (same path, rewritten in place, v1→v2);
+ * on create it is a fresh `<gardenId>.meta.json`. A duplicate `nativeSessionId`
+ * throws (via the scan) rather than silently picking one.
+ *
+ * Crash-order (3D-4): when the matched file is still v1, its delivery receipts are
+ * migrated to the mailbox state store BEFORE the v2 rewrite. If the process dies
+ * between the two, the record is still v1 → the next attach re-migrates (state-wins
+ * merge is idempotent), so no receipt is lost. The reverse order would lose the
+ * receipt permanently. The write is tmp-file + rename so a crash never leaves a
+ * half-written record (#30 crash-safety).
  */
 export function upsertMetaSession(opts: UpsertMetaSessionOptions): UpsertMetaSessionResult {
 	const dir = path.resolve(expandTilde(opts.dir ?? defaultMetaSessionsDir()));
 	fs.mkdirSync(dir, { recursive: true });
 	const entries = fs.readdirSync(dir);
-	const existing = scanByNativeId(
-		entries,
-		opts.input.nativeSessionId,
-		(filename) => fs.readFileSync(path.join(dir, filename), "utf8"),
-		opts.onSkip,
-	);
+	const readRaw = (filename: string) => fs.readFileSync(path.join(dir, filename), "utf8");
+	const existing = scanIdentityByNativeId(entries, opts.input.nativeSessionId, readRaw, opts.onSkip);
+
+	// Crash-order: migrate a v1 file's receipts to mailbox state BEFORE rewriting it
+	// as v2. Re-read the matched file raw to see if it is still v1 (carries delivery).
+	if (existing !== null) {
+		const raw = parseMetaRecordAny(readRaw(`${existing.gardenId}.meta.json`));
+		if (raw.schemaVersion === META_SCHEMA_VERSION) {
+			migrateV1DeliveryReceipts({ gardenId: existing.gardenId, delivery: raw.delivery, mailboxDir: opts.mailboxDir });
+		}
+	}
+
 	const decision = decideUpsert(existing, opts.input, opts.now);
 	const file = path.join(dir, metaRecordFilename(decision.record));
-	atomicWriteRecord(file, decision.record);
+	atomicWriteIdentity(file, decision.record);
 	return { action: decision.action, record: decision.record, dir, path: file };
 }
 
-/** tmp-file + rename so a crash never leaves a half-written record. */
-function atomicWriteRecord(file: string, record: MetaRecord): void {
+/** tmp-file + rename so a crash never leaves a half-written record (v2 identity write). */
+function atomicWriteIdentity(file: string, identity: MetaIdentity): void {
 	const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
-	fs.writeFileSync(tmp, serializeMetaRecord(record), { mode: 0o600 });
+	fs.writeFileSync(tmp, serializeMetaIdentity(identity), { mode: 0o600 });
 	fs.renameSync(tmp, file);
 }
 
@@ -1225,8 +1299,17 @@ function recordFileFor(sessionsDir: string, gardenId: string): string {
 	return path.join(path.resolve(expandTilde(sessionsDir)), `${id}.meta.json`);
 }
 
-/** Read + parse the meta-record for a garden id, or throw if that citizen is unknown. */
-export function readMetaRecordByGardenId(gardenId: string, sessionsDir: string = defaultMetaSessionsDir()): MetaRecord {
+/**
+ * Read + parse a V1 meta-record by garden id, or throw if unknown (3D-4: renamed
+ * from readMetaRecordByGardenId, demoted to v1-only — it uses the strict v1 parser
+ * and throws on a v2 file). The live path reads identity via
+ * readMetaIdentityByGardenId (dual-read); this stays for v1-fixture / dual-read
+ * gates that need the raw v1 record (with delivery).
+ */
+export function readMetaRecordV1ByGardenId(
+	gardenId: string,
+	sessionsDir: string = defaultMetaSessionsDir(),
+): MetaRecord {
 	const id = requireGardenId(gardenId);
 	const file = recordFileFor(sessionsDir, id);
 	if (!fs.existsSync(file)) {
@@ -1252,10 +1335,9 @@ export function readMetaRecordByGardenId(gardenId: string, sessionsDir: string =
  * The dual-read identity read-by-gardenId (0.11 Stage 0 step 3D-4 commit1,
  * additive). Same contract as readMetaRecordByGardenId — read the file, body is
  * SSOT, fail-fast on body/filename gardenId drift — but reads v1 AND v2 (via
- * parseMetaIdentity) and returns normalized identity. This is what delivery-
- * agnostic consumers (the MCP sender-marker check, future upsert callers) use so
- * they survive the v2 cut; readMetaRecordByGardenId stays for the still-v1
- * enqueue/read path until commit2.
+ * parseMetaIdentity) and returns normalized identity. This is what the live path
+ * uses (enqueue/read, the MCP sender-marker check) so it survives the v2 cut;
+ * readMetaRecordV1ByGardenId remains the v1-only raw reader for v1-fixture gates.
  */
 export function readMetaIdentityByGardenId(
 	gardenId: string,
@@ -1304,12 +1386,15 @@ export function enqueueMetaMessage(opts: EnqueueMetaMessageOptions): EnqueueMeta
 	const now = opts.now ?? new Date();
 	const sessionsDir = opts.sessionsDir ?? defaultMetaSessionsDir();
 	const recordFile = recordFileFor(sessionsDir, opts.gardenId);
-	const record = readMetaRecordByGardenId(opts.gardenId, sessionsDir);
+	// 3D-4: read IDENTITY (dual-read v1+v2) — confirms the citizen exists and
+	// normalizes the gardenId. The record is no longer mutated; the v2 record carries
+	// no delivery, so the enqueue receipt lives SOLELY in the mailbox state store.
+	const citizen = readMetaIdentityByGardenId(opts.gardenId, sessionsDir);
 	if (typeof opts.body !== "string" || opts.body.length === 0) {
 		throw new MetaRecordError("enqueueMetaMessage: body must be a non-empty string.");
 	}
 
-	const dir = path.join(path.resolve(expandTilde(opts.mailboxDir ?? defaultMetaMailboxDir())), record.gardenId);
+	const dir = path.join(path.resolve(expandTilde(opts.mailboxDir ?? defaultMetaMailboxDir())), citizen.gardenId);
 	fs.mkdirSync(dir, { recursive: true });
 	// Sortable + unique: ISO stamp (colons/dots flattened for a clean filename) +
 	// a short random tag so two sends in the same millisecond never collide.
@@ -1317,19 +1402,13 @@ export function enqueueMetaMessage(opts: EnqueueMetaMessageOptions): EnqueueMeta
 	const messagePath = path.join(dir, `${stamp}.msg`);
 	fs.writeFileSync(messagePath, opts.body, { mode: 0o600 });
 
-	atomicWriteRecord(recordFile, markEnqueued(record, now));
-	// 0.11 Stage 0 3D-2: dual-write the SAME receipt to the mailbox state store
-	// (the v2 home for delivery timestamps), additive to record.delivery. Same
-	// record.gardenId (NOT opts.gardenId — the reader normalizes), same mailboxDir
-	// (the base dir whose <gardenId>/ holds the .msg traffic), same `now` (markEnqueued
-	// and stampMailboxReceipt both isoNow(now), so the two stamps are byte-identical).
-	// Adjacent to and AFTER the record stamp, no try/catch — a state-stamp throw
-	// (e.g. a 3B body/path drift guard) surfaces fail-loud. 3D-2 does NOT implement
-	// rollback/all-or-nothing: the record stamp and the .msg may already be written,
-	// but the caller never gets a silent success. Stamped before the signal poke so
-	// all state is settled before the watch fires.
+	// 3D-4 the cut: the enqueue receipt lives SOLELY in the mailbox state store now
+	// (record.delivery removed from the v2 record). No record write. Stamped before the
+	// signal poke so all state is settled before the watch fires. A state-stamp throw
+	// surfaces fail-loud — no rollback: the `.msg` may already be written, but the
+	// caller never gets a silent success.
 	stampMailboxReceipt({
-		gardenId: record.gardenId,
+		gardenId: citizen.gardenId,
 		mailboxDir: opts.mailboxDir ?? defaultMetaMailboxDir(),
 		field: "lastEnqueuedAt",
 		now,
@@ -1340,7 +1419,7 @@ export function enqueueMetaMessage(opts: EnqueueMetaMessageOptions): EnqueueMeta
 	const signalPath = path.join(dir, "inbox.signal");
 	fs.writeFileSync(signalPath, `${isoNow(now)}\n`, { mode: 0o600 });
 
-	return { gardenId: record.gardenId, recordPath: recordFile, messagePath, signalPath };
+	return { gardenId: citizen.gardenId, recordPath: recordFile, messagePath, signalPath };
 }
 
 export interface MetaInboxMessage {
@@ -1375,9 +1454,11 @@ export function readMetaInbox(opts: ReadMetaInboxOptions): ReadMetaInboxResult {
 	const now = opts.now ?? new Date();
 	const sessionsDir = opts.sessionsDir ?? defaultMetaSessionsDir();
 	const recordFile = recordFileFor(sessionsDir, opts.gardenId);
-	const record = readMetaRecordByGardenId(opts.gardenId, sessionsDir);
+	// 3D-4: read IDENTITY (dual-read) — citizen-existence + normalized gardenId. The
+	// record is not mutated; the read receipt lives solely in the mailbox state store.
+	const citizen = readMetaIdentityByGardenId(opts.gardenId, sessionsDir);
 
-	const dir = path.join(path.resolve(expandTilde(opts.mailboxDir ?? defaultMetaMailboxDir())), record.gardenId);
+	const dir = path.join(path.resolve(expandTilde(opts.mailboxDir ?? defaultMetaMailboxDir())), citizen.gardenId);
 	const entries = fs.existsSync(dir) ? fs.readdirSync(dir) : [];
 	// Unread = a body still ending in .msg or .msg.delivered (NOT yet .read).
 	const unread = entries.filter((f) => f.endsWith(".msg") || f.endsWith(".msg.delivered")).sort();
@@ -1390,36 +1471,25 @@ export function readMetaInbox(opts: ReadMetaInboxOptions): ReadMetaInboxResult {
 	}
 
 	if (messages.length === 0) {
-		return { gardenId: record.gardenId, messages, readAt: null, recordPath: recordFile };
+		return { gardenId: citizen.gardenId, messages, readAt: null, recordPath: recordFile };
 	}
 
-	// Stamp ONLY lastReadAt — the one receipt this layer can stamp honestly: it
-	// KNOWS the body reached the reader. lastDeliveredAt is the doorbell's to own
-	// (the moment the FileChanged hook rang); recording it here would report a
-	// delivered-time of "read-time", later than the truth. So it is left as the
-	// doorbell left it — null in the MVP, where the `.msg.delivered` FILE (not a
-	// record field) is the delivery marker. lastDeliveredAt null + lastReadAt set
-	// therefore means "delivery-time not recorded", NOT "read before delivered".
-	const updated = markRead(record, now);
-	atomicWriteRecord(recordFile, updated);
-	// 0.11 Stage 0 3D-2: dual-write lastReadAt to the mailbox state store, same
-	// record.gardenId / mailboxDir / now as the record stamp. This sits INSIDE the
-	// messages.length>0 branch by construction — an empty inbox already early-returned
-	// above (record untouched, readAt:null), so the state stays untouched too, keeping
-	// the two stamps' meaning a mirror image ("read nothing" = no receipt on either
-	// store). lastDeliveredAt is NOT backfilled here — the doorbell owns delivery-time
-	// (see the record-stamp note above); stamping it would report read-time as
-	// delivery-time. Adjacent to and AFTER the record stamp, no try/catch — a state
-	// throw surfaces fail-loud. 3D-2 does NOT implement rollback/all-or-nothing: the
-	// messages are already archived (.read) and the record already stamped, but the
-	// caller never gets a silent success.
-	stampMailboxReceipt({
-		gardenId: record.gardenId,
+	// 3D-4 the cut: the read receipt lives SOLELY in the mailbox state store now.
+	// Stamp lastReadAt — the one receipt this layer stamps honestly (it KNOWS the body
+	// reached the reader). lastDeliveredAt is the doorbell's to own; stamping it here
+	// would report read-time as delivery-time, so it is left as the doorbell left it.
+	// The state stamp returns the updated state, whose lastReadAt IS the D7 read-receipt.
+	// Inside the messages.length>0 branch by construction — an empty inbox already
+	// early-returned (no .read archive, state untouched), so "read nothing" is no
+	// receipt on the state either. A throw surfaces fail-loud — no rollback: the
+	// messages are already archived (.read), but the caller never gets a silent success.
+	const state = stampMailboxReceipt({
+		gardenId: citizen.gardenId,
 		mailboxDir: opts.mailboxDir ?? defaultMetaMailboxDir(),
 		field: "lastReadAt",
 		now,
 	});
-	return { gardenId: record.gardenId, messages, readAt: updated.delivery.lastReadAt, recordPath: recordFile };
+	return { gardenId: citizen.gardenId, messages, readAt: state.lastReadAt, recordPath: recordFile };
 }
 
 // ---------------------------------------------------------------------------
@@ -1592,4 +1662,53 @@ export function stampMailboxReceipt(
 	fs.writeFileSync(tmp, serializeMailboxReceiptState(updated), { mode: 0o600 });
 	fs.renameSync(tmp, file);
 	return updated;
+}
+
+/** The v1 delivery receipt timestamps that migrate to mailbox state (the 3 only — wakeMode/deliveryLevel are capability). */
+export interface V1DeliveryReceipts {
+	lastEnqueuedAt: string | null;
+	lastDeliveredAt: string | null;
+	lastReadAt: string | null;
+}
+
+/**
+ * Migrate a v1 record's delivery receipts into the mailbox state store (3D-4),
+ * called by upsert BEFORE it rewrites a v1 file as v2 so a pre-3D-2 receipt is not
+ * lost. Per-field merge, STATE WINS: a v1 timestamp only fills a state field that
+ * is still null (`state[f] ?? v1[f]`); a state value already there is never
+ * overwritten. ONLY the 3 timestamps move — wakeMode/deliveryLevel are capability
+ * (registry), and a stray key would trip the receipt-state strict keyset (H2).
+ *
+ * "Migrating nothing is not a receipt": if no v1 value fills a null state field
+ * (state already wins on every field, or v1 had nothing), this is a NO-OP — no
+ * write, no state.json creation — returning null. Otherwise it writes the merged
+ * state atomically (tmp+rename, mirroring stampMailboxReceipt) and returns it.
+ */
+export function migrateV1DeliveryReceipts(opts: {
+	gardenId: string;
+	delivery: V1DeliveryReceipts;
+	mailboxDir?: string;
+}): MailboxReceiptState | null {
+	const gardenId = requireGardenId(opts.gardenId);
+	const mailboxDir = opts.mailboxDir ?? defaultMetaMailboxDir();
+	const current = readMailboxReceiptState({ gardenId, mailboxDir });
+	const merged: MailboxReceiptState = {
+		...current,
+		lastEnqueuedAt: current.lastEnqueuedAt ?? opts.delivery.lastEnqueuedAt,
+		lastDeliveredAt: current.lastDeliveredAt ?? opts.delivery.lastDeliveredAt,
+		lastReadAt: current.lastReadAt ?? opts.delivery.lastReadAt,
+	};
+	if (
+		merged.lastEnqueuedAt === current.lastEnqueuedAt &&
+		merged.lastDeliveredAt === current.lastDeliveredAt &&
+		merged.lastReadAt === current.lastReadAt
+	) {
+		return null; // no-write / no-create — migrating nothing is not a receipt
+	}
+	const file = mailboxReceiptStatePath(mailboxDir, gardenId);
+	fs.mkdirSync(path.dirname(file), { recursive: true });
+	const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
+	fs.writeFileSync(tmp, serializeMailboxReceiptState(merged), { mode: 0o600 });
+	fs.renameSync(tmp, file);
+	return merged;
 }

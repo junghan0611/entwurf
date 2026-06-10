@@ -103,9 +103,11 @@ echo "$A_READ" | grep -q 'wants reply: yes' && ok "envelope round-trip: wants_re
 echo "$A_READ" | grep -q 'lastReadAt=' && ok "inbox_read stamps a read receipt (lastReadAt)" || bad "inbox_read did not report lastReadAt"
 echo "$A_READ2" | grep -qi 'empty' && ok "re-read is empty (drain + archive, no double-return)" || bad "re-read was not empty: ${A_READ2:0:200}"
 
-# Receipt + archive on disk (servers have exited).
-LRA="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d['delivery']['lastReadAt'])" "$PI_META_SESSIONS_DIR/$GARDEN_A.meta.json")"
-[ "$LRA" != "None" ] && [ -n "$LRA" ] && ok "meta-record lastReadAt persisted ($LRA)" || bad "meta-record lastReadAt not persisted (got '$LRA')"
+# Receipt + archive on disk (servers have exited). 3D-4: the read receipt lives in
+# the mailbox state store (<mailbox>/<gardenId>/state.json), NOT record.delivery
+# (the v2 record carries no delivery).
+LRA="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d['lastReadAt'])" "$PI_META_MAILBOX_DIR/$GARDEN_A/state.json")"
+[ "$LRA" != "None" ] && [ -n "$LRA" ] && ok "mailbox-state lastReadAt persisted ($LRA)" || bad "mailbox-state lastReadAt not persisted (got '$LRA')"
 ls "$PI_META_MAILBOX_DIR/$GARDEN_A"/*.read >/dev/null 2>&1 && ok "message archived as .read" || bad "no .read archive in mailbox"
 if ls "$PI_META_MAILBOX_DIR/$GARDEN_A"/*.msg >/dev/null 2>&1; then bad "unread .msg still present after read"; else ok "no unread .msg remains after read"; fi
 

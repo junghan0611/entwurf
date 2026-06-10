@@ -58,8 +58,9 @@ Usage:
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-meta-dual-read        # deterministic gate (0.11 Stage 0 step 3D-1): v2 write shape (serializeMetaIdentity) + dual-read dispatcher (parseMetaRecordAny/parseMetaIdentity) + write→read round-trip, pure, no API
-  ./run.sh check-meta-mailbox-dualwrite # deterministic gate (0.11 Stage 0 step 3D-2): LIVE receipt dual-write — enqueue/read stamp BOTH record.delivery AND mailbox state (byte-identical, same now); empty inbox no-op on both; state drift surfaces; additive only, no API
-  ./run.sh check-meta-dual-consumers   # deterministic gate (0.11 Stage 0 step 3D-4 commit1): delivery-agnostic dual-read seam — readMetaIdentityByGardenId + scanIdentityByNativeId read v1 AND v2, cross-schema duplicate = ambiguity throw (G1), additive (scanByNativeId/readMetaRecordByGardenId stay v1 until commit2), no API
+  ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
+  ./run.sh check-meta-migration        # deterministic gate (0.11 Stage 0 step 3D-4 commit2): v1→v2 delivery-receipt migration (per-field state-wins, 3 timestamps, no-op when nothing to fill) + crash-order inside upsert (migrate before v2 rewrite; drift throws with record still v1), no API
+  ./run.sh check-meta-dual-consumers   # deterministic gate (0.11 Stage 0 step 3D-4): delivery-agnostic dual-read seam — readMetaIdentityByGardenId + scanIdentityByNativeId read v1 AND v2, cross-schema duplicate = ambiguity throw (G1); v1-only raw readers remain for v1-fixture gates, no API
   ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const), slot stays (3D-4), no API
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
   ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
@@ -1219,28 +1220,37 @@ check_meta_dual_read() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-dual-read.ts)
 }
 
-check_meta_mailbox_dualwrite() {
-  # Deterministic gate for 0.11 Stage 0 step 3D-2: the LIVE receipt dual-write.
-  # enqueueMetaMessage/readMetaInbox now stamp the mailbox receipt state store
-  # (3B) IN ADDITION to record.delivery (v1 home), additively. Asserts the
-  # dual-write invariant (record and state stamps byte-identical, same `now`),
-  # the enqueue receipt surviving a read, an empty inbox being a no-op on BOTH
-  # stores (record untouched AND state.json never created), and a state-store
-  # drift SURFACING (read throws, never swallows). Additive only — no
-  # record.delivery removal, no v2 writer, no capability switch (3D-3/3D-4). A
-  # temp sessions+mailbox dir. No backend, no hook, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-mailbox-dualwrite.ts)
+check_meta_mailbox_state_write() {
+  # Deterministic gate for 0.11 Stage 0 step 3D-4 commit2 (the cut). Renamed from
+  # check-meta-mailbox-dualwrite: after the cut the receipt is no longer dual-written
+  # (record.delivery is gone from the v2 record) — it lives SOLELY in the mailbox
+  # state store. Asserts the meta-record FILE is byte-identical before/after enqueue
+  # AND read (enqueue/read no longer touch the record — invariant ⑤), the state
+  # carries lastEnqueuedAt/lastReadAt with field isolation, lastDeliveredAt is never
+  # invented, an empty inbox is a no-op on BOTH record and state (⑥), and a state
+  # drift surfaces fail-loud. v2 citizen seeded via upsertMetaSession. No API.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-mailbox-state-write.ts)
+}
+
+check_meta_migration() {
+  # Deterministic gate for 0.11 Stage 0 step 3D-4 commit2: the v1→v2 delivery-receipt
+  # migration (migrateV1DeliveryReceipts) + its crash-order inside upsert. Per-field
+  # STATE WINS, 3 timestamps only; v1-all-null / state-already-wins are no-ops (no
+  # state.json). Crash-order: a v1 record's receipts migrate to state BEFORE the v2
+  # rewrite (proven via upsert attach), and a drift'd state makes migrate throw with
+  # the record STILL v1 (recoverable: next attach re-migrates). Temp dir, no API.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-migration.ts)
 }
 
 check_meta_dual_consumers() {
-  # Deterministic gate for 0.11 Stage 0 step 3D-4 commit1 (green checkpoint): the
-  # delivery-agnostic dual-read seam. readMetaIdentityByGardenId + scanIdentityByNativeId
-  # read v1 AND v2 records and return normalized identity, so the consumers moving onto
-  # them (MCP marker, prune, store-doctor, the v2 upsert's existence scan in commit2)
-  # survive the v2 cut. Proves cross-schema match + THE G1 invariant (a nativeSessionId
-  # duplicated across a v1 AND v2 file is authority ambiguity → throw, so the v2 upsert
-  # never duplicate-mints) + v1 normalize + body/filename drift fail-fast. Additive —
-  # scanByNativeId/readMetaRecordByGardenId stay v1 until commit2. Temp dir, no API.
+  # Deterministic gate for 0.11 Stage 0 step 3D-4: the delivery-agnostic dual-read
+  # seam. readMetaIdentityByGardenId + scanIdentityByNativeId read v1 AND v2 records and
+  # return normalized identity, so the live consumers (enqueue/read, MCP marker, prune,
+  # store-doctor, the v2 upsert's existence scan) survive the v2 cut. Proves cross-schema
+  # match + THE G1 invariant (a nativeSessionId duplicated across a v1 AND v2 file is
+  # authority ambiguity → throw, so the v2 upsert never duplicate-mints) + v1 normalize +
+  # body/filename drift fail-fast. The v1-only raw readers remain for v1-fixture gates.
+  # Temp dir, no API.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-dual-consumers.ts)
 }
 
@@ -4249,8 +4259,11 @@ case "$cmd" in
   check-meta-dual-read)
     check_meta_dual_read
     ;;
-  check-meta-mailbox-dualwrite)
-    check_meta_mailbox_dualwrite
+  check-meta-mailbox-state-write)
+    check_meta_mailbox_state_write
+    ;;
+  check-meta-migration)
+    check_meta_migration
     ;;
   check-meta-dual-consumers)
     check_meta_dual_consumers

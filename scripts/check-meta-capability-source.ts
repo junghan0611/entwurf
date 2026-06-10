@@ -15,9 +15,12 @@
  *  - behaviour preserved: registry ≡ META_BACKEND_DESCRIPTORS for the 3 existing
  *    backends (the const survives only as the drift-guard reference, 3C → 3D-3).
  *
- * Scope is 3D-3 ONLY: the SOURCE moves. The record.delivery.wakeMode SLOT stays
- * (its removal is 3D-4 = 끊을 지점 ②), and check-entwurf-capabilities still owns the
- * registry ≡ const drift guard. check-meta-session (mint/parse E2E) stays green.
+ * Scope is 3D-3: the SOURCE moves. NOTE (post-3D-4): the consumers proven here are
+ * mintMetaRecord / parseMetaRecord — the V1 (legacy / dual-read) path, which is the
+ * only place wakeMode/deliveryLevel still flow from. The live v2 mint
+ * (mintMetaIdentity) carries NO delivery, so it never sources capability — the v2
+ * record has no wakeMode at all. check-entwurf-capabilities still owns the
+ * registry ≡ const drift guard.
  */
 
 import assert from "node:assert/strict";
