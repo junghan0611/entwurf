@@ -94,8 +94,8 @@ import {
 	enqueueMetaMessage,
 	type MetaSenderMarker,
 	parentPid,
+	readMetaIdentityByGardenId,
 	readMetaInbox,
-	readMetaRecordByGardenId,
 	readMetaSenderMarker,
 } from "../../../pi-extensions/lib/meta-session.ts";
 import { probeSocketLiveness, shouldListAsLive } from "../../../pi-extensions/lib/socket-probe.ts";
@@ -334,8 +334,10 @@ function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): SenderEnve
 	// hint.
 	let backed = false;
 	try {
-		const rec = readMetaRecordByGardenId(marker.gardenId);
-		backed = rec.backend === marker.backend && rec.nativeSessionId === marker.nativeSessionId;
+		// dual-read (3D-4 commit1): identity-only check (backend/nativeSessionId), so
+		// it survives the v2 cut. Reads both v1 and v2 records.
+		const id = readMetaIdentityByGardenId(marker.gardenId);
+		backed = id.backend === marker.backend && id.nativeSessionId === marker.nativeSessionId;
 	} catch {
 		backed = false;
 	}

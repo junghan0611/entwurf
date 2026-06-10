@@ -59,6 +59,7 @@ Usage:
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-meta-dual-read        # deterministic gate (0.11 Stage 0 step 3D-1): v2 write shape (serializeMetaIdentity) + dual-read dispatcher (parseMetaRecordAny/parseMetaIdentity) + write→read round-trip, pure, no API
   ./run.sh check-meta-mailbox-dualwrite # deterministic gate (0.11 Stage 0 step 3D-2): LIVE receipt dual-write — enqueue/read stamp BOTH record.delivery AND mailbox state (byte-identical, same now); empty inbox no-op on both; state drift surfaces; additive only, no API
+  ./run.sh check-meta-dual-consumers   # deterministic gate (0.11 Stage 0 step 3D-4 commit1): delivery-agnostic dual-read seam — readMetaIdentityByGardenId + scanIdentityByNativeId read v1 AND v2, cross-schema duplicate = ambiguity throw (G1), additive (scanByNativeId/readMetaRecordByGardenId stay v1 until commit2), no API
   ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const), slot stays (3D-4), no API
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
   ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
@@ -1229,6 +1230,18 @@ check_meta_mailbox_dualwrite() {
   # record.delivery removal, no v2 writer, no capability switch (3D-3/3D-4). A
   # temp sessions+mailbox dir. No backend, no hook, no API.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-mailbox-dualwrite.ts)
+}
+
+check_meta_dual_consumers() {
+  # Deterministic gate for 0.11 Stage 0 step 3D-4 commit1 (green checkpoint): the
+  # delivery-agnostic dual-read seam. readMetaIdentityByGardenId + scanIdentityByNativeId
+  # read v1 AND v2 records and return normalized identity, so the consumers moving onto
+  # them (MCP marker, prune, store-doctor, the v2 upsert's existence scan in commit2)
+  # survive the v2 cut. Proves cross-schema match + THE G1 invariant (a nativeSessionId
+  # duplicated across a v1 AND v2 file is authority ambiguity → throw, so the v2 upsert
+  # never duplicate-mints) + v1 normalize + body/filename drift fail-fast. Additive —
+  # scanByNativeId/readMetaRecordByGardenId stay v1 until commit2. Temp dir, no API.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-dual-consumers.ts)
 }
 
 check_meta_capability_source() {
@@ -4238,6 +4251,9 @@ case "$cmd" in
     ;;
   check-meta-mailbox-dualwrite)
     check_meta_mailbox_dualwrite
+    ;;
+  check-meta-dual-consumers)
+    check_meta_dual_consumers
     ;;
   check-meta-capability-source)
     check_meta_capability_source

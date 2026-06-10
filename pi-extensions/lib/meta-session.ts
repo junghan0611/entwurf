@@ -816,6 +816,47 @@ export function scanByNativeId(
 	return matches.length === 1 ? (matches[0] as { record: MetaRecord }).record : null;
 }
 
+/**
+ * The dual-read identity scan (0.11 Stage 0 step 3D-4 commit1, additive). Same
+ * lookup authority as scanByNativeId — scan the BODIES, match on top-level
+ * `nativeSessionId`, fail-fast on duplicates — but reads v1 AND v2 records (via
+ * parseMetaIdentity) and returns normalized identity. This is the scan the v2
+ * upsert will use in commit2: once upsert starts writing v2, the existence check
+ * MUST recognize v2 records or it would mint a duplicate id for an existing
+ * citizen (G1). It is purely ADDITIVE here — scanByNativeId stays wired into the
+ * still-v1 upsert until commit2 swaps it, so this only needs a gate proving it
+ * matches across both schemas. Identity-only: it reads backend/nativeSessionId,
+ * never delivery, so it is safe before the delivery cut.
+ */
+export function scanIdentityByNativeId(
+	entries: readonly string[],
+	nativeSessionId: string,
+	readRecord: (filename: string) => string,
+	onSkip?: (filename: string, err: Error) => void,
+): MetaIdentity | null {
+	const target = requireNonEmptyString(nativeSessionId, "nativeSessionId");
+	const matches: { filename: string; identity: MetaIdentity }[] = [];
+	for (const filename of entries) {
+		if (!filename.endsWith(".meta.json")) continue;
+		let identity: MetaIdentity;
+		try {
+			identity = parseMetaIdentity(readRecord(filename));
+		} catch (err) {
+			onSkip?.(filename, err instanceof Error ? err : new Error(String(err)));
+			continue;
+		}
+		if (identity.nativeSessionId === target) matches.push({ filename, identity });
+	}
+	if (matches.length > 1) {
+		throw new MetaRecordError(
+			`ambiguous meta-record authority: nativeSessionId "${target}" matched ${matches.length} records ` +
+				`(${matches.map((m) => m.filename).join(", ")}). The native→garden mapping must be unique — ` +
+				`fail-fast rather than silently picking one. Remove the duplicate(s).`,
+		);
+	}
+	return matches.length === 1 ? (matches[0] as { identity: MetaIdentity }).identity : null;
+}
+
 export type UpsertAction = "create" | "attach";
 
 export interface UpsertDecision {
@@ -1205,6 +1246,36 @@ export function readMetaRecordByGardenId(gardenId: string, sessionsDir: string =
 		);
 	}
 	return record;
+}
+
+/**
+ * The dual-read identity read-by-gardenId (0.11 Stage 0 step 3D-4 commit1,
+ * additive). Same contract as readMetaRecordByGardenId — read the file, body is
+ * SSOT, fail-fast on body/filename gardenId drift — but reads v1 AND v2 (via
+ * parseMetaIdentity) and returns normalized identity. This is what delivery-
+ * agnostic consumers (the MCP sender-marker check, future upsert callers) use so
+ * they survive the v2 cut; readMetaRecordByGardenId stays for the still-v1
+ * enqueue/read path until commit2.
+ */
+export function readMetaIdentityByGardenId(
+	gardenId: string,
+	sessionsDir: string = defaultMetaSessionsDir(),
+): MetaIdentity {
+	const id = requireGardenId(gardenId);
+	const file = recordFileFor(sessionsDir, id);
+	if (!fs.existsSync(file)) {
+		throw new MetaRecordError(
+			`no meta-record for garden id "${id}" under ${path.dirname(file)} — not a garden citizen, cannot deliver.`,
+		);
+	}
+	const identity = parseMetaIdentity(fs.readFileSync(file, "utf8"));
+	if (identity.gardenId !== id) {
+		throw new MetaRecordError(
+			`meta-record body/filename drift: ${id}.meta.json contains gardenId "${identity.gardenId}". ` +
+				`The body is the authority; this file is corrupt. Remove or fix it.`,
+		);
+	}
+	return identity;
 }
 
 export interface EnqueueMetaMessageOptions {

@@ -108,7 +108,7 @@ echo "---"
 
 # classification counts: 1 orphan, 1 stale, 1 keep, 4 ambiguous (duplicate(dupA+dupB -> one line) + drift + invalid-lastSeen + corrupt)
 echo "$OUT" | grep -q "ORPHAN transcript-gone (1):"   && ok "orphan count 1" || bad "orphan count != 1"
-echo "$OUT" | grep -q "STALE lastSeen>30d (1):"       && ok "stale count 1"  || bad "stale count != 1"
+echo "$OUT" | grep -q "STALE recordUpdatedAt>30d (1):" && ok "stale count 1"  || bad "stale count != 1"
 echo "$OUT" | grep -q "KEEP (live/recent): 1 record"  && ok "keep count 1"   || bad "keep count != 1"
 # ambiguous lines: duplicate(1) + drift(1) + invalid-lastSeen(1) + corrupt(1) = 4
 echo "$OUT" | grep -q "AMBIGUOUS manual-only (4):"     && ok "ambiguous count 4" || bad "ambiguous count != 4"
@@ -121,8 +121,8 @@ echo "$OUT" | grep -A1 "STALE"  | grep -q "$STALE_ID"  && ok "stale id correct" 
 echo "$OUT" | grep -q "duplicate nativeSessionId"      && ok "duplicate classified ambiguous" || bad "duplicate not classified"
 echo "$OUT" | grep -q "corrupt"                        && ok "corrupt classified ambiguous"   || bad "corrupt not classified"
 echo "$OUT" | grep -q "body/filename drift"            && ok "drift classified ambiguous"     || bad "drift not classified"
-# invalid lastSeen cannot prove recency -> manual-only, NOT keep
-echo "$OUT" | grep -q "unparseable lastSeen"           && ok "invalid lastSeen classified ambiguous" || bad "invalid lastSeen not classified"
+# invalid recordUpdatedAt cannot prove recency -> manual-only, NOT keep
+echo "$OUT" | grep -q "unparseable recordUpdatedAt"    && ok "invalid recordUpdatedAt classified ambiguous" || bad "invalid recordUpdatedAt not classified"
 echo "$OUT" | grep -A6 "AMBIGUOUS" | grep -q "$BADDATE_ID" && ok "invalid-lastSeen id in AMBIGUOUS section" || bad "invalid-lastSeen id missing from AMBIGUOUS"
 
 # keep is NOT offered as a removal command
@@ -164,7 +164,7 @@ set -e
 set +e
 OUT3="$(node --experimental-strip-types "$PRUNE" "$STORE" --ttl-days 100 2>&1)"
 set -e
-echo "$OUT3" | grep -q "STALE lastSeen>100d (0):" && echo "$OUT3" | grep -q "KEEP (live/recent): 2 record" && ok "--ttl-days widens keep window" || bad "--ttl-days did not move stale boundary"
+echo "$OUT3" | grep -q "STALE recordUpdatedAt>100d (0):" && echo "$OUT3" | grep -q "KEEP (live/recent): 2 record" && ok "--ttl-days widens keep window" || bad "--ttl-days did not move stale boundary"
 
 if [ "$fail" = "0" ]; then
   echo "smoke-meta-prune PASS"

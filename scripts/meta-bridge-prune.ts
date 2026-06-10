@@ -5,10 +5,12 @@
  * 1.0.0 policy (GLG + GPT힣, 2026-06-06): list candidates, NEVER delete. The
  * store is the native→garden lookup authority, so this surface is deliberately
  * conservative:
- *   - orphan (transcript gone) / stale (lastSeen older than ttl) are SUGGESTED
- *     for manual prune with the exact rm command printed — but removed by no one
- *     here. transcript-gone is a strong abandonment signal, not proof; a backend
- *     path migration / cleanup / config-dir change can also vacate transcriptPath.
+ *   - orphan (transcript gone) / stale (recordUpdatedAt older than ttl) are
+ *     SUGGESTED for manual prune with the exact rm command printed — but removed
+ *     by no one here. transcript-gone is a strong abandonment signal, not proof; a
+ *     backend path migration / cleanup / config-dir change can also vacate it. A
+ *     NULL transcriptPath (v2 nullable-at-birth, e.g. pi) is "unknown", NOT gone —
+ *     never orphan on null; only a non-empty string path that no longer exists.
  *   - corrupt JSON / body↔filename drift / duplicate nativeSessionId are
  *     AMBIGUOUS / manual-only: the operator decides which authority survives.
  *     Never blindly rm a duplicate pair.
@@ -20,7 +22,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { defaultMetaSessionsDir, type MetaRecord, parseMetaRecord } from "../pi-extensions/lib/meta-session.ts";
+import { defaultMetaSessionsDir, type MetaIdentity, parseMetaIdentity } from "../pi-extensions/lib/meta-session.ts";
 
 /** POSIX single-quote a path so the printed rm command survives spaces/specials. */
 function shellQuote(s: string): string {
@@ -80,8 +82,8 @@ interface Good {
 	gardenId: string;
 	backend: string;
 	nativeSessionId: string;
-	transcriptPath: string;
-	lastSeen: string;
+	transcriptPath: string | null;
+	recordUpdatedAt: string;
 }
 
 const goodByNative = new Map<string, Good[]>();
@@ -92,28 +94,30 @@ for (const filename of fs.readdirSync(dir).sort()) {
 	if (!filename.endsWith(".meta.json")) continue;
 	scanned += 1;
 	const file = path.join(dir, filename);
-	let record: MetaRecord;
+	// dual-read (3D-4 commit1): parseMetaIdentity reads v1 AND v2, normalizing to
+	// identity (transcriptPath nullable, lastSeen → recordUpdatedAt).
+	let id: MetaIdentity;
 	try {
-		record = parseMetaRecord(fs.readFileSync(file, "utf8"));
+		id = parseMetaIdentity(fs.readFileSync(file, "utf8"));
 	} catch (err) {
 		ambiguous.push(`${filename}: corrupt — ${err instanceof Error ? err.message : String(err)}`);
 		continue;
 	}
-	const expectedFilename = `${record.gardenId}.meta.json`;
+	const expectedFilename = `${id.gardenId}.meta.json`;
 	if (filename !== expectedFilename) {
-		ambiguous.push(`${filename}: body/filename drift — body gardenId=${record.gardenId}, expected ${expectedFilename}`);
+		ambiguous.push(`${filename}: body/filename drift — body gardenId=${id.gardenId}, expected ${expectedFilename}`);
 		continue;
 	}
-	const list = goodByNative.get(record.nativeSessionId) ?? [];
+	const list = goodByNative.get(id.nativeSessionId) ?? [];
 	list.push({
 		file: filename,
-		gardenId: record.gardenId,
-		backend: record.backend,
-		nativeSessionId: record.nativeSessionId,
-		transcriptPath: record.transcriptPath,
-		lastSeen: record.lastSeen,
+		gardenId: id.gardenId,
+		backend: id.backend,
+		nativeSessionId: id.nativeSessionId,
+		transcriptPath: id.transcriptPath,
+		recordUpdatedAt: id.recordUpdatedAt,
 	});
-	goodByNative.set(record.nativeSessionId, list);
+	goodByNative.set(id.nativeSessionId, list);
 }
 
 const orphan: Good[] = [];
@@ -129,20 +133,26 @@ for (const [nativeSessionId, list] of goodByNative.entries()) {
 		continue;
 	}
 	const g = list[0];
-	const transcriptOk = g.transcriptPath !== "" && fs.existsSync(g.transcriptPath);
-	if (!transcriptOk) {
+	// G2 (3D-4): null transcriptPath is NOT orphan. v2 (pi nullable-at-birth) leaves
+	// it null = "unknown / not yet known", which is not "the file went away". Orphan
+	// is ONLY a non-empty string path that no longer exists on disk. A null path
+	// falls through to the recordUpdatedAt staleness check like any live record.
+	const tp = g.transcriptPath;
+	if (typeof tp === "string" && tp !== "" && !fs.existsSync(tp)) {
 		orphan.push(g);
 		continue;
 	}
-	// parseMetaRecord only proves lastSeen is a non-empty string, not a real date.
-	// KEEP means live + RECENT; an unparseable lastSeen cannot prove recency, so it
-	// is not a silent keep — it goes manual-only like any other authority defect.
-	const lastSeenMs = Date.parse(g.lastSeen);
-	if (!Number.isFinite(lastSeenMs)) {
-		ambiguous.push(`${g.file}: unparseable lastSeen ${JSON.stringify(g.lastSeen)} — cannot prove recent, manual-only`);
+	// recordUpdatedAt is only proven a non-empty string by the parser, not a real
+	// date. KEEP means live + RECENT; an unparseable recordUpdatedAt cannot prove
+	// recency, so it is not a silent keep — it goes manual-only like any defect.
+	const updatedMs = Date.parse(g.recordUpdatedAt);
+	if (!Number.isFinite(updatedMs)) {
+		ambiguous.push(
+			`${g.file}: unparseable recordUpdatedAt ${JSON.stringify(g.recordUpdatedAt)} — cannot prove recent, manual-only`,
+		);
 		continue;
 	}
-	if (now - lastSeenMs > ttlMs) stale.push(g);
+	if (now - updatedMs > ttlMs) stale.push(g);
 	else keep += 1;
 }
 
@@ -154,13 +164,13 @@ const ageDays = (iso: string): string => {
 
 console.log(`ORPHAN transcript-gone (${orphan.length}):`);
 for (const g of orphan) {
-	console.log(`- ${g.gardenId} ${g.backend} native=${g.nativeSessionId} transcript=${g.transcriptPath || "(empty)"}`);
+	console.log(`- ${g.gardenId} ${g.backend} native=${g.nativeSessionId} transcript=${g.transcriptPath ?? "(null)"}`);
 }
 console.log("");
 
-console.log(`STALE lastSeen>${ttlDays}d (${stale.length}):`);
+console.log(`STALE recordUpdatedAt>${ttlDays}d (${stale.length}):`);
 for (const g of stale) {
-	console.log(`- ${g.gardenId} ${g.backend} lastSeen=${g.lastSeen} age=${ageDays(g.lastSeen)}d`);
+	console.log(`- ${g.gardenId} ${g.backend} recordUpdatedAt=${g.recordUpdatedAt} age=${ageDays(g.recordUpdatedAt)}d`);
 }
 console.log("");
 

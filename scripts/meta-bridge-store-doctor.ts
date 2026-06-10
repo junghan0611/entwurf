@@ -9,7 +9,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { parseMetaRecord } from "../pi-extensions/lib/meta-session.ts";
+import { parseMetaIdentity } from "../pi-extensions/lib/meta-session.ts";
 
 const dir = process.argv[2];
 if (!dir) {
@@ -31,16 +31,18 @@ for (const filename of fs.readdirSync(dir).sort()) {
 	scanned += 1;
 	const file = path.join(dir, filename);
 	try {
-		const record = parseMetaRecord(fs.readFileSync(file, "utf8"));
-		const expectedFilename = `${record.gardenId}.meta.json`;
+		// dual-read (3D-4 commit1): parseMetaIdentity reads v1 AND v2 and normalizes,
+		// so doctor's gardenId/nativeSessionId checks survive the v2 cut.
+		const id = parseMetaIdentity(fs.readFileSync(file, "utf8"));
+		const expectedFilename = `${id.gardenId}.meta.json`;
 		if (filename !== expectedFilename) {
 			failures.push(
-				`${filename}: body/filename drift — body gardenId=${record.gardenId}, expected filename ${expectedFilename}`,
+				`${filename}: body/filename drift — body gardenId=${id.gardenId}, expected filename ${expectedFilename}`,
 			);
 		}
-		const files = nativeToFiles.get(record.nativeSessionId) ?? [];
+		const files = nativeToFiles.get(id.nativeSessionId) ?? [];
 		files.push(filename);
-		nativeToFiles.set(record.nativeSessionId, files);
+		nativeToFiles.set(id.nativeSessionId, files);
 	} catch (err) {
 		failures.push(`${filename}: ${err instanceof Error ? err.message : String(err)}`);
 	}
