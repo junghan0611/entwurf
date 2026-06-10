@@ -23,10 +23,17 @@
 - **하드 게이트 통과 필수.** 모든 코드는 이 repo `pnpm check`(biome lint + tsc + 전 smoke/check
   게이트)를 전부 넘어야 한다. 새 표면마다 게이트 동반.
 
-**▶ 다음 한 걸음:** Stage 0 **step 3D-2 = live receipt dual-write only**.
-`enqueueMetaMessage` / `readMetaInbox`가 기존 `record.delivery.*` stamp를 **유지하면서** mailbox receipt
-state(`meta-mailbox/<gardenId>/state.json`)도 stamp한다. **additive only** — delivery 제거 / v2 upsert 연결 /
-capability consumer 전환 금지. `smoke-meta-mailbox`는 깨지면 안 된다. (순수 TS, push 아직 안 함.)
+**▶ 다음 한 걸음 (구현 세션 진입점 — 2026-06-10 Fable 3자 설계검수 완료, 둘 다 GO, 택1):**
+- **(우선 후보) 버킷 A = trust 완성 + F3 live 버그 수정.** F5a/c(preflight `getEntry` + evidence 3필드 +
+  탈출구 방향 assertion, entryPath는 pi `normalizeCwd` 축) · Trust 2층 active-prompt 탈출구(`{trusted:"yes",
+  remember:true}`; defer=`{trusted:"undecided"}`, handler `undefined` 금지) · N3b inherited-false deny 메시지
+  (`inheritedFrom`+remedy) · **N5 F3 unlink 축소** = `gcStaleSockets`가 timeout(부하)에도 unlink →
+  지금 3주체 메일박스 협업을 깰 수 있는 **live 버그**(`startControlServer:1201`). 근거·게이트 = 아래
+  "Fable 5 설계 검수 반영" 섹션.
+- **(원래 main track) step 3D-2 = live receipt dual-write only.** `enqueueMetaMessage` / `readMetaInbox`가 기존
+  `record.delivery.*` stamp를 **유지하면서** mailbox receipt state(`meta-mailbox/<gardenId>/state.json`)도 stamp.
+  **additive only** — delivery 제거 / v2 upsert 연결 / capability consumer 전환 금지. `smoke-meta-mailbox` 안 깨짐.
+- **entwurf_v2(step 4-5) = NO-GO** — 버킷 B 설계동결(6칸표/스키마/error taxonomy) 먼저. (아래 Fable 섹션.)
 다음 구현 세션 계약 — 이 7개는 본문 동결결정/Trust 2층/Stage 0의 재확인이며 다시 흔들지 말 것:
 1. **Stage 0 step 1·2 = pi 0.79 bump/import/runtime guard + TS preflight module/gate 완료.**
 2. **설계 재탐색 금지** — 검증 원장 항목 다시 찌르지 말 것(doctor 실패/구체 버그만 예외).
