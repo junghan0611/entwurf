@@ -59,6 +59,7 @@ Usage:
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-meta-dual-read        # deterministic gate (0.11 Stage 0 step 3D-1): v2 write shape (serializeMetaIdentity) + dual-read dispatcher (parseMetaRecordAny/parseMetaIdentity) + write→read round-trip, pure, no API
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
+  ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
   ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
@@ -1224,6 +1225,18 @@ check_socket_probe() {
   # a two-socket integration (live listener → alive survives; nonexistent →
   # dead GC-eligible). No wire timeout fixture, no backend, no API.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-socket-probe.ts)
+}
+
+check_project_trust_handler() {
+  # Deterministic gate for 0.11 Stage 0 (Trust 2층 active-prompt escape): the
+  # project_trust handler. Pure decideProjectTrust over real preflight outcomes —
+  # approve/trusted-no-arg→{yes,remember:false}; direct distrust→{no}; inherited
+  # distrust + interactive + "trust-here"→{yes,remember:true} (THE escape, beats
+  # the ancestor false); non-interactive (pi -p / rpc)→{undecided}, never prompts;
+  # never undefined. Plus the thin adapter: fake ctx.ui.select, single-writer
+  # (handler never calls store.set — pi persists on remember:true), F5a evidence
+  # in the prompt title. No real UI, no backend, no API.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-project-trust-handler.ts)
 }
 
 check_plugin_empty_final_recovery() {
@@ -4197,6 +4210,9 @@ case "$cmd" in
     ;;
   check-socket-probe)
     check_socket_probe
+    ;;
+  check-project-trust-handler)
+    check_project_trust_handler
     ;;
   new-session-id)
     # Garden launcher helper: print one fresh garden sessionId (SSOT:

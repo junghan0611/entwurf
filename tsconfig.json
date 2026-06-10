@@ -37,5 +37,17 @@
 	// ${CLAUDE_PLUGIN_ROOT}), which the emit-capable root config cannot allow. It
 	// is typechecked by scripts/tsconfig.json instead (allowImportingTsExtensions),
 	// same fence split as mcp/pi-tools-bridge/src/resume-mode.ts.
-	"exclude": ["node_modules", "mcp", "scripts", "plugins", "pi-extensions/meta-bridge-hook.ts"]
+	"exclude": [
+		"node_modules",
+		"mcp",
+		"scripts",
+		"plugins",
+		"pi-extensions/meta-bridge-hook.ts",
+		// project-trust-handler.ts is a lib→lib VALUE importer (it pulls preflight /
+		// formatPreflightDenial from entwurf-preflight.ts), so it must use an explicit
+		// `.ts` extension to be runnable under the strip-types gate. The emit-capable
+		// root config can't allow .ts extensions — scripts/tsconfig.json (which already
+		// globs pi-extensions/lib/**/*.ts) typechecks it. Same fence as meta-bridge-hook.
+		"pi-extensions/lib/project-trust-handler.ts"
+	]
 }

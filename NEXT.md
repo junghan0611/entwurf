@@ -23,26 +23,25 @@
 - **하드 게이트 통과 필수.** 모든 코드는 이 repo `pnpm check`(biome lint + tsc + 전 smoke/check
   게이트)를 전부 넘어야 한다. 새 표면마다 게이트 동반.
 
-**▶ 다음 한 걸음 (구현 세션 진입점 — 2026-06-10 Fable 3자 설계검수 완료, 둘 다 GO, 택1):**
-- **버킷 A = trust 완성 + F3 live 버그 수정.** **N5 F3 unlink 축소 ✅ = 이번 커밋.** 3값 probe
-  (`alive|dead|indeterminate`) SSOT를 `pi-extensions/lib/socket-probe.ts`로 추출 — `gcStaleSockets`가
-  `shouldUnlinkOnGc`(dead만) unlink, indeterminate(부하 stall)·alive 생존 → 3주체 메일박스 협업 깨던
-  **live 버그 닫힘**(`startControlServer:1201`). 브리지 사본(`index.ts`)도 같은 lib 소비 = drift 제거.
-  분류 기본값 "모르면 파괴 안 함"(EACCES/EPIPE/undefined→indeterminate). 게이트 `check-socket-probe` 18.
-  **▶ trust 3조각 (내부 순서 F5a→N3b→핸들러):** **F5a ✅**(preflight `getEntry` 전환 + evidence
-  `trustStoreEntryPath`/`trustStoreInherited` + 탈출구 방향 #13b; entryPath=우리 `normalizePath`≡pi
-  `canonicalizePath` 동치를 direct-케이스 게이트로 입증, pi 정규화 함수는 public 아님) · **N3b ✅**
-  (`formatPreflightDenial` 순수 formatter — inherited-false=inheritedFrom+remedy, **launcher 배선 X=버킷 B**).
-  `check-pi-preflight` 13→22. **▶ 남은 핸들러**(Trust 2층 active-prompt 탈출구) = 신규 user/global extension,
-  순수 core `decideProjectTrust(outcome, prompt)` + `ctx.ui` 얇은 껍데기. GLG 6 검수포인트(2026-06-10):
-  ① handler가 `store.set` 직접 호출 금지 — pi `resolveProjectTrusted`(project-trust.js:30-31)가 `{yes,
-  remember:true}` 저장 · ② 모든 분기 값 반환(취소/ESC→`undecided`, 명시 no→`{no,remember:false}` R3a child-false
-  안 씀; `undefined` 금지=runner TypeError) · ③ `!ctx.hasUI||mode!=="interactive"`면 prompt 안 띄우고 즉시
-  `undecided`(pi -p degraded 명시) · ④ 게이트=fake prompt로 {yes/no/취소}×{approve/direct-false/inherited-false/
-  fail-fast} 매트릭스, 문구는 F5a evidence 재사용 · ⑤ preflight 결과만 소비(cwd 아래 파일 read 금지), prefixRoots는
-  operator 주입 · ⑥ 등록은 consumer(agent-config) 몫 — `package.json` `pi.extensions` 금지(project-local이라
-  project_trust 발화 시점 미로드=안전망 무용). 근거 = 아래 "Fable 5 설계 검수 반영" + 본문 "Trust 2층".
-- **(원래 main track) step 3D-2 = live receipt dual-write only.** `enqueueMetaMessage` / `readMetaInbox`가 기존
+**버킷 A ✅ 완료 (2026-06-10 구현 세션) — F3 live 버그 + trust 3조각 전부 닫힘.** 상세는 commit history:
+- **F3** = `2660fe4`. 3값 probe(`alive|dead|indeterminate`) SSOT `pi-extensions/lib/socket-probe.ts`;
+  `gcStaleSockets`=`shouldUnlinkOnGc`(dead만) unlink, indeterminate(부하 stall)·alive 생존 → 3주체 메일박스
+  협업 깨던 live 버그 닫힘; 브리지 사본도 같은 lib 소비=drift 제거; "모르면 파괴 안 함"(EACCES/EPIPE/
+  undefined→indeterminate). 게이트 `check-socket-probe` 18.
+- **F5a+N3b** = `1cae918`. preflight `store.get`→`getEntry` + evidence `trustStoreEntryPath`/
+  `trustStoreInherited`; 탈출구 방향 #13b(자식 true>조상 false); entryPath=우리 `normalizePath`≡pi
+  `canonicalizePath` 동치를 direct-케이스 게이트로 입증(pi 정규화 함수 public 아님). `formatPreflightDenial`
+  순수 formatter(inherited-false=inheritedFrom+remedy, **launcher 배선 X=버킷 B**). 게이트 `check-pi-preflight` 13→22.
+- **핸들러** = 이번 커밋. Trust 2층: 순수 `decideProjectTrust(outcome,ctx,prompt)` + 얇은
+  `createProjectTrustHandler` 어댑터. 탈출구=inherited-false+interactive+trust-here→`{yes,remember:true}`→pi가
+  direct child true 저장→상속 false 이김. GLG 6포인트(①store.set 금지=pi가 단일 작성자 ②undefined 금지
+  ③non-interactive→undecided ④ctx.ui 주입+fake prompt ⑤preflight만 소비 ⑥등록은 consumer user/global) +
+  GPT event-reachable fixture(child trust input 있어야 pi가 `project_trust` 발화). `ExtensionMode`는
+  `ProjectTrustContext["mode"]`로 추출; lib→lib `.ts` import + root tsconfig exclude(scripts/tsconfig가
+  typecheck). 게이트 `check-project-trust-handler` 16.
+
+**▶ 다음 한 걸음 (구현 세션 진입점 — 버킷 A 완료, 둘 다 GO, 택1):**
+- **(main track) step 3D-2 = live receipt dual-write only.** `enqueueMetaMessage` / `readMetaInbox`가 기존
   `record.delivery.*` stamp를 **유지하면서** mailbox receipt state(`meta-mailbox/<gardenId>/state.json`)도 stamp.
   **additive only** — delivery 제거 / v2 upsert 연결 / capability consumer 전환 금지. `smoke-meta-mailbox` 안 깨짐.
 - **entwurf_v2(step 4-5) = NO-GO** — 버킷 B 설계동결(6칸표/스키마/error taxonomy) 먼저. (아래 Fable 섹션.)
@@ -384,7 +383,11 @@ undecided≠false, `undefined` 반환은 TypeError**.) **탈출구는 그대로:
   추상화 + claude liveness 술어 Stage 1 전 한 줄 동결 / F6 entwurf_v2 TypeBox 입출력 스키마 + target 의미론
   (garden-id only? 오타 gid가 신규 spawn 사고 막기) + error taxonomy를 `check-*` 게이트로.
 - **버킷 C (backlog):** F7(doctor backend wake-path probe 또는 BASELINE "live-verified: date|never" 표) ·
-  F8(`getLiveSessionsWithInfo` `Promise.all` 병렬화 한 줄).
+  F8(`getLiveSessionsWithInfo` `Promise.all` 병렬화 한 줄) · **formatter remedy 정밀화(GPT 2026-06-10):**
+  `formatPreflightDenial`의 inherited-false remedy("interactive pi에서 approve")는 controlled-launch deny에
+  쓰일 때 cwd가 `hasTrustInputs=false`면 pi가 prompt를 안 띄워(early `return true`) 부정확할 수 있다 →
+  버킷 B에서 launcher가 formatter를 소비할 때 `hasTrustInputs` 분기 고려. (핸들러 경로는 항상 event-reachable
+  =hasTrustInputs=true라 무영향.)
 
 **Fable 2차 재검수 (2026-06-10, folding 검수):** F1-F8 처분 충실성 = clean(누락/격하 없음). folding 과정에서
 나온 신규 N1-N5 검토: N1(6칸표 모순 해소)·N2(fire-forget+dormant "지금 reject" 잠금)·N3(비대칭 = 의도된 보안
