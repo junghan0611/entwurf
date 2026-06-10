@@ -53,7 +53,7 @@
   / check-meta-dual-consumers 9 / check-meta-capability-source 14, smoke 전부 green. GPT 보강(isEntwurf 런타임
   검증 + migration create/attach-v2 no-state claim) 반영. **남은 잔여:** 고정순서 7(MCP `pi-tools-bridge` wording
   — 구조 비의존이라 코드 무변경, 주석만) = 저우선.
-- **3D-3 진입 시 기억할 2건(Fable 검수 2026-06-10):** (1) `pi/entwurf-capabilities.json`이 이제 **런타임
+- **잔여 인지사항 — capability registry(Fable 검수 2026-06-10):** (1) `pi/entwurf-capabilities.json`이 이제 **런타임
   load-bearing** — 3D-3 이후 모든 mint/parse가 이 파일에 의존, 누락/corruption이면 메타레코드 파싱 전체
   throw(fail-loud, check-pack이 tarball 포함 보장; 단 설치환경 깨지면 MCP 브리지 전체 멈춤 = 의존성 승격 인지).
   (2) mint/parse 자체는 registry 주입 안 받음(seam 주입은 `metaCapabilityFor` 레벨뿐) → 미래 리팩터가 mint
@@ -488,10 +488,10 @@ store.get이 막음). **최종 go/no-go:
 N3a 한 줄을 B 작업목록에 포함하는 조건 — 충족). N3-검증: controlled launch `trustOverride` short-circuit
 (project-trust.js:17)·`startControlServer` GC(:1201) 소스 확정.
 
-### Stage 0 step 3 progress map — meta-record v2 (정찰 완료, 3A·3B·3C·3D-1 완료)
+### Stage 0 step 3 progress map — meta-record v2 (3A→3D-4 ✅ 완료, 이력 보존)
 
-정찰 + GPT 리뷰 + 코드 재검수로 순서 고정. 지금은 3D-2 직전이다 — 어기면 dual-read 역호환 또는
-receipt 증거가 깨진다.
+정찰 + GPT 리뷰 + 코드 재검수로 고정했던 순서와 완료 이력이다. **step 3은 완결**됐고, 아래는 후속 세션이
+왜 이 순서로 왔는지 확인하기 위한 원장이다.
 
 **현 authority 위치 (2026-06-10 현재 — meta-record v2 전환 완결):**
 - **live receipt = state.json 단독(3D-4 `f0a20d7`).** `enqueueMetaMessage`/`readMetaInbox`가 record를
