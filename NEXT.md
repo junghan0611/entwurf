@@ -41,9 +41,18 @@
   typecheck). 게이트 `check-project-trust-handler` 16.
 
 **▶ 다음 한 걸음 (구현 세션 진입점 — 버킷 A 완료, 둘 다 GO, 택1):**
-- **(main track) step 3D-2 = live receipt dual-write only.** `enqueueMetaMessage` / `readMetaInbox`가 기존
-  `record.delivery.*` stamp를 **유지하면서** mailbox receipt state(`meta-mailbox/<gardenId>/state.json`)도 stamp.
-  **additive only** — delivery 제거 / v2 upsert 연결 / capability consumer 전환 금지. `smoke-meta-mailbox` 안 깨짐.
+- **(main track) step 3D-2 = live receipt dual-write only. 정찰 완료(2026-06-10, 재정찰 불필요):**
+  **dual-write 2지점** — `enqueueMetaMessage`(`meta-session.ts:1199`: 기존 `markEnqueued`=record.delivery.lastEnqueuedAt
+  **유지** + `stampMailboxReceipt({field:"lastEnqueuedAt"})` 추가) · `readMetaInbox`(`:1265`: 기존 `markRead`=lastReadAt
+  **유지** + `stampMailboxReceipt({field:"lastReadAt"})` 추가, **`messages.length>0` 분기 안** — 빈 inbox는 record도
+  state도 mutate 안 함). **일관성**: 같은 `record.gardenId`(opts.gardenId 아님 — reader가 정규화) + 같은 `mailboxDir`
+  (enqueue가 `.msg` 쓰는 dir과 동일 축) + 같은 `now`; `lastDeliveredAt` backfill **안 함**(doorbell 소유, record
+  주석 `:1258-1264`와 평행). 3B 산물 `stampMailboxReceipt`/`readMailboxReceiptState`/`MailboxReceiptState`
+  (`meta-session.ts:1296~`) 그대로 소비. **additive only** — delivery 제거 / v2 upsert 연결 / capability consumer
+  전환 금지. **게이트(먼저)**: 신규 deterministic `check-meta-mailbox-dualwrite` — temp sessionsDir/mailboxDir,
+  `mintMetaRecord`+`serializeMetaRecord`로 `<dir>/<gid>.meta.json` seed(smoke-meta-mailbox.sh:55-58 패턴) → enqueue/read
+  후 record.delivery.* AND state.json 둘 다 stamp + enqueue stamp가 read 후 보존 + 빈 inbox no-op. `smoke-meta-mailbox`
+  (E2E) **안 깨짐**(record.delivery.* 그대로). 이후 3D-3(capability consumer 전환) → 3D-4(v2 writer + 끊을 지점 ②).
 - **entwurf_v2(step 4-5) = NO-GO** — 버킷 B 설계동결(6칸표/스키마/error taxonomy) 먼저. (아래 Fable 섹션.)
 다음 구현 세션 계약 — 이 7개는 본문 동결결정/Trust 2층/Stage 0의 재확인이며 다시 흔들지 말 것:
 1. **Stage 0 step 1·2 = pi 0.79 bump/import/runtime guard + TS preflight module/gate 완료.**
@@ -290,7 +299,7 @@ trusted 전에는 cwd 아래 어떤 project-local 파일도 읽지 않는다 —
 > consumer 갈아엎기·record wakeMode 제거는 3D). **step 3D-1**(pure v2 write shape `serializeMetaIdentity`
 > + dual-read dispatcher `parseMetaRecordAny`(schemaVersion peek→V1/V2) + `parseMetaIdentity`(dual-read→
 > normalized identity) + `check-meta-dual-read` 14 assertions) = 커밋 `232d02c` (GPT 리뷰 통과, pure-only —
-> FS upsert·live·delivery 제거 전부 없음). **다음 = step 3D-2(live receipt dual-write).** (push 아직 안 함.)
+> FS upsert·live·delivery 제거 전부 없음). **다음 = step 3D-2(live receipt dual-write).** (push 완료.)
 >
 > **진행 (2026-06-10, pi 0.79.0→0.79.1 side-quest — 본궤도 3D-2와 별개, 깨짐 방지용 선반영):**
 > pi 0.79.1이 trust-manager를 둘 바꿈: (a) `hasProjectTrustInputs`에서 AGENTS.md/CLAUDE.md 제거,
@@ -300,7 +309,7 @@ trusted 전에는 cwd 아래 어떤 project-local 파일도 읽지 않는다 —
 > lockstep: devDep/peer floor `>=0.79.1`/run.sh check-pack-install 핀/runtime FLOOR/lockfile) →
 > `f141c3f`(0.79.1 nearest-ancestor 상속 assertion 3개, preflight 총 13). `pnpm check` + heavy
 > `check-pack-install` 모두 0.79.1에서 green. **본궤도(3D-2)는 변경 없음 — bump가 derail하지 않았다.**
-> (push 아직 안 함.) **잔여 follow-up:** `entwurf-preflight.ts` 헤더 주석 "no-trust-inputs = nothing
+> (push 완료.) **잔여 follow-up:** `entwurf-preflight.ts` 헤더 주석 "no-trust-inputs = nothing
 > project-local to load"는 0.79.1 기준 "no trust-gated input"으로 표현 정밀화 가능(코드 로직은 정확, 문구만).
 >
 > **3D 4-조각 분해 (GPT 2026-06-09, live path라 한 덩어리 금지):**
