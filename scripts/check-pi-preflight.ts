@@ -162,7 +162,56 @@ try {
 		else process.env.HOME = origHome;
 	}
 
-	// 10. isolation: every set above landed in the temp store; the real operator
+	// 10-12. nearest-ancestor trust inheritance (pi 0.79.1). 0.79.0's store.get
+	//     matched the cwd EXACTLY; 0.79.1's getEntry/findNearestTrustEntry walks
+	//     up to the closest ancestor carrying an explicit decision. preflight reads
+	//     pi's store directly (frozen decision 9), so this propagation flows
+	//     through verbatim — a saved decision on a PARENT now decides a child that
+	//     has no decision of its own. This is the production half of frozen
+	//     decision 8: an operator distrust on `~/repos/gh` reaches every repo under
+	//     it. These assertions FAIL on 0.79.0 (parent set, child get → null) and
+	//     are intentionally gated behind the 0.79.1 floor (committed with the bump).
+
+	// 10. inherited distrust beats a prefix match: parent=false, child under both
+	//     the parent AND a prefix root → the inherited saved-false still denies
+	//     (saved distrust is the strongest rung; a prefix only promotes null).
+	const inheritParent = mkCwd("inherit-deny", true);
+	const inheritChild = path.join(inheritParent, "nested", "child");
+	fs.mkdirSync(inheritChild, { recursive: true });
+	store.set(inheritParent, false);
+	const dInheritDeny = preflight({ cwd: inheritChild, agentDir, prefixRoots: [prefixRoot] });
+	ok(
+		"child inherits parent's saved-false (nearest ancestor) → deny, even under a prefix root",
+		dInheritDeny.kind === "deny" && dInheritDeny.reason === "saved-false" && dInheritDeny.trustStoreDecision === false,
+	);
+
+	// 11. inherited trust: parent=true, child with no own decision → approve via
+	//     saved-true (reason is saved-true, NOT prefix-match — the store wins first).
+	const trustParent = mkCwd("inherit-approve", true);
+	const trustChild = path.join(trustParent, "nested", "child");
+	fs.mkdirSync(trustChild, { recursive: true });
+	store.set(trustParent, true);
+	const dInheritApprove = preflight({ cwd: trustChild, agentDir });
+	ok(
+		"child inherits parent's saved-true (nearest ancestor) → approve/saved-true + --approve",
+		dInheritApprove.kind === "approve" &&
+			dInheritApprove.reason === "saved-true" &&
+			dInheritApprove.trustStoreDecision === true &&
+			dInheritApprove.launchArgs[0] === "--approve",
+	);
+
+	// 12. nearest wins: the child's OWN false overrides an ancestor true (the walk
+	//     stops at the closest decision, it does not keep climbing past it).
+	const nearestChild = path.join(trustParent, "distrusted-leaf");
+	fs.mkdirSync(nearestChild, { recursive: true });
+	store.set(nearestChild, false);
+	const dNearest = preflight({ cwd: nearestChild, agentDir });
+	ok(
+		"child's own saved-false overrides an ancestor saved-true (nearest entry wins)",
+		dNearest.kind === "deny" && dNearest.reason === "saved-false" && dNearest.trustStoreDecision === false,
+	);
+
+	// 13. isolation: every set above landed in the temp store; the real operator
 	//     trust.json was never opened.
 	ok("temp agentDir holds the trust file (real ~/.pi untouched)", fs.existsSync(path.join(agentDir, "trust.json")));
 } finally {
