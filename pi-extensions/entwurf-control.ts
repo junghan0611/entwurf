@@ -116,6 +116,7 @@ import {
 	readSessionHeader,
 	removeUnadoptedGardenSessionFile,
 } from "./lib/entwurf-core.js";
+import { probeSocketLiveness, shouldListAsLive, shouldUnlinkOnGc } from "./lib/socket-probe.js";
 
 const ENTWURF_FLAG = "entwurf-control";
 const ENTWURF_SESSION_FLAG = "entwurf-session";
@@ -279,34 +280,22 @@ async function gcStaleSockets(): Promise<void> {
 		}
 		if (!entry.name.endsWith(SOCKET_SUFFIX)) continue;
 		const fullPath = path.join(ENTWURF_DIR, entry.name);
-		const alive = await isSocketAlive(fullPath);
-		if (alive) continue;
+		// F3: reclaim ONLY a demonstrably dead socket. A timeout / unknown-error
+		// probe is indeterminate (a live socket may have stalled under load) and
+		// MUST survive the sweep — unlinking it permanently splits that live
+		// session's identity. shouldUnlinkOnGc(indeterminate|alive) === false.
+		const liveness = await probeSocketLiveness(fullPath);
+		if (!shouldUnlinkOnGc(liveness)) continue;
 		await fs.unlink(fullPath).catch(() => {});
 	}
 }
 
+// Listing wrapper over the shared three-valued probe: a session is "alive" for
+// listing/reachability only on a positive connect (shouldListAsLive). An
+// indeterminate probe is hidden from listings but — unlike GC above — never
+// unlinked, so it can reappear once the stall clears.
 async function isSocketAlive(socketPath: string): Promise<boolean> {
-	return await new Promise((resolve) => {
-		const socket = net.createConnection(socketPath);
-		const timeout = setTimeout(() => {
-			socket.destroy();
-			resolve(false);
-		}, 300);
-
-		const cleanup = (alive: boolean) => {
-			clearTimeout(timeout);
-			socket.removeAllListeners();
-			resolve(alive);
-		};
-
-		socket.once("connect", () => {
-			socket.end();
-			cleanup(true);
-		});
-		socket.once("error", () => {
-			cleanup(false);
-		});
-	});
+	return shouldListAsLive(await probeSocketLiveness(socketPath));
 }
 
 type LiveSessionInfo = {

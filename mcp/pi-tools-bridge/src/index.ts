@@ -98,6 +98,7 @@ import {
 	readMetaRecordByGardenId,
 	readMetaSenderMarker,
 } from "../../../pi-extensions/lib/meta-session.ts";
+import { probeSocketLiveness, shouldListAsLive } from "../../../pi-extensions/lib/socket-probe.ts";
 import { resolveEntwurfResumeMode } from "./resume-mode.ts";
 
 const HOME = os.homedir();
@@ -181,25 +182,14 @@ interface LiveSessionInfo {
 	socketPath: string;
 }
 
-const SOCKET_PROBE_TIMEOUT_MS = 300;
-
+// Liveness probe shares the entwurf-control SSOT (pi-extensions/lib/socket-probe).
+// The bridge only *lists* live sockets (it never unlinks), so it consumes the
+// listing policy: a session is live for discovery only on a positive connect;
+// an indeterminate probe (timeout / unknown error) is hidden but left on disk —
+// matching the extension's GC, which keeps indeterminate sockets too. Keeping
+// both surfaces on one probe prevents the two from diverging on timeout targets.
 async function isSocketAlive(socketPath: string): Promise<boolean> {
-	return new Promise((resolve) => {
-		const conn = net.createConnection(socketPath);
-		const timer = setTimeout(() => {
-			conn.destroy();
-			resolve(false);
-		}, SOCKET_PROBE_TIMEOUT_MS);
-		conn.once("connect", () => {
-			clearTimeout(timer);
-			conn.end();
-			resolve(true);
-		});
-		conn.once("error", () => {
-			clearTimeout(timer);
-			resolve(false);
-		});
-	});
+	return shouldListAsLive(await probeSocketLiveness(socketPath));
 }
 
 async function getLiveSessions(): Promise<LiveSessionInfo[]> {

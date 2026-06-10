@@ -24,12 +24,16 @@
   게이트)를 전부 넘어야 한다. 새 표면마다 게이트 동반.
 
 **▶ 다음 한 걸음 (구현 세션 진입점 — 2026-06-10 Fable 3자 설계검수 완료, 둘 다 GO, 택1):**
-- **(우선 후보) 버킷 A = trust 완성 + F3 live 버그 수정.** F5a/c(preflight `getEntry` + evidence 3필드 +
+- **버킷 A = trust 완성 + F3 live 버그 수정.** **N5 F3 unlink 축소 ✅ = 이번 커밋.** 3값 probe
+  (`alive|dead|indeterminate`) SSOT를 `pi-extensions/lib/socket-probe.ts`로 추출 — `gcStaleSockets`가
+  `shouldUnlinkOnGc`(dead만) unlink, indeterminate(부하 stall)·alive 생존 → 3주체 메일박스 협업 깨던
+  **live 버그 닫힘**(`startControlServer:1201`). 브리지 사본(`index.ts`)도 같은 lib 소비 = drift 제거.
+  분류 기본값 "모르면 파괴 안 함"(EACCES/EPIPE/undefined→indeterminate). 게이트 `check-socket-probe` 18.
+  **▶ 남은 trust 3조각 (다음 진입, 내부 순서 F5a→N3b→핸들러):** F5a/c(preflight `getEntry` + evidence 3필드 +
   탈출구 방향 assertion, entryPath는 pi `normalizeCwd` 축) · Trust 2층 active-prompt 탈출구(`{trusted:"yes",
   remember:true}`; defer=`{trusted:"undecided"}`, handler `undefined` 금지) · N3b inherited-false deny 메시지
-  (`inheritedFrom`+remedy) · **N5 F3 unlink 축소** = `gcStaleSockets`가 timeout(부하)에도 unlink →
-  지금 3주체 메일박스 협업을 깰 수 있는 **live 버그**(`startControlServer:1201`). 근거·게이트 = 아래
-  "Fable 5 설계 검수 반영" 섹션.
+  (`inheritedFrom`+remedy; **formatter+게이트로 끊고 launcher 배선은 버킷 B**). 근거·게이트 = 아래
+  "Fable 5 설계 검수 반영" 섹션. **F3 게이트 green 후 진입 = 충족.**
 - **(원래 main track) step 3D-2 = live receipt dual-write only.** `enqueueMetaMessage` / `readMetaInbox`가 기존
   `record.delivery.*` stamp를 **유지하면서** mailbox receipt state(`meta-mailbox/<gardenId>/state.json`)도 stamp.
   **additive only** — delivery 제거 / v2 upsert 연결 / capability consumer 전환 금지. `smoke-meta-mailbox` 안 깨짐.
@@ -254,6 +258,9 @@ trusted 전에는 cwd 아래 어떤 project-local 파일도 읽지 않는다 —
    `isSocketAlive`(`net.createConnection`)·`getLiveSessions`·`getLiveSessionsWithInfo`(RPC `get_info`)·
    `gcStaleSockets`를 lib로 추출/재사용.** 새 `ss`/`kill` probe 표면을 만들지 않는다(Go 드롭했는데 Linux
    CLI probe로 새 표면이 도로 생기는 걸 막음 — portable socket/RPC 경로가 이미 있음).
+   **probe lib 추출 = 이 step 4의 첫 슬라이스로 F3 수정에서 선제 완료**(`pi-extensions/lib/socket-probe.ts`,
+   3값 `SocketLiveness` export). fact-provider가 3값 liveness를 fact로 노출해야 할 때(버킷 B R3b) 이미 준비됨 —
+   양쪽 표면의 boolean `isSocketAlive` 래퍼는 listing 정책 소비라 그대로 두고, 3값 노출만 추가하면 된다.
 5. **상위 entwurf 단일 표면 (새 `entwurf_v2`, 레거시 공존)** — preflight + fact-provider 소비 → liveness로
    resume/send call-time 계산, trusted면 내부 `--approve`로 `pi -p` bg / tmux-live dispatch, untrusted면
    fail-fast. **레거시 `entwurf`/`_resume`/`_send`는 안 건드리고 완전 전환까지 유지**(additive; 동결결정 10).

@@ -58,6 +58,7 @@ Usage:
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-meta-dual-read        # deterministic gate (0.11 Stage 0 step 3D-1): v2 write shape (serializeMetaIdentity) + dual-read dispatcher (parseMetaRecordAny/parseMetaIdentity) + write→read round-trip, pure, no API
+  ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
   ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
@@ -1212,6 +1213,17 @@ check_meta_dual_read() {
   # readMetaInbox/enqueueMetaMessage change, no record.delivery removal (3D-2/3/4).
   # No backend, no hook, no API.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-dual-read.ts)
+}
+
+check_socket_probe() {
+  # Deterministic gate for 0.11 Stage 0 (F3 fix): three-valued control-socket
+  # liveness. classifyConnectError is a pure boundary (ECONNREFUSED/ENOENT →
+  # dead; timeout/EACCES/unknown → indeterminate). GC reclaims dead only;
+  # indeterminate (a load-stalled live socket) survives the sweep — the F3
+  # invariant. Listing lists alive only. Pure classify + GC/listing policy +
+  # a two-socket integration (live listener → alive survives; nonexistent →
+  # dead GC-eligible). No wire timeout fixture, no backend, no API.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-socket-probe.ts)
 }
 
 check_plugin_empty_final_recovery() {
@@ -4182,6 +4194,9 @@ case "$cmd" in
     ;;
   check-meta-dual-read)
     check_meta_dual_read
+    ;;
+  check-socket-probe)
+    check_socket_probe
     ;;
   new-session-id)
     # Garden launcher helper: print one fresh garden sessionId (SSOT:
