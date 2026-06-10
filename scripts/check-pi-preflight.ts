@@ -20,7 +20,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { ProjectTrustStore } from "@earendil-works/pi-coding-agent";
-import { preflight } from "../pi-extensions/lib/entwurf-preflight.ts";
+import { formatPreflightDenial, preflight } from "../pi-extensions/lib/entwurf-preflight.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -67,6 +67,15 @@ try {
 		"saved false → deny/saved-false (even under a prefix root)",
 		d1.kind === "deny" && d1.reason === "saved-false" && d1.trustStoreDecision === false && d1.launchArgs.length === 0,
 	);
+	// F5a evidence: a DIRECT decision on the cwd carries entryPath === the cwd
+	// (pi-canonical === our normalizePath here, since tmpRoot is a realpath) and
+	// is NOT inherited. This is also the entryPath axis assertion — if pi's
+	// canonicalizePath diverged from our normalizePath on this cwd, entryPath
+	// would not equal cwd1 and this fails loud (NEXT: symlink edge caught here).
+	ok(
+		"direct saved-false: entryPath === cwd, not inherited",
+		d1.trustStoreEntryPath === cwd1 && d1.trustStoreInherited === false,
+	);
 
 	// 2. saved true → approve, launchArgs carries the internal --approve.
 	const cwd2 = mkCwd("saved-true", true);
@@ -104,6 +113,12 @@ try {
 			d4.reason === "no-trust-inputs" &&
 			d4.hasTrustInputs === false &&
 			d4.launchArgs.length === 0,
+	);
+	// F5a evidence: no store decision (neither cwd nor any ancestor) ⇒ no entry
+	// path and not inherited. The deny/handler layers must see "nothing decided".
+	ok(
+		"no decision → entryPath undefined + not inherited",
+		d4.trustStoreEntryPath === undefined && d4.trustStoreInherited === false,
 	);
 
 	// 5. undecided + trust inputs + no prefix → fail-fast.
@@ -184,6 +199,14 @@ try {
 		"child inherits parent's saved-false (nearest ancestor) → deny, even under a prefix root",
 		dInheritDeny.kind === "deny" && dInheritDeny.reason === "saved-false" && dInheritDeny.trustStoreDecision === false,
 	);
+	// F5a evidence: an INHERITED decision carries entryPath === the ANCESTOR that
+	// holds it (not the cwd) and is flagged inherited. This is the raw material
+	// N3b's deny message turns into "inheritedFrom <parent> — open an interactive
+	// pi at <cwd> to override".
+	ok(
+		"inherited saved-false: entryPath === parent (ancestor), inherited === true",
+		dInheritDeny.trustStoreEntryPath === inheritParent && dInheritDeny.trustStoreInherited === true,
+	);
 
 	// 11. inherited trust: parent=true, child with no own decision → approve via
 	//     saved-true (reason is saved-true, NOT prefix-match — the store wins first).
@@ -199,6 +222,10 @@ try {
 			dInheritApprove.trustStoreDecision === true &&
 			dInheritApprove.launchArgs[0] === "--approve",
 	);
+	ok(
+		"inherited saved-true: entryPath === parent (ancestor), inherited === true",
+		dInheritApprove.trustStoreEntryPath === trustParent && dInheritApprove.trustStoreInherited === true,
+	);
 
 	// 12. nearest wins: the child's OWN false overrides an ancestor true (the walk
 	//     stops at the closest decision, it does not keep climbing past it).
@@ -210,6 +237,61 @@ try {
 		"child's own saved-false overrides an ancestor saved-true (nearest entry wins)",
 		dNearest.kind === "deny" && dNearest.reason === "saved-false" && dNearest.trustStoreDecision === false,
 	);
+	ok(
+		"nearest direct false (over ancestor true): entryPath === cwd, not inherited",
+		dNearest.trustStoreEntryPath === nearestChild && dNearest.trustStoreInherited === false,
+	);
+
+	// 13b. ESCAPE DIRECTION (F5a / Trust 2층 active-prompt). The mirror of #10:
+	//      parent=false, but the child carries its OWN saved-true. nearest-entry
+	//      wins, so the child approves DESPITE the inherited distrust. This is the
+	//      exact post-state of the only escape from an inherited false — a human
+	//      opens an interactive pi at the child cwd, the handler prompts, and yes →
+	//      `{trusted:"yes", remember:true}` writes a direct child true. Once that
+	//      entry exists, preflight must approve the child (entryPath === child, not
+	//      inherited), proving the escape actually releases the launch.
+	const escapeParent = mkCwd("escape-parent", true);
+	const escapeChild = path.join(escapeParent, "trusted-leaf");
+	fs.mkdirSync(escapeChild, { recursive: true });
+	store.set(escapeParent, false);
+	store.set(escapeChild, true);
+	const dEscape = preflight({ cwd: escapeChild, agentDir });
+	ok(
+		"child's own saved-true beats an ancestor saved-false (escape direction) → approve",
+		dEscape.kind === "approve" &&
+			dEscape.reason === "saved-true" &&
+			dEscape.trustStoreEntryPath === escapeChild &&
+			dEscape.trustStoreInherited === false &&
+			dEscape.launchArgs[0] === "--approve",
+	);
+
+	// N3b. deny-message formatter — a PURE formatter over deny evidence (no
+	//      launcher wiring; that is bucket B). The inherited-false message MUST
+	//      name the inheritedFrom source AND the active-prompt remedy; the other
+	//      two deny shapes must not leak an ancestor they don't have.
+	if (dInheritDeny.kind === "deny") {
+		const msg = formatPreflightDenial(dInheritDeny);
+		ok(
+			"N3b: inherited-false deny names inheritedFrom (ancestor) + interactive-pi remedy + cwd",
+			msg.includes(inheritParent) && msg.includes("interactive pi") && msg.includes(inheritChild),
+		);
+	}
+	if (d1.kind === "deny") {
+		const msg = formatPreflightDenial(d1);
+		// Direct distrust: explains "explicitly distrusted" + remedy, and does NOT
+		// invent an ancestor (cwd1 has no inherited source).
+		ok(
+			"N3b: direct-false deny says explicitly distrusted + remedy, no phantom ancestor",
+			msg.includes("explicitly distrusted") && msg.includes("interactive pi") && msg.includes(cwd1),
+		);
+	}
+	if (d5.kind === "deny") {
+		const msg = formatPreflightDenial(d5);
+		ok(
+			"N3b: fail-fast deny says untrusted + prefix-root-or-interactive remedy",
+			msg.includes("untrusted") && msg.includes("prefix") && msg.includes("interactive pi"),
+		);
+	}
 
 	// 13. isolation: every set above landed in the temp store; the real operator
 	//     trust.json was never opened.

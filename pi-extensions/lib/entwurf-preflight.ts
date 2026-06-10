@@ -75,8 +75,30 @@ interface PreflightEvidence {
 	 * Frozen decision 6: never `--no-approve` (that is a silent degraded launch).
 	 */
 	readonly launchArgs: readonly string[];
-	/** The raw `ProjectTrustStore.get(cwd)` value: true / false / null. */
+	/**
+	 * The trust decision that applies to this cwd: `ProjectTrustStore.getEntry(cwd)
+	 * ?.decision ?? null`. Identical value to the old `.get(cwd)`, but sourced from
+	 * `getEntry` so the deciding entry's path/inheritance survive (below).
+	 */
 	readonly trustStoreDecision: ProjectTrustDecision;
+	/**
+	 * The pi-canonical path of the trust-store entry that decided this cwd, or
+	 * undefined when neither the cwd nor any ancestor carries a decision
+	 * (trustStoreDecision === null). On 0.79.1 `getEntry` walks up to the nearest
+	 * ancestor with an explicit decision and returns ITS path — so this is the
+	 * source a deny message must name (N3b `inheritedFrom`). pi-canonical =
+	 * `canonicalizePath(resolvePath())`, the same realpath axis as `canonicalCwd`.
+	 */
+	readonly trustStoreEntryPath?: string;
+	/**
+	 * True when the deciding entry is an ANCESTOR, not the cwd itself — the
+	 * decision is INHERITED (0.79.1 nearest-ancestor walk-up). False for a direct
+	 * decision on the cwd or for no decision at all. The inherited-false case is
+	 * the one that silently blocks a human's active prompt (Trust 2층): the
+	 * handler defers `undecided`, then the store's inherited false wins anyway, so
+	 * only an active prompt → `{trusted:"yes", remember:true}` escapes it.
+	 */
+	readonly trustStoreInherited: boolean;
 	/** `hasProjectTrustInputs(cwd)` — computed even when a prefix already won. */
 	readonly hasTrustInputs: boolean;
 	/** The canonical operator root that matched, if the decision is prefix-driven. */
@@ -95,6 +117,47 @@ export type PreflightOutcome =
 	| (PreflightEvidence & { readonly kind: "approve"; readonly reason: "saved-true" | "prefix-match" })
 	| (PreflightEvidence & { readonly kind: "trusted-no-arg"; readonly reason: "no-trust-inputs" })
 	| (PreflightEvidence & { readonly kind: "deny"; readonly reason: "saved-false" | "fail-fast" });
+
+/** A deny outcome — the only shape `formatPreflightDenial` accepts. */
+export type PreflightDenial = Extract<PreflightOutcome, { kind: "deny" }>;
+
+/**
+ * Render the human-facing reason a controlled launch was refused (N3b). This is
+ * a PURE formatter over a deny outcome — it does NOT touch a launcher, a socket,
+ * or pi; wiring it into the controlled-launch surface is bucket B (step 5), not
+ * here. The launcher/handler/error layers all call this so the refusal text is
+ * identical everywhere and always sourced from F5a evidence.
+ *
+ * The inherited-false branch is the one that matters: an operator distrust on an
+ * ANCESTOR (e.g. `~/repos/gh`) silently denies a child cwd, and an agent CANNOT
+ * lift it — that is an intended security property (N3a: a controlled launch
+ * short-circuits on `trustOverride` and never reaches the human-only active
+ * prompt). So the message must (1) name the inherited source (`inheritedFrom`)
+ * and (2) give the only real remedy: open an interactive pi AT the cwd and
+ * approve, which writes a direct child trust that beats the inherited decision
+ * (the "escape direction" proven in check-pi-preflight #13b).
+ */
+export function formatPreflightDenial(outcome: PreflightDenial): string {
+	const cwd = outcome.canonicalCwd;
+	const openHere = `open an interactive pi at ${cwd} and approve when prompted`;
+	if (outcome.reason === "saved-false") {
+		if (outcome.trustStoreInherited && outcome.trustStoreEntryPath !== undefined) {
+			return (
+				`Controlled launch refused: ${cwd} is distrusted by inheritance from ${outcome.trustStoreEntryPath} ` +
+				`(an ancestor carries a saved "no"). An agent cannot self-promote trust — this is an intended ` +
+				`security property. To trust THIS cwd only, ${openHere}; that writes a direct decision for ${cwd} ` +
+				`which overrides the inherited one.`
+			);
+		}
+		return `Controlled launch refused: ${cwd} is explicitly distrusted (a saved "no" on this directory). To change it, ${openHere}.`;
+	}
+	// fail-fast: undecided + trust inputs + no operator prefix root.
+	return (
+		`Controlled launch refused: ${cwd} is untrusted — it has trust inputs but no saved decision and no ` +
+		`operator prefix root. Refusing a silent degraded launch. Either add ${cwd} under an operator prefix ` +
+		`root, or ${openHere}.`
+	);
+}
 
 /**
  * Normalize a path the way pi resolves one before the trust store sees it:
@@ -139,7 +202,16 @@ export function preflight(input: PreflightInput): PreflightOutcome {
 
 	const canonicalCwd = normalizePath(input.cwd);
 	const store = new ProjectTrustStore(agentDir);
-	const trustStoreDecision = store.get(input.cwd);
+	// getEntry, not get: get() throws away which path decided. getEntry returns
+	// `{ path, decision } | null` — the nearest ancestor (or the cwd itself)
+	// carrying an explicit decision. We recover the same decision value AND the
+	// deciding path, so the fact/handler/error layers can name an inherited
+	// source without re-walking the store. entry.path is pi-canonical, the same
+	// realpath axis as `canonicalCwd`, so an entry on the cwd ITSELF compares
+	// equal (= direct) and an ancestor compares unequal (= inherited).
+	const entry = store.getEntry(input.cwd);
+	const trustStoreDecision: ProjectTrustDecision = entry?.decision ?? null;
+	const trustStoreInherited = entry !== null && entry.path !== canonicalCwd;
 	// Computed unconditionally: a fact tool must report what a prefix-approved
 	// cwd could load, so the probe runs even when a prefix already decides.
 	const hasTrustInputs = hasProjectTrustInputs(input.cwd);
@@ -148,8 +220,10 @@ export function preflight(input: PreflightInput): PreflightOutcome {
 	const evidence: PreflightEvidence = {
 		launchArgs: [],
 		trustStoreDecision,
+		trustStoreInherited,
 		hasTrustInputs,
 		canonicalCwd,
+		...(entry !== null ? { trustStoreEntryPath: entry.path } : {}),
 		...(matched !== undefined ? { matchedPrefixRoot: matched } : {}),
 	};
 

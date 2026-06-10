@@ -29,11 +29,19 @@
   `shouldUnlinkOnGc`(dead만) unlink, indeterminate(부하 stall)·alive 생존 → 3주체 메일박스 협업 깨던
   **live 버그 닫힘**(`startControlServer:1201`). 브리지 사본(`index.ts`)도 같은 lib 소비 = drift 제거.
   분류 기본값 "모르면 파괴 안 함"(EACCES/EPIPE/undefined→indeterminate). 게이트 `check-socket-probe` 18.
-  **▶ 남은 trust 3조각 (다음 진입, 내부 순서 F5a→N3b→핸들러):** F5a/c(preflight `getEntry` + evidence 3필드 +
-  탈출구 방향 assertion, entryPath는 pi `normalizeCwd` 축) · Trust 2층 active-prompt 탈출구(`{trusted:"yes",
-  remember:true}`; defer=`{trusted:"undecided"}`, handler `undefined` 금지) · N3b inherited-false deny 메시지
-  (`inheritedFrom`+remedy; **formatter+게이트로 끊고 launcher 배선은 버킷 B**). 근거·게이트 = 아래
-  "Fable 5 설계 검수 반영" 섹션. **F3 게이트 green 후 진입 = 충족.**
+  **▶ trust 3조각 (내부 순서 F5a→N3b→핸들러):** **F5a ✅**(preflight `getEntry` 전환 + evidence
+  `trustStoreEntryPath`/`trustStoreInherited` + 탈출구 방향 #13b; entryPath=우리 `normalizePath`≡pi
+  `canonicalizePath` 동치를 direct-케이스 게이트로 입증, pi 정규화 함수는 public 아님) · **N3b ✅**
+  (`formatPreflightDenial` 순수 formatter — inherited-false=inheritedFrom+remedy, **launcher 배선 X=버킷 B**).
+  `check-pi-preflight` 13→22. **▶ 남은 핸들러**(Trust 2층 active-prompt 탈출구) = 신규 user/global extension,
+  순수 core `decideProjectTrust(outcome, prompt)` + `ctx.ui` 얇은 껍데기. GLG 6 검수포인트(2026-06-10):
+  ① handler가 `store.set` 직접 호출 금지 — pi `resolveProjectTrusted`(project-trust.js:30-31)가 `{yes,
+  remember:true}` 저장 · ② 모든 분기 값 반환(취소/ESC→`undecided`, 명시 no→`{no,remember:false}` R3a child-false
+  안 씀; `undefined` 금지=runner TypeError) · ③ `!ctx.hasUI||mode!=="interactive"`면 prompt 안 띄우고 즉시
+  `undecided`(pi -p degraded 명시) · ④ 게이트=fake prompt로 {yes/no/취소}×{approve/direct-false/inherited-false/
+  fail-fast} 매트릭스, 문구는 F5a evidence 재사용 · ⑤ preflight 결과만 소비(cwd 아래 파일 read 금지), prefixRoots는
+  operator 주입 · ⑥ 등록은 consumer(agent-config) 몫 — `package.json` `pi.extensions` 금지(project-local이라
+  project_trust 발화 시점 미로드=안전망 무용). 근거 = 아래 "Fable 5 설계 검수 반영" + 본문 "Trust 2층".
 - **(원래 main track) step 3D-2 = live receipt dual-write only.** `enqueueMetaMessage` / `readMetaInbox`가 기존
   `record.delivery.*` stamp를 **유지하면서** mailbox receipt state(`meta-mailbox/<gardenId>/state.json`)도 stamp.
   **additive only** — delivery 제거 / v2 upsert 연결 / capability consumer 전환 금지. `smoke-meta-mailbox` 안 깨짐.
