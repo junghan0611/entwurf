@@ -28,6 +28,12 @@
  *    id in the substrate; an additive extension later, not a permanent no).
  *  - Q2: every cell is a SINGLE verdict — no "default", no escape hatch (a
  *    "default reject" would re-admit the call-time nondeterminism F1 closes).
+ *  - F-mailbox: a `fire-and-forget` to an `unsupported` citizen (claude-code etc.)
+ *    is NOT a reject — the 0.10.0 meta-bridge mailbox delivers without liveness.
+ *    `unsupported` is the "no liveness predicate" fact, not a delivery verdict; so
+ *    ff+unsupported routes to the `meta-mailbox` transport, gated by a SEPARATE
+ *    `mailboxDeliverable` fact (NOT a column of the 6-cell table — Fable (i)).
+ *    owned-outcome+unsupported still rejects (self-fetch needs real liveness).
  *
  * The decision table here is a constant; `check-entwurf-v2-contract` asserts it
  * exhaustively + proves the "table cell ↔ receipt" round-trip. THAT round-trip
@@ -97,26 +103,35 @@ export const ENTWURF_V2_REJECT_REASONS = [
 	"indeterminate-no-spawn", // N1/F3: never spawn an indeterminate target
 	"dormant-fire-forget-unsupported", // N2: fire-and-forget to a dormant target — reject for now
 	"owned-live-no-autosend", // Q2/F1: owned-outcome to a live target is not an auto-send
-	"backend-liveness-unsupported", // R1: backend has no liveness predicate (e.g. claude-code)
+	"backend-liveness-unsupported", // R1: backend has no liveness predicate (e.g. claude-code) — owned-outcome only
+	"mailbox-undeliverable", // F-mailbox: fire-and-forget to an unsupported citizen whose mailbox is not deliverable (fail-closed; future pi-backend non-drainable mailbox)
 	"bad-target", // R2: absent/typo garden-id (no existing citizen); spawn-new out of v2 scope
 	"untrusted-fail-fast", // 동결결정 5: controlled launch into an untrusted cwd
 	"target-locked", // R5 pre-claim for bucket B F2 per-gid lockfile conflict
 ] as const;
 export type EntwurfV2RejectReason = (typeof ENTWURF_V2_REJECT_REASONS)[number];
 
-// Reasons the (intent × liveness) table itself can emit. The remaining taxonomy
-// members (bad-target, untrusted-fail-fast, target-locked) are produced by the
-// EARLIER stages (target resolution / preflight / lockfile) that run before the
-// resolver — pre-claimed in the enum so bucket B does not reopen it.
-export const TABLE_REJECT_REASONS = [
+// Reasons the RESOLVER emits — the in-domain 6-cell table cells PLUS the
+// unsupported domain-guard mini-table (backend-liveness-unsupported for
+// owned-outcome, mailbox-undeliverable for a fail-closed fire-and-forget). NOT
+// just the 6-cell table (the F-mailbox mini-table emits two of these), hence
+// RESOLVER_ not TABLE_. The remaining taxonomy members (bad-target,
+// untrusted-fail-fast, target-locked) are produced by the EARLIER stages (target
+// resolution / preflight / lockfile) that run before the resolver — pre-claimed
+// in the enum so bucket B does not reopen it.
+export const RESOLVER_REJECT_REASONS = [
 	"indeterminate-no-spawn",
 	"dormant-fire-forget-unsupported",
 	"owned-live-no-autosend",
 	"backend-liveness-unsupported",
+	"mailbox-undeliverable",
 ] as const satisfies readonly EntwurfV2RejectReason[];
 
 // ── Transport + verdict ────────────────────────────────────────────────────
-export const ENTWURF_V2_TRANSPORTS = ["control-socket", "spawn-bg", "tmux-live"] as const;
+// `meta-mailbox` (F-mailbox) = liveness-free delivery via the 0.10.0 meta-bridge
+// mailbox + doorbell. The ack is "enqueued + doorbell rung", NOT a read and NOT a
+// turn injection — so `mode` (steer/follow_up) is meaningless on this transport.
+export const ENTWURF_V2_TRANSPORTS = ["control-socket", "spawn-bg", "tmux-live", "meta-mailbox"] as const;
 export type EntwurfV2Transport = (typeof ENTWURF_V2_TRANSPORTS)[number];
 
 // Allow-branch facets (exported so the schema↔types gate asserts every enum).
@@ -129,7 +144,7 @@ export const ENTWURF_V2_OWNERSHIPS = ["ack-only", "owned"] as const;
 export const ENTWURF_V2_MODES = ["steer", "follow_up"] as const;
 
 export type DispatchVerdict =
-	| { action: "send"; transport: "control-socket"; ownership: "ack-only" }
+	| { action: "send"; transport: "control-socket" | "meta-mailbox"; ownership: "ack-only" }
 	| { action: "resume"; transport: "spawn-bg" | "tmux-live"; ownership: "owned" }
 	| { action: "reject"; reason: EntwurfV2RejectReason };
 
@@ -152,6 +167,30 @@ export const DISPATCH_TABLE: Record<EntwurfIntent, Record<DispatchLiveness, Disp
 	},
 };
 
+// ── The unsupported-backend mailbox mini-table (F-mailbox) ─────────────────
+// SEPARATE from the in-domain 6-cell DISPATCH_TABLE (Fable (i)): an `unsupported`
+// backend (claude-code self-fetch, codex/agy without a probe surface) has NO
+// liveness predicate, so it never enters the liveness-keyed table. Instead the
+// domain guard routes it here, keyed on intent alone:
+//  - fire-and-forget needs no liveness — the 0.10.0 meta-bridge mailbox delivers
+//    to any DELIVERABLE citizen. This cell is the deliverable path; resolveDispatch
+//    downgrades it to `mailbox-undeliverable` when the separate mailboxDeliverable
+//    fact is false (fail-closed). The ack is enqueue+doorbell, NOT read, and
+//    observedLiveness stays `unsupported` — the receipt's `meta-mailbox` transport
+//    is what says "this went to the mailbox".
+//  - owned-outcome has no real liveness to own on a self-fetch backend → reject.
+//
+// N2 asymmetry (명문화 — without this the two tables read as contradictory):
+//   fire-and-forget+dormant-PI = reject  vs  fire-and-forget+unsupported-CITIZEN = mailbox.
+//   In-domain `dormant` is a CONFIRMED not-running pi, so enqueuing would be a
+//   silent pileup (resume is the honest place). `unsupported` is UNKNOWN liveness
+//   on a backend we cannot probe, so a best-effort mailbox doorbell is the most we
+//   can honestly offer — there is nothing to resume into.
+export const UNSUPPORTED_DISPATCH_TABLE: Record<EntwurfIntent, DispatchVerdict> = {
+	"fire-and-forget": { action: "send", transport: "meta-mailbox", ownership: "ack-only" },
+	"owned-outcome": { action: "reject", reason: "backend-liveness-unsupported" },
+};
+
 // ── Dispatch receipt (R3) ──────────────────────────────────────────────────
 // Carries `observedLiveness` + the transport/action so `check-entwurf-v2-contract`
 // can assert a "table cell ↔ receipt" round-trip — the machine proof of F6.
@@ -170,14 +209,42 @@ export type EntwurfV2Receipt =
  * target (→ `bad-target` if no existing citizen), runs preflight (→
  * `untrusted-fail-fast`), and acquires the per-gid lock (→ `target-locked`)
  * BEFORE reaching here; this function only decides the liveness-routed verdict.
- * R1 domain guard runs first: an `unsupported` liveness rejects before the table.
+ *
+ * Two facts in: `liveness` (the 4-value FactLiveness) and `mailboxDeliverable`
+ * (F-mailbox — a SEPARATE axis from liveness, NOT a column of either table, NOT
+ * an entwurf_peers row field; step 5's target/capability layer supplies it, and
+ * unknown deliverability MUST be passed as false = fail-closed). The deliverable
+ * fact is consulted ONLY on the `unsupported` mailbox path; for an in-domain (pi)
+ * backend the liveness-routed table is authoritative and the flag is ignored.
+ *
+ * R1 domain guard runs first: an `unsupported` liveness is routed through the
+ * UNSUPPORTED_DISPATCH_TABLE (mailbox mini-table), never the 6-cell table.
  * No spawn, no send, no I/O — step 5 executes the chosen transport.
  */
-export function resolveDispatch(intent: EntwurfIntent, liveness: FactLiveness): EntwurfV2Receipt {
+export function resolveDispatch(
+	intent: EntwurfIntent,
+	liveness: FactLiveness,
+	mailboxDeliverable: boolean,
+): EntwurfV2Receipt {
 	if (liveness === "unsupported") {
-		return { ok: false, reason: "backend-liveness-unsupported", observedLiveness: liveness };
+		// R1 domain guard → the mailbox mini-table (intent-keyed), NOT the 6-cell table.
+		const mboxCell = UNSUPPORTED_DISPATCH_TABLE[intent];
+		if (mboxCell.action === "reject") {
+			return { ok: false, reason: mboxCell.reason, observedLiveness: liveness };
+		}
+		// fire-and-forget allow cell, gated by the separate deliverability fact.
+		if (!mailboxDeliverable) {
+			return { ok: false, reason: "mailbox-undeliverable", observedLiveness: liveness };
+		}
+		return {
+			ok: true,
+			action: mboxCell.action,
+			transport: mboxCell.transport,
+			ownership: mboxCell.ownership,
+			observedLiveness: liveness,
+		};
 	}
-	// liveness is now narrowed to SocketLiveness.
+	// liveness is now narrowed to SocketLiveness; deliverability does not apply.
 	const cell = DISPATCH_TABLE[intent][dispatchLivenessOf(liveness)];
 	if (cell.action === "reject") {
 		return { ok: false, reason: cell.reason, observedLiveness: liveness };
@@ -213,7 +280,7 @@ export const EntwurfV2InputSchema = Type.Object(
 		mode: Type.Optional(
 			StringEnum(ENTWURF_V2_MODES, {
 				description:
-					"delivery mode (steer = interrupt current turn, follow_up = queue) — NOT the ownership axis (F1) nor liveness routing.",
+					"delivery mode (steer = interrupt current turn, follow_up = queue) — NOT the ownership axis (F1) nor liveness routing. MEANINGLESS on the meta-mailbox transport (F-mailbox): a mailbox ack is enqueue+doorbell, not a turn injection, so steer/follow_up does not apply when the verdict transport is meta-mailbox.",
 			}),
 		),
 		wantsReply: Type.Optional(
