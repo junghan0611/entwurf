@@ -46,9 +46,11 @@
 > `main`=`origin/main`, working tree clean. step 4-pre(contract-lock) 진입 시작점 고정.
 >
 > **▣ 세션27 마무리 (2026-06-11, 커밋 — push는 GLG):**
-> - **contract-lock = 구현·커밋 완료** (`fa95a8a` feat 계약+게이트 78 assertions, `7aff4eb` docs, `4c25fbf` doctor).
->   GPT 1·2차 검수 통과 = freeze-ready. **잔여: Fable 코드-증거 교차검수 미완** — Fable(claude-fable-5)이
->   entwurf 레지스트리에 없고 라이브 Fable 세션도 없어 **닿을 경로가 없다**(process gap, ↓ 후속).
+> - **contract-lock = 구현·커밋 완료** (`fa95a8a` feat 계약+게이트, `aeac8d8` schema 정확성 = **81 assertions**, `7aff4eb` docs).
+>   GPT 1·2·3차 검수 통과 = freeze-ready. **GPT 3차 blocker 보강(`aeac8d8`):** receipt/input 스키마에
+>   `additionalProperties:false` — discriminated union이어도 default가 extra key 허용이라 `{ok:true,reason}`
+>   불법 영수증이 통과하던 구멍 차단(게이트가 `additionalProperties===false` assert). **잔여: Fable 코드-증거
+>   교차검수 미완** — Fable(claude-fable-5)이 entwurf 레지스트리에 없고 라이브 Fable 세션도 없어 **닿을 경로가 없다**(process gap, ↓ 후속).
 > - **⚠ meta-bridge 배포 지연 발견(중요, 데이터 손상 아님):** 3D-4 v2 cut이 **소스만 v2**로 바꾸고
 >   `pi/meta-bridge/.assembled/`(배포 번들 = Claude SessionStart 훅 실행체, gitignored, Jun 6)를 재조립 안 함 →
 >   **라이브 writer가 여전히 v1.** 그래서 store 58개 전부 schemaVersion 1(v2 0개), 내 세션 포함. v1 레코드는
@@ -57,9 +59,16 @@
 > - **고침 (이 세션):** `doctor-meta-bridge`에 **writer-version parity** 추가(`4c25fbf`) — source/assembled/
 >   installed 각 live-write schema(`serializeMetaIdentity` 유무 = v2/v1) + content-hash + store 분포 출력,
 >   installed≠source면 **FAIL "STALE → install-meta-bridge"**. 지금 돌리면 source=v2/installed=v1로 정확히 FAIL.
-> - **잔여 배포 절차 (GLG 승인 필요 — 미실행):** ① `./run.sh install-meta-bridge`(번들 재조립+재설치) →
->   ② 새 Claude 세션 1개 열어 v2 record 생성 확인 → ③ `doctor-meta-bridge` green. **지금 당장 안 함**(전역
->   플러그인 재설치 = 모든 향후 세션 영향, GLG 결정).
+> - **GPT 3차 blocker 2 보강(`550e6db`) — 배포가 hook을 깰 뻔:** v2 writer는 registry를
+>   `import.meta.dirname/../../pi/entwurf-capabilities.json`로 런타임 read하는데, `install.sh`가 그 파일을
+>   번들에 **안 복사**했다 → v2 배포 시 mint/parse마다 throw(silent hook break), hash parity는 못 봄. 고침:
+>   (1) `metaCapabilitiesFilePath`가 repo 경로 우선 + **plugin-root fallback**(번들에선 `../../pi`가 plugin dir
+>   탈출), (2) `install.sh`가 registry를 plugin-root에 복사, (3) doctor가 **v2 번들인데 registry 없으면 FAIL**
+>   (false-green 차단). repo 동작 불변(게이트 전부 green).
+> - **잔여 배포 절차 (GLG 승인 필요 — 미실행, 이제 안전):** ① `./run.sh install-meta-bridge`(번들 재조립+재설치,
+>   registry 동반) → ② 새 Claude 세션 1개 열어 v2 record 생성 확인 → ③ `doctor-meta-bridge` green(registry-dep
+>   포함). **배포 시 실제 번들 경로 resolve를 라이브 확인**(loader fallback은 repo에선 안 타므로 첫 배포가 검증점).
+>   **지금 당장 안 함**(전역 플러그인 재설치 = 모든 향후 세션 영향, GLG 결정).
 > - **완전 전환(v1 dual-read 제거) 기준 3개 (GPT+GLG 합의, 그 전까진 additive 유지 = 안전장치, 더러움 아님):**
 >   ① installed writer v2 확인 ② 기존 v1 store migration/archival 방침 확정 ③ doctor가 live v1 의존 없음 증명.
 > - **dev-flow 원칙 (박아둠 — 자기 발톱 깎기):** meta-bridge는 *우리 세션을 기록하는 바로 그 시스템*이라
