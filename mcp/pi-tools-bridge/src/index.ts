@@ -89,6 +89,7 @@ import {
 	runEntwurfResumeSync,
 	runEntwurfSync,
 } from "../../../pi-extensions/lib/entwurf-core.ts";
+import { formatMetaMailboxBody } from "../../../pi-extensions/lib/meta-mailbox-body.ts";
 import {
 	defaultMetaMailboxDir,
 	enqueueMetaMessage,
@@ -422,28 +423,10 @@ function previewBody(body: string, maxLines = 5): string {
 	return `${lines.slice(0, maxLines).join("\n")}\n...`;
 }
 
-// Render an entwurf message envelope as the meta-bridge mailbox body. The
-// control-socket path carries the sender envelope in its RPC framing; the mailbox
-// path is just a file, so the envelope must be SERIALIZED INTO the body — else a
-// receiver reading entwurf_inbox_read would not know who sent it, whether the
-// sender is replyable (and at which sessionId), or whether a reply was wanted.
-// Mirrors the "[entwurf received ⟵]" render used for live control-socket delivery.
-function formatMetaMailboxBody(sender: SenderEnvelope, message: string, wantsReply: boolean): string {
-	const replyable = sender.replyable === true;
-	const kind = sender.origin === "meta-session" ? "meta-session, " : "";
-	const sessionLine = replyable
-		? `${sender.sessionId} (${kind}replyable — reply with entwurf_send to this sessionId)`
-		: `${sender.sessionId} (external, non-replyable)`;
-	return (
-		`[entwurf received ⟵]\n` +
-		`  from:        ${sender.agentId} @ ${abbreviateHomeMcp(sender.cwd)}\n` +
-		`  session:     ${sessionLine}\n` +
-		`  at:          ${formatKstTimestamp(sender.timestamp)}\n` +
-		`  wants reply: ${wantsReply ? "yes" : "no"}\n` +
-		`────────────────────────────────────────\n` +
-		`${message}\n`
-	);
-}
+// The meta-bridge mailbox body render lives in the shared lib
+// (pi-extensions/lib/meta-mailbox-body.ts) so the MCP bridge and the pi-native
+// entwurf_send cannot drift in how a mailbox message presents who-sent-it. The
+// bridge's SenderEnvelope is structurally a MailboxSenderEnvelope.
 
 server.tool(
 	"entwurf_send",

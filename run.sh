@@ -66,6 +66,7 @@ Usage:
   ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
   ./run.sh check-entwurf-v2-contract   # deterministic gate (0.11 Stage 0 step 4-pre, 동결결정 10 + Fable R1-R5): FROZEN entwurf_v2 contract — R1 backend liveness domain (pi only; claude/codex/agy=unsupported, not folded), 6-cell intent×liveness table (single verdict, 2 allow/4 reject), N1 indeterminate-no-spawn, Q2 owned-live-no-autosend, R3 table↔receipt round-trip, R5 taxonomy, schema↔types drift; pure, no API
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1): PURE PeerFact core — R1 out-of-domain→unsupported (never coerced), R3b in-domain pi 4-value (null=indeterminate≠dead), facts-only keyset (identity+liveness, NO verb-routing/transcriptPath); pure, no IO
+  ./run.sh check-entwurf-send-mailbox-fallback # deterministic gate: pi-native entwurf_send → meta-bridge mailbox fallback (transport 2). ENOENT/ECONNREFUSED falls back, timeout does not; shared formatMetaMailboxBody; no-socket citizen → .msg enqueue; WIRING guard (pi-native calls fallback, bridge uses shared formatter)
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
   ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
@@ -1316,6 +1317,20 @@ check_entwurf_facts() {
   # verb-routing (resumable/sendable/transport/dispatch/action) and NO
   # transcriptPath (동결결정 10). Pure, no IO, no API.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-facts.ts)
+}
+
+check_entwurf_send_mailbox_fallback() {
+  # Deterministic gate for the pi-native entwurf_send → meta-bridge mailbox
+  # fallback (transport 2). Guards the bug where pi-native send was
+  # control-socket-ONLY, so a pi session could not reply to a Claude/Codex/agy
+  # garden citizen (no socket) — pi → Claude was ENOENT with no fallback,
+  # breaking the garden-id universal-address promise. Asserts: ENOENT/ECONNREFUSED
+  # ("dead") falls back, timeout/indeterminate does NOT (no double-deliver to a
+  # stalled-but-live socket); the SHARED formatMetaMailboxBody renders replyable
+  # correctly; enqueue to a no-socket citizen writes a .msg + signal; and a WIRING
+  # GUARD that pi-native actually calls the fallback and the bridge uses the shared
+  # formatter (no local copy) so neither sender can silently drop the transport.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-send-mailbox-fallback.ts)
 }
 
 check_plugin_empty_final_recovery() {
@@ -4310,6 +4325,9 @@ case "$cmd" in
     ;;
   check-entwurf-facts)
     check_entwurf_facts
+    ;;
+  check-entwurf-send-mailbox-fallback)
+    check_entwurf_send_mailbox_fallback
     ;;
   new-session-id)
     # Garden launcher helper: print one fresh garden sessionId (SSOT:

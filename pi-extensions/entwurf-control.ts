@@ -116,7 +116,9 @@ import {
 	readSessionHeader,
 	removeUnadoptedGardenSessionFile,
 } from "./lib/entwurf-core.js";
-import { probeSocketLiveness, shouldListAsLive, shouldUnlinkOnGc } from "./lib/socket-probe.js";
+import { formatMetaMailboxBody } from "./lib/meta-mailbox-body.js";
+import { enqueueMetaMessage } from "./lib/meta-session.js";
+import { classifyConnectError, probeSocketLiveness, shouldListAsLive, shouldUnlinkOnGc } from "./lib/socket-probe.js";
 
 const ENTWURF_FLAG = "entwurf-control";
 const ENTWURF_SESSION_FLAG = "entwurf-session";
@@ -1687,7 +1689,63 @@ Messages include sender session info for replies.`,
 				// semantics); there is no longer a turn_end wait surface.
 				// `delivered: true` in details is what renderResult keys on to
 				// draw the [entwurf sent →] box together with the sender envelope.
-				const result = await sendRpcCommand(socketPath, sendCommand);
+				let result: Awaited<ReturnType<typeof sendRpcCommand>>;
+				try {
+					result = await sendRpcCommand(socketPath, sendCommand);
+				} catch (connErr) {
+					// Transport 2 (fallback): no LIVE control socket → deliver to the
+					// target's meta-bridge mailbox if it is a garden citizen (e.g. a
+					// native Claude Code session: a meta-record but no socket of its
+					// own). garden-id is the universal address — a pi session must be
+					// able to reply to a Claude citizen, not only to other pi peers.
+					// Mirrors the MCP bridge entwurf_send's two-transport surface.
+					//
+					// Fall back ONLY when the connect error proves there is no live
+					// socket (ENOENT/ECONNREFUSED → classifyConnectError "dead"). A
+					// timeout/indeterminate socket may be alive-but-stalled, so we
+					// surface the error rather than risk a double delivery. get_message
+					// / clear never reach here — fallback is send-only by construction.
+					const code = (connErr as NodeJS.ErrnoException).code;
+					if (classifyConnectError(code) !== "dead") throw connErr;
+					try {
+						const mailboxSender: SenderEnvelope | undefined = sender
+							? { ...sender, origin: "pi-session", replyable: true }
+							: undefined;
+						const enq = enqueueMetaMessage({
+							gardenId: targetSessionId,
+							body: mailboxSender ? formatMetaMailboxBody(mailboxSender, params.message, false) : params.message,
+						});
+						return {
+							content: [
+								{
+									type: "text",
+									text: `Message delivered to meta-bridge mailbox for ${enq.gardenId} (no live control socket; doorbell wake)`,
+								},
+							],
+							details: {
+								sender: mailboxSender ?? sender,
+								delivered: true,
+								via: "meta-mailbox",
+								messagePath: enq.messagePath,
+							},
+						};
+					} catch (metaErr) {
+						const metaMsg = metaErr instanceof Error ? metaErr.message : String(metaErr);
+						const connMsg = connErr instanceof Error ? connErr.message : String(connErr);
+						return {
+							content: [
+								{
+									type: "text",
+									text:
+										`Failed: "${targetSessionId}" is neither a live pi control socket ` +
+										`(${connMsg}) nor a meta-bridge garden citizen (${metaMsg}).`,
+								},
+							],
+							isError: true,
+							details: { error: metaMsg, connectError: connMsg },
+						};
+					}
+				}
 				if (!result.response.success) {
 					return {
 						content: [{ type: "text", text: `Failed: ${result.response.error ?? "unknown error"}` }],
