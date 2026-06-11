@@ -651,10 +651,25 @@ undecided≠false, `undefined` 반환은 TypeError**.) **탈출구는 그대로:
   **fire-and-forget + mailbox-deliverable 시민 → send/meta-mailbox/ack-only**(reject 아님). (3) **owned-outcome +
   unsupported는 계속 reject**(self-fetch라 진짜 liveness 필요 = 정당). (4) **indeterminate pi socket은 여전히
   no-spawn / no-silent-mailbox**(안전). → `check-entwurf-v2-contract`에 mailbox-deliverability 축 assertion 추가.
+- **amendment 구현 제약 (Fable 검수 2026-06-11, amendment 커밋에 동반 필수):**
+  (i) **mailbox를 6칸 `DISPATCH_TABLE`에 굽지 말 것** — deliverability는 **별도 fact 입력**(citizen 존재)이다.
+  resolveDispatch가 2번째 fact를 받거나, R1 도메인-가드 분기가 자체 **2칸 미니표**(unsupported×ff→send/meta-mailbox/
+  ack-only · unsupported×owned→reject)가 되는 형태 — Q2 단일-verdict 순수성 + "6칸표=in-domain liveness 전용" 유지.
+  (ii) **ack 정직:** mailbox ack = "enqueued+doorbell"이지 read 아님. `observedLiveness`는 `unsupported` 그대로
+  (transport=meta-mailbox임을 영수증이 말함). (iii) **N2 비대칭 한 줄 명문화:** ff+dormant-**pi**=reject vs
+  ff+unsupported-**citizen**=mailbox는 정당 — in-domain dormant=not-running **확정**이라 enqueue는 침묵 적체(resume
+  권할 자리)·unsupported=미지라 doorbell best-effort가 최선. 이 줄 없으면 표가 모순처럼 읽힌다. (iv) **mode
+  (steer/follow_up)는 mailbox transport에서 무의미** — v2 스키마/영수증이 명시.
+- **미래 위험 (Fable, amendment 원장에 박을 것):** pi가 4번째 메타백엔드가 되면 `--entwurf-control` 없이 뜬
+  **live** pi 세션 = meta-record 있고 소켓 없음 → ENOENT → silent mailbox인데, 그 세션 wakeMode(direct-inject)가
+  mailbox를 drain 안 하면 메시지 **영구 적체**. 지금은 불가능(writer=Claude SessionStart 한정)이나 pi-backend
+  도입 시 deliverability fact가 "메일박스 drain 능력"까지 봐야 함.
 - **게이트-교훈 (GLG 2026-06-11, 박아둠):** 이 버그 클래스(= "control socket 없음 / liveness 없음"을 "전달
   불가"로 오해)는 **테스트로 검출됐어야 했다.** 레거시 쪽은 `check-entwurf-send-mailbox-fallback`(24 assertions,
-  WIRING 가드 포함)으로 닫았다. **v2 쪽 가드는 위 (1)-(4) 보강과 같은 커밋에 박는다** — cross-transport 대칭
-  (소켓 시민·mailbox 시민 둘 다 도달 가능)을 게이트가 강제하도록. "다음 게이트에선 이게 잡히게."
+  WIRING 가드 포함)으로 닫았다 — **Fable 검수 = 구조 GO**(전달가능성 0 입증된 ENOENT/ECONNREFUSED만 mailbox行,
+  "close before response"는 surface라 중복전송 창구 구조적 0). 비차단 관찰: WIRING 가드는 존재-assert(텍스트)라
+  미래에 get_message를 같은 try로 감싸면 못 잡음(주석이 by-construction 명시 = 수용). **v2 쪽 가드는 위 보강과
+  같은 커밋에 박는다** — cross-transport 대칭(소켓 시민·mailbox 시민 둘 다 도달)을 게이트가 강제하도록.
 
 **Fable 2차 재검수 (2026-06-10, folding 검수):** F1-F8 처분 충실성 = clean(누락/격하 없음). folding 과정에서
 나온 신규 N1-N5 검토: N1(6칸표 모순 해소)·N2(fire-forget+dormant "지금 reject" 잠금)·N3(비대칭 = 의도된 보안
