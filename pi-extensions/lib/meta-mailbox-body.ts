@@ -12,8 +12,11 @@
  * The render mirrors the live "[entwurf received ⟵]" header so a transcript reads
  * the same whether the message arrived over a socket or a mailbox.
  *
- * Pure: no IO. Extracted so the two senders cannot drift in how a mailbox message
- * presents who-sent-it — the field that round-trips garden-id replies.
+ * No filesystem/network IO and no mutation — the only ambient read is
+ * process.env.HOME for display abbreviation (so not strictly referentially pure,
+ * but deterministic per environment). Extracted so the two senders cannot drift
+ * in how a mailbox message presents who-sent-it — the field that round-trips
+ * garden-id replies.
  */
 
 /** The fields a mailbox body needs from a sender. Structurally compatible with
@@ -27,7 +30,7 @@ export interface MailboxSenderEnvelope {
 	replyable?: boolean;
 }
 
-/** `~`-abbreviate a home-relative cwd for display. Pure. */
+/** `~`-abbreviate a home-relative cwd for display. Reads process.env.HOME. */
 function abbreviateHome(cwd: string): string {
 	const home = process.env.HOME;
 	if (!home) return cwd;

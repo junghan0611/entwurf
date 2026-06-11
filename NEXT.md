@@ -670,6 +670,13 @@ undecided≠false, `undefined` 반환은 TypeError**.) **탈출구는 그대로:
   "close before response"는 surface라 중복전송 창구 구조적 0). 비차단 관찰: WIRING 가드는 존재-assert(텍스트)라
   미래에 get_message를 같은 try로 감싸면 못 잡음(주석이 by-construction 명시 = 수용). **v2 쪽 가드는 위 보강과
   같은 커밋에 박는다** — cross-transport 대칭(소켓 시민·mailbox 시민 둘 다 도달)을 게이트가 강제하도록.
+- **릴리즈게이트 매트릭스 smoke (GLG 2026-06-11 지침 + GPT 제안 — 지금 blocker 아님, step 5/v2 amendment 때
+  같이 게이트화·잊지 말 것):** entwurf 전달 경로를 **매트릭스로 전수** 테스트하는 별도 이름 smoke를 release gate에
+  박는다 — **sender surface**(pi-native / MCP bridge) × **target kind**(live control socket / meta mailbox) ×
+  **direction**(pi→meta · meta→pi · meta→meta · pi→pi). 지금은 개별 게이트(check-entwurf-send-mailbox-fallback +
+  smoke-meta-mailbox + check-socket-probe)가 칸들을 부분 커버하지만, **매트릭스 전수 한 판이 없어서** 이번 pi→meta
+  비대칭이 라이브에서야 드러났다(그게 교훈). 원칙: "막히는 부분 먼저 뚫되, 뚫은 자리마다 매트릭스 칸을 게이트로
+  남긴다."
 
 **Fable 2차 재검수 (2026-06-10, folding 검수):** F1-F8 처분 충실성 = clean(누락/격하 없음). folding 과정에서
 나온 신규 N1-N5 검토: N1(6칸표 모순 해소)·N2(fire-forget+dormant "지금 reject" 잠금)·N3(비대칭 = 의도된 보안
