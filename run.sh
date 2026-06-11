@@ -65,7 +65,8 @@ Usage:
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
   ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
   ./run.sh check-entwurf-v2-contract   # deterministic gate (0.11 Stage 0 step 4-pre, 동결결정 10 + Fable R1-R5): FROZEN entwurf_v2 contract — R1 backend liveness domain (pi only; claude/codex/agy=unsupported, not folded), 6-cell intent×liveness table (single verdict, 2 allow/4 reject), N1 indeterminate-no-spawn, Q2 owned-live-no-autosend, R3 table↔receipt round-trip, R5 taxonomy, schema↔types drift; pure, no API
-  ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1): PURE PeerFact core — R1 out-of-domain→unsupported (never coerced), R3b in-domain pi 4-value (null=indeterminate≠dead), facts-only keyset (identity+liveness, NO verb-routing/transcriptPath); pure, no IO
+  ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b pi 4-value, facts-only keyset; union: PeerFact+SocketOnlyFact by gardenId, dormant→dead, F3 indeterminate preserved, non-pi+socket fail-loud; pure, no IO
+  ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-entwurf-send-mailbox-fallback # deterministic gate: pi-native entwurf_send → meta-bridge mailbox fallback (transport 2). ENOENT/ECONNREFUSED falls back, timeout does not; shared formatMetaMailboxBody; no-socket citizen → .msg enqueue; WIRING guard (pi-native calls fallback, bridge uses shared formatter)
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
@@ -1317,6 +1318,18 @@ check_entwurf_facts() {
   # verb-routing (resumable/sendable/transport/dispatch/action) and NO
   # transcriptPath (동결결정 10). Pure, no IO, no API.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-facts.ts)
+}
+
+check_socket_discovery() {
+  # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 3): the
+  # SOCKET-axis wiring scanSocketProbes. Probes the union of (dir sockets) ∪
+  # (every in-domain pi citizen's canonical path) so a dormant citizen with no
+  # socket file reads dead (ENOENT) → resumable, never an unprobed gap (slice 2
+  # throws on that). Three-valued throughout — a stalled socket stays
+  # indeterminate (F3), never folded to dead by an alive-only listing. Dir
+  # hygiene (non-.sock / malformed names ignored), dedup, missing-dir, sort, and
+  # an end-to-end scanSocketProbes→resolveFactList. readdir/probe injected, no IO.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-socket-discovery.ts)
 }
 
 check_entwurf_send_mailbox_fallback() {
@@ -4325,6 +4338,9 @@ case "$cmd" in
     ;;
   check-entwurf-facts)
     check_entwurf_facts
+    ;;
+  check-socket-discovery)
+    check_socket_discovery
     ;;
   check-entwurf-send-mailbox-fallback)
     check_entwurf_send_mailbox_fallback

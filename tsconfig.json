@@ -53,6 +53,11 @@
 		// lib→lib VALUE importer (factLivenessOf from entwurf-v2-contract.ts), same
 		// `.ts`-extension fence as project-trust-handler. Typechecked by
 		// scripts/tsconfig.json via the gate (check-entwurf-facts.ts).
-		"pi-extensions/lib/entwurf-facts.ts"
+		"pi-extensions/lib/entwurf-facts.ts",
+		// socket-discovery.ts is the fact-provider's SOCKET-axis wiring (step 4
+		// slice 3) — a lib→lib VALUE importer (probeSocketLiveness from
+		// socket-probe.ts), same `.ts`-extension fence. Typechecked by
+		// scripts/tsconfig.json via the gate (check-socket-discovery.ts).
+		"pi-extensions/lib/socket-discovery.ts"
 	]
 }
