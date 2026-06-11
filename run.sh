@@ -65,6 +65,7 @@ Usage:
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
   ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
   ./run.sh check-entwurf-v2-contract   # deterministic gate (0.11 Stage 0 step 4-pre, 동결결정 10 + Fable R1-R5): FROZEN entwurf_v2 contract — R1 backend liveness domain (pi only; claude/codex/agy=unsupported, not folded), 6-cell intent×liveness table (single verdict, 2 allow/4 reject), N1 indeterminate-no-spawn, Q2 owned-live-no-autosend, R3 table↔receipt round-trip, R5 taxonomy, schema↔types drift; pure, no API
+  ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1): PURE PeerFact core — R1 out-of-domain→unsupported (never coerced), R3b in-domain pi 4-value (null=indeterminate≠dead), facts-only keyset (identity+liveness, NO verb-routing/transcriptPath); pure, no IO
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
   ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
@@ -1303,6 +1304,18 @@ check_entwurf_v2_contract() {
   # pre-claims bad-target/untrusted-fail-fast/target-locked (bucket B F2). Plus
   # a schema↔types drift guard on the TypeBox input/receipt. Pure, no API.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-contract.ts)
+}
+
+check_entwurf_facts() {
+  # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 1): the PURE
+  # fact core. Locks the PeerFact shape + R1/R3b liveness invariant before any IO
+  # wiring (gate-first). R1: out-of-domain backend (claude-code/codex/antigravity)
+  # → unsupported for EVERY socket input (never coerced to the socket value or
+  # dead). R3b: in-domain pi → alive/dead/indeterminate, null → indeterminate
+  # (no proof ≠ dead). facts-only keyset: identity facts + liveness, NO
+  # verb-routing (resumable/sendable/transport/dispatch/action) and NO
+  # transcriptPath (동결결정 10). Pure, no IO, no API.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-facts.ts)
 }
 
 check_plugin_empty_final_recovery() {
@@ -4294,6 +4307,9 @@ case "$cmd" in
     ;;
   check-entwurf-v2-contract)
     check_entwurf_v2_contract
+    ;;
+  check-entwurf-facts)
+    check_entwurf_facts
     ;;
   new-session-id)
     # Garden launcher helper: print one fresh garden sessionId (SSOT:

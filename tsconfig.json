@@ -48,6 +48,11 @@
 		// `.ts` extension to be runnable under the strip-types gate. The emit-capable
 		// root config can't allow .ts extensions — scripts/tsconfig.json (which already
 		// globs pi-extensions/lib/**/*.ts) typechecks it. Same fence as meta-bridge-hook.
-		"pi-extensions/lib/project-trust-handler.ts"
+		"pi-extensions/lib/project-trust-handler.ts",
+		// entwurf-facts.ts is the fact-provider's pure core (step 4 slice 1) — a
+		// lib→lib VALUE importer (factLivenessOf from entwurf-v2-contract.ts), same
+		// `.ts`-extension fence as project-trust-handler. Typechecked by
+		// scripts/tsconfig.json via the gate (check-entwurf-facts.ts).
+		"pi-extensions/lib/entwurf-facts.ts"
 	]
 }
