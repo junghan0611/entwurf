@@ -45,38 +45,33 @@
 > (meta 계열 check/smoke, trust handler, SDK surface, poison-smoke, check-pack 등 전체 green).
 > `main`=`origin/main`, working tree clean. step 4-pre(contract-lock) 진입 시작점 고정.
 >
-> **▣ 세션27 마무리 (2026-06-11, 커밋 — push는 GLG):**
-> - **contract-lock = 구현·커밋 완료** (`fa95a8a` feat 계약+게이트, `aeac8d8` schema 정확성 = **81 assertions**, `7aff4eb` docs).
+> **▣ 세션27 마무리 + 배포 확인 (2026-06-11, `main` push 완료):**
+> - **contract-lock = 구현·커밋·푸시 완료** (`fa95a8a` feat 계약+게이트, `aeac8d8` schema 정확성 = **81 assertions**, `7aff4eb` docs).
 >   GPT 1·2·3차 검수 통과 = freeze-ready. **GPT 3차 blocker 보강(`aeac8d8`):** receipt/input 스키마에
 >   `additionalProperties:false` — discriminated union이어도 default가 extra key 허용이라 `{ok:true,reason}`
->   불법 영수증이 통과하던 구멍 차단(게이트가 `additionalProperties===false` assert). **잔여: Fable 코드-증거
->   교차검수 미완** — Fable(claude-fable-5)이 entwurf 레지스트리에 없고 라이브 Fable 세션도 없어 **닿을 경로가 없다**(process gap, ↓ 후속).
+>   불법 영수증이 통과하던 구멍 차단(게이트가 `additionalProperties===false` assert). **잔여: Fable/Opus 코드-증거
+>   교차검수 결과 반영** — 새 v2 Claude meta-session 둘이 열림: Fable `20260611T112732-0f42b6`, Opus
+>   `20260611T112840-57da07`.
 > - **⚠ meta-bridge 배포 지연 발견(중요, 데이터 손상 아님):** 3D-4 v2 cut이 **소스만 v2**로 바꾸고
 >   `pi/meta-bridge/.assembled/`(배포 번들 = Claude SessionStart 훅 실행체, gitignored, Jun 6)를 재조립 안 함 →
->   **라이브 writer가 여전히 v1.** 그래서 store 58개 전부 schemaVersion 1(v2 0개), 내 세션 포함. v1 레코드는
->   `parseMetaRecordAny` dual-read로 정상 = 손상 아님, 그러나 "transition complete"는 **repo 기준만 참**.
+>   **라이브 writer가 여전히 v1**이었음. 그래서 당시 store 58개 전부 schemaVersion 1(v2 0개), 내 세션 포함.
+>   v1 레코드는 `parseMetaRecordAny` dual-read로 정상 = 손상 아님, 그러나 "transition complete"는 **repo 기준만 참**.
 >   왜 안 잡혔나: `store-doctor`가 dual-read라 all-v1에서도 green, install이 버전 stamp 안 함.
-> - **고침 (이 세션):** `doctor-meta-bridge`에 **writer-version parity** 추가(`4c25fbf`) — source/assembled/
+> - **고침 + 검증 완료:** `doctor-meta-bridge`에 **writer-version parity** 추가(`4c25fbf`) — source/assembled/
 >   installed 각 live-write schema(`serializeMetaIdentity` 유무 = v2/v1) + content-hash + store 분포 출력,
->   installed≠source면 **FAIL "STALE → install-meta-bridge"**. 지금 돌리면 source=v2/installed=v1로 정확히 FAIL.
-> - **GPT 3차 blocker 2 보강(`550e6db`) — 배포가 hook을 깰 뻔:** v2 writer는 registry를
->   `import.meta.dirname/../../pi/entwurf-capabilities.json`로 런타임 read하는데, `install.sh`가 그 파일을
->   번들에 **안 복사**했다 → v2 배포 시 mint/parse마다 throw(silent hook break), hash parity는 못 봄. 고침:
->   (1) `metaCapabilitiesFilePath`가 repo 경로 우선 + **plugin-root fallback**(번들에선 `../../pi`가 plugin dir
->   탈출), (2) `install.sh`가 registry를 plugin-root에 복사, (3) doctor가 **v2 번들인데 registry 없거나
->   registry hash가 source와 다르면 FAIL**(false-green 차단). repo 동작 불변(게이트 전부 green).
-> - **잔여 배포 절차 (GLG 승인 필요 — 미실행, 이제 안전):** ① `./run.sh install-meta-bridge`(번들 재조립+재설치,
->   registry 동반) → ② 새 Claude 세션 1개 열어 v2 record 생성 확인 → ③ `doctor-meta-bridge` green(registry-dep
->   포함). **배포 시 실제 번들 경로 resolve를 라이브 확인**(loader fallback은 repo에선 안 타므로 첫 배포가 검증점).
->   **지금 당장 안 함**(전역 플러그인 재설치 = 모든 향후 세션 영향, GLG 결정).
+>   installed≠source면 **FAIL "STALE → install-meta-bridge"**. 이후 `550e6db` + `50ac8e1`로 v2 writer의
+>   load-bearing registry(`pi/entwurf-capabilities.json`)를 plugin-root에 번들하고, doctor가 **registry 없음/registry hash drift**도
+>   FAIL하도록 보강(false-green 차단).
+> - **배포 완료:** `./run.sh install-meta-bridge` 실행, 새 Fable/Opus Claude 세션 생성 후 `doctor-meta-bridge` **PASS**.
+>   현재 writer parity: source=v2 / assembled=v2 / installed=v2, registry hash 모두 일치, store 분포 `v1=58 v2=2`.
+>   새 세션 `20260611T112732-0f42b6`, `20260611T112840-57da07` 모두 schemaVersion 2로 기록됨.
 > - **완전 전환(v1 dual-read 제거) 기준 3개 (GPT+GLG 합의, 그 전까진 additive 유지 = 안전장치, 더러움 아님):**
->   ① installed writer v2 확인 ② 기존 v1 store migration/archival 방침 확정 ③ doctor가 live v1 의존 없음 증명.
+>   ① installed writer v2 확인(**완료**) ② 기존 v1 store migration/archival 방침 확정 ③ doctor가 live v1 의존 없음 증명.
 > - **dev-flow 원칙 (박아둠 — 자기 발톱 깎기):** meta-bridge는 *우리 세션을 기록하는 바로 그 시스템*이라
 >   schema/interface cut은 **additive + 버전 가시 + 배포 검증 후에야 legacy 제거**한다. **"source complete ≠
 >   deployed complete."** entwurf_v2를 바로 `entwurf`로 안 한 것과 동일 이유 — 인터페이스 안정+버전 가시가 먼저.
-> - **후속(process):** (a) Fable entwurf 경로 — `entwurf-targets.json`에 `claude-fable-5` 등록 or 라이브 Fable
->   세션 띄우기, 둘 중 결정해야 분신 검수가 닫힌다. (b) release-gate에 source↔.assembled parity assert 검토
->   (지금은 doctor가 머신-로컬로만 잡음; CI는 .assembled gitignore라 재조립-후-diff 필요).
+> - **후속(process):** (a) Fable/Opus 교차검수 결과를 받아 contract-lock freeze를 최종 확정하거나 보강한다.
+>   (b) release-gate에 source↔.assembled parity assert 검토(doctor는 머신-로컬, CI는 .assembled gitignore라 재조립-후-diff 필요).
 - **(main track) 다음 = entwurf 공개 동사 contract-lock(동결결정 10) + 버킷 B 설계동결.** step 3(v1→v2 전환)이
   끝났으니 다음 큰 덩어리는 step 4-5(fact-provider + entwurf_v2 dispatch)인데 **NO-GO until 버킷 B**(아래 Fable
   섹션 F1/F2/F4/F6). 그 전에 **동결결정 10 contract-lock**을 fact-provider 빌드보다 먼저 잠근다 — 단,
