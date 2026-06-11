@@ -67,6 +67,7 @@ Usage:
   ./run.sh check-entwurf-v2-contract   # deterministic gate (0.11 Stage 0 step 4-pre, 동결결정 10 + Fable R1-R5): FROZEN entwurf_v2 contract — R1 backend liveness domain (pi only; claude/codex/agy=unsupported, not folded), 6-cell intent×liveness table (single verdict, 2 allow/4 reject), N1 indeterminate-no-spawn, Q2 owned-live-no-autosend, R3 table↔receipt round-trip, R5 taxonomy, schema↔types drift; pure, no API
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b pi 4-value, facts-only keyset; union: PeerFact+SocketOnlyFact by gardenId, dormant→dead, F3 indeterminate preserved, non-pi+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
+  ./run.sh check-meta-listing          # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4a): META-STORE axis listAllMetaIdentities — explicit-partial: parse failure / body-filename drift → explicit {filename,message} error (verbatim, no synthetic fields), valid records still listed (corrupt doesn't blind); mode strict throws / collect partial; entries/readRecord injected, no IO
   ./run.sh check-entwurf-send-mailbox-fallback # deterministic gate: pi-native entwurf_send → meta-bridge mailbox fallback (transport 2). ENOENT/ECONNREFUSED falls back, timeout does not; shared formatMetaMailboxBody; no-socket citizen → .msg enqueue; WIRING guard (pi-native calls fallback, bridge uses shared formatter)
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
@@ -1330,6 +1331,17 @@ check_socket_discovery() {
   # hygiene (non-.sock / malformed names ignored), dedup, missing-dir, sort, and
   # an end-to-end scanSocketProbes→resolveFactList. readdir/probe injected, no IO.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-socket-discovery.ts)
+}
+
+check_meta_listing() {
+  # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4a): the
+  # meta-store axis listAllMetaIdentities. Explicit-partial: a parse failure or
+  # body/filename drift does NOT blind the listing (valid records still surface)
+  # and does NOT throw (0.10 "corrupt blocks registration forever" lesson) — it
+  # becomes an explicit error carrying ONLY {filename, message}, verbatim (a
+  # salvaged gid string as a fact = synthetic backdoor). mode strict throws on
+  # any error, collect returns partial. entries/readRecord injected, no IO.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-listing.ts)
 }
 
 check_entwurf_send_mailbox_fallback() {
@@ -4341,6 +4353,9 @@ case "$cmd" in
     ;;
   check-socket-discovery)
     check_socket_discovery
+    ;;
+  check-meta-listing)
+    check_meta_listing
     ;;
   check-entwurf-send-mailbox-fallback)
     check_entwurf_send_mailbox_fallback

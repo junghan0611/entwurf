@@ -907,6 +907,74 @@ export function scanIdentityByNativeId(
 	return matches.length === 1 ? (matches[0] as { identity: MetaIdentity }).identity : null;
 }
 
+/** One unreadable meta-record, surfaced as an explicit fact — file + message
+ * ONLY, never a half-parsed identity field. A salvaged gid-looking string
+ * presented as a fact is a synthetic backdoor; verbatim-or-nothing. */
+export interface MetaRecordReadError {
+	filename: string;
+	message: string;
+}
+
+export interface ListIdentitiesResult {
+	identities: MetaIdentity[];
+	errors: MetaRecordReadError[];
+}
+
+/**
+ * Scan every meta-record in a store into identities + explicit read errors.
+ * Pure over injected (entries, readRecord) so gates drive it without IO; the
+ * fact-provider (slice 4b) supplies the real readdir/readFile.
+ *
+ * A record that fails to parse — or whose body gardenId drifts from its filename
+ * (the same authority check as `readMetaIdentityByGardenId`) — is NEITHER
+ * silently skipped (that hides a broken citizen = lie by omission) NOR allowed to
+ * throw the whole listing (one corrupt file must not blind `entwurf_peers` — the
+ * 0.10 "corrupt blocks registration forever" lesson). It becomes an explicit
+ * error entry carrying ONLY filename + message. Duplicate gardenId across files
+ * is impossible: the filename IS `<gardenId>.meta.json`, so the filesystem
+ * already enforces uniqueness — only body/filename drift can split authority.
+ *
+ * mode "collect" (default) returns partial results; "strict" throws if ANY
+ * record was unreadable (doctor / gate callers wanting all-or-nothing).
+ */
+export function listAllMetaIdentities(
+	entries: readonly string[],
+	readRecord: (filename: string) => string,
+	opts: { mode?: "collect" | "strict" } = {},
+): ListIdentitiesResult {
+	const identities: MetaIdentity[] = [];
+	const errors: MetaRecordReadError[] = [];
+	for (const filename of entries) {
+		if (!filename.endsWith(".meta.json")) continue;
+		let identity: MetaIdentity;
+		try {
+			identity = parseMetaIdentity(readRecord(filename));
+		} catch (err) {
+			errors.push({ filename, message: err instanceof Error ? err.message : String(err) });
+			continue;
+		}
+		const expected = filename.slice(0, -".meta.json".length);
+		if (identity.gardenId !== expected) {
+			errors.push({
+				filename,
+				message: `body/filename drift: body gardenId "${identity.gardenId}" ≠ filename. The body is the authority; this file is corrupt.`,
+			});
+			continue;
+		}
+		identities.push(identity);
+	}
+	if (opts.mode === "strict" && errors.length > 0) {
+		throw new MetaRecordError(
+			`listAllMetaIdentities(strict): ${errors.length} unreadable meta-record(s): ${errors
+				.map((e) => `${e.filename} (${e.message})`)
+				.join("; ")}`,
+		);
+	}
+	identities.sort((a, b) => (a.gardenId < b.gardenId ? -1 : a.gardenId > b.gardenId ? 1 : 0));
+	errors.sort((a, b) => (a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0));
+	return { identities, errors };
+}
+
 export type UpsertAction = "create" | "attach";
 
 export interface UpsertDecision {
