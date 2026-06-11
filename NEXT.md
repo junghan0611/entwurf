@@ -41,11 +41,17 @@
   typecheck). 게이트 `check-project-trust-handler` 16.
 
 **▶ 다음 한 걸음 (구현 세션 진입점 — Stage 0 step 3(meta-record v2) 전체 완료, 다음 = contract-lock(동결결정 10) → 버킷 B 설계동결 → step 4-5):**
+> **baseline green 체크포인트 (2026-06-11 세션 시작):** `pnpm check` EXIT=0 전 게이트 통과
+> (meta 계열 check/smoke, trust handler, SDK surface, poison-smoke, check-pack 등 전체 green).
+> `main`=`origin/main`, working tree clean. step 4-pre(contract-lock) 진입 시작점 고정.
 - **(main track) 다음 = entwurf 공개 동사 contract-lock(동결결정 10) + 버킷 B 설계동결.** step 3(v1→v2 전환)이
-  끝났으니 다음 큰 덩어리는 step 4-5(fact-provider + entwurf_v2 dispatch)인데 **NO-GO until 버킷 B**(6칸표/
-  TypeBox 스키마/error taxonomy를 원장에 결정표로 — 아래 Fable 섹션 F1/F2/F4/F6). 그 전에 **동결결정 10
-  contract-lock**(entwurf=공개 동사 1개로 축소 + `entwurf_peers`=읽기 전용 fact 표면)을 fact-provider 빌드보다
-  먼저 잠근다. 정찰은 진입 시(레거시 3-verb `entwurf`/`_resume`/`_send`는 완전 전환까지 유지 = 동결결정 10 scope A).
+  끝났으니 다음 큰 덩어리는 step 4-5(fact-provider + entwurf_v2 dispatch)인데 **NO-GO until 버킷 B**(아래 Fable
+  섹션 F1/F2/F4/F6). 그 전에 **동결결정 10 contract-lock**을 fact-provider 빌드보다 먼저 잠근다 — 단,
+  **contract-lock = 산문 동결이 아니라 실행 가능한 계약**(F6: "산문 금지")이다. **= 1개 동사로 통합하는 미래
+  contract를 지금 잠그는 것**(`entwurf=공개 동사 1개로 축소`라는 표현은 *지금 레거시를 줄인다*는 뜻이 **아님** —
+  GPT 보정 2026-06-11 + 소스 확정): 레거시 3-verb `entwurf`/`_resume`/`_send`는 **완전 전환까지 무변경 유지**
+  (동결결정 10 scope A), 통합 표면은 새 이름 `entwurf_v2`로 **additive**하게 올린다. `entwurf_peers`는 **읽기 전용
+  fact 표면**(verb-routing 금지). **작업 단위·이후 스텝 arc는 ↓ "entwurf_v2 contract-lock 작업 계획" 섹션.**
 - **step 3D-4 ✅ 완료 = the cut (끊을 지점 ②, GPT+Fable 리뷰 통과).** 커밋1 `31a246c`(dual-read seam +
   delivery-비결합 소비자) + 커밋2 `f0a20d7`(v2 write + migration + enqueue/read cut + 게이트 재작성). 이로써
   **meta-record v2 전환(3A→3D) 완결:** live write=v2 identity, receipt=state.json 단독, capability=registry,
@@ -69,7 +75,8 @@
   `record.delivery.*`(v1 home) stamp **유지** + mailbox `state.json`(3B) dual-write 추가, byte-identical. 게이트
   `check-meta-mailbox-dualwrite` 15 + smoke green. additive only. **비차단(3D-4 참고):** read-side가 drift'd
   `state.json`에 throw하면 메시지는 이미 `.read` archive라 재호출 0건 — no-rollback 스코프의 내재적 결과 = 수용.
-- **entwurf_v2(step 4-5) = NO-GO** — 버킷 B 설계동결(6칸표/스키마/error taxonomy) 먼저. (아래 Fable 섹션.)
+- **entwurf_v2(step 4-5) = NO-GO** — contract-lock executable freeze(계약물 4종, 산문 금지) + 버킷 B
+  먼저. (↓ "entwurf_v2 contract-lock 작업 계획" + Fable 섹션.)
 다음 구현 세션 계약 — 이 7개는 본문 동결결정/Trust 2층/Stage 0의 재확인이며 다시 흔들지 말 것:
 1. **Stage 0 step 1·2 = pi 0.79 bump/import/runtime guard + TS preflight module/gate 완료.**
 2. **설계 재탐색 금지** — 검증 원장 항목 다시 찌르지 말 것(doctor 실패/구체 버그만 예외).
@@ -402,6 +409,71 @@ trusted 전에는 cwd 아래 어떤 project-local 파일도 읽지 않는다 —
 **identity 파일 byte-identical, mailbox state만 변경** ⑥빈 inbox는 record도 state도 무변경 ⑦v1 legacy fixture 여전히
 normalize ⑧v1 delivery receipt가 state로 migrate(conflict 시 state wins, 전부 null이면 no-create).
 
+### entwurf_v2 contract-lock 작업 계획 — step 4 진입 전 executable freeze (2026-06-11, Opus 실측 + GPT 보정 + Fable R1-R5 수렴)
+
+동결결정 10 + 버킷 B(F1/F2/F4/F6)의 미해결 빈칸을 **산문이 아니라 실행 가능한 계약 + 게이트**로 잠근다.
+이게 step 4(fact-provider) 코드보다 **먼저**다 — 3-verb 표면을 켜둔 채 facts를 지으면 fact 층에 verb-routing
+이 구워져 `entwurf_peers`가 헛나가기 때문(동결결정 10 순서 근거). **런타임 dispatch 구현은 이 단위에 없음**
+(그건 step 5) — 계약 코드 + 결정표 + 게이트까지만.
+
+**실현성 (2026-06-11 Opus 실측, 재탐색 불필요):** TypeBox `Type` 스키마 표면은 이미
+`@earendil-works/pi-ai` re-export로 쓰고 있고(새 direct `@sinclair/typebox` 의존성 없음), MCP 도구 파라미터를
+`Type.Object`로 정의하는 패턴도 이미 존재(`entwurf.ts:340` `entwurfParameters`, `entwurf-control.ts:1541`
+`entwurfSendParameters`). `check-*` 게이트는 `scripts/check-*.ts` standalone → `node --experimental-strip-types`
+→ run.sh case+help 등록의 확립된 패턴(메타 계열 `check-meta*`/`check-entwurf-capabilities`/
+`check-mailbox-receipt-state` 다수 — 정확한 수는 부수적, 패턴 존재가 요점, Fable 숫자 보정 2026-06-11). F6의 "TypeBox 스키마 + check-* 게이트" 요구가
+**이 repo 관행과 동일 모양** = 새 toolchain 없음. F1 근거(send=ack-only "end of contract")도 소스 확정
+(`entwurf-control.ts:29-37`).
+
+**계약물 4종 (이 단위 산출 — 전부 실행 가능, 산문 금지):**
+1. **`entwurf_v2` TypeBox input/output 스키마** — 기존 `Type.Object` 패턴. input = caller **intent**
+   (`fire-and-forget`|`owned-outcome`) + target(**garden-id only, 존재 시민 주소지정 전용** — spawn-new는 v2
+   scope 밖 = **R2 (a) 정직 잠금**, 레거시 `entwurf` 유지 + 추후 additive; 미존재/오타 gid = 무조건 reject
+   `bad-target`, F6 자동 성립) + outcome-ownership 파라미터(mode/wants_reply는 liveness-routing 축과 **별개**로
+   유지, 동결결정 10). output = **dispatch 영수증**: 경로(**transport**) + **observedLiveness** + caller
+   기대(owned vs ack-only) — 이 필드라야 게이트가 "결정표 칸 ↔ 영수증" round-trip 전수 assert 가능(R3 = F6
+   기계 증명). **reject 표현 = 영수증 `ok:false`+`reason` vs throw 중 택1을 output 스키마가 지금 결정.**
+2. **intent×liveness dispatch 결정표 = 상수 테이블** (N1, F3 3값과 정합). **선행 도메인 가드(R1): liveness
+   predicate가 정의된 backend만 표에 진입** — 초기 = pi(direct-inject, control-socket)만(검증원장 실측:
+   claude-code=self-fetch 소켓 없음 = predicate 미정의, F4). **도메인 밖 gid = `backend-liveness-unsupported`
+   reject**(dead/indeterminate로 접기 금지 = identity-split 재발 = R1 핵심). 도메인 안에서만 live/dormant/
+   **indeterminate** × fire-forget/owned-outcome: **indeterminate = 무조건 reject(절대 spawn 금지)**(GC만 고치면
+   F3 절반, N1) · fire-forget+dormant = **"지금은 reject"**(N2: mailbox-wake는 reply-correlation id가 substrate에
+   없어 영구 아닌 additive 확장 여지) · owned+live = **무조건 reject `owned-live-no-autosend`**(상수 표는 칸당
+   verdict 1개 — "기본"이란 단어는 escape hatch라 비결정 재유입, Fable Q2; 확장 여지는 주석만). **각 칸 = 단일 verdict.**
+3. **error taxonomy = 상수/fixture** — reject 사유 enum: `indeterminate-no-spawn` /
+   `dormant-fire-forget-unsupported` / `owned-live-no-autosend` / **`backend-liveness-unsupported`(R1)** /
+   `untrusted-fail-fast` / `bad-target`(미존재 gid, R2). **F2 선점(R5):** `target-locked`(per-gid lockfile 충돌)을
+   지금 enum에 선점 — 안 그러면 버킷 B F2가 taxonomy 재개봉. (대안: 게이트를 **closed-enum 아니라 minimal-set
+   assert**로 명시.) **scope 한 줄(R5):** 이 enum = **pre-dispatch reject 전용**; 버킷 B "send-fail fallback"
+   (결정 후 transport 실패)은 별 축 — 섞지 말 것.
+4. **`check-entwurf-v2-contract.ts` 게이트** — 결정표 전수(도메인 가드 + 6칸) + 스키마 round-trip +
+   **영수증 round-trip(칸 ↔ observedLiveness/transport, R3)** + taxonomy 망라. run.sh case+help 등록,
+   `pnpm check` 편입. **이게 "executable" 증거** = 결정표가 코드로 강제됨.
+
+**경계 (버킷 B 조심점 — 이 단위에서 넘지 말 것):**
+- **`entwurf_peers`에 `resumable`/`sendable` verb-routing 금지** — facts only(liveness/capability/identity/
+  cwd-이력). liveness fact = **alive|dead|indeterminate|unsupported 4값 노출**(R1: predicate 미정의 backend는
+  명시적 `unsupported` — indeterminate로 접기 금지; 숨기면 6칸 dispatch가 도메인 밖을 못 봄 = facts-only 위반, R3b).
+- **F4 = Claude liveness 구현 아님.** backend별 liveness predicate **자리만** 추상화하고, claude(소켓 없음,
+  self-fetch)는 **"unsupported / Stage 1 전 정의 보류"로 정직하게 못박음**(GPT 2026-06-11). `connect`=reachable
+  ≠ responsive 주의.
+- **레거시 3-verb 무변경.** 이 단위는 순수 additive — 기존 `entwurf`/`_resume`/`_send` 코드/표면 안 건드림.
+
+**이후 스텝 arc (하나만 보지 말 것 — Fable 검수는 이 전체 호를 봐야 함):**
+| 단계 | 무엇 | 게이트/산출 | 의존 |
+|---|---|---|---|
+| **지금 = step 4-pre** | contract-lock (위 계약물 4종) | `check-entwurf-v2-contract` | — |
+| 버킷 B 잔여 freeze | F2 per-gid lockfile + pi 동시-resume 실측(검증원장 추가) · F4 predicate 동결 · R3b 4값(alive/dead/indeterminate/unsupported) fact 노출 | 결정/실측 원장 + (일부)게이트 | contract-lock |
+| **step 4** | TS fact-provider (`peers`/`who-can`/`preflight`, facts only) — `meta-session.ts`+mailbox+`socket-probe.ts`(3값, F3서 선추출 완료) 재사용, 기존 `entwurf_peers` MCP 노출 | fact-provider 게이트 | contract + 버킷 B |
+| **step 5** | `entwurf_v2` 단일 표면(레거시 공존) — preflight+fact-provider 소비 → liveness로 resume/send call-time 계산, trusted→내부 `--approve` `pi -p` bg / tmux-live, untrusted→fail-fast | dispatch 게이트 + live smoke | step 4 |
+> **끊을 지점:** 이 contract-lock freeze 직후 = **Fable/Claude 교차검수**(step 4 코드 진입 전). F6가 "산문 금지"
+> 라 검수 대상은 **계약 코드+게이트**여야 함 — Fable이 볼 코드 증거(2026-06-11 검수 합의) = **"결정표 상수(도메인
+> 가드+6칸) ↔ 게이트 전수 assert ↔ 영수증 observedLiveness/transport round-trip"** 가 실제로 코드로 강제되는지.
+>
+> **Fable 검수 결과 (2026-06-11): 구조 GO, R1·R2를 계약물에 박은 뒤 freeze(위에 반영 완료), R3-R5+숫자는 같은 커밋.**
+> 전부 새 결정이 아니라 기내려진 결정(동결결정 10 pi-native, F4 unsupported)을 계약 코드에 명시 = 추가 비용 거의 없음.
+
 ### Fable 5 설계 검수 반영 — entwurf_v2(step 4-5) 진입 블로커 (2026-06-10, Fable+Opus+GPT 3자 수렴, 소스 확정)
 
 Fable 5(Anthropic 신모델)에 entwurf_v2 설계 검수를 의뢰 → Opus 재검증 + GPT 교차검증으로 수렴. 8 finding
@@ -466,11 +538,13 @@ undecided≠false, `undefined` 반환은 TypeError**.) **탈출구는 그대로:
 - **버킷 B (entwurf_v2 step 4-5 진입 전, 원장에 산문 아니라 결정표/스키마/게이트로):** **N1 intent×{live,dormant,
   indeterminate} 6칸표 + "indeterminate 절대 spawn 금지" 동결 + dispatch 영수증** / **N2 fire-forget+dormant =
   "지금은 reject" 잠금**(mailbox-wake는 reply-correlation id가 substrate에 없어 additive 확장) / F2 per-gid
-  lockfile + pi 동시-resume 실측(검증원장 추가) + send-fail fallback / **fact-provider는 3값 liveness
-  (alive|dead|indeterminate)를 fact로 노출**(F3 결정의 "indeterminate는 getLiveSessions 제외"는 legacy listing
-  한정 — 숨기면 facts-only 교리 위반 + 6칸표 디스패치가 indeterminate를 못 봄, R3b) / F4 liveness를 backend-capability 술어로
+  lockfile + pi 동시-resume 실측(검증원장 추가) + send-fail fallback / **fact-provider는 4값 liveness
+  (alive|dead|indeterminate|**unsupported**)를 fact로 노출**(F3 결정의 "indeterminate는 getLiveSessions 제외"는 legacy
+  listing 한정 — 숨기면 facts-only 교리 위반 + 6칸표 디스패치가 indeterminate/도메인밖을 못 봄, R3b; **unsupported는
+  Fable R1 2026-06-11** = predicate 미정의 backend) / F4 liveness를 backend-capability 술어로
   추상화 + claude liveness 술어 Stage 1 전 한 줄 동결 / F6 entwurf_v2 TypeBox 입출력 스키마 + target 의미론
-  (garden-id only? 오타 gid가 신규 spawn 사고 막기) + error taxonomy를 `check-*` 게이트로.
+  (garden-id only? 오타 gid가 신규 spawn 사고 막기) + error taxonomy를 `check-*` 게이트로. **→ contract-lock
+  단위 산출·이후 스텝 arc·R1-R5 freeze 반영은 ↑ "entwurf_v2 contract-lock 작업 계획" 섹션(2026-06-11).**
 - **버킷 C (backlog):** F7(doctor backend wake-path probe 또는 BASELINE "live-verified: date|never" 표) ·
   F8(`getLiveSessionsWithInfo` `Promise.all` 병렬화 한 줄) · **formatter remedy 정밀화(GPT 2026-06-10):**
   `formatPreflightDenial`의 inherited-false remedy("interactive pi에서 approve")는 controlled-launch deny에
