@@ -1,0 +1,108 @@
+/**
+ * entwurf-fact-provider — the fact-provider's ASSEMBLY layer (0.11 Stage 0 step
+ * 4, slice 4b). Composes the two axes into the listing the MCP `entwurf_peers`
+ * surface (slice 4c) renders. Lives in its own module so nothing imports it back
+ * (one-way: provider → facts / socket-discovery / meta-session) — no import cycle
+ * with `entwurf-facts.ts` (which owns `SocketProbe`/`resolveFactList`).
+ *
+ *   listAllMetaIdentities → pi gid 추출 → scanSocketProbes(piGids)
+ *     → pre-quarantine non-pi/socket conflicts → resolveFactList(clean)
+ *     → { facts, diagnostics }
+ *
+ * Two throw-vs-diagnostics policies, kept distinct (GPT힣 C-원칙):
+ *   - EXPECTED data corruption → diagnostics, listing survives. A meta-record
+ *     parse failure (from listAllMetaIdentities) and a gardenId↔socket address
+ *     collision are external-state problems; one must not blind `entwurf_peers`.
+ *   - IMPOSSIBLE wiring invariant → throw, NOT swallowed. resolveFactList's
+ *     duplicate-identity / unprobed-in-domain throws are assembly BUGS; catching
+ *     them here would hide a code defect. We feed resolveFactList only CLEAN
+ *     inputs (conflicts pre-removed), so its throw stays the last line of defense
+ *     — that is not a re-implementation of the collision rule, it is input
+ *     sanitation that leaves the pure-core invariant intact.
+ *
+ * The non-pi+socket collision quarantines BOTH sides (the PeerFact AND the
+ * socket): gardenId is the universal address and a send path reads the socket
+ * first, so surfacing the record alone (as a clean `unsupported` PeerFact) while
+ * a same-gid socket exists would be half a lie. Both leave the normal output;
+ * one diagnostic carries the fact. (pi + same-gid socket = the normal merge.)
+ */
+
+import { type FactList, resolveFactList } from "./entwurf-facts.ts";
+import { isLivenessSupported } from "./entwurf-v2-contract.ts";
+import { listAllMetaIdentities, type MetaBackendV2 } from "./meta-session.ts";
+import { type SocketScanDeps, scanSocketProbes } from "./socket-discovery.ts";
+
+/** A listing-surface problem, surfaced explicitly rather than hidden or thrown.
+ * Kind-tagged so the render layer shows provenance; each carries only verbatim
+ * facts (never a half-parsed identity). */
+export type EntwurfDiagnostic =
+	| { kind: "meta-record-read-error"; filename: string; message: string }
+	| { kind: "garden-id-socket-conflict"; gardenId: string; backend: MetaBackendV2; message: string };
+
+export interface EntwurfFactsResult {
+	facts: FactList;
+	diagnostics: EntwurfDiagnostic[];
+}
+
+export interface EntwurfFactsDeps {
+	/** Meta-store axis: the `.meta.json` entry names + a record reader. */
+	metaEntries: readonly string[];
+	readRecord: (filename: string) => string;
+	/** Socket axis: injected into scanSocketProbes (controlDir/readdir/probe). */
+	socket?: Partial<SocketScanDeps>;
+}
+
+function diagnosticSortKey(d: EntwurfDiagnostic): string {
+	return d.kind === "meta-record-read-error" ? `0:${d.filename}` : `1:${d.gardenId}`;
+}
+
+/**
+ * Assemble the facts-only listing. Pure over its injected deps (no direct IO) so
+ * the gate drives it without a filesystem; slice 4c supplies the real readdir /
+ * readFile / probe. Enrich is still null this slice (probe-only) — honest, not
+ * synthetic; the render layer shows it as "not enriched".
+ */
+export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfFactsResult> {
+	const diagnostics: EntwurfDiagnostic[] = [];
+
+	// 1. meta-store axis — expected corruption becomes diagnostics, not a throw.
+	const { identities, errors } = listAllMetaIdentities(deps.metaEntries, deps.readRecord);
+	for (const e of errors) {
+		diagnostics.push({ kind: "meta-record-read-error", filename: e.filename, message: e.message });
+	}
+
+	// 2. socket axis — probe (dir sockets) ∪ (in-domain citizen canonical paths).
+	const piGids = identities.filter((i) => isLivenessSupported(i.backend)).map((i) => i.gardenId);
+	const probes = await scanSocketProbes(piGids, deps.socket ?? {});
+	const socketGids = new Set(probes.map((p) => p.gardenId));
+
+	// 3. pre-quarantine non-pi citizens that collide with a control socket.
+	const conflictGids = new Set<string>();
+	for (const id of identities) {
+		if (!isLivenessSupported(id.backend) && socketGids.has(id.gardenId)) {
+			conflictGids.add(id.gardenId);
+			diagnostics.push({
+				kind: "garden-id-socket-conflict",
+				gardenId: id.gardenId,
+				backend: id.backend,
+				message:
+					`non-pi citizen (${id.backend}) shares its gardenId with a control socket — address ambiguity; ` +
+					"both the citizen and the socket are quarantined from the listing.",
+			});
+		}
+	}
+
+	// 4. resolveFactList over CLEAN inputs only. Its throws (duplicate identity /
+	//    unprobed in-domain citizen) are impossible wiring invariants — left to
+	//    fire as the last line of defense, never caught here.
+	const cleanIdentities = identities.filter((i) => !conflictGids.has(i.gardenId));
+	const cleanProbes = probes.filter((p) => !conflictGids.has(p.gardenId));
+	const facts: FactList = resolveFactList(cleanIdentities, cleanProbes);
+
+	diagnostics.sort((a, b) => {
+		const ka = diagnosticSortKey(a);
+		const kb = diagnosticSortKey(b);
+		return ka < kb ? -1 : ka > kb ? 1 : 0;
+	});
+	return { facts, diagnostics };
+}

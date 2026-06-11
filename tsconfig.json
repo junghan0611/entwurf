@@ -58,6 +58,11 @@
 		// slice 3) — a lib→lib VALUE importer (probeSocketLiveness from
 		// socket-probe.ts), same `.ts`-extension fence. Typechecked by
 		// scripts/tsconfig.json via the gate (check-socket-discovery.ts).
-		"pi-extensions/lib/socket-discovery.ts"
+		"pi-extensions/lib/socket-discovery.ts",
+		// entwurf-fact-provider.ts is the fact-provider's ASSEMBLY layer (step 4
+		// slice 4b) — a lib→lib VALUE importer (resolveFactList / scanSocketProbes
+		// / listAllMetaIdentities), same `.ts`-extension fence. Typechecked by
+		// scripts/tsconfig.json via the gate (check-entwurf-fact-provider.ts).
+		"pi-extensions/lib/entwurf-fact-provider.ts"
 	]
 }

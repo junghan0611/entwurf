@@ -68,6 +68,7 @@ Usage:
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b pi 4-value, facts-only keyset; union: PeerFact+SocketOnlyFact by gardenId, dormant→dead, F3 indeterminate preserved, non-pi+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-listing          # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4a): META-STORE axis listAllMetaIdentities — explicit-partial: parse failure / body-filename drift → explicit {filename,message} error (verbatim, no synthetic fields), valid records still listed (corrupt doesn't blind); mode strict throws / collect partial; entries/readRecord injected, no IO
+  ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — listAllMetaIdentities→scanSocketProbes→pre-quarantine non-pi/socket conflicts→resolveFactList(clean)→{facts,diagnostics}; C-원칙: expected corruption (parse/collision)→diagnostics (listing survives), impossible invariant (dup/unprobed)→throw; collision quarantines BOTH PeerFact+socket; deps injected, no IO
   ./run.sh check-entwurf-send-mailbox-fallback # deterministic gate: pi-native entwurf_send → meta-bridge mailbox fallback (transport 2). ENOENT/ECONNREFUSED falls back, timeout does not; shared formatMetaMailboxBody; no-socket citizen → .msg enqueue; WIRING guard (pi-native calls fallback, bridge uses shared formatter)
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
@@ -1342,6 +1343,18 @@ check_meta_listing() {
   # salvaged gid string as a fact = synthetic backdoor). mode strict throws on
   # any error, collect returns partial. entries/readRecord injected, no IO.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-listing.ts)
+}
+
+check_entwurf_fact_provider() {
+  # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4b): the
+  # ASSEMBLY layer listEntwurfFacts. listAllMetaIdentities → scanSocketProbes →
+  # pre-quarantine non-pi/socket conflicts → resolveFactList(clean) →
+  # {facts, diagnostics}. Throw-vs-diagnostics policy (GPT힣 C-원칙): expected
+  # corruption (parse failure / gardenId↔socket collision) → diagnostics, listing
+  # survives; impossible wiring invariant (resolveFactList duplicate/unprobed) →
+  # throw, never swallowed. A collision quarantines BOTH the PeerFact and the
+  # socket (gid is the universal address). meta + socket deps injected, no IO.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-fact-provider.ts)
 }
 
 check_entwurf_send_mailbox_fallback() {
@@ -4356,6 +4369,9 @@ case "$cmd" in
     ;;
   check-meta-listing)
     check_meta_listing
+    ;;
+  check-entwurf-fact-provider)
+    check_entwurf_fact_provider
     ;;
   check-entwurf-send-mailbox-fallback)
     check_entwurf_send_mailbox_fallback
