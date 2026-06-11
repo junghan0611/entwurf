@@ -232,5 +232,23 @@ if [ -f "$ASM_MS" ] && [ "$asm_h" != "$src_h" ]; then
   warn "assembled bundle differs from source ($asm_v vs $src_v) — stale .assembled; install re-assembles it"
 fi
 
+# v2 writer dependency: loadMetaCapabilityRegistry reads entwurf-capabilities.json
+# at runtime. In the bundle layout it must sit at the plugin ROOT (resolved via
+# `../` from lib/). A v2 bundle WITHOUT it throws on every mint/parse — a silent
+# hook break that hash parity alone cannot see (it only hashes meta-session.ts).
+check_registry_dep() { # $1=bundle meta-session.ts  $2=label
+  local ms="$1" label="$2" root reg
+  [ -f "$ms" ] && grep -q "serializeMetaIdentity" "$ms" || return 0 # v1/absent: no registry dep
+  root="$(dirname "$(dirname "$ms")")"
+  reg="$root/entwurf-capabilities.json"
+  if [ -f "$reg" ]; then
+    ok "$label v2 carries capability registry ($reg)"
+  else
+    bad "$label is v2 but MISSING entwurf-capabilities.json at plugin root ($reg) — the v2 writer throws on mint/parse (silent hook break). Re-run ./run.sh install-meta-bridge (now bundles the registry)."
+  fi
+}
+check_registry_dep "$ASM_MS" "assembled"
+check_registry_dep "$INST_MS" "installed"
+
 echo
 if [ "$fail" -eq 0 ]; then echo "meta-bridge doctor: PASS"; else echo "meta-bridge doctor: FAIL (see above)"; exit 1; fi

@@ -69,6 +69,12 @@ cp "$REPO/pi-extensions/meta-bridge-hook.ts" "$ASM/$PLUGIN/meta-bridge-hook.ts"
 mkdir -p "$ASM/$PLUGIN/lib"
 cp "$REPO/pi-extensions/lib/meta-session.ts" "$ASM/$PLUGIN/lib/meta-session.ts"
 cp "$REPO/pi-extensions/lib/session-id.js" "$ASM/$PLUGIN/lib/session-id.js"
+# v2 writer (3D-3+) reads the capability registry at runtime
+# (loadMetaCapabilityRegistry). It MUST travel at the plugin ROOT — meta-session's
+# metaCapabilitiesFilePath() resolves it via `../` from lib/ in the bundle layout
+# (the repo `../../pi` path escapes the plugin dir under the cache version dir).
+# Without this, a v2 writer throws on every mint/parse. doctor-meta-bridge asserts it.
+cp "$REPO/pi/entwurf-capabilities.json" "$ASM/$PLUGIN/entwurf-capabilities.json"
 chmod +x "$ASM/$PLUGIN/scripts/doorbell.sh"
 # Bake the node abspath into hooks.json — the ONLY templated surface. mailbox /
 # meta-record dirs resolve at runtime inside entry.ts (<pi-agent-dir>, fixed ~/).

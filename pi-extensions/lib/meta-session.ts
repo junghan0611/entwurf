@@ -758,9 +758,20 @@ export function parseMetaCapabilityRegistry(json: string): MetaCapabilityRegistr
 	return { schemaVersion: CAPABILITY_SCHEMA_VERSION, backends: out };
 }
 
-/** The packaged capability registry path: `<repo>/pi/entwurf-capabilities.json`. */
+/**
+ * The packaged capability registry path. Two layouts resolve:
+ *  - repo / npm package: `pi-extensions/lib/` → `<root>/pi/entwurf-capabilities.json`.
+ *  - bundled meta-bridge plugin: `../../pi` would ESCAPE the plugin dir (the plugin
+ *    is installed under a version dir in the Claude plugin cache), so the registry
+ *    travels AT the plugin root and resolves via `../` from `lib/`.
+ *    meta-bridge-install.sh copies it there; doctor-meta-bridge asserts its presence.
+ * Repo path is tried first, so repo/package behaviour is unchanged; the bundle
+ * fallback only engages where the repo layout is absent.
+ */
 export function metaCapabilitiesFilePath(): string {
-	return path.join(import.meta.dirname, "..", "..", "pi", "entwurf-capabilities.json");
+	const repoPath = path.join(import.meta.dirname, "..", "..", "pi", "entwurf-capabilities.json");
+	if (fs.existsSync(repoPath)) return repoPath;
+	return path.join(import.meta.dirname, "..", "entwurf-capabilities.json");
 }
 
 // ---------------------------------------------------------------------------
