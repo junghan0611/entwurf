@@ -238,7 +238,8 @@ withTempDir((dir) => {
 	ok("corrupt: empty lockfile → conflict (not reclaimed by pid heuristic)", res.ok === false);
 	if (!res.ok) {
 		eq("corrupt: holder is null (unparseable)", res.conflict.holder, null);
-		ok("corrupt: detail flags empty/corrupt", /empty or corrupt/.test(res.conflict.detail));
+		ok("corrupt: detail flags empty/corrupt", /empty, corrupt/.test(res.conflict.detail));
+		ok("corrupt: detail carries file mtime (only age signal when body unreadable)", /mtime/.test(res.conflict.detail));
 	}
 	ok("corrupt: lockfile NOT auto-deleted (could be mid-write)", fs.existsSync(lockPath));
 });
@@ -249,6 +250,81 @@ withTempDir((dir) => {
 	const res = acquireLock(GID_A, fixedDeps({ dir }));
 	ok("corrupt: garbage lockfile → conflict", res.ok === false);
 	ok("corrupt: garbage lockfile preserved", fs.existsSync(lockPath));
+});
+
+// ── L3: gardenId mismatch (path authority = gid) → conflict, not reclaimed ──
+withTempDir((dir) => {
+	const lockPath = lockPathFor(GID_A, dir);
+	fs.mkdirSync(dir, { recursive: true });
+	// a <GID_A>.lock whose body claims gardenId GID_B — a corrupt address.
+	const wrong = {
+		gardenId: GID_B,
+		pid: 4242,
+		hostname: HOST,
+		createdAt: "x",
+		nonce: "n",
+		owner: "entwurf_v2",
+		lockPath,
+	};
+	fs.writeFileSync(lockPath, JSON.stringify(wrong));
+	// even with a dead-pid heuristic, a mismatched gid must NOT be reclaimed.
+	const res = acquireLock(GID_A, fixedDeps({ dir, killFn: killers.esrch }));
+	ok("gid-mismatch: <A>.lock holding gardenId B → conflict", res.ok === false);
+	if (!res.ok) eq("gid-mismatch: treated as corrupt (holder null)", res.conflict.holder, null);
+	ok("gid-mismatch: lockfile preserved (not reclaimed)", fs.existsSync(lockPath));
+});
+
+// ── L1: reclaim under a wx mutex — closes the F2 two-reclaimer race ─────────
+// (A) a pre-existing reclaim marker = a concurrent reclaimer mid-reclaim (or a
+// stale marker) → the second reclaimer is excluded, fail-closed to conflict.
+withTempDir((dir) => {
+	const lockPath = lockPathFor(GID_A, dir);
+	const held = acquireLock(GID_A, fixedDeps({ dir }));
+	ok("reclaim-mutex: holder acquired", held.ok === true);
+	fs.writeFileSync(`${lockPath}.reclaim`, ""); // a reclaimer already holds the mutex
+	const second = acquireLock(GID_A, fixedDeps({ dir, killFn: killers.esrch }));
+	ok("reclaim-mutex: marker present → second reclaimer excluded (conflict)", second.ok === false);
+	if (!second.ok)
+		ok("reclaim-mutex: detail flags reclaim-in-progress", /reclaim already in progress/.test(second.conflict.detail));
+});
+// (B) the dead lock CHANGES under the mutex (re-read nonce mismatch) → abort.
+withTempDir((dir) => {
+	const stale = acquireLock(GID_A, fixedDeps({ dir }));
+	if (!stale.ok) return;
+	const lockPath = stale.claim.lockPath;
+	const competitor = { ...stale.claim, nonce: "competitor-nonce" };
+	const swap = () => fs.writeFileSync(lockPath, JSON.stringify(competitor));
+	const res = acquireLock(GID_A, fixedDeps({ dir, killFn: killers.esrch, _test_beforeReread: swap }));
+	ok("reclaim-mutex: lock changed under mutex (re-read nonce mismatch) → abort conflict", res.ok === false);
+});
+// (C) a FRESH acquirer wins the unlink→create gap → we conflict, never clobber.
+withTempDir((dir) => {
+	const stale = acquireLock(GID_A, fixedDeps({ dir }));
+	if (!stale.ok) return;
+	const lockPath = stale.claim.lockPath;
+	const fresh = {
+		gardenId: GID_A,
+		pid: 9,
+		hostname: HOST,
+		createdAt: "x",
+		nonce: "fresh-F",
+		owner: "entwurf_v2",
+		lockPath,
+	};
+	const winGap = () => fs.writeFileSync(lockPath, JSON.stringify(fresh)); // F creates after our unlink
+	const res = acquireLock(GID_A, fixedDeps({ dir, killFn: killers.esrch, _test_beforeRecreate: winGap }));
+	ok("reclaim-mutex: gap-winner present → we conflict (no double-hold)", res.ok === false);
+	const onDisk = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+	eq("reclaim-mutex: on-disk is the gap-winner's lock, never overwritten", onDisk.nonce, "fresh-F");
+});
+// (D) a clean reclaim leaves NO leftover marker (finally cleanup).
+withTempDir((dir) => {
+	const lockPath = lockPathFor(GID_A, dir);
+	const stale = acquireLock(GID_A, fixedDeps({ dir }));
+	ok("reclaim-mutex: stale holder acquired", stale.ok === true);
+	const reclaimer = acquireLock(GID_A, fixedDeps({ dir, killFn: killers.esrch }));
+	ok("reclaim-mutex: clean reclaim succeeds (same host + ESRCH)", reclaimer.ok === true);
+	ok("reclaim-mutex: no leftover .reclaim marker after success", !fs.existsSync(`${lockPath}.reclaim`));
 });
 
 console.log(`\ncheck-entwurf-v2-lock: ${passed} assertions passed`);

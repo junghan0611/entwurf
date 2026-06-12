@@ -1,8 +1,19 @@
 /**
  * entwurf-v2-lock — the per-gid dispatch lock primitive (0.11 Stage 0 step 5a,
- * 버킷 B F2). LOAD-BEARING: the ONLY guard against a double-spawn of the same
- * dormant target by two dispatchers (v2/v2 or v2/legacy) that share the same
- * substrate through different entry points.
+ * 버킷 B F2). LOAD-BEARING: the guard against a double-spawn of the same dormant
+ * target by two V2 dispatchers that share the substrate through different entry
+ * points. SCOPE (honest): this protects v2/v2 only. The legacy `entwurf_resume`
+ * is unchanged (동결결정 10 scope A) and does NOT take this lock, so v2/legacy
+ * concurrent resume is a KNOWN residual gap (rare — single-orchestrator practice),
+ * closed only at full cut-over. Do not read this header as "v2/legacy is guarded".
+ *
+ * ENVIRONMENT ASSUMPTION (stale reclaim): `hostname` equality is used as the
+ * proxy for "same machine", so a holder pid is reclaim-probed with kill(0) only
+ * when its hostname matches ours. This holds when `~/.pi` is NOT shared across
+ * hosts. If two machines with the same hostname shared `~/.pi` over NFS, a remote
+ * pid could be mis-judged ESRCH and a live remote lock wrongly reclaimed. GLG's
+ * environment (laptop/nuc/oracle = distinct hostnames, non-shared homes) does not
+ * hit this; documented so a future shared-home setup reopens the reclaim axis.
  *
  * Why a lockfile and not pi's own guard (검증원장 F2, source-verified): pi
  * `SessionManager._persist` only takes an `openSync(file,"wx")` on the FIRST
@@ -48,7 +59,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { closeSync, mkdirSync, openSync, readFileSync, unlinkSync, writeSync } from "node:fs";
+import { closeSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { isValidSessionId } from "./session-id.js";
@@ -100,6 +111,11 @@ export interface LockDeps {
 	/** `kill(pid, 0)` surface for stale reclaim — injected so the gate controls
 	 * ESRCH / EPERM / alive without real processes. Default = `process.kill`. */
 	killFn?: (pid: number, signal: 0) => void;
+	/** TEST-ONLY seams to drive the reclaim critical section deterministically
+	 * (simulate a competitor changing the lock under our reclaim mutex). Default
+	 * undefined = noop in production; never set outside the gate. */
+	_test_beforeReread?: () => void;
+	_test_beforeRecreate?: () => void;
 }
 
 export type ProcessLiveness = "alive" | "dead" | "denied";
@@ -137,8 +153,14 @@ export function lockPathFor(gardenId: string, dir: string = ENTWURF_V2_LOCK_DIR)
 	return path.join(dir, `${gardenId}${LOCK_SUFFIX}`);
 }
 
-/** Parse a lockfile's bytes into a claim, or null when empty/corrupt/unowned. */
-function parseLockClaim(raw: string, lockPath: string): LockClaim | null {
+/**
+ * Parse a lockfile's bytes into a claim, or null when empty/corrupt/wrong-gid.
+ * When `expectedGardenId` is given, a well-formed claim whose `gardenId` does NOT
+ * match is treated as null (→ conflict, never reclaimed): the path authority IS
+ * the garden id (동결결정3), so a `<A>.lock` carrying `gardenId:B` is a corrupt
+ * address, not a holder we may probe-and-reclaim by A's heuristic.
+ */
+function parseLockClaim(raw: string, lockPath: string, expectedGardenId?: string): LockClaim | null {
 	let obj: unknown;
 	try {
 		obj = JSON.parse(raw);
@@ -157,6 +179,7 @@ function parseLockClaim(raw: string, lockPath: string): LockClaim | null {
 	) {
 		return null;
 	}
+	if (expectedGardenId !== undefined && o.gardenId !== expectedGardenId) return null;
 	return {
 		gardenId: o.gardenId,
 		pid: o.pid,
@@ -168,28 +191,37 @@ function parseLockClaim(raw: string, lockPath: string): LockClaim | null {
 	};
 }
 
-function describeHolder(holder: LockClaim | null, lockPath: string): string {
-	if (holder === null) {
-		return `lockfile at ${lockPath} is empty or corrupt (a crash between create and write); clear it by hand after confirming no dispatcher is mid-spawn`;
+/** Best-effort lockfile mtime (ISO) for human cleanup evidence — the ONLY age
+ * signal when the body is empty/corrupt (createdAt is then unreadable). */
+function lockMtimeIso(lockPath: string): string | null {
+	try {
+		return statSync(lockPath).mtime.toISOString();
+	} catch {
+		return null;
 	}
-	return `held by pid ${holder.pid} on host ${holder.hostname} since ${holder.createdAt} (${lockPath}); clear it by hand if that process is gone`;
 }
 
-/** Atomically write a fresh claim to an already-open exclusive fd, then close. */
-function writeClaim(fd: number, claim: LockClaim): void {
-	writeSync(fd, `${JSON.stringify(claim)}\n`);
-	closeSync(fd);
+function describeHolder(holder: LockClaim | null, lockPath: string): string {
+	const mtime = lockMtimeIso(lockPath);
+	const age = mtime ? ` (file mtime ${mtime})` : "";
+	if (holder === null) {
+		return `lockfile at ${lockPath} is empty, corrupt, or holds a different garden id${age}; clear it by hand after confirming no dispatcher is mid-spawn`;
+	}
+	return `held by pid ${holder.pid} on host ${holder.hostname} since ${holder.createdAt}${age} (${lockPath}); clear it by hand if that process is gone`;
 }
 
 /**
  * Acquire the per-gid dispatch lock. Returns the claim on success, or a
- * `target-locked` conflict (with the holder evidence) on contention. Performs at
- * most ONE stale reclaim (same host + ESRCH), then a single re-acquire — it never
- * loops, so a race lost on the re-acquire is an honest conflict, not a spin.
+ * `target-locked` conflict (with the holder evidence) on contention. Stale reclaim
+ * (same host + ESRCH) runs UNDER a `<gid>.lock.reclaim` wx mutex so two
+ * dispatchers can never both reclaim the same dead lock (the F2 double-spawn race
+ * GPT+Fable found). It never loops — a race lost on the re-acquire is an honest
+ * conflict, not a spin.
  */
 export function acquireLock(gardenId: string, deps: LockDeps = {}): AcquireLockResult {
 	const dir = deps.dir ?? ENTWURF_V2_LOCK_DIR;
 	const lockPath = lockPathFor(gardenId, dir); // validates gid (F2-P1)
+	const reclaimMarkerPath = `${lockPath}.reclaim`;
 	const pid = deps.pid ?? process.pid;
 	const hostname = deps.hostname ?? os.hostname();
 	const now = deps.now ?? (() => new Date().toISOString());
@@ -208,14 +240,49 @@ export function acquireLock(gardenId: string, deps: LockDeps = {}): AcquireLockR
 		lockPath,
 	};
 
-	const tryCreate = (): { ok: true } | { ok: false; code: string | undefined } => {
+	const conflict = (holder: LockClaim | null, detail?: string): AcquireLockResult => ({
+		ok: false,
+		conflict: { reason: LOCK_CONFLICT_REASON, lockPath, holder, detail: detail ?? describeHolder(holder, lockPath) },
+	});
+
+	const readHolder = (): LockClaim | null => {
 		try {
-			const fd = openSync(lockPath, "wx");
-			writeClaim(fd, claim);
-			return { ok: true };
+			return parseLockClaim(readFileSync(lockPath, "utf8"), lockPath, gardenId);
+		} catch {
+			return null;
+		}
+	};
+
+	// Create the lock and write the claim. On a write/close failure AFTER the wx
+	// create, best-effort unlink our OWN fresh file before rethrowing — otherwise a
+	// transient ENOSPC leaves an empty lockfile that permanently corrupt-conflicts
+	// the gid (Fable 2 self-harm). The unlink is safe: we hold the file exclusively.
+	const tryCreate = (): { ok: true } | { ok: false; code: string | undefined } => {
+		let fd: number;
+		try {
+			fd = openSync(lockPath, "wx");
 		} catch (err) {
 			return { ok: false, code: (err as NodeJS.ErrnoException).code };
 		}
+		try {
+			writeSync(fd, `${JSON.stringify(claim)}\n`);
+		} catch (err) {
+			try {
+				closeSync(fd);
+			} catch {
+				/* fd may already be unusable */
+			}
+			try {
+				unlinkSync(lockPath);
+			} catch {
+				/* best-effort; nothing else holds it */
+			}
+			throw new Error(
+				`entwurf-v2-lock: failed to write claim to ${lockPath}: ${(err as NodeJS.ErrnoException).code ?? "unknown error"}`,
+			);
+		}
+		closeSync(fd);
+		return { ok: true };
 	};
 
 	const first = tryCreate();
@@ -229,54 +296,77 @@ export function acquireLock(gardenId: string, deps: LockDeps = {}): AcquireLockR
 	// EEXIST: a lock already exists. Read it and decide reclaim vs conflict.
 	let holder: LockClaim | null;
 	try {
-		holder = parseLockClaim(readFileSync(lockPath, "utf8"), lockPath);
+		holder = parseLockClaim(readFileSync(lockPath, "utf8"), lockPath, gardenId);
 	} catch (err) {
 		const code = (err as NodeJS.ErrnoException).code;
 		if (code === "ENOENT") {
 			// The holder released between our open-wx and our read — retry once.
 			const retry = tryCreate();
 			if (retry.ok) return { ok: true, claim };
-			holder = null; // someone else re-grabbed it; fall through to conflict
-		} else {
-			throw err;
+			// Someone else re-grabbed it; report the actual winner (not "corrupt").
+			return conflict(readHolder());
 		}
+		throw err;
 	}
 
-	// Empty/corrupt lockfile → conflict (NEVER auto-deleted: could be mid-write).
-	if (holder === null) {
-		return {
-			ok: false,
-			conflict: { reason: LOCK_CONFLICT_REASON, lockPath, holder: null, detail: describeHolder(null, lockPath) },
-		};
-	}
+	// Empty/corrupt/wrong-gid lockfile → conflict (NEVER auto-deleted: could be
+	// mid-write, and there is no dead pid to reclaim by).
+	if (holder === null) return conflict(null);
 
 	// Stale reclaim is allowed ONLY for our own host + a provably-dead pid (ESRCH).
 	const reclaimable = holder.hostname === hostname && classifyProcessLiveness(holder.pid, killFn) === "dead";
-	if (reclaimable) {
+	if (!reclaimable) return conflict(holder);
+
+	// ── Reclaim under a wx mutex (closes the F2 two-reclaimer race) ────────────
+	// The blind unlink this replaced could delete a SUCCESSOR's fresh lock: two
+	// dispatchers read the same dead holder, the first reclaimed+recreated, the
+	// second's unlink then deleted the first's new lock → both spawned. The mutex
+	// serializes ALL would-be reclaimers (a fresh acquirer EEXISTs on the lock and
+	// re-enters this same branch), so under it the stale lock cannot change; an
+	// EEXIST on the marker is a fail-closed conflict (a permanent conflict is the
+	// accepted worst case — same grade as a corrupt lockfile — never a double-spawn).
+	let markerFd: number;
+	try {
+		markerFd = openSync(reclaimMarkerPath, "wx");
+	} catch (err) {
+		const code = (err as NodeJS.ErrnoException).code;
+		if (code === "EEXIST") {
+			return conflict(
+				holder,
+				`reclaim already in progress (or a stale reclaim marker at ${reclaimMarkerPath}); confirm no dispatcher is mid-reclaim, then clear it by hand`,
+			);
+		}
+		throw err;
+	}
+	try {
+		deps._test_beforeReread?.();
+		// Re-read UNDER the mutex: the lock must still be the exact dead claim we
+		// judged (Fable's nonce re-compare). If it changed (a normal release +
+		// recreate — impossible for a dead holder, but cheap insurance) abort.
+		const current = readHolder();
+		if (current === null || current.nonce !== holder.nonce) return conflict(current);
 		try {
 			unlinkSync(lockPath);
 		} catch (err) {
 			if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
 		}
+		deps._test_beforeRecreate?.();
 		const reacquired = tryCreate();
 		if (reacquired.ok) return { ok: true, claim };
-		// Lost the reclaim race to another dispatcher — honest conflict, no spin.
-		let winner: LockClaim | null = null;
+		// A fresh acquirer slipped into the unlink→create gap — honest conflict.
+		return conflict(readHolder());
+	} finally {
 		try {
-			winner = parseLockClaim(readFileSync(lockPath, "utf8"), lockPath);
+			closeSync(markerFd);
 		} catch {
-			winner = null;
+			/* fd may already be unusable */
 		}
-		return {
-			ok: false,
-			conflict: { reason: LOCK_CONFLICT_REASON, lockPath, holder: winner, detail: describeHolder(winner, lockPath) },
-		};
+		try {
+			unlinkSync(reclaimMarkerPath);
+		} catch {
+			/* best-effort; a leftover marker just fail-closes the next reclaim */
+		}
 	}
-
-	return {
-		ok: false,
-		conflict: { reason: LOCK_CONFLICT_REASON, lockPath, holder, detail: describeHolder(holder, lockPath) },
-	};
 }
 
 export type ReleaseResult = "released" | "not-owned" | "absent";
