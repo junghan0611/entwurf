@@ -67,6 +67,7 @@ Usage:
   ./run.sh check-entwurf-v2-contract   # deterministic gate (0.11 Stage 0 step 4-pre, 동결결정 10 + Fable R1-R5): FROZEN entwurf_v2 contract — R1 backend liveness domain (pi only; claude/codex/agy=unsupported, not folded), 6-cell intent×liveness table (single verdict, 2 allow/4 reject), N1 indeterminate-no-spawn, Q2 owned-live-no-autosend, R3 table↔receipt round-trip, R5 taxonomy, schema↔types drift; pure, no API
   ./run.sh check-entwurf-v2-lock       # deterministic gate (0.11 Stage 0 step 5a, 버킷 B F2): per-gid dispatch LOCK primitive — openSync wx atomic acquire, second-acquire=target-locked conflict (holder JSON for human cleanup), nonce-owned release (successor survives late release), stale reclaim same-host+ESRCH-only (EPERM/remote/alive/unknown fail-closed), empty/corrupt=conflict not auto-deleted, F2-P1 malformed gid throws; real temp dir, deps injected
   ./run.sh check-entwurf-v2-decider    # deterministic gate (0.11 Stage 0 step 5b): PURE dispatch decider decideDispatch — frozen 7-step order over injected fakes, lock acquire+release tracked so reject⇒no-plan-no-lock proven; pre-probe rejects observedLiveness=null, send/resume execute keep lock + mailbox no-lock (？7), resume plan no mode/provider/model, invalid gid throws (F2-P1); pure, no IO
+  ./run.sh check-entwurf-v2-release    # deterministic gate (0.11 Stage 0 step 5c-1): PURE release-policy reducer (decideReleasePolicy + reduceRelease) — Fable-3 release-after-observation as a state machine; spawn-started is NOT a release event, release on first socket-alive ∨ child-exited (any code) or failed start, socket↔exit race idempotent (single release), lock-nullness invariant enforced; pure, no IO
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b pi 4-value, facts-only keyset; union: PeerFact+SocketOnlyFact by gardenId, dormant→dead, F3 indeterminate preserved, non-pi+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-listing          # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4a): META-STORE axis listAllMetaIdentities — explicit-partial: parse failure / body-filename drift → explicit {filename,message} error (verbatim, no synthetic fields), valid records still listed (corrupt doesn't blind); mode strict throws / collect partial; entries/readRecord injected, no IO
@@ -1340,6 +1341,18 @@ check_entwurf_v2_decider() {
   # expectedSocketPath/observeTimeoutMs/releaseWhen; an invalid gid throws before
   # any lookup (F2-P1). Pure, no IO, no API.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-decider.ts)
+}
+
+check_entwurf_v2_release() {
+  # Deterministic gate for 0.11 Stage 0 step 5c-1: the PURE release-policy reducer
+  # (decideReleasePolicy + reduceRelease) for the 5c transport hand. Proves the
+  # Fable-3 "release-after-observation" timing as a pure state machine BEFORE any
+  # spawn/send IO: meta-mailbox=never release (no lock), control-socket=release once
+  # on send-final, spawn-bg=spawn-started is NOT a release event (load-bearing) →
+  # release on the FIRST observed transition (socket-alive ∨ child-exited any code)
+  # or a failed start; socket↔exit race idempotent (single release either order);
+  # decideReleasePolicy enforces the lock-nullness invariant (？7). Pure, no IO.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-release.ts)
 }
 
 check_entwurf_facts() {
@@ -4412,6 +4425,9 @@ case "$cmd" in
     ;;
   check-entwurf-v2-decider)
     check_entwurf_v2_decider
+    ;;
+  check-entwurf-v2-release)
+    check_entwurf_v2_release
     ;;
   check-entwurf-facts)
     check_entwurf_facts

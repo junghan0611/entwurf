@@ -74,6 +74,12 @@
 		// isNonPiGardenIdSocketConflict / metaCapabilityFor), same `.ts`-extension
 		// fence. Typechecked by scripts/tsconfig.json via the gate
 		// (check-entwurf-v2-decider.ts).
-		"pi-extensions/lib/entwurf-v2-decider.ts"
+		"pi-extensions/lib/entwurf-v2-decider.ts",
+		// entwurf-v2-release.ts is the PURE release-policy reducer (step 5c-1). Its
+		// imports are type-only, but they carry the explicit `.ts` extension and pull
+		// the excluded decider/lock into the program, so it lives in the same
+		// scripts/tsconfig.json fence. Typechecked via its gate
+		// (check-entwurf-v2-release.ts).
+		"pi-extensions/lib/entwurf-v2-release.ts"
 	]
 }
