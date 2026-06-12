@@ -3,6 +3,19 @@
 > 새 담당자는 여기만 먼저 읽는다. 모르면 아래 `# LEDGER`의 링크/섹션으로 내려간다.
 > NEXT는 DB가 아니라 나침반이다: 현재 위치·다음 한 걸음·넘으면 안 되는 선을 맨 위에 둔다.
 
+## 전달지침 — 새 담당자(2026-06-13 세션 #4 → 다음 세션)
+
+- **지금 할 일:** ◀ NOW = **5c-2(a) 구현**. 아래 `## Next moves` 1번에 reuse map(함수+라인)·설계 조건 4개·게이트 8케이스가
+  design 잠금 상태로 다 박혀 있다. 재탐색 없이 `executeControlSocketSend(plan, lock, deps)`부터 짜면 된다.
+- **검수 분신(살아있는 세션, 순차 호출 — 동시 같은 질문 금지):**
+  - **GPT힣 1차** = garden id `20260613T063959-cfdcff` (live pi control socket, direct 도달). 설계/코드 1차.
+  - **Fable5 2차** = garden id `20260613T064858-0dc14b` (claude-code, meta-mailbox + doorbell). 1차 통과분만 2차.
+  - 둘은 5b·5c-1·5c-2설계 맥락을 이미 가짐(이 세션에서 검수함). `entwurf_send`로 garden id에 보내고, 회신은 네 mailbox
+    doorbell로 온다(`entwurf_inbox_read <네 gid>`). 5c-2 설계는 GPT 조건부 GO까지 완료 — 다음은 **5c-2 코드 1차**부터.
+- **규율:** 매 슬라이스 GPT 1차 → 반영 → Fable 2차 → 둘 다 GO → local 커밋. **push는 GLG.** AI 서명 금지. `--no-verify`·
+  `AGENT_ALLOW_UNSAFE_COMMIT` 금지. 공개 repo라 device 호스트명·실명·시크릿을 커밋/푸시 diff에 넣지 말 것(pre-push가 막음).
+- **GLG는 폰에서 tmux 관망, 커밋 시점에만 확인.** 셋이 밀고 나가다 진짜 막힐 때만 호출.
+
 ## North Star — 잊지 말 것
 
 - **One forged screwdriver.** pi-shell-acp는 두 번째 하네스가 아니라 pi-facing bridge다. pi가 하네스이고, 이 repo는 ACP/backend/MCP/entwurf 접점을 얇고 명시적으로 정렬한다.
@@ -19,7 +32,7 @@
 
 ## Current state — 2026-06-13 (구현 세션 #4 — 5b 봉합 + 5c-1 done·전부 GO·local 커밋, push 전)
 
-- **2026-06-13 구현 세션 #4 (hejdev6 서버 이전 첫 세션): 5b B1/B2/B3 봉합 + 5c design + 5c-1 구현.
+- **2026-06-13 구현 세션 #4 (랩톱→개발 서버 이전 첫 세션): 5b B1/B2/B3 봉합 + 5c design + 5c-1 구현.
   매 단계 GPT 1차 GO → Fable 2차 GO. local 커밋만(push 전, GLG가 더 진행 후 일괄).** ◀ NOW = **5c-2 control-socket send 배선**.
   - **5c-1 (`ff69a3a`, GPT design GO → code GO → Fable GO): pure release-policy reducer.** transport IO
     전에 "어떤 event에서 lock release 허용되는가"를 순수 state machine으로 격리(`entwurf-v2-release.ts`).
@@ -41,8 +54,8 @@
     순서·역할은 사안 따라 유동(어떤 사안은 GPT가 더 필요할 수도). 이번엔 double-release 관찰을 GPT가 던지고
     Fable이 "현행이 옳다 — retry는 무해를 넘어 이득"으로 독립 판정 + 게이트 retry-pin 권고 → 분업이 실제로 값을
     만든 사례. GLG는 폰에서 tmux 관망, **커밋 시점에만 확인**(셋이 밀고 나가다 진짜 막힐 때만 호출).
-  - **설계 SSOT 부재 주의:** `.agent-reports/5b-decider-design.md`는 gitignored — laptop에만 있고 hejdev6엔
-    없음. 코드 + 커밋 `33f0c20` 본문 + 이 NEXT가 SSOT 역할. (5c 설계 산출물도 gitignored면 같은 한계.)
+  - **설계 SSOT 부재 주의:** `.agent-reports/5b-decider-design.md`는 gitignored — 랩톱에만 있고 이 개발
+    서버엔 없음. 코드 + 커밋 `33f0c20` 본문 + 이 NEXT가 SSOT 역할. (5c 설계 산출물도 gitignored면 같은 한계.)
 - **2026-06-12 구현 세션 #2: 진입① + 5a 완료·커밋·푸시·검수통과**.
   - **S1 = GLG 해소(2026-06-12):** nested spawn은 **코드레벨에서 차별 안 함**(다 열어둠), **지침으로 가드**. 5c
     launcher가 `--entwurf-control` 붙여 손자 spawn이 코드상 가능해지는 걸 수용. depth-cap 기계 가드 안 만듦. 인터페이스는
