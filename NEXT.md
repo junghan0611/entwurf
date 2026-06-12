@@ -11,11 +11,29 @@
 - **Facts before verbs.** fact-provider와 `entwurf_peers`는 liveness/capability/identity/cwd-history만 말한다. send/resume/transport 판단은 step 5 dispatch에서만 한다.
 - **Capability dignity.** Claude/Codex/Gemini/pi는 형제 백엔드다. surface 차이를 capability 포기로 번역하지 말고, unsupported는 숨기지 말고 사실로 노출한다.
 
-## Current state — 2026-06-12
+## Current state — 2026-06-12 (구현 세션 #2 — 진입① + 5a done, 5b next)
 
-- **2026-06-12: step 5 진입 물음표 전부 닫힘** (GPT+Fable+？1 실측 삼각측량). 결론·게이트·decider 순서 = LEDGER
-  "### step 5 물음표 닫힘" 블록. 미해결 1건 = **S1(GLG 확인 대기)**: v2 child가 extension 로드로 손자 spawn 가능해짐
-  → 수용 vs 억제 GLG 택1. contract 수정 1건(？6 reject receipt observedLiveness=required-nullable) = 5b 전 동결 필요.
+- **2026-06-12 구현 세션: 진입① + 5a 완료·커밋·검수통과** (push는 GLG 대기). 다음 = **5b pure decider**.
+  - **S1 = GLG 해소(2026-06-12):** nested spawn은 **코드레벨에서 차별 안 함**(다 열어둠), **지침으로 가드**. 5c
+    launcher가 `--entwurf-control` 붙여 손자 spawn이 코드상 가능해지는 걸 수용. depth-cap 기계 가드 안 만듦. 인터페이스는
+    뚫어두되 "사용자가 허락하는 경우에만" = 정책/지침 레벨. → **S1 BLOCKER 해소, 5c 진행 가능.** (재귀 dispatch 안전:
+    try-acquire-only라 lock 사이클 deadlock 불가 — Fable 확인.)
+  - **진입① ？6+F3 (`b9d46db` + 검수 `95e9989`):** reject receipt `observedLiveness: FactLiveness|null`(required-nullable).
+    pre-probe 3종(bad-target/target-locked/`target-address-conflict`)=null·나머지=non-null을 `rejectObservedLivenessWellFormed`
+    순수 술어로. **우회 차단 = `makeRejectReceipt(reason,lv)` constructor(wellFormed 위반 throw) — 5b는 reject를 손으로
+    조립 말고 무조건 이것만.** F3 `target-address-conflict`=pre-resolver enum(RESOLVER 멤버 아님). 게이트 109→**233**.
+  - **5a per-gid lock (`9c05576` + 검수 `d80476e`,`517a05c`):** `openSync wx`, target-locked+holder JSON, **reclaim
+    mutex(`<gid>.lock.reclaim` wx)** = F2 이중-spawn race 봉합(GPT+Fable 독립 발견), nonce-owned release,
+    same-host+ESRCH-only reclaim(EPERM/remote/alive/unknown fail-closed), corrupt/gid-mismatch=conflict, ENOSPC/close
+    실패 시 자기 wx파일 unlink, F2-P1 gid 검증. 게이트 신규 **67**. `~/.pi/entwurf-v2-locks/<gid>.lock`.
+  - **검수: GPT힣(1차)+Fable(2차) 둘 다 GO.** reclaim race=완전 폐쇄(Fable interleaving 전수 증명).
+- **⚠ 검수 프로세스 교훈(GLG 2026-06-12):** 분신 검수는 **순차** — GPT 1차 → 통과분을 Fable 2차. **동시에 둘 다
+  던지지 말 것**(이번에 그래서 둘이 같은 reclaim race를 중복 발견 = 리소스 낭비). 다음 슬라이스부터 적용.
+- **5c로 이월(Fable 3, load-bearing):** F2 완전 봉합 = nonce-release ∧ reclaim-mutex ∧ **release-after-observation(5c
+  watcher)** 3박자. **acquire→spawn 배선은 5c watcher 전에 켜면 안 됨** → 5c 게이트 "관측 전 release 없음"으로 박을 것.
+- **비차단 backlog(Fable O1):** reclaim marker는 nonce 무소유 → 인간이 in-flight marker 오삭제 시에만 race 재개방
+  (document-grade, conflict detail이 이미 경고). 운영 중 marker 수동 정리가 실제로 일어나면 marker에 nonce 기록+자기것만
+  unlink(~5줄). 지금은 불요.
 - Done: step 4 fact-provider slice 1·2·3·4a·4b·4c **+ F-mailbox amendment** (contract층 step 5 blocker 닫힘). `entwurf_peers` renders facts + legacy `sessions` projection from the same provider; no second socket scan.
 - F-mailbox amendment (this cleanup's companion commit): `entwurf_v2` contract now routes `fire-and-forget + unsupported citizen → meta-mailbox/ack-only` instead of rejecting it. New `meta-mailbox` transport + `mailbox-undeliverable` reason (fail-closed) + `UNSUPPORTED_DISPATCH_TABLE` mini-table separate from the 6-cell table. `resolveDispatch` takes a 2nd `mailboxDeliverable` fact. GPT힣 review = GO; `RESOLVER_REJECT_REASONS` rename + in-domain no-mailbox guard folded in.
 - Verified: `check-entwurf-v2-contract` **109** (was 81), `check-socket-discovery` 31, `check-entwurf-fact-provider` 27, `check-entwurf-peers-surface` 40, full `pnpm check` green.
@@ -23,12 +41,21 @@
 
 ## Next moves — read order
 
-1. **Step 5 (the next big chunk):** implement `entwurf_v2` dispatch consuming fact-provider + contract. **물음표 전부
-   닫힘 (2026-06-12) — 진입 전 ① S1 GLG 택1 ② ？6 contract 수정(reject observedLiveness=required-nullable) 동결만
-   남음.** 상세 = LEDGER "### step 5 물음표 닫힘" 블록(decider 7단계 순서 · A1 `--no-extensions` 빼고 `--entwurf-control
-   --approve` · A2 releaseWhen `socket-alive ∨ child-exited(any code)` · post-lock lstat-then-connect · lock iff
-   in-domain · preflight=resume verdict 뒤에만 · `target-address-conflict` named reason). 슬라이스 순서·F2 lock primitive는
-   ↓ "Stage 0 step 5 작업 계획"·"버킷 B 잔여 freeze". step 4 규율 그대로: 각 슬라이스 regression gate 먼저 → pure-before-IO → 연결.
+1. **Step 5 — 진입①·5a done, ◀ NOW = 5b pure decider.** 통합 7단계 순서(SSOT 동결, LEDGER "### step 5 물음표 닫힘"
+   "통합 decider 순서"): ① `requireGardenId`(path/lock/socket 계산 전 F2-P1) → ② meta identity lookup + address-conflict
+   precheck(probe 없음; 시민없음=`bad-target`, quarantine=`target-address-conflict`) → ③ backend → ④ `isLivenessSupported`이면
+   `acquireLock`(in-domain만 ？7) **before** lstat/connect → ⑤ in-domain: lock 아래 `inspectTargetControlSocket`
+   (lstat-then-connect ？2) → `resolveDispatch` → resume verdict이면 **그때** `preflight(cwd)`(deny→nonce-owned release
+   후 `untrusted-fail-fast`) 1B → plan → ⑥ unsupported: lock 없음, `resolveMailboxDeliverability`(wakeMode==="self-fetch"
+   fail-closed) → `resolveDispatch` → ⑦ send-fail fallback=같은 nonce 1회 재resolve. **반환=`DispatchDecision`
+   (reject|execute+plan+lock), transport 실행 없음.** **모든 reject는 `makeRejectReceipt` 경유(우회 0).** decider 게이트에
+   "reject ⇒ no-plan AND no-lock-retained" + receipt↔plan transport round-trip. `inspectTargetControlSocket`(신규 helper,
+   lstat→ENOENT만 absent→symlink면 connect 금지→socket이면 probe) + conflict predicate `socketGids ∪ symlinkedGardenIds`
+   공유 추출은 ↓ "### step 5 물음표 닫힘" ？2/？7/F3 블록. step 4 규율: regression gate 먼저 → pure-before-IO → 연결.
+   - 이후: **5c** transport hand(control-socket/meta-mailbox/spawn-bg=`--no-extensions` 빼고 `--entwurf-control --approve`
+     A1; releaseWhen=`socket-alive ∨ child-exited(any code)` A2; **release-after-observation 게이트 = Fable 3**;
+     send-fail fallback 같은 nonce 1회; 실패 전달 경로 명시) → **5d** MCP `entwurf_v2` additive 등록 + release-gate matrix
+     smoke + doctor `--entwurf-control` flag 체크 + prefixRoots 배선. 상세 = ↓ "Stage 0 step 5 작업 계획"(5a-5d 분해).
 2. **Small optional follow-up:** `get_info` enrich for alive socket probes (`cwd/model/idle`, per-socket `infoError`, `Promise.allSettled`, no whole-list throw). Current `(not enriched)` is honest.
 3. **Release-gate matrix smoke (step 5와 같이 게이트화):** sender surface(pi-native / MCP bridge) × target kind(live socket / meta mailbox) × direction(pi→meta·meta→pi·meta→meta·pi→pi). cross-transport 실제 도달성은 contract층이 아니라 여기서 증명(GPT힣 (c) 판정).
 4. **Separate backlog:** pi `session_start` meta-record writer; legacy `entwurf_send` direct socket symlink guard.
