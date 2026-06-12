@@ -258,6 +258,12 @@ export type EntwurfV2Receipt =
 	// `rejectObservedLivenessWellFormed`, not by this union alone.
 	| { ok: false; reason: EntwurfV2RejectReason; observedLiveness: FactLiveness | null };
 
+// The reject branch on its own — `makeRejectReceipt` returns exactly this (NOT the
+// widened `EntwurfV2Receipt`), so a consumer that mints a reject keeps the precise
+// type without a cast (the 5b decider's `DispatchDecision` reject branch carries it
+// directly). A type-only precision alias over the union above; discriminant unchanged.
+export type EntwurfV2RejectReceipt = Extract<EntwurfV2Receipt, { ok: false }>;
+
 /**
  * The ONLY sanctioned way to mint a reject receipt (？6 enforcement). A pure
  * predicate (`rejectObservedLivenessWellFormed`) cannot force a caller to consult
@@ -272,7 +278,7 @@ export type EntwurfV2Receipt =
 export function makeRejectReceipt(
 	reason: EntwurfV2RejectReason,
 	observedLiveness: FactLiveness | null,
-): EntwurfV2Receipt {
+): EntwurfV2RejectReceipt {
 	if (!rejectObservedLivenessWellFormed(reason, observedLiveness)) {
 		throw new Error(
 			`entwurf_v2: ill-formed reject receipt — reason '${reason}' requires ${

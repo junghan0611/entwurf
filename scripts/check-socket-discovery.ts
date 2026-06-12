@@ -30,6 +30,8 @@ import { resolveFactList } from "../pi-extensions/lib/entwurf-facts.ts";
 import type { MetaBackendV2, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
 import {
 	controlSocketPath,
+	inspectTargetControlSocket,
+	type LstatLike,
 	SOCKET_SUFFIX,
 	type SocketDirEntry,
 	scanSocketProbes,
@@ -226,6 +228,51 @@ async function main(): Promise<void> {
 			out.peers.find((p) => p.gardenId === GID_DORMANT)?.liveness === "dead",
 		);
 		ok("e2e: dir held only LIVE socket → no record-less SocketOnlyFact", out.socketOnly.length === 0);
+	}
+
+	// ── inspectTargetControlSocket (？2 — lstat-then-connect, v2 decider helper) ──
+	// The single-target, lock-time inspection. lstat is injected so every branch is
+	// driven without a real fs; every variant carries the canonical socketPath.
+	{
+		const DIR2 = "/fake/ctl";
+		const expectedPath = controlSocketPath(GID_LIVE, DIR2);
+		const stat = (over: Partial<Record<"sym" | "sock", boolean>>): LstatLike => ({
+			isSymbolicLink: () => over.sym === true,
+			isSocket: () => over.sock === true,
+		});
+		const lstatThrowing = (code: string) => async (): Promise<LstatLike> => {
+			const e = new Error(`${code}: lstat`) as NodeJS.ErrnoException;
+			e.code = code;
+			throw e;
+		};
+
+		// ENOENT → absent (the citizen is dormant; this is the path a resume creates).
+		const absent = await inspectTargetControlSocket(GID_LIVE, DIR2, lstatThrowing("ENOENT"));
+		ok("inspect: ENOENT → absent", absent.kind === "absent");
+		ok("inspect: absent carries socketPath", absent.socketPath === expectedPath);
+
+		// symlink → address-conflict (NEVER connected — P1), reason symlink.
+		const sym = await inspectTargetControlSocket(GID_LIVE, DIR2, async () => stat({ sym: true }));
+		ok("inspect: symlink → address-conflict", sym.kind === "address-conflict");
+		ok("inspect: symlink reason", sym.kind === "address-conflict" && sym.reason === "symlink");
+
+		// a real socket file → socket-file (safe to connect now).
+		const sock = await inspectTargetControlSocket(GID_LIVE, DIR2, async () => stat({ sock: true }));
+		ok("inspect: socket file → socket-file", sock.kind === "socket-file");
+		ok("inspect: socket-file carries socketPath", sock.socketPath === expectedPath);
+
+		// a non-socket regular file/dir at the canonical path → address-conflict.
+		const notSock = await inspectTargetControlSocket(GID_LIVE, DIR2, async () => stat({}));
+		ok("inspect: non-socket → address-conflict", notSock.kind === "address-conflict");
+		ok("inspect: non-socket reason", notSock.kind === "address-conflict" && notSock.reason === "not-socket");
+
+		// EACCES / unknown lstat error → indeterminate (never connect, never spawn).
+		const indet = await inspectTargetControlSocket(GID_LIVE, DIR2, lstatThrowing("EACCES"));
+		ok("inspect: EACCES → indeterminate", indet.kind === "indeterminate");
+		ok("inspect: indeterminate carries error code", indet.kind === "indeterminate" && indet.error === "EACCES");
+		// symlink is decided BEFORE socket — a symlink that also reports isSocket is still a conflict.
+		const symSock = await inspectTargetControlSocket(GID_LIVE, DIR2, async () => stat({ sym: true, sock: true }));
+		ok("inspect: symlink wins over isSocket (never connect a symlink)", symSock.kind === "address-conflict");
 	}
 
 	console.log(`\n[check-socket-discovery] ${passed} assertions ok`);

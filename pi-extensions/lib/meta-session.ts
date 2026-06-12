@@ -806,11 +806,14 @@ export function loadMetaCapabilityRegistry(): MetaCapabilityRegistry {
  * The capability for one backend, from the registry (3D-3 live source). The
  * optional `registry` injection lets a gate prove the value is registry-DRIVEN
  * (feed a doctored registry → the lookup follows it), distinguishing "read from
- * the registry" from "hardcoded off the const". MetaBackend ⊂ MetaBackendV2, so
- * the registry (which covers all 4) always has the 3 mint/parse backends.
+ * the registry" from "hardcoded off the const". Param is `MetaBackendV2` (all 4):
+ * `backends` is `Record<MetaBackendV2, …>`, so the lookup is total — mint/parse
+ * still pass the 3 `MetaBackend` values (a subset), and the v2 decider's mailbox
+ * deliverability passes the unsupported backends (which are MetaBackendV2 to the
+ * type system even though pi never reaches that call at runtime).
  */
 export function metaCapabilityFor(
-	backend: MetaBackend,
+	backend: MetaBackendV2,
 	registry: MetaCapabilityRegistry = loadMetaCapabilityRegistry(),
 ): MetaCapability {
 	return registry.backends[backend];

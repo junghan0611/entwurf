@@ -72,6 +72,59 @@ export function controlSocketPath(gardenId: string, dir: string = CONTROL_SOCKET
 	return path.join(dir, `${gardenId}${SOCKET_SUFFIX}`);
 }
 
+/**
+ * Target-specific control-socket inspection for the v2 decider (？2 — lstat-then-
+ * connect). The listing scan (`scanSocketProbes`) reads readdir dirents; a dispatch
+ * decision needs a fresh, single-target lstat UNDER the per-gid lock so a symlink
+ * planted between listing and dispatch cannot forge an alive liveness and hijack a
+ * control-socket send (the P1 reopening `probeSocketLiveness`-alone would allow,
+ * since it is connect-only and follows symlinks). This helper NEVER connects — it
+ * only classifies the canonical path's type so the decider can decide whether a
+ * probe is even safe:
+ *   - `absent` (ENOENT only)            → in-domain ⇒ dead (dormant)
+ *   - `socket-file`                     → safe to probe (connect) now
+ *   - `address-conflict` (symlink OR    → reject `target-address-conflict` (the gid
+ *      not-a-socket)                       resolves to a forged/corrupt address)
+ *   - `indeterminate` (EACCES/unknown)  → not provably absent, never connect, no spawn
+ * Every variant carries `socketPath` so the decider plants the SAME path into the
+ * plan (no re-derivation — 4c SSOT). `lstatFn` is injectable so the gate drives
+ * every branch without a real filesystem; the default is `fs.lstat` (which, unlike
+ * connect, does NOT follow the final symlink — that is the whole point).
+ */
+export type TargetSocketInspection =
+	| { kind: "absent"; socketPath: string }
+	| { kind: "socket-file"; socketPath: string }
+	| { kind: "address-conflict"; socketPath: string; reason: "symlink" | "not-socket" }
+	| { kind: "indeterminate"; socketPath: string; error: string };
+
+export interface LstatLike {
+	isSymbolicLink(): boolean;
+	isSocket(): boolean;
+}
+
+export async function inspectTargetControlSocket(
+	gardenId: string,
+	dir: string = CONTROL_SOCKET_DIR,
+	lstatFn: (p: string) => Promise<LstatLike> = (p) => fs.lstat(p),
+): Promise<TargetSocketInspection> {
+	const socketPath = controlSocketPath(gardenId, dir);
+	let st: LstatLike;
+	try {
+		st = await lstatFn(socketPath);
+	} catch (err) {
+		const code = (err as NodeJS.ErrnoException).code;
+		if (code === "ENOENT") return { kind: "absent", socketPath };
+		// EACCES / unknown: not provably absent, so never treat as dead-and-spawn.
+		return { kind: "indeterminate", socketPath, error: code ?? "unknown lstat error" };
+	}
+	// lstat does NOT dereference the final component — a symlink is caught HERE and
+	// never connected (P1). A non-socket regular file / dir / fifo at the canonical
+	// path is address corruption, not a live socket.
+	if (st.isSymbolicLink()) return { kind: "address-conflict", socketPath, reason: "symlink" };
+	if (st.isSocket()) return { kind: "socket-file", socketPath };
+	return { kind: "address-conflict", socketPath, reason: "not-socket" };
+}
+
 /** One control-socket directory entry, with the single bit the scan needs from
  * the filesystem beyond its name: whether it is a symlink (P1 forgery guard).
  * The real wiring maps `fs.readdir(dir, {withFileTypes:true})` Dirents to this. */

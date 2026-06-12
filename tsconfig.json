@@ -68,6 +68,12 @@
 		// layer (step 4 slice 4c) — a lib→lib VALUE importer (controlSocketPath from
 		// socket-discovery.ts), same `.ts`-extension fence. Typechecked by
 		// scripts/tsconfig.json via the gate (check-entwurf-peers-surface.ts).
-		"pi-extensions/lib/entwurf-peers-render.ts"
+		"pi-extensions/lib/entwurf-peers-render.ts",
+		// entwurf-v2-decider.ts is the PURE dispatch decider (step 5b) — a lib→lib
+		// VALUE importer (resolveDispatch / acquireLock / inspectTargetControlSocket /
+		// isNonPiGardenIdSocketConflict / metaCapabilityFor), same `.ts`-extension
+		// fence. Typechecked by scripts/tsconfig.json via the gate
+		// (check-entwurf-v2-decider.ts).
+		"pi-extensions/lib/entwurf-v2-decider.ts"
 	]
 }
