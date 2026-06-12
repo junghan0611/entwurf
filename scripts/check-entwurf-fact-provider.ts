@@ -177,6 +177,44 @@ async function main(): Promise<void> {
 		}
 	}
 
+	// ── non-pi citizen + SYMLINKED socket: the fact-provider:125 gap (closed) ───
+	// A non-pi record sharing its gid with a *symlinked* `*.sock`. The symlink is
+	// never probed, so its gid is absent from socketGids — the old socketGids-only
+	// check missed this and the non-pi citizen survived as a clean PeerFact while
+	// the legacy send path still followed the symlink to a forged receiver. The
+	// shared isNonPiGardenIdSocketConflict predicate unions socketGids with the
+	// symlinked gids, so the citizen is now quarantined (gid in NEITHER peers nor
+	// socketOnly) and the conflict diagnostic is raised — alongside the existing
+	// socket-symlink-rejected one (both are honest: symlink-rejected = "not probed",
+	// conflict = "non-pi address split").
+	{
+		const r = await listEntwurfFacts(
+			deps(
+				{ [`${GID_PI}.meta.json`]: rec(GID_PI, "pi"), [`${GID_CONFLICT}.meta.json`]: rec(GID_CONFLICT, "claude-code") },
+				{ [GID_PI]: "alive", [GID_CONFLICT]: "alive" },
+				{ symlinks: [GID_CONFLICT] },
+			),
+		);
+		ok(
+			"symlink-collision: non-pi citizen quarantined (NOT in peers)",
+			!r.facts.peers.some((p) => p.gardenId === GID_CONFLICT),
+		);
+		ok(
+			"symlink-collision: gid NOT in socketOnly (symlink never probed)",
+			!r.facts.socketOnly.some((s) => s.gardenId === GID_CONFLICT),
+		);
+		ok(
+			"symlink-collision: pi citizen still present",
+			r.facts.peers.some((p) => p.gardenId === GID_PI),
+		);
+		const conflict = r.diagnostics.find((d) => d.kind === "garden-id-socket-conflict" && d.gardenId === GID_CONFLICT);
+		ok("symlink-collision: garden-id-socket-conflict diagnostic raised for the symlinked gid", conflict !== undefined);
+		ok(
+			"symlink-collision: socket-symlink-rejected diagnostic ALSO raised (both honest)",
+			r.diagnostics.some((d) => d.kind === "socket-symlink-rejected" && d.gardenId === GID_CONFLICT),
+		);
+	}
+
 	// ── impossible-invariant throw is NOT swallowed (C-원칙) ────────────────────
 	// listEntwurfFacts feeds resolveFactList only CLEAN inputs, so its
 	// duplicate/unprobed throws never fire on real data — but they remain the last

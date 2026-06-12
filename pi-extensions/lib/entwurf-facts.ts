@@ -78,6 +78,36 @@ export function resolvePeerFact(identity: MetaIdentity, socket: SocketLiveness |
 	};
 }
 
+/**
+ * A non-pi RECORD whose gardenId collides with a control socket — a real (probed)
+ * one OR a symlinked/forged one. The gardenId is the universal address (동결결정3),
+ * so a non-pi citizen sharing it with a socket means a send-path that reaches the
+ * socket first hits a DIFFERENT receiver than the record names — an address split.
+ * Both the citizen and the socket are quarantined from the facts listing.
+ *
+ * The union `socketGids ∪ symlinkedGardenIds` is load-bearing: `socketGids` are
+ * gids with a real probed `*.sock`, but `symlinkedGardenIds` are NEVER probed (P1)
+ * and so are absent from `socketGids`. Looking at `socketGids` alone (the
+ * fact-provider:125 gap this closes) let a non-pi citizen with a *symlinked* socket
+ * survive as a clean PeerFact while the legacy send path still followed the symlink
+ * to a forged receiver. Both axes claim the gid → both must quarantine it.
+ *
+ * SCOPE: this is the RECORD-side, non-pi conflict only — shared by the fact-provider
+ * (listing) and the v2 decider (dispatch) so the two cannot drift (4c "재유도 금지"
+ * 동형; only the observation-bit source is parameterized). A pi citizen whose own
+ * canonical socket is a symlink is NOT this predicate's concern — that is a
+ * target-specific lstat conflict the decider's `inspectTargetControlSocket` raises
+ * as `address-conflict`, kept deliberately separate (GPT 1차 검수 C).
+ */
+export function isNonPiGardenIdSocketConflict(
+	backend: string,
+	gardenId: string,
+	socketGids: ReadonlySet<string>,
+	symlinkedGardenIds: ReadonlySet<string>,
+): boolean {
+	return !isLivenessSupported(backend) && (socketGids.has(gardenId) || symlinkedGardenIds.has(gardenId));
+}
+
 // ── slice 2: meta-store axis ⨯ socket axis → facts-only listing ─────────────
 // (설계 동결 2026-06-11, GPT힣 + Fable 수렴 — NEXT.md "step 4 slice 2 설계 동결")
 

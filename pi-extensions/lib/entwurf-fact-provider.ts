@@ -27,7 +27,7 @@
  * one diagnostic carries the fact. (pi + same-gid socket = the normal merge.)
  */
 
-import { type FactList, resolveFactList } from "./entwurf-facts.ts";
+import { type FactList, isNonPiGardenIdSocketConflict, resolveFactList } from "./entwurf-facts.ts";
 import { isLivenessSupported } from "./entwurf-v2-contract.ts";
 import { listAllMetaIdentities, type MetaBackendV2 } from "./meta-session.ts";
 import { type SocketScanDeps, scanSocketProbes } from "./socket-discovery.ts";
@@ -96,6 +96,7 @@ export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfF
 	const scan = await scanSocketProbes(piGids, deps.socket ?? {});
 	const probes = scan.probes;
 	const socketGids = new Set(probes.map((p) => p.gardenId));
+	const symlinkedGids = new Set(scan.symlinkedGardenIds);
 	for (const gardenId of scan.symlinkedGardenIds) {
 		diagnostics.push({
 			kind: "socket-symlink-rejected",
@@ -119,18 +120,24 @@ export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfF
 		});
 	}
 
-	// 3. pre-quarantine non-pi citizens that collide with a control socket.
+	// 3. pre-quarantine non-pi citizens that collide with a control socket. The
+	//    predicate is SHARED with the v2 decider (isNonPiGardenIdSocketConflict) so
+	//    listing and dispatch cannot drift, and it unions socketGids with the
+	//    symlinkedGids: a symlinked socket is never probed (absent from socketGids),
+	//    so the old socketGids-only check let a non-pi citizen with a forged
+	//    (symlinked) socket survive as a clean PeerFact while the legacy send path
+	//    still followed the symlink — the gap this closes.
 	const conflictGids = new Set<string>();
 	for (const id of identities) {
-		if (!isLivenessSupported(id.backend) && socketGids.has(id.gardenId)) {
+		if (isNonPiGardenIdSocketConflict(id.backend, id.gardenId, socketGids, symlinkedGids)) {
 			conflictGids.add(id.gardenId);
 			diagnostics.push({
 				kind: "garden-id-socket-conflict",
 				gardenId: id.gardenId,
 				backend: id.backend,
 				message:
-					`non-pi citizen (${id.backend}) shares its gardenId with a control socket — address ambiguity; ` +
-					"both the citizen and the socket are quarantined from the listing.",
+					`non-pi citizen (${id.backend}) shares its gardenId with a control socket (real or symlinked) — address ` +
+					"ambiguity; both the citizen and the socket are quarantined from the listing.",
 			});
 		}
 	}
