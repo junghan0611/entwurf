@@ -17,46 +17,25 @@
 - **작게 자르고 순차 검수한다.** GPT힣 1차 → 통과분만 Fable 2차. 동시 throw 금지.
 - **5b는 pure decider만.** transport 실행·spawn·smoke·새 표면은 다음 슬라이스로 넘긴다.
 
-## Current state — 2026-06-12 (구현 세션 #3 — 5b 구현 done·커밋(local)·GPT 1차 검수 대기, push 전)
+## Current state — 2026-06-13 (구현 세션 #4 — 5b 3 blocker 봉합·GPT+Fable 둘 다 GO·local 커밋, push 전)
 
-- **2026-06-12 구현 세션 #3: 5b pure decider 구현 완료 + 선행 커밋. local 커밋만(push·검수 미완).**
-  다음 = **GPT 1차 응답 반영 → Fable 2차 → (둘 다 GO면) GLG push → 5c**.
-  - **선행 커밋 (`b1adec1`, GPT 설계검수 C):** `isNonPiGardenIdSocketConflict` 공유 predicate 추출
-    (`entwurf-facts.ts`) + fact-provider:125 구멍 봉합(conflict를 `socketGids ∪ symlinkedGardenIds`로 —
-    symlinked non-pi 소켓이 clean PeerFact로 잔존하던 구멍). pi+symlink는 이 predicate 아님(decider
-    `inspectTargetControlSocket`이 잡음). 게이트 check-entwurf-facts 82→**86**, check-entwurf-fact-provider 27→**32**.
-  - **5b decider (`91e5665`):** `entwurf-v2-decider.ts` 신규 — `decideDispatch`(7단계 순수 orchestration,
-    transport 0) → `DispatchDecision`(reject | execute+plan+lock). `ExecutionPlan`은 5c hand가 재유도 없이
-    소비(socketPath/mailboxDir/sessionsDir/launchArgs planted) — **provider/model·child pid는 의도적 제외**
-    (5c-owned launch identity / watcher release-context). lock lifecycle: in-domain execute(control-socket send +
-    spawn-bg resume) 유지, 모든 reject release(nonce-owned), mailbox 무락(？7).
-  - **신규 helper:** `inspectTargetControlSocket`(socket-discovery.ts, ？2 lstat-then-connect, symlink는
-    isSocket이어도 connect 금지) + `resolveMailboxDeliverability`(self-fetch만, fail-closed).
-  - **타입 정밀화 2건(behavior 불변, GPT/Fable 확인 필요):** `makeRejectReceipt` 반환을
-    `EntwurfV2RejectReceipt`로 좁힘(cast 회피) · `metaCapabilityFor` param `MetaBackend→MetaBackendV2`(registry가
-    이미 4개 커버). frozen contract 건드린 지점이라 검수 포인트로 명시함.
-  - **게이트:** check-entwurf-v2-decider **82**(신규, 10 invariant + lock acquire/release 호출수 추적으로
-    reject⇒no-plan-no-lock 증명), check-socket-discovery 31→**42**. **full `pnpm check` EXIT=0, check-pack 128 files.**
-  - **검수 상태: GPT힣 1차 코드검수 = 조건부 NO-GO(2026-06-12, targeted gates 직접 실행해 82/42/32 확인).** 방향·대부분
-    GO(C 선행커밋·inspectTargetControlSocket P1·타입 정밀화 2건·plan 완결성 D 전부 GO). **단 lock lifecycle blocker 3개
-    먼저 고쳐야 Fable 2차 가능:**
-    - **B1 — `deps.lockDir` 미연결:** `entwurf-v2-decider.ts:237` default acquire가 `{ dir: undefined }` 하드코딩 →
-      `deps.lockDir` 완전 무시. live wrapper/test가 lockDir만 주입+acquireLock 미주입 시 실제 `~/.pi/entwurf-v2-locks`로
-      샘. 수정: `defaultAcquireLock(gid, { dir: deps.lockDir })` + release도 `{ dir: deps.lockDir }`. **또는 뺄셈:
-      acquire/inspect/probe를 required dep로(default 제거) — "pure decider"엔 required가 더 정직(GPT 권장 대안).**
-    - **B2 — post-lock throw lock leak(load-bearing):** lock acquire 후 `inspectSocket`/`probeSocket`/`preflightForCwd`
-      중 하나가 throw하면 lock release 안 되고 장수 MCP bridge가 영구 점유. 수정: `try{…retainLock=true on execute…}
-      catch{ if(!retainLock) releaseLock(lock); throw }`. 게이트 3개(inspect/probe/preflight throw→release+rethrow).
-      **이건 5c 아니라 5b lock lifecycle 소유.**
-    - **B3 — `target-locked` holder evidence 소실:** `decider.ts:283` acquire conflict의 holder JSON(pid/host/
-      createdAt/lockPath)을 버리고 `makeRejectReceipt("target-locked", null)`만 반환 → 사람이 영구 target-locked를 못
-      풂(F2-P2 "관측 가능해야 수용"). 수정: `DispatchDecision`에 `diagnostic?: RejectDiagnostic` 추가, target-locked만
-      `conflict`(LockConflict) 보존(receipt schema 불변, 5d 렌더가 붙임). 게이트: lockPath+holder/detail 보존, corrupt holder(null)도.
-    - **non-blocking(merge 전 권장):** mode default `follow_up`을 5d schema/tool desc에 명시(legacy in-process=steer라
-      혼동) · module header "IO injected"는 default가 실제 IO 수행하므로 "live defaults exist; tests inject" 로 낮추거나 required dep화(B1과 한 몸).
-  - **다음 세션 첫 동작 = B1/B2/B3 수정 → 재게이트(check-entwurf-v2-decider에 lock-leak 3 + target-locked evidence 추가)
-    → GPT 재-1차 ack → 통과면 Fable(`20260612T102534-ed0ebd`) 2차.** 순차 규율: Fable은 GPT 통과 후에만.
-  - **설계 SSOT:** `.agent-reports/5b-decider-design.md`(gitignored, v2=조건부 GO 반영본, 6개 부록 체크).
+- **2026-06-13 구현 세션 #4 (hejdev6 서버 이전 첫 세션): 5b lock-lifecycle blocker B1/B2/B3 봉합.
+  GPT힣 1차 GO + Fable5 2차 GO. local 커밋 `33f0c20`(push 전).** 다음 = **5c transport hand**.
+  push는 GLG가 더 진행 후 일괄.
+  - **봉합 내용(상세 = 커밋 `33f0c20` 본문이 SSOT):** B1=IO seam(acquire/release/inspect/probe) required
+    dep 승격(뺄셈 채택, `{dir:undefined}` footgun 구조 소멸; controlDir·default IO 래퍼/import 제거).
+    B2=post-lock try/retainLock/catch — inspect/probe/preflight throw 시 release+rethrow, reject-path
+    release throw는 정당한 retry(unlink 미발생). B3=`DispatchDecision` reject에 `diagnostic?: RejectDiagnostic`,
+    target-locked만 `LockConflict`(holder/lockPath/detail) 보존(receipt schema·observedLiveness=null 불변).
+  - **게이트:** check-entwurf-v2-decider 82→**100**(lock-leak 9 + B3 diagnostic/null-holder +
+    reject-path release retry-pin). 관련 회귀 green(lock 67/contract 233/socket-discovery 42/fact-provider 32).
+    **full `pnpm check` EXIT=0, lint/typecheck clean. check-pack 127 files**(HEAD 베이스라인; 이전 메모 "128"은 부정확).
+  - **검수 협업 교훈(살릴 것):** GPT 1차 → 반영 → Fable 2차 **순차**. **동시에 같은 것 묻지 않기가 핵심.**
+    순서·역할은 사안 따라 유동(어떤 사안은 GPT가 더 필요할 수도). 이번엔 double-release 관찰을 GPT가 던지고
+    Fable이 "현행이 옳다 — retry는 무해를 넘어 이득"으로 독립 판정 + 게이트 retry-pin 권고 → 분업이 실제로 값을
+    만든 사례. GLG는 폰에서 tmux 관망, **커밋 시점에만 확인**(셋이 밀고 나가다 진짜 막힐 때만 호출).
+  - **설계 SSOT 부재 주의:** `.agent-reports/5b-decider-design.md`는 gitignored — laptop에만 있고 hejdev6엔
+    없음. 코드 + 커밋 `33f0c20` 본문 + 이 NEXT가 SSOT 역할. (5c 설계 산출물도 gitignored면 같은 한계.)
 - **2026-06-12 구현 세션 #2: 진입① + 5a 완료·커밋·푸시·검수통과**.
   - **S1 = GLG 해소(2026-06-12):** nested spawn은 **코드레벨에서 차별 안 함**(다 열어둠), **지침으로 가드**. 5c
     launcher가 `--entwurf-control` 붙여 손자 spawn이 코드상 가능해지는 걸 수용. depth-cap 기계 가드 안 만듦. 인터페이스는
@@ -88,11 +67,18 @@
 
 ## Next moves — read order
 
-1. **Step 5 — 5b 구현 done(local `b1adec1`+`91e5665`+`fc731ce`), GPT 1차 = 조건부 NO-GO(blocker 3개), ◀ NOW = B1/B2/B3 수정.**
-   - **다음 세션 첫 동작:** 위 Current state의 **B1(lockDir 미연결)·B2(post-lock throw lock leak)·B3(target-locked
-     evidence 소실)** 수정. GPT가 라인·수정안·게이트까지 다 줌(재탐색 불필요). 재게이트 green → GPT에 재-1차 ack →
-     통과면 Fable 2차. **둘 다 GO여야 GLG push**(현재 local-only). GPT 응답 원문은 이 세션 mailbox 회수분(읽음 처리됨).
-   - **구현된 7단계(검증됨, check-entwurf-v2-decider 82):** ① `requireGardenId`(F2-P1) → ② `resolveTarget`(probe-free;
+1. **Step 5 — 5b DONE(local `b1adec1`+`91e5665`+`fc731ce`+`33f0c20`, GPT+Fable 둘 다 GO), ◀ NOW = 5c transport hand.**
+   - **다음 세션 첫 동작:** 5c 진입. decider가 반환하는 `DispatchDecision.plan`(`ExecutionPlan`)을 재유도 없이
+     소비하는 transport hand. 3 transport: control-socket send / meta-mailbox send / spawn-bg resume. **load-bearing
+     게이트 = release-after-observation(Fable 3):** acquire→spawn 배선은 5c watcher 전에 켜면 안 됨, "관측 전 release
+     없음"으로 박을 것. send-fail fallback은 같은 lock nonce로 1회 재해결(decider가 lock 유지하는 이유). 4-step 규율:
+     이해(읽기만)→GLG 범위 좁힘→구현→검수(GPT 1차→Fable 2차, 동시 같은 질문 금지). push 전 GLG 확인.
+   - **소비할 plan 계약(5b가 심어둠, 재유도 금지):** control-socket={socketPath,mode,wantsReply,message} ·
+     meta-mailbox={mailboxDir,sessionsDir,wantsReply,message} · spawn-bg={sessionId(=gid),cwd,prompt,launchArgs,
+     expectedSocketPath,observeTimeoutMs,releaseWhen}. **provider/model·child pid는 plan에 없음** — 5c launcher가
+     saved JSONL에서 launch identity 읽고(D4), pid는 watcher의 release-context(실행 중 출생). lock은 in-domain
+     execute만 non-null(control-socket·spawn-bg), meta-mailbox는 null(？7).
+   - **구현된 7단계(검증됨, check-entwurf-v2-decider 100):** ① `requireGardenId`(F2-P1) → ② `resolveTarget`(probe-free;
      없음=`bad-target`, quarantine=`target-address-conflict`) → ③ backend → ④ in-domain만 `acquireLock` before lstat →
      ⑤ lock 아래 `inspectTargetControlSocket`(？2) → `resolveDispatch` → resume verdict이면 `preflight`(deny→nonce-owned
      release→`untrusted-fail-fast`, 1B) → plan → ⑥ unsupported: 무락, `resolveMailboxDeliverability`(self-fetch) →
