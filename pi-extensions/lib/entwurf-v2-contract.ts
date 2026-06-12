@@ -108,8 +108,51 @@ export const ENTWURF_V2_REJECT_REASONS = [
 	"bad-target", // R2: absent/typo garden-id (no existing citizen); spawn-new out of v2 scope
 	"untrusted-fail-fast", // 동결결정 5: controlled launch into an untrusted cwd
 	"target-locked", // R5 pre-claim for bucket B F2 per-gid lockfile conflict
+	"target-address-conflict", // F3: a quarantined citizen (garden-id-socket-conflict / symlinked socket) — the gid resolves to two different receivers (record vs socket), so dispatch refuses to pick. The ONLY in-band honest channel for a dispatch-level identity-split (the listing diagnostic channel is not visible to a v2 caller, who only gets a receipt). Pre-resolver, like bad-target/target-locked — NOT a RESOLVER_REJECT_REASONS member.
 ] as const;
 export type EntwurfV2RejectReason = (typeof ENTWURF_V2_REJECT_REASONS)[number];
+
+// ── Pre-probe reject reasons (？6 — observedLiveness = null) ────────────────
+// These three rejects are decided BEFORE any liveness probe runs, so there is no
+// honest 4-value FactLiveness to stamp: `bad-target` (no citizen/backend),
+// `target-locked` (5a lock conflict, before lstat/connect), `target-address-conflict`
+// (address-subject conflict → probing is forbidden). `indeterminate` means an
+// in-domain probe was inconclusive (≠ "not looked yet"); `unsupported` means the
+// backend has no predicate (≠ "pre-probe"). So a pre-probe reject's
+// observedLiveness is `null`, NOT one of the four values. Every OTHER reject —
+// the RESOLVER_REJECT_REASONS (5, post-probe) plus `untrusted-fail-fast` (1B: it
+// now runs AFTER the lock+probe, only on a resume verdict, so its observedLiveness
+// is the honest measured `dormant`) — carries a non-null FactLiveness, as does
+// every success. This null/non-null split is REASON-DEPENDENT, so the receipt
+// schema (which allows null on every reject branch) cannot enforce it alone — the
+// semantic fixture in `check-entwurf-v2-contract` does, via `isPreProbeReject` /
+// `rejectObservedLivenessWellFormed` below (the SSOT 5b mints against).
+export const PRE_PROBE_REJECT_REASONS = [
+	"bad-target",
+	"target-locked",
+	"target-address-conflict",
+] as const satisfies readonly EntwurfV2RejectReason[];
+export type PreProbeRejectReason = (typeof PRE_PROBE_REJECT_REASONS)[number];
+
+export function isPreProbeReject(reason: EntwurfV2RejectReason): reason is PreProbeRejectReason {
+	return (PRE_PROBE_REJECT_REASONS as readonly string[]).includes(reason);
+}
+
+/**
+ * The ？6 well-formedness rule for a reject receipt's `observedLiveness`, made a
+ * pure SSOT predicate so 5b mints against it and the gate proves it: a pre-probe
+ * reject MUST carry `null`; every other reject MUST carry a non-null FactLiveness.
+ * Catches the illegal `{ok:false, reason:"bad-target", observedLiveness:"indeterminate"}`
+ * (pre-probe with a stamped value) and `{ok:false, reason:"owned-live-no-autosend",
+ * observedLiveness:null}` (post-probe with no value) — both reason-dependent, so
+ * unreachable by the schema's blanket `FactLiveness | null`.
+ */
+export function rejectObservedLivenessWellFormed(
+	reason: EntwurfV2RejectReason,
+	observedLiveness: FactLiveness | null,
+): boolean {
+	return isPreProbeReject(reason) ? observedLiveness === null : observedLiveness !== null;
+}
 
 // Reasons the RESOLVER emits — the in-domain 6-cell table cells PLUS the
 // unsupported domain-guard mini-table (backend-liveness-unsupported for
@@ -202,7 +245,11 @@ export type EntwurfV2Receipt =
 			ownership: "ack-only" | "owned";
 			observedLiveness: FactLiveness;
 	  }
-	| { ok: false; reason: EntwurfV2RejectReason; observedLiveness: FactLiveness };
+	// observedLiveness is `FactLiveness | null` (？6): null for the pre-probe
+	// rejects (PRE_PROBE_REJECT_REASONS — no honest value to stamp before a probe),
+	// non-null for every other reject. The split is reason-dependent, enforced by
+	// `rejectObservedLivenessWellFormed`, not by this union alone.
+	| { ok: false; reason: EntwurfV2RejectReason; observedLiveness: FactLiveness | null };
 
 /**
  * PURE dispatch decision over already-resolved facts. The caller resolves the
@@ -318,8 +365,15 @@ export const EntwurfV2ReceiptRejectSchema = Type.Object(
 	{
 		ok: Type.Literal(false),
 		reason: StringEnum(ENTWURF_V2_REJECT_REASONS),
-		observedLiveness: StringEnum(FACT_LIVENESSES, {
-			description: "the 4-value fact liveness the reject was computed from (R1/R3).",
+		// ？6: required-nullable, NOT optional — a reject branch ALWAYS carries the
+		// key, and it is `null` for the pre-probe rejects (PRE_PROBE_REJECT_REASONS)
+		// and a real FactLiveness otherwise. Optional would lose the "key always
+		// present, value may be null" shape and weaken the discriminated union; the
+		// reason-dependent null/non-null rule is enforced semantically (the gate's
+		// rejectObservedLivenessWellFormed fixture), not by this blanket union.
+		observedLiveness: Type.Union([StringEnum(FACT_LIVENESSES), Type.Null()], {
+			description:
+				"the 4-value fact liveness the reject was computed from (R1/R3); null for the pre-probe rejects (bad-target / target-locked / target-address-conflict) where no probe ran.",
 		}),
 	},
 	{ additionalProperties: false },

@@ -49,7 +49,10 @@ import {
 	type FactLiveness,
 	factLivenessOf,
 	isLivenessSupported,
+	isPreProbeReject,
+	PRE_PROBE_REJECT_REASONS,
 	RESOLVER_REJECT_REASONS,
+	rejectObservedLivenessWellFormed,
 	resolveDispatch,
 	UNSUPPORTED_DISPATCH_TABLE,
 } from "../pi-extensions/lib/entwurf-v2-contract.ts";
@@ -301,6 +304,94 @@ ok(
 	!ENTWURF_V2_REJECT_REASONS.some((r) => /fallback|transport-fail|send-fail/.test(r)),
 );
 
+// ── F3: target-address-conflict — named reason, pre-resolver (not RESOLVER_) ──
+// A quarantined gid (garden-id-socket-conflict / symlinked socket) resolves to
+// two receivers; dispatch refuses. It is the ONLY in-band honest channel for a
+// dispatch-level identity-split (a v2 caller sees only the receipt, not the
+// listing diagnostic). Lives with bad-target/target-locked as a pre-resolver
+// reject — NOT a member of RESOLVER_REJECT_REASONS (the 6-cell + mini-table set).
+ok(
+	"F3: taxonomy has target-address-conflict (named, in-band honest channel)",
+	(ENTWURF_V2_REJECT_REASONS as readonly string[]).includes("target-address-conflict"),
+);
+ok(
+	"F3: target-address-conflict is NOT a resolver reason (pre-resolver, like bad-target)",
+	!(RESOLVER_REJECT_REASONS as readonly string[]).includes("target-address-conflict"),
+);
+
+// ── ？6: reject observedLiveness = required-nullable, reason-dependent ──────
+// Pre-probe rejects (decided before any liveness probe) carry observedLiveness =
+// null; every other reject + every success carries a non-null FactLiveness. The
+// split is reason-dependent, so the receipt schema's blanket `FactLiveness | null`
+// cannot enforce it — these semantic fixtures (the SSOT predicate the 5b decider
+// mints against) do.
+eq(
+	"？6: PRE_PROBE_REJECT_REASONS = bad-target/target-locked/target-address-conflict",
+	[...PRE_PROBE_REJECT_REASONS],
+	["bad-target", "target-locked", "target-address-conflict"],
+);
+// the partition is exhaustive + disjoint: every reject reason is pre-probe XOR not.
+for (const r of ENTWURF_V2_REJECT_REASONS) {
+	const pre = (PRE_PROBE_REJECT_REASONS as readonly string[]).includes(r);
+	eq(`？6: isPreProbeReject('${r}') matches the const partition`, isPreProbeReject(r), pre);
+}
+// the RESOLVER reasons are all POST-probe (resolveDispatch always has a real
+// liveness in hand) — none may be pre-probe, so all require non-null.
+for (const r of RESOLVER_REJECT_REASONS) {
+	ok(`？6: resolver reason '${r}' is post-probe (non-null observedLiveness required)`, !isPreProbeReject(r));
+}
+// untrusted-fail-fast is post-probe too (1B: it now runs AFTER lock+probe, only on
+// a resume verdict, so observedLiveness is the honest measured dormant).
+ok("？6: untrusted-fail-fast is post-probe (1B — runs after lock+probe)", !isPreProbeReject("untrusted-fail-fast"));
+
+// rejectObservedLivenessWellFormed: pre-probe ⇒ null only; post-probe ⇒ value only.
+for (const r of PRE_PROBE_REJECT_REASONS) {
+	ok(`？6: well-formed('${r}', null) = true`, rejectObservedLivenessWellFormed(r, null));
+	for (const v of FACT_LIVENESSES) {
+		ok(
+			`？6: well-formed('${r}', '${v}') = false (pre-probe must not stamp a value)`,
+			!rejectObservedLivenessWellFormed(r, v),
+		);
+	}
+}
+for (const r of [...RESOLVER_REJECT_REASONS, "untrusted-fail-fast" as const]) {
+	ok(
+		`？6: well-formed('${r}', null) = false (post-probe must carry a value)`,
+		!rejectObservedLivenessWellFormed(r, null),
+	);
+	for (const v of FACT_LIVENESSES) {
+		ok(`？6: well-formed('${r}', '${v}') = true`, rejectObservedLivenessWellFormed(r, v));
+	}
+}
+// the illegal example from ？6: bad-target with a stamped liveness — schema cannot
+// catch it (reason-dependent), the predicate does.
+ok(
+	"？6: illegal {ok:false, reason:'bad-target', observedLiveness:'indeterminate'} rejected by predicate",
+	!rejectObservedLivenessWellFormed("bad-target", "indeterminate"),
+);
+ok(
+	"？6: legal {ok:false, reason:'bad-target', observedLiveness:null} accepted by predicate",
+	rejectObservedLivenessWellFormed("bad-target", null),
+);
+// every reject resolveDispatch actually emits is post-probe with a non-null value
+// AND well-formed — it never mints a pre-probe reason (those come from the 5b
+// stages that run before the resolver).
+for (const intent of ENTWURF_INTENTS) {
+	for (const lv of FACT_LIVENESSES) {
+		for (const deliverable of [true, false]) {
+			const receipt = resolveDispatch(intent, lv as FactLiveness, deliverable);
+			if (receipt.ok === false) {
+				ok(
+					`？6: resolveDispatch(${intent}/${lv}/${deliverable}) reject is post-probe + well-formed`,
+					!isPreProbeReject(receipt.reason) &&
+						receipt.observedLiveness !== null &&
+						rejectObservedLivenessWellFormed(receipt.reason, receipt.observedLiveness),
+				);
+			}
+		}
+	}
+}
+
 // ── schema ↔ types drift guard (structural; no @sinclair/value) ────────────
 function literalConst(schema: unknown): unknown {
 	return (schema as { const?: unknown }).const;
@@ -345,9 +436,20 @@ ok(
 	!("action" in rej) && !("transport" in rej) && !("ownership" in rej),
 );
 eq("receipt.reject.reason enum === ENTWURF_V2_REJECT_REASONS", enumValues(rej.reason), [...ENTWURF_V2_REJECT_REASONS]);
-eq("receipt.reject.observedLiveness enum === FACT_LIVENESSES (4)", enumValues(rej.observedLiveness), [
+// ？6: reject.observedLiveness is a required-nullable union — Type.Union([StringEnum
+// (FACT_LIVENESSES), Type.Null()]) — NOT Optional and NOT a bare StringEnum. The
+// key is always present (required), the value may be a 4-value liveness OR null.
+const rejLiveness = rej.observedLiveness as { anyOf?: { type?: string }[] };
+eq("？6: receipt.reject.observedLiveness is a 2-branch union (liveness | null)", rejLiveness.anyOf?.length, 2);
+ok(
+	"？6: receipt.reject.observedLiveness has a null branch (required-nullable, not optional)",
+	(rejLiveness.anyOf ?? []).some((b) => b.type === "null"),
+);
+const rejLivenessEnumBranch = (rejLiveness.anyOf ?? []).find((b) => b.type !== "null");
+eq("？6: receipt.reject.observedLiveness enum branch === FACT_LIVENESSES (4)", enumValues(rejLivenessEnumBranch), [
 	...FACT_LIVENESSES,
 ]);
+ok("？6: receipt.reject still has observedLiveness key (required, not optional-dropped)", "observedLiveness" in rej);
 
 // exactness — additionalProperties:false makes the schema reject extra keys at
 // the JSON-Schema level (not merely by declared-property convention). Without
