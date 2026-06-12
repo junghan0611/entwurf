@@ -146,6 +146,11 @@ export function isPreProbeReject(reason: EntwurfV2RejectReason): reason is PrePr
  * (pre-probe with a stamped value) and `{ok:false, reason:"owned-live-no-autosend",
  * observedLiveness:null}` (post-probe with no value) — both reason-dependent, so
  * unreachable by the schema's blanket `FactLiveness | null`.
+ *
+ * NOTE this predicate FREEZES the 1B ordering into the contract: classifying
+ * `untrusted-fail-fast` as post-probe (non-null required) encodes "preflight runs
+ * AFTER the probe". Moving preflight back ahead of the probe would make its
+ * observedLiveness un-measured (null) and reopen this predicate + the enum split.
  */
 export function rejectObservedLivenessWellFormed(
 	reason: EntwurfV2RejectReason,
@@ -158,10 +163,12 @@ export function rejectObservedLivenessWellFormed(
 // unsupported domain-guard mini-table (backend-liveness-unsupported for
 // owned-outcome, mailbox-undeliverable for a fail-closed fire-and-forget). NOT
 // just the 6-cell table (the F-mailbox mini-table emits two of these), hence
-// RESOLVER_ not TABLE_. The remaining taxonomy members (bad-target,
-// untrusted-fail-fast, target-locked) are produced by the EARLIER stages (target
-// resolution / preflight / lockfile) that run before the resolver — pre-claimed
-// in the enum so bucket B does not reopen it.
+// RESOLVER_ not TABLE_. The remaining taxonomy members are produced by stages
+// OTHER than the resolver: `bad-target` (target resolution) and `target-locked`
+// (lockfile) run BEFORE the resolver, while `untrusted-fail-fast` is decided
+// AFTER it — preflight runs only behind a resume verdict (1B), so it is a LATER
+// stage, not an earlier one. All three are pre-claimed in the enum so bucket B
+// does not reopen it.
 export const RESOLVER_REJECT_REASONS = [
 	"indeterminate-no-spawn",
 	"dormant-fire-forget-unsupported",
@@ -252,10 +259,39 @@ export type EntwurfV2Receipt =
 	| { ok: false; reason: EntwurfV2RejectReason; observedLiveness: FactLiveness | null };
 
 /**
- * PURE dispatch decision over already-resolved facts. The caller resolves the
- * target (→ `bad-target` if no existing citizen), runs preflight (→
- * `untrusted-fail-fast`), and acquires the per-gid lock (→ `target-locked`)
- * BEFORE reaching here; this function only decides the liveness-routed verdict.
+ * The ONLY sanctioned way to mint a reject receipt (？6 enforcement). A pure
+ * predicate (`rejectObservedLivenessWellFormed`) cannot force a caller to consult
+ * it — 5b could hand-assemble `{ok:false, reason:"bad-target",
+ * observedLiveness:"indeterminate"}`, which the blanket `FactLiveness | null`
+ * schema accepts. This constructor THROWS on a well-formedness violation, so
+ * every reject path (resolveDispatch's own mints below + the 5b stages that
+ * produce bad-target / target-locked / target-address-conflict / untrusted-
+ * fail-fast) routes through one chokepoint and the bypass surface is zero. 5b
+ * MUST build rejects with this, never by object literal.
+ */
+export function makeRejectReceipt(
+	reason: EntwurfV2RejectReason,
+	observedLiveness: FactLiveness | null,
+): EntwurfV2Receipt {
+	if (!rejectObservedLivenessWellFormed(reason, observedLiveness)) {
+		throw new Error(
+			`entwurf_v2: ill-formed reject receipt — reason '${reason}' requires ${
+				isPreProbeReject(reason) ? "observedLiveness=null (pre-probe)" : "a non-null observedLiveness (post-probe)"
+			}, got ${JSON.stringify(observedLiveness)}.`,
+		);
+	}
+	return { ok: false, reason, observedLiveness };
+}
+
+/**
+ * PURE dispatch decision over already-resolved facts. Before reaching here the
+ * caller has resolved the target (→ `bad-target` if no existing citizen) and, for
+ * an in-domain backend, acquired the per-gid lock (→ `target-locked`) and probed
+ * liveness UNDER that lock. This function only decides the liveness-routed
+ * verdict. preflight (→ `untrusted-fail-fast`) is NOT a precondition here: per 1B
+ * it runs only AFTER this resolver returns a resume verdict (the sole branch that
+ * launches a child into a target cwd), so a send/mailbox verdict never touches it.
+ * Do NOT reintroduce a global pre-resolver preflight — that re-breaks F-mailbox.
  *
  * Two facts in: `liveness` (the 4-value FactLiveness) and `mailboxDeliverable`
  * (F-mailbox — a SEPARATE axis from liveness, NOT a column of either table, NOT
@@ -277,11 +313,11 @@ export function resolveDispatch(
 		// R1 domain guard → the mailbox mini-table (intent-keyed), NOT the 6-cell table.
 		const mboxCell = UNSUPPORTED_DISPATCH_TABLE[intent];
 		if (mboxCell.action === "reject") {
-			return { ok: false, reason: mboxCell.reason, observedLiveness: liveness };
+			return makeRejectReceipt(mboxCell.reason, liveness);
 		}
 		// fire-and-forget allow cell, gated by the separate deliverability fact.
 		if (!mailboxDeliverable) {
-			return { ok: false, reason: "mailbox-undeliverable", observedLiveness: liveness };
+			return makeRejectReceipt("mailbox-undeliverable", liveness);
 		}
 		return {
 			ok: true,
@@ -294,7 +330,7 @@ export function resolveDispatch(
 	// liveness is now narrowed to SocketLiveness; deliverability does not apply.
 	const cell = DISPATCH_TABLE[intent][dispatchLivenessOf(liveness)];
 	if (cell.action === "reject") {
-		return { ok: false, reason: cell.reason, observedLiveness: liveness };
+		return makeRejectReceipt(cell.reason, liveness);
 	}
 	return {
 		ok: true,

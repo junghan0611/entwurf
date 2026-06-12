@@ -50,6 +50,7 @@ import {
 	factLivenessOf,
 	isLivenessSupported,
 	isPreProbeReject,
+	makeRejectReceipt,
 	PRE_PROBE_REJECT_REASONS,
 	RESOLVER_REJECT_REASONS,
 	rejectObservedLivenessWellFormed,
@@ -389,6 +390,46 @@ for (const intent of ENTWURF_INTENTS) {
 				);
 			}
 		}
+	}
+}
+
+// ── ？6 enforcement: makeRejectReceipt is the ONLY sanctioned reject mint ───
+// A pure predicate cannot force a caller to consult it (Fable 4): 5b could
+// hand-assemble an ill-formed reject the blanket schema accepts. makeRejectReceipt
+// THROWS on a violation, so routing every reject through it makes the bypass
+// surface zero. Prove: pre-probe accepts null + rejects any value; post-probe
+// accepts every value + rejects null; and resolveDispatch's own mints are exactly
+// what the constructor would have produced (the in-resolver path uses it too).
+for (const r of PRE_PROBE_REJECT_REASONS) {
+	eq(`makeRejectReceipt('${r}', null) → well-formed reject`, makeRejectReceipt(r, null), {
+		ok: false,
+		reason: r,
+		observedLiveness: null,
+	});
+	for (const v of FACT_LIVENESSES) {
+		assert.throws(
+			() => makeRejectReceipt(r, v),
+			/ill-formed reject/,
+			`makeRejectReceipt('${r}', '${v}') throws (pre-probe must not stamp a value)`,
+		);
+		console.log(`  ok    makeRejectReceipt('${r}', '${v}') throws (？6 chokepoint)`);
+		passed++;
+	}
+}
+for (const r of [...RESOLVER_REJECT_REASONS, "untrusted-fail-fast" as const]) {
+	assert.throws(
+		() => makeRejectReceipt(r, null),
+		/ill-formed reject/,
+		`makeRejectReceipt('${r}', null) throws (post-probe must carry a value)`,
+	);
+	console.log(`  ok    makeRejectReceipt('${r}', null) throws (？6 chokepoint)`);
+	passed++;
+	for (const v of FACT_LIVENESSES) {
+		eq(`makeRejectReceipt('${r}', '${v}') → well-formed reject`, makeRejectReceipt(r, v), {
+			ok: false,
+			reason: r,
+			observedLiveness: v,
+		});
 	}
 }
 
