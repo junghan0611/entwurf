@@ -77,14 +77,30 @@
 1. **Step 5 — 5b DONE + 5c-1 DONE(local `…33f0c20`(5b)+`bad296a`(next)+`ff69a3a`(5c-1), 전부 GPT+Fable GO), ◀ NOW = 5c-2 control-socket send 배선.**
    - **5c 분해(GPT design GO):** 5c-1 pure release reducer ✅ → **5c-2 control-socket send** → 5c-3 spawn-bg + 실
      socket-alive watcher(load-bearing) → 5c-4 meta-mailbox send. 위험 순, pure-before-IO.
-   - **5c-2 첫 동작:** `ExecutionPlan(control-socket)`{socketPath,mode,wantsReply,message}을 legacy entwurf_send
-     경로 재사용해 보내고, `reduceRelease`에 event 먹여 lock release. **재사용 map(정찰됨, 재구현 금지):**
-     `sendRpcCommand`(entwurf-control.ts:1105, net.createConnection 위 RPC 송신) + `classifyConnectError`
-     (socket-probe.ts:39, "dead"|"indeterminate")로 fallback 게이트(entwurf-control.ts:1704-1709 = dead만 fallback,
-     stall/EACCES/unknown은 throw — mailbox로 숨기지 말 것) + `enqueueMetaMessage`(meta-session.ts:1467) +
-     `formatMetaMailboxBody`. sender envelope=`buildLocalSenderEnvelope`(entwurf-control.ts:582).
-     **반드시 박을 계약(GPT):** `send-final(failed)`는 첫 send 실패가 아니라 fallback/re-resolve 체인 소진 후
-     최종 outcome에만 1회 emit(조기 release 금지) — 5c-2 게이트로. send-fail fallback은 같은 lock nonce 1회 재해결.
+   - **5c-2 설계 = GPT design 조건부 GO(아래 조건 박아야 함). public unit = `executeControlSocketSend(plan, lock, deps)`.**
+     `reduceRelease(release-after-send-final, …)`에 event 먹여 lock release. **재사용 map(정찰됨, 재구현 금지):**
+     `sendRpcCommand`(entwurf-control.ts:1105, newline-JSON RPC, 5s timeout) + `RpcSendCommand`{type:"send",message,mode,sender} +
+     `classifyConnectError`(socket-probe.ts:39) + `enqueueMetaMessage`(meta-session.ts:1467) + `formatMetaMailboxBody` +
+     `buildLocalSenderEnvelope`(entwurf-control.ts:582). legacy 핸들러 형상 = entwurf-control.ts:1680-1730.
+     - **조건① re-resolve 모델(load-bearing):** v2 control-socket plan은 5b가 alive 관측 후 고른 in-domain(pi) send.
+       send 시 `dead`는 TOCTOU race. control hand가 mailbox를 **직접 결정 금지**(5b dispatch table/deliverability/conflict
+       우회 — pi backend primary wakeMode=direct-inject라 "dead≠mailbox 가능"). → **same-lock one-shot re-resolve**:
+       `deps.deadFallback` 인터페이스 주입, 그 안은 **existing-lock fallback resolver**(5b `resolveTarget`/`inspectSocket`/
+       `resolveDispatch`/`resolveMailboxDeliverability` 재사용하되 **release 안 함**; `decideDispatch` 통째 재호출 ❌ —
+       acquire/release lifecycle 꼬임). resolver 반환 = `{kind:"execute",plan} | {kind:"reject"}`, hand는 실행만.
+       re-resolve가 control-socket이면 1회 retry 허용(원 send는 connect-dead라 미전달), 그 retry도 1회뿐.
+     - **조건② send-final outcome 매핑:** RPC ack 성공→`sent` / RPC `success:false` in-band reject→`rejected`(fallback 없음) /
+       connect `dead`→re-resolve 후 success→`fallback-sent`·reject/no-route→`rejected`·IO throw→`failed`+원error rethrow /
+       connect `indeterminate`(timeout/EACCES/stall)→**fallback 금지, 즉시 `failed`+release+rethrow**(double delivery 방지).
+       모든 경로 release 정확히 1회, `releaseLock`은 reducer가 shouldRelease일 때만.
+     - **조건③ helper 경계:** mailbox send=공유 `executeMetaMailboxSend(plan,sender,deps)` = **enqueue만**(routing 결정 ❌).
+       5c-4가 직접 사용, 5c-2는 re-resolve가 meta-mailbox plan 줄 때만. control hand에 `enqueueMetaMessage` 직접 판단 박지 말 것.
+     - **게이트 8케이스:** sent→release1 / in-band reject→release1,no-fallback / dead→deadFallback 1회 호출(held lock 아래)→
+       success→fallback-sent→release1 / dead→reject/no-route→release1+rejected / dead→throw→release1+rethrow /
+       indeterminate→deadFallback 미호출·mailbox helper 미호출→release1+rethrow / send-final event 경로당 1회 / first-dead에
+       fallback 없이 direct mailbox 금지. (releaseLock throw는 원 error 마스킹 금지 — 5b 방향.)
+     - **뺄셈 팁(GPT):** `deps.deadFallback`만 인터페이스로 박고 resolver 실제 구현은 **다음 sub-slice(5c-2b)**로 미뤄도 됨 →
+       5c-2(a) 게이트가 작아짐. resolver 복잡하면 분리.
    - **5c-3 진입 시 박을 계약(Fable, load-bearing):** timeout은 release event 아님. watcher는 observeTimeoutMs
      만료를 **관측으로 해소**(kill child→`child-exited(null)`→release, 또는 hold+증거). bare timeout release 금지
      (double-spawn 창 재개방). `spawnEntwurfResumeAsync`는 `--no-extensions` 하드코딩이라 무수정 호출 금지 —
