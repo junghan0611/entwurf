@@ -80,6 +80,12 @@
 		// the excluded decider/lock into the program, so it lives in the same
 		// scripts/tsconfig.json fence. Typechecked via its gate
 		// (check-entwurf-v2-release.ts).
-		"pi-extensions/lib/entwurf-v2-release.ts"
+		"pi-extensions/lib/entwurf-v2-release.ts",
+		// entwurf-v2-send.ts is the control-socket SEND hand (step 5c-2a) — it WIRES
+		// transport IO onto the release reducer and carries explicit `.ts`-extension
+		// imports that pull the excluded decider/lock/release into the program, same
+		// fence. Typechecked by scripts/tsconfig.json via its gate
+		// (check-entwurf-v2-send.ts).
+		"pi-extensions/lib/entwurf-v2-send.ts"
 	]
 }
