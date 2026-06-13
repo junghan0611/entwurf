@@ -1419,6 +1419,17 @@ check_entwurf_v2_runner() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-runner.ts)
 }
 
+check_entwurf_control_rpc() {
+  # Gate for 0.11 Stage 0 step 5d-2 (RPC-helper extraction micro-slice): the --entwurf-control
+  # socket protocol (wire types + the newline-JSON client sendRpcCommand) moved to the ctx-free
+  # SSOT lib/entwurf-control-rpc.ts behaviour-preservingly. Proves: lib is ctx-free (no
+  # ExtensionContext/ExtensionAPI/@earendil-works/pi-ai) / entwurf-control.ts imports
+  # sendRpcCommand from the lib and no longer defines its own / real short unix-socket round-trip
+  # (write command -> matched {type:response,command,success:true} -> resolve) / close-before-
+  # response rejects 'connection closed before response'. net.Server only, no model/pi process.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-control-rpc.ts)
+}
+
 check_entwurf_v2_spawn() {
   # Deterministic gate for 0.11 Stage 0 step 5c-3a: the spawn-bg RESUME watcher hand
   # (executeSpawnBgResume) wiring spawn + socket-observe IO onto the 5c-1 reducer. Proves
@@ -4560,6 +4571,9 @@ case "$cmd" in
     ;;
   check-entwurf-v2-runner)
     check_entwurf_v2_runner
+    ;;
+  check-entwurf-control-rpc)
+    check_entwurf_control_rpc
     ;;
   check-entwurf-v2-spawn)
     check_entwurf_v2_spawn
