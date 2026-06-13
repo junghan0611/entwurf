@@ -150,7 +150,12 @@ else
 fi
 
 echo "[SessionStart creation evidence (silent-miss guard)]"
-CC_COUNT="$(grep -l '"backend": "claude-code"' "$META_SESSIONS"/*.meta.json 2>/dev/null | wc -l | tr -d ' ')"
+# `set -euo pipefail` + empty store = doctor abort: with no *.meta.json the glob
+# stays literal, grep exits 2 (no such file) / 1 (no match), pipefail propagates,
+# and the doctor dies right after the section header — hiding the very "open a
+# session" hint a fresh-but-correct install needs. Swallow grep's nonzero IN the
+# pipe (same idiom as the `[ -f ] || continue` guard below) so CC_COUNT=0 cleanly.
+CC_COUNT="$({ grep -l '"backend": "claude-code"' "$META_SESSIONS"/*.meta.json 2>/dev/null || true; } | wc -l | tr -d ' ')"
 if [ -f "$HOOK_LOG" ]; then
   ok "hook log present: $HOOK_LOG ($(wc -l < "$HOOK_LOG" | tr -d ' ') lines)"
   # ERROR is sticky in an append-only log: a one-time miss that was later recovered
