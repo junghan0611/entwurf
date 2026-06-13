@@ -86,7 +86,12 @@ fi
 echo "[baked node path still resolves (NixOS store-churn guard)]"
 CACHE_HOOKS="$(ls "$CLAUDE_CFG/plugins/cache/$MKT_NAME/$PLUGIN/"*/hooks/hooks.json 2>/dev/null | head -1 || true)"
 if [ -n "$CACHE_HOOKS" ]; then
-  BAKED="$(grep -oE '"command": "[^ ]+ \$\{CLAUDE_PLUGIN_ROOT\}/meta-bridge-hook.ts"' "$CACHE_HOOKS" | head -1 | sed -E 's/.*"command": "([^ ]+) .*/\1/')"
+  # `[ -n "$CACHE_HOOKS" ]` proves the file EXISTS, not that the pattern matches.
+  # If a future hooks.json drifts the command format, grep finds nothing, exits 1,
+  # and under `set -euo pipefail` the doctor would abort here instead of reaching
+  # the `warn "could not parse baked node path"` fallback below. Swallow grep's
+  # nonzero in-pipe (same idiom as line 158) so BAKED="" routes to that warn.
+  BAKED="$({ grep -oE '"command": "[^ ]+ \$\{CLAUDE_PLUGIN_ROOT\}/meta-bridge-hook.ts"' "$CACHE_HOOKS" || true; } | head -1 | sed -E 's/.*"command": "([^ ]+) .*/\1/')"
   if [ -n "$BAKED" ] && [ -x "$BAKED" ]; then ok "baked node exists + executable: $BAKED"
   elif [ -n "$BAKED" ]; then bad "baked node path is DEAD (nix GC / version bump?): $BAKED — re-run ./run.sh install-meta-bridge"
   else warn "could not parse baked node path from $CACHE_HOOKS"; fi
