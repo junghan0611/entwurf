@@ -1038,8 +1038,12 @@ smoke_entwurf_resume_single() {
     exit 1
   fi
   local turn1_acp
+  # `set -euo pipefail`: when the inner `acpSessionId=` grep finds nothing it exits 1,
+  # pipefail propagates, and the assignment aborts the script BEFORE the `[[ -z ]]` guard
+  # below can emit the intended "acpSessionId not extractable" diagnostic. Swallow the
+  # pipeline's nonzero (oracle's doctor :153/:89 idiom) so emptiness flows to that guard.
   turn1_acp=$(grep -oE "^\[pi-shell-acp:bootstrap\] path=new backend=$backend [^$]*" <<< "$turn1_log" \
-    | head -1 | grep -oE 'acpSessionId=[^ ]+' | head -1 | cut -d= -f2)
+    | head -1 | grep -oE 'acpSessionId=[^ ]+' | head -1 | cut -d= -f2 || true)
   if [[ -z "$turn1_acp" ]]; then
     echo "[smoke-entwurf-resume/$backend] turn1 acpSessionId not extractable:" >&2
     echo "$turn1_log" >&2
@@ -1075,8 +1079,11 @@ smoke_entwurf_resume_single() {
     exit 1
   fi
   local turn2_acp
+  # Same pipefail-abort class as turn1_acp above: swallow the pipeline's nonzero so an
+  # unextractable acpSessionId flows to the `[[ ... != ... ]]` mismatch guard below
+  # instead of aborting the smoke mid-assignment.
   turn2_acp=$(grep -oE "^\[pi-shell-acp:bootstrap\] path=$expected_path backend=$backend [^$]*" <<< "$turn2_log" \
-    | head -1 | grep -oE 'acpSessionId=[^ ]+' | head -1 | cut -d= -f2)
+    | head -1 | grep -oE 'acpSessionId=[^ ]+' | head -1 | cut -d= -f2 || true)
   if [[ "$turn2_acp" != "$turn1_acp" ]]; then
     echo "[smoke-entwurf-resume/$backend] acpSessionId mismatch turn1=$turn1_acp turn2=$turn2_acp" >&2
     echo "$turn2_log" >&2
