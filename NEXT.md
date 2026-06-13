@@ -9,22 +9,24 @@
   세션(`063959-cfdcff`)은 컨텍스트 90% 차서 **새 GPT힣 `20260613T121021-03a5d7`(live pi, direct)**로 인계.
   Fable 복귀 전까지는 **GPT힣 + 실무자 페어**(Fable 합류 전 원래 모드)로 더 촘촘히 본다. 실무자가 판단 중심을 잡고
   GPT를 1차+사실상 2차로 같이 돌린다. 천천히.
-- **지금 할 일:** ◀ NOW = **5c-3c step 5 = `smoke-entwurf-v2-spawn-live`(체인 밖 manual, 5d 전 phase gate)**.
-  5c-3a watcher(`222f4d0`) + 5c-3b resume-argv SSOT(`314a334`) + 5c-3c R1 inspectControlSocketPath 추출(`e9d12df`)
-  + 5c-3c deterministic adapter(`6e8b9ba`, GPT GO)까지 끝났다. **deterministic 경계는 다 닫혔다.** 남은 건 실-IO
-  검증 1회: 실제 `pi --entwurf-control -p` resident 자식을 띄워 control socket connectability·child-exited·abort
-  teardown을 실측하는 `./run.sh smoke-entwurf-v2-spawn-live`(LIVE=1 가드, `pnpm check` 체인 **밖**). GPT D5 결정:
-  CI 안전성 위해 체인엔 deterministic 게이트만, 실-spawn은 manual. **단 5d MCP surface 얹기 전 1회 실행하고 결과를
-  NEXT/커밋본문에 기록**(안 그러면 live path 거짓 green). 그 다음 **5d** = MCP `entwurf_v2` additive 등록 +
-  release-gate matrix smoke + doctor `--entwurf-control` flag + prefixRoots 배선.
-  상세 = `## Next moves` 1번 + 5c-3c 커밋 `6e8b9ba` 본문.
-- **5c-3c done 요약(`e9d12df`+`6e8b9ba`, GPT GO):** R1 = `inspectControlSocketPath(socketPath,lstatFn)` path-core
-  추출(watcher가 plan.expectedSocketPath를 gid 재유도 없이 inspect), `inspectTargetControlSocket`은 thin wrapper.
-  adapter = `makeProductionSpawnBgResumeDeps(opts)`(plan/lock 캡처 안 함=D3) — `socketWatchVerdict`(addressConflict→
-  forged/alive→alive/dead·indeterminate→wait) + spawnChild(buildResumePiArgs v2-control, **B1: spawn event 대기 후
-  resolve·error면 reject**) + awaitSocketAlive(exact path 폴링, forged 즉시 reject·connect 안 함) + awaitChildExit
-  (**B2: proc 생성 즉시 resolve-only exitPromise 설치 → fast-exit 안 놓침**) + awaitTimeout(setTimeout+abort clear) +
-  killChild(SIGTERM). 게이트 check-entwurf-v2-spawn-production **38**, check-socket-discovery 47→**58**.
+- **지금 할 일:** ◀ NOW = **5c-4 meta-mailbox send hand(5c 마지막 슬라이스)**. spawn-bg 경로(5c-3)는 deterministic
+  게이트 + live phase gate 둘 다 닫혔다. 남은 5c 슬라이스는 unsupported-citizen fire-and-forget의 **meta-mailbox 직송**:
+  5c-2(a) hand가 `deps.sendViaMailbox(plan, lock)`로, 5c-2(b) resolver가 mailbox plan으로 라우팅할 때 쓰는 enqueue-only
+  helper(`enqueueMetaMessage`+`formatMetaMailboxBody`+`buildLocalSenderEnvelope` 재사용, 정찰됨). **routing 결정 ❌, enqueue만**
+  (5b dispatch table이 이미 결정). meta-mailbox plan은 lock null(？7)이라 release 없음. 그 다음 **5d** = MCP `entwurf_v2`
+  additive 등록 + release-gate matrix smoke + doctor `--entwurf-control` flag + prefixRoots 배선. **5d 전 실행 기록(D5,
+  완료): `LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live → 7 passed`(실 OS, S1 socket·S2 child·S3 watcher).**
+  상세 = `## Next moves` 1번.
+- **5c-3c done 요약(`e9d12df` R1 + `6e8b9ba` adapter + `410110d` live smoke, 전부 GPT GO):** R1 =
+  `inspectControlSocketPath(socketPath,lstatFn)` path-core 추출(watcher가 plan.expectedSocketPath를 gid 재유도 없이
+  inspect), `inspectTargetControlSocket`은 thin wrapper. adapter = `makeProductionSpawnBgResumeDeps(opts)`(plan/lock
+  캡처 안 함=D3) — `socketWatchVerdict`(addressConflict→forged/alive→alive/dead·indeterminate→wait) + spawnChild
+  (buildResumePiArgs v2-control, **B1: spawn event 대기 후 resolve·error면 reject**) + awaitSocketAlive(exact path 폴링,
+  forged 즉시 reject·connect 안 함) + awaitChildExit(**B2: proc 생성 즉시 resolve-only exitPromise 설치 → fast-exit 안
+  놓침**) + awaitTimeout(setTimeout+abort clear) + killChild(SIGTERM). 게이트 check-entwurf-v2-spawn-production **38**,
+  check-socket-discovery 47→**58**. **live smoke(체인 밖, LIVE=1) 7 checks: S1 실 unix socket connectability(실 lstat+probe)·
+  symlink forged·absent abort / S2 실 child spawn-event resolve+SIGTERM kill+exit 관측 / S3 실 timeout→kill→child-exited→
+  release×1.** real-pi resume E2E는 5d surface matrix가 증명(D5 phase gate split).
 - **5c-3c 진입 시 이월 계약(세션 #6 검수에서 도출):**
   - **(Fable, bounded-return)** watcher의 bounded return은 `awaitTimeout` dep이 실제로 settle한다는 계약에 의존한다.
     5c-3c에서 `awaitTimeout`을 setTimeout 기반(+abort 시 clearTimeout)으로 잇고, `awaitSocketAlive`/`awaitChildExit`는
@@ -55,9 +57,9 @@
 - **규율:** 매 슬라이스 GPT 1차 → 반영 → Fable 2차 → 둘 다 GO → local 커밋. **push는 GLG.** AI 서명 금지. `--no-verify`·
   `AGENT_ALLOW_UNSAFE_COMMIT` 금지. 공개 repo라 device 호스트명·실명·시크릿을 커밋/푸시 diff에 넣지 말 것(pre-push가 막음).
 - **GLG는 폰에서 tmux 관망, 커밋 시점에만 확인.** 셋이 밀고 나가다 진짜 막힐 때만 호출.
-- **이번 세션(#6) 커밋:** push 완료(GLG 승인): `222f4d0` 5c-3a watcher + `f547464` docs + `314a334` 5c-3b SSOT +
-  `edd30c6` docs. **미푸시(local, push 대기):** `e9d12df` 5c-3c R1 + `6e8b9ba` 5c-3c adapter + (이) docs. GLG가
-  push 시점 결정.
+- **이번 세션(#6) 커밋(전부 push 완료, GLG 승인):** `222f4d0` 5c-3a + `f547464` docs · `314a334` 5c-3b + `edd30c6`
+  docs · `e9d12df` 5c-3c R1 + `6e8b9ba` 5c-3c adapter + `cd4d4ec` docs · `410110d` 5c-3c live smoke + (이) docs.
+  5c-3 전부 종결. NOW = 5c-4.
 
 ## North Star — 잊지 말 것
 
@@ -73,10 +75,19 @@
 - **작게 자르고 순차 검수한다.** GPT힣 1차 → 통과분만 Fable 2차. 동시 throw 금지.
 - **5b는 pure decider만.** transport 실행·spawn·smoke·새 표면은 다음 슬라이스로 넘긴다.
 
-## Current state — 2026-06-13 (구현 세션 #6 — 5c-3a/5c-3b push 완료, 5c-3c R1+adapter local·push 대기)
+## Current state — 2026-06-13 (구현 세션 #6 — 5c-3 전부 done·push 완료, NOW = 5c-4)
 
+- **2026-06-13 구현 세션 #6 (Opus 실무자): 5c-3c live phase-gate smoke (`410110d`, GPT GO). 5c-3 슬라이스 전부
+  종결·push 완료.** `smoke-entwurf-v2-spawn-live`(체인 밖, LIVE=1) = production deps를 실 OS 객체로 실증:
+  S1 실 unix socket(`net.Server`)→awaitSocketAlive resolve(실 fs.lstat+probeSocketLiveness)·symlink forged·absent abort /
+  S2 실 generic child→spawnChild 실 'spawn' event resolve(B1)+SIGTERM kill+eager exitPromise exit 관측(B2) / S3
+  executeSpawnBgResume+production deps→실 timeout→kill→child-exited→release×1(실 timer+실 child+5c-3a watcher 통합).
+  **`LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live → 7 passed`(D5 phase gate 실행·기록 완료).** S2 발견(GPT 동의): 'spawn'
+  event는 process creation이지 child의 SIGTERM-handler readiness 아님 → spawn 직후 kill은 code null 가능 → 단언
+  `0||null`(둘 다 유효한 exit 관측, watcher는 any code로 release). real-pi resume E2E는 5d matrix(D5 split). check-pack
+  139→**140**, full `pnpm check` EXIT=0.
 - **2026-06-13 구현 세션 #6 (Opus 실무자): 5c-3c production deps adapter (`e9d12df` R1 + `6e8b9ba` adapter,
-  GPT design GO → 코드 GO[B1/B2 blocker 봉합 후]). local only, push 대기. Fable 부재로 GPT 페어 2회 검수.**
+  GPT design GO → 코드 GO[B1/B2 blocker 봉합 후]). Fable 부재로 GPT 페어 2회 검수.**
   R1 = `inspectControlSocketPath(socketPath, lstatFn)` path-core 추출(watcher가 `plan.expectedSocketPath`를 gid
   재유도 없이 inspect; `inspectTargetControlSocket`은 thin wrapper, P1 symlink guard·mapInspectionToLiveness 무변경,
   기존 호출자 무행동변화). adapter = `makeProductionSpawnBgResumeDeps(opts): SpawnBgResumeDeps` — **D3: plan/lock
@@ -221,15 +232,19 @@
 
 ## Next moves — read order
 
-1. **Step 5 — 5b + 5c-1 + 5c-2(a) + 5c-2(b) + 5c-3a + 5c-3b + 5c-3c(R1+adapter) DONE(`ff69a3a`+`03add67`+
-   `1814c5d`+`222f4d0`+`314a334`+`e9d12df`+`6e8b9ba`, 전부 GPT(+Fable where available) GO; 5c-3c는 local·push 대기),
-   ◀ NOW = 5c-3c step 5 live smoke → 5d.**
+1. **Step 5 — 5b + 5c-1 + 5c-2(a) + 5c-2(b) + 5c-3(a+b+c, live smoke 포함) DONE(`ff69a3a`+`03add67`+`1814c5d`+
+   `222f4d0`+`314a334`+`e9d12df`+`6e8b9ba`+`410110d`, 전부 GPT(+Fable where available) GO·push 완료),
+   ◀ NOW = 5c-4 meta-mailbox send → 5d.**
    - **5c 분해(GPT design GO):** 5c-1 pure release reducer ✅ → 5c-2(a) control-socket send hand ✅ → 5c-2(b)
      deadFallback resolver ✅ → 5c-3a spawn-bg watcher hand ✅(`executeSpawnBgResume`, 6 IO dep 주입) →
-     5c-3b resume-argv SSOT ✅(`buildResumePiArgs`, legacy|v2-control) → 5c-3c production deps adapter ✅
-     (`makeProductionSpawnBgResumeDeps`, deterministic 게이트 38; **step 5 live smoke만 남음**) → 5c-4 meta-mailbox send.
-     위험 순, pure-before-IO. spawn-bg 경로 deterministic 부분 전부 완료 — 남은 건 5c-3c live smoke 1회(체인 밖) +
-     mailbox 직송(5c-4) + 5d MCP surface.
+     5c-3b resume-argv SSOT ✅(`buildResumePiArgs`) → 5c-3c production deps adapter ✅(`makeProductionSpawnBgResumeDeps`,
+     게이트 38 + live smoke 7) → **5c-4 meta-mailbox send(◀ NOW, 5c 마지막)**. 위험 순, pure-before-IO. spawn-bg 경로
+     전부 종결 — 남은 건 mailbox 직송(5c-4) + 5d MCP surface.
+   - **5c-4 = enqueue-only meta-mailbox send helper.** 5c-2(a) hand의 `deps.sendViaMailbox(plan,lock)` + 5c-2(b)
+     resolver의 mailbox plan 경로가 소비하는 본체. 재사용(정찰됨): `enqueueMetaMessage`(meta-session.ts:1467) +
+     `formatMetaMailboxBody` + `buildLocalSenderEnvelope`(entwurf-control.ts:582). **enqueue만, routing 결정 ❌**(5b
+     dispatch table이 이미 결정). meta-mailbox plan은 lock null(？7) → release 없음. RpcSendResult{success} 반환(enqueue
+     성공/실패). 게이트: enqueue 호출·envelope/body 형상·routing 미결정. 그 다음 5d.
    - **5c-3c = production `SpawnBgResumeDeps` factory (GPT 5c-3c 설계, 코드 전 잠금):** dep factory로 5c-3a pure
      watcher 무수정 유지. ① `spawnChild(plan)` = identity authority 재사용(`readSessionIdentity(plan.sessionId)` +
      `getEntwurfExplicitExtensions(resumeModel,false,provider)`; cwd=header authority, process.cwd fallback 금지) +
