@@ -114,6 +114,12 @@
 		// (SendDeliveredReleaseFailedError from entwurf-v2-send) with explicit `.ts`-extension
 		// imports that pull the excluded send/decider/spawn into the program, same fence.
 		// Typechecked by scripts/tsconfig.json via its gate (check-entwurf-v2-runner.ts).
-		"pi-extensions/lib/entwurf-v2-runner.ts"
+		"pi-extensions/lib/entwurf-v2-runner.ts",
+		// entwurf-v2-production.ts is the 5d-2b PRODUCTION runEntwurfV2 deps assembly — a
+		// lib→lib VALUE importer (decideDispatch / the 3 transport hands / lock / mailbox /
+		// socket / preflight) with explicit `.ts`-extension imports that pull the excluded
+		// decider/send/spawn/runner into the program, same fence. Typechecked by
+		// scripts/tsconfig.json via its gate (check-entwurf-v2-production.ts).
+		"pi-extensions/lib/entwurf-v2-production.ts"
 	]
 }

@@ -1442,6 +1442,19 @@ export function readMetaIdentityByGardenId(
 	return identity;
 }
 
+/**
+ * Probe-free existence check for a garden citizen's meta-record. Used by the 5d
+ * entwurf_v2 production `resolveTarget`: a MISSING record is a soft `bad-target`
+ * (identity:null), but a PRESENT-but-corrupt record must fail loud — so the producer
+ * `existsSync`-checks here FIRST and only calls `readMetaIdentityByGardenId` when this
+ * returns true, leaving drift/corruption as the lone throw (never matched by message
+ * string). Validates the gid (F2-P1) like its read sibling.
+ */
+export function metaRecordExistsByGardenId(gardenId: string, sessionsDir: string = defaultMetaSessionsDir()): boolean {
+	const id = requireGardenId(gardenId);
+	return fs.existsSync(recordFileFor(sessionsDir, id));
+}
+
 export interface EnqueueMetaMessageOptions {
 	gardenId: string;
 	body: string;

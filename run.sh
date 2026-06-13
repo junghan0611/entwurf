@@ -1419,6 +1419,17 @@ check_entwurf_v2_runner() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-runner.ts)
 }
 
+check_entwurf_v2_production() {
+  # Deterministic gate for 0.11 Stage 0 step 5d-2b: makeProductionEntwurfV2Deps — the ctx-free
+  # PRODUCTION assembly of runEntwurfV2's deps. Proves the wiring over fake leaf-IO spies (no
+  # real socket/lock/spawn/meta-record): decide wraps decideDispatch and acquires under the
+  # wired lockDir / control sendOverSocket builds the RpcSendCommand + maps + releases under
+  # lockDir / QB3 the spawn watcher releases via the SHARED lockDir release (not the spawn
+  # factory default) / the mailbox hand enqueues onto the wired dirs / a dead control send
+  # re-resolves to the SAME sendViaMailbox instance on the SAME dirs (Q3+Q5 no drift).
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-production.ts)
+}
+
 check_entwurf_control_rpc() {
   # Gate for 0.11 Stage 0 step 5d-2 (RPC-helper extraction micro-slice): the --entwurf-control
   # socket protocol (wire types + the newline-JSON client sendRpcCommand) moved to the ctx-free
@@ -4574,6 +4585,9 @@ case "$cmd" in
     ;;
   check-entwurf-control-rpc)
     check_entwurf_control_rpc
+    ;;
+  check-entwurf-v2-production)
+    check_entwurf_v2_production
     ;;
   check-entwurf-v2-spawn)
     check_entwurf_v2_spawn
