@@ -73,6 +73,7 @@ Usage:
   ./run.sh check-entwurf-v2-spawn      # deterministic gate (0.11 Stage 0 step 5c-3a): spawn-bg RESUME watcher hand (executeSpawnBgResume) wiring spawn + socket-observe IO onto the 5c-1 reducer — Fable-3: TIMEOUT IS NOT A RELEASE (bare observeTimeout→killChild, release 0; bounded killGrace then real socket-alive ∨ child-exited releases ×1); spawnChild throw→spawn-start-failed; no observation obtainable (grace elapses / post-spawn watch dep throws)→lock-retained fail-closed (released:false, evidence surfaced), NO direct-release hatch; IO-via-dep, controlled promises
   ./run.sh check-entwurf-resume-args   # deterministic gate (0.11 Stage 0 step 5c-3b): resume-argv SSOT (buildResumePiArgs) shared by the legacy async worker and the v2 spawn-bg resident citizen — A1: legacy=--no-extensions + no --entwurf-control (one-shot pi -p exits), v2-control=--entwurf-control + no --no-extensions (keep-alive is the goal, resumed session stays addressable); BOTH keep --mode json -p + prompt-as-turn (-p NOT dropped in v2); explicitExtensionArgs preserved once (#29); v2 includes plan.launchArgs (--approve); null provider→no --provider; no cross-contamination
   ./run.sh check-entwurf-v2-spawn-production # deterministic gate (0.11 Stage 0 step 5c-3c): production SpawnBgResumeDeps factory (makeProductionSpawnBgResumeDeps) wiring the 5c-3a watcher's 6 IO seams — no real pi/socket/timer (that=opt-in smoke-entwurf-v2-spawn-live, OUT of pnpm check). socketWatchVerdict: address-conflict→forged (reject, never wait)/alive→alive/dead·indeterminate→wait; spawnChild builds v2-control argv (--entwurf-control, no --no-extensions, -p+prompt, --approve, cwd authority); awaitSocketAlive connectable→resolve / symlink→reject without connect / dead→wait→alive / abort-clears; awaitChildExit code + listener cleanup; awaitTimeout schedule + abort-clear; killChild=SIGTERM; proc-less child fails loud
+  ./run.sh smoke-entwurf-v2-spawn-live # LIVE phase gate (0.11 Stage 0 step 5c-3c, D5) — OUT of pnpm check, needs LIVE=1. Exercises the production SpawnBgResumeDeps against REAL OS objects: S1 real unix socket → awaitSocketAlive resolves (real lstat+probe), symlink→forged, absent→abort settles; S2 real child → spawn-event resolve + SIGTERM kill + exit-code capture; S3 watcher integration → real timeout→kill→child-exited→release ×1. Does NOT spawn a real pi resume (that=5d matrix). Run before 5d: LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b pi 4-value, facts-only keyset; union: PeerFact+SocketOnlyFact by gardenId, dormant→dead, F3 indeterminate preserved, non-pi+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-listing          # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4a): META-STORE axis listAllMetaIdentities — explicit-partial: parse failure / body-filename drift → explicit {filename,message} error (verbatim, no synthetic fields), valid records still listed (corrupt doesn't blind); mode strict throws / collect partial; entries/readRecord injected, no IO
@@ -1424,6 +1425,21 @@ check_entwurf_v2_spawn_production() {
   # resolves the code + removes the listener on abort. awaitTimeout schedules + abort-clears.
   # killChild=SIGTERM; releaseLock delegates; a proc-less child fails loud (mis-wire).
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-spawn-production.ts)
+}
+
+smoke_entwurf_v2_spawn_live() {
+  # LIVE phase gate for 0.11 Stage 0 step 5c-3c (D5) — kept OUT of `pnpm check`. Exercises the
+  # production SpawnBgResumeDeps against REAL OS objects (a real unix socket, real child
+  # processes, real timers, real abort teardown) to catch what the deterministic gate's fakes
+  # cannot: actual spawn/exit/error event semantics, real lstat+connect liveness, and the
+  # 5c-3a watcher's timeout→kill→child-exited→release integration on a live process. It does
+  # NOT spawn a real `pi --entwurf-control` resume (that is the 5d surface matrix). Run once
+  # before 5d and record the result:  LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live
+  if [ "${LIVE:-}" != "1" ]; then
+    echo "[smoke-entwurf-v2-spawn-live] skipped — set LIVE=1 to run (spawns real children + opens a real unix socket)."
+    return 0
+  fi
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-entwurf-v2-spawn-live.ts)
 }
 
 check_entwurf_facts() {
@@ -4514,6 +4530,9 @@ case "$cmd" in
     ;;
   check-entwurf-v2-spawn-production)
     check_entwurf_v2_spawn_production
+    ;;
+  smoke-entwurf-v2-spawn-live)
+    smoke_entwurf_v2_spawn_live
     ;;
   check-entwurf-facts)
     check_entwurf_facts
