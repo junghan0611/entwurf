@@ -103,6 +103,12 @@
 		// lib→lib VALUE importer (spawn child / socket inspect+probe / lock release / resume-argv
 		// builder / identity helpers) with explicit `.ts`-extension imports, same fence.
 		// Typechecked by scripts/tsconfig.json via its gate (check-entwurf-v2-spawn-production.ts).
-		"pi-extensions/lib/entwurf-v2-spawn-production.ts"
+		"pi-extensions/lib/entwurf-v2-spawn-production.ts",
+		// entwurf-v2-mailbox.ts is the 5c-4 ENQUEUE-ONLY meta-mailbox SEND body + production
+		// sendViaMailbox adapter — a lib→lib VALUE importer (formatMetaMailboxBody /
+		// enqueueMetaMessage) with explicit `.ts`-extension imports that pull the excluded
+		// send hand into the program, same fence. Typechecked by scripts/tsconfig.json via
+		// its gate (check-entwurf-v2-mailbox.ts).
+		"pi-extensions/lib/entwurf-v2-mailbox.ts"
 	]
 }
