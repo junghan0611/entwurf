@@ -30,6 +30,7 @@ import { resolveFactList } from "../pi-extensions/lib/entwurf-facts.ts";
 import type { MetaBackendV2, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
 import {
 	controlSocketPath,
+	inspectControlSocketPath,
 	inspectTargetControlSocket,
 	type LstatLike,
 	mapInspectionToLiveness,
@@ -274,6 +275,56 @@ async function main(): Promise<void> {
 		// symlink is decided BEFORE socket — a symlink that also reports isSocket is still a conflict.
 		const symSock = await inspectTargetControlSocket(GID_LIVE, DIR2, async () => stat({ sym: true, sock: true }));
 		ok("inspect: symlink wins over isSocket (never connect a symlink)", symSock.kind === "address-conflict");
+	}
+
+	// ── inspectControlSocketPath (5c-3c R1 — the path-addressed SSOT) ────────────────
+	// The 5c-3 spawn-bg watcher observes plan.expectedSocketPath and MUST inspect THAT exact
+	// path (no gid re-derivation). Proves the path-taking core classifies every branch
+	// identically to the gid wrapper, and that the wrapper just feeds it controlSocketPath(gid).
+	{
+		const EXACT = "/fake/ctl/some-exact.sock";
+		const WRAP_DIR = "/fake/ctl";
+		const stat = (over: Partial<Record<"sym" | "sock", boolean>>): LstatLike => ({
+			isSymbolicLink: () => over.sym === true,
+			isSocket: () => over.sock === true,
+		});
+		const lstatThrowing = (code: string) => async (): Promise<LstatLike> => {
+			const e = new Error(`${code}: lstat`) as NodeJS.ErrnoException;
+			e.code = code;
+			throw e;
+		};
+
+		// Inspects the EXACT path handed in (carried verbatim on every variant).
+		const absent = await inspectControlSocketPath(EXACT, lstatThrowing("ENOENT"));
+		ok("path-inspect: ENOENT → absent", absent.kind === "absent");
+		ok("path-inspect: absent carries the EXACT path (no re-derivation)", absent.socketPath === EXACT);
+
+		const sym = await inspectControlSocketPath(EXACT, async () => stat({ sym: true }));
+		ok("path-inspect: symlink → address-conflict (never connected, P1)", sym.kind === "address-conflict");
+		ok("path-inspect: symlink reason", sym.kind === "address-conflict" && sym.reason === "symlink");
+
+		const sock = await inspectControlSocketPath(EXACT, async () => stat({ sock: true }));
+		ok("path-inspect: socket file → socket-file", sock.kind === "socket-file");
+		ok("path-inspect: socket-file carries the EXACT path", sock.socketPath === EXACT);
+
+		const notSock = await inspectControlSocketPath(EXACT, async () => stat({}));
+		ok("path-inspect: non-socket → address-conflict", notSock.kind === "address-conflict");
+		ok("path-inspect: non-socket reason", notSock.kind === "address-conflict" && notSock.reason === "not-socket");
+
+		const indet = await inspectControlSocketPath(EXACT, lstatThrowing("EACCES"));
+		ok("path-inspect: EACCES → indeterminate", indet.kind === "indeterminate");
+		ok("path-inspect: indeterminate carries error code", indet.kind === "indeterminate" && indet.error === "EACCES");
+
+		// The gid wrapper feeds the path-core controlSocketPath(gid, dir) verbatim — same
+		// classification, just a derived path. Proves the thin-wrapper equivalence.
+		const wrapped = await inspectTargetControlSocket(GID_LIVE, WRAP_DIR, async () => stat({ sock: true }));
+		const direct = await inspectControlSocketPath(controlSocketPath(GID_LIVE, WRAP_DIR), async () =>
+			stat({ sock: true }),
+		);
+		ok(
+			"path-inspect: gid wrapper === path-core over controlSocketPath(gid)",
+			wrapped.socketPath === direct.socketPath && wrapped.kind === direct.kind,
+		);
 	}
 
 	// mapInspectionToLiveness — the shared inspection→liveness mapper (SSOT for the 5b

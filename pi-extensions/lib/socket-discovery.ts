@@ -102,12 +102,20 @@ export interface LstatLike {
 	isSocket(): boolean;
 }
 
-export async function inspectTargetControlSocket(
-	gardenId: string,
-	dir: string = CONTROL_SOCKET_DIR,
+/**
+ * Inspect the EXACT control-socket path given (no gid re-derivation) and classify it by
+ * lstat alone. This is the path-addressed core of the inspection: the 5c-3 spawn-bg watcher
+ * observes `plan.expectedSocketPath` and MUST inspect that exact path (its contract forbids
+ * re-deriving a path from the gid), so the path-taking form is the SSOT and
+ * `inspectTargetControlSocket` is the thin gid→path wrapper over it. `lstatFn` is injectable
+ * so the gate drives every branch without a real filesystem; the default is `fs.lstat`
+ * (which, unlike connect, does NOT follow the final symlink — that is the whole point: a
+ * symlink is caught as an address-conflict and never connected, P1).
+ */
+export async function inspectControlSocketPath(
+	socketPath: string,
 	lstatFn: (p: string) => Promise<LstatLike> = (p) => fs.lstat(p),
 ): Promise<TargetSocketInspection> {
-	const socketPath = controlSocketPath(gardenId, dir);
 	let st: LstatLike;
 	try {
 		st = await lstatFn(socketPath);
@@ -123,6 +131,20 @@ export async function inspectTargetControlSocket(
 	if (st.isSymbolicLink()) return { kind: "address-conflict", socketPath, reason: "symlink" };
 	if (st.isSocket()) return { kind: "socket-file", socketPath };
 	return { kind: "address-conflict", socketPath, reason: "not-socket" };
+}
+
+/**
+ * The gid-addressed inspection (？2 — lstat-then-connect, v2 decider helper): derive the
+ * canonical control-socket path for `gardenId` and inspect it. A thin wrapper over
+ * `inspectControlSocketPath` so the decider's gid-keyed path and the watcher's exact-path
+ * observation share ONE lstat classifier (no drift in the P1 symlink guard).
+ */
+export async function inspectTargetControlSocket(
+	gardenId: string,
+	dir: string = CONTROL_SOCKET_DIR,
+	lstatFn: (p: string) => Promise<LstatLike> = (p) => fs.lstat(p),
+): Promise<TargetSocketInspection> {
+	return inspectControlSocketPath(controlSocketPath(gardenId, dir), lstatFn);
 }
 
 /**
