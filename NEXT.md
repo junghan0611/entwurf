@@ -76,32 +76,35 @@
   `opts.prefixRoots ?? parse()`로 양 surface 공통 배선, agentDir undefined 유지, doctor는 env display only(parser 재구현 X).
   gate 25→**32**. 둘 다 GPT GO. `pnpm check` EXIT=0, check-pack 150. **doctor 전체는 기존 installed-writer-stale로 FAIL
   (install-meta-bridge 재배포 영역, 세션 #8 변경 무관) — 새 v2 섹션 5/5 OK.**
-- **지금 할 일:** ◀ NOW = **5d-5-pre hardening 배치**(deterministic·auth-불요, GLG-present 적기) → **deploy hygiene** →
-  그다음 **5d-5 LIVE matrix**. 트리오 합의 순서·근거: G1을 먼저 닫아야 LIVE matrix 실패 시 "실 lifecycle 문제"인지
-  "MCP boot/schema 회귀"인지 분리되고, doctor PASS를 앞에 둬야 release-gate 성격의 5d-5가 배경소음 없이 깨끗하다. 배치
-  본체는 5d-5 자신이 아니라 그 앞단 hardening임에 주의(5d-5 본체 = sender×target×direction live matrix는 headline 유지).
-  **5d-5-pre commit split:**
-  1. `docs`: G3 주석 3곳 정정(`index.ts:559`·`entwurf-control.ts:1484-85`·`surface.ts:58-61` — opts seam이 아니라
-     adapter env-fallback이 SSOT임을 반영).
-  2. `test(mcp)`: 신설 `check-pi-tools-bridge-boot` gate — start.sh 부팅 + `initialize`/`notifications/initialized` +
-     `tools/list` + `entwurf_v2` presence·schema deep-assert(props target/intent/message/mode/wants_reply, required
-     target/intent/message, intent enum fire-and-forget|owned-outcome, mode enum steer|follow_up; timeout 짧게·auth 없음·
-     side-effect 없음) → `pnpm check` 편입 + check-pack 배선. `check-bridge`/`test.sh`는 broad protocol negative suite로
-     유지, test.sh는 EXPECTED_TOOLS에 `entwurf_v2` presence 1개만 추가(D1=A안, 중복 최소).
-  3. `test(smoke)`: oracle deferred pipefail diagnostic guard — `run.sh:1040/1077`(로컬 세션 활성 파일, 소유권 조율된 지금
-     흡수, 별도 commit으로 review/rollback 분리). 나머지 deferred(`smoke-meta-prune:138`, `smoke-resident-garden-guard:
-     80/149/223/347/348`)도 같은 `{ … || true; }` 관용구 — 같은 commit 또는 follow-up.
-  4. `fix(doctor)`: A3b — installed `CACHE_HOOKS` 존재하는데 BAKED command parse 불가 = drift → `bad`로 승격(현행 warn);
-     hooks.json 부재(설치 전)는 `warn` 유지(D2 확정 시).
-  5. **ops(commit 아님):** `./run.sh install-meta-bridge` → doctor PASS(`deployed writer STALE` 해소) 확인 → NEXT 기록.
-  **그다음 5d-5 LIVE matrix(headline):** (a) MCP in-process spawn-bg path 실증(runtime static import + production runner
-  resolve — 부팅 절반은 G1 boot gate가 이미 닫음), (b) pi-native dynamic import path 실증, (c) release-gate matrix —
-  sender surface(pi-native tool / MCP verb) × target kind(alive pi / dormant pi / unsupported citizen) × direction에서
-  lock acquire→release ×1, lock-retained 진단 표면화. **LIVE=1 영역**(auth/model/실 pi 세션) — design은 GPT 잠금, LIVE
-  실행은 GLG 조율. **5d 전 실행 기록(D5, 완료): `LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live → 7 passed`.**
-  **미결 결정(트리오 권고 — GLG 확정 대기):** D1=신설 boot gate(A안) / D2=BAKED drift→`bad` / D3=브랜치
-  `verify/doctor-pipefail-and-pi-0.79.2`는 deferred 흡수 후 삭제 / D4=pi dev pin bump 안 함(B2, peer `>=0.79.1`이 runtime
-  0.79.2 이미 허용 + `check-dep-versions` devDep==peer floor 강제). 상세 = `## Next moves` 1번.
+- **지금 할 일:** ◀ NOW = **deploy hygiene**(`./run.sh install-meta-bridge` → doctor PASS) → **5d-5 LIVE matrix**.
+  **5d-5-pre hardening 배치 DONE·push 완료(`7a4ed48..88b679a`, 매 슬라이스 GPT design→code GO).** 트리오 근거: G1을
+  먼저 닫아야 LIVE 실패 원인이 "실 lifecycle"인지 "MCP boot/schema 회귀"인지 분리되고, doctor PASS가 release-gate를
+  깨끗하게 한다. **5d-5-pre 커밋(전부 push):**
+  1. `27bef33` `docs`: G3 prefixRoots-seam 주석 3곳(`index.ts:559`·`entwurf-control.ts:1484-85`·`surface.ts:58-61`)
+     → opts seam이 아니라 adapter env-fallback(`PI_ENTWURF_PREFIX_ROOTS`)이 SSOT임 반영.
+  2. `418325c` `test(mcp)`: 신설 `check-pi-tools-bridge-boot` gate(start.sh 부팅 + `tools/list` + `entwurf_v2`
+     presence·schema deep-assert: props target/intent/message/mode/wants_reply, required target/intent/message, intent/
+     mode enum set-equality; tools/list만→side-effect/auth 없음) → `pnpm check` 편입(check-entwurf-v2-surface 뒤),
+     check-pack 150→**151**. `check-bridge`/`test.sh`는 broad negative suite 유지, EXPECTED_TOOLS + `validate_pi_tools_bridge`
+     expected에 `entwurf_v2` presence만 추가(D1=A안). 게이트 **12 checks**. **G1a/G1b 닫힘.**
+  3. `0dfe4d0` `test(smoke)`: oracle deferred `run.sh:1040/1077` turn{1,2}_acp pipefail-abort guard — 파이프 끝 `|| true`로
+     emptiness가 기존 `[[ -z ]]`/`[[ != ]]` 진단 가드로 흐름(성공 경로 no-op). oracle doctor :153/:89 idiom.
+  4. `88b679a` `fix(doctor)`: A3b — installed `CACHE_HOOKS` 존재 + BAKED command parse 불가 = drift → `warn`에서 `bad`로
+     승격(store-churn guard blind = verify-impossible은 fail-loud); hooks.json 부재(설치 전)는 `warn` 유지. parse 성공 시 무변경.
+  5. ◀ **NOW(ops, commit 아님):** `./run.sh install-meta-bridge` → doctor PASS(`deployed writer STALE` 해소) 확인.
+     **GLG 환경 손 필요** — LIVE 5d-5의 전제(5d-2b가 추가한 `metaRecordExistsByGardenId`만큼 deployed writer가 source보다 뒤짐).
+  **그다음 5d-5 LIVE matrix(headline):** (a) MCP in-process spawn-bg path 실증(부팅·schema 절반은 G1 boot gate가 이미
+  닫음), (b) pi-native dynamic import path 실증, (c) release-gate matrix — sender surface(pi-native tool / MCP verb) ×
+  target kind(alive pi / dormant pi / unsupported citizen) × direction에서 lock acquire→release ×1, lock-retained 진단
+  표면화. **LIVE=1 영역**(auth/model/실 pi 세션) — design은 GPT 잠금, LIVE 실행은 GLG 조율. **LIVE 직전 체크포인트(비봇
+  관찰): 어느 백엔드/모델로 실 pi 세션을 띄워 spawn-resume·send를 실증할지 환경부터 고정**(모델 상황 유동 — Fable 차단,
+  Opus 복구). **D5(완료): `LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live → 7 passed`.**
+  **결정 확정:** D1=신설 boot gate(A안)✅ / D2=BAKED drift→`bad`✅(GLG 확정) / D4=pi dev pin bump 안 함(B2, peer
+  `>=0.79.1`이 runtime 0.79.2 이미 허용 + `check-dep-versions` devDep==peer floor 강제)✅. **남은 결정:** D3=브랜치
+  `verify/doctor-pipefail-and-pi-0.79.2`는 deferred 일부(`run.sh:1040/1077`) 흡수 완료 후 삭제 — 나머지 deferred
+  (`smoke-meta-prune:138`, `smoke-resident-garden-guard:80/149/223/347/348`)는 후속.
+  **후속(GPT 권고):** `test.sh` pre-existing 1-failure(entwurf registry "unregistered tuple" — 환경/별개, 5d-5-pre 무관)는
+  `check-bridge`를 나중에 release-gate에 넣을 때 발목 잡을 수 있으니 별도 후속으로 추적.
 - **5d-1 done 요약(`e0c6e75` 5d-1a + `97704c9` 5d-1b, GPT GO):** 5d-1a = send-hand result에 N3 `rejectReason`(dead
   fallback resolver reason carry; in-band refuse는 reason 없음) + N1 `SendDeliveredReleaseFailedError`(non-failed
   outcome 후 releaseLock throw = delivered+lock-dirty 구조화, bare rethrow 대체; `failed`는 original error 우선 유지).
