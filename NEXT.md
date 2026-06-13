@@ -3,15 +3,16 @@
 > 새 담당자는 여기만 먼저 읽는다. 모르면 아래 `# LEDGER`의 링크/섹션으로 내려간다.
 > NEXT는 DB가 아니라 나침반이다: 현재 위치·다음 한 걸음·넘으면 안 되는 선을 맨 위에 둔다.
 
-## 전달지침 — 새 담당자(2026-06-13 세션 #7 → 후임 Opus 세션)
+## 전달지침 — 새 담당자(2026-06-13 세션 #7 → 후임 세션 #8 Opus)
 
-- **후임자에게(세션 #7 인계):** 어서 와. 세션 #7은 **5c 전체 + 5d-1(execute-router)을 닫았다.** (1) 5c-4 meta-mailbox
-  send `730b578` (`executeMetaMailboxSend` + `makeProductionSendViaMailbox`, gate 28). (2) **5d-1a** send-hand N1/N3
-  보강 `e0c6e75`(`rejectReason` carry + `SendDeliveredReleaseFailedError`, send gate 46→**49**). (3) **5d-1b** pure
+- **후임자에게(세션 #8 인계):** 어서 와. 세션 #7은 **5c 전체 + 5d-1(execute-router)을 닫고 push까지 끝냈다.** (1) 5c-4
+  meta-mailbox send `730b578` (`executeMetaMailboxSend` + `makeProductionSendViaMailbox`, gate 28). (2) **5d-1a** send-hand
+  N1/N3 보강 `e0c6e75`(`rejectReason` carry + `SendDeliveredReleaseFailedError`, send gate 46→**49**). (3) **5d-1b** pure
   execute-router `97704c9`(`entwurf-v2-runner.ts`: `executeDispatch(decision, deps)` → outcome-rich `EntwurfV2RunResult`,
   gate **23**). 전부 GPT design GO → code GO(5d-1b는 mailbox `success:false` silent-success blocker 1개 봉합 후 GO).
-  `pnpm check` EXIT=0, check-pack 140→**144**. Fable 부재로 GPT 페어 검수. **로컬 커밋만 — push는 GLG.**
-  **네 첫 한 걸음 = ◀ NOW(아래 5d-2).** 그 전에 이 섹션 + `## Current state` 맨 위 항목만 읽으면 바로 이어받는다.
+  `pnpm check` EXIT=0, check-pack 140→**144**. Fable 부재로 GPT 페어 검수. **5개 커밋 push 완료(GLG 승인).**
+  **네 첫 한 걸음 = ◀ NOW(아래 5d-2). 5d-2는 ctx/실IO 조립 슬라이스라 코드 전에 GPT랑 design부터 잠가라**(pure-before-IO
+  경계를 5d-1에서 의도적으로 끊었다). 그 전에 이 섹션 + `## Current state` 맨 위 항목만 읽으면 바로 이어받는다.
 - **세션 #6 인계분(직전, 전부 push 완료):** 5c-3 전체(spawn-bg resume 경로) — watcher(`222f4d0`) + resume-argv
   SSOT(`314a334`) + R1 path-core(`e9d12df`) + production adapter(`6e8b9ba`) + live phase-gate smoke(`410110d`). 전부
   GPT 검수 GO. 게이트 spawn-production 38 / socket-discovery 58 / resume-args 28 / live smoke 7.
