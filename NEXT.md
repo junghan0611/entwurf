@@ -40,14 +40,22 @@
   in-process(Q1) — decider가 transport 결정, legacy rpcCall/enqueue 직접 호출 안 함. gate `check-entwurf-v2-surface` **25**
   (map/render/ctx-free + case4 pi-native wiring + case5 MCP wiring). 둘 다 GPT design GO → code GO. `pnpm check` EXIT=0,
   check-pack 148→**150**.
-- **지금 할 일:** ◀ NOW = **5d-4 doctor `--entwurf-control` flag 체크 + prefixRoots operator-policy 주입원 배선**. 5d-3가
-  surface 두 개를 닫았고 `ProductionEntwurfV2Opts`에 `agentDir?`/`prefixRoots?` seam을 열어뒀다(현재 undefined=preflight
-  기본/no prefix promotion). 5d-4 = (a) doctor가 `--entwurf-control` flag/socket 상태를 점검(v2 surface가 의존), (b)
-  operator-policy `prefixRoots` 주입원을 surface 양쪽(`registerEntwurfV2Tool` opts / MCP handler opts)에 배선해
-  `makeProductionEntwurfV2Deps`로 흘려보냄(frozen decision 7: no package default). 그 다음 **5d-5** release-gate matrix
-  smoke(sender surface × target kind × direction) — **여기서 MCP in-process spawn-bg path를 실제로 한 번 밟아** runtime
-  static import + production runner path 실증(GPT 5d-3b 비차단 관찰). **5d 전 실행 기록(D5, 완료): `LIVE=1 ./run.sh
-  smoke-entwurf-v2-spawn-live → 7 passed`.** 상세 = `## Next moves` 1번.
+- **세션 #8 5d-4 done(로컬 커밋 — push 대기):** 5d-4a doctor `e42f9f0` + 5d-4b prefixRoots `3ac4476`. 5d-4a =
+  `meta-bridge-doctor.sh`에 `[entwurf-control / v2 dispatch surface]` 섹션(pi-native flag + entwurf_v2 tool + MCP verb
+  source 체크 + `check-entwurf-v2-surface` 단일 gate 실행; live turn은 5d-5, `pi --help` grep 회피). 5d-4b = 공유 env
+  **`PI_ENTWURF_PREFIX_ROOTS`** SSOT — ctx-free fence `parseEntwurfPrefixRootsEnv`(`path.delimiter` split·trim·drop-empty·
+  unset→[]·**no throw**, typo는 verbatim 유지=preflight normalize가 fallback), `runAndRenderEntwurfV2FromSurface`에서
+  `opts.prefixRoots ?? parse()`로 양 surface 공통 배선, agentDir undefined 유지, doctor는 env display only(parser 재구현 X).
+  gate 25→**32**. 둘 다 GPT GO. `pnpm check` EXIT=0, check-pack 150. **doctor 전체는 기존 installed-writer-stale로 FAIL
+  (install-meta-bridge 재배포 영역, 세션 #8 변경 무관) — 새 v2 섹션 5/5 OK.**
+- **지금 할 일:** ◀ NOW = **5d-5 release-gate matrix smoke**(sender surface × target kind × direction). 5d-2~5d-4가
+  runner + production deps + 두 surface + doctor/prefixRoots를 전부 닫았으니, 5d-5 = lifecycle을 실제로 한 번 밟는
+  matrix/live smoke. **반드시 포함:** (a) **MCP in-process spawn-bg path 실증**(runtime static import + production runner
+  path가 실제로 resolve·동작 — GPT 5d-3b 비차단 관찰), (b) pi-native dynamic import path 실증(runtime resolve), (c)
+  release-gate matrix — sender surface(pi-native tool / MCP verb) × target kind(alive pi / dormant pi / unsupported
+  citizen) × direction에서 lock acquire→release ×1, lock-retained 진단 표면화. **LIVE=1 영역**(auth/model/실 pi 세션
+  필요)이라 GLG 환경 손이 필요할 수 있음 — design부터 GPT와 잠그고 LIVE 실행은 GLG와 조율. **5d 전 실행 기록(D5, 완료):
+  `LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live → 7 passed`.** 상세 = `## Next moves` 1번.
 - **5d-1 done 요약(`e0c6e75` 5d-1a + `97704c9` 5d-1b, GPT GO):** 5d-1a = send-hand result에 N3 `rejectReason`(dead
   fallback resolver reason carry; in-band refuse는 reason 없음) + N1 `SendDeliveredReleaseFailedError`(non-failed
   outcome 후 releaseLock throw = delivered+lock-dirty 구조화, bare rethrow 대체; `failed`는 original error 우선 유지).
