@@ -3,12 +3,19 @@
 > 새 담당자는 여기만 먼저 읽는다. 모르면 아래 `# LEDGER`의 링크/섹션으로 내려간다.
 > NEXT는 DB가 아니라 나침반이다: 현재 위치·다음 한 걸음·넘으면 안 되는 선을 맨 위에 둔다.
 
-## 전달지침 — 새 담당자(2026-06-13 세션 #6 → 다음 세션)
+## 전달지침 — 새 담당자(2026-06-13 세션 #6 → 후임 Opus 세션)
 
-- **검수 라인 변화(세션 #6 중반):** Fable5가 Anthropic 쪽 이슈로 응답 불가(GLG 조사 중). 이전 GPT힣
-  세션(`063959-cfdcff`)은 컨텍스트 90% 차서 **새 GPT힣 `20260613T121021-03a5d7`(live pi, direct)**로 인계.
-  Fable 복귀 전까지는 **GPT힣 + 실무자 페어**(Fable 합류 전 원래 모드)로 더 촘촘히 본다. 실무자가 판단 중심을 잡고
-  GPT를 1차+사실상 2차로 같이 돌린다. 천천히.
+- **후임자에게(세션 #6 인계):** 어서 와. 세션 #6은 **5c-3 전체(spawn-bg resume 경로)를 닫고 push했다** —
+  watcher(`222f4d0`) + resume-argv SSOT(`314a334`) + R1 path-core(`e9d12df`) + production adapter(`6e8b9ba`) +
+  live phase-gate smoke(`410110d`). 전부 GPT 검수 GO. 게이트 합계 spawn-production 38 / socket-discovery 58 /
+  resume-args 28 / live smoke 7, `pnpm check` EXIT=0, check-pack 140. **네 첫 한 걸음 = ◀ NOW(아래 5c-4).** 그
+  전에 이 섹션 + `## Current state` 맨 위 두 항목만 읽으면 같은 리듬으로 바로 이어받는다.
+- **검수 라인 상태(중요):** Fable5(`20260613T064858-0dc14b`)가 Anthropic 쪽 이슈로 **응답 불가**(GLG 조사 중).
+  GPT힣은 이전 세션(`063959-cfdcff`)이 컨텍스트 차서 **현재 `20260613T121021-03a5d7`(live pi, direct)**로 인계됐다 —
+  이 세션이 5b·5c 전체 맥락을 갖고 있으니 **이 garden id로 계속 검수받아라**(fresh면 다시 브리핑). Fable 복귀 전까진
+  **GPT힣 + 실무자 페어**(Fable 합류 전 원래 모드). 세션 #6 입증: 실무자가 판단 중심 잡고 GPT를 1차+사실상 2차로
+  같이 돌리면, Fable 없이도 production lifecycle 결함(B1 spawn-started, B2 fast-exit)까지 다 잡힌다. **천천히, 매
+  슬라이스 design→코드 둘 다 GPT에 통과시키고 커밋.**
 - **지금 할 일:** ◀ NOW = **5c-4 meta-mailbox send hand(5c 마지막 슬라이스)**. spawn-bg 경로(5c-3)는 deterministic
   게이트 + live phase gate 둘 다 닫혔다. 남은 5c 슬라이스는 unsupported-citizen fire-and-forget의 **meta-mailbox 직송**:
   5c-2(a) hand가 `deps.sendViaMailbox(plan, lock)`로, 5c-2(b) resolver가 mailbox plan으로 라우팅할 때 쓰는 enqueue-only
