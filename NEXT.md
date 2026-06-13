@@ -3,8 +3,28 @@
 > 새 담당자는 여기만 먼저 읽는다. 모르면 아래 `# LEDGER`의 링크/섹션으로 내려간다.
 > NEXT는 DB가 아니라 나침반이다: 현재 위치·다음 한 걸음·넘으면 안 되는 선을 맨 위에 둔다.
 
-## 전달지침 — 새 담당자(2026-06-13 세션 #8 → 후임 세션 #9 Opus)
+## 전달지침 — 새 담당자(2026-06-13 세션 #9 → 후임 세션 #10)
 
+- **세션 #9 진행분(재검증 + NEXT 재편, push 완료):** 실무자 Opus(로컬 세션, garden `20260613T154121-c98fc3`) + GPT힣
+  (새 세션 `20260613T154104-99b405`, live pi direct) 페어로 5d-2~5d-4 전체를 read-only 재검증했다. **HEAD: oracle 세션이
+  doctor pipefail fix 2건을 main에 머지 → `134ff76`→`a2bd5c6`(ff, `3a01fbd` 빈 store + `a2bd5c6` baked-node parse를
+  `{ … || true; }`로 pipefail-abort 봉합 — fresh install에서도 doctor가 끝까지 + v2 섹션 실행).** 감사 결과 빈 곳 3개
+  (트리오 수렴, GREEN 재확인: `pnpm check` EXIT=0 / check-pack 150 / v2-surface 32 / `LIVE=1 smoke-entwurf-v2-spawn-live`
+  7/7):
+  - **G1a/G1b(게이트 갭, load-bearing):** MCP 서버(`mcp/pi-tools-bridge/src/index.ts`)는 빌드 없이 `node
+    --experimental-strip-types`로 직접 부팅하며 v2 fence 그래프 전체를 top-level static import한다. 그런데 서버를 실제
+    부팅하는 `check-bridge`(→`test.sh`)는 **`pnpm check` 밖**이고(`check-mcp`는 `normalizeMcpServers()` 순수검사, 서버
+    부팅 안 함), `test.sh` EXPECTED_TOOLS엔 `entwurf_v2`가 없다. 즉 fence 그래프에 strip-types-금지 구문(enum/namespace/
+    parameter property/`import=`)이 들어와도 `pnpm check`는 green인데 MCP 서버는 부팅 크래시 = 회귀 방어 갭. (오늘 그래프는
+    hostile 구문 0개로 클린, 수동 부팅으로 entwurf_v2 등록·스키마 실증.)
+  - **G2(benign):** doctor 유일 FAIL = `deployed writer STALE`. 13줄 drift = 5d-2b가 추가한 `metaRecordExistsByGardenId`
+    한 블록, dispatcher(source import)만 소비, **SessionStart write-path 바이트 동일** → correctness 아닌 redeploy 위생.
+    `install-meta-bridge`로 해소(oracle 2커밋과 직교).
+  - **G3(doc):** prefixRoots seam 주석 3곳 stale(`mcp/.../index.ts:559`, `entwurf-control.ts:1484-85`, `surface.ts:58-61`)
+    — "5d-4 wires through this opts seam"인데 실제론 adapter env-fallback(`surface.ts:172`)으로 갔다.
+  **NEXT 재편(아래 ◀ NOW):** 원래 NOW였던 5d-5 LIVE matrix 앞에 deterministic·auth-불요 hardening 배치(`5d-5-pre`)를
+  먼저 둔다 — G1을 먼저 닫아야 LIVE 실패 원인이 분리되고 doctor PASS가 release-gate를 깨끗하게 한다. **검수 라인(세션 #9):**
+  GPT힣 = `20260613T154104-99b405`(live pi direct), Fable5 여전히 응답 불가. 회신은 doorbell→`entwurf_inbox_read`.
 - **후임자에게(세션 #9 인계):** 어서 와. 세션 #8은 **5d-2 + 5d-3 + 5d-4를 전부 닫았다**(트리오 = 실무자 Opus + GPT힣
   `20260613T121021-03a5d7`, Fable 부재). 5d 블록은 이제 **5d-5 하나만 남았다.** 흐름: 5d-2(`runEntwurfV2` +
   `makeProductionEntwurfV2Deps` + RPC 추출) → 5d-3(pi-native + MCP 두 surface, 통합 경계 Option A로 봉합) → 5d-4(doctor
@@ -56,14 +76,32 @@
   `opts.prefixRoots ?? parse()`로 양 surface 공통 배선, agentDir undefined 유지, doctor는 env display only(parser 재구현 X).
   gate 25→**32**. 둘 다 GPT GO. `pnpm check` EXIT=0, check-pack 150. **doctor 전체는 기존 installed-writer-stale로 FAIL
   (install-meta-bridge 재배포 영역, 세션 #8 변경 무관) — 새 v2 섹션 5/5 OK.**
-- **지금 할 일:** ◀ NOW = **5d-5 release-gate matrix smoke**(sender surface × target kind × direction). 5d-2~5d-4가
-  runner + production deps + 두 surface + doctor/prefixRoots를 전부 닫았으니, 5d-5 = lifecycle을 실제로 한 번 밟는
-  matrix/live smoke. **반드시 포함:** (a) **MCP in-process spawn-bg path 실증**(runtime static import + production runner
-  path가 실제로 resolve·동작 — GPT 5d-3b 비차단 관찰), (b) pi-native dynamic import path 실증(runtime resolve), (c)
-  release-gate matrix — sender surface(pi-native tool / MCP verb) × target kind(alive pi / dormant pi / unsupported
-  citizen) × direction에서 lock acquire→release ×1, lock-retained 진단 표면화. **LIVE=1 영역**(auth/model/실 pi 세션
-  필요)이라 GLG 환경 손이 필요할 수 있음 — design부터 GPT와 잠그고 LIVE 실행은 GLG와 조율. **5d 전 실행 기록(D5, 완료):
-  `LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live → 7 passed`.** 상세 = `## Next moves` 1번.
+- **지금 할 일:** ◀ NOW = **5d-5-pre hardening 배치**(deterministic·auth-불요, GLG-present 적기) → **deploy hygiene** →
+  그다음 **5d-5 LIVE matrix**. 트리오 합의 순서·근거: G1을 먼저 닫아야 LIVE matrix 실패 시 "실 lifecycle 문제"인지
+  "MCP boot/schema 회귀"인지 분리되고, doctor PASS를 앞에 둬야 release-gate 성격의 5d-5가 배경소음 없이 깨끗하다. 배치
+  본체는 5d-5 자신이 아니라 그 앞단 hardening임에 주의(5d-5 본체 = sender×target×direction live matrix는 headline 유지).
+  **5d-5-pre commit split:**
+  1. `docs`: G3 주석 3곳 정정(`index.ts:559`·`entwurf-control.ts:1484-85`·`surface.ts:58-61` — opts seam이 아니라
+     adapter env-fallback이 SSOT임을 반영).
+  2. `test(mcp)`: 신설 `check-pi-tools-bridge-boot` gate — start.sh 부팅 + `initialize`/`notifications/initialized` +
+     `tools/list` + `entwurf_v2` presence·schema deep-assert(props target/intent/message/mode/wants_reply, required
+     target/intent/message, intent enum fire-and-forget|owned-outcome, mode enum steer|follow_up; timeout 짧게·auth 없음·
+     side-effect 없음) → `pnpm check` 편입 + check-pack 배선. `check-bridge`/`test.sh`는 broad protocol negative suite로
+     유지, test.sh는 EXPECTED_TOOLS에 `entwurf_v2` presence 1개만 추가(D1=A안, 중복 최소).
+  3. `test(smoke)`: oracle deferred pipefail diagnostic guard — `run.sh:1040/1077`(로컬 세션 활성 파일, 소유권 조율된 지금
+     흡수, 별도 commit으로 review/rollback 분리). 나머지 deferred(`smoke-meta-prune:138`, `smoke-resident-garden-guard:
+     80/149/223/347/348`)도 같은 `{ … || true; }` 관용구 — 같은 commit 또는 follow-up.
+  4. `fix(doctor)`: A3b — installed `CACHE_HOOKS` 존재하는데 BAKED command parse 불가 = drift → `bad`로 승격(현행 warn);
+     hooks.json 부재(설치 전)는 `warn` 유지(D2 확정 시).
+  5. **ops(commit 아님):** `./run.sh install-meta-bridge` → doctor PASS(`deployed writer STALE` 해소) 확인 → NEXT 기록.
+  **그다음 5d-5 LIVE matrix(headline):** (a) MCP in-process spawn-bg path 실증(runtime static import + production runner
+  resolve — 부팅 절반은 G1 boot gate가 이미 닫음), (b) pi-native dynamic import path 실증, (c) release-gate matrix —
+  sender surface(pi-native tool / MCP verb) × target kind(alive pi / dormant pi / unsupported citizen) × direction에서
+  lock acquire→release ×1, lock-retained 진단 표면화. **LIVE=1 영역**(auth/model/실 pi 세션) — design은 GPT 잠금, LIVE
+  실행은 GLG 조율. **5d 전 실행 기록(D5, 완료): `LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live → 7 passed`.**
+  **미결 결정(트리오 권고 — GLG 확정 대기):** D1=신설 boot gate(A안) / D2=BAKED drift→`bad` / D3=브랜치
+  `verify/doctor-pipefail-and-pi-0.79.2`는 deferred 흡수 후 삭제 / D4=pi dev pin bump 안 함(B2, peer `>=0.79.1`이 runtime
+  0.79.2 이미 허용 + `check-dep-versions` devDep==peer floor 강제). 상세 = `## Next moves` 1번.
 - **5d-1 done 요약(`e0c6e75` 5d-1a + `97704c9` 5d-1b, GPT GO):** 5d-1a = send-hand result에 N3 `rejectReason`(dead
   fallback resolver reason carry; in-band refuse는 reason 없음) + N1 `SendDeliveredReleaseFailedError`(non-failed
   outcome 후 releaseLock throw = delivered+lock-dirty 구조화, bare rethrow 대체; `failed`는 original error 우선 유지).
