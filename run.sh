@@ -1419,6 +1419,17 @@ check_entwurf_v2_runner() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-runner.ts)
 }
 
+check_entwurf_v2_surface() {
+  # Deterministic gate for 0.11 Stage 0 step 5d-3a: the ctx-free surface adapter
+  # (entwurf-v2-surface.ts) + the entwurf-control.ts wiring contract. Proves the pure parts:
+  # toDispatchInput (wants_reply→wantsReply, absent mode/wants_reply undefined) / renderEntwurfV2Result
+  # per result kind ({text,isError} surfacing reject diagnostic, control N3 rejectReason, spawn
+  # lock-retained, N1 delivered-but-dirty) / surface ctx-free source guard / entwurf-control
+  # registers entwurf_v2 + reaches the fence via a NON-LITERAL dynamic import (no static fence
+  # import → TS5097 stays closed) + decorates sender origin:pi-session/replyable:true.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-surface.ts)
+}
+
 check_entwurf_v2_production() {
   # Deterministic gate for 0.11 Stage 0 step 5d-2b: makeProductionEntwurfV2Deps — the ctx-free
   # PRODUCTION assembly of runEntwurfV2's deps. Proves the wiring over fake leaf-IO spies (no
@@ -4588,6 +4599,9 @@ case "$cmd" in
     ;;
   check-entwurf-v2-production)
     check_entwurf_v2_production
+    ;;
+  check-entwurf-v2-surface)
+    check_entwurf_v2_surface
     ;;
   check-entwurf-v2-spawn)
     check_entwurf_v2_spawn

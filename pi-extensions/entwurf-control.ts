@@ -1210,6 +1210,7 @@ export default function (pi: ExtensionAPI) {
 	if (shouldRegisterControlTools(pi)) {
 		registerSessionTool(pi, state);
 		registerListSessionsTool(pi);
+		registerEntwurfV2Tool(pi);
 	}
 	registerControlSessionsCommand(pi, (sessions) => {
 		lastDisplayedSessions = sessions;
@@ -1369,6 +1370,137 @@ export default function (pi: ExtensionAPI) {
 // ============================================================================
 // Tool: entwurf_send
 // ============================================================================
+
+// ============================================================================
+// Tool: entwurf_v2 (5d-3a) — the unified additive dispatch verb
+// ============================================================================
+//
+// The v2 runner + production deps live in the `.ts`-extension fence (excluded from
+// this emit-capable root program). A STATIC import would pull the fence's literal
+// `.ts` imports into root tsc → TS5097. So we reach the surface adapter via a
+// NON-LITERAL dynamic import: root tsc cannot statically resolve a string-const
+// specifier, and the strip-types runtime loads the `.ts` fence entry fine. The
+// local interface below is the only contract this file knows about the fence — the
+// `EntwurfV2RunResult` union stays behind `runAndRenderEntwurfV2FromSurface`, which
+// hands back just `{ text, isError }`.
+const ENTWURF_V2_SURFACE_MODULE = "./lib/entwurf-v2-surface.ts";
+
+interface EntwurfV2SurfaceModule {
+	runAndRenderEntwurfV2FromSurface(
+		params: {
+			target: string;
+			intent: "fire-and-forget" | "owned-outcome";
+			mode?: "steer" | "follow_up";
+			wants_reply?: boolean;
+			message: string;
+		},
+		opts: {
+			senderProvider: () => SenderEnvelope | undefined;
+			agentDir?: string;
+			prefixRoots?: readonly string[];
+		},
+	): Promise<{ text: string; isError: boolean }>;
+}
+
+function registerEntwurfV2Tool(pi: ExtensionAPI): void {
+	const entwurfV2Parameters = Type.Object({
+		target: Type.String({ description: "Target garden id (use entwurf_peers to discover)" }),
+		intent: StringEnum(["fire-and-forget", "owned-outcome"] as const, {
+			description:
+				"Ownership intent: fire-and-forget (send, no owned result) or owned-outcome (the dispatcher owns the result)",
+		}),
+		message: Type.String({ description: "Message / prompt to dispatch" }),
+		mode: Type.Optional(
+			StringEnum(["steer", "follow_up"] as const, {
+				description: "Delivery mode for a live send: steer (immediate) or follow_up (after task)",
+			}),
+		),
+		wants_reply: Type.Optional(Type.Boolean({ description: "Human-conversation reply hint (default false)" })),
+	});
+
+	type EntwurfV2Params = {
+		target: string;
+		intent: "fire-and-forget" | "owned-outcome";
+		message: string;
+		mode?: "steer" | "follow_up";
+		wants_reply?: boolean;
+	};
+
+	const registerTool = pi.registerTool as (def: any) => void;
+
+	registerTool({
+		name: "entwurf_v2",
+		label: "Dispatch (v2)",
+		description: `Dispatch to a garden citizen through the unified entwurf_v2 verb: the 5b
+decider picks the transport (live control-socket send / spawn-bg resume / meta-mailbox
+enqueue) from the target's liveness + your intent, runs it under a single per-target lock,
+and reports one outcome (delivered / rejected / lock-retained / delivered-but-lock-dirty).
+
+- target: the garden id of the citizen to reach (required).
+- intent: fire-and-forget (a send with no owned result) or owned-outcome (you own the result).
+- message: the message/prompt to dispatch (required).
+- mode: steer or follow_up for a live send (optional).
+- wants_reply: reply hint for a live send (optional, default false).
+
+This is additive to entwurf_send; the decider — not this surface — chooses the transport.`,
+		parameters: entwurfV2Parameters,
+		async execute(
+			_toolCallId: string,
+			params: EntwurfV2Params,
+			_signal: AbortSignal | undefined,
+			_onUpdate: unknown,
+			ctx: ExtensionContext,
+		) {
+			const target = params.target?.trim();
+			if (!target) {
+				return { content: [{ type: "text", text: "entwurf_v2: missing target" }], isError: true };
+			}
+			if (!isSafeSessionId(target)) {
+				return { content: [{ type: "text", text: "entwurf_v2: invalid target garden id" }], isError: true };
+			}
+			if (!params.message?.trim()) {
+				return { content: [{ type: "text", text: "entwurf_v2: missing message" }], isError: true };
+			}
+
+			// The reply-address envelope for this pi session, decorated as a replyable
+			// pi-session sender. ONE provider feeds the control-socket RPC sender AND the
+			// meta-mailbox body sender (see entwurf-v2-production). Built per-call so the
+			// timestamp is the dispatch moment.
+			const senderProvider = (): SenderEnvelope | undefined => {
+				const s = buildLocalSenderEnvelope(ctx);
+				return s ? { ...s, origin: "pi-session" as const, replyable: true } : undefined;
+			};
+
+			try {
+				const mod = (await import(ENTWURF_V2_SURFACE_MODULE)) as unknown as EntwurfV2SurfaceModule;
+				const rendered = await mod.runAndRenderEntwurfV2FromSurface(
+					{
+						target,
+						intent: params.intent,
+						message: params.message,
+						mode: params.mode,
+						wants_reply: params.wants_reply,
+					},
+					// agentDir / prefixRoots stay undefined here — 5d-4 wires the doctor flag
+					// + operator-policy prefix roots through this opts seam.
+					{ senderProvider },
+				);
+				return {
+					content: [{ type: "text", text: rendered.text }],
+					isError: rendered.isError,
+					details: { isError: rendered.isError },
+				};
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				return {
+					content: [{ type: "text", text: `entwurf_v2 error: ${msg}` }],
+					isError: true,
+					details: { error: msg },
+				};
+			}
+		},
+	});
+}
 
 function registerSessionTool(pi: ExtensionAPI, state: SocketState): void {
 	// The schema (runtime) and the params type (compile-time) describe the

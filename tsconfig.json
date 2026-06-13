@@ -120,6 +120,13 @@
 		// socket / preflight) with explicit `.ts`-extension imports that pull the excluded
 		// decider/send/spawn/runner into the program, same fence. Typechecked by
 		// scripts/tsconfig.json via its gate (check-entwurf-v2-production.ts).
-		"pi-extensions/lib/entwurf-v2-production.ts"
+		"pi-extensions/lib/entwurf-v2-production.ts",
+		// entwurf-v2-surface.ts is the 5d-3a ctx-free SURFACE adapter (params→DispatchInput,
+		// result→{text,isError}, assemble+run+render) — a lib→lib VALUE importer (runEntwurfV2 /
+		// makeProductionEntwurfV2Deps) with explicit `.ts`-extension imports, same fence. The
+		// root-tsc surface (entwurf-control.ts) reaches it via a NON-LITERAL dynamic import so
+		// the fence never enters the emit-capable root program. Typechecked by
+		// scripts/tsconfig.json via its gate (check-entwurf-v2-surface.ts).
+		"pi-extensions/lib/entwurf-v2-surface.ts"
 	]
 }
