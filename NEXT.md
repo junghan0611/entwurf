@@ -22,17 +22,23 @@
   **GPT힣 + 실무자 페어**(Fable 합류 전 원래 모드). 세션 #6 입증: 실무자가 판단 중심 잡고 GPT를 1차+사실상 2차로
   같이 돌리면, Fable 없이도 production lifecycle 결함(B1 spawn-started, B2 fast-exit)까지 다 잡힌다. **천천히, 매
   슬라이스 design→코드 둘 다 GPT에 통과시키고 커밋.**
-- **지금 할 일:** ◀ NOW = **5d-2 production runEntwurfV2(decide→execute 조립)**. 5d-1(`executeDispatch`)이 이미
-  결정된 `DispatchDecision`을 transport별로 라우팅하는 pure router를 닫았다. 5d-2 = `runEntwurfV2(input, env)` =
-  `decideDispatch(input, deciderDeps)` → `executeDispatch(decision, executorDeps)` 한 줄로 잇고, **production deps 조립**:
-  decider deps(resolveTarget/acquireLock/releaseLock/inspect/probe/preflight) + executor deps(sendControl=
-  `executeControlSocketSend` 부분적용 / resumeSpawnBg=`executeSpawnBgResume`+`makeProductionSpawnBgResumeDeps` /
-  sendMailbox=`makeProductionSendViaMailbox({senderProvider})`, senderProvider=`buildLocalSenderEnvelope(ctx)`+
-  {origin:"pi-session",replyable:true}). meta-mailbox direct plan(lock null)도 이 경로에서 같은 sendMailbox로 닫힘.
-  그 다음 **5d-3** MCP `entwurf_v2` additive 등록(TypeBox, fail-closed) + pi-native surface가 runEntwurfV2 호출 →
-  **5d-4** doctor `--entwurf-control` flag 체크 + prefixRoots operator-policy 주입원 배선 → **5d-5** release-gate
-  matrix smoke(sender surface × target kind × direction). **5d 전 실행 기록(D5, 완료): `LIVE=1 ./run.sh
-  smoke-entwurf-v2-spawn-live → 7 passed`.** 상세 = `## Next moves` 1번.
+- **세션 #8 진행분(5d-2 전체 done, 로컬 커밋 — push 대기):** GPT힣(`20260613T121021-03a5d7`)과 트리오로 5d-2를 3슬라이스로
+  닫았다. (1) **5d-2a** pure `runEntwurfV2(input,{decide,executor})` `8e9aa66` — GPT Q1 보정대로 `DispatchDeciderDeps`가
+  아니라 **decide 함수 주입**(composition contract만 증명), decide-throw propagate, gate runner 23→**33**. (2) **RPC 추출
+  micro-slice** `18fe0e2` — `--entwurf-control` 프로토콜(`SenderEnvelope`+Rpc*+`sendRpcCommand`)을 ctx-free SSOT
+  `lib/entwurf-control-rpc.ts`로 behavior-preserving 추출(control.ts −166/+31, re-export, 호출처 6곳 무변경), gate
+  `check-entwurf-control-rpc` **11**(소스가드+round-trip+close-before-response). (3) **5d-2b** `makeProductionEntwurfV2Deps`
+  `7a0414e` — ctx-free production 조립, gate **18**. 셋 다 GPT design GO → code GO. **5d-2b는 GPT 코드검수서 실 blocker
+  B1(pi target pre-lock lstat) 잡혀 봉합 후 GO.** `pnpm check` EXIT=0, check-pack 144→**148**.
+- **지금 할 일:** ◀ NOW = **5d-3 MCP `entwurf_v2` additive 등록 + pi-native surface**. 5d-2가 `runEntwurfV2` +
+  `makeProductionEntwurfV2Deps`(ctx-free)를 닫았으니, 5d-3 = (a) entwurf-control.ts 표면에서 `senderProvider =
+  ()=>decorate(buildLocalSenderEnvelope(ctx))`(`{origin:"pi-session",replyable:true}`) 만들어 `makeProductionEntwurfV2Deps`
+  주입 → `runEntwurfV2(input, deps)` 호출하는 pi-native surface, (b) MCP `entwurf_v2` 동사 additive 등록(TypeBox 스키마,
+  fail-closed, gid 검증은 decider가 재검증). **표면 파일 손대는 슬라이스라 코드 전에 GPT랑 design부터**(특히 senderProvider
+  decorate 위치·agentDir/prefixRoots 주입원·MCP 스키마 shape·기존 entwurf_send와의 공존). 그 다음 **5d-4** doctor
+  `--entwurf-control` flag 체크 + prefixRoots operator-policy 주입원 배선 → **5d-5** release-gate matrix smoke(sender
+  surface × target kind × direction). **5d 전 실행 기록(D5, 완료): `LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live → 7
+  passed`.** 상세 = `## Next moves` 1번.
 - **5d-1 done 요약(`e0c6e75` 5d-1a + `97704c9` 5d-1b, GPT GO):** 5d-1a = send-hand result에 N3 `rejectReason`(dead
   fallback resolver reason carry; in-band refuse는 reason 없음) + N1 `SendDeliveredReleaseFailedError`(non-failed
   outcome 후 releaseLock throw = delivered+lock-dirty 구조화, bare rethrow 대체; `failed`는 original error 우선 유지).
