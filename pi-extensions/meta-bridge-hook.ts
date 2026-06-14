@@ -38,7 +38,9 @@ import * as path from "node:path";
 import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
+	type MetaReceiverArmProvenance,
 	upsertMetaSession,
+	writeMetaReceiverMarker,
 	writeMetaSenderMarker,
 } from "./lib/meta-session.ts";
 
@@ -71,6 +73,20 @@ function logLine(level: LogLevel, message: string): void {
 function emit(payload: Record<string, unknown>): never {
 	process.stdout.write(`${JSON.stringify(payload)}\n`);
 	process.exit(0);
+}
+
+/**
+ * Map the hook event to a receiver-marker arm provenance. ONLY the genuinely
+ * arm-capable events map; any other (a future/unknown hook event) returns null so we
+ * never mint an "active receiver" presence we cannot back — fail-closed, not an
+ * optimistic session-start. UserPromptSubmit never reaches here (it early-returns
+ * before the arm block).
+ */
+function armProvenanceFor(eventName: string): MetaReceiverArmProvenance | null {
+	if (eventName === "SessionStart") return "session-start";
+	if (eventName === "CwdChanged") return "cwd-changed";
+	if (eventName === "FileChanged") return "file-changed";
+	return null;
 }
 
 function main(): void {
@@ -177,6 +193,36 @@ function main(): void {
 		const signal = path.join(mailbox, "inbox.signal");
 		if (!fs.existsSync(signal)) fs.writeFileSync(signal, "", { mode: 0o600 });
 		logLine("INFO", `armed watch ${signal}`);
+		// Receiver presence marker (SE-2): written on the arm-capable hook path that
+		// emits watchPaths, keyed by garden id with the watch owner pid (= the Claude
+		// CLI, process.ppid — same single owner as the sender marker, never the
+		// grandparent). It records that a LIVE owner reached the watch-arm emit; it is
+		// not proof the host ack'd the watch registration. This is what lets a sender
+		// tell a live receiver from a terminated one whose record still lingers.
+		// Best-effort: a failed/skipped marker only costs deliverability detection
+		// (WARN), it does not break the arm. An unknown event maps to null provenance →
+		// no marker (fail-closed: never claim an active receiver we cannot back).
+		const ownerPid = process.ppid;
+		const armProvenance = armProvenanceFor(eventName);
+		if (armProvenance === null) {
+			logLine("WARN", `receiver marker skipped — non-arm event ${eventName} (garden=${gardenId})`);
+		} else if (typeof ownerPid === "number" && ownerPid > 0) {
+			try {
+				writeMetaReceiverMarker({
+					gardenId,
+					backend: "claude-code",
+					nativeSessionId: sessionId,
+					ownerPid,
+					armProvenance,
+				});
+				logLine("INFO", `receiver marker ${gardenId} owner=${ownerPid} arm=${eventName}`);
+			} catch (err) {
+				logLine(
+					"WARN",
+					`receiver marker write failed (event=${eventName}, garden=${gardenId}): ${err instanceof Error ? err.message : String(err)}`,
+				);
+			}
+		}
 		emit({
 			hookSpecificOutput: {
 				hookEventName: eventName,

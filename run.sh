@@ -60,6 +60,7 @@ Usage:
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-meta-dual-read        # deterministic gate (0.11 Stage 0 step 3D-1): v2 write shape (serializeMetaIdentity) + dual-read dispatcher (parseMetaRecordAny/parseMetaIdentity) + write→read round-trip, pure, no API
   ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
+  ./run.sh check-meta-receiver-marker # deterministic gate (SE-2 slice 2b): meta-receiver presence marker — write/read round-trip garden-id keyed + atomic 0600, dead-owner start-key guard reads null, armProvenance limited to arm-capable events (UserPromptSubmit can't mint presence), reader doesn't gate on record existence
   ./run.sh check-meta-migration        # deterministic gate (0.11 Stage 0 step 3D-4 commit2): v1→v2 delivery-receipt migration (per-field state-wins, 3 timestamps, no-op when nothing to fill) + crash-order inside upsert (migrate before v2 rewrite; drift throws with record still v1), no API
   ./run.sh check-meta-dual-consumers   # deterministic gate (0.11 Stage 0 step 3D-4): delivery-agnostic dual-read seam — readMetaIdentityByGardenId + scanIdentityByNativeId read v1 AND v2, cross-schema duplicate = ambiguity throw (G1); v1-only raw readers remain for v1-fixture gates, no API
   ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const), slot stays (3D-4), no API
@@ -1257,6 +1258,19 @@ check_meta_mailbox_state_write() {
   # invented, an empty inbox is a no-op on BOTH record and state (⑥), and a state
   # drift surfaces fail-loud. v2 citizen seeded via upsertMetaSession. No API.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-mailbox-state-write.ts)
+}
+
+check_meta_receiver_marker() {
+  # Deterministic gate for the meta-receiver presence marker (SE-2 slice 2b). The
+  # active-receiver signal a self-fetch backend (Claude Code) needs: a meta-record
+  # proves a session once existed; this marker proves a live watch owner is still
+  # there to be woken, so a terminated session's lingering record does not read as a
+  # ghost active receiver (mailbox garbage). Asserts: write→read round-trip keyed by
+  # GARDEN id, atomic 0600; dead-owner/pid-reuse start-key guard reads null (distinct
+  # from "no marker"); armProvenance constrained to the arm-capable events so
+  # UserPromptSubmit cannot mint presence; reader does NOT gate on record existence
+  # (recordBacked is the deliverability predicate's fact). Real tmpdir, no API.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-receiver-marker.ts)
 }
 
 check_meta_migration() {
@@ -4590,6 +4604,9 @@ case "$cmd" in
     ;;
   check-meta-mailbox-state-write)
     check_meta_mailbox_state_write
+    ;;
+  check-meta-receiver-marker)
+    check_meta_receiver_marker
     ;;
   check-meta-migration)
     check_meta_migration

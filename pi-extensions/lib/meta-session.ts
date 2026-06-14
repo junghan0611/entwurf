@@ -1138,6 +1138,27 @@ export function defaultMetaSendersDir(): string {
 }
 
 /**
+ * Where native-backend RECEIVER presence markers live: `<pi-agent-dir>/meta-receivers`.
+ *
+ * The problem this closes (SE-2): a meta-record proves a session once EXISTED, not
+ * that it is still a live receiver that a reply could reach. A self-fetch backend
+ * (Claude Code) has no control socket to probe, so "is this receiver active right
+ * now?" needs its own signal. The SessionStart/CwdChanged/FileChanged hook — the
+ * event that actually arms the watchPaths idle-wake — writes a presence marker keyed
+ * by GARDEN id (the universal address a sender targets), carrying the watch owner pid
+ * + its start-key. A reader trusts it only while that pid is still the same live
+ * process (start-key match); a terminated session leaves a marker whose owner is gone,
+ * so it reads as inactive instead of a ghost active-receiver. UNLIKE the sender marker
+ * (keyed by owner pid, a pid→garden hint), this is keyed by garden id because the
+ * deliverability question starts from a target garden id. `PI_META_RECEIVERS_DIR`
+ * overrides for tests.
+ */
+export function defaultMetaReceiversDir(): string {
+	if (process.env.PI_META_RECEIVERS_DIR) return path.resolve(expandTilde(process.env.PI_META_RECEIVERS_DIR));
+	return path.join(piAgentDir(), "meta-receivers");
+}
+
+/**
  * A boot-unique identity for a live process: pid is reused, but pid + start-time
  * is unique within a boot. Linux reads `/proc/<pid>/stat` field 22 (starttime in
  * clock ticks); macOS/BSD falls back to `ps -o lstart=`. Returns "" when the pid
@@ -1283,6 +1304,127 @@ export function readMetaSenderMarker(opts: ReadMetaSenderMarkerOptions): MetaSen
 		// the same process that wrote the marker. A bare pid is reused; pid+startKey
 		// is boot-unique, so a stale marker from a dead session fails here instead of
 		// granting a wrong-identity send.
+		if (opts.verifyOwner !== false) {
+			if (!Number.isInteger(marker.ownerPid)) return null;
+			const liveKey = processStartKey(marker.ownerPid);
+			if (!liveKey || liveKey !== marker.ownerStartKey) return null;
+		}
+		return marker;
+	} catch {
+		return null;
+	}
+}
+
+// ── meta-receiver presence marker (SE-2 active-receiver signal) ──────────────
+
+/**
+ * The arm-capable hook events. Only these can emit watchPaths (and therefore arm
+ * the idle-wake), so only these write a receiver presence marker. UserPromptSubmit
+ * is deliberately absent: it can backfill the record but cannot re-arm the watch, so
+ * it must NOT mint or refresh an "active receiver" claim it cannot back.
+ */
+export const META_RECEIVER_ARM_PROVENANCES = ["session-start", "cwd-changed", "file-changed"] as const;
+export type MetaReceiverArmProvenance = (typeof META_RECEIVER_ARM_PROVENANCES)[number];
+
+function requireArmProvenance(value: unknown): MetaReceiverArmProvenance {
+	if (typeof value === "string" && (META_RECEIVER_ARM_PROVENANCES as readonly string[]).includes(value)) {
+		return value as MetaReceiverArmProvenance;
+	}
+	throw new Error(
+		`invalid armProvenance: ${JSON.stringify(value)} (expected one of ${META_RECEIVER_ARM_PROVENANCES.join(", ")})`,
+	);
+}
+
+export interface MetaReceiverMarker {
+	gardenId: string;
+	backend: MetaBackend;
+	nativeSessionId: string;
+	/** The pid holding the watchPaths idle-wake subscription (the native CLI = hook's process.ppid). */
+	ownerPid: number;
+	/** processStartKey(ownerPid) at write time — the dead-owner / pid-reuse guard. */
+	ownerStartKey: string;
+	/** The kind of process that owns the watch. Currently always the native CLI, not the plugin host. */
+	ownerKind: string;
+	/** Which arm-capable event wrote this presence (never user-prompt-submit). */
+	armProvenance: MetaReceiverArmProvenance;
+	updatedAt: string;
+}
+
+/** `<receiversDir>/<gardenId>.json` — keyed by garden id (the universal address). */
+export function metaReceiverMarkerPath(gardenId: string, receiversDir: string = defaultMetaReceiversDir()): string {
+	return path.join(receiversDir, `${requireGardenId(gardenId)}.json`);
+}
+
+export interface WriteMetaReceiverMarkerOptions {
+	gardenId: string;
+	backend: MetaBackend;
+	nativeSessionId: string;
+	ownerPid: number;
+	armProvenance: MetaReceiverArmProvenance;
+	/** Defaults to "claude-code-cli" — the watchPaths subscriber. */
+	ownerKind?: string;
+	receiversDir?: string;
+	now?: Date;
+}
+
+/** Write (atomically) the receiver presence marker for a garden id. */
+export function writeMetaReceiverMarker(opts: WriteMetaReceiverMarkerOptions): string {
+	const gardenId = requireGardenId(opts.gardenId);
+	const backend = requireBackend(opts.backend);
+	const file = metaReceiverMarkerPath(gardenId, opts.receiversDir ?? defaultMetaReceiversDir());
+	fs.mkdirSync(path.dirname(file), { recursive: true });
+	const marker: MetaReceiverMarker = {
+		gardenId,
+		backend,
+		nativeSessionId: requireNonEmptyString(opts.nativeSessionId, "nativeSessionId"),
+		ownerPid: opts.ownerPid,
+		ownerStartKey: processStartKey(opts.ownerPid),
+		ownerKind: requireNonEmptyString(opts.ownerKind ?? "claude-code-cli", "ownerKind"),
+		armProvenance: requireArmProvenance(opts.armProvenance),
+		updatedAt: isoNow(opts.now ?? new Date()),
+	};
+	const tmp = `${file}.${crypto.randomBytes(4).toString("hex")}.tmp`;
+	fs.writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`, { mode: 0o600 });
+	fs.renameSync(tmp, file);
+	return file;
+}
+
+export interface ReadMetaReceiverMarkerOptions {
+	/** Explicit marker file (test / explicit wiring). Wins over gardenId. */
+	markerPath?: string;
+	gardenId?: string;
+	receiversDir?: string;
+	/** Run the dead-owner / pid-reuse guard (verify the owner pid is still the same live process).
+	 * Default true — set false only for unit assertions that inspect a marker without a live owner. */
+	verifyOwner?: boolean;
+}
+
+/**
+ * Read the receiver presence marker for a garden id. Returns null when absent,
+ * corrupt, or (under verifyOwner) the owner pid is no longer the same live process —
+ * each means "no active receiver", which the deliverability predicate turns into
+ * not-deliverable. Never throws: an unreadable marker must not break a send path.
+ * Record-backing is NOT checked here (the caller / predicate supplies recordBacked
+ * as an explicit fact, so an absent record and a dead owner stay distinguishable).
+ */
+export function readMetaReceiverMarker(opts: ReadMetaReceiverMarkerOptions): MetaReceiverMarker | null {
+	let file = opts.markerPath;
+	if (!file && opts.gardenId) {
+		file = metaReceiverMarkerPath(opts.gardenId, opts.receiversDir ?? defaultMetaReceiversDir());
+	}
+	if (!file || !fs.existsSync(file)) return null;
+	try {
+		const raw = JSON.parse(fs.readFileSync(file, "utf8"));
+		const marker: MetaReceiverMarker = {
+			gardenId: requireGardenId(raw.gardenId),
+			backend: requireBackend(raw.backend),
+			nativeSessionId: requireNonEmptyString(raw.nativeSessionId, "nativeSessionId"),
+			ownerPid: typeof raw.ownerPid === "number" ? raw.ownerPid : Number.NaN,
+			ownerStartKey: requireNonEmptyString(raw.ownerStartKey, "ownerStartKey"),
+			ownerKind: requireNonEmptyString(raw.ownerKind, "ownerKind"),
+			armProvenance: requireArmProvenance(raw.armProvenance),
+			updatedAt: requireNonEmptyString(raw.updatedAt, "updatedAt"),
+		};
 		if (opts.verifyOwner !== false) {
 			if (!Number.isInteger(marker.ownerPid)) return null;
 			const liveKey = processStartKey(marker.ownerPid);
