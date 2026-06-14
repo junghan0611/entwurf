@@ -83,6 +83,7 @@ Usage:
   ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — listAllMetaIdentities→scanSocketProbes→pre-quarantine non-pi/socket conflicts→resolveFactList(clean)→{facts,diagnostics}; C-원칙: expected corruption (parse/collision)→diagnostics (listing survives), impossible invariant (dup/unprobed)→throw; collision quarantines BOTH PeerFact+socket; deps injected, no IO
   ./run.sh check-entwurf-peers-surface # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4c): MCP entwurf_peers RENDER renderEntwurfPeers — legacy `sessions` = projection of facts (alive only, no 2nd scan), socketPath via controlSocketPath (SSOT), count=projection length, three distinct arrays, NO verb-routing key (JSON deep scan) NOR word (text), diagnostics both surfaces, empty→(none), unsupported shown, enrich→(not enriched); WIRING guard: bridge calls provider+render, getLiveSessions gone; facts fabricated, no IO
   ./run.sh check-entwurf-send-mailbox-fallback # deterministic gate: pi-native entwurf_send → meta-bridge mailbox fallback (transport 2). ENOENT/ECONNREFUSED falls back, timeout does not; shared formatMetaMailboxBody; no-socket citizen → .msg enqueue; WIRING guard (pi-native calls fallback, bridge uses shared formatter)
+  ./run.sh check-entwurf-self-address # deterministic gate (SE-1/SE-2 slice 1): self-addressability honesty predicate computeSelfAddressability — pi replyable ⟺ live socket; meta ⟺ recordBacked ∧ ownerAlive ∧ watchArmed (regression-proof record-present rows); SOURCE GUARD buildStrictPiSenderEnvelope drops hardcoded replyable:true + existsSync-probes socket, entwurf_self renders alive vs expected. meta watchArmed wired in slice 2 (same release block)
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
   ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
@@ -1600,6 +1601,22 @@ check_entwurf_send_mailbox_fallback() {
   # GUARD that pi-native actually calls the fallback and the bridge uses the shared
   # formatter (no local copy) so neither sender can silently drop the transport.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-send-mailbox-fallback.ts)
+}
+
+check_entwurf_self_address() {
+  # Deterministic gate for the self-addressability honesty predicate (SE-1/SE-2
+  # slice 1). Guards the bug where the MCP bridge / pi-native claim replyable:true
+  # from env presence alone: a socketless pi session, or a meta citizen whose owner
+  # exited / whose idle-watch was never armed, all advertised replyable while
+  # delivery silently failed (SE-1). Asserts: PURE truth table (pi replyable ⟺
+  # socketAlive; meta ⟺ recordBacked ∧ ownerAlive ∧ watchArmed; external never),
+  # incl. the two regression-proof rows (record-present + owner-dead / watch-unarmed)
+  # that stay meaningful after slice 3 mints records; SOURCE GUARD that
+  # buildStrictPiSenderEnvelope drops the hardcoded `replyable: true` and existsSync-
+  # probes the socket, and entwurf_self renders alive vs expected (no path lie).
+  # Slice boundary: meta watchArmed is wired from the slice-2 presence marker; do NOT
+  # claim slice 1 green standalone (1+2 close in the same release block).
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-self-address.ts)
 }
 
 check_plugin_empty_final_recovery() {
@@ -4654,6 +4671,9 @@ case "$cmd" in
     ;;
   check-entwurf-send-mailbox-fallback)
     check_entwurf_send_mailbox_fallback
+    ;;
+  check-entwurf-self-address)
+    check_entwurf_self_address
     ;;
   new-session-id)
     # Garden launcher helper: print one fresh garden sessionId (SSOT:

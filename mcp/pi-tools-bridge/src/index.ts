@@ -93,6 +93,7 @@ import {
 } from "../../../pi-extensions/lib/entwurf-core.ts";
 import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provider.ts";
 import { renderEntwurfPeers } from "../../../pi-extensions/lib/entwurf-peers-render.ts";
+import { computeSelfAddressability } from "../../../pi-extensions/lib/entwurf-self-address.ts";
 import { runAndRenderEntwurfV2FromSurface } from "../../../pi-extensions/lib/entwurf-v2-surface.ts";
 import { formatMetaMailboxBody } from "../../../pi-extensions/lib/meta-mailbox-body.ts";
 import {
@@ -279,13 +280,23 @@ function buildStrictPiSenderEnvelope(): SenderEnvelope {
 	if (!agentId) missing.push("PI_AGENT_ID");
 	if (!cwd) missing.push("cwd");
 	if (missing.length > 0) throw new EntwurfEnvelopeWiringError(missing);
+	// replyable is a FACT, not env presence: a pi session is only reachable for a
+	// reply when its control socket is actually live (SE-1). A session running
+	// without --entwurf-control has PI_SESSION_ID but no socket — it must report
+	// replyable:false, not the old hardcoded true. Probe the canonical path.
+	const socketPath = path.join(ENTWURF_DIR, `${sessionId}${SOCKET_SUFFIX}`);
+	const self = computeSelfAddressability({
+		origin: "pi-session",
+		socketAlive: existsSync(socketPath),
+		socketPathComputable: true,
+	});
 	return {
 		sessionId: sessionId as string,
 		agentId: agentId as string,
 		cwd,
 		timestamp: new Date().toISOString(),
 		origin: "pi-session",
-		replyable: true,
+		replyable: self.replyable,
 	};
 }
 
@@ -590,9 +601,18 @@ server.tool(
 				`timestamp:  ${kst}`,
 			];
 			if (sender.origin === "pi-session") {
+				// Render the socket honestly: alive vs expected (path computable but no
+				// live socket). The old code synthesized the path and printed it as if
+				// it existed — a lie when the session has no --entwurf-control (SE-1).
 				const socketPath = path.join(ENTWURF_DIR, `${sender.sessionId}${SOCKET_SUFFIX}`);
+				const socketState = existsSync(socketPath) ? "alive" : "expected";
 				extra.socketPath = socketPath;
-				lines.push(`socketPath: ${socketPath}`);
+				extra.socketState = socketState;
+				lines.push(
+					socketState === "alive"
+						? `socketPath: ${socketPath}`
+						: `socketPath: ${socketPath}  (expected — not alive; session not run with --entwurf-control)`,
+				);
 			} else if (sender.origin === "meta-session") {
 				const mailboxPath = path.join(defaultMetaMailboxDir(), sender.sessionId);
 				extra.mailboxPath = mailboxPath;

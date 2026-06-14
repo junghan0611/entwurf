@@ -39,8 +39,10 @@ TMP="$(mktemp -d -t psa-meta-mailbox.XXXXXX)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
 
-# Full env isolation (GPT힣 condition 1): private store + mailbox + an EMPTY
-# control dir so the live-socket branch can never resolve and fallback is forced.
+# Full env isolation (GPT힣 condition 1): private store + mailbox + a control dir
+# that holds NO target socket, so the live-socket branch can never resolve for a
+# TARGET and the mailbox fallback is forced. (Case A later drops the SENDER's own
+# socket here so it is honestly replyable per SE-1 — that does not resolve a target.)
 export PI_META_SESSIONS_DIR="$TMP/meta-sessions"
 export PI_META_MAILBOX_DIR="$TMP/meta-mailbox"
 export PI_META_SENDERS_DIR="$TMP/meta-senders"   # empty → external case never reads a real sender marker
@@ -87,9 +89,20 @@ readcall() { # id gardenId
 }
 
 # ---------------------------------------------------------------------------
-# Case A — REPLYABLE sender (PI_SESSION_ID + PI_AGENT_ID present).
-# ---------------------------------------------------------------------------
-A_SEND=$(PI_AGENT_ID="pi-shell-acp/claude-sonnet-4-6" PI_SESSION_ID="20260606T120000-aaaaaa" \
+# Case A — REPLYABLE sender: a pi session WITH a live control socket of its own.
+# SE-1: replyability is a FACT, not env presence. A pi session with PI_SESSION_ID
+# but NO --entwurf-control socket is NOT replyable (a reply could never reach it).
+# What makes THIS sender honestly replyable is its OWN control socket existing; the
+# TARGET (GARDEN_A) still has no socket, so the send still falls through to the
+# mailbox. (buildStrictPiSenderEnvelope existsSync-probes the sender's canonical
+# socket — a plain file satisfies that gate for this hermetic smoke.)
+SENDER_PI_ID="20260606T120000-aaaaaa"
+: > "$PI_ENTWURF_DIR/$SENDER_PI_ID.sock"   # the sender's own control socket (bridge SOCKET_SUFFIX=.sock)
+# Pin the fallback precondition: the TARGET has no socket, so the send cannot take
+# the live-socket branch and MUST fall through to the mailbox. (Without this the
+# sender-socket touch above could be misread as also satisfying the target.)
+[ ! -e "$PI_ENTWURF_DIR/$GARDEN_A.sock" ] && ok "target has no control socket (mailbox fallback forced)" || bad "target socket unexpectedly present — fallback not forced"
+A_SEND=$(PI_AGENT_ID="pi-shell-acp/claude-sonnet-4-6" PI_SESSION_ID="$SENDER_PI_ID" \
   srv 10 "$(sendcall 10 "$GARDEN_A" "MAILBOX_SMOKE_A payload" true)")
 A_READ=$(srv 11 "$(readcall 11 "$GARDEN_A")")
 A_READ2=$(srv 12 "$(readcall 12 "$GARDEN_A")")

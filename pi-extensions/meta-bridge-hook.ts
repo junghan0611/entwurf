@@ -38,7 +38,6 @@ import * as path from "node:path";
 import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
-	parentPid,
 	upsertMetaSession,
 	writeMetaSenderMarker,
 } from "./lib/meta-session.ts";
@@ -140,15 +139,20 @@ function main(): void {
 	// process ancestry, not cwd inference (same repo + multiple sessions would be
 	// ambiguous). Best-effort: a failed marker only costs reply-addressability
 	// (WARN), it does not break the session or the receiver path.
-	// Write to BOTH the direct parent and its parent: depending on whether Claude
-	// runs the hook command directly or through a shell wrapper, the ancestor the
-	// MCP child shares may be process.ppid OR one step up. Each marker carries that
-	// pid's start-key so a reader only trusts a still-live owner — writing two never
-	// grants a wrong identity, it only widens the chance the right one is found.
-	const senderOwners = [process.ppid, parentPid(process.ppid)].filter(
-		(p): p is number => typeof p === "number" && p > 0,
-	);
-	for (const ownerPid of senderOwners) {
+	//
+	// SE-1/SE-2 (dual-owner fix): write ONLY for the direct parent (process.ppid =
+	// the Claude CLI that ran this hook, verified the native tree is direct — the
+	// plugin host is not in between). The old code ALSO wrote a marker for the
+	// grandparent. That grandparent is the login shell (e.g. bash under ghostty/i3),
+	// which OUTLIVES the Claude session: when Claude exits, the grandparent marker's
+	// ownerStartKey still matches a live pid, so it passes readMetaSenderMarker's
+	// reuse guard and the dead session keeps looking like a live, replyable receiver
+	// — a false-positive "active receiver" leak. The owner must be the watchPaths
+	// subscriber (the Claude CLI), nothing higher. If a stray topology means the MCP
+	// child's shared ancestor is not process.ppid, that resolves to "no marker"
+	// (fail-closed, honest) rather than a wrong-but-live grandparent identity.
+	const ownerPid = process.ppid;
+	if (typeof ownerPid === "number" && ownerPid > 0) {
 		try {
 			writeMetaSenderMarker({ backend: "claude-code", gardenId, nativeSessionId: sessionId, cwd, ownerPid });
 			logLine("INFO", `sender marker ${ownerPid} -> ${gardenId} (event=${eventName})`);
