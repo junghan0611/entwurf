@@ -9,30 +9,34 @@
 > `9710d06` HEAD). 이제 5d-5 진입인데, **그 전에 닫아야 할 detour가 아래 인벤토리 4건**이다 — GLG가 말한 "detour가
 > 없을 수 없다"의 실체. 줄 세운 것 말고 *하다가/돌아와보니 터져 있는* 것들. **위임 불가** — 삼형제+GLG가 직접.
 
-### ▶ 5d-5 진입 전 닫아야 할 detour 인벤토리 (로컬 실행 순서)
+### ▶ 5d-5 진입 전 닫아야 할 detour 인벤토리 (세션 #12 처리 결과)
 
-> 이 순서대로 가면 로컬 삽질이 줄어든다. **D1이 5d-5 LIVE의 직접 전제**(doctor PASS).
+> D1·D2 닫힘(ops, 커밋 아님). D3 보존 완료(삭제만 GLG 승인 대기). D4 = 줄기 본체, GPT design 논의 진입.
+> **D1·D2는 환경(머신)별이라 노트북에서도 동일 복구가 필요할 수 있다** — repo 커밋으로 안 옮겨지는 ops.
 
-1. **🔴 D1 — deploy hygiene 재오픈 (즉시, ops·커밋 아님):** `doctor-meta-bridge`가 **지금 FAIL**.
-   유일 FAIL = writer-version parity stale: `source=ebdb9f61`(SE-2 slice 2b `7cac9e3`가 `meta-session.ts` writer를
-   바꿈) vs `installed=e132bc98`(5d-5-pre 때 배포한 옛 writer). live hook이 **옛 writer로 세션을 기록** 중.
-   나머지 doctor 항목은 전부 ok. **로컬 첫 걸음:**
-   `./run.sh install-meta-bridge` → Claude 세션 한 번 열기(새 record 생성) → `./run.sh doctor-meta-bridge` → PASS 확인.
-   (실측 2026-06-14 세션 #12. push로 코드는 안 바뀜 — writer source가 detour 작업 중 drift한 것.)
-2. **🟡 D2 — `test.sh` pre-existing 1-failure (GPT 권고 후속):** entwurf registry "unregistered tuple" 1건(환경/별개,
-   5d-5-pre 무관). `check-bridge`가 `release-gate` step에 들어 있으니(run.sh:4520) 5d-5 release-gate 돌릴 때 발목 가능.
-   release-gate 전에 원인 분리(환경 vs 코드)해 둘 것.
-3. **🟡 D3 — 브랜치 `verify/doctor-pipefail-and-pi-0.79.2` 정리 (GLG 판단):** origin에 살아있음. main에 없는 7커밋
-   = fix 2건(main에 다른 해시 `3a01fbd`/`a2bd5c6`로 이미 흡수) + docs(next) deferred 인벤토리 5건. 삭제 조건
-   (`run.sh:1040/1077` 흡수)은 `0dfe4d0`로 충족. **단 삭제 전, 브랜치에만 있는 deferred 인벤토리**(`smoke-meta-prune:138`,
-   `smoke-resident-garden-guard:80/149/223/347/348` pipefail 잔여)**를 main NEXT의 후속으로 옮겨야 정보 유실 없음.**
-4. **🔵 D4 — 5d-5 matrix 본체 미구현 (줄기의 실제 남은 큰 일):** `release_gate`(run.sh:4421)는 일반 substrate live
-   gate(smoke-all/async-resume/cancel/model-switch/entwurf-resume/check-bridge…)만 3-backend로 돈다. **5d-5 headline의
-   (c) release-gate matrix = sender surface(pi-native tool / MCP verb) × target kind(alive pi / dormant pi /
-   unsupported citizen) × direction에서 lock acquire→release ×1 + lock-retained 진단 표면화 는 아직 스크립트가 없다.**
-   design은 GPT 잠금 상태(아래 본문 line 324~). 구현 슬라이스로 진입 — 매 슬라이스 GPT 1차 검수.
-   - **환경 고정 선결:** 어떤 모델/백엔드로 실 pi 세션을 띄워 spawn-resume·send를 실증할지부터(Fable 차단, Opus 복구).
+1. **✅ D1 — deploy hygiene (닫힘, ops):** `doctor-meta-bridge`가 writer-version parity stale로 FAIL이었음
+   (`source=ebdb9f61` = SE-2 slice 2b `7cac9e3`가 `meta-session.ts` writer 변경 vs `installed=e132bc98` 옛 배포본).
+   **fix:** `./run.sh install-meta-bridge` 재배포 → source=assembled=installed=`ebdb9f61` 일치 → **doctor PASS**(세션 #12 실측).
+   **노트북에서도:** writer drift면 `install-meta-bridge` 재배포 후 doctor 확인.
+2. **✅ D2 — entwurf registry 안 잡힘 (닫힘, ops — 환경/개발버전):** test.sh 4e "unregistered tuple" fail의 진짜
+   원인은 `~/.pi/agent/entwurf-targets.json` symlink가 **옛 install 경로**(`~/.pi/agent/git/github.com/.../pi/entwurf-targets.json`)를
+   가리키는 dead link였던 것. **우리는 개발 버전을 쓰므로 그 `~/.pi/agent/git` 폴더는 없는 게 정상** → dead link →
+   "Entwurf target registry not found" → **모든 entwurf spawn refuse**(test 4e만이 아니라 5d-5 LIVE 전체 전제가 깨진 상태였음).
+   **fix:** `./run.sh setup:links --force` → repo canonical(`~/repos/gh/pi-shell-acp/pi/entwurf-targets.json`)로 relink →
+   **test.sh 20/20 passed**(세션 #12 실측). **노트북에서도:** 개발 버전이면 같은 dead link 가능 → `setup:links --force` 한 번.
+3. **🟢 D3 — 브랜치 `verify/doctor-pipefail-and-pi-0.79.2` (보존 완료, 삭제만 GLG 승인):** origin에 살아있음.
+   확인 결과 **삭제해도 정보 유실 없음** — fix 2건은 main에 `3a01fbd`/`a2bd5c6`로 흡수, run.sh:1040/1077 흡수는 `0dfe4d0`,
+   **나머지 pipefail deferred 6건은 이미 이 NEXT 아래 `smoke-meta-prune:138` + `smoke-resident-garden-guard:80/149/223/347/348`로 보존됨**
+   (브랜치 "8 deferred" − 흡수 2 = 6, 일치). 브랜치 tip NEXT는 세션 #7~#8 옛 스냅샷. **GLG 승인 시:**
+   `git push origin --delete verify/doctor-pipefail-and-pi-0.79.2`.
+4. **🔵 D4 — 5d-5 matrix 본체 미구현 (줄기의 실제 남은 큰 일, GPT design 진입):** `release_gate`(run.sh:4421)는 일반
+   substrate live gate(smoke-all/async-resume/cancel/model-switch/entwurf-resume/check-bridge…)만 3-backend로 돈다.
+   **5d-5 headline의 (c) release-gate matrix = sender surface(pi-native tool / MCP verb) × target kind(alive pi /
+   dormant pi / unsupported citizen) × direction에서 lock acquire→release ×1 + lock-retained 진단 표면화 는 아직 스크립트가 없다.**
+   design은 GPT 잠금 상태(아래 본문 line 324~). **D1·D2가 닫혀 이제 실 entwurf spawn이 살아있으니 LIVE 실증 가능.**
+   - **환경 고정 선결:** 어떤 모델/백엔드로 실 pi 세션을 띄워 spawn-resume·send를 실증할지(Fable 차단, Opus 복구).
    - **D5(이미 완료):** `LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live → 7 passed`(5c-3c phase gate, real pi resume 아님).
+   - **진입 방식:** GPT와 matrix runner design부터 잠그고(별도 smoke vs release_gate step 편입), 슬라이스별 1차 검수.
 
 - **삼형제 역할(세션 #12):** 실무자 = 현 Opus(claude-code, garden `20260614T152031-e914f2`) / 자문·리뷰 = **GPT5.5
   (openai-codex/gpt-5.5, `20260614T122717-bdfe6e`, live direct — 현행 검수자)**. 아래 line 384~의 옛 GPT id
