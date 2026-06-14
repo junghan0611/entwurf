@@ -9,7 +9,8 @@
 > 끼어든 버그는 아래 `## 🐛 끼어든 버그 레저` 헤딩에서 따로 관리한다. 잠깐 수리 → 줄기로 복귀.
 > 이 꼬리는 **위임 불가** — 이 프로젝트 성격상 우리(삼형제+GLG)가 직접 따라가야 관련 문제까지 함께 잡힌다.
 
-- **detour 활성:** **SE-1** (sibling-equality inbound) — pi-shell-acp 세션이 inbound 2등 시민. 상세 = 아래 레저.
+- **detour 활성(묶음):** **SE-1**(sibling-equality inbound) + **SE-2**(inactive-receiver mailbox 쓰레기) — 둘 다 같은
+  **deliverability-guard 표면**(v1 fallback mcp:459 + v2 meta-mailbox)을 공유하므로 함께 개선. 상세 = 아래 레저.
 - **돌아올 곳:** **5d-5 LIVE matrix** (기존 NOW, 본문 `지금 할 일`·`Next moves` 그대로 유효).
 - **삼형제 역할:** 실무자 = Opus(pi-shell-acp/claude-opus-4-8, `20260614T102907-f77390`) / 자문·리뷰 = GPT5.5
   (openai-codex/gpt-5.5, `20260614T102904-fe7f37`, live) / 3번째 = CC Opus(native claude-code, `20260614T103037-582512`,
@@ -68,9 +69,60 @@
      identity와 분리.
 - **검수 라인:** GPT5.5(자문) = `20260614T102904-fe7f37`(live, direct send). CC Opus(3번째) = `20260614T103037-582512`
   (native, meta-mailbox+doorbell) — **다음 턴 합류**. 회신은 doorbell→`entwurf_inbox_read`.
-- **상태:** 설계 합의 완료(GPT GO). **다음 한 걸음 = 슬라이스 1 진입 전 read-only 실측 4건**(`upsertMetaSession` id
-  민팅 / `MetaBackendV2`·`isLivenessSupported('pi')`·`scanSocketProbes` 실재 / `buildStrictPiSenderEnvelope`+`entwurf_self`
-  합성 위치 / v1 fallback `enqueueMetaMessage` 호출 지점·capability 검사 유무) → 결과 GPT 공유 → 슬라이스 1 failing test.
+- **read-only 실측 결과(2026-06-14, 코드 무변경) — 위험 그림 크게 완화:** v2 인프라는 이미 pi-complete. 갭은 소수
+  honesty 누수뿐.
+  - ① `mintMetaIdentity`(meta-session.ts:587)는 **pi backend 수용**(`requireBackendV2`), `model`/`transcriptPath`
+    **이미 nullable**. 유일 갭 = `gardenId: generateSessionId(now)`(새 민팅) + `MetaIdentityMintInput`에 `gardenId?` 없음
+    → 필드 1개 + 1줄 보존. 🟡
+  - ② **pi 전부 ready** 🟢: `META_BACKENDS_V2=["claude-code","antigravity","codex","pi"]`(선언된 4번째 시민),
+    `isLivenessSupported("pi")=true`, capability registry에 `pi:{wakeMode:"direct-inject"}`(`pi/entwurf-capabilities.json`),
+    `factLivenessOf("pi",socket)` alive/dead/indeterminate 정상.
+  - ③ **거짓 확정** 🔴: `buildStrictPiSenderEnvelope`(mcp:273)가 env만 보고 `replyable:true` 하드코딩(socket probe 0),
+    `entwurf_self`(mcp:593)는 `existsSync` 없이 socketPath 합성·렌더. (정직 헬퍼 `getActiveSocketPath` mcp:139는
+    existsSync-gated로 이미 존재 → 재사용.)
+  - ④ **v1 fallback capability 체크 0개** 🔴: `enqueueMetaMessage`(mcp:459) blind enqueue. pi record 생기면 pi에
+    enqueue+"doorbell wake" 거짓. (v2 decider/send-fallback은 이미 `wakeMode==="self-fetch"`로 게이트 — **flag 존재 입증,
+    CC ① 인프라로 확인**.)
+  - ⑤ record-존재 readers(CC ③): `metaRecordExistsByGardenId`→v2 production:196 / `listAllMetaIdentities`→fact-provider
+    (peers)·doctor / `readMetaIdentityByGardenId`. **v2 `resolveTarget`(production:194)는 이미 pi 완전 인지**(record+pi
+    →liveness route, unsupported→record-side lstat). statusbar(`meta-bridge-statusline.sh`)·entwurf_self는 별도.
+  - **결론:** SE-1은 "동등성 모델 부재"가 아니라 **capability-correct 코어를 우회하는 honesty 누수 몇 개**. 작업 = 새 비대칭
+    생성이 아니라 기존 capability-aware 기계에 배선. **다음 한 걸음 = 실측+CC 반영 후 슬라이스 1 failing test**(아래 SE-2와
+    공통 guard로 묶어 진행).
+
+### SE-2 — 종료/비활성 receiver mailbox 쓰레기 (no active-receiver guard) — 🔴 OPEN
+
+- **출처:** GLG가 GPT5.5에 별도 조사 지시(2026-06-14). 시나리오: GLG가 네이티브 Claude Code 2개를 띄워 대화하다 **하나를
+  종료**, 다른 하나가 "작업 끝내고 답장 보낸다". 종료된 세션에 답장이 전달되나? **GLG 의도: 사람이 종료한 세션엔 전달 안 돼야
+  하고, 어디에도 쓰레기로 남지 말아야 한다.**
+- **현재 동작(GPT 확인):** 종료된 claude-code meta-session에 대한 답장도 **"성공"할 수 있음** — live 전달은 아니지만
+  **meta-record 존재만으로** meta-mailbox에 `.msg` enqueue + "delivered/enqueued" 응답. 종료 세션이면 모델엔 안 들어가고
+  `~/.pi/agent/meta-mailbox/<garden-id>/*.msg`로 **대기 쓰레기**가 됨.
+- **로컬 스냅샷(GPT):** live pi socket `…fe7f37`·`…f77390`; 오늘 새 unread `.msg`/`.delivered` 없음; 미처리 1건 old
+  (`…20260605T174659-0497e2 …msg.delivered`). → 이번엔 새 쓰레기 안 생김(원칙상 생길 수 있는 구조일 뿐).
+- **설계 판단(GLG, GPT 동의):** human-terminated 세션에 conversational reply는 **기본 reject**. active receiver 없으면
+  enqueue 금지. 명시적 archive/mailbox send만 예외.
+- **닫을 구멍(GPT):** (1) meta-record exists만으로 mailbox enqueue 허용 금지. (2) claude-code meta-session도
+  **active-receiver marker / live-owner pid** 수신가능성 검증. (3) v1 `entwurf_send` fallback + v2 meta-mailbox **둘 다 같은
+  guard**. (4) 정직 실패 문구: `"record exists but receiver inactive — not enqueued"`.
+- **SE-2의 진짜 난제(실측 연결):** claude-code는 liveness 도메인 **밖**(`unsupported`, socket probe 없음) → pi처럼
+  socket-alive로 active 판정 불가. **self-fetch 백엔드용 별도 active-receiver 신호가 필요**(live owner pid / marker
+  freshness / lock 등 — reviewer 설계질문). 이게 SE-2 코어.
+
+### 묶음 — SE-1 + SE-2 = 같은 deliverability-guard 표면 (함께 개선)
+
+- **공통 지점:** v1 fallback(`mcp/pi-tools-bridge/src/index.ts:459`) + v2 meta-mailbox 경로. 둘 다 현재 "record exists →
+  enqueue → ✓delivered"의 거짓.
+- **합성 deliverability 정의(CC ② 3단 + GPT 닫을구멍 + capability flag):**
+  `deliverable = capability(wakeMode === "self-fetch") AND active-receiver(수신 가능: live owner / marker)`.
+  - **SE-1 몫:** `wakeMode` capability 게이트(pi=`direct-inject` → mailbox 거부, socket route로). flag·등록 이미 존재.
+  - **SE-2 몫:** self-fetch citizen(claude-code)이라도 **active-receiver 검증**(종료 세션 거부). socket probe 밖 backend라
+    새 신호 필요.
+  - CC ②의 `deliverable/delivered/read` 3단에서 **"deliverable"이 "receiver active"를 포함**해야 함 — 이 둘이 합쳐지는 지점.
+- **슬라이스 영향:** SE-1 slice 2(v1 fallback guard)를 **"wakeMode + active-receiver" 합동 guard**로 확장. slice 1 replyable
+  진실성 정의에도 active-receiver 축이 들어감. slice 4 matrix에 "종료된 self-fetch citizen → reject + no enqueue" 행 추가.
+- **상태:** SE-1 설계 합의(GPT GO) + 실측 완료. SE-2 설계 판단 확정(GLG+GPT), active-receiver 신호 설계는 reviewer(GPT/CC)
+  와 잠글 것. **다음 한 걸음 = 실측+SE-2를 양 reviewer에 공유 → 합동 guard 설계 잠금 → 슬라이스 1 failing test.**
 
 ## 전달지침 — 새 담당자(2026-06-13 세션 #9 → 후임 세션 #10)
 
