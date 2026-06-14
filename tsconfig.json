@@ -127,6 +127,16 @@
 		// root-tsc surface (entwurf-control.ts) reaches it via a NON-LITERAL dynamic import so
 		// the fence never enters the emit-capable root program. Typechecked by
 		// scripts/tsconfig.json via its gate (check-entwurf-v2-surface.ts).
-		"pi-extensions/lib/entwurf-v2-surface.ts"
+		"pi-extensions/lib/entwurf-v2-surface.ts",
+		// entwurf-deliverability.ts is the SE-1/SE-2 slice 2c PURE mailbox-deliverability
+		// predicate. It carries an explicit `.ts`-extension (type-only) import of WakeMode
+		// from meta-session.ts, same `.ts`-extension fence. Typechecked by
+		// scripts/tsconfig.json via its gate (check-entwurf-deliverability.ts).
+		"pi-extensions/lib/entwurf-deliverability.ts",
+		// entwurf-self-address.ts is the SE-1 slice 1 self-addressability predicate. From
+		// slice 2c it is a lib→lib VALUE importer (computeMetaReceiverActive from
+		// entwurf-deliverability.ts), so it moves into the same `.ts`-extension fence.
+		// Typechecked by scripts/tsconfig.json via its gate (check-entwurf-self-address.ts).
+		"pi-extensions/lib/entwurf-self-address.ts"
 	]
 }

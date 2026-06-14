@@ -27,6 +27,8 @@
  *  - external-mcp: never replyable — no authoritative reply address.
  */
 
+import { computeMetaReceiverActive } from "./entwurf-deliverability.ts";
+
 export type SelfOrigin = "pi-session" | "meta-session" | "external-mcp";
 
 /**
@@ -87,31 +89,17 @@ export function computeSelfAddressability(facts: SelfAddressabilityFacts): SelfA
 			};
 		}
 		case "meta-session": {
-			if (facts.recordBacked !== true) {
-				return {
-					replyable: false,
-					socketState: "none",
-					reason: "meta sender marker is not backed by a live meta-record",
-				};
-			}
-			if (facts.ownerAlive !== true) {
-				return {
-					replyable: false,
-					socketState: "none",
-					reason: "meta receiver owner is not alive (start-key mismatch — session exited or pid reused)",
-				};
-			}
-			if (facts.watchArmed !== true) {
-				return {
-					replyable: false,
-					socketState: "none",
-					reason: "meta receiver idle-watch is not armed — a reply would enqueue with no doorbell wake",
-				};
-			}
+			// Share the active-receiver atom with the deliverability predicate (one
+			// source of truth for "record backed AND owner alive AND watch armed").
+			const recv = computeMetaReceiverActive({
+				recordBacked: facts.recordBacked,
+				ownerAlive: facts.ownerAlive,
+				watchArmed: facts.watchArmed,
+			});
 			return {
-				replyable: true,
+				replyable: recv.active,
 				socketState: "none",
-				reason: "meta receiver active (record backed, owner alive, watch armed)",
+				reason: recv.active ? `meta receiver active (${recv.reason})` : `meta receiver inactive — ${recv.reason}`,
 			};
 		}
 		case "external-mcp":

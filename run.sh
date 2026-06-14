@@ -85,6 +85,7 @@ Usage:
   ./run.sh check-entwurf-peers-surface # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4c): MCP entwurf_peers RENDER renderEntwurfPeers — legacy `sessions` = projection of facts (alive only, no 2nd scan), socketPath via controlSocketPath (SSOT), count=projection length, three distinct arrays, NO verb-routing key (JSON deep scan) NOR word (text), diagnostics both surfaces, empty→(none), unsupported shown, enrich→(not enriched); WIRING guard: bridge calls provider+render, getLiveSessions gone; facts fabricated, no IO
   ./run.sh check-entwurf-send-mailbox-fallback # deterministic gate: pi-native entwurf_send → meta-bridge mailbox fallback (transport 2). ENOENT/ECONNREFUSED falls back, timeout does not; shared formatMetaMailboxBody; no-socket citizen → .msg enqueue; WIRING guard (pi-native calls fallback, bridge uses shared formatter)
   ./run.sh check-entwurf-self-address # deterministic gate (SE-1/SE-2 slice 1): self-addressability honesty predicate computeSelfAddressability — pi replyable ⟺ live socket; meta ⟺ recordBacked ∧ ownerAlive ∧ watchArmed (regression-proof record-present rows); SOURCE GUARD buildStrictPiSenderEnvelope drops hardcoded replyable:true + existsSync-probes socket, entwurf_self renders alive vs expected. meta watchArmed wired in slice 2 (same release block)
+  ./run.sh check-entwurf-deliverability # deterministic gate (SE-1/SE-2 slice 2c): conversational-mailbox deliverability predicate — computeMetaReceiverActive (recordBacked ∧ ownerAlive ∧ watchArmed) + mailboxConversationalDeliverable (self-fetch AND active); direct-inject pi refused (SE-1), self-fetch dead/unarmed refused (SE-2); self-address shares the same atom
   ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
   ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
   ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
@@ -1631,6 +1632,18 @@ check_entwurf_self_address() {
   # Slice boundary: meta watchArmed is wired from the slice-2 presence marker; do NOT
   # claim slice 1 green standalone (1+2 close in the same release block).
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-self-address.ts)
+}
+
+check_entwurf_deliverability() {
+  # Deterministic gate for the conversational-mailbox deliverability predicate
+  # (SE-1/SE-2 slice 2c). The predicate the enqueue sites must consult (slice 2d)
+  # before writing a .msg. Asserts: computeMetaReceiverActive (active iff recordBacked
+  # AND ownerAlive AND watchArmed, fail-closed, per-cause reasons); mailboxConversational-
+  # Deliverable (deliverable iff wakeMode self-fetch AND active) — KEY rows: direct-inject
+  # (pi) refused even when active (SE-1, no mailbox drain), self-fetch + dead-owner/unarmed
+  # refused (SE-2, would rot); WIRING that the self-addressability predicate shares the
+  # SAME active-receiver atom (one source of truth). Pure, no IO.
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-deliverability.ts)
 }
 
 check_plugin_empty_final_recovery() {
@@ -4691,6 +4704,9 @@ case "$cmd" in
     ;;
   check-entwurf-self-address)
     check_entwurf_self_address
+    ;;
+  check-entwurf-deliverability)
+    check_entwurf_deliverability
     ;;
   new-session-id)
     # Garden launcher helper: print one fresh garden sessionId (SSOT:
