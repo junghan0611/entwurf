@@ -189,7 +189,7 @@
     dynamic import**(root-tsc fence 제약, entwurf-v2-surface 패턴). body는 closure 밖 계산(params.message narrowing). 
     `check-entwurf-send-mailbox-fallback` wiring 갱신(dynamic guarded import, no static import, enqueue가 guard 안). 
     **→ v1 conversational 경로(MCP+pi-native) SE-2 쓰레기 방지 완전 강제.**
-  - **DONE ✅ 2d-3(로컬, 미커밋 — slice 2 release block, GLG가 커밋. 세션 #11, 실무자 후임 Opus `20260614T141824-d242bf`
+  - **DONE ✅ 2d-3(로컬 커밋 `0b6455d`+`df9a93f`, push 대기 — 세션 #11, 실무자 후임 Opus `20260614T141824-d242bf`
     + GPT5.5 `…122717-bdfe6e` design GO → code GO):** active-receiver 차원을 v2 dispatch에 **REQUIRED injected seam**으로.
     컴파일이 모든 호출자 강제 → SE-2 갭 부활 불가(=정책으로 막음, 코드 산더미 아님). 한 것:
     1. `entwurf-deliverability.ts`: NEW PURE `receiverMarkerMatchesIdentity(marker, identity)` — structural `ReceiverIdentityFacts`
@@ -207,10 +207,24 @@
     - **gates(새 파일 0, 기존 5개 확장):** deliverability 18→**24**, mailbox-guard 15→**20**, decider →**107**, send-fallback →**26**, production →**23**.
       decider SE-2 RED행=self-fetch citizen+seam false→mailbox-undeliverable+seam 1회+no lock/probe. production E2(marker absent→rejected+enqueue 0-call+release1)/E3(drift→rejected).
     - **검증:** typecheck 3-config / biome clean / `pnpm check` EXIT=0 / check-pack 158 불변. **GPT code GO, blocker 0.**
-  - **TODO 2e(다음):** native `entwurf-control.ts:1471·1695` `{origin:"pi-session",replyable:true}`→computeSelfAddressability 경유
-    + meta-self watchArmed 실배선(`buildTrustedMetaSenderEnvelope`/`entwurf_self`가 presence marker로 replyable).
-  - **TODO 2f:** 옛거짓 기대 소스가드 갱신 `check-entwurf-v2-surface.ts:249` + `check-entwurf-send-mailbox-fallback.ts:134`.
-  - **release block 마감 조건(GPT):** native hardcode·옛 smoke/소스가드가 하나도 안 남아야 함. 그 다음 줄기 5d-5 복귀.
+  - **DONE ✅ 2e(로컬 커밋 `b2f55d1`, push 대기 — 세션 #11, 후임 Opus + GPT5.5 design GO → code GO):** 남은 `replyable:true`
+    하드코딩 3곳을 honest replyability로. **2f(옛 소스가드 갱신) 흡수.**
+    - **2e-a (native pi, `entwurf-control.ts`):** NEW `decoratePiSenderAddressability(sender, compute)` — canonical 소켓
+      `existsSync(getSocketPath)` → `computeSelfAddressability(pi-session)` → `replyable:self.replyable`. 두 call site(entwurf_v2
+      senderProvider, legacy mailbox fallback) 모두 `ENTWURF_SELF_ADDRESS_MODULE` non-literal dynamic import 경유(root-tsc fence).
+    - **2e-b (MCP meta-self, `buildTrustedMetaSenderEnvelope`):** sender marker=identity 권위까지만; replyability는 receiver
+      presence marker `readMetaReceiverMarker(gardenId)` + `receiverMarkerMatchesIdentity` → `computeSelfAddressability(meta-session)`.
+      **record backed but receiver inactive → meta identity 유지 + replyable:false**(null degrade 금지 = who-sent 보존, GPT 주의).
+      `entwurf_self`는 sender.replyable 그대로 렌더 → 자동 따라옴. production.ts opts 주석도 보정.
+    - **2e-c (smoke E2E, `smoke-meta-sender-identity`):** sender 자신 receiver inactive(C record-only) → `entwurf_self`가 meta
+      identity 유지 + replyable:false + wants_reply=true reject(`sender.replyable===false` flag 기반) + ff 통과. regression
+      "inactive→external-mcp degrade"를 runtime이 잡음(GPT 권고).
+    - **gates(새 파일 0, 기존 3개 확장):** v2-surface 32→**34**, send-mailbox-fallback →**26**, self-address 18→**24**.
+    - **🐛 발견(후속):** `formatMetaMailboxBody`가 `replyable:false`면 origin 무관 항상 `(external, non-replyable)` 렌더 → meta
+      non-replyable이 body에서 "external"로 흐려짐. envelope 자체는 정직(`origin:meta-session`), 렌더만 부정확. 별도 후속(작은 정직성 흠).
+    - **검증:** typecheck 3-config / biome clean / `pnpm check` EXIT=0 / check-pack 158. **GPT code GO, blocker 0.**
+  - **release block 마감(거의 닫힘):** native hardcode 0 · 옛 소스가드 0 (2e가 2f 흡수). **남은 것 = 위 body-렌더 후속(선택) +
+    줄기 5d-5 LIVE matrix 복귀.** detour SE-1/SE-2 본체 종료 임박.
 
 ## 전달지침 — 새 담당자(2026-06-13 세션 #9 → 후임 세션 #10)
 
