@@ -171,4 +171,39 @@ ok(
 	/existsSync\s*\(/.test(selfRegion),
 );
 
+// ── SE-2 2e-b: meta-session sender replyability from the receiver presence marker ──
+// Identity stays trusted (record-backed), but `replyable` is now derived from whether
+// THIS session's own receiver inbox can actually wake (slice-2 presence marker), not a
+// hardcoded true. An inactive receiver must still return the meta identity (replyable:false)
+// — degrading to null would erase who-sent and fall through to external-mcp.
+const metaBody = functionBody("buildTrustedMetaSenderEnvelope");
+ok("buildTrustedMetaSenderEnvelope calls computeSelfAddressability", /computeSelfAddressability\s*\(/.test(metaBody));
+ok("buildTrustedMetaSenderEnvelope no longer hardcodes `replyable: true`", !/replyable:\s*true/.test(metaBody));
+ok(
+	"buildTrustedMetaSenderEnvelope derives active-receiver from the receiver marker (identity-matched)",
+	/readMetaReceiverMarker\s*\(/.test(metaBody) && /receiverMarkerMatchesIdentity\s*\(/.test(metaBody),
+);
+ok(
+	"buildTrustedMetaSenderEnvelope keeps meta identity + derived replyable (inactive → not null)",
+	/origin:\s*"meta-session"/.test(metaBody) && /replyable:\s*self\.replyable/.test(metaBody),
+);
+
+// ── SE-1 2e-a: pi-native surface derives pi-session replyability the SAME way ──
+// entwurf-control.ts is a root-tsc emit surface, so it reaches the self-address fence via a
+// non-literal dynamic import (never a static `.ts` import — TS5097), then decorates the
+// sender with computeSelfAddressability + canonical socket existsSync (no hardcoded true).
+const nativeSrc = readFileSync(path.join(REPO_DIR, "pi-extensions", "entwurf-control.ts"), "utf8");
+ok(
+	"pi-native: decoratePiSenderAddressability derives replyable from computeSelfAddressability + canonical existsSync",
+	/function\s+decoratePiSenderAddressability/.test(nativeSrc) &&
+		/computeSelfAddressability/.test(nativeSrc) &&
+		/existsSync\s*\(\s*getSocketPath/.test(nativeSrc),
+);
+ok(
+	"pi-native: reaches the self-address fence via non-literal dynamic import (no static import; TS5097)",
+	/const ENTWURF_SELF_ADDRESS_MODULE\s*=/.test(nativeSrc) &&
+		/await import\(ENTWURF_SELF_ADDRESS_MODULE\)/.test(nativeSrc) &&
+		!/import[^;]*from\s*"\.\/lib\/entwurf-self-address\.(js|ts)"/.test(nativeSrc),
+);
+
 console.log(`\ncheck-entwurf-self-address: ${passed} checks passed`);

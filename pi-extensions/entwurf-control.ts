@@ -1400,6 +1400,42 @@ interface EntwurfMailboxGuardModule {
 	): { delivered: true; result: T } | { delivered: false; reason: string };
 }
 
+// SE-1 (slice 2e-a): a pi-session sender's `replyable` is a FACT (does its canonical
+// control socket actually exist?), not env presence. entwurf-self-address.ts is a
+// `.ts`-extension fence lib, so this root-tsc emit surface reaches it the SAME way as the
+// v2 surface / mailbox guard — a NON-LITERAL dynamic import behind a local interface.
+const ENTWURF_SELF_ADDRESS_MODULE = "./lib/entwurf-self-address.ts";
+
+type SelfAddressabilityFn = (facts: {
+	origin: "pi-session" | "meta-session" | "external-mcp";
+	socketAlive?: boolean;
+	socketPathComputable?: boolean;
+	recordBacked?: boolean;
+	ownerAlive?: boolean;
+	watchArmed?: boolean;
+}) => { replyable: boolean; socketState: "alive" | "expected" | "none"; reason: string };
+
+interface EntwurfSelfAddressModule {
+	computeSelfAddressability: SelfAddressabilityFn;
+}
+
+/**
+ * Decorate a local pi sender envelope with its HONEST replyability (SE-1 slice 2e-a).
+ * The old code hardcoded replyability to true from env presence; a pi session running
+ * without --entwurf-control has a session id but no control socket, so a reply silently fails.
+ * Route both the v2 senderProvider and the legacy mailbox fallback through the shared
+ * computeSelfAddressability truth table: replyable ⟺ the canonical socket exists (existsSync
+ * — slice-1 level, NOT a listener probe; deeper liveness is a separate hardening slice).
+ */
+function decoratePiSenderAddressability(sender: SenderEnvelope, compute: SelfAddressabilityFn): SenderEnvelope {
+	const self = compute({
+		origin: "pi-session",
+		socketAlive: existsSync(getSocketPath(sender.sessionId)),
+		socketPathComputable: true,
+	});
+	return { ...sender, origin: "pi-session", replyable: self.replyable };
+}
+
 interface EntwurfV2SurfaceModule {
 	runAndRenderEntwurfV2FromSurface(
 		params: {
@@ -1477,16 +1513,17 @@ This is additive to entwurf_send; the decider — not this surface — chooses t
 				return { content: [{ type: "text", text: "entwurf_v2: missing message" }], isError: true };
 			}
 
-			// The reply-address envelope for this pi session, decorated as a replyable
-			// pi-session sender. ONE provider feeds the control-socket RPC sender AND the
-			// meta-mailbox body sender (see entwurf-v2-production). Built per-call so the
-			// timestamp is the dispatch moment.
-			const senderProvider = (): SenderEnvelope | undefined => {
-				const s = buildLocalSenderEnvelope(ctx);
-				return s ? { ...s, origin: "pi-session" as const, replyable: true } : undefined;
-			};
-
 			try {
+				// The reply-address envelope for this pi session, decorated with its HONEST
+				// replyability (SE-1 2e-a: socket existsSync, not a hardcoded true). ONE provider
+				// feeds the control-socket RPC sender AND the meta-mailbox body sender (see
+				// entwurf-v2-production). Built per-call so the timestamp is the dispatch moment;
+				// computeSelfAddressability is loaded once here (sync senderProvider can't await).
+				const selfMod = (await import(ENTWURF_SELF_ADDRESS_MODULE)) as unknown as EntwurfSelfAddressModule;
+				const senderProvider = (): SenderEnvelope | undefined => {
+					const s = buildLocalSenderEnvelope(ctx);
+					return s ? decoratePiSenderAddressability(s, selfMod.computeSelfAddressability) : undefined;
+				};
 				const mod = (await import(ENTWURF_V2_SURFACE_MODULE)) as unknown as EntwurfV2SurfaceModule;
 				const rendered = await mod.runAndRenderEntwurfV2FromSurface(
 					{
@@ -1706,8 +1743,12 @@ Messages include sender session info for replies.`,
 					const code = (connErr as NodeJS.ErrnoException).code;
 					if (classifyConnectError(code) !== "dead") throw connErr;
 					try {
+						// SE-1 2e-a: decorate the pi sender with its HONEST replyability (canonical
+						// socket existsSync), not a hardcoded true. Same shared truth table as the v2
+						// senderProvider, reached via the same non-literal dynamic import.
+						const selfMod = (await import(ENTWURF_SELF_ADDRESS_MODULE)) as unknown as EntwurfSelfAddressModule;
 						const mailboxSender: SenderEnvelope | undefined = sender
-							? { ...sender, origin: "pi-session", replyable: true }
+							? decoratePiSenderAddressability(sender, selfMod.computeSelfAddressability)
 							: undefined;
 						// Transport 2 gated (SE-1/SE-2): enqueue ONLY when the target is a
 						// conversationally-deliverable meta citizen. Reach the fence guard via a

@@ -211,6 +211,42 @@ else
   ok "inactive-receiver reject left the mailbox untouched"
 fi
 
+# 2e-c (SE-2 sender-side, identity ≠ replyability): a sender whose OWN receiver is inactive.
+# C has a backing record (identity is real) but NO receiver marker (its inbox cannot wake).
+# entwurf_self must KEEP the meta identity (garden-id + agentId — NOT degrade to external-mcp,
+# which would erase who-sent) yet report replyable:false; wants_reply=true from it must be
+# refused (no live reply address). Runtime proof of slice 2e-b's core contract — the regression
+# this guards against ("inactive → degrade to external-mcp") is one a source guard can miss.
+MARKER_C="$TMP/marker-c.json"
+mkmarker "$MARKER_C" "$GARDEN_C" "n-sender-c" "$SK_SELF"
+SELF_C=$(PI_META_SENDER_MARKER="$MARKER_C" srv 50 "$(selfcall 50)")
+if echo "$SELF_C" | grep -q "$GARDEN_C" && echo "$SELF_C" | grep -q 'meta-session/claude-code'; then
+  ok "2e-c: inactive-receiver sender keeps its meta identity (not degraded to external-mcp)"
+else
+  bad "2e-c: inactive-receiver sender identity lost: ${SELF_C:0:220}"
+fi
+if echo "$SELF_C" | grep -Eq 'replyable: *false'; then
+  ok "2e-c: inactive-receiver sender is replyable:false (identity ≠ replyability)"
+else
+  bad "2e-c: inactive-receiver sender not replyable:false: ${SELF_C:0:220}"
+fi
+# wants_reply=true from a non-replyable sender → refused (no reply address). Target A is
+# active, so the reject is about the SENDER's reply address, not the target's deliverability.
+C_WANTS=$(PI_META_SENDER_MARKER="$MARKER_C" srv 51 "$(sendcall 51 "$GARDEN_A" "from-inactive-wants" true)")
+if echo "$C_WANTS" | grep -q '"isError":true' && echo "$C_WANTS" | grep -q 'wants_reply=true requires a replyable'; then
+  ok "2e-c: wants_reply=true from an inactive-receiver sender is refused (no reply address)"
+else
+  bad "2e-c: wants_reply=true from inactive sender not refused: ${C_WANTS:0:220}"
+fi
+# wants_reply=false from the SAME sender still delivers (target A is active) — a non-replyable
+# sender is not blocked from fire-and-forget; only the reply badge is withheld.
+C_FF=$(PI_META_SENDER_MARKER="$MARKER_C" srv 52 "$(sendcall 52 "$GARDEN_A" "from-inactive-ff" false)")
+if echo "$C_FF" | grep -q '"isError":true'; then
+  bad "2e-c: wants_reply=false from inactive sender should still deliver: ${C_FF:0:220}"
+else
+  ok "2e-c: wants_reply=false from inactive-receiver sender still delivers (badge ≠ block)"
+fi
+
 if [ "$fail" = "0" ]; then
   echo "smoke-meta-sender-identity PASS"
 else

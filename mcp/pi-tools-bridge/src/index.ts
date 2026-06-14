@@ -91,6 +91,7 @@ import {
 	runEntwurfResumeSync,
 	runEntwurfSync,
 } from "../../../pi-extensions/lib/entwurf-core.ts";
+import { receiverMarkerMatchesIdentity } from "../../../pi-extensions/lib/entwurf-deliverability.ts";
 import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provider.ts";
 import { guardedMailboxEnqueue } from "../../../pi-extensions/lib/entwurf-mailbox-guard.ts";
 import { renderEntwurfPeers } from "../../../pi-extensions/lib/entwurf-peers-render.ts";
@@ -101,10 +102,12 @@ import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
 	enqueueMetaMessage,
+	type MetaIdentity,
 	type MetaSenderMarker,
 	parentPid,
 	readMetaIdentityByGardenId,
 	readMetaInbox,
+	readMetaReceiverMarker,
 	readMetaSenderMarker,
 } from "../../../pi-extensions/lib/meta-session.ts";
 import { resolveEntwurfResumeMode } from "./resume-mode.ts";
@@ -315,24 +318,41 @@ function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): SenderEnve
 	// deleted, or backend/nativeSessionId drift) must NOT grant a replyable
 	// identity. The record store is the authority; the marker is only a pid→garden
 	// hint.
-	let backed = false;
+	let identity: MetaIdentity | null = null;
 	try {
 		// dual-read (3D-4 commit1): identity-only check (backend/nativeSessionId), so
 		// it survives the v2 cut. Reads both v1 and v2 records.
 		const id = readMetaIdentityByGardenId(marker.gardenId);
-		backed = id.backend === marker.backend && id.nativeSessionId === marker.nativeSessionId;
+		if (id.backend === marker.backend && id.nativeSessionId === marker.nativeSessionId) identity = id;
 	} catch {
-		backed = false;
+		identity = null;
 	}
-	if (!backed) return null;
+	if (!identity) return null;
+
+	// SE-2 slice 2e-b: identity is trusted, but `replyable` is a SEPARATE fact — can THIS
+	// session's own receiver inbox actually wake? Read the receiver presence marker (slice
+	// 2b) and require it to match the identity (the same SSOT helper the mailbox guard uses).
+	// recordBacked is true here by construction; ownerAlive+watchArmed BOTH come from the
+	// matched receiver marker (readMetaReceiverMarker's verifyOwner folds a dead/reused owner
+	// to null, so a match means a live, armed receiver — the sender marker only proves
+	// identity, not an armed watch). Inactive → the meta identity is STILL returned (who-sent
+	// must survive; degrading to null would erase the sender) but with replyable:false.
+	const receiver = readMetaReceiverMarker({ gardenId: identity.gardenId });
+	const active = receiverMarkerMatchesIdentity(receiver, identity);
+	const self = computeSelfAddressability({
+		origin: "meta-session",
+		recordBacked: true,
+		ownerAlive: active,
+		watchArmed: active,
+	});
 
 	return {
-		sessionId: marker.gardenId,
-		agentId: `meta-session/${marker.backend}`,
+		sessionId: identity.gardenId,
+		agentId: `meta-session/${identity.backend}`,
 		cwd: marker.cwd || cwd,
 		timestamp: new Date().toISOString(),
 		origin: "meta-session",
-		replyable: true,
+		replyable: self.replyable,
 	};
 }
 

@@ -150,9 +150,15 @@ ok(
 		const eAt = piNative.indexOf("enqueueMetaMessage({", gAt);
 		ok("pi-native fallback wraps enqueueMetaMessage inside the guard (no unguarded enqueue)", gAt >= 0 && eAt > gAt);
 	}
+	// SE-1 2e-a: the mailbox sender is decorated pi-session, but `replyable` is now an HONEST
+	// fact (canonical socket existsSync via computeSelfAddressability), NOT a hardcoded true.
+	// Reached through the same non-literal dynamic import as the v2 senderProvider.
 	ok(
-		"pi-native mailbox sender is marked pi-session + replyable",
-		piNative.includes('origin: "pi-session"') && piNative.includes("replyable: true"),
+		"pi-native mailbox sender decorated pi-session with HONEST replyability (no hardcoded true)",
+		piNative.includes("decoratePiSenderAddressability") &&
+			piNative.includes('const ENTWURF_SELF_ADDRESS_MODULE = "./lib/entwurf-self-address.ts"') &&
+			piNative.includes("await import(ENTWURF_SELF_ADDRESS_MODULE)") &&
+			!piNative.includes("replyable: true"),
 	);
 
 	const bridge = readFileSync("mcp/pi-tools-bridge/src/index.ts", "utf8");

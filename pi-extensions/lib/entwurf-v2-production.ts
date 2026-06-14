@@ -118,9 +118,10 @@ export interface ProductionEntwurfV2Seams {
 }
 
 export interface ProductionEntwurfV2Opts {
-	/** Built at the wiring site from `buildLocalSenderEnvelope(ctx)`, already decorated with
-	 * `{ origin: "pi-session", replyable: true }`. ONE provider feeds the control-socket RPC
-	 * sender AND the meta-mailbox body sender (they share the same envelope). */
+	/** Built at the wiring site from `buildLocalSenderEnvelope(ctx)`, decorated with its
+	 * HONEST pi-session replyability (SE-1 2e-a: `replyable` reflects whether the canonical
+	 * control socket actually exists, not a hardcoded true). ONE provider feeds the
+	 * control-socket RPC sender AND the meta-mailbox body sender (they share the envelope). */
 	senderProvider: () => SenderEnvelope | undefined;
 	/** pi agent dir holding `trust.json` (preflight). Omit → preflight's own default. */
 	agentDir?: string;

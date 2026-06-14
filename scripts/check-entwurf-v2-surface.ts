@@ -12,7 +12,8 @@
  *   4. control wiring guard — `entwurf-control.ts` registers `entwurf_v2`, reaches the fence
  *      ONLY via a NON-LITERAL dynamic import (a string-const specifier), NEVER a static import
  *      of the fence v2 modules (which would break the emit-capable root tsc with TS5097), and
- *      decorates the sender as `origin:"pi-session"` + `replyable:true`.
+ *      decorates the sender as `origin:"pi-session"` with HONEST replyability (SE-1 2e-a:
+ *      computeSelfAddressability + socket existsSync, not a hardcoded `replyable:true`).
  */
 
 import assert from "node:assert/strict";
@@ -244,9 +245,24 @@ async function main(): Promise<void> {
 			"4: pi-native — NO static import of the v2 fence (runner/production/surface) — TS5097 stays closed",
 			!/import[^;]*from\s*"\.\/lib\/entwurf-v2-(runner|production|surface)\.(js|ts)"/.test(code),
 		);
+		// SE-1 2e-a: senderProvider decorates origin:'pi-session' but `replyable` is now an
+		// HONEST fact (canonical socket existsSync via computeSelfAddressability), NOT a
+		// hardcoded true. The self-address fence lib is reached through the same non-literal
+		// dynamic import pattern as the v2 surface.
 		ok(
-			"4: pi-native — senderProvider decorates origin:'pi-session' + replyable:true",
-			/origin:\s*"pi-session"/.test(code) && /replyable:\s*true/.test(code),
+			"4: pi-native — senderProvider decorates origin:'pi-session' (no hardcoded replyable:true)",
+			/origin:\s*"pi-session"/.test(code) && !/replyable:\s*true/.test(code),
+		);
+		ok(
+			"4: pi-native — replyability via computeSelfAddressability + existsSync, dynamic-imported",
+			/const ENTWURF_SELF_ADDRESS_MODULE\s*=/.test(code) &&
+				/await import\(ENTWURF_SELF_ADDRESS_MODULE\)/.test(code) &&
+				/computeSelfAddressability/.test(code) &&
+				/existsSync\(/.test(code),
+		);
+		ok(
+			"4: pi-native — NO static import of the self-address fence (TS5097 stays closed)",
+			!/import[^;]*from\s*"\.\/lib\/entwurf-self-address\.(js|ts)"/.test(code),
 		);
 	}
 
