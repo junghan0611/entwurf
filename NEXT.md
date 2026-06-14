@@ -171,17 +171,28 @@
   socketPath 거짓 제거). (d) **detour 속 detour:** `smoke-meta-mailbox` Case A가 빈 PI_ENTWURF_DIR로 pi sender를 socketless로
   두면서 replyable이라 단언 = SE-1 옛 거짓을 인코딩 → sender 자기 socket touch로 honestly replyable + target-socket-부재 명시
   assert(면피 아닌 원칙 fix, GPT GO). (e) run.sh+package.json 배선, check-pack 151→**153**, 전체 `pnpm check` EXIT=0.
-- **슬라이스 2 backlog(코드로 검증 완료 — slice 1과 같은 release block):** ① **dual-owner 수정 DONE(2a, 로컬·미커밋, GPT
-  design GO, code 검수 대기):** `meta-bridge-hook.ts` sender marker write를 `[ppid, parentPid(ppid)]`→**ppid 단독**(grandparent
-  login bash가 세션 종료 후 생존 → stale marker가 startKey guard 통과 → ghost active-receiver false-positive 차단). `parentPid`
-  import 제거. typecheck OK / smoke-meta-sender-identity(PPID-path 포함)·smoke-meta-honesty PASS / 전체 `pnpm check` EXIT=0. ② **meta-receiver presence marker**
-  신설(`{gardenId,backend,nativeSessionId,ownerPid,ownerStartKey,ownerKind,updatedAt,armProvenance}`, owner=훅 process.ppid
-  단독, 검증=startKey+record 일치). ③ PURE `mailboxConversationalDeliverable`(=self-fetch ∧ ownerPid-startKey-alive ∧
-  watch-armed) — enqueue 4지점(v1 mcp:459 / MCP v1 / pi-native v1 / v2 decider·send-fallback) 공통화, activeReceiver false면
-  enqueue 0 + signal poke 0 + mailbox 무변이. ④ **native 옛 거짓 마감**: `entwurf-control.ts:1471·1695` `{origin:"pi-session",
-  replyable:true}` 하드코딩 → computeSelfAddressability 경유. ⑤ meta-self watchArmed 실배선(entwurf_self/buildTrustedMetaSenderEnvelope
-  → presence marker). ⑥ **옛 거짓 기대 가드/스모크 갱신**: `check-entwurf-v2-surface.ts:249` + `check-entwurf-send-mailbox-fallback.ts:134`
-  (native replyable:true 기대 소스가드) + `smoke-meta-sender-identity.sh:104·148`(meta=replyable 모델). 줄기 5d-5 복귀 잊지 말 것.
+- **슬라이스 2 진행(전부 GPT design+code GO, 로컬 커밋·미push — slice 1과 같은 release block):**
+  - **DONE ✅ 2a** `36faa97` dual-owner: `meta-bridge-hook.ts` sender marker write `[ppid, parentPid(ppid)]`→**ppid 단독**.
+  - **DONE ✅ 2b** `7cac9e3` meta-receiver presence marker: `meta-session.ts`에 `defaultMetaReceiversDir`+`MetaReceiverMarker`+
+    `write/readMetaReceiverMarker`(garden-id 키, atomic 0600, dead-owner startKey guard), hook arm 지점 write(ppid 단독,
+    armProvenance=session-start|cwd-changed|file-changed, UPS 제외 fail-closed). gate `check-meta-receiver-marker` 26.
+  - **DONE ✅ 2c** `be4e859` PURE predicate: NEW `entwurf-deliverability.ts` `computeMetaReceiverActive`(공유 atom) +
+    `mailboxConversationalDeliverable`(=self-fetch ∧ active). self-address가 atom 공유(SSOT). tsconfig fence 2개 추가.
+    gate `check-entwurf-deliverability` 18.
+  - **DONE ✅ 2d-1** `0877099` guarded enqueue wrapper: NEW `entwurf-mailbox-guard.ts` `gatherMailboxDeliverabilityFacts` +
+    `guardedMailboxEnqueue`(deliverable일 때만 injected enqueue). gate `check-entwurf-mailbox-guard` 15(pure 0-call +
+    tmpdir 스냅샷). **additive — 배선 전.**
+  - **TODO 2d-2(다음, 깨지는 청크):** conversational enqueue 사이트를 guard 경유로 — MCP `entwurf_send` fallback(`mcp/.../index.ts:459`)
+    + pi-native `entwurf_send` fallback(`entwurf-control.ts` transport 2). **옛 모델 smoke 동반 갱신 필수**(둘 다 target에
+    receiver marker 없어 이제 reject됨): `smoke-meta-mailbox` Case A + `smoke-meta-sender-identity` A→B/B→A에 target presence
+    marker 추가 + "dead receiver → reject + no enqueue"(SE-2) 행 추가. low-level `enqueueMetaMessage`는 raw 유지.
+  - **TODO 2d-3:** v2 decider/send-fallback의 `resolveMailboxDeliverability`(decider:206 wakeMode-only)를 injected
+    `mailboxDeliverabilityFor` seam으로 승격(decider pure-except-deps 유지, production deps가 receiver marker로 facts 구성).
+    gate `check-entwurf-v2-decider`/`check-entwurf-v2-send-fallback` 갱신.
+  - **TODO 2e:** native `entwurf-control.ts:1471·1695` `{origin:"pi-session",replyable:true}`→computeSelfAddressability 경유
+    + meta-self watchArmed 실배선(`buildTrustedMetaSenderEnvelope`/`entwurf_self`가 presence marker로 replyable).
+  - **TODO 2f:** 옛거짓 기대 소스가드 갱신 `check-entwurf-v2-surface.ts:249` + `check-entwurf-send-mailbox-fallback.ts:134`.
+  - **release block 마감 조건(GPT):** native hardcode·옛 smoke/소스가드가 하나도 안 남아야 함. 그 다음 줄기 5d-5 복귀.
 
 ## 전달지침 — 새 담당자(2026-06-13 세션 #9 → 후임 세션 #10)
 
