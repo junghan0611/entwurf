@@ -92,6 +92,7 @@ import {
 	runEntwurfSync,
 } from "../../../pi-extensions/lib/entwurf-core.ts";
 import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provider.ts";
+import { guardedMailboxEnqueue } from "../../../pi-extensions/lib/entwurf-mailbox-guard.ts";
 import { renderEntwurfPeers } from "../../../pi-extensions/lib/entwurf-peers-render.ts";
 import { computeSelfAddressability } from "../../../pi-extensions/lib/entwurf-self-address.ts";
 import { runAndRenderEntwurfV2FromSurface } from "../../../pi-extensions/lib/entwurf-v2-surface.ts";
@@ -462,15 +463,27 @@ server.tool(
 				sock = await resolveControlSocket(sessionId);
 			} catch (noSocket) {
 				try {
-					// Serialize the FULL sender envelope into the mailbox body so the
-					// receiver knows who sent it + whether/where to reply. wants_reply
-					// rides in the envelope (a replyable sender + meta target CAN be
-					// replied to once the receiver has entwurf_send); the only reject is
-					// the top-level external-non-replyable one already handled above.
-					const result = enqueueMetaMessage({
-						gardenId: sessionId,
-						body: formatMetaMailboxBody(sender, message, effectiveWantsReply),
-					});
+					// Transport 2 gated (SE-1/SE-2): enqueue ONLY when the target is a
+					// conversationally-deliverable meta citizen — a self-fetch backend with
+					// a live, armed receiver. A direct-inject backend (pi) has no mailbox
+					// drain (SE-1), and a terminated / never-armed receiver would only collect
+					// garbage (SE-2). guardedMailboxEnqueue writes nothing in those cases.
+					// Serialize the FULL sender envelope into the body so the receiver knows
+					// who sent it + whether/where to reply (wants_reply rides in the envelope).
+					const outcome = guardedMailboxEnqueue(sessionId, {}, () =>
+						enqueueMetaMessage({
+							gardenId: sessionId,
+							body: formatMetaMailboxBody(sender, message, effectiveWantsReply),
+						}),
+					);
+					if (!outcome.delivered) {
+						return textErr(
+							`entwurf_send error: "${sessionId}" is not conversationally deliverable; ` +
+								`not enqueued — no doorbell wake (${outcome.reason}). ` +
+								`No live pi control socket either (${noSocket instanceof Error ? noSocket.message : String(noSocket)}).`,
+						);
+					}
+					const result = outcome.result;
 					const replyBadge = effectiveWantsReply ? "  (wants reply)" : "";
 					return textOk(
 						`[entwurf sent → meta]\n` +

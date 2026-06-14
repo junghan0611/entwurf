@@ -46,23 +46,31 @@ trap cleanup EXIT
 export PI_META_SESSIONS_DIR="$TMP/meta-sessions"
 export PI_META_MAILBOX_DIR="$TMP/meta-mailbox"
 export PI_META_SENDERS_DIR="$TMP/meta-senders"   # empty → external case never reads a real sender marker
+export PI_META_RECEIVERS_DIR="$TMP/meta-receivers"   # SE-2: targets need an active receiver marker to be deliverable
 export PI_ENTWURF_DIR="$TMP/entwurf-control"
-mkdir -p "$PI_META_SESSIONS_DIR" "$PI_META_MAILBOX_DIR" "$PI_META_SENDERS_DIR" "$PI_ENTWURF_DIR"
+mkdir -p "$PI_META_SESSIONS_DIR" "$PI_META_MAILBOX_DIR" "$PI_META_SENDERS_DIR" "$PI_META_RECEIVERS_DIR" "$PI_ENTWURF_DIR"
 
-# Two synthetic native-Claude meta-records (one per sender case), via the real lib.
+# Three synthetic native-Claude meta-records: a/b get an ACTIVE receiver marker
+# (deliverable), c gets a record but NO marker (SE-2: record exists, receiver gone →
+# must reject + enqueue nothing). The receiver marker owner is THIS bash ($$), which
+# stays alive for the whole smoke, so readMetaReceiverMarker's start-key guard passes.
 cat > "$TMP/gen.mjs" <<'JS'
-const [libPath, store] = process.argv.slice(2);
+const [libPath, store, receiversDir, ownerPid] = process.argv.slice(2);
 const fs = await import("node:fs");
 const path = await import("node:path");
-const { mintMetaRecord, serializeMetaRecord } = await import(libPath);
-const mk = (nid) => {
+const { mintMetaRecord, serializeMetaRecord, writeMetaReceiverMarker } = await import(libPath);
+const mk = (nid, active) => {
   const r = mintMetaRecord({ backend: "claude-code", nativeSessionId: nid, transcriptPath: "/tmp/t.jsonl", cwd: "/tmp" });
   fs.writeFileSync(path.join(store, r.gardenId + ".meta.json"), serializeMetaRecord(r));
+  if (active) {
+    writeMetaReceiverMarker({ gardenId: r.gardenId, backend: "claude-code", nativeSessionId: nid, ownerPid: Number(ownerPid), armProvenance: "session-start", receiversDir });
+  }
   return r.gardenId;
 };
-console.log(JSON.stringify({ a: mk("n-mailbox-a"), b: mk("n-mailbox-b") }));
+console.log(JSON.stringify({ a: mk("n-mailbox-a", true), b: mk("n-mailbox-b", true), c: mk("n-mailbox-c", false) }));
 JS
-IDS="$(node --experimental-strip-types "$TMP/gen.mjs" "$LIB" "$PI_META_SESSIONS_DIR")"
+IDS="$(node --experimental-strip-types "$TMP/gen.mjs" "$LIB" "$PI_META_SESSIONS_DIR" "$PI_META_RECEIVERS_DIR" "$$")"
+GARDEN_C="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).c)' "$IDS")"
 GARDEN_A="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).a)' "$IDS")"
 GARDEN_B="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).b)' "$IDS")"
 
@@ -146,6 +154,24 @@ if ls "$PI_META_MAILBOX_DIR/$GARDEN_B"/*.msg >/dev/null 2>&1; then
   bad "rejected send left an unread .msg (reject must have no enqueue side effect)"
 else
   ok "rejected send enqueued nothing (no side effect)"
+fi
+
+# ---------------------------------------------------------------------------
+# Case C — SE-2: target has a meta-record but NO active receiver marker (a
+# terminated / never-armed session). A conversational send must REJECT and write
+# nothing — no .msg, no mailbox dir, no doorbell poke.
+# ---------------------------------------------------------------------------
+C_SEND=$(PI_AGENT_ID="pi-shell-acp/claude-sonnet-4-6" PI_SESSION_ID="$SENDER_PI_ID" \
+  srv 40 "$(sendcall 40 "$GARDEN_C" "MAILBOX_SMOKE_C should not land" false)")
+if echo "$C_SEND" | grep -q '"isError":true' && echo "$C_SEND" | grep -q 'not conversationally deliverable'; then
+  ok "send to a record-backed but inactive receiver is rejected (SE-2)"
+else
+  bad "inactive-receiver send was not rejected: ${C_SEND:0:220}"
+fi
+if [ -e "$PI_META_MAILBOX_DIR/$GARDEN_C" ]; then
+  bad "inactive-receiver reject mutated the mailbox (must enqueue nothing, poke nothing)"
+else
+  ok "inactive-receiver reject left the mailbox untouched (no .msg, no signal poke)"
 fi
 
 if [ "$fail" = "0" ]; then

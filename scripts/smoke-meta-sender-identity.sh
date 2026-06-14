@@ -38,26 +38,35 @@ trap cleanup EXIT
 export PI_META_SESSIONS_DIR="$TMP/meta-sessions"
 export PI_META_MAILBOX_DIR="$TMP/meta-mailbox"
 export PI_META_SENDERS_DIR="$TMP/meta-senders"
+export PI_META_RECEIVERS_DIR="$TMP/meta-receivers"   # SE-2: targets need an active receiver marker to be deliverable
 export PI_ENTWURF_DIR="$TMP/entwurf-control"   # empty → no control socket → mailbox path
-mkdir -p "$PI_META_SESSIONS_DIR" "$PI_META_MAILBOX_DIR" "$PI_META_SENDERS_DIR" "$PI_ENTWURF_DIR"
+mkdir -p "$PI_META_SESSIONS_DIR" "$PI_META_MAILBOX_DIR" "$PI_META_SENDERS_DIR" "$PI_META_RECEIVERS_DIR" "$PI_ENTWURF_DIR"
 
-# Two synthetic native meta-records + their sender markers, via the real lib.
+# Synthetic native meta-records. a/b get an ACTIVE receiver marker (owner = this bash
+# $$, alive for the whole smoke) so they are conversationally deliverable; c gets a
+# record but NO marker (SE-2: record exists, receiver gone → send must reject).
 cat > "$TMP/gen.mjs" <<'JS'
-const [libPath, store] = process.argv.slice(2);
+const [libPath, store, receiversDir, ownerPid] = process.argv.slice(2);
 const fs = await import("node:fs");
 const path = await import("node:path");
-const { mintMetaRecord, serializeMetaRecord } = await import(libPath);
+const { mintMetaRecord, serializeMetaRecord, writeMetaReceiverMarker } = await import(libPath);
 const out = {};
-for (const tag of ["a", "b"]) {
-  const r = mintMetaRecord({ backend: "claude-code", nativeSessionId: "n-sender-" + tag, transcriptPath: "/tmp/t.jsonl", cwd: "/tmp/" + tag });
+const mk = (tag, active) => {
+  const nid = "n-sender-" + tag;
+  const r = mintMetaRecord({ backend: "claude-code", nativeSessionId: nid, transcriptPath: "/tmp/t.jsonl", cwd: "/tmp/" + tag });
   fs.writeFileSync(path.join(store, r.gardenId + ".meta.json"), serializeMetaRecord(r));
-  out[tag] = { gardenId: r.gardenId, nativeSessionId: r.nativeSessionId, cwd: r.cwd };
-}
+  if (active) {
+    writeMetaReceiverMarker({ gardenId: r.gardenId, backend: "claude-code", nativeSessionId: nid, ownerPid: Number(ownerPid), armProvenance: "session-start", receiversDir });
+  }
+  out[tag] = { gardenId: r.gardenId, nativeSessionId: nid, cwd: r.cwd };
+};
+mk("a", true); mk("b", true); mk("c", false);
 console.log(JSON.stringify(out));
 JS
-META="$(node --experimental-strip-types "$TMP/gen.mjs" "$LIB" "$PI_META_SESSIONS_DIR")"
+META="$(node --experimental-strip-types "$TMP/gen.mjs" "$LIB" "$PI_META_SESSIONS_DIR" "$PI_META_RECEIVERS_DIR" "$$")"
 GARDEN_A="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).a.gardenId)' "$META")"
 GARDEN_B="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).b.gardenId)' "$META")"
+GARDEN_C="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).c.gardenId)' "$META")"
 
 # Sender markers (what the hook would write). PI_META_SENDER_MARKER points the MCP
 # at one. They carry an owner pid + start-key; readMetaSenderMarker re-checks the
@@ -185,6 +194,21 @@ if ls "$PI_META_MAILBOX_DIR/$GARDEN_A"/*.msg >/dev/null 2>&1; then
   bad "refused anonymous send still enqueued a .msg (must have no side effect)"
 else
   ok "refused anonymous send enqueued nothing"
+fi
+
+# SE-2: a fully-replyable sender to a record-backed but INACTIVE receiver (C has a
+# record but no receiver marker) must reject and enqueue nothing — identity is honest,
+# deliverability is not. (Distinct surface from smoke-meta-mailbox's pi-sender path.)
+C_REJECT=$(PI_META_SENDER_MARKER="$MARKER_A" srv 40 "$(sendcall 40 "$GARDEN_C" "to-inactive" false)")
+if echo "$C_REJECT" | grep -q '"isError":true' && echo "$C_REJECT" | grep -q 'not conversationally deliverable'; then
+  ok "replyable sender → inactive receiver (record, no marker) is rejected (SE-2)"
+else
+  bad "send to inactive receiver was not rejected: ${C_REJECT:0:220}"
+fi
+if [ -e "$PI_META_MAILBOX_DIR/$GARDEN_C" ]; then
+  bad "inactive-receiver reject mutated the mailbox (must enqueue nothing)"
+else
+  ok "inactive-receiver reject left the mailbox untouched"
 fi
 
 if [ "$fail" = "0" ]; then

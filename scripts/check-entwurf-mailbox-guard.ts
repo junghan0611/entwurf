@@ -22,6 +22,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { gatherMailboxDeliverabilityFacts, guardedMailboxEnqueue } from "../pi-extensions/lib/entwurf-mailbox-guard.ts";
 import {
 	enqueueMetaMessage,
@@ -39,6 +40,7 @@ function ok(label: string, cond: boolean): void {
 	passed++;
 }
 
+const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const GARDEN = "20260614T120000-aaaaaa";
 const selfFetch = () => ({ wakeMode: "self-fetch" }) as never;
 const directInject = () => ({ wakeMode: "direct-inject" }) as never;
@@ -197,5 +199,17 @@ function snapshot(dir: string): string {
 	const msgs = readdirSync(path.join(mailboxDir, id.gardenId)).filter((f) => f.endsWith(".msg"));
 	ok("active receiver → exactly one .msg written", msgs.length === 1);
 }
+
+// ── CONSUMER WIRING: MCP entwurf_send fallback enqueues THROUGH the guard ────
+// (file-scoped, not a global grep — the raw enqueueMetaMessage primitive + meta-session
+// tests keep their direct calls; only the conversational fallback must be guarded.)
+const mcpSrc = readFileSync(path.join(REPO_DIR, "mcp", "pi-tools-bridge", "src", "index.ts"), "utf8");
+const gAt = mcpSrc.indexOf("guardedMailboxEnqueue(sessionId");
+const eAt = mcpSrc.indexOf("enqueueMetaMessage({");
+ok("MCP entwurf_send imports + calls guardedMailboxEnqueue", /guardedMailboxEnqueue/.test(mcpSrc) && gAt >= 0);
+ok(
+	"MCP entwurf_send fallback wraps enqueueMetaMessage inside the guard (no raw fallback enqueue)",
+	gAt >= 0 && eAt > gAt,
+);
 
 console.log(`\ncheck-entwurf-mailbox-guard: ${passed} checks passed`);
