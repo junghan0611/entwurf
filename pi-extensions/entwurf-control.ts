@@ -1385,6 +1385,21 @@ export default function (pi: ExtensionAPI) {
 // hands back just `{ text, isError }`.
 const ENTWURF_V2_SURFACE_MODULE = "./lib/entwurf-v2-surface.ts";
 
+// SE-1/SE-2 (slice 2d-2b): the v1 transport-2 mailbox fallback gates its enqueue on
+// conversational deliverability. entwurf-mailbox-guard.ts is a `.ts`-extension fence
+// lib, so this root-tsc emit surface reaches it the SAME way as the v2 surface — a
+// NON-LITERAL dynamic import behind a local interface — never a static import (which
+// would pull the fence's `.ts`-extension graph into the emit-capable root program; TS5097).
+const ENTWURF_MAILBOX_GUARD_MODULE = "./lib/entwurf-mailbox-guard.ts";
+
+interface EntwurfMailboxGuardModule {
+	guardedMailboxEnqueue<T>(
+		gardenId: string,
+		deps: Record<string, unknown>,
+		enqueue: () => T,
+	): { delivered: true; result: T } | { delivered: false; reason: string };
+}
+
 interface EntwurfV2SurfaceModule {
 	runAndRenderEntwurfV2FromSurface(
 		params: {
@@ -1694,10 +1709,35 @@ Messages include sender session info for replies.`,
 						const mailboxSender: SenderEnvelope | undefined = sender
 							? { ...sender, origin: "pi-session", replyable: true }
 							: undefined;
-						const enq = enqueueMetaMessage({
-							gardenId: targetSessionId,
-							body: mailboxSender ? formatMetaMailboxBody(mailboxSender, params.message, false) : params.message,
-						});
+						// Transport 2 gated (SE-1/SE-2): enqueue ONLY when the target is a
+						// conversationally-deliverable meta citizen. Reach the fence guard via a
+						// non-literal dynamic import (this root-tsc emit surface can't static-import it).
+						const guardModule = (await import(ENTWURF_MAILBOX_GUARD_MODULE)) as unknown as EntwurfMailboxGuardModule;
+						// Compute the body OUTSIDE the enqueue closure: params.message's narrowing
+						// to string does not carry into a closure, so capture it here first.
+						const mailboxBody = mailboxSender
+							? formatMetaMailboxBody(mailboxSender, params.message, false)
+							: params.message;
+						const outcome = guardModule.guardedMailboxEnqueue(targetSessionId, {}, () =>
+							enqueueMetaMessage({ gardenId: targetSessionId, body: mailboxBody }),
+						);
+						if (!outcome.delivered) {
+							const connMsg = connErr instanceof Error ? connErr.message : String(connErr);
+							return {
+								content: [
+									{
+										type: "text",
+										text:
+											`Message NOT delivered: "${targetSessionId}" is not conversationally deliverable; ` +
+											`not enqueued — no doorbell wake (${outcome.reason}). ` +
+											`No live pi control socket either (${connMsg}).`,
+									},
+								],
+								isError: true,
+								details: { delivered: false, via: "meta-mailbox", reason: outcome.reason, connectError: connMsg },
+							};
+						}
+						const enq = outcome.result;
 						return {
 							content: [
 								{

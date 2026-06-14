@@ -83,7 +83,11 @@ ok(
 	);
 }
 
-// ── integration: no-socket garden citizen → mailbox enqueue ─────────────────
+// ── integration: the raw enqueueMetaMessage PRIMITIVE writes a .msg ─────────
+// This exercises the low-level primitive (the building block), which is unchanged.
+// The pi-native FALLBACK now gates this primitive behind guardedMailboxEnqueue
+// (SE-1/SE-2) — a record-backed-but-inactive receiver is refused before this runs;
+// that guarded behaviour is proven in check-entwurf-mailbox-guard (tmpdir snapshot).
 {
 	const root = mkdtempSync(path.join(tmpdir(), "entwurf-mailbox-fallback-"));
 	const sessionsDir = path.join(root, "meta-sessions");
@@ -123,12 +127,29 @@ ok(
 {
 	const piNative = readFileSync("pi-extensions/entwurf-control.ts", "utf8");
 	ok("pi-native send imports classifyConnectError", piNative.includes("classifyConnectError"));
-	ok("pi-native send calls enqueueMetaMessage (transport 2)", piNative.includes("enqueueMetaMessage({"));
 	ok("pi-native send renders via the shared formatMetaMailboxBody", piNative.includes("formatMetaMailboxBody("));
 	ok(
 		"pi-native fallback is gated on classifyConnectError !== 'dead' (no fallback on stall)",
 		piNative.includes('classifyConnectError(code) !== "dead"'),
 	);
+	// SE-1/SE-2 (slice 2d-2b): the fallback enqueue must go THROUGH guardedMailboxEnqueue,
+	// reached via a NON-LITERAL dynamic import (root-tsc emit surface can't static-import
+	// the .ts-extension fence lib). The raw enqueueMetaMessage primitive stays, but only
+	// INSIDE the guard closure — never executed unguarded.
+	ok(
+		"pi-native fallback reaches the guard via non-literal dynamic import",
+		piNative.includes('const ENTWURF_MAILBOX_GUARD_MODULE = "./lib/entwurf-mailbox-guard.ts"') &&
+			piNative.includes("await import(ENTWURF_MAILBOX_GUARD_MODULE)"),
+	);
+	ok(
+		"pi-native fallback does NOT static-import the guard lib",
+		!/import\s*\{[^}]*guardedMailboxEnqueue[^}]*\}\s*from/.test(piNative),
+	);
+	{
+		const gAt = piNative.indexOf("guardedMailboxEnqueue(targetSessionId");
+		const eAt = piNative.indexOf("enqueueMetaMessage({", gAt);
+		ok("pi-native fallback wraps enqueueMetaMessage inside the guard (no unguarded enqueue)", gAt >= 0 && eAt > gAt);
+	}
 	ok(
 		"pi-native mailbox sender is marked pi-session + replyable",
 		piNative.includes('origin: "pi-session"') && piNative.includes("replyable: true"),
