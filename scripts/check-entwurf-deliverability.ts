@@ -91,6 +91,10 @@ ok(
 	D({ wakeMode: "self-fetch", recordBacked: false, ownerAlive: true, watchArmed: true }) === false,
 );
 ok("unset wakeMode → NOT deliverable", D({ recordBacked: true, ownerAlive: true, watchArmed: true }) === false);
+ok(
+	"unknown wakeMode string → fail-closed NOT deliverable",
+	D({ wakeMode: "direct-inject-future", recordBacked: true, ownerAlive: true, watchArmed: true }) === false,
+);
 // reasons distinguish the wake-mode refusal from the receiver-inactive refusal
 ok(
 	"direct-inject refusal reason names wake mode",

@@ -137,6 +137,11 @@
 		// slice 2c it is a lib→lib VALUE importer (computeMetaReceiverActive from
 		// entwurf-deliverability.ts), so it moves into the same `.ts`-extension fence.
 		// Typechecked by scripts/tsconfig.json via its gate (check-entwurf-self-address.ts).
-		"pi-extensions/lib/entwurf-self-address.ts"
+		"pi-extensions/lib/entwurf-self-address.ts",
+		// entwurf-mailbox-guard.ts is the SE-1/SE-2 slice 2d IO orchestration — a lib→lib
+		// VALUE importer (mailboxConversationalDeliverable + record/capability/receiver-marker
+		// readers) with explicit `.ts`-extension imports, same fence. Typechecked by
+		// scripts/tsconfig.json via its gate (check-entwurf-mailbox-guard.ts).
+		"pi-extensions/lib/entwurf-mailbox-guard.ts"
 	]
 }
