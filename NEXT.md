@@ -3,18 +3,41 @@
 > 새 담당자는 여기만 먼저 읽는다. 모르면 아래 `# LEDGER`의 링크/섹션으로 내려간다.
 > NEXT는 DB가 아니라 나침반이다: 현재 위치·다음 한 걸음·넘으면 안 되는 선을 맨 위에 둔다.
 
-## ◀ NOW (2026-06-14 세션 #10) — detour: SE-1 형제 동등성 inbound → 복귀하면 5d-5
+## ◀ NOW (2026-06-14 세션 #12) — detour SE-1/SE-2 종료(push 완료) → 줄기 5d-5 복귀, 단 진입 전 detour 4건
 
-> **줄기(stem)는 여전히 5d-5 LIVE matrix다.** 지금부터는 줄 세운 것 말고 *하다가 터지는* 버그를 관리하는 국면.
-> 끼어든 버그는 아래 `## 🐛 끼어든 버그 레저` 헤딩에서 따로 관리한다. 잠깐 수리 → 줄기로 복귀.
-> 이 꼬리는 **위임 불가** — 이 프로젝트 성격상 우리(삼형제+GLG)가 직접 따라가야 관련 문제까지 함께 잡힌다.
+> **줄기(stem)는 5d-5 LIVE matrix다.** detour SE-1/SE-2 본체는 **종료**(2d-3·2e·body-render 후속까지 push 완료,
+> `9710d06` HEAD). 이제 5d-5 진입인데, **그 전에 닫아야 할 detour가 아래 인벤토리 4건**이다 — GLG가 말한 "detour가
+> 없을 수 없다"의 실체. 줄 세운 것 말고 *하다가/돌아와보니 터져 있는* 것들. **위임 불가** — 삼형제+GLG가 직접.
 
-- **detour 활성(묶음):** **SE-1**(sibling-equality inbound) + **SE-2**(inactive-receiver mailbox 쓰레기) — 둘 다 같은
-  **deliverability-guard 표면**(v1 fallback mcp:459 + v2 meta-mailbox)을 공유하므로 함께 개선. 상세 = 아래 레저.
-- **돌아올 곳:** **5d-5 LIVE matrix** (기존 NOW, 본문 `지금 할 일`·`Next moves` 그대로 유효).
-- **삼형제 역할(세션 #11 현재):** 실무자 = 후임 Opus(claude-code, `20260614T141824-d242bf`) / 자문·리뷰 = GPT5.5
-  (openai-codex/gpt-5.5, `20260614T122717-bdfe6e`, live direct) / 전임 실무자 Opus(`20260614T122715-6adf55`) 퇴근(인계 완료).
-  **형제 차별 없음 — ACP도 정식 경로, pi 백그라운드/Sonnet 역할 가능.**
+### ▶ 5d-5 진입 전 닫아야 할 detour 인벤토리 (로컬 실행 순서)
+
+> 이 순서대로 가면 로컬 삽질이 줄어든다. **D1이 5d-5 LIVE의 직접 전제**(doctor PASS).
+
+1. **🔴 D1 — deploy hygiene 재오픈 (즉시, ops·커밋 아님):** `doctor-meta-bridge`가 **지금 FAIL**.
+   유일 FAIL = writer-version parity stale: `source=ebdb9f61`(SE-2 slice 2b `7cac9e3`가 `meta-session.ts` writer를
+   바꿈) vs `installed=e132bc98`(5d-5-pre 때 배포한 옛 writer). live hook이 **옛 writer로 세션을 기록** 중.
+   나머지 doctor 항목은 전부 ok. **로컬 첫 걸음:**
+   `./run.sh install-meta-bridge` → Claude 세션 한 번 열기(새 record 생성) → `./run.sh doctor-meta-bridge` → PASS 확인.
+   (실측 2026-06-14 세션 #12. push로 코드는 안 바뀜 — writer source가 detour 작업 중 drift한 것.)
+2. **🟡 D2 — `test.sh` pre-existing 1-failure (GPT 권고 후속):** entwurf registry "unregistered tuple" 1건(환경/별개,
+   5d-5-pre 무관). `check-bridge`가 `release-gate` step에 들어 있으니(run.sh:4520) 5d-5 release-gate 돌릴 때 발목 가능.
+   release-gate 전에 원인 분리(환경 vs 코드)해 둘 것.
+3. **🟡 D3 — 브랜치 `verify/doctor-pipefail-and-pi-0.79.2` 정리 (GLG 판단):** origin에 살아있음. main에 없는 7커밋
+   = fix 2건(main에 다른 해시 `3a01fbd`/`a2bd5c6`로 이미 흡수) + docs(next) deferred 인벤토리 5건. 삭제 조건
+   (`run.sh:1040/1077` 흡수)은 `0dfe4d0`로 충족. **단 삭제 전, 브랜치에만 있는 deferred 인벤토리**(`smoke-meta-prune:138`,
+   `smoke-resident-garden-guard:80/149/223/347/348` pipefail 잔여)**를 main NEXT의 후속으로 옮겨야 정보 유실 없음.**
+4. **🔵 D4 — 5d-5 matrix 본체 미구현 (줄기의 실제 남은 큰 일):** `release_gate`(run.sh:4421)는 일반 substrate live
+   gate(smoke-all/async-resume/cancel/model-switch/entwurf-resume/check-bridge…)만 3-backend로 돈다. **5d-5 headline의
+   (c) release-gate matrix = sender surface(pi-native tool / MCP verb) × target kind(alive pi / dormant pi /
+   unsupported citizen) × direction에서 lock acquire→release ×1 + lock-retained 진단 표면화 는 아직 스크립트가 없다.**
+   design은 GPT 잠금 상태(아래 본문 line 324~). 구현 슬라이스로 진입 — 매 슬라이스 GPT 1차 검수.
+   - **환경 고정 선결:** 어떤 모델/백엔드로 실 pi 세션을 띄워 spawn-resume·send를 실증할지부터(Fable 차단, Opus 복구).
+   - **D5(이미 완료):** `LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live → 7 passed`(5c-3c phase gate, real pi resume 아님).
+
+- **삼형제 역할(세션 #12):** 실무자 = 현 Opus(claude-code, garden `20260614T152031-e914f2`) / 자문·리뷰 = **GPT5.5
+  (openai-codex/gpt-5.5, `20260614T122717-bdfe6e`, live direct — 현행 검수자)**. 아래 line 384~의 옛 GPT id
+  (`20260613T121021-03a5d7`)·Fable id는 **stale**. Fable5 2차 가용 여부 미확인(직전 Anthropic 이슈로 응답불가였음).
+  **형제 차별 없음 — ACP도 정식 경로.**
 
 ## 🐛 끼어든 버그 레저 (detour ledger) — 줄기와 분리해서 관리
 
