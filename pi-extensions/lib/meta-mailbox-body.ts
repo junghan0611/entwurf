@@ -55,14 +55,19 @@ function formatKstTimestamp(iso: string): string {
 /**
  * Render the full mailbox body: header envelope + separator + message. A
  * replyable sender (pi-session, or a trusted meta-session) advertises its
- * sessionId as the reply address; an external/non-replyable sender says so.
+ * sessionId as the reply address; a non-replyable sender says so WITHOUT
+ * losing its origin — a record-backed meta-session that is currently inactive
+ * renders as `(meta-session, non-replyable)`, not degraded to `external`.
  */
 export function formatMetaMailboxBody(sender: MailboxSenderEnvelope, message: string, wantsReply: boolean): string {
 	const replyable = sender.replyable === true;
-	const kind = sender.origin === "meta-session" ? "meta-session, " : "";
+	const isMeta = sender.origin === "meta-session";
+	const kind = isMeta ? "meta-session, " : "";
 	const sessionLine = replyable
 		? `${sender.sessionId} (${kind}replyable — reply with entwurf_send to this sessionId)`
-		: `${sender.sessionId} (external, non-replyable)`;
+		: isMeta
+			? `${sender.sessionId} (meta-session, non-replyable)`
+			: `${sender.sessionId} (external, non-replyable)`;
 	return (
 		`[entwurf received ⟵]\n` +
 		`  from:        ${sender.agentId} @ ${abbreviateHome(sender.cwd)}\n` +

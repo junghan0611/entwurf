@@ -82,6 +82,15 @@ ok(
 		formatMetaMailboxBody(meta, "x", false).includes("meta-session, replyable"),
 	);
 }
+{
+	// regression: an inactive (record-backed but non-replyable) meta-session must
+	// keep its origin in the body — NOT degrade to `external`. The envelope was
+	// always honest (origin:meta-session); only the body render blurred it.
+	const metaInactive: MailboxSenderEnvelope = { ...piSender, origin: "meta-session", replyable: false };
+	const body = formatMetaMailboxBody(metaInactive, "x", false);
+	ok("inactive meta-session body says 'meta-session, non-replyable'", body.includes("meta-session, non-replyable"));
+	ok("inactive meta-session body does NOT degrade origin to 'external'", !body.includes("external, non-replyable"));
+}
 
 // ── integration: the raw enqueueMetaMessage PRIMITIVE writes a .msg ─────────
 // This exercises the low-level primitive (the building block), which is unchanged.
