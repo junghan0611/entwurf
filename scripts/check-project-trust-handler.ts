@@ -62,7 +62,9 @@ function mkdir(p: string): string {
 	return p;
 }
 function seedTrustInput(dir: string): string {
-	fs.mkdirSync(path.join(dir, ".pi"), { recursive: true });
+	const piDir = path.join(dir, ".pi");
+	fs.mkdirSync(piDir, { recursive: true });
+	fs.writeFileSync(path.join(piDir, "settings.json"), "{}\n");
 	return dir;
 }
 
@@ -81,7 +83,7 @@ try {
 	const oDirect = preflight({ cwd: cwdDirect, agentDir });
 	// inherited distrust (parent false, child has its OWN trust input but no direct
 	// decision). The child trust input is load-bearing for THIS gate: pi's
-	// resolveProjectTrusted returns true early when !hasProjectTrustInputs(cwd), so
+	// resolveProjectTrusted returns true early when !hasTrustRequiringProjectResources(cwd), so
 	// WITHOUT a child trust input the project_trust event never fires and the escape
 	// prompt is unreachable in the real pi path. With it, the event fires and the
 	// inherited parent false is exactly what the escape overrides (GPT review).

@@ -7,8 +7,8 @@
  * semantics are followed by importing pi's PUBLIC root exports directly (frozen
  * decision 9, 재구현 금지): `ProjectTrustStore` (the canonical `trust.json`
  * reader, which itself canonicalizes the cwd and takes a `proper-lockfile` on
- * every read) and `hasProjectTrustInputs` (the trust-input probe). We never copy
- * pi's trust detail — if pi changes it, this import tracks it.
+ * every read) and `hasTrustRequiringProjectResources` (the trust-input probe).
+ * We never copy pi's trust detail — if pi changes it, this import tracks it.
  *
  * The returned `PreflightOutcome` is deliberately RICH, not just {kind,reason}:
  * a fact tool must explain *why* a cwd is approved and *what* it may load
@@ -26,7 +26,7 @@
  *   saved === false        → deny           (explicit distrust; store wins)
  *   saved === true         → approve        (saved trust → internal --approve)
  *   null + prefix match    → approve        (operator prefix promotes null→yes)
- *   null + no trust inputs → trusted-no-arg (no trust-gated input — pi 0.79.1
+ *   null + no trust inputs → trusted-no-arg (no trust-gated input — pi 0.79.x
  *                                             excludes AGENTS.md/CLAUDE.md, so
  *                                             context files may still be loaded)
  *   else (null + inputs)   → fail-fast      (unknown/untrusted controlled launch)
@@ -45,7 +45,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import {
 	getAgentDir,
-	hasProjectTrustInputs,
+	hasTrustRequiringProjectResources,
 	type ProjectTrustDecision,
 	ProjectTrustStore,
 } from "@earendil-works/pi-coding-agent";
@@ -84,7 +84,7 @@ interface PreflightEvidence {
 	/**
 	 * The pi-canonical path of the trust-store entry that decided this cwd, or
 	 * undefined when neither the cwd nor any ancestor carries a decision
-	 * (trustStoreDecision === null). On 0.79.1 `getEntry` walks up to the nearest
+	 * (trustStoreDecision === null). On 0.79.x `getEntry` walks up to the nearest
 	 * ancestor with an explicit decision and returns ITS path — so this is the
 	 * source a deny message must name (N3b `inheritedFrom`). pi-canonical =
 	 * `canonicalizePath(resolvePath())`, the same realpath axis as `canonicalCwd`.
@@ -92,14 +92,14 @@ interface PreflightEvidence {
 	readonly trustStoreEntryPath?: string;
 	/**
 	 * True when the deciding entry is an ANCESTOR, not the cwd itself — the
-	 * decision is INHERITED (0.79.1 nearest-ancestor walk-up). False for a direct
+	 * decision is INHERITED (0.79.x nearest-ancestor walk-up). False for a direct
 	 * decision on the cwd or for no decision at all. The inherited-false case is
 	 * the one that silently blocks a human's active prompt (Trust 2층): the
 	 * handler defers `undecided`, then the store's inherited false wins anyway, so
 	 * only an active prompt → `{trusted:"yes", remember:true}` escapes it.
 	 */
 	readonly trustStoreInherited: boolean;
-	/** `hasProjectTrustInputs(cwd)` — computed even when a prefix already won. */
+	/** `hasTrustRequiringProjectResources(cwd)` — computed even when a prefix already won. */
 	readonly hasTrustInputs: boolean;
 	/** The canonical operator root that matched, if the decision is prefix-driven. */
 	readonly matchedPrefixRoot?: string;
@@ -214,7 +214,7 @@ export function preflight(input: PreflightInput): PreflightOutcome {
 	const trustStoreInherited = entry !== null && entry.path !== canonicalCwd;
 	// Computed unconditionally: a fact tool must report what a prefix-approved
 	// cwd could load, so the probe runs even when a prefix already decides.
-	const hasTrustInputs = hasProjectTrustInputs(input.cwd);
+	const hasTrustInputs = hasTrustRequiringProjectResources(input.cwd);
 	const matched = matchedPrefixRoot(canonicalCwd, prefixRoots);
 
 	const evidence: PreflightEvidence = {

@@ -35,19 +35,20 @@ const prefixRoot = path.join(tmpRoot, "repos");
 fs.mkdirSync(agentDir, { recursive: true });
 fs.mkdirSync(prefixRoot, { recursive: true });
 
-// Seed a trust-gated project input. We use a `.pi/` config dir, NOT an
-// AGENTS.md: pi 0.79.1 dropped AGENTS.md/CLAUDE.md from hasProjectTrustInputs
-// (they are now always-loaded context files, not trust-gated inputs), leaving
-// `.pi` (cwd-only) and `.agents/skills` (walked to root). `.pi` is cwd-scoped,
-// so each fixture is an independent trust input with no walk-to-root bleed, and
-// it reads as a trust input on BOTH 0.79.0 and 0.79.1 — this fixture swap is
-// version-agnostic and lands green before the pi bump.
+// Seed a trust-gated project input. We use a `.pi/settings.json` config file,
+// NOT an AGENTS.md: pi 0.79.x dropped AGENTS.md/CLAUDE.md from
+// hasTrustRequiringProjectResources (they are now always-loaded context files,
+// not trust-gated inputs). `.pi` is cwd-scoped, so each fixture is an
+// independent trust input with no walk-to-root bleed; current pi requires one of
+// the trust-requiring entries under `.pi`, not a bare directory.
 function seedTrustInput(dir: string): void {
-	fs.mkdirSync(path.join(dir, ".pi"), { recursive: true });
+	const piDir = path.join(dir, ".pi");
+	fs.mkdirSync(piDir, { recursive: true });
+	fs.writeFileSync(path.join(piDir, "settings.json"), "{}\n");
 }
 
 // A real cwd must exist for ProjectTrustStore's realpathSync canonicalization
-// and for hasProjectTrustInputs' filesystem walk.
+// and for hasTrustRequiringProjectResources' filesystem walk.
 function mkCwd(name: string, withTrustInput = false): string {
 	const dir = path.join(prefixRoot, name);
 	fs.mkdirSync(dir, { recursive: true });
@@ -177,15 +178,15 @@ try {
 		else process.env.HOME = origHome;
 	}
 
-	// 10-12. nearest-ancestor trust inheritance (pi 0.79.1). 0.79.0's store.get
-	//     matched the cwd EXACTLY; 0.79.1's getEntry/findNearestTrustEntry walks
+	// 10-12. nearest-ancestor trust inheritance (pi 0.79.x). 0.79.0's store.get
+	//     matched the cwd EXACTLY; 0.79.x getEntry/findNearestTrustEntry walks
 	//     up to the closest ancestor carrying an explicit decision. preflight reads
 	//     pi's store directly (frozen decision 9), so this propagation flows
 	//     through verbatim — a saved decision on a PARENT now decides a child that
 	//     has no decision of its own. This is the production half of frozen
 	//     decision 8: an operator distrust on `~/repos/gh` reaches every repo under
 	//     it. These assertions FAIL on 0.79.0 (parent set, child get → null) and
-	//     are intentionally gated behind the 0.79.1 floor (committed with the bump).
+	//     are intentionally gated behind the 0.79.3 floor (committed with the bump).
 
 	// 10. inherited distrust beats a prefix match: parent=false, child under both
 	//     the parent AND a prefix root → the inherited saved-false still denies

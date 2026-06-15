@@ -3417,7 +3417,7 @@ check_pi_runtime_version() {
   # via a DYNAMIC import of the package root only — never statically import a
   # 0.79-only symbol here, or this guard would crash before it can fail loud.
   (cd "$REPO_DIR" && node --input-type=module <<'EOF'
-const FLOOR = '0.79.1';
+const FLOOR = '0.79.3';
 const cmp = (a, b) => {
   const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
   for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0); }
@@ -3435,7 +3435,7 @@ if (typeof VERSION !== 'string') {
   process.exit(1);
 }
 if (cmp(VERSION, FLOOR) < 0) {
-  console.error(`[check-pi-runtime-version] FAIL: pi VERSION ${VERSION} < ${FLOOR} — the bridge imports 0.79.1 public trust exports + semantics (hasProjectTrustInputs without AGENTS.md/CLAUDE.md, ProjectTrustStore nearest-ancestor get) older pi lacks or behaves differently. Bump @earendil-works/pi-*.`);
+  console.error(`[check-pi-runtime-version] FAIL: pi VERSION ${VERSION} < ${FLOOR} — the bridge imports pi 0.79 public trust exports + semantics (hasTrustRequiringProjectResources, ProjectTrustStore nearest-ancestor get) older pi lacks or behaves differently. Bump @earendil-works/pi-*.`);
   process.exit(1);
 }
 console.log(`[check-pi-runtime-version] ok — pi VERSION ${VERSION} >= ${FLOOR}`);
@@ -3793,9 +3793,9 @@ check_pack_install() {
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.79.1" \
-    "@earendil-works/pi-coding-agent@0.79.1" \
-    "@earendil-works/pi-tui@0.79.1" \
+    "@earendil-works/pi-ai@0.79.3" \
+    "@earendil-works/pi-coding-agent@0.79.3" \
+    "@earendil-works/pi-tui@0.79.3" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"

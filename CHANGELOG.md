@@ -40,7 +40,7 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Changed (0.11.0 — dependencies)
 
-- **pi 0.79 bump + Stage 0 import/runtime guards.** Requires **pi >= 0.79.1** (`@earendil-works/pi-ai` / `pi-coding-agent` / `pi-tui` peer floor `>= 0.79.1`). The substrate carries new typecheck-fence and runtime guards that keep the `.ts` / `.js` dual-import worlds honest under `node --experimental-strip-types`.
+- **pi 0.79 bump + Stage 0 import/runtime guards.** Requires **pi >= 0.79.3** (`@earendil-works/pi-ai` / `pi-coding-agent` / `pi-tui` peer floor `>= 0.79.3`), matching the operator pi runtime used for the 0.11.0 verification. The substrate carries new typecheck-fence and runtime guards that keep the `.ts` / `.js` dual-import worlds honest under `node --experimental-strip-types`.
 
 ### Deprecated
 
