@@ -3,21 +3,57 @@
 > 새 담당자는 여기만 먼저 읽는다. 모르면 아래 `# LEDGER`의 링크/섹션으로 내려간다.
 > NEXT는 DB가 아니라 나침반이다: 현재 위치·다음 한 걸음·넘으면 안 되는 선을 맨 위에 둔다.
 
-## ⇄ 세션 #14 done (2026-06-14, thinkpad) — 5d-5 CLOSE → NOW = release 컷 준비 — 여기부터
+## ◀ NOW — 세션 #15 (2026-06-15, thinkpad) — ✅ 0.11.0 acceptance 잠금 완료 → 구현 (A spawn-resume-live + B v1 flag-off) — 여기부터
 
-> 노트북 이관 완료(pull + D1 install-meta-bridge 재배포·D2 symlink 확인 → doctor PASS / pnpm check EXIT0 / matrix 82).
-> **5d-5 = CLOSE**(GPT verdict): D4 트리오 done — a(deterministic 82) / b(LIVE 11/11) / c(release_gate wiring). 상세 = 아래 D4 항목.
->
-> 1. **GLG push:** `ae8e4e5`~`de207c5` (SE-3 기록 + D4-b/c smoke·wiring + NEXT). working tree clean이면 그대로.
-> 2. **NOW = release 컷 준비**(GPT 권고): `tag-release` 루프 — 닫힌 NEXT 항목 → CHANGELOG → NEXT 정리. 가능하면
->    `LIVE=1 ./run.sh release-gate <scratch>`로 matrix-live PASS evidence까지 확보(model auth 필요).
-> 3. **hejdev6 보안 묶기 판단(GLG):** secret/외부노출 수준이면 tag **전** 별도 small slice, 아니면 release 후 별도 lane(GPT 권고).
-> 4. **미결 GLG 판단:** ① D3 브랜치 `verify/doctor-pipefail-and-pi-0.79.2` 삭제(`git push origin --delete …`, 정보유실 없음 확인)
->    ② SE-3는 SE-1 slice 5 folded 후속(5d-5 blocker 아님).
-> 5. **재배포 후 함정(SE-3, 오늘 실측):** `install-meta-bridge` 재배포 시 **수신측 세션을 새로 열기/resume**해야 receiver
->    armed(`replyable:true`). 재배포 *이전* 시작된 mid-session은 `replyable:false`가 **정직한 동작(버그 아님)** — resume이 복구.
+- **Stem:** 0.11.0 릴리즈 컷 = **`#35`**(원제목 "entwurf tmux-live lifecycle", NEXT:833 — 단 production은 detached `spawn()` pi resident이므로 **headline 표현은 "spawn-bg resident lifecycle"로 정정**, ↓잠금). 2단 구조: **Stage 0**(pi-only 순수 TS substrate, step 1~5 = 5 시리즈 5a~5d-5 + SE detour) / **Stage 1**(Claude↔Claude live, **명시적으로 Stage 0 범위 밖** NEXT:1160-61). 5d-5 = step 5의 끝(5e 없음). 현재 릴리즈 = `v0.10.0`(첫 meta-bridge, Claude only). 0.11.0 **컷 안 됨** — package.json도 `0.10.0`.
+- **현재:** Stage 0 **코드 줄기 닫힘**(5d-5 CLOSE, 게이트 GREEN, `pnpm check` EXIT0), v0.10.0 이후 **155 커밋 push 완료**(working tree clean, `main...origin/main` 동기). **그러나 릴리즈 아님.**
+- **릴리즈 전 미결 2갭:**
+  1. **🔴 LIVE acceptance 구멍 — spawn real-pi E2E 미실견 = 0.11.0 이름값("tmux-live lifecycle") 미충족 (GLG 핵심, 2026-06-15).** production spawn-bg는 **detached `spawn()` pi 자식**(tmux 아님 — `pi-extensions/lib/entwurf-v2-spawn-production.ts:177` `detached:true` unref'd; tmux는 `smoke-async-resume.sh`가 **v1** async-entwurf worker[`entwurf-async.ts` `entwurf-task`/`entwurf-complete` followUp]를 disposable target으로 띄우는 fixture지 v2 production spawn 경로 아님). **약속 미이행이 NEXT 안에 박혀 있음:** step 5(5c-3c, `e9d12df` 주석)가 *"real-pi resume E2E는 5d matrix가 증명(D5 phase gate split)"*이라며 spawn 실증을 5d로 **의도적으로 미뤘는데**, 정작 5d matrix-live(D4-b)는 **control-socket/mailbox/guard 3-cell만** 만들고 **spawn-bg cell을 안 만든 채 5d-5 CLOSE**. 다른 LIVE 게이트도 못 채움: `smoke-entwurf-v2-spawn-live`=**OS substrate watcher만**(NEXT 명시 "real pi resume 아님"). ⇒ **실제 자식 pi가 떠서 resume해 일하는 full loop을 LIVE로 한 번도 안 봄.** 5d-5 CLOSE는 "합성 증거"로 닫은 것 — GLG는 실제 spawn을 눈으로 보고 싶다. **GLG 방향(2026-06-15): v2 검수 통과 = v1 인터페이스(async-entwurf worker 경로) 차단의 전제조건 — 검수되면 v1을 끄고 v2-only로 디테일 평가 진입. 지금 에이전트들이 v1을 쓰고 있어 함부로 못 끄는 것. ⇒ spawn-bg real-pi resume LIVE는 nice-to-have가 아니라 v1 deprecation의 전제.**
+  2. **🟡 0.11.0 경계 미확정 + CHANGELOG 0줄.** `## Unreleased`에 5 시리즈 항목 **0줄**(155커밋 미정리, openclaw deprecation만 있음). 컷 스코프 미정: 5d-5까지로 자르나 / SE 상태정리·hejdev6 보안·openclaw deprecation까지 한 컷에 묶나.
+- **Next (GPT 1차 회신 도착 2026-06-15 03:21 — GLG 결정 대기):** GPT verdict —
+  - **Q1 동의:** spawn-bg real-pi resume LIVE를 **0.11.0 blocker로**. 5c-3c가 5d로 미룬 acceptance debt(새 요구 아님). 3-cell matrix-live만으로 컷하면 v1 끌 근거 없음.
+  - **Q2:** **별도 `smoke-entwurf-v2-spawn-resume-live`** 권장(matrix-live 4th cell 금지 — matrix-live는 transport/lock sentinel, model-in-loop OUT이 장점). 순서: 수동 실견 → 스크립트화 → `LIVE=1 release-gate` 편입. **7단계 shape**(상세는 GPT 회신 archive `meta-mailbox/…d2928f`): ① temp cwd + fresh gid ② `backend=pi` identity mint → 그 gid를 seed session id ③ real `pi --mode json -p --no-extensions --session-id <gid> --name <entwurf-tagged> ...` 로 dormant saved session 생성(fixture) ④ canonical socket absent/dead 확인 ⑤ `runEntwurfV2({target, intent:"owned-outcome", message:<nonce>}, prod deps)`(temp root prefixRoots/approve) ⑥ assert: result.kind=executed·transport=spawn-bg / spawn=socket-alive(child-exited는 실패처리) / **release counter exactly 1**(releaseLock seam 래핑 + lockfile absent) / pid alive + socket connectable + child resident / **session JSONL poll로 resume nonce가 user turn + assistant turn에 반영**(watcher는 socket-alive에서 먼저 반환 → model-turn은 별도 poll) ⑦ cleanup SIGTERM→SIGKILL, 실패 시 temp/gid/jsonl/stderr 보존. LIVE!=1 honest SKIP(skip=CI 안전, acceptance PASS 아님).
+  - **Q3:** **v1 hard-off를 0.11.0에 묶지 말 것.** 0.11.0 = v2 substrate + spawn-resume LIVE acceptance + **v1 병존**. v1 deprecation = 0.12/별도 cutover lane. v1 차단 전 필요 gate: `smoke-entwurf-v2-spawn-resume-live` PASS + **v2-only mode flag**(`PI_SHELL_ACP_DISABLE_V1_ENTWURF`, 기본 off, 이 모드서 v1 surface가 명시 error+v2 안내하는 deterministic gate) + **v1 scenario coverage table**(initial spawn/create new sibling, resume, alive send, dormant owned resume, ff dormant reject, lock contention, stale/forged socket, trust preflight deny, corrupt identity, provider/model bridge re-injection, status/followUp 대체정책) + pi-native·MCP 둘 다 v2-only 통과 + Stage 1(Claude↔Claude) 예외 명시. **GLG "검수되면 v1 끈다"는 global hard-off가 아니라 flag 토글로 실현** = 양립.
+  - **곁가지:** hejdev6=secret/외부노출이면 tag 전 small slice, 아니면 후속 lane. openclaw deprecation=0.11.0에 섞지 말고 별도 lane. **headline 정직성: "tmux-live lifecycle" → "spawn-bg resident lifecycle"**(production은 detached `spawn()` pi resident, tmux는 v1 smoke fixture 단어).
+  - **✅ GLG 잠금(2026-06-15) — 흔들리지 말 것:** 0.11.0 acceptance = **2 blocker**.
+    - **(A) `smoke-entwurf-v2-spawn-resume-live` PASS** — real `pi` 자식 resume + model turn(nonce) + release×1 (위 7단계 shape).
+    - **(B) v2-only mode** — **`PI_SHELL_ACP_V2_ONLY=1`**(GPT 2차: 긍정형이 우회 hole 방지) on이면 v1 execution surface가 **side-effect 전 hard refusal**(Crash-Don't-Warn — v1은 어차피 우회될 것). v2 경로는 flag 무관 동작. **v1 코드 안 지움**(막기만, 삭제 0.12). **최소안**: 우회 entrypoint block table(↓구현 사양)만 0.11.0, 11-scenario replacement는 0.12 lane. helper SSOT `pi-extensions/lib/entwurf-v1-gate.ts`(`isV2OnlyMode`/`assertV1EntwurfAllowed`) 한 곳, pi-native·MCP·**control RPC** 모두 import(env check 흩뿌리면 우회 hole). default 값은 구현 시 확정(GLG 의도=에이전트 v1 off로 v2만 써보기).
+    - **headline → "spawn-bg resident lifecycle"** 채택(tmux 표현 폐기).
+    - **out-of-scope(핵심에서 새지 말 것):** hejdev6=무시(secret 이름, 비핵심) / openclaw=이미 npmjs deprecated·0.11.0 무관 별도 lane(지금 확인 안 함) / Stage 1(Claude↔Claude)=범위 밖.
+    - **✅ GPT 2차 GO(2026-06-15 03:33): 정합 + 구현 GO.** A=별도 smoke / B=최소안+우회 block table / 0.12 lane 분리(11-scenario replacement·v1 삭제·new sibling v2 대체·status+followUp UX) / headline 정정 유지. **구현 사양 = ↓ 별도 섹션.** 다음: NEXT 커밋 → **(A) `smoke-entwurf-v2-spawn-resume-live` 작성** → GPT code GO → (B) v2-only gate.
+- **검수 라인(세션 #15):** 실무자 = CC Opus `20260615T115707-d2928f`(meta-session, replyable:true 실측) / 자문·1차 = GPT5.5 `20260615T115712-c34027`(socket-only alive, direct). 옛 id(`20260614T152031-e914f2`·`20260614T122717-bdfe6e`)는 **stale**.
+- **Detour:** SE-1/SE-2 본체 **종료**(헤더 라벨만 🔴OPEN→CLOSE 정리 필요, 코드는 push 완료). SE-3 🟡 record-only(SE-1 slice 5 folded, 컷 blocker 아님).
+- **Return:** ✅경계 잠금 완료(GPT 1차+GLG) → GPT 2차 정합 확인 중 → (A) spawn real-pi 실견(구현) → (B) v1 flag-off → CHANGELOG → tag/push/stamp.
+- **Blocker:** 없음 (model auth OK — GLG 확인, 환경 OK).
+- **Do not touch:** CHANGELOG/tag는 **경계 확정 + GLG "컷 가자" 전까지 손대지 말 것**(tag-release 스킬은 명시 요청 시만). `core.hooksPath`·안전레일 불변.
 
-## ◀ NOW (2026-06-14 세션 #12) — detour SE-1/SE-2 종료(push 완료) → 줄기 5d-5 복귀, 단 진입 전 detour 4건
+### 0.11.0 구현 사양 (GPT 2차 GO 2026-06-15, 원문 archive `meta-mailbox/…d2928f`)
+
+**(A) `smoke-entwurf-v2-spawn-resume-live` — 구현 핀 10 (기존 spawn-live·matrix-live seam 재사용):**
+1. seed session = **`entwurf` tag canonical name 필수**(`resolveResumeLaunchIdentity`가 `requireEntwurf:true`) → TS smoke서 `buildSessionName` import(shell 재구현 금지).
+2. seed는 fixture + **`backend=pi` meta identity hand-mint**, **mint→minted gid를 seed `--session-id`로** 순서(`resolveTarget`이 meta-record 봄). "pi-writer E2E 아닌 spawn-resume E2E" 주석.
+3. cwd authority 고정: seed header cwd = identity.cwd = temp cwd 하나(decider plan.cwd ↔ JSONL header cwd 어긋나면 디버깅 더러움).
+4. preflight 통과 명시: `makeProductionEntwurfV2Deps({prefixRoots:[tmp]})`/trust fixture, `--approve`가 `plan.launchArgs` 들어가는지.
+5. **result PASS = `socket-alive`만**, `child-exited`는 실패 처리(resident lifecycle).
+6. JSONL poll은 watcher 반환 **후 별도 단계**: ① result spawn-bg/socket-alive+lock release assert ② session file poll로 user nonce append ③ assistant nonce는 더 긴 timeout poll. prompt=`Reply exactly V2_SPAWN_RESUME_OK_<nonce> and nothing else.`, acceptance=`includes(nonce)`(모델이 exact 어길 수 있음).
+7. JSONL 형태 특정 금지 → 파싱해 `JSON.stringify(entry).includes(nonce)`로 user/assistant 후보 탐색(type/role은 보조만).
+8. cleanup **pid+socket 둘 다** SIGTERM→wait→SIGKILL backstop + socket gone 확인. 실패 시 temp world/gid/session path/stderr tail 보존.
+9. **release counter=1 AND lock file absent**(다른 축 — "release called" ≠ "lock gone").
+10. release_gate 편입 = matrix-live 뒤 별도 step, `LIVE!=1`이면 SKIP, NEXT/CHANGELOG에 "tag 전 `LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live` PASS 필수" 박기.
+
+**(B) v2-only 우회 entrypoint block table (0.11.0 필수 — GLG 우회 본능, RPC·startup 놓치면 빈틈):**
+1. pi-native `entwurf` async/sync → **spawn 전** 거부. 2. pi-native `/entwurf` 거부. 3. pi-native `entwurf_resume` sync/async 거부. 4. `/entwurf-status`/`entwurf_status`=선택(execution 아님, read-only 유지 가능, blocker 아님). 5. pi-native `entwurf_send` 거부+`entwurf_v2` 안내. 6. MCP `entwurf_send` 거부. 7. MCP `entwurf_resume` 거부(async가 `spawn_async_resume` RPC **보내기 전**). 8. MCP `entwurf` spawn 있으면 거부. 9. **control RPC `spawn_async_resume` 직접 거부**(MCP 막아도 RPC 열리면 우회!). 10. startup `--entwurf-send`/native startup send path 거부(**silent skip 금지, error report**). 11. `entwurf_v2` pi-native+MCP는 flag-on에서도 **등록·동작** deterministic gate.
+   - error 문구(정직, "use entwurf_v2"만 말해 "새 create도 v2로 된다" 거짓암시 금지): `v1 entwurf surface is disabled in v2-only mode (PI_SHELL_ACP_V2_ONLY=1). Use entwurf_v2 for existing garden citizens; new sibling create / v1 completion followUp are intentionally unavailable in this mode until the 0.12 cutover lane.`
+   - gate = static grep만 말고 가능하면 handler 직접 호출 또는 source block에 `assertV1EntwurfAllowed` 들어갔는지 + **v2 block엔 안 들어갔는지** 함께. "등록 제거"보다 "등록되지만 호출 즉시 refuse"(관측성).
+
+### ⇄ 세션 #14 done (2026-06-14, thinkpad) — RECENT (참고)
+
+> 노트북 이관 완료(pull + D1 재배포·D2 symlink → doctor PASS / pnpm check EXIT0 / matrix 82). **5d-5 = CLOSE**(GPT verdict):
+> D4 트리오 done — a(deterministic 82) / b(LIVE 11/11, `openai-codex/gpt-5.4`) / c(release_gate wiring). 커밋 `ae8e4e5`~`de207c5` **push 완료**.
+> 미결로 넘긴 GLG 판단: ① D3 브랜치 `verify/doctor-pipefail-and-pi-0.79.2` 삭제(정보유실 0 확인) ② hejdev6 보안 묶기.
+> 재배포 함정(SE-3): `install-meta-bridge` 재배포 시 수신측 세션 새로 열기/resume해야 receiver armed. mid-session `replyable:false`는 정직(버그 아님).
+
+## ⇄ (closed, 세션 #12) — detour SE-1/SE-2 종료(push 완료) → 5d-5 복귀 맥락 (참고 LEDGER, NOW 아님)
 
 > **줄기(stem)는 5d-5 LIVE matrix다.** detour SE-1/SE-2 본체는 **종료**(2d-3·2e·body-render 후속까지 push 완료,
 > `9710d06` HEAD). 이제 5d-5 진입인데, **그 전에 닫아야 할 detour가 아래 인벤토리 4건**이다 — GLG가 말한 "detour가
