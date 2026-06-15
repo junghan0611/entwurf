@@ -41,6 +41,14 @@
 9. **release counter=1 AND lock file absent**(다른 축 — "release called" ≠ "lock gone").
 10. release_gate 편입 = matrix-live 뒤 별도 step, `LIVE!=1`이면 SKIP, NEXT/CHANGELOG에 "tag 전 `LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live` PASS 필수" 박기.
 
+**(A) F1~F5 잠금 + 타입 (GPT 3차 GO 2026-06-15 03:45):**
+- **result PASS** = `{kind:"executed", transport:"spawn-bg", outcome:{transport:"spawn-bg", result:{kind:"socket-alive", released:true, pid?}}}`. `child-exited`/`lock-retained`/`spawn-start-failed`=실패. cleanup용 pid=`outcome.result.pid`(child는 detached, ChildProcess handle 없음).
+- **F1:** real `~/.pi/agent/sessions` seed(`findSessionFileById` env override 불가) → mint → `findSessionFileById(gid)===null` assert → seed → seed 후 잡은 **정확한 1파일만** cleanup(디렉토리 rm 금지), 실패 시 보존.
+- **F2:** `seams.releaseLock:(claim,{dir})=>unknown` wrapper(shared release closure가 spawn watcher까지) → `releaseCount===1` + `releasedGids===[gid]` + `!existsSync(lockPathFor(gid,lockDir))`. **production 변경 0.**
+- **F3:** seed = `pi --no-extensions --mode json -p --session-id <gid> --name <buildSessionName({sessionId:gid,provider,model,tags:["entwurf"]})> --provider <p> --model <m> --approve <seed prompt>` one-shot → seed exit 후 `readSessionIdentity(sessionFile,{requireEntwurf:true})` 즉시 검증(non-null, `cwd===tmp`, provider/modelId===seed). model_change 누락이면 거기서 fail.
+- **F4:** seed `--approve`(CLI-level), v2 resume `makeProductionEntwurfV2Deps({prefixRoots:[tmp]})`(preflight).
+- **F5:** assistant nonce까지 **hard fail**(socket-alive+user만 PASS면 "실제로 일했다" 증거 비어 v1 차단 전제 약화). timeout seed120/observe30/user60/assistant180s(env `PI_SHELL_ACP_SPAWN_RESUME_ASSISTANT_TIMEOUT_MS`). resume 직전 line count 기록→이후 append만. `V2_SPAWN_RESUME_USER_<nonce>`(user)+`V2_SPAWN_RESUME_OK_<nonce>`(assistant), `includes`. child cleanup=`process.kill(pid,SIGTERM)`→socket gone poll→SIGKILL.
+
 **(B) v2-only 우회 entrypoint block table (0.11.0 필수 — GLG 우회 본능, RPC·startup 놓치면 빈틈):**
 1. pi-native `entwurf` async/sync → **spawn 전** 거부. 2. pi-native `/entwurf` 거부. 3. pi-native `entwurf_resume` sync/async 거부. 4. `/entwurf-status`/`entwurf_status`=선택(execution 아님, read-only 유지 가능, blocker 아님). 5. pi-native `entwurf_send` 거부+`entwurf_v2` 안내. 6. MCP `entwurf_send` 거부. 7. MCP `entwurf_resume` 거부(async가 `spawn_async_resume` RPC **보내기 전**). 8. MCP `entwurf` spawn 있으면 거부. 9. **control RPC `spawn_async_resume` 직접 거부**(MCP 막아도 RPC 열리면 우회!). 10. startup `--entwurf-send`/native startup send path 거부(**silent skip 금지, error report**). 11. `entwurf_v2` pi-native+MCP는 flag-on에서도 **등록·동작** deterministic gate.
    - error 문구(정직, "use entwurf_v2"만 말해 "새 create도 v2로 된다" 거짓암시 금지): `v1 entwurf surface is disabled in v2-only mode (PI_SHELL_ACP_V2_ONLY=1). Use entwurf_v2 for existing garden citizens; new sibling create / v1 completion followUp are intentionally unavailable in this mode until the 0.12 cutover lane.`
