@@ -45,7 +45,7 @@ function fatal(msg: string): never {
 interface BridgeTool {
 	name?: string;
 	inputSchema?: {
-		properties?: Record<string, { enum?: unknown }>;
+		properties?: Record<string, { enum?: unknown; maxLength?: unknown }>;
 		required?: unknown;
 	};
 }
@@ -181,6 +181,22 @@ async function main(): Promise<void> {
 		"G1b: entwurf_v2 mode enum == {steer, follow_up}",
 		setEq(props.mode?.enum, ["steer", "follow_up"]),
 		`--- inputSchema ---\n${rawSchema}`,
+	);
+	ok(
+		"G1b: entwurf_v2 message maxLength == 16000",
+		props.message?.maxLength === 16000,
+		`--- inputSchema ---\n${rawSchema}`,
+	);
+
+	const send = tools.find((t) => t?.name === "entwurf_send");
+	ok("G1c: entwurf_send registered on the runtime tools/list surface", !!send);
+	const sendSchema = send?.inputSchema ?? {};
+	const sendRawSchema = JSON.stringify(sendSchema);
+	const sendProps = sendSchema.properties ?? {};
+	ok(
+		"G1c: entwurf_send message maxLength == 16000",
+		sendProps.message?.maxLength === 16000,
+		`--- inputSchema ---\n${sendRawSchema}`,
 	);
 
 	console.log(`\ncheck-pi-tools-bridge-boot: ${passed} checks passed`);
