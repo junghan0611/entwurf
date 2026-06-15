@@ -1479,7 +1479,11 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 			description:
 				"Ownership intent: fire-and-forget (send, no owned result) or owned-outcome (the dispatcher owns the result)",
 		}),
-		message: Type.String({ description: "Message / prompt to dispatch" }),
+		message: Type.String({
+			description:
+				"Message / prompt to dispatch. Hard cap 16000 chars; for larger payloads send a file/artifact path plus digest.",
+			maxLength: 16000,
+		}),
 		mode: Type.Optional(
 			StringEnum(["steer", "follow_up"] as const, {
 				description: "Delivery mode for a live send: steer (immediate) or follow_up (after task)",
@@ -1602,7 +1606,13 @@ function registerSessionTool(pi: ExtensionAPI, state: SocketState): void {
 				default: "send",
 			}),
 		),
-		message: Type.Optional(Type.String({ description: "Message to send (required for action=send)" })),
+		message: Type.Optional(
+			Type.String({
+				description:
+					"Message to send (required for action=send). Hard cap 16000 chars; for larger payloads send a file/artifact path plus digest.",
+				maxLength: 16000,
+			}),
+		),
 		mode: Type.Optional(
 			StringEnum(["steer", "follow_up"] as const, {
 				description: "Delivery mode for send: steer (immediate) or follow_up (after task)",
@@ -1642,7 +1652,9 @@ semantics) and the contract ends there. If the caller needs a result it owns,
 prefer entwurf(mode=async) + entwurf_resume. If a peer should reply, say so in
 the message body and let the receiver send a separate entwurf_send back.
 
-Messages include sender session info for replies.`,
+Messages include sender session info for replies.
+
+Payload guidance: send ONE compact atomic message (hard cap 16000 chars). For larger reviews/logs, write a file/artifact and send its path plus a short digest. Avoid multi-part sends: mailbox doorbells are edge-triggered and may coalesce; one inbox_read drains the backlog, but each part is not guaranteed its own wake.`,
 		parameters: entwurfSendParameters,
 		async execute(
 			_toolCallId: string,

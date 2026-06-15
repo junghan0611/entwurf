@@ -453,10 +453,21 @@ server.tool(
 		"trusted sender marker), the envelope is also replyable by garden id. When called " +
 		"from an explicitly wired external MCP host with no trusted marker, delivery is " +
 		"still allowed but the envelope is marked external/non-replyable; wants_reply=true " +
-		"is rejected because there is no reply address.",
+		"is rejected because there is no reply address. Payload guidance: send ONE compact " +
+		"atomic message (hard cap 16000 chars). For larger reviews or logs, write a file/artifact " +
+		"and send its path plus a short digest. Do not split ordinary content into multiple " +
+		"entwurf_send calls: the mailbox doorbell is edge-triggered and may coalesce; one " +
+		"entwurf_inbox_read drains the backlog, but every part is not guaranteed its own wake.",
 	{
 		sessionId: z.string().min(1).describe("Target session id (garden id or pi-assigned uuid)"),
-		message: z.string().min(1).describe("Message text to deliver"),
+		message: z
+			.string()
+			.min(1)
+			.max(16000)
+			.describe(
+				"Message text to deliver. Hard cap 16000 chars: keep it one compact atomic message; " +
+					"for larger payloads send a file/artifact path plus digest instead of multi-part sends.",
+			),
 		mode: z.enum(["steer", "follow_up"]).optional().describe("Default follow_up"),
 		wants_reply: z
 			.boolean()
@@ -587,13 +598,22 @@ server.tool(
 		"(delivered / rejected / lock-retained / delivered-but-lock-dirty). Additive to " +
 		"entwurf_send; the decider — not this surface — chooses the transport. " +
 		"intent: fire-and-forget (a send with no owned result) or owned-outcome (you own the " +
-		"result). mode/wants_reply apply to a live send. Use entwurf_peers to discover targets.",
+		"result). mode/wants_reply apply to a live send. Use entwurf_peers to discover targets. " +
+		"Payload guidance: message hard cap 16000 chars. For larger reviews/logs, write an " +
+		"artifact and dispatch its path plus a short digest; avoid multi-part sends because " +
+		"mailbox doorbells may coalesce.",
 	{
 		target: z.string().min(1).describe("Target garden id (use entwurf_peers to discover)"),
 		intent: z
 			.enum(["fire-and-forget", "owned-outcome"])
 			.describe("Ownership intent: fire-and-forget (send) or owned-outcome (dispatcher owns the result)"),
-		message: z.string().min(1).describe("Message / prompt to dispatch"),
+		message: z
+			.string()
+			.min(1)
+			.max(16000)
+			.describe(
+				"Message / prompt to dispatch. Hard cap 16000 chars; for larger payloads send a file/artifact path plus digest.",
+			),
 		mode: z.enum(["steer", "follow_up"]).optional().describe("Delivery mode for a live send"),
 		wants_reply: z.boolean().optional().describe("Human-conversation reply hint (default false)"),
 	},
