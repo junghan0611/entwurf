@@ -18,7 +18,7 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Added (0.11.0 entwurf v2 — v2-only mode)
 
-- **`PI_SHELL_ACP_V2_ONLY=1` — hard-refuse every v1 entwurf entrypoint ahead of v1 removal.** A zero-import leaf helper (`entwurf-v2-only.ts`: `isV2OnlyMode` true only for exact `"1"`, `checkV1EntwurfAllowed` pure return, `assertV1EntwurfAllowed` throw wrapper) is the single source of truth; each of the 10 v1 entrypoints (9 surface groups — `/entwurf` tool + command count as two) refuses before any side effect through its own existing hard-refusal channel (tool throw, command notify, isError result, RPC `respond(false)`, startup error report, MCP `textErr`). The MCP `entwurf_resume` handler and the control RPC `spawn_async_resume` are **both** guarded so the socket path cannot bypass the MCP guard. v1 code is neither deleted nor unregistered — invocation refusal only; the 11-scenario v2 replacement and v1 removal are the 0.12 lane. `check-entwurf-v2-only` (28 checks) proves the helper contract, all 10 guard sites, the double guard, and that the `entwurf_v2` core stays flag-clean.
+- **`PI_SHELL_ACP_V2_ONLY=1` — hard-refuse every v1 entwurf entrypoint ahead of v1 removal.** A zero-import leaf helper (`entwurf-v2-only.ts`: `isV2OnlyMode` true only for exact `"1"`, `checkV1EntwurfAllowed` pure return, `assertV1EntwurfAllowed` throw wrapper) is the single source of truth; when `PI_SHELL_ACP_V2_ONLY=1`, each of the 10 v1 entrypoints (9 surface groups — `/entwurf` tool + command count as two) refuses before any side effect through its own existing hard-refusal channel (tool throw, command notify, isError result, RPC `respond(false)`, startup error report, MCP `textErr`). The MCP `entwurf_resume` handler and the control RPC `spawn_async_resume` are **both** guarded so the socket path cannot bypass the MCP guard. v1 code is neither deleted nor unregistered — invocation refusal only; the 11-scenario v2 replacement and v1 removal are the 0.12 lane. `check-entwurf-v2-only` (28 checks) proves the helper contract, all 10 guard sites, the double guard, and that the `entwurf_v2` core stays flag-clean.
 
 ### Added (0.11.0 entwurf v2 — fact surface)
 
@@ -31,7 +31,7 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Added (0.11.0 entwurf v2 — SE active-receiver deliverability)
 
-- **The SE-1/SE-2 deliverability seam — honest pi-native + meta-self replyability.** A meta-receiver presence marker, MCP + pi-native `entwurf_send` mailbox-fallback gates, a `mailboxConversationalDeliverable` predicate, a guarded mailbox-enqueue wrapper, and the required v2 active-receiver deliverability seam, so a send to a citizen with no live socket falls back to the mailbox transport instead of failing.
+- **The SE-1/SE-2 deliverability seam — honest pi-native + meta-self replyability.** A meta-receiver presence marker, MCP + pi-native `entwurf_send` mailbox-fallback gates, a `mailboxConversationalDeliverable` predicate, a guarded mailbox-enqueue wrapper, and the required v2 active-receiver deliverability seam, so a send to a **deliverable self-fetch meta citizen** (an active-receiver claude-code session) with no live socket can fall back to the mailbox transport, while **direct-inject (pi) and inactive-receiver** targets reject without leaving mailbox garbage instead of falsely succeeding.
 
 ### Changed (0.11.0 — dependencies)
 
