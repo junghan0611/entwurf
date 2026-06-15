@@ -38,6 +38,7 @@ import {
 import { buildResumePiArgs } from "./entwurf-resume-args.ts";
 import type { LockClaim } from "./entwurf-v2-lock.ts";
 import { releaseLock } from "./entwurf-v2-lock.ts";
+import { V2_RESUME_RESIDENT_SESSION_ENV } from "./entwurf-v2-resume-marker.ts";
 import type { SpawnBgPlan, SpawnBgResumeDeps, SpawnedChild } from "./entwurf-v2-spawn.ts";
 import { inspectControlSocketPath, type LstatLike, mapInspectionToLiveness } from "./socket-discovery.ts";
 import { probeSocketLiveness, type SocketLiveness } from "./socket-probe.ts";
@@ -153,8 +154,10 @@ export interface ProductionSpawnOpts {
 	/** Resolve launch identity (default = resolveResumeLaunchIdentity). */
 	resolveIdentity?: (plan: SpawnBgPlan) => LaunchIdentity;
 	/** Spawn the resume child and return its handle (default = real `pi` spawn + unref +
-	 * mirrorChildStderr). A throw becomes the watcher's spawn-start-failed. */
-	spawnChild?: (cmd: string, args: readonly string[], cwd: string) => SpawnedProcHandle;
+	 * mirrorChildStderr). `env` carries the v2 spawn-bg resume marker (V2_RESUME_RESIDENT_SESSION_ENV)
+	 * the factory plants so the resumed `--entwurf-control` resident is an AUTHORIZED Entwurf child,
+	 * not a corrupt operator resident. A throw becomes the watcher's spawn-start-failed. */
+	spawnChild?: (cmd: string, args: readonly string[], cwd: string, env: NodeJS.ProcessEnv) => SpawnedProcHandle;
 	/** lstat for socket inspection (default = fs.lstat). */
 	lstatFn?: (p: string) => Promise<LstatLike>;
 	/** Connect probe for a socket-file (default = probeSocketLiveness). */
@@ -173,12 +176,18 @@ const DEFAULT_KILL_GRACE_MS = 5_000;
 /** The default spawnChild: a detached, unref'd `pi` resident child with stderr mirrored —
  * the same launch posture as the legacy worker, minus `--no-extensions` (the argv comes
  * from buildResumePiArgs v2-control). Detached so the resumed citizen survives this parent. */
-function defaultSpawnChild(cmd: string, args: readonly string[], cwd: string): SpawnedProcHandle {
+function defaultSpawnChild(
+	cmd: string,
+	args: readonly string[],
+	cwd: string,
+	env: NodeJS.ProcessEnv,
+): SpawnedProcHandle {
 	const proc: ChildProcess = spawn(cmd, [...args], {
 		cwd,
 		shell: false,
 		detached: true,
 		stdio: ["ignore", "ignore", "pipe"],
+		env,
 	});
 	proc.unref();
 	mirrorChildStderr(proc);
@@ -235,7 +244,14 @@ export function makeProductionSpawnBgResumeDeps(opts: ProductionSpawnOpts = {}):
 				prompt: plan.prompt,
 				launchArgs: plan.launchArgs,
 			});
-			const proc = spawnChildFn("pi", args, identity.cwd);
+			// Plant the sessionId-bound authorization marker (QB-resident): this resume promotes a
+			// dormant `entwurf`-tagged session to a live `--entwurf-control` resident, which the
+			// entwurf-control guard would otherwise crash as a "corrupt resident session name". The
+			// marker authorizes ONLY this exact session — a human hand-opening the same session with
+			// `--entwurf-control` carries no marker and still crashes (the invariant is narrowed, not
+			// dropped). buildResumePiArgs's argv alone can't say "this is a v2 spawn-bg resume".
+			const childEnv: NodeJS.ProcessEnv = { ...process.env, [V2_RESUME_RESIDENT_SESSION_ENV]: plan.sessionId };
+			const proc = spawnChildFn("pi", args, identity.cwd, childEnv);
 
 			// B2: capture exit EAGERLY — the instant the proc exists, before we even await the
 			// spawn — so a fast exit cannot slip through the gap before awaitChildExit. Resolve-

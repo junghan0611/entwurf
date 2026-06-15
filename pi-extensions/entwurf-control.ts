@@ -123,6 +123,7 @@ import {
 	readSessionHeader,
 	removeUnadoptedGardenSessionFile,
 } from "./lib/entwurf-core.js";
+import { isV2ResumeResidentAuthorized } from "./lib/entwurf-v2-resume-marker.js";
 import { formatMetaMailboxBody } from "./lib/meta-mailbox-body.js";
 import { enqueueMetaMessage } from "./lib/meta-session.js";
 import { classifyConnectError, probeSocketLiveness, shouldListAsLive, shouldUnlinkOnGc } from "./lib/socket-probe.js";
@@ -1092,11 +1093,12 @@ function updateStatus(ctx: ExtensionContext | null, enabled: boolean): void {
 /**
  * Set the resident session's garden name ONCE, on the first turn that has
  * written the session file. Spawn-only-name rule: a session already carrying a
- * canonical garden name (resume) is left untouched. The name uses the live
- * `ctx.model` (registry-free via buildGardenSessionName) with the `control` tag
- * — never `entwurf`, so the resident session is not resumable as an Entwurf
- * child. Title slug is the cwd basename (home → `home`); a Korean first message
- * would ASCII-slugify to `untitled`, so cwd is the stable choice.
+ * canonical garden name (resume) is left untouched. New operator residents are
+ * named with the `control` tag, never `entwurf`. Existing `entwurf`-tagged names
+ * are accepted ONLY for a sessionId-bound v2 spawn-bg resume child (an authorized
+ * Entwurf child resident, left unchanged so it stays re-resumable) — see the tag
+ * branch below. Title slug is the cwd basename (home → `home`); a Korean first
+ * message would ASCII-slugify to `untitled`, so cwd is the stable choice.
  */
 function maybeSetResidentName(pi: ExtensionAPI, ctx: ExtensionContext): void {
 	const sessionId = ctx.sessionManager.getSessionId();
@@ -1106,11 +1108,19 @@ function maybeSetResidentName(pi: ExtensionAPI, ctx: ExtensionContext): void {
 	const existing = ctx.sessionManager.getSessionName();
 	const parsedExisting = existing ? parseSessionName(existing) : null;
 	if (parsedExisting) {
-		// A resident session must never carry the `entwurf` tag: that tag is the
-		// entwurf_resume marker. Also refuse a canonical name whose id mirror
-		// disagrees with the header id. These are invariant breaches, not cosmetic
-		// naming choices.
-		if (parsedExisting.sessionId !== sessionId || parsedExisting.tags.includes("entwurf")) {
+		// A canonical name whose id mirror disagrees with the header id is an invariant
+		// breach — always a crash (never a cosmetic naming choice).
+		if (parsedExisting.sessionId !== sessionId) {
+			process.stderr.write(`[entwurf-control] corrupt resident session name: ${existing}\n`);
+			process.exit(1);
+		}
+		// The `entwurf` tag is the entwurf_resume marker. An OPERATOR resident must never carry
+		// it (it would advertise a live citizen as also dormant-resumable). The ONE exception is
+		// a v2 spawn-bg resume promoting a dormant Entwurf session to a live resident: that child
+		// SHOULD keep its `entwurf` tag (so it is re-resumable once it dies), and is authorized by
+		// the sessionId-bound env marker its production launcher planted. Keep the name unchanged.
+		if (parsedExisting.tags.includes("entwurf")) {
+			if (isV2ResumeResidentAuthorized(sessionId)) return; // authorized Entwurf child resident
 			process.stderr.write(`[entwurf-control] corrupt resident session name: ${existing}\n`);
 			process.exit(1);
 		}

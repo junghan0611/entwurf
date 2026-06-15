@@ -25,6 +25,10 @@
 
 import assert from "node:assert/strict";
 import type { LockClaim } from "../pi-extensions/lib/entwurf-v2-lock.ts";
+import {
+	isV2ResumeResidentAuthorized,
+	V2_RESUME_RESIDENT_SESSION_ENV,
+} from "../pi-extensions/lib/entwurf-v2-resume-marker.ts";
 import type { SpawnBgPlan, SpawnBgResumeDeps, SpawnedChild } from "../pi-extensions/lib/entwurf-v2-spawn.ts";
 import {
 	type LaunchIdentity,
@@ -186,12 +190,14 @@ async function main(): Promise<void> {
 	// ── 2. spawnChild builds the v2-control argv, then WAITS for the 'spawn' event (B1) ─
 	{
 		// A holder (not a closure-assigned `let`) so flow analysis sees the capture.
-		const cap: { value: { cmd: string; args: readonly string[]; cwd: string } | null } = { value: null };
+		const cap: { value: { cmd: string; args: readonly string[]; cwd: string; env: NodeJS.ProcessEnv } | null } = {
+			value: null,
+		};
 		const fp = fakeProc();
 		const deps = makeProductionSpawnBgResumeDeps({
 			resolveIdentity: () => IDENTITY,
-			spawnChild: (cmd, args, cwd) => {
-				cap.value = { cmd, args, cwd };
+			spawnChild: (cmd, args, cwd, env) => {
+				cap.value = { cmd, args, cwd, env };
 				return fp.proc;
 			},
 		});
@@ -215,6 +221,13 @@ async function main(): Promise<void> {
 		ok("2 argv carries provider", args[args.indexOf("--provider") + 1] === "pi-shell-acp");
 		ok("2 argv carries model", args[args.indexOf("--model") + 1] === "claude-opus-4-8");
 		ok("2 argv carries session-id", args[args.indexOf("--session-id") + 1] === GID);
+		// the sessionId-bound authorization marker is planted on the child env so the resumed
+		// `--entwurf-control` resident is an AUTHORIZED Entwurf child (entwurf-control.ts guard),
+		// not a "corrupt resident session name" crash. Bound to plan.sessionId exactly.
+		ok(
+			"2 child env carries the v2 resume resident marker = sessionId",
+			captured.env[V2_RESUME_RESIDENT_SESSION_ENV] === GID,
+		);
 	}
 
 	// ── 2b. B1: an 'error' before 'spawn' (ENOENT pi / exec failure) → spawnChild REJECTS ─
@@ -420,6 +433,15 @@ async function main(): Promise<void> {
 		}
 		ok("8 awaitChildExit on a proc-less child fails loud", exitThrew);
 	}
+	ok(
+		"9 exact sessionId marker → authorized",
+		isV2ResumeResidentAuthorized(GID, { [V2_RESUME_RESIDENT_SESSION_ENV]: GID }),
+	);
+	ok("9 absent marker → NOT authorized", !isV2ResumeResidentAuthorized(GID, {}));
+	ok(
+		"9 wrong-session marker → NOT authorized (binding is to the exact id)",
+		!isV2ResumeResidentAuthorized(GID, { [V2_RESUME_RESIDENT_SESSION_ENV]: "20260101T000000-000000" }),
+	);
 
 	console.log(`\ncheck-entwurf-v2-spawn-production: ${passed} checks passed`);
 }

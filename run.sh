@@ -79,6 +79,7 @@ Usage:
   ./run.sh check-entwurf-resume-args   # deterministic gate (0.11 Stage 0 step 5c-3b): resume-argv SSOT (buildResumePiArgs) shared by the legacy async worker and the v2 spawn-bg resident citizen — A1: legacy=--no-extensions + no --entwurf-control (one-shot pi -p exits), v2-control=--entwurf-control + no --no-extensions (keep-alive is the goal, resumed session stays addressable); BOTH keep --mode json -p + prompt-as-turn (-p NOT dropped in v2); explicitExtensionArgs preserved once (#29); v2 includes plan.launchArgs (--approve); null provider→no --provider; no cross-contamination
   ./run.sh check-entwurf-v2-spawn-production # deterministic gate (0.11 Stage 0 step 5c-3c): production SpawnBgResumeDeps factory (makeProductionSpawnBgResumeDeps) wiring the 5c-3a watcher's 6 IO seams — no real pi/socket/timer (that=opt-in smoke-entwurf-v2-spawn-live, OUT of pnpm check). socketWatchVerdict: address-conflict→forged (reject, never wait)/alive→alive/dead·indeterminate→wait; spawnChild builds v2-control argv (--entwurf-control, no --no-extensions, -p+prompt, --approve, cwd authority); awaitSocketAlive connectable→resolve / symlink→reject without connect / dead→wait→alive / abort-clears; awaitChildExit code + listener cleanup; awaitTimeout schedule + abort-clear; killChild=SIGTERM; proc-less child fails loud
   ./run.sh smoke-entwurf-v2-spawn-live # LIVE phase gate (0.11 Stage 0 step 5c-3c, D5) — OUT of pnpm check, needs LIVE=1. Exercises the production SpawnBgResumeDeps against REAL OS objects: S1 real unix socket → awaitSocketAlive resolves (real lstat+probe), symlink→forged, absent→abort settles; S2 real child → spawn-event resolve + SIGTERM kill + exit-code capture; S3 watcher integration → real timeout→kill→child-exited→release ×1. Does NOT spawn a real pi resume (that=5d matrix). Run before 5d: LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live
+  ./run.sh smoke-entwurf-v2-spawn-resume-live # 0.11.0 (A) ACCEPTANCE gate — OUT of pnpm check, needs LIVE=1. The FULL spawn-bg resident lifecycle: mint backend=pi identity → seed a REAL dormant pi session (one-shot into ~/.pi/agent/sessions) → runEntwurfV2(owned-outcome) routes dormant→spawn-bg resume → a REAL detached pi --entwurf-control child stands its socket up, resumes, DOES a model turn. Asserts executed/spawn-bg/socket-alive/released + lock released ×1 + no lock file + pid alive + socket connectable + resume USER & assistant OK nonces in the session JSONL. Model-in-loop IN. The gate v1 deprecation (0.12) is predicated on. Model: PI_SHELL_ACP_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live
   ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 3 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: PI_SHELL_ACP_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b pi 4-value, facts-only keyset; union: PeerFact+SocketOnlyFact by gardenId, dormant→dead, F3 indeterminate preserved, non-pi+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
@@ -1577,6 +1578,28 @@ smoke_entwurf_v2_matrix_live() {
     return 0
   fi
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-entwurf-v2-matrix-live.ts)
+}
+
+smoke_entwurf_v2_spawn_resume_live() {
+  # The 0.11.0 (A) acceptance gate — kept OUT of `pnpm check`. Unlike matrix-live (a
+  # transport/lock sentinel, model-in-loop OUT) and spawn-live (OS-substrate watcher, no real
+  # pi), this drives the FULL production loop: mint a backend=pi meta identity → seed a REAL
+  # dormant pi session (one-shot `pi --mode json -p --no-extensions` into the REAL
+  # ~/.pi/agent/sessions) → runEntwurfV2(intent=owned-outcome) routes the dormant in-domain pi
+  # citizen to spawn-bg resume → a REAL detached `pi --entwurf-control` child stands its socket
+  # up, resumes, and DOES a model turn. Asserts: executed/spawn-bg/socket-alive/released, lock
+  # released exactly once + no lock file, resident pid alive + socket connectable, and the
+  # resume USER + assistant OK nonces appended to the session JSONL (real work, not just
+  # "process up"). This is the evidence v1 deprecation (0.12) is predicated on. Model-in-loop is
+  # IN. Honest skip when LIVE!=1 (skip = CI safety, NOT an acceptance PASS).
+  # Model: PI_SHELL_ACP_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4);
+  #        PI_SHELL_ACP_SPAWN_RESUME_ASSISTANT_TIMEOUT_MS (default 180000).
+  #   LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live
+  if [ "${LIVE:-}" != "1" ]; then
+    echo "[smoke-entwurf-v2-spawn-resume-live] skipped — set LIVE=1 to run (spawns a real pi resume child + opens a real socket)."
+    return 0
+  fi
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-entwurf-v2-spawn-resume-live.ts)
 }
 
 check_entwurf_facts() {
@@ -4573,6 +4596,25 @@ release_gate() {
     warn "smoke-entwurf-v2-matrix-live: LIVE!=1 — skipped (v2 substrate sentinel, opt-in: needs auth/model)"
     results+=("SKIP  smoke-entwurf-v2-matrix-live (LIVE!=1)"); skip=$((skip + 1))
   fi
+  # 0.11.0 (A) acceptance: the FULL spawn-bg resident lifecycle — a real `pi` resume child stands
+  # its control socket up, does a model turn, lock released ×1. Placed right after matrix-live (the
+  # transport sentinel): a spawn-resume failure then reads as "resume/resident lifecycle", not
+  # transport basics. Same opt-in LIVE rule — LIVE!=1 is an HONEST SKIP (model-in-loop, needs
+  # auth/model). NOTE: a 0.11.0 tag REQUIRES `LIVE=1 ./run.sh release-gate` (or this step direct)
+  # to PASS — the SKIP is CI safety, never acceptance.
+  section "release-gate step: smoke-entwurf-v2-spawn-resume-live"
+  if [ "${LIVE:-}" = "1" ]; then
+    if gate env LIVE=1 bash "$self" smoke-entwurf-v2-spawn-resume-live; then
+      ok "smoke-entwurf-v2-spawn-resume-live: PASS"
+      results+=("PASS  smoke-entwurf-v2-spawn-resume-live"); pass=$((pass + 1))
+    else
+      fail "smoke-entwurf-v2-spawn-resume-live: FAIL"
+      results+=("FAIL  smoke-entwurf-v2-spawn-resume-live"); failc=$((failc + 1))
+    fi
+  else
+    warn "smoke-entwurf-v2-spawn-resume-live: LIVE!=1 — skipped (0.11.0 A acceptance, opt-in: needs auth/model)"
+    results+=("SKIP  smoke-entwurf-v2-spawn-resume-live (LIVE!=1)"); skip=$((skip + 1))
+  fi
   run_step "check-native-async"             gate bash "$self" check-native-async
   run_step "sentinel"                       gate bash "$self" sentinel
   run_step "session-messaging"              gate bash "$self" session-messaging
@@ -4753,6 +4795,9 @@ case "$cmd" in
     ;;
   smoke-entwurf-v2-spawn-live)
     smoke_entwurf_v2_spawn_live
+    ;;
+  smoke-entwurf-v2-spawn-resume-live)
+    smoke_entwurf_v2_spawn_resume_live
     ;;
   smoke-entwurf-v2-matrix-live)
     smoke_entwurf_v2_matrix_live
