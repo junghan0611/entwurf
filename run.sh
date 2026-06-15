@@ -540,19 +540,13 @@ smoke_all() {
   local project_dir
   project_dir=$(normalize_project_dir "$1")
 
-  echo "[smoke-all] required triple-backend runtime verification starting"
+  # 0.11.0 release floor is claude-only (sonnet). Gemini (CLI deprecated) and
+  # Codex live runtime smokes were dropped from the gate; the codex/gemini
+  # smoke_test branches stay reachable for manual `./run.sh smoke-codex|gemini`
+  # debugging, but the automated floor exercises Claude only.
+  echo "[smoke-all] claude-only runtime verification starting (sonnet)"
   smoke_test "$project_dir" claude
-  smoke_test "$project_dir" codex
-  # Gemini smoke is best-effort: skip with a clear notice if `gemini` CLI is
-  # not installed (some operators may opt out of the gemini path entirely).
-  # When present, it joins the required gate alongside Claude/Codex.
-  if command -v gemini >/dev/null 2>&1; then
-    smoke_test "$project_dir" gemini
-    echo "[smoke-all] Claude + Codex + Gemini runtime smokes: ok"
-  else
-    echo "[smoke-all] gemini CLI not on PATH — skipping gemini smoke (install: pnpm add -g @google/gemini-cli)"
-    echo "[smoke-all] Claude + Codex runtime smokes: ok (gemini skipped)"
-  fi
+  echo "[smoke-all] Claude runtime smoke: ok (codex/gemini live tests dropped — 0.11.0 claude-only floor)"
 }
 
 smoke_continuity_single() {
@@ -611,13 +605,12 @@ smoke_continuity() {
 
   require_cmd pi
 
-  echo "[smoke-continuity] strict dual-backend persisted bootstrap gate"
+  echo "[smoke-continuity] claude-only persisted bootstrap gate (sonnet)"
   echo "[smoke-continuity] project: $project_dir"
   echo "[smoke-continuity] repo:    $REPO_DIR"
 
   smoke_continuity_single "$project_dir" claude claude-sonnet-4-6 resume
-  smoke_continuity_single "$project_dir" codex gpt-5.4 load
-  echo "[smoke-continuity] Claude(resume) + Codex(load) continuity: ok"
+  echo "[smoke-continuity] Claude(resume) continuity: ok (codex dropped — claude-only floor)"
 }
 
 smoke_cancel_single() {
@@ -806,13 +799,12 @@ smoke_cancel() {
 
   require_cmd pi
 
-  echo "[smoke-cancel] strict dual-backend cancel cleanup gate"
+  echo "[smoke-cancel] claude-only cancel cleanup gate (sonnet)"
   echo "[smoke-cancel] project: $project_dir"
   echo "[smoke-cancel] repo:    $REPO_DIR"
 
   smoke_cancel_single "$project_dir" claude claude-sonnet-4-6
-  smoke_cancel_single "$project_dir" codex gpt-5.4
-  echo "[smoke-cancel] Claude + Codex cancel cleanup: ok"
+  echo "[smoke-cancel] Claude cancel cleanup: ok (codex dropped — claude-only floor)"
 }
 
 smoke_model_switch_single() {
@@ -1000,16 +992,17 @@ smoke_model_switch() {
 
   require_cmd pi
 
-  echo "[smoke-model-switch] strict dual-backend model switch observability gate"
+  echo "[smoke-model-switch] claude-only model switch observability gate (negative: swap refused)"
   echo "[smoke-model-switch] project: $project_dir"
   echo "[smoke-model-switch] repo:    $REPO_DIR"
 
-  # Within-backend model switch (same backend, different model).
+  # Within-backend model switch (same backend, different model) — the NEGATIVE
+  # check that swapping the model on an existing session is refused
+  # (ModelSwitchLockedError), not silently respawned. Cheap: the swap is rejected
+  # before a model turn, so no real opus inference runs. Claude-only floor: the
+  # codex within-backend row and the claude→codex cross-backend row are dropped.
   smoke_model_switch_single "$project_dir" claude claude-sonnet-4-6 claude claude-opus-4-8
-  smoke_model_switch_single "$project_dir" codex  gpt-5.4            codex  gpt-5.5
-  # Cross-backend switch — pre-0.5.x silent-respawn hole, now locked.
-  smoke_model_switch_single "$project_dir" claude claude-sonnet-4-6 codex  gpt-5.4
-  echo "[smoke-model-switch] Claude + Codex model-switch lock observability: ok"
+  echo "[smoke-model-switch] Claude model-switch lock observability: ok (codex/cross-backend dropped — claude-only floor)"
 }
 
 smoke_entwurf_resume_single() {
@@ -1171,9 +1164,8 @@ smoke_entwurf_resume() {
   echo "                         This smoke validates BRIDGE carry only; orchestration is validated separately."
 
   smoke_entwurf_resume_single "$project_dir" claude claude-sonnet-4-6 resume "bridge continuity (Claude → resumeSession)"
-  smoke_entwurf_resume_single "$project_dir" codex  gpt-5.4           load   "bridge continuity (Codex → loadSession)"
 
-  echo "[smoke-entwurf-resume] Claude(resume) + Codex(load) bridge continuity: ok"
+  echo "[smoke-entwurf-resume] Claude(resume) bridge continuity: ok (codex dropped — claude-only floor)"
 }
 
 check_model_lock() {
@@ -4453,21 +4445,14 @@ xt_tool_surface() {
   local failc=0
   section "xt-tool-surface: claude backend (-xt bash)"
   xt_tool_surface_single claude claude-sonnet-4-6 bash || failc=$((failc + 1))
-  section "xt-tool-surface: codex backend (-xt bash)"
-  xt_tool_surface_single codex gpt-5.4 bash || failc=$((failc + 1))
-  section "xt-tool-surface: gemini backend (-xt write)"
-  if command -v gemini >/dev/null 2>&1; then
-    xt_tool_surface_single gemini gemini-3.1-pro-preview write || failc=$((failc + 1))
-  else
-    warn "xt-tool-surface[gemini]: gemini CLI absent — skipped here (release-gate's gemini-availability step enforces three-backend at release)"
-  fi
+  # Claude-only floor (0.11.0): the codex and gemini -xt rows are dropped.
   section "xt-tool-surface: extension-tool exemption (positive control)"
   xt_tool_surface_extension_honored claude claude-sonnet-4-6 || failc=$((failc + 1))
   if [ "$failc" -gt 0 ]; then
     fail "xt-tool-surface: $failc check(s) failed"
     return 1
   fi
-  ok "xt-tool-surface: all backends fail-fast on built-in -xt; extension exclusion honored"
+  ok "xt-tool-surface: claude fails fast on built-in -xt; extension exclusion honored"
   return 0
 }
 
@@ -4490,12 +4475,11 @@ xt_tool_surface() {
 #   - Final release authorization is GLG's, not this script's: a green
 #     run is necessary, and the operator closes the decision.
 release_gate() {
-  local allow_skip_gemini=0
   local -a positional=()
   local a
   for a in "$@"; do
     case "$a" in
-      --allow-skip-gemini) allow_skip_gemini=1 ;;
+      --allow-skip-gemini) ;;  # accepted-but-ignored: gemini removed from the claude-only floor (back-compat for existing scripts)
       *) positional+=("$a") ;;
     esac
   done
@@ -4549,18 +4533,8 @@ release_gate() {
     results+=("FAIL  static (pnpm check)"); failc=$((failc + 1))
   fi
 
-  # 2. Gemini availability — three-backend claim. SKIP = FAIL at release.
-  section "release-gate step: gemini-availability"
-  if command -v gemini >/dev/null 2>&1; then
-    ok "gemini CLI present — three-backend claim is verifiable"
-    results+=("PASS  gemini-availability"); pass=$((pass + 1))
-  elif [ "$allow_skip_gemini" -eq 1 ]; then
-    warn "gemini absent + --allow-skip-gemini (DEV) — three-backend claim NOT verified"
-    results+=("SKIP  gemini-availability (dev override)"); skip=$((skip + 1))
-  else
-    fail "gemini CLI absent — release requires all three backends (dev: --allow-skip-gemini)"
-    results+=("FAIL  gemini-availability"); failc=$((failc + 1))
-  fi
+  # 2. (gemini-availability step removed — claude-only floor; gemini CLI is
+  #    deprecated, so the gate no longer asserts a three-backend claim.)
 
   # 3. Live per-invariant gates (each is a run.sh subcommand). Every one runs
   #    with PWD=project_dir (via gate()) so cwd-derived pi session dirs land in

@@ -75,7 +75,9 @@ fi
 # pi-tools-bridge MCP tools (entwurf, entwurf_resume). Native openai-codex
 # would NOT see the MCP tools because pi-tools-bridge is registered under
 # piShellAcpProvider.mcpServers only.
-BACKENDS_DEFAULT=("pi-shell-acp/claude-sonnet-4-6" "pi-shell-acp/gpt-5.4" "pi-shell-acp/gemini-3.1-pro-preview")
+# Claude-only floor (0.11.0): codex/gemini dropped from the default; pass explicit
+# args to re-add them for a manual multi-backend run.
+BACKENDS_DEFAULT=("pi-shell-acp/claude-sonnet-4-6")
 BACKENDS=("${@:-${BACKENDS_DEFAULT[@]}}")
 
 TMUX_SESSIONS=()
