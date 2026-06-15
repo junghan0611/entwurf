@@ -147,7 +147,7 @@
 > 줄 세운 작업(5d) 밖에서 하다가 터지는 버그를 여기 담는다. 항목별: 증거 → 근본원인 → 설계합의 → 슬라이스 → 상태.
 > 원칙: 잠깐 수리하고 줄기로 복귀. 위임하지 않는다 — 꼬리를 직접 따라가야 연관 문제까지 검토된다.
 
-### SE-1 — pi-shell-acp 세션 inbound 2등 시민 (sibling-equality inbound) — ✅ CLOSE (본체 종료·push 완료, deliverability seam은 CHANGELOG Unreleased에 흡수)
+### SE-1 — pi-shell-acp 세션 inbound 2등 시민 (sibling-equality inbound) — ✅ CLOSE (0.11 deliverability blocker 종료·push 완료, seam은 CHANGELOG Unreleased 흡수 — residual pi meta-writer/record-only = SE-3 별도 lane, 컷 blocker 아님)
 
 - **LIVE 증거(2026-06-14):** 실무자 Opus가 `--entwurf-control` **없이**(control socket 없음) garden id(`…102907-f77390`)
   만 가지고 뜸. 보낸 메시지는 `✓ delivered`인데, GPT/CC가 그 id로 **회신하면 거부**: `no meta-record … not a garden
