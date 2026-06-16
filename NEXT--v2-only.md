@@ -9,6 +9,23 @@
 **v2-only로 동작**시킨다. 이름 변경(`pi-shell-acp`→`entwurf`, `piShellAcpProvider`→`entwurf`)은
 **이번 브랜치에서 안 한다** — rename은 v2 green 확인 후 별도 단계(브랜치/Phase B).
 
+## 현재 위치 (2026-06-16 KST, hejdev6)
+
+- dev 버전 pi 설치 완료(hejdev6, 로컬 클론 소스, pi 0.79.4). 이건 main 기준 작업 — 브랜치와 독립.
+- **env seam(step ⑤) 선분석 완료 → "본질 난제" 아님으로 격하** (아래 작업순서 step4 / 자율지침 step5).
+  근거: `PI_SESSION_ID`는 이미 pi-native, 끊기는 건 `PI_AGENT_ID` 하나뿐이고 caller-side는 fallback
+  보유 → MCP child만 상속 env로 메우면 됨(= PI_SESSION_ID와 동형 3줄). badlogic 원형이 확증(참고 섹션).
+- **라우팅(`getRegistryRouting` 하드코딩 + `resolve-acp-bridge.ts`)은 env seam과 별개 잔여**로 분리됨.
+- **step ① openclaw DROP + step ② check 체인 트림 DONE → `pnpm check` EXIT 0 (green)** (2026-06-16).
+  6 RED 처리: `check-mcp` DROP(normalizeMcpServers=ACP 전용, v2 부재) / `check-dep-versions`·`check-pack`·
+  `check-shell-quote`·`check-entwurf-session-identity` 수정(ACP 핀·required·SOURCE_SITES·v1 블록 제거) /
+  `check-entwurf-v2-only`는 체인에서만 제거(게이트 자체는 step③). **커밋 안 함(GLG 대기).**
+- **step② 잔여(green 무영향, 체인 밖 dead code)**: `check_backends/models/registration/auth_boundary/
+  sdk_surface/claude_sessions` 함수+case+usage + backend smokes(smoke-claude/codex/gemini/all) +
+  `smoke-installed-entwurf-acp` + package.json scripts 정리 / README ACP dep 언급 / `.husky/pre-commit` 주석.
+- 다음 한 걸음 = step② dead code 정리 → **step③ v1 가드 삭제**(+`check-entwurf-v2-only` 게이트) →
+  step④ `pnpm install` → step⑤ env seam 3줄 → step⑥ green.
+
 ## 잠긴 결정
 
 - **전략 = subtractive**. additive(closure 골라 이식)는 JSON/스크립트/`pi/meta-bridge/` 등
@@ -46,8 +63,14 @@
 3. [ ] **v1 가드 삭제** — `entwurf-v2-only.ts` / `entwurf-v2-resume-marker.ts` + 호출처
    (`entwurf-control.ts`, `mcp/pi-tools-bridge/src/index.ts`의 `checkV1EntwurfAllowed`/`isV2OnlyMode`/
    `isV2ResumeResidentAuthorized`).
-4. [ ] **env sender seam 수술** — acp-bridge가 주입하던 `PI_AGENT_ID`/`PI_SESSION_ID`가 사라짐 →
-   pi-native identity 출처로 재배선 (안 하면 entwurf_v2/send/self envelope 깨짐).
+4. [ ] **env sender seam 수술 (재평가: 본질 난제 아님)** — `PI_SESSION_ID`는 이미 pi-native
+   (`updateSessionEnv` entwurf-control.ts:1162, badlogic 원형 `control.ts:970`과 동일). 끊기는 건
+   `PI_AGENT_ID` 하나. caller-side(`buildLocalSenderEnvelope` :527)는 `${ctx.model.provider}/${ctx.model.id}`
+   fallback을 이미 가져 **무변경 동작**. MCP child(별도 프로세스, env만 읽음)만 메우면 됨 →
+   `updateSessionEnv`에 `process.env.PI_AGENT_ID = ${ctx.model.provider}/${ctx.model.id}` 3줄 추가
+   (PI_SESSION_ID와 대칭, off일 때 delete 포함). 결정 1건: agent id 포맷
+   `pi-shell-acp/<model>`→`<provider>/<model>` (v2-only 목적과 일치, fallback이 이미 쓰던 값) —
+   GLG OK 방향(2026-06-16). LIVE(pi child spawn)로 상속 1회 확인.
 5. [ ] **rename 보류** — 이번 브랜치에서 안 함. v2 green 후 Phase B.
 6. [ ] **배선 + green** — `pi.extensions` 정리, ACP deps 제거(`@agentclientprotocol/*`,
    `@zed-industries/codex-acp`, `@anthropic-ai/sdk`), lockfile, `pnpm check` 전체 통과.
@@ -73,13 +96,13 @@
    (`entwurf-control.ts`, `mcp/pi-tools-bridge/src/index.ts`) + `check-entwurf-v2-only` 게이트.
    v1 분기는 지우고 v2 경로만 남긴다.
 4. **lockfile 재생성**: `pnpm install` (ACP deps 3개 빠졌으니). 그 후 `pnpm check` 돌려 남은 RED 확인.
-5. **env sender seam (step 4 — 본질 난제, 여기서 멈춰 GLG와 합의 권장)**:
-   - 삭제된 `acp-bridge.ts`가 주입하던 `PI_AGENT_ID`(=`pi-shell-acp/<model>`) + `PI_SESSION_ID`를
-     pi-native identity로 재배선. 소비처: `entwurf-control.ts` envelope, `entwurf_v2/send/self`.
-   - `getRegistryRouting`(`entwurf-core.ts`)의 `provider: "pi-shell-acp"` 라우팅 +
-     `resolve-acp-bridge.ts`/`smoke-installed-entwurf-acp` = 패키지/확장 경로 resolve. v2-only에선
-     확장 entry가 `entwurf-control.ts`다 (index.ts 아님). 라우팅이 그걸 가리키게 조정.
-   - **LIVE 검증 필요** (실제 pi child spawn). 설계 합의 없이 추측 구현 금지 → GLG 동기화.
+5. **env sender seam (step 4 — 재평가 끝, 기계적)**: `updateSessionEnv`에 PI_AGENT_ID set 3줄
+   (위 작업순서 step4 참조). caller-side는 `ctx.model` fallback으로 이미 동작 → MCP child 상속만 메움.
+   PI_SESSION_ID와 동형이라 추측 아님. agent id 포맷 변화는 GLG OK 방향(2026-06-16). 마무리 LIVE 1회.
+   - **별개 잔여(라우팅, env seam 아님)**: `getRegistryRouting`(`entwurf-core.ts:991,1089`)의 하드코딩
+     `provider: "pi-shell-acp"` + `scripts/resolve-acp-bridge.ts` + `smoke-installed-entwurf-acp` =
+     패키지/확장 resolve 경로. v2-only 확장 entry는 `entwurf-control.ts`(index.ts 아님). 이건 rename(Phase B)
+     직전 또는 green 배선(step6)에서 다룬다. 여기서 추측 구현 금지.
 6. **green**: `pnpm check` 전체 통과 → `--no-verify` 없는 정상 커밋.
 
 ### 손대지 말 것
@@ -101,6 +124,10 @@
 
 ## 참고
 
+- **원형 레퍼런스**: `~/repos/3rd/agent-stuff/extensions/control.ts` (badlogic mitsupi) = 우리
+  `entwurf-control.ts`의 원형. `updateSessionEnv`(960-970)가 **PI_SESSION_ID만 set, PI_AGENT_ID 없음**
+  → env-set 정석 위치 확증 + PI_AGENT_ID가 pi-shell-acp 고유 확장임을 증명. `ctx.model.provider/id`
+  접근도 `loop.ts:91-93`에서 동일 패턴(가드 포함). env seam 설계의 SSOT 참조.
 - GPT(codex)와 동행 중. 같은 방향 합의: subtractive, 삭제 먼저 rename 나중.
 - `~/repos/gh/entwurf`에 GPT가 깐 v2-only 셸(README/AGENTS/ROADMAP/check-boundaries)이 있음.
   rename/이주 단계(Phase B)에서 그 셸 문서를 destination으로 재활용 가능. 이번 브랜치는 안 건드림.

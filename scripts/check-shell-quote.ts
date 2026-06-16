@@ -41,11 +41,7 @@ const REFERENCE_BODY = `function shellQuote(value: string): string {
 \treturn \`'\${value.replace(/'/g, \`'\\\\''\`)}\`;
 }`;
 
-const SOURCE_SITES = [
-	"pi-extensions/entwurf.ts",
-	"pi-extensions/lib/entwurf-core.ts",
-	"pi-extensions/lib/entwurf-async.ts",
-] as const;
+const SOURCE_SITES = ["pi-extensions/lib/entwurf-core.ts", "pi-extensions/lib/entwurf-async.ts"] as const;
 
 // Match the function block from `function shellQuote` up to the closing brace.
 // Tab indentation is required (matches the rest of the repo).

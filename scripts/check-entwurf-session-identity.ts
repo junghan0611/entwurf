@@ -722,26 +722,6 @@ try {
 		);
 	}
 
-	// ---- T-async-spawn-wrapped (source guard): every pi.sendMessage in
-	// entwurf.ts sits inside a makeBestEffortDeliverCompletion arrow wrapper, so a
-	// raw proc.on("close") send can't regress the stale-parent guard (the exact
-	// gap that left async spawn completion unguarded before 0.9.0 cut).
-	{
-		const entwurfSrc = fs.readFileSync(path.join(REPO_ROOT, "pi-extensions", "entwurf.ts"), "utf8");
-		const totalSends = (entwurfSrc.match(/pi\.sendMessage\(/g) ?? []).length;
-		const wrappedSends = (entwurfSrc.match(/=>\s*pi\.sendMessage\(/g) ?? []).length;
-		ok(totalSends > 0, "entwurf.ts has at least one pi.sendMessage (sanity)");
-		eq(
-			wrappedSends,
-			totalSends,
-			"every pi.sendMessage in entwurf.ts is inside a best-effort arrow wrapper (no raw send)",
-		);
-		ok(
-			entwurfSrc.includes("makeBestEffortDeliverCompletion"),
-			"entwurf.ts imports/uses makeBestEffortDeliverCompletion",
-		);
-	}
-
 	console.log(`[check-entwurf-session-identity] ${n} assertions ok`);
 } finally {
 	fs.rmSync(tmp, { recursive: true, force: true });

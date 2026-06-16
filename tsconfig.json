@@ -27,9 +27,6 @@
 	// same reason — both run under Node `--experimental-strip-types` and need
 	// `allowImportingTsExtensions`, which the emit-capable root config cannot
 	// enable. See pnpm typecheck for the three-config invocation.
-	// plugins/* is a workspace sibling — each plugin owns its own
-	// tsconfig and check pipeline (see pnpm check:plugins). Excluding here
-	// keeps root typecheck scoped to the bridge runtime.
 	//
 	// pi-extensions/meta-bridge-hook.ts is the meta-bridge entry shell: it runs
 	// under Node --experimental-strip-types and imports its sibling lib with an

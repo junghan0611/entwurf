@@ -50,7 +50,6 @@ Usage:
   ./run.sh sentinel [args...]         # entwurf 6-cell diagonal matrix (sync+resume × parent×target)
   ./run.sh session-messaging [args...] # 4-case session-messaging smoke (native/ACP cross-matrix)
   ./run.sh smoke-compaction-policy [--step=NN] # 0.5.0 compaction-policy verification (LIVE=1 to include backend observation steps)
-  ./run.sh check-mcp                  # local deterministic check of normalizeMcpServers() — no Claude/ACP subprocess
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
   ./run.sh check-entwurf-session-identity # deterministic gate for locked garden session identity & name grammar (sessionId/buildSessionName/parse/collision), no API
@@ -91,8 +90,6 @@ Usage:
   ./run.sh check-entwurf-self-address # deterministic gate (SE-1/SE-2 slice 1): self-addressability honesty predicate computeSelfAddressability — pi replyable ⟺ live socket; meta ⟺ recordBacked ∧ ownerAlive ∧ watchArmed (regression-proof record-present rows); SOURCE GUARD buildStrictPiSenderEnvelope drops hardcoded replyable:true + existsSync-probes socket, entwurf_self renders alive vs expected. meta watchArmed wired in slice 2 (same release block)
   ./run.sh check-entwurf-deliverability # deterministic gate (SE-1/SE-2 slice 2c): conversational-mailbox deliverability predicate — computeMetaReceiverActive (recordBacked ∧ ownerAlive ∧ watchArmed) + mailboxConversationalDeliverable (self-fetch AND active); direct-inject pi refused (SE-1), self-fetch dead/unarmed refused (SE-2); self-address shares the same atom
   ./run.sh check-entwurf-mailbox-guard # deterministic gate (SE-1/SE-2 slice 2d): guarded mailbox enqueue — PURE 0-call (undeliverable target leaves injected enqueue uncalled) + TMPDIR snapshot (refused send leaves mailbox byte-identical, accepted writes one .msg) + fact gathering from record/capability/receiver-marker
-  ./run.sh check-plugin-empty-final-recovery   # deterministic recovery-decision gate for plugins/openclaw/src/index.ts (issue #20 — no pi process)
-  ./run.sh check-plugin-prompt-format          # deterministic shape gate for buildConversationPrompt + stripChatCompletionTail (issue #20 follow-up leak)
   ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
   ./run.sh check-package-source-routing # deterministic gate (#29): package-source -> install-root mapping + fail-fast routing (local/git/npm/missing/project/no-source × local+remote, self-root, resume), no backend
   ./run.sh smoke-installed-entwurf-acp # live counterpart (#29): git+npm package sources plus packed tarball resolve + a --no-extensions child registers provider pi-shell-acp (credential-free --list-models proof)
@@ -1721,34 +1718,6 @@ check_entwurf_mailbox_guard() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-mailbox-guard.ts)
 }
 
-check_plugin_empty_final_recovery() {
-  # Deterministic recovery-decision gate for the OpenClaw plugin's
-  # `resolveRecoveredFinalMessage` helper (plugins/openclaw/src/index.ts).
-  # Issue #20 — post-#17 regression where a clean exit with
-  # message_end{role:"assistant", content:[]} bypassed both recovery
-  # branches and let OpenClaw surface raw prompt fragments to the user.
-  # The fix unifies the recovery decision; this gate exercises every
-  # branch on synthetic AssistantMessage inputs (no pi process, no
-  # network, no API cost). See scripts/check-plugin-empty-final-recovery.ts
-  # header for the full case matrix.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-plugin-empty-final-recovery.ts)
-}
-
-check_plugin_prompt_format() {
-  # Deterministic shape gate for the OpenClaw plugin's
-  # `buildConversationPrompt` serializer + `stripChatCompletionTail`
-  # output sanitizer (plugins/openclaw/src/index.ts). Issue #20 follow-up
-  # incident — after the empty-final fix landed, oracle bbot verification
-  # observed the model echoing a fabricated `User: ...` next-turn line
-  # plus a Cline-style `</environment_details>` close tag into the visible
-  # body, primed by the earlier `User:` / `Assistant:` transcript form.
-  # The serializer now produces a JSON-array context with an explicit
-  # non-continuation instruction, and the sanitizer strips the two
-  # narrow tail shapes observed in the wild as defense-in-depth.
-  # See scripts/check-plugin-prompt-format.ts header for the full matrix.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-plugin-prompt-format.ts)
-}
-
 smoke_async_resume() {
   # Live smoke for the async-resume regression repair (Phase A + Phase B).
   # It verifies the replyable MCP → control-RPC → native async launcher path:
@@ -1984,137 +1953,6 @@ smoke_session_id_name() {
   }
   ok "[smoke-session-id-name] --session-id/--name substrate proven (append + spawn-only name + wrong-cwd footgun)"
   return 0
-}
-
-check_mcp() {
-  (cd "$REPO_DIR" && node --input-type=module <<'EOF'
-import { normalizeMcpServers, McpServerConfigError } from './acp-bridge.ts';
-import { strict as assert } from 'node:assert';
-import { createHash } from 'node:crypto';
-
-const emptyHash = createHash('sha256').update('[]').digest('hex');
-
-function expectThrow(label, fn) {
-  try {
-    fn();
-  } catch (err) {
-    if (!(err instanceof McpServerConfigError)) {
-      throw new Error(`${label}: expected McpServerConfigError, got ${err?.name || err}`);
-    }
-    if (!Array.isArray(err.issues) || err.issues.length === 0) {
-      throw new Error(`${label}: expected non-empty issues[]`);
-    }
-    for (const issue of err.issues) {
-      if (typeof issue.server !== 'string' || issue.server.length === 0) {
-        throw new Error(`${label}: issue missing server name`);
-      }
-    }
-    return err;
-  }
-  throw new Error(`${label}: expected throw, got none`);
-}
-
-// 1. undefined -> empty, deterministic empty hash
-{
-  const r = normalizeMcpServers(undefined);
-  assert.deepEqual(r.servers, [], '1.undefined: servers empty');
-  assert.equal(r.hash, emptyHash, '1.undefined: hash matches sha256("[]")');
-  assert.equal(r.signatureKey, '[]', '1.undefined: signatureKey is "[]"');
-}
-
-// 2. {} -> same empty shape
-{
-  const r = normalizeMcpServers({});
-  assert.deepEqual(r.servers, []);
-  assert.equal(r.hash, emptyHash);
-}
-
-// 3. canonical ordering: z before a in input -> a first in output
-{
-  const r = normalizeMcpServers({
-    z: { command: 'bin-z' },
-    a: { command: 'bin-a' },
-  });
-  assert.deepEqual(r.servers.map(s => s.name), ['a', 'z'], '3: sorted by name');
-}
-
-// 4. deterministic hash — same semantic input -> same hash
-{
-  const a = normalizeMcpServers({ x: { command: 'c', args: ['1', '2'], env: { B: '2', A: '1' } } });
-  const b = normalizeMcpServers({ x: { command: 'c', args: ['1', '2'], env: { A: '1', B: '2' } } });
-  assert.equal(a.hash, b.hash, '4: env key order must not change hash');
-}
-
-// 5. stdio default shape (no "type")
-{
-  const r = normalizeMcpServers({ s: { command: 'bin', args: ['--x'], env: { K: 'v' } } });
-  assert.equal(r.servers.length, 1);
-  const s = r.servers[0];
-  assert.equal(s.name, 's');
-  assert.equal(s.command, 'bin');
-  assert.deepEqual(s.args, ['--x']);
-  assert.deepEqual(s.env, [{ name: 'K', value: 'v' }]);
-}
-
-// 6. http shape
-{
-  const r = normalizeMcpServers({
-    h: { type: 'http', url: 'https://e/mcp', headers: { Authorization: 'Bearer x' } },
-  });
-  const s = r.servers[0];
-  assert.equal(s.type, 'http');
-  assert.equal(s.url, 'https://e/mcp');
-  assert.deepEqual(s.headers, [{ name: 'Authorization', value: 'Bearer x' }]);
-}
-
-// 7. sse shape
-{
-  const r = normalizeMcpServers({ e: { type: 'sse', url: 'https://e/sse' } });
-  const s = r.servers[0];
-  assert.equal(s.type, 'sse');
-  assert.equal(s.url, 'https://e/sse');
-}
-
-// 8. unsupported type throws with server name
-{
-  const err = expectThrow('8.bad-type', () => normalizeMcpServers({ bad: { type: 'ws', url: 'x' } }));
-  assert.equal(err.issues[0].server, 'bad');
-  assert.match(err.message, /bad:/);
-}
-
-// 9. empty command throws
-expectThrow('9.empty-command', () => normalizeMcpServers({ noop: { command: '' } }));
-
-// 10. empty url (http) throws
-expectThrow('10.empty-url-http', () => normalizeMcpServers({ u: { type: 'http', url: '' } }));
-
-// 11. invalid env value throws
-expectThrow('11.env-non-string', () => normalizeMcpServers({ e: { command: 'c', env: { K: 42 } } }));
-
-// 12. args with non-string throws
-expectThrow('12.args-non-string', () => normalizeMcpServers({ a: { command: 'c', args: ['ok', 5] } }));
-
-// 13. root non-object (array) throws
-expectThrow('13.root-array', () => normalizeMcpServers([]));
-
-// 14. multiple invalid servers aggregated
-{
-  const err = expectThrow('14.aggregate', () => normalizeMcpServers({
-    a: { command: '' },
-    b: { type: 'ws' },
-  }));
-  assert.equal(err.issues.length, 2, '14: both issues surfaced');
-  assert.deepEqual(err.issues.map(i => i.server).sort(), ['a', 'b']);
-}
-
-// 15. headers bad shape throws
-expectThrow('15.headers-invalid', () => normalizeMcpServers({
-  h: { type: 'http', url: 'https://x', headers: 'no' },
-}));
-
-console.log('[check-mcp] 15 assertions ok');
-EOF
-  )
 }
 
 check_backends() {
@@ -3317,28 +3155,13 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-const claudePinned = pkg.dependencies['@agentclientprotocol/claude-agent-acp'];
-const codexPinned = pkg.dependencies['@zed-industries/codex-acp'];
 const geminiBundled = pkg.dependencies['@google/gemini-cli'] ?? pkg.optionalDependencies?.['@google/gemini-cli'];
-assert.ok(claudePinned, 'package.json must pin @agentclientprotocol/claude-agent-acp');
-assert.ok(codexPinned, 'package.json must pin @zed-industries/codex-acp');
 assert.equal(geminiBundled, undefined, 'package.json must not bundle @google/gemini-cli — gemini is an external PATH runtime');
 
 // `^` + `m` flag anchors to the start-of-line shell assignment so we don't
 // accidentally pick up the regex literal inside this very check function's
 // heredoc (which is indented, so won't match `^...`).
 const runSh = readFileSync('run.sh', 'utf8');
-const claudeRequired = runSh.match(/^CLAUDE_ACP_REQUIRED_VERSION="([^"]+)"/m)?.[1];
-const codexRequired = runSh.match(/^CODEX_ACP_REQUIRED_VERSION="([^"]+)"/m)?.[1];
-assert.equal(claudeRequired, claudePinned,
-  `run.sh CLAUDE_ACP_REQUIRED_VERSION (${claudeRequired}) must match package.json @agentclientprotocol/claude-agent-acp (${claudePinned})`);
-assert.equal(codexRequired, codexPinned,
-  `run.sh CODEX_ACP_REQUIRED_VERSION (${codexRequired}) must match package.json @zed-industries/codex-acp (${codexPinned})`);
-
-const readme = readFileSync('README.md', 'utf8');
-const readmeCodex = readme.match(/@zed-industries\/codex-acp@([0-9.]+)/)?.[1];
-assert.equal(readmeCodex, codexPinned,
-  `README.md @zed-industries/codex-acp install pin (${readmeCodex}) must match package.json (${codexPinned})`);
 
 // pi peer/dev alignment (#26 / 0.8.0 dep-alignment gate). The three
 // @earendil-works/pi-* devDeps must pin one identical version, and that
@@ -3381,7 +3204,7 @@ assert.equal(peerDepCoding, `>=${piAi}`,
 assert.equal(peerDepTui, `>=${piAi}`,
   `package.json peerDependencies @earendil-works/pi-tui (${peerDepTui}) must be >=${piAi} (devDep floor)`);
 
-console.log('[check-dep-versions] 15 assertions ok');
+console.log('[check-dep-versions] 10 assertions ok');
 EOF
   )
 }
@@ -3628,9 +3451,8 @@ check_pack() {
 
   local required=(
     "package.json" "README.md" "LICENSE" "CHANGELOG.md"
-    "index.ts" "acp-bridge.ts" "event-mapper.ts" "engraving.ts"
-    "pi-context-augment.ts" "protocol.js" "run.sh"
-    "pi-extensions/entwurf.ts" "pi-extensions/entwurf-control.ts"
+    "protocol.js" "run.sh"
+    "pi-extensions/entwurf-control.ts"
     "pi-extensions/model-lock.ts" "pi-extensions/lib/entwurf-core.ts"
     "mcp/pi-tools-bridge/src/index.ts"
     "scripts/postinstall-chmod.cjs"
@@ -4749,9 +4571,6 @@ case "$cmd" in
     shift || true
     smoke_compaction_policy "$@"
     ;;
-  check-mcp)
-    check_mcp
-    ;;
   check-model-lock)
     check_model_lock
     ;;
@@ -4998,12 +4817,6 @@ case "$cmd" in
     # its own logic is regression-tested hermetically by smoke-meta-keyset-guard.
     shift || true
     (cd "$REPO_DIR" && python3 scripts/check-keyset-overlap.py "$@")
-    ;;
-  check-plugin-empty-final-recovery)
-    check_plugin_empty_final_recovery
-    ;;
-  check-plugin-prompt-format)
-    check_plugin_prompt_format
     ;;
   check-async-resume-gate)
     check_async_resume_gate
