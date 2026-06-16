@@ -538,6 +538,82 @@ async function main(): Promise<void> {
 		ok("unsupported-owned: acquireLock NOT called", t.acquireCalls.length === 0);
 	}
 
+	// ── A1 narrow (0.11.0): socket-only pi endpoint (identity null + socketOnlyPi) ──
+	// A record-LESS live pi control socket is a FIRE-AND-FORGET control-send target ONLY.
+	// fire-and-forget + alive → control-socket execute (same in-domain path as a record-backed
+	// pi: lock acquired + inspected, lock retained); owned-outcome → bad-target REFUSED pre-lock
+	// (no record = no cwd/resume authority → spawn-bg can never open); fire-and-forget + dormant/
+	// indeterminate → the existing honest reject, lock released, NEVER a spawn plan.
+	const socketOnly: TargetResolution = { identity: null, preProbeAddressConflict: false, socketOnlyPi: true };
+	{
+		const t = mkDeps({
+			resolution: socketOnly,
+			lock: "ok",
+			inspection: { kind: "socket-file", socketPath: "/fake/ctl/s.sock" },
+			probe: "alive",
+		});
+		const d = await decideDispatch(
+			{ target: GID, intent: "fire-and-forget", mode: "follow_up", wantsReply: false, message: "ping" },
+			t.deps,
+		);
+		ok("socketOnly ff+alive: kind execute", isExecute(d));
+		ok("socketOnly ff+alive: plan transport control-socket", isExecute(d) && d.plan.transport === "control-socket");
+		ok("socketOnly ff+alive: lock RETAINED", isExecute(d) && d.lock !== null);
+		ok("socketOnly ff+alive: NOT released", t.releaseCalls.length === 0);
+		ok("socketOnly ff+alive: observedLiveness alive", isExecute(d) && d.receipt.observedLiveness === "alive");
+		ok("socketOnly ff+alive: lock acquired (in-domain)", t.acquireCalls.length === 1);
+		ok("socketOnly ff+alive: socket inspected under lock", t.inspectCalls.length === 1);
+		ok("socketOnly ff+alive: mailbox seam NEVER consulted (pi is in-domain)", t.mailboxCalls.length === 0);
+	}
+	{
+		// owned-outcome → bad-target BEFORE any lock/probe. A socket-only endpoint is not an
+		// owned citizen — spawn-bg must never open, so the refusal is pre-lock.
+		const t = mkDeps({
+			resolution: socketOnly,
+			lock: "ok",
+			inspection: { kind: "absent", socketPath: "/fake/ctl/s.sock" },
+		});
+		const d = await decideDispatch({ target: GID, intent: "owned-outcome", message: "do X" }, t.deps);
+		ok("socketOnly owned: reject bad-target", d.kind === "reject" && d.receipt.reason === "bad-target");
+		ok(
+			"socketOnly owned: observedLiveness null (pre-probe)",
+			d.kind === "reject" && d.receipt.observedLiveness === null,
+		);
+		ok("socketOnly owned: NO lock acquired (pre-lock refuse)", t.acquireCalls.length === 0);
+		ok("socketOnly owned: NOT probed (no spawn path opened)", t.inspectCalls.length === 0);
+		ok("socketOnly owned: no plan", !("plan" in d));
+	}
+	{
+		// fire-and-forget + dormant (socket vanished between presence-hint and the under-lock
+		// probe) → the existing honest reject, lock released, NEVER promoted to a resume/spawn.
+		const t = mkDeps({
+			resolution: socketOnly,
+			lock: "ok",
+			inspection: { kind: "absent", socketPath: "/fake/ctl/s.sock" },
+		});
+		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "ping" }, t.deps);
+		ok(
+			"socketOnly ff+dormant: reject dormant-fire-forget-unsupported",
+			d.kind === "reject" && d.receipt.reason === "dormant-fire-forget-unsupported",
+		);
+		ok("socketOnly ff+dormant: lock released", t.releaseCalls.length === 1);
+		ok("socketOnly ff+dormant: no plan (no spawn)", !("plan" in d));
+	}
+	{
+		// fire-and-forget + indeterminate → indeterminate-no-spawn, lock released.
+		const t = mkDeps({
+			resolution: socketOnly,
+			lock: "ok",
+			inspection: { kind: "indeterminate", socketPath: "/fake/ctl/s.sock", error: "EACCES" },
+		});
+		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "ping" }, t.deps);
+		ok(
+			"socketOnly ff+indeterminate: reject indeterminate-no-spawn",
+			d.kind === "reject" && d.receipt.reason === "indeterminate-no-spawn",
+		);
+		ok("socketOnly ff+indeterminate: lock released", t.releaseCalls.length === 1);
+	}
+
 	// ── B2: a throw AFTER the lock is acquired RELEASES it before rethrowing ─────
 	// inspectSocket / probeSocket / preflightForCwd are the three post-lock IO sites
 	// that can throw. Each must leave NO held lock (else a long-lived MCP bridge pins

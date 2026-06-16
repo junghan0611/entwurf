@@ -354,6 +354,46 @@ async function main(): Promise<void> {
 		ok("E3: drifted marker → enqueue NEVER called (presence ≠ identity match)", spies.enqueue.length === 0);
 	}
 
+	// ── F: A1 narrow (0.11.0) — record-LESS live pi control socket → socket-only target ──
+	// resolveTarget finds no meta-record, does ONE record-side lstat (inspectPath), sees a
+	// non-symlink socket → socketOnlyPi. fire-and-forget then routes to control-socket execute
+	// (in-domain: acquired under the wired lockDir). The same presence hint with a symlink /
+	// absent socket stays bad-target; owned-outcome on a socket-only target is refused pre-lock.
+	{
+		const { deps, spies } = makeSpiedFactory({ recordExists: false, inspectKind: "socket-file", probe: "alive" });
+		const decision = await deps.decide({ target: GID, intent: "fire-and-forget", message: "m" });
+		ok(
+			"F: recordless + live socket → control-socket execute (socket-only pi)",
+			decision.kind === "execute" && decision.plan.transport === "control-socket",
+		);
+		ok("F: resolveTarget did ONE record-side lstat (presence hint)", spies.inspectPath.length === 1);
+		ok(
+			"F: acquired under the wired lockDir (in-domain)",
+			spies.acquire.length === 1 && spies.acquire[0].dir === LOCK_DIR,
+		);
+	}
+	{
+		// record absent + a SYMLINKED socket → NOT promoted (never trust a symlink) → bad-target.
+		const { deps, spies } = makeSpiedFactory({ recordExists: false, inspectKind: "address-conflict" });
+		const decision = await deps.decide({ target: GID, intent: "fire-and-forget", message: "m" });
+		ok("F: recordless + symlinked socket → reject bad-target", decision.kind === "reject");
+		ok("F: symlinked socket-only is never lock-acquired", spies.acquire.length === 0);
+	}
+	{
+		// record absent + NO socket at all → plain bad-target.
+		const { deps, spies } = makeSpiedFactory({ recordExists: false, inspectKind: "absent" });
+		const decision = await deps.decide({ target: GID, intent: "fire-and-forget", message: "m" });
+		ok("F: recordless + no socket → reject bad-target", decision.kind === "reject");
+		ok("F: no-socket target is never lock-acquired", spies.acquire.length === 0);
+	}
+	{
+		// owned-outcome on a record-less live socket → bad-target BEFORE any lock (no spawn path).
+		const { deps, spies } = makeSpiedFactory({ recordExists: false, inspectKind: "socket-file" });
+		const decision = await deps.decide({ target: GID, intent: "owned-outcome", message: "do X" });
+		ok("F: socket-only + owned-outcome → reject bad-target (pre-lock)", decision.kind === "reject");
+		ok("F: socket-only owned-outcome never acquires a lock (no spawn opened)", spies.acquire.length === 0);
+	}
+
 	console.log(`\ncheck-entwurf-v2-production: ${passed} checks passed`);
 }
 

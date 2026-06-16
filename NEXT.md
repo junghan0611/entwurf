@@ -3,7 +3,10 @@
 > 새 담당자는 여기만 먼저 읽는다. 모르면 아래 `# LEDGER`의 링크/섹션으로 내려간다.
 > NEXT는 DB가 아니라 나침반이다: 현재 위치·다음 한 걸음·넘으면 안 되는 선을 맨 위에 둔다.
 
-## NOW — 2026-06-16 KST — 0.11.0 BLOCKER 구현 중: recordless-pi `bad-target` 버그 fix(A1 narrow). 자문 완료(GPT5.5)→NEXT 정렬→커밋→구현. release-gate는 fix 후. 문서 sweep은 닫힘.
+## NOW — 2026-06-16 KST — 0.11.0 BLOCKER fix(A1 narrow) 코드+결정적게이트 DONE ✅. 남은 것: live smoke C1b(recordless) + `LIVE=1 release-gate` 재실행 → GLG 컷.
+
+> **★구현 완료 (2026-06-16, deterministic green):** A1 narrow fix landed. `pi-extensions/lib/socket-discovery.ts`(`isSocketOnlyPiCandidate`) + `entwurf-v2-decider.ts`(`socketOnlyPi` flag, in-domain 경로를 `decideInDomain`으로 추출 + socket-only fire-and-forget 분기, owned-outcome 사전차단) + `entwurf-v2-production.ts`(resolveTarget record-absent presence-hint). **`pnpm check` 전체 PASS**(회귀 0). 새 단언: check-entwurf-v2-decider 125(socket-only ff alive/owned/dormant/indeterminate), check-entwurf-v2-production 32(record-absent+live socket→execute, symlink/absent→bad-target, owned→pre-lock). docs 정직화: README entwurf_v2(socket-only ff target / record-less dormant resume out-of-scope 0.11.1), CHANGELOG Fixed bullet, fact-surface↔dispatch gap 설명.
+> **남은 순서:** ① live smoke C1b — recordless live pi control session을 `entwurf_v2` ff target으로(기존 matrix-live C1은 record-backed; GPT 권고 gate④). ② `LIVE=1 ./run.sh release-gate <scratch>` 재실행(코드 바뀜) → PASS 로그 갱신(CHANGELOG/VERIFY). ③ GLG 컷. **push/tag는 GLG 결정 전 금지.**
 
 > **★0.11.0 BLOCKER — recordless-pi v2 bad-target (GLG 재정렬 2026-06-16: "완벽히 닫아서 릴리즈, 적어놓은 게 거짓이면 안 됨"):** entwurf_peers가 live로 보여주는 record-less pi control-socket 세션을 `entwurf_v2`가 `bad-target`으로 거부 → fact surface ↔ v2 resolver 계약 불일치. 재현: `20260616T094836-a32c30`(piar 직접 launch, socket alive, meta-record 없음) → `entwurf_v2` 거부 / `entwurf_send`만 성공. 즉 frozen table "alive pi→control-socket send"가 record-less pi에서 거짓.
 > - **근원:** `pi-extensions/lib/entwurf-v2-production.ts:227-248` resolveTarget — `if (!metaRecordExists(gid)) return {identity:null}` → `bad-target`. pi --entwurf-control session_start는 meta-record를 안 쓴다(record는 meta-bridge SessionStart hook이 native backend에만 mint) → record-less pi가 production 정상상태. smoke가 못 잡은 이유: `smoke-entwurf-v2-spawn-resume-live`(run.sh:21)·matrix-live C1이 "mint backend=pi meta identity"로 record를 fake로 심고 시작 → coverage gap.

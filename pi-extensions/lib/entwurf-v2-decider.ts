@@ -156,6 +156,17 @@ export type DispatchDecision =
 export interface TargetResolution {
 	identity: MetaIdentity | null;
 	preProbeAddressConflict: boolean;
+	/**
+	 * A1 narrow (0.11.0): a record-LESS but live-control-socket-present pi endpoint.
+	 * `identity` is null (there is NO meta-record citizen), yet a gid-shaped non-symlink
+	 * control socket exists, so the gid is an addressable socket-only pi endpoint. The
+	 * decider accepts it as a FIRE-AND-FORGET control-send target ONLY: with no record there
+	 * is no cwd/resume authority, so owned-outcome is refused pre-lock and spawn-bg can never
+	 * open for it ("a socket-only endpoint is not an owned citizen"). PROBE-FREE presence
+	 * hint — the decider still does the real under-lock `inspectSocket`. Only meaningful when
+	 * `identity === null`; a record-backed citizen never sets it.
+	 */
+	socketOnlyPi?: boolean;
 }
 
 export interface DispatchInput {
@@ -239,13 +250,12 @@ export function resolveMailboxWakeModeCapability(
  * ONLY through injected deps.
  */
 export async function decideDispatch(input: DispatchInput, deps: DispatchDeciderDeps): Promise<DispatchDecision> {
-	// IO seams are required deps (no defaults) — see DispatchDeciderDeps (B1).
-	const { acquireLock, releaseLock, inspectSocket, probeSocket } = deps;
 	const mailboxDir = deps.mailboxDir ?? defaultMetaMailboxDir();
 	const sessionsDir = deps.sessionsDir ?? defaultMetaSessionsDir();
 	const observeTimeoutMs = deps.observeTimeoutMs ?? ENTWURF_V2_OBSERVE_TIMEOUT_MS;
 	const mode: EntwurfV2Mode = input.mode ?? ENTWURF_V2_MODE_DEFAULT;
 	const wantsReply = input.wantsReply ?? false;
+	const ctx: InDomainCtx = { mode, wantsReply, observeTimeoutMs };
 
 	const reject = (receipt: RejectReceipt, diagnostic?: RejectDiagnostic): DispatchDecision =>
 		diagnostic ? { kind: "reject", receipt, diagnostic } : { kind: "reject", receipt };
@@ -255,6 +265,23 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 
 	// 2. resolveTarget — probe-free. no citizen → bad-target; quarantined → conflict.
 	const resolution = await deps.resolveTarget(gardenId);
+
+	// 2b. A1 narrow (0.11.0): a record-LESS live pi control socket — a socket-only pi
+	// endpoint (no citizen identity, but an addressable control socket). Accepted as a
+	// FIRE-AND-FORGET control-send target ONLY. owned-outcome is refused pre-lock: without a
+	// record there is no cwd/resume authority, so spawn-bg must never open for it ("a
+	// socket-only endpoint is not an owned citizen"). A fire-and-forget runs the SAME
+	// in-domain probe table as a record-backed pi (lock → inspect → send / honest reject) but
+	// can never reach the resume branch (fire-and-forget × dormant/indeterminate is a resolver
+	// reject; there is no cwd) — enforced by decideInDomain's `allowResume:false`.
+	if (resolution.identity === null && resolution.socketOnlyPi === true) {
+		if (input.intent !== "fire-and-forget") {
+			return reject(makeRejectReceipt("bad-target", null));
+		}
+		return decideInDomain(gardenId, input, deps, ctx, { allowResume: false });
+	}
+
+	// 2c. no citizen → bad-target; quarantined → conflict.
 	if (resolution.identity === null) {
 		return reject(makeRejectReceipt("bad-target", null));
 	}
@@ -285,25 +312,48 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 		return { kind: "execute", receipt, plan, lock: null };
 	}
 
-	// 4. in-domain → acquire the per-gid lock BEFORE lstat/connect.
+	// 4-5. in-domain (record-backed pi): lock → inspect → route (resume allowed, cwd from record).
+	return decideInDomain(gardenId, input, deps, ctx, { allowResume: true, cwd: identity.cwd });
+}
+
+// ── in-domain probe (steps 4-5), shared by the record-backed pi path and the A1-narrow
+// socket-only pi path ────────────────────────────────────────────────────────────────────
+// The lock lifecycle (B2) lives here: acquire BEFORE lstat/connect, every reject path
+// releases explicitly (rejectAfterRelease), every execute path that keeps the lock sets
+// retainLock=true, and a thrown IO error releases the still-held lock before rethrowing so
+// the long-lived MCP bridge never pins a gid. `resume.allowResume` gates the ONLY branch
+// that reads a target cwd and launches a child: a socket-only endpoint passes `false`, so
+// even though the resume verdict is structurally unreachable for it (fire-and-forget never
+// yields `resume`), spawn-bg can never open into a record-less endpoint.
+type InDomainCtx = { mode: EntwurfV2Mode; wantsReply: boolean; observeTimeoutMs: number };
+type ResumePolicy = { allowResume: true; cwd: string } | { allowResume: false };
+
+async function decideInDomain(
+	gardenId: string,
+	input: DispatchInput,
+	deps: DispatchDeciderDeps,
+	ctx: InDomainCtx,
+	resume: ResumePolicy,
+): Promise<DispatchDecision> {
+	const { acquireLock, releaseLock, inspectSocket, probeSocket } = deps;
+
+	// 4. acquire the per-gid lock BEFORE lstat/connect.
 	const acq = acquireLock(gardenId);
 	if (!acq.ok) {
 		// B3: carry the lock's holder evidence (pid/host/createdAt + lockPath) as a
 		// diagnostic so a permanently-held gid is observable/clearable. The receipt
 		// stays pre-probe-null; the conflict rides alongside it.
-		return reject(makeRejectReceipt("target-locked", null), { kind: "target-locked", conflict: acq.conflict });
+		return {
+			kind: "reject",
+			receipt: makeRejectReceipt("target-locked", null),
+			diagnostic: { kind: "target-locked", conflict: acq.conflict },
+		};
 	}
 	const lock = acq.claim;
 
-	// B2: from here a lock is HELD. Every reject path releases it explicitly
-	// (rejectAfterRelease); every execute path that keeps the lock sets
-	// retainLock=true just before returning. If inspectSocket / probeSocket /
-	// preflightForCwd THROWS, the catch releases the still-held lock before
-	// rethrowing — without this a thrown IO error leaks the lock and the long-lived
-	// MCP bridge pins the gid forever. This is 5b's lock lifecycle to own, not 5c's.
 	const rejectAfterRelease = (receipt: RejectReceipt): DispatchDecision => {
 		releaseLock(lock);
-		return reject(receipt);
+		return { kind: "reject", receipt };
 	};
 
 	let retainLock = false;
@@ -324,10 +374,17 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 		}
 
 		if (receipt.action === "resume") {
+			if (!resume.allowResume) {
+				// Defense in depth (A1 narrow): the resume verdict is owned-outcome × dormant
+				// ONLY, and a socket-only pi endpoint is dispatched fire-and-forget ONLY, so
+				// this is unreachable. If it ever fires, REFUSE — a record-less endpoint has no
+				// trusted cwd/resume authority, so spawn-bg must never open into it.
+				return rejectAfterRelease(makeRejectReceipt("bad-target", null));
+			}
 			// 1B: preflight runs ONLY here (the sole branch that launches a child into a
 			// target cwd). deny → nonce-owned release → untrusted-fail-fast, with the
 			// honest measured liveness (dormant = the `dead` we just probed).
-			const outcome = deps.preflightForCwd(identity.cwd);
+			const outcome = deps.preflightForCwd(resume.cwd);
 			if (outcome.kind === "deny") {
 				return rejectAfterRelease(makeRejectReceipt("untrusted-fail-fast", liveness));
 			}
@@ -336,11 +393,11 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 				action: "resume",
 				targetGardenId: gardenId,
 				sessionId: gardenId, // D3: gid is the pi resume authority, not nativeSessionId.
-				cwd: identity.cwd,
+				cwd: resume.cwd,
 				prompt: input.message,
 				launchArgs: outcome.launchArgs,
 				expectedSocketPath: socketPath,
-				observeTimeoutMs,
+				observeTimeoutMs: ctx.observeTimeoutMs,
 				releaseWhen: "socket-alive-or-child-exited",
 			};
 			retainLock = true;
@@ -353,8 +410,8 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 			action: "send",
 			targetGardenId: gardenId,
 			socketPath,
-			mode,
-			wantsReply,
+			mode: ctx.mode,
+			wantsReply: ctx.wantsReply,
 			message: input.message,
 		};
 		retainLock = true;
