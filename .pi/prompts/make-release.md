@@ -98,14 +98,15 @@ pnpm check
 
 ### 6. Release-gate evidence is recorded
 
-Confirm manually (do not invent paths) that the version's `CHANGELOG.md` section or the operator handoff records the fresh release-gate evidence:
+Confirm manually (do not invent paths) that the version's `CHANGELOG.md` section or the operator handoff records the fresh release-gate evidence. 0.11.0+ uses the two-tier release-gate summary: **MUST** is release-blocking and owns the exit code; **BEHAVIOR** is advisory and must be recorded but does not block the cut.
 
 ```text
 ./run.sh release-gate <scratch-project-dir>
-PASS=15 FAIL=0 SKIP=0
+MUST: PASS=<n> FAIL=0 SKIP=<n>
+BEHAVIOR: PASS=<n> FAIL=<n>   # advisory / non-blocking
 ```
 
-If missing, abort and return to `/prepare-release <version>` / the release-prep session.
+If the fresh MUST evidence is missing or has `FAIL>0`, abort and return to `/prepare-release <version>` / the release-prep session.
 
 ### 7. GitHub auth + target consistency
 

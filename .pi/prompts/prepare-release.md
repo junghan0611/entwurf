@@ -108,13 +108,16 @@ SCRATCH=$(mktemp -d /tmp/psa-release-gate-${VERSION}.XXXXXX)
 LIVE=1 ./run.sh release-gate "$SCRATCH"
 ```
 
-Expected summary (claude-only floor as of 0.11.0; `LIVE=1` runs the v2 spawn-resume/matrix LIVE steps, else they SKIP → PASS=16 SKIP=2):
+0.11.0+ release-gate reports a **two-tier** summary. The **MUST** tier is release-blocking and owns the exit code; the **BEHAVIOR** tier is advisory model-in-loop signal (for example S7 Bash-bypass) and must be recorded but does not block the cut.
+
+Expected 0.11.0 shape:
 
 ```text
-PASS=18  FAIL=0  SKIP=0
+MUST: PASS=17  FAIL=0  SKIP=0
+BEHAVIOR: PASS=<n>  FAIL=<n>   # advisory / non-blocking
 ```
 
-If the gate fails, stop at the failing axis and fix or explicitly classify it before committing release prep. Do not replace this with `pnpm check`; the live gate is the release floor.
+If any MUST step fails, stop at the failing axis and fix or explicitly classify it before committing release prep. Do not replace this with `pnpm check`; the live gate is the release floor. A BEHAVIOR fail is not a release blocker, but its count and artifact/log path must be recorded honestly in `CHANGELOG.md` or the operator handoff.
 
 ### 6. Commit release prep
 
@@ -142,7 +145,7 @@ Report:
 - prepared version
 - commit SHA
 - whether `pnpm check` passed
-- release-gate log/artifact/scratch paths and `PASS=18 FAIL=0 SKIP=0` (claude-only floor, `LIVE=1`)
+- release-gate log/artifact/scratch paths and the two-tier summary (`MUST PASS=<n> FAIL=0 SKIP=<n>` plus `BEHAVIOR PASS=<n> FAIL=<n>` advisory split)
 - whether the tree is clean
 - explicit final line:
 
