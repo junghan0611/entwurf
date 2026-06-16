@@ -96,6 +96,7 @@ Failure codes:
   S4 session has no assistant turn
   S5 identity mismatch (lastModel vs target)
   S6 bridge path != new             (child stderr, ACP-target only)
+  S7 entwurf absent from tool schema (parent never invoked it; no spawn)
   R1 parent non-zero exit            (resume stage)
   R2 turns did not increase within SENTINEL_WAIT
   R3 identity drift on resume (lastModel changed)
@@ -153,6 +154,13 @@ new_session_id() {
 
 parent_spawn() {
   local parent_key="$1" prompt="$2" out_file="$3" child_stderr_log="${4:-}"
+  # The parent's OWN launched session id, exposed to the caller so the S2
+  # session-file fallback can refuse to mistake the parent for its child (an
+  # ACP parent that never spawns — e.g. entwurf tool not in the model schema —
+  # otherwise leaves its own --session-id file as the newest, which the fallback
+  # would wrongly adopt). Empty for native parents (they emit "Session ID:" and
+  # never reach the fallback; they also run without an explicit --session-id).
+  PARENT_LAUNCH_SID=""
   if [ -n "$child_stderr_log" ]; then
     export PI_ENTWURF_CHILD_STDERR_LOG="$child_stderr_log"
   else
@@ -180,17 +188,15 @@ parent_spawn() {
       # matches prod. The flag is passed explicitly here — this script never relies on a
       # shell alias (non-interactive bash does not expand aliases, and `pi` resolves to the
       # pnpm binary), so renaming the alias `pi`→`pia` does not affect the sentinel.
-      local launch_sid
-      launch_sid=$(new_session_id) || return 2
-      timeout "$TIMEOUT" pi --mode json -p --session-id "$launch_sid" --entwurf-control \
+      PARENT_LAUNCH_SID=$(new_session_id) || return 2
+      timeout "$TIMEOUT" pi --mode json -p --session-id "$PARENT_LAUNCH_SID" --entwurf-control \
         -e "$REPOS/pi-shell-acp" \
         --provider pi-shell-acp --model claude-sonnet-4-6 \
         "$prompt" >"$out_file" 2>&1
       ;;
     acp-codex)
-      local launch_sid
-      launch_sid=$(new_session_id) || return 2
-      timeout "$TIMEOUT" pi --mode json -p --session-id "$launch_sid" --entwurf-control \
+      PARENT_LAUNCH_SID=$(new_session_id) || return 2
+      timeout "$TIMEOUT" pi --mode json -p --session-id "$PARENT_LAUNCH_SID" --entwurf-control \
         -e "$REPOS/pi-shell-acp" \
         --provider pi-shell-acp --model gpt-5.4 \
         "$prompt" >"$out_file" 2>&1
@@ -251,6 +257,23 @@ extract_session_id() {
 # infra-warmup race (retry) from a genuine outcome (see READY_RETRIES).
 entwurf_tool_uncallable() {
   grep -q 'No such tool available' "$1" 2>/dev/null
+}
+
+# Did the parent actually INVOKE the entwurf tool in its raw stream? This is the
+# precondition for treating the cell as a real MCP-surface spawn. A genuine
+# invocation shows a tool-call EVENT, in one of the parent surfaces' two shapes:
+#   native pi : a toolCall event carrying  "name":"entwurf"
+#   ACP       : [tool:start] Tool: pi-tools-bridge/entwurf
+# Both patterns are STRUCTURAL (the event envelope), deliberately NOT the bare
+# word "entwurf": a parent that bypasses via Bash/Terminal — or narrates "the
+# entwurf tool is not exposed" — mentions the word many times in tool
+# descriptions / thinking / pi-CLI args (observed 35× in a pure-Bash bypass log)
+# WITHOUT ever emitting the event. Matching the word would let a Bash bypass
+# masquerade as a real spawn (and a bash-spawned `pi` even echoes a "Session ID:"
+# — proving the CLI, not the MCP surface). Returns 0 (true) only on a real
+# entwurf tool-call event.
+parent_invoked_entwurf() {
+  grep -qE '"name":"entwurf"|\[tool:start\] Tool: [a-zA-Z0-9/._-]*entwurf' "$1" 2>/dev/null
 }
 
 # Pi names entwurf session files `<created-at>_<sessionId>.jsonl` (0.9.0
@@ -473,14 +496,31 @@ run_cell() {
     fi
 
     SPAWN_SESSION_ID=$(extract_session_id "$spawn_log")
-    if [ -z "$SPAWN_SESSION_ID" ]; then
-      # S2 fallback — parent surfaces that don't echo tool_result into their
-      # raw stream (ACP Codex) still write a session file. The fs is truth.
-      local fb
+    if ! parent_invoked_entwurf "$spawn_log"; then
+      # HARD GATE — this cell exists to prove the MCP entwurf SURFACE. If the
+      # parent did not invoke `mcp__pi-tools-bridge__entwurf` (it bypassed via
+      # Bash/Terminal or the pi CLI, or declined), the cell has FAILED, full
+      # stop. A "Session ID:" echoed by a bash-spawned `pi` does NOT count — it
+      # proves the CLI works, not the MCP surface. Discard any such id so the
+      # cell falls through to the honest S7 classification below. The whole
+      # point (GLG): MCP-surface-or-bust — a Bash fallback is an error, not a
+      # pass, and must blow up immediately.
+      SPAWN_SESSION_ID=""
+    elif [ -z "$SPAWN_SESSION_ID" ]; then
+      # S2 fallback — entwurf WAS invoked, but the surface did not echo the id
+      # into the raw stream (ACP Codex). The fs is truth — but never adopt the
+      # parent's OWN launched session: a no-spawn would otherwise leave it as
+      # the newest delta and get mislabeled as an S5 model mismatch.
+      local fb cand_sid
       if fb=$(find_new_entwurf_session "$spawn_threshold"); then
-        SPAWN_SESSION_ID="${fb%%$'\t'*}"
-        SPAWN_SESSION="${fb##*$'\t'}"
-        log "  [fallback] sessionId=$SPAWN_SESSION_ID from session-file delta"
+        cand_sid="${fb%%$'\t'*}"
+        if [ -n "$PARENT_LAUNCH_SID" ] && [ "$cand_sid" = "$PARENT_LAUNCH_SID" ]; then
+          log "  [fallback] rejected: newest delta is the parent's own session ($cand_sid), not a child"
+        else
+          SPAWN_SESSION_ID="$cand_sid"
+          SPAWN_SESSION="${fb##*$'\t'}"
+          log "  [fallback] sessionId=$SPAWN_SESSION_ID from session-file delta"
+        fi
       fi
     fi
 
@@ -498,6 +538,9 @@ run_cell() {
     CELL_FCODE="S2"
     if entwurf_tool_uncallable "$spawn_log"; then
       CELL_NOTE="entwurf MCP tool stayed uncallable ('No such tool') after the warmup-grace retry — real backend-readiness defect, not a warmup race — see $spawn_log"
+    elif ! parent_invoked_entwurf "$spawn_log"; then
+      CELL_FCODE="S7"
+      CELL_NOTE="parent did NOT invoke the MCP entwurf tool — no '[tool:start] ...entwurf' in the raw stream. It bypassed via Bash/Terminal or the pi CLI, or declined to call it. The MCP entwurf surface was NOT exercised (a Session ID echoed by a bash-spawned pi does not count). This is a real cell failure, NOT a spawn/model-identity defect — see $spawn_log"
     else
       CELL_NOTE="no 'Session ID:' in raw stream and no new entwurf session file after parent exit — see $spawn_log"
     fi
