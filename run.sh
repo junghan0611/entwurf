@@ -37,10 +37,8 @@ Usage:
   ./run.sh xt-tool-surface             # ACP backend exclude-tools policy: -xt <builtin> fail-fast per backend (declared==actual), extension exclusion honored
   ./run.sh check-bridge               # pi-tools-bridge direct MCP smoke + protocol/negative-path test.sh (backend tool-callability lives in smoke-async-resume + sentinel)
   ./run.sh check-pi-tools-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
-  ./run.sh check-native-async         # pi-native async entwurf spawn smoke (pi -e pi-extensions/entwurf.ts)
   ./run.sh sentinel [args...]         # entwurf 6-cell diagonal matrix (sync+resume × parent×target)
   ./run.sh session-messaging [args...] # 4-case session-messaging smoke (native/ACP cross-matrix)
-  ./run.sh smoke-compaction-policy [--step=NN] # 0.5.0 compaction-policy verification (LIVE=1 to include backend observation steps)
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
   ./run.sh check-entwurf-session-identity # deterministic gate for locked garden session identity & name grammar (sessionId/buildSessionName/parse/collision), no API
@@ -99,7 +97,6 @@ Usage:
   ./run.sh check-dep-versions         # local deterministic check that version pins (package.json/run.sh/README.md + pi devDeps/peer pins) agree
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.79.x peers
-  ./run.sh verify-resume [project-dir] # exact pi -> ACP -> Claude continuity check with visible acpSessionId diagnostics
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to pi-shell-acp alias
   ./run.sh install [project-dir]      # install this local package into project .pi/settings.json
   ./run.sh setup:links [--force]      # repair ~/.pi/agent/entwurf-targets.json link (use --force to replace a stale operator file or wrong symlink; a .bak is taken)
@@ -826,152 +823,6 @@ EOF
   echo "[smoke-model-switch/$label] ok (reuse mismatch locked, ModelSwitchLockedError thrown, existing session continues)"
   rm -f "$log_file"
 }
-
-
-smoke_entwurf_resume_single() {
-  local project_dir=$1
-  local backend=$2
-  local model=$3
-  local expected_path=$4
-  local label=$5
-
-  local session_file
-  session_file=$(mktemp /tmp/pi-shell-acp-entwurf-resume-XXXXXX.jsonl)
-
-  echo "[smoke-entwurf-resume/$backend] ${label}"
-  echo "[smoke-entwurf-resume/$backend] model=$model expected-turn2=$expected_path session=$session_file"
-
-  local turn1_log turn1_rc=0
-  turn1_log=$(cd "$project_dir" && PI_SHELL_ACP_STRICT_BOOTSTRAP=1 pi \
-    --mode json -p --no-extensions \
-    -e "$REPO_DIR" \
-    --provider pi-shell-acp \
-    --model "$model" \
-    --session "$session_file" \
-    'READY 만 답해' 2>&1) || turn1_rc=$?
-  if [[ "$turn1_rc" != "0" ]]; then
-    echo "[smoke-entwurf-resume/$backend] turn1 pi invocation failed rc=$turn1_rc:" >&2
-    echo "$turn1_log" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  if ! grep -q "^\[pi-shell-acp:bootstrap\] path=new backend=$backend" <<< "$turn1_log"; then
-    echo "[smoke-entwurf-resume/$backend] turn1 expected path=new, got:" >&2
-    echo "$turn1_log" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  local turn1_acp
-  # `set -euo pipefail`: when the inner `acpSessionId=` grep finds nothing it exits 1,
-  # pipefail propagates, and the assignment aborts the script BEFORE the `[[ -z ]]` guard
-  # below can emit the intended "acpSessionId not extractable" diagnostic. Swallow the
-  # pipeline's nonzero (oracle's doctor :153/:89 idiom) so emptiness flows to that guard.
-  turn1_acp=$(grep -oE "^\[pi-shell-acp:bootstrap\] path=new backend=$backend [^$]*" <<< "$turn1_log" \
-    | head -1 | grep -oE 'acpSessionId=[^ ]+' | head -1 | cut -d= -f2 || true)
-  if [[ -z "$turn1_acp" ]]; then
-    echo "[smoke-entwurf-resume/$backend] turn1 acpSessionId not extractable:" >&2
-    echo "$turn1_log" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  if ! grep -qE '"role":"assistant"' "$session_file"; then
-    echo "[smoke-entwurf-resume/$backend] turn1 session file has no assistant message" >&2
-    cat "$session_file" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  echo "[smoke-entwurf-resume/$backend] turn1 path=new acpSessionId=$turn1_acp: ok"
-
-  local turn2_log turn2_rc=0
-  turn2_log=$(cd "$project_dir" && PI_SHELL_ACP_STRICT_BOOTSTRAP=1 pi \
-    --mode json -p --no-extensions \
-    -e "$REPO_DIR" \
-    --provider pi-shell-acp \
-    --model "$model" \
-    --session "$session_file" \
-    'OK 만 답해' 2>&1) || turn2_rc=$?
-  if [[ "$turn2_rc" != "0" ]]; then
-    echo "[smoke-entwurf-resume/$backend] turn2 pi invocation failed rc=$turn2_rc:" >&2
-    echo "$turn2_log" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  if ! grep -q "^\[pi-shell-acp:bootstrap\] path=$expected_path backend=$backend" <<< "$turn2_log"; then
-    echo "[smoke-entwurf-resume/$backend] turn2 expected path=$expected_path, got:" >&2
-    echo "$turn2_log" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  local turn2_acp
-  # Same pipefail-abort class as turn1_acp above: swallow the pipeline's nonzero so an
-  # unextractable acpSessionId flows to the `[[ ... != ... ]]` mismatch guard below
-  # instead of aborting the smoke mid-assignment.
-  turn2_acp=$(grep -oE "^\[pi-shell-acp:bootstrap\] path=$expected_path backend=$backend [^$]*" <<< "$turn2_log" \
-    | head -1 | grep -oE 'acpSessionId=[^ ]+' | head -1 | cut -d= -f2 || true)
-  if [[ "$turn2_acp" != "$turn1_acp" ]]; then
-    echo "[smoke-entwurf-resume/$backend] acpSessionId mismatch turn1=$turn1_acp turn2=$turn2_acp" >&2
-    echo "$turn2_log" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  if grep -q "^\[pi-shell-acp:bootstrap-invalidate\]" <<< "$turn2_log"; then
-    echo "[smoke-entwurf-resume/$backend] turn2 unexpected bootstrap-invalidate:" >&2
-    echo "$turn2_log" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  if grep -q "^\[pi-shell-acp:bootstrap-fallback\]" <<< "$turn2_log"; then
-    echo "[smoke-entwurf-resume/$backend] turn2 unexpected bootstrap-fallback:" >&2
-    echo "$turn2_log" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-
-  # assistant message from turn2 must land in the same session file
-  local assistant_count
-  assistant_count=$(grep -cE '"role":"assistant"' "$session_file" || true)
-  if [[ "${assistant_count:-0}" -lt 2 ]]; then
-    echo "[smoke-entwurf-resume/$backend] expected >=2 assistant messages in session file, got ${assistant_count:-0}" >&2
-    cat "$session_file" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  # last assistant payload must be non-empty (guards against role-only or blank content records)
-  local last_assistant_len
-  last_assistant_len=$(SESSION_FILE="$session_file" node --input-type=module -e '
-    import { readFileSync } from "node:fs";
-    const lines = readFileSync(process.env.SESSION_FILE, "utf8").split("\n").filter(Boolean);
-    let last = null;
-    for (const raw of lines) {
-      try {
-        const rec = JSON.parse(raw);
-        const msg = rec && rec.message ? rec.message : rec;
-        if (msg && msg.role === "assistant") last = msg;
-      } catch {}
-    }
-    if (!last) { console.log(0); process.exit(0); }
-    const content = last.content;
-    let len = 0;
-    if (typeof content === "string") len = content.trim().length;
-    else if (Array.isArray(content)) {
-      for (const part of content) {
-        if (typeof part === "string") len += part.trim().length;
-        else if (part && typeof part.text === "string") len += part.text.trim().length;
-      }
-    } else if (content && typeof content.text === "string") len = content.text.trim().length;
-    console.log(len);
-  ' 2>/dev/null || echo 0)
-  if [[ "${last_assistant_len:-0}" -lt 1 ]]; then
-    echo "[smoke-entwurf-resume/$backend] last assistant payload is empty (len=${last_assistant_len:-0})" >&2
-    cat "$session_file" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  echo "[smoke-entwurf-resume/$backend] turn2 path=$expected_path acpSessionId=$turn2_acp (same as turn1, last-assistant-len=$last_assistant_len): ok"
-
-  rm -f "$session_file"
-}
-
 
 check_model_lock() {
   # Deterministic policy unit test for pi-extensions/model-lock.ts.
@@ -1961,94 +1812,14 @@ check_pack_install() {
 }
 
 
-
-verify_resume() {
-  local project_dir session_file model prompt_a prompt_b other_dir
-  project_dir=$(normalize_project_dir "$1")
-  model=${PI_SHELL_ACP_VERIFY_MODEL:-claude-sonnet-4-6}
-  prompt_a=${PI_SHELL_ACP_VERIFY_PROMPT_A:-'Remember this ordinary word for the next turn: owl. Reply only READY.'}
-  prompt_b=${PI_SHELL_ACP_VERIFY_PROMPT_B:-'What ordinary word did I ask you to remember? Reply with the word only.'}
-  session_file=$(mktemp /tmp/pi-shell-acp-verify-XXXXXX.jsonl)
-
-  # Cross-cwd target. The same-cwd verify-resume below would not have caught
-  # issue #9 — the bug needs cwd(turn2) != cwd(turn1) so the pi-shell-acp
-  # bridge's `isPersistedSessionCompatible` cwd-strictness invalidates the
-  # Scene 1 record. $HOME is the usual override and reliably differs from a
-  # project_dir; if the operator runs verify-resume *against* $HOME itself
-  # (project_dir == $HOME) we fall back to a fresh mktemp dir so the gate
-  # still exercises a true cross-cwd path. PI_SHELL_ACP_VERIFY_OTHER_DIR
-  # explicit override wins over both.
-  other_dir=${PI_SHELL_ACP_VERIFY_OTHER_DIR:-$HOME}
-  if [[ "$(cd "$other_dir" && pwd -P)" == "$(cd "$project_dir" && pwd -P)" ]]; then
-    other_dir=$(mktemp -d /tmp/pi-shell-acp-verify-other-XXXXXX)
-    echo "[verify-resume] project_dir == \$HOME; using fresh other-dir: $other_dir"
-  fi
-
-  require_cmd pi
-  require_cmd node
-
-  echo "[verify-resume] project:      $project_dir"
-  echo "[verify-resume] other-dir:    $other_dir   (cross-cwd resumer cwd)"
-  echo "[verify-resume] repo:         $REPO_DIR"
-  echo "[verify-resume] model:        $model"
-  echo "[verify-resume] session-file: $session_file"
-  echo "[verify-resume] turn1: pi should log bootstrap=new and an acpSessionId"
-  (
-    cd "$project_dir"
-    PI_SHELL_ACP_DEBUG=1 pi -e "$REPO_DIR" --session "$session_file" --provider pi-shell-acp --model "$model" -p "$prompt_a"
-  )
-  echo "[verify-resume] turn2: pi should log bootstrap=resume or bootstrap=load with the same acpSessionId"
-  (
-    cd "$project_dir"
-    PI_SHELL_ACP_DEBUG=1 pi -e "$REPO_DIR" --session "$session_file" --provider pi-shell-acp --model "$model" -p "$prompt_b"
-  )
-  check_claude_sessions "$project_dir"
-
-  # ----------------------------------------------------------------------
-  # Phase 2 — cross-cwd fact-recall through entwurf_resume (issue #9 gate).
-  #
-  # Phase 1 above checks acpSessionId continuity but runs both turns from
-  # the same cwd, so the cwd-mismatch branch of
-  # `isPersistedSessionCompatible` is never exercised. Phase 2 reproduces
-  # the regression shape: spawn at $project_dir, resume from $other_dir
-  # via runEntwurfResumeSync with options.cwd=undefined (the MCP shape).
-  # The fix in pi-extensions/lib/entwurf-core.ts must read the session
-  # header cwd to keep child spawn cwd aligned with the original.
-  # ----------------------------------------------------------------------
-  # Capture child entwurf stderr so a future silent regression cannot hide
-  # through release. Phase 2 spawns sibling pi processes via runEntwurfSync /
-  # runEntwurfResumeSync, both of which call entwurf-core's
-  # `mirrorChildStderr()` — that helper only writes when
-  # PI_ENTWURF_CHILD_STDERR_LOG is set in the parent env. We point it at a
-  # mktemp file so child-side `[pi-shell-acp:bootstrap]` lines and any thrown
-  # errors land somewhere visible on smoke failure; on success the file is
-  # left in /tmp for one-shot inspection. This is the same env that
-  # scripts/sentinel-runner.sh already drives — no new knob.
-  local phase2_child_stderr
-  phase2_child_stderr=$(mktemp /tmp/pi-shell-acp-verify-phase2-child-XXXXXX.log)
-  echo "[verify-resume] phase2: cross-cwd fact-recall via entwurf_resume"
-  echo "[verify-resume] phase2: child stderr -> $phase2_child_stderr"
-  PI_ENTWURF_CHILD_STDERR_LOG="$phase2_child_stderr" node --experimental-strip-types \
-    "$REPO_DIR/scripts/cross-cwd-resume-smoke.ts" \
-    --project-dir "$project_dir" \
-    --other-dir "$other_dir" \
-    --model "$model"
-}
-
-CLAUDE_ACP_REQUIRED_VERSION="0.39.0"
-CODEX_ACP_REQUIRED_VERSION="0.15.0"
-
-
-
 # --- Axis 1 interview-prerequisite gates (ported from agent-config pre-Phase-4) ---
 #
-# These three validators complement the local deterministic check_* gates by
+# These validators complement the local deterministic check_* gates by
 # actually exercising the runtime surfaces the agent interview depends on:
 #
 #   1. pi-tools-bridge as a standalone MCP server (tools/list + protocol suite)
-#   2. backend tool-callability via the live orchestration gates
-#      (smoke-async-resume + sentinel), not model self-report in check-bridge
-#   3. pi-native async entwurf spawn via `pi -e pi-extensions/entwurf.ts`
+#   2. session-messaging matrix + sentinel autonomous tool-selection, not model
+#      self-report in check-bridge
 #
 # AGENTS.md §Ingestion Gates (Axis 1) names these as required gates that must
 # pass before the Axis 2 agent interview can be re-run. They were implemented
@@ -2151,73 +1922,11 @@ JS
   # avoids Claude L1 self-recognition variance blocking a release gate.
 }
 
-# pi-native async entwurf spawn smoke. Loads the native entwurf.ts directly
-# and asks a cheap model to invoke `entwurf` in async mode locally. (Remote/SSH
-# entwurf is out of scope in the garden-native session identity — 0.9.0, #11 —
-# and now fails fast *before* runEntwurfAsync runs, so a remote host can no
-# longer be used to exercise the async spawn path.) We read pi's --mode json
-# event stream so the gate inspects the tool's *actual* sync return (which
-# contains "Async entwurf spawned" + Session ID), not the model's
-# natural-language interpretation. We also grep explicitly for the regression
-# class PM flagged: a stale `explicitExtensions` reference in runEntwurfAsync
-# would surface as a ReferenceError in the tool result.
-validate_pi_native_async_entwurf() {
-  local raw
-  log "pi-native: async entwurf spawn smoke (model: gpt-5.4-mini)..."
-
-  if ! raw=$(pi -p \
-              --mode json \
-              --no-extensions \
-              -e "$REPO_DIR/pi-extensions/entwurf.ts" \
-              --provider openai-codex \
-              --model gpt-5.4-mini \
-              'entwurf 도구를 task="noop", mode="async" 인수로 정확히 1회 호출하라. 도구의 첫 sync 응답을 그대로 echo하라. 그 다음에 도착하는 follow-up 메시지는 무시하고 더 출력하지 마라.' 2>&1); then
-    echo "$raw" >&2
-    fail "pi-native async entwurf smoke: pi -p exited non-zero"
-    return 1
-  fi
-
-  # Regression class PM flagged: stale variable name in runEntwurfAsync.
-  #
-  # NOTE on here-strings: $raw can exceed 800KB (pi --mode json is chatty),
-  # and `set -o pipefail` is active. The pattern `echo "$raw" | grep -q ...`
-  # races — grep -q exits 0 on first match, echo then gets SIGPIPE (rc=141),
-  # and pipefail elevates the whole pipe's rc to 141 → `if` sees "fail" even
-  # though the match happened. Observed in setup runs where raw > ~500KB.
-  # Here-strings (`<<< "$raw"`) feed stdin without a pipeline, sidestepping
-  # pipefail entirely. Keep this form for any grep check on large $raw.
-  if grep -qE 'ReferenceError.*explicitExtensions|explicitExtensions is not defined' <<< "$raw"; then
-    echo "$raw" >&2
-    fail "pi-native async: ReferenceError on 'explicitExtensions' (stale variable resurfaced)"
-    return 1
-  fi
-
-  # The sync tool return contains these strings verbatim — independent of how
-  # the model paraphrases. Either marker proves the spawn completed cleanly.
-  if grep -qE 'Async entwurf spawned|Session ID:' <<< "$raw"; then
-    local sessionid
-    # `head -1` still closes its stdin early, which can send SIGPIPE back
-    # to grep under pipefail. Swallow the rc so the assignment survives —
-    # the captured string is the only thing we need.
-    sessionid=$(grep -oE 'Session ID: [0-9]{8}T[0-9]{6}-[0-9a-f]{6}' <<< "$raw" | head -1 || true)
-    ok "pi-native async entwurf spawn (${sessionid:-Session ID present})"
-    return 0
-  fi
-
-  echo "$raw" >&2
-  fail "pi-native async entwurf produced neither Session ID nor a recognized error"
-  return 1
-}
-
 check_bridge() {
   section "pi-tools-bridge (direct MCP protocol)"
   validate_pi_tools_bridge
 }
 
-check_native_async() {
-  section "pi-native async entwurf spawn"
-  validate_pi_native_async_entwurf
-}
 
 sentinel_run() {
   local sentinel="$REPO_DIR/scripts/sentinel-runner.sh"
@@ -2237,20 +1946,6 @@ session_messaging_run() {
   "$smoke" "$@"
 }
 
-# smoke-compaction-policy — 0.5.0 compaction-policy verification.
-#
-# Five steps: 02/05 deterministic gate, 03/04/06 live observation
-# (require LIVE=1). See demo/compaction-policy-smoke/README.md for the
-# full surface declaration. Exits non-zero iff any deterministic step
-# fails; observed-only rows do not gate.
-smoke_compaction_policy() {
-  local script="$REPO_DIR/scripts/compaction-policy-smoke.ts"
-  if [ ! -f "$script" ]; then
-    fail "smoke-compaction-policy: $script not found"
-    return 1
-  fi
-  (cd "$REPO_DIR" && node --experimental-strip-types "$script" "$@")
-}
 
 # setup_all — full pi-shell-acp install.
 #
@@ -2286,7 +1981,7 @@ setup_all() {
   echo "[setup] repo:    $REPO_DIR"
   echo "[setup] project: $project_dir"
   echo "[setup] scope:   entwurf v2 orchestration install (pi-native; ACP backends dropped)"
-  echo "[setup] verification: Axis 1 interview gates (pi-tools-bridge, pi-native async, sentinel, session-messaging)"
+  echo "[setup] verification: Axis 1 interview gates (pi-tools-bridge, sentinel, session-messaging)"
 
   (cd "$REPO_DIR" && pnpm install --frozen-lockfile)
   sync_auth
@@ -2304,9 +1999,6 @@ setup_all() {
   # here; agent-config (consumer) does not run these anymore.
   section "Axis 1 gate: pi-tools-bridge (direct MCP protocol)"
   validate_pi_tools_bridge
-
-  section "Axis 1 gate: pi-native async entwurf spawn"
-  validate_pi_native_async_entwurf
 
   section "Axis 1 gate: session-messaging 4-case matrix"
   session_messaging_run
@@ -2405,11 +2097,7 @@ xt_tool_surface() {
 #     tests were dropped from the gate; --allow-skip-gemini is accepted but
 #     ignored (back-compat). Codex/Gemini stay supported surfaces verified by
 #     the deterministic gates + on-demand smoke-codex / smoke-gemini.
-#   - smoke-continuity is intentionally NOT here: smoke-entwurf-resume is its
-#     superset (asserts acpSessionId identity + turn count + blank/invalidate
-#     guards). smoke-continuity stays a dev quick-smoke.
-#   - smoke-compaction-policy runs LIVE=1 (else backend-observation steps skip).
-#   - xt-tool-surface asserts the ACP-backend exclude-tools policy: `-xt <builtin>`
+#   - xt-tool-surface asserts the exclude-tools policy: `-xt <builtin>`
 #     is fail-fast rejected per backend (declared==actual), extension exclusion honored.
 #   - Final release authorization is GLG's, not this script's: a green
 #     run is necessary, and the operator closes the decision.
@@ -2428,8 +2116,7 @@ release_gate() {
   # Absolute path to this script — survives the `cd "$project_dir"` below. The
   # live gates derive their pi session dir from $PWD (tmux `-c "$PWD"`,
   # PROJECT_DIR_DEFAULT, and the bare `pi -p` invocations that don't `cd`
-  # themselves). Six of them (smoke-async-resume, check-bridge,
-  # check-native-async, sentinel, session-messaging, smoke-compaction-policy)
+  # themselves). Three of them (check-bridge, sentinel, session-messaging)
   # plus xt-tool-surface take no project arg, so if release-gate runs from the
   # repo their sessions land in the repo's own session dir — polluting the very
   # tree we ship and breaking the "scratch full gate" evidence claim. Running
@@ -2471,10 +2158,10 @@ release_gate() {
   # Honesty rails: (1) "non-blocking" is NOT "pass" — a BEHAVIOR-FAIL is surfaced
   # loudly in the summary with its artifact path, never buried; (2) S7 (Bash
   # bypass, sentinel-runner.sh) stays a hard FAIL *inside* this lane — a bypass is
-  # never relabelled a pass; (3) the v1 tools themselves are proven by the
-  # deterministic/programmatic must-pass gates above (smoke-async-resume,
-  # smoke-entwurf-resume, check-native-async, check-bridge) — this lane is v1
-  # *behavior*, not v1 *function*. Residual bypass → 0.11.x usability lane.
+  # never relabelled a pass; (3) the entwurf_v2 surface itself is proven by the
+  # deterministic/programmatic must-pass gates above (check-entwurf-v2-*,
+  # check-bridge) — this lane is autonomous-tool-selection *behavior*, not
+  # *function*. Residual bypass → 0.11.x usability lane.
   local behavior_pass=0 behavior_failc=0
   local -a behavior_results=()
 
@@ -2575,10 +2262,7 @@ release_gate() {
     warn "smoke-entwurf-v2-spawn-resume-live: LIVE!=1 — skipped (0.11.0 A acceptance, opt-in: needs auth/model)"
     results+=("SKIP  smoke-entwurf-v2-spawn-resume-live (LIVE!=1)"); skip=$((skip + 1))
   fi
-  run_step "check-native-async"             gate bash "$self" check-native-async
   run_step "session-messaging"              gate bash "$self" session-messaging
-  run_step "smoke-compaction-policy (LIVE)" gate env LIVE=1 bash "$self" smoke-compaction-policy
-  run_step "verify-resume"                  gate bash "$self" verify-resume "$project_dir"
 
   # 4. -xt tool-surface truthfulness — now a real fail-fast policy gate.
   run_step "xt-tool-surface (exclude-tools policy)" gate xt_tool_surface
@@ -2644,9 +2328,6 @@ case "$cmd" in
   check-bridge)
     check_bridge
     ;;
-  check-native-async)
-    check_native_async
-    ;;
   sentinel)
     shift || true
     sentinel_run "$@"
@@ -2654,10 +2335,6 @@ case "$cmd" in
   session-messaging)
     shift || true
     session_messaging_run "$@"
-    ;;
-  smoke-compaction-policy)
-    shift || true
-    smoke_compaction_policy "$@"
     ;;
   check-model-lock)
     check_model_lock
@@ -2923,9 +2600,6 @@ case "$cmd" in
     ;;
   check-pack-install)
     check_pack_install
-    ;;
-  verify-resume)
-    verify_resume "$TARGET_PROJECT_DIR"
     ;;
   sync-auth)
     sync_auth
