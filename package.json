@@ -32,11 +32,6 @@
 	],
 	"type": "module",
 	"files": [
-		"index.ts",
-		"acp-bridge.ts",
-		"event-mapper.ts",
-		"engraving.ts",
-		"pi-context-augment.ts",
 		"protocol.js",
 		"pi-extensions/",
 		"mcp/",
@@ -68,11 +63,7 @@
 	},
 	"packageManager": "pnpm@10.33.0",
 	"dependencies": {
-		"@agentclientprotocol/claude-agent-acp": "0.39.0",
-		"@agentclientprotocol/sdk": "0.22.1",
-		"@anthropic-ai/sdk": "0.100.1",
 		"@modelcontextprotocol/sdk": "^1.12.1",
-		"@zed-industries/codex-acp": "0.15.0",
 		"zod": "^3.25.0 || ^4.0.0"
 	},
 	"peerDependencies": {
@@ -138,9 +129,7 @@
 	},
 	"pi": {
 		"extensions": [
-			"./index.ts",
 			"./pi-extensions/entwurf-control.ts",
-			"./pi-extensions/entwurf.ts",
 			"./pi-extensions/model-lock.ts"
 		],
 		"image": "https://raw.githubusercontent.com/junghan0611/pi-shell-acp/main/docs/assets/pi-shell-acp-demo.gif"
