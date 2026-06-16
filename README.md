@@ -8,6 +8,8 @@ Use Claude Code, Codex, and Gemini CLI through Agent Client Protocol (ACP) insid
 
 > **Public, active development.** Real working code, still young. Verify it in your own workflow before relying on it all day. Evidence calibration: [VERIFY.md](./VERIFY.md); native async-delivery capability levels: [DELIVERY.md](./DELIVERY.md).
 
+> **0.11.0** is a compatibility-preserving Stage 0 for [`entwurf_v2`](#entwurf_v2--additive-dispatch-verb-0110): the pi-only dispatch substrate now proves live control-socket send (including record-less socket-only pi sessions) and spawn-bg resident resume, while the v1 verbs remain available by default and `PI_SHELL_ACP_V2_ONLY=1` is a staging hard-refusal mode. Claude Code tmux-live and the broader Entwurf extraction stay in the next lane.
+
 ![pi-shell-acp demo](docs/assets/pi-shell-acp-demo.gif)
 
 ```text

@@ -101,7 +101,7 @@ updated when a backend version changes the delivery surface.
 
 | Harness / surface | Highest current level | Transport | Notes |
 |---|---:|---|---|
-| **pi native Entwurf** | D7+ | Unix control socket + pi followUp/custom messages | Replyable pi session. This is the resident baseline, not an external meta-session. |
+| **pi native Entwurf** | D7+ | Unix control socket + pi followUp/custom messages | Replyable pi session. This is the resident baseline, not an external meta-session. 0.11.0 `entwurf_v2` treats a record-less but live pi control socket as a socket-only `fire-and-forget` target (addressed by its socket, not a meta-record); record-less *dormant* resume is intentionally not claimed. |
 | **Claude Code interactive 2.1.163** | D6, D7 partial, D8 partial | Plugin/global `SessionStart` arms `watchPaths`; external write triggers `FileChanged`; `asyncRewake` wakes idle session | Active idle wake proven without pty. `Stop` alone is piggyback-only. `asyncRewake` is a doorbell; body is self-fetched from mailbox. D8 partial: duplicate/read idempotence, honest unread counts, and level-triggered body drain are gated; empirical wake-edge bounds and unread-heartbeat backstop remain open (#34). |
 | **Antigravity / agy** | D6+ | Native LS gRPC `agentapi send-message` | Active push into live conversation. Same judgement levels; transport differs from Claude. |
 | **Codex embedded TUI 0.136.0** | D0 partial | Native state DB / rollout transcript only | Standalone Embedded TUI binds no socket; no `FileChanged`/`asyncRewake` in Codex hooks; not retrofittable. Identify-only via state DB / rollout. |

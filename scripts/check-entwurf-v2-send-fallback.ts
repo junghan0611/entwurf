@@ -260,6 +260,57 @@ async function main(): Promise<void> {
 		ok("pi + inspect indeterminate → never connects (no probe)", trace.probeCalls === 0);
 	}
 
+	// ── 9b: A1 narrow — a socket-only pi endpoint (identity null + socketOnlyPi) re-resolves
+	// as IN-DOMAIN pi, NOT bad-target. This is the TOCTOU path for a record-less live pi whose
+	// socket died between the decision and the send: fire-and-forget → alive retries the
+	// control-send, dead is the honest dormant reject, never a mailbox/spawn. `inspectCalls === 1`
+	// proves it went through the in-domain probe path and did NOT short-circuit to bad-target
+	// (inspectCalls === 0) — the regression guard for the fallback fix. ─────────────────────────
+	const socketOnly: TargetResolution = { identity: null, preProbeAddressConflict: false, socketOnlyPi: true };
+	{
+		const { deps, trace } = makeDeps({
+			resolution: socketOnly,
+			inspection: { kind: "socket-file", socketPath: "/fake/ctl/fresh.sock" },
+			probe: "alive",
+		});
+		const r = await resolveDeadControlSendFallback(CONTROL_PLAN, lockClaim(), deps);
+		ok(
+			"socketOnly + alive → control-socket retry (NOT bad-target)",
+			r.kind === "execute" && r.plan.transport === "control-socket",
+		);
+		ok(
+			"socketOnly + alive → re-inspected once, probed once (in-domain path)",
+			trace.inspectCalls === 1 && trace.probeCalls === 1,
+		);
+	}
+	{
+		const { deps, trace } = makeDeps({
+			resolution: socketOnly,
+			inspection: { kind: "absent", socketPath: "/fake/ctl/gone.sock" },
+		});
+		const r = await resolveDeadControlSendFallback(CONTROL_PLAN, lockClaim(), deps);
+		ok(
+			"socketOnly + dead → reject dormant-fire-forget-unsupported (NOT bad-target, NOT mailbox)",
+			r.kind === "reject" && r.reason === "dormant-fire-forget-unsupported",
+		);
+		ok(
+			"socketOnly + dead → entered in-domain inspect (inspectCalls === 1, not short-circuit)",
+			trace.inspectCalls === 1,
+		);
+	}
+	{
+		const { deps } = makeDeps({
+			resolution: socketOnly,
+			inspection: { kind: "socket-file", socketPath: "/fake/ctl/stall.sock" },
+			probe: "indeterminate",
+		});
+		const r = await resolveDeadControlSendFallback(CONTROL_PLAN, lockClaim(), deps);
+		ok(
+			"socketOnly + probe indeterminate → reject indeterminate-no-spawn",
+			r.kind === "reject" && r.reason === "indeterminate-no-spawn",
+		);
+	}
+
 	// ── 10: address-conflict (symlink) → reject ───────────────────────────────
 	{
 		const { deps } = makeDeps({

@@ -87,10 +87,14 @@ export async function resolveDeadControlSendFallback(
 	const mailboxDir = deps.mailboxDir ?? defaultMetaMailboxDir();
 	const sessionsDir = deps.sessionsDir ?? defaultMetaSessionsDir();
 
-	// Probe-free target resolution first — a vanished citizen or a quarantined address
-	// short-circuits before any inspect/probe (mirrors decideDispatch steps 2).
+	// Probe-free target resolution first — a vanished target or a quarantined address
+	// short-circuits before any inspect/probe (mirrors decideDispatch steps 2). A1 narrow:
+	// a record-LESS but live pi control socket (socketOnlyPi, identity null) is NOT a
+	// bad-target — it is an in-domain pi endpoint that re-resolves through the inspect/probe
+	// path below (fire-and-forget: alive → retry control-send, dead → honest reject). Only a
+	// genuinely absent target (identity null AND not socket-only) is bad-target.
 	const resolution = await deps.resolveTarget(gardenId);
-	if (resolution.identity === null) {
+	if (resolution.identity === null && resolution.socketOnlyPi !== true) {
 		return { kind: "reject", reason: "bad-target" };
 	}
 	if (resolution.preProbeAddressConflict) {
@@ -100,8 +104,10 @@ export async function resolveDeadControlSendFallback(
 
 	// Unsupported backend (claude-code self-fetch, …) → the mailbox mini-table, keyed on
 	// intent alone. This is NOT an in-domain dormant (the N2 asymmetry) — a deliverable
-	// citizen's honest channel is its mailbox. No inspect/probe on this axis.
-	if (!isLivenessSupported(identity.backend)) {
+	// citizen's honest channel is its mailbox. No inspect/probe on this axis. A socket-only
+	// pi endpoint (identity null) is in-domain pi, so it NEVER takes this branch — only a
+	// record-backed unsupported identity does.
+	if (identity !== null && !isLivenessSupported(identity.backend)) {
 		const deliverability = await deps.mailboxDeliverabilityFor(identity);
 		const receipt = resolveDispatch("fire-and-forget", "unsupported", deliverability.deliverable);
 		if (!receipt.ok) {

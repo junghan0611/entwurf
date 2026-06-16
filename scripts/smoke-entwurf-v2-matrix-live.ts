@@ -9,10 +9,15 @@
  * paths stay in the deterministic gate (GPT Q2/Q4) — this is "substrate still works", not a
  * behavior suite.
  *
- * THREE cells (GPT verdict — model-in-loop is OUT, this is a transport/lock/enqueue gate):
+ * FOUR cells (GPT verdict — model-in-loop is OUT, this is a transport/lock/enqueue gate):
  *   C1 control-socket — a real `pi --entwurf-control` resident (a pi citizen with a live
  *      socket) → decider routes fire-and-forget/live to control-socket → real RPC send →
  *      lock acquire→release ×1 → no lock garbage.
+ *   C1b socket-only (A1 narrow) — a real `pi --entwurf-control` resident with NO meta-record
+ *      (the operator-greeted record-less case) → resolveTarget promotes its live control socket
+ *      to a socket-only pi endpoint → fire-and-forget routes to control-socket (outcome=sent),
+ *      while owned-outcome on the SAME record-less target is refused (bad-target, no spawn).
+ *      This is the LIVE proof that closes the gap C1's hand-minted record was hiding.
  *   C2 meta-mailbox (deliverable) — a self-fetch citizen (claude-code) with an ARMED receiver
  *      marker → decider routes to meta-mailbox → a real `.msg` + signal is enqueued → lock-free
  *      path (no lock file) → no garbage beyond the one message.
@@ -44,11 +49,16 @@ import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { SenderEnvelope } from "../pi-extensions/lib/entwurf-control-rpc.ts";
+import { generateSessionId } from "../pi-extensions/lib/entwurf-core.ts";
 import { lockPathFor } from "../pi-extensions/lib/entwurf-v2-lock.ts";
 import { makeProductionEntwurfV2Deps } from "../pi-extensions/lib/entwurf-v2-production.ts";
 import type { EntwurfV2RunResult } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import { runEntwurfV2 } from "../pi-extensions/lib/entwurf-v2-runner.ts";
-import { upsertMetaSession, writeMetaReceiverMarker } from "../pi-extensions/lib/meta-session.ts";
+import {
+	metaRecordExistsByGardenId,
+	upsertMetaSession,
+	writeMetaReceiverMarker,
+} from "../pi-extensions/lib/meta-session.ts";
 
 // pi's control socket lives at the canonical dir keyed by session id — pi owns this path, so
 // C1 must point the decider's controlSocketDir at the REAL dir (a fresh gid avoids collision).
@@ -157,6 +167,7 @@ async function main(): Promise<void> {
 
 	let resident: ChildProcess | null = null;
 	let residentGid = "";
+	let c1bGid = "";
 	let stderrTail = "";
 	let succeeded = false;
 
@@ -220,6 +231,68 @@ async function main(): Promise<void> {
 			);
 			// in-domain control-socket send keeps then releases the lock → no lock file remains.
 			ok("C1 lock released (no lock file left for the target)", !existsSync(lockPathFor(residentGid, lockDir)));
+
+			if (resident) {
+				await terminateChild(resident);
+				resident = null;
+			}
+		}
+
+		// ── C1b: A1 narrow — RECORD-LESS live pi control socket → socket-only target ─
+		// The operator-greeted case the deterministic gates model: a real `pi --entwurf-control`
+		// resident with NO meta-record. resolveTarget finds no record, sees a live non-symlink
+		// control socket (presence hint), promotes it to a socket-only pi endpoint, and routes
+		// fire-and-forget to control-socket — the end-to-end proof that closes the gap C1's
+		// hand-minted record was hiding. owned-outcome on the SAME record-less target is refused
+		// (bad-target, no spawn). Unlike C1, NO upsertMetaSession is called for this gid.
+		{
+			c1bGid = generateSessionId();
+			const sockPath = path.join(REAL_CONTROL_DIR, `${c1bGid}${SOCKET_SUFFIX}`);
+			artifacts["C1b.gid"] = c1bGid;
+			artifacts["C1b.socket"] = sockPath;
+			ok("C1b fresh gid has no pre-existing control socket", !existsSync(sockPath));
+			// The gap-closing precondition: this gid is genuinely RECORD-LESS (C1 minted one).
+			ok(
+				"C1b target has NO meta-record (record-less, the operator-greeted case)",
+				!metaRecordExistsByGardenId(c1bGid, sessionsDir),
+			);
+
+			resident = spawn(
+				"pi",
+				["--session-id", c1bGid, "--entwurf-control", "--provider", provider, "--model", model, "--mode", "rpc"],
+				{ cwd: tmp, stdio: ["pipe", "ignore", "pipe"], detached: false },
+			);
+			resident.stderr?.on("data", (b: Buffer) => {
+				stderrTail = (stderrTail + b.toString()).slice(-2000);
+			});
+
+			const up = await waitForSocket(sockPath, BOOT_TIMEOUT_MS);
+			ok("C1b real record-less `pi --entwurf-control` stood up a control socket", up);
+
+			const result: EntwurfV2RunResult = await runEntwurfV2(
+				{ target: c1bGid, intent: "fire-and-forget", message: "matrix-live C1b record-less socket-only probe" },
+				prodDeps(smokeSender(c1bGid, tmp)),
+			);
+			ok(
+				"C1b record-less live pi → socket-only control-socket RPC, outcome=sent",
+				result.kind === "executed" &&
+					result.transport === "control-socket" &&
+					result.outcome.transport === "control-socket" &&
+					result.outcome.outcome === "sent",
+			);
+			ok("C1b lock released (no lock file left for the socket-only target)", !existsSync(lockPathFor(c1bGid, lockDir)));
+
+			// owned-outcome on the record-less target is refused pre-lock — a socket-only endpoint
+			// is never an owned citizen, so spawn-bg can never open into it (cheap direct call, no
+			// extra child; the no-spawn invariant itself is pinned deterministically).
+			const owned: EntwurfV2RunResult = await runEntwurfV2(
+				{ target: c1bGid, intent: "owned-outcome", message: "matrix-live C1b owned must be refused" },
+				prodDeps(smokeSender(c1bGid, tmp)),
+			);
+			ok(
+				"C1b record-less + owned-outcome → rejected bad-target (no spawn)",
+				owned.kind === "rejected" && owned.receipt.reason === "bad-target",
+			);
 
 			if (resident) {
 				await terminateChild(resident);
@@ -300,9 +373,11 @@ async function main(): Promise<void> {
 			await terminateChild(resident).catch(() => {});
 			resident = null;
 		}
-		// remove the real control socket pi may have left under the fresh gid
-		if (residentGid) {
-			await fsp.rm(path.join(REAL_CONTROL_DIR, `${residentGid}${SOCKET_SUFFIX}`), { force: true }).catch(() => {});
+		// remove the real control sockets pi may have left under the fresh gids (C1, C1b)
+		for (const gid of [residentGid, c1bGid]) {
+			if (gid) {
+				await fsp.rm(path.join(REAL_CONTROL_DIR, `${gid}${SOCKET_SUFFIX}`), { force: true }).catch(() => {});
+			}
 		}
 		// B6: keep the temp world on failure so the printed artifact paths are real for post-mortem
 		// (CI/cron). Only a clean pass tears it down.
