@@ -3,7 +3,21 @@
 > 새 담당자는 여기만 먼저 읽는다. 모르면 아래 `# LEDGER`의 링크/섹션으로 내려간다.
 > NEXT는 DB가 아니라 나침반이다: 현재 위치·다음 한 걸음·넘으면 안 되는 선을 맨 위에 둔다.
 
-## NOW — 2026-06-16 KST — 0.11.0 BLOCKER fix(A1 narrow) + 테스트로직 + 릴리즈컷 문서 전부 DONE ✅. 남은 것: **GPT가 `LIVE=1 release-gate` 실행**(GLG 지정) → 로그 숫자 확정 → GLG 컷.
+## NOW — 2026-06-16 KST — 0.11.0 = v2 added+tested(PASS) + v1 compat "있는 기능" 전부 PASS. release-gate 두 FAIL은 **model-in-loop behavior gate**(sentinel·resident-garden-guard) = v1 기능 결함 아님(GLG 확인). 남은: ① model-in-loop gate 정책 ② pi floor 0.79.4 bump ③ 컷.
+
+> **★★최종 결론 (2026-06-16, GLG+GPT+Opus#2 — v1/v2 분리로 수렴. 다음 담당자는 이 블록만 읽어도 됨):**
+> - **v2 (0.11.0 핵심) = PASS:** `smoke-entwurf-v2-matrix-live`·`smoke-entwurf-v2-spawn-resume-live` 둘 다 release-gate PASS. v2는 옵셔널 아님 — 추가됨+테스트됨. v1 removal은 0.12 lane.
+> - **v1 compatibility "있는 기능" = 전부 PASS (GLG 원칙: "v1도 있는 기능은 다 패스 시켜야돼"):** programmatic v1 gate — `smoke-async-resume`·`smoke-entwurf-resume`·`check-native-async` — 전부 PASS = v1 도구(entwurf spawn/resume/send) **작동 검수됨**.
+> - **두 FAIL = model-in-loop behavior gate, v1 기능 결함 아님:** `sentinel`(v1 entwurf spawn)·`smoke-resident-garden-guard`(entwurf_self /gnew T3)는 "모델이 v1 도구를 **자율 호출**하는가"를 봄. Claude Sonnet flake(entwurf 안 부르고 Bash/pi-CLI 우회·포기)에 노출 → FAIL. **v1 도구는 살아있음**(probe로 0.79.3·0.79.4 둘 다 schema 노출 yes + programmatic gate PASS + baseline cell PASS).
+> - **왜 그동안 v1 게이트에서 안 터졌나(GLG 질문):** 이 model-in-loop 축은 **0.11 작업기 신규** — sentinel release-gate 편입 `6592c5f`(5/29), resident-garden-guard/T3 `440afba`·`7d45346`(6/4). 그 전엔 release-gate가 이 축을 **안 봤음**. **"문제 없었다"가 아니라 "검증 안 했다"** — v2/garden-identity 작업하며 커버리지 늘려 v1의 model-in-loop 취약성을 처음 발견. **나쁜 게 아니라 좋은 발견(GLG).**
+> - **fix-2 DONE (`scripts/sentinel-runner.sh` only, +56/-13):** model flake가 가짜 `S5` model mismatch로 둔갑하던 걸(fallback이 parent를 child로 줍음) 정직 `S7`(MCP entwurf 미호출/Bash 우회)로. GLG "Bash 우회=즉시 실패, MCP 표면 아니면 터져야" 반영 — MCP entwurf 호출 event 없으면 bash-pi가 뱉은 Session ID도 discard. 실로그 검증(0.79.3 우회 SID찍힘→S7 FAIL / 정상 cell→PASS).
+> - **0.79.4 = deterministic 회귀 없음** (probe·강제호출 A/B로 확인) → **floor bump 안전.**
+> - **폐기된 진단(이력):** "child 모델 전파 회귀"(1차), "ACP-Claude tool surface missing"(2~3차, 모델 self-report에 속음). H2(`tools`에 mcp__) exact·wildcard dead-end, `.pi/settings.json` 원복. 상세 = 아래 `## NOW` ledger 블록.
+> **남은 순서:**
+> - ① **GLG 결정 — model-in-loop gate를 release-gate 必須 PASS에서 어떻게 둘지:** v1 "있는 기능"은 programmatic gate로 이미 PASS이므로, sentinel/resident-garden-guard model-in-loop는 (a) 별도 진단 lane으로 빼 必須 제외 / (b) flake-tolerant retry / (c) prompt 강화로 모델이 v1 직접 호출 유도. **"v1 있는 기능 다 패스" = programmatic으로 달성됨; model-in-loop는 v1 기능이 아니라 모델 behavior 검증.**
+> - ② **fix-2 commit** (push는 GLG). `scripts/sentinel-runner.sh`만.
+> - ③ **pi dep/floor `>=0.79.4` bump** + lockfile/node_modules 0.79.4 정합.
+> - ④ fix 후 `LIVE=1 release-gate`(0.79.4) 재실행 → 숫자 확정 → CHANGELOG/VERIFY 갱신 → GLG 컷. **A1 blocker 닫힘.** push/tag 금지.
 
 > **★구현·테스트·문서 완료 (2026-06-16, deterministic green, commits 57eaae2·05566d0):**
 > - **fix:** socket-discovery(`isSocketOnlyPiCandidate`) + decider(`socketOnlyPi` flag, `decideInDomain` 추출, socket-only ff 분기, owned pre-lock 차단, allowResume:false 이중방어) + production resolveTarget(record-absent presence-hint) + **dead-control fallback**(socketOnlyPi를 in-domain inspect로 라우팅 — GPT risk#2, TOCTOU dead→honest reject not bad-target).
@@ -16,7 +30,32 @@
 >     1. `smoke-resident-garden-guard` /gnew T3: backend identity mismatch — `entwurf_self` 새 gid 미보고(`selfEnvelopeSessionIds:[]`). entwurf_self turn 자체는 완료, pre-switch id 미보고도 PASS — 즉 "새 gid 추출 빈값".
 >     2. `sentinel` 4/6: cell4(acp-claude→openai-codex/gpt-5.4)·cell5(acp-claude→pi-shell-acp/gpt-5.4) S5 실패 — child `lastModel=claude-sonnet-4-6`(부모 모델) 기록, 기대 gpt-5.4.
 >   - **triage**: 두 실패는 spawned/switched 세션의 **model 기록·self-id 추출** 표면. pi 런타임이 baseline(15:20, 옛 pi)→현재 **0.79.4**로 바뀜(0.79.3 bump `2eb34c7`는 16:13, baseline 이후). 강한 가설 = pi 0.79.4 런타임 변화 / 또는 live flake. **CHANGELOG/VERIFY green 갱신 금지(GPT 옳음).**
-> **남은 순서(GLG 결정 대기):** ① 두 FAIL triage — (a) GPT 1회 재실행(flake 배제) (b) 재현되면 pi 버전 인과 확인(baseline pi vs 0.79.4) (c) pi floor 결정/모델기록·self-envelope 수정/scope. ② green 후 숫자 확정 → GLG 컷. **A1 blocker 자체는 닫힘; 컷은 이 2개에 막힘.** push/tag 금지.
+> **★TRIAGE 확정 + 진단 정정 (2026-06-16 Opus #2 1차 → GPT 정정 → Opus #2 JSONL 검증, 재실행 없이 surviving artifact로 결판):**
+>   - **버전 split:** smoke가 때리는 system `pi`(`~/.local/share/pnpm/bin/pi`) = **0.79.4**. repo `node_modules/@earendil-works/*`·lockfile = **0.79.3**(floor `>=0.79.3`). 두 FAIL은 실 `pi` 프로세스를 spawn하는 테스트라 **런타임 0.79.4를 탐**.
+>   - **⚠️ 진단 변천 — 게이트로그 A/B "회귀 확정" → LIVE 재현으로 반증 → 최종 = LIVE 모델 flake (수정 없이 잡음):**
+>     - ❌ 폐기 1: "child가 부모 모델로 돌았다 / model propagation regression"(1차, `model_change=부모모델`만 보고).
+>     - ❌ 폐기 2: "ACP-Claude tool surface 미노출 회귀"(2~3차). **모델 self-report "노출 안됨"에 속음.** GPT 정정(메일): self-report·schema-list는 oracle 아님 — 6/15 baseline cell5도 "Bash/Edit만 보인다" 했다가 곧 `[tool:start] mcp__pi-tools-bridge__entwurf` 실제 호출해 PASS. **유일 증거 = raw stream `[tool:start] ...entwurf` + `Session ID:`.**
+>     - ✅ **LIVE A/B 최종(2026-06-16, production 무수정 재현):**
+>       - probe(list tools): 0.79.3·0.79.4 **둘 다 entwurf schema = `ENTWURF=yes`** → tool 노출은 양쪽 멀쩡(단 self-report라 보조 증거).
+>       - cell4 정확 spawn prompt A/B(system pi 0.79.4 vs `node_modules/.bin/pi` 0.79.3): **둘 다 entwurf MCP 직접호출 0, 둘 다 Bash로 `pi` CLI 우회**(Terminal 0.79.4=193 / 0.79.3=83). 0.79.3은 우회가 garden `Session ID` 뱉어 잡힘, 0.79.4(더 헤맴)는 `--no-session` uuid라 안 잡힘. force(강제 호출 prompt)는 또 `[tool:start]` 없이 종료. **매 실행 behavior 다름.**
+>     - ✅ **진짜 root = LIVE 모델 behavior flake (GLG triage 축 ① 정답).** Claude Sonnet이 entwurf MCP 도구를 신뢰성 있게 안 부르고 직접호출(PASS)/Bash우회/포기 사이를 오감. **entwurf 도구·0.79.4 런타임 둘 다 멀쩡 — deterministic 0.79.4 회귀 아님 → floor bump 안전, production 고칠 것 없음.**
+>     - ✅ **진짜 고칠 버그 = sentinel oracle 오분류(fix-2).** 모델이 entwurf 안 부르면 child 없는데, fallback이 newest=parent를 child로 줍어 S5 가짜 model mismatch. **이게 flake를 deterministic 회귀로 오진하게 만든 장본인.** fix-2가 정직(S7)하게 만듦.
+>     - ✅ **T3 동일 뿌리:** /gnew 후 모델이 entwurf_self 안 부름 → 빈 envelope. tool 미노출 아니라 모델 flake.
+>   - **공통 근원 = LIVE 모델이 entwurf 도구를 불안정하게 호출. tool exposure도 0.79.4 코드도 회귀 아님. sentinel/resident-garden-guard가 모델 자율 도구선택에 의존해 본질적으로 flaky.**
+> **★GLG 결정 = (B) 0.79.4에 싹 맞춘다 (2026-06-16, "pi는 버전업에 맞춰야돼. 이번 0.11.0은 0.79.4에 맞추자").** GPT 추천은 (A)였으나 GLG가 (B) 명시 선택 — GPT가 지적한 "`>=0.79.3`이면 0.79.4도 허용 = known bug 열어둔 릴리즈" 문제를 (B)가 정면으로 닫음.
+ **★구현+검증 완료 (2026-06-16 Opus #2, GLG "Bash 우회=error, MCP 표면 아니면 즉시 실패" 지시 반영):**
+>   - **진단명 최종(폐기 누적 후):** ❌ "ACP-Claude tool surface missing"(틀림 — probe(list tools)에서 0.79.3·0.79.4 둘 다 entwurf schema `yes`). ✅ `LIVE model flake — ACP parent가 MCP entwurf 도구를 declined하고 Bash/pi-CLI로 우회`. **GLG/GPT 분리 결론:** MCP tool은 callable schema에 **있는데**(probe yes + baseline cell5도 결국 호출) 모델이 자연어 prompt에 Bash를 택함 = behavior, 노출 부재 아님.
+>   - **fix-2 = sentinel oracle 강화 (DONE, `scripts/sentinel-runner.sh`, LIVE 불요·실로그 검증):**
+>     1. `parent_spawn`이 acp parent의 `PARENT_LAUNCH_SID`를 caller에 노출(`:163/191/198`). fallback이 그걸 exclusion → parent 자기 세션을 child로 안 줍음.
+>     2. `parent_invoked_entwurf`(`:262`) = MCP entwurf **호출 event** marker(`"name":"entwurf"` | `[tool:start] Tool: ..entwurf`) — bare word "entwurf" 금지(Bash 우회 로그가 35× 언급해 false-match하던 버그 정밀화).
+>     3. **HARD GATE(GLG 핵심):** MCP entwurf 호출 event 없으면 `extract_session_id`가 잡은 Session ID도 **discard** → bash-우회 pi가 뱉은 "Session ID:"로 PASS 안 됨 → `S7` 즉시 FAIL("MCP entwurf surface NOT exercised"). legend에 S7 추가.
+>     - **실로그 검증:** 0.79.3 Bash우회(SID찍힘)→**S7 FAIL** / 0.79.4 우회→S7 / cell4 포기→S7 / cell1·cell6 정상MCP→PASS-path. (`bash -n` OK.)
+>   - **fix-1 = 폐기.** production 코드·0.79.4 deterministic 회귀 없음 → 고칠 것 없음. H2(`tools`에 mcp__) exact·wildcard 둘 다 실패로 dead-end 확인, `.pi/settings.json` 원복 완료(git-ignored 로컬).
+> **남은 순서(0.79.4-target 컷):**
+>   ① **fix-2 commit (GLG).** `scripts/sentinel-runner.sh`만 변경. entwurf_self/probe/H2 우회는 분석용, production 무변경.
+>   ② **pi dep/floor `>=0.79.4` bump** + lockfile/node_modules 0.79.4 정합 (deterministic 회귀 없으니 안전).
+>   ③ **sentinel을 LIVE-flake 게이트로 어떻게 둘지 GLG 결정:** 이제 Bash 우회/declined는 정직히 S7 FAIL = sentinel이 "모델이 MCP entwurf를 실제로 부르는가"를 엄격 검사. 모델 behavior 변동이 크므로 release-gate 必須 PASS에서 sentinel을 빼거나(별도 진단 lane) retry/flake 허용 정책 필요. **deterministic `pnpm check`는 무영향.** T3(resident-garden-guard)도 같은 모델 flake — 동일 정책.
+>   ④ fix 후 `LIVE=1 release-gate`(0.79.4) 재실행 → 숫자 확정 → CHANGELOG/VERIFY 갱신 → GLG 컷. **A1 blocker 닫힘.** push/tag 금지.
 
 > **★0.11.0 BLOCKER — recordless-pi v2 bad-target (GLG 재정렬 2026-06-16: "완벽히 닫아서 릴리즈, 적어놓은 게 거짓이면 안 됨"):** entwurf_peers가 live로 보여주는 record-less pi control-socket 세션을 `entwurf_v2`가 `bad-target`으로 거부 → fact surface ↔ v2 resolver 계약 불일치. 재현: `20260616T094836-a32c30`(piar 직접 launch, socket alive, meta-record 없음) → `entwurf_v2` 거부 / `entwurf_send`만 성공. 즉 frozen table "alive pi→control-socket send"가 record-less pi에서 거짓.
 > - **근원:** `pi-extensions/lib/entwurf-v2-production.ts:227-248` resolveTarget — `if (!metaRecordExists(gid)) return {identity:null}` → `bad-target`. pi --entwurf-control session_start는 meta-record를 안 쓴다(record는 meta-bridge SessionStart hook이 native backend에만 mint) → record-less pi가 production 정상상태. smoke가 못 잡은 이유: `smoke-entwurf-v2-spawn-resume-live`(run.sh:21)·matrix-live C1이 "mint backend=pi meta identity"로 record를 fake로 심고 시작 → coverage gap.
