@@ -60,7 +60,7 @@
 
 > 노트북 이관 완료(pull + D1 재배포·D2 symlink → doctor PASS / pnpm check EXIT0 / matrix 82). **5d-5 = CLOSE**(GPT verdict):
 > D4 트리오 done — a(deterministic 82) / b(LIVE 11/11, `openai-codex/gpt-5.4`) / c(release_gate wiring). 커밋 `ae8e4e5`~`de207c5` **push 완료**.
-> 미결로 넘긴 GLG 판단: ① D3 브랜치 `verify/doctor-pipefail-and-pi-0.79.2` 삭제(정보유실 0 확인) ② hejdev6 보안 묶기.
+> 미결로 넘긴 GLG 판단: ① D3 브랜치 `verify/doctor-pipefail-and-pi-0.79.2` 삭제(정보유실 0 확인) ② dev-host 호스트명 보안 묶기 — 최종 파일에서 제거 완료(git history는 보존).
 > 재배포 함정(SE-3): `install-meta-bridge` 재배포 시 수신측 세션 새로 열기/resume해야 receiver armed. mid-session `replyable:false`는 정직(버그 아님).
 
 ## ⇄ (closed, 세션 #12) — detour SE-1/SE-2 종료(push 완료) → 5d-5 복귀 맥락 (참고 LEDGER, NOW 아님)
