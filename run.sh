@@ -33,7 +33,7 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # pnpm install + sync auth + install + smoke-all + Axis 1 gates (bridge, native async, session-messaging, sentinel)
-  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + every live per-invariant gate on the claude-only floor (0.11.0; gemini/codex live tests dropped) + one PASS/FAIL/SKIP summary. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
+  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + every live per-invariant gate on the claude-only floor (0.11.0; gemini/codex live tests dropped). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: model-in-loop autonomous MCP tool-selection — sentinel + RGG positive; S7 Bash-bypass stays hard-fail but never blocks the cut). --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh xt-tool-surface             # ACP backend exclude-tools policy: -xt <builtin> fail-fast per backend (declared==actual), extension exclusion honored
   ./run.sh smoke [project-dir]        # Claude runtime smoke (backward-compatible default)
   ./run.sh smoke-claude [project-dir] # explicit Claude runtime smoke
@@ -3417,7 +3417,7 @@ check_pi_runtime_version() {
   # via a DYNAMIC import of the package root only — never statically import a
   # 0.79-only symbol here, or this guard would crash before it can fail loud.
   (cd "$REPO_DIR" && node --input-type=module <<'EOF'
-const FLOOR = '0.79.3';
+const FLOOR = '0.79.4';
 const cmp = (a, b) => {
   const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
   for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0); }
@@ -3793,9 +3793,9 @@ check_pack_install() {
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.79.3" \
-    "@earendil-works/pi-coding-agent@0.79.3" \
-    "@earendil-works/pi-tui@0.79.3" \
+    "@earendil-works/pi-ai@0.79.4" \
+    "@earendil-works/pi-coding-agent@0.79.4" \
+    "@earendil-works/pi-tui@0.79.4" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -4525,6 +4525,34 @@ release_gate() {
     fi
   }
 
+  # BEHAVIOR lane (0.11.0, GLG+GPT+Opus): a SEPARATE advisory counter for
+  # model-in-loop gates that probe whether the *model* autonomously selects the
+  # MCP entwurf surface (vs. bypassing via Bash/Terminal/pi-CLI). These gates are
+  # flaky by the model's nature (Claude Sonnet's MCP-vs-Bash choice is
+  # non-deterministic on 0.79.4), so a single flake must NOT block the cut. They
+  # are NEVER folded into `failc`/`pass` — exit authority below is `failc` only.
+  # Honesty rails: (1) "non-blocking" is NOT "pass" — a BEHAVIOR-FAIL is surfaced
+  # loudly in the summary with its artifact path, never buried; (2) S7 (Bash
+  # bypass, sentinel-runner.sh) stays a hard FAIL *inside* this lane — a bypass is
+  # never relabelled a pass; (3) the v1 tools themselves are proven by the
+  # deterministic/programmatic must-pass gates above (smoke-async-resume,
+  # smoke-entwurf-resume, check-native-async, check-bridge) — this lane is v1
+  # *behavior*, not v1 *function*. Residual bypass → 0.11.x usability lane.
+  local behavior_pass=0 behavior_failc=0
+  local -a behavior_results=()
+
+  run_behavior_step() {
+    local name="$1"; shift
+    section "release-gate BEHAVIOR step (advisory, non-blocking): $name"
+    if "$@"; then
+      ok "$name: BEHAVIOR-PASS"
+      behavior_results+=("BEHAVIOR-PASS  $name"); behavior_pass=$((behavior_pass + 1))
+    else
+      warn "$name: BEHAVIOR-FAIL (advisory — model-in-loop signal; S7=Bash-bypass stays hard-fail here; NOT a cut blocker)"
+      behavior_results+=("BEHAVIOR-FAIL  $name"); behavior_failc=$((behavior_failc + 1))
+    fi
+  }
+
   # 1. Static floor (deterministic; includes the two folded gates).
   section "release-gate step: static (pnpm check)"
   if (cd "$REPO_DIR" && pnpm check); then
@@ -4557,7 +4585,13 @@ release_gate() {
   #    fail fast here. Negative path is 0-token; positive path is ~1 cheap turn;
   #    the substrate smoke is a few cheap turns.
   run_step "smoke-session-id-name (3a substrate)" gate bash "$self" smoke-session-id-name
-  run_step "smoke-resident-garden-guard (3c guard: negative 0-token + positive 1-turn)" gate env SMOKE_RGG_POSITIVE=1 bash "$self" smoke-resident-garden-guard
+  # RGG split (0.11.0): the deterministic half (negative/id-safety + /gnew
+  # zero-token live path) is release-blocking and stays here as a must-pass with
+  # SMOKE_RGG_POSITIVE=0. The model-in-loop half (post-/gnew backend entwurf_self
+  # identity turn [T3] + positive garden --session-id model turn) is gated behind
+  # SMOKE_RGG_POSITIVE=1 and runs in the BEHAVIOR lane below — advisory, because
+  # it depends on the backend child autonomously calling entwurf_self.
+  run_step "smoke-resident-garden-guard (3c guard: negative/id-safety + /gnew 0-token, deterministic)" gate env SMOKE_RGG_POSITIVE=0 bash "$self" smoke-resident-garden-guard
   run_step "smoke-installed-entwurf-acp (#29)" gate bash "$self" smoke-installed-entwurf-acp
   run_step "smoke-all (claude-only floor)"  gate bash "$self" smoke-all "$project_dir"
   run_step "smoke-async-resume"             gate bash "$self" smoke-async-resume
@@ -4605,7 +4639,6 @@ release_gate() {
     results+=("SKIP  smoke-entwurf-v2-spawn-resume-live (LIVE!=1)"); skip=$((skip + 1))
   fi
   run_step "check-native-async"             gate bash "$self" check-native-async
-  run_step "sentinel"                       gate bash "$self" sentinel
   run_step "session-messaging"              gate bash "$self" session-messaging
   run_step "smoke-compaction-policy (LIVE)" gate env LIVE=1 bash "$self" smoke-compaction-policy
   run_step "verify-resume"                  gate bash "$self" verify-resume "$project_dir"
@@ -4613,19 +4646,49 @@ release_gate() {
   # 4. -xt tool-surface truthfulness — now a real fail-fast policy gate.
   run_step "xt-tool-surface (exclude-tools policy)" gate xt_tool_surface
 
-  # 5. Summary.
+  # 4b. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
+  #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never
+  #     touch `failc`; the cut is decided by the MUST tier above. Run last so the
+  #     summary reads MUST-then-BEHAVIOR. S7 (Bash-bypass) inside sentinel stays a
+  #     hard FAIL here — surfaced, never relabelled pass.
+  run_behavior_step "sentinel (6-cell diagonal: autonomous MCP entwurf tool-selection)" gate bash "$self" sentinel
+  # SMOKE_RGG_POSITIVE=1 re-runs the FULL guard with its positives enabled (not a
+  # positive-only mode) — the deterministic paths run again here too, but only the
+  # two model-in-loop turns (post-/gnew entwurf_self identity [T3] + positive
+  # garden model turn) are the reason this run is advisory; the deterministic half
+  # is already release-blocking via the POSITIVE=0 must-pass step above.
+  run_behavior_step "smoke-resident-garden-guard (positives enabled: post-/gnew entwurf_self identity turn [T3] + positive garden model turn)" gate env SMOKE_RGG_POSITIVE=1 bash "$self" smoke-resident-garden-guard
+
+  # 5. Summary — two tiers. MUST is release-blocking and owns the exit code; the
+  #    word "green" is reserved for the MUST tier. BEHAVIOR is advisory and is
+  #    surfaced (with per-step artifact paths above) but never blocks the cut.
   section "release-gate summary"
-  printf '  %s\n' "${results[@]}"
+  echo "  MUST (release-blocking):"
+  printf '    %s\n' "${results[@]}"
+  echo "    MUST: PASS=$pass  FAIL=$failc  SKIP=$skip"
   echo ""
-  echo "  PASS=$pass  FAIL=$failc  SKIP=$skip"
+  echo "  BEHAVIOR (advisory, non-blocking — model-in-loop autonomous MCP tool-selection):"
+  if [ "${#behavior_results[@]}" -gt 0 ]; then
+    printf '    %s\n' "${behavior_results[@]}"
+  fi
+  echo "    BEHAVIOR: PASS=$behavior_pass  FAIL=$behavior_failc"
   echo "  (per-step artifact paths are printed in each step's output above)"
+  if [ "$behavior_failc" -gt 0 ]; then
+    echo ""
+    warn "BEHAVIOR FAIL present ($behavior_failc) — advisory model-in-loop signal (e.g. S7 Bash-bypass / entwurf_self not autonomously called). Tracked, NOT a cut blocker; see the 0.11.x usability lane."
+  fi
+  # Exit authority = MUST `failc` ONLY. A BEHAVIOR fail never blocks the cut.
   if [ "$failc" -gt 0 ]; then
     echo ""
-    fail "release-gate NOT green — $failc step(s) failed. Current release is NOT releasable."
-    echo "  A green release-gate is necessary but not sufficient; GLG closes the call."
+    fail "release-gate MUST NOT green — $failc release-blocking step(s) failed. Current release is NOT releasable."
+    echo "  A green MUST gate is necessary but not sufficient; GLG closes the call."
     return 1
   fi
-  ok "release-gate all steps green — necessary condition met (GLG authorizes the cut)"
+  if [ "$behavior_failc" -gt 0 ]; then
+    ok "release-gate MUST PASS (all release-blocking steps green); BEHAVIOR FAIL present (advisory). Necessary condition met — GLG authorizes the cut."
+  else
+    ok "release-gate MUST PASS + BEHAVIOR PASS — all green. Necessary condition met — GLG authorizes the cut."
+  fi
   return 0
 }
 

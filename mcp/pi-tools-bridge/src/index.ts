@@ -433,7 +433,14 @@ function previewBody(body: string, maxLines = 5): string {
 
 server.tool(
 	"entwurf_send",
-	"Send a message to another agent session, addressed by sessionId. ONE surface, two transports " +
+	"COMPATIBILITY / DIRECT-SEND SURFACE. For delivering to a garden id, PREFER `entwurf_v2` — it is " +
+		"the canonical delivery verb: it reads the target's liveness AND your intent and routes to the " +
+		"right transport (live pi control-socket / dormant spawn-bg resume / active Claude Code " +
+		"meta-mailbox), rejecting honestly when the target is unreachable. A garden id alone does NOT " +
+		"tell you the target type — a pi session and a Claude Code meta-session look alike — so if you " +
+		"cannot classify the target, do NOT default to this tool: use `entwurf_v2`. Reach for " +
+		"`entwurf_send` only for the low-level direct path / debugging, or when you already hold a KNOWN " +
+		"live pi control socket. Mechanics: sends a message addressed by sessionId, two transports " +
 		"resolved automatically: a live pi peer running with --entwurf-control is reached over its " +
 		"control socket; if no live socket exists but the target is a meta-bridge garden citizen (a " +
 		"NATIVE Claude Code / agy / Codex session whose SessionStart hook minted a meta-record), the " +
@@ -591,12 +598,19 @@ server.tool(
 // intent, not sender replyability).
 server.tool(
 	"entwurf_v2",
-	"Dispatch to a garden citizen through the unified entwurf_v2 verb. You give the target " +
+	"CANONICAL DELIVERY SURFACE for garden ids. When you have a garden id and want to reach " +
+		"whoever it names — message / reply / hand-off — use THIS verb, not entwurf_send: a garden id " +
+		"alone does not tell you whether the target is a live pi session, a dormant pi session, or a " +
+		"Claude Code meta-session, and entwurf_v2 is the one surface that reads that for you and routes " +
+		'correctly (so "when unsure which transport, use entwurf_v2"). You give the target ' +
 		"garden id + your intent; the decider picks the transport from the target's liveness " +
-		"(live pi → control-socket send; dormant pi → spawn-bg resume; unsupported deliverable " +
-		"citizen → meta-bridge mailbox) under a single per-target lock, and reports ONE outcome " +
+		"(live pi → control-socket send; dormant pi → spawn-bg resume; active deliverable self-fetch " +
+		"citizen → meta-bridge mailbox) under the v2 lock policy (pi paths per-target lock; mailbox " +
+		"lock-free, guarded by active-receiver deliverability), and reports ONE outcome " +
 		"(delivered / rejected / lock-retained / delivered-but-lock-dirty). Additive to " +
-		"entwurf_send; the decider — not this surface — chooses the transport. " +
+		"entwurf_send (the lower-level direct-send compat surface); the decider — not the caller — " +
+		"chooses the transport. Note: entwurf_v2 dispatches to EXISTING targets; creating a brand-new " +
+		"sibling is still the v1 `entwurf` verb. " +
 		"intent: fire-and-forget (a send with no owned result) or owned-outcome (you own the " +
 		"result). mode/wants_reply apply to a live send. Use entwurf_peers to discover targets. " +
 		"Payload guidance: message hard cap 16000 chars. For larger reviews/logs, write an " +

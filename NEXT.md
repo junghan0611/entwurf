@@ -3,7 +3,7 @@
 > 새 담당자는 여기만 먼저 읽는다. 모르면 아래 `# LEDGER`의 링크/섹션으로 내려간다.
 > NEXT는 DB가 아니라 나침반이다: 현재 위치·다음 한 걸음·넘으면 안 되는 선을 맨 위에 둔다.
 
-## NOW — 2026-06-16 KST — 0.11.0 = v2 added+tested(PASS) + v1 compat "있는 기능" 전부 PASS. release-gate 두 FAIL은 **model-in-loop behavior gate**(sentinel·resident-garden-guard) = v1 기능 결함 아님(GLG 확인). 남은: ① model-in-loop gate 정책 ② pi floor 0.79.4 bump ③ 컷.
+## NOW — 2026-06-16 KST — 0.11.0 컷 준비 완료(코드/문서/게이트 닫힘, 커밋만 GLG 대기). **①②③④ DONE (Opus#3, GPT 87388d 동행):** ② pi floor `>=0.79.4`(6곳, `pnpm check` EXIT0) + ① release-gate **two-tier**(MUST 차단/exit / BEHAVIOR advisory; S7 우회 lane 안 hard-FAIL이되 비차단; "green"은 MUST에만) + ④ **fresh LIVE release-gate(0.79.4+two-tier, log `…20260616T141023`) = `MUST PASS=17 FAIL=0 SKIP=0`(necessary 충족) + `BEHAVIOR PASS=1 FAIL=1`**(sentinel S7 advisory; RGG-positive FAIL→PASS flip로 flaky 입증) → VERIFY/CHANGELOG 기록 완료. **+ affordance fix(voscli 사건):** garden-id delivery canonical = `entwurf_v2`, `entwurf_send` 격하 — tool description(MCP+native 4곳)·README(tool list에 v2/inbox_read 추가 + "send/reply→v2, create→v1")·CHANGELOG 반영, description+docs only(런타임 무변경, LIVE 유효). **남은 = 커밋(commit skill 경유)뿐. push/tag/lockfile commit = GLG.** ③ prompt 강화는 0.11.x usability lane(선택).
 
 > **★★최종 결론 (2026-06-16, GLG+GPT+Opus#2 — v1/v2 분리로 수렴. 다음 담당자는 이 블록만 읽어도 됨):**
 > - **v2 (0.11.0 핵심) = PASS:** `smoke-entwurf-v2-matrix-live`·`smoke-entwurf-v2-spawn-resume-live` 둘 다 release-gate PASS. v2는 옵셔널 아님 — 추가됨+테스트됨. v1 removal은 0.12 lane.
@@ -68,9 +68,11 @@
 > - **docs(fix와 함께):** "recordless live pi control sessions are accepted as socket-only fire-and-forget targets; recordless dormant resume remains out of scope / 0.11.1." README entwurf_v2 문단·CHANGELOG에 정직하게.
 > - **fix 후:** `LIVE=1 release-gate` 재실행 → PASS 로그 갱신(CHANGELOG/VERIFY) → GLG 컷 판단.
 > - **분리(0.11.0 blocker 아님):** ⓐ unregister-토글(V2_ONLY일 때 v1 surface hide) = 잠긴 spec(`check-entwurf-v2-only`+SSOT "neither deleted nor unregistered") 변경이라 docs+gate 동반, 별도 결정 → 0.11.1+/entwurf. hard-refuse만으로 evidence rule 성립. ⓑ GC(meta-record 117개 누적): entwurf_peers default live+recent+cwd 제한, dormant/meta 옵션화, stale marker·read body GC, record archive/TTL/lastSeen — 0.11.1+ lane.
-> - **다음 큰 몸 = entwurf:** ACP는 plugin, boundary 아님(#37/#38). 0.11.0 안전 컷 후 entwurf-core(identity/garden id/inbox/liveness/dispatch/replyability/evidence) 추출로 일 줄이기. pi-shell-acp는 compatibility adapter로 잔존.
+> - **다음 큰 몸 = entwurf (GLG 결정 2026-06-16, 컷 직전):** **새 repo `entwurf`를 만들어 v2 인터페이스만 옮긴다.** pi-shell-acp를 버리는 게 아니라, v1/v2 혼재가 만든 혼선을 줄이려 **집중을 위해 분리**하는 것. v2(garden citizen에 대한 결정적 dispatch substrate: liveness×intent → control-socket/spawn-bg resume/meta-mailbox)는 새 `entwurf` repo에서 깨끗이 자라고, pi-shell-acp는 v1 + ACP compatibility adapter로 잔존. ACP는 plugin, boundary 아님(#37/#38). 0.11.0 안전 컷 = 이 분리의 출발선. entwurf-core(identity/garden id/inbox/liveness/dispatch/replyability/evidence) 추출이 새 repo의 첫 몸.
 
 ### 닫힌 사실(2026-06-15) — 컷 직전까지 도달했던 지점
+
+> ⚠️ **이 2026-06-15 블록은 SUPERSEDED (2026-06-16, 0.79.4 + two-tier).** 아래의 `release-gate GREEN PASS=18`·`원할 때 /prepare-release`·"이미 release-gate PASS 확인됨" 류는 **옛 pi(<0.79.4) + 옛 flat 게이트** 기준이라 현재 트리에 대한 지시가 아니다. 현재 cut 조건 = NOW 블록의 fresh `LIVE=1 release-gate`(0.79.4 + two-tier MUST/BEHAVIOR) 숫자 기록. 이 블록은 역사 보존용.
 
 - **Stem:** 0.11.0 컷 준비. 코드 acceptance **(A) spawn-bg resident lifecycle** + **(B) v2-only mode**는 닫힘. 0.11은 **Stage 0 = pi-only v2 dispatch substrate**로 잠겨 있고, Stage 1(Claude↔Claude live / tmux-live)은 0.11.0 범위 밖 = **0.11.1 lane**(GLG 방향).
 - **현재 상태:** 0.11.0 작업 커밋 push 완료(`fa2e82f..396d19c`); GPT5.5 수정요청 반영 문서정합(CHANGELOG/NEXT) 커밋 추가 예정 — push는 GLG. **release-gate GREEN: `PASS=18 FAIL=0 SKIP=0`**, log `/tmp/pi-shell-acp-release-gate-0.11.0-20260615T152058.log`, scratch `/tmp/psa-release-gate-0.11.0.zVX69T`.

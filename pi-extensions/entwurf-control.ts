@@ -1505,9 +1505,15 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 	registerTool({
 		name: "entwurf_v2",
 		label: "Dispatch (v2)",
-		description: `Dispatch to a garden citizen through the unified entwurf_v2 verb: the 5b
+		description: `CANONICAL delivery surface for a garden id. When you have a garden id and want to
+reach whoever it names — message / reply / hand-off — use THIS verb, not entwurf_send: a garden id
+alone does not reveal whether the target is a live pi session, a dormant pi session, or a Claude Code
+meta-session, and entwurf_v2 is the one surface that reads that and routes correctly (so "when unsure
+which transport, use entwurf_v2"). It dispatches to EXISTING targets; creating a brand-new sibling is
+still the v1 \`entwurf\` verb. Dispatch to a garden citizen through the unified entwurf_v2 verb: the 5b
 decider picks the transport (live control-socket send / spawn-bg resume / meta-mailbox
-enqueue) from the target's liveness + your intent, runs it under a single per-target lock,
+enqueue) from the target's liveness + your intent, runs it under the v2 lock policy (pi paths take a
+per-target lock; the mailbox path is lock-free, guarded by active-receiver deliverability),
 and reports one outcome (delivered / rejected / lock-retained / delivered-but-lock-dirty).
 
 - target: the garden id of the citizen to reach (required).
@@ -1633,7 +1639,13 @@ function registerSessionTool(pi: ExtensionAPI, state: SocketState): void {
 	registerTool({
 		name: "entwurf_send",
 		label: "Send To Session",
-		description: `Interact with another running pi session via its control socket.
+		description: `Lower-level direct control-socket tool. For delivering to a garden id, PREFER
+entwurf_v2 — the canonical delivery verb that classifies the target (live pi / dormant pi / Claude Code
+meta-session) and routes correctly. A garden id alone does not tell you the target type, so do not
+default to this tool for garden-id delivery; use it when you already hold a KNOWN live pi control
+socket, or for the get_message/clear debug actions.
+
+Interact with another running pi session via its control socket.
 
 Actions:
 - send: Send a message (default). Requires 'message'.
