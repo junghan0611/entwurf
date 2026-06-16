@@ -23,8 +23,24 @@
 - **step② 잔여(green 무영향, 체인 밖 dead code)**: `check_backends/models/registration/auth_boundary/
   sdk_surface/claude_sessions` 함수+case+usage + backend smokes(smoke-claude/codex/gemini/all) +
   `smoke-installed-entwurf-acp` + package.json scripts 정리 / README ACP dep 언급 / `.husky/pre-commit` 주석.
-- 다음 한 걸음 = step② dead code 정리 → **step③ v1 가드 삭제**(+`check-entwurf-v2-only` 게이트) →
-  step④ `pnpm install` → step⑤ env seam 3줄 → step⑥ green.
+- **방향 전환(2026-06-16, GLG): "ACP를 다 빼면 v1 ACP 의존이 드러난다" → step③ 보류, ACP 완전 제거 먼저.**
+  (이유: v1 surface가 ACP backend에 매달린 지점이 ACP 제거로 loud하게 드러남. 그때 v1 뺄 범위가 명확.)
+- **조사 결과**: ACP deps 이미 제거됨(`dependencies`=mcp-sdk+zod, ACP import 0건 → lockfile 재생성만).
+  `protocol.js`=entwurf 공유 상수라 **KEEP**(ACP 아님). `release_gate`(4301-4515)는 ACP 직접 호출 0건.
+  4542/4828은 case 분기(함수 아님). `bf4a533`=step①② 커밋(green).
+- **ACP 완전 제거 대상**: run.sh 13 ACP 함수(`smoke_all/continuity/cancel/model_switch/entwurf_resume/
+  async_resume/installed_entwurf_acp` + `check_backends/models/registration/auth_boundary/sdk_surface/
+  claude_sessions`) = 함수+case+usage / `setup_all` 본문 ACP 호출(`check_global_*_acp`·`check_mcp`(이미
+  함수삭제—dangling)·`check_backends/registration/models`·`smoke_all`) / package.json scripts /
+  `check_global_*_acp`·`sync_auth` / 잔여(`scripts/resolve-acp-bridge.ts`·`getRegistryRouting` 하드코딩·
+  mcp/index.ts description 문자열). **가드레일 = `pnpm check` green 유지.**
+- **ACP 완전 제거 DONE → `pnpm check` green** (setup_all v2화 / run.sh 16 ACP 함수+18 case+usage 제거 /
+  package.json scripts 13 제거 / lockfile ACP deps 4 + plugins/openclaw importer 제거). **미커밋.**
+- **잔여(라우팅성, Phase B 가까움)**: `scripts/resolve-acp-bridge.ts`(orphan 확인 후) /
+  `getRegistryRouting` 하드코딩 `provider:"pi-shell-acp"`(=rename 영역 → Phase B) /
+  `mcp/index.ts` description 문자열("from acp-bridge.ts" 등 정확성).
+- 다음 한 걸음 = (커밋) → **v1 가시화: ACP 빠진 지금 v1 surface 의존 재조사**(step③ 범위 확정) →
+  env seam(step⑤) → 마지막 `release_gate` v2 재정의.
 
 ## 잠긴 결정
 
