@@ -704,24 +704,6 @@ try {
 	throws(() => assertLocalOnlyEntwurf("oracle"), "non-local host 'oracle' fails fast");
 	throws(() => assertLocalOnlyEntwurf("user@host"), "ssh-style host 'user@host' fails fast");
 
-	// ---- T-async-completion-guard (source): stale-parent best-effort delivery.
-	// Async completion fires from proc.on("close") long after the spawn ack; a
-	// stale parent ctx must DROP the notification, never crash the parent turn.
-	// The guard's runtime behavior is live-exercised by sentinel R1; here we lock
-	// the source contract, because entwurf-async pulls entwurf-core.js and so
-	// can't be import-loaded in this no-build, pure-string gate.
-	{
-		const asyncSrc = fs.readFileSync(path.join(REPO_ROOT, "pi-extensions", "lib", "entwurf-async.ts"), "utf8");
-		const guardStart = asyncSrc.indexOf("export function makeBestEffortDeliverCompletion");
-		ok(guardStart >= 0, "entwurf-async exports makeBestEffortDeliverCompletion");
-		const guardBody = asyncSrc.slice(guardStart);
-		ok(/\.includes\(STALE_CTX_MARKER\)/.test(guardBody), "guard matches stale-ctx marker as a substring");
-		ok(
-			/\breturn;/.test(guardBody) && /\bthrow err;/.test(guardBody),
-			"guard DROPS stale-ctx (return) and RE-THROWS other errors (throw err)",
-		);
-	}
-
 	console.log(`[check-entwurf-session-identity] ${n} assertions ok`);
 } finally {
 	fs.rmSync(tmp, { recursive: true, force: true });

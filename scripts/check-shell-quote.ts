@@ -6,14 +6,10 @@
  * Backticks and `$(...)` inside a user prompt got executed by the remote shell
  * before pi ever saw them. The fix introduced `shellQuote()` (POSIX `'...'`
  * with `'\''` escape) in two places:
- *   - pi-extensions/entwurf.ts          (async spawn + async resume paths)
- *   - pi-extensions/lib/entwurf-core.ts (sync spawn + sync resume paths)
+ *   - pi-extensions/lib/entwurf-core.ts (legacy sync spawn/resume helper while v2 extraction is in progress)
  *
  * This script enforces two invariants:
- *   1. `shellQuote()` source in both files matches the reference implementation
- *      byte-for-byte. Catches accidental drift if one site is edited without
- *      the other (until shellQuote is consolidated into a single lib — see
- *      NEXT.md remote entwurf follow-up (a)).
+ *   1. `shellQuote()` source matches the reference implementation byte-for-byte.
  *   2. The reference implementation produces POSIX-safe output for the exact
  *      payload classes that caused the original incident — backtick command
  *      substitution, `$(...)` command substitution, `$VAR` expansion, embedded
@@ -41,7 +37,7 @@ const REFERENCE_BODY = `function shellQuote(value: string): string {
 \treturn \`'\${value.replace(/'/g, \`'\\\\''\`)}\`;
 }`;
 
-const SOURCE_SITES = ["pi-extensions/lib/entwurf-core.ts", "pi-extensions/lib/entwurf-async.ts"] as const;
+const SOURCE_SITES = ["pi-extensions/lib/entwurf-core.ts"] as const;
 
 // Match the function block from `function shellQuote` up to the closing brace.
 // Tab indentation is required (matches the rest of the repo).

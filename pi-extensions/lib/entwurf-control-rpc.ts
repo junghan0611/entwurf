@@ -75,21 +75,7 @@ export interface RpcGetInfoCommand {
 	id?: string;
 }
 
-export interface RpcSpawnAsyncResumeCommand {
-	type: "spawn_async_resume";
-	sessionId: string;
-	prompt: string;
-	host?: string;
-	id?: string;
-}
-
-export type RpcCommand =
-	| RpcSendCommand
-	| RpcGetMessageCommand
-	| RpcClearCommand
-	| RpcAbortCommand
-	| RpcGetInfoCommand
-	| RpcSpawnAsyncResumeCommand;
+export type RpcCommand = RpcSendCommand | RpcGetMessageCommand | RpcClearCommand | RpcAbortCommand | RpcGetInfoCommand;
 
 export interface RpcClientOptions {
 	timeout?: number;

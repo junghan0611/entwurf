@@ -188,15 +188,9 @@ async function main(): Promise<void> {
 		`--- inputSchema ---\n${rawSchema}`,
 	);
 
-	const send = tools.find((t) => t?.name === "entwurf_send");
-	ok("G1c: entwurf_send registered on the runtime tools/list surface", !!send);
-	const sendSchema = send?.inputSchema ?? {};
-	const sendRawSchema = JSON.stringify(sendSchema);
-	const sendProps = sendSchema.properties ?? {};
 	ok(
-		"G1c: entwurf_send message maxLength == 16000",
-		sendProps.message?.maxLength === 16000,
-		`--- inputSchema ---\n${sendRawSchema}`,
+		"G1c: legacy v1 MCP tools are absent",
+		!tools.some((t) => ["entwurf", "entwurf_resume", "entwurf_send"].includes(String(t?.name))),
 	);
 
 	console.log(`\ncheck-pi-tools-bridge-boot: ${passed} checks passed`);

@@ -9,57 +9,40 @@
  * protocol surface that pi-shell-acp publishes.
  *
  * Why this lives here (not in consumer dotfiles): pi-shell-acp's public
- * bridge surface (`mcp/pi-tools-bridge.entwurf_send`, `entwurf_peers`)
- * depends at runtime on some pi session having this extension loaded to
- * open the control socket. Bundling it here removes a hidden dependency on
- * a private consumer repo and makes pi-shell-acp installable as a public
- * package without extra setup.
+ * bridge surface (`mcp/pi-tools-bridge.entwurf_v2`, `entwurf_peers`)
+ * depends at runtime on pi sessions exposing the v2 control surface and
+ * control socket. Bundling it here removes a hidden dependency on a private
+ * consumer repo and makes pi-shell-acp installable as a public package without
+ * extra setup.
  *
  * Enables inter-session communication via Unix domain sockets. When enabled
  * with the `--entwurf-control` flag, each pi session creates a control socket
  * at `~/.pi/entwurf-control/<session-id>.sock` that accepts JSON-RPC commands.
  *
  * Features:
- * - Send messages to other running pi sessions (steer or follow-up mode)
- *   via tool (`entwurf_send`) or startup CLI flags
- *   (`--entwurf-session`, `--entwurf-send-message`)
- * - Retrieve the last assistant message from a session
- * - Clear/rewind sessions to their initial state
+ * - Register the canonical `entwurf_v2` dispatch tool for existing garden citizens.
+ * - Expose `entwurf_peers` facts and `/entwurf-sessions` for operator inspection.
+ * - Maintain the resident control socket used by v2 live-send / spawn-bg paths.
+ * - Keep `/gnew` garden-native in-process session birth.
  *
- * Send-is-throw — no `wait_until=turn_end`. Every send is fire-and-forget at the
- * delivery boundary: the RPC ack confirms the receiver enqueued the message
- * (`message_processed` semantics) and that is the end of the contract. The
- * older `wait_until=turn_end` surface was removed (2026-05-18) because it
- * turned `entwurf_send` into "await sibling's turn completion", which is a
- * worker pattern that contradicts pi-shell-acp's identity. Callers that need
- * a result they own should use `entwurf(mode=async)` + `entwurf_resume`; peers
- * that want a reply should say so in the message body and let the receiver send
- * a separate `entwurf_send` back. See AGENTS.md `Send-is-throw`.
- *
- * Once loaded the extension registers a `entwurf_send` tool that allows
- * the AI to communicate with other pi sessions programmatically.
+ * Send-is-throw still applies at the control-socket protocol layer: a `send` RPC
+ * ack confirms the receiver enqueued the message (`message_processed` semantics)
+ * and does not wait for a peer turn result. Public v1 send surfaces were removed;
+ * callers use `entwurf_v2`, whose decider chooses send / spawn-bg / mailbox.
  *
  * Usage:
  *   pi --session-id <garden-id> --entwurf-control
- *
- * One-shot startup send:
- *   pi -p --session-id <garden-id> --entwurf-control --entwurf-session <session-id> --entwurf-send-message <text>
- *     [--entwurf-send-mode steer|follow_up] [--entwurf-send-include-sender-info]
- *   (startup send is fire-and-forget; the legacy --entwurf-send-wait turn_end
- *    flag is refused at startup with an error report — the pi session itself
- *    continues, the startup send is simply not attempted; --entwurf-send-wait
- *    message_processed is accepted as a no-op for backward compatibility.)
  *
  * Addressing is sessionId-only. The sessionId (a garden id for
  * garden-native sessions, or a pi-assigned uuidv7 otherwise) is the only stable
  * identity a peer needs; alias / sessionName surfaces are deliberately not
  * exposed. Use entwurf_peers (or /entwurf-sessions) to discover live
- * sessions; pass the sessionId to entwurf_send. Note that this is independent
+ * sessions; pass the sessionId to entwurf_v2. Note that this is independent
  * of agent-config's --session-control extension, which lives under
  * ~/.pi/session-control/ and may keep its own alias surface.
  *
  * Environment:
- *   Sets PI_SESSION_ID when enabled, allowing child processes to discover
+ *   Sets PI_SESSION_ID / PI_AGENT_ID when enabled, allowing child processes to discover
  *   the current session.
  *
  * RPC Protocol:
@@ -69,15 +52,6 @@
  *   - { type: "get_info" }
  *   - { type: "clear", summarize?: boolean }
  *   - { type: "abort" }
- *   - { type: "spawn_async_resume", sessionId: "...", prompt: "...", host?: "..." }
- *     — Phase B Step 2 of the async-resume regression repair. Calls the
- *     `spawnEntwurfResumeAsync` launcher (from lib/entwurf-async.ts) with the
- *     control extension's own pi ExtensionAPI, so completion lands in the
- *     parent pi session as a followUp message — same as if a native pi tool
- *     had called the launcher directly. Lets the MCP bridge surface (Step 3)
- *     dispatch async resumes by delegating to this RPC instead of cloning
- *     the launcher body ("this bridge is not a second harness" invariant).
- *
  *   Responses are JSON objects with { type: "response", command, success, data?, error? }
  *   (No event channel — the turn_end subscribe surface was removed with the
  *    Send-is-throw cleanup; see note above.)
@@ -99,19 +73,11 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 	MessageRenderer,
-	ToolRenderResultOptions,
 } from "@earendil-works/pi-coding-agent";
 import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
-import { Box, Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
+import { Box, type Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { ENTWURF_SENT_MESSAGE_TYPE } from "../protocol.js";
-import { ENTWURF_ENTRY_TYPE, makeBestEffortDeliverCompletion, spawnEntwurfResumeAsync } from "./lib/entwurf-async.js";
-import {
-	type RpcCommand,
-	type RpcResponse,
-	type RpcSendCommand,
-	type SenderEnvelope,
-	sendRpcCommand,
-} from "./lib/entwurf-control-rpc.js";
+import { type RpcCommand, type RpcResponse, type SenderEnvelope, sendRpcCommand } from "./lib/entwurf-control-rpc.js";
 import {
 	assertGardenNativeSessionId,
 	buildGardenSessionName,
@@ -123,11 +89,8 @@ import {
 	readSessionHeader,
 	removeUnadoptedGardenSessionFile,
 } from "./lib/entwurf-core.js";
-import { checkV1EntwurfAllowed } from "./lib/entwurf-v2-only.js";
 import { isV2ResumeResidentAuthorized } from "./lib/entwurf-v2-resume-marker.js";
-import { formatMetaMailboxBody } from "./lib/meta-mailbox-body.js";
-import { enqueueMetaMessage } from "./lib/meta-session.js";
-import { classifyConnectError, probeSocketLiveness, shouldListAsLive, shouldUnlinkOnGc } from "./lib/socket-probe.js";
+import { probeSocketLiveness, shouldListAsLive, shouldUnlinkOnGc } from "./lib/socket-probe.js";
 
 // The `--entwurf-control` socket protocol (wire types + the newline-JSON client) now lives
 // in the ctx-free SSOT `lib/entwurf-control-rpc.ts` so the 5d entwurf_v2 production
@@ -136,11 +99,6 @@ import { classifyConnectError, probeSocketLiveness, shouldListAsLive, shouldUnli
 export type { SenderEnvelope } from "./lib/entwurf-control-rpc.js";
 
 const ENTWURF_FLAG = "entwurf-control";
-const ENTWURF_SESSION_FLAG = "entwurf-session";
-const ENTWURF_SEND_MESSAGE_FLAG = "entwurf-send-message";
-const ENTWURF_SEND_MODE_FLAG = "entwurf-send-mode";
-const ENTWURF_SEND_WAIT_FLAG = "entwurf-send-wait";
-const ENTWURF_SEND_INCLUDE_SENDER_FLAG = "entwurf-send-include-sender-info";
 const ENTWURF_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
 const SOCKET_SUFFIX = ".sock";
 const SESSION_MESSAGE_TYPE = "entwurf-message";
@@ -515,7 +473,7 @@ function parseSenderInfo(text: string): SenderInfo | null {
 // represents the public transparency contract.
 //
 // agentId preference order:
-//   1. PI_AGENT_ID env (injected by pi-shell-acp acp-bridge.ts as "pi-shell-acp/<model>")
+//   1. PI_AGENT_ID env (set by updateSessionEnv as `<ctx.model.provider>/<ctx.model.id>`)
 //   2. `<ctx.model.provider>/<ctx.model.id>` reconstructed from the live pi context
 //   3. undefined → envelope omitted
 function buildLocalSenderEnvelope(ctx: ExtensionContext): SenderEnvelope | undefined {
@@ -915,61 +873,6 @@ async function handleCommand(
 		return;
 	}
 
-	// Spawn async resume — Phase B Step 2. Calls the shared launcher in
-	// lib/entwurf-async.ts with this control extension's pi ExtensionAPI;
-	// completion lands in the parent pi session as a followUp message via
-	// `pi.sendMessage(..., { triggerTurn: true, deliverAs: "followUp" })`,
-	// identical to what the native entwurf_resume tool does. Lets the MCP
-	// bridge surface (Step 3) dispatch async resumes by delegating to this
-	// RPC instead of cloning the launcher body. "this bridge is not a
-	// second harness" invariant: the launcher stays in one place; both
-	// surfaces (native tool + MCP-via-RPC) reach the same code path.
-	if (command.type === "spawn_async_resume") {
-		// v2-only gate (0.11.0 B): this RPC is the MCP-bypass-proof seam — a caller could
-		// hit the control socket directly, skipping the MCP handler guard, so the refusal
-		// must also live here. respond(false, …) is the RPC's hard-refusal channel.
-		const v1gate = checkV1EntwurfAllowed("spawn_async_resume (control RPC)");
-		if (!v1gate.allowed) {
-			respond(false, "spawn_async_resume", undefined, v1gate.message);
-			return;
-		}
-		const sessionId = command.sessionId;
-		const prompt = command.prompt;
-		if (typeof sessionId !== "string" || sessionId.trim().length === 0) {
-			respond(false, "spawn_async_resume", undefined, "Missing sessionId");
-			return;
-		}
-		if (typeof prompt !== "string" || prompt.trim().length === 0) {
-			respond(false, "spawn_async_resume", undefined, "Missing prompt");
-			return;
-		}
-		try {
-			const ack = await spawnEntwurfResumeAsync(
-				{ sessionId, prompt, host: command.host },
-				{
-					appendActiveEntry: (data) => pi.appendEntry(ENTWURF_ENTRY_TYPE, data),
-					// Best-effort: the RPC-driven async resume (ACP parents) delivers its
-					// completion from proc.on("close") just like the native tool; if the
-					// parent ctx went stale by then, drop instead of crashing. Same race,
-					// same guard — see makeBestEffortDeliverCompletion.
-					deliverCompletion: makeBestEffortDeliverCompletion((message) =>
-						pi.sendMessage(message, { triggerTurn: true, deliverAs: "followUp" }),
-					),
-				},
-			);
-			respond(true, "spawn_async_resume", {
-				sessionId: ack.details.sessionId,
-				runId: ack.details.runId,
-				sessionFile: ack.details.sessionFile,
-				pid: ack.details.pid,
-				text: ack.text,
-			});
-		} catch (err) {
-			respond(false, "spawn_async_resume", undefined, err instanceof Error ? err.message : String(err));
-		}
-		return;
-	}
-
 	// Defensive fallback. After the exhaustive RpcCommand chain above the
 	// `command` local is narrowed to `never` at the type level, but at runtime
 	// we may still receive a JSON object whose `type` is a string we don't
@@ -1156,10 +1059,16 @@ function maybeSetResidentName(pi: ExtensionAPI, ctx: ExtensionContext): void {
 function updateSessionEnv(ctx: ExtensionContext | null, enabled: boolean): void {
 	if (!enabled) {
 		delete process.env.PI_SESSION_ID;
+		delete process.env.PI_AGENT_ID;
 		return;
 	}
 	if (!ctx) return;
 	process.env.PI_SESSION_ID = ctx.sessionManager.getSessionId();
+	if (ctx.model?.provider && ctx.model?.id) {
+		process.env.PI_AGENT_ID = `${ctx.model.provider}/${ctx.model.id}`;
+	} else {
+		delete process.env.PI_AGENT_ID;
+	}
 }
 
 // Extension factories run before extension flag values are hydrated into runtime.flagValues,
@@ -1182,32 +1091,6 @@ export default function (pi: ExtensionAPI) {
 		description: "Enable per-session control socket under ~/.pi/entwurf-control",
 		type: "boolean",
 	});
-	pi.registerFlag(ENTWURF_SESSION_FLAG, {
-		description: "Target session id (garden id or pi-assigned uuid) for startup control send",
-		type: "string",
-	});
-	pi.registerFlag(ENTWURF_SEND_MESSAGE_FLAG, {
-		description: "Message to send to --entwurf-session at startup",
-		type: "string",
-	});
-	pi.registerFlag(ENTWURF_SEND_MODE_FLAG, {
-		description: "Startup send mode: steer or follow_up",
-		type: "string",
-		default: "steer",
-	});
-	pi.registerFlag(ENTWURF_SEND_WAIT_FLAG, {
-		description:
-			"Deprecated startup send wait mode. Only 'message_processed' is accepted (no-op for backward compat); " +
-			"'turn_end' is refused at startup with an error report — entwurf_send is fire-and-forget.",
-		type: "string",
-	});
-	pi.registerFlag(ENTWURF_SEND_INCLUDE_SENDER_FLAG, {
-		description: "Include <sender_info> in startup messages (advanced; default: false)",
-		type: "boolean",
-	});
-
-	let cliSendHandled = false;
-
 	const state: SocketState = {
 		server: null,
 		socketPath: null,
@@ -1222,19 +1105,11 @@ export default function (pi: ExtensionAPI) {
 	// appear in this session's transcript when it sends.
 	pi.registerMessageRenderer(ENTWURF_SENT_MESSAGE_TYPE, renderSentMessage);
 
-	// Cached session list from the most recent /entwurf-sessions invocation.
-	// /entwurf-send uses it to resolve numeric indices like `1` or `[1]`.
-	let lastDisplayedSessions: EnrichedSession[] = [];
-
 	if (shouldRegisterControlTools(pi)) {
-		registerSessionTool(pi, state);
 		registerListSessionsTool(pi);
 		registerEntwurfV2Tool(pi);
 	}
-	registerControlSessionsCommand(pi, (sessions) => {
-		lastDisplayedSessions = sessions;
-	});
-	registerEntwurfSendCommand(pi, state, () => lastDisplayedSessions);
+	registerControlSessionsCommand(pi, () => {});
 	registerGardenNewCommand(pi);
 
 	// Session-replacement identity invariant (0.9.0): under --entwurf-control you
@@ -1311,10 +1186,6 @@ export default function (pi: ExtensionAPI) {
 	// Don't reintroduce them without first confirming the events exist.
 	pi.on("session_start", async (_event, ctx) => {
 		await refreshServer(ctx);
-		if (!cliSendHandled) {
-			cliSendHandled = true;
-			await maybeHandleStartupControlSend(pi, ctx);
-		}
 	});
 
 	// Pre-switch guard — cancel an in-process resident mint BEFORE session_start
@@ -1403,21 +1274,6 @@ export default function (pi: ExtensionAPI) {
 // `EntwurfV2RunResult` union stays behind `runAndRenderEntwurfV2FromSurface`, which
 // hands back just `{ text, isError }`.
 const ENTWURF_V2_SURFACE_MODULE = "./lib/entwurf-v2-surface.ts";
-
-// SE-1/SE-2 (slice 2d-2b): the v1 transport-2 mailbox fallback gates its enqueue on
-// conversational deliverability. entwurf-mailbox-guard.ts is a `.ts`-extension fence
-// lib, so this root-tsc emit surface reaches it the SAME way as the v2 surface — a
-// NON-LITERAL dynamic import behind a local interface — never a static import (which
-// would pull the fence's `.ts`-extension graph into the emit-capable root program; TS5097).
-const ENTWURF_MAILBOX_GUARD_MODULE = "./lib/entwurf-mailbox-guard.ts";
-
-interface EntwurfMailboxGuardModule {
-	guardedMailboxEnqueue<T>(
-		gardenId: string,
-		deps: Record<string, unknown>,
-		enqueue: () => T,
-	): { delivered: true; result: T } | { delivered: false; reason: string };
-}
 
 // SE-1 (slice 2e-a): a pi-session sender's `replyable` is a FACT (does its canonical
 // control socket actually exist?), not env presence. entwurf-self-address.ts is a
@@ -1583,454 +1439,6 @@ This is additive to entwurf_send; the decider — not this surface — chooses t
 	});
 }
 
-function registerSessionTool(pi: ExtensionAPI, state: SocketState): void {
-	// The schema (runtime) and the params type (compile-time) describe the
-	// same contract. We write BOTH explicitly: the schema feeds the agent
-	// runtime (Description / validation), the type feeds the execute body
-	// (`params: EntwurfSendParams`). Schema-to-type inference is then NOT
-	// taken — that inference is what blows TS2589 ("Type instantiation
-	// excessively deep") inside pi.registerTool when the schema mixes
-	// Type.Object with several Optional<TUnsafe<...>> from StringEnum.
-	//
-	// Revisit conditions for collapsing back to inferred params (i.e. drop
-	// `EntwurfSendParams` and let `params` be derived from the schema):
-	//   1. pi-coding-agent ships a registerTool overload taking
-	//      ToolDefinition<TSchema, ...> directly (no TParams generic), OR
-	//      a non-generic helper that returns it. The exported `defineTool`
-	//      currently keeps TParams generic so it does not help.
-	//   2. typebox 1.x / pi-ai narrows StringEnum's return from
-	//      TUnsafe<T[number]> to a leaner type that does not push
-	//      Type.Object's inferred shape past TypeScript's recursion budget.
-	// When either lands, drop the explicit `EntwurfSendParams` and the
-	// any-cast below in one step so the schema regains single-source
-	// status for both runtime and types.
-	const entwurfSendParameters = Type.Object({
-		sessionId: Type.String({ description: "Target session id (garden id or pi-assigned uuid)" }),
-		action: Type.Optional(
-			StringEnum(["send", "get_message", "clear"] as const, {
-				description: "Action to perform (default: send)",
-				default: "send",
-			}),
-		),
-		message: Type.Optional(
-			Type.String({
-				description:
-					"Message to send (required for action=send). Hard cap 16000 chars; for larger payloads send a file/artifact path plus digest.",
-				maxLength: 16000,
-			}),
-		),
-		mode: Type.Optional(
-			StringEnum(["steer", "follow_up"] as const, {
-				description: "Delivery mode for send: steer (immediate) or follow_up (after task)",
-				default: "steer",
-			}),
-		),
-	});
-
-	type EntwurfSendParams = {
-		sessionId: string;
-		action?: "send" | "get_message" | "clear";
-		message?: string;
-		mode?: "steer" | "follow_up";
-	};
-
-	const registerTool = pi.registerTool as (def: any) => void;
-
-	registerTool({
-		name: "entwurf_send",
-		label: "Send To Session",
-		description: `Lower-level direct control-socket tool. For delivering to a garden id, PREFER
-entwurf_v2 — the canonical delivery verb that classifies the target (live pi / dormant pi / Claude Code
-meta-session) and routes correctly. A garden id alone does not tell you the target type, so do not
-default to this tool for garden-id delivery; use it when you already hold a KNOWN live pi control
-socket, or for the get_message/clear debug actions.
-
-Interact with another running pi session via its control socket.
-
-Actions:
-- send: Send a message (default). Requires 'message'.
-- get_message: Get the most recent assistant message.
-- clear: Rewind the target session.
-
-Target:
-- sessionId: id of the session — a garden id or a pi-assigned uuid (required). Use entwurf_peers to discover live sessions.
-
-For action=send:
-- mode: steer (immediate) or follow_up (after task).
-
-Send-is-throw: every send is fire-and-forget at the delivery boundary. The
-RPC ack confirms the receiver enqueued the message (= message_processed
-semantics) and the contract ends there. If the caller needs a result it owns,
-prefer entwurf(mode=async) + entwurf_resume. If a peer should reply, say so in
-the message body and let the receiver send a separate entwurf_send back.
-
-Messages include sender session info for replies.
-
-Payload guidance: send ONE compact atomic message (hard cap 16000 chars). For larger reviews/logs, write a file/artifact and send its path plus a short digest. Avoid multi-part sends: mailbox doorbells are edge-triggered and may coalesce; one inbox_read drains the backlog, but each part is not guaranteed its own wake.`,
-		parameters: entwurfSendParameters,
-		async execute(
-			_toolCallId: string,
-			params: EntwurfSendParams,
-			_signal: AbortSignal | undefined,
-			_onUpdate: unknown,
-			_ctx: ExtensionContext,
-		) {
-			// v2-only gate (0.11.0 B): the in-pi entwurf_send tool is a v1 live-peer surface.
-			// This tool keeps the pi 0.70 isError result shape, so refuse with isError:true.
-			const v1gate = checkV1EntwurfAllowed("entwurf_send");
-			if (!v1gate.allowed) {
-				return {
-					content: [{ type: "text", text: v1gate.message }],
-					isError: true,
-					details: { error: v1gate.message },
-				};
-			}
-			const action = params.action ?? "send";
-			const sessionId = params.sessionId?.trim();
-
-			if (!sessionId) {
-				return {
-					content: [{ type: "text", text: "Missing session id" }],
-					isError: true,
-					details: { error: "Missing session id" },
-				};
-			}
-			if (!isSafeSessionId(sessionId)) {
-				return {
-					content: [{ type: "text", text: "Invalid session id" }],
-					isError: true,
-					details: { error: "Invalid session id" },
-				};
-			}
-
-			const targetSessionId = sessionId;
-			const displayTarget = sessionId;
-			const socketPath = getSocketPath(targetSessionId);
-
-			try {
-				// Handle each action
-				if (action === "get_message") {
-					const result = await sendRpcCommand(socketPath, { type: "get_message" });
-					if (!result.response.success) {
-						return {
-							content: [{ type: "text", text: `Failed: ${result.response.error ?? "unknown error"}` }],
-							isError: true,
-							details: result,
-						};
-					}
-					const data = result.response.data as { message?: ExtractedMessage };
-					if (!data?.message) {
-						return {
-							content: [{ type: "text", text: "No assistant message found in session" }],
-							details: result,
-						};
-					}
-					return {
-						content: [{ type: "text", text: data.message.content }],
-						details: { message: data.message },
-					};
-				}
-
-				if (action === "clear") {
-					const result = await sendRpcCommand(socketPath, { type: "clear", summarize: false }, { timeout: 10000 });
-					if (!result.response.success) {
-						return {
-							content: [{ type: "text", text: `Failed to clear: ${result.response.error ?? "unknown error"}` }],
-							isError: true,
-							details: result,
-						};
-					}
-					const data = result.response.data as { cleared?: boolean; alreadyAtRoot?: boolean };
-					const msg = data?.alreadyAtRoot ? "Session already at root" : "Session cleared";
-					return {
-						content: [{ type: "text", text: msg }],
-						details: data,
-					};
-				}
-
-				// action === "send"
-				if (!params.message || params.message.trim().length === 0) {
-					return {
-						content: [{ type: "text", text: "Missing message for send action" }],
-						isError: true,
-						details: { error: "Missing message" },
-					};
-				}
-
-				// Envelope path: sender metadata travels in the RPC `sender`
-				// field; the receiver synthesizes the canonical <sender_info> JSON
-				// from it. Body stays clean. When the local pi context cannot supply
-				// a complete envelope (missing model, etc.) we send without one and
-				// the receiver renders a bare label rather than partial header — see
-				// buildLocalSenderEnvelope for the policy.
-				const sender = state.context ? buildLocalSenderEnvelope(state.context) : undefined;
-
-				const sendCommand: RpcSendCommand = {
-					type: "send",
-					message: params.message,
-					mode: params.mode ?? "steer",
-					sender,
-				};
-
-				// Send-is-throw — one RPC, one ack. The send RPC ack already
-				// represents "receiver enqueued the message" (message_processed
-				// semantics); there is no longer a turn_end wait surface.
-				// `delivered: true` in details is what renderResult keys on to
-				// draw the [entwurf sent →] box together with the sender envelope.
-				let result: Awaited<ReturnType<typeof sendRpcCommand>>;
-				try {
-					result = await sendRpcCommand(socketPath, sendCommand);
-				} catch (connErr) {
-					// Transport 2 (fallback): no LIVE control socket → deliver to the
-					// target's meta-bridge mailbox if it is a garden citizen (e.g. a
-					// native Claude Code session: a meta-record but no socket of its
-					// own). garden-id is the universal address — a pi session must be
-					// able to reply to a Claude citizen, not only to other pi peers.
-					// Mirrors the MCP bridge entwurf_send's two-transport surface.
-					//
-					// Fall back ONLY when the connect error proves there is no live
-					// socket (ENOENT/ECONNREFUSED → classifyConnectError "dead"). A
-					// timeout/indeterminate socket may be alive-but-stalled, so we
-					// surface the error rather than risk a double delivery. get_message
-					// / clear never reach here — fallback is send-only by construction.
-					const code = (connErr as NodeJS.ErrnoException).code;
-					if (classifyConnectError(code) !== "dead") throw connErr;
-					try {
-						// SE-1 2e-a: decorate the pi sender with its HONEST replyability (canonical
-						// socket existsSync), not a hardcoded true. Same shared truth table as the v2
-						// senderProvider, reached via the same non-literal dynamic import.
-						const selfMod = (await import(ENTWURF_SELF_ADDRESS_MODULE)) as unknown as EntwurfSelfAddressModule;
-						const mailboxSender: SenderEnvelope | undefined = sender
-							? decoratePiSenderAddressability(sender, selfMod.computeSelfAddressability)
-							: undefined;
-						// Transport 2 gated (SE-1/SE-2): enqueue ONLY when the target is a
-						// conversationally-deliverable meta citizen. Reach the fence guard via a
-						// non-literal dynamic import (this root-tsc emit surface can't static-import it).
-						const guardModule = (await import(ENTWURF_MAILBOX_GUARD_MODULE)) as unknown as EntwurfMailboxGuardModule;
-						// Compute the body OUTSIDE the enqueue closure: params.message's narrowing
-						// to string does not carry into a closure, so capture it here first.
-						const mailboxBody = mailboxSender
-							? formatMetaMailboxBody(mailboxSender, params.message, false)
-							: params.message;
-						const outcome = guardModule.guardedMailboxEnqueue(targetSessionId, {}, () =>
-							enqueueMetaMessage({ gardenId: targetSessionId, body: mailboxBody }),
-						);
-						if (!outcome.delivered) {
-							const connMsg = connErr instanceof Error ? connErr.message : String(connErr);
-							return {
-								content: [
-									{
-										type: "text",
-										text:
-											`Message NOT delivered: "${targetSessionId}" is not conversationally deliverable; ` +
-											`not enqueued — no doorbell wake (${outcome.reason}). ` +
-											`No live pi control socket either (${connMsg}).`,
-									},
-								],
-								isError: true,
-								details: { delivered: false, via: "meta-mailbox", reason: outcome.reason, connectError: connMsg },
-							};
-						}
-						const enq = outcome.result;
-						return {
-							content: [
-								{
-									type: "text",
-									text: `Message delivered to meta-bridge mailbox for ${enq.gardenId} (no live control socket; doorbell wake)`,
-								},
-							],
-							details: {
-								sender: mailboxSender ?? sender,
-								delivered: true,
-								via: "meta-mailbox",
-								messagePath: enq.messagePath,
-							},
-						};
-					} catch (metaErr) {
-						const metaMsg = metaErr instanceof Error ? metaErr.message : String(metaErr);
-						const connMsg = connErr instanceof Error ? connErr.message : String(connErr);
-						return {
-							content: [
-								{
-									type: "text",
-									text:
-										`Failed: "${targetSessionId}" is neither a live pi control socket ` +
-										`(${connMsg}) nor a meta-bridge garden citizen (${metaMsg}).`,
-								},
-							],
-							isError: true,
-							details: { error: metaMsg, connectError: connMsg },
-						};
-					}
-				}
-				if (!result.response.success) {
-					return {
-						content: [{ type: "text", text: `Failed: ${result.response.error ?? "unknown error"}` }],
-						isError: true,
-						// Error path: no sender envelope injection — the
-						// [entwurf sent →] box is reserved for actual sends.
-						details: result,
-					};
-				}
-
-				return {
-					content: [{ type: "text", text: `Message delivered to session ${displayTarget || targetSessionId}` }],
-					details: {
-						...(result.response.data as Record<string, unknown> | undefined),
-						sender,
-						delivered: true,
-					},
-				};
-			} catch (error) {
-				const message = error instanceof Error ? error.message : "Unknown error";
-				return {
-					content: [{ type: "text", text: `Failed: ${message}` }],
-					isError: true,
-					details: { error: message },
-				};
-			}
-		},
-
-		renderCall(args: EntwurfSendParams, theme: { fg: (k: string, s: string) => string; bold: (s: string) => string }) {
-			const action = args.action ?? "send";
-			// sessionId-only addressing — alias surface is gone, and
-			// renderCall is the operator's first peek at where this tool is
-			// pointing, so we render the raw UUID (truncated) and never look
-			// up a name that no longer exists.
-			const sessionRef = args.sessionId ?? "...";
-			const shortSessionRef = sessionRef.length > 12 ? sessionRef.slice(0, 8) + "..." : sessionRef;
-
-			// Build the header line
-			let header = theme.fg("toolTitle", theme.bold("→ session "));
-			header += theme.fg("accent", shortSessionRef);
-
-			// Add action-specific info
-			if (action === "send") {
-				const mode = args.mode ?? "steer";
-				header += theme.fg("muted", ` (${mode})`);
-			} else {
-				header += theme.fg("muted", ` (${action})`);
-			}
-
-			// For send action, show the message
-			if (action === "send" && args.message) {
-				const msg = args.message;
-				const preview = msg.length > 80 ? msg.slice(0, 80) + "..." : msg;
-				// Handle multi-line messages
-				const firstLine = preview.split("\n")[0];
-				const hasMore = preview.includes("\n") || msg.length > 80;
-				return new Text(header + "\n  " + theme.fg("dim", `"${firstLine}${hasMore ? "..." : ""}"`), 0, 0);
-			}
-
-			return new Text(header, 0, 0);
-		},
-
-		renderResult(
-			result: AgentToolResult<unknown>,
-			{ expanded }: ToolRenderResultOptions,
-			theme: Theme,
-			ctx?: { args?: EntwurfSendParams },
-		) {
-			const details = result.details as Record<string, unknown> | undefined;
-			// `isError` is a runtime-only property: pi-agent-core tracks it
-			// alongside the AgentToolResult and the interactive harness spreads
-			// it onto the result object before handing it to the renderer
-			// (`{ ...event.result, isError }`). It is intentionally NOT in the
-			// public AgentToolResult<T> type, so we read it through a runtime
-			// cast and fall back to our own convention of `details.error`.
-			const runtimeIsError = (result as { isError?: boolean }).isError === true;
-			const detailsError = typeof details?.error === "string" ? details.error : undefined;
-			const isError = runtimeIsError || detailsError !== undefined;
-
-			// Error case
-			if (isError) {
-				const firstContent = result.content[0];
-				const fallbackText =
-					firstContent?.type === "text" ? (firstContent as { type: "text"; text: string }).text : "Unknown error";
-				const errorMsg = detailsError ?? fallbackText;
-				return new Text(theme.fg("error", "✗ ") + theme.fg("error", errorMsg), 0, 0);
-			}
-
-			// Detect action from details structure
-			const hasMessage = details && "message" in details && details.message;
-			const hasCleared = details && "cleared" in details;
-
-			// get_message result with message
-			if (hasMessage) {
-				const message = details.message as ExtractedMessage;
-				const icon = theme.fg("success", "✓");
-
-				if (expanded) {
-					const container = new Container();
-					container.addChild(new Text(icon + theme.fg("muted", " Message received"), 0, 0));
-					container.addChild(new Spacer(1));
-					container.addChild(new Markdown(message.content, 0, 0, getMarkdownTheme()));
-					return container;
-				}
-
-				// Collapsed view - show preview
-				const preview = message.content.length > 200 ? message.content.slice(0, 200) + "..." : message.content;
-				const lines = preview.split("\n").slice(0, 5);
-				let text = icon + theme.fg("muted", " Message received");
-				text += "\n" + theme.fg("toolOutput", lines.join("\n"));
-				if (message.content.split("\n").length > 5 || message.content.length > 200) {
-					text += "\n" + theme.fg("dim", "(Ctrl+O to expand)");
-				}
-				return new Text(text, 0, 0);
-			}
-
-			// clear result
-			if (hasCleared) {
-				const alreadyAtRoot = details.alreadyAtRoot as boolean | undefined;
-				const icon = theme.fg("success", "✓");
-				const msg = alreadyAtRoot ? "Session already at root" : "Session cleared";
-				return new Text(icon + " " + theme.fg("muted", msg), 0, 0);
-			}
-
-			// send result — single ack path, send-is-throw.
-			//
-			// First-class [entwurf sent →] box. Mirrors the receive-side
-			// [entwurf received ⟵] customMessage region so directionality is
-			// unambiguous in a busy multi-session transcript. We pull input args
-			// (sessionId, message, mode) from `ctx.args` — ToolRenderContext
-			// surfaces them per the pi-coding-agent ToolDefinition signature
-			// (extensions/types.ts:467-472) — and the sender envelope from
-			// `details.sender` which execute() populates from
-			// buildLocalSenderEnvelope(state.context).
-			//
-			// The execute() success content[0].text ("Message delivered to
-			// session ...") is intentionally still returned for the LLM as the
-			// tool's textual result; only the operator-facing render is
-			// upgraded. No LLM context pollution because the toolResult role
-			// stays the toolResult role.
-			if (details && "delivered" in details) {
-				const sender = details.sender as
-					| { agentId?: string; cwd?: string; sessionId?: string; timestamp?: string }
-					| undefined;
-				const args = ctx?.args;
-				const data: SentBoxData = {
-					to: args?.sessionId ?? "(unknown sessionId)",
-					from: sender?.agentId,
-					cwd: sender?.cwd,
-					timestamp: sender?.timestamp,
-					mode: args?.mode,
-					deliveredAs: typeof details.deliveredAs === "string" ? details.deliveredAs : undefined,
-					// wants_reply: native schema does not expose this field yet
-					// — see registerSessionTool's entwurfSendParameters. Will
-					// activate automatically once the schema grows it.
-					body: args?.message ?? "(no message in args)",
-				};
-				return buildSentMessageBox(data, expanded, theme);
-			}
-
-			// Fallback - just show the text content
-			const text = result.content[0];
-			const content = text?.type === "text" ? text.text : "(no output)";
-			return new Text(theme.fg("success", "✓ ") + theme.fg("muted", content), 0, 0);
-		},
-	});
-}
-
 // ============================================================================
 // Tool: entwurf_peers
 // ============================================================================
@@ -2069,174 +1477,6 @@ function registerListSessionsTool(pi: ExtensionAPI): void {
 			};
 		},
 	});
-}
-
-type StartupControlSendOptions = {
-	target: string;
-	message: string;
-	mode: "steer" | "follow_up";
-	includeSenderInfo: boolean;
-};
-
-function normalizeMode(raw: string): "steer" | "follow_up" | null {
-	const value = raw.trim().toLowerCase();
-	if (value === "steer") return "steer";
-	if (value === "follow_up" || value === "follow-up" || value === "followup") return "follow_up";
-	return null;
-}
-
-function getStringFlag(pi: ExtensionAPI, name: string): string | undefined {
-	const value = pi.getFlag(name);
-	if (typeof value !== "string") return undefined;
-	const trimmed = value.trim();
-	return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function parseStartupControlSendOptions(pi: ExtensionAPI): { options?: StartupControlSendOptions; error?: string } {
-	const target = getStringFlag(pi, ENTWURF_SESSION_FLAG);
-	const message = getStringFlag(pi, ENTWURF_SEND_MESSAGE_FLAG);
-
-	if (!target && !message) {
-		return {};
-	}
-	if (target && !message) {
-		return { error: `Missing --${ENTWURF_SEND_MESSAGE_FLAG} (required with --${ENTWURF_SESSION_FLAG})` };
-	}
-	if (!target && message) {
-		return { error: `Missing --${ENTWURF_SESSION_FLAG} (required with --${ENTWURF_SEND_MESSAGE_FLAG})` };
-	}
-
-	// v2-only gate (0.11.0 B): a real startup send (both target and message present) is a
-	// v1 surface; refuse it with an error report rather than silently skipping the send.
-	const v1gate = checkV1EntwurfAllowed("--entwurf-send-message startup send");
-	if (!v1gate.allowed) {
-		return { error: v1gate.message };
-	}
-
-	const rawMode = getStringFlag(pi, ENTWURF_SEND_MODE_FLAG) ?? "steer";
-	const mode = normalizeMode(rawMode);
-	if (!mode) {
-		return { error: `Invalid --${ENTWURF_SEND_MODE_FLAG}: ${rawMode}. Use steer|follow_up.` };
-	}
-
-	// Send-is-throw cleanup (2026-05-18): the only wait surface the bridge
-	// exposed was message_processed (delivery ack — same as the default send)
-	// and turn_end (await sibling's turn completion — pi-shell-acp identity
-	// violation). The flag is kept for backward compat at the CLI level so
-	// existing scripts do not break, but:
-	//   - --entwurf-send-wait turn_end          → refuse the startup send with
-	//     an explicit error report. Do not silently demote to message_processed;
-	//     the user explicitly asked for a contract we no longer honor and that
-	//     intent must surface. The error flows through reportStartupControlSend
-	//     (same path as any other invalid arg in this parser), so the pi
-	//     session itself continues — only the one-shot startup send is dropped.
-	//   - --entwurf-send-wait message_processed → accepted as no-op (the
-	//     default already has message_processed semantics).
-	const rawWait = getStringFlag(pi, ENTWURF_SEND_WAIT_FLAG);
-	if (rawWait) {
-		const value = rawWait.trim().toLowerCase();
-		if (value === "turn_end" || value === "turn-end") {
-			return {
-				error:
-					`--${ENTWURF_SEND_WAIT_FLAG}=turn_end is no longer supported. ` +
-					`entwurf_send is fire-and-forget (send-is-throw). ` +
-					`If you need a caller-owned result, use entwurf(mode=async) + entwurf_resume; ` +
-					`if a peer should reply, say so in the message body and let the receiver send back.`,
-			};
-		}
-		if (value !== "message_processed" && value !== "message-processed") {
-			return {
-				error:
-					`Invalid --${ENTWURF_SEND_WAIT_FLAG}: ${rawWait}. ` +
-					`Only 'message_processed' is accepted (deprecated no-op for backward compat).`,
-			};
-		}
-		// Accepted; no-op. The default send path already gives message_processed
-		// semantics (RPC ack = receiver enqueued the message).
-	}
-
-	const includeSenderInfo = pi.getFlag(ENTWURF_SEND_INCLUDE_SENDER_FLAG) === true;
-
-	return {
-		options: {
-			target: target!,
-			message: message!,
-			mode,
-			includeSenderInfo,
-		},
-	};
-}
-
-function reportStartupControlSend(
-	ctx: ExtensionContext,
-	message: string,
-	level: "info" | "warning" | "error" = "info",
-): void {
-	if (ctx.hasUI) {
-		ctx.ui.notify(message, level);
-		return;
-	}
-	if (level === "error") {
-		console.error(message);
-		return;
-	}
-	console.log(message);
-}
-
-async function maybeHandleStartupControlSend(pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> {
-	const parsed = parseStartupControlSendOptions(pi);
-	if (!parsed.options) {
-		if (parsed.error) {
-			reportStartupControlSend(ctx, parsed.error, "error");
-		}
-		return;
-	}
-
-	const { target, message, mode, includeSenderInfo } = parsed.options;
-	if (!isSafeSessionId(target)) {
-		reportStartupControlSend(ctx, `Invalid target session id: ${target} (sessionId-only — no name aliases)`, "error");
-		return;
-	}
-	const targetSessionId = target;
-
-	const socketPath = getSocketPath(targetSessionId);
-	const alive = await isSocketAlive(socketPath);
-	if (!alive) {
-		reportStartupControlSend(ctx, `Target session not reachable: ${target}`, "error");
-		return;
-	}
-
-	// --entwurf-send-include-sender-info is an opt-in toggle for the startup
-	// CLI path so existing scripts that explicitly disable the header keep
-	// behaving identically. When enabled, the sender envelope is
-	// built from local context (sessionId / agentId / cwd / timestamp) and
-	// passed structurally — the receiver synthesizes the <sender_info> JSON. No
-	// body mangling here either.
-	const sender = includeSenderInfo ? buildLocalSenderEnvelope(ctx) : undefined;
-
-	const sendCommand: RpcSendCommand = {
-		type: "send",
-		message,
-		mode,
-		sender,
-	};
-
-	// Single send path, send-is-throw. The RPC ack confirms the receiver
-	// enqueued the message (= message_processed semantics). We surface that
-	// as "Message delivered to ${target}" — chosen so existing tooling that
-	// greps for /message processed|delivered/ (e.g. session-messaging-smoke.sh)
-	// keeps passing after the wait_until cleanup.
-	try {
-		const result = await sendRpcCommand(socketPath, sendCommand, { timeout: 30000 });
-		if (!result.response.success) {
-			reportStartupControlSend(ctx, `Failed to send: ${result.response.error ?? "unknown error"}`, "error");
-			return;
-		}
-		reportStartupControlSend(ctx, `Message delivered to ${target}`);
-	} catch (error) {
-		const msg = error instanceof Error ? error.message : "unknown error";
-		reportStartupControlSend(ctx, `Failed to send to ${target}: ${msg}`, "error");
-	}
 }
 
 function registerControlSessionsCommand(pi: ExtensionAPI, setSessions: (sessions: EnrichedSession[]) => void): void {
@@ -2295,45 +1535,6 @@ function registerControlSessionsCommand(pi: ExtensionAPI, setSessions: (sessions
 			);
 		},
 	});
-}
-
-// Resolve a `/entwurf-send` target into the concrete socket.
-// Accepts: numeric index ("1", "[1]") or sessionId.
-function resolveSendTarget(
-	raw: string,
-	cached: EnrichedSession[],
-): { sessionId: string; socketPath: string; label: string } | { error: string } {
-	const trimmed = raw.trim();
-	if (!trimmed) return { error: "Missing target" };
-
-	const idxMatch = trimmed.match(/^\[?\s*(\d+)\s*\]?$/);
-	if (idxMatch) {
-		if (cached.length === 0) {
-			return {
-				error: "No cached session list. Run /entwurf-sessions first to populate indices.",
-			};
-		}
-		const idx = Number.parseInt(idxMatch[1], 10) - 1;
-		if (idx < 0 || idx >= cached.length) {
-			return { error: `Index ${idx + 1} out of range (1..${cached.length})` };
-		}
-		const s = cached[idx];
-		return {
-			sessionId: s.sessionId,
-			socketPath: s.socketPath,
-			label: `${s.sessionId.slice(0, 8)}…`,
-		};
-	}
-
-	if (isSafeSessionId(trimmed)) {
-		return {
-			sessionId: trimmed,
-			socketPath: getSocketPath(trimmed),
-			label: `${trimmed.slice(0, 8)}…`,
-		};
-	}
-
-	return { error: `Cannot resolve target: ${raw}` };
 }
 
 // /gnew (+ /garden-new) — birth a NEW garden-native session IN-PROCESS, same
@@ -2402,84 +1603,4 @@ function registerGardenNewCommand(pi: ExtensionAPI): void {
 	};
 	register("gnew");
 	register("garden-new");
-}
-
-function registerEntwurfSendCommand(pi: ExtensionAPI, state: SocketState, getSessions: () => EnrichedSession[]): void {
-	pi.registerCommand("entwurf-send", {
-		description: "Send a message to another entwurf session — /entwurf-send <index|sessionId> <message>",
-		handler: async (args, ctx) => {
-			if (pi.getFlag(ENTWURF_FLAG) !== true) {
-				if (ctx.hasUI) {
-					ctx.ui.notify("Entwurf control not enabled — relaunch pi with --entwurf-control", "warning");
-				}
-				return;
-			}
-
-			// v2-only gate (0.11.0 B): /entwurf-send is the slash twin of the v1 send tool.
-			const v1gate = checkV1EntwurfAllowed("/entwurf-send");
-			if (!v1gate.allowed) {
-				if (ctx.hasUI) {
-					ctx.ui.notify(v1gate.message, "error");
-				}
-				return;
-			}
-
-			const trimmed = (args ?? "").trim();
-			if (!trimmed) {
-				if (ctx.hasUI) {
-					ctx.ui.notify("Usage: /entwurf-send <index|sessionId> <message>", "warning");
-				}
-				return;
-			}
-
-			const splitIdx = trimmed.search(/\s/);
-			if (splitIdx === -1) {
-				if (ctx.hasUI) {
-					ctx.ui.notify("Missing message body", "warning");
-				}
-				return;
-			}
-			const rawTarget = trimmed.slice(0, splitIdx);
-			const message = trimmed.slice(splitIdx + 1).trim();
-			if (!message) {
-				if (ctx.hasUI) {
-					ctx.ui.notify("Empty message body", "warning");
-				}
-				return;
-			}
-
-			const resolved = resolveSendTarget(rawTarget, getSessions());
-			if ("error" in resolved) {
-				if (ctx.hasUI) {
-					ctx.ui.notify(resolved.error, "error");
-				}
-				return;
-			}
-
-			// Envelope path — see buildLocalSenderEnvelope above. The
-			// /entwurf-send slash command is a human-initiated peer message, so
-			// we always attempt to attach the envelope (no opt-out toggle here);
-			// when local context can't supply every field we send without one.
-			const sender = state.context ? buildLocalSenderEnvelope(state.context) : undefined;
-
-			// Default mode: follow_up — human-initiated peer message lands after
-			// the target's current turn instead of yanking it mid-stream.
-			const result = await sendRpcCommand(resolved.socketPath, {
-				type: "send",
-				message,
-				mode: "follow_up",
-				sender,
-			});
-			if (!result.response.success) {
-				if (ctx.hasUI) {
-					ctx.ui.notify(`Failed to send to ${resolved.label}: ${result.response.error ?? "unknown error"}`, "error");
-				}
-				return;
-			}
-
-			if (ctx.hasUI) {
-				ctx.ui.notify(`Sent to ${resolved.label} (follow_up)`, "info");
-			}
-		},
-	});
 }

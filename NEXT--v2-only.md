@@ -39,8 +39,8 @@
 - **잔여(라우팅성, Phase B 가까움)**: `scripts/resolve-acp-bridge.ts`(orphan 확인 후) /
   `getRegistryRouting` 하드코딩 `provider:"pi-shell-acp"`(=rename 영역 → Phase B) /
   `mcp/index.ts` description 문자열("from acp-bridge.ts" 등 정확성).
-- 다음 한 걸음 = (커밋) → **v1 가시화: ACP 빠진 지금 v1 surface 의존 재조사**(step③ 범위 확정) →
-  env seam(step⑤) → 마지막 `release_gate` v2 재정의.
+- **v1 surface 1차 제거 + env seam DONE → `pnpm check` green** (2026-06-16 19:25 KST): MCP `entwurf`/`entwurf_resume`/`entwurf_send`, pi-native `entwurf_send`, startup `/entwurf-send`, `spawn_async_resume`, v1 gate/async scripts 제거. `updateSessionEnv`가 이제 `PI_SESSION_ID`와 함께 `PI_AGENT_ID=<provider>/<model>`을 set/delete. `entwurf-v2-resume-marker.ts`는 v2 resume 인증이라 KEEP. 남은 건 문서/주석/레거시 smoke 정리 + 커밋.
+- 다음 한 걸음 = stale README/run.sh/comments 정리 → 커밋.
 
 ## 잠긴 결정
 
@@ -76,14 +76,39 @@
    - [ ] `.husky/pre-commit` 주석의 ACP 게이트 나열(check-models/backends/registration/sdk-surface)도
      v2 게이트로 갱신 (안 그러면 문서-현실 불일치).
    **삭제 결합 규칙**: 파일/게이트 1개 = 함수 + run.sh case + npm script + check 체인 동반 제거.
-3. [ ] **v1 가드 삭제** — `entwurf-v2-only.ts` / `entwurf-v2-resume-marker.ts` + 호출처
-   (`entwurf-control.ts`, `mcp/pi-tools-bridge/src/index.ts`의 `checkV1EntwurfAllowed`/`isV2OnlyMode`/
-   `isV2ResumeResidentAuthorized`).
-4. [ ] **env sender seam 수술 (재평가: 본질 난제 아님)** — `PI_SESSION_ID`는 이미 pi-native
+3. [x] **v1 surface 털어내기 (ACP v1)** — 조사로 호출 그래프 검증 완료 후 1차 제거 완료(2026-06-16, hejdev6 pi).
+   **NEXT 원안 2곳 정정**:
+   - 🔴 **`entwurf-v2-resume-marker.ts`는 v1 아님 → KEEP**. v2 spawn-bg resume의 resident 인증 마커
+     (producer `entwurf-v2-spawn-production.ts:253`, consumer `entwurf-control.ts:1132`
+     `maybeSetResidentName`). 지우면 v2 resume 깨짐. `isV2ResumeResidentAuthorized`/
+     `V2_RESUME_RESIDENT_SESSION_ENV` 보존. **실제 v1 가드는 `entwurf-v2-only.ts` 하나뿐.**
+   - 🔴 **`entwurf-async.ts` 삭제 대상 누락 → 추가**. v1 async resume 런처
+     (`spawnEntwurfResumeAsync`+`makeBestEffortDeliverCompletion`), 유일 도달=v1-gated
+     `spawn_async_resume` RPC(control.ts:947). v2는 안 씀 → orphan.
+   **DELETE (v1 본체)**:
+   - `mcp/.../index.ts`: 도구 `entwurf_send`(435)/`entwurf`(774)/`entwurf_resume`(833) + import
+     `runEntwurfSync`/`runEntwurfResumeSync`(91-92)·`checkV1EntwurfAllowed`(99) + 전용 헬퍼.
+   - `entwurf-control.ts`: `spawn_async_resume` RPC(919-960)/`entwurf_send`(1680)/
+     `--entwurf-send-message`(2111)/`/entwurf-send`(2419) + import(107·126).
+   - `lib/entwurf-v2-only.ts` 전체 / `lib/entwurf-async.ts` 전체.
+   - `lib/entwurf-control-rpc.ts:79`: `spawn_async_resume` RPC 타입 멤버.
+   - scripts+case+체인: `check-entwurf-v2-only` / `check-async-resume-gate` / `check-entwurf-send-mailbox-fallback` / `cross-cwd-resume-smoke` 제거.
+   - `mcp/pi-tools-bridge/test.sh` + `check-pi-tools-bridge-boot`는 v2-only tool surface(`entwurf_v2/self/peers/inbox_read`) 기준으로 갱신.
+   - `lib/entwurf-core.ts`의 `runEntwurfSync`/`runEntwurfResumeSync`는 현재 export dead로 남음. `getRegistryRouting`/package-source 라우팅 잔여와 얽혀 Phase B 직전 별도 절삭.
+   **KEEP (v2 surface)**: `entwurf_v2`/`entwurf_self`/`entwurf_peers`/`entwurf_inbox_read` 도구 +
+   `entwurf-v2-*.ts` 전부 + `entwurf-v2-resume-marker.ts` + `entwurf-core.ts`의 v2 4심볼
+   (`findSessionFileById`·`getEntwurfExplicitExtensions`·`mirrorChildStderr`·`readSessionIdentity`)
+   + `maybeSetResidentName`+`isV2ResumeResidentAuthorized`.
+   **⚠️ loud 커플링(결합 규칙, 추측 금지)**:
+   - `entwurf-async.ts` 삭제 → `check-shell-quote.ts:44` SOURCE_SITES + `check-entwurf-session-identity.ts:711-716`
+     동반 수정 (안 하면 check RED).
+   - `entwurf-core.ts` 죽은 함수 = 둘만 쓰는 전용 헬퍼 더 있는지 확인 후 트림.
+   - `index.ts` 공유 헬퍼(`buildSendSenderEnvelope` 등)가 `entwurf_v2`에도 쓰이는지 확인 후 제거.
+4. [x] **env sender seam 수술 (재평가: 본질 난제 아님)** — `PI_SESSION_ID`는 이미 pi-native
    (`updateSessionEnv` entwurf-control.ts:1162, badlogic 원형 `control.ts:970`과 동일). 끊기는 건
    `PI_AGENT_ID` 하나. caller-side(`buildLocalSenderEnvelope` :527)는 `${ctx.model.provider}/${ctx.model.id}`
-   fallback을 이미 가져 **무변경 동작**. MCP child(별도 프로세스, env만 읽음)만 메우면 됨 →
-   `updateSessionEnv`에 `process.env.PI_AGENT_ID = ${ctx.model.provider}/${ctx.model.id}` 3줄 추가
+   fallback을 이미 가져 **무변경 동작**. MCP child(별도 프로세스, env만 읽음)만 메움 →
+   `updateSessionEnv`에 `process.env.PI_AGENT_ID = ${ctx.model.provider}/${ctx.model.id}` 추가
    (PI_SESSION_ID와 대칭, off일 때 delete 포함). 결정 1건: agent id 포맷
    `pi-shell-acp/<model>`→`<provider>/<model>` (v2-only 목적과 일치, fallback이 이미 쓰던 값) —
    GLG OK 방향(2026-06-16). LIVE(pi child spawn)로 상속 1회 확인.
@@ -108,13 +133,10 @@
    → `tsc`/`pnpm check`의 `[eval1]` acp-bridge 에러 해소.
 2. **run.sh DROP 게이트 + check 체인 트림** (위 step2 목록). 삭제 결합 규칙 준수
    (함수 + case + npm script + 체인 동시). `check-dep-versions`/README/.husky 주석의 ACP 핀도 정리.
-3. **v1 가드 삭제** (step 3): `entwurf-v2-only.ts` + `entwurf-v2-resume-marker.ts` + 호출처
-   (`entwurf-control.ts`, `mcp/pi-tools-bridge/src/index.ts`) + `check-entwurf-v2-only` 게이트.
-   v1 분기는 지우고 v2 경로만 남긴다.
-4. **lockfile 재생성**: `pnpm install` (ACP deps 3개 빠졌으니). 그 후 `pnpm check` 돌려 남은 RED 확인.
-5. **env sender seam (step 4 — 재평가 끝, 기계적)**: `updateSessionEnv`에 PI_AGENT_ID set 3줄
-   (위 작업순서 step4 참조). caller-side는 `ctx.model` fallback으로 이미 동작 → MCP child 상속만 메움.
-   PI_SESSION_ID와 동형이라 추측 아님. agent id 포맷 변화는 GLG OK 방향(2026-06-16). 마무리 LIVE 1회.
+3. **v1 surface 삭제 완료.** `entwurf-v2-resume-marker.ts`는 삭제 금지(KEEP) — v2 spawn-bg resume resident 인증.
+4. **lockfile 재생성**: 필요 시 `pnpm install`; 현재 `pnpm check` green.
+5. **env sender seam 완료**: `updateSessionEnv`에 PI_AGENT_ID set/delete 추가. caller-side는 `ctx.model` fallback으로 이미 동작 → MCP child 상속만 메움.
+   PI_SESSION_ID와 동형이라 추측 아님. agent id 포맷 변화는 GLG OK 방향(2026-06-16).
    - **별개 잔여(라우팅, env seam 아님)**: `getRegistryRouting`(`entwurf-core.ts:991,1089`)의 하드코딩
      `provider: "pi-shell-acp"` + `scripts/resolve-acp-bridge.ts` + `smoke-installed-entwurf-acp` =
      패키지/확장 resolve 경로. v2-only 확장 entry는 `entwurf-control.ts`(index.ts 아님). 이건 rename(Phase B)
@@ -128,8 +150,7 @@
 
 ## 다음 한 걸음
 
-→ **2-tail step 1부터**: openclaw DROP → run.sh/check 체인 트림 → v1 가드 삭제 →
-   `pnpm install` → `pnpm check` RED 목록 확인 → env seam에서 GLG 합의.
+→ **stale 정리부터**: README/run.sh/top comments에서 v1 `entwurf_send`/`entwurf_resume`/async-resume 잔재 정리 → `pnpm check` → 커밋.
 
 ## 넘으면 안 되는 선
 

@@ -68,7 +68,6 @@ Usage:
   ./run.sh check-entwurf-v2-spawn      # deterministic gate (0.11 Stage 0 step 5c-3a): spawn-bg RESUME watcher hand (executeSpawnBgResume) wiring spawn + socket-observe IO onto the 5c-1 reducer — Fable-3: TIMEOUT IS NOT A RELEASE (bare observeTimeout→killChild, release 0; bounded killGrace then real socket-alive ∨ child-exited releases ×1); spawnChild throw→spawn-start-failed; no observation obtainable (grace elapses / post-spawn watch dep throws)→lock-retained fail-closed (released:false, evidence surfaced), NO direct-release hatch; IO-via-dep, controlled promises
   ./run.sh check-entwurf-resume-args   # deterministic gate (0.11 Stage 0 step 5c-3b): resume-argv SSOT (buildResumePiArgs) shared by the legacy async worker and the v2 spawn-bg resident citizen — A1: legacy=--no-extensions + no --entwurf-control (one-shot pi -p exits), v2-control=--entwurf-control + no --no-extensions (keep-alive is the goal, resumed session stays addressable); BOTH keep --mode json -p + prompt-as-turn (-p NOT dropped in v2); explicitExtensionArgs preserved once (#29); v2 includes plan.launchArgs (--approve); null provider→no --provider; no cross-contamination
   ./run.sh check-entwurf-v2-spawn-production # deterministic gate (0.11 Stage 0 step 5c-3c): production SpawnBgResumeDeps factory (makeProductionSpawnBgResumeDeps) wiring the 5c-3a watcher's 6 IO seams — no real pi/socket/timer (that=opt-in smoke-entwurf-v2-spawn-live, OUT of pnpm check). socketWatchVerdict: address-conflict→forged (reject, never wait)/alive→alive/dead·indeterminate→wait; spawnChild builds v2-control argv (--entwurf-control, no --no-extensions, -p+prompt, --approve, cwd authority); awaitSocketAlive connectable→resolve / symlink→reject without connect / dead→wait→alive / abort-clears; awaitChildExit code + listener cleanup; awaitTimeout schedule + abort-clear; killChild=SIGTERM; proc-less child fails loud
-  ./run.sh check-entwurf-v2-only          # deterministic gate (0.11.0 B): PI_SHELL_ACP_V2_ONLY=1 v2-only mode — pure helper (exact "1" only; off→allowed / on→blocked w/ flag+entwurf_v2+"unavailable"; assert throws on) + all 10 v1 entrypoint guards (9 surface groups; /entwurf tool+command) + MCP entwurf_resume & control-RPC spawn_async_resume BOTH guarded + v2 core flag-clean. v1 NOT deleted (호출 차단만; 0.12 lane).
   ./run.sh smoke-entwurf-v2-spawn-live # LIVE phase gate (0.11 Stage 0 step 5c-3c, D5) — OUT of pnpm check, needs LIVE=1. Exercises the production SpawnBgResumeDeps against REAL OS objects: S1 real unix socket → awaitSocketAlive resolves (real lstat+probe), symlink→forged, absent→abort settles; S2 real child → spawn-event resolve + SIGTERM kill + exit-code capture; S3 watcher integration → real timeout→kill→child-exited→release ×1. Does NOT spawn a real pi resume (that=5d matrix). Run before 5d: LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live
   ./run.sh smoke-entwurf-v2-spawn-resume-live # 0.11.0 (A) ACCEPTANCE gate — OUT of pnpm check, needs LIVE=1. The FULL spawn-bg resident lifecycle: mint backend=pi identity → seed a REAL dormant pi session (one-shot into ~/.pi/agent/sessions) → runEntwurfV2(owned-outcome) routes dormant→spawn-bg resume → a REAL detached pi --entwurf-control child stands its socket up, resumes, DOES a model turn. Asserts executed/spawn-bg/socket-alive/released + lock released ×1 + no lock file + pid alive + socket connectable + resume USER & assistant OK nonces in the session JSONL. Model-in-loop IN. The gate v1 deprecation (0.12) is predicated on. Model: PI_SHELL_ACP_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live
   ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b socket-only (record-less live pi → control-socket sent / owned→bad-target, A1 narrow), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: PI_SHELL_ACP_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
@@ -77,11 +76,9 @@ Usage:
   ./run.sh check-meta-listing          # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4a): META-STORE axis listAllMetaIdentities — explicit-partial: parse failure / body-filename drift → explicit {filename,message} error (verbatim, no synthetic fields), valid records still listed (corrupt doesn't blind); mode strict throws / collect partial; entries/readRecord injected, no IO
   ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — listAllMetaIdentities→scanSocketProbes→pre-quarantine non-pi/socket conflicts→resolveFactList(clean)→{facts,diagnostics}; C-원칙: expected corruption (parse/collision)→diagnostics (listing survives), impossible invariant (dup/unprobed)→throw; collision quarantines BOTH PeerFact+socket; deps injected, no IO
   ./run.sh check-entwurf-peers-surface # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4c): MCP entwurf_peers RENDER renderEntwurfPeers — legacy `sessions` = projection of facts (alive only, no 2nd scan), socketPath via controlSocketPath (SSOT), count=projection length, three distinct arrays, NO verb-routing key (JSON deep scan) NOR word (text), diagnostics both surfaces, empty→(none), unsupported shown, enrich→(not enriched); WIRING guard: bridge calls provider+render, getLiveSessions gone; facts fabricated, no IO
-  ./run.sh check-entwurf-send-mailbox-fallback # deterministic gate: pi-native entwurf_send → meta-bridge mailbox fallback (transport 2). ENOENT/ECONNREFUSED falls back, timeout does not; shared formatMetaMailboxBody; no-socket citizen → .msg enqueue; WIRING guard (pi-native calls fallback, bridge uses shared formatter)
   ./run.sh check-entwurf-self-address # deterministic gate (SE-1/SE-2 slice 1): self-addressability honesty predicate computeSelfAddressability — pi replyable ⟺ live socket; meta ⟺ recordBacked ∧ ownerAlive ∧ watchArmed (regression-proof record-present rows); SOURCE GUARD buildStrictPiSenderEnvelope drops hardcoded replyable:true + existsSync-probes socket, entwurf_self renders alive vs expected. meta watchArmed wired in slice 2 (same release block)
   ./run.sh check-entwurf-deliverability # deterministic gate (SE-1/SE-2 slice 2c): conversational-mailbox deliverability predicate — computeMetaReceiverActive (recordBacked ∧ ownerAlive ∧ watchArmed) + mailboxConversationalDeliverable (self-fetch AND active); direct-inject pi refused (SE-1), self-fetch dead/unarmed refused (SE-2); self-address shares the same atom
   ./run.sh check-entwurf-mailbox-guard # deterministic gate (SE-1/SE-2 slice 2d): guarded mailbox enqueue — PURE 0-call (undeliverable target leaves injected enqueue uncalled) + TMPDIR snapshot (refused send leaves mailbox byte-identical, accepted writes one .msg) + fact gathering from record/capability/receiver-marker
-  ./run.sh check-async-resume-gate    # deterministic gate for MCP entwurf_resume mode resolution + replyable gate + cwd silent-ignore (0.7.6, 16 assertions)
   ./run.sh check-package-source-routing # deterministic gate (#29): package-source -> install-root mapping + fail-fast routing (local/git/npm/missing/project/no-source × local+remote, self-root, resume), no backend
   ./run.sh smoke-session-id-name      # live 3-turn substrate smoke (Phase 3a): Pi 0.78 --session-id/--name through the bridge — header id/cwd, session_info name, append-not-recreate, spawn-only name, wrong-cwd footgun evidence
   ./run.sh new-session-id             # print one fresh garden-native session id for operator launchers (--session-id)
@@ -91,7 +88,6 @@ Usage:
   ./run.sh smoke-meta-install-state   # 1.0.0 meta-bridge Phase 2: stateful install/uninstall + store-doctor regression gate. Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-meta-prune           # 1.0.0 meta-bridge Phase 4: listing-only store janitor regression gate — classify keep/orphan/stale/ambiguous, delete nothing. Offline/deterministic (deps: bash+node)
   ./run.sh smoke-meta-keyset-guard    # 0.10.0 meta-bridge: keyset-owner guard regression — check-keyset-overlap + managed-keys SSOT (disjoint passes, collisions fail). Offline/hermetic (deps: bash+python3)
-  ./run.sh smoke-meta-mailbox         # 0.10.0 meta-bridge defense C: mailbox messaging E2E — entwurf_send fallback → enqueue → entwurf_inbox_read + receipt (replyable/external), zero Claude turns. Offline/hermetic (deps: bash+node+python3)
   ./run.sh smoke-meta-sender-identity # 0.10.0 meta-bridge: native SENDER identity E2E — parent-pid sender marker promotes anonymous MCP send to replyable meta-session (garden-id), REQUIRE_META_SENDER refuses anonymous. Offline/hermetic (deps: bash+node+python3)
 
   ./run.sh install-meta-bridge        # 1.0.0 meta-bridge Phase 2: stateful GLOBAL install (plugin + USER MCP + settings keyset, honest uninstall state)
@@ -1348,17 +1344,6 @@ check_entwurf_v2_spawn_production() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-spawn-production.ts)
 }
 
-check_entwurf_v2_only() {
-  # Deterministic gate for 0.11.0 acceptance blocker (B): PI_SHELL_ACP_V2_ONLY=1 v2-only mode.
-  # Two layers, no spawn/socket/timer. A) pure helper (entwurf-v2-only.ts): isV2OnlyMode is true
-  # ONLY for exact "1" ("true"/"0"/""/missing → false); checkV1EntwurfAllowed off→allowed,
-  # on→blocked with a message naming the flag + entwurf_v2 + "unavailable"; assert throws on, silent
-  # off. B) source/static: all 10 v1 entrypoints (9 surface groups; /entwurf tool+command = two)
-  # carry their guard at the handler head, the MCP entwurf_resume + control-RPC spawn_async_resume
-  # are BOTH guarded (no single-point bypass), and the v2 core (runner+surface) stays flag-CLEAN —
-  # the flag is a legacy-surface gate, never a v2-decision gate. v1 code is NOT deleted (0.12 lane).
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-only.ts)
-}
 
 smoke_entwurf_v2_spawn_live() {
   # LIVE phase gate for 0.11 Stage 0 step 5c-3c (D5) — kept OUT of `pnpm check`. Exercises the
@@ -1477,19 +1462,6 @@ check_entwurf_peers_surface() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-peers-surface.ts)
 }
 
-check_entwurf_send_mailbox_fallback() {
-  # Deterministic gate for the pi-native entwurf_send → meta-bridge mailbox
-  # fallback (transport 2). Guards the bug where pi-native send was
-  # control-socket-ONLY, so a pi session could not reply to a Claude/Codex/agy
-  # garden citizen (no socket) — pi → Claude was ENOENT with no fallback,
-  # breaking the garden-id universal-address promise. Asserts: ENOENT/ECONNREFUSED
-  # ("dead") falls back, timeout/indeterminate does NOT (no double-deliver to a
-  # stalled-but-live socket); the SHARED formatMetaMailboxBody renders replyable
-  # correctly; enqueue to a no-socket citizen writes a .msg + signal; and a WIRING
-  # GUARD that pi-native actually calls the fallback and the bridge uses the shared
-  # formatter (no local copy) so neither sender can silently drop the transport.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-send-mailbox-fallback.ts)
-}
 
 check_entwurf_self_address() {
   # Deterministic gate for the self-addressability honesty predicate (SE-1/SE-2
@@ -1531,19 +1503,6 @@ check_entwurf_mailbox_guard() {
 }
 
 
-check_async_resume_gate() {
-  # Deterministic gate for the MCP `entwurf_resume` mode resolution (Phase B
-  # Step 3 of the async-resume regression repair). The handler at mcp/pi-
-  # tools-bridge/src/index.ts uses `resolveEntwurfResumeMode` (extracted into
-  # mcp/pi-tools-bridge/src/resume-mode.ts) to apply the async-followUp
-  # discriminator: async only for a pi-session caller (owns a control socket),
-  # sync for external hosts AND meta-sessions, reject on explicit async from a
-  # non-pi-session caller. This gate pins the resolution against the
-  # 6 input cases plus 3 invariants so a future edit cannot silently turn the
-  # discriminator back into a static default (which would invert the external
-  # MCP host UX). No process spawn, no socket, no API cost.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-async-resume-gate.ts)
-}
 
 check_package_source_routing() {
   # Deterministic gate for #29 (package-installed Entwurf ACP routing). Pins
@@ -2127,7 +2086,7 @@ function finishOk(trimmed) {
     process.exit(1);
   }
   const names = tools.map((t) => t?.name).sort();
-  const expected = ['entwurf', 'entwurf_resume', 'entwurf_peers', 'entwurf_send', 'entwurf_self', 'entwurf_inbox_read', 'entwurf_v2'];
+  const expected = ['entwurf_peers', 'entwurf_self', 'entwurf_inbox_read', 'entwurf_v2'];
   for (const name of expected) {
     if (!names.includes(name)) {
       console.error(`missing MCP tool: ${name}`);
@@ -2793,9 +2752,6 @@ case "$cmd" in
   check-entwurf-v2-spawn-production)
     check_entwurf_v2_spawn_production
     ;;
-  check-entwurf-v2-only)
-    check_entwurf_v2_only
-    ;;
   smoke-entwurf-v2-spawn-live)
     smoke_entwurf_v2_spawn_live
     ;;
@@ -2819,9 +2775,6 @@ case "$cmd" in
     ;;
   check-entwurf-peers-surface)
     check_entwurf_peers_surface
-    ;;
-  check-entwurf-send-mailbox-fallback)
-    check_entwurf_send_mailbox_fallback
     ;;
   check-entwurf-self-address)
     check_entwurf_self_address
@@ -2946,9 +2899,6 @@ case "$cmd" in
     # its own logic is regression-tested hermetically by smoke-meta-keyset-guard.
     shift || true
     (cd "$REPO_DIR" && python3 scripts/check-keyset-overlap.py "$@")
-    ;;
-  check-async-resume-gate)
-    check_async_resume_gate
     ;;
   check-package-source-routing)
     check_package_source_routing

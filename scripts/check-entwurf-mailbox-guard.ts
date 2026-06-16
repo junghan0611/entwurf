@@ -255,16 +255,10 @@ function snapshot(dir: string): string {
 	ok("active receiver → exactly one .msg written", msgs.length === 1);
 }
 
-// ── CONSUMER WIRING: MCP entwurf_send fallback enqueues THROUGH the guard ────
-// (file-scoped, not a global grep — the raw enqueueMetaMessage primitive + meta-session
-// tests keep their direct calls; only the conversational fallback must be guarded.)
+// ── V2-ONLY WIRING: legacy MCP entwurf_send fallback is gone ───────────────
+// v2 mailbox delivery is covered by check-entwurf-v2-mailbox + decider gates; this
+// file keeps the guard primitive pinned for remaining/future conversational enqueue sites.
 const mcpSrc = readFileSync(path.join(REPO_DIR, "mcp", "pi-tools-bridge", "src", "index.ts"), "utf8");
-const gAt = mcpSrc.indexOf("guardedMailboxEnqueue(sessionId");
-const eAt = mcpSrc.indexOf("enqueueMetaMessage({");
-ok("MCP entwurf_send imports + calls guardedMailboxEnqueue", /guardedMailboxEnqueue/.test(mcpSrc) && gAt >= 0);
-ok(
-	"MCP entwurf_send fallback wraps enqueueMetaMessage inside the guard (no raw fallback enqueue)",
-	gAt >= 0 && eAt > gAt,
-);
+ok("legacy MCP entwurf_send tool removed", !mcpSrc.includes('server.tool(\n\t"entwurf_send"'));
 
 console.log(`\ncheck-entwurf-mailbox-guard: ${passed} checks passed`);

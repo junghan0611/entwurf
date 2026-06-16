@@ -1,8 +1,8 @@
 /**
  * pi-tools-bridge — MCP adapter exposing selected pi-side tools to ACP hosts.
  *
- * Ownership: this adapter lives inside `pi-shell-acp` alongside the rest of the
- * entwurf orchestration surface (pi-extensions/entwurf.ts + lib/entwurf-core.ts +
+ * Ownership: this adapter lives inside `pi-shell-acp` alongside the v2 entwurf
+ * orchestration surface (pi-extensions/entwurf-control.ts + lib/entwurf-v2-*.ts +
  * pi/entwurf-targets.json). See AGENTS.md §Entwurf Orchestration.
  *
  * Wiring: registered only via piShellAcpProvider.mcpServers in pi settings.
@@ -10,26 +10,18 @@
  *
  * Currently exposed tools (scope is deliberately narrow — anything that can live
  * as a local skill should live as a skill, not here):
- *   - entwurf_send    — ONE send surface, two transports: pi control.ts Unix-socket RPC for a
- *                       live peer; meta-bridge mailbox fallback (pi-extensions/lib/meta-session
- *                       enqueueMetaMessage + FileChanged doorbell) for a NATIVE session with no
- *                       control socket. The "meta" ontology stays internal; the action surface is
- *                       entwurf_*. Fire-and-forget (enqueue/delivery confirmed, a read is not).
+ *   - entwurf_v2      — canonical delivery surface for existing garden citizens; the decider
+ *                       chooses live control-socket send / dormant spawn-bg resume / meta-mailbox.
  *   - entwurf_peers   — entwurf fact surface: garden citizens (meta-records) + record-less control
  *                       sockets, each with liveness; legacy `sessions` projection retained. Brain =
  *                       pi-extensions/lib/entwurf-fact-provider (listEntwurfFacts) + entwurf-peers-render.
  *   - entwurf_self    — own session identity envelope (sessionId, agentId, cwd, timestamp)
- *   - entwurf_inbox_read — the receiver half of entwurf_send's meta-bridge path: drain your own
+ *   - entwurf_inbox_read — receiver half of the meta-bridge mailbox path: drain your own
  *                       inbox by garden id + stamp the D7 read-receipt (readMetaInbox: lastReadAt).
  *                       A rung doorbell is a wake attempt; this read is the receipt.
- *   - entwurf         → pi-extensions/lib/entwurf-core (sync mode only on the MCP surface)
- *   - entwurf_resume  — saved entwurf session revival by sessionId; conditional-default
- *                       mode since 0.7.6: pi-session callers with PI_SESSION_ID +
- *                       PI_AGENT_ID default to async via `spawn_async_resume` control
- *                       RPC delegation; plain external hosts and garden-native
- *                       meta-sessions default to sync; explicit `mode="async"` from a
- *                       non-pi-session caller is rejected because no followUp channel exists. See
- *                       `resume-mode.ts` + `scripts/check-async-resume-gate.ts`.
+ *
+ * Removed from this v2-only surface: legacy MCP `entwurf`, `entwurf_resume`, and
+ * `entwurf_send`. Use `entwurf_v2` for delivery to existing garden citizens.
  *
  * Not here on purpose: semantic memory / session search / knowledge-base search.
  * Those are personal-workflow surfaces and live as Claude Code / Codex skills
@@ -37,34 +29,9 @@
  * embedding CLI). Keeping them out of the MCP bridge is what lets pi-shell-acp
  * be a generic public package rather than a reflection of one operator's setup.
  *
- * Still deferred to a separate design round (NOT closed by 0.7.6 / 0.9.0):
- *   - entwurf spawn + mode=async — same followUp-channel question as resume had.
- *     As of 0.9.0 spawn does have sessionId continuity (the parent mints the
- *     sessionId before spawn), so the blocker is no longer continuity but the
- *     external-host followUp-delivery contract — the saved-session-after-spawn
- *     UX still differs from saved-session-revival. Resume async on MCP was the
- *     higher-pressure path; spawn async on MCP can be evaluated after it settles.
- *   - entwurf_status on MCP — needs a corresponding completion-notification contract
- *     that external hosts can subscribe to; not yet designed.
- *
- * Layer separation (PM-mandated, do not blur):
- *   - entwurf_peers     = active control-socket discovery (control.ts world)
- *   - entwurf_resume   = saved entwurf-session revival (entwurf.ts world)
- *   These are different lookup layers with different sources of truth. entwurf_resume
- *   must NOT depend on a live control socket; the original entwurf process may be dead
- *   and that is the normal case.
- *
- * Model routing:
- *   - entwurf (spawn) — the Entwurf Target Registry is the SSOT. Caller passes
- *     `provider` and/or `model`; resolveEntwurfTarget normalizes to an exact
- *     (provider, model) tuple from `pi/entwurf-targets.json` and routes via
- *     getRegistryRouting. Bare model auto-resolves only when unambiguous and
- *     not flagged `explicitOnly`.
- *   - entwurf_resume — registry is NOT consulted. The session JSONL's recorded
- *     (provider, model) is reused verbatim per Identity Preservation Rule.
- *   - Legacy: PI_ENTWURF_ACP_FOR_CODEX env var still affects the heuristic
- *     getEntwurfExplicitExtensions used only by the resume path. Slated for
- *     removal once the matrix routine settles.
+ * Layer separation (PM-mandated, do not blur): `entwurf_peers` reports facts;
+ * `entwurf_v2` later computes dispatch from those facts. Do not attach routing
+ * verbs to fact rows.
  *
  * Principles:
  *   - explicit forwarding, no dynamic tool discovery
@@ -74,7 +41,6 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import * as fs from "node:fs/promises";
-import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as process from "node:process";
@@ -82,27 +48,14 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-import {
-	DEFAULT_ENTWURF_MODEL,
-	ensureEntwurfOncePerTarget,
-	formatSyncSummary,
-	markEntwurfTargetUsed,
-	resolveGuardTargetKey,
-	runEntwurfResumeSync,
-	runEntwurfSync,
-} from "../../../pi-extensions/lib/entwurf-core.ts";
 import { receiverMarkerMatchesIdentity } from "../../../pi-extensions/lib/entwurf-deliverability.ts";
 import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provider.ts";
-import { guardedMailboxEnqueue } from "../../../pi-extensions/lib/entwurf-mailbox-guard.ts";
 import { renderEntwurfPeers } from "../../../pi-extensions/lib/entwurf-peers-render.ts";
 import { computeSelfAddressability } from "../../../pi-extensions/lib/entwurf-self-address.ts";
-import { checkV1EntwurfAllowed } from "../../../pi-extensions/lib/entwurf-v2-only.ts";
 import { runAndRenderEntwurfV2FromSurface } from "../../../pi-extensions/lib/entwurf-v2-surface.ts";
-import { formatMetaMailboxBody } from "../../../pi-extensions/lib/meta-mailbox-body.ts";
 import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
-	enqueueMetaMessage,
 	type MetaIdentity,
 	type MetaSenderMarker,
 	parentPid,
@@ -111,74 +64,11 @@ import {
 	readMetaReceiverMarker,
 	readMetaSenderMarker,
 } from "../../../pi-extensions/lib/meta-session.ts";
-import { resolveEntwurfResumeMode } from "./resume-mode.ts";
 
 const HOME = os.homedir();
 const DEFAULT_ENTWURF_DIR = path.join(HOME, ".pi", "entwurf-control");
 const ENTWURF_DIR = process.env.PI_ENTWURF_DIR ?? DEFAULT_ENTWURF_DIR;
 const SOCKET_SUFFIX = ".sock";
-
-const RPC_TIMEOUT_MS = Number(process.env.PI_TOOLS_BRIDGE_RPC_TIMEOUT_MS ?? 5_000);
-
-// ============================================================================
-// pi control-socket RPC (for entwurf_send)
-// ============================================================================
-
-interface RpcResponse {
-	type: "response";
-	command: string;
-	success: boolean;
-	error?: string;
-	data?: unknown;
-}
-
-async function resolveControlSocket(sessionId: string): Promise<string> {
-	try {
-		await fs.access(ENTWURF_DIR);
-	} catch {
-		throw new Error(`pi control dir not found at ${ENTWURF_DIR}. Target pi needs --entwurf-control.`);
-	}
-
-	if (!sessionId || sessionId.includes("/") || sessionId.includes("..")) {
-		throw new Error(`Invalid sessionId: ${sessionId}`);
-	}
-	const socketPath = path.join(ENTWURF_DIR, `${sessionId}${SOCKET_SUFFIX}`);
-	if (existsSync(socketPath)) return socketPath;
-	throw new Error(`No pi control socket for sessionId "${sessionId}" under ${ENTWURF_DIR}`);
-}
-
-function rpcCall(socketPath: string, payload: Record<string, unknown>): Promise<RpcResponse> {
-	return new Promise((resolve, reject) => {
-		const conn = net.createConnection(socketPath);
-		let buffer = "";
-		const timer = setTimeout(() => {
-			conn.destroy();
-			reject(new Error(`RPC timeout (${RPC_TIMEOUT_MS}ms) to ${socketPath}`));
-		}, RPC_TIMEOUT_MS);
-		conn.setEncoding("utf8");
-		conn.on("connect", () => {
-			conn.write(`${JSON.stringify(payload)}\n`);
-		});
-		conn.on("data", (chunk) => {
-			buffer += chunk;
-			const nl = buffer.indexOf("\n");
-			if (nl !== -1) {
-				clearTimeout(timer);
-				const line = buffer.slice(0, nl).trim();
-				conn.end();
-				try {
-					resolve(JSON.parse(line) as RpcResponse);
-				} catch {
-					reject(new Error(`Invalid RPC response: ${line.slice(0, 200)}`));
-				}
-			}
-		});
-		conn.on("error", (err) => {
-			clearTimeout(timer);
-			reject(err);
-		});
-	});
-}
 
 // ============================================================================
 // Live control-socket discovery for entwurf_peers now lives in the TS
@@ -415,177 +305,6 @@ function abbreviateHomeMcp(cwd: string): string {
 	return cwd;
 }
 
-// Truncate a multi-line body to the first N lines, appending "..." when
-// truncated. The send-side preview is what lets the operator (and the sending
-// model) see WHAT was actually transmitted — not just the target id. 5 lines is
-// a deliberate floor: enough to recognize the message intent without dumping
-// the whole body into the response stream.
-function previewBody(body: string, maxLines = 5): string {
-	const lines = body.split("\n");
-	if (lines.length <= maxLines) return body;
-	return `${lines.slice(0, maxLines).join("\n")}\n...`;
-}
-
-// The meta-bridge mailbox body render lives in the shared lib
-// (pi-extensions/lib/meta-mailbox-body.ts) so the MCP bridge and the pi-native
-// entwurf_send cannot drift in how a mailbox message presents who-sent-it. The
-// bridge's SenderEnvelope is structurally a MailboxSenderEnvelope.
-
-server.tool(
-	"entwurf_send",
-	"COMPATIBILITY / DIRECT-SEND SURFACE. For delivering to a garden id, PREFER `entwurf_v2` — it is " +
-		"the canonical delivery verb: it reads the target's liveness AND your intent and routes to the " +
-		"right transport (live pi control-socket / dormant spawn-bg resume / active Claude Code " +
-		"meta-mailbox), rejecting honestly when the target is unreachable. A garden id alone does NOT " +
-		"tell you the target type — a pi session and a Claude Code meta-session look alike — so if you " +
-		"cannot classify the target, do NOT default to this tool: use `entwurf_v2`. Reach for " +
-		"`entwurf_send` only for the low-level direct path / debugging, or when you already hold a KNOWN " +
-		"live pi control socket. Mechanics: sends a message addressed by sessionId, two transports " +
-		"resolved automatically: a live pi peer running with --entwurf-control is reached over its " +
-		"control socket; if no live socket exists but the target is a meta-bridge garden citizen (a " +
-		"NATIVE Claude Code / agy / Codex session whose SessionStart hook minted a meta-record), the " +
-		"message is delivered to that session's meta-bridge mailbox and a doorbell wakes it — the " +
-		"receiver reads it with entwurf_inbox_read. " +
-		"Use entwurf_peers to discover live sessionIds. " +
-		"This MCP surface is fire-and-forget: delivery is confirmed, a turn result is not. " +
-		"There is no wait/poll: the sender does not block. If the caller needs a result it owns, " +
-		"use entwurf(mode=async) + entwurf_resume instead. " +
-		"wants_reply is a human-conversation etiquette marker (default false). Set it true only " +
-		"when you genuinely want a conversational response back — it shows as '(wants reply)' on " +
-		"the receiver render. It is not a delivery flag, not a wait/poll, not a contract; whether " +
-		"the receiver replies is decided by the message body. " +
-		"When called from inside a pi session, a replyable sender envelope is attached " +
-		"automatically from PI_AGENT_ID + PI_SESSION_ID + cwd + now. When called from a " +
-		"garden-native meta-session (native Claude Code whose SessionStart hook wrote a " +
-		"trusted sender marker), the envelope is also replyable by garden id. When called " +
-		"from an explicitly wired external MCP host with no trusted marker, delivery is " +
-		"still allowed but the envelope is marked external/non-replyable; wants_reply=true " +
-		"is rejected because there is no reply address. Payload guidance: send ONE compact " +
-		"atomic message (hard cap 16000 chars). For larger reviews or logs, write a file/artifact " +
-		"and send its path plus a short digest. Do not split ordinary content into multiple " +
-		"entwurf_send calls: the mailbox doorbell is edge-triggered and may coalesce; one " +
-		"entwurf_inbox_read drains the backlog, but every part is not guaranteed its own wake.",
-	{
-		sessionId: z.string().min(1).describe("Target session id (garden id or pi-assigned uuid)"),
-		message: z
-			.string()
-			.min(1)
-			.max(16000)
-			.describe(
-				"Message text to deliver. Hard cap 16000 chars: keep it one compact atomic message; " +
-					"for larger payloads send a file/artifact path plus digest instead of multi-part sends.",
-			),
-		mode: z.enum(["steer", "follow_up"]).optional().describe("Default follow_up"),
-		wants_reply: z
-			.boolean()
-			.optional()
-			.describe(
-				"Human-conversation hint. No wait, no polling, no delivery tracking. " +
-					"Set true only to surface a '(wants reply)' badge on the receiver. Default false.",
-			),
-	},
-	async ({ sessionId, message, mode, wants_reply }) => {
-		// v2-only gate (0.11.0 B): the MCP entwurf_send is a v1 live-peer surface.
-		const v1gate = checkV1EntwurfAllowed("entwurf_send (MCP)");
-		if (!v1gate.allowed) return textErr(v1gate.message);
-		try {
-			const sender = buildSendSenderEnvelope();
-			const effectiveWantsReply = wants_reply === true;
-			if (effectiveWantsReply && sender.replyable === false) {
-				return textErr(
-					"entwurf_send error: wants_reply=true requires a replyable sender envelope " +
-						"(pi-session or trusted meta-session). This MCP process resolved as external/non-replyable.",
-				);
-			}
-			// Transport 1: a live pi control socket. Transport 2 (fallback): the
-			// meta-bridge mailbox for a native session that has no socket of its own
-			// (the entwurf_* surface fronts BOTH transports; "meta" stays internal).
-			let sock: string;
-			try {
-				sock = await resolveControlSocket(sessionId);
-			} catch (noSocket) {
-				try {
-					// Transport 2 gated (SE-1/SE-2): enqueue ONLY when the target is a
-					// conversationally-deliverable meta citizen — a self-fetch backend with
-					// a live, armed receiver. A direct-inject backend (pi) has no mailbox
-					// drain (SE-1), and a terminated / never-armed receiver would only collect
-					// garbage (SE-2). guardedMailboxEnqueue writes nothing in those cases.
-					// Serialize the FULL sender envelope into the body so the receiver knows
-					// who sent it + whether/where to reply (wants_reply rides in the envelope).
-					const outcome = guardedMailboxEnqueue(sessionId, {}, () =>
-						enqueueMetaMessage({
-							gardenId: sessionId,
-							body: formatMetaMailboxBody(sender, message, effectiveWantsReply),
-						}),
-					);
-					if (!outcome.delivered) {
-						return textErr(
-							`entwurf_send error: "${sessionId}" is not conversationally deliverable; ` +
-								`not enqueued — no doorbell wake (${outcome.reason}). ` +
-								`No live pi control socket either (${noSocket instanceof Error ? noSocket.message : String(noSocket)}).`,
-						);
-					}
-					const result = outcome.result;
-					const replyBadge = effectiveWantsReply ? "  (wants reply)" : "";
-					return textOk(
-						`[entwurf sent → meta]\n` +
-							`  to garden: ${result.gardenId}\n` +
-							`  from:      ${sender.agentId} @ ${abbreviateHomeMcp(sender.cwd)}${replyBadge}\n` +
-							`  via:       meta-bridge mailbox (no live control socket; doorbell wake)\n` +
-							`  msg:       ${path.basename(result.messagePath)}\n` +
-							`  preview:\n` +
-							`${previewBody(message)
-								.split("\n")
-								.map((l) => `    ${l}`)
-								.join("\n")}\n` +
-							`✓ enqueued + signal poked (read-receipt lands when the target calls entwurf_inbox_read)`,
-					);
-				} catch (metaErr) {
-					return textErr(
-						`entwurf_send error: "${sessionId}" is neither a live pi control socket ` +
-							`(${noSocket instanceof Error ? noSocket.message : String(noSocket)}) ` +
-							`nor a meta-bridge garden citizen (${metaErr instanceof Error ? metaErr.message : String(metaErr)}).`,
-					);
-				}
-			}
-			const effectiveMode = mode ?? "follow_up";
-			const resp = await rpcCall(sock, {
-				type: "send",
-				message,
-				mode: effectiveMode,
-				sender,
-				wants_reply: effectiveWantsReply,
-			});
-			if (!resp.success) {
-				return textErr(`entwurf_send failed: ${resp.error ?? "unknown"}`);
-			}
-			// Send-side preview — the sending model (or the operator reading the
-			// tool result) sees the target, the mode actually delivered, and the
-			// first 5 lines of the body. Header is "[entwurf sent →]" with a
-			// right-pointing arrow to mirror the receiver's "[entwurf received ⟵]"
-			// (see renderSessionMessage in pi-extensions/entwurf-control.ts). Same
-			// transport, opposite arrows — when a transcript is read end-to-end
-			// the direction of every peer message is unambiguous.
-			const deliveredAs = (resp.data as { deliveredAs?: string } | undefined)?.deliveredAs ?? effectiveMode;
-			const replyBadge = effectiveWantsReply ? "  (wants reply)" : "";
-			const summary =
-				`[entwurf sent →]\n` +
-				`  to:   ${sessionId}\n` +
-				`  from: ${sender.agentId} @ ${abbreviateHomeMcp(sender.cwd)}\n` +
-				`  mode: ${effectiveMode}${replyBadge}\n` +
-				`  preview:\n` +
-				`${previewBody(message)
-					.split("\n")
-					.map((l) => `    ${l}`)
-					.join("\n")}\n` +
-				`✓ delivered (${deliveredAs})`;
-			return textOk(summary);
-		} catch (err) {
-			return textErr(`entwurf_send error: ${err instanceof Error ? err.message : String(err)}`);
-		}
-	},
-);
-
 // entwurf_v2 — the unified additive dispatch verb (0.11 step 5d-3b). Unlike entwurf_send
 // (which picks control-socket vs mailbox itself), entwurf_v2 hands the target + intent to
 // the 5b decider, which chooses the transport (live control-socket send / spawn-bg resume /
@@ -766,190 +485,6 @@ server.tool(
 			);
 		} catch (err) {
 			return textErr(`entwurf_inbox_read error: ${err instanceof Error ? err.message : String(err)}`);
-		}
-	},
-);
-
-server.tool(
-	"entwurf",
-	"Entwurf a task to an independent pi agent process (sync mode). " +
-		"Spawns a fresh pi -p run, waits for completion, returns stdout + turns + cost. Use for " +
-		"isolated work (different cwd or resource-intensive jobs) " +
-		"where you want the result inline. Local only — remote/SSH is out of scope (#11) and fails fast. " +
-		"The result includes a Session ID — pass it to entwurf_resume to continue this entwurf's " +
-		"saved session with a follow-up prompt. " +
-		"Entwurf Target Registry (narrow door, see pi-shell-acp/AGENTS.md §Entwurf Orchestration): every spawn must " +
-		"resolve to an exact (provider, model) pair listed in ~/.pi/agent/entwurf-targets.json. " +
-		"Caller may pass either a qualified `model` (provider/name) or both `provider` and `model` " +
-		"fields. Bare model is accepted only when unambiguous — e.g. `claude-sonnet-4-6` resolves " +
-		"to pi-shell-acp; bare `gpt-5.4` resolves to native openai-codex (the pi-shell-acp/gpt-5.4 " +
-		"entry is marked explicitOnly and skipped from auto-resolution). " +
-		"Async spawn + entwurf_status are not exposed here yet (deferred to a separate design round). " +
-		"Spawn target is always a pi child (YOLO harness); backend CLIs (codex, gemini) are model carriers, " +
-		"not entwurf spawn targets. Do not run `codex exec` / `gemini -p` directly for delegation — " +
-		"select those models through `provider` / `model` so pi remains the YOLO harness. " +
-		`Default model when omitted: ${DEFAULT_ENTWURF_MODEL}.`,
-	{
-		task: z.string().min(1).describe("The task to entwurf (plain text prompt)"),
-		host: z.string().min(1).optional().describe("Host (local only; non-'local' fails fast — #11)"),
-		cwd: z.string().min(1).optional().describe("Working directory for the entwurf"),
-		provider: z
-			.string()
-			.min(1)
-			.optional()
-			.describe(
-				"Provider id (e.g. 'pi-shell-acp', 'openai-codex'). Pair with `model` to disambiguate. " +
-					"Optional if `model` is qualified ('provider/name') or unambiguous in the registry.",
-			),
-		model: z
-			.string()
-			.min(1)
-			.optional()
-			.describe(
-				"Model id. Either qualified ('pi-shell-acp/claude-sonnet-4-6') or bare ('claude-sonnet-4-6'). " +
-					"Bare names must resolve unambiguously in the registry; otherwise pass `provider`.",
-			),
-	},
-	async ({ task, host, cwd, provider, model }) => {
-		// v2-only gate (0.11.0 B): MCP entwurf spawn is a v1 surface.
-		const v1gate = checkV1EntwurfAllowed("entwurf (MCP spawn)");
-		if (!v1gate.allowed) return textErr(v1gate.message);
-		try {
-			const guardSessionId = process.pid.toString();
-			const guardTargetKey = resolveGuardTargetKey(provider, model);
-			ensureEntwurfOncePerTarget(guardSessionId, guardTargetKey);
-
-			const result = await runEntwurfSync(task, { host, cwd, provider, model });
-			markEntwurfTargetUsed(guardSessionId, guardTargetKey);
-			const text = formatSyncSummary(result);
-			return result.exitCode === 0 ? textOk(text) : textErr(text);
-		} catch (err) {
-			return textErr(`entwurf error: ${err instanceof Error ? err.message : String(err)}`);
-		}
-	},
-);
-
-server.tool(
-	"entwurf_resume",
-	"Resume a saved entwurf session by Session ID, with a follow-up prompt. " +
-		"The Session ID comes from a prior entwurf call's output (look for 'Session ID: <id>' in the " +
-		"summary). The bridge resolves the saved session JSONL under ~/.pi/agent/sessions by header " +
-		"scan and spawns `pi --session-id <id>` with the new prompt; pi appends to the same session. " +
-		"Important: this works on the saved session. The original entwurf process may have " +
-		"exited and is NOT required to be alive — entwurf_resume does NOT consult control sockets " +
-		"or entwurf_peers when running sync. The two surfaces are separate by design (active " +
-		"sessions vs saved entwurf sessions). " +
-		"Local only: remote/SSH resume is out of scope in the garden-native session identity (#11) and fails fast. " +
-		"Routing on resume comes entirely from the saved session JSONL (provider + model " +
-		"as recorded). The Entwurf Target Registry that gates spawn is NOT consulted here. " +
-		"Identity Preservation Rule: this tool intentionally does NOT accept a `model` " +
-		"parameter. The model is locked to whatever the saved session recorded at first " +
-		"spawn — resuming under a different model is treated as splicing a new identity " +
-		"onto someone else's transcript and is refused at the API layer. cwd is bound to the " +
-		"saved session header cwd — `--session-id` resolves the file relative to it, so the resume " +
-		"forces the child cwd to the header cwd (the wrong cwd would create a new session). An explicit cwd " +
-		"override is a debug/migration escape hatch and may forfeit backend continuity " +
-		"(see pi-shell-acp#9). Model may not. " +
-		"`mode` follows the async-followUp discriminator: when omitted, this MCP child " +
-		"resolves the effective mode from whether the caller can host a completion followUp — " +
-		"async only for a pi-session caller (pi-shell-acp Claude, sibling pi sessions) that " +
-		"owns a pi control socket; an external MCP host (Claude Code standalone, Codex CLI, " +
-		"Gemini CLI) and a garden-native meta-session both get sync, because neither has a pi " +
-		"control socket for the followUp (a meta-session is entwurf_send-replyable by garden-id, " +
-		"but that mailbox is not a followUp channel). Explicit `mode='async'` from a non-pi-session " +
-		"caller is rejected with the same pattern as entwurf_send's `wants_reply=true` rejection. " +
-		"Async resumes delegate back into the parent pi session via the entwurf-control " +
-		"`spawn_async_resume` RPC, so completion lands as a followUp message in the same " +
-		"session — preserves the `this bridge is not a second harness` invariant.",
-	{
-		sessionId: z.string().min(1).describe("Session ID from a prior entwurf result (e.g. '20260603T191245-a3f09c')"),
-		prompt: z.string().min(1).describe("Follow-up prompt to send into the resumed session"),
-		host: z
-			.string()
-			.min(1)
-			.optional()
-			.describe("Host (local only; non-'local' fails fast — remote/SSH resume is parked under #11)."),
-		cwd: z
-			.string()
-			.min(1)
-			.optional()
-			.describe(
-				"Working directory override for the resume spawn. SYNC ONLY — passing `cwd` " +
-					"alongside (effective) mode='async' is rejected explicitly because the async " +
-					"launcher would silently ignore it. Async resume uses the saved session " +
-					"header cwd as the authority (see #9); if you really need a cwd override, " +
-					"use mode='sync'.",
-			),
-		mode: z
-			.enum(["sync", "async"])
-			.optional()
-			.describe(
-				"auto resolution by caller — async only for a pi-session caller " +
-					"(PI_SESSION_ID/PI_AGENT_ID + a pi control socket), sync for external MCP " +
-					"hosts AND garden-native meta-session senders. Override with explicit " +
-					"'sync' or 'async'. Explicit 'async' requires a pi-session caller; " +
-					"external hosts and meta-sessions get reject.",
-			),
-	},
-	async ({ sessionId, prompt, host, cwd, mode }) => {
-		// v2-only gate (0.11.0 B): MCP entwurf_resume directly spawns without the control
-		// socket, so it needs its own guard in addition to the spawn_async_resume RPC guard.
-		const v1gate = checkV1EntwurfAllowed("entwurf_resume (MCP)");
-		if (!v1gate.allowed) return textErr(v1gate.message);
-		try {
-			// Phase B Step 3 — async-followUp discriminator. The mode
-			// resolution is in `resolveEntwurfResumeMode` so the deterministic
-			// gate (Step 4) can pin it without spawning. It consumes the same
-			// sender envelope as entwurf_send, but the async discriminant is
-			// origin === "pi-session" (control socket), NOT replyable=true
-			// (meta-sessions are send-replyable by mailbox). A static
-			// `default: "async"` would silently reject every external/meta turn —
-			// the UX inversion this Step closes.
-			const sender = buildSendSenderEnvelope();
-			const { mode: effectiveMode, rejectReason } = resolveEntwurfResumeMode(sender, mode, cwd);
-			if (rejectReason) {
-				return textErr(rejectReason);
-			}
-
-			if (effectiveMode === "async") {
-				// Delegate to the parent pi session's entwurf-control RPC so the
-				// async launcher runs inside the pi extension layer and delivers
-				// completion via that session's `pi.sendMessage({deliverAs:
-				// "followUp"})`. We do NOT clone the launcher body here — the
-				// bridge stays thin (Hard Rule #8).
-				const sock = await resolveControlSocket(sender.sessionId);
-				const resp = await rpcCall(sock, {
-					type: "spawn_async_resume",
-					sessionId,
-					prompt,
-					host,
-				});
-				if (!resp.success) {
-					return textErr(`entwurf_resume async error: ${resp.error ?? "unknown"}`);
-				}
-				const data =
-					(resp.data as { text?: string; sessionId?: string; runId?: string; pid?: number; sessionFile?: string }) ??
-					{};
-				const ackText =
-					data.text ??
-					[
-						"🔄 Resume spawned (async, via MCP → control RPC)",
-						`Session ID: ${data.sessionId ?? sessionId}`,
-						`Run: ${data.runId ?? "(unknown)"}`,
-						`Session: ${data.sessionFile ?? "(unknown)"}`,
-						`PID: ${data.pid ?? "(unknown)"}`,
-						"",
-						"Completion will arrive as a followUp message in the parent pi session.",
-					].join("\n");
-				return textOk(ackText);
-			}
-
-			// Sync branch — direct call to the existing sync core.
-			const result = await runEntwurfResumeSync(sessionId, prompt, { host, cwd });
-			const text = formatSyncSummary(result);
-			return result.exitCode === 0 ? textOk(text) : textErr(text);
-		} catch (err) {
-			return textErr(`entwurf_resume error: ${err instanceof Error ? err.message : String(err)}`);
 		}
 	},
 );
