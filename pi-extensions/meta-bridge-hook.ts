@@ -112,6 +112,15 @@ function main(): void {
 	const transcriptPath = typeof env.transcript_path === "string" ? env.transcript_path : "";
 	// cwd: prefer the envelope's, fall back to the process cwd (the hook runs in the session's cwd).
 	const cwd = typeof env.cwd === "string" && env.cwd.length > 0 ? env.cwd : process.cwd();
+	const modelEnvelope = env.model;
+	const model =
+		typeof modelEnvelope === "object" &&
+		modelEnvelope !== null &&
+		typeof (modelEnvelope as { id?: unknown }).id === "string"
+			? (modelEnvelope as { id: string }).id
+			: typeof env.model_id === "string"
+				? env.model_id
+				: undefined;
 	const eventName = typeof env.hook_event_name === "string" ? env.hook_event_name : "SessionStart";
 
 	if (!sessionId || !transcriptPath) {
@@ -132,7 +141,7 @@ function main(): void {
 	let gardenId: string;
 	try {
 		const result = upsertMetaSession({
-			input: { backend: "claude-code", nativeSessionId: sessionId, transcriptPath, cwd },
+			input: { backend: "claude-code", nativeSessionId: sessionId, transcriptPath, cwd, model },
 			onSkip: (filename, e) => logLine("WARN", `scan skipped ${filename}: ${e.message}`),
 		});
 		gardenId = result.record.gardenId;

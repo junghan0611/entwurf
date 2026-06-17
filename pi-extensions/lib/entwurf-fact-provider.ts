@@ -77,8 +77,8 @@ function diagnosticSortKey(d: EntwurfDiagnostic): string {
 /**
  * Assemble the facts-only listing. Pure over its injected deps (no direct IO) so
  * the gate drives it without a filesystem; slice 4c supplies the real readdir /
- * readFile / probe. Enrich is still null this slice (probe-only) — honest, not
- * synthetic; the render layer shows it as "not enriched".
+ * readFile / probe. Live socket probes may carry get_info runtime enrich
+ * (cwd/model/idle); null remains honest and renders as "not enriched".
  */
 export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfFactsResult> {
 	const diagnostics: EntwurfDiagnostic[] = [];

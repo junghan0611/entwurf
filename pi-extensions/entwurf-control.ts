@@ -77,7 +77,13 @@ import type {
 import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { Box, type Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { ENTWURF_SENT_MESSAGE_TYPE } from "../protocol.js";
-import { type RpcCommand, type RpcResponse, type SenderEnvelope, sendRpcCommand } from "./lib/entwurf-control-rpc.js";
+import {
+	fetchControlSocketRuntimeInfo,
+	formatRuntimeModel,
+	type RpcCommand,
+	type RpcResponse,
+	type SenderEnvelope,
+} from "./lib/entwurf-control-rpc.js";
 import {
 	assertGardenNativeSessionId,
 	buildGardenSessionName,
@@ -246,27 +252,16 @@ async function getLiveSessionsWithInfo(): Promise<EnrichedSession[]> {
 	const enriched: EnrichedSession[] = [];
 	for (const session of sessions) {
 		try {
-			const result = await sendRpcCommand(session.socketPath, { type: "get_info" }, { timeout: 1500 });
-			if (!result.response.success) {
-				enriched.push({
-					...session,
-					infoError: result.response.error ?? "get_info failed",
-				});
-				continue;
-			}
-			const data = result.response.data as
-				| {
-						cwd?: string;
-						model?: { id?: string; provider?: string } | null;
-						idle?: boolean;
-				  }
-				| undefined;
+			// Shared parse/RPC SSOT (lib/entwurf-control-rpc.ts) — a `!success` reply
+			// throws there, so it lands in the same catch and surfaces as `infoError`
+			// (behavior-preserving: the message is still `response.error ?? "get_info failed"`).
+			const info = await fetchControlSocketRuntimeInfo(session.socketPath, { timeout: 1500 });
 			enriched.push({
 				...session,
-				cwd: data?.cwd,
-				modelId: data?.model?.id,
-				modelProvider: data?.model?.provider,
-				idle: data?.idle,
+				cwd: info.cwd,
+				modelId: info.modelId,
+				modelProvider: info.modelProvider,
+				idle: info.idle,
 			});
 		} catch (e) {
 			enriched.push({
@@ -1598,8 +1593,7 @@ function registerControlSessionsCommand(pi: ExtensionAPI, setSessions: (sessions
 					lines.push(`    error: ${s.infoError}`);
 				} else {
 					lines.push(`    cwd:   ${abbreviateHome(s.cwd)}`);
-					const modelLabel =
-						s.modelProvider && s.modelId ? `${s.modelProvider}/${s.modelId}` : (s.modelId ?? "(unknown)");
+					const modelLabel = formatRuntimeModel({ modelId: s.modelId, modelProvider: s.modelProvider }) ?? "(unknown)";
 					lines.push(`    model: ${modelLabel}`);
 					const idleLabel = s.idle === undefined ? "?" : s.idle ? "yes" : "no  (turn in progress)";
 					lines.push(`    idle:  ${idleLabel}`);

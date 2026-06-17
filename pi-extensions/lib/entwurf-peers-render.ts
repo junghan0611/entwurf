@@ -86,11 +86,13 @@ function renderPeerLine(p: PeerFact): string {
 }
 
 function renderSocketOnlyLine(s: SocketOnlyFact): string {
-	// Enrich is null this slice (probe-only). "(not enriched)" — NOT "(unknown)",
-	// which would read as identity-unknown rather than not-yet-fetched.
+	// Null enrich is "(not enriched)" — NOT "(unknown)", which would read as
+	// identity-unknown rather than not-yet-fetched / not available for this socket.
 	const cwd = s.cwd ?? "(not enriched)";
 	const model = s.model ?? "(not enriched)";
-	return `- ${s.gardenId}  liveness=${s.liveness}  cwd=${cwd}  model=${model}`;
+	const idle = s.idle === null ? "" : `  idle=${s.idle ? "yes" : "no"}`;
+	const infoError = s.infoError === null ? "" : `  infoError=${s.infoError}`;
+	return `- ${s.gardenId}  liveness=${s.liveness}  cwd=${cwd}  model=${model}${idle}${infoError}`;
 }
 
 function renderDiagnosticLine(d: EntwurfDiagnostic): string {

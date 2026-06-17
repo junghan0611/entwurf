@@ -61,8 +61,12 @@ function peer(gardenId: string, backend: MetaBackendV2, liveness: FactLiveness):
 	};
 }
 
-function socketOnly(gardenId: string, liveness: SocketOnlyFact["liveness"]): SocketOnlyFact {
-	return { kind: "socket-only", gardenId, liveness, cwd: null, model: null, idle: null, infoError: null };
+function socketOnly(
+	gardenId: string,
+	liveness: SocketOnlyFact["liveness"],
+	over: Partial<SocketOnlyFact> = {},
+): SocketOnlyFact {
+	return { kind: "socket-only", gardenId, liveness, cwd: null, model: null, idle: null, infoError: null, ...over };
 }
 
 /** Recursively collect every object key in a JSON-able value. */
@@ -94,7 +98,10 @@ function main(): void {
 				peer(GID_PI_INDET, "pi", "indeterminate"),
 				peer(GID_CLAUDE, "claude-code", "unsupported"),
 			],
-			socketOnly: [socketOnly(GID_SOCK_ALIVE, "alive"), socketOnly(GID_SOCK_DEAD, "dead")],
+			socketOnly: [
+				socketOnly(GID_SOCK_ALIVE, "alive", { cwd: "/work/cos", model: "gpt-5.4", idle: false }),
+				socketOnly(GID_SOCK_DEAD, "dead", { infoError: "get_info failed" }),
+			],
 		},
 		diagnostics: [{ kind: "socket-symlink-rejected", gardenId: "20260611T999999-999999", message: "symlink rejected" }],
 	};
@@ -165,8 +172,14 @@ function main(): void {
 		ok("empty surface → count 0, no sessions", empty.payload.count === 0 && empty.payload.sessions.length === 0);
 	}
 	ok(
-		"socket-only enrich null → '(not enriched)' (socket line, not '(unknown)')",
-		text.includes(`${GID_SOCK_ALIVE}  liveness=alive  cwd=(not enriched)  model=(not enriched)`),
+		"socket-only enrich appears in text",
+		text.includes(`${GID_SOCK_ALIVE}  liveness=alive  cwd=/work/cos  model=gpt-5.4  idle=no`),
+	);
+	ok(
+		"socket-only infoError appears in text",
+		text.includes(
+			`${GID_SOCK_DEAD}  liveness=dead  cwd=(not enriched)  model=(not enriched)  infoError=get_info failed`,
+		),
 	);
 	ok("unsupported peer line shown in text", text.includes(`${GID_CLAUDE}  backend=claude-code  liveness=unsupported`));
 
