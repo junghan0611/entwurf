@@ -32,10 +32,10 @@ PROVIDER_ID="pi-shell-acp"
 usage() {
   cat <<'EOF'
 Usage:
-  ./run.sh setup [project-dir]        # pnpm install + sync auth + install + smoke-all + Axis 1 gates (bridge, native async, session-messaging, sentinel)
+  ./run.sh setup [project-dir]        # pnpm install + sync auth + install + Axis 1 gates (pi-tools-bridge, session-messaging, sentinel)
   ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + every live per-invariant gate on the claude-only floor (0.11.0; gemini/codex live tests dropped). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: model-in-loop autonomous MCP tool-selection — sentinel + RGG positive; S7 Bash-bypass stays hard-fail but never blocks the cut). --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh xt-tool-surface             # ACP backend exclude-tools policy: -xt <builtin> fail-fast per backend (declared==actual), extension exclusion honored
-  ./run.sh check-bridge               # pi-tools-bridge direct MCP smoke + protocol/negative-path test.sh (backend tool-callability lives in smoke-async-resume + sentinel)
+  ./run.sh check-bridge               # pi-tools-bridge direct MCP smoke + protocol/negative-path test.sh (live tool-callability lives in sentinel + the v2 live smokes)
   ./run.sh check-pi-tools-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
   ./run.sh sentinel [args...]         # entwurf 6-cell diagonal matrix (sync+resume × parent×target)
   ./run.sh session-messaging [args...] # 4-case session-messaging smoke (native/ACP cross-matrix)
@@ -105,7 +105,7 @@ Usage:
 Notes:
   - project-dir defaults to current directory
   - Claude Code login should already exist (e.g. ~/.claude.json)
-  - smoke-all is the operator-facing runtime verification path — claude-only as of the 0.11.0 floor (codex/gemini via smoke-codex / smoke-gemini) — and is what setup runs
+  - setup's runtime verification is the Axis 1 gate trio (pi-tools-bridge, session-messaging, sentinel); the v2 dispatch substrate is proven live by the release-gate v2 smokes
   - API key is optional; this bridge is intended to work with Claude Code auth
 EOF
 }
@@ -409,419 +409,6 @@ if isinstance(provider, dict):
 settings_path.write_text(json.dumps(data, indent=2) + "\n")
 print(f"remove: removed {pkg_removed} packages[] entries, {mcp_removed} mcpServers entries from {settings_path}")
 PY
-}
-
-
-
-smoke_continuity_single() {
-  local project_dir=$1
-  local backend=$2
-  local model=$3
-  local expected_path=$4
-
-  local session_file
-  session_file=$(mktemp /tmp/pi-shell-acp-continuity-XXXXXX.jsonl)
-
-  echo "[smoke-continuity/$backend] model=$model expected-turn2=$expected_path session=$session_file"
-
-  local turn1_log
-  if ! turn1_log=$(cd "$project_dir" && PI_SHELL_ACP_STRICT_BOOTSTRAP=1 pi -e "$REPO_DIR" --session "$session_file" --provider pi-shell-acp --model "$model" -p 'READY 만 답해' 2>&1); then
-    echo "[smoke-continuity/$backend] turn1 pi invocation failed:" >&2
-    echo "$turn1_log" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  if ! grep -q "^\[pi-shell-acp:bootstrap\] path=new backend=$backend" <<< "$turn1_log"; then
-    echo "[smoke-continuity/$backend] turn1 expected path=new, got:" >&2
-    echo "$turn1_log" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  echo "[smoke-continuity/$backend] turn1 path=new: ok"
-
-  local turn2_log
-  if ! turn2_log=$(cd "$project_dir" && PI_SHELL_ACP_STRICT_BOOTSTRAP=1 pi -e "$REPO_DIR" --session "$session_file" --provider pi-shell-acp --model "$model" -p 'OK 만 답해' 2>&1); then
-    echo "[smoke-continuity/$backend] turn2 pi invocation failed (strict bootstrap throw?):" >&2
-    echo "$turn2_log" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  if ! grep -q "^\[pi-shell-acp:bootstrap\] path=$expected_path backend=$backend" <<< "$turn2_log"; then
-    echo "[smoke-continuity/$backend] turn2 expected path=$expected_path, got:" >&2
-    echo "$turn2_log" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  if grep -q "^\[pi-shell-acp:bootstrap-invalidate\]" <<< "$turn2_log"; then
-    echo "[smoke-continuity/$backend] turn2 unexpected invalidation on happy continuity:" >&2
-    echo "$turn2_log" >&2
-    rm -f "$session_file"
-    exit 1
-  fi
-  echo "[smoke-continuity/$backend] turn2 path=$expected_path: ok"
-
-  rm -f "$session_file"
-}
-
-
-smoke_cancel_single() {
-  local project_dir=$1
-  local backend=$2
-  local model=$3
-
-  local backend_pattern
-  case "$backend" in
-    claude) backend_pattern="claude-agent-acp" ;;
-    codex)  backend_pattern="codex-acp" ;;
-    *)
-      echo "[smoke-cancel/$backend] unknown backend" >&2
-      exit 1
-      ;;
-  esac
-
-  echo "[smoke-cancel/$backend] model=$model pattern=$backend_pattern"
-
-  local before
-  before=$(pgrep -cf "$backend_pattern" 2>/dev/null) || before=0
-  echo "[smoke-cancel/$backend] baseline process count: $before"
-
-  local log_file
-  log_file=$(mktemp /tmp/pi-shell-acp-cancel-XXXXXX.log)
-
-  local rc=0
-  (
-    cd "$REPO_DIR"
-    PI_SHELL_ACP_SMOKE_BACKEND="$backend" PI_SHELL_ACP_MODEL_ID="$model" \
-      node --input-type=module 2>"$log_file" <<'EOF'
-import {
-  ensureBridgeSession,
-  sendPrompt,
-  setActivePromptHandler,
-  closeBridgeSession,
-  cancelActivePrompt,
-  normalizeMcpServers,
-} from './acp-bridge.ts';
-
-const backend = process.env.PI_SHELL_ACP_SMOKE_BACKEND;
-const modelId = process.env.PI_SHELL_ACP_MODEL_ID;
-if (!backend || !modelId) throw new Error('backend/model env required');
-
-const sessionKey = `smoke-cancel:${backend}:${modelId}`;
-const emptyMcpHash = normalizeMcpServers(undefined).hash;
-const baseParams = {
-  sessionKey,
-  cwd: process.cwd(),
-  backend,
-  modelId,
-  systemPromptAppend: '간단히 답하세요.',
-  settingSources: ['user'],
-  strictMcpConfig: false,
-  mcpServers: [],
-  tools: ['Read', 'Bash', 'Edit', 'Write'],
-  skillPlugins: [],
-  permissionAllow: ['Read(*)', 'Bash(*)', 'Edit(*)', 'Write(*)', 'mcp__*'],
-  disallowedTools: [],
-  codexDisabledFeatures: [],
-  bridgeConfigSignature: JSON.stringify({
-    backend,
-    appendSystemPrompt: false,
-    settingSources: ['user'],
-    strictMcpConfig: false,
-    mcpServersHash: emptyMcpHash,
-  }),
-  contextMessageSignatures: [`smoke-cancel:${backend}`],
-};
-
-const session = await ensureBridgeSession(baseParams);
-
-let firstChunkSeen = false;
-let cancelled = false;
-setActivePromptHandler(session, async (event) => {
-  if (event.type !== 'session_notification') return;
-  const update = event.notification?.update;
-  if (!update) return;
-  if (update.sessionUpdate === 'agent_message_chunk' || update.sessionUpdate === 'agent_thought_chunk') {
-    if (!firstChunkSeen) {
-      firstChunkSeen = true;
-      setTimeout(() => {
-        if (!cancelled) {
-          cancelled = true;
-          void cancelActivePrompt(session);
-        }
-      }, 50);
-    }
-  }
-});
-
-// fallback cancel in case no chunk ever arrives
-const failSafe = setTimeout(() => {
-  if (!cancelled) {
-    cancelled = true;
-    void cancelActivePrompt(session);
-  }
-}, 4000);
-failSafe.unref?.();
-
-let longResult;
-try {
-  longResult = await sendPrompt(session, [{
-    type: 'text',
-    text: '1부터 300까지 숫자를 하나씩 새 줄에 적어주세요. 각 숫자 옆에 짧은 단어도 하나 붙여주세요.',
-  }]);
-} catch (error) {
-  longResult = { stopReason: 'threw', error: error instanceof Error ? error.message : String(error) };
-}
-clearTimeout(failSafe);
-console.error(`[smoke-cancel] long prompt stopReason=${longResult.stopReason}`);
-
-// session reuse: short prompt must succeed after cancel
-setActivePromptHandler(session, () => { /* drop chunks */ });
-const reuse = await sendPrompt(session, [{ type: 'text', text: 'ok만 답하세요.' }]);
-setActivePromptHandler(session, undefined);
-if (reuse.stopReason !== 'end_turn') {
-  throw new Error(`reuse failed: stopReason=${reuse.stopReason}`);
-}
-console.error('[smoke-cancel] session reuse: ok');
-
-await closeBridgeSession(sessionKey, { closeRemote: true, invalidatePersisted: true });
-console.error('[smoke-cancel] explicit close: ok');
-EOF
-  ) || rc=$?
-
-  # drain any late exit
-  sleep 1
-
-  if ! grep -q '^\[pi-shell-acp:cancel\]' "$log_file"; then
-    echo "[smoke-cancel/$backend] missing [pi-shell-acp:cancel] log line" >&2
-    cat "$log_file" >&2
-    rm -f "$log_file"
-    exit 1
-  fi
-
-  if grep -q '^\[pi-shell-acp:cancel\] .*outcome=failed' "$log_file"; then
-    echo "[smoke-cancel/$backend] cancel outcome=failed" >&2
-    cat "$log_file" >&2
-    rm -f "$log_file"
-    exit 1
-  fi
-
-  if ! grep -qE '^\[pi-shell-acp:cancel\] .*outcome=(dispatched|unsupported)' "$log_file"; then
-    echo "[smoke-cancel/$backend] cancel outcome not in {dispatched, unsupported}" >&2
-    cat "$log_file" >&2
-    rm -f "$log_file"
-    exit 1
-  fi
-
-  if ! grep -q '^\[pi-shell-acp:shutdown\]' "$log_file"; then
-    echo "[smoke-cancel/$backend] missing [pi-shell-acp:shutdown] log line" >&2
-    cat "$log_file" >&2
-    rm -f "$log_file"
-    exit 1
-  fi
-
-  if [[ "$rc" != "0" ]]; then
-    echo "[smoke-cancel/$backend] node subprocess failed rc=$rc" >&2
-    cat "$log_file" >&2
-    rm -f "$log_file"
-    exit 1
-  fi
-
-  local after
-  after=$(pgrep -cf "$backend_pattern" 2>/dev/null) || after=0
-  local delta=$((after - before))
-  if [[ $delta -gt 0 ]]; then
-    echo "[smoke-cancel/$backend] backend process leak delta=$delta (before=$before after=$after)" >&2
-    pgrep -af "$backend_pattern" >&2 || true
-    cat "$log_file" >&2
-    rm -f "$log_file"
-    exit 1
-  fi
-  if [[ $delta -lt 0 ]]; then
-    echo "[smoke-cancel/$backend] backend process count dropped during smoke (delta=$delta, before=$before after=$after) — treating as external cleanup, not a leak" >&2
-  fi
-
-  echo "[smoke-cancel/$backend] ok (cancel logged, session reused, no positive process leak)"
-  rm -f "$log_file"
-}
-
-
-smoke_model_switch_single() {
-  local project_dir=$1
-  local backend_a=$2
-  local model_a=$3
-  local backend_b=${4:-$backend_a}
-  local model_b=$5
-
-  local label="$backend_a"
-  if [[ "$backend_a" != "$backend_b" ]]; then
-    label="$backend_a->$backend_b"
-  fi
-
-  echo "[smoke-model-switch/$label] models: $model_a -> $model_b"
-
-  local log_file
-  log_file=$(mktemp /tmp/pi-shell-acp-model-switch-XXXXXX.log)
-
-  local rc=0
-  (
-    cd "$REPO_DIR"
-    PI_SHELL_ACP_SMOKE_BACKEND_A="$backend_a" \
-    PI_SHELL_ACP_MODEL_A="$model_a" \
-    PI_SHELL_ACP_SMOKE_BACKEND_B="$backend_b" \
-    PI_SHELL_ACP_MODEL_B="$model_b" \
-      node --input-type=module 2>"$log_file" <<'EOF'
-import {
-  ensureBridgeSession,
-  sendPrompt,
-  setActivePromptHandler,
-  closeBridgeSession,
-  normalizeMcpServers,
-  ModelSwitchLockedError,
-} from './acp-bridge.ts';
-
-const backendA = process.env.PI_SHELL_ACP_SMOKE_BACKEND_A;
-const backendB = process.env.PI_SHELL_ACP_SMOKE_BACKEND_B;
-const modelA = process.env.PI_SHELL_ACP_MODEL_A;
-const modelB = process.env.PI_SHELL_ACP_MODEL_B;
-if (!backendA || !backendB || !modelA || !modelB) {
-  throw new Error('backendA/backendB/modelA/modelB required');
-}
-
-const emptyMcpHash = normalizeMcpServers(undefined).hash;
-const makeParams = (sessionKey, backend, modelId) => ({
-  sessionKey,
-  cwd: process.cwd(),
-  backend,
-  modelId,
-  systemPromptAppend: '간단히 답하세요.',
-  settingSources: ['user'],
-  strictMcpConfig: false,
-  mcpServers: [],
-  tools: ['Read', 'Bash', 'Edit', 'Write'],
-  skillPlugins: [],
-  permissionAllow: ['Read(*)', 'Bash(*)', 'Edit(*)', 'Write(*)', 'mcp__*'],
-  disallowedTools: [],
-  codexDisabledFeatures: [],
-  bridgeConfigSignature: JSON.stringify({
-    backend,
-    appendSystemPrompt: false,
-    settingSources: ['user'],
-    strictMcpConfig: false,
-    mcpServersHash: emptyMcpHash,
-  }),
-  contextMessageSignatures: [`smoke-model-switch:${backend}`],
-});
-
-async function runOneTurn(session, label) {
-  setActivePromptHandler(session, () => {});
-  const result = await sendPrompt(session, [{ type: 'text', text: 'ok만 답하세요.' }]);
-  setActivePromptHandler(session, undefined);
-  if (result.stopReason !== 'end_turn') {
-    throw new Error(`${label} turn stopReason=${result.stopReason}`);
-  }
-  console.error(`[smoke-model-switch] ${label} turn ok`);
-}
-
-// 0.5.x — pi-shell-acp session locks its model for lifetime (issue #14).
-// Scenario:
-//   1. ensureBridgeSession(backendA/modelA) -> session A bootstrap (path=new)
-//   2. one turn on session A succeeds
-//   3. ensureBridgeSession(backendB/modelB) on the SAME sessionKey -> bridge
-//      MUST throw ModelSwitchLockedError, regardless of whether backendA ==
-//      backendB. Pre-0.5.x behavior fell through isSessionCompatible on
-//      cross-backend mismatch and silent-respawned the new backend — the
-//      cross-backend case covers that hole.
-//   4. session A is still alive and serves one more turn under modelA
-const sessionKey = `smoke-ms-locked:${backendA}-${backendB}`;
-const sessionA = await ensureBridgeSession(makeParams(sessionKey, backendA, modelA));
-await runOneTurn(sessionA, 'locked/turn1');
-
-let lockedError;
-try {
-  await ensureBridgeSession(makeParams(sessionKey, backendB, modelB));
-} catch (err) {
-  lockedError = err;
-}
-if (!(lockedError instanceof ModelSwitchLockedError)) {
-  throw new Error(
-    `locked scenario: expected ModelSwitchLockedError, got ${lockedError ? lockedError.constructor?.name : 'no throw'}`,
-  );
-}
-if (lockedError.fromModel !== modelA || lockedError.toModel !== modelB) {
-  throw new Error(
-    `locked scenario: error payload mismatch from=${lockedError.fromModel} to=${lockedError.toModel}`,
-  );
-}
-if (lockedError.fromBackend !== backendA || lockedError.toBackend !== backendB) {
-  throw new Error(
-    `locked scenario: backend payload mismatch from=${lockedError.fromBackend} to=${lockedError.toBackend}`,
-  );
-}
-console.error('[smoke-model-switch] locked/throw observed as expected');
-
-// Lock means the existing session is still serving — confirm with a second
-// turn under the original (backendA, modelA).
-await runOneTurn(sessionA, 'locked/turn2-post-refusal-same-model');
-
-await closeBridgeSession(sessionKey, { closeRemote: true, invalidatePersisted: true });
-console.error('[smoke-model-switch] locked scenario done');
-EOF
-  ) || rc=$?
-
-  if [[ "$rc" != "0" ]]; then
-    echo "[smoke-model-switch/$label] node subprocess failed rc=$rc" >&2
-    cat "$log_file" >&2
-    rm -f "$log_file"
-    exit 1
-  fi
-
-  # 0.5.x locked-policy expected log line — the lock fires BEFORE the compat
-  # check, so backend=$backend_a (the live session's backend) is what shows
-  # up on the model-switch log line even for a cross-backend attempt.
-  local pattern="^\\[pi-shell-acp:model-switch\\] path=reuse outcome=locked .*backend=$backend_a .*fromModel=$model_a toModel=$model_b reason=pi_shell_acp_session_locked_to_starting_model"
-  if ! grep -qE "$pattern" "$log_file"; then
-    echo "[smoke-model-switch/$label] missing log matching: $pattern" >&2
-    cat "$log_file" >&2
-    rm -f "$log_file"
-    exit 1
-  fi
-
-  # Lock policy: exactly one bootstrap (path=new) for backend_a — the
-  # refused second ensureBridgeSession must NOT trigger a second bootstrap.
-  # A regression to the old "respawn" semantics would show >=2.
-  local new_bootstraps_a
-  new_bootstraps_a=$(grep -cE "^\\[pi-shell-acp:bootstrap\\] path=new backend=$backend_a" "$log_file" || true)
-  if [[ "$new_bootstraps_a" -ne 1 ]]; then
-    echo "[smoke-model-switch/$label] expected exactly 1 bootstrap path=new backend=$backend_a, got $new_bootstraps_a" >&2
-    cat "$log_file" >&2
-    rm -f "$log_file"
-    exit 1
-  fi
-
-  # No legacy "respawn" outcome anywhere — guards against partial revert.
-  if grep -qE "^\\[pi-shell-acp:model-switch\\] .*outcome=respawn" "$log_file"; then
-    echo "[smoke-model-switch/$label] legacy outcome=respawn line found — locked policy violated" >&2
-    cat "$log_file" >&2
-    rm -f "$log_file"
-    exit 1
-  fi
-
-  # Cross-backend regression guard: a backend-changing switch must NOT
-  # bootstrap a fresh session for $backend_b. Pre-0.5.x behavior fell
-  # through isSessionCompatible and silently bootstrapped the other backend
-  # — this is the exact wire-level evidence captured during the issue #14
-  # investigation (Claude sonnet → Codex gpt-5.4).
-  if [[ "$backend_a" != "$backend_b" ]]; then
-    if grep -qE "^\\[pi-shell-acp:bootstrap\\] path=new backend=$backend_b" "$log_file"; then
-      echo "[smoke-model-switch/$label] cross-backend regression: backend=$backend_b session was bootstrapped despite lock" >&2
-      cat "$log_file" >&2
-      rm -f "$log_file"
-      exit 1
-    fi
-  fi
-
-  echo "[smoke-model-switch/$label] ok (reuse mismatch locked, ModelSwitchLockedError thrown, existing session continues)"
-  rm -f "$log_file"
 }
 
 check_model_lock() {
@@ -1364,8 +951,7 @@ check_package_source_routing() {
   # install-missing / project-scope-unseen / no-source, across local + remote,
   # plus self-root fallback and the resume unresolvedAcpIntent signal. Isolated
   # via a temp PI_CODING_AGENT_DIR — the real ~/.pi/agent is never touched. No
-  # backend, no spawn, no API cost. The live counterpart that actually spawns a
-  # package-installed Entwurf ACP child is smoke-installed-entwurf-acp.
+  # backend, no spawn, no API cost.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-package-source-routing.ts)
 }
 
@@ -1915,7 +1501,7 @@ JS
   ok "pi-tools-bridge test.sh"
 
   # check-bridge deliberately stops at the objective MCP boundary. Live backend
-  # tool-callability/orchestration is covered by smoke-async-resume and sentinel,
+  # tool-callability/orchestration is covered by sentinel and the v2 live smokes,
   # whose assertions parse operational artifacts instead of asking a model to
   # self-report which tool schema it sees. This split keeps check-bridge
   # credential-free except for the already-hermetic direct stdio bridge tests and
@@ -2194,12 +1780,6 @@ release_gate() {
   #    with PWD=project_dir (via gate()) so cwd-derived pi session dirs land in
   #    the scratch project, never the repo — see the note above.
   #
-  #    install-topology first: the deterministic resolver matrix
-  #    (check-package-source-routing) already ran inside `pnpm check` above; this
-  #    is its live counterpart, proving real pi children load git+npm package
-  #    bridge roots under --no-extensions (#29). It must pass before the Entwurf live
-  #    gates, which assume package-source routing resolves.
-  #
   #    Foundational garden-native identity gates run first (0.9.0, #28): the
   #    substrate proof (Pi --session-id/--name through the bridge) and the
   #    resident --entwurf-control guard (non-garden id → 0-token fail-fast,
@@ -2216,12 +1796,6 @@ release_gate() {
   # SMOKE_RGG_POSITIVE=1 and runs in the BEHAVIOR lane below — advisory, because
   # it depends on the backend child autonomously calling entwurf_self.
   run_step "smoke-resident-garden-guard (3c guard: negative/id-safety + /gnew 0-token, deterministic)" gate env SMOKE_RGG_POSITIVE=0 bash "$self" smoke-resident-garden-guard
-  run_step "smoke-installed-entwurf-acp (#29)" gate bash "$self" smoke-installed-entwurf-acp
-  run_step "smoke-all (claude-only floor)"  gate bash "$self" smoke-all "$project_dir"
-  run_step "smoke-async-resume"             gate bash "$self" smoke-async-resume
-  run_step "smoke-cancel"                   gate bash "$self" smoke-cancel "$project_dir"
-  run_step "smoke-model-switch"             gate bash "$self" smoke-model-switch "$project_dir"
-  run_step "smoke-entwurf-resume"           gate bash "$self" smoke-entwurf-resume "$project_dir"
   run_step "check-bridge"                   gate bash "$self" check-bridge
   # D4-c: the v2 dispatch substrate sentinel (5d-5). A SINGLE run (NOT backend-looped — it proves
   # production runEntwurfV2 deps + real pi control-socket RPC + real mailbox enqueue + v2 lock, not
