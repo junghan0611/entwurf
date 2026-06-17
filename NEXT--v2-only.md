@@ -180,17 +180,52 @@
   D1(새 `entwurf` 키)/D3(공존+single-writer guard, takeover 금지)는 잠겼지만 **적용은 Phase B/설치 수술 때**.
 - `~/repos/gh/entwurf` 셸은 안 건드림 (Phase B destination).
 
+## A 재범위화 결과 (2026-06-17, 미커밋) — LIVE 2회 + 단독 1회로 실증
+
+**release-gate를 v2-native floor로 재범위화 완료** (GLG+GPT 처분안). 코드 4파일(+67/−33):
+- **retarget**: `scripts/smoke-session-id-name.ts` — 하드코딩 `--provider pi-shell-acp --model claude-sonnet-4-6`
+  → native target(`PI_SHELL_ACP_LIVE_TARGET`, 기본 `openai-codex/gpt-5.4`) + `buildSessionName` 동기화 +
+  **격리 temp `PI_CODING_AGENT_DIR`에 real `auth.json` 복사**(native provider는 auth.json로 인증, 구 ACP는
+  Claude Code OAuth라 격리가 공짜였음). **단독 LIVE 재실행 PASS** (name=`openai-codex/gpt-5.4...`, T1/T2/T3 ok).
+- **drop from release floor** (subcommand·case·usage는 on-demand 보존, GPT 지침): `xt-tool-surface`(ACP backend
+  exclude-tools), `session-messaging`(제거된 `entwurf_send` v1 도구 호출), `sentinel`(ACP multi-backend matrix).
+- **RGG retarget**: `smoke-resident-garden-guard.sh` 기본 provider/model을 native로(provider 마스킹 제거).
+- **텍스트 보정**: run.sh release-gate 헤더/usage/BEHAVIOR 주석 + AGENTS.md Verification → v2-only floor.
+
+**LIVE 최종 상태 (재실행 2 + 단독 1 합성)** — MUST 6: **5 PASS** (static / smoke-session-id-name / check-bridge /
+smoke-entwurf-v2-matrix-live / smoke-entwurf-v2-spawn-resume-live), **1 FAIL** (RGG 29/30). BEHAVIOR 1 advisory FAIL
+(RGG positives, model-in-loop). **v2 substrate(matrix-live + spawn-resume-live)는 GREEN — 테제 실증됨.**
+
+## 🔴 남은 1 MUST FAIL = RGG `/new` (조사 단위, A 밖 — deploy+pi-drift)
+
+`smoke-resident-garden-guard`의 1-fail "/new was NOT cancelled — in-process uuid mint reached the hard guard".
+**provider 무관 확정**: openai-codex로 retarget해도 동일 → GPT의 "investigate"가 맞았고 provider red-herring은 제거됨.
+**근본**:
+1. RGG `/new` 테스트(`smoke-resident-garden-guard.sh:132`)는 `--no-extensions`도 `-e $REPO`도 없이 `pi --entwurf-control`
+   spawn → **repo v2-only 코드가 아니라 전역 설치본(`~/.pi/agent/git/.../pi-shell-acp` = main/v0.11.0 ACP)을 테스트**.
+2. `/new` 취소 가드 = `pi.on("session_before_switch", reason:"new") → {cancel:true}` (`entwurf-control.ts:1197-1206`).
+   이 파일은 **typecheck-제외**이고 주석(1185-1186)이 "이벤트가 decay했을 수 있으니 존재 확인 없이 재도입 말라"고 경고 →
+   **pi 0.79.4 이벤트 API drift**로 `session_before_switch`/`reason:"new"`가 안 먹는 정황.
+→ **A(코드 재범위화)로 못 고침. B(배포: 전역이 main) + pi 0.79.4 event drift 조사가 필요.** 노트북 "더 진행" 1순위.
+   확인 경로: pi 0.79.4가 `session_before_switch`를 `reason:"new"`로 여전히 emit하는지(원형 `~/repos/3rd/agent-stuff/extensions/control.ts`
+   + pi 소스 대조), RGG가 전역 대신 repo 코드를 테스트하도록 `--no-extensions -e $REPO`를 줄지(test-topology 결정).
+
 ## 다음 한 걸음
 
-→ **다음 후보 (우선순위 순):**
-1. **LIVE release-gate 1회 재실행** — `LIVE=1 ./run.sh release-gate <scratch>`. release-gate dead-ref 2차 정리
-   (2026-06-17, 미커밋)로 MUST tier가 살아있는 8스텝만 부르게 됐으니 **이제 실증이 유의미**. 본대(0.79.4)에서
-   MUST 전부 green 확인. **토큰/실프로세스 비용 있음**(real pi child spawn, auth/model 필요) → GLG 승인 후 1회.
-   CHANGELOG의 옛 "MUST PASS=17"은 삭제 이전 로그라 현재 트리(8스텝)를 기술 못 함 — **LIVE 로그가 나온 뒤** 새
-   카운트로 교체(이 코드 변경엔 미포함, LIVE 후속).
-2. **README** — 아직 ACP 시대. Phase B(rename)에서 AGENTS.md와 동형으로 재작성하거나 전용 doc 패스.
-3. **라우팅 잔여(Phase B 가까움)**: `scripts/resolve-acp-bridge.ts`(orphan?) / `getRegistryRouting`
-   하드코딩 `provider:"pi-shell-acp"` / `mcp/index.ts` description 문자열. rename과 묶어 절삭.
+→ **노트북 이어받기 (우선순위 순):**
+1. **RGG `/new` 조사** (위 🔴) — pi 0.79.4 `session_before_switch` drift + RGG가 전역 vs repo 코드 중 무엇을
+   테스트해야 하는지. 이게 닫히면 MUST 6/6 green 가능.
+2. **B = 배포 위생(D1)** — GLG 결정. 전역 `pi-shell-acp`가 main/ACP라 v2-only repo와 충돌(`--entwurf-control` flag) +
+   RGG가 전역을 테스트하는 근원. v2-only를 daily로 올릴지(NEXT "daily로 안 씀" 결정과 충돌)와 함께 판단.
+3. **setup_all Axis 1 follow-up** — `setup_all`(run.sh:1592, 2003-2010)이 아직 `session-messaging`+`sentinel`을
+   Axis 1 게이트로 실행 → v2-only에서 release floor와 같은 v1/ACP 이유로 실패. install 경로라 A 밖이었지만 같은 처분 필요.
+4. **session-messaging / sentinel v2 재작성** — `entwurf_v2` surface 기준으로(drop이 아니라 재작성하기로 한 경우).
+5. **CHANGELOG MUST-PASS 카운트** — 옛 "MUST PASS=17"은 삭제 이전 로그. 현재 floor=MUST 6(LIVE 5 PASS+RGG)로 교체.
+   단 RGG 닫힌 뒤 green 로그로 갱신하는 게 정확.
+6. **README / 라우팅 잔여(Phase B)**: README ACP 시대 재작성 / `scripts/resolve-acp-bridge.ts`(orphan 심화) /
+   `getRegistryRouting` 하드코딩 `provider:"pi-shell-acp"` / `mcp/index.ts` description. rename과 묶어 절삭.
+7. **stale 주석(doc-truth, 기능 무영향)**: `scripts/sentinel-runner.sh`(225/457), `scripts/check-model-lock.ts`(31-32),
+   `scripts/smoke-entwurf-v2-matrix-live.ts`(29)가 삭제된 명령 호명. Phase B doc 패스.
 
 ## 넘으면 안 되는 선
 
