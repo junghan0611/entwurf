@@ -51,6 +51,20 @@
   Verification=실제 check-entwurf-v2-*/meta-*/sentinel/release-gate, Entwurf=v2 4도구+`/gnew`,
   File Structure/Deps(mcp-sdk+zod)/Typecheck fence 갱신. 상단에 **branch-status 배너**로 name(`pi-shell-acp`)↔
   content(no ACP) 불일치를 명시. rename은 보존(Phase B). **README는 아직 ACP 시대 — Phase B/후속 doc 패스로 미룸.**
+- **release-gate dead-ref 2차 정리 DONE → `pnpm check` green** (2026-06-17): `496452e`의 release-gate 수리가
+  **불완전**했음을 검토로 발견 — `ae33e73`(ACP backend purge)에서 함수+case가 삭제된 6개 smoke를 release-gate가
+  아직 MUST `run_step`으로 호출(run.sh unknown-subcommand=`exit 1` → MUST 6개 **가짜 RED** → gate 거짓 NOT-releasable).
+  제거 6: `smoke-installed-entwurf-acp`/`smoke-all`/`smoke-async-resume`/`smoke-cancel`/`smoke-model-switch`/`smoke-entwurf-resume`
+  (v2 대체는 이미 gate 내 `smoke-entwurf-v2-matrix-live`+`smoke-entwurf-v2-spawn-resume-live`). 동반:
+  orphan `_single` 워커 3개(`smoke_continuity/cancel/model_switch_single`, 호출자 0, −411줄) 삭제 +
+  orphan `scripts/smoke-async-resume.sh` 삭제 + usage/주석 5곳 truthful화(삭제된 명령 호명 제거). **미커밋.**
+  → MUST tier가 이제 8스텝(static+id-name+RGG+check-bridge+v2 matrix/spawn-resume+session-messaging+xt-surface),
+  전부 살아있는 subcommand. **LIVE 재실행이 비로소 유의미.**
+  - **잔여(이번 단위 밖, doc-truth)**: 살아있는 파일 안 stale 주석이 삭제된 명령을 호명 —
+    `scripts/sentinel-runner.sh`(225 smoke-async-resume / 457 smoke-continuity), `scripts/check-model-lock.ts`(31-32 smoke-model-switch),
+    `scripts/smoke-entwurf-v2-matrix-live.ts`(29 smoke-async-resume family). 기능 무영향 → Phase B doc 패스.
+  - **`scripts/resolve-acp-bridge.ts` orphan 심화 확정**: 유일 소비자였던 `smoke-installed-entwurf-acp` 제거로
+    이제 더 명확한 orphan. 단 NEXT 잠금대로 라우팅 잔여 = **Phase B**에서 절삭(여기서 안 건드림).
 
 ## 잠긴 결정
 
@@ -169,9 +183,11 @@
 ## 다음 한 걸음
 
 → **다음 후보 (우선순위 순):**
-1. **LIVE release-gate 1회 재실행** — `LIVE=1 ./run.sh release-gate <scratch>`. run.sh 수리(`496452e`) 후
-   MUST tier가 다시 통과하는지 본대(0.79.4)에서 실증. CHANGELOG의 옛 "MUST PASS=17"은 삭제 이전 로그라
-   현재 트리를 기술 못 함 — 새 로그로 교체 필요.
+1. **LIVE release-gate 1회 재실행** — `LIVE=1 ./run.sh release-gate <scratch>`. release-gate dead-ref 2차 정리
+   (2026-06-17, 미커밋)로 MUST tier가 살아있는 8스텝만 부르게 됐으니 **이제 실증이 유의미**. 본대(0.79.4)에서
+   MUST 전부 green 확인. **토큰/실프로세스 비용 있음**(real pi child spawn, auth/model 필요) → GLG 승인 후 1회.
+   CHANGELOG의 옛 "MUST PASS=17"은 삭제 이전 로그라 현재 트리(8스텝)를 기술 못 함 — **LIVE 로그가 나온 뒤** 새
+   카운트로 교체(이 코드 변경엔 미포함, LIVE 후속).
 2. **README** — 아직 ACP 시대. Phase B(rename)에서 AGENTS.md와 동형으로 재작성하거나 전용 doc 패스.
 3. **라우팅 잔여(Phase B 가까움)**: `scripts/resolve-acp-bridge.ts`(orphan?) / `getRegistryRouting`
    하드코딩 `provider:"pi-shell-acp"` / `mcp/index.ts` description 문자열. rename과 묶어 절삭.
