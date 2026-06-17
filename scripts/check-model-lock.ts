@@ -28,11 +28,11 @@
  *   17. session_start "reload" + entries=0 BUT prior sessionLocked=true: lock preserved
  *   18. getEntries() throws: defensive `catch { return true }` engages the lock
  *
- * Why this exists separate from smoke-model-switch:
- *   smoke-model-switch drives `ensureBridgeSession` directly to verify the
- *   A bridge-side guard. B (the extension hook) does NOT run there — there
- *   is no pi extension runtime in that smoke. This script is the B-side
- *   gate, and the two together form the full policy verification surface.
+ * Scope (B-side, the extension hook):
+ *   this drives the model-lock extension hook directly. Its former A-side
+ *   companion `smoke-model-switch` exercised the ACP bridge guard
+ *   (`ensureBridgeSession`) and was removed with the ACP purge (v2-only),
+ *   so this B-side gate now stands alone as the policy verification surface.
  *
  * Module-level state note: model-lock.ts uses two module-level flags
  * (`reverting`, `sessionLocked`) that persist across tests in the same

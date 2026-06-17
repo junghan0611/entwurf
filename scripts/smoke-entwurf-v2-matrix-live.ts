@@ -26,7 +26,7 @@
  *      → NO `.msg` written (SE-2: no mailbox garbage for a dead receiver).
  *
  * Why programmatic, not model-in-loop (GPT Q2): "does the sender model actually call
- * entwurf_send" is a SEPARATE behavior test (the smoke-async-resume family). Folding it in here
+ * the dispatch verb (entwurf_v2)" is a SEPARATE behavior concern. Folding it in here
  * would make a flaky model-tool-arg-variance failure indistinguishable from a bridge regression.
  * So C2/C3 drive the production enqueue path directly; only C1 needs a real pi process (to prove
  * the control socket + RPC are real, which fakes cannot).
