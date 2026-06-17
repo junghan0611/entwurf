@@ -34,11 +34,11 @@ usage() {
 Usage:
   ./run.sh setup [project-dir]        # pnpm install + sync auth + install + Axis 1 gates (pi-tools-bridge, session-messaging, sentinel)
   ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, retargeted smoke-session-id-name, RGG). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). ACP/v1 gates (xt-tool-surface, session-messaging, sentinel) dropped from the floor. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
-  ./run.sh xt-tool-surface             # ACP backend exclude-tools policy: -xt <builtin> fail-fast per backend (declared==actual), extension exclusion honored
+  ./run.sh xt-tool-surface             # [LEGACY — broken on v2-only, dropped from release floor, v2 rewrite pending] ACP backend exclude-tools policy: -xt <builtin> fail-fast per backend
   ./run.sh check-bridge               # pi-tools-bridge direct MCP smoke + protocol/negative-path test.sh (live tool-callability lives in sentinel + the v2 live smokes)
   ./run.sh check-pi-tools-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
-  ./run.sh sentinel [args...]         # entwurf 6-cell diagonal matrix (sync+resume × parent×target)
-  ./run.sh session-messaging [args...] # 4-case session-messaging smoke (native/ACP cross-matrix)
+  ./run.sh sentinel [args...]         # [LEGACY — broken on v2-only, dropped from release floor, v2 rewrite pending] ACP multi-backend 6-cell tool-selection matrix
+  ./run.sh session-messaging [args...] # [LEGACY — broken on v2-only (removed entwurf_send v1 tool), dropped from release floor, v2 rewrite pending] 4-case session-messaging smoke
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
   ./run.sh check-entwurf-session-identity # deterministic gate for locked garden session identity & name grammar (sessionId/buildSessionName/parse/collision), no API
@@ -1897,16 +1897,19 @@ case "$cmd" in
     release_gate "$@"
     ;;
   xt-tool-surface)
+    warn "xt-tool-surface is LEGACY (ACP backend exclude-tools policy) — broken on v2-only (assumes the removed pi-shell-acp provider). Dropped from the release floor; kept for reference, v2 rewrite pending."
     xt_tool_surface
     ;;
   check-bridge)
     check_bridge
     ;;
   sentinel)
+    warn "sentinel is LEGACY (ACP multi-backend tool-selection matrix) — broken on v2-only. Dropped from the release floor; kept for reference, v2 rewrite onto the entwurf_v2 surface pending."
     shift || true
     sentinel_run "$@"
     ;;
   session-messaging)
+    warn "session-messaging is LEGACY — broken on v2-only (calls the removed entwurf_send v1 tool). Dropped from the release floor; kept for reference, v2 rewrite onto entwurf_v2 pending."
     shift || true
     session_messaging_run "$@"
     ;;
