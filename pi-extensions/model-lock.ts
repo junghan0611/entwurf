@@ -1,6 +1,13 @@
 /**
  * model-lock — pi-shell-acp session model lock (extension-side revert).
  *
+ * ⚠️ v2-only status (doc-truth): the "A (bridge-side)" companion described below
+ * — `acp-bridge.ts` / `ensureBridgeSession` — was removed in the ACP purge, so
+ * only this B-side hook remains. The `pi-shell-acp` provider it guards against is
+ * itself routing residue (Phase B: decide remove-vs-redefine model-lock; see
+ * NEXT--v2-only.md § Phase B 잔여). The A/B narrative below is retained as
+ * historical context pending that decision — read "A" as removed.
+ *
  * Companion to the bridge-side guard in `acp-bridge.ts` (ensureBridgeSession
  * reuse-path `ModelSwitchLockedError`). The two work as a pair:
  *

@@ -24,7 +24,7 @@
 # RECENT
 
 - [2026-06-17] **v2-only subtraction 정리** (ACP/v1 제거). 닫힌 작업 전체는 `CHANGELOG.md` ## Unreleased 참조 (태그 미컷).
-  baseline `v0.11.0`..HEAD 21커밋. `pnpm check` green + `LIVE=1 release-gate` MUST 6/6 (thinkpad) + 두 레일 라이브 왕복.
+  baseline `v0.11.0`..HEAD. `pnpm check` green + `LIVE=1 release-gate` MUST 6/6 (thinkpad) + 두 레일 라이브 왕복.
 
 # LEDGER
 
@@ -40,11 +40,11 @@
 ## Phase B 잔여 (rename 단계에서 묶어 절삭 — 여기서 안 건드림)
 - **rename 본체**: `getRegistryRouting`(`entwurf-core.ts:991,1089`) 하드코딩 `provider:"pi-shell-acp"` /
   `scripts/resolve-acp-bridge.ts`(orphan 심화 확정) / `mcp/index.ts` description 문자열.
-- **dead export**: `entwurf-core.ts`의 `runEntwurfSync`/`runEntwurfResumeSync`(호출처 0) — 라우팅 잔여와 얽혀 rename 직전 절삭.
+- **dead export**: `entwurf-core.ts`의 `runEntwurfSync`/`runEntwurfResumeSync`(호출처 0) — 라우팅 잔여와 얽혀 rename 직전 절삭 (GPT 확인).
+- **model-lock vestigial** (GPT A): `model-lock.ts`의 본질=`native↔pi-shell-acp provider` 전환 revert인데 ACP 제거로 막을 provider 모델이 사라짐. 즉시 삭제 말고 **Phase B에서 제거 vs 새 entwurf 개념으로 재정의** 결정 (과거 saved session에 박힌 provider 잔재 가능성). 헤더는 doc-truth 배너로 낮춤(`beed720`+후속), `getRegistryRouting`와 함께 절삭.
 - **README**: 아직 ACP 시대 — Phase B doc 패스에서 재작성.
-- **stale 주석(doc-truth, 기능 무영향)**: `sentinel-runner.sh`(225/457) / `check-model-lock.ts`(31-32) /
-  `smoke-entwurf-v2-matrix-live.ts`(29)가 삭제된 명령 호명.
-- **session-messaging / sentinel**: 현재 `[LEGACY — broken on v2-only]` 표기 + fail-loud. `entwurf_v2` surface 기준 재작성 결정 시 진행.
+- **stale 주석 잔여**: `sentinel-runner.sh`(225/457)만 남음 (sentinel 자체가 LEGACY라 sentinel 처분과 함께). check-model-lock·matrix-live는 `beed720`으로 DONE.
+- **session-messaging / sentinel** (GPT B): release floor로 되살리지 말 것. 둘 다 drop/archive 우선. session-messaging만 재작성 가치 있으나 matrix-live가 상당 부분 커버 → 중복이면 drop. sentinel은 v1 model-in-loop 성격이라 Phase B 제거 또는 완전 신규 설계. 지금은 LEGACY fail-loud 보존.
 - **B = 배포 위생(D1)**: 전역 `pi-shell-acp` 설치를 v2-only로 올릴지는 daily 운용 판단으로 분리(이 gate는 deployment-smoke 아님).
 
 # 넘으면 안 되는 선
