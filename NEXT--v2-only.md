@@ -267,6 +267,12 @@ spawn은 device-local 전역 package에 의존하지 않고 **`--no-extensions -
    소켓 up·flag 에러 0 + headless turn에서 Bash가 `$PI_EMACS_AGENT_SOCKET=server` 실측(`EMACSCHECK=[server]`).
    **후속(비긴급)**: pi-context-augment 힌트(`emacsclient -s "$PI_EMACS_AGENT_SOCKET"`)는 v2에서 augment 경로 자체가
    ACP산(`pi-context-augment.ts` 삭제됨)이라 보류 — env 전파만으로 1차 동작. CHANGELOG 엔트리는 tag-release 때.
+7. **✅ pi-native `entwurf_peers` 두-레일 listing DONE (2026-06-17 미커밋)** — 기존 pi-native tool은
+   `getLiveSessions()`만 호출해 `~/.pi/entwurf-control/*.sock` 레일 A만 보였고, MCP bridge 쪽만 이미
+   `listEntwurfFacts`+`renderEntwurfPeers`로 meta-record 레일 B를 함께 보던 비대칭. `entwurf-control.ts`도 같은
+   fact-provider/render fence를 동적 import해 meta-record citizens + socket-only sections를 반환하도록 맞춤.
+   검증: `./run.sh check-entwurf-peers-surface`에 native wiring guard 추가, `pnpm typecheck`, `pnpm check` green.
+   라이브: `entwurf_v2(target=20260617T153025-ceba64, fire-and-forget)` meta-mailbox enqueue 성공.
 
 ## 넘으면 안 되는 선
 

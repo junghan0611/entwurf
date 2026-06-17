@@ -57,7 +57,7 @@
  *    Send-is-throw cleanup; see note above.)
  */
 
-import { existsSync, promises as fs } from "node:fs";
+import { existsSync, promises as fs, readFileSync } from "node:fs";
 import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -1323,6 +1323,9 @@ const ENTWURF_V2_SURFACE_MODULE = "./lib/entwurf-v2-surface.ts";
 // `.ts`-extension fence lib, so this root-tsc emit surface reaches it the SAME way as the
 // v2 surface / mailbox guard — a NON-LITERAL dynamic import behind a local interface.
 const ENTWURF_SELF_ADDRESS_MODULE = "./lib/entwurf-self-address.ts";
+const ENTWURF_FACT_PROVIDER_MODULE = "./lib/entwurf-fact-provider.ts";
+const ENTWURF_PEERS_RENDER_MODULE = "./lib/entwurf-peers-render.ts";
+const META_SESSION_MODULE = "./lib/meta-session.ts";
 
 type SelfAddressabilityFn = (facts: {
 	origin: "pi-session" | "meta-session" | "external-mcp";
@@ -1486,15 +1489,53 @@ The decider — not this surface — chooses the transport.`,
 // Tool: entwurf_peers
 // ============================================================================
 
+interface EntwurfFactProviderModule {
+	listEntwurfFacts(params: {
+		metaEntries: readonly string[];
+		readRecord: (filename: string) => string;
+		socket: { dir: string };
+	}): Promise<unknown>;
+}
+
+interface EntwurfPeersRenderModule {
+	renderEntwurfPeers(result: unknown, controlDir: string): { text: string; payload: unknown };
+}
+
+interface MetaSessionModule {
+	defaultMetaSessionsDir(): string;
+}
+
+async function renderEntwurfPeersForSurface(): Promise<{ text: string; payload: unknown }> {
+	const meta = (await import(META_SESSION_MODULE)) as unknown as MetaSessionModule;
+	const sessionsDir = meta.defaultMetaSessionsDir();
+	let metaEntries: string[] = [];
+	try {
+		metaEntries = (await fs.readdir(sessionsDir)).filter((name) => name.endsWith(".meta.json"));
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") throw err;
+	}
+
+	const provider = (await import(ENTWURF_FACT_PROVIDER_MODULE)) as unknown as EntwurfFactProviderModule;
+	const result = await provider.listEntwurfFacts({
+		metaEntries,
+		readRecord: (filename) => readFileSync(path.join(sessionsDir, filename), "utf8"),
+		// Same socket axis as the legacy live-session scan, but merged with the
+		// meta-record rail by listEntwurfFacts so meta-mailbox citizens are discoverable too.
+		socket: { dir: ENTWURF_DIR },
+	});
+	const render = (await import(ENTWURF_PEERS_RENDER_MODULE)) as unknown as EntwurfPeersRenderModule;
+	return render.renderEntwurfPeers(result, ENTWURF_DIR);
+}
+
 function registerListSessionsTool(pi: ExtensionAPI): void {
 	// Same TS2589 workaround as registerSessionTool — see the comment block
 	// in that function for the revisit conditions.
 	const registerTool = pi.registerTool as (def: any) => void;
 	registerTool({
 		name: "entwurf_peers",
-		label: "List Sessions",
+		label: "List Garden Citizens",
 		description:
-			"List live sessions that expose a control socket. Returns sessionIds only — addressing is sessionId-only (no name aliases). Use this for discovery; for the current session id in shell/bash use $PI_SESSION_ID.",
+			"List the entwurf fact surface across BOTH rails: garden citizens from meta-records (including active self-fetch meta receivers such as claude-code) and record-less control sockets, each with liveness. A legacy `sessions` projection is retained for alive pi control-socket sessions only. Pair with entwurf_v2 to address a peer by garden id; this surface reports facts, never per-row routing verbs.",
 		parameters: Type.Object({}),
 		async execute(
 			_toolCallId: string,
@@ -1503,21 +1544,19 @@ function registerListSessionsTool(pi: ExtensionAPI): void {
 			_onUpdate: AgentToolUpdateCallback<unknown> | undefined,
 			_ctx: ExtensionContext,
 		): Promise<AgentToolResult<unknown>> {
-			const sessions = await getLiveSessions();
-
-			if (sessions.length === 0) {
+			try {
+				const { text, payload } = await renderEntwurfPeersForSurface();
 				return {
-					content: [{ type: "text", text: "No live sessions found." }],
-					details: { sessions: [] },
+					content: [{ type: "text", text: `${text}\n\n${JSON.stringify(payload)}` }],
+					details: payload,
+				};
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				return {
+					content: [{ type: "text", text: `entwurf_peers error: ${msg}` }],
+					details: { error: msg },
 				};
 			}
-
-			const lines = sessions.map((session) => `- ${session.sessionId}`);
-
-			return {
-				content: [{ type: "text", text: `Live sessions:\n${lines.join("\n")}` }],
-				details: { sessions },
-			};
 		},
 	});
 }

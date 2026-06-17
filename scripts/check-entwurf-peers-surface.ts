@@ -1,5 +1,5 @@
 /**
- * check-entwurf-peers-surface — deterministic gate for the MCP `entwurf_peers`
+ * check-entwurf-peers-surface — deterministic gate for the MCP + pi-native `entwurf_peers`
  * RENDER/PAYLOAD layer (0.11 Stage 0 step 4, slice 4c). Drives the PURE
  * `renderEntwurfPeers` with a fabricated `EntwurfFactsResult` (no IO) and proves
  * the surface contract (GPi + Fable 수렴):
@@ -18,8 +18,8 @@
  *   - diagnostics appear in BOTH the text and the JSON,
  *   - empty sections render "(none)"; an `unsupported` peer is shown (never
  *     dropped); socket-only enrich null renders "(not enriched)",
- *   - WIRING guard (Fable e②/6): the MCP handler calls listEntwurfFacts +
- *     renderEntwurfPeers and the old getLiveSessions is gone from the bridge.
+ *   - WIRING guard (Fable e②/6): the MCP handler and pi-native tool call
+ *     listEntwurfFacts + renderEntwurfPeers, and the old getLiveSessions is gone from the bridge.
  *
  * No IO — the facts are fabricated; only the wiring guard reads the bridge source
  * as text (a static assertion, not an execution).
@@ -174,8 +174,15 @@ function main(): void {
 	{
 		const here = path.dirname(fileURLToPath(import.meta.url));
 		const bridgeSrc = readFileSync(path.join(here, "..", "mcp", "pi-tools-bridge", "src", "index.ts"), "utf8");
+		const nativeSrc = readFileSync(path.join(here, "..", "pi-extensions", "entwurf-control.ts"), "utf8");
 		ok("wiring: bridge calls listEntwurfFacts(", bridgeSrc.includes("listEntwurfFacts("));
 		ok("wiring: bridge calls renderEntwurfPeers(", bridgeSrc.includes("renderEntwurfPeers("));
+		ok("wiring: native pi tool calls listEntwurfFacts(", nativeSrc.includes("listEntwurfFacts("));
+		ok("wiring: native pi tool calls renderEntwurfPeers(", nativeSrc.includes("renderEntwurfPeers("));
+		ok(
+			"wiring: native pi tool description no longer claims socket-only discovery",
+			!nativeSrc.includes("List live sessions that expose a control socket. Returns sessionIds only"),
+		);
 		// `\bname\s*\(` catches a definition OR a call (tolerating a space before the
 		// paren, GPi Q4); a bare prose mention in a removal-note comment (no paren) is
 		// allowed — the guard targets the second scan, not the word.
