@@ -39,7 +39,8 @@ Usage:
   ./run.sh smoke-claude [project-dir] # explicit Claude runtime smoke
   ./run.sh smoke-codex [project-dir]  # explicit Codex runtime smoke
   ./run.sh smoke-gemini [project-dir] # explicit Gemini runtime smoke (requires `gemini` on PATH)
-  ./run.sh smoke-all [project-dir]    # claude-only runtime smoke (0.11.0 floor; codex/gemini via smoke-codex / smoke-gemini)
+  ./run.sh smoke-cortex [project-dir] # explicit Cortex runtime smoke (requires `cortex` on PATH + `cortex auth login`)
+  ./run.sh smoke-all [project-dir]    # claude-only runtime smoke (0.11.0 floor; codex/gemini/cortex via smoke-codex / smoke-gemini / smoke-cortex)
   ./run.sh smoke-continuity [project-dir] # strict dual-backend persisted bootstrap gate (Claude=resume, Codex=load)
   ./run.sh smoke-cancel [project-dir] # strict cancel/abort cleanup observability gate (Claude + Codex)
   ./run.sh smoke-model-switch [project-dir] # strict model-switch lock gate — same-backend + cross-backend reuse mismatch must throw ModelSwitchLockedError (issue #14)
@@ -455,6 +456,9 @@ smoke_test() {
         ;;
       gemini)
         model="pi-shell-acp/gemini-3.1-pro-preview"
+        ;;
+      cortex)
+        model="pi-shell-acp/cortex-auto"
         ;;
       *)
         echo "[smoke] unknown backend: $backend" >&2
@@ -2120,7 +2124,7 @@ EOF
 check_backends() {
   (cd "$REPO_DIR" && node --input-type=module <<'EOF'
 import { strict as assert } from 'node:assert';
-import { buildSessionMetaForBackend, CLAUDE_CONFIG_OVERLAY_DIR, CODEX_CONFIG_OVERLAY_DIR, ensureClaudeConfigOverlay, ensureCodexConfigOverlay, ensureGeminiConfigOverlay, GEMINI_CONFIG_OVERLAY_DIR, GEMINI_CONFIG_OVERLAY_HOME, GEMINI_OVERLAY_ADMIN_POLICY_PATH, GEMINI_OVERLAY_SYSTEM_MD_PATH, resolveAcpBackendLaunch, resolveBridgeEnvDefaults } from './acp-bridge.ts';
+import { buildSessionMetaForBackend, CLAUDE_CONFIG_OVERLAY_DIR, CODEX_CONFIG_OVERLAY_DIR, CORTEX_CONFIG_OVERLAY_HOME, CORTEX_REAL_HOME, ensureClaudeConfigOverlay, ensureCodexConfigOverlay, ensureCortexConfigOverlay, ensureGeminiConfigOverlay, GEMINI_CONFIG_OVERLAY_DIR, GEMINI_CONFIG_OVERLAY_HOME, GEMINI_OVERLAY_ADMIN_POLICY_PATH, GEMINI_OVERLAY_SYSTEM_MD_PATH, resolveAcpBackendLaunch, resolveBridgeEnvDefaults } from './acp-bridge.ts';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -3100,7 +3104,134 @@ try {
   assert.equal(geminiMeta, undefined,
     'gemini buildSessionMeta must return undefined — engraving travels via GEMINI_SYSTEM_MD (overlay system.md) instead');
 
-  console.log('[check-backends] 136 assertions ok');
+  // ── Cortex backend ──────────────────────────────────────────────────────
+  //
+  // Cortex Code IS the ACP server (`cortex acp serve`), resolved from PATH —
+  // same shape as gemini (the CLI itself is the server, no `*-acp` npm pkg).
+  // Auth boundary (Hard Rule #9): SNOWFLAKE_HOME overlay symlinks
+  // connections.toml / config.toml / credential cache through; the bridge
+  // never copies or parses credentials.
+  const prevCortex = process.env.CORTEX_ACP_COMMAND;
+  delete process.env.CORTEX_ACP_COMMAND;
+  try {
+    // PATH path, no model/connection → bare `cortex acp serve`.
+    const cortexLaunch = resolveAcpBackendLaunch('cortex');
+    assert.equal(cortexLaunch.command, 'cortex',
+      'cortex launch (PATH path) must invoke `cortex` directly');
+    assert.deepEqual(cortexLaunch.args, ['acp', 'serve'],
+      'cortex launch with no model/connection must be bare `acp serve` (Cortex uses its own default connection + model)');
+    assert.equal(cortexLaunch.source, 'PATH:cortex acp serve');
+
+    // Model pinning: `cortex-` prefix is stripped to the native id; `cortex-auto`
+    // emits no -m flag (Cortex picks its own default). Connection adds `-c`.
+    const cortexLaunchModel = resolveAcpBackendLaunch('cortex', {
+      codexDisabledFeatures: [],
+      cortexModel: 'cortex-claude-sonnet-4-6',
+      cortexConnection: 'my_conn',
+    });
+    assert.deepEqual(cortexLaunchModel.args, ['acp', 'serve', '-c', 'my_conn', '-m', 'claude-sonnet-4-6'],
+      'cortex launch must strip the cortex- prefix to the native model id and pass -c connection');
+
+    const cortexLaunchAuto = resolveAcpBackendLaunch('cortex', {
+      codexDisabledFeatures: [],
+      cortexModel: 'cortex-auto',
+    });
+    assert.deepEqual(cortexLaunchAuto.args, ['acp', 'serve'],
+      'cortex-auto must emit no -m flag (Cortex default model)');
+
+    // Override path mirrors Codex/Gemini: bash -lc with selection flags appended
+    // so pi-shell-acp's model/connection choice wins.
+    process.env.CORTEX_ACP_COMMAND = 'node /tmp/fake-cortex-acp.js acp serve';
+    const cortexOverride = resolveAcpBackendLaunch('cortex', {
+      codexDisabledFeatures: [],
+      cortexModel: 'cortex-claude-sonnet-4-6',
+      cortexConnection: 'c1',
+    });
+    assert.equal(cortexOverride.command, 'bash');
+    assert.equal(cortexOverride.args[0], '-lc');
+    assert.ok(cortexOverride.args[1].startsWith('node /tmp/fake-cortex-acp.js acp serve '),
+      'cortex override must keep the operator command at the head of the bash -lc string');
+    assert.ok(cortexOverride.args[1].includes("'-c' 'c1'") && cortexOverride.args[1].includes("'-m' 'claude-sonnet-4-6'"),
+      'cortex override must append the bridge -c / -m selection flags (stripped native model)');
+    assert.equal(cortexOverride.source, 'env:CORTEX_ACP_COMMAND');
+  } finally {
+    if (prevCortex === undefined) delete process.env.CORTEX_ACP_COMMAND;
+    else process.env.CORTEX_ACP_COMMAND = prevCortex;
+  }
+
+  // Cortex bridge env — SNOWFLAKE_HOME overlay isolation + auto-apply-profiles off.
+  const cortexEnvFull = resolveBridgeEnvDefaults('cortex');
+  assert.equal(cortexEnvFull?.SNOWFLAKE_HOME, CORTEX_CONFIG_OVERLAY_HOME,
+    'cortex bridge env must pin SNOWFLAKE_HOME to the overlay (operator-state isolation)');
+  assert.equal(cortexEnvFull?.CORTEX_DISABLE_AUTO_APPLY_PROFILES, '1',
+    'cortex bridge env must disable operator profile auto-apply (settings/system-prompt/MCP injection)');
+  assert.deepEqual(Object.keys(cortexEnvFull ?? {}).sort(), ['CORTEX_DISABLE_AUTO_APPLY_PROFILES', 'SNOWFLAKE_HOME'],
+    'cortex bridge env defaults must contain identity-isolation keys only');
+
+  // Cortex session meta — adapter returns undefined. Cortex ACP newSession has
+  // no `_meta.systemPrompt` carrier (nor a developer_instructions / system.md
+  // equivalent); the engraving rides the first-user augment instead.
+  const cortexMeta = buildSessionMetaForBackend(
+    'cortex',
+    {
+      modelId: 'cortex-claude-sonnet-4-6',
+      settingSources: [],
+      strictMcpConfig: true,
+      tools: [],
+      skillPlugins: [],
+      permissionAllow: [],
+      disallowedTools: [],
+    },
+    'engraving body that would be a carrier on claude',
+  );
+  assert.equal(cortexMeta, undefined,
+    'cortex buildSessionMeta must return undefined — no system-prompt-shape carrier; engraving rides the first-user augment');
+
+  // Cortex overlay — auth passthrough + state hiding against synthetic roots.
+  {
+    const root = join(tmpdir(), `cortex-overlay-check-${process.pid}-${Date.now()}`);
+    const realHome = join(root, 'real-snowflake');
+    const overlayHome = join(root, 'overlay');
+    const overlayCortex = join(overlayHome, 'cortex');
+    try {
+      // Author a realistic operator ~/.snowflake/: auth (passthrough) + state (hidden).
+      mkdirSync(join(realHome, 'cortex', 'conversations'), { recursive: true });
+      mkdirSync(join(realHome, 'cortex', 'profiles'), { recursive: true });
+      mkdirSync(join(realHome, 'cortex', 'cache'), { recursive: true });
+      mkdirSync(join(realHome, 'cortex', 'skills'), { recursive: true });
+      writeFileSync(join(realHome, 'connections.toml'), 'AUTH', 'utf8');
+      writeFileSync(join(realHome, 'config.toml'), 'CONFIG', 'utf8');
+      writeFileSync(join(realHome, 'cortex', 'mcp.json'), 'OPERATOR-MCP', 'utf8');
+
+      ensureCortexConfigOverlay(realHome, overlayHome, overlayCortex);
+
+      // Auth passthrough symlinked through (base level).
+      assert.ok(lstatSync(join(overlayHome, 'connections.toml')).isSymbolicLink(),
+        'cortex overlay must symlink connections.toml (auth passthrough)');
+      assert.equal(readlinkSync(join(overlayHome, 'connections.toml')), join(realHome, 'connections.toml'));
+      assert.ok(lstatSync(join(overlayHome, 'config.toml')).isSymbolicLink(),
+        'cortex overlay must symlink config.toml (connection config passthrough)');
+      // Auth + skills passthrough symlinked through (cortex subdir).
+      assert.ok(lstatSync(join(overlayCortex, 'cache')).isSymbolicLink(),
+        'cortex overlay must symlink cortex/cache (credential cache passthrough)');
+      assert.ok(lstatSync(join(overlayCortex, 'skills')).isSymbolicLink(),
+        'cortex overlay must symlink cortex/skills (operator skills passthrough)');
+      // Operator state must NOT leak: conversations/profiles are overlay-owned
+      // empty dirs (not symlinks to operator data); mcp.json is not exposed.
+      assert.ok(!lstatSync(join(overlayCortex, 'conversations')).isSymbolicLink(),
+        'cortex overlay conversations must be an overlay-owned dir, not a symlink to operator state');
+      assert.ok(!lstatSync(join(overlayCortex, 'profiles')).isSymbolicLink(),
+        'cortex overlay profiles must be an overlay-owned dir, not a symlink to operator state');
+      assert.ok(!existsSync(join(overlayCortex, 'mcp.json')),
+        'cortex overlay must NOT expose operator cortex/mcp.json (pi injects MCP)');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+  assert.equal(CORTEX_REAL_HOME, join(homedir(), '.snowflake'),
+    'CORTEX_REAL_HOME must be ~/.snowflake (Cortex SNOWFLAKE_HOME default)');
+
+  console.log('[check-backends] 156 assertions ok');
 } finally {
   if (prevClaude === undefined) delete process.env.CLAUDE_AGENT_ACP_COMMAND;
   else process.env.CLAUDE_AGENT_ACP_COMMAND = prevClaude;
@@ -3175,6 +3306,8 @@ async function collectModels(envOverride) {
     'gpt-5.4-mini',
     'gpt-5.5',
     'gemini-3.1-pro-preview',
+    'cortex-auto',
+    'cortex-claude-sonnet-4-6',
   ].sort();
   const actualIds = [...models.keys()].sort();
   assert.deepEqual(
@@ -3265,7 +3398,28 @@ async function collectModels(envOverride) {
     );
   }
 
-  console.log('[check-models] pass 1 (curated surface + Claude defaults + codex source + gemini source): ok');
+  // Cortex curated surface — hand-built (pi-ai has no cortex/snowflake source).
+  // The `cortex-` prefix keeps ids out of collision with the anthropic curated
+  // rows; contextWindow is a hand-set conservative default (Cortex reports the
+  // live window via its own ACP session config, not this metadata).
+  const CORTEX_EXPECTED_CTX = {
+    'cortex-auto': 200000,
+    'cortex-claude-sonnet-4-6': 200000,
+  };
+  for (const [id, expected] of Object.entries(CORTEX_EXPECTED_CTX)) {
+    const m = models.get(id);
+    assert.ok(m, `curated Cortex model missing: ${id}`);
+    assert.equal(
+      m.contextWindow, expected,
+      `${id} contextWindow should be the hand-curated ${expected}, got ${m.contextWindow}`,
+    );
+  }
+  // The native model id MUST NOT leak unprefixed (it would collide with the
+  // Claude curated row and route to the wrong backend).
+  assert.ok(!models.has('claude-sonnet-4-6') || models.get('claude-sonnet-4-6').name?.startsWith('Claude'),
+    'cortex must expose claude-sonnet-4-6 only behind the cortex- prefix, never as a bare collision');
+
+  console.log('[check-models] pass 1 (curated surface + Claude defaults + codex source + gemini source + cortex curated): ok');
 }
 
 // --- Pass 2: explicit override respected ---
@@ -4715,6 +4869,9 @@ case "$cmd" in
     ;;
   smoke-gemini)
     smoke_test "$TARGET_PROJECT_DIR" gemini
+    ;;
+  smoke-cortex)
+    smoke_test "$TARGET_PROJECT_DIR" cortex
     ;;
   smoke-all)
     smoke_all "$TARGET_PROJECT_DIR"

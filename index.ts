@@ -99,6 +99,8 @@ type ProviderSettings = {
 	disallowedTools?: string[];
 	/** codex-rs feature keys to disable at codex-acp launch via `-c features.<key>=false`. Defaults to `DEFAULT_CODEX_DISABLED_FEATURES` (image_generation, tool_suggest, tool_search, multi_agent, apps) so the codex tool surface aligns with pi's advertised baseline. Set to `[]` to opt out entirely. Codex-only — Claude ignores it. Mirror of `disallowedTools` on the codex side. */
 	codexDisabledFeatures?: string[];
+	/** Snowflake connection name forwarded to `cortex acp serve -c <name>`. Cortex-only — the claude/codex/gemini backends ignore it. When omitted, Cortex Code uses its own default connection from `~/.snowflake/connections.toml`. */
+	cortexConnection?: string;
 };
 
 type ResolvedProviderSettings = {
@@ -114,6 +116,7 @@ type ResolvedProviderSettings = {
 	permissionAllow: string[];
 	disallowedTools: string[];
 	codexDisabledFeatures: string[];
+	cortexConnection?: string;
 	bridgeConfigSignature: string;
 };
 
@@ -246,9 +249,20 @@ const SUPPORTED_ANTHROPIC_MODEL_IDS: readonly string[] = ["claude-sonnet-4-6", "
 const SUPPORTED_CODEX_MODEL_IDS: readonly string[] = ["gpt-5.4", "gpt-5.4-mini", "gpt-5.5"] as const;
 const SUPPORTED_GEMINI_MODEL_IDS: readonly string[] = ["gemini-3.1-pro-preview"] as const;
 
+// Cortex Code routes to model families (Claude, OpenAI, …) behind the Snowflake
+// Cortex agent. pi-ai has no `snowflake`/`cortex` model source, so this surface
+// is hand-curated. The ids carry a `cortex-` prefix because Cortex's native
+// model ids (e.g. `claude-sonnet-4-6`) collide with the Claude/Codex curated
+// surface; the prefix keeps the MODELS map keys unique and lets
+// inferBackendFromModel route deterministically. resolveCortexAcpLaunch strips
+// the prefix before passing `-m <native-id>` to `cortex acp serve`
+// (`cortex-auto` → no -m flag, Cortex picks its own default).
+const SUPPORTED_CORTEX_MODEL_IDS: readonly string[] = ["cortex-auto", "cortex-claude-sonnet-4-6"] as const;
+
 const SUPPORTED_ANTHROPIC_SET = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);
 const SUPPORTED_CODEX_SET = new Set(SUPPORTED_CODEX_MODEL_IDS);
 const SUPPORTED_GEMINI_SET = new Set(SUPPORTED_GEMINI_MODEL_IDS);
+const SUPPORTED_CORTEX_SET = new Set(SUPPORTED_CORTEX_MODEL_IDS);
 
 // Codex metadata must come from `openai-codex` (not `openai`). The two sources
 // diverge: `openai/gpt-5.5` declares 1,050,000 context (Chat Completions tier),
@@ -379,24 +393,42 @@ const CURATED_ANTHROPIC_MODELS = curatedAnthropicModels();
 const CURATED_CODEX_MODELS = curatedCodexModels();
 const CURATED_GEMINI_MODELS = curatedGeminiModels();
 
+// Cortex curated surface. pi-ai has no cortex/snowflake source, so we base the
+// rows on the Claude registry metadata (Cortex's default model family is
+// Claude) and override id/name/contextWindow. The `cortex-` prefix keeps the
+// ids out of collision with the anthropic curated rows. contextWindow values
+// are hand-set conservative defaults — Cortex reports the live window via its
+// own ACP session config, not through this curated metadata.
+function curatedCortexModels(): AnthropicRegistryModel[] {
+	const base = requireRegistryModel(ANTHROPIC_MODELS_ALL, "claude-sonnet-4-6");
+	return [
+		{ ...base, id: "cortex-auto", name: "Cortex · Auto", contextWindow: 200_000 },
+		{ ...base, id: "cortex-claude-sonnet-4-6", name: "Cortex · Claude Sonnet 4.6", contextWindow: 200_000 },
+	];
+}
+
+const CURATED_CORTEX_MODELS = curatedCortexModels();
+
 const MODELS = Array.from(
 	new Map(
-		[...CURATED_ANTHROPIC_MODELS, ...CURATED_CODEX_MODELS, ...CURATED_GEMINI_MODELS].map((model) => [
-			model.id,
-			{
-				id: model.id,
-				name: model.name,
-				reasoning: model.reasoning,
-				input: model.input,
-				cost: model.cost,
-				contextWindow: SUPPORTED_ANTHROPIC_SET.has(model.id)
-					? resolveClaudeModelContextWindow(model)
-					: SUPPORTED_GEMINI_SET.has(model.id)
-						? resolveGeminiModelContextWindow(model)
-						: model.contextWindow,
-				maxTokens: model.maxTokens,
-			},
-		]),
+		[...CURATED_ANTHROPIC_MODELS, ...CURATED_CODEX_MODELS, ...CURATED_GEMINI_MODELS, ...CURATED_CORTEX_MODELS].map(
+			(model) => [
+				model.id,
+				{
+					id: model.id,
+					name: model.name,
+					reasoning: model.reasoning,
+					input: model.input,
+					cost: model.cost,
+					contextWindow: SUPPORTED_ANTHROPIC_SET.has(model.id)
+						? resolveClaudeModelContextWindow(model)
+						: SUPPORTED_GEMINI_SET.has(model.id)
+							? resolveGeminiModelContextWindow(model)
+							: model.contextWindow,
+					maxTokens: model.maxTokens,
+				},
+			],
+		),
 	).values(),
 );
 
@@ -490,8 +522,14 @@ function readSettingsFile(filePath: string): ProviderSettings {
 
 	const settings = settingsBlock as Record<string, unknown>;
 	const backend = settings["backend"];
-	if (backend !== undefined && backend !== "claude" && backend !== "codex" && backend !== "gemini") {
-		throw settingsConfigError(filePath, "backend must be one of: claude, codex, gemini");
+	if (
+		backend !== undefined &&
+		backend !== "claude" &&
+		backend !== "codex" &&
+		backend !== "gemini" &&
+		backend !== "cortex"
+	) {
+		throw settingsConfigError(filePath, "backend must be one of: claude, codex, gemini, cortex");
 	}
 
 	const appendSystemPrompt = assertOptionalBoolean(settings, "appendSystemPrompt", filePath);
@@ -530,6 +568,12 @@ function readSettingsFile(filePath: string): ProviderSettings {
 	const disallowedTools = parseStringArray(settings, "disallowedTools", filePath);
 	const codexDisabledFeatures = parseStringArray(settings, "codexDisabledFeatures", filePath);
 
+	const cortexConnectionRaw = settings["cortexConnection"];
+	if (cortexConnectionRaw !== undefined && typeof cortexConnectionRaw !== "string") {
+		throw settingsConfigError(filePath, "cortexConnection must be a string");
+	}
+	const cortexConnection = cortexConnectionRaw as string | undefined;
+
 	return {
 		backend: backend as AcpBackend | undefined,
 		appendSystemPrompt,
@@ -542,6 +586,7 @@ function readSettingsFile(filePath: string): ProviderSettings {
 		permissionAllow,
 		disallowedTools,
 		codexDisabledFeatures,
+		cortexConnection,
 	};
 }
 
@@ -622,6 +667,7 @@ function warnIfCodexFeatureGatingDisabled(rawValue: readonly string[] | undefine
 
 function inferBackendFromModel(model: Model<any>): AcpBackend {
 	// Curated-first: the allowlist determines routing deterministically.
+	if (SUPPORTED_CORTEX_SET.has(model.id)) return "cortex";
 	if (SUPPORTED_CODEX_SET.has(model.id)) return "codex";
 	if (SUPPORTED_ANTHROPIC_SET.has(model.id)) return "claude";
 	if (SUPPORTED_GEMINI_SET.has(model.id)) return "gemini";
@@ -632,8 +678,10 @@ function inferBackendFromModel(model: Model<any>): AcpBackend {
 	if (ANTHROPIC_MODEL_IDS.has(model.id)) return "claude";
 	if (GEMINI_MODEL_IDS.has(model.id)) return "gemini";
 	// Last-resort prefix routing — keeps explicit-backend operators productive
-	// when they pass a model id outside any registered source. gpt-/o-/codex-
-	// → codex; gemini- → gemini; everything else → claude.
+	// when they pass a model id outside any registered source. cortex- → cortex
+	// (checked first so `cortex-claude-...` does not fall through to claude);
+	// gpt-/o-/codex- → codex; gemini- → gemini; everything else → claude.
+	if (model.id.startsWith("cortex-")) return "cortex";
 	if (model.id.startsWith("gpt-") || model.id.startsWith("o") || model.id.startsWith("codex")) return "codex";
 	if (model.id.startsWith("gemini-")) return "gemini";
 	return "claude";
@@ -696,6 +744,11 @@ function loadProviderSettings(cwd: string, model: Model<any>): ResolvedProviderS
 	// explicit-empty case and warn — see warnIfCodexFeatureGatingDisabled().
 	const codexDisabledFeatures = merged.codexDisabledFeatures ?? [...DEFAULT_CODEX_DISABLED_FEATURES];
 	warnIfCodexFeatureGatingDisabled(merged.codexDisabledFeatures);
+	// Cortex connection — env override wins over settings so an operator can pin
+	// a connection per-shell without editing settings.json. Empty/whitespace is
+	// normalized to undefined (Cortex falls back to its own default connection).
+	const cortexConnection =
+		(process.env.PI_SHELL_ACP_CORTEX_CONNECTION?.trim() || merged.cortexConnection?.trim()) || undefined;
 	const mergedMcpServersRaw: McpServerInputMap = {
 		...(globalSettings.mcpServers ?? {}),
 		...(projectSettings.mcpServers ?? {}),
@@ -714,6 +767,7 @@ function loadProviderSettings(cwd: string, model: Model<any>): ResolvedProviderS
 		permissionAllow,
 		disallowedTools,
 		codexDisabledFeatures,
+		cortexConnection,
 		bridgeConfigSignature: JSON.stringify({
 			backend,
 			appendSystemPrompt,
@@ -725,6 +779,7 @@ function loadProviderSettings(cwd: string, model: Model<any>): ResolvedProviderS
 			permissionAllow,
 			disallowedTools,
 			codexDisabledFeatures,
+			cortexConnection,
 		}),
 	};
 }
@@ -962,6 +1017,12 @@ function streamShellAcp(
 			const claudeEngraving = providerSettings.backend === "claude" ? engraving : null;
 			const codexEngraving = providerSettings.backend === "codex" ? engraving : null;
 			const geminiEngraving = providerSettings.backend === "gemini" ? engraving : null;
+			// Cortex has no dedicated system-prompt-shape carrier (no
+			// `_meta.systemPrompt`, no `developer_instructions`, no
+			// `GEMINI_SYSTEM_MD`). The engraving therefore rides the first-user
+			// pi-context augment instead — folded into bootstrapPromptAugment
+			// below. Documented surface asymmetry, not a hidden carrier.
+			const cortexEngraving = providerSettings.backend === "cortex" ? engraving : null;
 
 			const systemPromptParts = [baseSystemPrompt, claudeEngraving ?? undefined].filter(
 				(part): part is string => typeof part === "string" && part.length > 0,
@@ -988,6 +1049,14 @@ function streamShellAcp(
 				mcpServerNames: providerSettings.mcpServers.map((s) => s.name),
 				emacsAgentSocket,
 			});
+			// Cortex-only: prepend the operator engraving to the augment, since
+			// Cortex has no higher-authority identity carrier (see cortexEngraving
+			// above). The other three backends deliver the engraving through their
+			// system-prompt-shape carrier and leave the augment identity-free.
+			const mergedBootstrapPromptAugment =
+				cortexEngraving && cortexEngraving.length > 0
+					? `${cortexEngraving}\n\n${bootstrapPromptAugment}`
+					: bootstrapPromptAugment;
 
 			bridgeSession = await ensureBridgeSession({
 				sessionKey,
@@ -996,9 +1065,10 @@ function streamShellAcp(
 				modelId: model.id,
 				piSessionId,
 				systemPromptAppend: mergedSystemPromptAppend,
-				bootstrapPromptAugment,
+				bootstrapPromptAugment: mergedBootstrapPromptAugment,
 				codexDeveloperInstructions,
 				geminiSystemPromptText,
+				cortexConnection: providerSettings.cortexConnection,
 				emacsAgentSocket,
 				settingSources: providerSettings.settingSources,
 				strictMcpConfig: providerSettings.strictMcpConfig,
