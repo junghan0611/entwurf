@@ -17,6 +17,7 @@
   (a) **릴리즈 컷**: v2-only 마일스톤을 CHANGELOG+CalVer 태그로 박음 (`tag-release` 스킬, CHANGELOG의 옛 "MUST PASS=17"→현재 floor MUST 6 갱신 동반).
   (b) **Phase B 시작**: rename(`pi-shell-acp`→`entwurf`) — 아래 "Phase B 잔여" 묶음을 새 브랜치에서 절삭.
   (c) **merge**: v2-only를 main으로.
+- **URGENT README/install doc debt (oracle 2026-06-17 incident)**: v2/meta 설치 가이드에 반드시 명시할 것 — checkout/pull/branch-switch 후 `pnpm install`; Claude Code를 garden-native meta-session으로 쓰는 canonical path는 `./run.sh install-meta-bridge`; 검증은 `./run.sh doctor-meta-bridge` + `claude mcp get pi-tools-bridge`(중립 cwd `/tmp`에서도 USER scope Connected). 소스 갱신 후에는 `pnpm install && ./run.sh install-meta-bridge` 재실행. 수동 `~/.mcp.json`/project MCP 등록은 plain external/debug용으로 격하.
 - **Blocker**: none. (push/tag/merge = GLG)
 - **Read**: `AGENTS.md`(v2-only baseline) + 이 파일 LEDGER.
 - **Do not touch**: rename(이 브랜치 범위 밖) / `core.hooksPath` / `~/repos/gh/entwurf` 셸(Phase B destination).
@@ -38,6 +39,7 @@
   "무에서 새 형제 생성" verb 없음. 이 능력 구멍은 *문서화된 의도*(silent 아님). 그동안 "새 분신 생성" 데일리드라이버로 안 씀.
 
 ## Phase B 잔여 (rename 단계에서 묶어 절삭 — 여기서 안 건드림)
+- **README 재작성/설치 가이드 보정**: 현 README는 ACP/v1 잔상이 많고 Claude Code 섹션이 수동 MCP 등록을 추천처럼 보이게 함. v2/meta 기준으로는 `install-meta-bridge`가 USER-scope MCP + plugin + managed settings를 설치하는 정식 경로다. 실패 해석도 포함: `pi-tools-bridge Failed to connect` ⇒ stale `node_modules`/pi version/import failure, 먼저 `pnpm install`; `deployed writer STALE` ⇒ Claude plugin cache stale, `./run.sh install-meta-bridge`; `not USER-scope+Connected` ⇒ project `.mcp.json`만으로 부족.
 - **rename 본체**: `getRegistryRouting`(`entwurf-core.ts:991,1089`) 하드코딩 `provider:"pi-shell-acp"` /
   `scripts/resolve-acp-bridge.ts`(orphan 심화 확정) / `mcp/index.ts` description 문자열.
 - **dead export**: `entwurf-core.ts`의 `runEntwurfSync`/`runEntwurfResumeSync`(호출처 0) — 라우팅 잔여와 얽혀 rename 직전 절삭 (GPT 확인).
