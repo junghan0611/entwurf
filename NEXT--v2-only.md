@@ -213,9 +213,14 @@ spawn은 device-local 전역 package에 의존하지 않고 **`--no-extensions -
 - `pnpm check` PASS.
 - `SMOKE_RGG_POSITIVE=0 ./run.sh smoke-resident-garden-guard` PASS=30 FAIL=0 (0-token 경로). `/new` cancel 해소 확인.
 - `LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live` PASS=17 (model-in-loop 없음, real control socket + mailbox).
-- 아직 미실행: `smoke-entwurf-v2-spawn-resume-live` / 전체 `LIVE=1 ./run.sh release-gate ...` / model-in-loop positives.
+- `LIVE=1 ./run.sh release-gate /tmp/pi-shell-acp-live-scratch` (PWD=scratch) 결과:
+  - **MUST PASS=6 FAIL=0 SKIP=0**: static / smoke-session-id-name / RGG deterministic / check-bridge /
+    matrix-live / spawn-resume-live 전부 green.
+  - **BEHAVIOR FAIL=1 advisory**: RGG positive T3에서 model이 `entwurf_self`를 실제로 호출하지 않아
+    `selfEnvelopeSessionIds=[]` (positive garden turn 자체는 PASS). 컷 차단 아님, 0.11.x usability lane.
 
-남은 해석: hejdev6의 RGG `/new` FAIL은 pi event drift가 아니라 stale/global topology artifact였음이 thinkpad repo-under-test 주입으로 재확인됨.
+해석: hejdev6의 RGG `/new` FAIL은 pi event drift가 아니라 stale/global topology artifact였음이 thinkpad repo-under-test 주입과
+전체 LIVE MUST green으로 재확인됨.
 
 ## GPT 리뷰 반영 (2026-06-17, 이번 커밋)
 
@@ -229,16 +234,13 @@ spawn은 device-local 전역 package에 의존하지 않고 **`--no-extensions -
 ## 다음 한 걸음
 
 → **노트북 이어받기 (우선순위 순):**
-1. **전체 LIVE release-gate 재실행** — topology repo-under-test WIP + RGG 0-token green + matrix-live green은 확인됨. 이제
-   `LIVE=1 ./run.sh release-gate /path/to/scratch`로 MUST 6 전체를 다시 세워 green 로그를 만든다(토큰 사용 승인 필요; spawn-resume/model-in-loop 포함).
-2. **LIVE 결과 반영** — green/fail에 따라 NEXT/CHANGELOG 갱신 및 필요 시 후속 커밋.
+1. **setup_all Axis 1 follow-up** — `setup_all`이 아직 `session-messaging`+`sentinel`을 Axis 1로 실행 → 같은 v1/ACP
+   이유로 깨짐. install 경로라 A 밖이었지만 같은 처분 필요(drop 또는 v2 rewrite 전까지 fail-loud).
+2. **CHANGELOG MUST-PASS 카운트** — 옛 "MUST PASS=17"은 삭제 이전 로그. 현재 floor=MUST 6. LIVE MUST green 기준으로 갱신.
 3. **B = 배포 위생(D1)** — 별도 결정. 이번 gate는 deployment-smoke가 아니므로 전역 `pi-shell-acp`를 v2-only로 올릴지 여부는
    daily 운용 판단으로 분리.
-4. **setup_all Axis 1 follow-up** — `setup_all`이 아직 `session-messaging`+`sentinel`을 Axis 1로 실행 → 같은 v1/ACP
-   이유로 깨짐. install 경로라 A 밖이었지만 같은 처분 필요(drop 또는 v2 rewrite 전까지 fail-loud).
-5. **session-messaging / sentinel v2 재작성** — `entwurf_v2` surface 기준(drop이 아니라 재작성 결정 시).
-6. **CHANGELOG MUST-PASS 카운트** — 옛 "MUST PASS=17"은 삭제 이전 로그. 현재 floor=MUST 6. topology 닫혀 green 로그 나온 뒤 갱신.
-7. **README / 라우팅 잔여(Phase B)**: README ACP 시대 재작성 / `scripts/resolve-acp-bridge.ts`(orphan 심화) /
+4. **session-messaging / sentinel v2 재작성** — `entwurf_v2` surface 기준(drop이 아니라 재작성 결정 시).
+5. **README / 라우팅 잔여(Phase B)**: README ACP 시대 재작성 / `scripts/resolve-acp-bridge.ts`(orphan 심화) /
    `getRegistryRouting` 하드코딩 `provider:"pi-shell-acp"` / `mcp/index.ts` description. rename과 묶어 절삭.
 8. **stale 주석(doc-truth)**: `scripts/sentinel-runner.sh`(225/457), `check-model-lock.ts`(31-32),
    `smoke-entwurf-v2-matrix-live.ts`(29)가 삭제된 명령 호명. Phase B doc 패스.
