@@ -107,7 +107,7 @@ const server = new McpServer({ name: "pi-tools-bridge", version: "0.1.0" });
 // (timestamp UTC, displayed in KST). `entwurf_self` is authoritative-identity
 // required: it returns either a pi-session envelope or a trusted meta-session
 // envelope (garden id from the sender marker). Plain anonymous external hosts
-// still fail. `entwurf_send` is identity-enhanced, not identity-required: a native
+// still fail. v2 delivery is identity-enhanced, not identity-required: a native
 // Claude Code meta-session with a live sender marker is replyable by garden id; an
 // explicitly wired external MCP host with no marker may still deliver (unless
 // REQUIRE is set) but is marked external/non-replyable so the receiver sees the
@@ -117,7 +117,7 @@ class EntwurfEnvelopeWiringError extends Error {
 		super(
 			`entwurf sender envelope wiring incomplete — missing env: ${missing.join(", ")}, ` +
 				"and no trusted meta-sender marker was found. This MCP child should either inherit " +
-				"PI_SESSION_ID (from entwurf-control) + PI_AGENT_ID (from pi-shell-acp/acp-bridge.ts), " +
+				"PI_SESSION_ID + PI_AGENT_ID (from an entwurf-control pi session), " +
 				"or run inside a garden-native meta-session whose SessionStart hook wrote a live " +
 				"sender marker. entwurf_self is only callable when one of those authoritative " +
 				"identity paths is present.",
@@ -305,31 +305,30 @@ function abbreviateHomeMcp(cwd: string): string {
 	return cwd;
 }
 
-// entwurf_v2 — the unified additive dispatch verb (0.11 step 5d-3b). Unlike entwurf_send
-// (which picks control-socket vs mailbox itself), entwurf_v2 hands the target + intent to
-// the 5b decider, which chooses the transport (live control-socket send / spawn-bg resume /
-// meta-mailbox enqueue) under a single per-target lock, and reports one outcome. It runs
-// IN-PROCESS here (the same production runner pi-native uses) — NOT a delegating RPC — so
-// control, mailbox, AND spawn-bg all flow through `runEntwurfV2`. Additive: entwurf_send is
-// untouched. The sender envelope is `buildSendSenderEnvelope()` verbatim (origin/replyable
-// as resolved) — v2 does NOT gate on replyability (a `wants_reply` from an external/
-// non-replyable caller is surfaced honestly, not rejected; the decider routes on target +
-// intent, not sender replyability).
+// entwurf_v2 — the unified v2 dispatch verb (0.11 step 5d-3b). It hands the
+// target + intent to the 5b decider, which chooses the transport (live
+// control-socket send / spawn-bg resume / meta-mailbox enqueue) under a single
+// per-target lock, and reports one outcome. It runs IN-PROCESS here (the same
+// production runner pi-native uses) — NOT a delegating RPC — so control,
+// mailbox, AND spawn-bg all flow through `runEntwurfV2`. The sender envelope is
+// `buildSendSenderEnvelope()` verbatim (origin/replyable as resolved) — v2 does
+// NOT gate on replyability (a `wants_reply` from an external/non-replyable caller
+// is surfaced honestly, not rejected; the decider routes on target + intent, not
+// sender replyability).
 server.tool(
 	"entwurf_v2",
 	"CANONICAL DELIVERY SURFACE for garden ids. When you have a garden id and want to reach " +
-		"whoever it names — message / reply / hand-off — use THIS verb, not entwurf_send: a garden id " +
-		"alone does not tell you whether the target is a live pi session, a dormant pi session, or a " +
+		"whoever it names — message / reply / hand-off — use THIS verb. A garden id alone does " +
+		"not tell you whether the target is a live pi session, a dormant pi session, or a " +
 		"Claude Code meta-session, and entwurf_v2 is the one surface that reads that for you and routes " +
 		'correctly (so "when unsure which transport, use entwurf_v2"). You give the target ' +
 		"garden id + your intent; the decider picks the transport from the target's liveness " +
 		"(live pi → control-socket send; dormant pi → spawn-bg resume; active deliverable self-fetch " +
 		"citizen → meta-bridge mailbox) under the v2 lock policy (pi paths per-target lock; mailbox " +
 		"lock-free, guarded by active-receiver deliverability), and reports ONE outcome " +
-		"(delivered / rejected / lock-retained / delivered-but-lock-dirty). Additive to " +
-		"entwurf_send (the lower-level direct-send compat surface); the decider — not the caller — " +
-		"chooses the transport. Note: entwurf_v2 dispatches to EXISTING targets; creating a brand-new " +
-		"sibling is still the v1 `entwurf` verb. " +
+		"(delivered / rejected / lock-retained / delivered-but-lock-dirty). The decider — not the " +
+		"caller — chooses the transport. Note: entwurf_v2 dispatches to EXISTING targets; " +
+		"brand-new sibling creation is deferred to a later v2 lane. " +
 		"intent: fire-and-forget (a send with no owned result) or owned-outcome (you own the " +
 		"result). mode/wants_reply apply to a live send. Use entwurf_peers to discover targets. " +
 		"Payload guidance: message hard cap 16000 chars. For larger reviews/logs, write an " +
@@ -370,8 +369,8 @@ server.tool(
 
 server.tool(
 	"entwurf_self",
-	"Return this caller's authoritative identity envelope — the same fields entwurf_send " +
-		"would attach as the sender when a replyable identity exists. Use to confirm WHO you " +
+	"Return this caller's authoritative identity envelope — the same sender fields v2 delivery " +
+		"attaches when a replyable identity exists. Use to confirm WHO you " +
 		"are (agentId, sessionId), FROM WHERE (cwd), and WHEN this snapshot was taken. " +
 		"Works for pi sessions (PI_SESSION_ID / PI_AGENT_ID) and garden-native meta-sessions " +
 		"(trusted SessionStart sender marker → garden id). Throws for plain anonymous external " +
@@ -419,16 +418,15 @@ server.tool(
 	"entwurf_peers",
 	"List the entwurf fact surface: garden citizens (from meta-records) AND record-less control " +
 		"sockets, each with its liveness. A legacy `sessions` projection (alive pi sessions only) is " +
-		"retained for old consumers. Pair with entwurf_send to address a peer by garden id. " +
+		"retained for old consumers. Pair with entwurf_v2 to address a peer by garden id. " +
 		"This reports FACTS, never verbs: `liveness` is a fact (alive/dead/indeterminate, or " +
 		"`unsupported` for a backend with no control-socket probe such as claude-code); the dispatch " +
 		"decision (send vs resume) is computed LATER by the entwurf_v2 contract from that liveness, " +
 		"not here. By that frozen table an alive pi citizen takes a fire-and-forget send, a dead " +
-		"(dormant) pi citizen an owned resume, and an `unsupported` citizen falls outside the table " +
-		"(legacy send / future mailbox amendment) — but this surface carries no per-row routing field. " +
-		"Note: this is the *active* world. It is NOT how you discover saved entwurf sessions — those " +
-		"live as JSONL under ~/.pi/agent/sessions, addressed via entwurf_resume; their processes may " +
-		"already have exited.",
+		"(dormant) pi citizen an owned resume, and an active deliverable self-fetch citizen takes " +
+		"the meta-mailbox path — but this surface carries no per-row routing field. " +
+		"Note: this is the *active* world. It is NOT a fresh-sibling creation surface; pass an " +
+		"existing garden id to entwurf_v2.",
 	{},
 	async () => {
 		try {
@@ -459,7 +457,7 @@ server.tool(
 server.tool(
 	"entwurf_inbox_read",
 	"Read (drain) your own meta-bridge inbox and stamp the read-receipt. The receiver half of " +
-		"entwurf_send's meta-bridge path: when a doorbell notice announces unread mail (the notice " +
+		"the v2 meta-mailbox path: when a doorbell notice announces unread mail (the notice " +
 		"carries your garden id), call this with that garden id. Returns every unread message body and " +
 		"archives each so a re-read never double-returns. The act of reading is what marks the read " +
 		"receipt on your meta-record: THIS is the honest D7 receipt — for a self-fetch backend like " +

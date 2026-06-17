@@ -1258,11 +1258,7 @@ export default function (pi: ExtensionAPI) {
 }
 
 // ============================================================================
-// Tool: entwurf_send
-// ============================================================================
-
-// ============================================================================
-// Tool: entwurf_v2 (5d-3a) — the unified additive dispatch verb
+// Tool: entwurf_v2 (5d-3a) — the unified v2 dispatch verb
 // ============================================================================
 //
 // The v2 runner + production deps live in the `.ts`-extension fence (excluded from
@@ -1298,8 +1294,8 @@ interface EntwurfSelfAddressModule {
  * Decorate a local pi sender envelope with its HONEST replyability (SE-1 slice 2e-a).
  * The old code hardcoded replyability to true from env presence; a pi session running
  * without --entwurf-control has a session id but no control socket, so a reply silently fails.
- * Route both the v2 senderProvider and the legacy mailbox fallback through the shared
- * computeSelfAddressability truth table: replyable ⟺ the canonical socket exists (existsSync
+ * Route the v2 senderProvider through the shared computeSelfAddressability truth table:
+ * replyable ⟺ the canonical socket exists (existsSync
  * — slice-1 level, NOT a listener probe; deeper liveness is a separate hardening slice).
  */
 function decoratePiSenderAddressability(sender: SenderEnvelope, compute: SelfAddressabilityFn): SenderEnvelope {
@@ -1362,15 +1358,15 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 		name: "entwurf_v2",
 		label: "Dispatch (v2)",
 		description: `CANONICAL delivery surface for a garden id. When you have a garden id and want to
-reach whoever it names — message / reply / hand-off — use THIS verb, not entwurf_send: a garden id
-alone does not reveal whether the target is a live pi session, a dormant pi session, or a Claude Code
-meta-session, and entwurf_v2 is the one surface that reads that and routes correctly (so "when unsure
-which transport, use entwurf_v2"). It dispatches to EXISTING targets; creating a brand-new sibling is
-still the v1 \`entwurf\` verb. Dispatch to a garden citizen through the unified entwurf_v2 verb: the 5b
-decider picks the transport (live control-socket send / spawn-bg resume / meta-mailbox
-enqueue) from the target's liveness + your intent, runs it under the v2 lock policy (pi paths take a
-per-target lock; the mailbox path is lock-free, guarded by active-receiver deliverability),
-and reports one outcome (delivered / rejected / lock-retained / delivered-but-lock-dirty).
+reach whoever it names — message / reply / hand-off — use THIS verb. A garden id alone does not
+reveal whether the target is a live pi session, a dormant pi session, or a Claude Code meta-session,
+and entwurf_v2 is the one surface that reads that and routes correctly (so "when unsure which
+transport, use entwurf_v2"). It dispatches to EXISTING targets; brand-new sibling creation is deferred
+to a later v2 lane. Dispatch to a garden citizen through the unified entwurf_v2 verb: the 5b decider
+picks the transport (live control-socket send / spawn-bg resume / meta-mailbox enqueue) from the
+target's liveness + your intent, runs it under the v2 lock policy (pi paths take a per-target lock;
+the mailbox path is lock-free, guarded by active-receiver deliverability), and reports one outcome
+(delivered / rejected / lock-retained / delivered-but-lock-dirty).
 
 - target: the garden id of the citizen to reach (required).
 - intent: fire-and-forget (a send with no owned result) or owned-outcome (you own the result).
@@ -1378,7 +1374,7 @@ and reports one outcome (delivered / rejected / lock-retained / delivered-but-lo
 - mode: steer or follow_up for a live send (optional).
 - wants_reply: reply hint for a live send (optional, default false).
 
-This is additive to entwurf_send; the decider — not this surface — chooses the transport.`,
+The decider — not this surface — chooses the transport.`,
 		parameters: entwurfV2Parameters,
 		async execute(
 			_toolCallId: string,
@@ -1544,7 +1540,7 @@ function registerControlSessionsCommand(pi: ExtensionAPI, setSessions: (sessions
 // empty garden-native session file and ctx.switchSession()es into it: switchSession
 // runs SessionManager.open(file), which reads the garden header id BEFORE
 // session_start, so the backend/bridge identity (PI_SESSION_ID, control socket,
-// ACP stream sessionId) binds to the garden id from the first moment — no torn
+// backend sessionId) binds to the garden id from the first moment — no torn
 // identity. The whole path runs at 0 tokens (it's a command, not a model turn) and
 // is headless-testable via RPC `prompt "/gnew"` (session.prompt intercepts the
 // leading slash → the registered command handler, whose ctx has switchSession).

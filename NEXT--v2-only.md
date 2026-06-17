@@ -219,6 +219,9 @@ spawn은 device-local 전역 package에 의존하지 않고 **`--no-extensions -
   - **BEHAVIOR FAIL=1 advisory**: RGG positive T3에서 model이 `entwurf_self`를 실제로 호출하지 않아
     `selfEnvelopeSessionIds=[]` (positive garden turn 자체는 PASS). 컷 차단 아님, 0.11.x usability lane.
 - `./run.sh setup /tmp/pi-shell-acp-setup-scratch` PASS: install + pi-tools-bridge v2 install smoke green.
+- thinkpad daily wiring 확인: `~/.pi/agent/settings.json` → `agent-config/pi/settings.json`, `packages[]`가
+  `~/repos/gh/pi-shell-acp` 체크아웃(v2-only)을 직접 가리킴, MCP tools/list는 v2 4도구만 노출.
+  Active tool descriptions/package metadata에서 v1 `entwurf_send`/ACP bridge 안내 제거.
 
 해석: hejdev6의 RGG `/new` FAIL은 pi event drift가 아니라 stale/global topology artifact였음이 thinkpad repo-under-test 주입과
 전체 LIVE MUST green으로 재확인됨.

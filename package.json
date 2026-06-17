@@ -1,7 +1,7 @@
 {
 	"name": "@junghanacs/pi-shell-acp",
 	"version": "0.11.0",
-	"description": "ACP bridge providing Claude Code, Codex, and Gemini CLI backends to pi-coding-agent, with the entwurf orchestration surface for cross-session delegation.",
+	"description": "Pi-native garden-citizen dispatch substrate and meta-bridge for entwurf v2 sessions.",
 	"license": "MIT",
 	"author": {
 		"name": "Junghan Kim",
@@ -20,14 +20,12 @@
 		"pi-package",
 		"pi-extension",
 		"pi-coding-agent",
-		"ai-provider",
-		"acp",
-		"acp-bridge",
-		"agent-client-protocol",
+		"garden-session",
+		"entwurf",
+		"dispatch",
+		"meta-bridge",
 		"claude-code",
 		"codex",
-		"gemini",
-		"gemini-cli",
 		"mcp"
 	],
 	"type": "module",
