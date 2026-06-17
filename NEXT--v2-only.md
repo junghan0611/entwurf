@@ -180,7 +180,7 @@
   D1(새 `entwurf` 키)/D3(공존+single-writer guard, takeover 금지)는 잠겼지만 **적용은 Phase B/설치 수술 때**.
 - `~/repos/gh/entwurf` 셸은 안 건드림 (Phase B destination).
 
-## A 재범위화 결과 (2026-06-17, 미커밋) — LIVE 2회 + 단독 1회로 실증
+## A 재범위화 결과 (2026-06-17, 커밋 `d7783d4`) — LIVE 2회 + 단독 1회로 실증
 
 **release-gate를 v2-native floor로 재범위화 완료** (GLG+GPT 처분안). 코드 4파일(+67/−33):
 - **retarget**: `scripts/smoke-session-id-name.ts` — 하드코딩 `--provider pi-shell-acp --model claude-sonnet-4-6`
@@ -196,36 +196,53 @@
 smoke-entwurf-v2-matrix-live / smoke-entwurf-v2-spawn-resume-live), **1 FAIL** (RGG 29/30). BEHAVIOR 1 advisory FAIL
 (RGG positives, model-in-loop). **v2 substrate(matrix-live + spawn-resume-live)는 GREEN — 테제 실증됨.**
 
-## 🔴 남은 1 MUST FAIL = RGG `/new` (조사 단위, A 밖 — deploy+pi-drift)
+## 🔴 남은 1 MUST FAIL = RGG `/new` — 진단 정정(실험): repo 코드는 정상, **stale 전역을 테스트한 탓** (pi-drift 아님)
 
 `smoke-resident-garden-guard`의 1-fail "/new was NOT cancelled — in-process uuid mint reached the hard guard".
-**provider 무관 확정**: openai-codex로 retarget해도 동일 → GPT의 "investigate"가 맞았고 provider red-herring은 제거됨.
-**근본**:
-1. RGG `/new` 테스트(`smoke-resident-garden-guard.sh:132`)는 `--no-extensions`도 `-e $REPO`도 없이 `pi --entwurf-control`
+**GPT 리뷰 + 우리 0-token 실험으로 원인 확정. 어제의 "pi 0.79.4 event drift" 가설은 폐기.**
+
+1. **topology 혼입 (GPT 핵심 지적, 코드 확증)**: RGG `/new`는 `--no-extensions`/`-e $REPO` 없이 `pi --entwurf-control`
    spawn → **repo v2-only 코드가 아니라 전역 설치본(`~/.pi/agent/git/.../pi-shell-acp` = main/v0.11.0 ACP)을 테스트**.
-2. `/new` 취소 가드 = `pi.on("session_before_switch", reason:"new") → {cancel:true}` (`entwurf-control.ts:1197-1206`).
-   이 파일은 **typecheck-제외**이고 주석(1185-1186)이 "이벤트가 decay했을 수 있으니 존재 확인 없이 재도입 말라"고 경고 →
-   **pi 0.79.4 이벤트 API drift**로 `session_before_switch`/`reason:"new"`가 안 먹는 정황.
-→ **A(코드 재범위화)로 못 고침. B(배포: 전역이 main) + pi 0.79.4 event drift 조사가 필요.** 노트북 "더 진행" 1순위.
-   확인 경로: pi 0.79.4가 `session_before_switch`를 `reason:"new"`로 여전히 emit하는지(원형 `~/repos/3rd/agent-stuff/extensions/control.ts`
-   + pi 소스 대조), RGG가 전역 대신 repo 코드를 테스트하도록 `--no-extensions -e $REPO`를 줄지(test-topology 결정).
+   같은 혼입이 `smoke-entwurf-v2-matrix-live`(C1/C1b resident spawn, `:207,260` — `-e` 없음)·
+   `smoke-entwurf-v2-spawn-resume-live`(resume child = `buildResumePiArgs`, native target이면 `explicitExtensionArgs`
+   비어 v2-control 변형이 전역 의존)에도 있음 → 현재 "v2 substrate GREEN"은 사실 **repo `runEntwurfV2` dispatch 로직
+   + 전역 main resident extension 호환성**. resident-side v2 코드(repo `entwurf-control.ts` 변경분)는 이 LIVE에서 미검증.
+2. **0-token RPC 실험 (2026-06-17)** — `/new` 취소를 전역 vs repo로 직접 비교:
+   - 전역(현 RGG, `-e` 없음): `/new` 안 막힘 (fail 재현).
+   - repo(`--no-extensions -e $REPO`): **`{"cancelled":true}` + "blocked under --entwurf-control" 메시지** →
+     **repo `/new` 가드(`entwurf-control.ts:1197`, `session_before_switch reason:"new"`)는 pi 0.79.4에서 정상 작동.**
+   → **pi event drift 아님.** repo 코드는 옳고, RGG fail은 순전히 stale 전역을 테스트한 artifact.
+3. **메커니즘 가설(미확정)**: 전역·repo 둘 다 가드를 가짐(전역 `entwurf-control.ts:1326`, repo `:1197`). 전역만 실패 →
+   전역 main이 ACP/openclaw(`acp-bridge.ts`/`index.ts`)를 함께 로드하다 0.79.4에서 **partial-load 실패**로 가드 훅
+   미등록됐을 가능성(옛 `[eval1] acp-bridge.ts ERR_MODULE_NOT_FOUND` 정황). 노트북에서 전역 extensionErrors로 확정.
+→ **A(코드)로 못 고침. fix = topology 고정(LIVE smoke에 `--no-extensions -e $REPO`) 또는 전역 deploy를 v2-only로 갱신.**
+
+## GPT 리뷰 반영 (2026-06-17, 이번 커밋)
+
+- **RGG env 통일** (GPT 2): `smoke-resident-garden-guard.sh`가 이제 다른 live smoke와 동일하게
+  `PI_SHELL_ACP_LIVE_TARGET="<provider>/<model>"`(기본 openai-codex/gpt-5.4)을 파싱. `SMOKE_RGG_*` override 유지.
+- **drop 3 legacy 정직화** (GPT 4): `xt-tool-surface`/`session-messaging`/`sentinel` usage에 `[LEGACY — broken on
+  v2-only]` 표기 + 실행 시 fail-loud warn. "on-demand 보존"이 아니라 "참조용 legacy, v2 rewrite 대기"로 명시.
+- **미반영(설계 결정 → 노트북)**: topology 고정. gate 의미(repo-under-test vs deployment-smoke)를 정하는 결정이라
+  GLG가 노트북에서 확정.
 
 ## 다음 한 걸음
 
 → **노트북 이어받기 (우선순위 순):**
-1. **RGG `/new` 조사** (위 🔴) — pi 0.79.4 `session_before_switch` drift + RGG가 전역 vs repo 코드 중 무엇을
-   테스트해야 하는지. 이게 닫히면 MUST 6/6 green 가능.
-2. **B = 배포 위생(D1)** — GLG 결정. 전역 `pi-shell-acp`가 main/ACP라 v2-only repo와 충돌(`--entwurf-control` flag) +
-   RGG가 전역을 테스트하는 근원. v2-only를 daily로 올릴지(NEXT "daily로 안 씀" 결정과 충돌)와 함께 판단.
-3. **setup_all Axis 1 follow-up** — `setup_all`(run.sh:1592, 2003-2010)이 아직 `session-messaging`+`sentinel`을
-   Axis 1 게이트로 실행 → v2-only에서 release floor와 같은 v1/ACP 이유로 실패. install 경로라 A 밖이었지만 같은 처분 필요.
-4. **session-messaging / sentinel v2 재작성** — `entwurf_v2` surface 기준으로(drop이 아니라 재작성하기로 한 경우).
-5. **CHANGELOG MUST-PASS 카운트** — 옛 "MUST PASS=17"은 삭제 이전 로그. 현재 floor=MUST 6(LIVE 5 PASS+RGG)로 교체.
-   단 RGG 닫힌 뒤 green 로그로 갱신하는 게 정확.
+1. **topology 결정 (GPT 1순위)** — release-gate LIVE smoke가 **repo code under test**인지 **전역 deployment smoke**인지
+   고정. repo-gate면 resident spawn마다 `--no-extensions -e $REPO`(또는 explicit extension injection). 이게 정해지면
+   RGG `/new`는 자동 해소(실험상 repo 코드는 green) + matrix-live/spawn-resume-live의 green도 의미가 명확해짐.
+2. **B = 배포 위생(D1)** — GLG 결정. 전역 `pi-shell-acp`가 main/ACP라 v2-only repo와 `--entwurf-control` 충돌 +
+   RGG가 전역을 테스트하는 근원. v2-only를 daily로 올릴지(NEXT "daily로 안 씀" 결정과 충돌)와 함께 판단. topology를
+   deployment-smoke로 가면 B(전역을 v2-only로)와 한 묶음.
+3. **setup_all Axis 1 follow-up** — `setup_all`이 아직 `session-messaging`+`sentinel`을 Axis 1로 실행 → 같은 v1/ACP
+   이유로 깨짐. install 경로라 A 밖이었지만 같은 처분 필요(drop 또는 v2 rewrite 전까지 fail-loud).
+4. **session-messaging / sentinel v2 재작성** — `entwurf_v2` surface 기준(drop이 아니라 재작성 결정 시).
+5. **CHANGELOG MUST-PASS 카운트** — 옛 "MUST PASS=17"은 삭제 이전 로그. 현재 floor=MUST 6. topology 닫혀 green 로그 나온 뒤 갱신.
 6. **README / 라우팅 잔여(Phase B)**: README ACP 시대 재작성 / `scripts/resolve-acp-bridge.ts`(orphan 심화) /
    `getRegistryRouting` 하드코딩 `provider:"pi-shell-acp"` / `mcp/index.ts` description. rename과 묶어 절삭.
-7. **stale 주석(doc-truth, 기능 무영향)**: `scripts/sentinel-runner.sh`(225/457), `scripts/check-model-lock.ts`(31-32),
-   `scripts/smoke-entwurf-v2-matrix-live.ts`(29)가 삭제된 명령 호명. Phase B doc 패스.
+7. **stale 주석(doc-truth)**: `scripts/sentinel-runner.sh`(225/457), `check-model-lock.ts`(31-32),
+   `smoke-entwurf-v2-matrix-live.ts`(29)가 삭제된 명령 호명. Phase B doc 패스.
 
 ## 넘으면 안 되는 선
 
