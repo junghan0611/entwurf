@@ -1176,6 +1176,18 @@ check_acp_provider_surface() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-provider-surface.ts)
 }
 
+check_acp_sdk_surface() {
+  # Deterministic gate for the S2a ACP SDK dependency surface. Pins the three
+  # ACP runtime deps to the 0.11.0 oracle versions (@agentclientprotocol/sdk
+  # 0.22.1 + claude-agent-acp 0.39.0 + @anthropic-ai/sdk 0.100.1), locks the
+  # peer-resolution that keeps claude-agent-sdk satisfiable (0.100.1, not the
+  # stale 0.91.1), asserts the wire SDK still value-exports the symbols the raw
+  # turn needs (silent-rename gate), and forbids any source-level anthropic SDK
+  # import / API-client use (the anthropic dep is a peer-pin ONLY).
+  section "ACP SDK surface (S2a dep pin + peer-resolution + no-client-use)"
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-sdk-surface.ts)
+}
+
 check_pack() {
   # Dry-run tarball invariant gate for the public npm surface.
   #
@@ -2235,6 +2247,9 @@ case "$cmd" in
     ;;
   check-acp-provider-surface)
     check_acp_provider_surface
+    ;;
+  check-acp-sdk-surface)
+    check_acp_sdk_surface
     ;;
   check-pack)
     check_pack
