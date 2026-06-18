@@ -19,8 +19,13 @@
 // random / env-time. `bridgeConfigSignature` folds this string into its
 // `appendSystemPrompt` slot — if the rendered carrier drifted turn-to-turn, the
 // signature would drift and pi-shell-acp would rebuild the ACP session every
-// turn. The default-path source is cached once for exactly this reason; the env
-// override re-reads so A/B edits are picked up on the next bootstrap.
+// turn. The default-path source is cached once for exactly this reason, so a
+// resident's carrier never drifts mid-session. The env-override path instead
+// re-reads on EVERY call: editing that file mid-session INTENTIONALLY drifts the
+// rendered carrier → bridgeConfigSignature changes → the live session is judged
+// incompatible and the next turn opens a fresh ACP session with the new carrier.
+// That per-turn rebuild is the accepted cost of the A/B opt-in surface, never the
+// shipped default (which stays cached precisely so a resident never rebuilds).
 
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";

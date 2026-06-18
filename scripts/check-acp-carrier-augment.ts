@@ -28,6 +28,7 @@ import { buildAcpPrompt, contextToAcpPrompt } from "../pi-extensions/lib/acp/con
 import { loadEngraving } from "../pi-extensions/lib/acp/engraving.ts";
 import { bridgeConfigSignature, contextMessageSignatures } from "../pi-extensions/lib/acp/session-store.ts";
 import { buildClaudeSessionMeta } from "../pi-extensions/lib/acp/tool-surface.ts";
+import { ENTWURF_PROJECT_CONTEXT_OPEN_TAG } from "../protocol.js";
 
 const tmp = mkdtempSync(join(tmpdir(), "acp-carrier-augment-"));
 const BRIDGE_MARK = "operating through pi-shell-acp";
@@ -228,7 +229,10 @@ function ctxWith(firstUser: string): Context {
 	assert.ok(plain[0].text.includes(cwdHeading), "no entwurf marker → cwd AGENTS.md section is kept");
 
 	// (6) entwurf-spawned first user → marker present → cwd section dropped, home kept.
-	const entwurfFirst = `<project-context path="${join(proj, "AGENTS.md")}">\nCWD-AGENTS-CONTENT\n</project-context>\n\ndo the task`;
+	// Marker built from the SAME constant production uses (entwurf-core enrich +
+	// augment promptCarriesEntwurfCwdContext), so a future ENTWURF_PROJECT_CONTEXT_OPEN_TAG
+	// change cannot leave this gate green while real de-dup breaks (GPT c32a6c8 amber B).
+	const entwurfFirst = `${ENTWURF_PROJECT_CONTEXT_OPEN_TAG} path="${join(proj, "AGENTS.md")}">\nCWD-AGENTS-CONTENT\n</project-context>\n\ndo the task`;
 	const ctxE = ctxWith(entwurfFirst);
 	const promptText = contextToAcpPrompt(ctxE)
 		.map((b) => b.text)
