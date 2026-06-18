@@ -38,6 +38,30 @@
 - **Blocker**: none. commit/push/tag/merge = GLG.
 - **Read**: 이 파일 + **AGENTS.md**(영속 경계) + botlog 앵커 + 이슈 **#38**(ACP=plugin)/**#39**(awareness=read-only fact)/**#15**(구조청사진+트러스트경계) + (착수 시) 0.11.0 ACP 코드.
 
+# 홉 계획 + Continuity (계획이지 예언 아님 — Opus/GPT 합의 2026-06-18)
+
+> ⚠️ 이건 **끊는 흐름**을 위한 계획이지 고정 예언이 아니다. 숫자는 감각치(절대화 금지), S2 내부 설계 세부·새 파일명은 여기서 확정하지 않는다(그건 oracle A~H + 착수 시 코드가 SSOT).
+
+**3층 골격**: S1=구조 확정층 / S2=실제 backend 구현층 / PR-polish=공개·merge 준비층.
+
+- **S1 (작게 — 1 Opus + 1 GPT)**: backend turn 없이 "ACP-model `--entwurf-control` 세션이 `entwurf_peers`+`get_info`에 잡히나"만. socket-discovery가 model-agnostic이라 코드-라이트일 가능성 큼.
+  - 사전 물음표 2개(진입 첫 동작으로 차단): ① `model-lock.ts`가 ACP 모델 선택을 되돌리나 ② `pi --entwurf-control --model pi-shell-acp/…` 런치가 stub 때문에 *시작* 시 죽나(런치+peers+get_info는 턴 없음 → 안 죽어야 정상).
+- **S2-scout (S2a 앞단에 흡수 — 코드 전 핀)**: 구현 들어가기 전 아래 3개를 NEXT/코드에 **하드 제약으로 박기**(안 박으면 디버깅 지옥):
+  - billing carrier 규칙(oracle A — 400-error, 최고 위험), ACP SDK/dependency surface(버전 핀 + 사일런트 rename 게이트), local Claude ACP auth 가용성.
+- **S2 컷 (≈4~5 Opus + 2~3 GPT)** — 순서가 안전장치:
+  - **S2a** dep 핀 + stdio JSON-RPC ACP client + **raw 1턴**(overlay/augment 없이 바이트 회수).
+  - **S2b** overlay + 도구축소 + `assertExcludeToolsHonored`.
+  - **S2c** 이벤트매핑 + `streamSimple` 실 backend 교체(stub 제거). *(S2b/S2c는 합쳐질 수 있음)*
+  - **S2d** session store/signature/reuse + billing carrier(engraving) + first-user augment. **⛔ 앞당기지 말 것 — raw pipe(S2a)가 먼저 살아야 안전.**
+  - **S2e** live smoke + 게이트 + RGG.
+- **PR-polish (1~2 Opus + 1 GPT)**: README/ROADMAP/CHANGELOG/live gate.
+- **감각치(절대화 금지)**: usable+merge까지 대략 6~8 Opus 왕복 / 4~5 GPT 리뷰.
+
+**Continuity rule (꼭 지킬 것)**:
+> Do not rotate Opus and GPT at the same time. The GPT/Codex session is the review/continuity anchor; Opus can be re-minted from NEXT + AGENTS + botlog + the latest GPT review. If GPT must rotate, first write a short review-state into NEXT or botlog.
+
+- 즉 **어느 컷에서도 Opus·GPT 둘 다 동시에 새로 가지 않는다.** 기본: GPT 세션(현 `20260618T080922-be0e35`)을 anchor로 살려두고 Opus만 re-mint. (이번 S0가 그 키트로 깨끗이 re-mint된 게 증거.) 깨지는 경우 = 둘 다 새로 갈 때 → GPT 닫기 전 review-trail을 NEXT/botlog에 남길 것.
+
 # 0.11.0 behavior oracle — 구현 reference (소모성)
 
 > ⚠️ 다른 문서로 새지 말 것 — 여기가 **유일 사본**. 구현 끝나면 코드/CHANGELOG로 승격 후 이 섹션 삭제.
@@ -82,7 +106,7 @@
 - **README 재작성**: "v2 core + ACP plugin" 프레임 — 구현 후(위 재triage 참조).
 
 # 넘으면 안 되는 선
-- **다음 세션 첫 coding = S0(loader/fence/pack)만.** backend 구현·socket/peers/`entwurf_v2`/v2 core 손대기 금지. **v1 `entwurf`/`entwurf_send`/`entwurf_resume` 절대 부활 금지.** (이번 세션은 코드 0줄로 마감.)
+- **다음 coding = S1(socket-citizen 증명)만 — S0는 DONE(`4afa58e`).** S1은 backend turn 안 함: ACP-model `--entwurf-control` 세션이 `entwurf_peers`에 뜨고 `get_info`에 답하는 것만 증명(fail-loud stub 미접촉). **S2(실제 backend turn) 코드 금지 — 별도 큰 덩어리, 새 세션에서.** socket/peers/`entwurf_v2`/v2 core 손대기 금지. **v1 `entwurf`/`entwurf_send`/`entwurf_resume` 절대 부활 금지.**
 - **드리프트 금지**: 옛 칼날("ACP 제거 / rename")로 돌아가지 말 것. ACP는 *데리고 간다*. 흔들리면 botlog 앵커 + 원본 프롬프트 3블록 재독.
 - **경계 금지**: ACP가 다시 *중심 하네스*가 되지 말 것 — ACP는 v2 core 바깥 plugin(상세: AGENTS.md §ACP Plugin Boundary). plugin을 memory/planner/orchestrator/second harness/mailbox citizen으로 키우지 말 것.
 - **`v2-only` 브랜치 불가침**: base/지도라 보존. 작업은 이 브랜치에서만.
