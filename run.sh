@@ -872,6 +872,18 @@ smoke_acp_session_reuse_live() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-session-reuse-live.ts)
 }
 
+smoke_acp_carrier_augment_live() {
+  # S2e-1 acceptance smoke (billing carrier + first-user augment) — OUT of pnpm
+  # check, needs LIVE=1. Writes a unique secret into the scratch cwd's AGENTS.md
+  # (never the prompt) and drives one real provider turn: the reply must carry the
+  # secret (the augment rode the wire to the model) and the EMPTY default carrier
+  # must bill clean (exit 0, no HTTP-400 canary — 핀1 live). Optional tiny carrier
+  # check via SMOKE_ACP_CARRIER_PRESENT=1 (non-blocking).
+  # Model override: PI_SHELL_ACP_PROVIDER_MODEL (default claude-sonnet-4-6).
+  #   LIVE=1 ./run.sh smoke-acp-carrier-augment-live
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-carrier-augment-live.ts)
+}
+
 smoke_entwurf_v2_matrix_live() {
   # LIVE sentinel for 0.11 Stage 0 step 5d-5 (D4-b) — kept OUT of `pnpm check`. The deterministic
   # sibling (check-entwurf-v2-matrix) fixes every (target kind → transport → lock) cell over fakes
@@ -2252,6 +2264,9 @@ case "$cmd" in
     ;;
   smoke-acp-session-reuse-live)
     smoke_acp_session_reuse_live
+    ;;
+  smoke-acp-carrier-augment-live)
+    smoke_acp_carrier_augment_live
     ;;
   smoke-acp-socket-citizen-live)
     smoke_acp_socket_citizen_live
