@@ -811,6 +811,20 @@ smoke_acp_socket_citizen_live() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-socket-citizen-live.ts)
 }
 
+smoke_acp_raw_turn_live() {
+  # S2a-2 acceptance smoke (ACP plugin on v2) — OUT of pnpm check, needs LIVE=1.
+  # Drives ONE real ACP turn through the pinned Claude adapter: spawns
+  # claude-agent-acp from its resolved package bin, speaks ACP over stdio NDJSON
+  # (ndJsonStream + ClientSideConnection), runs initialize -> newSession ->
+  # (sonnet) setSessionModel -> prompt("say OK"), and asserts a live "OK" reply
+  # plus captured raw NDJSON bytes. NO provider/overlay/streamSimple/_meta — the
+  # raw backend pipe only. Launch source must be the package bin (PATH fallback
+  # fails acceptance unless PI_SHELL_ACP_RAW_TURN_ALLOW_PATH_FALLBACK=1, debug).
+  # Model override: PI_SHELL_ACP_RAW_TURN_MODEL (default claude-sonnet-4-6).
+  #   LIVE=1 ./run.sh smoke-acp-raw-turn-live
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-raw-turn-live.ts)
+}
+
 smoke_entwurf_v2_matrix_live() {
   # LIVE sentinel for 0.11 Stage 0 step 5d-5 (D4-b) — kept OUT of `pnpm check`. The deterministic
   # sibling (check-entwurf-v2-matrix) fixes every (target kind → transport → lock) cell over fakes
@@ -2081,6 +2095,9 @@ case "$cmd" in
     ;;
   smoke-entwurf-v2-matrix-live)
     smoke_entwurf_v2_matrix_live
+    ;;
+  smoke-acp-raw-turn-live)
+    smoke_acp_raw_turn_live
     ;;
   smoke-acp-socket-citizen-live)
     smoke_acp_socket_citizen_live

@@ -125,8 +125,11 @@ assert.equal(
 //     rename would not fail typecheck (type-only erasure) but would break the
 //     raw turn. Assert the *value* exports exist at runtime.
 // ---------------------------------------------------------------------------
+// ndJsonStream is value-imported by the S2a-2 raw-turn smoke; the others are
+// the connection + protocol constant the raw turn drives. (Per GPT: gate only
+// the value imports the real S2a code uses — type-only imports are erased.)
 const acpSdk = (await import("@agentclientprotocol/sdk")) as Record<string, unknown>;
-for (const sym of ["ClientSideConnection", "PROTOCOL_VERSION"]) {
+for (const sym of ["ClientSideConnection", "PROTOCOL_VERSION", "ndJsonStream"]) {
 	assert.ok(
 		sym in acpSdk,
 		`@agentclientprotocol/sdk lost value export "${sym}" — silent upstream rename; the raw ACP turn would break`,
@@ -150,7 +153,7 @@ const tracked = execFileSync("git", ["ls-files", "*.ts", "*.js", "*.mjs", "*.cjs
 // Specifier-shaped: any module binding to the anthropic SDK, in any of the
 // forms a source file could reach it — static `from`, `export ... from`,
 // side-effect `import "X"`, dynamic `import("X")`, and `require("X")`.
-const spec = String.raw`["']${ANTHROPIC_SDK.replace("/", "\\/")}["']`;
+const spec = `["']${ANTHROPIC_SDK.replace("/", "\\/")}["']`;
 const specifierPatterns: ReadonlyArray<{ re: RegExp; kind: string }> = [
 	{ re: new RegExp(String.raw`\bfrom\s+${spec}`), kind: `import/export from ${ANTHROPIC_SDK}` },
 	{ re: new RegExp(String.raw`^\s*import\s+${spec}`), kind: `side-effect import ${ANTHROPIC_SDK}` },
