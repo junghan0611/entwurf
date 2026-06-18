@@ -20,11 +20,13 @@ import {
 	contextMessageSignatures,
 	decideBootstrap,
 	deleteSessionRecord,
+	ENTWURF_CONTROL_FLAG,
 	type ExistingSession,
 	hasPrefix,
 	isCompatible,
 	parseSessionRecord,
 	readSessionRecord,
+	resolveLifecyclePolicy,
 	SESSION_RECORD_PROVIDER,
 	SESSION_RECORD_VERSION,
 	type SessionCompatFacts,
@@ -296,9 +298,30 @@ const baseInput = (): BridgeConfigInput => ({
 	}
 }
 
+// ---------------------------------------------------------------------------
+// 6) resolveLifecyclePolicy — only exact --entwurf-control is process-scoped
+// ---------------------------------------------------------------------------
+{
+	// A resident may ALSO carry -p (fire a first prompt, then stay alive) — it
+	// must still be process-scoped. Keying on -p (candidate B) would kill it.
+	const residentWithP = resolveLifecyclePolicy(["pi", ENTWURF_CONTROL_FLAG, "-p", "hi"]);
+	assert.equal(residentWithP, "process-scoped", "resident with -p is still process-scoped (B trap)");
+	assert.equal(resolveLifecyclePolicy(["pi", ENTWURF_CONTROL_FLAG]), "process-scoped", "resident → process-scoped");
+	// pi -p one-shot and plain interactive are turn-scoped (S2c hang-safe).
+	assert.equal(resolveLifecyclePolicy(["pi", "-p", "hi"]), "turn-scoped", "pi -p one-shot → turn-scoped");
+	assert.equal(resolveLifecyclePolicy(["pi"]), "turn-scoped", "interactive → turn-scoped (conservative)");
+	// Exact token only — a substring/look-alike flag must NOT qualify.
+	assert.equal(
+		resolveLifecyclePolicy(["pi", "--not-entwurf-control"]),
+		"turn-scoped",
+		"look-alike flag is not the exact token → turn-scoped",
+	);
+}
+
 console.log(
 	"[check-acp-session-store] ok — signature (pure, carrier/model drift detected), contextMessageSignatures " +
 		"(role:content, no raw image), hasPrefix/isCompatible (prefix-only, cwd/model/sig/edited drift → incompatible), " +
 		"decideBootstrap matrix (turn-scoped→always new, process reuse/resume/load/new, incompatible→invalidate, " +
-		"live model mismatch→throw), record build (injected clock) + parse validate + temp-dir roundtrip",
+		"live model mismatch→throw), record build (injected clock) + parse validate + temp-dir roundtrip, " +
+		"resolveLifecyclePolicy (exact --entwurf-control → process-scoped incl. with -p; -p/interactive/look-alike → turn-scoped)",
 );

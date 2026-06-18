@@ -35,6 +35,26 @@ export const SESSION_RECORD_PROVIDER = "pi-shell-acp" as const;
 /** Where the child survives relative to a turn — ORTHOGONAL to bootstrapPath. */
 export type LifecyclePolicy = "process-scoped" | "turn-scoped";
 
+/** The exact argv token that marks a long-lived resident pi process. */
+export const ENTWURF_CONTROL_FLAG = "--entwurf-control";
+
+/**
+ * Decide whether this pi process may keep an ACP child alive across turns. Only
+ * an explicit long-lived resident (`--entwurf-control`) is `process-scoped`;
+ * everything else — `pi -p` one-shot AND plain interactive — is `turn-scoped`
+ * (new + teardown each turn), the S2c hang-safe default (a surviving child's
+ * stdio handle would pin a one-shot pi's exit).
+ *
+ * Keyed on the resident flag, NEVER on `-p`: a resident may ALSO carry `-p`
+ * (fire a first prompt, then stay alive), so a `-p` test would kill real
+ * resident reuse. Exact-token match, not substring (`--not-entwurf-control`
+ * must NOT qualify). A future explicit pi lifecycle/mode hint would take
+ * precedence over argv, but argv is the most honest marker available today.
+ */
+export function resolveLifecyclePolicy(argv: readonly string[] = process.argv): LifecyclePolicy {
+	return argv.includes(ENTWURF_CONTROL_FLAG) ? "process-scoped" : "turn-scoped";
+}
+
 /**
  * Inputs to the config signature. Order is FIXED so the serialized hash is
  * stable across turns (a drifting key order would force a rebuild every turn).
