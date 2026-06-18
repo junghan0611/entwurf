@@ -825,6 +825,24 @@ smoke_acp_raw_turn_live() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-raw-turn-live.ts)
 }
 
+smoke_acp_overlay_live() {
+  # S2b acceptance smoke (ACP plugin on v2) — OUT of pnpm check, needs LIVE=1.
+  # One layer above the S2a raw turn: materializes the Claude config overlay
+  # (realDir = operator ~/.claude for live creds; overlay settings.json is ours,
+  # hooks:{}), spawns claude-agent-acp with CLAUDE_CONFIG_DIR=<overlay> (verified
+  # in the child's /proc/<pid>/environ), opens a session with a tool-narrowed
+  # _meta.claudeCode.options (tools + disallowedTools) and NO _meta.systemPrompt
+  # (billing carrier stays absent), then drives one live "OK" turn. NO
+  # provider/streamSimple (backend-stub stays fail-loud — that is S2c); no
+  # event-mapping/session-reuse/engraving (S2d). Does NOT diff the live
+  # meta-store for mailbox absence (flaky — concurrent sessions); the honest
+  # claim is overlay-supplies-hooks:{}. Launch must be the package bin (PATH
+  # fallback fails acceptance unless PI_SHELL_ACP_OVERLAY_ALLOW_PATH_FALLBACK=1).
+  # Model override: PI_SHELL_ACP_OVERLAY_MODEL (default claude-sonnet-4-6).
+  #   LIVE=1 ./run.sh smoke-acp-overlay-live
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-overlay-live.ts)
+}
+
 smoke_entwurf_v2_matrix_live() {
   # LIVE sentinel for 0.11 Stage 0 step 5d-5 (D4-b) — kept OUT of `pnpm check`. The deterministic
   # sibling (check-entwurf-v2-matrix) fixes every (target kind → transport → lock) cell over fakes
@@ -1200,6 +1218,30 @@ check_acp_sdk_surface() {
   # import / API-client use (the anthropic dep is a peer-pin ONLY).
   section "ACP SDK surface (S2a dep pin + peer-resolution + no-client-use)"
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-sdk-surface.ts)
+}
+
+check_acp_overlay() {
+  # Deterministic gate for the S2b Claude config overlay materializer. Drives
+  # ensureClaudeConfigOverlay against injected temp realDir/overlayDir (no
+  # operator ~/.claude touched) and asserts: settings.json hooks:{} +
+  # defaultMode default + autoMemory off; whitelisted entries symlinked;
+  # projects/sessions overlay-private real dirs (NOT symlinks); operator
+  # personal config (CLAUDE.md/settings.local.json/plugins/agents) never leaks;
+  # stale symlinks cleaned; binary-owned files preserved; CLAUDE_CONFIG_DIR
+  # launch-env planted; idempotent. Pure, no live model.
+  section "ACP overlay (S2b claude-config-overlay)"
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-overlay.ts)
+}
+
+check_acp_tool_surface() {
+  # Deterministic gate for the S2b Claude tool surface + exclude-tools
+  # truthfulness preflight. Matrix over assertExcludeToolsHonored (claude
+  # narrows via tools / native always-exposes / extension-tool exclusion is
+  # honest) + buildClaudeSessionMeta shape lock (tools/allow/disallowed/
+  # extraArgs/plugins) + the S2b billing-carrier guard (no _meta.systemPrompt
+  # unless a caller supplies one). Pure preflight — NOT a backend wire read.
+  section "ACP tool surface (S2b exclude-tools preflight + session meta)"
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-tool-surface.ts)
 }
 
 check_pack() {
@@ -2099,6 +2141,9 @@ case "$cmd" in
   smoke-acp-raw-turn-live)
     smoke_acp_raw_turn_live
     ;;
+  smoke-acp-overlay-live)
+    smoke_acp_overlay_live
+    ;;
   smoke-acp-socket-citizen-live)
     smoke_acp_socket_citizen_live
     ;;
@@ -2267,6 +2312,12 @@ case "$cmd" in
     ;;
   check-acp-sdk-surface)
     check_acp_sdk_surface
+    ;;
+  check-acp-overlay)
+    check_acp_overlay
+    ;;
+  check-acp-tool-surface)
+    check_acp_tool_surface
     ;;
   check-pack)
     check_pack
