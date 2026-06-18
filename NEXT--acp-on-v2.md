@@ -5,6 +5,15 @@
 > 영속 invariant(ACP=plugin 경계, 트러스트 경계)는 **AGENTS.md가 SSOT**. 이 파일 = *현 방향 + 구현 reference*(소모성).
 > 흔들릴 때 앵커: botlog `20260522T092950…__…mitsein_pi.org` heading `* [2026-06-18] ACP도 데리고 간다` + 그 안의 **GLG 원본 프롬프트 3블록**(요약 금지).
 
+# NOW (boot) — 다음 세션 = S2d-1b-2b 본 구현
+
+> **stem = S2d-1b-2b** (backend.ts 대수술, in-memory session reuse). 스펙은 §넘으면 안 되는 선 + §Next 핀4 + §S2d-1b 설계에 재정렬 없이 굳어 있음. 이번 세션은 셋업 + entwurf_v2 detour만 했고 1b-2b 코드는 **안 건드림**.
+> **첫 한 걸음**: GPT(`…32a6c8`)에 **1b-2b 4분기점 본문 재전송**(GPT가 재시작으로 본문 유실 — 제목만 봄, 본문 다시 보내라 요청함) → 4분기점 = ① 테스트 seam(fake connection/prompt-capture로 delta-only 직접 증명) ② sessionKey 출처(`options.sessionId`/`PI_SESSION_ID` 우선 + cwd fallback sha256) ③ model-lock throw 표면(stream error event로, 기존 live child close 금지) ④ record write 타이밍(턴 성공 후만/abort·error는 미갱신+map 제거+child close). 답 받으면 그 위에서 `backend.ts` 구현. continuity: GPT `…32a6c8` 살아있음(검수 anchor), Opus만 re-mint.
+> **커밋 대기(GLG)**: working tree = entwurf_v2 detour fix(substrate 6파일) + 이 NEXT(docs). commit/push = GLG. 권장 2커밋: `fix(entwurf-v2): live socket-only peer no longer mislabeled bad-target` / `docs(next): record entwurf_v2 detour DONE + 1b-2b stem`.
+
+## RECENT
+- **[2026-06-18] ✅ entwurf_v2 `owned×socket-only` 거짓 `bad-target` 버그 고침** (detour, 1b-2b 前 surgical). 살아있는 socket-only pi peer에 owned-outcome → 거짓 bad-target(=없는 타깃)이던 것을, decider 2b short-circuit 제거 + 새 reject reason `socket-only-no-resume-authority`로 정직화. owned×live→`owned-live-no-autosend`, owned×dormant→`socket-only-no-resume-authority`, fire×live=불변. GPT(`…32a6c8`) 5점 합의. `pnpm check` green(contract 242/decider/production PASS). **durable 디테일=커밋 메시지**. 변경: `entwurf-v2-{decider,contract}.ts` + `check-entwurf-v2-{decider,contract,production}.ts` + `smoke-entwurf-v2-matrix-live.ts`. ⚠️ **라이브 재검증 보류**: 이 세션 MCP는 편집 前 기동 → 재기동 후 owned×live-socket→owned-live-no-autosend 확인(GLG). caller 규칙: live socket-only peer엔 `fire-and-forget`(+wants_reply), owned는 record-backed dormant resume 전용.
+
 ## 목표 (한 줄)
 
 **v2 core + ACP overlay-ingress plugin.** v1은 끝. ACP는 데리고 간다 —
