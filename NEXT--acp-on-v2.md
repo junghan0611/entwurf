@@ -16,7 +16,8 @@
 - **Current**: **S0 + S1 DONE (2026-06-18).**
   - **S0 loader/fence**(커밋 `4afa58e`): `pi-extensions/acp-provider.ts`(thin entry) + `lib/acp/{models,backend-stub}.ts`, `pi.extensions` 맨 앞 등록. 큐레이트 Claude(sonnet-4-6 + opus-4-8 anchor), no-auth sentinel, **fail-loud streamSimple stub**(backend·native fallback·bash/env 우회 전부 없음). 게이트: `check-auth-boundary`(retarget) + `check-acp-provider-surface`(temp `tsc` emit → 컴파일 entry fake-pi 실행 캡처). pack stale(#4) RED→GREEN. `pnpm check`/`check-pack-install` green + 라이브 `pi --list-models`.
   - **S1 socket-citizen**(이 세션): **라이브 증명 완료** — `pi --entwurf-control --provider pi-shell-acp --model claude-opus-4-8 --mode rpc` resident가 production `entwurf_peers`에 `liveness=alive model=pi-shell-acp/claude-opus-4-8 idle=yes`로 떠서 native Codex 형제 옆 1급 시민. get_info(cwd/model/idle) 응답. **QM1**(model-lock가 ACP 모델 런치를 안 되돌림 — in-session switch에만 발화) + **QM2**(fail-loud stub은 턴에서만, 런치는 turn-free라 안 죽음) 둘 다 라이브 차단. 아티팩트: `scripts/smoke-acp-socket-citizen-live.ts` + `./run.sh smoke-acp-socket-citizen-live`(LIVE-gated, OUT of pnpm check, 10 checks PASS — GPT 검수 후 peers-visible(`scanSocketProbes`) + 소켓 잔여-0 hygiene check 추가). **턴 0회 — citizenship만 증명, backend turn은 S2.** **pushed**(`fe20436` + GPT 후속 보정).
-- **Next = S2 (실제 backend turn) — 새 세션 권장 + scout 먼저**: S2 코드 전에 **S2-scout 3핀**(billing carrier 규칙 / ACP SDK·dependency surface / local Claude ACP auth)부터 박기. 그 다음 S2a(dep+raw 1턴)→…→S2e. 상세 = §구현 순서 + 아래 §홉 계획. **overlay 활성·메일박스 부재 증명도 S2**(backend가 돌아야 가능).
+- **S2-scout DONE + GPT PASS (2026-06-18)**: 3핀 정찰 read-only 완료 → GPT(`…be0e35`) 검수 PASS. 확정값 = §S2-scout 핀(하드제약).
+- **Next = S2a (raw 1턴) — 새 세션 권장**: dep pin(0.11.0값) + SDK surface gate + stdio JSON-RPC ACP **raw 1턴까지만**. streamSimple 교체(S2c)/overlay(S2b)/session·engraving(S2d) 앞당김 금지. 상세 = §S2-scout 핀 + §구현 순서 + §홉 계획. **overlay 활성·메일박스 부재 증명은 S2b+**(backend가 돌아야 가능).
 - **잠긴 방향 (굳음)**:
   - ACP backend = overlay 격리 **소켓-시민**, 메일박스 **설계상 부재**(overlay `settings.json` `hooks:{}` → meta-bridge hook 없음 → 메일박스 없음; *같은* minimal 설정이 기본도구만 = 가벼움. 한 결정이 둘을 만듦).
   - **차별 없음 = 시민 층위**(entwurf_peers 가시 / garden id 주소화 / entwurf_v2 도달 / 응답), *레일 동일성 아님*. 메일박스 부재 = right-sizing(라이브라 "나중에 닿기" 불필요).
@@ -29,6 +30,35 @@
   4. Cortex 검증 한계 — 로컬 완전검증 불가(계정 없음), Claude만 지금 가능.
   5. fact 표면(#39) — **socket/liveness/addressability(exists / live / socket·control path / replyable·addressable)는 host `--entwurf-control` 세션이 socket-discovery로 공급**(plugin이 만드는 게 아님 — Q1 결론). ACP plugin 자신의 fact = **backend health / turn evidence**뿐. *그 이상(memory·planner) 금지.*
   6. **ACP entry/fence/pack 위치 (#15 벽 — 반만 해결, GPT 보정)** — pi extension은 **jiti로 TS 로드**(Node strip-types 아님). → 질문은 "strip-types로 로드되나"가 아니라 **"provider entry를 어디 두고, entry+내부모듈이 어떤 typecheck/runtime/pack fence를 타나"**. v2 crossing pattern은 *있음*(lib/* = root exclude → `scripts/tsconfig` allowImportingTsExtensions+noEmit; emit-root는 non-literal dynamic import로 닿음), 단 `scripts/tsconfig` include=`../pi-extensions/lib/**/*.ts`라 **top-level `acp/*`는 자동 진입 안 됨**. **택1(GPT lean=①)**: ① `pi-extensions/acp-provider.ts` entry(`package.json` `pi.extensions` 추가) + 내부 `pi-extensions/lib/acp/*`(기존 fence 탑승) / ② top-level `index.ts` 부활(v0.11 유사 — **중심성 회귀 위험**) + 새 tsconfig 경계. → **S0에서 고정**.
+
+# S2-scout 핀 — 확정값 (read-only 정찰 + GPT PASS 2026-06-18, 하드제약)
+
+> S2 코드 진입 전 디버깅 지옥 방지용. 이 3핀은 S2a~S2d 내내 불변.
+> **틀: 이건 재구현이지 port가 아니다.** 0.11.0은 동작하지만 v1 + 무거움 → behavior oracle만 이식, 구조는 새로. **pi는 4번째 하네스(Claude Code·Codex·Antigravity·pi)일 뿐, ACP는 그 pi에 붙는 plugin 하나**(중심/2번째 하네스 금지).
+
+**핀1 billing carrier (oracle A, 최고위험)** — 0.11.0 `engraving.ts` 실측:
+- `_meta.systemPrompt`가 SDK-default 모양서 material하게 멀어지면 → 구독(OAuth 정액제) billing이 metered 분류 → 잔액없는 구독자 HTTP400(캐리어 커지는 순간).
+- ⇒ 캐리어(engraving)=SHORT/empty. 리치컨텍스트(AGENTS/pi base/bridge identity/tool surface)는 `pi-context-augment.ts`가 **첫 user message에 prepend**. 캐리어 rendered=(template-on-disk, backend, mcpServerNames) **순수함수**(clock/random/env 금지 → 아니면 `bridgeConfigSignature` drift → 매턴 rebuild). Claude-only면 캐리어 1슬롯 붕괴.
+
+**핀2 ACP SDK surface** — 0.11.0 deps + registry(2026-06-18):
+- pin = `@agentclientprotocol/sdk@0.22.1` + `@agentclientprotocol/claude-agent-acp@0.39.0` (둘 다 0.11.0값). latest는 0.26.0/0.47.0(claude-agent-acp 8 minor drift) — **upstream 업그레이드는 raw turn+overlay+event mapping green 뒤 별도 lane**.
+- 사일런트 rename 없음(`@agentclientprotocol/*` 유지, pin registry 생존). spawn: `require.resolve("@agentclientprotocol/claude-agent-acp/package.json")`→bin→fallback `PATH:claude-agent-acp`.
+- **`@anthropic-ai/sdk` 직접 dep 금지** — 0.11.0 소스에 직접 import/`new Anthropic()` 0건(API client 아님). 실제는 `@anthropic-ai/claude-agent-sdk`(+platform-native) cli.js/native binary를 `require.resolve` probe→로컬 인증 claude spawn. runtime resolve 실패시 조사 대상 = `@anthropic-ai/claude-agent-sdk`(SDK API client 아님). 우선 claude-agent-acp가 transitive로 끌고 오는 걸로 충분한지 게이트 확인.
+- `@zed-industries/codex-acp` scope-out(native가 Codex 도달).
+
+**핀3 local Claude ACP auth** — 실측:
+- `claude 2.1.181` PATH ✅ / `~/.claude/.credentials.json` ✅. overlay `~/.pi/agent/claude-config-overlay/`: credentials/skills/cache/debug/session-env **symlink passthrough** + projects/sessions **로컬 격리**.
+- overlay `settings.json` = `{"permissions":{"defaultMode":"default"},"autoMemoryEnabled":false,"hooks":{}}` → `hooks:{}`=메일박스 부재 by design 실측 + autoMemory off. **claude-agent-acp 바이너리 미설치**(S2a가 dep 설치). auth=claude 바이너리가 자체 process FS에서 읽음(repo가 안 옮김 → invariant 정합).
+
+**GPT 명문 하드제약 3문장 (영속)**:
+1. First S2 implementation pins ACP deps to 0.11.0 versions; upstream upgrade is a later lane.
+2. No direct `@anthropic-ai/sdk` dependency unless source imports it; if runtime resolve fails, investigate `@anthropic-ai/claude-agent-sdk`, not the SDK API client.
+3. S2a proves bytes/one raw turn only; no overlay, no provider streamSimple replacement, no session reuse/signature, no rich carrier/augment.
+
+**S2a 경계 (GPT 확정)**: dep pin + SDK surface gate + stdio JSON-RPC ACP raw 1턴까지만. LIVE-gated · scratch cwd · `_meta.systemPrompt` 안 키우는 minimal payload(S2a에서 리치 컨텍스트/AGENTS prepend/engraving 실험 금지).
+
+**Continuity**: GPT anchor `20260618T080922-be0e35`가 이 S2-scout PASS를 끝으로 퇴근(rotate). 위 §검수 trail이 review-state. 다음 GPT는 새로 mint — 이 §S2-scout 핀 + 본 NEXT가 sync 기준.
+
 # 구현 순서 (S0 → S1 → S2 — GPT)
 
 > **첫 slice는 backend가 아니다.** 0.11.0은 behavior oracle이지 architecture oracle 아님. socket/peers/entwurf_v2/v2 core 손대기 금지, v1 부활 금지.
@@ -48,8 +78,7 @@
 
 - **S1 (작게 — 1 Opus + 1 GPT)**: backend turn 없이 "ACP-model `--entwurf-control` 세션이 `entwurf_peers`+`get_info`에 잡히나"만. socket-discovery가 model-agnostic이라 코드-라이트일 가능성 큼.
   - 사전 물음표 2개(진입 첫 동작으로 차단): ① `model-lock.ts`가 ACP 모델 선택을 되돌리나 ② `pi --entwurf-control --model pi-shell-acp/…` 런치가 stub 때문에 *시작* 시 죽나(런치+peers+get_info는 턴 없음 → 안 죽어야 정상).
-- **S2-scout (S2a 앞단에 흡수 — 코드 전 핀)**: 구현 들어가기 전 아래 3개를 NEXT/코드에 **하드 제약으로 박기**(안 박으면 디버깅 지옥):
-  - billing carrier 규칙(oracle A — 400-error, 최고 위험), ACP SDK/dependency surface(버전 핀 + 사일런트 rename 게이트), local Claude ACP auth 가용성.
+- ~~**S2-scout (S2a 앞단에 흡수 — 코드 전 핀)**~~ **DONE + GPT PASS (2026-06-18)**: 3핀 실측 + 확정값 = §S2-scout 핀. (billing carrier oracle A / ACP SDK surface / local Claude auth 전부 read-only 정찰 완료.)
 - **S2 컷 (≈4~5 Opus + 2~3 GPT)** — 순서가 안전장치:
   - **S2a** dep 핀 + stdio JSON-RPC ACP client + **raw 1턴**(overlay/augment 없이 바이트 회수).
   - **S2b** overlay + 도구축소 + `assertExcludeToolsHonored`.
@@ -108,7 +137,7 @@
 - **README 재작성**: "v2 core + ACP plugin" 프레임 — 구현 후(위 재triage 참조).
 
 # 넘으면 안 되는 선
-- **다음 coding = S2 — S0·S1 DONE.** S2는 큰 덩어리라 **새 세션 + S2-scout 3핀(billing carrier / ACP SDK surface / local Claude auth) 먼저**. S2d(billing/session reuse) 앞당김 금지 — raw pipe(S2a)가 먼저. **S2e 전엔 fail-loud stub 유지**(실 backend 교체는 S2c). socket/peers/`entwurf_v2`/v2 core 손대기 금지. **v1 `entwurf`/`entwurf_send`/`entwurf_resume` 절대 부활 금지.**
+- **다음 coding = S2a — S0·S1·S2-scout DONE(GPT PASS).** §S2-scout 핀이 하드제약. S2a = dep pin(0.11.0값: sdk 0.22.1 / claude-agent-acp 0.39.0) + SDK surface gate + raw 1턴까지만. `@anthropic-ai/sdk` 직접 dep 금지. S2d(billing/session reuse) 앞당김 금지 — raw pipe(S2a)가 먼저. **S2c 전엔 fail-loud stub 유지**. socket/peers/`entwurf_v2`/v2 core 손대기 금지. **v1 `entwurf`/`entwurf_send`/`entwurf_resume` 절대 부활 금지.**
 - **드리프트 금지**: 옛 칼날("ACP 제거 / rename")로 돌아가지 말 것. ACP는 *데리고 간다*. 흔들리면 botlog 앵커 + 원본 프롬프트 3블록 재독.
 - **경계 금지**: ACP가 다시 *중심 하네스*가 되지 말 것 — ACP는 v2 core 바깥 plugin(상세: AGENTS.md §ACP Plugin Boundary). plugin을 memory/planner/orchestrator/second harness/mailbox citizen으로 키우지 말 것.
 - **`v2-only` 브랜치 불가침**: base/지도라 보존. 작업은 이 브랜치에서만.
