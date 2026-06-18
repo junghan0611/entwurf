@@ -26,7 +26,7 @@
 import { strict as assert } from "node:assert";
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -40,6 +40,45 @@ const RAW_TAIL_CAP = 64 * 1024; // cap captured raw NDJSON to 64KB tail on repor
 function fail(msg: string): never {
 	console.error(`[smoke-acp-raw-turn-live] FAIL: ${msg}`);
 	process.exit(1);
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+// Guard each RPC so a hung backend fails this smoke instead of the outer
+// process timeout — keeps the failure attributable to the right step.
+function withTimeout<T>(label: string, p: Promise<T>, ms: number): Promise<T> {
+	return Promise.race([
+		p,
+		sleep(ms).then((): never => {
+			throw new Error(`${label} timed out after ${ms}ms`);
+		}),
+	]);
+}
+
+// SIGTERM then SIGKILL-after-grace, awaiting exit — the S1 smoke pattern.
+async function terminateChild(
+	child: ChildProcessByStdio<Writable, Readable, Readable>,
+	graceMs = 2_000,
+): Promise<void> {
+	if (child.exitCode !== null || child.signalCode !== null) return;
+	const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
+	try {
+		child.kill("SIGTERM");
+	} catch {
+		return;
+	}
+	const raced = await Promise.race([
+		exited.then(() => "exited" as const),
+		sleep(graceMs).then(() => "timeout" as const),
+	]);
+	if (raced === "timeout") {
+		try {
+			child.kill("SIGKILL");
+		} catch {
+			// already gone
+		}
+		await exited;
+	}
 }
 
 if (process.env.LIVE !== "1") {
@@ -147,18 +186,32 @@ async function main(): Promise<void> {
 		stream as any,
 	);
 
+	let failure: Error | null = null;
 	try {
+		// Acceptance precondition: the launch must be the resolved package bin.
+		if (!launch.acceptance) {
+			throw new Error("launch was a PATH fallback (debug) — not an acceptance PASS");
+		}
+
 		// 1) initialize
-		const init = await connection.initialize({
-			protocolVersion: PROTOCOL_VERSION,
-			clientCapabilities: {},
-			clientInfo: { name: "pi-shell-acp-smoke", version: "s2a-raw" },
-		} as any);
+		const init = await withTimeout(
+			"initialize",
+			connection.initialize({
+				protocolVersion: PROTOCOL_VERSION,
+				clientCapabilities: {},
+				clientInfo: { name: "pi-shell-acp-smoke", version: "s2a-raw" },
+			} as any),
+			30_000,
+		);
 		assert.ok(init, "initialize returned no result");
 		console.error(`[smoke-acp-raw-turn-live] initialize ok (protocolVersion=${(init as any)?.protocolVersion})`);
 
 		// 2) newSession — minimal: scratch cwd, no MCP, NO _meta (carrier absent).
-		const created = (await connection.newSession({ cwd: scratch, mcpServers: [] } as any)) as any;
+		const created = (await withTimeout(
+			"newSession",
+			connection.newSession({ cwd: scratch, mcpServers: [] } as any),
+			30_000,
+		)) as any;
 		const sessionId = created?.sessionId;
 		assert.ok(sessionId, "newSession returned no sessionId");
 		const available = Array.isArray(created?.models)
@@ -172,24 +225,27 @@ async function main(): Promise<void> {
 				")",
 		);
 
-		// 3) force sonnet via unstable_setSessionModel (best-effort, logged).
+		// 3) force the requested model — REQUIRED. If the adapter cannot honor
+		//    the switch, the "sonnet" claim would be a lie; fail loudly instead
+		//    of silently running the session default.
 		const setModel = (connection as any).unstable_setSessionModel;
-		if (typeof setModel === "function") {
-			try {
-				await setModel.call(connection, { sessionId, modelId: REQUESTED_MODEL_ID });
-				console.error(`[smoke-acp-raw-turn-live] model set -> ${REQUESTED_MODEL_ID}`);
-			} catch (e) {
-				console.error(`[smoke-acp-raw-turn-live] model set skipped (${(e as Error).message}) — using session default`);
-			}
-		} else {
-			console.error("[smoke-acp-raw-turn-live] unstable_setSessionModel unsupported — using session default");
+		if (typeof setModel !== "function") {
+			throw new Error(
+				`unstable_setSessionModel unsupported — cannot enforce ${REQUESTED_MODEL_ID}; S2a requires honest model enforcement`,
+			);
 		}
+		await withTimeout("setSessionModel", setModel.call(connection, { sessionId, modelId: REQUESTED_MODEL_ID }), 30_000);
+		console.error(`[smoke-acp-raw-turn-live] model set -> ${REQUESTED_MODEL_ID}`);
 
 		// 4) prompt — one tiny turn, no carrier.
-		const promptResult = (await connection.prompt({
-			sessionId,
-			prompt: [{ type: "text", text: "Reply with exactly OK and nothing else." }],
-		} as any)) as any;
+		const promptResult = (await withTimeout(
+			"prompt",
+			connection.prompt({
+				sessionId,
+				prompt: [{ type: "text", text: "Reply with exactly OK and nothing else." }],
+			} as any),
+			120_000,
+		)) as any;
 		console.error(`[smoke-acp-raw-turn-live] prompt returned (stopReason=${promptResult?.stopReason})`);
 
 		// ---- assertions ----
@@ -204,21 +260,24 @@ async function main(): Promise<void> {
 		);
 
 		console.log("[smoke-acp-raw-turn-live] PASS — raw ACP turn drove a live model reply");
-		console.log(`  launch:    ${launch.source}${launch.acceptance ? "" : "  ⚠ DEBUG (non-acceptance)"}`);
+		console.log(`  launch:    ${launch.source}`);
+		console.log(`  model:     ${REQUESTED_MODEL_ID}`);
 		console.log(`  reply:     ${JSON.stringify(collectedText.trim().slice(0, 120))}`);
 		console.log(`  rawBytes:  ${rawBytes.length} captured (NDJSON)`);
-		if (!launch.acceptance) fail("launch was a PATH fallback (debug) — not an acceptance PASS");
 	} catch (err) {
+		failure = err instanceof Error ? err : new Error(String(err));
 		console.error(`[smoke-acp-raw-turn-live] stderr tail:\n${stderrTail.slice(-20).join("")}`);
 		console.error(`[smoke-acp-raw-turn-live] raw NDJSON tail:\n${rawBytes.slice(-2048)}`);
-		fail((err as Error).message ?? String(err));
 	} finally {
+		await terminateChild(child);
 		try {
-			child.kill("SIGTERM");
+			await rm(scratch, { recursive: true, force: true });
 		} catch {
-			// best effort
+			// scratch cleanup is best-effort
 		}
 	}
+
+	if (failure) fail(failure.message);
 }
 
 await main();

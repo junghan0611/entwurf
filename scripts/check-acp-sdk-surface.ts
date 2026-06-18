@@ -17,10 +17,11 @@
 // exact peer-resolution pin; source-level use remains forbidden.)
 //
 // Layers:
-//   (1) package.json exact pins for all three deps;
-//   (2) pnpm-lock peer-resolution lock (adapter + claude-agent-sdk → 0.100.1);
-//   (3) @agentclientprotocol/sdk value-export surface (silent-rename gate);
-//   (4) no tracked source imports the anthropic SDK or builds an API client.
+//   (1)  package.json exact pins for all three deps;
+//   (2)  pnpm-lock peer-resolution lock (adapter + claude-agent-sdk → 0.100.1);
+//   (2b) runtime peer-resolution probe (claude-agent-sdk context → 0.100.1);
+//   (3)  @agentclientprotocol/sdk value-export surface (silent-rename gate);
+//   (4)  no tracked source imports the anthropic SDK or builds an API client.
 
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
