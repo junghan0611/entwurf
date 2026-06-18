@@ -29,6 +29,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchControlSocketRuntimeInfo, formatRuntimeModel } from "../pi-extensions/lib/entwurf-control-rpc.ts";
 import { generateSessionId } from "../pi-extensions/lib/entwurf-core.ts";
+import { scanSocketProbes } from "../pi-extensions/lib/socket-discovery.ts";
 
 const ACP_PROVIDER = "pi-shell-acp";
 const ACP_MODEL = process.env.PI_SHELL_ACP_S1_MODEL?.trim() || "claude-opus-4-8";
@@ -60,6 +61,15 @@ async function waitForSocket(sockPath: string, timeoutMs: number): Promise<boole
 		await sleep(POLL_MS);
 	}
 	return false;
+}
+
+async function waitForGone(sockPath: string, timeoutMs: number): Promise<boolean> {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		if (!existsSync(sockPath)) return true;
+		await sleep(POLL_MS);
+	}
+	return !existsSync(sockPath);
 }
 
 async function terminateChild(child: ChildProcess, graceMs = 2_000): Promise<void> {
@@ -142,6 +152,13 @@ async function main(): Promise<void> {
 		ok("get_info reports idle=true (no turn running)", info.idle === true);
 		ok("get_info reports the resident cwd", info.cwd === tmp);
 
+		// Peers-visible: the gid shows up in the REAL socket-discovery scan (the socket
+		// axis that feeds entwurf_peers' socketOnly section) as a live citizen — not just
+		// reachable by a direct get_info, but discoverable on the production fact surface.
+		const scan = await scanSocketProbes([]);
+		const probe = scan.probes.find((p) => p.gardenId === gid);
+		ok("gid is peers-visible on the socket-discovery fact surface, liveness=alive", probe?.liveness === "alive");
+
 		// QM2 (part 2): the fail-loud streamSimple stub never fired — no turn ran, so no
 		// AcpBackendNotImplementedError on the resident's stderr.
 		ok(
@@ -157,6 +174,12 @@ async function main(): Promise<void> {
 	} finally {
 		if (resident) await terminateChild(resident);
 	}
+
+	// Hygiene (B): after teardown the resident's control socket file is gone — the
+	// smoke leaves no process/socket residue. (The 0-turn session JSONL is the
+	// denote-id memory layer and is intentionally NOT scrubbed — that is data, not
+	// process residue.)
+	ok("control socket file removed after teardown (no socket residue)", await waitForGone(sockPath, 5_000));
 
 	console.log(
 		`[smoke-acp-socket-citizen-live] PASS — ${passed} checks (ACP-model session is a first-class socket-citizen, turn-free)`,
