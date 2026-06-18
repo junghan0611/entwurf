@@ -18,16 +18,19 @@
 - **잠긴 방향 (굳음)**:
   - ACP backend = overlay 격리 **소켓-시민**, 메일박스 **설계상 부재**(overlay `settings.json` `hooks:{}` → meta-bridge hook 없음 → 메일박스 없음; *같은* minimal 설정이 기본도구만 = 가벼움. 한 결정이 둘을 만듦).
   - **차별 없음 = 시민 층위**(entwurf_peers 가시 / garden id 주소화 / entwurf_v2 도달 / 응답), *레일 동일성 아님*. 메일박스 부재 = right-sizing(라이브라 "나중에 닿기" 불필요).
-  - ACP = 병렬레인 아님 → 소켓-시민 찍어내는 **ingress plugin**. Cortex=`SNOWFLAKE_HOME` overlay = 같은 패턴.
+  - **ACP plugin = pi 세션의 model/provider로 들어감.** socket-citizenship은 host `--entwurf-control` pi 세션이 **공급**(plugin이 새로 안 만듦). plugin 책임 = provider/model 등록 → backend spawn → overlay → streamSimple. **새 socket/peers/citizen protocol 금지(=과설계 실패모드).** Cortex=`SNOWFLAKE_HOME` overlay = 같은 패턴.
   - **스코프**: Claude 먼저(테스트 리그 + 크레딧 헤지) / Codex 스킵(native direct-inject로 이미 시민) / Cortex·기업용=payoff(벤더락=native 불가, hvkiefer PR #40 재오픈까지 완전검증 대기) / 메이저툴=native.
 - **설계 질문 6개 (정하지 말고 들고만 있기)**:
   1. overlay 재현 — `settings.json` minimal(`hooks:{}`+autoMemory off) + auth/skills/cache symlink passthrough + sessions/projects/settings 로컬 격리.
-  2. v1 소켓 배선 이식성 — v1의 증명된 소켓 경로를 v2 기판으로 *깨끗이 이식* 가능 vs entwurf-control 시민화에 맞춰 재설계.
-  3. repo 구조 — **#15 청사진 채택**: `acp/backends/claude.ts` · `acp/overlays/*` · `acp/session-store.ts` · `acp/model-lock.ts` · `acp/compaction-policy.ts` (+ 얇은 facade). #15가 extraction으로 못 닿은 그 shape를 *fresh build*로 실현. 단 **#38 보정**: facade는 중심이 아니라 entwurf-core 밑 plugin 하나.
+  2. v1 **model-side** 배선 이식성 — **채굴결과(06-18): 새 소켓 안 만듦.** `socket-discovery`는 model-agnostic이라 host `--entwurf-control` 세션이 시민권을 공급(소켓 파일명=gardenId, RPC로 cwd/model/idle enrich). → v1의 *model/provider* 배선만 v2 기판으로 이식; 소켓/peers 레이어는 상속.
+  3. repo 구조 — **#15 청사진**: `acp/backends/claude.ts` · `acp/overlays/*` · `acp/session-store.ts` · `acp/model-lock.ts` · `acp/compaction-policy.ts` (+ 얇은 facade, **#38 보정**: 중심 아닌 plugin 하나). #15가 extraction으로 못 닿은 shape를 *fresh build*로. **단 물리위치는 #6과 연동 미결**: top-level `acp/*` vs `pi-extensions/lib/acp/*`.
   4. Cortex 검증 한계 — 로컬 완전검증 불가(계정 없음), Claude만 지금 가능.
   5. fact 표면(#39) — ACP plugin이 core에 노출할 read-only fact: exists / live / socket·control path / replyable·addressable / delivery evidence. *그 이상(memory·planner) 금지.*
-  6. **nested split-import tooling (#15 벽)** — #15은 Node strip-types가 nested `.ts` split import의 `.js→.ts` fallback을 안 해 split을 접었다(`allowImportingTsExtensions`/별도 tsconfig+emit 필요). **재구현도 이 벽을 자동으로 안 푼다** — `acp/backends/*`가 `acp/overlays/*`를 import하는 구조를 v2-only 런타임/tsconfig가 굴리는지 *먼저 검증*. (AGENTS.md §Typecheck Boundary: mcp/scripts는 이미 `allowImportingTsExtensions`+strip-types로 굴림 → 경로는 있음.)
-- **Green-gate (나중 판정)**: ACP 클로드 형제가 `entwurf_peers`에 native pi 형제와 *똑같이* 뜨고 컨트롤 RPC에 *똑같이* 답함(소켓 레일) + 메일박스 없음(부재 문서화) + `pnpm check`/typecheck/ACP smoke green.
+  6. **split-import 물리위치 (#15 벽 — 반만 해결)** — 채굴결과: v2가 검증한 crossing pattern *있음*(lib/* = root에서 exclude → `scripts/tsconfig`(allowImportingTsExtensions+noEmit) → strip-types 실행; emit-root는 non-literal dynamic import로 fence를 닿음). **단 미결**: `scripts/tsconfig` include = `../pi-extensions/lib/**/*.ts`라 **top-level `acp/*`는 fence에 자동 진입 안 됨**. 택1 → (a) `pi-extensions/lib/acp/...`로 기존 fence 탑승 / (b) top-level `acp/...` + 새 tsconfig include/exclude 경계 명시. + 0.11.0 ACP는 emit(`.js` import)였으니 **pi가 ACP entry를 strip-types로 로드하는지 1개 확인**. → #6 = "벽은 뚫림, ACP 모듈을 fence에 넣는 *위치*만 결정/검증".
+- **Green-gate (나중 판정) — 2층 (S1만으론 ACP backend 건강 미증명)**:
+  - **S1 socket-citizen**: ACP-model `--entwurf-control` pi 세션이 native 형제처럼 `entwurf_peers`에 뜨고 control RPC(`get_info`: cwd/model/idle)에 답함 + 메일박스 없음(overlay 활성). ← 시민권 증명(host 소켓이 공급).
+  - **S2 backend turn**: 그 세션에서 실제 ACP Claude **1턴 성공** + overlay·도구축소·이벤트매핑(rawOutput=array) 안 깨짐. ← ACP backend 건강 증명.
+  - + `pnpm check`/typecheck green.
 - **Blocker**: none. commit/push/tag/merge = GLG.
 - **Read**: 이 파일 + **AGENTS.md**(영속 경계) + botlog 앵커 + 이슈 **#38**(ACP=plugin)/**#39**(awareness=read-only fact)/**#15**(구조청사진+트러스트경계) + (착수 시) 0.11.0 ACP 코드.
 
@@ -43,6 +46,7 @@
 - **E. 모델 강제 + 도구 정직성**: 커레이트 모델만(전체 pi-ai 레지스트리 아님), `unstable_setSessionModel`로 강제(=set_model 아날로그). `assertExcludeToolsHonored`=선언(pi)≠실제(backend)면 **fail-fast**(모델에게 거짓말 금지). 확장도구(entwurf*)는 pi-side라 자유 제외.
 - **F. 이벤트 매핑(3방언) + 권한 자동응답**: ACP `session_notification`→pi stream(message_chunk→text / thought→thinking / tool_call→notice / usage→토큰·비용). 3백엔드가 tool 결과 다르게 노출(Claude rawOutput=array / Codex=CallToolResult객체 / Gemini=없음→content[]). entwurf_send→`[entwurf sent →]` 박스(3단 args 복구), `sanitizeNoticeFragment`로 한 줄 notice 보호. 권한 자동응답(YOLO). **Claude-only면 방언 1종.**
 - **G. 기타 이식 대상**: stdio NDJSON JSON-RPC reader / MCP server normalize·validate / `sendPrompt` project-context **de-dup**(entwurf-spawn 시 AGENTS.md 중복 방지) / `assertLegacyCompactionKnobUnset`(compaction off by design).
+- **H. provider no-auth sentinel (구현 때 놓치기 쉬움 — GPT)**: `registerProvider("pi-shell-acp", …)` 재등록 시 "credentials 제공/재판매/우회 아님"을 *등록 형태*로 지키는 장치(0.11.0 `index.ts`). 놓치면 `ANTHROPIC_API_KEY`류 오해/오작동 재발. 게이트 `check-auth-boundary`(index.ts/acp-bridge.ts에 legacy-ENV apiKey 리터럴 금지)가 박음 — **AGENTS §Operating boundaries(trust)의 코드-레벨 짝**.
 - **핵심 발견**: 3544줄 fat의 큰 덩어리 = **3백엔드 방언 화해**. Claude-only면 **캐리어 1슬롯 · overlay 1종 · 이벤트 방언 1종**으로 붕괴 ⇒ *재구현이 port보다 얇다*(코드로 확인됨).
 
 # 0.11.0 읽기 전 규율 (ACP 중심 회귀 방지)

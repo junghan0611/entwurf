@@ -98,6 +98,7 @@ Warnings make agents blame themselves and flail. Broken tool state must surface 
 
 - **Sibling equality is a citizen-level property, not a rail-level one.** Every sibling is addressable (peers-visible, garden-id-addressed, `entwurf_v2`-reachable, replyable). The *rail* differs by lifecycle: a live ACP backend is a **socket-citizen** (no mailbox — it is always live, so durable async delivery is unneeded, not withheld); a come-and-go native-harness session is a **mailbox-citizen**. Missing a mailbox is right-sizing, not discrimination.
 - **Durable memory is the authored common record** (`~/org`, botlog, agenda, Denote, andenken). entwurf lets peers move across that record layer; it never replaces it.
+- **ACP enters as a model/provider, not a socket layer.** The ACP plugin registers as a pi session's provider/model and spawns the backend under an overlay; **socket-citizenship is supplied by the host `--entwurf-control` pi session**, not minted by the plugin. The plugin never builds a new socket registry, peers layer, or citizen protocol — over-designing one is the failure mode to avoid (`socket-discovery` is model-agnostic, so an ACP-model session is already a citizen).
 
 ### Operating boundaries (trust invariants — survive any re-implementation, #15)
 
