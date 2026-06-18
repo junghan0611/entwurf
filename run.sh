@@ -1282,6 +1282,17 @@ check_acp_prompt_builder() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-prompt-builder.ts)
 }
 
+check_acp_session_store() {
+  # Deterministic gate for the S2d-1b-1 session store / signature / bootstrap
+  # decision. Locks: model-lock fail-loud throw in the pure decision, prefix-
+  # compat (only a prefix history reuses; edited/compaction → new), carrier
+  # drift → signature change → incompatible, and bootstrapPath ⟂ lifecyclePolicy
+  # (turn-scoped/-p one-shot is ALWAYS new — no in-memory reuse, no persisted
+  # resume/load in the first cut). Pure + temp-dir record I/O, no child/spawn.
+  section "ACP session store (S2d-1b-1 signature/compat/bootstrap decision)"
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-session-store.ts)
+}
+
 check_acp_backend_preflight() {
   # Deterministic gate for the S2c runtime tool-surface preflight. Calls
   # streamShellAcp with a context whose declared tools exclude a built-in the
@@ -2380,6 +2391,9 @@ case "$cmd" in
     ;;
   check-acp-prompt-builder)
     check_acp_prompt_builder
+    ;;
+  check-acp-session-store)
+    check_acp_session_store
     ;;
   check-acp-backend-preflight)
     check_acp_backend_preflight
