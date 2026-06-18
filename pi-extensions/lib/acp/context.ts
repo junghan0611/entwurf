@@ -94,3 +94,70 @@ export function contextToAcpPrompt(context: Context): AcpTextBlock[] {
 	if (!transcript) return [];
 	return [{ type: "text", text: transcript }];
 }
+
+/**
+ * ACP session bootstrap path — the input that decides the prompt SCOPE (NEXT
+ * §S2-scout 핀4). S2c was spawn-per-turn (always a fresh session), so this stays
+ * `"new"` until S2d wires the session store that can actually produce the reuse
+ * paths.
+ */
+export type AcpBootstrapPath = "new" | "reuse" | "resume" | "load";
+
+/**
+ * The latest user turn only — the first user message AFTER the last assistant
+ * message. Ported from 0.11.0 `index.ts:732 extractPromptBlocks`: taking the
+ * FIRST user of the trailing group (not `reverse().find()`) skips the
+ * SessionStart hook user-message (`device=…, time_kst=…`) that pi appends AFTER
+ * the real prompt. Images leave a text marker (S2c decision — real ACP image
+ * passthrough is a later lane), never raw data.
+ *
+ * This is the prompt scope for a session that ALREADY holds the prior turns
+ * (reuse/resume/load): re-sending the whole transcript there would duplicate
+ * history the backend already remembers.
+ */
+export function latestUserDelta(context: Context): AcpTextBlock[] {
+	let lastAssistantIdx = -1;
+	for (let i = context.messages.length - 1; i >= 0; i--) {
+		if (context.messages[i].role === "assistant") {
+			lastAssistantIdx = i;
+			break;
+		}
+	}
+	const latestUser = context.messages.slice(lastAssistantIdx + 1).find((m): m is UserMessage => m.role === "user");
+	if (!latestUser) return [];
+	// The delta IS the user's actual prompt — preserve its body verbatim (0.11.0
+	// extractPromptBlocks sent it near-raw). Only the EMPTINESS test trims, so a
+	// whitespace-only turn yields no block.
+	const raw = textFromUserOrToolContent(latestUser.content);
+	return raw.trim() ? [{ type: "text", text: raw }] : [];
+}
+
+/**
+ * Build the ACP prompt array for a turn, scoping it by bootstrapPath (핀4):
+ *   - `"new"` (incompatible rebuild included): a fresh ACP session holds NO
+ *     history, so the whole transcript is the only history carrier (same as the
+ *     S2c spawn-per-turn path). Delta-only here would lose history on
+ *     rebuild/compaction/edited-history.
+ *   - `"reuse" | "resume" | "load"`: the stateful ACP session already holds the
+ *     prior turns, so send only the latest user delta — the whole transcript
+ *     would duplicate remembered history.
+ *
+ * The delta-only SAFETY for resume/load is owned by the caller's
+ * `contextMessageSignatures` prefix-compat gate (mismatch → fall back to
+ * `"new"` + full transcript); this pure function only splits the scope.
+ */
+export function buildAcpPrompt(context: Context, bootstrapPath: AcpBootstrapPath): AcpTextBlock[] {
+	switch (bootstrapPath) {
+		case "new":
+			return contextToAcpPrompt(context);
+		case "reuse":
+		case "resume":
+		case "load":
+			return latestUserDelta(context);
+		default:
+			// Fail-loud (핀4): a bad/unknown bootstrapPath must CRASH, never fall
+			// through to delta-only. A silent delta on a path that should carry the
+			// full transcript loses history — fail-OPEN toward the dangerous side.
+			throw new Error(`buildAcpPrompt: unknown bootstrapPath ${JSON.stringify(bootstrapPath)}`);
+	}
+}

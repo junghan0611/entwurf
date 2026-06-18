@@ -1271,6 +1271,17 @@ check_acp_event_mapper() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-event-mapper.ts)
 }
 
+check_acp_prompt_builder() {
+  # Deterministic gate for the S2d bootstrapPath-scoped ACP prompt builder (핀4).
+  # Proves prompt SCOPE follows bootstrapPath: new=full transcript (history
+  # carrier), reuse/resume/load=latest user delta (first user after last
+  # assistant, SessionStart hook skipped, image marker kept, prior history
+  # excluded so a reuse session is not re-injected its own history). Pure, no
+  # session store yet — locks the builder before S2d wires the reuse paths.
+  section "ACP prompt builder (S2d bootstrapPath prompt scope)"
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-prompt-builder.ts)
+}
+
 check_acp_backend_preflight() {
   # Deterministic gate for the S2c runtime tool-surface preflight. Calls
   # streamShellAcp with a context whose declared tools exclude a built-in the
@@ -2366,6 +2377,9 @@ case "$cmd" in
     ;;
   check-acp-event-mapper)
     check_acp_event_mapper
+    ;;
+  check-acp-prompt-builder)
+    check_acp_prompt_builder
     ;;
   check-acp-backend-preflight)
     check_acp_backend_preflight
