@@ -1,17 +1,18 @@
-# AGENTS.md — Maintainer Guidelines for pi-shell-acp (`v2-only` branch)
+# AGENTS.md — Maintainer Guidelines for pi-shell-acp
 
 For agents that own this repo: invariant principles + reproducible verification, not release-story drift.
 
-> **Branch status (read first).** This is the `v2-only` branch: a subtractive
-> experiment that removes the ACP subprocess bridge and the v1 entwurf verbs,
-> leaving the **pi-native v2 dispatch substrate** + the meta-bridge. The repo is
-> still *named* `pi-shell-acp` and the `pi-shell-acp` provider id survives as
-> routing residue — **rename is deliberately NOT done here** (Phase B). So the
-> name says "acp" while the code no longer speaks ACP; that mismatch is expected
-> and documented, not a bug. The forward plan (new `entwurf` repo seeded from
-> this branch; `pi-shell-acp` main stays the ACP/v1 adapter) lives in
-> [ROADMAP.md](./ROADMAP.md). Fresh sibling minting was the v1 `entwurf` verb and
-> is **deferred to a 0.12.x lane** — see [NEXT--v2-only.md](./NEXT--v2-only.md).
+> **Direction (read first).** This repo is a **pi-native v2 dispatch substrate
+> (entwurf-core) + a meta-bridge + an ACP plugin**. v1 entwurf verbs are done
+> and gone; v2 is the spine. ACP is **not** the project's center — it is one
+> **plugin** that supplies garden socket-citizens to the v2 core (#38: *"ACP is
+> a plugin, not the boundary."*). The package keeps the name `pi-shell-acp` —
+> ACP lives, so the name is honest; there is **no rename** (#38's eventual
+> `entwurf` package extraction is a deferred coordinate, not this work). The
+> transient current-state and the ACP re-implementation plan live in the branch
+> NEXT ([NEXT--acp-on-v2.md](./NEXT--acp-on-v2.md)); this file holds only what
+> does **not** change week-to-week. Fresh sibling minting (the old v1 `entwurf`
+> verb) stays deferred — see the branch NEXT.
 
 ## North Star — One Forged Screwdriver
 
@@ -54,13 +55,13 @@ For agents that own this repo: invariant principles + reproducible verification,
 릴리즈 이야기와 개별 기능은 주변을 돈다.
 중심은 언제나 이것이다: **thin substrate / explicit MCP / sibling-based entwurf / deterministic dispatch / observability / evidence-first language / capability dignity across sibling sessions**.
 
-## What This Repo Is (`v2-only`)
+## What This Repo Is
 
-A **pi-native garden-citizen dispatch substrate** plus a **meta-bridge**. Pi stays the harness; every addressed session keeps its own identity.
+A **pi-native garden-citizen dispatch substrate** + a **meta-bridge** + an **ACP plugin**. Pi stays the harness; every addressed session keeps its own identity.
 
 - **Meta-bridge**: a global `SessionStart` hook registers a native-harness session (Claude Code / Codex / Antigravity) as a **garden-native meta-session** — a garden id, a mailbox, a trusted sender marker — without importing that harness's transcript or pretending pi owns it. Installed/inspected via `./run.sh install-meta-bridge` / `doctor-meta-bridge`.
 - **v2 dispatch (`entwurf_v2`)**: one verb that delivers to / wakes an *already-identified* garden citizen. A pure decider reads target liveness as a fact and picks transport from a frozen table keyed on **target state × intent**: live pi + fire-and-forget → **control-socket** send; dormant pi + owned-outcome → **spawn-bg resume**; active self-fetch meta-session + fire-and-forget → **meta-mailbox** enqueue; every other state×intent pair is an honest reject. It does **not** mint new siblings.
-- **Removed on this branch**: the ACP subprocess bridge (`index.ts` / `acp-bridge.ts` / `event-mapper.ts`, three-backend ACP carriers/overlays) and the v1 entwurf verbs (`entwurf` / `entwurf_resume` / `entwurf_send`). See ROADMAP for why (subtract to expose v1's ACP coupling, then move v2 to a clean `entwurf` repo).
+- **ACP plugin** (the pi-harness ingress): drives an ACP backend (Claude first; vendor/governed CLIs like Cortex next) under an isolated config overlay and registers it as a **socket-citizen** of the v2 core. It *supplies* citizens — it is not the substrate and not a second harness. v1 entwurf verbs (`entwurf` / `entwurf_resume` / `entwurf_send`) are gone for good; the ACP plugin is a fresh build on the v2 core (0.11.0's `acp-bridge.ts` is a behavior oracle, not architecture to re-center). See §ACP Plugin Boundary.
 
 ## Code Principle — Crash, Don't Warn
 
@@ -76,7 +77,7 @@ Warnings make agents blame themselves and flail. Broken tool state must surface 
 
 ## Hard Rules
 
-1. **One surface name (until rename)**: provider/model/routing strings stay `pi-shell-acp`. No legacy aliases. The `pi-shell-acp` provider registration itself was removed with `index.ts`; the surviving `provider: "pi-shell-acp"` strings (`getRegistryRouting`, `model-lock.ts`) are **routing residue** to be resolved at rename (Phase B), not a live ACP provider.
+1. **One surface name, no rename**: provider/model/routing strings stay `pi-shell-acp`. No legacy aliases. ACP lives, so the name is honest — there is no `entwurf` package rename on this lane. The `provider: "pi-shell-acp"` strings (`getRegistryRouting`, `model-lock.ts`) are the routing the returning ACP plugin re-uses — keep them, do not "trim as residue".
 2. **Dispatch is a function of liveness, not session type.** `entwurf_v2` never asks "is this a resume or a send" up front — it probes liveness and routes: live→control-socket, dormant→spawn-bg resume, active self-fetch→meta-mailbox. State is computed, never stored (a stored liveness bit is a lie).
 3. **A reject is honest, never cosmetic.** When a target cannot receive (dead, drifted identity, wrong state×intent), the decider returns a reject — no `✓ delivered`, no `.msg` written, no signal poke. Silent degraded "delivery" is forbidden.
 4. **MCP injection**: only via explicit `mcpServers` wiring. No ambient `~/.mcp.json` scanning, no automatic retrieval.
@@ -84,6 +85,28 @@ Warnings make agents blame themselves and flail. Broken tool state must surface 
 6. **GC reclaims process resources only — never data.** meta-records and transcripts (the denote-id memory layer) are preserved; dormant/stale entries are archived/TTL'd, not deleted.
 7. **This is not a second harness**: no prompt reconstruction, no transcript hydration, no tool result ledger, no harness emulation. The meta-bridge fronts a mailbox + a garden id; it does not scrape transcripts or run a control daemon for the native session.
 8. **Auth boundary is deployment-surface-agnostic**. This repo does not provide, copy, proxy, decrypt, or mediate any backend's credentials. Native-harness sessions read whatever auth state is visible in their own process filesystem; nothing here moves that.
+
+## ACP Plugin Boundary
+
+`entwurf-core` (the v2 substrate) is the center; **ACP is one plugin**, never the boundary (#38). Plugins supply read-only facts the core already asks for; they do not become the core, a memory layer, or a second harness (#39).
+
+| Layer | Owns |
+|---|---|
+| **entwurf-core (v2)** | garden id · peer identity · liveness fact interface · dispatch decision · delivery evidence · rail choice (socket / mailbox / spawn) |
+| **ACP plugin** | ACP backend process lifecycle · config overlay (isolation + tool-narrowing + identity-carrier materialization) · per-backend ACP dialect quirks · socket-citizen registration · liveness/addressability facts · delivery evidence |
+| **ACP plugin MUST NOT become** | a memory DB · a task planner · an orchestrator · a second harness · a mailbox-citizen impersonation |
+
+- **Sibling equality is a citizen-level property, not a rail-level one.** Every sibling is addressable (peers-visible, garden-id-addressed, `entwurf_v2`-reachable, replyable). The *rail* differs by lifecycle: a live ACP backend is a **socket-citizen** (no mailbox — it is always live, so durable async delivery is unneeded, not withheld); a come-and-go native-harness session is a **mailbox-citizen**. Missing a mailbox is right-sizing, not discrimination.
+- **Durable memory is the authored common record** (`~/org`, botlog, agenda, Denote, andenken). entwurf lets peers move across that record layer; it never replaces it.
+
+### Operating boundaries (trust invariants — survive any re-implementation, #15)
+
+These claims must stay true on every install surface; they are the first thing a re-implementation silently drops, so they are pinned here:
+
+- `pi-shell-acp` does **not** provide, resell, or bypass Claude/vendor credentials, tokens, or subscription access. It connects only to the operator's **existing local authenticated backend** through an explicit plugin boundary.
+- No auth bypass, no subscription sharing, no hidden transcript restoration.
+- Expert escape hatches are **explicit and documented**, never accidental backdoors.
+- The plugin **fails loud / fails closed** when an invariant is broken.
 
 ## Verification
 
@@ -120,7 +143,7 @@ If a gate fails or a claim drops below its needed evidence level, do not commit.
 
 Uses `entwurf` instead of `delegate` to avoid ecosystem collisions. spawn-bg resume creates a sibling, not a worker.
 
-- **Surface (v2-only)** — MCP `pi-tools-bridge`: `entwurf_v2`, `entwurf_self`, `entwurf_peers`, `entwurf_inbox_read`. pi-native (`pi-extensions/entwurf-control.ts`): `entwurf_v2`, `entwurf_peers` tools + `/entwurf-sessions`, `/gnew` (`/garden-new`) commands. The v1 `entwurf` / `entwurf_resume` / `entwurf_send` tools and the `/entwurf` / `/entwurf-send` / `/entwurf-status` commands are **removed** on this branch.
+- **Surface** — MCP `pi-tools-bridge`: `entwurf_v2`, `entwurf_self`, `entwurf_peers`, `entwurf_inbox_read`. pi-native (`pi-extensions/entwurf-control.ts`): `entwurf_v2`, `entwurf_peers` tools + `/entwurf-sessions`, `/gnew` (`/garden-new`) commands. The v1 `entwurf` / `entwurf_resume` / `entwurf_send` tools and the `/entwurf` / `/entwurf-send` / `/entwurf-status` commands are **removed** on this branch.
 - **`entwurf_v2` is the one delivery verb.** Given a garden id, it classifies the target (live pi vs. dormant pi vs. meta-session — a bare garden id does not reveal this) and routes correctly. It does **not** mint a fresh sibling: the `dormant pi → spawn-bg resume` row resumes an *already-identified* citizen. Fresh creation was the v1 `entwurf` verb and is deferred to 0.12.x.
 - **`entwurf_peers`** is a read-only fact surface (liveness / capability / identity / cwd-history). Do not bake verb-routing (`resumable`/`sendable`) into the fact layer; routing is the decider's job.
 - **`entwurf_self`** returns the authoritative identity envelope (pi-session env, or a trusted meta-session sender marker) and is identity-required.
@@ -158,7 +181,7 @@ Messages are thrown, not awaited.
 | `pi-extensions/meta-bridge-hook.ts` | global `SessionStart` hook: register native-harness session as a garden meta-session |
 | `pi-extensions/lib/entwurf-v2-*.ts` | v2 substrate: contract / lock / decider / matrix / release / send / mailbox / runner / production / surface / spawn(+production) + resume-marker |
 | `pi-extensions/lib/meta-*.ts` | meta-record authority, mailbox state, dual-read/migration, receiver marker |
-| `pi-extensions/lib/entwurf-core.ts` | shared core (session-file lookup, identity read, explicit-extension args); some v1 exports now dead pending Phase-B routing trim |
+| `pi-extensions/lib/entwurf-core.ts` | shared core (session-file lookup, identity read, explicit-extension args); some v1 exports now dead pending routing cleanup |
 | `protocol.js` | dependency-free shared wire constants (`<project-context` marker); single source for tsc emit + strip-types MCP paths |
 | `run.sh` | install (incl. `install-meta-bridge`), check-*/smoke-* gates, sentinel, release-gate |
 | `pi/entwurf-targets.json` | spawn-bg resume target allowlist |
@@ -185,7 +208,7 @@ Code-level invariants pinned at the same time:
 
 ## Runtime Dependencies
 
-- `@modelcontextprotocol/sdk`, `zod` — the only runtime deps. The ACP packages (`@agentclientprotocol/claude-agent-acp`, `@zed-industries/codex-acp`, `@anthropic-ai/sdk`) were removed with the ACP bridge on this branch.
+- `@modelcontextprotocol/sdk`, `zod` — the only runtime deps right now. The Claude ACP package (`@agentclientprotocol/claude-agent-acp`) returns as a pinned dep when the ACP plugin lands; the Codex/Gemini ACP packages stay out of scope (native already reaches Codex; Gemini/major tools use native).
 - `pi` (`@earendil-works/pi-ai`) on PATH at the pinned floor (`>= 0.79.4`). Mismatches are caught by `check-dep-versions` / `check-pi-runtime-version`.
 
 ## Working Style
@@ -198,11 +221,11 @@ Code-level invariants pinned at the same time:
 
 ## Next
 
-Current priority + open decisions: [NEXT--v2-only.md](./NEXT--v2-only.md) (branch lane) and [NEXT.md](./NEXT.md) (main lane). Read at session start. `/recall` restores the past axis; NEXT fixes the future axis. Forward direction: [ROADMAP.md](./ROADMAP.md).
+Current priority + open decisions: [NEXT--acp-on-v2.md](./NEXT--acp-on-v2.md) (branch lane) and [NEXT.md](./NEXT.md) (main lane). Read at session start. `/recall` restores the past axis; NEXT fixes the future axis. Forward direction: [ROADMAP.md](./ROADMAP.md).
 
 ## References
 
-- [ROADMAP.md](./ROADMAP.md) — current + future direction, the 0.12 cutover lane, and the new-`entwurf`-repo split.
+- [ROADMAP.md](./ROADMAP.md) — current + future direction (the ACP-plugin-on-v2 lane; #38's eventual `entwurf` package extraction is a deferred coordinate).
 - [VERIFY.md](./VERIFY.md) — agent-driven verification guide (Evidence Levels L0–L5 + the §1A interview; independent axes, do not conflate).
 - [BASELINE.md](./BASELINE.md) — operator-driven verification record (companion to VERIFY.md).
 - [agent-config](https://github.com/junghan0611/agent-config) — real consumer repo.
