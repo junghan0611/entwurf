@@ -884,6 +884,24 @@ smoke_acp_carrier_augment_live() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-carrier-augment-live.ts)
 }
 
+smoke_acp_rgg_live() {
+  # S2e-2 — ACP-provider resident garden guard (RGG). Thin wrapper (GPT c32a6c8):
+  # runs the SHARED resident-garden-guard runner against the pi-shell-acp provider
+  # target with the DETERMINISTIC half only (SMOKE_RGG_POSITIVE=0). What this lane
+  # treats as release-blocking is that garden-native resident discipline (uuid
+  # refuse / new·clone cancel / legacy-resume pre-cancel / gnew clean birth) holds
+  # under the ACP provider too — the guard logic is provider-agnostic. The positive
+  # GNEW T3 (model autonomously calling entwurf_self) is N/A here BY ACP BOUNDARY:
+  # the ACP child is spawned with mcpServers:[] so it has no entwurf_self call
+  # surface (plugin stays lightweight, no ambient MCP — S2b/S2d boundary). To
+  # observe that boundary directly, run the shared runner with SMOKE_RGG_POSITIVE=1
+  # and PI_SHELL_ACP_LIVE_TARGET set (T3 will report N/A, not a real failure).
+  # Target override: PI_SHELL_ACP_RGG_TARGET (default pi-shell-acp/claude-sonnet-4-6).
+  #   ./run.sh smoke-acp-rgg-live
+  local target="${PI_SHELL_ACP_RGG_TARGET:-pi-shell-acp/claude-sonnet-4-6}"
+  (cd "$REPO_DIR" && PI_SHELL_ACP_LIVE_TARGET="$target" SMOKE_RGG_POSITIVE=0 bash scripts/smoke-resident-garden-guard.sh)
+}
+
 smoke_entwurf_v2_matrix_live() {
   # LIVE sentinel for 0.11 Stage 0 step 5d-5 (D4-b) — kept OUT of `pnpm check`. The deterministic
   # sibling (check-entwurf-v2-matrix) fixes every (target kind → transport → lock) cell over fakes
@@ -2267,6 +2285,9 @@ case "$cmd" in
     ;;
   smoke-acp-carrier-augment-live)
     smoke_acp_carrier_augment_live
+    ;;
+  smoke-acp-rgg-live)
+    smoke_acp_rgg_live
     ;;
   smoke-acp-socket-citizen-live)
     smoke_acp_socket_citizen_live

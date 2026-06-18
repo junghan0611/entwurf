@@ -53,11 +53,12 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENTWURF_DIR="$HOME/.pi/entwurf-control"
 SESSIONS_BASE="$HOME/.pi/agent/sessions"
-# v2-only: default to a pi-native provider/model (the ACP `pi-shell-acp` provider was
-# removed). The guard logic (garden-id enforcement) is provider-agnostic — no assertion
-# checks the provider name, only the garden sessionId. Honor the SAME target knob as the
-# other live smokes: PI_SHELL_ACP_LIVE_TARGET="<provider>/<model>" (default
-# openai-codex/gpt-5.4); RGG-specific SMOKE_RGG_PROVIDER/MODEL still override.
+# Default target stays pi-native (openai-codex/gpt-5.4), but honor the SAME target
+# knob as the other live smokes: PI_SHELL_ACP_LIVE_TARGET="<provider>/<model>". On
+# acp-on-v2 the ACP `pi-shell-acp` provider is back, and `./run.sh smoke-acp-rgg-live`
+# drives THIS runner against it (deterministic half) — the guard logic (garden-id
+# enforcement) is provider-agnostic, no assertion checks the provider name, only the
+# garden sessionId. RGG-specific SMOKE_RGG_PROVIDER/MODEL still override.
 if [ -n "${PI_SHELL_ACP_LIVE_TARGET:-}" ]; then
 	case "$PI_SHELL_ACP_LIVE_TARGET" in
 		*/*) _rgg_provider="${PI_SHELL_ACP_LIVE_TARGET%%/*}"; _rgg_model="${PI_SHELL_ACP_LIVE_TARGET#*/}" ;;
