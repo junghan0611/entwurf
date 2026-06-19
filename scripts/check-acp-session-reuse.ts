@@ -26,7 +26,7 @@
 
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -103,9 +103,30 @@ interface PromptCall {
 	text: string;
 }
 
-function makeHarness(recordDir: string) {
+// A self-consistent default resolved config (the all-defaults shape). The empty
+// mcpServersHash is sha256("[]") — must match what config.ts produces for an
+// absent mcpServers map (check-acp-config tests the real resolver; this gate
+// only needs internal consistency between loadConfig and the manual records).
+const EMPTY_MCP_HASH = "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945";
+// biome-ignore lint/suspicious/noExplicitAny: ResolvedAcpConfig fake shape
+const DEFAULT_RESOLVED_CONFIG: any = {
+	settingSources: [],
+	strictMcpConfig: true,
+	showToolNotifications: true,
+	mcpServers: [],
+	mcpServersHash: EMPTY_MCP_HASH,
+	tools: ["Read", "Bash", "Edit", "Write"],
+	skillPlugins: [],
+	permissionAllow: ["Read(*)", "Bash(*)", "Edit(*)", "Write(*)", "mcp__*"],
+	disallowedTools: [],
+};
+
+// biome-ignore lint/suspicious/noExplicitAny: ResolvedAcpConfig fake shape
+function makeHarness(recordDir: string, config: any = DEFAULT_RESOLVED_CONFIG, emitToolCall = false) {
 	const children: ReturnType<typeof makeFakeChild>[] = [];
 	const promptCalls: PromptCall[] = [];
+	// biome-ignore lint/suspicious/noExplicitAny: captured newSession params
+	const newSessionCalls: any[] = [];
 	let newSessionSeq = 0;
 	let noticeSeq = 0;
 	let block: Promise<void> | null = null;
@@ -113,7 +134,9 @@ function makeHarness(recordDir: string) {
 	// biome-ignore lint/suspicious/noExplicitAny: fake seam objects
 	const makeConnection = (handlers: any) => ({
 		initialize: async () => ({ agentCapabilities: {} }),
-		newSession: async () => {
+		// biome-ignore lint/suspicious/noExplicitAny: fake seam objects
+		newSession: async (params: any) => {
+			newSessionCalls.push(params);
 			newSessionSeq++;
 			return { sessionId: `ACP-${newSessionSeq}` };
 		},
@@ -122,6 +145,13 @@ function makeHarness(recordDir: string) {
 		prompt: async ({ sessionId, prompt }: any) => {
 			promptCalls.push({ sessionId, text: prompt.map((b: { text: string }) => b.text).join("\n") });
 			if (block) await block;
+			// Optional [tool:*] notice — exercises the showToolNotifications gate (S2g).
+			if (emitToolCall) {
+				await handlers.sessionUpdate({
+					update: { sessionUpdate: "tool_call", toolCallId: "probe-1", title: "probe tool", status: "pending" },
+					sessionId,
+				});
+			}
 			noticeSeq++;
 			await handlers.sessionUpdate({
 				update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `NOTICE-${noticeSeq}` } },
@@ -142,6 +172,7 @@ function makeHarness(recordDir: string) {
 		// biome-ignore lint/suspicious/noExplicitAny: fake seam objects
 		createConnection: (_child: any, handlers: any) => makeConnection(handlers),
 		lifecyclePolicy: () => "process-scoped",
+		loadConfig: () => config,
 		now: () => "2026-06-18T00:00:00Z",
 		sessionDir: recordDir,
 	};
@@ -150,10 +181,29 @@ function makeHarness(recordDir: string) {
 		deps,
 		children,
 		promptCalls,
+		newSessionCalls,
+		config,
 		setBlock(p: Promise<void> | null) {
 			block = p;
 		},
 	};
+}
+
+/** The config signature backend computes from a given resolved config (S2g). */
+// biome-ignore lint/suspicious/noExplicitAny: store module imported by URL
+function sigFor(store: any, modelId: string, config: any, engraving = ""): string {
+	return store.bridgeConfigSignature({
+		backend: "claude",
+		modelId,
+		appendSystemPrompt: engraving,
+		mcpServersHash: config.mcpServersHash,
+		settingSources: config.settingSources,
+		strictMcpConfig: config.strictMcpConfig,
+		tools: config.tools,
+		skillPlugins: config.skillPlugins,
+		permissionAllow: config.permissionAllow,
+		disallowedTools: config.disallowedTools,
+	});
 }
 
 const ZERO_USAGE = {
@@ -220,6 +270,9 @@ try {
 	const backend = (await import(backendUrl)) as any;
 	// biome-ignore lint/suspicious/noExplicitAny: compiled module imported by URL
 	const store = (await import(storeUrl)) as any;
+	const configUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/config.js")).href;
+	// biome-ignore lint/suspicious/noExplicitAny: compiled module imported by URL
+	const configMod = (await import(configUrl)) as any;
 
 	// ----------------------------------------------------------------------
 	// Section A — capture: new=full transcript, reuse=delta-only, no respawn,
@@ -239,13 +292,7 @@ try {
 					acpSessionId: "OLD-RESUME-ID",
 					cwd: process.cwd(),
 					modelId: sonnet.id,
-					bridgeConfigSignature: store.bridgeConfigSignature({
-						backend: "claude",
-						modelId: sonnet.id,
-						appendSystemPrompt: "",
-						mcpServers: [],
-						settingSources: [],
-					}),
+					bridgeConfigSignature: sigFor(store, sonnet.id, h.config),
 					contextMessageSignatures: store.contextMessageSignatures(turn1Ctx),
 				},
 				"2026-06-17T00:00:00Z",
@@ -535,6 +582,160 @@ try {
 			"the turn must claim the key in flight (first-turn race guard)",
 		);
 	}
+
+	// ----------------------------------------------------------------------
+	// Section G — S2g config passthrough: operator mcpServers / tools / skills /
+	//             flags reach newSession, the envelope is injected into the
+	//             pi-tools-bridge entry (stale values filtered), engraving/augment
+	//             see the same server names, and a config change breaks reuse
+	//             while a session-id-only change does NOT.
+	// ----------------------------------------------------------------------
+	{
+		// Build a real resolved config from a temp project settings file — this
+		// exercises the REAL loader (normalize + merge + defaults + Skill auto-add),
+		// not a hand-rolled fake, so the wire assertions reflect production resolve.
+		const cfgDir = mkdtempSync(resolve(tmpdir(), "acp-cfg-"));
+		const skillDir = resolve(cfgDir, "myskill");
+		mkdirSync(resolve(skillDir, ".claude-plugin"), { recursive: true });
+		writeFileSync(resolve(skillDir, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "myskill" }));
+		const projectSettings = resolve(cfgDir, "settings.json");
+		writeFileSync(
+			projectSettings,
+			JSON.stringify({
+				piShellAcpProvider: {
+					mcpServers: {
+						"pi-tools-bridge": {
+							command: "node",
+							args: ["bridge.js"],
+							// A STALE PI_SESSION_ID an operator might paste — must be overwritten.
+							env: { PI_SESSION_ID: "STALE-SHOULD-BE-REPLACED", FOO: "bar" },
+						},
+						weather: { type: "http", url: "https://example.test/mcp" },
+					},
+					skillPlugins: [skillDir],
+				},
+			}),
+		);
+		const NONE = resolve(cfgDir, "__absent__.json");
+		const richConfig = configMod.resolveProviderConfig({
+			cwd: cfgDir,
+			modelId: sonnet.id,
+			globalSettingsPath: NONE,
+			projectSettingsPath: projectSettings,
+		});
+
+		// Resolver sanity: two servers (sorted), Skill auto-added, defaults applied.
+		assert.deepEqual(
+			richConfig.mcpServers.map((s: { name: string }) => s.name),
+			["pi-tools-bridge", "weather"],
+			"resolver returns both MCP servers, name-sorted",
+		);
+		assert.ok(richConfig.tools.includes("Skill"), "nonempty skillPlugins auto-adds the Skill tool");
+		assert.ok(richConfig.permissionAllow.includes("Skill(*)"), "nonempty skillPlugins auto-allows Skill(*)");
+
+		const prevSid = process.env.PI_SESSION_ID;
+		process.env.PI_SESSION_ID = "LIVE-SID-123";
+		try {
+			const h = makeHarness(recordDir, richConfig);
+			await collect(
+				backend.streamAcpTurn(
+					sonnet,
+					{ messages: [{ role: "user", content: "hi NONCE-G", timestamp: 0 }] },
+					{ sessionId: "gate-G" },
+					h.deps,
+				) as Stream,
+			);
+			assert.equal(h.newSessionCalls.length, 1, "one newSession for the first turn");
+			const ns = h.newSessionCalls[0];
+			// G1: nonempty mcpServers reach newSession.
+			const wireNames = (ns.mcpServers as Array<{ name: string }>).map((s) => s.name).sort();
+			assert.deepEqual(wireNames, ["pi-tools-bridge", "weather"], "newSession receives the operator MCP servers");
+			// G2: envelope injected into pi-tools-bridge, stale PI_SESSION_ID filtered.
+			const bridge = (ns.mcpServers as Array<{ name: string; env?: Array<{ name: string; value: string }> }>).find(
+				(s) => s.name === "pi-tools-bridge",
+			);
+			const env = Object.fromEntries((bridge?.env ?? []).map((e) => [e.name, e.value]));
+			assert.equal(env.PI_SESSION_ID, "LIVE-SID-123", "live PI_SESSION_ID injected (stale value overwritten)");
+			assert.equal(env.PI_AGENT_ID, `pi-shell-acp/${sonnet.id}`, "PI_AGENT_ID injected from the model id");
+			assert.equal(env.FOO, "bar", "operator's own env entries are preserved");
+			// G3: the http server has no env carrier (untouched).
+			const weather = (ns.mcpServers as Array<{ name: string; env?: unknown }>).find((s) => s.name === "weather");
+			assert.ok(!("env" in (weather ?? {})), "http MCP server is not envelope-enriched (no env carrier)");
+			// G4: _meta carries the resolved tool surface + skill plugins.
+			const opts = ns._meta?.claudeCode?.options;
+			assert.ok(opts?.tools?.includes("Skill"), "_meta.claudeCode.options.tools carries the Skill tool");
+			assert.ok(Array.isArray(opts?.plugins) && opts.plugins.length === 1, "_meta carries the skill plugin");
+			assert.deepEqual(
+				opts?.extraArgs,
+				{ "strict-mcp-config": null },
+				"_meta carries strict-mcp-config (default true)",
+			);
+			// G5: the first-user augment lists the resolved server names.
+			assert.match(h.promptCalls[0].text, /pi-tools-bridge/, "augment lists the resolved MCP server names");
+			assert.match(h.promptCalls[0].text, /weather/, "augment lists every resolved MCP server");
+		} finally {
+			if (prevSid === undefined) delete process.env.PI_SESSION_ID;
+			else process.env.PI_SESSION_ID = prevSid;
+			rmSync(cfgDir, { recursive: true, force: true });
+		}
+
+		// G6: a config change (mcpServers hash) breaks reuse → a session-id-only
+		// change does NOT. Both checked at the signature layer (the reuse gate).
+		const sigEmpty = sigFor(store, sonnet.id, DEFAULT_RESOLVED_CONFIG);
+		const sigRich = sigFor(store, sonnet.id, richConfig);
+		assert.notEqual(sigEmpty, sigRich, "a config change (mcpServers/tools/skills) changes the bridge config signature");
+		assert.equal(
+			sigFor(store, sonnet.id, richConfig),
+			sigRich,
+			"the same resolved config yields the same signature (no per-turn rebuild)",
+		);
+	}
+
+	// ----------------------------------------------------------------------
+	// Section H — S2g showToolNotifications propagation: the operator flag
+	//             suppresses [tool:*] / [permission:*] notices, but NEVER the
+	//             S2f [acp:*] lifecycle notices (always visible). Also confirms it
+	//             stays OUT of the config signature (display-only, not compat).
+	// ----------------------------------------------------------------------
+	{
+		// false → tool notices suppressed, lifecycle still shown.
+		const offConfig = { ...DEFAULT_RESOLVED_CONFIG, showToolNotifications: false };
+		const hOff = makeHarness(recordDir, offConfig, /* emitToolCall */ true);
+		const off = deltaText(
+			await collect(
+				backend.streamAcpTurn(
+					sonnet,
+					{ messages: [{ role: "user", content: "hi NONCE-H", timestamp: 0 }] },
+					{ sessionId: "gate-H-off" },
+					hOff.deps,
+				) as Stream,
+			),
+		);
+		assert.ok(!off.includes("[tool:"), "showToolNotifications:false suppresses [tool:*] notices");
+		assert.ok(off.includes("[acp: preparing"), "lifecycle [acp:*] notices stay visible even when tool notices are off");
+
+		// true → tool notices shown (control).
+		const onConfig = { ...DEFAULT_RESOLVED_CONFIG, showToolNotifications: true };
+		const hOn = makeHarness(recordDir, onConfig, /* emitToolCall */ true);
+		const on = deltaText(
+			await collect(
+				backend.streamAcpTurn(
+					sonnet,
+					{ messages: [{ role: "user", content: "hi NONCE-H2", timestamp: 0 }] },
+					{ sessionId: "gate-H-on" },
+					hOn.deps,
+				) as Stream,
+			),
+		);
+		assert.ok(on.includes("[tool:start]"), "showToolNotifications:true shows [tool:*] notices");
+
+		// H3: the flag is display-only — it does NOT change the config signature.
+		assert.equal(
+			sigFor(store, sonnet.id, offConfig),
+			sigFor(store, sonnet.id, onConfig),
+			"showToolNotifications is display-only — never perturbs the bridge config signature (no spurious rebuild)",
+		);
+	}
 } finally {
 	rmSync(TMP_EMIT, { recursive: true, force: true });
 	rmSync(recordDir, { recursive: true, force: true });
@@ -548,5 +749,9 @@ console.log(
 		"(no double spawn); incompatible existing → new closes the old child (no orphan) while a model-lock throw leaves " +
 		"the live child alive + reusable; source locks buildAcpPrompt wiring + single-site applyAcpSessionUpdate + unref + " +
 		"in-flight claim; S2f progress notices emit in order (new: preparing→ready→sending prompt / reuse: reusing→sending " +
-		"prompt), are display-only (never on the ACP wire, dropped from a `new` rebuild, signature-invariant)",
+		"prompt), are display-only (never on the ACP wire, dropped from a `new` rebuild, signature-invariant); S2g config " +
+		"passthrough: resolved operator mcpServers/tools/skillPlugins reach newSession, the entwurf envelope is injected into " +
+		"pi-tools-bridge (stale PI_SESSION_ID overwritten, http untouched), _meta carries the tool surface + skill plugins + " +
+		"strict-mcp-config, the first-user augment lists the resolved server names, and a config change breaks the signature " +
+		"while the same config (and a session-id-only change) does not",
 );

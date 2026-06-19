@@ -48,6 +48,12 @@ import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from "@agentclie
 import type { Api, AssistantMessage, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { prependNewPromptAugment } from "./augment.js";
+import {
+	enrichMcpServersWithEnvelope,
+	mcpServerNames,
+	type ResolvedAcpConfig,
+	resolveProviderConfig,
+} from "./config.js";
 import { type AcpTextBlock, buildAcpPrompt } from "./context.js";
 import { loadEngraving } from "./engraving.js";
 import {
@@ -71,14 +77,7 @@ import {
 	resolveLifecyclePolicy,
 	writeSessionRecord,
 } from "./session-store.js";
-import {
-	assertExcludeToolsHonored,
-	buildClaudeSessionMeta,
-	DEFAULT_CLAUDE_DISALLOWED_TOOLS,
-	DEFAULT_CLAUDE_PERMISSION_ALLOW,
-	DEFAULT_CLAUDE_TOOLS,
-	PI_BUILTIN_BACKED_TOOLS,
-} from "./tool-surface.js";
+import { assertExcludeToolsHonored, buildClaudeSessionMeta, PI_BUILTIN_BACKED_TOOLS } from "./tool-surface.js";
 
 const INITIALIZE_TIMEOUT_MS = 30_000;
 const NEW_SESSION_TIMEOUT_MS = 30_000;
@@ -131,6 +130,8 @@ export interface AcpTurnDeps {
 	spawnChild(launch: { command: string; args: string[] }, cwd: string): AcpChildLike;
 	createConnection(child: AcpChildLike, handlers: AcpClientHandlers): AcpConnectionLike;
 	lifecyclePolicy(): LifecyclePolicy;
+	/** Resolve operator provider config (S2g). Real impl reads global+project settings. */
+	loadConfig(cwd: string, modelId: string): ResolvedAcpConfig;
 	now(): string;
 	/** Record dir override (tests). Defaults to the real session cache dir. */
 	sessionDir?: string;
@@ -340,6 +341,7 @@ function defaultDeps(): AcpTurnDeps {
 			) as unknown as AcpConnectionLike;
 		},
 		lifecyclePolicy: () => resolveLifecyclePolicy(),
+		loadConfig: (cwd, modelId) => resolveProviderConfig({ cwd, modelId }),
 		now: () => new Date().toISOString(),
 	};
 }
@@ -440,13 +442,34 @@ export function streamAcpTurn(
 	}
 
 	queueMicrotask(async () => {
+		// Operator provider config (S2g) — resolve FIRST. A config the bridge
+		// cannot honor (bad mcpServers / skillPlugins / appendSystemPrompt:true /
+		// strictMcpConfig:false) fails loud into the stream before any spawn. This
+		// is the baseline fix: the operator's piShellAcpProvider.{mcpServers,
+		// skillPlugins,tools,…} now actually reach the session.
+		let config: ResolvedAcpConfig;
+		try {
+			config = deps.loadConfig(cwd, model.id);
+		} catch (err) {
+			finishError(err, false);
+			return;
+		}
+		const serverNames = mcpServerNames(config);
+		// S2g: apply the operator's tool/permission notice preference to THIS turn's
+		// stream. Display-only rendering config (not session-compat), so it is set on
+		// the stream state and deliberately kept OUT of bridgeConfigSignature. The S2f
+		// lifecycle notices ignore this flag (always visible) — only the verbose
+		// [tool:*] / [permission:*] stream is suppressed when false.
+		state.showToolNotifications = config.showToolNotifications;
+
 		// Tool-surface truthfulness preflight (S2b assertExcludeToolsHonored) —
 		// BEFORE any spawn or session lookup. If pi excluded a built-in the Claude
 		// child will still expose (declared != actual), fail fast into the stream
-		// rather than lie to the model.
+		// rather than lie to the model. Uses the RESOLVED tool surface (S2g) so an
+		// operator-narrowed `tools` is what the truthfulness check honors.
 		try {
 			const activeToolNames = context.tools?.map((t) => t.name) ?? [...PI_BUILTIN_BACKED_TOOLS];
-			assertExcludeToolsHonored(activeToolNames, { backend: "claude", tools: DEFAULT_CLAUDE_TOOLS });
+			assertExcludeToolsHonored(activeToolNames, { backend: "claude", tools: config.tools });
 		} catch (err) {
 			finishError(err, false);
 			return;
@@ -461,13 +484,22 @@ export function streamAcpTurn(
 		// (no clock/random/env) so the signature stays a per-(model,template)
 		// constant and does NOT rebuild every turn (NEXT §S2-scout 핀1 / oracle C,
 		// GPT c32a6c8 ②). null → "" keeps a carrier-absent run byte-identical to 1b-2b.
-		const engraving = loadEngraving({ backend: "claude", mcpServerNames: [] });
+		// mcpServerNames feed the carrier so `{{mcp_servers}}` lists the real set.
+		const engraving = loadEngraving({ backend: "claude", mcpServerNames: serverNames });
+		// S2g: the signature folds the FULL resolved config (mcpServersHash + tool
+		// surface + skillPlugins + flags) so any operator config change invalidates
+		// a reused session; the per-session envelope is excluded (runtime, not config).
 		const configSig = bridgeConfigSignature({
 			backend: "claude",
 			modelId: model.id,
 			appendSystemPrompt: engraving ?? "",
-			mcpServers: [],
-			settingSources: [],
+			mcpServersHash: config.mcpServersHash,
+			settingSources: [...config.settingSources],
+			strictMcpConfig: config.strictMcpConfig,
+			tools: [...config.tools],
+			skillPlugins: [...config.skillPlugins],
+			permissionAllow: [...config.permissionAllow],
+			disallowedTools: [...config.disallowedTools],
 		});
 		const ctxSigs = contextMessageSignatures(context);
 		const params: BootstrapParams = {
@@ -532,7 +564,7 @@ export function streamAcpTurn(
 			if (decision.path === "reuse" && existing) {
 				await runReuseTurn(existing, ctxSigs);
 			} else {
-				await runNewTurn(params, ctxSigs, engraving);
+				await runNewTurn(params, ctxSigs, engraving, config);
 			}
 		} finally {
 			inFlightKeys.delete(sessionKey);
@@ -540,7 +572,12 @@ export function streamAcpTurn(
 	});
 
 	// --- new session: spawn → initialize → newSession → setModel → full transcript
-	async function runNewTurn(params: BootstrapParams, ctxSigs: string[], engraving: string | null): Promise<void> {
+	async function runNewTurn(
+		params: BootstrapParams,
+		ctxSigs: string[],
+		engraving: string | null,
+		config: ResolvedAcpConfig,
+	): Promise<void> {
 		let child: AcpChildLike | undefined;
 		let session: BridgeSession | undefined;
 		let onAbort: (() => void) | undefined;
@@ -623,21 +660,31 @@ export function streamAcpTurn(
 			// carrier is the SAME rendered engraving folded into configSig above;
 			// when null, buildClaudeSessionMeta omits the _meta.systemPrompt key
 			// entirely so a carrier-absent session is byte-identical to 1b-2b.
+			// S2g: the RESOLVED operator config drives the session meta (tools /
+			// permission / disallowed / settingSources / strictMcpConfig / skillPlugins)
+			// instead of the old hardcoded minimal surface.
 			const sessionMeta = buildClaudeSessionMeta(
 				{
 					modelId: model.id,
-					tools: DEFAULT_CLAUDE_TOOLS,
-					permissionAllow: DEFAULT_CLAUDE_PERMISSION_ALLOW,
-					disallowedTools: DEFAULT_CLAUDE_DISALLOWED_TOOLS,
-					settingSources: [],
-					strictMcpConfig: false,
-					skillPlugins: [],
+					tools: config.tools,
+					permissionAllow: config.permissionAllow,
+					disallowedTools: config.disallowedTools,
+					settingSources: config.settingSources,
+					strictMcpConfig: config.strictMcpConfig,
+					skillPlugins: config.skillPlugins,
 				},
 				engraving ?? undefined,
 			);
+			// Envelope-enrich the normalized servers at spawn time (PI_SESSION_ID/
+			// PI_AGENT_ID into pi-tools-bridge) — runtime wiring, applied AFTER the
+			// config signature was taken so a new session id never forces a rebuild.
+			const wireMcpServers = enrichMcpServersWithEnvelope(config.mcpServers, {
+				modelId: model.id,
+				piSessionId: process.env.PI_SESSION_ID?.trim() || undefined,
+			});
 			const created = await withTimeout(
 				"newSession",
-				connection.newSession({ cwd, mcpServers: [], _meta: sessionMeta }),
+				connection.newSession({ cwd, mcpServers: wireMcpServers, _meta: sessionMeta }),
 				NEW_SESSION_TIMEOUT_MS,
 			);
 			const acpSessionId = created?.sessionId;
@@ -672,7 +719,7 @@ export function streamAcpTurn(
 			const prompt = prependNewPromptAugment(basePrompt, {
 				backend: "claude",
 				cwd,
-				mcpServerNames: [],
+				mcpServerNames: mcpServerNames(config),
 				emacsAgentSocket: process.env.PI_EMACS_AGENT_SOCKET?.trim() || undefined,
 			});
 

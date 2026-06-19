@@ -71,15 +71,25 @@ export function resolveLifecyclePolicy(argv: readonly string[] = process.argv): 
 /**
  * Inputs to the config signature. Order is FIXED so the serialized hash is
  * stable across turns (a drifting key order would force a rebuild every turn).
- * `appendSystemPrompt` is the carrier slot — empty through S2d-1b (carrier
- * absent), populated by engraving in S2d-1c.
+ * `appendSystemPrompt` is the carrier slot — the rendered engraving string
+ * (empty when absent). `mcpServersHash` is the sha256 of the NORMALIZED server
+ * list (NOT just names — S2g/GPT `…2f9325`), so a change to a server's
+ * command/args/env/url/headers invalidates a reused session. The per-session
+ * envelope (PI_SESSION_ID/PI_AGENT_ID) is deliberately NOT here: it is runtime
+ * wiring injected after this hash is taken, so a new session id alone never
+ * forces a rebuild.
  */
 export interface BridgeConfigInput {
 	backend: "claude";
 	modelId: string;
 	appendSystemPrompt: string;
-	mcpServers: string[];
+	mcpServersHash: string;
 	settingSources: string[];
+	strictMcpConfig: boolean;
+	tools: string[];
+	skillPlugins: string[];
+	permissionAllow: string[];
+	disallowedTools: string[];
 }
 
 /** A persisted ACP session record (one file per sessionKey). */
@@ -152,8 +162,13 @@ export function bridgeConfigSignature(input: BridgeConfigInput): string {
 			backend: input.backend,
 			modelId: input.modelId,
 			appendSystemPrompt: input.appendSystemPrompt,
-			mcpServers: [...input.mcpServers],
+			mcpServersHash: input.mcpServersHash,
 			settingSources: [...input.settingSources],
+			strictMcpConfig: input.strictMcpConfig,
+			tools: [...input.tools],
+			skillPlugins: [...input.skillPlugins],
+			permissionAllow: [...input.permissionAllow],
+			disallowedTools: [...input.disallowedTools],
 		}),
 	);
 }

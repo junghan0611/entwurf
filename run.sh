@@ -33,7 +33,7 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # pnpm install + sync auth + install + v2 install smoke (pi-tools-bridge only; LIVE substrate = release-gate)
-  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, retargeted smoke-session-id-name, RGG) + the ACP plugin acceptance floor (7 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/rgg). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). LIVE-gated MUST steps HONEST-SKIP when LIVE!=1 (a CUT needs LIVE=1, SKIP=0). v1 verbs (xt-tool-surface, session-messaging, sentinel) are gone (v2 core); --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
+  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, retargeted smoke-session-id-name, RGG) + the ACP plugin acceptance floor (9 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/rgg/mcp/skill). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). LIVE-gated MUST steps HONEST-SKIP when LIVE!=1 (a CUT needs LIVE=1, SKIP=0). v1 verbs (xt-tool-surface, session-messaging, sentinel) are gone (v2 core); --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh xt-tool-surface             # [LEGACY — broken on v2-only, dropped from release floor, v2 rewrite pending] ACP backend exclude-tools policy: -xt <builtin> fail-fast per backend
   ./run.sh check-bridge               # pi-tools-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-pi-tools-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
@@ -884,6 +884,31 @@ smoke_acp_carrier_augment_live() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-carrier-augment-live.ts)
 }
 
+smoke_acp_mcp_live() {
+  # S2g LIVE 1 — operator MCP passthrough acceptance. OUT of pnpm check, needs
+  # LIVE=1. Registers a TINY isolated probe MCP server (scripts/fixtures/
+  # probe-mcp-server.ts, one tool probe_nonce) in a scratch .pi/settings.json and
+  # drives one real provider turn: the model must CALL the tool and echo the nonce
+  # that lives only inside the MCP server env. Proves the operator's
+  # piShellAcpProvider.mcpServers reaches the live ACP session (the GLG-baseline
+  # fix). Isolated probe (not pi-tools-bridge) so a failure does not blur into
+  # identity/env wiring. Model override: PI_SHELL_ACP_PROVIDER_MODEL.
+  #   LIVE=1 ./run.sh smoke-acp-mcp-live
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-mcp-live.ts)
+}
+
+smoke_acp_skill_live() {
+  # S2g LIVE 2 — operator skillPlugins passthrough acceptance. OUT of pnpm check,
+  # needs LIVE=1. Builds a temp skill plugin (.claude-plugin/plugin.json +
+  # skills/<name>/SKILL.md carrying a unique nonce instruction), points
+  # piShellAcpProvider.skillPlugins at it, and drives one real provider turn: the
+  # model must surface/use the skill and echo the nonce. Proves skillPlugins +
+  # the Skill/Skill(*) auto-add reach the live session (the other half of the GLG
+  # baseline). Model override: PI_SHELL_ACP_PROVIDER_MODEL.
+  #   LIVE=1 ./run.sh smoke-acp-skill-live
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-skill-live.ts)
+}
+
 smoke_acp_rgg_live() {
   # S2e-2 — ACP-provider resident garden guard (RGG). Thin wrapper (GPT c32a6c8):
   # runs the SHARED resident-garden-guard runner against the pi-shell-acp provider
@@ -1324,6 +1349,19 @@ check_acp_prompt_builder() {
   # session store yet — locks the builder before S2d wires the reuse paths.
   section "ACP prompt builder (S2d bootstrapPath prompt scope)"
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-prompt-builder.ts)
+}
+
+check_acp_config() {
+  # Deterministic gate for the S2g operator provider-config loader. Locks:
+  # global+project merge (project overrides defined keys only; mcpServers merge
+  # per-name with project win), defaults (strict-mcp-config on, [] sources,
+  # baseline tools), fail-loud on invalid mcpServers/skillPlugins/
+  # appendSystemPrompt:true/strictMcpConfig:false, nonempty skillPlugins auto-add
+  # Skill+Skill(*), deterministic sorted mcp hash sensitive to command/env/url/
+  # headers, and envelope enrich (PI_SESSION_ID/PI_AGENT_ID into pi-tools-bridge
+  # only, stale filtered, post-hash). Pure + temp-dir settings I/O, no child/spawn.
+  section "ACP provider config (S2g operator mcpServers/skillPlugins/tools passthrough)"
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-config.ts)
 }
 
 check_acp_session_store() {
@@ -1938,8 +1976,9 @@ xt_tool_surface() {
 #     LIVE), the MCP bridge (check-bridge), and the garden-native substrate/guard
 #     (smoke-session-id-name on a pi-native target via PI_SHELL_ACP_LIVE_TARGET,
 #     and smoke-resident-garden-guard).
-#   - ACP plugin acceptance floor (S0~S2f): the 7 ACP LIVE smokes
-#     (socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/rgg)
+#   - ACP plugin acceptance floor (S0~S2g): the 9 ACP LIVE smokes
+#     (socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/rgg
+#     + S2g mcp/skill config passthrough)
 #     are MUST, not BEHAVIOR — they prove programmatic transport/provider/backend
 #     invariants of the ACP plugin on the v2 core, so a failure is a release
 #     defect, not an advisory model-in-loop signal. Each is LIVE-gated honest-SKIP.
@@ -2142,6 +2181,8 @@ release_gate() {
   run_live_step "smoke-acp-session-reuse-live (S2d: process-scoped reuse + recall)"       gate env LIVE=1 bash "$self" smoke-acp-session-reuse-live
   run_live_step "smoke-acp-carrier-augment-live (S2e-1: augment delivery + 핀1 billing)"  gate env LIVE=1 bash "$self" smoke-acp-carrier-augment-live
   run_live_step "smoke-acp-rgg-live (S2e-2: ACP-target garden guard, deterministic half)" gate env LIVE=1 bash "$self" smoke-acp-rgg-live
+  run_live_step "smoke-acp-mcp-live (S2g: operator mcpServers reach the live ACP session)"  gate env LIVE=1 bash "$self" smoke-acp-mcp-live
+  run_live_step "smoke-acp-skill-live (S2g: operator skillPlugins reach the live ACP session)" gate env LIVE=1 bash "$self" smoke-acp-skill-live
 
   # 4. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
   #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never
@@ -2332,6 +2373,12 @@ case "$cmd" in
   smoke-acp-session-reuse-live)
     smoke_acp_session_reuse_live
     ;;
+  smoke-acp-mcp-live)
+    smoke_acp_mcp_live
+    ;;
+  smoke-acp-skill-live)
+    smoke_acp_skill_live
+    ;;
   smoke-acp-carrier-augment-live)
     smoke_acp_carrier_augment_live
     ;;
@@ -2518,6 +2565,9 @@ case "$cmd" in
     ;;
   check-acp-prompt-builder)
     check_acp_prompt_builder
+    ;;
+  check-acp-config)
+    check_acp_config
     ;;
   check-acp-session-store)
     check_acp_session_store

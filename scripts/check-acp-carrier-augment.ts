@@ -116,7 +116,17 @@ const BRIDGE_MARK = "operating through pi-shell-acp";
 // 3) a carrier change changes bridgeConfigSignature (invalidates reuse)
 // ===========================================================================
 {
-	const base = { backend: "claude" as const, modelId: "claude-x", mcpServers: [], settingSources: [] };
+	const base = {
+		backend: "claude" as const,
+		modelId: "claude-x",
+		mcpServersHash: "deadbeef",
+		settingSources: [],
+		strictMcpConfig: true,
+		tools: ["Read", "Bash", "Edit", "Write"],
+		skillPlugins: [],
+		permissionAllow: ["Read(*)"],
+		disallowedTools: [],
+	};
 	const absent = bridgeConfigSignature({ ...base, appendSystemPrompt: "" });
 	const present = bridgeConfigSignature({ ...base, appendSystemPrompt: "# carrier" });
 	assert.notEqual(absent, present, "carrier change → different config signature (a drifted carrier invalidates reuse)");

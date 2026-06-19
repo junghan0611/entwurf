@@ -45,8 +45,13 @@ const baseInput = (): BridgeConfigInput => ({
 	backend: "claude",
 	modelId: "claude-sonnet-4-6",
 	appendSystemPrompt: "",
-	mcpServers: [],
+	mcpServersHash: "deadbeef",
 	settingSources: [],
+	strictMcpConfig: true,
+	tools: ["Read", "Bash", "Edit", "Write"],
+	skillPlugins: [],
+	permissionAllow: ["Read(*)", "Bash(*)", "Edit(*)", "Write(*)", "mcp__*"],
+	disallowedTools: [],
 });
 
 // ---------------------------------------------------------------------------
@@ -58,7 +63,19 @@ const baseInput = (): BridgeConfigInput => ({
 	assert.ok(!sig0.includes("claude-sonnet-4-6"), "config signature is a digest — never embeds the raw modelId/carrier");
 	assert.equal(sig0, bridgeConfigSignature(baseInput()), "signature is deterministic");
 	// Array copies do not affect equality (same content).
-	assert.equal(bridgeConfigSignature({ ...baseInput(), mcpServers: [] }), sig0, "empty mcpServers stable");
+	assert.equal(bridgeConfigSignature({ ...baseInput(), settingSources: [] }), sig0, "empty settingSources stable");
+	// S2g: mcpServers hash drift → different signature (not just a name change).
+	assert.notEqual(
+		bridgeConfigSignature({ ...baseInput(), mcpServersHash: "cafef00d" }),
+		sig0,
+		"mcpServers hash drift changes the signature",
+	);
+	// S2g: tool-surface / skillPlugins drift → different signature.
+	assert.notEqual(
+		bridgeConfigSignature({ ...baseInput(), skillPlugins: ["/abs/plugin"] }),
+		sig0,
+		"skillPlugins drift changes the signature",
+	);
 	// Carrier (appendSystemPrompt) drift → different signature → incompatible (③).
 	assert.notEqual(
 		bridgeConfigSignature({ ...baseInput(), appendSystemPrompt: "ENGRAVED" }),
