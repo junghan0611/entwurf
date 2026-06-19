@@ -33,7 +33,7 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # pnpm install + sync auth + install + v2 install smoke (pi-tools-bridge only; LIVE substrate = release-gate)
-  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, retargeted smoke-session-id-name, RGG) + the ACP plugin acceptance floor (9 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/rgg/mcp/skill). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). LIVE-gated MUST steps HONEST-SKIP when LIVE!=1 (a CUT needs LIVE=1, SKIP=0). v1 verbs (xt-tool-surface, session-messaging, sentinel) are gone (v2 core); --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
+  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, retargeted smoke-session-id-name, RGG) + the ACP plugin acceptance floor (10 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/rgg/mcp/skill/bundled-mcp). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). LIVE-gated MUST steps HONEST-SKIP when LIVE!=1 (a CUT needs LIVE=1, SKIP=0). v1 verbs (xt-tool-surface, session-messaging, sentinel) are gone (v2 core); --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh xt-tool-surface             # [LEGACY — broken on v2-only, dropped from release floor, v2 rewrite pending] ACP backend exclude-tools policy: -xt <builtin> fail-fast per backend
   ./run.sh check-bridge               # pi-tools-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-pi-tools-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
@@ -907,6 +907,22 @@ smoke_acp_skill_live() {
   # baseline). Model override: PI_SHELL_ACP_PROVIDER_MODEL.
   #   LIVE=1 ./run.sh smoke-acp-skill-live
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-skill-live.ts)
+}
+
+smoke_acp_bundled_mcp_live() {
+  # S2g LIVE 3 (axis 3) — the BUNDLED pi-tools-bridge reaches the live ACP session
+  # via the 0.11.0 resident/RPC circuit. OUT of pnpm check, needs LIVE=1. Launches a
+  # real `pi --entwurf-control --mode rpc` resident on an ACP model and drives ONE
+  # model turn over the stdin RPC asking it to call mcp__pi-tools-bridge__entwurf_self;
+  # captures the identity envelope (the resident's own fresh gid — never told to the
+  # model, only in the bridge env — + agentId + socketState alive) and agent_end
+  # DIRECTLY from the stdout RPC event stream (gnew-rpc-drive shape). Complements
+  # smoke-acp-mcp-live (tiny isolated probe): this proves the REAL bundled bridge with
+  # envelope injection. NOT `pi -p` one-shot (that bundled-MCP teardown hang is
+  # diagnostic backlog, not the 0.11.0 release circuit). Model override:
+  # PI_SHELL_ACP_PROVIDER_MODEL.
+  #   LIVE=1 ./run.sh smoke-acp-bundled-mcp-live
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-bundled-mcp-live.ts)
 }
 
 smoke_acp_rgg_live() {
@@ -1976,9 +1992,9 @@ xt_tool_surface() {
 #     LIVE), the MCP bridge (check-bridge), and the garden-native substrate/guard
 #     (smoke-session-id-name on a pi-native target via PI_SHELL_ACP_LIVE_TARGET,
 #     and smoke-resident-garden-guard).
-#   - ACP plugin acceptance floor (S0~S2g): the 9 ACP LIVE smokes
+#   - ACP plugin acceptance floor (S0~S2g): the 10 ACP LIVE smokes
 #     (socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/rgg
-#     + S2g mcp/skill config passthrough)
+#     + S2g mcp/skill config passthrough + S2g axis-3 bundled-mcp resident/RPC)
 #     are MUST, not BEHAVIOR — they prove programmatic transport/provider/backend
 #     invariants of the ACP plugin on the v2 core, so a failure is a release
 #     defect, not an advisory model-in-loop signal. Each is LIVE-gated honest-SKIP.
@@ -2017,6 +2033,14 @@ release_gate() {
   # pi turn under its own os.tmpdir() agent dir + cwds (mkdtemp, cleaned up),
   # and the guard is wired here as the NEGATIVE path only — a 0-token fail-fast
   # that writes no session file at all.
+  #
+  # smoke-acp-bundled-mcp-live is a DELIBERATE exception to the PWD=project_dir
+  # routing: it runs its resident with cwd=os.tmpdir() and relies on the
+  # operator's INSTALLED bundled bridge (global ~/.pi/agent/settings.json
+  # piShellAcpProvider.mcpServers.pi-tools-bridge) — that IS the operator circuit
+  # this axis restores, not a scratch-isolated probe (that is smoke-acp-mcp-live's
+  # job). It writes only a tmpdir-cwd session (no repo pollution) and fails loud if
+  # the operator has not wired the bundled bridge.
   local self="$REPO_DIR/run.sh"
   gate() { ( cd "$project_dir" && "$@" ); }
 
@@ -2183,6 +2207,7 @@ release_gate() {
   run_live_step "smoke-acp-rgg-live (S2e-2: ACP-target garden guard, deterministic half)" gate env LIVE=1 bash "$self" smoke-acp-rgg-live
   run_live_step "smoke-acp-mcp-live (S2g: operator mcpServers reach the live ACP session)"  gate env LIVE=1 bash "$self" smoke-acp-mcp-live
   run_live_step "smoke-acp-skill-live (S2g: operator skillPlugins reach the live ACP session)" gate env LIVE=1 bash "$self" smoke-acp-skill-live
+  run_live_step "smoke-acp-bundled-mcp-live (S2g axis 3: bundled pi-tools-bridge via 0.11.0 resident/RPC circuit)" gate env LIVE=1 bash "$self" smoke-acp-bundled-mcp-live
 
   # 4. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
   #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never
@@ -2378,6 +2403,9 @@ case "$cmd" in
     ;;
   smoke-acp-skill-live)
     smoke_acp_skill_live
+    ;;
+  smoke-acp-bundled-mcp-live)
+    smoke_acp_bundled_mcp_live
     ;;
   smoke-acp-carrier-augment-live)
     smoke_acp_carrier_augment_live
