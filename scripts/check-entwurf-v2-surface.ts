@@ -293,6 +293,17 @@ async function main(): Promise<void> {
 			"4: pi-native — NO static import of the self-address fence (TS5097 stays closed)",
 			!/import[^;]*from\s*"\.\/lib\/entwurf-self-address\.(js|ts)"/.test(code),
 		);
+		// Caller-intent steer (live-peer owned-outcome bug): the description must tell the model
+		// to use fire-and-forget for a LIVE/alive peer and that owned-outcome is dormant-only and
+		// NEVER auto-converted — the preventive fix (the decider must not auto-convert).
+		ok(
+			"4: pi-native — description steers live/alive peer → fire-and-forget",
+			/liveness=alive/.test(src) && /fire-and-forget/.test(src),
+		);
+		ok(
+			"4: pi-native — description says owned-outcome is dormant-only + never auto-converted",
+			/owned-outcome is ONLY for waking a DORMANT pi/.test(src) && /NEVER auto-converted/.test(src),
+		);
 	}
 
 	// ── 5: MCP bridge wiring guard ────────────────────────────────────────────
@@ -322,6 +333,16 @@ async function main(): Promise<void> {
 		ok(
 			"5: MCP — v2 handler routes through the runner, NOT legacy rpcCall/enqueueMetaMessage",
 			!/\brpcCall\(/.test(v2Block) && !/\benqueueMetaMessage\(/.test(v2Block),
+		);
+		// Caller-intent steer — same preventive guidance on the MCP surface (a sibling reaching
+		// in over MCP reads this description, not the pi-native one).
+		ok(
+			"5: MCP — description steers live/alive peer → fire-and-forget",
+			/liveness=alive/.test(src) && /fire-and-forget/.test(src),
+		);
+		ok(
+			"5: MCP — description says owned-outcome is dormant-only + never auto-converted",
+			/owned-outcome is ONLY for waking a DORMANT pi/.test(src) && /NEVER auto-converted/.test(src),
 		);
 	}
 

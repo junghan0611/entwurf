@@ -329,8 +329,15 @@ server.tool(
 		"(delivered / rejected / lock-retained / delivered-but-lock-dirty). The decider — not the " +
 		"caller — chooses the transport. Note: entwurf_v2 dispatches to EXISTING targets; " +
 		"brand-new sibling creation is deferred to a later v2 lane. " +
-		"intent: fire-and-forget (a send with no owned result) or owned-outcome (you own the " +
-		"result). mode/wants_reply apply to a live send. Use entwurf_peers to discover targets. " +
+		"CHOOSING INTENT (read this — picking wrong is rejected, never auto-fixed): to message / " +
+		"reply / hand off a peer that entwurf_peers shows as liveness=alive (a live pi OR a " +
+		"socket-citizen) use intent: fire-and-forget — it routes to the live control-socket; set " +
+		"wants_reply:true if you need an answer (wants_reply is NOT owned-outcome). For a meta-session " +
+		"(liveness=unsupported, e.g. Claude Code) replies are ALSO fire-and-forget (→ mailbox). " +
+		"owned-outcome is ONLY for waking a DORMANT pi citizen (spawn-bg resume); on a live target it " +
+		"is rejected as owned-live-no-autosend and on an unsupported backend as " +
+		"backend-liveness-unsupported, and is NEVER auto-converted — so pick the right intent up front. " +
+		"mode/wants_reply apply to a live send. Use entwurf_peers to discover targets. " +
 		"Payload guidance: message hard cap 16000 chars. For larger reviews/logs, write an " +
 		"artifact and dispatch its path plus a short digest; avoid multi-part sends because " +
 		"mailbox doorbells may coalesce.",
@@ -338,7 +345,11 @@ server.tool(
 		target: z.string().min(1).describe("Target garden id (use entwurf_peers to discover)"),
 		intent: z
 			.enum(["fire-and-forget", "owned-outcome"])
-			.describe("Ownership intent: fire-and-forget (send) or owned-outcome (dispatcher owns the result)"),
+			.describe(
+				"fire-and-forget = send/reply/hand-off to a LIVE or meta-session target (set wants_reply " +
+					"for an answer); owned-outcome = wake a DORMANT pi via spawn-bg resume ONLY — on a live " +
+					"target it is rejected (owned-live-no-autosend) and never auto-converted",
+			),
 		message: z
 			.string()
 			.min(1)

@@ -1374,7 +1374,9 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 		target: Type.String({ description: "Target garden id (use entwurf_peers to discover)" }),
 		intent: StringEnum(["fire-and-forget", "owned-outcome"] as const, {
 			description:
-				"Ownership intent: fire-and-forget (send, no owned result) or owned-outcome (the dispatcher owns the result)",
+				"fire-and-forget = send/reply/hand-off to a LIVE or meta-session target (set wants_reply for an answer); " +
+				"owned-outcome = wake a DORMANT pi via spawn-bg resume ONLY — on a live target it is rejected " +
+				"(owned-live-no-autosend) and never auto-converted",
 		}),
 		message: Type.String({
 			description:
@@ -1418,6 +1420,14 @@ the mailbox path is lock-free, guarded by active-receiver deliverability), and r
 - message: the message/prompt to dispatch (required).
 - mode: steer or follow_up for a live send (optional).
 - wants_reply: reply hint for a live send (optional, default false).
+
+CHOOSING INTENT (picking wrong is rejected, never auto-fixed): to message / reply / hand off a peer
+that entwurf_peers shows as liveness=alive (a live pi OR a socket-citizen), use intent: fire-and-forget
+— it routes to the live control-socket; set wants_reply:true if you need an answer (wants_reply is NOT
+owned-outcome). For a meta-session (liveness=unsupported, e.g. Claude Code), replies are ALSO
+fire-and-forget (→ mailbox). owned-outcome is ONLY for waking a DORMANT pi citizen (spawn-bg resume);
+on a live target it is rejected as owned-live-no-autosend, on an unsupported backend as
+backend-liveness-unsupported, and is NEVER auto-converted — so pick the right intent up front.
 
 The decider — not this surface — chooses the transport.`,
 		parameters: entwurfV2Parameters,
