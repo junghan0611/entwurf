@@ -1169,21 +1169,29 @@ assert.equal(peerCoding, piAi,
 assert.equal(peerTui, piAi,
   `run.sh check-pack-install pi-tui peer pin (${peerTui}) must match (${piAi})`);
 
-// peerDependencies floor must track the devDep pin (0.11 Stage 0): a pi bump
-// that lifts devDeps but leaves a stale `>=0.78.0` peer floor would let a
-// consumer install pi-shell-acp against a pi that lacks the 0.79 public
-// trust exports the bridge now imports. Floor === `>=<devDep>`.
+// peerDependencies must be a CLOSED range (0.11 Stage 0, drift-proofing): the
+// floor tracks the devDep pin so a consumer can't install against a pi lacking
+// the 0.79 public trust exports the bridge imports, AND an upper bound at the
+// next minor stops a fresh install from silently pulling a future pi (0.80+)
+// whose internal export surface has drifted from the one we typecheck against.
+// pi moves its public surface every minor (the 0.79.x export churn), so an open
+// `>=` floor is exactly how the next installer re-acquires the drift. Expected
+// shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.79.8 <0.80`).
+const [piMaj, piMin] = piAi.split('.').map(Number);
+assert.equal(piMaj, 0,
+  `pi pin major must stay 0 for the next-minor ceiling rule (got ${piAi}); revisit check-dep-versions when pi reaches 1.x`);
+const expectedPeer = `>=${piAi} <0.${piMin + 1}`;
 const peerDepAi = pkg.peerDependencies?.['@earendil-works/pi-ai'];
 const peerDepCoding = pkg.peerDependencies?.['@earendil-works/pi-coding-agent'];
 const peerDepTui = pkg.peerDependencies?.['@earendil-works/pi-tui'];
-assert.equal(peerDepAi, `>=${piAi}`,
-  `package.json peerDependencies @earendil-works/pi-ai (${peerDepAi}) must be >=${piAi} (devDep floor)`);
-assert.equal(peerDepCoding, `>=${piAi}`,
-  `package.json peerDependencies @earendil-works/pi-coding-agent (${peerDepCoding}) must be >=${piAi} (devDep floor)`);
-assert.equal(peerDepTui, `>=${piAi}`,
-  `package.json peerDependencies @earendil-works/pi-tui (${peerDepTui}) must be >=${piAi} (devDep floor)`);
+assert.equal(peerDepAi, expectedPeer,
+  `package.json peerDependencies @earendil-works/pi-ai (${peerDepAi}) must be "${expectedPeer}" (devDep floor + next-minor ceiling)`);
+assert.equal(peerDepCoding, expectedPeer,
+  `package.json peerDependencies @earendil-works/pi-coding-agent (${peerDepCoding}) must be "${expectedPeer}"`);
+assert.equal(peerDepTui, expectedPeer,
+  `package.json peerDependencies @earendil-works/pi-tui (${peerDepTui}) must be "${expectedPeer}"`);
 
-console.log('[check-dep-versions] 10 assertions ok');
+console.log('[check-dep-versions] 11 assertions ok');
 EOF
   )
 }
@@ -1219,7 +1227,7 @@ check_pi_runtime_version() {
   # via a DYNAMIC import of the package root only — never statically import a
   # 0.79-only symbol here, or this guard would crash before it can fail loud.
   (cd "$REPO_DIR" && node --input-type=module <<'EOF'
-const FLOOR = '0.79.4';
+const FLOOR = '0.79.8';
 const cmp = (a, b) => {
   const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
   for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0); }
@@ -1237,7 +1245,7 @@ if (typeof VERSION !== 'string') {
   process.exit(1);
 }
 if (cmp(VERSION, FLOOR) < 0) {
-  console.error(`[check-pi-runtime-version] FAIL: pi VERSION ${VERSION} < ${FLOOR} — the bridge imports pi 0.79 public trust exports + semantics (hasTrustRequiringProjectResources, ProjectTrustStore nearest-ancestor get) older pi lacks or behaves differently. Bump @earendil-works/pi-*.`);
+  console.error(`[check-pi-runtime-version] FAIL: pi VERSION ${VERSION} < ${FLOOR} — the bridge is built and tested against the 0.79.8 public/runtime surface (trust exports hasTrustRequiringProjectResources + ProjectTrustStore nearest-ancestor get, provider registration surface, compaction semantics) that older pi lacks or behaves differently on. Bump @earendil-works/pi-*.`);
   process.exit(1);
 }
 console.log(`[check-pi-runtime-version] ok — pi VERSION ${VERSION} >= ${FLOOR}`);
@@ -1666,9 +1674,9 @@ check_pack_install() {
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.79.4" \
-    "@earendil-works/pi-coding-agent@0.79.4" \
-    "@earendil-works/pi-tui@0.79.4" \
+    "@earendil-works/pi-ai@0.79.8" \
+    "@earendil-works/pi-coding-agent@0.79.8" \
+    "@earendil-works/pi-tui@0.79.8" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"

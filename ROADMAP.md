@@ -46,7 +46,7 @@ carrier-augment 등)은 `pnpm check`에, LIVE 짝 7개는 release-gate **MUST** 
 | v2 dormant pi → spawn-bg resume (실 `pi --entwurf-control` child + model turn) | `smoke-entwurf-v2-spawn-resume-live` |
 | v2 active Claude Code meta → meta-mailbox enqueue + doorbell | matrix-live C2 |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability gates |
-| floor 0.79.4 parity | `pnpm check` + release-gate MUST |
+| floor 0.79.8 parity (`>=0.79.8 <0.80`) | `pnpm check` + release-gate MUST |
 
 ### 다음 — PR-polish → tag (GLG)
 
@@ -171,7 +171,7 @@ parentGardenId:null, isEntwurf:false, createdAt, recordUpdatedAt }`. `model`/`tr
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.79 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **0.79.4**(0.11.0).
+  public export → TS 직접 import(재구현 불필요). floor = **0.79.8** (`>=0.79.8 <0.80`, next-minor 상한; 이전 0.11.0 floor=0.79.4).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상

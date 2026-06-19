@@ -216,7 +216,7 @@ Code-level invariants pinned at the same time:
 ## Runtime Dependencies
 
 - `@modelcontextprotocol/sdk`, `zod` — the only runtime deps right now. The Claude ACP package (`@agentclientprotocol/claude-agent-acp`) returns as a pinned dep when the ACP plugin lands; the Codex/Gemini ACP packages stay out of scope (native already reaches Codex; Gemini/major tools use native).
-- `pi` (`@earendil-works/pi-ai`) on PATH at the pinned floor (`>= 0.79.4`). Mismatches are caught by `check-dep-versions` / `check-pi-runtime-version`.
+- `pi` (`@earendil-works/pi-ai`) on PATH at the pinned range (`>= 0.79.8 < 0.80` — devDep exact `0.79.8` + next-minor ceiling). Mismatches are caught by `check-dep-versions` / `check-pi-runtime-version`.
 
 ## Working Style
 
