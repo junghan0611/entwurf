@@ -33,12 +33,12 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # pnpm install + sync auth + install + v2 install smoke (pi-tools-bridge only; LIVE substrate = release-gate)
-  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, retargeted smoke-session-id-name, RGG). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). ACP/v1 gates (xt-tool-surface, session-messaging, sentinel) dropped from the floor. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
+  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, retargeted smoke-session-id-name, RGG) + the ACP plugin acceptance floor (7 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/rgg). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). LIVE-gated MUST steps HONEST-SKIP when LIVE!=1 (a CUT needs LIVE=1, SKIP=0). v1 verbs (xt-tool-surface, session-messaging, sentinel) are gone (v2 core); --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh xt-tool-surface             # [LEGACY — broken on v2-only, dropped from release floor, v2 rewrite pending] ACP backend exclude-tools policy: -xt <builtin> fail-fast per backend
   ./run.sh check-bridge               # pi-tools-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-pi-tools-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
   ./run.sh sentinel [args...]         # [LEGACY — broken on v2-only, dropped from release floor, v2 rewrite pending] ACP multi-backend 6-cell tool-selection matrix
-  ./run.sh session-messaging [args...] # [LEGACY — broken on v2-only (removed entwurf_send v1 tool), dropped from release floor, v2 rewrite pending] 4-case session-messaging smoke
+  ./run.sh session-messaging [args...] # [LEGACY — broken on the v2 core (v1 entwurf_send tool gone), not on the release floor, v2 rewrite pending] 4-case session-messaging smoke
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
   ./run.sh check-entwurf-session-identity # deterministic gate for locked garden session identity & name grammar (sessionId/buildSessionName/parse/collision), no API
@@ -1933,15 +1933,19 @@ xt_tool_surface() {
 # invoked through run.sh subcommands — never a script in scripts/ directly.
 #
 # Design invariants (NEXT Step 1e + GPT-5.5 reviews):
-#   - v2-only floor (2026-06-17): the live MUST tier is the v2 dispatch substrate
+#   - v2-native live floor: the MUST tier is the v2 dispatch substrate
 #     (smoke-entwurf-v2-matrix-live + smoke-entwurf-v2-spawn-resume-live, opt-in
 #     LIVE), the MCP bridge (check-bridge), and the garden-native substrate/guard
-#     (smoke-session-id-name — retargeted to a pi-native provider since the ACP
-#     `pi-shell-acp` provider was removed — and smoke-resident-garden-guard).
-#   - Dropped (ACP/v1 surface, survive as on-demand subcommands): xt-tool-surface
-#     (ACP backend exclude-tools policy), session-messaging (removed entwurf_send
-#     v1 tool), sentinel (ACP multi-backend tool-selection matrix). --allow-skip-gemini
-#     is accepted-but-ignored (back-compat). v2 re-writes are a separate follow-up.
+#     (smoke-session-id-name on a pi-native target via PI_SHELL_ACP_LIVE_TARGET,
+#     and smoke-resident-garden-guard).
+#   - ACP plugin acceptance floor (S0~S2f): the 7 ACP LIVE smokes
+#     (socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/rgg)
+#     are MUST, not BEHAVIOR — they prove programmatic transport/provider/backend
+#     invariants of the ACP plugin on the v2 core, so a failure is a release
+#     defect, not an advisory model-in-loop signal. Each is LIVE-gated honest-SKIP.
+#   - v1 entwurf verbs are gone (v2 core): the old xt-tool-surface / session-messaging
+#     / sentinel floor gates do not exist on this tree. --allow-skip-gemini is
+#     accepted-but-ignored (back-compat).
 #   - Final release authorization is GLG's, not this script's: a green
 #     run is necessary, and the operator closes the decision.
 release_gate() {
@@ -1989,6 +1993,30 @@ release_gate() {
     else
       fail "$name: FAIL"
       results+=("FAIL  $name"); failc=$((failc + 1))
+    fi
+  }
+
+  # LIVE-gated MUST step: a release-blocking gate that needs a real backend turn
+  # (auth/model/credit). When LIVE!=1 it is an HONEST SKIP — counted as SKIP, NOT
+  # PASS — so an unattended `./run.sh release-gate` stays runnable without faking
+  # coverage. A release CUT therefore requires `LIVE=1 ./run.sh release-gate
+  # <scratch>` to land MUST PASS with SKIP=0; a green run that still shows SKIP is
+  # CI safety, never live acceptance. (Same rule the v2 substrate sentinels below
+  # spell out inline; this helper applies it to the ACP plugin acceptance floor.)
+  run_live_step() {
+    local name="$1"; shift
+    section "release-gate step: $name"
+    if [ "${LIVE:-}" = "1" ]; then
+      if "$@"; then
+        ok "$name: PASS"
+        results+=("PASS  $name"); pass=$((pass + 1))
+      else
+        fail "$name: FAIL"
+        results+=("FAIL  $name"); failc=$((failc + 1))
+      fi
+    else
+      warn "$name: LIVE!=1 — skipped (opt-in: needs auth/model — NOT a live acceptance run)"
+      results+=("SKIP  $name (LIVE!=1)"); skip=$((skip + 1))
     fi
   }
 
@@ -2093,16 +2121,37 @@ release_gate() {
     warn "smoke-entwurf-v2-spawn-resume-live: LIVE!=1 — skipped (0.11.0 A acceptance, opt-in: needs auth/model)"
     results+=("SKIP  smoke-entwurf-v2-spawn-resume-live (LIVE!=1)"); skip=$((skip + 1))
   fi
+
+  # 3b. ACP plugin acceptance floor (S0~S2f live). These prove the ACP plugin's
+  #     programmatic transport/provider/backend invariants on the v2 core — NOT
+  #     model-in-loop autonomous tool-selection — so they belong in the MUST tier,
+  #     not BEHAVIOR. Their deterministic counterparts (check-acp-*, check-auth-
+  #     boundary, check-acp-overlay/tool-surface/event-mapper/prompt-builder/
+  #     session-store/session-reuse/carrier-augment) already run inside `pnpm
+  #     check` above; these are the LIVE acceptance halves. Ordered from the
+  #     cheapest, most foundational invariant outward: turn-free citizenship →
+  #     pinned ACP pipe/auth → overlay/tool meta → real pi provider path (+
+  #     progress visibility / L3 marker) → process-scoped reuse + semantic recall
+  #     → first-user augment delivery + empty-carrier billing-clean (핀1) →
+  #     ACP-target garden guard (deterministic half). Opt-in LIVE: LIVE!=1 is an
+  #     HONEST SKIP via run_live_step (see its note) — a CUT needs LIVE=1, SKIP=0.
+  run_live_step "smoke-acp-socket-citizen-live (S1: turn-free socket citizenship)"        gate env LIVE=1 bash "$self" smoke-acp-socket-citizen-live
+  run_live_step "smoke-acp-raw-turn-live (S2a: pinned ACP pipe + local auth)"             gate env LIVE=1 bash "$self" smoke-acp-raw-turn-live
+  run_live_step "smoke-acp-overlay-live (S2b: config overlay + hooks:{} + tool meta)"     gate env LIVE=1 bash "$self" smoke-acp-overlay-live
+  run_live_step "smoke-acp-provider-live (S2c/S2f: real pi provider path + progress/L3)"  gate env LIVE=1 bash "$self" smoke-acp-provider-live
+  run_live_step "smoke-acp-session-reuse-live (S2d: process-scoped reuse + recall)"       gate env LIVE=1 bash "$self" smoke-acp-session-reuse-live
+  run_live_step "smoke-acp-carrier-augment-live (S2e-1: augment delivery + 핀1 billing)"  gate env LIVE=1 bash "$self" smoke-acp-carrier-augment-live
+  run_live_step "smoke-acp-rgg-live (S2e-2: ACP-target garden guard, deterministic half)" gate env LIVE=1 bash "$self" smoke-acp-rgg-live
+
   # 4. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
   #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never
   #     touch `failc`; the cut is decided by the MUST tier above.
   #
-  #     v2-only floor (2026-06-17): the ACP/v1-surface live gates were dropped from
-  #     this gate — session-messaging (called the removed entwurf_send v1 tool),
-  #     xt-tool-surface (ACP backend exclude-tools policy), and the sentinel 6-cell
-  #     matrix (ACP multi-backend autonomous tool-selection). They survive as
-  #     on-demand subcommands; v2 re-writes onto the entwurf_v2 surface are a
-  #     separate follow-up (see NEXT). The MUST floor is now the v2-native gates.
+  #     Only genuinely flaky model-in-loop signals live here. Programmatic ACP
+  #     plugin invariants are MUST (section 3b above), not BEHAVIOR — a failed
+  #     transport/provider/backend smoke is a release defect, not advisory. The old
+  #     v1 floor gates (session-messaging / xt-tool-surface / sentinel) do not exist
+  #     on the v2 core — the v1 entwurf verbs they exercised are gone.
   # SMOKE_RGG_POSITIVE=1 re-runs the FULL guard with its positives enabled (not a
   # positive-only mode) — the deterministic paths run again here too, but only the
   # two model-in-loop turns (post-/gnew entwurf_self identity [T3] + positive
@@ -2165,7 +2214,7 @@ case "$cmd" in
     sentinel_run "$@"
     ;;
   session-messaging)
-    warn "session-messaging is LEGACY — broken on v2-only (calls the removed entwurf_send v1 tool). Dropped from the release floor; kept for reference, v2 rewrite onto entwurf_v2 pending."
+    warn "session-messaging is LEGACY — broken on the v2 core (calls the gone v1 entwurf_send tool). Not on the release floor; kept for reference, v2 rewrite onto entwurf_v2 pending."
     shift || true
     session_messaging_run "$@"
     ;;
