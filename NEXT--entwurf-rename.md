@@ -7,7 +7,7 @@
 > - **openclaw consumer는 허구다.** `plugins/openclaw`는 2026-06-10 deprecate·**디렉토리째 제거**(find 0건). repo 내 `openclaw` 언급은 전부 historical docs(README/CHANGELOG/ROADMAP/docs/run.sh 주석) — **코드 lockstep 0**. oracle이 docs 기록을 live 배포 consumer로 오인했던 §4-B는 **삭제**.
 > - **rename이 먼저. npm publish는 최후행.** 순서 = **코드 rename(S1~S3) → repo/dir rename(GLG) → npm publish(GLG, 맨 마지막)**(§6 시퀀스). publish는 rename 트리거가 아니다. package.json `name` *문자열*은 S1 소스 치환 대상이지만 *registry publish*는 모든 rename 완료 후 별도. 설치 동기화 cut-choreography **폐기** — 쓰는 사람은 전문가, 내 방향 따라오거나 안 쓰면 그만. 범용 도구가 아니다.
 >
-> **▶ 다음 세션 진입점 (실제 작업):** ① 정정본 self-review + **GPT 재검수 = 조건부 GO 수신·RED2건 반영 완료**(§9) → ② §6 GLG 결정 확정(AGENTS dual-accept 적용 · repo/dir rename 타이밍 — *npm publish는 §6 후행 단계라 트리거 결정에서 제외*) → ③ §5 S1 readiness gate `fresh rg` 전수(**repo 내부만**) → ④ **버린 worktree에서 S1 dry-run**(RENAME군 0 / KEEP 잔존 / `pnpm check` green / `check-pack` registry 미접촉 green) → ⑤ GLG 비준 시 live S1 일격. *치환은 ④까지 0건 유지.*
+> **▶ 다음 세션 진입점 (실제 작업):** self-review + **GPT 2라운드 = "GO for S1 dry-run 진입"**, RED/Amber 전부 반영, **§6 GLG 결정 4건 확정 완료**(§9). 남은 순서: ① §5 S1 readiness gate `fresh rg` 전수(**repo 내부만**, 3계층 분류) → ② **버린 worktree에서 S1 dry-run**(RENAME runtime/code군 0 / KEEP 잔존 / `pnpm check` + `check-pack` + **`check-pack-install`** green — 새 `@junghanacs/entwurf` publish에 의존하지 않음) → ③ **dry-run green 산출물을 GPT에 보여 live S1 최종 GO** → ④ GLG 비준 시 live S1 일격. *치환은 ②까지 0건 유지.*
 
 ---
 
@@ -126,7 +126,7 @@
 ### ▶ S1 진입 readiness gate — **일격 전 이게 다 닫혀야**
 - **(a) fresh `rg` 전수 (repo 내부만)** — 토큰 매트릭스(§2) + 27 env(§3) + negative-guard 패스(`!==`/`!includes`·sentinel·drift assert·docs-only) S1 직전 재실행. *consumer는 grep 안 함 — 담당자 영역.*
   - **★ "RENAME군 0" 정의 계층화 (GPT 검수 Amber — 검증자 해석 분기 방지):** 검증 기준 = **runtime/code군 0** (`.ts`/`.sh` 코드·게이트·loader·package metadata — S1~S3 결합 대상) **+ live-instruction docs는 결합** (VERIFY/README의 *실행 가능한* `pi-shell-acp/--list-models`·install 명령·model string) **+ historical/docs allowlist 잔존 허용** (CHANGELOG 과거 기록·`docs/setup-clean-host.md` openclaw historical·deprecate 노트 = §7 PR-polish 또는 보존). S1 직전 rg 출력을 이 3계층으로 분류해 "0"의 대상을 못박는다.
-- **(c) cache migration 리허설 [GLG 확정 §6-④: (A) body rewrite]** — `mv ~/.pi/agent/cache/pi-shell-acp/sessions → cache/entwurf/sessions` **+ 이동된 각 레코드 JSON body의 `provider` 필드 `pi-shell-acp`→`entwurf` rewrite** (안 하면 `parseSessionRecord:358`이 전부 삭제 → resume 끊김). **idempotent/fail-loud:** old有new無→mv+rewrite / new有→ok / 둘다有→fail. 실제 `~/.pi`로 리허설. (hard-cut 무충돌: 1회 이동, dual-routing 아님.)
+- **(c) cache migration 리허설 [GLG 확정 §6-④: (A) body rewrite, future-lane hygiene]** — `mv ~/.pi/agent/cache/pi-shell-acp/sessions → cache/entwurf/sessions` **+ 각 레코드 JSON `provider` 필드 rewrite**. **알고리즘 엣지 (GPT 2R):** ① lock 잡고 pi/ACP resident 끈 상태 실행(동시 write 방지) · ② old有new無 → `entwurf/sessions.tmp`로 복사 → 각 JSON atomic rewrite(tmpfile+rename) → 전부 validate 후 final `sessions`로 rename, 실패 시 tmp 남기고 fail-loud · ③ old有new有 → fail-loud(자동 merge 금지) · ④ old無new有 → "ok"로 끝내지 말고 scan: `provider:"entwurf"`면 ok, `pi-shell-acp` 잔존 시 partial이라 rewrite+validate · ⑤ 보존 필드 = `sessionKey`/`acpSessionId`/`cwd`/`modelId`/`bridgeConfigSignature`/`contextMessageSignatures`(provider만 교체). `bridgeConfigSignature`는 provider/package명 미포함이라 rewrite로 stale 안 됨(S2 mcpServersHash 변경은 정상 invalidation). 실제 `~/.pi`로 리허설. ※ persisted read OFF라 *지금* live 검증 불가 — hygiene 차원.
 - **(g) npm name 게이트 무해 확인 (문구 정밀화)** — package.json `name`→`@junghanacs/entwurf` + §2 `check-pack-install` 하드코딩 surface를 same-commit 치환하면, `check-pack`(`npm pack --dry-run`)·`check-pack-install`이 **새 `@junghanacs/entwurf` registry publish에 의존하지 않고 green**임을 dry-run worktree서 실증. ※ "registry 미접촉"은 정확히는 *우리 패키지 publish 불필요*라는 뜻 — peer deps(`@earendil-works/…`·typebox)는 캐시 없으면 npm resolve가 일어날 수 있음(정상).
 - **AGENTS dual-accept 문구** — §1-① 문구를 **우리 repo AGENTS에** (§6-② GLG 승인). agent-config AGENTS는 담당자.
 - **(d) GLG 비준 + (f) repo/dir rename 타이밍(§6-③) 확정 = 트리거.** *npm publish는 트리거 아님 — rename 완료 후 최후행(§6-①).*
@@ -135,7 +135,7 @@
 중간상태 "package=entwurf인데 provider=pi-shell-acp" 금지 → 통째로:
 - 패키지명(`@junghanacs/entwurf`) + provider id(`acp-provider.ts` baseUrl/api) + model prefix + `piShellAcpProvider`→`entwurfProvider` + `PiShellAcp*`/`piShellAcp*`/`pi_shell_acp` + Symbol + repo URL.
 - **MOVE-lockstep(§2) 동시 이동** — getRegistryRouting `!==` + no-auth sentinel 3-site + PROVIDER_ID(shell).
-- **게이트 same-commit:** `check-package-source-routing`·`check-model-lock`·`check-entwurf-session-identity`·`check-auth-boundary`.
+- **게이트 same-commit:** `check-package-source-routing`·`check-model-lock`·`check-entwurf-session-identity`·`check-auth-boundary` + **`check-pack-install`(GPT 2R — `pnpm check` 밖이라 명시 호출 필수; package name rename 실제 회귀 gate, §2 하드코딩 surface 검증).**
 - **bridge명은 건드리지 않음**(S2). → `pnpm check` EXIT0 + RENAME군 0/KEEP 잔존 양방향.
 - **먼저 버린 worktree에서 dry-run**(physical rename 없이 가능 — dir명은 fs path지 alias 아님), green 확인 후 live.
 - *consumer(agent-config)는 이 commit에 없다 — 담당자가 별도 beat로 맞춘다.*
@@ -158,8 +158,12 @@ taxonomy(§3)대로 `PI_SHELL_ACP_*` 27개 의미별 분해 + `PI_TOOLS_BRIDGE_*
 
 **일격 트리거 결정 (S1 진입용):**
 2. **AGENTS dual-accept 문구 적용 = 우리 repo만.** §1-① 문구를 `entwurf` repo AGENTS에만. agent-config AGENTS는 담당자 몫(우리는 안 건드림). **[GLG 확정]**
-3. **repo + dir rename 타이밍 = 코드 rename 전부 통과 + 사용상 무문제 후.** S1~S3 commit이 다 들어가고 `pnpm check` green + 실사용 검증 끝난 뒤에야 GitHub repo+로컬 dir rename(GLG 오퍼). 즉 rename은 코드 작업의 *후속 이벤트*지 동시 아님. 이후 담당자가 consumer physical-path 갱신. **[GLG 확정]**
-4. **ACP reuse 캐시 = (A) body `provider` rewrite (살린다).** 실증: `decideReusePath:307`이 캐시 레코드로 resume(전체 transcript replay 회피, 가장 빠름)을 고름 → drop하면 rename 순간 세션이 new로 떨어져 맥락 끊김. 단 rewrite는 mv하며 JSON `provider` 필드 1개 교체(one-shot/idempotent/fail-loud)라 비용 ≈0. **빨라지고 + 살리는 비용 단순 → (A) 채택.** §5(c)·§1-③의 rewrite 분기가 정식 경로. **[GLG 확정]**
+3. **repo + dir rename 타이밍 = 코드 rename 전부 통과 + 사용상 무문제 후.** S1~S3 commit이 다 들어가고 게이트 green + 실사용 검증 끝난 뒤에야 GitHub repo+로컬 dir rename(GLG 오퍼). rename은 코드 작업의 *후속 이벤트*지 동시 아님. 이후 담당자가 consumer physical-path 갱신.
+   - **"사용상 무문제" 검증 기준 (GPT 2R 제안):** ① `pnpm check` + `pnpm run check-pack-install`(후자는 pnpm check 밖, package rename 실제 gate) · ② no-token loader `pi -e "$PWD" --list-models entwurf` 통과 · ③ **path rehearsal** — 복제본을 실제 `…/entwurf` 경로명에 두고 `pnpm check`(+check-pack-install)로 source가 old path에 안 기댐 확인 · ④ live ACP `LIVE=1 ./run.sh smoke-acp-provider-live`(1턴)+`smoke-acp-session-reuse-live`(2턴 reuse), 최종 `LIVE=1 ./run.sh release-gate <scratch>` MUST PASS/SKIP=0. repo rename 직후엔 no-token loader+`pnpm check` 1회 재확인.
+   - cwd 축(§6-④): repo/dir rename으로 record `cwd` prefix 변경 = 별도 cold-start 축, future lane에서 cwd one-shot rewrite 또는 cold-start 허용. **[GLG 확정]**
+4. **ACP reuse 캐시 = (A) body `provider` rewrite (살린다).** `decideReusePath:307`이 캐시로 resume(replay 회피)을 고름 → drop하면 new로 떨어져 맥락 끊김. rewrite는 JSON `provider` 1필드 교체(비용≈0)라 **빨라지고+살리는 비용 단순 → (A)**. **[GLG 확정]**
+   - **⚠️ framing 정밀화 (GPT 2R, 실증):** `readSessionRecord` production 호출 **0건** · `backend.ts:591` "persisted resume/load is OFF" — 현재 live reuse는 **in-memory candidate** 기반이라 persisted record는 *지금 안 읽힘*. 따라서 (A) rewrite는 *지금 live resume을 살리는 게 아니라* **future-lane(persisted ON) 위한 record hygiene**. 그래도 비용≈0이라 S1에 넣어 깨끗이 가져간다(미래에 ON 시 즉시 resume).
+   - **★ cwd 축 (GPT 2R 새 발견 — 별개):** compat은 `session-store.ts:254` `candidate.cwd === params.cwd`도 봄. **dir rename으로 record `cwd` prefix(`…/pi-shell-acp`→`…/entwurf`)가 바뀌면 또 다른 incompat=cold-start.** persisted OFF라 지금 무영향이나, future lane에선 repo/dir rename 이벤트(§6-③) 때 **cwd prefix one-shot rewrite 별도** 또는 그 순간 cold-start 허용을 명시해야. provider rewrite(S1)와 다른 축.
 
 **후행 결정 (rename 전부 끝난 뒤 — S1 트리거 아님):**
 1. **npm publish = 최후행 (나중).** `@junghanacs/pi-shell-acp`→`@junghanacs/entwurf`. npm in-place rename 미지원 → 새 이름 publish + 옛것 deprecate 마킹. *설치자 동기화 cut-choreography 없음.* package.json `name` 문자열 치환은 S1에 이미 포함; 여기서 정하는 건 *registry 행위 + deprecate 문구*뿐, 시점은 "모든 rename·검증 완료 후"로 고정. **[GLG 확정 — 나중]**
@@ -182,5 +186,8 @@ README/VERIFY/CHANGELOG stale(backend overclaim·packaged docs·persisted contin
 - 분기점 `a893318`(CP1 lock) 원격 봉인, stamp `<2026-06-22 19:18>`.
 - 이 NEXT = oracle 산출물(`f573d06`)의 **2026-06-23 framing 정정본** — openclaw 허구 삭제 · consumer 위임 격하 · npm 단순화 · 범위를 repo 본체로 수축. **GPT 검수 대기.**
 - 형제 교차검수 이력: GPT `20260622T191739-19b503`(gpt-5.5, oracle framing 기준 GO) + 비봇 GO.
-- **GPT 재검수 (정정본 2f17d35 기준, `20260623T075242-7f3777`, 2026-06-23): 조건부 GO.** 범위 수축·openclaw 삭제·consumer 위임·npm 후행 = GO. RED 2건 반영 완료 → ① ACP session-store cache mv-only가 cold-start(§1-③·§5-c·§6-④) ② `check-pack-install` 하드코딩 surface를 S1 MOVE-lockstep에(§2·§5-g) · Amber 1건 반영 → RENAME군 0 검증 3계층화(§5-a). *반영본은 GPT 재확인 필요(다음 라운드).*
+- **GPT 검수 (`20260623T075242-7f3777`, 2026-06-23, 2라운드):**
+  - **1R 조건부 GO** → RED2(ACP cache cold-start §1-③·§5-c·§6-④ / `check-pack-install` 하드코딩 §2·§5) + Amber(RENAME-0 3계층화 §5-a) 반영.
+  - **2R = GO for S1 dry-run 진입** (큰 RED 없음). 새 발견 3건 실증 반영: ① `readSessionRecord` production 0건·`backend.ts:591` persisted OFF → cache migration은 *future-lane hygiene*(지금 live 무영향) ② rewrite 알고리즘 엣지(lock·temp atomic·partial scan §5-c) ③ cwd가 별도 compat 축(`session-store.ts:254`) → dir rename 시 cwd cold-start(§6-③·④). Amber 문구 2: S1 게이트에 `check-pack-install` 명시 + entry point 정밀화 = 반영.
+  - **live S1 최종 GO는 dry-run green 산출물 보고.**
 - 추가 구현 = rename 끝난 *다음 세션* 본질(ROADMAP deferred: persisted resume/load 1b-2c · Claude↔Claude live transport 등). **이 작업이 끝나야 entwurf 기능 정리 → 릴리즈.**
