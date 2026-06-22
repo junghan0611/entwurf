@@ -108,6 +108,16 @@ assert.deepEqual(
 	[...DEFAULT_CLAUDE_PERMISSION_ALLOW],
 	"permission allow must propagate",
 );
+// Auto-memory containment seal (Detour C). Assert the opt-out is IN THE META, not
+// only in the overlay settings.json — production runs `settingSources: []` (SDK
+// filesystem isolation), so the overlay copy never reaches the query; this inline
+// settings layer is the one the query actually honors. `check-acp-overlay.ts`
+// asserts the file copy; THIS asserts the live wire value.
+assert.equal(
+	(opts.settings as { autoMemoryEnabled?: unknown }).autoMemoryEnabled,
+	false,
+	"auto-memory containment: _meta.claudeCode.options.settings.autoMemoryEnabled must be false (live seal, survives settingSources:[])",
+);
 assert.deepEqual(
 	opts.disallowedTools,
 	[...DEFAULT_CLAUDE_DISALLOWED_TOOLS],
@@ -144,5 +154,6 @@ assert.equal(metaCarrier.systemPrompt, "CARRIER", "an explicit carrier must pass
 
 console.log(
 	"[check-acp-tool-surface] ok — exclude-tools truthfulness matrix (claude narrows / native always-exposes / extension-free) " +
-		"+ buildClaudeSessionMeta shape (tools/allow/disallowed/extraArgs/plugins) + carrier absent-branch guard",
+		"+ buildClaudeSessionMeta shape (tools/allow/disallowed/extraArgs/plugins) + carrier absent-branch guard " +
+		"+ auto-memory containment seal (settings.autoMemoryEnabled=false IN THE META, live under settingSources:[])",
 );

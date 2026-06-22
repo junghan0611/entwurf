@@ -358,6 +358,12 @@ async function main(): Promise<void> {
 		// ---- the gate: NO overlay memory artifact ----
 		const memoryFiles = await listMemoryFiles(join(overlayDir, "projects"));
 		const delegatedMemory = delegatedWrites.filter((p) => /[/\\]memory[/\\]/.test(p));
+		// Broader persistence blind spot (GPT review): the model could also persist
+		// "memory" as a MEMORY.md / CLAUDE.md / .claude artifact outside the overlay
+		// memory dir. Auxiliary guard so such a write is not silently missed.
+		const delegatedPersistence = delegatedWrites.filter((p) =>
+			/(^|[/\\])(MEMORY\.md|CLAUDE\.md|\.claude)([/\\]|$)/.test(p),
+		);
 		assert.ok(promptResult, "prompt returned no result");
 		assert.equal(
 			memoryFiles.length,
@@ -368,6 +374,11 @@ async function main(): Promise<void> {
 			delegatedMemory.length,
 			0,
 			`memory containment BROKEN — agent delegated write(s) to a memory path: ${JSON.stringify(delegatedMemory)}`,
+		);
+		assert.equal(
+			delegatedPersistence.length,
+			0,
+			`memory containment BROKEN — agent delegated write(s) to a persistence artifact (MEMORY.md/CLAUDE.md/.claude): ${JSON.stringify(delegatedPersistence)}`,
 		);
 
 		console.log("[smoke-acp-memory-containment-live] PASS — shipped overlay+engraving turn left NO overlay memory");

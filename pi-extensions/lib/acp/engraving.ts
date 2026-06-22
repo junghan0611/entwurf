@@ -81,21 +81,43 @@ function interpolate(template: string, params: EngravingParams): string {
 }
 
 /**
- * The rendered engraving carrier, or null when the engraving file is empty,
- * whitespace-only, missing, or unreadable. Callers MUST treat null as "no
- * carrier configured" and omit `_meta.systemPrompt` entirely (and pass "" as the
- * `appendSystemPrompt` signature input) so subscription billing is never
- * reclassified. The shipped default is NON-empty (the v1 memory-containment
- * lever); null is the operator opt-out reached by emptying the file.
+ * The rendered engraving carrier, or null when an ENV-OVERRIDE engraving file
+ * (`PI_SHELL_ACP_ENGRAVING_PATH`) is empty, whitespace-only, missing, or
+ * unreadable — that null is the operator opt-out. The SHIPPED default, by
+ * contrast, IS the auto-memory containment lever (its non-empty carrier replaces
+ * the claude_code preset, stripping the auto-memory advertisement) and MUST be
+ * present + non-empty: if the shipped default is missing/unpackaged/empty this
+ * THROWS (fail-loud, Detour C) rather than silently shipping with the carrier
+ * strip off. To opt the carrier out, point the env override at an empty file.
+ * Callers MUST treat null as "no carrier configured" and omit `_meta.systemPrompt`
+ * entirely (passing "" as the `appendSystemPrompt` signature input) so
+ * subscription billing is never reclassified.
  */
 export function loadEngraving(params: EngravingParams): string | null {
 	const filePath = resolveEngravingPath();
+	const isShippedDefault = filePath === DEFAULT_ENGRAVING_PATH;
 	let source: string;
 	try {
 		source = loadSource(filePath);
-	} catch {
+	} catch (err) {
+		if (isShippedDefault) {
+			throw new Error(
+				`pi-shell-acp: shipped engraving carrier unreadable at ${filePath} — it is the auto-memory ` +
+					`containment lever; refusing to proceed with containment silently degraded. (${(err as Error).message})`,
+			);
+		}
 		return null;
 	}
 	const rendered = interpolate(source, params).trim();
-	return rendered.length === 0 ? null : rendered;
+	if (rendered.length === 0) {
+		if (isShippedDefault) {
+			throw new Error(
+				`pi-shell-acp: shipped engraving carrier at ${filePath} is empty — it is the auto-memory ` +
+					`containment lever; refusing to proceed with the carrier strip silently off. ` +
+					`(opt out via an empty PI_SHELL_ACP_ENGRAVING_PATH file instead)`,
+			);
+		}
+		return null;
+	}
+	return rendered;
 }

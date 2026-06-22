@@ -146,6 +146,19 @@ export function buildClaudeSessionMeta(
 			permissions: {
 				allow: [...params.permissionAllow],
 			},
+			// Auto-memory containment, defense-in-depth (Detour C). The overlay's
+			// settings.json also pins `autoMemoryEnabled:false`, but production runs the
+			// query in SDK filesystem-isolation mode (`settingSources: []`), so that
+			// on-disk copy is never loaded — claude-agent-acp forwards our options
+			// verbatim (acp-agent.js: `...userProvidedOptions`) and the SDK skips
+			// ~/.claude/settings.json. This INLINE settings layer is independent of
+			// `settingSources`, so it IS honored — the live seal. Backstop only: the
+			// primary write-containment lever is the non-empty engraving carrier
+			// replacing the claude_code preset (which strips the auto-memory
+			// advertisement the model would otherwise act on). "knows-but-can't" here vs
+			// the carrier's "doesn't-know" — keeping both means a future preset/SDK
+			// change cannot silently re-open memory through a channel the strip misses.
+			autoMemoryEnabled: false,
 		},
 	};
 	if (params.skillPlugins.length > 0) {

@@ -26,7 +26,7 @@
 
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -264,6 +264,13 @@ try {
 	execFileSync("node_modules/.bin/tsc", ["--outDir", TMP_EMIT, "--rootDir", ".", "--noEmit", "false"], {
 		stdio: "pipe",
 	});
+	// tsc emits only .ts→.js; the engraving carrier is a .md asset that ships
+	// alongside engraving.js in the real package (check-pack-install verifies the
+	// tarball). Copy it into the emit tree so loadEngraving finds its shipped
+	// default — otherwise its (correct) fail-loud on a missing carrier trips here.
+	const promptsOut = resolve(TMP_EMIT, "pi-extensions/lib/acp/prompts");
+	mkdirSync(promptsOut, { recursive: true });
+	copyFileSync("pi-extensions/lib/acp/prompts/engraving.md", resolve(promptsOut, "engraving.md"));
 	const backendUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href;
 	const storeUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/session-store.js")).href;
 	// biome-ignore lint/suspicious/noExplicitAny: compiled module imported by URL
