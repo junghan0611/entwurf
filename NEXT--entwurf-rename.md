@@ -46,7 +46,7 @@
 
 **③ identity = garden-id-keyed → rename-immune (설계가 곧 안전판).** meta-records/mailbox는 `<pi-agent-dir>/meta-{sessions,mailbox}/<gardenId>`(패키지명 무관). 비대칭공존 설계(denote식, DB 없이 패키지명에 의미 안 실음)가 rename으로부터 정체성을 보호. orphan 위험 = ACP reuse 캐시 **1경로**뿐 — **단 디렉토리 mv만으론 부족**(GPT 검수 RED1, 실증).
 - `session-store.ts:46` `SESSION_RECORD_PROVIDER="pi-shell-acp"` + `:358` `parseSessionRecord`가 `r.provider !== SESSION_RECORD_PROVIDER`이면 invalid → `:395` `readSessionRecord`가 **레코드 delete**. S1에서 const를 `entwurf`로 바꾸고 디렉토리만 mv하면 기존 body `provider:"pi-shell-acp"`가 `!== "entwurf"`라 **전부 삭제(cold-start, migration 아님)**.
-- **→ §5(c)는 mv + JSON body `provider` 필드 rewrite 둘 다.** 또는 §6 결정으로 "ACP reuse 캐시 = process resource, cold-start/drop 허용"(데이터 손실 아님 — 정체성은 meta-records, rename-immune). 둘 중 택1을 명문화(현재 "migration" 표현과 mv-only가 모순).
+- **→ [GLG 확정 §6-④: (A) body rewrite] §5(c)는 mv + JSON body `provider` 필드 rewrite 둘 다.** resume 연속성(전체 replay 회피)을 살린다 — rewrite 비용 ≈0(필드 1개)이라 drop보다 안전·동등 단순.
 
 ---
 
@@ -126,7 +126,7 @@
 ### ▶ S1 진입 readiness gate — **일격 전 이게 다 닫혀야**
 - **(a) fresh `rg` 전수 (repo 내부만)** — 토큰 매트릭스(§2) + 27 env(§3) + negative-guard 패스(`!==`/`!includes`·sentinel·drift assert·docs-only) S1 직전 재실행. *consumer는 grep 안 함 — 담당자 영역.*
   - **★ "RENAME군 0" 정의 계층화 (GPT 검수 Amber — 검증자 해석 분기 방지):** 검증 기준 = **runtime/code군 0** (`.ts`/`.sh` 코드·게이트·loader·package metadata — S1~S3 결합 대상) **+ live-instruction docs는 결합** (VERIFY/README의 *실행 가능한* `pi-shell-acp/--list-models`·install 명령·model string) **+ historical/docs allowlist 잔존 허용** (CHANGELOG 과거 기록·`docs/setup-clean-host.md` openclaw historical·deprecate 노트 = §7 PR-polish 또는 보존). S1 직전 rg 출력을 이 3계층으로 분류해 "0"의 대상을 못박는다.
-- **(c) cache migration 리허설 (RED1 반영 — mv만으론 cold-start)** — `mv ~/.pi/agent/cache/pi-shell-acp/sessions → cache/entwurf/sessions` **+ 이동된 각 레코드 JSON body의 `provider` 필드 `pi-shell-acp`→`entwurf` rewrite** (안 하면 `parseSessionRecord:358`이 전부 삭제). **idempotent/fail-loud:** old有new無→mv+rewrite / new有→ok / 둘다有→fail. *또는 §6 결정으로 cold-start/drop 허용 시 이 단계 = 디렉토리 정리만.* 실제 `~/.pi`로 리허설. (hard-cut 무충돌: 1회 이동, dual-routing 아님.)
+- **(c) cache migration 리허설 [GLG 확정 §6-④: (A) body rewrite]** — `mv ~/.pi/agent/cache/pi-shell-acp/sessions → cache/entwurf/sessions` **+ 이동된 각 레코드 JSON body의 `provider` 필드 `pi-shell-acp`→`entwurf` rewrite** (안 하면 `parseSessionRecord:358`이 전부 삭제 → resume 끊김). **idempotent/fail-loud:** old有new無→mv+rewrite / new有→ok / 둘다有→fail. 실제 `~/.pi`로 리허설. (hard-cut 무충돌: 1회 이동, dual-routing 아님.)
 - **(g) npm name 게이트 무해 확인 (문구 정밀화)** — package.json `name`→`@junghanacs/entwurf` + §2 `check-pack-install` 하드코딩 surface를 same-commit 치환하면, `check-pack`(`npm pack --dry-run`)·`check-pack-install`이 **새 `@junghanacs/entwurf` registry publish에 의존하지 않고 green**임을 dry-run worktree서 실증. ※ "registry 미접촉"은 정확히는 *우리 패키지 publish 불필요*라는 뜻 — peer deps(`@earendil-works/…`·typebox)는 캐시 없으면 npm resolve가 일어날 수 있음(정상).
 - **AGENTS dual-accept 문구** — §1-① 문구를 **우리 repo AGENTS에** (§6-② GLG 승인). agent-config AGENTS는 담당자.
 - **(d) GLG 비준 + (f) repo/dir rename 타이밍(§6-③) 확정 = 트리거.** *npm publish는 트리거 아님 — rename 완료 후 최후행(§6-①).*
@@ -151,18 +151,18 @@ taxonomy(§3)대로 `PI_SHELL_ACP_*` 27개 의미별 분해 + `PI_TOOLS_BRIDGE_*
 
 ---
 
-## 6 · 🔴 GLG 결정 & 시퀀스 (제가 못 정하는 것)
+## 6 · 🔴 GLG 결정 & 시퀀스 — **GLG 확정 (2026-06-23)**
 
 **전체 시퀀스 (rename 먼저, publish 최후):**
-`코드 rename S1→S2→S3` (우리, commit) **→** `repo+dir rename` (GLG 오퍼) **→** `담당자 consumer 갱신` **→** `npm publish` (GLG, **맨 마지막**).
+`코드 rename S1→S2→S3` (우리, commit) **→ 게이트 전부 green + 사용상 무문제 확인 →** `repo+dir rename` (GLG 오퍼) **→** `담당자 consumer 갱신` **→** `npm publish` (GLG, **맨 마지막**).
 
 **일격 트리거 결정 (S1 진입용):**
-2. **AGENTS dual-accept 문구 적용** — **우리 repo(`entwurf`) AGENTS**에 §1-① 문구. agent-config AGENTS는 담당자 몫.
-3. **repo + 로컬 dir rename 타이밍** (GitHub repo `pi-shell-acp`→`entwurf` + `~/repos/gh/pi-shell-acp` dir) = GLG 오퍼레이션 (commit 밖). 이후 담당자가 consumer physical-path 갱신.
-4. **ACP reuse 캐시 정책 (GPT RED1 — S1 cache 단계 형태 결정):** (A) one-shot migration이 body `provider` 필드까지 rewrite해 과거 resume 연속성 유지 vs (B) "reuse 캐시 = process resource, cold-start/drop 허용"(정체성은 meta-records라 무손실, 가장 단순). *추천: (B)* — resume 캐시는 성능 최적화일 뿐이고 garden-id 정체성과 무관하니 drop이 안전·단순. GLG 택1.
+2. **AGENTS dual-accept 문구 적용 = 우리 repo만.** §1-① 문구를 `entwurf` repo AGENTS에만. agent-config AGENTS는 담당자 몫(우리는 안 건드림). **[GLG 확정]**
+3. **repo + dir rename 타이밍 = 코드 rename 전부 통과 + 사용상 무문제 후.** S1~S3 commit이 다 들어가고 `pnpm check` green + 실사용 검증 끝난 뒤에야 GitHub repo+로컬 dir rename(GLG 오퍼). 즉 rename은 코드 작업의 *후속 이벤트*지 동시 아님. 이후 담당자가 consumer physical-path 갱신. **[GLG 확정]**
+4. **ACP reuse 캐시 = (A) body `provider` rewrite (살린다).** 실증: `decideReusePath:307`이 캐시 레코드로 resume(전체 transcript replay 회피, 가장 빠름)을 고름 → drop하면 rename 순간 세션이 new로 떨어져 맥락 끊김. 단 rewrite는 mv하며 JSON `provider` 필드 1개 교체(one-shot/idempotent/fail-loud)라 비용 ≈0. **빨라지고 + 살리는 비용 단순 → (A) 채택.** §5(c)·§1-③의 rewrite 분기가 정식 경로. **[GLG 확정]**
 
 **후행 결정 (rename 전부 끝난 뒤 — S1 트리거 아님):**
-1. **npm publish 전략 (최후행)** — `@junghanacs/pi-shell-acp` → `@junghanacs/entwurf`. npm in-place rename 미지원이 표준이므로 실질 = **새 이름 publish + 옛것 deprecate 마킹**. *설치자 동기화 cut-choreography 없음.* 결정할 것 = 옛 패키지 deprecate 문구뿐(시점은 "모든 rename 완료 후"로 고정). package.json `name` *문자열* 치환은 S1에 이미 들어감 — 여기서 정하는 건 *registry 행위*만.
+1. **npm publish = 최후행 (나중).** `@junghanacs/pi-shell-acp`→`@junghanacs/entwurf`. npm in-place rename 미지원 → 새 이름 publish + 옛것 deprecate 마킹. *설치자 동기화 cut-choreography 없음.* package.json `name` 문자열 치환은 S1에 이미 포함; 여기서 정하는 건 *registry 행위 + deprecate 문구*뿐, 시점은 "모든 rename·검증 완료 후"로 고정. **[GLG 확정 — 나중]**
 
 ---
 
