@@ -86,8 +86,12 @@ pi-shell-acp repo를 `entwurf`로 rename. **단순 패키지명 교체가 아니
 - **S0.5 — SSOT 정렬 (NOW):** AGENTS의 no-rename 잔재 제거, ROADMAP/NEXT alias 정책 hard-cut으로 정렬, env taxonomy/state migration 후보 명시. **아직 source 치환 아님**.
 - **S1 진입 readiness gate (비봇 감수 GO, 2026-06-22) — 일격 전 이게 다 닫혀야:**
   - (a) S1 직전 fresh `rg` + negative-guard 패스 재실행. (c) 캐시 1경로 migration을 실제 `~/.pi`로 리허설. (d) GLG 비준. (e) consumer dirty baseline 고정. (f) **physical repo+dir rename 타이밍 = GLG 오퍼레이션, commit 밖** — consumer path 문자열은 이 beat에.
-  - **+비봇① test-discovery.py에 `pi-shell-acp` 픽스처 ≥1 보존**(historical-compat 회귀증거 — 안 그럼 보존 대상을 테스트째 삭제). **+비봇② JSONL 밖 영속저장소 1패스**(semantic-memory/andenken/agenda가 옛 provider/model로 필터하나).
+  - **+비봇① test-discovery.py에 `pi-shell-acp` 픽스처 ≥1 보존** + **entwurf 픽스처 추가**(케이스명에 `historical_pi_shell_acp` 의도 박기 — GPT). **+비봇② JSONL 밖 영속저장소 1패스 = OPEN 유지**(GPT: recall-loss 방지지 repo S1 core correctness 아님, but GLG 기억축이라 prep에서 봄).
   - **+화해 원칙** (위 ★★★): consumer history-reader는 dual-accept(=historical-compat, alias 아님) — hard-cut으로 청소 금지.
+  - **+GPT 검수 보강:**
+    - **dirty-state staging discipline (≠"benign이니 같이 커밋"):** S1 직전 `git -C agent-config diff -- pi/settings.server.json`이 그 한 줄뿐인지 재확인 → S1 edit 후 `git add -p`로 rename hunk만 stage, `lastChangelogVersion` hunk는 unstaged 잔류(commit purity). 또는 GLG가 marker 먼저 별도 처리.
+    - **cache migration idempotency:** old有+new無→mv · old無+new有→ok · 둘 다有→fail-loud(캐시 merge면 GLG 선택). hard-cut과 무충돌(1회 이동이지 영구 dual-routing 아님 — 오히려 no-alias의 정직한 형태).
+    - **★ physical-path 전략 — GLG 결정 (핵심):** *repo S1 자체는 physical rename 없이 dry-run 가능*(checkout dir명은 filesystem path지 runtime alias 아님). live S1 commit만 둘 중 택1 — **①** 같은 beat에 local+GitHub repo rename + consumer path 최종 `entwurf` (깔끔). **②** repo identity만 hard-cut, consumer physical path는 한 beat 옛 dir 유지 + NEXT에 "old path=filesystem location, not runtime alias" 명시 + **RENAME군 0 기준에 physical-path 예외 allowlist** (위험제어 쉬움).
 - **S1 — package/repo/provider identity (원자, 쪼개지 말 것):** 중간상태 "package=entwurf인데 provider=pi-shell-acp" 금지 → 통째로. 패키지명 + provider id(acp-provider.ts baseUrl/api) + model prefix + `piShellAcpProvider`→`entwurfProvider` + `PiShellAcp*`/`piShellAcp*`/`pi_shell_acp` + Symbol + repo URL. 게이트 동시: `check-package-source-routing`·`check-model-lock`·`check-entwurf-session-identity`·`check-auth-boundary`. **agent-config consumer lockstep** (`pi/settings.json` model prefix + `piShellAcpProvider` block). → `pnpm check` EXIT0.
 - **S2 — MCP bridge:** `mcp/pi-tools-bridge`→`mcp/entwurf-bridge` (dir+서버명) + **tool id `mcp__pi-tools-bridge__*`→`mcp__entwurf-bridge__*`** 전수 + install/remove/prune settings + `check-pi-tools-bridge-boot` + consumer mcpServers lockstep.
 - **S3 — env namespace:** taxonomy에 따라 `PI_SHELL_ACP_*`를 core/ACP/pi-adapter 의미별로 분해, `PI_TOOLS_BRIDGE_*`→`ENTWURF_BRIDGE_*`, `PI_ENTWURF_*`→`ENTWURF_*`, `PI_META_*`→`ENTWURF_META_*` + env명 assert 게이트(`check-entwurf-v2-surface` 등). **런타임 영구 alias 금지**, 필요시 installer one-shot migration만.
@@ -104,6 +108,7 @@ README/VERIFY/CHANGELOG stale (backend overclaim·packaged docs·persisted conti
 ## S1 identity atom (repo S1과 같은 beat)
 - `pi/settings.json` + `pi/settings.server.json:14` `"piShellAcpProvider"` 블록 키 → `entwurfProvider`.
 - `pi/claude-plugin.json:3` description "pi-shell-acp Claude … `piShellAcpProvider`.skillPlugins" (소프트 docs+키 참조).
+- **★ transitional shape (GPT 검수):** `piShellAcpProvider` 블록은 내부에 `mcpServers.pi-tools-bridge`(`:20-24`, start.sh 경로)를 품는다 — S1은 *provider key만* `entwurfProvider`로, **내부 bridge명은 S2까지 `pi-tools-bridge` 유지**. 중간형 `entwurfProvider.mcpServers.pi-tools-bridge`는 거짓말이 아니라 *의도된 transitional*("entwurf provider가 아직 pi-tools-bridge MCP를 주입"). S1 config gate 기대값 = **provider key=`entwurfProvider`, bundled server명=아직 `pi-tools-bridge`**.
 
 ## S2 bridge (`mcp__pi-tools-bridge` → `mcp__entwurf-bridge`)
 - `claude/settings.server.json:17` allow `"mcp__pi-tools-bridge__*"`.
@@ -119,6 +124,7 @@ GLG가 GitHub repo + 로컬 checkout dir를 rename하기 전엔 `entwurf`로 못
 - `pi/settings*.json:11` `"../../repos/gh/pi-shell-acp"` (local package source path).
 - `pi/settings*.json:22` + MCP configs: `/home/junghan/repos/gh/pi-shell-acp/mcp/pi-tools-bridge/start.sh` (절대경로).
 - `run.sh`: checkout `~/repos/gh/pi-shell-acp` · pi-managed `~/.pi/agent/git/github.com/junghan0611/pi-shell-acp` · `PI_SHELL_ACP_INSTALL_SPEC="git:github.com/junghan0611/pi-shell-acp"`(GitHub URL).
+- **★ 노트 C (GPT — grep에 안 묻히게 별도):** `claude/settings.server.json` `extraKnownMarketplaces.meta-bridge-local.source.path = /home/junghan/repos/gh/pi-shell-acp/pi/meta-bridge/.assembled` — `mcp__pi-tools-bridge`가 아니라 **meta-bridge artifact 경로**라 bridge 분류에 묻히면 누락됨. (f) physical + S4 구조(`pi/meta-bridge/.assembled` 빌드 산출물).
 - → 결론: **consumer S1 = repo S1 직후가 아니라 (f) physical rename과 같은 beat.** migration wrapper가 한 beat 동안 옛 경로 허용할지 stage 전 결정.
 
 ## ★★ 역사데이터 coupling — consumer-side "keep-old" 클래스는 NON-empty (실측 + 비봇 감수 확장)
@@ -132,6 +138,9 @@ repo 내부 negative-guard는 공집합이었으나 **consumer는 다르다 — 
 - **repo = 살아있는 라우팅 정체성 → hard-cut, permanent alias 금지** (AGENTS Hard Rule 1).
 - **consumer history-reader = 불변 과거를 읽음 → old ∪ new 영구 dual-accept** (역사는 안 바뀌므로 *영원히* 둘 다).
 - ⚠️ **함정:** 누군가 Hard Rule 1("no permanent alias")을 읽고 session-recap의 `pi-shell-acp` 수용을 "residue"로 청소 → **모든 과거 세션 recall이 조용히 끊김.** dual-accept는 alias가 아니라 *historical-compat*다. S1 직전 + AGENTS에 이 구분 한 줄 박을 것.
+- **AGENTS 반영 문구 (GPT 정확화, GLG 비준 시 적용 — 양쪽 repo):** Hard Rule 1 뒤/Code-level invariants 근처에 —
+  > *"No permanent runtime alias" does not forbid historical readers from accepting old provider strings. Transcript/session/agenda/semantic-memory readers MUST dual-accept immutable historical names (`pi-shell-acp`) and current names (`entwurf`); that is historical compatibility, not routing aliasing.*
+  - **양쪽 필요:** pi-shell-acp AGENTS(upstream) + **agent-config AGENTS(짧게)** — session-recap/test-discovery가 agent-config 표면이라 upstream만으론 미래 resident-side cleanup 못 막음(GPT). → 이 둘은 GLG 승인 후 편집(AGENTS 2개 repo 표면).
 
 # 넘으면 안 되는 선
 
