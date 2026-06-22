@@ -11,10 +11,12 @@
 > Detours may block trust, but they do not silently become the stem.
 > If GLG asks for “새 담당자/분신을 불러줘” and no suitable citizen exists, **do not route to a similar cwd/model.** Current `entwurf_v2` cannot fresh-mint; it only dispatches to an existing garden id or wakes an already-recorded dormant pi citizen.
 
-## Current stem
+## Current stem — 체크포인트 분리 (GLG 결정 2026-06-22)
 
-- **Stem:** finish ACP-on-v2 trust blockers → PR-polish docs/release-gate → merge/cut decision by GLG.
-- **Current repo state:** branch `acp-on-v2`, C hardening landed (`347ada2` + `ca079e0`) and final review cleanup surfaces fail-loud engraving load failures as stream errors. Detours A/B/C all closed; next is PR-polish. Commit/push = GLG.
+- **Stem:** trust blockers DONE → **CP1: 문서 정합성 lock(이 브랜치)** → commit/push(GLG) → **CP2: 새 브랜치 = rename(`pi-shell-acp`→`entwurf`, 패키지+repo) + 추가 구현** → 게이트 green + 실사용 엣지케이스 → 단단히 조인 뒤 cut(GLG).
+- **CP1 (NOW, this branch `acp-on-v2`) — 문서 정합성 lock:** operator 실사용 세트(GPT=pi-native host / ACP Claude=socket-citizen / Claude Code=meta-session mailbox-citizen)를 ROADMAP/NEXT가 같은 말로 비추게 정렬 + rename-확정 기록(ROADMAP 「현재」+「다음」 rename 준비 체크리스트). README/VERIFY/CHANGELOG 등 published 표면은 *안 건드림* — rename 브랜치에서 결합 규칙으로 한 번에. 커밋 후 push=GLG.
+- **CP2 (다음, 새 브랜치):** rename 실행(세 식별자 = npm 패키지명 / GitHub repo / 런타임 provider id — provider id가 호환성 최대 위험, ROADMAP rename 준비 참조) + "더 구현할게 있다" → `pnpm check` + LIVE release-gate MUST green.
+- **Current repo state:** branch `acp-on-v2`, C hardening landed (`347ada2` + `ca079e0`), final review cleanup surfaces fail-loud engraving load failures as stream errors. Detours A/B/C all closed. `pnpm check` EXIT0 (re-verified 2026-06-22 oracle device). Commit/push = GLG.
 - **Gate D review (2026-06-22, Claude Code Opus, independent):** **ACCEPT.** Verified the committed `smoke-acp-memory-containment-live.ts` directly — scan location correct (`overlay.ts:85` `projects` is an overlay-private empty dir, NOT a symlink, so the scan hits the real leak path and a test leak stays in mkdtemp, never `~/.claude`), hermetic + safe, all 4 load-bearing anti-false-green choices genuine, honest residual documented. Cheap presence-guard IS in `pnpm check` (`check-acp-carrier-augment.ts:109` asserts `# Engraving Here`) → re-emptying/deleting engraving.md fails CI; gate D adds the LIVE e2e proof on top. Good layering.
 - **DECISION CONVERGED (2026-06-22, Claude Code Opus + GPT `20260622T164556-af7a87`, both independent) — C-first, then PR-polish.** Pending only GLG's go.
 - **★ Verified finding (GPT caught, Claude Code confirmed via code) — the "already pinned `autoMemoryEnabled:false`" defense is INERT today.** It lives in the overlay `settings.json` (`overlay.ts:112`, asserted by `check-acp-overlay.ts:77`), but production sends `settingSources:[]` (`config.ts:4,467` → `tool-surface.ts:144`), which means **SDK isolation mode — filesystem settings are NOT loaded** (`sdk.d.ts:1799`; the query's default `["user","project","local"]` at `acp-agent.js:1522` is overridden by `...userProvidedOptions` at `:1524`). And `_meta.claudeCode.options.settings` carries only `{permissions:{allow}}` (`tool-surface.ts:141-145`) — no `autoMemoryEnabled`; acp-agent forwards none. So the overlay flag never reaches the query, and `check-acp-overlay.ts:77` is a **false-confidence gate** (asserts the file has the key, not that the query honors it). **Containment today rests SOLELY on the preset-strip** (string carrier removes the model's auto-memory awareness — proven by gate D, but LIVE-only / out of `pnpm check`).
@@ -22,8 +24,9 @@
 - **Billing axis wording (GPT-refined):** not "shape vs size" as an absolute — say "a tiny string carrier is observed subscription-safe (v1 prod + gate D LIVE, no 400); a large carrier is the known danger." Silent-metered is not provably 0.
 - **C hardening — DONE (`347ada2` + NEXT `ca079e0`, `pnpm check` exit=0, 182 files):** (a) `buildClaudeSessionMeta` now puts `autoMemoryEnabled:false` INTO `_meta.claudeCode.options.settings` (the live seal — survives `settingSources:[]`); (b) `check-acp-tool-surface.ts` asserts it IS IN THE META (CI-gated; the overlay `check-acp-overlay.ts:77` file-check kept as belt-and-suspenders); (c) `loadEngraving` fail-loud when the SHIPPED default is missing/empty (env-override empty stays opt-out) — this caught a real gap: `check-acp-session-reuse.ts` tsc-emit didn't copy the `engraving.md` asset, now fixed; (d) gate D auxiliary assert on delegatedWrites for `MEMORY.md`/`CLAUDE.md`/`.claude` paths. Containment now has BOTH levers (carrier "doesn't-know" + config "knows-but-can't"), and the config one is CI-gated, not LIVE-only.
 - **Next concrete move:**
-  1. **PR-polish:** README/ROADMAP/CHANGELOG/release-gate stale claims (backend support, packaged docs, persisted continuity, config passthrough overclaim; ROADMAP lower historical "legacy verbs maintained" language).
-  2. Then GLG's merge/cut decision.
+  1. **CP1 (NOW):** ROADMAP/NEXT 정합성 lock (이 커밋) → commit(commit skill) → push=GLG.
+  2. **CP2 새 브랜치 생성** (push 후) — rename + published 표면 PR-polish(README/VERIFY/CHANGELOG stale: backend overclaim·packaged docs·persisted continuity·config passthrough; ROADMAP 하단 "legacy verbs maintained" historical 표기)를 결합 규칙으로 한 번에.
+  3. Then GLG의 cut 결정.
 - **Optional only:** rerun `LIVE=1 ./run.sh smoke-claude-native-resume-live` Sonnet-only when Claude service is stable; 529/service failures are not repo mutations.
 
 ## Active detours

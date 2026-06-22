@@ -8,7 +8,16 @@
 > Stage 0 step 설계 · 동결 결정 · 검증 원장 · backlog)를 `ROADMAP.md`로 이주하고 NEXT를 compass로 축소했다.
 > 그 전 2133줄 ledger 전문은 git history(이 커밋 직전 NEXT.md)에 보존됨.
 
-## NOW — 2026-06-16 KST — 0.11.0 컷 준비 완료 (코드/문서/게이트 닫힘, push·컷만 GLG 대기)
+## NOW — 활성 lane은 `acp-on-v2` 브랜치 (2026-06-22 갱신)
+
+> **0.11.0은 이미 cut된 과거 태그.** 아래 "0.11.0 컷 준비" 블록은 *역사 기록*이다(superseded).
+> 현재 활성 개발 = 브랜치 **`acp-on-v2`** (pi-native v2 core + ACP plugin), 다음 방향 = **`pi-shell-acp`→`entwurf`
+> 인플레이스 rename(패키지+repo) + 추가 구현**. 체크포인트 분리·세트 north-star·rename 준비 체크리스트는
+> **`ROADMAP.md` 「현재」** + **`NEXT--acp-on-v2.md`** 가 SSOT. 메인 lane은 그 컷이 끝나야 다시 열린다.
+
+---
+
+### (역사) 2026-06-16 — 0.11.0 컷 준비 완료
 
 **①②③④ + affordance fix 전부 DONE (Opus#3, GPT `87388d` 동행), 커밋 `2ca818f`:**
 

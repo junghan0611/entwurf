@@ -13,7 +13,29 @@
 v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라졌다(v2 core). v2가 척추.
 ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugin 하나**(#38) — host
 `--entwurf-control` pi 세션이 *이미* v2 socket-citizen이고, plugin은 socket/peers/citizen 층을
-새로 만들지 않는다. 패키지명 `pi-shell-acp` 유지(ACP가 살아있으니 이름이 정직, rename 없음).
+새로 만들지 않는다.
+
+### Release north-star — operator 실사용 세트 (GLG 결정 2026-06-22)
+
+이번 릴리즈 목표는 GLG가 매일 쓰는 **세트 하나**를 단단히 조이는 것이다. 그 밖의 backend는 형제로서
+정직히 deferred로 둔다(제거 아님). 이게 정합성의 기준선 — 모든 문서가 이 세트를 같은 말로 비춘다.
+
+| 세트 | 이 repo에서의 정체 | rail | 근거(AGENTS.md) |
+|---|---|---|---|
+| **GPT** | pi-native 호스트 그 자체 (pi가 harness, GPT는 pi로 구동) — 이 repo의 backend가 아니라 *그 위에서 도는 곳* | host | L61 "Pi stays the harness" |
+| **Claude Code** (native 세션) | meta-bridge meta-session (SessionStart 훅 → garden id + mailbox + trusted marker, transcript 안 긁음, 2nd harness 아님) | mailbox-citizen (come-and-go) | L63, #87 |
+| **ACP Claude** | ACP plugin backend (provider/model이 claude-agent-acp를 overlay 격리로 구동) | socket-citizen (always live, mailbox 없음) | L65, #102 |
+
+세트 밖(deferred, 정직 유지): Codex(직접 주입으로 *이미* garden citizen, ACP backend 아님) · Antigravity
+(릴리즈 후 lane) · Gemini CLI(deprecated→Antigravity) · non-Claude ACP/Cortex(후속) · fresh-mint spawn.
+
+### Rename — `pi-shell-acp` → `entwurf` 확정 (GLG 결정 2026-06-22, 이전 "rename 없음" 뒤집음)
+
+spine이 entwurf-core이고 ACP는 plugin 하나이므로, 이름이 spine을 따르는 게 정직하다. **인플레이스
+rename**(한 몸 유지) — 패키지명 + GitHub repo 이름 둘 다 `entwurf`로. entwurf-core를 별 repo로 *추출*하는
+아키텍처 split(#38, 「큰 방향」)은 *그것과 별개의 더 먼 좌표*로 남는다. 실행은 **체크포인트 2(새 브랜치)**
+— 아래 「다음」의 rename 준비 체크리스트 참조. 이 lock 커밋 시점까지는 패키지명 `pi-shell-acp` 유지
+(README/VERIFY 등 published 표면은 rename 브랜치에서 결합 규칙으로 동시 갱신).
 
 **한 줄:** v2 substrate가 spine, ACP는 그 위 plugin. 기존 citizen 대상 send/reply → `entwurf_v2`
 (무에서 새 형제 만드는 fresh creation은 deferred lane).
@@ -48,11 +70,35 @@ carrier-augment 등)은 `pnpm check`에, LIVE 짝 7개는 release-gate **MUST** 
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability gates |
 | floor 0.79.8 parity (`>=0.79.8 <0.80`) | `pnpm check` + release-gate MUST |
 
-### 다음 — PR-polish → tag (GLG)
+### 다음 — 체크포인트 (GLG 결정 2026-06-22, 명확히 분리)
 
-README/ROADMAP/CHANGELOG/release-gate를 "v2 core + ACP plugin" 현실에 정렬(이 lane). version bump/tag는
-GLG가 컷. **0.11.0은 이미 cut된 과거 태그**라 이 컷을 다시 0.11.0으로 부르지 않는다(CHANGELOG는
-Unreleased 유지).
+- **체크포인트 1 (이 브랜치 `acp-on-v2`) — 문서 정합성 lock:** ROADMAP/NEXT를 operator-세트 + rename-확정
+  현실에 정렬(이 lane). 커밋 후 push=GLG. README/VERIFY/CHANGELOG 등 published 표면은 *건드리지 않는다* —
+  rename 브랜치에서 결합 규칙으로 한 번에.
+- **체크포인트 2 (새 브랜치) — rename 실행 + 추가 구현("더 구현할게 있다"):** 아래 rename 준비 체크리스트
+  실행 → `pnpm check` + LIVE release-gate MUST green → 실사용으로 엣지케이스 노출 → 단단히 조인 뒤
+  cut/publish. version bump/tag/publish/repo-rename = GLG. **0.11.0은 이미 cut된 과거 태그**라 이 컷을 다시
+  0.11.0으로 부르지 않는다(CHANGELOG는 Unreleased 유지).
+
+#### rename 준비 (`pi-shell-acp` → `entwurf`, 체크포인트 2 실행 체크리스트)
+
+세 식별자는 *서로 다르며* 따로 바꿀 수 있다 — 호환성 위험도 다르다:
+- **npm 패키지명** `@junghanacs/pi-shell-acp` → `@junghanacs/entwurf` (`package.json` name + `repository.url`). bin 없음.
+- **GitHub repo 이름** `junghan0611/pi-shell-acp` → `junghan0611/entwurf` (GitHub repo rename + git remote URL + README 배지/링크).
+- **런타임 provider id** `pi-shell-acp` (`acp-provider.ts` 등록 키 + Entwurf target `provider=` 라우팅) —
+  **여기가 호환성 최대 위험**: 기존 `provider=pi-shell-acp` Entwurf target / package-source-routing(#29)이
+  깨진다. CP2에서 hard-cut vs alias(구 id 라우팅 호환 유지) 결정.
+
+소스/게이트 — **결합 규칙**(source와 그 게이트를 *같이* 바꿔 `pnpm check`가 silent red 안 되게):
+- 소스: `entwurf-core.ts`(44) · `run.sh`(49) · `model-lock.ts`(23) · `sentinel-runner.sh`(22) ·
+  `meta-bridge-state.py`(9) — `pi-shell-acp` 문자열 90파일 분포 측정.
+- 이름을 assert하는 게이트: `check-package-source-routing.ts`(30) · `check-entwurf-session-identity.ts`(39) ·
+  `check-model-lock.ts`(12) — provider id/패키지명 기대값 동시 갱신.
+- published 문서(결합 동시 갱신): README(48) · VERIFY.md(110) · docs/setup-clean-host.md(110) ·
+  CHANGELOG(90) · demo/README(20) · BASELINE.md(10) · AGENTS.md(11, **명시 요청 시에만**).
+
+게이트: rename 후 `pnpm check` EXIT0 + `LIVE=1 ./run.sh release-gate` MUST(SKIP=0) 재확인. published
+consumer 호환성(provider id)은 cut 전 GLG와 alias/hard-cut 확정.
 
 ### deferred (범위는 보임)
 
@@ -97,18 +143,20 @@ id만으론 pi인지 Claude Code meta인지 모름 → canonical delivery = `ent
 
 ---
 
-## 큰 방향 — 새 `entwurf` repo (GLG 결정 2026-06-16)
+## 큰 방향 — entwurf-core / ACP plugin 아키텍처 split (GLG 결정 2026-06-16, 2026-06-22 갱신)
 
-**언젠가 새 repo `entwurf`를 만들어 v2 인터페이스(entwurf-core)만 옮길 수 있다.** pi-shell-acp를
-버리는 게 아니라 집중을 위해 분리하는 것 — 단 이것은 **deferred coordinate**(#38), 이번 lane이 아니다.
-지금 이 repo가 v2 dispatch substrate + meta-bridge + ACP plugin을 한 몸으로 들고 간다.
+**이번 인플레이스 rename(`pi-shell-acp`→`entwurf`, 「현재」 참조)과는 *별개의 더 먼 좌표*다.** rename은
+이름을 spine에 맞추는 것이고(같은 한 몸), split은 한 몸인 코드를 *물리적으로 쪼개는* 것이다.
+**언젠가 entwurf-core(v2 인터페이스)를 별 repo로 추출**해 ACP plugin과 분리할 수 있다 — 집중을 위해. 단
+이것은 **deferred coordinate**(#38), 이번 lane이 아니다. 지금(그리고 rename 직후에도) 이 repo가 v2
+dispatch substrate + meta-bridge + ACP plugin을 한 몸으로 들고 간다.
 
 - v2(garden citizen에 대한 결정적 dispatch substrate: liveness×intent → control-socket / spawn-bg
   resume / meta-mailbox)는 분리 시 새 `entwurf` repo에서 깨끗이 자랄 후보다.
 - **entwurf-core** = identity / garden id / inbox / liveness / dispatch / replyability / evidence 추출이
   그 첫 몸.
-- 그때까지 pi-shell-acp = **v2 core + meta-bridge + ACP plugin**(v1은 이미 제거됨, rename 없음). ACP는
-  plugin, boundary 아님(#38).
+- split 전까지 (그리고 rename 후) `entwurf` = **v2 core + meta-bridge + ACP plugin**(v1은 이미 제거됨,
+  한 몸). ACP는 plugin, boundary 아님(#38).
 
 ---
 
@@ -222,4 +270,4 @@ parentGardenId:null, isEntwurf:false, createdAt, recordUpdatedAt }`. `model`/`tr
 ## Reference paths
 
 - 본체: `~/repos/gh/pi-shell-acp/` · Consumer: `~/repos/gh/agent-config/` · NixOS: `~/repos/gh/nixos-config/`
-- 미래 분리 대상: 새 `entwurf` repo (v2 interface + entwurf-core)
+- 미래 split 대상(#38, rename과 별개): entwurf-core(v2 interface)를 ACP plugin에서 떼어낸 별 repo
