@@ -52,7 +52,7 @@ export type BridgePromptEvent =
 type PendingPromptHandler = (event: BridgePromptEvent) => Promise<void> | void;
 
 export type ClaudeSettingSource = "user" | "project" | "local";
-export type AcpBackend = "claude" | "codex" | "gemini";
+export type AcpBackend = "claude" | "codex" | "gemini" | "cortex";
 
 type EnvKvInput = Record<string, string> | Array<{ name: string; value: string }>;
 
@@ -295,6 +295,24 @@ type AcpLaunchSpec = {
 export type AcpBackendLaunchParams = {
 	codexDisabledFeatures: readonly string[];
 	codexDeveloperInstructions?: string;
+	/**
+	 * Cortex Snowflake connection name passed to `cortex acp serve -c <name>`.
+	 * Cortex-only. When omitted, Cortex Code uses its own default connection
+	 * from `~/.snowflake/connections.toml`. The claude/codex/gemini adapters
+	 * ignore it.
+	 */
+	cortexConnection?: string;
+	/**
+	 * Cortex model id passed to `cortex acp serve -m <model>`. Cortex-only.
+	 * Carries the pi-shell-acp curated model id (e.g. `cortex-claude-sonnet-4-6`);
+	 * resolveCortexAcpLaunch strips the `cortex-` prefix to recover the
+	 * cortex-native model name before emitting the flag. `cortex-auto` (or any
+	 * value resolving to `auto`) emits no `-m` flag so Cortex picks its own
+	 * default. Pinning the model at launch is the reliable carrier — Cortex's
+	 * ACP model surface is exposed via session config options, not the
+	 * spec-baseline `session/set_model` the bridge calls elsewhere.
+	 */
+	cortexModel?: string;
 };
 
 /**
@@ -452,6 +470,8 @@ export type EnsureBridgeSessionParams = {
 	codexDisabledFeatures: string[];
 	/** Gemini identity carrier — rendered engraving written into the overlay's `system.md` (`GEMINI_SYSTEM_MD` target) at spawn time by ensureGeminiConfigOverlay. Gemini-only — the claude/codex adapters ignore this. When omitted/empty, the overlay still authors a non-empty placeholder so gemini's `getCoreSystemPrompt` takes the override branch (replacing the native "Instruction and Memory Files" body). The override branch is gated by `systemMdResolution.value && !systemMdResolution.isDisabled` post the prompt-provider refactor — `isDisabled` is only ever true for the literal switch values `0`/`false`, which the bridge never uses (we always set `GEMINI_SYSTEM_MD` to a real path). Operator engravings with literal `${...}` text are run through `defuseGeminiSubstitutions` before write so gemini's `applySubstitutions` does not mutate them. */
 	geminiSystemPromptText?: string;
+	/** Cortex Snowflake connection name forwarded to `cortex acp serve -c <name>` (resolveCortexAcpLaunch). Cortex-only — the claude/codex/gemini adapters ignore this. When omitted, Cortex Code uses its own default connection from `~/.snowflake/connections.toml`. A connection change is folded into bridgeConfigSignature (index.ts) so it invalidates a reused session. */
+	cortexConnection?: string;
 	bridgeConfigSignature: string;
 	contextMessageSignatures: string[];
 };
@@ -1023,6 +1043,92 @@ function resolveGeminiAcpLaunch(_launchParams: AcpBackendLaunchParams): AcpLaunc
 		command: "gemini",
 		args: ["--acp", ...bridgeArgs],
 		source: "PATH:gemini --acp --admin-policy <overlay>",
+	};
+}
+
+/**
+ * Strip the pi-shell-acp `cortex-` curation prefix to recover the
+ * cortex-native model id. `cortex-claude-sonnet-4-6` → `claude-sonnet-4-6`,
+ * `cortex-auto` → `auto`. The bridge curates Cortex models behind a prefix
+ * because Cortex routes to model families (Claude, OpenAI, …) whose native
+ * ids collide with the Claude/Codex curated surface; the prefix keeps the
+ * `MODELS` map keys unique and lets `inferBackendFromModel` route
+ * deterministically. Returns undefined for an absent/empty/`auto` value so
+ * the caller emits no `-m` flag (Cortex picks its own default).
+ */
+function cortexNativeModelId(value: string | undefined): string | undefined {
+	const trimmed = value?.trim();
+	if (!trimmed) return undefined;
+	const stripped = trimmed.startsWith("cortex-") ? trimmed.slice("cortex-".length) : trimmed;
+	if (!stripped || stripped === "auto") return undefined;
+	return stripped;
+}
+
+/**
+ * Resolve the Cortex Code ACP launch spec.
+ *
+ * Cortex Code exposes ACP via `cortex acp serve` (stdio JSON-RPC), launching
+ * the Snowflake Cortex Code CLI in agent mode. Like Gemini (and unlike
+ * Claude/Codex), this is NOT a separate `*-acp` server npm package — the
+ * `cortex` CLI itself is the ACP server. We therefore resolve from PATH only;
+ * there is no node-package fallback to unpack into the dependency graph.
+ *
+ * Operators install + authenticate via:
+ *   curl -LsS https://ai.snowflake.com/static/cc-scripts/install.sh | sh
+ *   cortex auth login           # writes ~/.snowflake/connections.toml
+ *
+ * Auth boundary (Hard Rule #9): the bridge does not provide, copy, proxy, or
+ * decrypt Snowflake credentials. It spawns the official `cortex` CLI and lets
+ * that CLI read whatever auth state is visible on the filesystem of the
+ * process that runs it (`connections.toml`, credential cache). The
+ * SNOWFLAKE_HOME overlay (ensureCortexConfigOverlay) symlinks those auth
+ * artifacts through while hiding operator conversation / profile / memory
+ * state — same shape as the gemini oauth passthrough.
+ *
+ * Identity carrier asymmetry: Cortex ACP does not expose a `_meta.systemPrompt`
+ * carrier (like Codex) and has no `developer_instructions` / `GEMINI_SYSTEM_MD`
+ * equivalent. The operator engraving therefore rides the first-user pi-context
+ * augment only (folded in at index.ts), not a dedicated system-prompt-shape
+ * carrier. This is a real surface difference from the other three backends,
+ * documented rather than hidden.
+ *
+ * Model: pinned via `-m <native-id>` at launch (see cortexNativeModelId). The
+ * `cortex-` prefix is stripped here; `cortex-auto` emits no flag. Connection:
+ * `-c <name>` when configured, else Cortex's own default connection.
+ *
+ * Override path: CORTEX_ACP_COMMAND lets operators inline a different launch
+ * (e.g. a wrapper script or extra flags). The override runs through `bash -lc`
+ * so shell tokenization matches the operator's environment, mirroring
+ * CODEX_ACP_COMMAND / GEMINI_ACP_COMMAND. The bridge's `-m` / `-c` flags are
+ * appended after the override so pi-shell-acp's model/connection selection
+ * wins (later CLI args override earlier ones in yargs).
+ */
+function resolveCortexAcpLaunch(launchParams: AcpBackendLaunchParams): AcpLaunchSpec {
+	const override = process.env.CORTEX_ACP_COMMAND?.trim();
+	const nativeModel = cortexNativeModelId(launchParams.cortexModel);
+	const connection = launchParams.cortexConnection?.trim();
+	const bridgeArgs = ["acp", "serve"];
+	if (connection) bridgeArgs.push("-c", connection);
+	if (nativeModel) bridgeArgs.push("-m", nativeModel);
+	if (override) {
+		// Override path appends only the connection/model selection flags
+		// (`acp serve` is the operator's responsibility in the override). Mirror
+		// of the Codex `${override} ${ourFlags}` pattern.
+		const selectionArgs: string[] = [];
+		if (connection) selectionArgs.push("-c", connection);
+		if (nativeModel) selectionArgs.push("-m", nativeModel);
+		const command =
+			selectionArgs.length > 0 ? `${override} ${selectionArgs.map(shellQuote).join(" ")}` : override;
+		return {
+			command: "bash",
+			args: ["-lc", command],
+			source: "env:CORTEX_ACP_COMMAND",
+		};
+	}
+	return {
+		command: "cortex",
+		args: bridgeArgs,
+		source: "PATH:cortex acp serve",
 	};
 }
 
@@ -2235,6 +2341,144 @@ export function ensureGeminiConfigOverlay(
 	}
 }
 
+// ============================================================================
+// Cortex config overlay — isolate `cortex acp serve`'s Snowflake home from the
+// operator's `~/.snowflake/`, while passing backend auth through (Hard Rule #9).
+// ============================================================================
+//
+// Path-resolution invariant (verified against Cortex Code v1.1.8 bundle
+// source — the `ZO()` home resolver and `cx()` cortex-dir helper):
+//
+//   ZO()  = process.env.SNOWFLAKE_HOME ?? path.join(os.homedir(), ".snowflake")
+//   cx()  = path.join(ZO(), "cortex")
+//   connections.toml = path.join(ZO(), "connections.toml")   // AUTH
+//   config.toml      = path.join(ZO(), "config.toml")        // connection config
+//   conversations    = path.join(cx(), "conversations")      // session/memory state
+//   credential_cache = path.join(cx(), "cache", "credential_cache")  // AUTH cache
+//   profiles         = path.join(cx(), "profiles")           // operator profiles
+//   memory           = path.join(cx(), "memory")             // operator memory
+//   skills           = path.join(cx(), "skills")             // operator skills
+//   mcp.json         = path.join(cx(), "mcp.json")           // operator MCP
+//   hooks / hooks.json / secrets / commands / plugins / settings.json / logs
+//
+// Setting SNOWFLAKE_HOME relocates the entire base, so the overlay needs the
+// base dir (= SNOWFLAKE_HOME) and its `cortex/` subtree. We symlink only the
+// auth + skills surfaces through to the operator's real `~/.snowflake/`; every
+// other entry is left unlinked so Cortex materializes fresh empty state inside
+// the overlay rather than reading the operator's conversations / profiles /
+// memory / hooks / MCP config. Bundled Snowflake skills live under
+// `~/.local/share/cortex/`, OUTSIDE SNOWFLAKE_HOME, so they are unaffected.
+export const CORTEX_REAL_HOME = join(homedir(), ".snowflake");
+export const CORTEX_CONFIG_OVERLAY_HOME = join(homedir(), ".pi", "agent", "cortex-config-overlay");
+const CORTEX_OVERLAY_CORTEX_DIR = join(CORTEX_CONFIG_OVERLAY_HOME, "cortex");
+
+// Base-level (`~/.snowflake/*`) auth passthrough. connections.toml is the
+// credential/connection definition Cortex reads on launch; config.toml carries
+// connection defaults. Symlink-through only — the bridge never copies, parses,
+// or mediates these (Hard Rule #9).
+const CORTEX_OVERLAY_PASSTHROUGH_BASE = new Set(["connections.toml", "config.toml"]);
+
+// cortex-subdir (`~/.snowflake/cortex/*`) passthrough. `cache` holds the
+// credential token cache (auth — keep working). `skills` mirrors the
+// claude/codex/gemini operator-skills passthrough.
+const CORTEX_OVERLAY_PASSTHROUGH_CORTEX = new Set(["cache", "skills"]);
+
+// cortex-subdir state swept at every spawn (L5 — Memory containment). pi owns
+// persistence (semantic-memory + Denote llmlog); the backend must not run a
+// parallel memory/conversation layer that survives across pi sessions. These
+// are overlay-owned empty trees, nuked + recreated each spawn so nothing
+// Cortex wrote in a prior session leaks into the next.
+const CORTEX_OVERLAY_SWEPT_DIRS = new Set(["conversations", "memory", "profiles", "logs"]);
+
+function cortexSymlinkPassthrough(realBase: string, overlayBase: string, entry: string): void {
+	const realPath = join(realBase, entry);
+	const overlayPath = join(overlayBase, entry);
+	if (!existsSync(realPath)) {
+		try {
+			lstatSync(overlayPath);
+			rmSync(overlayPath, { recursive: true, force: true });
+		} catch {
+			// Doesn't exist — fine.
+		}
+		return;
+	}
+	try {
+		const existing = lstatSync(overlayPath);
+		if (existing.isSymbolicLink()) {
+			if (readlinkSync(overlayPath) === realPath) return;
+			unlinkSync(overlayPath);
+		} else {
+			rmSync(overlayPath, { recursive: true, force: true });
+		}
+	} catch {
+		// Doesn't exist — fall through to symlink.
+	}
+	try {
+		symlinkSync(realPath, overlayPath);
+	} catch (error) {
+		console.error(
+			`[pi-shell-acp:cortex-overlay] symlink failed for ${entry}: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+}
+
+export function ensureCortexConfigOverlay(
+	realHome: string = CORTEX_REAL_HOME,
+	overlayHome: string = CORTEX_CONFIG_OVERLAY_HOME,
+	overlayCortexDir: string = join(overlayHome, "cortex"),
+): void {
+	mkdirSync(overlayHome, { recursive: true });
+	mkdirSync(overlayCortexDir, { recursive: true });
+
+	const realCortexDir = join(realHome, "cortex");
+
+	// Auth passthrough — base level (connections.toml, config.toml).
+	for (const entry of CORTEX_OVERLAY_PASSTHROUGH_BASE) {
+		cortexSymlinkPassthrough(realHome, overlayHome, entry);
+	}
+	// Auth + skills passthrough — cortex subdir (cache, skills).
+	for (const entry of CORTEX_OVERLAY_PASSTHROUGH_CORTEX) {
+		cortexSymlinkPassthrough(realCortexDir, overlayCortexDir, entry);
+	}
+
+	// Memory containment — sweep overlay-owned state dirs every spawn, replacing
+	// any prior symlink to operator data and discarding overlay-written state
+	// from previous sessions.
+	for (const entry of CORTEX_OVERLAY_SWEPT_DIRS) {
+		const overlayPath = join(overlayCortexDir, entry);
+		rmSync(overlayPath, { recursive: true, force: true });
+		mkdirSync(overlayPath, { recursive: true });
+	}
+
+	// Stale cleanup — remove anything in the overlay cortex/ dir that is not on
+	// the passthrough/swept allowlist. Closes migration leaks if a prior
+	// overlay symlinked operator state (mcp.json, hooks, profiles, secrets, …)
+	// that has since been dropped from the whitelist. Cortex re-creates whatever
+	// runtime files it needs (settings.json, .ctx, …) fresh inside the overlay.
+	let entries: string[];
+	try {
+		entries = readdirSync(overlayCortexDir);
+	} catch {
+		entries = [];
+	}
+	for (const entry of entries) {
+		if (CORTEX_OVERLAY_PASSTHROUGH_CORTEX.has(entry)) continue;
+		if (CORTEX_OVERLAY_SWEPT_DIRS.has(entry)) continue;
+		const overlayPath = join(overlayCortexDir, entry);
+		try {
+			const stat = lstatSync(overlayPath);
+			// Only tear down symlinks (stale operator-state passthrough). Leave
+			// Cortex-authored regular files/dirs alone so within-overlay runtime
+			// state is not wiped mid-life.
+			if (stat.isSymbolicLink()) {
+				rmSync(overlayPath, { force: true });
+			}
+		} catch {
+			// Doesn't exist — fine.
+		}
+	}
+}
+
 const ACP_BACKEND_ADAPTERS: Record<AcpBackend, AcpBackendAdapter> = {
 	claude: {
 		id: "claude",
@@ -2343,6 +2587,41 @@ const ACP_BACKEND_ADAPTERS: Record<AcpBackend, AcpBackendAdapter> = {
 		// interface — the bridge intentionally does not surface
 		// backend-specific compaction names.
 	},
+	cortex: {
+		id: "cortex",
+		stderrLabel: "cortex acp serve stderr",
+		resolveLaunch: resolveCortexAcpLaunch,
+		// Cortex ACP newSession does not expose a `_meta.systemPrompt` carrier
+		// (like Codex/Gemini), and Cortex has no `developer_instructions` /
+		// `GEMINI_SYSTEM_MD` equivalent. So the bridge must not synthesize a
+		// session-meta carrier here — the operator engraving rides the first-user
+		// pi-context augment instead (folded in at index.ts). This is the one
+		// backend with no dedicated system-prompt-shape carrier; documented as a
+		// real surface difference rather than papered over.
+		buildSessionMeta: () => undefined,
+		// First-prompt augment carries the bridge identity narrative + pi base
+		// intro + ~/AGENTS.md + cwd/AGENTS.md + date/cwd AND (cortex-only) the
+		// operator engraving prepended at index.ts. Same user-message surface as
+		// the other three backends; here it additionally carries identity because
+		// no higher-authority carrier exists.
+		buildBootstrapPromptAugment: (text) => [{ type: "text", text }],
+		bridgeEnvDefaults: {
+			// Redirect Cortex's `ZO()` Snowflake-home resolver
+			// (process.env.SNOWFLAKE_HOME ?? ~/.snowflake) to the pi-owned overlay.
+			// ensureCortexConfigOverlay symlinks auth (connections.toml,
+			// config.toml, credential cache) + skills through to the operator's
+			// real ~/.snowflake/, while hiding conversations / profiles / memory /
+			// hooks / mcp.json. process.env wins, so an operator who explicitly
+			// exports SNOWFLAKE_HOME keeps full control.
+			SNOWFLAKE_HOME: CORTEX_CONFIG_OVERLAY_HOME,
+			// Operator profiles can inject settings, system-prompt text, and MCP
+			// servers at session start (auto-apply). pi-shell-acp owns the
+			// operating surface, so pin auto-apply off — the profiles dir is also
+			// hidden by the overlay, but this is belt-and-suspenders against any
+			// profile reached through the passed-through connection.
+			CORTEX_DISABLE_AUTO_APPLY_PROFILES: "1",
+		},
+	},
 };
 
 export function resolveAcpBackendAdapter(backend: AcpBackend): AcpBackendAdapter {
@@ -2351,7 +2630,7 @@ export function resolveAcpBackendAdapter(backend: AcpBackend): AcpBackendAdapter
 	}
 	const adapter = ACP_BACKEND_ADAPTERS[backend];
 	if (!adapter) {
-		throw new Error(`Unknown ACP backend: ${String(backend)}. Expected one of: claude, codex, gemini`);
+		throw new Error(`Unknown ACP backend: ${String(backend)}. Expected one of: claude, codex, gemini, cortex`);
 	}
 	return adapter;
 }
@@ -2576,6 +2855,15 @@ function buildSessionMeta(
 }
 
 function resolveModelIdFromSessionResponse(response: any, fallback?: string): string | undefined {
+	// Cortex: the ACP session reports its native model id (e.g.
+	// "claude-sonnet-4-6") via models.currentModelId, but pi-shell-acp tracks the
+	// prefixed curated id ("cortex-claude-sonnet-4-6") as the stable identity for
+	// model-lock + reuse-compat + PI_AGENT_ID. The native model is already pinned
+	// via the `cortex acp serve -m` launch arg, so keep the pi-side id
+	// authoritative and ignore the response's currentModelId — otherwise every
+	// turn would see session.modelId (native) != params.modelId (prefixed) and
+	// trigger a spurious model-switch invalidation.
+	if (fallback?.startsWith("cortex-")) return fallback;
 	const currentModelId = response?.models?.currentModelId;
 	return typeof currentModelId === "string" && currentModelId.length > 0 ? currentModelId : fallback;
 }
@@ -2585,6 +2873,13 @@ async function enforceRequestedSessionModel(
 	requestedModelId: string | undefined,
 ): Promise<void> {
 	if (!requestedModelId) return;
+	// Cortex pins its model at launch via `cortex acp serve -m <native-id>`. Its
+	// ACP model surface is exposed through session config options keyed by
+	// cortex-native ids, not the spec-baseline `session/set_model` the bridge
+	// calls here — and the requestedModelId is the pi-prefixed curated id
+	// ("cortex-..."), which Cortex would reject. Skip the ACP set-model call;
+	// the launch-arg pin is authoritative.
+	if (session.backend === "cortex") return;
 	const fromModel = session.modelId;
 	const setModel = session.connection.unstable_setSessionModel;
 	if (typeof setModel !== "function") {
@@ -2891,6 +3186,11 @@ async function createBridgeProcess(params: EnsureBridgeSessionParams): Promise<A
 	const launch = adapter.resolveLaunch({
 		codexDisabledFeatures,
 		codexDeveloperInstructions: normalizeText(params.codexDeveloperInstructions),
+		cortexConnection: normalizeText(params.cortexConnection),
+		// Cortex pins the model at launch (-m). Pass the pi-prefixed curated id;
+		// resolveCortexAcpLaunch strips the `cortex-` prefix. Only meaningful on
+		// the cortex backend — the other adapters ignore cortexModel.
+		cortexModel: params.backend === "cortex" ? params.modelId : undefined,
 	});
 	// Adapter defaults first, process.env last → operator's shell always wins.
 	//
@@ -2933,6 +3233,21 @@ async function createBridgeProcess(params: EnsureBridgeSessionParams): Promise<A
 		} catch (error) {
 			console.error(
 				`[pi-shell-acp:gemini-overlay] failed to prepare overlay; falling back to operator's GEMINI_CLI_HOME if any: ${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+	}
+	// Refresh the cortex config overlay before every cortex session bootstrap.
+	// Idempotent — re-symlinks auth (connections.toml / config.toml / credential
+	// cache) + skills from ~/.snowflake/, sweeps overlay-owned conversation /
+	// profile / memory state, and strips any stale operator-state symlink. Picks
+	// up operator re-auth without manual intervention. Auth boundary (Hard Rule
+	// #9): symlink-through only; the bridge never copies or parses credentials.
+	if (params.backend === "cortex" && bridgeEnvDefaults?.SNOWFLAKE_HOME === CORTEX_CONFIG_OVERLAY_HOME) {
+		try {
+			ensureCortexConfigOverlay();
+		} catch (error) {
+			console.error(
+				`[pi-shell-acp:cortex-overlay] failed to prepare overlay; falling back to operator's SNOWFLAKE_HOME if any: ${error instanceof Error ? error.message : String(error)}`,
 			);
 		}
 	}
