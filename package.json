@@ -1,6 +1,6 @@
 {
 	"name": "@junghanacs/entwurf",
-	"version": "0.11.0",
+	"version": "0.12.0",
 	"description": "Pi-native garden-citizen dispatch substrate and meta-bridge for entwurf v2 sessions.",
 	"license": "MIT",
 	"author": {
