@@ -8,7 +8,7 @@
 > - **rename이 먼저. npm publish는 최후행.** 순서 = **코드 rename(S1~S3) → repo/dir rename(GLG) → npm publish(GLG, 맨 마지막)**(§6 시퀀스). publish는 rename 트리거가 아니다. package.json `name` *문자열*은 S1 소스 치환 대상이지만 *registry publish*는 모든 rename 완료 후 별도. 설치 동기화 cut-choreography **폐기** — 쓰는 사람은 전문가, 내 방향 따라오거나 안 쓰면 그만. 범용 도구가 아니다.
 > - **🔪 이건 호환성 작업이 아니라 절단(cutover)다 [GLG 핵심 교리].** 이전 세션·이전 이름과 **결별**한다 — 어떤 *런타임* 호환성도 두지 않는다. dual-read/alias/legacy-accept 0. 설치자는 새로 간다(호환 아니라 새 시작). state(meta-bridge·ACP cache)는 **이장(one-shot cutover)**이지 dual-read가 아님 — old를 new로 한 번 옮기고 런타임은 이후 new만 안다. **이건 정체성의 전환** — pi를 4번째 하네스로 내린다(ACP·소켓 대화하는 특별한 adapter지만), **entwurf가 본질**. 약하게 조이면 버그가 아니라 *정체성*이 샌다.
 >
-> **▶ 다음 세션 진입점 (실제 작업):** ① fresh rg ✅ → ② S1 dry-run GREEN ✅ → ③ GPT 4R live S1 GO ✅ → ④ GLG 비준 ✅ → ⑤ **live S1 완료 ✅ — `07c2592`(code) + `1e89c13`(S1-doc)** → ⑥ **live S2 완료 ✅ — `e795a08`(MCP bridge: pi-tools-bridge→entwurf-bridge, GPT 2R Amber→GO, GLG 비준)**. 남은: ⑦ **S3(env namespace)** 별도 dry-run/검수 + ⑧ **GLG 무인 후행**(state 이장 §6-④/⑤ · repo/dir rename §6-③ · npm §6-① — §5 quiesce 가드). *S1·S2 = 정체성+브리지 전환 완료, S3만 남음.*
+> **▶ 다음 세션 진입점 (실제 작업):** ⑤ **live S1 ✅ `07c2592`+`1e89c13`** → ⑥ **live S2 ✅ `e795a08`**(MCP bridge) → ⑦ **live S3 ✅ `148a8f8`**(env namespace, 46f 229/229, GPT GO) + **`64cb6b5` check-env-namespace 게이트**(cutover lock, pnpm check 등록, negative-test 검증). **★ 코드 cutover(S1·S2·S3) 전부 완료.** 남은: ⑧ **GLG 무인 후행**(state 이장 §6-④/⑤ · repo/dir rename §6-③ · npm §6-① — §5 quiesce 가드) + **usage-ok 운영절차**(GPT §6-A: S3 후 install-meta-bridge/state apply가 MCP entry env를 `ENTWURF_BRIDGE_*`로 재작성 + 사용자 shell export·`*_ENV_FILE` 새 이름 전환). + **rename 이후 본격 방향 ↓(§10)**.
 
 ---
 
@@ -167,8 +167,13 @@
 - **S3 env `PI_TOOLS_BRIDGE_`(SCREAMING) 의도 보존** — case-sensitivity로 자동 분리.
 - **게이트 GREEN:** tsc·lint·check-entwurf-bridge-boot 14·check-entwurf-v2-surface 42·check-acp-config·check-acp-session-reuse·smoke-meta-keyset-guard·smoke-meta-install-state + pre-commit check-pack(182 files). GPT(`20260623T104220-35aa15`) 2R Amber→GO(수동 prune smoke 포함).
 
-### ▶ S3 — env namespace
+### ▶ S3 — env namespace ✅ 완료 (`148a8f8` + 게이트 `64cb6b5`, 2026-06-23)
 taxonomy(§3)대로 `PI_SHELL_ACP_*` 20개 의미별 분해 + `PI_TOOLS_BRIDGE_*`(3)→`ENTWURF_BRIDGE_*` + `PI_ENTWURF_*`(5)→`ENTWURF_*` + `PI_META_*`(5)→`ENTWURF_META_*` + env명 assert 게이트. **영구 alias 금지**, installer one-shot migration만.
+- **실행:** 46 files 229/229. content-driven `git grep -Il`(4 env prefix) → **per-name `\b` 앵커 perl**(blind prefix 금지 — `PROVIDER` vs `PROVIDER_MODEL` 충돌 방지; uniform 3군은 prefix) → biome(reflow 0).
+- **taxonomy 확정(GLG flat):** `ENTWURF_ACP_`=pi 닿는 백엔드 plugin config 11(PROVIDER_MODEL·PROVIDER_TIMEOUT_MS·CLAUDE_CONTEXT·ENGRAVING_PATH·MEMORY_*·OVERLAY_*·RAW_TURN_*·NO_AUTH_SENTINEL const) · flat `ENTWURF_` 9(V2_RESUME·DEBUG·LIVE_{T,P,M}·RGG_TARGET·S1_MODEL·SPAWN_RESUME·PROVIDER const). PI_ENTWURF_ACP_FOR_CODEX→ENTWURF_ACP_FOR_CODEX.
+- **const 2개**(NO_AUTH_SENTINEL export/import, PROVIDER) cross-file 치환 — tsc root+mcp+scripts 3타겟 EXIT0로 정합 확인. KEEP pi env(PI_SESSION_ID 등) 불변.
+- **cutover prune 0(GPT §6-A 확인):** env는 process.env/내부값이라 runtime prune 불필요. consumer 영속 env(MCP entry `-e`)는 **S3 후 install-meta-bridge/state apply가 `ENTWURF_BRIDGE_*`로 재작성** → stale 정리. 단 이건 usage-ok 운영절차(코드 아님). 사용자 shell export·`*_ENV_FILE`도 새 이름 전환 필요.
+- **게이트:** `check-env-namespace` 신설(`64cb6b5`) — source-scan으로 옛 prefix 잔존 0 잠금, `[_]` char-class로 self-match 회피, pnpm check 등록, negative-test(가짜 토큰 심으면 FAIL) 검증. + 기존 게이트 전부 GREEN(provider-surface·model-lock 18·acp-config·carrier-augment·package-source-routing·session-identity·v2-surface 42·meta smokes·check-pack 182). GPT GO.
 
 ### ▶ S4 deferred (구조개편, 텍스트치환 아님)
 `pi/entwurf-targets.json` 경로 재검토 · `pi-extensions/`→`adapters/pi/extensions/` · `pi/meta-bridge/.assembled` 산출물 경로.
@@ -224,3 +229,14 @@ README/VERIFY/CHANGELOG stale(backend overclaim·packaged docs·persisted contin
   - **★ 파일 선택 = content-driven 필수 (GPT 3R RED, 실증):** 1차 시도가 확장자 whitelist(`.ts/.sh/.json/.toml/.mjs/.js`)라 **`.py`/`.cjs`/`.husky`를 빠뜨림** — `scripts/meta-bridge-state.py`(9, OWNER·state file명·managed-key SSOT) · `check-keyset-overlap.py`(3) · `postinstall-chmod.cjs`(3) · `.husky/pre-commit`(2) 잔존했었음. **교정 레시피 = `git grep -Il -e 'pi-shell-acp' -e 'piShellAcp' -e 'PiShellAcp' -- ':!*.md' ':!NEXT*' ':!docs/**' ':!*.org'` 로 선택**(확장자 무관, docs 제외) → perl 치환 → `biome --write` → residual rg(역시 `git grep`).
   - **보정 후 GREEN:** diffstat **77 files 458/469** · residual S1 RENAME **0** · S2 `pi-tools-bridge`/S3 `PI_SHELL_ACP_` 보존. **게이트:** typecheck EXIT0 · lint 0err(12 pre-existing warn) · check-pack-install EXIT0(`junghanacs-entwurf-0.11.0.tgz`→pi loader `entwurf` 등록) · check-{package-source-routing,model-lock,entwurf-session-identity,auth-boundary} EXIT0 · **smoke-meta-install-state·smoke-meta-keyset-guard EXIT0**(meta-bridge .py 커버). **발견:** 치환→biome reflow 2건→`--write`. *전체 `pnpm check` 체인은 socket/`~/.pi` substrate 의존이라 worktree 부적합 — rename 회귀 핵심만 선별.*
 - 추가 구현 = rename 끝난 *다음 세션* 본질(ROADMAP deferred: persisted resume/load 1b-2c · Claude↔Claude live transport 등). **이 작업이 끝나야 entwurf 기능 정리 → 릴리즈.**
+
+---
+
+## 10 · rename 이후 본격 방향 — 하네스 무관 / ACP 옵션화 / doctor (GLG, 2026-06-23)
+
+> 왜 이름을 바꾸는가의 본질. `pi-shell-acp`는 **pi 쓰는 파워유저용**이라 설치가 어려워도 "알아서들 하겠지"였다. `entwurf`는 **아예 다른 대상** — pi/acp를 *안 쓰는* 사용자가 많을 것(Claude Code · Codex · agy만 연결). codex/agy는 아직 여기 미작업이나 **검증은 끝났고 금방 붙는다.**
+
+- **설치는 쉬워야 한다. ACP는 옵션 — 거의 plugin으로 본다.** ACP 지원은 overlay 구성 등 일반 케이스 대비 복잡하다. **강제 금지.**
+- **설치 = `entwurf` 설치.** 나머지(Claude Code/Codex/agy)는 **설치돼 있으면 설정해준다.**
+- **doctor = 하네스 감지 → 있으면 entwurf 설정**(YOLO·도구세트 축소), **없으면 담아준다(plug-in).**
+- 이 방향은 **rename 완료 후 본격 착수.** S4(구조개편 §5)·릴리즈 정리와 같은 lane.
