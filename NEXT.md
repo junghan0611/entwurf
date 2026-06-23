@@ -18,6 +18,28 @@
 > (.pi/settings.json bridge → 새 경로, old 누수 0 · global registry 심볼릭링크 relink · `pi --list-models
 > entwurf` 라이브). 디렉토리명 독립 + install 자가전파(REPO_DIR를 settings에 박음) 확인.
 
+### 재배치 재현 runbook — install은 **2갈래**다 (2026-06-23 statusLine 死 사건의 교훈)
+
+> **근본 원인:** repo를 옮기면(rename/move) install을 다시 돌려야 하는데, install이 둘로 갈려 있다.
+> 이번에 `./run.sh install`(=pi 패키지)만 돌리고 `./run.sh install-meta-bridge`(=Claude Code 배선)를 안 돌려서,
+> `~/.claude/settings.json` statusLine이 **死한 옛 경로**(`pi-shell-acp/scripts/meta-bridge-statusline.sh`)에 멈춰
+> 상태바가 날아갔다. canonical installer 재실행으로 복구.
+
+재배치/clone 후 working state를 **결정적으로 재현**하는 순서 (전부 새 위치에서):
+
+1. `./run.sh install .` — **pi 패키지** 배선 (`.pi/settings.json` 의 `entwurfProvider` + `mcpServers.entwurf-bridge`
+   절대경로, global registry 심볼릭링크). REPO_DIR을 self-박음 → 경로 독립.
+2. `./run.sh install-meta-bridge` — **Claude Code** 배선 (statusLine·meta-bridge 플러그인·USER-scope `entwurf-bridge` MCP).
+   `meta-bridge-state.py apply` 가 `~/.claude/settings.json` statusLine/`.assembled` 를 **현재 REPO 경로**로 박는다.
+   ⚠ 이 단계를 빼먹으면 상태바가 옛 경로에 멈춘다 (= 이번 사건).
+3. `./run.sh doctor-meta-bridge` — **fail-loud 검증 가드.** `meta-bridge-doctor.sh:117-118` 이 statusLine.command ==
+   `$REPO/scripts/meta-bridge-statusline.sh` 를 assert; drift면 `bad "statusLine.command drifted (got…expected…)"`.
+   `.assembled`/USER MCP 경로 drift도 같이 잡는다. **재배치 후 이걸 돌렸으면 즉시 빨갛게 떴다.**
+
+> 가드(doctor)는 이미 존재. 갭은 "절차 지식"이었고 이 runbook이 그걸 닫는다. 더 단단히 하려면(선택, GLG 승인):
+> `run.sh install` 이 meta-bridge가 **다른 repo 경로**를 가리키는 drift를 감지하면 "install-meta-bridge 돌려라" nudge
+> 출력 → 단일 install이 갭을 surface. (pi-only 호스트엔 no-op이 되도록 detection-gated.)
+
 ---
 
 ### (역사) 2026-06-16 — 0.11.0 컷 준비 완료
