@@ -81,7 +81,8 @@
      `setup-clean-host.md` openclaw Docker 부록. (= GLG 2026-06-22 승인 allowlist와 정합.)
    - `NEXT--*.md` 브랜치 ledger = 머지 전 삭제 대상(string-replace 불필요).
 4. **old 폴더:** `pi-shell-acp/` **이미 삭제됨**(확인). `pi-shell-acp-v1/`·`pi-entwurf/` 잔존 → 처분 GLG 결정.
-5. **push/컷 = GLG.** 0.12.0 bump 커밋은 로컬-온리. push 후 agenda stamp.
+5. **릴리즈 컷 = GLG.** `entwurf-rename` 브랜치는 `origin`(entwurf.git)에 push됨(2026-06-23, stamp 완료). 남은 건
+   **태그 + npm publish(`@junghanacs/entwurf` 신규 publish + 옛것 deprecate)** = 모든 rename·문서 pass 완료 후 GLG.
 
 ## 넘으면 안 되는 선
 
