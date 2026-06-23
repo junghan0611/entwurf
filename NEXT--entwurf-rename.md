@@ -7,7 +7,7 @@
 > - **openclaw consumer는 허구다.** `plugins/openclaw`는 2026-06-10 deprecate·**디렉토리째 제거**(find 0건). repo 내 `openclaw` 언급은 전부 historical docs(README/CHANGELOG/ROADMAP/docs/run.sh 주석) — **코드 lockstep 0**. oracle이 docs 기록을 live 배포 consumer로 오인했던 §4-B는 **삭제**.
 > - **rename이 먼저. npm publish는 최후행.** 순서 = **코드 rename(S1~S3) → repo/dir rename(GLG) → npm publish(GLG, 맨 마지막)**(§6 시퀀스). publish는 rename 트리거가 아니다. package.json `name` *문자열*은 S1 소스 치환 대상이지만 *registry publish*는 모든 rename 완료 후 별도. 설치 동기화 cut-choreography **폐기** — 쓰는 사람은 전문가, 내 방향 따라오거나 안 쓰면 그만. 범용 도구가 아니다.
 >
-> **▶ 다음 세션 진입점 (실제 작업):** self-review + **GPT 2라운드 = "GO for S1 dry-run 진입"**, RED/Amber 전부 반영, **§6 GLG 결정 4건 확정 완료**(§9). 남은 순서: ① §5 S1 readiness gate `fresh rg` 전수(**repo 내부만**, 3계층 분류) → ② **버린 worktree에서 S1 dry-run**(RENAME runtime/code군 0 / KEEP 잔존 / `pnpm check` + `check-pack` + **`check-pack-install`** green — 새 `@junghanacs/entwurf` publish에 의존하지 않음) → ③ **dry-run green 산출물을 GPT에 보여 live S1 최종 GO** → ④ GLG 비준 시 live S1 일격. *치환은 ②까지 0건 유지.*
+> **▶ 다음 세션 진입점 (실제 작업):** self-review + **GPT 2라운드 = "GO for S1 dry-run 진입"**, RED/Amber 전부 반영, **§6 GLG 결정 4건 확정 완료**(§9). 진행: ① fresh rg 전수 ✅ → ② **S1 dry-run = GREEN ✅(2026-06-23, §9 ledger)** → 남은: ③ **dry-run 산출물 GPT 최종 GO** → ④ GLG 비준 시 live S1 일격. *본 트리 치환 0건 유지(dry-run은 버린 worktree).*
 
 ---
 
@@ -146,6 +146,7 @@
 - 패키지명(`@junghanacs/entwurf`) + provider id(`acp-provider.ts` baseUrl/api) + model prefix + `piShellAcpProvider`→`entwurfProvider` + `PiShellAcp*`/`piShellAcp*`/`pi_shell_acp` + Symbol + repo URL.
 - **MOVE-lockstep(§2) 동시 이동** — getRegistryRouting `!==` + no-auth sentinel 3-site + PROVIDER_ID(shell).
 - **게이트 same-commit:** `check-package-source-routing`·`check-model-lock`·`check-entwurf-session-identity`·`check-auth-boundary` + **`check-pack-install`(GPT 2R — `pnpm check` 밖이라 명시 호출 필수; package name rename 실제 회귀 gate, §2 하드코딩 surface 검증).**
+- **★ 치환 직후 `biome check --write` 1회** (dry-run 발견: 치환이 라인 길이를 줄여 biome format reflow 2건 발생 → `--write`로 자동 해소, RENAME 안 깨짐). live S1 레시피 = `perl 치환 → biome --write → 게이트`.
 - **bridge명은 건드리지 않음**(S2). → `pnpm check` EXIT0 + RENAME군 0/KEEP 잔존 양방향.
 - **먼저 버린 worktree에서 dry-run**(physical rename 없이 가능 — dir명은 fs path지 alias 아님), green 확인 후 live.
   - **★ dry-run 가드 (GPT 확정):** ① **S1 범위만** 치환 — `pi-tools-bridge`(S2)·`PI_*` env namespace(S3)는 **건드리지 말 것**(섞으면 검증 의미 흐려짐). ② live `~/.pi` 금지(§5-c). ③ **산출물 필수 형태:** worktree path · replacement script/명령 · `git diff --stat` · residual rg 요약(runtime/code RENAME **0** / KEEP pi 잔존 / historical·docs allowlist 잔존) · `pnpm check` · `pnpm run check-pack-install` · 실패 시 첫 failure log.
@@ -201,4 +202,5 @@ README/VERIFY/CHANGELOG stale(backend overclaim·packaged docs·persisted contin
   - **1R 조건부 GO** → RED2(ACP cache cold-start §1-③·§5-c·§6-④ / `check-pack-install` 하드코딩 §2·§5) + Amber(RENAME-0 3계층화 §5-a) 반영.
   - **2R = GO for S1 dry-run 진입** (큰 RED 없음). 새 발견 3건 실증 반영: ① `readSessionRecord` production 0건·`backend.ts:591` persisted OFF → cache migration은 *future-lane hygiene*(지금 live 무영향) ② rewrite 알고리즘 엣지(lock·temp atomic·partial scan §5-c) ③ cwd가 별도 compat 축(`session-store.ts:254`) → dir rename 시 cwd cold-start(§6-③·④). Amber 문구 2: S1 게이트에 `check-pack-install` 명시 + entry point 정밀화 = 반영.
   - **live S1 최종 GO는 dry-run green 산출물 보고.**
+- **✅ S1 dry-run GREEN (2026-06-23, worktree `/tmp/entwurf-s1-dryrun` detached `28a4588`):** S1만 치환(perl `PiShellAcp→Entwurf`/`piShellAcp→entwurf`/`pi-shell-acp→entwurf`, 코드 165파일) + `biome --write`. **diffstat 73 files 441/452** · **residual: S1 RENAME runtime/code 0** · S2 `pi-tools-bridge` 37 보존 · S3 `PI_SHELL_ACP_` 109 보존 · KEEP 327 보존. **게이트 GREEN:** typecheck EXIT0 · lint 0err(12 pre-existing warn) · check-pack-install EXIT0(`junghanacs-entwurf-0.11.0.tgz` pack→install→pi loader `entwurf` 등록·`--list-models entwurf`) · check-{package-source-routing,model-lock,entwurf-session-identity,auth-boundary} EXIT0. **발견:** 치환이 biome format reflow 2건 유발 → `--write` 단계 레시피화. *전체 `pnpm check` 게이트 체인(check-meta-* 등)은 socket/`~/.pi` substrate 의존이라 worktree dry-run 부적합 — rename 회귀 핵심 게이트만 선별 실행.*
 - 추가 구현 = rename 끝난 *다음 세션* 본질(ROADMAP deferred: persisted resume/load 1b-2c · Claude↔Claude live transport 등). **이 작업이 끝나야 entwurf 기능 정리 → 릴리즈.**
