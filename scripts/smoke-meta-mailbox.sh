@@ -21,7 +21,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
-START="$REPO/mcp/pi-tools-bridge/start.sh"
+START="$REPO/mcp/entwurf-bridge/start.sh"
 LIB="$REPO/pi-extensions/lib/meta-session.ts"
 
 command -v node >/dev/null || { echo "FAIL: node not on PATH"; exit 1; }

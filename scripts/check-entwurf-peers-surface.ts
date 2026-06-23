@@ -198,7 +198,7 @@ function main(): void {
 	// ── WIRING guard: bridge handler calls the provider+render, not getLiveSessions ──
 	{
 		const here = path.dirname(fileURLToPath(import.meta.url));
-		const bridgeSrc = readFileSync(path.join(here, "..", "mcp", "pi-tools-bridge", "src", "index.ts"), "utf8");
+		const bridgeSrc = readFileSync(path.join(here, "..", "mcp", "entwurf-bridge", "src", "index.ts"), "utf8");
 		const nativeSrc = readFileSync(path.join(here, "..", "pi-extensions", "entwurf-control.ts"), "utf8");
 		ok("wiring: bridge calls listEntwurfFacts(", bridgeSrc.includes("listEntwurfFacts("));
 		ok("wiring: bridge calls renderEntwurfPeers(", bridgeSrc.includes("renderEntwurfPeers("));

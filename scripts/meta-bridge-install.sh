@@ -10,14 +10,14 @@
 #      hooks.json. The node path is the ONLY templated surface — the mailbox /
 #      meta-record dirs resolve at runtime inside entry.ts (<pi-agent-dir>, a
 #      fixed ~/ path). The plugin is wake/record hooks ONLY; the receiver-side
-#      entwurf_inbox_read tool comes from USER-scope pi-tools-bridge MCP wiring
+#      entwurf_inbox_read tool comes from USER-scope entwurf-bridge MCP wiring
 #      (`claude mcp add -s user ...`). Project-scoped .mcp.json is deliberately
 #      not enough: a /tmp native session would wake without a receipt tool.
 #   2. marketplace add <repo-stable .assembled>  (NOT /tmp — ephemeral source
 #      would break `claude plugin marketplace update`).
 #   3. install entwurf-meta-receive@meta-bridge-local --scope user  (= global:
 #      every native session auto-loads it; no manual --plugin-dir).
-#   4. install/update USER-scope pi-tools-bridge MCP, so every native session has
+#   4. install/update USER-scope entwurf-bridge MCP, so every native session has
 #      entwurf_inbox_read without duplicating MCP inside the plugin.
 # Idempotent: re-running removes the prior marketplace/plugin first, so a
 # `nix rebuild` that moved node just re-bakes and re-installs cleanly.
@@ -79,7 +79,7 @@ chmod +x "$ASM/$PLUGIN/scripts/doorbell.sh"
 # Bake the node abspath into hooks.json — the ONLY templated surface. mailbox /
 # meta-record dirs resolve at runtime inside entry.ts (<pi-agent-dir>, fixed ~/).
 # The plugin owns ONLY the wake/record hooks; the receiver-side entwurf_inbox_read
-# tool is NOT the plugin's job. It comes from USER-scope pi-tools-bridge MCP
+# tool is NOT the plugin's job. It comes from USER-scope entwurf-bridge MCP
 # wiring (`claude mcp add -s user ...`), never a plugin .mcp.json duplicate.
 HOOKS="$ASM/$PLUGIN/hooks/hooks.json"
 HOOKS_PATH="$HOOKS" NODE_PATH_TO_BAKE="$NODE_BIN" python3 - <<'PY'
@@ -107,17 +107,20 @@ claude plugin install "$PLUGIN@$MKT_NAME" --scope user >/dev/null
 echo "[meta-bridge-install] installed $PLUGIN@$MKT_NAME (scope: user = global)"
 
 # --- 4. ensure USER-scope receiver MCP wiring -------------------------------
-# One canonical MCP entry only: user-scope pi-tools-bridge via the repo-managed
+# One canonical MCP entry only: user-scope entwurf-bridge via the repo-managed
 # start.sh. This reaches /tmp and every other native Claude Code cwd. Do not put
-# pi-tools-bridge in the plugin (.mcp.json): that duplicates the server and drops
+# entwurf-bridge in the plugin (.mcp.json): that duplicates the server and drops
 # the canonical external identity env.
+claude mcp remove entwurf-bridge -s user >/dev/null 2>&1 || true
+# 0.11 S2 cutover: drop any stale USER-scope pi-tools-bridge entry written by a
+# prior version (one-shot rename cleanup, not a runtime alias).
 claude mcp remove pi-tools-bridge -s user >/dev/null 2>&1 || true
-claude mcp add -s user pi-tools-bridge \
+claude mcp add -s user entwurf-bridge \
   -e PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code \
-  -- bash "$REPO/mcp/pi-tools-bridge/start.sh" >/dev/null
-(cd /tmp && claude mcp get pi-tools-bridge 2>/dev/null | grep -q "Scope: User config") || \
-  die "post-install: pi-tools-bridge is not reachable as USER-scope MCP from /tmp"
-echo "[meta-bridge-install] installed pi-tools-bridge MCP (scope: user = global receiver tools)"
+  -- bash "$REPO/mcp/entwurf-bridge/start.sh" >/dev/null
+(cd /tmp && claude mcp get entwurf-bridge 2>/dev/null | grep -q "Scope: User config") || \
+  die "post-install: entwurf-bridge is not reachable as USER-scope MCP from /tmp"
+echo "[meta-bridge-install] installed entwurf-bridge MCP (scope: user = global receiver tools)"
 
 # Re-assert the repo-owned keyset through our stateful manager. The Claude CLI
 # calls above are allowed to maintain their cache/registry files, but the

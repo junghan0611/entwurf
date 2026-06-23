@@ -33,7 +33,7 @@
 	// explicit `.ts` extension (the installed plugin self-locates ./lib/ via
 	// ${CLAUDE_PLUGIN_ROOT}), which the emit-capable root config cannot allow. It
 	// is typechecked by scripts/tsconfig.json instead (allowImportingTsExtensions),
-	// same fence split as mcp/pi-tools-bridge/src/resume-mode.ts.
+	// same fence split as mcp/entwurf-bridge/src/resume-mode.ts.
 	"exclude": [
 		"node_modules",
 		"mcp",

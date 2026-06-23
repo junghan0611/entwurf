@@ -3,7 +3,7 @@
  *
  * Single implementation shared by:
  *   - pi-extensions/entwurf.ts (pi native tool surface)
- *   - mcp/pi-tools-bridge/src/index.ts (MCP tool surface for ACP hosts)
+ *   - mcp/entwurf-bridge/src/index.ts (MCP tool surface for ACP hosts)
  *
  * This module MUST NOT import anything from @earendil-works/pi-coding-agent or any
  * other pi runtime API. It is pure Node + @sinclair/typebox-free.  Anything that
@@ -344,7 +344,7 @@ export function mirrorChildStderr(proc: ChildProcess): void {
 // Spawn guard — one entwurf spawn per (session, target) per process.
 //
 // Shared by pi native tool (pi-extensions/entwurf.ts) and the MCP bridge
-// (mcp/pi-tools-bridge). Both paths must go through this gate before calling
+// (mcp/entwurf-bridge). Both paths must go through this gate before calling
 // runEntwurfSync / runEntwurfAsync. entwurf_resume deliberately bypasses it.
 //
 // Map key is the caller-provided sessionId:

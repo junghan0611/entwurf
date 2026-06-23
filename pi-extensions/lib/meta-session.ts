@@ -1122,7 +1122,7 @@ export function defaultMetaMailboxDir(): string {
  * Where native-backend SENDER markers live: `<pi-agent-dir>/meta-senders`.
  *
  * The problem this closes: a native Claude Code session that SENDS via the
- * user-scope pi-tools-bridge MCP has no `PI_SESSION_ID` — at tool-call time the
+ * user-scope entwurf-bridge MCP has no `PI_SESSION_ID` — at tool-call time the
  * MCP process does not know which garden-id session it belongs to, so the sender
  * envelope degrades to anonymous `external-mcp` and the receiver has no reply
  * address. The hook DOES know the garden-id (it just minted the record), and the

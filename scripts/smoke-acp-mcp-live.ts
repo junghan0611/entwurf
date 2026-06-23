@@ -10,7 +10,7 @@
 // smoke proves the LAST mile a fake cannot: a real ACP child spawns the operator
 // MCP server and the live model can actually CALL its tool.
 //
-// Method (GPT `…2f9325` LIVE 1 — a TINY isolated probe, not pi-tools-bridge, so a
+// Method (GPT `…2f9325` LIVE 1 — a TINY isolated probe, not entwurf-bridge, so a
 // failure isolates to "did mcpServers reach newSession" without identity/env
 // coupling): a scratch `.pi/settings.json` registers ONE stdio MCP server
 // (scripts/fixtures/probe-mcp-server.ts) that exposes a single tool `probe_nonce`

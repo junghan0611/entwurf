@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pi-tools-bridge MCP server launcher.
+# entwurf-bridge MCP server launcher.
 #
 # Runs src/index.ts directly via Node's --experimental-strip-types; no separate
 # build step. Node >= 22.6 (engines.node in ../../package.json).

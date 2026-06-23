@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# pi-tools-bridge smoke (v2-only): tool registration + a few no-side-effect calls.
+# entwurf-bridge smoke (v2-only): tool registration + a few no-side-effect calls.
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-BRIDGE="$ROOT_DIR/mcp/pi-tools-bridge/src/index.ts"
+BRIDGE="$ROOT_DIR/mcp/entwurf-bridge/src/index.ts"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }

@@ -32,11 +32,11 @@ PROVIDER_ID="entwurf"
 usage() {
   cat <<'EOF'
 Usage:
-  ./run.sh setup [project-dir]        # pnpm install + sync auth + install + v2 install smoke (pi-tools-bridge only; LIVE substrate = release-gate)
+  ./run.sh setup [project-dir]        # pnpm install + sync auth + install + v2 install smoke (entwurf-bridge only; LIVE substrate = release-gate)
   ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, retargeted smoke-session-id-name, RGG) + the ACP plugin acceptance floor (10 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/rgg/mcp/skill/bundled-mcp). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). LIVE-gated MUST steps HONEST-SKIP when LIVE!=1 (a CUT needs LIVE=1, SKIP=0). v1 verbs (xt-tool-surface, session-messaging, sentinel) are gone (v2 core); --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh xt-tool-surface             # [LEGACY — broken on v2-only, dropped from release floor, v2 rewrite pending] ACP backend exclude-tools policy: -xt <builtin> fail-fast per backend
-  ./run.sh check-bridge               # pi-tools-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
-  ./run.sh check-pi-tools-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
+  ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
+  ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
   ./run.sh sentinel [args...]         # [LEGACY — broken on v2-only, dropped from release floor, v2 rewrite pending] ACP multi-backend 6-cell tool-selection matrix
   ./run.sh session-messaging [args...] # [LEGACY — broken on the v2 core (v1 entwurf_send tool gone), not on the release floor, v2 rewrite pending] 4-case session-messaging smoke
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
@@ -106,7 +106,7 @@ Usage:
 Notes:
   - project-dir defaults to current directory
   - Claude Code login should already exist (e.g. ~/.claude.json)
-  - setup's runtime verification is the v2 install smoke (pi-tools-bridge); the v2 dispatch substrate is proven live by release-gate
+  - setup's runtime verification is the v2 install smoke (entwurf-bridge); the v2 dispatch substrate is proven live by release-gate
   - API key is optional; this bridge is intended to work with Claude Code auth
 EOF
 }
@@ -216,9 +216,9 @@ servers = provider.setdefault("mcpServers", {})
 if not isinstance(servers, dict):
     raise SystemExit("entwurfProvider.mcpServers is not an object")
 
-BUNDLED = ("pi-tools-bridge",)
+BUNDLED = ("entwurf-bridge",)
 # 0.4.14: session-bridge MCP was retracted (issue #7 — unified entwurf surface).
-# Install path now only wires pi-tools-bridge. Existing operator settings that
+# Install path now only wires entwurf-bridge. Existing operator settings that
 # carry the old bundled session-bridge entry are pruned below during install;
 # `./run.sh remove` also keeps session-bridge in its cleanup tuple so legacy
 # entries are removed on uninstall too.
@@ -241,11 +241,17 @@ for name in BUNDLED:
         cmd_repr = existing.get("command") if isinstance(existing, dict) else existing
         print(f"install: preserved entwurfProvider.mcpServers.{name} (user override: {cmd_repr})")
 
-# 0.4.14 migration: also prune any session-bridge entry that this install wrote
-# in a prior version. We only remove entries whose command matches the bundled
-# start.sh path (user-customized commands are left alone).
-LEGACY_BUNDLED = ("session-bridge",)
-for name in LEGACY_BUNDLED:
+# Legacy-bundled MCP names that prior versions of this installer wrote and that
+# the current cutover supersedes. One-shot install-time prune (NOT a runtime
+# alias): only remove entries whose command matches the bundled start.sh path,
+# so user-customized commands are left alone.
+#   - session-bridge: retracted in 0.4.14 (issue #7, unified entwurf surface).
+#   - pi-tools-bridge: renamed to entwurf-bridge in 0.11 S2 cutover.
+LEGACY_BUNDLED = {
+    "session-bridge": "retracted in 0.4.14, issue #7",
+    "pi-tools-bridge": "renamed to entwurf-bridge in 0.11 S2 cutover",
+}
+for name, reason in LEGACY_BUNDLED.items():
     existing = servers.get(name)
     if not isinstance(existing, dict):
         continue
@@ -254,7 +260,7 @@ for name in LEGACY_BUNDLED:
         continue
     if cmd == f"{repo_dir}/mcp/{name}/start.sh" or cmd.endswith(f"/entwurf/mcp/{name}/start.sh"):
         del servers[name]
-        print(f"install: pruned legacy entwurfProvider.mcpServers.{name} (retracted in 0.4.14, issue #7)")
+        print(f"install: pruned legacy entwurfProvider.mcpServers.{name} ({reason})")
 
 settings_path.write_text(json.dumps(data, indent=2) + "\n")
 print(f"install: updated {settings_path}")
@@ -381,7 +387,7 @@ if isinstance(packages, list):
 # the bundled "/entwurf/mcp/<name>/start.sh" pattern (covers a rebuilt
 # checkout under a different directory). Anything else is treated as a user
 # override and left in place.
-BUNDLED = ("pi-tools-bridge", "session-bridge")
+BUNDLED = ("entwurf-bridge", "session-bridge", "pi-tools-bridge")
 provider = data.get("entwurfProvider")
 mcp_removed = 0
 if isinstance(provider, dict):
@@ -709,15 +715,15 @@ check_entwurf_v2_surface() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-surface.ts)
 }
 
-check_pi_tools_bridge_boot() {
-  # Deterministic gate for 0.11 step 5d-5-pre (G1a/G1b): boots the pi-tools-bridge MCP server
+check_entwurf_bridge_boot() {
+  # Deterministic gate for 0.11 step 5d-5-pre (G1a/G1b): boots the entwurf-bridge MCP server
   # as it ships (start.sh → node --experimental-strip-types, no build) and asserts what the
   # source-shape gate check-entwurf-v2-surface cannot — that the whole v2 fence graph LOADS at
   # boot under strip-types (G1a: a parseable tools/list proves it) and that entwurf_v2 is
   # registered on the runtime surface with its schema (G1b). tools/list only → no tools/call,
   # no lock/fs side effect, no auth → safe in pnpm check. Broad protocol/negative suite stays
   # in check-bridge/test.sh (D1=A안).
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-pi-tools-bridge-boot.ts)
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-bridge-boot.ts)
 }
 
 check_entwurf_v2_production() {
@@ -907,7 +913,7 @@ smoke_acp_mcp_live() {
   # drives one real provider turn: the model must CALL the tool and echo the nonce
   # that lives only inside the MCP server env. Proves the operator's
   # entwurfProvider.mcpServers reaches the live ACP session (the GLG-baseline
-  # fix). Isolated probe (not pi-tools-bridge) so a failure does not blur into
+  # fix). Isolated probe (not entwurf-bridge) so a failure does not blur into
   # identity/env wiring. Model override: PI_SHELL_ACP_PROVIDER_MODEL.
   #   LIVE=1 ./run.sh smoke-acp-mcp-live
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-mcp-live.ts)
@@ -926,10 +932,10 @@ smoke_acp_skill_live() {
 }
 
 smoke_acp_bundled_mcp_live() {
-  # S2g LIVE 3 (axis 3) — the BUNDLED pi-tools-bridge reaches the live ACP session
+  # S2g LIVE 3 (axis 3) — the BUNDLED entwurf-bridge reaches the live ACP session
   # via the 0.11.0 resident/RPC circuit. OUT of pnpm check, needs LIVE=1. Launches a
   # real `pi --entwurf-control --mode rpc` resident on an ACP model and drives ONE
-  # model turn over the stdin RPC asking it to call mcp__pi-tools-bridge__entwurf_self;
+  # model turn over the stdin RPC asking it to call mcp__entwurf-bridge__entwurf_self;
   # captures the identity envelope (the resident's own fresh gid — never told to the
   # model, only in the bridge env — + agentId + socketState alive) and agent_end
   # DIRECTLY from the stdout RPC event stream (gnew-rpc-drive shape). Complements
@@ -1398,7 +1404,7 @@ check_acp_config() {
   # baseline tools), fail-loud on invalid mcpServers/skillPlugins/
   # appendSystemPrompt:true/strictMcpConfig:false, nonempty skillPlugins auto-add
   # Skill+Skill(*), deterministic sorted mcp hash sensitive to command/env/url/
-  # headers, and envelope enrich (PI_SESSION_ID/PI_AGENT_ID into pi-tools-bridge
+  # headers, and envelope enrich (PI_SESSION_ID/PI_AGENT_ID into entwurf-bridge
   # only, stale filtered, post-hash). Pure + temp-dir settings I/O, no child/spawn.
   section "ACP provider config (S2g operator mcpServers/skillPlugins/tools passthrough)"
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-config.ts)
@@ -1520,7 +1526,7 @@ check_pack() {
     "pi-extensions/lib/acp/event-mapper.ts" "pi-extensions/lib/acp/context.ts"
     "pi-extensions/entwurf-control.ts"
     "pi-extensions/model-lock.ts" "pi-extensions/lib/entwurf-core.ts"
-    "mcp/pi-tools-bridge/src/index.ts"
+    "mcp/entwurf-bridge/src/index.ts"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
   )
@@ -1638,7 +1644,7 @@ check_pack_install() {
     "pi-extensions/lib/acp/event-mapper.ts" "pi-extensions/lib/acp/context.ts"
     "pi-extensions/entwurf-control.ts"
     "pi-extensions/model-lock.ts" "pi-extensions/lib/entwurf-core.ts"
-    "mcp/pi-tools-bridge/src/index.ts"
+    "mcp/entwurf-bridge/src/index.ts"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
   )
@@ -1767,16 +1773,16 @@ check_pack_install() {
 # until rewritten onto entwurf_v2. The release-gate owns the heavier live v2
 # substrate proof (matrix-live + spawn-resume-live).
 
-validate_pi_tools_bridge() {
-  local bridge_dir="$REPO_DIR/mcp/pi-tools-bridge"
+validate_entwurf_bridge() {
+  local bridge_dir="$REPO_DIR/mcp/entwurf-bridge"
   local raw
 
   if [ ! -x "$bridge_dir/start.sh" ]; then
-    fail "pi-tools-bridge: launcher missing at $bridge_dir/start.sh"
+    fail "entwurf-bridge: launcher missing at $bridge_dir/start.sh"
     return 1
   fi
 
-  log "pi-tools-bridge: direct MCP smoke (strip-types launcher, no build step)"
+  log "entwurf-bridge: direct MCP smoke (strip-types launcher, no build step)"
 
   if ! raw=$(cd "$bridge_dir" && node --input-type=module <<'JS'
 import { spawn } from 'node:child_process';
@@ -1820,7 +1826,7 @@ child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }
 
 const timer = setTimeout(() => {
   child.kill('SIGKILL');
-  console.error('pi-tools-bridge direct smoke timeout');
+  console.error('entwurf-bridge direct smoke timeout');
   process.exit(1);
 }, 3000);
 
@@ -1844,16 +1850,16 @@ child.on('close', () => {
 });
 JS
   ); then
-    fail "pi-tools-bridge: direct MCP smoke failed"
+    fail "entwurf-bridge: direct MCP smoke failed"
     return 1
   fi
-  ok "pi-tools-bridge direct MCP smoke ($raw)"
+  ok "entwurf-bridge direct MCP smoke ($raw)"
 
   if ! (cd "$bridge_dir" && ./test.sh >/dev/null); then
-    fail "pi-tools-bridge: protocol/negative-path tests failed"
+    fail "entwurf-bridge: protocol/negative-path tests failed"
     return 1
   fi
-  ok "pi-tools-bridge test.sh"
+  ok "entwurf-bridge test.sh"
 
   # check-bridge deliberately stops at the objective MCP boundary. Live v2
   # substrate/orchestration is covered by the v2 live smokes, whose assertions
@@ -1863,8 +1869,8 @@ JS
 }
 
 check_bridge() {
-  section "pi-tools-bridge (direct MCP protocol)"
-  validate_pi_tools_bridge
+  section "entwurf-bridge (direct MCP protocol)"
+  validate_entwurf_bridge
 }
 
 
@@ -1889,7 +1895,7 @@ session_messaging_run() {
 
 # setup_all — full entwurf v2 install.
 #
-# Installs the v2 dispatch substrate + MCP pi-tools-bridge into a target project
+# Installs the v2 dispatch substrate + MCP entwurf-bridge into a target project
 # and verifies the installed bridge boundary. ACP/v1 backend interview gates are
 # deliberately not part of setup on v2-only; the heavier live v2 substrate proof
 # is release-gate's job.
@@ -1920,7 +1926,7 @@ setup_all() {
   echo "[setup] repo:    $REPO_DIR"
   echo "[setup] project: $project_dir"
   echo "[setup] scope:   entwurf v2 orchestration install (pi-native; ACP backends dropped)"
-  echo "[setup] verification: v2 install smoke (pi-tools-bridge; LIVE substrate = release-gate)"
+  echo "[setup] verification: v2 install smoke (entwurf-bridge; LIVE substrate = release-gate)"
 
   (cd "$REPO_DIR" && pnpm install --frozen-lockfile)
   sync_auth
@@ -1930,8 +1936,8 @@ setup_all() {
   # in `LIVE=1 ./run.sh release-gate <scratch>`. Setup is the install path, so it
   # verifies the installed MCP bridge boundary only and does NOT run the legacy
   # ACP/v1 session-messaging/sentinel gates.
-  section "v2 install smoke: pi-tools-bridge (direct MCP protocol)"
-  validate_pi_tools_bridge
+  section "v2 install smoke: entwurf-bridge (direct MCP protocol)"
+  validate_entwurf_bridge
 
   echo ""
   echo "DONE: entwurf setup + v2 install smoke green. Run release-gate for live substrate acceptance."
@@ -2061,7 +2067,7 @@ release_gate() {
   # smoke-acp-bundled-mcp-live is a DELIBERATE exception to the PWD=project_dir
   # routing: it runs its resident with cwd=os.tmpdir() and relies on the
   # operator's INSTALLED bundled bridge (global ~/.pi/agent/settings.json
-  # entwurfProvider.mcpServers.pi-tools-bridge) — that IS the operator circuit
+  # entwurfProvider.mcpServers.entwurf-bridge) — that IS the operator circuit
   # this axis restores, not a scratch-isolated probe (that is smoke-acp-mcp-live's
   # job). It writes only a tmpdir-cwd session (no repo pollution) and fails loud if
   # the operator has not wired the bundled bridge.
@@ -2232,7 +2238,7 @@ release_gate() {
   run_live_step "smoke-acp-rgg-live (S2e-2: ACP-target garden guard, deterministic half)" gate env LIVE=1 bash "$self" smoke-acp-rgg-live
   run_live_step "smoke-acp-mcp-live (S2g: operator mcpServers reach the live ACP session)"  gate env LIVE=1 bash "$self" smoke-acp-mcp-live
   run_live_step "smoke-acp-skill-live (S2g: operator skillPlugins reach the live ACP session)" gate env LIVE=1 bash "$self" smoke-acp-skill-live
-  run_live_step "smoke-acp-bundled-mcp-live (S2g axis 3: bundled pi-tools-bridge via 0.11.0 resident/RPC circuit)" gate env LIVE=1 bash "$self" smoke-acp-bundled-mcp-live
+  run_live_step "smoke-acp-bundled-mcp-live (S2g axis 3: bundled entwurf-bridge via 0.11.0 resident/RPC circuit)" gate env LIVE=1 bash "$self" smoke-acp-bundled-mcp-live
 
   # 4. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
   #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never
@@ -2390,8 +2396,8 @@ case "$cmd" in
   check-entwurf-v2-surface)
     check_entwurf_v2_surface
     ;;
-  check-pi-tools-bridge-boot)
-    check_pi_tools_bridge_boot
+  check-entwurf-bridge-boot)
+    check_entwurf_bridge_boot
     ;;
   check-entwurf-v2-spawn)
     check_entwurf_v2_spawn

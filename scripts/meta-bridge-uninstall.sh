@@ -29,7 +29,7 @@ python3 "$REPO/scripts/meta-bridge-state.py" preflight-uninstall --repo "$REPO"
 if command -v claude >/dev/null; then
   claude plugin uninstall "$PLUGIN@$MKT_NAME" >/dev/null 2>&1 || true
   claude plugin marketplace remove "$MKT_NAME" >/dev/null 2>&1 || true
-  claude mcp remove pi-tools-bridge -s user >/dev/null 2>&1 || true
+  claude mcp remove entwurf-bridge -s user >/dev/null 2>&1 || true
   echo "[meta-bridge-uninstall] removed Claude plugin/marketplace/MCP registrations when present"
 else
   echo "[meta-bridge-uninstall] WARN: claude CLI not on PATH; restoring JSON state only" >&2

@@ -41,7 +41,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.join(HERE, "..");
 const SURFACE_SRC = path.join(REPO, "pi-extensions/lib/entwurf-v2-surface.ts");
 const CONTROL_SRC = path.join(REPO, "pi-extensions/entwurf-control.ts");
-const MCP_SRC = path.join(REPO, "mcp/pi-tools-bridge/src/index.ts");
+const MCP_SRC = path.join(REPO, "mcp/entwurf-bridge/src/index.ts");
 
 const GID = "20260613T100000-aaaaaa";
 const SUCCESS_RECEIPT = {

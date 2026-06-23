@@ -32,7 +32,7 @@ PERMISSION_ALLOW = [
     "WebFetch",
     "WebSearch",
     "Skill",
-    "mcp__pi-tools-bridge__*",
+    "mcp__entwurf-bridge__*",
 ]
 
 PERMISSION_DENY = [
@@ -260,7 +260,7 @@ def desired_mcp(repo: Path) -> dict[str, Any]:
     return {
         "type": "stdio",
         "command": "bash",
-        "args": [str((repo / "mcp" / "pi-tools-bridge" / "start.sh").resolve())],
+        "args": [str((repo / "mcp" / "entwurf-bridge" / "start.sh").resolve())],
         "env": {
             "PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID": "external-mcp/claude-code",
             # Anonymous sends are forbidden on the Claude Code install path: a send
@@ -325,9 +325,9 @@ def prepare(repo: Path, asm: Path) -> None:
     snapshot_value(
         state,
         "claudeRoot",
-        "mcpServers.pi-tools-bridge",
+        "mcpServers.entwurf-bridge",
         root,
-        ["mcpServers", "pi-tools-bridge"],
+        ["mcpServers", "entwurf-bridge"],
         "map-entry",
         legacy_absent_if_equal=desired_mcp(repo),
     )
@@ -364,7 +364,7 @@ def apply(repo: Path, asm: Path) -> None:
     for _name, path_, desired in MANAGED_SETTINGS_SCALARS:
         set_nested(settings, path_, desired)
     set_nested(settings, ["statusLine"], desired_statusline(repo))
-    set_nested(root, ["mcpServers", "pi-tools-bridge"], desired_mcp(repo))
+    set_nested(root, ["mcpServers", "entwurf-bridge"], desired_mcp(repo))
 
     state["updatedAt"] = iso_now()
     state["repo"] = str(repo.resolve())
@@ -454,7 +454,7 @@ def managed_keys() -> dict[str, Any]:
             ],
         },
         "claudeRoot": {
-            "map-entry": ["mcpServers.pi-tools-bridge"],
+            "map-entry": ["mcpServers.entwurf-bridge"],
         },
     }
 
@@ -489,9 +489,9 @@ def check(repo: Path, asm: Path) -> None:
             missing = [item for item in desired if item not in value]
             if missing:
                 failures.append(f"settings permissions.{label} missing managed item(s): {', '.join(missing)}")
-    existed, value = get_nested(root, ["mcpServers", "pi-tools-bridge"])
+    existed, value = get_nested(root, ["mcpServers", "entwurf-bridge"])
     if not existed or value != desired_mcp(repo):
-        failures.append("user MCP pi-tools-bridge missing/drifted in ~/.claude.json")
+        failures.append("user MCP entwurf-bridge missing/drifted in ~/.claude.json")
 
     if failures:
         for f in failures:

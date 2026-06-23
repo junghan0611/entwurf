@@ -1,4 +1,4 @@
-// S2g LIVE 3 (axis 3) — the BUNDLED pi-tools-bridge reaches the live ACP session
+// S2g LIVE 3 (axis 3) — the BUNDLED entwurf-bridge reaches the live ACP session
 // via the 0.11.0 resident/RPC circuit. LIVE-gated, OUT of `pnpm check`.
 //
 //   LIVE=1 ./run.sh smoke-acp-bundled-mcp-live
@@ -6,7 +6,7 @@
 // WHY a separate axis. smoke-acp-mcp-live proves the generic passthrough with a
 // TINY isolated probe MCP (so a failure isolates to "did mcpServers reach
 // newSession" without identity/env coupling). This smoke proves the LAST mile that
-// probe deliberately skips: the operator's REAL bundled `pi-tools-bridge` — the one
+// probe deliberately skips: the operator's REAL bundled `entwurf-bridge` — the one
 // that needs PI_SESSION_ID/PI_AGENT_ID envelope injection (enrichMcpServersWithEnvelope)
 // to answer entwurf_self — reaches the live ACP session and can be CALLED by the model.
 // GLG verified this by hand (entwurf_self → sessionId/agentId/socketState alive); this
@@ -20,7 +20,7 @@
 // stdin-RPC / stdout-event-stream driver as scripts/gnew-rpc-drive.ts.
 //
 // METHOD (gnew-rpc-drive shape): launch a real resident on an ACP model, send one
-// `{type:"prompt"}` over stdin asking the model to call mcp__pi-tools-bridge__entwurf_self,
+// `{type:"prompt"}` over stdin asking the model to call mcp__entwurf-bridge__entwurf_self,
 // and capture — DIRECTLY from the stdout RPC event stream — the identity envelope
 // (the resident's own freshly-minted gid, agentId entwurf/<model>, socketState
 // alive) plus `agent_end`. The gid is never told to the model: it lives only as the
@@ -28,7 +28,7 @@
 // ONLY by actually calling the tool. JSONL is an L3 backstop, never the primary proof.
 //
 // The bundled bridge is supplied by the operator's REAL
-// entwurfProvider.mcpServers.pi-tools-bridge (global ~/.pi/agent/settings.json) —
+// entwurfProvider.mcpServers.entwurf-bridge (global ~/.pi/agent/settings.json) —
 // this is the operator circuit, not a scratch-isolated probe. If the operator has not
 // wired it, the smoke fails loud (the circuit is not installed).
 //
@@ -229,7 +229,7 @@ async function main(): Promise<void> {
 
 		// Drive ONE model turn over the stdin RPC: call the BUNDLED bridge's entwurf_self.
 		const prompt =
-			"Call the mcp__pi-tools-bridge__entwurf_self tool now. Then reply with exactly the " +
+			"Call the mcp__entwurf-bridge__entwurf_self tool now. Then reply with exactly the " +
 			"sessionId, agentId, and socketState values it returned, one per line, and nothing else. " +
 			"Do not paraphrase or invent values — copy them verbatim from the tool result.";
 		// The prompt must NOT leak the gid — the gid in the envelope is the proof the bridge
@@ -306,7 +306,7 @@ async function main(): Promise<void> {
 	ok("control socket file removed after teardown (no socket residue)", await waitForGone(sockPath, 5_000));
 
 	console.log(
-		`[smoke-acp-bundled-mcp-live] PASS — ${passed} checks (bundled pi-tools-bridge reaches the live ACP session via the 0.11.0 resident/RPC circuit)`,
+		`[smoke-acp-bundled-mcp-live] PASS — ${passed} checks (bundled entwurf-bridge reaches the live ACP session via the 0.11.0 resident/RPC circuit)`,
 	);
 }
 

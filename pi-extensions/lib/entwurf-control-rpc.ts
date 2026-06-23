@@ -23,7 +23,7 @@ import * as net from "node:net";
 // handleCommand("send") + parseSenderInfo and the SenderInfo block below for
 // the full semantics: human-conversation hint only, no wait, no polling, no
 // delivery tracking. `<sender_info>` JSON synthesis happens at the receiver
-// side so callers never have to mangle the message body; pi-tools-bridge
+// side so callers never have to mangle the message body; entwurf-bridge
 // passes the envelope through and the receiving pi prepends the canonical
 // XML-style payload before handing the customMessage to pi.sendMessage.
 export interface SenderEnvelope {

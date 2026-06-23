@@ -731,7 +731,7 @@ export function streamAcpTurn(
 				engraving ?? undefined,
 			);
 			// Envelope-enrich the normalized servers at spawn time (PI_SESSION_ID/
-			// PI_AGENT_ID into pi-tools-bridge) — runtime wiring, applied AFTER the
+			// PI_AGENT_ID into entwurf-bridge) — runtime wiring, applied AFTER the
 			// config signature was taken so a new session id never forces a rebuild.
 			const wireMcpServers = enrichMcpServersWithEnvelope(config.mcpServers, {
 				modelId: model.id,

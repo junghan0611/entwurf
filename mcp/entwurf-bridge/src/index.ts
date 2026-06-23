@@ -1,5 +1,5 @@
 /**
- * pi-tools-bridge — MCP adapter exposing selected pi-side tools to ACP hosts.
+ * entwurf-bridge — MCP adapter exposing selected pi-side tools to ACP hosts.
  *
  * Ownership: this adapter lives inside `entwurf` alongside the v2 entwurf
  * orchestration surface (pi-extensions/entwurf-control.ts + lib/entwurf-v2-*.ts +
@@ -98,7 +98,7 @@ function textErr(msg: string) {
 // MCP server
 // ============================================================================
 
-const server = new McpServer({ name: "pi-tools-bridge", version: "0.1.0" });
+const server = new McpServer({ name: "entwurf-bridge", version: "0.1.0" });
 
 // Transparency envelope.
 //
@@ -141,7 +141,7 @@ interface SenderEnvelope {
 class EntwurfSenderIdentityError extends Error {
 	constructor() {
 		super(
-			"pi-tools-bridge refused: no authoritative sender identity. " +
+			"entwurf-bridge refused: no authoritative sender identity. " +
 				"PI_TOOLS_BRIDGE_REQUIRE_META_SENDER=1 forbids anonymous external sends, and no live meta-sender " +
 				"marker was found for this process. The native SessionStart hook writes that marker (keyed by the " +
 				"Claude Code parent pid + start-time) — open this session through the installed meta-bridge so your " +
@@ -508,6 +508,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-	console.error(`[pi-tools-bridge] fatal: ${err instanceof Error ? err.stack : err}`);
+	console.error(`[entwurf-bridge] fatal: ${err instanceof Error ? err.stack : err}`);
 	process.exit(1);
 });

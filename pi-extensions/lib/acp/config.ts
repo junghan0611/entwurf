@@ -20,7 +20,7 @@
 //     `bridgeConfigSignature`, so a change to a server's command/args/env/url/
 //     headers — not just its name — invalidates a reused session.
 //   - `enrichMcpServersWithEnvelope` injects the per-session PI_SESSION_ID /
-//     PI_AGENT_ID into the pi-tools-bridge stdio entry. It runs AFTER the hash is
+//     PI_AGENT_ID into the entwurf-bridge stdio entry. It runs AFTER the hash is
 //     taken (runtime wiring, not config), so a new session id alone never forces
 //     a rebuild.
 //
@@ -267,7 +267,7 @@ export function normalizeMcpServers(input: Record<string, unknown> | undefined):
 
 /**
  * Inject the per-session entwurf envelope (PI_SESSION_ID + PI_AGENT_ID) into the
- * `pi-tools-bridge` stdio MCP entry so the bridge's MCP child can resolve the
+ * `entwurf-bridge` stdio MCP entry so the bridge's MCP child can resolve the
  * caller identity (entwurf_self / entwurf_send). Runs AFTER the config hash is
  * taken — this is runtime wiring, not config, so a new session id alone must not
  * invalidate a reused session. http/sse have no env carrier; other stdio servers
@@ -284,7 +284,7 @@ export function enrichMcpServersWithEnvelope(
 	if (!piSessionId && !piAgentId) return [...servers];
 	return servers.map((s) => {
 		if ("type" in s && (s.type === "http" || s.type === "sse")) return s;
-		if (s.name !== "pi-tools-bridge") return s;
+		if (s.name !== "entwurf-bridge") return s;
 		const stdio = s as { name: string; command: string; args: string[]; env: AcpKeyValue[] };
 		const baseEnv = stdio.env.filter((e) => e.name !== "PI_SESSION_ID" && e.name !== "PI_AGENT_ID");
 		const extras: AcpKeyValue[] = [];

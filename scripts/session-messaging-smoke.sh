@@ -13,7 +13,7 @@
 # Sender surfaces:
 #   native — pi's control.ts CLI bridge
 #            (pi -p --session-id <garden> --entwurf-control --entwurf-session <id> --entwurf-send-message ...)
-#   MCP    — pi-tools-bridge stdio JSON-RPC (tools/call entwurf_send)
+#   MCP    — entwurf-bridge stdio JSON-RPC (tools/call entwurf_send)
 #
 # Targets are pi sessions with --entwurf-control. "ACP" here means the target
 # pi uses entwurf as its LLM provider — the control socket namespace
@@ -28,7 +28,7 @@
 set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-BRIDGE="$REPO/mcp/pi-tools-bridge/start.sh"
+BRIDGE="$REPO/mcp/entwurf-bridge/start.sh"
 ENTWURF_DIR="$HOME/.pi/entwurf-control"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 ARTIFACT="${SMS_ARTIFACT:-/tmp/session-messaging-smoke-$TIMESTAMP.json}"
@@ -126,7 +126,7 @@ case_mcp() {
     # 0.4.14 sessionId-only addressing: the field used to be `target` but was
     # renamed at the same time entwurf_peers + entwurf_send standardized on
     # UUID sessionIds (no name aliases). The MCP schema lives in
-    # mcp/pi-tools-bridge/src/index.ts:312 and is the source of truth.
+    # mcp/entwurf-bridge/src/index.ts:312 and is the source of truth.
     printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"entwurf_send\",\"arguments\":{\"sessionId\":\"$target\",\"message\":\"sms:$case_name\"}}}"
     sleep 2
   } | PI_SESSION_ID="00000000-0000-4000-8000-000000000000" \

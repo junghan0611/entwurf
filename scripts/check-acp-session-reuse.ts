@@ -593,7 +593,7 @@ try {
 	// ----------------------------------------------------------------------
 	// Section G — S2g config passthrough: operator mcpServers / tools / skills /
 	//             flags reach newSession, the envelope is injected into the
-	//             pi-tools-bridge entry (stale values filtered), engraving/augment
+	//             entwurf-bridge entry (stale values filtered), engraving/augment
 	//             see the same server names, and a config change breaks reuse
 	//             while a session-id-only change does NOT.
 	// ----------------------------------------------------------------------
@@ -611,7 +611,7 @@ try {
 			JSON.stringify({
 				entwurfProvider: {
 					mcpServers: {
-						"pi-tools-bridge": {
+						"entwurf-bridge": {
 							command: "node",
 							args: ["bridge.js"],
 							// A STALE PI_SESSION_ID an operator might paste — must be overwritten.
@@ -634,7 +634,7 @@ try {
 		// Resolver sanity: two servers (sorted), Skill auto-added, defaults applied.
 		assert.deepEqual(
 			richConfig.mcpServers.map((s: { name: string }) => s.name),
-			["pi-tools-bridge", "weather"],
+			["entwurf-bridge", "weather"],
 			"resolver returns both MCP servers, name-sorted",
 		);
 		assert.ok(richConfig.tools.includes("Skill"), "nonempty skillPlugins auto-adds the Skill tool");
@@ -656,10 +656,10 @@ try {
 			const ns = h.newSessionCalls[0];
 			// G1: nonempty mcpServers reach newSession.
 			const wireNames = (ns.mcpServers as Array<{ name: string }>).map((s) => s.name).sort();
-			assert.deepEqual(wireNames, ["pi-tools-bridge", "weather"], "newSession receives the operator MCP servers");
-			// G2: envelope injected into pi-tools-bridge, stale PI_SESSION_ID filtered.
+			assert.deepEqual(wireNames, ["entwurf-bridge", "weather"], "newSession receives the operator MCP servers");
+			// G2: envelope injected into entwurf-bridge, stale PI_SESSION_ID filtered.
 			const bridge = (ns.mcpServers as Array<{ name: string; env?: Array<{ name: string; value: string }> }>).find(
-				(s) => s.name === "pi-tools-bridge",
+				(s) => s.name === "entwurf-bridge",
 			);
 			const env = Object.fromEntries((bridge?.env ?? []).map((e) => [e.name, e.value]));
 			assert.equal(env.PI_SESSION_ID, "LIVE-SID-123", "live PI_SESSION_ID injected (stale value overwritten)");
@@ -678,7 +678,7 @@ try {
 				"_meta carries strict-mcp-config (default true)",
 			);
 			// G5: the first-user augment lists the resolved server names.
-			assert.match(h.promptCalls[0].text, /pi-tools-bridge/, "augment lists the resolved MCP server names");
+			assert.match(h.promptCalls[0].text, /entwurf-bridge/, "augment lists the resolved MCP server names");
 			assert.match(h.promptCalls[0].text, /weather/, "augment lists every resolved MCP server");
 		} finally {
 			if (prevSid === undefined) delete process.env.PI_SESSION_ID;
@@ -758,7 +758,7 @@ console.log(
 		"in-flight claim; S2f progress notices emit in order (new: preparing→ready→sending prompt / reuse: reusing→sending " +
 		"prompt), are display-only (never on the ACP wire, dropped from a `new` rebuild, signature-invariant); S2g config " +
 		"passthrough: resolved operator mcpServers/tools/skillPlugins reach newSession, the entwurf envelope is injected into " +
-		"pi-tools-bridge (stale PI_SESSION_ID overwritten, http untouched), _meta carries the tool surface + skill plugins + " +
+		"entwurf-bridge (stale PI_SESSION_ID overwritten, http untouched), _meta carries the tool surface + skill plugins + " +
 		"strict-mcp-config, the first-user augment lists the resolved server names, and a config change breaks the signature " +
 		"while the same config (and a session-id-only change) does not",
 );

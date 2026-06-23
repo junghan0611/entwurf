@@ -258,7 +258,7 @@ function snapshot(dir: string): string {
 // ── V2-ONLY WIRING: legacy MCP entwurf_send fallback is gone ───────────────
 // v2 mailbox delivery is covered by check-entwurf-v2-mailbox + decider gates; this
 // file keeps the guard primitive pinned for remaining/future conversational enqueue sites.
-const mcpSrc = readFileSync(path.join(REPO_DIR, "mcp", "pi-tools-bridge", "src", "index.ts"), "utf8");
+const mcpSrc = readFileSync(path.join(REPO_DIR, "mcp", "entwurf-bridge", "src", "index.ts"), "utf8");
 ok("legacy MCP entwurf_send tool removed", !mcpSrc.includes('server.tool(\n\t"entwurf_send"'));
 
 console.log(`\ncheck-entwurf-mailbox-guard: ${passed} checks passed`);

@@ -40,7 +40,7 @@ ARTIFACT="${SENTINEL_ARTIFACT:-/tmp/sentinel-${TIMESTAMP}.json}"
 TIMEOUT="${SENTINEL_TIMEOUT:-240}"
 WAIT_BUDGET="${SENTINEL_WAIT:-180}"
 # Cold-start ready-gate (ACP parents only). When an ACP backend + its
-# pi-tools-bridge MCP child are still warming up, the parent can try to call the
+# entwurf-bridge MCP child are still warming up, the parent can try to call the
 # entwurf tool before it is registered and get "No such tool available", so no
 # worker is spawned. That is a one-shot startup race; normal prompts often hide
 # it because the model does a little natural warmup work before the tool call.
@@ -177,12 +177,12 @@ parent_spawn() {
         "$prompt" >"$out_file" 2>&1
       ;;
     acp-claude)
-      # ACP parent brings pi-tools-bridge MCP into scope through the repo extension.
+      # ACP parent brings entwurf-bridge MCP into scope through the repo extension.
       # The MCP entwurf/entwurf_resume tools are what the parent will invoke; live
       # backend callability for this path is owned by sentinel itself.
       # --entwurf-control: ACP-parent async resume routes through the MCP
       # `spawn_async_resume` RPC, which needs this session's control socket
-      # (mcp/pi-tools-bridge/src/index.ts throws "No pi control socket" without it).
+      # (mcp/entwurf-bridge/src/index.ts throws "No pi control socket" without it).
       # Native parents (cells 1/3) use the in-process callback and don't need it.
       # The operator's real-use alias (`pia`) always passes --entwurf-control, so this
       # matches prod. The flag is passed explicitly here — this script never relies on a
@@ -263,7 +263,7 @@ entwurf_tool_uncallable() {
 # precondition for treating the cell as a real MCP-surface spawn. A genuine
 # invocation shows a tool-call EVENT, in one of the parent surfaces' two shapes:
 #   native pi : a toolCall event carrying  "name":"entwurf"
-#   ACP       : [tool:start] Tool: pi-tools-bridge/entwurf
+#   ACP       : [tool:start] Tool: entwurf-bridge/entwurf
 # Both patterns are STRUCTURAL (the event envelope), deliberately NOT the bare
 # word "entwurf": a parent that bypasses via Bash/Terminal — or narrates "the
 # entwurf tool is not exposed" — mentions the word many times in tool
@@ -498,7 +498,7 @@ run_cell() {
     SPAWN_SESSION_ID=$(extract_session_id "$spawn_log")
     if ! parent_invoked_entwurf "$spawn_log"; then
       # HARD GATE — this cell exists to prove the MCP entwurf SURFACE. If the
-      # parent did not invoke `mcp__pi-tools-bridge__entwurf` (it bypassed via
+      # parent did not invoke `mcp__entwurf-bridge__entwurf` (it bypassed via
       # Bash/Terminal or the pi CLI, or declined), the cell has FAILED, full
       # stop. A "Session ID:" echoed by a bash-spawned `pi` does NOT count — it
       # proves the CLI works, not the MCP surface. Discard any such id so the
@@ -631,11 +631,11 @@ run_cell() {
   # returns; a parent that omitted the call returns fast with no tool invocation
   # in its own stream. The marker is the parent's tool-call event, matched
   # across all three surfaces (native `toolCall`/`toolName`/`toolUse`, Claude
-  # `mcp__pi-tools-bridge__…`, Codex `pi-tools-bridge/…`). The prompt echoes
+  # `mcp__entwurf-bridge__…`, Codex `entwurf-bridge/…`). The prompt echoes
   # `entwurf_resume` but none of these tokens, so an omission cannot be masked
   # by prompt echo. Non-authoritative for PASS — a genuine call still has to
   # clear the turn-growth + identity + continuity checks below.
-  if ! grep -qE 'toolName|toolUse|"type":"tool[cC]all|tool_execution_start|mcp__pi-tools-bridge__|pi-tools-bridge/entwurf' "$resume_log"; then
+  if ! grep -qE 'toolName|toolUse|"type":"tool[cC]all|tool_execution_start|mcp__entwurf-bridge__|entwurf-bridge/entwurf' "$resume_log"; then
     CELL_FCODE="R6"
     CELL_NOTE="parent emitted no entwurf_resume tool call (tool-omission) — see $resume_log"
     finalize_cell; return

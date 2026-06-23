@@ -56,7 +56,7 @@ JSON
 cat > "$HOME/.claude.json" <<'JSON'
 {
   "mcpServers": {
-    "pi-tools-bridge": {
+    "entwurf-bridge": {
       "type": "stdio",
       "command": "old",
       "args": ["old-start.sh"]
@@ -85,7 +85,7 @@ assert s['files']['settings']['keys']['env.DISABLE_AUTOCOMPACT']['original']['va
 assert s['files']['settings']['keys']['statusLine']['original']['value']['command'] == '/old/user/statusline.sh'
 assert s['files']['settings']['keys']['promptSuggestionEnabled']['original']['value'] is True
 assert s['files']['settings']['keys']['autoCompactEnabled']['original']['existed'] is False
-assert s['files']['claudeRoot']['keys']['mcpServers.pi-tools-bridge']['original']['value']['command'] == 'old'
+assert s['files']['claudeRoot']['keys']['mcpServers.entwurf-bridge']['original']['value']['command'] == 'old'
 PY
 then ok "state captures original scalar/map values and is mode 0600"; else bad "state did not capture original values / mode 0600"; fi
 
@@ -105,11 +105,11 @@ assert settings['statusLine']['command'] == os.environ['REPO'] + '/scripts/meta-
 for key in ['promptSuggestionEnabled','awaySummaryEnabled','autoMemoryEnabled','verbose','autoCompactEnabled','showTurnDuration','terminalProgressBarEnabled','useAutoModeDuringPlan']:
     assert settings[key] is False, key
 assert settings['skipDangerousModePermissionPrompt'] is True
-for item in ['Bash','Read','Write','Edit','Grep','Glob','WebFetch','WebSearch','Skill','mcp__pi-tools-bridge__*']:
+for item in ['Bash','Read','Write','Edit','Grep','Glob','WebFetch','WebSearch','Skill','mcp__entwurf-bridge__*']:
     assert item in settings['permissions']['allow'], item
 assert settings['permissions']['allow'].count('Read') == 1
 assert 'keep-server' in root['mcpServers']
-assert root['mcpServers']['pi-tools-bridge']['env']['PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID'] == 'external-mcp/claude-code'
+assert root['mcpServers']['entwurf-bridge']['env']['PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID'] == 'external-mcp/claude-code'
 PY
 then ok "apply installs managed keyset without clobbering unrelated keys"; else bad "apply keyset check failed"; fi
 
@@ -184,9 +184,9 @@ for key in ['awaySummaryEnabled','autoMemoryEnabled','verbose','autoCompactEnabl
 allow=settings['permissions']['allow']
 deny=settings['permissions']['deny']
 assert 'CustomUserTool' in allow and 'UserAfterInstall' in allow
-assert 'Bash' not in allow and 'mcp__pi-tools-bridge__*' not in allow
+assert 'Bash' not in allow and 'mcp__entwurf-bridge__*' not in allow
 assert 'Agent' in deny and 'UserDeniedAfterInstall' in deny and 'TaskCreate' not in deny
-assert root['mcpServers']['pi-tools-bridge']['command'] == 'old'
+assert root['mcpServers']['entwurf-bridge']['command'] == 'old'
 assert 'keep-server' in root['mcpServers']
 assert not os.path.exists(os.environ['CLAUDE_CONFIG_DIR'] + '/entwurf.install-state.json')
 PY
@@ -216,7 +216,7 @@ py prepare >/dev/null
 py apply >/dev/null
 FAKE_CLAUDE_LOG="$TMP/fake-claude-state.log"
 if PATH="$FAKE_BIN:$PATH" FAKE_CLAUDE_LOG="$FAKE_CLAUDE_LOG" bash "$REPO/scripts/meta-bridge-uninstall.sh" >/dev/null 2>&1; then
-  if grep -q 'plugin uninstall entwurf-meta-receive@meta-bridge-local' "$FAKE_CLAUDE_LOG" && grep -q 'mcp remove pi-tools-bridge -s user' "$FAKE_CLAUDE_LOG" && [ ! -f "$STATE_FILE" ]; then
+  if grep -q 'plugin uninstall entwurf-meta-receive@meta-bridge-local' "$FAKE_CLAUDE_LOG" && grep -q 'mcp remove entwurf-bridge -s user' "$FAKE_CLAUDE_LOG" && [ ! -f "$STATE_FILE" ]; then
     ok "wrapper uninstall with valid state removes Claude registrations and restores state"
   else
     bad "wrapper uninstall with state missed expected side effects/state removal"
@@ -253,7 +253,7 @@ settings={
   'permissions': {'allow': ['Read'], 'deny': ['Agent']},
   'env': {'DISABLE_AUTOCOMPACT': '1'}
 }
-root={'mcpServers': {'pi-tools-bridge': {'type':'stdio','command':'bash','args':[repo + '/mcp/pi-tools-bridge/start.sh'],'env': {'PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID':'external-mcp/claude-code','PI_TOOLS_BRIDGE_REQUIRE_META_SENDER':'1'}}}}
+root={'mcpServers': {'entwurf-bridge': {'type':'stdio','command':'bash','args':[repo + '/mcp/entwurf-bridge/start.sh'],'env': {'PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID':'external-mcp/claude-code','PI_TOOLS_BRIDGE_REQUIRE_META_SENDER':'1'}}}}
 json.dump(settings, open(cfg + '/settings.json','w'), indent=2); open(cfg + '/settings.json','a').write('\n')
 json.dump(root, open(home + '/.claude.json','w'), indent=2); open(home + '/.claude.json','a').write('\n')
 PY
@@ -263,7 +263,7 @@ import json, os
 s=json.load(open(os.environ['CLAUDE_CONFIG_DIR'] + '/entwurf.install-state.json'))
 assert s['files']['settings']['keys']['enabledPlugins.entwurf-meta-receive@meta-bridge-local']['original']['existed'] is False
 assert s['files']['settings']['keys']['extraKnownMarketplaces.meta-bridge-local']['original']['existed'] is False
-assert s['files']['claudeRoot']['keys']['mcpServers.pi-tools-bridge']['original']['existed'] is False
+assert s['files']['claudeRoot']['keys']['mcpServers.entwurf-bridge']['original']['existed'] is False
 assert s['files']['settings']['keys']['env.DISABLE_AUTOCOMPACT']['original']['existed'] is True
 PY
 then ok "legacy exact plugin/marketplace/MCP migrate as pi-owned absent, policy keys remain user-owned"; else bad "legacy migration state check failed"; fi
@@ -274,7 +274,7 @@ settings=json.load(open(os.environ['CLAUDE_CONFIG_DIR'] + '/settings.json'))
 root=json.load(open(os.environ['HOME'] + '/.claude.json'))
 assert 'entwurf-meta-receive@meta-bridge-local' not in settings.get('enabledPlugins', {})
 assert 'meta-bridge-local' not in settings.get('extraKnownMarketplaces', {})
-assert 'pi-tools-bridge' not in root.get('mcpServers', {})
+assert 'entwurf-bridge' not in root.get('mcpServers', {})
 assert settings['env']['DISABLE_AUTOCOMPACT'] == '1'
 PY
 then ok "legacy migration uninstall removes pi-owned wiring but preserves policy scalar"; else bad "legacy migration uninstall check failed"; fi
@@ -372,7 +372,7 @@ env HOME="$DOC_HOME" python3 - <<'PY'
 import json, os
 p = os.path.join(os.environ['HOME'], '.claude.json')
 d = json.load(open(p))
-d.setdefault('mcpServers', {})['pi-tools-bridge'] = {'type': 'stdio', 'command': 'CLOBBERED-BY-ANOTHER-CONSUMER'}
+d.setdefault('mcpServers', {})['entwurf-bridge'] = {'type': 'stdio', 'command': 'CLOBBERED-BY-ANOTHER-CONSUMER'}
 json.dump(d, open(p, 'w'), indent=2)
 PY
 # Capture without tripping THIS script's own set -e (the very trap under test).
@@ -382,7 +382,7 @@ DOC_CODE=$?
 set -e
 if [ "$DOC_CODE" -eq 1 ]; then ok "doctor exits 1 on a managed-config drift"; else bad "doctor exit on drift was $DOC_CODE, want 1:"$'\n'"$DOC_OUT"; fi
 if printf '%s\n' "$DOC_OUT" | grep -q 'Drift detail:'; then ok "doctor prints 'Drift detail:' instead of dying at the managed-config header"; else bad "doctor did not print Drift detail — silent early death?:"$'\n'"$DOC_OUT"; fi
-if printf '%s\n' "$DOC_OUT" | grep -q 'user MCP pi-tools-bridge'; then ok "doctor names the concrete drifted key (user MCP pi-tools-bridge)"; else bad "doctor did not name the drifted MCP key:"$'\n'"$DOC_OUT"; fi
+if printf '%s\n' "$DOC_OUT" | grep -q 'user MCP entwurf-bridge'; then ok "doctor names the concrete drifted key (user MCP entwurf-bridge)"; else bad "doctor did not name the drifted MCP key:"$'\n'"$DOC_OUT"; fi
 if printf '%s\n' "$DOC_OUT" | grep -q '\[plugin install'; then ok "doctor continues to a later section after the drift (no early set -e death)"; else bad "doctor did not reach a later section header after the drift:"$'\n'"$DOC_OUT"; fi
 if printf '%s\n' "$DOC_OUT" | grep -q 'meta-bridge doctor: FAIL'; then ok "doctor runs the whole chain to its final summary line"; else bad "doctor did not reach its final summary line (mid-run death):"$'\n'"$DOC_OUT"; fi
 

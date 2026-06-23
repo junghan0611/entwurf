@@ -9,7 +9,7 @@
  * protocol surface that entwurf publishes.
  *
  * Why this lives here (not in consumer dotfiles): entwurf's public
- * bridge surface (`mcp/pi-tools-bridge.entwurf_v2`, `entwurf_peers`)
+ * bridge surface (`mcp/entwurf-bridge.entwurf_v2`, `entwurf_peers`)
  * depends at runtime on pi sessions exposing the v2 control surface and
  * control socket. Bundling it here removes a hidden dependency on a private
  * consumer repo and makes entwurf installable as a public package without
@@ -464,7 +464,7 @@ function parseSenderInfo(text: string): SenderInfo | null {
 // --entwurf-send-message startup flag). Returns undefined when any field
 // cannot be resolved — pi-native callers should fall back to body-less sends
 // rather than synthesize partial envelopes that would render as "(unknown ...)"
-// at the receiver. The MCP-side bridge (mcp/pi-tools-bridge entwurf_send) is
+// at the receiver. The MCP-side bridge (mcp/entwurf-bridge entwurf_send) is
 // strict — it throws when its own env wiring is incomplete — because it
 // represents the public transparency contract.
 //
@@ -528,7 +528,7 @@ const renderSessionMessage: MessageRenderer = (message, { expanded }, theme) => 
 	// The label is "[entwurf received ⟵]" with a left-pointing arrow so the
 	// receiving operator immediately sees the directionality (this is an
 	// incoming message). The corresponding sender-side surface in
-	// mcp/pi-tools-bridge/entwurf_send renders "[entwurf sent →]" — same
+	// mcp/entwurf-bridge/entwurf_send renders "[entwurf sent →]" — same
 	// transport, opposite arrows, no confusion about who-said-what when the
 	// transcript is read end-to-end.
 	//
@@ -659,7 +659,7 @@ const buildSentMessageBox = (data: SentBoxData, expanded: boolean, theme: Theme)
 
 // CustomMessageRenderer adapter for Layer B (ACP path). The CustomMessage
 // carries the SentBoxData under `details` (set by index.ts streamShellAcp
-// when a completed mcp__pi-tools-bridge__entwurf_send is observed). `content`
+// when a completed mcp__entwurf-bridge__entwurf_send is observed). `content`
 // holds the raw message body too, but we prefer details.body because the
 // content channel may have been routed through string-only persistence and
 // trimmed.
@@ -785,7 +785,7 @@ async function handleCommand(
 		// When sender is omitted entirely we accept the send (a fallback for
 		// non-bridge paths or future surfaces that haven't been migrated yet) but
 		// the renderer will just show the bare label — the operator will notice
-		// the missing header. The pi-tools-bridge entwurf_send already throws
+		// the missing header. The entwurf-bridge entwurf_send already throws
 		// when its env is incomplete, so the common bridge path never reaches
 		// this `sender === undefined` branch.
 		const sender = command.sender;
@@ -816,7 +816,7 @@ async function handleCommand(
 		const wantsReply = typeof command.wants_reply === "boolean" ? command.wants_reply : false;
 
 		// Synthesize <sender_info> JSON at the receiver side. Caller code paths
-		// (pi-tools-bridge entwurf_send, registerControlSendTool, runStartupControlSend)
+		// (entwurf-bridge entwurf_send, registerControlSendTool, runStartupControlSend)
 		// pass the envelope structurally and never touch the message body — the
 		// canonical XML-style payload is constructed here once. We emit
 		// wants_reply only when the sender explicitly set it true; an undefined

@@ -125,7 +125,7 @@ fi
 
 echo "[receiver MCP reach — entwurf_inbox_read in EVERY native session, NOT plugin-owned]"
 # The plugin owns ONLY the wake/record hooks. The receiver self-fetch tool
-# (entwurf_inbox_read) comes from the user's pi-tools-bridge MCP wiring — a Claude
+# (entwurf_inbox_read) comes from the user's entwurf-bridge MCP wiring — a Claude
 # Code / agent-config responsibility, never injected here (injecting from the
 # plugin duplicates the server and drops its identity env). The honest test is
 # GLOBAL REACH: a native session in an arbitrary cwd must see the tool. A
@@ -133,11 +133,11 @@ echo "[receiver MCP reach — entwurf_inbox_read in EVERY native session, NOT pl
 # /tmp session would wake with no way to record its receipt). USER scope is.
 # So probe from a neutral non-project cwd, exactly like a real native session.
 if command -v claude >/dev/null; then
-	MCP_GET="$(cd /tmp && claude mcp get pi-tools-bridge 2>/dev/null || true)"
+	MCP_GET="$(cd /tmp && claude mcp get entwurf-bridge 2>/dev/null || true)"
 	if printf '%s\n' "$MCP_GET" | grep -q "Scope: User config" && printf '%s\n' "$MCP_GET" | grep -q "Status: .*Connected"; then
-		ok "pi-tools-bridge reachable from a neutral cwd (/tmp) as USER-scope MCP — every native session can entwurf_inbox_read"
+		ok "entwurf-bridge reachable from a neutral cwd (/tmp) as USER-scope MCP — every native session can entwurf_inbox_read"
 	else
-		bad "pi-tools-bridge is not USER-scope+Connected from /tmp — a native session outside the wired project cannot entwurf_inbox_read, so a woken receipt is never recorded. A PROJECT-scoped ~/.mcp.json is not enough; wire it USER scope: claude mcp add -s user pi-tools-bridge -e PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code -- bash \"$REPO/mcp/pi-tools-bridge/start.sh\""
+		bad "entwurf-bridge is not USER-scope+Connected from /tmp — a native session outside the wired project cannot entwurf_inbox_read, so a woken receipt is never recorded. A PROJECT-scoped ~/.mcp.json is not enough; wire it USER scope: claude mcp add -s user entwurf-bridge -e PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code -- bash \"$REPO/mcp/entwurf-bridge/start.sh\""
 	fi
 else
 	warn "claude not on PATH — cannot probe MCP reach"
@@ -281,7 +281,7 @@ echo "[entwurf-control / v2 dispatch surface]"
 # avoided: flag exposure depends on extension-load conditions, so source+gate is the honest signal.
 V2_CONTROL_SRC="$REPO/pi-extensions/entwurf-control.ts"
 V2_SURFACE_SRC="$REPO/pi-extensions/lib/entwurf-v2-surface.ts"
-V2_MCP_SRC="$REPO/mcp/pi-tools-bridge/src/index.ts"
+V2_MCP_SRC="$REPO/mcp/entwurf-bridge/src/index.ts"
 if [ -f "$V2_CONTROL_SRC" ] && grep -q 'ENTWURF_FLAG = "entwurf-control"' "$V2_CONTROL_SRC" && grep -q 'registerFlag(ENTWURF_FLAG' "$V2_CONTROL_SRC"; then
   ok "pi-native --entwurf-control flag registered (ENTWURF_FLAG)"
 else
@@ -295,7 +295,7 @@ fi
 if [ -f "$V2_MCP_SRC" ] && grep -q 'server.tool(' "$V2_MCP_SRC" && grep -q '"entwurf_v2"' "$V2_MCP_SRC"; then
   ok "MCP entwurf_v2 verb registered"
 else
-  bad "MCP entwurf_v2 verb not found in pi-tools-bridge"
+  bad "MCP entwurf_v2 verb not found in entwurf-bridge"
 fi
 if [ -f "$V2_SURFACE_SRC" ] && (cd "$REPO" && node --experimental-strip-types scripts/check-entwurf-v2-surface.ts >/dev/null 2>&1); then
   ok "check-entwurf-v2-surface gate passes (surface adapter + pi-native/MCP wiring)"

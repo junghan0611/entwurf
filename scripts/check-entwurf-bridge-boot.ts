@@ -1,6 +1,6 @@
 /**
- * check-pi-tools-bridge-boot — deterministic gate (0.11 step 5d-5-pre, G1a/G1b):
- * boots the pi-tools-bridge MCP server EXACTLY as it ships (start.sh →
+ * check-entwurf-bridge-boot — deterministic gate (0.11 step 5d-5-pre, G1a/G1b):
+ * boots the entwurf-bridge MCP server EXACTLY as it ships (start.sh →
  * `node --experimental-strip-types src/index.ts`, no build step) and asserts the
  * runtime contract that the source-shape gate `check-entwurf-v2-surface` cannot:
  *
@@ -25,7 +25,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const START_SH = path.join(REPO_DIR, "mcp", "pi-tools-bridge", "start.sh");
+const START_SH = path.join(REPO_DIR, "mcp", "entwurf-bridge", "start.sh");
 
 let passed = 0;
 function ok(label: string, cond: boolean, detail?: string): void {
@@ -38,7 +38,7 @@ function ok(label: string, cond: boolean, detail?: string): void {
 }
 
 function fatal(msg: string): never {
-	console.error(`check-pi-tools-bridge-boot: ${msg}`);
+	console.error(`check-entwurf-bridge-boot: ${msg}`);
 	process.exit(1);
 }
 
@@ -193,7 +193,7 @@ async function main(): Promise<void> {
 		!tools.some((t) => ["entwurf", "entwurf_resume", "entwurf_send"].includes(String(t?.name))),
 	);
 
-	console.log(`\ncheck-pi-tools-bridge-boot: ${passed} checks passed`);
+	console.log(`\ncheck-entwurf-bridge-boot: ${passed} checks passed`);
 }
 
 await main();

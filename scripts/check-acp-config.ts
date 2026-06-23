@@ -14,7 +14,7 @@
 //   7. strictMcpConfig: false → fail-loud (Hard Rule #4).
 //   8. normalized mcp hash: deterministic + sorted; a command/env/header/url
 //      change changes the hash (NOT just a name change). The envelope enrich
-//      injects PI_SESSION_ID/PI_AGENT_ID into pi-tools-bridge only, filters stale
+//      injects PI_SESSION_ID/PI_AGENT_ID into entwurf-bridge only, filters stale
 //      values, leaves http/sse untouched, and runs AFTER the hash is taken.
 
 import { strict as assert } from "node:assert";
@@ -225,15 +225,15 @@ try {
 			"url/header change changes the hash",
 		);
 
-		// enrich: PI_SESSION_ID/PI_AGENT_ID into pi-tools-bridge only; stale filtered;
+		// enrich: PI_SESSION_ID/PI_AGENT_ID into entwurf-bridge only; stale filtered;
 		// http untouched; other stdio untouched.
 		const servers = normalizeMcpServers({
-			"pi-tools-bridge": { command: "node", env: { PI_SESSION_ID: "STALE", FOO: "bar" } },
+			"entwurf-bridge": { command: "node", env: { PI_SESSION_ID: "STALE", FOO: "bar" } },
 			weather: { type: "http", url: "https://w.test" },
 			other: { command: "x" },
 		}).servers;
 		const enriched = enrichMcpServersWithEnvelope(servers, { modelId: "claude-sonnet-4-6", piSessionId: "LIVE-1" });
-		const bridge = enriched.find((s) => s.name === "pi-tools-bridge") as Extract<AcpMcpServer, { command: string }>;
+		const bridge = enriched.find((s) => s.name === "entwurf-bridge") as Extract<AcpMcpServer, { command: string }>;
 		const env = Object.fromEntries(bridge.env.map((e) => [e.name, e.value]));
 		assert.equal(env.PI_SESSION_ID, "LIVE-1", "live PI_SESSION_ID wins over the stale operator value");
 		assert.equal(env.PI_AGENT_ID, "entwurf/claude-sonnet-4-6", "PI_AGENT_ID injected from the model id");
@@ -244,9 +244,9 @@ try {
 		assert.deepEqual(other.env, [], "a non-bridge stdio server keeps its (empty) env untouched");
 		// enrich does NOT mutate the normalized list (hash taken earlier stays valid).
 		assert.equal(
-			normalizeMcpServers({ "pi-tools-bridge": { command: "node", env: { PI_SESSION_ID: "STALE", FOO: "bar" } } })
+			normalizeMcpServers({ "entwurf-bridge": { command: "node", env: { PI_SESSION_ID: "STALE", FOO: "bar" } } })
 				.servers[0].name,
-			"pi-tools-bridge",
+			"entwurf-bridge",
 			"enrich is a pure map — the source normalized list is unchanged",
 		);
 	}
@@ -256,7 +256,7 @@ try {
 			"defined keys; mcpServers merge per-name with project win; invalid mcpServers/skillPlugins fail loud naming the " +
 			"offender; nonempty skillPlugins auto-add Skill+Skill(*); appendSystemPrompt:true and strictMcpConfig:false are " +
 			"rejected; mcp hash is sorted+deterministic and sensitive to command/args/env/url/headers; envelope enrich injects " +
-			"PI_SESSION_ID/PI_AGENT_ID into pi-tools-bridge only (stale filtered), leaves http/other stdio untouched, post-hash",
+			"PI_SESSION_ID/PI_AGENT_ID into entwurf-bridge only (stale filtered), leaves http/other stdio untouched, post-hash",
 	);
 } finally {
 	rmSync(root, { recursive: true, force: true });

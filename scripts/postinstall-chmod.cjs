@@ -3,8 +3,8 @@
 // Why: `pnpm publish` normalizes file modes in the published tarball
 // to 0644, so the registry artifact loses the executable bit that the
 // repo tracks (`git ls-files --stage` shows 100755). README documents
-// running `run.sh install .` directly, and the pi-tools-bridge MCP
-// extension spawns `mcp/pi-tools-bridge/start.sh` — both break with
+// running `run.sh install .` directly, and the entwurf-bridge MCP
+// extension spawns `mcp/entwurf-bridge/start.sh` — both break with
 // EACCES on a fresh `pi install npm:@junghanacs/entwurf`.
 //
 // CJS so it runs regardless of the consumer's package "type" and
@@ -20,8 +20,8 @@ const root = path.resolve(__dirname, "..");
 
 const targets = [
 	"run.sh",
-	"mcp/pi-tools-bridge/start.sh",
-	"mcp/pi-tools-bridge/test.sh",
+	"mcp/entwurf-bridge/start.sh",
+	"mcp/entwurf-bridge/test.sh",
 	"demo/demo.sh",
 	"demo/demo-baseline.sh",
 ];

@@ -2,7 +2,7 @@
  * meta-mailbox-body — the SINGLE source for rendering an entwurf message as a
  * meta-bridge mailbox body. Both transports that can deliver to a garden citizen
  * with no live control socket use this:
- *   - the MCP bridge entwurf_send (mcp/pi-tools-bridge) — external/Claude-host sends
+ *   - the MCP bridge entwurf_send (mcp/entwurf-bridge) — external/Claude-host sends
  *   - the pi-native entwurf_send (pi-extensions/entwurf-control.ts) — pi-session sends
  *
  * The control-socket path carries the sender envelope inside its RPC framing; the

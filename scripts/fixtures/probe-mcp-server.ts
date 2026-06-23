@@ -13,7 +13,7 @@
 // import resolves against the repo node_modules even though the server is spawned
 // (by the claude ACP child) with an arbitrary scratch cwd. Deliberately minimal:
 // no identity / env coupling beyond PROBE_NONCE, so a failure isolates to "did
-// the operator mcpServers reach newSession" — not to pi-tools-bridge wiring.
+// the operator mcpServers reach newSession" — not to entwurf-bridge wiring.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";

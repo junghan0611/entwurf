@@ -107,7 +107,7 @@ function row(facts: SelfAddressabilityFacts): { replyable: boolean; socketState:
 }
 
 // ── SOURCE GUARD: the MCP builders consume the predicate, no hardcoded lie ────
-const indexPath = path.join(REPO_DIR, "mcp", "pi-tools-bridge", "src", "index.ts");
+const indexPath = path.join(REPO_DIR, "mcp", "entwurf-bridge", "src", "index.ts");
 const src = readFileSync(indexPath, "utf8");
 
 /** Extract a top-level `function NAME(...) { ... }` body by brace-counting. */
