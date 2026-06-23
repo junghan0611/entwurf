@@ -38,7 +38,6 @@
 		"demo/README.md",
 		"demo/demo.sh",
 		"demo/demo-baseline.sh",
-		"demo/compaction-policy-smoke/",
 		"docs/setup-clean-host.md",
 		"docs/assets/entwurf-hero.jpg",
 		"docs/assets/entwurf-demo.gif",

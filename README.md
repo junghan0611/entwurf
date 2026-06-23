@@ -52,7 +52,7 @@ A few words that look unusual for a coding tool.
 
 ## Install
 
-`entwurf` is a thin ACP bridge — it connects pi to a local Claude or Codex backend the operator has already installed and authenticated. The bridge does not provide Claude credentials, tokens, or subscription access, and does not bypass any backend auth. Whatever the operator's local `claude` / `codex` already trusts is what entwurf uses.
+`entwurf` is a thin ACP bridge — it connects pi to a locally authenticated **Claude** backend (the shipped default ACP path). **Codex** runs as a direct pi-native provider by default, with a tested `ENTWURF_ACP_FOR_CODEX=1` opt-in that routes it through the ACP bridge too. The bridge does not provide Claude credentials, tokens, or subscription access, and does not bypass any backend auth. Whatever the operator's local `claude` / `codex` already trusts is what entwurf uses.
 
 `pi` accepts four install sources for the bridge — `npm:` or `git:`, each in **global** (default, writes to `~/.pi/agent/settings.json`) or **project** (`-l` flag, writes to `.pi/settings.json`) scope. A fifth path is a local clone for hacking on the bridge.
 
@@ -447,19 +447,9 @@ Bridge identity, pi context, `~/AGENTS.md`, `cwd/AGENTS.md`, and date/cwd ride a
 
 ## Compaction policy
 
-**entwurf does not implement compaction.** When a backend compacts natively, the pi session and mapping survive that.
+**entwurf does not implement compaction.** When a backend compacts natively, the pi session and mapping survive that. The bridge exposes no backend-specific compaction knobs; operators who need to alter a backend's auto-compaction configure that backend through its own native interface. Do not rely on a pi-side JSONL summary to reduce a backend transcript — it does not.
 
-Pi-side JSONL compaction is blocked by default — `session_before_compact` returns `{cancel: true}` because pi-side summary does not reduce the backend transcript. Opt back in only with `PI_SHELL_ACP_ALLOW_PI_COMPACTION=1`.
-
-Backend-native compaction is always allowed. The bridge does not surface backend-specific compaction knobs; operators who need to alter a backend's auto-compaction configure that backend through its own native interface.
-
-The legacy single knob `PI_SHELL_ACP_ALLOW_COMPACTION` is rejected at spawn intent with a next-action message pointing at `PI_SHELL_ACP_ALLOW_PI_COMPACTION`.
-
-The footer uses ACP `usage_update.used / size` (backend prompt/tools/cache/session included) with `[entwurf:usage] ...` diagnostics. Near limit, choose a visible action: clear, open a new session with a different model, or let the backend compact on its own.
-
-Identity-isolation env (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CODEX_SQLITE_HOME`) is unrelated to compaction and ships unconditionally.
-
-Verification: `./run.sh smoke-compaction-policy` (deterministic). `LIVE=1 ./run.sh smoke-compaction-policy` adds backend-owned continuation probes for Claude and Codex. Probe outcomes live in [demo/compaction-policy-smoke/README.md](./demo/compaction-policy-smoke/README.md), with the release baseline and verification framing in [BASELINE.md](./BASELINE.md) and [VERIFY.md](./VERIFY.md); the probe is not a product surface (no user-facing `/acp-compact`).
+The footer uses ACP `usage_update.used / size` (backend prompt/tools/cache/session included) with `[entwurf:usage]` diagnostics. Near limit, choose a visible action: clear, open a new session with a different model, or let the backend compact on its own.
 
 ## What this repo owns, and does not
 
