@@ -8,7 +8,7 @@
 > - **rename이 먼저. npm publish는 최후행.** 순서 = **코드 rename(S1~S3) → repo/dir rename(GLG) → npm publish(GLG, 맨 마지막)**(§6 시퀀스). publish는 rename 트리거가 아니다. package.json `name` *문자열*은 S1 소스 치환 대상이지만 *registry publish*는 모든 rename 완료 후 별도. 설치 동기화 cut-choreography **폐기** — 쓰는 사람은 전문가, 내 방향 따라오거나 안 쓰면 그만. 범용 도구가 아니다.
 > - **🔪 이건 호환성 작업이 아니라 절단(cutover)다 [GLG 핵심 교리].** 이전 세션·이전 이름과 **결별**한다 — 어떤 *런타임* 호환성도 두지 않는다. dual-read/alias/legacy-accept 0. 설치자는 새로 간다(호환 아니라 새 시작). state(meta-bridge·ACP cache)는 **이장(one-shot cutover)**이지 dual-read가 아님 — old를 new로 한 번 옮기고 런타임은 이후 new만 안다. **이건 정체성의 전환** — pi를 4번째 하네스로 내린다(ACP·소켓 대화하는 특별한 adapter지만), **entwurf가 본질**. 약하게 조이면 버그가 아니라 *정체성*이 샌다.
 >
-> **▶ 다음 세션 진입점 (실제 작업):** self-review + **GPT 2라운드 = "GO for S1 dry-run 진입"**, RED/Amber 전부 반영, **§6 GLG 결정 4건 확정 완료**(§9). 진행: ① fresh rg ✅ → ② S1 dry-run GREEN(보정 포함) ✅ → ③ **GPT 4R = live S1 GO ✅**(조건: §6-5 A 잠금) → 남은: ④ **GLG 비준**(§6-5 meta-bridge state A 승인 + live S1 착수) → ⑤ live S1 실행(§5 S1 시퀀스 8단계) + 직후 S1-doc commit. *본 트리 치환 0건 유지(dry-run은 버린 worktree).*
+> **▶ 다음 세션 진입점 (실제 작업):** self-review + **GPT 2라운드 = "GO for S1 dry-run 진입"**, RED/Amber 전부 반영, **§6 GLG 결정 4건 확정 완료**(§9). 진행: ① fresh rg ✅ → ② S1 dry-run GREEN ✅ → ③ GPT 4R live S1 GO ✅ → ④ GLG 비준 ✅ → ⑤ **live S1 실행 완료 ✅ — `07c2592`(code identity) + `1e89c13`(S1-doc, live docs+asset)**. 남은: ⑥ **GLG 무인 후행**(state 이장 §6-④/⑤ · repo/dir rename §6-③ · npm §6-① — §5 quiesce 가드) + **S2(MCP bridge)·S3(env namespace) 후속 단계**(각각 별도 dry-run/검수). *S1 = 정체성 전환의 본질 완료.*
 
 ---
 
