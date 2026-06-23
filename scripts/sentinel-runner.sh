@@ -143,7 +143,7 @@ ALL_CELLS=(
 # giving us a paraphrase-free anchor for `Session ID: <YYYYMMDDTHHMMSS-xxxxxx>`.
 #
 # child_stderr_log (4th arg, optional): when set, exported to the parent pi as
-# PI_ENTWURF_CHILD_STDERR_LOG so entwurf-core's mirrorChildStderr() appends
+# ENTWURF_CHILD_STDERR_LOG so entwurf-core's mirrorChildStderr() appends
 # the entwurf child's stderr to that file. This is the only way to observe
 # child-side `[entwurf:bootstrap]` bridge markers — parent stderr can't
 # see the bridge when target provider is entwurf (bridge lives in child).
@@ -162,9 +162,9 @@ parent_spawn() {
   # never reach the fallback; they also run without an explicit --session-id).
   PARENT_LAUNCH_SID=""
   if [ -n "$child_stderr_log" ]; then
-    export PI_ENTWURF_CHILD_STDERR_LOG="$child_stderr_log"
+    export ENTWURF_CHILD_STDERR_LOG="$child_stderr_log"
   else
-    unset PI_ENTWURF_CHILD_STDERR_LOG
+    unset ENTWURF_CHILD_STDERR_LOG
   fi
   case "$parent_key" in
     native)

@@ -119,7 +119,7 @@ find_meta_record_json() {
 const fs = require('fs');
 const path = require('path');
 const nativeId = process.argv[2];
-const dir = process.env.PI_META_SESSIONS_DIR || path.join(process.env.HOME, '.pi/agent/meta-sessions');
+const dir = process.env.ENTWURF_META_SESSIONS_DIR || path.join(process.env.HOME, '.pi/agent/meta-sessions');
 const matches = [];
 if (fs.existsSync(dir)) {
   for (const name of fs.readdirSync(dir)) {

@@ -17,7 +17,7 @@
 // Boundary notes (GPT-reviewed):
 //   - launch source MUST be the resolved package bin. A silent PATH fallback
 //     would hide a dep-pin / pack miss, so it FAILS acceptance unless the
-//     operator sets PI_SHELL_ACP_RAW_TURN_ALLOW_PATH_FALLBACK=1 (then the run
+//     operator sets ENTWURF_ACP_RAW_TURN_ALLOW_PATH_FALLBACK=1 (then the run
 //     is stamped "debug/non-acceptance").
 //   - cwd is a fresh mkdtemp scratch — this isolates the repo, NOT ~/.claude
 //     side effects. Without an overlay the adapter reads the operator's own
@@ -33,8 +33,8 @@ import { dirname, join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 
-const REQUESTED_MODEL_ID = process.env.PI_SHELL_ACP_RAW_TURN_MODEL ?? "claude-sonnet-4-6";
-const ALLOW_PATH_FALLBACK = process.env.PI_SHELL_ACP_RAW_TURN_ALLOW_PATH_FALLBACK === "1";
+const REQUESTED_MODEL_ID = process.env.ENTWURF_ACP_RAW_TURN_MODEL ?? "claude-sonnet-4-6";
+const ALLOW_PATH_FALLBACK = process.env.ENTWURF_ACP_RAW_TURN_ALLOW_PATH_FALLBACK === "1";
 const RAW_TAIL_CAP = 64 * 1024; // cap captured raw NDJSON to 64KB tail on report.
 
 function fail(msg: string): never {
@@ -109,7 +109,7 @@ function resolveLaunch(): { command: string; args: string[]; source: string; acc
 			fail(
 				`could not resolve @agentclientprotocol/claude-agent-acp package bin (${(err as Error).message}). ` +
 					"This is an acceptance failure — the dep pin / install is broken. Set " +
-					"PI_SHELL_ACP_RAW_TURN_ALLOW_PATH_FALLBACK=1 only for debug.",
+					"ENTWURF_ACP_RAW_TURN_ALLOW_PATH_FALLBACK=1 only for debug.",
 			);
 		}
 	}

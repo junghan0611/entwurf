@@ -15,7 +15,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { streamShellAcp } from "./lib/acp/backend.js";
-import { curatedClaudeModels, PI_SHELL_ACP_NO_AUTH_SENTINEL, PROVIDER_ID } from "./lib/acp/models.js";
+import { curatedClaudeModels, ENTWURF_ACP_NO_AUTH_SENTINEL, PROVIDER_ID } from "./lib/acp/models.js";
 
 // Idempotent registration guard. pi may evaluate an extension entry more than
 // once across a runtime; registering the provider twice would replace its model
@@ -45,7 +45,7 @@ export default function (pi: ExtensionAPI) {
 		// No-auth sentinel, not a credential. See lib/acp/models.ts + the
 		// check-auth-boundary gate. The ACP plugin never provides, resells, or
 		// bypasses backend credentials.
-		apiKey: PI_SHELL_ACP_NO_AUTH_SENTINEL,
+		apiKey: ENTWURF_ACP_NO_AUTH_SENTINEL,
 		api: "entwurf",
 		models: curatedClaudeModels(),
 		// S2c: real ACP backend. Spawn-per-turn claude-agent-acp drive + event

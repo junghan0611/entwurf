@@ -262,13 +262,13 @@ def desired_mcp(repo: Path) -> dict[str, Any]:
         "command": "bash",
         "args": [str((repo / "mcp" / "entwurf-bridge" / "start.sh").resolve())],
         "env": {
-            "PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID": "external-mcp/claude-code",
+            "ENTWURF_BRIDGE_EXTERNAL_AGENT_ID": "external-mcp/claude-code",
             # Anonymous sends are forbidden on the Claude Code install path: a send
             # with no pi-session identity AND no meta-sender marker is refused, not
             # delivered as an unidentified external. The SessionStart hook writes
             # the marker (parent-pid keyed), so a normally-opened session always has
             # an authoritative garden-id sender.
-            "PI_TOOLS_BRIDGE_REQUIRE_META_SENDER": "1",
+            "ENTWURF_BRIDGE_REQUIRE_META_SENDER": "1",
         },
     }
 

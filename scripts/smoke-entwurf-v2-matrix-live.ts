@@ -33,8 +33,8 @@
  *
  * LIVE-only (spawns a real pi, opens a real socket) — kept OUT of `pnpm check`; honest skip when
  * LIVE!=1 (a release-gate that hard-fails without auth/model is unrunnable unattended). Model:
- *   PI_SHELL_ACP_LIVE_TARGET   = "<provider>/<model>"  (default "openai-codex/gpt-5.4")
- *   (or split: PI_SHELL_ACP_LIVE_PROVIDER + PI_SHELL_ACP_LIVE_MODEL)
+ *   ENTWURF_LIVE_TARGET   = "<provider>/<model>"  (default "openai-codex/gpt-5.4")
+ *   (or split: ENTWURF_LIVE_PROVIDER + ENTWURF_LIVE_MODEL)
  *   LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
  *
  * Automation seams (GPT Q1): the resident child + its socket are always reaped in `finally`; a
@@ -84,17 +84,17 @@ function ok(label: string, cond: boolean): void {
 }
 
 function resolveTarget(): { provider: string; model: string } {
-	const combined = process.env.PI_SHELL_ACP_LIVE_TARGET?.trim();
+	const combined = process.env.ENTWURF_LIVE_TARGET?.trim();
 	if (combined) {
 		const slash = combined.indexOf("/");
 		if (slash <= 0 || slash === combined.length - 1) {
-			throw new Error(`PI_SHELL_ACP_LIVE_TARGET must be "<provider>/<model>", got: ${JSON.stringify(combined)}`);
+			throw new Error(`ENTWURF_LIVE_TARGET must be "<provider>/<model>", got: ${JSON.stringify(combined)}`);
 		}
 		return { provider: combined.slice(0, slash), model: combined.slice(slash + 1) };
 	}
 	return {
-		provider: process.env.PI_SHELL_ACP_LIVE_PROVIDER?.trim() || "openai-codex",
-		model: process.env.PI_SHELL_ACP_LIVE_MODEL?.trim() || "gpt-5.4",
+		provider: process.env.ENTWURF_LIVE_PROVIDER?.trim() || "openai-codex",
+		model: process.env.ENTWURF_LIVE_MODEL?.trim() || "gpt-5.4",
 	};
 }
 
@@ -166,9 +166,9 @@ async function main(): Promise<void> {
 	for (const d of [sessionsDir, mailboxDir, lockDir, receiversDir]) await fsp.mkdir(d, { recursive: true });
 	// The receiver marker is read through defaultMetaReceiversDir() (env-overridable); point it
 	// (and the store/mailbox defaults, belt-and-suspenders to the opts dirs) at the temp world.
-	process.env.PI_META_RECEIVERS_DIR = receiversDir;
-	process.env.PI_META_SESSIONS_DIR = sessionsDir;
-	process.env.PI_META_MAILBOX_DIR = mailboxDir;
+	process.env.ENTWURF_META_RECEIVERS_DIR = receiversDir;
+	process.env.ENTWURF_META_SESSIONS_DIR = sessionsDir;
+	process.env.ENTWURF_META_MAILBOX_DIR = mailboxDir;
 
 	let resident: ChildProcess | null = null;
 	let residentGid = "";

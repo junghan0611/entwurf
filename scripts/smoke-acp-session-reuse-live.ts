@@ -27,8 +27,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Context, Model } from "@earendil-works/pi-ai";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const MODEL = process.env.PI_SHELL_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-4-6";
-const TURN_TIMEOUT_MS = Number(process.env.PI_SHELL_ACP_PROVIDER_TIMEOUT_MS) || 240_000;
+const MODEL = process.env.ENTWURF_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-4-6";
+const TURN_TIMEOUT_MS = Number(process.env.ENTWURF_ACP_PROVIDER_TIMEOUT_MS) || 240_000;
 
 function fail(msg: string): never {
 	console.error(`[smoke-acp-session-reuse-live] FAIL: ${msg}`);

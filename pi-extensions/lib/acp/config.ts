@@ -451,7 +451,7 @@ export function resolveProviderConfig(params: ResolveProviderConfigParams): Reso
 		throw settingsConfigError(
 			projectSettings.appendSystemPrompt !== undefined ? projectPath : globalPath,
 			"appendSystemPrompt: true is unsupported on acp-on-v2 — rich context rides the first-user augment and the " +
-				"tiny system-prompt carrier is the engraving (PI_SHELL_ACP_ENGRAVING_PATH). Remove the key.",
+				"tiny system-prompt carrier is the engraving (ENTWURF_ACP_ENGRAVING_PATH). Remove the key.",
 		);
 	}
 

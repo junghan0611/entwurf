@@ -237,7 +237,7 @@ async function main(): Promise<void> {
 	// ── 6: parseEntwurfPrefixRootsEnv (5d-4b operator-policy SSOT) ─────────────
 	{
 		const D = path.delimiter;
-		ok("6: env name is PI_ENTWURF_PREFIX_ROOTS", ENTWURF_PREFIX_ROOTS_ENV === "PI_ENTWURF_PREFIX_ROOTS");
+		ok("6: env name is ENTWURF_PREFIX_ROOTS", ENTWURF_PREFIX_ROOTS_ENV === "ENTWURF_PREFIX_ROOTS");
 		ok("6: undefined → [] (no prefix promotion)", parseEntwurfPrefixRootsEnv(undefined).length === 0);
 		ok("6: empty string → []", parseEntwurfPrefixRootsEnv("").length === 0);
 		ok("6: delimiters-only → []", parseEntwurfPrefixRootsEnv(`${D}${D}`).length === 0);

@@ -109,7 +109,7 @@ for item in ['Bash','Read','Write','Edit','Grep','Glob','WebFetch','WebSearch','
     assert item in settings['permissions']['allow'], item
 assert settings['permissions']['allow'].count('Read') == 1
 assert 'keep-server' in root['mcpServers']
-assert root['mcpServers']['entwurf-bridge']['env']['PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID'] == 'external-mcp/claude-code'
+assert root['mcpServers']['entwurf-bridge']['env']['ENTWURF_BRIDGE_EXTERNAL_AGENT_ID'] == 'external-mcp/claude-code'
 PY
 then ok "apply installs managed keyset without clobbering unrelated keys"; else bad "apply keyset check failed"; fi
 
@@ -253,7 +253,7 @@ settings={
   'permissions': {'allow': ['Read'], 'deny': ['Agent']},
   'env': {'DISABLE_AUTOCOMPACT': '1'}
 }
-root={'mcpServers': {'entwurf-bridge': {'type':'stdio','command':'bash','args':[repo + '/mcp/entwurf-bridge/start.sh'],'env': {'PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID':'external-mcp/claude-code','PI_TOOLS_BRIDGE_REQUIRE_META_SENDER':'1'}}}}
+root={'mcpServers': {'entwurf-bridge': {'type':'stdio','command':'bash','args':[repo + '/mcp/entwurf-bridge/start.sh'],'env': {'ENTWURF_BRIDGE_EXTERNAL_AGENT_ID':'external-mcp/claude-code','ENTWURF_BRIDGE_REQUIRE_META_SENDER':'1'}}}}
 json.dump(settings, open(cfg + '/settings.json','w'), indent=2); open(cfg + '/settings.json','a').write('\n')
 json.dump(root, open(home + '/.claude.json','w'), indent=2); open(home + '/.claude.json','a').write('\n')
 PY
@@ -309,15 +309,15 @@ valid_record "20260606T000001-bbbbbb" "native-b" > "$STORE/20260606T000001-bbbbb
 STATUS_INPUT_MATCH='{"session_id":"native-a","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-sonnet-4-6"},"context_window":{"context_window_size":200000,"used_percentage":2,"current_usage":{"input_tokens":10}}}'
 STATUS_INPUT_MISS='{"session_id":"native-missing","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-opus-4-8"}}'
 STATUS_INPUT_READY='{"workspace":{"current_dir":"/tmp"},"model":{"id":"claude-haiku-4-5"}}'
-STATUS_OUT_MATCH="$(printf '%s' "$STATUS_INPUT_MATCH" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+STATUS_OUT_MATCH="$(printf '%s' "$STATUS_INPUT_MATCH" | ENTWURF_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
 if [ "$(printf '%s\n' "$STATUS_OUT_MATCH" | wc -l | tr -d ' ')" = "2" ]; then ok "statusline renders exactly two rows"; else bad "statusline should render two rows: $STATUS_OUT_MATCH"; fi
 if printf '%s\n' "$STATUS_OUT_MATCH" | sed -n '1p' | grep -q 'tmp' && printf '%s\n' "$STATUS_OUT_MATCH" | sed -n '2p' | grep -q '🪛 20260606T000000-aaaaaa cc | s'; then ok "statusline keeps row-1 work context and maps native session_id to row-2 garden-id"; else bad "statusline did not show expected two-row content for native-a: $STATUS_OUT_MATCH"; fi
-STATUS_OUT_MISS="$(printf '%s' "$STATUS_INPUT_MISS" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+STATUS_OUT_MISS="$(printf '%s' "$STATUS_INPUT_MISS" | ENTWURF_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
 if printf '%s' "$STATUS_OUT_MISS" | grep -q '🪛 ? cc'; then ok "statusline no-record fallback is ?"; else bad "statusline no-record fallback wrong: $STATUS_OUT_MISS"; fi
-STATUS_OUT_READY="$(printf '%s' "$STATUS_INPUT_READY" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+STATUS_OUT_READY="$(printf '%s' "$STATUS_INPUT_READY" | ENTWURF_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
 if printf '%s' "$STATUS_OUT_READY" | grep -q '🪛 ready cc'; then ok "statusline no-session_id fallback is ready"; else bad "statusline ready fallback wrong: $STATUS_OUT_READY"; fi
 cp "$STORE/20260606T000000-aaaaaa.meta.json" "$STORE/20260606T000003-dddddd.meta.json"
-STATUS_OUT_DUP="$(printf '%s' "$STATUS_INPUT_MATCH" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+STATUS_OUT_DUP="$(printf '%s' "$STATUS_INPUT_MATCH" | ENTWURF_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
 if printf '%s' "$STATUS_OUT_DUP" | grep -q '🪛 ! cc'; then ok "statusline duplicate nativeSessionId fallback is !"; else bad "statusline duplicate fallback wrong: $STATUS_OUT_DUP"; fi
 rm "$STORE/20260606T000003-dddddd.meta.json"
 
@@ -377,7 +377,7 @@ json.dump(d, open(p, 'w'), indent=2)
 PY
 # Capture without tripping THIS script's own set -e (the very trap under test).
 set +e
-DOC_OUT="$(env HOME="$DOC_HOME" CLAUDE_CONFIG_DIR="$DOC_CFG" PI_CODING_AGENT_DIR="$DOC_AGENT" PI_META_SESSIONS_DIR="$DOC_STORE" PATH="$DOC_BIN:$PATH" bash "$REPO/scripts/meta-bridge-doctor.sh" 2>&1)"
+DOC_OUT="$(env HOME="$DOC_HOME" CLAUDE_CONFIG_DIR="$DOC_CFG" PI_CODING_AGENT_DIR="$DOC_AGENT" ENTWURF_META_SESSIONS_DIR="$DOC_STORE" PATH="$DOC_BIN:$PATH" bash "$REPO/scripts/meta-bridge-doctor.sh" 2>&1)"
 DOC_CODE=$?
 set -e
 if [ "$DOC_CODE" -eq 1 ]; then ok "doctor exits 1 on a managed-config drift"; else bad "doctor exit on drift was $DOC_CODE, want 1:"$'\n'"$DOC_OUT"; fi

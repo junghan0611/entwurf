@@ -47,7 +47,7 @@ GIF_SPEED=${GIF_SPEED:-2.8}
 
 EMACS_SOCKET=${PI_EMACS_AGENT_SOCKET:-server}
 
-# Debug output: PI_SHELL_ACP_DEBUG=1 is always on inside the panes. Each pane's
+# Debug output: ENTWURF_DEBUG=1 is always on inside the panes. Each pane's
 # stderr is appended to its own log file so the GIF stays clean. To watch live,
 # open a separate terminal:
 #   tail -f ~/tmp/entwurf-demo/sender-debug.log
@@ -67,9 +67,9 @@ tmux kill-session -t "$SESSION" 2>/dev/null || true
 : > "$PEER_LOG"
 : > "$SENDER_LOG"
 
-# Each pane runs with PI_SHELL_ACP_DEBUG=1; stderr appended to its own log file.
+# Each pane runs with ENTWURF_DEBUG=1; stderr appended to its own log file.
 # Plain `2>>` is POSIX sh — works under tmux's default /bin/sh.
-COMMON_ENV="PI_SHELL_ACP_DEBUG=1 PI_EMACS_AGENT_SOCKET=$EMACS_SOCKET"
+COMMON_ENV="ENTWURF_DEBUG=1 PI_EMACS_AGENT_SOCKET=$EMACS_SOCKET"
 COMMON_ARGS="--entwurf-control --emacs-agent-socket $EMACS_SOCKET"
 new_session_id() { bash "$REPO_ROOT/run.sh" new-session-id; }
 

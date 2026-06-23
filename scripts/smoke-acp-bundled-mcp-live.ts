@@ -33,7 +33,7 @@
 // wired it, the smoke fails loud (the circuit is not installed).
 //
 // LIVE-only — kept OUT of `pnpm check`; honest skip when LIVE!=1 (skip = CI safety,
-// NOT an acceptance PASS). Model override: PI_SHELL_ACP_PROVIDER_MODEL (default sonnet).
+// NOT an acceptance PASS). Model override: ENTWURF_ACP_PROVIDER_MODEL (default sonnet).
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -45,7 +45,7 @@ import { fetchControlSocketRuntimeInfo, formatRuntimeModel } from "../pi-extensi
 import { generateSessionId } from "../pi-extensions/lib/entwurf-core.ts";
 
 const ACP_PROVIDER = "entwurf";
-const ACP_MODEL = process.env.PI_SHELL_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-4-6";
+const ACP_MODEL = process.env.ENTWURF_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-4-6";
 
 const REAL_CONTROL_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
 const SOCKET_SUFFIX = ".sock";
@@ -54,7 +54,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", REPO_ROOT] as const;
 
 const BOOT_TIMEOUT_MS = 30_000;
-const TURN_TIMEOUT_MS = Number(process.env.PI_SHELL_ACP_PROVIDER_TIMEOUT_MS) || 240_000;
+const TURN_TIMEOUT_MS = Number(process.env.ENTWURF_ACP_PROVIDER_TIMEOUT_MS) || 240_000;
 const POLL_MS = 100;
 
 const STUB_PATTERN = /AcpBackendNotImplementedError|not implemented in S0/i;

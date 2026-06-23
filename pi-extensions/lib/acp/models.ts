@@ -26,7 +26,7 @@ export const PROVIDER_ID = "entwurf";
 // failing preflight when the var is unset. Do NOT change to "$ANTHROPIC_API_KEY"
 // — that silences the warning but keeps the wrong auth-boundary shape. The
 // check-auth-boundary gate pins this.
-export const PI_SHELL_ACP_NO_AUTH_SENTINEL = "entwurf-no-auth";
+export const ENTWURF_ACP_NO_AUTH_SENTINEL = "entwurf-no-auth";
 
 // The curated Claude ids. Adding one here is a commitment to verify it across
 // both axes (protocol smoke + agent interview) — do not extend casually.
@@ -37,7 +37,7 @@ export const CURATED_ANCHOR_MODEL_ID = "claude-opus-4-8";
 
 // Anthropic's registry reports 1M for Claude 4.6+ models, but the public
 // entwurf surface deliberately distinguishes Sonnet vs Opus: Sonnet stays
-// at 200K, Opus surfaces at 1M. (The 0.11.0 PI_SHELL_ACP_CLAUDE_CONTEXT env
+// at 200K, Opus surfaces at 1M. (The 0.11.0 ENTWURF_ACP_CLAUDE_CONTEXT env
 // override is a behavior-oracle nicety deferred past S0 — the loader/fence
 // slice only needs the anchor present and registered.)
 const CLAUDE_CONTEXT_DEFAULT = 1_000_000;

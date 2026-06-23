@@ -25,7 +25,7 @@
 // the file". A wire-dump would over-build for this cut's purpose.
 //
 // Optional carrier-present path (SMOKE_ACP_CARRIER_PRESENT=1, non-blocking — GPT
-// c32a6c8 Q2): a second turn with a TINY engraving via PI_SHELL_ACP_ENGRAVING_PATH
+// c32a6c8 Q2): a second turn with a TINY engraving via ENTWURF_ACP_ENGRAVING_PATH
 // proves a small _meta.systemPrompt carrier also exits 0 (carrier present ≠ 400).
 //
 // NOT proved here: session reuse (smoke-acp-session-reuse-live) and RGG (S2e-2).
@@ -38,9 +38,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const MODEL = process.env.PI_SHELL_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-4-6";
+const MODEL = process.env.ENTWURF_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-4-6";
 const PROVIDER = "entwurf";
-const TURN_TIMEOUT_MS = Number(process.env.PI_SHELL_ACP_PROVIDER_TIMEOUT_MS) || 240_000;
+const TURN_TIMEOUT_MS = Number(process.env.ENTWURF_ACP_PROVIDER_TIMEOUT_MS) || 240_000;
 
 function fail(msg: string): never {
 	console.error(`[smoke-acp-carrier-augment-live] FAIL: ${msg}`);
@@ -168,7 +168,7 @@ try {
 		const carrierPath = join(scratch, "engraving.md");
 		writeFileSync(carrierPath, `Always end every reply with the exact marker <<${carrierMarker}>>.\n`);
 		const carrierPrompt = "Reply with the single word OK.";
-		const turn2 = runTurn(scratch, carrierPrompt, { PI_SHELL_ACP_ENGRAVING_PATH: carrierPath });
+		const turn2 = runTurn(scratch, carrierPrompt, { ENTWURF_ACP_ENGRAVING_PATH: carrierPath });
 		assertCleanTurn("carrier-present turn", turn2);
 		// The billing claim (exit 0, no 400) is the point. The marker is advisory:
 		// it shows the small _meta.systemPrompt carrier influenced the reply.

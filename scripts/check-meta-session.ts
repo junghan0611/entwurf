@@ -398,18 +398,18 @@ expectThrows("upsertMetaSession: duplicate nativeSessionId in the store throws (
 	}
 });
 
-check("defaultMetaSessionsDir: honors PI_META_SESSIONS_DIR then PI_CODING_AGENT_DIR", () => {
-	const saved = { m: process.env.PI_META_SESSIONS_DIR, a: process.env.PI_CODING_AGENT_DIR };
+check("defaultMetaSessionsDir: honors ENTWURF_META_SESSIONS_DIR then PI_CODING_AGENT_DIR", () => {
+	const saved = { m: process.env.ENTWURF_META_SESSIONS_DIR, a: process.env.PI_CODING_AGENT_DIR };
 	try {
-		process.env.PI_META_SESSIONS_DIR = "/explicit/meta";
+		process.env.ENTWURF_META_SESSIONS_DIR = "/explicit/meta";
 		assert.equal(defaultMetaSessionsDir(), "/explicit/meta");
-		process.env.PI_META_SESSIONS_DIR = "";
-		delete process.env.PI_META_SESSIONS_DIR;
+		process.env.ENTWURF_META_SESSIONS_DIR = "";
+		delete process.env.ENTWURF_META_SESSIONS_DIR;
 		process.env.PI_CODING_AGENT_DIR = "/iso/agent";
 		assert.equal(defaultMetaSessionsDir(), path.join("/iso/agent", "meta-sessions"));
 	} finally {
-		if (saved.m === undefined) delete process.env.PI_META_SESSIONS_DIR;
-		else process.env.PI_META_SESSIONS_DIR = saved.m;
+		if (saved.m === undefined) delete process.env.ENTWURF_META_SESSIONS_DIR;
+		else process.env.ENTWURF_META_SESSIONS_DIR = saved.m;
 		if (saved.a === undefined) delete process.env.PI_CODING_AGENT_DIR;
 		else process.env.PI_CODING_AGENT_DIR = saved.a;
 	}
@@ -655,16 +655,16 @@ expectThrows("readMetaRecordV1ByGardenId: body/filename gardenId drift is corrup
 });
 
 check("defaultMetaMailboxDir: sibling of meta-sessions under the pi agent dir", () => {
-	const saved = { m: process.env.PI_META_MAILBOX_DIR, a: process.env.PI_CODING_AGENT_DIR };
+	const saved = { m: process.env.ENTWURF_META_MAILBOX_DIR, a: process.env.PI_CODING_AGENT_DIR };
 	try {
-		process.env.PI_META_MAILBOX_DIR = "/explicit/mbx";
+		process.env.ENTWURF_META_MAILBOX_DIR = "/explicit/mbx";
 		assert.equal(defaultMetaMailboxDir(), "/explicit/mbx");
-		delete process.env.PI_META_MAILBOX_DIR;
+		delete process.env.ENTWURF_META_MAILBOX_DIR;
 		process.env.PI_CODING_AGENT_DIR = "/iso/agent";
 		assert.equal(defaultMetaMailboxDir(), path.join("/iso/agent", "meta-mailbox"));
 	} finally {
-		if (saved.m === undefined) delete process.env.PI_META_MAILBOX_DIR;
-		else process.env.PI_META_MAILBOX_DIR = saved.m;
+		if (saved.m === undefined) delete process.env.ENTWURF_META_MAILBOX_DIR;
+		else process.env.ENTWURF_META_MAILBOX_DIR = saved.m;
 		if (saved.a === undefined) delete process.env.PI_CODING_AGENT_DIR;
 		else process.env.PI_CODING_AGENT_DIR = saved.a;
 	}

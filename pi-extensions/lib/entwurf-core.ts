@@ -24,7 +24,7 @@
  *   - Claude models (claude-*)            — always routed through entwurf.
  *     If entwurf can't be resolved, falls back to pi-claude-code-use, then warns.
  *   - Codex models (openai-codex/*, gpt-5*) — default is the direct openai-codex provider.
- *     Opt-in via env var `PI_ENTWURF_ACP_FOR_CODEX=1` routes Codex through entwurf,
+ *     Opt-in via env var `ENTWURF_ACP_FOR_CODEX=1` routes Codex through entwurf,
  *     in which case `normalizeCodexEntwurfModelForAcp()` strips the `openai-codex/`
  *     prefix because the bridge forwards the model id verbatim to codex-acp, which
  *     only accepts the bare backend id (e.g. `gpt-5.4`) on ChatGPT accounts.
@@ -66,9 +66,9 @@ const PI_SETTINGS_PATH = process.env.PI_SETTINGS_PATH
 	? expandTilde(process.env.PI_SETTINGS_PATH)
 	: path.join(AGENT_DIR, "settings.json");
 export const SESSIONS_BASE = path.join(AGENT_DIR, "sessions");
-const ENTWURF_TARGETS_PATH = process.env.PI_ENTWURF_TARGETS_PATH ?? path.join(AGENT_DIR, "entwurf-targets.json");
+const ENTWURF_TARGETS_PATH = process.env.ENTWURF_TARGETS_PATH ?? path.join(AGENT_DIR, "entwurf-targets.json");
 export const DEFAULT_ENTWURF_MODEL = "openai-codex/gpt-5.4";
-export const ENTWURF_CODEX_ACP_ENV = "PI_ENTWURF_ACP_FOR_CODEX";
+export const ENTWURF_CODEX_ACP_ENV = "ENTWURF_ACP_FOR_CODEX";
 
 // Currently unused: remote/SSH entwurf is fail-fast in 0.9.0 (garden-native
 // identity is local-FS only). Retained for #11 remote revival; parity-gated by
@@ -182,7 +182,7 @@ export function normalizeCodexEntwurfModelForAcp(model?: string): string | undef
 // Entwurf Target Registry (v1) — narrow door
 //
 // SSOT for what (provider, model) pairs may be spawned via entwurf.
-// File: ~/.pi/agent/entwurf-targets.json (override with PI_ENTWURF_TARGETS_PATH).
+// File: ~/.pi/agent/entwurf-targets.json (override with ENTWURF_TARGETS_PATH).
 // See entwurf/AGENTS.md §Entwurf Orchestration (Entwurf Target Registry) for principle and schema.
 //
 // Spawn flow goes through this gate. Resume flow does NOT — Identity Preservation
@@ -318,7 +318,7 @@ export function _resetEntwurfRegistryCache(): void {
 // ============================================================================
 // Child stderr mirror (opt-in, sentinel observability)
 //
-// Gated by env PI_ENTWURF_CHILD_STDERR_LOG. When set, any entwurf child pi
+// Gated by env ENTWURF_CHILD_STDERR_LOG. When set, any entwurf child pi
 // process spawned here also has its stderr appended to the given path. The
 // sentinel uses this to grep for child-side `[entwurf:bootstrap]` bridge
 // markers when asserting continuity — parent stderr can't see that signal
@@ -330,7 +330,7 @@ export function _resetEntwurfRegistryCache(): void {
 // ============================================================================
 
 export function mirrorChildStderr(proc: ChildProcess): void {
-	const logPath = process.env.PI_ENTWURF_CHILD_STDERR_LOG;
+	const logPath = process.env.ENTWURF_CHILD_STDERR_LOG;
 	if (!logPath || !proc.stderr) return;
 	const writer = fs.createWriteStream(logPath, { flags: "a" });
 	writer.on("error", (err) => {

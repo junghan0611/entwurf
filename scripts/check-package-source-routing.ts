@@ -40,7 +40,7 @@ import type { ResolvedTarget } from "../pi-extensions/lib/entwurf-core.ts";
 // --- Isolated agent dir (must be set BEFORE importing entwurf-core) ----------
 const tmpAgent = fs.mkdtempSync(path.join(os.tmpdir(), "psa-route-"));
 process.env.PI_CODING_AGENT_DIR = tmpAgent;
-delete process.env.PI_ENTWURF_ACP_FOR_CODEX; // control wantsCodexBridge per-case
+delete process.env.ENTWURF_ACP_FOR_CODEX; // control wantsCodexBridge per-case
 
 // Dynamic import so the resolver's AGENT_DIR / PI_SETTINGS_PATH consts capture
 // the env above. A static import would evaluate them against the real ~/.pi.
@@ -229,12 +229,12 @@ check("resume recorded entwurf + local resolves via self-root", () => {
 // 14. opt-in Codex-via-ACP + remote + no source → unresolvedAcpIntent (fail-fast).
 check("resume Codex-via-ACP opt-in + remote + no source → unresolvedAcpIntent", () => {
 	setSource(null);
-	process.env.PI_ENTWURF_ACP_FOR_CODEX = "1";
+	process.env.ENTWURF_ACP_FOR_CODEX = "1";
 	try {
 		const r = getEntwurfExplicitExtensions("gpt-5.4", true, undefined);
 		assert.equal(r.unresolvedAcpIntent, true);
 	} finally {
-		delete process.env.PI_ENTWURF_ACP_FOR_CODEX;
+		delete process.env.ENTWURF_ACP_FOR_CODEX;
 	}
 });
 

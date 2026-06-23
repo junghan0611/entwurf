@@ -67,7 +67,7 @@ import {
 
 const HOME = os.homedir();
 const DEFAULT_ENTWURF_DIR = path.join(HOME, ".pi", "entwurf-control");
-const ENTWURF_DIR = process.env.PI_ENTWURF_DIR ?? DEFAULT_ENTWURF_DIR;
+const ENTWURF_DIR = process.env.ENTWURF_DIR ?? DEFAULT_ENTWURF_DIR;
 const SOCKET_SUFFIX = ".sock";
 
 // ============================================================================
@@ -142,7 +142,7 @@ class EntwurfSenderIdentityError extends Error {
 	constructor() {
 		super(
 			"entwurf-bridge refused: no authoritative sender identity. " +
-				"PI_TOOLS_BRIDGE_REQUIRE_META_SENDER=1 forbids anonymous external sends, and no live meta-sender " +
+				"ENTWURF_BRIDGE_REQUIRE_META_SENDER=1 forbids anonymous external sends, and no live meta-sender " +
 				"marker was found for this process. The native SessionStart hook writes that marker (keyed by the " +
 				"Claude Code parent pid + start-time) — open this session through the installed meta-bridge so your " +
 				"garden-id is registered, then retry.",
@@ -150,13 +150,13 @@ class EntwurfSenderIdentityError extends Error {
 	}
 }
 
-// Resolve the meta-sender marker for THIS MCP process. PI_META_SENDER_MARKER is an
+// Resolve the meta-sender marker for THIS MCP process. ENTWURF_META_SENDER_MARKER is an
 // explicit override (test / wiring). Otherwise try the shared ancestor: process.ppid
 // first, then one step up (Claude may run the hook through a shell wrapper, shifting
 // the shared ancestor). readMetaSenderMarker's pid+start-key guard rejects a
 // dead/reused owner, so a wrong marker is never trusted on any candidate.
 function resolveMetaSenderMarker(): MetaSenderMarker | null {
-	const explicit = process.env.PI_META_SENDER_MARKER?.trim();
+	const explicit = process.env.ENTWURF_META_SENDER_MARKER?.trim();
 	if (explicit) return readMetaSenderMarker({ markerPath: explicit });
 	const candidates = [process.ppid, parentPid(process.ppid)].filter((p): p is number => typeof p === "number" && p > 0);
 	for (const ownerPid of candidates) {
@@ -199,7 +199,7 @@ function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): SenderEnve
 	// No pi-session identity. Try the meta-sender marker: a native backend that
 	// minted a garden-id via its SessionStart hook. The marker is keyed by the
 	// shared parent pid — this MCP child's process.ppid IS the Claude Code process
-	// the hook ran under (NOT cwd inference). PI_META_SENDER_MARKER overrides the
+	// the hook ran under (NOT cwd inference). ENTWURF_META_SENDER_MARKER overrides the
 	// lookup for explicit wiring / tests. A trusted marker promotes this process to
 	// a REPLYABLE meta-session sender addressed by its garden-id.
 	const marker = resolveMetaSenderMarker();
@@ -273,12 +273,12 @@ function buildSendSenderEnvelope(): SenderEnvelope {
 	if (meta) return meta;
 
 	// No marker. Anonymous external is allowed ONLY when not explicitly forbidden.
-	if (process.env.PI_TOOLS_BRIDGE_REQUIRE_META_SENDER === "1") {
+	if (process.env.ENTWURF_BRIDGE_REQUIRE_META_SENDER === "1") {
 		throw new EntwurfSenderIdentityError();
 	}
 	return {
 		sessionId: "external-mcp",
-		agentId: process.env.PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID?.trim() || "external-mcp/unknown-host",
+		agentId: process.env.ENTWURF_BRIDGE_EXTERNAL_AGENT_ID?.trim() || "external-mcp/unknown-host",
 		cwd,
 		timestamp: new Date().toISOString(),
 		origin: "external-mcp",
@@ -368,7 +368,7 @@ server.tool(
 			const rendered = await runAndRenderEntwurfV2FromSurface(
 				{ target, intent, message, mode, wants_reply },
 				// agentDir / prefixRoots intentionally omitted: runAndRenderEntwurfV2FromSurface falls
-				// back to the PI_ENTWURF_PREFIX_ROOTS env SSOT for prefixRoots (5d-4); agentDir stays undefined.
+				// back to the ENTWURF_PREFIX_ROOTS env SSOT for prefixRoots (5d-4); agentDir stays undefined.
 				{ senderProvider: () => sender },
 			);
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);

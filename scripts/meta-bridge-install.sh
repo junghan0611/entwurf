@@ -116,7 +116,7 @@ claude mcp remove entwurf-bridge -s user >/dev/null 2>&1 || true
 # prior version (one-shot rename cleanup, not a runtime alias).
 claude mcp remove pi-tools-bridge -s user >/dev/null 2>&1 || true
 claude mcp add -s user entwurf-bridge \
-  -e PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code \
+  -e ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code \
   -- bash "$REPO/mcp/entwurf-bridge/start.sh" >/dev/null
 (cd /tmp && claude mcp get entwurf-bridge 2>/dev/null | grep -q "Scope: User config") || \
   die "post-install: entwurf-bridge is not reachable as USER-scope MCP from /tmp"

@@ -1470,7 +1470,7 @@ The decider — not this surface — chooses the transport.`,
 						wants_reply: params.wants_reply,
 					},
 					// agentDir / prefixRoots intentionally omitted here: the surface adapter falls back
-					// to the PI_ENTWURF_PREFIX_ROOTS env SSOT for prefixRoots (5d-4); agentDir stays undefined.
+					// to the ENTWURF_PREFIX_ROOTS env SSOT for prefixRoots (5d-4); agentDir stays undefined.
 					{ senderProvider },
 				);
 				return {

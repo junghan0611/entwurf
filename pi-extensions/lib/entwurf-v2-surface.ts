@@ -29,9 +29,9 @@ import { type EntwurfV2RunResult, runEntwurfV2 } from "./entwurf-v2-runner.ts";
  * ONE shared env var feeds BOTH surfaces (pi-native + MCP) — a pi session and an MCP child
  * both inherit it, so there is no per-surface config fork. `prefixRoots` is operator policy,
  * not session-local UX, so it is an env var, not a pi flag. */
-export const ENTWURF_PREFIX_ROOTS_ENV = "PI_ENTWURF_PREFIX_ROOTS";
+export const ENTWURF_PREFIX_ROOTS_ENV = "ENTWURF_PREFIX_ROOTS";
 
-/** Parse `PI_ENTWURF_PREFIX_ROOTS` into the preflight's `prefixRoots`. `path.delimiter`-
+/** Parse `ENTWURF_PREFIX_ROOTS` into the preflight's `prefixRoots`. `path.delimiter`-
  * separated (`:` on Linux/macOS); entries are trimmed, empty segments dropped. Unset / empty
  * / delimiters-only ⇒ `[]` (no prefix promotion — frozen decision 7, no package default).
  * It does NOT throw on a nonexistent/typo path: `preflight`'s normalize keeps an absolute
@@ -58,7 +58,7 @@ export interface SurfaceEntwurfV2Params {
 /** ctx-free run options. The caller (entwurf-control.ts / MCP bridge) builds `senderProvider`
  * from its own envelope source — this module never touches `ExtensionContext`. Both surfaces
  * leave `agentDir`/`prefixRoots` undefined by design: `runAndRenderEntwurfV2FromSurface` falls
- * back to the `PI_ENTWURF_PREFIX_ROOTS` env SSOT for `prefixRoots` (5d-4), and `agentDir` stays
+ * back to the `ENTWURF_PREFIX_ROOTS` env SSOT for `prefixRoots` (5d-4), and `agentDir` stays
  * undefined (no surface sets it). Explicit opts still win — kept for tests / a future surface. */
 export interface EntwurfV2SurfaceRunOptions {
 	senderProvider: () => SenderEnvelope | undefined;

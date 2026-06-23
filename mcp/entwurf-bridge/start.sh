@@ -5,17 +5,17 @@
 # build step. Node >= 22.6 (engines.node in ../../package.json).
 #
 # Env file loading is strictly opt-in — the launcher never reads any dotfile
-# unless PI_TOOLS_BRIDGE_ENV_FILE points at one. Rationale: entwurf is a
+# unless ENTWURF_BRIDGE_ENV_FILE points at one. Rationale: entwurf is a
 # public package; baking in personal conventions (~/.env.local, etc.) would
 # bleed the original author's dotfile habits into every consumer's shell.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
-if [ -n "${PI_TOOLS_BRIDGE_ENV_FILE:-}" ] && [ -f "$PI_TOOLS_BRIDGE_ENV_FILE" ]; then
+if [ -n "${ENTWURF_BRIDGE_ENV_FILE:-}" ] && [ -f "$ENTWURF_BRIDGE_ENV_FILE" ]; then
   set -a
   # shellcheck disable=SC1090
-  source "$PI_TOOLS_BRIDGE_ENV_FILE"
+  source "$ENTWURF_BRIDGE_ENV_FILE"
   set +a
 fi
 

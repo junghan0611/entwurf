@@ -83,7 +83,7 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-const PI_SHELL_ACP_PROVIDER = "entwurf";
+const ENTWURF_PROVIDER = "entwurf";
 
 /**
  * Module-level reentry guard.
@@ -216,7 +216,7 @@ export default function (pi: ExtensionAPI) {
 		//   native       → entwurf                   — B only (A not yet engaged)
 		// Skips:
 		//   native       → native                         — out of scope, free
-		const touchesEntwurf = from.provider === PI_SHELL_ACP_PROVIDER || to.provider === PI_SHELL_ACP_PROVIDER;
+		const touchesEntwurf = from.provider === ENTWURF_PROVIDER || to.provider === ENTWURF_PROVIDER;
 		if (!touchesEntwurf) return;
 
 		reverting = true;

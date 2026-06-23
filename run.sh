@@ -67,8 +67,8 @@ Usage:
   ./run.sh check-entwurf-resume-args   # deterministic gate (0.11 Stage 0 step 5c-3b): resume-argv SSOT (buildResumePiArgs) shared by the legacy async worker and the v2 spawn-bg resident citizen — A1: legacy=--no-extensions + no --entwurf-control (one-shot pi -p exits), v2-control=--entwurf-control + no --no-extensions (keep-alive is the goal, resumed session stays addressable); BOTH keep --mode json -p + prompt-as-turn (-p NOT dropped in v2); explicitExtensionArgs preserved once (#29); v2 includes plan.launchArgs (--approve); null provider→no --provider; no cross-contamination
   ./run.sh check-entwurf-v2-spawn-production # deterministic gate (0.11 Stage 0 step 5c-3c): production SpawnBgResumeDeps factory (makeProductionSpawnBgResumeDeps) wiring the 5c-3a watcher's 6 IO seams — no real pi/socket/timer (that=opt-in smoke-entwurf-v2-spawn-live, OUT of pnpm check). socketWatchVerdict: address-conflict→forged (reject, never wait)/alive→alive/dead·indeterminate→wait; spawnChild builds v2-control argv (--entwurf-control, no --no-extensions, -p+prompt, --approve, cwd authority); awaitSocketAlive connectable→resolve / symlink→reject without connect / dead→wait→alive / abort-clears; awaitChildExit code + listener cleanup; awaitTimeout schedule + abort-clear; killChild=SIGTERM; proc-less child fails loud
   ./run.sh smoke-entwurf-v2-spawn-live # LIVE phase gate (0.11 Stage 0 step 5c-3c, D5) — OUT of pnpm check, needs LIVE=1. Exercises the production SpawnBgResumeDeps against REAL OS objects: S1 real unix socket → awaitSocketAlive resolves (real lstat+probe), symlink→forged, absent→abort settles; S2 real child → spawn-event resolve + SIGTERM kill + exit-code capture; S3 watcher integration → real timeout→kill→child-exited→release ×1. Does NOT spawn a real pi resume (that=5d matrix). Run before 5d: LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live
-  ./run.sh smoke-entwurf-v2-spawn-resume-live # 0.11.0 (A) ACCEPTANCE gate — OUT of pnpm check, needs LIVE=1. The FULL spawn-bg resident lifecycle: mint backend=pi identity → seed a REAL dormant pi session (one-shot into ~/.pi/agent/sessions) → runEntwurfV2(owned-outcome) routes dormant→spawn-bg resume → a REAL detached pi --entwurf-control child stands its socket up, resumes, DOES a model turn. Asserts executed/spawn-bg/socket-alive/released + lock released ×1 + no lock file + pid alive + socket connectable + resume USER & assistant OK nonces in the session JSONL. Model-in-loop IN. The gate v1 deprecation (0.12) is predicated on. Model: PI_SHELL_ACP_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live
-  ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b socket-only (record-less live pi → control-socket sent / owned→bad-target, A1 narrow), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: PI_SHELL_ACP_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
+  ./run.sh smoke-entwurf-v2-spawn-resume-live # 0.11.0 (A) ACCEPTANCE gate — OUT of pnpm check, needs LIVE=1. The FULL spawn-bg resident lifecycle: mint backend=pi identity → seed a REAL dormant pi session (one-shot into ~/.pi/agent/sessions) → runEntwurfV2(owned-outcome) routes dormant→spawn-bg resume → a REAL detached pi --entwurf-control child stands its socket up, resumes, DOES a model turn. Asserts executed/spawn-bg/socket-alive/released + lock released ×1 + no lock file + pid alive + socket connectable + resume USER & assistant OK nonces in the session JSONL. Model-in-loop IN. The gate v1 deprecation (0.12) is predicated on. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live
+  ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b socket-only (record-less live pi → control-socket sent / owned→bad-target, A1 narrow), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b pi 4-value, facts-only keyset; union: PeerFact+SocketOnlyFact by gardenId, dormant→dead, F3 indeterminate preserved, non-pi+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-listing          # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4a): META-STORE axis listAllMetaIdentities — explicit-partial: parse failure / body-filename drift → explicit {filename,message} error (verbatim, no synthetic fields), valid records still listed (corrupt doesn't blind); mode strict throws / collect partial; entries/readRecord injected, no IO
@@ -286,7 +286,7 @@ PY
 #
 # Two explicit exits are honored:
 #   1. `./run.sh setup:links --force` — back up + overwrite with canonical
-#   2. `PI_ENTWURF_TARGETS_PATH=/path/to/custom.json` — tells entwurf-core
+#   2. `ENTWURF_TARGETS_PATH=/path/to/custom.json` — tells entwurf-core
 #      to read elsewhere, freeing this slot from any policy obligation
 #
 # Idempotent for the happy path. Lazy registry load means a corrected
@@ -322,7 +322,7 @@ ensure_agent_dir_symlinks() {
     echo "       expected:  $target" >&2
     echo "       Fix with one of:" >&2
     echo "         ./run.sh setup:links --force      # relink to canonical" >&2
-    echo "         export PI_ENTWURF_TARGETS_PATH=$current  # honor your override explicitly" >&2
+    echo "         export ENTWURF_TARGETS_PATH=$current  # honor your override explicitly" >&2
     exit 1
   fi
 
@@ -343,7 +343,7 @@ ensure_agent_dir_symlinks() {
     diff -u "$link" "$target" | sed 's/^/         /' >&2 || true
     echo "       Fix with one of:" >&2
     echo "         ./run.sh setup:links --force      # back up + replace with symlink to canonical" >&2
-    echo "         export PI_ENTWURF_TARGETS_PATH=$link  # honor your file as an explicit override" >&2
+    echo "         export ENTWURF_TARGETS_PATH=$link  # honor your file as an explicit override" >&2
     exit 1
   fi
 
@@ -813,7 +813,7 @@ smoke_acp_socket_citizen_live() {
   # did NOT revert — QM1), idle/cwd are reported, and the fail-loud streamSimple
   # stub never fires (turn-free launch — QM2). No prompt is sent: S1 proves
   # citizenship, never a backend turn (that is S2). Honest skip when LIVE!=1.
-  # Model override: PI_SHELL_ACP_S1_MODEL (default claude-opus-4-8).
+  # Model override: ENTWURF_S1_MODEL (default claude-opus-4-8).
   #   LIVE=1 ./run.sh smoke-acp-socket-citizen-live
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-socket-citizen-live.ts)
 }
@@ -826,8 +826,8 @@ smoke_acp_raw_turn_live() {
   # (sonnet) setSessionModel -> prompt("say OK"), and asserts a live "OK" reply
   # plus captured raw NDJSON bytes. NO provider/overlay/streamSimple/_meta — the
   # raw backend pipe only. Launch source must be the package bin (PATH fallback
-  # fails acceptance unless PI_SHELL_ACP_RAW_TURN_ALLOW_PATH_FALLBACK=1, debug).
-  # Model override: PI_SHELL_ACP_RAW_TURN_MODEL (default claude-sonnet-4-6).
+  # fails acceptance unless ENTWURF_ACP_RAW_TURN_ALLOW_PATH_FALLBACK=1, debug).
+  # Model override: ENTWURF_ACP_RAW_TURN_MODEL (default claude-sonnet-4-6).
   #   LIVE=1 ./run.sh smoke-acp-raw-turn-live
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-raw-turn-live.ts)
 }
@@ -844,8 +844,8 @@ smoke_acp_overlay_live() {
   # event-mapping/session-reuse/engraving (S2d). Does NOT diff the live
   # meta-store for mailbox absence (flaky — concurrent sessions); the honest
   # claim is overlay-supplies-hooks:{}. Launch must be the package bin (PATH
-  # fallback fails acceptance unless PI_SHELL_ACP_OVERLAY_ALLOW_PATH_FALLBACK=1).
-  # Model override: PI_SHELL_ACP_OVERLAY_MODEL (default claude-sonnet-4-6).
+  # fallback fails acceptance unless ENTWURF_ACP_OVERLAY_ALLOW_PATH_FALLBACK=1).
+  # Model override: ENTWURF_ACP_OVERLAY_MODEL (default claude-sonnet-4-6).
   #   LIVE=1 ./run.sh smoke-acp-overlay-live
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-overlay-live.ts)
 }
@@ -859,8 +859,8 @@ smoke_acp_memory_containment_live() {
   # cancelled) and writeTextFile delegation is PERFORMED, so the only thing that
   # can stop a memory write is the lever — not us. Fails loud if engraving.md is
   # empty (carrier OFF = no containment). Launch must be the package bin (PATH
-  # fallback fails acceptance unless PI_SHELL_ACP_MEMORY_ALLOW_PATH_FALLBACK=1).
-  # Model override: PI_SHELL_ACP_MEMORY_MODEL (default claude-sonnet-4-6).
+  # fallback fails acceptance unless ENTWURF_ACP_MEMORY_ALLOW_PATH_FALLBACK=1).
+  # Model override: ENTWURF_ACP_MEMORY_MODEL (default claude-sonnet-4-6).
   #   LIVE=1 ./run.sh smoke-acp-memory-containment-live
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-memory-containment-live.ts)
 }
@@ -875,7 +875,7 @@ smoke_acp_provider_live() {
   # assistant reply (live model proof) + the removed S0 stub error never appears
   # (provider path actually opened) + pi exits 0. Tool-free prompt; the
   # event-mapper gate owns the tool→notice contract.
-  # Model override: PI_SHELL_ACP_PROVIDER_MODEL (default claude-sonnet-4-6).
+  # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-4-6).
   #   LIVE=1 ./run.sh smoke-acp-provider-live
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-provider-live.ts)
 }
@@ -889,7 +889,7 @@ smoke_acp_session_reuse_live() {
   # was reused and the live ACP session kept turn-1 history (a respawn-per-turn
   # backend would forget it). The one-shot exit0 half is owned by
   # smoke-acp-provider-live.
-  # Model override: PI_SHELL_ACP_PROVIDER_MODEL (default claude-sonnet-4-6).
+  # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-4-6).
   #   LIVE=1 ./run.sh smoke-acp-session-reuse-live
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-session-reuse-live.ts)
 }
@@ -901,7 +901,7 @@ smoke_acp_carrier_augment_live() {
   # secret (the augment rode the wire to the model) and the EMPTY default carrier
   # must bill clean (exit 0, no HTTP-400 canary — 핀1 live). Optional tiny carrier
   # check via SMOKE_ACP_CARRIER_PRESENT=1 (non-blocking).
-  # Model override: PI_SHELL_ACP_PROVIDER_MODEL (default claude-sonnet-4-6).
+  # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-4-6).
   #   LIVE=1 ./run.sh smoke-acp-carrier-augment-live
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-carrier-augment-live.ts)
 }
@@ -914,7 +914,7 @@ smoke_acp_mcp_live() {
   # that lives only inside the MCP server env. Proves the operator's
   # entwurfProvider.mcpServers reaches the live ACP session (the GLG-baseline
   # fix). Isolated probe (not entwurf-bridge) so a failure does not blur into
-  # identity/env wiring. Model override: PI_SHELL_ACP_PROVIDER_MODEL.
+  # identity/env wiring. Model override: ENTWURF_ACP_PROVIDER_MODEL.
   #   LIVE=1 ./run.sh smoke-acp-mcp-live
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-mcp-live.ts)
 }
@@ -926,7 +926,7 @@ smoke_acp_skill_live() {
   # entwurfProvider.skillPlugins at it, and drives one real provider turn: the
   # model must surface/use the skill and echo the nonce. Proves skillPlugins +
   # the Skill/Skill(*) auto-add reach the live session (the other half of the GLG
-  # baseline). Model override: PI_SHELL_ACP_PROVIDER_MODEL.
+  # baseline). Model override: ENTWURF_ACP_PROVIDER_MODEL.
   #   LIVE=1 ./run.sh smoke-acp-skill-live
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-skill-live.ts)
 }
@@ -942,7 +942,7 @@ smoke_acp_bundled_mcp_live() {
   # smoke-acp-mcp-live (tiny isolated probe): this proves the REAL bundled bridge with
   # envelope injection. NOT `pi -p` one-shot (that bundled-MCP teardown hang is
   # diagnostic backlog, not the 0.11.0 release circuit). Model override:
-  # PI_SHELL_ACP_PROVIDER_MODEL.
+  # ENTWURF_ACP_PROVIDER_MODEL.
   #   LIVE=1 ./run.sh smoke-acp-bundled-mcp-live
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-bundled-mcp-live.ts)
 }
@@ -958,11 +958,11 @@ smoke_acp_rgg_live() {
   # the ACP child is spawned with mcpServers:[] so it has no entwurf_self call
   # surface (plugin stays lightweight, no ambient MCP — S2b/S2d boundary). To
   # observe that boundary directly, run the shared runner with SMOKE_RGG_POSITIVE=1
-  # and PI_SHELL_ACP_LIVE_TARGET set (T3 will report N/A, not a real failure).
-  # Target override: PI_SHELL_ACP_RGG_TARGET (default entwurf/claude-sonnet-4-6).
+  # and ENTWURF_LIVE_TARGET set (T3 will report N/A, not a real failure).
+  # Target override: ENTWURF_RGG_TARGET (default entwurf/claude-sonnet-4-6).
   #   ./run.sh smoke-acp-rgg-live
-  local target="${PI_SHELL_ACP_RGG_TARGET:-entwurf/claude-sonnet-4-6}"
-  (cd "$REPO_DIR" && PI_SHELL_ACP_LIVE_TARGET="$target" SMOKE_RGG_POSITIVE=0 bash scripts/smoke-resident-garden-guard.sh)
+  local target="${ENTWURF_RGG_TARGET:-entwurf/claude-sonnet-4-6}"
+  (cd "$REPO_DIR" && ENTWURF_LIVE_TARGET="$target" SMOKE_RGG_POSITIVE=0 bash scripts/smoke-resident-garden-guard.sh)
 }
 
 smoke_entwurf_v2_matrix_live() {
@@ -975,7 +975,7 @@ smoke_entwurf_v2_matrix_live() {
   # reject, no garbage). Model-in-loop is OUT (GPT Q2): "does the sender model call entwurf_send"
   # is a separate behavior test — this is a transport/lock/enqueue gate. Negative/timeout/contention
   # stay deterministic. Honest skip when LIVE!=1 so the release-gate is runnable unattended.
-  # Model: PI_SHELL_ACP_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4).
+  # Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4).
   #   LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
   if [ "${LIVE:-}" != "1" ]; then
     echo "[smoke-entwurf-v2-matrix-live] skipped — set LIVE=1 to run (spawns a real pi --entwurf-control + opens a real socket)."
@@ -996,8 +996,8 @@ smoke_entwurf_v2_spawn_resume_live() {
   # resume USER + assistant OK nonces appended to the session JSONL (real work, not just
   # "process up"). This is the evidence v1 deprecation (0.12) is predicated on. Model-in-loop is
   # IN. Honest skip when LIVE!=1 (skip = CI safety, NOT an acceptance PASS).
-  # Model: PI_SHELL_ACP_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4);
-  #        PI_SHELL_ACP_SPAWN_RESUME_ASSISTANT_TIMEOUT_MS (default 180000).
+  # Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4);
+  #        ENTWURF_SPAWN_RESUME_ASSISTANT_TIMEOUT_MS (default 180000).
   #   LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live
   if [ "${LIVE:-}" != "1" ]; then
     echo "[smoke-entwurf-v2-spawn-resume-live] skipped — set LIVE=1 to run (spawns a real pi resume child + opens a real socket)."
@@ -2020,7 +2020,7 @@ xt_tool_surface() {
 #   - v2-native live floor: the MUST tier is the v2 dispatch substrate
 #     (smoke-entwurf-v2-matrix-live + smoke-entwurf-v2-spawn-resume-live, opt-in
 #     LIVE), the MCP bridge (check-bridge), and the garden-native substrate/guard
-#     (smoke-session-id-name on a pi-native target via PI_SHELL_ACP_LIVE_TARGET,
+#     (smoke-session-id-name on a pi-native target via ENTWURF_LIVE_TARGET,
 #     and smoke-resident-garden-guard).
 #   - ACP plugin acceptance floor (S0~S2g): the 10 ACP LIVE smokes
 #     (socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/rgg
@@ -2512,7 +2512,7 @@ case "$cmd" in
     ;;
   smoke-meta-sender-identity)
     # 0.10.0 meta-bridge blocker: deterministic E2E for native SENDER identity.
-    # A SessionStart-written sender marker (parent-pid keyed; PI_META_SENDER_MARKER
+    # A SessionStart-written sender marker (parent-pid keyed; ENTWURF_META_SENDER_MARKER
     # overrides for the test) promotes an anonymous user-scope MCP send into a
     # REPLYABLE meta-session addressed by garden-id, and REQUIRE_META_SENDER refuses
     # anonymous sends. A↔B round-trip + reject, zero Claude turns. Offline/hermetic
@@ -2521,7 +2521,7 @@ case "$cmd" in
     ;;
   smoke-meta-mailbox)
     # 0.10.0 meta-bridge defense C: deterministic E2E for the mailbox messaging
-    # axis. entwurf_send fallback (empty PI_ENTWURF_DIR forces no-socket) → meta
+    # axis. entwurf_send fallback (empty ENTWURF_DIR forces no-socket) → meta
     # mailbox enqueue → entwurf_inbox_read drain + lastReadAt receipt, for both a
     # replyable and an external sender, with ZERO Claude turns. Offline/hermetic
     # (deps: bash+node+python3).

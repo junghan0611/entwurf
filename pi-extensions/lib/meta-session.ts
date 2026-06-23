@@ -1097,10 +1097,10 @@ function piAgentDir(): string {
  * Where meta-records live. Under the pi agent dir (pi owns persistence), so an
  * isolated install / test that sets `PI_CODING_AGENT_DIR` gets isolated
  * meta-sessions too — symmetric with how pi's own sessions isolate. A direct
- * `PI_META_SESSIONS_DIR` override wins (used by tests / unusual deployments).
+ * `ENTWURF_META_SESSIONS_DIR` override wins (used by tests / unusual deployments).
  */
 export function defaultMetaSessionsDir(): string {
-	if (process.env.PI_META_SESSIONS_DIR) return path.resolve(expandTilde(process.env.PI_META_SESSIONS_DIR));
+	if (process.env.ENTWURF_META_SESSIONS_DIR) return path.resolve(expandTilde(process.env.ENTWURF_META_SESSIONS_DIR));
 	return path.join(piAgentDir(), "meta-sessions");
 }
 
@@ -1111,10 +1111,10 @@ export function defaultMetaSessionsDir(): string {
  * signal/body traffic; keeping them apart means a mailbox poke never risks a
  * record-dir readdir picking up a non-record file. The watched signal for a
  * session is `<this>/<gardenId>/inbox.signal`. Same runtime resolution as
- * meta-sessions (no config baking); `PI_META_MAILBOX_DIR` overrides for tests.
+ * meta-sessions (no config baking); `ENTWURF_META_MAILBOX_DIR` overrides for tests.
  */
 export function defaultMetaMailboxDir(): string {
-	if (process.env.PI_META_MAILBOX_DIR) return path.resolve(expandTilde(process.env.PI_META_MAILBOX_DIR));
+	if (process.env.ENTWURF_META_MAILBOX_DIR) return path.resolve(expandTilde(process.env.ENTWURF_META_MAILBOX_DIR));
 	return path.join(piAgentDir(), "meta-mailbox");
 }
 
@@ -1130,10 +1130,10 @@ export function defaultMetaMailboxDir(): string {
  * writes a marker keyed by that parent pid; the MCP reads the marker for its OWN
  * `process.ppid` and promotes itself to a replyable meta-session sender. This
  * uses process ancestry, NOT cwd inference (same repo / multiple sessions would
- * make cwd ambiguous). `PI_META_SENDERS_DIR` overrides for tests.
+ * make cwd ambiguous). `ENTWURF_META_SENDERS_DIR` overrides for tests.
  */
 export function defaultMetaSendersDir(): string {
-	if (process.env.PI_META_SENDERS_DIR) return path.resolve(expandTilde(process.env.PI_META_SENDERS_DIR));
+	if (process.env.ENTWURF_META_SENDERS_DIR) return path.resolve(expandTilde(process.env.ENTWURF_META_SENDERS_DIR));
 	return path.join(piAgentDir(), "meta-senders");
 }
 
@@ -1150,11 +1150,11 @@ export function defaultMetaSendersDir(): string {
  * process (start-key match); a terminated session leaves a marker whose owner is gone,
  * so it reads as inactive instead of a ghost active-receiver. UNLIKE the sender marker
  * (keyed by owner pid, a pid→garden hint), this is keyed by garden id because the
- * deliverability question starts from a target garden id. `PI_META_RECEIVERS_DIR`
+ * deliverability question starts from a target garden id. `ENTWURF_META_RECEIVERS_DIR`
  * overrides for tests.
  */
 export function defaultMetaReceiversDir(): string {
-	if (process.env.PI_META_RECEIVERS_DIR) return path.resolve(expandTilde(process.env.PI_META_RECEIVERS_DIR));
+	if (process.env.ENTWURF_META_RECEIVERS_DIR) return path.resolve(expandTilde(process.env.ENTWURF_META_RECEIVERS_DIR));
 	return path.join(piAgentDir(), "meta-receivers");
 }
 

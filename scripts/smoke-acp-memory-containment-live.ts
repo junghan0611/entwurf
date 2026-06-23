@@ -40,7 +40,7 @@
 //
 // Boundary notes (mirror S2b overlay-live, GPT-reviewed):
 //   - launch source MUST be the resolved package bin; a silent PATH fallback
-//     FAILS acceptance unless PI_SHELL_ACP_MEMORY_ALLOW_PATH_FALLBACK=1.
+//     FAILS acceptance unless ENTWURF_ACP_MEMORY_ALLOW_PATH_FALLBACK=1.
 //   - scratch cwd + overlay are fresh mkdtemp; the overlay's realDir is the
 //     operator's ~/.claude so live credentials pass through — entwurf
 //     neither copies nor proxies auth.
@@ -67,8 +67,8 @@ import {
 	DEFAULT_CLAUDE_TOOLS,
 } from "../pi-extensions/lib/acp/tool-surface.ts";
 
-const REQUESTED_MODEL_ID = process.env.PI_SHELL_ACP_MEMORY_MODEL ?? "claude-sonnet-4-6";
-const ALLOW_PATH_FALLBACK = process.env.PI_SHELL_ACP_MEMORY_ALLOW_PATH_FALLBACK === "1";
+const REQUESTED_MODEL_ID = process.env.ENTWURF_ACP_MEMORY_MODEL ?? "claude-sonnet-4-6";
+const ALLOW_PATH_FALLBACK = process.env.ENTWURF_ACP_MEMORY_ALLOW_PATH_FALLBACK === "1";
 const RAW_TAIL_CAP = 64 * 1024;
 
 function fail(msg: string): never {
@@ -157,7 +157,7 @@ function resolveLaunch(): { command: string; args: string[]; source: string; acc
 			fail(
 				`could not resolve @agentclientprotocol/claude-agent-acp package bin (${(err as Error).message}). ` +
 					"This is an acceptance failure — the dep pin / install is broken. Set " +
-					"PI_SHELL_ACP_MEMORY_ALLOW_PATH_FALLBACK=1 only for debug.",
+					"ENTWURF_ACP_MEMORY_ALLOW_PATH_FALLBACK=1 only for debug.",
 			);
 		}
 	}

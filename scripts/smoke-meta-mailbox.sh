@@ -9,7 +9,7 @@
 # by check-meta-session. THIS gate exercises the MCP HANDLER round-trip end to
 # end: the entwurf_send fallback branch, the sender-envelope serialization into
 # the mailbox body, and entwurf_inbox_read draining + stamping the receipt — with
-# ZERO Claude turns. A synthetic meta-record plus an EMPTY PI_ENTWURF_DIR forces
+# ZERO Claude turns. A synthetic meta-record plus an EMPTY ENTWURF_DIR forces
 # socket resolution to fail, so every send falls through to the mailbox; no
 # backend, no tokens.
 #
@@ -43,12 +43,12 @@ trap cleanup EXIT
 # that holds NO target socket, so the live-socket branch can never resolve for a
 # TARGET and the mailbox fallback is forced. (Case A later drops the SENDER's own
 # socket here so it is honestly replyable per SE-1 — that does not resolve a target.)
-export PI_META_SESSIONS_DIR="$TMP/meta-sessions"
-export PI_META_MAILBOX_DIR="$TMP/meta-mailbox"
-export PI_META_SENDERS_DIR="$TMP/meta-senders"   # empty → external case never reads a real sender marker
-export PI_META_RECEIVERS_DIR="$TMP/meta-receivers"   # SE-2: targets need an active receiver marker to be deliverable
-export PI_ENTWURF_DIR="$TMP/entwurf-control"
-mkdir -p "$PI_META_SESSIONS_DIR" "$PI_META_MAILBOX_DIR" "$PI_META_SENDERS_DIR" "$PI_META_RECEIVERS_DIR" "$PI_ENTWURF_DIR"
+export ENTWURF_META_SESSIONS_DIR="$TMP/meta-sessions"
+export ENTWURF_META_MAILBOX_DIR="$TMP/meta-mailbox"
+export ENTWURF_META_SENDERS_DIR="$TMP/meta-senders"   # empty → external case never reads a real sender marker
+export ENTWURF_META_RECEIVERS_DIR="$TMP/meta-receivers"   # SE-2: targets need an active receiver marker to be deliverable
+export ENTWURF_DIR="$TMP/entwurf-control"
+mkdir -p "$ENTWURF_META_SESSIONS_DIR" "$ENTWURF_META_MAILBOX_DIR" "$ENTWURF_META_SENDERS_DIR" "$ENTWURF_META_RECEIVERS_DIR" "$ENTWURF_DIR"
 
 # Three synthetic native-Claude meta-records: a/b get an ACTIVE receiver marker
 # (deliverable), c gets a record but NO marker (SE-2: record exists, receiver gone →
@@ -69,7 +69,7 @@ const mk = (nid, active) => {
 };
 console.log(JSON.stringify({ a: mk("n-mailbox-a", true), b: mk("n-mailbox-b", true), c: mk("n-mailbox-c", false), d: mk("n-mailbox-d", true) }));
 JS
-IDS="$(node --experimental-strip-types "$TMP/gen.mjs" "$LIB" "$PI_META_SESSIONS_DIR" "$PI_META_RECEIVERS_DIR" "$$")"
+IDS="$(node --experimental-strip-types "$TMP/gen.mjs" "$LIB" "$ENTWURF_META_SESSIONS_DIR" "$ENTWURF_META_RECEIVERS_DIR" "$$")"
 GARDEN_C="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).c)' "$IDS")"
 GARDEN_A="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).a)' "$IDS")"
 GARDEN_B="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).b)' "$IDS")"
@@ -106,11 +106,11 @@ readcall() { # id gardenId
 # mailbox. (buildStrictPiSenderEnvelope existsSync-probes the sender's canonical
 # socket — a plain file satisfies that gate for this hermetic smoke.)
 SENDER_PI_ID="20260606T120000-aaaaaa"
-: > "$PI_ENTWURF_DIR/$SENDER_PI_ID.sock"   # the sender's own control socket (bridge SOCKET_SUFFIX=.sock)
+: > "$ENTWURF_DIR/$SENDER_PI_ID.sock"   # the sender's own control socket (bridge SOCKET_SUFFIX=.sock)
 # Pin the fallback precondition: the TARGET has no socket, so the send cannot take
 # the live-socket branch and MUST fall through to the mailbox. (Without this the
 # sender-socket touch above could be misread as also satisfying the target.)
-[ ! -e "$PI_ENTWURF_DIR/$GARDEN_A.sock" ] && ok "target has no control socket (mailbox fallback forced)" || bad "target socket unexpectedly present — fallback not forced"
+[ ! -e "$ENTWURF_DIR/$GARDEN_A.sock" ] && ok "target has no control socket (mailbox fallback forced)" || bad "target socket unexpectedly present — fallback not forced"
 A_SEND=$(PI_AGENT_ID="entwurf/claude-sonnet-4-6" PI_SESSION_ID="$SENDER_PI_ID" \
   srv 10 "$(sendcall 10 "$GARDEN_A" "MAILBOX_SMOKE_A payload" true)")
 A_READ=$(srv 11 "$(readcall 11 "$GARDEN_A")")
@@ -128,10 +128,10 @@ echo "$A_READ2" | grep -qi 'empty' && ok "re-read is empty (drain + archive, no 
 # Receipt + archive on disk (servers have exited). 3D-4: the read receipt lives in
 # the mailbox state store (<mailbox>/<gardenId>/state.json), NOT record.delivery
 # (the v2 record carries no delivery).
-LRA="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d['lastReadAt'])" "$PI_META_MAILBOX_DIR/$GARDEN_A/state.json")"
+LRA="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d['lastReadAt'])" "$ENTWURF_META_MAILBOX_DIR/$GARDEN_A/state.json")"
 [ "$LRA" != "None" ] && [ -n "$LRA" ] && ok "mailbox-state lastReadAt persisted ($LRA)" || bad "mailbox-state lastReadAt not persisted (got '$LRA')"
-ls "$PI_META_MAILBOX_DIR/$GARDEN_A"/*.read >/dev/null 2>&1 && ok "message archived as .read" || bad "no .read archive in mailbox"
-if ls "$PI_META_MAILBOX_DIR/$GARDEN_A"/*.msg >/dev/null 2>&1; then bad "unread .msg still present after read"; else ok "no unread .msg remains after read"; fi
+ls "$ENTWURF_META_MAILBOX_DIR/$GARDEN_A"/*.read >/dev/null 2>&1 && ok "message archived as .read" || bad "no .read archive in mailbox"
+if ls "$ENTWURF_META_MAILBOX_DIR/$GARDEN_A"/*.msg >/dev/null 2>&1; then bad "unread .msg still present after read"; else ok "no unread .msg remains after read"; fi
 
 # ---------------------------------------------------------------------------
 # Case D — MULTI-MESSAGE BACKLOG: two separate sends before one read.
@@ -164,7 +164,7 @@ else
   bad "multi-message read order drifted (part1=$D_POS1 part2=$D_POS2)"
 fi
 echo "$D_READ" | grep -q 'lastReadAt=' && ok "multi-message read stamps a single read receipt" || bad "multi-message read did not report lastReadAt"
-D_READ_COUNT=$(find "$PI_META_MAILBOX_DIR/$GARDEN_D" -maxdepth 1 -name '*.read' | wc -l | tr -d ' ')
+D_READ_COUNT=$(find "$ENTWURF_META_MAILBOX_DIR/$GARDEN_D" -maxdepth 1 -name '*.read' | wc -l | tr -d ' ')
 [ "$D_READ_COUNT" = "2" ] && ok "multi-message read archives both bodies as .read" || bad "expected 2 .read archives, got $D_READ_COUNT"
 echo "$D_READ2" | grep -qi 'empty' && ok "multi-message re-read is empty" || bad "multi-message re-read was not empty: ${D_READ2:0:200}"
 
@@ -186,7 +186,7 @@ else
 fi
 # Reject is reject — it must not enqueue. The wants_reply=true guard returns
 # BEFORE the fallback, so the inbox (drained empty by id21) stays empty.
-if ls "$PI_META_MAILBOX_DIR/$GARDEN_B"/*.msg >/dev/null 2>&1; then
+if ls "$ENTWURF_META_MAILBOX_DIR/$GARDEN_B"/*.msg >/dev/null 2>&1; then
   bad "rejected send left an unread .msg (reject must have no enqueue side effect)"
 else
   ok "rejected send enqueued nothing (no side effect)"
@@ -204,7 +204,7 @@ if echo "$C_SEND" | grep -q '"isError":true' && echo "$C_SEND" | grep -q 'not co
 else
   bad "inactive-receiver send was not rejected: ${C_SEND:0:220}"
 fi
-if [ -e "$PI_META_MAILBOX_DIR/$GARDEN_C" ]; then
+if [ -e "$ENTWURF_META_MAILBOX_DIR/$GARDEN_C" ]; then
   bad "inactive-receiver reject mutated the mailbox (must enqueue nothing, poke nothing)"
 else
   ok "inactive-receiver reject left the mailbox untouched (no .msg, no signal poke)"

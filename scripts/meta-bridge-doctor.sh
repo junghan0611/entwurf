@@ -32,7 +32,7 @@ agent_dir() {
   else echo "$HOME/.pi/agent"; fi
 }
 AGENT="$(agent_dir)"
-META_SESSIONS="${PI_META_SESSIONS_DIR:-$AGENT/meta-sessions}"
+META_SESSIONS="${ENTWURF_META_SESSIONS_DIR:-$AGENT/meta-sessions}"
 HOOK_LOG="$AGENT/meta-bridge-hook.log"
 
 echo "meta-bridge doctor"
@@ -137,7 +137,7 @@ if command -v claude >/dev/null; then
 	if printf '%s\n' "$MCP_GET" | grep -q "Scope: User config" && printf '%s\n' "$MCP_GET" | grep -q "Status: .*Connected"; then
 		ok "entwurf-bridge reachable from a neutral cwd (/tmp) as USER-scope MCP — every native session can entwurf_inbox_read"
 	else
-		bad "entwurf-bridge is not USER-scope+Connected from /tmp — a native session outside the wired project cannot entwurf_inbox_read, so a woken receipt is never recorded. A PROJECT-scoped ~/.mcp.json is not enough; wire it USER scope: claude mcp add -s user entwurf-bridge -e PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code -- bash \"$REPO/mcp/entwurf-bridge/start.sh\""
+		bad "entwurf-bridge is not USER-scope+Connected from /tmp — a native session outside the wired project cannot entwurf_inbox_read, so a woken receipt is never recorded. A PROJECT-scoped ~/.mcp.json is not enough; wire it USER scope: claude mcp add -s user entwurf-bridge -e ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code -- bash \"$REPO/mcp/entwurf-bridge/start.sh\""
 	fi
 else
 	warn "claude not on PATH — cannot probe MCP reach"
@@ -305,10 +305,10 @@ fi
 # prefixRoots operator policy (5d-4b): the shared env SSOT both v2 surfaces read. Display
 # ONLY — the parser SSOT lives in entwurf-v2-surface.ts (proven by check-entwurf-v2-surface);
 # the doctor does NOT re-implement parsing. Unset ⇒ no prefix promotion (the safe default).
-if [ -z "${PI_ENTWURF_PREFIX_ROOTS:-}" ]; then
-  ok "PI_ENTWURF_PREFIX_ROOTS unset → no prefix auto-approve (preflight default trust)"
+if [ -z "${ENTWURF_PREFIX_ROOTS:-}" ]; then
+  ok "ENTWURF_PREFIX_ROOTS unset → no prefix auto-approve (preflight default trust)"
 else
-  ok "PI_ENTWURF_PREFIX_ROOTS set → operator prefix-approve roots: $PI_ENTWURF_PREFIX_ROOTS"
+  ok "ENTWURF_PREFIX_ROOTS set → operator prefix-approve roots: $ENTWURF_PREFIX_ROOTS"
 fi
 
 echo

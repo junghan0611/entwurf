@@ -33,7 +33,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 // ENTWURF_TARGETS_PATH at module load). Dynamic import after the env is set.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "psa-session-identity-"));
 process.env.PI_CODING_AGENT_DIR = tmp;
-process.env.PI_ENTWURF_TARGETS_PATH = path.join(REPO_ROOT, "pi", "entwurf-targets.json");
+process.env.ENTWURF_TARGETS_PATH = path.join(REPO_ROOT, "pi", "entwurf-targets.json");
 
 const {
 	isValidSessionId,

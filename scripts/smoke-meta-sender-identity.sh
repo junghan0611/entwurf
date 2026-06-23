@@ -7,7 +7,7 @@
 # marker keyed by the shared Claude parent pid; the MCP reads it and promotes the
 # send to a REPLYABLE meta-session addressed by garden-id.
 #
-# Here PI_META_SENDER_MARKER injects a specific marker per send so the round-trip
+# Here ENTWURF_META_SENDER_MARKER injects a specific marker per send so the round-trip
 # is deterministic (no real pids, no Claude turns). Verifies:
 #   entwurf_self: A's marker returns A's garden-id (not the old pi-env-only throw)
 #   A→B: B's inbox shows A's garden-id as a (meta-session, replyable) sender
@@ -35,12 +35,12 @@ TMP="$(mktemp -d -t psa-meta-sender.XXXXXX)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
 
-export PI_META_SESSIONS_DIR="$TMP/meta-sessions"
-export PI_META_MAILBOX_DIR="$TMP/meta-mailbox"
-export PI_META_SENDERS_DIR="$TMP/meta-senders"
-export PI_META_RECEIVERS_DIR="$TMP/meta-receivers"   # SE-2: targets need an active receiver marker to be deliverable
-export PI_ENTWURF_DIR="$TMP/entwurf-control"   # empty → no control socket → mailbox path
-mkdir -p "$PI_META_SESSIONS_DIR" "$PI_META_MAILBOX_DIR" "$PI_META_SENDERS_DIR" "$PI_META_RECEIVERS_DIR" "$PI_ENTWURF_DIR"
+export ENTWURF_META_SESSIONS_DIR="$TMP/meta-sessions"
+export ENTWURF_META_MAILBOX_DIR="$TMP/meta-mailbox"
+export ENTWURF_META_SENDERS_DIR="$TMP/meta-senders"
+export ENTWURF_META_RECEIVERS_DIR="$TMP/meta-receivers"   # SE-2: targets need an active receiver marker to be deliverable
+export ENTWURF_DIR="$TMP/entwurf-control"   # empty → no control socket → mailbox path
+mkdir -p "$ENTWURF_META_SESSIONS_DIR" "$ENTWURF_META_MAILBOX_DIR" "$ENTWURF_META_SENDERS_DIR" "$ENTWURF_META_RECEIVERS_DIR" "$ENTWURF_DIR"
 
 # Synthetic native meta-records. a/b get an ACTIVE receiver marker (owner = this bash
 # $$, alive for the whole smoke) so they are conversationally deliverable; c gets a
@@ -63,12 +63,12 @@ const mk = (tag, active) => {
 mk("a", true); mk("b", true); mk("c", false);
 console.log(JSON.stringify(out));
 JS
-META="$(node --experimental-strip-types "$TMP/gen.mjs" "$LIB" "$PI_META_SESSIONS_DIR" "$PI_META_RECEIVERS_DIR" "$$")"
+META="$(node --experimental-strip-types "$TMP/gen.mjs" "$LIB" "$ENTWURF_META_SESSIONS_DIR" "$ENTWURF_META_RECEIVERS_DIR" "$$")"
 GARDEN_A="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).a.gardenId)' "$META")"
 GARDEN_B="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).b.gardenId)' "$META")"
 GARDEN_C="$(node -e 'process.stdout.write(JSON.parse(process.argv[1]).c.gardenId)' "$META")"
 
-# Sender markers (what the hook would write). PI_META_SENDER_MARKER points the MCP
+# Sender markers (what the hook would write). ENTWURF_META_SENDER_MARKER points the MCP
 # at one. They carry an owner pid + start-key; readMetaSenderMarker re-checks the
 # live owner, so the marker must name a STILL-ALIVE process — use this smoke's own
 # pid ($$) and its real start-key (via the lib, so the format matches exactly).
@@ -97,14 +97,14 @@ readcall() { printf '{"jsonrpc":"2.0","id":%s,"method":"tools/call","params":{"n
 selfcall() { printf '{"jsonrpc":"2.0","id":%s,"method":"tools/call","params":{"name":"entwurf_self","arguments":{}}}' "$1"; }
 
 # entwurf_self must resolve the same trusted marker identity, not remain pi-env-only.
-SELF_A=$(PI_META_SENDER_MARKER="$MARKER_A" srv 9 "$(selfcall 9)")
+SELF_A=$(ENTWURF_META_SENDER_MARKER="$MARKER_A" srv 9 "$(selfcall 9)")
 if echo "$SELF_A" | grep -q '"isError":true'; then bad "entwurf_self with meta marker errored: ${SELF_A:0:200}"; else ok "entwurf_self accepts trusted meta-session identity (not pi-env-only)"; fi
 echo "$SELF_A" | grep -q "$GARDEN_A" && echo "$SELF_A" | grep -q 'meta-session/claude-code' && echo "$SELF_A" | grep -q 'replyable:' \
   && ok "entwurf_self returns garden-id + meta-session agentId + replyable flag" \
   || bad "entwurf_self meta envelope incomplete: ${SELF_A:0:220}"
 
 # A → B (A's marker injected). wants_reply=true allowed because meta-session is replyable.
-A_SEND=$(PI_META_SENDER_MARKER="$MARKER_A" srv 10 "$(sendcall 10 "$GARDEN_B" "SENDER_SMOKE_AtoB" true)")
+A_SEND=$(ENTWURF_META_SENDER_MARKER="$MARKER_A" srv 10 "$(sendcall 10 "$GARDEN_B" "SENDER_SMOKE_AtoB" true)")
 B_READ=$(srv 11 "$(readcall 11 "$GARDEN_B")")
 
 if echo "$A_SEND" | grep -q '"isError":true'; then bad "A→B send errored: ${A_SEND:0:200}"; else ok "marker promotes anonymous MCP send to a meta-session send (no isError)"; fi
@@ -115,14 +115,14 @@ echo "$B_READ" | grep -q 'meta-session/claude-code' && ok "sender agentId is met
 echo "$B_READ" | grep -q 'SENDER_SMOKE_AtoB' && ok "message body delivered" || bad "message body missing"
 
 # B → A (reply by garden-id, B's marker injected).
-B_REPLY=$(PI_META_SENDER_MARKER="$MARKER_B" srv 12 "$(sendcall 12 "$GARDEN_A" "SENDER_SMOKE_BtoA" false)")
+B_REPLY=$(ENTWURF_META_SENDER_MARKER="$MARKER_B" srv 12 "$(sendcall 12 "$GARDEN_A" "SENDER_SMOKE_BtoA" false)")
 A_READ=$(srv 13 "$(readcall 13 "$GARDEN_A")")
 
 if echo "$B_REPLY" | grep -q '"isError":true'; then bad "B→A reply errored: ${B_REPLY:0:200}"; else ok "reply by garden-id is accepted"; fi
 echo "$A_READ" | grep -q "$GARDEN_B" && ok "reply carries B's garden-id back to A (two-way closed)" || bad "reply sender garden-id missing: ${A_READ:0:200}"
 echo "$A_READ" | grep -q 'SENDER_SMOKE_BtoA' && ok "reply body delivered to A" || bad "reply body missing"
 
-# PPID production path: NO PI_META_SENDER_MARKER override. The hook and the MCP
+# PPID production path: NO ENTWURF_META_SENDER_MARKER override. The hook and the MCP
 # server run under ONE shared parent (this bash -c); start.sh `exec node` and the
 # hook's direct `node` both resolve process.ppid to that parent, so the MCP finds
 # the marker the hook wrote — exactly the production "hook ppid == MCP ppid"
@@ -149,7 +149,7 @@ GARDEN_PPID=$(node -e '
     if (!f.endsWith(".meta.json")) continue;
     const r=JSON.parse(fs.readFileSync(d+"/"+f,"utf8"));
     if (r.nativeSessionId==="n-ppid") { process.stdout.write(r.gardenId); break; }
-  }' "$PI_META_SESSIONS_DIR")
+  }' "$ENTWURF_META_SESSIONS_DIR")
 PPID_READ=$(srv 31 "$(readcall 31 "$GARDEN_B")")
 
 if echo "$PPID_SEND" | grep -q '"isError":true'; then bad "PPID-path send errored: ${PPID_SEND:0:200}"; else ok "PPID path: MCP finds the hook-written marker via shared process.ppid (no override)"; fi
@@ -164,7 +164,7 @@ fi
 # The record store is the authority, so it must NOT grant identity → reject.
 BAD_MARKER="$TMP/marker-unbacked.json"
 mkmarker "$BAD_MARKER" "20990101T000000-deadbe" "n-ghost" "$SK_SELF"
-STALE_REJECT=$(PI_TOOLS_BRIDGE_REQUIRE_META_SENDER=1 PI_META_SENDER_MARKER="$BAD_MARKER" srv 32 "$(sendcall 32 "$GARDEN_A" "stale" false)")
+STALE_REJECT=$(ENTWURF_BRIDGE_REQUIRE_META_SENDER=1 ENTWURF_META_SENDER_MARKER="$BAD_MARKER" srv 32 "$(sendcall 32 "$GARDEN_A" "stale" false)")
 if echo "$STALE_REJECT" | grep -q '"isError":true' && echo "$STALE_REJECT" | grep -q 'no authoritative sender identity'; then
   ok "marker with no backing meta-record is rejected under REQUIRE (store is authority)"
 else
@@ -176,7 +176,7 @@ fi
 # not. This stale marker must NOT grant a wrong identity → reject (the P0 fix).
 REUSE_MARKER="$TMP/marker-pidreuse.json"
 mkmarker "$REUSE_MARKER" "$GARDEN_A" "n-sender-a" "linux:1"  # bogus start-key for pid $$
-REUSE_REJECT=$(PI_TOOLS_BRIDGE_REQUIRE_META_SENDER=1 PI_META_SENDER_MARKER="$REUSE_MARKER" srv 33 "$(sendcall 33 "$GARDEN_B" "reuse" false)")
+REUSE_REJECT=$(ENTWURF_BRIDGE_REQUIRE_META_SENDER=1 ENTWURF_META_SENDER_MARKER="$REUSE_MARKER" srv 33 "$(sendcall 33 "$GARDEN_B" "reuse" false)")
 if echo "$REUSE_REJECT" | grep -q '"isError":true' && echo "$REUSE_REJECT" | grep -q 'no authoritative sender identity'; then
   ok "pid-reuse stale marker (start-key mismatch) is rejected — no wrong-identity accept"
 else
@@ -184,13 +184,13 @@ else
 fi
 
 # No marker + REQUIRE_META_SENDER=1 → refuse, and enqueue NOTHING.
-REJECT=$(PI_TOOLS_BRIDGE_REQUIRE_META_SENDER=1 srv 14 "$(sendcall 14 "$GARDEN_A" "anon-attempt" false)")
+REJECT=$(ENTWURF_BRIDGE_REQUIRE_META_SENDER=1 srv 14 "$(sendcall 14 "$GARDEN_A" "anon-attempt" false)")
 if echo "$REJECT" | grep -q '"isError":true' && echo "$REJECT" | grep -q 'no authoritative sender identity'; then
   ok "anonymous send refused under REQUIRE_META_SENDER (who-sent-it is mandatory)"
 else
   bad "anonymous send was not refused: ${REJECT:0:200}"
 fi
-if ls "$PI_META_MAILBOX_DIR/$GARDEN_A"/*.msg >/dev/null 2>&1; then
+if ls "$ENTWURF_META_MAILBOX_DIR/$GARDEN_A"/*.msg >/dev/null 2>&1; then
   bad "refused anonymous send still enqueued a .msg (must have no side effect)"
 else
   ok "refused anonymous send enqueued nothing"
@@ -199,13 +199,13 @@ fi
 # SE-2: a fully-replyable sender to a record-backed but INACTIVE receiver (C has a
 # record but no receiver marker) must reject and enqueue nothing — identity is honest,
 # deliverability is not. (Distinct surface from smoke-meta-mailbox's pi-sender path.)
-C_REJECT=$(PI_META_SENDER_MARKER="$MARKER_A" srv 40 "$(sendcall 40 "$GARDEN_C" "to-inactive" false)")
+C_REJECT=$(ENTWURF_META_SENDER_MARKER="$MARKER_A" srv 40 "$(sendcall 40 "$GARDEN_C" "to-inactive" false)")
 if echo "$C_REJECT" | grep -q '"isError":true' && echo "$C_REJECT" | grep -q 'not conversationally deliverable'; then
   ok "replyable sender → inactive receiver (record, no marker) is rejected (SE-2)"
 else
   bad "send to inactive receiver was not rejected: ${C_REJECT:0:220}"
 fi
-if [ -e "$PI_META_MAILBOX_DIR/$GARDEN_C" ]; then
+if [ -e "$ENTWURF_META_MAILBOX_DIR/$GARDEN_C" ]; then
   bad "inactive-receiver reject mutated the mailbox (must enqueue nothing)"
 else
   ok "inactive-receiver reject left the mailbox untouched"
@@ -219,7 +219,7 @@ fi
 # this guards against ("inactive → degrade to external-mcp") is one a source guard can miss.
 MARKER_C="$TMP/marker-c.json"
 mkmarker "$MARKER_C" "$GARDEN_C" "n-sender-c" "$SK_SELF"
-SELF_C=$(PI_META_SENDER_MARKER="$MARKER_C" srv 50 "$(selfcall 50)")
+SELF_C=$(ENTWURF_META_SENDER_MARKER="$MARKER_C" srv 50 "$(selfcall 50)")
 if echo "$SELF_C" | grep -q "$GARDEN_C" && echo "$SELF_C" | grep -q 'meta-session/claude-code'; then
   ok "2e-c: inactive-receiver sender keeps its meta identity (not degraded to external-mcp)"
 else
@@ -232,7 +232,7 @@ else
 fi
 # wants_reply=true from a non-replyable sender → refused (no reply address). Target A is
 # active, so the reject is about the SENDER's reply address, not the target's deliverability.
-C_WANTS=$(PI_META_SENDER_MARKER="$MARKER_C" srv 51 "$(sendcall 51 "$GARDEN_A" "from-inactive-wants" true)")
+C_WANTS=$(ENTWURF_META_SENDER_MARKER="$MARKER_C" srv 51 "$(sendcall 51 "$GARDEN_A" "from-inactive-wants" true)")
 if echo "$C_WANTS" | grep -q '"isError":true' && echo "$C_WANTS" | grep -q 'wants_reply=true requires a replyable'; then
   ok "2e-c: wants_reply=true from an inactive-receiver sender is refused (no reply address)"
 else
@@ -240,7 +240,7 @@ else
 fi
 # wants_reply=false from the SAME sender still delivers (target A is active) — a non-replyable
 # sender is not blocked from fire-and-forget; only the reply badge is withheld.
-C_FF=$(PI_META_SENDER_MARKER="$MARKER_C" srv 52 "$(sendcall 52 "$GARDEN_A" "from-inactive-ff" false)")
+C_FF=$(ENTWURF_META_SENDER_MARKER="$MARKER_C" srv 52 "$(sendcall 52 "$GARDEN_A" "from-inactive-ff" false)")
 if echo "$C_FF" | grep -q '"isError":true'; then
   bad "2e-c: wants_reply=false from inactive sender should still deliver: ${C_FF:0:220}"
 else

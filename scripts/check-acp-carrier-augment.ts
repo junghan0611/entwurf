@@ -40,8 +40,8 @@ const BRIDGE_MARK = "operating through entwurf";
 {
 	const file = join(tmp, "engraving.md");
 	writeFileSync(file, "backend={{backend}} mcp={{mcp_servers}}\n");
-	const prev = process.env.PI_SHELL_ACP_ENGRAVING_PATH;
-	process.env.PI_SHELL_ACP_ENGRAVING_PATH = file;
+	const prev = process.env.ENTWURF_ACP_ENGRAVING_PATH;
+	process.env.ENTWURF_ACP_ENGRAVING_PATH = file;
 	try {
 		const a = loadEngraving({ backend: "claude", mcpServerNames: ["zebra", "alpha"] });
 		const b = loadEngraving({ backend: "claude", mcpServerNames: ["zebra", "alpha"] });
@@ -59,8 +59,8 @@ const BRIDGE_MARK = "operating through entwurf";
 			"no mcp servers → (none registered)",
 		);
 	} finally {
-		if (prev === undefined) delete process.env.PI_SHELL_ACP_ENGRAVING_PATH;
-		else process.env.PI_SHELL_ACP_ENGRAVING_PATH = prev;
+		if (prev === undefined) delete process.env.ENTWURF_ACP_ENGRAVING_PATH;
+		else process.env.ENTWURF_ACP_ENGRAVING_PATH = prev;
 	}
 }
 
@@ -81,21 +81,21 @@ const BRIDGE_MARK = "operating through entwurf";
 
 	const whitespace = join(tmp, "blank.md");
 	writeFileSync(whitespace, "   \n\t\n");
-	const prev = process.env.PI_SHELL_ACP_ENGRAVING_PATH;
-	process.env.PI_SHELL_ACP_ENGRAVING_PATH = whitespace;
+	const prev = process.env.ENTWURF_ACP_ENGRAVING_PATH;
+	process.env.ENTWURF_ACP_ENGRAVING_PATH = whitespace;
 	try {
 		assert.equal(loadEngraving({ backend: "claude", mcpServerNames: [] }), null, "whitespace-only template → null");
 	} finally {
-		if (prev === undefined) delete process.env.PI_SHELL_ACP_ENGRAVING_PATH;
-		else process.env.PI_SHELL_ACP_ENGRAVING_PATH = prev;
+		if (prev === undefined) delete process.env.ENTWURF_ACP_ENGRAVING_PATH;
+		else process.env.ENTWURF_ACP_ENGRAVING_PATH = prev;
 	}
 
-	process.env.PI_SHELL_ACP_ENGRAVING_PATH = join(tmp, "does-not-exist.md");
+	process.env.ENTWURF_ACP_ENGRAVING_PATH = join(tmp, "does-not-exist.md");
 	try {
 		assert.equal(loadEngraving({ backend: "claude", mcpServerNames: [] }), null, "missing/unreadable template → null");
 	} finally {
-		if (prev === undefined) delete process.env.PI_SHELL_ACP_ENGRAVING_PATH;
-		else process.env.PI_SHELL_ACP_ENGRAVING_PATH = prev;
+		if (prev === undefined) delete process.env.ENTWURF_ACP_ENGRAVING_PATH;
+		else process.env.ENTWURF_ACP_ENGRAVING_PATH = prev;
 	}
 
 	// No override → the shipped default prompts/engraving.md is NON-EMPTY (the v1

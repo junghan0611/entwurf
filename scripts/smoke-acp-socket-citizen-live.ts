@@ -20,7 +20,7 @@
 // LIVE-only (spawns a real pi + opens a real socket) — kept OUT of `pnpm check`;
 // honest skip when LIVE!=1 (skip = CI safety, NOT an acceptance PASS).
 //   LIVE=1 ./run.sh smoke-acp-socket-citizen-live
-//   override model via PI_SHELL_ACP_S1_MODEL (default claude-opus-4-8).
+//   override model via ENTWURF_S1_MODEL (default claude-opus-4-8).
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -32,7 +32,7 @@ import { generateSessionId } from "../pi-extensions/lib/entwurf-core.ts";
 import { scanSocketProbes } from "../pi-extensions/lib/socket-discovery.ts";
 
 const ACP_PROVIDER = "entwurf";
-const ACP_MODEL = process.env.PI_SHELL_ACP_S1_MODEL?.trim() || "claude-opus-4-8";
+const ACP_MODEL = process.env.ENTWURF_S1_MODEL?.trim() || "claude-opus-4-8";
 
 const REAL_CONTROL_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
 const SOCKET_SUFFIX = ".sock";

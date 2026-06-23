@@ -71,10 +71,10 @@ trap cleanup EXIT
 tmux kill-session -t "$SESSION" 2>/dev/null || true
 : > "$DRIVER_LOG"
 
-# PI_SHELL_ACP_DEBUG=1 on; stderr appended to debug log so the recorded pane
+# ENTWURF_DEBUG=1 on; stderr appended to debug log so the recorded pane
 # stays clean. --entwurf-control gives the driven session a control socket so
 # entwurf siblings can address it if a follow-up demo needs it.
-COMMON_ENV="PI_SHELL_ACP_DEBUG=1 PI_EMACS_AGENT_SOCKET=$EMACS_SOCKET"
+COMMON_ENV="ENTWURF_DEBUG=1 PI_EMACS_AGENT_SOCKET=$EMACS_SOCKET"
 COMMON_ARGS="--entwurf-control --emacs-agent-socket $EMACS_SOCKET"
 new_session_id() { bash "$REPO_ROOT/run.sh" new-session-id; }
 

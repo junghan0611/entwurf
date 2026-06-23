@@ -55,7 +55,7 @@ let cached: CachedSource | null = null;
 
 /** Point the loader at an alternate engraving file (A/B); bypasses the cache. */
 function resolveEngravingPath(): string {
-	const envPath = process.env.PI_SHELL_ACP_ENGRAVING_PATH?.trim();
+	const envPath = process.env.ENTWURF_ACP_ENGRAVING_PATH?.trim();
 	return envPath ? resolve(envPath) : DEFAULT_ENGRAVING_PATH;
 }
 
@@ -82,7 +82,7 @@ function interpolate(template: string, params: EngravingParams): string {
 
 /**
  * The rendered engraving carrier, or null when an ENV-OVERRIDE engraving file
- * (`PI_SHELL_ACP_ENGRAVING_PATH`) is empty, whitespace-only, missing, or
+ * (`ENTWURF_ACP_ENGRAVING_PATH`) is empty, whitespace-only, missing, or
  * unreadable — that null is the operator opt-out. The SHIPPED default, by
  * contrast, IS the auto-memory containment lever (its non-empty carrier replaces
  * the claude_code preset, stripping the auto-memory advertisement) and MUST be
@@ -114,7 +114,7 @@ export function loadEngraving(params: EngravingParams): string | null {
 			throw new Error(
 				`entwurf: shipped engraving carrier at ${filePath} is empty — it is the auto-memory ` +
 					`containment lever; refusing to proceed with the carrier strip silently off. ` +
-					`(opt out via an empty PI_SHELL_ACP_ENGRAVING_PATH file instead)`,
+					`(opt out via an empty ENTWURF_ACP_ENGRAVING_PATH file instead)`,
 			);
 		}
 		return null;
