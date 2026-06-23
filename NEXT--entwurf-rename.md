@@ -8,7 +8,7 @@
 > - **rename이 먼저. npm publish는 최후행.** 순서 = **코드 rename(S1~S3) → repo/dir rename(GLG) → npm publish(GLG, 맨 마지막)**(§6 시퀀스). publish는 rename 트리거가 아니다. package.json `name` *문자열*은 S1 소스 치환 대상이지만 *registry publish*는 모든 rename 완료 후 별도. 설치 동기화 cut-choreography **폐기** — 쓰는 사람은 전문가, 내 방향 따라오거나 안 쓰면 그만. 범용 도구가 아니다.
 > - **🔪 이건 호환성 작업이 아니라 절단(cutover)다 [GLG 핵심 교리].** 이전 세션·이전 이름과 **결별**한다 — 어떤 *런타임* 호환성도 두지 않는다. dual-read/alias/legacy-accept 0. 설치자는 새로 간다(호환 아니라 새 시작). state(meta-bridge·ACP cache)는 **이장(one-shot cutover)**이지 dual-read가 아님 — old를 new로 한 번 옮기고 런타임은 이후 new만 안다. **이건 정체성의 전환** — pi를 4번째 하네스로 내린다(ACP·소켓 대화하는 특별한 adapter지만), **entwurf가 본질**. 약하게 조이면 버그가 아니라 *정체성*이 샌다.
 >
-> **▶ 다음 세션 진입점 (실제 작업):** self-review + **GPT 2라운드 = "GO for S1 dry-run 진입"**, RED/Amber 전부 반영, **§6 GLG 결정 4건 확정 완료**(§9). 진행: ① fresh rg ✅ → ② S1 dry-run GREEN ✅ → ③ GPT 4R live S1 GO ✅ → ④ GLG 비준 ✅ → ⑤ **live S1 실행 완료 ✅ — `07c2592`(code identity) + `1e89c13`(S1-doc, live docs+asset)**. 남은: ⑥ **GLG 무인 후행**(state 이장 §6-④/⑤ · repo/dir rename §6-③ · npm §6-① — §5 quiesce 가드) + **S2(MCP bridge)·S3(env namespace) 후속 단계**(각각 별도 dry-run/검수). *S1 = 정체성 전환의 본질 완료.*
+> **▶ 다음 세션 진입점 (실제 작업):** ① fresh rg ✅ → ② S1 dry-run GREEN ✅ → ③ GPT 4R live S1 GO ✅ → ④ GLG 비준 ✅ → ⑤ **live S1 완료 ✅ — `07c2592`(code) + `1e89c13`(S1-doc)** → ⑥ **live S2 완료 ✅ — `e795a08`(MCP bridge: pi-tools-bridge→entwurf-bridge, GPT 2R Amber→GO, GLG 비준)**. 남은: ⑦ **S3(env namespace)** 별도 dry-run/검수 + ⑧ **GLG 무인 후행**(state 이장 §6-④/⑤ · repo/dir rename §6-③ · npm §6-① — §5 quiesce 가드). *S1·S2 = 정체성+브리지 전환 완료, S3만 남음.*
 
 ---
 
@@ -160,8 +160,12 @@
 - **★ S1 commit GO ≠ "사용상 무문제" GO (분리):** S1/S1-doc commit이 green이어도 *usage-ok*는 아니다. usage-ok 선언 = ⑥ meta-bridge state cutover + ACP cache(우선순위 낮음, persisted OFF) + **no-token doctor/loader 확인**까지 끝난 뒤. 그 전엔 "코드 cutover 완료"지 "사용 가능"이 아니다.
 - **★ quiesce 운영 가드 (GLG — 누가 언제 퇴근하나):** 단계별 위험이 다르다. **(1) S1 code + S1-doc commit = 에이전트 살아있는 채로 가능**(git 파일 작업뿐, live 세션 무관 — 실행 세션만 작업). **(2) repo/dir physical rename = 모든 세션의 cwd를 stale로 깸 → 진짜 quiesce 지점.** 이 순간 *실행 세션(이 ACP Claude) 자신도 cwd가 `pi-shell-acp`라 함께 깨지므로* "너희 빼고"가 아니라 **나 포함 전 세션 퇴근 → 무인 상태에서 GLG가 state 이장(backup)+dir rename+npm 수행**. (meta-bridge state는 doctor/uninstall 동시 실행만 피하면 backup+atomic으로 안전; ACP cache는 persisted OFF라 거의 무관.) **(3) 재기동 후 no-token doctor/loader로 usage-ok.** 즉 물리 단계는 무인.
 
-### ▶ S2 — MCP bridge
-`mcp/pi-tools-bridge`→`mcp/entwurf-bridge`(dir+서버명) + tool id `mcp__pi-tools-bridge__*`→`mcp__entwurf-bridge__*` 전수 + install/remove/prune settings + `check-pi-tools-bridge-boot`. (consumer mcpServers·노트 C 경로 = 담당자.)
+### ▶ S2 — MCP bridge ✅ 완료 (`e795a08`, 2026-06-23)
+`mcp/pi-tools-bridge`→`mcp/entwurf-bridge`(dir+서버명) + tool id `mcp__pi-tools-bridge__*`→`mcp__entwurf-bridge__*` 전수 + install/remove/prune settings + 게이트 rename `check-pi-tools-bridge-boot`→`check-entwurf-bridge-boot`. (consumer mcpServers·노트 C 경로 = 담당자.)
+- **실행:** 39 files 167/158, dir 3 + gate 1 rename. content-driven `git grep -Il`(39f) → perl kebab `s/pi-tools-bridge/entwurf-bridge/g` + perl snake `s/pi_tools_bridge/entwurf_bridge/g`(함수명 5곳, kebab가 놓친 것) → dir/gate git mv → biome(reflow 0).
+- **cutover prune (GLG 교리 — stale 설정으로 애매하게 동작 0):** installer one-shot으로 옛 `pi-tools-bridge` 엔트리 제거 — run.sh `LEGACY_BUNDLED` reason-map + remove 튜플 + `meta-bridge-install.sh` USER-scope `claude mcp remove pi-tools-bridge -s user`. 남은 `pi-tools-bridge` literal 5줄 = **전부 one-shot migration prune 대상**(runtime alias 0). residual whitelist 이 5줄만.
+- **S3 env `PI_TOOLS_BRIDGE_`(SCREAMING) 의도 보존** — case-sensitivity로 자동 분리.
+- **게이트 GREEN:** tsc·lint·check-entwurf-bridge-boot 14·check-entwurf-v2-surface 42·check-acp-config·check-acp-session-reuse·smoke-meta-keyset-guard·smoke-meta-install-state + pre-commit check-pack(182 files). GPT(`20260623T104220-35aa15`) 2R Amber→GO(수동 prune smoke 포함).
 
 ### ▶ S3 — env namespace
 taxonomy(§3)대로 `PI_SHELL_ACP_*` 20개 의미별 분해 + `PI_TOOLS_BRIDGE_*`(3)→`ENTWURF_BRIDGE_*` + `PI_ENTWURF_*`(5)→`ENTWURF_*` + `PI_META_*`(5)→`ENTWURF_META_*` + env명 assert 게이트. **영구 alias 금지**, installer one-shot migration만.
