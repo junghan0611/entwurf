@@ -141,6 +141,15 @@ json.dump(d, open(p,'w'), indent=2)
 PY
 ERR_ARRAY="$(py check 2>&1 >/dev/null || true)"
 if printf '%s' "$ERR_ARRAY" | grep -qi 'allow'; then ok "survival check fails when permissions.allow is array-replaced (pi items dropped)"; else bad "survival check did not catch dropped permissions.allow items: $ERR_ARRAY"; fi
+cp "$SURVIVAL_SNAP" "$CLAUDE_CONFIG_DIR/settings.json"  # back to clean keyset before the legacy-reinject case
+python3 - <<'PY'
+import json, os
+p=os.environ['CLAUDE_CONFIG_DIR'] + '/settings.json'
+d=json.load(open(p)); d['permissions']['allow'].append('mcp__pi-tools-bridge__*')  # someone re-injects the pruned legacy item
+json.dump(d, open(p,'w'), indent=2)
+PY
+ERR_LEGACY="$(py check 2>&1 >/dev/null || true)"
+if printf '%s' "$ERR_LEGACY" | grep -qi 'legacy'; then ok "survival check fails when a pruned legacy allow item is re-injected"; else bad "survival check did not catch re-injected legacy allow item: $ERR_LEGACY"; fi
 cp "$SURVIVAL_SNAP" "$CLAUDE_CONFIG_DIR/settings.json"  # exact restore so later cases see the clean installed keyset
 if py check >/dev/null 2>&1; then ok "survival check passes again after restoring the keyset"; else bad "keyset not restored after adversarial survival cases"; fi
 

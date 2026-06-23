@@ -500,6 +500,10 @@ def check(repo: Path, asm: Path) -> None:
             missing = [item for item in desired if item not in value]
             if missing:
                 failures.append(f"settings permissions.{label} missing managed item(s): {', '.join(missing)}")
+            if path_ == ["permissions", "allow"]:
+                legacy = [item for item in LEGACY_PERMISSION_ALLOW if item in value]
+                if legacy:
+                    failures.append(f"settings permissions.allow carries pruned legacy item(s): {', '.join(legacy)} (re-inject — re-run install-meta-bridge to prune)")
     existed, value = get_nested(root, ["mcpServers", "entwurf-bridge"])
     if not existed or value != desired_mcp(repo):
         failures.append("user MCP entwurf-bridge missing/drifted in ~/.claude.json")
