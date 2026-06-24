@@ -32,6 +32,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { terminateChild } from "./lib/acp-child-cleanup.ts";
 
 const REQUESTED_MODEL_ID = process.env.ENTWURF_ACP_RAW_TURN_MODEL ?? "claude-sonnet-4-6";
 const ALLOW_PATH_FALLBACK = process.env.ENTWURF_ACP_RAW_TURN_ALLOW_PATH_FALLBACK === "1";
@@ -53,32 +54,6 @@ function withTimeout<T>(label: string, p: Promise<T>, ms: number): Promise<T> {
 			throw new Error(`${label} timed out after ${ms}ms`);
 		}),
 	]);
-}
-
-// SIGTERM then SIGKILL-after-grace, awaiting exit — the S1 smoke pattern.
-async function terminateChild(
-	child: ChildProcessByStdio<Writable, Readable, Readable>,
-	graceMs = 2_000,
-): Promise<void> {
-	if (child.exitCode !== null || child.signalCode !== null) return;
-	const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
-	try {
-		child.kill("SIGTERM");
-	} catch {
-		return;
-	}
-	const raced = await Promise.race([
-		exited.then(() => "exited" as const),
-		sleep(graceMs).then(() => "timeout" as const),
-	]);
-	if (raced === "timeout") {
-		try {
-			child.kill("SIGKILL");
-		} catch {
-			// already gone
-		}
-		await exited;
-	}
 }
 
 if (process.env.LIVE !== "1") {

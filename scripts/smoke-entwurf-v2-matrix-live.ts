@@ -60,6 +60,7 @@ import {
 	upsertMetaSession,
 	writeMetaReceiverMarker,
 } from "../pi-extensions/lib/meta-session.ts";
+import { terminateChild } from "./lib/acp-child-cleanup.ts";
 
 // pi's control socket lives at the canonical dir keyed by session id — pi owns this path, so
 // C1 must point the decider's controlSocketDir at the REAL dir (a fresh gid avoids collision).
@@ -109,32 +110,6 @@ async function waitForSocket(sockPath: string, timeoutMs: number): Promise<boole
 		await sleep(POLL_MS);
 	}
 	return false;
-}
-
-// Tear a resident child down for real (B2): SIGTERM, wait for the exit, SIGKILL backstop if it
-// ignores the term, then wait again. The caller nulls the handle ONLY after this resolves — a
-// bare `kill("SIGTERM")` returns before the process is gone, so a slow/term-ignoring pi could
-// survive while the finally's backstop is skipped.
-async function terminateChild(child: ChildProcess, graceMs = 2_000): Promise<void> {
-	if (child.exitCode !== null || child.signalCode !== null) return;
-	const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
-	try {
-		child.kill("SIGTERM");
-	} catch {
-		return;
-	}
-	const raced = await Promise.race([
-		exited.then(() => "exited" as const),
-		sleep(graceMs).then(() => "timeout" as const),
-	]);
-	if (raced === "timeout") {
-		try {
-			child.kill("SIGKILL");
-		} catch {
-			// already gone
-		}
-		await exited;
-	}
 }
 
 function smokeSender(gardenId: string, cwd: string): SenderEnvelope {

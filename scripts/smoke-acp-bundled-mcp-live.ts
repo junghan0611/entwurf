@@ -43,6 +43,7 @@ import * as readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { fetchControlSocketRuntimeInfo, formatRuntimeModel } from "../pi-extensions/lib/entwurf-control-rpc.ts";
 import { generateSessionId } from "../pi-extensions/lib/entwurf-core.ts";
+import { terminateChild } from "./lib/acp-child-cleanup.ts";
 
 const ACP_PROVIDER = "entwurf";
 const ACP_MODEL = process.env.ENTWURF_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-4-6";
@@ -86,28 +87,6 @@ async function waitForGone(sockPath: string, timeoutMs: number): Promise<boolean
 		await sleep(POLL_MS);
 	}
 	return !existsSync(sockPath);
-}
-
-async function terminateChild(child: ChildProcess, graceMs = 2_000): Promise<void> {
-	if (child.exitCode !== null || child.signalCode !== null) return;
-	const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
-	try {
-		child.kill("SIGTERM");
-	} catch {
-		return;
-	}
-	const raced = await Promise.race([
-		exited.then(() => "exited" as const),
-		sleep(graceMs).then(() => "timeout" as const),
-	]);
-	if (raced === "timeout") {
-		try {
-			child.kill("SIGKILL");
-		} catch {
-			// already gone
-		}
-		await exited;
-	}
 }
 
 interface TurnCapture {
