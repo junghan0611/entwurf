@@ -41,7 +41,8 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable, Writable } from "node:stream";
-import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { connectAcpClient } from "../pi-extensions/lib/acp/acp-client.ts";
 import {
 	CLAUDE_REAL_CONFIG_DIR,
 	claudeLaunchEnvDefaults,
@@ -175,30 +176,27 @@ async function main(): Promise<void> {
 	let unexpectedPermission = 0;
 	let unexpectedFileOp = 0;
 
-	const connection = new ClientSideConnection(
-		() => ({
-			sessionUpdate: async (notification: any) => {
-				const u = notification?.update;
-				if (u?.sessionUpdate === "agent_message_chunk") {
-					const t = u?.content?.text;
-					if (typeof t === "string") collectedText += t;
-				}
-			},
-			requestPermission: async (): Promise<any> => {
-				unexpectedPermission++;
-				return { outcome: { outcome: "cancelled" } };
-			},
-			readTextFile: async (): Promise<any> => {
-				unexpectedFileOp++;
-				throw new Error("unexpected readTextFile in overlay OK turn");
-			},
-			writeTextFile: async (): Promise<any> => {
-				unexpectedFileOp++;
-				throw new Error("unexpected writeTextFile in overlay OK turn");
-			},
-		}),
-		stream as any,
-	);
+	const connection = connectAcpClient(stream as any, {
+		sessionUpdate: async (notification: any) => {
+			const u = notification?.update;
+			if (u?.sessionUpdate === "agent_message_chunk") {
+				const t = u?.content?.text;
+				if (typeof t === "string") collectedText += t;
+			}
+		},
+		requestPermission: async (): Promise<any> => {
+			unexpectedPermission++;
+			return { outcome: { outcome: "cancelled" } };
+		},
+		readTextFile: async (): Promise<any> => {
+			unexpectedFileOp++;
+			throw new Error("unexpected readTextFile in overlay OK turn");
+		},
+		writeTextFile: async (): Promise<any> => {
+			unexpectedFileOp++;
+			throw new Error("unexpected writeTextFile in overlay OK turn");
+		},
+	});
 
 	let failure: Error | null = null;
 	try {
@@ -299,6 +297,7 @@ async function main(): Promise<void> {
 		console.error(`[smoke-acp-overlay-live] stderr tail:\n${stderrTail.slice(-20).join("")}`);
 		console.error(`[smoke-acp-overlay-live] raw NDJSON tail:\n${rawBytes.slice(-2048)}`);
 	} finally {
+		connection.close?.();
 		await terminateChild(child);
 		for (const dir of [scratch, overlayDir]) {
 			try {

@@ -31,7 +31,8 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable, Writable } from "node:stream";
-import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { connectAcpClient } from "../pi-extensions/lib/acp/acp-client.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
 
 const REQUESTED_MODEL_ID = process.env.ENTWURF_ACP_RAW_TURN_MODEL ?? "claude-sonnet-4-6";
@@ -133,33 +134,30 @@ async function main(): Promise<void> {
 	let unexpectedPermission = 0;
 	let unexpectedFileOp = 0;
 
-	const connection = new ClientSideConnection(
-		() => ({
-			// agent text chunks land here as sessionUpdate notifications.
-			sessionUpdate: async (notification: any) => {
-				const u = notification?.update;
-				if (u?.sessionUpdate === "agent_message_chunk") {
-					const t = u?.content?.text;
-					if (typeof t === "string") collectedText += t;
-				}
-			},
-			// A raw "say OK" turn should need no tools / files. Anything else is
-			// unexpected — refuse and count it, then fail at the end.
-			requestPermission: async (): Promise<any> => {
-				unexpectedPermission++;
-				return { outcome: { outcome: "cancelled" } };
-			},
-			readTextFile: async (): Promise<any> => {
-				unexpectedFileOp++;
-				throw new Error("unexpected readTextFile in raw OK turn");
-			},
-			writeTextFile: async (): Promise<any> => {
-				unexpectedFileOp++;
-				throw new Error("unexpected writeTextFile in raw OK turn");
-			},
-		}),
-		stream as any,
-	);
+	const connection = connectAcpClient(stream as any, {
+		// agent text chunks land here as sessionUpdate notifications.
+		sessionUpdate: async (notification: any) => {
+			const u = notification?.update;
+			if (u?.sessionUpdate === "agent_message_chunk") {
+				const t = u?.content?.text;
+				if (typeof t === "string") collectedText += t;
+			}
+		},
+		// A raw "say OK" turn should need no tools / files. Anything else is
+		// unexpected — refuse and count it, then fail at the end.
+		requestPermission: async (): Promise<any> => {
+			unexpectedPermission++;
+			return { outcome: { outcome: "cancelled" } };
+		},
+		readTextFile: async (): Promise<any> => {
+			unexpectedFileOp++;
+			throw new Error("unexpected readTextFile in raw OK turn");
+		},
+		writeTextFile: async (): Promise<any> => {
+			unexpectedFileOp++;
+			throw new Error("unexpected writeTextFile in raw OK turn");
+		},
+	});
 
 	let failure: Error | null = null;
 	try {
@@ -248,6 +246,7 @@ async function main(): Promise<void> {
 		console.error(`[smoke-acp-raw-turn-live] stderr tail:\n${stderrTail.slice(-20).join("")}`);
 		console.error(`[smoke-acp-raw-turn-live] raw NDJSON tail:\n${rawBytes.slice(-2048)}`);
 	} finally {
+		connection.close?.();
 		await terminateChild(child);
 		try {
 			await rm(scratch, { recursive: true, force: true });

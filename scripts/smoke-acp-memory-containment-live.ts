@@ -53,7 +53,8 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable, Writable } from "node:stream";
-import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { connectAcpClient } from "../pi-extensions/lib/acp/acp-client.ts";
 import { loadEngraving } from "../pi-extensions/lib/acp/engraving.ts";
 import {
 	CLAUDE_REAL_CONFIG_DIR,
@@ -204,52 +205,49 @@ async function main(): Promise<void> {
 	let grantedPermissions = 0;
 	const delegatedWrites: string[] = [];
 
-	const connection = new ClientSideConnection(
-		() => ({
-			sessionUpdate: async (notification: any) => {
-				const u = notification?.update;
-				if (u?.sessionUpdate === "agent_message_chunk") {
-					const t = u?.content?.text;
-					if (typeof t === "string") collectedText += t;
-				}
-			},
-			// GRANT (never cancel): denying would make containment trivially true via
-			// permission, not the lever. Pick an allow-ish option so nothing the
-			// model attempts is artificially blocked.
-			requestPermission: async (req: any): Promise<any> => {
-				grantedPermissions++;
-				const opts: any[] = req?.options ?? req?.params?.options ?? [];
-				const allow = opts.find((o) => /allow/i.test(String(o?.kind ?? o?.name ?? ""))) ?? opts[0];
-				if (allow?.optionId != null) return { outcome: { outcome: "selected", optionId: allow.optionId } };
-				return { outcome: { outcome: "selected" } };
-			},
-			readTextFile: async (req: any): Promise<any> => {
-				const p = req?.path ?? req?.params?.path;
+	const connection = connectAcpClient(stream as any, {
+		sessionUpdate: async (notification: any) => {
+			const u = notification?.update;
+			if (u?.sessionUpdate === "agent_message_chunk") {
+				const t = u?.content?.text;
+				if (typeof t === "string") collectedText += t;
+			}
+		},
+		// GRANT (never cancel): denying would make containment trivially true via
+		// permission, not the lever. Pick an allow-ish option so nothing the
+		// model attempts is artificially blocked.
+		requestPermission: async (req: any): Promise<any> => {
+			grantedPermissions++;
+			const opts: any[] = req?.options ?? req?.params?.options ?? [];
+			const allow = opts.find((o) => /allow/i.test(String(o?.kind ?? o?.name ?? ""))) ?? opts[0];
+			if (allow?.optionId != null) return { outcome: { outcome: "selected", optionId: allow.optionId } };
+			return { outcome: { outcome: "selected" } };
+		},
+		readTextFile: async (req: any): Promise<any> => {
+			const p = req?.path ?? req?.params?.path;
+			try {
+				return { content: typeof p === "string" ? await readFile(p, "utf8") : "" };
+			} catch {
+				return { content: "" };
+			}
+		},
+		// PERFORM the delegated write so a delegated memory leak actually lands on
+		// disk and is caught by the post-turn scan.
+		writeTextFile: async (req: any): Promise<any> => {
+			const p = req?.path ?? req?.params?.path;
+			const content = req?.content ?? req?.params?.content ?? "";
+			if (typeof p === "string") {
+				delegatedWrites.push(p);
 				try {
-					return { content: typeof p === "string" ? await readFile(p, "utf8") : "" };
+					await mkdir(dirname(p), { recursive: true });
+					await writeFile(p, content);
 				} catch {
-					return { content: "" };
+					// best-effort; the filesystem scan is the authority
 				}
-			},
-			// PERFORM the delegated write so a delegated memory leak actually lands on
-			// disk and is caught by the post-turn scan.
-			writeTextFile: async (req: any): Promise<any> => {
-				const p = req?.path ?? req?.params?.path;
-				const content = req?.content ?? req?.params?.content ?? "";
-				if (typeof p === "string") {
-					delegatedWrites.push(p);
-					try {
-						await mkdir(dirname(p), { recursive: true });
-						await writeFile(p, content);
-					} catch {
-						// best-effort; the filesystem scan is the authority
-					}
-				}
-				return {};
-			},
-		}),
-		stream as any,
-	);
+			}
+			return {};
+		},
+	});
 
 	let failure: Error | null = null;
 	try {
@@ -374,6 +372,7 @@ async function main(): Promise<void> {
 		console.error(`[smoke-acp-memory-containment-live] stderr tail:\n${stderrTail.slice(-20).join("")}`);
 		console.error(`[smoke-acp-memory-containment-live] raw NDJSON tail:\n${rawBytes.slice(-2048)}`);
 	} finally {
+		connection.close?.();
 		await terminateChild(child);
 		for (const dir of [scratch, overlayDir]) {
 			try {

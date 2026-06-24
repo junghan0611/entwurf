@@ -868,8 +868,8 @@ smoke_acp_raw_turn_live() {
   # S2a-2 acceptance smoke (ACP plugin on v2) — OUT of pnpm check, needs LIVE=1.
   # Drives ONE real ACP turn through the pinned Claude adapter: spawns
   # claude-agent-acp from its resolved package bin, speaks ACP over stdio NDJSON
-  # (ndJsonStream + ClientSideConnection), runs initialize -> newSession ->
-  # (sonnet) setSessionModel -> prompt("say OK"), and asserts a live "OK" reply
+  # (ndJsonStream + the connectAcpClient adapter), runs initialize -> newSession ->
+  # (sonnet) setSessionConfigOption(model) -> prompt("say OK"), and asserts a live "OK" reply
   # plus captured raw NDJSON bytes. NO provider/overlay/streamSimple/_meta — the
   # raw backend pipe only. Launch source must be the package bin (PATH fallback
   # fails acceptance unless ENTWURF_ACP_RAW_TURN_ALLOW_PATH_FALLBACK=1, debug).

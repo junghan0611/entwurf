@@ -29,7 +29,7 @@
 //     base) is prepended to the `new` prompt ONLY, on the wire, so it never enters
 //     the reuse-compat signature.
 //
-// CRITICAL — mutable activePromptHandler routing: a retained ClientSideConnection
+// CRITICAL — mutable activePromptHandler routing: a retained ACP connection
 // outlives the turn, so its sessionUpdate/requestPermission callbacks must NOT
 // close over the first turn's stream state (turn 2's notifications would leak into
 // turn 1's finished stream). The callbacks delegate to a MUTABLE
@@ -45,9 +45,10 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { Readable, Writable } from "node:stream";
-import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
+import { ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import type { Api, AssistantMessage, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { type AcpClientHandlers, type AcpConnectionLike, connectAcpClient } from "./acp-client.js";
 import { prependNewPromptAugment } from "./augment.js";
 import {
 	enrichMcpServersWithEnvelope,
@@ -55,7 +56,7 @@ import {
 	type ResolvedAcpConfig,
 	resolveProviderConfig,
 } from "./config.js";
-import { type AcpTextBlock, buildAcpPrompt } from "./context.js";
+import { buildAcpPrompt } from "./context.js";
 import { loadEngraving } from "./engraving.js";
 import {
 	type AcpPiStreamState,
@@ -106,23 +107,9 @@ export interface AcpChildLike {
 	once(event: "exit" | "error", listener: (...args: unknown[]) => void): void;
 }
 
-/** The subset of ClientSideConnection the backend drives (real or fake). */
-export interface AcpConnectionLike {
-	initialize(params: unknown): Promise<unknown>;
-	newSession(params: unknown): Promise<{ sessionId?: string }>;
-	prompt(params: { sessionId: string; prompt: AcpTextBlock[] }): Promise<{ stopReason?: string }>;
-	setSessionConfigOption?(params: unknown): Promise<unknown>;
-}
-
-/** The ACP client-side callbacks. They delegate to the session's mutable handler. */
-export interface AcpClientHandlers {
-	sessionUpdate(notification: { update?: Record<string, unknown>; sessionId?: string }): Promise<void>;
-	requestPermission(request: { options?: Array<{ optionId: string; kind?: string }> }): Promise<{
-		outcome: { outcome: "selected"; optionId: string } | { outcome: "cancelled" };
-	}>;
-	readTextFile(request: { path: string }): Promise<{ content: string }>;
-	writeTextFile(request: unknown): Promise<never>;
-}
+// AcpConnectionLike / AcpClientHandlers (the connection seam the backend drives
+// and the gate fakes) now live in ./acp-client.ts alongside the connectAcpClient
+// factory that builds the real one — imported above.
 
 /** Backend dependencies — defaulted to the real implementations, faked in gates. */
 export interface AcpTurnDeps {
@@ -318,7 +305,7 @@ function unrefRetainedChild(child: AcpChildLike): void {
 	}
 }
 
-/** Default (production) dependencies — real spawn + real ClientSideConnection. */
+/** Default (production) dependencies — real spawn + real ACP client connection. */
 function defaultDeps(): AcpTurnDeps {
 	return {
 		resolveLaunch,
@@ -336,10 +323,7 @@ function defaultDeps(): AcpTurnDeps {
 			const stdoutWeb = Readable.toWeb(real.stdout) as unknown as ReadableStream<Uint8Array>;
 			const stdinWeb = Writable.toWeb(real.stdin) as unknown as WritableStream<Uint8Array>;
 			const transport = ndJsonStream(stdinWeb, stdoutWeb);
-			return new ClientSideConnection(
-				() => handlers,
-				transport as unknown as ConstructorParameters<typeof ClientSideConnection>[1],
-			) as unknown as AcpConnectionLike;
+			return connectAcpClient(transport as unknown as Parameters<typeof connectAcpClient>[0], handlers);
 		},
 		lifecyclePolicy: () => resolveLifecyclePolicy(),
 		loadConfig: (cwd, modelId) => resolveProviderConfig({ cwd, modelId }),
@@ -603,11 +587,12 @@ export function streamAcpTurn(
 		// A "new" decision WITH an existing session means we are ABANDONING that
 		// session (incompatible drift / stale-dead) — the model-lock throw already
 		// returned above, so this is never a "leave it alone" case. Close the old
-		// child so it is not orphaned in retainedChildren (GPT blocker 2).
+		// connection + child so it is not orphaned in retainedChildren (GPT blocker 2).
 		if (decision.path === "new" && existing) {
 			existing.alive = false;
 			if (bridgeSessions.get(sessionKey) === existing) bridgeSessions.delete(sessionKey);
 			retainedChildren.delete(existing.child);
+			existing.connection.close?.();
 			teardownChild(existing.child);
 		}
 
@@ -807,6 +792,7 @@ export function streamAcpTurn(
 				unrefRetainedChild(spawned);
 				persistRecord(session, deps);
 			} else {
+				connection.close?.();
 				teardownChild(spawned);
 			}
 		} catch (err) {
@@ -820,6 +806,7 @@ export function streamAcpTurn(
 			// uncertain connection must never be reused (GPT ④).
 			if (child) {
 				retainedChildren.delete(child);
+				session?.connection.close?.(err);
 				teardownChild(child);
 			}
 			finishError(err, aborted, stderrTail);
@@ -872,6 +859,7 @@ export function streamAcpTurn(
 			// error/abort on a reused session → drop it and close the child (GPT ④).
 			if (bridgeSessions.get(session.key) === session) bridgeSessions.delete(session.key);
 			retainedChildren.delete(session.child);
+			session.connection.close?.(err);
 			teardownChild(session.child);
 			finishError(err, aborted);
 		} finally {

@@ -20,6 +20,16 @@ import type { ChildProcess } from "node:child_process";
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+function destroyChildStdio(child: ChildProcess): void {
+	for (const stream of [child.stdin, child.stdout, child.stderr]) {
+		try {
+			stream?.destroy();
+		} catch {
+			// best-effort teardown; never load-bearing
+		}
+	}
+}
+
 export interface TerminateOptions {
 	/** Grace after SIGTERM before escalating to SIGKILL. */
 	graceMs?: number;
@@ -38,8 +48,13 @@ export async function terminateChild(
 	child: ChildProcess,
 	{ graceMs = 2_000, killWaitMs = 2_000 }: TerminateOptions = {},
 ): Promise<void> {
-	// Already reaped — nothing to do.
-	if (child.exitCode !== null || child.signalCode !== null) return;
+	// Already reaped, but still close our side of the stdio pipes. With the SDK
+	// fluent connection a smoke can otherwise print PASS and keep Node alive on
+	// a retained pipe/read handle.
+	if (child.exitCode !== null || child.signalCode !== null) {
+		destroyChildStdio(child);
+		return;
+	}
 
 	const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
 
@@ -47,6 +62,7 @@ export async function terminateChild(
 		child.kill("SIGTERM");
 	} catch {
 		// kill() throws ESRCH when the process is already gone — treat as exited.
+		destroyChildStdio(child);
 		return;
 	}
 
@@ -54,40 +70,45 @@ export async function terminateChild(
 		exited.then(() => "exited" as const),
 		sleep(graceMs).then(() => "timeout" as const),
 	]);
-	if (afterTerm === "exited") return;
+	if (afterTerm === "exited") {
+		destroyChildStdio(child);
+		return;
+	}
 
 	// Grace elapsed — escalate. (The old bug: the wait AFTER this kill was
 	// unbounded `await exited`.)
 	try {
 		child.kill("SIGKILL");
 	} catch {
+		destroyChildStdio(child);
 		return; // raced to death between the grace race and this kill
 	}
 
 	// Release any stdio the helper may be pinning, so a missed "exit" event does
 	// not keep the event loop (and the pipes) alive. Probe-only — best effort.
-	for (const stream of [child.stdin, child.stdout, child.stderr]) {
-		try {
-			stream?.destroy();
-		} catch {
-			// best-effort teardown; never load-bearing
-		}
-	}
+	destroyChildStdio(child);
 
 	const afterKill = await Promise.race([
 		exited.then(() => "exited" as const),
 		sleep(killWaitMs).then(() => "timeout" as const),
 	]);
-	if (afterKill === "exited") return;
+	if (afterKill === "exited") {
+		destroyChildStdio(child);
+		return;
+	}
 
 	// The "exit" event may simply have been missed even though the process is
 	// dead. Probe with signal 0: a throw (ESRCH/EPERM on a reaped pid) means the
 	// process is gone, so proceed; a clean return means it is genuinely alive.
 	const pid = child.pid;
-	if (pid === undefined) return; // never acquired a pid; nothing can leak
+	if (pid === undefined) {
+		destroyChildStdio(child);
+		return; // never acquired a pid; nothing can leak
+	}
 	try {
 		process.kill(pid, 0);
 	} catch {
+		destroyChildStdio(child);
 		return; // gone — the exit event was just missed
 	}
 

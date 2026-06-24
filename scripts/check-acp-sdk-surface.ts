@@ -152,11 +152,14 @@ assert.ok(
 //     rename would not fail typecheck (type-only erasure) but would break the
 //     raw turn. Assert the *value* exports exist at runtime.
 // ---------------------------------------------------------------------------
-// ndJsonStream is value-imported by the S2a-2 raw-turn smoke; the others are
-// the connection + protocol constant the raw turn drives. (Per GPT: gate only
-// the value imports the real S2a code uses — type-only imports are erased.)
+// These are the value imports the real ACP code uses: the connectAcpClient
+// adapter (acp-client.ts) drives `client` + the `AGENT_METHODS`/`CLIENT_METHODS`
+// method tables; the backend + raw-turn smoke value-import `ndJsonStream` (the
+// stdio transport) and `PROTOCOL_VERSION`. The deprecated `ClientSideConnection`
+// is no longer used, so it is no longer gated. (Per GPT: gate only the value
+// imports the real code uses — type-only imports are erased.)
 const acpSdk = (await import("@agentclientprotocol/sdk")) as Record<string, unknown>;
-for (const sym of ["ClientSideConnection", "PROTOCOL_VERSION", "ndJsonStream"]) {
+for (const sym of ["client", "ndJsonStream", "PROTOCOL_VERSION", "AGENT_METHODS", "CLIENT_METHODS"]) {
 	assert.ok(
 		sym in acpSdk,
 		`@agentclientprotocol/sdk lost value export "${sym}" — silent upstream rename; the raw ACP turn would break`,
