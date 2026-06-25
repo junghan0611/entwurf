@@ -72,11 +72,32 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 - `smoke-acp-bundled-mcp-live`의 MUST/model-in-loop 불일치를 split한다: deterministic bundled bridge proof는 MUST,
   모델 자율 tool-call echo는 BEHAVIOR. 이번 cut에서는 PASS였지만 taxonomy hardening으로 남긴다.
 - 데모 gif / hero 이미지를 새 표면에 맞춰 재생성한다.
+- **ACP 백엔드 어댑터 레일을 재도입한다 (아래 표준궤 섹션).**
+
+### 0.12.0 — ACP 백엔드 어댑터 레일 (표준궤, 2026-06-25 GLG 결정)
+
+PR #40(Snowflake Cortex Code, hvkiefer)이 드러낸 핵심: 0.11.0엔 `AcpBackendAdapter` 어댑터 패턴
+(`type AcpBackend`=claude|codex|gemini, `ACP_BACKEND_ADAPTERS` Record, `resolveAcpBackendAdapter`)이
+있었고 PR은 거기에 cortex를 4번째로 끼웠다. 그러나 0.12.0 cutover가 fat `acp-bridge.ts`를 통째 버리고
+Claude-first로 새로 빌드하며 그 추상화를 제거 → 현재 `lib/acp/`는 claude 단선 + `config.ts:374`
+non-claude **throw** 가드. **백엔드 추가 레일이 0.11.0보다 후퇴**(단일 claude 코드 품질은 향상).
+
+- **결정:** `AcpBackendAdapter` 인터페이스를 plugin 구조 위에 재도입하고 claude를 그 *첫 구현*으로
+  리팩터한다. cortex가 2번째 백엔드 = 추상화를 정당화하는 첫 실수요("2개부터 패턴이 산다").
+  레일을 표준궤로 못박는 것이 곧 0.12.0에 담을 내용이다.
+- **7 seam:** `resolveLaunch` · `ensureOverlay`(auth passthrough+state hiding) · `buildSessionMeta`
+  (carrier; cortex=undefined→first-user augment) · curated models+prefix 라우팅(`inferBackendFromModel`) ·
+  model enforcement(claude=`session/set_config_option` / cortex=launch-time `-m` pin) ·
+  settings+`bridgeConfigSignature` · gates(`check-backends`/`check-models`/`smoke-cortex`).
+- **역할 분담:** GLG가 레일(인터페이스 + claude 리팩터)을 깔고, 기여자(hvkiefer)가 PR #40을 0.12.0
+  `lib/acp/` 어댑터 하나로 포팅한다. 설계 SSOT = `docs/acp-backend-rail.md`. GPT 논의 후 확정.
 
 ### deferred (범위는 보임)
 
 - **persisted resume/load (1b-2c)** — 현재는 in-memory reuse + record write만, persisted read/use는 OFF.
-- **non-Claude ACP backend / Cortex lane** — vendor/governed CLI는 로컬 완전검증 가능해지면.
+- **Cortex 백엔드 자체의 운영 lane** — 어댑터 레일(위 표준궤 섹션)이 0.12.0에 들어간 *뒤*, 기여자가
+  PR #40을 어댑터로 포팅하고 로컬 완전검증(`smoke-cortex`)이 서면 운영 surface로 승격. 레일=0.12.0,
+  백엔드 검증=그 위에서. (이전 "vendor CLI 검증되면" 단일 항목을 레일/백엔드로 분리.)
 - **fresh sibling minting (v2 `spawn-fresh`)** — v2 3 transport는 전부 기존 citizen 대상. 무에서 새
   형제 만드는 verb는 의도적 부재(능력 구멍을 문서에 못박음, silent regression 아님).
 - **test/release-gate taxonomy (#41)** — 검증 자산을 deterministic / MUST live / BEHAVIOR / utility로 재분류.
