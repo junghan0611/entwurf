@@ -125,6 +125,7 @@ const BRIDGE_MARK = "operating through entwurf";
 	const base = {
 		backend: "claude" as const,
 		modelId: "claude-x",
+		nativeModelId: "claude-x",
 		mcpServersHash: "deadbeef",
 		settingSources: [],
 		strictMcpConfig: true,

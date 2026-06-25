@@ -48,7 +48,9 @@ export const ENTWURF_ACP_NO_AUTH_SENTINEL = "entwurf-no-auth";
 
 // The curated Claude ids. Adding one here is a commitment to verify it across
 // both axes (protocol smoke + agent interview) — do not extend casually.
-const SUPPORTED_ANTHROPIC_MODEL_IDS = ["claude-sonnet-4-6", "claude-opus-4-8"] as const;
+// Exported so the claude backend adapter (backend-adapter.ts) can answer
+// `routeModel` without re-deriving the set from curatedClaudeModels().
+export const SUPPORTED_ANTHROPIC_MODEL_IDS = ["claude-sonnet-4-6", "claude-opus-4-8"] as const;
 
 /** The anchor model whose absence is a hard registry regression, not a soft skip. */
 export const CURATED_ANCHOR_MODEL_ID = "claude-opus-4-8";

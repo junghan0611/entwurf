@@ -15,7 +15,8 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { streamShellAcp } from "./lib/acp/backend.js";
-import { curatedClaudeModels, ENTWURF_ACP_NO_AUTH_SENTINEL, PROVIDER_ID } from "./lib/acp/models.js";
+import { allCuratedModels } from "./lib/acp/backend-adapter.js";
+import { ENTWURF_ACP_NO_AUTH_SENTINEL, PROVIDER_ID } from "./lib/acp/models.js";
 
 // Idempotent registration guard. pi may evaluate an extension entry more than
 // once across a runtime; registering the provider twice would replace its model
@@ -47,7 +48,7 @@ export default function (pi: ExtensionAPI) {
 		// bypasses backend credentials.
 		apiKey: ENTWURF_ACP_NO_AUTH_SENTINEL,
 		api: "entwurf",
-		models: curatedClaudeModels(),
+		models: allCuratedModels(),
 		// S2c: real ACP backend. Spawn-per-turn claude-agent-acp drive + event
 		// mapping (lib/acp/backend.ts). The S0 fail-loud stub is gone — the
 		// provider path is open. Backend auth still belongs to the operator's own

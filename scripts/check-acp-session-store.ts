@@ -44,6 +44,7 @@ import {
 const baseInput = (): BridgeConfigInput => ({
 	backend: "claude",
 	modelId: "claude-sonnet-4-6",
+	nativeModelId: "claude-sonnet-4-6",
 	appendSystemPrompt: "",
 	mcpServersHash: "deadbeef",
 	settingSources: [],

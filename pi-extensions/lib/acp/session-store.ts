@@ -80,9 +80,13 @@ export function resolveLifecyclePolicy(argv: readonly string[] = process.argv): 
  * forces a rebuild.
  */
 export interface BridgeConfigInput {
-	backend: "claude";
+	backend: string;
 	modelId: string;
+	/** Backend-native model id (curation prefix stripped); claude: equals modelId. */
+	nativeModelId: string;
 	appendSystemPrompt: string;
+	/** Backend-specific stable signature fields (e.g. cortex connection). Never secrets. */
+	extra?: Record<string, unknown>;
 	mcpServersHash: string;
 	settingSources: string[];
 	strictMcpConfig: boolean;
@@ -161,6 +165,7 @@ export function bridgeConfigSignature(input: BridgeConfigInput): string {
 		JSON.stringify({
 			backend: input.backend,
 			modelId: input.modelId,
+			nativeModelId: input.nativeModelId,
 			appendSystemPrompt: input.appendSystemPrompt,
 			mcpServersHash: input.mcpServersHash,
 			settingSources: [...input.settingSources],
@@ -169,6 +174,7 @@ export function bridgeConfigSignature(input: BridgeConfigInput): string {
 			skillPlugins: [...input.skillPlugins],
 			permissionAllow: [...input.permissionAllow],
 			disallowedTools: [...input.disallowedTools],
+			extra: input.extra ?? {},
 		}),
 	);
 }
