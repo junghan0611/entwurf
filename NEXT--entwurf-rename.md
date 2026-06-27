@@ -112,14 +112,13 @@
 - **BASELINE.md 284→~140:** shipped Claude question bank + answer guide 본문 유지 / Gemini `Q-H`+canary → probe appendix("0.12 코드 부재", **치환 금지** = false claim 위험) / `check-backends` stale → 현행 ACP 게이트명 or "deterministic ACP gates" / HISTORY 0.9.0(retired 게이트 참조) → CHANGELOG 포인터.
 - **DELIVERY.md:** 구조 유지, vocab/count만 VERIFY·BASELINE과 cross-link 정렬. ACP Claude/Cortex row = "ACP runtime lane이지 native async delivery target 아님" 유지.
 
-### 안 쓰는 파일 / stale publish surface 제거 후보 (GPT audit, 제거는 GLG 결정)
-| 후보 | 상태 | 처리안 |
-|---|---|---|
-| `demo/{demo.sh,demo-baseline.sh,README.md}` | **최대 stale**: package.files로 shipping, v1 verb + `entwurf/gpt-5.4` sibling 전제 | (1) package.files 제외+README 주장 낮춤, 또는 (2) v2/Claude-only rewrite+gif 재생성(issue #44 "데모 새로") |
-| `scripts/{sentinel-runner,session-messaging-smoke}.sh` | run.sh가 "LEGACY broken on v2"로 노출, scripts/ 통째 ship | VERIFY/BASELINE current에서 참조 금지. 삭제 vs legacy 명시 = 정책 결정 |
-| `scripts/{smoke-meta-mailbox,smoke-meta-sender-identity}.sh` | MCP `entwurf_send` 직접 호출, v2-only에서 깨질 가능성 | v2 `entwurf_v2`로 rewrite or legacy/dropped 명시 |
-| `prompts/engraving.md` (root) | runtime default는 `pi-extensions/lib/acp/prompts/engraving.md`, root는 README가 operator surface로 가리킴+package 포함 | "shipped default"인지 "override sample"인지 문서 명확화 |
-| `.tmp-verify/` | gitignored local artifact | 무시(ship 안 됨) |
+### 안 쓰는 파일 / stale publish surface — 처리 결과 (GLG 지시 2026-06-27)
+| 후보 | 처리 |
+|---|---|
+| `scripts/{sentinel-runner,session-messaging-smoke,smoke-meta-mailbox,smoke-meta-sender-identity}.sh` | **✅ 삭제 완료 (`fbcbdbc`)** — v1/broken, 1594줄 + run.sh 배선(case·wrapper·xt-tool-surface 인라인·usage) 제거. AGENTS stale 참조 정리. release-gate usage "10→11 smokes" 교정. pnpm check green(183f). |
+| `prompts/engraving.md` (root) | **✅ sample 명확화 완료 (`fbcbdbc`)** — runtime default는 lib copy(게이트 pin), root는 self-documenting 샘플로(뭘 하는지 드러나게). README sample-vs-default 정리. |
+| `demo/{demo.sh,demo-baseline.sh,README.md}` | **보류 — GLG가 v2로 재생성 예정.** 지금 삭제/수정 안 함(v1 verb 전제지만 GLG가 새로 만들 것). gif/hero 재생성과 한 묶음. |
+| `.tmp-verify/` | gitignored local artifact, 무시(ship 안 됨). |
 
 ### 기타 꼬리
 - **bundled-mcp MUST/BEHAVIOR split** — model-in-loop라 MUST 정당화 불성립. MUST=callable surface resolve를 *모델 턴 없이* 증명 / BEHAVIOR=모델 자율. flake 반복 시 재조정.
