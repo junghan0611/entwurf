@@ -8,10 +8,11 @@
 // The wiring is `defaultDeps(adapter)` — the turn loop in backend.ts stays
 // backend-invariant; only these per-backend functions change with `adapter`.
 //
-// STATUS: Step A of the rail — interface + claudeAdapter + registry. backend.ts is
-// not wired to it yet (Step B). `resolveClaudeLaunch` below intentionally mirrors
-// backend.ts:resolveLaunch for now; Step B removes the backend.ts private copy and
-// keeps only this adapter method (single source).
+// STATUS: Step A+B done — backend.ts is wired to this rail. The turn loop in
+// backend.ts delegates every per-backend step through the resolved adapter
+// (resolveLaunch/ensureOverlay/loadCarrier/buildSessionMeta/enforceModel/
+// launchEnvDefaults); there is no private resolveLaunch copy in backend.ts.
+// `resolveClaudeLaunch` below is the single source for the claude launch spec.
 //
 // Fence: imported by the root program with `.js` suffixes, same as the sibling
 // lib/acp modules — no new strip-types fence.
@@ -178,7 +179,7 @@ export interface AcpBackendAdapter {
 const SUPPORTED_CLAUDE_IDS: ReadonlySet<string> = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);
 
 /** Resolve the claude-agent-acp launch — package bin (resolve), env override for debug.
- *  STEP A NOTE: mirrors backend.ts:resolveLaunch; Step B removes that private copy. */
+ *  This is the single source for the claude launch spec; backend.ts holds no private copy. */
 function resolveClaudeLaunch(): AcpLaunchSpec {
 	const override = process.env.CLAUDE_AGENT_ACP_COMMAND?.trim();
 	if (override) return { command: "bash", args: ["-lc", override] };
