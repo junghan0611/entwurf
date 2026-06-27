@@ -460,8 +460,8 @@ function parseSenderInfo(text: string): SenderInfo | null {
 }
 
 // Build a sender envelope for messages originating from the local pi session.
-// Used by every caller-side send path (mcp tool, /entwurf-send slash command,
-// --entwurf-send-message startup flag). Returns undefined when any field
+// Used by every caller-side send path (the mcp + pi-native entwurf_v2
+// surfaces). Returns undefined when any field
 // cannot be resolved — pi-native callers should fall back to body-less sends
 // rather than synthesize partial envelopes that would render as "(unknown ...)"
 // at the receiver. The MCP-side bridge (mcp/entwurf-bridge entwurf_v2) is
