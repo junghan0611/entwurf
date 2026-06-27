@@ -94,13 +94,36 @@
   ① repo 핀+FLOOR 동시 bump → ② `pnpm add -g @earendil-works/pi-coding-agent@<핀>`(절대 `@latest` 아님)
   → ③ `check-pi-runtime-version`로 일치 검증.
 
-## 릴리즈 컷 전 꼬리 (tag 직전 재검토)
+## 릴리즈 컷 lane — 문서 정비 (2026-06-27 Opus 실무 / GPT 검수)
 
-- **bundled-mcp MUST/BEHAVIOR split** — `smoke-acp-bundled-mcp-live`가 model-in-loop라 MUST 정당화 불성립.
-  split: MUST=bundled bridge가 callable surface로 resolve됨을 *모델 턴 없이* 증명 / BEHAVIOR=모델 자율 호출.
-  GPT에 split 지시안 relay됨. flake 반복 시 MUST 위치 재조정.
+> issue #44 핵심: BASELINE/VERIFY/DELIVERY 세트 재정리(특히 BASELINE·VERIFY 간소화) + 안 쓰는 파일 정리.
+>
+> **✅ 문서 간소화 1차 완료 (GPT GO):** VERIFY 621→260(§6 BROKEN dead code + v1 절차 제거, AMBER 7+1건
+> 코드 재검증 반영) · BASELINE 284→227(Claude 본문 + Gemini probe appendix + HISTORY 포인터, bilingual
+> 유지=hvkiefer 외부기여 표면) · DELIVERY = no-op audited(이미 0.12 정렬). **남은 일 = 아래 stale 파일
+> audit(제거는 GLG 결정).** 제거는 아직 안 함 — 후보 표만 박음(GPT 안전 규율).
+
+### 문서 간소화 1차 — 무엇을 고쳤나 (완료, 기록)
+- **VERIFY.md 621→~230 — "줄이기" 아니라 *거짓/고장 제거*:**
+  - ★ §6(379-398) = **BROKEN dead code**: 삭제된 `acp-bridge.ts` import + 0.11 fat-bridge API(`ensureBridgeSession`/`normalizeMcpServers`) 호출. 실행 즉사. 삭제/게이트 포인터화.
+  - 내부 모순: §0A/§5는 "v1 `entwurf`/`entwurf_resume` retired"라면서 §3/§4/§1A.4/§5/§7은 그 v1 verb로 실행 지시 → current v2 surface로 재작성 or 게이트 map으로 접기.
+  - "ten ACP smokes"(§65/70) stale → 실제 **11개**(memory-containment 포함). 숫자 hardcode 말고 "MUST tier in release-gate" + 날짜 evidence line만.
+  - **살릴 load-bearing(GPT 합의):** §0A floor+What-NOT-to-Do+wording-contamination+bridge-vs-semantic / §1 install Path A·B(설치면) / §1A human eval(실행 surface만 current화) / §1A.1.0 carrier 분리 / §8.4 backend별 MCP identifier 표 / §10.3 tuple formula / §11 pi JSONL memory axis / §14 pass criteria(0.12 floor 재작성) / L0-L5·D0-D8·Q-L* namespace 구분.
+- **BASELINE.md 284→~140:** shipped Claude question bank + answer guide 본문 유지 / Gemini `Q-H`+canary → probe appendix("0.12 코드 부재", **치환 금지** = false claim 위험) / `check-backends` stale → 현행 ACP 게이트명 or "deterministic ACP gates" / HISTORY 0.9.0(retired 게이트 참조) → CHANGELOG 포인터.
+- **DELIVERY.md:** 구조 유지, vocab/count만 VERIFY·BASELINE과 cross-link 정렬. ACP Claude/Cortex row = "ACP runtime lane이지 native async delivery target 아님" 유지.
+
+### 안 쓰는 파일 / stale publish surface 제거 후보 (GPT audit, 제거는 GLG 결정)
+| 후보 | 상태 | 처리안 |
+|---|---|---|
+| `demo/{demo.sh,demo-baseline.sh,README.md}` | **최대 stale**: package.files로 shipping, v1 verb + `entwurf/gpt-5.4` sibling 전제 | (1) package.files 제외+README 주장 낮춤, 또는 (2) v2/Claude-only rewrite+gif 재생성(issue #44 "데모 새로") |
+| `scripts/{sentinel-runner,session-messaging-smoke}.sh` | run.sh가 "LEGACY broken on v2"로 노출, scripts/ 통째 ship | VERIFY/BASELINE current에서 참조 금지. 삭제 vs legacy 명시 = 정책 결정 |
+| `scripts/{smoke-meta-mailbox,smoke-meta-sender-identity}.sh` | MCP `entwurf_send` 직접 호출, v2-only에서 깨질 가능성 | v2 `entwurf_v2`로 rewrite or legacy/dropped 명시 |
+| `prompts/engraving.md` (root) | runtime default는 `pi-extensions/lib/acp/prompts/engraving.md`, root는 README가 operator surface로 가리킴+package 포함 | "shipped default"인지 "override sample"인지 문서 명확화 |
+| `.tmp-verify/` | gitignored local artifact | 무시(ship 안 됨) |
+
+### 기타 꼬리
+- **bundled-mcp MUST/BEHAVIOR split** — model-in-loop라 MUST 정당화 불성립. MUST=callable surface resolve를 *모델 턴 없이* 증명 / BEHAVIOR=모델 자율. flake 반복 시 재조정.
 - `models.ts` `getModels` deprecated(L32/69) chore.
-- 데모 gif / hero 재생성.
 - README 수동 `rg` 1패스(`PI_SHELL_ACP_`·기능주장) — doc은 `check-env-namespace` 사각.
 
 ## 브랜치 close 규칙
