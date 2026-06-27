@@ -33,8 +33,10 @@
      셋트로서 0.12.0 entwurf-first 표면에 맞게. v1 잔재·stale 명령·drift 교정.
   2. **안 쓰는 파일 / 오래된 설정파일 정리** — 0.12.0 entwurf 이름으로 내보내기 위한 결계.
      쓸데없는 파일·구설정 식별 후 제거(`package.json#files`/`check-pack` forbidden과 정합).
-  3. 코덱스/agy 지원 문서 조이기(전송방식 검증은 끝남) + 하네스 도구 제한(서브에이전트·투두 없음·욜로
-     = pi에서 배운 힣 드라이버) 문서화.
+  3. **✅ 완료 (`8cd51e1`+`c0ab039`, GPT clean GO).** 코덱스/agy 지원 조이기(README:11 헤지 제거 →
+     DELIVERY per-launch-mode 매트릭스, ROADMAP agy 행·CONTRIBUTING·setup-clean-host 정합) + 하네스
+     도구 제한 교리(서브에이전트·투두 없음·yolo=힣 드라이버)를 README 디자인 프레이밍 + AGENTS North Star에
+     명시 원칙으로 승격. 검증으로 잡음: smoke-acp=Claude 전용(codex/gemini 0건), AGENTS deps 현행화(5 pin).
 - **검수 순서:** 로컬 커밋(NEXT 정리 + doc-drift 픽스) → **sibling(GPT) 검수** → GLG가 GO 후 push.
   (2026-06-27 GPT 검수: 커밋1 GO, 커밋2는 이 push-guard 2줄 픽스 후 GO.)
 
@@ -47,6 +49,8 @@
 
 ## RECENT — 닫힌 작업 (compact, 상세는 git log / ROADMAP)
 
+- **2026-06-27** item 3 종결 — 코덱스/agy 지원 + 도구제한 교리 문서화(`8cd51e1`+`c0ab039`, Opus 초안 →
+  GPT gpt-5.5 검수 GO → push). v1-verb 주석 sweep(`5e5f9f0`) + acp-on-v2 ledger 삭제·stale audit(`0ddd1da`)도 동일 세션.
 - **2026-06-27** 1차 재검수(설치 재현 + LIVE gate 17/0/0 + doc-drift 픽스) — 위 NOW.
 - **2026-06-25** `d554e27` **ACP 백엔드 어댑터 레일** generalize(settings rail) → `ccfb590` NEXT 종결.
   Step A(`backend-adapter.ts` 인터페이스+claudeAdapter+fail-fast registry) + Step B(backend.ts turn loop를
