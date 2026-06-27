@@ -126,9 +126,10 @@ pnpm check                                  # full static floor: lint + typechec
 ./run.sh check-bridge /path/to/project      # entwurf-bridge direct MCP smoke (tools/list + protocol/negative-path)
 ./run.sh check-auth-boundary                # ACP plugin no-auth sentinel present + no legacy-ENV apiKey literal (trust invariant, code-level)
 ./run.sh check-acp-provider-surface         # provider registers curated Claude anchor + streamSimple wired to the real streamShellAcp backend
-# sentinel / session-messaging / xt-tool-surface survive as on-demand subcommands but were
-# DROPPED from the v2 release floor (2026-06-17): legacy ACP/v1 surface
-# (including entwurf_send v1 tool). v2 re-writes onto entwurf_v2 are a separate follow-up.
+# The legacy v1 ACP gates (sentinel / session-messaging / xt-tool-surface) and the
+# v1-only meta smokes (smoke-meta-mailbox / smoke-meta-sender-identity, both calling
+# the gone entwurf_send tool) were REMOVED in the 0.12 cutover (2026-06-27). Any
+# re-test of those axes belongs on the entwurf_v2 surface as a fresh gate.
 ```
 
 **Live release gate** (opt-in, owns the merge decision):
@@ -190,7 +191,7 @@ Messages are thrown, not awaited.
 | `pi-extensions/lib/meta-*.ts` | meta-record authority, mailbox state, dual-read/migration, receiver marker |
 | `pi-extensions/lib/entwurf-core.ts` | shared core (session-file lookup, identity read, explicit-extension args); some v1 exports now dead pending routing cleanup |
 | `protocol.js` | dependency-free shared wire constants (`<project-context` marker); single source for tsc emit + strip-types MCP paths |
-| `run.sh` | install (incl. `install-meta-bridge`), check-*/smoke-* gates, sentinel, release-gate |
+| `run.sh` | install (incl. `install-meta-bridge`), check-*/smoke-* gates, release-gate |
 | `pi/entwurf-targets.json` | spawn-bg resume target allowlist |
 | `mcp/entwurf-bridge/` | MCP server exposing `entwurf_v2`, `entwurf_self`, `entwurf_peers`, `entwurf_inbox_read` |
 

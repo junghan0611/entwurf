@@ -33,12 +33,9 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # ONE confident install: pnpm install + install + meta-bridge (if native harness) + v2 install smoke (LIVE substrate = release-gate)
-  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, retargeted smoke-session-id-name, RGG) + the ACP plugin acceptance floor (10 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/rgg/mcp/skill/bundled-mcp). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). LIVE-gated MUST steps HONEST-SKIP when LIVE!=1 (a CUT needs LIVE=1, SKIP=0). v1 verbs (xt-tool-surface, session-messaging, sentinel) are gone (v2 core); --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
-  ./run.sh xt-tool-surface             # [LEGACY — broken on v2-only, dropped from release floor, v2 rewrite pending] ACP backend exclude-tools policy: -xt <builtin> fail-fast per backend
+  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, retargeted smoke-session-id-name, RGG) + the ACP plugin acceptance floor (11 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). LIVE-gated MUST steps HONEST-SKIP when LIVE!=1 (a CUT needs LIVE=1, SKIP=0). --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
-  ./run.sh sentinel [args...]         # [LEGACY — broken on v2-only, dropped from release floor, v2 rewrite pending] ACP multi-backend 6-cell tool-selection matrix
-  ./run.sh session-messaging [args...] # [LEGACY — broken on the v2 core (v1 entwurf_send tool gone), not on the release floor, v2 rewrite pending] 4-case session-messaging smoke
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
   ./run.sh check-entwurf-session-identity # deterministic gate for locked garden session identity & name grammar (sessionId/buildSessionName/parse/collision), no API
@@ -86,7 +83,6 @@ Usage:
   ./run.sh smoke-meta-install-state   # 1.0.0 meta-bridge Phase 2: stateful install/uninstall + store-doctor regression gate. Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-meta-prune           # 1.0.0 meta-bridge Phase 4: listing-only store janitor regression gate — classify keep/orphan/stale/ambiguous, delete nothing. Offline/deterministic (deps: bash+node)
   ./run.sh smoke-meta-keyset-guard    # 0.10.0 meta-bridge: keyset-owner guard regression — check-keyset-overlap + managed-keys SSOT (disjoint passes, collisions fail). Offline/hermetic (deps: bash+python3)
-  ./run.sh smoke-meta-sender-identity # 0.10.0 meta-bridge: native SENDER identity E2E — parent-pid sender marker promotes anonymous MCP send to replyable meta-session (garden-id), REQUIRE_META_SENDER refuses anonymous. Offline/hermetic (deps: bash+node+python3)
   ./run.sh smoke-claude-native-resume-live # LIVE-only: Claude Code native fresh→--resume continuity + meta-record uniqueness; proves meta-bridge records identity without touching the backend resume path
 
   ./run.sh install-meta-bridge        # 1.0.0 meta-bridge Phase 2: stateful GLOBAL install (plugin + USER MCP + settings keyset, honest uninstall state)
@@ -2053,25 +2049,6 @@ check_bridge() {
 }
 
 
-sentinel_run() {
-  local sentinel="$REPO_DIR/scripts/sentinel-runner.sh"
-  if [ ! -x "$sentinel" ]; then
-    fail "sentinel: $sentinel not found or not executable"
-    return 1
-  fi
-  "$sentinel" "$@"
-}
-
-session_messaging_run() {
-  local smoke="$REPO_DIR/scripts/session-messaging-smoke.sh"
-  if [ ! -x "$smoke" ]; then
-    fail "session-messaging: $smoke not found or not executable"
-    return 1
-  fi
-  "$smoke" "$@"
-}
-
-
 # setup_all — full entwurf v2 install.
 #
 # Installs the v2 dispatch substrate + MCP entwurf-bridge into a target project
@@ -2137,74 +2114,6 @@ setup_all() {
     echo "Verify native-harness wiring with: ./run.sh doctor-meta-bridge"
   fi
   echo "Run 'LIVE=1 ./run.sh release-gate <scratch>' for live substrate acceptance."
-}
-
-# ---------------------------------------------------------------------------
-# xt-tool-surface — ACP backend exclude-tools policy gate (NEXT Step 1e).
-#
-# pi 0.77 --exclude-tools/-xt removes a tool from pi's active set + "Available
-# tools:" system prompt, but the ACP backend CLI keeps its own tool surface that
-# entwurf does NOT gate per-tool (Claude gets providerSettings.tools;
-# Codex/Gemini expose native shell+file tools regardless). The 0.8.0 policy is
-# truthfulness-first FAIL-FAST: excluding a backend-backed built-in
-# (read/bash/edit/write) is rejected up front (index.ts assertExcludeToolsHonored)
-# rather than silently letting the backend keep the tool (declared != actual).
-#
-# This gate asserts, per backend, that `pi --provider entwurf -xt <builtin>`
-# is rejected before backend launch with the policy error and runs NO tool — and
-# (positive control) that excluding an EXTENSION tool (entwurf) is NOT rejected,
-# because extension tools are pi-side and never reach the backend.
-# ---------------------------------------------------------------------------
-xt_tool_surface_single() {
-  local backend=$1 model=$2 excluded=$3
-  local out
-  out=$(timeout 120 pi --mode json -p -e "$REPO_DIR" \
-    --provider entwurf --model "$model" -xt "$excluded" \
-    "say hi" 2>&1) || true
-  if ! echo "$out" | grep -q "cannot honor --exclude-tools ($excluded) on the $backend backend"; then
-    fail "xt-tool-surface[$backend]: expected fail-fast on -xt $excluded, got none"
-    echo "$out" | tail -5
-    return 1
-  fi
-  # Fail-fast fires before backend launch, so no tool may have executed.
-  if echo "$out" | grep -q '"type":"tool_execution_start"'; then
-    fail "xt-tool-surface[$backend]: policy error present BUT a tool still executed — not fail-fast"
-    return 1
-  fi
-  ok "xt-tool-surface[$backend]: -xt $excluded rejected up front (declared==actual upheld)"
-  return 0
-}
-
-xt_tool_surface_extension_honored() {
-  # Positive control: excluding an EXTENSION tool is honored (pi-side), so the
-  # policy guard must NOT trip — the backend launches normally.
-  local backend=$1 model=$2
-  local out
-  out=$(timeout 120 pi --mode json -p -e "$REPO_DIR" \
-    --provider entwurf --model "$model" -xt entwurf \
-    "reply with the single word ok" 2>&1) || true
-  if echo "$out" | grep -q "cannot honor --exclude-tools"; then
-    fail "xt-tool-surface[$backend]: -xt entwurf wrongly tripped the guard (extension tools must be exempt)"
-    echo "$out" | tail -5
-    return 1
-  fi
-  ok "xt-tool-surface[$backend]: -xt entwurf honored (extension exclusion not blocked)"
-  return 0
-}
-
-xt_tool_surface() {
-  local failc=0
-  section "xt-tool-surface: claude backend (-xt bash)"
-  xt_tool_surface_single claude claude-sonnet-4-6 bash || failc=$((failc + 1))
-  # Claude-only floor (0.11.0): the codex and gemini -xt rows are dropped.
-  section "xt-tool-surface: extension-tool exemption (positive control)"
-  xt_tool_surface_extension_honored claude claude-sonnet-4-6 || failc=$((failc + 1))
-  if [ "$failc" -gt 0 ]; then
-    fail "xt-tool-surface: $failc check(s) failed"
-    return 1
-  fi
-  ok "xt-tool-surface: claude fails fast on built-in -xt; extension exclusion honored"
-  return 0
 }
 
 # release-gate — the single command that, when GREEN, is sufficient to cut
@@ -2316,8 +2225,8 @@ release_gate() {
   # non-deterministic on 0.79.4), so a single flake must NOT block the cut. They
   # are NEVER folded into `failc`/`pass` — exit authority below is `failc` only.
   # Honesty rails: (1) "non-blocking" is NOT "pass" — a BEHAVIOR-FAIL is surfaced
-  # loudly in the summary with its artifact path, never buried; (2) S7 (Bash
-  # bypass, sentinel-runner.sh) stays a hard FAIL *inside* this lane — a bypass is
+  # loudly in the summary with its artifact path, never buried; (2) a Bash-bypass
+  # of the entwurf surface stays a hard FAIL *inside* this lane — a bypass is
   # never relabelled a pass; (3) the entwurf_v2 surface itself is proven by the
   # deterministic/programmatic must-pass gates above (check-entwurf-v2-*,
   # check-bridge) — this lane is autonomous-tool-selection *behavior*, not
@@ -2494,22 +2403,8 @@ case "$cmd" in
     shift || true
     release_gate "$@"
     ;;
-  xt-tool-surface)
-    warn "xt-tool-surface is LEGACY (ACP backend exclude-tools policy) — broken on v2-only (assumes the removed entwurf provider). Dropped from the release floor; kept for reference, v2 rewrite pending."
-    xt_tool_surface
-    ;;
   check-bridge)
     check_bridge
-    ;;
-  sentinel)
-    warn "sentinel is LEGACY (ACP multi-backend tool-selection matrix) — broken on v2-only. Dropped from the release floor; kept for reference, v2 rewrite onto the entwurf_v2 surface pending."
-    shift || true
-    sentinel_run "$@"
-    ;;
-  session-messaging)
-    warn "session-messaging is LEGACY — broken on the v2 core (calls the gone v1 entwurf_send tool). Not on the release floor; kept for reference, v2 rewrite onto entwurf_v2 pending."
-    shift || true
-    session_messaging_run "$@"
     ;;
   check-model-lock)
     check_model_lock
@@ -2705,23 +2600,6 @@ case "$cmd" in
     # classifies correctly, exits 0, and deletes NOTHING (listing-only invariant).
     # Offline/deterministic (deps: bash+node).
     (cd "$REPO_DIR" && bash scripts/smoke-meta-prune.sh)
-    ;;
-  smoke-meta-sender-identity)
-    # 0.10.0 meta-bridge blocker: deterministic E2E for native SENDER identity.
-    # A SessionStart-written sender marker (parent-pid keyed; ENTWURF_META_SENDER_MARKER
-    # overrides for the test) promotes an anonymous user-scope MCP send into a
-    # REPLYABLE meta-session addressed by garden-id, and REQUIRE_META_SENDER refuses
-    # anonymous sends. A↔B round-trip + reject, zero Claude turns. Offline/hermetic
-    # (deps: bash+node+python3).
-    (cd "$REPO_DIR" && bash scripts/smoke-meta-sender-identity.sh)
-    ;;
-  smoke-meta-mailbox)
-    # 0.10.0 meta-bridge defense C: deterministic E2E for the mailbox messaging
-    # axis. entwurf_send fallback (empty ENTWURF_DIR forces no-socket) → meta
-    # mailbox enqueue → entwurf_inbox_read drain + lastReadAt receipt, for both a
-    # replyable and an external sender, with ZERO Claude turns. Offline/hermetic
-    # (deps: bash+node+python3).
-    (cd "$REPO_DIR" && bash scripts/smoke-meta-mailbox.sh)
     ;;
   smoke-meta-keyset-guard)
     # 0.10.0 meta-bridge regression gate: the PREVENTIVE keyset guard
