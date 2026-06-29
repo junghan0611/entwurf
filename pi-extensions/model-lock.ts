@@ -1,18 +1,25 @@
 /**
- * model-lock — pi-shell-acp session model lock (extension-side revert).
+ * model-lock — entwurf session model lock (extension-side revert).
+ *
+ * ⚠️ v2-only status (doc-truth): the "A (bridge-side)" companion described below
+ * — `acp-bridge.ts` / `ensureBridgeSession` — was removed in the ACP purge, so
+ * only this B-side hook remains. The `entwurf` provider it guards against is
+ * itself routing residue (Phase B: decide remove-vs-redefine model-lock; see
+ * NEXT--v2-only.md § Phase B 잔여). The A/B narrative below is retained as
+ * historical context pending that decision — read "A" as removed.
  *
  * Companion to the bridge-side guard in `acp-bridge.ts` (ensureBridgeSession
  * reuse-path `ModelSwitchLockedError`). The two work as a pair:
  *
- *   - A (bridge-side): live reuse-path mismatch inside a pi-shell-acp
+ *   - A (bridge-side): live reuse-path mismatch inside a entwurf
  *     bridge session is refused at `ensureBridgeSession`. This is the
  *     fallback/direct-call boundary: it prevents silent backend handoff
  *     and MCP identity drift if the extension hook is absent, disabled,
  *     or fails before the revert lands.
  *
- *   - B (this hook): cross-provider departure (pi-shell-acp/X → native) AND
- *     cross-provider entry (native → pi-shell-acp/X) — both touch the
- *     pi-shell-acp boundary and are refused by reverting to the previous
+ *   - B (this hook): cross-provider departure (entwurf/X → native) AND
+ *     cross-provider entry (native → entwurf/X) — both touch the
+ *     entwurf boundary and are refused by reverting to the previous
  *     model via `pi.setModel(previousModel)`. This is NOT a clean refusal:
  *     pi-core has already mutated `agent.state.model` and appended
  *     `model_change` to the JSONL before emitting `model_select`. We
@@ -22,33 +29,33 @@
  * Why both surfaces (B fires first, A is the fallback):
  *   - B observes `model_select` immediately when pi-core emits it,
  *     which happens during `AgentSession.setModel()` BEFORE the next
- *     prompt reaches any provider. So for the pi-shell-acp →
- *     pi-shell-acp case (and every other touches-pi-shell-acp case), B
+ *     prompt reaches any provider. So for the entwurf →
+ *     entwurf case (and every other touches-entwurf case), B
  *     reverts the model first and the next prompt then enters the
  *     bridge under the ORIGINAL model. A's reuse-path mismatch check
  *     therefore does not fire on the happy path — there is no mismatch
  *     left to catch. A only matters if B fails to register, throws
  *     before `pi.setModel(from)` completes, or is disabled by an
  *     operator overriding the extensions list.
- *   - cross-provider departure (pi-shell-acp → native) and cross-provider
- *     entry (native → pi-shell-acp) NEVER reach A at all — the next
+ *   - cross-provider departure (entwurf → native) and cross-provider
+ *     entry (native → entwurf) NEVER reach A at all — the next
  *     prompt routes to a different provider, so `ensureBridgeSession`
  *     is not called. B is the only surface for those cases.
  *   - Wire-evidence captured during the issue #14 investigation: in a
- *     native → pi-shell-acp entry, pi JSONL continued (hi1, hi2, ...)
+ *     native → entwurf entry, pi JSONL continued (hi1, hi2, ...)
  *     but a fresh ACP backend session was bootstrapped and the model
  *     could not see the pre-switch turn (model replied "현재 세션에서
- *     hi2만 보입니다"). Same failure mode as pi-shell-acp → native
+ *     hi2만 보입니다"). Same failure mode as entwurf → native
  *     departure, mirrored.
  *
  * Policy:
- *   - A pi-shell-acp session is locked to its starting model.
+ *   - A entwurf session is locked to its starting model.
  *   - Native-to-native switching is free. Once a native session is
- *     anchored, switching INTO pi-shell-acp is refused because it would
+ *     anchored, switching INTO entwurf is refused because it would
  *     create a fresh ACP backend behind a continuous pi transcript.
  *   - The lock fires for any in-session `model_select` event whose
- *     transition touches the pi-shell-acp boundary
- *     (`from.provider === "pi-shell-acp" || to.provider === "pi-shell-acp"`)
+ *     transition touches the entwurf boundary
+ *     (`from.provider === "entwurf" || to.provider === "entwurf"`)
  *     and whose source is "set" or "cycle" (not "restore").
  *
  * Honest limits:
@@ -57,7 +64,7 @@
  *     event. Our `pi.setModel(from)` adds a second entry (Y → X). For a
  *     fully clean refusal, pi-core would need a cancellable
  *     `before_model_select` hook that this repo intentionally does not
- *     patch (pi-shell-acp does not send PRs to pi-core).
+ *     patch (entwurf does not send PRs to pi-core).
  *   - On the happy path B is a strict superset of A's coverage. A is the
  *     fallback for cases where B did not run (handler registration
  *     missing, thrown before the revert lands, extension disabled by an
@@ -70,13 +77,13 @@
  *   - ModelSelectEvent: pi-mono/packages/coding-agent/src/core/extensions/types.ts:711-719
  *   - ExtensionAPI.setModel: types.ts:1228 (returns Promise<boolean>; false = auth missing)
  *   - ExtensionUIContext.notify: types.ts:135 (sync void)
- *   - Wire evidence native → pi-shell-acp entry failure mode: GLG live test
+ *   - Wire evidence native → entwurf entry failure mode: GLG live test
  *     2026-05-14 ~13:30 KST, session pi:019e24c0-1251-...
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-const PI_SHELL_ACP_PROVIDER = "pi-shell-acp";
+const ENTWURF_PROVIDER = "entwurf";
 
 /**
  * Module-level reentry guard.
@@ -202,15 +209,15 @@ export default function (pi: ExtensionAPI) {
 		// just a no-op state set. Skip.
 		if (from.provider === to.provider && from.id === to.id) return;
 
-		// Only act when the transition touches the pi-shell-acp boundary.
+		// Only act when the transition touches the entwurf boundary.
 		// Covers:
-		//   pi-shell-acp → pi-shell-acp (id different)    — B primary, A fallback
-		//   pi-shell-acp → native                         — B only (A out of flow)
-		//   native       → pi-shell-acp                   — B only (A not yet engaged)
+		//   entwurf → entwurf (id different)    — B primary, A fallback
+		//   entwurf → native                         — B only (A out of flow)
+		//   native       → entwurf                   — B only (A not yet engaged)
 		// Skips:
 		//   native       → native                         — out of scope, free
-		const touchesPiShellAcp = from.provider === PI_SHELL_ACP_PROVIDER || to.provider === PI_SHELL_ACP_PROVIDER;
-		if (!touchesPiShellAcp) return;
+		const touchesEntwurf = from.provider === ENTWURF_PROVIDER || to.provider === ENTWURF_PROVIDER;
+		if (!touchesEntwurf) return;
 
 		reverting = true;
 		try {

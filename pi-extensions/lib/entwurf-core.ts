@@ -3,7 +3,7 @@
  *
  * Single implementation shared by:
  *   - pi-extensions/entwurf.ts (pi native tool surface)
- *   - mcp/pi-tools-bridge/src/index.ts (MCP tool surface for ACP hosts)
+ *   - mcp/entwurf-bridge/src/index.ts (MCP tool surface for ACP hosts)
  *
  * This module MUST NOT import anything from @earendil-works/pi-coding-agent or any
  * other pi runtime API. It is pure Node + @sinclair/typebox-free.  Anything that
@@ -21,10 +21,10 @@
  *   - explicit compat extension resolution for Claude models + opt-in Codex ACP routing
  *
  * Provider bridge routing contract:
- *   - Claude models (claude-*)            — always routed through pi-shell-acp.
- *     If pi-shell-acp can't be resolved, falls back to pi-claude-code-use, then warns.
+ *   - Claude models (claude-*)            — always routed through entwurf.
+ *     If entwurf can't be resolved, falls back to pi-claude-code-use, then warns.
  *   - Codex models (openai-codex/*, gpt-5*) — default is the direct openai-codex provider.
- *     Opt-in via env var `PI_ENTWURF_ACP_FOR_CODEX=1` routes Codex through pi-shell-acp,
+ *     Opt-in via env var `ENTWURF_ACP_FOR_CODEX=1` routes Codex through entwurf,
  *     in which case `normalizeCodexEntwurfModelForAcp()` strips the `openai-codex/`
  *     prefix because the bridge forwards the model id verbatim to codex-acp, which
  *     only accepts the bare backend id (e.g. `gpt-5.4`) on ChatGPT accounts.
@@ -66,9 +66,9 @@ const PI_SETTINGS_PATH = process.env.PI_SETTINGS_PATH
 	? expandTilde(process.env.PI_SETTINGS_PATH)
 	: path.join(AGENT_DIR, "settings.json");
 export const SESSIONS_BASE = path.join(AGENT_DIR, "sessions");
-const ENTWURF_TARGETS_PATH = process.env.PI_ENTWURF_TARGETS_PATH ?? path.join(AGENT_DIR, "entwurf-targets.json");
+const ENTWURF_TARGETS_PATH = process.env.ENTWURF_TARGETS_PATH ?? path.join(AGENT_DIR, "entwurf-targets.json");
 export const DEFAULT_ENTWURF_MODEL = "openai-codex/gpt-5.4";
-export const ENTWURF_CODEX_ACP_ENV = "PI_ENTWURF_ACP_FOR_CODEX";
+export const ENTWURF_CODEX_ACP_ENV = "ENTWURF_ACP_FOR_CODEX";
 
 // Currently unused: remote/SSH entwurf is fail-fast in 0.9.0 (garden-native
 // identity is local-FS only). Retained for #11 remote revival; parity-gated by
@@ -85,7 +85,7 @@ function shellQuote(value: string): string {
 export interface EntwurfSyncOptions {
 	host?: string;
 	cwd?: string;
-	/** Caller-provided provider id (e.g. "pi-shell-acp", "openai-codex"). Optional;
+	/** Caller-provided provider id (e.g. "entwurf", "openai-codex"). Optional;
 	 *  if model is qualified ("provider/name") or unambiguous in the registry,
 	 *  this can be omitted. See resolveEntwurfTarget for resolution rules. */
 	provider?: string;
@@ -106,7 +106,7 @@ export interface EntwurfResult {
 	stopReason?: string;
 	/**
 	 * Durable garden-native session handle (`YYYYMMDDTHHMMSS-[0-9a-f]{6}` = JSONL
-	 * header id). The single public resume handle — pass this to entwurf_resume.
+	 * header id). The single public resume handle — pass this to entwurf_v2 (dormant-resume).
 	 */
 	sessionId: string;
 	/** Diagnostic only — resolved by header scan after the run. Never a public handle. */
@@ -182,8 +182,8 @@ export function normalizeCodexEntwurfModelForAcp(model?: string): string | undef
 // Entwurf Target Registry (v1) — narrow door
 //
 // SSOT for what (provider, model) pairs may be spawned via entwurf.
-// File: ~/.pi/agent/entwurf-targets.json (override with PI_ENTWURF_TARGETS_PATH).
-// See pi-shell-acp/AGENTS.md §Entwurf Orchestration (Entwurf Target Registry) for principle and schema.
+// File: ~/.pi/agent/entwurf-targets.json (override with ENTWURF_TARGETS_PATH).
+// See entwurf/AGENTS.md §Entwurf Orchestration (Entwurf Target Registry) for principle and schema.
 //
 // Spawn flow goes through this gate. Resume flow does NOT — Identity Preservation
 // Rule states that an existing being is preserved as-is, regardless of current
@@ -212,10 +212,10 @@ export class EntwurfRegistryError extends Error {
 	}
 }
 
-// Raised when a spawn is routed to provider=pi-shell-acp but the bridge extension
+// Raised when a spawn is routed to provider=entwurf but the bridge extension
 // cannot be resolved from settings package sources or the loaded module self-root.
-// Fail-fast before spawning a child with `--no-extensions --provider pi-shell-acp`,
-// which would otherwise die with `Unknown provider "pi-shell-acp"` (#29).
+// Fail-fast before spawning a child with `--no-extensions --provider entwurf`,
+// which would otherwise die with `Unknown provider "entwurf"` (#29).
 export class EntwurfRoutingError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -250,7 +250,7 @@ export function loadEntwurfTargets(): EntwurfRegistry {
 		throw new EntwurfRegistryError(
 			`Entwurf target registry not found at ${ENTWURF_TARGETS_PATH}. ` +
 				`Without it, every entwurf spawn is refused. Run \`./run.sh setup:links\` ` +
-				`or create the file manually (see pi-shell-acp/pi/entwurf-targets.json for the canonical shape).`,
+				`or create the file manually (see entwurf/pi/entwurf-targets.json for the canonical shape).`,
 		);
 	}
 
@@ -318,11 +318,11 @@ export function _resetEntwurfRegistryCache(): void {
 // ============================================================================
 // Child stderr mirror (opt-in, sentinel observability)
 //
-// Gated by env PI_ENTWURF_CHILD_STDERR_LOG. When set, any entwurf child pi
+// Gated by env ENTWURF_CHILD_STDERR_LOG. When set, any entwurf child pi
 // process spawned here also has its stderr appended to the given path. The
-// sentinel uses this to grep for child-side `[pi-shell-acp:bootstrap]` bridge
+// sentinel uses this to grep for child-side `[entwurf:bootstrap]` bridge
 // markers when asserting continuity — parent stderr can't see that signal
-// because the bridge lives in the child when target provider is pi-shell-acp.
+// because the bridge lives in the child when target provider is entwurf.
 //
 // Opt-in (env unset → no-op) so production runs pay nothing. A write failure
 // surfaces on console.error instead of being silently swallowed (see the "No
@@ -330,7 +330,7 @@ export function _resetEntwurfRegistryCache(): void {
 // ============================================================================
 
 export function mirrorChildStderr(proc: ChildProcess): void {
-	const logPath = process.env.PI_ENTWURF_CHILD_STDERR_LOG;
+	const logPath = process.env.ENTWURF_CHILD_STDERR_LOG;
 	if (!logPath || !proc.stderr) return;
 	const writer = fs.createWriteStream(logPath, { flags: "a" });
 	writer.on("error", (err) => {
@@ -344,8 +344,8 @@ export function mirrorChildStderr(proc: ChildProcess): void {
 // Spawn guard — one entwurf spawn per (session, target) per process.
 //
 // Shared by pi native tool (pi-extensions/entwurf.ts) and the MCP bridge
-// (mcp/pi-tools-bridge). Both paths must go through this gate before calling
-// runEntwurfSync / runEntwurfAsync. entwurf_resume deliberately bypasses it.
+// (mcp/entwurf-bridge). Both paths must go through this gate before calling
+// runEntwurfSync / runEntwurfAsync. entwurf_v2 resume deliberately bypasses it.
 //
 // Map key is the caller-provided sessionId:
 //   - pi native: pi.sessionManager.getSessionId()
@@ -358,7 +358,7 @@ const usedEntwurfTargets = new Map<string, Set<string>>();
 export function ensureEntwurfOncePerTarget(sessionId: string, targetKey: string): void {
 	const seen = usedEntwurfTargets.get(sessionId);
 	if (seen && seen.has(targetKey)) {
-		throw new Error(`entwurf to ${targetKey} already exists in this session. Use entwurf_resume to continue.`);
+		throw new Error(`entwurf to ${targetKey} already exists in this session. Use entwurf_v2 to continue.`);
 	}
 }
 
@@ -506,10 +506,10 @@ export function parseMessages(messages: AssistantMessageLike[]): string {
  *
  * Why this exists (issue #9):
  *   `runEntwurfResumeSync` originally fell back to `process.cwd()` when no
- *   explicit `cwd` was passed. Through the MCP `entwurf_resume` surface, the
+ *   explicit `cwd` was passed. Through the MCP `entwurf_v2` resume surface, the
  *   resumer is a different process from the original spawner, so its cwd is
  *   unrelated to the saved session's cwd. The child pi then started in the
- *   resumer's cwd, the pi-shell-acp bridge persisted that cwd in its session
+ *   resumer's cwd, the entwurf bridge persisted that cwd in its session
  *   cache, and on lookup `isPersistedSessionCompatible` saw a cwd mismatch
  *   against the Scene 1 record. The bridge discarded the record, started a
  *   `newSession`, and the backend lost all prior-turn memory — even though the
@@ -830,8 +830,8 @@ function resolveConfiguredPackageSource(packageNeedle: string): string | null {
 }
 
 // Strip an optional trailing @version from an npm spec while preserving a leading
-// @scope. "@junghanacs/pi-shell-acp@0.8.0" → "@junghanacs/pi-shell-acp";
-// "pi-shell-acp@1.2.3" → "pi-shell-acp". The install root keys on the bare name,
+// @scope. "@junghanacs/entwurf@0.8.0" → "@junghanacs/entwurf";
+// "entwurf@1.2.3" → "entwurf". The install root keys on the bare name,
 // not the raw source string (#29 correction: never slice the version into the path).
 function parseNpmPackageName(spec: string): string | null {
 	const trimmed = spec.trim();
@@ -932,12 +932,12 @@ function resolveExplicitExtensionSpec(packageNeedle: string, isRemote: boolean):
 	}
 
 	// Self-root fallback — LOCAL spawn only. When settings package-source
-	// resolution misses (e.g. local-dev `pi -e /abs/path/pi-shell-acp` with no
-	// matching settings source), the parent pi-shell-acp extension is still loaded
+	// resolution misses (e.g. local-dev `pi -e /abs/path/entwurf` with no
+	// matching settings source), the parent entwurf extension is still loaded
 	// from disk and our own module path is a more accurate bridge root than
 	// settings (#29 correction #5). Remote spawn cannot reach a local path across
 	// SSH, so it is excluded — remote must rely on settings/source mapping.
-	if (!isRemote && packageNeedle === "pi-shell-acp") {
+	if (!isRemote && packageNeedle === "entwurf") {
 		const selfRoot = resolveSelfRoot();
 		if (selfRoot) {
 			const spec = probeExtensionRoot(packageNeedle, selfRoot, selfRoot);
@@ -957,9 +957,9 @@ export function getEntwurfExplicitExtensions(
 	warnings: string[];
 	provider?: string;
 	modelOverride?: string;
-	/** Set when an explicit ACP intent (recorded provider=pi-shell-acp, or opt-in
+	/** Set when an explicit ACP intent (recorded provider=entwurf, or opt-in
 	 *  Codex-via-ACP) cannot resolve the bridge. Resume callers MUST fail-fast on
-	 *  this rather than spawning a guaranteed-broken `--provider pi-shell-acp`
+	 *  this rather than spawning a guaranteed-broken `--provider entwurf`
 	 *  child (#29). Claude-only heuristic stays warning-only (legacy fallback). */
 	unresolvedAcpIntent?: boolean;
 } {
@@ -969,18 +969,18 @@ export function getEntwurfExplicitExtensions(
 
 	const wantsClaudeBridge = isClaudeModel(model);
 	const wantsCodexBridge = shouldRouteCodexViaAcp(model);
-	// Resume-path signal: a session whose first spawn went through pi-shell-acp
+	// Resume-path signal: a session whose first spawn went through entwurf
 	// MUST be resumed with the bridge extension loaded — otherwise pi cannot
-	// resolve the "pi-shell-acp" provider and the resume dies silently (no
+	// resolve the "entwurf" provider and the resume dies silently (no
 	// assistant turn gets appended). This guard is needed because resume
 	// deliberately bypasses the Entwurf Target Registry (Identity Preservation
 	// Rule) — so routing info has to come from the session's own recordedProvider.
-	const wantsAcpByRecordedProvider = recordedProvider === "pi-shell-acp";
+	const wantsAcpByRecordedProvider = recordedProvider === "entwurf";
 	if (!wantsClaudeBridge && !wantsCodexBridge && !wantsAcpByRecordedProvider) {
 		return { args, names, warnings };
 	}
 
-	const acpBridge = resolveExplicitExtensionSpec("pi-shell-acp", isRemote);
+	const acpBridge = resolveExplicitExtensionSpec("entwurf", isRemote);
 	if (acpBridge) {
 		args.push("-e", isRemote ? acpBridge.remotePath : acpBridge.localPath);
 		names.push(acpBridge.name);
@@ -988,7 +988,7 @@ export function getEntwurfExplicitExtensions(
 			args,
 			names,
 			warnings,
-			provider: "pi-shell-acp",
+			provider: "entwurf",
 			// Strip `openai-codex/` prefix when routing via ACP, for both opt-in Codex
 			// routing and recorded-provider resume. For bare model ids the helper is
 			// a no-op, so this is safe regardless of whether the prefix is present.
@@ -997,16 +997,16 @@ export function getEntwurfExplicitExtensions(
 		};
 	}
 
-	// Bridge unresolved. Explicit ACP intent — recorded provider=pi-shell-acp on
+	// Bridge unresolved. Explicit ACP intent — recorded provider=entwurf on
 	// resume, or opt-in Codex-via-ACP — cannot degrade: the child would be spawned
-	// with `--provider pi-shell-acp` and die with `Unknown provider`. Signal
+	// with `--provider entwurf` and die with `Unknown provider`. Signal
 	// fail-fast to the caller (#29 correction #4: fail-fast scope = explicit ACP
 	// intent). Checked BEFORE the Claude heuristic so a Claude model that also
-	// recorded provider=pi-shell-acp fails fast instead of silently falling back
+	// recorded provider=entwurf fails fast instead of silently falling back
 	// to the unrelated pi-claude-code-use bridge.
 	if (wantsAcpByRecordedProvider) {
 		warnings.push(
-			"Resume recorded provider=pi-shell-acp but the bridge extension could not be resolved " +
+			"Resume recorded provider=entwurf but the bridge extension could not be resolved " +
 				"(checked settings package source: local path / git install / npm install, plus module self-root). " +
 				"Refusing to resume with an unknown provider.",
 		);
@@ -1015,8 +1015,8 @@ export function getEntwurfExplicitExtensions(
 
 	if (wantsCodexBridge) {
 		warnings.push(
-			`Codex entwurf requested with ${ENTWURF_CODEX_ACP_ENV}=1 but pi-shell-acp could not be resolved. ` +
-				"Refusing to spawn with --provider pi-shell-acp.",
+			`Codex entwurf requested with ${ENTWURF_CODEX_ACP_ENV}=1 but entwurf could not be resolved. ` +
+				"Refusing to spawn with --provider entwurf.",
 		);
 		return { args, names, warnings, unresolvedAcpIntent: true };
 	}
@@ -1033,7 +1033,7 @@ export function getEntwurfExplicitExtensions(
 	}
 
 	warnings.push(
-		"Claude entwurf requested but pi-shell-acp could not be resolved. Claude entwurfs may fail without an explicit provider bridge.",
+		"Claude entwurf requested but entwurf could not be resolved. Claude entwurfs may fail without an explicit provider bridge.",
 	);
 	return { args, names, warnings };
 }
@@ -1057,25 +1057,25 @@ export function getRegistryRouting(
 
 	// Native providers (openai-codex, anthropic, etc.) — pi handles them directly.
 	// No extension injection; just pass through provider + model.
-	if (target.provider !== "pi-shell-acp") {
+	if (target.provider !== "entwurf") {
 		return { args, names, warnings, provider: target.provider };
 	}
 
-	// pi-shell-acp targets need the bridge extension injected. If it can't be
+	// entwurf targets need the bridge extension injected. If it can't be
 	// resolved, fail-fast — NOT warning-only. A warning-then-spawn path puts a
-	// child on `pi --no-extensions --provider pi-shell-acp`, which dies with
-	// `Unknown provider "pi-shell-acp"` before any session file exists (#29). The
+	// child on `pi --no-extensions --provider entwurf`, which dies with
+	// `Unknown provider "entwurf"` before any session file exists (#29). The
 	// throw is caught by the same tool-surface try/catch that handles
 	// EntwurfRegistryError, and surfaces as a failed entwurf.
-	const acpBridge = resolveExplicitExtensionSpec("pi-shell-acp", isRemote);
+	const acpBridge = resolveExplicitExtensionSpec("entwurf", isRemote);
 	if (!acpBridge) {
 		throw new EntwurfRoutingError(
-			`pi-shell-acp target requested (provider=${target.provider}, model=${target.model}) but the ` +
+			`entwurf target requested (provider=${target.provider}, model=${target.model}) but the ` +
 				"bridge extension could not be resolved. Checked settings package source: local path / " +
 				"git install (~/.pi/agent/git/...) / npm install (~/.pi/agent/npm/node_modules/...)" +
 				(isRemote ? "" : " / loaded module self-root") +
-				". Refusing to spawn a child with `--no-extensions --provider pi-shell-acp` (it would die " +
-				'with `Unknown provider "pi-shell-acp"`). Install pi-shell-acp in pi settings packages, or ' +
+				". Refusing to spawn a child with `--no-extensions --provider entwurf` (it would die " +
+				'with `Unknown provider "entwurf"`). Install entwurf in pi settings packages, or ' +
 				"check that the configured source's install directory exists.",
 		);
 	}
@@ -1086,9 +1086,9 @@ export function getRegistryRouting(
 		args,
 		names,
 		warnings,
-		provider: "pi-shell-acp",
+		provider: "entwurf",
 		// Defensive: registry should already store bare basenames, but if a future
-		// entry slips an `openai-codex/` prefix into a pi-shell-acp model field,
+		// entry slips an `openai-codex/` prefix into a entwurf model field,
 		// strip it before forwarding to codex-acp.
 		modelOverride: target.model.startsWith("openai-codex/") ? target.model.slice("openai-codex/".length) : undefined,
 	};
@@ -1337,7 +1337,7 @@ export function buildGardenSessionName(input: BuildSessionNameInput): string {
 		}
 		if (tag === "entwurf") {
 			throw new SessionIdentityError(
-				`A resident garden session name must not carry the "entwurf" tag — that tag is the entwurf_resume ` +
+				`A resident garden session name must not carry the "entwurf" tag — that tag is the Entwurf resume ` +
 					`marker and would make this operator session resumable as an Entwurf child. Use "${RESIDENT_SESSION_TAG}".`,
 			);
 		}
@@ -1362,7 +1362,7 @@ export function assertGardenNativeSessionId(sessionId: string | undefined): void
 		throw new SessionIdentityError(
 			`Non-garden session id "${sessionId ?? "(none)"}" under --entwurf-control. Expected ` +
 				`YYYYMMDDTHHMMSS-[0-9a-f]{6}. Launch through the garden launcher that passes ` +
-				`--session-id "<generated>" (see pi-shell-acp README §Garden launcher / run.sh new-session-id) ` +
+				`--session-id "<generated>" (see entwurf README §Garden launcher / run.sh new-session-id) ` +
 				`so every --entwurf-control session is a garden citizen. No uuid / back-compat path.`,
 		);
 	}
@@ -1849,12 +1849,12 @@ export async function runEntwurfResumeSync(
 	}
 
 	const effectiveModel = resolveEntwurfModel(recordedModel);
-	// Pass recordedProvider so the resume path re-injects pi-shell-acp when the
+	// Pass recordedProvider so the resume path re-injects entwurf when the
 	// original spawn went through it (registry is bypassed on resume per Identity
 	// Preservation Rule — so the bridge signal must come from the session itself).
 	const explicitExtensions = getEntwurfExplicitExtensions(effectiveModel, false, recordedProvider);
 	// Explicit ACP intent that can't resolve the bridge — fail-fast rather than
-	// spawn a guaranteed-broken `--provider pi-shell-acp` child (#29). Returned as
+	// spawn a guaranteed-broken `--provider entwurf` child (#29). Returned as
 	// an error result to match this function's other pre-spawn guards (session
 	// identity / cwd), which the tool surface renders as a failed resume.
 	if (explicitExtensions.unresolvedAcpIntent) {

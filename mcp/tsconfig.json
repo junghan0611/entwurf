@@ -2,7 +2,7 @@
 	// Sub-config for the MCP bridges. They share the root's settings but
 	// add two strip-types-runtime concessions:
 	//
-	//   1. allowImportingTsExtensions — pi-tools-bridge imports
+	//   1. allowImportingTsExtensions — entwurf-bridge imports
 	//      ../../pi-extensions/lib/entwurf-core.ts with an explicit .ts
 	//      suffix because mcp/* is launched via Node's
 	//      `--experimental-strip-types` resolver, which requires the
@@ -25,5 +25,5 @@
 		"noEmit": true,
 		"rootDir": ".."
 	},
-	"include": ["./pi-tools-bridge/src/**/*.ts", "../pi-extensions/lib/**/*.ts"]
+	"include": ["./entwurf-bridge/src/**/*.ts", "../pi-extensions/lib/**/*.ts"]
 }

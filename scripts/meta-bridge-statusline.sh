@@ -128,7 +128,7 @@ def context_info(data: dict[str, Any]) -> str:
 
 
 def meta_sessions_dir() -> Path:
-    override = os.environ.get("PI_META_SESSIONS_DIR")
+    override = os.environ.get("ENTWURF_META_SESSIONS_DIR")
     if override:
         return Path(override).expanduser().resolve()
     agent = os.environ.get("PI_CODING_AGENT_DIR")

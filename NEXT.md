@@ -1,4 +1,4 @@
-# NEXT — pi-shell-acp 0.11.0 나침반
+# NEXT — entwurf 0.12.0 나침반
 
 > 나침반이지 DB가 아니다: **현재 위치 · 다음 한 걸음 · 넘으면 안 되는 선**만 여기 둔다.
 > 현재+미래 방향과 설계 SSOT(동결 결정·검증 원장·아키텍처·backlog) = **`ROADMAP.md`**.
@@ -8,7 +8,41 @@
 > Stage 0 step 설계 · 동결 결정 · 검증 원장 · backlog)를 `ROADMAP.md`로 이주하고 NEXT를 compass로 축소했다.
 > 그 전 2133줄 ledger 전문은 git history(이 커밋 직전 NEXT.md)에 보존됨.
 
-## NOW — 2026-06-16 KST — 0.11.0 컷 준비 완료 (코드/문서/게이트 닫힘, push·컷만 GLG 대기)
+## NOW — entwurf 인플레이스 rename **landed**, 새 위치 GREEN (2026-06-23 갱신)
+
+> **rename cutover 완료.** 패키지 `@junghanacs/entwurf@0.12.0` (커밋 `fcdac5a`), 물리 위치
+> `~/repos/gh/entwurf/`. 브랜치 `entwurf-rename`, working tree clean.
+>
+> **2026-06-23 새 위치 airtight 검증 = GREEN:** `cd ~/repos/gh/entwurf && pnpm check` EXIT=0 —
+> lint + typecheck + 60여 게이트 + `check-pack`(181 files tarball) 전 체인 통과. install 전파도 3면 증명
+> (.pi/settings.json bridge → 새 경로, old 누수 0 · global registry 심볼릭링크 relink · `pi --list-models
+> entwurf` 라이브). 디렉토리명 독립 + install 자가전파(REPO_DIR를 settings에 박음) 확인.
+
+### 재배치 재현 runbook — install은 **2갈래**다 (2026-06-23 statusLine 死 사건의 교훈)
+
+> **근본 원인:** repo를 옮기면(rename/move) install을 다시 돌려야 하는데, install이 둘로 갈려 있다.
+> 이번에 `./run.sh install`(=pi 패키지)만 돌리고 `./run.sh install-meta-bridge`(=Claude Code 배선)를 안 돌려서,
+> `~/.claude/settings.json` statusLine이 **死한 옛 경로**(`pi-shell-acp/scripts/meta-bridge-statusline.sh`)에 멈춰
+> 상태바가 날아갔다. canonical installer 재실행으로 복구.
+
+재배치/clone 후 working state를 **결정적으로 재현**하는 순서 (전부 새 위치에서):
+
+1. `./run.sh install .` — **pi 패키지** 배선 (`.pi/settings.json` 의 `entwurfProvider` + `mcpServers.entwurf-bridge`
+   절대경로, global registry 심볼릭링크). REPO_DIR을 self-박음 → 경로 독립.
+2. `./run.sh install-meta-bridge` — **Claude Code** 배선 (statusLine·meta-bridge 플러그인·USER-scope `entwurf-bridge` MCP).
+   `meta-bridge-state.py apply` 가 `~/.claude/settings.json` statusLine/`.assembled` 를 **현재 REPO 경로**로 박는다.
+   ⚠ 이 단계를 빼먹으면 상태바가 옛 경로에 멈춘다 (= 이번 사건).
+3. `./run.sh doctor-meta-bridge` — **fail-loud 검증 가드.** `meta-bridge-doctor.sh:117-118` 이 statusLine.command ==
+   `$REPO/scripts/meta-bridge-statusline.sh` 를 assert; drift면 `bad "statusLine.command drifted (got…expected…)"`.
+   `.assembled`/USER MCP 경로 drift도 같이 잡는다. **재배치 후 이걸 돌렸으면 즉시 빨갛게 떴다.**
+
+> 가드(doctor)는 이미 존재. 갭은 "절차 지식"이었고 이 runbook이 그걸 닫는다. 더 단단히 하려면(선택, GLG 승인):
+> `run.sh install` 이 meta-bridge가 **다른 repo 경로**를 가리키는 drift를 감지하면 "install-meta-bridge 돌려라" nudge
+> 출력 → 단일 install이 갭을 surface. (pi-only 호스트엔 no-op이 되도록 detection-gated.)
+
+---
+
+### (역사) 2026-06-16 — 0.11.0 컷 준비 완료
 
 **①②③④ + affordance fix 전부 DONE (Opus#3, GPT `87388d` 동행), 커밋 `2ca818f`:**
 
@@ -25,14 +59,30 @@
 
 > v1/v2 분리 결론·되는것/안되는것·triage 최종 진단은 **`ROADMAP.md` 「현재 — 0.11.0」**에 정리됨.
 
-## 다음 한 걸음
+## 다음 한 걸음 — rename 후행 tail (전부 GLG 결정)
 
-1. **doc-cleanup 커밋** (working tree 미커밋): README Gemini 추천경로 제거(2026-06-18 deprecated→Antigravity) +
-   `ROADMAP.md` 신설 + `NEXT.md` compass 축소. → commit skill 경유.
-2. **push = GLG.** push 후 agenda stamp(로컬-온리 커밋은 stamp 안 함).
-3. **컷 = GLG.** "컷 가자" 시 `## Unreleased` → `## 0.11.0` promote + tag (tag-release Make 또는
-   `/prepare-release 0.11.0` → `/make-release`).
-4. **컷 후 = 새 `entwurf` repo로 v2 인터페이스 분리** (ROADMAP 「큰 방향」). entwurf-core 추출이 첫 몸.
+> 코드/install/런타임 축은 닫혔다. 남은 건 **전역 설정·GitHub repo·old 폴더 처분** — 전부 GLG 손/결정.
+
+1. ✅ **GitHub repo rename = 2026-06-23 DONE.** `gh repo rename entwurf` (`junghan0611/pi-shell-acp`→`junghan0611/entwurf`)
+   + `git remote set-url origin git@github.com:junghan0611/entwurf.git` + dangling 글로벌 심링크
+   `~/.pi/agent/git/.../pi-shell-acp`(→삭제된 dir) 제거. GitHub는 old명 redirect 유지.
+2. **consumer repoint:**
+   - ✅ `~/.claude.json` top-level mcpServers dangling `pi-tools-bridge` **= 제거됨** (`claude mcp remove … -s user`).
+   - ✅ `~/.claude/settings.json` statusLine/`.assembled`/`entwurf-bridge` MCP **= entwurf로 repoint됨**
+     (`./run.sh install-meta-bridge` 재실행, `doctor-meta-bridge` PASS). ※ marketplace 소스도 entwurf — 옛 세션은 재시작해야 잔상 해소.
+   - ✅ agent-config **workstation 3면** (`pi/settings.json` packages+`entwurfProvider`+`entwurf-bridge` · `antigravity/mcp_config.json`
+     · `codex/config.toml`) **= agent-config 세션이 처리** (pit/pia 복구). 
+   - ⏳ agent-config **server 면** (`*.server.json` · `run.sh` install spec/URL): remote rename 됐으니 이제 unblock — agent-config 세션 lane.
+3. **docs prose cutover = GPT 협업 pass 예정 (GLG가 따로 진행).** entwurf repo 8파일. **live/historical 분류 맵(이미 분석함):**
+   - **변경(LIVE):** `ROADMAP.md:1` 제목 `pi-shell-acp ROADMAP`→`entwurf` · `ROADMAP.md:274` 본체경로 · `setup-clean-host.md` Stage 1–4
+     설치명령(clone URL·`--list-models`·provider id·`@junghanacs/pi-shell-acp`·`[pi-shell-acp:bootstrap]` 로그prefix·model prefix).
+   - **🔒 보존(역사/리터럴):** `CHANGELOG.md`(90건) · `BASELINE.md`(날짜 검증 원장)·`VERIFY.md`(History rows) ·
+     canary 리터럴 `GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1`(코드 매칭) · deprecated npm `@junghan0611/openclaw-pi-shell-acp` ·
+     `setup-clean-host.md` openclaw Docker 부록. (= GLG 2026-06-22 승인 allowlist와 정합.)
+   - `NEXT--*.md` 브랜치 ledger = 머지 전 삭제 대상(string-replace 불필요).
+4. **old 폴더:** `pi-shell-acp/` **이미 삭제됨**(확인). `pi-shell-acp-v1/`·`pi-entwurf/` 잔존 → 처분 GLG 결정.
+5. **릴리즈 컷 = GLG.** `entwurf-rename` 브랜치는 `origin`(entwurf.git)에 push됨(2026-06-23, stamp 완료). 남은 건
+   **태그 + npm publish(`@junghanacs/entwurf` 신규 publish + 옛것 deprecate)** = 모든 rename·문서 pass 완료 후 GLG.
 
 ## 넘으면 안 되는 선
 
@@ -45,4 +95,4 @@
 - **현재+미래 방향 · 설계 SSOT:** `ROADMAP.md`
 - **닫힌 변경 핵심(게시):** `CHANGELOG.md`
 - **검증 calibration:** `VERIFY.md` · **전달 capability levels:** `DELIVERY.md` · **repo baseline:** `AGENTS.md`
-- 본체 `~/repos/gh/pi-shell-acp/` · consumer `~/repos/gh/agent-config/`
+- 본체 `~/repos/gh/entwurf/` · GitHub `junghan0611/entwurf` (rename 완료) · consumer `~/repos/gh/agent-config/`

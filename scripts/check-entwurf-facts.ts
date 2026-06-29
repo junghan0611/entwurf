@@ -60,7 +60,7 @@ function identity(backend: MetaBackendV2, over: Partial<MetaIdentity> = {}): Met
 		gardenId: "20260611T093858-14984d",
 		backend,
 		nativeSessionId: "native-abc",
-		cwd: "/home/junghan/repos/gh/pi-shell-acp",
+		cwd: "/home/junghan/repos/gh/entwurf",
 		model: "claude-opus-4-8",
 		transcriptPath: "/home/junghan/.claude/projects/x/native-abc.jsonl",
 		parentGardenId: null,

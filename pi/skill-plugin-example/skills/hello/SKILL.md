@@ -1,6 +1,6 @@
 ---
 name: hello
-description: Smallest skill the Claude Agent SDK will load through pi-shell-acp's skillPlugins surface. Use it as a copy-and-rename template; replace this file with your own SKILL.md for each skill you ship.
+description: Smallest skill the Claude Agent SDK will load through entwurf's skillPlugins surface. Use it as a copy-and-rename template; replace this file with your own SKILL.md for each skill you ship.
 ---
 
 # hello
@@ -15,4 +15,4 @@ skill. If your skill needs auxiliary scripts or files, place them next to this
 `SKILL.md` inside `skills/<name>/` — the SDK passes the directory through.
 
 For the full SKILL.md authoring contract see the upstream Claude Agent SDK
-documentation; pi-shell-acp does not reinterpret that contract.
+documentation; entwurf does not reinterpret that contract.

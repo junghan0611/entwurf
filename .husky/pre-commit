@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# pi-shell-acp pre-commit gate.
+# entwurf pre-commit gate.
 #
 # `pnpm check` already covers the entire static-quality surface:
 #
@@ -14,7 +14,7 @@
 #
 # That is the single source of truth for "does this commit hold the bridge's
 # invariants". The hook just wires it in. Anything beyond this — runtime
-# smoke, dual-backend interview, resume continuity — stays manual; pi-shell-acp
+# smoke, dual-backend interview, resume continuity — stays manual; entwurf
 # is a daily-driver bridge and those gates need a real ACP subprocess.
 #
 # Bypass with `git commit --no-verify` only when you genuinely understand

@@ -1,9 +1,9 @@
 ---
-description: Prepare a pi-shell-acp release — changelog promote → version bump → commit
+description: Prepare an entwurf release — changelog promote → version bump → commit
 argument-hint: "<version>  (e.g. 0.4.11 — no leading 'v', digits and dots only)"
 ---
 
-You are preparing a standard release for pi-shell-acp.
+You are preparing a standard release for entwurf.
 
 User-supplied version: $ARGUMENTS
 

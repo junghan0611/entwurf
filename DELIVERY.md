@@ -18,7 +18,7 @@ Companion surfaces:
 
 ## Scope and non-goals
 
-This document is about **native live-session delivery** for the 1.0.0
+This document is about **native live-session delivery** for the 0.12.0
 meta-bridge direction: a garden meta-session points at a backend-owned native
 session, and async messages reach that session through the backend's own
 supported surfaces.
@@ -94,19 +94,27 @@ When a level is **not applicable** or **conditional**, say so explicitly. For
 example, Codex app-server delivery is conditional on a loaded thread and control
 socket; direct Codex TUI is a different surface.
 
-## Current capability matrix (2026-06-05)
+## Current capability matrix (2026-06-24)
 
 This matrix is a snapshot of what the raw probes have established. It should be
 updated when a backend version changes the delivery surface.
 
-| Harness / surface | Highest current level | Transport | Notes |
-|---|---:|---|---|
-| **pi native Entwurf** | D7+ | Unix control socket + pi followUp/custom messages | Replyable pi session. This is the resident baseline, not an external meta-session. 0.11.0 `entwurf_v2` treats a record-less but live pi control socket as a socket-only `fire-and-forget` target (addressed by its socket, not a meta-record); record-less *dormant* resume is intentionally not claimed. |
-| **Claude Code interactive 2.1.163** | D6, D7 partial, D8 partial | Plugin/global `SessionStart` arms `watchPaths`; external write triggers `FileChanged`; `asyncRewake` wakes idle session | Active idle wake proven without pty. `Stop` alone is piggyback-only. `asyncRewake` is a doorbell; body is self-fetched from mailbox. D8 partial: duplicate/read idempotence, honest unread counts, and level-triggered body drain are gated; empirical wake-edge bounds and unread-heartbeat backstop remain open (#34). |
-| **Antigravity / agy** | D6+ | Native LS gRPC `agentapi send-message` | Active push into live conversation. Same judgement levels; transport differs from Claude. |
-| **Codex embedded TUI 0.136.0** | D0 partial | Native state DB / rollout transcript only | Standalone Embedded TUI binds no socket; no `FileChanged`/`asyncRewake` in Codex hooks; not retrofittable. Identify-only via state DB / rollout. |
-| **Codex app-server-backed TUI 0.136.0** | D6, D7 (status) | WebSocket-over-UDS `turn/start` into the live `threadId` | **Demonstrated, no managed standalone, no cloud.** `codex app-server --listen unix://<owned 0700 dir>` + plain `codex` auto-attach (or `--remote unix://`). Full message injection (agy-like, not a doorbell); `thread/status/changed` gives completion observation. D8 robustness (dedupe / crash recovery / ordering policy) is not tested. `turn/steer` is active-turn steering, not idle wake. |
-| **Codex managed-daemon / remote-control 0.136.0** | D4–D6 conditional | `app-server proxy` newline JSON-RPC over the daemon control socket | Needs the managed standalone install; `remote-control` also enables the **cloud** bridge. Use the bare `--listen` path above for a purely-local setup. |
+The **Status** column is the 0.12.0 release framing, kept separate from the
+`D0–D8` capability level:
+
+- **shipped** — a supported entwurf 0.12.0 lane: wired, gated, and addressable through the bridge today.
+- **verified-probe** — async delivery proven by a raw probe, but not yet a shipped/supported lane in 0.12.0 (documented, ships after this cut).
+- **deferred** — not addressable as-is, or needs an extra managed install / cloud surface that is out of 0.12.0 scope.
+
+| Harness / surface | Status | Highest current level | Transport | Notes |
+|---|---|---:|---|---|
+| **pi native Entwurf** | shipped | D7+ | Unix control socket + pi followUp/custom messages | Replyable pi session. This is the resident baseline, not an external meta-session. 0.12.0 `entwurf_v2` treats a record-less but live pi control socket as a socket-only `fire-and-forget` target (addressed by its socket, not a meta-record); record-less *dormant* resume is intentionally not claimed. |
+| **Claude Code interactive 2.1.163** | shipped | D6, D7 partial, D8 partial | Plugin/global `SessionStart` arms `watchPaths`; external write triggers `FileChanged`; `asyncRewake` wakes idle session | Active idle wake proven without pty. `Stop` alone is piggyback-only. `asyncRewake` is a doorbell; body is self-fetched from mailbox. D8 partial: duplicate/read idempotence, honest unread counts, and level-triggered body drain are gated; empirical wake-edge bounds and unread-heartbeat backstop remain open (#34). |
+| **Antigravity / agy** | verified-probe | D6+ | Native LS gRPC `agentapi send-message` | Active push into live conversation. Same judgement levels; transport differs from Claude. Delivery proven; a shipped adapter lane lands after the 0.12.0 doc cut. |
+| **Codex app-server-backed TUI 0.136.0** | verified-probe | D6, D7 (status) | WebSocket-over-UDS `turn/start` into the live `threadId` | **Demonstrated, no managed standalone, no cloud.** `codex app-server --listen unix://<owned 0700 dir>` + plain `codex` auto-attach (or `--remote unix://`). Full message injection (agy-like, not a doorbell); `thread/status/changed` gives completion observation. D8 robustness (dedupe / crash recovery / ordering policy) is not tested. `turn/steer` is active-turn steering, not idle wake. |
+| **Codex embedded TUI 0.136.0** | deferred | D0 partial | Native state DB / rollout transcript only | Standalone Embedded TUI binds no socket; no `FileChanged`/`asyncRewake` in Codex hooks; not retrofittable. Identify-only via state DB / rollout. |
+| **Codex managed-daemon / remote-control 0.136.0** | deferred | D4–D6 conditional | `app-server proxy` newline JSON-RPC over the daemon control socket | Needs the managed standalone install; `remote-control` also enables the **cloud** bridge. Use the bare `--listen` path above for a purely-local setup. |
+| **ACP Claude / Cortex (candidate)** | deferred | — | ACP (via entwurf's pi adapter) | Shipped as an ACP *runtime* lane (you can run Claude through ACP — see VERIFY/README), but **not a native-async-*delivery* target**: ACP sessions are bridge-spawned children, not already-running native sessions to wake, so they fall outside this doc's delivery question. `deferred` here means "no async-delivery lane," not "unsupported." Cortex is the candidate that would land on the ACP path next. |
 
 ## Backend notes
 
@@ -173,7 +181,7 @@ not addressability.
 
 A Codex adapter must declare which launch mode + which socket it targets.
 
-## How to use this in 1.0.0 design
+## How to use this in 0.12.0 design
 
 For meta-sessions, peer records should expose capability rather than hiding
 backend differences:

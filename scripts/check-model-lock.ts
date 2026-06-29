@@ -10,10 +10,10 @@
  *
  * Coverage (every assertion must pass):
  *   1.  native → native: no-op
- *   2.  native → pi-shell-acp: revert (warning notify)
- *   3.  pi-shell-acp → native: revert (warning notify)
- *   4.  pi-shell-acp/X → pi-shell-acp/Y (id differs): revert (warning notify)
- *   5.  pi-shell-acp → pi-shell-acp (same id): skip (changed=false)
+ *   2.  native → entwurf: revert (warning notify)
+ *   3.  entwurf → native: revert (warning notify)
+ *   4.  entwurf/X → entwurf/Y (id differs): revert (warning notify)
+ *   5.  entwurf → entwurf (same id): skip (changed=false)
  *   6.  undefined → any: skip (!from)
  *   7.  source="restore": skip
  *   8.  Reentry guard: revert's synthetic emit MUST NOT re-trigger revert
@@ -28,11 +28,11 @@
  *   17. session_start "reload" + entries=0 BUT prior sessionLocked=true: lock preserved
  *   18. getEntries() throws: defensive `catch { return true }` engages the lock
  *
- * Why this exists separate from smoke-model-switch:
- *   smoke-model-switch drives `ensureBridgeSession` directly to verify the
- *   A bridge-side guard. B (the extension hook) does NOT run there — there
- *   is no pi extension runtime in that smoke. This script is the B-side
- *   gate, and the two together form the full policy verification surface.
+ * Scope (B-side, the extension hook):
+ *   this drives the model-lock extension hook directly. Its former A-side
+ *   companion `smoke-model-switch` exercised the ACP bridge guard
+ *   (`ensureBridgeSession`) and was removed with the ACP purge (v2-only),
+ *   so this B-side gate now stands alone as the policy verification surface.
  *
  * Module-level state note: model-lock.ts uses two module-level flags
  * (`reverting`, `sessionLocked`) that persist across tests in the same
@@ -210,8 +210,8 @@ async function makeHarness(opts: MakeHarnessOpts = {}): Promise<Harness> {
 // Test models.
 const NATIVE_A: ModelLike = { provider: "openai-codex", id: "gpt-5.4" };
 const NATIVE_B: ModelLike = { provider: "openai-codex", id: "gpt-5.5" };
-const PSA_SONNET: ModelLike = { provider: "pi-shell-acp", id: "claude-sonnet-4-6" };
-const PSA_OPUS: ModelLike = { provider: "pi-shell-acp", id: "claude-opus-4-8" };
+const PSA_SONNET: ModelLike = { provider: "entwurf", id: "claude-sonnet-4-6" };
+const PSA_OPUS: ModelLike = { provider: "entwurf", id: "claude-opus-4-8" };
 
 let passed = 0;
 let failed = 0;
@@ -235,14 +235,14 @@ console.log("[check-model-lock] policy unit tests");
 // Tests 1-9 — original policy matrix (sessionLocked=true via default "locked")
 // =============================================================================
 
-await run("1. native → native: no-op (touchesPiShellAcp=false)", async () => {
+await run("1. native → native: no-op (touchesEntwurf=false)", async () => {
 	const h = await makeHarness();
 	await h.dispatch({ type: "model_select", model: NATIVE_B, previousModel: NATIVE_A, source: "set" });
 	assert.equal(h.setModelCalls.length, 0);
 	assert.equal(h.notifyCalls.length, 0);
 });
 
-await run("2. native → pi-shell-acp: revert + warning notify", async () => {
+await run("2. native → entwurf: revert + warning notify", async () => {
 	const h = await makeHarness();
 	await h.dispatch({ type: "model_select", model: PSA_SONNET, previousModel: NATIVE_A, source: "set" });
 	assert.equal(h.setModelCalls.length, 1);
@@ -250,10 +250,10 @@ await run("2. native → pi-shell-acp: revert + warning notify", async () => {
 	assert.equal(h.notifyCalls.length, 1);
 	assert.equal(h.notifyCalls[0].level, "warning");
 	assert.match(h.notifyCalls[0].message, /locked to openai-codex\/gpt-5\.4/);
-	assert.match(h.notifyCalls[0].message, /pi-shell-acp\/claude-sonnet-4-6/);
+	assert.match(h.notifyCalls[0].message, /entwurf\/claude-sonnet-4-6/);
 });
 
-await run("3. pi-shell-acp → native: revert + warning notify", async () => {
+await run("3. entwurf → native: revert + warning notify", async () => {
 	const h = await makeHarness();
 	await h.dispatch({ type: "model_select", model: NATIVE_A, previousModel: PSA_SONNET, source: "set" });
 	assert.equal(h.setModelCalls.length, 1);
@@ -262,7 +262,7 @@ await run("3. pi-shell-acp → native: revert + warning notify", async () => {
 	assert.equal(h.notifyCalls[0].level, "warning");
 });
 
-await run("4. pi-shell-acp/X → pi-shell-acp/Y (id differs): revert + warning notify", async () => {
+await run("4. entwurf/X → entwurf/Y (id differs): revert + warning notify", async () => {
 	const h = await makeHarness();
 	await h.dispatch({ type: "model_select", model: PSA_OPUS, previousModel: PSA_SONNET, source: "set" });
 	assert.equal(h.setModelCalls.length, 1, "B reverts same-provider mismatch BEFORE next prompt");
@@ -271,14 +271,14 @@ await run("4. pi-shell-acp/X → pi-shell-acp/Y (id differs): revert + warning n
 	assert.equal(h.notifyCalls[0].level, "warning");
 });
 
-await run("5. pi-shell-acp → pi-shell-acp (same id): no-op (changed=false)", async () => {
+await run("5. entwurf → entwurf (same id): no-op (changed=false)", async () => {
 	const h = await makeHarness();
 	await h.dispatch({ type: "model_select", model: PSA_SONNET, previousModel: PSA_SONNET, source: "set" });
 	assert.equal(h.setModelCalls.length, 0);
 	assert.equal(h.notifyCalls.length, 0);
 });
 
-await run("6. undefined → pi-shell-acp (first selection): no-op (!from)", async () => {
+await run("6. undefined → entwurf (first selection): no-op (!from)", async () => {
 	const h = await makeHarness();
 	await h.dispatch({ type: "model_select", model: PSA_SONNET, previousModel: undefined, source: "set" });
 	assert.equal(h.setModelCalls.length, 0);

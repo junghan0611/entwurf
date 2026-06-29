@@ -1,6 +1,6 @@
 /**
  * resolve-acp-bridge — print the bridge extension path entwurf-core's
- * getRegistryRouting() would inject for a provider=pi-shell-acp spawn under the
+ * getRegistryRouting() would inject for a provider=entwurf spawn under the
  * CURRENT environment (PI_CODING_AGENT_DIR + settings.json package sources).
  *
  * Used by smoke-installed-entwurf-acp so the live smoke drives a real pi child
@@ -16,7 +16,7 @@ import type { ResolvedTarget } from "../pi-extensions/lib/entwurf-core.ts";
 import { getRegistryRouting } from "../pi-extensions/lib/entwurf-core.ts";
 
 const isRemote = process.argv[2] === "remote";
-const target: ResolvedTarget = { provider: "pi-shell-acp", model: "claude-sonnet-4-6", explicitOnly: false };
+const target: ResolvedTarget = { provider: "entwurf", model: "claude-sonnet-4-6", explicitOnly: false };
 
 // Throws EntwurfRoutingError (non-zero exit) when the bridge cannot be resolved —
 // exactly the fail-fast the smoke wants to observe as a failure, not a pass.

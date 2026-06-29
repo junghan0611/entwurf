@@ -8,7 +8,7 @@
  *   3. BOTH keep the headless prefix `--mode json -p` and run the prompt as the final
  *      positional (the prompt-as-turn authority is unchanged in v2 — `-p` is NOT dropped).
  *   4. `explicitExtensionArgs` is preserved verbatim, exactly once, in BOTH variants
- *      (load-bearing for a recorded `provider=pi-shell-acp` resume; #29 footgun).
+ *      (load-bearing for a recorded `provider=entwurf` resume; #29 footgun).
  *   5. v2-control includes `plan.launchArgs` (`--approve` / empty) as flags BEFORE the
  *      prompt; legacy ignores launchArgs entirely.
  *   6. provider/model identity is laid out identically in both; a null/undefined provider
@@ -32,7 +32,7 @@ const GID = "20260613T091000-98363c";
 // Real production shape: getEntwurfExplicitExtensions emits `-e <path>` (entwurf-core.ts),
 // NOT `--extension`. The builder spreads verbatim, but the fixture mirrors production so the
 // "preserved exactly once" assertion exercises the token the launcher actually passes.
-const EXT = ["-e", "/path/to/pi-shell-acp/index.ts"] as const;
+const EXT = ["-e", "/path/to/entwurf/index.ts"] as const;
 
 // index of token `flag`'s VALUE (the token right after it), or -1 if the flag is absent.
 function valueAfter(args: readonly string[], flag: string): string | undefined {
@@ -47,7 +47,7 @@ function main(): void {
 			variant: "legacy",
 			sessionId: GID,
 			explicitExtensionArgs: EXT,
-			provider: "pi-shell-acp",
+			provider: "entwurf",
 			model: "claude-opus-4-8",
 			prompt: "continue the task",
 		});
@@ -56,7 +56,7 @@ function main(): void {
 		ok("3 legacy headless prefix --mode json -p", args[0] === "--mode" && args[1] === "json" && args[2] === "-p");
 		ok("3 legacy prompt is the final positional", args[args.length - 1] === "continue the task");
 		ok("4 legacy keeps ext args exactly once", args.filter((a) => a === "-e").length === 1);
-		ok("6 legacy provider laid out", valueAfter(args, "--provider") === "pi-shell-acp");
+		ok("6 legacy provider laid out", valueAfter(args, "--provider") === "entwurf");
 		ok("6 legacy model laid out", valueAfter(args, "--model") === "claude-opus-4-8");
 		ok("6 legacy session-id laid out", valueAfter(args, "--session-id") === GID);
 		// model + prompt are the last three tokens: --model <m> <prompt>
@@ -74,7 +74,7 @@ function main(): void {
 			variant: "v2-control",
 			sessionId: GID,
 			explicitExtensionArgs: EXT,
-			provider: "pi-shell-acp",
+			provider: "entwurf",
 			model: "claude-opus-4-8",
 			prompt: "resume now",
 			launchArgs: ["--approve"],
@@ -87,7 +87,7 @@ function main(): void {
 		ok("4 v2 keeps ext args exactly once", args.filter((a) => a === "-e").length === 1);
 		ok("5 v2 includes launchArgs --approve", args.includes("--approve"));
 		ok("5 v2 --approve is before the prompt", args.indexOf("--approve") < args.length - 1);
-		ok("6 v2 provider laid out", valueAfter(args, "--provider") === "pi-shell-acp");
+		ok("6 v2 provider laid out", valueAfter(args, "--provider") === "entwurf");
 		ok("6 v2 model laid out", valueAfter(args, "--model") === "claude-opus-4-8");
 		ok("6 v2 session-id laid out", valueAfter(args, "--session-id") === GID);
 		ok(
@@ -132,7 +132,7 @@ function main(): void {
 		const base = {
 			sessionId: GID,
 			explicitExtensionArgs: EXT,
-			provider: "pi-shell-acp",
+			provider: "entwurf",
 			model: "m",
 			prompt: "p",
 			launchArgs: ["--approve"],

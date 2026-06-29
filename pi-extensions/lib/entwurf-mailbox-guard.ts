@@ -4,8 +4,8 @@
  * from entwurf-deliverability.ts so the predicate stays pure (gate-pinnable) and only
  * this thin wrapper touches the record store / capability registry / presence marker.
  *
- * The contract every conversational-reply enqueue site (MCP entwurf_send fallback,
- * pi-native entwurf_send fallback) must use INSTEAD of calling enqueueMetaMessage
+ * The contract every conversational-reply enqueue site (MCP entwurf_v2 fallback,
+ * pi-native entwurf_v2 fallback) must use INSTEAD of calling enqueueMetaMessage
  * directly:
  *   1. gather facts for the target garden id (record? wakeMode? receiver active?),
  *   2. ask mailboxConversationalDeliverable,

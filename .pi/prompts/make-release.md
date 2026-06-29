@@ -1,9 +1,9 @@
 ---
-description: Cut a release of pi-shell-acp — pre-flight → tag → push → stamp → notes → release → verify → notify
+description: Cut a release of entwurf — pre-flight → tag → push → stamp → notes → release → verify → notify
 argument-hint: "<version>  (e.g. 0.4.9 — no leading 'v', digits and dots only)"
 ---
 
-You are running a standard release for pi-shell-acp.
+You are running a standard release for entwurf.
 
 User-supplied version: $ARGUMENTS
 
@@ -290,7 +290,7 @@ rm -f "/tmp/release-notes-v${VERSION}.md"
 - **Does not auto-author release titles** — title is always
   `v<version>`, theme stays in the CHANGELOG body.
 - **Does not bump downstream consumers** — `agent-config` pins
-  pi-shell-acp by tag (`package.json` / `pi/settings.server.json` /
+  entwurf by tag (`package.json` / `pi/settings.server.json` /
   `run.sh`'s `PI_SHELL_ACP_VERSION` / `CHANGELOG.md`). See
   agent-config's own `AGENTS.md § Release` for the consumer bump
   procedure.
@@ -305,15 +305,15 @@ registry-installed package source, not just the local tarball:
 ```bash
 VERSION="$ARGUMENTS"
 TMP_AGENT=$(mktemp -d -t psa-registry-smoke.XXXXXX)
-PI_CODING_AGENT_DIR="$TMP_AGENT" pi install "npm:@junghanacs/pi-shell-acp@${VERSION}"
-printf '%s\n' "{ \"packages\": [\"npm:@junghanacs/pi-shell-acp@${VERSION}\"] }" > "$TMP_AGENT/settings.json"
+PI_CODING_AGENT_DIR="$TMP_AGENT" pi install "npm:@junghanacs/entwurf@${VERSION}"
+printf '%s\n' "{ \"packages\": [\"npm:@junghanacs/entwurf@${VERSION}\"] }" > "$TMP_AGENT/settings.json"
 BRIDGE=$(PI_CODING_AGENT_DIR="$TMP_AGENT" node --experimental-strip-types scripts/resolve-acp-bridge.ts)
-test "$BRIDGE" = "$TMP_AGENT/npm/node_modules/@junghanacs/pi-shell-acp"
-PI_CODING_AGENT_DIR="$TMP_AGENT" pi --no-extensions -e "$BRIDGE" --list-models pi-shell-acp
+test "$BRIDGE" = "$TMP_AGENT/npm/node_modules/@junghanacs/entwurf"
+PI_CODING_AGENT_DIR="$TMP_AGENT" pi --no-extensions -e "$BRIDGE" --list-models entwurf
 rm -rf "$TMP_AGENT"
 ```
 
-Pass criteria: output includes `pi-shell-acp` and `claude-sonnet-4-6`, with no
+Pass criteria: output includes `entwurf` and `claude-sonnet-4-6`, with no
 `Unknown provider` / `No models matching`. If this fails after publish, stop and
 ask GLG whether to deprecate/yank before notifying downstream consumers.
 

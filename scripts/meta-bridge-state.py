@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stateful install/uninstall config manager for pi-shell-acp meta-bridge.
+"""Stateful install/uninstall config manager for entwurf meta-bridge.
 
 This is the Phase-2 honesty core: install records exactly what it touched before
 writing, and uninstall restores/removes only those keys/items. No blind jq merge.
@@ -20,7 +20,7 @@ PLUGIN = "entwurf-meta-receive"
 MARKETPLACE = "meta-bridge-local"
 PLUGIN_REF = f"{PLUGIN}@{MARKETPLACE}"
 STATE_VERSION = 1
-OWNER = "pi-shell-acp meta-bridge"
+OWNER = "entwurf meta-bridge"
 
 PERMISSION_ALLOW = [
     "Bash",
@@ -32,7 +32,7 @@ PERMISSION_ALLOW = [
     "WebFetch",
     "WebSearch",
     "Skill",
-    "mcp__pi-tools-bridge__*",
+    "mcp__entwurf-bridge__*",
 ]
 
 PERMISSION_DENY = [
@@ -56,10 +56,18 @@ PERMISSION_DENY = [
     "TaskUpdate",
 ]
 
-# Claude Code single-driver policy scalars owned by pi-shell-acp for the native
+# Legacy permission-allow items from the pre-rename bridge name (pi-tools-bridge
+# → entwurf-bridge). apply() prunes these so an old install's stale allow does
+# not linger forever (append_unique only adds; it never removes). Parallel to
+# install.sh's one-shot `claude mcp remove pi-tools-bridge`. Uninstall does not
+# restore them — the tool no longer exists under the old name, and they were
+# never user-authored items.
+LEGACY_PERMISSION_ALLOW = ["mcp__pi-tools-bridge__*"]
+
+# Claude Code single-driver policy scalars owned by entwurf for the native
 # meta-bridge install. These are not theming/personal hooks; they close background
 # autonomy/suggestion/compaction surfaces so Claude Code behaves like the same
-# single forged screwdriver that pi-shell-acp already enforces for ACP backends.
+# single forged screwdriver that entwurf already enforces for ACP backends.
 MANAGED_SETTINGS_SCALARS: list[tuple[str, list[str], Any]] = [
     ("cleanupPeriodDays", ["cleanupPeriodDays"], 365),
     ("env.DISABLE_AUTOCOMPACT", ["env", "DISABLE_AUTOCOMPACT"], "1"),
@@ -97,7 +105,7 @@ def settings_path() -> Path:
 
 
 def state_path() -> Path:
-    return claude_config_dir() / "pi-shell-acp.install-state.json"
+    return claude_config_dir() / "entwurf.install-state.json"
 
 
 def claude_root_config_path() -> Path:
@@ -160,7 +168,7 @@ def ensure_object(parent: dict[str, Any], key: str, label: str) -> dict[str, Any
         value = {}
         parent[key] = value
     if not isinstance(value, dict):
-        die(f"{label} must be an object before pi-shell-acp can manage a child key")
+        die(f"{label} must be an object before entwurf can manage a child key")
     return value
 
 
@@ -216,7 +224,7 @@ def snapshot_value(
         return
     existed, value = get_nested(obj, path)
     # Phase-2 migration path: GLG's machine already had the Phase-0/1 tribal
-    # installer live before the state file existed. If an exact pi-shell-acp
+    # installer live before the state file existed. If an exact entwurf
     # managed value is present with no state, treating it as "original" would make
     # uninstall restore the legacy install instead of removing it. Exact-match
     # migration is limited to pi-owned identity keys (plugin/marketplace/MCP), not
@@ -260,15 +268,15 @@ def desired_mcp(repo: Path) -> dict[str, Any]:
     return {
         "type": "stdio",
         "command": "bash",
-        "args": [str((repo / "mcp" / "pi-tools-bridge" / "start.sh").resolve())],
+        "args": [str((repo / "mcp" / "entwurf-bridge" / "start.sh").resolve())],
         "env": {
-            "PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID": "external-mcp/claude-code",
+            "ENTWURF_BRIDGE_EXTERNAL_AGENT_ID": "external-mcp/claude-code",
             # Anonymous sends are forbidden on the Claude Code install path: a send
             # with no pi-session identity AND no meta-sender marker is refused, not
             # delivered as an unidentified external. The SessionStart hook writes
             # the marker (parent-pid keyed), so a normally-opened session always has
             # an authoritative garden-id sender.
-            "PI_TOOLS_BRIDGE_REQUIRE_META_SENDER": "1",
+            "ENTWURF_BRIDGE_REQUIRE_META_SENDER": "1",
         },
     }
 
@@ -325,9 +333,9 @@ def prepare(repo: Path, asm: Path) -> None:
     snapshot_value(
         state,
         "claudeRoot",
-        "mcpServers.pi-tools-bridge",
+        "mcpServers.entwurf-bridge",
         root,
-        ["mcpServers", "pi-tools-bridge"],
+        ["mcpServers", "entwurf-bridge"],
         "map-entry",
         legacy_absent_if_equal=desired_mcp(repo),
     )
@@ -360,11 +368,14 @@ def apply(repo: Path, asm: Path) -> None:
         existed, value = get_nested(settings, path_)
         if existed and not isinstance(value, list):
             die(f"{'.'.join(path_)} exists but is not an array; refusing to merge managed permission items")
-        set_nested(settings, path_, append_unique(value if isinstance(value, list) else [], desired))
+        merged = append_unique(value if isinstance(value, list) else [], desired)
+        if path_ == ["permissions", "allow"]:
+            merged = [item for item in merged if item not in LEGACY_PERMISSION_ALLOW]
+        set_nested(settings, path_, merged)
     for _name, path_, desired in MANAGED_SETTINGS_SCALARS:
         set_nested(settings, path_, desired)
     set_nested(settings, ["statusLine"], desired_statusline(repo))
-    set_nested(root, ["mcpServers", "pi-tools-bridge"], desired_mcp(repo))
+    set_nested(root, ["mcpServers", "entwurf-bridge"], desired_mcp(repo))
 
     state["updatedAt"] = iso_now()
     state["repo"] = str(repo.resolve())
@@ -433,7 +444,7 @@ def uninstall() -> None:
 
 
 def managed_keys() -> dict[str, Any]:
-    """The SSOT of settings.json / ~/.claude.json keys pi-shell-acp OWNS.
+    """The SSOT of settings.json / ~/.claude.json keys entwurf OWNS.
 
     Derived from the same constants install/apply/check use, so there is one
     source of truth for "which keys are ours". Cross-repo consumers (the keyset
@@ -454,7 +465,7 @@ def managed_keys() -> dict[str, Any]:
             ],
         },
         "claudeRoot": {
-            "map-entry": ["mcpServers.pi-tools-bridge"],
+            "map-entry": ["mcpServers.entwurf-bridge"],
         },
     }
 
@@ -489,9 +500,13 @@ def check(repo: Path, asm: Path) -> None:
             missing = [item for item in desired if item not in value]
             if missing:
                 failures.append(f"settings permissions.{label} missing managed item(s): {', '.join(missing)}")
-    existed, value = get_nested(root, ["mcpServers", "pi-tools-bridge"])
+            if path_ == ["permissions", "allow"]:
+                legacy = [item for item in LEGACY_PERMISSION_ALLOW if item in value]
+                if legacy:
+                    failures.append(f"settings permissions.allow carries pruned legacy item(s): {', '.join(legacy)} (re-inject — re-run install-meta-bridge to prune)")
+    existed, value = get_nested(root, ["mcpServers", "entwurf-bridge"])
     if not existed or value != desired_mcp(repo):
-        failures.append("user MCP pi-tools-bridge missing/drifted in ~/.claude.json")
+        failures.append("user MCP entwurf-bridge missing/drifted in ~/.claude.json")
 
     if failures:
         for f in failures:
@@ -501,7 +516,7 @@ def check(repo: Path, asm: Path) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="pi-shell-acp meta-bridge state manager")
+    parser = argparse.ArgumentParser(description="entwurf meta-bridge state manager")
     parser.add_argument(
         "command",
         choices=["prepare", "apply", "preflight-uninstall", "uninstall", "check", "managed-keys"],

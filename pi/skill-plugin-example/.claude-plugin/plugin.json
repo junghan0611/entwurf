@@ -1,4 +1,4 @@
 {
-	"name": "pi-shell-acp-skill-plugin-example",
-	"description": "Minimum plugin shape that pi-shell-acp's `skillPlugins` validator accepts. Copy this directory anywhere on disk, point `skillPlugins` at the absolute path, and add your own `skills/<name>/SKILL.md` siblings to `hello/`. The pi-shell-acp bridge does not require any other key in this manifest — additional fields are forwarded to the Claude Agent SDK as-is."
+	"name": "entwurf-skill-plugin-example",
+	"description": "Minimum plugin shape that entwurf's `skillPlugins` validator accepts. Copy this directory anywhere on disk, point `skillPlugins` at the absolute path, and add your own `skills/<name>/SKILL.md` siblings to `hello/`. The entwurf bridge does not require any other key in this manifest — additional fields are forwarded to the Claude Agent SDK as-is."
 }

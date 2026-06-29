@@ -4,6 +4,51 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.12.0 — 2026-06-29
+
+> This release hard-cuts the project from `pi-shell-acp` to **`entwurf`**. It is not a compatibility rename: the package/provider/model/MCP identity is now `entwurf`, v1 entwurf verbs are gone, and `entwurf_v2` is the canonical garden-id dispatch verb. The repo is **entwurf-core (v2 dispatch) + meta-bridge + pi adapter + ACP plugin**. Pi remains an important adapter and ACP host, but the project subject is the garden-citizen dispatch substrate. Verified release floor: `pnpm check`, `check-pack`, `check-pack-install`, and `LIVE=1 ./run.sh release-gate <scratch>` MUST tier `PASS=17 FAIL=0 SKIP=0` on 2026-06-29, with BEHAVIOR (advisory model-in-loop autonomous MCP tool-selection) `PASS=1 FAIL=0` and recorded separately from the cut decision.
+
+### Added
+
+- **`entwurf` package/provider identity.** Package metadata, provider id, model prefix, MCP server name, repo URL, env namespace, install surface, and package-source resolver now use `entwurf` / `@junghanacs/entwurf` / `entwurf-bridge`. Runtime aliases and legacy provider-id accept are intentionally absent.
+- **0.12.0 install surface.** `./run.sh setup .` is the one-command local setup path: `pnpm install` → project install → Claude Code meta-bridge install when available → v2 smoke. `run.sh install` now preflights broken/missing `node_modules` and fails loud before writing settings. `check-install-preflight` locks the relocation/reinstall gap found after the repo move.
+- **Published-package smoke.** `check-pack` and `check-pack-install` pack the release tarball, install it into a fresh temp project with pi 0.80.x peers, and prove the pi loader registers the `entwurf` provider and curated Claude model anchors.
+- **ACP plugin on the v2 core.** Provider registration via `pi-extensions/acp-provider.ts` plus `pi-extensions/lib/acp/*`, curated Claude models (`claude-sonnet-4-6`, `claude-opus-4-8`), no-auth sentinel, explicit config overlay, tool-surface preflight, ACP→pi event mapping, session reuse, first-user augment, and display-only lifecycle notices.
+- **Meta-bridge install/state cutover.** Claude Code meta-bridge install state, MCP entry, statusline, permissions, and sender/receiver markers now use the `entwurf` naming surface; stale `pi-tools-bridge` MCP entries are pruned as one-shot cutover state, not accepted as a runtime alias.
+
+### Changed
+
+- **Project framing is entwurf-first.** README / ROADMAP / DELIVERY / BASELINE / VERIFY were reframed around garden ids, shipped vs verified-probe harness lanes, thin bridge boundaries, tool narrowing, and the ACP plugin as one ingress rather than the boundary.
+- **ACP is a plugin, not a second harness.** The host `--entwurf-control` pi session supplies socket citizenship; the ACP plugin owns backend process lifecycle, overlay, per-backend dialect, and turn evidence only. No auth proxy, no subscription bypass, no transcript hydration, no ambient MCP scan.
+- **Dependencies bumped and fenced.** pi dev/runtime floor is now **0.80.2** (`>=0.80.2 <0.81`), with `getModels` reached through the loader-compatible `/compat` entrypoint. Claude ACP moved to `@agentclientprotocol/claude-agent-acp@0.50.0` and `@agentclientprotocol/sdk@0.29.0`; model forcing uses `session/set_config_option(configId="model")`. The deprecated `ClientSideConnection` path was replaced by the fluent `client().connect(stream)` adapter with explicit teardown close.
+- **Release gate remains two-tier.** MUST owns the cut decision and now includes v2-native live gates plus ACP plugin live smokes (socket-citizen, raw-turn, overlay, provider, reuse, carrier augment, memory containment, RGG, operator MCP, skill, bundled bridge). BEHAVIOR is advisory model-in-loop autonomous tool-selection and never blocks the cut.
+- **Install docs are npm-first.** README and the clean-host walk-through lead with `pi install npm:@junghanacs/entwurf` (resolving to `~/.pi/agent/npm/node_modules/@junghanacs/entwurf`, the path `check-package-source-routing` pins); the `git:` source path and a local clone are documented as alternatives for tracking `main` or hacking on the bridge.
+- **Verification docs simplified to the 0.12 surface.** `VERIFY.md` was reduced from 621 to 260 lines and `BASELINE.md` from 284 to 227 lines by deleting broken/dead v1 procedures, moving historical rows back to CHANGELOG/git, and keeping the load-bearing 0.12 evidence axes: install paths, identity interview, carrier separation, backend MCP identifiers, tuple formula, JSONL memory axis, and pass criteria.
+- **v1 residue swept from runnable comments and stale ledgers.** Retired `entwurf_send` / `entwurf_resume` references in current-source comments and the absorbed `NEXT--acp-on-v2.md` branch ledger were removed or rewritten to the v2 surface; historical CHANGELOG rows remain historical evidence, not current recipes.
+
+### Removed
+
+- **v1 entwurf entrypoints.** MCP tools `entwurf` / `entwurf_resume` / `entwurf_send`, pi-native `entwurf_send`, `spawn_async_resume`, and `/entwurf*` commands are removed. Current surface: `entwurf_v2`, `entwurf_peers`, `entwurf_self`, `entwurf_inbox_read`, plus `/entwurf-sessions` and `/gnew` on the pi adapter.
+- **Legacy `pi-shell-acp` runtime identity.** No permanent package/provider alias, no legacy provider accept, no dual-read of old runtime state. Old install/cache state is a one-shot operator cutover only.
+- **OpenClaw install surface.** The old plugin/importer path remains historical only; it is not a live consumer.
+- **Phantom compaction surface.** Documentation no longer claims bridge-owned compaction knobs or a compaction smoke surface; backend-native compaction remains backend-owned.
+
+### Fixed
+
+- **Mailbox reply instructions point at the canonical v2 surface.** Replyable meta-session bodies now tell agents to use `entwurf_v2`, not the retired `entwurf_send` tool.
+- **Branch-lane handoff pointers no longer dangle.** `AGENTS.md` now points at the main-lane `NEXT.md` rather than a deleted branch ledger.
+- **npm-managed installs resolve hoisted runtime dependencies before writing settings.** `run.sh install` walks Node's module-resolution paths, so `pi install npm:@junghanacs/entwurf` works from `~/.pi/agent/npm/node_modules` with no package-local `node_modules`; the `@earendil-works/pi-*` peer trio is treated as loader-provided. `check-pack-install` locks the layout with a real npm-managed `run.sh install` regression under an isolated HOME.
+
+### Deferred
+
+- **npm publish / old package deprecation** — maintainer-owned final step after the release cut. `package.json` is already `@junghanacs/entwurf` with `publishConfig.access: public`; registry publication is intentionally last.
+- **Demo / GIF / hero retake** — the recorded demo scripts and gallery image still describe the retired v1 `entwurf` / `entwurf_resume` / `entwurf_send` flow, so they ship as pre-0.12 evidence; a v2-native retake of the demo and image surface is a post-0.12 minor follow-up.
+- **Fresh sibling minting** — v2 dispatch targets already-identified citizens only. Creating a brand-new sibling from nothing is a later `spawn-fresh` lane.
+- **Persisted resume/load** — current ACP reuse is in-memory plus record write; persisted read/use stays off.
+- **Non-Claude ACP backends / Cortex lane** — next backend work should first define the backend-addition rail and verification contract.
+- **Codex / Antigravity shipped adapter lanes** — delivery probes are verified, but 0.12.0 ships them as documented evidence, not managed install surfaces.
+- **Bundled-MCP deterministic split** — `smoke-acp-bundled-mcp-live` still exercises a model-in-loop `entwurf_self` call inside the MUST floor; it passed on the current cut, but the deterministic surface proof vs autonomous echo split remains a follow-up before hardening the taxonomy.
+
 ## 0.11.0 — 2026-06-16
 
 > **0.11.0.** The entwurf v2 dispatch substrate (#35): a single additive verb, `entwurf_v2` / `runEntwurfV2`, that unifies *dispatch to existing garden citizens* behind one decider which reads peer liveness as a fact and picks transport from a frozen table keyed on **target state AND intent** (not state alone): live pi + fire-and-forget → control-socket send, dormant pi + owned-outcome → spawn-bg resume, active self-fetch + fire-and-forget → meta-mailbox enqueue; every other state×intent pair (live+owned, dormant+fire-and-forget, self-fetch+owned) is an honest reject. It does **not** mint new siblings — fresh sibling creation stays the v1 `entwurf` verb (0.12 cutover lane); the `spawn-bg resume` row resumes an already-identified dormant citizen, it does not create one. Built bottom-up as pi-only TypeScript substrate (Stage 0): contract freeze → per-gid dispatch lock → pure decider → release-policy reducer → send/spawn hands → production deps assembly → pi-native + MCP `entwurf_v2` tool. On top of it the **spawn-bg resident lifecycle** — the headline guarantee of #35 — was proven LIVE for the first time (a real `pi --entwurf-control` child stands its socket up, resumes a dormant Entwurf session, and does a model turn), and that first LIVE run surfaced and closed a production contradiction in the resident-name guard. Finally a **v2-only mode** (`PI_SHELL_ACP_V2_ONLY=1`) hard-refuses every v1 entrypoint so v1 can be turned off ahead of its 0.12 removal. Scope is Stage 0 (pi-only substrate); Stage 1 (Claude↔Claude live) is explicitly out of scope. **Release-gate restructured before the cut (2026-06-16): the pi floor was bumped to `>=0.79.4` (runtime parity) and the live gate was split into a two-tier MUST (release-blocking, owns the exit code) + BEHAVIOR (advisory, model-in-loop autonomous MCP tool-selection) summary. The prior flat `LIVE=1 → PASS=18` run (log `…20260615T152058`) predates BOTH changes and no longer describes the current tree. Fresh `LIVE=1 release-gate` on the 0.79.4 + two-tier tree (2026-06-16, log `…20260616T141023`): **`MUST PASS=17 FAIL=0 SKIP=0` (necessary condition met) + `BEHAVIOR PASS=1 FAIL=1`** — the lone BEHAVIOR-FAIL is `sentinel` (cell4/5 `S7` Bash-bypass, advisory/non-blocking); resident-garden-guard positives flipped FAIL→PASS vs the earlier run with zero code change, confirming the advisory scoping. "green" applies to the MUST tier only.**

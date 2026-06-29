@@ -30,6 +30,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
+import { fileURLToPath } from "node:url";
 
 const ENTWURF_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
 const listSockets = (): string[] => {
@@ -47,6 +48,8 @@ if (!sessionId || !provider || !model) {
 }
 const timeoutMs = Number(timeoutMsArg) || 90_000;
 const wantSelf = typeof selfPrompt === "string" && selfPrompt.length > 0;
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", REPO_ROOT] as const;
 
 interface DriveResult {
 	before: string | null;
@@ -81,7 +84,18 @@ const result: DriveResult = {
 
 const child = spawn(
 	"pi",
-	["--session-id", sessionId, "--entwurf-control", "--provider", provider, "--model", model, "--mode", "rpc"],
+	[
+		...REPO_EXTENSION_ARGS,
+		"--session-id",
+		sessionId,
+		"--entwurf-control",
+		"--provider",
+		provider,
+		"--model",
+		model,
+		"--mode",
+		"rpc",
+	],
 	{ stdio: ["pipe", "pipe", "inherit"] },
 );
 

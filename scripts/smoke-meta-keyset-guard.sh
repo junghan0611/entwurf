@@ -33,7 +33,7 @@ assert 'statusLine' in s['map-entry'], 'statusLine missing from SSOT map-entry'
 assert 'permissions.allow' in s['array-items'] and 'permissions.deny' in s['array-items'], 'permissions missing'
 assert 'verbose' in s['scalar'] and 'autoCompactEnabled' in s['scalar'], 'scalar policy missing'
 assert any(k.startswith('enabledPlugins.') for k in s['map-entry']), 'plugin ref missing'
-assert d['claudeRoot']['map-entry'] == ['mcpServers.pi-tools-bridge'], 'MCP key missing'
+assert d['claudeRoot']['map-entry'] == ['mcpServers.entwurf-bridge'], 'MCP key missing'
 " && ok "managed-keys SSOT is valid JSON with the expected owned keys" \
   || bad "managed-keys SSOT malformed or missing expected keys"
 

@@ -20,7 +20,7 @@
  * `entwurf-control.ts` `maybeSetResidentName` (consumer) and `entwurf-v2-spawn-production.ts`
  * `makeProductionSpawnBgResumeDeps` (producer).
  */
-export const V2_RESUME_RESIDENT_SESSION_ENV = "PI_SHELL_ACP_V2_RESUME_RESIDENT_SESSION_ID";
+export const V2_RESUME_RESIDENT_SESSION_ENV = "ENTWURF_V2_RESUME_RESIDENT_SESSION_ID";
 
 /**
  * True when this process is the resume child a v2 spawn-bg resume launched for EXACTLY

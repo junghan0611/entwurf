@@ -107,6 +107,7 @@ export const ENTWURF_V2_REJECT_REASONS = [
 	"mailbox-undeliverable", // F-mailbox: fire-and-forget to an unsupported citizen whose mailbox is not deliverable (fail-closed; future pi-backend non-drainable mailbox)
 	"bad-target", // R2: absent/typo garden-id (no existing citizen); spawn-new out of v2 scope
 	"untrusted-fail-fast", // 동결결정 5: controlled launch into an untrusted cwd
+	"socket-only-no-resume-authority", // A1: a record-less socket-only endpoint resolved to a resume verdict (owned-outcome × dormant), but spawn-bg cannot open into it — no trusted cwd/resume authority. Post-probe guard reject (NOT pre-probe, NOT a table resolver cell): the in-domain probe ran and measured the liveness, then `allowResume:false` refused the resume. Carries the honest measured FactLiveness (non-null), unlike the pre-probe `bad-target` it replaces here — a live/addressable socket-only citizen must NEVER be mislabeled absent.
 	"target-locked", // R5 pre-claim for bucket B F2 per-gid lockfile conflict
 	"target-address-conflict", // F3: a quarantined citizen (garden-id-socket-conflict / symlinked socket) — the gid resolves to two different receivers (record vs socket), so dispatch refuses to pick. The ONLY in-band honest channel for a dispatch-level identity-split (the listing diagnostic channel is not visible to a v2 caller, who only gets a receipt). Pre-resolver, like bad-target/target-locked — NOT a RESOLVER_REJECT_REASONS member.
 ] as const;

@@ -33,7 +33,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 // ENTWURF_TARGETS_PATH at module load). Dynamic import after the env is set.
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "psa-session-identity-"));
 process.env.PI_CODING_AGENT_DIR = tmp;
-process.env.PI_ENTWURF_TARGETS_PATH = path.join(REPO_ROOT, "pi", "entwurf-targets.json");
+process.env.ENTWURF_TARGETS_PATH = path.join(REPO_ROOT, "pi", "entwurf-targets.json");
 
 const {
 	isValidSessionId,
@@ -120,19 +120,19 @@ try {
 	ok(!slugifyTitle("any__thing_here").includes("_"), "slug never contains underscore");
 
 	// ---- T-registry: exact tuple, no regex invention ----
-	ok(isKnownProviderModel("pi-shell-acp", "claude-opus-4-8"), "known opus tuple");
+	ok(isKnownProviderModel("entwurf", "claude-opus-4-8"), "known opus tuple");
 	ok(isKnownProviderModel("openai-codex", "gpt-5.5"), "known dotted tuple (gpt-5.5)");
-	ok(isKnownProviderModel("pi-shell-acp", "gemini-3.1-pro-preview"), "known dotted+hyphen tuple");
-	ok(!isKnownProviderModel("pi-shell-acp", "claude-opus-4.8"), "dotted opus is NOT a tuple (hyphen canonical)");
-	ok(!isKnownProviderModel("pi-shell-acp", "claude-opus-9-9"), "invented model rejected");
+	ok(isKnownProviderModel("entwurf", "gemini-3.1-pro-preview"), "known dotted+hyphen tuple");
+	ok(!isKnownProviderModel("entwurf", "claude-opus-4.8"), "dotted opus is NOT a tuple (hyphen canonical)");
+	ok(!isKnownProviderModel("entwurf", "claude-opus-9-9"), "invented model rejected");
 	ok(!isKnownProviderModel("totally", "made-up"), "invented provider rejected");
 
 	// ---- T-grammar: build/parse round-trip ----
 	const cases = [
-		{ p: "pi-shell-acp", m: "claude-opus-4-8", title: "Review substrate smoke", tags: ["entwurf", "review"] },
+		{ p: "entwurf", m: "claude-opus-4-8", title: "Review substrate smoke", tags: ["entwurf", "review"] },
 		{ p: "openai-codex", m: "gpt-5.5", title: "async resume check", tags: ["entwurf", "smoke"] },
-		{ p: "pi-shell-acp", m: "gemini-3.1-pro-preview", title: "vision team", tags: ["entwurf"] },
-		{ p: "pi-shell-acp", m: "claude-sonnet-4-6", title: "manual session", tags: [] as string[] },
+		{ p: "entwurf", m: "gemini-3.1-pro-preview", title: "vision team", tags: ["entwurf"] },
+		{ p: "entwurf", m: "claude-sonnet-4-6", title: "manual session", tags: [] as string[] },
 	];
 	for (const c of cases) {
 		const sid = generateSessionId(new Date(2026, 5, 3, 19, 12, 45));
@@ -152,33 +152,33 @@ try {
 	eq(
 		buildSessionName({
 			sessionId: "20260603T191245-a3f09c",
-			provider: "pi-shell-acp",
+			provider: "entwurf",
 			model: "claude-opus-4-8",
 			rawTitle: "Review substrate smoke",
 			tags: ["entwurf", "review"],
 		}),
-		"20260603T191245-a3f09c==pi-shell-acp/claude-opus-4-8--review-substrate-smoke__entwurf_review",
+		"20260603T191245-a3f09c==entwurf/claude-opus-4-8--review-substrate-smoke__entwurf_review",
 		"canonical NEXT.md example",
 	);
 
 	// ---- builder fail-fast (corrupt metadata never reaches --name) ----
 	throws(
-		() => buildSessionName({ sessionId: "bad", provider: "pi-shell-acp", model: "claude-opus-4-8" }),
+		() => buildSessionName({ sessionId: "bad", provider: "entwurf", model: "claude-opus-4-8" }),
 		"invalid sessionId",
 	);
 	throws(
-		() => buildSessionName({ sessionId: "20260603T191245-a3f09c", provider: "pi-shell-acp", model: "invented-9" }),
+		() => buildSessionName({ sessionId: "20260603T191245-a3f09c", provider: "entwurf", model: "invented-9" }),
 		"unknown tuple",
 	);
 	throws(
-		() => buildSessionName({ sessionId: "20260603T191245-a3f09c", provider: "pi-shell-acp", model: "claude-opus-4.8" }),
+		() => buildSessionName({ sessionId: "20260603T191245-a3f09c", provider: "entwurf", model: "claude-opus-4.8" }),
 		"dotted opus (non-tuple)",
 	);
 	throws(
 		() =>
 			buildSessionName({
 				sessionId: "20260603T191245-a3f09c",
-				provider: "pi-shell-acp",
+				provider: "entwurf",
 				model: "claude-opus-4-8",
 				tags: ["Bad_Tag"],
 			}),
@@ -188,7 +188,7 @@ try {
 		() =>
 			buildSessionName({
 				sessionId: "20260603T191245-a3f09c",
-				provider: "pi-shell-acp",
+				provider: "entwurf",
 				model: "claude-opus-4-8",
 				tags: ["UPPER"],
 			}),
@@ -197,29 +197,25 @@ try {
 
 	// ---- parser negatives ----
 	eq(parseSessionName("no-separators-here"), null, "no == → null");
-	eq(parseSessionName("20260603T191245-a3f09c==pi-shell-acp/claude-opus-4-8"), null, "no -- (no title) → null");
-	eq(parseSessionName("badid==pi-shell-acp/claude-opus-4-8--title"), null, "bad sessionId → null");
+	eq(parseSessionName("20260603T191245-a3f09c==entwurf/claude-opus-4-8"), null, "no -- (no title) → null");
+	eq(parseSessionName("badid==entwurf/claude-opus-4-8--title"), null, "bad sessionId → null");
 	eq(parseSessionName("20260603T191245-a3f09c==noslash--title"), null, "no / → null");
 	eq(parseSessionName("20260603T191245-a3f09c==p/m--title__Bad"), null, "bad tag charset → null");
 	// canonical-only titleSlug: non-slug titles must not parse (the builder could
 	// never emit them, so accepting them would break the build↔parse contract).
 	eq(
-		parseSessionName("20260603T191245-a3f09c==pi-shell-acp/claude-opus-4-8--Bad Title__entwurf"),
+		parseSessionName("20260603T191245-a3f09c==entwurf/claude-opus-4-8--Bad Title__entwurf"),
 		null,
 		"space/uppercase title → null",
 	);
+	eq(parseSessionName("20260603T191245-a3f09c==entwurf/claude-opus-4-8--검증__entwurf"), null, "unicode title → null");
 	eq(
-		parseSessionName("20260603T191245-a3f09c==pi-shell-acp/claude-opus-4-8--검증__entwurf"),
-		null,
-		"unicode title → null",
-	);
-	eq(
-		parseSessionName("20260603T191245-a3f09c==pi-shell-acp/claude-opus-4-8--a__b__entwurf"),
+		parseSessionName("20260603T191245-a3f09c==entwurf/claude-opus-4-8--a__b__entwurf"),
 		null,
 		"raw __ delimiter smuggle → null",
 	);
 	eq(
-		parseSessionName("20260603T191245-a3f09c==pi-shell-acp/claude-opus-4-8---leading__entwurf"),
+		parseSessionName("20260603T191245-a3f09c==entwurf/claude-opus-4-8---leading__entwurf"),
 		null,
 		"leading-hyphen title → null",
 	);
@@ -228,14 +224,14 @@ try {
 	const sid2 = "20260603T191245-deadbe";
 	const nameA = buildSessionName({
 		sessionId: sid2,
-		provider: "pi-shell-acp",
+		provider: "entwurf",
 		model: "claude-opus-4-8",
 		rawTitle: "first title",
 		tags: ["entwurf"],
 	});
 	const nameB = buildSessionName({
 		sessionId: sid2,
-		provider: "pi-shell-acp",
+		provider: "entwurf",
 		model: "claude-opus-4-8",
 		rawTitle: "COMPLETELY different / 다른 제목",
 		tags: ["entwurf", "phase1", "review"],
@@ -250,13 +246,13 @@ try {
 	const recorded = "claude-opus-4-8";
 	const goodName = buildSessionName({
 		sessionId: sid2,
-		provider: "pi-shell-acp",
+		provider: "entwurf",
 		model: recorded,
 		rawTitle: "x",
 		tags: ["entwurf"],
 	});
 	eq(parseSessionName(goodName)?.model, recorded, "name model mirrors recorded model");
-	const driftName = "20260603T191245-deadbe==pi-shell-acp/claude-sonnet-4-6--x__entwurf";
+	const driftName = "20260603T191245-deadbe==entwurf/claude-sonnet-4-6--x__entwurf";
 	ok(parseSessionName(driftName)?.model !== recorded, "model drift is detectable for fail-fast");
 
 	// ---- T-collision: header scan is authority; spawn pre-check ----
@@ -421,7 +417,7 @@ try {
 			msg({
 				content: "second",
 				model: "claude-opus-4-8",
-				provider: "pi-shell-acp",
+				provider: "entwurf",
 				stopReason: "tool_use",
 				errorMessage: "oops",
 				usage: { cost: { total: 0.02 } },
@@ -431,7 +427,7 @@ try {
 	eq(a1.turns, 2, "analyze: only assistant turns counted (user + malformed skipped)");
 	eq(a1.lastAssistantText, "second", "analyze: last-wins assistant text");
 	eq(a1.lastModel, "claude-opus-4-8", "analyze: last-wins model");
-	eq(a1.lastProvider, "pi-shell-acp", "analyze: last-wins provider");
+	eq(a1.lastProvider, "entwurf", "analyze: last-wins provider");
 	eq(a1.lastStopReason, "tool_use", "analyze: last-wins stopReason");
 	eq(a1.lastError, "oops", "analyze: last error captured");
 	eq(Math.round(a1.cost * 100) / 100, 0.03, "analyze: cost accumulated");
@@ -444,7 +440,7 @@ try {
 		bigFile,
 		`${JSON.stringify({ type: "session", id: "20260603T210000-bbbbbb", cwd: "/b" })}\n` +
 			msg({ content: bigBody, model: "m-big", provider: "p-big", usage: { cost: { total: 1 } } }) +
-			msg({ content: "final", model: "claude-sonnet-4-6", provider: "pi-shell-acp", usage: { cost: { total: 0.5 } } }),
+			msg({ content: "final", model: "claude-sonnet-4-6", provider: "entwurf", usage: { cost: { total: 0.5 } } }),
 	);
 	const a2 = analyzeSessionFileLike(bigFile);
 	eq(a2.turns, 2, "analyze(big): turns correct across chunk boundaries");
@@ -469,7 +465,7 @@ try {
 		fileA,
 		sessionLine(idA, "/identity/a") +
 			mc("openai-codex", "gpt-5.5") +
-			msg({ content: "drifted", model: "claude-opus-4-8", provider: "pi-shell-acp" }),
+			msg({ content: "drifted", model: "claude-opus-4-8", provider: "entwurf" }),
 	);
 	const recA = readSessionIdentity(fileA);
 	eq(recA?.provider, "openai-codex", "identity: provider = first model_change (not assistant message)");
@@ -481,7 +477,7 @@ try {
 	const fileB = path.join(idDir, `2026-06-03T22-00-00-000Z_${idB}.jsonl`);
 	fs.writeFileSync(
 		fileB,
-		sessionLine(idB, "/identity/b") + mc("pi-shell-acp", "claude-opus-4-8") + mc("openai-codex", "gpt-5.5"),
+		sessionLine(idB, "/identity/b") + mc("entwurf", "claude-opus-4-8") + mc("openai-codex", "gpt-5.5"),
 	);
 	throws(() => readSessionIdentity(fileB), "identity: later model_change drift → fail-fast");
 
@@ -490,7 +486,7 @@ try {
 	const fileC = path.join(idDir, `2026-06-03T22-00-00-000Z_${idC}.jsonl`);
 	const mismatchName = buildSessionName({
 		sessionId: idC,
-		provider: "pi-shell-acp",
+		provider: "entwurf",
 		model: "claude-opus-4-8",
 		rawTitle: "x",
 		tags: ["entwurf"],
@@ -516,7 +512,7 @@ try {
 	const fileE = path.join(idDir, `2026-06-03T22-00-00-000Z_${idE}.jsonl`);
 	const cleanName = buildSessionName({
 		sessionId: idE,
-		provider: "pi-shell-acp",
+		provider: "entwurf",
 		model: "claude-sonnet-4-6",
 		rawTitle: "clean resume",
 		tags: ["entwurf", "async"],
@@ -524,13 +520,13 @@ try {
 	fs.writeFileSync(
 		fileE,
 		sessionLine(idE, "/identity/e") +
-			mc("pi-shell-acp", "claude-sonnet-4-6") +
+			mc("entwurf", "claude-sonnet-4-6") +
 			infoLine(cleanName) +
-			msg({ content: "ok", model: "claude-sonnet-4-6", provider: "pi-shell-acp" }),
+			msg({ content: "ok", model: "claude-sonnet-4-6", provider: "entwurf" }),
 	);
 	noThrow(() => readSessionIdentity(fileE), "identity: clean session does not throw");
 	const recE = readSessionIdentity(fileE);
-	eq(recE?.provider, "pi-shell-acp", "identity(clean): provider");
+	eq(recE?.provider, "entwurf", "identity(clean): provider");
 	eq(recE?.modelId, "claude-sonnet-4-6", "identity(clean): modelId mirrors name");
 
 	// 6. no model_change → null (caller refuses with its own no-recorded-model result).
@@ -555,7 +551,7 @@ try {
 	const fileG = path.join(idDir, `2026-06-03T23-00-00-000Z_${idG}.jsonl`);
 	fs.writeFileSync(
 		fileG,
-		sessionLine(idG, "/identity/g") + mc("pi-shell-acp", "claude-opus-4-8") + infoLine("not a canonical name"),
+		sessionLine(idG, "/identity/g") + mc("entwurf", "claude-opus-4-8") + infoLine("not a canonical name"),
 	);
 	throws(
 		() => readSessionIdentity(fileG, { requireEntwurf: true }),
@@ -568,15 +564,12 @@ try {
 	const fileH = path.join(idDir, `2026-06-03T23-00-00-000Z_${idH}.jsonl`);
 	const noTagName = buildSessionName({
 		sessionId: idH,
-		provider: "pi-shell-acp",
+		provider: "entwurf",
 		model: "claude-opus-4-8",
 		rawTitle: "general session",
 		tags: [],
 	});
-	fs.writeFileSync(
-		fileH,
-		sessionLine(idH, "/identity/h") + mc("pi-shell-acp", "claude-opus-4-8") + infoLine(noTagName),
-	);
+	fs.writeFileSync(fileH, sessionLine(idH, "/identity/h") + mc("entwurf", "claude-opus-4-8") + infoLine(noTagName));
 	throws(
 		() => readSessionIdentity(fileH, { requireEntwurf: true }),
 		"requireEntwurf: canonical name without 'entwurf' tag → fail-fast",
@@ -638,10 +631,10 @@ try {
 		sessionId: residentSid,
 		provider: "deepseek",
 		model: "deepseek-v4-pro",
-		rawTitle: "pi-shell-acp",
+		rawTitle: "entwurf",
 		tags: [RESIDENT_SESSION_TAG],
 	});
-	eq(residentName, `${residentSid}==deepseek/deepseek-v4-pro--pi-shell-acp__control`, "resident garden name shape");
+	eq(residentName, `${residentSid}==deepseek/deepseek-v4-pro--entwurf__control`, "resident garden name shape");
 	const residentParsed = parseSessionName(residentName);
 	if (!residentParsed) assert.fail(`resident name did not parse: ${residentName}`);
 	eq(residentParsed.provider, "deepseek", "resident name parses provider");
@@ -650,7 +643,7 @@ try {
 	ok(!isEntwurfSessionName(residentName), "resident control name is NOT an Entwurf session name");
 
 	// The `entwurf` tag is FORBIDDEN on a resident name — that tag is the
-	// entwurf_resume marker; a resident session must never be resumable as a child.
+	// Entwurf resume marker; a resident session must never be resumable as a child.
 	throws(
 		() =>
 			buildGardenSessionName({
@@ -664,7 +657,7 @@ try {
 
 	// Regression guard for the closed blocker: a resident `control` session on
 	// disk must be REFUSED by readSessionIdentity(requireEntwurf) — it is not an
-	// Entwurf child and entwurf_resume must not open it.
+	// Entwurf child and entwurf_v2 must not open it.
 	const fileResident = path.join(tmp, "resident-control.jsonl");
 	fs.writeFileSync(
 		fileResident,
@@ -703,44 +696,6 @@ try {
 	noThrow(() => assertLocalOnlyEntwurf(undefined), "undefined host (defaults local) passes");
 	throws(() => assertLocalOnlyEntwurf("oracle"), "non-local host 'oracle' fails fast");
 	throws(() => assertLocalOnlyEntwurf("user@host"), "ssh-style host 'user@host' fails fast");
-
-	// ---- T-async-completion-guard (source): stale-parent best-effort delivery.
-	// Async completion fires from proc.on("close") long after the spawn ack; a
-	// stale parent ctx must DROP the notification, never crash the parent turn.
-	// The guard's runtime behavior is live-exercised by sentinel R1; here we lock
-	// the source contract, because entwurf-async pulls entwurf-core.js and so
-	// can't be import-loaded in this no-build, pure-string gate.
-	{
-		const asyncSrc = fs.readFileSync(path.join(REPO_ROOT, "pi-extensions", "lib", "entwurf-async.ts"), "utf8");
-		const guardStart = asyncSrc.indexOf("export function makeBestEffortDeliverCompletion");
-		ok(guardStart >= 0, "entwurf-async exports makeBestEffortDeliverCompletion");
-		const guardBody = asyncSrc.slice(guardStart);
-		ok(/\.includes\(STALE_CTX_MARKER\)/.test(guardBody), "guard matches stale-ctx marker as a substring");
-		ok(
-			/\breturn;/.test(guardBody) && /\bthrow err;/.test(guardBody),
-			"guard DROPS stale-ctx (return) and RE-THROWS other errors (throw err)",
-		);
-	}
-
-	// ---- T-async-spawn-wrapped (source guard): every pi.sendMessage in
-	// entwurf.ts sits inside a makeBestEffortDeliverCompletion arrow wrapper, so a
-	// raw proc.on("close") send can't regress the stale-parent guard (the exact
-	// gap that left async spawn completion unguarded before 0.9.0 cut).
-	{
-		const entwurfSrc = fs.readFileSync(path.join(REPO_ROOT, "pi-extensions", "entwurf.ts"), "utf8");
-		const totalSends = (entwurfSrc.match(/pi\.sendMessage\(/g) ?? []).length;
-		const wrappedSends = (entwurfSrc.match(/=>\s*pi\.sendMessage\(/g) ?? []).length;
-		ok(totalSends > 0, "entwurf.ts has at least one pi.sendMessage (sanity)");
-		eq(
-			wrappedSends,
-			totalSends,
-			"every pi.sendMessage in entwurf.ts is inside a best-effort arrow wrapper (no raw send)",
-		);
-		ok(
-			entwurfSrc.includes("makeBestEffortDeliverCompletion"),
-			"entwurf.ts imports/uses makeBestEffortDeliverCompletion",
-		);
-	}
 
 	console.log(`[check-entwurf-session-identity] ${n} assertions ok`);
 } finally {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# demo-baseline.sh — single-pane recorded demo of pi-shell-acp.
+# demo-baseline.sh — single-pane recorded demo of entwurf.
 #
 # Two scenes, both driven into one pi session:
 #   1. Baseline self-awareness — Q-B0 + Q-B0-CARRIER (English answer enforced).
@@ -15,7 +15,7 @@
 set -euo pipefail
 
 # ---------- config ----------
-SESSION=${SESSION:-pi-shell-acp-baseline-demo}
+SESSION=${SESSION:-entwurf-baseline-demo}
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 # Recording artifacts land in the publish surface (docs/assets/) so the cast
@@ -25,14 +25,14 @@ REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 # script (gitignored via `demo/*.log`).
 OUTDIR=${OUTDIR:-$SCRIPT_DIR}                           # debug log dir (local)
 PUBLISH_DIR=${PUBLISH_DIR:-$REPO_ROOT/docs/assets}      # cast + gif (publish surface)
-CAST="$PUBLISH_DIR/pi-shell-acp-demo.cast"
-GIF="$PUBLISH_DIR/pi-shell-acp-demo.gif"
+CAST="$PUBLISH_DIR/entwurf-demo.cast"
+GIF="$PUBLISH_DIR/entwurf-demo.gif"
 DRIVER_LOG="$OUTDIR/baseline-debug.log"
 
 # Driven pi runs the bridge surface and answers both prompts.
-DRIVER_MODEL=${DRIVER_MODEL:-pi-shell-acp/claude-sonnet-4-6}   # pias
+DRIVER_MODEL=${DRIVER_MODEL:-entwurf/claude-sonnet-4-6}   # pias
 # Sibling spawned via entwurf in scene 2 — different backend for contrast.
-SIBLING_MODEL=${SIBLING_MODEL:-pi-shell-acp/gpt-5.4}            # piat
+SIBLING_MODEL=${SIBLING_MODEL:-entwurf/gpt-5.4}            # piat
 SIBLING_CWD=${SIBLING_CWD:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 
 # Pacing in seconds.
@@ -71,10 +71,10 @@ trap cleanup EXIT
 tmux kill-session -t "$SESSION" 2>/dev/null || true
 : > "$DRIVER_LOG"
 
-# PI_SHELL_ACP_DEBUG=1 on; stderr appended to debug log so the recorded pane
+# ENTWURF_DEBUG=1 on; stderr appended to debug log so the recorded pane
 # stays clean. --entwurf-control gives the driven session a control socket so
 # entwurf siblings can address it if a follow-up demo needs it.
-COMMON_ENV="PI_SHELL_ACP_DEBUG=1 PI_EMACS_AGENT_SOCKET=$EMACS_SOCKET"
+COMMON_ENV="ENTWURF_DEBUG=1 PI_EMACS_AGENT_SOCKET=$EMACS_SOCKET"
 COMMON_ARGS="--entwurf-control --emacs-agent-socket $EMACS_SOCKET"
 new_session_id() { bash "$REPO_ROOT/run.sh" new-session-id; }
 
@@ -95,7 +95,7 @@ drive() {
   sleep "$SCENE1_DELAY"
 
   # Scene 2 — entwurf surface: spawn a sibling, receive its reply inline.
-  tmux send-keys -t "$DRIVER_PANE" -l "Now demonstrate the entwurf surface. Spawn a sibling via the entwurf tool — provider: pi-shell-acp, model: gpt-5.4, mode: sync, cwd: $SIBLING_CWD. Task body: \"You are a sibling spawned for a recorded demo. Reply in one English sentence: which backend ACP model are you running on, and what does the entwurf_self envelope say about your identity (sessionId, agentId, cwd)?\". After the entwurf returns, print the Session ID and quote the sibling reply verbatim in one line."
+  tmux send-keys -t "$DRIVER_PANE" -l "Now demonstrate the entwurf surface. Spawn a sibling via the entwurf tool — provider: entwurf, model: gpt-5.4, mode: sync, cwd: $SIBLING_CWD. Task body: \"You are a sibling spawned for a recorded demo. Reply in one English sentence: which backend ACP model are you running on, and what does the entwurf_self envelope say about your identity (sessionId, agentId, cwd)?\". After the entwurf returns, print the Session ID and quote the sibling reply verbatim in one line."
   tmux send-keys -t "$DRIVER_PANE" Enter
   sleep $((SCENE2_DELAY + FINAL_PAUSE))
 
@@ -124,7 +124,7 @@ else
 fi
 
 # ---------- compress gif (gifsicle) ----------
-# Same flags that produced the committed docs/assets/pi-shell-acp-demo.gif —
+# Same flags that produced the committed docs/assets/entwurf-demo.gif —
 # rerunning this script reproduces a comparable artifact, not a 3 MB raw take.
 if [ "$GIF_COMPRESS" = "1" ] && [ -f "$GIF" ]; then
   if command -v gifsicle >/dev/null 2>&1; then
@@ -148,7 +148,7 @@ echo "Cast:   $CAST"
 echo "Driver log:  $DRIVER_LOG  ($(wc -l < "$DRIVER_LOG" 2>/dev/null || echo 0) lines)"
 echo
 echo "Quick debug peek:"
-echo "  grep 'pi-shell-acp:debug' $DRIVER_LOG | head -20"
+echo "  grep 'entwurf:debug' $DRIVER_LOG | head -20"
 echo "  grep -E '(entwurf|model-switch)' $DRIVER_LOG | head -20"
 echo
 echo "Recording artifacts land directly in the publish surface:"

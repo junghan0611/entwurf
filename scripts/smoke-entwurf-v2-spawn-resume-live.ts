@@ -32,8 +32,8 @@
  * model turn is not a resumed citizen. So this is LIVE-only and OUT of `pnpm check`; honest
  * SKIP when LIVE!=1 (a release-gate that hard-fails without auth/model is unrunnable
  * unattended — skip is CI safety, NOT an acceptance PASS).
- *   PI_SHELL_ACP_LIVE_TARGET   = "<provider>/<model>"  (default "openai-codex/gpt-5.4")
- *   PI_SHELL_ACP_SPAWN_RESUME_ASSISTANT_TIMEOUT_MS  (default 180000)
+ *   ENTWURF_LIVE_TARGET   = "<provider>/<model>"  (default "openai-codex/gpt-5.4")
+ *   ENTWURF_SPAWN_RESUME_ASSISTANT_TIMEOUT_MS  (default 180000)
  *   LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live
  *
  * Automation seams: the resident child is reaped (SIGTERM→socket-gone poll→SIGKILL) and its
@@ -47,12 +47,14 @@ import { existsSync, readFileSync } from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { SenderEnvelope } from "../pi-extensions/lib/entwurf-control-rpc.ts";
 import { buildSessionName, findSessionFileById, readSessionIdentity } from "../pi-extensions/lib/entwurf-core.ts";
 import { type LockClaim, lockPathFor, releaseLock as realReleaseLock } from "../pi-extensions/lib/entwurf-v2-lock.ts";
 import { makeProductionEntwurfV2Deps } from "../pi-extensions/lib/entwurf-v2-production.ts";
 import type { EntwurfV2RunResult } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import { runEntwurfV2 } from "../pi-extensions/lib/entwurf-v2-runner.ts";
+import { resolveResumeLaunchIdentity } from "../pi-extensions/lib/entwurf-v2-spawn-production.ts";
 import { upsertMetaSession } from "../pi-extensions/lib/meta-session.ts";
 import { controlSocketPath } from "../pi-extensions/lib/socket-discovery.ts";
 
@@ -61,13 +63,17 @@ import { controlSocketPath } from "../pi-extensions/lib/socket-discovery.ts";
 // keeps us off any live session's path; cleanup only ever touches our own gid's socket).
 const REAL_CONTROL_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
 const SOCKET_SUFFIX = ".sock";
+// Release-gate topology: repo-under-test, not deployment smoke. The spawned
+// resident must load this checkout's extension, independent of global pi packages.
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", REPO_ROOT] as const;
 
 const SEED_TIMEOUT_MS = 120_000; // F5: a real seed model turn can be slow.
 const OBSERVE_TIMEOUT_MS = 30_000; // spawn-bg watcher's socket-alive observe window.
 const SEED_IDENTITY_POLL_MS = 10_000; // GPT pin: defend against seed file flush/rename timing.
 const USER_TURN_TIMEOUT_MS = 60_000;
 const ASSISTANT_TURN_TIMEOUT_MS = (() => {
-	const n = Number(process.env.PI_SHELL_ACP_SPAWN_RESUME_ASSISTANT_TIMEOUT_MS);
+	const n = Number(process.env.ENTWURF_SPAWN_RESUME_ASSISTANT_TIMEOUT_MS);
 	return Number.isFinite(n) && n > 0 ? n : 180_000;
 })();
 const POLL_MS = 250;
@@ -82,17 +88,17 @@ function ok(label: string, cond: boolean): void {
 }
 
 function resolveTarget(): { provider: string; model: string } {
-	const combined = process.env.PI_SHELL_ACP_LIVE_TARGET?.trim();
+	const combined = process.env.ENTWURF_LIVE_TARGET?.trim();
 	if (combined) {
 		const slash = combined.indexOf("/");
 		if (slash <= 0 || slash === combined.length - 1) {
-			throw new Error(`PI_SHELL_ACP_LIVE_TARGET must be "<provider>/<model>", got: ${JSON.stringify(combined)}`);
+			throw new Error(`ENTWURF_LIVE_TARGET must be "<provider>/<model>", got: ${JSON.stringify(combined)}`);
 		}
 		return { provider: combined.slice(0, slash), model: combined.slice(slash + 1) };
 	}
 	return {
-		provider: process.env.PI_SHELL_ACP_LIVE_PROVIDER?.trim() || "openai-codex",
-		model: process.env.PI_SHELL_ACP_LIVE_MODEL?.trim() || "gpt-5.4",
+		provider: process.env.ENTWURF_LIVE_PROVIDER?.trim() || "openai-codex",
+		model: process.env.ENTWURF_LIVE_MODEL?.trim() || "gpt-5.4",
 	};
 }
 
@@ -179,11 +185,11 @@ async function main(): Promise<void> {
 	}
 
 	const { provider, model } = resolveTarget();
-	// ACP override is OUT of scope for 0.11.0 (A): `--no-extensions --provider pi-shell-acp` is a
+	// ACP override is OUT of scope for 0.11.0 (A): `--no-extensions --provider entwurf` is a
 	// broken combination, and this smoke proves spawn-bg resident lifecycle, not backend equality.
-	if (provider === "pi-shell-acp") {
+	if (provider === "entwurf") {
 		throw new Error(
-			"spawn-resume-live: provider=pi-shell-acp is out of scope for 0.11.0 (A) — use a native target (e.g. openai-codex/gpt-5.4).",
+			"spawn-resume-live: provider=entwurf is out of scope for 0.11.0 (A) — use a native target (e.g. openai-codex/gpt-5.4).",
 		);
 	}
 	console.log(`[smoke-entwurf-v2-spawn-resume-live] target = ${provider}/${model}`);
@@ -194,8 +200,8 @@ async function main(): Promise<void> {
 	const mailboxDir = path.join(tmp, "mailbox");
 	const lockDir = path.join(tmp, "locks");
 	for (const d of [sessionsDir, mailboxDir, lockDir]) await fsp.mkdir(d, { recursive: true });
-	process.env.PI_META_SESSIONS_DIR = sessionsDir;
-	process.env.PI_META_MAILBOX_DIR = mailboxDir;
+	process.env.ENTWURF_META_SESSIONS_DIR = sessionsDir;
+	process.env.ENTWURF_META_MAILBOX_DIR = mailboxDir;
 
 	let gid = "";
 	let seedFile: string | null = null;
@@ -303,6 +309,15 @@ async function main(): Promise<void> {
 					releaseCount++;
 					releasedGids.push(claim.gardenId);
 					return realReleaseLock(claim, deps);
+				},
+				spawnOverrides: {
+					resolveIdentity: (plan) => {
+						const launch = resolveResumeLaunchIdentity(plan);
+						return {
+							...launch,
+							explicitExtensionArgs: [...REPO_EXTENSION_ARGS, ...launch.explicitExtensionArgs],
+						};
+					},
 				},
 			},
 		});

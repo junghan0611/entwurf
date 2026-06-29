@@ -53,8 +53,8 @@ const flush = (): Promise<void> => new Promise((res) => setImmediate(res));
 
 const IDENTITY: LaunchIdentity = {
 	cwd: "/home/test/repo",
-	explicitExtensionArgs: ["-e", "/path/to/pi-shell-acp/index.ts"],
-	provider: "pi-shell-acp",
+	explicitExtensionArgs: ["-e", "/path/to/entwurf/index.ts"],
+	provider: "entwurf",
 	model: "claude-opus-4-8",
 };
 
@@ -218,7 +218,7 @@ async function main(): Promise<void> {
 		ok("2 argv prompt is final positional", args[args.length - 1] === "continue the task");
 		ok("2 argv carries plan.launchArgs (--approve)", args.includes("--approve"));
 		ok("2 argv carries the ext args", args.includes("-e"));
-		ok("2 argv carries provider", args[args.indexOf("--provider") + 1] === "pi-shell-acp");
+		ok("2 argv carries provider", args[args.indexOf("--provider") + 1] === "entwurf");
 		ok("2 argv carries model", args[args.indexOf("--model") + 1] === "claude-opus-4-8");
 		ok("2 argv carries session-id", args[args.indexOf("--session-id") + 1] === GID);
 		// the sessionId-bound authorization marker is planted on the child env so the resumed

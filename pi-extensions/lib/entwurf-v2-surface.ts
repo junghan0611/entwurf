@@ -29,9 +29,9 @@ import { type EntwurfV2RunResult, runEntwurfV2 } from "./entwurf-v2-runner.ts";
  * ONE shared env var feeds BOTH surfaces (pi-native + MCP) — a pi session and an MCP child
  * both inherit it, so there is no per-surface config fork. `prefixRoots` is operator policy,
  * not session-local UX, so it is an env var, not a pi flag. */
-export const ENTWURF_PREFIX_ROOTS_ENV = "PI_ENTWURF_PREFIX_ROOTS";
+export const ENTWURF_PREFIX_ROOTS_ENV = "ENTWURF_PREFIX_ROOTS";
 
-/** Parse `PI_ENTWURF_PREFIX_ROOTS` into the preflight's `prefixRoots`. `path.delimiter`-
+/** Parse `ENTWURF_PREFIX_ROOTS` into the preflight's `prefixRoots`. `path.delimiter`-
  * separated (`:` on Linux/macOS); entries are trimmed, empty segments dropped. Unset / empty
  * / delimiters-only ⇒ `[]` (no prefix promotion — frozen decision 7, no package default).
  * It does NOT throw on a nonexistent/typo path: `preflight`'s normalize keeps an absolute
@@ -46,7 +46,7 @@ export function parseEntwurfPrefixRootsEnv(raw: string | undefined = process.env
 }
 
 /** The raw shape a surface (pi tool / MCP verb) collects. `wants_reply` is snake_case to
- * match the external `entwurf_send` convention; the runner sees `wantsReply`. */
+ * match the external `entwurf_v2` convention; the runner sees `wantsReply`. */
 export interface SurfaceEntwurfV2Params {
 	target: string;
 	intent: "fire-and-forget" | "owned-outcome";
@@ -58,7 +58,7 @@ export interface SurfaceEntwurfV2Params {
 /** ctx-free run options. The caller (entwurf-control.ts / MCP bridge) builds `senderProvider`
  * from its own envelope source — this module never touches `ExtensionContext`. Both surfaces
  * leave `agentDir`/`prefixRoots` undefined by design: `runAndRenderEntwurfV2FromSurface` falls
- * back to the `PI_ENTWURF_PREFIX_ROOTS` env SSOT for `prefixRoots` (5d-4), and `agentDir` stays
+ * back to the `ENTWURF_PREFIX_ROOTS` env SSOT for `prefixRoots` (5d-4), and `agentDir` stays
  * undefined (no surface sets it). Explicit opts still win — kept for tests / a future surface. */
 export interface EntwurfV2SurfaceRunOptions {
 	senderProvider: () => SenderEnvelope | undefined;
@@ -85,6 +85,32 @@ export function toDispatchInput(params: SurfaceEntwurfV2Params): DispatchInput {
 	};
 }
 
+/**
+ * Detour B (B-a) — actionable rendering of an honest reject. The decider is UNCHANGED:
+ * a reject stays a reject (Hard Rule 3), and intent is NEVER auto-converted (Hard Rule 2 —
+ * owned→fire-and-forget mailbox fallback would break the F1 ownership contract). This only
+ * appends a one-line "what to do instead" to the reject TEXT, so an honest reject stops
+ * reading as "delivery impossible". Returns undefined for rejects with no useful next step.
+ */
+export function actionableRejectHint(reason: string): string | undefined {
+	switch (reason) {
+		case "backend-liveness-unsupported":
+			// A meta-session backend (e.g. claude-code self-fetch) has no liveness predicate, so
+			// owned-outcome has nothing to own. Replies go to the mailbox via fire-and-forget.
+			return (
+				"meta-session backend has no liveness predicate → owned-outcome is unsupported. " +
+				"To reply, dispatch with intent: fire-and-forget — it routes to the meta-mailbox when a " +
+				"deliverable/active receiver is armed (else it fail-closes as mailbox-undeliverable). " +
+				"(Intent is not auto-converted; you choose it.)"
+			);
+		case "owned-live-no-autosend":
+			// A live target is reachable, but owned-outcome is not an auto-send (Q2/F1).
+			return "target is live — owned-outcome never auto-sends. Use intent: fire-and-forget (with wants_reply if you need a reply).";
+		default:
+			return undefined;
+	}
+}
+
 /** Render the outcome-rich result to `{ text, isError }`. A reject or a thrown/failed/dirty
  * delivery is `isError:true`; a sent/fallback-sent/enqueued/observed delivery is `isError:false`.
  * A control in-band `rejected` is a non-delivery (isError:true) and carries N3 `rejectReason`
@@ -94,6 +120,8 @@ export function renderEntwurfV2Result(result: EntwurfV2RunResult): EntwurfV2Surf
 		case "rejected": {
 			const r = result.receipt;
 			let text = `entwurf_v2 rejected: ${r.reason} (observed liveness: ${r.observedLiveness ?? "n/a"})`;
+			const hint = actionableRejectHint(r.reason);
+			if (hint) text += `\n  → ${hint}`;
 			if (result.diagnostic?.kind === "target-locked") {
 				const c = result.diagnostic.conflict;
 				text +=

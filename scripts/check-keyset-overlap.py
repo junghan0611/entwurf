@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """check-keyset-overlap — guard the keyset-owner invariant across consumers.
 
-pi-shell-acp's meta-bridge install OWNS a fixed set of `~/.claude/settings.json`
+entwurf's meta-bridge install OWNS a fixed set of `~/.claude/settings.json`
 (+ `~/.claude.json`) keys (the SSOT is `meta-bridge-state.py managed-keys`).
 agent-config (and any future consumer) merges its OWN fragment into the same
 file. The invariant: each side sets only its own keys and never the other's —
@@ -41,7 +41,7 @@ def die(msg: str, code: int = 2) -> "None":
 
 
 def pi_owned_paths() -> list[str]:
-    """Flat dotted key paths pi-shell-acp owns, from the state-manager SSOT."""
+    """Flat dotted key paths entwurf owns, from the state-manager SSOT."""
     try:
         out = subprocess.run(
             [sys.executable, str(STATE), "managed-keys"],
@@ -107,7 +107,7 @@ def main() -> int:
             print(f"  FAIL: {line}", file=sys.stderr)
         print(
             "  Fix: remove the colliding key(s) from the consumer fragment; "
-            "pi-shell-acp owns them (see ./run.sh meta-bridge-managed-keys).",
+            "entwurf owns them (see ./run.sh meta-bridge-managed-keys).",
             file=sys.stderr,
         )
         return 1

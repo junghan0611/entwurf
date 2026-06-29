@@ -58,7 +58,7 @@ function ok(label: string, cond: boolean): void {
 }
 
 const GID = "20260612T100000-aaaaaa";
-const CWD = "/home/junghan/repos/gh/pi-shell-acp";
+const CWD = "/home/junghan/repos/gh/entwurf";
 
 function identity(backend: MetaBackendV2): MetaIdentity {
 	return {

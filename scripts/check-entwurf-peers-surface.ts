@@ -1,5 +1,5 @@
 /**
- * check-entwurf-peers-surface — deterministic gate for the MCP `entwurf_peers`
+ * check-entwurf-peers-surface — deterministic gate for the MCP + pi-native `entwurf_peers`
  * RENDER/PAYLOAD layer (0.11 Stage 0 step 4, slice 4c). Drives the PURE
  * `renderEntwurfPeers` with a fabricated `EntwurfFactsResult` (no IO) and proves
  * the surface contract (GPi + Fable 수렴):
@@ -18,8 +18,8 @@
  *   - diagnostics appear in BOTH the text and the JSON,
  *   - empty sections render "(none)"; an `unsupported` peer is shown (never
  *     dropped); socket-only enrich null renders "(not enriched)",
- *   - WIRING guard (Fable e②/6): the MCP handler calls listEntwurfFacts +
- *     renderEntwurfPeers and the old getLiveSessions is gone from the bridge.
+ *   - WIRING guard (Fable e②/6): the MCP handler and pi-native tool call
+ *     listEntwurfFacts + renderEntwurfPeers, and the old getLiveSessions is gone from the bridge.
  *
  * No IO — the facts are fabricated; only the wiring guard reads the bridge source
  * as text (a static assertion, not an execution).
@@ -61,8 +61,12 @@ function peer(gardenId: string, backend: MetaBackendV2, liveness: FactLiveness):
 	};
 }
 
-function socketOnly(gardenId: string, liveness: SocketOnlyFact["liveness"]): SocketOnlyFact {
-	return { kind: "socket-only", gardenId, liveness, cwd: null, model: null, idle: null, infoError: null };
+function socketOnly(
+	gardenId: string,
+	liveness: SocketOnlyFact["liveness"],
+	over: Partial<SocketOnlyFact> = {},
+): SocketOnlyFact {
+	return { kind: "socket-only", gardenId, liveness, cwd: null, model: null, idle: null, infoError: null, ...over };
 }
 
 /** Recursively collect every object key in a JSON-able value. */
@@ -94,7 +98,10 @@ function main(): void {
 				peer(GID_PI_INDET, "pi", "indeterminate"),
 				peer(GID_CLAUDE, "claude-code", "unsupported"),
 			],
-			socketOnly: [socketOnly(GID_SOCK_ALIVE, "alive"), socketOnly(GID_SOCK_DEAD, "dead")],
+			socketOnly: [
+				socketOnly(GID_SOCK_ALIVE, "alive", { cwd: "/work/cos", model: "gpt-5.4", idle: false }),
+				socketOnly(GID_SOCK_DEAD, "dead", { infoError: "get_info failed" }),
+			],
 		},
 		diagnostics: [{ kind: "socket-symlink-rejected", gardenId: "20260611T999999-999999", message: "symlink rejected" }],
 	};
@@ -165,17 +172,50 @@ function main(): void {
 		ok("empty surface → count 0, no sessions", empty.payload.count === 0 && empty.payload.sessions.length === 0);
 	}
 	ok(
-		"socket-only enrich null → '(not enriched)' (socket line, not '(unknown)')",
-		text.includes(`${GID_SOCK_ALIVE}  liveness=alive  cwd=(not enriched)  model=(not enriched)`),
+		"socket-only enrich appears in text",
+		text.includes(`${GID_SOCK_ALIVE}  liveness=alive  cwd=/work/cos  model=gpt-5.4  idle=no`),
+	);
+	ok(
+		"socket-only infoError appears in text",
+		text.includes(
+			`${GID_SOCK_DEAD}  liveness=dead  cwd=(not enriched)  model=(not enriched)  infoError=get_info failed`,
+		),
 	);
 	ok("unsupported peer line shown in text", text.includes(`${GID_CLAUDE}  backend=claude-code  liveness=unsupported`));
+
+	// ── human text is bounded: full payload remains structured, not pasted into content ──
+	{
+		const manyPeers = Array.from({ length: 40 }, (_, i) =>
+			peer(`20260612T0000${String(i).padStart(2, "0")}-aaaaaa`, "claude-code", "unsupported"),
+		);
+		const bounded = renderEntwurfPeers({ facts: { peers: manyPeers, socketOnly: [] }, diagnostics: [] }, DIR);
+		ok("bounded text omits older entries when peer list is large", bounded.text.includes("older entries omitted"));
+		ok("bounded text shows latest entries", bounded.text.includes("20260612T000039-aaaaaa"));
+		ok("bounded text omits oldest entry", !bounded.text.includes("20260612T000000-aaaaaa  backend="));
+		ok("bounded payload still carries every peer", bounded.payload.peers.length === 40);
+	}
 
 	// ── WIRING guard: bridge handler calls the provider+render, not getLiveSessions ──
 	{
 		const here = path.dirname(fileURLToPath(import.meta.url));
-		const bridgeSrc = readFileSync(path.join(here, "..", "mcp", "pi-tools-bridge", "src", "index.ts"), "utf8");
+		const bridgeSrc = readFileSync(path.join(here, "..", "mcp", "entwurf-bridge", "src", "index.ts"), "utf8");
+		const nativeSrc = readFileSync(path.join(here, "..", "pi-extensions", "entwurf-control.ts"), "utf8");
 		ok("wiring: bridge calls listEntwurfFacts(", bridgeSrc.includes("listEntwurfFacts("));
 		ok("wiring: bridge calls renderEntwurfPeers(", bridgeSrc.includes("renderEntwurfPeers("));
+		ok("wiring: native pi tool calls listEntwurfFacts(", nativeSrc.includes("listEntwurfFacts("));
+		ok("wiring: native pi tool calls renderEntwurfPeers(", nativeSrc.includes("renderEntwurfPeers("));
+		ok(
+			"wiring: native pi tool description no longer claims socket-only discovery",
+			!nativeSrc.includes("List live sessions that expose a control socket. Returns sessionIds only"),
+		);
+		ok(
+			"wiring: bridge does not paste full JSON payload into human text",
+			!bridgeSrc.includes("JSON.stringify(payload)"),
+		);
+		ok(
+			"wiring: native pi tool does not paste full JSON payload into human text",
+			!nativeSrc.includes("JSON.stringify(payload)"),
+		);
 		// `\bname\s*\(` catches a definition OR a call (tolerating a space before the
 		// paren, GPi Q4); a bare prose mention in a removal-note comment (no paren) is
 		// allowed — the guard targets the second scan, not the word.

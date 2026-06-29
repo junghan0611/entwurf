@@ -43,7 +43,7 @@ const GID = "20260613T100000-aaaaaa";
 const SENDER: MailboxSenderEnvelope = {
 	sessionId: "20260613T120000-sender",
 	agentId: "openai-codex/gpt-5.5",
-	cwd: "/home/junghan/repos/gh/pi-shell-acp",
+	cwd: "/home/junghan/repos/gh/entwurf",
 	timestamp: "2026-06-13T04:00:00.000Z",
 	origin: "pi-session",
 	replyable: true,
@@ -97,6 +97,10 @@ function recordingEnqueue(): {
 	ok("1: wantsReply=true → 'wants reply: yes' in body", body.includes("wants reply: yes"));
 	ok("1: body carries the message", body.includes("ping"));
 	ok("1: body carries the sender sessionId (replyable)", body.includes(SENDER.sessionId));
+	ok(
+		"1: replyable body points to the v2 reply surface (entwurf_v2), not the retired entwurf_send",
+		body.includes("entwurf_v2") && !body.includes("entwurf_send"),
+	);
 }
 
 // ── 2. sender present + wantsReply=false → 'wants reply: no' ──────────────────

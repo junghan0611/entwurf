@@ -1,7 +1,7 @@
 /**
  * smoke-session-id-name — LIVE 3-turn substrate smoke for the Pi 0.78
- * `--session-id` + `--name` primitives, exercised through the pi-shell-acp
- * bridge but WITHOUT touching the Entwurf tool surface (Phase 3a).
+ * `--session-id` + `--name` primitives, exercised with a pi-native provider
+ * but WITHOUT touching the Entwurf tool surface (Phase 3a).
  *
  * It dogfoods the locked identity helpers (generateSessionId / buildSessionName
  * / readSessionHeader / findSessionFilesById / analyzeSessionFileLike) against a
@@ -32,11 +32,38 @@ import { fileURLToPath } from "node:url";
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PI_BIN = process.env.PI_BIN ?? "pi";
 
+// v2-only retarget: the substrate smoke no longer rides the (removed) ACP
+// `entwurf` provider — the --session-id/--name primitives under test are
+// provider-agnostic. Drive a real pi-native provider/model instead, sharing the
+// v2 live-smoke env (ENTWURF_LIVE_TARGET, default openai-codex/gpt-5.4).
+function resolveTarget(): { provider: string; model: string } {
+	const combined = process.env.ENTWURF_LIVE_TARGET?.trim();
+	if (combined) {
+		const slash = combined.indexOf("/");
+		if (slash <= 0 || slash === combined.length - 1) {
+			throw new Error(`ENTWURF_LIVE_TARGET must be "<provider>/<model>", got: ${JSON.stringify(combined)}`);
+		}
+		return { provider: combined.slice(0, slash), model: combined.slice(slash + 1) };
+	}
+	return {
+		provider: process.env.ENTWURF_LIVE_PROVIDER?.trim() || "openai-codex",
+		model: process.env.ENTWURF_LIVE_MODEL?.trim() || "gpt-5.4",
+	};
+}
+const { provider: LIVE_PROVIDER, model: LIVE_MODEL } = resolveTarget();
+
 // Isolate session storage BEFORE importing entwurf-core (it computes
 // SESSIONS_BASE at module load from PI_CODING_AGENT_DIR).
 const agentDir = fs.mkdtempSync(path.join(os.tmpdir(), "psa-sidname-agent-"));
 process.env.PI_CODING_AGENT_DIR = agentDir;
-process.env.PI_ENTWURF_TARGETS_PATH = path.join(REPO_ROOT, "pi", "entwurf-targets.json");
+process.env.ENTWURF_TARGETS_PATH = path.join(REPO_ROOT, "pi", "entwurf-targets.json");
+
+// The native retarget provider authenticates via <PI_CODING_AGENT_DIR>/auth.json.
+// The isolated temp dir has none (old ACP `entwurf` rode Claude Code OAuth, so
+// isolation was free); copy the real OAuth creds in so real turns authenticate while
+// SESSIONS stay isolated — the whole point — and the dir is removed on exit.
+const realAuth = path.join(os.homedir(), ".pi", "agent", "auth.json");
+if (fs.existsSync(realAuth)) fs.copyFileSync(realAuth, path.join(agentDir, "auth.json"));
 
 const { generateSessionId, buildSessionName, readSessionHeader, findSessionFilesById, analyzeSessionFileLike } =
 	await import("../pi-extensions/lib/entwurf-core.ts");
@@ -78,9 +105,9 @@ function runPiTurn(turnCwd: string, sessionId: string, name: string | null, prom
 		"--session-id",
 		sessionId,
 		"--provider",
-		"pi-shell-acp",
+		LIVE_PROVIDER,
 		"--model",
-		"claude-sonnet-4-6",
+		LIVE_MODEL,
 		"--mode",
 		"json",
 	];
@@ -103,8 +130,8 @@ try {
 	const sessionId = generateSessionId();
 	const name = buildSessionName({
 		sessionId,
-		provider: "pi-shell-acp",
-		model: "claude-sonnet-4-6",
+		provider: LIVE_PROVIDER,
+		model: LIVE_MODEL,
 		rawTitle: "substrate smoke session-id name",
 		tags: ["entwurf", "smoke"],
 	});

@@ -75,7 +75,7 @@ const SPAWN_PLAN: ExecutionPlan = {
 	action: "resume",
 	targetGardenId: GID,
 	sessionId: GID,
-	cwd: "/home/junghan/repos/gh/pi-shell-acp",
+	cwd: "/home/junghan/repos/gh/entwurf",
 	prompt: "p",
 	launchArgs: ["--approve"],
 	expectedSocketPath: "/fake/ctl/s.sock",

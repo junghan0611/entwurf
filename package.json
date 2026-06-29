@@ -1,7 +1,7 @@
 {
-	"name": "@junghanacs/pi-shell-acp",
-	"version": "0.11.0",
-	"description": "ACP bridge providing Claude Code, Codex, and Gemini CLI backends to pi-coding-agent, with the entwurf orchestration surface for cross-session delegation.",
+	"name": "@junghanacs/entwurf",
+	"version": "0.12.0",
+	"description": "Garden-citizen dispatch substrate and meta-bridge for Claude Code, Codex, Antigravity, and pi harnesses.",
 	"license": "MIT",
 	"author": {
 		"name": "Junghan Kim",
@@ -9,34 +9,30 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/junghan0611/pi-shell-acp.git"
+		"url": "git+https://github.com/junghan0611/entwurf.git"
 	},
-	"homepage": "https://github.com/junghan0611/pi-shell-acp#readme",
+	"homepage": "https://github.com/junghan0611/entwurf#readme",
 	"bugs": {
-		"url": "https://github.com/junghan0611/pi-shell-acp/issues"
+		"url": "https://github.com/junghan0611/entwurf/issues"
+	},
+	"publishConfig": {
+		"access": "public"
 	},
 	"keywords": [
 		"pi",
 		"pi-package",
 		"pi-extension",
 		"pi-coding-agent",
-		"ai-provider",
-		"acp",
-		"acp-bridge",
-		"agent-client-protocol",
+		"garden-session",
+		"entwurf",
+		"dispatch",
+		"meta-bridge",
 		"claude-code",
 		"codex",
-		"gemini",
-		"gemini-cli",
 		"mcp"
 	],
 	"type": "module",
 	"files": [
-		"index.ts",
-		"acp-bridge.ts",
-		"event-mapper.ts",
-		"engraving.ts",
-		"pi-context-augment.ts",
 		"protocol.js",
 		"pi-extensions/",
 		"mcp/",
@@ -45,15 +41,18 @@
 		"demo/README.md",
 		"demo/demo.sh",
 		"demo/demo-baseline.sh",
-		"demo/compaction-policy-smoke/",
 		"docs/setup-clean-host.md",
-		"docs/assets/pi-shell-acp-hero.jpg",
-		"docs/assets/pi-shell-acp-demo.gif",
-		"docs/assets/pi-shell-acp-doomemacs.gif",
-		"docs/assets/pi-shell-acp-entwurf.gif",
+		"docs/assets/entwurf-hero.jpg",
+		"docs/assets/entwurf-demo.gif",
+		"docs/assets/entwurf-doomemacs.gif",
+		"docs/assets/entwurf-entwurf.gif",
 		"pi/entwurf-targets.json",
 		"pi/entwurf-capabilities.json",
 		"pi/settings.reference.json",
+		"pi/meta-bridge/.claude-plugin/marketplace.json",
+		"pi/meta-bridge/entwurf-meta-receive/.claude-plugin/plugin.json",
+		"pi/meta-bridge/entwurf-meta-receive/hooks/hooks.json",
+		"pi/meta-bridge/entwurf-meta-receive/scripts/doorbell.sh",
 		"pi/skill-plugin-example/",
 		"run.sh",
 		"AGENTS.md",
@@ -68,24 +67,23 @@
 	},
 	"packageManager": "pnpm@10.33.0",
 	"dependencies": {
-		"@agentclientprotocol/claude-agent-acp": "0.39.0",
-		"@agentclientprotocol/sdk": "0.22.1",
+		"@agentclientprotocol/claude-agent-acp": "0.50.0",
+		"@agentclientprotocol/sdk": "0.29.0",
 		"@anthropic-ai/sdk": "0.100.1",
 		"@modelcontextprotocol/sdk": "^1.12.1",
-		"@zed-industries/codex-acp": "0.15.0",
 		"zod": "^3.25.0 || ^4.0.0"
 	},
 	"peerDependencies": {
-		"@earendil-works/pi-ai": ">=0.79.4",
-		"@earendil-works/pi-coding-agent": ">=0.79.4",
-		"@earendil-works/pi-tui": ">=0.79.4",
+		"@earendil-works/pi-ai": ">=0.80.2 <0.81",
+		"@earendil-works/pi-coding-agent": ">=0.80.2 <0.81",
+		"@earendil-works/pi-tui": ">=0.80.2 <0.81",
 		"typebox": "*"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.13",
-		"@earendil-works/pi-ai": "0.79.4",
-		"@earendil-works/pi-coding-agent": "0.79.4",
-		"@earendil-works/pi-tui": "0.79.4",
+		"@earendil-works/pi-ai": "0.80.2",
+		"@earendil-works/pi-coding-agent": "0.80.2",
+		"@earendil-works/pi-tui": "0.80.2",
 		"@types/node": "^24.3.0",
 		"husky": "^9.1.7",
 		"typescript": "^6.0.2"
@@ -95,13 +93,6 @@
 		"postinstall": "node scripts/postinstall-chmod.cjs",
 		"prepublishOnly": "pnpm run check && pnpm run check-pack-install",
 		"setup": "./run.sh setup",
-		"smoke": "./run.sh smoke",
-		"smoke-claude": "./run.sh smoke-claude",
-		"smoke-codex": "./run.sh smoke-codex",
-		"smoke-gemini": "./run.sh smoke-gemini",
-		"smoke-all": "./run.sh smoke-all",
-		"smoke-async-resume": "./run.sh smoke-async-resume",
-		"check-mcp": "./run.sh check-mcp",
 		"check-shell-quote": "./run.sh check-shell-quote",
 		"check-entwurf-session-identity": "./run.sh check-entwurf-session-identity",
 		"check-meta-session": "./run.sh check-meta-session",
@@ -117,32 +108,23 @@
 		"check-project-trust-handler": "./run.sh check-project-trust-handler",
 		"check-entwurf-v2-lock": "./run.sh check-entwurf-v2-lock",
 		"check-model-lock": "./run.sh check-model-lock",
-		"check-models": "./run.sh check-models",
-		"check-backends": "./run.sh check-backends",
-		"check-registration": "./run.sh check-registration",
 		"check-dep-versions": "./run.sh check-dep-versions",
-		"check-auth-boundary": "./run.sh check-auth-boundary",
-		"check-sdk-surface": "./run.sh check-sdk-surface",
-		"verify-transcript-poison": "./run.sh verify-transcript-poison",
+		"check-acp-carrier-augment": "./run.sh check-acp-carrier-augment",
 		"check-pack": "./run.sh check-pack",
 		"check-pack-install": "./run.sh check-pack-install",
 		"test:pack": "pnpm run check-pack && pnpm run check-pack-install",
-		"check-claude-sessions": "./run.sh check-claude-sessions",
 		"typecheck": "tsc --noEmit && tsc -p mcp/tsconfig.json && tsc -p scripts/tsconfig.json",
 		"lint": "biome check .",
 		"format": "biome check --write .",
-		"check:plugins": "pnpm -r --filter \"./plugins/*\" run check",
-		"check-async-resume-gate": "./run.sh check-async-resume-gate",
 		"check-package-source-routing": "./run.sh check-package-source-routing",
-		"check": "pnpm lint && pnpm typecheck && pnpm check:plugins && ./run.sh check-mcp && ./run.sh check-shell-quote && ./run.sh check-entwurf-session-identity && ./run.sh check-meta-session && ./run.sh check-meta-record-v2 && ./run.sh check-mailbox-receipt-state && ./run.sh check-entwurf-capabilities && ./run.sh check-meta-dual-read && ./run.sh check-meta-mailbox-state-write && ./run.sh check-meta-receiver-marker && ./run.sh check-meta-migration && ./run.sh check-meta-dual-consumers && ./run.sh check-meta-capability-source && ./run.sh check-socket-probe && ./run.sh smoke-meta-honesty && ./run.sh smoke-meta-install-state && ./run.sh smoke-meta-prune && ./run.sh smoke-meta-keyset-guard && ./run.sh smoke-meta-mailbox && ./run.sh smoke-meta-sender-identity && ./run.sh check-plugin-empty-final-recovery && ./run.sh check-plugin-prompt-format && ./run.sh check-async-resume-gate && ./run.sh check-package-source-routing && ./run.sh check-model-lock && ./run.sh check-models && ./run.sh check-backends && ./run.sh check-registration && ./run.sh check-dep-versions && ./run.sh check-pi-import-surface && ./run.sh check-pi-runtime-version && ./run.sh check-pi-preflight && ./run.sh check-project-trust-handler && ./run.sh check-entwurf-v2-contract && ./run.sh check-entwurf-v2-lock && ./run.sh check-entwurf-v2-decider && ./run.sh check-entwurf-v2-matrix && ./run.sh check-entwurf-v2-release && ./run.sh check-entwurf-v2-send && ./run.sh check-entwurf-v2-send-fallback && ./run.sh check-entwurf-v2-mailbox && ./run.sh check-entwurf-v2-runner && ./run.sh check-entwurf-control-rpc && ./run.sh check-entwurf-v2-production && ./run.sh check-entwurf-v2-surface && ./run.sh check-pi-tools-bridge-boot && ./run.sh check-entwurf-v2-spawn && ./run.sh check-entwurf-resume-args && ./run.sh check-entwurf-v2-spawn-production && ./run.sh check-entwurf-v2-only && ./run.sh check-entwurf-facts && ./run.sh check-socket-discovery && ./run.sh check-meta-listing && ./run.sh check-entwurf-fact-provider && ./run.sh check-entwurf-peers-surface && ./run.sh check-entwurf-send-mailbox-fallback && ./run.sh check-entwurf-self-address && ./run.sh check-entwurf-deliverability && ./run.sh check-entwurf-mailbox-guard && ./run.sh check-auth-boundary && ./run.sh check-sdk-surface && ./run.sh verify-transcript-poison && ./run.sh check-pack"
+		"check": "pnpm lint && pnpm typecheck && ./run.sh check-shell-quote && ./run.sh check-entwurf-session-identity && ./run.sh check-meta-session && ./run.sh check-meta-record-v2 && ./run.sh check-mailbox-receipt-state && ./run.sh check-entwurf-capabilities && ./run.sh check-meta-dual-read && ./run.sh check-meta-mailbox-state-write && ./run.sh check-meta-receiver-marker && ./run.sh check-meta-migration && ./run.sh check-meta-dual-consumers && ./run.sh check-meta-capability-source && ./run.sh check-socket-probe && ./run.sh smoke-meta-honesty && ./run.sh smoke-meta-install-state && ./run.sh smoke-meta-prune && ./run.sh smoke-meta-keyset-guard && ./run.sh check-package-source-routing && ./run.sh check-model-lock && ./run.sh check-dep-versions && ./run.sh check-install-preflight && ./run.sh check-pi-import-surface && ./run.sh check-env-namespace && ./run.sh check-pi-runtime-version && ./run.sh check-pi-preflight && ./run.sh check-project-trust-handler && ./run.sh check-entwurf-v2-contract && ./run.sh check-entwurf-v2-lock && ./run.sh check-entwurf-v2-decider && ./run.sh check-entwurf-v2-matrix && ./run.sh check-entwurf-v2-release && ./run.sh check-entwurf-v2-send && ./run.sh check-entwurf-v2-send-fallback && ./run.sh check-entwurf-v2-mailbox && ./run.sh check-entwurf-v2-runner && ./run.sh check-entwurf-control-rpc && ./run.sh check-entwurf-v2-production && ./run.sh check-entwurf-v2-surface && ./run.sh check-entwurf-bridge-boot && ./run.sh check-entwurf-v2-spawn && ./run.sh check-entwurf-resume-args && ./run.sh check-entwurf-v2-spawn-production && ./run.sh check-entwurf-facts && ./run.sh check-socket-discovery && ./run.sh check-meta-listing && ./run.sh check-entwurf-fact-provider && ./run.sh check-entwurf-peers-surface && ./run.sh check-entwurf-self-address && ./run.sh check-entwurf-deliverability && ./run.sh check-entwurf-mailbox-guard && ./run.sh check-auth-boundary && ./run.sh check-acp-provider-surface && ./run.sh check-acp-sdk-surface && ./run.sh check-acp-overlay && ./run.sh check-acp-tool-surface && ./run.sh check-acp-event-mapper && ./run.sh check-acp-prompt-builder && ./run.sh check-acp-config && ./run.sh check-acp-session-store && ./run.sh check-acp-backend-preflight && ./run.sh check-acp-session-reuse && ./run.sh check-acp-carrier-augment && ./run.sh check-pack"
 	},
 	"pi": {
 		"extensions": [
-			"./index.ts",
+			"./pi-extensions/acp-provider.ts",
 			"./pi-extensions/entwurf-control.ts",
-			"./pi-extensions/entwurf.ts",
 			"./pi-extensions/model-lock.ts"
 		],
-		"image": "https://raw.githubusercontent.com/junghan0611/pi-shell-acp/main/docs/assets/pi-shell-acp-demo.gif"
+		"image": "https://raw.githubusercontent.com/junghan0611/entwurf/main/docs/assets/entwurf-demo.gif"
 	}
 }

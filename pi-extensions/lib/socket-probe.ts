@@ -3,7 +3,7 @@
  *
  * Why this is a shared lib (not a per-file copy): the entwurf-control
  * extension (`pi-extensions/entwurf-control.ts`) AND the MCP bridge
- * (`mcp/pi-tools-bridge/src/index.ts`) both probe `~/.pi/entwurf-control/*.sock`.
+ * (`mcp/entwurf-bridge/src/index.ts`) both probe `~/.pi/entwurf-control/*.sock`.
  * They used to carry independent `isSocketAlive` copies. If only one side
  * learned the three-valued classification the two probes would diverge — the
  * bridge routes a timeout target one way (mailbox fallback) while the

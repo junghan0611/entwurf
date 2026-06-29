@@ -1,4 +1,4 @@
-# pi-shell-acp recorded demos
+# entwurf recorded demos
 
 Two recorded GIF scripts live here. Both use `asciinema` for capture and
 `agg` for cast → GIF conversion. Both share the same gitignore policy
@@ -30,9 +30,9 @@ Output lands directly in the publish surface — re-running the script
 overwrites the previous take so the gallery preview always matches the
 current branch:
 
-- `docs/assets/pi-shell-acp-demo.cast` — raw asciinema recording (gitignored)
-- `docs/assets/pi-shell-acp-demo.gif` — tracked, referenced by `package.json#pi.image` and the top-level `README.md`
-- `demo/baseline-debug.log` — `PI_SHELL_ACP_DEBUG=1` stderr (gitignored, stays next to the script)
+- `docs/assets/entwurf-demo.cast` — raw asciinema recording (gitignored)
+- `docs/assets/entwurf-demo.gif` — tracked, referenced by `package.json#pi.image` and the top-level `README.md`
+- `demo/baseline-debug.log` — `ENTWURF_DEBUG=1` stderr (gitignored, stays next to the script)
 
 ## `demo.sh` — two-pane entwurf flow (regression guard)
 
@@ -55,9 +55,9 @@ Output mirrors the baseline demo's layout — recording artifacts land in
 `docs/assets/` so the publish surface and the demo script share one
 naming convention:
 
-- `docs/assets/pi-shell-acp-entwurf.cast` — raw asciinema recording (gitignored via global `*.cast`)
-- `docs/assets/pi-shell-acp-entwurf.gif` — tracked, referenced by the top-level `README.md` Entwurf section
-- `demo/peer-debug.log` — `PI_SHELL_ACP_DEBUG=1` stderr from the top pane (gitignored, stays next to the script)
+- `docs/assets/entwurf-entwurf.cast` — raw asciinema recording (gitignored via global `*.cast`)
+- `docs/assets/entwurf-entwurf.gif` — tracked, referenced by the top-level `README.md` Entwurf section
+- `demo/peer-debug.log` — `ENTWURF_DEBUG=1` stderr from the top pane (gitignored, stays next to the script)
 - `demo/sender-debug.log` — same from the bottom pane
 
 Watch debug live (separate terminal, before `bash demo.sh`):
@@ -69,7 +69,7 @@ tail -F demo/sender-debug.log demo/peer-debug.log
 Quick post-run greps:
 
 ```bash
-grep 'pi-shell-acp:debug'        demo/sender-debug.log
+grep 'entwurf:debug'        demo/sender-debug.log
 grep -E '(entwurf|model-switch)' demo/sender-debug.log
 ```
 
@@ -79,8 +79,8 @@ grep -E '(entwurf|model-switch)' demo/sender-debug.log
 
 | Var | Default | Meaning |
 |---|---|---|
-| `PEER_MODEL` | `pi-shell-acp/gpt-5.4` (≡ `piat`) | top pane backend (receives greeting) |
-| `SENDER_MODEL` | `pi-shell-acp/claude-sonnet-4-6` (≡ `pias`) | bottom pane backend (drives scenes) |
+| `PEER_MODEL` | `entwurf/gpt-5.4` (≡ `piat`) | top pane backend (receives greeting) |
+| `SENDER_MODEL` | `entwurf/claude-sonnet-4-6` (≡ `pias`) | bottom pane backend (drives scenes) |
 | `SCENE_DELAY` | `25` | seconds to wait for each scene's agent work |
 | `WARMUP` | `3` | seconds to wait for both pi banners |
 | `FINAL_PAUSE` | `5` | extra wait after scene 3 (peer reply lag) |
@@ -92,8 +92,8 @@ grep -E '(entwurf|model-switch)' demo/sender-debug.log
 
 | Var | Default | Meaning |
 |---|---|---|
-| `DRIVER_MODEL` | `pi-shell-acp/claude-sonnet-4-6` (≡ `pias`) | the driven pane — answers Q-B0 and spawns the sibling |
-| `SIBLING_MODEL` | `pi-shell-acp/gpt-5.4` (≡ `piat`) | cross-backend sibling spawned in scene 2 |
+| `DRIVER_MODEL` | `entwurf/claude-sonnet-4-6` (≡ `pias`) | the driven pane — answers Q-B0 and spawns the sibling |
+| `SIBLING_MODEL` | `entwurf/gpt-5.4` (≡ `piat`) | cross-backend sibling spawned in scene 2 |
 | `SIBLING_CWD` | repo root | cwd passed to the entwurf sibling (drives `<project-context>` injection) |
 | `SCENE1_DELAY` | `60` | seconds for the long English baseline answer |
 | `SCENE2_DELAY` | `30` | seconds for the sync entwurf round-trip |
@@ -103,7 +103,7 @@ grep -E '(entwurf|model-switch)' demo/sender-debug.log
 | `GIF_COMPRESS` | `1` | run gifsicle after agg (`0` to skip) |
 | `GIF_LOSSY` | `200` | gifsicle `--lossy` strength (drop to `80` if a future scenario shows artifacts) |
 | `GIF_COLORS` | `64` | gifsicle `--colors` palette size |
-| `SESSION` | `pi-shell-acp-baseline-demo` | tmux session name |
+| `SESSION` | `entwurf-baseline-demo` | tmux session name |
 | `OUTDIR` | `demo/` | debug log directory (cast + gif live in `docs/assets/`) |
 
 ### Model ↔ alias map
@@ -112,13 +112,13 @@ The demo launch lines correspond to your shell aliases:
 
 | Alias | Model id | Use as |
 |---|---|---|
-| `piao` | `pi-shell-acp/claude-opus-4-8` | `SENDER_MODEL` (precision scenes) |
-| `pias` | `pi-shell-acp/claude-sonnet-4-6` | `SENDER_MODEL` (default) |
-| `piat` | `pi-shell-acp/gpt-5.4` | `PEER_MODEL` (default) |
-| `piat5` | `pi-shell-acp/gpt-5.5` | either |
-| `piag` | `pi-shell-acp/gemini-3.1-pro-preview` | either |
+| `piao` | `entwurf/claude-opus-4-8` | `SENDER_MODEL` (precision scenes) |
+| `pias` | `entwurf/claude-sonnet-4-6` | `SENDER_MODEL` (default) |
+| `piat` | `entwurf/gpt-5.4` | `PEER_MODEL` (default) |
+| `piat5` | `entwurf/gpt-5.5` | either |
+| `piag` | `entwurf/gemini-3.1-pro-preview` | either |
 
-Each pane runs with `PI_SHELL_ACP_DEBUG=1` baked in — same shape as
+Each pane runs with `ENTWURF_DEBUG=1` baked in — same shape as
 the aliases — so every spawn/model-switch/entwurf trace lands in the
 debug log files (see below).
 
@@ -126,7 +126,7 @@ Examples:
 
 ```bash
 # Swap peer to gemini
-PEER_MODEL=pi-shell-acp/gemini-3.1-pro-preview bash demo.sh
+PEER_MODEL=entwurf/gemini-3.1-pro-preview bash demo.sh
 
 # Faster pacing for short retake
 SCENE_DELAY=30 FINAL_PAUSE=10 bash demo.sh
@@ -136,8 +136,8 @@ SCENE_DELAY=30 FINAL_PAUSE=10 bash demo.sh
 
 ## Prerequisites
 
-- `pi` on PATH (currently 0.74.0)
-- `pi-shell-acp` provider configured + auth ready for the selected sender/peer models
+- `pi` on PATH (current floor 0.80.2)
+- `entwurf` provider configured + auth ready for the selected sender/peer models
 - `asciinema` installed
 - `agg` installed (optional — only for GIF conversion)
 - `gifsicle` installed (optional — `demo-baseline.sh` post-compress step; skip with `GIF_COMPRESS=0`. On NixOS: `nix-shell -p gifsicle` covers both scripts)
@@ -170,8 +170,8 @@ Tracked (committed):
 - `demo/demo.sh`
 - `demo/demo-baseline.sh`
 - `demo/README.md`
-- `docs/assets/pi-shell-acp-demo.gif` — published gallery preview (referenced by `package.json#pi.image`)
-- `docs/assets/pi-shell-acp-entwurf.gif` — README Entwurf section illustration
+- `docs/assets/entwurf-demo.gif` — published gallery preview (referenced by `package.json#pi.image`)
+- `docs/assets/entwurf-entwurf.gif` — README Entwurf section illustration
 
 Ignored (regenerable recording artifacts — both demos):
 

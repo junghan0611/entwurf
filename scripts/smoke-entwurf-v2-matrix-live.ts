@@ -26,15 +26,15 @@
  *      → NO `.msg` written (SE-2: no mailbox garbage for a dead receiver).
  *
  * Why programmatic, not model-in-loop (GPT Q2): "does the sender model actually call
- * entwurf_send" is a SEPARATE behavior test (the smoke-async-resume family). Folding it in here
+ * the dispatch verb (entwurf_v2)" is a SEPARATE behavior concern. Folding it in here
  * would make a flaky model-tool-arg-variance failure indistinguishable from a bridge regression.
  * So C2/C3 drive the production enqueue path directly; only C1 needs a real pi process (to prove
  * the control socket + RPC are real, which fakes cannot).
  *
  * LIVE-only (spawns a real pi, opens a real socket) — kept OUT of `pnpm check`; honest skip when
  * LIVE!=1 (a release-gate that hard-fails without auth/model is unrunnable unattended). Model:
- *   PI_SHELL_ACP_LIVE_TARGET   = "<provider>/<model>"  (default "openai-codex/gpt-5.4")
- *   (or split: PI_SHELL_ACP_LIVE_PROVIDER + PI_SHELL_ACP_LIVE_MODEL)
+ *   ENTWURF_LIVE_TARGET   = "<provider>/<model>"  (default "openai-codex/gpt-5.4")
+ *   (or split: ENTWURF_LIVE_PROVIDER + ENTWURF_LIVE_MODEL)
  *   LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
  *
  * Automation seams (GPT Q1): the resident child + its socket are always reaped in `finally`; a
@@ -48,6 +48,7 @@ import { existsSync } from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { SenderEnvelope } from "../pi-extensions/lib/entwurf-control-rpc.ts";
 import { generateSessionId } from "../pi-extensions/lib/entwurf-core.ts";
 import { lockPathFor } from "../pi-extensions/lib/entwurf-v2-lock.ts";
@@ -59,11 +60,16 @@ import {
 	upsertMetaSession,
 	writeMetaReceiverMarker,
 } from "../pi-extensions/lib/meta-session.ts";
+import { terminateChild } from "./lib/acp-child-cleanup.ts";
 
 // pi's control socket lives at the canonical dir keyed by session id — pi owns this path, so
 // C1 must point the decider's controlSocketDir at the REAL dir (a fresh gid avoids collision).
 const REAL_CONTROL_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
 const SOCKET_SUFFIX = ".sock";
+// Release-gate topology: repo-under-test, not deployment smoke. Load only this
+// checkout's extension so resident behavior is independent of global pi packages.
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", REPO_ROOT] as const;
 
 // Staged timeouts (automation): short and per-stage so a stall is attributable.
 const BOOT_TIMEOUT_MS = 30_000; // pi --entwurf-control socket appears
@@ -79,17 +85,17 @@ function ok(label: string, cond: boolean): void {
 }
 
 function resolveTarget(): { provider: string; model: string } {
-	const combined = process.env.PI_SHELL_ACP_LIVE_TARGET?.trim();
+	const combined = process.env.ENTWURF_LIVE_TARGET?.trim();
 	if (combined) {
 		const slash = combined.indexOf("/");
 		if (slash <= 0 || slash === combined.length - 1) {
-			throw new Error(`PI_SHELL_ACP_LIVE_TARGET must be "<provider>/<model>", got: ${JSON.stringify(combined)}`);
+			throw new Error(`ENTWURF_LIVE_TARGET must be "<provider>/<model>", got: ${JSON.stringify(combined)}`);
 		}
 		return { provider: combined.slice(0, slash), model: combined.slice(slash + 1) };
 	}
 	return {
-		provider: process.env.PI_SHELL_ACP_LIVE_PROVIDER?.trim() || "openai-codex",
-		model: process.env.PI_SHELL_ACP_LIVE_MODEL?.trim() || "gpt-5.4",
+		provider: process.env.ENTWURF_LIVE_PROVIDER?.trim() || "openai-codex",
+		model: process.env.ENTWURF_LIVE_MODEL?.trim() || "gpt-5.4",
 	};
 }
 
@@ -104,32 +110,6 @@ async function waitForSocket(sockPath: string, timeoutMs: number): Promise<boole
 		await sleep(POLL_MS);
 	}
 	return false;
-}
-
-// Tear a resident child down for real (B2): SIGTERM, wait for the exit, SIGKILL backstop if it
-// ignores the term, then wait again. The caller nulls the handle ONLY after this resolves — a
-// bare `kill("SIGTERM")` returns before the process is gone, so a slow/term-ignoring pi could
-// survive while the finally's backstop is skipped.
-async function terminateChild(child: ChildProcess, graceMs = 2_000): Promise<void> {
-	if (child.exitCode !== null || child.signalCode !== null) return;
-	const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
-	try {
-		child.kill("SIGTERM");
-	} catch {
-		return;
-	}
-	const raced = await Promise.race([
-		exited.then(() => "exited" as const),
-		sleep(graceMs).then(() => "timeout" as const),
-	]);
-	if (raced === "timeout") {
-		try {
-			child.kill("SIGKILL");
-		} catch {
-			// already gone
-		}
-		await exited;
-	}
 }
 
 function smokeSender(gardenId: string, cwd: string): SenderEnvelope {
@@ -161,9 +141,9 @@ async function main(): Promise<void> {
 	for (const d of [sessionsDir, mailboxDir, lockDir, receiversDir]) await fsp.mkdir(d, { recursive: true });
 	// The receiver marker is read through defaultMetaReceiversDir() (env-overridable); point it
 	// (and the store/mailbox defaults, belt-and-suspenders to the opts dirs) at the temp world.
-	process.env.PI_META_RECEIVERS_DIR = receiversDir;
-	process.env.PI_META_SESSIONS_DIR = sessionsDir;
-	process.env.PI_META_MAILBOX_DIR = mailboxDir;
+	process.env.ENTWURF_META_RECEIVERS_DIR = receiversDir;
+	process.env.ENTWURF_META_SESSIONS_DIR = sessionsDir;
+	process.env.ENTWURF_META_MAILBOX_DIR = mailboxDir;
 
 	let resident: ChildProcess | null = null;
 	let residentGid = "";
@@ -206,7 +186,18 @@ async function main(): Promise<void> {
 			// substrate this cell actually probes (model UI is irrelevant here).
 			resident = spawn(
 				"pi",
-				["--session-id", residentGid, "--entwurf-control", "--provider", provider, "--model", model, "--mode", "rpc"],
+				[
+					...REPO_EXTENSION_ARGS,
+					"--session-id",
+					residentGid,
+					"--entwurf-control",
+					"--provider",
+					provider,
+					"--model",
+					model,
+					"--mode",
+					"rpc",
+				],
 				{ cwd: tmp, stdio: ["pipe", "ignore", "pipe"], detached: false },
 			);
 			resident.stderr?.on("data", (b: Buffer) => {
@@ -259,7 +250,18 @@ async function main(): Promise<void> {
 
 			resident = spawn(
 				"pi",
-				["--session-id", c1bGid, "--entwurf-control", "--provider", provider, "--model", model, "--mode", "rpc"],
+				[
+					...REPO_EXTENSION_ARGS,
+					"--session-id",
+					c1bGid,
+					"--entwurf-control",
+					"--provider",
+					provider,
+					"--model",
+					model,
+					"--mode",
+					"rpc",
+				],
 				{ cwd: tmp, stdio: ["pipe", "ignore", "pipe"], detached: false },
 			);
 			resident.stderr?.on("data", (b: Buffer) => {
@@ -282,16 +284,17 @@ async function main(): Promise<void> {
 			);
 			ok("C1b lock released (no lock file left for the socket-only target)", !existsSync(lockPathFor(c1bGid, lockDir)));
 
-			// owned-outcome on the record-less target is refused pre-lock — a socket-only endpoint
-			// is never an owned citizen, so spawn-bg can never open into it (cheap direct call, no
-			// extra child; the no-spawn invariant itself is pinned deterministically).
+			// owned-outcome on the record-less but LIVE target → owned-live-no-autosend (the honest
+			// table verdict), NOT the `bad-target` lie: the live resident is a real addressable
+			// citizen. spawn-bg still never opens (allowResume:false guard; no record = no resume
+			// authority). The no-spawn invariant is also pinned deterministically in the gate.
 			const owned: EntwurfV2RunResult = await runEntwurfV2(
 				{ target: c1bGid, intent: "owned-outcome", message: "matrix-live C1b owned must be refused" },
 				prodDeps(smokeSender(c1bGid, tmp)),
 			);
 			ok(
-				"C1b record-less + owned-outcome → rejected bad-target (no spawn)",
-				owned.kind === "rejected" && owned.receipt.reason === "bad-target",
+				"C1b record-less(live) + owned-outcome → rejected owned-live-no-autosend (NOT bad-target, no spawn)",
+				owned.kind === "rejected" && owned.receipt.reason === "owned-live-no-autosend",
 			);
 
 			if (resident) {

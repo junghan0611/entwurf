@@ -17,7 +17,7 @@
  *   - dedup: a gid present in BOTH the dir and the citizen list is probed once,
  *   - missing dir: citizens are still probed (→ dead),
  *   - determinism: output sorted by gardenId,
- *   - enrich is null this slice (probe-only, honest not synthetic),
+ *   - enrich: default fake scans stay null; live sockets can carry get_info cwd/model/idle,
  *   - end-to-end: scanSocketProbes → resolveFactList yields the dormant citizen
  *     as a resumable `dead` PeerFact (no throw — all in-domain citizens probed).
  *
@@ -91,7 +91,47 @@ async function main(): Promise<void> {
 		ok("F3: stalled socket → indeterminate (never folded to dead)", byGid[GID_STALL]?.liveness === "indeterminate");
 		ok("dormant pi citizen (no socket file) → dead (ENOENT)", byGid[GID_DORMANT]?.liveness === "dead");
 		ok("record-less socket → alive", byGid[GID_SOCKET_ONLY]?.liveness === "alive");
-		ok("enrich null this slice (probe-only, honest)", byGid[GID_LIVE]?.cwd === null && byGid[GID_LIVE]?.model === null);
+		ok(
+			"enrich default null under injected fake scan (honest)",
+			byGid[GID_LIVE]?.cwd === null && byGid[GID_LIVE]?.model === null,
+		);
+	}
+
+	// ── live get_info enrich: only alive sockets carry cwd/model/idle ───────────
+	{
+		const calls: string[] = [];
+		const { probes } = await scanSocketProbes([GID_DORMANT], {
+			dir: DIR,
+			readdir: fakeReaddir([`${GID_LIVE}.sock`, `${GID_STALL}.sock`]),
+			probe: fakeProbe(PROBE_MAP),
+			getInfo: async (socketPath) => {
+				calls.push(path.basename(socketPath, SOCKET_SUFFIX));
+				return { cwd: "/work/cos", model: "gpt-5.4", idle: false };
+			},
+		});
+		const byGid = Object.fromEntries(probes.map((p) => [p.gardenId, p]));
+		ok("get_info called only for alive sockets", calls.length === 1 && calls[0] === GID_LIVE);
+		ok("alive socket enrich carries cwd", byGid[GID_LIVE]?.cwd === "/work/cos");
+		ok("alive socket enrich carries model", byGid[GID_LIVE]?.model === "gpt-5.4");
+		ok("alive socket enrich carries idle", byGid[GID_LIVE]?.idle === false);
+		ok(
+			"indeterminate socket does not get_info",
+			byGid[GID_STALL]?.cwd === null && byGid[GID_STALL]?.infoError === null,
+		);
+	}
+
+	// ── get_info failure is surfaced but liveness remains alive ─────────────────
+	{
+		const { probes } = await scanSocketProbes([], {
+			dir: DIR,
+			readdir: fakeReaddir([`${GID_LIVE}.sock`]),
+			probe: fakeProbe(PROBE_MAP),
+			getInfo: async () => {
+				throw new Error("boom get_info");
+			},
+		});
+		ok("get_info failure keeps alive liveness", probes[0]?.liveness === "alive");
+		ok("get_info failure surfaces infoError", probes[0]?.infoError?.includes("boom get_info") === true);
 	}
 
 	// ── dir hygiene: non-.sock ignored; malformed names VISIBLY dropped (P3) ────

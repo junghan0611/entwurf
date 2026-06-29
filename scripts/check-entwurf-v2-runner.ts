@@ -93,7 +93,7 @@ const SPAWN_PLAN: SpawnBgPlan = {
 	action: "resume",
 	targetGardenId: GID,
 	sessionId: GID,
-	cwd: "/home/junghan/repos/gh/pi-shell-acp",
+	cwd: "/home/junghan/repos/gh/entwurf",
 	prompt: "p",
 	launchArgs: [],
 	expectedSocketPath: "/fake/ctl/s.sock",

@@ -10,14 +10,14 @@
  *   - getEntwurfExplicitExtensions(model, isRemote, recordedProvider) — resume path
  *
  * The original bug: a `git:` / `npm:` Pi settings package source returned null,
- * so `provider=pi-shell-acp` spawned a `--no-extensions` child that died with
- * `Unknown provider "pi-shell-acp"`. This gate covers the install matrix:
+ * so `provider=entwurf` spawned a `--no-extensions` child that died with
+ * `Unknown provider "entwurf"`. This gate covers the install matrix:
  *
  *   local path / git user / npm user (+ version spec) / install-missing /
  *   project-scope (unseen → unresolved) / no-source, across local + remote,
  *   plus the self-root fallback property and the resume fail-fast signal.
  *
- * Self-root note: for LOCAL pi-shell-acp resolution the parent module's own path
+ * Self-root note: for LOCAL entwurf resolution the parent module's own path
  * is a valid bridge root, so local resolution always succeeds even when settings
  * has no source — that IS the desired "local always works" property. Fail-fast is
  * therefore asserted on the REMOTE path, where a local self-root cannot cross SSH.
@@ -40,7 +40,7 @@ import type { ResolvedTarget } from "../pi-extensions/lib/entwurf-core.ts";
 // --- Isolated agent dir (must be set BEFORE importing entwurf-core) ----------
 const tmpAgent = fs.mkdtempSync(path.join(os.tmpdir(), "psa-route-"));
 process.env.PI_CODING_AGENT_DIR = tmpAgent;
-delete process.env.PI_ENTWURF_ACP_FOR_CODEX; // control wantsCodexBridge per-case
+delete process.env.ENTWURF_ACP_FOR_CODEX; // control wantsCodexBridge per-case
 
 // Dynamic import so the resolver's AGENT_DIR / PI_SETTINGS_PATH consts capture
 // the env above. A static import would evaluate them against the real ~/.pi.
@@ -74,7 +74,7 @@ function rmInstall(...segs: string[]): void {
 	fs.rmSync(path.join(tmpAgent, ...segs), { recursive: true, force: true });
 }
 
-const ACP: ResolvedTarget = { provider: "pi-shell-acp", model: "claude-sonnet-4-6", explicitOnly: false };
+const ACP: ResolvedTarget = { provider: "entwurf", model: "claude-sonnet-4-6", explicitOnly: false };
 const eArg = (r: { args: string[] }): string | undefined => {
 	const i = r.args.indexOf("-e");
 	return i >= 0 ? r.args[i + 1] : undefined;
@@ -86,33 +86,33 @@ const eArg = (r: { args: string[] }): string | undefined => {
 
 // 1. Local path package source resolves to <agentDir>/<source>.
 check("local-path source resolves to agentDir-relative root", () => {
-	const root = makeInstallDir("local-pkgs", "pi-shell-acp");
-	setSource("local-pkgs/pi-shell-acp");
+	const root = makeInstallDir("local-pkgs", "entwurf");
+	setSource("local-pkgs/entwurf");
 	const r = getRegistryRouting(ACP, false);
-	assert.equal(r.provider, "pi-shell-acp");
+	assert.equal(r.provider, "entwurf");
 	assert.equal(eArg(r), root);
 });
 
 // 2. git: user source → <agentDir>/git/<host>/<path>.
 check("git: source resolves to agentDir/git/<host>/<path>", () => {
-	const root = makeInstallDir("git", "github.com", "junghan0611", "pi-shell-acp");
-	setSource("git:github.com/junghan0611/pi-shell-acp");
+	const root = makeInstallDir("git", "github.com", "junghan0611", "entwurf");
+	setSource("git:github.com/junghan0611/entwurf");
 	const r = getRegistryRouting(ACP, false);
 	assert.equal(eArg(r), root);
 });
 
 // 3. npm: user source → <agentDir>/npm/node_modules/<name>.
 check("npm: source resolves to agentDir/npm/node_modules/<name>", () => {
-	const root = makeInstallDir("npm", "node_modules", "@junghanacs", "pi-shell-acp");
-	setSource("npm:@junghanacs/pi-shell-acp");
+	const root = makeInstallDir("npm", "node_modules", "@junghanacs", "entwurf");
+	setSource("npm:@junghanacs/entwurf");
 	const r = getRegistryRouting(ACP, false);
 	assert.equal(eArg(r), root);
 });
 
 // 4. npm: source WITH a version spec — root keys on the bare name, version stripped.
 check("npm: source with @version strips the version from the install root", () => {
-	const root = makeInstallDir("npm", "node_modules", "@junghanacs", "pi-shell-acp");
-	setSource("npm:@junghanacs/pi-shell-acp@0.8.0");
+	const root = makeInstallDir("npm", "node_modules", "@junghanacs", "entwurf");
+	setSource("npm:@junghanacs/entwurf@0.8.0");
 	const r = getRegistryRouting(ACP, false);
 	assert.equal(eArg(r), root);
 });
@@ -143,24 +143,24 @@ check("native provider target passes through with no -e and no throw", () => {
 // 7. git: remote → remotePath uses the plain ~/.pi/agent layout, NOT the local
 //    PI_CODING_AGENT_DIR override (no local-env leak into the SSH path).
 check("git: remote resolves to ~/.pi/agent/git/... (no local-env leak)", () => {
-	makeInstallDir("git", "github.com", "junghan0611", "pi-shell-acp"); // local mirror gates existence
-	setSource("git:github.com/junghan0611/pi-shell-acp");
+	makeInstallDir("git", "github.com", "junghan0611", "entwurf"); // local mirror gates existence
+	setSource("git:github.com/junghan0611/entwurf");
 	const r = getRegistryRouting(ACP, true);
-	assert.equal(eArg(r), path.posix.join(REMOTE_AGENT, "git", "github.com", "junghan0611", "pi-shell-acp"));
+	assert.equal(eArg(r), path.posix.join(REMOTE_AGENT, "git", "github.com", "junghan0611", "entwurf"));
 });
 
 // 8. npm: remote with version → ~/.pi/agent/npm/node_modules/<name>.
 check("npm: remote with @version resolves to ~/.pi/agent/npm/node_modules/<name>", () => {
-	makeInstallDir("npm", "node_modules", "@junghanacs", "pi-shell-acp");
-	setSource("npm:@junghanacs/pi-shell-acp@0.8.0");
+	makeInstallDir("npm", "node_modules", "@junghanacs", "entwurf");
+	setSource("npm:@junghanacs/entwurf@0.8.0");
 	const r = getRegistryRouting(ACP, true);
-	assert.equal(eArg(r), path.posix.join(REMOTE_AGENT, "npm", "node_modules", "@junghanacs", "pi-shell-acp"));
+	assert.equal(eArg(r), path.posix.join(REMOTE_AGENT, "npm", "node_modules", "@junghanacs", "entwurf"));
 });
 
 // 9. Install dir missing, remote → fail-fast (EntwurfRoutingError), NOT warn-and-spawn.
 check("remote git: with missing install dir throws EntwurfRoutingError", () => {
 	rmInstall("git");
-	setSource("git:github.com/junghan0611/pi-shell-acp");
+	setSource("git:github.com/junghan0611/entwurf");
 	assert.throws(() => getRegistryRouting(ACP, true), EntwurfRoutingError);
 });
 
@@ -176,10 +176,10 @@ check("remote with no settings source throws EntwurfRoutingError", () => {
 check("PI_SETTINGS_PATH env override is honored", () => {
 	const agent = fs.mkdtempSync(path.join(os.tmpdir(), "psa-route-settings-"));
 	try {
-		const root = path.join(agent, "git", "github.com", "junghan0611", "pi-shell-acp");
+		const root = path.join(agent, "git", "github.com", "junghan0611", "entwurf");
 		fs.mkdirSync(root, { recursive: true });
 		const settingsPath = path.join(agent, "custom-settings.json");
-		fs.writeFileSync(settingsPath, JSON.stringify({ packages: ["git:github.com/junghan0611/pi-shell-acp"] }));
+		fs.writeFileSync(settingsPath, JSON.stringify({ packages: ["git:github.com/junghan0611/entwurf"] }));
 		const out = execFileSync(
 			process.execPath,
 			["--experimental-strip-types", path.join(REPO_ROOT, "scripts", "resolve-acp-bridge.ts"), "remote"],
@@ -188,7 +188,7 @@ check("PI_SETTINGS_PATH env override is honored", () => {
 				encoding: "utf8",
 			},
 		);
-		assert.equal(out, path.posix.join(REMOTE_AGENT, "git", "github.com", "junghan0611", "pi-shell-acp"));
+		assert.equal(out, path.posix.join(REMOTE_AGENT, "git", "github.com", "junghan0611", "entwurf"));
 	} finally {
 		fs.rmSync(agent, { recursive: true, force: true });
 	}
@@ -207,34 +207,34 @@ check("project-scope source (unseen in user settings) fails fast on remote", () 
 // RESUME path (getEntwurfExplicitExtensions) — unresolvedAcpIntent signal
 // =============================================================================
 
-// 12. recorded provider=pi-shell-acp + remote + no source → unresolvedAcpIntent
+// 12. recorded provider=entwurf + remote + no source → unresolvedAcpIntent
 //     (resume callers fail-fast; no -e injected).
-check("resume recorded pi-shell-acp + remote + no source → unresolvedAcpIntent", () => {
+check("resume recorded entwurf + remote + no source → unresolvedAcpIntent", () => {
 	setSource(null);
-	const r = getEntwurfExplicitExtensions("claude-sonnet-4-6", true, "pi-shell-acp");
+	const r = getEntwurfExplicitExtensions("claude-sonnet-4-6", true, "entwurf");
 	assert.equal(r.unresolvedAcpIntent, true);
 	assert.equal(eArg(r), undefined);
 	assert.ok(r.warnings.length > 0, "should warn about the unresolved bridge");
 });
 
-// 13. recorded provider=pi-shell-acp + LOCAL → self-root resolves, no fail-fast.
-check("resume recorded pi-shell-acp + local resolves via self-root", () => {
+// 13. recorded provider=entwurf + LOCAL → self-root resolves, no fail-fast.
+check("resume recorded entwurf + local resolves via self-root", () => {
 	setSource(null);
-	const r = getEntwurfExplicitExtensions("claude-sonnet-4-6", false, "pi-shell-acp");
+	const r = getEntwurfExplicitExtensions("claude-sonnet-4-6", false, "entwurf");
 	assert.ok(!r.unresolvedAcpIntent, "local self-root should resolve");
 	assert.equal(eArg(r), REPO_ROOT);
-	assert.equal(r.provider, "pi-shell-acp");
+	assert.equal(r.provider, "entwurf");
 });
 
 // 14. opt-in Codex-via-ACP + remote + no source → unresolvedAcpIntent (fail-fast).
 check("resume Codex-via-ACP opt-in + remote + no source → unresolvedAcpIntent", () => {
 	setSource(null);
-	process.env.PI_ENTWURF_ACP_FOR_CODEX = "1";
+	process.env.ENTWURF_ACP_FOR_CODEX = "1";
 	try {
 		const r = getEntwurfExplicitExtensions("gpt-5.4", true, undefined);
 		assert.equal(r.unresolvedAcpIntent, true);
 	} finally {
-		delete process.env.PI_ENTWURF_ACP_FOR_CODEX;
+		delete process.env.ENTWURF_ACP_FOR_CODEX;
 	}
 });
 

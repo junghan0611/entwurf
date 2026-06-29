@@ -21,7 +21,7 @@
  * Provider/model identity is the caller's existing authority (readSessionIdentity /
  * getEntwurfExplicitExtensions) — this builder only LAYS OUT argv, it never resolves
  * identity. `explicitExtensionArgs` is preserved verbatim in BOTH variants: a recorded
- * `provider=pi-shell-acp` resume needs the bridge re-injected to resolve the provider, and
+ * `provider=entwurf` resume needs the bridge re-injected to resolve the provider, and
  * dropping it when `--no-extensions` is removed would re-introduce the "Unknown provider"
  * footgun (#29). (A future slice may dedup against settings-loaded extensions; not here.)
  *
@@ -40,7 +40,7 @@ export interface ResumePiArgsInput {
 	 * `--entwurf-control`, derives the control socket at ~/.pi/entwurf-control/<gid>.sock. */
 	sessionId: string;
 	/** The explicit `--extension …` re-injection (ACP bridge / provider resolution).
-	 * Preserved verbatim in BOTH variants — load-bearing for a pi-shell-acp resume. */
+	 * Preserved verbatim in BOTH variants — load-bearing for a entwurf resume. */
 	explicitExtensionArgs: readonly string[];
 	/** Recorded provider (may be null/undefined — then no `--provider` flag is emitted). */
 	provider: string | null | undefined;

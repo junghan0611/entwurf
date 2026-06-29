@@ -126,7 +126,7 @@ export function resolveResumeLaunchIdentity(plan: SpawnBgPlan): LaunchIdentity {
 	const explicitExtensions = getEntwurfExplicitExtensions(resumeModel, false, identity.provider);
 	if (explicitExtensions.unresolvedAcpIntent) {
 		throw new Error(
-			`entwurf-v2-spawn-production: ${plan.sessionId} recorded provider=pi-shell-acp but the bridge ` +
+			`entwurf-v2-spawn-production: ${plan.sessionId} recorded provider=entwurf but the bridge ` +
 				`extension could not be resolved — refusing to resume with an unknown provider (#29).`,
 		);
 	}

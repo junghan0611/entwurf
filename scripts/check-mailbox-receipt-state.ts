@@ -7,7 +7,7 @@
  * pure schema round-trip + crash-on-malformed + strict keyset, then the fs store
  * (stamp → persist → read-back) including the observable result GPT named for
  * 3B — "read receipt가 record.delivery가 아니라 mailbox state로: stamp 후 state를
- * 보면 lastReadAt가 남는다". PI_META_MAILBOX_DIR / explicit mailboxDir keep this
+ * 보면 lastReadAt가 남는다". ENTWURF_META_MAILBOX_DIR / explicit mailboxDir keep this
  * off the operator's real ~/.pi/agent/meta-mailbox.
  *
  * Scope is 3B ONLY: schema + store. The live enqueue/read dual-write and the

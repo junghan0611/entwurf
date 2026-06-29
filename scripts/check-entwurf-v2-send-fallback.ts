@@ -48,7 +48,7 @@ function ok(label: string, cond: boolean): void {
 
 const GID = "20260612T100000-aaaaaa";
 const WRONG_GID = "20260612T999999-bbbbbb";
-const CWD = "/home/junghan/repos/gh/pi-shell-acp";
+const CWD = "/home/junghan/repos/gh/entwurf";
 
 function lockClaim(gardenId = GID): LockClaim {
 	return {

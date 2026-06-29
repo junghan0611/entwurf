@@ -20,19 +20,19 @@
  *     entwurf_self renders the socket as alive vs expected (no synthesized path lie).
  *
  * v1/v2 contract (pin so it is not later misread): the slice-1 goal is "neither
- * surface CLAIMS a false replyable", NOT "both surfaces reject". v1 entwurf_send
- * rejects wants_reply=true from a non-replyable sender (no reply address); v2
- * entwurf_v2 passes wants_reply through as an etiquette payload and surfaces the
- * envelope's honest replyable:false. Both stop lying about replyability; only v1 also
- * hard-rejects. They share ONE builder, so the honesty fix lands in both at once.
+ * surface CLAIMS a false replyable", NOT "both surfaces reject". The now-removed v1
+ * entwurf_send rejected wants_reply=true from a non-replyable sender (no reply
+ * address); v2 entwurf_v2 passes wants_reply through as an etiquette payload and
+ * surfaces the envelope's honest replyable:false. Both stopped lying about
+ * replyability; only v1 also hard-rejected. They shared ONE builder, so the honesty
+ * fix landed in both at once.
  *
  * Slice boundary: meta-self's watchArmed FACT is wired from the slice-2 meta-receiver
  * presence marker; the predicate already demands it here (fail-closed). Slices 1 and
- * 2 close in the same release block — do NOT claim slice 1 green standalone. The
- * pi-NATIVE surface (entwurf-control.ts senderProvider/fallback) still hardcodes
- * replyable:true and is closed in slice 2 along with its source guards
- * (check-entwurf-v2-surface, check-entwurf-send-mailbox-fallback) and
- * smoke-meta-sender-identity.
+ * 2 closed in the same release block. The pi-NATIVE surface (entwurf-control.ts
+ * senderProvider/fallback) no longer hardcodes replyable:true — it derives replyable
+ * from computeSelfAddressability + a canonical-socket existsSync probe, pinned by
+ * check-entwurf-v2-surface and this gate's own pi-native source check.
  */
 
 import assert from "node:assert/strict";
@@ -107,7 +107,7 @@ function row(facts: SelfAddressabilityFacts): { replyable: boolean; socketState:
 }
 
 // ── SOURCE GUARD: the MCP builders consume the predicate, no hardcoded lie ────
-const indexPath = path.join(REPO_DIR, "mcp", "pi-tools-bridge", "src", "index.ts");
+const indexPath = path.join(REPO_DIR, "mcp", "entwurf-bridge", "src", "index.ts");
 const src = readFileSync(indexPath, "utf8");
 
 /** Extract a top-level `function NAME(...) { ... }` body by brace-counting. */

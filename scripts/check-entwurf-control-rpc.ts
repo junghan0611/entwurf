@@ -15,6 +15,7 @@
  *   4. close-before-response — a server that accepts then closes WITHOUT a response makes
  *      `sendRpcCommand` reject `connection closed before response` (the 2026-05-18
  *      receiver-stuck backstop the settled-guard preserves).
+ *   5. get_info runtime helper parses/formats cwd/model/idle once for every caller.
  *
  * No model / auth / pi process — only `net.Server` on a tmp socket, so it rides `pnpm check`.
  */
@@ -25,7 +26,13 @@ import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { type RpcSendCommand, sendRpcCommand } from "../pi-extensions/lib/entwurf-control-rpc.ts";
+import {
+	fetchControlSocketRuntimeInfo,
+	formatRuntimeModel,
+	parseGetInfoResponseData,
+	type RpcSendCommand,
+	sendRpcCommand,
+} from "../pi-extensions/lib/entwurf-control-rpc.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -83,14 +90,15 @@ async function main(): Promise<void> {
 		ok("1: lib imports only node:net (value)", /import \* as net from "node:net";/.test(code));
 	}
 
-	// ── 2: extraction guard — surface imports it, no longer defines it ─────────
+	// ── 2: extraction guard — surface imports shared runtime helper, no fork ────
 	{
 		const src = await fs.readFile(CONTROL_SRC, "utf8");
 		ok(
-			"2: entwurf-control imports sendRpcCommand from the shared lib",
-			/from "\.\/lib\/entwurf-control-rpc\.js"/.test(src) && /\bsendRpcCommand\b/.test(src),
+			"2: entwurf-control imports fetchControlSocketRuntimeInfo from the shared lib",
+			/from "\.\/lib\/entwurf-control-rpc\.js"/.test(src) && /\bfetchControlSocketRuntimeInfo\b/.test(src),
 		);
 		ok("2: entwurf-control no longer DEFINES sendRpcCommand", !/(async\s+)?function\s+sendRpcCommand\s*\(/.test(src));
+		ok("2: entwurf-control does not call sendRpcCommand directly", !/[^.]\bsendRpcCommand\s*\(/.test(src));
 	}
 
 	// ── 3: round-trip — write command, matched response, success:true ─────────
@@ -134,6 +142,42 @@ async function main(): Promise<void> {
 		ok(
 			"4: close-before-response → rejects 'connection closed before response'",
 			rejected instanceof Error && rejected.message === "connection closed before response",
+		);
+	}
+
+	// ── 5: get_info runtime parse/format/fetch SSOT ───────────────────────────
+	{
+		const parsed = parseGetInfoResponseData({
+			cwd: "/work/cos",
+			model: { provider: "entwurf", id: "gpt-5.5" },
+			idle: false,
+		});
+		ok("5: parse cwd", parsed.cwd === "/work/cos");
+		ok("5: parse model id", parsed.modelId === "gpt-5.5");
+		ok("5: parse model provider", parsed.modelProvider === "entwurf");
+		ok("5: parse idle false", parsed.idle === false);
+		ok("5: format provider/model", formatRuntimeModel(parsed) === "entwurf/gpt-5.5");
+		ok("5: format model-only fallback", formatRuntimeModel({ modelId: "gpt-5.5" }) === "gpt-5.5");
+		const malformed = parseGetInfoResponseData({ model: null });
+		ok(
+			"5: parse malformed data yields undefined fields",
+			malformed.cwd === undefined && malformed.modelId === undefined,
+		);
+
+		await withServer(
+			(line, socket) => {
+				const cmd = JSON.parse(line);
+				socket.write(
+					`${JSON.stringify({ type: "response", command: cmd.type, success: true, data: { cwd: "/w", model: { provider: "p", id: "m" }, idle: true } })}\n`,
+				);
+			},
+			async (socketPath) => {
+				const info = await fetchControlSocketRuntimeInfo(socketPath, { timeout: 2000 });
+				ok(
+					"5: fetch get_info parses response",
+					info.cwd === "/w" && formatRuntimeModel(info) === "p/m" && info.idle === true,
+				);
+			},
 		);
 	}
 

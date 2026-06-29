@@ -48,7 +48,7 @@ type ExtensionMode = ProjectTrustContext["mode"];
 // the gates and the bridges — resolves `.ts` specifiers literally, but refuses
 // to substitute a `.ts` for a `.js` specifier (root tsconfig note). A lib→lib
 // VALUE import therefore has to be `.ts` to be runnable under strip-types. Same
-// fence as mcp/pi-tools-bridge → entwurf-core.ts and meta-bridge-hook.ts → its
+// fence as mcp/entwurf-bridge → entwurf-core.ts and meta-bridge-hook.ts → its
 // lib: this file is excluded from the emit-capable root tsconfig (which can't
 // allow .ts extensions) and typechecked by scripts/tsconfig.json instead.
 import { formatPreflightDenial, type PreflightDenial, type PreflightOutcome, preflight } from "./entwurf-preflight.ts";

@@ -23,7 +23,7 @@ import * as net from "node:net";
 // handleCommand("send") + parseSenderInfo and the SenderInfo block below for
 // the full semantics: human-conversation hint only, no wait, no polling, no
 // delivery tracking. `<sender_info>` JSON synthesis happens at the receiver
-// side so callers never have to mangle the message body; pi-tools-bridge
+// side so callers never have to mangle the message body; entwurf-bridge
 // passes the envelope through and the receiving pi prepends the canonical
 // XML-style payload before handing the customMessage to pi.sendMessage.
 export interface SenderEnvelope {
@@ -75,24 +75,51 @@ export interface RpcGetInfoCommand {
 	id?: string;
 }
 
-export interface RpcSpawnAsyncResumeCommand {
-	type: "spawn_async_resume";
-	sessionId: string;
-	prompt: string;
-	host?: string;
-	id?: string;
-}
-
-export type RpcCommand =
-	| RpcSendCommand
-	| RpcGetMessageCommand
-	| RpcClearCommand
-	| RpcAbortCommand
-	| RpcGetInfoCommand
-	| RpcSpawnAsyncResumeCommand;
+export type RpcCommand = RpcSendCommand | RpcGetMessageCommand | RpcClearCommand | RpcAbortCommand | RpcGetInfoCommand;
 
 export interface RpcClientOptions {
 	timeout?: number;
+}
+
+export interface ControlSocketRuntimeInfo {
+	cwd?: string;
+	modelId?: string;
+	modelProvider?: string;
+	idle?: boolean;
+}
+
+export function parseGetInfoResponseData(data: unknown): ControlSocketRuntimeInfo {
+	const value = data as
+		| {
+				cwd?: unknown;
+				model?: { id?: unknown; provider?: unknown } | null;
+				idle?: unknown;
+		  }
+		| undefined;
+	return {
+		cwd: typeof value?.cwd === "string" ? value.cwd : undefined,
+		modelId: typeof value?.model?.id === "string" ? value.model.id : undefined,
+		modelProvider: typeof value?.model?.provider === "string" ? value.model.provider : undefined,
+		idle: typeof value?.idle === "boolean" ? value.idle : undefined,
+	};
+}
+
+export function formatRuntimeModel(
+	info: Pick<ControlSocketRuntimeInfo, "modelId" | "modelProvider">,
+): string | undefined {
+	if (info.modelProvider && info.modelId) return `${info.modelProvider}/${info.modelId}`;
+	return info.modelId;
+}
+
+export async function fetchControlSocketRuntimeInfo(
+	socketPath: string,
+	options: RpcClientOptions = {},
+): Promise<ControlSocketRuntimeInfo> {
+	const result = await sendRpcCommand(socketPath, { type: "get_info" }, { timeout: options.timeout ?? 1500 });
+	if (!result.response.success) {
+		throw new Error(result.response.error ?? "get_info failed");
+	}
+	return parseGetInfoResponseData(result.response.data);
 }
 
 export async function sendRpcCommand(

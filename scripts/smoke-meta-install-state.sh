@@ -37,7 +37,7 @@ cat > "$CLAUDE_CONFIG_DIR/settings.json" <<'JSON'
     "keep@user": true
   },
   "permissions": {
-    "allow": ["Read", "CustomUserTool"],
+    "allow": ["Read", "CustomUserTool", "mcp__pi-tools-bridge__*"],
     "deny": ["Agent"]
   },
   "env": {
@@ -56,7 +56,7 @@ JSON
 cat > "$HOME/.claude.json" <<'JSON'
 {
   "mcpServers": {
-    "pi-tools-bridge": {
+    "entwurf-bridge": {
       "type": "stdio",
       "command": "old",
       "args": ["old-start.sh"]
@@ -72,11 +72,11 @@ JSON
 py() { python3 "$STATE" "$@" --repo "$REPO" --asm "$ASM"; }
 
 py prepare >/dev/null
-STATE_FILE="$CLAUDE_CONFIG_DIR/pi-shell-acp.install-state.json"
+STATE_FILE="$CLAUDE_CONFIG_DIR/entwurf.install-state.json"
 [ -f "$STATE_FILE" ] && ok "prepare writes install-state before any merge" || bad "state file missing after prepare"
 if python3 - <<'PY'
 import json, os, stat
-path=os.environ['CLAUDE_CONFIG_DIR'] + '/pi-shell-acp.install-state.json'
+path=os.environ['CLAUDE_CONFIG_DIR'] + '/entwurf.install-state.json'
 assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
 s=json.load(open(path))
 assert s['files']['settings']['keys']['enabledPlugins.entwurf-meta-receive@meta-bridge-local']['original']['value'] is False
@@ -85,7 +85,7 @@ assert s['files']['settings']['keys']['env.DISABLE_AUTOCOMPACT']['original']['va
 assert s['files']['settings']['keys']['statusLine']['original']['value']['command'] == '/old/user/statusline.sh'
 assert s['files']['settings']['keys']['promptSuggestionEnabled']['original']['value'] is True
 assert s['files']['settings']['keys']['autoCompactEnabled']['original']['existed'] is False
-assert s['files']['claudeRoot']['keys']['mcpServers.pi-tools-bridge']['original']['value']['command'] == 'old'
+assert s['files']['claudeRoot']['keys']['mcpServers.entwurf-bridge']['original']['value']['command'] == 'old'
 PY
 then ok "state captures original scalar/map values and is mode 0600"; else bad "state did not capture original values / mode 0600"; fi
 
@@ -105,11 +105,15 @@ assert settings['statusLine']['command'] == os.environ['REPO'] + '/scripts/meta-
 for key in ['promptSuggestionEnabled','awaySummaryEnabled','autoMemoryEnabled','verbose','autoCompactEnabled','showTurnDuration','terminalProgressBarEnabled','useAutoModeDuringPlan']:
     assert settings[key] is False, key
 assert settings['skipDangerousModePermissionPrompt'] is True
-for item in ['Bash','Read','Write','Edit','Grep','Glob','WebFetch','WebSearch','Skill','mcp__pi-tools-bridge__*']:
+for item in ['Bash','Read','Write','Edit','Grep','Glob','WebFetch','WebSearch','Skill','mcp__entwurf-bridge__*']:
     assert item in settings['permissions']['allow'], item
 assert settings['permissions']['allow'].count('Read') == 1
+# S2 rename cutover: the legacy pre-rename allow item is pruned, but an unrelated
+# user-authored allow item survives (prune is targeted, not a blanket wipe).
+assert 'mcp__pi-tools-bridge__*' not in settings['permissions']['allow']
+assert 'CustomUserTool' in settings['permissions']['allow']
 assert 'keep-server' in root['mcpServers']
-assert root['mcpServers']['pi-tools-bridge']['env']['PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID'] == 'external-mcp/claude-code'
+assert root['mcpServers']['entwurf-bridge']['env']['ENTWURF_BRIDGE_EXTERNAL_AGENT_ID'] == 'external-mcp/claude-code'
 PY
 then ok "apply installs managed keyset without clobbering unrelated keys"; else bad "apply keyset check failed"; fi
 
@@ -137,6 +141,15 @@ json.dump(d, open(p,'w'), indent=2)
 PY
 ERR_ARRAY="$(py check 2>&1 >/dev/null || true)"
 if printf '%s' "$ERR_ARRAY" | grep -qi 'allow'; then ok "survival check fails when permissions.allow is array-replaced (pi items dropped)"; else bad "survival check did not catch dropped permissions.allow items: $ERR_ARRAY"; fi
+cp "$SURVIVAL_SNAP" "$CLAUDE_CONFIG_DIR/settings.json"  # back to clean keyset before the legacy-reinject case
+python3 - <<'PY'
+import json, os
+p=os.environ['CLAUDE_CONFIG_DIR'] + '/settings.json'
+d=json.load(open(p)); d['permissions']['allow'].append('mcp__pi-tools-bridge__*')  # someone re-injects the pruned legacy item
+json.dump(d, open(p,'w'), indent=2)
+PY
+ERR_LEGACY="$(py check 2>&1 >/dev/null || true)"
+if printf '%s' "$ERR_LEGACY" | grep -qi 'legacy'; then ok "survival check fails when a pruned legacy allow item is re-injected"; else bad "survival check did not catch re-injected legacy allow item: $ERR_LEGACY"; fi
 cp "$SURVIVAL_SNAP" "$CLAUDE_CONFIG_DIR/settings.json"  # exact restore so later cases see the clean installed keyset
 if py check >/dev/null 2>&1; then ok "survival check passes again after restoring the keyset"; else bad "keyset not restored after adversarial survival cases"; fi
 
@@ -146,7 +159,7 @@ py prepare >/dev/null
 py apply >/dev/null
 if python3 - <<'PY'
 import json, os
-s=json.load(open(os.environ['CLAUDE_CONFIG_DIR'] + '/pi-shell-acp.install-state.json'))
+s=json.load(open(os.environ['CLAUDE_CONFIG_DIR'] + '/entwurf.install-state.json'))
 assert s['files']['settings']['keys']['enabledPlugins.entwurf-meta-receive@meta-bridge-local']['original']['value'] is False
 assert s['files']['settings']['keys']['cleanupPeriodDays']['original']['value'] == 30
 assert s['files']['settings']['keys']['env.DISABLE_AUTOCOMPACT']['original']['value'] == '0'
@@ -184,11 +197,11 @@ for key in ['awaySummaryEnabled','autoMemoryEnabled','verbose','autoCompactEnabl
 allow=settings['permissions']['allow']
 deny=settings['permissions']['deny']
 assert 'CustomUserTool' in allow and 'UserAfterInstall' in allow
-assert 'Bash' not in allow and 'mcp__pi-tools-bridge__*' not in allow
+assert 'Bash' not in allow and 'mcp__entwurf-bridge__*' not in allow
 assert 'Agent' in deny and 'UserDeniedAfterInstall' in deny and 'TaskCreate' not in deny
-assert root['mcpServers']['pi-tools-bridge']['command'] == 'old'
+assert root['mcpServers']['entwurf-bridge']['command'] == 'old'
 assert 'keep-server' in root['mcpServers']
-assert not os.path.exists(os.environ['CLAUDE_CONFIG_DIR'] + '/pi-shell-acp.install-state.json')
+assert not os.path.exists(os.environ['CLAUDE_CONFIG_DIR'] + '/entwurf.install-state.json')
 PY
 then ok "uninstall restores scalars/maps and removes only managed array additions"; else bad "uninstall restoration check failed"; fi
 
@@ -216,7 +229,7 @@ py prepare >/dev/null
 py apply >/dev/null
 FAKE_CLAUDE_LOG="$TMP/fake-claude-state.log"
 if PATH="$FAKE_BIN:$PATH" FAKE_CLAUDE_LOG="$FAKE_CLAUDE_LOG" bash "$REPO/scripts/meta-bridge-uninstall.sh" >/dev/null 2>&1; then
-  if grep -q 'plugin uninstall entwurf-meta-receive@meta-bridge-local' "$FAKE_CLAUDE_LOG" && grep -q 'mcp remove pi-tools-bridge -s user' "$FAKE_CLAUDE_LOG" && [ ! -f "$STATE_FILE" ]; then
+  if grep -q 'plugin uninstall entwurf-meta-receive@meta-bridge-local' "$FAKE_CLAUDE_LOG" && grep -q 'mcp remove entwurf-bridge -s user' "$FAKE_CLAUDE_LOG" && [ ! -f "$STATE_FILE" ]; then
     ok "wrapper uninstall with valid state removes Claude registrations and restores state"
   else
     bad "wrapper uninstall with state missed expected side effects/state removal"
@@ -253,17 +266,17 @@ settings={
   'permissions': {'allow': ['Read'], 'deny': ['Agent']},
   'env': {'DISABLE_AUTOCOMPACT': '1'}
 }
-root={'mcpServers': {'pi-tools-bridge': {'type':'stdio','command':'bash','args':[repo + '/mcp/pi-tools-bridge/start.sh'],'env': {'PI_TOOLS_BRIDGE_EXTERNAL_AGENT_ID':'external-mcp/claude-code','PI_TOOLS_BRIDGE_REQUIRE_META_SENDER':'1'}}}}
+root={'mcpServers': {'entwurf-bridge': {'type':'stdio','command':'bash','args':[repo + '/mcp/entwurf-bridge/start.sh'],'env': {'ENTWURF_BRIDGE_EXTERNAL_AGENT_ID':'external-mcp/claude-code','ENTWURF_BRIDGE_REQUIRE_META_SENDER':'1'}}}}
 json.dump(settings, open(cfg + '/settings.json','w'), indent=2); open(cfg + '/settings.json','a').write('\n')
 json.dump(root, open(home + '/.claude.json','w'), indent=2); open(home + '/.claude.json','a').write('\n')
 PY
 py prepare >/dev/null
 if python3 - <<'PY'
 import json, os
-s=json.load(open(os.environ['CLAUDE_CONFIG_DIR'] + '/pi-shell-acp.install-state.json'))
+s=json.load(open(os.environ['CLAUDE_CONFIG_DIR'] + '/entwurf.install-state.json'))
 assert s['files']['settings']['keys']['enabledPlugins.entwurf-meta-receive@meta-bridge-local']['original']['existed'] is False
 assert s['files']['settings']['keys']['extraKnownMarketplaces.meta-bridge-local']['original']['existed'] is False
-assert s['files']['claudeRoot']['keys']['mcpServers.pi-tools-bridge']['original']['existed'] is False
+assert s['files']['claudeRoot']['keys']['mcpServers.entwurf-bridge']['original']['existed'] is False
 assert s['files']['settings']['keys']['env.DISABLE_AUTOCOMPACT']['original']['existed'] is True
 PY
 then ok "legacy exact plugin/marketplace/MCP migrate as pi-owned absent, policy keys remain user-owned"; else bad "legacy migration state check failed"; fi
@@ -274,7 +287,7 @@ settings=json.load(open(os.environ['CLAUDE_CONFIG_DIR'] + '/settings.json'))
 root=json.load(open(os.environ['HOME'] + '/.claude.json'))
 assert 'entwurf-meta-receive@meta-bridge-local' not in settings.get('enabledPlugins', {})
 assert 'meta-bridge-local' not in settings.get('extraKnownMarketplaces', {})
-assert 'pi-tools-bridge' not in root.get('mcpServers', {})
+assert 'entwurf-bridge' not in root.get('mcpServers', {})
 assert settings['env']['DISABLE_AUTOCOMPACT'] == '1'
 PY
 then ok "legacy migration uninstall removes pi-owned wiring but preserves policy scalar"; else bad "legacy migration uninstall check failed"; fi
@@ -309,15 +322,15 @@ valid_record "20260606T000001-bbbbbb" "native-b" > "$STORE/20260606T000001-bbbbb
 STATUS_INPUT_MATCH='{"session_id":"native-a","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-sonnet-4-6"},"context_window":{"context_window_size":200000,"used_percentage":2,"current_usage":{"input_tokens":10}}}'
 STATUS_INPUT_MISS='{"session_id":"native-missing","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-opus-4-8"}}'
 STATUS_INPUT_READY='{"workspace":{"current_dir":"/tmp"},"model":{"id":"claude-haiku-4-5"}}'
-STATUS_OUT_MATCH="$(printf '%s' "$STATUS_INPUT_MATCH" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+STATUS_OUT_MATCH="$(printf '%s' "$STATUS_INPUT_MATCH" | ENTWURF_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
 if [ "$(printf '%s\n' "$STATUS_OUT_MATCH" | wc -l | tr -d ' ')" = "2" ]; then ok "statusline renders exactly two rows"; else bad "statusline should render two rows: $STATUS_OUT_MATCH"; fi
 if printf '%s\n' "$STATUS_OUT_MATCH" | sed -n '1p' | grep -q 'tmp' && printf '%s\n' "$STATUS_OUT_MATCH" | sed -n '2p' | grep -q '🪛 20260606T000000-aaaaaa cc | s'; then ok "statusline keeps row-1 work context and maps native session_id to row-2 garden-id"; else bad "statusline did not show expected two-row content for native-a: $STATUS_OUT_MATCH"; fi
-STATUS_OUT_MISS="$(printf '%s' "$STATUS_INPUT_MISS" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+STATUS_OUT_MISS="$(printf '%s' "$STATUS_INPUT_MISS" | ENTWURF_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
 if printf '%s' "$STATUS_OUT_MISS" | grep -q '🪛 ? cc'; then ok "statusline no-record fallback is ?"; else bad "statusline no-record fallback wrong: $STATUS_OUT_MISS"; fi
-STATUS_OUT_READY="$(printf '%s' "$STATUS_INPUT_READY" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+STATUS_OUT_READY="$(printf '%s' "$STATUS_INPUT_READY" | ENTWURF_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
 if printf '%s' "$STATUS_OUT_READY" | grep -q '🪛 ready cc'; then ok "statusline no-session_id fallback is ready"; else bad "statusline ready fallback wrong: $STATUS_OUT_READY"; fi
 cp "$STORE/20260606T000000-aaaaaa.meta.json" "$STORE/20260606T000003-dddddd.meta.json"
-STATUS_OUT_DUP="$(printf '%s' "$STATUS_INPUT_MATCH" | PI_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+STATUS_OUT_DUP="$(printf '%s' "$STATUS_INPUT_MATCH" | ENTWURF_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
 if printf '%s' "$STATUS_OUT_DUP" | grep -q '🪛 ! cc'; then ok "statusline duplicate nativeSessionId fallback is !"; else bad "statusline duplicate fallback wrong: $STATUS_OUT_DUP"; fi
 rm "$STORE/20260606T000003-dddddd.meta.json"
 
@@ -372,17 +385,17 @@ env HOME="$DOC_HOME" python3 - <<'PY'
 import json, os
 p = os.path.join(os.environ['HOME'], '.claude.json')
 d = json.load(open(p))
-d.setdefault('mcpServers', {})['pi-tools-bridge'] = {'type': 'stdio', 'command': 'CLOBBERED-BY-ANOTHER-CONSUMER'}
+d.setdefault('mcpServers', {})['entwurf-bridge'] = {'type': 'stdio', 'command': 'CLOBBERED-BY-ANOTHER-CONSUMER'}
 json.dump(d, open(p, 'w'), indent=2)
 PY
 # Capture without tripping THIS script's own set -e (the very trap under test).
 set +e
-DOC_OUT="$(env HOME="$DOC_HOME" CLAUDE_CONFIG_DIR="$DOC_CFG" PI_CODING_AGENT_DIR="$DOC_AGENT" PI_META_SESSIONS_DIR="$DOC_STORE" PATH="$DOC_BIN:$PATH" bash "$REPO/scripts/meta-bridge-doctor.sh" 2>&1)"
+DOC_OUT="$(env HOME="$DOC_HOME" CLAUDE_CONFIG_DIR="$DOC_CFG" PI_CODING_AGENT_DIR="$DOC_AGENT" ENTWURF_META_SESSIONS_DIR="$DOC_STORE" PATH="$DOC_BIN:$PATH" bash "$REPO/scripts/meta-bridge-doctor.sh" 2>&1)"
 DOC_CODE=$?
 set -e
 if [ "$DOC_CODE" -eq 1 ]; then ok "doctor exits 1 on a managed-config drift"; else bad "doctor exit on drift was $DOC_CODE, want 1:"$'\n'"$DOC_OUT"; fi
 if printf '%s\n' "$DOC_OUT" | grep -q 'Drift detail:'; then ok "doctor prints 'Drift detail:' instead of dying at the managed-config header"; else bad "doctor did not print Drift detail — silent early death?:"$'\n'"$DOC_OUT"; fi
-if printf '%s\n' "$DOC_OUT" | grep -q 'user MCP pi-tools-bridge'; then ok "doctor names the concrete drifted key (user MCP pi-tools-bridge)"; else bad "doctor did not name the drifted MCP key:"$'\n'"$DOC_OUT"; fi
+if printf '%s\n' "$DOC_OUT" | grep -q 'user MCP entwurf-bridge'; then ok "doctor names the concrete drifted key (user MCP entwurf-bridge)"; else bad "doctor did not name the drifted MCP key:"$'\n'"$DOC_OUT"; fi
 if printf '%s\n' "$DOC_OUT" | grep -q '\[plugin install'; then ok "doctor continues to a later section after the drift (no early set -e death)"; else bad "doctor did not reach a later section header after the drift:"$'\n'"$DOC_OUT"; fi
 if printf '%s\n' "$DOC_OUT" | grep -q 'meta-bridge doctor: FAIL'; then ok "doctor runs the whole chain to its final summary line"; else bad "doctor did not reach its final summary line (mid-run death):"$'\n'"$DOC_OUT"; fi
 

@@ -22,6 +22,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EntwurfV2RunResult } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import {
+	actionableRejectHint,
 	ENTWURF_PREFIX_ROOTS_ENV,
 	parseEntwurfPrefixRootsEnv,
 	renderEntwurfV2Result,
@@ -40,7 +41,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.join(HERE, "..");
 const SURFACE_SRC = path.join(REPO, "pi-extensions/lib/entwurf-v2-surface.ts");
 const CONTROL_SRC = path.join(REPO, "pi-extensions/entwurf-control.ts");
-const MCP_SRC = path.join(REPO, "mcp/pi-tools-bridge/src/index.ts");
+const MCP_SRC = path.join(REPO, "mcp/entwurf-bridge/src/index.ts");
 
 const GID = "20260613T100000-aaaaaa";
 const SUCCESS_RECEIPT = {
@@ -203,12 +204,40 @@ async function main(): Promise<void> {
 			retrySafe: false,
 		};
 		ok("2: plain execution-failed → isError", renderEntwurfV2Result(failed).isError);
+
+		// Detour B (B-a): backend-liveness-unsupported reject → still a reject (isError),
+		// but the text carries the actionable "use fire-and-forget → mailbox" hint. The
+		// reject stays honest (reason unchanged, no auto-convert) — only the render guides.
+		const metaReject: EntwurfV2RunResult = {
+			kind: "rejected",
+			receipt: { ok: false, reason: "backend-liveness-unsupported", observedLiveness: "unsupported" },
+		};
+		const mr = renderEntwurfV2Result(metaReject);
+		ok(
+			"2: backend-liveness-unsupported reject → isError + actionable fire-and-forget/mailbox hint",
+			mr.isError &&
+				mr.text.includes("backend-liveness-unsupported") &&
+				mr.text.includes("fire-and-forget") &&
+				mr.text.includes("mailbox"),
+		);
+		ok(
+			"2B: actionableRejectHint guides meta-session owned → fire-and-forget mailbox",
+			(actionableRejectHint("backend-liveness-unsupported") ?? "").includes("fire-and-forget"),
+		);
+		ok(
+			"2B: actionableRejectHint guides owned-live → fire-and-forget",
+			(actionableRejectHint("owned-live-no-autosend") ?? "").includes("fire-and-forget"),
+		);
+		ok(
+			"2B: actionableRejectHint returns undefined for a reject with no next step",
+			actionableRejectHint("bad-target") === undefined,
+		);
 	}
 
 	// ── 6: parseEntwurfPrefixRootsEnv (5d-4b operator-policy SSOT) ─────────────
 	{
 		const D = path.delimiter;
-		ok("6: env name is PI_ENTWURF_PREFIX_ROOTS", ENTWURF_PREFIX_ROOTS_ENV === "PI_ENTWURF_PREFIX_ROOTS");
+		ok("6: env name is ENTWURF_PREFIX_ROOTS", ENTWURF_PREFIX_ROOTS_ENV === "ENTWURF_PREFIX_ROOTS");
 		ok("6: undefined → [] (no prefix promotion)", parseEntwurfPrefixRootsEnv(undefined).length === 0);
 		ok("6: empty string → []", parseEntwurfPrefixRootsEnv("").length === 0);
 		ok("6: delimiters-only → []", parseEntwurfPrefixRootsEnv(`${D}${D}`).length === 0);
@@ -264,13 +293,24 @@ async function main(): Promise<void> {
 			"4: pi-native — NO static import of the self-address fence (TS5097 stays closed)",
 			!/import[^;]*from\s*"\.\/lib\/entwurf-self-address\.(js|ts)"/.test(code),
 		);
+		// Caller-intent steer (live-peer owned-outcome bug): the description must tell the model
+		// to use fire-and-forget for a LIVE/alive peer and that owned-outcome is dormant-only and
+		// NEVER auto-converted — the preventive fix (the decider must not auto-convert).
+		ok(
+			"4: pi-native — description steers live/alive peer → fire-and-forget",
+			/liveness=alive/.test(src) && /fire-and-forget/.test(src),
+		);
+		ok(
+			"4: pi-native — description says owned-outcome is dormant-only + never auto-converted",
+			/owned-outcome is ONLY for waking a DORMANT pi/.test(src) && /NEVER auto-converted/.test(src),
+		);
 	}
 
 	// ── 5: MCP bridge wiring guard ────────────────────────────────────────────
 	// The MCP bridge is a `.ts`-import fence consumer (mcp/tsconfig allowImportingTsExtensions),
 	// so it STATICALLY imports the surface adapter (no dynamic import). The v2 handler runs the
 	// production runner IN-PROCESS via runAndRenderEntwurfV2FromSurface — it does NOT route the
-	// v2 dispatch through legacy rpcCall/enqueueMetaMessage (those stay for the entwurf_send body).
+	// v2 dispatch through legacy rpcCall/enqueueMetaMessage (those stay as the v2 runner's transport primitives).
 	{
 		const src = await fs.readFile(MCP_SRC, "utf8");
 		ok("5: MCP — registers entwurf_v2 server.tool", /server\.tool\(\s*"entwurf_v2"/.test(src));
@@ -293,6 +333,16 @@ async function main(): Promise<void> {
 		ok(
 			"5: MCP — v2 handler routes through the runner, NOT legacy rpcCall/enqueueMetaMessage",
 			!/\brpcCall\(/.test(v2Block) && !/\benqueueMetaMessage\(/.test(v2Block),
+		);
+		// Caller-intent steer — same preventive guidance on the MCP surface (a sibling reaching
+		// in over MCP reads this description, not the pi-native one).
+		ok(
+			"5: MCP — description steers live/alive peer → fire-and-forget",
+			/liveness=alive/.test(src) && /fire-and-forget/.test(src),
+		);
+		ok(
+			"5: MCP — description says owned-outcome is dormant-only + never auto-converted",
+			/owned-outcome is ONLY for waking a DORMANT pi/.test(src) && /NEVER auto-converted/.test(src),
 		);
 	}
 
