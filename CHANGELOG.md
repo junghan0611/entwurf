@@ -36,7 +36,8 @@ All notable changes to this project will be documented here. Format follows [Kee
 ### Fixed
 
 - **Mailbox reply instructions point at the canonical v2 surface.** Replyable meta-session bodies now tell agents to use `entwurf_v2`, not the retired `entwurf_send` tool.
-- **Branch-lane handoff pointers no longer dangle.** `AGENTS.md` now points at `NEXT--entwurf-rename.md` instead of the deleted `NEXT--acp-on-v2.md`.
+- **Branch-lane handoff pointers no longer dangle.** `AGENTS.md` now points at the main-lane `NEXT.md` rather than a deleted branch ledger.
+- **npm-managed installs resolve hoisted runtime dependencies before writing settings.** `run.sh install` walks Node's module-resolution paths, so `pi install npm:@junghanacs/entwurf` works from `~/.pi/agent/npm/node_modules` with no package-local `node_modules`; the `@earendil-works/pi-*` peer trio is treated as loader-provided. `check-pack-install` locks the layout with a real npm-managed `run.sh install` regression under an isolated HOME.
 
 ### Deferred
 
