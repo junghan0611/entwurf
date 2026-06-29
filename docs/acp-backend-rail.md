@@ -1,208 +1,312 @@
-# ACP Backend Adapter Rail (표준궤) — 0.12.0 설계 초안
+# ACP Backend Adapter Rail (표준궤) — as built in 0.12
 
-> **Status: 규격 확정 + claude 레일 구현 완료 (Opus 구현 / GPT `…341a87` 검수 GO, 2026-06-25).**
-> 확정 규격 = **§9**(7-seam) + **§10**(settings.backend 가드 + adapterSettings 범용 seam). 레일 track
-> 완성 — 남은 일은 기여자(hvkiefer)가 PR #40 cortex를 **어댑터 1개**(`adapters/cortex.ts` + registry +
-> cortex 게이트)로 포팅하는 것뿐(공통층 무수정). (§3 인터페이스는 GPT 제안 반영본, §7은 해소된 논의 기록.)
+> **Status: spec frozen + claude rail SHIPPED** (Opus implementation / GPT `…341a87` review GO, 2026-06-25).
+> The confirmed spec is **§9** (the adapter seam) + **§10** (the `settings.backend` guard + the generic
+> `adapterSettings` seam). The rail is in the tree and unchanged through current HEAD (**0.12.2**).
+>
+> **The only remaining work** is for the contributor (hvkiefer) to port PR #40 (Cortex Code) as **one adapter
+> object** — `cortexAdapter` in `pi-extensions/lib/acp/backend-adapter.ts`, registered in the `ADAPTERS` array,
+> plus cortex assertions in the `check-acp-*` gate family. The common turn loop is not touched.
+>
+> **Real namespace.** Everything lives under **`pi-extensions/lib/acp/`**. There is no `acp-bridge.ts` and no
+> `adapters/` subdirectory — both were 0.11.0 monolith shapes that the 0.12.0 cutover deleted. `claudeAdapter`
+> lives inline in `backend-adapter.ts`; a second backend either lives inline next to it or in its own sibling
+> module imported into the same `ADAPTERS` array.
+>
+> **Doc history.** §1–§2, §5, §8 are the *pre-implementation* rationale (kept as background, now past tense).
+> §3's interface draft has been **superseded by §9+§10**: the shipped adapter has two methods the draft lacked —
+> `resolveAdapterSettings` and `loadCarrier` — and a couple of signatures differ (noted inline). §4 and §6 are
+> the as-built seam table and the contributor guide; trust those plus the source over the older sections.
 
-## 1. 왜 (배경)
+## 1. Why (background)
 
-- PR [#40](https://github.com/junghan0611/entwurf/pull/40)(Snowflake Cortex Code, hvkiefer)은 **0.12.0에서
-  삭제된** `acp-bridge.ts`/`index.ts`(0.11.0 fat-bridge) 위에 작성됐다. 단순 rebase conflict가 아니라
-  그 아키텍처가 사라졌다.
-- **0.11.0엔 표준궤가 있었다:** `type AcpBackend = "claude"|"codex"|"gemini"`,
-  `type AcpBackendAdapter`, `ACP_BACKEND_ADAPTERS: Record<AcpBackend, AcpBackendAdapter>`,
-  `resolveAcpBackendAdapter(backend)`. PR #40은 cortex를 4번째로 끼웠을 뿐 — 기여자 표현:
-  *"slots into the existing AcpBackendAdapter pattern the same way Gemini does."*
-- **0.12.0 cutover가 그 레일을 걷어냈다.** fat-bridge를 통째 버리고 Claude-first로 새로 빌드
-  (CHANGELOG: "a fresh build on the v2 core, not a port of the old architecture"). 결과:
-  - `lib/acp/`에 백엔드 추상화 **0건**.
-  - `config.ts:374` — `backend !== "claude"`면 `throw`로 차단.
-  - 확장 의도는 주석으로만 남음: `models.ts:9-12` "Cortex would EXTEND this set — does not change the pattern."
-- **판정:** 단일 claude 코드 품질은 0.12.0이 더 깔끔(11모듈 분해, v2 위 thin plugin). 그러나
-  **백엔드 추가 레일은 0.11.0보다 후퇴.** cortex가 들어올 seam이 없다.
+- PR [#40](https://github.com/junghan0611/entwurf/pull/40) (Snowflake Cortex Code, hvkiefer) was written
+  against `acp-bridge.ts` / `index.ts` — the **0.11.0 fat-bridge that 0.12.0 deleted**. This is not a rebase
+  conflict; the architecture it patched no longer exists.
+- **0.11.0 had a rail:** `type AcpBackend = "claude"|"codex"|"gemini"`, an `AcpBackendAdapter` type, an
+  `ACP_BACKEND_ADAPTERS: Record<AcpBackend, AcpBackendAdapter>` registry, and `resolveAcpBackendAdapter(backend)`.
+  PR #40 simply slotted cortex in as a 4th entry — the contributor's words: *"slots into the existing
+  AcpBackendAdapter pattern the same way Gemini does."*
+- **The 0.12.0 cutover removed that rail.** The fat-bridge was thrown away and the plugin was rebuilt
+  claude-first on the v2 core (CHANGELOG: *"a fresh build on the v2 core, not a port of the old architecture"*).
+  At the moment of the cut the result was: zero backend abstraction in `pi-extensions/lib/acp/`; a hard
+  `backend !== "claude"` throw in `config.ts`; and the only trace of extension intent was a comment in
+  `models.ts` ("a second governed backend would EXTEND this set — it does not change the pattern").
+- **Verdict at the time:** single-claude code quality was *better* in 0.12.0 (decomposed into modules, a thin
+  plugin on v2), but the *backend-extension rail had regressed* below 0.11.0 — cortex had no seam to land in.
+  **This doc records the rail that closed that gap.** §9+§10 are now implemented; §5 happened.
 
-## 2. 핵심 통찰 — seam은 이미 절반 존재한다
+## 2. Key insight — the seam was already half present
 
-0.12.0 `backend.ts`는 이미 의존성 주입 구조체 `AcpTurnDeps`를 갖고 있고, `defaultDeps()`가 claude
-전용 함수로 채운다(원래는 session-reuse fake 주입용):
+0.12.0 `backend.ts` already carried a dependency-injection struct, `AcpTurnDeps`, that the
+session-reuse gate uses to inject fakes. The original idea was to promote the backend-specific parts of
+those deps into an adapter. The **final design separated the two** (see §9-2): the test/runtime seam
+(`AcpTurnDeps`: `spawnChild`/`createConnection`/`lifecyclePolicy`/`loadConfig`/`now`) stays a fake-injection
+seam, and the **product seam** (`AcpBackendAdapter`: which backend drives a turn) is a separate object resolved
+from the model id at turn entry.
 
-```ts
-function defaultDeps(): AcpTurnDeps {
-  return {
-    resolveLaunch,                                  // claude launch (인자 없음)
-    ensureOverlay: ensureClaudeConfigOverlay,        // CLAUDE_CONFIG_DIR overlay
-    spawnChild: (launch, cwd) => spawn(..., { env: { ...process.env, ...claudeLaunchEnvDefaults() } }),
-    createConnection: ...,                           // 백엔드 불변 (ndJsonStream + connectAcpClient)
-    lifecyclePolicy: ...,                            // 백엔드 불변
-    loadConfig: (cwd, modelId) => resolveProviderConfig({ cwd, modelId }),
-    now: ...,
-  };
-}
-```
+→ **The rail = resolve `const { adapter, nativeModelId } = resolveAcpBackendAdapter(model.id)` once at the top
+of the turn, then route every backend-specific step (`resolveLaunch` / `ensureOverlay` / `launchEnvDefaults` /
+`loadCarrier` / `buildSessionMeta` / `enforceModel`) through that adapter.** The turn orchestration body in
+`backend.ts` (`streamAcpTurn`: spawn → initialize → newSession → enforceModel → prompt → event-map) stays
+**backend-invariant**. `defaultDeps()` takes no adapter argument; the adapter is threaded into config loading
+via `loadConfig(cwd, modelId, adapter)` and otherwise used directly in the turn body.
 
-→ **레일 재도입 = 이 `AcpTurnDeps`의 백엔드-특정 부분을 `AcpBackendAdapter`로 묶고, `defaultDeps()`가
-modelId로 어댑터를 골라 채우게 하는 것.** turn orchestration 본체(streamShellAcp의 spawn→initialize→
-newSession→enforce→prompt→event-map 루프)는 **백엔드 불변으로 그대로 유지**된다. 이게 0.11.0의 거대
-`ACP_BACKEND_ADAPTERS` Record 분기보다 testable하고 깔끔할 수 있는 이유 — seam이 이미 deps로 존재.
+## 3. The `AcpBackendAdapter` interface (as built)
 
-## 3. `AcpBackendAdapter` 인터페이스 (초안 — 논의 대상)
+Source of truth: `pi-extensions/lib/acp/backend-adapter.ts` (interface at `:115`, `claudeAdapter` reference
+implementation at `:194`, registry at `:275`, `resolveAcpBackendAdapter` at `:287`, `allCuratedModels` at `:307`).
+This is the **real** shape — it is the §3 draft updated per §9+§10 (two methods added, two signatures fixed):
 
 ```ts
 export interface AcpBackendAdapter {
-  /** Discriminator. BridgeSession/configSig에 명시 저장(modelId 파싱 의존 제거),
-   *  tool-surface assertions(assertExcludeToolsHonored backend). */
-  readonly backend: string;                          // "claude" | "cortex"
+  /** Discriminator stored on BridgeSession/configSig so reuse never re-parses the model id. */
+  readonly backend: string;                                   // "claude" | "cortex"
 
-  /** modelId가 이 어댑터 소유면 native model id로 라우팅, 아니면 undefined.
-   *  ownsModel(boolean)을 쓰면 unprefixed claude가 과넓게 잡음 → owns+prefix-strip을
-   *  한 메서드로. registry adapter order에 안 기댐. cortex-claude-sonnet-4-6 →
-   *  { nativeModelId: "claude-sonnet-4-6" }, cortex-auto → { nativeModelId: "auto" }. */
+  /** Owns modelId? → backend-native id (prefix stripped), else undefined.
+   *  cortex-claude-sonnet-4-6 → { nativeModelId: "claude-sonnet-4-6" }. */
   routeModel(modelId: string): { nativeModelId: string } | undefined;
 
-  /** provider registry에 기여하는 curated model rows. */
+  /** Curated model rows this backend contributes to the single `entwurf` provider. */
   curatedModels(): AcpModelRow[];
 
-  /** ACP 서버 launch. native model id 사용(cortex -m, -c). */
-  resolveLaunch(params: {
-    cwd: string; modelId: string; nativeModelId: string; config: ResolvedAcpConfig;
-  }): AcpLaunchSpec;
+  /** ADDED (§10). Parse this backend's OWN settings off the raw entwurfProvider blocks
+   *  → opaque value stored on ResolvedAcpConfig.adapterSettings. claude returns undefined. */
+  resolveAdapterSettings(params: AcpAdapterSettingsParams): unknown;
 
-  /** spawn 시 process.env 위에 머지할 백엔드 launch env defaults. */
+  /** ACP server launch (command + args), honoring an env override. Uses native model id. */
+  resolveLaunch(params: AcpLaunchParams): AcpLaunchSpec;
+
+  /** STATIC launch env merged over process.env at spawn (settings-derived env rides ensureOverlay). */
   launchEnvDefaults(): Record<string, string>;
 
-  /** config overlay(auth passthrough + state hiding). envOverrides만 반환 — spawn이
-   *  공통 머지. sweep은 어댑터 내부(필요시 diagnostic만). no-op = { envOverrides: {} }. */
+  /** Materialize the config overlay (auth passthrough + state hiding); return env overrides
+   *  to merge at spawn. no-op backend → { envOverrides: {} }. */
   ensureOverlay(params: AcpOverlayParams): { envOverrides: Record<string, string> };
 
-  /** system-prompt carrier _meta. engraving 로딩까지 캡슐화 — carrier 없으면 undefined
-   *  반환(backend.ts가 newSession에서 _meta 키 omit). cortex는 loadEngraving 자체를
-   *  안 부른다. rich context(augment)는 carrier와 무관하게 항상 운반(별개 경로). */
-  buildSessionMeta(params: AcpSessionMetaParams): AcpSessionMeta | undefined;
+  /** ADDED (§10). Render the optional short operator carrier (engraving), SEPARATE from
+   *  buildSessionMeta so backend.ts folds the same value into both the config signature and the
+   *  session meta. A carrier-less backend returns null WITHOUT calling loadEngraving. */
+  loadCarrier(params: AcpCarrierParams): string | null;
 
-  /** 모델 강제. 단일 메서드가 백엔드 차이 흡수(flag 불필요). native model id 사용.
-   *  claude=session/set_config_option, cortex=no-op + launch-pin assertion. */
+  /** Build the `_meta` for newSession. undefined → backend.ts omits the `_meta` key entirely.
+   *  Receives the already-loaded carrier (the engraving is NOT loaded inside here — see loadCarrier). */
+  buildSessionMeta(params: AcpSessionMetaParams, carrier: string | null): Record<string, unknown> | undefined;
+
+  /** Enforce the requested model on the live session. claude = per-turn setSessionConfigOption;
+   *  a launch-pinned backend = no-op here. */
   enforceModel(params: AcpEnforceModelParams): Promise<void>;
 
-  /** bridgeConfigSignature에 접히는 필드: backend, nativeModelId, backend-specific
-   *  connection/profile/env-derived stable id. env 원문 값/secret 금지. */
-  configSignatureFields(config: ResolvedAcpConfig): Record<string, unknown>;
+  /** Backend-specific fields folded into bridgeConfigSignature. Takes the OPAQUE adapterSettings
+   *  (NOT the whole config). MUST be a flat, sorted-stable primitive map. backend + nativeModelId
+   *  are added by backend.ts. */
+  configSignatureFields(adapterSettings: unknown): Record<string, unknown>;
 }
 
-/** modelId → 어댑터. 0개 매칭=throw(unknown model), 2개 매칭=throw(prefix 충돌,
- *  startup fail-fast). claude=unprefixed 기본, non-claude=reserved prefix 필수(cortex-*). */
-export function resolveAcpBackendAdapter(modelId: string): AcpBackendAdapter;
+/** modelId → { adapter, nativeModelId }. 0 matches → throw (unknown model);
+ *  2+ matches → throw (prefix collision, fail-fast at startup/check).
+ *  claude owns its UNPREFIXED ids; a non-claude backend MUST carry a reserved prefix (cortex-*). */
+export function resolveAcpBackendAdapter(modelId: string): { adapter: AcpBackendAdapter; nativeModelId: string };
 ```
 
-## 4. 7 seam 명세 (claude 현재 / cortex = PR #40이 0.11.0에서 실증)
+## 4. The seam spec (claude as built / cortex as PR #40 demonstrated on 0.11.0)
 
-| seam | claude (현재 0.12.0) | cortex (PR #40 실증) |
+| seam (adapter method) | claude (shipped, 0.12) | cortex (PR #40) |
 |---|---|---|
-| **resolveLaunch** | `@agentclientprotocol/claude-agent-acp` npm bin resolve, `CLAUDE_AGENT_ACP_COMMAND` override | `cortex acp serve` PATH resolve(+`-c <conn>` `-m <model>`), `CORTEX_ACP_COMMAND` override |
-| **launchEnvDefaults** | `claudeLaunchEnvDefaults()` | `SNOWFLAKE_HOME`=overlay, `CORTEX_DISABLE_AUTO_APPLY_PROFILES=1` |
-| **ensureOverlay** | `CLAUDE_CONFIG_DIR` whitelist overlay(auth/runtime 보존, memory/hooks/project 숨김, `hooks:{}`) | `SNOWFLAKE_HOME` symlink-passthrough(`connections.toml`/`config.toml`/cred cache/skills) + conv/profile/memory/mcp/hooks 숨김 + 매 spawn sweep |
-| **buildSessionMeta** | `_meta.systemPrompt`(짧고 순수, 빌링 안전) | **undefined** — Cortex ACP엔 systemPrompt carrier 없음 → engraving이 first-user augment로 |
-| **curated models + 라우팅** | `getModels("anthropic")` 2개(prefix 없음) | hand-curated `cortex-auto`/`cortex-claude-sonnet-4-6`(pi-ai에 cortex source 없음), `cortex-` prefix → `inferBackendFromModel` 라우팅, launch 시 prefix strip해 native `-m` 복원 |
-| **enforceModel** | per-turn `session/set_config_option(configId="model")` | **launch-time `-m` pin**, per-turn switch **금지**(Cortex는 session config로 모델 노출 → spurious per-turn invalidation 방지) |
-| **settings + signature** | (단일) | `backend:"cortex"`, `cortexConnection`(또는 env) → `bridgeConfigSignature`에 접힘(conn 변경 시 reuse 무효) |
-| **gates** | `check-acp-*` | `check-backends`(launch/strip/override/env-pin/undefined-meta/overlay-passthrough), `check-models`(prefix+anti-collision), `smoke-cortex`(on-demand, claude-only floor 밖) |
+| **routeModel + curatedModels** | unprefixed `getModels("anthropic")` rows (`claude-sonnet-4-6`, `claude-opus-4-8`); native id == curated id | hand-curated `cortex-auto` / `cortex-claude-sonnet-4-6` (pi-ai has no cortex source); `cortex-` prefix routes via `routeModel`; launch strips the prefix to recover the native `-m` value |
+| **resolveAdapterSettings + configSignatureFields** | both no-op (`undefined` / `{}`) — claude has no own settings | parse `cortexConnection` off the raw block → opaque `adapterSettings`; fold `{ cortexConnection: conn ?? null }` into the signature (a connection change invalidates a reused session) |
+| **resolveLaunch** | `@agentclientprotocol/claude-agent-acp` npm bin resolve; `CLAUDE_AGENT_ACP_COMMAND` override | `cortex acp serve` resolved from PATH (+ `-c <conn>` `-m <native>`); `CORTEX_ACP_COMMAND` override via `bash -lc`, selection flags appended so the bridge's choice wins |
+| **launchEnvDefaults** | `claudeLaunchEnvDefaults()` (`CLAUDE_CONFIG_DIR`) | `SNOWFLAKE_HOME` = overlay, `CORTEX_DISABLE_AUTO_APPLY_PROFILES=1` |
+| **ensureOverlay** | `CLAUDE_CONFIG_DIR` whitelist overlay (auth/runtime kept, memory/hooks/projects hidden, `hooks:{}`) | `SNOWFLAKE_HOME` symlink-passthrough (`connections.toml` / `config.toml` / credential cache / skills) + conversations/profiles/memory/mcp.json/hooks hidden + swept each spawn |
+| **loadCarrier + buildSessionMeta** | carrier = the shipped engraving (`loadCarrier` → string); `buildSessionMeta` → `_meta.systemPrompt` (short, pure, billing-safe) | **`loadCarrier` → null, `buildSessionMeta` → undefined** — Cortex ACP exposes no `_meta.systemPrompt` carrier, so the operator engraving must ride the first-user augment (the one open detail; see §6 + §9-4) |
+| **enforceModel** | per-turn `setSessionConfigOption({ configId: "model" })` | **launch-time `-m` pin, no per-turn switch** — Cortex exposes its model surface via session config options, not the spec-baseline set-model the bridge calls; a per-turn call would trigger spurious reuse invalidation |
+| **gates** | `check-acp-*` family + the LIVE `smoke-acp-*-live` floor | EXTEND the same `check-acp-*` family (see §6) + a new on-demand `smoke-acp-cortex-live` (outside the claude-only LIVE release floor) |
 
-**두 비대칭이 인터페이스 설계의 시금석이다:**
-1. `buildSessionMeta`가 **undefined를 반환할 수 있어야** 한다(cortex carrier 부재). backend.ts는 undefined면
-   engraving을 first-user augment 경로로 흘린다 — 이 fallback이 이미 augment.ts에 있는지 확인 필요.
-2. `enforceModel`이 **per-turn vs launch-pin을 흡수**해야 한다. claude는 매 턴 set_config_option,
-   cortex는 launch에 박고 턴마다 안 건드림. 인터페이스가 이 둘을 같은 메서드 뒤로 숨겨야 "혼란 없는 표준궤".
+**Two asymmetries are the design touchstones:**
+1. `loadCarrier` / `buildSessionMeta` must support the **carrier-less case** (cortex). `buildSessionMeta`
+   returning `undefined` makes `backend.ts` omit the `_meta` key entirely; `loadCarrier` returning `null` keeps
+   the cortex turn from ever touching the shipped-engraving / appendSystemPrompt signature. Rich operator
+   context rides the first-user augment regardless of carrier.
+2. `enforceModel` absorbs **per-turn vs launch-pin** behind one method. claude calls set-model every turn;
+   cortex pins `-m` at launch and is a no-op here. The interface hides that difference so the turn loop stays
+   backend-invariant.
 
-## 5. claude 리팩터 경로 (GLG가 깔 레일)
+## 5. How the claude rail was laid (done)
 
-1. `AcpBackendAdapter` 인터페이스 + `resolveAcpBackendAdapter(modelId)` 추가(신규 `lib/acp/backend-adapter.ts`).
-2. 현재 claude 하드코딩을 `claudeAdapter` 객체로 모은다: `resolveLaunch`/`ensureClaudeConfigOverlay`/
-   `claudeLaunchEnvDefaults`/`buildClaudeSessionMeta`/claude enforce → 어댑터 메서드로.
-3. `defaultDeps()`가 modelId로 어댑터를 골라 deps를 채움(turn loop 본체 불변).
-4. `config.ts:374` claude-only `throw` 가드 → 어댑터 registry 조회(미등록 backend만 reject).
-5. `models.ts`를 백엔드별 curated 병합 + prefix 라우팅으로 일반화(claude=prefix 없음 기본).
-6. `acp-provider.ts`는 단일 `entwurf` provider 유지, `models`는 등록된 모든 어댑터의 `curatedModels()` 병합.
+The steps below were executed when the rail shipped; they are recorded so the cortex port can see the pattern:
 
-→ 이 단계까지가 "레일". cortex는 0건 추가(claude 단독으로 어댑터 패턴이 서는지 먼저 green).
+1. Added the `AcpBackendAdapter` interface + `resolveAcpBackendAdapter(modelId)` in
+   `pi-extensions/lib/acp/backend-adapter.ts`.
+2. Collected the claude hardcoding into the `claudeAdapter` object: `resolveLaunch` (was `resolveClaudeLaunch`),
+   `ensureClaudeConfigOverlay`, `claudeLaunchEnvDefaults`, `buildClaudeSessionMeta`, the claude enforce path,
+   `loadEngraving` (via `loadCarrier`) → all became adapter methods.
+3. `streamAcpTurn` resolves the adapter once at turn entry and routes every backend-specific step through it;
+   the turn body is backend-invariant.
+4. The old claude-only `throw` guard in `config.ts` became a *syntactic-only* `backend` check (§10 A); the
+   semantic guard (declared backend must match the routed adapter) moved to the routing site in `backend.ts`.
+5. `models.ts` exposes the curated claude rows; `allCuratedModels()` (in `backend-adapter.ts`) merges every
+   registered adapter's `curatedModels()` for provider registration.
+6. `pi-extensions/acp-provider.ts` keeps the single `entwurf` provider and registers
+   `models: allCuratedModels()`.
 
-## 6. 기여자 지침의 뼈대 (레일 확정 후)
+→ That was "the rail". cortex adds **zero** to the common layer (claude alone proves the adapter pattern holds).
 
-PR #40을 0.12.0으로 포팅 = **어댑터 객체 하나(`cortexAdapter`) 작성 + 등록**:
-- `lib/acp/adapters/cortex.ts`에 7 seam 구현(위 표 cortex 열).
-- `resolveAcpBackendAdapter`에 prefix 등록.
-- `check-backends`/`check-models`/`smoke-cortex` 게이트 추가.
-- **backend.ts turn loop / acp-client / event-mapper / session-store는 건드리지 않는다**(불변식). 이게
-  "레일이 깔렸다"의 검증 — 백엔드 추가가 어댑터 파일 + 게이트로 닫히면 표준궤.
+## 6. Contributor guide — porting PR #40 to 0.12
 
-## 7. 논의 포인트 (GPT)
+Porting PR #40 = **write one adapter object (`cortexAdapter`) and register it**. Real namespace =
+`pi-extensions/lib/acp/`. Concretely:
 
-1. **어댑터 선택 키 = modelId prefix 라우팅으로 충분한가?** 0.11.0은 `inferBackendFromModel` + `settings.backend`
-   둘 다 썼다. 0.12.0 단일 provider에선 modelId prefix가 자연스러운데, claude를 "prefix 없음=기본"으로 둘지
-   claude도 명시 prefix를 줄지(표준궤 규격의 핵심 결정).
-2. **단일 provider 유지 확정?** `entwurf` 하나에 모든 백엔드 모델 + modelId 라우팅. vs provider-per-backend.
-3. **`AcpTurnDeps` 승격 vs 별도 `AcpBackendAdapter` 객체?** deps에 어댑터를 흡수할지, 어댑터를 deps와 분리해
-   `defaultDeps(adapter)`로 주입할지. 후자가 test seam(fake deps)과 backend seam(adapter)을 안 섞어 깔끔할 듯.
-4. **`buildSessionMeta` undefined fallback이 이미 있나?** augment.ts가 carrier 부재 시 engraving을 first-user로
-   흘리는 경로를 갖는지 — 없으면 레일에 추가해야 cortex가 산다.
-5. **`enforceModel` 추상화 형태.** 메서드 하나 + 내부 분기 vs `supportsPerTurnModelSwitch` flag + 공통 enforce.
-6. **overlay 출력 규격.** claude(CLAUDE_CONFIG_DIR)와 cortex(SNOWFLAKE_HOME)를 `ensureOverlay → { envOverrides,
-   sweepDirs }` 같은 공통 출력으로 묶을지, 어댑터가 자유 구현하고 backend.ts는 envOverrides만 받을지.
-7. **codex/gemini는?** 0.12.0 교리상 codex=native garden citizen(ACP 아님), gemini=deprecated. 레일이
-   claude+cortex 2개만 다뤄도 되는지, 아니면 codex-ACP opt-in(`ENTWURF_ACP_FOR_CODEX=1`)도 어댑터로 흡수할지.
+- **`pi-extensions/lib/acp/backend-adapter.ts`** — add `cortexAdapter: AcpBackendAdapter` next to `claudeAdapter`
+  (or in a sibling module, e.g. `cortex-adapter.ts`, and import it here). Implement all members for the cortex
+  column of §4 + §9/§10.
+- **Register** by appending to the `ADAPTERS` array (`const ADAPTERS = [claudeAdapter, cortexAdapter]`, `:275`).
+  Because `routeModel` owns the `cortex-` prefix, `resolveAcpBackendAdapter` and `allCuratedModels` pick it up
+  automatically and fail-fast on any prefix collision or unowned id.
+- **Curated models** — add the cortex rows (`cortex-auto`, `cortex-claude-sonnet-4-6`) in `models.ts` (or a new
+  `cortex-models.ts`) and return them from `cortexAdapter.curatedModels()`. Hand-curated, since pi-ai carries no
+  cortex/snowflake source. The `cortex-` prefix keeps the ids from colliding with the Claude ids Cortex routes
+  to. `resolveLaunch` strips the prefix to recover the native `-m` value (`cortex-auto` → no `-m`).
+- **Overlay** — add `ensureCortexConfigOverlay` in `overlay.ts` (or a new `cortex-overlay.ts`): `SNOWFLAKE_HOME`
+  symlink-passthrough of auth + skills, hiding conversations/profiles/memory/mcp.json/hooks, swept every spawn.
+  Wire it through `cortexAdapter.ensureOverlay` + `launchEnvDefaults` (`SNOWFLAKE_HOME` = overlay,
+  `CORTEX_DISABLE_AUTO_APPLY_PROFILES=1`).
+- **Backend-owned settings** — parse `cortexConnection` off the raw block in `cortexAdapter.resolveAdapterSettings`
+  → opaque `adapterSettings`; fold `{ cortexConnection: conn ?? null }` into `configSignatureFields`. **Do NOT
+  edit `config.ts`** — backend-named keys must never reach the common `ResolvedAcpConfig` (§10 B/D). The
+  declared `entwurfProvider.backend: "cortex"` already passes the syntactic guard. (PR #40's
+  `PI_SHELL_ACP_CORTEX_CONNECTION` env should be renamed to the `ENTWURF_ACP_*` convention.)
+- **Identity carrier asymmetry — the one open detail.** `cortexAdapter.buildSessionMeta()` returns `undefined`
+  and `loadCarrier()` returns `null` (Cortex ACP has no `_meta.systemPrompt`). The operator engraving must
+  therefore ride the first-user augment (`augment.ts`). **Today `augment.ts` carries the bridge identity / pi
+  base / AGENTS.md but NOT an operator engraving**, so the cortex PR has to define exactly how the engraving
+  joins the augment for a carrier-less backend (§9-4 deferred this). Resolve it explicitly in the PR rather than
+  leaving it implicit.
+- **Gates — extend the `check-acp-*` family** (the 0.11.0 monolith names `check-backends` / `check-models` do
+  not exist in 0.12):
+  - `scripts/check-acp-provider-surface.ts` — curated cortex rows + `cortex-` prefix routing + anti-collision.
+  - `scripts/check-acp-config.ts` — `backend:"cortex"` passes the syntactic guard; `cortexConnection` lands in
+    `adapterSettings` and **never** surfaces on the common config (the fake-adapter seam plumbing already lives
+    here).
+  - `scripts/check-acp-overlay.ts` — `SNOWFLAKE_HOME` overlay passthrough / state-hiding / per-spawn sweep.
+  - `scripts/check-acp-tool-surface.ts` — `cortexAdapter.buildSessionMeta()` is `undefined` → `_meta` omitted.
+  - `scripts/check-acp-session-reuse.ts` — adapter wiring through the turn loop + `configSignatureFields`
+    (a `cortexConnection` change invalidates a reused session).
+  - `scripts/check-acp-carrier-augment.ts` — carrier-less path (loadCarrier null) + engraving via augment.
+  - **new:** `scripts/smoke-acp-cortex-live.ts` — on-demand LIVE smoke (needs `cortex` on PATH +
+    `cortex auth login`), OUT of `pnpm check` and OUTSIDE the claude-only LIVE release floor. Wire it into
+    `run.sh` as its own target (`LIVE=1 ./run.sh smoke-acp-cortex-live`).
+- **Do NOT touch the common layer** — `backend.ts` turn loop, `acp-client.ts`, `event-mapper.ts`,
+  `session-store.ts`, `config.ts`. That a backend lands in *an adapter file + gates only* IS the proof the rail
+  holds. `pnpm check` + `pnpm typecheck` (all three configs) must be EXIT 0.
 
-## 8. 역할 분담
+## 7. Discussion points (resolved)
 
-- **GLG:** §5 레일(인터페이스 + claude 리팩터)을 깔고 claude 단독으로 게이트 green.
-- **기여자(hvkiefer):** §6 cortex 어댑터 1개 포팅(PR #40 → 0.12.0).
-- **GPT:** §7 논의 → 규격 확정.
-- 위임 전제: GLG가 거의 다 해보고 인터페이스가 0.11.0보다 깔끔할 것.
+These were the open questions before the spec froze; §9+§10 resolved all of them. Kept as a record.
 
-## 9. 확정 규격 (GPT 합의 2026-06-25)
+1. **Adapter selection key = modelId prefix routing — enough?** Resolved: yes. 0.11.0 used both
+   `inferBackendFromModel` and `settings.backend`; 0.12 makes the **modelId prefix the single routing
+   authority**. claude is "no prefix = default"; non-claude backends carry a reserved prefix.
+2. **Single provider?** Resolved: one `entwurf` provider, all backends' models merged via `allCuratedModels()`.
+3. **Promote `AcpTurnDeps` vs a separate `AcpBackendAdapter`?** Resolved: keep them separate (§9-2) — merging
+   would make a fake-deps fixture look like a fake backend.
+4. **Is the `buildSessionMeta` undefined fallback already present?** Resolved into the shipped design: the
+   augment always rides via `prependNewPromptAugment` regardless of carrier; how a *carrier-less backend's
+   operator engraving* joins the augment is the cortex PR's call (§6, §9-4).
+5. **`enforceModel` abstraction shape.** Resolved: one method, no flag (claude = set-model, cortex = no-op).
+6. **Overlay output shape.** Resolved: `ensureOverlay → { envOverrides }`; sweep lives inside the adapter.
+7. **codex/gemini?** Resolved as a 0.12 non-goal (§9-8) — codex is a native garden citizen, not ACP.
 
-GPT(`…341a87`) 검토로 §7 논의 포인트가 전부 해소됐다. 확정 사항 — 이게 표준궤 규격이다:
+## 8. Roles
 
-1. **단일 `entwurf` provider + modelId prefix registry.** provider-per-backend 안 함.
-   - non-claude 백엔드는 **reserved prefix 필수**(`cortex-*`). claude adapter는 **unprefixed** curated model만 소유.
-   - `resolveAcpBackendAdapter(modelId)`: 0개 매칭=`throw`(unknown), 2개 매칭=`throw`(prefix 충돌). 충돌은 startup/check **fail-fast**.
-   - `claude-*` 명시 prefix는 0.12.0 rail에 **넣지 않는다**(alias/dual identity 회피, 기존 id 비파괴).
-2. **`AcpBackendAdapter`(product seam)와 `AcpTurnDeps`(test/runtime seam) 분리.** 합치지 않는다 — 합치면 fake deps가 fake backend처럼 보이고 어댑터가 clock/sessionDir/createConnection까지 떠안음.
-   - turn 초입에서 `const adapter = resolveAcpBackendAdapter(model.id)` 1회 결정 → `defaultDeps(adapter)`.
-   - `backend: adapter.backend`를 BridgeSession/BootstrapParams/configSig에 **명시 저장**(modelId 문자열 파싱 의존 제거).
-3. **`routeModel(modelId)`로 owns+native-id strip을 한 메서드에.** `enforceModel`/`resolveLaunch`는 **native model id** 사용.
-4. **`buildSessionMeta` undefined → `_meta` omit.** `newSessionParams = sessionMeta === undefined ? { cwd, mcpServers } : { cwd, mcpServers, _meta: sessionMeta }`. engraving 로딩은 어댑터 `buildSessionMeta` 내부에 캡슐화(cortex는 `loadEngraving` 자체를 안 부름 → shipped-engraving/appendSystemPrompt signature와 안 엮임). rich context(augment)는 carrier와 **무관하게 항상** `prependNewPromptAugment`로 운반(이미 존재 확인 — GPT). carrier 부재 백엔드의 operator engraving은 first-user augment로(PR #40 패턴) — augment 합류 디테일은 claude 리팩터 시 확정.
-5. **`ensureOverlay → { envOverrides }`.** spawn 공통 머지 `env: { ...process.env, ...adapter.launchEnvDefaults(), ...overlay.envOverrides }`. sweep은 어댑터 내부, 필요시 diagnostic만.
-6. **`enforceModel` 단일 메서드, flag 없음.** claude=`session/set_config_option`, cortex=no-op + launch-pin assertion(필요시 created session config 검증).
-7. **`configSignatureFields`**: `backend`, `nativeModelId`, backend-specific connection/profile/env-derived **stable id**. env 원문 값/secret **금지**.
-8. **codex/gemini = 0.12.0 non-goal.** codex=native garden citizen이 정위치. `ENTWURF_ACP_FOR_CODEX=1` ACP opt-in을 rail에 넣으면 "plugin은 plugin, sibling은 sibling" 경계가 흐림 → default registry **미등록**, future opt-in only, 별도 issue/branch에서 교리 충돌 검토.
+- **Maintainer:** lay the §5 rail (interface + claude refactor) and get claude green on the gates. **Done.**
+- **Contributor (hvkiefer):** the §6 cortex adapter — one adapter object + registration + cortex gates
+  (PR #40 → 0.12).
+- **GPT:** the §7 review → frozen spec. **Done.**
 
-**최종 규격 한 줄:** 단일 `entwurf` provider + modelId prefix registry(non-claude required) + 별도 Adapter 객체 + `defaultDeps(adapter)` + `buildSessionMeta` undefined 시 `_meta` omit, rich context는 first-user augment로 항상 운반 + codex ACP는 0.12.0 non-goal.
+## 9. Frozen spec (GPT-agreed 2026-06-25)
 
-### Step B 검수 future notes (GPT 2026-06-25)
+GPT (`…341a87`) closed every §7 point. These are the rail invariants:
 
-구현 완료 후 GPT가 남긴 후속 — cortex 포팅 시 반드시 반영:
+1. **Single `entwurf` provider + modelId-prefix registry.** No provider-per-backend.
+   - A non-claude backend MUST carry a **reserved prefix** (`cortex-*`). The claude adapter owns only
+     **unprefixed** curated ids.
+   - `resolveAcpBackendAdapter(modelId)`: 0 matches → `throw` (unknown); 2+ matches → `throw` (prefix
+     collision). Collisions fail-fast at startup/check.
+   - An explicit `claude-*` prefix is **not** introduced (avoids alias / dual identity; keeps existing ids).
+2. **`AcpBackendAdapter` (product seam) is separate from `AcpTurnDeps` (test/runtime seam).** Resolve
+   `const { adapter, nativeModelId } = resolveAcpBackendAdapter(model.id)` once at turn entry; `defaultDeps()`
+   takes no adapter and the adapter is threaded into `loadConfig(cwd, modelId, adapter)`. `backend`,
+   `nativeModelId` are stored explicitly on BridgeSession/configSig (no model-id re-parsing).
+3. **`routeModel(modelId)` does owns + native-id strip in one method.** `enforceModel` / `resolveLaunch` use
+   the **native** model id.
+4. **`buildSessionMeta` undefined → `_meta` omitted.**
+   `newSessionArgs = sessionMeta === undefined ? { cwd, mcpServers } : { cwd, mcpServers, _meta: sessionMeta }`.
+   **Implementation update:** the engraving is loaded by a SEPARATE `loadCarrier(params)` method (not inside
+   `buildSessionMeta` as the §3 draft sketched); `buildSessionMeta` receives the already-loaded carrier. A
+   carrier-less backend (cortex) returns `null` from `loadCarrier` so it never touches the shipped-engraving /
+   appendSystemPrompt signature, and `undefined` from `buildSessionMeta`. Rich context always rides
+   `prependNewPromptAugment`; a carrier-less backend's operator engraving joins the augment (cortex PR defines
+   the exact join — deferred here).
+5. **`ensureOverlay → { envOverrides }`.** Spawn merges `env: { ...process.env, ...adapter.launchEnvDefaults(),
+   ...overlay.envOverrides }`. Sweep is internal to the adapter.
+6. **`enforceModel` — single method, no flag.** claude = `setSessionConfigOption`, cortex = no-op + launch-pin.
+7. **`configSignatureFields(adapterSettings)`** takes the **opaque adapterSettings** (not the whole config) and
+   returns `backend`/`nativeModelId`-adjacent **stable ids only** (connection/profile/env-derived). No raw env
+   values / secrets. Must be a flat, deterministic primitive map (JSON.stringify stability).
+8. **codex/gemini = 0.12 non-goal.** codex is a native garden citizen (not ACP). `ENTWURF_ACP_FOR_CODEX=1`
+   opt-in is deliberately **not** in the default registry — a future opt-in only, debated in a separate issue.
 
-- **`configSignatureFields`의 `extra`는 flat/sorted primitive map만.** key order가 안정적이어야 signature가 turn 간 안정(JSON.stringify 결정성). nested object / 비결정 순서 금지 — `check-backends`에 이 제약을 박는다.
-- **`config.ts`의 `settings.backend` non-claude throw 가드는 cortex 포팅 전/동시 정리 필수.** 표준궤에서 routing authority는 **modelId prefix**다. `settings.backend`를 살린다면 duplicate authority가 되지 않도록 "diagnostic/compat only" 또는 "modelId prefix와 불일치 시 throw"로 한정. 지금 가드를 그대로 두면 `backend:"cortex"` 설정이 config 단계에서 막힌다.
-- **persisted resume/load가 켜질 때** persisted record와 `adapter`/`backend`/`nativeModelId` 정합을 재검토(현재 persisted off라 무관).
+**One-line spec:** single `entwurf` provider + modelId-prefix registry (prefix required for non-claude) +
+separate adapter object resolved at turn entry + `buildSessionMeta` undefined ⇒ `_meta` omitted + rich context
+always via first-user augment + codex ACP is a 0.12 non-goal.
 
-## 10. settings.backend 가드 + adapterSettings 범용 seam (확정 2026-06-25, GPT 검수 GO)
+### Step B review notes (GPT 2026-06-25) — apply when porting cortex
 
-future note 두 개를 구현으로 닫고, "cortex 말고도 많이 붙일 범용 ACP rail"을 위해 backend-owned settings seam을 표준궤에 박았다. **Opus 구현 / GPT 검수 3라운드 수렴.**
+- **`configSignatureFields`' return must be a flat, sorted-stable primitive map.** Stable key order keeps the
+  signature stable across turns (JSON.stringify determinism). No nested objects / non-deterministic order — pin
+  this in `check-acp-session-reuse`.
+- **The `config.ts` `settings.backend` guard is already syntactic-only** (§10 A) — `backend:"cortex"` is not
+  blocked at the config layer. The modelId prefix is the single routing authority; the declared-vs-routed
+  mismatch is the only throw, at the routing site in `backend.ts`.
+- **When persisted resume/load lands**, re-check `adapter`/`backend`/`nativeModelId` agreement against the
+  persisted record (persisted resume is currently off, so this is a future note).
 
-**(A) `settings.backend` = 진단 가드, routing authority 아님.**
-- `config.ts`는 `backend`를 **구문 검증만**(string이면 통과). 유효 backend 집합 화이트리스트 **금지** — registry가 소유하므로 새 backend가 config.ts 편집 불필요.
-- 의미 가드는 `backend.ts` 라우팅 지점: `resolveAcpBackendAdapter(modelId)` 직후 `config.backend !== adapter.backend → fail-loud`. **modelId prefix = 단일 routing authority.** declared-vs-routed mismatch만 throw(= unknown backend도 mismatch로 죽음).
+## 10. `settings.backend` guard + the generic `adapterSettings` seam (confirmed 2026-06-25, GPT GO)
 
-**(B) backend-specific settings는 opaque `adapterSettings`로만 운반(공통 config 무오염).**
-- `AcpBackendAdapter.resolveAdapterSettings(params: AcpAdapterSettingsParams): unknown` — adapter가 raw `entwurfProvider` 블록(`{global,project,merged}Block` + `{global,project}Path`)에서 **자기 키만** 파싱해 opaque 반환. claude=`undefined`.
-- `ResolvedAcpConfig.adapterSettings: unknown` 슬롯 1개. `cortexConnection` 등 backend-named 필드를 공통 타입에 올리는 것은 **fat-bridge 회귀로 금지.** `backend.ts`는 이 슬롯을 **절대 inspect 안 함** — 라우팅된 adapter의 메서드만 자기 타입으로 cast해 읽는다.
-- threading = **(ii)**: `loadConfig(cwd, modelId, adapter)` — turn entry에서 이미 resolve된 adapter를 config 해석에 넘긴다. config.ts는 재라우팅 안 함("routing happened twice" 회피, 코드 흐름이 modelId 단일 권위를 드러냄). `readProviderSettingsFile`는 `{settings, raw}` 반환(raw가 backend 키 운반).
+This closed the two future notes above and added a backend-owned-settings seam to the rail so backends beyond
+cortex can attach cleanly. Opus implementation / GPT review converged over three rounds.
 
-**(C) 모든 backend-owned behavior seam이 adapterSettings에 도달 가능해야 한다(GPT AMBER).**
-- `resolveLaunch(params{config})` · `buildSessionMeta(params{config})` · **`ensureOverlay(params: AcpOverlayParams{cwd,modelId,nativeModelId,config})`** · **`loadCarrier(params{mcpServerNames,config})`** 전부 `config`(⊇ adapterSettings) 접근. `configSignatureFields(adapterSettings)`는 opaque 직접 수령.
-- `launchEnvDefaults()`는 **static 유지**(보수안) — settings-derived spawn env는 `ensureOverlay(...).envOverrides`로 운반.
-- `configSignatureFields` 반환은 **flat deterministic primitive map만**(JSON.stringify 결정성 — reuse signature 안정). nested/array/비결정 순서 금지. 예: `{ <connectionId>: conn ?? null }`(backend별 stable id, secret 금지).
+**(A) `settings.backend` = diagnostic guard, NOT routing authority.**
+- `config.ts` validates `backend` **syntactically only** (string → pass). No value whitelist — the registry
+  owns the valid-backend set, so a new backend needs no `config.ts` edit.
+- The semantic guard lives at the `backend.ts` routing site: right after `resolveAcpBackendAdapter(modelId)`,
+  `config.backend !== adapter.backend → fail-loud`. **modelId prefix = single routing authority**; only a
+  declared-vs-routed mismatch throws (an unknown backend dies as a mismatch).
 
-**(D) 기여자 표면(레일 track 완성).** PR #40 cortex = **`adapters/cortex.ts`(또는 cortexAdapter) + registry 등록 + cortex 게이트만** 추가. `backend.ts`/`acp-client`/`event-mapper`/`session-store`/`config.ts` 공통층 **무수정.** cortex 필드의 실제 검증은 cortex adapter PR/게이트 몫.
+**(B) Backend-specific settings travel ONLY via the opaque `adapterSettings` (common config stays clean).**
+- `AcpBackendAdapter.resolveAdapterSettings(params: AcpAdapterSettingsParams): unknown` — the adapter parses
+  **only its own keys** off the raw `entwurfProvider` blocks (`{global,project,merged}Block` + paths) and
+  returns an opaque value. claude returns `undefined`.
+- `ResolvedAcpConfig.adapterSettings: unknown` is one slot. Putting backend-named fields (e.g.
+  `cortexConnection`) on the common type is a **fat-bridge regression and is forbidden**. `backend.ts` NEVER
+  inspects this slot — only the routed adapter's methods read it, casting their own type back.
+- Threading: `loadConfig(cwd, modelId, adapter)` hands the already-resolved adapter to config parsing, so
+  `config.ts` never re-routes (the model id stays the single authority). `readProviderSettingsFile` returns
+  `{ settings, raw }` — the raw block carries the backend keys.
 
-**게이트:** `check-acp-config`에 settings.backend 구문 검증 4종 + **페이크 어댑터 seam plumbing**(opaque 안착 / raw 블록 hook 도달 / backend-specific 키가 공통 config에 **절대 안 뜸** / no-settings→undefined). `check-acp-session-reuse`는 adapter 배선 + S2g passthrough + signature 민감도. **typecheck 3-config + pnpm check 전체 EXIT 0.**
+**(C) Every backend-owned behavior seam can reach `adapterSettings`.**
+- `resolveLaunch` · `buildSessionMeta` · `ensureOverlay` · `loadCarrier` all receive `config` (⊇
+  `adapterSettings`). `configSignatureFields(adapterSettings)` receives the opaque value directly.
+- `launchEnvDefaults()` stays **static**; settings-derived spawn env rides `ensureOverlay(...).envOverrides`.
+- `configSignatureFields` returns a **flat deterministic primitive map only** (e.g.
+  `{ cortexConnection: conn ?? null }`) — stable id per backend, no secrets.
+
+**(D) Contributor surface (rail track complete).** PR #40 cortex = **`cortexAdapter` (inline or its own module) +
+registry registration + cortex gates only**. `backend.ts` / `acp-client.ts` / `event-mapper.ts` /
+`session-store.ts` / `config.ts` (the common layer) are **untouched**. The real verification of cortex fields is
+the cortex adapter PR + its gates.
+
+**Gates that already exist for this seam:** `check-acp-config` carries the `settings.backend` syntactic checks +
+fake-adapter seam plumbing (opaque lands / raw block reaches the hook / backend-specific keys NEVER appear on
+the common config / no-settings → undefined). `check-acp-session-reuse` covers adapter wiring + settings
+passthrough + signature sensitivity. `pnpm typecheck` (3 configs) + `pnpm check` are EXIT 0.
