@@ -179,25 +179,42 @@ PY
 # while the top-level dir still looks present.
 preflight_dep_integrity() {
   command -v node >/dev/null 2>&1 || { fail "node not on PATH — cannot verify repo dependency integrity"; exit 1; }
-  # node_modules entries are pnpm symlinks; accessSync follows the link and
-  # asserts each package.json exists. This catches BOTH a missing install
-  # (clone with no `pnpm install`) and a dir move/rename that left the symlink
-  # store dangling — while staying immune to per-package "exports" maps that
-  # forbid a bare-root import (@modelcontextprotocol/sdk) or a ./package.json
-  # subpath import (@earendil-works/pi-ai). A bare `test -d node_modules` would
-  # miss the dir-move case (top dir present, store broken underneath).
-  # Probe set = every runtime hard dep the wired pi-extensions / MCP bridge /
-  # ACP backend root-import or spawn-resolve: package.json dependencies + the
-  # peerDep pi-* trio. Build-only devDeps (biome/typescript/husky/@types) are
-  # excluded — a broken one does not break a wired install at runtime.
+  # Each wired pi-extension / MCP bridge / ACP backend root-imports its bundled
+  # runtime deps at load/spawn time. Assert they actually resolve from the
+  # package's location BEFORE writing settings, so a broken install fails loud
+  # here instead of surfacing later as a dead MCP bridge (entwurf-bridge ✘) or an
+  # ERR_MODULE_NOT_FOUND at runtime.
+  #
+  # Resolution must follow Node's OWN algorithm, because the package lives in two
+  # layouts: a pnpm clone (deps in $REPO_DIR/node_modules) OR a pi-managed
+  # `pi install npm:@junghanacs/entwurf` (deps HOISTED to an ancestor node_modules,
+  # e.g. ~/.pi/agent/npm/node_modules, with NO package-local node_modules). A
+  # cwd-relative `node_modules/<dep>` probe only sees the clone layout and wrongly
+  # rejects every pi-managed npm install. So walk Node's real module-resolution
+  # paths (Module._nodeModulePaths) and accessSync each candidate package.json:
+  # exports-immune (no bare-root / ./package.json import) and hoist-aware, while
+  # still catching a pnpm dir-move that left the symlink store dangling
+  # (accessSync follows the link).
+  #
+  # Probe set = the BUNDLED runtime `dependencies` only. The `@earendil-works/pi-*`
+  # peer trio is intentionally EXCLUDED: pi-managed installs omit peers
+  # (--legacy-peer-deps) and the pi loader provides that runtime itself, so the
+  # trio is legitimately absent from node_modules on the npm path. pi runtime
+  # presence/version is covered by check-pi-runtime-version / check-pi-import-surface.
   local probe=(
-    "@earendil-works/pi-ai" "@earendil-works/pi-coding-agent" "@earendil-works/pi-tui"
     "@modelcontextprotocol/sdk" "@agentclientprotocol/sdk" "@agentclientprotocol/claude-agent-acp"
     "@anthropic-ai/sdk" "zod"
   )
   local missing=() dep
   for dep in "${probe[@]}"; do
-    if ! (cd "$REPO_DIR" && node -e "require('fs').accessSync('node_modules/$dep/package.json')") >/dev/null 2>&1; then
+    if ! (cd "$REPO_DIR" && node -e '
+      const M = require("module"), fs = require("fs"), path = require("path");
+      const dep = process.argv[1];
+      for (const nm of M._nodeModulePaths(process.cwd())) {
+        try { fs.accessSync(path.join(nm, dep, "package.json")); process.exit(0); } catch {}
+      }
+      process.exit(1);
+    ' "$dep") >/dev/null 2>&1; then
       missing+=("$dep")
     fi
   done
@@ -1402,15 +1419,19 @@ check_install_preflight() {
   ok "[check-install-preflight] missing node_modules → fails before writing settings"
 
   # negative 2 — representative dangling symlink (dir move): node_modules/ EXISTS
-  # (a bare `test -d` would pass) with sdk/zod symlinked live, but a representative
-  # dep (@earendil-works/pi-ai) dangles. Asserts the dir-move blind spot is closed
-  # AND that the failure names the broken dep.
+  # (a bare `test -d` would pass) with the other runtime deps symlinked live, but a
+  # representative dep (@anthropic-ai/sdk) dangles. Asserts the dir-move blind spot
+  # is closed AND that the failure names the broken dep. Uses a BUNDLED runtime dep
+  # because the @earendil-works/pi-* peer trio is loader-provided and no longer part
+  # of the install preflight probe set.
   fake=$(mktemp -d); proj=$(mktemp -d)
   cp "$REPO_DIR/run.sh" "$fake/run.sh"
-  mkdir -p "$fake/node_modules/@earendil-works" "$fake/node_modules/@modelcontextprotocol"
+  mkdir -p "$fake/node_modules/@modelcontextprotocol" "$fake/node_modules/@agentclientprotocol" "$fake/node_modules/@anthropic-ai"
   ln -s "$REPO_DIR/node_modules/@modelcontextprotocol/sdk" "$fake/node_modules/@modelcontextprotocol/sdk"
+  ln -s "$REPO_DIR/node_modules/@agentclientprotocol/sdk" "$fake/node_modules/@agentclientprotocol/sdk"
+  ln -s "$REPO_DIR/node_modules/@agentclientprotocol/claude-agent-acp" "$fake/node_modules/@agentclientprotocol/claude-agent-acp"
   ln -s "$REPO_DIR/node_modules/zod" "$fake/node_modules/zod"
-  ln -s /nonexistent/pnpm-store/pi-ai "$fake/node_modules/@earendil-works/pi-ai"
+  ln -s /nonexistent/pnpm-store/anthropic-sdk "$fake/node_modules/@anthropic-ai/sdk"
   rc=0; out=$("$fake/run.sh" install "$proj" 2>&1) || rc=$?
   if [ "$rc" -eq 0 ]; then
     fail "[check-install-preflight] dangling dep symlink did NOT fail install (test -d blind spot)"; rm -rf "$fake" "$proj"; exit 1
@@ -1421,8 +1442,8 @@ check_install_preflight() {
   if ! printf '%s' "$out" | grep -q "repo dependency integrity check failed"; then
     fail "[check-install-preflight] dangling symlink failed for the WRONG reason:"; echo "$out"; rm -rf "$fake" "$proj"; exit 1
   fi
-  if ! printf '%s' "$out" | grep -q "@earendil-works/pi-ai"; then
-    fail "[check-install-preflight] dangling case did not name the broken dep (@earendil-works/pi-ai):"; echo "$out"; rm -rf "$fake" "$proj"; exit 1
+  if ! printf '%s' "$out" | grep -q "@anthropic-ai/sdk"; then
+    fail "[check-install-preflight] dangling case did not name the broken dep (@anthropic-ai/sdk):"; echo "$out"; rm -rf "$fake" "$proj"; exit 1
   fi
   rm -rf "$fake" "$proj"
   ok "[check-install-preflight] representative dangling symlink (test -d blind spot) → fails before writing settings, names the dep"
@@ -1861,9 +1882,13 @@ check_pack_install() {
   # the consumer project. Peer deps are pinned to the 0.80.x release
   # baseline so the smoke matches the same shape an external pi user
   # would have after `pi install`.
-  local tmp
+  local tmp npm_tmp
   tmp=$(mktemp -d -t entwurf-install-smoke.XXXXXX)
-  trap 'rm -rf "$tmp" "$tgz_path"' RETURN
+  # Separate tree for the npm-managed regression below: npm install must NOT be
+  # nested under $tmp, whose pnpm-add node_modules/package.json would make npm
+  # climb the parent and choke ("Cannot read properties of null").
+  npm_tmp=$(mktemp -d -t entwurf-npm-managed.XXXXXX)
+  trap 'rm -rf "$tmp" "$npm_tmp" "$tgz_path"' RETURN
 
   printf '%s\n' '{ "name": "entwurf-install-smoke", "version": "0.0.0", "private": true }' > "$tmp/package.json"
 
@@ -1933,6 +1958,51 @@ check_pack_install() {
     fi
   done
   echo "[check-pack-install] pi loader smoke pass (entwurf registered, claude-sonnet-4-6 + claude-opus-4-8 anchor)"
+
+  # npm-managed `run.sh install` regression — the README's PRIMARY install path,
+  # `pi install npm:@junghanacs/entwurf` then `run.sh install .`. This layout
+  # differs from the pnpm-add smoke above in the exact way that broke the install:
+  # pi installs via npm with --legacy-peer-deps, so the package lands under a
+  # managed prefix (~/.pi/agent/npm/node_modules/@junghanacs/entwurf), runtime deps
+  # HOIST to the sibling node_modules, there is NO package-local node_modules, and
+  # the pi peer trio is absent (loader-provided). The old cwd-relative
+  # preflight_dep_integrity rejected every dep in this layout, so the documented
+  # primary path failed on first use while every dry-run/pnpm-add gate stayed green.
+  # Prove `run.sh install` actually writes settings from the hoisted layout. HOME is
+  # redirected to a throwaway dir so ensure_agent_dir_symlinks operates on a temp
+  # ~/.pi/agent and never touches (or fails against) the operator's real targets link.
+  if ! command -v npm >/dev/null 2>&1; then
+    fail "[check-pack-install] npm not on PATH — cannot run npm-managed install regression"
+    return 1
+  fi
+  local npmroot="$npm_tmp/npmroot" npmhome="$npm_tmp/npmhome" npmproj="$npm_tmp/npmproj" npm_log npm_pkg wire_log
+  mkdir -p "$npmroot" "$npmhome" "$npmproj"
+  npm_log=$(cd "$npmroot" && npm install "$tgz_path" --legacy-peer-deps --no-audit --no-fund 2>&1) || {
+    fail "[check-pack-install] npm-managed install failed:"
+    echo "$npm_log" | tail -10 | sed 's/^/    /' >&2
+    return 1
+  }
+  npm_pkg="$npmroot/node_modules/@junghanacs/entwurf"
+  if [ ! -x "$npm_pkg/run.sh" ]; then
+    fail "[check-pack-install] npm-managed layout missing executable run.sh (postinstall-chmod did not run?) at $npm_pkg"
+    return 1
+  fi
+  wire_log=$(HOME="$npmhome" "$npm_pkg/run.sh" install "$npmproj" 2>&1) || {
+    fail "[check-pack-install] npm-managed run.sh install failed (preflight rejected hoisted deps?):"
+    echo "$wire_log" | tail -15 | sed 's/^/    /' >&2
+    return 1
+  }
+  if [ ! -f "$npmproj/.pi/settings.json" ]; then
+    fail "[check-pack-install] npm-managed run.sh install did not write settings.json:"
+    echo "$wire_log" | tail -15 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! grep -q "node_modules/@junghanacs/entwurf" <<<"$wire_log"; then
+    fail "[check-pack-install] npm-managed install did not report the npm package source:"
+    echo "$wire_log" | tail -15 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] npm-managed install regression pass (hoisted-dep run.sh install wrote settings)"
 
   ok "[check-pack-install] publish install smoke pass"
   return 0
