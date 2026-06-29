@@ -1,77 +1,72 @@
-# NEXT — entwurf 0.12.1 pi-decouple lane
+# NEXT — entwurf 0.12.1 pi-decouple handoff
 
 > 나침반이지 DB가 아니다: **현재 위치 · 다음 한 걸음 · 넘으면 안 되는 선**만 둔다.
 > 현재+미래 방향과 설계 SSOT = **`ROADMAP.md`**. 닫힌 변경 핵심 = **`CHANGELOG.md`**. 세션별 process history = git log.
 
-## NOW — 0.12.0 published, 0.12.1 pi-decouple 착수
+## NOW — A/B landed, C is intentionally RED until JS dist
 
 - `0.12.0` 배포 완료 (`@junghanacs/entwurf@0.12.0`, npm latest, 2026-06-29).
-- **설치면 검증에서 결함 발견** (GLG 지시 + GPT 검수, 둘 다 독립 확인):
-  - 명제: **entwurf = harness-중립 npm 패키지여야 한다. pi는 4번째 하네스 lane일 뿐.** "pi install"이 아니라 "npm 설치"에서 끝나야 함. pi-package 정체성은 강등돼도 좋다 (rename의 이유).
-  - 결함: 메타브릿지(`mcp/entwurf-bridge`)가 **pi 없이 boot 못 함** — transitive value-import로 pi가 박혀 있음:
-    - **pi-ai**: `bridge index → fact-provider → entwurf-v2-contract.ts:44` (`StringEnum,Type` from `@earendil-works/pi-ai`, 모듈 top-level 358/368에서 즉시 실행)
-    - **pi-coding-agent**: `bridge index → v2-surface:25 → v2-production:42` (`preflight` value import) `→ entwurf-preflight.ts:46-51` (`ProjectTrustStore` 등)
-  - 현재 게이트가 못 잡은 이유: devDeps/peers가 깔린 상태로만 돌아서.
-- 추가 발견: pi `>=0.80.2` floor 미달 시(예: hejdev6 0.79.8) 설치는 성공하나 **provider 무음 미등록**. README Install엔 floor 안내 없음(clean-host 문서에만).
-- 설계 잠금 완료 (Opus + GPT `…e06002` 수렴). cut 순서 A→B→C→D 확정.
+- main is ahead with the 0.12.1 A/B commits:
+  - `81fdeea docs(next): scope 0.12.1 pi-decouple lane handoff`
+  - `bd9270e feat(bridge): boot the meta-bridge pi-free (0.12.1 A+B)`
+- A/B status:
+  - ✅ `scripts/check-entwurf-bridge-pi-free.ts` + run.sh verb + `pnpm check` pipeline.
+  - ✅ `entwurf-v2-contract.ts` is pi-free core; TypeBox schema moved to `entwurf-v2-contract-schema.ts`.
+  - ✅ `entwurf-v2-production.ts` preflight is lazy (`await import`) and decider preflight seam is MaybePromise.
+  - ✅ Last reported verification after A/B: `pnpm check` rc=0, 3-config typecheck/lint clean, bridge eager value closure pi-free.
+- C packaging attempt exposed a deeper pre-existing install bug:
+  - Node native `--experimental-strip-types` **refuses `.ts` under `node_modules`** (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`; help says `no-node-modules`).
+  - Therefore 0.12.0’s documented npm-installed Claude Code path (`bash <pkg>/mcp/entwurf-bridge/start.sh`) was already broken when `<pkg>` lives under `node_modules`.
+  - Local clone worked because it is outside `node_modules`; pi extension worked because pi uses its own loader/jiti.
+- Current local dirty WIP (do **not** commit as-is):
+  - `package.json`: `bin`, optional peers, keyword reorder.
+  - `mcp/entwurf-bridge/start.sh`: symlink-aware bin path fix, still points to `.ts` and therefore still fails from installed package.
+  - `run.sh`: neutral pi-free npm install smoke; currently red for the right reason until JS dist exists.
 
-## 진행 — A·B 완료 (green), 다음은 C·D
+## 다음 한 걸음 — C 정석 해법
 
-- ✅ **A** `scripts/check-entwurf-bridge-pi-free.ts` + run.sh verb + `pnpm check` 파이프라인. bridge boot eager value-closure에 pi 0개 증명.
-- ✅ **B-1** `entwurf-v2-contract.ts` pi-free core 정화 + `entwurf-v2-contract-schema.ts`(pi-ai TypeBox) 분리. root tsconfig에 `.ts`-fence exclude 추가, gate import repoint.
-- ✅ **B-2** `entwurf-v2-production.ts` `preflight` → `lazyProductionPreflight`(`await import`), `entwurf-v2-decider.ts` `preflightForCwd` MaybePromise + resume 분기 `await`.
-- ✅ 검증: `pnpm check` rc=0 (60+ 게이트), typecheck 3-config 클린, lint 클린. bridge boot pi-free (28 모듈).
-- ⬜ **C** packaging (npm-primary) — 아래
-- ⬜ **D** README lane 재구성 + garden-id primer — 아래
+1. **Do not commit the current C WIP until the installed bridge boots from `node_modules`.** The neutral smoke must stay RED until the fix is real.
+2. Add a distribution JS artifact for the MCP bridge:
+   - Preferred: a dedicated tsc emit for the bridge graph into `mcp/entwurf-bridge/dist/` (JS tree, not Node strip-types).
+   - Acceptable: esbuild with code splitting/chunks. Avoid a naive single bundle if it hoists or inlines the lazy preflight edge.
+3. Preserve dual-mode launcher:
+   - published/npm install: `start.sh` runs `dist/index.js` with plain `node`.
+   - dev clone: if `dist/index.js` is absent, fallback to `node --experimental-strip-types src/index.ts`.
+4. Keep lazy pi boundary:
+   - eager bridge boot must not import `@earendil-works/*`.
+   - owned-outcome spawn-bg resume may lazy-load `entwurf-preflight` and require the pi lane.
+5. Extend packaging gates:
+   - tarball contains `dist/` JS entry/chunks and `bin`.
+   - neutral `npm install <tgz>` without pi peers leaves `node_modules/@earendil-works` absent.
+   - `node_modules/.bin/entwurf-bridge` answers MCP `tools/list` with `entwurf_v2`.
+   - existing pi loader smoke remains the pi/ACP lane proof.
+6. Then commit C. After C is green, do D docs.
 
-## 다음 한 걸음 — 0.12.1 구현 (main 직접, A→B→C→D)
+## D — README/docs after C green
 
-**A. 게이트 먼저 (회귀 가드, RED 상태로) — ✅ 완료**
-- `scripts/check-entwurf-bridge-pi-free.ts` 신규:
-  - static: `mcp/entwurf-bridge/src/index.ts`의 **eager static value-import closure**에 `@earendil-works/*` 0개 (`import type` + dynamic `await import` 제외)
-  - runtime smoke: pi peers 없는 tmp에 tarball install → `entwurf-bridge`가 MCP `tools/list`까지 boot (최종 권위)
-- `run.sh` verb 등록 + `check` 파이프라인 + release-gate 편입
+- Reframe Install as **neutral npm/npx base → harness-specific wiring**.
+- Move `pi install` under “pi adapter / ACP plugin lane”; state pi `>=0.80.2 <0.81` floor and the silent-misregistration risk on older pi.
+- Add Concept primer entry:
+  - **Garden / garden id** — the garden is the shared address space where independent harness sessions become citizens without losing their own runtime or transcript. A garden id is the stable address of one such citizen (for pi, a garden-native session id like `YYYYMMDDTHHMMSS-<6hex>`; for native harnesses, a meta-session id minted by the SessionStart hook). It is not a worker name and not proof that pi owns the session. The same-looking id may name a live control socket, a dormant pi record, or a mailbox-backed native session, so callers discover facts with `entwurf_peers` and deliver with `entwurf_v2` instead of choosing a transport by hand.
 
-**B. 코드 분리 (boot path에서 pi 제거)**
-- `pi-extensions/lib/entwurf-v2-contract.ts` → **pi-free core로 정화** (pi-ai import 제거; 상수/`isLivenessSupported`/dispatch/receipt types 유지)
-- `pi-extensions/lib/entwurf-v2-contract-schema.ts` **신규** → `StringEnum,Type` + `EntwurfV2InputSchema`/`Receipt*Schema`만; "MCP bridge must not import this" 주석
-- `pi-extensions/lib/entwurf-v2-decider.ts` → `preflightForCwd: MaybePromise<PreflightOutcome>`, resume 분기 `await` 1회
-- `pi-extensions/lib/entwurf-v2-production.ts` → `preflight` eager import 제거 → `lazyProductionPreflight` (`await import("./entwurf-preflight.ts")`); factory는 **sync 유지**, `ProductionEntwurfV2Seams.preflight`도 MaybePromise
-- `scripts/check-entwurf-v2-contract.ts` → 스키마 import를 새 파일로
-- (선택, 더 깨끗한 경계) `entwurf-preflight-types.ts` 분리 — GPT는 게이트가 `import type` 제외하면 1안으로 충분하다고 봄
+## hvkiefer / PR #40 답변
 
-**C. packaging (npm-primary)**
-- `package.json`: `bin: { "entwurf-bridge": "mcp/entwurf-bridge/start.sh" }` (= 主 진입점), `peerDependenciesMeta`로 pi peers + typebox optional, keywords 재정렬(`mcp`/`meta-bridge`/`entwurf` 앞, `pi-*` 뒤)
-- `check-pack-install`에 **neutral npm install smoke** 추가 (pi peers 없이 install → bin/`npx --package @junghanacs/entwurf entwurf-bridge` → `tools/list`). 기존 pi loader smoke는 pi lane으로 유지
-- typebox 실제 제거는 별도 cleanup
-
-**D. README + docs**
-- Install 헤드라인을 **npm/npx + `claude mcp add ... npx --package @junghanacs/entwurf entwurf-bridge`**로. `pi install`은 하위 "pi / ACP plugin lane" 섹션으로 강등. pi >=0.80.2 floor + 무음실패 경고 명시
-- Concept primer에 **garden-id 문단** 추가 (GPT 초안 채택)
-
-**검증 순서:** A(RED) → B → A 그린 → `pnpm check` → C → `check-pack-install`(+neutral smoke) → D.
-
-## 별개 deliverable — hvkiefer / PR #40 답변 (commit과 분리)
-
-- 0.12.1 lane 분리가 그 답변을 선명하게 함: **Cortex = ACP backend 기여 → pi/ACP-plugin lane** (`pi install` + pi floor 맞음). neutral 메타브릿지 lane은 분리 중.
-- 영어 초안은 Opus+GPT 합의본 존재 (lane 구분 한 줄 추가 예정). **외부 기여자 대상이라 GLG 승인 후 포스팅.** 이슈 #44는 안 건드림(GLG 마인드셋 노트).
-
-## post-0.12 follow-ups
-
-- v2-native demo/GIF retake (현재 demo scripts는 v1 흐름).
-- bundled-MCP deterministic split (`smoke-acp-bundled-mcp-live` MUST/BEHAVIOR 분리).
-- fresh sibling minting (`spawn-fresh` lane), persisted ACP resume/load.
+- Cortex is an **ACP backend contribution**, so it lives on the pi/ACP-plugin lane (`pi install` + pi floor is correct there).
+- Neutral meta-bridge install lane is being separated so pi is not the project boundary.
+- Post only after GLG approval; do not post from agent.
 
 ## 넘으면 안 되는 선
 
+- Work on `main`; do **not** create a branch for this lane.
 - `core.hooksPath` 건드리지 않음. `--no-verify` 금지.
-- push / tag / npm publish / old package deprecate는 GLG 결정·실행 전용. agent는 working tree + commit까지.
-- 외부 기여자(PR #40) 답변 포스팅은 GLG 승인 후.
-- 실패한 게이트를 기준 낮춰 통과시키지 않는다. retier 필요 시 deterministic replacement를 같이 만든다.
-- 0.12.1 핵심 불변식: bridge boot는 pi 없이 떠야 한다. owned-outcome spawn-bg resume만 pi 필요(정직한 runtime error 허용).
+- Do not commit a RED neutral install smoke by lowering or skipping it.
+- push/tag/npm publish/old package deprecate only when GLG explicitly asks. npm publish/tag still GLG-only.
+- 0.12.1 핵심 불변식: bridge boot is pi-free; only owned-outcome spawn-bg resume needs the pi lane.
 
 ## 참조
 
-- 설계 SSOT: `ROADMAP.md` / 닫힌 변경: `CHANGELOG.md`
+- 설계 SSOT: `ROADMAP.md`
+- 닫힌 변경: `CHANGELOG.md`
 - 검증 calibration: `VERIFY.md`, `BASELINE.md`, `DELIVERY.md`
-- repo baseline: `AGENTS.md` / ACP 레일: `docs/acp-backend-rail.md`
+- repo baseline: `AGENTS.md`
+- ACP 레일: `docs/acp-backend-rail.md`
