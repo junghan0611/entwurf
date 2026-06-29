@@ -1,5 +1,7 @@
 # pi-shell-acp
 
+> **Successor project:** `pi-shell-acp` continues as [`@junghanacs/entwurf`](https://www.npmjs.com/package/@junghanacs/entwurf) / [github.com/junghan0611/entwurf](https://github.com/junghan0611/entwurf). The new `entwurf` package is the 0.12+ line: the same work, renamed around the garden-citizen dispatch substrate rather than the pi adapter. Use `npm:@junghanacs/entwurf` for new installs.
+
 Use Claude Code and Codex through Agent Client Protocol (ACP) inside pi — and make native Claude Code sessions garden-addressable peers.
 
 ![pi-shell-acp — a reproducible agent harness for pi](docs/assets/pi-shell-acp-hero.jpg)
