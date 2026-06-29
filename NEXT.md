@@ -1,33 +1,26 @@
-# NEXT — entwurf 0.12.2 meta-bridge install portability
+# NEXT — entwurf post-0.12.2: PR #40 cortex 재안착 + floor 검증
 
 > 나침반이지 DB가 아니다: **현재 위치 · 다음 한 걸음 · 넘으면 안 되는 선**만 둔다.
 > 현재+미래 방향과 설계 SSOT = **`ROADMAP.md`**. 닫힌 변경 핵심 = **`CHANGELOG.md`**. 세션별 process history = git log.
 
-## DONE — 0.12.1 released
+## DONE — 0.12.2 released
 
-- tag `v0.12.1` (origin), npm `@junghanacs/entwurf@0.12.1` publish, GitHub release 모두 완료.
-- hejdev6(오라클)에 릴리즈본 `pnpm add -g` 설치 검증: bins/dist/pi-free/`tools/list` 부팅 전부 통과.
+- **0.12.2** tag `v0.12.2` (origin) + npm `@junghanacs/entwurf@0.12.2` publish 완료. 메타브리지 install 이식성 회귀 2건(구버전 claude closed-schema manifest / pnpm-store 해시 MCP 경로 stale) + 신규 `check-meta-manifest-schema.py` 게이트 포함.
+- **0.12.1** tag + npm + GitHub release 완료. hejdev6(오라클) `pnpm add -g` 설치 검증(bins/dist/pi-free/`tools/list`) 통과.
+- **PR #40 cortex 재안착 준비 (이번 세션):** `docs/acp-backend-rail.md`를 as-built 0.12 기준으로 검토·영어 재작성(commit `4e9bcb6`, push). PR #40에 영어 개발 가이드 댓글 게시 — 실 네임스페이스(`pi-extensions/lib/acp/`)·`cortexAdapter`+`ADAPTERS` 등록·`check-acp-*` 게이트로 안내.
 
-## NOW — 0.12.2 WIP in working tree (uncommitted), GPT 검수 완료 · GLG 컷 대기
+## NOW — PR #40 cortex 어댑터 재안착 (hvkiefer 개발 대기)
 
-0.12.1 설치 검증 중 발견한 **메타브리지 install 이식성 회귀 2건**을 닫는 WIP. commit/tag/push/publish 안 함.
+0.12.2 릴리즈는 기본 마무리. 활성 레인 = PR #40을 0.12 레일 위로 다시 받아내기.
 
-**버그 (hejdev6 claude 2.1.97에서 `entwurf install-meta-bridge` rc=1):**
-- `claude plugin validate`는 **closed schema**(미지 키 거부). `marketplace.json` 루트 `description`이 구버전 claude에 미등록 → `Unrecognized key`. thinkpad(2.1.195)는 허용 → 신버전 단일 박스 검증이 회귀를 가렸다.
-- installed 호스트의 user-scope MCP가 pnpm store **해시 경로**(`$REPO/mcp/.../start.sh`)를 박아 peer/버전 바뀌면 stale. SSOT는 `meta-bridge-state.py::desired_mcp()` (apply가 덮어씀).
-
-**수정 (working tree, `pnpm check` green):**
-- A `marketplace.json` 루트 `description` 제거 (minimal-manifest). 설명은 install.sh 주석.
-- B `desired_mcp()` + `install.sh`의 `claude mcp add` dual-mode: installed(`*/node_modules/@junghanacs/entwurf`)→안정적 `entwurf-bridge` bin / clone→`start.sh`. env 2개 보존. 판별은 path-suffix(절대 `command -v` 아님 — clone에서 stale 전역 bin 위험).
-- C1 신규 `scripts/check-meta-manifest-schema.py` — **CLI 버전 독립** 정적 가드: manifest 키셋 ⊆ 최저-Claude 검증 최소집합 + desired_mcp dual-mode 단언. `pnpm check`/run.sh dispatch/usage 배선. 음성테스트로 그 버그 잡는 것 확인.
-
-**경험적 증명:** hejdev6 floor(claude 2.1.97)에서 root `description` 제거판 전체 manifest validate **통과(exit 0, 무해 경고만)**. hooks.json `asyncRewake`/`timeout` 다른 취약 키 없음 확인.
+- 우리 쪽 준비 끝: 레일 doc 정합 + PR 개발 가이드 댓글. 레일은 이미 green(claude 어댑터 + §9/§10 구현, `check-acp-*` 통과).
+- 공은 hvkiefer에게: 0.11.0 fat-bridge가 삭제됐으니 rebase 아님 → `cortexAdapter` 1개 신규(`pi-extensions/lib/acp/backend-adapter.ts`) + `ADAPTERS` 등록 + curated cortex 모델 + `SNOWFLAKE_HOME` overlay + `check-acp-*` cortex 단언 + `smoke-acp-cortex-live`. 공통 turn loop 무수정.
+- **미정 디테일 1건(가이드에 명시):** carrier 부재 백엔드(cortex)의 operator engraving이 first-user augment(`augment.ts`)에 합류하는 방식 — 현재 augment는 engraving을 안 실음. cortex PR이 그 경로를 정의해야 함.
 
 ## 다음 한 걸음
 
-1. **GLG 컷 승인/prepare-release 대기** — Opus 구현 + GPT 검수 완료. patch caution 4건(desired_mcp+install.sh 동시·path-suffix·env보존·no $comment)과 installed-location self-fail fix, hook event subset guard까지 반영 확인.
-2. 승인 시: `commit` 스킬 → 버전 0.12.2 bump → `/make-release 0.12.2` → npm publish.
-3. 릴리즈 후 hejdev6 clean reinstall(`pnpm add -g @junghanacs/entwurf@0.12.2` → `entwurf install-meta-bridge` → `doctor-meta-bridge`)로 floor 호스트 end-to-end 확정.
+1. **hvkiefer cortex 어댑터 PR 갱신 대기** → 들어오면 `check-acp-provider-surface`/`-config`/`-overlay`/`-tool-surface`/`-session-reuse`/`-carrier-augment` + `smoke-acp-cortex-live` 기준 리뷰. 공통층 무수정 불변식 확인.
+2. **0.12.2 floor 검증 (post-release, 미완):** hejdev6 clean reinstall(`pnpm add -g @junghanacs/entwurf@0.12.2` → `entwurf install-meta-bridge` → `doctor-meta-bridge`)로 floor 호스트 end-to-end 확정.
 
 ## Follow-up (이번 컷 blocker 아님 — GPT 합의 설계)
 
