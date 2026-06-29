@@ -6,6 +6,8 @@
 
 [![npm](https://img.shields.io/npm/v/@junghanacs/entwurf?logo=npm)](https://www.npmjs.com/package/@junghanacs/entwurf) · maintained by [junghanacs.com](https://junghanacs.com/)
 
+npm package: <https://www.npmjs.com/package/@junghanacs/entwurf>
+
 > **Public, active development.** Real working code, still young. Verify it in your own workflow before relying on it all day. Evidence calibration: [VERIFY.md](./VERIFY.md); native async-delivery capability levels: [DELIVERY.md](./DELIVERY.md).
 
 > **Current state for 0.12.0.** This repo is **entwurf-core (v2 dispatch) + a meta-bridge + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code is shipped through the meta-bridge; pi is shipped through the control-socket adapter; Codex and Antigravity (`agy`) reach the garden with verified delivery probes, documented per launch mode in [DELIVERY.md](./DELIVERY.md), with shipped adapter/install lanes landing after the 0.12.0 doc cut. The ACP plugin is Claude-first; Cortex/vendor-governed ACP backends are future lanes.

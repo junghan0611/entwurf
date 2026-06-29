@@ -108,7 +108,6 @@ interface PromptCall {
 // absent mcpServers map (check-acp-config tests the real resolver; this gate
 // only needs internal consistency between loadConfig and the manual records).
 const EMPTY_MCP_HASH = "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945";
-// biome-ignore lint/suspicious/noExplicitAny: ResolvedAcpConfig fake shape
 const DEFAULT_RESOLVED_CONFIG: any = {
 	settingSources: [],
 	strictMcpConfig: true,
@@ -121,27 +120,22 @@ const DEFAULT_RESOLVED_CONFIG: any = {
 	disallowedTools: [],
 };
 
-// biome-ignore lint/suspicious/noExplicitAny: ResolvedAcpConfig fake shape
 function makeHarness(recordDir: string, config: any = DEFAULT_RESOLVED_CONFIG, emitToolCall = false) {
 	const children: ReturnType<typeof makeFakeChild>[] = [];
 	const promptCalls: PromptCall[] = [];
-	// biome-ignore lint/suspicious/noExplicitAny: captured newSession params
 	const newSessionCalls: any[] = [];
 	let newSessionSeq = 0;
 	let noticeSeq = 0;
 	let block: Promise<void> | null = null;
 
-	// biome-ignore lint/suspicious/noExplicitAny: fake seam objects
 	const makeConnection = (handlers: any) => ({
 		initialize: async () => ({ agentCapabilities: {} }),
-		// biome-ignore lint/suspicious/noExplicitAny: fake seam objects
 		newSession: async (params: any) => {
 			newSessionCalls.push(params);
 			newSessionSeq++;
 			return { sessionId: `ACP-${newSessionSeq}` };
 		},
 		setSessionConfigOption: async () => ({}),
-		// biome-ignore lint/suspicious/noExplicitAny: fake seam objects
 		prompt: async ({ sessionId, prompt }: any) => {
 			promptCalls.push({ sessionId, text: prompt.map((b: { text: string }) => b.text).join("\n") });
 			if (block) await block;
@@ -169,7 +163,6 @@ function makeHarness(recordDir: string, config: any = DEFAULT_RESOLVED_CONFIG, e
 			children.push(c);
 			return c;
 		},
-		// biome-ignore lint/suspicious/noExplicitAny: fake seam objects
 		createConnection: (_child: any, handlers: any) => makeConnection(handlers),
 		lifecyclePolicy: () => "process-scoped",
 		loadConfig: () => config,
@@ -190,7 +183,6 @@ function makeHarness(recordDir: string, config: any = DEFAULT_RESOLVED_CONFIG, e
 }
 
 /** The config signature backend computes from a given resolved config (S2g). */
-// biome-ignore lint/suspicious/noExplicitAny: store module imported by URL
 function sigFor(store: any, modelId: string, config: any, engraving = ""): string {
 	return store.bridgeConfigSignature({
 		backend: "claude",
@@ -273,15 +265,11 @@ try {
 	copyFileSync("pi-extensions/lib/acp/prompts/engraving.md", resolve(promptsOut, "engraving.md"));
 	const backendUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href;
 	const storeUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/session-store.js")).href;
-	// biome-ignore lint/suspicious/noExplicitAny: compiled module imported by URL
 	const backend = (await import(backendUrl)) as any;
-	// biome-ignore lint/suspicious/noExplicitAny: compiled module imported by URL
 	const store = (await import(storeUrl)) as any;
 	const configUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/config.js")).href;
-	// biome-ignore lint/suspicious/noExplicitAny: compiled module imported by URL
 	const configMod = (await import(configUrl)) as any;
 	const adapterUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend-adapter.js")).href;
-	// biome-ignore lint/suspicious/noExplicitAny: compiled module imported by URL
 	const adapterMod = (await import(adapterUrl)) as any;
 
 	// ----------------------------------------------------------------------

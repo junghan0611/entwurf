@@ -76,7 +76,6 @@ async function main(): Promise<void> {
 	mkdirSync(promptsOut, { recursive: true });
 	copyFileSync(resolve(REPO_ROOT, "pi-extensions/lib/acp/prompts/engraving.md"), resolve(promptsOut, "engraving.md"));
 	const backendUrl = pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href;
-	// biome-ignore lint/suspicious/noExplicitAny: compiled module imported by URL
 	const backend = (await import(backendUrl)) as any;
 
 	// Force process-scoped: the real resident flag makes resolveLifecyclePolicy
