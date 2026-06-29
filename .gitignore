@@ -25,6 +25,12 @@ __pycache__/
 # and the publish-prep smoke flow. The real publish artifact is fetched from npm.
 *.tgz
 
+# entwurf-bridge prebuilt JS — emitted by `pnpm run build-bridge` (tsc) at
+# `prepack` time so the tarball carries a node_modules-safe boot artifact (the
+# .ts source can't strip-types under node_modules). The tarball owns dist via the
+# package `files` allowlist; a dev clone has no dist and falls back to strip-types.
+mcp/entwurf-bridge/dist/
+
 # demo/ recordings — script + README are tracked; recorded artifacts are not.
 demo/*.gif
 demo/*.log

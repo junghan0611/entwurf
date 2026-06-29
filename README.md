@@ -12,7 +12,7 @@ Legacy package: [`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@jung
 
 > **Public, active development.** Real working code, still young. Verify it in your own workflow before relying on it all day. Evidence calibration: [VERIFY.md](./VERIFY.md); native async-delivery capability levels: [DELIVERY.md](./DELIVERY.md).
 
-> **Current state for 0.12.0.** This repo is **entwurf-core (v2 dispatch) + a meta-bridge + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code is shipped through the meta-bridge; pi is shipped through the control-socket adapter; Codex and Antigravity (`agy`) reach the garden with verified delivery probes, documented per launch mode in [DELIVERY.md](./DELIVERY.md), with shipped adapter/install lanes landing after the 0.12.0 doc cut. The ACP plugin is Claude-first; Cortex/vendor-governed ACP backends are future lanes.
+> **Current state for 0.12.1.** This repo is **entwurf-core (v2 dispatch) + a meta-bridge + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code is shipped through the meta-bridge; pi is shipped through the control-socket adapter; Codex and Antigravity (`agy`) reach the garden with verified delivery probes, documented per launch mode in [DELIVERY.md](./DELIVERY.md), with shipped adapter/install lanes landing after the 0.12.0 doc cut. The ACP plugin is Claude-first; Cortex/vendor-governed ACP backends are future lanes.
 
 <details>
 <summary>Watch archived pre-0.12 demo (2131×1142 GIF, click to expand)</summary>
@@ -70,68 +70,126 @@ This meta-bridge installer/doctor is **Claude Code only** in the shipped 0.12.0 
 A few words that look unusual for a coding tool.
 
 - **Entwurf** (기투, projection-of-self) — sibling sessions with their own runtime boundary. Not "delegate," not "worker," not "sub-agent." Spawn, resume, and live peer messaging are first-class.
+- **Garden / garden id** — the garden is the shared address space where independent harness sessions become citizens without losing their own runtime or transcript. A garden id is the stable address of one such citizen (for pi, a garden-native session id like `YYYYMMDDTHHMMSS-<6hex>`; for native harnesses, a meta-session id minted by the `SessionStart` hook). It is not a worker name and not proof that pi owns the session. The same-looking id may name a live control socket, a dormant pi record, or a mailbox-backed native session, so callers discover facts with `entwurf_peers` and deliver with `entwurf_v2` instead of choosing a transport by hand.
 - **Engraving** — optional short operator text delivered through each backend's native identity carrier. Not a giant hidden prompt, not a tool catalog.
 - **MCP** — in this repo, MCP is just the transport by which ACP-backed sessions receive pi capabilities that native pi exposes directly as extensions. It is not a general MCP platform. Explicit `entwurfProvider.mcpServers` only; no ambient `~/.mcp.json` scanning, no automatic retrieval. The same `entwurf-bridge` entry can also be wired into another host's MCP catalog (Claude Code, Codex, Antigravity, …) when the operator chooses. `entwurf_self` returns an authoritative pi-session or trusted meta-session identity envelope; `entwurf_v2` can deliver from plain external MCP hosts, but only pi-session and trusted meta-session senders are replyable.
 - **Session persistence** — re-attaches pi to the same remote ACP session. Does not hydrate backend transcripts into pi history.
 
 ## Install
 
-`entwurf` is a thin garden-citizen bridge with a **Claude-first ACP plugin**. Pi is the host adapter for that ACP plugin today; Codex runs as a direct pi-native provider by default, with a tested `ENTWURF_ACP_FOR_CODEX=1` opt-in that routes it through the ACP bridge too. The bridge does not provide Claude credentials, tokens, or subscription access, and does not bypass any backend auth. Whatever the operator's local `claude` / `codex` already trusts is what entwurf uses.
+`entwurf` is a neutral npm package first. Install the package with `npm` (or
+`pnpm`/`yarn`) and then wire the harness you want to use. Pi is still the
+adapter that hosts the ACP plugin and live control-socket surface, but the base
+install is **not** `pi install npm:...` anymore.
 
-`pi` installs the bridge from an `npm:` source (the published `@junghanacs/entwurf` package) in **global** (default, writes to `~/.pi/agent/settings.json`) or **project** (`-l` flag, writes to `.pi/settings.json`) scope. A `git:` source and a local clone remain available for tracking `main` or hacking on the bridge.
+The package exposes two bins:
 
-After installing the package, run `run.sh install .` in your target project. The script writes the `entwurfProvider` block into `.pi/settings.json` with the correct absolute path for `entwurf-bridge/start.sh` — no hand-editing required. The exact location of `run.sh` depends on which install path was used (each section below shows it). For manual configuration, [`pi/settings.reference.json`](./pi/settings.reference.json) is the reference shape — see [Settings](#settings) below.
+- `entwurf` → `run.sh` (installer, checks, meta-bridge doctor/install)
+- `entwurf-bridge` → the MCP stdio launcher (`mcp/entwurf-bridge/start.sh`)
 
-### From npm via pi — global
+The bridge does not provide Claude credentials, tokens, or subscription access,
+and does not bypass any backend auth. Whatever the operator's local `claude` /
+`codex` / pi runtime already trusts is what entwurf can use.
 
-```bash
-pi install npm:@junghanacs/entwurf
-cd /path/to/your-project
-~/.pi/agent/npm/node_modules/@junghanacs/entwurf/run.sh install .
-~/.pi/agent/npm/node_modules/@junghanacs/entwurf/run.sh check-bridge
-```
-
-### From npm via pi — project (`-l` flag)
-
-```bash
-cd /path/to/your-project
-pi install -l npm:@junghanacs/entwurf
-./.pi/npm/node_modules/@junghanacs/entwurf/run.sh install .
-./.pi/npm/node_modules/@junghanacs/entwurf/run.sh check-bridge
-```
-
-### From source via pi — global (alternative)
+### From npm — user/global install
 
 ```bash
-pi install git:github.com/junghan0611/entwurf
+npm install -g @junghanacs/entwurf
+
+# wire a target project for the pi adapter / ACP plugin lane
 cd /path/to/your-project
-~/.pi/agent/git/github.com/junghan0611/entwurf/run.sh install .
-~/.pi/agent/git/github.com/junghan0611/entwurf/run.sh check-bridge
+entwurf install .
+entwurf check-bridge
 ```
 
-### From source via pi — project (`-l` flag)
+This writes `.pi/settings.json` in the target project with the absolute path to
+the installed `entwurf-bridge` launcher. It also links the target registry under
+`~/.pi/agent/` for spawn-bg resume. The global install is the easiest path when
+Claude Code's USER-scope MCP registration should work from every cwd.
+
+### From npm — project-local install
 
 ```bash
 cd /path/to/your-project
-pi install -l git:github.com/junghan0611/entwurf
-./.pi/git/github.com/junghan0611/entwurf/run.sh install .
-./.pi/git/github.com/junghan0611/entwurf/run.sh check-bridge
+npm install --save-dev @junghanacs/entwurf
+
+npx entwurf install .
+npx entwurf check-bridge
 ```
 
-### Local development clone
+For manual MCP registration from a project-local install, point the host at:
+
+```text
+/path/to/your-project/node_modules/.bin/entwurf-bridge
+```
+
+or at the package launcher directly:
+
+```text
+/path/to/your-project/node_modules/@junghanacs/entwurf/mcp/entwurf-bridge/start.sh
+```
+
+### From source — development clone
 
 ```bash
 git clone https://github.com/junghan0611/entwurf ~/repos/gh/entwurf
 cd ~/repos/gh/entwurf
 pnpm install
-pi install ./
+
 ./run.sh install /path/to/your-project
 ./run.sh check-bridge
 ```
 
-> **First time on a clean Ubuntu / Debian / macOS host?** See the [clean-host walk-through](./docs/setup-clean-host.md) — `nvm` + `pnpm` + `pi` install, `pi install git:...`, `run.sh install .`, the missing-auth boundary surface, and an authenticated runtime smoke for Claude.
+A development clone runs the bridge source through Node's strip-types path;
+an npm-installed package runs the prebuilt JS under `mcp/entwurf-bridge/dist/`
+because Node refuses to strip `.ts` files under `node_modules`.
 
-> **Post-install checks.** `run.sh check-bridge` proves the `entwurf-bridge` MCP surface loads (provider registration + protocol/negative-path), with no backend auth needed. To prove the **ACP backend actually answers** — the bridge spawns Claude through the provider path and a real turn comes back — run `LIVE=1 run.sh smoke-acp-provider-live` (it needs the operator's local Claude auth/credit). Package-source routing — so that a `provider=entwurf` Entwurf target from a `git:` / `npm:` install resolves and does not die with `Unknown provider "entwurf"` (#29) — is pinned deterministically by `run.sh check-package-source-routing`, which runs inside `pnpm check` and the release gate.
+### Pi adapter / ACP plugin lane
+
+To use the `entwurf` provider inside pi, install a compatible pi binary
+separately (`@earendil-works/pi-coding-agent >=0.80.2 <0.81`). Then point pi at
+the npm-installed package or development clone:
+
+```bash
+# global npm install path
+pi -e "$(npm root -g)/@junghanacs/entwurf" --list-models entwurf
+
+# project-local install path
+pi -e ./node_modules/@junghanacs/entwurf --list-models entwurf
+```
+
+For daily operator sessions, launch pi with `--entwurf-control` and a garden id
+from `entwurf new-session-id`; see [Garden launcher](#garden-launcher). Older pi
+versions may silently miss the provider/extension surface, so treat the pi floor
+as release-critical for the ACP/plugin lane. A host that only uses
+`entwurf-bridge` from Claude Code / Codex / Antigravity does not need pi until it
+tries an `owned-outcome` spawn-bg resume target.
+
+### External MCP host lane
+
+After any npm install, register `entwurf-bridge` with the external host:
+
+```bash
+claude mcp add --scope user entwurf-bridge \
+  entwurf-bridge
+```
+
+If the host does not inherit the npm bin directory, use an absolute path to the
+bin or `start.sh`. For a garden-native Claude Code meta-session (replyable by
+garden id), run:
+
+```bash
+entwurf install-meta-bridge
+entwurf doctor-meta-bridge
+```
+
+For manual configuration, [`pi/settings.reference.json`](./pi/settings.reference.json)
+shows the pi adapter settings shape, and the external-host examples below show
+plain MCP registrations.
+
+> **First time on a clean Ubuntu / Debian / macOS host?** See the [clean-host walk-through](./docs/setup-clean-host.md) — Node/npm install, auth-free bridge boot, optional pi adapter verification, and authenticated runtime smokes.
+
+> **Post-install checks.** `entwurf check-bridge` (or `./run.sh check-bridge` from a clone) proves the `entwurf-bridge` MCP surface loads with no backend auth needed. To prove the **ACP backend actually answers** — the bridge spawns Claude through the pi provider path and a real turn comes back — run `LIVE=1 entwurf smoke-acp-provider-live` from an installed package/clone with pi and Claude auth available. Package-source routing is pinned deterministically by `run.sh check-package-source-routing`, which runs inside `pnpm check` and the release gate.
 
 > **Extension set — do not filter.** `entwurf` ships three `pi.extensions` entries as a single set: the ACP provider extension (`pi-extensions/acp-provider.ts`) plus `pi-extensions/entwurf-control.ts` and `pi-extensions/model-lock.ts`. Filtering some out via pi's object-form package configuration can leave the model lock or entwurf-control surface in a broken state. Disable the entire package or none of it unless you know precisely which boundary you are turning off.
 

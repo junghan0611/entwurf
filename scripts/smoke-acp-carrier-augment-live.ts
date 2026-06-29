@@ -7,10 +7,17 @@
 // This is the S2e-1 live half: it drives the REAL pi provider path and proves the
 // two 핀1-critical behaviors the gate cannot observe on a real model turn:
 //
-//   1. the augment reaches the model — a unique secret written ONLY into the
-//      scratch cwd's AGENTS.md (NEVER into the user prompt) comes back in the
-//      reply, so buildPiContextAugment's "## <cwd>/AGENTS.md" section actually rode
-//      the wire to the live model via streamShellAcp.
+//   1. the augment reaches the model — a unique BENIGN factual marker written
+//      ONLY into the scratch cwd's AGENTS.md (NEVER into the user prompt) comes
+//      back in the reply, so buildPiContextAugment's "## <cwd>/AGENTS.md" section
+//      actually rode the wire to the live model via streamShellAcp. The marker is
+//      a plain project fact ("internal build codename: <nonce>") asked back with a
+//      normal "answer from project context" question — NOT a "SECRET ... reply
+//      with the value" directive. The old secret-echo phrasing read as a prompt
+//      injection embedded in a /tmp AGENTS.md, and current Claude correctly
+//      REFUSES it ("typical injection pattern"), which made this MUST gate fail
+//      even though the augment DID ride the wire. Proving delivery must not depend
+//      on the model agreeing to echo an exfil-shaped secret.
 //   2. the default (EMPTY) carrier does not trip subscription billing — the turn
 //      exits 0 with no HTTP-400 / "extra usage" billing error. This is the 핀1
 //      live check: a carrier-absent run must bill like a normal subscription call.
@@ -18,11 +25,13 @@
 // Read-tool caveat (deliberate — GPT c32a6c8 Q1): Claude ACP exposes Read, so a
 // model COULD read AGENTS.md directly instead of answering from the augment. We do
 // not forbid that at the wire — the deterministic gate already locks the augment
-// SHAPE; this smoke asks the model to answer WITHOUT tools and treats the secret
+// SHAPE; this smoke asks the model to answer WITHOUT tools and treats the marker
 // in the reply as evidence that the augment+provider path is live AND billing-
 // clean. The honest claim is "the augment rode the live provider path and the
 // empty-carrier turn billed fine", NOT "the model was physically unable to read
-// the file". A wire-dump would over-build for this cut's purpose.
+// the file". A live wire-dump would over-build for this cut's purpose (the
+// production ACP path has no prompt-capture seam; only the deterministic gate's
+// fake child captures payloads).
 //
 // Optional carrier-present path (SMOKE_ACP_CARRIER_PRESENT=1, non-blocking — GPT
 // c32a6c8 Q2): a second turn with a TINY engraving via ENTWURF_ACP_ENGRAVING_PATH
@@ -122,45 +131,52 @@ function assertCleanTurn(label: string, turn: { status: number | null; combined:
 const scratch = mkdtempSync(join(tmpdir(), "entwurf-s2e1-"));
 try {
 	// A nonce unique to this run; lives ONLY in the cwd AGENTS.md, never the prompt.
+	// The marker is a BENIGN project FACT (an internal build codename) with no
+	// directive attached — not a "SECRET ... reply with the value" instruction.
+	// A factual line cannot read as an embedded user-turn injection, so asking for
+	// it back is a normal "answer from project context" task the model performs
+	// instead of refusing (see header). Its uniqueness still proves delivery: the
+	// codename appears nowhere but the cwd AGENTS.md the augment carries.
 	const nonce = `${process.pid.toString(36)}${Date.now().toString(36)}`;
-	const secret = `SAC_${nonce}`;
+	const marker = `nimbus${nonce}`;
 	const agentsPath = join(scratch, "AGENTS.md");
 	writeFileSync(
 		agentsPath,
 		[
-			"# Scratch project — entwurf S2e-1 augment live check",
+			"# Scratch project: entwurf augment live check",
 			"",
-			`SECRET_PROJECT_CODE: ${secret}`,
+			"## Project facts",
 			"",
-			"When asked for the secret project code, reply with the value above.",
+			`- Internal build codename: ${marker}`,
 			"",
 		].join("\n"),
 	);
 
-	// The prompt never names the secret; only the cwd AGENTS.md (carried by the
+	// The prompt never names the marker; only the cwd AGENTS.md (carried by the
 	// augment) holds it. "Without using any tool" pushes the model to answer from
-	// the provided instructions rather than reading the file (Read-tool caveat).
+	// the provided project context rather than reading the file (Read-tool caveat).
 	const prompt =
-		"Without using any tool or reading any file, reply with exactly the " +
-		"SECRET_PROJECT_CODE value from this project's instructions, and nothing else.";
+		"Based on the project context you were given, what is this project's " +
+		"internal build codename? Reply with just the codename and nothing else, " +
+		"and answer from the provided context without using any tool or reading any file.";
 
 	console.error(`[smoke-acp-carrier-augment-live] repo:   ${REPO_ROOT}`);
 	console.error(`[smoke-acp-carrier-augment-live] cwd:    ${scratch}`);
 	console.error(`[smoke-acp-carrier-augment-live] model:  ${PROVIDER}/${MODEL}`);
-	console.error(`[smoke-acp-carrier-augment-live] secret: ${secret} (only in cwd AGENTS.md)`);
+	console.error(`[smoke-acp-carrier-augment-live] marker: ${marker} (only in cwd AGENTS.md)`);
 
 	// --- MUST: empty (default) carrier + augment behavior ---------------------
 	const turn1 = runTurn(scratch, prompt, {});
 	assertCleanTurn("empty-carrier turn", turn1);
 	assert.ok(
-		turn1.stdout.includes(secret),
-		`empty-carrier turn: reply did not carry the cwd-AGENTS secret ${secret} ` +
+		turn1.stdout.includes(marker),
+		`empty-carrier turn: reply did not carry the cwd-AGENTS marker ${marker} ` +
 			`(the augment did not reach the model). stdout tail: ${JSON.stringify(turn1.stdout.slice(-300))}`,
 	);
-	console.log("[smoke-acp-carrier-augment-live] PASS (MUST) — augment delivered the cwd AGENTS.md secret on a");
+	console.log("[smoke-acp-carrier-augment-live] PASS (MUST) — augment delivered the cwd AGENTS.md marker on a");
 	console.log("  live provider turn; the empty default carrier billed clean (exit 0, no 400 canary).");
 	console.log(`  model:  ${PROVIDER}/${MODEL}`);
-	console.log(`  secret: ${secret} present in assistant reply`);
+	console.log(`  marker: ${marker} present in assistant reply`);
 
 	// --- OPTIONAL (non-blocking): tiny carrier-present billing -----------------
 	if (process.env.SMOKE_ACP_CARRIER_PRESENT === "1") {

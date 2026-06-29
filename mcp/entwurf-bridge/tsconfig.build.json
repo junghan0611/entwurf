@@ -1,0 +1,42 @@
+{
+	// Emit config for the entwurf-bridge MCP server (0.12.1 C — install fix).
+	//
+	// WHY THIS EXISTS: Node's `--experimental-strip-types` REFUSES `.ts` files
+	// under `node_modules` (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING). So the
+	// 0.12.0 launcher (`node --experimental-strip-types src/index.ts`) works from a
+	// dev clone but breaks the moment the package is installed under node_modules
+	// (every npm/pnpm consumer). This config tsc-EMITS the bridge boot closure to a
+	// plain-JS tree (`dist/`) that boots with vanilla `node` from anywhere. start.sh
+	// runs dist/ when its path is under node_modules (installed) and runs the
+	// strip-types src/ otherwise (dev clone).
+	//
+	// FENCE NOTE: the bridge graph is the SAME `.ts`-extension fence the root
+	// tsconfig excludes (root is emit-capable and can't allow `.ts` imports). This
+	// config pairs `allowImportingTsExtensions` with `rewriteRelativeImportExtensions`
+	// (TS 5.7+) instead of `noEmit`, so emitted JS references `.js` paths, including
+	// the lazy `await import("./entwurf-preflight.ts")` → `./entwurf-preflight.js`.
+	// That dynamic import stays dynamic in the output, so the eager boot closure
+	// remains pi-free (check-entwurf-bridge-pi-free) while the owned-outcome resume
+	// branch still lazy-loads the pi-backed preflight. This is an EMIT pass, not a
+	// typecheck pass — the noEmit typecheck fence (scripts/tsconfig.json) is
+	// untouched, so every `.ts` is still typechecked by exactly one `tsc --noEmit`.
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"allowImportingTsExtensions": true,
+		"rewriteRelativeImportExtensions": true,
+		"noEmit": false,
+		"declaration": false,
+		"sourceMap": false,
+		"outDir": "./dist",
+		"rootDir": "../.."
+	},
+	// Clear the root `exclude` (it filters out every `.ts`-extension lib file the
+	// bridge graph needs). Only node_modules must stay excluded.
+	"exclude": ["../../node_modules"],
+	// Just the bridge entry (+ the dependency-free protocol.js it reaches via an
+	// explicit `.js` import). tsc auto-follows the import graph — STATIC imports
+	// AND the lazy `await import("./entwurf-preflight.ts")` — and emits exactly the
+	// boot closure, nothing more. This tracks graph drift automatically and keeps
+	// the pi-lane-only acp/* (unreached at boot) out of the tarball.
+	"include": ["./src/index.ts", "../../protocol.js"]
+}

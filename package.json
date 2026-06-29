@@ -1,6 +1,6 @@
 {
 	"name": "@junghanacs/entwurf",
-	"version": "0.12.0",
+	"version": "0.12.1",
 	"description": "Garden-citizen dispatch substrate and meta-bridge for Claude Code, Codex, Antigravity, and pi harnesses.",
 	"license": "MIT",
 	"author": {
@@ -19,17 +19,17 @@
 		"access": "public"
 	},
 	"keywords": [
-		"pi",
-		"pi-package",
-		"pi-extension",
-		"pi-coding-agent",
-		"garden-session",
 		"entwurf",
+		"garden-id",
+		"garden-citizen",
 		"dispatch",
 		"meta-bridge",
+		"mcp",
 		"claude-code",
 		"codex",
-		"mcp"
+		"antigravity",
+		"pi-coding-agent",
+		"pi-extension"
 	],
 	"type": "module",
 	"files": [
@@ -89,8 +89,10 @@
 		"typescript": "^6.0.2"
 	},
 	"scripts": {
-		"prepare": "husky 2>/dev/null || true",
+		"prepare": "husky 2>/dev/null || true; npm run --silent build-bridge",
 		"postinstall": "node scripts/postinstall-chmod.cjs",
+		"build-bridge": "rm -rf mcp/entwurf-bridge/dist && tsc -p mcp/entwurf-bridge/tsconfig.build.json",
+		"prepack": "pnpm --silent run build-bridge",
 		"prepublishOnly": "pnpm run check && pnpm run check-pack-install",
 		"setup": "./run.sh setup",
 		"check-shell-quote": "./run.sh check-shell-quote",
@@ -126,5 +128,23 @@
 			"./pi-extensions/model-lock.ts"
 		],
 		"image": "https://raw.githubusercontent.com/junghan0611/entwurf/main/docs/assets/entwurf-hero.jpg"
+	},
+	"bin": {
+		"entwurf": "./run.sh",
+		"entwurf-bridge": "./mcp/entwurf-bridge/start.sh"
+	},
+	"peerDependenciesMeta": {
+		"@earendil-works/pi-ai": {
+			"optional": true
+		},
+		"@earendil-works/pi-coding-agent": {
+			"optional": true
+		},
+		"@earendil-works/pi-tui": {
+			"optional": true
+		},
+		"typebox": {
+			"optional": true
+		}
 	}
 }

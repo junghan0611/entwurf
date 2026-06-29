@@ -4,6 +4,27 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.12.1 — 2026-06-29
+
+### Fixed
+
+- **Installed MCP bridge boots from npm/node_modules.** The 0.12.0 launcher ran `src/index.ts` through Node strip-types, but Node refuses type stripping below `node_modules` (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`). The npm tarball now carries a clean tsc-emitted bridge JS closure under `mcp/entwurf-bridge/dist/`, and `start.sh` runs that dist path when installed while keeping the strip-types source path for development clones.
+- **Stale dist files cannot ship.** `build-bridge` removes `mcp/entwurf-bridge/dist` before emit, and `check-pack-install` plants a stale sentinel before `npm pack` to prove prepack cleaned the tree. This closes the orphan-emit tarball contamination found during the 0.12.1 C review.
+- **npm bin symlink installs resolve the package root.** `run.sh`, `start.sh`, and the bridge protocol smoke now resolve symlinks before computing their root, so `node_modules/.bin/entwurf` and `node_modules/.bin/entwurf-bridge` work like direct package paths.
+- **Two live ACP MUST smokes no longer flake on model-in-loop phrasing.** `smoke-acp-carrier-augment-live` proved augment delivery by asking the model to echo a `SECRET_PROJECT_CODE` planted in a `/tmp` `AGENTS.md` — current Claude correctly refuses that as a prompt-injection/exfil pattern, so the MUST gate failed even though the augment rode the wire and the empty carrier billed clean. It now uses a benign factual marker (an internal build codename) asked back as a normal "answer from project context" task. `smoke-acp-bundled-mcp-live` asked the model for "values only, one per line" yet asserted on field-name-labeled lines (`socketState: alive`), so a compliant bare-value reply was dropped by the envelope filter while the `[tool:done]` notice truncated `socketState`; it now requests labeled lines so the three identity fields are deterministically observable. Neither change weakens the gate (same MUST assertions, same non-circular gid proof) — both only realign the observation contract with current model behavior.
+
+### Changed
+
+- **Install docs are npm-first and pi-adapter-second.** The README and clean-host walkthrough now lead with neutral `npm install @junghanacs/entwurf`, document the `entwurf` / `entwurf-bridge` bins, and move pi to the optional ACP-provider/control-socket adapter lane (`@earendil-works/pi-coding-agent >=0.80.2 <0.81`). `pi install npm:...` is no longer the public primary install recipe.
+- **Pi peers are optional for the neutral package.** The `@earendil-works/*` peer trio and `typebox` are marked optional so a plain npm install can boot the MCP bridge without pulling the pi adapter stack. The pi loader lane is still verified separately with explicit pi peers.
+- **Garden id concept is documented up front.** The concept primer now defines garden/garden id as the shared address space for independent harness citizens, not a worker name or proof of pi ownership, and points callers to `entwurf_peers` + `entwurf_v2` instead of hand-picking transports.
+
+### Verification
+
+- `./run.sh check-pack-install` passes with the neutral npm install regression: package bins present, optional pi peers absent, installed dist bridge answers `tools/list`, and pi-loader registration still passes on the explicit pi-peer lane.
+- Remote `hejdev6` real-install probe from the packed tarball passed: local npm install, package bins, optional pi peers absent, installed `entwurf-bridge` `tools/list`, `entwurf install` with isolated HOME, and `entwurf check-bridge`. The host's real HOME also exposed a pre-existing stale `~/.pi/agent/entwurf-targets.json` symlink to `pi-shell-acp`; fix with `entwurf setup:links --force` or an explicit `ENTWURF_TARGETS_PATH` if that old registry is intentional.
+- `LIVE=1 ./run.sh release-gate /tmp/psa-release-gate-0.12.1.GUFDUb` tiers `MUST: PASS=17 FAIL=0 SKIP=0` with `BEHAVIOR: PASS=1 FAIL=0` on 2026-06-29; log `/tmp/entwurf-release-gate-0.12.1-20260629T191543.log` (the two live-smoke observation fixes above were what moved the gate from `MUST FAIL=1` to green; the install change is harness-neutral and touches no ACP code path).
+
 ## 0.12.0 — 2026-06-29
 
 > This release hard-cuts the project from `pi-shell-acp` to **`entwurf`**. It is not a compatibility rename: the package/provider/model/MCP identity is now `entwurf`, v1 entwurf verbs are gone, and `entwurf_v2` is the canonical garden-id dispatch verb. The repo is **entwurf-core (v2 dispatch) + meta-bridge + pi adapter + ACP plugin**. Pi remains an important adapter and ACP host, but the project subject is the garden-citizen dispatch substrate. Verified release floor: `pnpm check`, `check-pack`, `check-pack-install`, and `LIVE=1 ./run.sh release-gate <scratch>` MUST tier `PASS=17 FAIL=0 SKIP=0` on 2026-06-29, with BEHAVIOR (advisory model-in-loop autonomous MCP tool-selection) `PASS=1 FAIL=0` and recorded separately from the cut decision.

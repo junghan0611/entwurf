@@ -2,8 +2,17 @@
 set -euo pipefail
 
 # entwurf-bridge smoke (v2-only): tool registration + a few no-side-effect calls.
-ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-BRIDGE="$ROOT_DIR/mcp/entwurf-bridge/src/index.ts"
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  TARGET="$(readlink "$SOURCE")"
+  case "$TARGET" in
+    /*) SOURCE="$TARGET" ;;
+    *) SOURCE="$DIR/$TARGET" ;;
+  esac
+done
+ROOT_DIR="$(cd -P "$(dirname "$SOURCE")/../.." && pwd)"
+BRIDGE_LAUNCHER="$ROOT_DIR/mcp/entwurf-bridge/start.sh"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
@@ -18,7 +27,7 @@ jsonrpc() {
     -u ENTWURF_META_SENDER_MARKER \
     -u ENTWURF_BRIDGE_REQUIRE_META_SENDER \
     ENTWURF_META_SENDERS_DIR="$tmp_meta_senders" \
-    node --experimental-strip-types "$BRIDGE" <<'EOF'
+    bash "$BRIDGE_LAUNCHER" <<'EOF'
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}
 {"jsonrpc":"2.0","method":"notifications/initialized","params":{}}
 {"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}

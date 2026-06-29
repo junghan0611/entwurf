@@ -13,7 +13,16 @@
 #
 set -euo pipefail
 
-REPO_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)"
+  TARGET="$(readlink "$SOURCE")"
+  case "$TARGET" in
+    /*) SOURCE="$TARGET" ;;
+    *) SOURCE="$DIR/$TARGET" ;;
+  esac
+done
+REPO_DIR=$(cd -P -- "$(dirname -- "$SOURCE")" && pwd)
 PROJECT_DIR_DEFAULT=$(pwd)
 TARGET_PROJECT_DIR=${2:-$PROJECT_DIR_DEFAULT}
 # npm publish identity. Scoped 2026-05-18 — bare `entwurf` was not on npm
@@ -1662,7 +1671,11 @@ check_pack() {
   section "pack invariants (dry-run)"
 
   local json
-  json=$(cd "$REPO_DIR" && npm pack --dry-run --json 2>/dev/null) || {
+  # --silent so the `prepack` build (pnpm --silent run build-bridge → tsc) and
+  # npm's own lifecycle banner stay off stdout; otherwise they pollute the --json
+  # payload this parses. prepack runs on dry-run too, which is how dist lands in
+  # this gate's file list.
+  json=$(cd "$REPO_DIR" && npm pack --dry-run --json --silent 2>/dev/null) || {
     fail "[check-pack] npm pack --dry-run failed"
     return 1
   }
@@ -1713,6 +1726,10 @@ check_pack() {
     "pi-extensions/entwurf-control.ts"
     "pi-extensions/model-lock.ts" "pi-extensions/lib/entwurf-core.ts"
     "mcp/entwurf-bridge/src/index.ts"
+    # 0.12.1 C — the prepack-built node_modules-safe boot artifact. start.sh runs
+    # this dist JS when present (the .ts source can't strip-types under
+    # node_modules). prepack runs on `npm pack --dry-run`, so it is in this gate.
+    "mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
     "pi/entwurf-targets.json"
@@ -1808,6 +1825,15 @@ check_pack_install() {
   tgz_path="${REPO_DIR}/${tgz_name}"
   rm -f "$tgz_path"
 
+  # 0.12.1 C — stale-dist guard. `tsc` emit does NOT prune orphaned files from
+  # outDir, and `files: ["mcp/"]` would carry any leftover dist file into the
+  # tarball. build-bridge therefore `rm -rf`s dist before emit. Prove it: plant a
+  # sentinel in dist, then assert the pack's prepack (build-bridge) wiped it so it
+  # never reaches the tarball. Without the clean step this sentinel ships.
+  local stale_probe="${REPO_DIR}/mcp/entwurf-bridge/dist/__stale_probe__.js"
+  mkdir -p "$(dirname "$stale_probe")"
+  printf 'module.exports = "stale";\n' > "$stale_probe"
+
   echo "[check-pack-install] npm pack -> ${tgz_name}"
   (cd "$REPO_DIR" && npm pack --dry-run=false 2>&1 | tail -1) || {
     fail "[check-pack-install] npm pack failed"
@@ -1826,6 +1852,15 @@ check_pack_install() {
   local tar_files pass=1 f pat
   tar_files=$(tar -tf "$tgz_path" | sed 's|^package/||' | grep -v '/$' || true)
 
+  # 0.12.1 C — the planted stale sentinel must NOT have survived into the tarball.
+  # If it did, build-bridge's `rm -rf dist` clean step regressed and stale/orphan
+  # emit can ship. (See the plant just before npm pack above.)
+  if grep -qxF "mcp/entwurf-bridge/dist/__stale_probe__.js" <<<"$tar_files"; then
+    rm -f "$tgz_path"
+    fail "[check-pack-install] stale dist file shipped — build-bridge did not clean dist before emit (orphan-emit publish risk)"
+    return 1
+  fi
+
   # Required tarball contents. The old 0.11.0 ACP root files (index.ts,
   # acp-bridge.ts, event-mapper.ts, engraving.ts, pi-context-augment.ts,
   # pi-extensions/entwurf.ts) were removed on v2-only and are GONE — keeping them
@@ -1842,6 +1877,8 @@ check_pack_install() {
     "pi-extensions/entwurf-control.ts"
     "pi-extensions/model-lock.ts" "pi-extensions/lib/entwurf-core.ts"
     "mcp/entwurf-bridge/src/index.ts"
+    # 0.12.1 C — prepack-built node_modules-safe boot artifact (see check-pack).
+    "mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
     "pi/entwurf-targets.json"
@@ -1971,32 +2008,36 @@ check_pack_install() {
   done
   echo "[check-pack-install] pi loader smoke pass (entwurf registered, claude-sonnet-4-6 + claude-opus-4-8 anchor)"
 
-  # npm-managed `run.sh install` regression — the README's PRIMARY install path,
-  # `pi install npm:@junghanacs/entwurf` then `run.sh install .`. This layout
-  # differs from the pnpm-add smoke above in the exact way that broke the install:
-  # pi installs via npm with --legacy-peer-deps, so the package lands under a
-  # managed prefix (~/.pi/agent/npm/node_modules/@junghanacs/entwurf), runtime deps
-  # HOIST to the sibling node_modules, there is NO package-local node_modules, and
-  # the pi peer trio is absent (loader-provided). The old cwd-relative
-  # preflight_dep_integrity rejected every dep in this layout, so the documented
-  # primary path failed on first use while every dry-run/pnpm-add gate stayed green.
-  # Prove `run.sh install` actually writes settings from the hoisted layout. HOME is
+  # npm-managed neutral install regression — the README's PRIMARY install path is
+  # now `npm install @junghanacs/entwurf` (NOT `pi install npm:...`). This layout
+  # lands the package under node_modules, hoists runtime deps to the sibling
+  # node_modules, has no package-local node_modules, and the pi peer trio must be
+  # absent because pi is an optional adapter lane. The old cwd-relative
+  # preflight_dep_integrity rejected every hoisted-dep npm install; 0.12.0 then
+  # additionally died because start.sh tried strip-types under node_modules.
+  # Prove `entwurf`/`entwurf-bridge` bins exist, `run.sh install` writes settings
+  # from the hoisted layout, and the installed bridge boots from dist. HOME is
   # redirected to a throwaway dir so ensure_agent_dir_symlinks operates on a temp
-  # ~/.pi/agent and never touches (or fails against) the operator's real targets link.
+  # ~/.pi/agent and never touches the operator's real targets link.
   if ! command -v npm >/dev/null 2>&1; then
     fail "[check-pack-install] npm not on PATH — cannot run npm-managed install regression"
     return 1
   fi
   local npmroot="$npm_tmp/npmroot" npmhome="$npm_tmp/npmhome" npmproj="$npm_tmp/npmproj" npm_log npm_pkg wire_log
   mkdir -p "$npmroot" "$npmhome" "$npmproj"
-  npm_log=$(cd "$npmroot" && npm install "$tgz_path" --legacy-peer-deps --no-audit --no-fund 2>&1) || {
-    fail "[check-pack-install] npm-managed install failed:"
+  npm_log=$(cd "$npmroot" && npm install "$tgz_path" --no-audit --no-fund 2>&1) || {
+    fail "[check-pack-install] npm-managed neutral install failed:"
     echo "$npm_log" | tail -10 | sed 's/^/    /' >&2
     return 1
   }
   npm_pkg="$npmroot/node_modules/@junghanacs/entwurf"
   if [ ! -x "$npm_pkg/run.sh" ]; then
     fail "[check-pack-install] npm-managed layout missing executable run.sh (postinstall-chmod did not run?) at $npm_pkg"
+    return 1
+  fi
+  if [ ! -x "$npmroot/node_modules/.bin/entwurf" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-bridge" ]; then
+    fail "[check-pack-install] npm-managed neutral install missing package bins (entwurf / entwurf-bridge)"
+    ls -l "$npmroot/node_modules/.bin" 2>/dev/null | sed 's/^/    /' >&2 || true
     return 1
   fi
   wire_log=$(HOME="$npmhome" "$npm_pkg/run.sh" install "$npmproj" 2>&1) || {
@@ -2015,6 +2056,75 @@ check_pack_install() {
     return 1
   fi
   echo "[check-pack-install] npm-managed install regression pass (hoisted-dep run.sh install wrote settings)"
+
+  # 0.12.1 C — installed bridge BOOT regression. This is the test whose absence
+  # let the 0.12.0 install bug ship: the README's bridge launcher was
+  # `node --experimental-strip-types src/index.ts`, which Node REFUSES under
+  # node_modules (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING). Every gate above
+  # wired settings or probed shape but never BOOTED the bridge from its installed
+  # node_modules home, so the dead-on-arrival MCP server passed publish. Here we
+  # boot the installed start.sh and assert it answers MCP tools/list with the v2
+  # surface. Two proofs in one: (1) the prepack dist JS boots under node_modules
+  # with plain node — a strip-types fallback would crash with the exact error
+  # above, so a parseable tools/list IS proof the dist path was taken; (2) the
+  # boot is pi-free — the @earendil-works peer trio is optional and must NOT be
+  # installed by the neutral npm path, so the eager closure stands up with pi absent.
+  local installed_start="$npmroot/node_modules/.bin/entwurf-bridge"
+  local installed_dist="$npm_pkg/mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js"
+  if [ ! -f "$installed_dist" ]; then
+    fail "[check-pack-install] installed bridge missing prebuilt dist (prepack did not emit into the tarball?): $installed_dist"
+    return 1
+  fi
+  if [ -d "$npmroot/node_modules/@earendil-works" ]; then
+    fail "[check-pack-install] @earendil-works present in npm-managed node_modules — pi-free boot proof is void (neutral npm install should not install optional pi peers)"
+    return 1
+  fi
+  local boot_out
+  if ! boot_out=$(START_SH="$installed_start" node --input-type=module <<'JS'
+import { spawn } from 'node:child_process';
+const start = process.env.START_SH;
+// Sanitize the child env so the pi-free proof cannot be masked by a leaked
+// module-resolution path: if NODE_PATH (or a stray pi env) pointed at a tree
+// holding @earendil-works, a statically pi-importing eager graph could resolve
+// and boot anyway, turning this gate falsely green. Strip it so "boots with
+// @earendil absent" stays an honest adversarial proof.
+const env = { ...process.env };
+delete env.NODE_PATH;
+const child = spawn(start, { stdio: ['pipe', 'pipe', 'pipe'], env });
+let stdout = '', stderr = '', done = false;
+const timer = setTimeout(() => {
+  child.kill('SIGKILL');
+  console.error('installed bridge boot timeout');
+  if (stderr.trim()) console.error(stderr.trim());
+  process.exit(1);
+}, 5000);
+function finish(trimmed) {
+  if (done) return;
+  done = true;
+  clearTimeout(timer);
+  let msg;
+  try { msg = JSON.parse(trimmed); }
+  catch { console.error('unparseable tools/list:', trimmed.slice(0, 300)); if (stderr.trim()) console.error(stderr.trim()); process.exit(1); }
+  const names = (msg?.result?.tools ?? []).map((t) => t?.name).sort();
+  for (const need of ['entwurf_v2', 'entwurf_peers', 'entwurf_self', 'entwurf_inbox_read']) {
+    if (!names.includes(need)) { console.error('missing MCP tool from installed boot:', need, '— got', names.join(',')); process.exit(1); }
+  }
+  console.log(names.join(','));
+  child.kill('SIGTERM');
+  process.exit(0);
+}
+child.stdout.on('data', (d) => { stdout += d.toString(); const t = stdout.trim(); if (t) finish(t); });
+child.stderr.on('data', (d) => { stderr += d.toString(); });
+child.on('error', (e) => { clearTimeout(timer); console.error('installed bridge spawn error:', String(e)); process.exit(1); });
+child.on('close', () => { if (done) return; clearTimeout(timer); if (stderr.trim()) console.error(stderr.trim()); console.error('installed bridge closed with empty tools/list'); process.exit(1); });
+child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) + '\n');
+JS
+  ); then
+    fail "[check-pack-install] installed bridge boot FAILED — the npm-installed MCP server does not answer tools/list (the 0.12.0 strip-types-under-node_modules regression):"
+    echo "$boot_out" | tail -15 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] installed bridge boot pass (dist boots under node_modules, pi-free: $boot_out)"
 
   ok "[check-pack-install] publish install smoke pass"
   return 0

@@ -207,9 +207,20 @@ async function main(): Promise<void> {
 		);
 
 		// Drive ONE model turn over the stdin RPC: call the BUNDLED bridge's entwurf_self.
+		// Ask for LABELED lines ("socketState: <value>"), not bare values. The old
+		// "reply with the values ... one per line, and nothing else" prompt contradicted
+		// the assertions below, which match on the FIELD NAME (e.g. /socketState…alive/):
+		// a model that obeyed "values only" replied with a bare "alive" line that the
+		// envelope filter (it keys on field-name tokens) dropped, and the [tool:done]
+		// notice truncates the envelope before socketState — so the gate flaked on the
+		// model's formatting choice. Labeled lines make the three identity fields
+		// deterministically observable in the reply regardless of notice truncation.
 		const prompt =
-			"Call the mcp__entwurf-bridge__entwurf_self tool now. Then reply with exactly the " +
-			"sessionId, agentId, and socketState values it returned, one per line, and nothing else. " +
+			"Call the mcp__entwurf-bridge__entwurf_self tool now. Then reply with exactly these " +
+			"three lines, copying the tool result verbatim and nothing else:\n" +
+			"sessionId: <value>\n" +
+			"agentId: <value>\n" +
+			"socketState: <value>\n" +
 			"Do not paraphrase or invent values — copy them verbatim from the tool result.";
 		// The prompt must NOT leak the gid — the gid in the envelope is the proof the bridge
 		// answered, so a gid in the prompt would make that proof circular (the model could echo
