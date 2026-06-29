@@ -1,5 +1,7 @@
 # entwurf recorded demos
 
+> **Archived pre-0.12 evidence.** These scripts still describe the retired v1 `entwurf` / `entwurf_resume` / `entwurf_send` demo flow. They are kept for historical comparison and will be replaced by a v2-native retake in a post-0.12 follow-up; do not treat them as the current 0.12 runnable recipe.
+
 Two recorded GIF scripts live here. Both use `asciinema` for capture and
 `agg` for cast → GIF conversion. Both share the same gitignore policy
 (`*.cast` global, `demo/*.gif`, `demo/*.log` — only the `.sh` and this
@@ -7,8 +9,7 @@ README are tracked).
 
 ## `demo-baseline.sh` — single-pane baseline + entwurf surface
 
-Publish-facing demo, referenced from the top-level `README.md` and
-`package.json#pi.image`. Two scenes driven into one pi pane:
+Historical pre-0.12 demo, still linked from the top-level `README.md` as archived evidence. `package.json#pi.image` now points at the `entwurf` release hero instead. Two scenes driven into one pi pane:
 
 1. **Baseline self-awareness** — the `Q-B0` + `Q-B0-CARRIER` interview,
    English answer enforced. The pane exposes how the running model
@@ -31,7 +32,7 @@ overwrites the previous take so the gallery preview always matches the
 current branch:
 
 - `docs/assets/entwurf-demo.cast` — raw asciinema recording (gitignored)
-- `docs/assets/entwurf-demo.gif` — tracked, referenced by `package.json#pi.image` and the top-level `README.md`
+- `docs/assets/entwurf-demo.gif` — tracked, referenced by the top-level `README.md` as archived pre-0.12 evidence
 - `demo/baseline-debug.log` — `ENTWURF_DEBUG=1` stderr (gitignored, stays next to the script)
 
 ## `demo.sh` — two-pane entwurf flow (regression guard)
@@ -170,8 +171,8 @@ Tracked (committed):
 - `demo/demo.sh`
 - `demo/demo-baseline.sh`
 - `demo/README.md`
-- `docs/assets/entwurf-demo.gif` — published gallery preview (referenced by `package.json#pi.image`)
-- `docs/assets/entwurf-entwurf.gif` — README Entwurf section illustration
+- `docs/assets/entwurf-demo.gif` — archived pre-0.12 README demo GIF (no longer `package.json#pi.image`)
+- `docs/assets/entwurf-entwurf.gif` — archived pre-0.12 Entwurf section illustration
 
 Ignored (regenerable recording artifacts — both demos):
 

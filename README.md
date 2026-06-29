@@ -11,7 +11,9 @@
 > **Current state for 0.12.0.** This repo is **entwurf-core (v2 dispatch) + a meta-bridge + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code is shipped through the meta-bridge; pi is shipped through the control-socket adapter; Codex and Antigravity (`agy`) reach the garden with verified delivery probes, documented per launch mode in [DELIVERY.md](./DELIVERY.md), with shipped adapter/install lanes landing after the 0.12.0 doc cut. The ACP plugin is Claude-first; Cortex/vendor-governed ACP backends are future lanes.
 
 <details>
-<summary>Watch demo (2131×1142 GIF, click to expand)</summary>
+<summary>Watch archived pre-0.12 demo (2131×1142 GIF, click to expand)</summary>
+
+> This GIF is historical pre-0.12 evidence and still shows the retired v1 demo flow. The current 0.12 tool surface is `entwurf_v2`; a v2-native demo retake is a follow-up.
 
 ![entwurf demo](docs/assets/entwurf-demo.gif)
 
@@ -452,7 +454,7 @@ The human-greeted 담당자 pattern is first-class: the operator opens a entwurf
 
 After a session is anchored, entwurf locks its model identity: switches that touch `entwurf` are reverted; native-to-native and pre-turn selection remain free. `ensureBridgeSession` refuses direct reuse-path mismatches before backend handoff.
 
-Reproduce + debug: [`demo/README.md`](./demo/README.md).
+Archived pre-0.12 demo notes: [`demo/README.md`](./demo/README.md). They remain as historical evidence until the v2-native demo retake.
 
 ## Context carriers
 

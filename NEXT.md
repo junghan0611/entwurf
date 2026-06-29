@@ -1,98 +1,52 @@
-# NEXT — entwurf 0.12.0 나침반
+# NEXT — entwurf 0.12.0 publish handoff
 
-> 나침반이지 DB가 아니다: **현재 위치 · 다음 한 걸음 · 넘으면 안 되는 선**만 여기 둔다.
-> 현재+미래 방향과 설계 SSOT(동결 결정·검증 원장·아키텍처·backlog) = **`ROADMAP.md`**.
-> 게시되는 닫힌-변경 핵심 = **`CHANGELOG.md`**. 세션별 process history = git 커밋 log.
->
-> **2026-06-16 대정리:** 0.11 작업의 닫힌 ledger(SE-1/2/3 · 세션 #12/#14 · model-in-loop triage 사가 ·
-> Stage 0 step 설계 · 동결 결정 · 검증 원장 · backlog)를 `ROADMAP.md`로 이주하고 NEXT를 compass로 축소했다.
-> 그 전 2133줄 ledger 전문은 git history(이 커밋 직전 NEXT.md)에 보존됨.
+> 나침반이지 DB가 아니다: **현재 위치 · 다음 한 걸음 · 넘으면 안 되는 선**만 둔다.
+> 현재+미래 방향과 설계 SSOT = **`ROADMAP.md`**. 닫힌 변경 핵심 = **`CHANGELOG.md`**. 세션별 process history = git log.
 
-## NOW — entwurf 인플레이스 rename **landed**, 새 위치 GREEN (2026-06-23 갱신)
+## NOW — 0.12.0 main landed, publish 직전 정렬
 
-> **rename cutover 완료.** 패키지 `@junghanacs/entwurf@0.12.0` (커밋 `fcdac5a`), 물리 위치
-> `~/repos/gh/entwurf/`. 브랜치 `entwurf-rename`, working tree clean.
->
-> **2026-06-23 새 위치 airtight 검증 = GREEN:** `cd ~/repos/gh/entwurf && pnpm check` EXIT=0 —
-> lint + typecheck + 60여 게이트 + `check-pack`(181 files tarball) 전 체인 통과. install 전파도 3면 증명
-> (.pi/settings.json bridge → 새 경로, old 누수 0 · global registry 심볼릭링크 relink · `pi --list-models
-> entwurf` 라이브). 디렉토리명 독립 + install 자가전파(REPO_DIR를 settings에 박음) 확인.
+- `entwurf-rename`은 `main`으로 no-ff merge 완료: `5b5243f merge: cut 0.12.0 entwurf-first release`.
+- 최종 release evidence: `LIVE=1 ./run.sh release-gate /tmp/psa-release-gate-0.12.0.np8FuB` → **MUST PASS=17 FAIL=0 SKIP=0 + BEHAVIOR PASS=1 FAIL=0** (2026-06-29 14:01–14:10 KST). Operator log: `/tmp/pi-tmux-entwurf-release-gate.log`; per-step artifact paths are printed in that log. 직전 `smoke-acp-bundled-mcp-live` red는 같은 트리 bounded retry green으로 flake 처리.
+- `pnpm check` / `check-pack` / `check-pack-install` green. npm-managed install regression은 `check-pack-install` 안에서 real `npm install --legacy-peer-deps` + hoisted deps + isolated HOME으로 잠김.
+- publish surface: package `@junghanacs/entwurf@0.12.0`, `publishConfig.access=public`, README/clean-host npm-first, hero image refreshed to GLGMAN Universe `entwurf` release art.
+- 현재 tag/npm 상태는 GLG가 최종 실행한다. agent는 push/tag/npm publish 금지.
 
-### 재배치 재현 runbook — install은 **2갈래**다 (2026-06-23 statusLine 死 사건의 교훈)
+## 다음 한 걸음 — GLG publish loop
 
-> **근본 원인:** repo를 옮기면(rename/move) install을 다시 돌려야 하는데, install이 둘로 갈려 있다.
-> 이번에 `./run.sh install`(=pi 패키지)만 돌리고 `./run.sh install-meta-bridge`(=Claude Code 배선)를 안 돌려서,
-> `~/.claude/settings.json` statusLine이 **死한 옛 경로**(`pi-shell-acp/scripts/meta-bridge-statusline.sh`)에 멈춰
-> 상태바가 날아갔다. canonical installer 재실행으로 복구.
+1. **최종 diff sanity**
+   - `git status --short`
+   - `git diff --stat` / hero asset + small docs/package diff 확인
+   - `rg 'coming soon|not yet published|after publish' README.md docs/setup-clean-host.md package.json` → live publish 표면에 남으면 안 됨
+2. **tag + publish (GLG only)**
+   - tag는 main merge commit 이후 현재 HEAD에 `v0.12.0`.
+   - `npm publish`는 manifest의 `publishConfig.access=public`을 사용.
+   - publish가 실패하면 실패 로그를 그대로 보존하고, 원인별 patch로 대응한다. `--no-verify` / unsafe override 금지.
+3. **post-publish smoke**
+   - `npm view @junghanacs/entwurf version` → `0.12.0` 확인.
+   - scratch에서 `pi install npm:@junghanacs/entwurf` → `~/.pi/agent/npm/node_modules/@junghanacs/entwurf/run.sh install .` → `run.sh check-bridge`.
+   - 가능하면 authenticated `LIVE=1 run.sh smoke-acp-provider-live` 1회.
+4. **old package / consumer follow-up**
+   - old package deprecation 여부는 GLG 결정.
+   - agent-config server 면(`*.server.json`, install spec/URL) repoint는 agent-config lane에서 처리.
 
-재배치/clone 후 working state를 **결정적으로 재현**하는 순서 (전부 새 위치에서):
+## post-0.12 follow-ups — 내보낸 뒤 바로 볼 것
 
-1. `./run.sh install .` — **pi 패키지** 배선 (`.pi/settings.json` 의 `entwurfProvider` + `mcpServers.entwurf-bridge`
-   절대경로, global registry 심볼릭링크). REPO_DIR을 self-박음 → 경로 독립.
-2. `./run.sh install-meta-bridge` — **Claude Code** 배선 (statusLine·meta-bridge 플러그인·USER-scope `entwurf-bridge` MCP).
-   `meta-bridge-state.py apply` 가 `~/.claude/settings.json` statusLine/`.assembled` 를 **현재 REPO 경로**로 박는다.
-   ⚠ 이 단계를 빼먹으면 상태바가 옛 경로에 멈춘다 (= 이번 사건).
-3. `./run.sh doctor-meta-bridge` — **fail-loud 검증 가드.** `meta-bridge-doctor.sh:117-118` 이 statusLine.command ==
-   `$REPO/scripts/meta-bridge-statusline.sh` 를 assert; drift면 `bad "statusLine.command drifted (got…expected…)"`.
-   `.assembled`/USER MCP 경로 drift도 같이 잡는다. **재배치 후 이걸 돌렸으면 즉시 빨갛게 떴다.**
-
-> 가드(doctor)는 이미 존재. 갭은 "절차 지식"이었고 이 runbook이 그걸 닫는다. 더 단단히 하려면(선택, GLG 승인):
-> `run.sh install` 이 meta-bridge가 **다른 repo 경로**를 가리키는 drift를 감지하면 "install-meta-bridge 돌려라" nudge
-> 출력 → 단일 install이 갭을 surface. (pi-only 호스트엔 no-op이 되도록 detection-gated.)
-
----
-
-### (역사) 2026-06-16 — 0.11.0 컷 준비 완료
-
-**①②③④ + affordance fix 전부 DONE (Opus#3, GPT `87388d` 동행), 커밋 `2ca818f`:**
-
-- **② pi floor `>=0.79.4`** (package.json peer/devDep + lockfile + run.sh:3420 FLOOR + run.sh:3796
-  check-pack-install = 6곳, `pnpm check` EXIT0). deterministic 회귀 없음 → 안전.
-- **① release-gate two-tier** — MUST(차단·exit authority, "green"은 여기만) / BEHAVIOR(advisory·비차단:
-  sentinel·RGG-positive). S7 Bash-우회는 BEHAVIOR lane 안 hard-FAIL이되 컷 비차단.
-- **④ fresh LIVE release-gate** (0.79.4+two-tier, log `…20260616T141023`) = **`MUST PASS=17 FAIL=0 SKIP=0`**
-  (necessary 충족) **+ `BEHAVIOR PASS=1 FAIL=1`** (sentinel S7 advisory; RGG-positive 직전 FAIL→이번 PASS
-  flip로 flaky 입증). VERIFY/CHANGELOG 기록 완료.
-- **affordance fix (voscli 사건):** garden-id delivery canonical = `entwurf_v2`, `entwurf_send` 격하
-  (tool description MCP+native 4곳 · README tool list에 v2/inbox_read 추가 + "send/reply→v2, create→v1" ·
-  CHANGELOG). description+docs only(런타임 무변경, LIVE 유효).
-
-> v1/v2 분리 결론·되는것/안되는것·triage 최종 진단은 **`ROADMAP.md` 「현재 — 0.11.0」**에 정리됨.
-
-## 다음 한 걸음 — rename 후행 tail (전부 GLG 결정)
-
-> 코드/install/런타임 축은 닫혔다. 남은 건 **전역 설정·GitHub repo·old 폴더 처분** — 전부 GLG 손/결정.
-
-1. ✅ **GitHub repo rename = 2026-06-23 DONE.** `gh repo rename entwurf` (`junghan0611/pi-shell-acp`→`junghan0611/entwurf`)
-   + `git remote set-url origin git@github.com:junghan0611/entwurf.git` + dangling 글로벌 심링크
-   `~/.pi/agent/git/.../pi-shell-acp`(→삭제된 dir) 제거. GitHub는 old명 redirect 유지.
-2. **consumer repoint:**
-   - ✅ `~/.claude.json` top-level mcpServers dangling `pi-tools-bridge` **= 제거됨** (`claude mcp remove … -s user`).
-   - ✅ `~/.claude/settings.json` statusLine/`.assembled`/`entwurf-bridge` MCP **= entwurf로 repoint됨**
-     (`./run.sh install-meta-bridge` 재실행, `doctor-meta-bridge` PASS). ※ marketplace 소스도 entwurf — 옛 세션은 재시작해야 잔상 해소.
-   - ✅ agent-config **workstation 3면** (`pi/settings.json` packages+`entwurfProvider`+`entwurf-bridge` · `antigravity/mcp_config.json`
-     · `codex/config.toml`) **= agent-config 세션이 처리** (pit/pia 복구). 
-   - ⏳ agent-config **server 면** (`*.server.json` · `run.sh` install spec/URL): remote rename 됐으니 이제 unblock — agent-config 세션 lane.
-3. **docs prose cutover = GPT 협업 pass 예정 (GLG가 따로 진행).** entwurf repo 8파일. **live/historical 분류 맵(이미 분석함):**
-   - **변경(LIVE):** `ROADMAP.md:1` 제목 `pi-shell-acp ROADMAP`→`entwurf` · `ROADMAP.md:274` 본체경로 · `setup-clean-host.md` Stage 1–4
-     설치명령(clone URL·`--list-models`·provider id·`@junghanacs/pi-shell-acp`·`[pi-shell-acp:bootstrap]` 로그prefix·model prefix).
-   - **🔒 보존(역사/리터럴):** `CHANGELOG.md`(90건) · `BASELINE.md`(날짜 검증 원장)·`VERIFY.md`(History rows) ·
-     canary 리터럴 `GEMINI_SYSTEM_MD_CANARY_PISHELLACP_V1`(코드 매칭) · deprecated npm `@junghan0611/openclaw-pi-shell-acp` ·
-     `setup-clean-host.md` openclaw Docker 부록. (= GLG 2026-06-22 승인 allowlist와 정합.)
-   - `NEXT--*.md` 브랜치 ledger = 머지 전 삭제 대상(string-replace 불필요).
-4. **old 폴더:** `pi-shell-acp/` **이미 삭제됨**(확인). `pi-shell-acp-v1/`·`pi-entwurf/` 잔존 → 처분 GLG 결정.
-5. **릴리즈 컷 = GLG.** `entwurf-rename` 브랜치는 `origin`(entwurf.git)에 push됨(2026-06-23, stamp 완료). 남은 건
-   **태그 + npm publish(`@junghanacs/entwurf` 신규 publish + 옛것 deprecate)** = 모든 rename·문서 pass 완료 후 GLG.
+- **v2-native demo/GIF retake:** README의 GIF는 archived pre-0.12 evidence로 표시했다. demo scripts는 아직 v1 `entwurf` / `entwurf_resume` / `entwurf_send` 흐름이라 다음 minor에서 v2-native demo로 교체.
+- **bundled-MCP deterministic split:** `smoke-acp-bundled-mcp-live`는 현재 MUST 안에 model-in-loop/socket-timing 축이 섞여 있다. 다음 작업은 deterministic bundled-MCP proof를 MUST로 세우고 autonomous model echo를 BEHAVIOR로 분리.
+- **ACP backend adapter rail:** `docs/acp-backend-rail.md` 기준으로 Cortex/vendor-governed backend 추가는 adapter 객체 + registry 계약부터, 0.12.0에 구현 선점하지 않음.
+- **fresh sibling minting:** `entwurf_v2`는 기존 garden citizen dispatch만 담당. 새 sibling minting은 `spawn-fresh` lane.
+- **persisted ACP resume/load:** current reuse는 in-memory + record write. persisted read/use는 별도 hardening.
 
 ## 넘으면 안 되는 선
 
-- `core.hooksPath` 건드리지 않음. **push / tag / npm publish = GLG 결정 전 금지.** `--no-verify` 금지.
-- CHANGELOG는 게시됨(npm tarball, 이미 225KB) — 내부 process detail 덤프 금지, 핵심만. 내부 ledger는 ROADMAP.
-- agent는 `CHANGELOG.md` + `NEXT.md` + (요청 시) `ROADMAP.md`만 편집. AGENTS.md 무단 수정 금지.
+- `core.hooksPath` 건드리지 않음. `--no-verify` 금지.
+- push / tag / npm publish / old package deprecate는 GLG 결정·실행 전용.
+- 실패한 release gate를 기준 낮춰 통과시키지 않는다. retier가 필요하면 deterministic replacement MUST를 같이 만든다.
+- demo v1 잔존은 숨기지 않는다. 현재는 archived pre-0.12 evidence로 명시하고, retake를 follow-up으로 둔다.
 
 ## 참조
 
-- **현재+미래 방향 · 설계 SSOT:** `ROADMAP.md`
-- **닫힌 변경 핵심(게시):** `CHANGELOG.md`
-- **검증 calibration:** `VERIFY.md` · **전달 capability levels:** `DELIVERY.md` · **repo baseline:** `AGENTS.md`
-- 본체 `~/repos/gh/entwurf/` · GitHub `junghan0611/entwurf` (rename 완료) · consumer `~/repos/gh/agent-config/`
+- 설계 SSOT: `ROADMAP.md`
+- 닫힌 변경: `CHANGELOG.md`
+- 검증 calibration: `VERIFY.md`, `BASELINE.md`, `DELIVERY.md`
+- repo baseline: `AGENTS.md`

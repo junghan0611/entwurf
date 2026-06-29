@@ -125,6 +125,6 @@
 			"./pi-extensions/entwurf-control.ts",
 			"./pi-extensions/model-lock.ts"
 		],
-		"image": "https://raw.githubusercontent.com/junghan0611/entwurf/main/docs/assets/entwurf-demo.gif"
+		"image": "https://raw.githubusercontent.com/junghan0611/entwurf/main/docs/assets/entwurf-hero.jpg"
 	}
 }
