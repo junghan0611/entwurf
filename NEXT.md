@@ -17,7 +17,7 @@
 
 **GLG 의도(오늘 정렬):** fresh launch를 **mux-visible surface로 먼저 통일**한다. pi-native GPT도 일단 bg/detached `pi -p`로 숨기지 않는다. 투명하게 pane/session으로 보이고, 같은 launch 관문을 통과해야 한다. 나중에 필요하면 pi만 headless/bg 최적화 레인을 추가할 수 있지만, 지금은 pi를 "4번째 하네스"로 세우기 위해 Claude Code/Codex/Antigravity와 같은 mux launch 규율 위에 올린다.
 
-- v1 본체: `pi-extensions/entwurf.ts` `runEntwurfAsync` / MCP `entwurf` sync surface → `pi -p --no-extensions --session-id <new gid> --provider openai-codex --model gpt-* <task>`로 새 세션을 만들었다.
+- v1 본체: `pi-extensions/lib/entwurf-core.ts` `runEntwurfSync`(:1940, "spawn pi and collect result") = fresh-mint 본체 — registry gate `resolveEntwurfTarget`(미등록 provider/model reject) + session-id/name/cwd-enrich가 여기 산다. resume 경로는 같은 파일 `runEntwurfResumeSync`(:1772). launch arg shape SSOT는 `entwurf-resume-args.ts`(`--no-extensions`/`--entwurf-control` 결정처). 조립 형태 `[…ext] --mode … --no-extensions --session-id <new gid> --name … --provider <routing.provider> --model <m> <task>` — provider는 registry에서 동적으로 옴(`openai-codex` 하드코딩 아님; 게이트 기본 타깃만 `ENTWURF_LIVE_TARGET=openai-codex/gpt-5.4` env). 주: fresh-mint는 `--no-extensions` one-shot worker이지 `-p`/control 경로가 아니다.
 - v2 현상: `entwurf_v2`는 target garden id 필수 + 기존 citizen 전용. `bad-target`은 절대 fresh spawn으로 변환하지 않는다. 즉 Claude Code에서 "새 GPT 불러줘"는 현재 표면상 불가능/우회 필요.
 - 정렬: fresh-mint 복구는 **mux driver 위의 launch profile**로 다룬다. "pi는 tmux 없이 bg로 먼저"가 아니라, "모든 하네스를 mux로 투명하게 먼저"다.
 
@@ -47,7 +47,7 @@
 ## 다음 한 걸음
 
 1. **mux driver 인터페이스 먼저** — tmux/zmx 공통 contract를 먼저 박고, 기존 repro 동작 보존용 `tmuxDriver`와 가벼운 선택지 `zmxDriver`를 같은 급으로 붙인다. 오늘의 중심은 launch surface 통일이지 tmux 의존성 도입이 아니다.
-2. **fresh pi-native GPT spawn-fresh는 mux profile로 얹기** — v1 `runEntwurfAsync`/MCP `entwurf` sync의 registry/session-id/name/cwd-enrich 자산은 재사용하되, `pi -p` detached bg 복구가 아니라 mux-visible `pi-native-gpt` launch profile로 설계한다.
+2. **fresh pi-native GPT spawn-fresh는 mux profile로 얹기** — v1 `runEntwurfSync`(`entwurf-core.ts:1940`) + `resolveEntwurfTarget` registry / session-id / name / cwd-enrich 자산은 재사용하되, `--no-extensions` one-shot detached 복구가 아니라 mux-visible `pi-native-gpt` launch profile로 설계한다.
 3. **agy(Antigravity) 서포트** — **spawn surface 통일 후** 그 위에 얹기. (아래 Follow-up 멀티하네스 항목에서 승격. 기반 먼저 안 서면 agy 넣다가 launch seam이 갈림.)
 4. **hvkiefer cortex PR 갱신 대기** → 들어오면 `check-acp-*` 6종 + `smoke-acp-cortex-live` 기준 리뷰. 공통층 무수정 불변식 확인.
 5. **0.12.2 floor 검증 (post-release, 미완):** hejdev6 clean reinstall(`pnpm add -g @junghanacs/entwurf@0.12.2` → `entwurf install-meta-bridge` → `doctor-meta-bridge`)로 floor 호스트 end-to-end 확정.
