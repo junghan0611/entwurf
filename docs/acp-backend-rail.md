@@ -2,7 +2,7 @@
 
 > **Status: spec frozen + claude rail SHIPPED** (Opus implementation / GPT `…341a87` review GO, 2026-06-25).
 > The confirmed spec is **§9** (the adapter seam) + **§10** (the `settings.backend` guard + the generic
-> `adapterSettings` seam). The rail is in the tree and unchanged through current HEAD (**0.12.2**).
+> `adapterSettings` seam). The rail is in the tree and unchanged through the 0.12.x hotfix lane.
 >
 > **The only remaining work** is for the contributor (hvkiefer) to port PR #40 (Cortex Code) as **one adapter
 > object** — `cortexAdapter` in `pi-extensions/lib/acp/backend-adapter.ts`, registered in the `ADAPTERS` array,
@@ -255,6 +255,9 @@ GPT (`…341a87`) closed every §7 point. These are the rail invariants:
    values / secrets. Must be a flat, deterministic primitive map (JSON.stringify stability).
 8. **codex/gemini = 0.12 non-goal.** codex is a native garden citizen (not ACP). `ENTWURF_ACP_FOR_CODEX=1`
    opt-in is deliberately **not** in the default registry — a future opt-in only, debated in a separate issue.
+   0.12.3 went further and **removed the placeholder `entwurf/gpt-5.x` targets** from the registry: a vendor
+   ACP surface only exists once its adapter lands through *this* rail. Cortex (PR #40) would be the first real
+   one — which is exactly why the rail matters.
 
 **One-line spec:** single `entwurf` provider + modelId-prefix registry (prefix required for non-claude) +
 separate adapter object resolved at turn entry + `buildSessionMeta` undefined ⇒ `_meta` omitted + rich context

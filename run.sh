@@ -1731,6 +1731,10 @@ check_pack() {
     # this dist JS when present (the .ts source can't strip-types under
     # node_modules). prepack runs on `npm pack --dry-run`, so it is in this gate.
     "mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js"
+    # 0.12.4 — the doctor's node_modules-safe store-scan artifact. meta-bridge-
+    # doctor.sh runs this prebuilt JS when installed under node_modules (strip-types
+    # refuses the .ts there), same boundary start.sh crosses. build-bridge emits it.
+    "mcp/entwurf-bridge/dist/scripts/meta-bridge-store-doctor.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
     "pi/entwurf-targets.json"
@@ -1880,6 +1884,9 @@ check_pack_install() {
     "mcp/entwurf-bridge/src/index.ts"
     # 0.12.1 C — prepack-built node_modules-safe boot artifact (see check-pack).
     "mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js"
+    # 0.12.4 — prebuilt node_modules-safe store-scan artifact for the doctor
+    # (see check-pack). The installed-scan smoke below runs exactly this file.
+    "mcp/entwurf-bridge/dist/scripts/meta-bridge-store-doctor.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
     "pi/entwurf-targets.json"
@@ -2126,6 +2133,52 @@ JS
     return 1
   fi
   echo "[check-pack-install] installed bridge boot pass (dist boots under node_modules, pi-free: $boot_out)"
+
+  # 0.12.4 — installed STORE-DOCTOR regression. meta-bridge-doctor.sh's full store
+  # scan runs the prebuilt dist JS when it lives under node_modules (strip-types
+  # refuses the .ts there — the same class as the bridge boot above). Before the dist
+  # split the doctor ran the raw .ts and reported a FALSE "corrupt records" FAIL on
+  # EVERY installed host. Prove the shipped dist JS scans a fixture store with PLAIN
+  # node (a strip-types fallback would crash with the exact
+  # ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING) AND that its rewritten import of the
+  # emitted meta-session.js resolves — a real record exercises parseMetaIdentity.
+  local installed_store_doctor="$npm_pkg/mcp/entwurf-bridge/dist/scripts/meta-bridge-store-doctor.js"
+  if [ ! -f "$installed_store_doctor" ]; then
+    fail "[check-pack-install] installed store-doctor missing prebuilt dist (prepack did not emit it into the tarball?): $installed_store_doctor"
+    return 1
+  fi
+  local sd_fixture="$npm_tmp/store-fixture"
+  mkdir -p "$sd_fixture"
+  # One valid v2 record: filename == "${gardenId}.meta.json" (no drift), unique
+  # nativeSessionId (no dupe). gardenId must match YYYYMMDDTHHMMSS-[0-9a-f]{6}.
+  printf '%s\n' '{"schemaVersion":2,"gardenId":"20990101T000000-abcdef","backend":"claude-code","nativeSessionId":"native-store-doctor-fixture","cwd":"/tmp/entwurf-fixture","model":null,"transcriptPath":null,"parentGardenId":null,"isEntwurf":false,"createdAt":"2099-01-01T00:00:00.000Z","recordUpdatedAt":"2099-01-01T00:00:00.000Z"}' \
+    > "$sd_fixture/20990101T000000-abcdef.meta.json"
+  local sd_out
+  if ! sd_out=$(node "$installed_store_doctor" "$sd_fixture" 2>&1); then
+    fail "[check-pack-install] installed store-doctor FAILED to scan under node_modules (strip-types-under-node_modules regression, or the emitted meta-session import broke):"
+    echo "$sd_out" | tail -15 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! grep -q "1 record(s) scanned" <<<"$sd_out"; then
+    fail "[check-pack-install] installed store-doctor scanned but did not report the fixture record (parseMetaIdentity path not exercised?): $sd_out"
+    return 1
+  fi
+  echo "[check-pack-install] installed store-doctor scan pass (dist JS scans under node_modules with plain node: $sd_out)"
+
+  # 0.12.4 — installed DOCTOR DISPATCH lock. The artifact above proves the store-scan
+  # target runs under node_modules; this proves the doctor SCRIPT actually routes to
+  # it (store scan → dist JS) and defers the strip-types-only source-shape gate
+  # (v2-surface) when installed, instead of running raw .ts and false-failing.
+  local installed_doctor="$npm_pkg/scripts/meta-bridge-doctor.sh"
+  if ! grep -q 'dist/scripts/meta-bridge-store-doctor.js' "$installed_doctor"; then
+    fail "[check-pack-install] installed doctor does not dispatch the store scan to the dist JS under node_modules: $installed_doctor"
+    return 1
+  fi
+  if ! grep -q 'shipped surface source present' "$installed_doctor"; then
+    fail "[check-pack-install] installed doctor does not defer the v2-surface source-shape gate on installed hosts: $installed_doctor"
+    return 1
+  fi
+  echo "[check-pack-install] installed doctor dispatch lock pass (store-scan → dist JS, v2-surface deferred)"
 
   ok "[check-pack-install] publish install smoke pass"
   return 0

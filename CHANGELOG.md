@@ -4,6 +4,20 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.12.4 — 2026-07-01
+
+### Fixed
+
+- **Installed `doctor-meta-bridge` no longer false-fails on node_modules strip-types.** The doctor previously ran `scripts/meta-bridge-store-doctor.ts` and `scripts/check-entwurf-v2-surface.ts` through Node strip-types even from an npm/pnpm-installed package. Node refuses type stripping under `node_modules` (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`), so real floor hosts reported false store-scan / v2-surface failures while development clones stayed green. The doctor now branches by package location: installed packages run the prebuilt `mcp/entwurf-bridge/dist/scripts/meta-bridge-store-doctor.js` with plain `node` and defer the repo-only v2 source-shape gate after confirming the shipped source and runtime wiring; development clones keep the raw `.ts` gates.
+- **The store-doctor helper now ships as a node_modules-safe dist artifact.** The bridge build emits `dist/scripts/meta-bridge-store-doctor.js` alongside the MCP bridge closure, reusing the already-shipped `meta-session.js` dependency without adding a new runtime package lane. `check-pack` / `check-pack-install` require the artifact in the tarball and prove it scans a real fixture store under `node_modules` with plain `node`.
+- **Clean-host install docs call out the 0.12.4 doctor floor check.** The walkthrough now tells operators exactly which doctor lines prove the installed-vs-dev split and flags any `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` as a pre-0.12.4 or broken-tarball signal.
+
+### Verification
+
+- `pnpm check` passed on 2026-07-01 after the doctor/install-floor fix.
+- `./run.sh check-pack-install` passed with the new installed store-doctor scan and doctor-dispatch lock assertions.
+- `hejdev6` real floor host reproduced the pre-fix strip-types failure from an installed package and passed after installing the patched tarball: compiled store-doctor scanned `1 record(s)` with plain `node`, and installed `doctor-meta-bridge` reported store-scan ok plus v2-surface deferred.
+
 ## 0.12.3 — 2026-07-01
 
 ### Changed

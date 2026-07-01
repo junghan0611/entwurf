@@ -147,10 +147,36 @@ echo "[meta-record store]"
 mkdir -p "$META_SESSIONS" 2>/dev/null || true
 if [ -d "$META_SESSIONS" ] && [ -w "$META_SESSIONS" ]; then ok "writable: $META_SESSIONS"; else bad "meta-sessions dir not writable: $META_SESSIONS"; fi
 if command -v node >/dev/null; then
-  if node --experimental-strip-types "$REPO/scripts/meta-bridge-store-doctor.ts" "$META_SESSIONS" >/dev/null 2>&1; then
-    ok "full store scan: no corrupt records, duplicate nativeSessionId, body/filename drift, or backend↔wakeMode contradiction"
-  else
-    bad "full store scan failed — corrupt/duplicate/drift meta-record(s) present. Inspect with: node --experimental-strip-types $REPO/scripts/meta-bridge-store-doctor.ts $META_SESSIONS"
+  # Full store scan — mode by LOCATION (mirror mcp/entwurf-bridge/start.sh). Node
+  # REFUSES --experimental-strip-types for a .ts under node_modules
+  # (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING), so an INSTALLED package must scan
+  # via the prebuilt dist JS (build-bridge emits it; files:["mcp/"] ships it); a DEV
+  # CLONE lives outside node_modules and runs the .ts source. Before this split the
+  # doctor always ran the .ts and reported a FALSE "corrupt records" FAIL on every
+  # installed host (the 0.12.0 strip-types-under-node_modules class the bridge boot
+  # already fixed, but this doctor helper still ran raw .ts).
+  case "$REPO" in
+    */node_modules/*)
+      store_doctor="$REPO/mcp/entwurf-bridge/dist/scripts/meta-bridge-store-doctor.js"
+      if [ -f "$store_doctor" ]; then
+        store_scan=(node "$store_doctor" "$META_SESSIONS")
+      else
+        bad "installed under node_modules but prebuilt store-doctor missing: $store_doctor — the tarball ships it via prepack; reinstall @junghanacs/entwurf"
+        store_scan=()
+      fi
+      ;;
+    *)
+      store_scan=(node --experimental-strip-types "$REPO/scripts/meta-bridge-store-doctor.ts" "$META_SESSIONS")
+      ;;
+  esac
+  # Guard the expansion: bash 3.2 (macOS) + set -u errors on "${arr[@]}" for a
+  # zero-length array, so only run/print when the command was actually built.
+  if [ "${#store_scan[@]}" -gt 0 ]; then
+    if "${store_scan[@]}" >/dev/null 2>&1; then
+      ok "full store scan: no corrupt records, duplicate nativeSessionId, body/filename drift, or backend↔wakeMode contradiction"
+    else
+      bad "full store scan failed — corrupt/duplicate/drift meta-record(s) present. Inspect with: ${store_scan[*]}"
+    fi
   fi
 else
   bad "cannot scan meta-record store without node"
@@ -297,11 +323,30 @@ if [ -f "$V2_MCP_SRC" ] && grep -q 'server.tool(' "$V2_MCP_SRC" && grep -q '"ent
 else
   bad "MCP entwurf_v2 verb not found in entwurf-bridge"
 fi
-if [ -f "$V2_SURFACE_SRC" ] && (cd "$REPO" && node --experimental-strip-types scripts/check-entwurf-v2-surface.ts >/dev/null 2>&1); then
-  ok "check-entwurf-v2-surface gate passes (surface adapter + pi-native/MCP wiring)"
-else
-  bad "check-entwurf-v2-surface gate FAILED or surface adapter missing — run: ./run.sh check-entwurf-v2-surface"
-fi
+# check-entwurf-v2-surface is a SOURCE-SHAPE gate: it strip-types-runs a .ts gate
+# (which imports typebox, a dev dep) to assert the surface source shape. Under
+# node_modules that cannot run (strip-types refused + dev deps absent), AND its
+# subject — the shipped surface source shape — is a repo/release invariant already
+# enforced by the release gate. So on an INSTALLED host, confirm the surface source
+# SHIPPED and defer the exhaustive gate; the live runtime wiring (flag/tool/MCP verb)
+# is already proven by the grep checks just above. Running the full .ts gate here
+# produced a FALSE "gate FAILED" on every installed host.
+case "$REPO" in
+  */node_modules/*)
+    if [ -f "$V2_SURFACE_SRC" ]; then
+      ok "check-entwurf-v2-surface: shipped surface source present; exhaustive source-shape gate is a repo/release invariant (not run under node_modules)"
+    else
+      bad "entwurf-v2-surface.ts missing from the installed package — the v2 surface source did not ship"
+    fi
+    ;;
+  *)
+    if [ -f "$V2_SURFACE_SRC" ] && (cd "$REPO" && node --experimental-strip-types scripts/check-entwurf-v2-surface.ts >/dev/null 2>&1); then
+      ok "check-entwurf-v2-surface gate passes (surface adapter + pi-native/MCP wiring)"
+    else
+      bad "check-entwurf-v2-surface gate FAILED or surface adapter missing — run: ./run.sh check-entwurf-v2-surface"
+    fi
+    ;;
+esac
 # prefixRoots operator policy (5d-4b): the shared env SSOT both v2 surfaces read. Display
 # ONLY — the parser SSOT lives in entwurf-v2-surface.ts (proven by check-entwurf-v2-surface);
 # the doctor does NOT re-implement parsing. Unset ⇒ no prefix promotion (the safe default).

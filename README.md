@@ -181,6 +181,12 @@ entwurf install-meta-bridge
 entwurf doctor-meta-bridge
 ```
 
+On npm/pnpm-installed packages, `doctor-meta-bridge` must use prebuilt JS for its
+store scan and defer repo-only source-shape gates; Node refuses strip-types for
+raw `.ts` helpers under `node_modules`. If the doctor reports
+`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, reinstall a current package before
+trusting the floor result.
+
 For manual configuration, [`pi/settings.reference.json`](./pi/settings.reference.json)
 shows the pi adapter settings shape, and the external-host examples below show
 plain MCP registrations.

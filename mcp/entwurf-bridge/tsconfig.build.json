@@ -33,10 +33,18 @@
 	// Clear the root `exclude` (it filters out every `.ts`-extension lib file the
 	// bridge graph needs). Only node_modules must stay excluded.
 	"exclude": ["../../node_modules"],
-	// Just the bridge entry (+ the dependency-free protocol.js it reaches via an
-	// explicit `.js` import). tsc auto-follows the import graph — STATIC imports
-	// AND the lazy `await import("./entwurf-preflight.ts")` — and emits exactly the
-	// boot closure, nothing more. This tracks graph drift automatically and keeps
-	// the pi-lane-only acp/* (unreached at boot) out of the tarball.
-	"include": ["./src/index.ts", "../../protocol.js"]
+	// The bridge boot entry (+ the dependency-free protocol.js it reaches via an
+	// explicit `.js` import) PLUS the doctor's store-scan helper. tsc auto-follows
+	// the import graph — STATIC imports AND the lazy
+	// `await import("./entwurf-preflight.ts")` — and emits exactly that closure,
+	// nothing more (the pi-lane-only acp/* stays out of the tarball).
+	//
+	// WHY store-doctor rides THIS build: meta-bridge-doctor.sh's full store scan
+	// must run from an INSTALLED package (under node_modules, where strip-types is
+	// refused) — the same node_modules boundary start.sh crosses. Its only repo
+	// import is pi-extensions/lib/meta-session.ts, which the bridge graph ALREADY
+	// emits here, so it adds ONE leaf JS (dist/scripts/meta-bridge-store-doctor.js)
+	// and ZERO new deps. It is NOT in index.ts's boot closure, so
+	// check-entwurf-bridge-pi-free (which walks the index eager closure) is unaffected.
+	"include": ["./src/index.ts", "../../protocol.js", "../../scripts/meta-bridge-store-doctor.ts"]
 }
