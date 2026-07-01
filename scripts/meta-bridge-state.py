@@ -306,6 +306,12 @@ def desired_mcp(repo: Path) -> dict[str, Any]:
 
 
 def desired_statusline(repo: Path) -> dict[str, Any]:
+    if is_installed_package(repo):
+        # Installed package: mirror the MCP stable-bin pattern. The statusLine is
+        # executed at render time, so a bare bin shim lets npm/pnpm update the
+        # target on package upgrade without rewriting Claude settings. Dev clones
+        # stay pinned to their checkout below.
+        return {"type": "command", "command": "entwurf-statusline"}
     return {"type": "command", "command": str((repo / "scripts" / "meta-bridge-statusline.sh").resolve())}
 
 
@@ -543,7 +549,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="entwurf meta-bridge state manager")
     parser.add_argument(
         "command",
-        choices=["prepare", "apply", "preflight-uninstall", "uninstall", "check", "managed-keys", "desired-mcp"],
+        choices=[
+            "prepare",
+            "apply",
+            "preflight-uninstall",
+            "uninstall",
+            "check",
+            "managed-keys",
+            "desired-mcp",
+            "desired-statusline",
+        ],
     )
     parser.add_argument("--repo", default=Path(__file__).resolve().parents[1], type=Path)
     parser.add_argument("--asm", default=None, type=Path)
@@ -568,6 +583,10 @@ def main() -> int:
             # write for --repo. Lets a deterministic guard assert the installed-vs-clone
             # dual-mode without spinning up a real `claude` CLI. --repo need not exist.
             print(json.dumps(desired_mcp(repo), indent=2))
+        elif args.command == "desired-statusline":
+            # Same guard surface for the statusLine dual-mode: dev clones pin the
+            # checkout path; installed packages use the stable bin shim.
+            print(json.dumps(desired_statusline(repo), indent=2))
     except StateError as exc:
         print(f"meta-bridge-state: {exc}", file=sys.stderr)
         return 1

@@ -132,7 +132,8 @@
 	},
 	"bin": {
 		"entwurf": "./run.sh",
-		"entwurf-bridge": "./mcp/entwurf-bridge/start.sh"
+		"entwurf-bridge": "./mcp/entwurf-bridge/start.sh",
+		"entwurf-statusline": "./scripts/meta-bridge-statusline.sh"
 	},
 	"peerDependenciesMeta": {
 		"@earendil-works/pi-ai": {

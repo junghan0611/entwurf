@@ -319,10 +319,10 @@ ask GLG whether to deprecate/yank before notifying downstream consumers.
 
 If the operator uses the global npm/pnpm `entwurf` binary for Claude Code's
 user-scope meta-bridge, the package upgrade alone is not enough: the installer
-writes absolute `statusLine` / marketplace paths and a user MCP entry. Re-run the
-installed surface so `~/.claude/settings.json` and `~/.claude.json` stop pointing
-at the previous pnpm store version, then restart existing Claude Code sessions
-(they keep the hook/config loaded from session start):
+materializes and installs the Claude plugin bundle. Re-run the installed surface
+so the version-stable marketplace assembly/cache carries the new writer, then
+restart existing Claude Code sessions (they keep the hook/config loaded from
+session start):
 
 ```bash
 VERSION="$ARGUMENTS"
@@ -332,9 +332,9 @@ entwurf doctor-meta-bridge
 ```
 
 Pass criteria: `doctor-meta-bridge` is green from the same installed `entwurf`
-surface, and its managed-config/statusline/MCP checks point at the intended
-version (or at the dev checkout only if the dev checkout intentionally owns the
-install). A dev-repo `./run.sh doctor-meta-bridge` red against a global install is
+surface: statusLine uses the stable `entwurf-statusline` bin, MCP uses the stable
+`entwurf-bridge` bin, and the installed writer parity matches the intended
+version. A dev-repo `./run.sh doctor-meta-bridge` red against a global install is
 a real ownership mismatch signal, not a reason to ignore the installed doctor.
 
 ## Failure modes

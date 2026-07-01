@@ -2043,8 +2043,8 @@ check_pack_install() {
     fail "[check-pack-install] npm-managed layout missing executable run.sh (postinstall-chmod did not run?) at $npm_pkg"
     return 1
   fi
-  if [ ! -x "$npmroot/node_modules/.bin/entwurf" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-bridge" ]; then
-    fail "[check-pack-install] npm-managed neutral install missing package bins (entwurf / entwurf-bridge)"
+  if [ ! -x "$npmroot/node_modules/.bin/entwurf" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-bridge" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-statusline" ]; then
+    fail "[check-pack-install] npm-managed neutral install missing package bins (entwurf / entwurf-bridge / entwurf-statusline)"
     ls -l "$npmroot/node_modules/.bin" 2>/dev/null | sed 's/^/    /' >&2 || true
     return 1
   fi
@@ -2064,6 +2064,67 @@ check_pack_install() {
     return 1
   fi
   echo "[check-pack-install] npm-managed install regression pass (hoisted-dep run.sh install wrote settings)"
+
+  # Installed meta-bridge ownership regression (0.12.5): package upgrades must not
+  # bake versioned pnpm-store paths into Claude settings. MCP already uses the
+  # stable `entwurf-bridge` bin; statusLine must now use `entwurf-statusline`, and
+  # the plugin marketplace source must be the version-stable operator data dir
+  # rather than <node_modules>/pi/meta-bridge/.assembled. Use a fake claude CLI so
+  # this stays deterministic/offline while running the REAL installed
+  # install-meta-bridge path and meta-bridge-state apply.
+  local fake_claude_dir="$npm_tmp/fake-claude-bin" fake_claude_log="$npm_tmp/fake-claude.log"
+  mkdir -p "$fake_claude_dir"
+  cat > "$fake_claude_dir/claude" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${FAKE_CLAUDE_LOG:?}"
+case "$1${2:+ $2}" in
+  "--version") echo "2.1.197 (Claude Code)" ;;
+  "plugin validate") : ;;
+  "plugin uninstall") : ;;
+  "plugin marketplace") : ;;
+  "plugin install") : ;;
+  "plugin list") printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
+  "mcp remove") : ;;
+  "mcp add") : ;;
+  "mcp get") printf '%s\n' "Scope: User config" "Status: ✔ Connected" ;;
+  *) : ;;
+esac
+exit 0
+SH
+  chmod +x "$fake_claude_dir/claude"
+  local mb_home="$npm_tmp/meta-home" mb_cfg="$npm_tmp/meta-claude" mb_log
+  mkdir -p "$mb_home" "$mb_cfg"
+  mb_log=$(HOME="$mb_home" XDG_DATA_HOME="$mb_home/.local/share" CLAUDE_CONFIG_DIR="$mb_cfg" FAKE_CLAUDE_LOG="$fake_claude_log" PATH="$fake_claude_dir:$npmroot/node_modules/.bin:$PATH" "$npm_pkg/run.sh" install-meta-bridge 2>&1) || {
+    fail "[check-pack-install] installed install-meta-bridge failed under fake claude:"
+    echo "$mb_log" | tail -20 | sed 's/^/    /' >&2
+    return 1
+  }
+  local stable_asm="$mb_home/.local/share/entwurf/meta-bridge/.assembled"
+  if [ ! -f "$stable_asm/entwurf-meta-receive/meta-bridge-hook.ts" ]; then
+    fail "[check-pack-install] installed meta-bridge did not assemble into the stable operator data dir: $stable_asm"
+    return 1
+  fi
+  if [ -e "$npm_pkg/pi/meta-bridge/.assembled/entwurf-meta-receive/meta-bridge-hook.ts" ]; then
+    fail "[check-pack-install] installed meta-bridge still assembled inside the versioned package store: $npm_pkg/pi/meta-bridge/.assembled"
+    return 1
+  fi
+  python3 - "$mb_cfg/settings.json" "$mb_home/.claude.json" "$stable_asm" <<'PY'
+import json, sys
+settings = json.load(open(sys.argv[1]))
+root = json.load(open(sys.argv[2]))
+stable_asm = sys.argv[3]
+market = settings.get("extraKnownMarketplaces", {}).get("meta-bridge-local", {})
+assert market == {"source": {"source": "directory", "path": stable_asm}}, market
+assert settings.get("statusLine") == {"type": "command", "command": "entwurf-statusline"}, settings.get("statusLine")
+mcp = root.get("mcpServers", {}).get("entwurf-bridge", {})
+assert mcp.get("command") == "entwurf-bridge" and mcp.get("args") == [], mcp
+PY
+  if ! grep -q "$stable_asm" "$fake_claude_log"; then
+    fail "[check-pack-install] fake claude did not receive the stable marketplace path during install-meta-bridge"
+    sed 's/^/    /' "$fake_claude_log" >&2 || true
+    return 1
+  fi
+  echo "[check-pack-install] installed meta-bridge ownership pass (stable statusline bin + stable marketplace dir + stable MCP bin)"
 
   # 0.12.1 C — installed bridge BOOT regression. This is the test whose absence
   # let the 0.12.0 install bug ship: the README's bridge launcher was

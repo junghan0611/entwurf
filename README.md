@@ -188,10 +188,11 @@ raw `.ts` helpers under `node_modules`. If the doctor reports
 trusting the floor result.
 
 After upgrading a globally installed package, run `entwurf install-meta-bridge`
-again before trusting native Claude Code sessions. The installer owns absolute
-Claude Code `statusLine` / marketplace paths plus the user-scope MCP entry; a
-package-manager upgrade alone can leave those keys pointing at the previous pnpm
-store version. Existing Claude Code sessions should be restarted after reinstall.
+again before trusting native Claude Code sessions. The installed statusline and
+MCP entries use stable bin shims, and the marketplace source uses a version-stable
+operator data dir, but the Claude plugin bundle/cache still has to be
+re-materialized for the new package writer. Existing Claude Code sessions should
+be restarted after reinstall.
 
 For manual configuration, [`pi/settings.reference.json`](./pi/settings.reference.json)
 shows the pi adapter settings shape, and the external-host examples below show

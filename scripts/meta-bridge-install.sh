@@ -13,8 +13,9 @@
 #      entwurf_inbox_read tool comes from USER-scope entwurf-bridge MCP wiring
 #      (`claude mcp add -s user ...`). Project-scoped .mcp.json is deliberately
 #      not enough: a /tmp native session would wake without a receipt tool.
-#   2. marketplace add <repo-stable .assembled>  (NOT /tmp — ephemeral source
-#      would break `claude plugin marketplace update`).
+#   2. marketplace add <stable .assembled>  (dev: repo-local; installed package:
+#      version-stable XDG data dir; NOT /tmp — ephemeral source would break
+#      `claude plugin marketplace update`).
 #   3. install entwurf-meta-receive@meta-bridge-local --scope user  (= global:
 #      every native session auto-loads it; no manual --plugin-dir).
 #   4. install/update USER-scope entwurf-bridge MCP, so every native session has
@@ -30,7 +31,16 @@ REPO="$(cd "$HERE/.." && pwd)"
 MKT_NAME="meta-bridge-local"
 PLUGIN="entwurf-meta-receive"
 SRC="$REPO/pi/meta-bridge"
-ASM="$SRC/.assembled"
+# Dev clone: keep the marketplace source inside the checkout for transparent
+# inspection. Installed package: assemble into a version-stable operator path;
+# Claude settings store this directory path and package-manager upgrades do not
+# rewrite it, so a pnpm-store path would go stale on version/peer churn.
+case "$REPO" in
+  */node_modules/@junghanacs/entwurf)
+    ASM="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/meta-bridge/.assembled" ;;
+  *)
+    ASM="$SRC/.assembled" ;;
+esac
 
 die() { echo "meta-bridge-install: $*" >&2; exit 1; }
 

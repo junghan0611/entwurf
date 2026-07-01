@@ -13,7 +13,7 @@
   - **환경:** 전역 `pi`(`@earendil-works/pi-coding-agent`, pnpm global)를 0.80.2→**0.80.3** 업그레이드 — 익스텐션 로더가 런타임 pi 카탈로그를 해석하므로 이게 안 맞으면 sonnet-5가 로더에서 드롭됨.
   - **GPT 검수 반영:** live smoke 3종(`smoke-acp-{raw-turn,overlay,memory-containment}-live`)의 `withTimeout` stale-timer 누수(PASS 후 프로세스 붙잡힘) → `clearTimeout` in `.finally()`. `smoke-acp-session-reuse-live`: turn2 timeout 통일 + 성공경로 `process.exit(0)`→`process.exitCode=0`(PASS 로그 truncate 방지). stale SSOT(AGENTS/README/ROADMAP/setup-clean-host/demo) 정정.
   - **`6d06ad0` fix(targets):** `entwurf/gpt-5.4`·`entwurf/gpt-5.5` **ACP-routed 엔트리 제거**. 노트: "ACP Codex is not on this surface **until the ACP backend is implemented**." → 아래 §① mux 레인의 동기이자 완료판정.
-- **0.12.4 hotfix 완료** — 일반설치 floor(`node_modules`)에서 `doctor-meta-bridge`가 raw `.ts` helper를 strip-types 실행해 가짜 FAIL 내던 버그 수정. hejdev6 실측: pre-fix `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` 재현, patched tarball 설치 후 compiled store-doctor plain-node scan + v2-surface defer 통과. tag/GitHub release/npm publish 완료. Oracle post-publish 확인: global pnpm 0.12.3→0.12.4 upgrade 후 `entwurf install-meta-bridge` 재실행이 필요했음(Claude settings absolute path ownership); docs/release prompt에 upgrade invariant 반영.
+- **0.12.4 hotfix 완료** — 일반설치 floor(`node_modules`)에서 `doctor-meta-bridge`가 raw `.ts` helper를 strip-types 실행해 가짜 FAIL 내던 버그 수정. hejdev6 실측: pre-fix `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` 재현, patched tarball 설치 후 compiled store-doctor plain-node scan + v2-surface defer 통과. tag/GitHub release/npm publish 완료. Oracle post-publish 확인: global pnpm 0.12.3→0.12.4 upgrade 후 `entwurf install-meta-bridge` 재실행이 필요했음. 후속 main에는 installed `entwurf-statusline` bin + version-stable marketplace assembly dir + cached hook doctor probe를 얹어 old-store dead-link 축을 닫는 중.
 - **0.12.2/0.12.1** — 이전 릴리즈(메타브리지 install 이식성 + `check-meta-manifest-schema`, 오라클 설치검증). 상세는 CHANGELOG.
 
 ## NOW — ⓪ GLG 결정: fresh spawn도 mux-visible로 통일
@@ -76,7 +76,7 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
 
 ## Follow-up (blocker 아님)
 
-- **Post-publish global meta-bridge invariant:** package upgrade alone does not rewrite Claude Code `statusLine` / marketplace / user MCP absolute paths. Future publish checklist: `pnpm add -g @junghanacs/entwurf@<version>` → `entwurf install-meta-bridge` → `entwurf doctor-meta-bridge` from the same installed surface, then restart open Claude Code sessions.
+- **Post-publish global meta-bridge invariant:** package upgrade alone does not refresh Claude's plugin bundle/cache. Future publish checklist: `pnpm add -g @junghanacs/entwurf@<version>` → `entwurf install-meta-bridge` → `entwurf doctor-meta-bridge` from the same installed surface, then restart open Claude Code sessions. With the main follow-up, installed statusLine/MCP use stable bins and marketplace source uses a stable data dir; reinstall remains the explicit bundle refresh, not a dead-link repair.
 - **C2** `check-pack-install` 확장: fake `claude` CLI + temp `HOME`/`CLAUDE_CONFIG_DIR`로 installed `entwurf install-meta-bridge` 실행 → `~/.claude.json` command가 해시 store 경로 아니라 안정적 `entwurf-bridge`인지 검증.
 - **C3** support-floor: 실제 최저버전(2.1.97 오라클) validate/install/doctor를 컷 체크리스트 또는 remote gate로.
 - **멀티하네스(Codex/Antigravity):** claude marketplace 일반화 금지. 하네스별 adapter contract(manifest shape, MCP 등록면, version floor, doctor evidence). 공통화는 runner/reporting만.

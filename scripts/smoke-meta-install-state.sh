@@ -71,6 +71,12 @@ JSON
 
 py() { python3 "$STATE" "$@" --repo "$REPO" --asm "$ASM"; }
 
+DEV_STATUSLINE="$(python3 "$STATE" desired-statusline --repo "$REPO" | python3 -c 'import json,sys; print(json.load(sys.stdin)["command"])')"
+if [ "$DEV_STATUSLINE" = "$REPO/scripts/meta-bridge-statusline.sh" ]; then ok "dev statusLine pins the checkout script"; else bad "dev statusLine command drifted: $DEV_STATUSLINE"; fi
+FAKE_INSTALLED_REPO="$TMP/npmroot/node_modules/@junghanacs/entwurf"
+INSTALLED_STATUSLINE="$(python3 "$STATE" desired-statusline --repo "$FAKE_INSTALLED_REPO" | python3 -c 'import json,sys; print(json.load(sys.stdin)["command"])')"
+if [ "$INSTALLED_STATUSLINE" = "entwurf-statusline" ]; then ok "installed statusLine uses the stable bin shim"; else bad "installed statusLine command drifted: $INSTALLED_STATUSLINE"; fi
+
 py prepare >/dev/null
 STATE_FILE="$CLAUDE_CONFIG_DIR/entwurf.install-state.json"
 [ -f "$STATE_FILE" ] && ok "prepare writes install-state before any merge" || bad "state file missing after prepare"
