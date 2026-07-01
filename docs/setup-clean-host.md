@@ -31,7 +31,7 @@ ssh cleanhost 'uname -a; whoami; which git node npm pi claude 2>/dev/null'
 |---|---|---|
 | Node | **24** recommended; `>=22.6.0` minimum | `engines.node` (Node strip-types / ESM runtime) |
 | npm | bundled with Node 24 | public package install path |
-| entwurf | `@junghanacs/entwurf` | neutral npm package; exposes `entwurf` and `entwurf-bridge` bins |
+| entwurf | `@junghanacs/entwurf` | neutral npm package; exposes `entwurf`, `entwurf-bridge`, and `entwurf-statusline` bins |
 | pi binary | **optional**, `@earendil-works/pi-coding-agent >=0.80.3 <0.81` | needed only for the pi adapter / ACP provider / spawn-bg resume lane |
 
 ## Stage 0 — Node 24 via nvm
@@ -64,6 +64,7 @@ npm install -g @junghanacs/entwurf
 
 which entwurf
 which entwurf-bridge
+which entwurf-statusline
 entwurf --help | head -5
 ```
 

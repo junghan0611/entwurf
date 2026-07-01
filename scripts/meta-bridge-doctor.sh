@@ -131,7 +131,7 @@ except Exception:
 PY
 )"
   EXPECTED_STATUSLINE="$(python3 "$REPO/scripts/meta-bridge-state.py" desired-statusline --repo "$REPO" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("command", ""))')"
-  if [ "$STATUSLINE_CMD" = "$EXPECTED_STATUSLINE" ]; then ok "statusLine.command is repo-owned: $STATUSLINE_CMD"; else bad "statusLine.command drifted (got '$STATUSLINE_CMD', expected '$EXPECTED_STATUSLINE')"; fi
+  if [ "$STATUSLINE_CMD" = "$EXPECTED_STATUSLINE" ]; then ok "statusLine.command matches expected (dev: checkout path; installed: entwurf-statusline bin shim): $STATUSLINE_CMD"; else bad "statusLine.command drifted (got '$STATUSLINE_CMD', expected '$EXPECTED_STATUSLINE')"; fi
   if [[ "$EXPECTED_STATUSLINE" == */* ]]; then
     if [ -x "$EXPECTED_STATUSLINE" ]; then ok "statusline executable"; else bad "statusline script not executable: $EXPECTED_STATUSLINE"; fi
   elif command -v "$EXPECTED_STATUSLINE" >/dev/null 2>&1; then

@@ -36,4 +36,17 @@ else
 fi
 
 python3 "$REPO/scripts/meta-bridge-state.py" uninstall --repo "$REPO"
+
+# Remove the assembled marketplace source too — an honest inverse must not orphan
+# it. Installed packages assemble into a version-stable operator data dir
+# (~/.local/share/entwurf/meta-bridge/.assembled); leaving that tree behind is the
+# only meta-bridge footprint uninstall would otherwise leak. Dev clones drop their
+# gitignored in-checkout .assembled. Mirror install-meta-bridge's ASM resolution.
+case "$REPO" in
+  */node_modules/@junghanacs/entwurf)
+    rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/meta-bridge"
+    rmdir "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf" 2>/dev/null || true ;;
+  *)
+    rm -rf "$REPO/pi/meta-bridge/.assembled" ;;
+esac
 echo "[meta-bridge-uninstall] DONE"
