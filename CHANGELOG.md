@@ -18,6 +18,7 @@ All notable changes to this project will be documented here. Format follows [Kee
 - **Live ACP smoke timeout cleanup no longer leaves stale timers after PASS.** Raw-turn, overlay, memory-containment, and session-reuse live smokes now clear their timeout handles when the awaited operation wins, so a successful live check exits promptly instead of lingering until the old timeout expires.
 - **Session-reuse live smoke now preserves its success evidence.** The two-turn reuse smoke no longer calls `process.exit(0)` on success, allowing the turn-2/PASS log and cleanup to drain naturally while the retained ACP child is still handled by the backend exit cleanup.
 - **Claude Code meta-bridge install state also disables workflow surfaces.** `enableWorkflows` and `workflowKeywordTriggerEnabled` are now managed false alongside the existing auto-memory, compaction, prompt-suggestion, progress, and auto-mode settings.
+- **Unsupported ACP Codex targets are not advertised.** The target registry keeps Codex on the native `openai-codex` provider only; `entwurf/gpt-5.4` and `entwurf/gpt-5.5` are removed until an ACP Codex backend exists.
 
 ### Verification
 

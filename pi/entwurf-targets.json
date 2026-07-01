@@ -1,8 +1,8 @@
 {
 	"$comment": "Entwurf Target Registry — exact (provider, model) allowlist. SSOT for what can be spawned via entwurf. See entwurf/AGENTS.md Entwurf Orchestration. Resume path intentionally bypasses this registry per Identity Preservation Rule.",
 	"$notes": {
-		"gpt-5.5": "High-end frontier target with 400K native codex context. Cost: ~$5 input / $30 output per 1M tokens on this tier — ~6x gpt-5.4. Do not make it the default. Use explicitly for long-context / high-quality work only. ACP-routed entries are `explicitOnly`: caller must pass provider=entwurf to route through the ACP bridge, otherwise bare `gpt-5.5` resolves to native openai-codex.",
-		"bareResolution": "Each bare model id resolves unambiguously because only the native openai-codex entry is non-explicitOnly. Bare `gpt-5.5` -> openai-codex/gpt-5.5. ACP route requires explicit provider.",
+		"gpt-5.5": "High-end frontier target with 400K native codex context. Cost: ~$5 input / $30 output per 1M tokens on this tier — ~6x gpt-5.4. Do not make it the default. Use explicitly for long-context / high-quality work only.",
+		"bareResolution": "Each bare Codex model id resolves through the native openai-codex provider. Bare `gpt-5.5` -> openai-codex/gpt-5.5. ACP Codex is not on this surface until the ACP backend is implemented.",
 		"gemini": "Gemini ACP targets are routed exclusively through entwurf's `gemini --acp` backend; the host pi removed its built-in google provider in v0.71.0. ACP entries are `explicitOnly` to keep the entwurf surface honest — there is currently no native pi alternative to disambiguate against, but the flag keeps the policy stable if pi reintroduces a google provider later. 3.1 Pro is the subscription-backed high-quality ACP target. Flash / 2.5 routing through ACP is intentionally not on this surface."
 	},
 	"entwurfTargets": [
@@ -11,9 +11,6 @@
 
 		{ "provider": "openai-codex", "model": "gpt-5.4", "enabled": true },
 		{ "provider": "openai-codex", "model": "gpt-5.5", "enabled": true },
-
-		{ "provider": "entwurf", "model": "gpt-5.4", "enabled": true, "explicitOnly": true },
-		{ "provider": "entwurf", "model": "gpt-5.5", "enabled": true, "explicitOnly": true },
 
 		{ "provider": "entwurf", "model": "gemini-3.1-pro-preview", "enabled": true, "explicitOnly": true }
 	]
