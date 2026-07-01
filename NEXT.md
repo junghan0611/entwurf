@@ -1,4 +1,4 @@
-# NEXT — entwurf post-0.12.4 hotfix: mux-agnostic spawn surface + PR #40 cortex
+# NEXT — entwurf post-0.12.5: mux-agnostic spawn surface + PR #40 cortex
 
 > 나침반이지 DB가 아니다: **현재 위치 · 다음 한 걸음 · 넘으면 안 되는 선**만 둔다.
 > 현재+미래 방향과 설계 SSOT = **`ROADMAP.md`**. 닫힌 변경 핵심 = **`CHANGELOG.md`**. 세션별 process history = git log.
@@ -14,7 +14,6 @@
   - **GPT 검수 반영:** live smoke 3종(`smoke-acp-{raw-turn,overlay,memory-containment}-live`)의 `withTimeout` stale-timer 누수(PASS 후 프로세스 붙잡힘) → `clearTimeout` in `.finally()`. `smoke-acp-session-reuse-live`: turn2 timeout 통일 + 성공경로 `process.exit(0)`→`process.exitCode=0`(PASS 로그 truncate 방지). stale SSOT(AGENTS/README/ROADMAP/setup-clean-host/demo) 정정.
   - **`6d06ad0` fix(targets):** `entwurf/gpt-5.4`·`entwurf/gpt-5.5` **ACP-routed 엔트리 제거**. 노트: "ACP Codex is not on this surface **until the ACP backend is implemented**." → 아래 §① mux 레인의 동기이자 완료판정.
 - **0.12.4 hotfix 완료** — 일반설치 floor(`node_modules`)에서 `doctor-meta-bridge`가 raw `.ts` helper를 strip-types 실행해 가짜 FAIL 내던 버그 수정. hejdev6 실측: pre-fix `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` 재현, patched tarball 설치 후 compiled store-doctor plain-node scan + v2-surface defer 통과. tag/GitHub release/npm publish 완료.
-- **0.12.5 미배포(main ahead, publish 대기)** — strip-types 클래스의 **세 번째 얼굴**을 닫음. 오라클 실측: 0.12.4 글로벌 설치에서 marketplace source가 `.../node_modules/.../pi/meta-bridge/.assembled` → Claude가 그 source의 hook `.ts`를 직접 strip-types 실행 → 매 세션 `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`. 근본은 hook이 유일한 `.ts`-at-runtime 표면(bridge boot 0.12.1 / store-doctor 0.12.4는 이미 dist JS). 조치: **L1** statusLine `entwurf-statusline` bin shim, **L2** marketplace `.assembled`를 XDG(`~/.local/share/entwurf/...`)로, **B(hook dist JS)** `build-bridge`가 `dist/pi-extensions/meta-bridge-hook.js` emit + install.sh가 installed면 그 `.js`(+`meta-session.js`) 복사·`__HOOK_ENTRY__` bake(dev는 `.ts` 유지). doctor writer-version parity를 `meta-session.<js|ts>` 모드별 비교로(installed=dist `.js` ↔ installed `.js`, false-STALE 방지). doctor BAKED 파싱/cached-hook 실행도 `.ts|.js` 확장자 인지. **회귀 게이트**: `check-pack-install`이 installed 컴파일 hook을 **node_modules 밑에서 plain node 실행 PASS + 같은 위치 raw `.ts` REFUSED 재현**(오늘 `.ts` FAIL / 새 `.js` PASS). 검증: `pnpm check` green, dev `doctor-meta-bridge` green(parity 3자 동일해시). 커밋 미푸시 — 0.12.5 prepare/publish는 GLG 승인 대기. **응급 회피(현행)**: dead-store 겪는 host는 dev clone `./run.sh install-meta-bridge`(marketplace=checkout, node_modules 밖). 단 dev `.assembled`는 gitignored라 `git clean -dfx`에 취약 — 0.12.5 글로벌이 영구 해법.
 - **0.12.2/0.12.1** — 이전 릴리즈(메타브리지 install 이식성 + `check-meta-manifest-schema`, 오라클 설치검증). 상세는 CHANGELOG.
 
 ## NOW — ⓪ GLG 결정: fresh spawn도 mux-visible로 통일

@@ -4,11 +4,11 @@ End-to-end install of **entwurf** on a host with only `git` available — no
 node, no npm package, no pi binary, no dotfiles. The point is to validate the
 public install surface as an outside user would experience it.
 
-> **Scope.** This is the entwurf 0.12.4 install recipe. The base package install
+> **Scope.** This is the entwurf 0.12.5 install recipe. The base package install
 > is **neutral npm**, not `pi install npm:...`. Pi is an optional adapter lane for
-> the ACP provider / control-socket runtime. The 0.12.4 floor fix is explicitly
+> the ACP provider / control-socket runtime. The 0.12.5 floor fix is explicitly
 > covered here: installed packages under `node_modules` must not run raw `.ts`
-> doctor helpers through Node strip-types.
+> bridge, doctor, or plugin-hook helpers through Node strip-types.
 
 `entwurf` is a garden-citizen dispatch substrate and meta-bridge. It does not
 provide, copy, or mediate backend credentials — it lets the official backend CLI
@@ -150,17 +150,18 @@ entwurf doctor-meta-bridge
 ```
 
 On an installed package (`.../node_modules/@junghanacs/entwurf`), the doctor must
-not try to strip-types-run raw `.ts` helpers. In the output, check for these two
-0.12.4 floor-regression signals:
+not try to strip-types-run raw `.ts` helpers or hooks. In the output, check for
+these 0.12.5 floor-regression signals:
 
 ```text
+ok    cached SessionStart hook executes cleanly in an isolated temp agent dir
 ok    full store scan: no corrupt records, duplicate nativeSessionId, body/filename drift, or backend↔wakeMode contradiction
 ok    check-entwurf-v2-surface: shipped surface source present; exhaustive source-shape gate is a repo/release invariant (not run under node_modules)
 ```
 
-If either section reports `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, the host
-is still running a pre-0.12.4 package or a broken tarball. Reinstall the current
-package and re-run `entwurf install-meta-bridge && entwurf doctor-meta-bridge`.
+If any of those sections reports `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`,
+the host is still running a pre-0.12.5 package or a broken tarball. Reinstall the
+current package and re-run `entwurf install-meta-bridge && entwurf doctor-meta-bridge`.
 
 Upgrade invariant: every global npm/pnpm package upgrade must be followed by
 `entwurf install-meta-bridge` from that same installed binary and then

@@ -4,10 +4,19 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.12.5 — 2026-07-01
+
 ### Fixed
 
 - **The plugin hook now runs as compiled JS when installed — the strip-types class is closed for good.** The SessionStart/UserPromptSubmit hook ran as a raw `meta-bridge-hook.ts`. When the marketplace source sits below `node_modules` (a global npm/pnpm install), Claude executes that `.ts` directly and Node refuses strip-types there (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`), so every session failed. The hook was the last `.ts`-at-runtime surface; `build-bridge` now emits `dist/pi-extensions/meta-bridge-hook.js` and the installer copies that compiled closure (dev clones still run the `.ts` for transparent editing), mirroring the same installed-vs-dev split `start.sh` (0.12.1) and the store-doctor (0.12.4) already use. `check-pack-install` now runs the installed compiled hook **from under `node_modules` with plain `node`** and proves a raw `.ts` at the same location is refused — the exact fence that broke real hosts is a green regression. The doctor's writer-version parity compares `meta-session.<js|ts>` by install mode so a compiled bundle no longer false-STALEs against the `.ts` source.
 - **Installed meta-bridge paths are now stable across package upgrades.** The installed statusline uses a new `entwurf-statusline` bin shim (matching the existing `entwurf-bridge` MCP shim), and installed meta-bridge marketplace assemblies move out of versioned pnpm store paths into a version-stable operator data directory. Package upgrades still require `entwurf install-meta-bridge` to refresh the Claude plugin bundle/cache, but old-store dead links no longer strand `statusLine` or marketplace source paths. The doctor now also executes the cached SessionStart hook once in an isolated temp agent dir, catching stale plugin-cache / hook-syntax failures before the next real Claude Code session.
+
+### Verification
+
+- Oracle and local review both reproduced the installed hook fence: compiled `meta-bridge-hook.js` runs from under `node_modules` with plain `node`, while the raw `.ts` at the same location fails specifically with `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`.
+- `./run.sh check-pack` and `./run.sh check-pack-install` passed on 2026-07-01 with the hook-JS tarball requirements, baked `hooks.json` `.js` assertion, and raw-`.ts` fence reproduction.
+- `pnpm check` passed on 2026-07-01 after the hook-JS + stable installed-path changes.
+- `./run.sh install-meta-bridge && ./run.sh doctor-meta-bridge` passed from the development clone after re-materializing the gitignored `.assembled` bundle.
 
 ## 0.12.4 — 2026-07-01
 
