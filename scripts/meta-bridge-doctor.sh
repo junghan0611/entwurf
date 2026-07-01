@@ -17,11 +17,18 @@ MKT_NAME="meta-bridge-local"
 PLUGIN="entwurf-meta-receive"
 CLAUDE_CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# LIB_EXT tracks the hook artifact mode (0.12.5): installed packages ship the
+# tsc-emitted `.js` closure (node_modules-safe), dev clones run the `.ts` source.
+# The writer-version parity below hashes meta-session.<LIB_EXT> so an installed
+# `.js` bundle is compared against the SAME-pipeline dist `.js`, never against the
+# `.ts` source (which would hash-mismatch and false-STALE).
 case "$REPO" in
   */node_modules/@junghanacs/entwurf)
-    ASM="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/meta-bridge/.assembled" ;;
+    ASM="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/meta-bridge/.assembled"
+    LIB_EXT="js" ;;
   *)
-    ASM="$REPO/pi/meta-bridge/.assembled" ;;
+    ASM="$REPO/pi/meta-bridge/.assembled"
+    LIB_EXT="ts" ;;
 esac
 # shellcheck source=scripts/meta-bridge-hook-log.sh
 source "$REPO/scripts/meta-bridge-hook-log.sh"
@@ -99,13 +106,18 @@ if [ -n "$CACHE_HOOKS" ]; then
   # line 158) so BAKED="" routes to that bad(...): an installed hooks.json exists but
   # the doctor cannot read its load-bearing hook command, so the store-churn guard is
   # blind — a verify-impossible state must fail loud, not pass as a soft warn (A3b).
-  BAKED="$({ grep -oE '"command": "[^ ]+ \$\{CLAUDE_PLUGIN_ROOT\}/meta-bridge-hook.ts"' "$CACHE_HOOKS" || true; } | head -1 | sed -E 's/.*"command": "([^ ]+) .*/\1/')"
+  # Match either hook artifact (0.12.5): installed ships meta-bridge-hook.js, dev
+  # clones meta-bridge-hook.ts. Capture the whole command so we run the SAME entry
+  # file the live hook runs (never a hardcoded extension that drifts from install).
+  HOOK_CMD="$({ grep -oE '"command": "[^ ]+ \$\{CLAUDE_PLUGIN_ROOT\}/meta-bridge-hook\.(ts|js)"' "$CACHE_HOOKS" || true; } | head -1)"
+  BAKED="$(printf '%s' "$HOOK_CMD" | sed -E 's/.*"command": "([^ ]+) .*/\1/')"
+  HOOK_FILE="$(printf '%s' "$HOOK_CMD" | sed -E 's#.*/([^/"]+)"$#\1#')"
   if [ -n "$BAKED" ] && [ -x "$BAKED" ]; then
     ok "baked node exists + executable: $BAKED"
     CACHE_ROOT="$(cd "$(dirname "$CACHE_HOOKS")/.." && pwd)"
     TMP_AGENT="$(mktemp -d 2>/dev/null || mktemp -d -t entwurf-doctor-hook)"
     HOOK_ENV='{"session_id":"doctor-synthetic-native","transcript_path":"/tmp/entwurf-doctor-synthetic-transcript.jsonl","cwd":"/tmp","hook_event_name":"SessionStart","model":{"id":"doctor-model"}}'
-    if HOOK_OUT="$(printf '%s' "$HOOK_ENV" | env PI_CODING_AGENT_DIR="$TMP_AGENT" CLAUDE_PLUGIN_ROOT="$CACHE_ROOT" "$BAKED" "$CACHE_ROOT/meta-bridge-hook.ts" 2>&1)" && printf '%s' "$HOOK_OUT" | grep -q 'hookSpecificOutput'; then
+    if HOOK_OUT="$(printf '%s' "$HOOK_ENV" | env PI_CODING_AGENT_DIR="$TMP_AGENT" CLAUDE_PLUGIN_ROOT="$CACHE_ROOT" "$BAKED" "$CACHE_ROOT/$HOOK_FILE" 2>&1)" && printf '%s' "$HOOK_OUT" | grep -q 'hookSpecificOutput'; then
       ok "cached SessionStart hook executes cleanly in an isolated temp agent dir"
     else
       bad "cached SessionStart hook failed to execute — stale plugin cache / unsupported TS syntax / broken bundle. Re-run install-meta-bridge from the intended surface. Detail: $(printf '%s' "$HOOK_OUT" | tr '\n' ' ' | cut -c1-300)"
@@ -263,10 +275,17 @@ registry_for_ms() { # $1=bundle meta-session.ts → sibling plugin-root registry
   dirname "$(dirname "$1")"
 }
 
-SRC_MS="$REPO/pi-extensions/lib/meta-session.ts"
+# Source authority for parity depends on the mode: an installed bundle carries the
+# dist `.js`, so compare it against the dist `.js` (same tsc pipeline → hash-equal);
+# a dev clone carries the `.ts`, so compare against the `.ts` source.
+if [ "$LIB_EXT" = "js" ]; then
+  SRC_MS="$REPO/mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
+else
+  SRC_MS="$REPO/pi-extensions/lib/meta-session.ts"
+fi
 SRC_REG="$REPO/pi/entwurf-capabilities.json"
-ASM_MS="$ASM/$PLUGIN/lib/meta-session.ts"
-INST_MS="$(ls "$CLAUDE_CFG"/plugins/cache/"$MKT_NAME"/"$PLUGIN"/*/lib/meta-session.ts 2>/dev/null | head -1 || true)"
+ASM_MS="$ASM/$PLUGIN/lib/meta-session.$LIB_EXT"
+INST_MS="$(ls "$CLAUDE_CFG"/plugins/cache/"$MKT_NAME"/"$PLUGIN"/*/lib/meta-session."$LIB_EXT" 2>/dev/null | head -1 || true)"
 
 ASM_ROOT="$(registry_for_ms "$ASM_MS")"
 INST_ROOT="$(registry_for_ms "${INST_MS:-}")"

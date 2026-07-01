@@ -6,7 +6,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "__NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/meta-bridge-hook.ts"
+						"command": "__NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"
 					}
 				]
 			}
@@ -17,7 +17,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "__NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/meta-bridge-hook.ts"
+						"command": "__NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"
 					}
 				]
 			}
@@ -28,7 +28,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "__NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/meta-bridge-hook.ts"
+						"command": "__NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"
 					}
 				]
 			}

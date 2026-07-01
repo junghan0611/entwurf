@@ -35,11 +35,26 @@ SRC="$REPO/pi/meta-bridge"
 # inspection. Installed package: assemble into a version-stable operator path;
 # Claude settings store this directory path and package-manager upgrades do not
 # rewrite it, so a pnpm-store path would go stale on version/peer churn.
+#
+# The SAME installed-vs-dev split also picks the hook artifact (0.12.5): an
+# installed marketplace source lives below node_modules, where Node REFUSES
+# `--experimental-strip-types` on `.ts` (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING),
+# so installed packages run the tsc-emitted `meta-bridge-hook.js` closure (mirrors
+# start.sh/store-doctor). Dev clones live outside node_modules and run the `.ts`
+# source directly for transparent editing. HOOK_ENTRY is baked into hooks.json.
 case "$REPO" in
   */node_modules/@junghanacs/entwurf)
-    ASM="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/meta-bridge/.assembled" ;;
+    ASM="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/meta-bridge/.assembled"
+    HOOK_ENTRY="meta-bridge-hook.js"
+    HOOK_SRC="$REPO/mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook.js"
+    LIB_SRC="$REPO/mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
+    LIB_EXT="js" ;;
   *)
-    ASM="$SRC/.assembled" ;;
+    ASM="$SRC/.assembled"
+    HOOK_ENTRY="meta-bridge-hook.ts"
+    HOOK_SRC="$REPO/pi-extensions/meta-bridge-hook.ts"
+    LIB_SRC="$REPO/pi-extensions/lib/meta-session.ts"
+    LIB_EXT="ts" ;;
 esac
 
 die() { echo "meta-bridge-install: $*" >&2; exit 1; }
@@ -75,9 +90,12 @@ mkdir -p "$ASM"
 cp -r "$SRC/.claude-plugin" "$ASM/.claude-plugin"
 cp -r "$SRC/$PLUGIN" "$ASM/$PLUGIN"
 # entry shell + its lib travel WITH the plugin so the install copy is self-contained.
-cp "$REPO/pi-extensions/meta-bridge-hook.ts" "$ASM/$PLUGIN/meta-bridge-hook.ts"
+# Installed → tsc-emitted JS (dist, node_modules-safe); dev clone → strip-types .ts.
+[ -f "$HOOK_SRC" ] || die "hook artifact missing: $HOOK_SRC (installed package ships it via prepack build-bridge → dist; reinstall @junghanacs/entwurf, or run 'pnpm run build-bridge' in a dev clone)."
+[ -f "$LIB_SRC" ]  || die "hook lib artifact missing: $LIB_SRC (same build-bridge dist closure)."
+cp "$HOOK_SRC" "$ASM/$PLUGIN/$HOOK_ENTRY"
 mkdir -p "$ASM/$PLUGIN/lib"
-cp "$REPO/pi-extensions/lib/meta-session.ts" "$ASM/$PLUGIN/lib/meta-session.ts"
+cp "$LIB_SRC" "$ASM/$PLUGIN/lib/meta-session.$LIB_EXT"
 cp "$REPO/pi-extensions/lib/session-id.js" "$ASM/$PLUGIN/lib/session-id.js"
 # v2 writer (3D-3+) reads the capability registry at runtime
 # (loadMetaCapabilityRegistry). It MUST travel at the plugin ROOT — meta-session's
@@ -86,23 +104,29 @@ cp "$REPO/pi-extensions/lib/session-id.js" "$ASM/$PLUGIN/lib/session-id.js"
 # Without this, a v2 writer throws on every mint/parse. doctor-meta-bridge asserts it.
 cp "$REPO/pi/entwurf-capabilities.json" "$ASM/$PLUGIN/entwurf-capabilities.json"
 chmod +x "$ASM/$PLUGIN/scripts/doorbell.sh"
-# Bake the node abspath into hooks.json — the ONLY templated surface. mailbox /
-# meta-record dirs resolve at runtime inside entry.ts (<pi-agent-dir>, fixed ~/).
+# Bake the node abspath AND the hook entry filename into hooks.json — the two
+# templated surfaces (0.12.5: HOOK_ENTRY is meta-bridge-hook.js when installed,
+# .ts in a dev clone). mailbox / meta-record dirs resolve at runtime inside the
+# hook itself (<pi-agent-dir>, fixed ~/).
 # The plugin owns ONLY the wake/record hooks; the receiver-side entwurf_inbox_read
 # tool is NOT the plugin's job. It comes from USER-scope entwurf-bridge MCP
 # wiring (`claude mcp add -s user ...`), never a plugin .mcp.json duplicate.
 HOOKS="$ASM/$PLUGIN/hooks/hooks.json"
-HOOKS_PATH="$HOOKS" NODE_PATH_TO_BAKE="$NODE_BIN" python3 - <<'PY'
+HOOKS_PATH="$HOOKS" NODE_PATH_TO_BAKE="$NODE_BIN" HOOK_ENTRY_TO_BAKE="$HOOK_ENTRY" python3 - <<'PY'
 from pathlib import Path
 import os
 hooks = Path(os.environ["HOOKS_PATH"])
 node = os.environ["NODE_PATH_TO_BAKE"]
+hook_entry = os.environ["HOOK_ENTRY_TO_BAKE"]
 text = hooks.read_text(encoding="utf-8")
-if "__NODE_BIN__" not in text:
-    raise SystemExit(f"node-path bake failed before replacement (placeholder absent in {hooks})")
-hooks.write_text(text.replace("__NODE_BIN__", node), encoding="utf-8")
+for placeholder in ("__NODE_BIN__", "__HOOK_ENTRY__"):
+    if placeholder not in text:
+        raise SystemExit(f"hooks bake failed before replacement ({placeholder} absent in {hooks})")
+hooks.write_text(text.replace("__NODE_BIN__", node).replace("__HOOK_ENTRY__", hook_entry), encoding="utf-8")
 PY
-grep -q "__NODE_BIN__" "$HOOKS" && die "node-path bake failed (placeholder still present in $HOOKS)."
+for placeholder in "__NODE_BIN__" "__HOOK_ENTRY__"; do
+  grep -q "$placeholder" "$HOOKS" && die "hooks bake failed ($placeholder still present in $HOOKS)."
+done
 echo "[meta-bridge-install] assembled $ASM (node baked, entry+lib bundled; MCP wiring is NOT plugin-owned)"
 
 # --- validate the manifests before touching user config ---------------------

@@ -2100,14 +2100,48 @@ SH
     return 1
   }
   local stable_asm="$mb_home/.local/share/entwurf/meta-bridge/.assembled"
-  if [ ! -f "$stable_asm/entwurf-meta-receive/meta-bridge-hook.ts" ]; then
-    fail "[check-pack-install] installed meta-bridge did not assemble into the stable operator data dir: $stable_asm"
+  local installed_hook="$stable_asm/entwurf-meta-receive/meta-bridge-hook.js"
+  if [ ! -f "$installed_hook" ]; then
+    fail "[check-pack-install] installed meta-bridge did not assemble the compiled hook JS into the stable operator data dir: $installed_hook"
     return 1
   fi
-  if [ -e "$npm_pkg/pi/meta-bridge/.assembled/entwurf-meta-receive/meta-bridge-hook.ts" ]; then
+  if [ -f "$stable_asm/entwurf-meta-receive/meta-bridge-hook.ts" ]; then
+    fail "[check-pack-install] installed meta-bridge shipped a raw .ts hook — installed packages must run compiled JS (strip-types is refused under node_modules)"
+    return 1
+  fi
+  if [ -e "$npm_pkg/pi/meta-bridge/.assembled/entwurf-meta-receive" ]; then
     fail "[check-pack-install] installed meta-bridge still assembled inside the versioned package store: $npm_pkg/pi/meta-bridge/.assembled"
     return 1
   fi
+  # 0.12.5 strip-types-fence regression (GPT safety pin). The compiled hook must run
+  # FROM UNDER node_modules with plain node — the exact fence that broke oracle's
+  # 0.12.4 raw-.ts hook (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING). L2 relocates
+  # the runtime marketplace source to XDG, but this hardens the ARTIFACT itself so
+  # it is safe even if a future cache/marketplace path lands under node_modules.
+  local nm_probe="$npmroot/node_modules/@junghanacs/entwurf/pi/meta-bridge/.assembled-packprobe/entwurf-meta-receive"
+  mkdir -p "$nm_probe/lib"
+  cp "$installed_hook" "$nm_probe/meta-bridge-hook.js"
+  cp "$stable_asm/entwurf-meta-receive/lib/meta-session.js" "$nm_probe/lib/meta-session.js"
+  cp "$stable_asm/entwurf-meta-receive/lib/session-id.js" "$nm_probe/lib/session-id.js"
+  cp "$stable_asm/entwurf-meta-receive/entwurf-capabilities.json" "$nm_probe/entwurf-capabilities.json"
+  local probe_env='{"session_id":"pack-probe","transcript_path":"/tmp/x.jsonl","cwd":"/tmp","hook_event_name":"SessionStart","model":{"id":"probe"}}'
+  local probe_out
+  if probe_out="$(printf '%s' "$probe_env" | env PI_CODING_AGENT_DIR="$(mktemp -d)" CLAUDE_PLUGIN_ROOT="$nm_probe" node "$nm_probe/meta-bridge-hook.js" 2>&1)" && printf '%s' "$probe_out" | grep -q hookSpecificOutput; then
+    : # compiled hook crosses the node_modules strip-types fence safely
+  else
+    fail "[check-pack-install] compiled hook failed to run under node_modules with plain node: $(printf '%s' "$probe_out" | tr '\n' ' ' | cut -c1-200)"
+    rm -rf "$nm_probe"; return 1
+  fi
+  # FAIL-reproduction: a raw .ts at the SAME node_modules location must be REFUSED by
+  # node — proving why the compiled JS is required. If node ever accepts it, the
+  # fence moved and this guard flips loud instead of silently regressing.
+  cp "$npm_pkg/pi-extensions/meta-bridge-hook.ts" "$nm_probe/meta-bridge-hook.ts"
+  if printf '%s' "$probe_env" | env PI_CODING_AGENT_DIR="$(mktemp -d)" CLAUDE_PLUGIN_ROOT="$nm_probe" node "$nm_probe/meta-bridge-hook.ts" >/dev/null 2>&1; then
+    fail "[check-pack-install] raw .ts hook UNEXPECTEDLY ran under node_modules — strip-types fence moved; the compiled-hook rationale must be revisited"
+    rm -rf "$nm_probe"; return 1
+  fi
+  rm -rf "$nm_probe"
+  echo "[check-pack-install] installed hook is node_modules-safe compiled JS (runs under node_modules with plain node; raw .ts refused there)"
   python3 - "$mb_cfg/settings.json" "$mb_home/.claude.json" "$stable_asm" <<'PY'
 import json, sys
 settings = json.load(open(sys.argv[1]))

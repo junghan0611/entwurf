@@ -28,9 +28,14 @@
  * a UserPromptSubmit fire does a degraded RECORD backfill (upsert) but cannot
  * re-arm the idle watch — the record's address is restored, the wake is not.
  *
- * Run: `<node> --experimental-strip-types <plugin-root>/meta-bridge-hook.ts`.
- * Imports `./lib/meta-session.ts` (+ `./lib/session-id.js`); the installer copies
- * that lib dir alongside this file so `${CLAUDE_PLUGIN_ROOT}` self-locates it.
+ * Run (dev clone): `<node> --experimental-strip-types <plugin-root>/meta-bridge-hook.ts`.
+ * Run (installed):  `<node> <plugin-root>/meta-bridge-hook.js` — the tsc-emitted
+ * closure (build-bridge → dist), because Node REFUSES strip-types on a `.ts` below
+ * node_modules (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING). The installer picks
+ * the artifact by layout (0.12.5), mirroring start.sh / store-doctor.
+ * Imports `./lib/meta-session.ts` (+ `./lib/session-id.js`); `rewriteRelativeImportExtensions`
+ * rewrites that to `./lib/meta-session.js` in the emitted closure. The installer
+ * copies the lib dir alongside this file so `${CLAUDE_PLUGIN_ROOT}` self-locates it.
  */
 
 import * as fs from "node:fs";

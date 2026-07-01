@@ -46,5 +46,22 @@
 	// emits here, so it adds ONE leaf JS (dist/scripts/meta-bridge-store-doctor.js)
 	// and ZERO new deps. It is NOT in index.ts's boot closure, so
 	// check-entwurf-bridge-pi-free (which walks the index eager closure) is unaffected.
-	"include": ["./src/index.ts", "../../protocol.js", "../../scripts/meta-bridge-store-doctor.ts"]
+	//
+	// WHY meta-bridge-hook rides THIS build (0.12.5): the SessionStart/UserPromptSubmit
+	// plugin hook ran as raw `.ts` (`node ${CLAUDE_PLUGIN_ROOT}/meta-bridge-hook.ts`).
+	// Under an installed marketplace source below node_modules that is
+	// ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING — the SAME strip-types fence
+	// start.sh (0.12.1) and the store-doctor (0.12.4) already cross by shipping JS.
+	// The hook was the last `.ts`-at-runtime surface; emitting it here closes that
+	// class for good (installer copies the dist JS when installed, keeps `.ts` for a
+	// dev clone). Its only repo import is meta-session.ts, ALREADY emitted for the
+	// store-doctor, so this adds ONE leaf JS (dist/pi-extensions/meta-bridge-hook.js)
+	// and ZERO new deps. It is a plugin hook, never in index.ts's boot closure, so
+	// check-entwurf-bridge-pi-free is unaffected.
+	"include": [
+		"./src/index.ts",
+		"../../protocol.js",
+		"../../scripts/meta-bridge-store-doctor.ts",
+		"../../pi-extensions/meta-bridge-hook.ts"
+	]
 }
