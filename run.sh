@@ -1735,6 +1735,12 @@ check_pack() {
     # doctor.sh runs this prebuilt JS when installed under node_modules (strip-types
     # refuses the .ts there), same boundary start.sh crosses. build-bridge emits it.
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-store-doctor.js"
+    # 0.12.5 — the node_modules-safe plugin hook + its lib. install-meta-bridge copies
+    # these compiled JS into the assembled plugin when installed (raw .ts can't
+    # strip-types under node_modules). meta-session.js is shared with the store-doctor
+    # above; listed here too so the hook axis fails loud if the emit graph drops it.
+    "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
     "pi/entwurf-targets.json"
@@ -1887,6 +1893,10 @@ check_pack_install() {
     # 0.12.4 — prebuilt node_modules-safe store-scan artifact for the doctor
     # (see check-pack). The installed-scan smoke below runs exactly this file.
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-store-doctor.js"
+    # 0.12.5 — node_modules-safe plugin hook + lib (see check-pack). The installed
+    # hook regression below runs exactly this compiled JS from under node_modules.
+    "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook.js"
+    "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
     "pi/entwurf-targets.json"
@@ -2109,6 +2119,19 @@ SH
     fail "[check-pack-install] installed meta-bridge shipped a raw .ts hook — installed packages must run compiled JS (strip-types is refused under node_modules)"
     return 1
   fi
+  # The artifact existing is not enough (review BLOCKER 1): Claude runs the hooks.json
+  # COMMAND, so assert the baked command actually targets the compiled .js with both
+  # placeholders resolved. A bake that mis-targeted .ts (or left a placeholder) would
+  # still pass the direct-JS smoke below, then fail live.
+  local installed_hooks_json="$stable_asm/entwurf-meta-receive/hooks/hooks.json"
+  if ! grep -q 'meta-bridge-hook\.js' "$installed_hooks_json"; then
+    fail "[check-pack-install] installed hooks.json does not point at the compiled meta-bridge-hook.js: $installed_hooks_json"
+    return 1
+  fi
+  if grep -qE 'meta-bridge-hook\.ts|__HOOK_ENTRY__|__NODE_BIN__' "$installed_hooks_json"; then
+    fail "[check-pack-install] installed hooks.json references a raw .ts entry or an unbaked placeholder (__HOOK_ENTRY__/__NODE_BIN__): $installed_hooks_json"
+    return 1
+  fi
   if [ -e "$npm_pkg/pi/meta-bridge/.assembled/entwurf-meta-receive" ]; then
     fail "[check-pack-install] installed meta-bridge still assembled inside the versioned package store: $npm_pkg/pi/meta-bridge/.assembled"
     return 1
@@ -2132,16 +2155,23 @@ SH
     fail "[check-pack-install] compiled hook failed to run under node_modules with plain node: $(printf '%s' "$probe_out" | tr '\n' ' ' | cut -c1-200)"
     rm -rf "$nm_probe"; return 1
   fi
-  # FAIL-reproduction: a raw .ts at the SAME node_modules location must be REFUSED by
-  # node — proving why the compiled JS is required. If node ever accepts it, the
-  # fence moved and this guard flips loud instead of silently regressing.
+  # FAIL-reproduction (review BLOCKER 2): a raw .ts at the SAME node_modules location
+  # must be refused SPECIFICALLY by the strip-types fence — not by some unrelated
+  # failure. A missing lib would also exit nonzero and hollow out the proof, so
+  # capture stderr and require the exact ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING.
   cp "$npm_pkg/pi-extensions/meta-bridge-hook.ts" "$nm_probe/meta-bridge-hook.ts"
-  if printf '%s' "$probe_env" | env PI_CODING_AGENT_DIR="$(mktemp -d)" CLAUDE_PLUGIN_ROOT="$nm_probe" node "$nm_probe/meta-bridge-hook.ts" >/dev/null 2>&1; then
+  local ts_out ts_rc
+  ts_out="$(printf '%s' "$probe_env" | env PI_CODING_AGENT_DIR="$(mktemp -d)" CLAUDE_PLUGIN_ROOT="$nm_probe" node "$nm_probe/meta-bridge-hook.ts" 2>&1)" && ts_rc=0 || ts_rc=$?
+  if [ "${ts_rc:-0}" -eq 0 ]; then
     fail "[check-pack-install] raw .ts hook UNEXPECTEDLY ran under node_modules — strip-types fence moved; the compiled-hook rationale must be revisited"
     rm -rf "$nm_probe"; return 1
   fi
+  if ! printf '%s' "$ts_out" | grep -q 'ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING'; then
+    fail "[check-pack-install] raw .ts hook failed under node_modules but NOT via the strip-types fence (expected ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING); got: $(printf '%s' "$ts_out" | tr '\n' ' ' | cut -c1-200) — the regression no longer proves the compiled-hook rationale"
+    rm -rf "$nm_probe"; return 1
+  fi
   rm -rf "$nm_probe"
-  echo "[check-pack-install] installed hook is node_modules-safe compiled JS (runs under node_modules with plain node; raw .ts refused there)"
+  echo "[check-pack-install] installed hook is node_modules-safe compiled JS (hooks.json points at .js; runs under node_modules with plain node; raw .ts refused there by the strip-types fence)"
   python3 - "$mb_cfg/settings.json" "$mb_home/.claude.json" "$stable_asm" <<'PY'
 import json, sys
 settings = json.load(open(sys.argv[1]))
