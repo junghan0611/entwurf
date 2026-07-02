@@ -88,46 +88,36 @@ The goal is not merely "invoke Claude Code." We want:
 
 ## 1. Setup
 
-entwurf supports two install paths; both end in the same runtime state (a valid `.pi/settings.json` with `entwurfProvider.mcpServers` wired) and differ only in who owns the checkout.
+**One install command to remember: `./run.sh setup <project>`.** It is idempotent — re-run the exact same command whenever anything looks wrong. There is no second install surface to juggle: from a clone `setup` runs the whole floor in order.
 
-| Path | Who | Shape |
-|------|-----|-------|
-| **A — Consumer** | end-user of pi | `pi install git:…` + one `run.sh install .` |
-| **B — Developer** | contributor / first user | `git clone …` + `pi install ./` + `run.sh install …` |
-
-### 1.1 Path A — consumer install
-
-```bash
-pi install git:github.com/junghan0611/entwurf          # pi auto-clones + installs deps
-cd /path/to/consumer-project
-~/.pi/agent/git/github.com/junghan0611/entwurf/run.sh install .   # wire bundled mcpServers
-pi --list-models entwurf                               # curated model surface
-pi --provider entwurf --model claude-sonnet-5 -p "reply with ok only"   # one-turn smoke
-```
-
-Expected: the package appears under pi's `User packages`; `install .` logs `added entwurfProvider.mcpServers.entwurf-bridge` + `updated <project>/.pi/settings.json`; the smoke returns a one-word reply (full bootstrap → ACP session → bridge → clean shutdown). Note: `~/.pi/agent/git/.../entwurf` is pi-managed — do not edit it (a `pi update` overwrites). Step 2 is still required after `pi install git:…`.
-
-### 1.2 Path B — developer install
+1. `pnpm install` — bundles pi (a dev/peer dependency; no separate `pi install` step) and builds the bridge
+2. project wiring → `<project>/.pi/settings.json` `entwurfProvider.mcpServers.entwurf-bridge`
+3. meta-bridge global plugin — only when a native harness (`claude`) is on PATH; a pi-only host skips it cleanly
+4. `entwurf-bridge` install smoke (`validate_entwurf_bridge`)
 
 ```bash
 git clone https://github.com/junghan0611/entwurf /path/to/entwurf && cd $_
-pnpm install                                   # pnpm is the pinned packageManager
-pi install ./
-./run.sh install /path/to/consumer-project
-pnpm check                                     # full deterministic floor
-pi --provider entwurf --model claude-sonnet-5 -p "reply with ok only"
-LIVE=1 ./run.sh release-gate /path/to/consumer-project
+./run.sh setup /path/to/consumer-project
+# re-run the SAME command any time to repair a broken install
 ```
 
-`install` is idempotent; user-authored `mcpServers.<name>` overrides survive a re-run (`preserved (user override: …)`). `run.sh remove <dir>` deletes only entries whose command matches the repo-authored launcher.
+Expected tail: `DONE: entwurf setup (pi package + meta-bridge + v2 install smoke) green.` On a host with `claude`, verify the native wiring with `./run.sh doctor-meta-bridge`.
 
-### 1.3 Setup shortcut + variables
+The wiring / meta-bridge / smoke steps are internal building blocks of `setup` (`install_local_package`, `scripts/meta-bridge-install.sh`, `validate_entwurf_bridge`) — call `setup`, never the parts. Consumers who `npm install @junghanacs/entwurf` get the obvious npm surface; that path is not the developer concern here.
+
+### 1.1 Variables (optional)
 
 ```bash
-export REPO_DIR=...        # Path A: $HOME/.pi/agent/git/github.com/junghan0611/entwurf ; Path B: your clone
+export REPO_DIR=/path/to/entwurf
 export PROJECT_DIR=/path/to/consumer-project
-export CACHE_DIR=$HOME/.pi/agent/cache/entwurf/sessions
 cd "$REPO_DIR" && ./run.sh setup "$PROJECT_DIR"
+```
+
+### 1.2 Live acceptance (optional)
+
+```bash
+LIVE=1 ./run.sh release-gate /path/to/consumer-project
+pi --provider entwurf --model claude-sonnet-5 -p "reply with ok only"   # one-turn smoke
 ```
 
 `setup` runs `pnpm install` + `install` + meta-bridge (native harness) + the v2 install smoke; a green `setup` implies the settings.json wiring and install surface are healthy. The full live floor is still `LIVE=1 ./run.sh release-gate`.

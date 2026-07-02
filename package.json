@@ -65,7 +65,6 @@
 	"engines": {
 		"node": ">=22.6.0"
 	},
-	"packageManager": "pnpm@10.33.0",
 	"dependencies": {
 		"@agentclientprotocol/claude-agent-acp": "0.54.1",
 		"@agentclientprotocol/sdk": "1.1.0",
