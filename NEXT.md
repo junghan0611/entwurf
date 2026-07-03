@@ -1,4 +1,4 @@
-# NEXT — entwurf post-0.12.5: ⓪ 설치 경계 봉쇄 → ① agy delivery → ② mux
+# NEXT — entwurf post-0.12.6: ① agy delivery → ② mux
 
 > 나침반이지 DB가 아니다: **현재 위치 · 다음 한 걸음 · 넘으면 안 되는 선**만 둔다.
 > 현재+미래 방향과 설계 SSOT = **`ROADMAP.md`**. 닫힌 변경 핵심 = **`CHANGELOG.md`**. 세션별 process history = git log.
@@ -13,27 +13,11 @@
   - **환경:** 전역 `pi`(`@earendil-works/pi-coding-agent`, pnpm global)를 0.80.2→**0.80.3** 업그레이드 — 익스텐션 로더가 런타임 pi 카탈로그를 해석하므로 이게 안 맞으면 sonnet-5가 로더에서 드롭됨.
   - **GPT 검수 반영:** live smoke 3종(`smoke-acp-{raw-turn,overlay,memory-containment}-live`)의 `withTimeout` stale-timer 누수(PASS 후 프로세스 붙잡힘) → `clearTimeout` in `.finally()`. `smoke-acp-session-reuse-live`: turn2 timeout 통일 + 성공경로 `process.exit(0)`→`process.exitCode=0`(PASS 로그 truncate 방지). stale SSOT(AGENTS/README/ROADMAP/setup-clean-host/demo) 정정.
   - **`6d06ad0` fix(targets):** `entwurf/gpt-5.4`·`entwurf/gpt-5.5` **ACP-routed 엔트리 제거**. 노트: "ACP Codex is not on this surface **until the ACP backend is implemented**." → 아래 §① mux 레인의 동기이자 완료판정.
+- **0.12.6 prepare 완료(커밋/태그 대기)** — 설치 경계 봉쇄를 코드/검증/라이브 배선까지 닫음. dev·npm 모두 live marketplace source를 `$XDG_DATA_HOME/entwurf/meta-bridge/.assembled`에 조립하고 repo/node_modules는 source origin으로만 남김. uninstall/doctor/check는 install-state의 recorded `assembledMarketplacePath`를 SSOT로 쓰며, missing/empty/bad-basename/corrupt path는 side-effect 전 fail-loud. `smoke-meta-install-state`가 install→XDG, recorded A 제거/env B 보존, corrupt path side-effect 0, state+settings both-corrupt FAIL, checkout-internal `.assembled` 미생성을 검증. `smoke-user-scope-citizen`으로 user-scope pi package registration도 고정.
 - **0.12.4 hotfix 완료** — 일반설치 floor(`node_modules`)에서 `doctor-meta-bridge`가 raw `.ts` helper를 strip-types 실행해 가짜 FAIL 내던 버그 수정. hejdev6 실측: pre-fix `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` 재현, patched tarball 설치 후 compiled store-doctor plain-node scan + v2-surface defer 통과. tag/GitHub release/npm publish 완료.
 - **0.12.2/0.12.1** — 이전 릴리즈(메타브리지 install 이식성 + `check-meta-manifest-schema`, 오라클 설치검증). 상세는 CHANGELOG.
 
-## NOW — ⓪ 설치 경계 봉쇄: `pnpm check`가 dev 배선을 삼킨 사건 (2026-07-03 `?`)
-
-**판정(페블 진단 → 오푸스 검증 → GPT 재검증, 3중 합치):** pnpm 정리 무관. `pnpm check` 체인의 `smoke-meta-install-state`가 실제 `meta-bridge-uninstall.sh`를 real REPO 기준으로 실행 → dev-clone 분기의 `rm -rf $REPO/pi/meta-bridge/.assembled`(bec39f9의 honest-inverse rm)가 **샌드박스 밖으로 탈출** → marketplace directory source 소실 → 다음 새 CC 세션에서 `entwurf-meta-receive` 플러그인 silent drop → SessionStart 각인 불발 → statusline `?`. HOME/CLAUDE_CONFIG_DIR/fake-claude는 격리돼 있었고 **wrapper의 `REPO=HERE/..` 경계 하나만 구멍**이었다. 실측: 플러그인 마지막 실행 = 마지막 record 갱신 = 7/2 17:21:00; `pi/meta-bridge` mtime 17:23:03 = 커밋(17:22) 직후 푸시 전 check.
-
-**원칙 판정(고정):** ① uninstall의 rm은 옳다 — honest inverse 유지, 약화 금지. ② statusline `?`는 **성공한 트립와이어** — 설계 검증됨. ③ 고칠 것은 smoke 격리이지 uninstall이 아니다. 이 사건의 이름: **"검증이 실제 개발자 배선을 파괴한 impurity bug"**.
-
-**봉쇄 순서 (GPT 순서 채택 — 코드는 오푸스, 순서 바꾸지 말 것):**
-1. **smoke 격리**: `smoke-meta-install-state`의 wrapper-uninstall 구간을 `$TMP` 사본 repo에서 실행. uninstall이 `HERE/..`로 REPO를 재계산하므로 env override보다 **temp repo copy가 자연스러움**. state prepare/apply도 그 temp repo 기준. 실제 `$REPO/scripts/meta-bridge-uninstall.sh` 직접 실행 금지.
-2. **회귀 게이트**: smoke 시작/종료에 실제 `$REPO/pi/meta-bridge/.assembled` fingerprint 비교 — "check는 live developer wiring을 절대 만지지 않는다"를 check 스스로 증명. (`.assembled` 부재 상태에선 약하고, setup 복구 후부터 정확히 잡는다.)
-3. **복구는 그 다음**: `./run.sh setup` → `pnpm check` 재실행(**`.assembled` 생존 확인**) → `./run.sh doctor-meta-bridge` PASS → CC 재시작 → 새 세션 각인 + statusline garden id 복원 확인. 봉쇄 전 setup만 하면 다음 check에서 또 잘린다.
-
-**구현 완료 (2026-07-03, 커밋 대기 — GPT 재검토 채택):** `scripts/smoke-meta-install-state.sh`만 수정 — smoke 격리(wrapper-uninstall을 `$TMP` 사본 repo에서 실행; `uninstall.sh`가 REPO를 `HERE/..`로 재계산하므로 사본이면 rm이 사본 sentinel만 지움) + 회귀 게이트(실제 `.assembled` fingerprint 시작/종료 불변 단언). **`uninstall.sh`·`state.py` 무수정**(honest inverse rm 유지 — 원칙 준수). 검증 3중: PROOF.txt 대조 byte-불변(봉쇄 전이면 삭제됐을 파일) · `pnpm check` 전체 green(격리/회귀 게이트 2종 통과, `.assembled` 지문 `7522dc75…` 전후 동일) · `doctor-meta-bridge` PASS(writer-parity source=assembled=installed=v2). **남은 것 = CC 새 세션에서 `?`→`🪛 garden-id` 복원 수동확인**(현 세션은 SessionStart 놓쳐 정상적으로 `?` 유지). 확인되면 ⓪ DONE 강등 + NOW를 ①로.
-
-**선택 강화(오푸스 판단 여지, 미착수):** statusline이 marketplace source 부재를 별도 글리프로 구분(=`?`를 진단 가능하게); doctor의 assembled-존재 체크가 이 케이스를 이미 FAIL로 잡는지 확인하고 아니면 추가.
-
-**남는 구조 리스크(이번 레인 범위 밖, 기록만):** smoke를 고쳐도 `git clean -xfd`는 여전히 live 배선(`.assembled`)을 자른다 — gitignored 빌드 산출물이 곧 live marketplace source인 구조 자체의 긴장. dev도 XDG data dir 조립으로 옮길지(Follow-up C 계열)는 별도 결정.
-
-## ① (⓪ 뒤 착수) agy delivery lane — 설치 가드레일의 검증면
+## NOW — ① agy delivery lane — 설치 가드레일의 검증면
 
 **GLG 결정(2026-07-03): agy 지원을 mux보다 먼저.** agy는 두 번째 native-delivery 하네스 — 붙여봐야 install/doctor/uninstall 경계가 CC-특수인지 진짜 하네스-일반인지 드러난다. **agy 지원 = 설치면 가드레일 검증면.** mux보다 당기는 이유 = launch surface가 아니라 설치면/검증면/하네스별 adapter 경계를 먼저 조여야 codex·agy 지원 시 쓰레기 코드/파일 없이 단단해지기 때문. **GPT 재검토 최종판정: 이 레인의 핵심은 "Claude mailbox 일반화"가 아니라 direct-inject backend adapter를 v2 dispatch/doctor/install 경계에 정식으로 세우는 것.**
 
@@ -50,11 +34,11 @@
 2. **liveness probe** — raw = `pgrep -x agy` + LS port 탐색 + `agentapi get-conversation-metadata`. production adapter seam으로 승격. transcript/db/WAL 간접흔적을 liveness로 삼지 말 것. **production에서 `pgrep -x agy | head -1`(raw-agy-send.sh:16) 금지** — 전 pid/LS port 스캔, `get-conversation-metadata`가 응답하는 route를 **매 send/probe마다 동적 발견**(LS address = volatile route, 저장 authority 아님).
 3. **direct-inject send** — `agentapi send-message <conversationId> <content>`. mailbox enqueue 아님. entwurf_v2 fire-and-forget → native-push route. owned-outcome=reject.
 4. **install/uninstall/doctor** — **claude marketplace 일반화 금지.** agy config adapter 별도. 대상 config: documented `~/.gemini/antigravity-cli/mcp_config.json` vs observed runtime `~/.gemini/config/mcp_config.json` — 어느 것이 SSOT·어느 것이 compatibility write인지 명시. stateful uninstall로 사용자 기존 MCP config 보존.
-5. **검증** — deterministic(fake agy/ss/config-HOME으로 install/doctor/uninstall) + live(실제 agy conversation에 token send) + `DELIVERY.md` D-level verified-probe→shipped 갱신. **⓪ 규율 day-one 이식: smoke는 temp-copy 격리 + live-wiring fingerprint 게이트** — 레인 합격 기준 = agy 표면에서 `.assembled`류 impurity bug를 구조적으로 재생산 불가능하게 만든 것.
+5. **검증** — deterministic(fake agy/ss/config-HOME으로 install/doctor/uninstall) + live(실제 agy conversation에 token send) + `DELIVERY.md` D-level verified-probe→shipped 갱신. **⓪ 규율 day-one 이식: smoke는 격리 HOME+XDG_DATA_HOME + source-origin/live-artifact boundary gate(uninstall은 recorded path로 삭제)** — 레인 합격 기준 = agy 표면에서 `.assembled`류 impurity bug를 구조적으로 재생산 불가능하게 만든 것.
 
 **구현 순서 (GPT안, 페블 검수 통과):** ① stale 주석 정리(deliverability:15/:106) → ② `native-push` transport enum + schema/type/**DispatchVerdict·runner union 동시** 확장(③mux 레인 5번의 경고와 동일 규율) → ③ NativePushAdapter interface → ④ antigravityAdapter(probe/send/fake-runner gate) → ⑤ decider에 pi domain과 **별도** native-push branch → ⑥ MCP self-register 설계(보정① 반영) → ⑦ agy install/uninstall/doctor config adapter(보정② 반영) → ⑧ LIVE smoke(기존 live agy conversation에 token send).
 
-## ② (mux 사전결정, 2026-07-02) fresh spawn도 mux-visible로 통일
+## ② (① agy 뒤 착수) fresh spawn도 mux-visible로 통일
 
 v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 dormant pi citizen**을 `spawn-bg resume`으로 깨우는 production path가 있고 `smoke-entwurf-v2-spawn-resume-live`가 실 child+turn을 검증한다. 빠진 것은 v1 `entwurf`가 하던 **무에서 새 sibling을 만드는 fresh spawn/mint**.
 
@@ -147,6 +131,7 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
 - **Post-publish global meta-bridge invariant:** package upgrade alone does not refresh Claude's plugin bundle/cache. Future publish checklist: `pnpm add -g @junghanacs/entwurf@<version>` → `entwurf install-meta-bridge` → `entwurf doctor-meta-bridge` from the same installed surface, then restart open Claude Code sessions. With the main follow-up, installed statusLine/MCP use stable bins and marketplace source uses a stable data dir; reinstall remains the explicit bundle refresh, not a dead-link repair.
 - **C2** `check-pack-install` 확장: fake `claude` CLI + temp `HOME`/`CLAUDE_CONFIG_DIR`로 installed `entwurf install-meta-bridge` 실행 → `~/.claude.json` command가 해시 store 경로 아니라 안정적 `entwurf-bridge`인지 검증.
 - **C3** support-floor: 실제 최저버전(2.1.97 오라클) validate/install/doctor를 컷 체크리스트 또는 remote gate로.
+- **user-scope 등록 역연산 부재 (페블 GO 판정 명명 팔로업, 2026-07-03):** `install_local_package`는 `register_user_scope_citizen`으로 `~/.pi/agent/settings.json`에 쓰지만 `run.sh remove`는 project scope만 지움 — 소비자가 패키지 삭제 시 user-scope packages[]에 dangling 경로가 남아 모든 cwd의 pi 기동에 파급 가능(honest-inverse 위반). SSOT(`register-pi-package.py --remove`)는 이미 있으니 인버스 노출 지점만 결정(remove가 user-scope도 내리거나 별도 커맨드). 경미 nit 동반: register-pi-package.py `write_text` 비원자(tmp+rename 없음) — user-scope는 글로벌 파일.
 - **멀티하네스(Codex/Antigravity):** claude marketplace 일반화 금지. 하네스별 adapter contract(manifest shape, MCP 등록면, version floor, doctor evidence). 공통화는 runner/reporting만.
 - `smoke-acp-skill-live` "secret probe code" → "probe code/project marker" 낮추기(injection-refusal 선제 cleanup, GPT 제안 이월).
 - **pnpm 10→11 이관 + 단일 설치면(setup) 재검증** — *배경*: npm `codex` 중복(같은 바이너리가 `~/.local/share/pnpm/bin`과 부모 dir에 2개)에서 출발 → 원인은 pnpm **자기관리 shim(11.5)↔nix pnpm(10.33)** 이 디렉토리별 버전 스위칭하며 글로벌 스토어를 `global/5`(pnpm10)+`global/v11`(pnpm11) 둘로 쪼갠 것. 머신 정리: nix 단일 pnpm **11.9.0** + `~/.config/pnpm/rc`(home-manager) `manage-package-manager-versions=false`+`global-bin-dir` 고정 → 자기관리 pnpm/`.tools`/`global/5` 제거. **패키지 소유권 3층**: nix store(선언) / `external-packages.sh`(npm글로벌·벤더·go, 목록SSOT) / per-repo devShell(특정버전 필요 시). **entwurf 쪽 config**: `packageManager: pnpm@10.33.0` 핀 제거(전역 nix pnpm 따라감), `.npmrc`(pnpm11이 무시하는 죽은 파일) 삭제 → `pnpm-workspace.yaml`(autoInstallPeers:false + allowBuilds `@google/genai`·protobufjs false)이 SSOT, CI `pnpm/action-setup` 10.33→11.9. **설치면**: `./run.sh setup <project>` **단일**로 정리 + `pi install` 제거(중복 확정 — project-scope `.pi/settings.json` `packages[]`만으로 provider/ACP 로드됨을 `pi --list-models entwurf`로 실증; pi 바이너리는 필요, pi install 커맨드는 불필요). *재검증(다음 세션/클린 호스트)*: ① `which -a pnpm` 1개·전역/entwurf 모두 11.9.0 ② 11.9.0에서 `pnpm check` **전체** green(이번엔 dep-versions/문법만 확인함) ③ `./run.sh setup <scratch>` 한 방 green ④ `pi install` 없이 provider 로드 ⑤ `doctor-meta-bridge` PASS. 소비자(npm)엔 무영향(tarball=package.json+files만; `.npmrc`/`pnpm-workspace.yaml`/lock 제외).
@@ -154,8 +139,8 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
 ## 넘으면 안 되는 선
 
 - Work on `main`; 이 레인용 브랜치 만들지 않음.
-- **check/smoke는 live developer wiring을 절대 만지지 않는다** — 실제 `$REPO/pi/meta-bridge/.assembled`, 실제 `~/.claude`/`~/.claude.json`/`~/.pi` 어느 것도. 파괴 검증은 전부 `$TMP` 사본에서. uninstall의 honest-inverse rm은 약화 금지(고칠 곳은 smoke 격리다).
-- **⓪ 봉쇄 완료 전 `./run.sh setup` 단독 복구 금지** — 다음 `pnpm check`가 또 자른다. 순서: 봉쇄 → setup → check 생존 확인 → doctor → CC 재시작.
+- **source origin ≠ live artifact** — live marketplace source는 항상 `$XDG_DATA_HOME/entwurf/meta-bridge/.assembled`(repo/npm 조립 입력만 다름). 어떤 install/doctor/uninstall/check도 `$REPO/pi/meta-bridge/.assembled`를 만들거나 참조하지 말 것. check/smoke는 실제 `~/.claude`/`~/.claude.json`/`~/.pi`·실제 XDG artifact도 만지지 않는다 — 파괴 검증은 전부 격리 HOME+XDG_DATA_HOME에서. uninstall의 honest-inverse rm은 XDG에서 유지(약화 금지).
+- **live artifact는 checkout 밖(XDG)** — `./run.sh install-meta-bridge`/`setup`이 곧 XDG 이관 절차다(더는 `pnpm check`가 배선을 자르지 않음). repo 안에 `.assembled`를 되살리지 말 것.
 - **mux launch는 driver 인터페이스 뒤에서만** — 프로덕션 코드에 `tmux` 직접 호출 금지(repro 예외). tmux 전용 가정/타입/필드명 새로 심지 말 것. zmx는 경량 1급 driver 후보.
 - **mint는 mux를 모르고 driver는 mint를 모른다** — spawn/mint 로직에 `lib/mux` import 금지, `driver.ts`는 `entwurf-core` 무의존 leaf. 더블-Enter submit은 driver 아니라 launch-profile. `$TMUX` 전제(caller도 tmux 안이어야)를 driver/게이트에 심지 말 것 — 관찰가능 launch는 강제 아닌 default posture.
 - **fresh pi-native GPT도 먼저 mux-visible** — v1식 detached/bg `pi -p` 복구를 기본값으로 되살리지 않는다. headless/bg pi 최적화는 GLG 명시 시 별도 레인.

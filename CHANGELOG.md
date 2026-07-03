@@ -4,6 +4,28 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.12.6 — 2026-07-03
+
+### Fixed
+
+- **Claude Code meta-bridge live marketplace sources now live outside the checkout for dev and npm installs alike.** Development clones and installed packages both assemble the plugin bundle under `$XDG_DATA_HOME/entwurf/meta-bridge/.assembled`; the checkout or `node_modules` tree is now only the source origin. This removes the class where `pnpm check`, `git clean -xfd`, or a repo-local uninstall smoke could delete a user-scope Claude marketplace source and leave new Claude Code sessions at statusline `?`. The installer still chooses `.ts` vs compiled `.js` hook artifacts by source origin, but the live registration path is the same XDG artifact lane.
+- **Meta-bridge uninstall now uses the recorded live-artifact path and fails before side effects when the state is corrupt.** The install state's `assembledMarketplacePath` is the SSOT for uninstall, doctor, and state checks. Uninstall validates the full `…/entwurf/meta-bridge/.assembled` suffix before removing Claude plugin/MCP registrations or deleting state, so malformed paths such as `/` or `…/entwurf/meta-bridge/not-assembled` fail loud with zero Claude side effects and leave state/artifacts intact. `state.py check` also rejects missing, empty, or malformed recorded paths even when settings agree with the corruption.
+- **User-scope pi package registration is now part of setup.** `./run.sh setup` registers `entwurf` in user-scope pi settings so `--entwurf-control` and the provider surface load from foreign cwd sessions, not only from a project-local `.pi/settings.json`. A hermetic `smoke-user-scope-citizen` covers idempotency, stale normalization, remove symmetry, unrelated-key preservation, and corrupt-shape fail-loud behavior.
+
+### Changed
+
+- **The install toolchain is now aligned to one pnpm 11 lane and one setup surface.** The repo dropped the obsolete `packageManager` pin and `.npmrc`, moved pnpm policy to `pnpm-workspace.yaml`, updated CI to pnpm 11.9, and treats `./run.sh setup` as the single local install path instead of a split `pi install` flow.
+- **The next delivery lane is pinned before implementation.** `NEXT.md` now records the agy/Antigravity delivery adapter constraints: direct-inject/native-push is separate from pi's control-socket liveness domain, registration is explicit, receiver markers are not reused for native-push replyability, and install/doctor/uninstall must inherit the source-origin/live-artifact boundary proven by this release.
+- **The future fresh-spawn lane stays mux-visible by default.** The mux driver plan now keeps minting and mux transport separate, treats tmux/zmx as drivers behind a leaf interface, and keeps fresh pi-native GPT launch visible instead of reviving hidden background one-shots as the default.
+
+### Verification
+
+- `pnpm check` passed on 2026-07-03 after the XDG live-artifact move, recorded-path uninstall hardening, user-scope citizen smoke, pnpm 11 setup cleanup, and NEXT lane updates.
+- `./run.sh smoke-meta-install-state` passed with the new direct install→XDG proof, recorded-path mismatch case, corrupt basename/missing-field fail-loud cases, and checkout-internal `.assembled` boundary fingerprint.
+- `./run.sh doctor-meta-bridge` passed on 2026-07-03 with source/assembled/installed writer parity all v2 and the assembled bundle under `$XDG_DATA_HOME/entwurf/meta-bridge/.assembled`.
+- `./run.sh check-pack-install` passed on 2026-07-03, proving the npm consumer path keeps the stable XDG marketplace source and user-scope pi citizen registration.
+- `LIVE=1 ./run.sh release-gate /tmp/psa-release-gate-0.12.6.ddCcmz` passed on 2026-07-03; log `/tmp/pi-tmux-entwurf-release-gate-0126.log`; summary `MUST: PASS=17 FAIL=0 SKIP=0`, advisory `BEHAVIOR: PASS=0 FAIL=1` (`smoke-resident-garden-guard` positive `/gnew T3` model-in-loop identity turn; non-blocking).
+
 ## 0.12.5 — 2026-07-01
 
 ### Fixed
