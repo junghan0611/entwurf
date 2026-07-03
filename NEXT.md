@@ -1,4 +1,4 @@
-# NEXT — entwurf post-0.12.5: mux-agnostic spawn surface + PR #40 cortex
+# NEXT — entwurf post-0.12.5: ⓪ 설치 경계 봉쇄 → ① agy delivery → ② mux
 
 > 나침반이지 DB가 아니다: **현재 위치 · 다음 한 걸음 · 넘으면 안 되는 선**만 둔다.
 > 현재+미래 방향과 설계 SSOT = **`ROADMAP.md`**. 닫힌 변경 핵심 = **`CHANGELOG.md`**. 세션별 process history = git log.
@@ -16,7 +16,39 @@
 - **0.12.4 hotfix 완료** — 일반설치 floor(`node_modules`)에서 `doctor-meta-bridge`가 raw `.ts` helper를 strip-types 실행해 가짜 FAIL 내던 버그 수정. hejdev6 실측: pre-fix `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` 재현, patched tarball 설치 후 compiled store-doctor plain-node scan + v2-surface defer 통과. tag/GitHub release/npm publish 완료.
 - **0.12.2/0.12.1** — 이전 릴리즈(메타브리지 install 이식성 + `check-meta-manifest-schema`, 오라클 설치검증). 상세는 CHANGELOG.
 
-## NOW — ⓪ GLG 결정: fresh spawn도 mux-visible로 통일
+## NOW — ⓪ 설치 경계 봉쇄: `pnpm check`가 dev 배선을 삼킨 사건 (2026-07-03 `?`)
+
+**판정(페블 진단 → 오푸스 검증 → GPT 재검증, 3중 합치):** pnpm 정리 무관. `pnpm check` 체인의 `smoke-meta-install-state`가 실제 `meta-bridge-uninstall.sh`를 real REPO 기준으로 실행 → dev-clone 분기의 `rm -rf $REPO/pi/meta-bridge/.assembled`(bec39f9의 honest-inverse rm)가 **샌드박스 밖으로 탈출** → marketplace directory source 소실 → 다음 새 CC 세션에서 `entwurf-meta-receive` 플러그인 silent drop → SessionStart 각인 불발 → statusline `?`. HOME/CLAUDE_CONFIG_DIR/fake-claude는 격리돼 있었고 **wrapper의 `REPO=HERE/..` 경계 하나만 구멍**이었다. 실측: 플러그인 마지막 실행 = 마지막 record 갱신 = 7/2 17:21:00; `pi/meta-bridge` mtime 17:23:03 = 커밋(17:22) 직후 푸시 전 check.
+
+**원칙 판정(고정):** ① uninstall의 rm은 옳다 — honest inverse 유지, 약화 금지. ② statusline `?`는 **성공한 트립와이어** — 설계 검증됨. ③ 고칠 것은 smoke 격리이지 uninstall이 아니다. 이 사건의 이름: **"검증이 실제 개발자 배선을 파괴한 impurity bug"**.
+
+**봉쇄 순서 (GPT 순서 채택 — 코드는 오푸스, 순서 바꾸지 말 것):**
+1. **smoke 격리**: `smoke-meta-install-state`의 wrapper-uninstall 구간을 `$TMP` 사본 repo에서 실행. uninstall이 `HERE/..`로 REPO를 재계산하므로 env override보다 **temp repo copy가 자연스러움**. state prepare/apply도 그 temp repo 기준. 실제 `$REPO/scripts/meta-bridge-uninstall.sh` 직접 실행 금지.
+2. **회귀 게이트**: smoke 시작/종료에 실제 `$REPO/pi/meta-bridge/.assembled` fingerprint 비교 — "check는 live developer wiring을 절대 만지지 않는다"를 check 스스로 증명. (`.assembled` 부재 상태에선 약하고, setup 복구 후부터 정확히 잡는다.)
+3. **복구는 그 다음**: `./run.sh setup` → `pnpm check` 재실행(**`.assembled` 생존 확인**) → `./run.sh doctor-meta-bridge` PASS → CC 재시작 → 새 세션 각인 + statusline garden id 복원 확인. 봉쇄 전 setup만 하면 다음 check에서 또 잘린다.
+
+**구현 완료 (2026-07-03, 커밋 대기 — GPT 재검토 채택):** `scripts/smoke-meta-install-state.sh`만 수정 — smoke 격리(wrapper-uninstall을 `$TMP` 사본 repo에서 실행; `uninstall.sh`가 REPO를 `HERE/..`로 재계산하므로 사본이면 rm이 사본 sentinel만 지움) + 회귀 게이트(실제 `.assembled` fingerprint 시작/종료 불변 단언). **`uninstall.sh`·`state.py` 무수정**(honest inverse rm 유지 — 원칙 준수). 검증 3중: PROOF.txt 대조 byte-불변(봉쇄 전이면 삭제됐을 파일) · `pnpm check` 전체 green(격리/회귀 게이트 2종 통과, `.assembled` 지문 `7522dc75…` 전후 동일) · `doctor-meta-bridge` PASS(writer-parity source=assembled=installed=v2). **남은 것 = CC 새 세션에서 `?`→`🪛 garden-id` 복원 수동확인**(현 세션은 SessionStart 놓쳐 정상적으로 `?` 유지). 확인되면 ⓪ DONE 강등 + NOW를 ①로.
+
+**선택 강화(오푸스 판단 여지, 미착수):** statusline이 marketplace source 부재를 별도 글리프로 구분(=`?`를 진단 가능하게); doctor의 assembled-존재 체크가 이 케이스를 이미 FAIL로 잡는지 확인하고 아니면 추가.
+
+**남는 구조 리스크(이번 레인 범위 밖, 기록만):** smoke를 고쳐도 `git clean -xfd`는 여전히 live 배선(`.assembled`)을 자른다 — gitignored 빌드 산출물이 곧 live marketplace source인 구조 자체의 긴장. dev도 XDG data dir 조립으로 옮길지(Follow-up C 계열)는 별도 결정.
+
+## ① (⓪ 뒤 착수) agy delivery lane — 설치 가드레일의 검증면
+
+**GLG 결정(2026-07-03): agy 지원을 mux보다 먼저.** agy는 두 번째 native-delivery 하네스 — 붙여봐야 install/doctor/uninstall 경계가 CC-특수인지 진짜 하네스-일반인지 드러난다. **agy 지원 = 설치면 가드레일 검증면.** mux보다 당기는 이유 = launch surface가 아니라 설치면/검증면/하네스별 adapter 경계를 먼저 조여야 codex·agy 지원 시 쓰레기 코드/파일 없이 단단해지기 때문. **GPT 재검토 최종판정: 이 레인의 핵심은 "Claude mailbox 일반화"가 아니라 direct-inject backend adapter를 v2 dispatch/doctor/install 경계에 정식으로 세우는 것.**
+
+- **범위 한정(무너지면 다시 꼬임):** agy *delivery + install adapter*는 여기(①), agy *fresh spawn/launch*는 ③ mux 뒤. 여기는 수신/발신 + 설치 어댑터만.
+- 기반 검수 완료: `DELIVERY.md` agy = **verified-probe D6+** (native LS gRPC `agentapi send-message`, `scripts/raw-async-delivery/raw-agy-send.sh`). 이 레인 = probe → **shipped lane** 승격.
+- **⚠ 착수 전 해소할 첫 계약 질문 — agy는 self-fetch냐 direct-inject냐 (오푸스 재검토 발견, 2026-07-03):** `entwurf-deliverability.ts:14` 주석은 agy를 **self-fetch**(Claude Code/Codex/agy)로 분류하고 self-fetch만 mailbox deliverable · direct-inject(pi)는 refused(:110). 그러나 GPT/DELIVERY는 agy delivery를 `agentapi send-message` **direct-inject**(mailbox enqueue 아님)로 본다 — **코드 주석 ↔ delivery 실측이 불일치.** agy가 direct-inject로 확정되면: entwurf_v2 fire-and-forget에 **native-push route 신설** + owned-outcome=reject, meta-mailbox의 self-fetch-only fail-closed(:110)는 그대로. 이 답이 어댑터 계약에서 먼저 나와야 코드 착수.
+
+**어댑터 계약 5축 (GPT 지침):**
+1. **identity/registration** — agy conversationId ↔ garden id 결속. birth hook 자동인지 명시 register surface 필요인지. meta-record `backend:"antigravity"`/`nativeSessionId:conversationId`를 언제·누가 쓰나. (CC=meta-record anchor / pi=record-less socket — agy는 어느 모델?)
+2. **liveness probe** — raw = `pgrep -x agy` + LS port 탐색 + `agentapi get-conversation-metadata`. production adapter seam으로 승격. transcript/db/WAL 간접흔적을 liveness로 삼지 말 것.
+3. **direct-inject send** — `agentapi send-message <conversationId> <content>`. mailbox enqueue 아님. entwurf_v2 fire-and-forget → native-push route. owned-outcome=reject.
+4. **install/uninstall/doctor** — **claude marketplace 일반화 금지.** agy config adapter 별도. 대상 config: documented `~/.gemini/antigravity-cli/mcp_config.json` vs observed runtime `~/.gemini/config/mcp_config.json` — 어느 것이 SSOT·어느 것이 compatibility write인지 명시. stateful uninstall로 사용자 기존 MCP config 보존.
+5. **검증** — deterministic(fake agy/ss/config-HOME으로 install/doctor/uninstall) + live(실제 agy conversation에 token send) + `DELIVERY.md` D-level verified-probe→shipped 갱신.
+
+## ② (mux 사전결정, 2026-07-02) fresh spawn도 mux-visible로 통일
 
 v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 dormant pi citizen**을 `spawn-bg resume`으로 깨우는 production path가 있고 `smoke-entwurf-v2-spawn-resume-live`가 실 child+turn을 검증한다. 빠진 것은 v1 `entwurf`가 하던 **무에서 새 sibling을 만드는 fresh spawn/mint**.
 
@@ -25,7 +57,7 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
 - v1 본체: `pi-extensions/lib/entwurf-core.ts` `runEntwurfSync`(:1940) = fresh-mint 본체 — registry gate `resolveEntwurfTarget`(미등록 reject) + session-id/name/cwd-enrich. resume는 `runEntwurfResumeSync`(:1772, registry 우회). launch arg SSOT `entwurf-resume-args.ts`. 주: fresh-mint는 현재 `--no-extensions` one-shot worker이지 `-p`/control 경로 아님.
 - **레지스트리 현황(6d06ad0 이후):** `entwurf/claude-sonnet-5`·`entwurf/claude-opus-4-8`(ACP claude), `openai-codex/gpt-5.4|5.5`(native), `entwurf/gemini-3.1-pro-preview`(ACP gemini, explicitOnly). **ACP Codex 엔트리는 삭제됨** — 즉 "Claude Code에서 새 GPT 불러줘"는 레지스트리가 하드 차단. mux 레인이 서야 되살릴 수 있음.
 
-## ① (다음 세션 착수) mux-agnostic spawn/launch surface
+## ③ (①agy 뒤 착수) mux-agnostic spawn/launch surface
 
 네이티브 백엔드(Claude Code)는 인터랙티브 TTY 필수 → headless 불가 → **multiplexer가 곧 launch surface**. pi-native GPT도 같은 mux-visible surface로 올린다. **tmux 전용 금지** — mux driver 인터페이스 뒤에서 `tmuxDriver`/`zmxDriver`가 동급. zmx는 후순위 장식이 아니라 경량 1급 후보(driver 한 개 갈아끼우는 일이 되도록).
 
@@ -95,9 +127,9 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
 5. **enum 공존** — `ENTWURF_V2_TRANSPORTS`(:186)에 `zmx-live` 추가(`tmux-live`와 공존). schema↔types 게이트 갱신 **+ `DispatchVerdict`의 resume union도 같이 확장(GPT 지적 — 놓치면 타입 갈라짐)**. mux 종류를 별도 필드로 빼는 추상화는 금지(enum 나열 > 추상화 두께).
 6. **네이밍 중립화(cosmetic)** — fixture `tmuxTarget`(위 2줄) → `muxTarget`. 프로덕션 필드가 아니므로 리스크 낮음.
 7. **fresh pi-native GPT launch profile(더 큰 후속)** — `runEntwurfSync`(:1940)의 registry/session-id/name/cwd-enrich 자산 재사용하되, `--no-extensions` detached one-shot 복구가 아니라 mux-visible `pi-native-gpt` launch profile로 설계(`claude-code`/`codex`/`agy`도 같은 launch/observe/capture/kill 규율). **완료판정:** mux launch가 서면 `6d06ad0`이 지운 `entwurf/gpt-5.x` ACP 타깃을 레지스트리에 되살릴 수 있음.
-8. **agy(Antigravity)** — spawn surface 통일 **후** 그 위에 얹기(기반 먼저 안 서면 launch seam이 갈림).
+8. **agy(Antigravity) spawn** — spawn surface 통일 **후** 그 위에 얹기(기반 먼저 안 서면 launch seam이 갈림). *주: agy **delivery/설치 어댑터**는 ①에서 mux보다 먼저 감 — 갈라진 건 launch면뿐.*
 
-## ② (수동·대기) PR #40 cortex 어댑터 재안착 — 공은 hvkiefer
+## ④ (수동·대기) PR #40 cortex 어댑터 재안착 — 공은 hvkiefer
 
 - 우리 쪽 준비 끝: 레일 doc(`docs/acp-backend-rail.md`) + PR 개발 가이드 댓글. 레일 green.
 - hvkiefer: `cortexAdapter` 1개 신규(`pi-extensions/lib/acp/backend-adapter.ts`) + `ADAPTERS` 등록 + curated cortex 모델 + `SNOWFLAKE_HOME` overlay + `check-acp-*` cortex 단언 + `smoke-acp-cortex-live`. 공통 turn loop 무수정.
@@ -116,6 +148,8 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
 ## 넘으면 안 되는 선
 
 - Work on `main`; 이 레인용 브랜치 만들지 않음.
+- **check/smoke는 live developer wiring을 절대 만지지 않는다** — 실제 `$REPO/pi/meta-bridge/.assembled`, 실제 `~/.claude`/`~/.claude.json`/`~/.pi` 어느 것도. 파괴 검증은 전부 `$TMP` 사본에서. uninstall의 honest-inverse rm은 약화 금지(고칠 곳은 smoke 격리다).
+- **⓪ 봉쇄 완료 전 `./run.sh setup` 단독 복구 금지** — 다음 `pnpm check`가 또 자른다. 순서: 봉쇄 → setup → check 생존 확인 → doctor → CC 재시작.
 - **mux launch는 driver 인터페이스 뒤에서만** — 프로덕션 코드에 `tmux` 직접 호출 금지(repro 예외). tmux 전용 가정/타입/필드명 새로 심지 말 것. zmx는 경량 1급 driver 후보.
 - **mint는 mux를 모르고 driver는 mint를 모른다** — spawn/mint 로직에 `lib/mux` import 금지, `driver.ts`는 `entwurf-core` 무의존 leaf. 더블-Enter submit은 driver 아니라 launch-profile. `$TMUX` 전제(caller도 tmux 안이어야)를 driver/게이트에 심지 말 것 — 관찰가능 launch는 강제 아닌 default posture.
 - **fresh pi-native GPT도 먼저 mux-visible** — v1식 detached/bg `pi -p` 복구를 기본값으로 되살리지 않는다. headless/bg pi 최적화는 GLG 명시 시 별도 레인.

@@ -22,6 +22,18 @@ TMP="$(mktemp -d -t psa-meta-install-state.XXXXXX)"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
 
+# ⓪ 설치 경계 회귀 게이트: 이 smoke는 아래에서 dev wrapper-uninstall을 돌리므로,
+# 실제 체크아웃의 live marketplace source(pi/meta-bridge/.assembled)를 절대 만지지
+# 않았음을 스스로 증명한다. 시작/종료 fingerprint가 다르면 봉쇄가 뚫린 것이다
+# (2026-07-03 `?` 사건 = "검증이 실제 개발자 배선을 파괴한 impurity bug"의 정확한
+# 재발 방지선). .assembled 부재 상태에선 ABSENT로 약하게, setup 복구 후부터
+# 내용까지 byte 단위로 잡는다.
+REAL_ASM="$REPO/pi/meta-bridge/.assembled"
+asm_fingerprint() {
+  if [ -e "$REAL_ASM" ]; then (cd "$REAL_ASM" && find . -type f -exec sha256sum {} + 2>/dev/null | sort); else echo ABSENT; fi
+}
+FP_START="$(asm_fingerprint)"
+
 export HOME="$TMP/home"
 export CLAUDE_CONFIG_DIR="$HOME/.claude"
 mkdir -p "$CLAUDE_CONFIG_DIR"
@@ -213,6 +225,18 @@ then ok "uninstall restores scalars/maps and removes only managed array addition
 
 if py uninstall >/dev/null 2>&1; then bad "state manager uninstall without state should not guess"; else ok "state manager uninstall without state fails instead of guessing"; fi
 
+# ⓪ 봉쇄: wrapper-uninstall은 실제 $REPO가 아니라 사본 repo에서 실행한다.
+# meta-bridge-uninstall.sh는 REPO를 자기 위치(HERE/..)에서 재계산하고 dev-clone
+# 분기에서 rm -rf "$REPO/pi/meta-bridge/.assembled"를 돈다 — 실제 $REPO의 wrapper를
+# 직접 실행하면 이 smoke가 live marketplace source를 삭제한다(2026-07-03 `?`). 사본
+# repo에서 돌리면 그 rm이 사본의 sentinel .assembled만 지운다. state.py는 순수
+# stdlib(sibling 스크립트 import 없음)라 두 파일 복사로 충분하다.
+TMPREPO="$TMP/repo"
+mkdir -p "$TMPREPO/scripts" "$TMPREPO/pi/meta-bridge/.assembled"
+cp "$REPO/scripts/meta-bridge-uninstall.sh" "$REPO/scripts/meta-bridge-state.py" "$TMPREPO/scripts/"
+: > "$TMPREPO/pi/meta-bridge/.assembled/.sentinel"
+pyt() { python3 "$STATE" "$@" --repo "$TMPREPO" --asm "$ASM"; }
+
 # The wrapper must ALSO refuse before side effects. A fake claude records whether
 # plugin/MCP removals were attempted; no state means the log must stay empty.
 FAKE_BIN="$TMP/fake-bin"; mkdir -p "$FAKE_BIN"
@@ -223,7 +247,7 @@ exit 0
 SH
 chmod +x "$FAKE_BIN/claude"
 FAKE_CLAUDE_LOG="$TMP/fake-claude-nostate.log"
-if PATH="$FAKE_BIN:$PATH" FAKE_CLAUDE_LOG="$FAKE_CLAUDE_LOG" bash "$REPO/scripts/meta-bridge-uninstall.sh" >/dev/null 2>&1; then
+if PATH="$FAKE_BIN:$PATH" FAKE_CLAUDE_LOG="$FAKE_CLAUDE_LOG" bash "$TMPREPO/scripts/meta-bridge-uninstall.sh" >/dev/null 2>&1; then
   bad "wrapper uninstall without state should fail"
 else
   if [ ! -s "$FAKE_CLAUDE_LOG" ]; then ok "wrapper uninstall without state has zero Claude side effects"; else bad "wrapper uninstall without state touched Claude: $(cat "$FAKE_CLAUDE_LOG")"; fi
@@ -231,15 +255,18 @@ fi
 
 # With valid state, the wrapper may remove Claude registrations and then restore
 # JSON state. This proves the preflight gate is ordered before side effects.
-py prepare >/dev/null
-py apply >/dev/null
+pyt prepare >/dev/null
+pyt apply >/dev/null
 FAKE_CLAUDE_LOG="$TMP/fake-claude-state.log"
-if PATH="$FAKE_BIN:$PATH" FAKE_CLAUDE_LOG="$FAKE_CLAUDE_LOG" bash "$REPO/scripts/meta-bridge-uninstall.sh" >/dev/null 2>&1; then
+if PATH="$FAKE_BIN:$PATH" FAKE_CLAUDE_LOG="$FAKE_CLAUDE_LOG" bash "$TMPREPO/scripts/meta-bridge-uninstall.sh" >/dev/null 2>&1; then
   if grep -q 'plugin uninstall entwurf-meta-receive@meta-bridge-local' "$FAKE_CLAUDE_LOG" && grep -q 'mcp remove entwurf-bridge -s user' "$FAKE_CLAUDE_LOG" && [ ! -f "$STATE_FILE" ]; then
     ok "wrapper uninstall with valid state removes Claude registrations and restores state"
   else
     bad "wrapper uninstall with state missed expected side effects/state removal"
   fi
+  # 봉쇄가 회피가 아니라 격리임을 증명: dev-clone rm 경로는 실제로 탔고, 사본의
+  # sentinel .assembled가 지워졌다(실제 $REPO였다면 이게 파괴였다).
+  if [ ! -e "$TMPREPO/pi/meta-bridge/.assembled" ]; then ok "wrapper dev-clone rm hit the sandbox copy .assembled, not the real checkout"; else bad "wrapper did not drop the copy .assembled — dev-clone rm path not exercised"; fi
 else
   bad "wrapper uninstall with valid state failed"
 fi
@@ -404,6 +431,11 @@ if printf '%s\n' "$DOC_OUT" | grep -q 'Drift detail:'; then ok "doctor prints 'D
 if printf '%s\n' "$DOC_OUT" | grep -q 'user MCP entwurf-bridge'; then ok "doctor names the concrete drifted key (user MCP entwurf-bridge)"; else bad "doctor did not name the drifted MCP key:"$'\n'"$DOC_OUT"; fi
 if printf '%s\n' "$DOC_OUT" | grep -q '\[plugin install'; then ok "doctor continues to a later section after the drift (no early set -e death)"; else bad "doctor did not reach a later section header after the drift:"$'\n'"$DOC_OUT"; fi
 if printf '%s\n' "$DOC_OUT" | grep -q 'meta-bridge doctor: FAIL'; then ok "doctor runs the whole chain to its final summary line"; else bad "doctor did not reach its final summary line (mid-run death):"$'\n'"$DOC_OUT"; fi
+
+# ⓪ 회귀 게이트 종료 단언: check가 실제 개발자 배선(.assembled)을 만졌으면 여기서
+# 잡는다 — "check는 live developer wiring을 절대 만지지 않는다"를 check 스스로 증명.
+FP_END="$(asm_fingerprint)"
+if [ "$FP_START" = "$FP_END" ]; then ok "real checkout .assembled is byte-identical before/after (check never touched live wiring)"; else bad "real checkout .assembled CHANGED during check — sandbox escaped: was [$FP_START] now [$FP_END]"; fi
 
 echo
 if [ "$fail" -eq 0 ]; then echo "smoke-meta-install-state: PASS"; else echo "smoke-meta-install-state: FAIL (see above)"; exit 1; fi
