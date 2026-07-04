@@ -117,20 +117,37 @@ do_doctor() {
   for c in "$DOCUMENTED_CONFIG" "$OBSERVED_CONFIG"; do
     case "$(python3 "$CONFIG_PY" doctor-static "$c")" in configured\ *) configured_any=1 ;; esac
   done
-  if [ "$configured_any" -eq 0 ]; then
-    log "  note: neither candidate configures entwurf-bridge (this is the '?' the operator sees)."
+
+  # N1 (state-evidence, mirrors the meta-bridge doctor): if we HAVE an install-state, the
+  # managed config it recorded MUST still configure entwurf-bridge. state ∧ missing-key = DRIFT
+  # (installed, then someone removed it — the actual "wiring came loose / ?" case) → FAIL. This
+  # is the honest distinction from "never installed" (a note, below), which no state backs.
+  if [ -f "$STATE_FILE" ]; then
+    local managed
+    managed="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("managedConfigPath",""))' "$STATE_FILE" 2>/dev/null || true)"
+    if [ -n "$managed" ]; then
+      case "$(python3 "$CONFIG_PY" doctor-static "$managed")" in
+        configured\ *) log "  state: install-state present; its managed config still configures entwurf-bridge." ;;
+        *) log "  state: DRIFT — install-state records $managed but it no longer configures entwurf-bridge (removed since install)."; hard_fail=1 ;;
+      esac
+    fi
+  elif [ "$configured_any" -eq 0 ]; then
+    log "  note: no install-state and neither candidate configures entwurf-bridge (never installed — this is the '?' the operator sees; run install-agy-bridge)."
   fi
 
-  log "── live (runtime-effective)"
+  log "── live (runtime wiring)"
   if command -v pgrep >/dev/null 2>&1 && pgrep -x agy >/dev/null 2>&1; then
     if [ "$configured_any" -eq 1 ] && [ "$hard_fail" -eq 0 ]; then
-      log "  live: agy is running AND a configured candidate has a resolvable command (runtime-effective evidence)."
+      # HONEST label (N2): a running agy + a resolvable configured candidate is CONSISTENT with
+      # runtime wiring, but it does NOT prove agy actually read that config — that needs MCP
+      # tool-listing-grade evidence (deferred). Do not overclaim "runtime-effective".
+      log "  live: agy is running AND a configured candidate has a resolvable command — consistent with runtime wiring (config-read NOT proven; MCP-tool-listing evidence deferred)."
     else
       log "  live: agy is running but no resolvable configured candidate — runtime wiring is broken."
       hard_fail=1
     fi
   else
-    log "  live: SKIP — no agy process (cannot prove runtime-effectiveness; NOT a pass)."
+    log "  live: SKIP — no agy process (cannot check runtime wiring; NOT a pass)."
   fi
 
   if [ "$hard_fail" -ne 0 ]; then

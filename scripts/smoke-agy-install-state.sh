@@ -68,15 +68,27 @@ want "install: managed config command is the stable bin, NOT a repo path" \
 DOC_OUT="$(bash "$BRIDGE" doctor)"; DOC_RC=$?
 want "doctor(no-agy): exits 0 (static clean)" "[ '$DOC_RC' -eq 0 ]"
 want "doctor(no-agy): live tier is an honest SKIP" "printf '%s' \"\$DOC_OUT\" | grep -q 'live: SKIP'"
-want "doctor(no-agy): SKIP is not disguised as a pass" "! printf '%s' \"\$DOC_OUT\" | grep -q 'runtime-effective evidence'"
+want "doctor(no-agy): SKIP is not disguised as a pass" "! printf '%s' \"\$DOC_OUT\" | grep -q 'consistent with runtime wiring'"
+want "doctor(installed): state-evidence confirms the managed config still configured" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'still configures entwurf-bridge'"
 
-# ── C: doctor with a fake agy present → live PASS (not SKIP) ───────────────────
+# ── C: doctor with a fake agy present → live is CONSISTENT (honest, not overclaimed) ──
 fake_agy on
 DOC_OUT="$(bash "$BRIDGE" doctor)"; DOC_RC=$?
 want "doctor(agy-live): exits 0" "[ '$DOC_RC' -eq 0 ]"
-want "doctor(agy-live): live tier proves runtime-effectiveness (not SKIP)" \
-  "printf '%s' \"\$DOC_OUT\" | grep -q 'runtime-effective evidence'"
+want "doctor(agy-live): live tier says consistent-with-wiring (not SKIP)" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'consistent with runtime wiring'"
+want "doctor(agy-live): live tier does NOT overclaim config-read as proven (honest label)" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'config-read NOT proven'"
 fake_agy off
+
+# ── C2 (N1 drift): install-state present but the managed config LOST our key → FAIL ──
+# The real "wiring came loose / '?'" case — distinct from "never installed" (which is a note).
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["mcpServers"].pop("entwurf-bridge",None); json.dump(d,open(p,"w"))' "$GEM_DOC"
+if bash "$BRIDGE" doctor >/dev/null 2>&1; then die "drift: doctor should FAIL (state present, key removed)"; fi
+ok "drift: doctor FAILS on state-present + key-removed (installed-then-loosened ≠ never installed)"
+bash "$BRIDGE" install >/dev/null   # restore so the honest-inverse uninstall below has a key to remove
+want "drift: re-install restores the key" "grep -q '\"entwurf-bridge\"' '$GEM_DOC'"
 
 # ── D: uninstall — honest inverse ─────────────────────────────────────────────
 bash "$BRIDGE" uninstall >/dev/null
