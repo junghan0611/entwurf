@@ -121,6 +121,11 @@
 		// decider into the program, same fence. It owns the 1-shot re-probe→re-send retry.
 		// Typechecked by scripts/tsconfig.json via its gate (check-entwurf-v2-native-push.ts).
 		"pi-extensions/lib/entwurf-v2-native-push.ts",
+		// native-push/register.ts is the pure-ish core of the entwurf_register_native MCP tool
+		// (봉인 5) — a lib→lib VALUE importer (upsertMetaSession + resolveNativePushAdapter) with
+		// explicit `.ts`-extension imports, same fence. Typechecked by scripts/tsconfig.json via
+		// its gate (check-native-push-register.ts) and by mcp/tsconfig.json (the bridge imports it).
+		"pi-extensions/lib/native-push/register.ts",
 		// entwurf-v2-runner.ts is the 5d-1 execute-router — a lib→lib VALUE importer
 		// (SendDeliveredReleaseFailedError from entwurf-v2-send) with explicit `.ts`-extension
 		// imports that pull the excluded send/decider/spawn into the program, same fence.

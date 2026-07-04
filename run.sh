@@ -85,6 +85,7 @@ Usage:
   ./run.sh check-entwurf-deliverability # deterministic gate (SE-1/SE-2 slice 2c): conversational-mailbox deliverability predicate — computeMetaReceiverActive (recordBacked ∧ ownerAlive ∧ watchArmed) + mailboxConversationalDeliverable (self-fetch AND active); direct-inject pi refused (SE-1), self-fetch dead/unarmed refused (SE-2); self-address shares the same atom
   ./run.sh check-entwurf-mailbox-guard # deterministic gate (SE-1/SE-2 slice 2d): guarded mailbox enqueue — PURE 0-call (undeliverable target leaves injected enqueue uncalled) + TMPDIR snapshot (refused send leaves mailbox byte-identical, accepted writes one .msg) + fact gathering from record/capability/receiver-marker
   ./run.sh check-native-push-adapter # deterministic gate (봉인 3/8): native-push adapter leaf (antigravity) via a FAKE runner — FULL pid scan (not head -1), dead vs indeterminate, VOLATILE route re-discovery (no cache), send argv+ANTIGRAVITY_LS_ADDRESS env, non-zero exit throws, NO adapter-level retry (executor-owned), resolveNativePushAdapter fail-fast
+  ./run.sh check-native-push-register # deterministic gate (봉인 5): registerNativeConversation (entwurf_register_native core) via fake adapter + isolated mkdtemp store — live probe→CREATE, re-register→ATTACH (same gid, cwd refreshed, no dup), not-live probe→REFUSE (throws, no record), receiver-marker abstinence (보정① source guard)
   ./run.sh check-package-source-routing # deterministic gate (#29): package-source -> install-root mapping + fail-fast routing (local/git/npm/missing/project/no-source × local+remote, self-root, resume), no backend
   ./run.sh smoke-session-id-name      # live 3-turn substrate smoke (Phase 3a): Pi 0.78 --session-id/--name through the bridge — header id/cwd, session_info name, append-not-recreate, spawn-only name, wrong-cwd footgun evidence
   ./run.sh new-session-id             # print one fresh garden-native session id for operator launchers (--session-id)
@@ -1288,6 +1289,17 @@ check_native_push_adapter() {
   # ANTIGRAVITY_LS_ADDRESS env, non-zero exit THROWS; NO retry in the adapter (single send,
   # no re-probe — retry is the executor hand's job, step ⑥); resolveNativePushAdapter fail-fast.
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-native-push-adapter.ts)
+}
+
+check_native_push_register() {
+  # Deterministic gate for 봉인 5: registerNativeConversation (the core of the
+  # entwurf_register_native MCP tool). Drives it with a FAKE adapter + an ISOLATED mkdtemp
+  # store (never the real ~/.pi). Asserts: live probe -> CREATE (record carries backend/
+  # nativeSessionId/caller-cwd); re-register -> ATTACH (SAME garden id, cwd refreshed, ONE
+  # record, no duplicate mint); dead/indeterminate probe -> REFUSE (throws, NO record written);
+  # RECEIVER-MARKER ABSTINENCE (보정①) — the register source references no receiver-marker
+  # writer (writeMetaReceiverMarker / armProvenance / META_RECEIVER_ARM_PROVENANCES).
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-native-push-register.ts)
 }
 
 
@@ -3196,6 +3208,9 @@ case "$cmd" in
     ;;
   check-native-push-adapter)
     check_native_push_adapter
+    ;;
+  check-native-push-register)
+    check_native_push_register
     ;;
   new-session-id)
     # Garden launcher helper: print one fresh garden sessionId (SSOT:

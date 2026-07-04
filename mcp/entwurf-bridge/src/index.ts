@@ -64,6 +64,7 @@ import {
 	readMetaReceiverMarker,
 	readMetaSenderMarker,
 } from "../../../pi-extensions/lib/meta-session.ts";
+import { registerNativeConversation } from "../../../pi-extensions/lib/native-push/register.ts";
 
 const HOME = os.homedir();
 const DEFAULT_ENTWURF_DIR = path.join(HOME, ".pi", "entwurf-control");
@@ -494,6 +495,51 @@ server.tool(
 			);
 		} catch (err) {
 			return textErr(`entwurf_inbox_read error: ${err instanceof Error ? err.message : String(err)}`);
+		}
+	},
+);
+
+server.tool(
+	"entwurf_register_native",
+	"Register an ALREADY-RUNNING native conversation as a garden citizen — it does NOT spawn " +
+		"a new one (that is a separate, deferred capability; do not use this to create a sibling). " +
+		"Give the backend + its native conversation id + the cwd, and this binds them to a garden id " +
+		"so entwurf_v2 can reach the conversation (fire-and-forget → native-push). The conversation " +
+		"must be LIVE: it is probed first, and a dead/indeterminate probe is refused (no garden id is " +
+		"minted for a pointer that does not resolve to a real host). Re-registering the same " +
+		"conversation attaches to the SAME garden id and refreshes the cwd. Only 'antigravity' is " +
+		"registerable on this lane. No mailbox receiver marker is written — native-push has no " +
+		"idle-wake watch; the returned garden id is the reply handle.",
+	{
+		backend: z
+			.enum(["antigravity"])
+			.describe("The native backend hosting the conversation. Only 'antigravity' — codex is a separate lane."),
+		nativeSessionId: z
+			.string()
+			.min(1)
+			.describe("The backend's native conversation id (antigravity conversationId) to bind to a garden id."),
+		cwd: z
+			.string()
+			.min(1)
+			.describe(
+				"The working directory to record for this citizen — REQUIRED (a native conversation's metadata cannot confirm it, so you must state it).",
+			),
+	},
+	async ({ backend, nativeSessionId, cwd }) => {
+		try {
+			const result = await registerNativeConversation({ backend, nativeSessionId, cwd });
+			return textOk(
+				`[entwurf register native ⟶]\n` +
+					`  backend:      ${result.backend}\n` +
+					`  conversation: ${result.nativeSessionId}\n` +
+					`  action:       ${result.action}\n` +
+					`  gardenId:     ${result.gardenId}\n` +
+					`  cwd:          ${result.cwd}\n\n` +
+					`Reach it with entwurf_v2 (target=${result.gardenId}, intent=fire-and-forget). No receiver ` +
+					`marker was written (native-push has no idle-wake mailbox watch).`,
+			);
+		} catch (err) {
+			return textErr(`entwurf_register_native error: ${err instanceof Error ? err.message : String(err)}`);
 		}
 	},
 );
