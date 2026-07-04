@@ -110,7 +110,7 @@ The **Status** column is the 0.12.0 release framing, kept separate from the
 |---|---|---:|---|---|
 | **pi native Entwurf** | shipped | D7+ | Unix control socket + pi followUp/custom messages | Replyable pi session. This is the resident baseline, not an external meta-session. 0.12.0 `entwurf_v2` treats a record-less but live pi control socket as a socket-only `fire-and-forget` target (addressed by its socket, not a meta-record); record-less *dormant* resume is intentionally not claimed. |
 | **Claude Code interactive 2.1.163** | shipped | D6, D7 partial, D8 partial | Plugin/global `SessionStart` arms `watchPaths`; external write triggers `FileChanged`; `asyncRewake` wakes idle session | Active idle wake proven without pty. `Stop` alone is piggyback-only. `asyncRewake` is a doorbell; body is self-fetched from mailbox. D8 partial: duplicate/read idempotence, honest unread counts, and level-triggered body drain are gated; empirical wake-edge bounds and unread-heartbeat backstop remain open (#34). |
-| **Antigravity / agy** | verified-probe | D6+ | Native LS gRPC `agentapi send-message` | Active push into live conversation. Same judgement levels; transport differs from Claude. Delivery proven; a shipped adapter lane lands after the 0.12.0 doc cut. |
+| **Antigravity / agy** | shipped | D6, D7 partial | Native LS gRPC `agentapi send-message` (native-push rail: register + `entwurf_v2` + install adapter) | Shipped native-push lane: `entwurf_register_native` binds a live conversation → `entwurf_v2` fire-and-forget direct-injects via the antigravity adapter (full pid/LS scan + `get-conversation-metadata` route, 1-shot re-probe retry); `install-agy-bridge` wires the agy mcp_config (bare `entwurf-bridge`, symlink-refuse, honest inverse). Proven by the canonical `smoke-agy-native-push-live` against a real agy conversation (register create/attach idempotency, native-push delivered, owned→`native-push-no-resume-authority`, bogus→`native-push-probe-indeterminate`, isolated meta-store) + the GPT manual L1~L5 pass. D7 partial: delivery confirmed by GPT's live token-reception observation **and** the smoke's post-send re-probe; a transcript-level content receipt is a canonical follow-up (a smoke-owned agy lifecycle would also cover `native-push-target-dead`). |
 | **Codex app-server-backed TUI 0.136.0** | verified-probe | D6, D7 (status) | WebSocket-over-UDS `turn/start` into the live `threadId` | **Demonstrated, no managed standalone, no cloud.** `codex app-server --listen unix://<owned 0700 dir>` + plain `codex` auto-attach (or `--remote unix://`). Full message injection (agy-like, not a doorbell); `thread/status/changed` gives completion observation. D8 robustness (dedupe / crash recovery / ordering policy) is not tested. `turn/steer` is active-turn steering, not idle wake. |
 | **Codex embedded TUI 0.136.0** | deferred | D0 partial | Native state DB / rollout transcript only | Standalone Embedded TUI binds no socket; no `FileChanged`/`asyncRewake` in Codex hooks; not retrofittable. Identify-only via state DB / rollout. |
 | **Codex managed-daemon / remote-control 0.136.0** | deferred | D4–D6 conditional | `app-server proxy` newline JSON-RPC over the daemon control socket | Needs the managed standalone install; `remote-control` also enables the **cloud** bridge. Use the bare `--listen` path above for a purely-local setup. |
@@ -157,6 +157,16 @@ Antigravity reaches the same delivery levels through a different transport:
 `agy agentapi send-message` over the native LS gRPC surface. This is not a reason
 to make the garden layer backend-specific; it is exactly why the adapter contract
 must describe capability (`D0–D8`) separately from transport.
+
+The raw probe (`scripts/raw-async-delivery/raw-agy-send.sh` — the Live-SSOT method
+`pgrep -x agy` + an LS socket that answers `get-conversation-metadata`) is now
+productionized as the **native-push rail**: `pi-extensions/lib/native-push/adapter.ts`
+(full pid/LS scan, volatile route, 1-shot re-probe retry in the executor hand),
+`registerNativeConversation` (bind an already-running conversation as a garden
+citizen; no spawn), the `entwurf_v2` `native-push` transport (post-probe reject
+taxonomy: `native-push-target-dead` / `-probe-indeterminate` / `-no-resume-authority`),
+and the `install-agy-bridge` install adapter. agy is a `native-push` domain, distinct
+from the pi control-socket liveness domain and from the Claude mailbox self-fetch domain.
 
 ### Codex — split by launch mode, not by "Codex"
 
