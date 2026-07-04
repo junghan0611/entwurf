@@ -46,11 +46,18 @@ import {
 	factLivenessOf,
 	isLivenessSupported,
 	isPreProbeReject,
+	LIVENESS_DOMAIN_BACKENDS,
 	makeRejectReceipt,
+	NATIVE_PUSH_BACKENDS,
+	NATIVE_PUSH_DISPATCH_TABLE,
+	NATIVE_PUSH_REJECT_REASONS,
+	type NativePushLiveness,
+	nativePushSupported,
 	PRE_PROBE_REJECT_REASONS,
 	RESOLVER_REJECT_REASONS,
 	rejectObservedLivenessWellFormed,
 	resolveDispatch,
+	resolveNativePushDispatch,
 	UNSUPPORTED_DISPATCH_TABLE,
 } from "../pi-extensions/lib/entwurf-v2-contract.ts";
 import {
@@ -291,6 +298,128 @@ ok(
 	(RESOLVER_REJECT_REASONS as readonly string[]).includes("mailbox-undeliverable"),
 );
 
+// ── native-push (봉인 1/2/4): a THIRD table, disjoint from pi socket + mailbox ──
+const NATIVE_PUSH_LIVENESSES = ["alive", "dead", "indeterminate"] as const;
+
+// domain: antigravity is native-push; pi/claude-code are NOT; the domain is DISJOINT
+// from the pi socket liveness domain (a backend is never in both rails).
+eq("native-push domain: antigravity supported", nativePushSupported("antigravity"), true);
+eq("native-push domain: pi is NOT native-push (it is pi-socket)", nativePushSupported("pi"), false);
+eq(
+	"native-push domain: claude-code is NOT native-push (self-fetch mailbox)",
+	nativePushSupported("claude-code"),
+	false,
+);
+eq("native-push domain: NATIVE_PUSH_BACKENDS == ['antigravity']", [...NATIVE_PUSH_BACKENDS], ["antigravity"]);
+ok(
+	"native-push ∩ pi-socket liveness domain = ∅ (separate rails)",
+	!NATIVE_PUSH_BACKENDS.some((b) => (LIVENESS_DOMAIN_BACKENDS as readonly string[]).includes(b)),
+);
+
+// transport present + stays OUT of the pi 6-cell table (like meta-mailbox).
+ok(
+	"transport: native-push present (direct-inject into a live app-server conversation)",
+	(ENTWURF_V2_TRANSPORTS as readonly string[]).includes("native-push"),
+);
+for (const intent of ENTWURF_INTENTS) {
+	for (const dl of DISPATCH_LIVENESSES) {
+		const cell = DISPATCH_TABLE[intent][dl as DispatchLiveness];
+		ok(
+			`guard: DISPATCH_TABLE[${intent}][${dl}] is NOT native-push (native-push stays out of the pi 6-cell table)`,
+			cell.action === "reject" || cell.transport !== "native-push",
+		);
+	}
+}
+
+// NATIVE_PUSH_DISPATCH_TABLE: 6 cells (2 intents × 3 liveness), single verdict each.
+{
+	let allow = 0;
+	let reject = 0;
+	for (const intent of ENTWURF_INTENTS) {
+		for (const lv of NATIVE_PUSH_LIVENESSES) {
+			const cell = NATIVE_PUSH_DISPATCH_TABLE[intent]?.[lv as NativePushLiveness];
+			ok(`native-push table[${intent}][${lv}] present`, cell != null);
+			if (cell.action === "reject") {
+				reject++;
+				ok(
+					`native-push table[${intent}][${lv}] reason in taxonomy`,
+					(ENTWURF_V2_REJECT_REASONS as readonly string[]).includes(cell.reason),
+				);
+			} else {
+				allow++;
+			}
+		}
+	}
+	eq("native-push table has 6 cells (2 intents × 3 liveness)", allow + reject, 6);
+	eq("native-push: exactly 1 allow cell (fire-and-forget × alive)", allow, 1);
+	eq("native-push: exactly 5 reject cells", reject, 5);
+}
+// the one allow cell + the intended reject reasons.
+eq("native-push allow: ff+alive = send/native-push/ack-only", NATIVE_PUSH_DISPATCH_TABLE["fire-and-forget"].alive, {
+	action: "send",
+	transport: "native-push",
+	ownership: "ack-only",
+});
+eq("native-push: ff+dead = reject(native-push-target-dead)", NATIVE_PUSH_DISPATCH_TABLE["fire-and-forget"].dead, {
+	action: "reject",
+	reason: "native-push-target-dead",
+});
+eq(
+	"native-push: ff+indeterminate = reject(native-push-probe-indeterminate)",
+	NATIVE_PUSH_DISPATCH_TABLE["fire-and-forget"].indeterminate,
+	{ action: "reject", reason: "native-push-probe-indeterminate" },
+);
+// owned-outcome × * = single, state-independent no-resume-authority reject.
+for (const lv of NATIVE_PUSH_LIVENESSES) {
+	eq(
+		`native-push: owned+${lv} = reject(native-push-no-resume-authority)`,
+		NATIVE_PUSH_DISPATCH_TABLE["owned-outcome"][lv],
+		{
+			action: "reject",
+			reason: "native-push-no-resume-authority",
+		},
+	);
+}
+// `backend-liveness-unsupported` is NOT reused for a native-push backend (봉인 1).
+ok(
+	"native-push: reject reasons never reuse backend-liveness-unsupported (agy IS measured)",
+	!(NATIVE_PUSH_REJECT_REASONS as readonly string[]).includes("backend-liveness-unsupported"),
+);
+// resolveNativePushDispatch round-trip: observedLiveness === probed value, verdict === cell.
+for (const intent of ENTWURF_INTENTS) {
+	for (const lv of NATIVE_PUSH_LIVENESSES as readonly NativePushLiveness[]) {
+		const cell = NATIVE_PUSH_DISPATCH_TABLE[intent][lv];
+		const receipt = resolveNativePushDispatch(intent, lv);
+		ok(
+			`native-push round-trip ${intent}/${lv}: observedLiveness === probed value (post-probe stamp)`,
+			receipt.observedLiveness === lv,
+		);
+		if (cell.action === "reject") {
+			ok(
+				`native-push round-trip ${intent}/${lv}: receipt reject matches cell`,
+				receipt.ok === false && receipt.reason === cell.reason,
+			);
+		} else {
+			ok(
+				`native-push round-trip ${intent}/${lv}: receipt allow matches cell (native-push send)`,
+				receipt.ok === true &&
+					receipt.action === "send" &&
+					receipt.transport === "native-push" &&
+					receipt.ownership === "ack-only",
+			);
+		}
+	}
+}
+// every native-push reject reason is post-probe (non-null) and in the master taxonomy.
+for (const r of NATIVE_PUSH_REJECT_REASONS) {
+	ok(`native-push taxonomy: '${r}' is in the enum`, (ENTWURF_V2_REJECT_REASONS as readonly string[]).includes(r));
+	ok(`native-push: '${r}' is post-probe (non-null observedLiveness required)`, !isPreProbeReject(r));
+	ok(
+		`native-push: '${r}' is NOT a pi/mailbox resolver reason (separate table)`,
+		!(RESOLVER_REJECT_REASONS as readonly string[]).includes(r),
+	);
+}
+
 // ── R5: taxonomy coverage + pre-claims + pre-dispatch scope ────────────────
 for (const r of RESOLVER_REJECT_REASONS) {
 	ok(`taxonomy: resolver reason '${r}' is in the enum`, (ENTWURF_V2_REJECT_REASONS as readonly string[]).includes(r));
@@ -377,6 +506,7 @@ for (const r of PRE_PROBE_REJECT_REASONS) {
 }
 for (const r of [
 	...RESOLVER_REJECT_REASONS,
+	...NATIVE_PUSH_REJECT_REASONS,
 	"untrusted-fail-fast" as const,
 	"socket-only-no-resume-authority" as const,
 ]) {
@@ -440,7 +570,12 @@ for (const r of PRE_PROBE_REJECT_REASONS) {
 		passed++;
 	}
 }
-for (const r of [...RESOLVER_REJECT_REASONS, "untrusted-fail-fast" as const]) {
+for (const r of [
+	...RESOLVER_REJECT_REASONS,
+	...NATIVE_PUSH_REJECT_REASONS,
+	"untrusted-fail-fast" as const,
+	"socket-only-no-resume-authority" as const,
+]) {
 	assert.throws(
 		() => makeRejectReceipt(r, null),
 		/ill-formed reject/,

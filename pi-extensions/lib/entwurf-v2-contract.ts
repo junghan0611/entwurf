@@ -87,6 +87,30 @@ export function isLivenessSupported(backend: string): boolean {
 	return (LIVENESS_DOMAIN_BACKENDS as readonly string[]).includes(backend);
 }
 
+// ── Native-push backend domain (봉인 2/4) ───────────────────────────────────
+// A backend whose liveness is measured by the SEPARATE native-push adapter rail (a
+// live app-server conversation probe — antigravity's LS gRPC), NOT the pi control
+// socket. This domain is DISJOINT from LIVENESS_DOMAIN_BACKENDS (pi socket): an agy
+// session is `unsupported` at the pi-socket FACT level (entwurf_peers) yet fully
+// measured + deliverable on the native-push axis. The two are separate rails on
+// purpose — check-entwurf-facts pins both sets and asserts their intersection is ∅
+// (a backend can never be in both a socket-liveness domain and a native-push domain).
+export const NATIVE_PUSH_BACKENDS = ["antigravity"] as const;
+export type NativePushBackend = (typeof NATIVE_PUSH_BACKENDS)[number];
+
+export function nativePushSupported(backend: string): boolean {
+	return (NATIVE_PUSH_BACKENDS as readonly string[]).includes(backend);
+}
+
+// NativePushLiveness = the 3-value liveness the native-push adapter probe yields.
+// The SAME three values as SocketLiveness, reused so there is ONE 3-value liveness
+// vocabulary — but these are NOT socket-bound (봉인 2: "주석만 socket-전용 오독 정정"):
+// the value is a live-app-server-conversation probe result (agentapi
+// get-conversation-metadata answered = alive; no live port served the conv = dead;
+// probe error/ambiguity = indeterminate). All three are valid FactLiveness values, so
+// a native-push receipt stamps observedLiveness ∈ {alive, dead, indeterminate}.
+export type NativePushLiveness = SocketLiveness;
+
 /**
  * Compose the 4-value FACT liveness from a backend and its socket probe.
  * Out-of-domain backend → `unsupported` (NOT dead/indeterminate, R1). An
@@ -113,6 +137,9 @@ export const ENTWURF_V2_REJECT_REASONS = [
 	"owned-live-no-autosend", // Q2/F1: owned-outcome to a live target is not an auto-send
 	"backend-liveness-unsupported", // R1: backend has no liveness predicate (e.g. claude-code) — owned-outcome only
 	"mailbox-undeliverable", // F-mailbox: fire-and-forget to an unsupported citizen whose mailbox is not deliverable (fail-closed; future pi-backend non-drainable mailbox)
+	"native-push-target-dead", // 봉인 1: fire-and-forget to a native-push (agy) target whose adapter probe found NO live conversation. Post-probe; observedLiveness = dead. NOT `backend-liveness-unsupported` — a native-push backend IS measured, so that name would be a lie.
+	"native-push-probe-indeterminate", // 봉인 1: fire-and-forget to a native-push target whose adapter probe was inconclusive (agy alive but no port served the conv, or a probe error). Post-probe; observedLiveness = indeterminate. Never spawns, never coerced to dead.
+	"native-push-no-resume-authority", // 봉인 1: owned-outcome to a native-push target (any liveness — single, state-independent). A native-push backend has no resume/spawn authority (there is no pi-child to own), so the caller cannot own its completion; use fire-and-forget. Post-probe; observedLiveness = the measured value.
 	"bad-target", // R2: absent/typo garden-id (no existing citizen); spawn-new out of v2 scope
 	"untrusted-fail-fast", // 동결결정 5: controlled launch into an untrusted cwd
 	"socket-only-no-resume-authority", // A1: a record-less socket-only endpoint resolved to a resume verdict (owned-outcome × dormant), but spawn-bg cannot open into it — no trusted cwd/resume authority. Post-probe guard reject (NOT pre-probe, NOT a table resolver cell): the in-domain probe ran and measured the liveness, then `allowResume:false` refused the resume. Carries the honest measured FactLiveness (non-null), unlike the pre-probe `bad-target` it replaces here — a live/addressable socket-only citizen must NEVER be mislabeled absent.
@@ -190,7 +217,18 @@ export const RESOLVER_REJECT_REASONS = [
 // `meta-mailbox` (F-mailbox) = liveness-free delivery via the 0.10.0 meta-bridge
 // mailbox + doorbell. The ack is "enqueued + doorbell rung", NOT a read and NOT a
 // turn injection — so `mode` (steer/follow_up) is meaningless on this transport.
-export const ENTWURF_V2_TRANSPORTS = ["control-socket", "spawn-bg", "tmux-live", "meta-mailbox"] as const;
+// `native-push` (봉인 1) = direct injection into a LIVE native app-server conversation
+// (antigravity `agentapi send-message`). Like meta-mailbox it is a fire-and-forget
+// send arm (ack-only), but it requires a live-probe (NATIVE_PUSH_DISPATCH_TABLE),
+// where meta-mailbox is liveness-free. It is NOT a mailbox enqueue and NOT a pi socket
+// send — it is its own rail.
+export const ENTWURF_V2_TRANSPORTS = [
+	"control-socket",
+	"spawn-bg",
+	"tmux-live",
+	"meta-mailbox",
+	"native-push",
+] as const;
 export type EntwurfV2Transport = (typeof ENTWURF_V2_TRANSPORTS)[number];
 
 // Allow-branch facets (exported so the schema↔types gate asserts every enum).
@@ -203,7 +241,7 @@ export const ENTWURF_V2_OWNERSHIPS = ["ack-only", "owned"] as const;
 export const ENTWURF_V2_MODES = ["steer", "follow_up"] as const;
 
 export type DispatchVerdict =
-	| { action: "send"; transport: "control-socket" | "meta-mailbox"; ownership: "ack-only" }
+	| { action: "send"; transport: "control-socket" | "meta-mailbox" | "native-push"; ownership: "ack-only" }
 	| { action: "resume"; transport: "spawn-bg" | "tmux-live"; ownership: "owned" }
 	| { action: "reject"; reason: EntwurfV2RejectReason };
 
@@ -349,6 +387,66 @@ export function resolveDispatch(
 	}
 	// liveness is now narrowed to SocketLiveness; deliverability does not apply.
 	const cell = DISPATCH_TABLE[intent][dispatchLivenessOf(liveness)];
+	if (cell.action === "reject") {
+		return makeRejectReceipt(cell.reason, liveness);
+	}
+	return {
+		ok: true,
+		action: cell.action,
+		transport: cell.transport,
+		ownership: cell.ownership,
+		observedLiveness: liveness,
+	};
+}
+
+// ── The native-push dispatch table (봉인 1/2/4) ─────────────────────────────
+// A THIRD table, distinct from both the pi 6-cell DISPATCH_TABLE and the unsupported
+// mailbox mini-table. Keyed intent × NativePushLiveness (NOT intent-only): a
+// native-push backend (antigravity) IS measured by its adapter probe, so the
+// send/reject decision depends on the probed liveness. The decider intercepts a
+// native-push backend in its own rail (nativePushSupported → probe → this table)
+// BEFORE the unsupported branch, so agy never falls through to a mailbox it lacks.
+//
+//   fire-and-forget × alive         → native-push send (the ONE allow cell)
+//   fire-and-forget × dead          → reject native-push-target-dead
+//   fire-and-forget × indeterminate → reject native-push-probe-indeterminate
+//   owned-outcome  × *              → reject native-push-no-resume-authority (state-
+//                                     independent: no pi-child to own; `backend-
+//                                     liveness-unsupported` is NOT reused — false name).
+export const NATIVE_PUSH_DISPATCH_TABLE: Record<EntwurfIntent, Record<NativePushLiveness, DispatchVerdict>> = {
+	"fire-and-forget": {
+		alive: { action: "send", transport: "native-push", ownership: "ack-only" },
+		dead: { action: "reject", reason: "native-push-target-dead" },
+		indeterminate: { action: "reject", reason: "native-push-probe-indeterminate" },
+	},
+	"owned-outcome": {
+		alive: { action: "reject", reason: "native-push-no-resume-authority" },
+		dead: { action: "reject", reason: "native-push-no-resume-authority" },
+		indeterminate: { action: "reject", reason: "native-push-no-resume-authority" },
+	},
+};
+
+// The reasons the native-push resolver emits — a THIRD post-probe reject set, parallel
+// to RESOLVER_REJECT_REASONS (pi/mailbox). All post-probe: resolveNativePushDispatch
+// always has a real probed liveness in hand, so observedLiveness is non-null. None may
+// be pre-probe (they are never in PRE_PROBE_REJECT_REASONS).
+export const NATIVE_PUSH_REJECT_REASONS = [
+	"native-push-target-dead",
+	"native-push-probe-indeterminate",
+	"native-push-no-resume-authority",
+] as const satisfies readonly EntwurfV2RejectReason[];
+
+/**
+ * PURE native-push dispatch decision (봉인 4). Given the caller intent and the adapter
+ * probe's 3-value liveness, mint the receipt from NATIVE_PUSH_DISPATCH_TABLE. Mirrors
+ * resolveDispatch's shape; observedLiveness is ALWAYS the probed value (non-null,
+ * post-probe). The decider calls this only AFTER nativePushSupported(backend) gates the
+ * backend and the adapter probe returns a liveness — it never touches the pi socket
+ * table or the mailbox mini-table (those are other domains). No IO here (the probe is
+ * the decider's injected dep); this only maps (intent, liveness) → verdict.
+ */
+export function resolveNativePushDispatch(intent: EntwurfIntent, liveness: NativePushLiveness): EntwurfV2Receipt {
+	const cell = NATIVE_PUSH_DISPATCH_TABLE[intent][liveness];
 	if (cell.action === "reject") {
 		return makeRejectReceipt(cell.reason, liveness);
 	}
