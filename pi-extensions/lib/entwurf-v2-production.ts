@@ -60,6 +60,7 @@ import {
 	releaseLock as realReleaseLock,
 } from "./entwurf-v2-lock.ts";
 import { makeProductionSendViaMailbox } from "./entwurf-v2-mailbox.ts";
+import { makeNativePushSend } from "./entwurf-v2-native-push.ts";
 import type { DispatchExecutorDeps, EntwurfV2RunDeps } from "./entwurf-v2-runner.ts";
 import {
 	type ControlSocketPlan,
@@ -85,6 +86,11 @@ import {
 	readMetaIdentityByGardenId,
 	readMetaReceiverMarker,
 } from "./meta-session.ts";
+import {
+	type NativePushAdapter,
+	type NativePushProbeResult,
+	resolveNativePushAdapter as realResolveNativePushAdapter,
+} from "./native-push/adapter.ts";
 import {
 	CONTROL_SOCKET_DIR,
 	controlSocketPath,
@@ -121,6 +127,11 @@ export interface ProductionEntwurfV2Seams {
 	classifyConnect: (code: string | undefined) => "dead" | "indeterminate";
 	sendRpc: (socketPath: string, command: RpcCommand, options?: RpcClientOptions) => Promise<{ response: RpcResponse }>;
 	enqueue: (opts: EnqueueMetaMessageOptions) => EnqueueMetaMessageResult;
+	/** Resolve the native-push adapter for a backend id (봉인 4). The SAME resolver feeds the
+	 * decider's `nativePushProbe` AND the executor's `sendNativePush`, so a single injected
+	 * fake adapter drives both the probe (routing decision) and the send (delivery + retry).
+	 * Default: the real registry resolver. */
+	resolveNativePushAdapter: (backend: string) => NativePushAdapter;
 	/** Extra spawn-factory overrides (timers/spawnChild/probe) for a deterministic spawn gate.
 	 * `releaseFn` is NOT overridable here — the factory injects the shared `release` (QB3). */
 	spawnOverrides: Omit<ProductionSpawnOpts, "releaseFn">;
@@ -211,6 +222,7 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 		classifyConnect: s.classifyConnect ?? classifyConnectError,
 		sendRpc: s.sendRpc ?? realSendRpc,
 		enqueue: s.enqueue ?? enqueueMetaMessage,
+		resolveNativePushAdapter: s.resolveNativePushAdapter ?? realResolveNativePushAdapter,
 		spawnOverrides: s.spawnOverrides ?? {},
 	};
 
@@ -290,6 +302,11 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 		preflightForCwd: (cwd: string): PreflightOutcome | Promise<PreflightOutcome> =>
 			io.preflight({ cwd, agentDir: opts.agentDir, prefixRoots: opts.prefixRoots }),
 		mailboxDeliverabilityFor,
+		// 봉인 4: resolve the native-push adapter for this backend + probe the conversation.
+		// Only reached on a nativePushSupported backend (the decider gates it), so the resolver
+		// never throws for a non-native-push backend here.
+		nativePushProbe: (identity: MetaIdentity): Promise<NativePushProbeResult> =>
+			Promise.resolve(io.resolveNativePushAdapter(identity.backend).probe(identity.nativeSessionId)),
 		mailboxDir,
 		sessionsDir,
 		observeTimeoutMs: opts.observeTimeoutMs,
@@ -339,6 +356,9 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 				}),
 			),
 		sendMailbox: (plan, _lock) => sendViaMailbox(plan as MetaMailboxPlan, _lock as LockClaim),
+		// native-push (봉인 4): the SAME injected adapter resolver drives the executor send,
+		// so the decider's probe and the delivery use one adapter. Lock-free (lock ignored).
+		sendNativePush: makeNativePushSend({ resolveAdapter: io.resolveNativePushAdapter }),
 	};
 
 	return {

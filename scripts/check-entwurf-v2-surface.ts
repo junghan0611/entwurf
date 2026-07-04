@@ -179,6 +179,41 @@ async function main(): Promise<void> {
 			!renderEntwurfV2Result(mailbox).isError && renderEntwurfV2Result(mailbox).text.includes("enqueued"),
 		);
 
+		// native-push → delivered (no retry)
+		const np: EntwurfV2RunResult = {
+			kind: "executed",
+			receipt: { ...SUCCESS_RECEIPT, transport: "native-push" },
+			transport: "native-push",
+			outcome: { transport: "native-push", success: true, retried: false },
+		};
+		ok(
+			"2: native-push → not error + delivered",
+			!renderEntwurfV2Result(np).isError && renderEntwurfV2Result(np).text.includes("delivered"),
+		);
+
+		// native-push delivered after a 1-shot re-probe retry → retry note surfaced
+		const npRetried: EntwurfV2RunResult = {
+			kind: "executed",
+			receipt: { ...SUCCESS_RECEIPT, transport: "native-push" },
+			transport: "native-push",
+			outcome: { transport: "native-push", success: true, retried: true },
+		};
+		ok(
+			"2: native-push retried → not error + retry note surfaced",
+			!renderEntwurfV2Result(npRetried).isError && renderEntwurfV2Result(npRetried).text.includes("retry"),
+		);
+
+		// native-push owned reject → hint to switch to fire-and-forget
+		const npReject: EntwurfV2RunResult = {
+			kind: "rejected",
+			receipt: { ok: false, reason: "native-push-no-resume-authority", observedLiveness: "alive" },
+		};
+		const npRej = renderEntwurfV2Result(npReject);
+		ok(
+			"2: native-push-no-resume-authority → isError + fire-and-forget hint",
+			npRej.isError && npRej.text.includes("fire-and-forget"),
+		);
+
 		// N1: execution-failed with finalizedOutcome + releaseFailed → delivered-but-dirty
 		const n1: EntwurfV2RunResult = {
 			kind: "execution-failed",

@@ -217,6 +217,13 @@ async function driveDeadFallback(
 			// contract violation (a send and a spawn are different actions), so fail loud
 			// rather than silently mis-execute.
 			throw new Error("entwurf-v2-send: re-resolve returned a spawn-bg plan for a send fallback (contract violation).");
+		case "native-push":
+			// The dead-control-socket fallback re-resolves only the pi socket domain
+			// (control-socket / mailbox / spawn); it never routes the native-push rail. A
+			// native-push rePlan here is structurally impossible — fail loud.
+			throw new Error(
+				"entwurf-v2-send: re-resolve returned a native-push plan for a send fallback (contract violation).",
+			);
 	}
 }
 

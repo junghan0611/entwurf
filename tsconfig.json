@@ -115,6 +115,12 @@
 		// send hand into the program, same fence. Typechecked by scripts/tsconfig.json via
 		// its gate (check-entwurf-v2-mailbox.ts).
 		"pi-extensions/lib/entwurf-v2-mailbox.ts",
+		// entwurf-v2-native-push.ts is the native-push SEND hand (봉인 3/4, the executor half of
+		// the native-push rail) — a lib→lib VALUE importer (resolveNativePushAdapter from
+		// native-push/adapter.ts) with explicit `.ts`-extension imports that pull the excluded
+		// decider into the program, same fence. It owns the 1-shot re-probe→re-send retry.
+		// Typechecked by scripts/tsconfig.json via its gate (check-entwurf-v2-native-push.ts).
+		"pi-extensions/lib/entwurf-v2-native-push.ts",
 		// entwurf-v2-runner.ts is the 5d-1 execute-router — a lib→lib VALUE importer
 		// (SendDeliveredReleaseFailedError from entwurf-v2-send) with explicit `.ts`-extension
 		// imports that pull the excluded send/decider/spawn into the program, same fence.

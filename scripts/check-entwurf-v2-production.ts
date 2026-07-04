@@ -27,9 +27,11 @@ import {
 	makeProductionEntwurfV2Deps,
 	type ProductionEntwurfV2Opts,
 } from "../pi-extensions/lib/entwurf-v2-production.ts";
+import { runEntwurfV2 } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import type { ControlSocketPlan, MetaMailboxPlan } from "../pi-extensions/lib/entwurf-v2-send.ts";
 import type { SpawnBgPlan } from "../pi-extensions/lib/entwurf-v2-spawn.ts";
 import type { MetaIdentity, MetaReceiverMarker } from "../pi-extensions/lib/meta-session.ts";
+import type { NativePushAdapter, NativePushProbeResult } from "../pi-extensions/lib/native-push/adapter.ts";
 import type { TargetSocketInspection } from "../pi-extensions/lib/socket-discovery.ts";
 
 let passed = 0;
@@ -125,6 +127,10 @@ interface Spies {
 	enqueue: { gardenId: string; sessionsDir?: string; mailboxDir?: string }[];
 	rpc: { socketPath: string; command: Record<string, unknown> }[];
 	inspectPath: { socketPath: string }[];
+	/** which backend the native-push adapter resolver was asked for (decide + execute). */
+	nativePushResolve: string[];
+	nativePushProbe: { conv: string }[];
+	nativePushSend: { lsAddress: string; conv: string; content: string }[];
 }
 
 /** Build a factory whose every leaf IO is a spy. `over` lets a case shape the decision
@@ -137,11 +143,22 @@ function makeSpiedFactory(over: {
 	rpc?: "success" | "dead-throw";
 	classifyDead?: boolean;
 	spawnChildThrows?: boolean;
+	/** the native-push adapter probe result (only reached on a native-push backend). */
+	nativePushProbe?: NativePushProbeResult;
 	/** SE-2 2d-3 — the target's receiver presence marker: "active" (matches identity,
 	 * default), "absent" (terminated/never-armed), or "mismatch" (drifted native id). */
 	receiverMarker?: "active" | "absent" | "mismatch";
 }) {
-	const spies: Spies = { acquire: [], release: [], enqueue: [], rpc: [], inspectPath: [] };
+	const spies: Spies = {
+		acquire: [],
+		release: [],
+		enqueue: [],
+		rpc: [],
+		inspectPath: [],
+		nativePushResolve: [],
+		nativePushProbe: [],
+		nativePushSend: [],
+	};
 	const opts: ProductionEntwurfV2Opts = {
 		senderProvider: () => ({ sessionId: "self", agentId: "pi/x", cwd: "/cwd", timestamp: "2026-06-13T00:00:00.000Z" }),
 		lockDir: LOCK_DIR,
@@ -194,6 +211,23 @@ function makeSpiedFactory(over: {
 				spies.enqueue.push({ gardenId: o.gardenId, sessionsDir: o.sessionsDir, mailboxDir: o.mailboxDir });
 				return { gardenId: o.gardenId, recordPath: "r", messagePath: "m", signalPath: "s" };
 			},
+			// ONE native-push adapter resolver (봉인 4): the SAME injected fake feeds the
+			// decider's nativePushProbe AND the executor's sendNativePush — so a single dispatch
+			// records both a probe (decide) and a send (execute) on this one adapter, proving the
+			// two hands never resolve different adapters.
+			resolveNativePushAdapter: (backend: string): NativePushAdapter => {
+				spies.nativePushResolve.push(backend);
+				return {
+					id: "antigravity",
+					async probe(conv) {
+						spies.nativePushProbe.push({ conv });
+						return over.nativePushProbe ?? { status: "dead", reason: "fake: no native-push probe configured" };
+					},
+					async send(route, conv, content) {
+						spies.nativePushSend.push({ lsAddress: route.lsAddress, conv, content });
+					},
+				};
+			},
 			spawnOverrides: {
 				spawnChild: over.spawnChildThrows
 					? () => {
@@ -230,6 +264,39 @@ async function main(): Promise<void> {
 		ok("A2: non-pi conflict → reject", decision.kind === "reject");
 		ok("A2: non-pi target lstat'd the conflict exactly once", spies.inspectPath.length === 1);
 		ok("A2: a quarantined target is never lock-acquired", spies.acquire.length === 0);
+	}
+
+	// ── A3: native-push wiring — ONE injected adapter feeds BOTH decider + executor ─
+	{
+		const { deps, spies } = makeSpiedFactory({
+			backend: "antigravity",
+			nativePushProbe: { status: "alive", route: { lsAddress: "127.0.0.1:5599" } },
+		});
+		const result = await runEntwurfV2({ target: GID, intent: "fire-and-forget", message: "hi agy" }, deps);
+		ok("A3: antigravity ff → native-push delivered", result.kind === "executed" && result.transport === "native-push");
+		ok("A3: decider probed the native-push adapter once (decide side)", spies.nativePushProbe.length === 1);
+		ok("A3: executor sent via the native-push adapter once (execute side)", spies.nativePushSend.length === 1);
+		ok("A3: send used the DECIDER-probed route", spies.nativePushSend[0]?.lsAddress === "127.0.0.1:5599");
+		ok("A3: send carried the dispatch message", spies.nativePushSend[0]?.content === "hi agy");
+		ok(
+			"A3: BOTH hands resolved the SAME adapter (for 'antigravity')",
+			spies.nativePushResolve.length === 2 && spies.nativePushResolve.every((b) => b === "antigravity"),
+		);
+		ok("A3: native-push is LOCK-FREE (no acquire)", spies.acquire.length === 0);
+		ok("A3: native-push did NOT enqueue a mailbox (not the unsupported path)", spies.enqueue.length === 0);
+	}
+	{
+		// antigravity + dead probe → reject native-push-target-dead, NO send.
+		const { deps, spies } = makeSpiedFactory({
+			backend: "antigravity",
+			nativePushProbe: { status: "dead", reason: "no host" },
+		});
+		const result = await runEntwurfV2({ target: GID, intent: "fire-and-forget", message: "x" }, deps);
+		ok(
+			"A3b: antigravity ff + dead → rejected native-push-target-dead",
+			result.kind === "rejected" && result.receipt.reason === "native-push-target-dead",
+		);
+		ok("A3b: no send attempted on a dead target", spies.nativePushSend.length === 0);
 	}
 
 	// ── A3: QB2 — a non-pi indeterminate lstat FAILS LOUD (never "no conflict") ─

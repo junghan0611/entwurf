@@ -38,6 +38,7 @@ import type {
 	SuccessReceipt,
 } from "./entwurf-v2-decider.ts";
 import type { LockClaim } from "./entwurf-v2-lock.ts";
+import type { NativePushPlan, NativePushSendResult } from "./entwurf-v2-native-push.ts";
 import {
 	type ControlSocketPlan,
 	type ControlSocketSendResult,
@@ -58,6 +59,9 @@ export interface DispatchExecutorDeps {
 	sendControl: (plan: ControlSocketPlan, lock: LockClaim | null) => Promise<ControlSocketSendResult>;
 	resumeSpawnBg: (plan: SpawnBgPlan, lock: LockClaim | null) => Promise<SpawnBgResumeResult>;
 	sendMailbox: (plan: MetaMailboxPlan, lock: LockClaim | null) => Promise<RpcSendResult>;
+	// native-push (봉인 4): lock-free like meta-mailbox — the runner passes the null lock
+	// verbatim and the hand ignores it. Owns the 1-shot re-probe→re-send retry internally.
+	sendNativePush: (plan: NativePushPlan, lock: LockClaim | null) => Promise<NativePushSendResult>;
 }
 
 /** The per-transport success outcome, discriminated by transport so the surface renders
@@ -68,7 +72,9 @@ export interface DispatchExecutorDeps {
 export type ExecutedOutcome =
 	| { transport: "control-socket"; outcome: SendFinalOutcome; rejectReason?: string }
 	| { transport: "spawn-bg"; result: SpawnBgResumeResult }
-	| { transport: "meta-mailbox"; success: true };
+	| { transport: "meta-mailbox"; success: true }
+	// native-push carries `retried` so the surface can note the 1-shot re-probe retry fired.
+	| { transport: "native-push"; success: true; retried: boolean };
 
 /** The single outcome-rich result the 5d surface renders. `rejected` = the decider
  * refused (no execution). `executed` = a hand ran to a terminal result. `execution-failed`
@@ -160,6 +166,28 @@ export async function executeDispatch(
 					);
 				}
 				return { kind: "executed", receipt, transport, outcome: { transport: "meta-mailbox", success: true } };
+			} catch (err) {
+				return { kind: "execution-failed", receipt, transport, error: errorMessage(err), retrySafe: false };
+			}
+		}
+		case "native-push": {
+			try {
+				// lock is null here (lock-free rail, 봉인 4) — passed verbatim; the hand ignores it.
+				const r = await deps.sendNativePush(plan, lock);
+				// Like meta-mailbox, native-push has NO in-band reject (no live receiver answers
+				// success:false). A `success:false` is therefore a CONTRACT VIOLATION — fail loud
+				// rather than render a non-delivery as delivered ("Never warn. Throw.").
+				if (r.success !== true) {
+					throw new Error(
+						"entwurf-v2-runner: native-push send returned success:false (contract violation; native-push has no in-band reject).",
+					);
+				}
+				return {
+					kind: "executed",
+					receipt,
+					transport,
+					outcome: { transport: "native-push", success: true, retried: r.retried },
+				};
 			} catch (err) {
 				return { kind: "execution-failed", receipt, transport, error: errorMessage(err), retrySafe: false };
 			}

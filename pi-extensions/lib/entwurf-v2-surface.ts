@@ -106,6 +106,16 @@ export function actionableRejectHint(reason: string): string | undefined {
 		case "owned-live-no-autosend":
 			// A live target is reachable, but owned-outcome is not an auto-send (Q2/F1).
 			return "target is live — owned-outcome never auto-sends. Use intent: fire-and-forget (with wants_reply if you need a reply).";
+		case "native-push-no-resume-authority":
+			// A native-push backend (antigravity) has no pi-child to own, so owned-outcome has
+			// nothing to own. Delivery is a direct inject via fire-and-forget.
+			return "native-push target (e.g. antigravity) has no resume/spawn authority → owned-outcome is unsupported. Use intent: fire-and-forget to direct-inject into the live conversation.";
+		case "native-push-target-dead":
+			// The adapter probe found no live host process for the conversation.
+			return "native-push conversation is not live (no host process found). Re-open the conversation, then retry — there is nothing to inject into.";
+		case "native-push-probe-indeterminate":
+			// Host up, but no LS port served the conversation — inconclusive, not a hard dead.
+			return "native-push host is up but no port served this conversation (probe inconclusive). Retry once the conversation is loaded, or verify the conversation id.";
 		default:
 			return undefined;
 	}
@@ -162,6 +172,13 @@ export function renderEntwurfV2Result(result: EntwurfV2RunResult): EntwurfV2Surf
 				const pid = "pid" in res && res.pid !== undefined ? ` (pid ${res.pid})` : "";
 				const exit = res.kind === "child-exited" ? ` exitCode=${res.exitCode}` : "";
 				return { text: `entwurf_v2 spawn-bg → ${res.kind}${pid}${exit}, lock released`, isError: false };
+			}
+			if (o.transport === "native-push") {
+				// direct-inject succeeded; note if the 1-shot re-probe retry fired.
+				return {
+					text: `entwurf_v2 native-push → delivered${o.retried ? " (after a 1-shot re-probe retry)" : ""}`,
+					isError: false,
+				};
 			}
 			// meta-mailbox
 			return { text: "entwurf_v2 meta-mailbox → enqueued", isError: false };

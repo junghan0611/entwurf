@@ -96,6 +96,15 @@ export function decideReleasePolicy(plan: ExecutionPlan, lock: LockClaim | null)
 				throw new Error("entwurf-v2-release: a meta-mailbox plan must carry no lock (？7 invariant violated).");
 			}
 			return { kind: "no-lock" };
+		case "native-push":
+			// Native-push is the other lock-free rail (봉인 4) — like meta-mailbox it holds no
+			// lock, so a non-null lock is a decider contract violation. (The native-push hand
+			// never actually routes through this reducer; the case keeps the switch exhaustive
+			// and pins the lock-free invariant.)
+			if (lock !== null) {
+				throw new Error("entwurf-v2-release: a native-push plan must carry no lock (봉인 4 lock-free rail violated).");
+			}
+			return { kind: "no-lock" };
 		case "control-socket":
 			assertInDomainLock(plan, lock);
 			return { kind: "release-after-send-final" };

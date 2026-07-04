@@ -838,6 +838,18 @@ check_entwurf_v2_mailbox() {
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-mailbox.ts)
 }
 
+check_entwurf_v2_native_push() {
+  # Deterministic gate for 봉인 3/4: the native-push SEND hand (deliverViaNativePush +
+  # makeNativePushSend), the executor half of the native-push rail — where the 1-shot retry
+  # lives (moved out of the adapter leaf). Proves over a fake adapter (no agy/socket): success
+  # first try -> {retried:false}, ONE send over the planted route, ZERO re-probe; fail ->
+  # re-probe alive -> re-send success -> {retried:true}, TWO sends, the 2nd over the RE-
+  # DISCOVERED route; re-send FAIL -> throws (no 3rd attempt); re-probe dead/indeterminate ->
+  # throws (not retried), NO second send. makeNativePushSend resolves the adapter from
+  # plan.backend and IGNORES the lock (lock-free rail).
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-native-push.ts)
+}
+
 check_entwurf_v2_runner() {
   # Deterministic gate for 0.11 Stage 0 step 5d-1: the execute-router (executeDispatch) that
   # routes an already-decided DispatchDecision to its 5c transport hand and maps the outcome
@@ -3085,6 +3097,9 @@ case "$cmd" in
     ;;
   check-entwurf-v2-mailbox)
     check_entwurf_v2_mailbox
+    ;;
+  check-entwurf-v2-native-push)
+    check_entwurf_v2_native_push
     ;;
   check-entwurf-v2-runner)
     check_entwurf_v2_runner

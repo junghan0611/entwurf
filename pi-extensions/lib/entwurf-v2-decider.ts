@@ -52,7 +52,10 @@ import {
 	type EntwurfV2Receipt,
 	isLivenessSupported,
 	makeRejectReceipt,
+	type NativePushBackend,
+	nativePushSupported,
 	resolveDispatch,
+	resolveNativePushDispatch,
 } from "./entwurf-v2-contract.ts";
 import type { AcquireLockResult, LockClaim, LockConflict } from "./entwurf-v2-lock.ts";
 import {
@@ -63,6 +66,7 @@ import {
 	type MetaIdentity,
 	metaCapabilityFor,
 } from "./meta-session.ts";
+import type { NativePushProbeResult, NativePushRoute } from "./native-push/adapter.ts";
 import { isValidSessionId } from "./session-id.js";
 import { controlSocketPath, mapInspectionToLiveness, type TargetSocketInspection } from "./socket-discovery.ts";
 import type { SocketLiveness } from "./socket-probe.ts";
@@ -124,6 +128,21 @@ export type ExecutionPlan =
 			expectedSocketPath: string;
 			observeTimeoutMs: number;
 			releaseWhen: "socket-alive-or-child-exited";
+	  }
+	// native-push send (봉인 4): direct-inject into a live app-server conversation. LOCK-FREE
+	// (the DispatchDecision carries lock:null). Carries the decider-probed VOLATILE route so
+	// the executor sends without re-deriving it (봉인 3 "used within the same dispatch"); the
+	// executor still owns the 1-shot re-probe→re-send on failure. `backend` lets the executor
+	// resolve the adapter for that re-probe.
+	| {
+			transport: "native-push";
+			action: "send";
+			targetGardenId: string;
+			backend: NativePushBackend;
+			nativeSessionId: string;
+			route: NativePushRoute;
+			wantsReply: boolean;
+			message: string;
 	  };
 
 // ── DispatchDecision (the decider's only output) ────────────────────────────
@@ -212,6 +231,16 @@ export interface DispatchDeciderDeps {
 	mailboxDeliverabilityFor: (
 		identity: MetaIdentity,
 	) => MailboxDeliverabilityResult | Promise<MailboxDeliverabilityResult>;
+	/**
+	 * 봉인 4: the native-push liveness+route probe seam (REQUIRED, no default). Called ONLY on
+	 * the native-push branch (a nativePushSupported backend, e.g. antigravity), it returns the
+	 * adapter probe result — the 3-value liveness the NATIVE_PUSH table routes on PLUS the
+	 * volatile route the executor sends over. The decider does NOT probe itself (purity); the
+	 * production wrapper resolves the native-push adapter and calls its probe. Making it
+	 * required forces every construction site to wire it, so a native-push dispatch can never
+	 * silently fall through to the pi-socket / mailbox path.
+	 */
+	nativePushProbe: (identity: MetaIdentity) => NativePushProbeResult | Promise<NativePushProbeResult>;
 	mailboxDir?: string;
 	sessionsDir?: string;
 	observeTimeoutMs?: number;
@@ -297,6 +326,37 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 		return reject(makeRejectReceipt("target-address-conflict", null));
 	}
 	const identity = resolution.identity;
+
+	// 2d. native-push rail (봉인 4): a native-push backend (antigravity) is measured by its
+	// adapter probe, NOT the pi socket and NOT the mailbox. Intercept it HERE — after identity
+	// resolution + the address-conflict guard, but BEFORE the unsupported mailbox branch — so
+	// agy routes to native-push and never falls through to a mailbox it does not have. This
+	// branch is LOCK-FREE (봉인 4): the pi in-domain lock closes a socket TOCTOU, but a
+	// volatile probe route has no lock meaning (a duplicate-send idempotency is a D8 future).
+	if (nativePushSupported(identity.backend)) {
+		const probe = await deps.nativePushProbe(identity);
+		const receipt = resolveNativePushDispatch(input.intent, probe.status);
+		if (!receipt.ok) return reject(receipt);
+		// The ONLY allow cell is fire-and-forget × alive, so an ok receipt ⟹ the probe is
+		// alive and carries a route. The narrow is defensive: a contract-breaking probe/table
+		// mismatch fails loud rather than planting a routeless send plan.
+		if (probe.status !== "alive") {
+			throw new Error(
+				"entwurf_v2 decider: native-push send verdict without an alive probe route (contract invariant broken).",
+			);
+		}
+		const plan: ExecutionPlan = {
+			transport: "native-push",
+			action: "send",
+			targetGardenId: gardenId,
+			backend: identity.backend,
+			nativeSessionId: identity.nativeSessionId,
+			route: probe.route,
+			wantsReply,
+			message: input.message,
+		};
+		return { kind: "execute", receipt, plan, lock: null };
+	}
 
 	// 3. backend.
 	if (!isLivenessSupported(identity.backend)) {

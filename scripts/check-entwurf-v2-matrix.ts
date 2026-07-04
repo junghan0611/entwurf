@@ -154,6 +154,13 @@ function mkDeps(opts: ScenarioOpts): Tracked {
 			mailboxCalls.push(id);
 			return { deliverable: opts.mailboxDeliverable ?? false, reason: "fake-deliverability" };
 		},
+		// The matrix rows are pi / claude-code targets — the native-push branch (antigravity)
+		// is NOT exercised here (it is a SEPARATE table, covered by check-entwurf-v2-contract's
+		// NATIVE_PUSH round-trip + check-entwurf-v2-decider's branch scenarios). A tripwire so a
+		// future antigravity row that forgets to wire this fails loud instead of misrouting.
+		nativePushProbe: () => {
+			throw new Error("matrix: native-push branch must not be reached (no antigravity row wired)");
+		},
 		mailboxDir: "/fake/mailbox",
 		sessionsDir: "/fake/sessions",
 	};

@@ -98,7 +98,7 @@ export function isLivenessSupported(backend: string): boolean {
 export const NATIVE_PUSH_BACKENDS = ["antigravity"] as const;
 export type NativePushBackend = (typeof NATIVE_PUSH_BACKENDS)[number];
 
-export function nativePushSupported(backend: string): boolean {
+export function nativePushSupported(backend: string): backend is NativePushBackend {
 	return (NATIVE_PUSH_BACKENDS as readonly string[]).includes(backend);
 }
 

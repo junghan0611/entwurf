@@ -43,6 +43,7 @@ import type {
 	SuccessReceipt,
 } from "../pi-extensions/lib/entwurf-v2-decider.ts";
 import type { LockClaim } from "../pi-extensions/lib/entwurf-v2-lock.ts";
+import type { NativePushPlan, NativePushSendResult } from "../pi-extensions/lib/entwurf-v2-native-push.ts";
 import {
 	type DispatchExecutorDeps,
 	type EntwurfV2RunDeps,
@@ -109,6 +110,16 @@ const MAILBOX_PLAN: MetaMailboxPlan = {
 	wantsReply: false,
 	message: "m",
 };
+const NATIVE_PUSH_PLAN: NativePushPlan = {
+	transport: "native-push",
+	action: "send",
+	targetGardenId: GID,
+	backend: "antigravity",
+	nativeSessionId: "conv-xyz",
+	route: { lsAddress: "127.0.0.1:5599" },
+	wantsReply: false,
+	message: "m",
+};
 
 const SUCCESS_RECEIPT: SuccessReceipt = {
 	ok: true,
@@ -128,12 +139,14 @@ interface Trace {
 	controlArgs?: { plan: ControlSocketPlan; lock: LockClaim | null };
 	spawnArgs?: { plan: SpawnBgPlan; lock: LockClaim | null };
 	mailboxArgs?: { plan: MetaMailboxPlan; lock: LockClaim | null };
+	nativePushArgs?: { plan: NativePushPlan; lock: LockClaim | null };
 }
 
 interface FakeSpec {
 	control?: { result: ControlSocketSendResult } | { throw: unknown };
 	spawn?: { result: SpawnBgResumeResult } | { throw: unknown };
 	mailbox?: { result: RpcSendResult } | { throw: unknown };
+	nativePush?: { result: NativePushSendResult } | { throw: unknown };
 }
 
 function makeDeps(spec: FakeSpec): { deps: DispatchExecutorDeps; trace: Trace } {
@@ -159,6 +172,13 @@ function makeDeps(spec: FakeSpec): { deps: DispatchExecutorDeps; trace: Trace } 
 			if (!spec.mailbox) throw new Error("test: sendMailbox called but no spec");
 			if ("throw" in spec.mailbox) throw spec.mailbox.throw;
 			return spec.mailbox.result;
+		},
+		async sendNativePush(plan, lock) {
+			trace.calls.push("sendNativePush");
+			trace.nativePushArgs = { plan, lock };
+			if (!spec.nativePush) throw new Error("test: sendNativePush called but no spec");
+			if ("throw" in spec.nativePush) throw spec.nativePush.throw;
+			return spec.nativePush.result;
 		},
 	};
 	return { deps, trace };
@@ -250,6 +270,44 @@ async function main(): Promise<void> {
 		ok(
 			"4: executed{meta-mailbox, success}",
 			res.kind === "executed" && res.outcome.transport === "meta-mailbox" && res.outcome.success === true,
+		);
+	}
+
+	// ── 4b: native-push execute → sendNativePush(plan, null), lock-free (봉인 4) ──
+	{
+		const { deps, trace } = makeDeps({ nativePush: { result: { success: true, retried: false } } });
+		const res = await executeDispatch(executeDecision(NATIVE_PUSH_PLAN, null), deps);
+		ok("4b: only sendNativePush ran", trace.calls.length === 1 && trace.calls[0] === "sendNativePush");
+		ok(
+			"4b: NULL lock passed verbatim (lock-free rail)",
+			trace.nativePushArgs?.lock === null && trace.nativePushArgs?.plan === NATIVE_PUSH_PLAN,
+		);
+		ok(
+			"4b: executed{native-push, success, retried:false}",
+			res.kind === "executed" &&
+				res.outcome.transport === "native-push" &&
+				res.outcome.success === true &&
+				res.outcome.retried === false,
+		);
+	}
+
+	// ── 4c: native-push retried flag surfaces onto the executed outcome ──────────
+	{
+		const { deps } = makeDeps({ nativePush: { result: { success: true, retried: true } } });
+		const res = await executeDispatch(executeDecision(NATIVE_PUSH_PLAN, null), deps);
+		ok(
+			"4c: retried:true carried onto executed{native-push}",
+			res.kind === "executed" && res.outcome.transport === "native-push" && res.outcome.retried === true,
+		);
+	}
+
+	// ── 4d: native-push hand THROWS → execution-failed, retry-unsafe ─────────────
+	{
+		const { deps } = makeDeps({ nativePush: { throw: new Error("agy send boom") } });
+		const res = await executeDispatch(executeDecision(NATIVE_PUSH_PLAN, null), deps);
+		ok(
+			"4d: native-push throw → execution-failed (retrySafe:false)",
+			res.kind === "execution-failed" && res.transport === "native-push" && res.retrySafe === false,
 		);
 	}
 

@@ -48,6 +48,7 @@ import {
 } from "../pi-extensions/lib/entwurf-v2-decider.ts";
 import type { AcquireLockResult, LockClaim } from "../pi-extensions/lib/entwurf-v2-lock.ts";
 import type { MetaBackendV2, MetaCapability, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
+import type { NativePushProbeResult } from "../pi-extensions/lib/native-push/adapter.ts";
 import { controlSocketPath, type TargetSocketInspection } from "../pi-extensions/lib/socket-discovery.ts";
 import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
 
@@ -131,6 +132,9 @@ interface ScenarioOpts {
 	 * unsupported path. Default false (fail-closed) — the decider trusts the seam, never
 	 * wake-mode alone, so this is how a test asserts both the deliverable and inactive cells. */
 	mailboxDeliverable?: boolean;
+	/** 봉인 4: the native-push adapter probe result the injected nativePushProbe seam returns
+	 * (only reached on a nativePushSupported backend, e.g. antigravity). */
+	nativePush?: NativePushProbeResult;
 }
 
 interface Tracked {
@@ -139,6 +143,7 @@ interface Tracked {
 	releaseCalls: LockClaim[];
 	inspectCalls: string[];
 	mailboxCalls: MetaIdentity[];
+	nativePushCalls: MetaIdentity[];
 }
 
 // Build injected deps with call tracking. A lock "conflict" returns a failed
@@ -149,6 +154,7 @@ function mkDeps(opts: ScenarioOpts): Tracked {
 	const releaseCalls: LockClaim[] = [];
 	const inspectCalls: string[] = [];
 	const mailboxCalls: MetaIdentity[] = [];
+	const nativePushCalls: MetaIdentity[] = [];
 	const deps: DispatchDeciderDeps = {
 		resolveTarget: () => opts.resolution,
 		acquireLock: (gardenId: string): AcquireLockResult => {
@@ -179,10 +185,14 @@ function mkDeps(opts: ScenarioOpts): Tracked {
 			mailboxCalls.push(identity);
 			return { deliverable: opts.mailboxDeliverable ?? false, reason: "fake-deliverability" };
 		},
+		nativePushProbe: (identity: MetaIdentity): NativePushProbeResult => {
+			nativePushCalls.push(identity);
+			return opts.nativePush ?? { status: "dead", reason: "fake: no native-push probe configured" };
+		},
 		mailboxDir: "/fake/mailbox",
 		sessionsDir: "/fake/sessions",
 	};
-	return { deps, acquireCalls, releaseCalls, inspectCalls, mailboxCalls };
+	return { deps, acquireCalls, releaseCalls, inspectCalls, mailboxCalls, nativePushCalls };
 }
 
 function isExecute(d: DispatchDecision): d is Extract<DispatchDecision, { kind: "execute" }> {
@@ -264,6 +274,9 @@ async function main(): Promise<void> {
 				preflightForCwd: () => APPROVE,
 				mailboxDeliverabilityFor: () => {
 					throw new Error("target-locked(corrupt): in-domain pi never consults the mailbox seam");
+				},
+				nativePushProbe: () => {
+					throw new Error("target-locked(corrupt): in-domain pi never consults the native-push seam");
 				},
 			},
 		);
@@ -670,6 +683,9 @@ async function main(): Promise<void> {
 						probeSocket: async () => "dead",
 						preflightForCwd: () => APPROVE,
 						mailboxDeliverabilityFor: () => ({ deliverable: false, reason: "in-domain pi: seam unused" }),
+						nativePushProbe: () => {
+							throw new Error("lock-leak: in-domain pi never consults the native-push seam");
+						},
 						...over,
 					},
 				);
@@ -724,6 +740,9 @@ async function main(): Promise<void> {
 					probeSocket: async () => "alive",
 					preflightForCwd: () => APPROVE,
 					mailboxDeliverabilityFor: () => ({ deliverable: false, reason: "in-domain pi: seam unused" }),
+					nativePushProbe: () => {
+						throw new Error("reject-release-throw: in-domain pi never consults the native-push seam");
+					},
 				},
 			);
 		} catch (e) {
@@ -763,6 +782,9 @@ async function main(): Promise<void> {
 			mailboxDeliverabilityFor: () => {
 				throw new Error("invalid-gid: mailboxDeliverabilityFor must not be reached");
 			},
+			nativePushProbe: () => {
+				throw new Error("invalid-gid: nativePushProbe must not be reached");
+			},
 		};
 		try {
 			await decideDispatch({ target: "../etc/passwd", intent: "owned-outcome", message: "x" }, deps);
@@ -772,6 +794,78 @@ async function main(): Promise<void> {
 		ok("invalid-gid: throws", threw);
 		ok("invalid-gid: throws BEFORE resolveTarget (no path/lookup built)", !resolveCalled);
 	}
+
+	// ── native-push rail (봉인 4): antigravity is intercepted BEFORE the unsupported ──
+	// mailbox branch, routed by nativePushProbe + the NATIVE_PUSH table, LOCK-FREE.
+	const npResolution = { identity: identity("antigravity"), preProbeAddressConflict: false };
+	{
+		// ff × alive → execute native-push send; plan carries route/backend/nativeSessionId; lock null.
+		const t = mkDeps({
+			resolution: npResolution,
+			nativePush: { status: "alive", route: { lsAddress: "127.0.0.1:5599" } },
+		});
+		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "yo" }, t.deps);
+		ok("native-push ff+alive: execute", isExecute(d));
+		ok("native-push ff+alive: transport native-push", isExecute(d) && d.plan.transport === "native-push");
+		ok("native-push ff+alive: LOCK-FREE (decision lock null)", isExecute(d) && d.lock === null);
+		ok("native-push ff+alive: acquireLock NOT called (lock-free rail)", t.acquireCalls.length === 0);
+		ok("native-push ff+alive: nativePushProbe consulted once", t.nativePushCalls.length === 1);
+		ok(
+			"native-push ff+alive: mailbox seam NOT consulted (intercepts before unsupported branch)",
+			t.mailboxCalls.length === 0,
+		);
+		if (isExecute(d) && d.plan.transport === "native-push") {
+			ok("native-push ff+alive: plan route = probed route", d.plan.route.lsAddress === "127.0.0.1:5599");
+			ok("native-push ff+alive: plan backend = antigravity", d.plan.backend === "antigravity");
+			ok("native-push ff+alive: plan nativeSessionId from identity", d.plan.nativeSessionId === `native-${GID}`);
+			ok(
+				"native-push ff+alive: plan keyset exact",
+				planKeys(d.plan).join(",") ===
+					"action,backend,message,nativeSessionId,route,targetGardenId,transport,wantsReply",
+			);
+		}
+		ok(
+			"native-push ff+alive: receipt success transport native-push, observedLiveness alive",
+			isExecute(d) && d.receipt.ok && d.receipt.transport === "native-push" && d.receipt.observedLiveness === "alive",
+		);
+	}
+	{
+		// ff × dead → reject native-push-target-dead (post-probe, dead), lock-free.
+		const t = mkDeps({ resolution: npResolution, nativePush: { status: "dead", reason: "no host" } });
+		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "yo" }, t.deps);
+		ok(
+			"native-push ff+dead: reject native-push-target-dead",
+			d.kind === "reject" && d.receipt.reason === "native-push-target-dead",
+		);
+		ok(
+			"native-push ff+dead: observedLiveness dead (post-probe stamp)",
+			d.kind === "reject" && d.receipt.observedLiveness === "dead",
+		);
+		ok("native-push ff+dead: acquireLock NOT called", t.acquireCalls.length === 0);
+	}
+	{
+		// ff × indeterminate → reject native-push-probe-indeterminate.
+		const t = mkDeps({ resolution: npResolution, nativePush: { status: "indeterminate", reason: "no port served" } });
+		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "yo" }, t.deps);
+		ok(
+			"native-push ff+indeterminate: reject native-push-probe-indeterminate",
+			d.kind === "reject" && d.receipt.reason === "native-push-probe-indeterminate",
+		);
+	}
+	{
+		// owned × alive → reject native-push-no-resume-authority (state-independent), lock-free.
+		const t = mkDeps({
+			resolution: npResolution,
+			nativePush: { status: "alive", route: { lsAddress: "127.0.0.1:5599" } },
+		});
+		const d = await decideDispatch({ target: GID, intent: "owned-outcome", message: "yo" }, t.deps);
+		ok(
+			"native-push owned+alive: reject native-push-no-resume-authority",
+			d.kind === "reject" && d.receipt.reason === "native-push-no-resume-authority",
+		);
+		ok("native-push owned+alive: acquireLock NOT called (lock-free)", t.acquireCalls.length === 0);
+	}
+
 	// The wake-mode capability HELPER stays gate-pinned (renamed; the decider no longer
 	// calls it directly — deliverability flows through the required seam). It answers the
 	// capability HALF only; the active-receiver half lives in the production seam.
