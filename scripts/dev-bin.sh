@@ -47,13 +47,26 @@ try: print(json.load(open(sys.argv[1])).get("linkPath",""))
 except Exception: print("")' "$STATE_FILE" 2>/dev/null || echo ""
 }
 
+state_target() { # the target we recorded for the link, or empty
+  [ -f "$STATE_FILE" ] || { echo ""; return 0; }
+  python3 -c 'import json,sys
+try: print(json.load(open(sys.argv[1])).get("target",""))
+except Exception: print("")' "$STATE_FILE" 2>/dev/null || echo ""
+}
+
 # Is $LINK ours to manage? ours = truly absent OR a symlink into our target OR the exact link
-# our state recorded. Anything else (regular file / dir / foreign symlink) = foreign.
+# our state recorded AND still pointing where we recorded it. Anything else (regular file / dir /
+# a foreign symlink — including one SWAPPED IN at our recorded path) = foreign.
 link_is_ours() {
   if [ ! -e "$LINK" ] && [ ! -L "$LINK" ]; then return 0; fi   # truly absent (not even a dangling link)
   if [ -L "$LINK" ]; then
-    [ "$(readlink "$LINK")" = "$TARGET" ] && return 0
-    [ "$(state_link)" = "$LINK" ] && return 0                   # we made it; target checkout may have moved
+    local cur; cur="$(readlink "$LINK")"
+    [ "$cur" = "$TARGET" ] && return 0
+    # A link WE recorded — ours ONLY if it STILL points where we last recorded it (state.target).
+    # linkPath-match alone is not enough: a foreign symlink swapped in at our path would be
+    # clobbered (GPT R). The state.target check keeps a moved-checkout relink safe (cur ==
+    # old recorded target) while refusing a foreign swap (cur == someone else's target).
+    [ "$(state_link)" = "$LINK" ] && [ "$cur" = "$(state_target)" ] && return 0
     return 1                                                    # foreign symlink
   fi
   return 1                                                      # regular file / dir → foreign

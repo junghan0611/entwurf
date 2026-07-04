@@ -214,6 +214,16 @@ want "dev-bin re-expose: idempotent — still our symlink" "[ \"\$(readlink '$DL
 want "dev-bin re-expose: detectMode now refresh-ours" \
   "python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[\"detectMode\"])' '$DSTATE' | grep -qx refresh-ours"
 
+# J-2b (GPT R): state present but our link REPLACED by a foreign symlink → expose must REFUSE.
+# linkPath-match alone must NOT authorize a clobber — the swapped-in symlink points elsewhere
+# (readlink != state.target), so it is someone else's, not a moved-checkout relink of ours.
+rm -f "$DLINK"; ln -s "$SB/foreign-target" "$DLINK"   # foreign symlink at our recorded path (dangling ok)
+if bash "$DEVBIN" expose >/dev/null 2>&1; then die "dev-bin: expose should REFUSE a foreign symlink swapped in at our recorded path"; fi
+ok "dev-bin expose: refused a foreign symlink at our recorded path (readlink != state.target)"
+want "dev-bin expose: foreign symlink NOT clobbered" "[ \"\$(readlink '$DLINK')\" = '$SB/foreign-target' ]"
+rm -f "$DLINK"
+bash "$DEVBIN" expose >/dev/null 2>&1   # restore our link + state for the sub-cases below
+
 # J-3: FOREIGN bin already at the link path → REFUSE (exit 3), no clobber, no state
 bash "$DEVBIN" remove >/dev/null 2>&1        # clear our link + state first
 printf 'FOREIGN NPM BIN\n' > "$DLINK"        # someone else's regular-file bin
