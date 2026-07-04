@@ -2740,6 +2740,11 @@ setup_all() {
     echo "[setup] no native harness (claude) on PATH — skipping meta-bridge wiring (pi-only host)"
   fi
 
+  # Expose the entwurf-bridge STABLE bin on PATH for this DEV checkout (막힘 ②) BEFORE wiring
+  # agy: the agy config records the bare name `entwurf-bridge`, so it must resolve for
+  # doctor-agy-bridge to pass. NON-FATAL — a foreign bin already on PATH is left as-is.
+  expose_dev_bin
+
   # Fold agy (Antigravity) MCP bridge wiring into setup (막힘 ①, GLG 2026-07-04: install
   # ownership moves to entwurf). Same detection-gated, idempotent, NON-FATAL posture as the
   # meta-bridge block above — agy is an OPTIONAL harness, so a refused/corrupt agy config warns
@@ -2808,6 +2813,29 @@ wire_agy_bridge() {
       echo "[setup]       Bridge NOT wired; verify with ./run.sh doctor-agy-bridge. setup continues." >&2
       ;;
   esac
+  return 0
+}
+
+# expose_dev_bin — make the `entwurf-bridge` STABLE bin resolve for a DEV checkout (막힘 ②).
+# setup IS the dev install command (consumers get the bin from npm bin-linking), so setup owns a
+# managed ~/.local/bin/entwurf-bridge symlink into this checkout via scripts/dev-bin.sh, recorded
+# for an honest inverse (remove-dev-bin). NON-FATAL like wire_agy_bridge: a foreign bin already on
+# PATH (a real npm install) is REFUSED not clobbered, and a BIN_DIR off PATH only WARNs — neither
+# bricks setup. The hard gate stays doctor-agy-bridge (a missing/dangling bin FAILs there).
+expose_dev_bin() {
+  section "dev bin: expose entwurf-bridge on PATH (dev checkout)"
+  local rc
+  set +e
+  bash "$REPO_DIR/scripts/dev-bin.sh" expose
+  rc=$?
+  set -e
+  [ "$rc" -eq 0 ] && return 0
+  if [ "$rc" -eq 3 ]; then
+    echo "[setup] WARN: entwurf-bridge is already on PATH as someone else's bin (not ours) — left as-is." >&2
+    echo "[setup]       If that is a stale/foreign bin, remove it and re-run setup. setup continues." >&2
+  else
+    echo "[setup] WARN: dev bin exposure did not complete (rc=$rc; see above). setup continues." >&2
+  fi
   return 0
 }
 
@@ -3406,6 +3434,18 @@ case "$cmd" in
     # deterministically. The hard gate stays doctor-agy-bridge (issue #45: the '?' is a doctor
     # signal, not a setup-killer).
     wire_agy_bridge
+    ;;
+  expose-dev-bin)
+    # 막힘 ②: expose the entwurf-bridge STABLE bin on PATH for a DEV checkout (a managed symlink
+    # into this checkout, recorded for an honest inverse). HIDDEN/internal — setup calls the
+    # NON-FATAL expose_dev_bin wrapper; exposed here so smoke-agy-install-state can drive the
+    # foreign-refuse WARN path. The exposure logic lives in scripts/dev-bin.sh.
+    expose_dev_bin
+    ;;
+  remove-dev-bin)
+    # 막힘 ②: honest inverse of expose-dev-bin — remove ONLY our managed link + state (REFUSE if
+    # it became foreign). The raw script (no wrapper) so an operator sees a loud failure.
+    (cd "$REPO_DIR" && bash scripts/dev-bin.sh remove "$@")
     ;;
   meta-bridge-prune)
     # 1.0.0 meta-bridge Phase 4: LISTING-ONLY janitor for the meta-session store.
