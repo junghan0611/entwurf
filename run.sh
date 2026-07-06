@@ -307,82 +307,11 @@ install_local_package() {
   # packages[] registration via the shared SSOT — same is_entwurf_source
   # predicate + idempotency as user-scope and remove (not a substring match).
   python3 "$REPO_DIR/scripts/register-pi-package.py" "$project_dir/.pi/settings.json" "$REPO_DIR"
-  # entwurfProvider.mcpServers + legacy prune (project-scope only; packages[] was
-  # already written above by register-pi-package.py).
-  python3 - "$project_dir/.pi/settings.json" "$REPO_DIR" <<'PY'
-import json, sys
-from pathlib import Path
-
-settings_path = Path(sys.argv[1])
-repo_dir = str(Path(sys.argv[2]).resolve())
-settings_path.parent.mkdir(parents=True, exist_ok=True)
-if settings_path.exists():
-    data = json.loads(settings_path.read_text())
-    if not isinstance(data, dict):
-        raise SystemExit("settings.json is not an object")
-else:
-    data = {}
-
-# --- entwurfProvider.mcpServers bundled entries ---------------------------
-# Ship the two in-repo MCP adapters pre-wired so `pi install` produces a
-# working setup without the consumer hand-editing settings.json. User-authored
-# overrides (different command/args) are preserved untouched.
-provider = data.setdefault("entwurfProvider", {})
-if not isinstance(provider, dict):
-    raise SystemExit("entwurfProvider is not an object")
-servers = provider.setdefault("mcpServers", {})
-if not isinstance(servers, dict):
-    raise SystemExit("entwurfProvider.mcpServers is not an object")
-
-BUNDLED = ("entwurf-bridge",)
-# 0.4.14: session-bridge MCP was retracted (issue #7 — unified entwurf surface).
-# Install path now only wires entwurf-bridge. Existing operator settings that
-# carry the old bundled session-bridge entry are pruned below during install;
-# `./run.sh remove` also keeps session-bridge in its cleanup tuple so legacy
-# entries are removed on uninstall too.
-for name in BUNDLED:
-    desired_cmd = f"{repo_dir}/mcp/{name}/start.sh"
-    desired = {"command": desired_cmd, "args": []}
-    existing = servers.get(name)
-    if existing is None:
-        servers[name] = desired
-        print(f"install: added entwurfProvider.mcpServers.{name}")
-    elif isinstance(existing, dict) and existing.get("command") == desired_cmd:
-        # Already managed by us at the current repo path. Add the default args
-        # field when missing, but never overwrite user-customized args.
-        if "args" not in existing:
-            existing["args"] = []
-            print(f"install: normalized entwurfProvider.mcpServers.{name}.args -> []")
-        elif existing.get("args") != []:
-            print(f"install: preserved entwurfProvider.mcpServers.{name}.args (custom args)")
-    else:
-        cmd_repr = existing.get("command") if isinstance(existing, dict) else existing
-        print(f"install: preserved entwurfProvider.mcpServers.{name} (user override: {cmd_repr})")
-
-# Legacy-bundled MCP names that prior versions of this installer wrote and that
-# the current cutover supersedes. One-shot install-time prune (NOT a runtime
-# alias): only remove entries whose command matches the bundled start.sh path,
-# so user-customized commands are left alone.
-#   - session-bridge: retracted in 0.4.14 (issue #7, unified entwurf surface).
-#   - pi-tools-bridge: renamed to entwurf-bridge in 0.11 S2 cutover.
-LEGACY_BUNDLED = {
-    "session-bridge": "retracted in 0.4.14, issue #7",
-    "pi-tools-bridge": "renamed to entwurf-bridge in 0.11 S2 cutover",
-}
-for name, reason in LEGACY_BUNDLED.items():
-    existing = servers.get(name)
-    if not isinstance(existing, dict):
-        continue
-    cmd = existing.get("command")
-    if not isinstance(cmd, str):
-        continue
-    if cmd == f"{repo_dir}/mcp/{name}/start.sh" or cmd.endswith(f"/entwurf/mcp/{name}/start.sh"):
-        del servers[name]
-        print(f"install: pruned legacy entwurfProvider.mcpServers.{name} ({reason})")
-
-settings_path.write_text(json.dumps(data, indent=2) + "\n")
-print(f"install: updated {settings_path}")
-PY
+  # entwurfProvider.mcpServers.entwurf-bridge (project scope — checkout-local, NO state; #46
+  # Task 2) via the shared register-pi-provider SSOT: normalize the command to the bare stable
+  # bin `entwurf-bridge` (ownership-classified: absent/managed-current/managed-legacy adopt, a
+  # true user-override is left untouched) + prune legacy bundles. project remove is the inverse.
+  python3 "$REPO_DIR/scripts/register-pi-provider.py" install "$project_dir/.pi/settings.json" "$REPO_DIR" --scope project
   ensure_agent_dir_symlinks
   register_user_scope_citizen
 }
@@ -401,6 +330,12 @@ register_user_scope_citizen() {
   local agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
   # Shared idempotent implementation (also driven by smoke-user-scope-citizen).
   python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR"
+  # #46 Task 2: own entwurfProvider.mcpServers.entwurf-bridge as the bare stable bin at USER scope
+  # (GLOBAL/durable →파급s to every cwd), so its inverse needs an install-state honest inverse
+  # under $XDG_DATA_HOME/entwurf/pi-provider/ (Task 0/1 discipline). project scope is checkout-
+  # local and covered by `run.sh remove` (no state) — deliberate, reasoned asymmetry.
+  local pp_state="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/pi-provider/install-state.json"
+  python3 "$REPO_DIR/scripts/register-pi-provider.py" install "$agent_dir/settings.json" "$REPO_DIR" --scope user --state "$pp_state"
 }
 
 # The honest inverse of register_user_scope_citizen: drop entwurf from the GLOBAL
@@ -416,6 +351,10 @@ register_user_scope_citizen() {
 remove_user_scope_citizen() {
   local agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
   python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR" --remove
+  # #46 Task 2: honest inverse of the user-scope entwurfProvider ownership — the install-state
+  # drives it (absent/managed-* → remove OUR key; a user-override we never owned is untouched).
+  local pp_state="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/pi-provider/install-state.json"
+  python3 "$REPO_DIR/scripts/register-pi-provider.py" remove "$agent_dir/settings.json" "$REPO_DIR" --scope user --state "$pp_state"
 }
 
 # Ensure agent-level resources that entwurf code reads from
@@ -511,55 +450,11 @@ remove_local_package() {
   # install, so remove never over-deletes a look-alike repo (entwurf-notes, …)
   # that install would never have registered.
   python3 "$REPO_DIR/scripts/register-pi-package.py" "$project_dir/.pi/settings.json" "$REPO_DIR" --remove
-  python3 - "$project_dir/.pi/settings.json" "$REPO_DIR" <<'PY'
-import json, sys
-from pathlib import Path
-
-settings_path = Path(sys.argv[1])
-repo_dir = str(Path(sys.argv[2]).resolve())
-if not settings_path.exists():
-    print(f"remove: nothing to do ({settings_path} missing)")
-    raise SystemExit(0)
-
-data = json.loads(settings_path.read_text())
-if not isinstance(data, dict):
-    raise SystemExit("settings.json is not an object")
-
-# --- entwurfProvider.mcpServers cleanup ------------------------------------
-# Only remove entries that look like they came from ./run.sh install: either
-# the command matches the current $REPO_DIR anchor exactly, or it ends with
-# the bundled "/entwurf/mcp/<name>/start.sh" pattern (covers a rebuilt
-# checkout under a different directory). Anything else is treated as a user
-# override and left in place.
-BUNDLED = ("entwurf-bridge", "session-bridge", "pi-tools-bridge")
-provider = data.get("entwurfProvider")
-mcp_removed = 0
-if isinstance(provider, dict):
-    servers = provider.get("mcpServers")
-    if isinstance(servers, dict):
-        for name in BUNDLED:
-            existing = servers.get(name)
-            if not isinstance(existing, dict):
-                continue
-            cmd = existing.get("command")
-            if not isinstance(cmd, str):
-                continue
-            exact = cmd == f"{repo_dir}/mcp/{name}/start.sh"
-            pattern = cmd.endswith(f"/entwurf/mcp/{name}/start.sh")
-            if exact or pattern:
-                del servers[name]
-                mcp_removed += 1
-                print(f"remove: removed entwurfProvider.mcpServers.{name}")
-            else:
-                print(f"remove: preserved entwurfProvider.mcpServers.{name} (user override: {cmd})")
-        if not servers:
-            provider.pop("mcpServers", None)
-    if not provider:
-        data.pop("entwurfProvider", None)
-
-settings_path.write_text(json.dumps(data, indent=2) + "\n")
-print(f"remove: removed {mcp_removed} mcpServers entries from {settings_path}")
-PY
+  # entwurfProvider.mcpServers.entwurf-bridge cleanup (project scope) via the shared SSOT: strip
+  # our-managed shapes (the bare stable bin AND the legacy repo start.sh path — a true user
+  # override is left in place) + prune legacy bundles. Mirrors install's ownership predicate so it
+  # never over-deletes a look-alike, and now also catches the bare bin the Task-2 install writes.
+  python3 "$REPO_DIR/scripts/register-pi-provider.py" remove "$project_dir/.pi/settings.json" "$REPO_DIR" --scope project
   # `remove` is project-scope only. The GLOBAL user-scope citizen in
   # ~/.pi/agent/settings.json (written by install's register_user_scope_citizen)
   # is shared across every project + foreign cwd, so it is left intact here to
@@ -3424,6 +3319,15 @@ case "$cmd" in
     # impurity 0. Offline + deterministic (deps: bash+python3).
     (cd "$REPO_DIR" && bash scripts/smoke-agy-statusline-state.sh)
     ;;
+  smoke-pi-provider-state)
+    # #46 Task 2 regression gate for the pi provider install adapter: register-pi-provider.py
+    # (ownership-classified install/remove, user+project scopes) + read-only doctor-pi-provider.ts
+    # (effective shadow view). ISOLATED HOME+XDG + fake stable bin — user ownership matrix
+    # (absent/managed-legacy/managed-current/user-override), state honest-inverse (legacy NOT
+    # restored), sibling + legacy prune, project no-state strip, doctor effective/drift/dangling/
+    # malformed/project-stale/'?', symlink refuse, and checkout impurity 0. Offline (bash+python3+node).
+    (cd "$REPO_DIR" && bash scripts/smoke-pi-provider-state.sh)
+    ;;
   smoke-agy-native-push-live)
     # 봉인 8 LIVE acceptance gate for the native-push (agy) delivery rail. Drives the REAL
     # antigravity adapter + register core + runEntwurfV2 (production deps) against a live agy
@@ -3521,6 +3425,14 @@ case "$cmd" in
     # root) parses and carries OUR RESOLVABLE command (dangling FAILs, state drift FAILs). LIVE
     # proves runtime-effectiveness only with an agy process; else an honest SKIP.
     (cd "$REPO_DIR" && bash scripts/agy-statusline-bridge.sh doctor "$@")
+    ;;
+  doctor-pi-provider)
+    # #46 Task 2: read-only fail-loud doctor for the pi provider ownership (entwurfProvider.
+    # mcpServers.entwurf-bridge). Uses config.ts readProviderSettingsFile SSOT for the EFFECTIVE
+    # (project-shadows-user) command — never a re-implemented merge. Reports user/project/effective,
+    # gates on stable-bin resolvability, and distinguishes state-owned drift (FAIL) from an
+    # unowned user override (honest note). No agy/pi process needed — pure settings inspection.
+    (cd "$REPO_DIR" && node --experimental-strip-types scripts/doctor-pi-provider.ts "$@")
     ;;
   wire-agy-statusline)
     # #46 Task 1: the detection-gated, NON-FATAL setup wrapper around install-agy-statusline.

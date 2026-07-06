@@ -42,6 +42,13 @@ mkdir -p "$(dirname "$SET")" "$SB/bin"
 # fake stable bin (on PATH) — the renderer the statusLine command resolves to.
 printf '#!/usr/bin/env bash\necho fake-agy-statusline\n' > "$SB/bin/entwurf-agy-statusline"
 chmod +x "$SB/bin/entwurf-agy-statusline"
+# Keep THIS fake authoritative: drop the dir holding a REAL entwurf-agy-statusline (a dev host
+# that ran setup exposes one at ~/.local/bin) so the dangling-command test is not masked by it.
+_real_sl="$(command -v entwurf-agy-statusline 2>/dev/null || true)"
+_real_sl_dir="${_real_sl%/*}"
+if [ -n "$_real_sl_dir" ]; then
+  PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vFx "$_real_sl_dir" | paste -sd: -)"
+fi
 export PATH="$SB/bin:$PATH"
 export AGY_SETTINGS_CONFIG="$SET"
 
