@@ -17,7 +17,7 @@
 
 **현재 위치 (2026-07-06 실측, evidence label 정밀):**
 - 주말(07-05~06) #46 작업은 **코드 미착지** — 마지막 entwurf 커밋 `b030e44`(07-04 23:31), thinkpad/oracle/origin 동일 HEAD·tree clean·**주말 산출물 stash 없음**(thinkpad 구형 stash 3개는 별건: 06-29/04-24/04-14). 주말 agy 세션 0건(oracle conversations 최신 = 07-04 23:24). agent-config 주말 커밋 2건만 존재(`254144b` consumer-install drop + `5e9106e` docs).
-- **thinkpad 무소유 공백 = specimen (Task 0 봉인 전 수동 제거 금지):** `~/.gemini/antigravity-cli/mcp_config.json` + `~/.gemini/config/mcp_config.json` 둘 다 떠난 agent-config 경로(`a2359f0`가 제거)로 향하는 **dangling 심링크**. `doctor-agy-bridge` = rc 0 + "never installed — this is the '?'" — **미설치를 정직하게 말하는 ok이지 green 아님**(라벨 혼동 금지). install은 심링크 REFUSE 설계 → 디바이스별 인수 절차 필요.
+- ~~thinkpad 무소유 공백~~ **→ Task 0으로 해소(2026-07-06):** dangling 심링크 2개는 phase E2로 봉인 후 실 인수 완료(아래 Task 0). 교훈 유지: install은 심링크 REFUSE 설계, "never installed `?`"(rc 0)는 미설치를 정직하게 말하는 ok이지 green 아님(라벨 혼동 금지).
 - pi user-scope(`~/.pi/agent/settings.json`): `packages[]`에 repo 경로 + `entwurfProvider.mcpServers.entwurf-bridge.command` = repo `start.sh` **절대경로**(안정 bin 아님). sibling 키 실재: `skillPlugins:["~/.pi/agent/claude-plugin"]`·`appendSystemPrompt`·`showToolNotifications`. oracle `settings.server.json` 동형 변형.
 
 **GLG 결정 (2026-07-06 확정):**
@@ -33,7 +33,7 @@
 6. **이관 순서**: agent-config 쪽 제거는 entwurf install+doctor+live smoke 통과 **후**. 역순(무소유 공백) 금지 — thinkpad specimen이 그 실물.
 
 **Task 순서 (오푸스):**
-- **Task 0 — thinkpad 디바이스 인수**: `smoke-agy-install-state`에 departed-owner dangling-symlink phase(→ install REFUSE 경로) 추가로 specimen 먼저 봉인 → 그 다음 실 인수(심링크 2개 제거 → `./run.sh setup` → doctor 확인). 완료판정에 "디바이스별 인수" 명시(oracle-시점 종결 재발 방지).
+- **✅ Task 0 — thinkpad 디바이스 인수 (2026-07-06 완료, 페블 독립 재검증)**: phase E2 봉인(`c7c5af9`, 71 checks — dangling도 REFUSE·state 0·link 미추적·specimen intact) → 실 인수(specimen 심링크 2개 rm → `./run.sh setup` 완주 → doctor static+state green, live honest SKIP). **멱등 실측 증거**: `~/.pi/agent/settings.json` byte-identical(entwurfProvider 무변경 = Task 2 영역 무침범 증명) · `~/.claude` statusLine/mcp 키셋 무변경 · checkout impurity 0. agy config = created-new, command=`entwurf-bridge` 안정 bin. 게이트 정정 기록: wire_agy_bridge 검출 = PATH 바이너리(`command -v agy`)이지 프로세스 아님. **디바이스별 인수 = 완료판정의 일부**(oracle-시점 종결 재발 방지).
 - **Task 1 — agy statusline 이관**: **첫 게이트 = raw sample로 agy statusline 입력(JSON/ENV)에 stable native id 실재 증명** — 현 agent-config `statusline.sh` 입력 사용 필드는 `current_dir`/`model`/`context_window`뿐이라 미확인. id 없으면 매핑 권위 설계 회귀(레인 중단, 재논의). 통과 시: `install-agy-bridge`가 `statusLine.command`를 entwurf 소유 안정-bin 렌더러(driver+gid)로 세팅(meta-bridge statusLine 소유 패턴 미러) + install-state + honest uninstall 역연산. gid = `scanIdentityByNativeId` 역조회 재사용(body authority + duplicate fail-fast). statusline은 고빈도 호출 → **bounded read/cache/timeout 계약**(meta-record 300+건 full-scan 매회 금지).
 - **Task 2 — pi provider 이관**: entwurf install이 user-scope `entwurfProvider.mcpServers.entwurf-bridge`를 안정 bin으로 멱등 등록 → **스코프 커버 + shadow 검증**(pi는 project `.pi/settings.json`이 global을 shadow — doctor가 양측 검사, oracle `settings.server.json` 변형 포함) → agent-config에서 인수한 키만 제거(계약 4·6). "기존 라이브 pi 세션 무중단"과 "새 세션 provider load"를 **분리 검증**, 설정 reload 타이밍 암묵 가정 금지. `packages[]` 중복 제거는 스코프 커버 확인 뒤.
 - **Task 3 — 문서 정합**: `DELIVERY.md`에 ambient-status 축 반영 + #46 완료 코멘트. (NEXT stale 정정은 본 커밋으로 완료.)
