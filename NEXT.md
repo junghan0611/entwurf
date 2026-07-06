@@ -11,43 +11,38 @@
 - **0.12.4 hotfix 완료** — 일반설치 floor(`node_modules`)에서 `doctor-meta-bridge`가 raw `.ts` helper를 strip-types 실행해 가짜 FAIL 내던 버그 수정. hejdev6 실측: pre-fix `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` 재현, patched tarball 설치 후 compiled store-doctor plain-node scan + v2-surface defer 통과. tag/GitHub release/npm publish 완료.
 - **0.12.2/0.12.1** — 이전 릴리즈(메타브리지 install 이식성 + `check-meta-manifest-schema`, 오라클 설치검증). 상세는 CHANGELOG.
 
-## NOW — ⓪ #46 설치면 소유 이관 레인 (agy statusline + pi provider) — 2026-07-06 착수, 실무=오푸스
+## NOW — agy 설치면을 Claude Code 급으로 닫기 (#46 stem) — pi-provider는 분리/대기
 
-**나침반:** #45(설치면=본질, 문제는 `?`로 즉시 드러나야) → **#46(소유 경계 실행 — 이 레인)** → #47(mux, 이 레인 뒤). 이 패키지는 3자 검수 정렬본(2026-07-06 오전: 페블 실측 점검 + GPT 2라운드 교차검수 + GLG 결정 2건).
+**Stem:** 지금 닫을 것은 **agy**다. #45의 기준(설치면=본질, 문제는 `?`로 즉시 드러남)에 맞춰 agy를 Claude Code와 같은 급의 설치면으로 세운 뒤에야 #47(mux)로 간다. 2026-07-06 GLG 재정렬: **pi-provider Task2는 별도 후반부/대기 전선이며, agy 완료판정의 blocker가 아니다.** 지금 섞지 말 것.
 
-**현재 위치 (2026-07-06 실측, evidence label 정밀):**
-- 주말(07-05~06) #46 작업은 **코드 미착지** — 마지막 entwurf 커밋 `b030e44`(07-04 23:31), thinkpad/oracle/origin 동일 HEAD·tree clean·**주말 산출물 stash 없음**(thinkpad 구형 stash 3개는 별건: 06-29/04-24/04-14). 주말 agy 세션 0건(oracle conversations 최신 = 07-04 23:24). agent-config 주말 커밋 2건만 존재(`254144b` consumer-install drop + `5e9106e` docs).
-- ~~thinkpad 무소유 공백~~ **→ Task 0으로 해소(2026-07-06):** dangling 심링크 2개는 phase E2로 봉인 후 실 인수 완료(아래 Task 0). 교훈 유지: install은 심링크 REFUSE 설계, "never installed `?`"(rc 0)는 미설치를 정직하게 말하는 ok이지 green 아님(라벨 혼동 금지).
-- pi user-scope(`~/.pi/agent/settings.json`): `packages[]`에 repo 경로 + `entwurfProvider.mcpServers.entwurf-bridge.command` = repo `start.sh` **절대경로**(안정 bin 아님). sibling 키 실재: `skillPlugins:["~/.pi/agent/claude-plugin"]`·`appendSystemPrompt`·`showToolNotifications`. oracle `settings.server.json` 동형 변형.
+### agy 완료판정 — 현재 상태
 
-**GLG 결정 (2026-07-06 확정):**
-- **agent-config는 entwurf 로직과 무관한 설정만 소유**(Korean/peon-ping류). entwurf 관련 배선은 전부 entwurf가 잡는다.
-- **스킬 정본은 사용자 소유** — 사용자마다 관리 방식이 달라 entwurf가 강제 배선하지 않는다(`skillPlugins`는 개인 pi 설정으로 보존). 단 **doctor가 스킬 비대칭(한쪽 surface에만 존재) WARN**을 준다 → 사용자 에이전트가 "스킬 경로 동기화할까요?"를 물을 수 있는 신호면. (ACP claude는 오버레이 아래 스킬 — 구현 재량, WARN only.)
+- **Task 0 — thinkpad agy MCP 인수 완료.** 떠난 agent-config dangling symlink 2개는 `smoke-agy-install-state` E2로 봉인한 뒤 제거했고, `./run.sh setup`이 `~/.gemini/antigravity-cli/mcp_config.json`에 bare `entwurf-bridge`를 기록했다. `doctor-agy-bridge` static+state OK, live는 agy 유무에 따라 honest label. `~/.gemini/config/mcp_config.json` 0-byte는 agy가 재생성하는 부산물로, entwurf-bridge가 그 안에 configured로 나타날 때만 drift로 본다.
+- **Task 1 — agy statusline 이관 완료.** `entwurf-agy-statusline` bare bin, `statusLine` subtree 통째 소유, 별도 XDG state, symlink refuse, honest inverse, dev-bin 다중화, `doctor-agy-statusline`, setup non-fatal 편입. Smoke: `smoke-agy-statusline-state` 53 checks. Live: GLG agy 재기동 → `🪛 ? agy`(미등록 honest) → `entwurf_register_native` → `🪛 20260706T170557-323f00 agy` 육안 확인.
+- **정체성 계약:** agy에는 Claude Code의 SessionStart hook 같은 자동 각인이 없다. 새 conversation은 `?`가 정답이고, `entwurf_register_native(conversation_id,cwd)` 후 garden id가 붙는다. 등록된 conversation을 resume하면 meta-record 때문에 바로 gid가 보일 수 있다. 자동 register/launcher는 별도 레인이다.
+- **Claude Code 급의 의미:** 자동 hook 동형이 아니라, 설치면의 동등한 규율이다 — stable bin, state-backed install/uninstall, doctor, honest `?`, explicit identity authority, live proof. 이 기준에서 agy MCP + statusline은 닫혔다.
 
-**봉인 계약 (어기면 reject, 재해석 금지):**
-1. **범위** = install/statusline/provider 이관만. mux(#47)·spawn·agy launch 금지.
-2. **stable bin only** — agy `statusLine.command`·pi provider command에 repo 경로/store 해시 금지(오라클 dangling 교훈).
-3. **statusline gid 권위**: stable native id 증거 없는 cwd 역매칭 금지. 미등록 세션 gid 발명 금지 — honest `?` 표시. duplicate/corrupt → honest `?`(UI 파손 금지).
-4. **pi 소유 keyset = `entwurfProvider.mcpServers.entwurf-bridge` 키 1개만**(adopt-and-preserve). sibling 키(skillPlugins 등) 보존. uninstall = install-state가 소유한 그 키만 honest inverse(parent object는 비면 정리, 다른 키 있으면 보존). agent-config 완료판정 = "블록 제거"가 아니라 **"entwurf가 인수한 키만 제거"** — #46 원문 (c)의 정밀화, GLG 승인 완료(2026-07-06).
-5. **doctor 라벨 계약**: "never installed `?`"(rc 0)를 PASS/green으로 부르는 acceptance 문구 금지.
-6. **이관 순서**: agent-config 쪽 제거는 entwurf install+doctor+live smoke 통과 **후**. 역순(무소유 공백) 금지 — thinkpad specimen이 그 실물.
+### 다음 한 수 — agy 레인 문 닫기
 
-**Task 순서 (세션 로테이션 2026-07-06 17시: 구 오푸스 종료·정밀 인수 완료, 새 오푸스는 Task 2 "다음 한 수"부터. 검수=페블(커밋 소유)+GPT. 이 NOW가 부트섹터):**
-- **✅ Task 0 — thinkpad 디바이스 인수 (2026-07-06 완료, 페블 독립 재검증)**: phase E2 봉인(`c7c5af9`, 71 checks — dangling도 REFUSE·state 0·link 미추적·specimen intact) → 실 인수(specimen 심링크 2개 rm → `./run.sh setup` 완주 → doctor static+state green, live honest SKIP). **멱등 실측 증거**: `~/.pi/agent/settings.json` byte-identical(entwurfProvider 무변경 = Task 2 영역 무침범 증명) · `~/.claude` statusLine/mcp 키셋 무변경 · checkout impurity 0. agy config = created-new, command=`entwurf-bridge` 안정 bin. 게이트 정정 기록: wire_agy_bridge 검출 = PATH 바이너리(`command -v agy`)이지 프로세스 아님. **디바이스별 인수 = 완료판정의 일부**(oracle-시점 종결 재발 방지).
-- **✅ Task 1 — agy statusline 이관 (2026-07-06 완료, live gid 실증까지)**: 게이트 PASS — agy statusline stdin JSON에 `conversation_id`(==`session_id`) 실재, **3중 매칭**(stdin = `last_conversations.json` = 기동로그 "Created conversation")으로 워크스페이스 id 오인 배제. 구현 `04490c2`: `entwurf-agy-statusline` renderer(bounded: 30s 파일캐시·0.4s 스캔예산·duplicate early-exit·미등록 honest `?`) + settings `statusLine` **subtree 통째 소유**(agent-config preimage 캡처, honest inverse, agy-bridge와 별도 XDG state) + dev-bin 다중화(bin별 state, 레거시 내용검증 마이그레이션) + `doctor-agy-statusline` + setup NON-FATAL 편입 + smoke 53 checks. 라이브 이관 정직장부 4종 green(pi byte-identical·statusLine축만 변경·dev-bin 2종·doctor green). **착지④ 실증: GLG agy 재기동 → `🪛 ? agy`(미등록 honest = 계약3 검증) → 페블 `entwurf_register_native`(ed7e15b6…, cwd=~/org) → 상태바 `🪛 20260706T170557-323f00 agy` GLG 육안 확인 = #46 완료판정(driver+gid, claude 대칭) 달성.** Q2 판정 기록: dev에서도 bare bin(#46 원문 준수; claude의 dev-repo-path 분기는 legacy by-design으로 격리, 동형화는 후속 판단).
-- **Task 2 — pi provider 이관: 코드 완성(`7240023`, 전체 check green·페블 smoke 독립 재현) / 라이브 이관 미수행 ← 새 오푸스 첫 수.**
-  - 완성분: `register-pi-provider.py`(user+project 공용 SSOT, ownership 4분류 absent/managed-current/managed-legacy/user-override, desired=bare `entwurf-bridge`, **managed-legacy inverse=키 제거 — 옛 managed 값을 사용자값으로 복원 금지(GPT caveat)**, user-override 불가침+미소유, legacy prune, symlink refuse, restart-timing 라벨) · user-scope `$XDG_DATA_HOME/entwurf/pi-provider/install-state.json`(preimage=audit-only) · project-scope 무state by-design(checkout-local disposable — 비대칭 근거 주석 명문화) · `doctor-pi-provider.ts`(TS config SSOT 재사용, user/project/**effective**(project-shadows-user) 3출력, bare+resolvable/dangling/drift/legacy/override/none 판정) · run.sh 인라인 heredoc→위임 치환 · `smoke-pi-provider-state` 34 checks · statusline smoke PATH 격리 보강.
-  - **다음 한 수(순서 고정)**: ① **라이브 이관** — `./run.sh setup` 재실행 → user-scope `entwurfProvider…command` repo start.sh→bare bin. 정직장부: before/after diff에서 해당 키만 변경·sibling(skillPlugins 등)/packages[] 무변경·project `.pi/settings.json`도 bare·`doctor-pi-provider` green·agy/meta/statusline 무회귀. ② **3축 라이브 검증 분리** — 새 세션 provider load(`pi --list-models entwurf`류) / 기존 라이브 pi 세션 무중단(restart 전 무영향 라벨) / bridge-reaches-ACP(`smoke-acp-bundled-mcp-live`). ③ Task 3 문서. ④ **agent-config 후속(별도 repo)**: `packages[]` 중복 제거 + `entwurfProvider`의 인수된 키만 제거 — 반드시 ①② 후(계약 4·6).
-  - **알려진 함정(구 오푸스 실측 + GPT 최종검수 2026-07-06)**: ⓐ project remove는 bare bin과 legacy repo path **둘 다** 매칭해야(`_classify`가 해결, 약화 금지) · ⓑ NixOS엔 /bin/bash 없음 → doctor의 execSync에 shell 옵션 금지(POSIX `command -v`) · ⓒ smoke는 라이브 노출 bin의 PATH 오염 격리 필수 · ⓓ **doctor rc0 ≠ 이관 완료** — `doctor-pi-provider`는 pre-migration(legacy managed)에서도 rc0 "ok"를 낸다. 라이브 이관 acceptance는 rc0가 아니라 **verdict 텍스트**(user/project/effective 모두 bare `entwurf-bridge` + RESOLVES)로 판정 · ⓔ **doctor false-green 갭(GPT isolated repro 확정)**: 현 doctor는 `projCmd ?? userCmd` 수동 merge라, project에 malformed per-server entry(예: 문자열)가 있으면 runtime `normalizeMcpServers`는 터지는데 doctor는 user 값으로 green — thinkpad 현 실상(legacy dict)은 blocker 아니나 **G5-4 doctor 완결 claim 전에 `normalizeMcpServers`/`resolveProviderConfig` 수준 검증 추가 필수**(+ 해당 smoke 단언).
-- **Task 3 — 문서 정합**: `DELIVERY.md` ambient-status 축 + #46 완료 코멘트 + **Q3 mcp read-root 갭 명시 이월**(agy는 mcp load path를 로깅 안 함 — appDataDir=antigravity-cli 컨벤션 + 07-01 entwurf-bridge 실로드 이력으로 지지되나 미완결; doctor-agy-bridge의 honest gap) + project-scope pi-provider state 편입 named follow-up + oracle 재검증 row(HEAD pull → doctor 3종 + setup 멱등 무변경; 미수행 시 "thinkpad 실인수 완료/oracle 07-04 인수+추후 재검증"으로 라벨 정직화).
-- **팔로업(레인 밖, blocker 아님)**: doctor 스킬 비대칭 WARN(위 GLG 결정 — WARN only, FAIL 금지, 설계 재량) · observed `~/.gemini/config/mcp_config.json` 0-byte = agy 기동 부산물(rm→재기동 재현으로 이중 확정, "agy-managed artifact" 라벨 — entwurf-bridge가 그 안에 configured로 나타날 때만 drift 경고).
+1. **문서 정합만 남김:** `DELIVERY.md`에 agy ambient-status 축을 추가하고, #46에 완료 코멘트 남긴다. 문구는 “agy statusline/MCP 설치면 완료; 새 conversation 자동 gid 아님; register 후 gid; pi-provider는 별도 후반부”로 정직하게 쓴다.
+2. **최종 확인 라벨:** `./run.sh doctor-agy-bridge` + `./run.sh doctor-agy-statusline` + `./run.sh smoke-agy-install-state` + `./run.sh smoke-agy-statusline-state`를 agy close gate로 본다. 이미 실증된 live `?→register→gid`는 재현 강제하지 말고 증거로 기록한다.
+3. **선택적 전체 바닥:** push/merge 전에는 `pnpm check`를 한 번 더 찍는다. 단 `pnpm check`는 전체 repo floor이지 agy만의 blocker label이 아니다.
+4. **그 다음에만** #47 mux 또는 pi-provider 후반부를 재개한다. GLG가 “agy 끝내”라고 하면 pi-provider를 만지지 않는다.
 
-**검증 요구(#46 상속):** install/uninstall/doctor **멱등**, symlink **refuse**, dangling **static FAIL**, agy 부재 **honest SKIP**(PASS 둔갑 금지), checkout impurity 0, install-state는 checkout-밖 안정 경로 — 기존 `smoke-agy-install-state`/`doctor-agy-bridge` 규율 그대로.
+### Parked — pi-provider Task2 (agy blocker 아님)
 
-**agy delivery 레인 이월 잔여(blocker 아님):**
-- ⓐ 기존 meta-record `20260704T201811-071ba8` 일회성 prune = GLG 확인 대기(`meta-bridge-prune`로 분류+수동 rm).
-- ⓑ canonical follow-up: smoke-소유 agy launch(tmux/new-conversation)·`native-push-target-dead`(agy 프로세스 부재 필요)·전문 content-receipt(transcript read) — 셋 다 smoke-소유 agy 생애주기 필요.
-- ⓒ Q14 tsconfig 이중 포함은 문서화로 갈음.
+- 코드 `7240023`은 user/project `entwurfProvider.mcpServers.entwurf-bridge`를 bare `entwurf-bridge`로 이관하는 후반부다. 현재 thinkpad live는 아직 legacy repo path라 `./run.sh setup` 재실행이 필요하지만, 이것은 **pi/ACP provider 설치면** 문제이지 agy statusline/MCP 완료판정이 아니다.
+- 알려진 trap: `doctor-pi-provider` rc0는 완료가 아니다. pre-migration legacy도 rc0로 honest note를 낸다. 또한 malformed project shadow false-green gap이 있어, pi-provider를 다시 열 때 먼저 doctor/smoke를 보강한다.
+- agent-config에서 pi `packages[]`/`entwurfProvider` 제거도 pi-provider live 이관 뒤의 별도 repo 후속이다. agy close 중에는 손대지 않는다.
+
+### 넘으면 안 되는 선 (이 stem 한정)
+
+- agy를 자동 garden citizen으로 설명하지 말 것. “register 후 citizen”이 정본이다.
+- cwd 역매칭으로 gid를 발명하지 말 것. `conversation_id/nativeSessionId`만 권위다.
+- pi-provider / mux / spawn을 agy close blocker로 끌고 오지 말 것.
+- `doctor` rc0를 “green”으로 과장하지 말 것. 라벨은 static/state/live/effective를 분리한다.
+
+**agy delivery 레인 이월 잔여(blocker 아님):** 기존 meta-record `20260704T201811-071ba8` prune은 GLG 확인 대기. smoke-owned agy launch / dead reject / transcript content-receipt는 mux/launch 생애주기 필요 시 후속으로 다룬다.
 
 ## ② (⓪ 이관 뒤 착수) fresh spawn도 mux-visible로 통일
 

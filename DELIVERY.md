@@ -168,6 +168,29 @@ taxonomy: `native-push-target-dead` / `-probe-indeterminate` / `-no-resume-autho
 and the `install-agy-bridge` install adapter. agy is a `native-push` domain, distinct
 from the pi control-socket liveness domain and from the Claude mailbox self-fetch domain.
 
+#### agy ambient-status axis (install surface, orthogonal to D0–D8)
+
+Beyond delivery, agy carries a second entwurf-owned install surface: **ambient
+garden identity in the native statusline** (`entwurf-agy-statusline`, the agy
+mirror of `meta-bridge-statusline`). This is not a delivery level — it is an
+install-surface ownership axis with the same discipline the delivery rail uses:
+bare stable bin only (never a repo/checkout path), state-backed install/uninstall,
+`statusLine` subtree adopt-and-preserve with honest inverse, symlink refuse, a
+fail-loud `doctor-agy-statusline`, and an honest `?` when the runtime can't answer.
+
+Identity authority is the native `conversation_id` (== `session_id`) looked up
+against the meta-session record bodies — the same authority the MCP install uses.
+No cwd back-match, no gid invention: an unregistered conversation renders `🪛 ?
+agy`, and only after `entwurf_register_native(conversation_id, cwd)` does a garden
+id appear (`🪛 <gid> agy`). **There is no Claude-Code-style SessionStart auto-imprint
+on agy** — "register, then citizen" is canonical; a resumed already-registered
+conversation shows its gid immediately because the meta-record persists. Auto-register
+/ launcher wiring is a separate lane, not part of this install surface.
+
+Verified: `smoke-agy-statusline-state` (53 checks) + `smoke-agy-install-state`
+(76 checks) + both `doctor-agy-*` static/state green with honest live SKIP when no
+agy process; live `?` → register → gid observed by GLG.
+
 ### Codex — split by launch mode, not by "Codex"
 
 Do not describe "Codex" as one delivery shape. The split is the TUI's launch mode:
