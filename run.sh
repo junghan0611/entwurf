@@ -2741,9 +2741,10 @@ setup_all() {
     echo "[setup] no native harness (claude) on PATH — skipping meta-bridge wiring (pi-only host)"
   fi
 
-  # Expose the entwurf-bridge STABLE bin on PATH for this DEV checkout (막힘 ②) BEFORE wiring
-  # agy: the agy config records the bare name `entwurf-bridge`, so it must resolve for
-  # doctor-agy-bridge to pass. NON-FATAL — a foreign bin already on PATH is left as-is.
+  # Expose entwurf's STABLE bins on PATH for this DEV checkout (막힘 ②) BEFORE wiring agy: the
+  # agy mcp_config and settings.statusLine record the bare names `entwurf-bridge` /
+  # `entwurf-agy-statusline`, so they must resolve for doctor-agy-bridge / doctor-agy-statusline
+  # to pass. NON-FATAL — a foreign bin already on PATH is left as-is.
   expose_dev_bin
 
   # Fold agy (Antigravity) MCP bridge wiring into setup (막힘 ①, GLG 2026-07-04: install
@@ -2751,6 +2752,11 @@ setup_all() {
   # meta-bridge block above — agy is an OPTIONAL harness, so a refused/corrupt agy config warns
   # but never bricks a pi/Claude setup. The hard gate stays doctor-agy-bridge.
   wire_agy_bridge
+
+  # Fold agy statusLine wiring into setup (#46 Task 1: own the ambient status area so it shows
+  # driver + garden id, the claude meta-bridge symmetry). Same detection-gated NON-FATAL posture
+  # — an explicit install-agy-statusline is fail-loud, but the setup wrapper WARNs + continues.
+  wire_agy_statusline
 
   # Deterministic preflight lives in `pnpm check`; live substrate acceptance lives
   # in `LIVE=1 ./run.sh release-gate <scratch>`. Setup is the install path, so it
@@ -2812,6 +2818,46 @@ wire_agy_bridge() {
     *)
       echo "[setup] WARN: agy bridge install did not complete (rc=$rc; see the line above)." >&2
       echo "[setup]       Bridge NOT wired; verify with ./run.sh doctor-agy-bridge. setup continues." >&2
+      ;;
+  esac
+  return 0
+}
+
+# wire_agy_statusline — detection-gated, NON-FATAL agy statusLine wiring, folded into setup (#46
+# Task 1). Mirrors wire_agy_bridge: agy on PATH → idempotent install-agy-statusline; no agy →
+# honest skip, NO state. NON-FATAL by contract (agy is OPTIONAL — a refused/corrupt settings must
+# not brick a pi/Claude setup); the hard gate is doctor-agy-statusline. The renderer is the
+# stable bin entwurf-agy-statusline, exposed by expose_dev_bin above.
+wire_agy_statusline() {
+  if ! command -v "${AGY_BIN:-agy}" >/dev/null 2>&1; then
+    echo "[setup] no agy on PATH — skipping agy statusLine wiring (no state; pi/Claude-only host)"
+    return 0
+  fi
+  section "agy statusLine install (native harness detected: Antigravity)"
+  local out rc
+  set +e
+  out="$(bash "$REPO_DIR/scripts/agy-statusline-bridge.sh" install 2>&1)"
+  rc=$?
+  set -e
+  printf '%s\n' "$out"
+  if [ "$rc" -eq 0 ]; then
+    echo "[setup] agy statusLine wired (idempotent). Verify with: ./run.sh doctor-agy-statusline"
+    return 0
+  fi
+  case "$out" in
+    *"refused (symlink)"*)
+      echo "[setup] WARN: agy settings.json is a symlink — someone else's SSOT (transitional)." >&2
+      echo "[setup]       statusLine NOT wired; expected until install ownership moves to entwurf." >&2
+      echo "[setup]       Re-run setup once the symlink is dropped. setup continues." >&2
+      ;;
+    *"invalid JSON"*)
+      echo "[setup] WARN: your agy settings.json is CORRUPT (invalid JSON) — statusLine NOT wired." >&2
+      echo "[setup]       doctor-agy-statusline will KEEP FAILING until you repair that file." >&2
+      echo "[setup]       (Not a silent skip — fix the config, then re-run setup.) setup continues." >&2
+      ;;
+    *)
+      echo "[setup] WARN: agy statusLine install did not complete (rc=$rc; see the line above)." >&2
+      echo "[setup]       statusLine NOT wired; verify with ./run.sh doctor-agy-statusline. setup continues." >&2
       ;;
   esac
   return 0
@@ -3368,6 +3414,16 @@ case "$cmd" in
     # Offline + deterministic (deps: bash+python3).
     (cd "$REPO_DIR" && bash scripts/smoke-agy-install-state.sh)
     ;;
+  smoke-agy-statusline-state)
+    # #46 Task 1 regression gate for the agy statusLine install adapter: install→doctor→uninstall
+    # in an ISOLATED HOME+XDG with a fake stable bin (entwurf-agy-statusline) + fake pgrep —
+    # own the statusLine subtree WHOLE (preserve unrelated keys) + state (stable command, prior
+    # subtree as preimage), doctor static-clean/live-SKIP (+live-consistent with a fake agy) /
+    # drift-FAIL / dangling-command-FAIL / not-ours note, honest-inverse uninstall, symlink +
+    # dangling-symlink refuse, create-new inverse, the NON-FATAL wire wrapper, and checkout
+    # impurity 0. Offline + deterministic (deps: bash+python3).
+    (cd "$REPO_DIR" && bash scripts/smoke-agy-statusline-state.sh)
+    ;;
   smoke-agy-native-push-live)
     # 봉인 8 LIVE acceptance gate for the native-push (agy) delivery rail. Drives the REAL
     # antigravity adapter + register core + runEntwurfV2 (production deps) against a live agy
@@ -3444,6 +3500,33 @@ case "$cmd" in
     # deterministically. The hard gate stays doctor-agy-bridge (issue #45: the '?' is a doctor
     # signal, not a setup-killer).
     wire_agy_bridge
+    ;;
+  install-agy-statusline)
+    # #46 Task 1: own the WHOLE statusLine subtree of agy settings.json → the stable-bin renderer
+    # entwurf-agy-statusline (driver + garden id), the claude meta-bridge statusLine symmetry.
+    # Adopt a regular file / create / REFUSE a symlink. install-state under $XDG_DATA_HOME/
+    # entwurf/agy-statusline/ for an honest inverse. The command is a BARE stable bin — dev AND
+    # installed (the checkout path lives only in the dev-bin symlink state, never in settings).
+    (cd "$REPO_DIR" && bash scripts/agy-statusline-bridge.sh install "$@")
+    ;;
+  uninstall-agy-statusline)
+    # #46 Task 1: honest inverse of install-agy-statusline — restore the captured statusLine
+    # subtree preimage (remove the key if absent, else set it back; remove the file if we created
+    # it empty). Refuses if settings.json became a symlink since install; no state → nothing.
+    (cd "$REPO_DIR" && bash scripts/agy-statusline-bridge.sh uninstall "$@")
+    ;;
+  doctor-agy-statusline)
+    # #46 Task 1: fail-loud doctor. STATIC proves the SINGLE settings root agy reads statusLine
+    # from (~/.gemini/antigravity-cli/settings.json — Task-1 capture, not the 2-candidate mcp
+    # root) parses and carries OUR RESOLVABLE command (dangling FAILs, state drift FAILs). LIVE
+    # proves runtime-effectiveness only with an agy process; else an honest SKIP.
+    (cd "$REPO_DIR" && bash scripts/agy-statusline-bridge.sh doctor "$@")
+    ;;
+  wire-agy-statusline)
+    # #46 Task 1: the detection-gated, NON-FATAL setup wrapper around install-agy-statusline.
+    # HIDDEN/internal — setup calls this; exposed so smoke-agy-statusline-state can drive it
+    # deterministically. The hard gate stays doctor-agy-statusline.
+    wire_agy_statusline
     ;;
   expose-dev-bin)
     # 막힘 ②: expose the entwurf-bridge STABLE bin on PATH for a DEV checkout (a managed symlink

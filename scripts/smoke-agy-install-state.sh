@@ -211,31 +211,35 @@ want "wire(agy+corrupt): reason-specific WARN flags invalid JSON (not a silent s
 want "wire(agy+corrupt): NO state written" "[ ! -f '$STATE' ]"
 rm -f "$GEM_DOC" "$SB/bin/agy"
 
-# ── J: dev bin exposure — dev-bin.sh (막힘 ②: managed entwurf-bridge symlink) ──────
-# The dev-mode stable-bin exposure setup owns so the agy config's BARE `entwurf-bridge`
-# resolves. Isolated: a sandbox bin dir + a fake executable target + the sandbox XDG state.
-# Locks 페블 B-1..B-4: ownership-checked link (REFUSE foreign, never a blind ln -sf), state +
-# honest inverse, remove only OUR link, and the NON-FATAL setup wrapper on a foreign bin.
+# ── J: dev bin exposure — dev-bin.sh (막힘 ②: managed stable-bin symlinks) ─────────
+# dev-bin.sh now manages MULTIPLE bins (entwurf-bridge + entwurf-agy-statusline), each with its
+# OWN <name>.install-state.json. J drives the entwurf-bridge bin by NAME so these locks stay
+# byte-for-byte the pre-multi-bin regression (무회귀 판정): ownership-checked link (REFUSE
+# foreign, never a blind ln -sf), state + honest inverse, remove only OUR link, NON-FATAL setup
+# wrapper on a foreign bin. J-5 adds the new legacy-state migration. Isolated: a sandbox bin dir
+# + fake executable targets + the sandbox XDG state.
 DEVBIN="$REPO_DIR/scripts/dev-bin.sh"
 DBIN_DIR="$SB/devbin"
 DLINK="$DBIN_DIR/entwurf-bridge"
-DSTATE="$XDG_DATA_HOME/entwurf/dev-bin/install-state.json"
+DSTATE="$XDG_DATA_HOME/entwurf/dev-bin/entwurf-bridge.install-state.json"   # bin-scoped state
 printf '#!/usr/bin/env bash\necho fake-bridge\n' > "$SB/fake-start.sh"; chmod +x "$SB/fake-start.sh"
+printf '#!/usr/bin/env bash\necho fake-status\n' > "$SB/fake-status.sh"; chmod +x "$SB/fake-status.sh"
 export ENTWURF_DEV_BIN_DIR="$DBIN_DIR"
 export ENTWURF_BRIDGE_TARGET="$SB/fake-start.sh"
+export ENTWURF_AGY_STATUSLINE_TARGET="$SB/fake-status.sh"   # for the no-arg setup wrapper (two bins)
 
-# J-1: expose → creates the managed symlink + state (created-new)
-bash "$DEVBIN" expose >/dev/null 2>&1
+# J-1: expose the entwurf-bridge bin BY NAME → creates the managed symlink + state (created-new)
+bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1
 want "dev-bin expose: symlink created" "[ -L '$DLINK' ]"
 want "dev-bin expose: symlink points at our target" "[ \"\$(readlink '$DLINK')\" = '$SB/fake-start.sh' ]"
-want "dev-bin expose: state written under XDG" "[ -f '$DSTATE' ]"
+want "dev-bin expose: bin-scoped state written under XDG" "[ -f '$DSTATE' ]"
 want "dev-bin expose: state records our linkPath" \
   "python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d[\"linkPath\"]==sys.argv[2] else 1)' '$DSTATE' '$DLINK'"
 want "dev-bin expose: detectMode created-new" \
   "python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[\"detectMode\"])' '$DSTATE' | grep -qx created-new"
 
 # J-2: re-expose → idempotent refresh (still our link, detectMode refresh-ours)
-bash "$DEVBIN" expose >/dev/null 2>&1
+bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1
 want "dev-bin re-expose: idempotent — still our symlink" "[ \"\$(readlink '$DLINK')\" = '$SB/fake-start.sh' ]"
 want "dev-bin re-expose: detectMode now refresh-ours" \
   "python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[\"detectMode\"])' '$DSTATE' | grep -qx refresh-ours"
@@ -244,39 +248,64 @@ want "dev-bin re-expose: detectMode now refresh-ours" \
 # linkPath-match alone must NOT authorize a clobber — the swapped-in symlink points elsewhere
 # (readlink != state.target), so it is someone else's, not a moved-checkout relink of ours.
 rm -f "$DLINK"; ln -s "$SB/foreign-target" "$DLINK"   # foreign symlink at our recorded path (dangling ok)
-if bash "$DEVBIN" expose >/dev/null 2>&1; then die "dev-bin: expose should REFUSE a foreign symlink swapped in at our recorded path"; fi
+if bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1; then die "dev-bin: expose should REFUSE a foreign symlink swapped in at our recorded path"; fi
 ok "dev-bin expose: refused a foreign symlink at our recorded path (readlink != state.target)"
 want "dev-bin expose: foreign symlink NOT clobbered" "[ \"\$(readlink '$DLINK')\" = '$SB/foreign-target' ]"
 rm -f "$DLINK"
-bash "$DEVBIN" expose >/dev/null 2>&1   # restore our link + state for the sub-cases below
+bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1   # restore our link + state for the sub-cases below
 
 # J-3: FOREIGN bin already at the link path → REFUSE (exit 3), no clobber, no state
-bash "$DEVBIN" remove >/dev/null 2>&1        # clear our link + state first
+bash "$DEVBIN" remove entwurf-bridge >/dev/null 2>&1        # clear our link + state first
 printf 'FOREIGN NPM BIN\n' > "$DLINK"        # someone else's regular-file bin
-if bash "$DEVBIN" expose >/dev/null 2>&1; then die "dev-bin: expose should REFUSE a foreign bin"; fi
+if bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1; then die "dev-bin: expose should REFUSE a foreign bin"; fi
 ok "dev-bin expose: refused a foreign bin (nonzero exit)"
 want "dev-bin expose: foreign bin NOT clobbered" "[ \"\$(cat '$DLINK')\" = 'FOREIGN NPM BIN' ]"
 want "dev-bin expose: no state written on foreign refuse" "[ ! -f '$DSTATE' ]"
-# the NON-FATAL setup wrapper turns that refuse into a WARN + continue (exit 0)
+# the NON-FATAL setup wrapper (no-arg → all bins) turns that refuse into a WARN + continue. The
+# foreign entwurf-bridge is the FIRST managed bin, so the wrapper stops there (statusline unreached).
 set +e; OUT="$(bash "$REPO_DIR/run.sh" expose-dev-bin 2>&1)"; RC=$?; set -e
 want "dev-bin wrapper(foreign): setup wrapper exits 0 (NON-FATAL)" "[ '$RC' -eq 0 ]"
 want "dev-bin wrapper(foreign): WARNs about a foreign bin (not ours)" "printf '%s' \"\$OUT\" | grep -qi 'not ours'"
 rm -f "$DLINK"
 
 # J-4: remove is honest-inverse — removes ONLY our link, refuses a link that became foreign
-bash "$DEVBIN" expose >/dev/null 2>&1
-bash "$DEVBIN" remove >/dev/null 2>&1
+bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1
+bash "$DEVBIN" remove entwurf-bridge >/dev/null 2>&1
 want "dev-bin remove: our link removed" "[ ! -e '$DLINK' ]"
 want "dev-bin remove: state removed" "[ ! -f '$DSTATE' ]"
-bash "$DEVBIN" remove >/dev/null 2>&1
+bash "$DEVBIN" remove entwurf-bridge >/dev/null 2>&1
 ok "dev-bin remove: idempotent with no state (exit 0)"
-bash "$DEVBIN" expose >/dev/null 2>&1
+bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1
 rm -f "$DLINK"; printf 'FOREIGN\n' > "$DLINK"   # our link replaced by a foreign regular file
-if bash "$DEVBIN" remove >/dev/null 2>&1; then die "dev-bin: remove should REFUSE a now-foreign link"; fi
+if bash "$DEVBIN" remove entwurf-bridge >/dev/null 2>&1; then die "dev-bin: remove should REFUSE a now-foreign link"; fi
 ok "dev-bin remove: refused removing a now-foreign link"
 want "dev-bin remove: foreign file left intact" "[ \"\$(cat '$DLINK')\" = 'FOREIGN' ]"
 rm -f "$DLINK" "$DSTATE"
-unset ENTWURF_DEV_BIN_DIR ENTWURF_BRIDGE_TARGET
+
+# J-5 (multi-bin migration, 페블 A): a pre-multi-bin single `install-state.json` is ADOPTED as
+# `entwurf-bridge.install-state.json` (content-checked: linkPath basename == entwurf-bridge), old
+# name dropped (new first, then old — atomic rename); corrupt/foreign legacy → refuse (never guess).
+bash "$DEVBIN" remove entwurf-bridge >/dev/null 2>&1        # clean slate
+LEGACY="$XDG_DATA_HOME/entwurf/dev-bin/install-state.json"
+mkdir -p "$(dirname "$LEGACY")"
+printf '{"schemaVersion":1,"linkPath":"%s","target":"%s","detectMode":"created-new","stampedAt":"x"}\n' "$DLINK" "$SB/fake-start.sh" > "$LEGACY"
+bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1
+want "dev-bin migrate: legacy install-state.json adopted as entwurf-bridge.install-state.json" "[ -f '$DSTATE' ]"
+want "dev-bin migrate: legacy name gone (new first, old dropped)" "[ ! -f '$LEGACY' ]"
+want "dev-bin migrate: adopted state preserves linkPath" \
+  "python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))[\"linkPath\"]==sys.argv[2] else 1)' '$DSTATE' '$DLINK'"
+bash "$DEVBIN" remove entwurf-bridge >/dev/null 2>&1
+mkdir -p "$(dirname "$LEGACY")"       # remove may have rmdir'd the empty state dir
+printf 'not json{{{' > "$LEGACY"      # corrupt legacy → refuse
+if bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1; then die "dev-bin migrate: corrupt legacy should REFUSE"; fi
+ok "dev-bin migrate: corrupt legacy refused (nonzero, no guess)"
+rm -f "$LEGACY" "$DLINK" "$DSTATE"
+mkdir -p "$(dirname "$LEGACY")"
+printf '{"linkPath":"%s/something-else","target":"x"}\n' "$DBIN_DIR" > "$LEGACY"   # foreign basename → refuse
+if bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1; then die "dev-bin migrate: foreign legacy should REFUSE"; fi
+ok "dev-bin migrate: foreign legacy refused (linkPath basename != entwurf-bridge)"
+rm -f "$LEGACY" "$DLINK" "$DSTATE"
+unset ENTWURF_DEV_BIN_DIR ENTWURF_BRIDGE_TARGET ENTWURF_AGY_STATUSLINE_TARGET
 
 # ── ⓪ checkout purity: the working tree is byte-identical (nothing under $REPO) ─
 REPO_AFTER="$(cd "$REPO_DIR" && git status --porcelain)"
