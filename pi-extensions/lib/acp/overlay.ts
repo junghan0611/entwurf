@@ -218,3 +218,151 @@ export function ensureClaudeConfigOverlay(
 		}
 	}
 }
+
+// ============================================================================
+// Cortex config overlay — isolate `cortex acp serve`'s Snowflake home from the
+// operator's `~/.snowflake/`, while passing backend auth through (trust
+// invariant / AGENTS §Operating boundaries). The cortex column of the ACP rail
+// (docs/acp-backend-rail.md §4/§6).
+// ============================================================================
+//
+// Path-resolution invariant (verified in PR #40 against Cortex Code v1.1.8 bundle
+// source — the `ZO()` home resolver and `cx()` cortex-dir helper):
+//
+//   ZO()  = process.env.SNOWFLAKE_HOME ?? path.join(os.homedir(), ".snowflake")
+//   cx()  = path.join(ZO(), "cortex")
+//   connections.toml = join(ZO(), "connections.toml")            // AUTH
+//   config.toml      = join(ZO(), "config.toml")                 // connection config
+//   cortex/cache     = join(cx(), "cache")                       // AUTH credential cache
+//   cortex/skills    = join(cx(), "skills")                      // operator skills
+//   cortex/{conversations,profiles,memory,logs,mcp.json,hooks}  // operator state — hidden
+//
+// Setting SNOWFLAKE_HOME relocates the entire base, so the overlay owns the base
+// dir (= SNOWFLAKE_HOME) and its `cortex/` subtree. We symlink ONLY the auth +
+// skills surfaces through to the operator's real `~/.snowflake/`; every other
+// entry is left unlinked so Cortex materializes fresh empty state inside the
+// overlay rather than reading operator conversations / profiles / memory / hooks
+// / MCP config. Bundled Snowflake skills live under `~/.local/share/cortex/`,
+// OUTSIDE SNOWFLAKE_HOME, so they are unaffected. The bridge NEVER copies,
+// parses, or mediates Snowflake credentials — symlink-through only.
+export const CORTEX_REAL_HOME = join(homedir(), ".snowflake");
+export const CORTEX_CONFIG_OVERLAY_HOME = join(homedir(), ".pi", "agent", "cortex-config-overlay");
+
+// Base-level (`~/.snowflake/*`) auth passthrough. connections.toml is the
+// credential/connection definition Cortex reads on launch; config.toml carries
+// connection defaults. Symlink-through only.
+const CORTEX_OVERLAY_PASSTHROUGH_BASE: ReadonlySet<string> = new Set(["connections.toml", "config.toml"]);
+
+// cortex-subdir (`~/.snowflake/cortex/*`) passthrough. `cache` holds the
+// credential token cache (auth — keep working); `skills` mirrors the operator
+// skills passthrough the claude overlay grants.
+const CORTEX_OVERLAY_PASSTHROUGH_CORTEX: ReadonlySet<string> = new Set(["cache", "skills"]);
+
+// cortex-subdir state swept every spawn (Memory containment, VERIFY L5). pi owns
+// persistence; the backend must not run a parallel memory/conversation layer
+// that survives across pi sessions. Overlay-owned empty trees, nuked + recreated
+// each spawn so nothing Cortex wrote in a prior session leaks into the next.
+const CORTEX_OVERLAY_SWEPT_DIRS: ReadonlySet<string> = new Set(["conversations", "memory", "profiles", "logs"]);
+
+function cortexSymlinkPassthrough(realBase: string, overlayBase: string, entry: string): void {
+	const realPath = join(realBase, entry);
+	const overlayPath = join(overlayBase, entry);
+	if (!existsSync(realPath)) {
+		try {
+			lstatSync(overlayPath);
+			rmSync(overlayPath, { recursive: true, force: true });
+		} catch {
+			// Doesn't exist — fine.
+		}
+		return;
+	}
+	try {
+		const existing = lstatSync(overlayPath);
+		if (existing.isSymbolicLink()) {
+			if (readlinkSync(overlayPath) === realPath) return;
+			unlinkSync(overlayPath);
+		} else {
+			rmSync(overlayPath, { recursive: true, force: true });
+		}
+	} catch {
+		// Doesn't exist — fall through to symlink.
+	}
+	try {
+		symlinkSync(realPath, overlayPath);
+	} catch (error) {
+		console.error(
+			`[entwurf:cortex-overlay] symlink failed for ${entry}: ${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+}
+
+/**
+ * The launch-env override a cortex ACP child spawn carries. STATIC (no settings
+ * dependence): redirect Cortex's `ZO()` Snowflake-home resolver at the pi-owned
+ * overlay, and pin operator profile auto-apply OFF (profiles can inject
+ * settings / system-prompt / MCP). process.env wins at the spawn merge, so an
+ * operator who explicitly exports SNOWFLAKE_HOME keeps full control.
+ */
+export function cortexLaunchEnvDefaults(overlayHome: string = CORTEX_CONFIG_OVERLAY_HOME): {
+	SNOWFLAKE_HOME: string;
+	CORTEX_DISABLE_AUTO_APPLY_PROFILES: string;
+} {
+	return { SNOWFLAKE_HOME: overlayHome, CORTEX_DISABLE_AUTO_APPLY_PROFILES: "1" };
+}
+
+/**
+ * Materialize / refresh the Cortex config overlay. Idempotent: re-symlinks auth
+ * (connections.toml / config.toml / credential cache) + skills from the real
+ * `~/.snowflake/`, sweeps overlay-owned conversation / profile / memory / log
+ * state, and strips any stale operator-state symlink off the current allowlist.
+ * Safe to call on every cortex ACP session bootstrap.
+ */
+export function ensureCortexConfigOverlay(
+	realHome: string = CORTEX_REAL_HOME,
+	overlayHome: string = CORTEX_CONFIG_OVERLAY_HOME,
+	overlayCortexDir: string = join(overlayHome, "cortex"),
+): void {
+	mkdirSync(overlayHome, { recursive: true });
+	mkdirSync(overlayCortexDir, { recursive: true });
+
+	const realCortexDir = join(realHome, "cortex");
+
+	// Auth passthrough — base level (connections.toml, config.toml).
+	for (const entry of CORTEX_OVERLAY_PASSTHROUGH_BASE) {
+		cortexSymlinkPassthrough(realHome, overlayHome, entry);
+	}
+	// Auth + skills passthrough — cortex subdir (cache, skills).
+	for (const entry of CORTEX_OVERLAY_PASSTHROUGH_CORTEX) {
+		cortexSymlinkPassthrough(realCortexDir, overlayCortexDir, entry);
+	}
+
+	// Memory containment — sweep overlay-owned state dirs every spawn, replacing
+	// any prior symlink to operator data and discarding overlay-written state from
+	// previous sessions.
+	for (const entry of CORTEX_OVERLAY_SWEPT_DIRS) {
+		const overlayPath = join(overlayCortexDir, entry);
+		rmSync(overlayPath, { recursive: true, force: true });
+		mkdirSync(overlayPath, { recursive: true });
+	}
+
+	// Stale cleanup — remove any overlay cortex/ entry NOT on the passthrough/swept
+	// allowlist that is a symlink (a migration artifact pointing at operator state:
+	// mcp.json, hooks, secrets, …). Cortex-authored regular files/dirs are left
+	// alone so within-overlay runtime state is not wiped mid-life.
+	let entries: string[];
+	try {
+		entries = readdirSync(overlayCortexDir);
+	} catch {
+		entries = [];
+	}
+	for (const entry of entries) {
+		if (CORTEX_OVERLAY_PASSTHROUGH_CORTEX.has(entry)) continue;
+		if (CORTEX_OVERLAY_SWEPT_DIRS.has(entry)) continue;
+		const overlayPath = join(overlayCortexDir, entry);
+		try {
+			if (lstatSync(overlayPath).isSymbolicLink()) rmSync(overlayPath, { force: true });
+		} catch {
+			// Doesn't exist — fine.
+		}
+	}
+}

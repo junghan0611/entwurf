@@ -1,12 +1,21 @@
 # ACP Backend Adapter Rail (표준궤) — as built in 0.12
 
-> **Status: spec frozen + claude rail SHIPPED** (Opus implementation / GPT `…341a87` review GO, 2026-06-25).
+> **Status: spec frozen + claude rail SHIPPED + cortex adapter SHIPPED** (claude rail: Opus implementation /
+> GPT `…341a87` review GO, 2026-06-25; cortex: PR #40 ported onto the rail on `snowflake-cortex-code-acp-backend`).
 > The confirmed spec is **§9** (the adapter seam) + **§10** (the `settings.backend` guard + the generic
 > `adapterSettings` seam). The rail is in the tree and unchanged through the 0.12.x hotfix lane.
 >
-> **The only remaining work** is for the contributor (hvkiefer) to port PR #40 (Cortex Code) as **one adapter
-> object** — `cortexAdapter` in `pi-extensions/lib/acp/backend-adapter.ts`, registered in the `ADAPTERS` array,
-> plus cortex assertions in the `check-acp-*` gate family. The common turn loop is not touched.
+> **Cortex is now the first SHIPPED non-claude adapter on this rail** — it landed exactly as the rail predicted:
+> `cortexAdapter` in `pi-extensions/lib/acp/backend-adapter.ts` (registered in `ADAPTERS = [claudeAdapter,
+> cortexAdapter]`), a hand-curated cortex model surface (`cortex-auto`, `cortex-claude-opus-4-6`, `cortex-claude-haiku-4-5`, `cortex-claude-sonnet-4-6`, `cortex-openai-gpt-5.2`) in `models.ts`,
+> `ensureCortexConfigOverlay` in `overlay.ts`, and a deterministic gate `scripts/check-acp-cortex.ts` wired into
+> `pnpm check` (green) + `run.sh`. **The common turn loop was not touched** — cortex added zero to the common
+> layer, which is the proof the rail holds.
+>
+> **Still pending (the one deliverable not yet in the tree):** the on-demand LIVE smoke *script*
+> `scripts/smoke-acp-cortex-live.ts` does not exist yet. Its `run.sh` target (`smoke-acp-cortex-live`) is already
+> wired and fails loud until the script lands; it is deliberately OUTSIDE the claude-only LIVE release floor
+> (capability-dignity invariant #7).
 >
 > **Real namespace.** Everything lives under **`pi-extensions/lib/acp/`**. There is no `acp-bridge.ts` and no
 > `adapters/` subdirectory — both were 0.11.0 monolith shapes that the 0.12.0 cutover deleted. `claudeAdapter`
@@ -54,9 +63,10 @@ via `loadConfig(cwd, modelId, adapter)` and otherwise used directly in the turn 
 
 ## 3. The `AcpBackendAdapter` interface (as built)
 
-Source of truth: `pi-extensions/lib/acp/backend-adapter.ts` (interface at `:115`, `claudeAdapter` reference
-implementation at `:194`, registry at `:275`, `resolveAcpBackendAdapter` at `:287`, `allCuratedModels` at `:307`).
-This is the **real** shape — it is the §3 draft updated per §9+§10 (two methods added, two signatures fixed):
+Source of truth: `pi-extensions/lib/acp/backend-adapter.ts` (interface at `:136`, `claudeAdapter` reference
+implementation at `:215`, `cortexAdapter` at `:316`, registry `ADAPTERS` at `:407`, `resolveAcpBackendAdapter`
+at `:419`, `allCuratedModels` at `:439`). This is the **real** shape — it is the §3 draft updated per §9+§10
+(two methods added, two signatures fixed):
 
 ```ts
 export interface AcpBackendAdapter {
@@ -64,7 +74,7 @@ export interface AcpBackendAdapter {
   readonly backend: string;                                   // "claude" | "cortex"
 
   /** Owns modelId? → backend-native id (prefix stripped), else undefined.
-   *  cortex-claude-sonnet-5 → { nativeModelId: "claude-sonnet-5" }. */
+   *  cortex-claude-sonnet-4-6 → { nativeModelId: "claude-sonnet-4-6" }. */
   routeModel(modelId: string): { nativeModelId: string } | undefined;
 
   /** Curated model rows this backend contributes to the single `entwurf` provider. */
@@ -109,18 +119,18 @@ export interface AcpBackendAdapter {
 export function resolveAcpBackendAdapter(modelId: string): { adapter: AcpBackendAdapter; nativeModelId: string };
 ```
 
-## 4. The seam spec (claude as built / cortex as PR #40 demonstrated on 0.11.0)
+## 4. The seam spec (claude + cortex both as built on the 0.12 rail)
 
-| seam (adapter method) | claude (shipped, 0.12) | cortex (PR #40) |
+| seam (adapter method) | claude (shipped, 0.12) | cortex (shipped, PR #40 → 0.12 rail) |
 |---|---|---|
-| **routeModel + curatedModels** | unprefixed `getModels("anthropic")` rows (`claude-sonnet-5`, `claude-opus-4-8`); native id == curated id | hand-curated `cortex-auto` / `cortex-claude-sonnet-5` (pi-ai has no cortex source); `cortex-` prefix routes via `routeModel`; launch strips the prefix to recover the native `-m` value |
+| **routeModel + curatedModels** | unprefixed `getModels("anthropic")` rows (`claude-sonnet-5`, `claude-opus-4-8`); native id == curated id | hand-curated `cortex-auto` / `cortex-claude-opus-4-6` / `cortex-claude-haiku-4-5` / `cortex-claude-sonnet-4-6` / `cortex-openai-gpt-5.2` (pi-ai has no cortex source); `cortex-` prefix routes via `routeModel`; launch strips the prefix to recover the native `-m` value |
 | **resolveAdapterSettings + configSignatureFields** | both no-op (`undefined` / `{}`) — claude has no own settings | parse `cortexConnection` off the raw block → opaque `adapterSettings`; fold `{ cortexConnection: conn ?? null }` into the signature (a connection change invalidates a reused session) |
 | **resolveLaunch** | `@agentclientprotocol/claude-agent-acp` npm bin resolve; `CLAUDE_AGENT_ACP_COMMAND` override | `cortex acp serve` resolved from PATH (+ `-c <conn>` `-m <native>`); `CORTEX_ACP_COMMAND` override via `bash -lc`, selection flags appended so the bridge's choice wins |
 | **launchEnvDefaults** | `claudeLaunchEnvDefaults()` (`CLAUDE_CONFIG_DIR`) | `SNOWFLAKE_HOME` = overlay, `CORTEX_DISABLE_AUTO_APPLY_PROFILES=1` |
 | **ensureOverlay** | `CLAUDE_CONFIG_DIR` whitelist overlay (auth/runtime kept, memory/hooks/projects hidden, `hooks:{}`) | `SNOWFLAKE_HOME` symlink-passthrough (`connections.toml` / `config.toml` / credential cache / skills) + conversations/profiles/memory/mcp.json/hooks hidden + swept each spawn |
 | **loadCarrier + buildSessionMeta** | carrier = the shipped engraving (`loadCarrier` → string); `buildSessionMeta` → `_meta.systemPrompt` (short, pure, billing-safe) | **`loadCarrier` → null, `buildSessionMeta` → undefined** — Cortex ACP exposes no `_meta.systemPrompt` carrier, so the operator engraving must ride the first-user augment (the one open detail; see §6 + §9-4) |
 | **enforceModel** | per-turn `setSessionConfigOption({ configId: "model" })` | **launch-time `-m` pin, no per-turn switch** — Cortex exposes its model surface via session config options, not the spec-baseline set-model the bridge calls; a per-turn call would trigger spurious reuse invalidation |
-| **gates** | `check-acp-*` family + the LIVE `smoke-acp-*-live` floor | EXTEND the same `check-acp-*` family (see §6) + a new on-demand `smoke-acp-cortex-live` (outside the claude-only LIVE release floor) |
+| **gates** | `check-acp-*` family + the LIVE `smoke-acp-*-live` floor | `scripts/check-acp-cortex.ts` (shipped, in `pnpm check`) owns the whole deterministic cortex axis; the on-demand `smoke-acp-cortex-live` target is wired in `run.sh` but its script is still PENDING (outside the claude-only LIVE release floor) |
 
 **Two asymmetries are the design touchstones:**
 1. `loadCarrier` / `buildSessionMeta` must support the **carrier-less case** (cortex). `buildSessionMeta`
@@ -151,53 +161,50 @@ The steps below were executed when the rail shipped; they are recorded so the co
 
 → That was "the rail". cortex adds **zero** to the common layer (claude alone proves the adapter pattern holds).
 
-## 6. Contributor guide — porting PR #40 to 0.12
+## 6. Contributor guide — how cortex landed on the rail (as built)
 
-Porting PR #40 = **write one adapter object (`cortexAdapter`) and register it**. Real namespace =
-`pi-extensions/lib/acp/`. Concretely:
+PR #40 was ported to 0.12 exactly as this rail predicted: **one adapter object (`cortexAdapter`) + registration +
+cortex gate**. Real namespace = `pi-extensions/lib/acp/`. What shipped:
 
-- **`pi-extensions/lib/acp/backend-adapter.ts`** — add `cortexAdapter: AcpBackendAdapter` next to `claudeAdapter`
-  (or in a sibling module, e.g. `cortex-adapter.ts`, and import it here). Implement all members for the cortex
-  column of §4 + §9/§10.
-- **Register** by appending to the `ADAPTERS` array (`const ADAPTERS = [claudeAdapter, cortexAdapter]`, `:275`).
-  Because `routeModel` owns the `cortex-` prefix, `resolveAcpBackendAdapter` and `allCuratedModels` pick it up
+- **`pi-extensions/lib/acp/backend-adapter.ts`** — `cortexAdapter: AcpBackendAdapter` landed inline next to
+  `claudeAdapter` (`:316`), implementing every member of the cortex column of §4 + §9/§10.
+- **Registered** in the `ADAPTERS` array (`const ADAPTERS = [claudeAdapter, cortexAdapter]`, `:407`). Because
+  `routeModel` owns the `cortex-` prefix, `resolveAcpBackendAdapter` and `allCuratedModels` pick it up
   automatically and fail-fast on any prefix collision or unowned id.
-- **Curated models** — add the cortex rows (`cortex-auto`, `cortex-claude-sonnet-5`) in `models.ts` (or a new
-  `cortex-models.ts`) and return them from `cortexAdapter.curatedModels()`. Hand-curated, since pi-ai carries no
-  cortex/snowflake source. The `cortex-` prefix keeps the ids from colliding with the Claude ids Cortex routes
-  to. `resolveLaunch` strips the prefix to recover the native `-m` value (`cortex-auto` → no `-m`).
-- **Overlay** — add `ensureCortexConfigOverlay` in `overlay.ts` (or a new `cortex-overlay.ts`): `SNOWFLAKE_HOME`
-  symlink-passthrough of auth + skills, hiding conversations/profiles/memory/mcp.json/hooks, swept every spawn.
-  Wire it through `cortexAdapter.ensureOverlay` + `launchEnvDefaults` (`SNOWFLAKE_HOME` = overlay,
-  `CORTEX_DISABLE_AUTO_APPLY_PROFILES=1`).
-- **Backend-owned settings** — parse `cortexConnection` off the raw block in `cortexAdapter.resolveAdapterSettings`
-  → opaque `adapterSettings`; fold `{ cortexConnection: conn ?? null }` into `configSignatureFields`. **Do NOT
-  edit `config.ts`** — backend-named keys must never reach the common `ResolvedAcpConfig` (§10 B/D). The
-  declared `entwurfProvider.backend: "cortex"` already passes the syntactic guard. (PR #40's
-  `PI_SHELL_ACP_CORTEX_CONNECTION` env should be renamed to the `ENTWURF_ACP_*` convention.)
-- **Identity carrier asymmetry — the one open detail.** `cortexAdapter.buildSessionMeta()` returns `undefined`
-  and `loadCarrier()` returns `null` (Cortex ACP has no `_meta.systemPrompt`). The operator engraving must
-  therefore ride the first-user augment (`augment.ts`). **Today `augment.ts` carries the bridge identity / pi
-  base / AGENTS.md but NOT an operator engraving**, so the cortex PR has to define exactly how the engraving
-  joins the augment for a carrier-less backend (§9-4 deferred this). Resolve it explicitly in the PR rather than
-  leaving it implicit.
-- **Gates — extend the `check-acp-*` family** (the 0.11.0 monolith names `check-backends` / `check-models` do
-  not exist in 0.12):
-  - `scripts/check-acp-provider-surface.ts` — curated cortex rows + `cortex-` prefix routing + anti-collision.
-  - `scripts/check-acp-config.ts` — `backend:"cortex"` passes the syntactic guard; `cortexConnection` lands in
-    `adapterSettings` and **never** surfaces on the common config (the fake-adapter seam plumbing already lives
-    here).
-  - `scripts/check-acp-overlay.ts` — `SNOWFLAKE_HOME` overlay passthrough / state-hiding / per-spawn sweep.
-  - `scripts/check-acp-tool-surface.ts` — `cortexAdapter.buildSessionMeta()` is `undefined` → `_meta` omitted.
-  - `scripts/check-acp-session-reuse.ts` — adapter wiring through the turn loop + `configSignatureFields`
-    (a `cortexConnection` change invalidates a reused session).
-  - `scripts/check-acp-carrier-augment.ts` — carrier-less path (loadCarrier null) + engraving via augment.
-  - **new:** `scripts/smoke-acp-cortex-live.ts` — on-demand LIVE smoke (needs `cortex` on PATH +
-    `cortex auth login`), OUT of `pnpm check` and OUTSIDE the claude-only LIVE release floor. Wire it into
-    `run.sh` as its own target (`LIVE=1 ./run.sh smoke-acp-cortex-live`).
-- **Do NOT touch the common layer** — `backend.ts` turn loop, `acp-client.ts`, `event-mapper.ts`,
-  `session-store.ts`, `config.ts`. That a backend lands in *an adapter file + gates only* IS the proof the rail
-  holds. `pnpm check` + `pnpm typecheck` (all three configs) must be EXIT 0.
+- **Curated models** — the cortex rows (`cortex-auto`, `cortex-claude-opus-4-6`, `cortex-claude-haiku-4-5`, `cortex-claude-sonnet-4-6`, `cortex-openai-gpt-5.2`) live in `models.ts`
+  (`curatedCortexModels`, `CORTEX_MODEL_PREFIX`, `SUPPORTED_CORTEX_MODEL_IDS`) and are returned from
+  `cortexAdapter.curatedModels()`. Hand-curated, since pi-ai carries no cortex/snowflake source. The `cortex-`
+  prefix keeps the ids from colliding with the Claude ids Cortex routes to. `resolveLaunch` strips the prefix to
+  recover the native `-m` value (`cortex-auto` → no `-m`).
+- **Overlay** — `ensureCortexConfigOverlay` (+ `CORTEX_CONFIG_OVERLAY_HOME`, `cortexLaunchEnvDefaults`) landed in
+  `overlay.ts`: `SNOWFLAKE_HOME` symlink-passthrough of auth (connections/config/credential cache) + skills,
+  hiding conversations/profiles/memory/mcp.json/hooks, swept every spawn. It is wired through
+  `cortexAdapter.ensureOverlay` + `launchEnvDefaults` (`SNOWFLAKE_HOME` = overlay,
+  `CORTEX_DISABLE_AUTO_APPLY_PROFILES=1`). Auth is **symlinked, never copied** (Hard Rule #8).
+- **Backend-owned settings** — `cortexConnection` is parsed off the raw block in
+  `cortexAdapter.resolveAdapterSettings` → opaque `adapterSettings`; `{ cortexConnection: conn ?? null }` folds
+  into `configSignatureFields`. `config.ts` was **not** edited — backend-named keys never reach the common
+  `ResolvedAcpConfig` (§10 B/D). The declared `entwurfProvider.backend: "cortex"` passes the syntactic guard.
+- **Identity carrier asymmetry.** `cortexAdapter.buildSessionMeta()` returns `undefined` and `loadCarrier()`
+  returns `null` (Cortex ACP has no `_meta.systemPrompt`), so the operator engraving rides the first-user
+  augment via the carrier-less path in `augment.ts` (inline operator-engraving override reader for carrier-less
+  backends). This was the one open detail in the original port; it is resolved in the tree.
+- **Gate — `scripts/check-acp-cortex.ts`** (shipped, in the `pnpm check` aggregate + `run.sh` case dispatch as
+  `check-acp-cortex`). It is the deterministic owner of the whole cortex axis: cortex curated rows register
+  through the REAL registry path (`allCuratedModels`, no collision), the `cortex-` prefix routes to
+  `cortexAdapter`, prefix-strip recovers the native `-m` (`cortex-auto` → no `-m`), the overlay symlinks auth
+  through + redirects `SNOWFLAKE_HOME`, and the `CORTEX_ACP_COMMAND` override single-quotes shell-metachar
+  tokens. (The 결합 규칙 — source + gate land together — was honored.) The existing `check-acp-config` /
+  `-overlay` / `-provider-surface` / `-session-reuse` / `-carrier-augment` gates already carry the shared seam
+  plumbing this exercises.
+- **STILL PENDING — `scripts/smoke-acp-cortex-live.ts`.** The on-demand LIVE smoke *script* is not yet in the
+  tree. Its `run.sh` target (`smoke-acp-cortex-live`, needs `cortex` on PATH + `cortex auth login`) is already
+  wired and **fails loud** until the script lands (it is OUT of `pnpm check` and OUTSIDE the claude-only LIVE
+  release floor — capability-dignity invariant #7). Authoring that script completes the target.
+- **The common layer stayed untouched** — `backend.ts` turn loop, `acp-client.ts`, `event-mapper.ts`,
+  `session-store.ts`, `config.ts`. That cortex landed in *an adapter object + one gate* (plus its curated
+  surface and overlay) IS the proof the rail holds. `pnpm check` + `pnpm typecheck` (all three configs) are
+  EXIT 0.
 
 ## 7. Discussion points (resolved)
 
@@ -219,8 +226,9 @@ These were the open questions before the spec froze; §9+§10 resolved all of th
 ## 8. Roles
 
 - **Maintainer:** lay the §5 rail (interface + claude refactor) and get claude green on the gates. **Done.**
-- **Contributor (hvkiefer):** the §6 cortex adapter — one adapter object + registration + cortex gates
-  (PR #40 → 0.12).
+- **Contributor (hvkiefer):** the §6 cortex adapter — one adapter object + registration + cortex gate
+  (PR #40 → 0.12). **Done** (adapter + curated surface + overlay + `check-acp-cortex` in the tree; the
+  on-demand `smoke-acp-cortex-live` *script* is the one remaining deliverable — target wired, script pending).
 - **GPT:** the §7 review → frozen spec. **Done.**
 
 ## 9. Frozen spec (GPT-agreed 2026-06-25)
@@ -256,8 +264,8 @@ GPT (`…341a87`) closed every §7 point. These are the rail invariants:
 8. **codex/gemini = 0.12 non-goal.** codex is a native garden citizen (not ACP). `ENTWURF_ACP_FOR_CODEX=1`
    opt-in is deliberately **not** in the default registry — a future opt-in only, debated in a separate issue.
    0.12.3 went further and **removed the placeholder `entwurf/gpt-5.x` targets** from the registry: a vendor
-   ACP surface only exists once its adapter lands through *this* rail. Cortex (PR #40) would be the first real
-   one — which is exactly why the rail matters.
+   ACP surface only exists once its adapter lands through *this* rail. Cortex (PR #40) is now the first real
+   one to land — which is exactly why the rail matters.
 
 **One-line spec:** single `entwurf` provider + modelId-prefix registry (prefix required for non-claude) +
 separate adapter object resolved at turn entry + `buildSessionMeta` undefined ⇒ `_meta` omitted + rich context
