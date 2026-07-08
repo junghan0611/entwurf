@@ -156,12 +156,26 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
 7. **fresh pi-native GPT launch profile(더 큰 후속)** — `runEntwurfSync`(:1940)의 registry/session-id/name/cwd-enrich 자산 재사용하되, `--no-extensions` detached one-shot 복구가 아니라 mux-visible `pi-native-gpt` launch profile로 설계(`claude-code`/`codex`/`agy`도 같은 launch/observe/capture/kill 규율). **완료판정:** mux launch가 서면 `6d06ad0`이 지운 `entwurf/gpt-5.x` ACP 타깃을 레지스트리에 되살릴 수 있음.
 8. **agy(Antigravity) spawn** — spawn surface 통일 **후** 그 위에 얹기(기반 먼저 안 서면 launch seam이 갈림). *주: agy **delivery/설치 어댑터**는 07-04 레인에서 mux보다 먼저 감 — 갈라진 건 launch면뿐.*
 
-## ④ (수동·대기) PR #40 cortex 어댑터 재안착 — 공은 hvkiefer
+## ④ PR #40 cortex 어댑터 — 리뷰 완료·PARK, 통합은 0.13.0(agy 뒤) 메인테이너 몫
 
-- 우리 쪽 준비 끝: 레일 doc(`docs/acp-backend-rail.md`) + PR 개발 가이드 댓글. 레일 green.
-- hvkiefer: `cortexAdapter` 1개 신규(`pi-extensions/lib/acp/backend-adapter.ts`) + `ADAPTERS` 등록 + curated cortex 모델 + `SNOWFLAKE_HOME` overlay + `check-acp-*` cortex 단언 + `smoke-acp-cortex-live`. 공통 turn loop 무수정.
-- **미정 1건:** carrier 부재 백엔드(cortex)의 operator engraving이 first-user augment(`augment.ts`)에 합류하는 방식 — 현재 augment는 engraving 미탑재. cortex PR이 그 경로 정의.
-- 들어오면 `check-acp-*` 6종 + `smoke-acp-cortex-live` 기준 리뷰, 공통층 무수정 불변식 확인.
+**들어옴:** `d8baf79`(main 2일전 머지 → 현 트리에 clean). PR head를 격리 worktree(shared node_modules)에서 실측 리뷰. 아래 findings 확정.
+
+**green (자기 스코프 = "pi에 직접 붙는 ACP 모델" 안에선 문제없음):**
+- 결정론 게이트 `check-acp-cortex` ok(7축: curated 등록/`cortex-` prefix 라우팅/prefix-strip `-m`/`cortex-auto` no-`-m`/overlay auth-through/override 쿼팅/carrier-less augment). `check-shell-quote`(신규 SOURCE_SITE)·`check-env-namespace` ok. tsc 3 config·biome green. 기존 ACP 게이트 5종(carrier-augment·provider-surface·config·session-reuse·overlay) 회귀 0.
+- **공통층 무수정 확정** — backend.ts/acp-client.ts/event-mapper.ts/session-store.ts/config.ts/engraving.ts diff 0. carrier-less engraving 경로(옛 "미정 1건") 정의됨: `augment.ts` `loadCarrierlessOperatorEngraving`+`CARRIER_LESS_BACKENDS={cortex}`, override 해석 `resolve(envPath)`가 engraving.ts:59와 parity. env 분리 올바름: override는 `CORTEX_ACP_COMMAND`(claude `CLAUDE_AGENT_ACP_COMMAND`와 동형), entwurf-owned만 `ENTWURF_ACP_*`. Hard Rule #8 준수(overlay가 auth symlink-only, copy/parse 0).
+
+**빠진 것 = 우리 몫(기여자 잘못 아님 — ACP 스폰면 미완이 우리 구멍):**
+- **레지스트리 2개 중 ①만 채움.** ① `allCuratedModels`(`acp-provider.ts:44` → pi provider) = cortex 2행 추가됨 → `pi --model entwurf/cortex-auto` **직접은 됨**. ② `pi/entwurf-targets.json`(entwurf 스폰 allowlist) = cortex **없음** → `resolveEntwurfTarget`(entwurf-core.ts:429)이 `entwurf_v2` cortex 스폰을 hard-reject.
+- **②에 넣어도 아직 안 됨:** entwurf_v2 프로덕션 스폰이 `provider=entwurf`(ACP) 자체를 out-of-scope(`smoke-entwurf-v2-spawn-resume-live.ts:189` throw — "native codex 써라"; `--no-extensions --provider entwurf` broken combo). = §②/§③(mux launch, #47) 레인 의존. claude ACP도 동일 처지 — cortex 특유 문제 아님.
+- **라이브 스모크 미배달:** `scripts/smoke-acp-cortex-live.ts` 부재. run.sh 타깃만 배선(LIVE=1+cortex on PATH일 때만 fail-loud). 실 cortex 턴 증거 0 → 무료/유료 cortex 계정으로 저작+1턴 필요.
+
+**결정 (PARK, 통합은 0.13.0):**
+1. PR #40 **OPEN 유지.** 기여자는 자기 브랜치 빌드로 이미 매일 사용중(entwurf 안 써도 됨 — pi로 cortex) → 머지가 그를 열어주는 게 아님. 지금 머지하면 agy 레인 흔들림 → 안 함.
+2. agy 닫힌 **뒤** `feat/cortex-0.13.0` 통합 브랜치에서 뒷부분(②등록 + §②/§③ 스폰 얹기 + 라이브 턴) 채우고 **통합-머지 → 0.13.0**. cortex를 entwurf v2로 품는다 = 프로젝트가 말하는 "형제 차별 없음" 증명.
+3. **기여자 커밋 보존**(squash로 저자 지우지 말 것 — 예의). CHANGELOG `thanks @hvkiefer`. no Co-Authored-By/generated 트레일러(커밋 hygiene 규칙 — 인간 기여자 크레딧은 정당·권장).
+4. **overlay 버전 핀 함정:** `overlay.ts`의 `ZO()`/`cx()` 경로 리졸버가 Cortex Code v1.1.8 대조 가정 — **하드핀 금지.** cortex CLI 버전이 매일 churn → 러프하게 두고 라이브 재검증. 통합 때 실 위험.
+
+**참조:** PR #40 · mux/spawn 레인 #47 · `docs/acp-backend-rail.md` · (본 findings는 GitHub 이슈로 승격 — 이 커밋 해시 인용)
 
 ## Follow-up (blocker 아님)
 
