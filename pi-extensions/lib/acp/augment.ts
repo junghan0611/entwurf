@@ -30,11 +30,57 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { ENTWURF_PROJECT_CONTEXT_OPEN_TAG } from "../../../protocol.js";
 import type { AcpTextBlock } from "./context.js";
 
 const MAX_AUGMENT_BYTES = 50 * 1024;
+
+// Carrier-less backends expose no `_meta.systemPrompt` (docs/acp-backend-rail.md
+// §9-4). claude folds the operator engraving into that carrier; a carrier-less
+// backend (cortex, the first) has nowhere to put it — so its operator engraving
+// rides HERE, prepended as the LEADING section of the first-user augment. It
+// travels on the WIRE only (new-only, never the config signature), so an
+// engraving change applies to the NEXT new cortex session rather than
+// invalidating a live reused one — the documented asymmetry vs claude, where the
+// carrier feeds bridgeConfigSignature.
+const CARRIER_LESS_BACKENDS: ReadonlySet<string> = new Set(["cortex"]);
+
+// The env var an operator points at a personal engraving file. Shared surface
+// with the claude carrier (engraving.ts) BY NAME, but read INLINE here (not
+// imported): augment.ts is loaded raw by the strip-types carrier-augment gate,
+// which cannot resolve a `.js` VALUE import of the sibling `.ts` engraving
+// module (augment.ts only value-imports real `.js` files). So the carrier-less
+// override read is self-contained. Unlike engraving.ts's shipped-default path,
+// this ONLY ever reads the operator OVERRIDE file: the shipped claude default
+// (a preset-replacement / auto-memory lever) is meaningless for a non-claude
+// backend and is never injected into a carrier-less augment.
+const ENGRAVING_OVERRIDE_ENV = "ENTWURF_ACP_ENGRAVING_PATH";
+
+/**
+ * Render the operator engraving OVERRIDE for a carrier-less backend, or null
+ * when unset / empty / whitespace / unreadable. Pure w.r.t. (override file
+ * contents, backend, sorted mcpServerNames). Mirrors engraving.ts's `{{backend}}`
+ * / `{{mcp_servers}}` token substitution so the operator's file behaves the same
+ * on the augment as it would on the claude carrier.
+ */
+function loadCarrierlessOperatorEngraving(backend: string, mcpServerNames: readonly string[]): string | null {
+	const envPath = process.env[ENGRAVING_OVERRIDE_ENV]?.trim();
+	if (!envPath) return null;
+	let source: string;
+	try {
+		source = readFileSync(resolve(envPath), "utf8");
+	} catch {
+		return null;
+	}
+	const names = [...mcpServerNames].sort();
+	const mcpList = names.length > 0 ? names.join(", ") : "(none registered)";
+	const rendered = source
+		.replace(/\{\{backend\}\}/g, backend)
+		.replace(/\{\{mcp_servers\}\}/g, mcpList)
+		.trim();
+	return rendered.length > 0 ? rendered : null;
+}
 
 export interface PiContextAugmentParams {
 	/** Claude-only this cut; kept as a field so the narrative names the backend. */
@@ -57,6 +103,14 @@ export function buildPiContextAugment(params: PiContextAugmentParams): string {
 	const mcpList = names.length > 0 ? names.join(", ") : "(none registered)";
 
 	const sections: string[] = [];
+
+	// Carrier-less backend (cortex): the operator engraving leads the augment,
+	// since there is no `_meta.systemPrompt` carrier to hold it. null when no
+	// override is configured — the shipped claude default is never injected here.
+	if (CARRIER_LESS_BACKENDS.has(params.backend)) {
+		const engraving = loadCarrierlessOperatorEngraving(params.backend, params.mcpServerNames);
+		if (engraving) sections.push(engraving);
+	}
 
 	// Bridge identity + caller-side sibling stance. The closing line is a
 	// caller-perspective statement: when THIS session throws an entwurf, the peer
