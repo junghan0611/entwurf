@@ -1037,6 +1037,35 @@ smoke_acp_rgg_live() {
   (cd "$REPO_DIR" && ENTWURF_LIVE_TARGET="$target" SMOKE_RGG_POSITIVE=0 bash scripts/smoke-resident-garden-guard.sh)
 }
 
+smoke_acp_cortex_live() {
+  # On-demand LIVE smoke for the Cortex (Snowflake Cortex Code) ACP backend — the
+  # first NON-claude adapter on the rail (docs/acp-backend-rail.md §6). OUT of
+  # `pnpm check` AND OUTSIDE the claude-only LIVE release floor (capability
+  # dignity, invariant #7): cortex is a deterministic-gated (check-acp-cortex) +
+  # on-demand-live surface, NEVER a claude-release blocker — so it is deliberately
+  # absent from release-gate's 11-smoke ACP acceptance floor. Drives one real
+  # cortex ACP turn through the entwurf provider path. HONEST-SKIP (exit 0) when
+  # LIVE!=1 OR `cortex` is not on PATH — the live turn needs `cortex` installed +
+  # a prior `cortex auth login` (Hard Rule #8: entwurf never provides/proxies the
+  # Snowflake credential — it reads the operator's existing local auth through the
+  # overlay). PR #40 called this `smoke-cortex`; the canonical family name is
+  # smoke-acp-cortex-live (matches the smoke-acp-*-live floor + check-acp-cortex).
+  #   LIVE=1 ./run.sh smoke-acp-cortex-live
+  if [ "${LIVE:-}" != "1" ]; then
+    echo "[smoke-acp-cortex-live] skipped — set LIVE=1 to run (needs cortex on PATH + a prior 'cortex auth login')."
+    return 0
+  fi
+  if ! command -v cortex >/dev/null 2>&1; then
+    echo "[smoke-acp-cortex-live] skipped — cortex not on PATH (install Snowflake Cortex Code + run 'cortex auth login')."
+    return 0
+  fi
+  if [ ! -f "$REPO_DIR/scripts/smoke-acp-cortex-live.ts" ]; then
+    fail "[smoke-acp-cortex-live] scripts/smoke-acp-cortex-live.ts not found — the on-demand live cortex smoke script is a PENDING deliverable (docs/acp-backend-rail.md §6). run.sh is wired; author the script to complete the target."
+    return 1
+  fi
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-cortex-live.ts)
+}
+
 smoke_entwurf_v2_matrix_live() {
   # LIVE sentinel for 0.11 Stage 0 step 5d-5 (D4-b) — kept OUT of `pnpm check`. The deterministic
   # sibling (check-entwurf-v2-matrix) fixes every (target kind → transport → lock) cell over fakes
@@ -1746,6 +1775,24 @@ check_acp_carrier_augment() {
   # de-dup. Pure + temp-dir fs, no spawn.
   section "ACP carrier + augment (S2d-1c engraving + first-user augment)"
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-carrier-augment.ts)
+}
+
+check_acp_cortex() {
+  # Deterministic gate for the Cortex (Snowflake Cortex Code) ACP backend — the
+  # first non-claude adapter on the rail (docs/acp-backend-rail.md §4/§6/§9). The
+  # cortex source landed as one `cortexAdapter` object (backend-adapter.ts) + its
+  # curated surface (models.ts) + config overlay (overlay.ts); the 결합 규칙
+  # requires the gate to land WITH it, and §6 said EXTEND the check-acp-* family,
+  # so cortex's whole deterministic axis lives here. Locks: cortex curated rows
+  # register through the REAL registry path (allCuratedModels, no collision), the
+  # `cortex-` prefix routes to cortexAdapter, prefix-strip recovers the native -m
+  # (cortex-auto → no -m), overlay auth-through symlinks connections/config/cache/
+  # skills (never copies — Hard Rule #8) + SNOWFLAKE_HOME redirect, and the
+  # CORTEX_ACP_COMMAND override single-quotes shell-metachar connection tokens.
+  # The gate self-manages the tsc-emit layer for the .js-suffixed backend-adapter
+  # imports; no auth, no spawn, no live cortex needed.
+  section "ACP cortex backend (Snowflake Cortex Code — 1st non-claude adapter)"
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-cortex.ts)
 }
 
 check_pack() {
@@ -3209,6 +3256,9 @@ case "$cmd" in
   smoke-acp-rgg-live)
     smoke_acp_rgg_live
     ;;
+  smoke-acp-cortex-live)
+    smoke_acp_cortex_live
+    ;;
   smoke-acp-socket-citizen-live)
     smoke_acp_socket_citizen_live
     ;;
@@ -3537,6 +3587,9 @@ case "$cmd" in
     ;;
   check-acp-carrier-augment)
     check_acp_carrier_augment
+    ;;
+  check-acp-cortex)
+    check_acp_cortex
     ;;
   check-pack)
     check_pack

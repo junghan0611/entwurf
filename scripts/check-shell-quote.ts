@@ -5,8 +5,9 @@
  * SSH command strings with `JSON.stringify`, which is NOT a shell-safe escape.
  * Backticks and `$(...)` inside a user prompt got executed by the remote shell
  * before pi ever saw them. The fix introduced `shellQuote()` (POSIX `'...'`
- * with `'\''` escape) in two places:
+ * with `'\''` escape) in:
  *   - pi-extensions/lib/entwurf-core.ts (legacy sync spawn/resume helper while v2 extraction is in progress)
+ *   - pi-extensions/lib/acp/backend-adapter.ts (cortex CORTEX_ACP_COMMAND override arg quoting)
  *
  * This script enforces two invariants:
  *   1. `shellQuote()` source matches the reference implementation byte-for-byte.
@@ -14,7 +15,6 @@
  *      payload classes that caused the original incident — backtick command
  *      substitution, `$(...)` command substitution, `$VAR` expansion, embedded
  *      single quotes, whitespace, empty string, non-ASCII text.
- *
  * No process spawn, no SSH, no API. Pure-string verification — safe in `pnpm
  * check` chain.
  */
@@ -37,7 +37,7 @@ const REFERENCE_BODY = `function shellQuote(value: string): string {
 \treturn \`'\${value.replace(/'/g, \`'\\\\''\`)}\`;
 }`;
 
-const SOURCE_SITES = ["pi-extensions/lib/entwurf-core.ts"] as const;
+const SOURCE_SITES = ["pi-extensions/lib/entwurf-core.ts", "pi-extensions/lib/acp/backend-adapter.ts"] as const;
 
 // Match the function block from `function shellQuote` up to the closing brace.
 // Tab indentation is required (matches the rest of the repo).

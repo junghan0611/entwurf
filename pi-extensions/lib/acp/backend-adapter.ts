@@ -24,9 +24,30 @@ import { dirname, join } from "node:path";
 import type { AcpConnectionLike } from "./acp-client.js";
 import type { ResolvedAcpConfig } from "./config.js";
 import { loadEngraving } from "./engraving.js";
-import { curatedClaudeModels, SUPPORTED_ANTHROPIC_MODEL_IDS } from "./models.js";
-import { claudeLaunchEnvDefaults, ensureClaudeConfigOverlay } from "./overlay.js";
+import {
+	CORTEX_MODEL_PREFIX,
+	curatedClaudeModels,
+	curatedCortexModels,
+	SUPPORTED_ANTHROPIC_MODEL_IDS,
+	SUPPORTED_CORTEX_MODEL_IDS,
+} from "./models.js";
+import {
+	claudeLaunchEnvDefaults,
+	cortexLaunchEnvDefaults,
+	ensureClaudeConfigOverlay,
+	ensureCortexConfigOverlay,
+} from "./overlay.js";
 import { buildClaudeSessionMeta } from "./tool-surface.js";
+
+// POSIX-safe single-quote wrapper for shell arg interpolation. Byte-for-byte
+// identical to the reference in entwurf-core.ts; PARITY-PINNED by
+// scripts/check-shell-quote.ts (SOURCE_SITES). Used only by the cortex override
+// path below, where operator-configured connection/model tokens are appended to
+// an operator `bash -lc` string — quoting keeps a connection name with shell
+// metacharacters from being reinterpreted by the shell.
+function shellQuote(value: string): string {
+	return `'${value.replace(/'/g, `'\\''`)}'`;
+}
 
 // ---------------------------------------------------------------------------
 // Shared shapes
@@ -270,9 +291,120 @@ export const claudeAdapter: AcpBackendAdapter = {
 // ---------------------------------------------------------------------------
 
 /** Registered adapters. Order carries NO routing authority — routeModel decides.
- *  Step A: claude only. A second backend appends here with its reserved prefix
- *  (e.g. `<backend>-*`), and the fail-fast below proves no two adapters claim one id. */
-const ADAPTERS: readonly AcpBackendAdapter[] = [claudeAdapter];
+ *  claude (unprefixed ids) + cortex (the `cortex-` prefix). A further backend
+ *  appends here with its own reserved prefix; the fail-fast below proves no two
+ *  adapters claim one id. */
+// ---------------------------------------------------------------------------
+// cortex adapter — Snowflake Cortex Code, the first non-claude backend on the
+// rail (docs/acp-backend-rail.md §4/§6). It adds ZERO to the common layer:
+// everything cortex-specific lives here + models.ts + overlay.ts + the gates.
+// ---------------------------------------------------------------------------
+
+const SUPPORTED_CORTEX_IDS: ReadonlySet<string> = new Set(SUPPORTED_CORTEX_MODEL_IDS);
+
+/** Cortex's OWN settings (§10 B): a Snowflake connection name, or null. Opaque to
+ *  config.ts / backend.ts — only cortexAdapter reads it (casting back). */
+export interface CortexAdapterSettings {
+	cortexConnection: string | null;
+}
+
+/** The env var an operator sets to pin a Snowflake connection per-shell without
+ *  editing settings.json. Wins over `entwurfProvider.cortexConnection`. The
+ *  ENTWURF_ACP_* convention (PR #40's legacy PI_SHELL_ACP* cortex-connection var renamed). */
+export const CORTEX_CONNECTION_ENV = "ENTWURF_ACP_CORTEX_CONNECTION";
+
+export const cortexAdapter: AcpBackendAdapter = {
+	backend: "cortex",
+
+	// Cortex owns the reserved `cortex-` prefix (§9-1). routeModel strips it to the
+	// native id: `cortex-auto` → "auto", `cortex-claude-sonnet-4-6` → "claude-sonnet-4-6".
+	routeModel(modelId) {
+		if (!SUPPORTED_CORTEX_IDS.has(modelId)) return undefined;
+		return { nativeModelId: modelId.slice(CORTEX_MODEL_PREFIX.length) };
+	},
+
+	curatedModels() {
+		return curatedCortexModels();
+	},
+
+	// Cortex's ONLY own setting is the connection name. env override wins over
+	// settings (per-shell pin); empty/whitespace → null (Cortex falls back to its
+	// own default connection). A non-string settings value fails loud.
+	resolveAdapterSettings({ mergedBlock, projectBlock, globalPath, projectPath }): CortexAdapterSettings {
+		const raw = mergedBlock.cortexConnection;
+		if (raw !== undefined && typeof raw !== "string") {
+			const offending = projectBlock.cortexConnection !== undefined ? projectPath : globalPath;
+			throw new Error(`${offending}: invalid entwurfProvider settings: cortexConnection must be a string`);
+		}
+		const envConn = process.env[CORTEX_CONNECTION_ENV]?.trim();
+		const settingsConn = raw?.trim();
+		const cortexConnection = envConn || settingsConn || null;
+		return { cortexConnection };
+	},
+
+	// `cortex acp serve` resolved from PATH (the CLI itself IS the ACP server — no
+	// `*-acp` npm package, unlike claude). `-c <conn>` / `-m <native>` appended;
+	// `auto` emits no `-m` (Cortex picks its own default). CORTEX_ACP_COMMAND
+	// override runs via `bash -lc` with the selection flags appended so the
+	// bridge's choice wins (later yargs args override earlier ones).
+	resolveLaunch({ nativeModelId, config }) {
+		const settings = config.adapterSettings as CortexAdapterSettings | undefined;
+		const connection = settings?.cortexConnection?.trim() || undefined;
+		const nativeModel = nativeModelId && nativeModelId !== "auto" ? nativeModelId : undefined;
+		const selectionArgs: string[] = [];
+		if (connection) selectionArgs.push("-c", connection);
+		if (nativeModel) selectionArgs.push("-m", nativeModel);
+		const override = process.env.CORTEX_ACP_COMMAND?.trim();
+		if (override) {
+			const command = selectionArgs.length > 0 ? `${override} ${selectionArgs.map(shellQuote).join(" ")}` : override;
+			return { command: "bash", args: ["-lc", command] };
+		}
+		return { command: "cortex", args: ["acp", "serve", ...selectionArgs] };
+	},
+
+	launchEnvDefaults() {
+		return cortexLaunchEnvDefaults();
+	},
+
+	ensureOverlay() {
+		// SNOWFLAKE_HOME rides launchEnvDefaults(); the overlay materialization
+		// contributes no extra spawn env (mirrors claude's CLAUDE_CONFIG_DIR shape).
+		ensureCortexConfigOverlay();
+		return { envOverrides: {} };
+	},
+
+	// Carrier-less (§9-4): Cortex ACP exposes no `_meta.systemPrompt` and has no
+	// developer_instructions / GEMINI_SYSTEM_MD equivalent. loadCarrier returns
+	// null WITHOUT calling loadEngraving, so the cortex turn never touches the
+	// shipped-engraving / appendSystemPrompt signature; buildSessionMeta returns
+	// undefined so backend.ts omits the `_meta` key entirely. The operator
+	// engraving instead rides the first-user augment (augment.ts).
+	loadCarrier() {
+		return null;
+	},
+
+	buildSessionMeta() {
+		return undefined;
+	},
+
+	// Launch-pinned: the native model is fixed by `cortex acp serve -m` at spawn.
+	// Cortex exposes its model surface via session config options keyed by
+	// cortex-native ids, NOT the spec-baseline set-model the bridge calls for
+	// claude — and it would reject the pi-prefixed curated id. No-op here (§9-6).
+	async enforceModel() {
+		return;
+	},
+
+	// A connection change must invalidate a reused session (§4/§7). Flat,
+	// sorted-stable primitive map; reads ONLY the opaque adapterSettings. `backend`
+	// + `nativeModelId` are added by backend.ts.
+	configSignatureFields(adapterSettings) {
+		const settings = adapterSettings as CortexAdapterSettings | undefined;
+		return { cortexConnection: settings?.cortexConnection ?? null };
+	},
+};
+
+const ADAPTERS: readonly AcpBackendAdapter[] = [claudeAdapter, cortexAdapter];
 
 /**
  * Resolve the backend adapter that owns `modelId`.

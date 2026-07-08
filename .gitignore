@@ -25,6 +25,11 @@ __pycache__/
 # and the publish-prep smoke flow. The real publish artifact is fetched from npm.
 *.tgz
 
+# This repo is pnpm-managed: pnpm-lock.yaml is the tracked SSOT lockfile.
+# A stray npm package-lock.json (produced by an accidental `npm install`) is a
+# competing lockfile and is never tracked — ignore it so it can't drift in.
+package-lock.json
+
 # entwurf-bridge prebuilt JS — emitted by `pnpm run build-bridge` (tsc) at
 # `prepack` time so the tarball carries a node_modules-safe boot artifact (the
 # .ts source can't strip-types under node_modules). The tarball owns dist via the
@@ -61,3 +66,9 @@ demo/compaction-policy-smoke/fixtures/
 # when Phase 2 npm/ClawHub publish lands (tarball owns dist via the
 # package `files` allowlist).
 plugins/*/node_modules/
+
+# pi sub-agent orchestration scaffolding (transcripts + run metadata written by
+# the delegating agent framework into the workspace). Never repo content — kept
+# out of tracking and out of `biome check .` (vcs-ignore-aware) so `pnpm lint`
+# reflects only repo source.
+.pi-subagents/
