@@ -13,24 +13,49 @@
 
 ## NOW — agy를 Claude Code 급으로 닫기 (#46 stem): display는 됐고, **자동 birth**가 남았다
 
-**Stem:** 지금 닫을 것은 **agy**다. GLG 재정렬: Claude Code는 SessionStart hook으로 켜자마자 garden id가 붙는다. agy도 "Claude Code 급"이라 말하려면 **누가 수동으로 `entwurf_register_native`를 실행해주면 안 된다.** 새 agy conversation이 정상 launch 경로에서 자동으로 meta-record를 만들고 statusline에 gid가 떠야 한다. pi-provider Task2는 별도 후반부/대기 전선이며 agy blocker가 아니다.
+**Stem:** 지금 닫을 것은 **agy**다. Claude Code는 SessionStart hook으로 켜자마자 garden id가 붙는다. agy도 "Claude Code 급"이라면 **누가 수동으로 `entwurf_register_native`를 실행해주면 안 된다** — 새 agy conversation이 정상 launch에서 자동으로 meta-record를 만들고 statusline에 gid가 떠야 한다. GLG 지시(2026-07-08): **"후크로 만들어. 구현 줄이고 간단하게 하지만 모든 하네스 동급으로."** pi-provider Task2는 별도 후반부/대기 전선이며 agy blocker가 아니다.
 
-### 현재 사실 — 끝난 것과 안 끝난 것
+### 현재 사실 (2026-07-08 thinkpad 라이브 실측) — 끝난 것과 안 끝난 것
 
-- **끝남: agy MCP install 인수.** 떠난 agent-config dangling symlink 2개는 `smoke-agy-install-state` E2로 봉인 후 제거. `./run.sh setup`이 `~/.gemini/antigravity-cli/mcp_config.json`에 bare `entwurf-bridge`를 기록. `doctor-agy-bridge` static/state OK.
-- **끝남: agy statusline 표시/조회 면.** `entwurf-agy-statusline` bare bin, `statusLine` subtree 통째 소유, 별도 XDG state, symlink refuse, honest inverse, dev-bin 다중화, `doctor-agy-statusline`, setup non-fatal 편입. Smoke: `smoke-agy-statusline-state` 53 checks. Statusline stdin에는 `conversation_id == session_id`가 실재하고 cwd도 있다.
-- **미흡: birth 자동화.** 현재 live 실증은 `🪛 ? agy` → 사람이/형제가 `entwurf_register_native` 실행 → `🪛 <gid> agy`였다. 이것은 표시·역조회 사슬의 증거일 뿐, Claude Code 급 자동 각인이 아니다. 새 conversation에서 `?`가 계속 남으면 agy 레인은 아직 닫힌 게 아니다.
+- **끝남·라이브: agy MCP install 인수.** `~/.gemini/antigravity-cli/mcp_config.json` → bare `entwurf-bridge` 실측. `doctor-agy-bridge` static/state OK. (dangling symlink 2개는 `smoke-agy-install-state` E2로 봉인 후 제거됨.)
+- **끝남·라이브: agy statusline 표시/조회 면(Reader).** `~/.gemini/antigravity-cli/settings.json` → `statusLine.command = "entwurf-agy-statusline"`(custom/enabled) 실측. `statusLine` subtree 통째 소유, 별도 XDG state, symlink refuse, honest inverse, dev-bin 다중화, `doctor-agy-statusline`, setup non-fatal 편입. Smoke `smoke-agy-statusline-state` 53 checks. stdin `conversation_id`로 record body를 `nativeSessionId` 스캔해 gid/`?` 렌더 — **읽기 전용, record를 만들지 않음.**
+- **미흡: birth 자동화(Writer 부재).** meta-record를 만드는 훅이 없다 → 새 conversation은 수동 `entwurf_register_native` 전까지 영원히 `?`. `🪛 ? agy` → 수동 register → `🪛 <gid> agy`였던 07-06 실증은 표시·역조회 사슬 증거일 뿐, CC 급 자동 각인이 아니다.
+- **잔여(#46 완료판정): agent-config 옛 소유 미회수.** `~/repos/gh/agent-config/antigravity/{settings.json,statusline.sh}`가 아직 존재(구 `statusline.sh` 절대경로 보유). 라이브 CLI는 `antigravity-cli/`를 읽으므로 경합은 아니나, #46은 agent-config가 "놓음"을 요구 — imprint close와 함께 정리.
 
-### 다음 한 수 — PreInvocation imprint 훅으로 수동 register를 없애라 (설계 확정)
+### 훅 루트 = `~/.gemini/antigravity-cli/` (실측 확정, GPT+agy 교차확인 2026-07-08)
 
-**birth surface 확정:** agy에 lifecycle hook surface가 실재한다 — `agy-customizations/docs/hooks.md`. 단 **`SessionStart`가 없고**(이벤트는 PreToolUse/PostToolUse/**PreInvocation**/PostInvocation/Stop), 가장 이른 트리거가 `PreInvocation`(첫 모델 호출 직전)이다. payload common fields에 `conversationId` + `workspacePaths`(cwd) + `transcriptPath`가 camelCase(protojson)로 실린다. 전역 hook root = `~/.gemini/config/`(json_configs.md: "or `~/.gemini/config/` globally"). 이게 CC SessionStart와 동종의 birth authority다.
+**`~/.gemini/config/`는 이 레인에서 금지.** 근거: 이미 작동하는 두 어댑터(MCP·statusLine)가 전부 `~/.gemini/antigravity-cli/`에 쓰고, `~/.gemini/config/mcp_config.json`은 0바이트(CLI가 안 씀). agy 본체도 `~/.gemini/antigravity-cli`를 App Data Directory로 확인. `json_configs.md`가 전역 등록을 보장하는 건 `skills.json`/`plugins.json`뿐이며 `hooks.json`은 그 목록에 없다 → 전역 config root 가설 폐기.
 
-1. **`entwurf-agy-imprint` bare bin 신설.** PreInvocation stdin → `conversationId`+`workspacePaths[0]` 읽어 CC와 **동일한** `upsertMetaSession({backend:"antigravity", nativeSessionId:conversationId, cwd})` 호출(scan-by-nativeId → idempotent create/attach). best-effort + log(agy 루프 절대 안 막음), stdout `{}`. 빈 `conversationId` 등록 금지. hook이 live invocation 안에서 도니 **probe 불필요**(외부 `entwurf_register_native`만 probe가 필요). meta-bridge-hook.ts의 claude-code 판을 미러(dist 아티팩트 layout 선택 동일).
-2. **installer 배선:** `~/.gemini/config/hooks.json`에 PreInvocation → `entwurf-agy-imprint` 배선. statusline과 **동일 계약** — adopt-and-preserve(다른 hook 키 보존), honest inverse(우리가 넣은 키만 제거), stable bin only(repo/checkout 경로 금지), symlink refuse, 별도 XDG install-state, setup non-fatal.
-3. **doctor + smoke:** `doctor-agy-imprint`(static/state/live 분리, hook 배선·resolvable·state 정합) + `smoke-agy-imprint-state`(멱등, symlink refuse, honest inverse, corrupt refuse, checkout impurity 0, 빈 id 등록거부).
-4. **수동 도구 호출은 acceptance가 아니다.** `entwurf_register_native`는 debug/외부 명시 등록 경로로 남기되, agy close gate는 새 conversation에서 사람/형제의 tool call 없이 gid가 붙는지다.
-5. **live close gate:** 새 agy conversation launch → 첫 invocation 후 meta-record 자동 생성 → 같은 conversation statusline에 `🪛 <gid> agy`(수동 register 0). 첫 메시지 전 짧은 `?`는 timing상 허용(SessionStart 부재). meta-record body의 `backend=antigravity`, `nativeSessionId=<conversationId>`, `cwd` 정합 확인.
-6. **문서:** `DELIVERY.md` ambient-status 축은 이미 "auto-birth pending → PreInvocation imprint" 확정형으로 정정됨(이 커밋). 훅 배선 후 "완료"로 승격.
+- **1순위 hook target:** `~/.gemini/antigravity-cli/hooks.json` (CLI 실 customization root; `hooks.md`가 "customization root의 hooks.json"이라 명시).
+- **2순위 fallback(1순위가 발화 안 하면):** 같은 root 아래 plugin 방식 — `~/.gemini/antigravity-cli/plugins/entwurf/plugin.json` + `.../plugins/entwurf/hooks.json`. (plugin hooks는 `plugins.md`가 실행을 명시.)
+- **settings.json `hooks` 키는 비권장/후순위.** statusLine은 settings가 맞지만 hooks까지 settings subtree라는 증거 없음.
+
+### 다음 한 수 — PreInvocation imprint 훅 (코드 전에 probe로 루트 확정)
+
+> **GPT 검수 GO (2026-07-08):** config 폐기 / antigravity-cli hooks.json 1순위 / plugin fallback / settings.json hooks 후순위 / stdout `{"injectSteps":[]}` / acceptance "수동 register 0 자동 birth" / "공유 birth core + 얇은 envelope adapter" — **전부 OK.** 단 **probe-first 권장**: 코드부터 짜면 잘못된 install surface에 맞춰 doctor/smoke를 만들 위험 → 어느 hook file을 agy가 실제로 읽는지부터 실측하고 그 위에 배선.
+
+**계약 확정(`hooks.md` 실측):** PreInvocation = 첫 모델 호출 직전. payload common fields camelCase — `conversationId` + `workspacePaths[0]`(cwd) + `transcriptPath` + `modelName`(= CC upsert 입력과 필드 대칭). 훅은 **동기 블로킹**(timeout 30s default) + **매 invocation 발화**(`invocationNum` 증가) → best-effort·빠름 필수.
+
+**0. 먼저: 루트 probe (live, GLG 승인 완료 — 다음 세션에서 실행).**
+   - **대상 2곳만, 순서대로:** (1) `~/.gemini/antigravity-cli/hooks.json`, 실발화 안 하면 (2) `~/.gemini/antigravity-cli/plugins/entwurf/{plugin.json,hooks.json}`.
+   - **안전 계약(양쪽 공통, 위반 금지):**
+     - **preimage 백업/복구 필수.** 기존 파일이 있으면 원본을 백업하고, probe 끝나면 원상 복구.
+     - **기존 `hooks.json` 절대 clobber 금지** — named hook **하나만** adopt-and-preserve로 추가/삭제(다른 hook 키 보존).
+     - **plugin fallback도 동일 규율** — preimage 백업/복구 + named plugin(entwurf)만 제거.
+     - **probe hook은 stdout `{"injectSteps":[]}`만** 방출. **payload dump는 temp/log 파일로만** 남김(터미널/루프에 안 흘림).
+     - **`~/.gemini/config`는 건드리지 않음.**
+     - probe 중 만든 파일/디렉터리는 끝나면 **전부 정리.**
+   - **검증(성공 판정):** ① 훅이 실발화 ② payload에 `conversationId`/`workspacePaths` 실림 ③ `{"injectSteps":[]}`이 agy 루프를 안 깸. **결과(성공/실패, 확정 target)를 NEXT.md에 실측값으로 반영** → 그 다음에야 step 1~3.
+**1. `entwurf-agy-imprint` bare bin.** PreInvocation stdin → `conversationId`+`workspacePaths[0]` → **공유 birth core** `upsertMetaSession({backend:"antigravity", nativeSessionId:conversationId, cwd, transcriptPath, model})`(scan-by-nativeId → idempotent create/attach). **stdout `{"injectSteps":[]}` 고정**(빈 `{}` 아님 — PreInvocation 출력계약). best-effort+log(agy 루프 절대 안 막음), 빈 `conversationId` 등록 금지. mailbox arm/sender·receiver marker/watchPaths는 **넣지 않음**(Claude native-push 전용). "구현 줄이고 동급": `meta-bridge-hook.ts`와 birth core를 공유하고 envelope 어댑터만 얇게 분리(← GPT 검수: core 공유 vs 복제).
+   - **검증:** 격리 stdin(camelCase 봉투)로 bin 직접 구동 → meta-record 1개 생성, body `backend=antigravity`/`nativeSessionId`/`cwd` 정합, 재실행 시 attach(중복 0), 빈 `conversationId`면 no-write + log.
+**2. installer 배선(step 0 확정 target).** PreInvocation → `entwurf-agy-imprint`. statusline과 **동일 계약** — adopt-and-preserve, honest inverse(우리가 넣은 키만 제거), **stable bin only**(repo/checkout 경로 금지), symlink refuse, setup non-fatal. **구현 줄이기:** 별도 XDG state·config.py·doctor·smoke triad를 새로 만들기보다 **기존 agy 어댑터에 {mcp,statusLine,hooks} 흡수**를 우선 검토(← GPT 검수).
+   - **검증:** install→해당 hook file에 named hook 존재 + stable bin 해석, uninstall→우리 키만 제거·나머지 보존, 두 번 install 멱등, config가 symlink면 refuse, checkout 안에 아티팩트 0.
+**3. doctor + smoke.** hook 배선·resolvable·state 정합 doctor + smoke(멱등/symlink refuse/honest inverse/corrupt refuse/checkout impurity 0/빈 id 등록거부). 2번 흡수 여부에 따라 신설 vs 기존 확장.
+   - **검증:** `doctor-agy-*` rc0(정상)·dangling static FAIL·agy 부재 시 live-SKIP(PASS 둔갑 금지), smoke는 격리 HOME+XDG에서 전 계약 통과(check count 기록).
+**4. live close gate = 수동 register 0.** `entwurf_register_native`는 debug/명시 경로로 잔존. close = **새 conversation에서 사람/형제 tool call 없이** meta-record 자동 생성 → 같은 conversation statusline `🪛 <gid> agy`. 첫 메시지 전 짧은 `?`는 timing상 허용.
+   - **검증:** 새 agy conversation 하나 → register 호출 0 → 첫 invocation 후 record body `backend=antigravity`/`nativeSessionId=<conversationId>`/`cwd` 정합 + statusline gid 육안 확인.
+**5. 문서/회수.** `DELIVERY.md` ambient-status 축 "완료" 승격 + `agent-config/antigravity/{settings.json,statusline.sh}` 잔재 회수(#46 완료판정).
+   - **검증:** agent-config 회수 후에도 라이브 statusLine/MCP/hook 무중단, `doctor-agy-*` 전부 rc0.
 
 ### Parked — pi-provider Task2 (agy blocker 아님)
 
@@ -40,10 +65,13 @@
 
 ### 넘으면 안 되는 선 (이 stem 한정)
 
-- agy를 “register 후 citizen이 정본”으로 닫지 말 것. 그건 현재 격차를 덮는 말이다. Claude Code 급이면 **자동 birth**가 필요하다.
-- cwd 역매칭으로 gid를 발명하지 말 것. `conversation_id/nativeSessionId`만 권위다.
+- **`~/.gemini/config/` 금지** — 이 레인은 `~/.gemini/antigravity-cli/`만 건드린다. 전역 Gemini root(config/hooks.json, config/plugins.json)에 쓰지 말 것.
+- **settings.json에 `hooks` 키 넣지 말 것**(비권장) — hooks는 hooks.json/plugin 경로로.
+- agy를 "register 후 citizen이 정본"으로 닫지 말 것. Claude Code 급이면 **자동 birth**가 필요하다.
+- cwd 역매칭으로 gid를 발명하지 말 것. `conversationId/nativeSessionId`만 권위다.
+- PreInvocation stdout은 **`{"injectSteps":[]}`** — 빈 `{}`로 얼버무리지 말 것. 훅은 동기 블로킹이니 best-effort·빠름 위반 금지.
 - pi-provider / mux / spawn을 agy close blocker로 끌고 오지 말 것.
-- statusline birth를 넣더라도 렌더가 느려지거나 깨지면 안 된다: bounded, lock, best-effort, 실패 시 honest `?`.
+- imprint를 넣더라도 agy 루프가 느려지거나 깨지면 안 된다: bounded, best-effort, 실패 시 조용히 log + `{"injectSteps":[]}`.
 
 **agy delivery 레인 이월 잔여(blocker 아님):** 기존 meta-record `20260704T201811-071ba8` prune은 GLG 확인 대기. smoke-owned agy launch / dead reject / transcript content-receipt는 mux/launch 생애주기 필요 시 후속으로 다룬다.
 
