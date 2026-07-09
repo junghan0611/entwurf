@@ -11,6 +11,7 @@
 # into any config; this only makes the bare name RESOLVE in a dev checkout):
 #   entwurf-bridge          -> mcp/entwurf-bridge/start.sh    (agy mcp_config command)
 #   entwurf-agy-statusline  -> scripts/agy-statusline.sh      (agy settings.statusLine command)
+#   entwurf-agy-imprint     -> scripts/agy-imprint.sh         (agy PreInvocation birth hook)
 #
 # Ownership discipline (mirrors the agy adopt/refuse rule, 봉인 7), applied PER BIN:
 #   - create/refresh ONLY a link that is OURS — absent, or a symlink into our target, or the
@@ -33,6 +34,7 @@
 #   ENTWURF_DEV_BIN_DIR            link location (default: ~/.local/bin — where agy itself lives)
 #   ENTWURF_BRIDGE_TARGET         entwurf-bridge target (default: $REPO/mcp/entwurf-bridge/start.sh)
 #   ENTWURF_AGY_STATUSLINE_TARGET entwurf-agy-statusline target (default: $REPO/scripts/agy-statusline.sh)
+#   ENTWURF_AGY_IMPRINT_TARGET    entwurf-agy-imprint target (default: $REPO/scripts/agy-imprint.sh)
 #   XDG_DATA_HOME                 state root (states under $XDG_DATA_HOME/entwurf/dev-bin/)
 set -euo pipefail
 
@@ -43,7 +45,7 @@ BIN_DIR="${ENTWURF_DEV_BIN_DIR:-$HOME/.local/bin}"
 STATE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/dev-bin"
 LEGACY_STATE="$STATE_DIR/install-state.json"   # pre-multi-bin single state == entwurf-bridge
 
-MANAGED_BINS="entwurf-bridge entwurf-agy-statusline"
+MANAGED_BINS="entwurf-bridge entwurf-agy-statusline entwurf-agy-imprint"
 
 log()  { printf '%s\n' "$*"; }
 warn() { printf '%s\n' "$*" >&2; }
@@ -53,6 +55,7 @@ bin_target() {  # $1 = name → prints target path (env-overridable for smoke)
   case "$1" in
     entwurf-bridge)         echo "${ENTWURF_BRIDGE_TARGET:-$REPO_DIR/mcp/entwurf-bridge/start.sh}" ;;
     entwurf-agy-statusline) echo "${ENTWURF_AGY_STATUSLINE_TARGET:-$REPO_DIR/scripts/agy-statusline.sh}" ;;
+    entwurf-agy-imprint)    echo "${ENTWURF_AGY_IMPRINT_TARGET:-$REPO_DIR/scripts/agy-imprint.sh}" ;;
     *) return 1 ;;
   esac
 }

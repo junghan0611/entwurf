@@ -22,9 +22,9 @@ Subcommands (argv[1]):
       if the settings file became a symlink since install (exit 3). No state → nothing (exit 2).
 
   doctor-static <settings_path>
-      Print one shell-parseable status token line: `absent` / `invalid-json` / `not-ours`
-      (statusLine present but command != entwurf-agy-statusline) / `configured <command>`.
-      Never mutates.
+      Print one shell-parseable status token line: `file-absent` / `absent` (file exists but
+      no statusLine command) / `invalid-json` / `not-ours` (statusLine present but command !=
+      entwurf-agy-statusline) / `configured <command>`. Never mutates.
 
 Exit codes: 0 ok · 2 no-state · 3 refuse-symlink · 4 invalid-json · 5 usage.
 """
@@ -145,7 +145,7 @@ def cmd_uninstall(state_path: str) -> None:
 def cmd_doctor_static(settings_path: str) -> None:
     real = os.path.realpath(settings_path)
     if not os.path.exists(real):
-        sys.stdout.write("absent\n")
+        sys.stdout.write("file-absent\n")
         return
     try:
         with open(real, "r", encoding="utf-8") as fh:

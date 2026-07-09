@@ -94,6 +94,7 @@ do_doctor() {
   local status
   status="$(python3 "$CONFIG_PY" doctor-static "$SETTINGS")"
   case "$status" in
+    file-absent)    log "  settings: file absent$link_note" ;;
     absent)         log "  settings: statusLine absent$link_note" ;;
     invalid-json)   log "  settings: INVALID JSON$link_note"; hard_fail=1 ;;
     not-ours)       log "  settings: statusLine present but NOT entwurf-owned (still the prior/agent-config command)$link_note" ;;
@@ -114,8 +115,14 @@ do_doctor() {
     local managed
     managed="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("managedSettingsPath",""))' "$STATE_FILE" 2>/dev/null || true)"
     if [ -n "$managed" ]; then
-      case "$(python3 "$CONFIG_PY" doctor-static "$managed")" in
+      local managed_status
+      managed_status="$(python3 "$CONFIG_PY" doctor-static "$managed")"
+      case "$managed_status" in
         configured\ *) log "  state: install-state present; its managed settings still configure entwurf-agy-statusline." ;;
+        file-absent)
+          log "  state: ORPHANED — install-state records $managed but the file is absent (HOME reset). Auto-cleaning stale state."
+          rm -f "$STATE_FILE"
+          ;;
         *) log "  state: DRIFT — install-state records $managed but it no longer configures entwurf-agy-statusline (removed since install)."; hard_fail=1 ;;
       esac
     fi

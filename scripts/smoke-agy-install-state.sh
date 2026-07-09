@@ -102,6 +102,16 @@ ok "drift: doctor FAILS on state-present + key-removed (installed-then-loosened 
 bash "$BRIDGE" install >/dev/null   # restore so the honest-inverse uninstall below has a key to remove
 want "drift: re-install restores the key" "grep -q '\"entwurf-bridge\"' '$GEM_DOC'"
 
+# ── C3 (ORPHANED): install-state present but managed config is completely ABSENT → Auto-clean ──
+rm -f "$GEM_DOC"
+DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?
+want "orphan: doctor exits 0 when config is completely absent (HOME wiped)" "[ '$DOC_RC' -eq 0 ]"
+want "orphan: doctor logs ORPHANED and auto-cleans" "printf '%s' \"\$DOC_OUT\" | grep -q 'ORPHANED'"
+want "orphan: state file is removed automatically" "[ ! -f '$STATE' ]"
+printf '{\n  "mcpServers": { "other": { "command": "keepme" } }\n}\n' > "$GEM_DOC"
+bash "$BRIDGE" install >/dev/null   # restore for the honest-inverse uninstall below
+
+
 # ── D: uninstall — honest inverse ─────────────────────────────────────────────
 bash "$BRIDGE" uninstall >/dev/null
 want "uninstall: entwurf-bridge removed" "! grep -q '\"entwurf-bridge\"' '$GEM_DOC'"

@@ -6,7 +6,7 @@
 #     enabled:true}), UNRELATED settings keys (model/permissions/…) preserved, state written with
 #     the STABLE command (never a repo/checkout path), prior subtree captured as preimage.
 #   - doctor STATIC clean + LIVE SKIP with no agy; LIVE consistent (not overclaimed) with a fake agy.
-#   - state-drift (state present, statusLine changed away) → doctor FAILS.
+#   - state-drift (state present, statusLine changed away OR removed from existing settings) → doctor FAILS.
 #   - uninstall honest-inverse: statusLine preimage restored, unrelated keys survive, state removed.
 #   - SYMLINK target → install REFUSES + writes NO state (someone else's SSOT).
 #   - DANGLING SYMLINK (departed owner) → install REFUSES the same, NO state, link left intact.
@@ -120,7 +120,24 @@ ok "drift: doctor FAILS on state-present + statusLine-changed (installed-then-lo
 bash "$BRIDGE" install >/dev/null   # restore our command
 want "drift: re-install restores our command" \
   "python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))[\"statusLine\"][\"command\"]==\"entwurf-agy-statusline\" else 1)' '$SET'"
+
+# ── C2b (drift): settings file exists but statusLine was removed → FAIL, NOT orphan auto-clean ──
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d.pop("statusLine", None); json.dump(d,open(p,"w"))' "$SET"
+if bash "$BRIDGE" doctor >/dev/null 2>&1; then die "drift-absent-key: doctor should FAIL (state present, settings exists, statusLine removed)"; fi
+ok "drift-absent-key: doctor FAILS on state-present + settings-exists + statusLine-removed"
+want "drift-absent-key: state is NOT auto-cleaned" "[ -f '$STATE' ]"
+bash "$BRIDGE" install >/dev/null   # restore our command/state for the orphan case
+want "drift-absent-key: re-install restores our command" \
+  "python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))[\"statusLine\"][\"command\"]==\"entwurf-agy-statusline\" else 1)' '$SET'"
+
+# ── C3 (ORPHANED): install-state present but managed config is completely ABSENT → Auto-clean ──
+rm -f "$SET"
+DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?
+want "orphan: doctor exits 0 when config is completely absent (HOME wiped)" "[ '$DOC_RC' -eq 0 ]"
+want "orphan: doctor logs ORPHANED and auto-cleans" "printf '%s' \"\$DOC_OUT\" | grep -q 'ORPHANED'"
+want "orphan: state file is removed automatically" "[ ! -f '$STATE' ]"
 bash "$BRIDGE" uninstall >/dev/null  # clear the drift-polluted preimage before the honest-inverse check
+
 
 # ── D: uninstall — honest inverse (FRESH install so preimage is the true prior, not C2's drift) ──
 write_settings "$PRIOR"

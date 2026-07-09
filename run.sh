@@ -95,6 +95,7 @@ Usage:
   ./run.sh smoke-meta-honesty         # 1.0.0 meta-bridge: honesty regression gate (#30 blockers) — doorbell counts ALL msgs honestly + hook logs failures as ERROR (best-effort, no scream). Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-meta-install-state   # 1.0.0 meta-bridge Phase 2: stateful install/uninstall + store-doctor regression gate. Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-agy-install-state    # 봉인 8: agy MCP install adapter regression — isolated HOME+XDG, fake bin/pgrep/ss; adopt+state, doctor static/live-SKIP, honest uninstall, symlink refuse, dangling FAIL, checkout impurity 0. Offline/deterministic (deps: bash+python3)
+  ./run.sh smoke-agy-hooks-state      # #46 agy birth imprint regression — hooks.json named hook install/doctor/uninstall + direct PreInvocation stdin→meta-record upsert, isolated HOME+XDG/PI_AGENT. Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-user-scope-citizen   # 0.12.6 install-boundary: pi packages[] registration SSOT (register-pi-package.py) — idempotent + preserves unrelated + normalizes stale + remove symmetry + fails loud. Offline/hermetic (deps: bash+python3)
   ./run.sh smoke-meta-prune           # 1.0.0 meta-bridge Phase 4: listing-only store janitor regression gate — classify keep/orphan/stale/ambiguous, delete nothing. Offline/deterministic (deps: bash+node)
   ./run.sh smoke-meta-keyset-guard    # 0.10.0 meta-bridge: keyset-owner guard regression — check-keyset-overlap + managed-keys SSOT (disjoint passes, collisions fail). Offline/hermetic (deps: bash+python3)
@@ -107,6 +108,9 @@ Usage:
   ./run.sh install-agy-bridge         # 봉인 7: agy MCP install adapter — register ONE entwurf-bridge server in the agy mcp_config (adopt file / create / REFUSE symlink), stable bin command, install-state under $XDG_DATA_HOME/entwurf/agy-bridge/
   ./run.sh uninstall-agy-bridge       # 봉인 7: honest inverse of install-agy-bridge from install-state (restore preimage / remove key; refuse if config became a symlink)
   ./run.sh doctor-agy-bridge          # 봉인 7: 2-tier fail-loud doctor — static (documented+observed candidates resolve/parse/command-resolvable, dangling FAILs) + live (agy present → runtime-effective, else honest SKIP)
+  ./run.sh install-agy-hooks          # #46 agy birth imprint hook — named PreInvocation hook running bare entwurf-agy-imprint, preserving other hooks
+  ./run.sh uninstall-agy-hooks        # honest inverse of install-agy-hooks from install-state
+  ./run.sh doctor-agy-hooks           # fail-loud doctor for agy hooks.json imprint wiring
   ./run.sh meta-bridge-prune          # 1.0.0 meta-bridge Phase 4: LISTING-ONLY store hygiene — classify orphan/stale/ambiguous/keep, print manual rm commands, delete NOTHING ([dir] [--ttl-days N])
   ./run.sh meta-bridge-managed-keys   # 0.10.0 meta-bridge: print the SSOT of settings keys entwurf OWNS (consumers read this to stay disjoint — keyset-owner invariant)
   ./run.sh check-keyset-overlap <fragment.json...>  # 0.10.0 meta-bridge: PREVENTIVE keyset guard — fail if a consumer fragment collides with any pi-owned key (cross-repo; not in pnpm check)
@@ -2637,8 +2641,8 @@ setup_all() {
   fi
 
   # Expose entwurf's STABLE bins on PATH for this DEV checkout (막힘 ②) BEFORE wiring agy: the
-  # agy mcp_config and settings.statusLine record the bare names `entwurf-bridge` /
-  # `entwurf-agy-statusline`, so they must resolve for doctor-agy-bridge / doctor-agy-statusline
+  # agy mcp_config, settings.statusLine, and hooks.json record the bare names `entwurf-bridge` /
+  # `entwurf-agy-statusline` / `entwurf-agy-imprint`, so they must resolve for the agy doctors
   # to pass. NON-FATAL — a foreign bin already on PATH is left as-is.
   expose_dev_bin
 
@@ -2652,6 +2656,11 @@ setup_all() {
   # driver + garden id, the claude meta-bridge symmetry). Same detection-gated NON-FATAL posture
   # — an explicit install-agy-statusline is fail-loud, but the setup wrapper WARNs + continues.
   wire_agy_statusline
+
+  # Fold agy PreInvocation birth imprint wiring into setup (#46 close criterion: manual register 0).
+  # The hook runs the thin `entwurf-agy-imprint` bin and returns {"injectSteps":[]} so agy's loop
+  # survives while the meta-record is created/attached by conversationId.
+  wire_agy_hooks
 
   # Deterministic preflight lives in `pnpm check`; live substrate acceptance lives
   # in `LIVE=1 ./run.sh release-gate <scratch>`. Setup is the install path, so it
@@ -2753,6 +2762,42 @@ wire_agy_statusline() {
     *)
       echo "[setup] WARN: agy statusLine install did not complete (rc=$rc; see the line above)." >&2
       echo "[setup]       statusLine NOT wired; verify with ./run.sh doctor-agy-statusline. setup continues." >&2
+      ;;
+  esac
+  return 0
+}
+
+# wire_agy_hooks — detection-gated, NON-FATAL agy PreInvocation imprint wiring. Same setup posture
+# as the MCP/statusLine adapters, but this one is the birth writer that turns statusLine '?' into a
+# garden id after the first invocation.
+wire_agy_hooks() {
+  if ! command -v "${AGY_BIN:-agy}" >/dev/null 2>&1; then
+    echo "[setup] no agy on PATH — skipping agy hooks wiring (no state; pi/Claude-only host)"
+    return 0
+  fi
+  section "agy hooks install (native harness detected: Antigravity)"
+  local out rc
+  set +e
+  out="$(bash "$REPO_DIR/scripts/agy-hooks-bridge.sh" install 2>&1)"
+  rc=$?
+  set -e
+  printf '%s\n' "$out"
+  if [ "$rc" -eq 0 ]; then
+    echo "[setup] agy hooks wired (idempotent). Verify with: ./run.sh doctor-agy-hooks"
+    return 0
+  fi
+  case "$out" in
+    *"refused (symlink)"*)
+      echo "[setup] WARN: agy hooks.json is a symlink — someone else's SSOT (transitional)." >&2
+      echo "[setup]       birth imprint NOT wired; re-run setup once the symlink is dropped. setup continues." >&2
+      ;;
+    *"invalid JSON"*)
+      echo "[setup] WARN: your agy hooks.json is CORRUPT (invalid JSON) — birth imprint NOT wired." >&2
+      echo "[setup]       doctor-agy-hooks will KEEP FAILING until you repair that file. setup continues." >&2
+      ;;
+    *)
+      echo "[setup] WARN: agy hooks install did not complete (rc=$rc; see the line above)." >&2
+      echo "[setup]       Birth imprint NOT wired; verify with ./run.sh doctor-agy-hooks. setup continues." >&2
       ;;
   esac
   return 0
@@ -3319,6 +3364,11 @@ case "$cmd" in
     # impurity 0. Offline + deterministic (deps: bash+python3).
     (cd "$REPO_DIR" && bash scripts/smoke-agy-statusline-state.sh)
     ;;
+  smoke-agy-hooks-state)
+    # #46 birth imprint regression gate: hooks.json named hook ownership + direct
+    # PreInvocation stdin → upsertMetaSession antigravity record, isolated HOME/XDG/PI agent.
+    (cd "$REPO_DIR" && bash scripts/smoke-agy-hooks-state.sh)
+    ;;
   smoke-pi-provider-state)
     # #46 Task 2 regression gate for the pi provider install adapter: register-pi-provider.py
     # (ownership-classified install/remove, user+project scopes) + read-only doctor-pi-provider.ts
@@ -3426,6 +3476,19 @@ case "$cmd" in
     # proves runtime-effectiveness only with an agy process; else an honest SKIP.
     (cd "$REPO_DIR" && bash scripts/agy-statusline-bridge.sh doctor "$@")
     ;;
+  install-agy-hooks)
+    # #46 birth writer: install the Antigravity PreInvocation named hook that runs
+    # entwurf-agy-imprint and returns {"injectSteps":[]}.
+    (cd "$REPO_DIR" && bash scripts/agy-hooks-bridge.sh install "$@")
+    ;;
+  uninstall-agy-hooks)
+    # Honest inverse of install-agy-hooks: restore/remove only our named hook.
+    (cd "$REPO_DIR" && bash scripts/agy-hooks-bridge.sh uninstall "$@")
+    ;;
+  doctor-agy-hooks)
+    # Fail-loud doctor for agy hooks.json imprint wiring.
+    (cd "$REPO_DIR" && bash scripts/agy-hooks-bridge.sh doctor "$@")
+    ;;
   doctor-pi-provider)
     # #46 Task 2: read-only fail-loud doctor for the pi provider ownership (entwurfProvider.
     # mcpServers.entwurf-bridge). Uses config.ts readProviderSettingsFile SSOT for the EFFECTIVE
@@ -3439,6 +3502,10 @@ case "$cmd" in
     # HIDDEN/internal — setup calls this; exposed so smoke-agy-statusline-state can drive it
     # deterministically. The hard gate stays doctor-agy-statusline.
     wire_agy_statusline
+    ;;
+  wire-agy-hooks)
+    # #46 birth writer setup wrapper around install-agy-hooks.
+    wire_agy_hooks
     ;;
   expose-dev-bin)
     # 막힘 ②: expose the entwurf-bridge STABLE bin on PATH for a DEV checkout (a managed symlink
