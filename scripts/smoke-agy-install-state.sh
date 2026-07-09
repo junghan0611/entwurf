@@ -12,6 +12,11 @@
 #     file, and leaves the link itself intact (it is a specimen, not ours to silently remove).
 #     Structurally reproduces the thinkpad ~/.gemini/*/mcp_config.json → removed agent-config path.
 #   - DANGLING command → doctor FAILS (the oracle lesson, structurally reproduced).
+#   - LEGACY MIGRATION: install targets the GLOBAL config (~/.gemini/config) and drops the stale
+#     entwurf-bridge entry from the LEGACY antigravity-cli root (preserve unrelated / remove-if-ours
+#     / never clobber a symlinked SSOT) — the "뭐가 글로벌인지" fix.
+#   - LEGACY CACHE PRUNE: install removes the orphaned agy MCP tool-schema cache for cut-over-FROM
+#     keys (pi-tools-bridge) — exact-name whitelist, live + unrelated caches preserved, symlink-safe.
 #   - CREATE-NEW → uninstall removes the file it created.
 #   - SETUP INTEGRATION (막힘 ①): the `wire_agy_bridge` wrapper folded into `./run.sh setup` —
 #     agy absent → honest skip + NO state; agy present + regular → idempotent install + state;
@@ -40,18 +45,24 @@ SB="$(mktemp -d)"
 trap 'rm -rf "$SB"' EXIT
 export HOME="$SB/home"
 export XDG_DATA_HOME="$SB/xdg"
-GEM_DOC="$HOME/.gemini/antigravity-cli/mcp_config.json"
-GEM_OBS="$HOME/.gemini/config/mcp_config.json"
+# GLOBAL = the install target (the file live agy actually reads: ~/.gemini/config/mcp_config.json).
+# LEGACY = the stale antigravity-cli root install now CLEANS (agy does not read it as global).
+GLOBAL="$HOME/.gemini/config/mcp_config.json"
+LEGACY="$HOME/.gemini/antigravity-cli/mcp_config.json"
 STATE="$XDG_DATA_HOME/entwurf/agy-bridge/install-state.json"
-mkdir -p "$(dirname "$GEM_DOC")" "$(dirname "$GEM_OBS")" "$SB/bin"
+mkdir -p "$(dirname "$GLOBAL")" "$(dirname "$LEGACY")" "$SB/bin"
 
 # fake stable bin (on PATH) + fake ss (unused by the deterministic path) — fake agy toggled per case.
 printf '#!/usr/bin/env bash\necho fake-entwurf-bridge\n' > "$SB/bin/entwurf-bridge"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$SB/bin/ss"
 chmod +x "$SB/bin/entwurf-bridge" "$SB/bin/ss"
 export PATH="$SB/bin:$PATH"
-export AGY_MCP_CONFIG="$GEM_DOC"
-export AGY_MCP_CONFIG_ALT="$GEM_OBS"
+export AGY_MCP_CONFIG="$GLOBAL"
+export AGY_MCP_CONFIG_ALT="$LEGACY"
+# agy MCP tool-schema cache root (sandbox-isolated — HOME is already the sandbox, set explicitly so
+# the legacy-cache prune can NEVER reach a real ~/.gemini during the smoke).
+CACHE="$HOME/.gemini/antigravity-cli/mcp"
+export AGY_MCP_CACHE_DIR="$CACHE"
 
 fake_agy() { # install/remove a fake `pgrep` that reports (or not) a live agy
   if [ "$1" = "on" ]; then
@@ -64,17 +75,17 @@ fake_agy() { # install/remove a fake `pgrep` that reports (or not) a live agy
 fake_agy off
 
 # ── A: adopt a regular file — merge + preserve unrelated + record state ───────
-printf '{\n  "mcpServers": { "other": { "command": "keepme" } }\n}\n' > "$GEM_DOC"
+printf '{\n  "mcpServers": { "other": { "command": "keepme" } }\n}\n' > "$GLOBAL"
 bash "$BRIDGE" install >/dev/null
-want "install: entwurf-bridge registered" "grep -q '\"entwurf-bridge\"' '$GEM_DOC'"
-want "install: unrelated server preserved" "grep -q '\"other\"' '$GEM_DOC'"
+want "install: entwurf-bridge registered" "grep -q '\"entwurf-bridge\"' '$GLOBAL'"
+want "install: unrelated server preserved" "grep -q '\"other\"' '$GLOBAL'"
 want "install: state file written under XDG" "[ -f '$STATE' ]"
 want "install: state records the STABLE command (not a repo/git path)" \
   "python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d[\"command\"])' '$STATE' | grep -qx entwurf-bridge"
 want "install: state preimage null (key was absent)" \
   "python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d[\"preimage\"] is None else 1)' '$STATE'"
 want "install: managed config command is the stable bin, NOT a repo path" \
-  "! grep -q '$REPO_DIR' '$GEM_DOC'"
+  "! grep -q '$REPO_DIR' '$GLOBAL'"
 
 # ── B: doctor — static clean, live SKIP (no agy) ──────────────────────────────
 DOC_OUT="$(bash "$BRIDGE" doctor)"; DOC_RC=$?
@@ -96,37 +107,37 @@ fake_agy off
 
 # ── C2 (N1 drift): install-state present but the managed config LOST our key → FAIL ──
 # The real "wiring came loose / '?'" case — distinct from "never installed" (which is a note).
-python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["mcpServers"].pop("entwurf-bridge",None); json.dump(d,open(p,"w"))' "$GEM_DOC"
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d["mcpServers"].pop("entwurf-bridge",None); json.dump(d,open(p,"w"))' "$GLOBAL"
 if bash "$BRIDGE" doctor >/dev/null 2>&1; then die "drift: doctor should FAIL (state present, key removed)"; fi
 ok "drift: doctor FAILS on state-present + key-removed (installed-then-loosened ≠ never installed)"
 bash "$BRIDGE" install >/dev/null   # restore so the honest-inverse uninstall below has a key to remove
-want "drift: re-install restores the key" "grep -q '\"entwurf-bridge\"' '$GEM_DOC'"
+want "drift: re-install restores the key" "grep -q '\"entwurf-bridge\"' '$GLOBAL'"
 
 # ── C3 (ORPHANED): install-state present but managed config is completely ABSENT → Auto-clean ──
-rm -f "$GEM_DOC"
+rm -f "$GLOBAL"
 DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?
 want "orphan: doctor exits 0 when config is completely absent (HOME wiped)" "[ '$DOC_RC' -eq 0 ]"
 want "orphan: doctor logs ORPHANED and auto-cleans" "printf '%s' \"\$DOC_OUT\" | grep -q 'ORPHANED'"
 want "orphan: state file is removed automatically" "[ ! -f '$STATE' ]"
-printf '{\n  "mcpServers": { "other": { "command": "keepme" } }\n}\n' > "$GEM_DOC"
+printf '{\n  "mcpServers": { "other": { "command": "keepme" } }\n}\n' > "$GLOBAL"
 bash "$BRIDGE" install >/dev/null   # restore for the honest-inverse uninstall below
 
 
 # ── D: uninstall — honest inverse ─────────────────────────────────────────────
 bash "$BRIDGE" uninstall >/dev/null
-want "uninstall: entwurf-bridge removed" "! grep -q '\"entwurf-bridge\"' '$GEM_DOC'"
-want "uninstall: unrelated server survived" "grep -q '\"other\"' '$GEM_DOC'"
+want "uninstall: entwurf-bridge removed" "! grep -q '\"entwurf-bridge\"' '$GLOBAL'"
+want "uninstall: unrelated server survived" "grep -q '\"other\"' '$GLOBAL'"
 want "uninstall: state file removed" "[ ! -f '$STATE' ]"
 
 # ── E: SYMLINK target → install REFUSES + writes NO state ──────────────────────
-rm -f "$GEM_DOC"
+rm -f "$GLOBAL"
 printf '{"mcpServers":{}}\n' > "$SB/real_config.json"
-ln -s "$SB/real_config.json" "$GEM_DOC"
+ln -s "$SB/real_config.json" "$GLOBAL"
 if bash "$BRIDGE" install >/dev/null 2>&1; then die "symlink: install should have REFUSED"; fi
 ok "symlink: install refused (nonzero exit)"
 want "symlink: NO state written on refusal" "[ ! -f '$STATE' ]"
 want "symlink: the linked SSOT was NOT clobbered" "python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d[\"mcpServers\"]=={} else 1)' '$SB/real_config.json'"
-rm -f "$GEM_DOC"
+rm -f "$GLOBAL"
 
 # ── E2: DANGLING SYMLINK (departed owner) → install REFUSES + NO state ─────────
 # The thinkpad specimen: ~/.gemini/*/mcp_config.json is a symlink to a DEPARTED owner's path
@@ -134,11 +145,11 @@ rm -f "$GEM_DOC"
 # absent target, so install must refuse it the SAME as a live symlink — write NO state, and (the
 # real point) NEVER follow the link to re-materialize the departed owner's file. The link itself
 # is left intact: it is a specimen the device-adoption step removes by hand, not ours to clobber.
-rm -f "$GEM_DOC"
+rm -f "$GLOBAL"
 DEPARTED="$SB/departed-owner/mcp_config.json"   # target dir/file does NOT exist (departed owner)
-ln -s "$DEPARTED" "$GEM_DOC"
+ln -s "$DEPARTED" "$GLOBAL"
 want "dangling-symlink: precondition — link is dangling (target absent)" \
-  "[ -L '$GEM_DOC' ] && [ ! -e '$GEM_DOC' ]"
+  "[ -L '$GLOBAL' ] && [ ! -e '$GLOBAL' ]"
 set +e; OUT="$(bash "$BRIDGE" install 2>&1)"; RC=$?; set -e
 want "dangling-symlink: install exits nonzero (refused)" "[ '$RC' -ne 0 ]"
 want "dangling-symlink: refusal is the SYMLINK reason (not invalid-json / other)" \
@@ -147,27 +158,80 @@ want "dangling-symlink: NO state written on refusal" "[ ! -f '$STATE' ]"
 want "dangling-symlink: link NOT followed — departed target still absent (no re-materialize)" \
   "[ ! -e '$DEPARTED' ]"
 want "dangling-symlink: the dangling link left intact (a specimen, not silently removed)" \
-  "[ -L '$GEM_DOC' ]"
-rm -f "$GEM_DOC"
+  "[ -L '$GLOBAL' ]"
+rm -f "$GLOBAL"
 
 # ── F: DANGLING command → doctor FAILS ────────────────────────────────────────
-printf '{"mcpServers":{"entwurf-bridge":{"command":"/nonexistent/dangling/start.sh"}}}\n' > "$GEM_OBS"
+printf '{"mcpServers":{"entwurf-bridge":{"command":"/nonexistent/dangling/start.sh"}}}\n' > "$LEGACY"
 if bash "$BRIDGE" doctor >/dev/null 2>&1; then die "dangling: doctor should have FAILED"; fi
 ok "dangling: doctor failed (nonzero exit) on a dangling command"
-rm -f "$GEM_OBS"
+rm -f "$LEGACY"
 
 # ── G: CREATE-NEW → uninstall removes the created file ────────────────────────
 bash "$BRIDGE" install >/dev/null
-want "create-new: file created" "[ -f '$GEM_DOC' ]"
+want "create-new: file created" "[ -f '$GLOBAL' ]"
 want "create-new: state detectMode is created-new" \
   "python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d[\"detectMode\"])' '$STATE' | grep -qx created-new"
 bash "$BRIDGE" uninstall >/dev/null
-want "create-new: uninstall removed the file it created (empty)" "[ ! -f '$GEM_DOC' ]"
+want "create-new: uninstall removed the file it created (empty)" "[ ! -f '$GLOBAL' ]"
 want "create-new: state removed" "[ ! -f '$STATE' ]"
 
 # ── H: uninstall with no state is idempotent (a note, not a failure) ──────────
 bash "$BRIDGE" uninstall >/dev/null 2>&1
 ok "idempotent: uninstall with no state exits 0 (nothing to undo)"
+
+# ── H2: legacy migration — install targets GLOBAL and CLEANS the LEGACY root ──────────
+# The "뭐가 글로벌인지" fix: install writes to the GLOBAL config (~/.gemini/config) and, as a
+# one-way migration, drops the stale entwurf-bridge entry from the LEGACY root (~/.gemini/
+# antigravity-cli) which live agy does NOT read as global MCP config. Preserves unrelated servers.
+rm -f "$GLOBAL" "$LEGACY" "$STATE"
+printf '{"mcpServers":{"entwurf-bridge":{"command":"old-wrong-bin"},"other":{"command":"keepme"}}}\n' > "$LEGACY"
+bash "$BRIDGE" install >/dev/null
+want "legacy-migrate: entwurf-bridge registered in the GLOBAL config" "grep -q '\"entwurf-bridge\"' '$GLOBAL'"
+want "legacy-migrate: stale entwurf-bridge removed from the LEGACY root" \
+  "! python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if \"entwurf-bridge\" in d[\"mcpServers\"] else 1)' '$LEGACY'"
+want "legacy-migrate: unrelated LEGACY server preserved" "grep -q '\"other\"' '$LEGACY'"
+want "legacy-migrate: state managedConfigPath is the GLOBAL config" \
+  "python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))[\"managedConfigPath\"]==sys.argv[2] else 1)' '$STATE' '$GLOBAL'"
+bash "$BRIDGE" uninstall >/dev/null; rm -f "$GLOBAL" "$LEGACY" "$STATE"
+
+# H2b: a LEGACY root holding ONLY entwurf-bridge → install removes the whole file (cleaned-removed)
+printf '{"mcpServers":{"entwurf-bridge":{"command":"old-wrong-bin"}}}\n' > "$LEGACY"
+bash "$BRIDGE" install >/dev/null
+want "legacy-migrate(only-ours): LEGACY file removed when it held only entwurf-bridge" "[ ! -e '$LEGACY' ]"
+bash "$BRIDGE" uninstall >/dev/null; rm -f "$GLOBAL" "$STATE"
+
+# H2c: a SYMLINK LEGACY (someone else's SSOT) → install still succeeds, link left intact (not clobbered)
+printf '{"mcpServers":{"entwurf-bridge":{"command":"x"}}}\n' > "$SB/legacy_ssot.json"
+ln -s "$SB/legacy_ssot.json" "$LEGACY"
+bash "$BRIDGE" install >/dev/null
+want "legacy-migrate(symlink): install still registered entwurf-bridge in GLOBAL" "grep -q '\"entwurf-bridge\"' '$GLOBAL'"
+want "legacy-migrate(symlink): symlinked LEGACY SSOT left intact (not clobbered)" \
+  "python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if \"entwurf-bridge\" in d[\"mcpServers\"] else 1)' '$SB/legacy_ssot.json'"
+bash "$BRIDGE" uninstall >/dev/null; rm -f "$GLOBAL" "$LEGACY" "$STATE"
+
+# ── H3: legacy CACHE prune — install removes ONLY the known-legacy MCP cache, never others ─────
+# The pi-tools-bridge → entwurf-bridge cutover leaves an orphaned agy tool-schema cache dir agy
+# never prunes. install removes it (exact-name whitelist), preserves the live entwurf-bridge cache
+# AND any unrelated server's cache, and never follows a symlink.
+rm -f "$GLOBAL" "$LEGACY" "$STATE"
+mkdir -p "$CACHE/pi-tools-bridge" "$CACHE/entwurf-bridge" "$CACHE/some-other-mcp"
+printf '{}' > "$CACHE/pi-tools-bridge/entwurf.json"
+printf '{}' > "$CACHE/some-other-mcp/tool.json"
+bash "$BRIDGE" install >/dev/null
+want "cache-prune: stale pi-tools-bridge cache removed" "[ ! -e '$CACHE/pi-tools-bridge' ]"
+want "cache-prune: live entwurf-bridge cache preserved" "[ -d '$CACHE/entwurf-bridge' ]"
+want "cache-prune: unrelated MCP server cache preserved (whitelist, not scan-delete)" "[ -d '$CACHE/some-other-mcp' ]"
+bash "$BRIDGE" uninstall >/dev/null; rm -f "$GLOBAL" "$STATE"; rm -rf "$CACHE/entwurf-bridge" "$CACHE/some-other-mcp"
+
+# H3b: a SYMLINK legacy cache dir → install leaves it intact (not ours to remove)
+rm -f "$GLOBAL" "$STATE"
+mkdir -p "$SB/foreign-cache"
+ln -s "$SB/foreign-cache" "$CACHE/pi-tools-bridge"
+bash "$BRIDGE" install >/dev/null
+want "cache-prune(symlink): symlinked legacy cache left intact (not clobbered)" \
+  "[ -L '$CACHE/pi-tools-bridge' ] && [ -d '$SB/foreign-cache' ]"
+bash "$BRIDGE" uninstall >/dev/null; rm -f "$CACHE/pi-tools-bridge" "$GLOBAL" "$STATE"
 
 # ── I: setup integration — wire_agy_bridge (막힘 ①: detection-gated, NON-FATAL) ─────
 # The setup wrapper folded into `./run.sh setup`. Driven here via the hidden `wire-agy-bridge`
@@ -176,7 +240,7 @@ ok "idempotent: uninstall with no state exits 0 (nothing to undo)"
 # present + regular → idempotent install + state; agy present + symlink/corrupt → NON-FATAL
 # WARN + continue (exit 0 — an optional harness must never brick a pi/Claude setup), reason-
 # specific, no clobber, no state. Clean slate here (H left no config/state).
-rm -f "$GEM_DOC" "$GEM_OBS" "$STATE"
+rm -f "$GLOBAL" "$LEGACY" "$STATE"
 printf '#!/usr/bin/env bash\necho fake-agy\n' > "$SB/bin/agy"; chmod +x "$SB/bin/agy"
 
 # I-1: agy ABSENT → honest skip, no state, exit 0 (AGY_BIN → a nonexistent path)
@@ -184,25 +248,25 @@ set +e; OUT="$(AGY_BIN="$SB/no-such-agy" bash "$REPO_DIR/run.sh" wire-agy-bridge
 want "wire(no-agy): exits 0 (non-fatal skip)" "[ '$RC' -eq 0 ]"
 want "wire(no-agy): honest skip message" "printf '%s' \"\$OUT\" | grep -q 'skipping agy bridge wiring'"
 want "wire(no-agy): NO state written" "[ ! -f '$STATE' ]"
-want "wire(no-agy): NO config created" "[ ! -e '$GEM_DOC' ]"
+want "wire(no-agy): NO config created" "[ ! -e '$GLOBAL' ]"
 
 # I-2: agy PRESENT + regular config → idempotent install + state, exit 0
-printf '{\n  "mcpServers": { "other": { "command": "keepme" } }\n}\n' > "$GEM_DOC"
+printf '{\n  "mcpServers": { "other": { "command": "keepme" } }\n}\n' > "$GLOBAL"
 set +e; OUT="$(AGY_BIN="$SB/bin/agy" bash "$REPO_DIR/run.sh" wire-agy-bridge 2>&1)"; RC=$?; set -e
 want "wire(agy+regular): exits 0" "[ '$RC' -eq 0 ]"
-want "wire(agy+regular): entwurf-bridge registered" "grep -q '\"entwurf-bridge\"' '$GEM_DOC'"
-want "wire(agy+regular): unrelated server preserved" "grep -q '\"other\"' '$GEM_DOC'"
+want "wire(agy+regular): entwurf-bridge registered" "grep -q '\"entwurf-bridge\"' '$GLOBAL'"
+want "wire(agy+regular): unrelated server preserved" "grep -q '\"other\"' '$GLOBAL'"
 want "wire(agy+regular): state written" "[ -f '$STATE' ]"
 set +e; OUT="$(AGY_BIN="$SB/bin/agy" bash "$REPO_DIR/run.sh" wire-agy-bridge 2>&1)"; RC=$?; set -e
 want "wire(agy+regular, re-run): idempotent exit 0" "[ '$RC' -eq 0 ]"
 want "wire(agy+regular, re-run): config still valid + entwurf-bridge present" \
-  "python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if \"entwurf-bridge\" in d[\"mcpServers\"] else 1)' '$GEM_DOC'"
-want "wire(agy+regular, re-run): unrelated server still preserved" "grep -q '\"other\"' '$GEM_DOC'"
-bash "$BRIDGE" uninstall >/dev/null; rm -f "$GEM_DOC"
+  "python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if \"entwurf-bridge\" in d[\"mcpServers\"] else 1)' '$GLOBAL'"
+want "wire(agy+regular, re-run): unrelated server still preserved" "grep -q '\"other\"' '$GLOBAL'"
+bash "$BRIDGE" uninstall >/dev/null; rm -f "$GLOBAL"
 
 # I-3: agy PRESENT + SYMLINK config → NON-FATAL WARN + continue (exit 0), no clobber, no state
 printf '{"mcpServers":{}}\n' > "$SB/real_wire_cfg.json"
-ln -s "$SB/real_wire_cfg.json" "$GEM_DOC"
+ln -s "$SB/real_wire_cfg.json" "$GLOBAL"
 set +e; OUT="$(AGY_BIN="$SB/bin/agy" bash "$REPO_DIR/run.sh" wire-agy-bridge 2>&1)"; RC=$?; set -e
 want "wire(agy+symlink): exits 0 (NON-FATAL — setup not bricked)" "[ '$RC' -eq 0 ]"
 want "wire(agy+symlink): reason-specific WARN names the symlink/SSOT" \
@@ -210,16 +274,16 @@ want "wire(agy+symlink): reason-specific WARN names the symlink/SSOT" \
 want "wire(agy+symlink): linked SSOT NOT clobbered" \
   "python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d[\"mcpServers\"]=={} else 1)' '$SB/real_wire_cfg.json'"
 want "wire(agy+symlink): NO state written" "[ ! -f '$STATE' ]"
-rm -f "$GEM_DOC"
+rm -f "$GLOBAL"
 
 # I-4: agy PRESENT + CORRUPT config (invalid JSON) → NON-FATAL WARN + continue, corrupt-specific
-printf 'this is not json{{{' > "$GEM_DOC"
+printf 'this is not json{{{' > "$GLOBAL"
 set +e; OUT="$(AGY_BIN="$SB/bin/agy" bash "$REPO_DIR/run.sh" wire-agy-bridge 2>&1)"; RC=$?; set -e
 want "wire(agy+corrupt): exits 0 (NON-FATAL)" "[ '$RC' -eq 0 ]"
 want "wire(agy+corrupt): reason-specific WARN flags invalid JSON (not a silent skip)" \
   "printf '%s' \"\$OUT\" | grep -qi 'invalid JSON'"
 want "wire(agy+corrupt): NO state written" "[ ! -f '$STATE' ]"
-rm -f "$GEM_DOC" "$SB/bin/agy"
+rm -f "$GLOBAL" "$SB/bin/agy"
 
 # ── J: dev bin exposure — dev-bin.sh (막힘 ②: managed stable-bin symlinks) ─────────
 # dev-bin.sh now manages MULTIPLE bins (entwurf-bridge + entwurf-agy-statusline), each with its

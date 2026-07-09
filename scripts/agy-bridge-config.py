@@ -19,6 +19,14 @@ Subcommands (argv[1]):
       else, remove the file. REFUSES if the managed config became a symlink since install
       (exit 3). No state → nothing to do (exit 2).
 
+  clean-legacy <config_path>
+      One-way MIGRATION cleanup: remove OUR server key from a LEGACY (wrong-root) config that
+      live agy does NOT read as the global MCP config (the doc-correct global is
+      ~/.gemini/config/mcp_config.json; the antigravity-cli copy was a mis-wiring). Idempotent.
+      Preserves unrelated servers. Removes the file only if it becomes an empty mcpServers-only
+      object. REFUSES to touch a symlink (someone else's SSOT) — reports skip, never clobbers.
+      This is NOT tracked for an honest inverse: the legacy entry was wrong and stays gone.
+
   doctor-static <config_path>
       Print one line describing the candidate for the shell doctor: `absent` / `symlink ->
       <target>` prefix / `invalid-json` / `not-configured` / `command <cmd>`. Never mutates.
@@ -141,6 +149,30 @@ def cmd_uninstall(state_path: str) -> None:
     sys.stdout.write(f"uninstalled {config_path}\n")
 
 
+def cmd_clean_legacy(config_path: str) -> None:
+    # Symlink = someone else's SSOT (e.g. an agent-config link). Never clobber; report + skip.
+    if os.path.islink(config_path):
+        sys.stdout.write(f"skip-symlink {config_path}\n")
+        return
+    if not os.path.exists(config_path):
+        sys.stdout.write(f"absent {config_path}\n")
+        return
+    data = _load_config(config_path)
+    servers = data.get("mcpServers")
+    if not isinstance(servers, dict) or SERVER_KEY not in servers:
+        sys.stdout.write(f"not-present {config_path}\n")
+        return
+    servers.pop(SERVER_KEY, None)
+    # Remove the file only if nothing else remains and it was a pure mcpServers object (ours to
+    # tidy). Otherwise rewrite it, preserving unrelated servers / top-level keys.
+    if len(servers) == 0 and set(data.keys()) == {"mcpServers"}:
+        os.remove(config_path)
+        sys.stdout.write(f"cleaned-removed {config_path}\n")
+    else:
+        _atomic_write(config_path, _dump(data))
+        sys.stdout.write(f"cleaned-kept {config_path}\n")
+
+
 def cmd_doctor_static(config_path: str) -> None:
     # Report the RESOLVED path's config status in one shell-parseable token line. Symlink
     # detection/reporting is the shell's job (realpath here just follows any link).
@@ -180,6 +212,10 @@ def main(argv: list) -> None:
         if len(argv) != 3:
             _die(5, "usage: agy-bridge-config.py uninstall <state_path>")
         cmd_uninstall(argv[2])
+    elif sub == "clean-legacy":
+        if len(argv) != 3:
+            _die(5, "usage: agy-bridge-config.py clean-legacy <config_path>")
+        cmd_clean_legacy(argv[2])
     elif sub == "doctor-static":
         if len(argv) != 3:
             _die(5, "usage: agy-bridge-config.py doctor-static <config_path>")

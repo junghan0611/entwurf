@@ -11,18 +11,30 @@
 #              parse, and carry a resolvable command; LIVE proves runtime-effectiveness only
 #              when an agy process exists, else an honest SKIP (never a PASS in disguise).
 #
+# GLOBAL ROOT (the one file that matters): live agy reads its global MCP config from
+# ~/.gemini/config/mcp_config.json (agy's own builtin doc: mcp_servers.md — "Global Configuration:
+# ~/.gemini/config/mcp_config.json, applies to all sessions"). The ~/.gemini/antigravity-cli copy
+# is a stale mis-wiring agy does NOT read as global — install now targets config/ and CLEANS the
+# antigravity-cli entry (one-way migration). This is the "뭐가 글로벌인지" that had been confusing.
+#
 # Paths (all overridable for the isolated smoke):
-#   AGY_MCP_CONFIG        install target        (default: ~/.gemini/antigravity-cli/mcp_config.json)
-#   AGY_MCP_CONFIG_ALT    2nd doctor candidate  (default: ~/.gemini/config/mcp_config.json)
-#   AGY_BRIDGE_COMMAND    command to register   (default: entwurf-bridge — a stable bin)
-#   XDG_DATA_HOME         install-state root    (state at $XDG_DATA_HOME/entwurf/agy-bridge/)
+#   AGY_MCP_CONFIG        install target (global) (default: ~/.gemini/config/mcp_config.json)
+#   AGY_MCP_CONFIG_ALT    legacy root to clean    (default: ~/.gemini/antigravity-cli/mcp_config.json)
+#   AGY_BRIDGE_COMMAND    command to register     (default: entwurf-bridge — a stable bin)
+#   XDG_DATA_HOME         install-state root      (state at $XDG_DATA_HOME/entwurf/agy-bridge/)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_PY="$HERE/agy-bridge-config.py"
 
-DOCUMENTED_CONFIG="${AGY_MCP_CONFIG:-$HOME/.gemini/antigravity-cli/mcp_config.json}"
-OBSERVED_CONFIG="${AGY_MCP_CONFIG_ALT:-$HOME/.gemini/config/mcp_config.json}"
+GLOBAL_CONFIG="${AGY_MCP_CONFIG:-$HOME/.gemini/config/mcp_config.json}"
+LEGACY_CONFIG="${AGY_MCP_CONFIG_ALT:-$HOME/.gemini/antigravity-cli/mcp_config.json}"
+# agy's MCP tool-schema cache root (appDataDir/mcp). agy NEVER prunes an orphaned server's cache
+# itself, so a cut-over-FROM key (pi-tools-bridge → entwurf-bridge rename) lingers forever as
+# config garbage. install prunes ONLY these exact legacy keys — never a scan-and-delete that could
+# touch another harness's LIVE MCP cache. Cache, not config: agy re-fetches if ever reconfigured.
+AGY_MCP_CACHE_DIR="${AGY_MCP_CACHE_DIR:-$HOME/.gemini/antigravity-cli/mcp}"
+LEGACY_CACHE_KEYS="pi-tools-bridge"
 COMMAND="${AGY_BRIDGE_COMMAND:-entwurf-bridge}"
 STATE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/agy-bridge"
 STATE_FILE="$STATE_DIR/install-state.json"
@@ -40,9 +52,25 @@ command_resolvable() {
   esac
 }
 
+# Prune the agy MCP tool-schema cache for the KNOWN-legacy server keys (LEGACY_CACHE_KEYS). Removes
+# ONLY the exact-named dirs — a symlink is left intact (not ours), and any OTHER server's cache is
+# never touched. Idempotent (absent = no-op). One-shot cutover hygiene, not honest-inverse tracked.
+prune_legacy_cache() {
+  local key dir
+  for key in $LEGACY_CACHE_KEYS; do
+    dir="$AGY_MCP_CACHE_DIR/$key"
+    [ -e "$dir" ] || continue
+    if [ -L "$dir" ]; then
+      log "  cache: legacy '$key' is a symlink — left intact (not ours to remove)"
+      continue
+    fi
+    rm -rf "$dir" && log "  cache: pruned stale legacy MCP tool cache '$key'"
+  done
+}
+
 do_install() {
   log "[agy-bridge install]"
-  log "  target:  $DOCUMENTED_CONFIG"
+  log "  target:  $GLOBAL_CONFIG"
   log "  command: $COMMAND"
   log "  state:   $STATE_FILE"
   if ! command_resolvable "$COMMAND"; then
@@ -51,7 +79,7 @@ do_install() {
   fi
   local out rc
   set +e
-  out="$(python3 "$CONFIG_PY" install "$DOCUMENTED_CONFIG" "$COMMAND" "$STATE_FILE" 2>&1)"
+  out="$(python3 "$CONFIG_PY" install "$GLOBAL_CONFIG" "$COMMAND" "$STATE_FILE" 2>&1)"
   rc=$?
   set -e
   case "$rc" in
@@ -60,6 +88,20 @@ do_install() {
     4) fail "invalid JSON — ${out}" ;;
     *) fail "install error (rc=$rc) — ${out}" ;;
   esac
+  # One-way migration: drop the stale entwurf-bridge entry from the LEGACY root (agy does not read
+  # it as global MCP config). Non-fatal — a corrupt/symlinked legacy must not brick the install.
+  local lout lrc
+  set +e
+  lout="$(python3 "$CONFIG_PY" clean-legacy "$LEGACY_CONFIG" 2>&1)"
+  lrc=$?
+  set -e
+  case "$lout" in
+    cleaned-*)     log "  legacy: removed stale entwurf-bridge from $LEGACY_CONFIG" ;;
+    skip-symlink*) log "  legacy: $LEGACY_CONFIG is a symlink (someone else's SSOT) — left intact" ;;
+    absent*|not-present*) : ;;  # nothing to clean
+    *) [ "$lrc" -ne 0 ] && log "  legacy: WARN could not clean $LEGACY_CONFIG — ${lout}" ;;
+  esac
+  prune_legacy_cache
   log "  installed. Verify with: ./run.sh doctor-agy-bridge"
 }
 
@@ -111,10 +153,10 @@ do_doctor() {
   local hard_fail=0 configured_any=0
 
   log "── static (configured candidates)"
-  doctor_static_one "documented ($DOCUMENTED_CONFIG)" "$DOCUMENTED_CONFIG" || hard_fail=1
-  doctor_static_one "observed   ($OBSERVED_CONFIG)"   "$OBSERVED_CONFIG"   || hard_fail=1
+  doctor_static_one "global ($GLOBAL_CONFIG)" "$GLOBAL_CONFIG" || hard_fail=1
+  doctor_static_one "legacy ($LEGACY_CONFIG)" "$LEGACY_CONFIG" || hard_fail=1
   # Did EITHER candidate carry a configured entwurf-bridge? (best-effort — re-read cheaply.)
-  for c in "$DOCUMENTED_CONFIG" "$OBSERVED_CONFIG"; do
+  for c in "$GLOBAL_CONFIG" "$LEGACY_CONFIG"; do
     case "$(python3 "$CONFIG_PY" doctor-static "$c")" in configured\ *) configured_any=1 ;; esac
   done
 

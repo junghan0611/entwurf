@@ -3441,8 +3441,9 @@ case "$cmd" in
     (cd "$REPO_DIR" && bash scripts/agy-bridge.sh uninstall "$@")
     ;;
   doctor-agy-bridge)
-    # 봉인 7: 2-tier fail-loud doctor. STATIC proves both candidate configs (documented
-    # ~/.gemini/antigravity-cli + observed ~/.gemini/config) resolve, parse, and carry a
+    # 봉인 7: 2-tier fail-loud doctor. STATIC proves both candidate configs (global
+    # ~/.gemini/config/mcp_config.json — the file live agy actually reads — + legacy
+    # ~/.gemini/antigravity-cli which install now cleans) resolve, parse, and carry a
     # RESOLVABLE command (a dangling command FAILS). LIVE proves runtime-effectiveness only
     # when an agy process exists; with no agy it is an honest SKIP (never a PASS in disguise).
     (cd "$REPO_DIR" && bash scripts/agy-bridge.sh doctor "$@")

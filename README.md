@@ -359,25 +359,21 @@ command = "/absolute/path/to/entwurf/mcp/entwurf-bridge/start.sh"
 
 #### Antigravity CLI (`agy`)
 
-Documented global config path:
-
-```text
-~/.gemini/antigravity-cli/mcp_config.json
-```
-
-Current runtime-compatible path also observed:
+The **global** MCP config live agy reads (agy's own builtin doc `mcp_servers.md`: "Global Configuration: `~/.gemini/config/mcp_config.json`, applies to all sessions"):
 
 ```text
 ~/.gemini/config/mcp_config.json
 ```
 
-Use the same server entry in either file:
+`~/.gemini/antigravity-cli/mcp_config.json` is NOT read as the global config (that root holds `settings.json` + appData/cache); do not register the server there. `./run.sh install-agy-bridge` targets the global file above and one-way cleans any stale entry left in the antigravity-cli root.
+
+Server entry:
 
 ```json
 {
   "mcpServers": {
     "entwurf-bridge": {
-      "command": "/absolute/path/to/entwurf/mcp/entwurf-bridge/start.sh"
+      "command": "entwurf-bridge"
     }
   }
 }
