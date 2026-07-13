@@ -497,11 +497,17 @@ want "permission: a symlinked settings.json is left untouched (someone else's SS
 want "permission: no permission state is written for a refused symlink" "[ ! -e '$PSTATE' ]"
 
 # …and the SAME failure, seen from setup: NON-FATAL, reason-specific, never silent.
-set +e; OUT="$(bash "$REPO_DIR/run.sh" wire-agy-bridge 2>&1)"; RC=$?; set -e
+# Detection must be hermetic here exactly as it is in section I: re-mint the fake agy (I tore it
+# down at its end) and pin AGY_BIN at it. Unpinned, the wrapper falls back to the host's PATH —
+# it finds a real agy on a dev box and degrades honestly, but on a CI runner with no agy it takes
+# the skip branch and exits 0 with no WARN. The exit-0 assertion below passes either way; only the
+# NOT-GRANTED one can tell a degrade from a skip, which is the whole point of this pair.
+printf '#!/usr/bin/env bash\necho fake-agy\n' > "$SB/bin/agy"; chmod +x "$SB/bin/agy"
+set +e; OUT="$(AGY_BIN="$SB/bin/agy" bash "$REPO_DIR/run.sh" wire-agy-bridge 2>&1)"; RC=$?; set -e
 want "permission(setup): the wrapper keeps setup alive (exit 0) despite the failed grant" "[ '$RC' -eq 0 ]"
 want "permission(setup): the wrapper says the bridge is REGISTERED but NOT GRANTED (no silent pass)" \
   "printf '%s' \"\$OUT\" | grep -q 'NOT GRANTED'"
-rm -f "$SETTINGS" "$PSTATE" "$STATE" "$GLOBAL"
+rm -f "$SETTINGS" "$PSTATE" "$STATE" "$GLOBAL" "$SB/bin/agy"
 
 # Corrupt settings.json: same contract — the explicit install fails loud, and says what to repair.
 printf 'not json\n' > "$SETTINGS"
