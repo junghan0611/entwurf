@@ -5,13 +5,14 @@
 ## NOW — #46을 0.12.7로 출하
 
 - **Stem:** agy/Antigravity를 완전한 garden citizen으로 출하한다. 당분간 릴리즈 축은 **0.12.x**이며, **0.13.0은 cortex 지원(#48)** 에 예약한다.
-- **Current:** #46 구현·설치면·회귀 게이트가 완료됐다. thinkpad에서 agy 자동 birth → gid/statusline → MCP `entwurf_v2` → `meta-session/antigravity`·`replyable:true` sender → 같은 gid로 native-push 답장 도착까지 라이브 왕복을 확인했다. agy 3개 동시 실행도 pid 3개/marker 3개로 분리됐다.
-- **Next (다음 세션 첫 순서):**
-  1. main이 clean이고 #46 코드 커밋 + `docs/mux-launch-rail.md` 별도 문서 커밋이 push됐는지 확인한다.
-  2. `tag-release` 스킬을 읽고 `CHANGELOG.md`의 Unreleased에 #46 결과를 승격한 뒤 package/lock을 **0.12.7**로 맞춘다.
-  3. 아래 정적·패키지·LIVE 관문을 모두 통과시킨다.
-  4. GLG 승인으로 `v0.12.7` tag + npm publish를 수행하고 실제 글로벌 설치면을 0.12.7로 재배선한다.
-- **Blocker:** 없음.
+- **Current:** #46 본체 구현·설치면·회귀 게이트는 완료됐다. thinkpad에서 agy 자동 birth → gid/statusline → MCP `entwurf_v2` → `meta-session/antigravity`·`replyable:true` sender → 같은 gid로 native-push 답장 도착까지 라이브 왕복을 확인했다. 최종 문서/pack 감사에서 npm-installed `entwurf-agy-imprint`가 raw `.ts`를 실행해 `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`으로 죽는 릴리즈 블로커를 발견했고, compiled dist dispatch + 실제 tarball 설치 회귀로 수정했다.
+- **Next:**
+  1. **#46 마지막 ownership handoff를 agent-config에서 닫는다.** 현재 agent-config의 `pi/settings{,.server}.json`에는 entwurf `packages[]`/`entwurfProvider.mcpServers`가, `antigravity/settings.json`/setup에는 agent-config statusLine whole-file ownership이 남아 있다. entwurf `setup`을 먼저 실행해 live user/project provider를 bare `entwurf-bridge`로 normalize한 뒤, agent-config가 이 키들을 놓고 agy settings를 symlink가 아닌 disjoint-key merge로 바꾼다. `doctor-pi-provider` EFFECTIVE bare + agy doctor 3개 green + agent-config setup 재실행 후 무회귀가 완료판정이다.
+  2. #46 문서+installed-imprint fix를 검수·커밋하고 main을 push한다.
+  3. 기존 표준 명령 **`/prepare-release 0.12.7`**로 CHANGELOG 승격 + package/lock 버전 범프 + 정적/LIVE 관문 + release-prep 커밋을 수행한다. `tag-release` 스킬은 이 repo의 릴리즈 절차가 아니다.
+  4. clean HEAD에서 **`/make-release 0.12.7`**로 tag/push/GitHub release를 수행한다.
+  5. GLG 승인으로 npm publish를 수행하고 실제 글로벌 설치면을 0.12.7로 재배선한다.
+- **Blocker:** agent-config의 옛 소유자 cleanup이 아직 안 닫혔다. 현재 `doctor-pi-provider`는 EFFECTIVE project repo-path + no state를 "not yet adopted"로 정직하게 보고한다. 이 상태에서 issue #46을 닫거나 0.12.7을 prepare하지 않는다.
 - **Return:** 0.12.7 publish·실설치·doctor·fresh agy 왕복까지 끝나면 #47 mux launch rail로 돌아간다.
 
 ### 0.12.7 컷 관문
@@ -37,7 +38,7 @@ LIVE=1 ./run.sh release-gate /path/to/scratch
 
 ## RECENT
 
-- **[2026-07-13] #46 closed:** ppid+start-key sender marker, record-backed ambiguity refusal, native-push probe 기반 replyability, exact agy permission ownership, install/reinstall/uninstall provenance 고정. `pnpm check` green; 핵심 회귀는 sender identity 28, self-address 31, agy install 120, hooks 37, statusline 62.
+- **[2026-07-13] #46 implementation closed / ownership handoff pending:** ppid+start-key sender marker, record-backed ambiguity refusal, native-push probe 기반 replyability, exact agy permission ownership, install/reinstall/uninstall provenance 고정. `pnpm check` green; 핵심 회귀는 sender identity 28, self-address 31, agy install 120, hooks 37, statusline 62. GitHub issue 최종 감사에서 agent-config 옛 소유자 cleanup이 남은 것을 확인해 close 판정을 되돌렸다.
 - **[2026-07-13] evidence boundary:** 동일 agy pid에서 여러 conversation이 동시에 model invocation을 수행하면 단일 marker가 last-writer로 덮인다. 현재 agy의 process-per-session·직렬 invocation에 기대며, 같은 pid 동시성은 지원하지 않는다. owner ancestry 추적은 `ENTWURF_AGY_TRACE_OWNER=1`에서만 켜진다.
 - **[2026-07-03] 0.12.6 released:** XDG live artifact, user-scope pi citizen, pnpm 11/setup 단일화.
 
