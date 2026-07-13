@@ -6,10 +6,12 @@ silently drifted into a different identity / context surface. Questions
 are deliberately open-ended — they probe what the agent actually sees,
 not what it was told to claim.
 
-The 0.12 shipped ACP backend is **Claude**; the question bank below is the
-Claude baseline. Codex (pi-native, or ACP via `ENTWURF_ACP_FOR_CODEX=1`)
-and Gemini (non-goal/probe) are carried as the probe appendix, not the
-release baseline.
+The 0.12 shipped ACP backend is **Claude**; the main question bank below is the
+Claude ACP baseline. Antigravity (`agy`) is also shipped, but as a native-push
+garden citizen rather than an ACP backend, so it has a separate citizen/round-trip
+baseline below instead of being forced into Claude's overlay questions. Codex
+(pi-native / delivery probe) and Gemini (historical non-goal ACP probe) remain
+reference axes, not the shipped ACP baseline.
 
 ## How to use
 
@@ -48,10 +50,12 @@ expected isolation-closed response, **FAIL** = listed failure mode,
 > `check-acp-carrier-augment`) and the live `smoke-acp-memory-containment-live`;
 > this document records the model-side observation.
 
-## Per-backend specifics
+## Per-ACP-backend specifics
 
-Pick the active backend's column before pasting a question block. Claude
-is the 0.12 shipped baseline; Codex/Gemini are probe reference.
+Pick the active **ACP backend's** column before pasting a question block. Claude
+is the 0.12 shipped ACP baseline; Codex/Gemini are historical probe reference.
+Do not replace the Gemini column with agy: agy does not use this overlay/carrier
+contract at all, and its shipped baseline is the native-citizen section below.
 
 | Slot | Claude *(shipped)* | Codex *(probe)* | Gemini *(probe)* |
 |---|---|---|---|
@@ -186,7 +190,37 @@ Per-question PASS / FAIL / NOTE for grading the model's response.
 ### Q-MCP — MCP enumerate
 - **PASS** — Exactly one: `entwurf-bridge`.
 - **FAIL** — Any second server appears, or `entwurf-bridge` missing.
-- **NOTE** — Codex naturally writes the name with underscores (`entwurf_bridge`); that is the agent-visible backend marker, not a mutation.
+- **NOTE** — Codex naturally writes the name with underscores (`entwurf_bridge`); that is the agent-visible backend marker, not a mutation. The current server exposes five tools, including the manual `entwurf_register_native` fallback; MCP enumeration asks for the server name, not a stale four-tool count.
+
+---
+
+## Native-citizen baseline — Antigravity / agy (shipped)
+
+This is not an ACP overlay interview. Run it in a **fresh agy conversation** after
+`install-agy-bridge`, `install-agy-statusline`, and `install-agy-hooks`, with all
+three doctors green. `PreInvocation` is the earliest lifecycle event, so a brief
+`🪛 ? agy` before the first model invocation is honest; after that first invocation
+the same conversation must have a garden id.
+
+| ID | Check | PASS | FAIL |
+|---|---|---|---|
+| Q-AGY-BIRTH | Automatic birth | First invocation creates/attaches one record by native `conversationId`; statusline becomes `🪛 <garden-id> agy`. | Manual cwd matching or `entwurf_register_native` is required for normal birth; a new id appears on every turn. |
+| Q-AGY-SELF | Sender identity | `entwurf_self` reports the same garden id, `origin=meta-session`, `agentId=meta-session/antigravity`, and `replyable:true` while the native probe is alive. | Anonymous `external-mcp`, unbacked marker accepted, model name substituted into `agentId`, or mailbox evidence used to infer replyability. |
+| Q-AGY-SEND | Outbound attribution | `entwurf_v2` from agy reaches a sibling carrying that same sender garden id and `replyable:true`. | Receiver sees unknown host/wrong garden id, or sender ambiguity is silently guessed. |
+| Q-AGY-REPLY | Same-conversation reply | Sibling replies with `entwurf_v2(target=<agy-gid>, intent=fire-and-forget)` and the message direct-injects into the same live agy conversation. | New conversation/spawn, mailbox file/doorbell, or a cosmetic delivered result with no live native route. |
+| Q-AGY-OWNERSHIP | Install scope | MCP owns one server plus `mcp(entwurf-bridge/entwurf_v2)` only; statusline owns its subtree; hooks own one named hook. | Installer broadens YOLO policy (`command(*)`, `unsandboxed(*)`) or overwrites unrelated settings/hooks. |
+| Q-AGY-CONCURRENCY | Evidence boundary | Separate agy processes have separate pid/start-key markers; same-pid concurrent model invocation is explicitly reported unsupported. | Claims that one pid can safely identify two simultaneously invoking conversations. |
+
+The replyability formula is **record-backed identity AND live native-push probe**.
+There is intentionally no receiver marker, `watchArmed`, mailbox, or owned-outcome
+resume authority. The model field may exist in the meta-record/status display,
+but `agentId=meta-session/antigravity` is the stable sender contract.
+
+Recorded operator evidence (2026-07-13): automatic birth → gid/statusline → MCP
+send with record-backed sender identity → same-gid native-push reply passed on a
+live conversation; three simultaneous agy processes produced three distinct pid
+and sender markers. This is live evidence for that host, not proof of unsupported
+same-process concurrency.
 
 ---
 

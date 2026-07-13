@@ -10,7 +10,7 @@ npm package: <https://www.npmjs.com/package/@junghanacs/entwurf>
 
 Legacy package: [`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@junghanacs/pi-shell-acp). `entwurf` is its 0.12+ successor line: the same work renamed around the garden-citizen dispatch substrate rather than the pi adapter.
 
-> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + a meta-bridge + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code is shipped through the meta-bridge; pi is shipped through the control-socket adapter. Codex and Antigravity (`agy`) have verified delivery probes documented per launch mode in [DELIVERY.md](./DELIVERY.md); shipped adapter/install lanes are tracked separately. The ACP plugin is Claude-first; Cortex/vendor-governed ACP backends are future lanes.
+> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code is shipped as a mailbox-backed meta-session; Antigravity (`agy`) is shipped as a native-push citizen with automatic `PreInvocation` birth, ambient garden-id status, and a managed MCP/permission install surface. Codex has a launch-mode-specific verified delivery probe documented in [DELIVERY.md](./DELIVERY.md), but no managed native-citizen install lane yet. The ACP plugin is Claude-first; Cortex/vendor-governed ACP backends are future lanes.
 
 <details>
 <summary>Watch archived pre-0.12 demo (2131×1142 GIF, click to expand)</summary>
@@ -25,10 +25,10 @@ Legacy package: [`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@jung
 Claude Code / Codex / agy / pi
   → garden id
     → entwurf_v2
-      → control-socket | spawn-bg resume | meta-mailbox
+      → control-socket | spawn-bg resume | meta-mailbox | native-push
 ```
 
-[`entwurf_v2`](#entwurf_v2--canonical-dispatch-verb) is the canonical dispatch surface over *existing* garden citizens — live control-socket send (including record-less socket-only pi sessions), spawn-bg resume, and meta-mailbox enqueue. The v1 entwurf verbs are gone. Fresh sibling minting and non-Claude ACP backends are deferred lanes.
+[`entwurf_v2`](#entwurf_v2--canonical-dispatch-verb) is the canonical dispatch surface over *existing* garden citizens — live control-socket send (including record-less socket-only pi sessions), spawn-bg resume, meta-mailbox enqueue, and native-push into a live Antigravity conversation. The v1 entwurf verbs are gone. Fresh sibling minting and non-Claude ACP backends are deferred lanes.
 
 **Garden id is deliberate vocabulary.** It is not a decorative synonym for session id, worker, delegate, or subagent. The unfamiliar word is a guard: each harness keeps its own identity and transcript, while `entwurf` supplies a narrow addressable surface between siblings.
 
@@ -43,17 +43,26 @@ pi --entwurf-control
       → Claude backend under the operator's local auth
 ```
 
-**The meta-bridge reaches beyond ACP transport.** A global `SessionStart` hook registers native Claude Code sessions as **garden-native meta-sessions** with a garden id, a mailbox, and a trusted sender marker. That makes an already-running Claude Code terminal addressable through `entwurf_v2` (the mailbox path), self-identifying through `entwurf_self`, and replyable by garden id — without turning pi into a second harness or importing Claude's transcript.
+**Native bridges reach beyond ACP transport.** A global `SessionStart` hook registers native Claude Code sessions as **garden-native meta-sessions** with a garden id, a mailbox, and a trusted sender marker. That makes an already-running Claude Code terminal addressable through `entwurf_v2` (the mailbox path), self-identifying through `entwurf_self`, and replyable by garden id — without turning pi into a second harness or importing Claude's transcript.
 
 ```text
 native Claude Code
   → SessionStart hook
-    → meta-session <garden-id>
+    → mailbox-backed meta-session <garden-id>
       → entwurf-bridge MCP
         → entwurf_self | entwurf_v2 | entwurf_inbox_read
 ```
 
-This meta-bridge installer/doctor is **Claude Code only** in the current shipped surface. Codex and Antigravity delivery probes are recorded in [DELIVERY.md](./DELIVERY.md) as verified adapter evidence, not yet shipped install surfaces.
+Antigravity uses a separate shipped rail. Its `PreInvocation` hook births or re-attaches the conversation by native `conversationId`, writes a record-backed sender marker, and leaves delivery to the live native LS gRPC route. There is no mailbox or receiver marker on this rail: `entwurf_v2` probes the conversation and direct-injects with native-push.
+
+```text
+native Antigravity / agy
+  → PreInvocation imprint → meta-session <garden-id>
+  → entwurf-bridge MCP sender identity
+  ↔ entwurf_v2 native-push
+```
+
+Claude's `install-meta-bridge` and agy's `install-agy-{bridge,statusline,hooks}` are distinct managed install surfaces because their lifecycle and delivery transports are genuinely different. Codex remains verified probe evidence, not a shipped managed native-citizen lane; see [DELIVERY.md](./DELIVERY.md).
 
 > **Direction.** Inverse of [`pi-acp`](https://github.com/svkozak/pi-acp). `pi-acp` lets external ACP clients talk *to* pi; `entwurf` lets garden citizens talk across harness boundaries — with pi as one adapter, not the center.
 
@@ -68,7 +77,7 @@ This meta-bridge installer/doctor is **Claude Code only** in the current shipped
 A few words that look unusual for a coding tool.
 
 - **Entwurf** (기투, projection-of-self) — sibling sessions with their own runtime boundary. Not "delegate," not "worker," not "sub-agent." Spawn, resume, and live peer messaging are first-class.
-- **Garden / garden id** — the garden is the shared address space where independent harness sessions become citizens without losing their own runtime or transcript. A garden id is the stable address of one such citizen (for pi, a garden-native session id like `YYYYMMDDTHHMMSS-<6hex>`; for native harnesses, a meta-session id minted by the `SessionStart` hook). It is not a worker name and not proof that pi owns the session. The same-looking id may name a live control socket, a dormant pi record, or a mailbox-backed native session, so callers discover facts with `entwurf_peers` and deliver with `entwurf_v2` instead of choosing a transport by hand.
+- **Garden / garden id** — the garden is the shared address space where independent harness sessions become citizens without losing their own runtime or transcript. A garden id is the stable address of one such citizen (for pi, a garden-native session id like `YYYYMMDDTHHMMSS-<6hex>`; for native harnesses, a meta-session id minted from an authoritative lifecycle hook — Claude `SessionStart`, agy `PreInvocation`). It is not a worker name and not proof that pi owns the session. The same-looking id may name a live control socket, a dormant pi record, a mailbox-backed native session, or a native-push conversation, so callers discover facts with `entwurf_peers` and deliver with `entwurf_v2` instead of choosing a transport by hand.
 - **Engraving** — optional short operator text delivered through each backend's native identity carrier. Not a giant hidden prompt, not a tool catalog.
 - **MCP** — in this repo, MCP is just the transport by which ACP-backed sessions receive pi capabilities that native pi exposes directly as extensions. It is not a general MCP platform. Explicit `entwurfProvider.mcpServers` only; no ambient `~/.mcp.json` scanning, no automatic retrieval. The same `entwurf-bridge` entry can also be wired into another host's MCP catalog (Claude Code, Codex, Antigravity, …) when the operator chooses. `entwurf_self` returns an authoritative pi-session or trusted meta-session identity envelope; `entwurf_v2` can deliver from plain external MCP hosts, but only pi-session and trusted meta-session senders are replyable.
 - **Session persistence** — re-attaches pi to the same remote ACP session. Does not hydrate backend transcripts into pi history.
@@ -80,15 +89,19 @@ A few words that look unusual for a coding tool.
 adapter that hosts the ACP plugin and live control-socket surface, but the base
 install is **not** `pi install npm:...` anymore.
 
-The package exposes three bins:
+The package exposes five bins:
 
-- `entwurf` → `run.sh` (installer, checks, meta-bridge doctor/install)
+- `entwurf` → `run.sh` (installer, checks, native-bridge doctors/installers)
 - `entwurf-bridge` → the MCP stdio launcher (`mcp/entwurf-bridge/start.sh`)
-- `entwurf-statusline` → the Claude Code statusline renderer (`scripts/meta-bridge-statusline.sh`); a stable bin shim so a package upgrade tracks the current version without rewriting Claude settings
+- `entwurf-statusline` → the Claude Code statusline renderer (`scripts/meta-bridge-statusline.sh`)
+- `entwurf-agy-statusline` → the Antigravity garden-id statusline renderer (`scripts/agy-statusline.sh`)
+- `entwurf-agy-imprint` → the Antigravity `PreInvocation` birth/sender hook (`scripts/agy-imprint.sh`)
 
-The bridge does not provide Claude credentials, tokens, or subscription access,
+The bridge/renderers/hook use stable bin names so package upgrades do not bake versioned package-store paths into native-harness settings.
+
+The bridge does not provide backend credentials, tokens, or subscription access,
 and does not bypass any backend auth. Whatever the operator's local `claude` /
-`codex` / pi runtime already trusts is what entwurf can use.
+`codex` / `agy` / pi runtime already trusts is what entwurf can use.
 
 ### From npm — user/global install
 
@@ -188,12 +201,21 @@ raw `.ts` helpers under `node_modules`. If the doctor reports
 `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, reinstall a current package before
 trusting the floor result.
 
-After upgrading a globally installed package, run `entwurf install-meta-bridge`
-again before trusting native Claude Code sessions. The installed statusline and
-MCP entries use stable bin shims, and the marketplace source uses a version-stable
-operator data dir, but the Claude plugin bundle/cache still has to be
-re-materialized for the new package writer. Existing Claude Code sessions should
-be restarted after reinstall.
+After upgrading a globally installed package, reinstall the native-harness surface you use before trusting it:
+
+```bash
+entwurf install-meta-bridge
+entwurf doctor-meta-bridge
+
+entwurf install-agy-bridge
+entwurf install-agy-statusline
+entwurf install-agy-hooks
+entwurf doctor-agy-bridge
+entwurf doctor-agy-statusline
+entwurf doctor-agy-hooks
+```
+
+The installed entries use stable bin shims, but Claude's plugin bundle/cache still has to be re-materialized and agy's three ownership records must be refreshed by their idempotent installers. Restart existing Claude Code and agy processes after reinstall.
 
 For manual configuration, [`pi/settings.reference.json`](./pi/settings.reference.json)
 shows the pi adapter settings shape, and the external-host examples below show
@@ -273,11 +295,11 @@ Reference shape lives in [`pi/settings.reference.json`](./pi/settings.reference.
 `entwurf-bridge` can also be registered in a separate MCP-aware harness (Claude Code, Codex CLI, Antigravity/`agy`, …). That host does **not** become a pi session and does **not** need to be ACP-backed. There are now two honest cases:
 
 - **plain external MCP host**: no garden meta-record / sender marker. It can call tools, but its sender envelope is external/non-replyable.
-- **garden-native meta-session**: the native `SessionStart` hook minted a garden id and wrote a trusted sender marker. It is not a pi control-socket session, but it **is replyable by garden id**.
+- **garden-native native session**: a trusted lifecycle hook minted a garden id and sender marker — `SessionStart` for Claude Code, `PreInvocation` for agy. It is not a pi control-socket session, but it can be replyable by garden id when its own mailbox/probe rail says so.
 
-**Which verb an external agent should reach for:** to deliver to / reply to a garden id, use **`entwurf_v2`** — it is the canonical delivery surface and the only one that reads the target's type (live pi vs. dormant pi vs. Claude Code meta-session, which a bare garden id does not reveal) and routes correctly. Discover targets with `entwurf_peers`, confirm your own identity with `entwurf_self`, and drain your mailbox with `entwurf_inbox_read`. Fresh sibling creation from nothing is a deferred lane. (The old v1 verbs `entwurf` / `entwurf_resume` / `entwurf_send` are gone — the bridge wires only the v2 dispatch surface.)
+**Which verb an external agent should reach for:** to deliver to / reply to a garden id, use **`entwurf_v2`** — it is the canonical delivery surface and the only one that reads whether the target is live pi, dormant pi, mailbox-backed Claude Code, or native-push Antigravity and routes correctly. Discover targets with `entwurf_peers`, confirm your own identity with `entwurf_self`, drain a mailbox with `entwurf_inbox_read`, and use `entwurf_register_native` only as the explicit/manual fallback for binding an already-running agy conversation (normal agy birth is automatic through the installed hook). Fresh sibling creation from nothing is a deferred lane. (The old v1 verbs `entwurf` / `entwurf_resume` / `entwurf_send` are gone.)
 
-Observed: Claude Code, Codex CLI, and Antigravity CLI all reach garden citizens through this MCP bridge from a plain external host; sync result delivery is the baseline, and a garden-native meta-session is symmetric/replyable over the mailbox once sender identity is proven.
+Observed: Claude Code, Codex CLI, and Antigravity CLI all reach garden citizens through this MCP bridge from a plain external host. Claude becomes symmetric/replyable through its mailbox-backed meta-session; agy becomes symmetric/replyable through its record-backed sender marker plus live native-push probe. Codex remains a plain external/probe lane until it has a managed citizen lifecycle.
 
 Prerequisites on the host running the external MCP client:
 
@@ -359,25 +381,27 @@ command = "/absolute/path/to/entwurf/mcp/entwurf-bridge/start.sh"
 
 #### Antigravity CLI (`agy`)
 
-The **global** MCP config live agy reads (agy's own builtin doc `mcp_servers.md`: "Global Configuration: `~/.gemini/config/mcp_config.json`, applies to all sessions"):
+Use the managed install surface rather than editing agy's files by hand:
 
-```text
-~/.gemini/config/mcp_config.json
+```bash
+entwurf install-agy-bridge
+entwurf install-agy-statusline
+entwurf install-agy-hooks
+
+entwurf doctor-agy-bridge
+entwurf doctor-agy-statusline
+entwurf doctor-agy-hooks
 ```
 
-`~/.gemini/antigravity-cli/mcp_config.json` is NOT read as the global config (that root holds `settings.json` + appData/cache); do not register the server there. `./run.sh install-agy-bridge` targets the global file above and one-way cleans any stale entry left in the antigravity-cli root.
+The three adapters deliberately own different atoms:
 
-Server entry:
+- bridge: one `entwurf-bridge` server in `~/.gemini/config/mcp_config.json`, plus exactly one permission string — `mcp(entwurf-bridge/entwurf_v2)` — in `~/.gemini/antigravity-cli/settings.json`;
+- statusline: the complete `statusLine` subtree pointing at the bare stable bin `entwurf-agy-statusline`;
+- hooks: one named `PreInvocation` hook pointing at the bare stable bin `entwurf-agy-imprint`.
 
-```json
-{
-  "mcpServers": {
-    "entwurf-bridge": {
-      "command": "entwurf-bridge"
-    }
-  }
-}
-```
+Unrelated servers, permissions, settings, and hooks are preserved; every adapter has a state-backed honest inverse and refuses symlink-owned SSOTs. The installer never grants broad `command(*)`, `unsandboxed(*)`, or other YOLO policy — those remain operator decisions.
+
+The **global** MCP config live agy reads is `~/.gemini/config/mcp_config.json`. `~/.gemini/antigravity-cli/mcp_config.json` is not the global MCP root; the bridge installer one-way cleans only a stale entwurf-owned entry there. After the first model invocation, the imprint hook binds the native `conversationId` to a garden id, the statusline shows `🪛 <garden-id> agy`, and sends from that MCP child carry `agentId=meta-session/antigravity` with `replyable:true` only when the record exists and the live native-push probe succeeds.
 
 #### External-host skills and commands
 
@@ -393,6 +417,8 @@ The Claude ACP backend keeps its native model / API / tools; entwurf shapes only
 
 (Codex is *not* an ACP backend here — it reaches the garden natively. Vendor / governed CLIs are a later ACP backend lane.)
 
+Antigravity is also not an ACP backend. It is a native-push citizen: `PreInvocation` supplies birth/sender identity, `entwurf_v2` probes and direct-injects replies into the live conversation, and no mailbox/receiver marker is involved.
+
 Pi is the canonical memory authority (semantic-memory + Denote llmlog); Claude's native memory layer is pinned off.
 
 ## Smoke commands
@@ -400,6 +426,13 @@ Pi is the canonical memory authority (semantic-memory + Denote llmlog); Claude's
 ```bash
 pnpm check                              # full deterministic floor (all check-* gates, incl. check-acp-*)
 ./run.sh check-bridge                   # entwurf-bridge direct MCP smoke (no backend auth)
+./run.sh smoke-agy-install-state        # agy MCP + exact permission ownership (120 checks)
+./run.sh smoke-agy-statusline-state     # agy ambient garden-id install surface (62 checks)
+./run.sh smoke-agy-hooks-state          # agy PreInvocation birth hook (37 checks)
+./run.sh check-agy-sender-identity      # record-backed pid/start-key sender identity (28 checks)
+
+# agy LIVE acceptance — requires an already-running conversation:
+LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live
 
 # ACP plugin LIVE acceptance — need the operator's local Claude auth/credit:
 LIVE=1 ./run.sh smoke-acp-socket-citizen-live   # turn-free socket citizenship (S1)
@@ -445,9 +478,9 @@ For a real consumer arranging many skills, see [agent-config](https://github.com
 
 ## Entwurf orchestration
 
-**Entwurf is a pi capability with two surfaces.** Native pi exposes it directly as an extension tool; ACP-backed sessions reach the same capability through entwurf's MCP/Unix-socket bridge. The purpose is not to invent a different sub-agent system, but to preserve the same sibling-based model across backends.
+**Entwurf is one dispatch capability with native-pi and MCP surfaces.** Native pi exposes it directly as extension tools; ACP-backed and external native-harness sessions reach it through `entwurf-bridge`. The purpose is not to invent a different sub-agent system, but to preserve the same sibling-based model across harnesses.
 
-A sibling has its own runtime boundary and its own provider/model identity — not a worker, delegate, or sub-agent. Minting a brand-new sibling from nothing is a deferred v2 lane (`spawn-fresh`); today every transport targets an *existing* garden citizen. `entwurf_v2` dispatches over those: it reads the target's liveness as a fact and routes a `fire-and-forget` send (live pi), an `owned-outcome` spawn-bg resume (dormant pi, a real `pi --entwurf-control` child), or a meta-mailbox enqueue (active self-fetch receiver) — under a per-target lock, reporting one honest outcome.
+A sibling has its own runtime boundary and its own provider/model identity — not a worker, delegate, or sub-agent. Minting a brand-new sibling from nothing is a deferred v2 lane (`spawn-fresh`); today every transport targets an *existing* garden citizen. `entwurf_v2` routes from rail-specific liveness + intent: live pi fire-and-forget → control socket; dormant pi owned-outcome → spawn-bg resume; active self-fetch → meta-mailbox; probe-alive agy → native-push. Pi paths use the per-target lock; mailbox/native-push use their own deliverability evidence and remain lock-free.
 
 A two-pane recording covers the surface end-to-end — sibling resume, cross-process MCP dispatch across a different cwd, and a live peer greeting:
 
@@ -460,11 +493,11 @@ A two-pane recording covers the surface end-to-end — sibling resume, cross-pro
 
 Live peer messaging carries a sender envelope `{ sessionId, agentId, cwd, timestamp }`; `entwurf_self` returns that authoritative envelope for the current pi session or trusted meta-session. Plain external MCP hosts are non-replyable; garden-native meta-sessions carry a trusted `meta-session` envelope and are replyable by garden id. `wants_reply` is an etiquette marker rendered as a `(wants reply)` badge — not a transport contract, no wait, no polling — and is rejected only from non-replyable external senders.
 
-In ACP-backed sessions, agent tools (`entwurf_v2`, `entwurf_peers`, `entwurf_self`, `entwurf_inbox_read`) auto-attach through `entwurf-bridge`; in native pi sessions the same capability is available directly through the extension surface (`entwurf_v2`, `entwurf_peers` tools + `/entwurf-sessions`, `/gnew` commands). **For garden-id delivery/reply use `entwurf_v2`** — the canonical surface that classifies the target and routes to live-pi / dormant-resume / Claude-Code-meta-mailbox. Fresh sibling creation from nothing is a deferred lane. (The v1 verbs `entwurf` / `entwurf_resume` / `entwurf_send` are gone — replaced by the v2 dispatch surface.) Garden-native operator commands require `--entwurf-control`. The spawn target allowlist is [`pi/entwurf-targets.json`](./pi/entwurf-targets.json).
+In ACP-backed and external native-harness sessions, `entwurf-bridge` exposes five tools: `entwurf_v2`, `entwurf_peers`, `entwurf_self`, `entwurf_inbox_read`, and the explicit/manual `entwurf_register_native` fallback. Native pi exposes the shared capability directly through the extension surface (`entwurf_v2`, `entwurf_peers` tools + `/entwurf-sessions`, `/gnew` commands). **For garden-id delivery/reply use `entwurf_v2`** — the canonical surface that classifies the target and routes to live-pi / dormant-resume / Claude-Code-meta-mailbox / Antigravity-native-push. Fresh sibling creation from nothing is a deferred lane. (The v1 verbs `entwurf` / `entwurf_resume` / `entwurf_send` are gone.) Garden-native operator commands require `--entwurf-control`. The spawn target allowlist is [`pi/entwurf-targets.json`](./pi/entwurf-targets.json).
 
 ### `entwurf_v2` — canonical dispatch verb
 
-`entwurf_v2` / `runEntwurfV2` is the canonical v2 dispatch verb over **existing** garden targets — record-backed citizens plus live socket-only `pi` endpoints (a record-less but live `pi --entwurf-control` peer is a *target*, intentionally **not** an owned citizen). You give a target garden id plus an intent (`fire-and-forget` or `owned-outcome`); one decider reads the target's liveness as a fact (via the `entwurf_peers` fact surface) and picks the transport from a frozen table keyed on **both** the target's state **and** the intent — never on state alone — then reports one outcome under the v2 lock policy (the pi control-socket and spawn-bg paths take a per-target lock; the meta-mailbox path is lock-free but guarded by active-receiver deliverability):
+`entwurf_v2` / `runEntwurfV2` is the canonical v2 dispatch verb over **existing** garden targets — record-backed citizens plus live socket-only `pi` endpoints (a record-less but live `pi --entwurf-control` peer is a *target*, intentionally **not** an owned citizen). You give a target garden id plus an intent (`fire-and-forget` or `owned-outcome`); one decider reads the target's liveness as a fact and picks the transport from a frozen table keyed on **both** the target's state **and** the intent — never on state alone — then reports one outcome under the v2 lock policy. Pi control-socket and spawn-bg paths take a per-target lock; mailbox and native-push are lock-free, with deliverability guarded by their own receiver/probe evidence:
 
 | target state | intent | transport |
 |---|---|---|
@@ -475,10 +508,13 @@ In ACP-backed sessions, agent tools (`entwurf_v2`, `entwurf_peers`, `entwurf_sel
 | active self-fetch receiver | fire-and-forget | meta-mailbox enqueue + doorbell |
 | inactive / terminated self-fetch receiver | fire-and-forget | **reject** (`mailbox-undeliverable` — no `.msg`, no doorbell) |
 | self-fetch | owned-outcome | **reject** (no owned result over a mailbox) |
+| live native-push conversation | fire-and-forget | native-push direct injection |
+| dead / indeterminate native-push conversation | fire-and-forget | **reject** (`native-push-target-dead` / `native-push-probe-indeterminate`) |
+| native-push | owned-outcome | **reject** (`native-push-no-resume-authority`) |
 
-**`entwurf_v2` is the canonical surface for garden-id delivery.** When you have a garden id and want to reach whoever it names — message, reply, or hand-off — `entwurf_v2` is the one surface that reads whether the target is a live pi session, a dormant pi session, or a Claude Code meta-session (they look alike) and routes correctly; *when unsure which transport, use `entwurf_v2`*. This is exactly what prevents an agent from poking a live-socket transport at a Claude Code meta-session that needs the mailbox.
+**`entwurf_v2` is the canonical surface for garden-id delivery.** When you have a garden id and want to reach whoever it names — message, reply, or hand-off — `entwurf_v2` is the one surface that reads whether the target is live pi, dormant pi, mailbox-backed Claude Code, or native-push Antigravity and routes correctly; *when unsure which transport, use `entwurf_v2`*. This prevents callers from guessing a rail from the shape of an id.
 
-What v2 provides is a **deterministic dispatch substrate** that moves the "which transport?" decision out of the fallible caller/model and into the decider, under a per-target lock, with an honest reject (no `✓ delivered`, no `.msg` garbage) when a target cannot receive. What it does **not** do is **fresh sibling creation** — minting a brand-new sibling from a provider/model/prompt is a deferred lane (the `dormant pi → spawn-bg resume` row above resumes an *already-identified* citizen, it does not mint a new one). The meta-mailbox row requires an **active** self-fetch receiver; Claude↔Claude / Claude tmux-live transport is a later lane (the contract enum names `tmux-live` but no production path executes it).
+What v2 provides is a **deterministic dispatch substrate** that moves the "which transport?" decision out of the fallible caller/model and into the decider, with transport-appropriate locking and an honest reject (no `✓ delivered`, no `.msg` garbage) when a target cannot receive. What it does **not** do is **fresh sibling creation** — minting a brand-new sibling from a provider/model/prompt is a deferred lane (the `dormant pi → spawn-bg resume` row above resumes an *already-identified* citizen, it does not mint one). The meta-mailbox row requires an **active** self-fetch receiver; native-push requires a record-backed, probe-alive native conversation and never borrows mailbox state. Claude↔Claude / Claude tmux-live transport is a later lane (the contract enum names `tmux-live` but no production path executes it).
 
 A live pi target is addressed by its **control socket**, so a record-less but live `pi --entwurf-control` session (an operator-greeted peer with no meta-record) is accepted as a `fire-and-forget` control-send target, matching what `entwurf_peers` lists as alive. An `owned-outcome` resume, however, needs a record-backed citizen (its cwd/launch authority); a record-less endpoint is a socket-only fire-and-forget target only — record-less dormant resume is a later lane.
 
@@ -520,7 +556,7 @@ Enforcement (no uuid / back-compat path): a `--entwurf-control` session whose id
 
 The human-greeted 담당자 pattern is first-class: the operator opens a entwurf session in repo B, greets it directly, then passes that `sessionId` to another session, which reaches it via `entwurf_v2`. Resumed citizens and human-opened peers share the same messaging semantics; only how they came to exist differs.
 
-**Mitsein over MCP** (공존) — the cross-harness counterpart. Pi may collaborate with an external interactive coding session (Claude Code, Codex, Antigravity used as a human terminal) without spawning it. A plain external host is one-directional in shape: outbound `pi → external` rides whatever the operator already uses (tmux send-keys, manual paste, any interactive input path), while inbound `external → pi` returns through this bridge's `entwurf_v2`. A garden-native meta-session closes that gap — both sides are addressable by garden id through the mailbox, and `wants_reply` is allowed when the sender marker proves the native session identity, so send/inbox is symmetric. The one remaining asymmetry is the followUp channel: async owned-outcome delivery still needs a pi control socket, which a meta-session does not have. This is still not a second harness — no control daemon and no transcript scraping are introduced; the bridge only fronts the mailbox/dispatch surface.
+**Mitsein over MCP** (공존) — the cross-harness counterpart. Pi may collaborate with an external interactive coding session (Claude Code, Codex, Antigravity used as a human terminal) without spawning it. A plain external host is one-directional in shape: inbound `external → pi` returns through this bridge's `entwurf_v2`, but the host has no reply address. A garden-native native session closes that gap on its own rail: Claude Code through mailbox self-fetch, agy through probe-alive native-push. `wants_reply` is allowed only when the sender marker and rail-specific evidence prove replyability. Async `owned-outcome` still needs a dormant pi citizen with spawn authority; neither mailbox nor native-push has it. This is still not a second harness — no control daemon and no transcript scraping are introduced.
 
 After a session is anchored, entwurf locks its model identity: switches that touch `entwurf` are reverted; native-to-native and pre-turn selection remain free. `ensureBridgeSession` refuses direct reuse-path mismatches before backend handoff.
 

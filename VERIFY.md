@@ -1,8 +1,8 @@
 # VERIFY.md
 
-Agent-driven verification guide for `entwurf` (0.12.0 surface).
+Agent-driven verification guide for the current `entwurf` 0.12.x surface.
 
-> **Current surface.** The live release surface is one bundled MCP server, `entwurf-bridge`, exposing four tools: `entwurf_v2`, `entwurf_peers`, `entwurf_self`, `entwurf_inbox_read`. The shipped ACP backend is **Claude**; Codex is pi-native by default (`ENTWURF_ACP_FOR_CODEX=1` opts a Codex target into ACP), and Gemini is a **non-goal/probe** on 0.12 — historical Gemini rows are kept for context, not as a current expectation. The 0.4.x `session-bridge` adapter, the 0.11.0 fat-bridge (`acp-bridge.ts` / `ensureBridgeSession`), and the v1 `entwurf` / `entwurf_resume` / `entwurf_send` verbs are **retired** — rows mentioning them survive in CHANGELOG/git as historical baseline, never as a runnable recipe.
+> **Current surface.** The bundled MCP server, `entwurf-bridge`, exposes five tools: `entwurf_v2`, `entwurf_peers`, `entwurf_self`, `entwurf_inbox_read`, and `entwurf_register_native` (an explicit/manual fallback for binding an already-running native conversation). The shipped ACP backend is **Claude**. Antigravity (`agy`) is a separate shipped **native-push citizen** lane, not an ACP backend: automatic `PreInvocation` birth + sender identity + live probe/direct injection. Codex is pi-native by default and has native delivery probe evidence; Gemini is a non-goal/historical ACP probe on 0.12. The 0.4.x `session-bridge` adapter, the 0.11.0 fat-bridge (`acp-bridge.ts` / `ensureBridgeSession`), and the v1 `entwurf` / `entwurf_resume` / `entwurf_send` verbs are **retired** — rows mentioning them survive in CHANGELOG/git as historical baseline, never as a runnable recipe.
 
 This is a **working document, not a metrics document**. The deterministic and live gates carry the machine-checkable invariants; this file carries only what a gate cannot judge — the human/agent reading of *whether the bridge is honestly itself*. Where a former manual procedure is now a gate, it is named as a pointer rather than re-spelled as a runnable script.
 
@@ -39,12 +39,15 @@ Verification here is not a benchmark. In production we exchange short turns and 
   - **BEHAVIOR tier** (advisory, non-blocking): the resident-garden-guard positive (a model-in-loop `entwurf_self` turn). A BEHAVIOR FAIL is surfaced with its artifact path but **never blocks the cut**.
   - LIVE-gated MUST steps honest-skip when `LIVE!=1`; a real cut needs `LIVE=1` with `SKIP=0`. A green MUST gate is **necessary, not sufficient** — GLG authorizes the cut.
 
-> The authoritative per-cut counts live in BASELINE.md's HISTORY and CHANGELOG/git, not inline here (they drift against `run.sh`). Most recent recorded floor: **2026-06-27 — MUST 17/0/0 + BEHAVIOR 1/0**.
+> The aggregate release gate does not own a live agy conversation id, so agy's real native-push round trip is a separate acceptance axis: three fail-loud doctors plus `LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live`, followed by a fresh-conversation sender/reply check after package install. Its deterministic install/sender gates are already inside `pnpm check`; do not misreport the aggregate gate as live agy evidence.
+>
+> The authoritative per-cut counts live in BASELINE.md's HISTORY and CHANGELOG/git, not inline here (they drift against `run.sh`). Most recent recorded aggregate floor: **2026-06-27 — MUST 17/0/0 + BEHAVIOR 1/0**.
 
 ### Verifying the two capabilities a gate cannot fully judge
 
-- **Garden-id delivery:** discover a target with `entwurf_peers`, then `entwurf_v2` with the correct intent — `fire-and-forget` for a live/replyable or meta-session target, `owned-outcome` only to wake a dormant record-backed pi citizen. Picking the wrong intent is rejected, never auto-fixed.
+- **Garden-id delivery:** discover a target with `entwurf_peers`, then `entwurf_v2` with the correct intent — `fire-and-forget` for live pi, mailbox-backed meta, or native-push targets; `owned-outcome` only to wake a dormant record-backed pi citizen. Picking the wrong intent is rejected, never auto-fixed.
 - **ACP continuity:** a direct `pi --provider entwurf --model claude-sonnet-5` turn, or the `smoke-acp-session-reuse-live` gate (process-scoped reuse + recall). Multi-turn reuse is proven by that gate, not by any v1 resume tool.
+- **agy citizenship:** in a fresh agy conversation, the first `PreInvocation` must yield a garden id, `entwurf_self` must report `agentId=meta-session/antigravity` and `replyable:true` only while the native probe is alive, and a reply to that same garden id must direct-inject into the same conversation. No mailbox/receiver-marker evidence counts on this rail.
 
 ### What NOT to do — bypassing the operational path
 
@@ -92,8 +95,9 @@ The goal is not merely "invoke Claude Code." We want:
 
 1. `pnpm install` — bundles pi (a dev/peer dependency; no separate `pi install` step) and builds the bridge
 2. project wiring → `<project>/.pi/settings.json` `entwurfProvider.mcpServers.entwurf-bridge`
-3. meta-bridge global plugin — only when a native harness (`claude`) is on PATH; a pi-only host skips it cleanly
-4. `entwurf-bridge` install smoke (`validate_entwurf_bridge`)
+3. Claude meta-bridge global plugin — only when `claude` is on PATH; otherwise skipped cleanly
+4. agy bridge + exact permission + statusline + `PreInvocation` hook — only when `agy` is on PATH; each adapter is idempotent and independently doctorable
+5. `entwurf-bridge` install smoke (`validate_entwurf_bridge`)
 
 ```bash
 git clone https://github.com/junghan0611/entwurf /path/to/entwurf && cd $_
@@ -101,7 +105,7 @@ git clone https://github.com/junghan0611/entwurf /path/to/entwurf && cd $_
 # re-run the SAME command any time to repair a broken install
 ```
 
-Expected tail: `DONE: entwurf setup (pi package + meta-bridge + v2 install smoke) green.` On a host with `claude`, verify the native wiring with `./run.sh doctor-meta-bridge`.
+Expected tail: `DONE: entwurf setup (pi adapter + detected native bridges + v2 install smoke) green.` On a host with `claude`, verify `./run.sh doctor-meta-bridge`. On a host with `agy`, verify all three: `doctor-agy-bridge`, `doctor-agy-statusline`, and `doctor-agy-hooks`. Setup keeps optional-harness failures non-fatal so pi/Claude hosts are not bricked; the doctors are the fail-loud acceptance surface.
 
 The wiring / meta-bridge / smoke steps are internal building blocks of `setup` (`install_local_package`, `scripts/meta-bridge-install.sh`, `validate_entwurf_bridge`) — call `setup`, never the parts. Consumers who `npm install @junghanacs/entwurf` get the obvious npm surface; that path is not the developer concern here.
 
@@ -120,11 +124,11 @@ LIVE=1 ./run.sh release-gate /path/to/consumer-project
 pi --provider entwurf --model claude-sonnet-5 -p "reply with ok only"   # one-turn smoke
 ```
 
-`setup` runs `pnpm install` + `install` + meta-bridge (native harness) + the v2 install smoke; a green `setup` implies the settings.json wiring and install surface are healthy. The full live floor is still `LIVE=1 ./run.sh release-gate`.
+`setup` runs `pnpm install` + project/user-scope install + detected native-harness wiring (Claude and/or agy) + the v2 install smoke. A green setup proves the required core path and reports optional-harness degradation; it does **not** replace the native-harness doctors. The full aggregate live floor is still `LIVE=1 ./run.sh release-gate`, with agy's conversation-id-gated round trip verified separately.
 
 ### 1.4 Cross-install / cross-backend parity (optional, high-value)
 
-Compare a fresh self-awareness report across axes: (1) same backend, different install path — answer must be path-invariant; (2) same backend, different machine — identical native tool list + MCP server/tool set; (3) different backend, same bridge — same harness id (`entwurf`) and MCP surface but **different** native tool surface (a Claude session reporting `apply_patch` as native, or normalized cross-backend tools, is a fail); (4) native pi routing vs ACP-bridged, same model — the native target reports **no `entwurf-bridge` MCP** (capability via pi's extension surface) while the ACP target reports it as the single MCP server. Honest "native: I cannot tell" hedging is PASS on the native side. Status: Claude axes 1–4 closed; Gemini is probe-only on 0.12.
+Compare a fresh self-awareness report across axes: (1) same backend, different install path — answer must be path-invariant; (2) same backend, different machine — identical native tool list + MCP server/tool set; (3) different backend, same bridge — same garden capability but **different** native tool surface (a Claude session reporting another backend's native tools is a fail); (4) native pi routing vs ACP-bridged, same model — the native target reports no `entwurf-bridge` MCP (capability via pi's extension surface), while the ACP target reports it as the single MCP server. Honest "native: I cannot tell" hedging is PASS on the native side. Claude axes 1–4 are closed. agy is graded by the separate native-citizen checklist above, not by pretending it has Claude's ACP overlay. Gemini remains probe-only on 0.12.
 
 ---
 
@@ -147,7 +151,7 @@ Pass (carrier honesty): the subject distinguishes engraving from pi-context-augm
 
 - **Layer 0 — self-awareness:** ask environment self-awareness / MCP visibility / upstream-instruction awareness, guessing prohibited. Pass: recognizes native tool family, says "I don't know" honestly, answers MCP visibility only as configured, describes upstream instruction type without reproducing internal prompts. Fail: claims a nonexistent tool, conflates pi-custom and native tools, hallucinates MCP visibility, or conflates the two carriers (§1A.0).
 - **Layer 1 — native tool use:** throw file-reading / structure-analysis / regression-hunting tasks. Pass: Read/Edit/Bash/Grep/Glob selection is natural; no detour through MCP or recursive `pi`. Fail: strange detours for simple reads; speaks from memory without reading.
-- **Layer 2 — MCP boundary:** by default the four v2 MCP tools are not visible (they appear only when `entwurf-bridge` is registered). Pass: says invisible tools are not visible; explains the native-vs-MCP boundary. Fail: pretends to use an unseen tool; mimics entwurf via recursive `pi`.
+- **Layer 2 — MCP boundary:** by default the five entwurf MCP tools are not visible (they appear only when `entwurf-bridge` is registered). Pass: says invisible tools are not visible; explains the native-vs-MCP boundary; treats `entwurf_register_native` as binding an already-running conversation, never as fresh spawn. Fail: pretends to use an unseen tool; mimics entwurf via recursive `pi`.
 - **Layer 3 — focus across turns:** inject a fact, then accumulate turns mixing retrieval/exploration. Pass (post-0.4.1): after **8 turns** holds **3+ early facts** incl. **one verbatim string injected before turn 5**; no repeated exploration, no self-contradiction, no tool-strategy drift. Fail: forgets early reads; paraphrases instead of returning the verbatim string. Note: entwurf exposes no user-facing compaction; use the backend's `usage_update` footer as an overflow-risk signal (it follows the ACP backend's `used/size`, not pi's visible-transcript estimate).
 - **Layer 4 — vs direct Claude Code:** requires a verifier holding **both** the `entwurf` and a direct path (human-in-loop, or both transport handles). Compare latency / native tool accuracy / detours / boundary confusion / quality around turns 10–15. Repeated tool confusion, long-turn forgetting, or boundary workarounds are a fail.
 
@@ -215,10 +219,11 @@ The minimum passing bar:
 
 1. **Deterministic floor green:** `pnpm check` passes (lint + typecheck + the `check-*` gate set + `check-pack`).
 2. **Live floor MUST green:** `LIVE=1 ./run.sh release-gate <dir>` reports `MUST PASS=N FAIL=0 SKIP=0`; a BEHAVIOR FAIL is advisory, not blocking.
-3. **Honest self-recognition:** the bridged model identifies the harness as `entwurf`, names its backend, lists `entwurf-bridge` as the single MCP server with its four v2 tools, and presents a **backend-native** (not normalized) tool surface.
+3. **Honest self-recognition:** the bridged model identifies its actual harness/backend, lists `entwurf-bridge` as the single MCP server with its five current tools, and presents a backend-native (not normalized) tool surface.
 4. **Carrier separation honored:** engraving vs pi-context-augment kept distinct (§1A.0); no bridge-identity narrative attributed to the engraving carrier.
-5. **Boundary preservation across backends/machines:** for every shipped or explicitly probed backend, regardless of install path or host, no cross-backend tool-surface contamination and no confabulation about pi internals.
-6. **Hygiene:** no orphan ACP children; no unexpected persisted session garbage (a turn-scoped `cwd:` fallback is never a persisted reuse).
+5. **agy shipped lane accepted:** all three agy doctors are green; automatic birth/statusline/sender identity and same-gid native-push reply are confirmed in a fresh conversation. `agentId=meta-session/antigravity` is correct; model display is not part of that contract. Same-pid concurrent conversation invocation is not claimed.
+6. **Boundary preservation across backends/machines:** for every shipped or explicitly probed backend, regardless of install path or host, no cross-backend tool-surface contamination and no confabulation about pi internals.
+7. **Hygiene:** no orphan ACP children; no unexpected persisted session garbage (a turn-scoped `cwd:` fallback is never a persisted reuse).
 
 Passing establishes a **release verification floor**, not an 8-hour/day operational guarantee. The floor says: gates hold, the agent honestly recognizes its environment, no tool surface is normalized away, no identity leaks, no orphans. It does **not** say a real-day workload (50–100+ turns, tool bursts, partial MCP failures, auth/version drift) survives — that needs L3–L5 evidence (appendix).
 

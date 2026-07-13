@@ -95,8 +95,9 @@ Usage:
   ./run.sh smoke-meta-async-drift     # 1.0.0 meta-bridge step 1: drift sentinel — version pins + Claude binary undocumented-behavior markers (LIVE=1 adds plugin watch-arm probe)
   ./run.sh smoke-meta-honesty         # 1.0.0 meta-bridge: honesty regression gate (#30 blockers) — doorbell counts ALL msgs honestly + hook logs failures as ERROR (best-effort, no scream). Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-meta-install-state   # 1.0.0 meta-bridge Phase 2: stateful install/uninstall + store-doctor regression gate. Offline/deterministic (deps: bash+node+python3)
-  ./run.sh smoke-agy-install-state    # 봉인 8: agy MCP install adapter regression — isolated HOME+XDG, fake bin/pgrep/ss; adopt+state, doctor static/live-SKIP, honest uninstall, symlink refuse, dangling FAIL, checkout impurity 0. Offline/deterministic (deps: bash+python3)
-  ./run.sh smoke-agy-hooks-state      # #46 agy birth imprint regression — hooks.json named hook install/doctor/uninstall + direct PreInvocation stdin→meta-record upsert, isolated HOME+XDG/PI_AGENT. Offline/deterministic (deps: bash+node+python3)
+  ./run.sh smoke-agy-install-state    # agy MCP + exact permission ownership regression (120): isolated HOME+XDG, adopt/state/inverse, symlink refuse, setup degrade. Offline/deterministic
+  ./run.sh smoke-agy-statusline-state # agy ambient garden-id statusLine install/doctor/inverse regression (62). Offline/deterministic
+  ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression (37). Offline/deterministic
   ./run.sh smoke-user-scope-citizen   # 0.12.6 install-boundary: pi packages[] registration SSOT (register-pi-package.py) — idempotent + preserves unrelated + normalizes stale + remove symmetry + fails loud. Offline/hermetic (deps: bash+python3)
   ./run.sh smoke-meta-prune           # 1.0.0 meta-bridge Phase 4: listing-only store janitor regression gate — classify keep/orphan/stale/ambiguous, delete nothing. Offline/deterministic (deps: bash+node)
   ./run.sh smoke-meta-keyset-guard    # 0.10.0 meta-bridge: keyset-owner guard regression — check-keyset-overlap + managed-keys SSOT (disjoint passes, collisions fail). Offline/hermetic (deps: bash+python3)
@@ -108,7 +109,10 @@ Usage:
   ./run.sh doctor-meta-bridge         # 1.0.0 meta-bridge Phase 2: fail-loud doctor — toolchain + state + plugin/MCP + store scan + hook errors + SessionStart evidence + writer-version parity (source↔assembled↔installed: FAIL on a stale deployed meta-record writer)
   ./run.sh install-agy-bridge         # 봉인 7: agy MCP install adapter — register ONE entwurf-bridge server in the agy mcp_config (adopt file / create / REFUSE symlink), stable bin command, install-state under $XDG_DATA_HOME/entwurf/agy-bridge/
   ./run.sh uninstall-agy-bridge       # 봉인 7: honest inverse of install-agy-bridge from install-state (restore preimage / remove key; refuse if config became a symlink)
-  ./run.sh doctor-agy-bridge          # 봉인 7: 2-tier fail-loud doctor — static (documented+observed candidates resolve/parse/command-resolvable, dangling FAILs) + live (agy present → runtime-effective, else honest SKIP)
+  ./run.sh doctor-agy-bridge          # fail-loud doctor: MCP config + exact permission rule + state + live probe label
+  ./run.sh install-agy-statusline     # own the agy statusLine subtree with bare entwurf-agy-statusline; preserve unrelated settings
+  ./run.sh uninstall-agy-statusline   # honest inverse from statusline install-state
+  ./run.sh doctor-agy-statusline      # fail-loud statusLine config/bin/state doctor + honest live SKIP
   ./run.sh install-agy-hooks          # #46 agy birth imprint hook — named PreInvocation hook running bare entwurf-agy-imprint, preserving other hooks
   ./run.sh uninstall-agy-hooks        # honest inverse of install-agy-hooks from install-state
   ./run.sh doctor-agy-hooks           # fail-loud doctor for agy hooks.json imprint wiring
@@ -2668,7 +2672,7 @@ setup_all() {
 
   echo "[setup] repo:    $REPO_DIR"
   echo "[setup] project: $project_dir"
-  echo "[setup] scope:   entwurf v2 orchestration install (pi-native; ACP backends dropped)"
+  echo "[setup] scope:   entwurf v2 package + detected native-harness bridges + pi adapter"
   echo "[setup] verification: v2 install smoke (entwurf-bridge; LIVE substrate = release-gate)"
 
   (cd "$REPO_DIR" && pnpm install --frozen-lockfile)
@@ -2718,12 +2722,14 @@ setup_all() {
   validate_entwurf_bridge
 
   echo ""
-  echo "DONE: entwurf setup (pi package + meta-bridge + v2 install smoke) green."
+  echo "DONE: entwurf setup (pi adapter + detected native bridges + v2 install smoke) green."
   if command -v claude >/dev/null 2>&1; then
-    echo "Verify native-harness wiring with: ./run.sh doctor-meta-bridge"
+    echo "Verify Claude wiring with: ./run.sh doctor-meta-bridge"
   fi
   if command -v agy >/dev/null 2>&1; then
-    echo "Verify agy-harness wiring with:    ./run.sh doctor-agy-bridge"
+    echo "Verify agy wiring with:    ./run.sh doctor-agy-bridge"
+    echo "                           ./run.sh doctor-agy-statusline"
+    echo "                           ./run.sh doctor-agy-hooks"
   fi
   echo "Run 'LIVE=1 ./run.sh release-gate <scratch>' for live substrate acceptance."
 }

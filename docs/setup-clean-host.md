@@ -4,11 +4,12 @@ End-to-end install of **entwurf** on a host with only `git` available — no
 node, no npm package, no pi binary, no dotfiles. The point is to validate the
 public install surface as an outside user would experience it.
 
-> **Scope.** This is the entwurf 0.12.5 install recipe. The base package install
-> is **neutral npm**, not `pi install npm:...`. Pi is an optional adapter lane for
-> the ACP provider / control-socket runtime. The 0.12.5 floor fix is explicitly
-> covered here: installed packages under `node_modules` must not run raw `.ts`
-> bridge, doctor, or plugin-hook helpers through Node strip-types.
+> **Scope.** This is the current entwurf 0.12.x install recipe, including the
+> 0.12.7 Antigravity (`agy`) citizen surface. The base package install is
+> **neutral npm**, not `pi install npm:...`. Pi is an optional adapter lane for
+> the ACP provider / control-socket runtime. Installed packages under
+> `node_modules` must not run raw `.ts` bridge, doctor, or native-hook helpers
+> through Node strip-types.
 
 `entwurf` is a garden-citizen dispatch substrate and meta-bridge. It does not
 provide, copy, or mediate backend credentials — it lets the official backend CLI
@@ -21,7 +22,7 @@ Written against a clean Ubuntu / Debian / macOS host reachable via SSH, here
 called `cleanhost`. `nvm` keeps the path identical across them.
 
 ```bash
-ssh cleanhost 'uname -a; whoami; which git node npm pi claude 2>/dev/null'
+ssh cleanhost 'uname -a; whoami; which git node npm pi claude agy 2>/dev/null'
 # expect on a fully clean host: git present, node/npm/pi/claude absent
 ```
 
@@ -31,8 +32,9 @@ ssh cleanhost 'uname -a; whoami; which git node npm pi claude 2>/dev/null'
 |---|---|---|
 | Node | **24** recommended; `>=22.6.0` minimum | `engines.node` (Node strip-types / ESM runtime) |
 | npm | bundled with Node 24 | public package install path |
-| entwurf | `@junghanacs/entwurf` | neutral npm package; exposes `entwurf`, `entwurf-bridge`, and `entwurf-statusline` bins |
+| entwurf | `@junghanacs/entwurf` | neutral npm package; exposes `entwurf`, `entwurf-bridge`, `entwurf-statusline`, `entwurf-agy-statusline`, and `entwurf-agy-imprint` bins |
 | pi binary | **optional**, `@earendil-works/pi-coding-agent >=0.80.3 <0.81` | needed only for the pi adapter / ACP provider / spawn-bg resume lane |
+| Antigravity `agy` | **optional**, operator-installed/authenticated native CLI | needed only for the shipped native-push citizen lane; entwurf never moves its auth |
 
 ## Stage 0 — Node 24 via nvm
 
@@ -65,6 +67,8 @@ npm install -g @junghanacs/entwurf
 which entwurf
 which entwurf-bridge
 which entwurf-statusline
+which entwurf-agy-statusline
+which entwurf-agy-imprint
 entwurf --help | head -5
 ```
 
@@ -78,11 +82,12 @@ Prove the installed MCP server answers `tools/list` from inside `node_modules`.
 This is the first `node_modules` strip-types regression fixed in 0.12.0: Node
 refuses `--experimental-strip-types` for `.ts` under `node_modules`, so the
 installed package must boot the prebuilt JS under `mcp/entwurf-bridge/dist/`.
-The same installed-vs-dev split then closes the other two `.ts`-at-runtime
-surfaces on that same fence: the `doctor-meta-bridge` store-scan helper (0.12.4)
-and the plugin `SessionStart`/`UserPromptSubmit` hook (0.12.5, runs the compiled
-`dist/pi-extensions/meta-bridge-hook.js` when installed). Installed packages run
-tsc-emitted JS on every one of these; dev clones keep the `.ts` source.
+The same installed-vs-dev split closes every shipped `.ts`-at-runtime surface on
+that fence: the `doctor-meta-bridge` store-scan helper (0.12.4), the Claude plugin
+hook (0.12.5, compiled `dist/pi-extensions/meta-bridge-hook.js`), and the agy
+`PreInvocation` imprint (0.12.7, compiled `dist/scripts/agy-imprint.js`). Installed
+packages run tsc-emitted JS on these paths; dev clones keep transparent `.ts`
+source execution.
 
 ```bash
 node --input-type=module <<'JS'
@@ -96,7 +101,7 @@ child.stdout.on('data', d => {
   try {
     const msg = JSON.parse(out.trim());
     const names = (msg.result?.tools ?? []).map(t => t.name).sort();
-    for (const n of ['entwurf_v2','entwurf_peers','entwurf_self','entwurf_inbox_read']) {
+    for (const n of ['entwurf_v2','entwurf_peers','entwurf_self','entwurf_inbox_read','entwurf_register_native']) {
       if (!names.includes(n)) throw new Error(`missing ${n}: ${names.join(',')}`);
     }
     clearTimeout(timer);
@@ -108,8 +113,9 @@ child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }
 JS
 ```
 
-Expected: a comma-separated tool list containing all four `entwurf_*` tools,
-exit code 0, no backend auth required.
+Expected: a comma-separated tool list containing all five current `entwurf_*`
+tools, exit code 0, no backend auth required. `entwurf_register_native` binds an
+already-running native conversation; it is not a fresh-spawn verb.
 
 ## Stage 3 — wire a project for the pi adapter / ACP plugin (optional)
 
@@ -178,7 +184,54 @@ A plain external MCP host can call tools but is non-replyable. A garden-native
 meta-session has a garden id, a mailbox, and a trusted sender marker; it can call
 `entwurf_self`, receive mailbox wakeups, and be replied to by garden id.
 
-## Stage 5 — backend auth and live runtime smoke
+## Stage 5 — Antigravity native citizen (optional)
+
+If `agy` is already installed and authenticated by the operator, wire the three
+separate ownership atoms. Entwurf does not install agy or copy its auth.
+
+```bash
+which agy
+
+entwurf install-agy-bridge
+entwurf install-agy-statusline
+entwurf install-agy-hooks
+
+entwurf doctor-agy-bridge
+entwurf doctor-agy-statusline
+entwurf doctor-agy-hooks
+```
+
+What these commands own:
+
+- `install-agy-bridge`: one MCP server in `~/.gemini/config/mcp_config.json`
+  and exactly `mcp(entwurf-bridge/entwurf_v2)` in
+  `~/.gemini/antigravity-cli/settings.json`'s permission allow-list;
+- `install-agy-statusline`: the `statusLine` subtree only, pointing at
+  `entwurf-agy-statusline`;
+- `install-agy-hooks`: one named plugin `PreInvocation` hook pointing at
+  `entwurf-agy-imprint`.
+
+They preserve unrelated user state, record independent install-state under
+`$XDG_DATA_HOME/entwurf/`, and refuse symlink-owned config instead of writing
+through someone else's SSOT. Broad YOLO rules such as `command(*)` and
+`unsandboxed(*)` are operator policy and are never granted by this package.
+
+Restart agy, open a **fresh conversation**, and make one model invocation. The
+hook's first `PreInvocation` births/attaches the conversation by native
+`conversationId`; after that, the statusline should show `🪛 <garden-id> agy`.
+Verify:
+
+1. `entwurf_self` reports that gid with `agentId=meta-session/antigravity` and
+   `replyable:true` while the native route probes alive;
+2. an `entwurf_v2` send from agy reaches a sibling with that sender gid;
+3. a sibling's `entwurf_v2(..., intent=fire-and-forget)` reply to the same gid
+   direct-injects into the same agy conversation.
+
+This rail has no mailbox/receiver marker and no `owned-outcome` authority.
+Same-pid concurrent conversation invocation is not supported; separate agy
+processes have separate pid/start-key sender markers.
+
+## Stage 6 — backend auth and live ACP runtime smoke
 
 Backend authentication is the operator's responsibility and lives entirely
 outside entwurf. For the Claude ACP lane:
@@ -196,7 +249,7 @@ pi --provider entwurf --model claude-sonnet-5 -p "reply with ok only"
 If the backend CLI fails directly (`claude -p "ping"`), fix that upstream first.
 `entwurf` surfaces missing auth; it does not repair it.
 
-## Stage 6 — garden/control-socket surface (optional)
+## Stage 7 — garden/control-socket surface (optional)
 
 To address a long-lived pi session from another session or an external MCP host,
 open it with `--entwurf-control`. A garden-native `--session-id` is required —
@@ -210,7 +263,8 @@ pi --session-id "$(entwurf new-session-id)" \
 
 Use `entwurf_peers` to discover citizens and `entwurf_v2` to deliver by garden
 id. Do not choose the transport by hand: the same-looking id may name a live pi
-socket, a dormant pi record, or a mailbox-backed native session.
+socket, a dormant pi record, a mailbox-backed Claude session, or a native-push
+Antigravity conversation.
 
 ## Teardown
 
@@ -218,8 +272,11 @@ socket, a dormant pi record, or a mailbox-backed native session.
 # project wiring
 rm -rf ~/entwurf-smoke/.pi
 
-# meta-bridge plugin (if installed)
+# native-harness surfaces (if installed)
 entwurf uninstall-meta-bridge 2>/dev/null || true
+entwurf uninstall-agy-hooks 2>/dev/null || true
+entwurf uninstall-agy-statusline 2>/dev/null || true
+entwurf uninstall-agy-bridge 2>/dev/null || true
 
 # package and optional pi binary
 npm uninstall -g @junghanacs/entwurf
@@ -231,6 +288,7 @@ rm -rf ~/.nvm
 ```
 
 This walk-through is a verification floor underneath release cuts: neutral npm
-install, installed bridge boot, optional pi adapter registration, and at least
-one authenticated runtime smoke when cutting a live release. GLG owns the
-publish/tag decision.
+install, installed bridge boot, optional pi adapter registration, Claude
+meta-bridge verification where used, all three agy doctors plus a fresh native
+round trip where used, and at least one authenticated ACP runtime smoke. GLG owns
+the publish/tag decision.

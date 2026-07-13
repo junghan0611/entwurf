@@ -18,10 +18,11 @@ Companion surfaces:
 
 ## Scope and non-goals
 
-This document is about **native live-session delivery** for the 0.12.0
-meta-bridge direction: a garden meta-session points at a backend-owned native
-session, and async messages reach that session through the backend's own
-supported surfaces.
+This document is about **native live-session delivery** on the current 0.12.x
+surface: a garden citizen points at a backend-owned native session, and async
+messages reach that session through the backend's own supported surface —
+mailbox wake for Claude Code, native-push for agy, or a launch-mode-specific
+probe rail for Codex.
 
 Non-goals:
 
@@ -94,23 +95,23 @@ When a level is **not applicable** or **conditional**, say so explicitly. For
 example, Codex app-server delivery is conditional on a loaded thread and control
 socket; direct Codex TUI is a different surface.
 
-## Current capability matrix (2026-06-24)
+## Current capability matrix (2026-07-13)
 
 This matrix is a snapshot of what the raw probes have established. It should be
 updated when a backend version changes the delivery surface.
 
-The **Status** column is the 0.12.0 release framing, kept separate from the
-`D0–D8` capability level:
+The **Status** column is the current 0.12.x release framing, kept separate from
+the `D0–D8` capability level:
 
-- **shipped** — a supported entwurf 0.12.0 lane: wired, gated, and addressable through the bridge today.
-- **verified-probe** — async delivery proven by a raw probe, but not yet a shipped/supported lane in 0.12.0 (documented, ships after this cut).
-- **deferred** — not addressable as-is, or needs an extra managed install / cloud surface that is out of 0.12.0 scope.
+- **shipped** — a supported lane: wired, gated, and addressable through the bridge today.
+- **verified-probe** — async delivery proven by a raw probe, but not yet a managed supported citizen lane.
+- **deferred** — not addressable as-is, or needs an extra managed install / cloud surface outside the current release.
 
 | Harness / surface | Status | Highest current level | Transport | Notes |
 |---|---|---:|---|---|
-| **pi native Entwurf** | shipped | D7+ | Unix control socket + pi followUp/custom messages | Replyable pi session. This is the resident baseline, not an external meta-session. 0.12.0 `entwurf_v2` treats a record-less but live pi control socket as a socket-only `fire-and-forget` target (addressed by its socket, not a meta-record); record-less *dormant* resume is intentionally not claimed. |
+| **pi native Entwurf** | shipped | D7+ | Unix control socket + pi followUp/custom messages | Replyable pi session. This is the resident baseline, not an external meta-session. `entwurf_v2` treats a record-less but live pi control socket as a socket-only `fire-and-forget` target; record-less *dormant* resume is intentionally not claimed. |
 | **Claude Code interactive 2.1.163** | shipped | D6, D7 partial, D8 partial | Plugin/global `SessionStart` arms `watchPaths`; external write triggers `FileChanged`; `asyncRewake` wakes idle session | Active idle wake proven without pty. `Stop` alone is piggyback-only. `asyncRewake` is a doorbell; body is self-fetched from mailbox. D8 partial: duplicate/read idempotence, honest unread counts, and level-triggered body drain are gated; empirical wake-edge bounds and unread-heartbeat backstop remain open (#34). |
-| **Antigravity / agy** | shipped | D6, D7 partial | Native LS gRPC `agentapi send-message` (native-push rail: register + `entwurf_v2` + install adapter) | Shipped native-push lane: `entwurf_register_native` binds a live conversation → `entwurf_v2` fire-and-forget direct-injects via the antigravity adapter (full pid/LS scan + `get-conversation-metadata` route, 1-shot re-probe retry); `install-agy-bridge` wires the agy mcp_config (bare `entwurf-bridge`, symlink-refuse, honest inverse). Proven by the canonical `smoke-agy-native-push-live` against a real agy conversation (register create/attach idempotency, native-push delivered, owned→`native-push-no-resume-authority`, bogus→`native-push-probe-indeterminate`, isolated meta-store) + the GPT manual L1~L5 pass. D7 partial: delivery confirmed by GPT's live token-reception observation **and** the smoke's post-send re-probe; a transcript-level content receipt is a canonical follow-up (a smoke-owned agy lifecycle would also cover `native-push-target-dead`). |
+| **Antigravity / agy** | shipped | D6, D7 partial | Native LS gRPC `agentapi send-message` (native-push) | `PreInvocation` automatically births/attaches by native `conversationId` and writes the record-backed pid/start-key sender marker; `entwurf_v2` fire-and-forget probes and direct-injects through the antigravity adapter with a one-shot re-probe retry. Three managed adapters own MCP+one exact permission, statusline, and hook separately. `entwurf_register_native` remains an explicit/manual fallback, not the normal birth path. Live sender→sibling→same-gid reply passed on 2026-07-13; D7 stays partial because there is no canonical transcript/content receipt owned by the smoke. |
 | **Codex app-server-backed TUI 0.136.0** | verified-probe | D6, D7 (status) | WebSocket-over-UDS `turn/start` into the live `threadId` | **Demonstrated, no managed standalone, no cloud.** `codex app-server --listen unix://<owned 0700 dir>` + plain `codex` auto-attach (or `--remote unix://`). Full message injection (agy-like, not a doorbell); `thread/status/changed` gives completion observation. D8 robustness (dedupe / crash recovery / ordering policy) is not tested. `turn/steer` is active-turn steering, not idle wake. |
 | **Codex embedded TUI 0.136.0** | deferred | D0 partial | Native state DB / rollout transcript only | Standalone Embedded TUI binds no socket; no `FileChanged`/`asyncRewake` in Codex hooks; not retrofittable. Identify-only via state DB / rollout. |
 | **Codex managed-daemon / remote-control 0.136.0** | deferred | D4–D6 conditional | `app-server proxy` newline JSON-RPC over the daemon control socket | Needs the managed standalone install; `remote-control` also enables the **cloud** bridge. Use the bare `--listen` path above for a purely-local setup. |
@@ -170,42 +171,37 @@ from the pi control-socket liveness domain and from the Claude mailbox self-fetc
 
 #### agy ambient-status axis (install surface, orthogonal to D0–D8)
 
-Beyond delivery, agy carries a second entwurf-owned install surface: **ambient
-garden identity in the native statusline** (`entwurf-agy-statusline`, the agy
-mirror of `meta-bridge-statusline`). This is not a delivery level — it is an
-install-surface ownership axis with the same discipline the delivery rail uses:
-bare stable bin only (never a repo/checkout path), state-backed install/uninstall,
-`statusLine` subtree adopt-and-preserve with honest inverse, symlink refuse, a
-fail-loud `doctor-agy-statusline`, and an honest `?` when the runtime can't answer.
+Beyond delivery, agy carries two more entwurf-owned install surfaces: **ambient
+garden identity in the native statusline** (`entwurf-agy-statusline`) and the
+**`PreInvocation` birth/sender imprint** (`entwurf-agy-imprint`). These are not
+delivery levels — they are install-surface ownership axes with the same discipline
+the delivery rail uses: bare stable bins only (never repo/checkout paths),
+state-backed install/uninstall, element-level adopt-and-preserve with honest
+inverse, symlink refusal, fail-loud doctors, and an honest `?` before identity
+exists.
 
-Identity authority is the native `conversation_id` (== `session_id`) looked up
-against the meta-session record bodies. No cwd back-match, no gid invention.
-The display half is verified: an unregistered conversation renders `🪛 ? agy`,
-and after `entwurf_register_native(conversation_id, cwd)` a garden id appears
-(`🪛 <gid> agy`).
+Identity authority is the native `conversationId` looked up against meta-record
+**bodies**. No cwd back-match, filename-derived identity, or gid invention. agy
+has no `SessionStart`; the earliest hook is `PreInvocation`, so a new conversation
+may briefly render `🪛 ? agy`. On the first invocation the installed hook reads
+`conversationId` + `workspacePaths`, calls `upsertMetaSession` idempotently, and
+writes a sender marker only after the record exists. It always returns the neutral
+`{"injectSteps":[]}` response so identity bookkeeping cannot block the agy loop.
 
-**Open to reach Claude-Code parity:** Claude Code has a SessionStart hook that
-births the meta-record automatically (`upsertMetaSession(claude-code)`), so the
-gid is present before the statusline first renders. agy does not yet have an
-equivalent birth path in this lane. Manual `entwurf_register_native` is a debug /
-explicit-register path, not the final "Claude Code level" UX. agy DOES expose a
-lifecycle-hook surface (`hooks.json`), but with **no `SessionStart`** — the
-earliest trigger is `PreInvocation` (before the first model call), whose payload
-carries `conversationId` + `workspacePaths` (cwd). The confirmed close design is
-an agy `PreInvocation` imprint hook that reads those and calls the SAME
-`upsertMetaSession({backend:"antigravity", nativeSessionId:conversationId, cwd})`
-CC uses — best-effort + log (never blocks the agy loop), empty `conversationId`
-refused, no probe needed (the hook runs inside a live invocation). This is a
-real record mint by an authoritative native id, NOT a cwd back-match or gid
-invention, so it completes sealed-contract 3 rather than violating it. The only
-difference from CC is timing (SessionStart vs first PreInvocation → a brief `?`
-before the first turn). Until this hook is wired + installed (adopt-and-preserve
-in agy's hook root, honest inverse, stable bin, doctor + smoke), a new agy
-conversation stays honest `?`.
+The marker is keyed by the shared host pid + process start-key and is revalidated
+against the record body. Replyability is `recordBacked ∧ probeAlive`, never
+mailbox `watchArmed`. This supports separate agy processes (measured: three pids,
+three markers) but **not** simultaneous model invocation by two conversations
+under one agy pid: one marker file would be last-writer-wins, so that concurrency
+is explicitly unsupported.
 
-Verified so far: `smoke-agy-statusline-state` (53 checks) + `smoke-agy-install-state`
-(76 checks) + both `doctor-agy-*` static/state green with honest live labels;
-live `?` → manual register → gid observed by GLG. Auto-birth is still pending.
+Current deterministic floor: `smoke-agy-install-state` 120 checks,
+`smoke-agy-statusline-state` 62, `smoke-agy-hooks-state` 37,
+`check-agy-sender-identity` 28, plus the shared self-address/native-push gates.
+The bridge installer owns only `mcp(entwurf-bridge/entwurf_v2)` in
+`permissions.allow`; broad YOLO policy stays operator-owned. Live 2026-07-13:
+automatic birth → gid/statusline → record-backed sender → sibling delivery →
+same-gid native-push reply passed.
 
 ### Codex — split by launch mode, not by "Codex"
 
@@ -230,7 +226,7 @@ not addressability.
 
 A Codex adapter must declare which launch mode + which socket it targets.
 
-## How to use this in 0.12.0 design
+## How to use this in the current 0.12.x design
 
 For meta-sessions, peer records should expose capability rather than hiding
 backend differences:
@@ -241,7 +237,7 @@ type WakeMode = "socket" | "file-watch" | "native-push" | "app-server" | "piggyb
 type DeliveryPeer = {
   sessionId: string;              // garden id
   kind: "pi-session" | "meta-session";
-  backend: "pi" | "claude-code" | "agy" | "codex" | string;
+  backend: "pi" | "claude-code" | "antigravity" | "codex" | string;
   replyable: boolean;
   wakeMode: WakeMode;
   deliveryLevel: "D0" | "D1" | "D2" | "D3" | "D4" | "D5" | "D6" | "D7" | "D8";
