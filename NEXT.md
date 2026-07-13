@@ -7,8 +7,11 @@
 - **Stem:** agy/Antigravity를 완전한 garden citizen으로 출하한다. 당분간 릴리즈 축은 **0.12.x**이며, **0.13.0은 cortex 지원(#48)** 에 예약한다.
 - **Current:** #46 본체 구현·설치면·회귀 게이트는 완료됐다. thinkpad에서 agy 자동 birth → gid/statusline → MCP `entwurf_v2` → `meta-session/antigravity`·`replyable:true` sender → 같은 gid로 native-push 답장 도착까지 라이브 왕복을 확인했다. 최종 문서/pack 감사에서 npm-installed `entwurf-agy-imprint`가 raw `.ts`를 실행해 `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`으로 죽는 릴리즈 블로커를 발견했고, compiled dist dispatch + 실제 tarball 설치 회귀로 수정했다.
 - **Next:**
-  1. **#46 마지막 ownership handoff를 agent-config에서 닫는다.** 현재 agent-config의 `pi/settings{,.server}.json`에는 entwurf `packages[]`/`entwurfProvider.mcpServers`가, `antigravity/settings.json`/setup에는 agent-config statusLine whole-file ownership이 남아 있다. entwurf `setup`을 먼저 실행해 live user/project provider를 bare `entwurf-bridge`로 normalize한 뒤, agent-config가 이 키들을 놓고 agy settings를 symlink가 아닌 disjoint-key merge로 바꾼다. `doctor-pi-provider` EFFECTIVE bare + agy doctor 3개 green + agent-config setup 재실행 후 무회귀가 완료판정이다.
-  2. #46 문서+installed-imprint fix를 검수·커밋하고 main을 push한다.
+  1. **#46 마지막 ownership handoff를 agent-config에서 닫는다.** "새 소유자가 잡는" 앞 절반은 이 호스트에서 이미 끝났다: live `~/.gemini/antigravity-cli/settings.json`은 **regular file**이고 `statusLine.command=entwurf-agy-statusline` + `permissions.allow`에 `mcp(entwurf-bridge/entwurf_v2)` 한 줄이 들어가 있으며, 운영자 소유 `command(*)`/`unsandboxed(*)`는 그대로 보존돼 있다. 남은 것은 "옛 소유자가 놓는" 뒷 절반이다.
+     - 재발 벡터가 구체적이다: `agent-config/run.sh:741`의 `ensure_link`가 그 파일을 **whole-file symlink로 되돌린다.** 그 순간 entwurf의 원소별 adapter는 symlink-refuse로 막히고 statusline/permission 소유가 agent-config 버전으로 되돌아간다. agent-config가 symlink를 버리고 disjoint-key merge로 바꾸기 전에는 agy doctor green이 재현 가능한 상태가 아니다.
+     - pi 축은 아직 앞 절반도 안 끝났다: agent-config `pi/settings{,.server}.json`이 entwurf `packages[]` + repo-path `entwurfProvider.mcpServers`를 들고 있고, `doctor-pi-provider`는 EFFECTIVE를 legacy repo path로 읽으며 user-scope install-state가 없다. entwurf `setup`을 먼저 돌려 bare `entwurf-bridge`로 normalize한 뒤 agent-config가 그 키들을 놓는다.
+     - 완료판정: `doctor-pi-provider` EFFECTIVE bare + agy doctor 3개 green + **agent-config setup 재실행 후에도** 무회귀.
+  2. main을 push하고 CI green을 확인한다 (agy 없는 러너에서 `smoke-agy-install-state`가 통과해야 한다 — `b434d0f` 이전에는 여기서 터졌다).
   3. 기존 표준 명령 **`/prepare-release 0.12.7`**로 CHANGELOG 승격 + package/lock 버전 범프 + 정적/LIVE 관문 + release-prep 커밋을 수행한다. `tag-release` 스킬은 이 repo의 릴리즈 절차가 아니다.
   4. clean HEAD에서 **`/make-release 0.12.7`**로 tag/push/GitHub release를 수행한다.
   5. GLG 승인으로 npm publish를 수행하고 실제 글로벌 설치면을 0.12.7로 재배선한다.
