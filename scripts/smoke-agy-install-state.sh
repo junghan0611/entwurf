@@ -381,6 +381,154 @@ ok "dev-bin migrate: foreign legacy refused (linkPath basename != entwurf-bridge
 rm -f "$LEGACY" "$DLINK" "$DSTATE"
 unset ENTWURF_DEV_BIN_DIR ENTWURF_BRIDGE_TARGET ENTWURF_AGY_STATUSLINE_TARGET
 
+# ── K: permission grant — the OTHER half of a usable bridge ───────────────────
+# Registering the server only makes the tool REACHABLE. agy defaults every `mcp` action to Ask, so
+# without an allow rule every entwurf_v2 call stops for a y/n — a registered-but-ungranted bridge is
+# half-installed. We grant exactly ONE string in `permissions.allow`; the operator's own rules are
+# preserved, never managed (granting ourselves command(*) would be their trust decision, not ours).
+SETTINGS="$HOME/.gemini/antigravity-cli/settings.json"
+PSTATE="$XDG_DATA_HOME/entwurf/agy-bridge/permission-state.json"
+SLSTATE="$XDG_DATA_HOME/entwurf/agy-statusline/install-state.json"
+STATUSLINE="$REPO_DIR/scripts/agy-statusline-bridge.sh"
+RULE='mcp(entwurf-bridge/entwurf_v2)'
+has_rule() { python3 -c "
+import json,sys
+d=json.load(open('$1'))
+sys.exit(0 if '$RULE' in (d.get('permissions') or {}).get('allow', []) else 1)"; }
+
+rm -f "$SETTINGS" "$PSTATE" "$STATE" "$GLOBAL"
+bash "$BRIDGE" install >/dev/null 2>&1
+want "permission: install grants the rule into permissions.allow" "has_rule '$SETTINGS'"
+
+# IDEMPOTENCY, and not only of the file: a re-install must not rewrite PROVENANCE either. Re-reading
+# the rule we ourselves wrote as "the operator already had it" would strand it forever (the inverse
+# would decline to remove it). Installers are re-run on every upgrade, so this path is the norm.
+bash "$BRIDGE" install >/dev/null 2>&1
+bash "$BRIDGE" install >/dev/null 2>&1
+want "permission: re-install is idempotent (rule appears exactly once)" \
+  "[ \"\$(python3 -c \"import json;print(json.load(open('$SETTINGS'))['permissions']['allow'].count('$RULE'))\")\" = 1 ]"
+want "permission: re-install does NOT re-attribute OUR rule to the operator (provenance is sticky)" \
+  "[ \"\$(python3 -c \"import json;print(json.load(open('$PSTATE'))['ruleExistedBefore'])\")\" = False ]"
+
+# Honest inverse after those re-installs: WE created the file and both containers, so nothing of
+# ours may survive. (Before the provenance fix, install×2 → uninstall left the rule behind.)
+bash "$BRIDGE" uninstall >/dev/null 2>&1
+want "permission: uninstall after re-installs still removes everything we created" "[ ! -e '$SETTINGS' ]"
+want "permission: uninstall clears the permission state" "[ ! -e '$PSTATE' ]"
+
+# The operator's file: unrelated keys and their OWN rules survive us, coming and going.
+printf '{"model":"x","permissions":{"allow":["command(*)"],"deny":["read_file(/etc)"]}}\n' > "$SETTINGS"
+bash "$BRIDGE" install >/dev/null 2>&1
+want "permission: install preserves the operator's own allow/deny rules" \
+  "python3 -c \"import json,sys;p=json.load(open('$SETTINGS'))['permissions'];sys.exit(0 if 'command(*)' in p['allow'] and p['deny']==['read_file(/etc)'] else 1)\""
+want "permission: install preserves unrelated settings keys" \
+  "[ \"\$(python3 -c \"import json;print(json.load(open('$SETTINGS')).get('model'))\")\" = x ]"
+bash "$BRIDGE" uninstall >/dev/null 2>&1
+want "permission: uninstall takes back ONLY our rule, leaving the operator's structure intact" \
+  "python3 -c \"import json,sys;p=json.load(open('$SETTINGS'))['permissions'];sys.exit(0 if p['allow']==['command(*)'] and p['deny']==['read_file(/etc)'] else 1)\""
+
+# The rule was ALREADY the operator's before we ever installed → it was never ours to take away.
+printf '{"permissions":{"allow":["%s"]}}\n' "$RULE" > "$SETTINGS"
+bash "$BRIDGE" install >/dev/null 2>&1
+want "permission: an operator's pre-existing rule is recorded as theirs (ruleExistedBefore)" \
+  "[ \"\$(python3 -c \"import json;print(json.load(open('$PSTATE'))['ruleExistedBefore'])\")\" = True ]"
+bash "$BRIDGE" uninstall >/dev/null 2>&1
+want "permission: uninstall does NOT revoke a rule the operator already had" "has_rule '$SETTINGS'"
+
+# ── K2: TWO adapters, ONE file — element ownership is what keeps them apart ────
+# The statusline adapter owns the `statusLine` subtree of this same settings.json; we own one string
+# in `permissions.allow`. Neither may restore a whole-file preimage, or uninstalling one would
+# silently revert the other. Both orders, both inverses.
+rm -f "$SETTINGS" "$PSTATE" "$SLSTATE"
+bash "$STATUSLINE" install >/dev/null 2>&1
+bash "$BRIDGE" install >/dev/null 2>&1
+want "two-adapters: bridge's grant does not disturb the statusline subtree" \
+  "python3 -c \"import json,sys;d=json.load(open('$SETTINGS'));sys.exit(0 if d['statusLine']['command']=='entwurf-agy-statusline' else 1)\""
+want "two-adapters: statusline install did not block the grant" "has_rule '$SETTINGS'"
+bash "$BRIDGE" uninstall >/dev/null 2>&1
+want "two-adapters: uninstalling the bridge leaves the statusline intact (no whole-file preimage)" \
+  "python3 -c \"import json,sys;d=json.load(open('$SETTINGS'));sys.exit(0 if d['statusLine']['command']=='entwurf-agy-statusline' else 1)\""
+want "two-adapters: uninstalling the bridge removed OUR rule" "! has_rule '$SETTINGS'"
+
+# Reverse order: bridge first, statusline second, uninstall the statusline.
+rm -f "$SETTINGS" "$PSTATE" "$SLSTATE"
+bash "$BRIDGE" install >/dev/null 2>&1
+bash "$STATUSLINE" install >/dev/null 2>&1
+bash "$STATUSLINE" uninstall >/dev/null 2>&1
+want "two-adapters(reverse): uninstalling the statusline leaves OUR grant intact" "has_rule '$SETTINGS'"
+want "two-adapters(reverse): the statusline key is gone" \
+  "! python3 -c \"import json,sys;sys.exit(0 if 'statusLine' in json.load(open('$SETTINGS')) else 1)\""
+
+# ── K3: doctor evidence — "why does agy ask me every time?" is never a mystery ──
+# A registered server with no grant is a HALF-installed bridge: it works, but stops for a y/n on
+# every call. Naming that in a message while exiting 0 would be the same lie in a friendlier voice,
+# so the doctor must FAIL on it — for an INSTALLED host. On a host that never installed the bridge
+# there is nothing to grant, and that stays a note.
+rm -f "$SETTINGS" "$PSTATE" "$SLSTATE"
+bash "$BRIDGE" install >/dev/null 2>&1
+python3 -c "import json;d=json.load(open('$SETTINGS'));d['permissions'].pop('allow',None);json.dump(d,open('$SETTINGS','w'))"
+DOC_OUT="$(bash "$BRIDGE" doctor 2>&1 || true)"
+want "permission: doctor names the missing grant (not a silent pass)" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'DRIFT'"
+if bash "$BRIDGE" doctor >/dev/null 2>&1; then die "grant-drift: doctor should FAIL (installed bridge, grant gone)"; fi
+ok "permission: doctor EXITS NONZERO on an installed-but-ungranted bridge (a half-install is not green)"
+
+# THE SUBTLE ONE: agy evaluates Deny > Ask > Allow, so an operator rule like mcp(*) in their ask
+# list silently OVERRIDES our allow — agy prompts again while our install-state still looks green.
+printf '{"permissions":{"allow":["%s"],"ask":["mcp(*)"]}}\n' "$RULE" > "$SETTINGS"
+if bash "$BRIDGE" doctor >/dev/null 2>&1; then die "shadow: doctor should FAIL when ask/deny overrides our allow"; fi
+ok "permission: doctor FAILS when a higher-precedence ask/deny rule shadows our allow"
+DOC_OUT="$(bash "$BRIDGE" doctor 2>&1 || true)"
+want "permission: the shadow report names the offending list and rule" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'SHADOWED'"
+
+# ── K4: a grant we cannot write FAILS the explicit install (setup degrades it, not us) ──
+# A symlinked settings.json is someone else's SSOT (an agent-config link) — never clobber it. But
+# refusing to write is not the same as succeeding: the explicit installer must exit nonzero, because
+# it registered a server it could not make callable. Tolerance belongs one level up, in setup, where
+# agy is optional and must not brick a pi/Claude host.
+rm -f "$SETTINGS" "$PSTATE" "$STATE" "$GLOBAL"
+printf '{"permissions":{"allow":[]}}\n' > "$SB/foreign-settings.json"
+ln -s "$SB/foreign-settings.json" "$SETTINGS"
+if bash "$BRIDGE" install >/dev/null 2>&1; then die "grant-symlink: explicit install should FAIL when it cannot grant"; fi
+ok "permission: explicit install EXITS NONZERO when the grant cannot be written (no half-install reported as success)"
+want "permission: a symlinked settings.json is left untouched (someone else's SSOT)" \
+  "! has_rule '$SB/foreign-settings.json'"
+want "permission: no permission state is written for a refused symlink" "[ ! -e '$PSTATE' ]"
+
+# …and the SAME failure, seen from setup: NON-FATAL, reason-specific, never silent.
+set +e; OUT="$(bash "$REPO_DIR/run.sh" wire-agy-bridge 2>&1)"; RC=$?; set -e
+want "permission(setup): the wrapper keeps setup alive (exit 0) despite the failed grant" "[ '$RC' -eq 0 ]"
+want "permission(setup): the wrapper says the bridge is REGISTERED but NOT GRANTED (no silent pass)" \
+  "printf '%s' \"\$OUT\" | grep -q 'NOT GRANTED'"
+rm -f "$SETTINGS" "$PSTATE" "$STATE" "$GLOBAL"
+
+# Corrupt settings.json: same contract — the explicit install fails loud, and says what to repair.
+printf 'not json\n' > "$SETTINGS"
+if bash "$BRIDGE" install >/dev/null 2>&1; then die "grant-corrupt: explicit install should FAIL on an unparseable settings.json"; fi
+ok "permission: explicit install EXITS NONZERO on a corrupt settings.json (repair it, do not guess)"
+rm -f "$SETTINGS" "$PSTATE" "$STATE" "$GLOBAL"
+
+# ── K5: a revoke we cannot perform is a FAILED inverse, not a footnote ────────
+# Install cleanly, then have the settings file become someone else's SSOT (a symlink) before the
+# uninstall. We refuse to write through it — correct — but "uninstalled" over a rule still sitting
+# in the operator's settings would be a lie in the one direction that must never lie. It fails, the
+# foreign file is untouched, and the permission-state SURVIVES so a retry (or a hand-repair) still
+# knows what we owe.
+rm -f "$SETTINGS" "$PSTATE" "$STATE" "$GLOBAL"
+bash "$BRIDGE" install >/dev/null 2>&1
+want "inverse-symlink: precondition — the grant is in place before we break the path" "has_rule '$SETTINGS'"
+printf '{"permissions":{"allow":["command(*)"]}}\n' > "$SB/foreign-uninstall.json"
+rm -f "$SETTINGS"
+ln -s "$SB/foreign-uninstall.json" "$SETTINGS"
+if bash "$BRIDGE" uninstall >/dev/null 2>&1; then die "inverse-symlink: uninstall should FAIL when it cannot revoke the grant"; fi
+ok "permission: uninstall EXITS NONZERO when the grant cannot be revoked (honest inverse, not a WARN)"
+want "inverse-symlink: the foreign settings file is untouched (never written through a symlink)" \
+  "python3 -c \"import json,sys;p=json.load(open('$SB/foreign-uninstall.json'))['permissions'];sys.exit(0 if p['allow']==['command(*)'] else 1)\""
+want "inverse-symlink: the permission state SURVIVES the failure (a retry still knows what we owe)" \
+  "[ -e '$PSTATE' ]"
+rm -f "$SETTINGS" "$PSTATE" "$STATE" "$GLOBAL"
+
 # ── ⓪ checkout purity: the working tree is byte-identical (nothing under $REPO) ─
 REPO_AFTER="$(cd "$REPO_DIR" && git status --porcelain)"
 want "purity: checkout unchanged (0 impurity — all writes stayed in the sandbox HOME+XDG)" \

@@ -52,17 +52,17 @@ import { receiverMarkerMatchesIdentity } from "../../../pi-extensions/lib/entwur
 import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provider.ts";
 import { renderEntwurfPeers } from "../../../pi-extensions/lib/entwurf-peers-render.ts";
 import { computeSelfAddressability } from "../../../pi-extensions/lib/entwurf-self-address.ts";
+import { nativePushSupported } from "../../../pi-extensions/lib/entwurf-v2-contract.ts";
 import { runAndRenderEntwurfV2FromSurface } from "../../../pi-extensions/lib/entwurf-v2-surface.ts";
+import {
+	probeNativeSenderAlive,
+	resolveTrustedMetaSenderIdentity,
+} from "../../../pi-extensions/lib/meta-sender-identity.ts";
 import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
-	type MetaIdentity,
-	type MetaSenderMarker,
-	parentPid,
-	readMetaIdentityByGardenId,
 	readMetaInbox,
 	readMetaReceiverMarker,
-	readMetaSenderMarker,
 } from "../../../pi-extensions/lib/meta-session.ts";
 import { registerNativeConversation } from "../../../pi-extensions/lib/native-push/register.ts";
 
@@ -151,22 +151,6 @@ class EntwurfSenderIdentityError extends Error {
 	}
 }
 
-// Resolve the meta-sender marker for THIS MCP process. ENTWURF_META_SENDER_MARKER is an
-// explicit override (test / wiring). Otherwise try the shared ancestor: process.ppid
-// first, then one step up (Claude may run the hook through a shell wrapper, shifting
-// the shared ancestor). readMetaSenderMarker's pid+start-key guard rejects a
-// dead/reused owner, so a wrong marker is never trusted on any candidate.
-function resolveMetaSenderMarker(): MetaSenderMarker | null {
-	const explicit = process.env.ENTWURF_META_SENDER_MARKER?.trim();
-	if (explicit) return readMetaSenderMarker({ markerPath: explicit });
-	const candidates = [process.ppid, parentPid(process.ppid)].filter((p): p is number => typeof p === "number" && p > 0);
-	for (const ownerPid of candidates) {
-		const marker = readMetaSenderMarker({ backend: "claude-code", ownerPid });
-		if (marker) return marker;
-	}
-	return null;
-}
-
 function buildStrictPiSenderEnvelope(): SenderEnvelope {
 	const sessionId = process.env.PI_SESSION_ID?.trim();
 	const agentId = process.env.PI_AGENT_ID?.trim();
@@ -196,47 +180,49 @@ function buildStrictPiSenderEnvelope(): SenderEnvelope {
 	};
 }
 
-function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): SenderEnvelope | null {
-	// No pi-session identity. Try the meta-sender marker: a native backend that
-	// minted a garden-id via its SessionStart hook. The marker is keyed by the
-	// shared parent pid — this MCP child's process.ppid IS the Claude Code process
-	// the hook ran under (NOT cwd inference). ENTWURF_META_SENDER_MARKER overrides the
-	// lookup for explicit wiring / tests. A trusted marker promotes this process to
-	// a REPLYABLE meta-session sender addressed by its garden-id.
-	const marker = resolveMetaSenderMarker();
-	if (!marker) return null;
-
-	// Validate the marker against its backing meta-record: a stale marker (record
-	// deleted, or backend/nativeSessionId drift) must NOT grant a replyable
-	// identity. The record store is the authority; the marker is only a pid→garden
-	// hint.
-	let identity: MetaIdentity | null = null;
-	try {
-		// dual-read (3D-4 commit1): identity-only check (backend/nativeSessionId), so
-		// it survives the v2 cut. Reads both v1 and v2 records.
-		const id = readMetaIdentityByGardenId(marker.gardenId);
-		if (id.backend === marker.backend && id.nativeSessionId === marker.nativeSessionId) identity = id;
-	} catch {
-		identity = null;
-	}
-	if (!identity) return null;
-
-	// SE-2 slice 2e-b: identity is trusted, but `replyable` is a SEPARATE fact — can THIS
-	// session's own receiver inbox actually wake? Read the receiver presence marker (slice
-	// 2b) and require it to match the identity (the same SSOT helper the mailbox guard uses).
-	// recordBacked is true here by construction; ownerAlive+watchArmed BOTH come from the
-	// matched receiver marker (readMetaReceiverMarker's verifyOwner folds a dead/reused owner
-	// to null, so a match means a live, armed receiver — the sender marker only proves
-	// identity, not an armed watch). Inactive → the meta identity is STILL returned (who-sent
-	// must survive; degrading to null would erase the sender) but with replyable:false.
-	const receiver = readMetaReceiverMarker({ gardenId: identity.gardenId });
-	const active = receiverMarkerMatchesIdentity(receiver, identity);
-	const self = computeSelfAddressability({
-		origin: "meta-session",
-		recordBacked: true,
-		ownerAlive: active,
-		watchArmed: active,
+async function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): Promise<SenderEnvelope | null> {
+	// No pi-session identity. Try the meta-sender marker: a native backend that minted a
+	// garden-id from its own hook (Claude SessionStart / agy PreInvocation). The marker is
+	// keyed by the shared parent pid — this MCP child's process.ppid IS the native host the
+	// hook ran under (NOT cwd inference). A trusted marker promotes this process from
+	// anonymous external-mcp to a meta-session sender addressed by its garden-id.
+	const trusted = resolveTrustedMetaSenderIdentity({
+		markerPath: process.env.ENTWURF_META_SENDER_MARKER?.trim() || undefined,
 	});
+	if (!trusted) return null;
+	const { marker, identity } = trusted;
+
+	// Identity is trusted — but `replyable` is a SEPARATE fact, and WHICH fact depends on the
+	// rail a reply would ride (보정①). The domain comes from nativePushSupported(backend), not
+	// from wakeMode: `direct-inject` also covers codex/pi, which have no native-push adapter.
+	//   self-fetch (claude-code): can this citizen's own inbox wake? → the receiver presence
+	//     marker (readMetaReceiverMarker folds a dead/reused owner to null, so a match means a
+	//     live, ARMED receiver — the sender marker proves identity, never an armed watch).
+	//   native-push (antigravity): there is no inbox and no watch. A reply is injected into a
+	//     live app-server conversation, so only an adapter probe can answer. Composing the
+	//     receiver atom here would demand `watchArmed` from a backend that never arms one, and
+	//     every agy citizen would report replyable:false forever.
+	// Either way an inactive/unreachable citizen STILL returns its identity (who-sent must
+	// survive; degrading to null would erase the sender) — only with replyable:false.
+	const facts = nativePushSupported(identity.backend)
+		? {
+				origin: "meta-session" as const,
+				metaDeliveryDomain: "native-push" as const,
+				recordBacked: true,
+				probeAlive: await probeNativeSenderAlive(identity),
+			}
+		: (() => {
+				const receiver = readMetaReceiverMarker({ gardenId: identity.gardenId });
+				const active = receiverMarkerMatchesIdentity(receiver, identity);
+				return {
+					origin: "meta-session" as const,
+					metaDeliveryDomain: "self-fetch" as const,
+					recordBacked: true,
+					ownerAlive: active,
+					watchArmed: active,
+				};
+			})();
+	const self = computeSelfAddressability(facts);
 
 	return {
 		sessionId: identity.gardenId,
@@ -248,13 +234,15 @@ function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): SenderEnve
 	};
 }
 
-function buildAuthoritativeSelfEnvelope(): SenderEnvelope {
+// async only for the native-push branch's adapter probe: a pi sender and a claude-code
+// sender still resolve from files alone, so their cost is unchanged.
+async function buildAuthoritativeSelfEnvelope(): Promise<SenderEnvelope> {
 	const sessionId = process.env.PI_SESSION_ID?.trim();
 	const agentId = process.env.PI_AGENT_ID?.trim();
 	const cwd = process.cwd();
 	if (sessionId && agentId && cwd) return buildStrictPiSenderEnvelope();
 
-	const meta = buildTrustedMetaSenderEnvelope(cwd);
+	const meta = await buildTrustedMetaSenderEnvelope(cwd);
 	if (meta) return meta;
 
 	const missing: string[] = [];
@@ -264,13 +252,13 @@ function buildAuthoritativeSelfEnvelope(): SenderEnvelope {
 	throw new EntwurfEnvelopeWiringError(missing);
 }
 
-function buildSendSenderEnvelope(): SenderEnvelope {
+async function buildSendSenderEnvelope(): Promise<SenderEnvelope> {
 	const sessionId = process.env.PI_SESSION_ID?.trim();
 	const agentId = process.env.PI_AGENT_ID?.trim();
 	const cwd = process.cwd();
 	if (sessionId && agentId && cwd) return buildStrictPiSenderEnvelope();
 
-	const meta = buildTrustedMetaSenderEnvelope(cwd);
+	const meta = await buildTrustedMetaSenderEnvelope(cwd);
 	if (meta) return meta;
 
 	// No marker. Anonymous external is allowed ONLY when not explicitly forbidden.
@@ -365,7 +353,7 @@ server.tool(
 		try {
 			// Resolved ONCE so the dispatch-moment timestamp is fixed and the control RPC sender
 			// + the mailbox body sender share one envelope. No replyability gate (see above).
-			const sender = buildSendSenderEnvelope();
+			const sender = await buildSendSenderEnvelope();
 			const rendered = await runAndRenderEntwurfV2FromSurface(
 				{ target, intent, message, mode, wants_reply },
 				// agentDir / prefixRoots intentionally omitted: runAndRenderEntwurfV2FromSurface falls
@@ -390,7 +378,7 @@ server.tool(
 	{},
 	async () => {
 		try {
-			const sender = buildAuthoritativeSelfEnvelope();
+			const sender = await buildAuthoritativeSelfEnvelope();
 			const kst = formatKstTimestamp(sender.timestamp);
 			const extra: Record<string, string> = {};
 			const lines = [

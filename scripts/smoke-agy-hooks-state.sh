@@ -111,6 +111,24 @@ want "imprint: second run attaches, no duplicate" "[ \$(find '$AGENT/meta-sessio
 printf '%s' '{"workspacePaths":["/work/smoke"]}' | PI_CODING_AGENT_DIR="$SB/agent2" node --experimental-strip-types "$IMPRINT" >/dev/null
 want "imprint: missing conversationId writes no record" "[ ! -d '$SB/agent2/meta-sessions' ] || [ \$(find '$SB/agent2/meta-sessions' -name '*.meta.json' | wc -l) -eq 0 ]"
 
+# ── RE-INSTALL PROVENANCE: an installer is re-run on every upgrade ────────────
+# The preimage answers "what was here before US". Re-capturing it on each install would record OUR
+# OWN previous hook as the operator's, and the honest inverse would then restore us — uninstall
+# leaving behind the very thing it exists to remove. Same bug class, all three agy adapters.
+rm -f "$HOOKS" "$STATE"
+mkdir -p "$(dirname "$HOOKS")"
+printf '{"other-plugin":{"PreInvocation":[{"type":"command","command":"keepme"}]}}\n' > "$HOOKS"
+bash "$BRIDGE" install >/dev/null 2>&1
+bash "$BRIDGE" install >/dev/null 2>&1
+bash "$BRIDGE" install >/dev/null 2>&1
+want "re-install: provenance stays the FIRST install's (preimage still null, not our own hook)" \
+  "python3 -c \"import json,sys;sys.exit(0 if json.load(open('$STATE'))['preimage'] is None else 1)\""
+bash "$BRIDGE" uninstall >/dev/null 2>&1
+want "re-install: uninstall after install×3 still removes our hook (no self-restore)" \
+  "! python3 -c \"import json,sys;sys.exit(0 if 'entwurf-agy-imprint' in json.load(open('$HOOKS')) else 1)\""
+want "re-install: an unrelated plugin's hook survives the whole cycle" \
+  "python3 -c \"import json,sys;sys.exit(0 if 'other-plugin' in json.load(open('$HOOKS')) else 1)\""
+
 REPO_AFTER="$(cd "$REPO_DIR" && git status --porcelain)"
 want "purity: checkout unchanged (all writes stayed in sandbox HOME+XDG)" "[ \"$REPO_BEFORE\" = \"$REPO_AFTER\" ]"
 

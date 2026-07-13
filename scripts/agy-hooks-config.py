@@ -68,6 +68,20 @@ def hook_command(value) -> str | None:
     return None
 
 
+def prior_state(state_path: str, hooks_path: str) -> dict:
+    """The state of OUR FIRST install of this exact hooks file, if we are re-installing over it.
+
+    Empty when there is no prior install, or when it managed a DIFFERENT path (a re-target is a
+    fresh install for that path). See the note in cmd_install for why this exists.
+    """
+    if not os.path.exists(state_path):
+        return {}
+    prior = load_json(state_path)
+    if prior.get("managedHooksPath") != os.path.abspath(hooks_path):
+        return {}
+    return prior
+
+
 def cmd_install(hooks_path: str, command: str, state_path: str) -> None:
     if os.path.islink(hooks_path):
         die(3, f"agy-hooks: refusing to adopt {hooks_path} — it is a symlink to {os.readlink(hooks_path)} (someone else's SSOT).")
@@ -78,7 +92,17 @@ def cmd_install(hooks_path: str, command: str, state_path: str) -> None:
     else:
         data = {}
         mode = "created-new"
-    preimage = data.get(HOOK_KEY, None)
+    # Capture the preimage ONLY on the first install of this target. An installer is re-run on every
+    # upgrade; re-capturing here would record OUR OWN previous hook as "what was there before", and
+    # uninstall would then faithfully restore us — leaving behind the exact thing it exists to
+    # remove. Provenance is a fact about a moment that has passed: record it once, carry it forward.
+    prior = prior_state(state_path, hooks_path)
+    if prior:
+        preimage = prior.get("preimage", None)
+        mode = prior.get("detectMode", mode)
+        existed = prior.get("hooksExistedBefore", existed)
+    else:
+        preimage = data.get(HOOK_KEY, None)
     data[HOOK_KEY] = hook_value(command)
     atomic_write(hooks_path, dump(data))
     state = {

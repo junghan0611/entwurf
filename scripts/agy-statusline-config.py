@@ -75,6 +75,20 @@ def _now() -> str:
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _prior_state(state_path: str, settings_path: str) -> dict:
+    """The state of OUR FIRST install of this exact settings file, if we are re-installing over it.
+
+    Empty dict when there is no prior install, or when the prior install managed a DIFFERENT path
+    (a re-target is a fresh install for that path, and its preimage must be captured anew).
+    """
+    if not os.path.exists(state_path):
+        return {}
+    prior = _load(state_path)
+    if prior.get("managedSettingsPath") != os.path.abspath(settings_path):
+        return {}
+    return prior
+
+
 def cmd_install(settings_path: str, command: str, state_path: str) -> None:
     # REFUSE a symlink — someone else's SSOT (an agent-config link). Never clobber.
     if os.path.islink(settings_path):
@@ -90,8 +104,18 @@ def cmd_install(settings_path: str, command: str, state_path: str) -> None:
         data = {}
         detect_mode = "created-new"
 
-    # Capture the WHOLE prior statusLine subtree (None = absent) for the honest inverse.
-    preimage = data.get(KEY, None)
+    # Capture the WHOLE prior statusLine subtree (None = absent) for the honest inverse — but ONLY
+    # on the first install of this target. An installer is re-run routinely (every package upgrade);
+    # re-capturing here would capture OUR OWN previous subtree as "what was there before", and
+    # uninstall would then faithfully restore us — leaving behind the exact thing it exists to
+    # remove. Provenance is a fact about a moment that has already passed: record it once, carry it.
+    prior = _prior_state(state_path, settings_path)
+    if prior:
+        preimage = prior.get("preimage", None)
+        detect_mode = prior.get("detectMode", detect_mode)
+        settings_existed = prior.get("settingsExistedBefore", settings_existed)
+    else:
+        preimage = data.get(KEY, None)
     data[KEY] = {"type": "custom", "command": command, "enabled": True}
 
     _atomic_write(settings_path, _dump(data))

@@ -237,6 +237,24 @@ want "wire(agy+corrupt): NO state written" "[ ! -f '$STATE' ]"
 rm -f "$SET" "$SB/bin/agy"
 
 # ── checkout purity: the working tree is byte-identical (nothing under $REPO) ──
+# ── RE-INSTALL PROVENANCE: an installer is re-run on every upgrade ────────────
+# The preimage answers "what was here before US" — a fact about a moment that has already passed.
+# Re-capturing it on each install would record OUR OWN previous subtree as the operator's, and the
+# honest inverse would then faithfully restore us: uninstall leaves behind the very thing it exists
+# to remove. Measured before the fix: install×2 → uninstall left statusLine in the file.
+rm -f "$SET" "$STATE"
+printf '{"model":"x"}\n' > "$SET"
+bash "$BRIDGE" install >/dev/null 2>&1
+bash "$BRIDGE" install >/dev/null 2>&1
+bash "$BRIDGE" install >/dev/null 2>&1
+want "re-install: provenance stays the FIRST install's (preimage still null, not our own subtree)" \
+  "python3 -c \"import json,sys;sys.exit(0 if json.load(open('$STATE'))['preimage'] is None else 1)\""
+bash "$BRIDGE" uninstall >/dev/null 2>&1
+want "re-install: uninstall after install×3 still removes our statusLine (no self-restore)" \
+  "! python3 -c \"import json,sys;sys.exit(0 if 'statusLine' in json.load(open('$SET')) else 1)\""
+want "re-install: the operator's unrelated keys survive the whole cycle" \
+  "[ \"\$(python3 -c \"import json;print(json.load(open('$SET')).get('model'))\")\" = x ]"
+
 REPO_AFTER="$(cd "$REPO_DIR" && git status --porcelain)"
 want "purity: checkout unchanged (all writes stayed in the sandbox HOME+XDG)" \
   "[ \"\$REPO_BEFORE\" = \"\$REPO_AFTER\" ]"

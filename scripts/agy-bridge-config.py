@@ -31,6 +31,29 @@ Subcommands (argv[1]):
       Print one line describing the candidate for the shell doctor: `absent` / `symlink ->
       <target>` prefix / `invalid-json` / `not-configured` / `command <cmd>`. Never mutates.
 
+  permission-install <settings_path> <state_path>
+      The OTHER half of "agy can call our bridge": registering the server (above) makes the tool
+      reachable, but agy's permission engine defaults every `mcp` action to Ask, so every single
+      entwurf_v2 call stops for a y/n. This adds our allow rule to agy's settings.json.
+
+      Ownership is ELEMENT-level, not subtree: we own exactly the string
+      `mcp(entwurf-bridge/entwurf_v2)` inside `permissions.allow`. The operator's own rules
+      (command(*), their ask/deny lists, everything else) are ours to preserve, never to manage —
+      granting ourselves broad permissions would be a trust decision that is not the installer's
+      to make. Same discipline as the single mcpServers key above. Idempotent; refuses a symlink.
+
+  permission-uninstall <state_path>
+      Honest inverse: remove OUR rule only if WE added it (an operator who already had the rule
+      keeps it), then drop the `allow`/`permissions` containers only if we created them and they
+      are now empty. Removes the settings file only if we created it and nothing else remains.
+
+  permission-doctor <settings_path>
+      One token line: `absent` / `invalid-json` / `not-configured` / `configured` /
+      `shadowed-by-<list> <rule>`. The shadow check exists because agy evaluates
+      Deny > Ask > Allow: an operator rule like `mcp(*)` in their ask list SILENTLY defeats our
+      allow, and agy starts prompting again with our install still green. That would be a
+      debugging hole ("why is it asking me every time?"), so the doctor names it instead.
+
 Exit codes: 0 ok · 2 no-state · 3 refuse-symlink · 4 invalid-json · 5 usage.
 """
 
@@ -40,6 +63,15 @@ import sys
 
 SERVER_KEY = "entwurf-bridge"
 STATE_SCHEMA_VERSION = 1
+
+# The ONE permission rule we own. Scoped to a single tool on our own server — not mcp(*), not the
+# server-wide mcp(entwurf-bridge): an installer grants itself the narrowest rule that makes the
+# thing it installed work, and nothing more.
+ALLOW_RULE = f"mcp({SERVER_KEY}/entwurf_v2)"
+# Rules that would match our tool and, from a higher-precedence list, override our allow.
+SHADOWING_RULES = (ALLOW_RULE, f"mcp({SERVER_KEY})", "mcp(*)")
+# Deny > Ask > Allow (agy permissions engine).
+SHADOWING_LISTS = ("deny", "ask")
 
 
 def _die(code: int, msg: str) -> "None":
@@ -73,6 +105,26 @@ def _dump(data: dict) -> str:
     return json.dumps(data, indent=2) + "\n"
 
 
+def _prior_state(state_path: str, managed_key: str, managed_path: str) -> dict:
+    """The state of OUR FIRST install of this exact target, if we are re-installing over it.
+
+    An installer is re-run routinely (every package upgrade). Re-capturing the preimage on each run
+    would capture OUR OWN previous write as "what was there before" — and then uninstall faithfully
+    restores us, leaving the very entry it was supposed to take away. Provenance must be recorded
+    once, at the first install, and carried forward unchanged: preimage, and whether the file
+    existed before us, are facts about a moment that has already passed.
+    """
+    if not os.path.exists(state_path):
+        return {}
+    try:
+        prior = _load_config(state_path)
+    except SystemExit:
+        raise
+    if prior.get(managed_key) != os.path.abspath(managed_path):
+        return {}  # re-targeted somewhere else — this is a fresh install for that path
+    return prior
+
+
 def cmd_install(config_path: str, command: str, state_path: str) -> None:
     # REFUSE a symlink — it is someone else's SSOT (an agent-config link). Never clobber.
     if os.path.islink(config_path):
@@ -95,8 +147,16 @@ def cmd_install(config_path: str, command: str, state_path: str) -> None:
     if not isinstance(servers, dict):
         _die(4, f"agy-bridge: {config_path} mcpServers must be a JSON object")
 
-    # Capture the preimage of OUR key (None = the key was absent) for the honest inverse.
-    preimage = servers.get(SERVER_KEY, None)
+    # Capture the preimage of OUR key (None = the key was absent) for the honest inverse — but ONLY
+    # on the first install of this target. On a re-install the key on disk is our own previous
+    # write; capturing it would make uninstall "restore" us and leave the entry behind.
+    prior = _prior_state(state_path, "managedConfigPath", config_path)
+    if prior:
+        preimage = prior.get("preimage", None)
+        detect_mode = prior.get("detectMode", detect_mode)
+        config_existed = prior.get("configExistedBefore", config_existed)
+    else:
+        preimage = servers.get(SERVER_KEY, None)
     servers[SERVER_KEY] = {"command": command, "args": []}
 
     _atomic_write(config_path, _dump(data))
@@ -194,6 +254,134 @@ def cmd_doctor_static(config_path: str) -> None:
     sys.stdout.write(f"configured {server['command']}\n")
 
 
+def cmd_permission_install(settings_path: str, state_path: str) -> None:
+    if os.path.islink(settings_path):
+        target = os.readlink(settings_path)
+        _die(3, f"agy-bridge: refusing to adopt {settings_path} — it is a symlink to {target} (someone else's SSOT). "
+                f"Manage it there, or replace it with a regular file, then retry.")
+
+    settings_existed = os.path.exists(settings_path)
+    data = _load_config(settings_path) if settings_existed else {}
+    detect_mode = "adopt-regular-file" if settings_existed else "created-new"
+
+    perms = data.get("permissions")
+    permissions_existed = isinstance(perms, dict)
+    if perms is None:
+        perms = {}
+        data["permissions"] = perms
+    if not isinstance(perms, dict):
+        _die(4, f"agy-bridge: {settings_path} permissions must be a JSON object")
+
+    allow = perms.get("allow")
+    allow_existed = isinstance(allow, list)
+    if allow is None:
+        allow = []
+        perms["allow"] = allow
+    if not isinstance(allow, list):
+        _die(4, f"agy-bridge: {settings_path} permissions.allow must be a JSON array")
+
+    # Idempotent, and the provenance that makes the inverse honest: if the operator ALREADY had this
+    # rule, we did not add it, so uninstall must not take it away. On a RE-install the rule on disk
+    # is our own previous write — reading it as "pre-existing" would hand the operator credit for
+    # our entry and strand it forever. So provenance is taken from the first install and carried.
+    on_disk = ALLOW_RULE in allow  # what the file says NOW (may be our own earlier write)
+    rule_existed = on_disk
+    prior = _prior_state(state_path, "managedSettingsPath", settings_path)
+    if prior:
+        rule_existed = prior.get("ruleExistedBefore", rule_existed)
+        detect_mode = prior.get("detectMode", detect_mode)
+        settings_existed = prior.get("settingsExistedBefore", settings_existed)
+        permissions_existed = prior.get("permissionsExistedBefore", permissions_existed)
+        allow_existed = prior.get("allowExistedBefore", allow_existed)
+    if ALLOW_RULE not in allow:
+        allow.append(ALLOW_RULE)
+
+    _atomic_write(settings_path, _dump(data))
+
+    state = {
+        "schemaVersion": STATE_SCHEMA_VERSION,
+        "managedSettingsPath": os.path.abspath(settings_path),
+        "rule": ALLOW_RULE,
+        "detectMode": detect_mode,
+        "settingsExistedBefore": settings_existed,
+        "permissionsExistedBefore": permissions_existed,
+        "allowExistedBefore": allow_existed,
+        "ruleExistedBefore": rule_existed,  # true = the operator's rule, not ours to remove
+        "installedAt": _now(),
+    }
+    _atomic_write(state_path, _dump(state))
+    sys.stdout.write(f"{'already-present' if on_disk else 'added'} {ALLOW_RULE}\n")
+
+
+def cmd_permission_uninstall(state_path: str) -> None:
+    if not os.path.exists(state_path):
+        _die(2, f"agy-bridge: no permission install-state at {state_path} — nothing to uninstall.")
+    state = _load_config(state_path)
+    settings_path = state.get("managedSettingsPath")
+    if not isinstance(settings_path, str):
+        _die(4, f"agy-bridge: permission install-state {state_path} has no managedSettingsPath")
+
+    if os.path.islink(settings_path):
+        _die(3, f"agy-bridge: refusing to uninstall — {settings_path} became a symlink since install "
+                f"(someone else's SSOT now). Resolve by hand.")
+
+    if os.path.exists(settings_path):
+        data = _load_config(settings_path)
+        perms = data.get("permissions")
+        if isinstance(perms, dict):
+            allow = perms.get("allow")
+            # The operator already had the rule before us → it is theirs; leave it.
+            if isinstance(allow, list) and not state.get("ruleExistedBefore", False):
+                perms["allow"] = [r for r in allow if r != ALLOW_RULE]
+                # Drop only the containers WE created, and only while they are empty. An operator
+                # who has since added their own rules keeps their structure untouched.
+                if not state.get("allowExistedBefore", False) and perms["allow"] == []:
+                    perms.pop("allow", None)
+                if not state.get("permissionsExistedBefore", False) and perms == {}:
+                    data.pop("permissions", None)
+        created_new = state.get("detectMode") == "created-new" and state.get("settingsExistedBefore") is False
+        if created_new and data == {}:
+            os.remove(settings_path)
+        else:
+            _atomic_write(settings_path, _dump(data))
+
+    os.remove(state_path)
+    sys.stdout.write(f"uninstalled {ALLOW_RULE} from {settings_path}\n")
+
+
+def cmd_permission_doctor(settings_path: str) -> None:
+    real = os.path.realpath(settings_path)
+    if not os.path.exists(real):
+        sys.stdout.write("absent\n")
+        return
+    try:
+        with open(real, "r", encoding="utf-8") as fh:
+            data = json.loads(fh.read() or "{}")
+    except (json.JSONDecodeError, OSError):
+        sys.stdout.write("invalid-json\n")
+        return
+    perms = data.get("permissions") if isinstance(data, dict) else None
+    perms = perms if isinstance(perms, dict) else {}
+
+    # Precedence FIRST (Deny > Ask > Allow): a matching rule in a higher list means agy prompts (or
+    # blocks) no matter what our allow says. Reporting `configured` there would be a green light on
+    # a surface that is actually still stopping every call.
+    for list_name in SHADOWING_LISTS:
+        rules = perms.get(list_name)
+        if not isinstance(rules, list):
+            continue
+        for rule in rules:
+            if rule in SHADOWING_RULES:
+                sys.stdout.write(f"shadowed-by-{list_name} {rule}\n")
+                return
+
+    allow = perms.get("allow")
+    if isinstance(allow, list) and ALLOW_RULE in allow:
+        sys.stdout.write("configured\n")
+        return
+    sys.stdout.write("not-configured\n")
+
+
 def _now() -> str:
     import datetime
 
@@ -220,6 +408,18 @@ def main(argv: list) -> None:
         if len(argv) != 3:
             _die(5, "usage: agy-bridge-config.py doctor-static <config_path>")
         cmd_doctor_static(argv[2])
+    elif sub == "permission-install":
+        if len(argv) != 4:
+            _die(5, "usage: agy-bridge-config.py permission-install <settings_path> <state_path>")
+        cmd_permission_install(argv[2], argv[3])
+    elif sub == "permission-uninstall":
+        if len(argv) != 3:
+            _die(5, "usage: agy-bridge-config.py permission-uninstall <state_path>")
+        cmd_permission_uninstall(argv[2])
+    elif sub == "permission-doctor":
+        if len(argv) != 3:
+            _die(5, "usage: agy-bridge-config.py permission-doctor <settings_path>")
+        cmd_permission_doctor(argv[2])
     else:
         _die(5, f"agy-bridge-config.py: unknown subcommand {sub!r}")
 

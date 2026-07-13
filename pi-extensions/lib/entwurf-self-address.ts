@@ -24,12 +24,28 @@
  *                 caller passes watchArmed=false, so meta-self is intentionally
  *                 FAIL-CLOSED until slice 2. Slices 1 and 2 close in the SAME release
  *                 block, so no intermediate "meta self all-false" state is ever pushed.
+ *  - meta-session (native-push backend, e.g. antigravity): replyable ⟺ recordBacked AND
+ *                 probeAlive — the SEPARATE native-push axis (봉인 6 / 보정①). A reply to
+ *                 an agy citizen is a direct injection into a live app-server conversation,
+ *                 so what makes it land is an adapter probe finding that conversation, NOT a
+ *                 mailbox watch. Reusing the receiver atom here would smuggle `watchArmed`
+ *                 (a mailbox-only signal) into a domain with no mailbox, and an agy sender
+ *                 — which never arms a watch — would report replyable:false forever.
  *  - external-mcp: never replyable — no authoritative reply address.
+ *
+ * `origin` stays identity PROVENANCE (where the sender identity came from), never a rail.
+ * Which rail a meta citizen's reply rides is a SECOND axis — `metaDeliveryDomain`, derived
+ * by the caller from `nativePushSupported(backend)`, not from `wakeMode` (direct-inject also
+ * covers codex/pi, which have no native-push adapter). Fail-closed: an unsupplied domain is
+ * not replyable.
  */
 
-import { computeMetaReceiverActive } from "./entwurf-deliverability.ts";
+import { computeMetaReceiverActive, nativePushDeliverable } from "./entwurf-deliverability.ts";
 
 export type SelfOrigin = "pi-session" | "meta-session" | "external-mcp";
+
+/** Which delivery rail carries a reply back to a meta citizen (the second axis, never `origin`). */
+export type MetaDeliveryDomain = "self-fetch" | "native-push";
 
 /**
  * pi control-socket reachability for a reply addressed back to this session.
@@ -49,12 +65,16 @@ export interface SelfAddressabilityFacts {
 	socketAlive?: boolean;
 	/** pi-session: a session id is present so the canonical socket path is computable. */
 	socketPathComputable?: boolean;
+	/** meta-session: which rail a reply rides — from nativePushSupported(backend), NOT wakeMode. */
+	metaDeliveryDomain?: MetaDeliveryDomain;
 	/** meta-session: the sender marker's identity is backed by a live meta-record. */
 	recordBacked?: boolean;
-	/** meta-session: the marker's owner pid is still the same process (start-key match). */
+	/** meta-session (self-fetch): the marker's owner pid is still the same process (start-key match). */
 	ownerAlive?: boolean;
-	/** meta-session: the idle-wake watch is armed (slice-2 presence marker; fail-closed until then). */
+	/** meta-session (self-fetch): the idle-wake watch is armed (slice-2 presence marker; fail-closed until then). */
 	watchArmed?: boolean;
+	/** meta-session (native-push): an adapter probe found this citizen's live native conversation. */
+	probeAlive?: boolean;
 }
 
 export interface SelfAddressabilityResult {
@@ -89,18 +109,41 @@ export function computeSelfAddressability(facts: SelfAddressabilityFacts): SelfA
 			};
 		}
 		case "meta-session": {
-			// Share the active-receiver atom with the deliverability predicate (one
-			// source of truth for "record backed AND owner alive AND watch armed").
-			const recv = computeMetaReceiverActive({
-				recordBacked: facts.recordBacked,
-				ownerAlive: facts.ownerAlive,
-				watchArmed: facts.watchArmed,
-			});
-			return {
-				replyable: recv.active,
-				socketState: "none",
-				reason: recv.active ? `meta receiver active (${recv.reason})` : `meta receiver inactive — ${recv.reason}`,
-			};
+			// TWO rails, pinned apart (보정①). Each branch composes the predicate that OWNS its
+			// axis — the mailbox receiver atom and the native-push predicate share nothing, so a
+			// mailbox liveness fact can never leak into a backend that has no mailbox.
+			switch (facts.metaDeliveryDomain) {
+				case "native-push": {
+					const push = nativePushDeliverable({ recordBacked: facts.recordBacked, probeAlive: facts.probeAlive });
+					return {
+						replyable: push.deliverable,
+						socketState: "none",
+						reason: push.deliverable
+							? `native-push reachable (${push.reason})`
+							: `native-push unreachable — ${push.reason}`,
+					};
+				}
+				case "self-fetch": {
+					// Share the active-receiver atom with the deliverability predicate (one
+					// source of truth for "record backed AND owner alive AND watch armed").
+					const recv = computeMetaReceiverActive({
+						recordBacked: facts.recordBacked,
+						ownerAlive: facts.ownerAlive,
+						watchArmed: facts.watchArmed,
+					});
+					return {
+						replyable: recv.active,
+						socketState: "none",
+						reason: recv.active ? `meta receiver active (${recv.reason})` : `meta receiver inactive — ${recv.reason}`,
+					};
+				}
+				default:
+					return {
+						replyable: false,
+						socketState: "none",
+						reason: "meta delivery domain not supplied — cannot say which rail a reply would ride (fail-closed)",
+					};
+			}
 		}
 		case "external-mcp":
 			return {

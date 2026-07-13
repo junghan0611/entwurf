@@ -158,6 +158,12 @@
 		// VALUE importer (mailboxConversationalDeliverable + record/capability/receiver-marker
 		// readers) with explicit `.ts`-extension imports, same fence. Typechecked by
 		// scripts/tsconfig.json via its gate (check-entwurf-mailbox-guard.ts).
-		"pi-extensions/lib/entwurf-mailbox-guard.ts"
+		"pi-extensions/lib/entwurf-mailbox-guard.ts",
+		// meta-sender-identity.ts answers "WHO is calling this MCP child?" (#46 sender lane) —
+		// a lib→lib VALUE importer (readMetaSenderMarker / readMetaIdentityByGardenId / parentPid
+		// from meta-session.ts) with explicit `.ts`-extension imports, same fence. Typechecked by
+		// scripts/tsconfig.json via its gate (check-agy-sender-identity.ts) and by
+		// mcp/tsconfig.json (the bridge imports it).
+		"pi-extensions/lib/meta-sender-identity.ts"
 	]
 }

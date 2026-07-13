@@ -87,6 +87,7 @@ Usage:
   ./run.sh check-entwurf-mailbox-guard # deterministic gate (SE-1/SE-2 slice 2d): guarded mailbox enqueue — PURE 0-call (undeliverable target leaves injected enqueue uncalled) + TMPDIR snapshot (refused send leaves mailbox byte-identical, accepted writes one .msg) + fact gathering from record/capability/receiver-marker
   ./run.sh check-native-push-adapter # deterministic gate (봉인 3/8): native-push adapter leaf (antigravity) via a FAKE runner — FULL pid scan (not head -1), dead vs indeterminate, VOLATILE route re-discovery (no cache), send argv+ANTIGRAVITY_LS_ADDRESS env, non-zero exit throws, NO adapter-level retry (executor-owned), resolveNativePushAdapter fail-fast
   ./run.sh check-native-push-register # deterministic gate (봉인 5): registerNativeConversation (entwurf_register_native core) via fake adapter + isolated mkdtemp store — live probe→CREATE, re-register→ATTACH (same gid, cwd refreshed, no dup), not-live probe→REFUSE (throws, no record), receiver-marker abstinence (보정① source guard)
+  ./run.sh check-agy-sender-identity # deterministic gate (#46 sender lane): WHO is calling the bridge — real agy hook as a child process writes an antigravity sender marker keyed by its PARENT pid (never on upsert failure), and resolveTrustedMetaSenderIdentity over isolated stores yields 0→null / 1→identity on EITHER backend / two distinct live identities on one owner pid→THROW (never guess, never downgrade to anonymous). This is what turns an agy send from external-mcp/unknown-host into a replyable garden citizen
   ./run.sh check-package-source-routing # deterministic gate (#29): package-source -> install-root mapping + fail-fast routing (local/git/npm/missing/project/no-source × local+remote, self-root, resume), no backend
   ./run.sh smoke-session-id-name      # live 3-turn substrate smoke (Phase 3a): Pi 0.78 --session-id/--name through the bridge — header id/cwd, session_info name, append-not-recreate, spawn-only name, wrong-cwd footgun evidence
   ./run.sh new-session-id             # print one fresh garden-native session id for operator launchers (--session-id)
@@ -1204,6 +1205,23 @@ check_native_push_register() {
   # RECEIVER-MARKER ABSTINENCE (보정①) — the register source references no receiver-marker
   # writer (writeMetaReceiverMarker / armProvenance / META_RECEIVER_ARM_PROVENANCES).
   (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-native-push-register.ts)
+}
+
+check_agy_sender_identity() {
+  # Deterministic gate for the #46 sender-identity lane — WHO is calling the bridge.
+  # A birthed agy conversation could already CALL entwurf_v2 for real, yet its message
+  # landed as external-mcp/unknown-host (non-replyable): the hook wrote only the
+  # meta-record, and the bridge's resolver looked markers up under `claude-code` alone.
+  # Behavioral, not source-regex: the real hook runs as a child process (so the marker's
+  # ownerPid is the gate's own pid — the same parent-pid join production performs), and
+  # the resolver runs against isolated marker/record stores.
+  # Rows: hook writes an antigravity marker keyed by its PARENT pid; an upsert failure
+  # writes NO marker (record authority first); resolver 0→null, 1→identity on EITHER
+  # backend, no-record/drifted marker→null, two distinct live identities on one owner pid
+  # →THROW (never guess, never downgrade to anonymous), two markers naming the SAME
+  # identity→not a conflict; antigravity is native-push so its replyable comes from the
+  # adapter probe, never from a mailbox watch it can never arm (보정①).
+  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-agy-sender-identity.ts)
 }
 
 
@@ -2708,7 +2726,18 @@ wire_agy_bridge() {
     return 0
   fi
   # NON-FATAL: keep setup alive, surface the reason honestly (never a silent pass).
+  # ORDER MATTERS: the permission failures carry the same words as the mcp_config ones ("refused
+  # (symlink)", "invalid JSON") and MUST be matched first — otherwise a settings.json problem gets
+  # reported as an mcp_config problem and sends the operator to repair the wrong file.
   case "$out" in
+    *"permission refused (symlink)"*|*"permission invalid JSON"*|*"permission could not be granted"*)
+      # The MCP server IS registered — only the allow rule failed. agy defaults every mcp action to
+      # Ask, so the bridge works but stops for a y/n on EVERY entwurf_v2 call. Half-wired, and said
+      # so: the explicit installer fails loud on this; setup only degrades it, never hides it.
+      echo "[setup] WARN: agy settings.json could not take our permission rule — bridge REGISTERED but NOT GRANTED." >&2
+      echo "[setup]       agy will prompt on every entwurf_v2 call until 'mcp(entwurf-bridge/entwurf_v2)'" >&2
+      echo "[setup]       is in its permissions.allow (see the line above for why). setup continues." >&2
+      ;;
     *"refused (symlink)"*)
       echo "[setup] WARN: agy mcp_config is a symlink — someone else's SSOT (transitional)." >&2
       echo "[setup]       Bridge NOT wired; expected until install ownership moves to entwurf." >&2
@@ -3286,6 +3315,9 @@ case "$cmd" in
     ;;
   check-native-push-register)
     check_native_push_register
+    ;;
+  check-agy-sender-identity)
+    check_agy_sender_identity
     ;;
   new-session-id)
     # Garden launcher helper: print one fresh garden sessionId (SSOT:

@@ -77,26 +77,93 @@ function row(facts: SelfAddressabilityFacts): { replyable: boolean; socketState:
 	ok("pi + no session id → socketState none", none.socketState === "none");
 }
 
-// meta-session axis: 3-conjunct deliverability (recordBacked ∧ ownerAlive ∧ watchArmed).
+// meta-session / SELF-FETCH rail (claude-code): 3-conjunct deliverability
+// (recordBacked ∧ ownerAlive ∧ watchArmed).
 {
-	const full = row({ origin: "meta-session", recordBacked: true, ownerAlive: true, watchArmed: true });
-	ok("meta + record + owner-alive + watch-armed → replyable", full.replyable === true);
+	const meta = (f: Partial<SelfAddressabilityFacts>): SelfAddressabilityFacts => ({
+		origin: "meta-session",
+		metaDeliveryDomain: "self-fetch",
+		...f,
+	});
+	const full = row(meta({ recordBacked: true, ownerAlive: true, watchArmed: true }));
+	ok("meta/self-fetch + record + owner-alive + watch-armed → replyable", full.replyable === true);
 
 	// (b) REGRESSION-PROOF row: record PRESENT but owner dead.
-	const ownerDead = row({ origin: "meta-session", recordBacked: true, ownerAlive: false, watchArmed: true });
-	ok("meta + record present + owner-dead (start-key mismatch) → NOT replyable", ownerDead.replyable === false);
+	const ownerDead = row(meta({ recordBacked: true, ownerAlive: false, watchArmed: true }));
+	ok(
+		"meta/self-fetch + record present + owner-dead (start-key mismatch) → NOT replyable",
+		ownerDead.replyable === false,
+	);
 
 	// (c) REGRESSION-PROOF row: record + owner present but watch never armed.
-	const watchUnarmed = row({ origin: "meta-session", recordBacked: true, ownerAlive: true, watchArmed: false });
-	ok("meta + record present + owner-alive + watch-unarmed → NOT replyable", watchUnarmed.replyable === false);
+	const watchUnarmed = row(meta({ recordBacked: true, ownerAlive: true, watchArmed: false }));
+	ok("meta/self-fetch + record + owner-alive + watch-unarmed → NOT replyable", watchUnarmed.replyable === false);
 
 	// not backed by a record at all → false (the all-absent baseline; weakest row).
-	const unbacked = row({ origin: "meta-session", recordBacked: false, ownerAlive: false, watchArmed: false });
-	ok("meta + no backing record → NOT replyable", unbacked.replyable === false);
+	const unbacked = row(meta({ recordBacked: false, ownerAlive: false, watchArmed: false }));
+	ok("meta/self-fetch + no backing record → NOT replyable", unbacked.replyable === false);
 
 	// fail-closed on missing axes (undefined treated as false, never optimistic).
-	const partial = row({ origin: "meta-session", recordBacked: true });
-	ok("meta + record but undefined owner/watch → fail-closed NOT replyable", partial.replyable === false);
+	const partial = row(meta({ recordBacked: true }));
+	ok("meta/self-fetch + record but undefined owner/watch → fail-closed NOT replyable", partial.replyable === false);
+}
+
+// meta-session / NATIVE-PUSH rail (antigravity): a SEPARATE axis — recordBacked ∧ probeAlive.
+// The two rails must not be able to borrow each other's facts (보정①): a mailbox signal
+// deciding an agy reply, or a probe deciding a Claude reply, is a category error.
+{
+	const push = (f: Partial<SelfAddressabilityFacts>): SelfAddressabilityFacts => ({
+		origin: "meta-session",
+		metaDeliveryDomain: "native-push",
+		...f,
+	});
+	const reachable = row(push({ recordBacked: true, probeAlive: true }));
+	ok("meta/native-push + record + probe-alive → replyable", reachable.replyable === true);
+
+	// THE ROW THIS RAIL EXISTS FOR: an agy citizen never arms a mailbox watch. Under the
+	// self-fetch atom it would be un-replyable forever; on its own rail it is reachable.
+	ok(
+		"meta/native-push + record + probe-alive + watch NEVER armed → STILL replyable (no mailbox axis leak)",
+		row(push({ recordBacked: true, probeAlive: true, watchArmed: false })).replyable === true,
+	);
+
+	// Dead conversation: the host is gone, so an injected reply has nowhere to land.
+	ok(
+		"meta/native-push + record + probe-dead → NOT replyable",
+		row(push({ recordBacked: true, probeAlive: false })).replyable === false,
+	);
+
+	// No record → not an identity, whatever the probe says.
+	ok(
+		"meta/native-push + no record + probe-alive → NOT replyable",
+		row(push({ recordBacked: false, probeAlive: true })).replyable === false,
+	);
+
+	// fail-closed: an unsupplied probe fact is false, never optimistic.
+	ok(
+		"meta/native-push + record but undefined probe → fail-closed NOT replyable",
+		row(push({ recordBacked: true })).replyable === false,
+	);
+
+	// A native-push citizen must NOT be able to buy replyability with mailbox facts.
+	ok(
+		"meta/native-push + owner-alive + watch-armed but probe-dead → NOT replyable (mailbox facts cannot rescue it)",
+		row(push({ recordBacked: true, ownerAlive: true, watchArmed: true, probeAlive: false })).replyable === false,
+	);
+}
+
+// meta-session with NO rail declared: we cannot say how a reply would travel, so we do not
+// claim it would arrive. The domain is derived from nativePushSupported(backend) — a caller
+// that forgets it gets a refusal, not an optimistic guess.
+{
+	const noDomain = row({
+		origin: "meta-session",
+		recordBacked: true,
+		ownerAlive: true,
+		watchArmed: true,
+		probeAlive: true,
+	});
+	ok("meta + NO delivery domain (all facts true) → fail-closed NOT replyable", noDomain.replyable === false);
 }
 
 // external-mcp: never replyable.

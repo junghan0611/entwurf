@@ -38,6 +38,13 @@ LEGACY_CACHE_KEYS="pi-tools-bridge"
 COMMAND="${AGY_BRIDGE_COMMAND:-entwurf-bridge}"
 STATE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/agy-bridge"
 STATE_FILE="$STATE_DIR/install-state.json"
+# agy's settings.json — the SAME file the statusline adapter owns, but a DIFFERENT element: it owns
+# the `statusLine` subtree, we own one string in `permissions.allow`. Element-level ownership on
+# both sides is what lets two adapters share a file without either clobbering the other (or the
+# operator's own rules). Tracked in its own state file so each half has an honest inverse.
+SETTINGS_FILE="${AGY_SETTINGS_CONFIG:-$HOME/.gemini/antigravity-cli/settings.json}"
+PERMISSION_STATE_FILE="$STATE_DIR/permission-state.json"
+ALLOW_RULE="mcp(entwurf-bridge/entwurf_v2)"
 
 log()  { printf '%s\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -102,7 +109,32 @@ do_install() {
     *) [ "$lrc" -ne 0 ] && log "  legacy: WARN could not clean $LEGACY_CONFIG — ${lout}" ;;
   esac
   prune_legacy_cache
+  install_permission
   log "  installed. Verify with: ./run.sh doctor-agy-bridge"
+}
+
+# The other half of a usable bridge: agy defaults every `mcp` action to Ask, so a registered-but-
+# ungranted server stops for a y/n on EVERY entwurf_v2 call. We grant exactly our own tool —
+# never mcp(*), never the operator's command/file rules; those are their trust decision, not the
+# installer's.
+#
+# FAIL LOUD on an explicit install. A grant we could not write is a HALF-installed bridge: the
+# server is registered, every call prompts, and reporting "installed" over that is the exact shape
+# this repo exists to remove (a layer saying yes while the surface says no). The tolerance lives one
+# level up, where it belongs: setup's wire_agy_bridge catches this nonzero and degrades to a
+# reason-specific WARN, because agy is optional and must never brick a pi/Claude host.
+install_permission() {
+  local out rc
+  set +e
+  out="$(python3 "$CONFIG_PY" permission-install "$SETTINGS_FILE" "$PERMISSION_STATE_FILE" 2>&1)"
+  rc=$?
+  set -e
+  case "$rc" in
+    0) log "  permission: ${out} in $SETTINGS_FILE" ;;
+    3) fail "permission refused (symlink) — $SETTINGS_FILE is someone else's SSOT; left intact. The MCP server is registered but NOT granted, so agy would prompt on every entwurf_v2 call. Add '$ALLOW_RULE' to permissions.allow there, or replace the symlink with a regular file and re-run." ;;
+    4) fail "permission invalid JSON — $SETTINGS_FILE could not be parsed; left intact. The MCP server is registered but NOT granted, so agy would prompt on every entwurf_v2 call. Repair that file, then re-run." ;;
+    *) fail "permission could not be granted (rc=$rc) — ${out}" ;;
+  esac
 }
 
 do_uninstall() {
@@ -118,6 +150,20 @@ do_uninstall() {
     2) log "  note: ${out}" ;;          # no state → nothing to undo (idempotent)
     3) fail "refused (symlink) — ${out}" ;;
     *) fail "uninstall error (rc=$rc) — ${out}" ;;
+  esac
+  # Honest inverse of the grant. If the operator ALREADY had the rule before we installed, the
+  # state records that and the rule stays — it was never ours to take away. A revoke we cannot
+  # perform is a FAILED inverse, not a footnote: uninstall would otherwise report success while
+  # leaving our rule in the operator's settings.
+  set +e
+  out="$(python3 "$CONFIG_PY" permission-uninstall "$PERMISSION_STATE_FILE" 2>&1)"
+  rc=$?
+  set -e
+  case "$rc" in
+    0) log "  permission: ${out}" ;;
+    2) : ;;                              # never granted → nothing to undo (idempotent)
+    3) fail "permission refused (symlink) — $SETTINGS_FILE became a symlink since install; our rule is STILL THERE. Remove '$ALLOW_RULE' from permissions.allow by hand at the link target." ;;
+    *) fail "permission could not be revoked (rc=$rc) — ${out}" ;;
   esac
 }
 
@@ -148,6 +194,41 @@ doctor_static_one() {
   esac
 }
 
+# Is our tool actually callable without a prompt? A registered server that stops for a y/n on every
+# call is a half-installed bridge, and "why does agy ask me every time?" must not be a mystery — so
+# the permission is doctor evidence, not silent state. The shadow case is the subtle one: agy
+# evaluates Deny > Ask > Allow, so an operator rule like mcp(*) in their ask/deny list overrides our
+# allow while our install-state still looks green. Name it rather than report a false pass.
+doctor_permission() {
+  local status installed=0
+  # "Installed" = we have state for either half. A missing grant is only a NOTE on a host that never
+  # installed the bridge; on an installed one it is DRIFT — the server is registered and every call
+  # prompts, which is precisely the half-installed surface a green doctor must never bless. Same
+  # distinction the mcp-key N1 check draws between "never installed" and "installed then loosened".
+  if [ -f "$STATE_FILE" ] || [ -f "$PERMISSION_STATE_FILE" ]; then installed=1; fi
+  status="$(python3 "$CONFIG_PY" permission-doctor "$SETTINGS_FILE")"
+  case "$status" in
+    configured)
+      log "  permission ($SETTINGS_FILE): allow → '$ALLOW_RULE' (agy calls entwurf_v2 without prompting)"; return 0 ;;
+    not-configured|absent)
+      local what="'$ALLOW_RULE' NOT granted"
+      [ "$status" = absent ] && what="settings file absent, so no grant"
+      if [ "$installed" -eq 1 ]; then
+        log "  permission ($SETTINGS_FILE): DRIFT — $what, but the bridge IS installed. agy defaults mcp to Ask, so EVERY entwurf_v2 call prompts: the server is registered and unusable without a y/n. Fix: ./run.sh install-agy-bridge"
+        return 1
+      fi
+      log "  permission ($SETTINGS_FILE): $what (bridge not installed here — nothing to grant yet)"; return 0 ;;
+    invalid-json)
+      log "  permission ($SETTINGS_FILE): INVALID JSON — cannot read the permission engine's config"; return 1 ;;
+    shadowed-by-*)
+      local list rule
+      list="${status%% *}"; list="${list#shadowed-by-}"
+      rule="${status#* }"
+      log "  permission ($SETTINGS_FILE): SHADOWED — your '$list' list carries '$rule', and agy evaluates Deny > Ask > Allow, so it OVERRIDES our allow of '$ALLOW_RULE'. agy will keep prompting (or blocking) on every entwurf_v2 call until that rule is narrowed."; return 1 ;;
+    *) log "  permission ($SETTINGS_FILE): unexpected status '$status'"; return 1 ;;
+  esac
+}
+
 do_doctor() {
   log "[agy-bridge doctor]"
   local hard_fail=0 configured_any=0
@@ -155,6 +236,7 @@ do_doctor() {
   log "── static (configured candidates)"
   doctor_static_one "global ($GLOBAL_CONFIG)" "$GLOBAL_CONFIG" || hard_fail=1
   doctor_static_one "legacy ($LEGACY_CONFIG)" "$LEGACY_CONFIG" || hard_fail=1
+  doctor_permission || hard_fail=1
   # Did EITHER candidate carry a configured entwurf-bridge? (best-effort — re-read cheaply.)
   for c in "$GLOBAL_CONFIG" "$LEGACY_CONFIG"; do
     case "$(python3 "$CONFIG_PY" doctor-static "$c")" in configured\ *) configured_any=1 ;; esac
