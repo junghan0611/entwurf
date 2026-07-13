@@ -44,7 +44,7 @@ python3 - <<'PY' <<<"$TOOLS_JSON"
 import json, sys
 obj=json.load(sys.stdin)
 names={t['name'] for t in obj['result']['tools']}
-expected={'entwurf_v2','entwurf_self','entwurf_peers','entwurf_inbox_read'}
+expected={'entwurf_v2','entwurf_self','entwurf_peers','entwurf_inbox_read','entwurf_register_native'}
 missing=expected-names
 legacy={'entwurf','entwurf_resume','entwurf_send'} & names
 if missing:

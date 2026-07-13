@@ -13,8 +13,10 @@
  *   - G1b: `entwurf_v2` is registered on the runtime tools/list surface with the
  *     expected input schema (props ⊇ target/intent/message/mode/wants_reply;
  *     required ⊇ target/intent/message; intent/mode enums).
+ *   - G1c/G1d: the shipped manual native-registration fallback is present and
+ *     retired v1 verbs remain absent.
  *
- * Scope boundary (D1=A안): this gate owns boot + entwurf_v2 registration/schema.
+ * Scope boundary (D1=A안): this gate owns boot + current tool registration/schema.
  * The broad protocol/negative suite stays in check-bridge/test.sh. Only a
  * `tools/list` is sent — no `tools/call` — so there is NO lock/filesystem side
  * effect and no auth/model is needed; it lives in `pnpm check`.
@@ -189,7 +191,11 @@ async function main(): Promise<void> {
 	);
 
 	ok(
-		"G1c: legacy v1 MCP tools are absent",
+		"G1c: native registration fallback is present",
+		tools.some((t) => t?.name === "entwurf_register_native"),
+	);
+	ok(
+		"G1d: legacy v1 MCP tools are absent",
 		!tools.some((t) => ["entwurf", "entwurf_resume", "entwurf_send"].includes(String(t?.name))),
 	);
 

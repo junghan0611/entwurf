@@ -2431,7 +2431,7 @@ function finish(trimmed) {
   try { msg = JSON.parse(trimmed); }
   catch { console.error('unparseable tools/list:', trimmed.slice(0, 300)); if (stderr.trim()) console.error(stderr.trim()); process.exit(1); }
   const names = (msg?.result?.tools ?? []).map((t) => t?.name).sort();
-  for (const need of ['entwurf_v2', 'entwurf_peers', 'entwurf_self', 'entwurf_inbox_read']) {
+  for (const need of ['entwurf_v2', 'entwurf_peers', 'entwurf_self', 'entwurf_inbox_read', 'entwurf_register_native']) {
     if (!names.includes(need)) { console.error('missing MCP tool from installed boot:', need, '— got', names.join(',')); process.exit(1); }
   }
   console.log(names.join(','));
@@ -2566,7 +2566,7 @@ function finishOk(trimmed) {
     process.exit(1);
   }
   const names = tools.map((t) => t?.name).sort();
-  const expected = ['entwurf_peers', 'entwurf_self', 'entwurf_inbox_read', 'entwurf_v2'];
+  const expected = ['entwurf_peers', 'entwurf_self', 'entwurf_inbox_read', 'entwurf_register_native', 'entwurf_v2'];
   for (const name of expected) {
     if (!names.includes(name)) {
       console.error(`missing MCP tool: ${name}`);
