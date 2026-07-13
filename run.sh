@@ -1856,6 +1856,9 @@ check_pack() {
     # doctor.sh runs this prebuilt JS when installed under node_modules (strip-types
     # refuses the .ts there), same boundary start.sh crosses. build-bridge emits it.
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-store-doctor.js"
+    # 0.12.7 — node_modules-safe agy PreInvocation hook. The stable npm bin
+    # dispatches here because Node refuses raw .ts below node_modules.
+    "mcp/entwurf-bridge/dist/scripts/agy-imprint.js"
     # 0.12.5 — the node_modules-safe plugin hook + its lib. install-meta-bridge copies
     # these compiled JS into the assembled plugin when installed (raw .ts can't
     # strip-types under node_modules). meta-session.js is shared with the store-doctor
@@ -2032,6 +2035,9 @@ check_pack_install() {
     # 0.12.4 — prebuilt node_modules-safe store-scan artifact for the doctor
     # (see check-pack). The installed-scan smoke below runs exactly this file.
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-store-doctor.js"
+    # 0.12.7 — node_modules-safe agy PreInvocation hook. The installed bin smoke
+    # below executes this exact compiled leaf from under node_modules.
+    "mcp/entwurf-bridge/dist/scripts/agy-imprint.js"
     # 0.12.5 — node_modules-safe plugin hook + lib (see check-pack). The installed
     # hook regression below runs exactly this compiled JS from under node_modules.
     "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook.js"
@@ -2202,8 +2208,8 @@ check_pack_install() {
     fail "[check-pack-install] npm-managed layout missing executable run.sh (postinstall-chmod did not run?) at $npm_pkg"
     return 1
   fi
-  if [ ! -x "$npmroot/node_modules/.bin/entwurf" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-bridge" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-statusline" ]; then
-    fail "[check-pack-install] npm-managed neutral install missing package bins (entwurf / entwurf-bridge / entwurf-statusline)"
+  if [ ! -x "$npmroot/node_modules/.bin/entwurf" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-bridge" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-statusline" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-agy-statusline" ] || [ ! -x "$npmroot/node_modules/.bin/entwurf-agy-imprint" ]; then
+    fail "[check-pack-install] npm-managed neutral install missing package bins (entwurf / entwurf-bridge / entwurf-statusline / entwurf-agy-statusline / entwurf-agy-imprint)"
     ls -l "$npmroot/node_modules/.bin" 2>/dev/null | sed 's/^/    /' >&2 || true
     return 1
   fi
@@ -2444,6 +2450,30 @@ JS
     return 1
   fi
   echo "[check-pack-install] installed bridge boot pass (dist boots under node_modules, pi-free: $boot_out)"
+
+  # 0.12.7 — installed AGY IMPRINT regression. The npm bin resolves through a
+  # node_modules symlink; raw scripts/agy-imprint.ts is therefore forbidden by
+  # Node's strip-types fence. Execute the real installed bin with an isolated
+  # agent dir and prove the neutral hook response + one record write. This is the
+  # exact package bug that a dev-only hook smoke cannot see.
+  local installed_agy_imprint="$npmroot/node_modules/.bin/entwurf-agy-imprint"
+  local agy_imprint_agent="$npm_tmp/agy-imprint-agent" agy_imprint_out agy_record_count
+  mkdir -p "$agy_imprint_agent"
+  if ! agy_imprint_out=$(printf '%s\n' '{"conversationId":"pack-install-agy-conversation","workspacePaths":["/tmp/entwurf-pack-install"],"modelName":"probe-model"}' | HOME="$npmhome" PI_CODING_AGENT_DIR="$agy_imprint_agent" "$installed_agy_imprint" 2>&1); then
+    fail "[check-pack-install] installed entwurf-agy-imprint FAILED under node_modules (raw-.ts strip-types regression or emitted hook missing):"
+    echo "$agy_imprint_out" | tail -15 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if [ "$agy_imprint_out" != '{"injectSteps":[]}' ]; then
+    fail "[check-pack-install] installed entwurf-agy-imprint returned a non-neutral hook response: $agy_imprint_out"
+    return 1
+  fi
+  agy_record_count=$(find "$agy_imprint_agent/meta-sessions" -maxdepth 1 -name '*.meta.json' -type f 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$agy_record_count" != "1" ]; then
+    fail "[check-pack-install] installed entwurf-agy-imprint did not write exactly one isolated meta-record (got $agy_record_count)"
+    return 1
+  fi
+  echo "[check-pack-install] installed agy imprint pass (compiled JS runs under node_modules; neutral response + record write)"
 
   # 0.12.4 — installed STORE-DOCTOR regression. meta-bridge-doctor.sh's full store
   # scan runs the prebuilt dist JS when it lives under node_modules (strip-types

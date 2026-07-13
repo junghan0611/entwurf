@@ -52,16 +52,23 @@
 	// Under an installed marketplace source below node_modules that is
 	// ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING — the SAME strip-types fence
 	// start.sh (0.12.1) and the store-doctor (0.12.4) already cross by shipping JS.
-	// The hook was the last `.ts`-at-runtime surface; emitting it here closes that
-	// class for good (installer copies the dist JS when installed, keeps `.ts` for a
-	// dev clone). Its only repo import is meta-session.ts, ALREADY emitted for the
+	// At 0.12.5 this was the last known `.ts`-at-runtime surface; emitting it here
+	// closed that release's set (installer copies dist JS when installed, keeps
+	// `.ts` for a dev clone). Its only repo import is meta-session.ts, ALREADY emitted for the
 	// store-doctor, so this adds ONE leaf JS (dist/pi-extensions/meta-bridge-hook.js)
 	// and ZERO new deps. It is a plugin hook, never in index.ts's boot closure, so
 	// check-entwurf-bridge-pi-free is unaffected.
+	//
+	// WHY agy-imprint rides THIS build (0.12.7): the npm bin resolves to
+	// scripts/agy-imprint.sh under node_modules. Running its raw .ts there hits the
+	// same ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING fence. Emit the hook leaf as
+	// dist/scripts/agy-imprint.js; the stable bin chooses it only when installed and
+	// keeps transparent strip-types source execution in a dev clone.
 	"include": [
 		"./src/index.ts",
 		"../../protocol.js",
 		"../../scripts/meta-bridge-store-doctor.ts",
+		"../../scripts/agy-imprint.ts",
 		"../../pi-extensions/meta-bridge-hook.ts"
 	]
 }
