@@ -23,6 +23,18 @@ command -v python3 >/dev/null || { echo "FAIL: python3 not on PATH"; exit 1; }
 
 TMP="$(mktemp -d -t psa-user-citizen.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
+
+# Isolation is a property of every root run.sh writes through, not of the one this gate happens
+# to override. `remove-user-scope` today reads PI_CODING_AGENT_DIR (settings) and XDG_DATA_HOME
+# (ownership state) — passing the operator's real XDG_DATA_HOME is what let this gate delete the
+# live MCP key during `pnpm check` (2026-07-14). It does not touch HOME *today*; sandbox HOME and
+# the whole XDG trio anyway, so the next root run.sh reaches for is already fenced (AGENTS rule 11).
+export HOME="$TMP/home"
+export XDG_DATA_HOME="$TMP/xdg"
+export XDG_STATE_HOME="$TMP/state"
+export XDG_CACHE_HOME="$TMP/cache"
+mkdir -p "$HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME"
+
 S="$TMP/settings.json"
 FAKE_REPO="$TMP/fake/entwurf"; mkdir -p "$FAKE_REPO"
 RESOLVED="$(cd "$FAKE_REPO" && pwd)"

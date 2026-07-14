@@ -228,6 +228,24 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	const LIVE_ROOTS = String.raw`(?:\$HOME|\$\{HOME\}|~)/\.(?:claude|gemini|pi|config/pi|local/share/(?:claude|entwurf))`;
 	const MUTATORS = String.raw`rm\s+-\w+|rm|mv|cp|install|mkdir\s+-p|mkdir|touch|tee|ln\s+-s\w*|truncate`;
 
+	// A mutating run.sh drive is shell code, not prose. `bad "… re-run ./run.sh install-meta-bridge"`
+	// and a python assertion string both carry the same token, so normalize a line to its code
+	// before looking for a drive: drop message arguments, keep "$RUN" / "$REPO/run.sh" as the
+	// executable tokens they are, and blank every other quoted literal.
+	const MSG_ARG = /\b(?:bad|ok|echo|log|warn|fail|printf)\s+"(?:[^"\\]|\\.)*"/g;
+	const EXEC_TOKEN = /"(\$\{?RUN\}?|\$[A-Za-z_]\w*\/run\.sh|\.{0,2}\/?run\.sh)"/g;
+	const shellCode = (l: string) =>
+		l
+			.replace(MSG_ARG, "")
+			.replace(EXEC_TOKEN, "$1")
+			.replace(/"(?:[^"\\]|\\.)*"/g, '""')
+			.replace(/'(?:[^'\\]|\\.)*'/g, "''");
+	const RUNSH_DRIVE = /(?:\$\{?RUN\}?|run\.sh)\s+(install|setup:links|setup|remove-user-scope|remove)\b/;
+	// ensure_agent_dir_symlinks() hard-codes "$HOME/.pi/agent" and ignores PI_CODING_AGENT_DIR
+	// entirely (run.sh:424), so these commands relink the operator's REAL agent dir no matter how
+	// the override is set. Sandboxing the agent dir is not isolation for them; only HOME is.
+	const HOME_ROOTED = new Set(["install", "setup", "setup:links"]);
+
 	const offenders: { file: string; line: number; text: string }[] = [];
 	const xdgOffenders: string[] = [];
 	const agentDirXdgOffenders: string[] = [];
@@ -250,18 +268,39 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		const xdgSwapped = lines.some((l) => /^\s*export\s+XDG_DATA_HOME=/.test(l) && !/\$\{?XDG_DATA_HOME/.test(l));
 		if (swapAt !== -1 && !xdgSwapped) xdgOffenders.push(f);
 
-		// PI_CODING_AGENT_DIR is a second settings-root swap independent of HOME. A smoke can
-		// point a mutating run.sh command at fake settings while still passing the REAL XDG
-		// ownership state; the inverse then follows managedSettingsPath from that real state and
-		// removes the operator's live key. This struck smoke-user-scope-citizen in the release
-		// floor. Require XDG_DATA_HOME on the same drive (or a prior sandbox export).
-		const agentDirMutator = lines.some(
-			(l) =>
-				/PI_CODING_AGENT_DIR=/.test(l) &&
-				/(?:bash\s+["']?\$RUN|run\.sh)\s+(?:install|remove|remove-user-scope|setup)\b/.test(l) &&
-				!/XDG_DATA_HOME=/.test(l),
-		);
-		if (agentDirMutator && !xdgSwapped) agentDirXdgOffenders.push(f);
+		// A mutating run.sh drive writes through THREE roots, and no single override covers them:
+		// the agent dir (settings target), ${XDG_DATA_HOME}/entwurf (the ownership state whose
+		// recorded managedSettingsPath an inverse FOLLOWS), and $HOME (the hard-coded agent-dir
+		// symlinks). smoke-user-scope-citizen sandboxed the first and passed the operator's real
+		// second, so `pnpm check` removed the live MCP key while reporting green (2026-07-14).
+		// Find the drive, then demand what that command actually needs — in whatever env form
+		// carries it. The leak shipped as inline env; the same drive hoisted into an `export` is
+		// the same leak, and a tripwire that only sees one syntactic form is how the next one ships.
+		const agentDirExportAt = lines.findIndex((l) => /^\s*export\s+PI_CODING_AGENT_DIR=/.test(l));
+		lines.forEach((line, i) => {
+			if (/^\s*#/.test(line)) return;
+			const code = shellCode(line);
+			const drive = code.match(RUNSH_DRIVE);
+			if (!drive) return;
+			const cmd = drive[1] as string;
+			const homeOk = /(?:^|\s)HOME=/.test(code) || (swapAt !== -1 && i > swapAt);
+			const xdgOk = /XDG_DATA_HOME=/.test(code) || xdgSwapped;
+			const agentOk = /PI_CODING_AGENT_DIR=/.test(code) || (agentDirExportAt !== -1 && i > agentDirExportAt) || homeOk;
+			const missing: string[] = [];
+			if (!xdgOk)
+				missing.push(
+					"XDG_DATA_HOME (real ownership state — an inverse follows its managedSettingsPath to the live host)",
+				);
+			if (!agentOk) missing.push("PI_CODING_AGENT_DIR or HOME (real ~/.pi/agent/settings.json)");
+			if (HOME_ROOTED.has(cmd) && !homeOk)
+				missing.push(
+					"HOME (ensure_agent_dir_symlinks hard-codes $HOME/.pi/agent — the agent-dir override does not reach it)",
+				);
+			if (missing.length)
+				agentDirXdgOffenders.push(
+					`scripts/${f}:${i + 1} drives \`run.sh ${cmd}\` without a sandbox ${missing.join("\n  and without a sandbox ")}`,
+				);
+		});
 
 		// One hop of aliasing: `VICTIM="$HOME/.gemini/…"` taints VICTIM, so `rm -rf "$VICTIM"` is
 		// caught too. Without this, renaming the path into a variable walks straight past the
@@ -303,15 +342,9 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			.join("\n"),
 	);
 	ok(
-		"S5c: a mutating run.sh drive that swaps PI_CODING_AGENT_DIR also swaps XDG_DATA_HOME",
+		"S5c: every mutating run.sh drive in the offline floor is sandboxed at every root it writes",
 		agentDirXdgOffenders.length === 0,
-		agentDirXdgOffenders
-			.map(
-				(f) =>
-					`scripts/${f} drives a mutating run.sh command against sandbox PI_CODING_AGENT_DIR but real XDG state —\n` +
-					`an inverse can follow the operator state's managedSettingsPath and remove live wiring.`,
-			)
-			.join("\n"),
+		agentDirXdgOffenders.join("\n"),
 	);
 }
 
