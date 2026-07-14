@@ -11,15 +11,24 @@
  * gate proves no NEW surface can reintroduce the class, statically and with no side
  * effects — sweeping every subcommand for real would run installers and LIVE gates.
  *
- *   S1  run.sh reaches .ts ONLY through run_ts (one fence, one place).
- *   S2  every operator subcommand (one that is neither a check- nor a smoke- gate) that
- *       runs a .ts has a compiled twin declared in tsconfig.build.json — the exact miss
- *       that killed the three.
- *   S3  every npm bin shell wrapper that execs a .ts carries the node_modules branch.
- *   S4  dev-only gates are NOT emitted — the tarball ships operator surfaces, not 70+
- *       gate leaves (a build bloat regression is as real as a missing artifact).
- *   S5  offline verification never writes the operator's own installed state: a smoke
- *       that reads $HOME must isolate it, or a "test" run silently rewires the live host.
+ *   S1   run.sh reaches .ts ONLY through run_ts (one fence, one place).
+ *   S2   every operator subcommand (one that is neither a check- nor a smoke- gate) that runs
+ *        a .ts — directly OR through a helper function, which is the house style — has a
+ *        compiled twin declared in tsconfig.build.json. The exact miss that killed the three.
+ *   S3a  no npm bin points at a raw .ts at all; S3b every .sh bin that execs one branches.
+ *   S4   dev-only gates are NOT emitted — the tarball ships operator surfaces, not 70+ gate
+ *        leaves (a build bloat regression is as real as a missing artifact).
+ *   S5   no offline smoke carries an obvious write to the operator's real $HOME.
+ *
+ * HONEST SCOPE — what a green run does and does not mean. S1-S4 are structural: they read the
+ * dispatch graph and the build manifest, so they hold for any entrypoint written in this repo's
+ * style. S5 is a static TRIPWIRE over shell source: it catches a literal live path and ONE hop
+ * of variable aliasing, and it does not see a path assembled across several variables, built
+ * inside an embedded python/node heredoc, or reached through a helper in another file. A green
+ * S5 therefore means "no obvious destructive line", NOT "verification is sandboxed". The real
+ * guarantee is running the whole offline floor under a swapped HOME; that is an open item in
+ * NEXT.md, not a claim made here. Every S was mutation-checked, including bypasses found in
+ * review — do not add an S without proving it fails on the bug it names.
  *
  * Read-only: parses sources, spawns nothing.
  */
@@ -73,27 +82,80 @@ const emitted = new Set(
 	[...BUILD_TSCONFIG.matchAll(/"\.\.\/\.\.\/scripts\/([a-z0-9-]+)\.ts"/g)].map((m) => m[1] as string),
 );
 
-/** subcommand → the .ts it runs, by walking `case` labels down to their run_ts call. */
-function subcommandTargets(): Map<string, string> {
-	const map = new Map<string, string>();
+/**
+ * subcommand → every .ts it can reach.
+ *
+ * The naive version — read the `run_ts` call sitting directly under a `case` label — is what the
+ * dominant style in this file does NOT look like: nearly every subcommand delegates to a function
+ * (`check-shell-quote) check_shell_quote ;;`). A gate that only sees direct calls would pass a new
+ * operator command written in the house style with no compiled twin, which is the very bug this
+ * file exists to prevent. So resolve through function bodies too.
+ */
+const RUN_TS_CALL = /run_ts\s+scripts\/([a-z0-9-]+)\.ts/;
+
+function functionTargets(): Map<string, string[]> {
+	const byFn = new Map<string, string[]>();
+	let fn: string | null = null;
+	for (const { line } of runShCodeLines()) {
+		// Read the definition line's own tail too: `f() { run_ts scripts/x.ts; }` is a single line,
+		// and a parser that only looks at SUBSEQUENT lines walks right past it.
+		const def = line.match(/^(?:function\s+)?([a-z_][a-z0-9_]*)\s*\(\)\s*\{(.*)$/);
+		if (def) {
+			fn = def[1] as string;
+			byFn.set(fn, []);
+			const tail = def[2] ?? "";
+			const inlineCall = tail.match(RUN_TS_CALL);
+			if (inlineCall) byFn.get(fn)?.push(inlineCall[1] as string);
+			if (tail.includes("}")) fn = null; // one-liner: body opened and closed here
+			continue;
+		}
+		if (fn && /^\}/.test(line)) {
+			fn = null;
+			continue;
+		}
+		const call = line.match(RUN_TS_CALL);
+		if (fn && call) byFn.get(fn)?.push(call[1] as string);
+	}
+	return byFn;
+}
+
+function subcommandTargets(): Map<string, string[]> {
+	const byFn = functionTargets();
+	const map = new Map<string, string[]>();
 	let current: string | null = null;
+	let inCaseBody = false;
 	for (const { line } of runShCodeLines()) {
 		const label = line.match(/^\s{2}([a-z][a-z0-9-]*)\)\s*$/);
-		if (label) current = label[1] as string;
-		const call = line.match(/run_ts\s+scripts\/([a-z0-9-]+)\.ts/);
-		if (call && current) map.set(current, call[1] as string);
+		if (label) {
+			current = label[1] as string;
+			inCaseBody = true;
+			map.set(current, []);
+			continue;
+		}
+		if (!current || !inCaseBody) continue;
+		if (/^\s{4};;\s*$/.test(line)) {
+			inCaseBody = false;
+			continue;
+		}
+		const direct = line.match(/run_ts\s+scripts\/([a-z0-9-]+)\.ts/);
+		if (direct) map.get(current)?.push(direct[1] as string);
+		// …and one hop through a helper function, which is how most subcommands are written.
+		for (const word of line.trim().split(/[\s;|&(]+/)) {
+			const viaFn = byFn.get(word);
+			if (viaFn?.length) map.get(current)?.push(...viaFn);
+		}
 	}
 	return map;
 }
 
 const targets = subcommandTargets();
 const isDevGate = (cmd: string): boolean => cmd.startsWith("check-") || cmd.startsWith("smoke-");
-const operatorCmds = [...targets].filter(([cmd]) => !isDevGate(cmd));
+const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.length > 0);
 
 {
-	const dead = operatorCmds.filter(([, ts]) => !emitted.has(ts));
+	const dead = operatorCmds.flatMap(([cmd, tss]) => tss.filter((ts) => !emitted.has(ts)).map((ts) => [cmd, ts]));
 	ok(
-		`S2: every operator subcommand has a compiled twin (${operatorCmds.length} operator surfaces)`,
+		`S2: every operator subcommand has a compiled twin (${operatorCmds.length} operator surfaces, direct + via helper)`,
 		dead.length === 0,
 		dead
 			.map(
@@ -105,7 +167,9 @@ const operatorCmds = [...targets].filter(([cmd]) => !isDevGate(cmd));
 			.join("\n\n"),
 	);
 
-	const bloat = [...targets].filter(([cmd, ts]) => isDevGate(cmd) && emitted.has(ts));
+	const bloat = [...targets].flatMap(([cmd, tss]) =>
+		isDevGate(cmd) ? tss.filter((ts) => emitted.has(ts)).map((ts) => [cmd, ts]) : [],
+	);
 	ok(
 		"S4: dev-only gates are not emitted into the tarball",
 		bloat.length === 0,
@@ -113,20 +177,35 @@ const operatorCmds = [...targets].filter(([cmd]) => !isDevGate(cmd));
 	);
 }
 
-// ─── S3 — npm bin wrappers that exec .ts carry the node_modules branch ───────────────
+// ─── S3 — no npm bin can reach a raw .ts when installed ──────────────────────────────
 {
-	const offenders: string[] = [];
-	for (const rel of Object.values(PACKAGE_JSON.bin ?? {})) {
+	// Two ways a bin dies under node_modules: it IS a .ts, or it is a wrapper that execs one
+	// without branching. The first is flatly forbidden — there is no correct way to point an npm
+	// bin at a raw .ts, since Node cannot strip types there at all.
+	const rawTsBins: string[] = [];
+	const unbranchedWrappers: string[] = [];
+	for (const [name, rel] of Object.entries(PACKAGE_JSON.bin ?? {})) {
+		if (/\.ts$/.test(rel)) {
+			rawTsBins.push(`${name} → ${rel}`);
+			continue;
+		}
 		if (!rel.endsWith(".sh")) continue;
 		const src = readFileSync(path.join(REPO, rel), "utf8");
 		const execsTs = /--experimental-strip-types[^\n]*\.ts|\.ts"?\s*$/m.test(src) && /\.ts/.test(src);
 		if (!execsTs) continue; // python3/JS-only wrappers (the statuslines) never hit the fence
-		if (!/node_modules\/\*/.test(src)) offenders.push(rel);
+		if (!/node_modules\/\*/.test(src)) unbranchedWrappers.push(rel);
 	}
 	ok(
-		"S3: every npm bin wrapper that execs a .ts branches on node_modules",
-		offenders.length === 0,
-		offenders.map((f) => `${f} execs a .ts with no */node_modules/* branch — it dies when installed`).join("\n"),
+		"S3a: no npm bin points at a raw .ts (Node cannot strip types under node_modules at all)",
+		rawTsBins.length === 0,
+		rawTsBins.map((b) => `bin ${b} is a raw .ts — it can never run from an installed package`).join("\n"),
+	);
+	ok(
+		"S3b: every npm bin wrapper that execs a .ts branches on node_modules",
+		unbranchedWrappers.length === 0,
+		unbranchedWrappers
+			.map((f) => `${f} execs a .ts with no */node_modules/* branch — it dies when installed`)
+			.join("\n"),
 	);
 }
 
@@ -145,21 +224,34 @@ const operatorCmds = [...targets].filter(([cmd]) => !isDevGate(cmd));
 	// probing whether a real bundle exists) stay legal — they cannot uninstall anything.
 	const LIVE_ROOTS = String.raw`(?:\$HOME|\$\{HOME\}|~)/\.(?:claude|gemini|pi|config/pi|local/share/(?:claude|entwurf))`;
 	const MUTATORS = String.raw`rm\s+-\w+|rm|mv|cp|install|mkdir\s+-p|mkdir|touch|tee|ln\s+-s\w*|truncate`;
-	const WRITE_TO_LIVE = new RegExp(
-		// `rm -rf "$HOME/.claude/..."` / `mkdir -p ~/.pi/...` / `... > "$HOME/.gemini/..."`
-		String.raw`(?:(?:${MUTATORS})\s+(?:-\w+\s+)*["']?${LIVE_ROOTS}|>>?\s*["']?${LIVE_ROOTS})`,
-	);
 
-	// The install smokes DO write "$HOME/.claude/…" — legally, because they first swap the
-	// process HOME to a sandbox (`export HOME="$TMP/home"`), after which $HOME no longer
-	// names the operator's home at all. So the offense is not "writes $HOME"; it is writing
-	// a live path while $HOME still points at the real one: either with no swap in the file,
-	// or on a line that runs BEFORE the swap.
 	const offenders: { file: string; line: number; text: string }[] = [];
 	for (const f of readdirSync(path.join(REPO, "scripts"))) {
 		if (!/^(smoke|check)-.*\.sh$/.test(f) || LIVE_GATES.has(f)) continue;
 		const lines = readFileSync(path.join(REPO, "scripts", f), "utf8").split("\n");
+
+		// The install smokes DO write "$HOME/.claude/…" — legally, because they first swap the
+		// process HOME to a sandbox (`export HOME="$TMP/home"`), after which $HOME no longer names
+		// the operator's home at all. So the offense is not "writes $HOME"; it is writing a live
+		// path while $HOME still points at the real one: with no swap, or before the swap.
 		const swapAt = lines.findIndex((l) => /^\s*export\s+HOME=/.test(l) && !/(\$HOME|~)\//.test(l));
+
+		// One hop of aliasing: `VICTIM="$HOME/.gemini/…"` taints VICTIM, so `rm -rf "$VICTIM"` is
+		// caught too. Without this, renaming the path into a variable walks straight past the
+		// tripwire — which it did, until a review mutation proved it.
+		const tainted = new Set<string>();
+		lines.forEach((line, i) => {
+			if (/^\s*#/.test(line)) return;
+			const assign = line.match(new RegExp(String.raw`^\s*(?:local\s+|export\s+)?([A-Za-z_]\w*)=["']?${LIVE_ROOTS}`));
+			if (assign && (swapAt === -1 || i < swapAt)) tainted.add(assign[1] as string);
+		});
+		const aliasAlt = tainted.size
+			? String.raw`|(?:${MUTATORS})\s+(?:-\w+\s+)*["']?\$\{?(?:${[...tainted].join("|")})\b`
+			: "";
+		const WRITE_TO_LIVE = new RegExp(
+			String.raw`(?:(?:${MUTATORS})\s+(?:-\w+\s+)*["']?${LIVE_ROOTS}|>>?\s*["']?${LIVE_ROOTS}${aliasAlt})`,
+		);
+
 		lines.forEach((line, i) => {
 			if (/^\s*#/.test(line)) return;
 			if (!WRITE_TO_LIVE.test(line)) return;
@@ -168,7 +260,7 @@ const operatorCmds = [...targets].filter(([cmd]) => !isDevGate(cmd));
 		});
 	}
 	ok(
-		"S5: offline smokes never write the real $HOME (verification cannot uninstall the operator)",
+		"S5: no offline smoke carries an obvious write to the real $HOME (static tripwire, not a sandbox proof)",
 		offenders.length === 0,
 		offenders.map((o) => `scripts/${o.file}:${o.line} mutates the operator's live install:\n  ${o.text}`).join("\n"),
 	);
