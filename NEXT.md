@@ -15,18 +15,24 @@
   - **agy bridge doctor의 false red를 고쳤다.** `permissions.allow`에 운영자의 넓은 `mcp(*)`가 있으면 entwurf_v2는 이미 프롬프트 없이 호출된다. 그런데 doctor는 literal exact rule만 인정해 "registered and unusable"이라 **거짓 FAIL**을 냈다. 근거는 외부 문서가 아니라 repo 자신의 코드였다: `SHADOWING_RULES`가 이미 `mcp(*)`를 우리 tool과 매칭되는 것으로 취급하면서(deny/ask 방향), allow 방향에서만 그 커버리지를 무시했다. 이제 양방향으로 읽는다 — exact = `configured`, 넓은 운영자 규칙 = `covered-by-allow`(**NOTE, exit 0, 소유자를 명시**), 없음 = `DRIFT`. installer는 여전히 최소권한 한 줄만 쓴다. deny/ask precedence는 그대로 FAIL(같은 규칙이 양쪽에 있어도).
   - 죽은 스크립트 감사: `scripts/` 117개 중 **미참조 0건**. 고아처럼 보인 6개는 전부 의도된 것(LIVE 3종은 release-gate 밖이라고 AGENTS/VERIFY에 명시, `check-keyset-overlap`은 `smoke-meta-keyset-guard`가 감싸 `pnpm check`에서 실행, `check-pack-install`은 이제 CI). `smoke-meta-async-drift`는 죽은 게 아니라 **지금 RED다** — 아래 Next 3.
   - **[2026-07-14] hard-verify가 live XDG state를 오염시킨 사실을 확인했다.** scratch sweep이 HOME만 `/tmp`로 바꾸고 이미 export된 `XDG_DATA_HOME=~/.local/share`를 물려받아, agy bridge/permission/statusline/hooks + dev-bin 3개의 state 7개가 `/tmp/entwurf-hardverify-…/home-sweep`를 관리 대상으로 기록했다. 실제 bins/config/hooks는 살아 있고 agy 1.1.0 양방향 왕복도 성공했지만 provenance는 무효다. 세 doctor가 이제 foreign target을 FAIL하며, 후속 검수에서 corrupt/missing target도 FAIL, permission state는 bridge state와 독립 검증, runtime-present와 ownership-broken을 동시에 정직하게 보고하도록 보강했다(136/68/43). live 복구는 아래 Next 1이며 승인 전 자동 정리하지 않는다.
+- **[2026-07-14] Fable 독립 검수 — 9커밋 재검수에서 구멍 4개를 찾아 닫았고, blocker ③(backend drift)을 닫았다.**
+  - **S5b**: 사고의 실제 축(상속된 `XDG_DATA_HOME`)이 S5 tripwire에 없었다. HOME을 sandbox로 swap하면서 XDG_DATA_HOME을 같이 swap하지 않는 offline smoke를 정적으로 잡는다. mutation-check(export 제거 → FAIL) 통과.
+  - **상대경로 state = CORRUPT**: doctor가 state의 managed path를 `abspath`로 정규화할 때 상대경로면 doctor의 CWD 기준으로 풀려 우연히 green이 될 수 있었다. install은 절대경로만 기록하므로 비절대 경로는 CORRUPT로 격상(binding 4지점 + 회귀 3개).
+  - **wildcard가 가리던 owned drift**: 우리가 설치한 exact rule이 제거돼도 운영자 `mcp(*)`가 커버하면 bridge doctor가 green NOTE를 냈다 — agent-config `ensure_link` relink가 정확히 이 shape를 만들며 statusline doctor만 잡고 있었다. ownership beats coverage: 두 축을 다 말하고 verdict는 red (`ruleExistedBefore=true`인 운영자 소유 rule 소실은 여전히 green NOTE).
+  - CHANGELOG의 diff-marker 오타(`+-`) 수정. 스모크 136/68/43 → **140/69/44**, AGENTS 규칙 11·12에 반영.
+  - **blocker ③ 닫음**: agy pin `1.0→1.1` (2026-07-14 live 재검증 — 무프롬프트 `entwurf_self`, 양방향 native-push, 13/13 LIVE), codex pin `0.136→0.144` (**명시적 비재검증 판정** — DELIVERY §Codex에 기록, native-citizen lane 아님). `smoke-meta-async-drift` green (claude 2.1.208 / codex 0.144.1 / agy 1.1.2).
 - **Next:**
-  1. **오염된 live install-state를 pre-entwurf 상태에서 복구한다.** Claude session scratch의 `scratchpad/state-backup-103131`은 세션 수명에 묶이므로 복구 전에 durable 경로로 복사하고 checksum을 남긴다. 그 뒤 state 7개를 정리하고, statusLine을 agent-config 원본으로 되돌리며 hooks/MCP의 entwurf 항목을 제거해 pre-entwurf shape를 만든다. **dev-bin state 3개도 삭제되므로 기존 정상 symlink를 방치하지 말고 `bash scripts/dev-bin.sh expose`로 먼저 re-stamp**한다. 이후 `install-agy-statusline` → `install-agy-bridge` → `install-agy-hooks`를 clean install한다. 단순 재설치는 현재 entwurf 값을 preimage로 재캡처하는 자기참조 함정이라 금지한다. 완료판정: state target 7개가 전부 실제 live path, exact `mcp(entwurf-bridge/entwurf_v2)`가 package-owned, statusline state의 preimage가 agent-config 원본, doctor 3종 green. 실제 설치면 변경이므로 GLG 승인 후 수행한다.
+  1. **오염된 live install-state를 pre-entwurf 상태에서 복구한다.** ~~durable 백업~~ **[완료 2026-07-14]** `~/.local/share/entwurf-recovery/state-backup-20260714/` (SHA256SUMS 포함; live 및 이전 세션 scratch 백업과 identical 검증). 그 뒤 state 7개를 정리하고, statusLine을 agent-config 원본으로 되돌리며 hooks/MCP의 entwurf 항목을 제거해 pre-entwurf shape를 만든다. **dev-bin state 3개도 삭제되므로 기존 정상 symlink를 방치하지 말고 `bash scripts/dev-bin.sh expose`로 먼저 re-stamp**한다. 이후 `install-agy-statusline` → `install-agy-bridge` → `install-agy-hooks`를 clean install한다. 단순 재설치는 현재 entwurf 값을 preimage로 재캡처하는 자기참조 함정이라 금지한다. 완료판정: state target 7개가 전부 실제 live path, exact `mcp(entwurf-bridge/entwurf_v2)`가 package-owned, statusline state의 preimage가 agent-config 원본, doctor 3종 green. 실제 설치면 변경이므로 GLG 승인 후 수행한다.
   2. **#46 마지막 ownership handoff를 agent-config에서 닫는다.** 현재 live `~/.gemini/antigravity-cli/settings.json`은 regular file이고 statusLine은 동작하지만, exact permission rule은 아직 없고 state provenance도 오염돼 있어 "새 소유자가 잡는" 앞 절반도 복구 전에는 완료로 볼 수 없다. 복구 후 "옛 소유자가 놓는" 뒷 절반을 닫는다.
      - 재발 벡터가 구체적이다: `agent-config/run.sh:741`의 `ensure_link`가 그 파일을 **whole-file symlink로 되돌린다.** 그 순간 entwurf의 원소별 adapter는 symlink-refuse로 막히고 statusline/permission 소유가 agent-config 버전으로 되돌아간다. agent-config가 symlink를 버리고 disjoint-key merge로 바꾸기 전에는 agy doctor green이 재현 가능한 상태가 아니다.
      - pi 축은 아직 앞 절반도 안 끝났다: agent-config `pi/settings{,.server}.json`이 entwurf `packages[]` + repo-path `entwurfProvider.mcpServers`를 들고 있고, `doctor-pi-provider`는 EFFECTIVE를 legacy repo path로 읽으며 user-scope install-state가 없다. entwurf `setup`을 먼저 돌려 bare `entwurf-bridge`로 normalize한 뒤 agent-config가 그 키들을 놓는다.
      - 완료판정: `doctor-pi-provider` EFFECTIVE bare + agy doctor 3개 green + **agent-config setup 재실행 후에도** 무회귀.
-  3. **backend drift를 닫는다 (0.12.7 차단).** `smoke-meta-async-drift`가 지금 RED다: **agy 1.1.0**(pin 1.0.x), **codex 0.144.1**(pin 0.136.x). agy 1.1.0은 이번 검수에서 실제 `entwurf_self` 무프롬프트 호출, replyable 양방향 native-push, `smoke-agy-native-push-live` 13 checks를 모두 통과했다. 이제 pin과 DELIVERY에 이 증거를 반영한다. codex는 native-citizen lane이 아니므로 "이번 컷에서 재검증하지 않음"을 명시 판정으로 남기거나 같이 확인한다. 이 게이트는 외부 바이너리에 의존해 CI에 못 넣으므로 **컷 체크리스트의 수동 항목**이다.
+  3. ~~backend drift를 닫는다~~ **[완료 2026-07-14]** agy pin `1.1` (live 재검증 증거를 DELIVERY §Antigravity에 기록), codex pin `0.144` (비재검증 판정을 DELIVERY §Codex에 기록). `smoke-meta-async-drift` green. 이 게이트는 외부 바이너리에 의존해 CI에 못 넣으므로 여전히 **컷 체크리스트의 수동 항목**이다.
   4. main을 push하고 CI green을 확인한다. 이제 job이 둘이다: `check`(정적 바닥)와 **`install-surface`**(실제 tarball 설치 후 bin/subcommand 주행 — 이번에 추가). agy 없는 러너에서 `smoke-agy-install-state`가 통과해야 한다(`b434d0f` 이전에는 여기서 터졌다).
   5. 기존 표준 명령 **`/prepare-release 0.12.7`**로 CHANGELOG 승격 + package/lock 버전 범프 + 정적/LIVE 관문 + release-prep 커밋을 수행한다. `tag-release` 스킬은 이 repo의 릴리즈 절차가 아니다.
   6. clean HEAD에서 **`/make-release 0.12.7`**로 tag/push/GitHub release를 수행한다.
   7. GLG 승인으로 npm publish를 수행하고 실제 글로벌 설치면을 0.12.7로 재배선한다.
-- **Blocker (셋):** ① live state provenance 복구. ② agent-config 옛 소유자 cleanup. ③ backend drift pin/DELIVERY 판정. 하나라도 열려 있으면 #46을 닫거나 0.12.7을 prepare하지 않는다.
+- **Blocker (남은 둘):** ① live state provenance 복구 — GLG 승인 대기. ② agent-config 옛 소유자 cleanup. (③ backend drift는 2026-07-14 닫힘.) 하나라도 열려 있으면 #46을 닫거나 0.12.7을 prepare하지 않는다.
   - agent-config: 아직 안 닫혔다. 현재 `doctor-pi-provider`는 EFFECTIVE project repo-path + no state를 "not yet adopted"로 정직하게 보고한다. 이 상태에서 issue #46을 닫거나 0.12.7을 prepare하지 않는다.
 - **Return:** 0.12.7 publish·실설치·doctor·fresh agy 왕복까지 끝나면 #47 mux launch rail로 돌아간다.
 
@@ -36,7 +42,7 @@
 pnpm check
 ./run.sh check-pack
 ./run.sh check-pack-install
-./run.sh smoke-meta-async-drift        # 수동: 외부 바이너리 pin. 지금 RED (agy 1.1.0 / codex 0.144.1)
+./run.sh smoke-meta-async-drift        # 수동: 외부 바이너리 pin. 2026-07-14 green (claude 2.1.208 / codex 0.144.1 / agy 1.1.2)
 ./run.sh doctor-agy-hooks
 ./run.sh doctor-agy-statusline
 ./run.sh doctor-agy-bridge
