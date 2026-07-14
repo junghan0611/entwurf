@@ -88,6 +88,8 @@ Warnings make agents blame themselves and flail. Broken tool state must surface 
 7. **This is not a second harness**: no prompt reconstruction, no transcript hydration, no tool result ledger, no harness emulation. Native bridges front only a garden id plus their narrow delivery rail (Claude mailbox or agy native-push); they do not scrape transcripts or run a replacement control daemon.
 8. **Auth boundary is deployment-surface-agnostic**. This repo does not provide, copy, proxy, decrypt, or mediate any backend's credentials. Native-harness sessions read whatever auth state is visible in their own process filesystem; nothing here moves that.
 9. **Native-push is not a mailbox or pi socket in disguise.** Antigravity replyability is `recordBacked ∧ probeAlive`; it gets no receiver marker, no `watchArmed`, and no spawn/resume authority. Its `agentId` remains `meta-session/antigravity`. The pid+start-key sender join assumes serialized model invocation per agy process: two conversations concurrently invoking under one pid are unsupported and must never be claimed safe.
+10. **A green dev clone is not a working package.** Node refuses `--experimental-strip-types` below `node_modules`, so any surface an operator can invoke must reach compiled JS when installed. This class has shipped four times (start.sh 0.12.1, store-doctor 0.12.4, plugin hook 0.12.5, agy imprint + three operator commands 0.12.7) because the fence was crossed by hand, per surface, and the source-tree floor cannot see it. There is now exactly one crossing — `run_ts` in `run.sh` — and two gates that hold it: `check-install-surface` (structural) and `check-pack-install` (drives the real tarball, in CI). A new `.ts` entrypoint routes through `run_ts` or it does not ship. Dev-only gates have no compiled twin by design and must be REFUSED under an installed package, never silently skipped.
+11. **Verification must not rewire the operator's own install.** An offline smoke that writes a live `~/.claude` / `~/.gemini` / `~/.pi` path uninstalls the operator as a side effect of "testing". Swap the process HOME to a sandbox first; `check-install-surface` S5 fails a write that lands before the swap or without one. LIVE gates are the only surfaces that may drive the real host, and they say so in their name.
 
 ## ACP Plugin Boundary
 
@@ -130,6 +132,7 @@ pnpm check                                  # full static floor: lint + typechec
 ./run.sh smoke-agy-statusline-state         # ambient garden identity install surface (62)
 ./run.sh smoke-agy-hooks-state              # PreInvocation birth/sender hook install surface (37)
 ./run.sh check-entwurf-bridge-boot          # the MCP entwurf-bridge stands up + exposes the v2/native-register tool set
+./run.sh check-install-surface              # structural strip-types fence: run_ts is the only crossing, every operator command has a compiled twin, offline smokes never write the real $HOME
 ./run.sh check-bridge /path/to/project      # entwurf-bridge direct MCP smoke (tools/list + protocol/negative-path)
 ./run.sh check-auth-boundary                # ACP plugin no-auth sentinel present + no legacy-ENV apiKey literal (trust invariant, code-level)
 ./run.sh check-acp-provider-surface         # provider registers curated Claude anchor + streamSimple wired to the real streamShellAcp backend

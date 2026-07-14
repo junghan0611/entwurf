@@ -5,13 +5,20 @@
 ## NOW — #46을 0.12.7로 출하
 
 - **Stem:** agy/Antigravity를 완전한 garden citizen으로 출하한다. 당분간 릴리즈 축은 **0.12.x**이며, **0.13.0은 cortex 지원(#48)** 에 예약한다.
-- **Current:** #46 본체 구현·설치면·회귀 게이트는 완료됐다. thinkpad에서 agy 자동 birth → gid/statusline → MCP `entwurf_v2` → `meta-session/antigravity`·`replyable:true` sender → 같은 gid로 native-push 답장 도착까지 라이브 왕복을 확인했다. 최종 문서/pack 감사에서 npm-installed `entwurf-agy-imprint`가 raw `.ts`를 실행해 `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`으로 죽는 릴리즈 블로커를 발견했고, compiled dist dispatch + 실제 tarball 설치 회귀로 수정했다.
+- **Current:** #46 본체 구현·설치면·회귀 게이트는 완료됐다. thinkpad에서 agy 자동 birth → gid/statusline → MCP `entwurf_v2` → `meta-session/antigravity`·`replyable:true` sender → 같은 gid로 native-push 답장 도착까지 라이브 왕복을 확인했다.
+- **[2026-07-14] strip-types fence를 한 곳으로 모았다 (설치면 수리 완료).** agy imprint 블로커를 고친 뒤 **같은 계열이 3개 더 살아 있었다**: `doctor-pi-provider` / `new-session-id` / `meta-bridge-prune`이 installed에서 raw `.ts`를 실행해 전부 죽어 있었다(실제 tarball을 격리 HOME에 설치해 재현). 이 클래스의 **네 번째 재발**이라 손으로 고치지 않고 구조로 닫았다:
+  - `run.sh`의 `.ts` 진입점 75곳을 `run_ts` 헬퍼 하나로 모았다. installed면 dist JS, dev clone이면 strip-types 소스. compiled twin이 없는 dev 전용 게이트는 raw `.ts` 폴백도 silent exit 0도 아닌 **명시적 거부**다.
+  - `check-pack-install`이 이제 설치본에서 그 세 명령을 실제로 실행하고 **의미까지** 단언한다(id는 `SESSION_ID_RE` 형태, doctor는 verdict 본문 도달, prune은 0-record store 주행). bin만 두들기고 subcommand는 한 번도 안 두들긴 것이 3개를 놓친 이유였다.
+  - 새 정적 게이트 `check-install-surface`(S1–S5)가 나머지 절반을 막는다: 새 `.ts` 진입점이 twin 없이 추가되면 FAIL. mutation으로 실효성 확인(위반 2건 잡음 / 합법 2건 통과 / 오탐 0).
+  - **CI에 `check-pack-install` job을 추가했다.** 지금까지 설치면 축은 CI에 **한 번도 없었고**, 그래서 이 클래스가 네 번 반복됐다. `pnpm check`는 구조상 dev clone 바닥이다.
+  - 스모크가 실제 설치면을 깨는 벡터는 **현재 없음**을 확인했다(설치 스모크 5개는 전부 샌드박스 HOME으로 갈아탐, RGG의 `rm -rf`는 `mktemp -d` 대상). S5가 이 계약을 못박는다.
+  - 죽은 스크립트 감사: `scripts/` 117개 중 **미참조 0건**. 고아처럼 보인 6개는 전부 의도된 것(LIVE 3종은 release-gate 밖이라고 AGENTS/VERIFY에 명시, `check-keyset-overlap`은 `smoke-meta-keyset-guard`가 감싸 `pnpm check`에서 실행, `check-pack-install`은 이제 CI). 유일한 판단 보류는 `smoke-meta-async-drift` — 외부 바이너리 버전 sentinel이라 자동 러너에 못 넣는 수동 게이트다.
 - **Next:**
   1. **#46 마지막 ownership handoff를 agent-config에서 닫는다.** "새 소유자가 잡는" 앞 절반은 이 호스트에서 이미 끝났다: live `~/.gemini/antigravity-cli/settings.json`은 **regular file**이고 `statusLine.command=entwurf-agy-statusline` + `permissions.allow`에 `mcp(entwurf-bridge/entwurf_v2)` 한 줄이 들어가 있으며, 운영자 소유 `command(*)`/`unsandboxed(*)`는 그대로 보존돼 있다. 남은 것은 "옛 소유자가 놓는" 뒷 절반이다.
      - 재발 벡터가 구체적이다: `agent-config/run.sh:741`의 `ensure_link`가 그 파일을 **whole-file symlink로 되돌린다.** 그 순간 entwurf의 원소별 adapter는 symlink-refuse로 막히고 statusline/permission 소유가 agent-config 버전으로 되돌아간다. agent-config가 symlink를 버리고 disjoint-key merge로 바꾸기 전에는 agy doctor green이 재현 가능한 상태가 아니다.
      - pi 축은 아직 앞 절반도 안 끝났다: agent-config `pi/settings{,.server}.json`이 entwurf `packages[]` + repo-path `entwurfProvider.mcpServers`를 들고 있고, `doctor-pi-provider`는 EFFECTIVE를 legacy repo path로 읽으며 user-scope install-state가 없다. entwurf `setup`을 먼저 돌려 bare `entwurf-bridge`로 normalize한 뒤 agent-config가 그 키들을 놓는다.
      - 완료판정: `doctor-pi-provider` EFFECTIVE bare + agy doctor 3개 green + **agent-config setup 재실행 후에도** 무회귀.
-  2. main을 push하고 CI green을 확인한다 (agy 없는 러너에서 `smoke-agy-install-state`가 통과해야 한다 — `b434d0f` 이전에는 여기서 터졌다).
+  2. main을 push하고 CI green을 확인한다. 이제 job이 둘이다: `check`(정적 바닥)와 **`install-surface`**(실제 tarball 설치 후 bin/subcommand 주행 — 이번에 추가). agy 없는 러너에서 `smoke-agy-install-state`가 통과해야 한다(`b434d0f` 이전에는 여기서 터졌다).
   3. 기존 표준 명령 **`/prepare-release 0.12.7`**로 CHANGELOG 승격 + package/lock 버전 범프 + 정적/LIVE 관문 + release-prep 커밋을 수행한다. `tag-release` 스킬은 이 repo의 릴리즈 절차가 아니다.
   4. clean HEAD에서 **`/make-release 0.12.7`**로 tag/push/GitHub release를 수행한다.
   5. GLG 승인으로 npm publish를 수행하고 실제 글로벌 설치면을 0.12.7로 재배선한다.
