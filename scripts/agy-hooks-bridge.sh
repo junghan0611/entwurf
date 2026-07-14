@@ -146,16 +146,19 @@ do_doctor() {
   esac
 
   if [ -f "$STATE_FILE" ]; then
-    local managed
-    managed="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("managedHooksPath",""))' "$STATE_FILE" 2>/dev/null || true)"
-    if [ -n "$managed" ] && [ "$managed" != "$HOOKS" ]; then
+    local managed expected_hooks
+    expected_hooks="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$HOOKS")"
+    if ! managed="$(python3 -c 'import json,os,sys; v=json.load(open(sys.argv[1])).get("managedHooksPath"); assert isinstance(v,str) and v; print(os.path.abspath(v))' "$STATE_FILE" 2>/dev/null)"; then
+      log "  state: CORRUPT — install-state is unreadable or has no managedHooksPath: $STATE_FILE"
+      hard_fail=1
+    elif [ "$managed" != "$expected_hooks" ]; then
       # The state describes a DIFFERENT hooks file than the one agy loads here — so the live hook
       # is unowned: uninstall would leave it in place, and its provenance (what the file held
       # before we wrote it) is unrecorded. A test run that isolated HOME but SHARED XDG_DATA_HOME
       # produces exactly this shape.
-      log "  state: FOREIGN TARGET — install-state manages '$managed', but agy loads '$HOOKS' on this host. The live PreInvocation hook is unowned. Re-run install-agy-hooks against this host (and check whether an isolated test leaked its state)."
+      log "  state: FOREIGN TARGET — install-state manages '$managed', but agy loads '$expected_hooks' on this host. The live PreInvocation hook is unowned. Re-run install-agy-hooks against this host (and check whether an isolated test leaked its state)."
       hard_fail=1
-    elif [ -n "$managed" ]; then
+    else
       local managed_status
       managed_status="$(python3 "$CONFIG_PY" doctor-static "$managed")"
       case "$managed_status" in

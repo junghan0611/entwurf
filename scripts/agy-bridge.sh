@@ -238,15 +238,25 @@ doctor_permission() {
 
 do_doctor() {
   log "[agy-bridge doctor]"
-  local hard_fail=0 configured_any=0
+  local hard_fail=0 configured_any=0 resolvable_any=0
 
   log "── static (configured candidates)"
   doctor_static_one "global ($GLOBAL_CONFIG)" "$GLOBAL_CONFIG" || hard_fail=1
   doctor_static_one "legacy ($LEGACY_CONFIG)" "$LEGACY_CONFIG" || hard_fail=1
   doctor_permission || hard_fail=1
-  # Did EITHER candidate carry a configured entwurf-bridge? (best-effort — re-read cheaply.)
+  # Did EITHER candidate carry a configured + resolvable entwurf-bridge? Keep this runtime fact
+  # separate from ownership-state failures below: a FOREIGN TARGET makes the doctor red, but it
+  # does not make a visibly configured command disappear.
+  local c candidate_status candidate_cmd
   for c in "$GLOBAL_CONFIG" "$LEGACY_CONFIG"; do
-    case "$(python3 "$CONFIG_PY" doctor-static "$c")" in configured\ *) configured_any=1 ;; esac
+    candidate_status="$(python3 "$CONFIG_PY" doctor-static "$c")"
+    case "$candidate_status" in
+      configured\ *)
+        configured_any=1
+        candidate_cmd="${candidate_status#configured }"
+        command_resolvable "$candidate_cmd" && resolvable_any=1
+        ;;
+    esac
   done
 
   # N1 (state-evidence, mirrors the meta-bridge doctor): if we HAVE an install-state, the
@@ -254,16 +264,19 @@ do_doctor() {
   # (installed, then someone removed it — the actual "wiring came loose / ?" case) → FAIL. This
   # is the honest distinction from "never installed" (a note, below), which no state backs.
   if [ -f "$STATE_FILE" ]; then
-    local managed
-    managed="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("managedConfigPath",""))' "$STATE_FILE" 2>/dev/null || true)"
-    if [ -n "$managed" ] && [ "$managed" != "$GLOBAL_CONFIG" ]; then
+    local managed expected_global
+    expected_global="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$GLOBAL_CONFIG")"
+    if ! managed="$(python3 -c 'import json,os,sys; v=json.load(open(sys.argv[1])).get("managedConfigPath"); assert isinstance(v,str) and v; print(os.path.abspath(v))' "$STATE_FILE" 2>/dev/null)"; then
+      log "  state: CORRUPT — install-state is unreadable or has no managedConfigPath: $STATE_FILE"
+      hard_fail=1
+    elif [ "$managed" != "$expected_global" ]; then
       # The state describes a DIFFERENT file than the one agy reads here. Checking the recorded
       # file and calling that green blesses a host we do not own: uninstall would not touch the
       # live config, and the live config's provenance is gone. A verification run that isolated
       # HOME but SHARED XDG_DATA_HOME writes exactly this — sandbox settings, real state.
-      log "  state: FOREIGN TARGET — install-state manages '$managed', but agy reads '$GLOBAL_CONFIG' on this host. Nothing here is package-owned. Re-run install-agy-bridge against this host (and check whether an isolated test leaked its state)."
+      log "  state: FOREIGN TARGET — install-state manages '$managed', but agy reads '$expected_global' on this host. Nothing here is package-owned. Re-run install-agy-bridge against this host (and check whether an isolated test leaked its state)."
       hard_fail=1
-    elif [ -n "$managed" ]; then
+    else
       local managed_status
       managed_status="$(python3 "$CONFIG_PY" doctor-static "$managed")"
       case "$managed_status" in
@@ -275,26 +288,36 @@ do_doctor() {
         *) log "  state: DRIFT — install-state records $managed but it no longer configures entwurf-bridge (removed since install)."; hard_fail=1 ;;
       esac
     fi
-    # The permission half carries its own target, and it can drift independently of the config.
-    if [ -f "$PERMISSION_STATE_FILE" ]; then
-      local pmanaged
-      pmanaged="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("managedSettingsPath",""))' "$PERMISSION_STATE_FILE" 2>/dev/null || true)"
-      if [ -n "$pmanaged" ] && [ "$pmanaged" != "$SETTINGS_FILE" ]; then
-        log "  state: FOREIGN TARGET (permission) — permission-state manages '$pmanaged', but agy reads '$SETTINGS_FILE'. The grant recorded there is not the grant on this host."
-        hard_fail=1
-      fi
-    fi
   elif [ "$configured_any" -eq 0 ]; then
     log "  note: no install-state and neither candidate configures entwurf-bridge (never installed — this is the '?' the operator sees; run install-agy-bridge)."
   fi
 
+  # The permission half carries its own target and can exist/drift independently of the MCP config
+  # state. Never nest this check under STATE_FILE: a foreign permission-state must fail even when
+  # the config state is absent.
+  if [ -f "$PERMISSION_STATE_FILE" ]; then
+    local pmanaged expected_settings
+    expected_settings="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$SETTINGS_FILE")"
+    if ! pmanaged="$(python3 -c 'import json,os,sys; v=json.load(open(sys.argv[1])).get("managedSettingsPath"); assert isinstance(v,str) and v; print(os.path.abspath(v))' "$PERMISSION_STATE_FILE" 2>/dev/null)"; then
+      log "  state: CORRUPT (permission) — permission-state is unreadable or has no managedSettingsPath: $PERMISSION_STATE_FILE"
+      hard_fail=1
+    elif [ "$pmanaged" != "$expected_settings" ]; then
+      log "  state: FOREIGN TARGET (permission) — permission-state manages '$pmanaged', but agy reads '$expected_settings'. The grant recorded there is not the grant on this host."
+      hard_fail=1
+    fi
+  fi
+
   log "── live (runtime wiring)"
   if command -v pgrep >/dev/null 2>&1 && pgrep -x agy >/dev/null 2>&1; then
-    if [ "$configured_any" -eq 1 ] && [ "$hard_fail" -eq 0 ]; then
+    if [ "$resolvable_any" -eq 1 ]; then
       # HONEST label (N2): a running agy + a resolvable configured candidate is CONSISTENT with
       # runtime wiring, but it does NOT prove agy actually read that config — that needs MCP
-      # tool-listing-grade evidence (deferred). Do not overclaim "runtime-effective".
-      log "  live: agy is running AND a configured candidate has a resolvable command — consistent with runtime wiring (config-read NOT proven; MCP-tool-listing evidence deferred)."
+      # tool-listing-grade evidence (deferred). Ownership/state failures remain red independently.
+      if [ "$hard_fail" -eq 0 ]; then
+        log "  live: agy is running AND a configured candidate has a resolvable command — consistent with runtime wiring (config-read NOT proven; MCP-tool-listing evidence deferred)."
+      else
+        log "  live: agy is running and a configured candidate resolves, but ownership/state errors above keep this doctor red (config-read NOT proven)."
+      fi
     else
       log "  live: agy is running but no resolvable configured candidate — runtime wiring is broken."
       hard_fail=1

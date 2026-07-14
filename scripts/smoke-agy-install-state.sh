@@ -50,6 +50,7 @@ export XDG_DATA_HOME="$SB/xdg"
 GLOBAL="$HOME/.gemini/config/mcp_config.json"
 LEGACY="$HOME/.gemini/antigravity-cli/mcp_config.json"
 STATE="$XDG_DATA_HOME/entwurf/agy-bridge/install-state.json"
+PSTATE="$XDG_DATA_HOME/entwurf/agy-bridge/permission-state.json"
 mkdir -p "$(dirname "$GLOBAL")" "$(dirname "$LEGACY")" "$SB/bin"
 
 # fake stable bin (on PATH) + fake ss (unused by the deterministic path) — fake agy toggled per case.
@@ -149,6 +150,37 @@ want "foreign-target: the state file is NOT auto-cleaned (a wrong target is a ve
 cp "$SB/state-before-foreign.json" "$STATE"
 rm -f "$FOREIGN_CFG"
 
+# State presence is not validity. A malformed body or missing target field must fail loud rather
+# than becoming an empty string that silently skips the ownership check.
+cp "$STATE" "$SB/state-before-corrupt.json"
+printf 'not-json{{{' > "$STATE"
+set +e; DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?; set -e
+want "corrupt-state: doctor FAILS on unreadable install-state" "[ '$DOC_RC' -ne 0 ]"
+want "corrupt-state: report names CORRUPT instead of silently skipping ownership" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'state: CORRUPT'"
+cp "$SB/state-before-corrupt.json" "$STATE"
+
+# Permission state is an independent ownership rail. It must be checked even when the MCP config
+# state is absent; nesting it under STATE_FILE would let a foreign permission target pass green.
+cp "$PSTATE" "$SB/pstate-before-independent.json"
+rm -f "$STATE"
+python3 -c "
+import json,sys
+p=sys.argv[1]; d=json.load(open(p)); d['managedSettingsPath']=sys.argv[2]
+json.dump(d, open(p,'w'))" "$PSTATE" "$SB/foreign-settings.json"
+set +e; DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?; set -e
+want "permission-foreign-target: doctor FAILS even when config install-state is absent" "[ '$DOC_RC' -ne 0 ]"
+want "permission-foreign-target: report names the independent permission target" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'FOREIGN TARGET (permission)'"
+cp "$SB/state-before-corrupt.json" "$STATE"
+cp "$SB/pstate-before-independent.json" "$PSTATE"
+
+printf 'not-json{{{' > "$PSTATE"
+set +e; DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?; set -e
+want "permission-corrupt-state: doctor FAILS on unreadable permission-state" "[ '$DOC_RC' -ne 0 ]"
+want "permission-corrupt-state: report names CORRUPT instead of silently skipping permission ownership" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'CORRUPT (permission)'"
+cp "$SB/pstate-before-independent.json" "$PSTATE"
 
 # ── D: uninstall — honest inverse ─────────────────────────────────────────────
 bash "$BRIDGE" uninstall >/dev/null
@@ -414,7 +446,6 @@ unset ENTWURF_DEV_BIN_DIR ENTWURF_BRIDGE_TARGET ENTWURF_AGY_STATUSLINE_TARGET
 # half-installed. We grant exactly ONE string in `permissions.allow`; the operator's own rules are
 # preserved, never managed (granting ourselves command(*) would be their trust decision, not ours).
 SETTINGS="$HOME/.gemini/antigravity-cli/settings.json"
-PSTATE="$XDG_DATA_HOME/entwurf/agy-bridge/permission-state.json"
 SLSTATE="$XDG_DATA_HOME/entwurf/agy-statusline/install-state.json"
 STATUSLINE="$REPO_DIR/scripts/agy-statusline-bridge.sh"
 RULE='mcp(entwurf-bridge/entwurf_v2)'

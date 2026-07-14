@@ -85,7 +85,7 @@ do_uninstall() {
 
 do_doctor() {
   log "[agy-statusline doctor]"
-  local hard_fail=0 link_note=""
+  local hard_fail=0 runtime_ready=0 link_note=""
   if [ -L "$SETTINGS" ]; then
     link_note=" [symlink → $(readlink "$SETTINGS")]"
   fi
@@ -101,6 +101,7 @@ do_doctor() {
     configured\ *)
       local cmd="${status#configured }"
       if command_resolvable "$cmd"; then
+        runtime_ready=1
         log "  settings: configured → '$cmd' (resolvable)$link_note"
       else
         log "  settings: configured → '$cmd' DANGLING (not on PATH / not executable — run expose-dev-bin)$link_note"
@@ -112,16 +113,19 @@ do_doctor() {
   # state-evidence (mirrors agy-bridge N1): install-state present ⇒ its managed settings MUST
   # still configure OUR command. state ∧ not-configured = DRIFT (installed, then removed) → FAIL.
   if [ -f "$STATE_FILE" ]; then
-    local managed
-    managed="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("managedSettingsPath",""))' "$STATE_FILE" 2>/dev/null || true)"
-    if [ -n "$managed" ] && [ "$managed" != "$SETTINGS" ]; then
+    local managed expected_settings
+    expected_settings="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$SETTINGS")"
+    if ! managed="$(python3 -c 'import json,os,sys; v=json.load(open(sys.argv[1])).get("managedSettingsPath"); assert isinstance(v,str) and v; print(os.path.abspath(v))' "$STATE_FILE" 2>/dev/null)"; then
+      log "  state: CORRUPT — install-state is unreadable or has no managedSettingsPath: $STATE_FILE"
+      hard_fail=1
+    elif [ "$managed" != "$expected_settings" ]; then
       # The state describes a DIFFERENT settings file than the one agy reads here. The live
       # statusLine's provenance (whose command was there before ours) is therefore NOT recorded:
       # uninstalling would drop the key instead of restoring the operator's own command. A test
       # run that isolated HOME but SHARED XDG_DATA_HOME produces exactly this shape.
-      log "  state: FOREIGN TARGET — install-state manages '$managed', but agy reads '$SETTINGS' on this host. The live statusLine has no recorded preimage, so uninstall could not restore what was there before. Re-run install-agy-statusline against this host (and check whether an isolated test leaked its state)."
+      log "  state: FOREIGN TARGET — install-state manages '$managed', but agy reads '$expected_settings' on this host. The live statusLine has no recorded preimage, so uninstall could not restore what was there before. Re-run install-agy-statusline against this host (and check whether an isolated test leaked its state)."
       hard_fail=1
-    elif [ -n "$managed" ]; then
+    else
       local managed_status
       managed_status="$(python3 "$CONFIG_PY" doctor-static "$managed")"
       case "$managed_status" in
@@ -142,8 +146,12 @@ do_doctor() {
 
   log "── live (runtime wiring)"
   if command -v pgrep >/dev/null 2>&1 && pgrep -x agy >/dev/null 2>&1; then
-    if [ "$hard_fail" -eq 0 ] && [ "${status#configured }" != "$status" ]; then
-      log "  live: agy is running AND statusLine resolves to our renderer — consistent with runtime wiring (statusline read NOT proven; agy re-reads settings on launch)."
+    if [ "$runtime_ready" -eq 1 ]; then
+      if [ "$hard_fail" -eq 0 ]; then
+        log "  live: agy is running AND statusLine resolves to our renderer — consistent with runtime wiring (statusline read NOT proven; agy re-reads settings on launch)."
+      else
+        log "  live: agy is running and statusLine resolves to our renderer, but ownership/state errors above keep this doctor red (statusline read NOT proven)."
+      fi
     else
       log "  live: agy is running but statusLine is not our resolvable command — runtime wiring is broken."
       hard_fail=1

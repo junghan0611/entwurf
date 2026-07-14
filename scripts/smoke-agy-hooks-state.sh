@@ -154,4 +154,12 @@ want "foreign-target: it names the real damage — the live hook is unowned" \
 want "foreign-target: neither the foreign hooks file nor the state is auto-deleted" "[ -f '$FOREIGN_HOOKS' ] && [ -f '$STATE' ]"
 rm -f "$FOREIGN_HOOKS"
 
+# A present state with invalid JSON or no managed target is corrupt evidence, not "no evidence".
+# The doctor must fail loud instead of parsing to an empty string and skipping the ownership check.
+printf 'not-json{{{' > "$STATE"
+set +e; FT_OUT="$(bash "$BRIDGE" doctor 2>&1)"; FT_RC=$?; set -e
+want "corrupt-state: doctor FAILS on unreadable install-state" "[ '$FT_RC' -ne 0 ]"
+want "corrupt-state: report names CORRUPT instead of silently skipping ownership" \
+  "printf '%s' \"\$FT_OUT\" | grep -q 'state: CORRUPT'"
+
 printf '\nsmoke-agy-hooks-state: %d checks passed\n' "$pass"
