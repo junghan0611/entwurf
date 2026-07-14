@@ -265,7 +265,8 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		// real state records whose managed targets are sandbox paths. That is the exact leak
 		// that broke a live host's provenance on 2026-07-14 (AGENTS.md hard rule 11: swap BOTH).
 		// The swap must not itself lean on the unswapped variable ($XDG_DATA_HOME on the RHS).
-		const xdgSwapped = lines.some((l) => /^\s*export\s+XDG_DATA_HOME=/.test(l) && !/\$\{?XDG_DATA_HOME/.test(l));
+		const xdgSwapAt = lines.findIndex((l) => /^\s*export\s+XDG_DATA_HOME=/.test(l) && !/\$\{?XDG_DATA_HOME/.test(l));
+		const xdgSwapped = xdgSwapAt !== -1;
 		if (swapAt !== -1 && !xdgSwapped) xdgOffenders.push(f);
 
 		// A mutating run.sh drive writes through THREE roots, and no single override covers them:
@@ -284,7 +285,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			if (!drive) return;
 			const cmd = drive[1] as string;
 			const homeOk = /(?:^|\s)HOME=/.test(code) || (swapAt !== -1 && i > swapAt);
-			const xdgOk = /XDG_DATA_HOME=/.test(code) || xdgSwapped;
+			const xdgOk = /XDG_DATA_HOME=/.test(code) || (xdgSwapAt !== -1 && i > xdgSwapAt);
 			const agentOk = /PI_CODING_AGENT_DIR=/.test(code) || (agentDirExportAt !== -1 && i > agentDirExportAt) || homeOk;
 			const missing: string[] = [];
 			if (!xdgOk)
