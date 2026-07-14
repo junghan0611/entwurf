@@ -9,12 +9,15 @@
 
 ### 실행 순서 — ~~A~~ → ~~B~~ → **C** → E
 
-**A·B는 닫혔다.** 아래 RECENT 참조. 한 항목씩 커밋·푸시하고 CI로 확인한 뒤 다음으로 넘어간다.
+**A·B는 닫혔다** (`33b3810`/`76f14c6`, `52d515b` — 둘 다 main CI green). 아래 RECENT 참조. 한 항목씩 커밋·푸시하고 CI로 확인한 뒤 다음으로 넘어간다.
 
-1. **C — fresh mint와 strict resume 분리. ← 다음 한 걸음.** pi는 건드리지 않는다. 외부 주소·plan·marker·socket의 권위는 계속 gid이고, v2 rail 내부 handoff만 고친다.
+1. **C — fresh mint와 strict resume 분리. ← 다음 한 걸음. 착수 전 #49 §C의 "구현 전 고정" 블록부터 읽는다.** pi는 건드리지 않는다. 외부 주소·plan·marker·socket의 권위는 계속 gid이고, v2 rail 내부 handoff만 고친다.
    - parent가 이미 찾은 authoritative `sessionFile`을 버리고 child에게 `--session-id <gid>`로 두 번째 lookup을 시키는 것이 버그다. parent의 고정 `SESSIONS_BASE`와 child의 `sessionDir` 해석이 달라지는 실제 반례에서 같은-gid 빈 세션/socket이 생겨 false-success할 수 있었다.
-   - v2-control child는 exact `--session <absolute-file>`을 사용한다. 실제 pi v0.80.6 + entwurf-control 무토큰 RPC에서 header gid 기반 socket·`get_info`가 유지됨을 확인했다. 상세 액션/게이트는 **#49 §C**.
-   - fresh launcher는 계속 `--session-id "$(run.sh new-session-id)"`; 경고는 **수용 + README 계약 문장 갱신**. launcher pre-create는 반쪽 세션·불변식 파괴로 기각.
+   - v2-control child는 exact `--session <absolute-file>`을 사용한다. 실제 pi v0.80.6 + entwurf-control 무토큰 RPC에서 header gid 기반 socket·`get_info`가 유지됨을 확인했다.
+   - **완료 판정은 argv에 `--session`이 보이는 것이 아니다.** 일부러 child의 resolver를 틀리게 해도(LIVE 게이트에서 `PI_CODING_AGENT_SESSION_DIR=<빈 임시 디렉터리>`) **원래 JSONL만 재개되는가**다. 평상시 설정으로 LIVE resume만 돌리면 **지금 코드도 green일 수 있다** — 반례를 게이트에 심는 것이 C의 핵심이다.
+   - **최소침습이지만 표면이 여럿이다.** `sessionFile`은 optional이 아니라 **discriminated union**으로 강제하고(v2 argv의 `--session-id`는 정확히 0회), 절대경로는 resolve+assert 양쪽에서 강제한다. "TOCTOU swap 전부 방어"는 **과한 주장** — parent lookup 뒤 같은 경로에 같은 gid의 다른 유효 파일이 갈리는 건 못 막는다(범위를 좁히거나 header gid ↔ marker gid 비교를 넣는다).
+   - **C 이후 거짓이 되는 서술 8곳**(`entwurf-resume-args.ts:39,59,83` · `check-entwurf-resume-args.ts` · `check-entwurf-v2-spawn-production.ts` · `run.sh:105` · `README.md:539` · `AGENTS.md:177` · `entwurf-control.ts:1169,1190` · `entwurf-core.ts:1354`)를 **같은 커밋에서** 고친다. 표·작업 순서는 #49 §C. **B가 남긴 교훈이 그것이다 — 코드가 바뀌는데 선언이 안 바뀌면 게이트가 거짓말을 시작한다.**
+   - fresh launcher는 계속 `--session-id "$(run.sh new-session-id)"`; 경고는 **수용 + README 계약 문장 갱신**. launcher pre-create는 반쪽 세션·불변식 파괴로 기각. legacy one-shot과 `smoke-session-id-name`은 footgun 증거로 **유지**.
 2. **E — floor purity.** 설계 SSOT는 **#41의 두 코멘트**(본 설계 + 실기기 보정). GPT 초안은 관측면이 좁아 워킹트리에서 걷어냈고, #41 기준으로 **재작성**한다.
    - 첫 전체 floor 실행은 green이 목표가 아니다. **churn 카탈로그를 뽑는 관측 실행**이고, RED는 데이터다.
 
