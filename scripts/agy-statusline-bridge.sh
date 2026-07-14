@@ -115,8 +115,10 @@ do_doctor() {
   if [ -f "$STATE_FILE" ]; then
     local managed expected_settings
     expected_settings="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$SETTINGS")"
-    if ! managed="$(python3 -c 'import json,os,sys; v=json.load(open(sys.argv[1])).get("managedSettingsPath"); assert isinstance(v,str) and v; print(os.path.abspath(v))' "$STATE_FILE" 2>/dev/null)"; then
-      log "  state: CORRUPT — install-state is unreadable or has no managedSettingsPath: $STATE_FILE"
+    if ! managed="$(python3 -c 'import json,os,sys; v=json.load(open(sys.argv[1])).get("managedSettingsPath"); assert isinstance(v,str) and os.path.isabs(v); print(os.path.abspath(v))' "$STATE_FILE" 2>/dev/null)"; then
+      # isabs: install always records an absolute path — a relative one is corrupt, and
+      # normalizing it against OUR cwd could bless whatever directory the doctor runs from.
+      log "  state: CORRUPT — install-state is unreadable or its managedSettingsPath is missing/non-absolute: $STATE_FILE"
       hard_fail=1
     elif [ "$managed" != "$expected_settings" ]; then
       # The state describes a DIFFERENT settings file than the one agy reads here. The live

@@ -290,4 +290,11 @@ want "corrupt-state: doctor FAILS on unreadable install-state" "[ '$FT_RC' -ne 0
 want "corrupt-state: report names CORRUPT instead of silently skipping ownership" \
   "printf '%s' \"\$FT_OUT\" | grep -q 'state: CORRUPT'"
 
+# A RELATIVE managed path is corrupt too — install records absolute paths only, and resolving a
+# relative one against the doctor's cwd could bless whatever directory it happens to run from.
+printf '{"managedSettingsPath":".gemini/antigravity-cli/settings.json"}' > "$STATE"
+set +e; FT_OUT="$(bash "$BRIDGE" doctor 2>&1)"; FT_RC=$?; set -e
+want "corrupt-state: a relative managedSettingsPath is CORRUPT, never resolved against the doctor's cwd" \
+  "[ '$FT_RC' -ne 0 ] && printf '%s' \"\$FT_OUT\" | grep -q 'state: CORRUPT'"
+
 printf '\nsmoke-agy-statusline-state: %d checks passed\n' "$pass"

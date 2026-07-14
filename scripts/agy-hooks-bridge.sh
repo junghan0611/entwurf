@@ -148,8 +148,10 @@ do_doctor() {
   if [ -f "$STATE_FILE" ]; then
     local managed expected_hooks
     expected_hooks="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$HOOKS")"
-    if ! managed="$(python3 -c 'import json,os,sys; v=json.load(open(sys.argv[1])).get("managedHooksPath"); assert isinstance(v,str) and v; print(os.path.abspath(v))' "$STATE_FILE" 2>/dev/null)"; then
-      log "  state: CORRUPT — install-state is unreadable or has no managedHooksPath: $STATE_FILE"
+    if ! managed="$(python3 -c 'import json,os,sys; v=json.load(open(sys.argv[1])).get("managedHooksPath"); assert isinstance(v,str) and os.path.isabs(v); print(os.path.abspath(v))' "$STATE_FILE" 2>/dev/null)"; then
+      # isabs: install always records an absolute path — a relative one is corrupt, and
+      # normalizing it against OUR cwd could bless whatever directory the doctor runs from.
+      log "  state: CORRUPT — install-state is unreadable or its managedHooksPath is missing/non-absolute: $STATE_FILE"
       hard_fail=1
     elif [ "$managed" != "$expected_hooks" ]; then
       # The state describes a DIFFERENT hooks file than the one agy loads here — so the live hook

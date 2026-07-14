@@ -158,6 +158,17 @@ set +e; DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?; set -e
 want "corrupt-state: doctor FAILS on unreadable install-state" "[ '$DOC_RC' -ne 0 ]"
 want "corrupt-state: report names CORRUPT instead of silently skipping ownership" \
   "printf '%s' \"\$DOC_OUT\" | grep -q 'state: CORRUPT'"
+
+# A RELATIVE managed path is corrupt too: install only ever records an absolute path, and
+# normalizing a relative one against the doctor's own cwd could bless whatever directory the
+# doctor happens to run from.
+python3 -c "
+import json,sys
+p=sys.argv[1]; d={'managedConfigPath':'.gemini/config/mcp_config.json'}
+json.dump(d, open(p,'w'))" "$STATE"
+set +e; DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?; set -e
+want "corrupt-state: a relative managedConfigPath is CORRUPT, never resolved against the doctor's cwd" \
+  "[ '$DOC_RC' -ne 0 ] && printf '%s' \"\$DOC_OUT\" | grep -q 'state: CORRUPT'"
 cp "$SB/state-before-corrupt.json" "$STATE"
 
 # Permission state is an independent ownership rail. It must be checked even when the MCP config
@@ -544,6 +555,9 @@ want "permission: the shadow report names the offending list and rule" \
 # operator who granted a broad mcp(*) has already made entwurf_v2 callable — reporting that host as
 # "NOT granted, agy prompts on EVERY call" is a false red about a surface that works. It is still
 # THEIR rule, not ours, so it is a NOTE (exit 0 + named owner), never a silent pass and never DRIFT.
+# The never-installed shape: no permission-state claims ownership here (the owned-drift mirror of
+# THIS case — state says we added the rule, rule gone, wildcard covering — is pinned red below).
+rm -f "$STATE" "$PSTATE"
 for broad in 'mcp(*)' 'mcp(entwurf-bridge)'; do
   printf '{"permissions":{"allow":["%s"]}}\n' "$broad" > "$SETTINGS"
   DOC_OUT="$(bash "$BRIDGE" doctor 2>&1 || true)"
@@ -560,6 +574,30 @@ for broad in 'mcp(*)' 'mcp(entwurf-bridge)'; do
   fi
   ok "permission: '$broad' in deny still shadows its own allow (Deny > Allow, not order-of-lists)"
 done
+
+# OWNERSHIP BEATS COVERAGE (hard rule 12): our state says WE added the exact rule, the rule is
+# gone, and an operator wildcard keeps calls working. Runtime works — but the grant entwurf owns
+# (and repairs) vanished, so the verdict stays red with both axes named. This is the exact shape a
+# whole-file settings relink (agent-config ensure_link) produces: statusline drifts loudly, and the
+# permission half must not be the silent one.
+printf '{"permissions":{"allow":[]}}\n' > "$SETTINGS"
+bash "$BRIDGE" install >/dev/null 2>&1   # state records ruleExistedBefore=false — the rule is OURS
+python3 -c "import json;d=json.load(open('$SETTINGS'));d['permissions']['allow']=['mcp(*)'];json.dump(d,open('$SETTINGS','w'))"
+set +e; DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?; set -e
+want "permission: an operator wildcard does NOT mask drift of the rule WE installed (doctor fails)" "[ '$DOC_RC' -ne 0 ]"
+want "permission: the owned-drift report names both axes (our grant gone, their rule covering)" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'DRIFT' && printf '%s' \"\$DOC_OUT\" | grep -qF 'mcp(*)'"
+
+# …but an operator's OWN pre-existing rule vanishing is not our drift: ruleExistedBefore=true means
+# the rule was never ours to lose. Their file, their edit; the wildcard covering it stays a NOTE.
+rm -f "$STATE" "$PSTATE"
+printf '{"permissions":{"allow":["%s"]}}\n' "$RULE" > "$SETTINGS"
+bash "$BRIDGE" install >/dev/null 2>&1   # rule pre-existed → recorded as theirs
+python3 -c "import json;d=json.load(open('$SETTINGS'));d['permissions']['allow']=['mcp(*)'];json.dump(d,open('$SETTINGS','w'))"
+if ! bash "$BRIDGE" doctor >/dev/null 2>&1; then
+  die "covered: losing the OPERATOR's own pre-existing rule must not be reported as OUR drift"
+fi
+ok "permission: an operator's own vanished rule under a covering wildcard stays green (not our element)"
 
 # ── K4: a grant we cannot write FAILS the explicit install (setup degrades it, not us) ──
 # A symlinked settings.json is someone else's SSOT (an agent-config link) — never clobber it. But

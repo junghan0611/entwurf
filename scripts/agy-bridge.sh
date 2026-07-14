@@ -215,6 +215,23 @@ doctor_permission() {
       # calling this DRIFT would be a false red about a working surface. But it is THEIR rule, not
       # ours: narrowing that wildcard silently takes our grant with it. Note, never a silent pass.
       local covering="${status#covered-by-allow }"
+      # Ownership axis first (hard rule 12): if OUR permission-state says WE added the exact rule
+      # to THIS settings file and it is now gone, that is drift of an owned element — the operator's
+      # broad rule keeps calls working (say so), but the verdict stays red. A whole-file settings
+      # relink (agent-config ensure_link) produces exactly this shape. A state bound to a DIFFERENT
+      # file (foreign) or unreadable (corrupt) is the independent state check's verdict, not this one.
+      if [ -f "$PERMISSION_STATE_FILE" ] && python3 -c '
+import json, os, sys
+try:
+    s = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(1)
+p = s.get("managedSettingsPath")
+same = isinstance(p, str) and os.path.isabs(p) and os.path.abspath(p) == os.path.abspath(sys.argv[2])
+sys.exit(0 if same and s.get("ruleExistedBefore") is False else 1)' "$PERMISSION_STATE_FILE" "$SETTINGS_FILE"; then
+        log "  permission ($SETTINGS_FILE): DRIFT — entwurf installed '$ALLOW_RULE' here and it is now GONE. Your '$covering' still covers the tool, so agy does not prompt today — but the grant entwurf owns (and repairs) no longer exists. Fix: ./run.sh install-agy-bridge"
+        return 1
+      fi
       log "  permission ($SETTINGS_FILE): NOTE — we own no rule here, but your '$covering' in permissions.allow already matches $ALLOW_RULE, so agy calls entwurf_v2 without prompting. That grant is YOURS: narrow '$covering' and entwurf_v2 starts prompting again. Run ./run.sh install-agy-bridge if you want the narrow rule owned (and repaired) by entwurf."
       return 0 ;;
     not-configured|absent)
@@ -266,8 +283,10 @@ do_doctor() {
   if [ -f "$STATE_FILE" ]; then
     local managed expected_global
     expected_global="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$GLOBAL_CONFIG")"
-    if ! managed="$(python3 -c 'import json,os,sys; v=json.load(open(sys.argv[1])).get("managedConfigPath"); assert isinstance(v,str) and v; print(os.path.abspath(v))' "$STATE_FILE" 2>/dev/null)"; then
-      log "  state: CORRUPT — install-state is unreadable or has no managedConfigPath: $STATE_FILE"
+    if ! managed="$(python3 -c 'import json,os,sys; v=json.load(open(sys.argv[1])).get("managedConfigPath"); assert isinstance(v,str) and os.path.isabs(v); print(os.path.abspath(v))' "$STATE_FILE" 2>/dev/null)"; then
+      # isabs: install always records an absolute path. A relative one is tampered/corrupt state —
+      # normalizing it against OUR cwd could bless whatever directory the doctor happens to run from.
+      log "  state: CORRUPT — install-state is unreadable or its managedConfigPath is missing/non-absolute: $STATE_FILE"
       hard_fail=1
     elif [ "$managed" != "$expected_global" ]; then
       # The state describes a DIFFERENT file than the one agy reads here. Checking the recorded
@@ -298,8 +317,8 @@ do_doctor() {
   if [ -f "$PERMISSION_STATE_FILE" ]; then
     local pmanaged expected_settings
     expected_settings="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$SETTINGS_FILE")"
-    if ! pmanaged="$(python3 -c 'import json,os,sys; v=json.load(open(sys.argv[1])).get("managedSettingsPath"); assert isinstance(v,str) and v; print(os.path.abspath(v))' "$PERMISSION_STATE_FILE" 2>/dev/null)"; then
-      log "  state: CORRUPT (permission) — permission-state is unreadable or has no managedSettingsPath: $PERMISSION_STATE_FILE"
+    if ! pmanaged="$(python3 -c 'import json,os,sys; v=json.load(open(sys.argv[1])).get("managedSettingsPath"); assert isinstance(v,str) and os.path.isabs(v); print(os.path.abspath(v))' "$PERMISSION_STATE_FILE" 2>/dev/null)"; then
+      log "  state: CORRUPT (permission) — permission-state is unreadable or its managedSettingsPath is missing/non-absolute: $PERMISSION_STATE_FILE"
       hard_fail=1
     elif [ "$pmanaged" != "$expected_settings" ]; then
       log "  state: FOREIGN TARGET (permission) — permission-state manages '$pmanaged', but agy reads '$expected_settings'. The grant recorded there is not the grant on this host."
