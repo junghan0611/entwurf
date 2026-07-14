@@ -519,6 +519,14 @@ valid_record "20260606T120000-eeeeee" "doctor-native" > "$DOC_STORE/20260606T120
 # Fake claude: a healthy toolchain so the doctor sails past every other section.
 cat > "$DOC_BIN/claude" <<'SH'
 #!/usr/bin/env bash
+if [ "${1:-} ${2:-} ${3:-}" = "plugin list --json" ]; then
+  if [ "${FAKE_PLUGIN_CACHE_MISS:-0}" = 1 ]; then
+    printf '%s\n' '[{"id":"entwurf-meta-receive@meta-bridge-local","enabled":true,"errors":["Marketplace meta-bridge-local failed to load: cache-miss"]}]'
+  else
+    printf '%s\n' '[{"id":"entwurf-meta-receive@meta-bridge-local","enabled":true}]'
+  fi
+  exit 0
+fi
 case "$1${2:+ $2}" in
   "--version") echo "2.1.167 (Claude Code)" ;;
   "plugin list") printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
@@ -548,6 +556,18 @@ if printf '%s\n' "$DOC_OUT" | grep -q 'Drift detail:'; then ok "doctor prints 'D
 if printf '%s\n' "$DOC_OUT" | grep -q 'user MCP entwurf-bridge'; then ok "doctor names the concrete drifted key (user MCP entwurf-bridge)"; else bad "doctor did not name the drifted MCP key:"$'\n'"$DOC_OUT"; fi
 if printf '%s\n' "$DOC_OUT" | grep -q '\[plugin install'; then ok "doctor continues to a later section after the drift (no early set -e death)"; else bad "doctor did not reach a later section header after the drift:"$'\n'"$DOC_OUT"; fi
 if printf '%s\n' "$DOC_OUT" | grep -q 'meta-bridge doctor: FAIL'; then ok "doctor runs the whole chain to its final summary line"; else bad "doctor did not reach its final summary line (mid-run death):"$'\n'"$DOC_OUT"; fi
+
+# A plugin can be configured enabled while Claude refuses to load its missing marketplace
+# source. Text-only `grep enabled` called that healthy and let `🪛 ? cc` look mysterious.
+set +e
+DOC_CACHE_OUT="$(env HOME="$DOC_HOME" CLAUDE_CONFIG_DIR="$DOC_CFG" PI_CODING_AGENT_DIR="$DOC_AGENT" ENTWURF_META_SESSIONS_DIR="$DOC_STORE" FAKE_PLUGIN_CACHE_MISS=1 PATH="$DOC_BIN:$PATH" bash "$REPO/scripts/meta-bridge-doctor.sh" 2>&1)"
+DOC_CACHE_CODE=$?
+set -e
+if [ "$DOC_CACHE_CODE" -eq 1 ] && printf '%s\n' "$DOC_CACHE_OUT" | grep -q 'enabled=true but FAILED TO LOAD:.*cache-miss'; then
+  ok "doctor distinguishes configured-enabled from loadable (cache-miss is a hard failure)"
+else
+  bad "doctor did not surface enabled-but-cache-miss as a hard load failure:"$'\n'"$DOC_CACHE_OUT"
+fi
 
 # ⓪ 경계 종료 단언: 이 smoke 전체(install 조립 + state + wrapper-uninstall + doctor)가
 # 끝난 뒤에도 checkout 안에는 live marketplace source가 생기지 않았다 — source

@@ -1975,7 +1975,7 @@ check_pack() {
   return 1
 }
 
-check_pack_install() {
+_check_pack_install_impl() {
   # Heavy publish gate. Runs the remaining three checks in #13's
   # publish checklist that check_pack (dry-run only) does not cover:
   #
@@ -1996,18 +1996,6 @@ check_pack_install() {
   # does not write the .tgz file, causing prepublishOnly to fail before
   # a real publish can be exercised.
   section "publish install smoke (actual pack + tar + fresh install)"
-
-  # SELF-FENCE (rule 11, enforced at the gate itself). Every drive below swaps HOME into a
-  # sandbox — but the operator's shell exports XDG_DATA_HOME/XDG_STATE_HOME/XDG_CACHE_HOME,
-  # and a HOME-only swap inherits them: on 2026-07-14 this gate's own `run.sh install` drive
-  # wrote a foreign pi-provider install-state into the REAL ~/.local/share/entwurf while all
-  # of its config candidates sat in /tmp. So the gate now proves its own idempotency: the
-  # operator's real install-state tree must be byte-identical before and after. STATE/CACHE
-  # roots are not fenced (a live agy/claude legitimately writes logs/caches there while this
-  # gate runs); they are handled by swapping them in every drive instead.
-  local real_state_root="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf"
-  local state_fence_before
-  state_fence_before="$( (find "$real_state_root" -type f -print0 2>/dev/null | sort -z | xargs -0r sha256sum) 2>/dev/null || true)"
 
   local version tgz_name tgz_path
   version=$(node -p "require('${REPO_DIR}/package.json').version")
@@ -2657,20 +2645,43 @@ JS
   fi
   echo "[check-pack-install] installed doctor dispatch lock pass (store-scan → dist JS, v2-surface deferred)"
 
-  # The fence's other half: recompute and compare. A diff here means a drive above leaked
-  # through an inherited XDG root into the operator's real install-state — the exact class
-  # that corrupted live provenance twice (hard-verify 2026-07-13, this gate itself 2026-07-14).
-  local state_fence_after
-  state_fence_after="$( (find "$real_state_root" -type f -print0 2>/dev/null | sort -z | xargs -0r sha256sum) 2>/dev/null || true)"
-  if [ "$state_fence_before" != "$state_fence_after" ]; then
-    fail "[check-pack-install] SELF-FENCE: this gate changed the operator's REAL install-state tree ($real_state_root) — a sandbox drive is leaking through an inherited XDG root:"
-    diff <(printf '%s\n' "$state_fence_before") <(printf '%s\n' "$state_fence_after") | sed 's/^/    /' >&2 || true
-    return 1
-  fi
-  echo "[check-pack-install] self-fence pass (real install-state tree untouched: $real_state_root)"
-
   ok "[check-pack-install] publish install smoke pass"
   return 0
+}
+
+check_pack_install() {
+  # SELF-FENCE wrapper (rule 11). Keep this OUTSIDE the implementation so every exit path —
+  # including an early failure before the implementation's cleanup trap is installed — returns
+  # through the comparison. The DATA tree is byte-fenced. STATE cannot be byte-fenced because a
+  # live native session may append legitimate lines concurrently, so fence the gate's unique fake
+  # conversation marker instead; any increase proves that agy-imprint escaped its sandbox.
+  trap - RETURN
+  local real_data_root="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf"
+  local real_imprint_log="${XDG_STATE_HOME:-$HOME/.local/state}/entwurf/agy-imprint.log"
+  local data_before data_after fake_before fake_after rc=0
+  data_before="$( (find "$real_data_root" -type f -print0 2>/dev/null | sort -z | xargs -0r sha256sum) 2>/dev/null || true)"
+  fake_before="$(grep -Fc 'conversationId=pack-install-agy-conversation' "$real_imprint_log" 2>/dev/null || true)"
+
+  _check_pack_install_impl "$@" || rc=$?
+  # _check_pack_install_impl installs a RETURN cleanup trap after allocating its temp roots.
+  # It has fired now; clear it before this wrapper returns so it cannot leak into its caller.
+  trap - RETURN
+
+  data_after="$( (find "$real_data_root" -type f -print0 2>/dev/null | sort -z | xargs -0r sha256sum) 2>/dev/null || true)"
+  fake_after="$(grep -Fc 'conversationId=pack-install-agy-conversation' "$real_imprint_log" 2>/dev/null || true)"
+  if [ "$data_before" != "$data_after" ]; then
+    fail "[check-pack-install] SELF-FENCE: this gate changed the operator's REAL install-state tree ($real_data_root) — a sandbox drive is leaking through an inherited XDG root:"
+    diff <(printf '%s\n' "$data_before") <(printf '%s\n' "$data_after") | sed 's/^/    /' >&2 || true
+    rc=1
+  fi
+  if [ "$fake_before" != "$fake_after" ]; then
+    fail "[check-pack-install] SELF-FENCE: this gate appended its fake agy birth marker to the operator's REAL state log ($real_imprint_log): before=$fake_before after=$fake_after"
+    rc=1
+  fi
+  if [ "$rc" -eq 0 ]; then
+    echo "[check-pack-install] self-fence pass (real DATA tree byte-identical; fake STATE marker count unchanged)"
+  fi
+  return "$rc"
 }
 
 

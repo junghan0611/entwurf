@@ -93,9 +93,43 @@ else
 fi
 
 echo "[plugin install (global / --scope user)]"
-if claude plugin list 2>/dev/null | grep -q "$PLUGIN@$MKT_NAME"; then
+PLUGIN_LIST_JSON="$(claude plugin list --json 2>/dev/null || true)"
+PLUGIN_FACT="$(printf '%s' "$PLUGIN_LIST_JSON" | python3 -c '
+import json, sys
+try:
+    rows = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+target = sys.argv[1]
+row = next((x for x in rows if isinstance(x, dict) and x.get("id") == target), None)
+if row is None:
+    print("absent")
+else:
+    print("present")
+    print("true" if row.get("enabled") is True else "false")
+    errors = row.get("errors")
+    print("; ".join(str(x) for x in errors) if isinstance(errors, list) else "")
+' "$PLUGIN@$MKT_NAME" 2>/dev/null || true)"
+if [ -n "$PLUGIN_FACT" ]; then
+  PLUGIN_PRESENT="$(printf '%s\n' "$PLUGIN_FACT" | sed -n '1p')"
+  PLUGIN_ENABLED="$(printf '%s\n' "$PLUGIN_FACT" | sed -n '2p')"
+  PLUGIN_ERRORS="$(printf '%s\n' "$PLUGIN_FACT" | sed -n '3p')"
+  if [ "$PLUGIN_PRESENT" = "absent" ]; then
+    bad "$PLUGIN@$MKT_NAME not installed — run ./run.sh install-meta-bridge"
+  else
+    ok "$PLUGIN@$MKT_NAME present"
+    if [ -n "$PLUGIN_ERRORS" ]; then
+      bad "enabled=$PLUGIN_ENABLED but FAILED TO LOAD: $PLUGIN_ERRORS — the SessionStart hook is not running; re-run ./run.sh install-meta-bridge"
+    elif [ "$PLUGIN_ENABLED" = "true" ]; then
+      ok "enabled and loadable"
+    else
+      bad "installed but NOT enabled"
+    fi
+  fi
+# Compatibility fallback for a Claude floor whose plugin list has no --json surface.
+elif claude plugin list 2>/dev/null | grep -q "$PLUGIN@$MKT_NAME"; then
   ok "$PLUGIN@$MKT_NAME present"
-  claude plugin list 2>/dev/null | grep -A3 "$PLUGIN@$MKT_NAME" | grep -qi "enabled" && ok "enabled" || bad "installed but NOT enabled"
+  claude plugin list 2>/dev/null | grep -A3 "$PLUGIN@$MKT_NAME" | grep -qi "enabled" && ok "enabled (text fallback; load errors unavailable)" || bad "installed but NOT enabled"
 else
   bad "$PLUGIN@$MKT_NAME not installed — run ./run.sh install-meta-bridge"
 fi
