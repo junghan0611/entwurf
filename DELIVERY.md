@@ -111,7 +111,7 @@ the `D0–D8` capability level:
 |---|---|---:|---|---|
 | **pi native Entwurf** | shipped | D7+ | Unix control socket + pi followUp/custom messages | Replyable pi session. This is the resident baseline, not an external meta-session. `entwurf_v2` treats a record-less but live pi control socket as a socket-only `fire-and-forget` target; record-less *dormant* resume is intentionally not claimed. |
 | **Claude Code interactive 2.1.163** | shipped | D6, D7 partial, D8 partial | Plugin/global `SessionStart` arms `watchPaths`; external write triggers `FileChanged`; `asyncRewake` wakes idle session | Active idle wake proven without pty. `Stop` alone is piggyback-only. `asyncRewake` is a doorbell; body is self-fetched from mailbox. D8 partial: duplicate/read idempotence, honest unread counts, and level-triggered body drain are gated; empirical wake-edge bounds and unread-heartbeat backstop remain open (#34). |
-| **Antigravity / agy** | shipped | D6, D7 partial | Native LS gRPC `agentapi send-message` (native-push) | `PreInvocation` automatically births/attaches by native `conversationId` and writes the record-backed pid/start-key sender marker; `entwurf_v2` fire-and-forget probes and direct-injects through the antigravity adapter with a one-shot re-probe retry. Three managed adapters own MCP+one exact permission, statusline, and hook separately. `entwurf_register_native` remains an explicit/manual fallback, not the normal birth path. Live sender→sibling→same-gid reply passed on 2026-07-13; D7 stays partial because there is no canonical transcript/content receipt owned by the smoke. |
+| **Antigravity / agy** | shipped | D6, D7 partial | Native LS gRPC `agentapi send-message` (native-push) | `PreInvocation` automatically births/attaches by native `conversationId` and writes the record-backed pid/start-key sender marker; `entwurf_v2` fire-and-forget probes and direct-injects through the antigravity adapter with a one-shot re-probe retry. Three managed adapters own MCP+one exact permission, statusline, and hook separately. `entwurf_register_native` remains an explicit/manual fallback, not the normal birth path. Live sender→sibling→same-gid reply passed on 2026-07-13, re-verified at **agy 1.1.0** on 2026-07-14 (13/13 LIVE checks); D7 stays partial because there is no canonical transcript/content receipt owned by the smoke. |
 | **Codex app-server-backed TUI 0.136.0** | verified-probe | D6, D7 (status) | WebSocket-over-UDS `turn/start` into the live `threadId` | **Demonstrated, no managed standalone, no cloud.** `codex app-server --listen unix://<owned 0700 dir>` + plain `codex` auto-attach (or `--remote unix://`). Full message injection (agy-like, not a doorbell); `thread/status/changed` gives completion observation. D8 robustness (dedupe / crash recovery / ordering policy) is not tested. `turn/steer` is active-turn steering, not idle wake. |
 | **Codex embedded TUI 0.136.0** | deferred | D0 partial | Native state DB / rollout transcript only | Standalone Embedded TUI binds no socket; no `FileChanged`/`asyncRewake` in Codex hooks; not retrofittable. Identify-only via state DB / rollout. |
 | **Codex managed-daemon / remote-control 0.136.0** | deferred | D4–D6 conditional | `app-server proxy` newline JSON-RPC over the daemon control socket | Needs the managed standalone install; `remote-control` also enables the **cloud** bridge. Use the bare `--listen` path above for a purely-local setup. |
@@ -195,15 +195,27 @@ three markers) but **not** simultaneous model invocation by two conversations
 under one agy pid: one marker file would be last-writer-wins, so that concurrency
 is explicitly unsupported.
 
-Current deterministic floor: `smoke-agy-install-state` 120 checks,
-`smoke-agy-statusline-state` 62, `smoke-agy-hooks-state` 37,
+Current deterministic floor: `smoke-agy-install-state` 140 checks,
+`smoke-agy-statusline-state` 69, `smoke-agy-hooks-state` 44,
 `check-agy-sender-identity` 28, plus the shared self-address/native-push gates.
 The bridge installer owns only `mcp(entwurf-bridge/entwurf_v2)` in
-`permissions.allow`; broad YOLO policy stays operator-owned. Live 2026-07-13:
-automatic birth → gid/statusline → record-backed sender → sibling delivery →
-same-gid native-push reply passed.
+`permissions.allow`; broad YOLO policy stays operator-owned. Live 2026-07-13
+(agy 1.0.x): automatic birth → gid/statusline → record-backed sender → sibling
+delivery → same-gid native-push reply passed. Live 2026-07-14 (**agy 1.1.0**):
+re-verified on the new minor — `entwurf_self` answered without a permission
+prompt under the operator's broad allow (gid `20260714T101829-e7fccd`, native
+conversation `21266946-64a6-4a35-a7e5-fc84f0a7f250`), bidirectional native-push
+reply arrived on the same gid, and `LIVE=1 smoke-agy-native-push-live` passed
+13/13; the drift-sentinel agy pin moved to the 1.1 line on this evidence.
 
 ### Codex — split by launch mode, not by "Codex"
+
+> **Version verdict (2026-07-14, 0.12.7 cut):** the installed codex is **0.144.1**;
+> every claim in this section was measured at **0.136.0** and has **NOT been
+> re-verified** since. Codex is not a shipped native-citizen lane in 0.12.x, so the
+> drift-sentinel pin moved to the 0.144 line with this explicit non-reverification
+> verdict instead of a fresh probe run. Re-run the raw probes (and re-date the matrix
+> rows) before building any codex adapter on the new line.
 
 Do not describe "Codex" as one delivery shape. The split is the TUI's launch mode:
 
