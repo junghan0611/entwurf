@@ -64,11 +64,24 @@
 	// same ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING fence. Emit the hook leaf as
 	// dist/scripts/agy-imprint.js; the stable bin chooses it only when installed and
 	// keeps transparent strip-types source execution in a dev clone.
+	//
+	// WHY the three OPERATOR commands ride this build (0.12.7): `entwurf` dispatches
+	// them through run.sh, whose REPO_DIR is under node_modules once installed — so
+	// they hit the same fence the imprint hook did, and shipped dead. They are not
+	// dev gates: doctor-pi-provider is the pi-ownership verdict, new-session-id is
+	// the operator alias that mints a garden citizen (docs/setup-clean-host.md tells
+	// operators to run it from the installed bin), and meta-bridge-prune is the store
+	// maintenance verb. check-*/smoke-* stay OUT on purpose — they are dev-clone-only
+	// and run_ts refuses them under an installed package rather than emitting 70+
+	// gate leaves into the tarball.
 	"include": [
 		"./src/index.ts",
 		"../../protocol.js",
 		"../../scripts/meta-bridge-store-doctor.ts",
 		"../../scripts/agy-imprint.ts",
+		"../../scripts/doctor-pi-provider.ts",
+		"../../scripts/new-session-id.ts",
+		"../../scripts/meta-bridge-prune.ts",
 		"../../pi-extensions/meta-bridge-hook.ts"
 	]
 }

@@ -38,6 +38,37 @@ PACKAGE_NAME="@junghanacs/entwurf"
 # saved session anchor.
 PROVIDER_ID="entwurf"
 
+# THE strip-types fence, in one place. Node REFUSES `--experimental-strip-types`
+# for any .ts below node_modules (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING), so
+# an installed package MUST run the prepack-emitted JS twin — the same boundary
+# start.sh (0.12.1), the store-doctor (0.12.4), the plugin hook (0.12.5), and the
+# agy imprint (0.12.7) each cross. Every .ts entrypoint routes through here so a
+# NEW one cannot silently reintroduce the class: it was hand-written per surface
+# before, and three operator commands (doctor-pi-provider / new-session-id /
+# meta-bridge-prune) shipped dead under node_modules because of exactly that.
+#
+# A dev-only gate has no emitted twin by design (check-*/smoke-* are not shipped
+# surfaces). Under an installed package it REFUSES rather than falling back to raw
+# .ts — a fallback would just re-raise the fence error with a worse message.
+# check-install-surface pins both halves statically.
+run_ts() {
+  local rel="$1"; shift
+  case "$REPO_DIR" in
+    */node_modules/*)
+      local dist="$REPO_DIR/mcp/entwurf-bridge/dist/${rel%.ts}.js"
+      if [ ! -f "$dist" ]; then
+        echo "entwurf: '$rel' is a dev-clone-only surface — the installed package ships no compiled twin." >&2
+        echo "         (Node cannot strip types below node_modules; run this from a checkout.)" >&2
+        return 1
+      fi
+      (cd "$REPO_DIR" && node "$dist" "$@")
+      ;;
+    *)
+      (cd "$REPO_DIR" && node --experimental-strip-types "$rel" "$@")
+      ;;
+  esac
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -481,7 +512,7 @@ check_model_lock() {
   # No pi process, no network, no API cost. Mocks ExtensionAPI/Context and
   # drives the model_select handler through every quadrant + edge case
   # (see scripts/check-model-lock.ts header for the full matrix).
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-model-lock.ts)
+  run_ts scripts/check-model-lock.ts
 }
 
 check_shell_quote() {
@@ -490,7 +521,7 @@ check_shell_quote() {
   # across the two duplication sites AND behavioral correctness on the
   # payload classes that caused the 2026-05-18 remote entwurf incident
   # (backtick / $(...) / $VAR / korean tokens). No process spawn, no SSH.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-shell-quote.ts)
+  run_ts scripts/check-shell-quote.ts
 }
 
 check_entwurf_session_identity() {
@@ -500,7 +531,7 @@ check_entwurf_session_identity() {
   # models, titleSlug canonicalization, registry exact-tuple membership, name=
   # info-only invariants, and header-scan collision pre-check. Isolates registry
   # + sessions base to a temp dir. No backend, no API, no spawn.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-session-identity.ts)
+  run_ts scripts/check-entwurf-session-identity.ts
 }
 
 check_meta_session() {
@@ -510,7 +541,7 @@ check_meta_session() {
   # real temp dir), idempotent existence-keyed decideUpsert + identity-drift
   # refusal, and the pre-drilled read-receipt mutators. Pure functions; no
   # backend, no hook, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-session.ts)
+  run_ts scripts/check-meta-session.ts
 }
 
 check_meta_record_v2() {
@@ -520,7 +551,7 @@ check_meta_record_v2() {
   # and v2 field-contract crashes. Reader/normalizer only — no v2 writer yet.
   # Kept separate from check-meta-session so 3D's v1-gate rewrites leave this
   # back-compat golden untouched. Pure functions; no backend, no hook, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-record-v2.ts)
+  run_ts scripts/check-meta-record-v2.ts
 }
 
 check_mailbox_receipt_state() {
@@ -530,7 +561,7 @@ check_mailbox_receipt_state() {
   # keyset, then the fs store (stamp → persist → read-back) in a temp mailbox
   # dir. Schema/store only — no live enqueue/read dual-write (that is 3D). No
   # backend, no hook, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-mailbox-receipt-state.ts)
+  run_ts scripts/check-mailbox-receipt-state.ts
 }
 
 check_entwurf_capabilities() {
@@ -541,7 +572,7 @@ check_entwurf_capabilities() {
   # META_BACKEND_DESCRIPTORS for the three existing backends (drift guard), and
   # strict keyset/coverage/field crashes. Parser/gate only — no live routing,
   # no record/descriptor consumer change (that is 3D). No backend, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-capabilities.ts)
+  run_ts scripts/check-entwurf-capabilities.ts
 }
 
 check_meta_dual_read() {
@@ -551,7 +582,7 @@ check_meta_dual_read() {
   # unknown-version crash. Pure functions only — no fs upsert wiring, no
   # readMetaInbox/enqueueMetaMessage change, no record.delivery removal (3D-2/3/4).
   # No backend, no hook, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-dual-read.ts)
+  run_ts scripts/check-meta-dual-read.ts
 }
 
 check_meta_mailbox_state_write() {
@@ -563,7 +594,7 @@ check_meta_mailbox_state_write() {
   # carries lastEnqueuedAt/lastReadAt with field isolation, lastDeliveredAt is never
   # invented, an empty inbox is a no-op on BOTH record and state (⑥), and a state
   # drift surfaces fail-loud. v2 citizen seeded via upsertMetaSession. No API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-mailbox-state-write.ts)
+  run_ts scripts/check-meta-mailbox-state-write.ts
 }
 
 check_meta_receiver_marker() {
@@ -576,7 +607,7 @@ check_meta_receiver_marker() {
   # from "no marker"); armProvenance constrained to the arm-capable events so
   # UserPromptSubmit cannot mint presence; reader does NOT gate on record existence
   # (recordBacked is the deliverability predicate's fact). Real tmpdir, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-receiver-marker.ts)
+  run_ts scripts/check-meta-receiver-marker.ts
 }
 
 check_meta_migration() {
@@ -586,7 +617,7 @@ check_meta_migration() {
   # state.json). Crash-order: a v1 record's receipts migrate to state BEFORE the v2
   # rewrite (proven via upsert attach), and a drift'd state makes migrate throw with
   # the record STILL v1 (recoverable: next attach re-migrates). Temp dir, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-migration.ts)
+  run_ts scripts/check-meta-migration.ts
 }
 
 check_meta_dual_consumers() {
@@ -598,7 +629,7 @@ check_meta_dual_consumers() {
   # authority ambiguity → throw, so the v2 upsert never duplicate-mints) + v1 normalize +
   # body/filename drift fail-fast. The v1-only raw readers remain for v1-fixture gates.
   # Temp dir, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-dual-consumers.ts)
+  run_ts scripts/check-meta-dual-consumers.ts
 }
 
 check_meta_capability_source() {
@@ -611,7 +642,7 @@ check_meta_capability_source() {
   # 3 backends). The record.delivery.wakeMode SLOT stays (removal is 3D-4); only the
   # SOURCE moves. check-entwurf-capabilities still owns the registry ≡ const drift
   # guard. Pure — no fs writes, no backend, no hook, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-capability-source.ts)
+  run_ts scripts/check-meta-capability-source.ts
 }
 
 check_socket_probe() {
@@ -622,7 +653,7 @@ check_socket_probe() {
   # invariant. Listing lists alive only. Pure classify + GC/listing policy +
   # a two-socket integration (live listener → alive survives; nonexistent →
   # dead GC-eligible). No wire timeout fixture, no backend, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-socket-probe.ts)
+  run_ts scripts/check-socket-probe.ts
 }
 
 check_project_trust_handler() {
@@ -634,7 +665,7 @@ check_project_trust_handler() {
   # never undefined. Plus the thin adapter: fake ctx.ui.select, single-writer
   # (handler never calls store.set — pi persists on remember:true), F5a evidence
   # in the prompt title. No real UI, no backend, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-project-trust-handler.ts)
+  run_ts scripts/check-project-trust-handler.ts
 }
 
 check_entwurf_v2_contract() {
@@ -648,7 +679,7 @@ check_entwurf_v2_contract() {
   # Q2 owned-outcome+live never auto-sends. R5 taxonomy covers table reasons +
   # pre-claims bad-target/untrusted-fail-fast/target-locked (bucket B F2). Plus
   # a schema↔types drift guard on the TypeBox input/receipt. Pure, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-contract.ts)
+  run_ts scripts/check-entwurf-v2-contract.ts
 }
 
 check_entwurf_v2_lock() {
@@ -663,7 +694,7 @@ check_entwurf_v2_lock() {
   # fail-closed to conflict. Empty/corrupt lockfile = conflict, never
   # auto-deleted. F2-P1: a malformed gid throws before any path is built. Real
   # temp dir (wx atomicity under test); clock/nonce/pid/host/kill injected.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-lock.ts)
+  run_ts scripts/check-entwurf-v2-lock.ts
 }
 
 check_entwurf_v2_decider() {
@@ -677,7 +708,7 @@ check_entwurf_v2_decider() {
   # takes NO lock (？7); resume plan has no mode/wantsReply/provider/model but has
   # expectedSocketPath/observeTimeoutMs/releaseWhen; an invalid gid throws before
   # any lookup (F2-P1). Pure, no IO, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-decider.ts)
+  run_ts scripts/check-entwurf-v2-decider.ts
 }
 
 check_entwurf_v2_matrix() {
@@ -691,7 +722,7 @@ check_entwurf_v2_matrix() {
   # FAILS if any transport / lock class / pre-probe reject is missing — a dropped
   # decider cell cannot pass silently. Thin coverage, NOT a decider re-impl; surface
   # parity stays in check-entwurf-v2-surface. Pure, no IO, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-matrix.ts)
+  run_ts scripts/check-entwurf-v2-matrix.ts
 }
 
 check_entwurf_v2_release() {
@@ -703,7 +734,7 @@ check_entwurf_v2_release() {
   # release on the FIRST observed transition (socket-alive ∨ child-exited any code)
   # or a failed start; socket↔exit race idempotent (single release either order);
   # decideReleasePolicy enforces the lock-nullness invariant (？7). Pure, no IO.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-release.ts)
+  run_ts scripts/check-entwurf-v2-release.ts
 }
 
 check_entwurf_v2_send() {
@@ -715,7 +746,7 @@ check_entwurf_v2_send() {
   # indeterminate->failed+rethrow with deadFallback+mailbox NEVER called (no
   # double-delivery on an alive-but-stalled socket). Release fires exactly once per
   # send-final; a releaseLock throw never masks the send failure (5b). IO-via-dep.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-send.ts)
+  run_ts scripts/check-entwurf-v2-send.ts
 }
 
 check_entwurf_v2_send_fallback() {
@@ -728,7 +759,7 @@ check_entwurf_v2_send_fallback() {
   # / bad-target + address-conflict->reject pre-probe. Mis-wire (plan/lock gid) fails loud
   # before IO; inspect/probe throws PROPAGATE (the hand owns failed+release); the resolver
   # has NO release seam; every execute plan keeps the held gid and is never spawn-bg.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-send-fallback.ts)
+  run_ts scripts/check-entwurf-v2-send-fallback.ts
 }
 
 check_entwurf_v2_mailbox() {
@@ -745,7 +776,7 @@ check_entwurf_v2_mailbox() {
   # every access throws still resolves). Source guard: the lib code has NO release seam
   # and NO routing seam (no releaseLock / inspect / probe / resolve) — a lock leak or
   # re-route is structurally impossible.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-mailbox.ts)
+  run_ts scripts/check-entwurf-v2-mailbox.ts
 }
 
 check_entwurf_v2_native_push() {
@@ -757,7 +788,7 @@ check_entwurf_v2_native_push() {
   # DISCOVERED route; re-send FAIL -> throws (no 3rd attempt); re-probe dead/indeterminate ->
   # throws (not retried), NO second send. makeNativePushSend resolves the adapter from
   # plan.backend and IGNORES the lock (lock-free rail).
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-native-push.ts)
+  run_ts scripts/check-entwurf-v2-native-push.ts
 }
 
 check_entwurf_v2_runner() {
@@ -771,7 +802,7 @@ check_entwurf_v2_runner() {
   # SendDeliveredReleaseFailedError -> execution-failed{finalizedOutcome, releaseFailed,
   # retrySafe:false}; a plain hand throw -> execution-failed{retrySafe:false} with no
   # finalizedOutcome. Exactly one hand runs per execute.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-runner.ts)
+  run_ts scripts/check-entwurf-v2-runner.ts
 }
 
 check_entwurf_v2_surface() {
@@ -782,7 +813,7 @@ check_entwurf_v2_surface() {
   # lock-retained, N1 delivered-but-dirty) / surface ctx-free source guard / entwurf-control
   # registers entwurf_v2 + reaches the fence via a NON-LITERAL dynamic import (no static fence
   # import → TS5097 stays closed) + decorates sender origin:pi-session/replyable:true.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-surface.ts)
+  run_ts scripts/check-entwurf-v2-surface.ts
 }
 
 check_entwurf_bridge_boot() {
@@ -793,7 +824,7 @@ check_entwurf_bridge_boot() {
   # registered on the runtime surface with its schema (G1b). tools/list only → no tools/call,
   # no lock/fs side effect, no auth → safe in pnpm check. Broad protocol/negative suite stays
   # in check-bridge/test.sh (D1=A안).
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-bridge-boot.ts)
+  run_ts scripts/check-entwurf-bridge-boot.ts
 }
 
 check_entwurf_bridge_pi_free() {
@@ -804,7 +835,7 @@ check_entwurf_bridge_pi_free() {
   # value-imports @earendil-works/pi-*. Type-only imports and dynamic `await import()`
   # (the intended lazy preflight boundary) are excluded — the runtime boot smoke is the
   # final authority that peers/self/list/mailbox-deliver come up pi-free.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-bridge-pi-free.ts)
+  run_ts scripts/check-entwurf-bridge-pi-free.ts
 }
 
 check_entwurf_v2_production() {
@@ -815,7 +846,7 @@ check_entwurf_v2_production() {
   # lockDir / QB3 the spawn watcher releases via the SHARED lockDir release (not the spawn
   # factory default) / the mailbox hand enqueues onto the wired dirs / a dead control send
   # re-resolves to the SAME sendViaMailbox instance on the SAME dirs (Q3+Q5 no drift).
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-production.ts)
+  run_ts scripts/check-entwurf-v2-production.ts
 }
 
 check_entwurf_control_rpc() {
@@ -826,7 +857,7 @@ check_entwurf_control_rpc() {
   # sendRpcCommand from the lib and no longer defines its own / real short unix-socket round-trip
   # (write command -> matched {type:response,command,success:true} -> resolve) / close-before-
   # response rejects 'connection closed before response'. net.Server only, no model/pi process.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-control-rpc.ts)
+  run_ts scripts/check-entwurf-control-rpc.ts
 }
 
 check_entwurf_v2_spawn() {
@@ -840,7 +871,7 @@ check_entwurf_v2_spawn() {
   # obtainable (grace elapses, or a post-spawn watch dep throws and the exit can't be
   # observed) -> lock-retained fail-closed (released:false, pid/socket/lockPath surfaced) —
   # there is NO direct-release hatch; deps.releaseLock is reached ONLY via reduceRelease.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-spawn.ts)
+  run_ts scripts/check-entwurf-v2-spawn.ts
 }
 
 check_entwurf_resume_args() {
@@ -853,7 +884,7 @@ check_entwurf_resume_args() {
   # and the prompt-as-turn positional (`-p` NOT dropped in v2); explicitExtensionArgs
   # preserved exactly once (provider-resolution footgun #29); v2 includes plan.launchArgs
   # (--approve) before the prompt; null provider emits no --provider; no cross-contamination.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-resume-args.ts)
+  run_ts scripts/check-entwurf-resume-args.ts
 }
 
 check_entwurf_v2_spawn_production() {
@@ -867,7 +898,7 @@ check_entwurf_v2_spawn_production() {
   # (symlink) rejects without connecting, dead→wait→alive, abort clears the sleep. awaitChildExit
   # resolves the code + removes the listener on abort. awaitTimeout schedules + abort-clears.
   # killChild=SIGTERM; releaseLock delegates; a proc-less child fails loud (mis-wire).
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-v2-spawn-production.ts)
+  run_ts scripts/check-entwurf-v2-spawn-production.ts
 }
 
 
@@ -883,7 +914,7 @@ smoke_entwurf_v2_spawn_live() {
     echo "[smoke-entwurf-v2-spawn-live] skipped — set LIVE=1 to run (spawns real children + opens a real unix socket)."
     return 0
   fi
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-entwurf-v2-spawn-live.ts)
+  run_ts scripts/smoke-entwurf-v2-spawn-live.ts
 }
 
 smoke_acp_socket_citizen_live() {
@@ -896,7 +927,7 @@ smoke_acp_socket_citizen_live() {
   # citizenship, never a backend turn (that is S2). Honest skip when LIVE!=1.
   # Model override: ENTWURF_S1_MODEL (default claude-opus-4-8).
   #   LIVE=1 ./run.sh smoke-acp-socket-citizen-live
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-socket-citizen-live.ts)
+  run_ts scripts/smoke-acp-socket-citizen-live.ts
 }
 
 smoke_acp_raw_turn_live() {
@@ -910,7 +941,7 @@ smoke_acp_raw_turn_live() {
   # fails acceptance unless ENTWURF_ACP_RAW_TURN_ALLOW_PATH_FALLBACK=1, debug).
   # Model override: ENTWURF_ACP_RAW_TURN_MODEL (default claude-sonnet-5).
   #   LIVE=1 ./run.sh smoke-acp-raw-turn-live
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-raw-turn-live.ts)
+  run_ts scripts/smoke-acp-raw-turn-live.ts
 }
 
 smoke_acp_overlay_live() {
@@ -928,7 +959,7 @@ smoke_acp_overlay_live() {
   # fallback fails acceptance unless ENTWURF_ACP_OVERLAY_ALLOW_PATH_FALLBACK=1).
   # Model override: ENTWURF_ACP_OVERLAY_MODEL (default claude-sonnet-5).
   #   LIVE=1 ./run.sh smoke-acp-overlay-live
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-overlay-live.ts)
+  run_ts scripts/smoke-acp-overlay-live.ts
 }
 
 smoke_acp_memory_containment_live() {
@@ -943,7 +974,7 @@ smoke_acp_memory_containment_live() {
   # fallback fails acceptance unless ENTWURF_ACP_MEMORY_ALLOW_PATH_FALLBACK=1).
   # Model override: ENTWURF_ACP_MEMORY_MODEL (default claude-sonnet-5).
   #   LIVE=1 ./run.sh smoke-acp-memory-containment-live
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-memory-containment-live.ts)
+  run_ts scripts/smoke-acp-memory-containment-live.ts
 }
 
 smoke_acp_provider_live() {
@@ -958,7 +989,7 @@ smoke_acp_provider_live() {
   # event-mapper gate owns the tool→notice contract.
   # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-5).
   #   LIVE=1 ./run.sh smoke-acp-provider-live
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-provider-live.ts)
+  run_ts scripts/smoke-acp-provider-live.ts
 }
 
 smoke_acp_session_reuse_live() {
@@ -972,7 +1003,7 @@ smoke_acp_session_reuse_live() {
   # smoke-acp-provider-live.
   # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-5).
   #   LIVE=1 ./run.sh smoke-acp-session-reuse-live
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-session-reuse-live.ts)
+  run_ts scripts/smoke-acp-session-reuse-live.ts
 }
 
 smoke_acp_carrier_augment_live() {
@@ -984,7 +1015,7 @@ smoke_acp_carrier_augment_live() {
   # check via SMOKE_ACP_CARRIER_PRESENT=1 (non-blocking).
   # Model override: ENTWURF_ACP_PROVIDER_MODEL (default claude-sonnet-5).
   #   LIVE=1 ./run.sh smoke-acp-carrier-augment-live
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-carrier-augment-live.ts)
+  run_ts scripts/smoke-acp-carrier-augment-live.ts
 }
 
 smoke_acp_mcp_live() {
@@ -997,7 +1028,7 @@ smoke_acp_mcp_live() {
   # fix). Isolated probe (not entwurf-bridge) so a failure does not blur into
   # identity/env wiring. Model override: ENTWURF_ACP_PROVIDER_MODEL.
   #   LIVE=1 ./run.sh smoke-acp-mcp-live
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-mcp-live.ts)
+  run_ts scripts/smoke-acp-mcp-live.ts
 }
 
 smoke_acp_skill_live() {
@@ -1009,7 +1040,7 @@ smoke_acp_skill_live() {
   # the Skill/Skill(*) auto-add reach the live session (the other half of the GLG
   # baseline). Model override: ENTWURF_ACP_PROVIDER_MODEL.
   #   LIVE=1 ./run.sh smoke-acp-skill-live
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-skill-live.ts)
+  run_ts scripts/smoke-acp-skill-live.ts
 }
 
 smoke_acp_bundled_mcp_live() {
@@ -1025,7 +1056,7 @@ smoke_acp_bundled_mcp_live() {
   # diagnostic backlog, not the 0.11.0 release circuit). Model override:
   # ENTWURF_ACP_PROVIDER_MODEL.
   #   LIVE=1 ./run.sh smoke-acp-bundled-mcp-live
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-acp-bundled-mcp-live.ts)
+  run_ts scripts/smoke-acp-bundled-mcp-live.ts
 }
 
 smoke_acp_rgg_live() {
@@ -1062,7 +1093,7 @@ smoke_entwurf_v2_matrix_live() {
     echo "[smoke-entwurf-v2-matrix-live] skipped — set LIVE=1 to run (spawns a real pi --entwurf-control + opens a real socket)."
     return 0
   fi
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-entwurf-v2-matrix-live.ts)
+  run_ts scripts/smoke-entwurf-v2-matrix-live.ts
 }
 
 smoke_entwurf_v2_spawn_resume_live() {
@@ -1084,7 +1115,7 @@ smoke_entwurf_v2_spawn_resume_live() {
     echo "[smoke-entwurf-v2-spawn-resume-live] skipped — set LIVE=1 to run (spawns a real pi resume child + opens a real socket)."
     return 0
   fi
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-entwurf-v2-spawn-resume-live.ts)
+  run_ts scripts/smoke-entwurf-v2-spawn-resume-live.ts
 }
 
 check_entwurf_facts() {
@@ -1096,7 +1127,7 @@ check_entwurf_facts() {
   # (no proof ≠ dead). facts-only keyset: identity facts + liveness, NO
   # verb-routing (resumable/sendable/transport/dispatch/action) and NO
   # transcriptPath (동결결정 10). Pure, no IO, no API.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-facts.ts)
+  run_ts scripts/check-entwurf-facts.ts
 }
 
 check_socket_discovery() {
@@ -1108,7 +1139,7 @@ check_socket_discovery() {
   # indeterminate (F3), never folded to dead by an alive-only listing. Dir
   # hygiene (non-.sock / malformed names ignored), dedup, missing-dir, sort, and
   # an end-to-end scanSocketProbes→resolveFactList. readdir/probe injected, no IO.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-socket-discovery.ts)
+  run_ts scripts/check-socket-discovery.ts
 }
 
 check_meta_listing() {
@@ -1119,7 +1150,7 @@ check_meta_listing() {
   # becomes an explicit error carrying ONLY {filename, message}, verbatim (a
   # salvaged gid string as a fact = synthetic backdoor). mode strict throws on
   # any error, collect returns partial. entries/readRecord injected, no IO.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-meta-listing.ts)
+  run_ts scripts/check-meta-listing.ts
 }
 
 check_entwurf_fact_provider() {
@@ -1131,7 +1162,7 @@ check_entwurf_fact_provider() {
   # survives; impossible wiring invariant (resolveFactList duplicate/unprobed) →
   # throw, never swallowed. A collision quarantines BOTH the PeerFact and the
   # socket (gid is the universal address). meta + socket deps injected, no IO.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-fact-provider.ts)
+  run_ts scripts/check-entwurf-fact-provider.ts
 }
 
 check_entwurf_peers_surface() {
@@ -1145,7 +1176,7 @@ check_entwurf_peers_surface() {
   # diagnostics in both surfaces; empty → "(none)"; unsupported shown; enrich null
   # → "(not enriched)". WIRING guard: bridge calls listEntwurfFacts+renderEntwurfPeers,
   # getLiveSessions gone. Facts fabricated, no IO (only static source read).
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-peers-surface.ts)
+  run_ts scripts/check-entwurf-peers-surface.ts
 }
 
 
@@ -1162,7 +1193,7 @@ check_entwurf_self_address() {
   # probes the socket, and entwurf_self renders alive vs expected (no path lie).
   # Slice boundary: meta watchArmed is wired from the slice-2 presence marker; do NOT
   # claim slice 1 green standalone (1+2 close in the same release block).
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-self-address.ts)
+  run_ts scripts/check-entwurf-self-address.ts
 }
 
 check_entwurf_deliverability() {
@@ -1174,7 +1205,7 @@ check_entwurf_deliverability() {
   # (pi) refused even when active (SE-1, no mailbox drain), self-fetch + dead-owner/unarmed
   # refused (SE-2, would rot); WIRING that the self-addressability predicate shares the
   # SAME active-receiver atom (one source of truth). Pure, no IO.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-deliverability.ts)
+  run_ts scripts/check-entwurf-deliverability.ts
 }
 
 check_entwurf_mailbox_guard() {
@@ -1185,7 +1216,7 @@ check_entwurf_mailbox_guard() {
   # one calls it exactly once; TMPDIR SNAPSHOT with the real enqueueMetaMessage — a refused
   # send leaves the mailbox tree byte-identical (file list + content hash, not just mtime),
   # an accepted send writes exactly one .msg; plus fact gathering from record/capability/marker.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-entwurf-mailbox-guard.ts)
+  run_ts scripts/check-entwurf-mailbox-guard.ts
 }
 
 check_native_push_adapter() {
@@ -1197,7 +1228,7 @@ check_native_push_adapter() {
   # CHANGED route); send argv === [binary,agentapi,send-message,conv,body] with
   # ANTIGRAVITY_LS_ADDRESS env, non-zero exit THROWS; NO retry in the adapter (single send,
   # no re-probe — retry is the executor hand's job, step ⑥); resolveNativePushAdapter fail-fast.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-native-push-adapter.ts)
+  run_ts scripts/check-native-push-adapter.ts
 }
 
 check_native_push_register() {
@@ -1208,7 +1239,7 @@ check_native_push_register() {
   # record, no duplicate mint); dead/indeterminate probe -> REFUSE (throws, NO record written);
   # RECEIVER-MARKER ABSTINENCE (보정①) — the register source references no receiver-marker
   # writer (writeMetaReceiverMarker / armProvenance / META_RECEIVER_ARM_PROVENANCES).
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-native-push-register.ts)
+  run_ts scripts/check-native-push-register.ts
 }
 
 check_agy_sender_identity() {
@@ -1225,7 +1256,7 @@ check_agy_sender_identity() {
   # →THROW (never guess, never downgrade to anonymous), two markers naming the SAME
   # identity→not a conflict; antigravity is native-push so its replyable comes from the
   # adapter probe, never from a mailbox watch it can never arm (보정①).
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-agy-sender-identity.ts)
+  run_ts scripts/check-agy-sender-identity.ts
 }
 
 
@@ -1240,7 +1271,7 @@ check_package_source_routing() {
   # plus self-root fallback and the resume unresolvedAcpIntent signal. Isolated
   # via a temp PI_CODING_AGENT_DIR — the real ~/.pi/agent is never touched. No
   # backend, no spawn, no API cost.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-package-source-routing.ts)
+  run_ts scripts/check-package-source-routing.ts
 }
 
 
@@ -1256,7 +1287,7 @@ smoke_session_id_name() {
     fail "[smoke-session-id-name] pi binary not on PATH — cannot run live substrate proof"
     return 1
   fi
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-session-id-name.ts) || {
+  run_ts scripts/smoke-session-id-name.ts || {
     fail "[smoke-session-id-name] live substrate smoke failed"
     return 1
   }
@@ -1597,7 +1628,7 @@ check_pi_preflight() {
   # decision 8 precedence (saved false > saved true > prefix > no-inputs >
   # fail-fast) and decision 7's separator-boundary prefix against pi's own
   # ProjectTrustStore in a temp agentDir. Deterministic, no network/backend.
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-pi-preflight.ts)
+  run_ts scripts/check-pi-preflight.ts
 }
 
 
@@ -1652,7 +1683,7 @@ check_acp_provider_surface() {
   # sentinel shape, and a FAIL-LOUD streamSimple (calling it throws — no native
   # fallback, no empty-but-successful stream). Pure, no pi runtime, no API.
   section "ACP provider surface (S0 loader/fence)"
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-provider-surface.ts)
+  run_ts scripts/check-acp-provider-surface.ts
 }
 
 check_acp_sdk_surface() {
@@ -1664,7 +1695,7 @@ check_acp_sdk_surface() {
   # turn needs (silent-rename gate), and forbids any source-level anthropic SDK
   # import / API-client use (the anthropic dep is a peer-pin ONLY).
   section "ACP SDK surface (S2a dep pin + peer-resolution + no-client-use)"
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-sdk-surface.ts)
+  run_ts scripts/check-acp-sdk-surface.ts
 }
 
 check_acp_overlay() {
@@ -1677,7 +1708,7 @@ check_acp_overlay() {
   # stale symlinks cleaned; binary-owned files preserved; CLAUDE_CONFIG_DIR
   # launch-env planted; idempotent. Pure, no live model.
   section "ACP overlay (S2b claude-config-overlay)"
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-overlay.ts)
+  run_ts scripts/check-acp-overlay.ts
 }
 
 check_acp_tool_surface() {
@@ -1688,7 +1719,7 @@ check_acp_tool_surface() {
   # extraArgs/plugins) + the S2b billing-carrier guard (no _meta.systemPrompt
   # unless a caller supplies one). Pure preflight — NOT a backend wire read.
   section "ACP tool surface (S2b exclude-tools preflight + session meta)"
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-tool-surface.ts)
+  run_ts scripts/check-acp-tool-surface.ts
 }
 
 check_acp_event_mapper() {
@@ -1700,7 +1731,7 @@ check_acp_event_mapper() {
   # context→ACP-prompt transcript passthrough (excludes systemPrompt/thinking,
   # single text block). Pure, no live backend.
   section "ACP event mapper (S2c notification→stream + context)"
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-event-mapper.ts)
+  run_ts scripts/check-acp-event-mapper.ts
 }
 
 check_acp_prompt_builder() {
@@ -1711,7 +1742,7 @@ check_acp_prompt_builder() {
   # excluded so a reuse session is not re-injected its own history). Pure, no
   # session store yet — locks the builder before S2d wires the reuse paths.
   section "ACP prompt builder (S2d bootstrapPath prompt scope)"
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-prompt-builder.ts)
+  run_ts scripts/check-acp-prompt-builder.ts
 }
 
 check_acp_config() {
@@ -1724,7 +1755,7 @@ check_acp_config() {
   # headers, and envelope enrich (PI_SESSION_ID/PI_AGENT_ID into entwurf-bridge
   # only, stale filtered, post-hash). Pure + temp-dir settings I/O, no child/spawn.
   section "ACP provider config (S2g operator mcpServers/skillPlugins/tools passthrough)"
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-config.ts)
+  run_ts scripts/check-acp-config.ts
 }
 
 check_acp_session_store() {
@@ -1735,7 +1766,7 @@ check_acp_session_store() {
   # (turn-scoped/-p one-shot is ALWAYS new — no in-memory reuse, no persisted
   # resume/load in the first cut). Pure + temp-dir record I/O, no child/spawn.
   section "ACP session store (S2d-1b-1 signature/compat/bootstrap decision)"
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-session-store.ts)
+  run_ts scripts/check-acp-session-store.ts
 }
 
 check_acp_backend_preflight() {
@@ -1746,7 +1777,7 @@ check_acp_backend_preflight() {
   # assertExcludeToolsHonored is wired into the live provider path, not just the
   # pure gate. No backend launched (preflight throws first). Pure.
   section "ACP backend preflight (S2c runtime exclude-tools wiring)"
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-backend-preflight.ts)
+  run_ts scripts/check-acp-backend-preflight.ts
 }
 
 check_acp_session_reuse() {
@@ -1759,7 +1790,7 @@ check_acp_session_reuse() {
   # never torn down between turns, and source-locks buildAcpPrompt wiring +
   # single-site applyAcpSessionUpdate via the router. No real child launched.
   section "ACP session reuse (S2d-1b-2b delta-only capture + mutable routing)"
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-session-reuse.ts)
+  run_ts scripts/check-acp-session-reuse.ts
 }
 
 check_acp_carrier_augment() {
@@ -1771,7 +1802,7 @@ check_acp_carrier_augment() {
   # so it never enters contextMessageSignatures — with entwurf cwd/AGENTS.md
   # de-dup. Pure + temp-dir fs, no spawn.
   section "ACP carrier + augment (S2d-1c engraving + first-user augment)"
-  (cd "$REPO_DIR" && node --experimental-strip-types scripts/check-acp-carrier-augment.ts)
+  run_ts scripts/check-acp-carrier-augment.ts
 }
 
 check_pack() {
@@ -1863,6 +1894,11 @@ check_pack() {
     # 0.12.7 — node_modules-safe agy PreInvocation hook. The stable npm bin
     # dispatches here because Node refuses raw .ts below node_modules.
     "mcp/entwurf-bridge/dist/scripts/agy-imprint.js"
+    # 0.12.7 — the three OPERATOR commands run.sh dispatches. Installed, REPO_DIR is
+    # under node_modules, so run_ts must find a compiled twin or the command is dead.
+    "mcp/entwurf-bridge/dist/scripts/doctor-pi-provider.js"
+    "mcp/entwurf-bridge/dist/scripts/new-session-id.js"
+    "mcp/entwurf-bridge/dist/scripts/meta-bridge-prune.js"
     # 0.12.5 — the node_modules-safe plugin hook + its lib. install-meta-bridge copies
     # these compiled JS into the assembled plugin when installed (raw .ts can't
     # strip-types under node_modules). meta-session.js is shared with the store-doctor
@@ -2042,6 +2078,11 @@ check_pack_install() {
     # 0.12.7 — node_modules-safe agy PreInvocation hook. The installed bin smoke
     # below executes this exact compiled leaf from under node_modules.
     "mcp/entwurf-bridge/dist/scripts/agy-imprint.js"
+    # 0.12.7 — the three operator commands (see check-pack). The installed-command
+    # regression below drives each one through the real `entwurf` bin.
+    "mcp/entwurf-bridge/dist/scripts/doctor-pi-provider.js"
+    "mcp/entwurf-bridge/dist/scripts/new-session-id.js"
+    "mcp/entwurf-bridge/dist/scripts/meta-bridge-prune.js"
     # 0.12.5 — node_modules-safe plugin hook + lib (see check-pack). The installed
     # hook regression below runs exactly this compiled JS from under node_modules.
     "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook.js"
@@ -3359,7 +3400,7 @@ case "$cmd" in
     # Garden launcher helper: print one fresh garden sessionId (SSOT:
     # generateSessionId). Used by the operator alias to make every
     # --entwurf-control session a garden citizen. Stdout = the id only.
-    (cd "$REPO_DIR" && node --experimental-strip-types scripts/new-session-id.ts)
+    run_ts scripts/new-session-id.ts
     ;;
   smoke-resident-garden-guard)
     # LIVE negative (0 tokens) + opt-in positive gate for the resident
@@ -3453,7 +3494,7 @@ case "$cmd" in
     # fire→native-push delivered, owned-outcome reject, bogus-conv probe-indeterminate reject.
     # Meta-store is isolated to a temp dir (only the agy round-trip is real); honest SKIP when
     # LIVE!=1. doctor-static preflight FAILs before the agy bridge is wired (③).
-    (cd "$REPO_DIR" && node --experimental-strip-types scripts/smoke-agy-native-push-live.ts)
+    run_ts scripts/smoke-agy-native-push-live.ts
     ;;
   smoke-user-scope-citizen)
     # 0.12.6 install-boundary gate: register-pi-package.py is the shared
@@ -3564,7 +3605,7 @@ case "$cmd" in
     # (project-shadows-user) command — never a re-implemented merge. Reports user/project/effective,
     # gates on stable-bin resolvability, and distinguishes state-owned drift (FAIL) from an
     # unowned user override (honest note). No agy/pi process needed — pure settings inspection.
-    (cd "$REPO_DIR" && node --experimental-strip-types scripts/doctor-pi-provider.ts "$@")
+    run_ts scripts/doctor-pi-provider.ts "$@"
     ;;
   wire-agy-statusline)
     # #46 Task 1: the detection-gated, NON-FATAL setup wrapper around install-agy-statusline.
@@ -3598,7 +3639,7 @@ case "$cmd" in
     # surviving authority). Default store = defaultMetaSessionsDir(); pass [dir]
     # + [--ttl-days N] to override.
     shift || true
-    (cd "$REPO_DIR" && node --experimental-strip-types scripts/meta-bridge-prune.ts "$@")
+    run_ts scripts/meta-bridge-prune.ts "$@"
     ;;
   meta-bridge-managed-keys)
     # 0.10.0 meta-bridge: emit the SSOT of settings.json/~/.claude.json keys that
