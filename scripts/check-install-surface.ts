@@ -230,6 +230,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 
 	const offenders: { file: string; line: number; text: string }[] = [];
 	const xdgOffenders: string[] = [];
+	const agentDirXdgOffenders: string[] = [];
 	for (const f of readdirSync(path.join(REPO, "scripts"))) {
 		if (!/^(smoke|check)-.*\.sh$/.test(f) || LIVE_GATES.has(f)) continue;
 		const lines = readFileSync(path.join(REPO, "scripts", f), "utf8").split("\n");
@@ -248,6 +249,19 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		// The swap must not itself lean on the unswapped variable ($XDG_DATA_HOME on the RHS).
 		const xdgSwapped = lines.some((l) => /^\s*export\s+XDG_DATA_HOME=/.test(l) && !/\$\{?XDG_DATA_HOME/.test(l));
 		if (swapAt !== -1 && !xdgSwapped) xdgOffenders.push(f);
+
+		// PI_CODING_AGENT_DIR is a second settings-root swap independent of HOME. A smoke can
+		// point a mutating run.sh command at fake settings while still passing the REAL XDG
+		// ownership state; the inverse then follows managedSettingsPath from that real state and
+		// removes the operator's live key. This struck smoke-user-scope-citizen in the release
+		// floor. Require XDG_DATA_HOME on the same drive (or a prior sandbox export).
+		const agentDirMutator = lines.some(
+			(l) =>
+				/PI_CODING_AGENT_DIR=/.test(l) &&
+				/(?:bash\s+["']?\$RUN|run\.sh)\s+(?:install|remove|remove-user-scope|setup)\b/.test(l) &&
+				!/XDG_DATA_HOME=/.test(l),
+		);
+		if (agentDirMutator && !xdgSwapped) agentDirXdgOffenders.push(f);
 
 		// One hop of aliasing: `VICTIM="$HOME/.gemini/…"` taints VICTIM, so `rm -rf "$VICTIM"` is
 		// caught too. Without this, renaming the path into a variable walks straight past the
@@ -285,6 +299,17 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 				(f) =>
 					`scripts/${f} exports a sandbox HOME but never exports a sandbox XDG_DATA_HOME —\n` +
 					`its install-state writes land under the operator's real ~/.local/share/entwurf.`,
+			)
+			.join("\n"),
+	);
+	ok(
+		"S5c: a mutating run.sh drive that swaps PI_CODING_AGENT_DIR also swaps XDG_DATA_HOME",
+		agentDirXdgOffenders.length === 0,
+		agentDirXdgOffenders
+			.map(
+				(f) =>
+					`scripts/${f} drives a mutating run.sh command against sandbox PI_CODING_AGENT_DIR but real XDG state —\n` +
+					`an inverse can follow the operator state's managedSettingsPath and remove live wiring.`,
 			)
 			.join("\n"),
 	);

@@ -161,7 +161,10 @@ US="$AGENT_DIR/settings.json"
 cat > "$US" <<JSON
 {"defaultProvider": "openai-codex", "packages": ["$REPO", "../../repos/gh/andenken"]}
 JSON
-PI_CODING_AGENT_DIR="$AGENT_DIR" bash "$RUN" remove-user-scope >/dev/null 2>&1 || bad "run.sh remove-user-scope exited non-zero"
+# remove-user-scope uses BOTH PI_CODING_AGENT_DIR (settings target) and XDG_DATA_HOME
+# (ownership-state authority). Isolating only the former lets the fake inverse consume the
+# operator's real state, follow its recorded managedSettingsPath, and remove the live MCP key.
+XDG_DATA_HOME="$TMP/xdg" PI_CODING_AGENT_DIR="$AGENT_DIR" bash "$RUN" remove-user-scope >/dev/null 2>&1 || bad "run.sh remove-user-scope exited non-zero"
 if python3 -c "
 import json
 d=json.load(open('$US')); p=d['packages']
@@ -170,7 +173,7 @@ assert '../../repos/gh/andenken' in p, 'run.sh remove-user-scope over-removed an
 assert d['defaultProvider']=='openai-codex', 'run.sh remove-user-scope dropped an unrelated key'
 " 2>/dev/null; then ok "run.sh remove-user-scope drops the global citizen, preserves unrelated (SSOT reached via shell)"; else bad "run.sh remove-user-scope path failed"; fi
 # idempotent: a second remove-user-scope is a clean no-op (no crash on absent entry)
-if PI_CODING_AGENT_DIR="$AGENT_DIR" bash "$RUN" remove-user-scope >/dev/null 2>&1; then ok "run.sh remove-user-scope is idempotent (no-op second run)"; else bad "run.sh remove-user-scope second run crashed"; fi
+if XDG_DATA_HOME="$TMP/xdg" PI_CODING_AGENT_DIR="$AGENT_DIR" bash "$RUN" remove-user-scope >/dev/null 2>&1; then ok "run.sh remove-user-scope is idempotent (no-op second run)"; else bad "run.sh remove-user-scope second run crashed"; fi
 
 echo
 if [ "$fail" -eq 0 ]; then echo "smoke-user-scope-citizen: PASS"; else echo "smoke-user-scope-citizen: FAIL (see above)"; exit 1; fi
