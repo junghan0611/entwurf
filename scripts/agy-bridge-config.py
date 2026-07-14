@@ -66,10 +66,20 @@ STATE_SCHEMA_VERSION = 1
 
 # The ONE permission rule we own. Scoped to a single tool on our own server — not mcp(*), not the
 # server-wide mcp(entwurf-bridge): an installer grants itself the narrowest rule that makes the
-# thing it installed work, and nothing more.
+# thing it installed work, and nothing more. INSTALL still writes only this.
 ALLOW_RULE = f"mcp({SERVER_KEY}/entwurf_v2)"
-# Rules that would match our tool and, from a higher-precedence list, override our allow.
-SHADOWING_RULES = (ALLOW_RULE, f"mcp({SERVER_KEY})", "mcp(*)")
+# Rules that MATCH our tool: the exact grant, the server-wide rule, and the action wildcard.
+# Membership here is a statement about agy's matcher, not about which list the rule sits in — the
+# same three rules cover entwurf_v2 wherever they appear. From a higher-precedence list they
+# override our allow (shadowing); from `allow` itself they already grant it (covering).
+#
+# The doctor used to read them ONE WAY ONLY — shadowing — and demanded a literal ALLOW_RULE string
+# in `allow`. So a host whose operator had granted a broad `mcp(*)` (their trust decision, not
+# ours) was reported as "NOT granted, agy prompts on EVERY entwurf_v2 call": a false red about a
+# surface that in fact works. Reading the same coverage in both directions is the fix; treating
+# mcp(*) as matching in deny/ask but not in allow was never defensible.
+MATCHING_RULES = (ALLOW_RULE, f"mcp({SERVER_KEY})", "mcp(*)")
+SHADOWING_RULES = MATCHING_RULES  # same set, higher-precedence lists
 # Deny > Ask > Allow (agy permissions engine).
 SHADOWING_LISTS = ("deny", "ask")
 
@@ -376,9 +386,17 @@ def cmd_permission_doctor(settings_path: str) -> None:
                 return
 
     allow = perms.get("allow")
-    if isinstance(allow, list) and ALLOW_RULE in allow:
-        sys.stdout.write("configured\n")
-        return
+    if isinstance(allow, list):
+        if ALLOW_RULE in allow:
+            sys.stdout.write("configured\n")
+            return
+        # No rule of ours, but a BROADER operator rule in the same list already matches our tool.
+        # agy will not prompt; the call works. Say so — and say whose rule is carrying it, because
+        # the day the operator narrows that wildcard, our unowned grant disappears with it.
+        for rule in MATCHING_RULES:
+            if rule != ALLOW_RULE and rule in allow:
+                sys.stdout.write(f"covered-by-allow {rule}\n")
+                return
     sys.stdout.write("not-configured\n")
 
 

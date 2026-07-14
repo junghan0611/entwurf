@@ -482,6 +482,27 @@ DOC_OUT="$(bash "$BRIDGE" doctor 2>&1 || true)"
 want "permission: the shadow report names the offending list and rule" \
   "printf '%s' \"\$DOC_OUT\" | grep -q 'SHADOWED'"
 
+# THE MIRROR OF IT: the same rules that shadow our allow from ask/deny COVER it from allow. An
+# operator who granted a broad mcp(*) has already made entwurf_v2 callable — reporting that host as
+# "NOT granted, agy prompts on EVERY call" is a false red about a surface that works. It is still
+# THEIR rule, not ours, so it is a NOTE (exit 0 + named owner), never a silent pass and never DRIFT.
+for broad in 'mcp(*)' 'mcp(entwurf-bridge)'; do
+  printf '{"permissions":{"allow":["%s"]}}\n' "$broad" > "$SETTINGS"
+  DOC_OUT="$(bash "$BRIDGE" doctor 2>&1 || true)"
+  if ! bash "$BRIDGE" doctor >/dev/null 2>&1; then
+    die "covered: doctor should NOT fail when the operator's '$broad' already grants our tool"
+  fi
+  ok "permission: an operator's broad '$broad' in allow is not reported as drift (no false red)"
+  want "permission: the note names '$broad' as the covering rule, and it is NOT called granted-by-us" \
+    "printf '%s' \"\$DOC_OUT\" | grep -q 'NOTE' && printf '%s' \"\$DOC_OUT\" | grep -qF '$broad' && ! printf '%s' \"\$DOC_OUT\" | grep -q 'DRIFT'"
+  # …and precedence still wins: the same broad rule in deny must override its own allow.
+  printf '{"permissions":{"allow":["%s"],"deny":["%s"]}}\n' "$broad" "$broad" > "$SETTINGS"
+  if bash "$BRIDGE" doctor >/dev/null 2>&1; then
+    die "covered: a deny of '$broad' must still shadow, even though the same rule sits in allow"
+  fi
+  ok "permission: '$broad' in deny still shadows its own allow (Deny > Allow, not order-of-lists)"
+done
+
 # ── K4: a grant we cannot write FAILS the explicit install (setup degrades it, not us) ──
 # A symlinked settings.json is someone else's SSOT (an agent-config link) — never clobber it. But
 # refusing to write is not the same as succeeding: the explicit installer must exit nonzero, because

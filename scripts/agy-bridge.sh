@@ -210,6 +210,13 @@ doctor_permission() {
   case "$status" in
     configured)
       log "  permission ($SETTINGS_FILE): allow → '$ALLOW_RULE' (agy calls entwurf_v2 without prompting)"; return 0 ;;
+    covered-by-allow\ *)
+      # The operator's own broader rule already grants our tool, so entwurf_v2 does NOT prompt —
+      # calling this DRIFT would be a false red about a working surface. But it is THEIR rule, not
+      # ours: narrowing that wildcard silently takes our grant with it. Note, never a silent pass.
+      local covering="${status#covered-by-allow }"
+      log "  permission ($SETTINGS_FILE): NOTE — we own no rule here, but your '$covering' in permissions.allow already matches $ALLOW_RULE, so agy calls entwurf_v2 without prompting. That grant is YOURS: narrow '$covering' and entwurf_v2 starts prompting again. Run ./run.sh install-agy-bridge if you want the narrow rule owned (and repaired) by entwurf."
+      return 0 ;;
     not-configured|absent)
       local what="'$ALLOW_RULE' NOT granted"
       [ "$status" = absent ] && what="settings file absent, so no grant"
