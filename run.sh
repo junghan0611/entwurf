@@ -1997,6 +1997,18 @@ check_pack_install() {
   # a real publish can be exercised.
   section "publish install smoke (actual pack + tar + fresh install)"
 
+  # SELF-FENCE (rule 11, enforced at the gate itself). Every drive below swaps HOME into a
+  # sandbox — but the operator's shell exports XDG_DATA_HOME/XDG_STATE_HOME/XDG_CACHE_HOME,
+  # and a HOME-only swap inherits them: on 2026-07-14 this gate's own `run.sh install` drive
+  # wrote a foreign pi-provider install-state into the REAL ~/.local/share/entwurf while all
+  # of its config candidates sat in /tmp. So the gate now proves its own idempotency: the
+  # operator's real install-state tree must be byte-identical before and after. STATE/CACHE
+  # roots are not fenced (a live agy/claude legitimately writes logs/caches there while this
+  # gate runs); they are handled by swapping them in every drive instead.
+  local real_state_root="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf"
+  local state_fence_before
+  state_fence_before="$( (find "$real_state_root" -type f -print0 2>/dev/null | sort -z | xargs -0r sha256sum) 2>/dev/null || true)"
+
   local version tgz_name tgz_path
   version=$(node -p "require('${REPO_DIR}/package.json').version")
   # Scoped npm packages produce a tarball named "<scope>-<name>-<version>.tgz"
@@ -2203,7 +2215,7 @@ check_pack_install() {
   # this whole lane is about).
   local loader_out loader_home="$tmp/loader-home"
   mkdir -p "$loader_home/.pi/agent"
-  loader_out=$(cd "$tmp" && HOME="$loader_home" PI_CODING_AGENT_DIR="$loader_home/.pi/agent" pi -e "$tmp/node_modules/@junghanacs/entwurf" --list-models entwurf 2>&1) || {
+  loader_out=$(cd "$tmp" && HOME="$loader_home" XDG_DATA_HOME="$loader_home/.local/share" XDG_STATE_HOME="$loader_home/.local/state" XDG_CACHE_HOME="$loader_home/.cache" PI_CODING_AGENT_DIR="$loader_home/.pi/agent" pi -e "$tmp/node_modules/@junghanacs/entwurf" --list-models entwurf 2>&1) || {
     fail "[check-pack-install] pi loader smoke failed (exit non-zero):"
     echo "$loader_out" | tail -10 | sed 's/^/    /' >&2
     return 1
@@ -2258,7 +2270,7 @@ check_pack_install() {
     ls -l "$npmroot/node_modules/.bin" 2>/dev/null | sed 's/^/    /' >&2 || true
     return 1
   fi
-  wire_log=$(HOME="$npmhome" "$npm_pkg/run.sh" install "$npmproj" 2>&1) || {
+  wire_log=$(HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" "$npm_pkg/run.sh" install "$npmproj" 2>&1) || {
     fail "[check-pack-install] npm-managed run.sh install failed (preflight rejected hoisted deps?):"
     echo "$wire_log" | tail -15 | sed 's/^/    /' >&2
     return 1
@@ -2300,7 +2312,7 @@ sys.exit(0 if any(isinstance(s,str) and s.endswith('/node_modules/@junghanacs/en
   # a KNOWN flag and the entwurf provider must load, sourced only from user scope.
   # Before the fix this printed "Unknown options: --entwurf-control".
   local foreign_out
-  foreign_out=$(cd "$tmp" && HOME="$npmhome" PI_CODING_AGENT_DIR="$npmhome/.pi/agent" pi --entwurf-control --list-models entwurf 2>&1) || {
+  foreign_out=$(cd "$tmp" && HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" PI_CODING_AGENT_DIR="$npmhome/.pi/agent" pi --entwurf-control --list-models entwurf 2>&1) || {
     fail "[check-pack-install] foreign-cwd --entwurf-control smoke failed (user-scope citizen not loading?):"
     echo "$foreign_out" | tail -10 | sed 's/^/    /' >&2
     return 1
@@ -2341,7 +2353,7 @@ SH
   chmod +x "$fake_claude_dir/claude"
   local mb_home="$npm_tmp/meta-home" mb_cfg="$npm_tmp/meta-claude" mb_log
   mkdir -p "$mb_home" "$mb_cfg"
-  mb_log=$(HOME="$mb_home" XDG_DATA_HOME="$mb_home/.local/share" CLAUDE_CONFIG_DIR="$mb_cfg" FAKE_CLAUDE_LOG="$fake_claude_log" PATH="$fake_claude_dir:$npmroot/node_modules/.bin:$PATH" "$npm_pkg/run.sh" install-meta-bridge 2>&1) || {
+  mb_log=$(HOME="$mb_home" XDG_DATA_HOME="$mb_home/.local/share" XDG_STATE_HOME="$mb_home/.local/state" XDG_CACHE_HOME="$mb_home/.cache" CLAUDE_CONFIG_DIR="$mb_cfg" FAKE_CLAUDE_LOG="$fake_claude_log" PATH="$fake_claude_dir:$npmroot/node_modules/.bin:$PATH" "$npm_pkg/run.sh" install-meta-bridge 2>&1) || {
     fail "[check-pack-install] installed install-meta-bridge failed under fake claude:"
     echo "$mb_log" | tail -20 | sed 's/^/    /' >&2
     return 1
@@ -2504,7 +2516,7 @@ JS
   local installed_agy_imprint="$npmroot/node_modules/.bin/entwurf-agy-imprint"
   local agy_imprint_agent="$npm_tmp/agy-imprint-agent" agy_imprint_out agy_record_count
   mkdir -p "$agy_imprint_agent"
-  if ! agy_imprint_out=$(printf '%s\n' '{"conversationId":"pack-install-agy-conversation","workspacePaths":["/tmp/entwurf-pack-install"],"modelName":"probe-model"}' | HOME="$npmhome" PI_CODING_AGENT_DIR="$agy_imprint_agent" "$installed_agy_imprint" 2>&1); then
+  if ! agy_imprint_out=$(printf '%s\n' '{"conversationId":"pack-install-agy-conversation","workspacePaths":["/tmp/entwurf-pack-install"],"modelName":"probe-model"}' | HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" PI_CODING_AGENT_DIR="$agy_imprint_agent" "$installed_agy_imprint" 2>&1); then
     fail "[check-pack-install] installed entwurf-agy-imprint FAILED under node_modules (raw-.ts strip-types regression or emitted hook missing):"
     echo "$agy_imprint_out" | tail -15 | sed 's/^/    /' >&2
     return 1
@@ -2535,7 +2547,11 @@ JS
   local op_agent="$npm_tmp/op-agent" op_out
   mkdir -p "$op_agent/meta-sessions"
 
-  if ! op_out=$(HOME="$npmhome" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" new-session-id 2>&1); then
+  # Same sandbox root set on every operator-command drive: doctor-pi-provider READS install-state
+  # below XDG_DATA_HOME, so an inherited real root would make this gate's verdict depend on the
+  # operator's host instead of the sandbox (non-hermetic even when nothing is written).
+  local op_xdg_data="$npmhome/.local/share" op_xdg_state="$npmhome/.local/state" op_xdg_cache="$npmhome/.cache"
+  if ! op_out=$(HOME="$npmhome" XDG_DATA_HOME="$op_xdg_data" XDG_STATE_HOME="$op_xdg_state" XDG_CACHE_HOME="$op_xdg_cache" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" new-session-id 2>&1); then
     fail "[check-pack-install] installed 'entwurf new-session-id' FAILED under node_modules (strip-types fence or missing compiled twin):"
     echo "$op_out" | tail -8 | sed 's/^/    /' >&2
     return 1
@@ -2547,7 +2563,7 @@ JS
     return 1
   fi
 
-  if ! op_out=$(HOME="$npmhome" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" doctor-pi-provider 2>&1); then
+  if ! op_out=$(HOME="$npmhome" XDG_DATA_HOME="$op_xdg_data" XDG_STATE_HOME="$op_xdg_state" XDG_CACHE_HOME="$op_xdg_cache" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" doctor-pi-provider 2>&1); then
     # A doctor may exit non-zero on an unadopted host — that is a VERDICT, not a crash.
     # The fence, by contrast, kills it before any verdict body is printed.
     if printf '%s' "$op_out" | grep -q ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING; then
@@ -2562,7 +2578,7 @@ JS
     return 1
   fi
 
-  if ! op_out=$(HOME="$npmhome" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" meta-bridge-prune "$op_agent/meta-sessions" 2>&1); then
+  if ! op_out=$(HOME="$npmhome" XDG_DATA_HOME="$op_xdg_data" XDG_STATE_HOME="$op_xdg_state" XDG_CACHE_HOME="$op_xdg_cache" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" meta-bridge-prune "$op_agent/meta-sessions" 2>&1); then
     fail "[check-pack-install] installed 'entwurf meta-bridge-prune' FAILED on a 0-record store:"
     echo "$op_out" | tail -8 | sed 's/^/    /' >&2
     return 1
@@ -2578,7 +2594,7 @@ JS
   # REFUSE it with a legible message — never fall back to raw .ts (that just re-raises the
   # fence error) and never exit 0 (a silent no-op would let CI "pass" a gate it never ran).
   local devgate_out devgate_rc=0
-  devgate_out=$(HOME="$npmhome" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" check-meta-session 2>&1) || devgate_rc=$?
+  devgate_out=$(HOME="$npmhome" XDG_DATA_HOME="$op_xdg_data" XDG_STATE_HOME="$op_xdg_state" XDG_CACHE_HOME="$op_xdg_cache" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" check-meta-session 2>&1) || devgate_rc=$?
   if [ "$devgate_rc" -eq 0 ]; then
     fail "[check-pack-install] a dev-only gate (check-meta-session) exited 0 from an installed package — it cannot have run; run_ts must refuse it"
     return 1
@@ -2640,6 +2656,18 @@ JS
     return 1
   fi
   echo "[check-pack-install] installed doctor dispatch lock pass (store-scan → dist JS, v2-surface deferred)"
+
+  # The fence's other half: recompute and compare. A diff here means a drive above leaked
+  # through an inherited XDG root into the operator's real install-state — the exact class
+  # that corrupted live provenance twice (hard-verify 2026-07-13, this gate itself 2026-07-14).
+  local state_fence_after
+  state_fence_after="$( (find "$real_state_root" -type f -print0 2>/dev/null | sort -z | xargs -0r sha256sum) 2>/dev/null || true)"
+  if [ "$state_fence_before" != "$state_fence_after" ]; then
+    fail "[check-pack-install] SELF-FENCE: this gate changed the operator's REAL install-state tree ($real_state_root) — a sandbox drive is leaking through an inherited XDG root:"
+    diff <(printf '%s\n' "$state_fence_before") <(printf '%s\n' "$state_fence_after") | sed 's/^/    /' >&2 || true
+    return 1
+  fi
+  echo "[check-pack-install] self-fence pass (real install-state tree untouched: $real_state_root)"
 
   ok "[check-pack-install] publish install smoke pass"
   return 0
