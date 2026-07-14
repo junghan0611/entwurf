@@ -137,7 +137,7 @@ SCENE_DELAY=30 FINAL_PAUSE=10 bash demo.sh
 
 ## Prerequisites
 
-- `pi` on PATH (current floor 0.80.3)
+- `pi` on PATH (current floor 0.80.6)
 - `entwurf` provider configured + auth ready for the selected sender/peer models
 - `asciinema` installed
 - `agg` installed (optional — only for GIF conversion)

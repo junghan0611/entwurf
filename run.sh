@@ -150,7 +150,7 @@ Usage:
   ./run.sh meta-bridge-prune          # 1.0.0 meta-bridge Phase 4: LISTING-ONLY store hygiene — classify orphan/stale/ambiguous/keep, print manual rm commands, delete NOTHING ([dir] [--ttl-days N])
   ./run.sh meta-bridge-managed-keys   # 0.10.0 meta-bridge: print the SSOT of settings keys entwurf OWNS (consumers read this to stay disjoint — keyset-owner invariant)
   ./run.sh check-keyset-overlap <fragment.json...>  # 0.10.0 meta-bridge: PREVENTIVE keyset guard — fail if a consumer fragment collides with any pi-owned key (cross-repo; not in pnpm check)
-  ./run.sh check-dep-versions         # local deterministic check that version pins (package.json/run.sh/README.md + pi devDeps/peer pins) agree
+  ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.80.x peers
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to entwurf alias
@@ -1298,11 +1298,13 @@ smoke_session_id_name() {
 
 
 check_dep_versions() {
-  # Catches version-pin drift across package.json, run.sh, and README.md.
-  # Concretely the kind of skew that produced commit 21de0f9's "0.11.1
+  # Catches pi version-pin drift across package.json, run.sh, and the baseline
+  # docs. Concretely the kind of skew that produced commit 21de0f9's "0.11.1
   # leftover" review comment: package.json bumped to 0.12.0 while README
   # and run.sh's setup gate still claimed 0.11.1. Static check, no
   # subprocess — fast enough to run inside `pnpm check` and pre-commit.
+  # The doc half of that promise was prose only until 0.12.8 — see the
+  # BASELINE DOCS block below, which finally makes this comment true.
   (cd "$REPO_DIR" && node --input-type=module <<'EOF'
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
@@ -1351,7 +1353,7 @@ assert.equal(peerTui, piAi,
 // pi moves its public surface every minor (the 0.79→0.80 getModels→provider-
 // factory churn is exactly this), so an open `>=` floor is exactly how the next
 // installer re-acquires the drift. Expected
-// shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.80.3 <0.81`).
+// shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.80.6 <0.81`).
 const [piMaj, piMin] = piAi.split('.').map(Number);
 assert.equal(piMaj, 0,
   `pi pin major must stay 0 for the next-minor ceiling rule (got ${piAi}); revisit check-dep-versions when pi reaches 1.x`);
@@ -1366,7 +1368,56 @@ assert.equal(peerDepCoding, expectedPeer,
 assert.equal(peerDepTui, expectedPeer,
   `package.json peerDependencies @earendil-works/pi-tui (${peerDepTui}) must be "${expectedPeer}"`);
 
-console.log('[check-dep-versions] 11 assertions ok');
+// BASELINE DOCS (0.12.8). This gate was BORN reading a doc: 362becd added it
+// after the 21de0f9 drift and asserted README.md's codex-acp install pin against
+// package.json. bf4a533 then dropped the openclaw/ACP lane and took that
+// assertion out with it — but left the coverage CLAIM standing in the usage line
+// and the comment above. So the doc half of the promise has been prose ever
+// since, and pi's baseline docs were never bound here at all. The 0.80.3→0.80.6
+// bump touched FIVE such files, and a hand-grep — not a gate — is what kept
+// demo/README.md from being left behind. A declaration no gate reads is exactly
+// what this repair cut exists to delete, so the docs are back IN the gate.
+// Scope is deliberately narrow: only sentences that DECLARE the pi pin. History
+// (CHANGELOG/NEXT) keeps its old versions, and a pi mention without a version
+// (an uninstall line, a type import) is not a declaration.
+const BASELINE_DOCS = ['AGENTS.md', 'README.md', 'ROADMAP.md', 'docs/setup-clean-host.md', 'demo/README.md'];
+let rangeDecls = 0, exactDecls = 0;
+for (const file of BASELINE_DOCS) {
+  const text = readFileSync(file, 'utf8');
+  // Closed-range declarations: `>=<floor> <0.<ceiling>` (spaces optional).
+  for (const [decl, floor, ceilMinor] of text.matchAll(/>=\s?(\d+\.\d+\.\d+)\s?<\s?0\.(\d+)/g)) {
+    rangeDecls++;
+    assert.equal(floor, piAi,
+      `${file}: declared pi floor in "${decl}" is ${floor}, but the devDep pin is ${piAi} — a baseline doc may not advertise a version no gate drives`);
+    assert.equal(Number(ceilMinor), piMin + 1,
+      `${file}: declared pi ceiling in "${decl}" must be the next minor (0.${piMin + 1})`);
+  }
+  // Exact install pins: `@earendil-works/pi-<pkg>@<version>`.
+  for (const [decl, ver] of text.matchAll(/@earendil-works\/pi-(?:ai|coding-agent|tui)@(\d+\.\d+\.\d+)/g)) {
+    exactDecls++;
+    assert.equal(ver, piAi, `${file}: install example "${decl}" pins ${ver}, but the devDep pin is ${piAi}`);
+  }
+}
+// Prose declarations carry the pin in sentences the two patterns above cannot
+// see. Each MUST still be found: a reworded baseline sentence has to fail loud
+// here, never pass by matching nothing.
+const PROSE_DECLS = [
+  ['demo/README.md', /current floor (\d+\.\d+\.\d+)/, 'current floor <version>'],
+  ['ROADMAP.md', /\bpi (\d+\.\d+\.\d+) fence\b/, 'pi <version> fence'],
+  ['ROADMAP.md', /floor = \*\*(\d+\.\d+\.\d+)\*\*/, 'floor = **<version>**'],
+  ['AGENTS.md', /devDep exact `(\d+\.\d+\.\d+)`/, 'devDep exact `<version>`'],
+];
+for (const [file, re, shape] of PROSE_DECLS) {
+  const m = readFileSync(file, 'utf8').match(re);
+  assert.ok(m, `${file}: the baseline sentence "${shape}" is gone — restore it or update check-dep-versions; a doc reword must not silently drop the pin from the gate`);
+  assert.equal(m[1], piAi, `${file}: "${shape}" declares ${m[1]}, but the devDep pin is ${piAi}`);
+}
+// Guard the guard: if the patterns ever stop matching, the loops above pass
+// vacuously and the docs fall back OUT of the gate without a word.
+assert.ok(rangeDecls >= 5, `expected at least 5 pi range declarations across the baseline docs, found ${rangeDecls} — the doc scan matched (almost) nothing and would pass vacuously`);
+assert.ok(exactDecls >= 1, `expected at least 1 exact pi install pin in the baseline docs, found ${exactDecls}`);
+
+console.log(`[check-dep-versions] ok — pi ${piAi} is coherent across package.json (devDeps + peer range), run.sh (peer-install pins), and ${BASELINE_DOCS.length} baseline docs (${rangeDecls} range + ${exactDecls} exact + ${PROSE_DECLS.length} prose declarations)`);
 EOF
   )
 }
@@ -1440,13 +1491,36 @@ check_env_namespace() {
 
 check_pi_runtime_version() {
   # 0.11 Stage 0 (동결결정 9, runtime half): tsc catches a missing 0.80 export
-  # at dev time, but an installed environment can still resolve an older pi at
-  # runtime where the named trust exports / 0.80 provider-factory surface do not
-  # exist. Verify VERSION >= floor via a DYNAMIC import of the package root only —
-  # never statically import a floor-only symbol here, or this guard would crash
-  # before it can fail loud.
+  # at dev time, but an installed environment can still resolve a pi OUTSIDE the
+  # supported range at runtime — older, where the named trust exports / 0.80
+  # provider-factory surface do not exist; or newer, where they have moved again.
+  # Verify VERSION against the DECLARED CLOSED RANGE (both ends, see below) via a
+  # DYNAMIC import of the package root only — never statically import a
+  # range-only symbol here, or this guard would crash before it can fail loud.
+  #
+  # The floor is DERIVED from the package.json devDep pin, never a second literal.
+  # A hand-kept `const FLOOR = '<version>'` is a declaration no gate enforces:
+  # check-dep-versions binds the devDeps, the peer range, and the check-pack-install
+  # peer pins to one another, but it never saw this constant — so a pi bump that
+  # forgot it would leave the runtime gate still blessing the OLD floor, silently.
+  # That is the same "declared runtime ≠ verified runtime" split the 0.12.8
+  # check-pack-install fix closed; there must be exactly ONE pin to move.
   (cd "$REPO_DIR" && node --input-type=module <<'EOF'
-const FLOOR = '0.80.3';
+import { readFileSync } from 'node:fs';
+
+const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+const FLOOR = pkg.devDependencies?.['@earendil-works/pi-coding-agent'];
+if (typeof FLOOR !== 'string' || !/^\d+\.\d+\.\d+$/.test(FLOOR)) {
+  console.error(`[check-pi-runtime-version] FAIL: package.json devDependencies['@earendil-works/pi-coding-agent'] must be an EXACT x.y.z pin to serve as the runtime floor (got ${FLOOR ?? 'nothing'})`);
+  process.exit(1);
+}
+// The declared contract is a CLOSED range (`>=<devDep> <0.<minor+1>`, enforced on
+// package.json by check-dep-versions), so the runtime check must be closed too.
+// A floor-only comparison would bless a resolved pi ABOVE the ceiling — and an
+// out-of-range pi is exactly the drift this cut exists to stop: 0.80.6 landed on
+// the dev box while the repo still declared 0.80.3, and every gate stayed green.
+// Verifying only half of a declared range is the same lie in the other direction.
+const CEILING = `0.${Number(FLOOR.split('.')[1]) + 1}.0`;
 const cmp = (a, b) => {
   const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
   for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0); }
@@ -1464,10 +1538,14 @@ if (typeof VERSION !== 'string') {
   process.exit(1);
 }
 if (cmp(VERSION, FLOOR) < 0) {
-  console.error(`[check-pi-runtime-version] FAIL: pi VERSION ${VERSION} < ${FLOOR} — the bridge is built and tested against the 0.80.3 public/runtime surface (trust exports hasTrustRequiringProjectResources + ProjectTrustStore nearest-ancestor get, the 0.80 model-catalog API getModels reached via the deprecated /compat entrypoint — 0.80 moved the standalone root getModels there, and the extension loader resolves only /compat, NOT the providers/* factory subpath — provider registration surface, compaction semantics) that older pi lacks or behaves differently on. Bump @earendil-works/pi-*.`);
+  console.error(`[check-pi-runtime-version] FAIL: pi VERSION ${VERSION} < ${FLOOR} — the bridge is built and tested against the ${FLOOR} public/runtime surface (trust exports hasTrustRequiringProjectResources + ProjectTrustStore nearest-ancestor get, the 0.80 model-catalog API getModels reached via the deprecated /compat entrypoint — 0.80 moved the standalone root getModels there, and the extension loader resolves only /compat, NOT the providers/* factory subpath — provider registration surface, compaction semantics) that older pi lacks or behaves differently on. Bump @earendil-works/pi-*.`);
   process.exit(1);
 }
-console.log(`[check-pi-runtime-version] ok — pi VERSION ${VERSION} >= ${FLOOR}`);
+if (cmp(VERSION, CEILING) >= 0) {
+  console.error(`[check-pi-runtime-version] FAIL: pi VERSION ${VERSION} >= ${CEILING} — OUTSIDE the declared range (>=${FLOOR} <${CEILING.slice(0, -2)}). pi moves its public surface every minor (the 0.79→0.80 getModels→/compat churn), so a next-minor runtime is unverified by definition: no gate here has driven it. Either pin the repo to that pi (devDeps + peer range + baseline docs move together) or install the declared one.`);
+  process.exit(1);
+}
+console.log(`[check-pi-runtime-version] ok — pi VERSION ${VERSION} within the declared range (>=${FLOOR} <${CEILING.slice(0, -2)})`);
 EOF
   )
 }
@@ -2157,9 +2235,9 @@ _check_pack_install_impl() {
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.80.3" \
-    "@earendil-works/pi-coding-agent@0.80.3" \
-    "@earendil-works/pi-tui@0.80.3" \
+    "@earendil-works/pi-ai@0.80.6" \
+    "@earendil-works/pi-coding-agent@0.80.6" \
+    "@earendil-works/pi-tui@0.80.6" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
