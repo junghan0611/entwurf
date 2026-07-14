@@ -2191,19 +2191,52 @@ _check_pack_install_impl() {
   # the Claude/Codex/Gemini backends, so this stays credential-free
   # and safe to run in CI. Output goes to stderr; capture both
   # streams with 2>&1.
-  if ! command -v pi >/dev/null 2>&1; then
-    fail "[check-pack-install] pi binary not on PATH — cannot run loader smoke"
+  #
+  # The pi that loads the tarball is the PINNED peer this smoke just installed next to
+  # it ($tmp/node_modules/.bin/pi = the floor of the supported peer range), NEVER
+  # whatever `pi` the host happens to have on PATH. A gate may not READ the operator's
+  # global install any more than it may WRITE it: PATH resolution made this gate green
+  # on a dev box carrying a newer global pi and RED in CI, which carries no global pi
+  # at all — and in neither case was it driving the runtime the repo actually pins.
+  #
+  # EVERY pi invocation below — including `--version` — runs under the throwaway
+  # HOME/XDG/agent-dir defined here once. pi reads settings BEFORE it prints its
+  # version (bootstrapSettingsManager precedes the --version branch in pi's main),
+  # so an unsandboxed probe would open the operator's real ~/.pi/agent/settings.json:
+  # the same read coupling this fix exists to remove. One env array, no second
+  # spelling to drift out of step.
+  local loader_home="$tmp/loader-home"
+  mkdir -p "$loader_home/.pi/agent"
+  local -a pi_env=(
+    HOME="$loader_home"
+    XDG_DATA_HOME="$loader_home/.local/share"
+    XDG_STATE_HOME="$loader_home/.local/state"
+    XDG_CACHE_HOME="$loader_home/.cache"
+    PI_CODING_AGENT_DIR="$loader_home/.pi/agent"
+  )
+
+  # Assert the version: a gate that cannot name which pi it proved has proved nothing.
+  # package.json devDeps is the pin SSOT (check-dep-versions keeps the peer-install
+  # literals above in step with it).
+  local pi_bin="$tmp/node_modules/.bin/pi" pi_pin pi_ver
+  if [ ! -x "$pi_bin" ]; then
+    fail "[check-pack-install] pinned pi missing from the install-smoke tree ($pi_bin) — cannot run loader smoke"
     return 1
   fi
+  pi_pin=$(cd "$REPO_DIR" && node -p "require('./package.json').devDependencies['@earendil-works/pi-coding-agent']")
+  pi_ver=$(cd "$tmp" && env "${pi_env[@]}" "$pi_bin" --version 2>&1 | head -1 | tr -d '[:space:]')
+  if [ "$pi_ver" != "$pi_pin" ]; then
+    fail "[check-pack-install] install-smoke pi is '$pi_ver', expected the pinned '$pi_pin' — the loader smoke would prove the wrong runtime"
+    return 1
+  fi
+  echo "[check-pack-install] loader runtime: pinned pi $pi_ver (not the host's global pi)"
 
-  # HOME/PI_CODING_AGENT_DIR redirected to a throwaway dir: this loader smoke must
-  # depend ONLY on the -e package path, never on the operator's real
-  # ~/.pi/agent/settings.json — otherwise a live-config change could silently
+  # The loader smoke must depend ONLY on the -e package path, never on the operator's
+  # real ~/.pi/agent/settings.json — otherwise a live-config change could silently
   # pass/fail the gate (the exact "check must not depend on live wiring" impurity
   # this whole lane is about).
-  local loader_out loader_home="$tmp/loader-home"
-  mkdir -p "$loader_home/.pi/agent"
-  loader_out=$(cd "$tmp" && HOME="$loader_home" XDG_DATA_HOME="$loader_home/.local/share" XDG_STATE_HOME="$loader_home/.local/state" XDG_CACHE_HOME="$loader_home/.cache" PI_CODING_AGENT_DIR="$loader_home/.pi/agent" pi -e "$tmp/node_modules/@junghanacs/entwurf" --list-models entwurf 2>&1) || {
+  local loader_out
+  loader_out=$(cd "$tmp" && env "${pi_env[@]}" "$pi_bin" -e "$tmp/node_modules/@junghanacs/entwurf" --list-models entwurf 2>&1) || {
     fail "[check-pack-install] pi loader smoke failed (exit non-zero):"
     echo "$loader_out" | tail -10 | sed 's/^/    /' >&2
     return 1
@@ -2300,7 +2333,7 @@ sys.exit(0 if any(isinstance(s,str) and s.endswith('/node_modules/@junghanacs/en
   # a KNOWN flag and the entwurf provider must load, sourced only from user scope.
   # Before the fix this printed "Unknown options: --entwurf-control".
   local foreign_out
-  foreign_out=$(cd "$tmp" && HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" PI_CODING_AGENT_DIR="$npmhome/.pi/agent" pi --entwurf-control --list-models entwurf 2>&1) || {
+  foreign_out=$(cd "$tmp" && HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" PI_CODING_AGENT_DIR="$npmhome/.pi/agent" "$pi_bin" --entwurf-control --list-models entwurf 2>&1) || {
     fail "[check-pack-install] foreign-cwd --entwurf-control smoke failed (user-scope citizen not loading?):"
     echo "$foreign_out" | tail -10 | sed 's/^/    /' >&2
     return 1
