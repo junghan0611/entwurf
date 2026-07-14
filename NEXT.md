@@ -11,13 +11,16 @@
 
 **A·B는 닫혔다** (`33b3810`/`76f14c6`, `52d515b` — 둘 다 main CI green). 아래 RECENT 참조. 한 항목씩 커밋·푸시하고 CI로 확인한 뒤 다음으로 넘어간다.
 
-1. **C — fresh mint와 strict resume 분리. ← 다음 한 걸음. 착수 전 #49 §C의 "구현 전 고정" 블록부터 읽는다.** pi는 건드리지 않는다. 외부 주소·plan·marker·socket의 권위는 계속 gid이고, v2 rail 내부 handoff만 고친다.
-   - parent가 이미 찾은 authoritative `sessionFile`을 버리고 child에게 `--session-id <gid>`로 두 번째 lookup을 시키는 것이 버그다. parent의 고정 `SESSIONS_BASE`와 child의 `sessionDir` 해석이 달라지는 실제 반례에서 같은-gid 빈 세션/socket이 생겨 false-success할 수 있었다.
-   - v2-control child는 exact `--session <absolute-file>`을 사용한다. 실제 pi v0.80.6 + entwurf-control 무토큰 RPC에서 header gid 기반 socket·`get_info`가 유지됨을 확인했다.
-   - **완료 판정은 argv에 `--session`이 보이는 것이 아니다.** 일부러 child의 resolver를 틀리게 해도(LIVE 게이트에서 `PI_CODING_AGENT_SESSION_DIR=<빈 임시 디렉터리>`) **원래 JSONL만 재개되는가**다. 평상시 설정으로 LIVE resume만 돌리면 **지금 코드도 green일 수 있다** — 반례를 게이트에 심는 것이 C의 핵심이다.
-   - **최소침습이지만 표면이 여럿이다.** `sessionFile`은 optional이 아니라 **discriminated union**으로 강제하고(v2 argv의 `--session-id`는 정확히 0회), 절대경로는 resolve+assert 양쪽에서 강제한다. "TOCTOU swap 전부 방어"는 **과한 주장** — parent lookup 뒤 같은 경로에 같은 gid의 다른 유효 파일이 갈리는 건 못 막는다(범위를 좁히거나 header gid ↔ marker gid 비교를 넣는다).
-   - **C 이후 거짓이 되는 서술 8곳**(`entwurf-resume-args.ts:39,59,83` · `check-entwurf-resume-args.ts` · `check-entwurf-v2-spawn-production.ts` · `run.sh:105` · `README.md:539` · `AGENTS.md:177` · `entwurf-control.ts:1169,1190` · `entwurf-core.ts:1354`)를 **같은 커밋에서** 고친다. 표·작업 순서는 #49 §C. **B가 남긴 교훈이 그것이다 — 코드가 바뀌는데 선언이 안 바뀌면 게이트가 거짓말을 시작한다.**
-   - fresh launcher는 계속 `--session-id "$(run.sh new-session-id)"`; 경고는 **수용 + README 계약 문장 갱신**. launcher pre-create는 반쪽 세션·불변식 파괴로 기각. legacy one-shot과 `smoke-session-id-name`은 footgun 증거로 **유지**.
+1. **C — fresh mint와 strict resume 분리. ← 다음 한 걸음.** **착수 전 [§C 최종 범위 코멘트](https://github.com/junghan0611/entwurf/issues/49#issuecomment-4967496388)를 읽는다 — 그것이 C의 SSOT이고, 본문 §C의 `discriminated union` 요구와 builder의 `sessionId` 유지는 그 코멘트가 폐기했다.** main에서 간다(브랜치 없음). pi는 건드리지 않는다. 외부 주소·plan·marker·socket의 권위는 계속 gid이고, v2 rail 내부 handoff만 고친다.
+   - **버그.** parent가 이미 찾은 authoritative `sessionFile`을 버리고 child에게 `--session-id <gid>`로 두 번째 lookup을 시킨다. parent의 고정 `SESSIONS_BASE`와 child의 `sessionDir` 해석이 갈리면 같은-gid 빈 세션/socket이 생겨 false-success한다.
+   - **처방.** v2 child는 exact `--session <absolute-file>`. **builder는 v2 전용이 된다** — `variant`와 legacy arm을 **삭제**한다(그 arm의 production caller는 애초에 없었다: 헤더가 지목한 `entwurf-async.ts`는 존재하지 않고, `entwurf-core.ts:1908`이 인라인으로 만들며, 그 v1 함수들은 caller 0). `entwurf-core.ts:1908`은 **그대로 둔다** — `entwurf-core.ts`는 MCP strip-types(`.ts` 필수) ↔ root tsc(`.ts` 금지) 이중 경계에 끼여 있어 **resume builder를 import할 수 없다**(Node는 `.js`→`.ts`를 remap하지 않는다. `mcp/tsconfig.json` 주석 참조). dead v1 제거는 **별도 routing-cleanup**.
+   - **marker/header pre-socket guard를 넣는다.** 지금 마커 검사는 entwurf-tag 분기 안에만 있고 소켓이 선 뒤에 돈다 — 그래서 loaded header가 **다른 gid의 일반 resident**면 남의 세션에 모델 턴이 들어간다. `startControlServer()` 전에 `marker ≠ loaded id` → hard-exit. 남는 한계는 **같은 gid·다른 내용 교체**뿐이다(inode/digest 영역, C 범위 밖).
+   - **marker 수명주기는 reload-safe여야 한다.** 단순 `delete process.env[...]` 3줄은 `/reload`(`agent-session.ts:2544` → shutdown → **팩토리 재실행** → session_start)에서 authorization을 잃는다. capture → 즉시 scrub → closure 보관 → **`session_shutdown(reason="reload")`일 때만** 복원. 자손은 마커를 상속하지 않는다.
+   - **완료 판정은 argv에 `--session`이 보이는 것이 아니다.** child의 resolver를 일부러 틀리게 해도(`PI_CODING_AGENT_SESSION_DIR=<빈 temp>`) **원래 JSONL만 재개되는가**다. 평상시 설정의 LIVE resume은 **지금 코드도 green일 수 있다** — 반례를 심는 것이 C의 핵심이다. **main에서 RED 먼저 확인하고, RED는 커밋하지 않는다.**
+   - **negative 4-case(missing/corrupt/empty/different-gid)는 LIVE가 아니라 `pnpm check`.** pin(`node_modules/.bin/pi`) + sandbox(HOME·XDG 3종·`PI_CODING_AGENT_DIR`·`PI_SETTINGS_PATH`·`PI_CODING_AGENT_SESSION_DIR`)면 host를 안 건드리고 **토큰도 0**이다(넷 다 모델 턴 전에 죽는다). **exit code만 보면 vacuous pass** — 기대 stderr 문구를 assert한다.
+   - **C 이후 거짓이 되는 선언을 같은 커밋에서 고친다:** `entwurf-resume-args.ts`(허구의 shared/legacy 서술) · `check-entwurf-resume-args.ts` · `check-entwurf-v2-spawn-production.ts` · `run.sh:105` · `README.md:539` · `AGENTS.md:177` · `entwurf-control.ts:1169,1190` · `entwurf-core.ts:1354` · `docs/mux-launch-rail.md:23` · marker leaf의 env 수명주기 · **#49 본문 §C와 이 NEXT의 union 요구**. **B의 교훈이다 — 코드가 바뀌는데 선언이 안 바뀌면 게이트가 거짓말을 시작한다.**
+   - **중지 조건:** production 순증가 25줄 초과 · 새 파일/registry · `entwurf-core.ts`가 resume builder를 import · 파일 경로가 외부 garden-id surface로 노출 · same-gid content swap까지 C에서 해결하려 함. (예산: production 5~20줄, 전체 30~70줄, 새 파일 0.)
+   - fresh launcher는 계속 `--session-id "$(run.sh new-session-id)"`; 경고는 **수용 + README 계약 문장 갱신**. launcher pre-create는 반쪽 세션·불변식 파괴로 기각. `smoke-session-id-name`은 upstream footgun 증거로 **유지**.
 2. **E — floor purity.** 설계 SSOT는 **#41의 두 코멘트**(본 설계 + 실기기 보정). GPT 초안은 관측면이 좁아 워킹트리에서 걷어냈고, #41 기준으로 **재작성**한다.
    - 첫 전체 floor 실행은 green이 목표가 아니다. **churn 카탈로그를 뽑는 관측 실행**이고, RED는 데이터다.
 
@@ -27,6 +30,10 @@
 
 ## RECENT
 
+- **[2026-07-14] #49 C — 착수 전 3자 교차검토에서 설계가 두 번 바뀌었다. 범위는 [§C 최종 범위 코멘트](https://github.com/junghan0611/entwurf/issues/49#issuecomment-4967496388)에 고정.** 진단(parent/child가 서로 다른 resolver를 쓴다)과 처방(`--session <절대경로>`)은 그대로지만, 그 처방을 **어디에 놓느냐**가 두 번 틀렸다.
+  - **첫 오류 — "`entwurf-core.ts`를 builder에 연결해 SSOT를 참으로 만들자".** 불가능했다. `entwurf-core.ts`는 MCP strip-types(`.ts` 명시 필수)와 emit-capable root tsc(`.ts` 금지) **이중 런타임 경계**에 끼여 있다. 근거로 삼은 `entwurf-control.ts → ./lib/entwurf-core.js`는 pi의 **jiti loader** 증거였지 Node 증거가 아니었다 — Node v24.16.0 실측: `.js` 지정자 → `ERR_MODULE_NOT_FOUND`. **리포가 이미 `mcp/tsconfig.json` 주석에 적어둔 제약을 안 읽고 추론했다.** 방향도 틀렸다: 그 legacy 함수들은 caller 0인 v1 시체다 → **연결이 아니라 삭제**.
+  - **둘째 오류 — "marker를 캐시하고 env에서 지우면 끝".** `/reload`를 빠뜨렸다. pi는 같은 프로세스에서 **extension 팩토리를 다시 돌린다**(`agent-session.ts:2544`) → scrub된 새 instance는 authorization을 잃는다. reload에서만 복원하는 수명주기가 필요하다.
+  - **남긴 규율:** 런타임 경계를 **추론하지 말고 실행해서 확인한다.** 그리고 리포가 자기 제약을 이미 문서화해 뒀는지 먼저 본다.
 - **[2026-07-14] #49 B — pi pin `0.80.3 → 0.80.6`. 로컬 게이트 전부 green, main CI는 이 커밋의 푸시로 확정한다.** devDeps·peer range·`check-pack-install` peer pin·baseline 문서 5개 파일이 함께 움직였다. 전체 `pnpm check` green + **고의로 실패하는(exit 97) 가짜 `pi`를 PATH 맨 앞에 둔** `check-pack-install` green — 게이트가 `pinned pi 0.80.6`을 드라이브했다고 스스로 말했고, 가짜는 한 번도 호출되지 않았다.
   - **타입이 답할 수 없었던 것을 게이트가 답했다.** 0.80.4가 갈아엎은 `package-manager`(autoload delta + dedupe 재작성)·`settings-manager`·`resource-loader`가 우리 install surface(hoisted-dep npm install, foreign-cwd user-scope citizen)를 건드리지 않았다.
   - **하마터면 놓칠 뻔한 것:** 0.80.6의 anthropic 카탈로그가 **줄었다** (24 → 14 id, `claude-3-*`/`opus-4-0`/`sonnet-4-0` 레거시 제거). `curatedClaudeModels()`는 앵커(`claude-opus-4-8`)가 없으면 **crash**한다 — 앵커가 잘렸다면 extension load에서 provider 표면이 통째로 죽었다. 두 curated 행 모두 생존, `cost`/`contextWindow`/`maxTokens` 동일. 늘어난 `thinkingLevelMap`(Opus `{xhigh}`→`{xhigh,max}`, Sonnet은 맵 자체가 새로 생김)은 curated 행이 복사하지 않는다(thinking wire는 후속 D).
