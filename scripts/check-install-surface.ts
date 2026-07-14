@@ -18,7 +18,10 @@
  *   S3a  no npm bin points at a raw .ts at all; S3b every .sh bin that execs one branches.
  *   S4   dev-only gates are NOT emitted — the tarball ships operator surfaces, not 70+ gate
  *        leaves (a build bloat regression is as real as a missing artifact).
- *   S5   no offline smoke carries an obvious write to the operator's real $HOME.
+ *   S5   no offline smoke carries an obvious write to the operator's real $HOME, and any
+ *        smoke that swaps HOME into a sandbox swaps XDG_DATA_HOME with it — moving HOME
+ *        alone still writes real install-state below the inherited XDG root, which is
+ *        exactly how a verification sweep polluted a live host's provenance (2026-07-14).
  *
  * HONEST SCOPE — what a green run does and does not mean. S1-S4 are structural: they read the
  * dispatch graph and the build manifest, so they hold for any entrypoint written in this repo's
@@ -226,6 +229,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	const MUTATORS = String.raw`rm\s+-\w+|rm|mv|cp|install|mkdir\s+-p|mkdir|touch|tee|ln\s+-s\w*|truncate`;
 
 	const offenders: { file: string; line: number; text: string }[] = [];
+	const xdgOffenders: string[] = [];
 	for (const f of readdirSync(path.join(REPO, "scripts"))) {
 		if (!/^(smoke|check)-.*\.sh$/.test(f) || LIVE_GATES.has(f)) continue;
 		const lines = readFileSync(path.join(REPO, "scripts", f), "utf8").split("\n");
@@ -235,6 +239,15 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		// the operator's home at all. So the offense is not "writes $HOME"; it is writing a live
 		// path while $HOME still points at the real one: with no swap, or before the swap.
 		const swapAt = lines.findIndex((l) => /^\s*export\s+HOME=/.test(l) && !/(\$HOME|~)\//.test(l));
+
+		// A HOME swap DECLARES isolation — and isolation that inherits the operator's real
+		// XDG_DATA_HOME is a lie: every install adapter roots its state at
+		// ${XDG_DATA_HOME:-$HOME/.local/share}/entwurf, so the "sandboxed" run keeps writing
+		// real state records whose managed targets are sandbox paths. That is the exact leak
+		// that broke a live host's provenance on 2026-07-14 (AGENTS.md hard rule 11: swap BOTH).
+		// The swap must not itself lean on the unswapped variable ($XDG_DATA_HOME on the RHS).
+		const xdgSwapped = lines.some((l) => /^\s*export\s+XDG_DATA_HOME=/.test(l) && !/\$\{?XDG_DATA_HOME/.test(l));
+		if (swapAt !== -1 && !xdgSwapped) xdgOffenders.push(f);
 
 		// One hop of aliasing: `VICTIM="$HOME/.gemini/…"` taints VICTIM, so `rm -rf "$VICTIM"` is
 		// caught too. Without this, renaming the path into a variable walks straight past the
@@ -263,6 +276,17 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		"S5: no offline smoke carries an obvious write to the real $HOME (static tripwire, not a sandbox proof)",
 		offenders.length === 0,
 		offenders.map((o) => `scripts/${o.file}:${o.line} mutates the operator's live install:\n  ${o.text}`).join("\n"),
+	);
+	ok(
+		"S5b: every offline smoke that swaps HOME also swaps XDG_DATA_HOME (HOME alone still writes real install-state)",
+		xdgOffenders.length === 0,
+		xdgOffenders
+			.map(
+				(f) =>
+					`scripts/${f} exports a sandbox HOME but never exports a sandbox XDG_DATA_HOME —\n` +
+					`its install-state writes land under the operator's real ~/.local/share/entwurf.`,
+			)
+			.join("\n"),
 	);
 }
 
