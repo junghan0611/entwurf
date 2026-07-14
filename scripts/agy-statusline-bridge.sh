@@ -114,7 +114,14 @@ do_doctor() {
   if [ -f "$STATE_FILE" ]; then
     local managed
     managed="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("managedSettingsPath",""))' "$STATE_FILE" 2>/dev/null || true)"
-    if [ -n "$managed" ]; then
+    if [ -n "$managed" ] && [ "$managed" != "$SETTINGS" ]; then
+      # The state describes a DIFFERENT settings file than the one agy reads here. The live
+      # statusLine's provenance (whose command was there before ours) is therefore NOT recorded:
+      # uninstalling would drop the key instead of restoring the operator's own command. A test
+      # run that isolated HOME but SHARED XDG_DATA_HOME produces exactly this shape.
+      log "  state: FOREIGN TARGET — install-state manages '$managed', but agy reads '$SETTINGS' on this host. The live statusLine has no recorded preimage, so uninstall could not restore what was there before. Re-run install-agy-statusline against this host (and check whether an isolated test leaked its state)."
+      hard_fail=1
+    elif [ -n "$managed" ]; then
       local managed_status
       managed_status="$(python3 "$CONFIG_PY" doctor-static "$managed")"
       case "$managed_status" in

@@ -256,7 +256,14 @@ do_doctor() {
   if [ -f "$STATE_FILE" ]; then
     local managed
     managed="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("managedConfigPath",""))' "$STATE_FILE" 2>/dev/null || true)"
-    if [ -n "$managed" ]; then
+    if [ -n "$managed" ] && [ "$managed" != "$GLOBAL_CONFIG" ]; then
+      # The state describes a DIFFERENT file than the one agy reads here. Checking the recorded
+      # file and calling that green blesses a host we do not own: uninstall would not touch the
+      # live config, and the live config's provenance is gone. A verification run that isolated
+      # HOME but SHARED XDG_DATA_HOME writes exactly this — sandbox settings, real state.
+      log "  state: FOREIGN TARGET — install-state manages '$managed', but agy reads '$GLOBAL_CONFIG' on this host. Nothing here is package-owned. Re-run install-agy-bridge against this host (and check whether an isolated test leaked its state)."
+      hard_fail=1
+    elif [ -n "$managed" ]; then
       local managed_status
       managed_status="$(python3 "$CONFIG_PY" doctor-static "$managed")"
       case "$managed_status" in
@@ -267,6 +274,15 @@ do_doctor() {
           ;;
         *) log "  state: DRIFT — install-state records $managed but it no longer configures entwurf-bridge (removed since install)."; hard_fail=1 ;;
       esac
+    fi
+    # The permission half carries its own target, and it can drift independently of the config.
+    if [ -f "$PERMISSION_STATE_FILE" ]; then
+      local pmanaged
+      pmanaged="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("managedSettingsPath",""))' "$PERMISSION_STATE_FILE" 2>/dev/null || true)"
+      if [ -n "$pmanaged" ] && [ "$pmanaged" != "$SETTINGS_FILE" ]; then
+        log "  state: FOREIGN TARGET (permission) — permission-state manages '$pmanaged', but agy reads '$SETTINGS_FILE'. The grant recorded there is not the grant on this host."
+        hard_fail=1
+      fi
     fi
   elif [ "$configured_any" -eq 0 ]; then
     log "  note: no install-state and neither candidate configures entwurf-bridge (never installed — this is the '?' the operator sees; run install-agy-bridge)."

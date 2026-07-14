@@ -122,6 +122,33 @@ want "orphan: state file is removed automatically" "[ ! -f '$STATE' ]"
 printf '{\n  "mcpServers": { "other": { "command": "keepme" } }\n}\n' > "$GLOBAL"
 bash "$BRIDGE" install >/dev/null   # restore for the honest-inverse uninstall below
 
+# ── C3b (FOREIGN TARGET): state describes a file this host does not read ──────────────
+# The state is INTACT and the file it names is perfectly configured — it is just not OUR file.
+# A doctor that only inspects the recorded path calls that green while owning nothing here:
+# uninstall would not touch the live config, and the live config has no recorded provenance.
+# This is not hypothetical. A verification run that isolated HOME but SHARED XDG_DATA_HOME wrote
+# sandbox settings and REAL state, and every agy doctor reported green on a host it no longer
+# owned. Isolation must move HOME and XDG_DATA_HOME together; this gate is what says so out loud.
+FOREIGN_DIR="$SB/foreign"; mkdir -p "$FOREIGN_DIR"
+FOREIGN_CFG="$FOREIGN_DIR/mcp_config.json"
+cp "$GLOBAL" "$FOREIGN_CFG"   # a VALID, fully-configured config — just not the one agy reads here
+cp "$STATE" "$SB/state-before-foreign.json"   # restored verbatim below: see the note at the end
+python3 -c "
+import json,sys
+p=sys.argv[1]; d=json.load(open(p)); d['managedConfigPath']=sys.argv[2]
+json.dump(d, open(p,'w'))" "$STATE" "$FOREIGN_CFG"
+set +e; DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?; set -e
+want "foreign-target: doctor FAILS when install-state manages a config this host does not read" "[ '$DOC_RC' -ne 0 ]"
+want "foreign-target: the report names both paths (recorded vs live), not a generic drift" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'FOREIGN TARGET' && printf '%s' \"\$DOC_OUT\" | grep -qF '$FOREIGN_CFG' && printf '%s' \"\$DOC_OUT\" | grep -qF '$GLOBAL'"
+want "foreign-target: the foreign file is NOT auto-cleaned (it is someone else's, not ours to delete)" "[ -f '$FOREIGN_CFG' ]"
+want "foreign-target: the state file is NOT auto-cleaned (a wrong target is a verdict, not stale state)" "[ -f '$STATE' ]"
+# Restore the state VERBATIM rather than re-installing. A second install over an already-configured
+# config would recapture OUR OWN entry as the preimage — the self-referential provenance trap this
+# suite pins elsewhere — and the honest-inverse uninstall below would then have nothing to remove.
+cp "$SB/state-before-foreign.json" "$STATE"
+rm -f "$FOREIGN_CFG"
+
 
 # ── D: uninstall — honest inverse ─────────────────────────────────────────────
 bash "$BRIDGE" uninstall >/dev/null

@@ -259,4 +259,27 @@ REPO_AFTER="$(cd "$REPO_DIR" && git status --porcelain)"
 want "purity: checkout unchanged (all writes stayed in the sandbox HOME+XDG)" \
   "[ \"\$REPO_BEFORE\" = \"\$REPO_AFTER\" ]"
 
+# ── FOREIGN TARGET: state describes a settings file this host does not read ───────────
+# The recorded file is perfectly configured — it is just not OURS. A doctor that only inspects the
+# recorded path blesses a host it owns nothing on, and the damage here is specific: the LIVE
+# statusLine has no recorded preimage, so uninstall would DROP the key instead of restoring the
+# operator's own command. This exact shape was produced on a real host by a verification run that
+# isolated HOME but SHARED XDG_DATA_HOME — sandbox settings, real state. Isolation must move HOME
+# and XDG_DATA_HOME together.
+bash "$BRIDGE" install >/dev/null   # the uninstall cases above left no state; re-own this host first
+FOREIGN_SET="$SB/foreign-settings.json"
+cp "$SET" "$FOREIGN_SET"
+python3 -c "
+import json,sys
+p=sys.argv[1]; d=json.load(open(p)); d['managedSettingsPath']=sys.argv[2]
+json.dump(d, open(p,'w'))" "$STATE" "$FOREIGN_SET"
+set +e; FT_OUT="$(bash "$BRIDGE" doctor 2>&1)"; FT_RC=$?; set -e
+want "foreign-target: doctor FAILS when install-state manages settings this host does not read" "[ '$FT_RC' -ne 0 ]"
+want "foreign-target: the report names both the recorded and the live settings path" \
+  "printf '%s' \"\$FT_OUT\" | grep -q 'FOREIGN TARGET' && printf '%s' \"\$FT_OUT\" | grep -qF '$FOREIGN_SET' && printf '%s' \"\$FT_OUT\" | grep -qF '$SET'"
+want "foreign-target: it names the real damage — the live statusLine has no recorded preimage" \
+  "printf '%s' \"\$FT_OUT\" | grep -qi 'preimage'"
+want "foreign-target: neither the foreign settings nor the state is auto-deleted" "[ -f '$FOREIGN_SET' ] && [ -f '$STATE' ]"
+rm -f "$FOREIGN_SET"
+
 printf '\nsmoke-agy-statusline-state: %d checks passed\n' "$pass"

@@ -132,4 +132,26 @@ want "re-install: an unrelated plugin's hook survives the whole cycle" \
 REPO_AFTER="$(cd "$REPO_DIR" && git status --porcelain)"
 want "purity: checkout unchanged (all writes stayed in sandbox HOME+XDG)" "[ \"$REPO_BEFORE\" = \"$REPO_AFTER\" ]"
 
+# ── FOREIGN TARGET: state describes a hooks file this host does not load ──────────────
+# The recorded hooks file is perfectly configured — it is just not the one agy loads here. A doctor
+# that only inspects the recorded path calls that green while the LIVE PreInvocation hook is
+# unowned: uninstall would leave it in place, and its provenance is unrecorded. A real host reached
+# this shape via a verification run that isolated HOME but SHARED XDG_DATA_HOME. Isolation must move
+# HOME and XDG_DATA_HOME together.
+bash "$BRIDGE" install >/dev/null   # re-own this host (earlier cases may have torn the state down)
+FOREIGN_HOOKS="$SB/foreign-hooks.json"
+cp "$HOOKS" "$FOREIGN_HOOKS"
+python3 -c "
+import json,sys
+p=sys.argv[1]; d=json.load(open(p)); d['managedHooksPath']=sys.argv[2]
+json.dump(d, open(p,'w'))" "$STATE" "$FOREIGN_HOOKS"
+set +e; FT_OUT="$(bash "$BRIDGE" doctor 2>&1)"; FT_RC=$?; set -e
+want "foreign-target: doctor FAILS when install-state manages hooks this host does not load" "[ '$FT_RC' -ne 0 ]"
+want "foreign-target: the report names both the recorded and the live hooks path" \
+  "printf '%s' \"\$FT_OUT\" | grep -q 'FOREIGN TARGET' && printf '%s' \"\$FT_OUT\" | grep -qF '$FOREIGN_HOOKS' && printf '%s' \"\$FT_OUT\" | grep -qF '$HOOKS'"
+want "foreign-target: it names the real damage — the live hook is unowned" \
+  "printf '%s' \"\$FT_OUT\" | grep -qi 'unowned'"
+want "foreign-target: neither the foreign hooks file nor the state is auto-deleted" "[ -f '$FOREIGN_HOOKS' ] && [ -f '$STATE' ]"
+rm -f "$FOREIGN_HOOKS"
+
 printf '\nsmoke-agy-hooks-state: %d checks passed\n' "$pass"
