@@ -24,3 +24,25 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+
+  # The install surface has its own job because `pnpm check` is a SOURCE-tree floor: it
+  # can only ever prove a dev clone works. Every fence bug this repo has shipped —
+  # start.sh (0.12.1), the store-doctor (0.12.4), the plugin hook (0.12.5), the agy
+  # imprint plus three operator commands (0.12.7) — was green on that floor and dead once
+  # installed, because Node refuses type-stripping below node_modules. check-pack-install
+  # packs the real tarball, installs it, and drives the bins and commands from under
+  # node_modules. It was release-gate-only until 0.12.7, which is precisely why the class
+  # kept coming back. ~1 minute.
+  install-surface:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: ./run.sh check-pack-install

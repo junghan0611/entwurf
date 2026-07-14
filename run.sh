@@ -2520,6 +2520,81 @@ JS
   fi
   echo "[check-pack-install] installed agy imprint pass (compiled JS runs under node_modules; neutral response + record write)"
 
+  # 0.12.7 — installed OPERATOR COMMAND regression. `entwurf <cmd>` dispatches through
+  # run.sh, whose REPO_DIR is under node_modules once installed, so a raw-.ts entrypoint
+  # dies on the strip-types fence. These three are operator surfaces, not dev gates:
+  # doctor-pi-provider is the pi-ownership verdict, new-session-id is the alias that mints
+  # a garden citizen (docs/setup-clean-host.md tells operators to run the installed bin),
+  # and meta-bridge-prune is the store maintenance verb. All three shipped DEAD through
+  # 0.12.6 because the only installed smokes drove bins, never subcommands.
+  #
+  # Assert MEANING, not just the absence of the fence string: a command that regressed to
+  # a stub or an empty exit would still "not crash". So: the id must be well-formed, the
+  # doctor must reach its own verdict body, and prune must actually walk a 0-record store.
+  local installed_entwurf="$npmroot/node_modules/.bin/entwurf"
+  local op_agent="$npm_tmp/op-agent" op_out
+  mkdir -p "$op_agent/meta-sessions"
+
+  if ! op_out=$(HOME="$npmhome" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" new-session-id 2>&1); then
+    fail "[check-pack-install] installed 'entwurf new-session-id' FAILED under node_modules (strip-types fence or missing compiled twin):"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  # Same shape as SESSION_ID_RE (the garden id SSOT): <denote-stamp>-<6 hex>. A stub or a
+  # truncated id would still "not crash", so the gate reads the id, not just the exit code.
+  if ! printf '%s' "$op_out" | grep -qE '^[0-9]{8}T[0-9]{6}-[0-9a-f]{6}$'; then
+    fail "[check-pack-install] installed 'entwurf new-session-id' did not print a well-formed garden session id: $op_out"
+    return 1
+  fi
+
+  if ! op_out=$(HOME="$npmhome" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" doctor-pi-provider 2>&1); then
+    # A doctor may exit non-zero on an unadopted host — that is a VERDICT, not a crash.
+    # The fence, by contrast, kills it before any verdict body is printed.
+    if printf '%s' "$op_out" | grep -q ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING; then
+      fail "[check-pack-install] installed 'entwurf doctor-pi-provider' hit the node_modules strip-types fence:"
+      echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+      return 1
+    fi
+  fi
+  if ! printf '%s' "$op_out" | grep -q '\[pi-provider doctor\]' || ! printf '%s' "$op_out" | grep -q 'EFFECTIVE'; then
+    fail "[check-pack-install] installed 'entwurf doctor-pi-provider' never reached its verdict body (no scopes/EFFECTIVE report):"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+
+  if ! op_out=$(HOME="$npmhome" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" meta-bridge-prune "$op_agent/meta-sessions" 2>&1); then
+    fail "[check-pack-install] installed 'entwurf meta-bridge-prune' FAILED on a 0-record store:"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! printf '%s' "$op_out" | grep -q 'prune candidates' || ! printf '%s' "$op_out" | grep -q "store: $op_agent/meta-sessions"; then
+    fail "[check-pack-install] installed 'entwurf meta-bridge-prune' did not scan the store it was given:"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] installed operator commands pass (new-session-id id-shaped, doctor-pi-provider reaches its verdict, meta-bridge-prune walks a 0-record store)"
+
+  # A dev-only gate has NO compiled twin by design. Under an installed package run_ts must
+  # REFUSE it with a legible message — never fall back to raw .ts (that just re-raises the
+  # fence error) and never exit 0 (a silent no-op would let CI "pass" a gate it never ran).
+  local devgate_out devgate_rc=0
+  devgate_out=$(HOME="$npmhome" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" check-meta-session 2>&1) || devgate_rc=$?
+  if [ "$devgate_rc" -eq 0 ]; then
+    fail "[check-pack-install] a dev-only gate (check-meta-session) exited 0 from an installed package — it cannot have run; run_ts must refuse it"
+    return 1
+  fi
+  if printf '%s' "$devgate_out" | grep -q ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING; then
+    fail "[check-pack-install] a dev-only gate leaked the raw strip-types fence error instead of run_ts's refusal:"
+    echo "$devgate_out" | tail -6 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! printf '%s' "$devgate_out" | grep -q 'dev-clone-only surface'; then
+    fail "[check-pack-install] a dev-only gate under an installed package did not produce run_ts's refusal message:"
+    echo "$devgate_out" | tail -6 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] dev-only gate refusal pass (installed package refuses check-* legibly, no raw-.ts fallback, no silent exit 0)"
+
   # 0.12.4 — installed STORE-DOCTOR regression. meta-bridge-doctor.sh's full store
   # scan runs the prebuilt dist JS when it lives under node_modules (strip-types
   # refuses the .ts there — the same class as the bridge boot above). Before the dist
@@ -3227,6 +3302,13 @@ case "$cmd" in
     ;;
   check-shell-quote)
     check_shell_quote
+    ;;
+  check-install-surface)
+    # 0.12.7 — structural half of the node_modules strip-types fence: run_ts is the only
+    # crossing, every operator subcommand has a compiled twin, bin wrappers branch, dev
+    # gates stay out of the tarball, and offline smokes never touch the real $HOME.
+    # check-pack-install owns the dynamic half (it drives the installed commands).
+    run_ts scripts/check-install-surface.ts
     ;;
   check-entwurf-session-identity)
     check_entwurf_session_identity
