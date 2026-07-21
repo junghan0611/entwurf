@@ -155,15 +155,26 @@ entwurf install-meta-bridge
 entwurf doctor-meta-bridge
 ```
 
+> **Upgrades are not live-reload safe across this hook-owner cut.** Re-run `install-meta-bridge`, then restart **all already-open Claude Code sessions** before trusting send/receive. If a new hook runs under the old cached command, it deliberately writes no sender/receiver marker even though a meta-record may still land; reinstall pairs the artifact and command, and restart makes the native process load that pair.
+
 On an installed package (`.../node_modules/@junghanacs/entwurf`), the doctor must
 not try to strip-types-run raw `.ts` helpers or hooks. In the output, check for
-these 0.12.5 floor-regression signals:
+these floor-regression signals:
 
 ```text
-ok    cached SessionStart hook executes cleanly in an isolated temp agent dir
+ok    installed hook carries explicit shell-$PPID owner + exec topology contract
+ok    cached SessionStart command executes and keys its sender marker to the live host pid
+ok    <N> live Claude MCP process(es): sender + receiver owner join is live and record-backed
 ok    full store scan: no corrupt records, duplicate nativeSessionId, body/filename drift, or backend↔wakeMode contradiction
 ok    check-entwurf-v2-surface: shipped surface source present; exhaustive source-shape gate is a repo/release invariant (not run under node_modules)
 ```
+
+The live-process line is a warning when no matching Claude MCP child is open (or
+on a host without `/proc`), because only the static + synthetic checks are then
+possible; that WARN cannot diagnose the retained-wrapper failure. An `UNSUPPORTED`
+installed command needs reinstall; a failed live owner join after reinstall means
+the already-open Claude process still has the old hook definition in memory and
+must be restarted.
 
 If any of those sections reports `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`,
 the host is still running a pre-0.12.5 package or a broken tarball. Reinstall the

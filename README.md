@@ -195,11 +195,19 @@ entwurf install-meta-bridge
 entwurf doctor-meta-bridge
 ```
 
+> **Upgrade action:** after installing a package containing the explicit hook-owner carrier, run `entwurf install-meta-bridge` and restart **every already-open Claude Code session** before trusting send/receive. A new hook reached through an old cached command fails closed: it may still mint a garden record, but writes no sender/receiver marker. Reinstall materializes the matching command; restart makes live Claude processes load it.
+
 On npm/pnpm-installed packages, `doctor-meta-bridge` must use prebuilt JS for its
 store scan and defer repo-only source-shape gates; Node refuses strip-types for
-raw `.ts` helpers under `node_modules`. If the doctor reports
-`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, reinstall a current package before
-trusting the floor result.
+raw `.ts` helpers under `node_modules`. It also checks Claude's installed hook
+command carries the explicit shell-`$PPID` owner and, on Linux, verifies every live
+Claude MCP process joins to live sender/receiver markers. `owner topology is
+UNSUPPORTED` means reinstall the meta-bridge; a live-owner-join failure after that
+means restart the affected Claude session so it loads the new hook command. If no
+matching MCP child exists, this runtime check is only a WARN and cannot diagnose the
+broken session; the installed-command contract remains the blocking evidence. If the
+doctor reports `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, reinstall a current
+package before trusting the floor result.
 
 After upgrading a globally installed package, reinstall the native-harness surface you use before trusting it:
 

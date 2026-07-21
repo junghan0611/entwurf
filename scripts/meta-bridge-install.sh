@@ -109,8 +109,14 @@ cp "$REPO/pi/entwurf-capabilities.json" "$ASM/$PLUGIN/entwurf-capabilities.json"
 chmod +x "$ASM/$PLUGIN/scripts/doorbell.sh"
 # Bake the node abspath AND the hook entry filename into hooks.json — the two
 # templated surfaces (0.12.5: HOOK_ENTRY is meta-bridge-hook.js when installed,
-# .ts in a dev clone). mailbox / meta-record dirs resolve at runtime inside the
-# hook itself (<pi-agent-dir>, fixed ~/).
+# .ts in a dev clone). The committed command captures shell `$PPID` in
+# ENTWURF_META_HOOK_OWNER_PID, then starts with POSIX `exec`. The same Claude Code
+# version produced both a direct join and a retained `/bin/bash -c` wrapper; the
+# internal spawn trigger is unknown, so no host may rely on shell tail-exec. The
+# explicit, ancestry-validated carrier joins both paths on the Claude/MCP owner pid,
+# while exec normalizes the common case. Dropping either contract is a gate failure.
+# mailbox / meta-record dirs resolve at runtime inside the hook itself
+# (<pi-agent-dir>, fixed ~/).
 # The plugin owns ONLY the wake/record hooks; the receiver-side entwurf_inbox_read
 # tool is NOT the plugin's job. It comes from USER-scope entwurf-bridge MCP
 # wiring (`claude mcp add -s user ...`), never a plugin .mcp.json duplicate.

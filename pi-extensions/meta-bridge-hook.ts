@@ -44,6 +44,7 @@ import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
 	type MetaReceiverArmProvenance,
+	parentPid,
 	upsertMetaSession,
 	writeMetaReceiverMarker,
 	writeMetaSenderMarker,
@@ -91,6 +92,39 @@ function armProvenanceFor(eventName: string): MetaReceiverArmProvenance | null {
 	if (eventName === "SessionStart") return "session-start";
 	if (eventName === "CwdChanged") return "cwd-changed";
 	if (eventName === "FileChanged") return "file-changed";
+	return null;
+}
+
+const META_HOOK_OWNER_PID_ENV = "ENTWURF_META_HOOK_OWNER_PID";
+
+/**
+ * Resolve the native host pid carried explicitly by hooks.json's shell command.
+ * `$PPID` is expanded by Claude's command-hook shell BEFORE `exec` replaces that
+ * shell. It names Claude whether that shell would tail-exec Node or would otherwise
+ * remain as the retained wrapper observed in Claude's real hook spawn path:
+ *
+ *   tail-exec path: hook node → Claude
+ *   retained-shell path: hook node → shell → Claude
+ *
+ * The ancestry check is load-bearing. A configured number is not trusted merely
+ * because its process is alive: it must actually be an ancestor of this hook. This
+ * keeps the old "blind grandparent = long-lived login shell" false-positive closed.
+ */
+function resolveMetaHookOwnerPid(): number | null {
+	const raw = process.env[META_HOOK_OWNER_PID_ENV];
+	if (!raw || !/^\d+$/.test(raw)) return null;
+	const candidate = Number(raw);
+	if (!Number.isSafeInteger(candidate) || candidate <= 0) return null;
+
+	const seen = new Set<number>();
+	let cursor = process.pid;
+	for (let depth = 0; depth < 16; depth++) {
+		const parent = parentPid(cursor);
+		if (parent === null || seen.has(parent)) return null;
+		if (parent === candidate) return candidate;
+		seen.add(parent);
+		cursor = parent;
+	}
 	return null;
 }
 
@@ -163,26 +197,22 @@ function main(): void {
 		emit({});
 	}
 
-	// Sender marker, keyed by the shared Claude Code parent pid: the user-scope
-	// MCP child (same parent) reads it at entwurf_v2 send time to promote this
+	// Sender marker, keyed by the shared Claude Code owner pid: the user-scope
+	// MCP child (same owner, even when the hook has a shell wrapper) reads it at
+	// entwurf_v2 send time to promote this
 	// session from anonymous external-mcp to a REPLYABLE meta-session sender —
 	// process ancestry, not cwd inference (same repo + multiple sessions would be
 	// ambiguous). Best-effort: a failed marker only costs reply-addressability
 	// (WARN), it does not break the session or the receiver path.
 	//
-	// SE-1/SE-2 (dual-owner fix): write ONLY for the direct parent (process.ppid =
-	// the Claude CLI that ran this hook, verified the native tree is direct — the
-	// plugin host is not in between). The old code ALSO wrote a marker for the
-	// grandparent. That grandparent is the login shell (e.g. bash under ghostty/i3),
-	// which OUTLIVES the Claude session: when Claude exits, the grandparent marker's
-	// ownerStartKey still matches a live pid, so it passes readMetaSenderMarker's
-	// reuse guard and the dead session keeps looking like a live, replyable receiver
-	// — a false-positive "active receiver" leak. The owner must be the watchPaths
-	// subscriber (the Claude CLI), nothing higher. If a stray topology means the MCP
-	// child's shared ancestor is not process.ppid, that resolves to "no marker"
-	// (fail-closed, honest) rather than a wrong-but-live grandparent identity.
-	const ownerPid = process.ppid;
-	if (typeof ownerPid === "number" && ownerPid > 0) {
+	// SE-1/SE-2 owner join: hooks.json explicitly captures its shell's `$PPID`
+	// (Claude) before `exec`, and resolveMetaHookOwnerPid verifies that pid is truly
+	// in this hook's ancestry. This supports both possible shell behaviors without
+	// attributing either one to an OS/host or guessing that every grandparent is
+	// Claude. Missing/forged carrier = no marker + loud hook evidence, never a marker
+	// for a short-lived wrapper or long-lived login shell.
+	const ownerPid = resolveMetaHookOwnerPid();
+	if (ownerPid !== null) {
 		try {
 			writeMetaSenderMarker({ backend: "claude-code", gardenId, nativeSessionId: sessionId, cwd, ownerPid });
 			logLine("INFO", `sender marker ${ownerPid} -> ${gardenId} (event=${eventName})`);
@@ -192,6 +222,11 @@ function main(): void {
 				`sender marker write failed (event=${eventName}, pid=${ownerPid}, garden=${gardenId}): ${err instanceof Error ? err.message : String(err)}`,
 			);
 		}
+	} else {
+		logLine(
+			"ERROR",
+			`owner pid carrier missing/invalid (${META_HOOK_OWNER_PID_ENV}); sender/receiver identity not armed (event=${eventName}, garden=${gardenId})`,
+		);
 	}
 
 	// watchPaths is emittable only from SessionStart / CwdChanged / FileChanged.
@@ -208,19 +243,19 @@ function main(): void {
 		if (!fs.existsSync(signal)) fs.writeFileSync(signal, "", { mode: 0o600 });
 		logLine("INFO", `armed watch ${signal}`);
 		// Receiver presence marker (SE-2): written on the arm-capable hook path that
-		// emits watchPaths, keyed by garden id with the watch owner pid (= the Claude
-		// CLI, process.ppid — same single owner as the sender marker, never the
-		// grandparent). It records that a LIVE owner reached the watch-arm emit; it is
-		// not proof the host ack'd the watch registration. This is what lets a sender
+		// emits watchPaths, keyed by garden id with the validated Claude owner pid from
+		// the explicit shell `$PPID` carrier — same single owner as the sender marker,
+		// independent of whether the hook shell retained a process or tail-exec'd Node.
+		// It records that a LIVE owner reached the watch-arm emit; it is not proof the
+		// host ack'd the watch registration. This is what lets a sender
 		// tell a live receiver from a terminated one whose record still lingers.
 		// Best-effort: a failed/skipped marker only costs deliverability detection
 		// (WARN), it does not break the arm. An unknown event maps to null provenance →
 		// no marker (fail-closed: never claim an active receiver we cannot back).
-		const ownerPid = process.ppid;
 		const armProvenance = armProvenanceFor(eventName);
 		if (armProvenance === null) {
 			logLine("WARN", `receiver marker skipped — non-arm event ${eventName} (garden=${gardenId})`);
-		} else if (typeof ownerPid === "number" && ownerPid > 0) {
+		} else if (ownerPid !== null) {
 			try {
 				writeMetaReceiverMarker({
 					gardenId,
@@ -236,6 +271,11 @@ function main(): void {
 					`receiver marker write failed (event=${eventName}, garden=${gardenId}): ${err instanceof Error ? err.message : String(err)}`,
 				);
 			}
+		} else {
+			// Keep this ERROR after `INFO armed watch`: the hook-log doctor's recovery
+			// rule treats a later arm as recovery, but an armed file watch without a live
+			// owner marker is still not a deliverable garden receiver.
+			logLine("ERROR", `receiver marker skipped — no validated Claude owner (event=${eventName}, garden=${gardenId})`);
 		}
 		emit({
 			hookSpecificOutput: {

@@ -86,7 +86,7 @@ Usage:
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-meta-dual-read        # deterministic gate (0.11 Stage 0 step 3D-1): v2 write shape (serializeMetaIdentity) + dual-read dispatcher (parseMetaRecordAny/parseMetaIdentity) + write→read round-trip, pure, no API
   ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
-  ./run.sh check-meta-receiver-marker # deterministic gate (SE-2 slice 2b): meta-receiver presence marker — write/read round-trip garden-id keyed + atomic 0600, dead-owner start-key guard reads null, armProvenance limited to arm-capable events (UserPromptSubmit can't mint presence), reader doesn't gate on record existence
+  ./run.sh check-meta-receiver-marker # deterministic gate (SE-2 + clean-host owner join): receiver marker round-trip/start-key/provenance + real hook command under BOTH tail-exec and retained-shell topologies; explicit shell-$PPID carrier must key sender+receiver to the live Claude owner, never wrapper/login-shell
   ./run.sh check-meta-migration        # deterministic gate (0.11 Stage 0 step 3D-4 commit2): v1→v2 delivery-receipt migration (per-field state-wins, 3 timestamps, no-op when nothing to fill) + crash-order inside upsert (migrate before v2 rewrite; drift throws with record still v1), no API
   ./run.sh check-meta-dual-consumers   # deterministic gate (0.11 Stage 0 step 3D-4): delivery-agnostic dual-read seam — readMetaIdentityByGardenId + scanIdentityByNativeId read v1 AND v2, cross-schema duplicate = ambiguity throw (G1); v1-only raw readers remain for v1-fixture gates, no API
   ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const), slot stays (3D-4), no API
@@ -2231,6 +2231,14 @@ _check_pack_install_impl() {
 
   printf '%s\n' '{ "name": "entwurf-install-smoke", "version": "0.0.0", "private": true }' > "$tmp/package.json"
 
+  # pi-agent-core is pinned even though we never import it: pi-coding-agent depends
+  # on it by CARET (`^0.80.7`), so with no lockfile in this fresh temp project it
+  # floats to whatever pi published last — and that newer core then drags a NESTED
+  # pi-ai of its own. Measured 2026-07-21: pinning only the three we import left
+  # pi-agent-core@0.80.10 + pi-ai@0.80.10 in the tree while the gate still announced
+  # "pinned pi 0.80.7". The gate would then be verifying an UNVERIFIED runtime — the
+  # exact class this cut exists to close. Pin every @earendil-works package that
+  # constitutes the pi runtime, not just the ones whose types we touch.
   echo "[check-pack-install] pnpm add into $tmp (with 0.80.x peers + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
@@ -2238,12 +2246,27 @@ _check_pack_install_impl() {
     "@earendil-works/pi-ai@0.80.7" \
     "@earendil-works/pi-coding-agent@0.80.7" \
     "@earendil-works/pi-tui@0.80.7" \
+    "@earendil-works/pi-agent-core@0.80.7" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
     echo "$install_log" | tail -10 | sed 's/^/    /' >&2
     return 1
   }
+
+  # A pin is a wish until the resolved tree is read back. Assert it: EVERY
+  # @earendil-works pi package present — direct or transitive, top level or nested —
+  # must be the pinned 0.80.7. Anything else means an unpinned caret floated and the
+  # rest of this gate would be exercising a runtime nobody verified, while still
+  # printing "pinned pi 0.80.7". Fail loud instead of proving the wrong floor.
+  local leaked_pi
+  leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | grep '^@earendil-works+pi-' | grep -v '@0\.80\.7' || true)
+  if [ -n "$leaked_pi" ]; then
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.80.7):"
+    printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works pi package is 0.80.7"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the
@@ -2480,6 +2503,10 @@ SH
     fail "[check-pack-install] installed hooks.json references a raw .ts entry or an unbaked placeholder (__HOOK_ENTRY__/__NODE_BIN__): $installed_hooks_json"
     return 1
   fi
+  if [ "$(grep -c 'ENTWURF_META_HOOK_OWNER_PID=\$PPID exec .*meta-bridge-hook\.js' "$installed_hooks_json" || true)" -ne 3 ]; then
+    fail "[check-pack-install] installed hooks.json lost the explicit shell-\$PPID owner + exec contract on one of SessionStart/CwdChanged/UserPromptSubmit: $installed_hooks_json"
+    return 1
+  fi
   if [ -e "$npm_pkg/pi/meta-bridge/.assembled/entwurf-meta-receive" ]; then
     fail "[check-pack-install] installed meta-bridge still assembled inside the versioned package store: $npm_pkg/pi/meta-bridge/.assembled"
     return 1
@@ -2497,7 +2524,7 @@ SH
   cp "$stable_asm/entwurf-meta-receive/entwurf-capabilities.json" "$nm_probe/entwurf-capabilities.json"
   local probe_env='{"session_id":"pack-probe","transcript_path":"/tmp/x.jsonl","cwd":"/tmp","hook_event_name":"SessionStart","model":{"id":"probe"}}'
   local probe_out
-  if probe_out="$(printf '%s' "$probe_env" | env PI_CODING_AGENT_DIR="$(mktemp -d)" CLAUDE_PLUGIN_ROOT="$nm_probe" node "$nm_probe/meta-bridge-hook.js" 2>&1)" && printf '%s' "$probe_out" | grep -q hookSpecificOutput; then
+  if probe_out="$(printf '%s' "$probe_env" | env PI_CODING_AGENT_DIR="$(mktemp -d)" CLAUDE_PLUGIN_ROOT="$nm_probe" ENTWURF_META_HOOK_OWNER_PID="$$" node "$nm_probe/meta-bridge-hook.js" 2>&1)" && printf '%s' "$probe_out" | grep -q hookSpecificOutput; then
     : # compiled hook crosses the node_modules strip-types fence safely
   else
     fail "[check-pack-install] compiled hook failed to run under node_modules with plain node: $(printf '%s' "$probe_out" | tr '\n' ' ' | cut -c1-200)"
@@ -2509,7 +2536,7 @@ SH
   # capture stderr and require the exact ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING.
   cp "$npm_pkg/pi-extensions/meta-bridge-hook.ts" "$nm_probe/meta-bridge-hook.ts"
   local ts_out ts_rc
-  ts_out="$(printf '%s' "$probe_env" | env PI_CODING_AGENT_DIR="$(mktemp -d)" CLAUDE_PLUGIN_ROOT="$nm_probe" node "$nm_probe/meta-bridge-hook.ts" 2>&1)" && ts_rc=0 || ts_rc=$?
+  ts_out="$(printf '%s' "$probe_env" | env PI_CODING_AGENT_DIR="$(mktemp -d)" CLAUDE_PLUGIN_ROOT="$nm_probe" ENTWURF_META_HOOK_OWNER_PID="$$" node "$nm_probe/meta-bridge-hook.ts" 2>&1)" && ts_rc=0 || ts_rc=$?
   if [ "${ts_rc:-0}" -eq 0 ]; then
     fail "[check-pack-install] raw .ts hook UNEXPECTEDLY ran under node_modules — strip-types fence moved; the compiled-hook rationale must be revisited"
     rm -rf "$nm_probe"; return 1

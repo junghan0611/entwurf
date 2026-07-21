@@ -1,17 +1,25 @@
-# NEXT — v0.12.8 수선 컷
+# NEXT — v0.12.7-1 체크포인트 → v0.12.8 수선 컷
 
 > NEXT는 부트 섹터다. 닫힌 역사는 CHANGELOG/git에, 장기 방향은 ROADMAP/이슈에 둔다.
 
-## NOW — 0.12.8은 수선 컷이다. 범위 SSOT는 **#49**
+## NOW — 0.12.8은 수선 컷이다. 범위 SSOT는 **#49**, hook 토폴로지·하네스 축의 SSOT는 **#51**
 
 - **Stem:** 0.12.7 출하 하루 만에 **런타임 축이 우리 밑에서 움직였다.** 전역 pi가 `0.80.6`으로 가 있는데 리포 pin은 `0.80.3`이었다. 그 격차가 CI RED · `pit` 경고 · "게이트가 검증하는 런타임이 게이트가 선언한 런타임이 아님" 세 형태로 동시에 터졌다. 0.12.8은 새 능력을 더하지 않고 **바닥이 선언대로인지**만 맞춘다. `0.13.0`은 계속 cortex(#48).
 - **범위·근거·기각된 선택지는 전부 #49에 있다.** 여기엔 다음 한 걸음만 둔다.
 
-### 실행 순서 — ~~A~~ → ~~B~~ → **C** → E
+### 실행 순서 — **0.12.7-1 체크포인트(커밋됨)** → exec form 판정 → clean-host acceptance → ~~A~~ → ~~B~~ → C → E
+
+**교차검수는 끝났고 Claude meta-owner 수선은 `0.12.7-1`로 커밋했다 — 단 계약은 잠정이다. 축이 #51 v3에서 한 번 더 움직였다.** 어느 clean host의 완전 설치에서 hook Node의 `process.ppid`가 Claude가 아니라 즉시 죽는 `/bin/bash -c` wrapper였고, sender/receiver marker가 전부 stale이 됐다. 같은 Claude Code 2.1.216의 노트북에서는 direct owner join이 관측됐지만, 일반 `bash -c 'node …'`는 그 clean host에서도 tail-exec한다. 따라서 차이를 NixOS-vs-Ubuntu 속성으로 돌릴 근거는 없다. **확립된 사실은 Claude의 실제 hook spawn 경로에서 retained wrapper가 발생했다는 것뿐이고, 유발 조건은 미규명이다. 어느 호스트도 shell tail-exec을 안전 전제로 삼을 수 없다.**
+- **커밋된 수선(잠정):** hooks.json이 shell `$PPID`를 `ENTWURF_META_HOOK_OWNER_PID`로 명시 전달한 뒤 `exec`; hook은 그 pid가 실제 조상일 때만 sender/receiver owner로 신뢰한다. parent/grandparent를 눈감고 고르는 방식은 금지(전자는 transient wrapper, 후자는 장수 login shell 가능). `check-meta-receiver-marker`가 tail-exec과 retained-shell을 실제 child process로 둘 다 구동한다. doctor는 설치 command 계약 + Linux live MCP↔marker join을 검사한다. **프로덕션 런타임 변경은 31줄 추가/21줄 삭제뿐이고, 나머지는 전부 검증면이다.**
+- **이 계약은 확정이 아니다 — #51이 SSOT다.** #51 v3가 Claude 2.1.216 바이너리와 공식 문서에서 **`exec form`(shell 없는 `args` 배열)**을 찾았다. shell이 없으면 wrapper도 없으니 `process.ppid == Claude pid`가 조건부 관찰이 아니라 **구조적 귀결**이 되고, 그때 `$PPID` carrier는 통째로 불필요해진다. 공식 문서는 경로 placeholder를 쓰는 hook에 exec form을 **권고**하는데 현재 hooks.json은 그 반대편이다. `$PPID`와 `exec`는 shell 없이 의미가 없으므로 지금 수선은 **shell form에 묶이는 선택**이다. #51의 미검증 3개(버전 floor의 실패 모드가 fail-loud인지 · `asyncRewake`/`timeout` 병행 가부 · 실제 ppid 실증)가 답해지기 전에 계약을 굳히지 않는다.
+- **어제의 "출하 blocker"는 실재하지 않았다 — 두 겹의 오진이었다.** (1) upstream partial publish가 아니다: `@aws-sdk/token-providers@3.1088.0`도 `@earendil-works/pi-*@0.80.10`도 tarball까지 **실재한다**. 실패는 **이 호스트의 낡은 pnpm 메타데이터 캐시**가 새 버전을 못 본 것이었다(캐시가 본 최신 3.1087.0 vs 라이브 3.1091.0). (2) 그리고 캐시를 갱신하면 blocker 대신 **더 나쁜 것**이 들어온다 — 게이트가 pi 런타임 4개 중 3개만 pin해서 `pi-agent-core`가 caret로 `0.80.10`까지 떠오르고 중첩 `pi-ai@0.80.10`까지 끌고 왔다. **게이트는 "pinned pi 0.80.7"이라 찍으면서 미검증 런타임 위에서 돌고 있었다.** 낡은 캐시가 우연히 그 유입을 막고 있었을 뿐이다. → `check-pack-install`이 `pi-agent-core@0.80.7`을 함께 pin하고, **해석된 트리를 읽어 0.80.7 이외의 `@earendil-works` 패키지가 하나라도 있으면 fail loud** 한다(뮤테이션 확인: 3개-pin 트리에서 `pi-agent-core@0.80.10`·`pi-ai@0.80.10` 검출).
+- **검증:** `pnpm check` 전체 green(❌ 0). `check-meta-receiver-marker` 46 checks(두 shell topology + missing-carrier fail-closed 포함). `check-pack-install` green — `junghanacs-entwurf-0.12.7-1.tgz`, `pi runtime tree pin verified`, `loader runtime: pinned pi 0.80.7`, self-fence pass. **단 이 green은 격리 `XDG_CACHE_HOME`에서 얻었다.** 운영자 캐시로는 아직 `token-providers@3.1088.0`에서 RED다.
+- **다음 한 걸음 — 순서대로.** (1) **운영자 pnpm 메타데이터 캐시 갱신** 후 `check-pack-install`을 운영자 환경에서 재확인(캐시는 재생성되므로 저위험이지만 운영자 환경이라 승인 대기). (2) #51 미검증 3개를 실행해서 확인 — 추론 금지. (3) exec form 판정에 따라 계약 확정 또는 전환. (4) clean host에 `0.12.7-1` 설치 + **모든 기존 Claude 재시작** 후 static contract + live join 확인. doctor의 live-join은 해당 agent-dir에 MCP child가 없으면 WARN이라 장애 검출력이 없다 — 그 경우 설치 command의 정적 contract 검사가 blocking evidence다.
+- **미결 — pi pin을 어디까지 진짜로 만들 것인가.** 지금 리포의 0.80.7 고정은 `pnpm-lock.yaml`이 **우연히** 잡고 있다. `package.json`은 `pi-agent-core`를 devDeps에도 peerDeps에도 **선언하지 않는다**. 그리고 `peerDependencies: ">=0.80.7 <0.81"`은 소비자에게 **미검증 0.80.10을 허용**하고, `docs/setup-clean-host.md:126`의 전역 설치도 같은 이유로 0.80.10을 끌어올 수 있다. lockfile·`check-dep-versions`까지 파급되므로 운영자 판단으로 남긴다.
 
 **A·B는 닫혔다** (`33b3810`/`76f14c6`, `52d515b` — 둘 다 main CI green). 아래 RECENT 참조. 한 항목씩 커밋·푸시하고 CI로 확인한 뒤 다음으로 넘어간다.
 
-1. **C — fresh mint와 strict resume 분리. ← 다음 한 걸음.** **착수 전 [§C 최종 범위 코멘트](https://github.com/junghan0611/entwurf/issues/49#issuecomment-4967496388)를 읽는다 — 그것이 C의 SSOT이고, 본문 §C의 `discriminated union` 요구와 builder의 `sessionId` 유지는 그 코멘트가 폐기했다.** main에서 간다(브랜치 없음). pi는 건드리지 않는다. 외부 주소·plan·marker·socket의 권위는 계속 gid이고, v2 rail 내부 handoff만 고친다.
+1. **C — fresh mint와 strict resume 분리.** **착수 전 [§C 최종 범위 코멘트](https://github.com/junghan0611/entwurf/issues/49#issuecomment-4967496388)를 읽는다 — 그것이 C의 SSOT이고, 본문 §C의 `discriminated union` 요구와 builder의 `sessionId` 유지는 그 코멘트가 폐기했다.** main에서 간다(브랜치 없음). pi는 건드리지 않는다. 외부 주소·plan·marker·socket의 권위는 계속 gid이고, v2 rail 내부 handoff만 고친다.
    - **버그.** parent가 이미 찾은 authoritative `sessionFile`을 버리고 child에게 `--session-id <gid>`로 두 번째 lookup을 시킨다. parent의 고정 `SESSIONS_BASE`와 child의 `sessionDir` 해석이 갈리면 같은-gid 빈 세션/socket이 생겨 false-success한다.
    - **처방.** v2 child는 exact `--session <absolute-file>`. **builder는 v2 전용이 된다** — `variant`와 legacy arm을 **삭제**한다(그 arm의 production caller는 애초에 없었다: 헤더가 지목한 `entwurf-async.ts`는 존재하지 않고, `entwurf-core.ts:1908`이 인라인으로 만들며, 그 v1 함수들은 caller 0). `entwurf-core.ts:1908`은 **그대로 둔다** — `entwurf-core.ts`는 MCP strip-types(`.ts` 필수) ↔ root tsc(`.ts` 금지) 이중 경계에 끼여 있어 **resume builder를 import할 수 없다**(Node는 `.js`→`.ts`를 remap하지 않는다. `mcp/tsconfig.json` 주석 참조). dead v1 제거는 **별도 routing-cleanup**.
    - **marker/header pre-socket guard를 넣는다.** 지금 마커 검사는 entwurf-tag 분기 안에만 있고 소켓이 선 뒤에 돈다 — 그래서 loaded header가 **다른 gid의 일반 resident**면 남의 세션에 모델 턴이 들어간다. `startControlServer()` 전에 `marker ≠ loaded id` → hard-exit. 남는 한계는 **같은 gid·다른 내용 교체**뿐이다(inode/digest 영역, C 범위 밖).

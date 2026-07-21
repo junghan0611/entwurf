@@ -137,32 +137,67 @@ fi
 echo "[baked node path still resolves (NixOS store-churn guard)]"
 CACHE_HOOKS="$(ls "$CLAUDE_CFG/plugins/cache/$MKT_NAME/$PLUGIN/"*/hooks/hooks.json 2>/dev/null | head -1 || true)"
 if [ -n "$CACHE_HOOKS" ]; then
-  # `[ -n "$CACHE_HOOKS" ]` proves the file EXISTS, not that the pattern matches.
-  # If a future hooks.json drifts the command format, grep finds nothing, exits 1,
-  # and under `set -euo pipefail` the doctor would abort here instead of reaching
-  # the parse-drift diagnostic below. Swallow grep's nonzero in-pipe (same idiom as
-  # line 158) so BAKED="" routes to that bad(...): an installed hooks.json exists but
-  # the doctor cannot read its load-bearing hook command, so the store-churn guard is
-  # blind — a verify-impossible state must fail loud, not pass as a soft warn (A3b).
-  # Match either hook artifact (0.12.5): installed ships meta-bridge-hook.js, dev
-  # clones meta-bridge-hook.ts. Capture the whole command so we run the SAME entry
-  # file the live hook runs (never a hardcoded extension that drifts from install).
-  HOOK_CMD="$({ grep -oE '"command": "[^ ]+ \$\{CLAUDE_PLUGIN_ROOT\}/meta-bridge-hook\.(ts|js)"' "$CACHE_HOOKS" || true; } | head -1)"
-  BAKED="$(printf '%s' "$HOOK_CMD" | sed -E 's/.*"command": "([^ ]+) .*/\1/')"
-  HOOK_FILE="$(printf '%s' "$HOOK_CMD" | sed -E 's#.*/([^/"]+)"$#\1#')"
+  # Parse the exact SessionStart command as JSON, not with a whitespace-sensitive
+  # grep. The `$PPID` carrier + leading `exec` are identity/liveness wiring: on an
+  # observed installed host Claude retained `/bin/bash -c`, so old `node hook.js`
+  # commands wrote markers under the wrapper's dead pid while the MCP looked under
+  # Claude. A doctor that only checked the node path called that broken state PASS.
+  if ! command -v python3 >/dev/null; then
+    BAKED=""
+    HOOK_FILE=""
+    HOOK_COMMAND=""
+    bad "cannot inspect installed hook owner topology: python3 is missing (toolchain failure above); topology was NOT classified"
+  elif HOOK_PARSE="$(python3 - "$CACHE_HOOKS" <<'PY' 2>&1
+import json, re, sys
+p = sys.argv[1]
+try:
+    d = json.load(open(p, encoding="utf-8"))
+    command = d["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+except Exception as exc:
+    raise SystemExit(f"cannot read SessionStart command: {exc}")
+m = re.fullmatch(
+    r"ENTWURF_META_HOOK_OWNER_PID=\$PPID exec (\S+) \$\{CLAUDE_PLUGIN_ROOT\}/(meta-bridge-hook\.(?:ts|js))",
+    command,
+)
+if not m:
+    raise SystemExit(f"missing explicit $PPID owner carrier + exec contract: {command!r}")
+print(m.group(1))
+print(m.group(2))
+print(command)
+PY
+)"; then
+    BAKED="$(printf '%s\n' "$HOOK_PARSE" | sed -n '1p')"
+    HOOK_FILE="$(printf '%s\n' "$HOOK_PARSE" | sed -n '2p')"
+    HOOK_COMMAND="$(printf '%s\n' "$HOOK_PARSE" | sed -n '3p')"
+    ok "installed hook carries explicit shell-\$PPID owner + exec topology contract"
+  else
+    BAKED=""
+    HOOK_FILE=""
+    HOOK_COMMAND=""
+    bad "installed hook owner topology is UNSUPPORTED: $HOOK_PARSE. Re-run ./run.sh install-meta-bridge; existing Claude sessions must then restart."
+  fi
+
   if [ -n "$BAKED" ] && [ -x "$BAKED" ]; then
     ok "baked node exists + executable: $BAKED"
     CACHE_ROOT="$(cd "$(dirname "$CACHE_HOOKS")/.." && pwd)"
     TMP_AGENT="$(mktemp -d 2>/dev/null || mktemp -d -t entwurf-doctor-hook)"
     HOOK_ENV='{"session_id":"doctor-synthetic-native","transcript_path":"/tmp/entwurf-doctor-synthetic-transcript.jsonl","cwd":"/tmp","hook_event_name":"SessionStart","model":{"id":"doctor-model"}}'
-    if HOOK_OUT="$(printf '%s' "$HOOK_ENV" | env PI_CODING_AGENT_DIR="$TMP_AGENT" CLAUDE_PLUGIN_ROOT="$CACHE_ROOT" "$BAKED" "$CACHE_ROOT/$HOOK_FILE" 2>&1)" && printf '%s' "$HOOK_OUT" | grep -q 'hookSpecificOutput'; then
-      ok "cached SessionStart hook executes cleanly in an isolated temp agent dir"
+    printf '%s' "$HOOK_ENV" > "$TMP_AGENT/hook-input.json"
+    # Drive the SAME shell command Claude loaded. Run it as a foreground child (not
+    # a pipeline/command-substitution grandchild), so inner `$PPID` is this still-live
+    # doctor shell (`$$`). The marker key proves the owner join, not merely hook output.
+    if env PI_CODING_AGENT_DIR="$TMP_AGENT" CLAUDE_PLUGIN_ROOT="$CACHE_ROOT" bash -c "$HOOK_COMMAND" \
+         < "$TMP_AGENT/hook-input.json" > "$TMP_AGENT/hook-output.txt" 2>&1 \
+       && grep -q 'hookSpecificOutput' "$TMP_AGENT/hook-output.txt" \
+       && [ -f "$TMP_AGENT/meta-senders/claude-code/$$.json" ]; then
+      ok "cached SessionStart command executes and keys its sender marker to the live host pid"
     else
-      bad "cached SessionStart hook failed to execute — stale plugin cache / unsupported TS syntax / broken bundle. Re-run install-meta-bridge from the intended surface. Detail: $(printf '%s' "$HOOK_OUT" | tr '\n' ' ' | cut -c1-300)"
+      bad "cached SessionStart command failed owner-join execution — stale plugin cache / unsupported hook topology / broken bundle. Re-run install-meta-bridge. Detail: $(tr '\n' ' ' < "$TMP_AGENT/hook-output.txt" | cut -c1-300)"
     fi
     rm -rf "$TMP_AGENT" 2>/dev/null || true
-  elif [ -n "$BAKED" ]; then bad "baked node path is DEAD (nix GC / version bump?): $BAKED — re-run ./run.sh install-meta-bridge"
-  else bad "could not parse baked node path from $CACHE_HOOKS — hook command format drift; doctor cannot verify the NixOS store-churn guard. Re-run ./run.sh install-meta-bridge or update the doctor parser."; fi
+  elif [ -n "$BAKED" ]; then
+    bad "baked node path is DEAD (nix GC / version bump?): $BAKED — re-run ./run.sh install-meta-bridge"
+  fi
 else
   warn "no installed hooks.json in cache (plugin not installed?)"
 fi
@@ -291,6 +326,120 @@ else
   else
     warn "no meta-records yet (plugin not installed)"
   fi
+fi
+
+# Runtime complement to the installed-command contract above. On Linux, inspect
+# every live entwurf MCP process rooted in THIS agent dir and prove its candidate
+# owner pid has a live, record-backed sender marker plus the matching receiver
+# marker. This catches the observed retained-wrapper failure when an MCP child is
+# present: reinstall updated cache files, but an already-running Claude process still executes the old in-memory hook and
+# keeps writing dead wrapper pids. A restart is then required, not another install.
+echo "[live Claude MCP owner join]"
+if command -v python3 >/dev/null; then
+  if JOIN_OUT="$(python3 - "$AGENT" "$META_SESSIONS" <<'PY' 2>&1
+import json, os, sys
+from pathlib import Path
+
+agent = Path(sys.argv[1]).expanduser().resolve()
+store = Path(sys.argv[2]).expanduser().resolve()
+proc = Path("/proc")
+if not proc.is_dir():
+    print("/proc unavailable; static command + synthetic owner-join checks only")
+    raise SystemExit(2)
+
+def stat_fields(pid):
+    text = Path(f"/proc/{pid}/stat").read_text()
+    return text[text.rfind(")") + 2:].split()
+
+def parent(pid):
+    try: return int(stat_fields(pid)[1])
+    except Exception: return None
+
+def start_key(pid):
+    try: return "linux:" + stat_fields(pid)[19]
+    except Exception: return ""
+
+def process_agent(env):
+    raw = env.get("PI_CODING_AGENT_DIR")
+    home = env.get("HOME", str(Path.home()))
+    if raw:
+        if raw == "~": raw = home
+        elif raw.startswith("~/"): raw = str(Path(home) / raw[2:])
+        return Path(raw).resolve()
+    return (Path(home) / ".pi" / "agent").resolve()
+
+bridges = []
+for p in proc.glob("[0-9]*"):
+    try:
+        pairs = p.joinpath("environ").read_bytes().split(b"\0")
+        env = {k.decode(): v.decode(errors="replace") for x in pairs if b"=" in x for k, v in [x.split(b"=", 1)]}
+        if env.get("ENTWURF_BRIDGE_REQUIRE_META_SENDER") != "1": continue
+        if env.get("ENTWURF_BRIDGE_EXTERNAL_AGENT_ID") != "external-mcp/claude-code": continue
+        if process_agent(env) != agent: continue
+        bridges.append((int(p.name), parent(int(p.name))))
+    except (OSError, ValueError):
+        continue
+if not bridges:
+    print("no live Claude entwurf MCP process for this agent dir; open/restart Claude to obtain runtime evidence")
+    raise SystemExit(2)
+
+records = {}
+for f in store.glob("*.meta.json"):
+    try:
+        d = json.loads(f.read_text())
+        if d.get("backend") == "claude-code" and isinstance(d.get("gardenId"), str): records[d["gardenId"]] = d
+    except Exception:
+        pass  # the full store doctor reports corruption separately
+
+failures = []
+for bridge_pid, bridge_parent in bridges:
+    candidates = []
+    if bridge_parent: candidates.append(bridge_parent)
+    grand = parent(bridge_parent) if bridge_parent else None
+    if grand and grand not in candidates: candidates.append(grand)
+    live = []
+    for owner in candidates:
+        f = agent / "meta-senders" / "claude-code" / f"{owner}.json"
+        try:
+            d = json.loads(f.read_text())
+            if d.get("ownerPid") == owner and d.get("ownerStartKey") == start_key(owner) and start_key(owner):
+                live.append(d)
+        except Exception:
+            pass
+    gids = {d.get("gardenId") for d in live if isinstance(d.get("gardenId"), str)}
+    if len(gids) != 1:
+        failures.append(f"bridge pid={bridge_pid} owner-candidates={candidates}: live sender garden ids={sorted(gids)}")
+        continue
+    gid = next(iter(gids))
+    sender = next(d for d in live if d.get("gardenId") == gid)
+    record = records.get(gid)
+    if not record or record.get("nativeSessionId") != sender.get("nativeSessionId"):
+        failures.append(f"bridge pid={bridge_pid} owner={sender.get('ownerPid')}: sender {gid} is not record-backed")
+        continue
+    try:
+        receiver = json.loads((agent / "meta-receivers" / f"{gid}.json").read_text())
+    except Exception:
+        receiver = {}
+    owner = sender.get("ownerPid")
+    if receiver.get("ownerPid") != owner or receiver.get("ownerStartKey") != start_key(owner) or receiver.get("nativeSessionId") != sender.get("nativeSessionId"):
+        failures.append(f"bridge pid={bridge_pid} owner={owner}: receiver marker for {gid} is absent/stale/mismatched")
+if failures:
+    print("; ".join(failures))
+    raise SystemExit(1)
+print(f"{len(bridges)} live Claude MCP process(es): sender + receiver owner join is live and record-backed")
+PY
+)"; then
+    ok "$JOIN_OUT"
+  else
+    JOIN_RC=$?
+    if [ "$JOIN_RC" -eq 2 ]; then
+      warn "$JOIN_OUT"
+    else
+      bad "$JOIN_OUT. Re-run install-meta-bridge, restart the affected Claude session(s), then run doctor again."
+    fi
+  fi
+else
+  bad "cannot validate live Claude MCP owner join without python3"
 fi
 
 # ── writer-version parity (source ↔ assembled ↔ installed) ──────────────────

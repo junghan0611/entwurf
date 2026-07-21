@@ -1126,10 +1126,13 @@ export function defaultMetaMailboxDir(): string {
  * MCP process does not know which garden-id session it belongs to, so the sender
  * envelope degrades to anonymous `external-mcp` and the receiver has no reply
  * address. The hook DOES know the garden-id (it just minted the record), and the
- * hook + the MCP child run under the SAME Claude Code parent process. So the hook
- * writes a marker keyed by that parent pid; the MCP reads the marker for its OWN
- * `process.ppid` and promotes itself to a replyable meta-session sender. This
- * uses process ancestry, NOT cwd inference (same repo / multiple sessions would
+ * hook + the MCP child run under the SAME Claude Code owner process. The hook
+ * command explicitly captures its shell's `$PPID` in `ENTWURF_META_HOOK_OWNER_PID`
+ * before a leading POSIX `exec` replaces Claude's transient `/bin/bash -c` wrapper.
+ * The hook verifies that carried pid is in its ancestry, writes the marker under it,
+ * and the MCP reads the marker for its OWN `process.ppid`. Thus both a tail-exec
+ * shell and a retained wrapper join on Claude without blindly trusting a grandparent.
+ * This uses process ancestry, NOT cwd inference (same repo / multiple sessions would
  * make cwd ambiguous). `ENTWURF_META_SENDERS_DIR` overrides for tests.
  */
 export function defaultMetaSendersDir(): string {
@@ -1339,7 +1342,7 @@ export interface MetaReceiverMarker {
 	gardenId: string;
 	backend: MetaBackend;
 	nativeSessionId: string;
-	/** The pid holding the watchPaths idle-wake subscription (the native CLI = hook's process.ppid). */
+	/** The pid holding watchPaths (validated explicit hook-owner carrier = native CLI pid). */
 	ownerPid: number;
 	/** processStartKey(ownerPid) at write time — the dead-owner / pid-reuse guard. */
 	ownerStartKey: string;

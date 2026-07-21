@@ -6,7 +6,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "__NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"
+						"command": "ENTWURF_META_HOOK_OWNER_PID=$PPID exec __NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"
 					}
 				]
 			}
@@ -17,7 +17,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "__NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"
+						"command": "ENTWURF_META_HOOK_OWNER_PID=$PPID exec __NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"
 					}
 				]
 			}
@@ -28,7 +28,7 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "__NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"
+						"command": "ENTWURF_META_HOOK_OWNER_PID=$PPID exec __NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"
 					}
 				]
 			}

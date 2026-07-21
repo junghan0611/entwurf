@@ -105,6 +105,9 @@ if echo "$BL_OUT" | grep -q "2 unread mailbox messages"; then ok "backlog .deliv
 echo "[B] hook ERROR logging (blocker #2)"
 
 export PI_CODING_AGENT_DIR="$TMP/agent"
+# Stand in for Claude's hooks.json shell: its explicit $PPID carrier names the
+# still-live host process. Here this smoke shell is that host for child hook nodes.
+export ENTWURF_META_HOOK_OWNER_PID="$$"
 HOOK_LOG="$TMP/agent/meta-bridge-hook.log"
 run_hook() { echo "$1" | "$NODE_BIN" --experimental-strip-types "$HOOK" >/dev/null 2>&1 || true; }
 

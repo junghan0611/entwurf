@@ -1,6 +1,6 @@
 {
 	"name": "@junghanacs/entwurf",
-	"version": "0.12.7",
+	"version": "0.12.7-1",
 	"description": "Garden-citizen dispatch substrate and meta-bridge for Claude Code, Codex, Antigravity, and pi harnesses.",
 	"license": "MIT",
 	"author": {

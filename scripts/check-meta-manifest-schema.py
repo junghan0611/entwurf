@@ -96,6 +96,25 @@ if hooks is not None:
                 # allowed, NOT decorative. Anything beyond this set must be reviewed.
                 subset(f"hooks.{event}[{j}].hooks[{k}]", h, {"type", "command", "asyncRewake", "timeout"})
 
+    # Clean installed hosts may retain Claude's `/bin/bash -c` wrapper while NixOS
+    # tail-execs the final hook command. Capture shell `$PPID` explicitly before
+    # `exec`: the hook ancestry-validates this as the Claude/MCP owner. This is an
+    # identity/liveness contract, not command decoration.
+    expected_hook_command = (
+        "ENTWURF_META_HOOK_OWNER_PID=$PPID exec "
+        "__NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"
+    )
+    for event in ("SessionStart", "CwdChanged", "UserPromptSubmit"):
+        try:
+            command = hooks["hooks"][event][0]["hooks"][0]["command"]
+        except (KeyError, IndexError, TypeError):
+            bad(f"hooks.{event}: cannot find load-bearing command hook")
+            continue
+        if command == expected_hook_command:
+            ok(f"hooks.{event}: explicit $PPID owner carrier + exec topology contract")
+        else:
+            bad(f"hooks.{event}: owner command drifted; got {command!r}, want {expected_hook_command!r}")
+
 # --- desired_mcp() installed-vs-clone dual-mode ------------------------------
 def desired_mcp(repo: str):
     out = subprocess.run(
