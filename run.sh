@@ -126,6 +126,7 @@ Usage:
   ./run.sh smoke-meta-async-drift     # 1.0.0 meta-bridge step 1: drift sentinel — version pins + Claude binary undocumented-behavior markers (LIVE=1 adds plugin watch-arm probe)
   ./run.sh smoke-meta-honesty         # 1.0.0 meta-bridge: honesty regression gate (#30 blockers) — doorbell counts ALL msgs honestly + hook logs failures as ERROR (best-effort, no scream). Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-meta-install-state   # 1.0.0 meta-bridge Phase 2: stateful install/uninstall + store-doctor regression gate. Offline/deterministic (deps: bash+node+python3)
+  ./run.sh check-meta-doctor-oracle   # 0.12.8 (#51): detection power of the release ORACLE — healthy fixture must reach `doctor: PASS`, then 19 planted defects (exec form, malformed exec args, partial hand-patch, carrier removal, owner type drift, extra leaf, extra matcher group, doorbell asyncRewake/path/timeout, no live bridge, stale receiver, ambiguous cache, missing artifact ×2, missing hook log, missing writer bundle, failing CLI probes) must each turn it FAIL naming their own cause, plus a positive case pinning that a long-writing CLI is NOT a false negative. Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-agy-install-state    # agy MCP + exact permission ownership regression (120): isolated HOME+XDG, adopt/state/inverse, symlink refuse, setup degrade. Offline/deterministic
   ./run.sh smoke-agy-statusline-state # agy ambient garden-id statusLine install/doctor/inverse regression (62). Offline/deterministic
   ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression (37). Offline/deterministic
@@ -137,7 +138,7 @@ Usage:
 
   ./run.sh install-meta-bridge        # INTERNAL part of `setup` (native-harness plugin) + doctor recovery path — prefer `setup`; stateful GLOBAL install (plugin + USER MCP + settings keyset, honest uninstall state)
   ./run.sh uninstall-meta-bridge      # 1.0.0 meta-bridge Phase 2: stateful GLOBAL uninstall (restore only keys/items captured in install-state)
-  ./run.sh doctor-meta-bridge         # 1.0.0 meta-bridge Phase 2: fail-loud doctor — toolchain + state + plugin/MCP + store scan + hook errors + SessionStart evidence + writer-version parity (source↔assembled↔installed: FAIL on a stale deployed meta-record writer)
+  ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51). exit 0 = every required layer was MEASURED on this host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; macOS cannot reach the live tier. Detection power is held by check-meta-doctor-oracle
   ./run.sh install-agy-bridge         # 봉인 7: agy MCP install adapter — register ONE entwurf-bridge server in the agy mcp_config (adopt file / create / REFUSE symlink), stable bin command, install-state under $XDG_DATA_HOME/entwurf/agy-bridge/
   ./run.sh uninstall-agy-bridge       # 봉인 7: honest inverse of install-agy-bridge from install-state (restore preimage / remove key; refuse if config became a symlink)
   ./run.sh doctor-agy-bridge          # fail-loud doctor: MCP config + exact permission rule + state + live probe label
@@ -3832,6 +3833,16 @@ case "$cmd" in
     # to guess without state, and the doctor store scan fails on corrupt/
     # duplicate/drift records. Offline + deterministic (deps bash+node+python3).
     (cd "$REPO_DIR" && bash scripts/smoke-meta-install-state.sh)
+    ;;
+  check-meta-doctor-oracle)
+    # 0.12.8 (#51): detection-power gate for the release ORACLE itself. doctor-meta-bridge
+    # decides whether a host is certified, yet its GREEN path had no coverage — the two
+    # existing doctor drives both expect exit 1 and neither has a plugin cache, so the
+    # installed-form classification and synthetic owner join never ran under any gate.
+    # This stands up a healthy fixture (real assembly + planted cache + live owner +
+    # fake bridge), proves PASS, then plants 19 defects that must each turn it red WITH
+    # THE MESSAGE THAT NAMES THEM. Offline + deterministic (deps bash+node+python3).
+    (cd "$REPO_DIR" && bash scripts/check-meta-doctor-oracle.sh)
     ;;
   smoke-agy-install-state)
     # 봉인 8 regression gate for the agy MCP install adapter: install→doctor→uninstall in an

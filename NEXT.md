@@ -2,12 +2,17 @@
 
 > NEXT는 부트 섹터다. 닫힌 역사는 CHANGELOG/git에, 장기 방향은 ROADMAP/이슈에 둔다.
 
-## NOW — 0.12.8은 수선 컷이다. 범위 SSOT는 **#49**, hook 토폴로지·하네스 축의 SSOT는 **#51**
+## NOW — doctor oracle을 두 원자적 커밋 후보로 닫는다
 
-- **Stem:** 0.12.7 출하 하루 만에 **런타임 축이 우리 밑에서 움직였다.** 전역 pi가 `0.80.6`으로 가 있는데 리포 pin은 `0.80.3`이었다. 그 격차가 CI RED · `pit` 경고 · "게이트가 검증하는 런타임이 게이트가 선언한 런타임이 아님" 세 형태로 동시에 터졌다. 0.12.8은 새 능력을 더하지 않고 **바닥이 선언대로인지**만 맞춘다. `0.13.0`은 계속 cortex(#48).
-- **범위·근거·기각된 선택지는 전부 #49에 있다.** 여기엔 다음 한 걸음만 둔다.
+- **Current:** `2ef5f97`이 installer SIGPIPE/rc-preservation 수선과 결정론 regression을 첫 원자적 커밋으로 닫았다. doctor 변경을 숨긴 별도 worktree에서 `smoke-meta-install-state` + 전체 `pnpm check` 독립 GREEN을 확인했다. main은 아직 미푸시다.
+- **Next:** doctor strict oracle + exact shipped-manifest equality + active `installPath` authority + 19 defect RED/1 positive를 두 번째 커밋으로 닫아 push한다. 다음 텀은 clean main에서 Linux Node 24 artifact-consumer C를 시작한다.
+- **Commit split:** ① `2ef5f97` 완료, ② 현재 doctor oracle + 등록 문서/NEXT. 128KiB tail의 `seq` 의존은 Python으로 교체했고 targeted 두 gate가 GREEN이다.
+- **Blocker:** doctor commit hook의 전체 floor와 push CI. `claude` probe는 rc와 content를 모두 요구해야 하며, `if ! cmd; then rc=$?`는 부정 결과 0을 읽으므로 금지한다.
+- **Read:** #51 본문/최신 진행 코멘트(SSOT) · `scripts/meta-bridge-{install,doctor}.sh` · `scripts/{smoke-meta-install-state,check-meta-doctor-oracle}.sh` · 아래 접힌 ledger.
+- **Do not touch:** maintainer/hejdev6g 재설치·현장 patch, C prototype, B/B2 세션, winning hook form, topology gate, operator pnpm cache, push/release.
+- **Return:** 두 커밋 후보가 각각 독립 GREEN + PM 검수되면 GLG에게 commit ①/② 결정을 요청하고, 그 뒤에만 Linux C로 간다.
 
-### 실행 순서 — **A 완료 · Node 24 선언/coherence 완료 · hejdev6g doctor RED** → doctor oracle + Linux C → B/B2 → exec form 판정 → production hook/topology gate → shared-artifact acceptance → release → hejdev6g clean reinstall + doctor → #49 C/E
+<details><summary>LEDGER — #51 doctor/harness 진단 변천(현재 실행 지시가 아님)</summary>
 
 **교차검수는 끝났고 Claude meta-owner 수선은 `0.12.7-1`로 커밋했다 — 단 계약은 잠정이다. 축이 #51 v4에서 한 번 더 움직였다.** 어느 clean host의 완전 설치에서 hook Node의 `process.ppid`가 Claude가 아니라 즉시 죽는 `/bin/bash -c` wrapper였고, sender/receiver marker가 전부 stale이 됐다. 같은 Claude Code 2.1.216의 노트북에서는 direct owner join이 관측됐지만, 일반 `bash -c 'node …'`는 그 clean host에서도 tail-exec한다. 따라서 차이를 NixOS-vs-Ubuntu 속성으로 돌릴 근거는 없다. **확립된 사실은 Claude의 실제 hook spawn 경로에서 retained wrapper가 발생했다는 것뿐이고, 유발 조건은 미규명이다. 어느 호스트도 shell tail-exec을 안전 전제로 삼을 수 없다.**
 - **커밋된 수선(잠정):** hooks.json이 shell `$PPID`를 `ENTWURF_META_HOOK_OWNER_PID`로 명시 전달한 뒤 `exec`; hook은 그 pid가 실제 조상일 때만 sender/receiver owner로 신뢰한다. parent/grandparent를 눈감고 고르는 방식은 금지(전자는 transient wrapper, 후자는 장수 login shell 가능). `check-meta-receiver-marker`가 tail-exec과 retained-shell을 실제 child process로 둘 다 구동한다. doctor는 설치 command 계약 + Linux live MCP↔marker join을 검사한다. **프로덕션 런타임 변경은 31줄 추가/21줄 삭제뿐이고, 나머지는 전부 검증면이다.**
@@ -38,6 +43,10 @@
   - **뮤테이션 10/10 기대 결과 일치(9 RED + M8a intentional GREEN), control green.** M1~M5(원래 다섯) · M6 `start.sh` · M7 CI `node-version` · **M8b stage된 새 파일** · M9 SSOT를 minor floor로 — 여기까지 9건이 RED다. **M8a(unstaged 새 파일)는 RED가 아니라 GREEN이 기대값이다** — corpus가 candidate contract라 운영자 워킹트리를 보지 않는 것이 설계이고, 그 GREEN이 floor purity의 증거다. **M5와 M8이 핵심이다** — M5는 "하나만 옮기고 나머지를 잊는" 경로를, M8은 "새 파일이 게이트 밖에서 선언하는" 경로를 막는다. 후자가 이번에 실제로 뚫렸던 구멍이다.
   - **경계는 그대로다.** GitHub Actions가 Node 24라는 사실만으로 runtime floor가 증명되지 않는다. 증명은 `node:24-*` package-consumer가 실제 candidate tarball을 설치·실행하는 것(게이트 2)이고 **그건 C에 남아 있다.** 지금 참이 된 것은 선언의 정합성이지 소비 증거가 아니다.
 - **실무자 금지/운영자 결정:** 운영자 pnpm 캐시 갱신은 첫 작업도 blocker도 아닌 별도 operator action이며 GLG 승인 대기다. `0.12.7-1`은 이미 출하된 `0.12.7`보다 낮은 체크포인트 이름이므로 publish하지 않는다. 권고안 `0.12.8-repair.0 --tag repair`, pi peer 범위, version/dist-tag, 운영자 캐시, 새 Claude 세션은 모두 GLG 결정/승인 사항이다. 다음 실무자가 임의로 건드리지 않는다. #49 C·E도 이 하네스 축이 닫힐 때까지 열지 않는다(산출물 C와 다른 항목이다).
+
+</details>
+
+## BLOCKED RETURN — #49 C/E는 #51 release-harness 축 뒤에 재개
 
 **A·B는 닫혔다** (`33b3810`/`76f14c6`, `52d515b` — 둘 다 main CI green). 아래 RECENT 참조. 한 항목씩 커밋·푸시하고 CI로 확인한 뒤 다음으로 넘어간다.
 
