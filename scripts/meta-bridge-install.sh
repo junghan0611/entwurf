@@ -175,8 +175,23 @@ case "$REPO" in
       -e ENTWURF_BRIDGE_REQUIRE_META_SENDER=1 \
       -- bash "$REPO/mcp/entwurf-bridge/start.sh" >/dev/null ;;
 esac
-(cd /tmp && claude mcp get entwurf-bridge 2>/dev/null | grep -q "Scope: User config") || \
-  die "post-install: entwurf-bridge is not reachable as USER-scope MCP from /tmp"
+# Capture, THEN match — and require BOTH the exit code and the content.
+# `<cli> | grep -q` under `set -o pipefail` is a race, not a test: grep exits at the
+# first match and closes the pipe, the still-writing CLI dies of SIGPIPE (141), and
+# pipefail reports that as a failed check — a FALSE "not reachable" die on a correctly
+# wired host. But `$(... || true)` is the opposite error: it discards the CLI's exit
+# code, so a FAILING `claude mcp get` that still printed a plausible line would PASS.
+# The honest test needs both halves, so the assignment IS the if-condition (which also
+# keeps `set -e` from killing the script on a nonzero probe).
+if MCP_REACH_OUT="$(cd /tmp && claude mcp get entwurf-bridge 2>/dev/null)"; then
+  case "$MCP_REACH_OUT" in
+    *"Scope: User config"*) ;;
+    *) die "post-install: entwurf-bridge is not reachable as USER-scope MCP from /tmp" ;;
+  esac
+else
+  MCP_REACH_RC=$?
+  die "post-install: 'claude mcp get entwurf-bridge' failed (exit $MCP_REACH_RC) — the USER-scope MCP wiring could not be verified, so this install is not confirmed."
+fi
 echo "[meta-bridge-install] installed entwurf-bridge MCP (scope: user = global receiver tools)"
 
 # Re-assert the repo-owned keyset through our stateful manager. The Claude CLI

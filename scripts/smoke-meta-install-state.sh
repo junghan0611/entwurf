@@ -62,6 +62,73 @@ else
   bad "real install-meta-bridge failed under isolated HOME/XDG/fake-claude:"$'\n'"$(cat "$INS_LOG" 2>/dev/null)"
 fi
 
+# ── Claude CLI probe honesty: rc AND content, with no pipe ──────────────────
+# The post-install USER-scope MCP check used `claude mcp get … | grep -q …` under
+# `set -o pipefail`. That is a race, not a test: grep exits at the first match and
+# closes the pipe, the still-writing CLI dies of SIGPIPE, and pipefail reports the
+# healthy host as broken. It surfaced as an INTERMITTENT install failure.
+# The fixture makes it DETERMINISTIC: the fake CLI prints the matching line and then a
+# tail larger than the 64 KiB pipe buffer, so the writer is guaranteed to still be
+# writing when grep leaves. Both directions are pinned — the old shape must die on this
+# fixture (else the fixture proves nothing), and the shipped installer must survive it.
+PROBE_HOME="$TMP/probe-home"; PROBE_XDG="$TMP/probe-xdg"; PROBE_BIN="$TMP/probe-bin"
+mkdir -p "$PROBE_HOME/.claude" "$PROBE_BIN"
+echo '{}' > "$PROBE_HOME/.claude/settings.json"
+echo '{}' > "$PROBE_HOME/.claude.json"
+python3 - "$TMP/probe-tail" <<'PY'
+from pathlib import Path
+import sys
+Path(sys.argv[1]).write_bytes(b"x" * (128 * 1024))  # > the usual 64 KiB pipe buffer
+PY
+cat > "$PROBE_BIN/claude" <<'SH'
+#!/usr/bin/env bash
+case "$1${2:+ $2}" in
+  "mcp get")
+    printf '%s\n' "Scope: User config" "Status: ✔ Connected"
+    [ "${FAKE_MCP_RC:-0}" != 0 ] && exit "$FAKE_MCP_RC"
+    # Keep writing well past the pipe buffer: a reader that leaves early SIGPIPEs us.
+    cat "$FAKE_MCP_TAIL"
+    exit $? ;;
+  "plugin list") printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
+  *) : ;;
+esac
+exit 0
+SH
+chmod +x "$PROBE_BIN/claude"
+
+set +e
+( set -o pipefail; cd /tmp && env FAKE_MCP_TAIL="$TMP/probe-tail" PATH="$PROBE_BIN:$PATH" \
+    claude mcp get entwurf-bridge 2>/dev/null | grep -q "Scope: User config" )
+OLD_SHAPE_RC=$?
+set -e
+if [ "$OLD_SHAPE_RC" -ne 0 ]; then
+  ok "fixture reproduces the defect deterministically: the old \`cli | grep -q\` shape exits $OLD_SHAPE_RC on a long-writing CLI"
+else
+  bad "fixture did NOT reproduce the SIGPIPE/pipefail defect — the regression below would prove nothing"
+fi
+
+if env HOME="$PROBE_HOME" CLAUDE_CONFIG_DIR="$PROBE_HOME/.claude" XDG_DATA_HOME="$PROBE_XDG" \
+       FAKE_MCP_TAIL="$TMP/probe-tail" PATH="$PROBE_BIN:$PATH" \
+       bash "$REPO/scripts/meta-bridge-install.sh" >"$TMP/probe-install.log" 2>&1; then
+  ok "shipped installer survives a long-writing \`claude mcp get\` (no SIGPIPE false negative)"
+else
+  bad "installer still fails on a long-writing CLI probe:"$'\n'"$(tail -3 "$TMP/probe-install.log" | sed 's/^/        /')"
+fi
+
+# The opposite error: swallowing rc. A FAILING probe that still printed a plausible
+# line must NOT be read as a verified install.
+set +e
+env HOME="$PROBE_HOME" CLAUDE_CONFIG_DIR="$PROBE_HOME/.claude" XDG_DATA_HOME="$PROBE_XDG" \
+    FAKE_MCP_TAIL="$TMP/probe-tail" FAKE_MCP_RC=3 PATH="$PROBE_BIN:$PATH" \
+    bash "$REPO/scripts/meta-bridge-install.sh" >"$TMP/probe-rc.log" 2>&1
+PROBE_RC_CODE=$?
+set -e
+if [ "$PROBE_RC_CODE" -ne 0 ] && grep -q "failed (exit 3)" "$TMP/probe-rc.log"; then
+  ok "installer refuses a FAILING mcp-get probe even when its output matches (rc is not discarded)"
+else
+  bad "installer accepted a nonzero mcp-get probe with matching output (exit $PROBE_RC_CODE):"$'\n'"$(tail -3 "$TMP/probe-rc.log" | sed 's/^/        /')"
+fi
+
 export HOME="$TMP/home"
 # The wrapper-uninstall below removes ${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/
 # meta-bridge. Pin XDG_DATA_HOME into the sandbox too, so a developer who runs this
