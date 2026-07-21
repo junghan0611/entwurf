@@ -1353,7 +1353,7 @@ assert.equal(peerTui, piAi,
 // pi moves its public surface every minor (the 0.79→0.80 getModels→provider-
 // factory churn is exactly this), so an open `>=` floor is exactly how the next
 // installer re-acquires the drift. Expected
-// shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.80.6 <0.81`).
+// shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.80.7 <0.81`).
 const [piMaj, piMin] = piAi.split('.').map(Number);
 assert.equal(piMaj, 0,
   `pi pin major must stay 0 for the next-minor ceiling rule (got ${piAi}); revisit check-dep-versions when pi reaches 1.x`);
@@ -2235,9 +2235,9 @@ _check_pack_install_impl() {
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.80.6" \
-    "@earendil-works/pi-coding-agent@0.80.6" \
-    "@earendil-works/pi-tui@0.80.6" \
+    "@earendil-works/pi-ai@0.80.7" \
+    "@earendil-works/pi-coding-agent@0.80.7" \
+    "@earendil-works/pi-tui@0.80.7" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
