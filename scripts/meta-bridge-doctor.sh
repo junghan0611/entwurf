@@ -65,8 +65,9 @@ echo "[toolchain]"
 if command -v claude >/dev/null; then ok "claude: $(claude --version 2>/dev/null | head -1)"; else bad "claude not on PATH"; fi
 if command -v python3 >/dev/null; then ok "python3: $(python3 --version 2>/dev/null | head -1) (doorbell JSON parser)"; else bad "python3 not on PATH — FileChanged wake runtime would silently die"; fi
 if command -v node >/dev/null; then
-  NV="$(node -p 'process.versions.node' 2>/dev/null || echo 0)"; MJ="${NV%%.*}"; MN="$(printf '%s' "$NV" | cut -d. -f2)"
-  if [ "${MJ:-0}" -gt 22 ] || { [ "${MJ:-0}" -eq 22 ] && [ "${MN:-0}" -ge 6 ]; }; then ok "node $NV (>= 22.6 strip-types)"; else bad "node $NV too old (need >= 22.6)"; fi
+  # Node 24+ single supported axis (GLG, 2026-07-21) — rationale in run.sh setup preflight.
+  NV="$(node -p 'process.versions.node' 2>/dev/null || echo 0)"; MJ="${NV%%.*}"
+  if [ "${MJ:-0}" -ge 24 ]; then ok "node $NV (>= 24, supported axis)"; else bad "node $NV too old (need >= 24; there is no Node 22 lane)"; fi
 else bad "node not on PATH"; fi
 
 echo "[managed config state]"

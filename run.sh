@@ -151,6 +151,7 @@ Usage:
   ./run.sh meta-bridge-managed-keys   # 0.10.0 meta-bridge: print the SSOT of settings keys entwurf OWNS (consumers read this to stay disjoint — keyset-owner invariant)
   ./run.sh check-keyset-overlap <fragment.json...>  # 0.10.0 meta-bridge: PREVENTIVE keyset guard — fail if a consumer fragment collides with any pi-owned key (cross-repo; not in pnpm check)
   ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
+  ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.80.x peers
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to entwurf alias
@@ -1418,6 +1419,121 @@ assert.ok(rangeDecls >= 5, `expected at least 5 pi range declarations across the
 assert.ok(exactDecls >= 1, `expected at least 1 exact pi install pin in the baseline docs, found ${exactDecls}`);
 
 console.log(`[check-dep-versions] ok — pi ${piAi} is coherent across package.json (devDeps + peer range), run.sh (peer-install pins), and ${BASELINE_DOCS.length} baseline docs (${rangeDecls} range + ${exactDecls} exact + ${PROSE_DECLS.length} prose declarations)`);
+EOF
+  )
+}
+
+check_node_floor_coherence() {
+  # #51 gate 3. The Node floor is declared across SIX contract surfaces
+  # (package.json engines, run.sh setup preflight, meta-bridge install + doctor,
+  # docs/setup-clean-host.md, mcp/entwurf-bridge/start.sh) plus the CI runner's
+  # node-version, and TWO of those are live judgment logic (the installer `die`,
+  # the doctor ok/bad branch), not prose. Before this gate they were bound to
+  # nothing: the contract said one thing, CI exercised another, and the docs
+  # advertised a dual "recommended / minimum" floor that no consumer image ever
+  # ran. That is the same shape as check-dep-versions' regression — the
+  # assertion was removed and the declaration survived, advertising a coverage
+  # that had stopped existing.
+  #
+  # package.json engines.node is the SSOT; every other spelling is DERIVED and
+  # compared against it. There must be exactly ONE number to move.
+  (cd "$REPO_DIR" && node --input-type=module <<'EOF'
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+
+const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+const declared = pkg.engines?.node;
+// The derived sites below compare MAJORS only (`-lt 24`, `>= 24`). A SSOT of
+// `>=24.3.0` would therefore be unenforceable: installer and doctor would bless
+// 24.0 while the contract demanded 24.3, and this gate would print green. The
+// supported axis is a MAJOR lane, so pin the SSOT to a `.0.0` floor and reject
+// anything finer rather than silently under-enforcing it. (Raising this to a
+// minor floor means implementing a full semver compare at every derived site.)
+assert.match(String(declared), /^>=\d+\.0\.0$/,
+  `package.json engines.node must be a major-lane floor ">=<major>.0.0" — the derived sites compare majors only and cannot enforce a finer floor (got ${declared ?? 'nothing'})`);
+const MAJOR = Number(String(declared).slice(2).split('.')[0]);
+
+// The gate itself must not run BELOW the axis it certifies: a coherence green
+// printed by an unsupported runtime is exactly the "declared ≠ verified" split
+// this gate exists to close.
+const runner = Number(process.versions.node.split('.')[0]);
+assert.ok(runner >= MAJOR,
+  `this gate is running on Node ${process.versions.node}, below the floor it certifies (${declared}) — a green from an unsupported runtime proves nothing`);
+
+// Every site that must agree with the SSOT. `min` is the guard-the-guard: if a
+// pattern ever stops matching, the site has drifted out of the gate and we fail
+// loud instead of passing vacuously on zero matches.
+const SITES = [
+  ['run.sh', /process\.versions\.node\.split\("\."\)\[0\]\) >= (\d+)/g, 1, 'setup preflight logic'],
+  ['run.sh', /entwurf requires Node >= (\d+)/g, 1, 'setup preflight message'],
+  ['scripts/meta-bridge-install.sh', /NODE_MAJOR" -lt (\d+)/g, 1, 'installer die condition'],
+  ['scripts/meta-bridge-install.sh', /entwurf requires Node >= (\d+)/g, 1, 'installer die message'],
+  ['scripts/meta-bridge-doctor.sh', /MJ:-0}" -ge (\d+)/g, 1, 'doctor judgment logic'],
+  ['scripts/meta-bridge-doctor.sh', /need >= (\d+)/g, 1, 'doctor bad message'],
+  ['docs/setup-clean-host.md', /`>=(\d+)\.\d+\.\d+`/g, 1, 'clean-host pin matrix'],
+  ['mcp/entwurf-bridge/start.sh', /Node >= (\d+) \(engines\.node/g, 1, 'bridge launcher header'],
+  ['.github/workflows/ci.yml', /node-version: (\d+)/g, 2, 'CI runner node-version'],
+];
+
+let bound = 0;
+for (const [file, re, min, label] of SITES) {
+  const text = readFileSync(file, 'utf8');
+  const hits = [...text.matchAll(re)];
+  assert.ok(hits.length >= min,
+    `${file}: ${label} — pattern matched ${hits.length} time(s), expected >= ${min}. The declaration left the gate; re-bind it instead of deleting the assertion.`);
+  for (const [decl, major] of hits) {
+    assert.equal(Number(major), MAJOR,
+      `${file}: ${label} declares Node major ${major} in "${decl.trim()}", but engines.node is ${declared}`);
+  }
+  bound += hits.length;
+}
+
+// Sweep the tracked first-party contract TEXT surfaces, NOT just the files
+// already registered above. The first cut of this gate swept only SITES' own
+// files and therefore could not see a declaration in an UNREGISTERED file —
+// which is precisely how `mcp/entwurf-bridge/start.sh` kept advertising the old
+// floor while the gate printed green (review lane, 2026-07-21). A sweep scoped
+// to what is already bound is not a safety net; it is a restatement.
+// pnpm-lock.yaml is excluded on purpose: those engine ranges belong to third-
+// party dependencies and are not this repo's supported axis.
+// `--cached` ONLY — deliberately not `--others`. The corpus must be the
+// candidate contract (what is tracked/staged), never the operator's working
+// directory: an un-ignored scratch file would otherwise turn this gate RED on
+// one host and green on another, which is the read-coupling this cut exists to
+// remove (rule 11 — a gate may not READ operator state any more than WRITE it).
+// A genuinely new source file enters `--cached` the moment it is staged, i.e.
+// before the commit that would ship it. (Review lane, 2026-07-21.)
+const tracked = execFileSync('git', ['ls-files', '--cached', '--', '*.sh', '*.json', '*.ts', '*.md', '*.yml', '*.yaml'], { encoding: 'utf8' })
+  .split('\n')
+  .filter((f) => f && f !== 'pnpm-lock.yaml' && f !== 'CHANGELOG.md' && f !== 'NEXT.md');
+assert.ok(tracked.length >= 20,
+  `git ls-files returned ${tracked.length} first-party files — the sweep lost its corpus and would pass vacuously`);
+
+// A floor declaration = the word node, then a comparison operator, then a
+// two-digit major. Case-insensitive: the miss above was literally a capital N.
+const FLOOR_DECL = /node[^0-9\n]{0,20}(?:>=|-lt|-ge|-gt)\s*(\d{2})/gi;
+let swept = 0;
+for (const file of tracked) {
+  // No catch-continue: every path here is tracked, so an unreadable file is a
+  // broken checkout, not a condition to skip past. Crash, do not warn.
+  const text = readFileSync(file, 'utf8');
+  for (const line of text.split('\n')) {
+    if (line.includes('check_node_floor_coherence') || line.includes('FLOOR_DECL')) continue;
+    for (const [decl, major] of line.matchAll(FLOOR_DECL)) {
+      swept++;
+      assert.equal(Number(major), MAJOR,
+        `${file}: unregistered Node floor "${decl.trim()}" — expected major ${MAJOR}. Bind it in SITES or fix it.`);
+    }
+  }
+}
+assert.ok(swept >= 6,
+  `sweep found only ${swept} node floor declarations across ${tracked.length} tracked files — the pattern rotted and would pass vacuously`);
+
+// `bound` is the real declaration count; SITES.length is the number of RULES
+// (the CI rule alone matches two node-version lines). Naming the rule count a
+// declaration count would be this gate telling a small lie about its own reach.
+console.log(`[check-node-floor-coherence] ok — Node >=${MAJOR} is coherent across engines.node, ${bound} bound declarations from ${SITES.length} site rules, and ${swept} declarations swept over ${tracked.length} tracked first-party contract text surfaces (single supported axis, no legacy lane). Non-text carriers (e.g. a Dockerfile \`FROM node:*\`) are OUTSIDE this pattern and must be bound by their own gate.`);
 EOF
   )
 }
@@ -2952,14 +3068,17 @@ setup_all() {
   require_cmd pi
   require_cmd node
 
-  # MCP bridge launchers run via `node --experimental-strip-types` (stable in
-  # Node 23.6, experimental from 22.6). Anything older lacks the flag, and an
-  # ACP session would hit a cryptic "unknown argument" rather than a clear
-  # setup-time error. Fail early with an actionable message. package.json
-  # engines.node mirrors this floor.
-  if ! node -e 'const [M,m]=process.versions.node.split(".").map(Number); process.exit((M>22||(M===22&&m>=6))?0:1)'; then
-    echo "[setup] entwurf requires Node >= 22.6.0 (got $(node -v))" >&2
-    echo "[setup] MCP bridge launchers depend on --experimental-strip-types." >&2
+  # Node 24+ is the SINGLE supported axis (GLG, 2026-07-21). The floor is not
+  # derived from a feature gate: type-stripping alone would only demand 23.6.
+  # It is derived from what is actually verified — this repo designs and proves
+  # BOTH boundaries (dev-clone native-TS/ESM, installed compiled-JS) on Node 24,
+  # and no 22 lane is maintained or tested. A floor nobody exercises is a
+  # declaration, not a contract; #51 exists because this repo shipped several.
+  # DO NOT reintroduce a "24 recommended / 22 minimum" dual declaration.
+  # check-node-floor-coherence binds every spelling of this floor.
+  if ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)'; then
+    echo "[setup] entwurf requires Node >= 24 (got $(node -v))" >&2
+    echo "[setup] Node 24+ is the only supported runtime axis; there is no Node 22 lane." >&2
     exit 1
   fi
 
@@ -3922,6 +4041,9 @@ case "$cmd" in
     ;;
   check-dep-versions)
     check_dep_versions
+    ;;
+  check-node-floor-coherence)
+    check_node_floor_coherence
     ;;
   check-install-preflight)
     check_install_preflight

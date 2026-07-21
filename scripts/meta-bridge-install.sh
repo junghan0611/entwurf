@@ -72,12 +72,12 @@ esac
 command -v claude >/dev/null || die "'claude' CLI not on PATH. Install Claude Code first."
 command -v python3 >/dev/null || die "'python3' not on PATH. The FileChanged doorbell parses hook JSON with python3; install refuses a silently-dead wake runtime."
 NODE_BIN="$(command -v node)" || die "'node' not on PATH (the hook needs it to run the entry shell)."
-# Need TypeScript type-stripping: native default >= 23.6, --experimental-strip-types >= 22.6.
+# Node 24+ is the SINGLE supported axis (GLG, 2026-07-21) — see run.sh setup
+# preflight for why the floor is 24 and not the 23.6 type-stripping feature gate.
 NODE_VER="$(node -p 'process.versions.node')"
 NODE_MAJOR="${NODE_VER%%.*}"
-NODE_MINOR="$(printf '%s' "$NODE_VER" | cut -d. -f2)"
-if [ "$NODE_MAJOR" -lt 22 ] || { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -lt 6 ]; }; then
-  die "node $NODE_VER too old; meta-bridge entry needs >= 22.6.0 (TypeScript strip-types)."
+if [ "$NODE_MAJOR" -lt 24 ]; then
+  die "node $NODE_VER too old; entwurf requires Node >= 24 (single supported runtime axis, no Node 22 lane)."
 fi
 echo "[meta-bridge-install] platform=$(uname -s) node=$NODE_VER ($NODE_BIN) python3=$(command -v python3)"
 

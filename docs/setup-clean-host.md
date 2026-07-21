@@ -30,7 +30,7 @@ ssh cleanhost 'uname -a; whoami; which git node npm pi claude agy 2>/dev/null'
 
 | Component | Pin / floor | Source of truth |
 |---|---|---|
-| Node | **24** recommended; `>=22.6.0` minimum | `engines.node` (Node strip-types / ESM runtime) |
+| Node | **`>=24.0.0`** — single supported axis, no Node 22 lane | `engines.node` (bound by `check-node-floor-coherence`) |
 | npm | bundled with Node 24 | public package install path |
 | entwurf | `@junghanacs/entwurf` | neutral npm package; exposes `entwurf`, `entwurf-bridge`, `entwurf-statusline`, `entwurf-agy-statusline`, and `entwurf-agy-imprint` bins |
 | pi binary | **optional**, `@earendil-works/pi-coding-agent >=0.80.7 <0.81` | needed only for the pi adapter / ACP provider / spawn-bg resume lane |
