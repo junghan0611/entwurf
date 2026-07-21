@@ -2,15 +2,15 @@
 
 > NEXT는 부트 섹터다. 닫힌 역사는 CHANGELOG/git에, 장기 방향은 ROADMAP/이슈에 둔다.
 
-## NOW — doctor oracle을 두 원자적 커밋 후보로 닫는다
+## NOW — Linux Node 24 artifact-consumer C를 연다
 
-- **Current:** `2ef5f97`이 installer SIGPIPE/rc-preservation 수선과 결정론 regression을 첫 원자적 커밋으로 닫았다. doctor 변경을 숨긴 별도 worktree에서 `smoke-meta-install-state` + 전체 `pnpm check` 독립 GREEN을 확인했다. main은 아직 미푸시다.
-- **Next:** doctor strict oracle + exact shipped-manifest equality + active `installPath` authority + 19 defect RED/1 positive를 두 번째 커밋으로 닫아 push한다. 다음 텀은 clean main에서 Linux Node 24 artifact-consumer C를 시작한다.
-- **Commit split:** ① `2ef5f97` 완료, ② 현재 doctor oracle + 등록 문서/NEXT. 128KiB tail의 `seq` 의존은 Python으로 교체했고 targeted 두 gate가 GREEN이다.
-- **Blocker:** doctor commit hook의 전체 floor와 push CI. `claude` probe는 rc와 content를 모두 요구해야 하며, `if ! cmd; then rc=$?`는 부정 결과 0을 읽으므로 금지한다.
-- **Read:** #51 본문/최신 진행 코멘트(SSOT) · `scripts/meta-bridge-{install,doctor}.sh` · `scripts/{smoke-meta-install-state,check-meta-doctor-oracle}.sh` · 아래 접힌 ledger.
-- **Do not touch:** maintainer/hejdev6g 재설치·현장 patch, C prototype, B/B2 세션, winning hook form, topology gate, operator pnpm cache, push/release.
-- **Return:** 두 커밋 후보가 각각 독립 GREEN + PM 검수되면 GLG에게 commit ①/② 결정을 요청하고, 그 뒤에만 Linux C로 간다.
+- **Current:** `2ef5f97`(Claude CLI probe SIGPIPE/rc-preservation)과 `455542b`(strict doctor release oracle)가 각각 전체 floor GREEN으로 main에 push됐다. doctor gate는 healthy PASS + 19 planted defect RED + long-writer positive를 고정한다. worktree clean.
+- **Next:** host에서 candidate `.tgz`를 한 번만 만들고 read-only로 넘기는 Node 24 Linux non-root/dash consumer prototype을 만든다. foreign cwd, 격리 `npm_config_prefix`, `NODE_PATH=''`, checkout/repo `node_modules` 비가시를 요구한다.
+- **Completion:** 기존 `check-pack-install`은 GREEN인데 container만 RED인 differential defect를 먼저 증명하고, 결함 제거 뒤 동일 artifact consumer가 GREEN이어야 한다. raw `.ts`/누락 파일처럼 기존 gate도 잡는 결함은 C의 델타가 아니다.
+- **Blocker:** Docker가 로컬에 없으면 정직한 SKIP, required CI에서는 RED. container image의 `FROM node:24-*`는 `check-node-floor-coherence` 밖이므로 C gate가 직접 bind한다.
+- **Read:** #51 본문/최신 진행 코멘트(SSOT) · `run.sh`의 `check-pack-install` · `scripts/check-meta-doctor-oracle.sh` · 아래 접힌 ledger.
+- **Do not touch:** maintainer/hejdev6g 재설치·현장 patch, B/B2 세션, winning hook form, topology gate, operator pnpm cache, release/version/dist-tag.
+- **Return:** C prototype의 artifact digest + 기존-green/container-red 반례 + fixed-green을 기록한 뒤 GLG에게 gate commit 여부를 요청한다. 그 다음에만 B/B2로 간다.
 
 <details><summary>LEDGER — #51 doctor/harness 진단 변천(현재 실행 지시가 아님)</summary>
 
