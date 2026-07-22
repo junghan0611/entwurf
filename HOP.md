@@ -314,11 +314,11 @@ symbol/file → current authority/mutation → all production callers
 
 **Work**
 
-- C3에서 선행한 spawn-resume envelope를 공통 계약과 합친다.
-- native-push delivered turn에 caller/reply envelope 추가.
-- socket/mailbox 포함 네 rail의 A→B→C와 reply evidence 검증.
+- socket receiver의 인라인 `<sender_info>` 생성을 pure shared formatter로 추출하고 socket·spawn-resume·native-push가 같은 grammar/`SenderEnvelope`를 사용한다. `wantsReply`는 envelope 밖 sibling input이며 true일 때만 `wants_reply`를 emit한다.
+- mailbox는 self-fetch rail에 맞는 human-readable formatter를 유지하되 동일 envelope fields와 sibling `wantsReply`를 보존한다.
+- socket/mailbox/spawn/native-push 네 rail의 A→B→C와 reply evidence를 검증한다. Shared formatter와 각 rail consumer에 provenance-drop mutation gate를 둔다.
 - identity record에 parent/lastCaller/call DB를 넣지 않는다.
-- intent/transport/receipt의 durable 최소 필드는 GLG decision 결과만 반영한다.
+- durable 공통 사실은 caller envelope뿐이다. Intent/transport는 dispatch 선택·caller receipt에만 남고, delivery receipt는 기존 rail별 증거(mailbox state/RPC ack/socket observation/native probe)를 유지하며 공통 DB로 승격하지 않는다.
 
 **Exit evidence**
 
@@ -359,8 +359,7 @@ D0와 backup/rollback은 GLG가 승인했다. 아래는 근거가 나올 때만 
 1. **D5 — H7 live-cutover entry blocker:** 최초 live M1 전에 live old writer quiesce를 강제할 operator 절차/표면을 GLG가 확정한다. H2 rehearsal이 선택 근거를 낸다.
 2. **M1 trigger — H7 live-cutover entry blocker:** session/startup 자동 upgrade인가 명시적 operator migrate command인가. Release UX와 self-host 안전성을 함께 보고 H2 뒤, H7 전 GLG가 확정한다.
 3. target registry에서 identity 제거 뒤 별도 dormant-launch trust policy 필요 여부.
-4. call provenance에서 intent/transport/receipt 중 durable 최소 필드.
-5. record-less diagnostic을 doctor/peers에서 얼마 동안 노출할지. 정상 routing fallback은 금지.
+4. record-less diagnostic을 doctor/peers에서 얼마 동안 노출할지. 정상 routing fallback은 금지.
 
 결정 전 임시 fallback을 만들지 않는다.
 

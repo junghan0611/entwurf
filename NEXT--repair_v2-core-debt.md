@@ -89,7 +89,7 @@
 5. **C2 / H4 — pi lifecycle/identity authority:** native pi id로 record attach/mint; socket/sender는 record garden id. session-id/name/header gardenization, `/gnew`, `/new` guard 제거.
 6. **C3 / H5a — resume/file authority:** ordinary prompt 앞에 기존 structured `<sender_info>`를 prepend하고 `wantsReply`는 sibling input으로 유지; record transcript path/native header 검증 + exact `--session`; global scan/name authorization/resume marker 제거. 새 child carrier/custom-message reconstruction은 만들지 않는다.
 7. **C4 / H5b — facts/dispatch authority:** M1 뒤 live legacy session은 C2 attach, dormant M2는 explicit absolute JSONL paths로만 등록한다(global inventory/name/pi-open 없음). Alive socket-only count 0을 증명한 뒤 facts/listing rail과 dispatch/resolveTarget rail을 각각 record-first로 전환한다. Target registry DATA/OPS와 RT-dead reader는 이 authority transfer와 분리한다.
-8. **H6:** native-push까지 uniform call provenance를 완성한다.
+8. **H6:** socket의 인라인 `<sender_info>`를 pure formatter로 추출해 socket·spawn·native-push가 공유하고, mailbox는 동일 envelope fields의 human formatter를 유지한다. `wantsReply`는 sibling input, intent/transport/receipt는 rail별 증거로 남기며 공통 DB를 만들지 않는다.
 9. **H7:** D5/M1-trigger 결정 뒤 candidate artifact로 controlled live backup→M1→M2 cutover와 rollback을 실증한다. 이어 full floor/package/live evidence, production net subtraction, durable docs/#49/#50 승격, branch plan docs 삭제를 준비한다.
 
 C1~C4는 각각 독립 GREEN authority-transfer commit이다. H5a/H5b가 한 PM 홉에 과하면 둘로 나눠 operational 8홉으로 수정한다.
