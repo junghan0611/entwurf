@@ -14,9 +14,12 @@ PLUGIN="entwurf-meta-receive"
 
 die() { echo "meta-bridge-uninstall: $*" >&2; exit 1; }
 
+# Darwin stays here intentionally even though NEW installs are Linux-only in the #51
+# repair cut. Removing the inverse would strand an older macOS install precisely when
+# support narrows; uninstall is a legacy-cleanup capability, not install certification.
 case "$(uname -s)" in
   Linux | Darwin) ;;
-  *) die "unsupported platform '$(uname -s)'. meta-bridge supports Linux + macOS only (Windows is fail-fast, not silently attempted)." ;;
+  *) die "unsupported platform '$(uname -s)'. This repair cut certifies new Claude meta-bridge installs on Linux only; uninstall additionally permits Darwin so legacy state can be removed honestly." ;;
 esac
 
 command -v python3 >/dev/null || die "'python3' not on PATH. It is required for stateful uninstall."

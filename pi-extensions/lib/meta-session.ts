@@ -1126,12 +1126,12 @@ export function defaultMetaMailboxDir(): string {
  * MCP process does not know which garden-id session it belongs to, so the sender
  * envelope degrades to anonymous `external-mcp` and the receiver has no reply
  * address. The hook DOES know the garden-id (it just minted the record), and the
- * hook + the MCP child run under the SAME Claude Code owner process. The hook
- * command explicitly captures its shell's `$PPID` in `ENTWURF_META_HOOK_OWNER_PID`
- * before a leading POSIX `exec` replaces Claude's transient `/bin/bash -c` wrapper.
- * The hook verifies that carried pid is in its ancestry, writes the marker under it,
- * and the MCP reads the marker for its OWN `process.ppid`. Thus both a tail-exec
- * shell and a retained wrapper join on Claude without blindly trusting a grandparent.
+ * hook + the MCP child run under the SAME Claude Code owner process. Under the
+ * exec-form launch contract the hook's parent IS Claude — Claude execs
+ * `hook-launch.sh`, which `exec`s the hook and hands it that same pid — so the hook
+ * writes the marker under `process.ppid` and the MCP reads the marker for its OWN
+ * `process.ppid`. Both sides name the one owner on every host, with no shell on the
+ * path to be mistaken for it and nothing to carry in an env var.
  * This uses process ancestry, NOT cwd inference (same repo / multiple sessions would
  * make cwd ambiguous). `ENTWURF_META_SENDERS_DIR` overrides for tests.
  */

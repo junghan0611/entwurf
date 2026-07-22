@@ -28,7 +28,13 @@
  * a UserPromptSubmit fire does a degraded RECORD backfill (upsert) but cannot
  * re-arm the idle watch — the record's address is restored, the wake is not.
  *
- * Run (dev clone): `<node> --experimental-strip-types <plugin-root>/meta-bridge-hook.ts`.
+ * LAUNCH: never invoked directly by Claude. `hooks.json` declares the EXEC form
+ * (`command` = `<plugin-root>/scripts/hook-launch.sh`, `args` = [node, this file]),
+ * and the launcher `exec`s that argv — so this process inherits the launcher's pid
+ * and its parent is Claude itself. See hook-launch.sh for why the launcher is the
+ * fail-loud that an older Claude's silent `args` drop otherwise denies us.
+ *
+ * Run (dev clone): `<node> <plugin-root>/meta-bridge-hook.ts` (Node 24 strips types).
  * Run (installed):  `<node> <plugin-root>/meta-bridge-hook.js` — the tsc-emitted
  * closure (build-bridge → dist), because Node REFUSES strip-types on a `.ts` below
  * node_modules (ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING). The installer picks
@@ -44,7 +50,6 @@ import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
 	type MetaReceiverArmProvenance,
-	parentPid,
 	upsertMetaSession,
 	writeMetaReceiverMarker,
 	writeMetaSenderMarker,
@@ -95,37 +100,56 @@ function armProvenanceFor(eventName: string): MetaReceiverArmProvenance | null {
 	return null;
 }
 
-const META_HOOK_OWNER_PID_ENV = "ENTWURF_META_HOOK_OWNER_PID";
+/**
+ * Set by `hook-launch.sh` immediately before it `exec`s this payload. It carries no
+ * identity — only the fact that the authorized launch path was actually taken.
+ */
+const META_HOOK_LAUNCH_ENV = "ENTWURF_META_HOOK_LAUNCH";
+const META_HOOK_LAUNCH_TOKEN = "hook-launch/v1";
 
 /**
- * Resolve the native host pid carried explicitly by hooks.json's shell command.
- * `$PPID` is expanded by Claude's command-hook shell BEFORE `exec` replaces that
- * shell. It names Claude whether that shell would tail-exec Node or would otherwise
- * remain as the retained wrapper observed in Claude's real hook spawn path:
+ * Resolve the native host pid: under the EXEC-FORM launch contract it is simply
+ * this process's parent — but only once we know the exec-form launch path was taken.
  *
- *   tail-exec path: hook node → Claude
- *   retained-shell path: hook node → shell → Claude
+ * There is no `$PPID` carrier and no ancestry walk any more, and their removal is
+ * a narrowing of trust, not a loosening of it. Those existed to survive a shell
+ * that Claude chose and a command string Claude assembled — under that regime the
+ * parent could be Claude OR a retained `/bin/bash -c` wrapper, so a configured
+ * number had to be cross-checked against the real process tree.
  *
- * The ancestry check is load-bearing. A configured number is not trusted merely
- * because its process is alive: it must actually be an ancestor of this hook. This
- * keeps the old "blind grandparent = long-lived login shell" false-positive closed.
+ * The exec form removes the shell from the path entirely (#51 B2, 2026-07-22:
+ * `args` elements arrive verbatim, a literal `${HOME}` is never expanded, and the
+ * hook's parent is the Claude process). `hook-launch.sh` then `exec`s this payload,
+ * which preserves the pid, so the parent stays Claude on every POSIX host —
+ * structurally, not conditionally. Two gates hold that chain up:
+ *   - `check-hook-launch-topology` drives the shipped launcher for real and
+ *     asserts the payload's parent is the process that exec'd the launcher;
+ *   - `doctor-meta-bridge` requires the INSTALLED manifest to equal the shipped
+ *     template (modulo the two baked values), so a hand-edit back to shell form is
+ *     RED before it can reach this code.
+ *
+ * Two things the form cannot guarantee are still checked here, and both fail CLOSED.
+ *
+ * 1. LAUNCH PROVENANCE. `process.ppid` is only the Claude owner when this hook was
+ *    reached through `hook-launch.sh`. The case that breaks it is the upgrade
+ *    mismatch: an already-open Claude session holds the OLD cached hook command, so
+ *    after a reinstall it invokes this NEW hook through the OLD shell form, where the
+ *    parent may be a retained wrapper. The retired `$PPID` carrier used to fail closed
+ *    there merely by being absent, and removing it without a replacement reopened the
+ *    hole (cross-review, 2026-07-22). The launcher therefore stamps an explicit token;
+ *    no token means we do not know what our parent is, so we claim nothing.
+ * 2. A PLAUSIBLE LIVE PARENT. A reparented orphan (ppid 0/1) is not an owner, and
+ *    minting a marker for init would be exactly the "blind ancestor" false-positive
+ *    the old ancestry walk existed to prevent.
+ *
+ * Failing closed costs only reply-addressability, and the doctor sees the ERROR. The
+ * opposite — a marker keyed to a transient wrapper — is a lie a sender acts on.
  */
 function resolveMetaHookOwnerPid(): number | null {
-	const raw = process.env[META_HOOK_OWNER_PID_ENV];
-	if (!raw || !/^\d+$/.test(raw)) return null;
-	const candidate = Number(raw);
-	if (!Number.isSafeInteger(candidate) || candidate <= 0) return null;
-
-	const seen = new Set<number>();
-	let cursor = process.pid;
-	for (let depth = 0; depth < 16; depth++) {
-		const parent = parentPid(cursor);
-		if (parent === null || seen.has(parent)) return null;
-		if (parent === candidate) return candidate;
-		seen.add(parent);
-		cursor = parent;
-	}
-	return null;
+	if (process.env[META_HOOK_LAUNCH_ENV] !== META_HOOK_LAUNCH_TOKEN) return null;
+	const ownerPid = process.ppid;
+	if (!Number.isSafeInteger(ownerPid) || ownerPid <= 1) return null;
+	return ownerPid;
 }
 
 function main(): void {
@@ -198,19 +222,18 @@ function main(): void {
 	}
 
 	// Sender marker, keyed by the shared Claude Code owner pid: the user-scope
-	// MCP child (same owner, even when the hook has a shell wrapper) reads it at
-	// entwurf_v2 send time to promote this
+	// MCP child (same Claude owner; the exec form leaves no hook shell wrapper) reads
+	// it at entwurf_v2 send time to promote this
 	// session from anonymous external-mcp to a REPLYABLE meta-session sender —
 	// process ancestry, not cwd inference (same repo + multiple sessions would be
 	// ambiguous). Best-effort: a failed marker only costs reply-addressability
 	// (WARN), it does not break the session or the receiver path.
 	//
-	// SE-1/SE-2 owner join: hooks.json explicitly captures its shell's `$PPID`
-	// (Claude) before `exec`, and resolveMetaHookOwnerPid verifies that pid is truly
-	// in this hook's ancestry. This supports both possible shell behaviors without
-	// attributing either one to an OS/host or guessing that every grandparent is
-	// Claude. Missing/forged carrier = no marker + loud hook evidence, never a marker
-	// for a short-lived wrapper or long-lived login shell.
+	// SE-1/SE-2 owner join: under the exec-form launch contract the owner IS this
+	// hook's parent — Claude execs `hook-launch.sh`, which `exec`s this payload and
+	// so hands it the same pid whose parent is Claude. No shell is involved on any
+	// host, so there is no wrapper to mistake for the owner and nothing to carry in
+	// an env var. Missing launcher provenance or an implausible parent yields no marker.
 	const ownerPid = resolveMetaHookOwnerPid();
 	if (ownerPid !== null) {
 		try {
@@ -225,7 +248,9 @@ function main(): void {
 	} else {
 		logLine(
 			"ERROR",
-			`owner pid carrier missing/invalid (${META_HOOK_OWNER_PID_ENV}); sender/receiver identity not armed (event=${eventName}, garden=${gardenId})`,
+			process.env[META_HOOK_LAUNCH_ENV] !== META_HOOK_LAUNCH_TOKEN
+				? `exec-launch provenance missing (${META_HOOK_LAUNCH_ENV}); this hook was NOT reached through hook-launch.sh, so its parent is not a trustworthy owner — an already-open Claude session still holding the OLD cached command does this. Reinstall the meta-bridge and RESTART that session. sender/receiver identity not armed (event=${eventName}, garden=${gardenId})`
+				: `no plausible native owner: parent pid ${process.ppid} is not a live owner (reparented orphan?); sender/receiver identity not armed (event=${eventName}, garden=${gardenId})`,
 		);
 	}
 
@@ -243,9 +268,9 @@ function main(): void {
 		if (!fs.existsSync(signal)) fs.writeFileSync(signal, "", { mode: 0o600 });
 		logLine("INFO", `armed watch ${signal}`);
 		// Receiver presence marker (SE-2): written on the arm-capable hook path that
-		// emits watchPaths, keyed by garden id with the validated Claude owner pid from
-		// the explicit shell `$PPID` carrier — same single owner as the sender marker,
-		// independent of whether the hook shell retained a process or tail-exec'd Node.
+		// emits watchPaths, keyed by garden id with the Claude owner pid this hook's
+		// exec-form parent gives it — the same single owner as the sender marker, on
+		// every host, because no shell exists on the launch path to sit in between.
 		// It records that a LIVE owner reached the watch-arm emit; it is not proof the
 		// host ack'd the watch registration. This is what lets a sender
 		// tell a live receiver from a terminated one whose record still lingers.

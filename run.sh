@@ -86,7 +86,8 @@ Usage:
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-meta-dual-read        # deterministic gate (0.11 Stage 0 step 3D-1): v2 write shape (serializeMetaIdentity) + dual-read dispatcher (parseMetaRecordAny/parseMetaIdentity) + write→read round-trip, pure, no API
   ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
-  ./run.sh check-meta-receiver-marker # deterministic gate (SE-2 + clean-host owner join): receiver marker round-trip/start-key/provenance + real hook command under BOTH tail-exec and retained-shell topologies; explicit shell-$PPID carrier must key sender+receiver to the live Claude owner, never wrapper/login-shell
+  ./run.sh check-meta-receiver-marker # deterministic gate (SE-2): receiver marker round-trip/start-key/provenance, UserPromptSubmit cannot mint presence, reader does not gate on record existence — marker SEMANTICS only; launch topology moved to check-hook-launch-topology
+  ./run.sh check-hook-launch-topology # #51 gate 1: shipped hooks.json is exec form through hook-launch.sh, launcher is loud on an empty argv (older Claude's silent args drop), exec preserves the pid so the hook's parent is Claude, and a space/$/backtick plugin path survives as one argv element
   ./run.sh check-meta-migration        # deterministic gate (0.11 Stage 0 step 3D-4 commit2): v1→v2 delivery-receipt migration (per-field state-wins, 3 timestamps, no-op when nothing to fill) + crash-order inside upsert (migrate before v2 rewrite; drift throws with record still v1), no API
   ./run.sh check-meta-dual-consumers   # deterministic gate (0.11 Stage 0 step 3D-4): delivery-agnostic dual-read seam — readMetaIdentityByGardenId + scanIdentityByNativeId read v1 AND v2, cross-schema duplicate = ambiguity throw (G1); v1-only raw readers remain for v1-fixture gates, no API
   ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const), slot stays (3D-4), no API
@@ -126,7 +127,7 @@ Usage:
   ./run.sh smoke-meta-async-drift     # 1.0.0 meta-bridge step 1: drift sentinel — version pins + Claude binary undocumented-behavior markers (LIVE=1 adds plugin watch-arm probe)
   ./run.sh smoke-meta-honesty         # 1.0.0 meta-bridge: honesty regression gate (#30 blockers) — doorbell counts ALL msgs honestly + hook logs failures as ERROR (best-effort, no scream). Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-meta-install-state   # 1.0.0 meta-bridge Phase 2: stateful install/uninstall + store-doctor regression gate. Offline/deterministic (deps: bash+node+python3)
-  ./run.sh check-meta-doctor-oracle   # 0.12.8 (#51): detection power of the release ORACLE — healthy fixture must reach `doctor: PASS`, then 19 planted defects (exec form, malformed exec args, partial hand-patch, carrier removal, owner type drift, extra leaf, extra matcher group, doorbell asyncRewake/path/timeout, no live bridge, stale receiver, ambiguous cache, missing artifact ×2, missing hook log, missing writer bundle, failing CLI probes) must each turn it FAIL naming their own cause, plus a positive case pinning that a long-writing CLI is NOT a false negative. Offline/deterministic (deps: bash+node+python3)
+  ./run.sh check-meta-doctor-oracle   # 0.12.8 (#51): detection power of the release ORACLE — healthy fixture must reach `doctor: PASS`, then 21 planted defects (retired shell form, partial hand-patch, launcher bypass/repoint/provenance loss, malformed exec args, owner type drift, extra leaf/group, doorbell asyncRewake/path/timeout, no live bridge, stale receiver, ambiguous/missing cache, missing hook log/writer, failing CLI probes) must each turn it FAIL naming their own cause, plus a positive case pinning that a long-writing CLI is NOT a false negative. Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-agy-install-state    # agy MCP + exact permission ownership regression (120): isolated HOME+XDG, adopt/state/inverse, symlink refuse, setup degrade. Offline/deterministic
   ./run.sh smoke-agy-statusline-state # agy ambient garden-id statusLine install/doctor/inverse regression (62). Offline/deterministic
   ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression (37). Offline/deterministic
@@ -138,7 +139,7 @@ Usage:
 
   ./run.sh install-meta-bridge        # INTERNAL part of `setup` (native-harness plugin) + doctor recovery path — prefer `setup`; stateful GLOBAL install (plugin + USER MCP + settings keyset, honest uninstall state)
   ./run.sh uninstall-meta-bridge      # 1.0.0 meta-bridge Phase 2: stateful GLOBAL uninstall (restore only keys/items captured in install-state)
-  ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51). exit 0 = every required layer was MEASURED on this host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; macOS cannot reach the live tier. Detection power is held by check-meta-doctor-oracle
+  ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is not yet verified/certified and stays nonzero for this cut (future validation may reopen it). Detection power is held by check-meta-doctor-oracle
   ./run.sh install-agy-bridge         # 봉인 7: agy MCP install adapter — register ONE entwurf-bridge server in the agy mcp_config (adopt file / create / REFUSE symlink), stable bin command, install-state under $XDG_DATA_HOME/entwurf/agy-bridge/
   ./run.sh uninstall-agy-bridge       # 봉인 7: honest inverse of install-agy-bridge from install-state (restore preimage / remove key; refuse if config became a symlink)
   ./run.sh doctor-agy-bridge          # fail-loud doctor: MCP config + exact permission rule + state + live probe label
@@ -155,7 +156,7 @@ Usage:
   ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.80.x peers
-  ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Non-root `npm install -g` into a writable isolated prefix, 5 bins via the PATH shim, then the package is FROZEN read-only and consumed: MCP tools/list + fake-Claude install-meta-bridge under a path+sha256 byte-fence + the strict doctor oracle (incl. the /proc live owner join). The delta over check-pack-install is the global lane, the read-only package, and the absent checkout. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that same condition RED (required CI)
+  ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to entwurf alias
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
   ./run.sh setup:links [--force]      # repair ~/.pi/agent/entwurf-targets.json link (use --force to replace a stale operator file or wrong symlink; a .bak is taken)
@@ -611,6 +612,17 @@ check_meta_receiver_marker() {
   # UserPromptSubmit cannot mint presence; reader does NOT gate on record existence
   # (recordBacked is the deliverability predicate's fact). Real tmpdir, no API.
   run_ts scripts/check-meta-receiver-marker.ts
+}
+
+check_hook_launch_topology() {
+  # #51 gate 1, deliberately built only AFTER the B/B2 verdict. Binds the SHIPPED
+  # hooks.json to real child topology: every leaf is exec form through the shipped
+  # hook-launch.sh, the launcher refuses an empty argv (the only visible symptom of an
+  # older Claude silently dropping `args`), and `exec` preserves the pid so the hook's
+  # parent is the process that stood in for Claude. Includes a plugin path containing
+  # space/$/backtick/;& — under exec form that is one opaque argv element, which is
+  # exactly what the retired shell form could not promise. No API, no live session.
+  run_ts scripts/check-hook-launch-topology.ts
 }
 
 check_meta_migration() {
@@ -1473,7 +1485,10 @@ const SITES = [
   ['scripts/meta-bridge-install.sh', /entwurf requires Node >= (\d+)/g, 1, 'installer die message'],
   ['scripts/meta-bridge-doctor.sh', /MJ:-0}" -ge (\d+)/g, 1, 'doctor judgment logic'],
   ['scripts/meta-bridge-doctor.sh', /need >= (\d+)/g, 1, 'doctor bad message'],
-  ['docs/setup-clean-host.md', /`>=(\d+)\.\d+\.\d+`/g, 1, 'clean-host pin matrix'],
+  // Anchored to the Node ROW, not to any `>=x.y.z` in the file. The loose pattern
+  // matched the Claude Code floor row the moment that table grew one (2026-07-22) and
+  // read its major as the Node major. A site rule has to name its own site.
+  ['docs/setup-clean-host.md', /\| Node \| \*\*`>=(\d+)\.\d+\.\d+`\*\*/g, 1, 'clean-host pin matrix'],
   ['mcp/entwurf-bridge/start.sh', /Node >= (\d+) \(engines\.node/g, 1, 'bridge launcher header'],
   ['.github/workflows/ci.yml', /node-version: (\d+)/g, 2, 'CI runner node-version'],
 ];
@@ -1538,6 +1553,195 @@ assert.ok(swept >= 6,
 console.log(`[check-node-floor-coherence] ok — Node >=${MAJOR} is coherent across engines.node, ${bound} bound declarations from ${SITES.length} site rules, and ${swept} declarations swept over ${tracked.length} tracked first-party contract text surfaces (single supported axis, no legacy lane). Non-text carriers (e.g. a Dockerfile \`FROM node:*\`) are OUTSIDE this pattern and must be bound by their own gate.`);
 EOF
   )
+}
+
+check_claude_floor_coherence() {
+  # #51 policy A. The Claude Code floor is a THREE-PART version, unlike the Node
+  # floor's major lane: the discriminator lives in the patch position (2.1.138 drops
+  # `args`, 2.1.139 introduces the exec form, 2.1.217 is the version actually proven
+  # in a live session). So it cannot borrow check-node-floor-coherence's major-only
+  # comparison and needs its own binding.
+  #
+  # package.json `entwurf.claudeCodeFloor` is the SSOT. The installer and the doctor
+  # DERIVE it at runtime through scripts/meta-bridge-claude-floor.sh, so they carry no
+  # literal to drift — that shared file is itself part of the contract and is asserted
+  # below. What remains are the human-facing declarations (the launcher's refusal
+  # message, docs, AGENTS) plus every fake `claude` CLI stub the gates spawn: a stub
+  # that reports a version BELOW the floor would make the doctor legitimately refuse
+  # its own fixture, so those are bound too — as `>=`, not equality, since a stub may
+  # honestly claim a newer version.
+  (cd "$REPO_DIR" && node --input-type=module <<'EOF'
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+
+const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+const declared = pkg.entwurf?.claudeCodeFloor;
+assert.match(String(declared), /^>=\d+\.\d+\.\d+$/,
+  `package.json entwurf.claudeCodeFloor must be a ">=X.Y.Z" spec (got ${declared ?? 'nothing'})`);
+const FLOOR = String(declared).slice(2);
+const cmp = (a, b) => {
+  const x = a.split('.').map(Number), y = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+};
+
+// The installer and doctor must DERIVE, never retype. If either grows a literal
+// floor, the number stops being single and this gate has to say so.
+const DERIVERS = ['scripts/meta-bridge-install.sh', 'scripts/meta-bridge-doctor.sh'];
+for (const file of DERIVERS) {
+  const text = readFileSync(file, 'utf8');
+  assert.ok(text.includes('meta-bridge-claude-floor.sh'),
+    `${file}: must source scripts/meta-bridge-claude-floor.sh — the floor is derived from package.json, never retyped`);
+  assert.ok(text.includes('claude_floor_satisfied'),
+    `${file}: sources the floor helper but never calls claude_floor_satisfied — a floor that is read and not enforced is decoration`);
+  const stray = [...text.matchAll(/Claude Code >=\s*(\d+\.\d+\.\d+)/g)];
+  for (const [decl, ver] of stray) {
+    assert.equal(ver, FLOOR, `${file}: hardcodes "${decl.trim()}" but the SSOT floor is ${FLOOR}`);
+  }
+}
+
+// Exact-equality declarations: prose and user-facing text that names the floor.
+const SITES = [
+  ['pi/meta-bridge/entwurf-meta-receive/scripts/hook-launch.sh', /Claude Code >= (\d+\.\d+\.\d+)/g, 1, 'launcher refusal message'],
+  ['scripts/meta-bridge-claude-floor.sh', /THE FLOOR IS (\d+\.\d+\.\d+)/g, 1, 'floor helper rationale header'],
+  ['docs/setup-clean-host.md', /`>=(\d+\.\d+\.\d+)`\*\* — the exec-form hook floor/g, 1, 'clean-host pin matrix'],
+  ['AGENTS.md', /Claude Code `>=(\d+\.\d+\.\d+)`/g, 1, 'AGENTS rule 13'],
+  ['README.md', /supported floor `>=(\d+\.\d+\.\d+)`/g, 1, 'README doctor description'],
+  ['scripts/check-hook-launch-topology.ts', /\/(\d+)\\\.(\d+)\\\.(\d+)\//g, 1, 'topology gate floor assertion'],
+];
+let bound = 0;
+for (const [file, re, min, label] of SITES) {
+  const text = readFileSync(file, 'utf8');
+  const hits = [...text.matchAll(re)];
+  assert.ok(hits.length >= min,
+    `${file}: ${label} — pattern matched ${hits.length} time(s), expected >= ${min}. The declaration left the gate; re-bind it instead of deleting the assertion.`);
+  for (const hit of hits) {
+    const ver = hit.length > 2 ? `${hit[1]}.${hit[2]}.${hit[3]}` : hit[1];
+    assert.equal(ver, FLOOR, `${file}: ${label} declares ${ver} in "${hit[0].trim()}", but the SSOT floor is ${FLOOR}`);
+  }
+  bound += hits.length;
+}
+
+// Every fake `claude` CLI a gate spawns. These are not prose: the doctor reads them
+// and judges the version, so a stub below the floor turns a healthy fixture RED for
+// the wrong reason. Swept over tracked files rather than a registered list, because
+// the miss this repo already paid for was a declaration in an UNREGISTERED file.
+const tracked = execFileSync('git', ['ls-files', '--cached', '--', '*.sh', '*.ts'], { encoding: 'utf8' })
+  .split('\n').filter(Boolean);
+assert.ok(tracked.length >= 20, `git ls-files returned ${tracked.length} files — the sweep lost its corpus`);
+const STUB = /echo\s+"(\d+\.\d+\.\d+) \(Claude Code\)"/g;
+let stubs = 0;
+for (const file of tracked) {
+  for (const [decl, ver] of readFileSync(file, 'utf8').matchAll(STUB)) {
+    stubs++;
+    assert.ok(cmp(ver, FLOOR) >= 0,
+      `${file}: fake claude CLI reports ${ver} in "${decl.trim()}", BELOW the floor ${FLOOR} — the doctor would refuse this fixture for the version, not for what the fixture is testing`);
+  }
+}
+assert.ok(stubs >= 4,
+  `sweep found only ${stubs} fake claude version stubs — the pattern rotted and would pass vacuously`);
+
+// The sweep above can only judge stubs that ANSWER `--version`. A fake `claude` with
+// no version arm at all is invisible to it — and that is not hypothetical: adding the
+// installer's floor check turned three such stubs into silent installer deaths on the
+// first full run (2026-07-22), caught by the smoke rather than by this gate. A gate
+// that binds only the declarations that exist is the same "sweep what is already
+// bound" mistake check-node-floor-coherence had to fix. So: if a file MINTS a fake
+// claude, that stub must be able to say who it is.
+const MINT = /(?:cat|tee)\s*>+\s*"?\$?\{?\w+\}?\/claude"?\s*<<-?\s*'?(\w+)'?/g;
+let stubsMinted = 0;
+for (const file of tracked) {
+  const text = readFileSync(file, 'utf8');
+  for (const m of text.matchAll(MINT)) {
+    stubsMinted++;
+    const body = text.slice(m.index + m[0].length);
+    const end = body.search(new RegExp(`^\\s*${m[1]}\\s*$`, 'm'));
+    const stub = end >= 0 ? body.slice(0, end) : body;
+    assert.ok(stub.includes('--version'),
+      `${file}: a fake \`claude\` stub is minted here with no \`--version\` arm. The installer and doctor read the version to enforce the floor, so this stub makes them die (or pass) for a reason that has nothing to do with what the fixture is testing.`);
+  }
+}
+assert.ok(stubsMinted >= 4,
+  `sweep found only ${stubsMinted} fake claude stub definitions — the mint pattern rotted and would pass vacuously`);
+
+console.log(`[check-claude-floor-coherence] ok — Claude Code >=${FLOOR} is coherent across package.json (SSOT), ${DERIVERS.length} runtime derivers that never retype it, ${bound} bound declarations from ${SITES.length} site rules, ${stubs} fake-CLI version declarations (>= floor, since a stub may honestly claim newer), and ${stubsMinted} minted fake-claude stubs each able to answer --version — swept over ${tracked.length} tracked files.`);
+EOF
+  )
+
+  # The shared detector is called from a bare assignment under `set -euo pipefail`.
+  # A failed or unparseable probe must therefore return success-with-empty so each
+  # caller reaches its own explicit NOT CERTIFIED / install-refusal diagnosis instead
+  # of dying at the assignment. The long-writer cell reproduces the old early-reader
+  # SIGPIPE class with 128 KiB before the version line; the parser must consume it all.
+  local probe_tmp
+  probe_tmp="$(mktemp -d -t entwurf-claude-floor.XXXXXX)"
+  cat > "$probe_tmp/claude" <<'SH'
+#!/usr/bin/env bash
+[ "${1:-}" = "--version" ] || exit 2
+case "${FAKE_CLAUDE_VERSION_MODE:-ok}" in
+  ok)          printf '%s\n' 'diagnostic prelude' '2.1.217 (Claude Code)' ;;
+  unparseable) printf '%s\n' 'Claude Code version unknown' ;;
+  nonzero)     printf '%s\n' '2.1.217 (failed probe)'; exit 7 ;;
+  longwriter)  python3 - <<'PY'
+import sys
+sys.stdout.write("x" * (128 * 1024) + "\n2.1.217 (Claude Code)\n")
+PY
+    ;;
+esac
+SH
+  chmod +x "$probe_tmp/claude"
+  for mode in ok longwriter; do
+    FAKE_CLAUDE_VERSION_MODE="$mode" PATH="$probe_tmp:$PATH" bash -c '
+      set -euo pipefail
+      source "$1"
+      [ "$(claude_detected_version)" = 2.1.217 ]
+    ' _ "$REPO_DIR/scripts/meta-bridge-claude-floor.sh"
+  done
+  for mode in unparseable nonzero; do
+    FAKE_CLAUDE_VERSION_MODE="$mode" PATH="$probe_tmp:$PATH" bash -c '
+      set -euo pipefail
+      source "$1"
+      [ -z "$(claude_detected_version)" ]
+    ' _ "$REPO_DIR/scripts/meta-bridge-claude-floor.sh"
+  done
+  ok "[check-claude-floor-coherence] detector returns the intended value for normal, nonzero, unparseable, and 128-KiB long-writer probes"
+
+  # Do not stop at helper behavior: prove both production callers reach THEIR OWN
+  # diagnostic branches. Every writable/readable root is sandboxed; these probes stop
+  # before an installer side effect and let the doctor finish its normal FAIL summary.
+  local probe_home="$probe_tmp/home" install_out doctor_out
+  mkdir -p "$probe_home" "$probe_tmp/xdg-data" "$probe_tmp/xdg-state" "$probe_tmp/xdg-cache" "$probe_tmp/agent"
+  if install_out="$(env \
+      HOME="$probe_home" XDG_DATA_HOME="$probe_tmp/xdg-data" XDG_STATE_HOME="$probe_tmp/xdg-state" XDG_CACHE_HOME="$probe_tmp/xdg-cache" \
+      PI_CODING_AGENT_DIR="$probe_tmp/agent" CLAUDE_CONFIG_DIR="$probe_home/.claude" \
+      FAKE_CLAUDE_VERSION_MODE=unparseable PATH="$probe_tmp:$PATH" \
+      bash "$REPO_DIR/scripts/meta-bridge-install.sh" 2>&1)"; then
+    echo "[check-claude-floor-coherence] FAIL: installer accepted an unparseable Claude version" >&2
+    rm -rf "$probe_tmp"
+    return 1
+  fi
+  case "$install_out" in
+    *"meta-bridge-install: could not read a version from 'claude --version'"*) ;;
+    *) echo "[check-claude-floor-coherence] FAIL: installer died before its own unidentifiable-version diagnosis: $install_out" >&2; rm -rf "$probe_tmp"; return 1 ;;
+  esac
+  ok "[check-claude-floor-coherence] installer reaches its own unidentifiable-version refusal branch"
+
+  if doctor_out="$(env \
+      HOME="$probe_home" XDG_DATA_HOME="$probe_tmp/xdg-data" XDG_STATE_HOME="$probe_tmp/xdg-state" XDG_CACHE_HOME="$probe_tmp/xdg-cache" \
+      PI_CODING_AGENT_DIR="$probe_tmp/agent" CLAUDE_CONFIG_DIR="$probe_home/.claude" \
+      FAKE_CLAUDE_VERSION_MODE=nonzero PATH="$probe_tmp:$PATH" \
+      bash "$REPO_DIR/scripts/meta-bridge-doctor.sh" 2>&1)"; then
+    echo "[check-claude-floor-coherence] FAIL: doctor certified a failed Claude version probe" >&2
+    rm -rf "$probe_tmp"
+    return 1
+  fi
+  case "$doctor_out" in
+    *"could not read a version from 'claude --version' — NOT CERTIFIED"*"meta-bridge doctor: FAIL"*) ;;
+    *) echo "[check-claude-floor-coherence] FAIL: doctor did not reach its own NOT CERTIFIED branch and final FAIL summary: $doctor_out" >&2; rm -rf "$probe_tmp"; return 1 ;;
+  esac
+  ok "[check-claude-floor-coherence] doctor reaches its own NOT CERTIFIED branch and final FAIL summary"
+  rm -rf "$probe_tmp"
 }
 
 check_pi_import_surface() {
@@ -2577,7 +2781,7 @@ sys.exit(0 if any(isinstance(s,str) and s.endswith('/node_modules/@junghanacs/en
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "${FAKE_CLAUDE_LOG:?}"
 case "$1${2:+ $2}" in
-  "--version") echo "2.1.197 (Claude Code)" ;;
+  "--version") echo "2.1.217 (Claude Code)" ;;
   "plugin validate") : ;;
   "plugin uninstall") : ;;
   "plugin marketplace") : ;;
@@ -2621,8 +2825,23 @@ SH
     fail "[check-pack-install] installed hooks.json references a raw .ts entry or an unbaked placeholder (__HOOK_ENTRY__/__NODE_BIN__): $installed_hooks_json"
     return 1
   fi
-  if [ "$(grep -c 'ENTWURF_META_HOOK_OWNER_PID=\$PPID exec .*meta-bridge-hook\.js' "$installed_hooks_json" || true)" -ne 3 ]; then
-    fail "[check-pack-install] installed hooks.json lost the explicit shell-\$PPID owner + exec contract on one of SessionStart/CwdChanged/UserPromptSubmit: $installed_hooks_json"
+  # Exec-form launch contract on all three owner hooks: `command` is the shipped
+  # launcher and the baked entry travels in `args`. Counting the launcher alone would
+  # pass a manifest whose args were emptied, so require the pair on the same leaf.
+  if [ "$(grep -c 'scripts/hook-launch\.sh' "$installed_hooks_json" || true)" -ne 4 ]; then
+    fail "[check-pack-install] installed hooks.json does not route all 4 hooks (3 owner + FileChanged) through the shipped hook-launch.sh: $installed_hooks_json"
+    return 1
+  fi
+  if [ "$(grep -c 'meta-bridge-hook\.js"' "$installed_hooks_json" || true)" -ne 3 ]; then
+    fail "[check-pack-install] installed hooks.json lost the baked hook entry in the exec-form args on one of SessionStart/CwdChanged/UserPromptSubmit: $installed_hooks_json"
+    return 1
+  fi
+  if grep -q 'ENTWURF_META_HOOK_OWNER_PID' "$installed_hooks_json"; then
+    fail "[check-pack-install] installed hooks.json still carries the RETIRED shell-\$PPID owner carrier: $installed_hooks_json"
+    return 1
+  fi
+  if [ ! -x "$stable_asm/entwurf-meta-receive/scripts/hook-launch.sh" ]; then
+    fail "[check-pack-install] assembled hook-launch.sh is missing or not executable — the exec form names it as the executable, so a lost +x bit is ENOEXEC at session open"
     return 1
   fi
   if [ -e "$npm_pkg/pi/meta-bridge/.assembled/entwurf-meta-receive" ]; then
@@ -2642,7 +2861,7 @@ SH
   cp "$stable_asm/entwurf-meta-receive/entwurf-capabilities.json" "$nm_probe/entwurf-capabilities.json"
   local probe_env='{"session_id":"pack-probe","transcript_path":"/tmp/x.jsonl","cwd":"/tmp","hook_event_name":"SessionStart","model":{"id":"probe"}}'
   local probe_out
-  if probe_out="$(printf '%s' "$probe_env" | env PI_CODING_AGENT_DIR="$(mktemp -d)" CLAUDE_PLUGIN_ROOT="$nm_probe" ENTWURF_META_HOOK_OWNER_PID="$$" node "$nm_probe/meta-bridge-hook.js" 2>&1)" && printf '%s' "$probe_out" | grep -q hookSpecificOutput; then
+  if probe_out="$(printf '%s' "$probe_env" | env PI_CODING_AGENT_DIR="$(mktemp -d)" CLAUDE_PLUGIN_ROOT="$nm_probe" node "$nm_probe/meta-bridge-hook.js" 2>&1)" && printf '%s' "$probe_out" | grep -q hookSpecificOutput; then
     : # compiled hook crosses the node_modules strip-types fence safely
   else
     fail "[check-pack-install] compiled hook failed to run under node_modules with plain node: $(printf '%s' "$probe_out" | tr '\n' ' ' | cut -c1-200)"
@@ -2654,7 +2873,7 @@ SH
   # capture stderr and require the exact ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING.
   cp "$npm_pkg/pi-extensions/meta-bridge-hook.ts" "$nm_probe/meta-bridge-hook.ts"
   local ts_out ts_rc
-  ts_out="$(printf '%s' "$probe_env" | env PI_CODING_AGENT_DIR="$(mktemp -d)" CLAUDE_PLUGIN_ROOT="$nm_probe" ENTWURF_META_HOOK_OWNER_PID="$$" node "$nm_probe/meta-bridge-hook.ts" 2>&1)" && ts_rc=0 || ts_rc=$?
+  ts_out="$(printf '%s' "$probe_env" | env PI_CODING_AGENT_DIR="$(mktemp -d)" CLAUDE_PLUGIN_ROOT="$nm_probe" node "$nm_probe/meta-bridge-hook.ts" 2>&1)" && ts_rc=0 || ts_rc=$?
   if [ "${ts_rc:-0}" -eq 0 ]; then
     fail "[check-pack-install] raw .ts hook UNEXPECTEDLY ran under node_modules — strip-types fence moved; the compiled-hook rationale must be revisited"
     rm -rf "$nm_probe"; return 1
@@ -3632,6 +3851,9 @@ case "$cmd" in
   check-meta-receiver-marker)
     check_meta_receiver_marker
     ;;
+  check-hook-launch-topology)
+    check_hook_launch_topology
+    ;;
   check-meta-migration)
     check_meta_migration
     ;;
@@ -3841,7 +4063,7 @@ case "$cmd" in
     # existing doctor drives both expect exit 1 and neither has a plugin cache, so the
     # installed-form classification and synthetic owner join never ran under any gate.
     # This stands up a healthy fixture (real assembly + planted cache + live owner +
-    # fake bridge), proves PASS, then plants 19 defects that must each turn it red WITH
+    # fake bridge), proves PASS, then plants 21 defects that must each turn it red WITH
     # THE MESSAGE THAT NAMES THEM. Offline + deterministic (deps bash+node+python3).
     (cd "$REPO_DIR" && bash scripts/check-meta-doctor-oracle.sh)
     ;;
@@ -3907,7 +4129,10 @@ case "$cmd" in
     # XDG data dir ($XDG_DATA_HOME/entwurf/meta-bridge/.assembled — dev clone and
     # installed package alike, never the checkout) and runs marketplace add +
     # install --scope user, so every native Claude Code session auto-loads it.
-    # Idempotent; Linux/macOS only (Windows fail-fast).
+    # Idempotent; Linux is the only currently certified axis for the #51 repair cut.
+    # Darwin fails loud as not-yet-verified because the strict doctor cannot currently
+    # certify its live owner join; future validation may reopen it. Uninstall permits Darwin
+    # so an older macOS install is not stranded without an honest inverse.
     (cd "$REPO_DIR" && bash scripts/meta-bridge-install.sh "$@")
     ;;
   uninstall-meta-bridge)
@@ -4056,6 +4281,9 @@ case "$cmd" in
     ;;
   check-node-floor-coherence)
     check_node_floor_coherence
+    ;;
+  check-claude-floor-coherence)
+    check_claude_floor_coherence
     ;;
   check-install-preflight)
     check_install_preflight

@@ -88,7 +88,7 @@ cat > "$BIN/claude" <<'SH'
 printf '%s\n' "$*" >> "$FAKE_CLAUDE_LOG"
 case "$1${2:+ $2}${3:+ $3}" in
   "--version")
-    echo "2.1.216 (Claude Code)" ;;
+    echo "2.1.217 (Claude Code)" ;;
   "plugin list --json")
     # FAKE_NO_JSON stands in for a Claude floor with no --json surface at all.
     [ "${FAKE_NO_JSON:-0}" = 1 ] && exit 0
@@ -141,17 +141,23 @@ ok "plugin cache PLANTED from the assembled bundle (fixture, not a real \`claude
 cp -r "$PLANTED" "$TMP/pristine-cache"
 
 # --- 2. live owner fixture ---------------------------------------------------
-# THIS shell stands in for Claude. Drive the installed owner command as a foreground
-# child so its inner `$PPID` is $$; the hook then keys sender+receiver markers to $$.
-HOOK_COMMAND="$(python3 -c '
+# THIS shell stands in for Claude. Drive the installed owner ARGV the way Claude execs
+# an exec-form hook — resolving ${CLAUDE_PLUGIN_ROOT} per element as a plain string,
+# with no shell — as a foreground child. hook-launch.sh then `exec`s the payload, so the
+# hook's parent is $$ and it keys sender+receiver markers to $$.
+mapfile -t HOOK_ARGV < <(python3 -c '
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
-print(d["hooks"]["SessionStart"][0]["hooks"][0]["command"])
-' "$PLANTED/hooks/hooks.json")"
+leaf = d["hooks"]["SessionStart"][0]["hooks"][0]
+root = sys.argv[2]
+print(leaf["command"].replace("${CLAUDE_PLUGIN_ROOT}", root))
+for a in leaf["args"]:
+    print(a.replace("${CLAUDE_PLUGIN_ROOT}", root))
+' "$PLANTED/hooks/hooks.json" "$PLANTED")
 printf '%s' '{"session_id":"oracle-native-1","transcript_path":"/tmp/entwurf-oracle-transcript.jsonl","cwd":"/tmp","hook_event_name":"SessionStart","model":{"id":"oracle-model"}}' > "$TMP/hook-input.json"
-if env CLAUDE_PLUGIN_ROOT="$PLANTED" bash -c "$HOOK_COMMAND" < "$TMP/hook-input.json" > "$TMP/hook-run.txt" 2>&1 \
+if env CLAUDE_PLUGIN_ROOT="$PLANTED" "${HOOK_ARGV[@]}" < "$TMP/hook-input.json" > "$TMP/hook-run.txt" 2>&1 \
    && [ -f "$AGENT/meta-senders/claude-code/$$.json" ]; then
-  ok "installed owner command keyed its sender marker to this stand-in Claude pid ($$)"
+  ok "installed owner argv keyed its sender marker to this stand-in Claude pid ($$)"
 else
   bad "owner fixture drive failed: $(tr '\n' ' ' < "$TMP/hook-run.txt" | cut -c1-300)"
 fi
@@ -203,7 +209,8 @@ else
 fi
 for claim in \
   'active cached artifact resolved from plugin installPath' \
-  'launch form: shell form with the explicit $PPID owner carrier' \
+  'exec-form launch contract supported' \
+  'launch form: exec form through the shipped hook-launch.sh' \
   'FileChanged doorbell matches the shipped static contract exactly' \
   'keys its sender marker to the live host pid' \
   'sender + receiver owner join is live and record-backed'
@@ -214,20 +221,21 @@ done
 # --- 4. MUTATIONS ------------------------------------------------------------
 echo "[mutations] each must flip PASS→FAIL for its own reason"
 
-# M1 — exec form. The launch form hejdev6g was hand-patched into. Must be NAMED, not
-# reported as unreadable drift.
+# M1 — reversion to the RETIRED shell form (the `$PPID` carrier manifest this release
+# replaced, and the form hejdev6g was hand-patched away from). Must be NAMED, not
+# reported as unreadable drift: the operator has to learn the form is retired, not that
+# their file is corrupt.
 python3 - "$PLANTED/hooks/hooks.json" <<'PY'
-import json, re, sys
+import json, sys
 p = sys.argv[1]
 d = json.load(open(p, encoding="utf-8"))
 for event in ("SessionStart", "CwdChanged", "UserPromptSubmit"):
     leaf = d["hooks"][event][0]["hooks"][0]
-    m = re.fullmatch(r"ENTWURF_META_HOOK_OWNER_PID=\$PPID exec (\S+) (\S+)", leaf["command"])
-    leaf["command"] = m.group(1)
-    leaf["args"] = [m.group(2)]
+    node, entry = leaf.pop("args")
+    leaf["command"] = f"ENTWURF_META_HOOK_OWNER_PID=$PPID exec {node} {entry}"
 json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
 PY
-expect_red "exec form installed" "RECOGNIZED EXEC-FORM"
+expect_red "reverted to the retired shell form" "SHELL FORM, which this release no longer authorizes"
 restore_cache
 
 # M2 — partial hand-patch: SessionStart authorized, CwdChanged reverted. THE hole that
@@ -237,23 +245,58 @@ import json, sys
 p = sys.argv[1]
 d = json.load(open(p, encoding="utf-8"))
 leaf = d["hooks"]["CwdChanged"][0]["hooks"][0]
-leaf["command"] = leaf["command"].replace("ENTWURF_META_HOOK_OWNER_PID=$PPID exec ", "")
+node, entry = leaf.pop("args")
+leaf["command"] = f"{node} {entry}"
 json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
 PY
 expect_red "only SessionStart carries the contract" "owner hooks disagree on launch form"
 restore_cache
 
-# M3 — the pre-carrier shell form (what shipped before 26b8ab1).
+# M3 — exec form that SKIPS the shipped launcher (`command` = node directly). This is
+# the seductive one: it works perfectly on a current Claude, so every runtime signal
+# looks healthy — and then on an older Claude it degrades in total silence, because the
+# launcher that would have refused an empty argv is not on the path. The doctor must
+# refuse the shape, not wait for the host that breaks.
 python3 - "$PLANTED/hooks/hooks.json" <<'PY'
 import json, sys
 p = sys.argv[1]
 d = json.load(open(p, encoding="utf-8"))
 for event in ("SessionStart", "CwdChanged", "UserPromptSubmit"):
     leaf = d["hooks"][event][0]["hooks"][0]
-    leaf["command"] = leaf["command"].replace("ENTWURF_META_HOOK_OWNER_PID=$PPID exec ", "")
+    node, entry = leaf["args"]
+    leaf["command"] = node
+    leaf["args"] = [entry]
 json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
 PY
-expect_red "owner carrier removed from every hook" "shell form WITHOUT the owner carrier contract"
+expect_red "exec form bypassing hook-launch.sh" "do NOT go through the shipped"
+restore_cache
+
+# M3a — launcher repointed at an attacker path that still ends in hook-launch.sh. The
+# same suffix-vs-equality lesson M4b teaches for the doorbell, on the owner side.
+python3 - "$PLANTED/hooks/hooks.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+for event in ("SessionStart", "CwdChanged", "UserPromptSubmit"):
+    d["hooks"][event][0]["hooks"][0]["command"] = "/tmp/evil/scripts/hook-launch.sh"
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+expect_red "launcher repointed at /tmp/evil (suffix still matches)" "do NOT go through the shipped"
+restore_cache
+
+# M3f — the INSTALLED launcher stops stamping exec-launch provenance. Nothing about
+# the manifest changes, so every static check still passes; what breaks is the thing
+# the launcher exists for. Without the token the hook refuses to write sender/receiver
+# markers (fail-closed), so the synthetic owner join has nothing to prove itself with.
+# This is the upgrade-mismatch defect seen from the doctor's side.
+python3 - "$PLANTED/scripts/hook-launch.sh" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+s = s.replace('export ENTWURF_META_HOOK_LAUNCH="hook-launch/v1"', ": # provenance removed")
+open(p, "w", encoding="utf-8").write(s)
+PY
+expect_red "installed launcher stopped stamping exec-launch provenance" "failed owner-join execution"
 restore_cache
 
 # M3b — `args` present but malformed. Must NOT be excused as the recognized upstream

@@ -43,6 +43,7 @@
  * Read-only: parses sources, spawns nothing.
  */
 
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -411,6 +412,33 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		"S5c: every mutating run.sh drive in the offline floor is sandboxed at every root it writes",
 		agentDirXdgOffenders.length === 0,
 		agentDirXdgOffenders.join("\n"),
+	);
+}
+
+// ── S6: tracked first-party sources are TEXT ────────────────────────────────
+// A single stray NUL byte makes a source file `data` to file(1) and BINARY to git:
+// `git diff` stops showing content, and every reviewer and safety hook that reads the
+// diff is reading nothing. That is not a cosmetic defect — it is a hole straight
+// through the review surface, and it is silent because tsc, biome and the test run all
+// keep passing (a NUL inside a JS string literal is perfectly valid code).
+// This is not hypothetical: a `.join("\0")` typo shipped in a new gate here on
+// 2026-07-22 and was caught by cross-review reading `file`, not by any gate.
+{
+	const tracked = execFileSync(
+		"git",
+		["ls-files", "--cached", "--", "*.ts", "*.js", "*.sh", "*.py", "*.json", "*.md"],
+		{
+			cwd: REPO,
+			encoding: "utf8",
+		},
+	)
+		.split("\n")
+		.filter(Boolean);
+	const binary = tracked.filter((f) => readFileSync(path.join(REPO, f)).includes(0));
+	ok(
+		`S6: all ${tracked.length} tracked first-party text sources are NUL-free (git shows them as diffable text)`,
+		tracked.length >= 20 && binary.length === 0,
+		binary.length ? binary.map((f) => `${f}: contains a NUL byte`).join("\n") : "git ls-files returned too few files",
 	);
 }
 

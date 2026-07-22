@@ -13,6 +13,28 @@ baseline below instead of being forced into Claude's overlay questions. Codex
 (pi-native / delivery probe) and Gemini (historical non-goal ACP probe) remain
 reference axes, not the shipped ACP baseline.
 
+## Release-host baseline — #51 repair cut
+
+This table is the operator-facing support/certification view. It complements the
+model interview below; a persuasive answer from the model cannot turn an unmeasured
+host into a certified one.
+
+| Surface | Automated artifact evidence | Direct/native evidence | Current verdict |
+|---|---|---|---|
+| Node 24 Linux package consumer | Required `artifact-consumer` CI: read-only candidate `.tgz`, checkout-invisible, non-root global install, PATH shims, frozen package root, path+sha256 regular-file fence, strict doctor fixture | None required for the package layout itself | Package-consumer shape verified. The planted Claude cache/owner/bridge are synthetic and prove no real Claude lifecycle. |
+| Claude Code 2.1.217 exec form | `check-hook-launch-topology` + `check-claude-floor-coherence`; doctor oracle healthy fixture + 21 defect mutations | B2 actual Claude session on NixOS: args per element, literal `${HOME}`, direct parent, FileChanged exit 2 → idle wake | Runtime behavior verified at 2.1.217 on one host; this is the supported floor. |
+| Claude Code 2.1.138 negative | Launcher empty-argv refusal + installer/doctor floor checks | B actual Claude session on NixOS: args discarded while runtime reported success | Unsupported; no shell-form fallback. |
+| Maintainer NixOS installed package | Gates and B/B2 are green, but the installed artifact is intentionally stale before release | Post-release clean reinstall → new Claude session → installed doctor exit 0 **pending** | Not yet host-certified for the repair artifact. |
+| hejdev6 Ubuntu installed package | Linux artifact-consumer gate models the package shape, not this machine | Post-release clean reinstall → new Claude session → installed doctor exit 0 **pending** | Recovery remains open; hand-patched hooks and validate output are not acceptance. |
+| macOS Claude meta-bridge | No artifact-consumer job and no `/proc` live join | None | **Not yet verified/certified for this repair cut.** Installer refuses Darwin and doctor remains nonzero; uninstall permits Darwin to remove older managed state. This is not permanent—future native validation may reopen it, and package-level `os` stays unrestricted. |
+| WSL2 / Windows | None | None | Unverified / outside this repair cut. |
+
+**Operator acceptance rule:** on a claimed Claude host, reinstall from the released
+artifact, restart every old Claude process, open a new session, and run the doctor
+from that installed package. PASS means exit 0 with the live MCP↔sender↔receiver
+join. `plugin validate`, a hand-inspected marker, or a synthetic fixture cannot
+supersede doctor RED.
+
 ## How to use
 
 Each question carries a **stable ID** so a future operator can spot a
@@ -251,6 +273,24 @@ prompt, and if so quote the visible text exactly:
 ---
 
 # HISTORY (pointer)
+
+2026-07-22 repair evidence: Linux artifact-consumer C is committed locally as
+`328c66e` (not yet pushed at the time of this baseline update); B/B2 direct-native
+observations and the exec-only production cut are documented in issue #51 and
+VERIFY's host matrix. **Post-provenance C was re-proven rather than inheriting the
+earlier green:** the first rerun correctly went RED because its stand-in Claude was
+container PID 1, which the product rejects as an impossible/reparented owner. The
+fixture now keeps an outer PID-1 shell and runs the consumer as pid 8; both default
+pack-once and caller-preserved exact-tgz modes reached doctor PASS with marker
+`ownerPid=8 (>1)` and identical artifact sha256. The preserved file's
+inode/size/mtime/sha tuple was unchanged across acceptance. Evidence logs:
+`/tmp/pi-tmux-entwurf-exact-final.log` and
+`/tmp/pi-tmux-entwurf-default-final.log`; the digest belongs in the external cut log,
+not inside this shipped file (embedding it would mutate the tarball it names).
+This was the current `0.12.7-1` gate candidate, **not** the approved release artifact;
+repeat exact mode after the separate `0.12.8-repair.0` version commit. Maintainer/
+hejdev6 installed doctor GREEN remains deliberately pending until after release.
+
 
 Per-release baselines — the 0.9.0 garden-native identity cut (17 PASS / 0 FAIL /
 0 SKIP `/gnew`-inclusive gate, #28), and the older 0.8.x / 0.5.0 context-pressure

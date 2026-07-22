@@ -105,11 +105,20 @@ if echo "$BL_OUT" | grep -q "2 unread mailbox messages"; then ok "backlog .deliv
 echo "[B] hook ERROR logging (blocker #2)"
 
 export PI_CODING_AGENT_DIR="$TMP/agent"
-# Stand in for Claude's hooks.json shell: its explicit $PPID carrier names the
-# still-live host process. Here this smoke shell is that host for child hook nodes.
-export ENTWURF_META_HOOK_OWNER_PID="$$"
+# Stand in for Claude itself: under the exec-form launch contract the hook's owner is
+# simply its parent, so this smoke shell IS the host for the child hook nodes below.
+# No owner pid is exported — the retired $PPID carrier is exactly what the exec form made
+# unnecessary, and re-adding it here would test a contract we no longer ship. The one
+# thing the launcher does stamp is exec-launch PROVENANCE, and it is stamped by running
+# the real launcher below rather than by faking the variable here.
 HOOK_LOG="$TMP/agent/meta-bridge-hook.log"
-run_hook() { echo "$1" | "$NODE_BIN" --experimental-strip-types "$HOOK" >/dev/null 2>&1 || true; }
+# Drive the hook THROUGH the shipped launcher, exactly as the exec-form manifest does.
+# Going around it would mean this smoke tests a launch path the product never uses — and
+# since the launcher is what stamps the exec-launch provenance the hook requires before
+# writing any marker, a direct call would make the "sender marker evidence" assertion
+# below fail for a reason that has nothing to do with what part B is about.
+LAUNCHER="$REPO/pi/meta-bridge/entwurf-meta-receive/scripts/hook-launch.sh"
+run_hook() { echo "$1" | "$LAUNCHER" "$NODE_BIN" --experimental-strip-types "$HOOK" >/dev/null 2>&1 || true; }
 
 # Normal SessionStart create -> INFO, NO ERROR (no false alarm).
 rm -f "$HOOK_LOG"

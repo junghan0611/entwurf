@@ -2,20 +2,28 @@
 
 > NEXT는 부트 섹터다. 닫힌 역사는 CHANGELOG/git에, 장기 방향은 ROADMAP/이슈에 둔다.
 
-## NOW — C는 닫혔다. B/B2(실제 Claude 세션)를 연다
+## NOW — exec form으로 전환했다. 커밋 대기 중이다
 
-- **Current:** `check-install-container`가 커밋됐다 — Linux artifact-consumer 하네스가 섰다. 개발자 checkout에서만 green이던 패키지를, 실제 사용자가 candidate artifact 하나만 받아 설치하는 면에서 검증한다. **push는 아직이다**(GLG 결정). production runtime 변경 0.
-- **Next — B/B2를 한 번에 요청한다. 이건 실제 Claude 세션이 필요하고, 그것만이 답할 수 있다.**
-  - **B (구버전 세션 1회):** Claude 2.1.138이 실제 `args` exec-form hook을 만났을 때 **fail-loud인지 silent인지** 기록한다. 2.1.138 validator가 `args`를 green으로 통과시키는 것은 이미 확인됐다(unknown key passthrough) — 남은 것은 런타임 동작이다.
-  - **B2 (현행 버전 세션 1회):** exec form의 ppid 실증과 `asyncRewake` acceptance를 **같은 세션에서 동시에** 관찰한다. production `hooks.json`은 건드리지 않고 격리 `CLAUDE_CONFIG_DIR` + 임시 fixture로 편다. exit 2→wake는 exec 전환의 선행 가부 조건이므로 전환 뒤로 미루지 않는다.
-  - **Return:** 증거로 정책 A(`Claude >=2.1.139`, entwurf가 install/doctor에서 직접 fail-loud)와 B(shell fallback) 중 **추천안만** #51에 기록하고 멈춘다. 판정 뒤에야 실제 설치가 생성한 hooks.json 기준으로 topology gate를 만들고 receiver-marker의 두 topology case를 이관한다(marker 의미론 유지). exec form이 이기면 `$PPID` carrier·ancestry walk·missing-carrier 계약을 제거한다.
-- **C에서 확정된 사실(다시 파지 마라):**
-  - **checkout-CWD leakage는 델타가 아니다.** `run.sh`가 shipped subcommand를 전부 `(cd "$REPO_DIR" && …)`로 디스패치하고, shell은 `BASH_SOURCE`, JS/TS는 `import.meta.dirname`/`__dirname` 앵커다. cwd 결함을 심으면 **제품이 중화해 두 레인 모두 GREEN**이 된다. `/bin/sh`=dash도 shipped 셰방이 전부 bash라 검출력이 아니라 환경 fact다.
-  - **freeze와 manifest fence는 상호 독립 검출기가 아니다.** freeze는 permission 층위의 **소비자 사실**(쓰기를 실제로 EACCES로 거부하는 호스트 재현), fence는 **검출기**이며 범위는 정확히 regular-file path+sha256 manifest다(perms·ownership·symlink 비교 아님). D2가 증명한 것은 "root freeze만으로는 부족하다"이지 그 역이 아니다.
-  - **소비자보다 엄격한 세계를 모델링하지 마라.** `chmod -R a-w` freeze는 `cp -r`이 모드를 설치자 자신의 XDG assembly 대상까지 전파해 **false RED**를 두 번 만들었다(디렉토리 555 → 파일 444). 실제 `sudo npm i -g` 소비자는 755/644라 닿지 않는다. 결함을 찾는 게 아니라 만들어내는 짓이다.
+- **Current:** B/B2 증거로 **정책 A가 확정됐고**(GLG, 2026-07-22) production 전환을 구현했다. **전부 uncommitted다.** HEAD는 `328c66e` 그대로다.
+  - hooks.json 4개 hook 전부 **exec form** — `command`는 새로 출하하는 `scripts/hook-launch.sh`, `args`가 실제 argv다.
+  - hook은 `process.ppid`를 그대로 owner로 쓴다. **`$PPID` carrier · ancestry walk · missing-carrier 계약은 삭제됐다.**
+  - **단 `process.ppid`는 launcher를 거쳐 왔을 때만 owner다.** launcher가 `exec` 직전 non-identity 토큰 `ENTWURF_META_HOOK_LAUNCH`를 stamp하고, hook은 그 토큰이 없으면 sender/receiver marker를 **하나도 쓰지 않는다**. carrier의 개명이 아니다 — carrier는 ancestry 검증이 필요한 *pid*를 실었고 이 토큰은 identity를 전혀 싣지 않는다. 목적은 하나: 이미 열린 세션이 OLD cached command로 새 hook을 부르는 upgrade mismatch를 fail-closed로 유지하는 것. 장식이 아니므로 정리 대상으로 지우지 마라.
+  - **Claude Code floor `>=2.1.217`** — SSOT는 `package.json` `entwurf.claudeCodeFloor` 하나이고, installer/doctor는 `scripts/meta-bridge-claude-floor.sh`로 **파생**해서 강제한다(리터럴 재타이핑 금지).
+  - 신규 게이트 2개: `check-hook-launch-topology`(58 checks), `check-claude-floor-coherence`. 둘 다 `pnpm check` aggregate에 등록됐다.
+- **Next — GLG의 커밋 결정.** 현재 PM 권고는 production exec-only hard-cut + floor/provenance + gates + release docs를 **한 atomic commit**으로 닫는 것이다. C `328c66e`는 별도 commit으로 유지한다. commit/push는 각각 GLG 결정이고 `328c66e`도 아직 push 안 됐다.
+- **B/B2에서 확정된 사실(다시 파지 마라):**
+  - **2.1.138은 `args`를 통째로 버리고, 그 hook을 `exit_code: 0, outcome: "success"`로 보고한다.** stdout·stderr·stream·result 어디에도 진단이 없다. 조용한 게 아니라 **성공이라고 잘못 말한다** — 그래서 상류 fail-loud에 기댈 수 없고 entwurf가 직접 막는다.
+  - **2.1.217에서 exec form은 완전하다.** `args` 원소별 전달, `${CLAUDE_PLUGIN_ROOT}` 원소별 치환, `${HOME}`는 **리터럴로 도착**(어떤 shell도 파싱하지 않았다는 ancestry 독립 증거), hook의 부모는 Claude 프로세스, 그리고 FileChanged `asyncRewake` exit 2 → **실제 idle wake**(입력 0인 상태에서 새 턴이 exit-2 stderr를 싣고 나옴).
+  - **메인테이너 호스트에서 shell form과 exec form은 ppid로 구별되지 않는다**(bash elision). 그래서 dual-form 계약은 여기서 영원히 green이면서 남의 호스트에서 깨진다. 정책 B를 기각한 이유가 이것이다.
+  - **floor는 2.1.139가 아니라 2.1.217이다.** 2.1.139는 바이너리 문자열로만 확인됐고 세션이 돈 적이 없다. GLG 결정: Claude는 자동 업데이트되므로 검증 안 된 버전의 호환을 지지 않는다.
+- **뮤테이션 증거(9/9, 각자 자기 원인 지목):** shell form 복귀 · launcher 우회 exec form · asyncRewake 상실 · launcher의 empty-argv 거부 제거 · launcher가 exec 대신 fork · **launcher가 provenance stamp를 멈춤** · SSOT만 이동 · launcher가 다른 floor 광고 · installer가 floor를 읽고 강제하지 않음. doctor oracle은 별도로 21 planted defects.
 - **읽어둘 조건:** `check-pack-install`의 GREEN은 **격리 `XDG_CACHE_HOME`** 조건이다. 운영자 pnpm 캐시로는 `@aws-sdk/token-providers`에서 여전히 RED고, 캐시 갱신은 GLG 승인 대기인 별도 operator action이다.
-- **Do not touch:** maintainer/hejdev6g 재설치·현장 patch, winning hook form을 B/B2 증거 없이 production에 확정하는 것, 최종 `check-hook-launch-topology`를 미리 만드는 것, operator pnpm cache, release/version/dist-tag.
-- **최종 acceptance/release:** 동일 candidate tarball을 Node 24+ Linux consumer와 `macos-15`가 소비하고, clean install + static contract + doctor oracle + VERIFY support matrix가 모두 GREEN이어야 release 후보가 된다. release 뒤에만 hejdev6g를 깨끗이 재설치하고, 새 Claude 세션 + **그 설치판의 `doctor-meta-bridge` GREEN**으로 복구를 닫는다.
+- **Do not touch:** 2.1.139 실세션, 구버전 shell fallback 부활, maintainer/hejdev6g 재설치·현장 patch, operator pnpm cache, release/version/dist-tag, push.
+- **릴리즈 컷 순서(권한을 내포하지 않음):** atomic repair commit → GLG 승인 push → exact release commit에서 CI 3 jobs(`check` / `install-surface` / `artifact-consumer`) GREEN → 승인된 version follow-up `0.12.8-repair.0`도 같은 3 jobs GREEN → `npm pack --pack-destination <보존-dir>`로 candidate 하나 생성 → `ENTWURF_CANDIDATE_TGZ=<그 절대경로> ./run.sh check-install-container`가 **재-pack 없이 그 파일**을 소비하고 canonical path+sha256/image identity 출력 → sha 대조 → 같은 파일을 `npm publish <same.tgz> --tag repair` → `repair=0.12.8-repair.0`, `latest=0.12.7` 확인 → release 뒤에만 maintainer/hejdev6 clean reinstall → 기존 Claude 전부 restart → 새 session → **설치판 `doctor-meta-bridge` GREEN**. tag/version/publish/push는 이 체크리스트로 승인되지 않는다.
+- **버전 판정:** GLG가 후보 `0.12.8-repair.0` + dist-tag `repair`를 승인했다. 현 `0.12.7-1`은 정식 `0.12.7`보다 낮으므로 publish 금지. 승인 후보는 0.12.7보다 높고 정식 0.12.8보다 낮다. npm registry 현재 `latest=0.12.7`; 컷 뒤에도 그대로여야 한다. **지금 bump하지 않는다** — atomic production commit/첫 3 CI 뒤 별도 version commit이다.
+- **지원 범위 확정:** GLG 승인으로 Linux가 이번 Claude meta-bridge repair cut의 **유일한 현재 certified axis**다. installer는 Darwin을 fail-loud로 거부하고 doctor는 `NOT CERTIFIED`/nonzero다. 이는 영구 불가 선언이 아니며 future native validation이 macOS를 다시 열 수 있다. uninstall은 기존 macOS 설치를 고립시키지 않도록 Darwin honest-inverse를 유지한다. 패키지 전체 `os` 제한은 없다.
+- **C post-provenance 재실증:** 이전 green을 재사용하지 않았다. 첫 rerun은 stand-in Claude가 container PID 1이라 제품의 올바른 `ppid<=1` fail-closed에 RED; fixture만 outer PID-1 shell + child consumer(pid 8)로 현실화했다. 이후 default pack-once와 preserved exact-tgz 모두 marker `ownerPid=8 (>1)` + doctor PASS, artifact sha256 동일, exact file inode/size/mtime/sha 불변. digest는 shipped doc에 자기참조로 박지 않고 외부 acceptance log에 둔다. 이는 현 `0.12.7-1` gate candidate 증거이며 release artifact 증거가 아니다.
+- **남은 release blocker:** maintainer/hejdev6 installed-doctor GREEN은 의도적으로 release 뒤에 남아 있다. exact-artifact gap은 `ENTWURF_CANDIDATE_TGZ` mode로 닫혔고, `0.12.8-repair.0` version commit 뒤 보존 tgz의 acceptance/publish sha 일치를 실제 기록해야 한다.
 
 <details><summary>LEDGER — #51 doctor/harness 진단 변천(현재 실행 지시가 아님)</summary>
 
@@ -39,7 +47,7 @@
   - **B2 (현행 버전 세션 1회):** exec form ppid 실증과 `asyncRewake` acceptance를 **같은 세션에서 동시에** 관찰한다. production `hooks.json`은 건드리지 않고 격리 `CLAUDE_CONFIG_DIR` + 임시 fixture로 편다. exit 2→wake는 exec 전환의 선행 가부 조건이므로 전환 뒤로 미루지 않는다.
   - B/B2 증거로 정책 A(`Claude >=2.1.139`, entwurf가 install/doctor에서 직접 fail-loud)와 B(shell fallback) 중 추천안만 #51에 기록하고 멈춘다.
 - **stop/commit 경계:** doctor oracle과 C는 구현·뮤테이션·검증까지 허용됐지만, GLG가 새 커밋/push/release를 각각 결정한다. B/B2 전에는 winning hook form을 production에 확정하거나 최종 `check-hook-launch-topology`를 만들지 않는다. 판정 뒤 실제 설치가 생성한 hooks.json 기준으로 topology gate를 만들고 기존 receiver-marker의 두 topology case를 이관한다(marker 의미론은 유지). exec form이 이기면 `$PPID` carrier·ancestry walk·missing-carrier 계약을 제거한다.
-- **최종 acceptance/release:** 동일 candidate tarball을 Node 24+ Linux dash/non-root와 `macos-15`가 소비하고, clean install + static contract + doctor oracle + VERIFY support matrix가 모두 GREEN이어야 release 후보가 된다. Docker 없음은 로컬 SKIP·required CI RED. **Node 22 lane은 열지 않는다.** release 뒤에만 hejdev6g를 깨끗이 재설치하고, 새 Claude 세션을 연 뒤 **그 설치판의 doctor GREEN**으로 실제 복구를 닫는다.
+- **역사적 pre-hard-cut acceptance(현재 지시 아님):** 당시에는 동일 tarball의 Linux + `macos-15` 소비를 요구했지만, macOS live tier를 아직 계측하지 못해 GLG가 **이번 cut의 certified axis**를 Linux로 좁혔다(영구 불가 선언 아님; future validation이 reopen 가능). 현재 acceptance는 NOW의 Linux artifact consumer + post-release installed-doctor 순서를 따른다. Docker 없음은 로컬 SKIP·required CI RED. **Node 22 lane은 열지 않는다.**
 - **Node 24+ 단일 지원축 — 선언·coherence 구현 완료. runtime acceptance는 C에 남아 있다(축이 닫힌 것이 아니다).** `>=22`는 계약·preflight·doctor·docs 어디에도 남지 않는다. **"24 권장 / 22 최소" 같은 이중 선언을 금지한다** — 그 문장이 바로 검증 안 된 floor를 만든다. **여섯 곳**을 함께 옮겼다: `package.json` engines · `run.sh` setup preflight · `meta-bridge-install.sh` die 조건 · `meta-bridge-doctor.sh` 판정 분기 · `docs/setup-clean-host.md` pin matrix · **`mcp/entwurf-bridge/start.sh` 헤더**. **그중 둘은 산문이 아니라 실제 판정 로직**이라 지금까지 Node 22.6을 통과시키고 있었다. `.github/workflows/ci.yml`의 `node-version`도 계약면이라 함께 바인딩했다.
   - **숫자만 옮기는 것은 수선이 아니다 — `check-node-floor-coherence`를 함께 세웠다.** `engines.node`가 SSOT이고 나머지는 전부 파생·대조된다. **움직일 숫자는 하나여야 한다.** SSOT는 `>=<major>.0.0`으로 좁혔다 — 파생 사이트가 major만 비교하므로 `>=24.3.0` 같은 minor floor는 **강제할 수 없으면서 green을 찍는다**. 게이트 자신이 SSOT 미만 Node에서 도는 것도 막는다(미지원 런타임이 찍는 green은 아무것도 증명하지 않는다).
   - **첫 판은 실제로 false negative를 갖고 있었고 교차검수가 잡았다.** sweep이 **SITES에 이미 등록된 파일만** 순회해서, 등록되지 않은 파일의 선언은 보지 못했다 — `start.sh`가 옛 floor를 계속 광고하는 동안 게이트는 green이었다. **이미 묶인 것만 훑는 sweep은 안전망이 아니라 재진술이다.** 지금은 `git ls-files --cached`로 **tracked first-party contract text surface(209 파일)**를 훑고, 패턴도 대소문자 무시로 고쳤다(놓친 원인이 말 그대로 대문자 `N`이었다).
@@ -47,7 +55,7 @@
     - **sweep의 한계를 출력이 직접 말한다.** 확장자 6종의 **텍스트 선언 + 비교 연산자 형태**만 본다. `Dockerfile`의 `FROM node:24-*` 같은 비텍스트 carrier는 이 패턴 **밖**이고 **C 게이트가 따로 바인딩해야 한다**. `pnpm-lock.yaml`의 서드파티 engine 선언은 우리 축이 아니라 제외한다.
   - **뮤테이션 10/10 기대 결과 일치(9 RED + M8a intentional GREEN), control green.** M1~M5(원래 다섯) · M6 `start.sh` · M7 CI `node-version` · **M8b stage된 새 파일** · M9 SSOT를 minor floor로 — 여기까지 9건이 RED다. **M8a(unstaged 새 파일)는 RED가 아니라 GREEN이 기대값이다** — corpus가 candidate contract라 운영자 워킹트리를 보지 않는 것이 설계이고, 그 GREEN이 floor purity의 증거다. **M5와 M8이 핵심이다** — M5는 "하나만 옮기고 나머지를 잊는" 경로를, M8은 "새 파일이 게이트 밖에서 선언하는" 경로를 막는다. 후자가 이번에 실제로 뚫렸던 구멍이다.
   - **경계는 그대로다.** GitHub Actions가 Node 24라는 사실만으로 runtime floor가 증명되지 않는다. 증명은 `node:24-*` package-consumer가 실제 candidate tarball을 설치·실행하는 것(게이트 2)이고 **그건 C에 남아 있다.** 지금 참이 된 것은 선언의 정합성이지 소비 증거가 아니다.
-- **실무자 금지/운영자 결정:** 운영자 pnpm 캐시 갱신은 첫 작업도 blocker도 아닌 별도 operator action이며 GLG 승인 대기다. `0.12.7-1`은 이미 출하된 `0.12.7`보다 낮은 체크포인트 이름이므로 publish하지 않는다. 권고안 `0.12.8-repair.0 --tag repair`, pi peer 범위, version/dist-tag, 운영자 캐시, 새 Claude 세션은 모두 GLG 결정/승인 사항이다. 다음 실무자가 임의로 건드리지 않는다. #49 C·E도 이 하네스 축이 닫힐 때까지 열지 않는다(산출물 C와 다른 항목이다).
+- **실무자 금지/운영자 결정:** 운영자 pnpm 캐시 갱신은 첫 작업도 blocker도 아닌 별도 operator action이며 GLG 승인 대기다. `0.12.7-1`은 이미 출하된 `0.12.7`보다 낮은 체크포인트 이름이므로 publish하지 않는다. 후보 `0.12.8-repair.0 --tag repair`는 승인됐지만 **지금 bump/publish하지 않는다** — atomic production commit→push/3 CI 뒤 별도 version commit/3 CI 순서다. pi peer 범위, 운영자 캐시, 새 Claude 세션은 계속 GLG 결정/승인 사항이다. #49 C·E도 이 하네스 축이 닫힐 때까지 열지 않는다(산출물 C와 다른 항목이다).
 
 </details>
 

@@ -56,18 +56,38 @@ echo "meta-bridge doctor"
 echo "config=$CLAUDE_CFG  agent-dir=$AGENT"
 
 echo "[platform]"
-# Install support and CERTIFIABILITY are two different claims. Both Linux and macOS
-# are install-supported, but only Linux can reach the live owner-join tier below
-# (bridge discovery needs per-process environ). Say that here rather than letting a
-# macOS run reach the end and discover it as a surprise failure.
+# The #51 repair contract is Linux-only because certification requires discovery of
+# each live bridge process's environment through /proc. Darwin is not an install lane
+# for this cut and must stay nonzero here too — never downgrade unsupported to a
+# static/synthetic PASS.
 case "$(uname -s)" in
   Linux)  ok "Linux supported — the certified live axis (live owner join is instrumentable)" ;;
-  Darwin) bad "macOS is install-supported but NOT certifiable by this release: the live owner join below cannot be instrumented (no /proc). Tracked as a release blocker in #51; do not read a macOS run as certification." ;;
-  *) bad "$(uname -s) unsupported (Linux/macOS only)" ;;
+  Darwin) bad "macOS is NOT YET VERIFIED/CERTIFIED for this repair cut: strict live-owner certification currently requires /proc. The installer refuses Darwin; this doctor remains nonzero for diagnosis/legacy cleanup. Future validation may reopen the lane." ;;
+  *) bad "$(uname -s) unsupported (Claude meta-bridge repair cut is Linux-only)" ;;
 esac
 
 echo "[toolchain]"
-if command -v claude >/dev/null; then ok "claude: $(claude --version 2>/dev/null | head -1)"; else bad "claude not on PATH"; fi
+if command -v claude >/dev/null; then
+  # The Claude floor is a CONTRACT check, not a courtesy line. Upstream gives no
+  # fail-loud of its own: an older Claude validates the exec-form manifest, then at
+  # runtime drops `args`, runs `command` alone, and reports the hook as
+  # `exit_code: 0, outcome: "success"` (measured on 2.1.138, #51 B). Every other tier
+  # in this doctor would therefore look plausible on a host that can never wake, so
+  # the version has to be judged, not printed.
+  # shellcheck source=scripts/meta-bridge-claude-floor.sh
+  source "$REPO/scripts/meta-bridge-claude-floor.sh"
+  CLAUDE_FLOOR="$(claude_floor_version "$REPO" 2>/dev/null || true)"
+  CLAUDE_VER="$(claude_detected_version)"
+  if [ -z "$CLAUDE_FLOOR" ]; then
+    bad "cannot read the Claude Code floor from package.json (entwurf.claudeCodeFloor) — NOT CERTIFIED: the doctor may not certify a launch contract whose floor it cannot read"
+  elif [ -z "$CLAUDE_VER" ]; then
+    bad "could not read a version from 'claude --version' — NOT CERTIFIED: entwurf requires Claude Code >= $CLAUDE_FLOOR and an unidentifiable runtime is not a supported one"
+  elif claude_floor_satisfied "$CLAUDE_VER" "$CLAUDE_FLOOR"; then
+    ok "claude $CLAUDE_VER (>= $CLAUDE_FLOOR, exec-form launch contract supported)"
+  else
+    bad "claude $CLAUDE_VER is below the supported floor >= $CLAUDE_FLOOR. The hooks use the shell-less exec form; this Claude silently DROPS the hook args, runs the command alone, and still reports success — the bridge cannot wake. There is no shell-form fallback: update Claude Code, then re-run ./run.sh install-meta-bridge."
+  fi
+else bad "claude not on PATH"; fi
 if command -v python3 >/dev/null; then ok "python3: $(python3 --version 2>/dev/null | head -1) (doorbell JSON parser)"; else bad "python3 not on PATH — FileChanged wake runtime would silently die"; fi
 if command -v node >/dev/null; then
   # Node 24+ single supported axis (GLG, 2026-07-21) — rationale in run.sh setup preflight.
@@ -230,23 +250,28 @@ elif ! command -v python3 >/dev/null; then
 else
   # Classify the INSTALLED launch form, do not merely pattern-match one command.
   # Claude command hooks have two launch forms: shell form (`command` runs through a
-  # shell) and exec form (`args` present → no shell at all, #51 v3). This release's
-  # owner identity is carried by shell `$PPID` before `exec`, so exec form cannot
-  # stand it up — but an unreadable-command message calls that "drift" and sends the
-  # operator hand-patching hooks.json. Name the form, then judge it.
+  # shell) and exec form (`args` present → no shell at all). Since #51 B/B2 the
+  # AUTHORIZED form is exec, through the shipped `hook-launch.sh`: no shell means the
+  # hook's parent is Claude on every host, which is what retired the `$PPID` carrier.
+  # A shell-form manifest is now the refused one — but an unreadable-command message
+  # would call that "drift" and send the operator hand-patching hooks.json. So name
+  # the form, then judge it.
   #
   # All THREE owner hooks are read. Reading only SessionStart passed a manifest whose
   # other two hooks were still stale — exactly the hand-patch class this cut refuses.
   # The FileChanged doorbell is reported separately (line 4): its asyncRewake/timeout
   # are the wake path, and losing them must not blank the owner command layer 2 drives.
-  if HOOK_PARSE="$(python3 - "$CACHE_HOOKS" "$REPO/pi/meta-bridge/$PLUGIN/hooks/hooks.json" <<'PY' 2>&1
+  if HOOK_PARSE="$(python3 - "$CACHE_HOOKS" "$REPO/pi/meta-bridge/$PLUGIN/hooks/hooks.json" "$CACHE_ROOT" <<'PY' 2>&1
 import json, re, sys
 
-inst_path, tmpl_path = sys.argv[1], sys.argv[2]
+inst_path, tmpl_path, cache_root = sys.argv[1], sys.argv[2], sys.argv[3]
 OWNER_EVENTS = ("SessionStart", "CwdChanged", "UserPromptSubmit")
-CONTRACT = re.compile(
-    r"ENTWURF_META_HOOK_OWNER_PID=\$PPID exec (\S+) \$\{CLAUDE_PLUGIN_ROOT\}/(meta-bridge-hook\.(?:ts|js))"
-)
+# The authorized owner launch: `command` is the shipped launcher, `args` is the real
+# argv (baked node + baked hook entry). The launcher is named exactly, not merely
+# "some executable" — an exec form pointing anywhere else is not this contract, and
+# it is the launcher that carries the empty-argv fail-loud an older Claude needs.
+LAUNCHER = "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launch.sh"
+ENTRY_ARG = re.compile(r"\$\{CLAUDE_PLUGIN_ROOT\}/(meta-bridge-hook\.(?:ts|js))")
 
 try:
     manifest = json.load(open(inst_path, encoding="utf-8"))
@@ -310,24 +335,35 @@ for event, tmpl_groups in template["hooks"].items():
 
 # ── owner launch form ──────────────────────────────────────────────────────
 def classify(hook):
-    """exec | malformed-exec | non-command | corrupt | shell-carrier | shell-other."""
+    """exec-launcher | exec-other | malformed-exec | non-command | corrupt | shell.
+
+    Order matters, and it is not the order the fields appear in. The leaf TYPE is
+    checked before `args`, because a `prompt` leaf that happens to carry an args array
+    is a type defect, not a malformed exec form — reporting it as the latter would give
+    two different defects the same message and let one mutation's red be credited to
+    the other. Diagnose the most fundamental break first.
+    """
     if not isinstance(hook, dict):
         return "corrupt"
-    command = hook.get("command")
-    command_ok = isinstance(command, str) and command != ""
-    type_ok = hook.get("type") == "command"
-    if hook.get("args") is not None:
-        # Only a STRUCTURALLY VALID exec form earns the "recognized upstream form"
-        # message. A string/number `args`, an empty command, or a non-command type is
-        # corruption wearing exec form's clothes, and must not be excused as one.
-        args = hook.get("args")
-        args_ok = isinstance(args, list) and all(isinstance(a, str) for a in args)
-        return "exec" if (type_ok and command_ok and args_ok) else "malformed-exec"
-    if not type_ok:
+    if hook.get("type") != "command":
         return "non-command"
-    if not command_ok:
+    command = hook.get("command")
+    if not (isinstance(command, str) and command != ""):
         return "corrupt"
-    return "shell-carrier" if CONTRACT.fullmatch(command) else "shell-other"
+    args = hook.get("args")
+    if args is not None:
+        # Only a STRUCTURALLY VALID exec form earns a form name. A string/number `args`
+        # is corruption wearing exec form's clothes and must not be excused as one.
+        if not (isinstance(args, list) and all(isinstance(a, str) for a in args)):
+            return "malformed-exec"
+        # Authorized only through the shipped launcher with both argv elements. An
+        # exec form that skips the launcher would run fine on a current Claude and
+        # then degrade SILENTLY on an older one — the exact failure this contract
+        # exists to make loud.
+        if command == LAUNCHER and len(args) == 2 and ENTRY_ARG.fullmatch(args[1]):
+            return "exec-launcher"
+        return "exec-other"
+    return "shell"
 
 
 forms = {event: classify(leaf(event)) for event in OWNER_EVENTS}
@@ -340,15 +376,23 @@ if len(distinct) > 1:
     )
 
 form = distinct[0]
-if form == "exec":
+if form == "shell":
     raise SystemExit(
-        "RECOGNIZED EXEC-FORM (`args` present, no shell), NOT AUTHORIZED BY THE CURRENT RELEASE "
-        "CONTRACT — #51 B+B2 pending. This is a known upstream launch form, not corruption and not "
-        "drift; the doctor reads it fine. It is refused because this release's owner identity is the "
-        "shell `$PPID` carrier expanded before `exec`, and exec form has no shell to expand it, so "
-        "sender/receiver markers cannot be keyed to the Claude owner. Do not hand-patch hooks.json: "
-        "re-run ./run.sh install-meta-bridge to restore the authorized form, then restart existing "
-        "Claude sessions."
+        "installed owner hooks use SHELL FORM, which this release no longer authorizes: "
+        f"{leaf('SessionStart').get('command')!r}. Under shell form the process that ends up as the "
+        "hook's parent depends on which shell the host picked and how the command was assembled — "
+        "the same Claude version produced both a direct join and a retained `/bin/bash -c` wrapper "
+        "(#51). Markers would be keyed to whatever that shell leaves behind. Re-run "
+        "./run.sh install-meta-bridge to restore the exec form; existing Claude sessions must then "
+        "restart."
+    )
+if form == "exec-other":
+    raise SystemExit(
+        "installed owner hooks are exec form but do NOT go through the shipped "
+        f"{LAUNCHER} with [<node>, <hook entry>] argv: command={leaf('SessionStart').get('command')!r}, "
+        f"args={leaf('SessionStart').get('args')!r}. That launcher is not decoration — it is the only "
+        "thing that turns an older Claude's SILENT `args` drop into a visible failure (such a Claude "
+        "runs `command` alone and still reports exit 0 / success). Re-run ./run.sh install-meta-bridge."
     )
 if form == "malformed-exec":
     raise SystemExit(
@@ -362,21 +406,13 @@ if form in ("non-command", "corrupt"):
         f"installed owner hook is not a usable command hook ({detail}) — type must be `command` with "
         "a non-empty string command. Re-run ./run.sh install-meta-bridge."
     )
-if form == "shell-other":
-    raise SystemExit(
-        "installed hooks use shell form WITHOUT the owner carrier contract: "
-        f"{leaf('SessionStart').get('command')!r}. Markers would be keyed to whatever process the "
-        "host shell leaves behind. Re-run ./run.sh install-meta-bridge; existing Claude sessions "
-        "must then restart."
-    )
-
-commands = {event: leaf(event)["command"] for event in OWNER_EVENTS}
+commands = {event: (leaf(event)["command"], tuple(leaf(event)["args"])) for event in OWNER_EVENTS}
 if len(set(commands.values())) != 1:
     detail = "; ".join(f"{event}={commands[event]!r}" for event in OWNER_EVENTS)
-    raise SystemExit(f"owner hooks share a form but not a command — {detail}")
+    raise SystemExit(f"owner hooks share a form but not a launch argv — {detail}")
 
-command = commands["SessionStart"]
-matched = CONTRACT.fullmatch(command)
+command, argv = commands["SessionStart"]
+baked_node, baked_entry = argv[0], ENTRY_ARG.fullmatch(argv[1]).group(1)
 
 # ── exact equality against the shipped template ────────────────────────────
 # The installer bakes exactly two values into the template. So "the deployed manifest
@@ -384,7 +420,7 @@ matched = CONTRACT.fullmatch(command)
 # per-field allowlists unnecessary: a doorbell pointed at /tmp/evil, a timeout of 999, an
 # added field, all surface here instead of slipping through a suffix or isinstance test.
 expected = json.loads(
-    tmpl_text.replace("__NODE_BIN__", matched.group(1)).replace("__HOOK_ENTRY__", matched.group(2))
+    tmpl_text.replace("__NODE_BIN__", baked_node).replace("__HOOK_ENTRY__", baked_entry)
 )
 
 
@@ -424,21 +460,35 @@ if diff:
 bell = leaf("FileChanged")
 doorbell = (
     f"ok FileChanged doorbell matches the shipped static contract exactly "
-    f"(command={bell['command']}, asyncRewake={bell['asyncRewake']}, timeout={bell['timeout']}); "
-    "runtime exit-2 wake acceptance is NOT proven here (#51 B2)"
+    f"(command={bell['command']}, args={bell['args']}, asyncRewake={bell['asyncRewake']}, "
+    f"timeout={bell['timeout']}); runtime exit-2 wake was observed at Claude 2.1.217 (#51 B2) but "
+    "is not re-proven by this static read"
 )
 
-print(matched.group(1))
-print(matched.group(2))
-print(command)
+# Resolve the argv EXACTLY the way Claude does for an exec form: substitute the
+# plugin-root placeholder into each element as a plain string, with no shell parsing.
+# The doctor then execs these three strings directly. Driving them through `bash -c`
+# instead — as this section did while the shell form was authorized — would put back
+# the very interpreter the exec form removes, and would break outright on a plugin
+# path containing a space, a `$`, or a backtick.
+def resolve(s):
+    return s.replace("${CLAUDE_PLUGIN_ROOT}", cache_root)
+
+
+print(baked_node)
+print(baked_entry)
+print(resolve(command))
+print(resolve(argv[1]))
 print(doorbell)
 PY
 )"; then
     BAKED="$(printf '%s\n' "$HOOK_PARSE" | sed -n '1p')"
     HOOK_FILE="$(printf '%s\n' "$HOOK_PARSE" | sed -n '2p')"
-    HOOK_COMMAND="$(printf '%s\n' "$HOOK_PARSE" | sed -n '3p')"
-    HOOK_DOORBELL="$(printf '%s\n' "$HOOK_PARSE" | sed -n '4p')"
-    ok "launch form: shell form with the explicit \$PPID owner carrier + exec — supported, and identical across all 3 owner hooks"
+    HOOK_LAUNCHER="$(printf '%s\n' "$HOOK_PARSE" | sed -n '3p')"
+    HOOK_ENTRY_ARG="$(printf '%s\n' "$HOOK_PARSE" | sed -n '4p')"
+    HOOK_COMMAND="$HOOK_LAUNCHER $BAKED $HOOK_ENTRY_ARG"
+    HOOK_DOORBELL="$(printf '%s\n' "$HOOK_PARSE" | sed -n '5p')"
+    ok "launch form: exec form through the shipped hook-launch.sh (no shell on the path) — supported, and identical across all 3 owner hooks"
     case "$HOOK_DOORBELL" in
       ok\ *)  ok "${HOOK_DOORBELL#ok }" ;;
       *)      bad "${HOOK_DOORBELL#bad }. Re-run ./run.sh install-meta-bridge." ;;
@@ -447,6 +497,8 @@ PY
     BAKED=""
     HOOK_FILE=""
     HOOK_COMMAND=""
+    HOOK_LAUNCHER=""
+    HOOK_ENTRY_ARG=""
     bad "installed hook launch form is UNSUPPORTED — $HOOK_PARSE"
   fi
 
@@ -455,20 +507,22 @@ PY
     TMP_AGENT="$(mktemp -d 2>/dev/null || mktemp -d -t entwurf-doctor-hook)"
     HOOK_ENV='{"session_id":"doctor-synthetic-native","transcript_path":"/tmp/entwurf-doctor-synthetic-transcript.jsonl","cwd":"/tmp","hook_event_name":"SessionStart","model":{"id":"doctor-model"}}'
     printf '%s' "$HOOK_ENV" > "$TMP_AGENT/hook-input.json"
-    # Drive the SAME command Claude loaded, from the SAME resolved artifact root. Run it
-    # as a foreground child (not a pipeline/command-substitution grandchild), so inner
-    # `$PPID` is this still-live doctor shell (`$$`). The marker key proves the owner
-    # join, not merely hook output.
-    if env PI_CODING_AGENT_DIR="$TMP_AGENT" CLAUDE_PLUGIN_ROOT="$CACHE_ROOT" bash -c "$HOOK_COMMAND" \
+    # Drive the SAME argv Claude execs, from the SAME resolved artifact root, with NO
+    # shell in between — which is the whole point of the exec form and is now what the
+    # doctor reproduces. Run it as a foreground child (not a pipeline or command-
+    # substitution grandchild), so this still-live doctor shell (`$$`) stands in for
+    # Claude: hook-launch.sh `exec`s the payload, keeping that pid, so the hook's parent
+    # is `$$`. The marker key under `$$` is therefore evidence of the owner join itself,
+    # not merely of hook output — and it is evidence for EVERY host, because there is no
+    # host-chosen shell left to behave differently.
+    if env PI_CODING_AGENT_DIR="$TMP_AGENT" CLAUDE_PLUGIN_ROOT="$CACHE_ROOT" \
+         "$HOOK_LAUNCHER" "$BAKED" "$HOOK_ENTRY_ARG" \
          < "$TMP_AGENT/hook-input.json" > "$TMP_AGENT/hook-output.txt" 2>&1 \
        && grep -q 'hookSpecificOutput' "$TMP_AGENT/hook-output.txt" \
        && [ -f "$TMP_AGENT/meta-senders/claude-code/$$.json" ]; then
-      # Say exactly what was driven. This runs the command under BASH; which shell
-      # Claude itself uses for a shell-form hook is not instrumented here (#51: the
-      # topology matrix is gate 1's job, and it is not built before the B/B2 verdict).
-      ok "installed owner command executes under bash and keys its sender marker to the live host pid (bash only — Claude's own shell choice is NOT instrumented here)"
+      ok "installed owner argv execs directly (no shell) through hook-launch.sh and keys its sender marker to the live host pid"
     else
-      bad "installed owner command failed owner-join execution under bash — stale plugin cache / unsupported hook topology / broken bundle. Re-run install-meta-bridge. Detail: $(tr '\n' ' ' < "$TMP_AGENT/hook-output.txt" | cut -c1-300)"
+      bad "installed owner argv failed owner-join execution — stale plugin cache / broken bundle / non-executable launcher. Re-run install-meta-bridge. Detail: $(tr '\n' ' ' < "$TMP_AGENT/hook-output.txt" | cut -c1-300)"
     fi
     rm -rf "$TMP_AGENT" 2>/dev/null || true
   elif [ -n "$BAKED" ]; then
@@ -742,7 +796,7 @@ PY
     # send an operator to completely different places.
     case "$JOIN_RC" in
       2) bad "NOT CERTIFIED — $JOIN_OUT. Nothing here says the install is broken: the evidence simply does not exist yet. Open a Claude Code session (or restart the affected one) and run this doctor again." ;;
-      3) bad "NOT CERTIFIED on this platform — $JOIN_OUT. This release cannot certify a $(uname -s) host; Linux is the certified live axis today (#51 support matrix)." ;;
+      3) bad "NOT CERTIFIED on this platform — $JOIN_OUT. This repair cut currently certifies the Claude meta-bridge on Linux only; static/synthetic evidence cannot certify $(uname -s), and future native validation may reopen that lane." ;;
       *) bad "$JOIN_OUT. Re-run install-meta-bridge, restart the affected Claude session(s), then run doctor again." ;;
     esac
   fi

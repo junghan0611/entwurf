@@ -6,7 +6,9 @@
 # package installed project-locally. `check-pack-install` is the strongest of
 # them and it still only ever proves THAT shape. This gate reproduces a clean
 # Linux consumer instead: one candidate tarball, handed read-only to a container
-# that has never seen this repository.
+# that has never seen this repository. Default mode packs once into a temp dir;
+# release mode accepts `ENTWURF_CANDIDATE_TGZ=/preserved/candidate.tgz` and consumes
+# those exact bytes without copying, chmodding, or re-packing them.
 #
 # WHAT IT ADDS OVER check-pack-install (the delta is the whole justification):
 #   - `npm install -g` into an isolated prefix + resolution through the PATH shim
@@ -24,6 +26,9 @@
 # from the bundle this container assembles, because a fake CLI cannot materialize
 # Claude's cache. Both are labelled as fixtures in the output. The host-shell
 # matrix and the exec-form verdict are #51 gate 1 / B-B2, deliberately not here.
+#
+# In both modes the canonical artifact path + sha256 and container image identity are
+# printed. Release publishes the SAME preserved file only after exact-mode acceptance.
 #
 # Docker absent -> honest SKIP. ENTWURF_REQUIRE_DOCKER=1 turns that SKIP into a
 # failure, which is how required CI runs it: a lane nobody can prove is not a
@@ -66,7 +71,7 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
   exit 0
 fi
 
-# ── candidate artifact: made ONCE on the host ────────────────────────────────
+# ── candidate artifact: pack once OR consume a caller-preserved exact file ────
 VERSION="$(node -p "require('$REPO/package.json').version")"
 FLOOR_SPEC="$(node -p "require('$REPO/package.json').engines.node")"
 FLOOR_MAJOR="${FLOOR_SPEC#>=}"; FLOOR_MAJOR="${FLOOR_MAJOR%%.*}"
@@ -76,26 +81,52 @@ esac
 # Same derivation as check-pack-install: scope `@` stripped, `/` becomes `-`.
 TGZ_NAME="junghanacs-entwurf-${VERSION}.tgz"
 IMAGE="node:${FLOOR_MAJOR}-bookworm"
+PACK_TMP=""
 
-PACK_TMP="$(mktemp -d -t entwurf-container-pack.XXXXXX)"
-trap 'rm -rf "$PACK_TMP"' EXIT
-TGZ_PATH="$PACK_TMP/$TGZ_NAME"
+if [ -n "${ENTWURF_CANDIDATE_TGZ:-}" ]; then
+  # Release acceptance mode: the caller already packed and preserved the candidate.
+  # Resolve it once and NEVER chmod/copy/re-pack it; the exact bytes accepted here are
+  # the bytes `npm publish <same.tgz> --tag repair` must receive later.
+  [ -f "$ENTWURF_CANDIDATE_TGZ" ] || { echo "[check-install-container] FAIL — ENTWURF_CANDIDATE_TGZ is not a regular file: $ENTWURF_CANDIDATE_TGZ" >&2; exit 1; }
+  [ -r "$ENTWURF_CANDIDATE_TGZ" ] || { echo "[check-install-container] FAIL — ENTWURF_CANDIDATE_TGZ is not readable: $ENTWURF_CANDIDATE_TGZ" >&2; exit 1; }
+  TGZ_PATH="$(node -e 'process.stdout.write(require("node:fs").realpathSync(process.argv[1]))' "$ENTWURF_CANDIDATE_TGZ")"
+  CANDIDATE_MODE="caller-preserved exact artifact (no repack)"
+else
+  # Default local/CI mode remains self-contained: make one candidate in a temp dir,
+  # consume it once, then delete it with the temp dir.
+  PACK_TMP="$(mktemp -d -t entwurf-container-pack.XXXXXX)"
+  trap 'rm -rf "$PACK_TMP"' EXIT
+  TGZ_PATH="$PACK_TMP/$TGZ_NAME"
+  CANDIDATE_MODE="pack-once temporary artifact"
+  # with-dist-lock: same whole-pack serialization check-pack/check-pack-install use;
+  # unserialized packs race the shared dist dir.
+  (cd "$REPO" && bash scripts/with-dist-lock.sh npm pack --dry-run=false --pack-destination "$PACK_TMP" >/dev/null 2>&1) || {
+    echo "[check-install-container] FAIL — npm pack failed" >&2; exit 1; }
+  [ -f "$TGZ_PATH" ] || { echo "[check-install-container] FAIL — tarball not produced at $TGZ_PATH" >&2; exit 1; }
+  # The container consumer is non-root and does not share this host's uid map, so
+  # a generated candidate must be world-readable. Caller-preserved mode is never
+  # mutated; its readability was checked above and Docker mounts it read-only.
+  chmod 0444 "$TGZ_PATH"
+fi
 
-echo "[check-install-container] candidate: $TGZ_NAME (engines.node=$FLOOR_SPEC -> image $IMAGE)"
-# with-dist-lock: same whole-pack serialization check-pack/check-pack-install use;
-# unserialized packs race the shared dist dir.
-(cd "$REPO" && bash scripts/with-dist-lock.sh npm pack --dry-run=false --pack-destination "$PACK_TMP" >/dev/null 2>&1) || {
-  echo "[check-install-container] FAIL — npm pack failed" >&2; exit 1; }
-[ -f "$TGZ_PATH" ] || { echo "[check-install-container] FAIL — tarball not produced at $TGZ_PATH" >&2; exit 1; }
-
-# The container consumer is non-root and does not share this host's uid map, so
-# the mount must be world-readable or the whole run fails on a permission detail
-# that says nothing about the artifact.
-chmod 0444 "$TGZ_PATH"
 PERM="$(stat -c '%a' "$TGZ_PATH")"
-[ "$PERM" = "444" ] || { echo "[check-install-container] FAIL — artifact perms are $PERM, expected 444" >&2; exit 1; }
-
 DIGEST="$(sha256sum "$TGZ_PATH" | cut -d' ' -f1)"
+META="$(tar -xOf "$TGZ_PATH" package/package.json | node -e '
+let s = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (d) => { s += d; });
+process.stdin.on("end", () => {
+  const p = JSON.parse(s);
+  process.stdout.write(`${p.name}\t${p.version}`);
+});
+')" || { echo "[check-install-container] FAIL — cannot read package/package.json from candidate $TGZ_PATH" >&2; exit 1; }
+IFS=$'\t' read -r ARTIFACT_NAME ARTIFACT_VERSION <<< "$META"
+[ "$ARTIFACT_NAME" = "@junghanacs/entwurf" ] || { echo "[check-install-container] FAIL — candidate package name is '$ARTIFACT_NAME', expected @junghanacs/entwurf" >&2; exit 1; }
+[ "$ARTIFACT_VERSION" = "$VERSION" ] || { echo "[check-install-container] FAIL — candidate version $ARTIFACT_VERSION does not match checkout release version $VERSION" >&2; exit 1; }
+
+echo "[check-install-container] candidate mode: $CANDIDATE_MODE"
+echo "[check-install-container] candidate canonical-path=$TGZ_PATH"
+echo "[check-install-container] candidate package=$ARTIFACT_NAME version=$ARTIFACT_VERSION engines.node=$FLOOR_SPEC image=$IMAGE"
 echo "[check-install-container] artifact sha256=$DIGEST bytes=$(stat -c%s "$TGZ_PATH") mode=$PERM"
 
 # Name the image by identity, not just by tag: a tag is a moving pointer, and a
@@ -110,7 +141,11 @@ echo "[check-install-container] image $IMAGE id=$IMAGE_ID repoDigest=$IMAGE_DIGE
 # ONE cell, non-root end to end: the same unprivileged user installs globally
 # into a writable isolated prefix, freezes the installed package, and then
 # consumes it. No repo mount, no checkout, no node_modules, no host $HOME.
-# The runner arrives on stdin, so the container depends on no repo file.
+# The runner arrives on stdin, so the container depends on no repo file. Keep one
+# outer shell as container PID 1 and run the consumer shell beneath it: that inner
+# shell stands in for Claude during the owner fixture, and a real owner must be >1.
+# Running the consumer itself as PID 1 would correctly trip the hook's reparented-
+# orphan guard and make the synthetic join vacuously impossible.
 set +e
 docker run --rm -i \
   --user node \
@@ -120,7 +155,7 @@ docker run --rm -i \
   -e "EXPECTED_FLOOR_MAJOR=$FLOOR_MAJOR" \
   -v "$TGZ_PATH:/artifact/$TGZ_NAME:ro" \
   "$IMAGE" \
-  bash -s -- "/artifact/$TGZ_NAME" <<'CONTAINER_RUNNER_EOF'
+  bash -c 'bash -s -- "$1"; rc=$?; exit "$rc"' _ "/artifact/$TGZ_NAME" <<'CONTAINER_RUNNER_EOF'
 set -uo pipefail
 
 TGZ="${1:?candidate tarball path required}"
@@ -130,13 +165,14 @@ ok()  { echo "  ok    $*"; }
 bad() { echo "  FAIL  $*"; fail=1; }
 die() { echo "  FAIL  $*"; echo; echo "container-consumer: FAIL (see above)"; exit 1; }
 
-echo "container consumer (uid=$(id -u) user=$(id -un 2>/dev/null || echo '?'))"
+echo "container consumer (uid=$(id -u) user=$(id -un 2>/dev/null || echo '?') runner-pid=$$)"
 
 # ── 1. environment facts ─────────────────────────────────────────────────────
 # These are recorded as FACTS about the consumer cell. None of them is claimed as
 # detection power on its own; the detection claim is the differential at the end.
 echo "[consumer environment]"
 if [ "$(id -u)" -ne 0 ]; then ok "non-root consumer (uid=$(id -u))"; else bad "running as root — the non-root install/consume lane is not exercised"; fi
+if [ "$$" -gt 1 ]; then ok "consumer/stand-in-Claude pid=$$ (>1; outer container init remains PID 1)"; else bad "consumer runner is PID 1 — the synthetic owner would be an impossible/reparented owner"; fi
 ok "/bin/sh -> $(readlink -f /bin/sh) (environment fact; hook launch topology is out of scope here)"
 if [ -z "${NODE_PATH:-}" ]; then ok "NODE_PATH empty"; else bad "NODE_PATH=$NODE_PATH leaked into the consumer"; fi
 
@@ -301,7 +337,7 @@ cat > "$FAKEBIN/claude" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_CLAUDE_LOG"
 case "$1${2:+ $2}${3:+ $3}" in
-  "--version") echo "2.1.216 (Claude Code)" ;;
+  "--version") echo "2.1.217 (Claude Code)" ;;
   "plugin list --json")
     printf '[{"id":"entwurf-meta-receive@meta-bridge-local","version":"0.1.0","enabled":true,"installPath":"%s"}]\n' "$FAKE_INSTALL_PATH" ;;
   "plugin list"*) printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
@@ -348,17 +384,31 @@ cp -r "$ASM/$PLUGIN/." "$PLANTED/"
 chmod -R u+w "$PLANTED"
 ok "plugin cache PLANTED from the container-assembled bundle — a FIXTURE, not evidence that 'claude plugin install' works"
 
-HOOK_COMMAND="$(python3 -c '
+mapfile -t HOOK_ARGV < <(python3 -c '
 import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
-print(d["hooks"]["SessionStart"][0]["hooks"][0]["command"])
-' "$PLANTED/hooks/hooks.json")"
+leaf = d["hooks"]["SessionStart"][0]["hooks"][0]
+root = sys.argv[2]
+print(leaf["command"].replace("${CLAUDE_PLUGIN_ROOT}", root))
+for a in leaf["args"]:
+    print(a.replace("${CLAUDE_PLUGIN_ROOT}", root))
+' "$PLANTED/hooks/hooks.json" "$PLANTED")
 printf '%s' '{"session_id":"container-native-1","transcript_path":"/tmp/entwurf-container-transcript.jsonl","cwd":"/tmp","hook_event_name":"SessionStart","model":{"id":"container-model"}}' > "$HOME/hook-input.json"
-# THIS shell stands in for Claude: drive the installed owner command as a
-# foreground child so its inner $PPID is $$, and the hook keys both markers to $$.
-if env CLAUDE_PLUGIN_ROOT="$PLANTED" bash -c "$HOOK_COMMAND" < "$HOME/hook-input.json" > "$HOME/hook-run.txt" 2>&1 \
-   && [ -f "$AGENT/meta-senders/claude-code/$$.json" ]; then
-  ok "installed owner command keyed its sender marker to this stand-in Claude pid ($$) — a FIXTURE owner, not a real Claude process"
+# THIS shell stands in for Claude: exec the installed owner ARGV directly (no shell,
+# per-element placeholder substitution — exactly what Claude does for an exec form) as
+# a foreground child. hook-launch.sh execs the payload, so the hook's parent is $$ and
+# it keys both markers to $$. On this image /bin/sh is dash, which under the retired
+# shell form would have RETAINED a wrapper and broken that join — the exec form has no
+# shell to differ, which is the whole point of running this cell on a foreign host.
+OWNER_MARKER="$AGENT/meta-senders/claude-code/$$.json"
+if env CLAUDE_PLUGIN_ROOT="$PLANTED" "${HOOK_ARGV[@]}" < "$HOME/hook-input.json" > "$HOME/hook-run.txt" 2>&1 \
+   && [ -f "$OWNER_MARKER" ]; then
+  MARKER_OWNER="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8")).ownerPid' "$OWNER_MARKER")"
+  if [ "$MARKER_OWNER" = "$$" ] && [ "$MARKER_OWNER" -gt 1 ]; then
+    ok "installed owner argv execs directly (no shell): marker ownerPid=$MARKER_OWNER == stand-in Claude pid=$$ (>1) — a FIXTURE owner, not a real Claude process"
+  else
+    bad "owner fixture marker names ownerPid=$MARKER_OWNER, expected stand-in Claude pid=$$ and >1"
+  fi
 else
   bad "owner fixture drive failed: $(tr '\n' ' ' < "$HOME/hook-run.txt" | cut -c1-300)"
 fi
@@ -385,7 +435,8 @@ fi
 # claims that matter on a consumer host, not merely returning 0.
 for claim in \
   'active cached artifact resolved from plugin installPath' \
-  'launch form: shell form with the explicit $PPID owner carrier' \
+  'exec-form launch contract supported' \
+  'launch form: exec form through the shipped hook-launch.sh' \
   'sender + receiver owner join is live and record-backed'
 do
   printf '%s\n' "$DOC_OUT" | grep -qF "$claim" \

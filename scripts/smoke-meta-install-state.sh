@@ -45,6 +45,7 @@ cat > "$INS_BIN/claude" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_CLAUDE_LOG"
 case "$1${2:+ $2}" in
+  "--version")   echo "2.1.217 (Claude Code)" ;;
   "plugin list") printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
   "mcp get")     printf '%s\n' "Scope: User config" "Status: Connected" ;;
   *) : ;;
@@ -89,6 +90,7 @@ case "$1${2:+ $2}" in
     # Keep writing well past the pipe buffer: a reader that leaves early SIGPIPEs us.
     cat "$FAKE_MCP_TAIL"
     exit $? ;;
+  "--version")   echo "2.1.217 (Claude Code)" ;;
   "plugin list") printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
   *) : ;;
 esac
@@ -336,6 +338,7 @@ FAKE_BIN="$TMP/fake-bin"; mkdir -p "$FAKE_BIN"
 cat > "$FAKE_BIN/claude" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_CLAUDE_LOG"
+[ "$1" = "--version" ] && echo "2.1.217 (Claude Code)"
 exit 0
 SH
 chmod +x "$FAKE_BIN/claude"
@@ -595,7 +598,7 @@ if [ "${1:-} ${2:-} ${3:-}" = "plugin list --json" ]; then
   exit 0
 fi
 case "$1${2:+ $2}" in
-  "--version") echo "2.1.167 (Claude Code)" ;;
+  "--version") echo "2.1.217 (Claude Code)" ;;
   "plugin list") printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
   "mcp get") printf '%s\n' "Scope: User config" "Status: ✔ Connected" ;;
   *) : ;;
@@ -635,6 +638,35 @@ if [ "$DOC_CACHE_CODE" -eq 1 ] && printf '%s\n' "$DOC_CACHE_OUT" | grep -q 'enab
 else
   bad "doctor did not surface enabled-but-cache-miss as a hard load failure:"$'\n'"$DOC_CACHE_OUT"
 fi
+
+# #51 repair support boundary. Fake only `uname -s`: no macOS implementation is
+# emulated. New Darwin install must refuse as not-yet-certified, doctor must stay
+# nonzero with the same evidence wording, while uninstall MUST get past the platform
+# gate so an older managed install is not stranded (it then honestly fails on our
+# fixture's intentionally absent state file).
+PLATFORM_BIN="$TMP/platform-bin"; mkdir -p "$PLATFORM_BIN"
+cat > "$PLATFORM_BIN/uname" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' Darwin
+SH
+chmod +x "$PLATFORM_BIN/uname"
+set +e
+DARWIN_INSTALL_OUT="$(env HOME="$DOC_HOME" XDG_DATA_HOME="$TMP/darwin-xdg" PI_CODING_AGENT_DIR="$DOC_AGENT" PATH="$PLATFORM_BIN:$DOC_BIN:$PATH" bash "$REPO/scripts/meta-bridge-install.sh" 2>&1)"
+DARWIN_INSTALL_CODE=$?
+DARWIN_DOCTOR_OUT="$(env HOME="$DOC_HOME" CLAUDE_CONFIG_DIR="$DOC_CFG" PI_CODING_AGENT_DIR="$DOC_AGENT" ENTWURF_META_SESSIONS_DIR="$DOC_STORE" PATH="$PLATFORM_BIN:$DOC_BIN:$PATH" bash "$REPO/scripts/meta-bridge-doctor.sh" 2>&1)"
+DARWIN_DOCTOR_CODE=$?
+DARWIN_UNINSTALL_OUT="$(env HOME="$TMP/darwin-clean-home" XDG_DATA_HOME="$TMP/darwin-clean-xdg" PATH="$PLATFORM_BIN:$PATH" bash "$REPO/scripts/meta-bridge-uninstall.sh" 2>&1)"
+DARWIN_UNINSTALL_CODE=$?
+set -e
+if [ "$DARWIN_INSTALL_CODE" -ne 0 ] && printf '%s\n' "$DARWIN_INSTALL_OUT" | grep -q 'not yet verified/certified for this repair cut'; then
+  ok "Darwin install is refused fail-loud as not-yet-certified (future validation may reopen)"
+else bad "Darwin install did not enforce the repair-cut evidence boundary:"$'\n'"$DARWIN_INSTALL_OUT"; fi
+if [ "$DARWIN_DOCTOR_CODE" -ne 0 ] && printf '%s\n' "$DARWIN_DOCTOR_OUT" | grep -q 'NOT YET VERIFIED/CERTIFIED for this repair cut' && printf '%s\n' "$DARWIN_DOCTOR_OUT" | grep -q 'meta-bridge doctor: FAIL'; then
+  ok "Darwin doctor stays nonzero and reaches its final NOT-YET-CERTIFIED verdict"
+else bad "Darwin doctor did not hold the repair-cut evidence boundary:"$'\n'"$DARWIN_DOCTOR_OUT"; fi
+if [ "$DARWIN_UNINSTALL_CODE" -ne 0 ] && printf '%s\n' "$DARWIN_UNINSTALL_OUT" | grep -q 'install state missing' && ! printf '%s\n' "$DARWIN_UNINSTALL_OUT" | grep -q 'unsupported platform'; then
+  ok "Darwin uninstall passes the platform gate and reaches honest state preflight (legacy inverse retained)"
+else bad "Darwin uninstall was blocked by the support hard-cut instead of reaching honest inverse preflight:"$'\n'"$DARWIN_UNINSTALL_OUT"; fi
 
 # ⓪ 경계 종료 단언: 이 smoke 전체(install 조립 + state + wrapper-uninstall + doctor)가
 # 끝난 뒤에도 checkout 안에는 live marketplace source가 생기지 않았다 — source

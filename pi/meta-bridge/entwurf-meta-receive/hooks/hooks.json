@@ -6,7 +6,8 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "ENTWURF_META_HOOK_OWNER_PID=$PPID exec __NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"
+						"command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launch.sh",
+						"args": ["__NODE_BIN__", "${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"]
 					}
 				]
 			}
@@ -17,7 +18,8 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "ENTWURF_META_HOOK_OWNER_PID=$PPID exec __NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"
+						"command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launch.sh",
+						"args": ["__NODE_BIN__", "${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"]
 					}
 				]
 			}
@@ -28,7 +30,8 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "ENTWURF_META_HOOK_OWNER_PID=$PPID exec __NODE_BIN__ ${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"
+						"command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launch.sh",
+						"args": ["__NODE_BIN__", "${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"]
 					}
 				]
 			}
@@ -39,7 +42,8 @@
 				"hooks": [
 					{
 						"type": "command",
-						"command": "${CLAUDE_PLUGIN_ROOT}/scripts/doorbell.sh",
+						"command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launch.sh",
+						"args": ["${CLAUDE_PLUGIN_ROOT}/scripts/doorbell.sh"],
 						"asyncRewake": true,
 						"timeout": 20
 					}

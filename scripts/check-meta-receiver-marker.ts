@@ -18,11 +18,16 @@
  *     it cannot back.
  *   - record-backing is NOT checked by the reader (recordBacked is the deliverability
  *     predicate's explicit fact, so an absent record and a dead owner stay distinct).
+ *
+ * NOT proved here any more: launch topology. The tail-exec / retained-wrapper cells and
+ * the missing-carrier contract were retired together with the shell form (#51 B/B2);
+ * check-hook-launch-topology now drives the shipped exec-form argv and asserts the owner
+ * join for real. Marker semantics are launch-form independent, which is exactly why that
+ * migration did not disturb anything below.
  */
 
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -143,15 +148,21 @@ const hookSrc = readFileSync(path.join(REPO_DIR, "pi-extensions", "meta-bridge-h
 
 ok("hook imports + calls writeMetaReceiverMarker", /writeMetaReceiverMarker/.test(hookSrc));
 
-// The owner comes from the manifest's explicit shell-$PPID carrier, and the hook
-// must ancestry-validate it before use. It may be the direct parent (tail-exec) or
-// grandparent (retained wrapper), but is never selected merely by depth.
-ok("hook resolves the explicit owner pid carrier", /ENTWURF_META_HOOK_OWNER_PID/.test(hookSrc));
-ok(
-	"hook ancestry-validates the carried pid",
-	/resolveMetaHookOwnerPid/.test(hookSrc) && /parentPid\s*\(/.test(hookSrc),
-);
-ok("hook no longer assigns ownerPid directly from process.ppid", !/ownerPid\s*=\s*process\.ppid/.test(hookSrc));
+// Under the exec-form launch contract the owner is simply this hook's parent: Claude
+// execs the shipped launcher, which execs the hook and hands it the same pid. The
+// retired shell-$PPID carrier and its ancestry walk existed only to survive a shell
+// Claude chose; assert they are GONE, so a future edit cannot quietly reintroduce a
+// second owner source that the manifest no longer feeds. Whether the parent really is
+// Claude is proven by execution in check-hook-launch-topology, not by reading source.
+ok("hook no longer reads a $PPID owner carrier", !/ENTWURF_META_HOOK_OWNER_PID/.test(hookSrc));
+ok("hook no longer walks ancestry to validate an owner", !/parentPid\s*\(/.test(hookSrc));
+ok("hook resolves the owner from its exec-form parent", /process\.ppid/.test(hookSrc));
+// Removing the carrier removed a fail-closed the exec form does NOT replace: an
+// already-open Claude session still holding the OLD cached shell command reaches this
+// NEW hook with a wrapper as its parent. The launcher stamps an explicit provenance
+// token for exactly that case, and the hook must refuse to mint any presence without
+// it. Without this assertion the marker's honesty depends on nobody deleting one line.
+ok("hook requires exec-launch provenance before trusting its parent", /ENTWURF_META_HOOK_LAUNCH/.test(hookSrc));
 
 // UserPromptSubmit must early-return BEFORE the receiver marker write — it cannot
 // arm a watch, so it must never mint a presence. Check the early-return appears
@@ -187,118 +198,13 @@ ok(
 	signalAt >= 0 && recvWriteAt > signalAt,
 );
 
-// ── REAL command topology: both shell behaviors join on the same Claude owner ─
-// The gate process stands in for Claude. Claude starts a command shell whose $PPID
-// is therefore process.pid. Case 1 runs the committed `... $PPID exec node ...`.
-// Case 2 deliberately removes exec and appends `; :`, forcing bash to RETAIN the
-// wrapper while Node runs. Both must write sender + receiver markers under THIS pid.
-const hooksPath = path.join(REPO_DIR, "pi", "meta-bridge", "entwurf-meta-receive", "hooks", "hooks.json");
-const hooksManifest = JSON.parse(readFileSync(hooksPath, "utf8")) as {
-	hooks: { SessionStart: Array<{ hooks: Array<{ command: string }> }> };
-};
-const templateCommand = hooksManifest.hooks.SessionStart[0]?.hooks[0]?.command ?? "";
-ok(
-	"SessionStart command carries shell $PPID before exec",
-	templateCommand.startsWith("ENTWURF_META_HOOK_OWNER_PID=$PPID exec "),
-);
-
-function shellQuote(value: string): string {
-	return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
-
-function runTopologyCase(label: string, command: string, nativeSessionId: string): void {
-	const root = mkdtempSync(path.join(tmpdir(), "psa-meta-hook-owner-"));
-	const baked = command
-		.replace("__NODE_BIN__", shellQuote(process.execPath))
-		.replace("__HOOK_ENTRY__", "meta-bridge-hook.ts");
-	const result = spawnSync("bash", ["-c", baked], {
-		encoding: "utf8",
-		input: JSON.stringify({
-			hook_event_name: "SessionStart",
-			session_id: nativeSessionId,
-			transcript_path: path.join(root, "transcript.jsonl"),
-			cwd: root,
-		}),
-		env: {
-			...process.env,
-			CLAUDE_PLUGIN_ROOT: path.join(REPO_DIR, "pi-extensions"),
-			PI_CODING_AGENT_DIR: root,
-			ENTWURF_META_SESSIONS_DIR: path.join(root, "meta-sessions"),
-			ENTWURF_META_SENDERS_DIR: path.join(root, "meta-senders"),
-			ENTWURF_META_RECEIVERS_DIR: path.join(root, "meta-receivers"),
-			ENTWURF_META_MAILBOX_DIR: path.join(root, "meta-mailbox"),
-		},
-	});
-	ok(`${label}: hook command exits 0`, result.status === 0);
-	ok(`${label}: hook emits watchPaths`, result.stdout.includes("hookSpecificOutput"));
-
-	const senderPath = path.join(root, "meta-senders", "claude-code", `${process.pid}.json`);
-	ok(`${label}: sender marker is keyed by Claude pid, not wrapper pid`, existsSync(senderPath));
-	const sender = JSON.parse(readFileSync(senderPath, "utf8")) as {
-		gardenId: string;
-		nativeSessionId: string;
-		ownerPid: number;
-	};
-	ok(
-		`${label}: sender marker identity + owner agree`,
-		sender.nativeSessionId === nativeSessionId && sender.ownerPid === process.pid,
-	);
-
-	const receiverPath = path.join(root, "meta-receivers", `${sender.gardenId}.json`);
-	ok(`${label}: receiver marker exists for the minted garden id`, existsSync(receiverPath));
-	const receiver = JSON.parse(readFileSync(receiverPath, "utf8")) as { nativeSessionId: string; ownerPid: number };
-	ok(
-		`${label}: receiver liveness owner is the same Claude pid`,
-		receiver.nativeSessionId === nativeSessionId && receiver.ownerPid === process.pid,
-	);
-}
-
-runTopologyCase("tail-exec topology", templateCommand, "native-owner-tail-exec");
-const retainedWrapperCommand = `${templateCommand.replace(" exec ", " ")}; :`;
-runTopologyCase("retained-shell topology", retainedWrapperCommand, "native-owner-retained-shell");
-
-// Upgrade mismatch: a new hook reached through an old command has no explicit
-// owner carrier. Record minting remains best-effort, but sender/receiver markers
-// MUST stay absent and the hook log MUST remain red after the later watch-arm line.
-// This is why package upgrade requires reinstall-meta-bridge + native-session restart.
-{
-	const root = mkdtempSync(path.join(tmpdir(), "psa-meta-hook-no-owner-"));
-	const oldCommand = templateCommand
-		.replace("ENTWURF_META_HOOK_OWNER_PID=$PPID ", "")
-		.replace("__NODE_BIN__", shellQuote(process.execPath))
-		.replace("__HOOK_ENTRY__", "meta-bridge-hook.ts");
-	const result = spawnSync("bash", ["-c", oldCommand], {
-		encoding: "utf8",
-		input: JSON.stringify({
-			hook_event_name: "SessionStart",
-			session_id: "native-owner-missing-carrier",
-			transcript_path: path.join(root, "transcript.jsonl"),
-			cwd: root,
-		}),
-		env: {
-			...process.env,
-			ENTWURF_META_HOOK_OWNER_PID: "",
-			CLAUDE_PLUGIN_ROOT: path.join(REPO_DIR, "pi-extensions"),
-			PI_CODING_AGENT_DIR: root,
-			ENTWURF_META_SESSIONS_DIR: path.join(root, "meta-sessions"),
-			ENTWURF_META_SENDERS_DIR: path.join(root, "meta-senders"),
-			ENTWURF_META_RECEIVERS_DIR: path.join(root, "meta-receivers"),
-			ENTWURF_META_MAILBOX_DIR: path.join(root, "meta-mailbox"),
-		},
-	});
-	ok("missing carrier: hook stays best-effort exit 0", result.status === 0);
-	ok(
-		"missing carrier: meta-record still lands",
-		readdirSync(path.join(root, "meta-sessions")).filter((name) => name.endsWith(".meta.json")).length === 1,
-	);
-	ok("missing carrier: sender marker is NOT written", !existsSync(path.join(root, "meta-senders")));
-	ok("missing carrier: receiver marker is NOT written", !existsSync(path.join(root, "meta-receivers")));
-	const log = readFileSync(path.join(root, "meta-bridge-hook.log"), "utf8");
-	ok("missing carrier: hook log names invalid owner carrier", log.includes("owner pid carrier missing/invalid"));
-	ok(
-		"missing carrier: final post-arm evidence remains ERROR (doctor cannot call it recovered)",
-		log.trimEnd().split("\n").at(-1)?.includes(" ERROR receiver marker skipped") === true,
-	);
-}
+// ── launch topology is NOT this gate's job any more ─────────────────────────
+// The two shell-topology cells (tail-exec / retained-wrapper) and the missing-carrier
+// contract that used to live here were retired with the shell form itself (#51 B/B2).
+// Keeping them would have meant defending a launch form the repo no longer ships.
+// What replaced them is check-hook-launch-topology, which drives the SHIPPED exec-form
+// argv through the shipped launcher and asserts the owner join for real. This gate
+// stays on marker SEMANTICS, which are launch-form independent — that separation is
+// the reason the migration did not have to rewrite the marker contract.
 
 console.log(`\ncheck-meta-receiver-marker: ${passed} checks passed`);
