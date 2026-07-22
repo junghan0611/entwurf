@@ -9,10 +9,10 @@
 - **Stem:** entwurf는 pi의 session id·filename·session name을 만들거나 강제하지 않는다. Garden identity는 meta-record가 `gardenId ↔ backend/nativeSessionId`로 연결하고, socket/mailbox/native-push는 delivery/liveness rail로만 남는다.
 - **Decision:** pi도 record-backed citizen이다. Native GPT와 pi-hosted ACP는 모두 `backend:"pi"`; ACP는 model/provider axis이지 별도 citizen species가 아니다.
 - **Current hop:** **H0 done (`50251ea`).** PM↔Opus 교차검토와 GLG의 D0/rollback 승인을 plan-only commit으로 닫았다. Production delta는 0이고 full commit-hook floor가 GREEN이었다.
-- **Active serial implementer:** Opus garden `20260722T124111-bd16e8` (`tmux: entwurf-v2-debt-opus`). Previous planning Opus `20260722T112508-fad929` is closed. No parallel implementation is authorized. Session continuity is coordinated only by GLG↔PM conversation, not by implementer policy.
+- **H1-prep complete:** Opus garden `20260722T124111-bd16e8` closed its read-only campaign with `.agent-reports/H1-prep/HANDOFF.md` (sha256 `3b2126b30a7a16a4029f6557db08105599c17c8a8582c412eca6c0e43b52dfc2`, 206 lines). It indexes 14 verified local artifacts and all post-G1 commands. No parallel implementation is authorized; the next serial implementer starts from that handoff after G1.
 - **Expected self-host blackout:** C2/C4/H7에서 PM의 현재 socket-only session이 새 record garden socket으로 넘어가며 delivery가 잠시 끊길 수 있다. cut 직전 ids/HEAD/patch/next command를 고정하고, 끊긴 동안 GLG가 수동으로 턴을 전달한다. 새 pi record+socket, peers visibility, PM↔Opus 양방향 delivery가 복구되기 전 다음 cut으로 가지 않으며 fallback carrier를 만들지 않는다.
 - **Current blocker (2026-07-22 12:45 KST): G1은 아직 닫히지 않았다.** fetch 기준 `origin/main=fbde7b8`; #51의 B/B2 실측은 끝났지만 **(1) Linux artifact-consumer C gate와 (2) winning launch form + topology gate**, 두 구현 축이 아직 main에 없다. 둘 다 착지해야 G1이고, 동일 tgz Linux/macOS acceptance → release → clean reinstall/installed doctor는 G2다. 이 branch는 `origin/repair/v2-core-debt`보다 H0+handoff commit 두 개 앞선다(push 없음).
-- **Next session first move:** `HOP.md`와 이 NOW를 읽고 `git fetch origin --prune` + #51 status로 G1을 재확인한다. G1이 닫혔으면 main을 이 branch에 한 번 병합하고 H1 exact subtraction map을 시작한다. 아직 열리지 않았으면 merge·production edit·부분 map을 시작하지 말고 blocker 상태만 PM/GLG에게 보고한다.
+- **Next session first move:** `HOP.md` → 이 NOW → `.agent-reports/H1-prep/HANDOFF.md` 순으로 읽고 artifact digest를 검증한 뒤 `git fetch origin --prune` + #51 status로 G1을 재확인한다. G1이 닫혔으면 main을 이 branch에 한 번 병합하고 HANDOFF §3의 열 명령으로 H1 exact subtraction map을 연다. 아직 열리지 않았으면 merge·production edit을 시작하지 않는다.
 - **H1 topic:** production symbol별 `producer / consumer / gate+live-smoke / docs / delete-or-keep / replacement authority / expected RED` 표와 C1~C4 cut ledger. 이것은 read-only 설계 산출물이다.
 - **Two gates:** **G1** = #51 구현 코드 main 착지 → main 1회 병합 + H1(source-level subtraction map) 허용. **G2** = #51 release + maintainer/hejdev6g clean reinstall + installed `doctor-meta-bridge` GREEN → production 작업 개방; 첫 authority-transfer commit은 C1이다.
 - **Implementation rule:** GLG가 subtraction map을 확인하고 G2가 닫히기 전 production code는 열지 않는다. RED는 커밋하지 않고 `.agent-reports/H<n>/` patch+digest로 보존한다. Production 권위 이전은 C1~C4 각각 `새 writer/reader + 소비자 전환 + 옛 producer 삭제`가 같은 GREEN commit에서 닫혀야 한다. 정상 routing의 새 dual-read/dual-authority는 금지한다.
@@ -31,7 +31,7 @@
 6. **All record-backed pi citizens are siblings.** Explicit `owned-outcome` + trust/preflight may wake a dormant pi citizen. Do not recreate `isEntwurf` as a species/permission boolean. If launch policy later proves necessary, it is separate operator policy.
 7. **Hard cut, not permanent compatibility.** Existing gardenized pi sessions get one-shot record enrollment without **entwurf-authored** JSONL mutation. New sessions use native pi ids. Record-less socket-only is a migration/crash diagnostic, not the final normal path.
 8. **ACP remains supported.** The pi host session owns the record and socket; the ACP plugin only supplies the model/backend process behind that same pi citizen.
-9. **Schema hard cut is V3 + one-shot migration.** V1/V2 readers live only in the explicit M1 migration surface; normal production becomes V3-only. Migration is idempotent, verifies zero non-V3 records, and proves backup restore + previous-release rollback before touching the live store.
+9. **Schema hard cut is V3 + one-shot migration.** V1/V2 readers live only in the explicit M1 migration surface; normal production becomes V3-only. M1은 installed operator command로만 실행하고 best-effort SessionStart/PreInvocation hook에 자동 이식하지 않는다. Migration is idempotent, verifies zero non-V3 records, and proves backup restore + previous-release rollback before touching the live store.
 
 ## AUTHORITY TABLE
 
@@ -90,7 +90,7 @@
 6. **C3 / H5a — resume/file authority:** ordinary prompt 앞에 기존 structured `<sender_info>`를 prepend하고 `wantsReply`는 sibling input으로 유지; record transcript path/native header 검증 + exact `--session`; global scan/name authorization/resume marker 제거. 새 child carrier/custom-message reconstruction은 만들지 않는다.
 7. **C4 / H5b — facts/dispatch authority:** M1 뒤 live legacy session은 C2 attach, dormant M2는 explicit absolute JSONL paths로만 등록한다(global inventory/name/pi-open 없음). Alive socket-only count 0을 증명한 뒤 facts/listing rail과 dispatch/resolveTarget rail을 각각 record-first로 전환한다. Target registry DATA/OPS와 RT-dead reader는 이 authority transfer와 분리한다.
 8. **H6:** socket의 인라인 `<sender_info>`를 pure formatter로 추출해 socket·spawn·native-push가 공유하고, mailbox는 동일 envelope fields의 human formatter를 유지한다. `wantsReply`는 sibling input, intent/transport/receipt는 rail별 증거로 남기며 공통 DB를 만들지 않는다.
-9. **H7:** D5/M1-trigger 결정 뒤 candidate artifact로 controlled live backup→M1→M2 cutover와 rollback을 실증한다. 이어 full floor/package/live evidence, production net subtraction, durable docs/#49/#50 승격, branch plan docs 삭제를 준비한다.
+9. **H7:** D5 quiesce actuator/detector 확정 뒤 candidate artifact로 controlled live cutover를 실행한다: quiesce → backup → explicit M1 → non-V3=0 → M2 → alive socketOnly=0 → new runtime. Rollback은 backup 완전 복원 후 이전 artifact 재설치 순서다. 이어 full floor/package/live evidence와 durable docs를 닫는다.
 
 C1~C4는 각각 독립 GREEN authority-transfer commit이다. H5a/H5b가 한 PM 홉에 과하면 둘로 나눠 operational 8홉으로 수정한다.
 
