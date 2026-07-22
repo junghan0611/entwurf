@@ -84,6 +84,8 @@ Usage:
   ./run.sh check-meta-record-v2        # deterministic golden gate (0.11 Stage 0 step 3A): synthetic v1 fixture → normalizeMetaIdentity v2 identity golden + dual-read version fences, no API
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
+  ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
+  ./run.sh check-bridge-delivery      # deterministic gate (IN pnpm check): demo scene 3 recovered — seed an armed self-fetch citizen in an isolated temp world, drive the BUILT DIST ENTRY over MCP stdio through a real tools/call entwurf_v2, assert the .msg landed + doorbell poked. DELIVERS through the artifact, not from source. ENTWURF_DELIVERY_SUBJECT=<launcher> replays the same scene against another consumer artifact (check-pack-install passes the npm-installed bin). No model/network/cost; stale or missing dist FAILS
   ./run.sh check-meta-dual-read        # deterministic gate (0.11 Stage 0 step 3D-1): v2 write shape (serializeMetaIdentity) + dual-read dispatcher (parseMetaRecordAny/parseMetaIdentity) + write→read round-trip, pure, no API
   ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
   ./run.sh check-meta-receiver-marker # deterministic gate (SE-2): receiver marker round-trip/start-key/provenance, UserPromptSubmit cannot mint presence, reader does not gate on record existence — marker SEMANTICS only; launch topology moved to check-hook-launch-topology
@@ -155,7 +157,7 @@ Usage:
   ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
   ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
-  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.80.x peers
+  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.80.x peers + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to entwurf alias
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
@@ -261,10 +263,18 @@ preflight_dep_integrity() {
   # (accessSync follows the link).
   #
   # Probe set = the BUNDLED runtime `dependencies` only. The `@earendil-works/pi-*`
-  # peer trio is intentionally EXCLUDED: pi-managed installs omit peers
-  # (--legacy-peer-deps) and the pi loader provides that runtime itself, so the
-  # trio is legitimately absent from node_modules on the npm path. pi runtime
-  # presence/version is covered by check-pi-runtime-version / check-pi-import-surface.
+  # peer trio is intentionally EXCLUDED, and the reason depends on the lane — the old
+  # blanket claim ("the pi loader provides that runtime itself") was true for only one
+  # of them and is corrected here:
+  #   pi-managed install — pi omits peers (--legacy-peer-deps) and its own loader
+  #     supplies the runtime, so the trio is legitimately absent.
+  #   neutral npm/pnpm install — nothing supplies it. The optional peer is simply
+  #     unresolved (entwurf-preflight.ts:51), and the owned-outcome lane that needs it
+  #     is dead on that host. Excluding the trio from this probe is still right (a hard
+  #     require would reject every consumer install), but it is a KNOWN GAP, not proof
+  #     that the runtime is present by another route.
+  # pi runtime presence/version is covered by check-pi-runtime-version /
+  # check-pi-import-surface, neither of which runs on a consumer host.
   local probe=(
     "@modelcontextprotocol/sdk" "@agentclientprotocol/sdk" "@agentclientprotocol/claude-agent-acp"
     "@anthropic-ai/sdk" "zod"
@@ -577,6 +587,31 @@ check_entwurf_capabilities() {
   # strict keyset/coverage/field crashes. Parser/gate only — no live routing,
   # no record/descriptor consumer change (that is 3D). No backend, no API.
   run_ts scripts/check-entwurf-capabilities.ts
+}
+
+check_capability_bundle_reach() {
+  # The gate check-entwurf-capabilities structurally cannot be. That gate imports
+  # metaCapabilitiesFilePath() from ../pi-extensions/lib/ — the one location where
+  # its relative path arithmetic is correct — so "the registry resolves" is a
+  # tautology there. This one DISCOVERS every shipped copy of the module and
+  # re-asks each from where it actually lives, including the bridge bundle emit at
+  # mcp/entwurf-bridge/dist/pi-extensions/lib/ that answers the real entwurf_v2.
+  # Requires a built bridge; a missing dist FAILS (never skips).
+  run_ts scripts/check-capability-bundle-reach.ts
+}
+
+check_bridge_delivery() {
+  # demo/demo.sh scene 3, recovered as a deterministic gate. demo drove two real pi
+  # panes so it proved DELIVERY through the installed binary (at model cost); what
+  # replaced it split in half — matrix-live C2 delivers but from repo source
+  # in-process, while bridge-boot/pack-install/install-container run the artifact but
+  # only tools/list. entwurf_v2 through the shipped bundle was never executed once,
+  # and it shipped dead through 0.12.8-repair.0. This seeds an armed self-fetch
+  # citizen (C2 recipe) into an env-isolated temp world, then drives the BUILT DIST
+  # ENTRY as its own process over MCP stdio through a real tools/call entwurf_v2 and
+  # asserts the .msg physically landed + the doorbell was poked. Seeder is source,
+  # subject is the artifact, separate processes. No model, no network, no cost.
+  run_ts scripts/check-bridge-delivery.ts
 }
 
 check_meta_dual_read() {
@@ -3033,6 +3068,30 @@ JS
   fi
   echo "[check-pack-install] installed bridge boot pass (dist boots under node_modules, pi-free: $boot_out)"
 
+  # 0.12.8 — installed bridge DELIVERY regression. The boot probe above stops at
+  # tools/list, and so did every other artifact gate: `entwurf_v2` had never once been
+  # CALLED through a shipped bundle. That blind spot shipped a DEAD send path from the
+  # birth of the dist (0.12.1) through 0.12.8-repair.0 — the bundle carried no
+  # capability registry, so every real send died `ENOENT entwurf-capabilities.json`
+  # while the registry-free verbs (entwurf_self/entwurf_peers) stayed green and hid it.
+  # Had this probe existed, that corpse would have been RED at the first pack.
+  #
+  # Same scene as check-bridge-delivery, different cell: there the subject is the
+  # checkout's dist, here it is THIS npm-installed tree — peer-free, hoisted deps, the
+  # hejdev6g world — driven through the installed BIN, so start.sh's node_modules→dist
+  # branch is itself under test rather than bypassed. The gate seeds its own citizen
+  # from repo source in a separate process and asserts the .msg physically landed; the
+  # env-isolated temp world (ENTWURF_META_* trio + ENTWURF_DIR + NODE_PATH stripped)
+  # lives inside it. No model, no network. HOME/XDG are the sandbox roots this function
+  # already uses, so the drive cannot read the operator's real store (rule 11).
+  local delivery_out
+  if ! delivery_out=$(HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" ENTWURF_DELIVERY_SUBJECT="$installed_start" run_ts scripts/check-bridge-delivery.ts 2>&1); then
+    fail "[check-pack-install] installed bridge DELIVERY failed — the npm-installed MCP server boots but cannot deliver an entwurf_v2 send (the 0.12.1→0.12.8-repair.0 registry corpse):"
+    echo "$delivery_out" | tail -20 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] installed bridge delivery pass (tools/call entwurf_v2 through the installed bin landed a .msg)"
+
   # 0.12.7 — installed AGY IMPRINT regression. The npm bin resolves through a
   # node_modules symlink; raw scripts/agy-imprint.ts is therefore forbidden by
   # Node's strip-types fence. Execute the real installed bin with an isolated
@@ -3903,6 +3962,12 @@ case "$cmd" in
     ;;
   check-entwurf-capabilities)
     check_entwurf_capabilities
+    ;;
+  check-capability-bundle-reach)
+    check_capability_bundle_reach
+    ;;
+  check-bridge-delivery)
+    check_bridge_delivery
     ;;
   check-meta-dual-read)
     check_meta_dual_read

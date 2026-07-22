@@ -34,6 +34,16 @@ case "$REPO" in
   */node_modules/@junghanacs/entwurf) LIB_EXT="js" ;;
   *)                                  LIB_EXT="ts" ;;
 esac
+# THE writer module for this mode, derived once. An installed package carries the
+# tsc-emitted `.js` (Node refuses strip-types below node_modules); a dev clone carries
+# the `.ts` source. Two sections need it — the delivery self-diagnostic (which imports
+# it to seed its throwaway citizens) and writer-version parity (which hashes it) — and
+# a second derivation is a second thing to forget when the layout moves.
+if [ "$LIB_EXT" = "js" ]; then
+  SRC_MS="$REPO/mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
+else
+  SRC_MS="$REPO/pi-extensions/lib/meta-session.ts"
+fi
 # shellcheck source=scripts/meta-bridge-hook-log.sh
 source "$REPO/scripts/meta-bridge-hook-log.sh"
 
@@ -591,6 +601,227 @@ else
 	warn "claude not on PATH — cannot probe MCP reach"
 fi
 
+echo "[bridge delivery self-diagnostic — the LIVE command actually DELIVERS]"
+# Every section above reads SHAPE: the manifest equals the shipped template, the tool is
+# reachable, the hook keys a marker. None of them SENDS anything. That gap is how a dead
+# send path shipped from the birth of the dist (0.12.1) through 0.12.8-repair.0 — the
+# bridge bundle carried no capability registry, so every real entwurf_v2 died
+# `ENOENT ... entwurf-capabilities.json` while tools/list, entwurf_self and entwurf_peers
+# (which never read it) stayed green, and THIS doctor said PASS on a host that could not
+# send one message. An oracle that never delivers judges shape, not function.
+#
+# TWO AXES, kept apart on purpose:
+#   OWNERSHIP  the live entry equals what desired_mcp() would write — drift is loud.
+#   DELIVERY   the LIVE entry, drift included, seeds citizens in a throwaway world and
+#              lands exactly one .msg.
+# Delivery is driven from the LIVE value and never from a recomputed desired one: on a
+# drifted host the recomputed command can deliver while the command Claude actually execs
+# cannot, and that green would be about a bridge nobody runs. Same rule as the artifact
+# root above — judge the thing Claude loads.
+#
+# COST: none. No model, no network, no API. The probe writes only inside its own mktemp
+# world (PI_CODING_AGENT_DIR + the four meta dirs + ENTWURF_DIR all redirected), so the
+# operator's real store, mailbox and sockets cannot be touched — a doctor that delivered
+# into the real mailbox would be a doctor nobody could afford to run twice.
+if ! command -v python3 >/dev/null || ! command -v node >/dev/null; then
+  bad "cannot run the delivery self-diagnostic without python3 + node — DELIVERY IS UNPROVEN, not fine"
+else
+  # Claude Code keeps user-scope MCP in ~/.claude.json, NOT in settings.json — mirror
+  # meta-bridge-state.py:claude_root_config_path() exactly, including its HOME anchoring
+  # (CLAUDE_CONFIG_DIR does not move this file, and pretending it does would read an
+  # empty config on an isolated-config host and call the miss "no bridge wired").
+  LIVE_MCP="$(python3 - <<'PY'
+import json, os
+p = os.path.join(os.path.expanduser('~'), '.claude.json')
+try:
+    d = json.load(open(p))
+except Exception:
+    d = None
+e = (d.get('mcpServers') or {}).get('entwurf-bridge') if isinstance(d, dict) else None
+print(json.dumps(e, sort_keys=True) if isinstance(e, dict) else '')
+PY
+)"
+  if [ -z "$LIVE_MCP" ]; then
+    bad "no live mcpServers.entwurf-bridge in ~/.claude.json — Claude has no entwurf bridge to exec, so nothing can be delivered. Re-run ./run.sh install-meta-bridge."
+  else
+    # Human-readable argv for the verdict lines, so a green names the command it was about.
+    LIVE_MCP_DESC="$(LIVE_MCP="$LIVE_MCP" python3 -c 'import json,os; e=json.loads(os.environ["LIVE_MCP"]); print(" ".join([e.get("command","")] + list(e.get("args") or [])))' 2>/dev/null || true)"
+    [ -n "$LIVE_MCP_DESC" ] || LIVE_MCP_DESC="(unprintable live command)"
+    # Ownership axis. `|| true` on the pipeline only: a state.py failure must read as
+    # UNKNOWN-and-loud below, never abort the doctor before the delivery drive.
+    DESIRED_MCP="$( { python3 "$REPO/scripts/meta-bridge-state.py" desired-mcp --repo "$REPO" \
+      | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin), sort_keys=True))'; } 2>/dev/null || true)"
+    if [ -z "$DESIRED_MCP" ]; then
+      bad "could not compute the desired MCP entry (meta-bridge-state.py desired-mcp failed) — live-vs-desired ownership is UNKNOWN"
+    elif [ "$LIVE_MCP" = "$DESIRED_MCP" ]; then
+      ok "live mcpServers.entwurf-bridge equals desired_mcp() for this mode (installed: bin shim; clone: this checkout's start.sh)"
+    else
+      bad "live mcpServers.entwurf-bridge DRIFTED from desired_mcp(): live=$LIVE_MCP desired=$DESIRED_MCP — re-run ./run.sh install-meta-bridge (delivery below is still driven from the LIVE value, which is what Claude execs)"
+    fi
+
+    # Delivery axis. The writer module is imported by the probe to seed its citizens; a
+    # missing one is a broken install, not a reason to skip the drive quietly.
+    if [ ! -f "$SRC_MS" ]; then
+      bad "delivery self-diagnostic cannot seed: writer module missing at $SRC_MS — reinstall @junghanacs/entwurf"
+    else
+      # Mode split for the PROBE ITSELF: under node_modules Node refuses strip-types, so
+      # the installed lane imports the emitted `.js` with plain node. Array (never an
+      # empty one) so bash 3.2 + `set -u` cannot trip on the expansion.
+      if [ "$LIB_EXT" = "js" ]; then
+        PROBE_NODE=(node)
+      else
+        PROBE_NODE=(node --experimental-strip-types --disable-warning=ExperimentalWarning)
+      fi
+      if DELIVERY_OUT=$(PROBE_MCP_JSON="$LIVE_MCP" PROBE_MODULE="$SRC_MS" "${PROBE_NODE[@]}" --input-type=module <<'JS' 2>&1
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const entry = JSON.parse(process.env.PROBE_MCP_JSON);
+if (typeof entry.command !== 'string' || entry.command.trim() === '') {
+  console.error('live mcpServers.entwurf-bridge has no command');
+  process.exit(1);
+}
+const { upsertMetaSession, writeMetaSenderMarker, writeMetaReceiverMarker } =
+  await import(pathToFileURL(process.env.PROBE_MODULE).href);
+
+const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'entwurf-doctor-delivery-'));
+const agent = path.join(tmp, 'agent');
+const sessionsDir = path.join(agent, 'meta-sessions');
+const mailboxDir = path.join(agent, 'meta-mailbox');
+const receiversDir = path.join(agent, 'meta-receivers');
+const sendersDir = path.join(agent, 'meta-senders');
+for (const d of [sessionsDir, mailboxDir, receiversDir, sendersDir]) await fsp.mkdir(d, { recursive: true });
+
+// SENDER — this probe process is the parent the bridge child will see, so a sender
+// marker keyed to it is exactly what a real SessionStart hook writes for a native
+// session. Not decoration: the live env sets ENTWURF_BRIDGE_REQUIRE_META_SENDER=1
+// (anonymous sends are refused on the Claude install path) and the probe KEEPS that
+// env, so the identity join is under test alongside the delivery.
+const sender = upsertMetaSession({
+  input: { backend: 'claude-code', nativeSessionId: `doctor-delivery-sender-${process.pid}`, cwd: tmp },
+  dir: sessionsDir,
+});
+writeMetaSenderMarker({
+  backend: 'claude-code',
+  gardenId: sender.record.gardenId,
+  nativeSessionId: sender.record.nativeSessionId,
+  cwd: tmp,
+  ownerPid: process.pid,
+  sendersDir,
+});
+
+// RECEIVER — a DIFFERENT citizen, armed by a live owner pid (this process). An unarmed
+// target is correctly fail-closed as mailbox-undeliverable, so an unarmed probe could
+// never separate "the artifact cannot read its registry" from "nobody is listening".
+const receiver = upsertMetaSession({
+  input: { backend: 'claude-code', nativeSessionId: `doctor-delivery-receiver-${process.pid}`, cwd: tmp },
+  dir: sessionsDir,
+});
+const gid = receiver.record.gardenId;
+writeMetaReceiverMarker({
+  gardenId: gid,
+  backend: 'claude-code',
+  nativeSessionId: receiver.record.nativeSessionId,
+  ownerPid: process.pid,
+  armProvenance: 'session-start',
+  receiversDir,
+});
+
+// The live env wins over the ambient one (it is part of the command under test); the
+// isolation vars win over both, because a probe that could reach the operator's real
+// store is not a probe.
+const env = {
+  ...process.env,
+  ...(entry.env && typeof entry.env === 'object' ? entry.env : {}),
+  PI_CODING_AGENT_DIR: agent,
+  ENTWURF_META_SESSIONS_DIR: sessionsDir,
+  ENTWURF_META_MAILBOX_DIR: mailboxDir,
+  ENTWURF_META_RECEIVERS_DIR: receiversDir,
+  ENTWURF_META_SENDERS_DIR: sendersDir,
+  ENTWURF_DIR: path.join(tmp, 'sockets'),
+};
+delete env.NODE_PATH;
+
+let child = null;
+let stderr = '';
+let verdict = 0;
+const bail = (msg) => { console.error(msg); verdict = 1; };
+try {
+  child = spawn(entry.command, Array.isArray(entry.args) ? entry.args : [], { stdio: ['pipe', 'pipe', 'pipe'], env });
+  child.on('error', (e) => { stderr += `spawn error: ${String(e)}\n`; });
+  child.stderr.on('data', (d) => { stderr += d.toString(); });
+  const replies = new Map();
+  let buf = '';
+  child.stdout.on('data', (d) => {
+    buf += d.toString();
+    const lines = buf.split('\n');
+    buf = lines.pop() ?? '';
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t) continue;
+      try { const m = JSON.parse(t); if (typeof m?.id === 'number') replies.set(m.id, m); } catch {}
+    }
+  });
+  const send = (o) => child.stdin.write(`${JSON.stringify(o)}\n`);
+  const awaitId = (id, what) => new Promise((resolve, reject) => {
+    const t0 = Date.now();
+    const iv = setInterval(() => {
+      if (replies.has(id)) { clearInterval(iv); resolve(replies.get(id)); }
+      else if (Date.now() - t0 > 20000) { clearInterval(iv); reject(new Error(`timeout waiting for ${what}\n${stderr.slice(0, 800)}`)); }
+    }, 50);
+  });
+
+  send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+  const listed = await awaitId(1, 'tools/list');
+  const names = (listed?.result?.tools ?? []).map((t) => t?.name);
+  if (!names.includes('entwurf_v2')) bail(`the live command booted but registers no entwurf_v2 (tools: ${names.join(',') || 'none'})`);
+
+  if (verdict === 0) {
+    send({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'entwurf_v2',
+        arguments: {
+          target: gid,
+          intent: 'fire-and-forget',
+          mode: 'follow_up',
+          message: 'doctor-meta-bridge delivery self-diagnostic (throwaway citizen).',
+        },
+      },
+    });
+    const called = await awaitId(2, 'tools/call entwurf_v2');
+    const body = called?.result?.content?.[0]?.text ?? JSON.stringify(called);
+    const box = path.join(mailboxDir, gid);
+    const files = fs.existsSync(box) ? fs.readdirSync(box) : [];
+    const landed = files.filter((f) => f.endsWith('.msg')).length;
+    if (called?.result?.isError === true || landed !== 1 || !fs.existsSync(path.join(box, 'inbox.signal'))) {
+      bail(`the live command did not deliver — response: ${String(body).slice(0, 400)} | mailbox: ${files.join(',') || 'empty'}`);
+    }
+  }
+} catch (e) {
+  bail(String(e instanceof Error ? e.message : e));
+} finally {
+  try { child?.kill('SIGTERM'); } catch {}
+  await fsp.rm(tmp, { recursive: true, force: true });
+}
+if (verdict === 0) console.log('delivered: one .msg landed + doorbell poked');
+process.exit(verdict);
+JS
+      ); then
+        ok "live bridge command DELIVERS — $DELIVERY_OUT (seeded citizens in a temp world, real tools/call entwurf_v2 through: $LIVE_MCP_DESC)"
+      else
+        bad "live bridge command CANNOT DELIVER — it may boot and answer tools/list while every real entwurf_v2 send dies (the 0.12.1→0.12.8-repair.0 registry corpse class). Detail: $(printf '%s' "$DELIVERY_OUT" | tr '\n' ' ' | cut -c1-400)"
+      fi
+    fi
+  fi
+fi
+
 echo "[meta-record store]"
 mkdir -p "$META_SESSIONS" 2>/dev/null || true
 if [ -d "$META_SESSIONS" ] && [ -w "$META_SESSIONS" ]; then ok "writable: $META_SESSIONS"; else bad "meta-sessions dir not writable: $META_SESSIONS"; fi
@@ -826,12 +1057,8 @@ registry_for_ms() { # $1=bundle meta-session.ts → sibling plugin-root registry
 
 # Source authority for parity depends on the mode: an installed bundle carries the
 # dist `.js`, so compare it against the dist `.js` (same tsc pipeline → hash-equal);
-# a dev clone carries the `.ts`, so compare against the `.ts` source.
-if [ "$LIB_EXT" = "js" ]; then
-  SRC_MS="$REPO/mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
-else
-  SRC_MS="$REPO/pi-extensions/lib/meta-session.ts"
-fi
+# a dev clone carries the `.ts`, so compare against the `.ts` source. That mode split
+# is `SRC_MS`, derived once at the top of this script.
 SRC_REG="$REPO/pi/entwurf-capabilities.json"
 ASM_MS="$ASM/$PLUGIN/lib/meta-session.$LIB_EXT"
 # Read the SAME artifact root the hook sections judged. Re-globbing here could hash a

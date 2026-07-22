@@ -759,12 +759,24 @@ export function parseMetaCapabilityRegistry(json: string): MetaCapabilityRegistr
 }
 
 /**
- * The packaged capability registry path. Two layouts resolve:
+ * The packaged capability registry path. This function's ENTIRE behaviour is
+ * arithmetic on its own file location, so it is only ever as correct as the layout
+ * it is executed from — which is why it is gated by check-capability-bundle-reach
+ * (which re-asks every shipped copy from where it lives) and NOT by the source-path
+ * gates (calling it from its own source dir can never fail).
+ *
+ * Two layouts resolve:
  *  - repo / npm package: `pi-extensions/lib/` → `<root>/pi/entwurf-capabilities.json`.
- *  - bundled meta-bridge plugin: `../../pi` would ESCAPE the plugin dir (the plugin
- *    is installed under a version dir in the Claude plugin cache), so the registry
- *    travels AT the plugin root and resolves via `../` from `lib/`.
- *    meta-bridge-install.sh copies it there; doctor-meta-bridge asserts its presence.
+ *  - a BUNDLE that carries the module at its own root: `../../pi` would escape the
+ *    bundle, so the registry travels AT the bundle root and resolves via `../` from
+ *    `lib/`. Two bundles ship this way, and each needs its own copy step:
+ *      · meta-bridge plugin — installed under a version dir in the Claude plugin
+ *        cache; meta-bridge-install.sh copies it, doctor-meta-bridge asserts it.
+ *      · entwurf-bridge MCP dist — `mcp/entwurf-bridge/dist/pi-extensions/lib/`,
+ *        three levels deeper than the source; build-bridge.sh copies it. This is
+ *        the copy that answers entwurf_v2, and it shipped with NO registry through
+ *        0.12.8-repair.0: sends died ENOENT while the registry-free verbs
+ *        (entwurf_self/entwurf_peers) stayed green and hid it.
  * Repo path is tried first, so repo/package behaviour is unchanged; the bundle
  * fallback only engages where the repo layout is absent.
  */

@@ -163,8 +163,18 @@ export interface ProductionEntwurfV2Opts {
  * would pull pi into the harness-neutral MCP bridge's boot closure. This wrapper
  * defers that to a lazy `await import()` reached ONLY on the owned-outcome resume
  * branch (the decider awaits it). peers/self/list/mailbox-deliver therefore boot
- * with no pi package present; a pi-less environment that DOES hit a spawn-bg resume
- * surfaces an honest module-not-found at that point rather than failing boot.
+ * with no pi package present.
+ *
+ * WHAT THIS DEFERRAL DOES NOT DO — corrected 0.12.8. The old sentence framed the
+ * pi-less case as an edge ("a pi-less environment that DOES hit a spawn-bg resume
+ * surfaces an honest module-not-found"). In a published consumer tree that is not an
+ * edge, it is the DEFAULT: `@earendil-works/pi-coding-agent` is an optional peer that
+ * a neutral `npm install` does not resolve (entwurf-preflight.ts:51), so this import
+ * throws for every installed user and the owned-outcome lane has never lived in any
+ * published version. The deferral still buys what it claims — a pi-free boot — and
+ * "module-not-found" is still honest, but it is a permanent floor on the install path,
+ * not a rare condition. Reviving that lane (declared dep / pi CLI subprocess / PATH
+ * resolution) is a separate decision; nothing here should read as if it works today.
  */
 async function lazyProductionPreflight(input: PreflightInput): Promise<PreflightOutcome> {
 	const { preflight } = await import("./entwurf-preflight.ts");

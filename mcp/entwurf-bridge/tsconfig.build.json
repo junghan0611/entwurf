@@ -36,8 +36,17 @@
 	// The bridge boot entry (+ the dependency-free protocol.js it reaches via an
 	// explicit `.js` import) PLUS the doctor's store-scan helper. tsc auto-follows
 	// the import graph — STATIC imports AND the lazy
-	// `await import("./entwurf-preflight.ts")` — and emits exactly that closure,
-	// nothing more (the pi-lane-only acp/* stays out of the tarball).
+	// `await import("./entwurf-preflight.ts")` — and emits exactly that closure.
+	//
+	// It is a TYPE closure, not a boot closure, and the difference is shipped bytes.
+	// The retired claim here ("the pi-lane-only acp/* stays out of the tarball") is
+	// FALSE: dist/pi-extensions/lib/acp/ carries 8 modules (acp-client, backend-adapter,
+	// config, context, engraving, models, overlay, tool-surface) that no bridge code
+	// path executes — tsc followed a type reference and emitted them. Dead emit is a
+	// correctness question only for anything that reads its own location (see the
+	// registry corpse), but it is dead weight in every consumer's tarball. Cleanup is
+	// tracked as a follow-up, and the choice is one of two: narrow the emit, or ship
+	// the assets those modules expect. Do NOT restore the old sentence.
 	//
 	// WHY store-doctor rides THIS build: meta-bridge-doctor.sh's full store scan
 	// must run from an INSTALLED package (under node_modules, where strip-types is

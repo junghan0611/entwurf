@@ -22,6 +22,9 @@
 # fake `claude` on PATH. The Claude plugin CACHE is NOT real: the fake CLI cannot copy
 # an artifact into its cache the way the real `claude plugin install` does, so this gate
 # PLANTS the cache from the assembled bundle. Every claim below is worded to that line.
+# The user-scope MCP entry IS real in the only sense that matters here: the fake CLI's
+# `mcp add` writes the same `~/.claude.json` shape Claude writes, and the delivery
+# self-diagnostic then SPAWNS that live command for an actual `tools/call entwurf_v2`.
 #
 # Offline / hermetic. Deps: bash + node + python3. Swaps HOME and every writable XDG
 # root plus the agent dir (rule 11), and fences the operator's real data tree on exit.
@@ -100,6 +103,56 @@ case "$1${2:+ $2}${3:+ $3}" in
   "plugin list"*)
     printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled"
     exit "${FAKE_PLUGIN_LIST_RC:-0}" ;;
+  "mcp add"*)
+    # Real Claude persists user-scope MCP into ~/.claude.json, and the doctor's delivery
+    # self-diagnostic drives EXACTLY that live entry. A fake CLI that swallowed `mcp add`
+    # would leave the fixture with no live command, so the healthy control could never
+    # reach the delivery axis at all. Parse the installer's real argv shape
+    # (`-s user <name> -e K=V ... -- <cmd> [args]`) and write what Claude would write.
+    shift 2
+    python3 - "$@" <<'PY'
+import json, os, sys
+argv, env, name, cmd, i = sys.argv[1:], {}, None, [], 0
+while i < len(argv):
+    a = argv[i]
+    if a == "-s":
+        i += 2; continue
+    if a == "-e":
+        k, _, v = argv[i + 1].partition("="); env[k] = v; i += 2; continue
+    if a == "--":
+        cmd = argv[i + 1:]; break
+    if name is None:
+        name = a
+    i += 1
+p = os.path.join(os.path.expanduser("~"), ".claude.json")
+try:
+    d = json.load(open(p, encoding="utf-8"))
+except Exception:
+    d = {}
+if not isinstance(d, dict):
+    d = {}
+d.setdefault("mcpServers", {})[name] = {
+    "type": "stdio",
+    "command": cmd[0] if cmd else "",
+    "args": cmd[1:],
+    "env": env,
+}
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+    exit 0 ;;
+  "mcp remove"*)
+    python3 - "${3:-}" <<'PY'
+import json, os, sys
+p = os.path.join(os.path.expanduser("~"), ".claude.json")
+try:
+    d = json.load(open(p, encoding="utf-8"))
+except Exception:
+    sys.exit(0)
+if isinstance(d, dict) and isinstance(d.get("mcpServers"), dict):
+    d["mcpServers"].pop(sys.argv[1], None)
+    json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+    exit 0 ;;
   "mcp get"*)
     printf '%s\n' "Scope: User config" "Status: ✔ Connected"
     [ "${FAKE_MCP_RC:-0}" != 0 ] && exit "$FAKE_MCP_RC"
@@ -213,7 +266,9 @@ for claim in \
   'launch form: exec form through the shipped hook-launch.sh' \
   'FileChanged doorbell matches the shipped static contract exactly' \
   'keys its sender marker to the live host pid' \
-  'sender + receiver owner join is live and record-backed'
+  'sender + receiver owner join is live and record-backed' \
+  'live mcpServers.entwurf-bridge equals desired_mcp()' \
+  'live bridge command DELIVERS'
 do
   if printf '%s\n' "$DOC_OUT" | grep -qF "$claim"; then ok "control claim present: $claim"; else bad "control run never made the claim: $claim"; fi
 done
@@ -454,6 +509,63 @@ unset FAKE_MCP_RC
 export FAKE_NO_JSON=1 FAKE_PLUGIN_LIST_RC=4
 expect_red "plugin list fails with no --json surface" "'claude plugin list' failed (exit 4)"
 unset FAKE_NO_JSON FAKE_PLUGIN_LIST_RC
+
+# M14 — the live MCP entry is GONE. The delivery axis must FAIL LOUD on an absent
+# command rather than skipping quietly (a skipped axis in a release oracle is a green
+# nobody earned). The managed-keyset check independently reds on this too; both messages
+# are legible and this one names the command Claude does not have.
+LIVE_CLAUDE_JSON="$HOME/.claude.json"
+cp "$LIVE_CLAUDE_JSON" "$TMP/claude-json.bak"
+python3 - "$LIVE_CLAUDE_JSON" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+d.get("mcpServers", {}).pop("entwurf-bridge", None)
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+expect_red "live mcpServers.entwurf-bridge removed" "no live mcpServers.entwurf-bridge in ~/.claude.json"
+cp "$TMP/claude-json.bak" "$LIVE_CLAUDE_JSON"
+
+# M15 — the 0.12.1→0.12.8-repair.0 CORPSE as a live command: a bridge tree complete
+# EXCEPT for the capability registry. It boots, answers tools/list, and serves
+# entwurf_self / entwurf_peers; only a real send dies. `node_modules` is symlinked
+# because the missing REGISTRY is the defect under test — a missing MCP SDK would be a
+# different and louder failure.
+#
+# WHAT THIS PROVES, EXACTLY: that the delivery axis exists and names DELIVERY. It is not
+# a clean detection-power delta, and pretending otherwise would be the vacuous kind of
+# green this gate was built against. Measured: the pre-delivery doctor also goes red here
+# — via the managed-keyset check, because repointing the entry IS keyset drift — but its
+# message is "another consumer may have clobbered a pi-owned key. Re-run install", which
+# sends the operator to a reinstall that cannot fix a dead bundle.
+#
+# The real corpse had NO drift: the live entry was the `entwurf-bridge` shim, byte-equal
+# to what install recorded, and the dead artifact sat BEHIND it (hejdev6g: doctor PASS
+# while every send died). A clone fixture cannot reproduce that — its live command is
+# this very checkout, and corrupting the checkout is not something a gate may do. The
+# artifact-with-entry-untouched case is covered one cell over, by check-pack-install's
+# install-tree delivery probe: remove the registry from the npm-installed tree and the
+# boot probe stays GREEN while only the delivery probe goes RED.
+#
+# What the pre-delivery doctor could never say is the thing the control asserts above:
+# "live bridge command DELIVERS". It made no delivery claim at all.
+CORPSE="$TMP/corpse-bridge"
+mkdir -p "$CORPSE/mcp/entwurf-bridge"
+cp -R "$REPO/pi-extensions" "$CORPSE/pi-extensions"
+cp -R "$REPO/mcp/entwurf-bridge/src" "$CORPSE/mcp/entwurf-bridge/src"
+cp "$REPO/mcp/entwurf-bridge/start.sh" "$CORPSE/mcp/entwurf-bridge/start.sh"
+ln -s "$REPO/node_modules" "$CORPSE/node_modules"
+# NB: "$REPO/pi/entwurf-capabilities.json" is deliberately NOT copied. That absence IS
+# the planted defect; do not "fix" it while tidying this fixture.
+python3 - "$LIVE_CLAUDE_JSON" "$CORPSE/mcp/entwurf-bridge/start.sh" <<'PY'
+import json, sys
+p, launcher = sys.argv[1], sys.argv[2]
+d = json.load(open(p, encoding="utf-8"))
+d["mcpServers"]["entwurf-bridge"]["args"] = [launcher]
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+expect_red "live command points at a bridge bundle with no capability registry" "live bridge command CANNOT DELIVER"
+cp "$TMP/claude-json.bak" "$LIVE_CLAUDE_JSON"
 
 # M13 (positive) — the SIGPIPE fix itself. A CLI that keeps writing long past the pipe
 # buffer must NOT be turned into a false negative. Deterministic: the tail is 128 KiB.
