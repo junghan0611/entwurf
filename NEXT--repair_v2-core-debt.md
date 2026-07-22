@@ -1,122 +1,52 @@
 # NEXT — repair/v2-core-debt
 
-> Branch-only boot sector. Main stays usable while this lane removes pi-session gardenization and finishes the pi meta-record citizen path. Delete this file before merge after durable outcomes move to code/docs/#50.
+> Branch boot sector. 실전 축 한 줄: **pi는 특별한 하네스가 아니라 meta-record로 동작하는 하네스가 된다.** 그게 되면 된 거다. Merge 전 이 파일 삭제.
 >
-> **Campaign map:** [`HOP.md`](./HOP.md) is the current H0–H7 hypothesis: entry/exit evidence and PM↔Opus roles. It is not a permanent rule; real evidence may revise it. This NEXT owns only the immediate resumption point and protocol decisions.
+> 설계문서(HOP.md, .agent-reports/)는 폐기했다 — 내용은 git history와 #50에 보존. 종이보다 코드. 터질 수 있는 지점을 아는 채로 터지는 건 실패가 아니다.
 
-## NOW — subtraction first: pi session은 pi에게 돌려준다
+## 상태 (2026-07-22)
 
-- **Stem:** entwurf는 pi의 session id·filename·session name을 만들거나 강제하지 않는다. Garden identity는 meta-record가 `gardenId ↔ backend/nativeSessionId`로 연결하고, socket/mailbox/native-push는 delivery/liveness rail로만 남는다.
-- **Decision:** pi도 record-backed citizen이다. Native GPT와 pi-hosted ACP는 모두 `backend:"pi"`; ACP는 model/provider axis이지 별도 citizen species가 아니다.
-- **Current hop:** **H2 open.** H1의 87-row C1~C4 source graph를 GLG가 승인했다. 이제 production을 만들기 전에 sandbox에서 migration/rollback/mutation power를 증명한다.
-- **H1 approved evidence:** `.agent-reports/H1/h1-cut-ledger.md` sha256 `d5d49fb9e80d1a32df9737990301701a701e4972fc0db2e8e0b8d3b2f3eca5df` (368 lines). Supporting artifacts: H1-A `276261a9…`, H1-B `e2611d39…`, H1-C `d3d3bb83…`. Unknown production caller 0; C1~C4 미결 설계 결정 0.
-- **Expected self-host blackout:** C2/C4/H7에서 PM의 현재 socket-only session이 새 record garden socket으로 넘어가며 delivery가 잠시 끊길 수 있다. cut 직전 ids/HEAD/patch/next command를 고정하고, 끊긴 동안 GLG가 수동으로 턴을 전달한다. 새 pi record+socket, peers visibility, PM↔Opus 양방향 delivery가 복구되기 전 다음 cut으로 가지 않으며 fallback carrier를 만들지 않는다.
-- **Current state (2026-07-22): H2-A starts on this branch.** 이 lane은 main/#51과 독립적으로 간다. #51 결과는 참고 evidence이지 entry gate가 아니다. 자동 merge/cherry-pick하지 않는다.
-- **Next session first move:** `HOP.md` → 이 NOW → `.agent-reports/H1/h1-cut-ledger.md` 순으로 읽고 digest를 검증한다. 이어 H2-A에서 현재 branch의 full/targeted floor와 isolated fixture inventory(V1/V2/V3/malformed/duplicate/half-migrated)를 고정한다. M1 prototype은 H2-A baseline을 PM이 검수하기 전 열지 않는다.
-- **H2 topic:** branch baseline · migration/rollback rehearsal · stale-writer verify-loop RED · migration-only import mutation · pi JSONL non-mutation fence. RED는 commit하지 않고 `.agent-reports/H2/` patch+digest로 보존한다.
-- **Branch gates:** H2 rehearsal/mutation evidence가 GREEN이면 C1 production authority transfer를 연다. C1/C2는 `check-pack-install`을 명시 실행하며, C2는 9-cell socket-fence mutation matrix를 추가로 소유한다.
-- **Implementation rule:** RED는 커밋하지 않고 `.agent-reports/H<n>/` patch+digest로 보존한다. Production 권위 이전은 C1~C4 각각 `새 writer/reader + 소비자 전환 + 옛 producer 삭제`가 같은 GREEN commit에서 닫혀야 한다. 정상 routing의 새 dual-read/dual-authority는 금지한다. 각 C commit은 replacement authority와 그 mutation gate를 함께 저자한다.
-- **Sequencing reason:** main의 #51 하네스를 선행조건으로 삼지 않는다. 이 브랜치가 제거할 옛 identity/resume/socket authority를 main gate가 먼저 고정하면 그것이 다시 기술부채다. #51의 관측은 읽되, H7에서 최종 authority에 맞는 package/OS floor로 재적합한다.
-- **Main protection:** 모든 protocol surgery와 RED 관측은 이 branch에서만 한다. main/origin-main은 일상 사용 lane으로 유지한다.
-- **SSOT:** #50 hard-cut decision — https://github.com/junghan0611/entwurf/issues/50#issuecomment-5033106676
-- **Do not touch:** fresh sibling mint/#47 mux, Cortex/#48, 0.12.9 ACP dependency work, backend auth, transcript hydration, a new DB/planner/worker tree.
+- 감산 커밋 3개 in, full `pnpm check` GREEN: `77483c5` socket path grammar 단일화(+fence `check-control-socket-path`), `e2eff3b` v1 sync-spawn dead island(entwurf-core.ts −469), **`d125946` C1 — V3 schema hard cut**(31파일 +995/−1560; V3-only production, frozen v1/v2 reader는 meta-migration.ts 단일 주소 + import-allowlist gate, strayness 양방향 게이트, M1 명령 이름 예약 `./run.sh meta-bridge-migrate-v3 migrate`).
+- live store 실측(oracle): 167 records, **100% schemaVersion=2**, v1/malformed/filename-mismatch/이물 0. C1 이후에도 live store는 무접촉 — M1/H7 레인이 옮긴다.
+- 게이트 재편: check-meta-{record-v2, dual-read, dual-consumers, migration} 4개 삭제 → check-meta-{v3-record, migration-readers, identity-consumers} 3개 신설.
 
-## LOCKED PROTOCOL
+## NOW — vertical slice: pi-attach 테스트까지 최단 경로
 
-1. **Meta-record = garden mapping authority.** `gardenId` is the universal address; `nativeSessionId` belongs to the harness. They may be equal for migrated sessions but equality is never an invariant.
-2. **Native session stays native.** Pi owns its id, filename, JSONL header, display name, `/new`, `/resume`, `/fork`, and storage layout. Entwurf reads public session facts; it does not rewrite them. Pi may migrate/rewrite its own older session-format versions when loading; that native behavior is not entwurf mutation.
-3. **Rail ≠ identity.** A pi record-backed citizen still uses control-socket while alive and exact `--session` spawn-resume while dormant. Claude uses mailbox; agy uses native-push.
-4. **Liveness is computed.** Never store alive/dead in the record. Pi liveness is the socket probe keyed by the record's garden id.
-5. **Call ≠ parentage.** No `parentGardenId`, mutable `lastCaller`, or worker tree in identity. Uniform caller evidence belongs in the delivered turn/envelope.
-6. **All record-backed pi citizens are siblings.** Explicit `owned-outcome` + trust/preflight may wake a dormant pi citizen. Do not recreate `isEntwurf` as a species/permission boolean. If launch policy later proves necessary, it is separate operator policy.
-7. **Hard cut, not permanent compatibility.** Existing gardenized pi sessions get one-shot record enrollment without **entwurf-authored** JSONL mutation. New sessions use native pi ids. Record-less socket-only is a migration/crash diagnostic, not the final normal path.
-8. **ACP remains supported.** The pi host session owns the record and socket; the ACP plugin only supplies the model/backend process behind that same pi citizen.
-9. **Schema hard cut is V3 + one-shot migration.** V1/V2 readers live only in the explicit M1 migration surface; normal production becomes V3-only. M1은 installed operator command로만 실행하고 best-effort SessionStart/PreInvocation hook에 자동 이식하지 않는다. Migration is idempotent, verifies zero non-V3 records, and proves backup restore + previous-release rollback before touching the live store.
+목표 테스트: **pi 세션이 SessionStart에서 V3 meta-record(`backend:"pi"`)로 붙고 `entwurf_peers`/`entwurf_v2`로 addressable — 샌드박스 smoke.** 이게 GREEN이면 GLG 핵심 질문("언제 pi가 meta-record로 붙나")에 코드로 답한 것이다.
 
-## AUTHORITY TABLE
+1. **C1 — V3 schema cut: DONE (`d125946`).** Opus 구조 cut + 페블 게이트 tail. 컴파일러 판정 2건 기록: `requireBackend`는 sender/receiver marker 경로의 live 심볼(native-3 axis는 marker 계약이지 record schema가 아님), `scanByNativeId`는 게이트 전용이라 삭제.
+2. **C2-lite — pi mint/attach (다음 걸음)**: pi SessionStart → upsert(`backend:"pi"`, nativeSessionId=native id). upsert는 attach다 — `(backend, nativeSessionId)` lookup으로 기존 record에 붙고 없을 때만 mint(재오픈이 새 garden id를 만들면 버그). 현행 gardenized 세션은 gardenId=session id mirror(동일 허용, 불변식 아님). 라우팅/socket 불변.
+3. **pi-attach smoke** (mkdtemp 격리, live store 무접촉) = slice 종착점.
 
-| fact | authority |
-|---|---|
-| garden address ↔ native session | meta-record |
-| native pi transcript/session content | pi native session + native id |
-| dormant resume file | record `transcriptPath`, validated against native id |
-| live/dead | socket probe |
-| live runtime cwd/model/idle | socket `get_info` |
-| caller/reply address | sender envelope in delivered turn |
-| launch trust | existing trust/preflight policy |
+이후 순서:
 
-## SUBTRACTION MANIFEST — remove before fitting the record
+4. **C2-full — gardenize 제거**: `--session-id` 주입(entwurf-resume-args.ts:83, entwurf-core.ts), `setSessionName` garden mirror, `/gnew`/`garden-new`, builtin `/new` block, garden-format hard exit, custom pre-created session header/name 경로. socket key를 record gardenId로 전환. `smoke-resident-garden-guard` 뒤집기 — 생존 = record mint + record-gardenId socket (uuid.sock 아님). 삭제+게이트 재저작+record 전환 같은 GREEN 커밋.
+5. **C3 — resume 권위**: exact `--session <absolute-file>`(record transcriptPath, native header 검증), resume env marker 사슬(`PI_SHELL_ACP_*` leaf/producer/consumer/gates), 정상 resume의 global JSONL header scan(`findSessionFilesById`), `requireEntwurf` name-tag 인가, v1 "entwurf-tagged ⇒ resident 불가" crash, name-authority 사슬(`buildSessionName`→`isKnownProviderModel`→`loadEntwurfTargets`+registry reader) 삭제. spawn-resume prompt 앞에 기존 structured sender envelope prepend(caller-edge 보존; native-push 동형은 후속 H6 성격).
+6. **C4 — facts/dispatch record-first**: record-less socket-only를 migration/진단 상태로 강등, dispatch/resolveTarget rail 전환.
+7. **M1 + H7 레인 (라이브 cutover)**: M1 operator command(backup `meta-sessions.v3-migration-backup-<ts>/` → migrate → verify non-V3=0 → restore/rollback 증명, fixture: V1/V3-already/malformed/stray-key/mismatch/half-migrated; duplicate는 파일명=gardenId 구조상 불가라 제외). 167 record 라이브 전환: quiesce → backup → M1 → non-V3=0 → 새 런타임. self-host blackout 예상 — cut 직전 ids/HEAD/patch 고정, 끊긴 동안 GLG 수동 릴레이, 양방향 delivery 복구 전 다음 cut 금지.
 
-### Pi session mutation / constraint
+커밋 규율: 각 커밋은 삭제 + 게이트 재저작 + GREEN이 한 몸. RED는 커밋하지 않는다. 정상 라우팅의 새 dual-authority 금지.
 
-- garden-id `--session-id` injection in entwurf launchers;
-- garden-id-format hard exit for pi native session ids;
-- `pi.setSessionName()` garden mirror and provider/model/tag writer;
-- session-name parser as identity/resume authority;
-- `__control` and `__entwurf` species semantics;
-- builtin `/new` block and `/gnew` / `/garden-new` replacement;
-- custom pre-created garden session header/name path;
-- docs/gates that require pi header id == garden id or filename/name mirrors.
+## LOCKED PROTOCOL (요지)
 
-### v1/v2 workaround residue
+1. meta-record = garden 주소 권위 (`gardenId ↔ backend/nativeSessionId`). 둘이 같을 수 있으나 동일성은 불변식이 아니다.
+2. pi 세션은 pi 소유 — id/파일명/헤더/이름/`/new`/`/resume`/저장 형식에 entwurf가 손대지 않는다. pi 자신의 구버전 migrate는 pi 소유 동작.
+3. rail ≠ identity: live socket / dormant spawn-resume / mailbox / native-push는 transport일 뿐.
+4. liveness는 저장하지 않는다 — socket probe로 계산.
+5. caller는 delivered turn의 sender envelope. record에 parent/lastCaller/worker tree 없음.
+6. record-backed pi 시민은 전부 sibling. `isEntwurf` 종 boolean 부활 금지. 필요하면 별도 operator policy.
+7. V3 hard cut + explicit one-shot M1(installed operator command only, hook 자동실행 금지). entwurf-authored JSONL 수정 없음.
+8. ACP는 model/provider axis — pi host 세션이 record와 socket을 소유.
 
-- `entwurf-tagged ⇒ resident cannot be live` crash;
-- resume env-marker leaf, producer, consumer, and authorization gates;
-- normal resume's global JSONL header scan by garden id;
-- `requireEntwurf` name-tag authorization;
-- filename/header/name triple claims;
-- record-less socket-only pi promotion as a normal dispatch target;
-- `socketOnlyPi` and `socket-only-no-resume-authority` once enrollment/cutover is proven.
+## 게이트 편차 기록
 
-### Keep — these are adapter capabilities, not session mutation
+- **`check-pack-install`: C1~C4에서 de-scope** (페블 판정, GLG 확인). upstream registry 고장으로 unrunnable — 관측된 원인: `@aws-sdk/token-providers@3.1088.0` 미출판(2026-07-22 오전, `.agent-reports` 폐기 전 로그), 이후 `pi-agent-core@0.80.10` 요구로 이동. **released main도 동일 RED** — 이 게이트는 현재 우리 회귀와 upstream 고장을 구분하지 못한다. 대체 증거 = full `pnpm check`(dry-run `check-pack` tarball invariants 포함, GREEN). 재장전: upstream 복구 시 1회, 늦어도 H7 cutover 전.
+- **registry(`pi/entwurf-targets.json`)는 spawn-bg allowlist가 아니다.** v2 spawn 경로는 이 파일을 읽지 않는다. 실제 dormant resume 인가는 `requireEntwurf` name-tag + resume marker(둘 다 C3 삭제 대상). 살아있는 소비자는 OPS routing(`getRegistryRouting` ← resolve-acp-bridge)뿐. registry DATA/OPS 처분은 C3에서.
 
-- `--entwurf-control` runtime switch for socket/tools activation (for now);
-- control socket, RPC, `get_info`, socket liveness probe;
-- `ctx.sessionManager.getSessionId()` / `getSessionFile()` reads;
-- exact upstream `pi --session <native transcript>` resume;
-- ACP provider/model plugin and model lock;
-- trust/preflight, target lock, deterministic v2 decider;
-- meta-record parser/writer/store and native bridge records.
+## Do not touch
 
-## EXECUTION ORDER — 현재 가설
+fresh sibling mint/#47 mux, Cortex/#48, 0.12.9 ACP 의존성 작업, backend auth, transcript hydration, 새 DB/planner/worker 트리.
 
-세부 entry/exit/rollback은 `HOP.md`가 가진다. 실측이 다르면 이 순서를 고친다.
+## SSOT
 
-1. **H0 done (`50251ea`):** PM↔Opus 홉 설계 교차검토를 plan-only commit으로 닫았다.
-2. **H1 done:** 87-row exact subtraction/caller/gate/live-smoke map과 C1~C4 cut ledger를 GLG가 승인했다 (`d5d49fb9…`).
-3. **H2 now:** branch floor baseline → sandbox M1 migration+rollback rehearsal → mutation RED catalog와 self-host pre-cut peer map.
-4. **C1 / H3 — schema authority:** V3 minimal record + migration-only V1/V2 M1 + backup/restore/verify-loop. `parentGardenId`/`isEntwurf` 제거. 정상 production은 V3 only.
-5. **C2 / H4 — pi lifecycle/identity authority:** native pi id로 record attach/mint; socket/sender는 record garden id. session-id/name/header gardenization, `/gnew`, `/new` guard 제거.
-6. **C3 / H5a — resume/file authority:** ordinary prompt 앞에 기존 structured `<sender_info>`를 prepend하고 `wantsReply`는 sibling input으로 유지; record transcript path/native header 검증 + exact `--session`; global scan/name authorization/resume marker 제거. 새 child carrier/custom-message reconstruction은 만들지 않는다.
-7. **C4 / H5b — facts/dispatch authority:** M1 뒤 live legacy session은 C2 attach, dormant M2는 explicit absolute JSONL paths로만 등록한다(global inventory/name/pi-open 없음). Alive socket-only count 0을 증명한 뒤 facts/listing rail과 dispatch/resolveTarget rail을 각각 record-first로 전환한다. Target registry DATA/OPS와 RT-dead reader는 이 authority transfer와 분리한다.
-8. **H6:** socket의 인라인 `<sender_info>`를 pure formatter로 추출해 socket·spawn·native-push가 공유하고, mailbox는 동일 envelope fields의 human formatter를 유지한다. `wantsReply`는 sibling input, intent/transport/receipt는 rail별 증거로 남기며 공통 DB를 만들지 않는다.
-9. **H7:** D5 quiesce actuator/detector 확정 뒤 candidate artifact로 controlled live cutover를 실행한다: quiesce → backup → explicit M1 → non-V3=0 → M2 → alive socketOnly=0 → new runtime. Rollback은 backup 완전 복원 후 이전 artifact 재설치 순서다. 이어 full floor/package/live evidence와 durable docs를 닫는다.
-
-C1~C4는 각각 독립 GREEN authority-transfer commit이다. H5a/H5b가 한 PM 홉에 과하면 둘로 나눠 operational 8홉으로 수정한다.
-
-### Required close evidence
-
-- arbitrary pi-native UUID session becomes one stable garden citizen;
-- extension writes no session name/header/id and builtin `/new` works unchanged;
-- reload/resume preserve garden id; new/fork mint new garden ids;
-- native GPT and pi-hosted ACP satisfy the same `backend:"pi"` lifecycle;
-- file-absent birth is honest; first materialization refreshes path;
-- record path/header native-id drift fails before socket/model turn;
-- wrong child session resolver cannot redirect exact record-backed resume;
-- V1/V2→V3 migration is reversible and normal routing imports no legacy reader;
-- no stored liveness; socket probe remains authority;
-- enrollment performs no entwurf-authored JSONL write; pi's own old-format migration is measured separately rather than forced byte-identical;
-- cut 전후 self-host peers remain reachable by garden id;
-- full `pnpm check`, pack/install gates, sandbox negatives, and assigned live smokes green;
-- each C1~C4 records SHA, GREEN gates, production LOC delta, rollback evidence;
-- production diff is net subtractive and every deleted source loses its obsolete gate/docs in the same cut.
-
-Then update #49/#50, promote durable rules to AGENTS/README/VERIFY, delete branch NEXT/HOP before merge, and let GLG decide merge/release/push.
-
-## BASELINE
-
-- Branch: `repair/v2-core-debt`; HEAD and `origin/repair/v2-core-debt` were both `5ca4040` before this plan correction.
-- The branch absorbed main `d89446b` by merge commit `7877af0`; it was not rebased. That historical merge does not create a continuing main-merge gate.
-- Before H0 planning, branch delta against main was this branch NEXT only. H0/H1-prep add `HOP.md` and update NEXT; no production implementation exists.
-- Do not merge/cherry-pick #51 merely to open H1. H1 is open now; H2 rehearsal opens after ledger approval, and C1 is the first authority-transfer commit.
-- Main remains the daily usable lane while this branch carries the surgery independently.
+#50 hard-cut 결정 — https://github.com/junghan0611/entwurf/issues/50
