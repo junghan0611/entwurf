@@ -81,8 +81,7 @@ function deriveSessions(peers: PeerFact[], socketOnly: SocketOnlyFact[], control
 
 function renderPeerLine(p: PeerFact): string {
 	const model = p.model ?? "(unknown)";
-	const entwurf = p.isEntwurf ? " entwurf" : "";
-	return `- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  cwd=${p.cwd}  model=${model}${entwurf}`;
+	return `- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  cwd=${p.cwd}  model=${model}`;
 }
 
 function renderSocketOnlyLine(s: SocketOnlyFact): string {

@@ -39,42 +39,42 @@ cat > "$TMP/gen.mjs" <<'JS'
 const [libPath, store, liveTranscript] = process.argv.slice(2);
 const fs = await import("node:fs");
 const path = await import("node:path");
-const { mintMetaRecord, serializeMetaRecord } = await import(libPath);
+const { mintMetaIdentity, serializeMetaIdentity } = await import(libPath);
 
 const DAY = 24 * 60 * 60 * 1000;
 const now = new Date();
 const old = new Date(now.getTime() - 40 * DAY); // older than the 30d default ttl
 
 function write(filename, record) {
-  fs.writeFileSync(path.join(store, filename), serializeMetaRecord(record));
+  fs.writeFileSync(path.join(store, filename), serializeMetaIdentity(record));
 }
 
 // keep — live transcript, recent
-const keep = mintMetaRecord({ backend: "claude-code", nativeSessionId: "n-keep", transcriptPath: liveTranscript, cwd: "/tmp/keep" }, now);
+const keep = mintMetaIdentity({ backend: "claude-code", nativeSessionId: "n-keep", transcriptPath: liveTranscript, cwd: "/tmp/keep" }, now);
 write(`${keep.gardenId}.meta.json`, keep);
 
 // orphan — transcript path that does not exist
-const orphan = mintMetaRecord({ backend: "claude-code", nativeSessionId: "n-orphan", transcriptPath: "/no/such/transcript.jsonl", cwd: "/tmp/orphan" }, now);
+const orphan = mintMetaIdentity({ backend: "claude-code", nativeSessionId: "n-orphan", transcriptPath: "/no/such/transcript.jsonl", cwd: "/tmp/orphan" }, now);
 write(`${orphan.gardenId}.meta.json`, orphan);
 
-// stale — live transcript but old lastSeen
-const stale = mintMetaRecord({ backend: "claude-code", nativeSessionId: "n-stale", transcriptPath: liveTranscript, cwd: "/tmp/stale" }, old);
+// stale — live transcript but old recordUpdatedAt
+const stale = mintMetaIdentity({ backend: "claude-code", nativeSessionId: "n-stale", transcriptPath: liveTranscript, cwd: "/tmp/stale" }, old);
 write(`${stale.gardenId}.meta.json`, stale);
 
 // duplicate nativeSessionId across two distinct files
-const dupA = mintMetaRecord({ backend: "claude-code", nativeSessionId: "n-dup", transcriptPath: liveTranscript, cwd: "/tmp/a" }, now);
-const dupB = mintMetaRecord({ backend: "claude-code", nativeSessionId: "n-dup", transcriptPath: liveTranscript, cwd: "/tmp/b" }, now);
+const dupA = mintMetaIdentity({ backend: "claude-code", nativeSessionId: "n-dup", transcriptPath: liveTranscript, cwd: "/tmp/a" }, now);
+const dupB = mintMetaIdentity({ backend: "claude-code", nativeSessionId: "n-dup", transcriptPath: liveTranscript, cwd: "/tmp/b" }, now);
 write(`${dupA.gardenId}.meta.json`, dupA);
 write(`${dupB.gardenId}.meta.json`, dupB);
 
 // drift — valid body, wrong filename
-const drift = mintMetaRecord({ backend: "claude-code", nativeSessionId: "n-drift", transcriptPath: liveTranscript, cwd: "/tmp/drift" }, now);
+const drift = mintMetaIdentity({ backend: "claude-code", nativeSessionId: "n-drift", transcriptPath: liveTranscript, cwd: "/tmp/drift" }, now);
 write(`20991231T235959-ffffff.meta.json`, drift);
 
-// invalid lastSeen — parseMetaRecord passes (non-empty string) but Date.parse fails;
+// invalid recordUpdatedAt — the parser passes (non-empty string) but Date.parse fails;
 // live transcript so NOT orphan. Cannot prove "recent" -> must be ambiguous, not keep.
-const badDate = mintMetaRecord({ backend: "claude-code", nativeSessionId: "n-baddate", transcriptPath: liveTranscript, cwd: "/tmp/baddate" }, now);
-badDate.lastSeen = "not-a-date";
+const badDate = mintMetaIdentity({ backend: "claude-code", nativeSessionId: "n-baddate", transcriptPath: liveTranscript, cwd: "/tmp/baddate" }, now);
+badDate.recordUpdatedAt = "not-a-date";
 write(`${badDate.gardenId}.meta.json`, badDate);
 
 // corrupt — non-parseable json

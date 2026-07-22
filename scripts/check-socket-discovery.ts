@@ -244,15 +244,13 @@ async function main(): Promise<void> {
 	// ── end-to-end: scanSocketProbes → resolveFactList (dormant resumable) ──────
 	{
 		const identity = (gid: string, backend: MetaBackendV2): MetaIdentity => ({
-			schemaVersion: 2,
+			schemaVersion: 3,
 			gardenId: gid,
 			backend,
 			nativeSessionId: "n",
 			cwd: "/x",
 			model: null,
 			transcriptPath: null,
-			parentGardenId: null,
-			isEntwurf: false,
 			createdAt: "2026-06-11T00:00:00.000Z",
 			recordUpdatedAt: "2026-06-11T00:00:00.000Z",
 		});

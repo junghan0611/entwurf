@@ -56,15 +56,13 @@ function ok(label: string, cond: boolean): void {
 
 function identity(backend: MetaBackendV2, over: Partial<MetaIdentity> = {}): MetaIdentity {
 	return {
-		schemaVersion: 2,
+		schemaVersion: 3,
 		gardenId: "20260611T093858-14984d",
 		backend,
 		nativeSessionId: "native-abc",
 		cwd: "/home/junghan/repos/gh/entwurf",
 		model: "claude-opus-4-8",
 		transcriptPath: "/home/junghan/.claude/projects/x/native-abc.jsonl",
-		parentGardenId: null,
-		isEntwurf: false,
 		createdAt: "2026-06-11T00:38:58.000Z",
 		recordUpdatedAt: "2026-06-11T02:40:00.000Z",
 		...over,
@@ -123,8 +121,6 @@ for (const backend of META_BACKENDS_V2) {
 		nativeSessionId: "uuid-xyz",
 		cwd: "/tmp/work",
 		model: null,
-		parentGardenId: "20260101T000000-aaaaaa",
-		isEntwurf: true,
 		createdAt: "2026-06-11T01:00:00.000Z",
 		recordUpdatedAt: "2026-06-11T03:00:00.000Z",
 	});
@@ -134,8 +130,6 @@ for (const backend of META_BACKENDS_V2) {
 	ok("passthrough nativeSessionId", fact.nativeSessionId === id.nativeSessionId);
 	ok("passthrough cwd", fact.cwd === id.cwd);
 	ok("passthrough model (null preserved)", fact.model === null);
-	ok("passthrough parentGardenId", fact.parentGardenId === id.parentGardenId);
-	ok("passthrough isEntwurf", fact.isEntwurf === true);
 	ok("passthrough createdAt", fact.createdAt === id.createdAt);
 	ok("passthrough recordUpdatedAt", fact.recordUpdatedAt === id.recordUpdatedAt);
 }
@@ -149,17 +143,24 @@ for (const backend of META_BACKENDS_V2) {
 		"createdAt",
 		"cwd",
 		"gardenId",
-		"isEntwurf",
 		"liveness",
 		"model",
 		"nativeSessionId",
-		"parentGardenId",
 		"recordUpdatedAt",
 	].sort();
 	assert.deepStrictEqual(keys, expected, `PeerFact keyset drift: got ${keys.join(",")}`);
 	ok("facts-only keyset exact (identity facts + liveness)", true);
 
-	const FORBIDDEN = ["resumable", "sendable", "transport", "dispatch", "action", "transcriptPath"];
+	const FORBIDDEN = [
+		"resumable",
+		"sendable",
+		"transport",
+		"dispatch",
+		"action",
+		"transcriptPath",
+		"parentGardenId",
+		"isEntwurf",
+	];
 	for (const k of FORBIDDEN) {
 		ok(`no '${k}' on PeerFact (facts-only, no verb-routing/transcript)`, !(k in fact));
 	}

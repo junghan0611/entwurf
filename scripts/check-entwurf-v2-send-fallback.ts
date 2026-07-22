@@ -64,15 +64,13 @@ function lockClaim(gardenId = GID): LockClaim {
 
 function identity(backend: MetaBackendV2): MetaIdentity {
 	return {
-		schemaVersion: 2,
+		schemaVersion: 3,
 		gardenId: GID,
 		backend,
 		nativeSessionId: `native-${GID}`,
 		cwd: CWD,
 		model: null,
 		transcriptPath: null,
-		parentGardenId: null,
-		isEntwurf: false,
 		createdAt: "2026-06-12T01:00:00.000Z",
 		recordUpdatedAt: "2026-06-12T01:00:00.000Z",
 	};

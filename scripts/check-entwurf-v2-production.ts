@@ -49,15 +49,13 @@ const CONTROL_DIR = "/fake/ctl";
 
 function identity(backend: MetaIdentity["backend"], gardenId = GID): MetaIdentity {
 	return {
-		schemaVersion: 2,
+		schemaVersion: 3,
 		gardenId,
 		backend,
 		nativeSessionId: "n",
 		cwd: "/home/junghan/repos/gh/entwurf",
 		model: null,
 		transcriptPath: null,
-		parentGardenId: null,
-		isEntwurf: false,
 		createdAt: "2026-06-13T01:00:00.000Z",
 		recordUpdatedAt: "2026-06-13T01:00:00.000Z",
 	};

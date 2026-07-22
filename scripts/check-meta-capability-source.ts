@@ -1,26 +1,24 @@
 /**
- * check-meta-capability-source — deterministic gate for 0.11 Stage 0 step 3D-3:
- * the capability-source cut-over. mint/parse now read backend honesty metadata
- * (wakeMode/deliveryLevel) from the capability registry (3C) via metaCapabilityFor,
- * NOT from META_BACKEND_DESCRIPTORS. No backend, no network, no hook, no fs writes
- * (the registry is the packaged file). Safe in the `pnpm check` static floor.
+ * check-meta-capability-source — deterministic gate for the capability seam:
+ * metaCapabilityFor reads backend honesty metadata (wakeMode/deliveryLevel)
+ * from the packaged capability registry (3C), NOT from META_BACKEND_DESCRIPTORS.
+ * No backend, no network, no hook, no fs writes (the registry is the packaged
+ * file). Safe in the `pnpm check` static floor.
  *
- * Proves the cut-over without changing observable behaviour:
- *  - the lookup seam is registry-DRIVEN — fed a doctored registry, metaCapabilityFor
- *    follows it (so the value is read from the registry, not hardcoded off the const);
- *    the default still reads the shipped file.
- *  - mintMetaRecord sources delivery.wakeMode/deliveryLevel through that seam.
- *  - parseMetaRecord's drift guard is now registry-sourced: a stored wakeMode that
- *    contradicts the registry canonical is rejected; a consistent one round-trips.
- *  - behaviour preserved: registry ≡ META_BACKEND_DESCRIPTORS for the 3 existing
- *    backends (the const survives only as the drift-guard reference, 3C → 3D-3).
+ * Live consumers of the seam: the v2 decider/production deliverability and the
+ * mailbox guard, plus the frozen v1 reader's wakeMode drift guard (which lives
+ * in meta-migration.ts and is gated by check-meta-migration-readers — the V3
+ * identity record carries no delivery aspect, so V3 mint/parse never source
+ * capability).
  *
- * Scope is 3D-3: the SOURCE moves. NOTE (post-3D-4): the consumers proven here are
- * mintMetaRecord / parseMetaRecord — the V1 (legacy / dual-read) path, which is the
- * only place wakeMode/deliveryLevel still flow from. The live v2 mint
- * (mintMetaIdentity) carries NO delivery, so it never sources capability — the v2
- * record has no wakeMode at all. check-entwurf-capabilities still owns the
- * registry ≡ const drift guard.
+ * Proves:
+ *  - the lookup seam is registry-DRIVEN — fed a doctored registry,
+ *    metaCapabilityFor follows it (so the value is read from the registry, not
+ *    hardcoded off the const); the default still reads the shipped file and
+ *    memoizes.
+ *  - behaviour preserved: registry ≡ META_BACKEND_DESCRIPTORS for the 3 native
+ *    backends (the const survives only as the drift-guard reference; the
+ *    registry ≡ const drift guard proper is check-entwurf-capabilities).
  */
 
 import assert from "node:assert/strict";
@@ -29,11 +27,7 @@ import {
 	META_BACKEND_DESCRIPTORS,
 	META_BACKENDS,
 	type MetaCapabilityRegistry,
-	MetaRecordError,
 	metaCapabilityFor,
-	mintMetaRecord,
-	parseMetaRecord,
-	serializeMetaRecord,
 } from "../pi-extensions/lib/meta-session.ts";
 
 let passed = 0;
@@ -42,13 +36,6 @@ function ok(label: string, cond: boolean): void {
 	console.log(`  ok    ${label}`);
 	passed++;
 }
-function throws(label: string, fn: () => unknown): void {
-	assert.throws(fn, MetaRecordError, label);
-	console.log(`  ok    ${label}`);
-	passed++;
-}
-
-const MINT = { nativeSessionId: "n-capsrc", transcriptPath: "/tmp/t.jsonl", cwd: "/tmp" };
 
 // --- the seam is registry-driven, not const-hardcoded ----------------------
 // Doctor the shipped registry (flip claude-code's wakeMode) and feed it in: if the
@@ -76,17 +63,6 @@ const load1 = loadMetaCapabilityRegistry();
 const load2 = loadMetaCapabilityRegistry();
 ok("loadMetaCapabilityRegistry memoizes (same object on repeat load)", load1 === load2);
 
-// --- mint sources delivery metadata through the seam -----------------------
-for (const backend of META_BACKENDS) {
-	const cap = metaCapabilityFor(backend);
-	const r = mintMetaRecord({ backend, ...MINT });
-	ok(`mint(${backend}): delivery.wakeMode sourced from the registry`, r.delivery.wakeMode === cap.wakeMode);
-	ok(
-		`mint(${backend}): delivery.deliveryLevel sourced from the registry`,
-		r.delivery.deliveryLevel === cap.deliveryLevel,
-	);
-}
-
 // --- cut-over preserves behaviour: registry ≡ const for the 3 backends ------
 for (const backend of META_BACKENDS) {
 	const cap = metaCapabilityFor(backend);
@@ -96,17 +72,5 @@ for (const backend of META_BACKENDS) {
 		cap.wakeMode === d.wakeMode && cap.deliveryLevel === d.deliveryLevel,
 	);
 }
-
-// --- parse drift guard is now registry-sourced -----------------------------
-const good = mintMetaRecord({ backend: "claude-code", ...MINT });
-const tampered = JSON.parse(serializeMetaRecord(good)) as { delivery: { wakeMode: string } };
-tampered.delivery.wakeMode = flip(metaCapabilityFor("claude-code").wakeMode); // contradicts the registry canonical
-throws("parse: a wakeMode contradicting the registry canonical throws (drift guard registry-sourced)", () =>
-	parseMetaRecord(JSON.stringify(tampered)),
-);
-ok(
-	"parse: a registry-consistent record round-trips",
-	parseMetaRecord(serializeMetaRecord(good)).delivery.wakeMode === metaCapabilityFor("claude-code").wakeMode,
-);
 
 console.log(`[check-meta-capability-source] ${passed} assertions ok`);

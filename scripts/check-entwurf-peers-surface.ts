@@ -53,8 +53,6 @@ function peer(gardenId: string, backend: MetaBackendV2, liveness: FactLiveness):
 		nativeSessionId: `n-${gardenId}`,
 		cwd: "/x",
 		model: null,
-		parentGardenId: null,
-		isEntwurf: false,
 		createdAt: "2026-06-11T00:00:00.000Z",
 		recordUpdatedAt: "2026-06-11T00:00:00.000Z",
 		liveness,

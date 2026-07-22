@@ -164,6 +164,12 @@
 		// from meta-session.ts) with explicit `.ts`-extension imports, same fence. Typechecked by
 		// scripts/tsconfig.json via its gate (check-agy-sender-identity.ts) and by
 		// mcp/tsconfig.json (the bridge imports it).
-		"pi-extensions/lib/meta-sender-identity.ts"
+		"pi-extensions/lib/meta-sender-identity.ts",
+		// meta-migration.ts is the FROZEN v1/v2 legacy reader snapshot, isolated out of the
+		// V3-only production path (#50 hard cut) — a lib→lib VALUE importer (the require*/describe
+		// validators + MetaRecordError from meta-session.ts) with explicit `.ts`-extension imports,
+		// same fence. Typechecked by scripts/tsconfig.json via its gate
+		// (check-meta-migration-import-allowlist.ts). The M1 operator lane (H7) builds on it.
+		"pi-extensions/lib/meta-migration.ts"
 	]
 }

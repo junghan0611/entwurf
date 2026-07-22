@@ -43,15 +43,13 @@ const GID_CONFLICT = "20260611T333333-cccccc"; // claude citizen + same-gid sock
 
 function rec(gardenId: string, backend: MetaBackendV2): string {
 	return serializeMetaIdentity({
-		schemaVersion: 2,
+		schemaVersion: 3,
 		gardenId,
 		backend,
 		nativeSessionId: `n-${gardenId}`,
 		cwd: "/x",
 		model: null,
 		transcriptPath: null,
-		parentGardenId: null,
-		isEntwurf: false,
 		createdAt: "2026-06-11T00:00:00.000Z",
 		recordUpdatedAt: "2026-06-11T00:00:00.000Z",
 	});

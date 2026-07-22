@@ -298,8 +298,8 @@ fi
 # DEPLOYED bundle (what the live SessionStart hook runs) is not re-assembled, so
 # new sessions are still written by the old writer — invisibly. "source complete"
 # ≠ "deployed complete". This section makes the running writer version legible:
-# live-write schema = does the bundle carry serializeMetaIdentity (v2 identity
-# write) or only mintMetaRecord (v1). Hash = drift catch. The authority for "what
+# live-write schema = does the bundle carry serializeMetaIdentity (the identity
+# write) or only the pre-identity v1 writer. Hash = drift catch. The authority for "what
 # records me" is the INSTALLED bundle; a mismatch vs source is a loud FAIL.
 echo
 echo "writer-version parity"
@@ -339,14 +339,14 @@ echo "  assembled : $asm_v  ($asm_h)  registry=$asm_reg_h"
 echo "  installed : $inst_v  ($inst_h)  registry=$inst_reg_h  ${INST_MS:-<none>}"
 
 # store reality — distribution of schemaVersion across landed records.
-sv1=0; sv2=0
+sv1=0; sv2=0; sv3=0
 for mf in "$META_SESSIONS"/*.meta.json; do
   [ -f "$mf" ] || continue
   case "$(grep -o '"schemaVersion"[[:space:]]*:[[:space:]]*[0-9]*' "$mf" | grep -o '[0-9]*$' | head -1)" in
-    1) sv1=$((sv1 + 1)) ;; 2) sv2=$((sv2 + 1)) ;;
+    1) sv1=$((sv1 + 1)) ;; 2) sv2=$((sv2 + 1)) ;; 3) sv3=$((sv3 + 1)) ;;
   esac
 done
-echo "  store     : v1=$sv1 v2=$sv2  (dual-read reads both)"
+echo "  store     : v1=$sv1 v2=$sv2 v3=$sv3  (production reads v3 only; v1/v2 wait for the M1 migrate)"
 
 if [ -z "${INST_MS:-}" ]; then
   warn "no installed bundle to compare — run ./run.sh install-meta-bridge"

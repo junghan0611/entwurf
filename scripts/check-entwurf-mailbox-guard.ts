@@ -49,15 +49,13 @@ const directInject = () => ({ wakeMode: "direct-inject" }) as never;
 // from a fixed garden id (NOT mintMetaIdentity, which would generate a random gardenId that
 // never matches GARDEN — the old presence-only test silently ignored that mismatch).
 const liveIdentity = (): MetaIdentity => ({
-	schemaVersion: 2,
+	schemaVersion: 3,
 	gardenId: GARDEN,
 	backend: "claude-code",
 	nativeSessionId: "n-a",
 	cwd: "/tmp",
 	model: null,
 	transcriptPath: null,
-	parentGardenId: null,
-	isEntwurf: false,
 	createdAt: "2026-06-14T01:00:00.000Z",
 	recordUpdatedAt: "2026-06-14T01:00:00.000Z",
 });

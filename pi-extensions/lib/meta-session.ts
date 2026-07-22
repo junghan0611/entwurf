@@ -9,13 +9,13 @@
  * hydrate or replay it).
  *
  * Two layers, clearly sectioned:
- *   1. RECORD functions + types (mint / serialize / parse / scanByNativeId /
- *      decideUpsert / read-receipt mutators), the backend-agnostic authority.
- *      Pure beyond an injected `now`, with ONE exception since 3D-3: mint/parse
- *      read backend capability (wakeMode/deliveryLevel) from the packaged registry
- *      via a cached fs read (loadMetaCapabilityRegistry) — see that seam below.
+ *   1. RECORD functions + types (mint / serialize / parse / scanIdentityByNativeId /
+ *      decideUpsert), the backend-agnostic authority. Pure beyond an injected
+ *      `now`; backend capability (wakeMode/deliveryLevel) comes from the packaged
+ *      registry via a cached fs read (loadMetaCapabilityRegistry) — see that seam
+ *      below.
  *   2. The thin FS-BOUND STORE (step 3): `upsertMetaSession` wraps the pure core
- *      (readdir → `scanByNativeId` → `decideUpsert` → atomic write) with the real
+ *      (readdir → `scanIdentityByNativeId` → `decideUpsert` → atomic write) with the real
  *      filesystem. It lives in this module (not a sibling `*-store.ts`) on purpose:
  *      the typecheck fence forbids a root-config lib importing another `.ts` lib
  *      via a `.ts` specifier (tsc-emit) while the same `.js` specifier is
@@ -34,7 +34,7 @@
  *   - garden id = `generateSessionId` (the single SSOT grammar), minted at the
  *     session's true birth. Reused, never re-derived.
  *   - lookup authority = SCAN the record bodies by top-level `native_session_id`
- *     (see scanByNativeId), symmetric with 0.9.0 `findSessionFileById`. Any
+ *     (see scanIdentityByNativeId), symmetric with 0.9.0 `findSessionFileById`. Any
  *     native→garden index is an OPTIONAL derived cache, never the source of
  *     truth — "needs a DB" is the denote-instinct tripwire.
  *   - create-vs-attach keys on RECORD EXISTENCE, not the backend `source` field
@@ -72,9 +72,6 @@ export class MetaRecordError extends Error {
 // ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------
-
-/** Bump only on a breaking record-shape change; parse refuses other versions. */
-export const META_SCHEMA_VERSION = 1 as const;
 
 /**
  * The three native meta-bridge backends, declared from the start so the
@@ -132,61 +129,25 @@ export const META_BACKEND_DESCRIPTORS: Record<MetaBackend, MetaBackendDescriptor
 	},
 };
 
-/**
- * The read-receipt aspect, PRE-DRILLED (bbot review #4). The mailbox/outbox is
- * post-MVP — these timestamps stay null until that path lands — but the slot is
- * here so adding it later does not touch the schema twice.
- *   - lastEnqueuedAt : a sender wrote a message body to this peer's mailbox.
- *   - lastDeliveredAt: the doorbell rang / the body was injected ("`.delivered`"
- *     marker). For Claude self-fetch this means "doorbell rang", NOT "model read".
- *   - lastReadAt     : the inbox-read MCP call — THIS is the real read-receipt
- *     (makes Claude's D7 observable). For direct-inject backends delivered==read.
- */
-export interface MetaDelivery {
-	wakeMode: WakeMode;
-	deliveryLevel: string;
-	lastEnqueuedAt: string | null;
-	lastDeliveredAt: string | null;
-	lastReadAt: string | null;
-}
-
-/**
- * The opaque pointer record. Body is SSOT; the on-disk filename
- * (`<garden_id>.meta.json`) is only a denote-sortable surface (garden_id leads
- * with the birth timestamp). NEVER parse the filename for authority.
- */
-export interface MetaRecord {
-	schemaVersion: typeof META_SCHEMA_VERSION;
-	gardenId: string;
-	backend: MetaBackend;
-	nativeSessionId: string;
-	transcriptPath: string;
-	cwd: string;
-	createdAt: string;
-	lastSeen: string;
-	delivery: MetaDelivery;
-}
-
-/** Fields the caller supplies; garden id + timestamps + delivery are derived. */
-export interface MetaMintInput {
-	backend: MetaBackend;
-	nativeSessionId: string;
-	transcriptPath: string;
-	cwd: string;
-}
-
 // ---------------------------------------------------------------------------
 // Validation helpers (crash, don't warn)
 // ---------------------------------------------------------------------------
 
-function requireNonEmptyString(value: unknown, field: string): string {
+// The require*/describe validators are exported for meta-migration.ts, the frozen
+// V1/V2 reader snapshot (#50). Its parser must validate against the SAME primitives
+// as production, so drift between the V3 and legacy readers is impossible.
+export function requireNonEmptyString(value: unknown, field: string): string {
 	if (typeof value !== "string" || value.length === 0) {
 		throw new MetaRecordError(`meta-record field "${field}" must be a non-empty string (got ${describe(value)}).`);
 	}
 	return value;
 }
 
-function requireBackend(value: unknown): MetaBackend {
+/** Validate the 3-backend NATIVE bridge axis (sender/receiver markers, capability
+ * drift guard). Not a record-schema validator: identity records take
+ * `requireBackendV2` (which admits `pi`); markers stay native-3 because a pi
+ * session's sender identity is env-authored, never marker-authored. */
+export function requireBackend(value: unknown): MetaBackend {
 	if (typeof value !== "string" || !META_BACKENDS.includes(value as MetaBackend)) {
 		throw new MetaRecordError(
 			`meta-record "backend" must be one of ${META_BACKENDS.join(" | ")} (got ${describe(value)}).`,
@@ -195,7 +156,7 @@ function requireBackend(value: unknown): MetaBackend {
 	return value as MetaBackend;
 }
 
-function requireGardenId(value: unknown): string {
+export function requireGardenId(value: unknown): string {
 	const id = requireNonEmptyString(value, "gardenId");
 	if (!SESSION_ID_RE.test(id)) {
 		throw new MetaRecordError(`meta-record "gardenId" must match YYYYMMDDTHHMMSS-[0-9a-f]{6} (got "${id}").`);
@@ -203,7 +164,7 @@ function requireGardenId(value: unknown): string {
 	return id;
 }
 
-function requireNullableString(value: unknown, field: string): string | null {
+export function requireNullableString(value: unknown, field: string): string | null {
 	if (value === null) return null;
 	if (typeof value !== "string" || value.length === 0) {
 		throw new MetaRecordError(
@@ -213,7 +174,7 @@ function requireNullableString(value: unknown, field: string): string | null {
 	return value;
 }
 
-function describe(value: unknown): string {
+export function describe(value: unknown): string {
 	if (value === null) return "null";
 	if (typeof value === "string") return `string ${JSON.stringify(value)}`;
 	return `${typeof value}`;
@@ -221,127 +182,6 @@ function describe(value: unknown): string {
 
 function isoNow(now: Date): string {
 	return now.toISOString();
-}
-
-// ---------------------------------------------------------------------------
-// Record functions (pure beyond an injected `now`, except mint/parse read the
-// packaged capability registry via the cached metaCapabilityFor seam — 3D-3)
-// ---------------------------------------------------------------------------
-
-/**
- * Mint a brand-new meta-record at the session's true birth. Generates the garden
- * id from the SSOT grammar, stamps createdAt == lastSeen, and seeds the
- * delivery/read-receipt slot from the backend descriptor (timestamps null).
- */
-export function mintMetaRecord(input: MetaMintInput, now: Date = new Date()): MetaRecord {
-	const backend = requireBackend(input.backend);
-	// 3D-3: backend honesty metadata is sourced from the capability registry, not
-	// META_BACKEND_DESCRIPTORS (which now survives only as the drift-guard reference).
-	const capability = metaCapabilityFor(backend);
-	const ts = isoNow(now);
-	return {
-		schemaVersion: META_SCHEMA_VERSION,
-		gardenId: generateSessionId(now),
-		backend,
-		nativeSessionId: requireNonEmptyString(input.nativeSessionId, "nativeSessionId"),
-		transcriptPath: requireNonEmptyString(input.transcriptPath, "transcriptPath"),
-		cwd: requireNonEmptyString(input.cwd, "cwd"),
-		createdAt: ts,
-		lastSeen: ts,
-		delivery: {
-			wakeMode: capability.wakeMode,
-			deliveryLevel: capability.deliveryLevel,
-			lastEnqueuedAt: null,
-			lastDeliveredAt: null,
-			lastReadAt: null,
-		},
-	};
-}
-
-/**
- * Canonical serialization: stable key order (object built in order), 2-space
- * indent, trailing newline. Deterministic — the same record always serializes
- * byte-identically, so a temp-dir test can assert round-trip stability.
- */
-export function serializeMetaRecord(record: MetaRecord): string {
-	const ordered = {
-		schemaVersion: record.schemaVersion,
-		gardenId: record.gardenId,
-		backend: record.backend,
-		nativeSessionId: record.nativeSessionId,
-		transcriptPath: record.transcriptPath,
-		cwd: record.cwd,
-		createdAt: record.createdAt,
-		lastSeen: record.lastSeen,
-		delivery: {
-			wakeMode: record.delivery.wakeMode,
-			deliveryLevel: record.delivery.deliveryLevel,
-			lastEnqueuedAt: record.delivery.lastEnqueuedAt,
-			lastDeliveredAt: record.delivery.lastDeliveredAt,
-			lastReadAt: record.delivery.lastReadAt,
-		},
-	};
-	return `${JSON.stringify(ordered, null, 2)}\n`;
-}
-
-/** Parse + fully validate untrusted JSON text into a MetaRecord. Throws on any drift. */
-export function parseMetaRecord(json: string): MetaRecord {
-	let raw: unknown;
-	try {
-		raw = JSON.parse(json);
-	} catch (err) {
-		throw new MetaRecordError(`meta-record is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
-	}
-	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-		throw new MetaRecordError(`meta-record must be a JSON object (got ${describe(raw)}).`);
-	}
-	const obj = raw as Record<string, unknown>;
-	if (obj.schemaVersion !== META_SCHEMA_VERSION) {
-		throw new MetaRecordError(
-			`meta-record "schemaVersion" must be ${META_SCHEMA_VERSION} (got ${describe(obj.schemaVersion)}).`,
-		);
-	}
-	const delivery = obj.delivery;
-	if (typeof delivery !== "object" || delivery === null || Array.isArray(delivery)) {
-		throw new MetaRecordError(`meta-record "delivery" must be an object (got ${describe(delivery)}).`);
-	}
-	const d = delivery as Record<string, unknown>;
-	const backend = requireBackend(obj.backend);
-	const wakeMode = requireNonEmptyString(d.wakeMode, "delivery.wakeMode");
-	if (wakeMode !== "self-fetch" && wakeMode !== "direct-inject") {
-		throw new MetaRecordError(
-			`meta-record "delivery.wakeMode" must be self-fetch | direct-inject (got "${wakeMode}").`,
-		);
-	}
-	// wakeMode is backend-DETERMINED (Claude doorbell = self-fetch; agy/codex =
-	// direct-inject). A record whose stored wakeMode contradicts its backend is
-	// corrupt — a Claude record claiming direct-inject would silently mis-route
-	// the "last 1 cm" delivery contract. Refuse it. 3D-3: the canonical is sourced
-	// from the capability registry, not META_BACKEND_DESCRIPTORS.
-	const canonicalWakeMode = metaCapabilityFor(backend).wakeMode;
-	if (wakeMode !== canonicalWakeMode) {
-		throw new MetaRecordError(
-			`meta-record "delivery.wakeMode" (${wakeMode}) contradicts backend "${backend}" ` +
-				`(canonical ${canonicalWakeMode}). Delivery mode is backend-determined; this record is corrupt.`,
-		);
-	}
-	return {
-		schemaVersion: META_SCHEMA_VERSION,
-		gardenId: requireGardenId(obj.gardenId),
-		backend,
-		nativeSessionId: requireNonEmptyString(obj.nativeSessionId, "nativeSessionId"),
-		transcriptPath: requireNonEmptyString(obj.transcriptPath, "transcriptPath"),
-		cwd: requireNonEmptyString(obj.cwd, "cwd"),
-		createdAt: requireNonEmptyString(obj.createdAt, "createdAt"),
-		lastSeen: requireNonEmptyString(obj.lastSeen, "lastSeen"),
-		delivery: {
-			wakeMode,
-			deliveryLevel: requireNonEmptyString(d.deliveryLevel, "delivery.deliveryLevel"),
-			lastEnqueuedAt: requireNullableString(d.lastEnqueuedAt, "delivery.lastEnqueuedAt"),
-			lastDeliveredAt: requireNullableString(d.lastDeliveredAt, "delivery.lastDeliveredAt"),
-			lastReadAt: requireNullableString(d.lastReadAt, "delivery.lastReadAt"),
-		},
-	};
 }
 
 // ---------------------------------------------------------------------------
@@ -366,6 +206,14 @@ export function parseMetaRecord(json: string): MetaRecord {
 /** Bump only on a breaking v2 identity-shape change; the v2 parser refuses other versions. */
 export const META_SCHEMA_VERSION_V2 = 2 as const;
 
+/**
+ * v3 = the hard-cut identity schema (#50): v2 minus `parentGardenId` + `isEntwurf`.
+ * Call ≠ parentage and there is no `isEntwurf` species boolean (LOCKED PROTOCOL #5).
+ * Normal production is V3-only; V1/V2 readers survive solely in the M1 migration
+ * surface (`meta-migration.ts`), never imported by the normal routing path.
+ */
+export const META_SCHEMA_VERSION_V3 = 3 as const;
+
 /** v2 backends = the three v1 backends + `pi` (pi joins as the 4th meta citizen). */
 export const META_BACKENDS_V2 = ["claude-code", "antigravity", "codex", "pi"] as const;
 export type MetaBackendV2 = (typeof META_BACKENDS_V2)[number];
@@ -376,20 +224,18 @@ export type MetaBackendV2 = (typeof META_BACKENDS_V2)[number];
  * state (step 3B), referenced by gardenId, never embedded in identity.
  */
 export interface MetaIdentity {
-	schemaVersion: typeof META_SCHEMA_VERSION_V2;
+	schemaVersion: typeof META_SCHEMA_VERSION_V3;
 	gardenId: string;
 	backend: MetaBackendV2;
 	nativeSessionId: string;
 	cwd: string;
 	model: string | null;
 	transcriptPath: string | null;
-	parentGardenId: string | null;
-	isEntwurf: boolean;
 	createdAt: string;
 	recordUpdatedAt: string;
 }
 
-function requireBackendV2(value: unknown): MetaBackendV2 {
+export function requireBackendV2(value: unknown): MetaBackendV2 {
 	if (typeof value !== "string" || !META_BACKENDS_V2.includes(value as MetaBackendV2)) {
 		throw new MetaRecordError(
 			`meta-record "backend" must be one of ${META_BACKENDS_V2.join(" | ")} (got ${describe(value)}).`,
@@ -398,14 +244,14 @@ function requireBackendV2(value: unknown): MetaBackendV2 {
 	return value as MetaBackendV2;
 }
 
-function requireBoolean(value: unknown, field: string): boolean {
+export function requireBoolean(value: unknown, field: string): boolean {
 	if (typeof value !== "boolean") {
 		throw new MetaRecordError(`meta-record field "${field}" must be a boolean (got ${describe(value)}).`);
 	}
 	return value;
 }
 
-function requireNullableGardenId(value: unknown, field: string): string | null {
+export function requireNullableGardenId(value: unknown, field: string): string | null {
 	if (value === null) return null;
 	const id = requireNonEmptyString(value, field);
 	if (!SESSION_ID_RE.test(id)) {
@@ -417,19 +263,32 @@ function requireNullableGardenId(value: unknown, field: string): string | null {
 }
 
 /**
- * Explicit v1 name for the dual-read pair. `parseMetaRecord` predates the v2
- * split and stays the canonical v1 parser (existing callers untouched); this
- * alias makes the V1/V2 symmetry legible at call sites.
+ * The reserved name of the M1 migration operator command (built in the H7
+ * live-cutover lane, not C1). V3-only production points at it BY NAME the moment
+ * it meets a pre-cut (v1/v2) record, so the error is honest about the fix — a
+ * precise forward reference, not a live command yet (gate h). When the M1 lane
+ * lands, this constant becomes its `run.sh` verb.
  */
-export const parseMetaRecordV1 = parseMetaRecord;
+export const M1_MIGRATE_COMMAND = "./run.sh meta-bridge-migrate-v3 migrate";
+
+/** The uniform "this record predates the v3 hard cut" error, naming the M1 fix. */
+function nonV3RecordMessage(version: unknown): string {
+	return (
+		`meta-record "schemaVersion" must be ${META_SCHEMA_VERSION_V3} (got ${describe(version)}). ` +
+		`v1/v2 records predate the #50 hard cut and normal routing is v3-only — ` +
+		`migrate the store with \`${M1_MIGRATE_COMMAND}\` (the M1 operator command).`
+	);
+}
 
 /**
- * The EXACT key set a v2 identity record may carry. v2 is a fresh schema, so the
- * parser is strict: any key outside this set — including stale v1 fields like
- * `delivery` or `lastSeen` — is a half-migrated / corrupt record and must
- * fail-fast, never be silently normalized away. Frozen against the ledger jsonc.
+ * The EXACT key set a v3 identity record may carry — the #50 hard cut is exactly
+ * the v2 keyset minus `parentGardenId` + `isEntwurf`. v3 is strict: any key
+ * outside this set fails fast. This is HALF of the strayness invariant: a pre-cut
+ * v2 record still carrying `parentGardenId`/`isEntwurf` is REJECTED here as stray,
+ * while meta-migration.ts's frozen v2 keyset keeps ACCEPTING them — so a record is
+ * legible to exactly one schema and reaches v3 production only through M1.
  */
-const META_IDENTITY_V2_KEYS: readonly string[] = [
+const META_IDENTITY_KEYS: readonly string[] = [
 	"schemaVersion",
 	"gardenId",
 	"backend",
@@ -437,14 +296,12 @@ const META_IDENTITY_V2_KEYS: readonly string[] = [
 	"cwd",
 	"model",
 	"transcriptPath",
-	"parentGardenId",
-	"isEntwurf",
 	"createdAt",
 	"recordUpdatedAt",
 ];
 
-/** Parse + fully validate untrusted JSON into a v2 MetaIdentity. Throws on any drift. */
-export function parseMetaRecordV2(json: string): MetaIdentity {
+/** Parse + fully validate untrusted JSON into a v3 MetaIdentity. Throws on any drift. */
+export function parseMetaRecordV3(json: string): MetaIdentity {
 	let raw: unknown;
 	try {
 		raw = JSON.parse(json);
@@ -455,80 +312,56 @@ export function parseMetaRecordV2(json: string): MetaIdentity {
 		throw new MetaRecordError(`meta-record must be a JSON object (got ${describe(raw)}).`);
 	}
 	const obj = raw as Record<string, unknown>;
-	if (obj.schemaVersion !== META_SCHEMA_VERSION_V2) {
-		throw new MetaRecordError(
-			`meta-record "schemaVersion" must be ${META_SCHEMA_VERSION_V2} (got ${describe(obj.schemaVersion)}).`,
-		);
+	if (obj.schemaVersion !== META_SCHEMA_VERSION_V3) {
+		throw new MetaRecordError(nonV3RecordMessage(obj.schemaVersion));
 	}
-	// Strict keyset: reject stale v1 fields (delivery/lastSeen) and any unknown
-	// key. A v2 record carrying v1 leftovers is half-migrated/corrupt — surface
-	// it, do not silently drop it during normalize.
-	const stray = Object.keys(obj).filter((k) => !META_IDENTITY_V2_KEYS.includes(k));
+	// Strict keyset: v3 dropped parentGardenId + isEntwurf, so a pre-cut v2 record
+	// still carrying them arrives with stray keys and is REJECTED (strayness
+	// reversal, gate f). It must go through the M1 migration surface, never silent
+	// coercion — so the message names M1, not just "unexpected key".
+	const stray = Object.keys(obj).filter((k) => !META_IDENTITY_KEYS.includes(k));
 	if (stray.length > 0) {
 		throw new MetaRecordError(
-			`v2 meta-record carries unexpected key(s) ${stray.map((k) => `"${k}"`).join(", ")} ` +
-				`(allowed: ${META_IDENTITY_V2_KEYS.join(", ")}). Stale v1 fields (delivery/lastSeen) or unknown keys are rejected.`,
+			`v3 meta-record carries unexpected key(s) ${stray.map((k) => `"${k}"`).join(", ")} ` +
+				`(allowed: ${META_IDENTITY_KEYS.join(", ")}). A pre-cut v2 record still carrying ` +
+				`parentGardenId/isEntwurf must be migrated with \`${M1_MIGRATE_COMMAND}\`, never read directly.`,
 		);
 	}
 	return {
-		schemaVersion: META_SCHEMA_VERSION_V2,
+		schemaVersion: META_SCHEMA_VERSION_V3,
 		gardenId: requireGardenId(obj.gardenId),
 		backend: requireBackendV2(obj.backend),
 		nativeSessionId: requireNonEmptyString(obj.nativeSessionId, "nativeSessionId"),
 		cwd: requireNonEmptyString(obj.cwd, "cwd"),
 		model: requireNullableString(obj.model, "model"),
 		transcriptPath: requireNullableString(obj.transcriptPath, "transcriptPath"),
-		parentGardenId: requireNullableGardenId(obj.parentGardenId, "parentGardenId"),
-		isEntwurf: requireBoolean(obj.isEntwurf, "isEntwurf"),
 		createdAt: requireNonEmptyString(obj.createdAt, "createdAt"),
 		recordUpdatedAt: requireNonEmptyString(obj.recordUpdatedAt, "recordUpdatedAt"),
 	};
 }
 
 /**
- * Lazy-normalize a parsed v1 OR v2 record into the v2 identity shape. The dual-
- * read seam: consumers read either disk version and normalize to ONE identity
- * type. Discriminates on `schemaVersion` (TS narrows the union):
- *   - v1: lastSeen → recordUpdatedAt, delivery dropped, model/parentGardenId
- *     default null, isEntwurf default false, transcriptPath carried (v1 always
- *     has one).
- *   - v2: already identity — returned as a fresh, key-stable copy.
- * v1 identity is LOSSLESS through this (the golden gate proves it); the only v1
- * data not carried is delivery, which is intentionally out of identity.
+ * Normalize a parsed v3 identity into a fresh, key-stable copy. In V3-only
+ * production the dual-read v1/v2 collapse is GONE (it moved to the M1 migration
+ * surface); this stays as the one place that hands every consumer a canonical,
+ * key-ordered identity object, so a caller never depends on incidental key order.
  */
-export function normalizeMetaIdentity(record: MetaRecord | MetaIdentity): MetaIdentity {
-	if (record.schemaVersion === META_SCHEMA_VERSION_V2) {
-		return {
-			schemaVersion: META_SCHEMA_VERSION_V2,
-			gardenId: record.gardenId,
-			backend: record.backend,
-			nativeSessionId: record.nativeSessionId,
-			cwd: record.cwd,
-			model: record.model,
-			transcriptPath: record.transcriptPath,
-			parentGardenId: record.parentGardenId,
-			isEntwurf: record.isEntwurf,
-			createdAt: record.createdAt,
-			recordUpdatedAt: record.recordUpdatedAt,
-		};
-	}
+export function normalizeMetaIdentity(record: MetaIdentity): MetaIdentity {
 	return {
-		schemaVersion: META_SCHEMA_VERSION_V2,
+		schemaVersion: META_SCHEMA_VERSION_V3,
 		gardenId: record.gardenId,
 		backend: record.backend,
 		nativeSessionId: record.nativeSessionId,
 		cwd: record.cwd,
-		model: null,
+		model: record.model,
 		transcriptPath: record.transcriptPath,
-		parentGardenId: null,
-		isEntwurf: false,
 		createdAt: record.createdAt,
-		recordUpdatedAt: record.lastSeen,
+		recordUpdatedAt: record.recordUpdatedAt,
 	};
 }
 
 // ---------------------------------------------------------------------------
-// v2 write shape + dual-read dispatcher (0.11 Stage 0 step 3D-1)
+// v3 write shape + V3-only reader (#50 hard cut; was 0.11 3D-1 dual-read)
 //
 // Pure functions only: the canonical v2 serializer and the version-dispatching
 // reader. NO fs upsert, NO live readMetaInbox/enqueueMetaMessage change, NO
@@ -553,8 +386,6 @@ export function serializeMetaIdentity(identity: MetaIdentity): string {
 		cwd: identity.cwd,
 		model: identity.model,
 		transcriptPath: identity.transcriptPath,
-		parentGardenId: identity.parentGardenId,
-		isEntwurf: identity.isEntwurf,
 		createdAt: identity.createdAt,
 		recordUpdatedAt: identity.recordUpdatedAt,
 	};
@@ -574,8 +405,6 @@ export interface MetaIdentityMintInput {
 	cwd: string;
 	model?: string | null;
 	transcriptPath?: string | null;
-	parentGardenId?: string | null;
-	isEntwurf?: boolean;
 }
 
 /**
@@ -588,46 +417,30 @@ export function mintMetaIdentity(input: MetaIdentityMintInput, now: Date = new D
 	const backend = requireBackendV2(input.backend);
 	const ts = isoNow(now);
 	return {
-		schemaVersion: META_SCHEMA_VERSION_V2,
+		schemaVersion: META_SCHEMA_VERSION_V3,
 		gardenId: generateSessionId(now),
 		backend,
 		nativeSessionId: requireNonEmptyString(input.nativeSessionId, "nativeSessionId"),
 		cwd: requireNonEmptyString(input.cwd, "cwd"),
 		model: requireNullableString(input.model ?? null, "model"),
 		transcriptPath: requireNullableString(input.transcriptPath ?? null, "transcriptPath"),
-		parentGardenId: requireNullableGardenId(input.parentGardenId ?? null, "parentGardenId"),
-		isEntwurf: input.isEntwurf === undefined ? false : requireBoolean(input.isEntwurf, "isEntwurf"),
 		createdAt: ts,
 		recordUpdatedAt: ts,
 	};
 }
 
 /**
- * Dual-read dispatcher: peek schemaVersion on untrusted JSON and route to the
- * matching strict parser (v1 record or v2 identity). The lazy-normalize seam — a
- * consumer reads either on-disk version through ONE call. Returns the parsed
- * record in its OWN shape (v1 keeps delivery; v2 is identity); compose with
- * normalizeMetaIdentity, or use parseMetaIdentity, to collapse to identity.
+ * V3-only reader. The dual-read dispatch to v1/v2 is GONE from production (#50):
+ * those parsers live only in the M1 migration surface (meta-migration.ts). A
+ * pre-cut (v1/v2) or unknown version throws `nonV3RecordMessage`, which names the
+ * M1 command (gate h). The name is kept (`…Any`) for call-site stability, but with
+ * one schema in production it now means exactly "parse the sole live version".
  */
-export function parseMetaRecordAny(json: string): MetaRecord | MetaIdentity {
-	let raw: unknown;
-	try {
-		raw = JSON.parse(json);
-	} catch (err) {
-		throw new MetaRecordError(`meta-record is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
-	}
-	if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-		throw new MetaRecordError(`meta-record must be a JSON object (got ${describe(raw)}).`);
-	}
-	const version = (raw as Record<string, unknown>).schemaVersion;
-	if (version === META_SCHEMA_VERSION) return parseMetaRecordV1(json);
-	if (version === META_SCHEMA_VERSION_V2) return parseMetaRecordV2(json);
-	throw new MetaRecordError(
-		`meta-record "schemaVersion" must be ${META_SCHEMA_VERSION} or ${META_SCHEMA_VERSION_V2} (got ${describe(version)}).`,
-	);
+export function parseMetaRecordAny(json: string): MetaIdentity {
+	return parseMetaRecordV3(json);
 }
 
-/** Dual-read straight to a normalized v2 identity (parse any version, normalize). */
+/** Parse a v3 record straight to a fresh, key-stable identity copy. */
 export function parseMetaIdentity(json: string): MetaIdentity {
 	return normalizeMetaIdentity(parseMetaRecordAny(json));
 }
@@ -819,66 +632,28 @@ export function metaCapabilityFor(
 	return registry.backends[backend];
 }
 
-/** Denote-sortable on-disk filename. Body is SSOT; do NOT parse this for authority. Accepts v1 record or v2 identity. */
-export function metaRecordFilename(record: MetaRecord | MetaIdentity): string {
+/** Denote-sortable on-disk filename. Body is SSOT; do NOT parse this for authority. */
+export function metaRecordFilename(record: MetaIdentity): string {
 	return `${record.gardenId}.meta.json`;
 }
 
 /**
  * THE lookup authority. Scan the record BODIES in a meta-session directory and
- * return the one whose top-level `nativeSessionId` matches, or null. This is the
- * `.meta.json` analog of 0.9.0 `findSessionFileById` (which header-scans pi
+ * return the identity whose top-level `nativeSessionId` matches, or null. This is
+ * the `.meta.json` analog of 0.9.0 `findSessionFileById` (which header-scans pi
  * JSONLs). NOT a filename parse, NOT an index lookup — those are at best derived
  * caches. The directory listing + record reading is injected so this stays a
- * pure function (the step-3 CLI supplies the real fs).
+ * pure function (the step-3 CLI supplies the real fs). V3-only via
+ * parseMetaIdentity — a pre-cut record is skipped (surfaced through `onSkip`)
+ * like any other unreadable entry; M1 is the only door back in. This is the scan
+ * the upsert uses: the existence check MUST recognize every V3 record or it
+ * would mint a duplicate id for an existing citizen (G1).
  *
  * The scan runs to completion (does NOT stop at the first match): the
  * native→garden mapping MUST be unique, so two records claiming the same
  * `nativeSessionId` is an authority ambiguity — `MetaRecordError`, fail-fast,
  * never silently pick one (that would make `upsert` mint a second id / route a
- * message to the wrong garden citizen).
- *
- * Unreadable / malformed entries are surfaced honestly via `onSkip` (a corrupt
- * record is a real problem, not something to silently swallow); a throwing
- * reader for one file does not abort the whole scan.
- */
-export function scanByNativeId(
-	entries: readonly string[],
-	nativeSessionId: string,
-	readRecord: (filename: string) => string,
-	onSkip?: (filename: string, err: Error) => void,
-): MetaRecord | null {
-	const target = requireNonEmptyString(nativeSessionId, "nativeSessionId");
-	const matches: { filename: string; record: MetaRecord }[] = [];
-	for (const filename of entries) {
-		if (!filename.endsWith(".meta.json")) continue;
-		let record: MetaRecord;
-		try {
-			record = parseMetaRecord(readRecord(filename));
-		} catch (err) {
-			onSkip?.(filename, err instanceof Error ? err : new Error(String(err)));
-			continue;
-		}
-		if (record.nativeSessionId === target) matches.push({ filename, record });
-	}
-	if (matches.length > 1) {
-		throw new MetaRecordError(
-			`ambiguous meta-record authority: nativeSessionId "${target}" matched ${matches.length} records ` +
-				`(${matches.map((m) => m.filename).join(", ")}). The native→garden mapping must be unique — ` +
-				`fail-fast rather than silently picking one. Remove the duplicate(s).`,
-		);
-	}
-	return matches.length === 1 ? (matches[0] as { record: MetaRecord }).record : null;
-}
-
-/**
- * The dual-read identity scan (0.11 Stage 0 step 3D-4 commit1, additive). Same
- * lookup authority as scanByNativeId — scan the BODIES, match on top-level
- * `nativeSessionId`, fail-fast on duplicates — but reads v1 AND v2 records (via
- * parseMetaIdentity) and returns normalized identity. This is the scan the v2
- * upsert uses (3D-4): once upsert writes v2, the existence check MUST recognize v2
- * records or it would mint a duplicate id for an existing citizen (G1). scanByNativeId
- * remains the v1-only raw scan for v1-fixture gates. Identity-only: it reads
+ * message to the wrong garden citizen). Identity-only: it reads
  * backend/nativeSessionId, never delivery.
  */
 export function scanIdentityByNativeId(
@@ -1001,7 +776,7 @@ export interface UpsertDecision {
  *
  * Idempotent by construction: calling it twice with the same input yields one
  * attach after the first create, never a second id. `existing` is the normalized
- * identity from scanIdentityByNativeId (dual-read v1+v2).
+ * identity from scanIdentityByNativeId (V3-only).
  */
 export function decideUpsert(
 	existing: MetaIdentity | null,
@@ -1029,44 +804,17 @@ export function decideUpsert(
 		);
 	}
 	// 3-value merge (G5): undefined keeps existing, null clears, string sets. The
-	// nullable axes are validated the same way mint validates them.
+	// nullable axes are validated the same way mint validates them. v3 dropped
+	// parentGardenId + isEntwurf, so only model/transcriptPath merge now.
 	const model = input.model === undefined ? existing.model : requireNullableString(input.model, "model");
 	const transcriptPath =
 		input.transcriptPath === undefined
 			? existing.transcriptPath
 			: requireNullableString(input.transcriptPath, "transcriptPath");
-	const parentGardenId =
-		input.parentGardenId === undefined
-			? existing.parentGardenId
-			: requireNullableGardenId(input.parentGardenId, "parentGardenId");
-	const isEntwurf = input.isEntwurf === undefined ? existing.isEntwurf : requireBoolean(input.isEntwurf, "isEntwurf");
 	return {
 		action: "attach",
-		record: { ...existing, cwd, model, transcriptPath, parentGardenId, isEntwurf, recordUpdatedAt: isoNow(now) },
+		record: { ...existing, cwd, model, transcriptPath, recordUpdatedAt: isoNow(now) },
 	};
-}
-
-// ---------------------------------------------------------------------------
-// read-receipt mutators — V1-RECORD ONLY (3D-4 H3). These mutate record.delivery,
-// which exists only on the v1 schema. The LIVE enqueue/read path no longer calls
-// them (3D-4 the cut: the receipt lives in the mailbox state store, stamped by
-// stampMailboxReceipt). They are retained for the v1-fixture / dual-read gates that
-// still exercise a raw v1 record; do NOT re-wire them into the live path.
-// ---------------------------------------------------------------------------
-
-/** A sender enqueued a body to this peer's mailbox. (v1-record only — see section note.) */
-export function markEnqueued(record: MetaRecord, now: Date = new Date()): MetaRecord {
-	return { ...record, delivery: { ...record.delivery, lastEnqueuedAt: isoNow(now) } };
-}
-
-/** The doorbell rang / body injected ("`.delivered`"). For self-fetch ≠ read. */
-export function markDelivered(record: MetaRecord, now: Date = new Date()): MetaRecord {
-	return { ...record, delivery: { ...record.delivery, lastDeliveredAt: isoNow(now) } };
-}
-
-/** The inbox-read MCP call — the real read-receipt (makes Claude D7 observable). */
-export function markRead(record: MetaRecord, now: Date = new Date()): MetaRecord {
-	return { ...record, delivery: { ...record.delivery, lastReadAt: isoNow(now) } };
 }
 
 // ---------------------------------------------------------------------------
@@ -1455,11 +1203,11 @@ export interface UpsertMetaSessionResult {
 }
 
 /**
- * Idempotent fs upsert (3D-4: writes v2 identity). Scan the store by
- * `nativeSessionId` with the dual-read identity scan (sees v1 AND v2, so an
- * existing citizen is found regardless of schema — never duplicate-mint, G1),
- * decide create vs attach on EXISTENCE, and write atomically as v2. On attach the
- * file is the existing garden id's record (same path, rewritten in place, v1→v2);
+ * Idempotent fs upsert (writes v3 identity). Scan the store by
+ * `nativeSessionId` with the V3-only identity scan (a pre-cut record is skipped
+ * as unreadable — M1 is the only door back in),
+ * decide create vs attach on EXISTENCE, and write atomically as v3. On attach the
+ * file is the existing garden id's record (same path, rewritten in place);
  * on create it is a fresh `<gardenId>.meta.json`. A duplicate `nativeSessionId`
  * throws (via the scan) rather than silently picking one.
  *
@@ -1477,15 +1225,10 @@ export function upsertMetaSession(opts: UpsertMetaSessionOptions): UpsertMetaSes
 	const readRaw = (filename: string) => fs.readFileSync(path.join(dir, filename), "utf8");
 	const existing = scanIdentityByNativeId(entries, opts.input.nativeSessionId, readRaw, opts.onSkip);
 
-	// Crash-order: migrate a v1 file's receipts to mailbox state BEFORE rewriting it
-	// as v2. Re-read the matched file raw to see if it is still v1 (carries delivery).
-	if (existing !== null) {
-		const raw = parseMetaRecordAny(readRaw(`${existing.gardenId}.meta.json`));
-		if (raw.schemaVersion === META_SCHEMA_VERSION) {
-			migrateV1DeliveryReceipts({ gardenId: existing.gardenId, delivery: raw.delivery, mailboxDir: opts.mailboxDir });
-		}
-	}
-
+	// V3-only production: a matched record is already v3 (parseMetaRecordAny rejects
+	// any pre-cut version, naming M1), so the old v1→v2 receipt crash-migration is
+	// gone from this path — a v1 file cannot reach a live upsert. Migrating a
+	// genuinely-old v1 store is the M1 operator command's job (H7 lane), not attach.
 	const decision = decideUpsert(existing, opts.input, opts.now);
 	const file = path.join(dir, metaRecordFilename(decision.record));
 	atomicWriteIdentity(file, decision.record);
@@ -1506,7 +1249,7 @@ function atomicWriteIdentity(file: string, identity: MetaIdentity): void {
 //
 // The honest delivery contract (do not blur these):
 //   - enqueue        : a sender wrote a `.msg` body + poked `inbox.signal`
-//                      (markEnqueued). The poke is what the plugin's FileChanged
+//                      (receipt stamped in mailbox state). The poke is what the plugin's FileChanged
 //                      doorbell watches — it wakes an idle session.
 //   - `.msg.delivered`: the doorbell rang (FileChanged moved `.msg` ->
 //                      `.msg.delivered` and announced it). A FILESYSTEM marker =
@@ -1524,44 +1267,10 @@ function recordFileFor(sessionsDir: string, gardenId: string): string {
 }
 
 /**
- * Read + parse a V1 meta-record by garden id, or throw if unknown (3D-4: renamed
- * from readMetaRecordByGardenId, demoted to v1-only — it uses the strict v1 parser
- * and throws on a v2 file). The live path reads identity via
- * readMetaIdentityByGardenId (dual-read); this stays for v1-fixture / dual-read
- * gates that need the raw v1 record (with delivery).
- */
-export function readMetaRecordV1ByGardenId(
-	gardenId: string,
-	sessionsDir: string = defaultMetaSessionsDir(),
-): MetaRecord {
-	const id = requireGardenId(gardenId);
-	const file = recordFileFor(sessionsDir, id);
-	if (!fs.existsSync(file)) {
-		throw new MetaRecordError(
-			`no meta-record for garden id "${id}" under ${path.dirname(file)} — not a garden citizen, cannot deliver.`,
-		);
-	}
-	const record = parseMetaRecord(fs.readFileSync(file, "utf8"));
-	// The record BODY is the SSOT; the filename is only a denote-sortable surface.
-	// A `<id>.meta.json` whose body carries a DIFFERENT gardenId is corrupt (a
-	// renamed/clobbered file) and would misroute delivery — fail-fast, never trust
-	// the filename over the body.
-	if (record.gardenId !== id) {
-		throw new MetaRecordError(
-			`meta-record body/filename drift: ${id}.meta.json contains gardenId "${record.gardenId}". ` +
-				`The body is the authority; this file is corrupt. Remove or fix it.`,
-		);
-	}
-	return record;
-}
-
-/**
- * The dual-read identity read-by-gardenId (0.11 Stage 0 step 3D-4 commit1,
- * additive). Same contract as readMetaRecordByGardenId — read the file, body is
- * SSOT, fail-fast on body/filename gardenId drift — but reads v1 AND v2 (via
- * parseMetaIdentity) and returns normalized identity. This is what the live path
- * uses (enqueue/read, the MCP sender-marker check) so it survives the v2 cut;
- * readMetaRecordV1ByGardenId remains the v1-only raw reader for v1-fixture gates.
+ * The identity read-by-gardenId. Read the file, body is SSOT, fail-fast on
+ * body/filename gardenId drift; V3-only via parseMetaIdentity (a pre-cut record
+ * throws, naming the M1 command). This is what the live path uses (enqueue/read,
+ * the MCP sender-marker check).
  */
 export function readMetaIdentityByGardenId(
 	gardenId: string,
@@ -1623,7 +1332,7 @@ export function enqueueMetaMessage(opts: EnqueueMetaMessageOptions): EnqueueMeta
 	const now = opts.now ?? new Date();
 	const sessionsDir = opts.sessionsDir ?? defaultMetaSessionsDir();
 	const recordFile = recordFileFor(sessionsDir, opts.gardenId);
-	// 3D-4: read IDENTITY (dual-read v1+v2) — confirms the citizen exists and
+	// 3D-4: read IDENTITY (V3-only) — confirms the citizen exists and
 	// normalizes the gardenId. The record is no longer mutated; the v2 record carries
 	// no delivery, so the enqueue receipt lives SOLELY in the mailbox state store.
 	const citizen = readMetaIdentityByGardenId(opts.gardenId, sessionsDir);
@@ -1691,7 +1400,7 @@ export function readMetaInbox(opts: ReadMetaInboxOptions): ReadMetaInboxResult {
 	const now = opts.now ?? new Date();
 	const sessionsDir = opts.sessionsDir ?? defaultMetaSessionsDir();
 	const recordFile = recordFileFor(sessionsDir, opts.gardenId);
-	// 3D-4: read IDENTITY (dual-read) — citizen-existence + normalized gardenId. The
+	// 3D-4: read IDENTITY (V3-only) — citizen-existence + normalized gardenId. The
 	// record is not mutated; the read receipt lives solely in the mailbox state store.
 	const citizen = readMetaIdentityByGardenId(opts.gardenId, sessionsDir);
 

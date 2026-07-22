@@ -43,8 +43,6 @@ export interface PeerFact {
 	nativeSessionId: string;
 	cwd: string;
 	model: string | null;
-	parentGardenId: string | null;
-	isEntwurf: boolean;
 	createdAt: string;
 	recordUpdatedAt: string;
 	// — the single computed fact: 4-value liveness (R1/R3b). NOT a verb. —
@@ -70,8 +68,6 @@ export function resolvePeerFact(identity: MetaIdentity, socket: SocketLiveness |
 		nativeSessionId: identity.nativeSessionId,
 		cwd: identity.cwd,
 		model: identity.model,
-		parentGardenId: identity.parentGardenId,
-		isEntwurf: identity.isEntwurf,
 		createdAt: identity.createdAt,
 		recordUpdatedAt: identity.recordUpdatedAt,
 		liveness: factLivenessOf(identity.backend, socket),

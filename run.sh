@@ -80,15 +80,14 @@ Usage:
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
   ./run.sh check-entwurf-session-identity # deterministic gate for locked garden session identity & name grammar (sessionId/buildSessionName/parse/collision), no API
-  ./run.sh check-meta-session          # deterministic gate (#30 step 2): meta-record mint/serialize/parse + scanByNativeId body-authority + idempotent decideUpsert, no API
-  ./run.sh check-meta-record-v2        # deterministic golden gate (0.11 Stage 0 step 3A): synthetic v1 fixture → normalizeMetaIdentity v2 identity golden + dual-read version fences, no API
+  ./run.sh check-meta-session          # deterministic gate (#30 step 2, V3-only): fs store — idempotent decideUpsert/upsertMetaSession + mailbox enqueue/read + receipt state, no API
+  ./run.sh check-meta-v3-record        # deterministic gate (#50 hard cut): V3 record contract — canonical serialize/round-trip/mint, parseMetaRecordAny V3-only naming the M1 command, strayness inversion production half, no API
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
-  ./run.sh check-meta-dual-read        # deterministic gate (0.11 Stage 0 step 3D-1): v2 write shape (serializeMetaIdentity) + dual-read dispatcher (parseMetaRecordAny/parseMetaIdentity) + write→read round-trip, pure, no API
+  ./run.sh check-meta-migration-readers # deterministic gate (#50 hard cut): frozen v1/v2 readers + version fences + strict v2 keyset + meta-migration import allowlist, no API
   ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
   ./run.sh check-meta-receiver-marker # deterministic gate (SE-2 slice 2b): meta-receiver presence marker — write/read round-trip garden-id keyed + atomic 0600, dead-owner start-key guard reads null, armProvenance limited to arm-capable events (UserPromptSubmit can't mint presence), reader doesn't gate on record existence
-  ./run.sh check-meta-migration        # deterministic gate (0.11 Stage 0 step 3D-4 commit2): v1→v2 delivery-receipt migration (per-field state-wins, 3 timestamps, no-op when nothing to fill) + crash-order inside upsert (migrate before v2 rewrite; drift throws with record still v1), no API
-  ./run.sh check-meta-dual-consumers   # deterministic gate (0.11 Stage 0 step 3D-4): delivery-agnostic dual-read seam — readMetaIdentityByGardenId + scanIdentityByNativeId read v1 AND v2, cross-schema duplicate = ambiguity throw (G1); v1-only raw readers remain for v1-fixture gates, no API
+  ./run.sh check-meta-identity-consumers # deterministic gate (#50 hard cut): V3-only consumer seam — read/scan by body, pre-cut skipped via onSkip, G1 duplicate ambiguity throw, no API
   ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const), slot stays (3D-4), no API
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
   ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
@@ -535,23 +534,22 @@ check_entwurf_session_identity() {
 }
 
 check_meta_session() {
-  # Deterministic gate for the 1.0.0 meta-bridge record authority (#30 step 2):
-  # mint/serialize/parse round-trip + crash-on-malformed, scanByNativeId lookup
-  # authority BY RECORD BODY (not filename, proven with a decoy filename in a
-  # real temp dir), idempotent existence-keyed decideUpsert + identity-drift
+  # Deterministic gate for the meta-bridge STORE authority (#30 step 2, V3-only
+  # since the #50 cut — the pure record contract moved to check-meta-v3-record,
+  # the scan/read seam to check-meta-identity-consumers): idempotent
+  # existence-keyed decideUpsert + identity-drift
   # refusal, and the pre-drilled read-receipt mutators. Pure functions; no
   # backend, no hook, no API.
   run_ts scripts/check-meta-session.ts
 }
 
-check_meta_record_v2() {
-  # Deterministic golden gate for 0.11 Stage 0 step 3A: the v1→v2 identity
-  # normalize seam. A synthetic, sanitized v1 fixture normalizes to a
-  # hand-written v2 identity literal (golden), plus dual-read version fences
-  # and v2 field-contract crashes. Reader/normalizer only — no v2 writer yet.
-  # Kept separate from check-meta-session so 3D's v1-gate rewrites leave this
-  # back-compat golden untouched. Pure functions; no backend, no hook, no API.
-  run_ts scripts/check-meta-record-v2.ts
+check_meta_v3_record() {
+  # Deterministic gate for the #50 schema hard cut: the V3 production record
+  # contract. Canonical v3 serialize + round-trip, v3 mint, parseMetaRecordAny
+  # V3-only (a pre-cut v1/v2 body throws naming the M1 operator command), and
+  # the production half of the strayness inversion (parentGardenId/isEntwurf
+  # rejected as stray). Pure functions; no backend, no hook, no API.
+  run_ts scripts/check-meta-v3-record.ts
 }
 
 check_mailbox_receipt_state() {
@@ -575,14 +573,15 @@ check_entwurf_capabilities() {
   run_ts scripts/check-entwurf-capabilities.ts
 }
 
-check_meta_dual_read() {
-  # Deterministic gate for 0.11 Stage 0 step 3D-1: the v2 write shape
-  # (serializeMetaIdentity) + the dual-read dispatcher (parseMetaRecordAny /
-  # parseMetaIdentity). Canonical serialize + round-trip + version dispatch +
-  # unknown-version crash. Pure functions only — no fs upsert wiring, no
-  # readMetaInbox/enqueueMetaMessage change, no record.delivery removal (3D-2/3/4).
-  # No backend, no hook, no API.
-  run_ts scripts/check-meta-dual-read.ts
+check_meta_migration_readers() {
+  # Deterministic gate for the #50 schema hard cut: the FROZEN migration surface
+  # (meta-migration.ts). Frozen v1/v2 readers still parse their own shapes —
+  # including parentGardenId/isEntwurf, the fields V3 rejects (the frozen half of
+  # the strayness inversion) — version fences hold across all pairs, the v2
+  # keyset stays strict, and the IMPORT ALLOWLIST static scan keeps
+  # meta-migration.ts reachable only through the M1 operator surface + its gate.
+  # Pure functions + a source scan; no backend, no hook, no API.
+  run_ts scripts/check-meta-migration-readers.ts
 }
 
 check_meta_mailbox_state_write() {
@@ -610,26 +609,13 @@ check_meta_receiver_marker() {
   run_ts scripts/check-meta-receiver-marker.ts
 }
 
-check_meta_migration() {
-  # Deterministic gate for 0.11 Stage 0 step 3D-4 commit2: the v1→v2 delivery-receipt
-  # migration (migrateV1DeliveryReceipts) + its crash-order inside upsert. Per-field
-  # STATE WINS, 3 timestamps only; v1-all-null / state-already-wins are no-ops (no
-  # state.json). Crash-order: a v1 record's receipts migrate to state BEFORE the v2
-  # rewrite (proven via upsert attach), and a drift'd state makes migrate throw with
-  # the record STILL v1 (recoverable: next attach re-migrates). Temp dir, no API.
-  run_ts scripts/check-meta-migration.ts
-}
-
-check_meta_dual_consumers() {
-  # Deterministic gate for 0.11 Stage 0 step 3D-4: the delivery-agnostic dual-read
-  # seam. readMetaIdentityByGardenId + scanIdentityByNativeId read v1 AND v2 records and
-  # return normalized identity, so the live consumers (enqueue/read, MCP marker, prune,
-  # store-doctor, the v2 upsert's existence scan) survive the v2 cut. Proves cross-schema
-  # match + THE G1 invariant (a nativeSessionId duplicated across a v1 AND v2 file is
-  # authority ambiguity → throw, so the v2 upsert never duplicate-mints) + v1 normalize +
-  # body/filename drift fail-fast. The v1-only raw readers remain for v1-fixture gates.
-  # Temp dir, no API.
-  run_ts scripts/check-meta-dual-consumers.ts
+check_meta_identity_consumers() {
+  # Deterministic gate for the V3-only identity consumer seam (#50 hard cut).
+  # readMetaIdentityByGardenId reads v3 to identity (drift fail-fast, pre-cut v2
+  # names the M1 command), scanIdentityByNativeId matches by BODY (decoy filename
+  # still found), skips malformed/pre-cut via onSkip, and throws on THE G1
+  # invariant (duplicate nativeSessionId = authority ambiguity). Temp dir, no API.
+  run_ts scripts/check-meta-identity-consumers.ts
 }
 
 check_meta_capability_source() {
@@ -3476,8 +3462,8 @@ case "$cmd" in
   check-meta-session)
     check_meta_session
     ;;
-  check-meta-record-v2)
-    check_meta_record_v2
+  check-meta-v3-record)
+    check_meta_v3_record
     ;;
   check-mailbox-receipt-state)
     check_mailbox_receipt_state
@@ -3485,8 +3471,8 @@ case "$cmd" in
   check-entwurf-capabilities)
     check_entwurf_capabilities
     ;;
-  check-meta-dual-read)
-    check_meta_dual_read
+  check-meta-migration-readers)
+    check_meta_migration_readers
     ;;
   check-meta-mailbox-state-write)
     check_meta_mailbox_state_write
@@ -3494,11 +3480,8 @@ case "$cmd" in
   check-meta-receiver-marker)
     check_meta_receiver_marker
     ;;
-  check-meta-migration)
-    check_meta_migration
-    ;;
-  check-meta-dual-consumers)
-    check_meta_dual_consumers
+  check-meta-identity-consumers)
+    check_meta_identity_consumers
     ;;
   check-meta-capability-source)
     check_meta_capability_source
