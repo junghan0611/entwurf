@@ -20,6 +20,13 @@
 #   - the container's Node major bound to the ARTIFACT's own engines.node
 #     (`FROM node:<major>-*` is a non-text carrier, explicitly outside
 #     check-node-floor-coherence's sweep — it says so itself — so C binds it)
+#   - DELIVERY through the globally installed PATH shim (0.12.8). The doctor's
+#     delivery self-diagnostic spawns the live `mcpServers.entwurf-bridge` command,
+#     and on this host that value is the bare `entwurf-bridge` bin — resolved through
+#     PATH, from a read-only package, with no checkout anywhere. That is the reported
+#     consumer shape (`npm install -g` + shim); check-pack-install can only ever drive
+#     a project-local bin by absolute path. So this cell is the one that answers
+#     "would the shipped registry corpse have died HERE" for the real install form.
 #
 # WHAT IT DOES NOT PROVE. It does not certify Claude's real hook spawn topology:
 # the doctor fixture stands a synthetic owner up, and the plugin cache is PLANTED
@@ -342,6 +349,58 @@ case "$1${2:+ $2}${3:+ $3}" in
     printf '[{"id":"entwurf-meta-receive@meta-bridge-local","version":"0.1.0","enabled":true,"installPath":"%s"}]\n' "$FAKE_INSTALL_PATH" ;;
   "plugin list"*) printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
   "mcp get"*) printf '%s\n' "Scope: User config" "Status: ✔ Connected" ;;
+  "mcp add"*)
+    # Real Claude persists user-scope MCP into ~/.claude.json, and the doctor's
+    # delivery self-diagnostic SPAWNS whatever command it finds there. Swallowing
+    # `mcp add` would leave this consumer with no live command and turn the delivery
+    # axis into an absence report. Parse the installer's real argv shape
+    # (`-s user <name> -e K=V ... -- <cmd> [args]`) and write what Claude writes —
+    # here that is the bare `entwurf-bridge` PATH shim, which is exactly the shape a
+    # globally installed consumer runs.
+    shift 2
+    python3 - "$@" <<'PY'
+import json, os, sys
+argv, env, name, cmd, i = sys.argv[1:], {}, None, [], 0
+while i < len(argv):
+    a = argv[i]
+    if a == "-s":
+        i += 2; continue
+    if a == "-e":
+        k, _, v = argv[i + 1].partition("="); env[k] = v; i += 2; continue
+    if a == "--":
+        cmd = argv[i + 1:]; break
+    if name is None:
+        name = a
+    i += 1
+p = os.path.join(os.path.expanduser("~"), ".claude.json")
+try:
+    d = json.load(open(p, encoding="utf-8"))
+except Exception:
+    d = {}
+if not isinstance(d, dict):
+    d = {}
+d.setdefault("mcpServers", {})[name] = {
+    "type": "stdio",
+    "command": cmd[0] if cmd else "",
+    "args": cmd[1:],
+    "env": env,
+}
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+    ;;
+  "mcp remove"*)
+    python3 - "${3:-}" <<'PY'
+import json, os, sys
+p = os.path.join(os.path.expanduser("~"), ".claude.json")
+try:
+    d = json.load(open(p, encoding="utf-8"))
+except Exception:
+    sys.exit(0)
+if isinstance(d, dict) and isinstance(d.get("mcpServers"), dict):
+    d["mcpServers"].pop(sys.argv[1], None)
+    json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+    ;;
   *) : ;;
 esac
 exit 0
@@ -437,7 +496,8 @@ for claim in \
   'active cached artifact resolved from plugin installPath' \
   'exec-form launch contract supported' \
   'launch form: exec form through the shipped hook-launch.sh' \
-  'sender + receiver owner join is live and record-backed'
+  'sender + receiver owner join is live and record-backed' \
+  'live bridge command DELIVERS'
 do
   printf '%s\n' "$DOC_OUT" | grep -qF "$claim" \
     && ok "doctor claim present: $claim" \
