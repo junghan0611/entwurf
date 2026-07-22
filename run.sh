@@ -1130,6 +1130,16 @@ check_entwurf_facts() {
   run_ts scripts/check-entwurf-facts.ts
 }
 
+check_control_socket_path() {
+  # Deterministic gate: the control-socket path grammar `<dir>/<gid>.sock` has ONE
+  # definition (pi-extensions/lib/control-socket-path.js) instead of one per
+  # importer. Two duties: the leaf's own forward/inverse/round-trip behaviour
+  # including the null case, and a re-implementation fence over all three adapters
+  # (socket-discovery, entwurf-control, the MCP bridge) so a local ".sock" literal,
+  # an inline join, an inline filename parse, or a dropped leaf import goes RED.
+  run_ts scripts/check-control-socket-path.ts
+}
+
 check_socket_discovery() {
   # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 3): the
   # SOCKET-axis wiring scanSocketProbes. Probes the union of (dir sockets) ∪
@@ -3597,6 +3607,9 @@ case "$cmd" in
     ;;
   check-entwurf-facts)
     check_entwurf_facts
+    ;;
+  check-control-socket-path)
+    check_control_socket_path
     ;;
   check-socket-discovery)
     check_socket_discovery

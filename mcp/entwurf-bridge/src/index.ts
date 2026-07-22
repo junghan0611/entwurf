@@ -48,6 +48,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import { controlSocketPathIn, defaultControlSocketDir } from "../../../pi-extensions/lib/control-socket-path.js";
 import { receiverMarkerMatchesIdentity } from "../../../pi-extensions/lib/entwurf-deliverability.ts";
 import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provider.ts";
 import { renderEntwurfPeers } from "../../../pi-extensions/lib/entwurf-peers-render.ts";
@@ -67,9 +68,9 @@ import {
 import { registerNativeConversation } from "../../../pi-extensions/lib/native-push/register.ts";
 
 const HOME = os.homedir();
-const DEFAULT_ENTWURF_DIR = path.join(HOME, ".pi", "entwurf-control");
-const ENTWURF_DIR = process.env.ENTWURF_DIR ?? DEFAULT_ENTWURF_DIR;
-const SOCKET_SUFFIX = ".sock";
+// Directory SOURCE is this adapter's own policy — the bridge honours an explicit
+// ENTWURF_DIR override the pi side does not. The path GRAMMAR is the shared leaf.
+const ENTWURF_DIR = process.env.ENTWURF_DIR ?? defaultControlSocketDir(HOME);
 
 // ============================================================================
 // Live control-socket discovery for entwurf_peers now lives in the TS
@@ -164,7 +165,11 @@ function buildStrictPiSenderEnvelope(): SenderEnvelope {
 	// reply when its control socket is actually live (SE-1). A session running
 	// without --entwurf-control has PI_SESSION_ID but no socket — it must report
 	// replyable:false, not the old hardcoded true. Probe the canonical path.
-	const socketPath = path.join(ENTWURF_DIR, `${sessionId}${SOCKET_SUFFIX}`);
+	// `sessionId` is non-empty past the `missing`/throw guard above, but that guard
+	// narrows through an array length, which TS cannot follow — same reason the
+	// return below asserts. The old inline template hid this by stringifying
+	// `undefined` into the path; the shared grammar takes a real `string`.
+	const socketPath = controlSocketPathIn(ENTWURF_DIR, sessionId as string);
 	const self = computeSelfAddressability({
 		origin: "pi-session",
 		socketAlive: existsSync(socketPath),
@@ -393,7 +398,7 @@ server.tool(
 				// Render the socket honestly: alive vs expected (path computable but no
 				// live socket). The old code synthesized the path and printed it as if
 				// it existed — a lie when the session has no --entwurf-control (SE-1).
-				const socketPath = path.join(ENTWURF_DIR, `${sender.sessionId}${SOCKET_SUFFIX}`);
+				const socketPath = controlSocketPathIn(ENTWURF_DIR, sender.sessionId);
 				const socketState = existsSync(socketPath) ? "alive" : "expected";
 				extra.socketPath = socketPath;
 				extra.socketState = socketState;

@@ -78,6 +78,12 @@ import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { Box, type Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { ENTWURF_SENT_MESSAGE_TYPE } from "../protocol.js";
 import {
+	CONTROL_SOCKET_SUFFIX,
+	controlSocketPathIn,
+	defaultControlSocketDir,
+	gardenIdFromSocketFilename,
+} from "./lib/control-socket-path.js";
+import {
 	fetchControlSocketRuntimeInfo,
 	formatRuntimeModel,
 	type RpcCommand,
@@ -106,8 +112,9 @@ export type { SenderEnvelope } from "./lib/entwurf-control-rpc.js";
 
 const ENTWURF_FLAG = "entwurf-control";
 const EMACS_AGENT_SOCKET_FLAG = "emacs-agent-socket";
-const ENTWURF_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
-const SOCKET_SUFFIX = ".sock";
+// Directory SOURCE is this adapter's own policy (HOME-derived); the path GRAMMAR
+// comes from the `.js` leaf both runtime lanes can import.
+const ENTWURF_DIR = defaultControlSocketDir(os.homedir());
 const SESSION_MESSAGE_TYPE = "entwurf-message";
 // Sender-side UI marker. Layer B (ACP path) emits a CustomMessage with this
 // customType so the operator sees a first-class [entwurf sent →] box paired
@@ -144,7 +151,7 @@ function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
 }
 
 function getSocketPath(sessionId: string): string {
-	return path.join(ENTWURF_DIR, `${sessionId}${SOCKET_SUFFIX}`);
+	return controlSocketPathIn(ENTWURF_DIR, sessionId);
 }
 
 function isSafeSessionId(sessionId: string): boolean {
@@ -184,7 +191,7 @@ async function gcStaleSockets(): Promise<void> {
 			await fs.unlink(path.join(ENTWURF_DIR, entry.name)).catch(() => {});
 			continue;
 		}
-		if (!entry.name.endsWith(SOCKET_SUFFIX)) continue;
+		if (!entry.name.endsWith(CONTROL_SOCKET_SUFFIX)) continue;
 		const fullPath = path.join(ENTWURF_DIR, entry.name);
 		// F3: reclaim ONLY a demonstrably dead socket. A timeout / unknown-error
 		// probe is indeterminate (a live socket may have stalled under load) and
@@ -231,11 +238,11 @@ async function getLiveSessions(): Promise<LiveSessionInfo[]> {
 	const sessions: LiveSessionInfo[] = [];
 
 	for (const entry of entries) {
-		if (!entry.name.endsWith(SOCKET_SUFFIX)) continue;
+		const sessionId = gardenIdFromSocketFilename(entry.name);
+		if (sessionId === null) continue;
 		const socketPath = path.join(ENTWURF_DIR, entry.name);
 		const alive = await isSocketAlive(socketPath);
 		if (!alive) continue;
-		const sessionId = entry.name.slice(0, -SOCKET_SUFFIX.length);
 		if (!isSafeSessionId(sessionId)) continue;
 		sessions.push({ sessionId, socketPath });
 	}

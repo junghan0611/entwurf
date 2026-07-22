@@ -52,16 +52,23 @@
 
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
-import * as path from "node:path";
+import {
+	CONTROL_SOCKET_SUFFIX,
+	controlSocketPathIn,
+	defaultControlSocketDir,
+	gardenIdFromSocketFilename,
+} from "./control-socket-path.js";
 import { fetchControlSocketRuntimeInfo, formatRuntimeModel } from "./entwurf-control-rpc.ts";
 import type { SocketProbe } from "./entwurf-facts.ts";
 import { SESSION_ID_RE } from "./session-id.js";
 import { probeSocketLiveness, type SocketLiveness } from "./socket-probe.ts";
 
 /** Canonical control-socket directory; the socket filename IS the gardenId
- * (동결결정3 correlation authority). */
-export const CONTROL_SOCKET_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
-export const SOCKET_SUFFIX = ".sock";
+ * (동결결정3 correlation authority). Directory SOURCE stays here (HOME-derived);
+ * only the path GRAMMAR lives in `control-socket-path.js`. */
+export const CONTROL_SOCKET_DIR = defaultControlSocketDir(os.homedir());
+/** Re-export of the grammar SSOT's suffix. Consumers and gates keep this name. */
+export const SOCKET_SUFFIX = CONTROL_SOCKET_SUFFIX;
 
 // A control-socket filename is a bare garden id. We reuse the repo-wide
 // `SESSION_ID_RE` SSOT (not a local copy): 동결결정3 makes the socket filename the
@@ -71,7 +78,7 @@ export const SOCKET_SUFFIX = ".sock";
 // correlate to and is ignored.
 
 export function controlSocketPath(gardenId: string, dir: string = CONTROL_SOCKET_DIR): string {
-	return path.join(dir, `${gardenId}${SOCKET_SUFFIX}`);
+	return controlSocketPathIn(dir, gardenId);
 }
 
 /**
@@ -280,8 +287,8 @@ export async function scanSocketProbes(
 	const symlinkedGardenIds: string[] = [];
 	const malformedNames: string[] = [];
 	for (const entry of entries) {
-		if (!entry.name.endsWith(SOCKET_SUFFIX)) continue;
-		const gid = entry.name.slice(0, -SOCKET_SUFFIX.length);
+		const gid = gardenIdFromSocketFilename(entry.name);
+		if (gid === null) continue;
 		if (!SESSION_ID_RE.test(gid)) {
 			malformedNames.push(entry.name);
 			continue;
