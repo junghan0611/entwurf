@@ -287,9 +287,10 @@ symbol/file → current authority/mutation → all production callers
 - H2가 rehearsal한 M1→M2 순서를 operator cutover surface로 연결한다.
 - 기존 gardenized pi sessions를 **entwurf-authored JSONL mutation 없이** V3 record로 등록하는 M2를 sandbox에서 증명한다. Pi 자체의 구버전 session-format rewrite는 별도 native 동작이다.
 - `non-V3 record count == 0` 뒤에만 M2, `record-less expected count == 0` 뒤에만 record-first routing이 열린다는 preflight를 고정한다.
-- peers/facts/dispatch record-first.
+- facts/listing rail(`listEntwurfFacts`→renderer)과 dispatch rail(`resolveTarget`→decider)을 서로 다른 편집면으로 재검증해 둘 다 record-first로 전환한다.
 - live pi는 record garden id socket, dormant pi는 C3 path.
-- `SocketOnlyFact` 정상 promotion/reject, send fallback, target registry identity residue 제거.
+- `SocketOnlyFact` listing과 `socketOnlyPi` dispatch promotion/reject/send-fallback을 각각 제거한다.
+- target registry는 dispatch와 연결되지 않는다. DATA/OPS install 계약은 H1에서 별도 결정하고, RT-dead reader chain은 authority transfer에 끼우지 않고 H7 sweep 대상으로 판정한다.
 - record-less socket은 migration/crash diagnostic only.
 - candidate artifact + 격리 store의 pre/post peer reachability 보존.
 - C2/C3/C4 담당 live smokes는 격리 target에서 재확인하고, 실제 host cutover는 H7이 소유한다.
