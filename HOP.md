@@ -274,7 +274,7 @@ symbol/file → current authority/mutation → all production callers
 
 #### C3 — resume/file authority
 
-- spawn-resume delivered prompt에 sender envelope를 먼저 싣는다.
+- spawn-resume ordinary prompt 앞에 기존 structured `<sender_info>` grammar와 기존 sender envelope를 prepend한다. `wantsReply`는 envelope 밖 sibling input으로 유지한다. Raw tag의 UI 노출은 수용하며 badge parity를 위해 child custom-message reconstruction이나 새 carrier를 만들지 않는다.
 - record `transcriptPath` + native header id 검증 → exact `--session <absolute-file>`.
 - global JSONL header scan, `requireEntwurf`, session-name tag authorization 제거.
 - v1 resident prohibition과 resume env marker producer/consumer/gates 제거.

@@ -87,7 +87,7 @@
 3. **H2 after G2:** #51 release/doctor baseline → sandbox M1 migration+rollback rehearsal → mutation RED catalog와 self-host pre-cut peer map.
 4. **C1 / H3 — schema authority:** V3 minimal record + migration-only V1/V2 M1 + backup/restore/verify-loop. `parentGardenId`/`isEntwurf` 제거. 정상 production은 V3 only.
 5. **C2 / H4 — pi lifecycle/identity authority:** native pi id로 record attach/mint; socket/sender는 record garden id. session-id/name/header gardenization, `/gnew`, `/new` guard 제거.
-6. **C3 / H5a — resume/file authority:** spawn sender envelope + record transcript path/native header 검증 + exact `--session`; global scan/name authorization/resume marker 제거.
+6. **C3 / H5a — resume/file authority:** ordinary prompt 앞에 기존 structured `<sender_info>`를 prepend하고 `wantsReply`는 sibling input으로 유지; record transcript path/native header 검증 + exact `--session`; global scan/name authorization/resume marker 제거. 새 child carrier/custom-message reconstruction은 만들지 않는다.
 7. **C4 / H5b — peers/dispatch authority:** M1→M2 cutover preflight를 고정하고 M2 legacy pi enrollment를 sandbox에서 증명한 뒤 record-first facts/dispatch와 socket-only 정상 path 제거.
 8. **H6:** native-push까지 uniform call provenance를 완성한다.
 9. **H7:** D5/M1-trigger 결정 뒤 candidate artifact로 controlled live backup→M1→M2 cutover와 rollback을 실증한다. 이어 full floor/package/live evidence, production net subtraction, durable docs/#49/#50 승격, branch plan docs 삭제를 준비한다.
