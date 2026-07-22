@@ -88,7 +88,7 @@
 4. **C1 / H3 — schema authority:** V3 minimal record + migration-only V1/V2 M1 + backup/restore/verify-loop. `parentGardenId`/`isEntwurf` 제거. 정상 production은 V3 only.
 5. **C2 / H4 — pi lifecycle/identity authority:** native pi id로 record attach/mint; socket/sender는 record garden id. session-id/name/header gardenization, `/gnew`, `/new` guard 제거.
 6. **C3 / H5a — resume/file authority:** ordinary prompt 앞에 기존 structured `<sender_info>`를 prepend하고 `wantsReply`는 sibling input으로 유지; record transcript path/native header 검증 + exact `--session`; global scan/name authorization/resume marker 제거. 새 child carrier/custom-message reconstruction은 만들지 않는다.
-7. **C4 / H5b — facts/dispatch authority:** M1→M2 cutover preflight와 M2 legacy pi enrollment를 먼저 증명한다. 그 뒤 서로 분리된 facts/listing rail과 dispatch/resolveTarget rail을 각각 record-first로 전환하고 두 socket-only 정상 path를 제거한다. Target registry DATA/OPS와 RT-dead reader는 이 authority transfer와 분리한다.
+7. **C4 / H5b — facts/dispatch authority:** M1 뒤 live legacy session은 C2 attach, dormant M2는 explicit absolute JSONL paths로만 등록한다(global inventory/name/pi-open 없음). Alive socket-only count 0을 증명한 뒤 facts/listing rail과 dispatch/resolveTarget rail을 각각 record-first로 전환한다. Target registry DATA/OPS와 RT-dead reader는 이 authority transfer와 분리한다.
 8. **H6:** native-push까지 uniform call provenance를 완성한다.
 9. **H7:** D5/M1-trigger 결정 뒤 candidate artifact로 controlled live backup→M1→M2 cutover와 rollback을 실증한다. 이어 full floor/package/live evidence, production net subtraction, durable docs/#49/#50 승격, branch plan docs 삭제를 준비한다.
 

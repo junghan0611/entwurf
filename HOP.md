@@ -285,8 +285,9 @@ symbol/file → current authority/mutation → all production callers
 #### C4 — cutover surface + peers/dispatch authority + M2 enrollment
 
 - H2가 rehearsal한 M1→M2 순서를 operator cutover surface로 연결한다.
-- 기존 gardenized pi sessions를 **entwurf-authored JSONL mutation 없이** V3 record로 등록하는 M2를 sandbox에서 증명한다. Pi 자체의 구버전 session-format rewrite는 별도 native 동작이다.
-- `non-V3 record count == 0` 뒤에만 M2, `record-less expected count == 0` 뒤에만 record-first routing이 열린다는 preflight를 고정한다.
+- live legacy pi session은 C2 `session_start` attach로 등록한다. Dormant M2는 **명시적 absolute JSONL path 입력만** 받으며 global inventory, session name, `SessionManager.open()`에 의존하지 않는다. Header/model entries를 직접 읽고 `gardenId == nativeSessionId`인 V3 record를 쓴다.
+- M2는 shipped operator command의 `run_ts` + compiled-twin 계약을 따른다. HOME/XDG/agent roots를 모두 격리해 sandbox에서 **entwurf-authored JSONL write 0**을 증명한다. Pi 자체의 구버전 session-format rewrite는 별도 native 동작이다.
+- `non-V3 record count == 0` 뒤에만 M2를 연다. Record-first routing 전 완료 counter는 **alive `FactList.socketOnly` count == 0**이며, 모든 일반/dormant pi JSONL의 전량 inventory를 주장하지 않는다.
 - facts/listing rail(`listEntwurfFacts`→renderer)과 dispatch rail(`resolveTarget`→decider)을 서로 다른 편집면으로 재검증해 둘 다 record-first로 전환한다.
 - live pi는 record garden id socket, dormant pi는 C3 path.
 - `SocketOnlyFact` listing과 `socketOnlyPi` dispatch promotion/reject/send-fallback을 각각 제거한다.
@@ -358,9 +359,8 @@ D0와 backup/rollback은 GLG가 승인했다. 아래는 근거가 나올 때만 
 1. **D5 — H7 live-cutover entry blocker:** 최초 live M1 전에 live old writer quiesce를 강제할 operator 절차/표면을 GLG가 확정한다. H2 rehearsal이 선택 근거를 낸다.
 2. **M1 trigger — H7 live-cutover entry blocker:** session/startup 자동 upgrade인가 명시적 operator migrate command인가. Release UX와 self-host 안전성을 함께 보고 H2 뒤, H7 전 GLG가 확정한다.
 3. target registry에서 identity 제거 뒤 별도 dormant-launch trust policy 필요 여부.
-4. M2가 자동 attach만으로 충분한지, 명시적 import command가 필요한지.
-5. call provenance에서 intent/transport/receipt 중 durable 최소 필드.
-6. record-less diagnostic을 doctor/peers에서 얼마 동안 노출할지. 정상 routing fallback은 금지.
+4. call provenance에서 intent/transport/receipt 중 durable 최소 필드.
+5. record-less diagnostic을 doctor/peers에서 얼마 동안 노출할지. 정상 routing fallback은 금지.
 
 결정 전 임시 fallback을 만들지 않는다.
 
