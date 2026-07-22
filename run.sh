@@ -1532,9 +1532,15 @@ assert.ok(tracked.length >= 20,
 const FLOOR_DECL = /node[^0-9\n]{0,20}(?:>=|-lt|-ge|-gt)\s*(\d{2})/gi;
 let swept = 0;
 for (const file of tracked) {
-  // No catch-continue: every path here is tracked, so an unreadable file is a
-  // broken checkout, not a condition to skip past. Crash, do not warn.
-  const text = readFileSync(file, 'utf8');
+  // `git ls-files --cached` still names an UNSTAGED deletion. That is a valid
+  // release-surface migration before the commit workflow stages it, not an
+  // unreadable candidate file. Skip ENOENT only; every other read failure crashes.
+  let text;
+  try { text = readFileSync(file, 'utf8'); }
+  catch (error) {
+    if (error?.code === 'ENOENT') continue;
+    throw error;
+  }
   for (const line of text.split('\n')) {
     if (line.includes('check_node_floor_coherence') || line.includes('FLOOR_DECL')) continue;
     for (const [decl, major] of line.matchAll(FLOOR_DECL)) {
@@ -1665,7 +1671,49 @@ for (const file of tracked) {
 assert.ok(stubsMinted >= 4,
   `sweep found only ${stubsMinted} fake claude stub definitions — the mint pattern rotted and would pass vacuously`);
 
-console.log(`[check-claude-floor-coherence] ok — Claude Code >=${FLOOR} is coherent across package.json (SSOT), ${DERIVERS.length} runtime derivers that never retype it, ${bound} bound declarations from ${SITES.length} site rules, ${stubs} fake-CLI version declarations (>= floor, since a stub may honestly claim newer), and ${stubsMinted} minted fake-claude stubs each able to answer --version — swept over ${tracked.length} tracked files.`);
+// PROSE SWEEP over the tracked contract text, not just SITES' own files. Binding only
+// the declarations someone remembered to register is the "sweep what is already bound"
+// restatement check-node-floor-coherence had to fix, and this gate shipped with the same
+// shape: measured 2026-07-22, THREE floor declarations (DELIVERY.md x2, the clean-host
+// upgrade note) sat outside SITES, so moving the floor would have left them advertising
+// the old number while this gate printed green.
+//
+// Scope is deliberately narrow: only a COMPARISON (`>=`) next to the word Claude is a
+// floor declaration. A bare "Claude Code 2.1.217 actual session" in VERIFY/BASELINE is an
+// OBSERVATION — the version some evidence was taken at — and must not be rewritten when
+// the floor moves. CHANGELOG.md and NEXT.md are excluded for the same reason
+// check-node-floor-coherence excludes them: they are history, and history keeps the number
+// it was written with.
+const proseCorpus = execFileSync('git', ['ls-files', '--cached', '--', '*.sh', '*.json', '*.ts', '*.md', '*.yml', '*.yaml'], { encoding: 'utf8' })
+  .split('\n')
+  .filter((f) => f && f !== 'pnpm-lock.yaml' && f !== 'CHANGELOG.md' && f !== 'NEXT.md');
+assert.ok(proseCorpus.length >= 20,
+  `git ls-files returned ${proseCorpus.length} first-party files — the prose sweep lost its corpus and would pass vacuously`);
+const FLOOR_DECL = /[Cc]laude[^0-9\n]{0,24}>=\s*(\d+\.\d+\.\d+)/g;
+let sweptProse = 0;
+for (const file of proseCorpus) {
+  // As above, an unstaged deletion remains in `git ls-files --cached` until the
+  // commit workflow stages it. Skip only that ENOENT transition; do not hide any
+  // other read failure.
+  let text;
+  try { text = readFileSync(file, 'utf8'); }
+  catch (error) {
+    if (error?.code === 'ENOENT') continue;
+    throw error;
+  }
+  for (const line of text.split('\n')) {
+    if (line.includes('check_claude_floor_coherence') || line.includes('FLOOR_DECL')) continue;
+    for (const [decl, ver] of line.matchAll(FLOOR_DECL)) {
+      sweptProse++;
+      assert.equal(ver, FLOOR,
+        `${file}: unregistered Claude Code floor declaration "${decl.trim()}" — the SSOT floor is ${FLOOR}. Bind it in SITES or fix it.`);
+    }
+  }
+}
+assert.ok(sweptProse >= 8,
+  `prose sweep found only ${sweptProse} Claude floor declarations across ${proseCorpus.length} tracked files — the pattern rotted and would pass vacuously`);
+
+console.log(`[check-claude-floor-coherence] ok — Claude Code >=${FLOOR} is coherent across package.json (SSOT), ${DERIVERS.length} runtime derivers that never retype it, ${bound} bound declarations from ${SITES.length} site rules, ${stubs} fake-CLI version declarations (>= floor, since a stub may honestly claim newer), ${stubsMinted} minted fake-claude stubs each able to answer --version, and ${sweptProse} floor declarations swept over ${proseCorpus.length} tracked contract text surfaces (observations without a comparison operator are OUT of scope; CHANGELOG/NEXT keep their history).`);
 EOF
   )
 
@@ -2312,10 +2360,19 @@ check_pack() {
     "pi/meta-bridge/entwurf-meta-receive/.claude-plugin/plugin.json"
     "pi/meta-bridge/entwurf-meta-receive/hooks/hooks.json"
     "pi/meta-bridge/entwurf-meta-receive/scripts/doorbell.sh"
+    # 0.12.8 (#51) — the exec form names hook-launch.sh as the EXECUTABLE, so its
+    # absence is not a degraded path: install dies at the chmod and no hook can run.
+    # It rides a per-FILE entry in the files array (not a whole directory), so one
+    # deleted line drops it from the tarball while every other gate stays green.
+    "pi/meta-bridge/entwurf-meta-receive/scripts/hook-launch.sh"
     "pi-extensions/meta-bridge-hook.ts"
     "pi-extensions/lib/meta-session.ts"
     "pi-extensions/lib/session-id.js"
     "scripts/meta-bridge-install.sh"
+    # Both the installer and the doctor `source` this floor helper under `set -e`.
+    # Missing, the doctor dies before printing a single line — the release oracle
+    # would be silent rather than red.
+    "scripts/meta-bridge-claude-floor.sh"
     "scripts/meta-bridge-state.py"
   )
 
@@ -2494,10 +2551,15 @@ _check_pack_install_impl() {
     "pi/meta-bridge/entwurf-meta-receive/.claude-plugin/plugin.json"
     "pi/meta-bridge/entwurf-meta-receive/hooks/hooks.json"
     "pi/meta-bridge/entwurf-meta-receive/scripts/doorbell.sh"
+    # 0.12.8 (#51) — see check-pack: the exec form's executable and the floor helper
+    # both callers source. The install smoke below asserts the ASSEMBLED launcher is
+    # executable; this asserts the artifact it is assembled FROM actually shipped.
+    "pi/meta-bridge/entwurf-meta-receive/scripts/hook-launch.sh"
     "pi-extensions/meta-bridge-hook.ts"
     "pi-extensions/lib/meta-session.ts"
     "pi-extensions/lib/session-id.js"
     "scripts/meta-bridge-install.sh"
+    "scripts/meta-bridge-claude-floor.sh"
     "scripts/meta-bridge-state.py"
   )
   for f in "${tar_required[@]}"; do

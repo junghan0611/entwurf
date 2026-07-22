@@ -20,10 +20,10 @@ or the pi adapter read whatever auth the user already trusts on the host
 
 Written against a clean **Linux** host (Ubuntu / Debian / NixOS) reachable via
 SSH, here called `cleanhost`. `nvm` keeps the Node path independent of the distro.
-The neutral npm package may install elsewhere, but this repair cut's artifact and
-Linux is this repair cut's only currently certified Claude meta-bridge axis. macOS
-has no `/proc` bridge discovery and is not yet verified/certified for this cut, so
-its installer refuses new wiring and its strict doctor stays `NOT CERTIFIED`/nonzero.
+The neutral npm package may install elsewhere, but Linux is this repair cut's only
+currently certified Claude meta-bridge axis. macOS has no `/proc` bridge discovery
+and is not yet verified/certified for this cut, so its installer refuses new wiring
+and its strict doctor stays `NOT CERTIFIED`/nonzero.
 This is not permanent; future native validation may reopen the lane, while Darwin
 uninstall remains available for older managed state.
 

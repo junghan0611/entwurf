@@ -1,0 +1,12 @@
+{
+	"skills": ["../.claude/skills"],
+	"packages": [".."],
+	"entwurfProvider": {
+		"mcpServers": {
+			"entwurf-bridge": {
+				"command": "entwurf-bridge",
+				"args": []
+			}
+		}
+	}
+}

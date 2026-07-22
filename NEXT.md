@@ -2,15 +2,22 @@
 
 > NEXT는 부트 섹터다. 닫힌 역사는 CHANGELOG/git에, 장기 방향은 ROADMAP/이슈에 둔다.
 
-## NOW — exec form으로 전환했다. 커밋 대기 중이다
+## NOW — 로컬 3커밋 ahead, 전부 push 대기. 다음 게이트는 GLG의 push 승인이다
 
-- **Current:** B/B2 증거로 **정책 A가 확정됐고**(GLG, 2026-07-22) production 전환을 구현했다. **전부 uncommitted다.** HEAD는 `328c66e` 그대로다.
+- **Current:** B/B2 증거로 **정책 A가 확정됐고**(GLG, 2026-07-22) production 전환을 구현·커밋했다. 로컬 main은 `origin/main fbde7b8`보다 **3 커밋 앞선다** — `328c66e`(C) + `fbfa559`(production exec cut) + 교차검수·릴리즈면 커밋. **전부 push 안 됐고, main CI는 한 번도 돌지 않았다.**
   - hooks.json 4개 hook 전부 **exec form** — `command`는 새로 출하하는 `scripts/hook-launch.sh`, `args`가 실제 argv다.
   - hook은 `process.ppid`를 그대로 owner로 쓴다. **`$PPID` carrier · ancestry walk · missing-carrier 계약은 삭제됐다.**
   - **단 `process.ppid`는 launcher를 거쳐 왔을 때만 owner다.** launcher가 `exec` 직전 non-identity 토큰 `ENTWURF_META_HOOK_LAUNCH`를 stamp하고, hook은 그 토큰이 없으면 sender/receiver marker를 **하나도 쓰지 않는다**. carrier의 개명이 아니다 — carrier는 ancestry 검증이 필요한 *pid*를 실었고 이 토큰은 identity를 전혀 싣지 않는다. 목적은 하나: 이미 열린 세션이 OLD cached command로 새 hook을 부르는 upgrade mismatch를 fail-closed로 유지하는 것. 장식이 아니므로 정리 대상으로 지우지 마라.
   - **Claude Code floor `>=2.1.217`** — SSOT는 `package.json` `entwurf.claudeCodeFloor` 하나이고, installer/doctor는 `scripts/meta-bridge-claude-floor.sh`로 **파생**해서 강제한다(리터럴 재타이핑 금지).
   - 신규 게이트 2개: `check-hook-launch-topology`(58 checks), `check-claude-floor-coherence`. 둘 다 `pnpm check` aggregate에 등록됐다.
-- **Next — GLG의 커밋 결정.** 현재 PM 권고는 production exec-only hard-cut + floor/provenance + gates + release docs를 **한 atomic commit**으로 닫는 것이다. C `328c66e`는 별도 commit으로 유지한다. commit/push는 각각 GLG 결정이고 `328c66e`도 아직 push 안 됐다.
+- **Next — GLG의 push 승인.** 그 뒤 exact release commit에서 3 jobs(`check`/`install-surface`/`artifact-consumer`) GREEN → 별도 version commit `0.12.8-repair.0` → 같은 3 jobs → exact artifact acceptance → publish 승인. 각 단계는 서로를 함의하지 않는다.
+- **3번째 커밋이 담은 것(교차검수 + 릴리즈면):** 세 갈래이고 전부 실증됐다.
+  1. **tarball 불변식이 exec form의 실행 파일을 안 묶고 있었다.** `check-pack`/`check-pack-install`의 required 목록에 `hook-launch.sh`가 없어, `files[]`에서 그 한 줄을 지우면 tarball에서 사라지는데 `check-pack`은 **exit 0**이었다(실측: 269→268 files, green). `scripts/meta-bridge-claude-floor.sh`도 같은 부류다 — installer/doctor가 `set -e` 아래서 `source`하므로 없으면 doctor가 **한 줄도 못 찍고 죽는다**. 둘 다 두 목록에 등록했다. 뮤테이션 2/2 RED(각자 자기 파일명 지목), control green.
+  2. **`check-claude-floor-coherence`가 등록된 선언만 훑고 있었다** — `check-node-floor-coherence`가 이미 겪고 고친 "이미 묶인 것만 훑는 sweep은 재진술" 결함의 재발. 실측으로 미등록 floor 선언 3개(`DELIVERY.md` ×2, `docs/setup-clean-host.md` upgrade note)가 SITES 밖에 있었다. tracked contract text prose sweep을 추가했다(비교 연산자 `>=`가 붙은 것만 floor 선언으로 보고, `2.1.217 actual session` 같은 **관측**은 범위 밖. CHANGELOG/NEXT는 역사라 제외). **델타 증명:** 같은 뮤테이션(`DELIVERY.md` floor를 2.1.139로)에서 수정 전 게이트 **exit 0**, 수정 후 **exit 1 + 자기 원인 지목**. `docs/setup-clean-host.md`의 편집 중 잘린 비문도 함께 정정했다.
+  3. **릴리즈 조작면이 두 하네스로 갈려 있었고, SemVer prerelease를 받지 못했다.** `.pi/prompts/{prepare,make}-release.md` 2개(528줄)를 repo-local Agent Skill 하나(`.claude/skills/entwurf-release/SKILL.md`)로 통합했다 — Claude Code는 native 발견, pi는 `.pi/settings.json`의 `skills: ["../.claude/skills"]`로 같은 파일을 본다. `0.12.8-repair.0` 같은 prerelease를 수용하고 `v` 접두는 거부한다(실측 확인). `check-install-surface` **S7**이 이 면을 묶는다.
+    - **S7은 워킹트리가 아니라 `git show :path`로 candidate index를 읽는다.** 첫 판은 워킹트리를 읽어서, 새 두 파일이 untracked인 채로도 로컬 green이 나올 수 있었다 — rule 11 read-coupling이고 CI에서만 터졌을 결함이다.
+    - **그래서 이 마이그레이션은 원자적으로만 커밋된다.** S7a(두 새 파일이 index에 있을 것) + S7f(retired prompts가 index에 없을 것)를 pre-commit이 매번 검사하므로, 마이그레이션이 빠진 중간 커밋은 어떤 순서로도 통과하지 못한다. 교차검수 수선을 별도 커밋으로 떼려다 이 제약을 만나 한 커밋으로 합쳤다(2026-07-22).
+    - **두 floor sweep은 ENOENT를 건너뛴다.** `git ls-files --cached`는 unstaged deletion도 이름을 내는데, 그것이 바로 이 마이그레이션의 정상 상태다. 이전 코멘트는 "여기 오는 경로는 전부 tracked라 읽기 실패는 broken checkout"이라 단언하고 있었고, 그 단언이 틀렸다. ENOENT만 건너뛰고 나머지 실패는 여전히 throw다.
 - **B/B2에서 확정된 사실(다시 파지 마라):**
   - **2.1.138은 `args`를 통째로 버리고, 그 hook을 `exit_code: 0, outcome: "success"`로 보고한다.** stdout·stderr·stream·result 어디에도 진단이 없다. 조용한 게 아니라 **성공이라고 잘못 말한다** — 그래서 상류 fail-loud에 기댈 수 없고 entwurf가 직접 막는다.
   - **2.1.217에서 exec form은 완전하다.** `args` 원소별 전달, `${CLAUDE_PLUGIN_ROOT}` 원소별 치환, `${HOME}`는 **리터럴로 도착**(어떤 shell도 파싱하지 않았다는 ancestry 독립 증거), hook의 부모는 Claude 프로세스, 그리고 FileChanged `asyncRewake` exit 2 → **실제 idle wake**(입력 0인 상태에서 새 턴이 exit-2 stderr를 싣고 나옴).

@@ -29,6 +29,9 @@
  *        verified, not declared: exactly one block, and its command must START with
  *        `docker run` (containing the token is not enough — `echo docker run … <<TAG`
  *        contains it while executing right here).
+ *   S7   the release operator surface is one repo-local Agent Skill shared by Claude Code and
+ *        pi: project settings point pi at `.claude/skills`, the prepare/make modes coexist in
+ *        one SKILL.md, and the retired pi-only prompt copies stay absent.
  *
  * HONEST SCOPE — what a green run does and does not mean. S1-S4 are structural: they read the
  * dispatch graph and the build manifest, so they hold for any entrypoint written in this repo's
@@ -44,7 +47,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -415,6 +418,88 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	);
 }
 
+// ── S7: one multi-harness release skill, no pi-only prompt copies ───────────
+// Claude Code discovers `.claude/skills` natively. Pi sees the SAME directory only
+// through project settings — without that one line the skill works in Claude and is
+// invisible here, recreating the split this migration removes. Keep prepare + make in
+// one file so their SemVer/prerelease contract cannot drift apart again.
+{
+	const settingsRel = ".pi/settings.json";
+	const skillRel = ".claude/skills/entwurf-release/SKILL.md";
+	const retiredRels = [".pi/prompts/prepare-release.md", ".pi/prompts/make-release.md"];
+	// Read the CANDIDATE INDEX, not the operator's working tree. An untracked skill
+	// can make local discovery and every working-tree read green while CI receives
+	// no file at all. `git show :path` also rejects intent-to-add/unstaged-content
+	// laundering: the bytes judged here are exactly the bytes a commit would carry.
+	const readCandidate = (file: string): string | null => {
+		try {
+			return execFileSync("git", ["show", `:${file}`], {
+				cwd: REPO,
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			});
+		} catch {
+			return null;
+		}
+	};
+	const settingsText = readCandidate(settingsRel);
+	const skill = readCandidate(skillRel);
+	ok(
+		"S7a: the candidate index carries both halves of the shared release-skill surface",
+		settingsText !== null && skill !== null,
+		[settingsText === null ? settingsRel : "", skill === null ? skillRel : ""].filter(Boolean).join("\n"),
+	);
+	let settings: {
+		skills?: unknown;
+		packages?: unknown;
+		entwurfProvider?: { mcpServers?: { "entwurf-bridge"?: { command?: unknown; args?: unknown } } };
+	} = {};
+	let settingsParseError = "";
+	if (settingsText !== null) {
+		try {
+			settings = JSON.parse(settingsText);
+		} catch (error) {
+			settingsParseError = error instanceof Error ? error.message : String(error);
+		}
+	}
+	ok(
+		"S7b: candidate pi settings load the Claude-native repo skill directory",
+		settingsText === null ||
+			(settingsParseError === "" && Array.isArray(settings.skills) && settings.skills.includes("../.claude/skills")),
+		settingsParseError || `${settingsRel}: expected skills to include ../.claude/skills`,
+	);
+	ok(
+		"S7c: candidate project settings keep the local package source portable",
+		settingsText === null ||
+			(Array.isArray(settings.packages) && settings.packages.length === 1 && settings.packages[0] === ".."),
+		`${settingsRel}: expected packages to be the settings-relative repo root '..'`,
+	);
+	const bridge = settings.entwurfProvider?.mcpServers?.["entwurf-bridge"];
+	ok(
+		"S7d: candidate project settings use the stable entwurf-bridge bin, never a host-absolute path",
+		settingsText === null ||
+			(bridge?.command === "entwurf-bridge" && Array.isArray(bridge.args) && bridge.args.length === 0),
+		`${settingsRel}: expected entwurfProvider.mcpServers.entwurf-bridge to use the stable bin`,
+	);
+	const skillIsAscii = skill !== null && [...skill].every((char) => (char.codePointAt(0) ?? 128) <= 127);
+	ok(
+		"S7e: one English-only entwurf-release skill owns prepare + make and accepts the repair prerelease example",
+		skill === null ||
+			(/^name:\s*entwurf-release$/m.test(skill) &&
+				skill.includes("# PREPARE") &&
+				skill.includes("# MAKE") &&
+				skill.includes("0.12.8-repair.0") &&
+				skillIsAscii),
+		`${skillRel}: missing from the index, or missing name, prepare/make mode, prerelease contract, or English/ASCII-only surface`,
+	);
+	const retired = retiredRels.filter((file) => readCandidate(file) !== null);
+	ok(
+		"S7f: the candidate index omits the retired pi-only release prompts (no second release SSOT)",
+		retired.length === 0,
+		retired.join("\n"),
+	);
+}
+
 // ── S6: tracked first-party sources are TEXT ────────────────────────────────
 // A single stray NUL byte makes a source file `data` to file(1) and BINARY to git:
 // `git diff` stops showing content, and every reviewer and safety hook that reads the
@@ -433,10 +518,15 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		},
 	)
 		.split("\n")
-		.filter(Boolean);
+		.filter(Boolean)
+		// `git ls-files --cached` still names an unstaged deletion. Release-surface
+		// migrations deliberately delete tracked prompt files before the commit
+		// workflow stages them; absence is not binary content and must not crash this
+		// read-only gate before it can inspect the candidate files that remain.
+		.filter((f) => existsSync(path.join(REPO, f)));
 	const binary = tracked.filter((f) => readFileSync(path.join(REPO, f)).includes(0));
 	ok(
-		`S6: all ${tracked.length} tracked first-party text sources are NUL-free (git shows them as diffable text)`,
+		`S6: all ${tracked.length} present tracked first-party text sources are NUL-free (git shows them as diffable text)`,
 		tracked.length >= 20 && binary.length === 0,
 		binary.length ? binary.map((f) => `${f}: contains a NUL byte`).join("\n") : "git ls-files returned too few files",
 	);
