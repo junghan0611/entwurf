@@ -20,7 +20,7 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
 
 **정렬:** fresh launch를 **mux-visible surface로 먼저 통일**한다. pi-native GPT도 bg/detached `pi -p`로 숨기지 않고 투명하게 pane/session으로 보이며 같은 launch 관문을 통과 → pi를 Claude Code/Codex/Antigravity와 같은 급의 "4번째 하네스"로 세운다. pi 전용 headless/bg 최적화는 GLG가 나중에 명시할 때 별도 레인.
 
-- v1 본체: `pi-extensions/lib/entwurf-core.ts` `runEntwurfSync`(:1940) = fresh-mint 본체 — registry gate `resolveEntwurfTarget`(미등록 reject) + session-id/name/cwd-enrich. resume는 `runEntwurfResumeSync`(:1772, registry 우회). launch arg SSOT `entwurf-resume-args.ts`. 주: fresh-mint는 현재 `--no-extensions` one-shot worker이지 `-p`/control 경로 아님.
+- v1 본체(**제거됨**): `runEntwurfSync`/`runEntwurfResumeSync`는 v1 sync-body dead-island sweep에서 삭제됐다 — 자산이 필요하면 git history에서 복원. 삭제 전에는 fresh-mint 본체(registry gate `resolveEntwurfTarget`(미등록 reject) + session-id/name/cwd-enrich)와 resume(registry 우회)였다. launch arg SSOT `entwurf-resume-args.ts`는 유지. 주: fresh-mint는 `--no-extensions` one-shot worker이지 `-p`/control 경로 아님.
 - **레지스트리 현황(`6d06ad0` 이후):** `entwurf/claude-sonnet-5`·`entwurf/claude-opus-4-8`(ACP claude), `openai-codex/gpt-5.4|5.5`(native), `entwurf/gemini-3.1-pro-preview`(ACP gemini, explicitOnly). **ACP Codex 엔트리는 삭제됨** — 즉 "Claude Code에서 새 GPT 불러줘"는 레지스트리가 하드 차단. mux 레인이 서야 되살릴 수 있음.
 
 ## ② mux-agnostic spawn/launch surface
@@ -122,7 +122,7 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
 4. **`zmxDriver` 스텁** — 같은 interface로 `DRIVERS=[tmux,zmx]`가 컴파일되게. 미구현 op는 fail-loud. **zmx 확보 = 설치면 계약(#47 코멘트): `command -v zmx` probe → optional, 없으면 tmux fallback; 능동 확보는 upstream prebuilt self-fetch(opt-in), nix flake/external-packages.sh/특정 하네스 PATH 전제 금지.**
 5. **enum 공존** — `ENTWURF_V2_TRANSPORTS`에 `zmx-live` 추가(`tmux-live`와 공존). schema↔types 게이트 갱신 **+ `DispatchVerdict`의 resume union도 같이 확장(GPT 지적 — 놓치면 타입 갈라짐)**. mux 종류를 별도 필드로 빼는 추상화는 금지(enum 나열 > 추상화 두께).
 6. **네이밍 중립화(cosmetic)** — fixture `tmuxTarget`(위 2줄) → `muxTarget`. 프로덕션 필드가 아니므로 리스크 낮음.
-7. **fresh pi-native GPT launch profile(더 큰 후속)** — `runEntwurfSync`(:1940)의 registry/session-id/name/cwd-enrich 자산 재사용하되, `--no-extensions` detached one-shot 복구가 아니라 mux-visible `pi-native-gpt` launch profile로 설계(`claude-code`/`codex`/`agy`도 같은 launch/observe/capture/kill 규율). **완료판정:** mux launch가 서면 `6d06ad0`이 지운 `entwurf/gpt-5.x` ACP 타깃을 레지스트리에 되살릴 수 있음.
+7. **fresh pi-native GPT launch profile(더 큰 후속)** — `runEntwurfSync`(v1, sync-body sweep에서 **제거됨**)의 registry/session-id/name/cwd-enrich 자산을 git history에서 복원해 재사용하되, `--no-extensions` detached one-shot 복구가 아니라 mux-visible `pi-native-gpt` launch profile로 설계(`claude-code`/`codex`/`agy`도 같은 launch/observe/capture/kill 규율). **완료판정:** mux launch가 서면 `6d06ad0`이 지운 `entwurf/gpt-5.x` ACP 타깃을 레지스트리에 되살릴 수 있음.
 8. **agy(Antigravity) spawn** — spawn surface 통일 **후** 그 위에 얹기(기반 먼저 안 서면 launch seam이 갈림). *주: agy **delivery/설치 어댑터**는 07-04 레인에서 mux보다 먼저 감 — 갈라진 건 launch면뿐.*
 
 ## 넘으면 안 되는 선 (이 레인 한정)
