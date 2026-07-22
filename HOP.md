@@ -83,6 +83,17 @@ symbol → production hits 0
 - C4는 candidate artifact + 격리 store에서 reachability를 preflight하고, H7이 cut 전후 실제 peer reachability를 garden id별로 측정한다.
 - record-less/socket-only 제거는 C4 sandbox preflight와 H7 self-host acceptance를 모두 통과해야 출하 가능하다.
 
+### Expected coordination blackout
+
+C2/C4/H7에서 pi identity/socket을 record garden id로 옮길 때, PM의 현재 socket-only control session이 잠시 `entwurf_v2` delivery를 못 받을 수 있다. 이것은 숨은 fallback을 추가할 이유가 아니라 self-host cut의 예상 경계다.
+
+1. cut 직전 `HOP/NEXT/.agent-reports/<hop>/`에 PM·Opus garden ids, HEAD, working patch digest, 다음 명령, expected peer map을 고정한다.
+2. Opus native session과 tmux를 유지하되 자동 재시도/polling으로 상태를 흐리지 않는다.
+3. socket delivery가 끊기면 GLG가 두 세션 사이의 턴을 수동 전달한다.
+4. pi session을 V3 record에 attach하고 record garden id에서 socket을 다시 연다.
+5. `entwurf_peers` visibility + PM→Opus/Opus→PM 양방향 `entwurf_v2` delivery/reply가 복구돼야 cut을 계속한다.
+6. 예상 blackout을 거짓 socket-only fallback, name/env carrier, dual routing으로 덮지 않는다.
+
 ## 전체 게이트
 
 ### G1 — 읽기 작업 개방
@@ -178,7 +189,8 @@ symbol/file → current authority/mutation → all production callers
    - target registry identity vs launch trust
    - V1/V2 schema/migration/upsert와 obsolete fields
 4. C1~C4 ledger, grep allowlist, gate ownership, production LOC baseline을 만든다.
-5. live smokes를 배정한다.
+5. self-host coordination blackout의 trigger, GLG manual relay, pi rejoin 명령, expected peer map을 cut ledger에 넣는다.
+6. live smokes를 배정한다.
    - C2: `smoke-resident-garden-guard` (native-id hard crash, `/gnew`, resident-name axes), `smoke-acp-socket-citizen-live`
    - C3: `smoke-resident-garden-guard` (resume block/tag/marker axes), `smoke-entwurf-v2-spawn-resume-live`
    - C4/H7: 세 smoke의 cutover 후 재확인
@@ -207,7 +219,7 @@ symbol/file → current authority/mutation → all production callers
    - migration-only import allowlist mutation
 4. pi session 비조작 structural fence의 mutation power를 증명한다.
 5. subtraction 묶음별 expected RED를 `.agent-reports/H2/`에 기록한다.
-6. self-host pre-cut peer map을 저장한다.
+6. self-host pre-cut peer map과 PM↔Opus 양방향 delivery baseline을 저장하고 manual-relay/rejoin 절차를 sandbox에서 rehearsal한다.
 
 **Exit evidence**
 
