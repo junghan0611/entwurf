@@ -713,6 +713,14 @@ writeMetaSenderMarker({
   ownerPid: process.pid,
   sendersDir,
 });
+writeMetaReceiverMarker({
+  gardenId: sender.record.gardenId,
+  backend: 'claude-code',
+  nativeSessionId: sender.record.nativeSessionId,
+  ownerPid: process.pid,
+  armProvenance: 'session-start',
+  receiversDir,
+});
 
 // RECEIVER — a DIFFERENT citizen, armed by a live owner pid (this process). An unarmed
 // target is correctly fail-closed as mailbox-undeliverable, so an unarmed probe could
@@ -744,6 +752,14 @@ const env = {
   ENTWURF_META_SENDERS_DIR: sendersDir,
   ENTWURF_DIR: path.join(tmp, 'sockets'),
 };
+// Harness identity is AMBIENT, not part of the live MCP entry. The bridge checks a
+// complete PI_SESSION_ID + PI_AGENT_ID pair before marker discovery; inheriting them
+// from a pi-run doctor silently turns this seeded meta-sender proof into a pi-identity
+// proof. An explicit marker-path carrier can bypass the isolated pid lookup the same
+// way. Scrub all three so the marker above is the only possible strict sender.
+delete env.PI_SESSION_ID;
+delete env.PI_AGENT_ID;
+delete env.ENTWURF_META_SENDER_MARKER;
 delete env.NODE_PATH;
 
 let child = null;
@@ -799,9 +815,16 @@ try {
     const body = called?.result?.content?.[0]?.text ?? JSON.stringify(called);
     const box = path.join(mailboxDir, gid);
     const files = fs.existsSync(box) ? fs.readdirSync(box) : [];
-    const landed = files.filter((f) => f.endsWith('.msg')).length;
-    if (called?.result?.isError === true || landed !== 1 || !fs.existsSync(path.join(box, 'inbox.signal'))) {
+    const messages = files.filter((f) => f.endsWith('.msg'));
+    if (called?.result?.isError === true || messages.length !== 1 || !fs.existsSync(path.join(box, 'inbox.signal'))) {
       bail(`the live command did not deliver — response: ${String(body).slice(0, 400)} | mailbox: ${files.join(',') || 'empty'}`);
+    } else {
+      const landedBody = fs.readFileSync(path.join(box, messages[0]), 'utf8');
+      const fromMeta = landedBody.includes('from:        meta-session/claude-code @');
+      const fromSeed = landedBody.includes(`session:     ${sender.record.gardenId} (meta-session, replyable`);
+      if (!fromMeta || !fromSeed) {
+        bail(`the message landed under the WRONG sender identity (ambient pi/marker carrier bypass) — body: ${landedBody.slice(0, 500)}`);
+      }
     }
   }
 } catch (e) {
@@ -810,7 +833,7 @@ try {
   try { child?.kill('SIGTERM'); } catch {}
   await fsp.rm(tmp, { recursive: true, force: true });
 }
-if (verdict === 0) console.log('delivered: one .msg landed + doorbell poked');
+if (verdict === 0) console.log('delivered: one .msg landed + doorbell poked; seeded meta-sender identity joined');
 process.exit(verdict);
 JS
       ); then

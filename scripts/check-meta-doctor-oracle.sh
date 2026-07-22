@@ -230,7 +230,15 @@ DOC_OUT=""
 DOC_RC=0
 run_doctor() {
   set +e
-  DOC_OUT="$(bash "$REPO/scripts/meta-bridge-doctor.sh" 2>&1)"
+  # Deliberate cross-harness poison. Before the doctor scrubbed these carriers, the
+  # spawned bridge chose strict pi identity before meta-sender discovery and still
+  # delivered, so a pi-run control went green without proving the seeded marker join.
+  # The explicit marker path is the sibling bypass. The landed-body assertion now makes
+  # deletion of any scrub line fail this control under every caller, not only under pi.
+  DOC_OUT="$(PI_SESSION_ID=ambient-pi-session-must-not-win \
+    PI_AGENT_ID=ambient-pi-agent/must-not-win \
+    ENTWURF_META_SENDER_MARKER="$TMP/ambient-sender-marker-must-not-win.json" \
+    bash "$REPO/scripts/meta-bridge-doctor.sh" 2>&1)"
   DOC_RC=$?
   set -e
 }
@@ -268,7 +276,8 @@ for claim in \
   'keys its sender marker to the live host pid' \
   'sender + receiver owner join is live and record-backed' \
   'live mcpServers.entwurf-bridge equals desired_mcp()' \
-  'live bridge command DELIVERS'
+  'live bridge command DELIVERS' \
+  'seeded meta-sender identity joined'
 do
   if printf '%s\n' "$DOC_OUT" | grep -qF "$claim"; then ok "control claim present: $claim"; else bad "control run never made the claim: $claim"; fi
 done

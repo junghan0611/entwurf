@@ -85,7 +85,7 @@ Usage:
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
-  ./run.sh check-bridge-delivery      # deterministic gate (IN pnpm check): demo scene 3 recovered — seed an armed self-fetch citizen in an isolated temp world, drive the BUILT DIST ENTRY over MCP stdio through a real tools/call entwurf_v2, assert the .msg landed + doorbell poked. DELIVERS through the artifact, not from source. ENTWURF_DELIVERY_SUBJECT=<launcher> replays the same scene against another consumer artifact (check-pack-install passes the npm-installed bin). No model/network/cost; stale or missing dist FAILS
+  ./run.sh check-bridge-delivery      # deterministic gate (IN pnpm check): demo scene 3 recovered — seed strict meta-sender + armed receiver citizens in an isolated temp world, scrub ambient pi/sender carriers, drive the BUILT DIST ENTRY over MCP stdio through a real tools/call entwurf_v2, assert the .msg landed under the seeded sender + doorbell poked. DELIVERS through the artifact, not from source. ENTWURF_DELIVERY_SUBJECT=<launcher> replays the same scene against another consumer artifact (check-pack-install passes the npm-installed bin). No model/network/cost; stale or missing dist FAILS
   ./run.sh check-meta-dual-read        # deterministic gate (0.11 Stage 0 step 3D-1): v2 write shape (serializeMetaIdentity) + dual-read dispatcher (parseMetaRecordAny/parseMetaIdentity) + write→read round-trip, pure, no API
   ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
   ./run.sh check-meta-receiver-marker # deterministic gate (SE-2): receiver marker round-trip/start-key/provenance, UserPromptSubmit cannot mint presence, reader does not gate on record existence — marker SEMANTICS only; launch topology moved to check-hook-launch-topology
@@ -3079,11 +3079,13 @@ JS
   # Same scene as check-bridge-delivery, different cell: there the subject is the
   # checkout's dist, here it is THIS npm-installed tree — peer-free, hoisted deps, the
   # hejdev6g world — driven through the installed BIN, so start.sh's node_modules→dist
-  # branch is itself under test rather than bypassed. The gate seeds its own citizen
-  # from repo source in a separate process and asserts the .msg physically landed; the
-  # env-isolated temp world (ENTWURF_META_* trio + ENTWURF_DIR + NODE_PATH stripped)
-  # lives inside it. No model, no network. HOME/XDG are the sandbox roots this function
-  # already uses, so the drive cannot read the operator's real store (rule 11).
+  # branch is itself under test rather than bypassed. The gate seeds strict sender +
+  # receiver citizens from repo source in a separate process and asserts the .msg
+  # physically landed under that sender; the env-isolated temp world
+  # (PI_CODING_AGENT_DIR + every ENTWURF_META_* root + ENTWURF_DIR, with ambient
+  # pi/sender carriers and NODE_PATH stripped) lives inside it. No model, no network.
+  # HOME/XDG are the sandbox roots this function already uses, so the drive cannot read
+  # the operator's real store (rule 11).
   local delivery_out
   if ! delivery_out=$(HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" ENTWURF_DELIVERY_SUBJECT="$installed_start" run_ts scripts/check-bridge-delivery.ts 2>&1); then
     fail "[check-pack-install] installed bridge DELIVERY failed — the npm-installed MCP server boots but cannot deliver an entwurf_v2 send (the 0.12.1→0.12.8-repair.0 registry corpse):"

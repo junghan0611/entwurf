@@ -35,7 +35,8 @@
  *   D2  tools/call entwurf_v2 returns success, not isError           (delivery executed)
  *   D3  exactly one .msg landed in the target mailbox                (the body moved)
  *   D4  the doorbell inbox.signal was poked                          (the citizen is wakeable)
- *   D5  no capability-registry error anywhere in the response/stderr (the 0.12.8 corpse)
+ *   D5  the landed body names the seeded meta-session sender         (identity joined)
+ *   D6  no capability-registry error anywhere in the response/stderr (the 0.12.8 corpse)
  *
  * Deterministic: no model, no network, no API cost, no backend. Temp dirs only.
  *
@@ -57,7 +58,11 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { upsertMetaSession, writeMetaReceiverMarker } from "../pi-extensions/lib/meta-session.ts";
+import {
+	upsertMetaSession,
+	writeMetaReceiverMarker,
+	writeMetaSenderMarker,
+} from "../pi-extensions/lib/meta-session.ts";
 
 const REPO = path.join(import.meta.dirname, "..");
 const DIST_ENTRY = path.join(REPO, "mcp/entwurf-bridge/dist/mcp/entwurf-bridge/src/index.js");
@@ -135,23 +140,49 @@ if (SUBJECT_OVERRIDE) {
 // and no artifact of this gate lands in the real store.
 // ---------------------------------------------------------------------------
 const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "bridge-delivery-"));
-const sessionsDir = path.join(tmp, "sessions");
-const mailboxDir = path.join(tmp, "mailbox");
-const receiversDir = path.join(tmp, "receivers");
-for (const d of [sessionsDir, mailboxDir, receiversDir]) await fsp.mkdir(d, { recursive: true });
+const agentDir = path.join(tmp, "agent");
+const sessionsDir = path.join(agentDir, "meta-sessions");
+const mailboxDir = path.join(agentDir, "meta-mailbox");
+const receiversDir = path.join(agentDir, "meta-receivers");
+const sendersDir = path.join(agentDir, "meta-senders");
+for (const d of [sessionsDir, mailboxDir, receiversDir, sendersDir]) await fsp.mkdir(d, { recursive: true });
 
-// The C2 recipe: a self-fetch (claude-code) citizen whose receiver marker is owned
-// by a LIVE pid — this process — which is what makes it deliverable rather than a
-// terminated session the guard must fail-closed on.
-const minted = upsertMetaSession({
-	input: { backend: "claude-code", nativeSessionId: `bridge-delivery-${process.pid}`, cwd: tmp },
+// SENDER — force the same strict identity path as the installed Claude entry. This
+// process owns both marker kinds, like a real SessionStart owner, and the landed body
+// must name this garden id. Ambient pi identity is planted then scrubbed below so a
+// local pi run cannot silently bypass this marker join while CI takes the intended path.
+const sender = upsertMetaSession({
+	input: { backend: "claude-code", nativeSessionId: `bridge-delivery-sender-${process.pid}`, cwd: tmp },
 	dir: sessionsDir,
 });
-const gid = minted.record.gardenId;
+writeMetaSenderMarker({
+	backend: "claude-code",
+	gardenId: sender.record.gardenId,
+	nativeSessionId: sender.record.nativeSessionId,
+	cwd: tmp,
+	ownerPid: process.pid,
+	sendersDir,
+});
+writeMetaReceiverMarker({
+	gardenId: sender.record.gardenId,
+	backend: "claude-code",
+	nativeSessionId: sender.record.nativeSessionId,
+	ownerPid: process.pid,
+	armProvenance: "session-start",
+	receiversDir,
+});
+
+// RECEIVER — a different armed self-fetch citizen. A dead/unarmed target must remain
+// mailbox-undeliverable, so this marker isolates artifact delivery from target liveness.
+const receiver = upsertMetaSession({
+	input: { backend: "claude-code", nativeSessionId: `bridge-delivery-receiver-${process.pid}`, cwd: tmp },
+	dir: sessionsDir,
+});
+const gid = receiver.record.gardenId;
 writeMetaReceiverMarker({
 	gardenId: gid,
 	backend: "claude-code",
-	nativeSessionId: minted.record.nativeSessionId,
+	nativeSessionId: receiver.record.nativeSessionId,
 	ownerPid: process.pid,
 	armProvenance: "session-start",
 	receiversDir,
@@ -162,18 +193,31 @@ writeMetaReceiverMarker({
 // ---------------------------------------------------------------------------
 const env: NodeJS.ProcessEnv = {
 	...process.env,
+	// Deliberate ambient poison: without the scrub below buildSendSenderEnvelope()
+	// chooses strict pi identity before it even asks for the seeded meta-sender marker.
+	// This makes the cross-harness regression deterministic on both a plain shell and pi.
+	PI_SESSION_ID: "ambient-pi-session-must-not-win",
+	PI_AGENT_ID: "ambient-pi-agent/must-not-win",
+	ENTWURF_META_SENDER_MARKER: path.join(tmp, "ambient-sender-marker-must-not-win.json"),
+	PI_CODING_AGENT_DIR: agentDir,
 	ENTWURF_META_SESSIONS_DIR: sessionsDir,
 	ENTWURF_META_MAILBOX_DIR: mailboxDir,
 	ENTWURF_META_RECEIVERS_DIR: receiversDir,
-	// The ENTWURF_META_* trio does NOT cover the socket surface: the bridge reads
+	ENTWURF_META_SENDERS_DIR: sendersDir,
+	ENTWURF_BRIDGE_REQUIRE_META_SENDER: "1",
+	// The ENTWURF_META_* roots do NOT cover the socket surface: the bridge reads
 	// ENTWURF_DIR (index.ts:71, default ~/.pi/entwurf-control) for its socket-conflict
 	// inspection, so without this the gate would consult the operator's REAL live
 	// sockets. Read-only against a fresh gid, so it was harmless — but a gate that
 	// half-isolates is a gate whose result depends on the host it ran on.
 	ENTWURF_DIR: path.join(tmp, "sockets"),
 };
-// Same adversarial hygiene as the check-pack-install boot probe: a leaked NODE_PATH
-// could resolve modules from a tree the artifact does not actually ship with.
+// These three carriers outrank marker discovery. They are ambient harness identity,
+// not part of the artifact subject, so keeping any one would let local pi and CI prove
+// different sender paths. NODE_PATH is the matching dependency-resolution carrier.
+delete env.PI_SESSION_ID;
+delete env.PI_AGENT_ID;
+delete env.ENTWURF_META_SENDER_MARKER;
 delete env.NODE_PATH;
 
 let child: ChildProcess | null = null;
@@ -248,9 +292,10 @@ try {
 	// D3/D4 — the body physically moved and the citizen is wakeable.
 	const boxDir = path.join(mailboxDir, gid);
 	const files = await fsp.readdir(boxDir).catch(() => [] as string[]);
+	const messageFiles = files.filter((f) => f.endsWith(".msg"));
 	ok(
 		"D3: exactly one .msg landed in the target mailbox",
-		files.filter((f) => f.endsWith(".msg")).length === 1,
+		messageFiles.length === 1,
 		`--- mailbox ${boxDir} ---\n${files.join("\n") || "(empty)"}\n--- response ---\n${body}`,
 	);
 	ok(
@@ -259,11 +304,25 @@ try {
 		`--- mailbox ${boxDir} ---\n${files.join("\n") || "(empty)"}`,
 	);
 
-	// D5 — the specific corpse. Named explicitly so a regression reads as itself in
+	// D5 — prove the strict sender marker joined. Before the carrier scrub, a pi-run
+	// gate still landed the message but serialized PI_SESSION_ID here; CI serialized
+	// the seeded meta citizen. The physical delivery assertions above could not see that
+	// cross-harness lie. The mailbox body is the receiver's actual reply contract, so it
+	// is the strongest place to assert which identity rode the send.
+	const messageBody =
+		messageFiles.length === 1 ? await fsp.readFile(path.join(boxDir, messageFiles[0] as string), "utf8") : "";
+	ok(
+		"D5: landed sender is the seeded meta citizen (ambient pi identity scrubbed)",
+		messageBody.includes("from:        meta-session/claude-code @") &&
+			messageBody.includes(`session:     ${sender.record.gardenId} (meta-session, replyable`),
+		`--- mailbox body ---\n${messageBody || "(missing)"}`,
+	);
+
+	// D6 — the specific corpse. Named explicitly so a regression reads as itself in
 	// the log instead of as a generic delivery failure.
 	const capabilityCorpse = /entwurf-capabilities\.json|ENOENT/;
 	ok(
-		"D5: no capability-registry ENOENT in the response or the artifact's stderr",
+		"D6: no capability-registry ENOENT in the response or the artifact's stderr",
 		!capabilityCorpse.test(body) && !capabilityCorpse.test(stderr),
 		`--- response ---\n${body}\n--- stderr ---\n${stderr.slice(0, 1500)}`,
 	);
