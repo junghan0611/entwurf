@@ -110,7 +110,7 @@ GLG 승인(2026-07-22): **V3 hard cut + explicit one-shot V1/V2→V3 migration**
 - 종료 조건은 `non-V3 record count == 0`이다. live old writer가 record를 되살리면 quiesce 후 재실행한다.
 - rollback evidence는 backup 복원 + 이전 release 재설치 + 이전 reader/doctor GREEN이다.
 - 미migration record의 operator error는 migrate command를 직접 지목한다.
-- 기존 pi JSONL은 수정하지 않는다.
+- entwurf는 기존 pi JSONL을 수정하지 않는다. Pi가 자기 구버전 session format을 load 시 현재 버전으로 migrate/rewrite하는 것은 pi 소유 동작이며 byte-equality 검증에서 분리한다.
 
 이 설계도 H1/H2 실측에서 반증되면 GLG에게 되돌린다.
 
@@ -249,10 +249,11 @@ symbol/file → current authority/mutation → all production callers
 - `session_start(startup|reload|new|resume|fork)`에서 native pi id로 V3 record attach/mint.
 - duplicate native id fail-loud.
 - nullable transcript path와 materialization refresh.
-- garden-id `--session-id` injection, garden-format hard crash, session-name writer/parser authority 제거.
+- garden-id `--session-id` injection, garden-format hard crash, entwurf의 session-name writer/parser authority 제거. Pi 소유 `/name`, `--name`, RPC `set_session_name`은 그대로 남는다.
 - `/gnew`/`/garden-new`, builtin `/new` guard, custom pre-created header/name path 제거.
 - socket path와 pi sender envelope를 record garden id에 결속.
 - native GPT와 pi-hosted ACP가 같은 `backend:"pi"` lifecycle 사용.
+- resource는 factory에서 시작하지 않고 `session_start`에서 attach하며, `session_shutdown` cleanup은 idempotent해야 한다.
 - pi session id/name/header 비조작 structural fence GREEN.
 
 **Exit evidence**
@@ -284,7 +285,7 @@ symbol/file → current authority/mutation → all production callers
 #### C4 — cutover surface + peers/dispatch authority + M2 enrollment
 
 - H2가 rehearsal한 M1→M2 순서를 operator cutover surface로 연결한다.
-- 기존 gardenized pi sessions를 JSONL mutation 없이 V3 record로 등록하는 M2를 sandbox에서 증명한다.
+- 기존 gardenized pi sessions를 **entwurf-authored JSONL mutation 없이** V3 record로 등록하는 M2를 sandbox에서 증명한다. Pi 자체의 구버전 session-format rewrite는 별도 native 동작이다.
 - `non-V3 record count == 0` 뒤에만 M2, `record-less expected count == 0` 뒤에만 record-first routing이 열린다는 preflight를 고정한다.
 - peers/facts/dispatch record-first.
 - live pi는 record garden id socket, dormant pi는 C3 path.
@@ -297,7 +298,7 @@ symbol/file → current authority/mutation → all production callers
 
 - C3와 C4 각각 삼중 commit invariant/grep allowlist GREEN.
 - arbitrary UUID live/send/dormant resume가 garden id 보존.
-- migrated session JSONL byte-identical.
+- M2가 JSONL을 쓰지 않음을 syscall/write fence로 증명한다. Pi load가 자체 session-format migration을 수행한 파일에는 byte-identical을 요구하지 않는다.
 - record-less normal dispatch path 0.
 - candidate/sandbox pre/post peer map의 expected peers 도달 가능.
 

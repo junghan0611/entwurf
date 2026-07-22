@@ -24,12 +24,12 @@
 ## LOCKED PROTOCOL
 
 1. **Meta-record = garden mapping authority.** `gardenId` is the universal address; `nativeSessionId` belongs to the harness. They may be equal for migrated sessions but equality is never an invariant.
-2. **Native session stays native.** Pi owns its id, filename, JSONL header, display name, `/new`, `/resume`, `/fork`, and storage layout. Entwurf reads public session facts; it does not rewrite them.
+2. **Native session stays native.** Pi owns its id, filename, JSONL header, display name, `/new`, `/resume`, `/fork`, and storage layout. Entwurf reads public session facts; it does not rewrite them. Pi may migrate/rewrite its own older session-format versions when loading; that native behavior is not entwurf mutation.
 3. **Rail ≠ identity.** A pi record-backed citizen still uses control-socket while alive and exact `--session` spawn-resume while dormant. Claude uses mailbox; agy uses native-push.
 4. **Liveness is computed.** Never store alive/dead in the record. Pi liveness is the socket probe keyed by the record's garden id.
 5. **Call ≠ parentage.** No `parentGardenId`, mutable `lastCaller`, or worker tree in identity. Uniform caller evidence belongs in the delivered turn/envelope.
 6. **All record-backed pi citizens are siblings.** Explicit `owned-outcome` + trust/preflight may wake a dormant pi citizen. Do not recreate `isEntwurf` as a species/permission boolean. If launch policy later proves necessary, it is separate operator policy.
-7. **Hard cut, not permanent compatibility.** Existing gardenized pi sessions get one-shot record enrollment without JSONL mutation. New sessions use native pi ids. Record-less socket-only is a migration/crash diagnostic, not the final normal path.
+7. **Hard cut, not permanent compatibility.** Existing gardenized pi sessions get one-shot record enrollment without **entwurf-authored** JSONL mutation. New sessions use native pi ids. Record-less socket-only is a migration/crash diagnostic, not the final normal path.
 8. **ACP remains supported.** The pi host session owns the record and socket; the ACP plugin only supplies the model/backend process behind that same pi citizen.
 9. **Schema hard cut is V3 + one-shot migration.** V1/V2 readers live only in the explicit M1 migration surface; normal production becomes V3-only. Migration is idempotent, verifies zero non-V3 records, and proves backup restore + previous-release rollback before touching the live store.
 
@@ -105,7 +105,7 @@ C1~C4는 각각 독립 GREEN authority-transfer commit이다. H5a/H5b가 한 PM 
 - wrong child session resolver cannot redirect exact record-backed resume;
 - V1/V2→V3 migration is reversible and normal routing imports no legacy reader;
 - no stored liveness; socket probe remains authority;
-- migrated sessions work without JSONL mutation;
+- enrollment performs no entwurf-authored JSONL write; pi's own old-format migration is measured separately rather than forced byte-identical;
 - cut 전후 self-host peers remain reachable by garden id;
 - full `pnpm check`, pack/install gates, sandbox negatives, and assigned live smokes green;
 - each C1~C4 records SHA, GREEN gates, production LOC delta, rollback evidence;
