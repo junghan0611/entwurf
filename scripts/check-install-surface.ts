@@ -492,15 +492,19 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	);
 	const skillIsAscii = skill !== null && [...skill].every((char) => (char.codePointAt(0) ?? 128) <= 127);
 	const oracleIsAscii = ciOracle !== null && [...ciOracle].every((char) => (char.codePointAt(0) ?? 128) <= 127);
+	const skillAcceptsPrerelease =
+		skill !== null &&
+		skill.includes("version must be SemVer, optionally with a prerelease suffix") &&
+		skill.includes("(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?");
 	ok(
-		"S7e: one English-only skill owns all four authority modes and accepts the repair prerelease",
+		"S7e: one English-only skill owns all four authority modes and accepts SemVer prereleases",
 		skill === null ||
 			(/^name:\s*entwurf-release$/m.test(skill) &&
 				skill.includes("# LAND") &&
 				skill.includes("# PREPARE") &&
 				skill.includes("# MAKE") &&
 				skill.includes("# PUBLISH") &&
-				skill.includes("0.12.8-repair.0") &&
+				skillAcceptsPrerelease &&
 				skillIsAscii),
 		`${skillRel}: missing name, four authority modes, prerelease contract, or English/ASCII-only surface`,
 	);

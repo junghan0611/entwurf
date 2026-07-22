@@ -99,7 +99,7 @@ All notable changes to this project will be documented here. Format follows [Kee
 - `pnpm check` passed on 2026-07-01 after the doctor/install-floor fix.
 - `./run.sh check-pack-install` passed with the new installed store-doctor scan and doctor-dispatch lock assertions.
 - Release-gate prep evidence: `LIVE=1 ./run.sh release-gate /tmp/psa-release-gate-0.12.4.PliLsd` passed on 2026-07-01; log `/tmp/pi-tmux-entwurf-release-gate-0124.log`; summary `MUST: PASS=17 FAIL=0 SKIP=0`, advisory `BEHAVIOR: PASS=0 FAIL=1` (`smoke-resident-garden-guard` post-`/gnew` autonomous `entwurf_self` identity turn; non-blocking).
-- `hejdev6` real floor host reproduced the pre-fix strip-types failure from an installed package and passed after installing the patched tarball: compiled store-doctor scanned `1 record(s)` with plain `node`, and installed `doctor-meta-bridge` reported store-scan ok plus v2-surface deferred.
+- `target Linux host` real floor host reproduced the pre-fix strip-types failure from an installed package and passed after installing the patched tarball: compiled store-doctor scanned `1 record(s)` with plain `node`, and installed `doctor-meta-bridge` reported store-scan ok plus v2-surface deferred.
 
 ## 0.12.3 — 2026-07-01
 
@@ -141,7 +141,7 @@ All notable changes to this project will be documented here. Format follows [Kee
 - `pnpm check` passes with the new `check-meta-manifest-schema` static guard included.
 - `./run.sh smoke-meta-install-state` passes, proving the state manager/doctor consumers still follow `desired_mcp()` without drift.
 - Installed-location regression probe passes: running `scripts/check-meta-manifest-schema.py` from a synthetic `node_modules/@junghanacs/entwurf` package no longer self-fails.
-- Claude Code 2.1.97 floor validation passed on `hejdev6` after removing the root marketplace `description`; current Claude 2.1.195 validation also passes with warnings only.
+- Claude Code 2.1.97 floor validation passed on `target Linux host` after removing the root marketplace `description`; current Claude 2.1.195 validation also passes with warnings only.
 - `LIVE=1 ./run.sh release-gate /tmp/psa-release-gate-0.12.2.NLGhet` passed on 2026-06-29 with `MUST: PASS=17 FAIL=0 SKIP=0` and `BEHAVIOR: PASS=1 FAIL=0`; log `/tmp/entwurf-release-gate-0.12.2-20260629T205339.log`.
 
 ## 0.12.1 — 2026-06-29
@@ -162,7 +162,7 @@ All notable changes to this project will be documented here. Format follows [Kee
 ### Verification
 
 - `./run.sh check-pack-install` passes with the neutral npm install regression: package bins present, optional pi peers absent, installed dist bridge answers `tools/list`, and pi-loader registration still passes on the explicit pi-peer lane.
-- Remote `hejdev6` real-install probe from the packed tarball passed: local npm install, package bins, optional pi peers absent, installed `entwurf-bridge` `tools/list`, `entwurf install` with isolated HOME, and `entwurf check-bridge`. The host's real HOME also exposed a pre-existing stale `~/.pi/agent/entwurf-targets.json` symlink to `pi-shell-acp`; fix with `entwurf setup:links --force` or an explicit `ENTWURF_TARGETS_PATH` if that old registry is intentional.
+- Remote `target Linux host` real-install probe from the packed tarball passed: local npm install, package bins, optional pi peers absent, installed `entwurf-bridge` `tools/list`, `entwurf install` with isolated HOME, and `entwurf check-bridge`. The host's real HOME also exposed a pre-existing stale `~/.pi/agent/entwurf-targets.json` symlink to `pi-shell-acp`; fix with `entwurf setup:links --force` or an explicit `ENTWURF_TARGETS_PATH` if that old registry is intentional.
 - `LIVE=1 ./run.sh release-gate /tmp/psa-release-gate-0.12.1.GUFDUb` tiers `MUST: PASS=17 FAIL=0 SKIP=0` with `BEHAVIOR: PASS=1 FAIL=0` on 2026-06-29; log `/tmp/entwurf-release-gate-0.12.1-20260629T191543.log` (the two live-smoke observation fixes above were what moved the gate from `MUST FAIL=1` to green; the install change is harness-neutral and touches no ACP code path).
 
 ## 0.12.0 — 2026-06-29

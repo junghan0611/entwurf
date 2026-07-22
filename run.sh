@@ -3078,7 +3078,7 @@ JS
   #
   # Same scene as check-bridge-delivery, different cell: there the subject is the
   # checkout's dist, here it is THIS npm-installed tree — peer-free, hoisted deps, the
-  # hejdev6g world — driven through the installed BIN, so start.sh's node_modules→dist
+  # globally installed consumer world — driven through the installed BIN, so start.sh's node_modules→dist
   # branch is itself under test rather than bypassed. The gate seeds strict sender +
   # receiver citizens from repo source in a separate process and asserts the .msg
   # physically landed under that sender; the env-isolated temp world

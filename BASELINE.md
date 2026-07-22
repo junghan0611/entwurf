@@ -25,7 +25,7 @@ host into a certified one.
 | Claude Code 2.1.217 exec form | `check-hook-launch-topology` + `check-claude-floor-coherence`; doctor oracle healthy fixture + 21 defect mutations | B2 actual Claude session on NixOS: args per element, literal `${HOME}`, direct parent, FileChanged exit 2 → idle wake | Runtime behavior verified at 2.1.217 on one host; this is the supported floor. |
 | Claude Code 2.1.138 negative | Launcher empty-argv refusal + installer/doctor floor checks | B actual Claude session on NixOS: args discarded while runtime reported success | Unsupported; no shell-form fallback. |
 | Maintainer NixOS installed package | Gates and B/B2 are green, but the installed artifact is intentionally stale before release | Post-release clean reinstall → new Claude session → installed doctor exit 0 **pending** | Not yet host-certified for the repair artifact. |
-| hejdev6 Ubuntu installed package | Linux artifact-consumer gate models the package shape, not this machine | Post-release clean reinstall → new Claude session → installed doctor exit 0 **pending** | Recovery remains open; hand-patched hooks and validate output are not acceptance. |
+| Secondary Ubuntu Linux installed package | Linux artifact-consumer gate models the package shape, not this machine | Post-release clean reinstall → new Claude session → installed doctor exit 0 **pending** | Recovery remains open; hand-patched hooks and validate output are not acceptance. |
 | macOS Claude meta-bridge | No artifact-consumer job and no `/proc` live join | None | **Not yet verified/certified for this repair cut.** Installer refuses Darwin and doctor remains nonzero; uninstall permits Darwin to remove older managed state. This is not permanent—future native validation may reopen it, and package-level `os` stays unrestricted. |
 | WSL2 / Windows | None | None | Unverified / outside this repair cut. |
 
@@ -287,9 +287,14 @@ inode/size/mtime/sha tuple was unchanged across acceptance. Evidence logs:
 `/tmp/pi-tmux-entwurf-exact-final.log` and
 `/tmp/pi-tmux-entwurf-default-final.log`; the digest belongs in the external cut log,
 not inside this shipped file (embedding it would mutate the tarball it names).
-This was the current `0.12.7-1` gate candidate, **not** the approved release artifact;
-repeat exact mode after the separate `0.12.8-repair.0` version commit. Maintainer/
-hejdev6 installed doctor GREEN remains deliberately pending until after release.
+This was the `0.12.7-1` gate candidate, **not** the approved release artifact. Exact
+mode was later repeated for `0.12.8-repair.0`, and those accepted bytes were published
+under `repair` on 2026-07-22. Field evidence then invalidated that release: its installed
+MCP dist omitted `entwurf-capabilities.json`, so tools/list and the old doctor stayed
+green while every `entwurf_v2` send died ENOENT. The repaired candidate must be
+`0.12.8-repair.1` and must earn fresh exact-SHA CI, LIVE-gate, preserved-artifact, and
+container evidence; none of repair.0's release evidence transfers. Maintainer/secondary-host
+installed doctor GREEN remains deliberately pending until after repair.1 publication.
 
 
 Per-release baselines — the 0.9.0 garden-native identity cut (17 PASS / 0 FAIL /

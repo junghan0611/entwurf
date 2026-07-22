@@ -18,16 +18,16 @@ entry.
 
 ```text
 # Claude Code
-/entwurf-release land 0.12.8-repair.0
-/entwurf-release prepare 0.12.8-repair.0
-/entwurf-release make 0.12.8-repair.0
-/entwurf-release publish 0.12.8-repair.0 /absolute/path/to/candidate.tgz repair
+/entwurf-release land 0.12.8-repair.1
+/entwurf-release prepare 0.12.8-repair.1
+/entwurf-release make 0.12.8-repair.1
+/entwurf-release publish 0.12.8-repair.1 /absolute/path/to/candidate.tgz repair
 
 # pi
-/skill:entwurf-release land 0.12.8-repair.0
-/skill:entwurf-release prepare 0.12.8-repair.0
-/skill:entwurf-release make 0.12.8-repair.0
-/skill:entwurf-release publish 0.12.8-repair.0 /absolute/path/to/candidate.tgz repair
+/skill:entwurf-release land 0.12.8-repair.1
+/skill:entwurf-release prepare 0.12.8-repair.1
+/skill:entwurf-release make 0.12.8-repair.1
+/skill:entwurf-release publish 0.12.8-repair.1 /absolute/path/to/candidate.tgz repair
 ```
 
 Natural-language requests map to the same four modes.
@@ -555,7 +555,7 @@ A publish invocation requires:
 For example:
 
 ```text
-/entwurf-release publish 0.12.8-repair.0 /tmp/entwurf-release-candidate-0.12.8-repair.0.X/junghanacs-entwurf-0.12.8-repair.0.tgz repair
+/entwurf-release publish 0.12.8-repair.1 /tmp/entwurf-release-candidate-0.12.8-repair.1.X/junghanacs-entwurf-0.12.8-repair.1.tgz repair
 ```
 
 ## U0. Verify release and candidate identity
@@ -628,10 +628,11 @@ For the current #51 repair contract, additionally require:
 
 ```bash
 test "$DIST_TAG" = repair
-DIST_TAGS="$DIST_TAGS" node -e '
+DIST_TAGS="$DIST_TAGS" VERSION="$VERSION" node -e '
 const t=JSON.parse(process.env.DIST_TAGS);
+const version=process.env.VERSION;
 if(t.latest!=="0.12.7") throw new Error(`latest moved to ${t.latest}`);
-if(t.repair!=="0.12.8-repair.0") throw new Error(`repair is ${t.repair}`);
+if(t.repair!==version) throw new Error(`repair is ${t.repair}, expected ${version}`);
 console.log(`registry: latest=${t.latest} repair=${t.repair}`);'
 ```
 

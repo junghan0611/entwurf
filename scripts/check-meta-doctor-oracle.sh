@@ -286,7 +286,7 @@ done
 echo "[mutations] each must flip PASS→FAIL for its own reason"
 
 # M1 — reversion to the RETIRED shell form (the `$PPID` carrier manifest this release
-# replaced, and the form hejdev6g was hand-patched away from). Must be NAMED, not
+# replaced, and the form a field host was hand-patched away from). Must be NAMED, not
 # reported as unreadable drift: the operator has to learn the form is retired, not that
 # their file is corrupt.
 python3 - "$PLANTED/hooks/hooks.json" <<'PY'
@@ -549,7 +549,7 @@ cp "$TMP/claude-json.bak" "$LIVE_CLAUDE_JSON"
 # sends the operator to a reinstall that cannot fix a dead bundle.
 #
 # The real corpse had NO drift: the live entry was the `entwurf-bridge` shim, byte-equal
-# to what install recorded, and the dead artifact sat BEHIND it (hejdev6g: doctor PASS
+# to what install recorded, and the dead artifact sat BEHIND it (field host: doctor PASS
 # while every send died). A clone fixture cannot reproduce that — its live command is
 # this very checkout, and corrupting the checkout is not something a gate may do. The
 # artifact-with-entry-untouched case is covered one cell over, by check-pack-install's

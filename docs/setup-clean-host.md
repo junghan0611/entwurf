@@ -343,8 +343,11 @@ meta-bridge verification where used, all three agy doctors plus a fresh native
 round trip where used, and at least one authenticated ACP runtime smoke. For the
 repair cut, preserve the exact package version, candidate tarball sha256, container
 image identity, host OS, Claude version, and installed doctor output together. The
-approved candidate is `0.12.8-repair.0` under dist-tag `repair`; registry `latest`
-must stay `0.12.7`. The local `0.12.7-1` is lower than `0.12.7` and must not be
-published. The version bump still waits for the separate post-production-commit
-version commit and its own three CI jobs. GLG owns every version, tag, publish, push, and host-reinstall
-decision; the complete ordered checklist is in VERIFY.md §Repair-cut order.
+approved repaired candidate is `0.12.8-repair.1` under dist-tag `repair`;
+`0.12.8-repair.0` was published but its installed bridge cannot deliver and must not
+be reused. Registry `latest` must stay `0.12.7` during this repair cut. Promotion waits
+for fresh maintainer + secondary-host installed-doctor evidence and a separately authorized
+stable `0.12.8` cut. The repair.1 version bump still waits for the separate
+post-landing prepare commit and its own three CI jobs. GLG owns every version, tag,
+publish, push, and host-reinstall decision; the complete ordered checklist is in
+VERIFY.md §Repair-cut order.
