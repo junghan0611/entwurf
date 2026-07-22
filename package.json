@@ -117,6 +117,7 @@
 		"check-acp-carrier-augment": "./run.sh check-acp-carrier-augment",
 		"check-pack": "./run.sh check-pack",
 		"check-pack-install": "./run.sh check-pack-install",
+		"check-install-container": "./run.sh check-install-container",
 		"test:pack": "pnpm run check-pack && pnpm run check-pack-install",
 		"typecheck": "tsc --noEmit && tsc -p mcp/tsconfig.json && tsc -p scripts/tsconfig.json",
 		"lint": "biome check .",

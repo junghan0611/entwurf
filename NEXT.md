@@ -2,15 +2,20 @@
 
 > NEXT는 부트 섹터다. 닫힌 역사는 CHANGELOG/git에, 장기 방향은 ROADMAP/이슈에 둔다.
 
-## NOW — Linux Node 24 artifact-consumer C를 연다
+## NOW — C는 닫혔다. B/B2(실제 Claude 세션)를 연다
 
-- **Current:** `2ef5f97`(Claude CLI probe SIGPIPE/rc-preservation)과 `455542b`(strict doctor release oracle)가 각각 전체 floor GREEN으로 main에 push됐다. doctor gate는 healthy PASS + 19 planted defect RED + long-writer positive를 고정한다. worktree clean.
-- **Next:** host에서 candidate `.tgz`를 한 번만 만들고 read-only로 넘기는 Node 24 Linux non-root/dash consumer prototype을 만든다. foreign cwd, 격리 `npm_config_prefix`, `NODE_PATH=''`, checkout/repo `node_modules` 비가시를 요구한다.
-- **Completion:** 기존 `check-pack-install`은 GREEN인데 container만 RED인 differential defect를 먼저 증명하고, 결함 제거 뒤 동일 artifact consumer가 GREEN이어야 한다. raw `.ts`/누락 파일처럼 기존 gate도 잡는 결함은 C의 델타가 아니다.
-- **Blocker:** Docker가 로컬에 없으면 정직한 SKIP, required CI에서는 RED. container image의 `FROM node:24-*`는 `check-node-floor-coherence` 밖이므로 C gate가 직접 bind한다.
-- **Read:** #51 본문/최신 진행 코멘트(SSOT) · `run.sh`의 `check-pack-install` · `scripts/check-meta-doctor-oracle.sh` · 아래 접힌 ledger.
-- **Do not touch:** maintainer/hejdev6g 재설치·현장 patch, B/B2 세션, winning hook form, topology gate, operator pnpm cache, release/version/dist-tag.
-- **Return:** C prototype의 artifact digest + 기존-green/container-red 반례 + fixed-green을 기록한 뒤 GLG에게 gate commit 여부를 요청한다. 그 다음에만 B/B2로 간다.
+- **Current:** `check-install-container`가 커밋됐다 — Linux artifact-consumer 하네스가 섰다. 개발자 checkout에서만 green이던 패키지를, 실제 사용자가 candidate artifact 하나만 받아 설치하는 면에서 검증한다. **push는 아직이다**(GLG 결정). production runtime 변경 0.
+- **Next — B/B2를 한 번에 요청한다. 이건 실제 Claude 세션이 필요하고, 그것만이 답할 수 있다.**
+  - **B (구버전 세션 1회):** Claude 2.1.138이 실제 `args` exec-form hook을 만났을 때 **fail-loud인지 silent인지** 기록한다. 2.1.138 validator가 `args`를 green으로 통과시키는 것은 이미 확인됐다(unknown key passthrough) — 남은 것은 런타임 동작이다.
+  - **B2 (현행 버전 세션 1회):** exec form의 ppid 실증과 `asyncRewake` acceptance를 **같은 세션에서 동시에** 관찰한다. production `hooks.json`은 건드리지 않고 격리 `CLAUDE_CONFIG_DIR` + 임시 fixture로 편다. exit 2→wake는 exec 전환의 선행 가부 조건이므로 전환 뒤로 미루지 않는다.
+  - **Return:** 증거로 정책 A(`Claude >=2.1.139`, entwurf가 install/doctor에서 직접 fail-loud)와 B(shell fallback) 중 **추천안만** #51에 기록하고 멈춘다. 판정 뒤에야 실제 설치가 생성한 hooks.json 기준으로 topology gate를 만들고 receiver-marker의 두 topology case를 이관한다(marker 의미론 유지). exec form이 이기면 `$PPID` carrier·ancestry walk·missing-carrier 계약을 제거한다.
+- **C에서 확정된 사실(다시 파지 마라):**
+  - **checkout-CWD leakage는 델타가 아니다.** `run.sh`가 shipped subcommand를 전부 `(cd "$REPO_DIR" && …)`로 디스패치하고, shell은 `BASH_SOURCE`, JS/TS는 `import.meta.dirname`/`__dirname` 앵커다. cwd 결함을 심으면 **제품이 중화해 두 레인 모두 GREEN**이 된다. `/bin/sh`=dash도 shipped 셰방이 전부 bash라 검출력이 아니라 환경 fact다.
+  - **freeze와 manifest fence는 상호 독립 검출기가 아니다.** freeze는 permission 층위의 **소비자 사실**(쓰기를 실제로 EACCES로 거부하는 호스트 재현), fence는 **검출기**이며 범위는 정확히 regular-file path+sha256 manifest다(perms·ownership·symlink 비교 아님). D2가 증명한 것은 "root freeze만으로는 부족하다"이지 그 역이 아니다.
+  - **소비자보다 엄격한 세계를 모델링하지 마라.** `chmod -R a-w` freeze는 `cp -r`이 모드를 설치자 자신의 XDG assembly 대상까지 전파해 **false RED**를 두 번 만들었다(디렉토리 555 → 파일 444). 실제 `sudo npm i -g` 소비자는 755/644라 닿지 않는다. 결함을 찾는 게 아니라 만들어내는 짓이다.
+- **읽어둘 조건:** `check-pack-install`의 GREEN은 **격리 `XDG_CACHE_HOME`** 조건이다. 운영자 pnpm 캐시로는 `@aws-sdk/token-providers`에서 여전히 RED고, 캐시 갱신은 GLG 승인 대기인 별도 operator action이다.
+- **Do not touch:** maintainer/hejdev6g 재설치·현장 patch, winning hook form을 B/B2 증거 없이 production에 확정하는 것, 최종 `check-hook-launch-topology`를 미리 만드는 것, operator pnpm cache, release/version/dist-tag.
+- **최종 acceptance/release:** 동일 candidate tarball을 Node 24+ Linux consumer와 `macos-15`가 소비하고, clean install + static contract + doctor oracle + VERIFY support matrix가 모두 GREEN이어야 release 후보가 된다. release 뒤에만 hejdev6g를 깨끗이 재설치하고, 새 Claude 세션 + **그 설치판의 `doctor-meta-bridge` GREEN**으로 복구를 닫는다.
 
 <details><summary>LEDGER — #51 doctor/harness 진단 변천(현재 실행 지시가 아님)</summary>
 

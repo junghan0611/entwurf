@@ -46,3 +46,25 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: ./run.sh check-pack-install
+
+  # The artifact CONSUMER lane (#51 C). install-surface above is still a
+  # maintainer-shaped proof: the checkout is present, every tree is runner-owned,
+  # and the package is installed project-locally. This job hands one candidate
+  # tarball, read-only, to a container that has never seen the repo — non-root
+  # `npm install -g`, a frozen package directory, and the strict doctor oracle.
+  # ENTWURF_REQUIRE_DOCKER=1 is the point of the job: locally a missing Docker is
+  # an honest SKIP, but here an unprovable consumer lane must be RED, never a
+  # silent pass. ~2 minutes.
+  artifact-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: ENTWURF_REQUIRE_DOCKER=1 ./run.sh check-install-container

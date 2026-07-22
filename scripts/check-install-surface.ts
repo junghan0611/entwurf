@@ -22,6 +22,13 @@
  *        smoke that swaps HOME into a sandbox swaps XDG_DATA_HOME with it — moving HOME
  *        alone still writes real install-state below the inherited XDG root, which is
  *        exactly how a verification sweep polluted a live host's provenance (2026-07-14).
+ *   S5d  a gate may isolate by PROCESS BOUNDARY instead of by HOME swap: lines inside a
+ *        `CONTAINER_RUNNER_EOF` heredoc run in a container, so their $HOME is not this
+ *        host's and S5 must not read them as host writes. The exemption covers the BLOCK,
+ *        never the file — the same file's host half stays under the tripwire — and it is
+ *        verified, not declared: exactly one block, and its command must START with
+ *        `docker run` (containing the token is not enough — `echo docker run … <<TAG`
+ *        contains it while executing right here).
  *
  * HONEST SCOPE — what a green run does and does not mean. S1-S4 are structural: they read the
  * dispatch graph and the build manifest, so they hold for any entrypoint written in this repo's
@@ -246,12 +253,64 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	// the override is set. Sandboxing the agent dir is not isolation for them; only HOME is.
 	const HOME_ROOTED = new Set(["install", "setup", "setup:links"]);
 
+	// A THIRD isolation shape, alongside "swaps HOME" and "is a LIVE gate": code that never
+	// runs on this host at all. #51's artifact-consumer gate ships its runner as a heredoc fed
+	// to `docker run`, so its `$HOME` is the container's, and every live-path write inside it is
+	// correct. A whole-file exemption would be too blunt — that file also has real host code
+	// (pack, chmod, digest) that must stay under the tripwire — so exempt the BLOCK, not the file.
+	//
+	// The exemption is not a promise, it is checked: the reserved tag only silences lines when
+	// the file demonstrably hands that heredoc to `docker run`. Laundering host code through the
+	// reserved name is itself an offense, reported below. (Same discipline as S5c: match the
+	// construct, then demand the isolation — never the other way round.)
+	const CONTAINER_TAG = "CONTAINER_RUNNER_EOF";
+	const containerLaunderers: string[] = [];
+	function containerBlock(f: string, lines: string[]): Set<number> {
+		const inside = new Set<number>();
+		const openers = lines.flatMap((l, i) => (l.includes(`<<'${CONTAINER_TAG}'`) ? [i] : []));
+		const closers = lines.flatMap((l, i) => (l.trim() === CONTAINER_TAG ? [i] : []));
+		if (openers.length === 0 && closers.length === 0) return inside;
+
+		// Exactly one block, exactly one terminator. Several blocks (or a stray
+		// terminator) make "which lines are exempt" ambiguous, and an ambiguous
+		// exemption is the thing to fail on, not to resolve by guessing.
+		if (openers.length !== 1 || closers.length !== 1) {
+			containerLaunderers.push(
+				`scripts/${f}: expected exactly one '${CONTAINER_TAG}' block, found ${openers.length} opener(s) and ${closers.length} terminator(s) — an ambiguous exemption is refused, never guessed`,
+			);
+			return inside;
+		}
+		const opensAt = openers[0] as number;
+		const closesAt = closers[0] as number;
+		if (closesAt <= opensAt) {
+			containerLaunderers.push(`scripts/${f}:${opensAt + 1} '${CONTAINER_TAG}' terminator precedes its opener`);
+			return inside;
+		}
+
+		// The heredoc word sits on the `docker run` command line or a continuation of it, so
+		// walk back over backslash continuations to find the command it actually feeds — and
+		// ANCHOR on that command's first word. Merely CONTAINING the token is not enough:
+		// `echo docker run ... <<'TAG'` contains it while executing on this host, which is
+		// exactly the laundering this rule exists to refuse.
+		let cmdStart = opensAt;
+		while (cmdStart > 0 && /\\\s*$/.test(lines[cmdStart - 1] as string)) cmdStart -= 1;
+		if (!/^\s*docker\s+run\b/.test(lines[cmdStart] as string)) {
+			containerLaunderers.push(
+				`scripts/${f}:${opensAt + 1} opens a '${CONTAINER_TAG}' block whose command starts with \`${(lines[cmdStart] as string).trim().split(/\s+/)[0] ?? "?"}\`, not \`docker run\` — the container exemption cannot be claimed for host code`,
+			);
+			return inside;
+		}
+		for (let i = opensAt + 1; i < closesAt; i += 1) inside.add(i);
+		return inside;
+	}
+
 	const offenders: { file: string; line: number; text: string }[] = [];
 	const xdgOffenders: string[] = [];
 	const agentDirXdgOffenders: string[] = [];
 	for (const f of readdirSync(path.join(REPO, "scripts"))) {
 		if (!/^(smoke|check)-.*\.sh$/.test(f) || LIVE_GATES.has(f)) continue;
 		const lines = readFileSync(path.join(REPO, "scripts", f), "utf8").split("\n");
+		const inContainer = containerBlock(f, lines);
 
 		// The install smokes DO write "$HOME/.claude/…" — legally, because they first swap the
 		// process HOME to a sandbox (`export HOME="$TMP/home"`), after which $HOME no longer names
@@ -321,11 +380,17 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 
 		lines.forEach((line, i) => {
 			if (/^\s*#/.test(line)) return;
+			if (inContainer.has(i)) return; // executes in the container, not on this host
 			if (!WRITE_TO_LIVE.test(line)) return;
 			const sandboxed = swapAt !== -1 && i > swapAt;
 			if (!sandboxed) offenders.push({ file: f, line: i + 1, text: line.trim() });
 		});
 	}
+	ok(
+		`S5d: the '${CONTAINER_TAG}' exemption is a single block whose command STARTS with \`docker run\` (verified, not declared)`,
+		containerLaunderers.length === 0,
+		containerLaunderers.join("\n"),
+	);
 	ok(
 		"S5: no offline smoke carries an obvious write to the real $HOME (static tripwire, not a sandbox proof)",
 		offenders.length === 0,

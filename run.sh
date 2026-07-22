@@ -155,6 +155,7 @@ Usage:
   ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.80.x peers
+  ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Non-root `npm install -g` into a writable isolated prefix, 5 bins via the PATH shim, then the package is FROZEN read-only and consumed: MCP tools/list + fake-Claude install-meta-bridge under a path+sha256 byte-fence + the strict doctor oracle (incl. the /proc live owner join). The delta over check-pack-install is the global lane, the read-only package, and the absent checkout. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that same condition RED (required CI)
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to entwurf alias
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
   ./run.sh setup:links [--force]      # repair ~/.pi/agent/entwurf-targets.json link (use --force to replace a stale operator file or wrong symlink; a .bak is taken)
@@ -4112,6 +4113,16 @@ case "$cmd" in
     ;;
   check-pack-install)
     check_pack_install
+    ;;
+  check-install-container)
+    # 0.12.8 (#51 gate C): the Linux artifact-CONSUMER lane. check-pack-install is
+    # the strongest HOST gate and still only ever proves this machine's shape —
+    # checkout present, every tree operator-owned, project-local install. This
+    # hands ONE candidate tarball, read-only, to a container that has never seen
+    # the repo, installs it globally as a non-root user, freezes the package, and
+    # then consumes it. Dev-clone-only (hard rule 10): the script itself REFUSES
+    # from under node_modules rather than re-packing the installed copy.
+    (cd "$REPO_DIR" && bash scripts/check-install-container.sh "$@")
     ;;
   sync-auth)
     sync_auth
