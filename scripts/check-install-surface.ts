@@ -30,8 +30,8 @@
  *        `docker run` (containing the token is not enough — `echo docker run … <<TAG`
  *        contains it while executing right here).
  *   S7   the release operator surface is one repo-local Agent Skill shared by Claude Code and
- *        pi: project settings point pi at `.claude/skills`, the prepare/make modes coexist in
- *        one SKILL.md, and the retired pi-only prompt copies stay absent.
+ *        pi: project settings point pi at `.claude/skills`, land/prepare/make/publish coexist in
+ *        one SKILL.md, the exact-SHA CI oracle ships beside it, and retired prompt copies stay absent.
  *
  * HONEST SCOPE — what a green run does and does not mean. S1-S4 are structural: they read the
  * dispatch graph and the build manifest, so they hold for any entrypoint written in this repo's
@@ -421,11 +421,12 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 // ── S7: one multi-harness release skill, no pi-only prompt copies ───────────
 // Claude Code discovers `.claude/skills` natively. Pi sees the SAME directory only
 // through project settings — without that one line the skill works in Claude and is
-// invisible here, recreating the split this migration removes. Keep prepare + make in
-// one file so their SemVer/prerelease contract cannot drift apart again.
+// invisible here, recreating the split this migration removes. Keep every authority mode in
+// one file, and ship one executable exact-SHA CI oracle so both harnesses classify the same run.
 {
 	const settingsRel = ".pi/settings.json";
 	const skillRel = ".claude/skills/entwurf-release/SKILL.md";
+	const ciOracleRel = ".claude/skills/entwurf-release/scripts/verify-exact-ci.sh";
 	const retiredRels = [".pi/prompts/prepare-release.md", ".pi/prompts/make-release.md"];
 	// Read the CANDIDATE INDEX, not the operator's working tree. An untracked skill
 	// can make local discovery and every working-tree read green while CI receives
@@ -442,12 +443,20 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			return null;
 		}
 	};
+	const readCandidateMode = (file: string): string | null => {
+		const stage = execFileSync("git", ["ls-files", "--stage", "--", file], { cwd: REPO, encoding: "utf8" }).trim();
+		return stage === "" ? null : (stage.split(/\s+/, 1)[0] ?? null);
+	};
 	const settingsText = readCandidate(settingsRel);
 	const skill = readCandidate(skillRel);
+	const ciOracle = readCandidate(ciOracleRel);
+	const ciOracleMode = readCandidateMode(ciOracleRel);
 	ok(
-		"S7a: the candidate index carries both halves of the shared release-skill surface",
-		settingsText !== null && skill !== null,
-		[settingsText === null ? settingsRel : "", skill === null ? skillRel : ""].filter(Boolean).join("\n"),
+		"S7a: the candidate index carries the shared release skill and exact-SHA CI oracle",
+		settingsText !== null && skill !== null && ciOracle !== null,
+		[settingsText === null ? settingsRel : "", skill === null ? skillRel : "", ciOracle === null ? ciOracleRel : ""]
+			.filter(Boolean)
+			.join("\n"),
 	);
 	let settings: {
 		skills?: unknown;
@@ -482,15 +491,29 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		`${settingsRel}: expected entwurfProvider.mcpServers.entwurf-bridge to use the stable bin`,
 	);
 	const skillIsAscii = skill !== null && [...skill].every((char) => (char.codePointAt(0) ?? 128) <= 127);
+	const oracleIsAscii = ciOracle !== null && [...ciOracle].every((char) => (char.codePointAt(0) ?? 128) <= 127);
 	ok(
-		"S7e: one English-only entwurf-release skill owns prepare + make and accepts the repair prerelease example",
+		"S7e: one English-only skill owns all four authority modes and accepts the repair prerelease",
 		skill === null ||
 			(/^name:\s*entwurf-release$/m.test(skill) &&
+				skill.includes("# LAND") &&
 				skill.includes("# PREPARE") &&
 				skill.includes("# MAKE") &&
+				skill.includes("# PUBLISH") &&
 				skill.includes("0.12.8-repair.0") &&
 				skillIsAscii),
-		`${skillRel}: missing from the index, or missing name, prepare/make mode, prerelease contract, or English/ASCII-only surface`,
+		`${skillRel}: missing name, four authority modes, prerelease contract, or English/ASCII-only surface`,
+	);
+	ok(
+		"S7g: the executable ASCII CI oracle binds headSha and all three required jobs",
+		ciOracle === null ||
+			(ciOracle.includes("headSha") &&
+				ciOracle.includes('"check"') &&
+				ciOracle.includes('"install-surface"') &&
+				ciOracle.includes('"artifact-consumer"') &&
+				ciOracleMode === "100755" &&
+				oracleIsAscii),
+		`${ciOracleRel}: missing executable mode, exact-SHA classification, required jobs, or ASCII-only content`,
 	);
 	const retired = retiredRels.filter((file) => readCandidate(file) !== null);
 	ok(

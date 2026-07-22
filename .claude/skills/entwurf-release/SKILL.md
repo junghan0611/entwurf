@@ -1,6 +1,6 @@
 ---
 name: entwurf-release
-description: "Operate entwurf SemVer releases through two explicit modes: prepare and make. Use for release preparation, CHANGELOG promotion, package version and lockfile updates, static and LIVE release gates, release-prep commits, clean-HEAD tag/push preflight, agenda stamping, GitHub releases, prerelease versions such as 0.12.8-repair.0, and repair-tag publication handoffs. npm publish remains a separately authorized action. Triggers: prepare-release, make-release, release prep, release cut, prerelease, repair release."
+description: "Operate entwurf SemVer releases through four explicit modes: land, prepare, make, and publish. Use for pre-version exact-SHA CI landing, CHANGELOG and package preparation, static and LIVE gates, prepared-HEAD CI, exact artifact acceptance, tag and GitHub release creation, repair-dist-tag publication, and post-publish registry proof. Each mode is a separate authority boundary. Triggers: release land, prepare-release, make-release, publish release, release cut, prerelease, repair release."
 user_invocable: true
 ---
 
@@ -18,23 +18,33 @@ entry.
 
 ```text
 # Claude Code
+/entwurf-release land 0.12.8-repair.0
 /entwurf-release prepare 0.12.8-repair.0
 /entwurf-release make 0.12.8-repair.0
+/entwurf-release publish 0.12.8-repair.0 /absolute/path/to/candidate.tgz repair
 
 # pi
+/skill:entwurf-release land 0.12.8-repair.0
 /skill:entwurf-release prepare 0.12.8-repair.0
 /skill:entwurf-release make 0.12.8-repair.0
+/skill:entwurf-release publish 0.12.8-repair.0 /absolute/path/to/candidate.tgz repair
 ```
 
-Natural-language requests map to the same two modes.
+Natural-language requests map to the same four modes.
 
-- `prepare` edits release records, runs gates, and creates the release-prep
-  commit. It never tags or pushes.
-- `make` operates only on an already prepared clean HEAD and performs the
-  tag/push/GitHub release sequence.
+- `land` pushes an already reviewed pre-version HEAD and waits for the required
+  exact-SHA CI jobs. It never edits, versions, tags, or publishes.
+- `prepare` edits release records, runs deterministic and LIVE gates, and creates
+  the release-prep commit. It never pushes, tags, or publishes.
+- `make` pushes the prepared HEAD, waits for exact-SHA CI, creates and accepts one
+  preserved candidate, then tags, stamps, and creates the GitHub release. It
+  never runs `npm publish`.
+- `publish` publishes only the already accepted preserved candidate under an
+  explicitly supplied dist-tag and proves the registry-installed result.
 
-If the mode or version is missing, ask for it and stop. A prepare request is not
-make authorization. A make request is not npm-publish authorization.
+The invocation authorizes only the named mode. `prepare` is not `land`
+authorization. `make` is not `publish` authorization. If the mode, version, or a
+mode-specific required argument is missing, ask for it and stop.
 
 ## Shared version contract
 
@@ -55,18 +65,111 @@ fi
 Valid examples: `0.12.8`, `0.12.8-repair`, and `0.12.8-repair.0`.
 `npm version` remains the final package-version validator.
 
+## Exact-SHA CI oracle
+
+The shared helper is the only release instruction that classifies the required
+GitHub Actions run:
+
+```bash
+CI_ORACLE=".claude/skills/entwurf-release/scripts/verify-exact-ci.sh"
+bash "$CI_ORACLE" "$(git rev-parse HEAD)" wait
+```
+
+It selects only a push-triggered `ci.yml` run whose `headSha` is the supplied
+full SHA, waits when requested, and requires these exact jobs to conclude
+`success`:
+
+- `check`
+- `install-surface`
+- `artifact-consumer`
+
+Use mode `verify` instead of `wait` when a prior run must already be complete.
+Never replace this with a branch-level green badge or the newest unrelated run.
+
+---
+
+# LAND
+
+`land` exists for a narrower release contract that requires a pre-version
+implementation HEAD to receive its own CI run before release metadata changes.
+It is not required for every ordinary release.
+
+A `land <version>` invocation is explicit authorization for one ordinary push of
+`main`. It is not authorization for version edits, tags, GitHub releases, or npm
+publication.
+
+## L0. Establish the landing boundary
+
+1. Read `AGENTS.md`, `NEXT.md`, and `VERIFY.md` completely.
+2. Read the `commit` skill because its push and post-push stamp rules remain in
+   force.
+3. Confirm that the current narrower contract actually requires a pre-version
+   CI checkpoint. If it does not, stop and direct the operator to `prepare`.
+4. Inspect and require a clean, non-diverged `main`:
+
+```bash
+git status --short --branch
+git diff-index --quiet HEAD --
+test "$(git branch --show-current)" = main
+git fetch origin main
+read -r BEHIND AHEAD < <(git rev-list --left-right --count origin/main...HEAD)
+test "$BEHIND" = 0
+test "$AHEAD" -gt 0
+```
+
+Confirm from the diff and log that HEAD contains only the reviewed landing set.
+Do not absorb an unrelated local commit into a release push.
+
+For a required pre-version checkpoint, the package must not already equal the
+target version:
+
+```bash
+test "$(node -p "require('./package.json').version")" != "$VERSION"
+```
+
+## L1. Prove pushability and push main
+
+```bash
+SHA="$(git rev-parse HEAD)"
+git push --dry-run origin main
+git push origin main
+test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$SHA"
+```
+
+Never force and never bypass verification.
+
+## L2. Stamp the pushed commit
+
+Stamp only after the push succeeds, following the `commit` skill. If the stamp
+fails, report the exact error and stop; do not write the agenda target by hand.
+
+## L3. Require exact-SHA CI
+
+```bash
+CI_ORACLE=".claude/skills/entwurf-release/scripts/verify-exact-ci.sh"
+bash "$CI_ORACLE" "$SHA" wait
+```
+
+Report the SHA, workflow URL, and all three job conclusions. End with:
+
+```text
+Landing checkpoint complete. Ready for /entwurf-release prepare <version>.
+```
+
 ---
 
 # PREPARE
 
-Prepare edits, verifies, and commits. It does not tag or push.
+`prepare` edits, verifies, and commits. It does not push, tag, create a GitHub
+release, stamp a release, notify, or publish.
 
 ## P0. Establish the release boundary
 
-1. Read `AGENTS.md`, `NEXT.md`, and `VERIFY.md`. A narrower current release
-   contract in those files overrides a generic instruction in this skill.
+1. Read `AGENTS.md`, `NEXT.md`, and `VERIFY.md` completely. A narrower current
+   release contract in those files overrides a generic instruction in this
+   skill.
 2. Read the `commit` skill before creating any commit.
-3. Inspect the current state.
+3. Inspect the current state:
 
 ```bash
 git status --short --branch
@@ -75,21 +178,35 @@ git diff --check
 
 Do not mix pre-existing implementation or review fixes into the release-prep
 commit. If a completed, clearly scoped fix is present and GLG has approved its
-commit, close it as a separate atomic commit first. If the scope is ambiguous or
+commit, close it as a separate atomic commit first. If scope is ambiguous or
 unrelated, stop and ask.
 
-The prepare mode may commit only release-prep files such as `CHANGELOG.md`,
+If the current contract requires a pre-version landing checkpoint, verify it
+before making any edit:
+
+```bash
+git fetch origin main
+SHA="$(git rev-parse HEAD)"
+test "$(git rev-parse origin/main)" = "$SHA"
+bash .claude/skills/entwurf-release/scripts/verify-exact-ci.sh "$SHA" verify
+```
+
+A missing landing run is not a prepare failure to work around. Stop with the
+exact next command: `/entwurf-release land <version>`.
+
+Prepare may commit only release-prep files such as `CHANGELOG.md`,
 `package.json`, `pnpm-lock.yaml`, and an evidence handoff explicitly required by
 the current release contract.
 
 Forbidden in prepare mode:
 
-- tags
 - pushes
+- tags
 - GitHub releases
 - release agenda stamps
 - notifications
 - npm publication
+- final candidate creation for a contract that requires post-commit CI first
 
 ## P1. Audit changes since the last release
 
@@ -117,13 +234,12 @@ Keep a fresh empty `## Unreleased` section above the promoted release body.
 Preserve the repository's existing heading punctuation if it uses an em dash.
 
 Release-gate paths and summaries may live in the release section or in an
-explicit operator handoff, following the repository's current convention. The
-paths and the MUST/BEHAVIOR counts must not be lost.
+explicit durable operator handoff, following the repository's current
+convention. The paths and actual MUST/BEHAVIOR counts must not be lost.
 
 ## P3. Update package version and lockfile
 
 ```bash
-VERSION="<validated version>"
 npm version "$VERSION" --no-git-tag-version
 pnpm install --lockfile-only
 ```
@@ -143,46 +259,39 @@ fix it, and rerun the complete aggregate.
 
 ## P5. Run the LIVE release gate from fresh scratch
 
-Use the `tmux` skill because this command is long-running. Preserve both the
-scratch directory and the complete log.
+Use the `tmux` skill because this command is long-running. Preserve the scratch
+directory and complete log.
 
 ```bash
-VERSION="<validated version>"
-SCRATCH=$(mktemp -d "/tmp/psa-release-gate-${VERSION}.XXXXXX")
-LOG="/tmp/pi-tmux-entwurf-release-gate-${VERSION}.log"
+SCRATCH=$(mktemp -d "/tmp/entwurf-release-gate-${VERSION}.XXXXXX")
+LOG="$SCRATCH/release-gate.log"
 set -o pipefail
 LIVE=1 ./run.sh release-gate "$SCRATCH" 2>&1 | tee "$LOG"
 ```
 
 The release gate has two tiers:
 
-- `MUST` is release-blocking and owns the exit code. `FAIL` must be zero.
+- `MUST` is release-blocking and owns the exit code. `FAIL` must be zero and a
+  release run must not hide required LIVE work behind `SKIP`.
 - `BEHAVIOR` is advisory model-in-loop evidence. A failure does not block the
-  release, but its PASS/FAIL counts and artifact/log path must be recorded.
+  release, but its PASS/FAIL counts and artifact path must be recorded.
 
-Do not expect a fixed PASS count. Record the actual current output. Do not waive
-a MUST failure without diagnosing and explicitly classifying the failing axis.
-Do not hide a BEHAVIOR failure.
+Do not expect a fixed PASS count. Record actual output. Do not waive a MUST
+failure without diagnosing and explicitly classifying the failing axis. Do not
+hide a BEHAVIOR failure.
 
-## P6. Apply release-specific acceptance
+## P6. Apply release-specific pre-commit acceptance
 
 `NEXT.md` and `VERIFY.md` may require gates beyond `pnpm check` and the LIVE
-release gate. Exact candidate tarballs, artifact-consumer CI, and installed-host
-doctors are release contracts when those documents require them; none may be
-replaced by a weaker generic gate.
+release gate. Apply every requirement that belongs before the release-prep
+commit.
 
-For #51-style repair releases:
+For #51-style repair releases, do not create the final candidate here. The exact
+candidate must be created from the clean prepared HEAD only after that exact SHA
+has been pushed and all three CI jobs are green. `make` owns that post-CI
+acceptance. A checkout pack-once result is not release-artifact evidence.
 
-- A checkout pack-once green result is not release-artifact evidence.
-- After the version commit, create and preserve one candidate tarball.
-- Run
-  `ENTWURF_CANDIDATE_TGZ=<absolute-path> ./run.sh check-install-container`
-  so the gate consumes those exact bytes without repacking.
-- Preserve the canonical path, SHA-256, image ID, and repository digest.
-- Publishing that same tarball is not automatic in either prepare or make mode.
-
-If an additional acceptance step can run only after a commit or push, record the
-exact next gate in the handoff. Never claim an unrun gate as passed.
+Never claim an unrun gate as passed.
 
 ## P7. Create the release-prep commit
 
@@ -201,7 +310,6 @@ Do not bypass hooks. A commit request does not authorize a push.
 ## P8. Final preparation check
 
 ```bash
-VERSION="<validated version>"
 test "$(node -p "require('./package.json').version")" = "$VERSION"
 grep -qE "^## ${VERSION}([[:space:]]|$)" CHANGELOG.md
 git diff-index --quiet HEAD --
@@ -214,36 +322,39 @@ Report:
 - release-gate scratch, log, and artifact paths
 - actual `MUST: PASS=n FAIL=0 SKIP=n`
 - actual `BEHAVIOR: PASS=n FAIL=n`
-- completion or remaining status of release-specific acceptance
+- release-specific work deliberately deferred to `make`
 - clean-tree result
 
-Only when every make prerequisite is closed, end with:
+End with both harness forms:
 
 ```text
-Ready for /skill:entwurf-release make <version>
+Ready for /entwurf-release make <version>.
+Ready for /skill:entwurf-release make <version>.
 ```
 
 ---
 
 # MAKE
 
-Make tags, pushes, stamps, and creates the GitHub release from a prepared clean
-HEAD. It does not edit release files.
+`make` operates only on an already prepared clean HEAD. It pushes that HEAD,
+requires exact-SHA CI, creates and accepts the final candidate, then tags,
+stamps, creates the GitHub release, and notifies. It does not edit release files
+or run `npm publish`.
 
-A `make <version>` invocation is explicit authorization for the tag and release
-sequence. Read the `tag-release` skill before proceeding so its global push,
-safety, and stamp rules remain active. Make mode still does not authorize npm
-publication.
+A `make <version>` invocation is explicit authorization for ordinary main and
+tag pushes plus the GitHub release sequence. Read both the `commit` and
+`tag-release` skills before proceeding so their push, safety, and stamp rules
+remain active.
 
 ## M0. Preflight
 
 Abort on the first failed check.
 
-### Clean tree, version, changelog, and evidence
+### Clean tree, version, changelog, gate evidence, and tag absence
 
 ```bash
-VERSION="<validated version>"
 git diff-index --quiet HEAD --
+test "$(git branch --show-current)" = main
 test -z "$(git tag -l "v${VERSION}")"
 test -z "$(git ls-remote --tags origin "v${VERSION}")"
 grep -qE "^## ${VERSION}([[:space:]]|$)" CHANGELOG.md
@@ -252,9 +363,9 @@ pnpm check
 ```
 
 Confirm that a fresh release-gate scratch/log path and its actual MUST/BEHAVIOR
-summary are present in the changelog or operator handoff. Do not tag when MUST
-has a failure, evidence is missing, or `NEXT.md` still names a release-specific
-blocker.
+summary are present in the changelog or durable operator handoff. Do not proceed
+when MUST has a failure, evidence is missing, or `NEXT.md` names an unresolved
+pre-release blocker.
 
 ### GitHub identity and target
 
@@ -271,28 +382,93 @@ case "$GH_PERM" in
 esac
 ```
 
-### Push dry-run
+### Non-divergence and push dry-runs
 
 ```bash
+git fetch origin main
+read -r BEHIND AHEAD < <(git rev-list --left-right --count origin/main...HEAD)
+test "$BEHIND" = 0
 git push --dry-run origin main
 git push --dry-run origin "HEAD:refs/tags/v${VERSION}"
 ```
 
-## M1. Tag and push
-
-Create a lightweight tag pointing exactly at the prepared HEAD.
+## M1. Push the prepared HEAD and stamp that push
 
 ```bash
-SHA=$(git rev-parse HEAD)
-git tag "v${VERSION}" "$SHA"
-git push origin main
-git push origin "v${VERSION}"
+SHA="$(git rev-parse HEAD)"
+REMOTE_SHA="$(git rev-parse origin/main)"
+PUSHED_MAIN=0
+if [ "$REMOTE_SHA" != "$SHA" ]; then
+  test "$AHEAD" -gt 0
+  git push origin main
+  test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$SHA"
+  PUSHED_MAIN=1
+fi
+printf 'prepared-sha=%s pushed-main=%s\n' "$SHA" "$PUSHED_MAIN"
 ```
 
-Never force and never bypass verification. If a push fails, stop before stamp,
-GitHub release creation, or notification.
+If `PUSHED_MAIN=1`, immediately stamp the pushed commit according to the
+`commit` skill before waiting on CI. If main already pointed at this SHA, do not
+create a duplicate commit stamp. A stamp failure stops the mode even though the
+push has already happened; report that half-complete state exactly.
 
-## M2. Stamp the agenda
+## M2. Require exact-SHA CI
+
+```bash
+bash .claude/skills/entwurf-release/scripts/verify-exact-ci.sh "$SHA" wait
+```
+
+A CI failure stops make before candidate creation or tagging.
+
+## M3. Create and accept one preserved exact candidate
+
+Create the candidate only after exact-SHA CI is green. Keep the directory and
+log; do not clean them automatically.
+
+```bash
+ARTIFACT_DIR=$(mktemp -d "/tmp/entwurf-release-candidate-${VERSION}.XXXXXX")
+LOG="$ARTIFACT_DIR/acceptance.log"
+bash scripts/with-dist-lock.sh npm pack --dry-run=false --pack-destination "$ARTIFACT_DIR"
+CANDIDATE=$(realpath "$ARTIFACT_DIR/junghanacs-entwurf-${VERSION}.tgz")
+test -f "$CANDIDATE"
+SHA256_BEFORE=$(sha256sum "$CANDIDATE" | cut -d' ' -f1)
+set -o pipefail
+ENTWURF_REQUIRE_DOCKER=1 ENTWURF_CANDIDATE_TGZ="$CANDIDATE" \
+  ./run.sh check-install-container 2>&1 | tee "$LOG"
+SHA256_AFTER=$(sha256sum "$CANDIDATE" | cut -d' ' -f1)
+test "$SHA256_AFTER" = "$SHA256_BEFORE"
+grep -F "candidate mode: caller-preserved exact artifact (no repack)" "$LOG"
+grep -F "candidate canonical-path=$CANDIDATE" "$LOG"
+grep -F "artifact sha256=$SHA256_BEFORE" "$LOG"
+grep -F "repoDigest=" "$LOG"
+```
+
+The handoff must preserve:
+
+- candidate canonical path
+- candidate SHA-256
+- acceptance log path
+- Node image ID
+- repository digest
+- exact prepared commit SHA
+
+The accepted file is now the only file eligible for `publish`. Never repack it.
+
+## M4. Recheck immutability, tag, and push the tag
+
+```bash
+test "$(git rev-parse HEAD)" = "$SHA"
+git diff-index --quiet HEAD --
+test "$(sha256sum "$CANDIDATE" | cut -d' ' -f1)" = "$SHA256_BEFORE"
+git tag "v${VERSION}" "$SHA"
+git push origin "v${VERSION}"
+test "$(git ls-remote origin "refs/tags/v${VERSION}" | cut -f1)" = "$SHA"
+```
+
+Never force and never bypass verification. If tag push fails, stop before the
+release stamp, GitHub release, or notification.
+
+## M5. Stamp the release
 
 ```bash
 REMOTE=$(git remote get-url origin)
@@ -309,7 +485,7 @@ STAMP="$HOME/.pi/agent/skills/pi-skills/agenda/scripts/agenda-stamp.sh"
 If the stamp fails, report the exact command and error and stop. Do not invent a
 manual fallback on the agenda target.
 
-## M3. Create and verify the GitHub release
+## M6. Create and verify the GitHub release
 
 ```bash
 NOTES_FILE="/tmp/release-notes-v${VERSION}.md"
@@ -340,7 +516,7 @@ rm -f "$NOTES_FILE"
 
 Do not notify until `gh release view` verifies the expected tag.
 
-## M4. Notify
+## M7. Notify
 
 Run only after the GitHub release is verified.
 
@@ -355,51 +531,158 @@ ${REPO_URL}/releases/tag/v${VERSION}"
 A notification failure does not undo an existing release, but it must be
 reported exactly.
 
-## M5. npm artifact publication requires separate authorization
+Report the release URL plus the preserved candidate path, SHA-256, acceptance
+log, image ID, and repository digest. End with the exact publish command but do
+not execute it:
 
-Make mode never runs `npm publish`. A repair dist-tag is independent from the
-GitHub tag. Only when GLG explicitly authorizes publication in the current
-session may the already accepted preserved tarball be published.
-
-```bash
-npm publish <same-preserved.tgz> --tag repair
-npm view @junghanacs/entwurf dist-tags --json
+```text
+/entwurf-release publish <version> <absolute-candidate.tgz> <dist-tag>
 ```
 
-Immediately prove the registry-installed package source, not the checkout or the
-preserved local tarball:
+---
+
+# PUBLISH
+
+`publish` is a separate authority boundary. It never creates a candidate. It
+publishes only the exact file accepted by `make`.
+
+A publish invocation requires:
+
+1. version
+2. absolute candidate path
+3. explicit dist-tag
+
+For example:
+
+```text
+/entwurf-release publish 0.12.8-repair.0 /tmp/entwurf-release-candidate-0.12.8-repair.0.X/junghanacs-entwurf-0.12.8-repair.0.tgz repair
+```
+
+## U0. Verify release and candidate identity
 
 ```bash
-TMP_AGENT=$(mktemp -d -t entwurf-registry-smoke.XXXXXX)
-PI_CODING_AGENT_DIR="$TMP_AGENT" pi install "npm:@junghanacs/entwurf@${VERSION}"
-printf '%s\n' "{ \"packages\": [\"npm:@junghanacs/entwurf@${VERSION}\"] }" > "$TMP_AGENT/settings.json"
-BRIDGE=$(PI_CODING_AGENT_DIR="$TMP_AGENT" node --experimental-strip-types scripts/resolve-acp-bridge.ts)
-test "$BRIDGE" = "$TMP_AGENT/npm/node_modules/@junghanacs/entwurf"
-PI_CODING_AGENT_DIR="$TMP_AGENT" pi --no-extensions -e "$BRIDGE" --list-models entwurf
-rm -rf "$TMP_AGENT"
+CANDIDATE="<absolute candidate argument>"
+DIST_TAG="<dist-tag argument>"
+case "$CANDIDATE" in /*) ;; *) echo "ABORT: candidate path must be absolute"; exit 1 ;; esac
+case "$DIST_TAG" in ""|*[!0-9A-Za-z._-]*) echo "ABORT: invalid or missing dist-tag"; exit 1 ;; esac
+CANDIDATE=$(realpath "$CANDIDATE")
+test -f "$CANDIDATE"
+test "$(node -p "require('./package.json').version")" = "$VERSION"
+git diff-index --quiet HEAD --
+test "$(git rev-parse "v${VERSION}")" = "$(git rev-parse HEAD)"
+gh release view "v${VERSION}" --json tagName,name,url
+```
+
+Read package identity from the tarball and require an exact match:
+
+```bash
+META=$(tar -xOf "$CANDIDATE" package/package.json | node -e '
+let s=""; process.stdin.setEncoding("utf8");
+process.stdin.on("data", d => s += d);
+process.stdin.on("end", () => {
+  const p=JSON.parse(s); process.stdout.write(`${p.name}\t${p.version}`);
+});')
+IFS=$'\t' read -r NAME CANDIDATE_VERSION <<< "$META"
+test "$NAME" = "@junghanacs/entwurf"
+test "$CANDIDATE_VERSION" = "$VERSION"
+```
+
+Require the sibling acceptance log produced by `make` and bind it to the same
+canonical path and digest:
+
+```bash
+ACCEPTANCE_LOG="$(dirname "$CANDIDATE")/acceptance.log"
+test -s "$ACCEPTANCE_LOG"
+CANDIDATE_SHA256=$(sha256sum "$CANDIDATE" | cut -d' ' -f1)
+grep -F "candidate mode: caller-preserved exact artifact (no repack)" "$ACCEPTANCE_LOG"
+grep -F "candidate canonical-path=$CANDIDATE" "$ACCEPTANCE_LOG"
+grep -F "artifact sha256=$CANDIDATE_SHA256" "$ACCEPTANCE_LOG"
+grep -F "repoDigest=" "$ACCEPTANCE_LOG"
+```
+
+If any evidence is missing, stop. Do not repack or regenerate the candidate.
+
+## U1. Publish the accepted bytes
+
+```bash
+npm publish "$CANDIDATE" --tag "$DIST_TAG"
+test "$(sha256sum "$CANDIDATE" | cut -d' ' -f1)" = "$CANDIDATE_SHA256"
+```
+
+## U2. Verify dist-tags
+
+```bash
+DIST_TAGS=$(npm view @junghanacs/entwurf dist-tags --json)
+DIST_TAGS="$DIST_TAGS" VERSION="$VERSION" DIST_TAG="$DIST_TAG" node - <<'NODE'
+const tags = JSON.parse(process.env.DIST_TAGS);
+const version = process.env.VERSION;
+const distTag = process.env.DIST_TAG;
+if (tags[distTag] !== version) {
+  throw new Error(`dist-tag ${distTag}=${tags[distTag]}, expected ${version}`);
+}
+console.log(`registry dist-tag: ${distTag}=${version}`);
+NODE
+```
+
+For the current #51 repair contract, additionally require:
+
+```bash
+test "$DIST_TAG" = repair
+DIST_TAGS="$DIST_TAGS" node -e '
+const t=JSON.parse(process.env.DIST_TAGS);
+if(t.latest!=="0.12.7") throw new Error(`latest moved to ${t.latest}`);
+if(t.repair!=="0.12.8-repair.0") throw new Error(`repair is ${t.repair}`);
+console.log(`registry: latest=${t.latest} repair=${t.repair}`);'
+```
+
+## U3. Prove the registry-installed package
+
+Sandbox HOME and every writable XDG root. Prove the package came from the
+registry, not the checkout or preserved tarball.
+
+```bash
+TMP_ROOT=$(mktemp -d -t entwurf-registry-smoke.XXXXXX)
+mkdir -p "$TMP_ROOT/home" "$TMP_ROOT/data" "$TMP_ROOT/state" "$TMP_ROOT/cache" "$TMP_ROOT/agent"
+HOME="$TMP_ROOT/home" \
+XDG_DATA_HOME="$TMP_ROOT/data" \
+XDG_STATE_HOME="$TMP_ROOT/state" \
+XDG_CACHE_HOME="$TMP_ROOT/cache" \
+PI_CODING_AGENT_DIR="$TMP_ROOT/agent" \
+  pi install "npm:@junghanacs/entwurf@${VERSION}"
+printf '%s\n' "{ \"packages\": [\"npm:@junghanacs/entwurf@${VERSION}\"] }" > "$TMP_ROOT/agent/settings.json"
+BRIDGE=$(HOME="$TMP_ROOT/home" XDG_DATA_HOME="$TMP_ROOT/data" XDG_STATE_HOME="$TMP_ROOT/state" XDG_CACHE_HOME="$TMP_ROOT/cache" PI_CODING_AGENT_DIR="$TMP_ROOT/agent" node --experimental-strip-types scripts/resolve-acp-bridge.ts)
+test "$BRIDGE" = "$TMP_ROOT/agent/npm/node_modules/@junghanacs/entwurf"
+HOME="$TMP_ROOT/home" \
+XDG_DATA_HOME="$TMP_ROOT/data" \
+XDG_STATE_HOME="$TMP_ROOT/state" \
+XDG_CACHE_HOME="$TMP_ROOT/cache" \
+PI_CODING_AGENT_DIR="$TMP_ROOT/agent" \
+  pi --no-extensions -e "$BRIDGE" --list-models entwurf
+rm -rf "$TMP_ROOT"
 ```
 
 The output must include `entwurf` and the curated Claude anchors, with no
-`Unknown provider` or `No models matching` error. A failed registry smoke after
-publication is a stop-and-classify event; do not notify downstream consumers.
-Downstream consumer pin bumps remain a separate repository operation.
+`Unknown provider` or `No models matching` error. A failed registry smoke is a
+stop-and-classify event; do not notify downstream consumers.
 
-For the current #51 contract, verify `latest=0.12.7` and
-`repair=<approved version>`. After publication, the final Linux recovery proof
-is:
+For the current #51 contract, the final Linux recovery proof remains:
 
-1. Install the approved package on the target host.
+1. Install the approved package on the maintainer and target host.
 2. Run installed `entwurf install-meta-bridge`.
 3. Restart every already-open Claude Code session.
 4. Open a new session with its live MCP child.
 5. Require installed `entwurf doctor-meta-bridge` to pass.
 
-## Half-release recovery
+## Recovery table
 
 | State | Recovery |
 |---|---|
-| Local tag exists; push failed | Fix the cause and retry M1 push |
-| Tag is pushed; GitHub release is absent | Resume at M3 |
-| GitHub release exists; notification failed | Resume at M4 only |
-| Wrong local tag; not pushed | Delete the local tag and rerun preflight |
-| Wrong pushed tag | Do not force; report to GLG |
+| Pre-version main push succeeded; CI failed | Fix in a new commit; rerun `land` for the new SHA. |
+| Prepared main push succeeded; CI failed | Fix in a new commit; do not tag or create a candidate. |
+| Exact candidate acceptance failed | Preserve candidate and log; diagnose; do not repack around the failure. |
+| Local tag exists; tag push failed | Fix the cause and retry the tag push. |
+| Tag is pushed; GitHub release is absent | Resume at M5/M6; do not move the tag. |
+| GitHub release exists; notification failed | Resume at M7 only. |
+| Wrong local tag; not pushed | Delete the local tag and rerun preflight. |
+| Wrong pushed tag | Do not force; report to GLG. |
+| npm publish succeeded; registry smoke failed | Stop and classify; do not notify downstream consumers. |

@@ -64,41 +64,49 @@ identity. Preserve those in the cut record. A synthetic doctor PASS proves the
 oracle can recognize a fully supplied fixture; only the installed doctor against a
 new native session proves that a real host supplied those layers.
 
-### Repair-cut order (future execution; no implicit publish authority)
+### Repair-cut order (future execution; authority is mode-specific)
 
-1. Land the atomic production hard-cut + gates + documentation only after review;
-   keep the already-committed artifact-consumer change as its separate commit.
-2. Push only when GLG asks, then require all three jobs on the exact release commit:
-   `check`, `install-surface`, and `artifact-consumer`.
-3. In the approved release follow-up, set `0.12.8-repair.0`, push that exact
-   version commit, and require the same three jobs again. A version-only commit is
-   still a different release commit and does not inherit an earlier CI result.
-4. Preserve one exact candidate and accept those bytes without repacking:
+The repo-local `entwurf-release` skill is a checkpointed state machine. Each mode
+is a separate authorization; one mode never implies the next.
+
+1. Finish and review the atomic production hard-cut + gates + documentation while
+   keeping the already-committed artifact-consumer change as its separate commit.
+2. `land 0.12.8-repair.0` pushes only that clean **pre-version landing HEAD** and
+   requires a push-triggered `ci.yml` run whose `headSha` is exactly that commit.
+   All three jobs must be green: `check`, `install-surface`, and
+   `artifact-consumer`. This first run is an isolation/provenance checkpoint; the
+   later version-HEAD run also contains the production changes.
+3. `prepare 0.12.8-repair.0` promotes the changelog, sets the package version,
+   runs the deterministic and LIVE gates, and creates the release-prep commit. It
+   never pushes.
+4. `make 0.12.8-repair.0` pushes that clean prepared HEAD and requires the same
+   three jobs on that exact version commit. Only after the second exact-SHA CI is
+   green does it preserve and accept one candidate without repacking:
 
    ```bash
-   mkdir -p /tmp/entwurf-release-candidate
-   npm pack --dry-run=false --pack-destination /tmp/entwurf-release-candidate
-   CANDIDATE="$(realpath /tmp/entwurf-release-candidate/junghanacs-entwurf-0.12.8-repair.0.tgz)"
+   ARTIFACT_DIR=$(mktemp -d /tmp/entwurf-release-candidate-0.12.8-repair.0.XXXXXX)
+   bash scripts/with-dist-lock.sh npm pack --dry-run=false --pack-destination "$ARTIFACT_DIR"
+   CANDIDATE="$(realpath "$ARTIFACT_DIR/junghanacs-entwurf-0.12.8-repair.0.tgz")"
    sha256sum "$CANDIDATE"
    ENTWURF_REQUIRE_DOCKER=1 ENTWURF_CANDIDATE_TGZ="$CANDIDATE" \
-     ./run.sh check-install-container | tee /tmp/entwurf-release-candidate/acceptance.log
+     ./run.sh check-install-container | tee "$ARTIFACT_DIR/acceptance.log"
    ```
 
    The gate must print `candidate mode: caller-preserved exact artifact (no repack)`,
-   the same canonical path, and the same sha256. Keep that file; do not let a later
-   step silently repack different bytes.
-5. Under explicit release authorization, cut the tag/GitHub release and publish that
-   same file with `npm publish "$CANDIDATE" --tag repair`. Verify registry state:
-   `repair=0.12.8-repair.0` and
-   `latest=0.12.7`. The current `0.12.7-1` is lower than `0.12.7` and must never be
-   published.
-6. Only after release, clean-reinstall the maintainer and hejdev6 hosts. Restart all
-   old Claude sessions, open a new session, then require the **installed**
-   `doctor-meta-bridge` to exit 0. A validate result or manual marker observation
-   cannot override doctor RED.
+   the same canonical path, the same SHA-256, and the image identity. `make` then
+   tags that exact prepared SHA and creates the GitHub release. Keep the candidate
+   and acceptance log; do not let a later step silently repack different bytes.
+5. Only an explicit `publish 0.12.8-repair.0 <absolute-candidate> repair`
+   invocation may run `npm publish "$CANDIDATE" --tag repair`. It verifies
+   `repair=0.12.8-repair.0`, `latest=0.12.7`, and a registry-installed smoke. The
+   current `0.12.7-1` is lower than `0.12.7` and must never be published.
+6. Only after publication, clean-reinstall the maintainer and hejdev6 hosts.
+   Restart all old Claude sessions, open a new session, then require the
+   **installed** `doctor-meta-bridge` to exit 0. A validate result or manual marker
+   observation cannot override doctor RED.
 
-Tagging, publishing, version edits, host reinstall, and push remain separate GLG
-authorizations; this checklist grants none of them.
+Invoking `land`, `prepare`, `make`, or `publish` grants only that named mode's
+authority. Host reinstall remains a separate GLG authorization.
 
 ### Verifying the two capabilities a gate cannot fully judge
 
