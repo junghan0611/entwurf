@@ -8,8 +8,11 @@
 
 - **Stem:** entwurf는 pi의 session id·filename·session name을 만들거나 강제하지 않는다. Garden identity는 meta-record가 `gardenId ↔ backend/nativeSessionId`로 연결하고, socket/mailbox/native-push는 delivery/liveness rail로만 남는다.
 - **Decision:** pi도 record-backed citizen이다. Native GPT와 pi-hosted ACP는 모두 `backend:"pi"`; ACP는 model/provider axis이지 별도 citizen species가 아니다.
-- **Current hop:** **H0 exit 충족.** PM↔Opus 교차검토와 GLG의 D0/rollback 승인을 plan-only commit으로 닫았다. 이제 #51 구현 완료/G1까지 대기한다.
-- **Next after H0:** #51 구현 코드가 main에 착지하면 main을 이 branch에 한 번 병합하고, production symbol 기준 subtraction manifest를 만든다. 각 삭제 대상마다 producer / consumer / gate / docs / replacement authority를 한 줄로 매핑한다. 이것은 read-only 설계 산출물이며 release candidate를 바꾸지 않는다.
+- **Current hop:** **H0 done (`50251ea`).** PM↔Opus 교차검토와 GLG의 D0/rollback 승인을 plan-only commit으로 닫았다. Production delta는 0이고 full commit-hook floor가 GREEN이었다.
+- **Active serial implementer:** fresh Opus garden `20260722T124111-bd16e8` (`tmux: entwurf-v2-debt-opus`), assigned only the G1 fact check. Previous planning Opus `20260722T112508-fad929` was told to close after its final G1 report. No parallel implementation is authorized.
+- **Current blocker (2026-07-22 12:45 KST): G1은 아직 닫히지 않았다.** fetch 기준 `origin/main=fbde7b8`; #51의 B/B2 실측은 끝났지만 **(1) Linux artifact-consumer C gate와 (2) winning launch form + topology gate**, 두 구현 축이 아직 main에 없다. 둘 다 착지해야 G1이고, 동일 tgz Linux/macOS acceptance → release → clean reinstall/installed doctor는 G2다. 이 branch는 `origin/repair/v2-core-debt`보다 H0+handoff commit 두 개 앞선다(push 없음).
+- **Next session first move:** `HOP.md`와 이 NOW를 읽고 `git fetch origin --prune` + #51 status로 G1을 재확인한다. G1이 닫혔으면 main을 이 branch에 한 번 병합하고 H1 exact subtraction map을 시작한다. 아직 열리지 않았으면 merge·production edit·부분 map을 시작하지 말고 blocker 상태만 PM/GLG에게 보고한다.
+- **H1 topic:** production symbol별 `producer / consumer / gate+live-smoke / docs / delete-or-keep / replacement authority / expected RED` 표와 C1~C4 cut ledger. 이것은 read-only 설계 산출물이다.
 - **Two gates:** **G1** = #51 구현 코드 main 착지 → main 1회 병합 + H1(source-level subtraction map) 허용. **G2** = #51 release + maintainer/hejdev6g clean reinstall + installed `doctor-meta-bridge` GREEN → production 작업 개방; 첫 authority-transfer commit은 C1이다.
 - **Implementation rule:** GLG가 subtraction map을 확인하고 G2가 닫히기 전 production code는 열지 않는다. RED는 커밋하지 않고 `.agent-reports/H<n>/` patch+digest로 rotation한다. Production 권위 이전은 C1~C4 각각 `새 writer/reader + 소비자 전환 + 옛 producer 삭제`가 같은 GREEN commit에서 닫혀야 한다. 정상 routing의 새 dual-read/dual-authority는 금지한다.
 - **Sequencing reason:** #51과 #50의 현재 direct code overlap은 실질적으로 없다(`#51`이 건드린 `meta-session.ts` / `meta-sender-identity.ts`도 주석 변화뿐). 기다리는 이유는 conflict 회피가 아니라 **증거 귀속**이다. strict oracle과 artifact harness가 닫히기 전에 production을 빼면 RED가 하네스 결함인지 #50 회귀인지 분리할 수 없다. 반대로 source audit은 그 위험이 없고, #51의 최종 gates/docs를 본 뒤 해야 더 정확하다.
@@ -78,7 +81,7 @@
 
 세부 entry/exit/rollback/rotation은 `HOP.md`가 가진다. 실측이 다르면 이 순서를 고친다.
 
-1. **H0 now:** PM↔Opus 홉 설계 교차검토를 plan-only commit으로 닫는다.
+1. **H0 done (`50251ea`):** PM↔Opus 홉 설계 교차검토를 plan-only commit으로 닫았다.
 2. **H1 after G1:** main 1회 병합 → exact subtraction/caller/gate/live-smoke map → C1~C4 cut ledger를 GLG가 확인한다.
 3. **H2 after G2:** #51 release/doctor baseline → sandbox M1 migration+rollback rehearsal → mutation RED catalog와 self-host pre-cut peer map.
 4. **C1 / H3 — schema authority:** V3 minimal record + migration-only V1/V2 M1 + backup/restore/verify-loop. `parentGardenId`/`isEntwurf` 제거. 정상 production은 V3 only.
