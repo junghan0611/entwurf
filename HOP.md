@@ -139,7 +139,7 @@ Rollback:       종료 sha + 그 sha에서 GREEN인 gate 목록
 
 **Forbidden:** main merge, production 수정, live store 접근.
 
-### H1 — exact subtraction map, cut ledger (현재)
+### H1 — exact subtraction map, cut ledger (done)
 
 **Entry gate:** H1-prep handoff digest 검증 + clean plan-only branch. main/#51 merge는 요구하지 않는다.
 
@@ -168,15 +168,16 @@ symbol/file → current authority/mutation → all production callers
    - C3: `smoke-resident-garden-guard` (resume block/tag/marker axes), `smoke-entwurf-v2-spawn-resume-live`
    - C4/H7: 세 smoke의 cutover 후 재확인
 
-**Exit evidence**
+**Exit evidence — GREEN / GLG approved 2026-07-22**
 
-- unknown production caller 0 또는 GLG decision queue에 명시.
-- C1~C4 각각 독립 GREEN 가능성이 source graph로 증명됨.
-- GLG가 cut ledger 승인.
+- unknown production caller 0 across C1~C4.
+- C1~C4 각각 독립 GREEN 가능성이 87-row source graph로 증명됨.
+- 승인 원장: `.agent-reports/H1/h1-cut-ledger.md` sha256 `d5d49fb9e80d1a32df9737990301701a701e4972fc0db2e8e0b8d3b2f3eca5df` (368 lines).
+- PM-resolved: 🪛 label은 record gardenId에 rebind; record-less socket은 diagnostic-only/non-routeable로 영구 관측.
 
 **Forbidden:** production/gate expectation/native data 수정.
 
-### H2 — branch baseline, migration rehearsal, mutation RED catalog
+### H2 — branch baseline, migration rehearsal, mutation RED catalog (현재)
 
 **Entry gate:** H1 ledger GLG 승인.
 
@@ -347,13 +348,12 @@ D0와 backup/rollback은 GLG가 승인했다. 아래는 근거가 나올 때만 
 
 1. **D5 — H7 live-cutover entry blocker:** 최초 live M1 전에 live old writer quiesce를 강제할 operator 절차/actuator와 detector를 GLG가 확정한다. 현재 doctor는 stale deployed writer를 검출하지만 quiesce actuator는 없다. H2 rehearsal과 이용 가능한 doctor evidence가 선택 근거를 낸다.
 2. target registry에서 identity 제거 뒤 별도 dormant-launch trust policy 필요 여부.
-3. record-less diagnostic을 doctor/peers에서 얼마 동안 노출할지. 정상 routing fallback은 금지.
 
-결정 전 임시 fallback을 만들지 않는다.
+Record-less socket은 C4에서 peers/dispatch가 아닌 kind-tagged diagnostic-only로 영구 관측하기로 PM이 확정했다. 정상 routing fallback은 금지한다. 결정 전 임시 fallback을 만들지 않는다.
 
 ## 현재 상태
 
-- Current: H0 + H1-prep 종료. PM↔Opus 교차검토와 14개 read-only artifact가 있다.
+- Current: H1 종료/GLG 승인. H2 sandbox rehearsal + mutation RED catalog가 열렸다.
 - Production implementation: 없음.
 - Branch delta: `HOP.md` + branch NEXT plan only.
-- Next: main/#51을 기다리지 않고 H1 exact subtraction map과 C1~C4 cut ledger를 현재 branch에서 연다.
+- Next: H2-A에서 branch floor와 fixture inventory를 고정한다. M1 prototype은 그 baseline을 PM이 검수한 뒤 연다.

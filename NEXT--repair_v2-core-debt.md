@@ -8,13 +8,13 @@
 
 - **Stem:** entwurf는 pi의 session id·filename·session name을 만들거나 강제하지 않는다. Garden identity는 meta-record가 `gardenId ↔ backend/nativeSessionId`로 연결하고, socket/mailbox/native-push는 delivery/liveness rail로만 남는다.
 - **Decision:** pi도 record-backed citizen이다. Native GPT와 pi-hosted ACP는 모두 `backend:"pi"`; ACP는 model/provider axis이지 별도 citizen species가 아니다.
-- **Current hop:** **H1 open.** H0 (`50251ea`)와 H1-prep를 plan/read-only로 닫았고 production delta는 0이다. 이제 현재 branch에서 exact subtraction map과 C1~C4 cut ledger를 완성한다.
-- **H1-prep complete:** Opus garden `20260722T124111-bd16e8` closed its read-only campaign with `.agent-reports/H1-prep/HANDOFF.md` (sha256 `9cfe8186072b3bfd1256cfb0c79dbff95b18d9fb734da0f2995eb640a70dce12`, 195 lines). It indexes 14 verified local artifacts. No parallel implementation is authorized; the next serial implementer starts H1 from that handoff now.
+- **Current hop:** **H2 open.** H1의 87-row C1~C4 source graph를 GLG가 승인했다. 이제 production을 만들기 전에 sandbox에서 migration/rollback/mutation power를 증명한다.
+- **H1 approved evidence:** `.agent-reports/H1/h1-cut-ledger.md` sha256 `d5d49fb9e80d1a32df9737990301701a701e4972fc0db2e8e0b8d3b2f3eca5df` (368 lines). Supporting artifacts: H1-A `276261a9…`, H1-B `e2611d39…`, H1-C `d3d3bb83…`. Unknown production caller 0; C1~C4 미결 설계 결정 0.
 - **Expected self-host blackout:** C2/C4/H7에서 PM의 현재 socket-only session이 새 record garden socket으로 넘어가며 delivery가 잠시 끊길 수 있다. cut 직전 ids/HEAD/patch/next command를 고정하고, 끊긴 동안 GLG가 수동으로 턴을 전달한다. 새 pi record+socket, peers visibility, PM↔Opus 양방향 delivery가 복구되기 전 다음 cut으로 가지 않으며 fallback carrier를 만들지 않는다.
-- **Current state (2026-07-22 15:11 KST): H1 is open on this branch.** 이 lane은 main/#51과 독립적으로 간다. #51의 B/B2와 doctor/artifact-harness 결과는 참고 evidence이지 entry gate가 아니다. 옛 authority를 전제로 한 main 하네스를 먼저 병합하면 C1~C4가 곧 삭제할 계약을 새 gate가 다시 고정하므로 자동 merge/cherry-pick하지 않는다.
-- **Next session first move:** `HOP.md` → 이 NOW → `.agent-reports/H1-prep/HANDOFF.md` 순으로 읽고 14개 artifact digest를 검증한다. 이어 현재 branch HEAD에서 HANDOFF의 source revalidation 명령을 실행해 H1 exact subtraction map을 연다. `git fetch`/#51 확인/main 병합은 entry action이 아니다.
-- **H1 topic:** production symbol별 `producer / consumer / gate+live-smoke / docs / delete-or-keep / replacement authority / expected RED` 표와 C1~C4 cut ledger. 이것은 read-only 설계 산출물이다.
-- **Branch gates:** H1-prep digest + clean plan-only branch가 H1 entry다. GLG가 H1 ledger를 승인하면 H2 sandbox rehearsal/mutation RED를 열고, H2가 닫히면 C1 production authority transfer를 시작한다.
+- **Current state (2026-07-22): H2-A starts on this branch.** 이 lane은 main/#51과 독립적으로 간다. #51 결과는 참고 evidence이지 entry gate가 아니다. 자동 merge/cherry-pick하지 않는다.
+- **Next session first move:** `HOP.md` → 이 NOW → `.agent-reports/H1/h1-cut-ledger.md` 순으로 읽고 digest를 검증한다. 이어 H2-A에서 현재 branch의 full/targeted floor와 isolated fixture inventory(V1/V2/V3/malformed/duplicate/half-migrated)를 고정한다. M1 prototype은 H2-A baseline을 PM이 검수하기 전 열지 않는다.
+- **H2 topic:** branch baseline · migration/rollback rehearsal · stale-writer verify-loop RED · migration-only import mutation · pi JSONL non-mutation fence. RED는 commit하지 않고 `.agent-reports/H2/` patch+digest로 보존한다.
+- **Branch gates:** H2 rehearsal/mutation evidence가 GREEN이면 C1 production authority transfer를 연다. C1/C2는 `check-pack-install`을 명시 실행하며, C2는 9-cell socket-fence mutation matrix를 추가로 소유한다.
 - **Implementation rule:** RED는 커밋하지 않고 `.agent-reports/H<n>/` patch+digest로 보존한다. Production 권위 이전은 C1~C4 각각 `새 writer/reader + 소비자 전환 + 옛 producer 삭제`가 같은 GREEN commit에서 닫혀야 한다. 정상 routing의 새 dual-read/dual-authority는 금지한다. 각 C commit은 replacement authority와 그 mutation gate를 함께 저자한다.
 - **Sequencing reason:** main의 #51 하네스를 선행조건으로 삼지 않는다. 이 브랜치가 제거할 옛 identity/resume/socket authority를 main gate가 먼저 고정하면 그것이 다시 기술부채다. #51의 관측은 읽되, H7에서 최종 authority에 맞는 package/OS floor로 재적합한다.
 - **Main protection:** 모든 protocol surgery와 RED 관측은 이 branch에서만 한다. main/origin-main은 일상 사용 lane으로 유지한다.
@@ -83,8 +83,8 @@
 세부 entry/exit/rollback은 `HOP.md`가 가진다. 실측이 다르면 이 순서를 고친다.
 
 1. **H0 done (`50251ea`):** PM↔Opus 홉 설계 교차검토를 plan-only commit으로 닫았다.
-2. **H1 now:** H1-prep artifact를 현재 HEAD에서 재측정 → exact subtraction/caller/gate/live-smoke map → C1~C4 cut ledger를 GLG가 확인한다.
-3. **H2 after H1 approval:** branch floor baseline → sandbox M1 migration+rollback rehearsal → mutation RED catalog와 self-host pre-cut peer map.
+2. **H1 done:** 87-row exact subtraction/caller/gate/live-smoke map과 C1~C4 cut ledger를 GLG가 승인했다 (`d5d49fb9…`).
+3. **H2 now:** branch floor baseline → sandbox M1 migration+rollback rehearsal → mutation RED catalog와 self-host pre-cut peer map.
 4. **C1 / H3 — schema authority:** V3 minimal record + migration-only V1/V2 M1 + backup/restore/verify-loop. `parentGardenId`/`isEntwurf` 제거. 정상 production은 V3 only.
 5. **C2 / H4 — pi lifecycle/identity authority:** native pi id로 record attach/mint; socket/sender는 record garden id. session-id/name/header gardenization, `/gnew`, `/new` guard 제거.
 6. **C3 / H5a — resume/file authority:** ordinary prompt 앞에 기존 structured `<sender_info>`를 prepend하고 `wantsReply`는 sibling input으로 유지; record transcript path/native header 검증 + exact `--session`; global scan/name authorization/resume marker 제거. 새 child carrier/custom-message reconstruction은 만들지 않는다.
