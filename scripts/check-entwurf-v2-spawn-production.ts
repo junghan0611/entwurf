@@ -24,19 +24,20 @@
  */
 
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { LockClaim } from "../pi-extensions/lib/entwurf-v2-lock.ts";
-import {
-	isV2ResumeResidentAuthorized,
-	V2_RESUME_RESIDENT_SESSION_ENV,
-} from "../pi-extensions/lib/entwurf-v2-resume-marker.ts";
 import type { SpawnBgPlan, SpawnBgResumeDeps, SpawnedChild } from "../pi-extensions/lib/entwurf-v2-spawn.ts";
 import {
 	type LaunchIdentity,
 	makeProductionSpawnBgResumeDeps,
 	type ProductionSpawnOpts,
+	resolveResumeLaunchIdentity,
 	type SpawnedProcHandle,
 	socketWatchVerdict,
 } from "../pi-extensions/lib/entwurf-v2-spawn-production.ts";
+import { upsertMetaSession } from "../pi-extensions/lib/meta-session.ts";
 import type { LstatLike } from "../pi-extensions/lib/socket-discovery.ts";
 import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
 
@@ -193,14 +194,14 @@ async function main(): Promise<void> {
 	// ── 2. spawnChild builds the v2-control argv, then WAITS for the 'spawn' event (B1) ─
 	{
 		// A holder (not a closure-assigned `let`) so flow analysis sees the capture.
-		const cap: { value: { cmd: string; args: readonly string[]; cwd: string; env: NodeJS.ProcessEnv } | null } = {
+		const cap: { value: { cmd: string; args: readonly string[]; cwd: string } | null } = {
 			value: null,
 		};
 		const fp = fakeProc();
 		const deps = makeProductionSpawnBgResumeDeps({
 			resolveIdentity: () => IDENTITY,
-			spawnChild: (cmd, args, cwd, env) => {
-				cap.value = { cmd, args, cwd, env };
+			spawnChild: (cmd, args, cwd) => {
+				cap.value = { cmd, args, cwd };
 				return fp.proc;
 			},
 		});
@@ -229,13 +230,10 @@ async function main(): Promise<void> {
 		// called it a resume.
 		ok("2 argv resumes by exact file", args[args.indexOf("--session") + 1] === SESSION_FILE);
 		ok("2 argv carries NO --session-id", !args.includes("--session-id"));
-		// the sessionId-bound authorization marker is planted on the child env so the resumed
-		// `--entwurf-control` resident is an AUTHORIZED Entwurf child (entwurf-control.ts guard),
-		// not a "corrupt resident session name" crash. Bound to plan.sessionId exactly.
-		ok(
-			"2 child env carries the v2 resume resident marker = sessionId",
-			captured.env[V2_RESUME_RESIDENT_SESSION_ENV] === GID,
-		);
+		// #50 C3: the sessionId-bound resume-marker env is GONE — the name-mirror guard it
+		// authorized died in C2, so the seam no longer takes an env at all (the child
+		// inherits process.env). The compiler enforces the narrowed signature; what remains
+		// to assert is that authorization now lives in the RECORD (section 9 below).
 	}
 
 	// ── 2b. B1: an 'error' before 'spawn' (ENOENT pi / exec failure) → spawnChild REJECTS ─
@@ -441,15 +439,84 @@ async function main(): Promise<void> {
 		}
 		ok("8 awaitChildExit on a proc-less child fails loud", exitThrew);
 	}
-	ok(
-		"9 exact sessionId marker → authorized",
-		isV2ResumeResidentAuthorized(GID, { [V2_RESUME_RESIDENT_SESSION_ENV]: GID }),
-	);
-	ok("9 absent marker → NOT authorized", !isV2ResumeResidentAuthorized(GID, {}));
-	ok(
-		"9 wrong-session marker → NOT authorized (binding is to the exact id)",
-		!isV2ResumeResidentAuthorized(GID, { [V2_RESUME_RESIDENT_SESSION_ENV]: "20260101T000000-000000" }),
-	);
+	// ── 9. resolveResumeLaunchIdentity — the RECORD is the resume authority (#50 C2/C3) ──
+	// Fixture-driven through a temp ENTWURF_META_SESSIONS_DIR: the record names the
+	// transcript (gardenId → record.transcriptPath), and the transcript must prove it is
+	// the citizen's own (header id === record.nativeSessionId — the C3 integrity check
+	// that replaced the marker/name-tag authorization).
+	{
+		const world = fs.mkdtempSync(path.join(os.tmpdir(), "spawn-prod-resolve-"));
+		const storeDir = path.join(world, "meta-sessions");
+		fs.mkdirSync(storeDir, { recursive: true });
+		const prevStore = process.env.ENTWURF_META_SESSIONS_DIR;
+		process.env.ENTWURF_META_SESSIONS_DIR = storeDir;
+		try {
+			const cwd = path.join(world, "repo");
+			fs.mkdirSync(cwd, { recursive: true });
+			const sessionLine = (id: string) => `${JSON.stringify({ type: "session", id, cwd })}\n`;
+			const modelLine = `${JSON.stringify({ type: "model_change", provider: "openai-codex", modelId: "gpt-5.4" })}\n`;
+			const writeTranscript = (name: string, content: string): string => {
+				const p = path.join(world, name);
+				fs.writeFileSync(p, content);
+				return p;
+			};
+			const mintRecord = (nativeSessionId: string, transcriptPath: string | null, backend = "pi"): string =>
+				upsertMetaSession({
+					input: { backend: backend as "pi", nativeSessionId, cwd, model: "gpt-5.4", transcriptPath },
+					dir: storeDir,
+				}).record.gardenId;
+			const planFor = (gid: string): SpawnBgPlan => ({ ...spawnBgPlan(), targetGardenId: gid, sessionId: gid });
+			const rejects = (gid: string, needle: string, label: string): void => {
+				let msg = "";
+				try {
+					resolveResumeLaunchIdentity(planFor(gid));
+				} catch (e) {
+					msg = e instanceof Error ? e.message : String(e);
+				}
+				ok(label, msg.includes(needle));
+			};
+
+			// happy: record → transcriptPath → header id matches nativeSessionId → LaunchIdentity.
+			const nativeOk = "0199aaaa-1111-4222-8333-444455556666";
+			const fileOk = writeTranscript("own.jsonl", sessionLine(nativeOk) + modelLine);
+			const gidOk = mintRecord(nativeOk, fileOk);
+			const launch = resolveResumeLaunchIdentity(planFor(gidOk));
+			ok("9 record-backed resume resolves the recorded transcript", launch.sessionFile === fileOk);
+			ok("9 resume cwd = header authority", launch.cwd === cwd);
+			ok("9 resume model = first model_change", launch.model === "gpt-5.4" && launch.provider === "openai-codex");
+
+			// C3 integrity: a transcript whose header id is NOT the citizen's nativeSessionId
+			// (stale/foreign transcriptPath) must be refused, never resumed.
+			const nativeMine = "0199bbbb-1111-4222-8333-444455556666";
+			const foreignFile = writeTranscript(
+				"foreign.jsonl",
+				sessionLine("0199cccc-9999-4999-8999-999999999999") + modelLine,
+			);
+			const gidForeign = mintRecord(nativeMine, foreignFile);
+			rejects(gidForeign, "does not match the record's nativeSessionId", "9 header ≠ nativeSessionId → refused (C3)");
+
+			// missing record → not a garden citizen (readMetaIdentityByGardenId fail-fast).
+			rejects("20260101T000000-facade", "not a garden citizen", "9 recordless gid → not a citizen");
+
+			// non-pi citizen → spawn-bg resume is the pi rail.
+			const gidClaude = mintRecord("claude-native-1", null, "claude-code");
+			rejects(gidClaude, "the pi rail", "9 non-pi citizen → refused (pi rail)");
+
+			// pi citizen with no recorded transcript (no turn yet) → nothing to resume.
+			const gidNoFile = mintRecord("0199dddd-1111-4222-8333-444455556666", null);
+			rejects(gidNoFile, "no recorded transcriptPath", "9 transcriptPath null → nothing to resume");
+
+			// transcript with no model_change → no recorded model.
+			const nativeNoModel = "0199eeee-1111-4222-8333-444455556666";
+			const fileNoModel = writeTranscript("no-model.jsonl", sessionLine(nativeNoModel));
+			const gidNoModel = mintRecord(nativeNoModel, fileNoModel);
+			rejects(gidNoModel, "no recorded model", "9 no model_change → refused");
+		} finally {
+			if (prevStore === undefined) delete process.env.ENTWURF_META_SESSIONS_DIR;
+			else process.env.ENTWURF_META_SESSIONS_DIR = prevStore;
+			fs.rmSync(world, { recursive: true, force: true });
+		}
+	}
 
 	console.log(`\ncheck-entwurf-v2-spawn-production: ${passed} checks passed`);
 }

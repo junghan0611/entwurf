@@ -65,7 +65,6 @@ const AGENT_DIR = process.env.PI_CODING_AGENT_DIR
 const PI_SETTINGS_PATH = process.env.PI_SETTINGS_PATH
 	? expandTilde(process.env.PI_SETTINGS_PATH)
 	: path.join(AGENT_DIR, "settings.json");
-export const SESSIONS_BASE = path.join(AGENT_DIR, "sessions");
 const ENTWURF_TARGETS_PATH = process.env.ENTWURF_TARGETS_PATH ?? path.join(AGENT_DIR, "entwurf-targets.json");
 export const DEFAULT_ENTWURF_MODEL = "openai-codex/gpt-5.4";
 export const ENTWURF_CODEX_ACP_ENV = "ENTWURF_ACP_FOR_CODEX";
@@ -82,26 +81,6 @@ function shellQuote(value: string): string {
 // Types
 // ============================================================================
 
-export interface AssistantMessageLike {
-	role?: string;
-	content?: unknown;
-	usage?: { cost?: { total?: number } };
-	model?: string;
-	provider?: string;
-	stopReason?: string;
-	errorMessage?: string;
-}
-
-export interface SessionAnalysis {
-	lastAssistantText: string | null;
-	lastError: string | null;
-	lastStopReason: string | null;
-	lastModel: string | null;
-	lastProvider: string | null;
-	turns: number;
-	cost: number;
-}
-
 export interface ExplicitExtensionSpec {
 	name: string;
 	localPath: string;
@@ -111,12 +90,6 @@ export interface ExplicitExtensionSpec {
 // ============================================================================
 // Path / model helpers
 // ============================================================================
-
-export function cwdToSessionDir(cwd: string): string {
-	const normalized = cwd.replace(/\/$/, "");
-	const dirName = "--" + normalized.replace(/^\//, "").replace(/\//g, "-") + "--";
-	return path.join(SESSIONS_BASE, dirName);
-}
 
 export function resolveEntwurfModel(model?: string): string {
 	const trimmed = model?.trim();
@@ -434,165 +407,33 @@ function describeRegistryEntries(entries: EntwurfTarget[]): string {
 	return entries.map((t) => `${t.provider}/${t.model}${t.explicitOnly ? " [explicitOnly]" : ""}`).join(", ");
 }
 
-// ============================================================================
-// Content extraction
-// ============================================================================
+// The v1 session-file readers that used to sit here — extractTextContent,
+// readSessionHeader (the bounded header read), analyzeSessionFileLike (the
+// streamed last-assistant-state scan) — are GONE (#50 C3). Their last consumers
+// were the header-scan lookup below and the retired --session-id/--name
+// substrate smoke; the record owns lookup now and nothing analyzes a transcript
+// body from this module anymore. readSessionIdentity below is the one surviving
+// transcript reader (resume identity only).
 
-export function extractTextContent(content: unknown): string {
-	if (typeof content === "string") return content;
-	if (!Array.isArray(content)) return "";
-	const texts: string[] = [];
-	for (const block of content) {
-		if (
-			typeof block === "object" &&
-			block !== null &&
-			"type" in block &&
-			(block as { type?: unknown }).type === "text" &&
-			"text" in block &&
-			typeof (block as { text?: unknown }).text === "string"
-		) {
-			texts.push((block as { text: string }).text);
-		}
-	}
-	return texts.join("\n\n");
-}
-
-const SESSION_HEADER_READ_BYTES = 8192;
-const SESSION_ANALYSIS_CHUNK_BYTES = 64 * 1024;
-
-export function readSessionHeader(sessionFile: string): { id?: string; cwd?: string } | null {
-	let fd: number | undefined;
-	try {
-		fd = fs.openSync(sessionFile, "r");
-		const buffer = Buffer.alloc(SESSION_HEADER_READ_BYTES);
-		const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
-		if (bytesRead <= 0) return null;
-
-		// Session header is the first JSONL line. Read only a bounded prefix so
-		// header scans over many large transcripts cannot load/split whole files.
-		const prefix = buffer.subarray(0, bytesRead).toString("utf8");
-		const newlineIdx = prefix.indexOf("\n");
-		const trimmed = (newlineIdx >= 0 ? prefix.slice(0, newlineIdx) : prefix).trim();
-		if (!trimmed) return null;
-
-		const entry = JSON.parse(trimmed) as { type?: string; id?: unknown; cwd?: unknown };
-		if (entry.type !== "session") return null;
-		const id = typeof entry.id === "string" && entry.id.length > 0 ? entry.id : undefined;
-		const cwd = typeof entry.cwd === "string" && entry.cwd.length > 0 ? entry.cwd : undefined;
-		return { id, cwd };
-	} catch {
-		return null;
-	} finally {
-		if (fd !== undefined) {
-			try {
-				fs.closeSync(fd);
-			} catch {
-				/* best-effort close */
-			}
-		}
-	}
-}
+const SESSION_READ_CHUNK_BYTES = 64 * 1024;
 
 /**
- * Parse a pi session JSONL file and extract the latest assistant state.
- * Pure file I/O — safe to use from MCP bridge or pi runtime.
- */
-export function analyzeSessionFileLike(sessionFile: string): SessionAnalysis {
-	const analysis: SessionAnalysis = {
-		lastAssistantText: null,
-		lastError: null,
-		lastStopReason: null,
-		lastModel: null,
-		lastProvider: null,
-		turns: 0,
-		cost: 0,
-	};
-
-	// Per-line accumulation. Identical semantics to the old
-	// `readFileSync().trim().split("\n")` pass (last-wins fields, turn/cost
-	// accumulation, malformed lines skipped) but streamed so a multi-MB
-	// transcript is never held whole in memory at once.
-	const processLine = (line: string): void => {
-		const trimmed = line.trim();
-		if (!trimmed) return;
-		try {
-			const entry = JSON.parse(trimmed) as { type?: string; message?: AssistantMessageLike };
-			if (entry.type !== "message" || entry.message?.role !== "assistant") return;
-
-			const msg = entry.message;
-			analysis.turns++;
-
-			const text = extractTextContent(msg.content).trim();
-			if (text) analysis.lastAssistantText = text;
-			if (typeof msg.errorMessage === "string" && msg.errorMessage.trim()) {
-				analysis.lastError = msg.errorMessage.trim();
-			}
-			if (typeof msg.stopReason === "string") analysis.lastStopReason = msg.stopReason;
-			if (typeof msg.model === "string") analysis.lastModel = msg.model;
-			if (typeof msg.provider === "string") analysis.lastProvider = msg.provider;
-
-			const c = msg.usage?.cost?.total;
-			if (typeof c === "number") analysis.cost += c;
-		} catch {
-			/* skip malformed lines */
-		}
-	};
-
-	let fd: number | undefined;
-	try {
-		fd = fs.openSync(sessionFile, "r");
-		const chunk = Buffer.alloc(SESSION_ANALYSIS_CHUNK_BYTES);
-		// `leftover` holds a partial trailing line carried across chunk reads.
-		// Splitting on the newline BYTE (0x0a) and decoding each complete line
-		// independently keeps multibyte UTF-8 from being corrupted at a chunk
-		// boundary (a newline never falls inside a multibyte sequence).
-		let leftover = Buffer.alloc(0);
-		let bytesRead = 0;
-		// biome-ignore lint/suspicious/noAssignInExpressions: standard read loop
-		while ((bytesRead = fs.readSync(fd, chunk, 0, chunk.length, null)) > 0) {
-			const buf =
-				leftover.length > 0 ? Buffer.concat([leftover, chunk.subarray(0, bytesRead)]) : chunk.subarray(0, bytesRead);
-			let start = 0;
-			let nl = buf.indexOf(0x0a, start);
-			while (nl !== -1) {
-				processLine(buf.toString("utf8", start, nl));
-				start = nl + 1;
-				nl = buf.indexOf(0x0a, start);
-			}
-			// Copy the remainder before the next read overwrites `chunk`.
-			leftover = Buffer.from(buf.subarray(start));
-		}
-		if (leftover.length > 0) processLine(leftover.toString("utf8"));
-	} catch {
-		/* file not readable */
-	} finally {
-		if (fd !== undefined) {
-			try {
-				fs.closeSync(fd);
-			} catch {
-				/* best-effort close */
-			}
-		}
-	}
-
-	return analysis;
-}
-
-/**
- * Recorded session identity — the resume authority (locked grammar, NEXT.md
- * "Authority separation"):
+ * Recorded session identity — the resume authority (NEXT.md "Authority
+ * separation"):
  *   - model authority = the session's FIRST `model_change` (provider + modelId),
  *     NOT the last assistant message's `model` field. A session that drifted to
  *     a different model on a later `model_change` is corrupt for our purposes
  *     (entwurf children run `pi -p --model <M>` non-interactively, so a healthy
  *     entwurf session has exactly one model_change) — refuse rather than follow
  *     the drift.
- *   - the session_info `name` is a display/search/integrity mirror: if present
- *     and canonical, its sessionId / provider / model must mirror the header id
- *     and the first model_change, else the metadata is corrupt → fail-fast.
+ *   - the session NAME is pi's (LOCKED PROTOCOL 2) and is not read at all. The
+ *     old name-mirror integrity check and the `requireEntwurf` name-tag
+ *     authorization are gone (#50 C3): resume authorization is record existence,
+ *     and transcript integrity is the caller's header-id ↔ record.nativeSessionId
+ *     check (entwurf-v2-spawn-production.resolveResumeLaunchIdentity).
  */
 export interface RecordedSessionIdentity {
-	/** JSONL header `id` (the durable sessionId). */
+	/** JSONL header `id` (pi's own session id — the record's `nativeSessionId`). */
 	sessionId?: string;
 	/** JSONL header `cwd` (cold-resume authority). */
 	cwd?: string;
@@ -607,33 +448,19 @@ export interface RecordedSessionIdentity {
  * Returns `null` when the session has no `model_change` (never reached an
  * identity) so callers can refuse with their own "no recorded model" result.
  * **Throws** `SessionIdentityError` on model-identity drift (a later
- * `model_change` differs from the first) or on a corrupt session-name mirror
- * (the name's sessionId / provider / model disagree with the header / first
- * model_change). This is the fail-fast that replaces the old "follow the last
- * assistant message's model" behavior.
- *
- * `requireEntwurf` (resume paths): tightens the contract to the locked 0.9.0
- * rule "entwurf 여부 = session name tag 중 'entwurf' 존재; 없으면 Entwurf 세션
- * 아님; compatibility 없음". A general pi session (no name, non-canonical name,
- * or canonical name without the `entwurf` tag) must NOT be resumable as an
- * Entwurf session — it throws instead. lookup/resume authority is still the
- * header id/cwd; the name is only the integrity/discovery mirror being asserted.
+ * `model_change` differs from the first). This is the fail-fast that replaces
+ * the old "follow the last assistant message's model" behavior.
  */
-export function readSessionIdentity(
-	sessionFile: string,
-	opts?: { requireEntwurf?: boolean },
-): RecordedSessionIdentity | null {
-	const requireEntwurf = opts?.requireEntwurf === true;
+export function readSessionIdentity(sessionFile: string): RecordedSessionIdentity | null {
 	let headerId: string | undefined;
 	let headerCwd: string | undefined;
 	let first: { provider: string; modelId: string } | undefined;
 	let drift: { provider: string; modelId: string } | undefined;
-	let latestName: string | undefined;
 
 	const onLine = (line: string): void => {
 		const t = line.trim();
 		if (!t) return;
-		let e: { type?: string; id?: unknown; cwd?: unknown; provider?: unknown; modelId?: unknown; name?: unknown };
+		let e: { type?: string; id?: unknown; cwd?: unknown; provider?: unknown; modelId?: unknown };
 		try {
 			e = JSON.parse(t);
 		} catch {
@@ -648,15 +475,13 @@ export function readSessionIdentity(
 			if (!provider || !modelId) return;
 			if (!first) first = { provider, modelId };
 			else if ((provider !== first.provider || modelId !== first.modelId) && !drift) drift = { provider, modelId };
-		} else if (e.type === "session_info") {
-			if (typeof e.name === "string" && e.name) latestName = e.name;
 		}
 	};
 
 	let fd: number | undefined;
 	try {
 		fd = fs.openSync(sessionFile, "r");
-		const chunk = Buffer.alloc(SESSION_ANALYSIS_CHUNK_BYTES);
+		const chunk = Buffer.alloc(SESSION_READ_CHUNK_BYTES);
 		let leftover = Buffer.alloc(0);
 		let bytesRead = 0;
 		// biome-ignore lint/suspicious/noAssignInExpressions: standard read loop
@@ -693,53 +518,6 @@ export function readSessionIdentity(
 				`but a later model_change=${drift.provider}/${drift.modelId}. Resume identity is locked to the first ` +
 				`model_change; a differing later change is treated as corrupt/drift — refusing to resume.`,
 		);
-	}
-
-	// Name integrity mirror. In the general path a missing/non-canonical name is
-	// not itself a failure; only a canonical name that disagrees is corrupt.
-	const parsed = latestName ? parseSessionName(latestName) : null;
-	if (parsed) {
-		if (headerId && parsed.sessionId !== headerId) {
-			throw new SessionIdentityError(
-				`Session name sessionId mirror mismatch: name carries "${parsed.sessionId}" but header id is ` +
-					`"${headerId}" (corrupt metadata).`,
-			);
-		}
-		if (parsed.provider !== first.provider || parsed.model !== first.modelId) {
-			throw new SessionIdentityError(
-				`Session name provider/model mirror mismatch: name carries "${parsed.provider}/${parsed.model}" but ` +
-					`first model_change is "${first.provider}/${first.modelId}" (corrupt metadata).`,
-			);
-		}
-	}
-
-	// Entwurf-resume strictness (locked 0.9.0 rule). A session is an Entwurf
-	// session ONLY if its canonical name carries the `entwurf` tag — there is no
-	// compatibility path for the old `*_entwurf-<taskId>.jsonl` filename species.
-	if (requireEntwurf) {
-		if (!headerId) {
-			throw new SessionIdentityError(
-				`Refusing Entwurf resume of "${sessionFile}": session header has no id. Not an Entwurf session.`,
-			);
-		}
-		if (!latestName) {
-			throw new SessionIdentityError(
-				`Refusing Entwurf resume of sessionId "${headerId}": no session_info name. The Entwurf marker is the ` +
-					`name's \`entwurf\` tag; a session with no name is not an Entwurf session (no compatibility path).`,
-			);
-		}
-		if (!parsed) {
-			throw new SessionIdentityError(
-				`Refusing Entwurf resume of sessionId "${headerId}": session name "${latestName}" is not canonical ` +
-					`(cannot parse the locked grammar). Not an Entwurf session.`,
-			);
-		}
-		if (!parsed.tags.includes("entwurf")) {
-			throw new SessionIdentityError(
-				`Refusing Entwurf resume of sessionId "${headerId}": session name tags [${parsed.tags.join(", ")}] do not ` +
-					`include "entwurf". The Entwurf marker is the name's \`entwurf\` tag — this is a general pi session.`,
-			);
-		}
 	}
 
 	return { sessionId: headerId, cwd: headerCwd, provider: first.provider, modelId: first.modelId };
@@ -1059,11 +837,6 @@ export function enrichTaskWithProjectContext(task: string, cwd: string): string 
 	}
 }
 
-// Saved entwurf session lookup is by JSONL header `id` (= sessionId), not by
-// filename species. See findSessionFileById / findSessionFilesById below in the
-// "Garden session identity & name grammar" block — header scan is the sole
-// authority; filenames are a Pi artifact and are never parsed for logic.
-
 // ============================================================================
 // Garden session identity & name grammar (0.9.0 / 1.0.0) — locked SSOT
 //
@@ -1268,71 +1041,9 @@ export function computeResidentStatusLabel(input: { sessionId: string; sessionFi
 	return input.sessionFileExists ? `${RESIDENT_STATUS_ICON} ${input.sessionId}` : `${RESIDENT_STATUS_ICON} ready`;
 }
 
-/**
- * All session files whose JSONL header `id` equals `sessionId`, across every
- * cwd-encoded session dir. Header is the sole authority — every `.jsonl` header
- * is read; the filename is NOT used to pre-filter (a renamed/relocated file with
- * the right header still matches, a filename-only match with a different header
- * does not). Returns `[]` on invalid id or missing base.
- */
-export function findSessionFilesById(sessionId: string): string[] {
-	if (!isValidSessionId(sessionId)) return [];
-	let dirs: string[];
-	try {
-		dirs = fs.readdirSync(SESSIONS_BASE);
-	} catch {
-		return [];
-	}
-	const matches: string[] = [];
-	for (const dir of dirs) {
-		const dirPath = path.join(SESSIONS_BASE, dir);
-		let files: string[];
-		try {
-			if (!fs.statSync(dirPath).isDirectory()) continue;
-			files = fs.readdirSync(dirPath);
-		} catch {
-			continue;
-		}
-		for (const file of files) {
-			if (!file.endsWith(".jsonl")) continue;
-			const full = path.join(dirPath, file);
-			if (readSessionHeader(full)?.id === sessionId) matches.push(full);
-		}
-	}
-	return matches;
-}
-
-/**
- * Resolve a sessionId to its single session file by header scan. `null` if none,
- * the path if exactly one, and **throws** `SessionIdentityError` if the same
- * header id exists in more than one session (the wrong-cwd duplicate footgun) —
- * resume must never silently pick one of several ambiguous sessions.
- */
-export function findSessionFileById(sessionId: string): string | null {
-	const matches = findSessionFilesById(sessionId);
-	if (matches.length === 0) return null;
-	if (matches.length > 1) {
-		throw new SessionIdentityError(
-			`sessionId "${sessionId}" is ambiguous: ${matches.length} sessions carry this header id ` +
-				`(${matches.join(", ")}). This is the wrong-cwd duplicate footgun; refuse rather than guess.`,
-		);
-	}
-	return matches[0] ?? null;
-}
-
-/**
- * Scope lock for 0.9.0 garden-native session identity: spawn/resume/status are
- * local-FS only. The resume header scan (`findSessionFileById`) walks `~/.pi/agent/sessions`
- * on the local machine; they cannot see a remote host's filesystem. Remote (SSH)
- * entwurf identity is parked under #11. Fail-fast here rather than silently spawn
- * a remote session whose id we can neither pre-check nor later resume.
- */
-export function assertLocalOnlyEntwurf(host: string | undefined): void {
-	if (host && host !== "local") {
-		throw new SessionIdentityError(
-			`Remote entwurf host "${host}" is out of scope in 0.9.0 garden-native session identity (#11). ` +
-				`sessionId collision pre-check and header-scan resume are local-filesystem only. ` +
-				`Run the entwurf locally; remote/SSH identity is a later phase.`,
-		);
-	}
-}
+// The global header-scan lookup (`findSessionFilesById` / `findSessionFileById` —
+// "every cwd dir, header id is the authority") and its remote scope-lock
+// (`assertLocalOnlyEntwurf`) are GONE (#50 C3). They existed to resolve a garden id
+// to a pi session FILE while the garden id WAS pi's session id; the meta-record now
+// carries `transcriptPath` directly (resolveResumeLaunchIdentity), so nothing scans
+// `~/.pi/agent/sessions` anymore and the wrong-cwd duplicate footgun has no subject.

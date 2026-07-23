@@ -73,7 +73,7 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # ONE confident install: pnpm install + install + meta-bridge (if native harness) + v2 install smoke (LIVE substrate = release-gate)
-  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, retargeted smoke-session-id-name, RGG) + the ACP plugin acceptance floor (11 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). LIVE-gated MUST steps HONEST-SKIP when LIVE!=1 (a CUT needs LIVE=1, SKIP=0). --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
+  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, RGG) + the ACP plugin acceptance floor (11 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). LIVE-gated MUST steps HONEST-SKIP when LIVE!=1 (a CUT needs LIVE=1, SKIP=0). --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
   ./run.sh check-entwurf-bridge-pi-free # deterministic gate (0.12.1 A, IN pnpm check): static — bridge index eager value-import closure must carry no @earendil-works/pi-* (type-only + dynamic import excluded); proves the meta-bridge boots pi-free
@@ -123,7 +123,6 @@ Usage:
   ./run.sh check-native-push-register # deterministic gate (봉인 5): registerNativeConversation (entwurf_register_native core) via fake adapter + isolated mkdtemp store — live probe→CREATE, re-register→ATTACH (same gid, cwd refreshed, no dup), not-live probe→REFUSE (throws, no record), receiver-marker abstinence (보정① source guard)
   ./run.sh check-agy-sender-identity # deterministic gate (#46 sender lane): WHO is calling the bridge — real agy hook as a child process writes an antigravity sender marker keyed by its PARENT pid (never on upsert failure), and resolveTrustedMetaSenderIdentity over isolated stores yields 0→null / 1→identity on EITHER backend / two distinct live identities on one owner pid→THROW (never guess, never downgrade to anonymous). This is what turns an agy send from external-mcp/unknown-host into a replyable garden citizen
   ./run.sh check-package-source-routing # deterministic gate (#29): package-source -> install-root mapping + fail-fast routing (local/git/npm/missing/project/no-source × local+remote, self-root, resume), no backend
-  ./run.sh smoke-session-id-name      # live 3-turn substrate smoke (Phase 3a): Pi 0.78 --session-id/--name through the bridge — header id/cwd, session_info name, append-not-recreate, spawn-only name, wrong-cwd footgun evidence
   ./run.sh new-session-id             # print one fresh garden-native session id for operator launchers (--session-id)
   ./run.sh smoke-resident-garden-guard # live resident --entwurf-control garden guard (negative 0-token; SMOKE_RGG_POSITIVE=1 for positive)
   ./run.sh smoke-meta-async-drift     # 1.0.0 meta-bridge step 1: drift sentinel — version pins + Claude binary undocumented-behavior markers (LIVE=1 adds plugin watch-arm probe)
@@ -1331,25 +1330,11 @@ check_package_source_routing() {
 }
 
 
-smoke_session_id_name() {
-  # LIVE 3-turn substrate smoke (Phase 3a) for Pi 0.78 --session-id/--name,
-  # exercised through the bridge but NOT through the Entwurf tool surface, so it
-  # lands independently of the taskId->sessionId migration. Spawns real cheap
-  # sonnet turns (auth + tokens) and asserts: header id/cwd, session_info name as
-  # info layer, append-not-recreate, spawn-only name, and the wrong-cwd footgun
-  # as documented evidence. Isolated via a temp PI_CODING_AGENT_DIR.
-  section "smoke: --session-id / --name substrate (direct pi, no Entwurf API)"
-  if ! command -v pi >/dev/null 2>&1; then
-    fail "[smoke-session-id-name] pi binary not on PATH — cannot run live substrate proof"
-    return 1
-  fi
-  run_ts scripts/smoke-session-id-name.ts || {
-    fail "[smoke-session-id-name] live substrate smoke failed"
-    return 1
-  }
-  ok "[smoke-session-id-name] --session-id/--name substrate proven (append + spawn-only name + wrong-cwd footgun)"
-  return 0
-}
+# smoke-session-id-name is GONE (#50 C3): it proved the pi --session-id/--name
+# substrate entwurf used to stand on. C2 removed every entwurf use of that
+# substrate (the record mints the address; pi owns id and name), so the smoke's
+# subject no longer exists. The resident identity axis is covered by
+# smoke-pi-attach (deterministic, in pnpm check) + smoke-resident-garden-guard (LIVE).
 
 
 
@@ -1678,9 +1663,21 @@ const tracked = execFileSync('git', ['ls-files', '--cached', '--', '*.sh', '*.ts
   .split('\n').filter(Boolean);
 assert.ok(tracked.length >= 20, `git ls-files returned ${tracked.length} files — the sweep lost its corpus`);
 const STUB = /echo\s+"(\d+\.\d+\.\d+) \(Claude Code\)"/g;
+// `git ls-files --cached` still names an UNSTAGED deletion (same contract as the
+// node-floor sweep): a valid release-surface migration before the commit workflow
+// stages it. Skip ENOENT only; every other read failure crashes.
+const readTracked = (file) => {
+  try { return readFileSync(file, 'utf8'); }
+  catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+};
 let stubs = 0;
 for (const file of tracked) {
-  for (const [decl, ver] of readFileSync(file, 'utf8').matchAll(STUB)) {
+  const text = readTracked(file);
+  if (text === null) continue;
+  for (const [decl, ver] of text.matchAll(STUB)) {
     stubs++;
     assert.ok(cmp(ver, FLOOR) >= 0,
       `${file}: fake claude CLI reports ${ver} in "${decl.trim()}", BELOW the floor ${FLOOR} — the doctor would refuse this fixture for the version, not for what the fixture is testing`);
@@ -1699,7 +1696,8 @@ assert.ok(stubs >= 4,
 const MINT = /(?:cat|tee)\s*>+\s*"?\$?\{?\w+\}?\/claude"?\s*<<-?\s*'?(\w+)'?/g;
 let stubsMinted = 0;
 for (const file of tracked) {
-  const text = readFileSync(file, 'utf8');
+  const text = readTracked(file);
+  if (text === null) continue;
   for (const m of text.matchAll(MINT)) {
     stubsMinted++;
     const body = text.slice(m.index + m[0].length);
@@ -3662,9 +3660,8 @@ expose_dev_bin() {
 # Design invariants (NEXT Step 1e + GPT-5.5 reviews):
 #   - v2-native live floor: the MUST tier is the v2 dispatch substrate
 #     (smoke-entwurf-v2-matrix-live + smoke-entwurf-v2-spawn-resume-live, opt-in
-#     LIVE), the MCP bridge (check-bridge), and the garden-native substrate/guard
-#     (smoke-session-id-name on a pi-native target via ENTWURF_LIVE_TARGET,
-#     and smoke-resident-garden-guard).
+#     LIVE), the MCP bridge (check-bridge), and the resident citizen guard
+#     (smoke-resident-garden-guard).
 #   - ACP plugin acceptance floor (S0~S2g): the 11 ACP LIVE smokes
 #     (socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/
 #     memory-containment/rgg + S2g mcp/skill config passthrough + S2g axis-3 bundled-mcp resident/RPC)
@@ -3700,12 +3697,10 @@ release_gate() {
   # regardless of the operator's cwd. `-e "$REPO_DIR/..."` (extension load) and
   # every other path the gates touch are absolute, so the cd is safe.
   #
-  # The two garden-native identity gates (smoke-session-id-name,
-  # smoke-resident-garden-guard) also take no project arg but are exempt from
-  # the repo-pollution concern by construction: the substrate smoke runs every
-  # pi turn under its own os.tmpdir() agent dir + cwds (mkdtemp, cleaned up),
-  # and the guard is wired here as the NEGATIVE path only — a 0-token fail-fast
-  # that writes no session file at all.
+  # The identity gate (smoke-resident-garden-guard) also takes no project arg
+  # but is exempt from the repo-pollution concern by construction: it is wired
+  # here as the NEGATIVE path only — a 0-token fail-fast that writes no session
+  # file at all.
   #
   # smoke-acp-bundled-mcp-live is a DELIBERATE exception to the PWD=project_dir
   # routing: it runs its resident with cwd=os.tmpdir() and relies on the
@@ -3801,15 +3796,13 @@ release_gate() {
   #    with PWD=project_dir (via gate()) so cwd-derived pi session dirs land in
   #    the scratch project, never the repo — see the note above.
   #
-  #    Foundational garden-native identity gates run first (0.9.0, #28): the
-  #    substrate proof (Pi --session-id/--name through the bridge) and the
-  #    resident --entwurf-control citizen discipline (#50 C2: a raw resident
-  #    becomes a record-backed citizen on a record-keyed socket, and a re-open
-  #    attaches to the same address). If the identity foundation is broken, every
-  #    Entwurf live gate below is meaningless, so fail fast here. The 0-token
-  #    cells carry it; the positive is ~1 cheap turn; the substrate smoke is a
-  #    few cheap turns.
-  run_step "smoke-session-id-name (3a substrate)" gate bash "$self" smoke-session-id-name
+  #    The foundational identity gate runs first: the resident --entwurf-control
+  #    citizen discipline (#50 C2: a raw resident becomes a record-backed citizen
+  #    on a record-keyed socket, and a re-open attaches to the same address). If
+  #    the identity foundation is broken, every Entwurf live gate below is
+  #    meaningless, so fail fast here. (The old smoke-session-id-name substrate
+  #    proof is gone with the substrate itself — #50 C3; smoke-pi-attach carries
+  #    the deterministic half inside pnpm check.)
   # RGG split: the 0-token half (BIRTH: record + record-keyed socket / ATTACH:
   # re-open keeps the address / REPLACEMENT: in-process /new is pi's again) is
   # release-blocking and stays here as a must-pass with SMOKE_RGG_POSITIVE=0. The
@@ -4410,9 +4403,6 @@ case "$cmd" in
     ;;
   check-package-source-routing)
     check_package_source_routing
-    ;;
-  smoke-session-id-name)
-    smoke_session_id_name
     ;;
   check-dep-versions)
     check_dep_versions

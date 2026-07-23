@@ -33,7 +33,6 @@ import { getEntwurfExplicitExtensions, mirrorChildStderr, readSessionIdentity } 
 import { buildResumePiArgs } from "./entwurf-resume-args.ts";
 import type { LockClaim } from "./entwurf-v2-lock.ts";
 import { releaseLock } from "./entwurf-v2-lock.ts";
-import { V2_RESUME_RESIDENT_SESSION_ENV } from "./entwurf-v2-resume-marker.ts";
 import type { SpawnBgPlan, SpawnBgResumeDeps, SpawnedChild } from "./entwurf-v2-spawn.ts";
 import { readMetaIdentityByGardenId } from "./meta-session.ts";
 import { inspectControlSocketPath, type LstatLike, mapInspectionToLiveness } from "./socket-discovery.ts";
@@ -91,9 +90,9 @@ function requireProductionChild(child: SpawnedChild): ProductionSpawnedChild {
 }
 
 // ── launch identity (the spawnChild preamble, one injectable seam) ───────────
-/** The launch-time facts buildResumePiArgs needs, resolved from the saved session. The
- * default reads them the SAME way the legacy resume launcher does (header authority); the
- * gate injects a fake so spawnChild's argv is provable without a real session file. */
+/** The launch-time facts buildResumePiArgs needs, resolved from the meta-record + the
+ * recorded transcript (record authority, #50 C2/C3); the gate injects a fake so
+ * spawnChild's argv is provable without a real session file. */
 export interface LaunchIdentity {
 	/** The EXACT session JSONL to resume — `pi --session <path>`. */
 	sessionFile: string;
@@ -111,12 +110,14 @@ export interface LaunchIdentity {
  * address, that scan cannot find anything (a citizen's header carries pi's own uuid), so
  * keeping it would not have been a "smaller change", it would have been a broken one.
  *
- * The record is also the AUTHORIZATION now. The old gate was `requireEntwurf` — an
- * `entwurf` tag in the session NAME, planted by a name mirror that no longer exists.
- * Record-backed pi citizens are all siblings (LOCKED PROTOCOL 6), so "this garden id
- * names a pi citizen with a recorded transcript" is the whole test. (Verifying the
- * resumed file's header against `record.nativeSessionId` is C3's, together with the rest
- * of the resume-marker chain.)
+ * The record is also the AUTHORIZATION now (#50 C3). The old gates — `requireEntwurf`
+ * (an `entwurf` tag in the session NAME, planted by a name mirror that no longer
+ * exists) and the sessionId-bound resume-marker env — are deleted. Record-backed pi
+ * citizens are all siblings (LOCKED PROTOCOL 6), so "this garden id names a pi citizen
+ * with a recorded transcript" is the whole test, PLUS one integrity check: the resumed
+ * file's header id must equal `record.nativeSessionId` (pi owns the transcript, the
+ * record remembers whose it is — a mismatch means the transcriptPath is stale or
+ * foreign, and resuming it would put a turn into a different being's session).
  *
  * Everything else is unchanged authority: readSessionIdentity (first model_change) for
  * provider/model/cwd, getEntwurfExplicitExtensions for bridge re-injection (#29 fail-fast).
@@ -141,6 +142,13 @@ export function resolveResumeLaunchIdentity(plan: SpawnBgPlan): LaunchIdentity {
 	const resumeModel = identity?.modelId ?? null;
 	if (!identity || !resumeModel) {
 		throw new Error(`entwurf-v2-spawn-production: ${plan.sessionId} has no recorded model — cannot resume.`);
+	}
+	if (identity.sessionId !== record.nativeSessionId) {
+		throw new Error(
+			`entwurf-v2-spawn-production: ${plan.sessionId} transcript header id "${identity.sessionId ?? "(none)"}" ` +
+				`does not match the record's nativeSessionId "${record.nativeSessionId}" — the recorded transcriptPath ` +
+				`is stale or points at a foreign session file; refusing to resume another being's transcript.`,
+		);
 	}
 	const explicitExtensions = getEntwurfExplicitExtensions(resumeModel, false, identity.provider);
 	if (explicitExtensions.unresolvedAcpIntent) {
@@ -174,10 +182,10 @@ export interface ProductionSpawnOpts {
 	/** Resolve launch identity (default = resolveResumeLaunchIdentity). */
 	resolveIdentity?: (plan: SpawnBgPlan) => LaunchIdentity;
 	/** Spawn the resume child and return its handle (default = real `pi` spawn + unref +
-	 * mirrorChildStderr). `env` carries the v2 spawn-bg resume marker (V2_RESUME_RESIDENT_SESSION_ENV)
-	 * the factory plants so the resumed `--entwurf-control` resident is an AUTHORIZED Entwurf child,
-	 * not a corrupt operator resident. A throw becomes the watcher's spawn-start-failed. */
-	spawnChild?: (cmd: string, args: readonly string[], cwd: string, env: NodeJS.ProcessEnv) => SpawnedProcHandle;
+	 * mirrorChildStderr). The child inherits this process's env untouched — the resume-marker
+	 * env the factory used to plant died with the name-mirror guard it authorized (#50 C3).
+	 * A throw becomes the watcher's spawn-start-failed. */
+	spawnChild?: (cmd: string, args: readonly string[], cwd: string) => SpawnedProcHandle;
 	/** lstat for socket inspection (default = fs.lstat). */
 	lstatFn?: (p: string) => Promise<LstatLike>;
 	/** Connect probe for a socket-file (default = probeSocketLiveness). */
@@ -196,18 +204,12 @@ const DEFAULT_KILL_GRACE_MS = 5_000;
 /** The default spawnChild: a detached, unref'd `pi` resident child with stderr mirrored —
  * the same launch posture as the legacy worker, minus `--no-extensions` (the argv comes
  * from buildResumePiArgs v2-control). Detached so the resumed citizen survives this parent. */
-function defaultSpawnChild(
-	cmd: string,
-	args: readonly string[],
-	cwd: string,
-	env: NodeJS.ProcessEnv,
-): SpawnedProcHandle {
+function defaultSpawnChild(cmd: string, args: readonly string[], cwd: string): SpawnedProcHandle {
 	const proc: ChildProcess = spawn(cmd, [...args], {
 		cwd,
 		shell: false,
 		detached: true,
 		stdio: ["ignore", "ignore", "pipe"],
-		env,
 	});
 	proc.unref();
 	mirrorChildStderr(proc);
@@ -264,14 +266,7 @@ export function makeProductionSpawnBgResumeDeps(opts: ProductionSpawnOpts = {}):
 				prompt: plan.prompt,
 				launchArgs: plan.launchArgs,
 			});
-			// Plant the sessionId-bound authorization marker (QB-resident): this resume promotes a
-			// dormant `entwurf`-tagged session to a live `--entwurf-control` resident, which the
-			// entwurf-control guard would otherwise crash as a "corrupt resident session name". The
-			// marker authorizes ONLY this exact session — a human hand-opening the same session with
-			// `--entwurf-control` carries no marker and still crashes (the invariant is narrowed, not
-			// dropped). buildResumePiArgs's argv alone can't say "this is a v2 spawn-bg resume".
-			const childEnv: NodeJS.ProcessEnv = { ...process.env, [V2_RESUME_RESIDENT_SESSION_ENV]: plan.sessionId };
-			const proc = spawnChildFn("pi", args, identity.cwd, childEnv);
+			const proc = spawnChildFn("pi", args, identity.cwd);
 
 			// B2: capture exit EAGERLY — the instant the proc exists, before we even await the
 			// spawn — so a fast exit cannot slip through the gap before awaitChildExit. Resolve-

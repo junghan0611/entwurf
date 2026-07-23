@@ -168,7 +168,7 @@ Uses `entwurf` instead of `delegate` to avoid ecosystem collisions. spawn-bg res
 - **`entwurf_v2` is the one delivery verb.** Given a garden id, it classifies the target (live pi vs. dormant pi vs. mailbox meta-session vs. native-push citizen — a bare garden id does not reveal this) and routes correctly. It does **not** mint a fresh sibling: spawn-bg resumes an *already-identified* citizen, while native-register binds an *already-running* conversation. Fresh creation was the v1 `entwurf` verb and remains deferred.
 - **`entwurf_peers`** is a read-only fact surface (liveness / capability / identity / cwd-history). Do not bake verb-routing (`resumable`/`sendable`) into the fact layer; routing is the decider's job.
 - **`entwurf_self`** returns the authoritative identity envelope (pi-session env, or a trusted meta-session sender marker) and is identity-required.
-- Target registry: `pi/entwurf-targets.json` — **not** a spawn-bg allowlist: the v2 spawn path never reads it; dormant-resume authorization is the `requireEntwurf` name-tag + resume marker (both slated for removal in the #50 C3 cut). Its only live consumer is OPS routing (`getRegistryRouting` ← resolve-acp-bridge). Identity Preservation Rule: no model override on resume.
+- Target registry: `pi/entwurf-targets.json` — **not** a spawn-bg allowlist: the v2 spawn path never reads it; dormant-resume authorization is record existence + the transcript-header ↔ `record.nativeSessionId` integrity check (#50 C3 — the old `requireEntwurf` name-tag and resume-marker env are deleted). Its only live consumer is OPS routing (`getRegistryRouting` ← resolve-acp-bridge). Identity Preservation Rule: no model override on resume.
 - `PI_SHELL_ACP_V2_ONLY=1` was the v1-refusal flag; with v1 removed on this branch its guard (`entwurf-v2-only.ts`) is gone too. `runEntwurfV2` was always flag-clean.
 
 > **Source-agnostic does not mean harness-agnostic.** 어디서 던지든 — GLG / sibling / external MCP host — entwurf 의 *target* 은 garden citizen 이다. spawn-bg resume 의 spawn surface 는 pi 자식 프로세스만 띄운다 (`pi --entwurf-control` keep-alive resident). 외부 MCP host 가 닿을 때도 target 은 이미 식별된 citizen 이어야 한다. *Model* 은 free axis (어느 형제 학교 모델이든), *spawn target* 은 harness 정합 axis.
@@ -202,7 +202,8 @@ mints the `gardenId`, and everything addressable hangs off that one string.
   `🪛 <gardenId>` after (file written → model locked).
 - **The resident session NAME is pi's.** The `control`-tagged garden name mirror, its
   `entwurf`-tag refusal and the sessionId-bound resume-marker exemption are gone with the id
-  they mirrored. Dormant-resume authorization is record existence (LOCKED PROTOCOL 6).
+  they mirrored. Dormant-resume authorization is record existence (LOCKED PROTOCOL 6) plus
+  the transcript-header ↔ `record.nativeSessionId` integrity check (#50 C3).
 - Gates: `smoke-pi-attach` (deterministic, in `pnpm check`: record birth · record-keyed
   socket · attach-on-reopen · artifact delivers to the socket) + `smoke-resident-garden-guard`
   (LIVE, the same contract driven through a real `pi` process).
@@ -225,7 +226,7 @@ Messages are thrown, not awaited.
 | `pi-extensions/lib/pi-citizen-birth.ts` | the #50 C2 attach seam: pi session → meta-record upsert → control-socket address |
 | `pi-extensions/model-lock.ts` | package-provider model lock (pi.extension) |
 | `pi-extensions/meta-bridge-hook.ts` | Claude Code `SessionStart` hook: register a mailbox-backed garden meta-session |
-| `pi-extensions/lib/entwurf-v2-*.ts` | v2 substrate: contract / lock / decider / matrix / release / send / mailbox / native-push / runner / production / surface / spawn(+production) + resume-marker |
+| `pi-extensions/lib/entwurf-v2-*.ts` | v2 substrate: contract / lock / decider / matrix / release / send / mailbox / native-push / runner / production / surface / spawn(+production) |
 | `pi-extensions/lib/native-push/` | Antigravity adapter probe/route, direct-inject hand, explicit native registration core |
 | `pi-extensions/lib/meta-*.ts` | meta-record authority, mailbox state, dual-read/migration, receiver/sender identity |
 | `scripts/agy-{bridge,statusline-bridge,hooks-bridge}.*` | three state-backed agy install/doctor/inverse surfaces |

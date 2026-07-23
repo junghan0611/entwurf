@@ -13,9 +13,14 @@
  *   - T-no-logic   title/tags vary, sessionId stays stable; name is info only.
  *   - T-model-immut name model mirrors recorded model; drift is detectable for
  *                  corrupt-metadata fail-fast.
- *   - T-collision  header-scan lookup is the authority (filename glob is only an
- *                  index); spawn pre-check throws on a duplicate header id in ANY
- *                  cwd dir (the wrong-cwd footgun).
+ *   - T-identity   readSessionIdentity: first model_change is the model authority;
+ *                  drift fail-fast; the session NAME is pi's and is never read
+ *                  (#50 C3 — the old name-mirror/`requireEntwurf` refusals are
+ *                  asserted GONE, not just untested).
+ *
+ * The header-scan lookup (T-collision), the transcript analyzer, and the remote
+ * scope-lock died with the header-scan world (#50 C3) — the meta-record resolves
+ * a garden id to its transcript now (see check-entwurf-v2-spawn-production §9).
  *
  * Registry + sessions base are isolated to a temp dir BEFORE the module computes
  * its load-time paths, so the real ~/.pi/agent is never touched.
@@ -45,12 +50,7 @@ const {
 	computeResidentStatusLabel,
 	parseSessionName,
 	isEntwurfSessionName,
-	findSessionFileById,
-	findSessionFilesById,
-	readSessionHeader,
 	readSessionIdentity,
-	analyzeSessionFileLike,
-	assertLocalOnlyEntwurf,
 } = await import("../pi-extensions/lib/entwurf-core.ts");
 
 let n = 0;
@@ -248,105 +248,13 @@ try {
 	const driftName = "20260603T191245-deadbe==entwurf/claude-sonnet-5--x__entwurf";
 	ok(parseSessionName(driftName)?.model !== recorded, "model drift is detectable for fail-fast");
 
-	// ---- T-collision: header scan is authority; spawn pre-check ----
+	// ---- T-identity: resume identity authority = FIRST model_change ----
 	const sessionsBase = path.join(tmp, "sessions");
-	const dir = path.join(sessionsBase, "--home-fake-cwd--");
-	fs.mkdirSync(dir, { recursive: true });
-	const existingId = "20260603T200000-abc123";
-	const existingFile = path.join(dir, `2026-06-03T11-00-00-000Z_${existingId}.jsonl`);
-	fs.writeFileSync(
-		existingFile,
-		`${JSON.stringify({ type: "session", id: existingId, cwd: "/home/fake/cwd" })}\n${JSON.stringify({ type: "user_message" })}\n`,
-	);
-
-	eq(findSessionFileById(existingId), existingFile, "findSessionFileById resolves by header");
-	eq(findSessionFileById("20260603T200000-bbbbbb"), null, "unknown (valid, absent) id → null");
-
-	// readSessionHeader must be bounded to the first line. Session transcripts can
-	// be multi-MB; header-scan lookup must not read/split the whole JSONL body.
-	const largeBodyId = "20260603T200000-b0d1ee";
-	const largeBodyFile = path.join(dir, `2026-06-03T11-00-00-000Z_${largeBodyId}.jsonl`);
-	fs.writeFileSync(
-		largeBodyFile,
-		`${JSON.stringify({ type: "session", id: largeBodyId, cwd: "/large" })}\n${"x".repeat(1024 * 1024)}`,
-	);
-	eq(readSessionHeader(largeBodyFile)?.id, largeBodyId, "readSessionHeader reads header from large transcript prefix");
-	eq(findSessionFileById(largeBodyId), largeBodyFile, "large transcript header scan stays bounded and authoritative");
-
-	// header is the authority: filename carries the id but header disagrees → no match
-	const dir2 = path.join(sessionsBase, "--other-cwd--");
-	fs.mkdirSync(dir2, { recursive: true });
-	const spoofId = "20260603T200000-5900fa";
-	const spoofFile = path.join(dir2, `2026-06-03T11-00-00-000Z_${spoofId}.jsonl`);
-	fs.writeFileSync(spoofFile, `${JSON.stringify({ type: "session", id: "20260603T200000-d1ffe7", cwd: "/x" })}\n`);
-	eq(findSessionFileById(spoofId), null, "filename match but header mismatch → not found (header authority)");
-
-	// header authority (positive): filename does NOT carry the id, header does → found.
-	const headerOnlyId = "20260603T200000-c0ffee";
-	const renamedFile = path.join(dir2, "renamed-without-id.jsonl");
-	fs.writeFileSync(renamedFile, `${JSON.stringify({ type: "session", id: headerOnlyId, cwd: "/y" })}\n`);
-	eq(findSessionFileById(headerOnlyId), renamedFile, "header id found even when filename omits it (header authority)");
-
-	// duplicate header id across two cwd dirs → ambiguous → fail-fast everywhere.
-	const dupId = "20260603T200000-dddddd";
-	fs.writeFileSync(
-		path.join(dir, `2026-06-03T11-00-00-000Z_${dupId}.jsonl`),
-		`${JSON.stringify({ type: "session", id: dupId, cwd: "/home/fake/cwd" })}\n`,
-	);
-	fs.writeFileSync(
-		path.join(dir2, `2026-06-03T11-00-00-000Z_${dupId}.jsonl`),
-		`${JSON.stringify({ type: "session", id: dupId, cwd: "/x" })}\n`,
-	);
-	eq(findSessionFilesById(dupId).length, 2, "findSessionFilesById returns all duplicates");
-	throws(() => findSessionFileById(dupId), "findSessionFileById throws on ambiguous duplicate");
-
-	// ---- analyzeSessionFileLike: streamed, bounded, semantics preserved ----
 	const msg = (m: Record<string, unknown>) =>
 		`${JSON.stringify({ type: "message", message: { role: "assistant", ...m } })}\n`;
-	const analyzeFile = path.join(dir, "analyze-semantics.jsonl");
-	fs.writeFileSync(
-		analyzeFile,
-		`${JSON.stringify({ type: "session", id: "20260603T210000-aaaaaa", cwd: "/a" })}\n` +
-			`${JSON.stringify({ type: "message", message: { role: "user", content: "hi" } })}\n` + // non-assistant: not counted
-			msg({ content: "first", model: "m1", provider: "p1", stopReason: "end_turn", usage: { cost: { total: 0.01 } } }) +
-			"{ this is not valid json\n" + // malformed: skipped
-			msg({
-				content: "second",
-				model: "claude-opus-4-8",
-				provider: "entwurf",
-				stopReason: "tool_use",
-				errorMessage: "oops",
-				usage: { cost: { total: 0.02 } },
-			}),
-	);
-	const a1 = analyzeSessionFileLike(analyzeFile);
-	eq(a1.turns, 2, "analyze: only assistant turns counted (user + malformed skipped)");
-	eq(a1.lastAssistantText, "second", "analyze: last-wins assistant text");
-	eq(a1.lastModel, "claude-opus-4-8", "analyze: last-wins model");
-	eq(a1.lastProvider, "entwurf", "analyze: last-wins provider");
-	eq(a1.lastStopReason, "tool_use", "analyze: last-wins stopReason");
-	eq(a1.lastError, "oops", "analyze: last error captured");
-	eq(Math.round(a1.cost * 100) / 100, 0.03, "analyze: cost accumulated");
-
-	// bounded streaming: a single line > chunk size (incl. multibyte) spanning
-	// several reads must reassemble correctly and not corrupt the trailing turn.
-	const bigBody = `한${"a".repeat(300 * 1024)}글`; // > 64KB chunk, multibyte at both ends
-	const bigFile = path.join(dir, "analyze-big.jsonl");
-	fs.writeFileSync(
-		bigFile,
-		`${JSON.stringify({ type: "session", id: "20260603T210000-bbbbbb", cwd: "/b" })}\n` +
-			msg({ content: bigBody, model: "m-big", provider: "p-big", usage: { cost: { total: 1 } } }) +
-			msg({ content: "final", model: "claude-sonnet-5", provider: "entwurf", usage: { cost: { total: 0.5 } } }),
-	);
-	const a2 = analyzeSessionFileLike(bigFile);
-	eq(a2.turns, 2, "analyze(big): turns correct across chunk boundaries");
-	eq(a2.lastAssistantText, "final", "analyze(big): trailing turn intact after multi-chunk line");
-	eq(a2.lastModel, "claude-sonnet-5", "analyze(big): trailing model intact");
-	eq(Math.round(a2.cost * 100) / 100, 1.5, "analyze(big): cost summed across large line");
-
-	// ---- T-identity: resume identity authority = FIRST model_change ----
 	// (NEXT.md "Authority separation": model authority is the first model_change,
-	// NOT the last assistant message's model. Drift / corrupt name mirror fail-fast.)
+	// NOT the last assistant message's model. Drift fail-fast. The session NAME is
+	// pi's — #50 C3 removed the name-mirror integrity throws, asserted below.)
 	const idDir = path.join(sessionsBase, "--identity-cwd--");
 	fs.mkdirSync(idDir, { recursive: true });
 	const mc = (provider: string, modelId: string) => `${JSON.stringify({ type: "model_change", provider, modelId })}\n`;
@@ -377,7 +285,9 @@ try {
 	);
 	throws(() => readSessionIdentity(fileB), "identity: later model_change drift → fail-fast");
 
-	// 3. session name provider/model mirror disagrees with first model_change → corrupt.
+	// 3. the session NAME is pi's (LOCKED PROTOCOL 2, #50 C3): a name whose
+	//    provider/model disagrees with the first model_change is NOT entwurf's to
+	//    judge — identity must resolve from the transcript alone, no throw.
 	const idC = "20260603T220000-3333cc";
 	const fileC = path.join(idDir, `2026-06-03T22-00-00-000Z_${idC}.jsonl`);
 	const mismatchName = buildSessionName({
@@ -388,9 +298,11 @@ try {
 		tags: ["entwurf"],
 	});
 	fs.writeFileSync(fileC, sessionLine(idC, "/identity/c") + mc("openai-codex", "gpt-5.5") + infoLine(mismatchName));
-	throws(() => readSessionIdentity(fileC), "identity: name provider/model mirror mismatch → fail-fast");
+	noThrow(() => readSessionIdentity(fileC), "identity: name provider/model disagreement is pi's business — no throw");
+	eq(readSessionIdentity(fileC)?.modelId, "gpt-5.5", "identity: model still resolves from first model_change");
 
-	// 4. session name sessionId mirror disagrees with header id → corrupt.
+	// 4. same for a name carrying a different sessionId than the header: the name
+	//    is display/search metadata owned by pi; entwurf reads only header + model_change.
 	const idD = "20260603T220000-4444dd";
 	const fileD = path.join(idDir, `2026-06-03T22-00-00-000Z_${idD}.jsonl`);
 	const wrongIdName = buildSessionName({
@@ -401,7 +313,8 @@ try {
 		tags: ["entwurf"],
 	});
 	fs.writeFileSync(fileD, sessionLine(idD, "/identity/d") + mc("openai-codex", "gpt-5.5") + infoLine(wrongIdName));
-	throws(() => readSessionIdentity(fileD), "identity: name sessionId mirror mismatch → fail-fast");
+	noThrow(() => readSessionIdentity(fileD), "identity: name sessionId disagreement is pi's business — no throw");
+	eq(readSessionIdentity(fileD)?.sessionId, idD, "identity: sessionId resolves from the header, never the name");
 
 	// 5. clean session (matching name + single model_change) → identity, no throw.
 	const idE = "20260603T220000-5555ee";
@@ -434,69 +347,33 @@ try {
 	);
 	eq(readSessionIdentity(fileF), null, "identity: no model_change → null");
 
-	// ---- T-require-entwurf: resume path only accepts genuine Entwurf sessions ----
-	// (locked 0.9.0 rule: entwurf 여부 = name tag 중 'entwurf' 존재; no compatibility.)
-	// G1. model_change but NO session_info name → not an Entwurf session.
-	throws(
-		() => readSessionIdentity(fileA, { requireEntwurf: true }),
-		"requireEntwurf: no session_info name → fail-fast",
-	);
-
-	// G2. session_info name present but non-canonical → not an Entwurf session.
+	// ---- T-name-blind: the reader takes NO options and never reads the name (#50 C3) ----
+	// The old `requireEntwurf` name-tag authorization (0.9.0 "entwurf 여부 = name tag")
+	// is deleted, not just unused: resume authorization is record existence
+	// (readMetaIdentityByGardenId) + the header-id ↔ record.nativeSessionId integrity
+	// check in resolveResumeLaunchIdentity. A session with no name, a non-canonical
+	// name, or no `entwurf` tag resolves identity exactly like any other pi session.
 	const idG = "20260603T230000-7777aa";
 	const fileG = path.join(idDir, `2026-06-03T23-00-00-000Z_${idG}.jsonl`);
 	fs.writeFileSync(
 		fileG,
 		sessionLine(idG, "/identity/g") + mc("entwurf", "claude-opus-4-8") + infoLine("not a canonical name"),
 	);
-	throws(
-		() => readSessionIdentity(fileG, { requireEntwurf: true }),
-		"requireEntwurf: non-canonical session name → fail-fast",
-	);
-	noThrow(() => readSessionIdentity(fileG), "requireEntwurf off: non-canonical name is ignored (general path)");
-
-	// G3. canonical name that MIRRORS correctly but has NO entwurf tag → general pi session.
-	const idH = "20260603T230000-8888bb";
-	const fileH = path.join(idDir, `2026-06-03T23-00-00-000Z_${idH}.jsonl`);
-	const noTagName = buildSessionName({
-		sessionId: idH,
-		provider: "entwurf",
-		model: "claude-opus-4-8",
-		rawTitle: "general session",
-		tags: [],
-	});
-	fs.writeFileSync(fileH, sessionLine(idH, "/identity/h") + mc("entwurf", "claude-opus-4-8") + infoLine(noTagName));
-	throws(
-		() => readSessionIdentity(fileH, { requireEntwurf: true }),
-		"requireEntwurf: canonical name without 'entwurf' tag → fail-fast",
-	);
-	noThrow(() => readSessionIdentity(fileH), "requireEntwurf off: no-tag canonical name passes (general path)");
-
-	// G4. canonical name WITH the entwurf tag (fileE from above) → accepted.
-	noThrow(
-		() => readSessionIdentity(fileE, { requireEntwurf: true }),
-		"requireEntwurf: canonical __entwurf name → accepted",
-	);
-	eq(
-		readSessionIdentity(fileE, { requireEntwurf: true })?.modelId,
-		"claude-sonnet-5",
-		"requireEntwurf: accepted Entwurf session returns first-model_change identity",
-	);
+	noThrow(() => readSessionIdentity(fileG), "name-blind: non-canonical name resolves like any pi session");
+	eq(readSessionIdentity(fileG)?.modelId, "claude-opus-4-8", "name-blind: identity from model_change only");
+	eq(readSessionIdentity.length, 1, "name-blind: readSessionIdentity takes exactly one arg (no opts, compiler-pinned)");
 
 	// ========================================================================
-	// T-resident: the resident --entwurf-control session (#50 C2)
+	// T-resident: the resident --entwurf-control session (#50 C2/C3)
 	//
 	// What used to live here — the garden-id guard (assertGardenNativeSessionId),
 	// the resident NAME builder (buildGardenSessionName + the `control` tag, its
-	// registry-free contract and its `entwurf`-tag refusal) — is deleted, not
-	// relocated. All of it enforced "pi's session id IS the garden address", which
-	// the meta-record now owns; the address is minted by the record and the socket
-	// is keyed on it (smoke-pi-attach). The status label is what survives, because
-	// it was never about the id GRAMMAR — it signals the model-lock lifecycle.
-	//
-	// The `requireEntwurf` reader below is UNCHANGED and still C3's to remove: it
-	// no longer authorizes anything on the resume path (that moved to record
-	// existence), but the reader itself is still the name-authority chain's.
+	// registry-free contract and its `entwurf`-tag refusal), and later the
+	// `requireEntwurf` reader option (C3) — is deleted, not relocated. All of it
+	// enforced "pi's session id IS the garden address", which the meta-record now
+	// owns; the address is minted by the record and the socket is keyed on it
+	// (smoke-pi-attach). The status label is what survives, because it was never
+	// about the id GRAMMAR — it signals the model-lock lifecycle.
 	// ========================================================================
 
 	const residentSid = "20260604T083632-aa11bb";
@@ -517,14 +394,9 @@ try {
 		"status label never contains the word 'entwurf'",
 	);
 
-	// ---- T-local-only: remote/SSH entwurf is fail-fast in 0.9.0 (#11) ----
-	// CHANGELOG/BASELINE classify remote fail-fast as a 0.9.0 breaking change.
-	// Lock it so a later remote revival cannot silently re-enable a non-local host
-	// (header scan + collision pre-check are local-filesystem only).
-	noThrow(() => assertLocalOnlyEntwurf("local"), "local host passes");
-	noThrow(() => assertLocalOnlyEntwurf(undefined), "undefined host (defaults local) passes");
-	throws(() => assertLocalOnlyEntwurf("oracle"), "non-local host 'oracle' fails fast");
-	throws(() => assertLocalOnlyEntwurf("user@host"), "ssh-style host 'user@host' fails fast");
+	// (T-local-only died with assertLocalOnlyEntwurf — #50 C3: its whole rationale
+	// was the local-FS header scan; the record store replaced that lookup and the
+	// remote question belongs to #11's own design, not a leftover guard.)
 
 	console.log(`[check-entwurf-session-identity] ${n} assertions ok`);
 } finally {

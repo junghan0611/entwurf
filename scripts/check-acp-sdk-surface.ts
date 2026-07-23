@@ -25,7 +25,7 @@
 
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 
@@ -178,7 +178,12 @@ const tracked = execFileSync("git", ["ls-files", "*.ts", "*.js", "*.mjs", "*.cjs
 	encoding: "utf8",
 })
 	.split("\n")
-	.filter(Boolean);
+	.filter(Boolean)
+	// `git ls-files` still names an UNSTAGED deletion (same contract as
+	// check-install-surface / the run.sh floor sweeps): a release-surface
+	// migration deletes tracked files before the commit workflow stages them;
+	// absence cannot import the SDK and must not crash this read-only sweep.
+	.filter((f) => existsSync(resolve(repoRoot, f)));
 
 // Specifier-shaped: any module binding to the anthropic SDK, in any of the
 // forms a source file could reach it — static `from`, `export ... from`,
