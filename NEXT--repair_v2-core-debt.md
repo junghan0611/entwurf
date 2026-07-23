@@ -43,7 +43,7 @@ main 승격은 **당분간 보류**(GLG 2026-07-23) — 브랜치에서 C3 → C
 이후 순서:
 
 4. **C3 — DONE (4 cut, 상태 참조).** 유일한 스펙 편차 2건은 기록됨: ① sender envelope는 prepend가 아니라 live rail 동형 append(한 포맷터), ② `PI_SHELL_ACP_*`는 관념명이었고 실물은 `ENTWURF_V2_RESUME_RESIDENT_SESSION_ENV` 하나(소비자는 C2 때 이미 사망 — env를 심고 아무도 안 읽던 상태를 삭제).
-5. **C4 — entwurf는 socket을 모른다 (다음 걸음, 목표 2의 구현)**: 사용자 표면(peers/facts/dispatch)에서 socket을 identity 축에서 제거 — record가 유일한 주소 축, socket은 dispatch 내부 transport로만. record-less socket-only 시민은 migration/진단 상태로 강등, dispatch/resolveTarget rail 전환. 강등의 관측면(에러 메시지가 M1을 이름으로 지목, C2 검수의 "원인 한 겹 가림" 지적 포함) 동시 재저작. **자르기 전에 표면 의미론(무엇이 identity로 보이고 무엇이 숨는가)을 세워 GLG와 합의.**
+5. **C4 — entwurf는 socket을 모른다 (다음 걸음, 목표 2의 구현)**: 사용자 표면(peers/facts/dispatch)에서 socket을 identity 축에서 제거 — record가 유일한 주소 축, socket은 dispatch 내부 transport로만. record-less socket-only 시민은 migration/진단 상태로 강등, dispatch/resolveTarget rail 전환. 강등의 관측면(에러 메시지가 M1을 이름으로 지목, C2 검수의 "원인 한 겹 가림" 지적 포함) 동시 재저작. **자르기 전에 표면 의미론(무엇이 identity로 보이고 무엇이 숨는가)을 세워 GLG와 합의.** 초안에 **교차 리뷰 F2 포함**: spawn-bg plan variant에 `wantsReply` 슬롯이 없어 dormant rail의 `<sender_info>`가 wants_reply를 실을 수 없다(회귀 아님, C3 미완) — decider 계약 변경이라 "재개된 시민에게 무엇이 보이는가" 질문과 한 몸.
 6. **M1 + H7 레인 (라이브 cutover)**: M1 operator command(backup `meta-sessions.v3-migration-backup-<ts>/` → migrate → verify non-V3=0 → restore/rollback 증명, fixture: V1/V3-already/malformed/stray-key/mismatch/half-migrated; duplicate는 파일명=gardenId 구조상 불가라 제외). 173+ record 라이브 전환: quiesce(설치본 v2 writer가 계속 민팅 중 — writer 정지 순서 포함 runbook 필수) → backup → M1 → non-V3=0 → 새 런타임. self-host blackout 예상 — cut 직전 ids/HEAD/patch 고정, 끊긴 동안 GLG 수동 릴레이, 양방향 delivery 복구 전 다음 cut 금지. **방아쇠는 GLG.**
 
 커밋 규율: 각 커밋은 삭제 + 게이트 재저작 + GREEN이 한 몸. RED는 커밋하지 않는다. 정상 라우팅의 새 dual-authority 금지.
