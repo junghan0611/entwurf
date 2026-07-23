@@ -107,17 +107,17 @@ export type TargetSocketInspection =
 	| { kind: "indeterminate"; socketPath: string; error: string };
 
 /**
- * A1 narrow (0.11.0): does this PROBE-FREE single-lstat inspection of a gid's canonical
- * control socket mean a record-LESS pi endpoint is addressable as a socket-only target?
- * TRUE only for a confirmed NON-SYMLINK socket file (`socket-file`); a symlinked /
- * absent / not-socket / `indeterminate` path is conservatively NOT promoted (never trust a
- * symlink, never claim a target on an unprovable lstat). Shared by the v2 production
- * `resolveTarget` so the socket-only acceptance uses the SAME lstat classification the
- * listing/conflict paths use — listing↔dispatch cannot drift on what counts as a real
- * control socket. The decider still does its own under-lock `inspectSocket` probe; this is
- * only the presence hint that promotes `bad-target` → fire-and-forget socket-only pi.
+ * #50 C4: does this PROBE-FREE single-lstat inspection of a gid's canonical control
+ * socket confirm a REAL record-less socket? TRUE only for a confirmed NON-SYMLINK
+ * socket file (`socket-file`); a symlinked / absent / not-socket / `indeterminate`
+ * path is conservatively NOT counted (never trust a symlink, never claim a state on
+ * an unprovable lstat). Shared by the v2 production `resolveTarget` so the dispatch
+ * reject uses the SAME lstat classification the listing/conflict paths use —
+ * listing↔dispatch cannot drift on what counts as a real control socket. This is
+ * only the presence hint that turns a plain `bad-target` into the honest
+ * `record-less-socket` reject (migration/diagnostic state) — no probe, no acceptance.
  */
-export function isSocketOnlyPiCandidate(inspection: TargetSocketInspection): boolean {
+export function isRecordLessSocketCandidate(inspection: TargetSocketInspection): boolean {
 	return inspection.kind === "socket-file";
 }
 

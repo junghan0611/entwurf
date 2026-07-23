@@ -97,7 +97,7 @@ import {
 	controlSocketPath,
 	inspectControlSocketPath,
 	inspectTargetControlSocket,
-	isSocketOnlyPiCandidate,
+	isRecordLessSocketCandidate,
 	type TargetSocketInspection,
 } from "./socket-discovery.ts";
 import { classifyConnectError, probeSocketLiveness, type SocketLiveness } from "./socket-probe.ts";
@@ -271,16 +271,21 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 
 	// ── target resolution (QB1 + QB2) ─────────────────────────────────────────
 	const resolveTarget = async (gid: string): Promise<TargetResolution> => {
-		// MISSING record → not a citizen. But a record-LESS, gid-shaped, NON-SYMLINK control
-		// socket means the gid is still an addressable socket-only pi endpoint (A1 narrow,
-		// 0.11.0): entwurf_v2 accepts it as a FIRE-AND-FORGET control-send target only. This is
-		// PROBE-FREE — a single `inspectPath` lstat (NO connect), the SAME seam the pre-probe
-		// conflict uses — and `isSocketOnlyPiCandidate` promotes ONLY a confirmed non-symlink
-		// socket (`socket-file`); symlink/absent/not-socket/indeterminate stay a plain
+		// MISSING record → not a citizen. A record-LESS, gid-shaped, NON-SYMLINK control
+		// socket is still distinguished from a plain absent gid (#50 C4): the decider
+		// rejects it as `record-less-socket` (migration/diagnostic state) instead of the
+		// `bad-target` "absent" lie. This is PROBE-FREE — a single `inspectPath` lstat
+		// (NO connect), the SAME seam the pre-probe conflict uses — and
+		// `isRecordLessSocketCandidate` counts ONLY a confirmed non-symlink socket
+		// (`socket-file`); symlink/absent/not-socket/indeterminate stay a plain
 		// bad-target. PRESENT record → read (drift/corrupt throws = fail-loud).
 		if (!io.metaRecordExists(gid, sessionsDir)) {
 			const inspection = await io.inspectPath(controlSocketPath(gid, controlSocketDir));
-			return { identity: null, preProbeAddressConflict: false, socketOnlyPi: isSocketOnlyPiCandidate(inspection) };
+			return {
+				identity: null,
+				preProbeAddressConflict: false,
+				recordLessSocket: isRecordLessSocketCandidate(inspection),
+			};
 		}
 		const identity = io.readIdentity(gid, sessionsDir);
 		// `preProbeAddressConflict` is the record-side NON-PI conflict ONLY (B1). An in-domain

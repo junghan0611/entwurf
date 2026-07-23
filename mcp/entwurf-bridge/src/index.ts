@@ -324,8 +324,8 @@ server.tool(
 		"caller — chooses the transport. Note: entwurf_v2 dispatches to EXISTING targets; " +
 		"brand-new sibling creation is deferred to a later v2 lane. " +
 		"CHOOSING INTENT (read this — picking wrong is rejected, never auto-fixed): to message / " +
-		"reply / hand off a peer that entwurf_peers shows as liveness=alive (a live pi OR a " +
-		"socket-citizen) use intent: fire-and-forget — it routes to the live control-socket; set " +
+		"reply / hand off a peer that entwurf_peers shows as liveness=alive (a live pi citizen) " +
+		"use intent: fire-and-forget — it routes to the live control-socket; set " +
 		"wants_reply:true if you need an answer (wants_reply is NOT owned-outcome). For a meta-session " +
 		"(liveness=unsupported, e.g. Claude Code) replies are ALSO fire-and-forget (→ mailbox). " +
 		"owned-outcome is ONLY for waking a DORMANT pi citizen (spawn-bg resume); on a live target it " +

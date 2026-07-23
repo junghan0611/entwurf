@@ -475,50 +475,43 @@ async function main(): Promise<void> {
 		ok("E3: drifted marker → enqueue NEVER called (presence ≠ identity match)", spies.enqueue.length === 0);
 	}
 
-	// ── F: A1 narrow (0.11.0) — record-LESS live pi control socket → socket-only target ──
+	// ── F: #50 C4 — record-LESS control socket → pre-probe record-less-socket reject ──
 	// resolveTarget finds no meta-record, does ONE record-side lstat (inspectPath), sees a
-	// non-symlink socket → socketOnlyPi. fire-and-forget then routes to control-socket execute
-	// (in-domain: acquired under the wired lockDir). The same presence hint with a symlink /
-	// absent socket stays bad-target; owned-outcome on a LIVE socket-only target rejects
-	// owned-live-no-autosend POST-probe (lock acquired), never the pre-lock bad-target lie.
-	{
+	// non-symlink socket → recordLessSocket. EVERY intent then rejects pre-probe as
+	// `record-less-socket` (migration/diagnostic state): no lock, no under-lock probe, no
+	// plan — the record is the sole address authority. The same presence hint with a
+	// symlink / absent socket stays plain bad-target (never trust a symlink).
+	for (const intent of ["fire-and-forget", "owned-outcome"] as const) {
 		const { deps, spies } = makeSpiedFactory({ recordExists: false, inspectKind: "socket-file", probe: "alive" });
-		const decision = await deps.decide({ target: GID, intent: "fire-and-forget", message: "m" });
+		const decision = await deps.decide({ target: GID, intent, message: "m" });
 		ok(
-			"F: recordless + live socket → control-socket execute (socket-only pi)",
-			decision.kind === "execute" && decision.plan.transport === "control-socket",
+			`F: recordless + live socket + ${intent} → reject record-less-socket (pre-probe)`,
+			decision.kind === "reject" &&
+				decision.receipt.reason === "record-less-socket" &&
+				decision.receipt.observedLiveness === null,
 		);
-		ok("F: resolveTarget did ONE record-side lstat (presence hint)", spies.inspectPath.length === 1);
-		ok(
-			"F: acquired under the wired lockDir (in-domain)",
-			spies.acquire.length === 1 && spies.acquire[0].dir === LOCK_DIR,
-		);
+		ok(`F: resolveTarget did ONE record-side lstat (presence hint, ${intent})`, spies.inspectPath.length === 1);
+		ok(`F: record-less socket is never lock-acquired (${intent})`, spies.acquire.length === 0);
 	}
 	{
-		// record absent + a SYMLINKED socket → NOT promoted (never trust a symlink) → bad-target.
+		// record absent + a SYMLINKED socket → NOT counted (never trust a symlink) → bad-target.
 		const { deps, spies } = makeSpiedFactory({ recordExists: false, inspectKind: "address-conflict" });
 		const decision = await deps.decide({ target: GID, intent: "fire-and-forget", message: "m" });
-		ok("F: recordless + symlinked socket → reject bad-target", decision.kind === "reject");
-		ok("F: symlinked socket-only is never lock-acquired", spies.acquire.length === 0);
+		ok(
+			"F: recordless + symlinked socket → reject bad-target",
+			decision.kind === "reject" && decision.receipt.reason === "bad-target",
+		);
+		ok("F: symlinked record-less socket is never lock-acquired", spies.acquire.length === 0);
 	}
 	{
 		// record absent + NO socket at all → plain bad-target.
 		const { deps, spies } = makeSpiedFactory({ recordExists: false, inspectKind: "absent" });
 		const decision = await deps.decide({ target: GID, intent: "fire-and-forget", message: "m" });
-		ok("F: recordless + no socket → reject bad-target", decision.kind === "reject");
-		ok("F: no-socket target is never lock-acquired", spies.acquire.length === 0);
-	}
-	{
-		// owned-outcome on a record-less LIVE socket → owned-live-no-autosend (honest table
-		// verdict), NOT the `bad-target` lie. It runs the in-domain path (lock acquired + probed),
-		// then the table rejects owned×live — a live citizen is never reported absent.
-		const { deps, spies } = makeSpiedFactory({ recordExists: false, inspectKind: "socket-file", probe: "alive" });
-		const decision = await deps.decide({ target: GID, intent: "owned-outcome", message: "do X" });
 		ok(
-			"F: socket-only + owned-outcome(live) → reject owned-live-no-autosend (NOT bad-target)",
-			decision.kind === "reject" && decision.receipt.reason === "owned-live-no-autosend",
+			"F: recordless + no socket → reject bad-target",
+			decision.kind === "reject" && decision.receipt.reason === "bad-target",
 		);
-		ok("F: socket-only owned-outcome(live) acquires a lock (in-domain, no pre-lock lie)", spies.acquire.length === 1);
+		ok("F: no-socket target is never lock-acquired", spies.acquire.length === 0);
 	}
 
 	console.log(`\ncheck-entwurf-v2-production: ${passed} checks passed`);

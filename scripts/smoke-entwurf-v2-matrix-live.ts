@@ -15,12 +15,12 @@
  *      DISCOVERS that record and dispatches at its gardenId → decider routes
  *      fire-and-forget/live to control-socket → real RPC send → lock acquire→release ×1 →
  *      no lock garbage. This is the live birth→record→socket→dispatch chain in one cell.
- *   C1b socket-only (A1 narrow) — the same real resident, but its record is written to a
- *      HIDDEN store (a second temp dir): from the decider's store view the live socket is
- *      RECORD-LESS (the operator-greeted case — e.g. a socket whose owning store is not
- *      visible) → resolveTarget promotes it to a socket-only pi endpoint → fire-and-forget
- *      routes to control-socket (outcome=sent), while owned-outcome on the SAME record-less
- *      target is refused (owned-live-no-autosend, no spawn).
+ *   C1b record-less socket (#50 C4) — the same real resident, but its record is written to
+ *      a HIDDEN store (a second temp dir): from the decider's store view the live socket is
+ *      RECORD-LESS → EVERY intent is refused pre-probe as `record-less-socket` (the record
+ *      is the sole address authority; a bare socket is a migration/diagnostic state, not an
+ *      addressable citizen), the surface hint names the true cause + the M1 command, and no
+ *      lock/RPC ever reaches the live socket.
  *   C2 meta-mailbox (deliverable) — a self-fetch citizen (claude-code) with an ARMED receiver
  *      marker → decider routes to meta-mailbox → a real `.msg` + signal is enqueued → lock-free
  *      path (no lock file) → no garbage beyond the one message.
@@ -57,6 +57,7 @@ import { lockPathFor } from "../pi-extensions/lib/entwurf-v2-lock.ts";
 import { makeProductionEntwurfV2Deps } from "../pi-extensions/lib/entwurf-v2-production.ts";
 import type { EntwurfV2RunResult } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import { runEntwurfV2 } from "../pi-extensions/lib/entwurf-v2-runner.ts";
+import { renderEntwurfV2Result } from "../pi-extensions/lib/entwurf-v2-surface.ts";
 import {
 	metaRecordExistsByGardenId,
 	upsertMetaSession,
@@ -216,14 +217,15 @@ async function main(): Promise<void> {
 			}
 		}
 
-		// ── C1b: A1 narrow — RECORD-LESS live pi control socket → socket-only target ─
-		// The operator-greeted case the deterministic gates model: a live control socket whose
-		// owning record the decider's store CANNOT see. Post-C2 every resident births a record,
-		// so record-lessness is manufactured honestly: the resident writes its record into a
-		// HIDDEN second store (env override on the child only) while the decider keeps reading
-		// the main store. resolveTarget finds no record, sees a live non-symlink control socket
-		// (presence hint), promotes it to a socket-only pi endpoint, and routes fire-and-forget
-		// to control-socket. owned-outcome on the SAME record-less target is refused (no spawn).
+		// ── C1b: #50 C4 — RECORD-LESS live pi control socket → pre-probe reject ─────
+		// A live control socket whose owning record the decider's store CANNOT see. Post-C2
+		// every resident births a record, so record-lessness is manufactured honestly: the
+		// resident writes its record into a HIDDEN second store (env override on the child
+		// only) while the decider keeps reading the main store. resolveTarget finds no record,
+		// sees a live non-symlink control socket (presence hint) — and rejects EVERY intent
+		// pre-probe as `record-less-socket`: the record is the sole address authority, so the
+		// live socket is a migration/diagnostic state, never a delivery target. No lock is
+		// taken and no RPC reaches the resident; the rendered hint names the cause + M1.
 		{
 			const hiddenStore = path.join(tmp, "sessions-c1b-hidden");
 			await fsp.mkdir(hiddenStore, { recursive: true });
@@ -257,31 +259,31 @@ async function main(): Promise<void> {
 			const up = await waitForSocket(sockPath, BOOT_TIMEOUT_MS);
 			ok("C1b real record-less `pi --entwurf-control` stood up a control socket", up);
 
-			const result: EntwurfV2RunResult = await runEntwurfV2(
-				{ target: c1bGid, intent: "fire-and-forget", message: "matrix-live C1b record-less socket-only probe" },
-				prodDeps(smokeSender(c1bGid, tmp)),
-			);
-			ok(
-				"C1b record-less live pi → socket-only control-socket RPC, outcome=sent",
-				result.kind === "executed" &&
-					result.transport === "control-socket" &&
-					result.outcome.transport === "control-socket" &&
-					result.outcome.outcome === "sent",
-			);
-			ok("C1b lock released (no lock file left for the socket-only target)", !existsSync(lockPathFor(c1bGid, lockDir)));
-
-			// owned-outcome on the record-less but LIVE target → owned-live-no-autosend (the honest
-			// table verdict), NOT the `bad-target` lie: the live resident is a real addressable
-			// citizen. spawn-bg still never opens (allowResume:false guard; no record = no resume
-			// authority). The no-spawn invariant is also pinned deterministically in the gate.
-			const owned: EntwurfV2RunResult = await runEntwurfV2(
-				{ target: c1bGid, intent: "owned-outcome", message: "matrix-live C1b owned must be refused" },
-				prodDeps(smokeSender(c1bGid, tmp)),
-			);
-			ok(
-				"C1b record-less(live) + owned-outcome → rejected owned-live-no-autosend (NOT bad-target, no spawn)",
-				owned.kind === "rejected" && owned.receipt.reason === "owned-live-no-autosend",
-			);
+			for (const intent of ["fire-and-forget", "owned-outcome"] as const) {
+				const result: EntwurfV2RunResult = await runEntwurfV2(
+					{ target: c1bGid, intent, message: `matrix-live C1b record-less probe (${intent})` },
+					prodDeps(smokeSender(c1bGid, tmp)),
+				);
+				ok(
+					`C1b record-less LIVE socket + ${intent} → rejected record-less-socket (pre-probe, null liveness)`,
+					result.kind === "rejected" &&
+						result.receipt.reason === "record-less-socket" &&
+						result.receipt.observedLiveness === null,
+				);
+				// Pre-probe reject ⇒ the per-gid lock was never taken (no lock file, not even a
+				// released one's leftovers) — the live resident was never touched.
+				ok(`C1b NO lock file for the record-less target (${intent})`, !existsSync(lockPathFor(c1bGid, lockDir)));
+				// Observability (#50 F10 discipline): the rendered reject names the true cause
+				// AND the M1 fix — never a bare reason code on this migration-shaped state.
+				const rendered = renderEntwurfV2Result(result);
+				ok(
+					`C1b rendered reject names the record authority + M1 (${intent})`,
+					rendered.isError &&
+						rendered.text.includes("record-less-socket") &&
+						rendered.text.includes("NO meta-record claims it") &&
+						rendered.text.includes("meta-bridge-migrate-v3 migrate"),
+				);
+			}
 
 			if (resident) {
 				await terminateChild(resident);

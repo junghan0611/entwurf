@@ -88,25 +88,24 @@ export async function resolveDeadControlSendFallback(
 	const sessionsDir = deps.sessionsDir ?? defaultMetaSessionsDir();
 
 	// Probe-free target resolution first — a vanished target or a quarantined address
-	// short-circuits before any inspect/probe (mirrors decideDispatch steps 2). A1 narrow:
-	// a record-LESS but live pi control socket (socketOnlyPi, identity null) is NOT a
-	// bad-target — it is an in-domain pi endpoint that re-resolves through the inspect/probe
-	// path below (fire-and-forget: alive → retry control-send, dead → honest reject). Only a
-	// genuinely absent target (identity null AND not socket-only) is bad-target.
+	// short-circuits before any inspect/probe (mirrors decideDispatch steps 2). #50 C4:
+	// a record that vanished mid-dispatch while its control socket remains re-resolves to
+	// `record-less-socket` — the honest migration/diagnostic state, never a retry into a
+	// socket the record no longer authorizes. A genuinely absent target is bad-target.
 	const resolution = await deps.resolveTarget(gardenId);
-	if (resolution.identity === null && resolution.socketOnlyPi !== true) {
-		return { kind: "reject", reason: "bad-target" };
+	if (resolution.identity === null) {
+		return { kind: "reject", reason: resolution.recordLessSocket === true ? "record-less-socket" : "bad-target" };
 	}
 	if (resolution.preProbeAddressConflict) {
 		return { kind: "reject", reason: "target-address-conflict" };
 	}
+	// Non-null past the identity-null early return above (#50 C4: every re-resolve
+	// path below is record-backed — a record-less socket never re-enters dispatch).
 	const identity = resolution.identity;
 
 	// Unsupported backend (claude-code self-fetch, …) → the mailbox mini-table, keyed on
 	// intent alone. This is NOT an in-domain dormant (the N2 asymmetry) — a deliverable
-	// citizen's honest channel is its mailbox. No inspect/probe on this axis. A socket-only
-	// pi endpoint (identity null) is in-domain pi, so it NEVER takes this branch — only a
-	// record-backed unsupported identity does.
+	// citizen's honest channel is its mailbox. No inspect/probe on this axis.
 	if (identity !== null && !isLivenessSupported(identity.backend)) {
 		const deliverability = await deps.mailboxDeliverabilityFor(identity);
 		const receipt = resolveDispatch("fire-and-forget", "unsupported", deliverability.deliverable);

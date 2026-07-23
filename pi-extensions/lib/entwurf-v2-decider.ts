@@ -24,8 +24,10 @@
  * The frozen 7-step order (NEXT.md "통합 decider 순서"):
  *   1. requireGardenId   — runtime guard BEFORE any path is built (F2-P1; closes the
  *      MCP-schema bypass for pi-native/internal callers).
- *   2. resolveTarget     — no citizen → bad-target; quarantined (non-pi gid sharing
- *      a socket/symlink) → target-address-conflict. PROBE-FREE.
+ *   2. resolveTarget     — no citizen → bad-target; a record-less control socket →
+ *      record-less-socket (#50 C4: the record is the sole address authority);
+ *      quarantined (non-pi gid sharing a socket/symlink) → target-address-conflict.
+ *      PROBE-FREE.
  *   3. backend           → isLivenessSupported.
  *   4. acquireLock       — IN-DOMAIN ONLY (？7), BEFORE lstat/connect, so the probe
  *      happens under the lock (the TOCTOU 5a's lock closes).
@@ -180,18 +182,15 @@ export interface TargetResolution {
 	identity: MetaIdentity | null;
 	preProbeAddressConflict: boolean;
 	/**
-	 * A1 narrow (0.11.0): a record-LESS but live-control-socket-present pi endpoint.
-	 * `identity` is null (there is NO meta-record citizen), yet a gid-shaped non-symlink
-	 * control socket exists, so the gid is an addressable socket-only pi endpoint. The decider
-	 * routes EVERY intent through the same in-domain probe table under `allowResume:false` (it
-	 * does NOT pre-reject non-fire-and-forget — a live, addressable citizen must never be the
-	 * `bad-target` "absent" lie). With no record there is no cwd/resume authority, so spawn-bg
-	 * can never open: owned-outcome × live → owned-live-no-autosend (honest table verdict),
-	 * owned-outcome × dormant → socket-only-no-resume-authority (the post-probe allowResume:false
-	 * guard). PROBE-FREE presence hint — the decider still does the real under-lock
-	 * `inspectSocket`. Only meaningful when `identity === null`; a record-backed citizen never sets it.
+	 * #50 C4: a record-LESS gid whose canonical control socket exists as a confirmed
+	 * non-symlink socket file (a single PROBE-FREE lstat — `isRecordLessSocketCandidate`).
+	 * The record is the sole address authority, so this is NOT an addressable citizen:
+	 * the decider rejects it pre-probe as `record-less-socket` — a migration/diagnostic
+	 * state named honestly, never the `bad-target` "absent" lie (something real answers
+	 * to the gid) and never a dispatchable endpoint (the retired A1 narrow). Only
+	 * meaningful when `identity === null`; a record-backed citizen never sets it.
 	 */
-	socketOnlyPi?: boolean;
+	recordLessSocket?: boolean;
 }
 
 export interface DispatchInput {
@@ -305,21 +304,15 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 	// 2. resolveTarget — probe-free. no citizen → bad-target; quarantined → conflict.
 	const resolution = await deps.resolveTarget(gardenId);
 
-	// 2b. A1 narrow (0.11.0): a record-LESS live pi control socket — a socket-only pi
-	// endpoint (no citizen identity, but an addressable control socket). It is a REAL,
-	// addressable citizen, so it runs the SAME in-domain probe table as a record-backed pi
-	// (lock → inspect → table verdict) under `allowResume:false`. We DELIBERATELY do NOT
-	// short-circuit non-fire-and-forget here: rejecting owned-outcome pre-probe with
-	// `bad-target` would be a category lie (a LIVE, addressable peer classified as
-	// absent/typo). The frozen table is the honest authority instead —
-	//   owned-outcome × live    → `owned-live-no-autosend` (use fire-and-forget for a live peer)
-	//   owned-outcome × dormant → resume verdict, but `allowResume:false` refuses it with
-	//                             `socket-only-no-resume-authority` (no trusted cwd to spawn-bg)
-	//   fire-and-forget × live  → control-socket send (unchanged)
-	// `allowResume:false` is what keeps spawn-bg from EVER opening into a record-less
-	// endpoint, regardless of intent — so routing every intent through is safe.
-	if (resolution.identity === null && resolution.socketOnlyPi === true) {
-		return decideInDomain(gardenId, input, deps, ctx, { allowResume: false });
+	// 2b. #50 C4: a record-LESS control socket is NOT an addressable citizen. The record
+	// is the sole address authority (목표 ②), so EVERY intent is refused pre-probe with
+	// `record-less-socket` — a migration/diagnostic state named honestly. NOT `bad-target`
+	// (something real answers to this gid; "absent" would hide the state the reject exists
+	// to surface), and no lock/probe runs (no citizen ⇒ nothing in-domain to measure).
+	// The retired A1 narrow used to route this through the probe table as a dispatchable
+	// socket-only endpoint; that acceptance is gone with the socket identity axis.
+	if (resolution.identity === null && resolution.recordLessSocket === true) {
+		return reject(makeRejectReceipt("record-less-socket", null));
 	}
 
 	// 2c. no citizen → bad-target; quarantined → conflict.
@@ -384,28 +377,26 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 		return { kind: "execute", receipt, plan, lock: null };
 	}
 
-	// 4-5. in-domain (record-backed pi): lock → inspect → route (resume allowed, cwd from record).
-	return decideInDomain(gardenId, input, deps, ctx, { allowResume: true, cwd: identity.cwd });
+	// 4-5. in-domain (record-backed pi): lock → inspect → route (cwd from the record).
+	return decideInDomain(gardenId, input, deps, ctx, identity.cwd);
 }
 
-// ── in-domain probe (steps 4-5), shared by the record-backed pi path and the A1-narrow
-// socket-only pi path ────────────────────────────────────────────────────────────────────
+// ── in-domain probe (steps 4-5) — record-backed pi ONLY (#50 C4: a record-less
+// socket rejects pre-probe and never reaches here) ──────────────────────────────
 // The lock lifecycle (B2) lives here: acquire BEFORE lstat/connect, every reject path
 // releases explicitly (rejectAfterRelease), every execute path that keeps the lock sets
 // retainLock=true, and a thrown IO error releases the still-held lock before rethrowing so
-// the long-lived MCP bridge never pins a gid. `resume.allowResume` gates the ONLY branch
-// that reads a target cwd and launches a child: a socket-only endpoint passes `false`, so
-// even though the resume verdict is structurally unreachable for it (fire-and-forget never
-// yields `resume`), spawn-bg can never open into a record-less endpoint.
+// the long-lived MCP bridge never pins a gid. `cwd` comes from the meta-record — the only
+// resume authority — so the resume verdict's preflight+spawn always launch into a
+// record-owned working directory.
 type InDomainCtx = { mode: EntwurfV2Mode; wantsReply: boolean; observeTimeoutMs: number };
-type ResumePolicy = { allowResume: true; cwd: string } | { allowResume: false };
 
 async function decideInDomain(
 	gardenId: string,
 	input: DispatchInput,
 	deps: DispatchDeciderDeps,
 	ctx: InDomainCtx,
-	resume: ResumePolicy,
+	cwd: string,
 ): Promise<DispatchDecision> {
 	const { acquireLock, releaseLock, inspectSocket, probeSocket } = deps;
 
@@ -446,21 +437,10 @@ async function decideInDomain(
 		}
 
 		if (receipt.action === "resume") {
-			if (!resume.allowResume) {
-				// A1 narrow guard: the resume verdict is owned-outcome × dormant ONLY. A
-				// socket-only pi endpoint now routes ALL intents through here under
-				// `allowResume:false` (2b no longer pre-rejects non-fire-and-forget), so this
-				// guard IS reachable — it is the honest home of "owned-outcome to a DORMANT
-				// record-less socket". REFUSE: a record-less endpoint has no trusted cwd/resume
-				// authority, so spawn-bg must never open into it. This is a POST-probe guard
-				// (we measured `liveness` above), so it carries the honest measured liveness —
-				// NOT the pre-probe `bad-target` lie that would mislabel the citizen absent.
-				return rejectAfterRelease(makeRejectReceipt("socket-only-no-resume-authority", liveness));
-			}
 			// 1B: preflight runs ONLY here (the sole branch that launches a child into a
 			// target cwd). deny → nonce-owned release → untrusted-fail-fast, with the
 			// honest measured liveness (dormant = the `dead` we just probed).
-			const outcome = await deps.preflightForCwd(resume.cwd);
+			const outcome = await deps.preflightForCwd(cwd);
 			if (outcome.kind === "deny") {
 				return rejectAfterRelease(makeRejectReceipt("untrusted-fail-fast", liveness));
 			}
@@ -469,7 +449,7 @@ async function decideInDomain(
 				action: "resume",
 				targetGardenId: gardenId,
 				sessionId: gardenId, // D3: gid is the pi resume authority, not nativeSessionId.
-				cwd: resume.cwd,
+				cwd,
 				prompt: input.message,
 				wantsReply: ctx.wantsReply,
 				launchArgs: outcome.launchArgs,

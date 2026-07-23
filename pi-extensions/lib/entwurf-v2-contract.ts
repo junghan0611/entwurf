@@ -142,17 +142,19 @@ export const ENTWURF_V2_REJECT_REASONS = [
 	"native-push-no-resume-authority", // 봉인 1: owned-outcome to a native-push target (any liveness — single, state-independent). A native-push backend has no resume/spawn authority (there is no pi-child to own), so the caller cannot own its completion; use fire-and-forget. Post-probe; observedLiveness = the measured value.
 	"bad-target", // R2: absent/typo garden-id (no existing citizen); spawn-new out of v2 scope
 	"untrusted-fail-fast", // 동결결정 5: controlled launch into an untrusted cwd
-	"socket-only-no-resume-authority", // A1: a record-less socket-only endpoint resolved to a resume verdict (owned-outcome × dormant), but spawn-bg cannot open into it — no trusted cwd/resume authority. Post-probe guard reject (NOT pre-probe, NOT a table resolver cell): the in-domain probe ran and measured the liveness, then `allowResume:false` refused the resume. Carries the honest measured FactLiveness (non-null), unlike the pre-probe `bad-target` it replaces here — a live/addressable socket-only citizen must NEVER be mislabeled absent.
+	"record-less-socket", // #50 C4: a gid-shaped non-symlink control socket exists but NO meta-record claims it. The record is the sole address authority (목표 ②), so a bare socket is not an addressable citizen — it is a migration/diagnostic state, refused for EVERY intent before any lock/probe (pre-probe, observedLiveness=null). NOT `bad-target`: something real answers to this gid, and mislabeling it absent would hide the migration state the reject exists to surface. Replaces the retired A1-narrow acceptance (and its post-probe `socket-only-no-resume-authority`).
 	"target-locked", // R5 pre-claim for bucket B F2 per-gid lockfile conflict
 	"target-address-conflict", // F3: a quarantined citizen (garden-id-socket-conflict / symlinked socket) — the gid resolves to two different receivers (record vs socket), so dispatch refuses to pick. The ONLY in-band honest channel for a dispatch-level identity-split (the listing diagnostic channel is not visible to a v2 caller, who only gets a receipt). Pre-resolver, like bad-target/target-locked — NOT a RESOLVER_REJECT_REASONS member.
 ] as const;
 export type EntwurfV2RejectReason = (typeof ENTWURF_V2_REJECT_REASONS)[number];
 
 // ── Pre-probe reject reasons (？6 — observedLiveness = null) ────────────────
-// These three rejects are decided BEFORE any liveness probe runs, so there is no
+// These four rejects are decided BEFORE any liveness probe runs, so there is no
 // honest 4-value FactLiveness to stamp: `bad-target` (no citizen/backend),
 // `target-locked` (5a lock conflict, before lstat/connect), `target-address-conflict`
-// (address-subject conflict → probing is forbidden). `indeterminate` means an
+// (address-subject conflict → probing is forbidden), `record-less-socket` (#50 C4:
+// no record ⇒ not a citizen ⇒ no in-domain probe ever runs — the presence hint is
+// a single lstat, not a liveness measurement). `indeterminate` means an
 // in-domain probe was inconclusive (≠ "not looked yet"); `unsupported` means the
 // backend has no predicate (≠ "pre-probe"). So a pre-probe reject's
 // observedLiveness is `null`, NOT one of the four values. Every OTHER reject —
@@ -167,6 +169,7 @@ export const PRE_PROBE_REJECT_REASONS = [
 	"bad-target",
 	"target-locked",
 	"target-address-conflict",
+	"record-less-socket",
 ] as const satisfies readonly EntwurfV2RejectReason[];
 export type PreProbeRejectReason = (typeof PRE_PROBE_REJECT_REASONS)[number];
 

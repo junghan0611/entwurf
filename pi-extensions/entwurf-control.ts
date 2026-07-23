@@ -1402,7 +1402,7 @@ the mailbox path is lock-free, guarded by active-receiver deliverability), and r
 - wants_reply: reply hint for a live send (optional, default false).
 
 CHOOSING INTENT (picking wrong is rejected, never auto-fixed): to message / reply / hand off a peer
-that entwurf_peers shows as liveness=alive (a live pi OR a socket-citizen), use intent: fire-and-forget
+that entwurf_peers shows as liveness=alive (a live pi citizen), use intent: fire-and-forget
 — it routes to the live control-socket; set wants_reply:true if you need an answer (wants_reply is NOT
 owned-outcome). For a meta-session (liveness=unsupported, e.g. Claude Code), replies are ALSO
 fire-and-forget (→ mailbox). owned-outcome is ONLY for waking a DORMANT pi citizen (spawn-bg resume);

@@ -552,114 +552,36 @@ async function main(): Promise<void> {
 		ok("unsupported-owned: acquireLock NOT called", t.acquireCalls.length === 0);
 	}
 
-	// ── A1 narrow (0.11.0): socket-only pi endpoint (identity null + socketOnlyPi) ──
-	// A record-LESS live pi control socket is a REAL, addressable citizen — every intent runs
-	// the SAME in-domain probe table under allowResume:false (NO pre-probe short-circuit).
-	// fire-and-forget + alive → control-socket execute (lock acquired + inspected, retained);
-	// owned-outcome + alive → owned-live-no-autosend (honest table verdict, NOT the `bad-target`
-	// lie — a live citizen is never "absent"); owned-outcome + dormant →
-	// socket-only-no-resume-authority (the allowResume:false guard, post-probe, never a spawn);
-	// fire-and-forget + dormant/indeterminate → the existing honest reject, lock released.
-	const socketOnly: TargetResolution = { identity: null, preProbeAddressConflict: false, socketOnlyPi: true };
-	{
-		const t = mkDeps({
-			resolution: socketOnly,
-			lock: "ok",
-			inspection: { kind: "socket-file", socketPath: "/fake/ctl/s.sock" },
-			probe: "alive",
-		});
-		const d = await decideDispatch(
-			{ target: GID, intent: "fire-and-forget", mode: "follow_up", wantsReply: false, message: "ping" },
-			t.deps,
+	// ── #50 C4: record-less socket (identity null + recordLessSocket) ──────────
+	// The record is the sole address authority, so a bare control socket is NOT an
+	// addressable citizen — EVERY intent rejects pre-probe as `record-less-socket`
+	// (migration/diagnostic state, observedLiveness=null): no lock, no inspect, no
+	// probe, no mailbox seam, no plan. NOT `bad-target` (something real answers to
+	// the gid — "absent" would hide the state). The retired A1 narrow used to accept
+	// ff sends into this socket; that acceptance must never come back.
+	const recordLess: TargetResolution = { identity: null, preProbeAddressConflict: false, recordLessSocket: true };
+	for (const intent of ["fire-and-forget", "owned-outcome"] as const) {
+		const t = mkDeps({ resolution: recordLess });
+		const d = await decideDispatch({ target: GID, intent, message: "ping" }, t.deps);
+		ok(
+			`recordLess ${intent}: reject record-less-socket`,
+			d.kind === "reject" && d.receipt.reason === "record-less-socket",
 		);
-		ok("socketOnly ff+alive: kind execute", isExecute(d));
-		ok("socketOnly ff+alive: plan transport control-socket", isExecute(d) && d.plan.transport === "control-socket");
-		ok("socketOnly ff+alive: lock RETAINED", isExecute(d) && d.lock !== null);
-		ok("socketOnly ff+alive: NOT released", t.releaseCalls.length === 0);
-		ok("socketOnly ff+alive: observedLiveness alive", isExecute(d) && d.receipt.observedLiveness === "alive");
-		ok("socketOnly ff+alive: lock acquired (in-domain)", t.acquireCalls.length === 1);
-		ok("socketOnly ff+alive: socket inspected under lock", t.inspectCalls.length === 1);
-		ok("socketOnly ff+alive: mailbox seam NEVER consulted (pi is in-domain)", t.mailboxCalls.length === 0);
+		ok(
+			`recordLess ${intent}: observedLiveness null (pre-probe — no citizen, no probe)`,
+			d.kind === "reject" && d.receipt.observedLiveness === null,
+		);
+		ok(`recordLess ${intent}: NO lock acquired`, t.acquireCalls.length === 0);
+		ok(`recordLess ${intent}: NO socket inspect/probe`, t.inspectCalls.length === 0);
+		ok(`recordLess ${intent}: mailbox seam NEVER consulted`, t.mailboxCalls.length === 0);
+		ok(`recordLess ${intent}: no plan`, !("plan" in d));
 	}
 	{
-		// (a) owned-outcome + ALIVE → owned-live-no-autosend (the honest table verdict), NOT
-		// the `bad-target` lie. The live socket-only citizen runs the SAME in-domain path as a
-		// record-backed pi: lock acquired, socket probed, then the table rejects owned×live and
-		// the lock is released. observedLiveness is the measured `alive` (post-probe, non-null).
-		const t = mkDeps({
-			resolution: socketOnly,
-			lock: "ok",
-			inspection: { kind: "socket-file", socketPath: "/fake/ctl/s.sock" },
-			probe: "alive",
-		});
-		const d = await decideDispatch({ target: GID, intent: "owned-outcome", message: "do X" }, t.deps);
-		ok(
-			"socketOnly owned+alive: reject owned-live-no-autosend (NOT bad-target)",
-			d.kind === "reject" && d.receipt.reason === "owned-live-no-autosend",
-		);
-		ok(
-			"socketOnly owned+alive: observedLiveness alive (post-probe, non-null)",
-			d.kind === "reject" && d.receipt.observedLiveness === "alive",
-		);
-		ok("socketOnly owned+alive: lock acquired (in-domain, no pre-lock lie)", t.acquireCalls.length === 1);
-		ok("socketOnly owned+alive: socket probed under lock", t.inspectCalls.length === 1);
-		ok("socketOnly owned+alive: lock released", t.releaseCalls.length === 1);
-		ok("socketOnly owned+alive: no plan (no execute)", !("plan" in d));
-	}
-	{
-		// (c) owned-outcome + DORMANT → socket-only-no-resume-authority. The probe ran
-		// (post-probe), the table yields a resume verdict, and the allowResume:false guard
-		// refuses it — a record-less endpoint has no trusted cwd/resume authority, so spawn-bg
-		// never opens. observedLiveness is the measured `dead`, NOT the pre-probe `bad-target`
-		// null lie. Lock acquired then released; no spawn plan.
-		const t = mkDeps({
-			resolution: socketOnly,
-			lock: "ok",
-			inspection: { kind: "absent", socketPath: "/fake/ctl/s.sock" },
-		});
-		const d = await decideDispatch({ target: GID, intent: "owned-outcome", message: "do X" }, t.deps);
-		ok(
-			"socketOnly owned+dormant: reject socket-only-no-resume-authority",
-			d.kind === "reject" && d.receipt.reason === "socket-only-no-resume-authority",
-		);
-		ok(
-			"socketOnly owned+dormant: observedLiveness dead (post-probe, non-null)",
-			d.kind === "reject" && d.receipt.observedLiveness === "dead",
-		);
-		ok("socketOnly owned+dormant: lock acquired (in-domain)", t.acquireCalls.length === 1);
-		ok("socketOnly owned+dormant: socket probed under lock", t.inspectCalls.length === 1);
-		ok("socketOnly owned+dormant: lock released", t.releaseCalls.length === 1);
-		ok("socketOnly owned+dormant: NO spawn plan", !("plan" in d));
-	}
-	{
-		// fire-and-forget + dormant (socket vanished between presence-hint and the under-lock
-		// probe) → the existing honest reject, lock released, NEVER promoted to a resume/spawn.
-		const t = mkDeps({
-			resolution: socketOnly,
-			lock: "ok",
-			inspection: { kind: "absent", socketPath: "/fake/ctl/s.sock" },
-		});
+		// The hint is only meaningful with identity null — a PLAIN absent gid (no socket)
+		// stays the honest bad-target, and the two must not blur.
+		const t = mkDeps({ resolution: { identity: null, preProbeAddressConflict: false, recordLessSocket: false } });
 		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "ping" }, t.deps);
-		ok(
-			"socketOnly ff+dormant: reject dormant-fire-forget-unsupported",
-			d.kind === "reject" && d.receipt.reason === "dormant-fire-forget-unsupported",
-		);
-		ok("socketOnly ff+dormant: lock released", t.releaseCalls.length === 1);
-		ok("socketOnly ff+dormant: no plan (no spawn)", !("plan" in d));
-	}
-	{
-		// fire-and-forget + indeterminate → indeterminate-no-spawn, lock released.
-		const t = mkDeps({
-			resolution: socketOnly,
-			lock: "ok",
-			inspection: { kind: "indeterminate", socketPath: "/fake/ctl/s.sock", error: "EACCES" },
-		});
-		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "ping" }, t.deps);
-		ok(
-			"socketOnly ff+indeterminate: reject indeterminate-no-spawn",
-			d.kind === "reject" && d.receipt.reason === "indeterminate-no-spawn",
-		);
-		ok("socketOnly ff+indeterminate: lock released", t.releaseCalls.length === 1);
+		ok("recordLess=false absent gid: reject bad-target", d.kind === "reject" && d.receipt.reason === "bad-target");
 	}
 
 	// ── B2: a throw AFTER the lock is acquired RELEASES it before rethrowing ─────
