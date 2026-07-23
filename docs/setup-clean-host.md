@@ -168,9 +168,9 @@ pi -e "$(npm root -g)/@junghanacs/entwurf" --list-models entwurf
 ```
 
 Drift points:
-- `entwurf install .` writes `.pi/settings.json`, registers the bundled
-  `entwurf-bridge`, and links `~/.pi/agent/entwurf-targets.json` to the package's
-  `pi/entwurf-targets.json`.
+- `entwurf install .` writes `.pi/settings.json` and registers the bundled
+  `entwurf-bridge`. (The `entwurf-targets.json` link is gone — #50 C3 removed the
+  target registry; a leftover operator link is inert.)
 - Older pi versions may silently miss the provider/extension surface. Use the
   pinned floor (`>=0.80.7 <0.81`) for release verification.
 - A host that only uses the external MCP bridge can skip this stage until it

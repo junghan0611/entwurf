@@ -334,7 +334,6 @@ Observed: Claude Code, Codex CLI, and Antigravity CLI all reach garden citizens 
 Prerequisites on the host running the external MCP client:
 
 - `pi` on PATH (for the `owned-outcome` spawn-bg resume path).
-- `~/.pi/agent/entwurf-targets.json` (target registry) when dispatching to a target that resolves to a spawn-bg resume.
 - A live pi session launched with `--entwurf-control` populates `~/.pi/entwurf-control/<sessionId>.sock`; required for `entwurf_v2` control-socket dispatch and `entwurf_peers`.
 
 > **PATH boundary.** MCP servers are often launched by GUI/editor daemons and may not inherit the interactive shell's PATH. If `pi` works in your terminal but an external-host `entwurf_v2` spawn-bg resume fails with `spawn pi ENOENT`, pass a full PATH in the MCP server `env`, set `ENTWURF_BRIDGE_ENV_FILE` to a small shell file that exports PATH, or point the host at a wrapper that can find `pi`. `start.sh` sources only the explicit `ENTWURF_BRIDGE_ENV_FILE`; it never reads personal dotfiles automatically.

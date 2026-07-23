@@ -451,9 +451,9 @@ export function parseMetaIdentity(json: string): MetaIdentity {
 // v2 identity (step 3A) drops the backend honesty metadata (wakeMode /
 // deliveryLevel / nativeIdLabel) out of the per-session record: it is NOT per
 // session, it is per BACKEND. Its new home is a registry data file
-// `pi/entwurf-capabilities.json` (frozen decision 1 — a registry FILE, sibling
-// concern to the launch-allowlist `entwurf-targets.json`). "이 시민은 self-fetch
-// 인가 / pi 는 어떻게 깨우나" is answered by capability, not by identity.
+// `pi/entwurf-capabilities.json` (frozen decision 1 — a registry FILE). "이
+// 시민은 self-fetch 인가 / pi 는 어떻게 깨우나" is answered by capability, not
+// by identity.
 //
 // This block is the SCHEMA + PARSER + path resolver. As of 3C it did NOT re-wire
 // the live consumers (`META_BACKEND_DESCRIPTORS` was the authority mint/parse read).

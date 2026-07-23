@@ -79,7 +79,7 @@ Usage:
   ./run.sh check-entwurf-bridge-pi-free # deterministic gate (0.12.1 A, IN pnpm check): static — bridge index eager value-import closure must carry no @earendil-works/pi-* (type-only + dynamic import excluded); proves the meta-bridge boots pi-free
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
-  ./run.sh check-entwurf-session-identity # deterministic gate for locked garden session identity & name grammar (sessionId/buildSessionName/parse/collision), no API
+  ./run.sh check-entwurf-session-identity # deterministic gate for record-era session identity (garden-id grammar + readSessionIdentity: first-model_change authority, name-blind — #50 C3), no API
   ./run.sh check-meta-session          # deterministic gate (#30 step 2, V3-only): fs store — idempotent decideUpsert/upsertMetaSession + mailbox enqueue/read + receipt state, no API
   ./run.sh check-meta-v3-record        # deterministic gate (#50 hard cut): V3 record contract — canonical serialize/round-trip/mint, parseMetaRecordAny V3-only naming the M1 command, strayness inversion production half, no API
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
@@ -160,7 +160,6 @@ Usage:
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to entwurf alias
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
-  ./run.sh setup:links [--force]      # repair ~/.pi/agent/entwurf-targets.json link (use --force to replace a stale operator file or wrong symlink; a .bak is taken)
   ./run.sh remove [project-dir]       # remove entwurf entries from project .pi/settings.json (project scope only; global user-scope citizen left intact)
   ./run.sh remove-user-scope          # explicit GLOBAL inverse of install's user-scope citizen: drop entwurf from ~/.pi/agent/settings.json packages[] (affects ALL cwds — shared entry, not per-project)
 
@@ -365,7 +364,6 @@ install_local_package() {
   # bin `entwurf-bridge` (ownership-classified: absent/managed-current/managed-legacy adopt, a
   # true user-override is left untouched) + prune legacy bundles. project remove is the inverse.
   python3 "$REPO_DIR/scripts/register-pi-provider.py" install "$project_dir/.pi/settings.json" "$REPO_DIR" --scope project
-  ensure_agent_dir_symlinks
   register_user_scope_citizen
 }
 
@@ -410,87 +408,10 @@ remove_user_scope_citizen() {
   python3 "$REPO_DIR/scripts/register-pi-provider.py" remove "$agent_dir/settings.json" "$REPO_DIR" --scope user --state "$pp_state"
 }
 
-# Ensure agent-level resources that entwurf code reads from
-# ~/.pi/agent/ are wired up at install time. Currently:
-#   - entwurf-targets.json — pi-extensions/lib/entwurf-core.ts reads
-#     ~/.pi/agent/entwurf-targets.json. The package ships the canonical
-#     version at $REPO_DIR/pi/entwurf-targets.json. Without this symlink
-#     any entwurf tool call throws EntwurfRegistryError (lazy load — no
-#     surface during plain `pi --model ...` runs but blocks delegation
-#     immediately when the operator first calls entwurf).
-#
-# Fail-fast policy (added v0.5.0): drift between canonical and the
-# operator's link/file is treated as a bug to fix, not noise to preserve.
-# The v0.4.x oracle install regression came from a stale operator-copied
-# entwurf-targets.json that previous installs silently kept "as operator
-# file"; the only signal was a sentinel failure several minutes later.
-#
-# Two explicit exits are honored:
-#   1. `./run.sh setup:links --force` — back up + overwrite with canonical
-#   2. `ENTWURF_TARGETS_PATH=/path/to/custom.json` — tells entwurf-core
-#      to read elsewhere, freeing this slot from any policy obligation
-#
-# Idempotent for the happy path. Lazy registry load means a corrected
-# file/symlink is picked up on the next entwurf call without restarting
-# pi or the MCP bridge process.
-ensure_agent_dir_symlinks() {
-  local agent_dir="$HOME/.pi/agent"
-  mkdir -p "$agent_dir"
-
-  local target="$REPO_DIR/pi/entwurf-targets.json"
-  local link="$agent_dir/entwurf-targets.json"
-  local force="${1:-}"
-
-  if [ ! -f "$target" ]; then
-    fail "canonical registry missing at $target — repo install is broken"
-    exit 1
-  fi
-
-  if [ -L "$link" ]; then
-    local current
-    current=$(readlink "$link")
-    if [ "$current" = "$target" ]; then
-      return 0  # already correct, silent
-    fi
-    if [ "$force" = "--force" ]; then
-      rm -f "$link"
-      ln -s "$target" "$link"
-      echo "install: relinked $link -> $target (was -> $current)"
-      return 0
-    fi
-    fail "stale entwurf-targets symlink at $link"
-    echo "       points to: $current" >&2
-    echo "       expected:  $target" >&2
-    echo "       Fix with one of:" >&2
-    echo "         ./run.sh setup:links --force      # relink to canonical" >&2
-    echo "         export ENTWURF_TARGETS_PATH=$current  # honor your override explicitly" >&2
-    exit 1
-  fi
-
-  if [ -e "$link" ]; then
-    if cmp -s "$link" "$target"; then
-      return 0  # operator copy is byte-identical to canonical, silent
-    fi
-    if [ "$force" = "--force" ]; then
-      local backup="${link}.bak.$(date +%Y%m%d-%H%M%S)"
-      mv "$link" "$backup"
-      ln -s "$target" "$link"
-      echo "install: replaced stale $link with symlink -> $target (backup: $backup)"
-      return 0
-    fi
-    fail "stale entwurf-targets file at $link (drifts from canonical)"
-    echo "       canonical: $target" >&2
-    echo "       diff (link vs canonical):" >&2
-    diff -u "$link" "$target" | sed 's/^/         /' >&2 || true
-    echo "       Fix with one of:" >&2
-    echo "         ./run.sh setup:links --force      # back up + replace with symlink to canonical" >&2
-    echo "         export ENTWURF_TARGETS_PATH=$link  # honor your file as an explicit override" >&2
-    exit 1
-  fi
-
-  ln -s "$target" "$link"
-  echo "install: linked $link -> $target"
-}
+# The ~/.pi/agent/entwurf-targets.json symlink machinery (ensure_agent_dir_symlinks
+# + the `setup:links` command) is GONE (#50 C3): the target registry it linked has
+# no reader anymore — v2 resumes record-backed citizens and never resolves a spawn
+# model from a file. An operator's existing link/copy is inert; nothing reads it.
 
 remove_local_package() {
   local project_dir
@@ -538,12 +459,11 @@ check_shell_quote() {
 }
 
 check_entwurf_session_identity() {
-  # Deterministic gate for the locked garden session identity & name grammar
-  # (NEXT.md "Locked — session identity & name grammar"): sessionId validator,
-  # buildSessionName/parseSessionName round-trip incl. `.`-bearing registry
-  # models, titleSlug canonicalization, registry exact-tuple membership, name=
-  # info-only invariants, and header-scan collision pre-check. Isolates registry
-  # + sessions base to a temp dir. No backend, no API, no spawn.
+  # Deterministic gate for the record-era session identity contract: garden-id
+  # grammar (validator/generator — the RECORD's gardenId shape), readSessionIdentity
+  # (first model_change authority, drift fail-fast, name-blind — #50 C3), and the
+  # 🪛 status label. Isolates the sessions base to a temp dir. No backend, no API,
+  # no spawn.
   run_ts scripts/check-entwurf-session-identity.ts
 }
 
@@ -2394,7 +2314,6 @@ check_pack() {
     "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
-    "pi/entwurf-targets.json"
     "pi/meta-bridge/.claude-plugin/marketplace.json"
     "pi/meta-bridge/entwurf-meta-receive/.claude-plugin/plugin.json"
     "pi/meta-bridge/entwurf-meta-receive/hooks/hooks.json"
@@ -2585,7 +2504,6 @@ _check_pack_install_impl() {
     "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
-    "pi/entwurf-targets.json"
     "pi/meta-bridge/.claude-plugin/marketplace.json"
     "pi/meta-bridge/entwurf-meta-receive/.claude-plugin/plugin.json"
     "pi/meta-bridge/entwurf-meta-receive/hooks/hooks.json"
@@ -4485,12 +4403,6 @@ case "$cmd" in
     ;;
   install)
     install_local_package "$TARGET_PROJECT_DIR"
-    ;;
-  setup:links)
-    # Repair / refresh ~/.pi/agent/entwurf-targets.json without re-running
-    # the full setup flow. Pass --force to overwrite a stale operator file
-    # or a wrong symlink (a backup is taken for regular files).
-    ensure_agent_dir_symlinks "${2:-}"
     ;;
   remove)
     remove_local_package "$TARGET_PROJECT_DIR"

@@ -2,8 +2,8 @@
  * entwurf-bridge — MCP adapter exposing selected pi-side tools to ACP hosts.
  *
  * Ownership: this adapter lives inside `entwurf` alongside the v2 entwurf
- * orchestration surface (pi-extensions/entwurf-control.ts + lib/entwurf-v2-*.ts +
- * pi/entwurf-targets.json). See AGENTS.md §Entwurf Orchestration.
+ * orchestration surface (pi-extensions/entwurf-control.ts + lib/entwurf-v2-*.ts).
+ * See AGENTS.md §Entwurf Orchestration.
  *
  * Wiring: registered only via entwurfProvider.mcpServers in pi settings.
  * No ambient discovery. The bridge never auto-promotes pi extension tools.

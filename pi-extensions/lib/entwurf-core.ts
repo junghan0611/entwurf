@@ -65,8 +65,6 @@ const AGENT_DIR = process.env.PI_CODING_AGENT_DIR
 const PI_SETTINGS_PATH = process.env.PI_SETTINGS_PATH
 	? expandTilde(process.env.PI_SETTINGS_PATH)
 	: path.join(AGENT_DIR, "settings.json");
-const ENTWURF_TARGETS_PATH = process.env.ENTWURF_TARGETS_PATH ?? path.join(AGENT_DIR, "entwurf-targets.json");
-export const DEFAULT_ENTWURF_MODEL = "openai-codex/gpt-5.4";
 export const ENTWURF_CODEX_ACP_ENV = "ENTWURF_ACP_FOR_CODEX";
 
 // Currently unused: remote/SSH entwurf is fail-fast in 0.9.0 (garden-native
@@ -91,11 +89,6 @@ export interface ExplicitExtensionSpec {
 // Path / model helpers
 // ============================================================================
 
-export function resolveEntwurfModel(model?: string): string {
-	const trimmed = model?.trim();
-	return trimmed ? trimmed : DEFAULT_ENTWURF_MODEL;
-}
-
 export function isClaudeModel(model?: string): boolean {
 	return typeof model === "string" && /(^|\/)claude-/.test(model);
 }
@@ -118,39 +111,15 @@ export function normalizeCodexEntwurfModelForAcp(model?: string): string | undef
 	return model.startsWith("openai-codex/") ? model.slice("openai-codex/".length) : model;
 }
 
-// ============================================================================
-// Entwurf Target Registry (v1) — narrow door
-//
-// SSOT for what (provider, model) pairs may be spawned via entwurf.
-// File: ~/.pi/agent/entwurf-targets.json (override with ENTWURF_TARGETS_PATH).
-// See entwurf/AGENTS.md §Entwurf Orchestration (Entwurf Target Registry) for principle and schema.
-//
-// Spawn flow goes through this gate. Resume flow does NOT — Identity Preservation
-// Rule states that an existing being is preserved as-is, regardless of current
-// policy. Removing a target from the registry only stops new spawns; it does
-// not retroactively forbid resuming sessions that were already created.
-// ============================================================================
-
-export interface EntwurfTarget {
-	provider: string;
-	model: string;
-	enabled: boolean;
-	/** When true, this target is excluded from bare-model auto-resolution. Caller
-	 *  must specify provider explicitly to use it. Useful for test-only routings
-	 *  (e.g. ACP GPT alongside default native GPT). */
-	explicitOnly?: boolean;
-}
-
-export interface EntwurfRegistry {
-	entwurfTargets: EntwurfTarget[];
-}
-
-export class EntwurfRegistryError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "EntwurfRegistryError";
-	}
-}
+// The Entwurf Target Registry is GONE (#50 C3). `pi/entwurf-targets.json` and its
+// reader chain (loadEntwurfTargets / resolveEntwurfTarget / EntwurfRegistryError +
+// the ~/.pi/agent symlink machinery) were the v1 "narrow door" for spawn-model
+// policy — but v2 never spawns from a model tuple: entwurf_v2 resumes an
+// already-identified record-backed citizen, and the model axis is the citizen's
+// own (Identity Preservation Rule). The last readers were the RT-dead
+// buildSessionName mirror and the v1 spawn guard, both swept with this cut.
+// Bridge-extension routing for provider=entwurf survives below (getRegistryRouting
+// ← scripts/resolve-acp-bridge.ts) and takes a caller-supplied target — no file.
 
 // Raised when a spawn is routed to provider=entwurf but the bridge extension
 // cannot be resolved from settings package sources or the loaded module self-root.
@@ -161,98 +130,6 @@ export class EntwurfRoutingError extends Error {
 		super(message);
 		this.name = "EntwurfRoutingError";
 	}
-}
-
-// Positive-only cache. We intentionally do NOT cache EntwurfRegistryError —
-// caching a missing/broken registry once would make the same MCP/pi process
-// refuse every subsequent entwurf spawn even after the operator fixed the
-// file (e.g. ran `./run.sh setup:links` to relink the canonical registry).
-// That negative-cache trap was the root cause of the v0.4.x oracle install
-// regression: a stale operator file produced an EntwurfRegistryError on
-// first call, and the cached error survived the symlink repair.
-//
-// We keep a positive cache for hot-path performance, but invalidate it via
-// the file's mtime so that operator edits to entwurf-targets.json are
-// picked up on the next call without process restart.
-interface CachedRegistry {
-	registry: EntwurfRegistry;
-	mtimeMs: number;
-}
-let cachedRegistry: CachedRegistry | null = null;
-
-export function loadEntwurfTargets(): EntwurfRegistry {
-	let stat: fs.Stats;
-	try {
-		stat = fs.statSync(ENTWURF_TARGETS_PATH);
-	} catch {
-		// Missing — never cache. Operator may relink at any time and the next
-		// call must see the new file.
-		throw new EntwurfRegistryError(
-			`Entwurf target registry not found at ${ENTWURF_TARGETS_PATH}. ` +
-				`Without it, every entwurf spawn is refused. Run \`./run.sh setup:links\` ` +
-				`or create the file manually (see entwurf/pi/entwurf-targets.json for the canonical shape).`,
-		);
-	}
-
-	if (cachedRegistry && cachedRegistry.mtimeMs === stat.mtimeMs) {
-		return cachedRegistry.registry;
-	}
-
-	let raw: unknown;
-	try {
-		raw = JSON.parse(fs.readFileSync(ENTWURF_TARGETS_PATH, "utf-8"));
-	} catch (e) {
-		throw new EntwurfRegistryError(
-			`Failed to parse ${ENTWURF_TARGETS_PATH}: ${e instanceof Error ? e.message : String(e)}`,
-		);
-	}
-
-	if (typeof raw !== "object" || raw === null || !("entwurfTargets" in raw)) {
-		throw new EntwurfRegistryError(
-			`Invalid registry shape in ${ENTWURF_TARGETS_PATH}: expected { entwurfTargets: [...] }`,
-		);
-	}
-
-	const targetsRaw = (raw as { entwurfTargets: unknown }).entwurfTargets;
-	if (!Array.isArray(targetsRaw)) {
-		throw new EntwurfRegistryError(`Invalid entwurfTargets in ${ENTWURF_TARGETS_PATH}: must be an array`);
-	}
-
-	const targets: EntwurfTarget[] = [];
-	for (let i = 0; i < targetsRaw.length; i++) {
-		const t = targetsRaw[i];
-		if (typeof t !== "object" || t === null) {
-			throw new EntwurfRegistryError(`Entry #${i} is not an object`);
-		}
-		const obj = t as Record<string, unknown>;
-		if (typeof obj.provider !== "string" || !obj.provider.trim()) {
-			throw new EntwurfRegistryError(`Entry #${i}: provider must be a non-empty string`);
-		}
-		if (typeof obj.model !== "string" || !obj.model.trim()) {
-			throw new EntwurfRegistryError(`Entry #${i}: model must be a non-empty string`);
-		}
-		if (typeof obj.enabled !== "boolean") {
-			throw new EntwurfRegistryError(`Entry #${i}: enabled must be a boolean`);
-		}
-		if (obj.explicitOnly !== undefined && typeof obj.explicitOnly !== "boolean") {
-			throw new EntwurfRegistryError(`Entry #${i}: explicitOnly must be boolean if present`);
-		}
-		targets.push({
-			provider: obj.provider.trim(),
-			model: obj.model.trim(),
-			enabled: obj.enabled,
-			explicitOnly: obj.explicitOnly === true ? true : undefined,
-		});
-	}
-
-	const registry: EntwurfRegistry = { entwurfTargets: targets };
-	cachedRegistry = { registry, mtimeMs: stat.mtimeMs };
-	return registry;
-}
-
-/** Test-only hook to reset the in-memory cache (e.g. between test runs). */
-export function _resetEntwurfRegistryCache(): void {
-	cachedRegistry = null;
 }
 
 // ============================================================================
@@ -280,131 +157,18 @@ export function mirrorChildStderr(proc: ChildProcess): void {
 	proc.on("close", () => writer.end());
 }
 
-// ============================================================================
-// Spawn guard — one entwurf spawn per (session, target) per process.
-//
-// v1 target-use guard. Its callers (runEntwurfSync / runEntwurfAsync) were
-// removed in the v1 sync-body sweep; this guard and the registry it consults are
-// now reachable only through the RT-dead buildSessionName and are swept with the
-// C3 name-authority cut. entwurf_v2 never used it.
-//
-// Map key is the caller-provided sessionId:
-//   - pi native: pi.sessionManager.getSessionId()
-//   - MCP bridge: process.pid (the MCP subprocess is one Claude session)
-// Resets on process restart, which is the intended lifetime.
-// ============================================================================
+// The v1 spawn guard ("one entwurf spawn per (session, target) per process" —
+// usedEntwurfTargets / ensureEntwurfOncePerTarget / markEntwurfTargetUsed /
+// resolveGuardTargetKey) is GONE with the registry it consulted (#50 C3). Its
+// callers died in the v1 sync-body sweep; entwurf_v2 never used it.
 
-const usedEntwurfTargets = new Map<string, Set<string>>();
-
-export function ensureEntwurfOncePerTarget(sessionId: string, targetKey: string): void {
-	const seen = usedEntwurfTargets.get(sessionId);
-	if (seen && seen.has(targetKey)) {
-		throw new Error(`entwurf to ${targetKey} already exists in this session. Use entwurf_v2 to continue.`);
-	}
-}
-
-export function markEntwurfTargetUsed(sessionId: string, targetKey: string): void {
-	let seen = usedEntwurfTargets.get(sessionId);
-	if (!seen) {
-		seen = new Set();
-		usedEntwurfTargets.set(sessionId, seen);
-	}
-	seen.add(targetKey);
-}
-
-export function resolveGuardTargetKey(provider: string | undefined, model: string | undefined): string {
-	const fallbackModel = model && model.trim() ? model : DEFAULT_ENTWURF_MODEL;
-	const target = resolveEntwurfTarget({ provider, model: fallbackModel });
-	return `${target.provider}/${target.model}`;
-}
-
-/** Test-only: reset the guard state so unit tests can reuse a single process. */
-export function _resetUsedEntwurfTargets(): void {
-	usedEntwurfTargets.clear();
-}
-
+/** A caller-supplied (provider, model) tuple for bridge-extension routing.
+ * The registry that used to resolve/validate these is gone (#50 C3); the one
+ * live producer is scripts/resolve-acp-bridge.ts, which names its tuple inline. */
 export interface ResolvedTarget {
 	provider: string;
 	model: string;
 	explicitOnly: boolean;
-}
-
-/**
- * Resolve caller input to an exact (provider, model) tuple from the registry.
- *
- * Resolution rules (narrow door):
- *   1. Qualified `provider/model` in `model` → split, exact lookup.
- *   2. `provider` + `model` both given → exact lookup.
- *   3. Bare `model` only → registry entries matching that model name where
- *      `explicitOnly !== true`:
- *        - 0 candidates → reject.
- *        - 1 candidate → use it.
- *        - 2+ candidates → reject as ambiguous.
- *
- * In all paths the resolved tuple must be present in the registry with
- * `enabled: true`. Otherwise `EntwurfRegistryError` is thrown.
- */
-export function resolveEntwurfTarget(input: { provider?: string; model?: string }): ResolvedTarget {
-	const registry = loadEntwurfTargets();
-	const enabled = registry.entwurfTargets.filter((t) => t.enabled);
-
-	let provider = input.provider?.trim() || undefined;
-	let model = input.model?.trim() || undefined;
-
-	if (!model) {
-		throw new EntwurfRegistryError("entwurf: model is required");
-	}
-
-	// Path 1: qualified `provider/model` in model field
-	if (!provider && model.includes("/")) {
-		const slash = model.indexOf("/");
-		provider = model.slice(0, slash).trim();
-		model = model.slice(slash + 1).trim();
-		if (!provider || !model) {
-			throw new EntwurfRegistryError(`entwurf: malformed qualified model id "${input.model}"`);
-		}
-	}
-
-	// Paths 1 & 2: exact tuple lookup
-	if (provider) {
-		const found = enabled.find((t) => t.provider === provider && t.model === model);
-		if (!found) {
-			throw new EntwurfRegistryError(
-				`entwurf: (provider="${provider}", model="${model}") is not in the entwurf target ` +
-					`registry, or is disabled. Allowed: ${describeRegistryEntries(enabled)}`,
-			);
-		}
-		return { provider: found.provider, model: found.model, explicitOnly: found.explicitOnly === true };
-	}
-
-	// Path 3: bare model — auto-resolve excluding explicitOnly
-	const candidates = enabled.filter((t) => t.model === model && t.explicitOnly !== true);
-	if (candidates.length === 0) {
-		const sameModel = enabled.filter((t) => t.model === model);
-		if (sameModel.length > 0) {
-			throw new EntwurfRegistryError(
-				`entwurf: model "${model}" exists in registry only as explicitOnly target(s). ` +
-					`Specify provider explicitly. Available: ${describeRegistryEntries(sameModel)}`,
-			);
-		}
-		throw new EntwurfRegistryError(
-			`entwurf: model "${model}" is not in the entwurf target registry. ` +
-				`Allowed: ${describeRegistryEntries(enabled)}`,
-		);
-	}
-	if (candidates.length > 1) {
-		throw new EntwurfRegistryError(
-			`entwurf: bare model "${model}" is ambiguous (${candidates.length} candidates). ` +
-				`Specify provider explicitly. Candidates: ${describeRegistryEntries(candidates)}`,
-		);
-	}
-	const only = candidates[0];
-	return { provider: only.provider, model: only.model, explicitOnly: false };
-}
-
-function describeRegistryEntries(entries: EntwurfTarget[]): string {
-	if (entries.length === 0) return "(none)";
-	return entries.map((t) => `${t.provider}/${t.model}${t.explicitOnly ? " [explicitOnly]" : ""}`).join(", ");
 }
 
 // The v1 session-file readers that used to sit here — extractTextContent,
@@ -763,10 +527,10 @@ export function getEntwurfExplicitExtensions(
 }
 
 /**
- * Registry-driven routing. The v1 spawn caller (runEntwurfSync) was removed in
- * the sync-body sweep; the live caller is now OPS package routing
- * (scripts/resolve-acp-bridge.ts). Resolves the explicit extension spec for a
- * (provider, model) tuple already validated against the registry.
+ * Bridge-extension routing for a caller-supplied (provider, model) tuple. The
+ * registry that used to validate the tuple is gone (#50 C3 — the name survives
+ * for call-site stability); the live caller is OPS package routing
+ * (scripts/resolve-acp-bridge.ts), which names its target inline.
  */
 export function getRegistryRouting(
 	target: ResolvedTarget,
@@ -785,9 +549,7 @@ export function getRegistryRouting(
 	// entwurf targets need the bridge extension injected. If it can't be
 	// resolved, fail-fast — NOT warning-only. A warning-then-spawn path puts a
 	// child on `pi --no-extensions --provider entwurf`, which dies with
-	// `Unknown provider "entwurf"` before any session file exists (#29). The
-	// throw is caught by the same tool-surface try/catch that handles
-	// EntwurfRegistryError, and surfaces as a failed entwurf.
+	// `Unknown provider "entwurf"` before any session file exists (#29).
 	const acpBridge = resolveExplicitExtensionSpec("entwurf", isRemote);
 	if (!acpBridge) {
 		throw new EntwurfRoutingError(
@@ -838,31 +600,23 @@ export function enrichTaskWithProjectContext(task: string, cwd: string): string 
 }
 
 // ============================================================================
-// Garden session identity & name grammar (0.9.0 / 1.0.0) — locked SSOT
+// Garden session identity (record era)
 //
-// See NEXT.md "Locked — session identity & name grammar". This block is the
-// ONLY place that assembles or parses a session name; nothing builds it by hand.
+// The 0.9.0/1.0.0 "session identity & name grammar" block that stood here — the
+// canonical name grammar `{sessionId}=={provider}/{model}--{titleSlug}__{tags}`
+// with buildSessionName / parseSessionName / isEntwurfSessionName / slugifyTitle
+// / isKnownProviderModel — is GONE (#50 C3). It existed to mirror the garden
+// address into pi's session NAME while the address WAS pi's session id. The
+// meta-record mints the address now (C2), the name is pi's alone (LOCKED
+// PROTOCOL 2), and no code assembles or parses a session name anymore. The
+// garden-id grammar itself (YYYYMMDDTHHMMSS-[0-9a-f]{6}) lives on in
+// ./session-id.js as the RECORD's gardenId shape.
 //
-// Authority separation (do not blur):
-//   - lookup / resume authority  = JSONL header `id` + header `cwd`. Filenames
-//     are a Pi artifact and are NEVER parsed for logic.
-//   - model authority            = JSONL first `model_change` + the
-//     provider/model re-supplied on resume.
-//   - session name               = display / search / integrity-mirror only.
-//     title and tags carry zero logic. A name's provider/model mismatch is NOT
-//     a routing signal — it is corrupt-metadata, surfaced via fail-fast.
-//
-// Grammar:
-//   sessionId = YYYYMMDDTHHMMSS-[0-9a-f]{6}          (= JSONL header id)
-//   name      = {sessionId}=={provider}/{model}--{titleSlug}__{tag}_{tag}
-//     ==  signature delimiter | --  title delimiter
-//     __  tag-section start   | _   tag separator
-//   provider/model = entwurf-targets.json EXACT tuple (no regex model
-//                    invention; `.`-bearing models gpt-5.5 / gemini-3.1-pro-preview
-//                    are real).
-//   titleSlug      = ascii slug, lowercase, hyphen ok, NO underscore. Raw title
-//                    is free input; the builder canonicalizes it.
-//   tags           = lowercase alnum, `_`-separated. `entwurf` tag ⇒ Entwurf.
+// Earlier in the same sweep (#50 C2): the resident-name builder
+// (`buildGardenSessionName`), the garden-id resident guard
+// (`assertGardenNativeSessionId`), the spawn collision pre-check and the
+// in-process garden-session birth writer (`/gnew`) — all made pi's session id
+// BE the garden address; the record owns it now.
 // ============================================================================
 
 export class SessionIdentityError extends Error {
@@ -877,154 +631,6 @@ export class SessionIdentityError extends Error {
 // runtimes — same rationale as protocol.js). Imported above for internal use and
 // re-exported here so every existing `entwurf-core` importer keeps working.
 export { formatSessionTimestamp, generateSessionId, isValidSessionId, SESSION_ID_RE };
-
-const SESSION_TAG_RE = /^[a-z0-9]+$/;
-/** Canonical titleSlug: lowercase-alnum words joined by single hyphens, no edges. */
-const TITLE_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-/**
- * Canonicalize a human/agent raw title into an ascii slug. lowercase; every
- * non-`[a-z0-9]` run (spaces, unicode, punctuation, `_`, `__`) collapses to a
- * single `-`; trimmed. Empty → fallback (`untitled`). underscore is destroyed
- * here so a raw title can never smuggle a tag delimiter into the slug.
- */
-export function slugifyTitle(rawTitle: string | undefined, fallback = "untitled"): string {
-	const norm = (s: string) =>
-		s
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, "-")
-			.replace(/^-+|-+$/g, "");
-	return norm(rawTitle ?? "") || norm(fallback) || "untitled";
-}
-
-/**
- * Exact-tuple membership against the entwurf target registry. Existence, not
- * `enabled` — a session may have been spawned while the target was enabled and
- * later disabled; its name must still validate. Integrity mirror, not a routing gate.
- */
-export function isKnownProviderModel(provider: string, model: string): boolean {
-	let targets: EntwurfTarget[];
-	try {
-		targets = loadEntwurfTargets().entwurfTargets;
-	} catch {
-		return false;
-	}
-	return targets.some((t) => t.provider === provider && t.model === model);
-}
-
-export interface BuildSessionNameInput {
-	sessionId: string;
-	provider: string;
-	model: string;
-	/** Free human/agent input; canonicalized to a slug by the builder. */
-	rawTitle?: string;
-	/** lowercase-alnum tags. `entwurf` marks an Entwurf session. */
-	tags?: string[];
-}
-
-export interface ParsedSessionName {
-	sessionId: string;
-	provider: string;
-	model: string;
-	titleSlug: string;
-	tags: string[];
-}
-
-/**
- * Assemble a canonical session name — the ONLY way to produce a `--name` value.
- * Validates sessionId grammar, registry tuple, tag charset; canonicalizes title.
- * Throws SessionIdentityError on any violation; corrupt metadata must never reach `--name`.
- */
-export function buildSessionName(input: BuildSessionNameInput): string {
-	const { sessionId, provider, model, rawTitle, tags = [] } = input;
-
-	if (!isValidSessionId(sessionId)) {
-		throw new SessionIdentityError(`Invalid sessionId "${sessionId}": expected YYYYMMDDTHHMMSS-[0-9a-f]{6}.`);
-	}
-	if (!provider || provider.includes("/") || provider.includes("=") || provider.includes("--")) {
-		throw new SessionIdentityError(`Invalid provider "${provider}" for session name.`);
-	}
-	if (!model || model.includes("/") || model.includes("=") || model.includes("--")) {
-		throw new SessionIdentityError(`Invalid model "${model}" for session name.`);
-	}
-	if (!isKnownProviderModel(provider, model)) {
-		throw new SessionIdentityError(
-			`provider/model "${provider}/${model}" is not an exact tuple in the entwurf target registry. ` +
-				`Session names mirror a real (provider, model); do not invent one.`,
-		);
-	}
-	for (const tag of tags) {
-		if (!SESSION_TAG_RE.test(tag)) {
-			throw new SessionIdentityError(`Invalid tag "${tag}": tags must match /^[a-z0-9]+$/.`);
-		}
-	}
-
-	const titleSlug = slugifyTitle(rawTitle);
-	const base = `${sessionId}==${provider}/${model}--${titleSlug}`;
-	return tags.length > 0 ? `${base}__${tags.join("_")}` : base;
-}
-
-/**
- * Parse a canonical session name into its fields. Returns `null` on any
- * structural violation. Pure string work — does NOT consult the registry, so it
- * stays usable for diagnostics on a name whose target was later removed.
- */
-export function parseSessionName(name: string): ParsedSessionName | null {
-	if (typeof name !== "string") return null;
-
-	const sigIdx = name.indexOf("==");
-	if (sigIdx < 0) return null;
-	const sessionId = name.slice(0, sigIdx);
-	if (!isValidSessionId(sessionId)) return null;
-
-	const rest = name.slice(sigIdx + 2);
-
-	// First `--` is the title delimiter. provider/model and titleSlug each carry
-	// only single hyphens (registry models have no `--`; slugify collapses runs),
-	// so the first `--` is unambiguous.
-	const titleIdx = rest.indexOf("--");
-	if (titleIdx < 0) return null;
-	const providerModel = rest.slice(0, titleIdx);
-	const titleAndTags = rest.slice(titleIdx + 2);
-
-	const slashIdx = providerModel.indexOf("/");
-	if (slashIdx < 0) return null;
-	const provider = providerModel.slice(0, slashIdx);
-	const model = providerModel.slice(slashIdx + 1);
-	if (!provider || !model || model.includes("/")) return null;
-
-	let titleSlug = titleAndTags;
-	let tags: string[] = [];
-	const tagIdx = titleAndTags.indexOf("__");
-	if (tagIdx >= 0) {
-		titleSlug = titleAndTags.slice(0, tagIdx);
-		tags = titleAndTags.slice(tagIdx + 2).split("_");
-		if (tags.some((t) => !SESSION_TAG_RE.test(t))) return null;
-	}
-	// canonical-only: a parseable name must carry a slug the builder could emit
-	// (lowercase-alnum + single hyphens). Rejects spaces/uppercase/unicode and
-	// any raw delimiter that slipped through.
-	if (!TITLE_SLUG_RE.test(titleSlug)) return null;
-
-	return { sessionId, provider, model, titleSlug, tags };
-}
-
-/** `entwurf` tag present ⇒ Entwurf session. Reads name as a discovery hint only. */
-export function isEntwurfSessionName(name: string): boolean {
-	const parsed = parseSessionName(name);
-	return parsed ? parsed.tags.includes("entwurf") : false;
-}
-
-// The resident-name builder (`buildGardenSessionName`) and its `control` tag, the
-// garden-id resident guard (`assertGardenNativeSessionId`), the spawn collision
-// pre-check (`assertSessionIdAvailableForSpawn`) and the whole in-process
-// garden-session birth writer (`/gnew`: createGardenSessionFile +
-// removeUnadoptedGardenSessionFile + GARDEN_SESSION_FILE_VERSION) are GONE (#50 C2).
-// All five existed to make pi's session id BE the garden address — mint it, enforce
-// it, mirror it into a name, and pre-create a file carrying it. The meta-record mints
-// the address now, so pi's id is just `nativeSessionId` and none of that machinery
-// has a subject. The name-authority chain that remains (buildSessionName →
-// isKnownProviderModel → the registry) is C3's.
 
 /** Screwdriver icon for the resident-session status label (GLGMAN's tool). */
 export const RESIDENT_STATUS_ICON = "🪛";

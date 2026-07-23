@@ -168,7 +168,7 @@ Uses `entwurf` instead of `delegate` to avoid ecosystem collisions. spawn-bg res
 - **`entwurf_v2` is the one delivery verb.** Given a garden id, it classifies the target (live pi vs. dormant pi vs. mailbox meta-session vs. native-push citizen — a bare garden id does not reveal this) and routes correctly. It does **not** mint a fresh sibling: spawn-bg resumes an *already-identified* citizen, while native-register binds an *already-running* conversation. Fresh creation was the v1 `entwurf` verb and remains deferred.
 - **`entwurf_peers`** is a read-only fact surface (liveness / capability / identity / cwd-history). Do not bake verb-routing (`resumable`/`sendable`) into the fact layer; routing is the decider's job.
 - **`entwurf_self`** returns the authoritative identity envelope (pi-session env, or a trusted meta-session sender marker) and is identity-required.
-- Target registry: `pi/entwurf-targets.json` — **not** a spawn-bg allowlist: the v2 spawn path never reads it; dormant-resume authorization is record existence + the transcript-header ↔ `record.nativeSessionId` integrity check (#50 C3 — the old `requireEntwurf` name-tag and resume-marker env are deleted). Its only live consumer is OPS routing (`getRegistryRouting` ← resolve-acp-bridge). Identity Preservation Rule: no model override on resume.
+- The target registry (`pi/entwurf-targets.json` + `setup:links`) is **gone** (#50 C3): v2 never spawns from a model tuple — `entwurf_v2` resumes an already-identified record-backed citizen, and dormant-resume authorization is record existence + the transcript-header ↔ `record.nativeSessionId` integrity check (the old `requireEntwurf` name-tag and resume-marker env are deleted). Bridge-extension routing survives as `getRegistryRouting` (caller-supplied tuple, ← resolve-acp-bridge). Identity Preservation Rule: no model override on resume.
 - `PI_SHELL_ACP_V2_ONLY=1` was the v1-refusal flag; with v1 removed on this branch its guard (`entwurf-v2-only.ts`) is gone too. `runEntwurfV2` was always flag-clean.
 
 > **Source-agnostic does not mean harness-agnostic.** 어디서 던지든 — GLG / sibling / external MCP host — entwurf 의 *target* 은 garden citizen 이다. spawn-bg resume 의 spawn surface 는 pi 자식 프로세스만 띄운다 (`pi --entwurf-control` keep-alive resident). 외부 MCP host 가 닿을 때도 target 은 이미 식별된 citizen 이어야 한다. *Model* 은 free axis (어느 형제 학교 모델이든), *spawn target* 은 harness 정합 axis.
@@ -234,7 +234,6 @@ Messages are thrown, not awaited.
 | `pi-extensions/lib/entwurf-core.ts` | shared core (session-file lookup, identity read, explicit-extension args); some v1 exports now dead pending routing cleanup |
 | `protocol.js` | dependency-free shared wire constants (`<project-context` marker); single source for tsc emit + strip-types MCP paths |
 | `run.sh` | install (incl. `install-meta-bridge`), check-*/smoke-* gates, release-gate |
-| `pi/entwurf-targets.json` | spawn-bg resume target allowlist |
 | `mcp/entwurf-bridge/` | MCP server exposing `entwurf_v2`, `entwurf_self`, `entwurf_peers`, `entwurf_inbox_read` |
 
 ## Typecheck Boundary
