@@ -40,6 +40,9 @@
  *   D7  a pre-cut (v2) SENDER record refuses the send naming M1,     (F10 — the M1 contract
  *       never claiming "no live meta-sender marker"                   held per surface)
  *   D8  entwurf_self on that record refuses naming M1 + the citizen  (not "missing env")
+ *   D11 an identity-less send is refused BY DEFAULT (#50 C4), naming the cause
+ *       and the ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER hatch; no mailbox garbage
+ *   D12 the explicit hatch delivers, and the landed body names external-mcp
  *
  * Deterministic: no model, no network, no API cost, no backend. Temp dirs only.
  *
@@ -208,7 +211,6 @@ const env: NodeJS.ProcessEnv = {
 	ENTWURF_META_MAILBOX_DIR: mailboxDir,
 	ENTWURF_META_RECEIVERS_DIR: receiversDir,
 	ENTWURF_META_SENDERS_DIR: sendersDir,
-	ENTWURF_BRIDGE_REQUIRE_META_SENDER: "1",
 	// The ENTWURF_META_* roots do NOT cover the socket surface: the bridge reads
 	// ENTWURF_DIR (index.ts:71, default ~/.pi/entwurf-control) for its socket-conflict
 	// inspection, so without this the gate would consult the operator's REAL live
@@ -405,6 +407,7 @@ try {
 	// naming SURVIVES to the artifact response on each path.
 	await fsp.writeFile(senderRecordFile, senderRecordV3Bytes);
 	const receiverRecordFile = path.join(sessionsDir, `${gid}.meta.json`);
+	const receiverRecordV3Bytes = await fsp.readFile(receiverRecordFile);
 	await fsp.writeFile(
 		receiverRecordFile,
 		`${JSON.stringify({
@@ -457,6 +460,112 @@ try {
 		preCutInbox?.result?.isError === true && preCutInboxBody.includes(M1_MIGRATE_COMMAND),
 		`--- response ---\n${preCutInboxBody}`,
 	);
+
+	// D11/D12 — the #50 C4 sender default, proven against the artifact. Anonymous
+	// (no pi env, no trusted marker, no flag) is REFUSED by default, naming the true
+	// cause AND the one documented hatch; ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1
+	// restores the old external-mcp behaviour and the landed body says so honestly.
+	// A fresh bridge child per cell: the sender marker is ppid-keyed, so pointing the
+	// child at an EMPTY senders dir is what makes it genuinely anonymous.
+	await fsp.writeFile(receiverRecordFile, receiverRecordV3Bytes);
+	const anonSendersDir = path.join(tmp, "meta-senders-anon");
+	await fsp.mkdir(anonSendersDir, { recursive: true });
+	const oneShotV2 = async (
+		cellEnv: NodeJS.ProcessEnv,
+		message: string,
+		what: string,
+	): Promise<{ isError: boolean; body: string }> => {
+		const c = spawn(subjectCmd, subjectArgs, { stdio: ["pipe", "pipe", "pipe"], env: cellEnv });
+		let cellStderr = "";
+		c.stderr?.on("data", (d) => {
+			cellStderr += d.toString();
+		});
+		const cellReplies = new Map<number, any>();
+		let cellBuf = "";
+		c.stdout?.on("data", (d) => {
+			cellBuf += d.toString();
+			const lines = cellBuf.split("\n");
+			cellBuf = lines.pop() ?? "";
+			for (const line of lines) {
+				const t = line.trim();
+				if (!t) continue;
+				try {
+					const msg = JSON.parse(t);
+					if (typeof msg?.id === "number") cellReplies.set(msg.id, msg);
+				} catch {}
+			}
+		});
+		try {
+			c.stdin?.write(
+				`${JSON.stringify({
+					jsonrpc: "2.0",
+					id: 9,
+					method: "tools/call",
+					params: {
+						name: "entwurf_v2",
+						arguments: { target: gid, intent: "fire-and-forget", mode: "follow_up", message },
+					},
+				})}\n`,
+			);
+			const got = await new Promise<any>((resolve, reject) => {
+				const t0 = Date.now();
+				const iv = setInterval(() => {
+					const r = cellReplies.get(9);
+					if (r) {
+						clearInterval(iv);
+						resolve(r);
+					} else if (Date.now() - t0 > 15_000) {
+						clearInterval(iv);
+						reject(
+							new Error(`timeout waiting for ${what}${cellStderr.trim() ? `\n--- stderr ---\n${cellStderr}` : ""}`),
+						);
+					}
+				}, 50);
+			});
+			return {
+				isError: got?.result?.isError === true,
+				body: got?.result?.content?.[0]?.text ?? JSON.stringify(got),
+			};
+		} finally {
+			try {
+				c.kill("SIGTERM");
+			} catch {}
+		}
+	};
+
+	const anonEnv: NodeJS.ProcessEnv = { ...env, ENTWURF_META_SENDERS_DIR: anonSendersDir };
+	delete anonEnv.ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER;
+	{
+		const before = (await fsp.readdir(boxDir)).filter((f) => f.endsWith(".msg")).length;
+		const r = await oneShotV2(anonEnv, "check-bridge-delivery: D11 — must be refused.", "D11 anonymous send");
+		ok(
+			"D11: an identity-less send is refused BY DEFAULT, naming the cause + the explicit hatch",
+			r.isError &&
+				r.body.includes("no authoritative sender identity") &&
+				r.body.includes("ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER"),
+			`--- response ---\n${r.body}`,
+		);
+		const after = (await fsp.readdir(boxDir)).filter((f) => f.endsWith(".msg")).length;
+		ok("D11: the refused send left NO mailbox garbage", after === before, `before=${before} after=${after}`);
+	}
+	{
+		const before = new Set((await fsp.readdir(boxDir)).filter((f) => f.endsWith(".msg")));
+		const r = await oneShotV2(
+			{ ...anonEnv, ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER: "1" },
+			"check-bridge-delivery: D12 — explicit hatch, honest external origin.",
+			"D12 hatch send",
+		);
+		ok("D12: the explicit anonymous hatch delivers (not isError)", !r.isError, `--- response ---\n${r.body}`);
+		const afterFiles = (await fsp.readdir(boxDir)).filter((f) => f.endsWith(".msg"));
+		const landed = afterFiles.filter((f) => !before.has(f));
+		ok("D12: exactly one new .msg landed", landed.length === 1, `--- mailbox ---\n${afterFiles.join("\n")}`);
+		const landedBody = landed.length === 1 ? await fsp.readFile(path.join(boxDir, landed[0] as string), "utf8") : "";
+		ok(
+			"D12: the landed body names the external-mcp origin honestly (never a borrowed identity)",
+			landedBody.includes("external-mcp") && !landedBody.includes("meta-session/claude-code"),
+			`--- mailbox body ---\n${landedBody || "(missing)"}`,
+		);
+	}
 } finally {
 	try {
 		child?.kill("SIGTERM");

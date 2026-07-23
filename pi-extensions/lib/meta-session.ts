@@ -1049,8 +1049,8 @@ export interface ReadMetaSenderMarkerOptions {
 /**
  * Read the sender marker for this MCP process's owner. Returns null when absent
  * or corrupt — a marker we cannot trust means "no authoritative sender", which
- * the caller turns into external-non-replyable (or a hard reject under
- * REQUIRE_META_SENDER). Never throws: an unreadable marker must not break a send.
+ * the bridge refuses by default (#50 C4; external-non-replyable only under the
+ * explicit anonymous hatch). Never throws: an unreadable marker must not break a send.
  */
 export function readMetaSenderMarker(opts: ReadMetaSenderMarkerOptions): MetaSenderMarker | null {
 	let file = opts.markerPath;

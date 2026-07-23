@@ -108,11 +108,14 @@ const server = new McpServer({ name: "entwurf-bridge", version: "0.1.0" });
 // (timestamp UTC, displayed in KST). `entwurf_self` is authoritative-identity
 // required: it returns either a pi-session envelope or a trusted meta-session
 // envelope (garden id from the sender marker). Plain anonymous external hosts
-// still fail. v2 delivery is identity-enhanced, not identity-required: a native
-// Claude Code meta-session with a live sender marker is replyable by garden id; an
-// explicitly wired external MCP host with no marker may still deliver (unless
-// REQUIRE is set) but is marked external/non-replyable so the receiver sees the
-// origin honestly.
+// fail. #50 C4: v2 delivery is identity-REQUIRED by default — "if we don't know
+// who sent it, we don't send it" holds on every install surface, not only where
+// an installer remembered to set a flag. The ONE documented escape hatch is
+// ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1 (explicit operator wiring): it restores
+// the old behaviour for a deliberately-anonymous external MCP host, and the send
+// still goes out marked external/non-replyable so the receiver sees the origin
+// honestly. The retired opt-in ENTWURF_BRIDGE_REQUIRE_META_SENDER is not read —
+// a stale copy of it in an old install env is inert (its demand is the default).
 class EntwurfEnvelopeWiringError extends Error {
 	constructor(missing: string[]) {
 		super(
@@ -135,18 +138,20 @@ interface SenderEnvelope {
 	replyable?: boolean;
 }
 
-// REQUIRE_META_SENDER closes the "anonymous send" hole: when set (the Claude Code
-// user-scope install sets it), a send with no pi-session identity AND no trusted
-// meta-sender marker is refused rather than going out as anonymous external-mcp.
+// #50 C4: anonymous sends are refused BY DEFAULT — a send with no pi-session
+// identity AND no trusted meta-sender marker does not go out as anonymous
+// external-mcp unless the operator explicitly wired the escape hatch.
 // "If we don't know who sent it, we don't send it."
 class EntwurfSenderIdentityError extends Error {
 	constructor() {
 		super(
-			"entwurf-bridge refused: no authoritative sender identity. " +
-				"ENTWURF_BRIDGE_REQUIRE_META_SENDER=1 forbids anonymous external sends, and no live meta-sender " +
+			"entwurf-bridge refused: no authoritative sender identity. Anonymous external sends are " +
+				"refused by default, and no pi-session env (PI_SESSION_ID + PI_AGENT_ID) or live meta-sender " +
 				"marker was found for this process. The native SessionStart hook writes that marker (keyed by the " +
 				"Claude Code parent pid + start-time) — open this session through the installed meta-bridge so your " +
-				"garden-id is registered, then retry.",
+				"garden-id is registered, then retry. A deliberately-anonymous external MCP host may set " +
+				"ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1 (explicit operator wiring; the send is then marked " +
+				"external/non-replyable).",
 		);
 	}
 }
@@ -265,8 +270,9 @@ async function buildSendSenderEnvelope(): Promise<SenderEnvelope> {
 	const meta = await buildTrustedMetaSenderEnvelope(cwd);
 	if (meta) return meta;
 
-	// No marker. Anonymous external is allowed ONLY when not explicitly forbidden.
-	if (process.env.ENTWURF_BRIDGE_REQUIRE_META_SENDER === "1") {
+	// No marker. #50 C4: anonymous external is refused UNLESS the operator wired the
+	// explicit escape hatch — identity-required is the default, not an install flag.
+	if (process.env.ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER !== "1") {
 		throw new EntwurfSenderIdentityError();
 	}
 	return {

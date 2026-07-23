@@ -698,9 +698,8 @@ for (const d of [sessionsDir, mailboxDir, receiversDir, sendersDir]) await fsp.m
 
 // SENDER — this probe process is the parent the bridge child will see, so a sender
 // marker keyed to it is exactly what a real SessionStart hook writes for a native
-// session. Not decoration: the live env sets ENTWURF_BRIDGE_REQUIRE_META_SENDER=1
-// (anonymous sends are refused on the Claude install path) and the probe KEEPS that
-// env, so the identity join is under test alongside the delivery.
+// session. Not decoration: the bridge refuses anonymous sends by default (#50 C4),
+// so the identity join is under test alongside the delivery.
 const sender = upsertMetaSession({
   input: { backend: 'claude-code', nativeSessionId: `doctor-delivery-sender-${process.pid}`, cwd: tmp },
   dir: sessionsDir,
@@ -983,7 +982,6 @@ for p in proc.glob("[0-9]*"):
     try:
         pairs = p.joinpath("environ").read_bytes().split(b"\0")
         env = {k.decode(): v.decode(errors="replace") for x in pairs if b"=" in x for k, v in [x.split(b"=", 1)]}
-        if env.get("ENTWURF_BRIDGE_REQUIRE_META_SENDER") != "1": continue
         if env.get("ENTWURF_BRIDGE_EXTERNAL_AGENT_ID") != "external-mcp/claude-code": continue
         if process_agent(env) != agent: continue
         bridges.append((int(p.name), parent(int(p.name))))

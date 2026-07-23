@@ -25,7 +25,7 @@ jsonrpc() {
     -u PI_SESSION_ID \
     -u PI_AGENT_ID \
     -u ENTWURF_META_SENDER_MARKER \
-    -u ENTWURF_BRIDGE_REQUIRE_META_SENDER \
+    -u ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER \
     ENTWURF_META_SENDERS_DIR="$tmp_meta_senders" \
     bash "$BRIDGE_LAUNCHER" <<'EOF'
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}

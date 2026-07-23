@@ -472,8 +472,7 @@ else
   bad "owner fixture drive failed: $(tr '\n' ' ' < "$HOME/hook-run.txt" | cut -c1-300)"
 fi
 
-env ENTWURF_BRIDGE_REQUIRE_META_SENDER=1 \
-    ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code \
+env ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code \
     PI_CODING_AGENT_DIR="$AGENT" \
     sleep 600 &
 BRIDGE_PID=$!

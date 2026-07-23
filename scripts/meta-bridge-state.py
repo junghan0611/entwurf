@@ -278,13 +278,12 @@ def is_installed_package(repo: Path) -> bool:
 
 def desired_mcp(repo: Path) -> dict[str, Any]:
     env = {
+        # #50 C4: anonymous sends are refused by the BRIDGE DEFAULT now — the
+        # installer no longer sets ENTWURF_BRIDGE_REQUIRE_META_SENDER (retired,
+        # unread; a stale copy in an old install env is inert). The SessionStart
+        # hook writes the sender marker (parent-pid keyed), so a normally-opened
+        # session always has an authoritative garden-id sender.
         "ENTWURF_BRIDGE_EXTERNAL_AGENT_ID": "external-mcp/claude-code",
-        # Anonymous sends are forbidden on the Claude Code install path: a send
-        # with no pi-session identity AND no meta-sender marker is refused, not
-        # delivered as an unidentified external. The SessionStart hook writes
-        # the marker (parent-pid keyed), so a normally-opened session always has
-        # an authoritative garden-id sender.
-        "ENTWURF_BRIDGE_REQUIRE_META_SENDER": "1",
     }
     if is_installed_package(repo):
         # Installed package: wire the STABLE `entwurf-bridge` bin shim that npm/pnpm

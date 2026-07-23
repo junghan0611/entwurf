@@ -267,8 +267,11 @@ try {
 	delete env.PI_SESSION_ID;
 	delete env.PI_AGENT_ID;
 	delete env.ENTWURF_META_SENDER_MARKER;
-	delete env.ENTWURF_BRIDGE_REQUIRE_META_SENDER;
 	delete env.NODE_PATH;
+	// #50 C4: the bridge refuses identity-less sends by default. This drive's subject
+	// is the socket rail (peers listing + control-socket delivery), not sender policy
+	// — D11/D12 in check-bridge-delivery own that — so it takes the documented hatch.
+	env.ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER = "1";
 
 	const { send, await_ } = makeBridgeDriver(env);
 

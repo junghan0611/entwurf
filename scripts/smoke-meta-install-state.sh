@@ -486,7 +486,7 @@ settings={
   'permissions': {'allow': ['Read'], 'deny': ['Agent']},
   'env': {'DISABLE_AUTOCOMPACT': '1'}
 }
-root={'mcpServers': {'entwurf-bridge': {'type':'stdio','command':'bash','args':[repo + '/mcp/entwurf-bridge/start.sh'],'env': {'ENTWURF_BRIDGE_EXTERNAL_AGENT_ID':'external-mcp/claude-code','ENTWURF_BRIDGE_REQUIRE_META_SENDER':'1'}}}}
+root={'mcpServers': {'entwurf-bridge': {'type':'stdio','command':'bash','args':[repo + '/mcp/entwurf-bridge/start.sh'],'env': {'ENTWURF_BRIDGE_EXTERNAL_AGENT_ID':'external-mcp/claude-code'}}}}
 json.dump(settings, open(cfg + '/settings.json','w'), indent=2); open(cfg + '/settings.json','a').write('\n')
 json.dump(root, open(home + '/.claude.json','w'), indent=2); open(home + '/.claude.json','a').write('\n')
 PY

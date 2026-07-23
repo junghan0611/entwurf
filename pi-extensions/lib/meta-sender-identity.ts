@@ -132,7 +132,8 @@ export interface ResolveTrustedMetaSenderOptions {
 /**
  * Resolve the ONE identity that owns this MCP process, or refuse.
  *
- * 0 trusted → null (anonymous — or a hard refusal upstream under REQUIRE_META_SENDER).
+ * 0 trusted → null (the bridge then refuses the send by default, #50 C4 — anonymous
+ *   goes out only under the explicit ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1 hatch).
  * 1 trusted → that identity.
  * 2+ distinct → throw EntwurfSenderIdentityAmbiguityError.
  * a marker whose record exists but cannot be read → throw EntwurfSenderRecordUnreadableError
