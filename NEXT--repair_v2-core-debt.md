@@ -54,7 +54,21 @@ main 승격은 **당분간 보류**(GLG 2026-07-23) — 브랜치에서 C3 → C
 > **오푸스 권고 (2026-07-23): `M1+H7`을 `C4`보다 먼저.** 근거 넷 — ① 목표 ①이 실전에서 참이 되는 유일한 길이 M1이고 C4는 목표 ②(코드 청결)라 지연해도 비용이 안 쌓인다, ② 지연 비용은 M1 쪽에만 쌓인다(v2 record 실시간 증가), ③ **blackout 비용이 지금 가장 싸다** — 채널은 이미 끊겨 있어 지금 하면 추가 손실이 거의 없고 C4 뒤로 미루면 그때 다시 끊어야 한다, ④ C4의 dispatch/resolveTarget rail 변경은 살아있는 라이브 위에서 자르는 편이 안전하다. 반대 논거("C4가 M1의 관측면을 만든다")는 *migration 중 UX*이지 *migration 가능성*이 아니다 — M1은 C4 없이 성립한다. **연결 판단**: live rail repoint는 M1까지의 다리로만 값이 있다(repoint 기간만큼 v2 record가 더 늘어 M1의 짐이 커진다). M1 방아쇠가 가까우면 건너뛰고, 멀면 지금 채널을 살리는 값이 더 크다 — GLG가 M1 시점을 정하면 자동으로 풀린다.
 
 4. **C3 — DONE (4 cut + 교차 검수 + `770d8dd` 수선, 상태 참조).** 유일한 스펙 편차 2건은 기록됨: ① sender envelope는 prepend가 아니라 live rail 동형 append(한 포맷터), ② `PI_SHELL_ACP_*`는 관념명이었고 실물은 `ENTWURF_V2_RESUME_RESIDENT_SESSION_ENV` 하나(소비자는 C2 때 이미 사망 — env를 심고 아무도 안 읽던 상태를 삭제).
-5. **C4 — entwurf는 socket을 모른다 (다음 걸음, 목표 2의 구현)**: 사용자 표면(peers/facts/dispatch)에서 socket을 identity 축에서 제거 — record가 유일한 주소 축, socket은 dispatch 내부 transport로만. record-less socket-only 시민은 migration/진단 상태로 강등, dispatch/resolveTarget rail 전환. 강등의 관측면(에러 메시지가 M1을 이름으로 지목, C2 검수의 "원인 한 겹 가림" 지적 포함) 동시 재저작. **자르기 전에 표면 의미론(무엇이 identity로 보이고 무엇이 숨는가)을 세워 GLG와 합의.** 초안에 **교차 리뷰 F2 포함**: spawn-bg plan variant에 `wantsReply` 슬롯이 없어 dormant rail의 `<sender_info>`가 wants_reply를 실을 수 없다(회귀 아님, C3 미완) — decider 계약 변경이라 "재개된 시민에게 무엇이 보이는가" 질문과 한 몸. **「거부를 하나의 관측면으로 모은다」(F8/F9/F10)는 관측면 수선(2026-07-23)으로 선반영 완료** — M1 계약 경로별 게이트(D7~D10), 진단 집계, 값 표시가 이미 서 있다. C4 초안은 강등 의미론의 잔여분만 다룬다.
+5. **C4 — entwurf는 socket을 모른다 (진행 중, 목표 2의 구현. 표면 의미론 확정 2026-07-24 — GLG 위임: "초안 잡고 바로 작업", 사후 오푸스 검토)**:
+
+   **한 문장**: 사용자 표면(peers/facts/dispatch/발신 신원)에서 주소·신원 축은 meta-record 하나다. socket은 (a) in-domain liveness의 측정 증거, (b) dispatch 내부 transport로만 존재하고, record 없는 socket은 시민이 아니라 **진단 대상**이다. GLG 방향 재확인(2026-07-24): "pi-shell-acp 때 pi를 중심으로 세워놓은 기둥을 다 덜어내고 meta-record와 entwurf_v2로 완전히 조인다. ACP=클로드 전용, pi 네이티브=코덱스(GPT 구독) 전용, 리플리컨트↔리플리컨트급 게이트 정교함 유지."
+
+   | 표면 | 지금 | C4 이후 |
+   |---|---|---|
+   | `entwurf_peers` (bridge + pi-native) | peers + `socketOnly` 섹션 + legacy `sessions`(sessionId+socketPath) + `controlDir` | **peers + diagnostics 두 섹션만.** record-less socket은 `record-less-socket` 진단(F8 집계형, liveness별 그룹, 원인+처방 명시). `sessions`/`controlDir`/`socketOnly`/get_info enrich 삭제 |
+   | `/entwurf-sessions` (pi-native 명령) | 독자 socket-scan 세계(`getLiveSessions`) | **삭제** — 목록 표면은 `entwurf_peers` 하나 |
+   | `entwurf_v2` dispatch | A1 narrow: record-less socket에 ff-send 허용(`socket-only-no-resume-authority` 포함) | **거부** `record-less-socket` (pre-probe, observedLiveness=null) — 원인 명명: record가 유일한 주소 권위, 처방(pre-record resident 재시작 / M1) 포함 |
+   | spawn-bg `<sender_info>` | `wantsReply` 슬롯 없음 (F2) | plan에 `wantsReply` — live rail과 동형 (한 포맷터, 두 rail 등가) |
+   | bridge 발신 신원 (Ⅲ-8) | 익명 external-mcp 기본 허용, `ENTWURF_BRIDGE_REQUIRE_META_SENDER` opt-in 금지 | **신원 필수가 기본.** `ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1`이 명시적·문서화된 escape hatch(구 동작 보존: origin external-mcp, replyable:false). REQUIRE env는 hard cut 삭제(구 설치본의 잔존 env는 무해 — 새 기본과 동치) |
+
+   **의도적으로 유지**: liveness 어휘(4-value fact — socket이라는 단어 없이 의미 전달), quarantine 진단들(이미 진단), socket-discovery/probe/grammar SSOT(internal transport), stale socket sweep(GC=process resource), `entwurf_self`의 socketPath/mailboxPath 라인(자기 transport 상태 진단이며 identity 목록 표면이 아님 — **C4 범위 밖으로 판단, 오푸스 검토 대상**).
+
+   **cut 순서**: ① F2 wantsReply → ② dispatch rail(taxonomy `record-less-socket` 신설 + `socket-only-no-resume-authority` 삭제 + A1 narrow/ResumePolicy 삭제) → ③ facts/listing(socketOnly→진단 강등, sessions/controlDir/enrich/`/entwurf-sessions` 삭제) → ④ 발신 신원 기본 뒤집기(installer/doctor/oracle/컨테이너 게이트 동반 재저작; install 표면이라 push 전 check-pack-install + check-install-container 로컬 실측).
 6. **M1 + H7 레인 (라이브 cutover)**: M1 operator command(backup `meta-sessions.v3-migration-backup-<ts>/` → migrate → verify non-V3=0 → restore/rollback 증명, fixture: V1/V3-already/malformed/stray-key/mismatch/half-migrated; duplicate는 파일명=gardenId 구조상 불가라 제외). 173+ record 라이브 전환: quiesce(설치본 v2 writer가 계속 민팅 중 — writer 정지 순서 포함 runbook 필수) → backup → M1 → non-V3=0 → 새 런타임. self-host blackout 예상 — cut 직전 ids/HEAD/patch 고정, 끊긴 동안 GLG 수동 릴레이, 양방향 delivery 복구 전 다음 cut 금지. **방아쇠는 GLG.**
 
 커밋 규율: 각 커밋은 삭제 + 게이트 재저작 + GREEN이 한 몸. RED는 커밋하지 않는다. 정상 라우팅의 새 dual-authority 금지.
