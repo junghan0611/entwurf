@@ -2721,9 +2721,10 @@ JS
   fi
   local sd_fixture="$npm_tmp/store-fixture"
   mkdir -p "$sd_fixture"
-  # One valid v2 record: filename == "${gardenId}.meta.json" (no drift), unique
-  # nativeSessionId (no dupe). gardenId must match YYYYMMDDTHHMMSS-[0-9a-f]{6}.
-  printf '%s\n' '{"schemaVersion":2,"gardenId":"20990101T000000-abcdef","backend":"claude-code","nativeSessionId":"native-store-doctor-fixture","cwd":"/tmp/entwurf-fixture","model":null,"transcriptPath":null,"parentGardenId":null,"isEntwurf":false,"createdAt":"2099-01-01T00:00:00.000Z","recordUpdatedAt":"2099-01-01T00:00:00.000Z"}' \
+  # One valid v3 record (#50 hard cut keyset — no parentGardenId/isEntwurf):
+  # filename == "${gardenId}.meta.json" (no drift), unique nativeSessionId (no
+  # dupe). gardenId must match YYYYMMDDTHHMMSS-[0-9a-f]{6}.
+  printf '%s\n' '{"schemaVersion":3,"gardenId":"20990101T000000-abcdef","backend":"claude-code","nativeSessionId":"native-store-doctor-fixture","cwd":"/tmp/entwurf-fixture","model":null,"transcriptPath":null,"createdAt":"2099-01-01T00:00:00.000Z","recordUpdatedAt":"2099-01-01T00:00:00.000Z"}' \
     > "$sd_fixture/20990101T000000-abcdef.meta.json"
   local sd_out
   if ! sd_out=$(node "$installed_store_doctor" "$sd_fixture" 2>&1); then
