@@ -85,7 +85,7 @@ Usage:
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
-  ./run.sh smoke-pi-attach            # deterministic gate (#50 C2 checkpoint): a pi session attaches as a V3 meta-record citizen (backend:"pi"), the gardenId is the RECORD's not pi's session id, the control socket is keyed on it, a re-open ATTACHES to the same address (never a second mint), and the BUILT DIST ENTRY driven over MCP stdio lists the citizen + delivers entwurf_v2 to that socket with an RPC ack. mkdtemp-isolated; the live store is never read
+  ./run.sh smoke-pi-attach            # deterministic gate (#50 C2 checkpoint + C3 ACP tail): a pi session attaches as a V3 meta-record citizen (backend:"pi"), the gardenId is the RECORD's not pi's session id, the control socket is keyed on it, a re-open ATTACHES to the same address (never a second mint), the BUILT DIST ENTRY driven over MCP stdio lists the citizen + delivers entwurf_v2 to that socket with an RPC ack, and the ACP identity chain lands a send AS the host record (enrichMcpServersWithEnvelope env → bridge sender = host gardenId). mkdtemp-isolated; the live store is never read
   ./run.sh check-bridge-delivery      # deterministic gate (IN pnpm check): demo scene 3 recovered — seed strict meta-sender + armed receiver citizens in an isolated temp world, scrub ambient pi/sender carriers, drive the BUILT DIST ENTRY over MCP stdio through a real tools/call entwurf_v2, assert the .msg landed under the seeded sender + doorbell poked. DELIVERS through the artifact, not from source. ENTWURF_DELIVERY_SUBJECT=<launcher> replays the same scene against another consumer artifact (check-pack-install passes the npm-installed bin). No model/network/cost; stale or missing dist FAILS
   ./run.sh check-meta-migration-readers # deterministic gate (#50 hard cut): frozen v1/v2 readers + version fences + strict v2 keyset + meta-migration import allowlist, no API
   ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
@@ -540,8 +540,10 @@ smoke_pi_attach() {
   # `pnpm check`; the delivery half spawns the dist entry as its own process and speaks
   # MCP stdio (check-bridge-delivery's driver, socket-rail fixture). P4 is the one with
   # teeth — re-opening the same pi session must ATTACH to the same gardenId, never mint
-  # a second address under peers that already hold it. That a REAL pi process runs the
-  # seam is the LIVE axis (smoke-resident-garden-guard), not this one.
+  # a second address under peers that already hold it. P8 (#50 C3 tail) gates goal 3:
+  # the REAL ACP env enrichment carries the host record's gardenId into the bridge
+  # child, and a send from that child lands AS the host record identity. That a REAL
+  # pi process runs the seam is the LIVE axis (smoke-resident-garden-guard), not this one.
   run_ts scripts/smoke-pi-attach.ts
 }
 

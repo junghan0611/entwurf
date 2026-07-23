@@ -12,6 +12,10 @@
  *   P5  a second pi session gets its own citizen                   (join is per-native-id)
  *   P6  the built artifact lists the citizen via entwurf_peers     (peers sees pi)
  *   P7  tools/call entwurf_v2 reaches the socket and gets an ack   (the pi RAIL delivers)
+ *   P8  the ACP identity chain (#50 C3 tail): the REAL
+ *       enrichMcpServersWithEnvelope injects the HOST record's gardenId into the
+ *       bridge child's env, and a send from that child lands on the receiver
+ *       carrying the HOST RECORD identity                          (goal 3 gated)
  *
  * P4 is the invariant with teeth. `upsertMetaSession` decides create-vs-attach on
  * record EXISTENCE keyed by `nativeSessionId`, so a reload/resume must land on the
@@ -47,6 +51,7 @@ import fsp from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { type AcpKeyValue, type AcpMcpServer, enrichMcpServersWithEnvelope } from "../pi-extensions/lib/acp/config.ts";
 import { listAllMetaIdentities, parseMetaRecordV3 } from "../pi-extensions/lib/meta-session.ts";
 import { birthPiCitizen } from "../pi-extensions/lib/pi-citizen-birth.ts";
 
@@ -90,8 +95,55 @@ const socketDir = path.join(fakeHome, ".pi", "entwurf-control");
 for (const d of [sessionsDir, mailboxDir, receiversDir, sendersDir, socketDir]) await fsp.mkdir(d, { recursive: true });
 
 let server: net.Server | null = null;
-let child: ChildProcess | null = null;
-let stderr = "";
+const children: ChildProcess[] = [];
+
+/** Spawn the built bridge dist and speak MCP stdio to it. Each driver owns its
+ * child + reply map + stderr, so P6/P7 (external-mcp child) and P8 (the
+ * ACP-enriched child) drive two independent processes with one mechanism. */
+function makeBridgeDriver(envArg: NodeJS.ProcessEnv): {
+	send: (o: unknown) => void;
+	await_: (id: number, what: string, ms?: number) => Promise<any>;
+} {
+	const child = spawn(process.execPath, [DIST_ENTRY], { stdio: ["pipe", "pipe", "pipe"], env: envArg });
+	children.push(child);
+	let stderr = "";
+	child.stderr?.on("data", (d) => {
+		stderr += d.toString();
+	});
+	const replies = new Map<number, any>();
+	let outBuf = "";
+	child.stdout?.on("data", (d) => {
+		outBuf += d.toString();
+		const lines = outBuf.split("\n");
+		outBuf = lines.pop() ?? "";
+		for (const line of lines) {
+			const t = line.trim();
+			if (!t) continue;
+			try {
+				const msg = JSON.parse(t);
+				if (typeof msg?.id === "number") replies.set(msg.id, msg);
+			} catch {}
+		}
+	});
+	return {
+		send: (o: unknown) => child.stdin?.write(`${JSON.stringify(o)}\n`),
+		await_: (id: number, what: string, ms = 15_000): Promise<any> =>
+			new Promise((resolve, reject) => {
+				const t0 = Date.now();
+				const iv = setInterval(() => {
+					const got = replies.get(id);
+					if (got) {
+						clearInterval(iv);
+						resolve(got);
+					} else if (Date.now() - t0 > ms) {
+						clearInterval(iv);
+						reject(new Error(`timeout waiting for ${what}${stderr.trim() ? `\n--- stderr ---\n${stderr}` : ""}`));
+					}
+				}, 50);
+			}),
+	};
+}
+
 try {
 	// ── P1–P3: SessionStart attach ────────────────────────────────────────────────
 	// pi's own session id. A uuidv7 is the NORMAL case now: nothing injects an id, and
@@ -218,40 +270,7 @@ try {
 	delete env.ENTWURF_BRIDGE_REQUIRE_META_SENDER;
 	delete env.NODE_PATH;
 
-	child = spawn(process.execPath, [DIST_ENTRY], { stdio: ["pipe", "pipe", "pipe"], env });
-	child.stderr?.on("data", (d) => {
-		stderr += d.toString();
-	});
-	const replies = new Map<number, any>();
-	let outBuf = "";
-	child.stdout?.on("data", (d) => {
-		outBuf += d.toString();
-		const lines = outBuf.split("\n");
-		outBuf = lines.pop() ?? "";
-		for (const line of lines) {
-			const t = line.trim();
-			if (!t) continue;
-			try {
-				const msg = JSON.parse(t);
-				if (typeof msg?.id === "number") replies.set(msg.id, msg);
-			} catch {}
-		}
-	});
-	const send = (o: unknown) => child?.stdin?.write(`${JSON.stringify(o)}\n`);
-	const await_ = (id: number, what: string, ms = 15_000): Promise<any> =>
-		new Promise((resolve, reject) => {
-			const t0 = Date.now();
-			const iv = setInterval(() => {
-				const got = replies.get(id);
-				if (got) {
-					clearInterval(iv);
-					resolve(got);
-				} else if (Date.now() - t0 > ms) {
-					clearInterval(iv);
-					reject(new Error(`timeout waiting for ${what}${stderr.trim() ? `\n--- stderr ---\n${stderr}` : ""}`));
-				}
-			}, 50);
-		});
+	const { send, await_ } = makeBridgeDriver(env);
 
 	send({
 		jsonrpc: "2.0",
@@ -299,10 +318,67 @@ try {
 		!fs.existsSync(path.join(mailboxDir, first.gardenId)),
 		`--- response ---\n${body}`,
 	);
+
+	// ── P8: the ACP identity chain (#50 C3 tail — goal 3 gated) ───────────────────
+	// A Claude behind pi's ACP plugin uses entwurf through the meta-record too: the
+	// pi HOST session owns the record and the socket (LOCKED PROTOCOL 8), and the
+	// ACP spawn carries that identity into the bridge child's env via the REAL
+	// enrichMcpServersWithEnvelope (acp/config — the exact function backend.ts calls
+	// at newSession). This leg launches the built bridge with EXACTLY the env pairs
+	// the enrichment produced and asserts the delivered sender is the HOST RECORD's
+	// identity — never anonymous external-mcp, never an id of the ACP child's own.
+	{
+		const hostNative = "019e8fcc-2222-7b73-bf2c-1465d525c2e8";
+		const host = birthPiCitizen({
+			nativeSessionId: hostNative,
+			cwd,
+			model: "entwurf/claude-sonnet-5",
+			sessionsDir,
+			controlSocketDir: socketDir,
+		});
+		const bare: AcpMcpServer[] = [{ name: "entwurf-bridge", command: process.execPath, args: [DIST_ENTRY], env: [] }];
+		const wired = enrichMcpServersWithEnvelope(bare, { modelId: "claude-sonnet-5", piSessionId: host.gardenId });
+		const entry = wired[0] as { name: string; command: string; args: string[]; env: AcpKeyValue[] };
+		const envPairs = Object.fromEntries(entry.env.map((e) => [e.name, e.value]));
+		ok("P8: enrich injects the HOST record gardenId as PI_SESSION_ID", envPairs.PI_SESSION_ID === host.gardenId);
+		ok("P8: enrich injects PI_AGENT_ID = entwurf/<model>", envPairs.PI_AGENT_ID === "entwurf/claude-sonnet-5");
+
+		const acp = makeBridgeDriver({ ...env, ...envPairs });
+		const acpMessage = "smoke-pi-attach: the ACP chain, sender = the host record.";
+		acp.send({
+			jsonrpc: "2.0",
+			id: 3,
+			method: "tools/call",
+			params: {
+				name: "entwurf_v2",
+				arguments: { target: first.gardenId, intent: "fire-and-forget", mode: "follow_up", message: acpMessage },
+			},
+		});
+		const acpCalled = await acp.await_(3, "tools/call entwurf_v2 (ACP-enriched child)");
+		const acpBody: string = acpCalled?.result?.content?.[0]?.text ?? JSON.stringify(acpCalled);
+		ok("P8: the ACP-enriched send executed (not isError)", acpCalled?.result?.isError !== true, acpBody);
+		const acpLine = received.find((line) => line.includes(acpMessage));
+		ok("P8: the message landed on the receiver's record-gardenId socket", acpLine !== undefined, received.join("\n"));
+		const acpCmd = JSON.parse(acpLine as string) as {
+			sender?: { sessionId?: string; agentId?: string; origin?: string };
+		};
+		ok(
+			"P8: the delivered sender sessionId IS the host record gardenId (goal 3)",
+			acpCmd.sender?.sessionId === host.gardenId,
+			acpLine,
+		);
+		ok("P8: the delivered sender agentId carries the ACP model", acpCmd.sender?.agentId === "entwurf/claude-sonnet-5");
+		ok(
+			'P8: the delivered sender origin is "pi-session" (the HOST owns the identity)',
+			acpCmd.sender?.origin === "pi-session",
+		);
+	}
 } finally {
-	try {
-		child?.kill("SIGTERM");
-	} catch {}
+	for (const c of children) {
+		try {
+			c.kill("SIGTERM");
+		} catch {}
+	}
 	await new Promise<void>((resolve) => {
 		if (!server) return resolve();
 		server.close(() => resolve());
