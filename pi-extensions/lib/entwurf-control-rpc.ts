@@ -35,6 +35,29 @@ export interface SenderEnvelope {
 	replyable?: boolean;
 }
 
+/**
+ * THE `<sender_info>` synthesis — the one place the sender envelope becomes
+ * message text. Two consumers, one shape (#50 C3):
+ *   - the live socket rail's RECEIVER (entwurf-control handleCommand("send")
+ *     appends it to the delivered customMessage);
+ *   - the dormant spawn-resume rail's SENDER (entwurf-v2-production appends it
+ *     to the resume prompt, so a resumed citizen wakes knowing who called in
+ *     exactly the shape a live delivery would have rendered).
+ * `wants_reply` is emitted only when explicitly true — an unset/false marker
+ * renders nothing (etiquette marker, not transport contract).
+ */
+export function formatSenderInfoBlock(sender: SenderEnvelope, wantsReply = false): string {
+	return `\n\n<sender_info>${JSON.stringify({
+		sessionId: sender.sessionId,
+		agentId: sender.agentId,
+		cwd: sender.cwd,
+		timestamp: sender.timestamp,
+		...(sender.origin ? { origin: sender.origin } : {}),
+		...(typeof sender.replyable === "boolean" ? { replyable: sender.replyable } : {}),
+		...(wantsReply ? { wants_reply: true } : {}),
+	})}</sender_info>`;
+}
+
 export interface RpcResponse {
 	type: "response";
 	command: string;

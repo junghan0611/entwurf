@@ -89,6 +89,7 @@ import {
 import {
 	fetchControlSocketRuntimeInfo,
 	formatRuntimeModel,
+	formatSenderInfoBlock,
 	type RpcCommand,
 	type RpcResponse,
 	type SenderEnvelope,
@@ -830,20 +831,10 @@ async function handleCommand(
 		// Synthesize <sender_info> JSON at the receiver side. Caller code paths
 		// (entwurf-bridge entwurf_v2, the pi-native entwurf_v2 senderProvider via buildLocalSenderEnvelope)
 		// pass the envelope structurally and never touch the message body — the
-		// canonical XML-style payload is constructed here once. We emit
-		// wants_reply only when the sender explicitly set it true; an undefined
-		// or false value omits the field entirely so the receiver renders nothing.
-		const senderInfoBlock = sender
-			? `\n\n<sender_info>${JSON.stringify({
-					sessionId: sender.sessionId,
-					agentId: sender.agentId,
-					cwd: sender.cwd,
-					timestamp: sender.timestamp,
-					...(sender.origin ? { origin: sender.origin } : {}),
-					...(typeof sender.replyable === "boolean" ? { replyable: sender.replyable } : {}),
-					...(wantsReply ? { wants_reply: true } : {}),
-				})}</sender_info>`
-			: "";
+		// canonical XML-style payload is the shared formatSenderInfoBlock SSOT
+		// (#50 C3: the dormant spawn-resume rail appends the same block to its
+		// prompt, so both rails render one shape).
+		const senderInfoBlock = sender ? formatSenderInfoBlock(sender, wantsReply) : "";
 
 		const mode = command.mode ?? "steer";
 		const isIdle = ctx.isIdle();

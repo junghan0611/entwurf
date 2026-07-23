@@ -21,6 +21,7 @@
  */
 
 import assert from "node:assert/strict";
+import { formatSenderInfoBlock } from "../pi-extensions/lib/entwurf-control-rpc.ts";
 import type { DispatchInput } from "../pi-extensions/lib/entwurf-v2-decider.ts";
 import type { AcquireLockResult, LockClaim } from "../pi-extensions/lib/entwurf-v2-lock.ts";
 import {
@@ -141,6 +142,12 @@ function makeSpiedFactory(over: {
 	rpc?: "success" | "dead-throw";
 	classifyDead?: boolean;
 	spawnChildThrows?: boolean;
+	/** #50 C3 — capture the plan reaching the spawn factory's resolveIdentity, then
+	 * stop the resume (throw → spawn-start-failed) so the prompt is observable
+	 * without a watcher. */
+	spawnResolveCapture?: (plan: SpawnBgPlan) => void;
+	/** #50 C3 — a caller with no authoritative sender (senderProvider → undefined). */
+	noSender?: boolean;
 	/** the native-push adapter probe result (only reached on a native-push backend). */
 	nativePushProbe?: NativePushProbeResult;
 	/** SE-2 2d-3 — the target's receiver presence marker: "active" (matches identity,
@@ -158,7 +165,10 @@ function makeSpiedFactory(over: {
 		nativePushSend: [],
 	};
 	const opts: ProductionEntwurfV2Opts = {
-		senderProvider: () => ({ sessionId: "self", agentId: "pi/x", cwd: "/cwd", timestamp: "2026-06-13T00:00:00.000Z" }),
+		senderProvider: () =>
+			over.noSender
+				? undefined
+				: { sessionId: "self", agentId: "pi/x", cwd: "/cwd", timestamp: "2026-06-13T00:00:00.000Z" },
 		lockDir: LOCK_DIR,
 		sessionsDir: SESSIONS_DIR,
 		mailboxDir: MAILBOX_DIR,
@@ -230,6 +240,12 @@ function makeSpiedFactory(over: {
 				spawnChild: over.spawnChildThrows
 					? () => {
 							throw new Error("spawn boom");
+						}
+					: undefined,
+				resolveIdentity: over.spawnResolveCapture
+					? (plan) => {
+							over.spawnResolveCapture?.(plan);
+							throw new Error("capture stop");
 						}
 					: undefined,
 			},
@@ -342,6 +358,39 @@ async function main(): Promise<void> {
 			"C: QB3 — spawn watcher released under the wired lockDir (not the default)",
 			spies.release.length === 1 && spies.release[0].dir === LOCK_DIR,
 		);
+	}
+
+	// ── C2: #50 C3 — the dormant rail carries the caller edge (<sender_info>) ──
+	{
+		// The spawn-bg prompt reaching the factory is the plan prompt PLUS the same
+		// <sender_info> block the live socket rail's receiver synthesizes — one
+		// formatter, one shape, so a resumed citizen never wakes to an anonymous task.
+		const cap: { prompt: string | null } = { prompt: null };
+		const { deps } = makeSpiedFactory({
+			spawnResolveCapture: (plan) => {
+				cap.prompt = plan.prompt;
+			},
+		});
+		const res = await deps.executor.resumeSpawnBg(SPAWN_PLAN, lockClaim());
+		ok("C2: capture-stop surfaced as spawn-start-failed (released)", res.kind === "spawn-start-failed");
+		const expected =
+			SPAWN_PLAN.prompt +
+			formatSenderInfoBlock({ sessionId: "self", agentId: "pi/x", cwd: "/cwd", timestamp: "2026-06-13T00:00:00.000Z" });
+		ok("C2: spawn-bg prompt = task + the SHARED <sender_info> block", cap.prompt === expected);
+		ok("C2: the plan object handed to the executor is NOT mutated", SPAWN_PLAN.prompt === "p");
+	}
+	{
+		// No authoritative sender → the prompt goes out untouched (never a half-empty
+		// or fabricated envelope).
+		const cap: { prompt: string | null } = { prompt: null };
+		const { deps } = makeSpiedFactory({
+			noSender: true,
+			spawnResolveCapture: (plan) => {
+				cap.prompt = plan.prompt;
+			},
+		});
+		await deps.executor.resumeSpawnBg(SPAWN_PLAN, lockClaim());
+		ok("C2b: no sender → raw prompt (no fabricated envelope)", cap.prompt === "p");
 	}
 
 	// ── D: meta-mailbox hand enqueues onto the wired dirs ─────────────────────

@@ -27,6 +27,7 @@
  */
 
 import {
+	formatSenderInfoBlock,
 	type RpcClientOptions,
 	type RpcCommand,
 	type RpcResponse,
@@ -353,9 +354,18 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 	// ── executor: the three transport hands, each pre-bound ───────────────────
 	const executor: DispatchExecutorDeps = {
 		sendControl: (plan, lock) => executeControlSocketSend(plan as ControlSocketPlan, lock, controlSendDeps),
-		resumeSpawnBg: (plan, lock) =>
-			executeSpawnBgResume(
-				plan as SpawnBgPlan,
+		resumeSpawnBg: (plan, lock) => {
+			const spawnPlan = plan as SpawnBgPlan;
+			// Caller-edge preservation (#50 C3): the dormant rail delivers the SAME
+			// structured <sender_info> the live socket rail synthesizes at its
+			// receiver — one formatter (entwurf-control-rpc SSOT), appended after the
+			// task text exactly as a live delivery would render it. Without this, a
+			// resumed citizen woke with an anonymous prompt while every other rail
+			// carried the sender envelope.
+			const sender = opts.senderProvider();
+			const prompt = sender ? spawnPlan.prompt + formatSenderInfoBlock(sender) : spawnPlan.prompt;
+			return executeSpawnBgResume(
+				{ ...spawnPlan, prompt },
 				lock,
 				// QB3: inject the shared lockDir-bound `release` — never the spawn factory's
 				// default releaseFn (which would release into the DEFAULT lock dir).
@@ -364,7 +374,8 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 					killGraceMs: opts.killGraceMs ?? io.spawnOverrides.killGraceMs,
 					releaseFn: release,
 				}),
-			),
+			);
+		},
 		sendMailbox: (plan, _lock) => sendViaMailbox(plan as MetaMailboxPlan, _lock as LockClaim),
 		// native-push (봉인 4): the SAME injected adapter resolver drives the executor send,
 		// so the decider's probe and the delivery use one adapter. Lock-free (lock ignored).
