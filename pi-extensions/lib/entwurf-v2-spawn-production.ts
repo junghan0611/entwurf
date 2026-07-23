@@ -29,17 +29,13 @@
 
 import { type ChildProcess, spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
-import {
-	findSessionFileById,
-	getEntwurfExplicitExtensions,
-	mirrorChildStderr,
-	readSessionIdentity,
-} from "./entwurf-core.ts";
+import { getEntwurfExplicitExtensions, mirrorChildStderr, readSessionIdentity } from "./entwurf-core.ts";
 import { buildResumePiArgs } from "./entwurf-resume-args.ts";
 import type { LockClaim } from "./entwurf-v2-lock.ts";
 import { releaseLock } from "./entwurf-v2-lock.ts";
 import { V2_RESUME_RESIDENT_SESSION_ENV } from "./entwurf-v2-resume-marker.ts";
 import type { SpawnBgPlan, SpawnBgResumeDeps, SpawnedChild } from "./entwurf-v2-spawn.ts";
+import { readMetaIdentityByGardenId } from "./meta-session.ts";
 import { inspectControlSocketPath, type LstatLike, mapInspectionToLiveness } from "./socket-discovery.ts";
 import { probeSocketLiveness, type SocketLiveness } from "./socket-probe.ts";
 
@@ -99,6 +95,8 @@ function requireProductionChild(child: SpawnedChild): ProductionSpawnedChild {
  * default reads them the SAME way the legacy resume launcher does (header authority); the
  * gate injects a fake so spawnChild's argv is provable without a real session file. */
 export interface LaunchIdentity {
+	/** The EXACT session JSONL to resume — `pi --session <path>`. */
+	sessionFile: string;
 	cwd: string;
 	explicitExtensionArgs: readonly string[];
 	provider: string | null | undefined;
@@ -106,19 +104,40 @@ export interface LaunchIdentity {
 }
 
 /**
- * Resolve launch identity for a resume from the saved session — the same authority the
- * legacy launcher uses (readSessionIdentity = first model_change; getEntwurfExplicitExtensions
- * = bridge re-injection / #29 fail-fast), MINUS the legacy completion-delivery tail (that is
- * 5d). Throws on anything that makes a resume impossible — no session file, no recorded
- * model, an unresolvable ACP bridge, or no header cwd (NEVER falls back to process.cwd, #9).
- * Each throw becomes the watcher's `spawn-start-failed` (no child to watch → release).
+ * Resolve launch identity for a resume. The TARGET is now resolved through the
+ * meta-record (#50 C2): `gardenId → record.transcriptPath`. It used to be a global
+ * header scan for a JSONL whose header id equalled the garden id — which only worked
+ * while entwurf forced pi's session id to BE the garden id. With the record minting the
+ * address, that scan cannot find anything (a citizen's header carries pi's own uuid), so
+ * keeping it would not have been a "smaller change", it would have been a broken one.
+ *
+ * The record is also the AUTHORIZATION now. The old gate was `requireEntwurf` — an
+ * `entwurf` tag in the session NAME, planted by a name mirror that no longer exists.
+ * Record-backed pi citizens are all siblings (LOCKED PROTOCOL 6), so "this garden id
+ * names a pi citizen with a recorded transcript" is the whole test. (Verifying the
+ * resumed file's header against `record.nativeSessionId` is C3's, together with the rest
+ * of the resume-marker chain.)
+ *
+ * Everything else is unchanged authority: readSessionIdentity (first model_change) for
+ * provider/model/cwd, getEntwurfExplicitExtensions for bridge re-injection (#29 fail-fast).
+ * Throws on anything that makes a resume impossible; each throw becomes the watcher's
+ * `spawn-start-failed` (no child to watch → release), never a silent no-op.
  */
 export function resolveResumeLaunchIdentity(plan: SpawnBgPlan): LaunchIdentity {
-	const sessionFile = findSessionFileById(plan.sessionId);
-	if (!sessionFile) {
-		throw new Error(`entwurf-v2-spawn-production: no saved session for ${plan.sessionId} — cannot resume.`);
+	const record = readMetaIdentityByGardenId(plan.sessionId);
+	if (record.backend !== "pi") {
+		throw new Error(
+			`entwurf-v2-spawn-production: ${plan.sessionId} is a ${record.backend} citizen — spawn-bg resume is the pi rail.`,
+		);
 	}
-	const identity = readSessionIdentity(sessionFile, { requireEntwurf: true });
+	const sessionFile = record.transcriptPath;
+	if (!sessionFile) {
+		throw new Error(
+			`entwurf-v2-spawn-production: ${plan.sessionId} has no recorded transcriptPath — ` +
+				`the citizen never wrote a session file (no turn yet), so there is nothing to resume.`,
+		);
+	}
+	const identity = readSessionIdentity(sessionFile);
 	const resumeModel = identity?.modelId ?? null;
 	if (!identity || !resumeModel) {
 		throw new Error(`entwurf-v2-spawn-production: ${plan.sessionId} has no recorded model — cannot resume.`);
@@ -136,6 +155,7 @@ export function resolveResumeLaunchIdentity(plan: SpawnBgPlan): LaunchIdentity {
 		);
 	}
 	return {
+		sessionFile,
 		cwd: identity.cwd,
 		explicitExtensionArgs: explicitExtensions.args,
 		provider: explicitExtensions.provider ?? identity.provider,
@@ -237,7 +257,7 @@ export function makeProductionSpawnBgResumeDeps(opts: ProductionSpawnOpts = {}):
 			const identity = resolveIdentity(plan);
 			const args = buildResumePiArgs({
 				variant: "v2-control",
-				sessionId: plan.sessionId,
+				sessionFile: identity.sessionFile,
 				explicitExtensionArgs: identity.explicitExtensionArgs,
 				provider: identity.provider,
 				model: identity.model,

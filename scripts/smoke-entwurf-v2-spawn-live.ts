@@ -109,7 +109,13 @@ async function main(): Promise<void> {
 		// ── S2: real child lifecycle — spawn event, exit capture, SIGTERM kill ───────────
 		{
 			const deps = makeProductionSpawnBgResumeDeps({
-				resolveIdentity: () => ({ cwd: tmp, explicitExtensionArgs: [], provider: null, model: "smoke" }),
+				resolveIdentity: () => ({
+					sessionFile: path.join(tmp, "smoke-session.jsonl"),
+					cwd: tmp,
+					explicitExtensionArgs: [],
+					provider: null,
+					model: "smoke",
+				}),
 				spawnChild: () => {
 					const proc = spawn(process.execPath, ["-e", RESIDENT_CHILD], { stdio: "ignore" });
 					children.push(proc);
@@ -133,7 +139,13 @@ async function main(): Promise<void> {
 		{
 			let releases = 0;
 			const deps = makeProductionSpawnBgResumeDeps({
-				resolveIdentity: () => ({ cwd: tmp, explicitExtensionArgs: [], provider: null, model: "smoke" }),
+				resolveIdentity: () => ({
+					sessionFile: path.join(tmp, "smoke-session.jsonl"),
+					cwd: tmp,
+					explicitExtensionArgs: [],
+					provider: null,
+					model: "smoke",
+				}),
 				spawnChild: () => {
 					const proc = spawn(process.execPath, ["-e", RESIDENT_CHILD], { stdio: "ignore" });
 					children.push(proc);

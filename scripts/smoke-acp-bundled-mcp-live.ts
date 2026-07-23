@@ -17,9 +17,9 @@
 // subject, and NOT the 0.11.0 release circuit (whose bundled-MCP evidence was always
 // resident/RPC). So this smoke RESTORES the 0.11.0 circuit: it drives the bundled
 // bridge through a long-lived `pi --entwurf-control --mode rpc` resident, the same
-// stdin-RPC / stdout-event-stream driver as scripts/gnew-rpc-drive.ts.
+// stdin-RPC / stdout-event-stream driver as scripts/resident-rpc-drive.ts.
 //
-// METHOD (gnew-rpc-drive shape): launch a real resident on an ACP model, send one
+// METHOD (resident-rpc-drive shape): launch a real resident on an ACP model, send one
 // `{type:"prompt"}` over stdin asking the model to call mcp__entwurf-bridge__entwurf_self,
 // and capture — DIRECTLY from the stdout RPC event stream — the identity envelope
 // (the resident's own freshly-minted gid, agentId entwurf/<model>, socketState
@@ -100,7 +100,7 @@ interface TurnCapture {
 }
 
 // Drive exactly one model turn over the resident's stdin RPC and capture the stdout
-// event stream until `agent_end` (or a hard turn timeout). Mirrors gnew-rpc-drive.ts.
+// event stream until `agent_end` (or a hard turn timeout). Mirrors resident-rpc-drive.ts.
 function driveSelfTurn(child: ChildProcess, prompt: string): Promise<TurnCapture> {
 	return new Promise((resolve) => {
 		const cap: TurnCapture = {

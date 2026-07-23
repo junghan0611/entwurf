@@ -36,9 +36,15 @@ export interface ResumePiArgsInput {
 	/** legacy = one-shot worker (`--no-extensions`, no control socket); v2-control =
 	 * resident citizen (`--entwurf-control`, extensions loaded). */
 	variant: ResumeArgsVariant;
-	/** The garden id; `pi --session-id <gid>` resumes the existing JSONL AND, under
-	 * `--entwurf-control`, derives the control socket at ~/.pi/entwurf-control/<gid>.sock. */
-	sessionId: string;
+	/** ABSOLUTE path of the session JSONL to resume — pi's `--session <path>` (#50 C2).
+	 * It replaced `--session-id <gardenId>`, which did two jobs that are no longer the
+	 * same string: it named the session to reopen AND fixed the control-socket key. The
+	 * record owns the address now (the resumed child derives its socket from its OWN
+	 * record at session_start), so the launch argument is reduced to what it always
+	 * really was — WHICH session file. `--session-id` additionally CREATES the id when
+	 * missing, so passing a garden id post-cut would silently mint an empty session
+	 * instead of resuming one. A path cannot do that. */
+	sessionFile: string;
 	/** The explicit `--extension …` re-injection (ACP bridge / provider resolution).
 	 * Preserved verbatim in BOTH variants — load-bearing for a entwurf resume. */
 	explicitExtensionArgs: readonly string[];
@@ -56,7 +62,7 @@ export interface ResumePiArgsInput {
 /**
  * Build the `pi` argv for a resume spawn. The SHARED prefix is `--mode json -p` (headless
  * JSON child, prompt-as-turn); the variant then chooses the extension/socket posture; the
- * SHARED suffix is `[…ext args] --session-id <gid> [--provider <p>] --model <m> <prompt>`.
+ * SHARED suffix is `[…ext args] --session <file> [--provider <p>] --model <m> <prompt>`.
  *
  * Invariants the gate pins:
  *   - legacy  carries `--no-extensions` and NO `--entwurf-control`.
@@ -80,7 +86,7 @@ export function buildResumePiArgs(input: ResumePiArgsInput): string[] {
 
 	// Shared suffix — identical identity layout in both variants.
 	args.push(...input.explicitExtensionArgs);
-	args.push("--session-id", input.sessionId);
+	args.push("--session", input.sessionFile);
 	if (input.provider) args.push("--provider", input.provider);
 	args.push("--model", input.model, input.prompt);
 

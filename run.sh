@@ -85,6 +85,7 @@ Usage:
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
+  ./run.sh smoke-pi-attach            # deterministic gate (#50 C2 checkpoint): a pi session attaches as a V3 meta-record citizen (backend:"pi"), the gardenId is the RECORD's not pi's session id, the control socket is keyed on it, a re-open ATTACHES to the same address (never a second mint), and the BUILT DIST ENTRY driven over MCP stdio lists the citizen + delivers entwurf_v2 to that socket with an RPC ack. mkdtemp-isolated; the live store is never read
   ./run.sh check-bridge-delivery      # deterministic gate (IN pnpm check): demo scene 3 recovered — seed strict meta-sender + armed receiver citizens in an isolated temp world, scrub ambient pi/sender carriers, drive the BUILT DIST ENTRY over MCP stdio through a real tools/call entwurf_v2, assert the .msg landed under the seeded sender + doorbell poked. DELIVERS through the artifact, not from source. ENTWURF_DELIVERY_SUBJECT=<launcher> replays the same scene against another consumer artifact (check-pack-install passes the npm-installed bin). No model/network/cost; stale or missing dist FAILS
   ./run.sh check-meta-migration-readers # deterministic gate (#50 hard cut): frozen v1/v2 readers + version fences + strict v2 keyset + meta-migration import allowlist, no API
   ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
@@ -612,6 +613,19 @@ check_bridge_delivery() {
   run_ts scripts/check-bridge-delivery.ts
 }
 
+smoke_pi_attach() {
+  # The #50 C2 checkpoint gate: pi attaches as a meta-record citizen and the BUILT
+  # ARTIFACT routes that garden id to its control socket. Two halves, deliberately
+  # different in kind: the record+address half drives `birthPiCitizen` (the exact seam
+  # entwurf-control's session_start calls) so the gate is deterministic and lives in
+  # `pnpm check`; the delivery half spawns the dist entry as its own process and speaks
+  # MCP stdio (check-bridge-delivery's driver, socket-rail fixture). P4 is the one with
+  # teeth — re-opening the same pi session must ATTACH to the same gardenId, never mint
+  # a second address under peers that already hold it. That a REAL pi process runs the
+  # seam is the LIVE axis (smoke-resident-garden-guard), not this one.
+  run_ts scripts/smoke-pi-attach.ts
+}
+
 check_meta_migration_readers() {
   # Deterministic gate for the #50 schema hard cut: the FROZEN migration surface
   # (meta-migration.ts). Frozen v1/v2 readers still parse their own shapes —
@@ -1086,7 +1100,7 @@ smoke_acp_bundled_mcp_live() {
   # model turn over the stdin RPC asking it to call mcp__entwurf-bridge__entwurf_self;
   # captures the identity envelope (the resident's own fresh gid — never told to the
   # model, only in the bridge env — + agentId + socketState alive) and agent_end
-  # DIRECTLY from the stdout RPC event stream (gnew-rpc-drive shape). Complements
+  # DIRECTLY from the stdout RPC event stream (resident-rpc-drive shape). Complements
   # smoke-acp-mcp-live (tiny isolated probe): this proves the REAL bundled bridge with
   # envelope injection. NOT `pi -p` one-shot (that bundled-MCP teardown hang is
   # diagnostic backlog, not the 0.11.0 release circuit). Model override:
@@ -1099,14 +1113,10 @@ smoke_acp_rgg_live() {
   # S2e-2 — ACP-provider resident garden guard (RGG). Thin wrapper (GPT c32a6c8):
   # runs the SHARED resident-garden-guard runner against the entwurf provider
   # target with the DETERMINISTIC half only (SMOKE_RGG_POSITIVE=0). What this lane
-  # treats as release-blocking is that garden-native resident discipline (uuid
-  # refuse / new·clone cancel / legacy-resume pre-cancel / gnew clean birth) holds
-  # under the ACP provider too — the guard logic is provider-agnostic. The positive
-  # GNEW T3 (model autonomously calling entwurf_self) is N/A here BY ACP BOUNDARY:
-  # the ACP child is spawned with mcpServers:[] so it has no entwurf_self call
-  # surface (plugin stays lightweight, no ambient MCP — S2b/S2d boundary). To
-  # observe that boundary directly, run the shared runner with SMOKE_RGG_POSITIVE=1
-  # and ENTWURF_LIVE_TARGET set (T3 will report N/A, not a real failure).
+  # treats as release-blocking is that resident CITIZEN discipline (#50 C2: record
+  # birth, record-keyed socket, attach-on-reopen, no pi-session-id socket) holds
+  # under the ACP provider too — the logic is provider-agnostic. The POSITIVE cell
+  # (one real turn completing transcriptPath/model) is the only model-in-loop part.
   # Target override: ENTWURF_RGG_TARGET (default entwurf/claude-sonnet-5).
   #   ./run.sh smoke-acp-rgg-live
   local target="${ENTWURF_RGG_TARGET:-entwurf/claude-sonnet-5}"
@@ -3793,20 +3803,19 @@ release_gate() {
   #
   #    Foundational garden-native identity gates run first (0.9.0, #28): the
   #    substrate proof (Pi --session-id/--name through the bridge) and the
-  #    resident --entwurf-control guard (non-garden id → 0-token fail-fast,
-  #    PLUS the positive path: a garden id resident actually boots, gets a
-  #    control-tagged name, and is never entwurf-resumable). If the identity
-  #    foundation is broken, every Entwurf live gate below is meaningless, so
-  #    fail fast here. Negative path is 0-token; positive path is ~1 cheap turn;
-  #    the substrate smoke is a few cheap turns.
+  #    resident --entwurf-control citizen discipline (#50 C2: a raw resident
+  #    becomes a record-backed citizen on a record-keyed socket, and a re-open
+  #    attaches to the same address). If the identity foundation is broken, every
+  #    Entwurf live gate below is meaningless, so fail fast here. The 0-token
+  #    cells carry it; the positive is ~1 cheap turn; the substrate smoke is a
+  #    few cheap turns.
   run_step "smoke-session-id-name (3a substrate)" gate bash "$self" smoke-session-id-name
-  # RGG split (0.11.0): the deterministic half (negative/id-safety + /gnew
-  # zero-token live path) is release-blocking and stays here as a must-pass with
-  # SMOKE_RGG_POSITIVE=0. The model-in-loop half (post-/gnew backend entwurf_self
-  # identity turn [T3] + positive garden --session-id model turn) is gated behind
-  # SMOKE_RGG_POSITIVE=1 and runs in the BEHAVIOR lane below — advisory, because
-  # it depends on the backend child autonomously calling entwurf_self.
-  run_step "smoke-resident-garden-guard (3c guard: negative/id-safety + /gnew 0-token, deterministic)" gate env SMOKE_RGG_POSITIVE=0 bash "$self" smoke-resident-garden-guard
+  # RGG split: the 0-token half (BIRTH: record + record-keyed socket / ATTACH:
+  # re-open keeps the address / REPLACEMENT: in-process /new is pi's again) is
+  # release-blocking and stays here as a must-pass with SMOKE_RGG_POSITIVE=0. The
+  # model-in-loop half (one turn completing transcriptPath + model on the record)
+  # is gated behind SMOKE_RGG_POSITIVE=1 in the BEHAVIOR lane below.
+  run_step "smoke-resident-garden-guard (3c citizen: record birth / record-keyed socket / attach-on-reopen, 0-token)" gate env SMOKE_RGG_POSITIVE=0 bash "$self" smoke-resident-garden-guard
   run_step "check-bridge"                   gate bash "$self" check-bridge
   # D4-c: the v2 dispatch substrate sentinel (5d-5). A SINGLE run (NOT backend-looped — it proves
   # production runEntwurfV2 deps + real pi control-socket RPC + real mailbox enqueue + v2 lock, not
@@ -3882,12 +3891,12 @@ release_gate() {
   #     transport/provider/backend smoke is a release defect, not advisory. The old
   #     v1 floor gates (session-messaging / xt-tool-surface / sentinel) do not exist
   #     on the v2 core — the v1 entwurf verbs they exercised are gone.
-  # SMOKE_RGG_POSITIVE=1 re-runs the FULL guard with its positives enabled (not a
-  # positive-only mode) — the deterministic paths run again here too, but only the
-  # two model-in-loop turns (post-/gnew entwurf_self identity [T3] + positive
-  # garden model turn) are the reason this run is advisory; the deterministic half
-  # is already release-blocking via the POSITIVE=0 must-pass step above.
-  run_behavior_step "smoke-resident-garden-guard (positives enabled: post-/gnew entwurf_self identity turn [T3] + positive garden model turn)" gate env SMOKE_RGG_POSITIVE=1 bash "$self" smoke-resident-garden-guard
+  # SMOKE_RGG_POSITIVE=1 re-runs the FULL guard with its positive enabled (not a
+  # positive-only mode) — the 0-token cells run again here too, but the one
+  # model-in-loop turn (turn_end completing the record's transcriptPath + model) is
+  # the reason this run is advisory; the 0-token half is already release-blocking
+  # via the POSITIVE=0 must-pass step above.
+  run_behavior_step "smoke-resident-garden-guard (positive enabled: one turn completes the record's transcriptPath + model)" gate env SMOKE_RGG_POSITIVE=1 bash "$self" smoke-resident-garden-guard
 
   # 5. Summary — two tiers. MUST is release-blocking and owns the exit code; the
   #    word "green" is reserved for the MUST tier. BEHAVIOR is advisory and is
@@ -3970,6 +3979,9 @@ case "$cmd" in
     ;;
   check-bridge-delivery)
     check_bridge_delivery
+    ;;
+  smoke-pi-attach)
+    smoke_pi_attach
     ;;
   check-meta-mailbox-state-write)
     check_meta_mailbox_state_write

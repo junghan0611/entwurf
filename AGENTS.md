@@ -164,7 +164,7 @@ If a gate fails or a claim drops below its needed evidence level, do not commit.
 
 Uses `entwurf` instead of `delegate` to avoid ecosystem collisions. spawn-bg resume creates a sibling, not a worker.
 
-- **Surface** — MCP `entwurf-bridge`: `entwurf_v2`, `entwurf_self`, `entwurf_peers`, `entwurf_inbox_read`, `entwurf_register_native` (explicit/manual fallback for an already-running native conversation). pi-native (`pi-extensions/entwurf-control.ts`): `entwurf_v2`, `entwurf_peers` tools + `/entwurf-sessions`, `/gnew` (`/garden-new`) commands. The v1 `entwurf` / `entwurf_resume` / `entwurf_send` tools and the `/entwurf` / `/entwurf-send` / `/entwurf-status` commands are **removed**.
+- **Surface** — MCP `entwurf-bridge`: `entwurf_v2`, `entwurf_self`, `entwurf_peers`, `entwurf_inbox_read`, `entwurf_register_native` (explicit/manual fallback for an already-running native conversation). pi-native (`pi-extensions/entwurf-control.ts`): `entwurf_v2`, `entwurf_peers` tools + the `/entwurf-sessions` command. The v1 `entwurf` / `entwurf_resume` / `entwurf_send` tools and the `/entwurf` / `/entwurf-send` / `/entwurf-status` commands are **removed**.
 - **`entwurf_v2` is the one delivery verb.** Given a garden id, it classifies the target (live pi vs. dormant pi vs. mailbox meta-session vs. native-push citizen — a bare garden id does not reveal this) and routes correctly. It does **not** mint a fresh sibling: spawn-bg resumes an *already-identified* citizen, while native-register binds an *already-running* conversation. Fresh creation was the v1 `entwurf` verb and remains deferred.
 - **`entwurf_peers`** is a read-only fact surface (liveness / capability / identity / cwd-history). Do not bake verb-routing (`resumable`/`sendable`) into the fact layer; routing is the decider's job.
 - **`entwurf_self`** returns the authoritative identity envelope (pi-session env, or a trusted meta-session sender marker) and is identity-required.
@@ -175,15 +175,37 @@ Uses `entwurf` instead of `delegate` to avoid ecosystem collisions. spawn-bg res
 
 > **Naming pair.** *Entwurf* (기투, projection-of-self) — a resident agent throws siblings forward (resume / messaging). The resident-side counterpart is *Mitsein* (공존, being-with), defined in the resident's own knowledge base (cwd-scoped, not a global persona). This repo owns the entwurf substrate; resident-side conventions live where the resident wakes.
 
-### Garden launcher — the resident session is garden-native or it blows up (0.9.0)
+### Resident identity — the record is the address (#50 C2)
 
-Garden identity covers the operator's OWN `--entwurf-control` session, not just spawned children. A `--entwurf-control` session's header `id` MUST be a garden sessionId (`YYYYMMDDTHHMMSS-[0-9a-f]{6}`); pi assigns a `uuidv7` when `--session-id` is absent, so the launcher injects it and `entwurf-control` only enforces.
+A `--entwurf-control` session is a garden citizen because it has a **meta-record**, not
+because its session id has a particular shape. pi mints its own id (a uuidv7 is normal);
+`birthPiCitizen` upserts `(backend:"pi", nativeSessionId)` at `session_start`, the record
+mints the `gardenId`, and everything addressable hangs off that one string.
 
-- **Launch:** `pi --session-id "$(run.sh new-session-id)" --entwurf-control …` (operator alias). The id is fixed at launch — an extension cannot change it after pi's `newSession`. `run.sh new-session-id` is the `generateSessionId` SSOT; never reimplement the format in the shell.
-- **In-process new:** builtin `/new` stays blocked under `--entwurf-control` because it mints a uuid before extensions can inject an id. Use `/gnew` (alias `/garden-new`) for a same-terminal fresh garden session; it pre-creates a valid garden JSONL header and `switchSession()`es into it, so no uuid moment exists. A `/gnew` session quit before the first turn may appear in resume lists with message count 0; that is intentional, not an orphan. (`/gnew` births a fresh *operator* session in the same terminal — it is not the deferred programmatic fresh-sibling-minting capability.)
-- **Enforcement:** non-garden id under `--entwurf-control` → loud stderr + notify + `process.exit(1)` at `session_start`, **before any model turn**. A bare `throw` / `ctx.shutdown()` there is swallowed by pi's runner (verified: the turn ran, 26k tokens leaked), so the guard hard-exits. No uuid / back-compat path — "보이면 바로 터진다".
-- **Status label = 🪛 (the forged screwdriver, the North Star), NOT the word "entwurf".** `🪛 ready` before the first assistant turn (file not on disk → model changeable), `🪛 <gardenId>` after (file written → model locked). The id's presence is the model-lock lifecycle signal.
-- **Resident name is lazy + `control`-tagged, never `entwurf` — with one sessionId-bound exception.** Set on the first turn via `pi.setSessionName(buildGardenSessionName(...))`. `buildGardenSessionName` is registry-FREE and FORBIDS the `entwurf` tag — the `entwurf` tag is the v2 resume resident marker, so an **operator** resident must never carry it (else a general operator session becomes resumable as a child). The narrow exception: a **v2 spawn-bg authorized Entwurf child** — marked by env `ENTWURF_V2_RESUME_RESIDENT_SESSION_ID` (sessionId-bound) — **keeps** its `entwurf`-tagged name and stays re-resumable when it dies. Only that marker-authorized child is exempt. Gates: `check-entwurf-session-identity` (deterministic) + the v2 child exception via `check-entwurf-v2-spawn-production` + `smoke-entwurf-v2-spawn-resume-live`.
+- **Launch:** `pi --entwurf-control …`. No `--session-id` injection — that was the old
+  launcher's job and it is gone, together with `run.sh new-session-id`'s role in launching
+  (the generator itself stays; the record uses it to mint garden ids).
+- **In-process new/resume:** pi's own. `/new`, `/fork`, `/clone` and RPC session replacement
+  all just fire `session_start`, which attaches the new session as its own citizen and
+  rebinds the socket to its address. The `/gnew` command, the pre-switch cancels and the
+  garden-format hard exit are deleted — there is no id to police (LOCKED PROTOCOL 2).
+- **Socket:** `~/.pi/entwurf-control/<gardenId>.sock`, keyed on the RECORD's id. A socket
+  carrying pi's session id is the pre-cut address and a gate failure.
+- **`PI_SESSION_ID`** carries the gardenId, so every child MCP process reads back a
+  routable address (`entwurf_self`), never pi's internal id.
+- **Failure is loud, not cosmetic:** if the record cannot be written (unreadable store,
+  duplicate native id, a pre-cut v1/v2 store naming the M1 command) the control server is
+  refused, `PI_SESSION_ID` stays unset, and the reason is on stderr. An unaddressable
+  resident must not survive quietly — that is the guard's surviving purpose.
+- **Status label = 🪛 (the forged screwdriver, the North Star), NOT the word "entwurf".**
+  `🪛 ready` before the first assistant turn (session file not on disk → model changeable),
+  `🪛 <gardenId>` after (file written → model locked).
+- **The resident session NAME is pi's.** The `control`-tagged garden name mirror, its
+  `entwurf`-tag refusal and the sessionId-bound resume-marker exemption are gone with the id
+  they mirrored. Dormant-resume authorization is record existence (LOCKED PROTOCOL 6).
+- Gates: `smoke-pi-attach` (deterministic, in `pnpm check`: record birth · record-keyed
+  socket · attach-on-reopen · artifact delivers to the socket) + `smoke-resident-garden-guard`
+  (LIVE, the same contract driven through a real `pi` process).
 
 ### Send-is-throw
 
@@ -199,7 +221,8 @@ Messages are thrown, not awaited.
 |------|---------|
 | `pi-extensions/acp-provider.ts` | ACP plugin entry: registers the package provider `entwurf` + curated Claude model surface; wires `streamSimple` to the real ACP backend |
 | `pi-extensions/lib/acp/*.ts` | ACP plugin internals: curated Claude surface + no-auth sentinel (`models.ts`), Claude config overlay (`overlay.ts`), tool surface + exclude-tools preflight (`tool-surface.ts`), ACP→pi event mapper (`event-mapper.ts`), pi Context→ACP prompt (`context.ts`), spawn-per-turn `streamSimple` backend (`backend.ts`) |
-| `pi-extensions/entwurf-control.ts` | control plane: `--entwurf-control` socket, RPC, `entwurf_v2` / `entwurf_peers` tools, `/entwurf-sessions` / `/gnew` |
+| `pi-extensions/entwurf-control.ts` | control plane: record attach at session_start, `--entwurf-control` socket (keyed on the record gardenId), RPC, `entwurf_v2` / `entwurf_peers` tools, `/entwurf-sessions` |
+| `pi-extensions/lib/pi-citizen-birth.ts` | the #50 C2 attach seam: pi session → meta-record upsert → control-socket address |
 | `pi-extensions/model-lock.ts` | package-provider model lock (pi.extension) |
 | `pi-extensions/meta-bridge-hook.ts` | Claude Code `SessionStart` hook: register a mailbox-backed garden meta-session |
 | `pi-extensions/lib/entwurf-v2-*.ts` | v2 substrate: contract / lock / decider / matrix / release / send / mailbox / native-push / runner / production / surface / spawn(+production) + resume-marker |

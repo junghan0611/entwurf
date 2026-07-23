@@ -42,18 +42,11 @@ const {
 	slugifyTitle,
 	isKnownProviderModel,
 	buildSessionName,
-	buildGardenSessionName,
-	assertGardenNativeSessionId,
 	computeResidentStatusLabel,
-	RESIDENT_SESSION_TAG,
 	parseSessionName,
 	isEntwurfSessionName,
 	findSessionFileById,
 	findSessionFilesById,
-	assertSessionIdAvailableForSpawn,
-	createGardenSessionFile,
-	removeUnadoptedGardenSessionFile,
-	GARDEN_SESSION_FILE_VERSION,
 	readSessionHeader,
 	readSessionIdentity,
 	analyzeSessionFileLike,
@@ -280,9 +273,6 @@ try {
 	eq(readSessionHeader(largeBodyFile)?.id, largeBodyId, "readSessionHeader reads header from large transcript prefix");
 	eq(findSessionFileById(largeBodyId), largeBodyFile, "large transcript header scan stays bounded and authoritative");
 
-	throws(() => assertSessionIdAvailableForSpawn(existingId), "collision pre-check throws on existing id (any cwd)");
-	noThrow(() => assertSessionIdAvailableForSpawn("20260603T200000-fed210"), "fresh id passes pre-check");
-
 	// header is the authority: filename carries the id but header disagrees → no match
 	const dir2 = path.join(sessionsBase, "--other-cwd--");
 	fs.mkdirSync(dir2, { recursive: true });
@@ -309,100 +299,6 @@ try {
 	);
 	eq(findSessionFilesById(dupId).length, 2, "findSessionFilesById returns all duplicates");
 	throws(() => findSessionFileById(dupId), "findSessionFileById throws on ambiguous duplicate");
-	throws(() => assertSessionIdAvailableForSpawn(dupId), "spawn pre-check throws on duplicate id");
-
-	// ---- T-gnew: createGardenSessionFile (the /gnew writer) is fail-closed ----
-	// The /gnew in-process birth path pre-creates an EMPTY garden session file that
-	// ctx.switchSession() adopts. switchSession→SessionManager.open() reads the
-	// header id BEFORE session_start, so a VALID garden header is the only thing
-	// keeping the backend/bridge identity off a uuid (setSessionFile silently
-	// re-mints a uuid on an empty/invalid header). Lock the writer's guarantees.
-	const gnewCwd = "/home/fake/gnew";
-	const gnewDir = path.join(sessionsBase, "--home-fake-gnew--");
-	const fixedNow = new Date(2026, 5, 4, 9, 30, 0);
-
-	// happy path: header is exactly {type:session, version:3, id:<garden>, cwd}
-	const gnew1 = createGardenSessionFile({ cwd: gnewCwd, sessionDir: gnewDir, now: fixedNow });
-	ok(isValidSessionId(gnew1.sessionId), "gnew: created id is garden-native");
-	ok(fs.existsSync(gnew1.sessionFile), "gnew: session file written");
-	ok(gnew1.sessionFile.endsWith(`_${gnew1.sessionId}.jsonl`), "gnew: filename carries the garden id (pi convention)");
-	eq(path.dirname(gnew1.sessionFile), gnewDir, "gnew: file lands in the live sessionDir (not recomputed from cwd)");
-	const gnew1Header = JSON.parse(fs.readFileSync(gnew1.sessionFile, "utf8").split("\n", 1)[0] ?? "{}");
-	eq(gnew1Header.type, "session", "gnew: header type is session");
-	eq(gnew1Header.version, GARDEN_SESSION_FILE_VERSION, "gnew: header version pinned to pi CURRENT_SESSION_VERSION");
-	eq(gnew1Header.id, gnew1.sessionId, "gnew: header id IS the garden id (no uuid)");
-	eq(gnew1Header.cwd, gnewCwd, "gnew: header cwd recorded");
-	eq(gnew1Header.timestamp, fixedNow.toISOString(), "gnew: header timestamp recorded (read-back asserts it)");
-	eq(readSessionHeader(gnew1.sessionFile)?.id, gnew1.sessionId, "gnew: readSessionHeader resolves the garden id");
-	// the file must be header-ONLY (an empty session switchSession can adopt cleanly)
-	eq(
-		fs
-			.readFileSync(gnew1.sessionFile, "utf8")
-			.split("\n")
-			.filter((l) => l.trim()).length,
-		1,
-		"gnew: file is header-only (empty session)",
-	);
-	// discoverable as itself; never a uuid anywhere
-	eq(findSessionFileById(gnew1.sessionId), gnew1.sessionFile, "gnew: header-scan discovery finds the new session");
-
-	// collision: an id already on disk is refused (would APPEND, not create) and
-	// must NOT fall back to a uuid — the writer throws and writes nothing new.
-	const beforeCollision = findSessionFilesById(gnew1.sessionId).length;
-	throws(
-		() => createGardenSessionFile({ cwd: gnewCwd, sessionDir: gnewDir, sessionId: gnew1.sessionId, now: fixedNow }),
-		"gnew: collision (existing id) refused — no uuid fallback",
-	);
-	eq(findSessionFilesById(gnew1.sessionId).length, beforeCollision, "gnew: collision left no extra file");
-
-	// wx: a different header already at the EXACT target path is refused too (the
-	// in-flight same-ms collision the header scan can miss). Pre-place a foreign
-	// header at the deterministic path, then a same-(id,now) call must throw EEXIST.
-	const wxId = "20260604T093000-abcd12";
-	const wxNow = new Date(2026, 5, 4, 9, 30, 0);
-	const wxPath = path.join(gnewDir, `${wxNow.toISOString().replace(/[:.]/g, "-")}_${wxId}.jsonl`);
-	fs.writeFileSync(wxPath, `${JSON.stringify({ type: "session", id: "20260604T093000-ffffff", cwd: "/x" })}\n`);
-	throws(
-		() => createGardenSessionFile({ cwd: gnewCwd, sessionDir: gnewDir, sessionId: wxId, now: wxNow }),
-		"gnew: wx refuses to overwrite a pre-existing file at the target path",
-	);
-	// the foreign file is untouched (header id unchanged) — writer never clobbered it
-	eq(readSessionHeader(wxPath)?.id, "20260604T093000-ffffff", "gnew: wx-refused write left the existing file intact");
-
-	// invalid inputs are refused (crash-don't-warn)
-	throws(
-		() => createGardenSessionFile({ cwd: "relative/path", sessionDir: gnewDir }),
-		"gnew: non-absolute cwd refused",
-	);
-	throws(() => createGardenSessionFile({ cwd: gnewCwd, sessionDir: "" }), "gnew: empty sessionDir refused");
-	throws(
-		() => createGardenSessionFile({ cwd: gnewCwd, sessionDir: "relative/sessions" }),
-		"gnew: non-absolute sessionDir refused",
-	);
-	throws(
-		() => createGardenSessionFile({ cwd: gnewCwd, sessionDir: gnewDir, sessionId: "not-a-garden-id" }),
-		"gnew: invalid sessionId refused",
-	);
-
-	// ---- T-gnew-cleanup: removeUnadoptedGardenSessionFile is guarded ----
-	// header-only + matching id → removed (orphan from a cancelled/failed switch)
-	const orphan = createGardenSessionFile({ cwd: gnewCwd, sessionDir: gnewDir, now: new Date(2026, 5, 4, 9, 31, 0) });
-	removeUnadoptedGardenSessionFile(orphan.sessionFile, orphan.sessionId);
-	ok(!fs.existsSync(orphan.sessionFile), "gnew-cleanup: header-only orphan with matching id removed");
-
-	// gained a second entry (adopted/active session) → NOT removed
-	const adopted = createGardenSessionFile({ cwd: gnewCwd, sessionDir: gnewDir, now: new Date(2026, 5, 4, 9, 32, 0) });
-	fs.appendFileSync(adopted.sessionFile, `${JSON.stringify({ type: "user_message" })}\n`);
-	removeUnadoptedGardenSessionFile(adopted.sessionFile, adopted.sessionId);
-	ok(
-		fs.existsSync(adopted.sessionFile),
-		"gnew-cleanup: a session with entries is kept (never delete an active session)",
-	);
-
-	// header id differs from the expected id → NOT removed (not ours / re-minted)
-	const foreign = createGardenSessionFile({ cwd: gnewCwd, sessionDir: gnewDir, now: new Date(2026, 5, 4, 9, 33, 0) });
-	removeUnadoptedGardenSessionFile(foreign.sessionFile, "20260604T093300-000000");
-	ok(fs.existsSync(foreign.sessionFile), "gnew-cleanup: file with a different header id is left untouched");
 
 	// ---- analyzeSessionFileLike: streamed, bounded, semantics preserved ----
 	const msg = (m: Record<string, unknown>) =>
@@ -588,89 +484,22 @@ try {
 	);
 
 	// ========================================================================
-	// T-resident: top-level --entwurf-control garden session (0.9.0)
-	//   - assertGardenNativeSessionId: uuid → throw, garden → pass (immediate
-	//     enforcement; uuidv7 from a raw launch has no back-compat path).
-	//   - buildGardenSessionName: registry-FREE (native deepseek passes where
-	//     buildSessionName would throw); `entwurf` tag FORBIDDEN; round-trips.
-	//   - computeResidentStatusLabel: 🪛 ready before file, 🪛 <id> after.
-	//   - resident `control` name must NOT be resumable as an Entwurf child.
+	// T-resident: the resident --entwurf-control session (#50 C2)
+	//
+	// What used to live here — the garden-id guard (assertGardenNativeSessionId),
+	// the resident NAME builder (buildGardenSessionName + the `control` tag, its
+	// registry-free contract and its `entwurf`-tag refusal) — is deleted, not
+	// relocated. All of it enforced "pi's session id IS the garden address", which
+	// the meta-record now owns; the address is minted by the record and the socket
+	// is keyed on it (smoke-pi-attach). The status label is what survives, because
+	// it was never about the id GRAMMAR — it signals the model-lock lifecycle.
+	//
+	// The `requireEntwurf` reader below is UNCHANGED and still C3's to remove: it
+	// no longer authorizes anything on the resume path (that moved to record
+	// existence), but the reader itself is still the name-authority chain's.
 	// ========================================================================
 
-	// assertGardenNativeSessionId — the immediate-enforcement guard core.
-	noThrow(() => assertGardenNativeSessionId("20260604T083632-f9c3b3"), "garden id passes the resident guard");
-	throws(
-		() => assertGardenNativeSessionId("019e8faa-04ea-7b73-bf2c-1465d525c2e8"),
-		"uuidv7 id rejected by resident guard (no back-compat)",
-	);
-	throws(() => assertGardenNativeSessionId(undefined), "missing id rejected by resident guard");
-	throws(() => assertGardenNativeSessionId("20260604T083632-f9c3"), "short-suffix id rejected by resident guard");
-
 	const residentSid = "20260604T083632-aa11bb";
-
-	// buildGardenSessionName is registry-FREE: a native model absent from the
-	// Entwurf target registry (deepseek/deepseek-v4-pro) must pass here, while the
-	// child builder buildSessionName refuses it.
-	throws(
-		() => buildSessionName({ sessionId: residentSid, provider: "deepseek", model: "deepseek-v4-pro" }),
-		"buildSessionName (child) refuses a non-registry native model",
-	);
-	noThrow(
-		() =>
-			buildGardenSessionName({
-				sessionId: residentSid,
-				provider: "deepseek",
-				model: "deepseek-v4-pro",
-				rawTitle: "home",
-				tags: [RESIDENT_SESSION_TAG],
-			}),
-		"buildGardenSessionName accepts a non-registry native model",
-	);
-
-	const residentName = buildGardenSessionName({
-		sessionId: residentSid,
-		provider: "deepseek",
-		model: "deepseek-v4-pro",
-		rawTitle: "entwurf",
-		tags: [RESIDENT_SESSION_TAG],
-	});
-	eq(residentName, `${residentSid}==deepseek/deepseek-v4-pro--entwurf__control`, "resident garden name shape");
-	const residentParsed = parseSessionName(residentName);
-	if (!residentParsed) assert.fail(`resident name did not parse: ${residentName}`);
-	eq(residentParsed.provider, "deepseek", "resident name parses provider");
-	eq(residentParsed.model, "deepseek-v4-pro", "resident name parses model");
-	eq(residentParsed.tags.join(","), "control", "resident name carries the control tag");
-	ok(!isEntwurfSessionName(residentName), "resident control name is NOT an Entwurf session name");
-
-	// The `entwurf` tag is FORBIDDEN on a resident name — that tag is the
-	// Entwurf resume marker; a resident session must never be resumable as a child.
-	throws(
-		() =>
-			buildGardenSessionName({
-				sessionId: residentSid,
-				provider: "deepseek",
-				model: "deepseek-v4-pro",
-				tags: ["entwurf"],
-			}),
-		"buildGardenSessionName forbids the entwurf tag",
-	);
-
-	// Regression guard for the closed blocker: a resident `control` session on
-	// disk must be REFUSED by readSessionIdentity(requireEntwurf) — it is not an
-	// Entwurf child and entwurf_v2 must not open it.
-	const fileResident = path.join(tmp, "resident-control.jsonl");
-	fs.writeFileSync(
-		fileResident,
-		sessionLine(residentSid, "/identity/resident") + mc("deepseek", "deepseek-v4-pro") + infoLine(residentName),
-	);
-	throws(
-		() => readSessionIdentity(fileResident, { requireEntwurf: true }),
-		"requireEntwurf: resident control session is NOT resumable as an Entwurf child",
-	);
-	noThrow(
-		() => readSessionIdentity(fileResident),
-		"general path: resident control session reads fine (registry-free mirror)",
-	);
 
 	// computeResidentStatusLabel — 🪛 lifecycle signal (no "entwurf" text).
 	eq(

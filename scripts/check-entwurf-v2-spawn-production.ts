@@ -51,7 +51,10 @@ const GID = "20260613T091000-98363c";
 const SOCK = `/fake/entwurf-control/${GID}.sock`;
 const flush = (): Promise<void> => new Promise((res) => setImmediate(res));
 
+const SESSION_FILE = "/home/test/.pi/agent/sessions/-home-test-repo/2026-06-13T09-10-00-000Z_019e8faa-04ea.jsonl";
+
 const IDENTITY: LaunchIdentity = {
+	sessionFile: SESSION_FILE,
 	cwd: "/home/test/repo",
 	explicitExtensionArgs: ["-e", "/path/to/entwurf/index.ts"],
 	provider: "entwurf",
@@ -220,7 +223,12 @@ async function main(): Promise<void> {
 		ok("2 argv carries the ext args", args.includes("-e"));
 		ok("2 argv carries provider", args[args.indexOf("--provider") + 1] === "entwurf");
 		ok("2 argv carries model", args[args.indexOf("--model") + 1] === "claude-opus-4-8");
-		ok("2 argv carries session-id", args[args.indexOf("--session-id") + 1] === GID);
+		// #50 C2: argv names the exact transcript FILE, never a garden id. `--session-id`
+		// would CREATE a session at that id when it is missing — post-cut the garden id is
+		// never a pi session id, so the old flag would have minted an empty session and
+		// called it a resume.
+		ok("2 argv resumes by exact file", args[args.indexOf("--session") + 1] === SESSION_FILE);
+		ok("2 argv carries NO --session-id", !args.includes("--session-id"));
 		// the sessionId-bound authorization marker is planted on the child env so the resumed
 		// `--entwurf-control` resident is an AUTHORIZED Entwurf child (entwurf-control.ts guard),
 		// not a "corrupt resident session name" crash. Bound to plan.sessionId exactly.
