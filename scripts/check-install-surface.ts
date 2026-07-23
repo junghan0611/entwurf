@@ -359,7 +359,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			if (!agentOk) missing.push("PI_CODING_AGENT_DIR or HOME (real ~/.pi/agent/settings.json)");
 			if (HOME_ROOTED.has(cmd) && !homeOk)
 				missing.push(
-					"HOME (ensure_agent_dir_symlinks hard-codes $HOME/.pi/agent — the agent-dir override does not reach it)",
+					"HOME (install/setup write user-scope settings under $HOME/.pi/agent — the agent-dir override does not reach them)",
 				);
 			if (missing.length)
 				agentDirXdgOffenders.push(

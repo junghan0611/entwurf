@@ -2712,8 +2712,8 @@ _check_pack_install_impl() {
   # additionally died because start.sh tried strip-types under node_modules.
   # Prove `entwurf`/`entwurf-bridge` bins exist, `run.sh install` writes settings
   # from the hoisted layout, and the installed bridge boots from dist. HOME is
-  # redirected to a throwaway dir so ensure_agent_dir_symlinks operates on a temp
-  # ~/.pi/agent and never touches the operator's real targets link.
+  # redirected to a throwaway dir so the install's user-scope writes (settings.json
+  # registration under $HOME/.pi/agent) land in a temp home, never the operator's.
   if ! command -v npm >/dev/null 2>&1; then
     fail "[check-pack-install] npm not on PATH — cannot run npm-managed install regression"
     return 1

@@ -511,6 +511,14 @@ async function main(): Promise<void> {
 			const fileNoModel = writeTranscript("no-model.jsonl", sessionLine(nativeNoModel));
 			const gidNoModel = mintRecord(nativeNoModel, fileNoModel);
 			rejects(gidNoModel, "no recorded model", "9 no model_change → refused");
+
+			// transcript with a model_change but NO session header line: the header id is
+			// undefined, which can never equal the record's nativeSessionId — the C3
+			// integrity check refuses it as "(none)" rather than resuming a headerless file.
+			const nativeNoHeader = "0199ffff-1111-4222-8333-444455556666";
+			const fileNoHeader = writeTranscript("no-header.jsonl", modelLine);
+			const gidNoHeader = mintRecord(nativeNoHeader, fileNoHeader);
+			rejects(gidNoHeader, '"(none)"', "9 headerless transcript → refused as (none), never resumed");
 		} finally {
 			if (prevStore === undefined) delete process.env.ENTWURF_META_SESSIONS_DIR;
 			else process.env.ENTWURF_META_SESSIONS_DIR = prevStore;
