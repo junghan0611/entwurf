@@ -9,15 +9,21 @@
 - 감산 커밋 3개 in, full `pnpm check` GREEN: `77483c5` socket path grammar 단일화(+fence `check-control-socket-path`), `e2eff3b` v1 sync-spawn dead island(entwurf-core.ts −469), **`d125946` C1 — V3 schema hard cut**(31파일 +995/−1560; V3-only production, frozen v1/v2 reader는 meta-migration.ts 단일 주소 + import-allowlist gate, strayness 양방향 게이트, M1 명령 이름 예약 `./run.sh meta-bridge-migrate-v3 migrate`).
 - **2026-07-23: `f677284` store-doctor 픽스처 V3화 + `53159b9` main(0.12.8-repair.1) 머지 in.** 게이트 합집합 resolution — 브랜치 V3 게이트 유지 + main 신규 6게이트(capability-bundle-reach, bridge-delivery, hook-launch-topology, meta-doctor-oracle, node/claude-floor-coherence) 보존, v2 게이트 부활 없음. 머지된 aggregate full GREEN(pre-commit hook 실측), check-pack-install도 oracle 로컬 full GREEN(npm-managed install 포함).
 - **`46bbc7d` C2 랜딩 + 교차 검수 승인 (2026-07-23).** 21파일 +1212/−1298, full check 삼중 GREEN(오푸스 독립 실행 + hook + 페블 재실행). 검수 실측 근거: live store에 `backend:"pi"` record 0개(claude-code 170 + antigravity 5)라 record-only resume이 끊는 라이브 실사용 없음. 스코프 앞당김(resume 대상 해석) 승인 — 되돌리지 않는다.
+- **C3 랜딩 (2026-07-23, 페블 구현 — 4 cut, 각각 full check GREEN + hook 재검증).** 오푸스 교차 리뷰 대기.
+  - `74cac05` cut 1 — resume 권위: marker 사슬(leaf+producer+env seam 파라미터, 소비자는 C2 때 이미 사망)·`requireEntwurf` name-tag·name mirror·header-scan 일족(`findSessionFilesById`/`readSessionHeader`/`analyzeSessionFileLike`/`cwdToSessionDir`/`SESSIONS_BASE`/`assertLocalOnlyEntwurf`)·`smoke-session-id-name` 삭제 + **header id ↔ `record.nativeSessionId` 검증 신설**(spawn-production 게이트 §9, fixture 8단언) + `smoke-entwurf-v2-spawn-resume-live` record 시대 재저작(seed가 `--session-id`/`--name` 없이 뜨고 record를 seed의 실제 header id+transcriptPath로 mint — **C2 이후 RED였던 스모크**).
+  - `4b7ea16` cut 2 — name-authority + registry: name grammar 전체(`buildSessionName`/`parseSessionName`/`slugifyTitle`/`isKnownProviderModel`)·registry reader·v1 spawn guard·`pi/entwurf-targets.json`+pack manifest+`setup:links`/`ensure_agent_dir_symlinks` 삭제. `getRegistryRouting`(caller-supplied tuple)+`ResolvedTarget`만 생존. identity 게이트 87→29 단언.
+  - `d0b3b25` cut 3 — dormant rail caller-edge: `formatSenderInfoBlock` SSOT 신설(수신측 인라인 합성 추출) + `resumeSpawnBg`가 resume prompt에 같은 블록을 append. **판단 기록**: NEXT 스케치는 "prepend"였으나 live rail 수신측 합성과 동형(append, 한 포맷터)으로 랜딩 — 교차 리뷰 대상.
+  - `d5fcd2b` cut 4 (tail) — 목표 3 게이트화: smoke-pi-attach P8 — 실물 `enrichMcpServersWithEnvelope`가 만든 env 그대로 브릿지를 띄워 발신이 **host record 신원**(sessionId=host gardenId, agentId=entwurf/<model>, origin pi-session)으로 착지함을 단언 (20→27).
+  - **미실측 1건**: 재저작된 `smoke-entwurf-v2-spawn-resume-live`는 LIVE 실행(LIVE=1 + 실모델 턴) 전. 승격 전 조건에 RGG LIVE와 함께 이 스모크 1회 PASS를 추가할 것을 제안(아래 리듬 참조).
 - live store 실측(oracle): 173 records(설치본 v2 writer가 계속 민팅해 증가 중), **100% schemaVersion=2**, transcriptPath null 1개. C2 이후에도 live store는 무접촉 — M1/H7 레인이 옮긴다.
 - **live rail 상태**: `~/.claude.json`의 entwurf-bridge MCP가 dev 워킹트리를 가리켜 C1 이후 형제 채널 사망(V3-only 브릿지 vs v2 store). 임시 복구안 = live 표면을 `entwurf-main` 체크아웃으로 repoint(main 브릿지가 v2 store 판독 실측 완료) — GLG 결정 대기, 그때까지 형제 교신은 GLG 수동 릴레이. 원칙: **live 표면은 dev 체크아웃을 가리키지 않는다.**
 - 게이트 재편: check-meta-{record-v2, dual-read, dual-consumers, migration} 4개 삭제 → check-meta-{v3-record, migration-readers, identity-consumers} 3개 신설. C2에서 smoke-pi-attach 신설(check 편입) + smoke-resident-garden-guard 뒤집어 재저작(LIVE).
 
 ## 목표 (GLG 2026-07-23 재확인) — 세 문장
 
-1. **pi가 meta-record로 entwurf가 동작한다.** → C2로 코어 달성, C3가 잔여 사슬을 걷는다.
-2. **entwurf는 socket 인터페이스를 아예 모른다.** record가 유일한 주소 축이고 socket은 dispatch 내부 transport일 뿐(PROTOCOL 3) — 사용자 표면(peers/facts/dispatch 의미론)에 socket이 identity로 비치지 않는다. → C4의 정의.
-3. **pi 뒤에 ACP로 붙은 클로드도 entwurf를 meta-record로 쓴다.** 배선은 이미 있다: C2의 `PI_SESSION_ID`=record gardenId → ACP spawn 시 `enrichMcpServersWithEnvelope`(acp/config.ts:284)가 ACP 클로드의 entwurf-bridge env로 주입 → 브릿지(index.ts:156)가 발신 신원으로 소비. PROTOCOL 8(pi host가 record 소유). → 남은 것은 이 사슬의 record 시대 게이트 고정(C3 tail).
+1. **pi가 meta-record로 entwurf가 동작한다.** → C2로 코어 달성, **C3가 잔여 사슬을 걷었다** — 옛 권위(marker/name-tag/name grammar/header-scan/registry) 전부 삭제, record가 유일한 문.
+2. **entwurf는 socket 인터페이스를 아예 모른다.** record가 유일한 주소 축이고 socket은 dispatch 내부 transport일 뿐(PROTOCOL 3) — 사용자 표면(peers/facts/dispatch 의미론)에 socket이 identity로 비치지 않는다. → C4의 정의. **다음 걸음.**
+3. **pi 뒤에 ACP로 붙은 클로드도 entwurf를 meta-record로 쓴다.** → **C3 tail로 게이트 고정** (smoke-pi-attach P8: 실물 enrich env → 브릿지 → 발신이 host record 신원으로 착지). PROTOCOL 8(pi host가 record 소유).
 
 main 승격은 **당분간 보류**(GLG 2026-07-23) — 브랜치에서 C3 → C4 → M1+H7까지 계속 간다.
 
@@ -36,9 +42,9 @@ main 승격은 **당분간 보류**(GLG 2026-07-23) — 브랜치에서 C3 → C
 
 이후 순서:
 
-4. **C3 — resume 권위 잔여 사슬 (다음 걸음, 삭제 위주)**: resumed 파일 헤더 ↔ `record.nativeSessionId` 검증 신설(exact `--session <abs>`는 C2에서 이미 전환), resume env marker 사슬(`PI_SHELL_ACP_*` leaf/producer/consumer/gates), 정상 resume의 global JSONL header scan(`findSessionFilesById` 나머지 소비자), `requireEntwurf` name-tag 인가, v1 "entwurf-tagged ⇒ resident 불가" crash, name-authority 사슬(`buildSessionName`→`isKnownProviderModel`→`loadEntwurfTargets`+registry reader) 삭제. registry DATA/OPS 처분 포함(게이트 편차 기록 참조). spawn-resume prompt 앞에 기존 structured sender envelope prepend(caller-edge 보존; native-push 동형은 후속 H6 성격). **tail: ACP 신원 사슬 게이트 고정** — ACP 뒤 클로드의 entwurf_v2 발신이 pi host record 신원으로 착지함을 assertion(목표 3의 게이트화).
-5. **C4 — entwurf는 socket을 모른다 (목표 2의 구현)**: 사용자 표면(peers/facts/dispatch)에서 socket을 identity 축에서 제거 — record가 유일한 주소 축, socket은 dispatch 내부 transport로만. record-less socket-only 시민은 migration/진단 상태로 강등, dispatch/resolveTarget rail 전환. 강등의 관측면(에러 메시지가 M1을 이름으로 지목, C2 검수의 "원인 한 겹 가림" 지적 포함) 동시 재저작.
-6. **M1 + H7 레인 (라이브 cutover)**: M1 operator command(backup `meta-sessions.v3-migration-backup-<ts>/` → migrate → verify non-V3=0 → restore/rollback 증명, fixture: V1/V3-already/malformed/stray-key/mismatch/half-migrated; duplicate는 파일명=gardenId 구조상 불가라 제외). 167 record 라이브 전환: quiesce → backup → M1 → non-V3=0 → 새 런타임. self-host blackout 예상 — cut 직전 ids/HEAD/patch 고정, 끊긴 동안 GLG 수동 릴레이, 양방향 delivery 복구 전 다음 cut 금지.
+4. **C3 — DONE (4 cut, 상태 참조).** 유일한 스펙 편차 2건은 기록됨: ① sender envelope는 prepend가 아니라 live rail 동형 append(한 포맷터), ② `PI_SHELL_ACP_*`는 관념명이었고 실물은 `ENTWURF_V2_RESUME_RESIDENT_SESSION_ENV` 하나(소비자는 C2 때 이미 사망 — env를 심고 아무도 안 읽던 상태를 삭제).
+5. **C4 — entwurf는 socket을 모른다 (다음 걸음, 목표 2의 구현)**: 사용자 표면(peers/facts/dispatch)에서 socket을 identity 축에서 제거 — record가 유일한 주소 축, socket은 dispatch 내부 transport로만. record-less socket-only 시민은 migration/진단 상태로 강등, dispatch/resolveTarget rail 전환. 강등의 관측면(에러 메시지가 M1을 이름으로 지목, C2 검수의 "원인 한 겹 가림" 지적 포함) 동시 재저작. **자르기 전에 표면 의미론(무엇이 identity로 보이고 무엇이 숨는가)을 세워 GLG와 합의.**
+6. **M1 + H7 레인 (라이브 cutover)**: M1 operator command(backup `meta-sessions.v3-migration-backup-<ts>/` → migrate → verify non-V3=0 → restore/rollback 증명, fixture: V1/V3-already/malformed/stray-key/mismatch/half-migrated; duplicate는 파일명=gardenId 구조상 불가라 제외). 173+ record 라이브 전환: quiesce(설치본 v2 writer가 계속 민팅 중 — writer 정지 순서 포함 runbook 필수) → backup → M1 → non-V3=0 → 새 런타임. self-host blackout 예상 — cut 직전 ids/HEAD/patch 고정, 끊긴 동안 GLG 수동 릴레이, 양방향 delivery 복구 전 다음 cut 금지. **방아쇠는 GLG.**
 
 커밋 규율: 각 커밋은 삭제 + 게이트 재저작 + GREEN이 한 몸. RED는 커밋하지 않는다. 정상 라우팅의 새 dual-authority 금지.
 
@@ -56,14 +62,16 @@ main 승격은 **당분간 보류**(GLG 2026-07-23) — 브랜치에서 C3 → C
 ## 게이트 편차 기록
 
 - **`check-pack-install` de-scope는 오진이었다 — 2026-07-23 정정, 재장전 완료.** "upstream registry 고장으로 unrunnable, released main도 동일 RED"는 증거와 맞지 않았다: 실제 CI run 29918778751은 게이트를 끝까지 돌았고 딱 한 줄, C1이 안 옮긴 run.sh store-doctor 픽스처(schemaVersion:2 + V3가 거부하는 parentGardenId/isEntwurf)에서 죽었다. main CI는 내내 GREEN. `f677284`로 픽스처 V3화, oracle 로컬 full check-pack-install GREEN(npm-managed install 포함) 실측. 이 게이트는 다시 산다 — de-scope 근거를 잃었다. 교훈: 게이트를 끄면 자기 회귀를 upstream 탓으로 오진한 채 달린다.
-- **registry(`pi/entwurf-targets.json`)는 spawn-bg allowlist가 아니다.** v2 spawn 경로는 이 파일을 읽지 않는다. 실제 dormant resume 인가는 `requireEntwurf` name-tag + resume marker(둘 다 C3 삭제 대상). 살아있는 소비자는 OPS routing(`getRegistryRouting` ← resolve-acp-bridge)뿐. registry DATA/OPS 처분은 C3에서.
+- **registry(`pi/entwurf-targets.json`)는 spawn-bg allowlist가 아니었다 — C3 cut 2에서 DATA/reader 전부 처분 완료.** OPS routing(`getRegistryRouting`)은 caller-supplied tuple로 생존(파일 안 읽음). 운영자 호스트에 남은 옛 symlink는 무해(아무도 안 읽음).
+- **"unstaged deletion에서 게이트가 산다"는 상속되는 계약이다 (C3 cut 1 실측).** node-floor 스윕과 install-surface는 `git ls-files`가 아직 지목하는 미스테이징 삭제를 ENOENT-skip/existsSync로 문서화까지 해뒀는데, main 머지로 들어온 claude-floor 스윕 2곳과 `check-acp-sdk-surface`가 이 계약을 상속받지 않아 삭제 커밋 준비 중 crash. 같은 계약으로 고정(cut 1에 동승). 교훈 둘: ① ls-files 스윕을 새로 쓸 때 이 계약을 같이 옮겨라, ② **검증 실행을 pipe로 끝내지 마라** — `pnpm check | tail`이 exit code를 가려 RED를 GREEN으로 읽을 뻔했다.
 
 ## 머지 후 리듬 (0.12.8-repair.1 하네스 in, 2026-07-23)
 
 - **`.ts` 편집 후 `pnpm build-bridge` 먼저.** check-bridge-delivery는 stale dist에 설계상 RED — 자기 변경과 무관해 보이는 "artifact is not stale" RED를 만나면 빌드 누락이다. 새 리듬: `pnpm build-bridge && pnpm check` (빌드 ~5s). pre-commit hook이 full check를 강제한다.
 - 로컬 check 세금 +76s — check-meta-doctor-oracle 단독 73s(oracle 실측, thinkpad보다 빠름). CI는 push마다 3 job(check / install-surface / artifact-consumer), 전부 GitHub 러너라 oracle 부담 0.
 - **M1+H7 전까지 라이브 `install-meta-bridge` 금지.** 라이브 167 record는 v2, 프로덕션은 V3-only — 지금 라이브에 새 아티팩트를 깔면 store-doctor가 전 record를 거부한다. main 승격 후 릴리즈를 자르더라도 기존 v2 store 호스트(이 oracle 포함)는 M1 migration 전 설치 금지. 신규 설치는 무관(처음부터 V3 mint).
-- **main 승격은 당분간 보류(GLG 2026-07-23).** 기술적 조건(C2+smoke GREEN)은 충족됐으나 브랜치에서 C3→C4→M1+H7까지 계속 간다. 승격 시점이 오면 추가 조건: **승격 직전 `smoke-resident-garden-guard` LIVE 1회 PASS**(결정적 seam 게이트와 실배선 게이트의 분리 리스크 완화 — C2 검수 권고). 승격 전 이 파일 삭제(boot sector 규칙).
+- **main 승격은 당분간 보류(GLG 2026-07-23).** 기술적 조건(C2+smoke GREEN)은 충족됐으나 브랜치에서 C3→C4→M1+H7까지 계속 간다. 승격 시점이 오면 추가 조건: **승격 직전 `smoke-resident-garden-guard` LIVE 1회 PASS**(C2 검수 권고) + **재저작된 `smoke-entwurf-v2-spawn-resume-live` LIVE 1회 PASS**(C3 재저작 후 미실측 — dormant rail의 수용 증거 없이 승격하면 C2가 가르친 silent de-scope). 승격 전 이 파일 삭제(boot sector 규칙).
+- **main `NEXT.md`의 #49-C 블록은 hard cut이 통째로 무효화했다 (머지 때 정리).** 그 계획의 대상(`--session-id` handoff 버그, marker pre-socket guard, `smoke-session-id-name` 유지)은 C2/C3가 rail 자체를 삭제해 주제가 사라졌다. 머지 시점에 main NEXT에서 #49-C를 폐기 표기하고 #49-E만 남긴다.
 
 ## Do not touch
 
