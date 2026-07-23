@@ -37,13 +37,14 @@
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { fetchControlSocketRuntimeInfo, formatRuntimeModel } from "../pi-extensions/lib/entwurf-control-rpc.ts";
-import { generateSessionId } from "../pi-extensions/lib/entwurf-core.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { waitForPiRecord } from "./lib/pi-record-discovery.ts";
 
 const ACP_PROVIDER = "entwurf";
 const ACP_MODEL = process.env.ENTWURF_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-5";
@@ -157,47 +158,48 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	const gid = generateSessionId();
-	const sockPath = path.join(REAL_CONTROL_DIR, `${gid}${SOCKET_SUFFIX}`);
 	const tmp = os.tmpdir();
-
-	// A fresh gid must not collide with a pre-existing socket (else teardown deletes
-	// someone else's live socket). Fail loud rather than risk it.
-	ok("fresh gid has no pre-existing control socket", !existsSync(sockPath));
+	// Post-C2 the RECORD mints the address (`--session-id` injection is gone): isolate
+	// the resident's store to a temp dir so the freshly-born record is discoverable
+	// from an empty store AND no smoke garbage lands in the operator's live store
+	// (a pre-rewrite run minted a stray cwd=/tmp V3 record there, 2026-07-23). Only
+	// the STORE moves — auth.json (subscription login) and the control dir stay real.
+	const smokeStore = await fsp.mkdtemp(path.join(os.tmpdir(), "acp-s2g-store-"));
 
 	console.error(`[smoke-acp-bundled-mcp-live] repo:  ${REPO_ROOT}`);
-	console.error(
-		`[smoke-acp-bundled-mcp-live] gid:   ${gid} (never told to the model — only the bridge env carries it)`,
-	);
 	console.error(`[smoke-acp-bundled-mcp-live] model: ${ACP_PROVIDER}/${ACP_MODEL}`);
 
+	let gid = "";
+	let sockPath = "";
 	let stderrTail = "";
 	let resident: ChildProcess | null = null;
 	let cap: TurnCapture | null = null;
 	try {
 		resident = spawn(
 			"pi",
-			[
-				...REPO_EXTENSION_ARGS,
-				"--session-id",
-				gid,
-				"--entwurf-control",
-				"--provider",
-				ACP_PROVIDER,
-				"--model",
-				ACP_MODEL,
-				"--mode",
-				"rpc",
-			],
-			{ cwd: tmp, stdio: ["pipe", "pipe", "pipe"], detached: false },
+			[...REPO_EXTENSION_ARGS, "--entwurf-control", "--provider", ACP_PROVIDER, "--model", ACP_MODEL, "--mode", "rpc"],
+			{
+				cwd: tmp,
+				stdio: ["pipe", "pipe", "pipe"],
+				detached: false,
+				env: { ...process.env, ENTWURF_META_SESSIONS_DIR: smokeStore },
+			},
 		);
 		resident.stderr?.on("data", (b: Buffer) => {
 			stderrTail = (stderrTail + b.toString()).slice(-4000);
 		});
 
-		// The resident stands its control socket up (turn-free citizenship — S1).
+		// The resident births its record (the address authority) and stands its control
+		// socket up on that gardenId (turn-free citizenship — S1).
+		const bornGid = await waitForPiRecord(smokeStore, BOOT_TIMEOUT_MS);
+		ok(`ACP-model resident birthed its own V3 record (${ACP_PROVIDER}/${ACP_MODEL})`, bornGid !== null);
+		gid = bornGid as string;
+		sockPath = path.join(REAL_CONTROL_DIR, `${gid}${SOCKET_SUFFIX}`);
+		console.error(
+			`[smoke-acp-bundled-mcp-live] gid:   ${gid} (never told to the model — only the bridge env carries it)`,
+		);
 		const up = await waitForSocket(sockPath, BOOT_TIMEOUT_MS);
-		ok(`ACP-model resident stood up a control socket (${ACP_PROVIDER}/${ACP_MODEL})`, up);
+		ok(`ACP-model resident stood up a control socket keyed on the record gardenId (${gid})`, up);
 
 		// Citizen fact: get_info answers and reports the un-reverted ACP model (QM1).
 		const info = await fetchControlSocketRuntimeInfo(sockPath, { timeout: 3_000 });
@@ -289,6 +291,7 @@ async function main(): Promise<void> {
 		throw err;
 	} finally {
 		if (resident) await terminateChild(resident);
+		await fsp.rm(smokeStore, { recursive: true, force: true }).catch(() => {});
 	}
 
 	// Hygiene: after teardown the control socket file is gone — no process/socket residue.

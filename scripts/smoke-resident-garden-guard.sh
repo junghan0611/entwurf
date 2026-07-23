@@ -36,10 +36,12 @@
 #     replacement session becomes its own citizen and the socket rebinds to its
 #     address; no uuid socket appears.
 #
-#   POSITIVE (opt-in, ~1 cheap turn; SMOKE_RGG_POSITIVE=1): after one real turn the
-#     record carries the transcriptPath and model that were unknown at birth — the
-#     turn_end attach, which is what makes the citizen resumable (C3 reads exactly
-#     these fields).
+#   POSITIVE (opt-in, ~1 cheap turn; SMOKE_RGG_POSITIVE=1): a real turn CHANGES the
+#     record — transcriptPath goes null → a real on-disk file and recordUpdatedAt
+#     advances past createdAt (the turn_end attach, which is what makes the citizen
+#     resumable; C3 reads exactly these fields). Every record assertion is gated on
+#     the turn succeeding: a failed turn makes the claim UNPROVABLE (explicit FAIL),
+#     never a pass on fields birth already carried (F6).
 #
 # Cost: BIRTH + ATTACH + REPLACEMENT = 0 tokens. POSITIVE = ~1 cheap turn.
 #
@@ -57,6 +59,14 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Records + pi sessions go to a throwaway agent dir (see ISOLATION above).
 RGG_AGENT_DIR="$(mktemp -d)"
 export PI_CODING_AGENT_DIR="$RGG_AGENT_DIR"
+# The temp agent dir isolates the STORE, not the operator's login: pi reads its
+# provider auth from <agent-dir>/auth.json, so a bare temp dir silently amputates
+# the host's subscription OAuth and every POSITIVE turn dies "No API key found" —
+# misread live as "this host has no openai-codex key" (2026-07-23). Seed the real
+# auth into the isolated dir; records/sessions still never touch the live store.
+if [ -f "$HOME/.pi/agent/auth.json" ]; then
+	cp "$HOME/.pi/agent/auth.json" "$RGG_AGENT_DIR/auth.json"
+fi
 SESSIONS_BASE="$RGG_AGENT_DIR/sessions"
 cleanup() { rm -rf "$RGG_AGENT_DIR"; }
 trap cleanup EXIT
@@ -138,6 +148,16 @@ if [ -n "$birth_garden" ] && [ "$birth_garden" != "$birth_native" ]; then
 	ok "the address is the RECORD's, not pi's session id"
 else
 	bad "gardenId == nativeSessionId — the two authorities are still fused"
+fi
+
+# A 0-token birth writes no session file, so the record must NOT carry a resume
+# target. A non-null transcriptPath here is the F7 phantom: a path pi never wrote,
+# which later masks the precise "no turn yet" resume refusal. This cell used to
+# OBSERVE "birth left no session file" and still not ask the record about it (A2).
+if printf '%s' "$birth_json" | grep -q '"selfTranscriptPath":null'; then
+	ok "0-token birth record carries transcriptPath=null (no phantom resume target)"
+else
+	bad "birth record carries a transcriptPath for a file pi never wrote — phantom resume target (got: $(jstr "$birth_json" selfTranscriptPath))"
 fi
 
 # The socket: keyed on the record gardenId, and NEVER on pi's id.
@@ -256,7 +276,13 @@ else
 	ok "replacement ran at 0 tokens"
 fi
 
-# ─── POSITIVE — one real turn fills transcriptPath + model (opt-in) ──────────
+# ─── POSITIVE — one real turn fills what birth could NOT know (opt-in) ───────
+# The claim under test is a CHANGE, not an existence: birth records
+# transcriptPath=null (the file is not on disk yet — the BIRTH cell above pins
+# that), so a non-null transcriptPath afterwards proves the turn_end attach ran.
+# Every record assertion is gated on the turn actually succeeding: asserting
+# record fields after a failed turn proved nothing (F6 — the old shape PASSed
+# all three on a dead turn because birth already carried both fields).
 if [ "${SMOKE_RGG_POSITIVE:-0}" = "1" ]; then
 	echo "[smoke-resident-garden-guard] POSITIVE: one turn completes the record (SMOKE_RGG_POSITIVE=1)"
 	pos_ec=0
@@ -265,29 +291,45 @@ if [ "${SMOKE_RGG_POSITIVE:-0}" = "1" ]; then
 
 	if [ "$pos_ec" -eq 0 ]; then
 		ok "a plain (no --session-id) resident ran a turn and exited cleanly"
-	else
-		bad "resident turn failed (exit=$pos_ec)"
-	fi
 
-	pos_native=$(printf '%s\n' "$pos_out" | grep -o '"type":"session"[^}]*"id":"[^"]*"' | head -1 | grep -o '"id":"[^"]*"' | head -1 | sed 's/.*:"//;s/"$//' || true)
-	pos_record=$(grep -l "\"nativeSessionId\": \"$pos_native\"" "$RGG_AGENT_DIR"/meta-sessions/*.meta.json 2>/dev/null | head -1 || true)
-	if [ -n "$pos_record" ]; then
-		ok "the turn's session has a record ($(basename "$pos_record"))"
-	else
-		bad "no record for the session that ran a turn ($pos_native)"
-	fi
+		pos_native=$(printf '%s\n' "$pos_out" | grep -o '"type":"session"[^}]*"id":"[^"]*"' | head -1 | grep -o '"id":"[^"]*"' | head -1 | sed 's/.*:"//;s/"$//' || true)
+		pos_record=$(grep -l "\"nativeSessionId\": \"$pos_native\"" "$RGG_AGENT_DIR"/meta-sessions/*.meta.json 2>/dev/null | head -1 || true)
+		if [ -n "$pos_record" ]; then
+			ok "the turn's session has a record ($(basename "$pos_record"))"
+		else
+			bad "no record for the session that ran a turn ($pos_native)"
+		fi
 
-	# turn_end attaches the fields that were unknown at birth. These two ARE the
-	# resume target C3 reads; a record stuck at null is a citizen nobody can wake.
-	if [ -n "$pos_record" ] && grep -q '"transcriptPath": "/' "$pos_record"; then
-		ok "turn_end recorded the transcriptPath (the resume target)"
+		# transcriptPath: null at birth → a real on-disk file after the turn. Both
+		# halves matter — a recorded path that is not on disk is the F7 phantom.
+		pos_transcript=$(grep -o '"transcriptPath": "[^"]*"' "$pos_record" 2>/dev/null | head -1 | sed 's/.*": "//;s/"$//' || true)
+		if [ -n "$pos_transcript" ] && [ -f "$pos_transcript" ]; then
+			ok "turn_end recorded the transcriptPath AND the file exists on disk (the resume target)"
+		else
+			bad "transcriptPath after the turn is '${pos_transcript:-null}' (missing or not a real file) — turn_end attach did not complete the resume target"
+		fi
+
+		# recordUpdatedAt must have moved past createdAt: birth stamps them equal,
+		# so a later timestamp is the proof a post-birth attach ran at all.
+		pos_created=$(grep -o '"createdAt": "[^"]*"' "$pos_record" 2>/dev/null | head -1 | sed 's/.*": "//;s/"$//' || true)
+		pos_updated=$(grep -o '"recordUpdatedAt": "[^"]*"' "$pos_record" 2>/dev/null | head -1 | sed 's/.*": "//;s/"$//' || true)
+		if [ -n "$pos_created" ] && [ -n "$pos_updated" ] && [[ "$pos_updated" > "$pos_created" ]]; then
+			ok "recordUpdatedAt advanced past createdAt (a post-birth attach ran)"
+		else
+			bad "recordUpdatedAt did not advance (createdAt=$pos_created recordUpdatedAt=$pos_updated) — no post-birth attach observed"
+		fi
+
+		# model provenance is honest here: the launch flags make it knowable at
+		# birth, so the claim is only that the COMPLETED record carries it.
+		if [ -n "$pos_record" ] && grep -qE '"model": "[^"]+/' "$pos_record"; then
+			ok "the completed record carries the resolved <provider>/<model>"
+		else
+			bad "model still null after a completed turn"
+		fi
 	else
-		bad "transcriptPath still null after a completed turn — turn_end attach did not run"
-	fi
-	if [ -n "$pos_record" ] && grep -qE '"model": "[^"]+/' "$pos_record"; then
-		ok "turn_end recorded the resolved <provider>/<model>"
-	else
-		bad "model still null after a completed turn"
+		bad "resident turn failed (exit=$pos_ec) — the POSITIVE claim is UNPROVABLE on this run"
+		bad "unprovable: record completion after a turn (the turn never ran)"
+		note "turn output tail: $(printf '%s' "$pos_out" | tail -c 300)"
 	fi
 else
 	note "POSITIVE skipped (set SMOKE_RGG_POSITIVE=1 to run; costs ~1 cheap turn)"

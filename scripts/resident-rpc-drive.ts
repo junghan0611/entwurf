@@ -106,10 +106,18 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * false duplicate report (observed 2026-07-23). Compute the join once, in the place
  * that knows which id it is asking about.
  */
-function selfView(records: RecordView[], nativeSessionId: string | null): { gardenId: string | null; count: number } {
-	if (!nativeSessionId) return { gardenId: null, count: 0 };
+function selfView(
+	records: RecordView[],
+	nativeSessionId: string | null,
+): { gardenId: string | null; count: number; transcriptPath: string | null } {
+	if (!nativeSessionId) return { gardenId: null, count: 0, transcriptPath: null };
 	const mine = records.filter((r) => r.nativeSessionId === nativeSessionId);
-	return { gardenId: mine.length > 0 ? String(mine[0]?.gardenId ?? "") || null : null, count: mine.length };
+	const first = mine[0];
+	return {
+		gardenId: mine.length > 0 ? String(first?.gardenId ?? "") || null : null,
+		count: mine.length,
+		transcriptPath: typeof first?.transcriptPath === "string" ? first.transcriptPath : null,
+	};
 }
 
 interface DriveResult {
@@ -121,6 +129,9 @@ interface DriveResult {
 	/** This session's own address + how many records claim its native id (must be 1). */
 	selfGardenId: string | null;
 	selfRecordCount: number;
+	/** The self record's transcriptPath — null until pi actually writes the session
+	 * file (a non-null value for a file that is not on disk is the F7 phantom). */
+	selfTranscriptPath: string | null;
 	/** After the optional in-process replacement. */
 	replacedNativeSessionId: string | null;
 	replaceOk: boolean;
@@ -143,6 +154,7 @@ const result: DriveResult = {
 	records: [],
 	selfGardenId: null,
 	selfRecordCount: 0,
+	selfTranscriptPath: null,
 	replacedNativeSessionId: null,
 	replaceOk: false,
 	replaceCancelled: false,
@@ -228,6 +240,7 @@ rl.on("line", (line: string) => {
 			const self = selfView(result.records, result.nativeSessionId);
 			result.selfGardenId = self.gardenId;
 			result.selfRecordCount = self.count;
+			result.selfTranscriptPath = self.transcriptPath;
 		}
 		if (wantReplace) {
 			phase = 1;
