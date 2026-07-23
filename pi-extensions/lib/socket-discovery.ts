@@ -16,10 +16,10 @@
  * cannot reuse the legacy `getLiveSessions` (alive-only listing): folding the
  * hidden indeterminate/dead sockets into "absent" would resurrect the F3 split.
  *
- * This slice fills the LIVENESS axis and, for live sockets, best-effort runtime
- * enrich via the control RPC `get_info` (cwd / model / idle). `SocketProbe`'s
- * enrich fields remain nullable-by-design: a dead/indeterminate socket or a
- * failed enrich is HONEST, not synthetic, and carries `infoError` when known.
+ * This slice fills the LIVENESS axis only (#50 C4): the old per-socket `get_info`
+ * runtime enrich (cwd / model / idle) is gone with the socket-only quasi-citizen
+ * listing it decorated — a record-less socket is a diagnostic subject now, and a
+ * citizen's cwd/model come from its meta-record, never from RPC-ing its socket.
  *
  * Three socket-axis hazards are surfaced (slice 4c, Fable 검수), never swallowed:
  *   - SYMLINK (P1, security): a `<gid>.sock` that is a symlink can redirect to
@@ -58,7 +58,6 @@ import {
 	defaultControlSocketDir,
 	gardenIdFromSocketFilename,
 } from "./control-socket-path.js";
-import { fetchControlSocketRuntimeInfo, formatRuntimeModel } from "./entwurf-control-rpc.ts";
 import type { SocketProbe } from "./entwurf-facts.ts";
 import { SESSION_ID_RE } from "./session-id.js";
 import { probeSocketLiveness, type SocketLiveness } from "./socket-probe.ts";
@@ -209,18 +208,10 @@ export interface SocketDirEntry {
 	isSymbolicLink: boolean;
 }
 
-export interface SocketRuntimeInfo {
-	cwd: string | null;
-	model: string | null;
-	idle: boolean | null;
-}
-
 export interface SocketScanDeps {
 	dir: string;
 	readdir: (dir: string) => Promise<SocketDirEntry[]>;
 	probe: (socketPath: string) => Promise<SocketLiveness>;
-	/** Best-effort live-socket runtime enrich. Called only when liveness === "alive". */
-	getInfo: (socketPath: string) => Promise<SocketRuntimeInfo>;
 }
 
 /**
@@ -240,8 +231,8 @@ export interface SocketScanResult {
 
 /**
  * Probe the union of (control sockets present in `dir`) ∪ (`piCitizenGardenIds`)
- * and return one `SocketProbe` per gardenId (liveness + live get_info enrich), plus
- * the three surfaced hazards. A missing directory (ENOENT) is the normal empty
+ * and return one `SocketProbe` per gardenId (liveness only, #50 C4), plus the
+ * three surfaced hazards. A missing directory (ENOENT) is the normal empty
  * (`dirError=null`) — the in-domain citizens are still probed (their absent
  * canonical paths read `dead`); any OTHER readdir failure sets `dirError`. A
  * symlinked `*.sock` is never probed (P1): a citizen owning one is forced `dead`,
@@ -259,15 +250,6 @@ export async function scanSocketProbes(
 			return dirents.map((e) => ({ name: e.name, isSymbolicLink: e.isSymbolicLink() }));
 		});
 	const probe = deps.probe ?? ((p: string) => probeSocketLiveness(p));
-	// Deterministic gates commonly inject fake readdir/probe over fake paths. In that
-	// case, default enrich must stay no-op unless the test explicitly injects getInfo.
-	// Real production calls inject neither readdir nor probe, so they get live RPC
-	// enrich by default.
-	const getInfo =
-		deps.getInfo ??
-		(deps.readdir || deps.probe
-			? async (): Promise<SocketRuntimeInfo> => ({ cwd: null, model: null, idle: null })
-			: getRuntimeInfoOverControlSocket);
 
 	let entries: SocketDirEntry[] = [];
 	let dirError: string | null = null;
@@ -322,32 +304,9 @@ export async function scanSocketProbes(
 		} else {
 			liveness = await probe(controlSocketPath(gardenId, dir));
 		}
-		let cwd: string | null = null;
-		let model: string | null = null;
-		let idle: boolean | null = null;
-		let infoError: string | null = null;
-		if (liveness === "alive") {
-			try {
-				const info = await getInfo(controlSocketPath(gardenId, dir));
-				cwd = info.cwd;
-				model = info.model;
-				idle = info.idle;
-			} catch (err) {
-				infoError = err instanceof Error ? err.message : String(err);
-			}
-		}
-		probes.push({ gardenId, liveness, cwd, model, idle, infoError });
+		probes.push({ gardenId, liveness });
 	}
 	symlinkedGardenIds.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 	malformedNames.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 	return { probes, symlinkedGardenIds, malformedNames, dirError };
-}
-
-async function getRuntimeInfoOverControlSocket(socketPath: string): Promise<SocketRuntimeInfo> {
-	const info = await fetchControlSocketRuntimeInfo(socketPath, { timeout: 1500 });
-	return {
-		cwd: info.cwd ?? null,
-		model: formatRuntimeModel(info) ?? null,
-		idle: info.idle ?? null,
-	};
 }

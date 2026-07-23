@@ -164,7 +164,7 @@ If a gate fails or a claim drops below its needed evidence level, do not commit.
 
 Uses `entwurf` instead of `delegate` to avoid ecosystem collisions. spawn-bg resume creates a sibling, not a worker.
 
-- **Surface** — MCP `entwurf-bridge`: `entwurf_v2`, `entwurf_self`, `entwurf_peers`, `entwurf_inbox_read`, `entwurf_register_native` (explicit/manual fallback for an already-running native conversation). pi-native (`pi-extensions/entwurf-control.ts`): `entwurf_v2`, `entwurf_peers` tools + the `/entwurf-sessions` command. The v1 `entwurf` / `entwurf_resume` / `entwurf_send` tools and the `/entwurf` / `/entwurf-send` / `/entwurf-status` commands are **removed**.
+- **Surface** — MCP `entwurf-bridge`: `entwurf_v2`, `entwurf_self`, `entwurf_peers`, `entwurf_inbox_read`, `entwurf_register_native` (explicit/manual fallback for an already-running native conversation). pi-native (`pi-extensions/entwurf-control.ts`): `entwurf_v2`, `entwurf_peers` tools (#50 C4 removed the socket-scan `/entwurf-sessions` command). The v1 `entwurf` / `entwurf_resume` / `entwurf_send` tools and the `/entwurf` / `/entwurf-send` / `/entwurf-status` commands are **removed**.
 - **`entwurf_v2` is the one delivery verb.** Given a garden id, it classifies the target (live pi vs. dormant pi vs. mailbox meta-session vs. native-push citizen — a bare garden id does not reveal this) and routes correctly. It does **not** mint a fresh sibling: spawn-bg resumes an *already-identified* citizen, while native-register binds an *already-running* conversation. Fresh creation was the v1 `entwurf` verb and remains deferred.
 - **`entwurf_peers`** is a read-only fact surface (liveness / capability / identity / cwd-history). Do not bake verb-routing (`resumable`/`sendable`) into the fact layer; routing is the decider's job.
 - **`entwurf_self`** returns the authoritative identity envelope (pi-session env, or a trusted meta-session sender marker) and is identity-required.
@@ -222,7 +222,7 @@ Messages are thrown, not awaited.
 |------|---------|
 | `pi-extensions/acp-provider.ts` | ACP plugin entry: registers the package provider `entwurf` + curated Claude model surface; wires `streamSimple` to the real ACP backend |
 | `pi-extensions/lib/acp/*.ts` | ACP plugin internals: curated Claude surface + no-auth sentinel (`models.ts`), Claude config overlay (`overlay.ts`), tool surface + exclude-tools preflight (`tool-surface.ts`), ACP→pi event mapper (`event-mapper.ts`), pi Context→ACP prompt (`context.ts`), spawn-per-turn `streamSimple` backend (`backend.ts`) |
-| `pi-extensions/entwurf-control.ts` | control plane: record attach at session_start, `--entwurf-control` socket (keyed on the record gardenId), RPC, `entwurf_v2` / `entwurf_peers` tools, `/entwurf-sessions` |
+| `pi-extensions/entwurf-control.ts` | control plane: record attach at session_start, `--entwurf-control` socket (keyed on the record gardenId), RPC, `entwurf_v2` / `entwurf_peers` tools |
 | `pi-extensions/lib/pi-citizen-birth.ts` | the #50 C2 attach seam: pi session → meta-record upsert → control-socket address |
 | `pi-extensions/model-lock.ts` | package-provider model lock (pi.extension) |
 | `pi-extensions/meta-bridge-hook.ts` | Claude Code `SessionStart` hook: register a mailbox-backed garden meta-session |

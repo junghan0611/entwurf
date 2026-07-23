@@ -12,9 +12,10 @@
  * as a local skill should live as a skill, not here):
  *   - entwurf_v2      — canonical delivery surface for existing garden citizens; the decider
  *                       chooses live control-socket send / dormant spawn-bg resume / meta-mailbox.
- *   - entwurf_peers   — entwurf fact surface: garden citizens (meta-records) + record-less control
- *                       sockets, each with liveness; legacy `sessions` projection retained. Brain =
- *                       pi-extensions/lib/entwurf-fact-provider (listEntwurfFacts) + entwurf-peers-render.
+ *   - entwurf_peers   — entwurf fact surface: garden citizens (meta-records) with liveness +
+ *                       diagnostics (#50 C4: record-less sockets surface THERE, never as identity).
+ *                       Brain = pi-extensions/lib/entwurf-fact-provider (listEntwurfFacts) +
+ *                       entwurf-peers-render.
  *   - entwurf_self    — own session identity envelope (sessionId, agentId, cwd, timestamp)
  *   - entwurf_inbox_read — receiver half of the meta-bridge mailbox path: drain your own
  *                       inbox by garden id + stamp the D7 read-receipt (readMetaInbox: lastReadAt).
@@ -73,15 +74,13 @@ const HOME = os.homedir();
 const ENTWURF_DIR = process.env.ENTWURF_DIR ?? defaultControlSocketDir(HOME);
 
 // ============================================================================
-// Live control-socket discovery for entwurf_peers now lives in the TS
-// fact-provider (pi-extensions/lib/entwurf-fact-provider.ts → listEntwurfFacts),
-// which the entwurf_peers handler calls + renders (entwurf-peers-render.ts). The
-// old bridge-local `getLiveSessions`/`isSocketAlive` (alive-only scan) was
-// removed: a separate scan would bypass the provider's quarantine and resurrect
-// the symlink-forgery + F3 splits. The legacy `sessions` payload is kept as a
-// PROJECTION of those facts (alive only), not a second scan. PM layer separation
-// is unchanged: this is still the *active* control-socket world, NOT the saved
-// entwurf-session world that entwurf_resume reads from ~/.pi/agent/sessions.
+// Live control-socket discovery for entwurf_peers lives in the TS fact-provider
+// (pi-extensions/lib/entwurf-fact-provider.ts → listEntwurfFacts), which the
+// entwurf_peers handler calls + renders (entwurf-peers-render.ts). The old
+// bridge-local `getLiveSessions`/`isSocketAlive` (alive-only scan) was removed:
+// a separate scan would bypass the provider's quarantine and resurrect the
+// symlink-forgery + F3 splits. #50 C4 removed the legacy `sessions` projection
+// too — socket paths are dispatch-internal transport, never identity rows.
 // ============================================================================
 
 // ============================================================================
@@ -421,9 +420,10 @@ server.tool(
 
 server.tool(
 	"entwurf_peers",
-	"List the entwurf fact surface: garden citizens (from meta-records) AND record-less control " +
-		"sockets, each with its liveness. A legacy `sessions` projection (alive pi sessions only) is " +
-		"retained for old consumers. Pair with entwurf_v2 to address a peer by garden id. " +
+	"List the entwurf fact surface: garden citizens (from meta-records) with their liveness, " +
+		"plus diagnostics. The record is the sole address axis — a control socket no record claims " +
+		"is a `record-less-socket` diagnostic (migration/stale state), never a peer row. Pair with " +
+		"entwurf_v2 to address a peer by garden id. " +
 		"This reports FACTS, never verbs: `liveness` is a fact (alive/dead/indeterminate, or " +
 		"`unsupported` for a backend with no control-socket probe such as claude-code); the dispatch " +
 		"decision (send vs resume) is computed LATER by the entwurf_v2 contract from that liveness, " +
@@ -447,11 +447,10 @@ server.tool(
 			const result = await listEntwurfFacts({
 				metaEntries,
 				readRecord: (filename) => readFileSync(path.join(sessionsDir, filename), "utf8"),
-				// Socket axis: same dir the legacy scan used. controlSocketPath (SSOT)
-				// builds the derived socketPath, so scan and render cannot drift.
+				// Socket axis: the same dir dispatch uses (grammar SSOT), scan-internal only.
 				socket: { dir: ENTWURF_DIR },
 			});
-			const { text } = renderEntwurfPeers(result, ENTWURF_DIR);
+			const { text } = renderEntwurfPeers(result);
 			return textOk(text);
 		} catch (err) {
 			return textErr(`entwurf_peers error: ${err instanceof Error ? err.message : String(err)}`);

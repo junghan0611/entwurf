@@ -25,9 +25,9 @@ import {
 	type FactList,
 	isNonPiGardenIdSocketConflict,
 	type PeerFact,
+	type RecordLessSocketFact,
 	resolveFactList,
 	resolvePeerFact,
-	type SocketOnlyFact,
 	type SocketProbe,
 } from "../pi-extensions/lib/entwurf-facts.ts";
 import {
@@ -172,12 +172,14 @@ void _typecheck;
 
 // ════════════════════════════════════════════════════════════════════════════
 // slice 2 — resolveFactList: meta-store ⨯ socket union (설계 동결 2026-06-11,
-// GPT힣 + Fable). PeerFact for record citizens, SocketOnlyFact for record-less
-// live sockets; gardenId is the correlation key.
+// GPT힣 + Fable; #50 C4 demotion). PeerFact for record citizens,
+// RecordLessSocketFact for sockets no record claims — a DIAGNOSTIC subject the
+// provider folds into `record-less-socket`, never a citizen; gardenId is the
+// correlation key.
 // ════════════════════════════════════════════════════════════════════════════
 
-function socketProbe(gardenId: string, liveness: SocketLiveness, over: Partial<SocketProbe> = {}): SocketProbe {
-	return { gardenId, liveness, cwd: null, model: null, idle: null, infoError: null, ...over };
+function socketProbe(gardenId: string, liveness: SocketLiveness): SocketProbe {
+	return { gardenId, liveness };
 }
 
 const GID_PI_LIVE = "20260611T115213-3aa371";
@@ -188,10 +190,10 @@ const GID_SOCKET_ONLY = "20260611T135517-5f0d25";
 // ── basic union: pi-live citizen + claude citizen + record-less live socket ──
 {
 	const ids = [identity("pi", { gardenId: GID_PI_LIVE }), identity("claude-code", { gardenId: GID_CLAUDE })];
-	const probes = [socketProbe(GID_PI_LIVE, "alive"), socketProbe(GID_SOCKET_ONLY, "alive", { cwd: "/tmp/x" })];
+	const probes = [socketProbe(GID_PI_LIVE, "alive"), socketProbe(GID_SOCKET_ONLY, "alive")];
 	const out = resolveFactList(ids, probes);
 	ok("union: 2 citizens → 2 PeerFacts", out.peers.length === 2);
-	ok("union: 1 record-less socket → 1 SocketOnlyFact", out.socketOnly.length === 1);
+	ok("union: 1 record-less socket → 1 RecordLessSocketFact", out.recordLessSockets.length === 1);
 	ok(
 		"union: pi-live citizen liveness = alive (from its probe)",
 		out.peers.find((p) => p.gardenId === GID_PI_LIVE)?.liveness === "alive",
@@ -200,7 +202,7 @@ const GID_SOCKET_ONLY = "20260611T135517-5f0d25";
 		"union: claude citizen liveness = unsupported (out-of-domain, socket ignored)",
 		out.peers.find((p) => p.gardenId === GID_CLAUDE)?.liveness === "unsupported",
 	);
-	ok("union: socket-only gardenId surfaced", out.socketOnly[0]?.gardenId === GID_SOCKET_ONLY);
+	ok("union: record-less gardenId surfaced", out.recordLessSockets[0]?.gardenId === GID_SOCKET_ONLY);
 }
 
 // ── dormant trap (Fable): pi citizen probed dead → dead (NOT indeterminate) ──
@@ -210,7 +212,7 @@ const GID_SOCKET_ONLY = "20260611T135517-5f0d25";
 		"dormant trap: pi citizen + probe=dead → liveness=dead (resumable, not stranded)",
 		out.peers[0]?.liveness === "dead",
 	);
-	ok("dormant trap: dead pi citizen is a PeerFact, not socket-only", out.socketOnly.length === 0);
+	ok("dormant trap: dead pi citizen is a PeerFact, never record-less", out.recordLessSockets.length === 0);
 }
 
 // ── F3 preserve: pi citizen probed indeterminate → not folded to dead ────────
@@ -248,8 +250,8 @@ const GID_SOCKET_ONLY = "20260611T135517-5f0d25";
 {
 	const out = resolveFactList([identity("pi", { gardenId: GID_PI_LIVE })], [socketProbe(GID_PI_LIVE, "alive")]);
 	ok("dedup: pi citizen consumes its socket (1 PeerFact)", out.peers.length === 1);
-	ok("dedup: consumed gid not also emitted as SocketOnlyFact", out.socketOnly.length === 0);
-	const allGids = [...out.peers.map((p) => p.gardenId), ...out.socketOnly.map((s) => s.gardenId)];
+	ok("dedup: consumed gid not also emitted as RecordLessSocketFact", out.recordLessSockets.length === 0);
+	const allGids = [...out.peers.map((p) => p.gardenId), ...out.recordLessSockets.map((s) => s.gardenId)];
 	ok("dedup: no gardenId appears in both sections", new Set(allGids).size === allGids.length);
 }
 
@@ -275,22 +277,16 @@ const GID_SOCKET_ONLY = "20260611T135517-5f0d25";
 	ok("duplicate meta-record for one gid → throw", dupId);
 }
 
-// ── SocketOnlyFact: 3-value liveness + probe-derived enrich, no synthetic id ──
+// ── RecordLessSocketFact (#50 C4): gid + 3-value liveness, nothing else ──────
+// The demotion is structural: no enrich (cwd/model/idle came from get_info-ing
+// the socket — treating it as a citizen), no kind tag, no synthetic identity.
 {
-	const out = resolveFactList(
-		[],
-		[socketProbe(GID_SOCKET_ONLY, "alive", { cwd: "/tmp/w", model: "gpt-5.5", idle: true, infoError: null })],
-	);
-	const s = out.socketOnly[0] as SocketOnlyFact;
-	ok("socket-only: kind discriminant", s.kind === "socket-only");
-	ok("socket-only: liveness ∈ SocketLiveness 3-value (never unsupported)", s.liveness === "alive");
-	ok("socket-only: probe-derived cwd passthrough", s.cwd === "/tmp/w");
-	ok("socket-only: probe-derived model passthrough", s.model === "gpt-5.5");
-	ok("socket-only: probe-derived idle passthrough", s.idle === true);
+	const out = resolveFactList([], [socketProbe(GID_SOCKET_ONLY, "alive")]);
+	const s = out.recordLessSockets[0] as RecordLessSocketFact;
+	ok("record-less: liveness ∈ SocketLiveness 3-value (never unsupported)", s.liveness === "alive");
 	const keys = Object.keys(s).sort();
-	const expected = ["cwd", "gardenId", "idle", "infoError", "kind", "liveness", "model"].sort();
-	assert.deepStrictEqual(keys, expected, `SocketOnlyFact keyset drift: ${keys.join(",")}`);
-	ok("socket-only: keyset exact (gardenId + liveness + probe-derived enrich)", true);
+	assert.deepStrictEqual(keys, ["gardenId", "liveness"], `RecordLessSocketFact keyset drift: ${keys.join(",")}`);
+	ok("record-less: keyset exact (gardenId + liveness ONLY — enrich is gone with the listing)", true);
 	const FORBIDDEN = [
 		"resumable",
 		"sendable",
@@ -300,10 +296,18 @@ const GID_SOCKET_ONLY = "20260611T135517-5f0d25";
 		"backend",
 		"nativeSessionId",
 		"isEntwurf",
+		"cwd",
+		"model",
+		"idle",
+		"infoError",
+		"kind",
 	];
 	for (const k of FORBIDDEN) {
-		ok(`socket-only: no '${k}' (no verb-routing, no synthetic identity)`, !(k in s));
+		ok(`record-less: no '${k}' (no verb-routing, no synthetic identity, no enrich)`, !(k in s));
 	}
+	// dead/indeterminate stay surfaced too — hiding a dead socket is GC's job.
+	const dead = resolveFactList([], [socketProbe(GID_SOCKET_ONLY, "dead")]);
+	ok("record-less: dead socket stays surfaced (GC hides, the listing never does)", dead.recordLessSockets.length === 1);
 }
 
 // ── determinism: output sorted by gardenId in each section ───────────────────
@@ -319,7 +323,10 @@ const GID_SOCKET_ONLY = "20260611T135517-5f0d25";
 	];
 	const out = resolveFactList(ids, probes);
 	ok("determinism: peers sorted by gardenId", out.peers[0]?.gardenId === "20260611T111111-aaaaaa");
-	ok("determinism: socketOnly sorted by gardenId", out.socketOnly[0]?.gardenId === "20260611T333333-cccccc");
+	ok(
+		"determinism: recordLessSockets sorted by gardenId",
+		out.recordLessSockets[0]?.gardenId === "20260611T333333-cccccc",
+	);
 }
 
 // ── isNonPiGardenIdSocketConflict: the SHARED record-side conflict predicate ──
@@ -353,7 +360,7 @@ const GID_SOCKET_ONLY = "20260611T135517-5f0d25";
 }
 
 // Type-level guard: reference FactList so a shape rename breaks tsc.
-const _factlist: (f: FactList) => number = (f) => f.peers.length + f.socketOnly.length;
+const _factlist: (f: FactList) => number = (f) => f.peers.length + f.recordLessSockets.length;
 void _factlist;
 
 console.log(`\n[check-entwurf-facts] ${passed} assertions ok`);

@@ -130,13 +130,14 @@ async function main(): Promise<void> {
 			info.modelProvider === ACP_PROVIDER && info.modelId === ACP_MODEL,
 		);
 
-		// Citizen facts present: idle + cwd are get_info-enriched fields the peers surface shows.
+		// Citizen facts present on the control RPC surface (#50 C4: the peers listing
+		// itself no longer get_info-enriches — cwd/model are record facts there).
 		ok("get_info reports idle=true (no turn running)", info.idle === true);
 		ok("get_info reports the resident cwd", info.cwd === tmp);
 
 		// Peers-visible: the gid shows up in the REAL socket-discovery scan (the socket
-		// axis that feeds entwurf_peers' socketOnly section) as a live citizen — not just
-		// reachable by a direct get_info, but discoverable on the production fact surface.
+		// axis entwurf_peers folds into citizen liveness) as alive — not just reachable
+		// by a direct get_info, but discoverable on the production fact surface.
 		const scan = await scanSocketProbes([]);
 		const probe = scan.probes.find((p) => p.gardenId === gid);
 		ok("gid is peers-visible on the socket-discovery fact surface, liveness=alive", probe?.liveness === "alive");

@@ -23,7 +23,8 @@
  *
  * Features:
  * - Register the canonical `entwurf_v2` dispatch tool for existing garden citizens.
- * - Expose `entwurf_peers` facts and `/entwurf-sessions` for operator inspection.
+ * - Expose `entwurf_peers` facts for operator inspection (#50 C4: the socket-scan
+ *   `/entwurf-sessions` command is gone — the record listing is the only surface).
  * - Maintain the resident control socket used by v2 live-send / spawn-bg paths.
  * - Attach this pi session to its meta-record at session_start (#50 C2) and key
  *   the control socket on the record's gardenId.
@@ -39,8 +40,8 @@
  *
  * Addressing is garden-id-only. The garden id comes from this session's
  * meta-record (pi's own session id is the record's `nativeSessionId`, never an
- * address); alias / sessionName surfaces are deliberately not exposed. Use entwurf_peers (or /entwurf-sessions) to discover live
- * sessions; pass the sessionId to entwurf_v2. Note that this is independent
+ * address); alias / sessionName surfaces are deliberately not exposed. Use
+ * entwurf_peers to discover citizens; pass the gardenId to entwurf_v2. Note that this is independent
  * of agent-config's --session-control extension, which lives under
  * ~/.pi/session-control/ and may keep its own alias surface.
  *
@@ -87,15 +88,13 @@ import {
 	gardenIdFromSocketFilename,
 } from "./lib/control-socket-path.js";
 import {
-	fetchControlSocketRuntimeInfo,
-	formatRuntimeModel,
 	formatSenderInfoBlock,
 	type RpcCommand,
 	type RpcResponse,
 	type SenderEnvelope,
 } from "./lib/entwurf-control-rpc.js";
 import { computeResidentStatusLabel } from "./lib/entwurf-core.js";
-import { probeSocketLiveness, shouldListAsLive, shouldUnlinkOnGc } from "./lib/socket-probe.js";
+import { probeSocketLiveness, shouldUnlinkOnGc } from "./lib/socket-probe.js";
 
 // The `--entwurf-control` socket protocol (wire types + the newline-JSON client) now lives
 // in the ctx-free SSOT `lib/entwurf-control-rpc.ts` so the 5d entwurf_v2 production
@@ -205,81 +204,12 @@ async function gcStaleSockets(): Promise<void> {
 	}
 }
 
-// Listing wrapper over the shared three-valued probe: a session is "alive" for
-// listing/reachability only on a positive connect (shouldListAsLive). An
-// indeterminate probe is hidden from listings but — unlike GC above — never
-// unlinked, so it can reappear once the stall clears.
-async function isSocketAlive(socketPath: string): Promise<boolean> {
-	return shouldListAsLive(await probeSocketLiveness(socketPath));
-}
-
-type LiveSessionInfo = {
-	sessionId: string;
-	socketPath: string;
-};
-
-type EnrichedSession = LiveSessionInfo & {
-	cwd?: string;
-	modelId?: string;
-	modelProvider?: string;
-	idle?: boolean;
-	infoError?: string;
-};
-
 function abbreviateHome(cwd: string | undefined): string {
 	if (!cwd) return "(unknown)";
 	const home = os.homedir();
 	if (cwd === home) return "~";
 	if (cwd.startsWith(`${home}${path.sep}`)) return `~${cwd.slice(home.length)}`;
 	return cwd;
-}
-
-async function getLiveSessions(): Promise<LiveSessionInfo[]> {
-	await ensureControlDir();
-	const entries = await fs.readdir(ENTWURF_DIR, { withFileTypes: true });
-	const sessions: LiveSessionInfo[] = [];
-
-	for (const entry of entries) {
-		const sessionId = gardenIdFromSocketFilename(entry.name);
-		if (sessionId === null) continue;
-		const socketPath = path.join(ENTWURF_DIR, entry.name);
-		const alive = await isSocketAlive(socketPath);
-		if (!alive) continue;
-		if (!isSafeSessionId(sessionId)) continue;
-		sessions.push({ sessionId, socketPath });
-	}
-
-	sessions.sort((a, b) => a.sessionId.localeCompare(b.sessionId));
-	return sessions;
-}
-
-// Enrich each live session with cwd/model/idle by RPC-querying its socket.
-// Per-session failures are surfaced as `infoError` so the operator sees
-// exactly which session is unreachable instead of silently dropping it.
-async function getLiveSessionsWithInfo(): Promise<EnrichedSession[]> {
-	const sessions = await getLiveSessions();
-	const enriched: EnrichedSession[] = [];
-	for (const session of sessions) {
-		try {
-			// Shared parse/RPC SSOT (lib/entwurf-control-rpc.ts) — a `!success` reply
-			// throws there, so it lands in the same catch and surfaces as `infoError`
-			// (behavior-preserving: the message is still `response.error ?? "get_info failed"`).
-			const info = await fetchControlSocketRuntimeInfo(session.socketPath, { timeout: 1500 });
-			enriched.push({
-				...session,
-				cwd: info.cwd,
-				modelId: info.modelId,
-				modelProvider: info.modelProvider,
-				idle: info.idle,
-			});
-		} catch (e) {
-			enriched.push({
-				...session,
-				infoError: e instanceof Error ? e.message : String(e),
-			});
-		}
-	}
-	return enriched;
 }
 
 function writeResponse(socket: net.Socket, response: RpcResponse): void {
@@ -729,10 +659,9 @@ async function handleCommand(
 		return;
 	}
 
-	// Get session metadata (cwd, model, idle) — used by /entwurf-sessions enrichment.
+	// Get session metadata (cwd, model, idle) for the control RPC surface.
 	if (command.type === "get_info") {
-		// Report the GARDEN address (#50 C2) — this is what /entwurf-sessions and the
-		// peers surface show, and what a caller passes back to entwurf_v2.
+		// Report the GARDEN address (#50 C2) — what a caller passes back to entwurf_v2.
 		const sessionId = residentGardenId;
 		const modelInfo = ctx.model ? { id: ctx.model.id, provider: ctx.model.provider } : null;
 		respond(true, "get_info", {
@@ -1112,7 +1041,6 @@ export default function (pi: ExtensionAPI) {
 		registerListSessionsTool(pi);
 		registerEntwurfV2Tool(pi);
 	}
-	registerControlSessionsCommand(pi, () => {});
 
 	// The in-process mint refusals (`/new`, `/fork`, `/clone`, RPC new_session) are
 	// GONE with the id grammar they defended (#50 C2). They existed because pi mints a
@@ -1483,7 +1411,7 @@ interface EntwurfFactProviderModule {
 }
 
 interface EntwurfPeersRenderModule {
-	renderEntwurfPeers(result: unknown, controlDir: string): { text: string; payload: unknown };
+	renderEntwurfPeers(result: unknown): { text: string; payload: unknown };
 }
 
 interface MetaSessionModule {
@@ -1509,7 +1437,7 @@ async function renderEntwurfPeersForSurface(): Promise<{ text: string; payload: 
 		socket: { dir: ENTWURF_DIR },
 	});
 	const render = (await import(ENTWURF_PEERS_RENDER_MODULE)) as unknown as EntwurfPeersRenderModule;
-	return render.renderEntwurfPeers(result, ENTWURF_DIR);
+	return render.renderEntwurfPeers(result);
 }
 
 function registerListSessionsTool(pi: ExtensionAPI): void {
@@ -1520,7 +1448,7 @@ function registerListSessionsTool(pi: ExtensionAPI): void {
 		name: "entwurf_peers",
 		label: "List Garden Citizens",
 		description:
-			"List the entwurf fact surface across BOTH rails: garden citizens from meta-records (including active self-fetch meta receivers such as claude-code) and record-less control sockets, each with liveness. A legacy `sessions` projection is retained for alive pi control-socket sessions only. Pair with entwurf_v2 to address a peer by garden id; this surface reports facts, never per-row routing verbs.",
+			"List the entwurf fact surface: garden citizens from meta-records (including active self-fetch meta receivers such as claude-code) with liveness, plus diagnostics. The record is the sole address axis (#50 C4) — a control socket no record claims surfaces as a record-less-socket diagnostic, never a peer row. Pair with entwurf_v2 to address a peer by garden id; this surface reports facts, never per-row routing verbs.",
 		parameters: Type.Object({}),
 		async execute(
 			_toolCallId: string,
@@ -1542,63 +1470,6 @@ function registerListSessionsTool(pi: ExtensionAPI): void {
 					details: { error: msg },
 				};
 			}
-		},
-	});
-}
-
-function registerControlSessionsCommand(pi: ExtensionAPI, setSessions: (sessions: EnrichedSession[]) => void): void {
-	pi.registerCommand("entwurf-sessions", {
-		description: "List controllable sessions (from entwurf-control sockets)",
-		handler: async (_args, ctx) => {
-			if (pi.getFlag(ENTWURF_FLAG) !== true) {
-				if (ctx.hasUI) {
-					ctx.ui.notify("Entwurf control not enabled — relaunch pi with --entwurf-control", "warning");
-				}
-				return;
-			}
-
-			const sessions = await getLiveSessionsWithInfo();
-			setSessions(sessions);
-
-			const currentSessionId = ctx.sessionManager.getSessionId();
-
-			if (sessions.length === 0) {
-				pi.sendMessage(
-					{
-						customType: "entwurf-sessions",
-						content: "No live sessions found.",
-						display: true,
-					},
-					{ triggerTurn: false },
-				);
-				return;
-			}
-
-			const lines: string[] = ["Controllable sessions:", ""];
-			sessions.forEach((s, idx) => {
-				const current = s.sessionId === currentSessionId ? "  (current)" : "";
-				const idShort = `${s.sessionId.slice(0, 8)}…${s.sessionId.slice(-4)}`;
-				lines.push(`[${idx + 1}] ${idShort}${current}`);
-				if (s.infoError) {
-					lines.push(`    error: ${s.infoError}`);
-				} else {
-					lines.push(`    cwd:   ${abbreviateHome(s.cwd)}`);
-					const modelLabel = formatRuntimeModel({ modelId: s.modelId, modelProvider: s.modelProvider }) ?? "(unknown)";
-					lines.push(`    model: ${modelLabel}`);
-					const idleLabel = s.idle === undefined ? "?" : s.idle ? "yes" : "no  (turn in progress)";
-					lines.push(`    idle:  ${idleLabel}`);
-				}
-				lines.push("");
-			});
-
-			pi.sendMessage(
-				{
-					customType: "entwurf-sessions",
-					content: lines.join("\n").trimEnd(),
-					display: true,
-				},
-				{ triggerTurn: false },
-			);
 		},
 	});
 }

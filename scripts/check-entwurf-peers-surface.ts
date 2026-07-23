@@ -1,25 +1,25 @@
 /**
  * check-entwurf-peers-surface — deterministic gate for the MCP + pi-native `entwurf_peers`
- * RENDER/PAYLOAD layer (0.11 Stage 0 step 4, slice 4c). Drives the PURE
+ * RENDER/PAYLOAD layer (0.11 Stage 0 step 4, slice 4c; #50 C4 re-author). Drives the PURE
  * `renderEntwurfPeers` with a fabricated `EntwurfFactsResult` (no IO) and proves
- * the surface contract (GPi + Fable 수렴):
+ * the surface contract (GPi + Fable 수렴 + the C4 demotion):
  *
- *   - legacy `sessions` is a PROJECTION of the facts (alive pi citizens + alive
- *     socket-only), NOT a second scan — dead / indeterminate / unsupported /
- *     non-pi never appear in it,
- *   - sessions[].socketPath === controlSocketPath(gid, dir) — SSOT, no re-concat
- *     drift of the filename↔gardenId correlation authority (동결결정3, Fable a),
- *   - count === sessions.length (the legacy projection count, NOT peers.length;
- *     Fable d),
- *   - three DISTINCT arrays (peers / socketOnly / diagnostics), never merged,
+ *   - TWO sections only: citizens (peers) + diagnostics. The record is the sole
+ *     identity axis — no `sessions` projection, no `socketOnly` section, no
+ *     `controlDir`, no socketPath anywhere in payload or text (#50 C4),
+ *   - a record-less socket surfaces ONLY as a `record-less-socket` diagnostic,
+ *     visible in both text and JSON,
  *   - NO verb-routing field anywhere in the JSON (deep key scan) AND no
  *     verb-routing WORD in the text render (Fable e①: a "resumable peers" title
  *     leaks routing a key scan would miss),
  *   - diagnostics appear in BOTH the text and the JSON,
  *   - empty sections render "(none)"; an `unsupported` peer is shown (never
- *     dropped); socket-only enrich null renders "(not enriched)",
+ *     dropped),
+ *   - diagnostics sharing one (kind + message) AGGREGATE in text (F8) — including
+ *     record-less-socket groups, which share a message per liveness,
  *   - WIRING guard (Fable e②/6): the MCP handler and pi-native tool call
- *     listEntwurfFacts + renderEntwurfPeers, and the old getLiveSessions is gone from the bridge.
+ *     listEntwurfFacts + renderEntwurfPeers; getLiveSessions and the
+ *     `/entwurf-sessions` socket-scan command stay gone from both surfaces.
  *
  * No IO — the facts are fabricated; only the wiring guard reads the bridge source
  * as text (a static assertion, not an execution).
@@ -29,12 +29,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { EntwurfFactsResult } from "../pi-extensions/lib/entwurf-fact-provider.ts";
-import type { PeerFact, SocketOnlyFact } from "../pi-extensions/lib/entwurf-facts.ts";
+import { type EntwurfFactsResult, recordLessSocketMessage } from "../pi-extensions/lib/entwurf-fact-provider.ts";
+import type { PeerFact } from "../pi-extensions/lib/entwurf-facts.ts";
 import { renderEntwurfPeers } from "../pi-extensions/lib/entwurf-peers-render.ts";
 import type { FactLiveness } from "../pi-extensions/lib/entwurf-v2-contract.ts";
 import type { MetaBackendV2 } from "../pi-extensions/lib/meta-session.ts";
-import { controlSocketPath } from "../pi-extensions/lib/socket-discovery.ts";
+import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -43,8 +43,9 @@ function ok(label: string, cond: boolean): void {
 	passed++;
 }
 
-const DIR = "/fake/entwurf-control";
 const FORBIDDEN = ["sendable", "resumable", "dispatch", "action", "transport", "mailboxDeliverable"];
+// #50 C4: socket-shaped identity must not reappear on this surface.
+const FORBIDDEN_C4_KEYS = ["sessions", "socketOnly", "controlDir", "socketPath", "count"];
 
 function peer(gardenId: string, backend: MetaBackendV2, liveness: FactLiveness): PeerFact {
 	return {
@@ -59,12 +60,8 @@ function peer(gardenId: string, backend: MetaBackendV2, liveness: FactLiveness):
 	};
 }
 
-function socketOnly(
-	gardenId: string,
-	liveness: SocketOnlyFact["liveness"],
-	over: Partial<SocketOnlyFact> = {},
-): SocketOnlyFact {
-	return { kind: "socket-only", gardenId, liveness, cwd: null, model: null, idle: null, infoError: null, ...over };
+function recordLessDiag(gardenId: string, liveness: SocketLiveness) {
+	return { kind: "record-less-socket" as const, gardenId, liveness, message: recordLessSocketMessage(liveness) };
 }
 
 /** Recursively collect every object key in a JSON-able value. */
@@ -80,12 +77,12 @@ function allKeys(value: unknown, acc: Set<string> = new Set()): Set<string> {
 	return acc;
 }
 
-const GID_PI_ALIVE = "20260611T111111-aaaaaa"; // pi alive → in sessions
-const GID_PI_DEAD = "20260611T222222-bbbbbb"; // pi dead (dormant) → NOT in sessions
-const GID_PI_INDET = "20260611T333333-cccccc"; // pi indeterminate → NOT in sessions
-const GID_CLAUDE = "20260611T444444-dddddd"; // claude unsupported → shown, NOT in sessions
-const GID_SOCK_ALIVE = "20260611T555555-eeeeee"; // socket-only alive → in sessions
-const GID_SOCK_DEAD = "20260611T666666-ffffff"; // socket-only dead → shown, NOT in sessions
+const GID_PI_ALIVE = "20260611T111111-aaaaaa";
+const GID_PI_DEAD = "20260611T222222-bbbbbb";
+const GID_PI_INDET = "20260611T333333-cccccc";
+const GID_CLAUDE = "20260611T444444-dddddd"; // claude unsupported → shown, never dropped
+const GID_SOCK_ALIVE = "20260611T555555-eeeeee"; // record-less alive → diagnostic
+const GID_SOCK_DEAD = "20260611T666666-ffffff"; // record-less dead → diagnostic (distinct group)
 
 function main(): void {
 	const result: EntwurfFactsResult = {
@@ -96,50 +93,58 @@ function main(): void {
 				peer(GID_PI_INDET, "pi", "indeterminate"),
 				peer(GID_CLAUDE, "claude-code", "unsupported"),
 			],
-			socketOnly: [
-				socketOnly(GID_SOCK_ALIVE, "alive", { cwd: "/work/cos", model: "gpt-5.4", idle: false }),
-				socketOnly(GID_SOCK_DEAD, "dead", { infoError: "get_info failed" }),
+			// The provider has already folded these into diagnostics; the render layer
+			// never re-renders them as a section (facts carry them for the union math).
+			recordLessSockets: [
+				{ gardenId: GID_SOCK_ALIVE, liveness: "alive" },
+				{ gardenId: GID_SOCK_DEAD, liveness: "dead" },
 			],
 		},
-		diagnostics: [{ kind: "socket-symlink-rejected", gardenId: "20260611T999999-999999", message: "symlink rejected" }],
+		diagnostics: [
+			{ kind: "socket-symlink-rejected", gardenId: "20260611T999999-999999", message: "symlink rejected" },
+			recordLessDiag(GID_SOCK_ALIVE, "alive"),
+			recordLessDiag(GID_SOCK_DEAD, "dead"),
+		],
 	};
 
-	const { text, payload } = renderEntwurfPeers(result, DIR);
+	const { text, payload } = renderEntwurfPeers(result);
 
-	// ── legacy sessions = projection of facts (alive only) ──────────────────────
-	const sessGids = payload.sessions.map((s) => s.sessionId);
-	ok("sessions: alive pi citizen included", sessGids.includes(GID_PI_ALIVE));
-	ok("sessions: alive socket-only included", sessGids.includes(GID_SOCK_ALIVE));
-	ok("sessions: dead pi citizen NOT included", !sessGids.includes(GID_PI_DEAD));
-	ok("sessions: indeterminate pi citizen NOT included", !sessGids.includes(GID_PI_INDET));
-	ok("sessions: unsupported claude citizen NOT included", !sessGids.includes(GID_CLAUDE));
-	ok("sessions: dead socket-only NOT included", !sessGids.includes(GID_SOCK_DEAD));
-	ok("sessions: exactly the 2 alive entries", payload.sessions.length === 2);
-
-	// ── socketPath SSOT (Fable a) ───────────────────────────────────────────────
-	ok(
-		"sessions: socketPath built via controlSocketPath (SSOT, no drift)",
-		payload.sessions.every((s) => s.socketPath === controlSocketPath(s.sessionId, DIR)),
-	);
-
-	// ── count = legacy projection length, NOT peers.length (Fable d) ────────────
-	ok("count === sessions.length (projection, not peers)", payload.count === payload.sessions.length);
-	ok("count is not peers.length (would be 4)", payload.count !== payload.peers.length);
-
-	// ── three distinct arrays, never merged ─────────────────────────────────────
-	ok(
-		"payload keeps peers / socketOnly / diagnostics as three arrays",
-		Array.isArray(payload.peers) && Array.isArray(payload.socketOnly) && Array.isArray(payload.diagnostics),
-	);
+	// ── #50 C4: two arrays only — citizens + diagnostics ────────────────────────
+	{
+		const topKeys = Object.keys(payload).sort();
+		assert.deepStrictEqual(topKeys, ["diagnostics", "peers"], `payload keyset drift: ${topKeys.join(",")}`);
+		ok("C4: payload is exactly { peers, diagnostics }", true);
+	}
 	ok("peers carry all 4 citizens (unsupported NOT dropped)", payload.peers.length === 4);
 	ok(
 		"unsupported citizen present in peers",
 		payload.peers.some((p) => p.gardenId === GID_CLAUDE && p.liveness === "unsupported"),
 	);
-	ok("socketOnly carries both (dead NOT dropped)", payload.socketOnly.length === 2);
+
+	// ── #50 C4: no socket-shaped identity anywhere in JSON or text ──────────────
+	const keys = allKeys(payload as unknown);
+	for (const f of FORBIDDEN_C4_KEYS) {
+		ok(`C4: JSON has no '${f}' key (socket is transport, never identity)`, !keys.has(f));
+	}
+	ok("C4: text has no socket-only section title", !text.includes("Socket-only control sockets"));
+	ok("C4: text carries no .sock path", !text.includes(".sock"));
+
+	// ── the record-less sockets surface as diagnostics (both surfaces) ──────────
+	ok(
+		"record-less alive socket → record-less-socket diagnostic in JSON",
+		payload.diagnostics.some((d) => d.kind === "record-less-socket" && d.gardenId === GID_SOCK_ALIVE),
+	);
+	ok(
+		"record-less alive diagnostic line in text (gid + liveness + cause)",
+		text.includes(`- record-less-socket ${GID_SOCK_ALIVE} (alive):`) && text.includes("no meta-record claims"),
+	);
+	ok("record-less alive diagnostic names M1 (#50 F10 discipline)", text.includes("meta-bridge-migrate-v3 migrate"));
+	ok(
+		"record-less dead socket keeps its own (stale) line — distinct message group",
+		text.includes(`- record-less-socket ${GID_SOCK_DEAD} (dead):`),
+	);
 
 	// ── NO verb-routing field in JSON (deep key scan) ───────────────────────────
-	const keys = allKeys(payload as unknown);
 	for (const f of FORBIDDEN) {
 		ok(`JSON has no '${f}' key (facts-only, no verb-routing)`, !keys.has(f));
 	}
@@ -152,33 +157,21 @@ function main(): void {
 
 	// ── diagnostics visible in BOTH surfaces ────────────────────────────────────
 	ok(
-		"diagnostic visible in JSON",
-		payload.diagnostics.length === 1 && payload.diagnostics[0]?.kind === "socket-symlink-rejected",
+		"symlink diagnostic visible in JSON",
+		payload.diagnostics.some((d) => d.kind === "socket-symlink-rejected"),
 	);
-	ok("diagnostic visible in text", text.includes("socket-symlink-rejected"));
+	ok("symlink diagnostic visible in text", text.includes("socket-symlink-rejected"));
 
-	// ── three section titles present + ordering ─────────────────────────────────
+	// ── two section titles present ──────────────────────────────────────────────
 	ok("text has the citizens section", text.includes("Garden citizens (meta-record):"));
-	ok("text has the socket-only section", text.includes("Socket-only control sockets (no meta-record):"));
 	ok("text has the diagnostics section", text.includes("Diagnostics:"));
 
-	// ── empty sections render "(none)" + enrich label ──────────────────────────
+	// ── empty sections render "(none)" ─────────────────────────────────────────
 	{
-		const empty = renderEntwurfPeers({ facts: { peers: [], socketOnly: [] }, diagnostics: [] }, DIR);
+		const empty = renderEntwurfPeers({ facts: { peers: [], recordLessSockets: [] }, diagnostics: [] });
 		ok("empty diagnostics render '(none)' (trust signal, not hidden)", empty.text.includes("Diagnostics:\n  (none)"));
 		ok("empty citizens render '(none)'", empty.text.includes("Garden citizens (meta-record):\n  (none)"));
-		ok("empty surface → count 0, no sessions", empty.payload.count === 0 && empty.payload.sessions.length === 0);
 	}
-	ok(
-		"socket-only enrich appears in text",
-		text.includes(`${GID_SOCK_ALIVE}  liveness=alive  cwd=/work/cos  model=gpt-5.4  idle=no`),
-	);
-	ok(
-		"socket-only infoError appears in text",
-		text.includes(
-			`${GID_SOCK_DEAD}  liveness=dead  cwd=(not enriched)  model=(not enriched)  infoError=get_info failed`,
-		),
-	);
 	ok("unsupported peer line shown in text", text.includes(`${GID_CLAUDE}  backend=claude-code  liveness=unsupported`));
 
 	// ── human text is bounded: full payload remains structured, not pasted into content ──
@@ -186,7 +179,7 @@ function main(): void {
 		const manyPeers = Array.from({ length: 40 }, (_, i) =>
 			peer(`20260612T0000${String(i).padStart(2, "0")}-aaaaaa`, "claude-code", "unsupported"),
 		);
-		const bounded = renderEntwurfPeers({ facts: { peers: manyPeers, socketOnly: [] }, diagnostics: [] }, DIR);
+		const bounded = renderEntwurfPeers({ facts: { peers: manyPeers, recordLessSockets: [] }, diagnostics: [] });
 		ok("bounded text omits older entries when peer list is large", bounded.text.includes("older entries omitted"));
 		ok("bounded text shows latest entries", bounded.text.includes("20260612T000039-aaaaaa"));
 		ok("bounded text omits oldest entry", !bounded.text.includes("20260612T000000-aaaaaa  backend="));
@@ -210,7 +203,10 @@ function main(): void {
 			filename: "20260612T999998-dddddd.meta.json",
 			message: "body/filename drift: this one is different.",
 		};
-		const agg = renderEntwurfPeers({ facts: { peers: [], socketOnly: [] }, diagnostics: [...uniform, distinct] }, DIR);
+		const agg = renderEntwurfPeers({
+			facts: { peers: [], recordLessSockets: [] },
+			diagnostics: [...uniform, distinct],
+		});
 		ok("uniform diagnostics collapse to one ×N line", agg.text.includes("meta-record-read-error ×177:"));
 		ok("the shared message appears exactly once in the text", agg.text.split(sharedMsg).length - 1 === 1);
 		ok("the aggregated line samples subjects and counts the omitted rest", agg.text.includes("… +174 more"));
@@ -221,7 +217,18 @@ function main(): void {
 		ok("payload still carries every individual diagnostic", agg.payload.diagnostics.length === 178);
 	}
 
-	// ── WIRING guard: bridge handler calls the provider+render, not getLiveSessions ──
+	// ── F8 applies to record-less-socket too: same liveness ⇒ one aggregated line ──
+	{
+		const gids = Array.from({ length: 5 }, (_, i) => `20260613T00000${i}-eeeeee`);
+		const agg = renderEntwurfPeers({
+			facts: { peers: [], recordLessSockets: gids.map((g) => ({ gardenId: g, liveness: "dead" as const })) },
+			diagnostics: gids.map((g) => recordLessDiag(g, "dead")),
+		});
+		ok("5 dead record-less sockets collapse to one ×5 line", agg.text.includes("record-less-socket ×5:"));
+		ok("the aggregated record-less line samples gids", agg.text.includes(gids[0] as string));
+	}
+
+	// ── WIRING guard: both surfaces call the provider+render; the socket-scan lane is gone ──
 	{
 		const here = path.dirname(fileURLToPath(import.meta.url));
 		const bridgeSrc = readFileSync(path.join(here, "..", "mcp", "entwurf-bridge", "src", "index.ts"), "utf8");
@@ -230,10 +237,6 @@ function main(): void {
 		ok("wiring: bridge calls renderEntwurfPeers(", bridgeSrc.includes("renderEntwurfPeers("));
 		ok("wiring: native pi tool calls listEntwurfFacts(", nativeSrc.includes("listEntwurfFacts("));
 		ok("wiring: native pi tool calls renderEntwurfPeers(", nativeSrc.includes("renderEntwurfPeers("));
-		ok(
-			"wiring: native pi tool description no longer claims socket-only discovery",
-			!nativeSrc.includes("List live sessions that expose a control socket. Returns sessionIds only"),
-		);
 		ok(
 			"wiring: bridge does not paste full JSON payload into human text",
 			!bridgeSrc.includes("JSON.stringify(payload)"),
@@ -245,13 +248,23 @@ function main(): void {
 		// `\bname\s*\(` catches a definition OR a call (tolerating a space before the
 		// paren, GPi Q4); a bare prose mention in a removal-note comment (no paren) is
 		// allowed — the guard targets the second scan, not the word.
+		for (const [label, src] of [
+			["bridge", bridgeSrc],
+			["native pi surface", nativeSrc],
+		] as const) {
+			ok(
+				`wiring: no getLiveSessions definition/call in ${label} (no second scan)`,
+				!/\bgetLiveSessions\s*\(/.test(src),
+			);
+			ok(
+				`wiring: no isSocketAlive definition/call in ${label} (legacy probe removed)`,
+				!/\bisSocketAlive\s*\(/.test(src),
+			);
+		}
+		// #50 C4: the socket-scan operator command is gone from the pi-native surface.
 		ok(
-			"wiring: no getLiveSessions definition/call in bridge (no second scan)",
-			!/\bgetLiveSessions\s*\(/.test(bridgeSrc),
-		);
-		ok(
-			"wiring: no isSocketAlive definition/call in bridge (legacy probe removed)",
-			!/\bisSocketAlive\s*\(/.test(bridgeSrc),
+			"wiring: no /entwurf-sessions command registration (socket-scan lane deleted)",
+			!nativeSrc.includes('registerCommand("entwurf-sessions"'),
 		);
 	}
 
