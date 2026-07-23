@@ -14,7 +14,7 @@
   - `4b7ea16` cut 2 — name-authority + registry: name grammar 전체(`buildSessionName`/`parseSessionName`/`slugifyTitle`/`isKnownProviderModel`)·registry reader·v1 spawn guard·`pi/entwurf-targets.json`+pack manifest+`setup:links`/`ensure_agent_dir_symlinks` 삭제. `getRegistryRouting`(caller-supplied tuple)+`ResolvedTarget`만 생존. identity 게이트 87→29 단언.
   - `d0b3b25` cut 3 — dormant rail caller-edge: `formatSenderInfoBlock` SSOT 신설(수신측 인라인 합성 추출) + `resumeSpawnBg`가 resume prompt에 같은 블록을 append. **판단 기록**: NEXT 스케치는 "prepend"였으나 live rail 수신측 합성과 동형(append, 한 포맷터)으로 랜딩 — 교차 리뷰 대상.
   - `d5fcd2b` cut 4 (tail) — 목표 3 게이트화: smoke-pi-attach P8 — 실물 `enrichMcpServersWithEnvelope`가 만든 env 그대로 브릿지를 띄워 발신이 **host record 신원**(sessionId=host gardenId, agentId=entwurf/<model>, origin pi-session)으로 착지함을 단언 (20→27).
-  - **LIVE 실측 완료 (오푸스 2026-07-23, GLG 기준 적용 후).** `LIVE=1 smoke-entwurf-v2-spawn-resume-live` **23 checks PASS** — 재저작 후 최초 실행이 GREEN. 실제 pi resume + 실모델 턴(assistant nonce 응답) + socket-alive 관측 + lock 1회 해제까지. **dormant rail 실배달이 증명됐다.** `SMOKE_RGG_POSITIVE=1 smoke-resident-garden-guard` **PASS=22 / FAIL=1** — BIRTH/ATTACH/REPLACEMENT 전부 PASS, POSITIVE의 FAIL은 이 호스트에 `openai-codex` API key가 없어서(코드 회귀 아님, `No API key found` 실측). 라이브 store 무오염 확인(temp 격리 작동).
+  - **LIVE 실측 완료 (오푸스 2026-07-23, GLG 기준 적용 후).** `LIVE=1 smoke-entwurf-v2-spawn-resume-live` **23 checks PASS** — 재저작 후 최초 실행이 GREEN. 실제 pi resume + 실모델 턴(assistant nonce 응답) + socket-alive 관측 + lock 1회 해제까지. **dormant rail 실배달이 증명됐다.** `SMOKE_RGG_POSITIVE=1 smoke-resident-garden-guard` **PASS=22 / FAIL=1** — BIRTH/ATTACH/REPLACEMENT 전부 PASS. ~~POSITIVE의 FAIL은 API key 부재~~ → **오진이었다(아래 부수 발견 2에서 정정): RGG의 temp 격리가 `auth.json`까지 잘랐던 것.** auth 시드 수선 후 25/25. 라이브 store 무오염 확인(temp 격리 작동).
   - **GLG 기준 (2026-07-23): 배달 검증은 테스트 하네스와 라이브 테스트가 한다 — "GLG가 했냐 안 했냐"가 의미 없어야 한다. 배선이 없어 못 한 것은 OK, 배선이 있는데 안 돌린 것은 우리가 남긴 구멍이다.** 이 기준으로 위 2종을 즉시 돌렸고 곧바로 F6/F7이 나왔다. **"실모델 턴 비용이 드니 승인 때 돌리자"는 판단(페블 제안 + 오푸스 승인)이 검증을 GLG의 손에 묶은 지점이었다** — 되풀이 금지.
   - **그 실행에서 관측면 구멍 5건(F6~F10)이 나왔고, 페블이 전항 수선 완료 (2026-07-23) — 결과는 아래 「관측면 재조사 — 결과」.** 요지였던 것: 게이트가 자기 계약을 못 보고(F6), 정확한 진단이 도달 불가가 되고(F7), 거부가 틀린 원인을 지목하며(F10), 진단이 집계·값 표시를 안 한다(F8/F9).
   - **교차 검수 결과 (오푸스, 결함 5건 — 전부 실재 확인)**: 승인, 되돌릴 것 없음. §9와 P8이 자기충족이 아님을 fixture 수준까지 확인(§9는 실제 record store+transcript로 6→7 거부 경로, P8은 socket 도착 raw line을 파싱해 sender 검증 + ambient 신원 제거로 오탐 차단), 삭제 심볼 19개 전수 sweep 잔존 0, `updateSessionEnv`가 자식 env를 덮으므로 spawn env 상속에 신원 오염 없음. **`770d8dd`로 F1/F3/F5 반영** — F1 README:525가 삭제된 `pi/entwurf-targets.json`을 "spawn target allowlist"로 링크(게이트 편차 기록이 이미 정정한 오해가 최다 열람 표면에 생존), F3 §9의 headerless fixture 부재, F5 죽은 `ensure_agent_dir_symlinks`를 근거로 든 주석 2곳. **F2는 C4 이월**(아래 5번), **F4는 수용 유지**(레이아웃 드리프트는 조용한 GREEN이 아니라 타임아웃 실패 + 승격 조건 LIVE PASS가 커버).
@@ -107,6 +107,53 @@ M1 계약("v2를 만나는 순간 M1을 이름으로 지목")이 이제 **경로
 - `smoke-live-delivery`(현재 코드 브릿지 + 라이브 store 배달 게이트) — 오푸스 제안, 미구현. 라이브 시민에게 실메시지를 쏘는 설계 문제가 있어 C4/M1 표면 논의와 함께.
 - store-doctor 집계 없음은 **판단**이다(위 표). 뒤집으려면 check-meta-doctor-oracle(73s)와 smoke-meta-* 셸 게이트들의 출력 단언을 같이 옮겨야 한다.
 - C4 몫으로 남는 것: 표면 의미론(socket을 identity 축에서 제거) + F2(`wantsReply` 슬롯). "거부를 하나의 관측면으로"는 이번 수선으로 대부분 선반영됨 — C4 초안에서 잔여분만 다룬다.
+
+## 🔵 오푸스 교차 검수 (2026-07-23 심야) — 승인 + 남은 빈 곳 15건
+
+**검수 결론: 관측면 수선 3커밋 승인. 되돌릴 것 없다.** 독립 full check `EXIT=0`(파이프 없이). 페블 보고가 실측과 일치하고, 수선이 자기충족이 아님을 라이브에서 재현했다.
+
+| 검증 | 방법 | 결과 |
+|---|---|---|
+| F7 수선 | **내가 3/3 유령 경로를 뽑았던 그 명령 재실행** | 3/3 `transcriptPath = None` — 확정 |
+| F8/F9 수선 | 현재 코드 브릿지를 새로 띄워 라이브 `entwurf_peers` | **177줄 → 1줄** `×181` 집계 + `(got number 2)` 값 표시, 시민 줄 생존 |
+| F10 수선 | D7/D8 게이트 독해 | 자기충족 아님 — 실제 v2 body를 써서 dist를 MCP stdio 구동, M1 문자열 **포함** 단언 + 거짓 원인 **부재** 부정 단언 |
+| F6 수선 | RGG POSITIVE 독해 | diff 증명(null→실파일 + `recordUpdatedAt` 전진)으로 재저작. **F7 수선이 birth를 null로 만들어야 성립** — 두 수선이 서로를 강화한다 |
+| 라이브 store | 전수 스캔 | V3 1(페블 pi) + v2 181 = 182. ACP 오염 2건 제거 확인 |
+
+**부수 실측 1건 — 라이브 배달은 현재 코드로 작동한다.** F10 재현을 시도하다 `entwurf_v2 control-socket → sent`로 페블 세션에 실제로 닿았다(메시지 `probe`, 무해). control-socket rail 라이브 실배달의 첫 증거다.
+
+### 남은 빈 곳 — 6축 15건
+
+**Ⅰ. 검증이 아직 안 닿은 곳 → 1·2·3 닫힘 (페블 2026-07-24 마무리 실측)**
+1. ~~aggregate `release-gate`가 한 달간 안 돌았다~~ → **닫힘: `LIVE=1 ./run.sh release-gate /tmp/entwurf-rg-scratch-20260724` — MUST PASS=16 FAIL=0 SKIP=0 + BEHAVIOR PASS=1 FAIL=0, EXIT=0 (2026-07-24).** record 시대 최초의 aggregate GREEN. MUST step 수는 17→16(구 substrate smoke 삭제분 반영). "개별 GREEN의 합 ≠ 집계 GREEN" 가정은 이번엔 성립하지 않았지만, 그 가정을 검증 없이 들고 있던 한 달이 문제였다 — 아래 「기계가 말하는 장치」가 근본 처방.
+2. ~~`check-bridge` 실행 기록이 없다~~ → **닫힘: `./run.sh check-bridge` EXIT=0** (direct MCP smoke 5 verbs + test.sh). 관찰은 유효했다: `pnpm check` 명령줄에 없고 **release-gate의 MUST step으로만** 돈다 — 이번 aggregate 실측에도 포함됨.
+3. ~~CI 전용 2게이트 미실행~~ → **닫힘 (2026-07-24): `check-pack-install` EXIT=0 + `ENTWURF_REQUIRE_DOCKER=1 check-install-container` EXIT=0** — 관측면 수선 3커밋 위에서 로컬 실측. 새 후보 tgz sha256 `f110dd16…`(트리가 바뀌었으니 `82656026…`에서 이동한 것이 정상), Node 24 Linux consumer clean.
+4. `smoke-agy-native-push-live` 미실행(별도 acceptance axis, `AGY_CONVERSATION_ID` 필요 — **GLG가 살아있는 agy 대화 id를 주면 닫힌다**). 라이브에 antigravity record 5개가 있다.
+
+**Ⅱ. 문서 정합성 — 같은 패턴이 두 번째다**
+5. **NEXT 17줄이 stale이다.** 아직 *"POSITIVE의 FAIL은 openai-codex API key가 없어서"*인데, **91줄이 그걸 오진으로 정정했다**(원인은 RGG 격리가 `auth.json`을 자른 것). 같은 파일 안에서 두 설명이 충돌한다 — 17줄만 읽는 사람은 틀린 원인을 믿는다.
+6. **패턴 경고**: 이건 F1(README:525 죽은 링크)과 **같은 형태**다 — *새 사실을 추가하면서 옛 문장을 안 지운다.* 두 번 나왔으니 우연이 아니다. **수선 커밋마다 "이 발견이 무효화한 기존 문장"을 찾는 단계를 규율에 넣어라.**
+7. ~~오염 record 백업이 scratchpad(휘발성)에 있다~~ → **닫힘: `~/.pi/agent/meta-sessions.smoke-backup-20260723/`로 내구화** (store의 형제 디렉토리 — readdir 스캔 비대상, 2026-07-24).
+
+**Ⅲ. 표면 의미론 — C4 재료 (이번에 새로 드러남)**
+8. **익명 배달이 그냥 나간다.** `ENTWURF_BRIDGE_REQUIRE_META_SENDER` 없이 셸에서 브릿지를 띄우면 **누구나 라이브 시민에게 익명으로 배달할 수 있다** — 내가 실제로 성공시켰다. 그 env는 Claude Code user-scope install만 설정한다. 의도된 설계일 수 있으나 **"무엇이 identity로 보이고 무엇이 통과하는가"는 C4 질문 한복판**이다.
+9. F2(spawn-bg plan의 `wantsReply` 슬롯 부재) 미착수.
+10. C4 본체(socket을 identity 축에서 제거 + 거부의 관측면 통합) 미착수.
+
+**Ⅳ. 재현 가능성 갭**
+11. **F10을 라이브에서 재현할 방법이 없다.** marker는 부모 pid 체인으로 찾는데 셸에서 띄운 브릿지는 체인이 끊겨 marker를 못 만난다(실측). D7/D8이 fixture로 잡지만 **라이브 경로가 없다** — `smoke-live-delivery` 설계 시 핵심 제약.
+12. **다음 오푸스 세션은 F10을 실제로 만난다.** 이 세션의 브릿지는 18:11:16 시작 = C2 이전 코드였다. 새 세션은 수선된 코드로 뜨고, Claude Code record는 여전히 v2다 — **수선 확인의 자연 기회**다. 첫 `entwurf_v2` 호출의 에러 문구를 그대로 기록할 것.
+
+**Ⅴ. 라이브 상태 (M1이 여는 문)**
+13. 라이브 store 182개, 세션마다 증가. mixed 상태(V3 1 + v2 181) 지속.
+14. 형제 채널 비대칭 여전 — pi 쪽은 V3로 붙고, Claude Code 쪽은 v2라 **자기 자신이 안 보인다**. 교차 검수가 아직 GLG 수동 릴레이다.
+15. M1 미착수. 위 13·14와 Ⅲ-8의 상당 부분이 여기서 풀린다.
+
+### 🔴 가장 예리한 것 — A4 규칙만으로는 A3형 구멍이 다시 뚫린다
+
+A3(MUST-tier 라이브 3종이 C2 이후 죽어 있었는데 아무도 몰랐다)의 진짜 교훈은 **"MUST tier"라는 딱지가 실행을 보장하지 못했다**는 것이다. A4를 VERIFY.md에 고정한 건 옳지만 **그건 사람이 지키는 규칙**이고, A3는 정확히 사람이 안 지켜서 생긴 구멍이다. Ⅰ-1(aggregate 한 달 미실행)이 지금 **같은 형태로 살아있다** — 규칙을 쓴 그 순간에도.
+
+**필요한 것은 기계가 말하는 장치다**: 게이트별 마지막 PASS 시각을 기록하고, 커밋이 건드린 rail과 대조해 *"이 커밋은 X를 건드렸는데 X를 덮는 MUST 게이트의 마지막 PASS가 N일 전이다"*를 **자동으로 말하게** 하라. 그게 없으면 다음 대공사에서 또 한 달이 지난다. **다음 세션의 최우선 후보로 제안한다.**
 
 ## LOCKED PROTOCOL (요지)
 

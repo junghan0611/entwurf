@@ -42,7 +42,7 @@ Verification here is not a benchmark. In production we exchange short turns and 
 
 > The aggregate release gate does not own a live agy conversation id, so agy's real native-push round trip is a separate acceptance axis: three fail-loud doctors plus `LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live`, followed by a fresh-conversation sender/reply check after package install. Its deterministic install/sender gates are already inside `pnpm check`; do not misreport the aggregate gate as live agy evidence.
 >
-> The authoritative per-cut counts live in BASELINE.md's HISTORY and CHANGELOG/git, not inline here (they drift against `run.sh`). Most recent recorded aggregate floor: **2026-06-27 — MUST 17/0/0 + BEHAVIOR 1/0**.
+> The authoritative per-cut counts live in BASELINE.md's HISTORY and CHANGELOG/git, not inline here (they drift against `run.sh`). Most recent recorded aggregate floor: **2026-07-24 — MUST 16/0/0 + BEHAVIOR 1/0** (record-era first aggregate; the step count moved 17→16 with the v2-cutover smoke retirements).
 
 ### Artifact / host certification matrix — #51 repair cut
 

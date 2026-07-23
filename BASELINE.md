@@ -274,6 +274,16 @@ prompt, and if so quote the visible text exactly:
 
 # HISTORY (pointer)
 
+2026-07-24 record-era aggregate floor: `LIVE=1 ./run.sh release-gate` measured
+**MUST 16/0/0 + BEHAVIOR 1/0, EXIT=0** on the `repair/v2-core-debt` branch after
+the #50 C1–C3 cuts and the observability repair — the first aggregate run since
+2026-06-27 (every individual smoke had been green, but the two-tier summary and
+exit code of the aggregate command itself had gone unverified for the whole
+hard-cut window; three MUST live smokes were found dead on the pre-C2 address
+contract and re-authored in the same pass). The step count moved 17→16 with the
+v2-cutover smoke retirements. Evidence log: `/tmp/pi-tmux-release-gate.log`
+(scratch `/tmp/entwurf-rg-scratch-20260724`).
+
 2026-07-22 repair evidence: Linux artifact-consumer C is committed locally as
 `328c66e` (not yet pushed at the time of this baseline update); B/B2 direct-native
 observations and the exec-only production cut are documented in issue #51 and
@@ -303,4 +313,4 @@ baselines — live in **CHANGELOG.md and git history**, including the gate names
 their era (several of which, e.g. `smoke-all` / `smoke-async-resume` /
 `smoke-compaction-policy` / `sentinel` / `xt-tool-surface`, were retired in the
 v2 cutover). The live calibration reference is the current release floor in
-[VERIFY.md](./VERIFY.md) §0A — most recent: **2026-06-27 MUST 17/0/0 + BEHAVIOR 1/0**.
+[VERIFY.md](./VERIFY.md) §0A — most recent: **2026-07-24 MUST 16/0/0 + BEHAVIOR 1/0**.
