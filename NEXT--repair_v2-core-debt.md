@@ -4,6 +4,19 @@
 >
 > 설계문서(HOP.md, .agent-reports/)는 폐기했다 — 내용은 git history와 #50에 보존. 종이보다 코드. 터질 수 있는 지점을 아는 채로 터지는 건 실패가 아니다.
 
+## NOW (2026-07-24 저녁)
+
+- Current: **세 문장 목표 ①②③ 전부 코드로 성립.** C4 4 cut + docs 랜딩, aggregate `LIVE=1 release-gate` MUST 16/16 + BEHAVIOR 1/1 EXIT=0. 총 21커밋 push 대기.
+- Next: (1) **오푸스 교차 검수** — 대상은 C4 6커밋(`7ab0c7b`~`924f7d9`)과 「상태 2026-07-24」의 판단 기록 3건. A4 선행 조건(라이브 실측)은 이미 충족 → (2) GLG: push 여부 + **M1 방아쇠** → (3) M1+H7 레인 (runbook은 §6, "V3-already" 전제).
+- 대기: Ⅰ-4 `smoke-agy-native-push-live`(살아있는 `AGY_CONVERSATION_ID` 필요), 「기계가 말하는 장치」(게이트별 마지막 PASS × rail 대조 — 오푸스 최우선 후보, 덧셈 레인이라 C4와 분리해 둠. aggregate 실측 2회가 이미 데이터 포인트).
+- Do not touch: fresh sibling mint/#47, Cortex/#48, 0.12.9 ACP 의존성, backend auth, transcript hydration, 라이브 `install-meta-bridge`(M1 전 금지).
+
+## 상태 (2026-07-24 저녁)
+
+- **C4 랜딩 — 목표 ② "entwurf는 socket을 모른다" 코드로 성립 (페블, 오푸스 검수 대기).** 4 cut + 문서 수선, 커밋마다 full check GREEN: `be12348` cut① F2(spawn-bg plan `wantsReply` → dormant `<sender_info>` live rail 동형) · `d76d9f7` cut② dispatch rail(A1 narrow 삭제 — record-less socket은 모든 intent pre-probe `record-less-socket` 거부, 원인+M1 명명; `socket-only-no-resume-authority` 은퇴, +212/−312) · `5d99173` cut③ 목록 표면(legacy `sessions` projection·`controlDir`·socketOnly 섹션·per-socket get_info enrich·`/entwurf-sessions` 삭제 — peers = 시민+진단 2섹션, record-less는 F8 집계 진단, +352/−518) · `bc3f72d` cut④ 발신 신원(익명 발신 기본 거부, `ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1`이 유일한 문서화 hatch, REQUIRE env 은퇴 — installer/doctor/oracle/컨테이너 동반 재저작, D11/D12 신설) · `924f7d9` docs(README의 A1 시대 문장 3곳+dispatch 표, **pre-C2 `--session-id` launcher 섹션**, DELIVERY 행 — "무효화된 기존 문장 찾기" 규율 적용).
+- **C4 실측 (2026-07-24)**: `check-pack-install` EXIT=0 + `ENTWURF_REQUIRE_DOCKER=1 check-install-container` EXIT=0(새 후보 tgz sha256 `d526378a…`) + **aggregate `LIVE=1 release-gate` MUST PASS=16 FAIL=0 SKIP=0 + BEHAVIOR PASS=1, EXIT=0** (record 시대 두 번째 aggregate GREEN — "게이트 신선도 장치"의 둘째 데이터 포인트). matrix-live 20/20: **실제 record-less resident의 live socket이 두 intent 모두 pre-probe 거부 + lock 무접촉 + 렌더가 record 권위와 M1을 명명** — C4 강등의 라이브 증명. spawn-resume-live 23/23(openai-codex/gpt-5.4 구독 1턴) — wantsReply 실린 dormant rail 실배달.
+- 판단 기록(오푸스 검토 대상): ① `entwurf_self`의 socketPath/mailboxPath 라인은 자기 transport 진단으로 보고 C4 범위 밖 유지, ② record-less-socket을 **pre-probe**(null liveness)로 분류 — presence lstat은 liveness 측정이 아니라는 근거, A1의 "살아있는 걸 absent로 부르지 마라"는 `bad-target`과의 분리로 계승, ③ D12 hatch의 배달 본문은 external-mcp를 정직하게 명명.
+
 ## 상태 (2026-07-23)
 
 - 감산 커밋 3개 in, full `pnpm check` GREEN: `77483c5` socket path grammar 단일화(+fence `check-control-socket-path`), `e2eff3b` v1 sync-spawn dead island(entwurf-core.ts −469), **`d125946` C1 — V3 schema hard cut**(31파일 +995/−1560; V3-only production, frozen v1/v2 reader는 meta-migration.ts 단일 주소 + import-allowlist gate, strayness 양방향 게이트, M1 명령 이름 예약 `./run.sh meta-bridge-migrate-v3 migrate`).
@@ -31,7 +44,7 @@
 ## 목표 (GLG 2026-07-23 재확인) — 세 문장
 
 1. **pi가 meta-record로 entwurf가 동작한다.** → C2로 코어 달성, **C3가 잔여 사슬을 걷었다** — 옛 권위(marker/name-tag/name grammar/header-scan/registry) 전부 삭제, record가 유일한 문.
-2. **entwurf는 socket 인터페이스를 아예 모른다.** record가 유일한 주소 축이고 socket은 dispatch 내부 transport일 뿐(PROTOCOL 3) — 사용자 표면(peers/facts/dispatch 의미론)에 socket이 identity로 비치지 않는다. → C4의 정의. **다음 걸음.**
+2. **entwurf는 socket 인터페이스를 아예 모른다.** record가 유일한 주소 축이고 socket은 dispatch 내부 transport일 뿐(PROTOCOL 3) — 사용자 표면(peers/facts/dispatch 의미론)에 socket이 identity로 비치지 않는다. → **C4 랜딩 (2026-07-24, 위 상태 참조) — 오푸스 검수만 남음.**
 3. **pi 뒤에 ACP로 붙은 클로드도 entwurf를 meta-record로 쓴다.** → **C3 tail로 게이트 고정** (smoke-pi-attach P8: 실물 enrich env → 브릿지 → 발신이 host record 신원으로 착지). PROTOCOL 8(pi host가 record 소유).
 
 main 승격은 **당분간 보류**(GLG 2026-07-23) — 브랜치에서 C3 → C4 → M1+H7까지 계속 간다.
@@ -51,10 +64,12 @@ main 승격은 **당분간 보류**(GLG 2026-07-23) — 브랜치에서 C3 → C
 
 이후 순서 — **순서 자체가 GLG 결정 대기**:
 
+> ~~오푸스 권고 (2026-07-23): `M1+H7`을 `C4`보다 먼저~~ → **사건으로 해소 (2026-07-24)**: GLG가 뺄셈(C4)을 지시했고 페블이 하루에 랜딩했다. 남은 큰 레인은 M1+H7 하나 — 아래 권고의 근거(지연 비용은 M1에만 쌓인다)는 그대로 유효하며 이제 가리키는 곳도 M1뿐이다. 원문 보존:
+>
 > **오푸스 권고 (2026-07-23): `M1+H7`을 `C4`보다 먼저.** 근거 넷 — ① 목표 ①이 실전에서 참이 되는 유일한 길이 M1이고 C4는 목표 ②(코드 청결)라 지연해도 비용이 안 쌓인다, ② 지연 비용은 M1 쪽에만 쌓인다(v2 record 실시간 증가), ③ **blackout 비용이 지금 가장 싸다** — 채널은 이미 끊겨 있어 지금 하면 추가 손실이 거의 없고 C4 뒤로 미루면 그때 다시 끊어야 한다, ④ C4의 dispatch/resolveTarget rail 변경은 살아있는 라이브 위에서 자르는 편이 안전하다. 반대 논거("C4가 M1의 관측면을 만든다")는 *migration 중 UX*이지 *migration 가능성*이 아니다 — M1은 C4 없이 성립한다. **연결 판단**: live rail repoint는 M1까지의 다리로만 값이 있다(repoint 기간만큼 v2 record가 더 늘어 M1의 짐이 커진다). M1 방아쇠가 가까우면 건너뛰고, 멀면 지금 채널을 살리는 값이 더 크다 — GLG가 M1 시점을 정하면 자동으로 풀린다.
 
 4. **C3 — DONE (4 cut + 교차 검수 + `770d8dd` 수선, 상태 참조).** 유일한 스펙 편차 2건은 기록됨: ① sender envelope는 prepend가 아니라 live rail 동형 append(한 포맷터), ② `PI_SHELL_ACP_*`는 관념명이었고 실물은 `ENTWURF_V2_RESUME_RESIDENT_SESSION_ENV` 하나(소비자는 C2 때 이미 사망 — env를 심고 아무도 안 읽던 상태를 삭제).
-5. **C4 — entwurf는 socket을 모른다 (진행 중, 목표 2의 구현. 표면 의미론 확정 2026-07-24 — GLG 위임: "초안 잡고 바로 작업", 사후 오푸스 검토)**:
+5. **C4 — entwurf는 socket을 모른다 (DONE 2026-07-24, 4 cut + docs — 상태 참조. 표면 의미론은 GLG 위임으로 확정, 사후 오푸스 검토 대기)**. 아래 표가 랜딩된 의미론의 기록이다:
 
    **한 문장**: 사용자 표면(peers/facts/dispatch/발신 신원)에서 주소·신원 축은 meta-record 하나다. socket은 (a) in-domain liveness의 측정 증거, (b) dispatch 내부 transport로만 존재하고, record 없는 socket은 시민이 아니라 **진단 대상**이다. GLG 방향 재확인(2026-07-24): "pi-shell-acp 때 pi를 중심으로 세워놓은 기둥을 다 덜어내고 meta-record와 entwurf_v2로 완전히 조인다. ACP=클로드 전용, pi 네이티브=코덱스(GPT 구독) 전용, 리플리컨트↔리플리컨트급 게이트 정교함 유지."
 
@@ -120,7 +135,7 @@ M1 계약("v2를 만나는 순간 M1을 이름으로 지목")이 이제 **경로
 
 - `smoke-live-delivery`(현재 코드 브릿지 + 라이브 store 배달 게이트) — 오푸스 제안, 미구현. 라이브 시민에게 실메시지를 쏘는 설계 문제가 있어 C4/M1 표면 논의와 함께.
 - store-doctor 집계 없음은 **판단**이다(위 표). 뒤집으려면 check-meta-doctor-oracle(73s)와 smoke-meta-* 셸 게이트들의 출력 단언을 같이 옮겨야 한다.
-- C4 몫으로 남는 것: 표면 의미론(socket을 identity 축에서 제거) + F2(`wantsReply` 슬롯). "거부를 하나의 관측면으로"는 이번 수선으로 대부분 선반영됨 — C4 초안에서 잔여분만 다룬다.
+- ~~C4 몫으로 남는 것~~ → C4 랜딩 (2026-07-24). 잔여 선택지 둘만 남음: C4 tail(PI_SESSION_ID seam의 결정적 게이트화 — live 증거는 이미 확보, 선택), `smoke-live-delivery` 설계(오푸스 제안 — 라이브 시민에 실메시지를 쏘는 설계 문제, M1 표면 논의와 함께).
 
 ## 🔵 오푸스 교차 검수 (2026-07-23 심야) — 승인 + 남은 빈 곳 15건
 
@@ -149,10 +164,10 @@ M1 계약("v2를 만나는 순간 M1을 이름으로 지목")이 이제 **경로
 6. **패턴 경고**: 이건 F1(README:525 죽은 링크)과 **같은 형태**다 — *새 사실을 추가하면서 옛 문장을 안 지운다.* 두 번 나왔으니 우연이 아니다. **수선 커밋마다 "이 발견이 무효화한 기존 문장"을 찾는 단계를 규율에 넣어라.**
 7. ~~오염 record 백업이 scratchpad(휘발성)에 있다~~ → **닫힘: `~/.pi/agent/meta-sessions.smoke-backup-20260723/`로 내구화** (store의 형제 디렉토리 — readdir 스캔 비대상, 2026-07-24).
 
-**Ⅲ. 표면 의미론 — C4 재료 (이번에 새로 드러남)**
-8. **익명 배달이 그냥 나간다.** `ENTWURF_BRIDGE_REQUIRE_META_SENDER` 없이 셸에서 브릿지를 띄우면 **누구나 라이브 시민에게 익명으로 배달할 수 있다** — 내가 실제로 성공시켰다. 그 env는 Claude Code user-scope install만 설정한다. 의도된 설계일 수 있으나 **"무엇이 identity로 보이고 무엇이 통과하는가"는 C4 질문 한복판**이다.
-9. F2(spawn-bg plan의 `wantsReply` 슬롯 부재) 미착수.
-10. C4 본체(socket을 identity 축에서 제거 + 거부의 관측면 통합) 미착수.
+**Ⅲ. 표면 의미론 — C4 재료 → 전항 닫힘 (페블 2026-07-24, C4 랜딩)**
+8. ~~익명 배달이 그냥 나간다~~ → **닫힘: cut④ `bc3f72d`** — 신원 필수가 브릿지 기본, hatch는 명시적 env 하나, D11(기본 거부·mailbox 무오염)/D12(hatch 배달·external-mcp 정직 명명) 게이트 고정.
+9. ~~F2 미착수~~ → **닫힘: cut① `be12348`** — spawn-bg plan `wantsReply`, live rail 동형.
+10. ~~C4 본체 미착수~~ → **닫힘: cut② `d76d9f7` + cut③ `5d99173`** — record-less socket은 dispatch 거부 + 목록 진단, 두 경로 다 원인+M1 명명. matrix-live C1b가 라이브 증명.
 
 **Ⅳ. 재현 가능성 갭**
 11. **F10을 라이브에서 재현할 방법이 없다.** marker는 부모 pid 체인으로 찾는데 셸에서 띄운 브릿지는 체인이 끊겨 marker를 못 만난다(실측). D7/D8이 fixture로 잡지만 **라이브 경로가 없다** — `smoke-live-delivery` 설계 시 핵심 제약.
@@ -161,7 +176,7 @@ M1 계약("v2를 만나는 순간 M1을 이름으로 지목")이 이제 **경로
 **Ⅴ. 라이브 상태 (M1이 여는 문)**
 13. 라이브 store 182개, 세션마다 증가. mixed 상태(V3 1 + v2 181) 지속.
 14. 형제 채널 비대칭 여전 — pi 쪽은 V3로 붙고, Claude Code 쪽은 v2라 **자기 자신이 안 보인다**. 교차 검수가 아직 GLG 수동 릴레이다.
-15. M1 미착수. 위 13·14와 Ⅲ-8의 상당 부분이 여기서 풀린다.
+15. M1 미착수. 위 13·14가 여기서 풀린다 (Ⅲ-8은 cut④가 이미 닫았다).
 
 ### 🔴 가장 예리한 것 — A4 규칙만으로는 A3형 구멍이 다시 뚫린다
 
