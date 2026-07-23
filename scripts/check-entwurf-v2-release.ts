@@ -77,6 +77,7 @@ const SPAWN_PLAN: ExecutionPlan = {
 	sessionId: GID,
 	cwd: "/home/junghan/repos/gh/entwurf",
 	prompt: "p",
+	wantsReply: false,
 	launchArgs: ["--approve"],
 	expectedSocketPath: "/fake/ctl/s.sock",
 	observeTimeoutMs: 30_000,

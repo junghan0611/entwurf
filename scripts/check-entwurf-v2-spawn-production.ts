@@ -86,6 +86,7 @@ function spawnBgPlan(): SpawnBgPlan {
 		sessionId: GID,
 		cwd: "/home/test/repo",
 		prompt: "continue the task",
+		wantsReply: false,
 		launchArgs: ["--approve"],
 		expectedSocketPath: SOCK,
 		observeTimeoutMs: 30_000,

@@ -56,6 +56,7 @@ function spawnBgPlan(over: Partial<SpawnBgPlan> = {}): SpawnBgPlan {
 		sessionId: gid,
 		cwd: process.cwd(),
 		prompt: "continue",
+		wantsReply: false,
 		launchArgs: [],
 		expectedSocketPath: "/nonexistent/never.sock",
 		observeTimeoutMs: 30_000,

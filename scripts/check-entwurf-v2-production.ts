@@ -105,6 +105,7 @@ const SPAWN_PLAN: SpawnBgPlan = {
 	sessionId: GID,
 	cwd: "/home/junghan/repos/gh/entwurf",
 	prompt: "p",
+	wantsReply: true,
 	launchArgs: [],
 	expectedSocketPath: `${CONTROL_DIR}/${GID}.sock`,
 	observeTimeoutMs: 30_000,
@@ -373,10 +374,16 @@ async function main(): Promise<void> {
 		});
 		const res = await deps.executor.resumeSpawnBg(SPAWN_PLAN, lockClaim());
 		ok("C2: capture-stop surfaced as spawn-start-failed (released)", res.kind === "spawn-start-failed");
+		// #50 F2: the plan's wantsReply threads into the SAME formatter call the live
+		// rail's receiver makes, so wants_reply:true survives the dormant rail.
 		const expected =
 			SPAWN_PLAN.prompt +
-			formatSenderInfoBlock({ sessionId: "self", agentId: "pi/x", cwd: "/cwd", timestamp: "2026-06-13T00:00:00.000Z" });
+			formatSenderInfoBlock(
+				{ sessionId: "self", agentId: "pi/x", cwd: "/cwd", timestamp: "2026-06-13T00:00:00.000Z" },
+				SPAWN_PLAN.wantsReply,
+			);
 		ok("C2: spawn-bg prompt = task + the SHARED <sender_info> block", cap.prompt === expected);
+		ok("C2: wants_reply rides the dormant <sender_info> (#50 F2)", cap.prompt?.includes('"wants_reply":true') === true);
 		ok("C2: the plan object handed to the executor is NOT mutated", SPAWN_PLAN.prompt === "p");
 	}
 	{

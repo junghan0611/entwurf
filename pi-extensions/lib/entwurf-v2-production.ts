@@ -363,7 +363,7 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 			// resumed citizen woke with an anonymous prompt while every other rail
 			// carried the sender envelope.
 			const sender = opts.senderProvider();
-			const prompt = sender ? spawnPlan.prompt + formatSenderInfoBlock(sender) : spawnPlan.prompt;
+			const prompt = sender ? spawnPlan.prompt + formatSenderInfoBlock(sender, spawnPlan.wantsReply) : spawnPlan.prompt;
 			return executeSpawnBgResume(
 				{ ...spawnPlan, prompt },
 				lock,

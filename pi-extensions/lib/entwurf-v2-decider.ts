@@ -124,6 +124,10 @@ export type ExecutionPlan =
 			sessionId: string;
 			cwd: string;
 			prompt: string;
+			// wantsReply rides the plan so the dormant rail's <sender_info> carries the
+			// same wants_reply etiquette marker a live socket delivery renders (#50 F2).
+			// mode stays live-injection-only (meaningless for a resume prompt).
+			wantsReply: boolean;
 			launchArgs: readonly string[];
 			expectedSocketPath: string;
 			observeTimeoutMs: number;
@@ -467,6 +471,7 @@ async function decideInDomain(
 				sessionId: gardenId, // D3: gid is the pi resume authority, not nativeSessionId.
 				cwd: resume.cwd,
 				prompt: input.message,
+				wantsReply: ctx.wantsReply,
 				launchArgs: outcome.launchArgs,
 				expectedSocketPath: socketPath,
 				observeTimeoutMs: ctx.observeTimeoutMs,

@@ -102,6 +102,7 @@ const SPAWN_PLAN = {
 	sessionId: GID,
 	cwd: "/home/junghan/repos/gh/entwurf",
 	prompt: "p",
+	wantsReply: false,
 	launchArgs: [],
 	expectedSocketPath: "/fake/ctl/s.sock",
 	observeTimeoutMs: 30_000,

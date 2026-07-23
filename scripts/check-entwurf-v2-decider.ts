@@ -9,8 +9,9 @@
  *   3. pre-probe rejects (bad-target / target-locked / target-address-conflict)
  *      carry observedLiveness=null; untrusted-fail-fast carries the measured
  *      `dead` (non-null), and the deny path releases the lock (nonce-owned).
- *   4. resume plan has NO mode/wantsReply, HAS expectedSocketPath/observeTimeoutMs/
- *      releaseWhen; meta-mailbox plan has NO mode.
+ *   4. resume plan has NO mode, HAS wantsReply (#50 F2: the dormant rail's
+ *      <sender_info> carries the etiquette marker) + expectedSocketPath/
+ *      observeTimeoutMs/releaseWhen; meta-mailbox plan has NO mode.
  *   5. control-socket execute lock non-null; meta-mailbox execute lock null (？7).
  *   6. the unsupported (mailbox) path acquires NO lock (？7).
  *   7. a pre-probe address conflict rejects WITHOUT probing (inspectSocket unused).
@@ -418,6 +419,7 @@ async function main(): Promise<void> {
 			ok(`resume-execute(${pf.kind}): NOT released`, t.releaseCalls.length === 0);
 			ok(`resume-execute(${pf.kind}): sessionId === gardenId (D3)`, d.plan.sessionId === GID);
 			ok(`resume-execute(${pf.kind}): prompt = message`, d.plan.prompt === "do X");
+			ok(`resume-execute(${pf.kind}): wantsReply carried (#50 F2)`, d.plan.wantsReply === true);
 			ok(`resume-execute(${pf.kind}): launchArgs from preflight`, d.plan.launchArgs === pf.launchArgs);
 			ok(
 				`resume-execute(${pf.kind}): expectedSocketPath planted`,
@@ -441,10 +443,11 @@ async function main(): Promise<void> {
 					"sessionId",
 					"targetGardenId",
 					"transport",
+					"wantsReply",
 				],
 				`spawn-bg plan keyset drift: ${planKeys(d.plan).join(",")}`,
 			);
-			ok(`resume-execute(${pf.kind}): NO mode/wantsReply/provider/model in plan`, true);
+			ok(`resume-execute(${pf.kind}): NO mode/provider/model in plan`, true);
 		}
 	}
 
