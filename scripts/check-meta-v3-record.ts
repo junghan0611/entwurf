@@ -155,6 +155,18 @@ throwsNaming(
 	() => parseMetaRecordAny(V2_BODY),
 	M1_MIGRATE_COMMAND,
 );
+// The rejection must show the VALUE, not just the type: `got number` cannot tell a
+// v1 store from a v2 one, and the M1 runbook needs exactly that distinction (F9).
+throwsNaming(
+	"parseMetaRecordAny(v2 body) rejection shows the actual version value (got number 2)",
+	() => parseMetaRecordAny(V2_BODY),
+	"(got number 2)",
+);
+throwsNaming(
+	"parseMetaRecordAny(v1 body) rejection shows the actual version value (got number 1)",
+	() => parseMetaRecordAny(V1_BODY),
+	"(got number 1)",
+);
 throws("parseMetaRecordAny: invalid JSON throws", () => parseMetaRecordAny("{nope"));
 throws("parseMetaRecordAny: array (non-object) throws", () => parseMetaRecordAny("[]"));
 throws("parseMetaRecordAny: unknown schemaVersion (4) throws", () =>

@@ -37,6 +37,9 @@
  *   D4  the doorbell inbox.signal was poked                          (the citizen is wakeable)
  *   D5  the landed body names the seeded meta-session sender         (identity joined)
  *   D6  no capability-registry error anywhere in the response/stderr (the 0.12.8 corpse)
+ *   D7  a pre-cut (v2) SENDER record refuses the send naming M1,     (F10 — the M1 contract
+ *       never claiming "no live meta-sender marker"                   held per surface)
+ *   D8  entwurf_self on that record refuses naming M1 + the citizen  (not "missing env")
  *
  * Deterministic: no model, no network, no API cost, no backend. Temp dirs only.
  *
@@ -59,6 +62,7 @@ import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+	M1_MIGRATE_COMMAND,
 	upsertMetaSession,
 	writeMetaReceiverMarker,
 	writeMetaSenderMarker,
@@ -325,6 +329,133 @@ try {
 		"D6: no capability-registry ENOENT in the response or the artifact's stderr",
 		!capabilityCorpse.test(body) && !capabilityCorpse.test(stderr),
 		`--- response ---\n${body}\n--- stderr ---\n${stderr.slice(0, 1500)}`,
+	);
+
+	// D7/D8 — the M1 observability contract, per SURFACE (F10). meta-session.ts fixes
+	// the contract: production points at the M1 command BY NAME the moment it meets a
+	// pre-cut record. The reader honors it, but the live F10 incident proved the sender
+	// path swallowed that error into "no live meta-sender marker was found" — three
+	// false claims and a useless fix. So this cell rewrites the SENDER's record as a
+	// raw pre-cut v2 body and asserts, against the artifact over MCP stdio, that both
+	// sender-identity surfaces refuse WITH the M1 pointer and WITHOUT the false claim.
+	const senderRecordFile = path.join(sessionsDir, `${sender.record.gardenId}.meta.json`);
+	const senderRecordV3Bytes = await fsp.readFile(senderRecordFile);
+	await fsp.writeFile(
+		senderRecordFile,
+		`${JSON.stringify({
+			schemaVersion: 2,
+			gardenId: sender.record.gardenId,
+			backend: "claude-code",
+			nativeSessionId: sender.record.nativeSessionId,
+			cwd: tmp,
+			model: null,
+			transcriptPath: null,
+			parentGardenId: null,
+			isEntwurf: false,
+			createdAt: "2026-03-01T12:00:00.000Z",
+			recordUpdatedAt: "2026-03-01T12:30:00.000Z",
+		})}\n`,
+	);
+
+	send({
+		jsonrpc: "2.0",
+		id: 3,
+		method: "tools/call",
+		params: {
+			name: "entwurf_v2",
+			arguments: {
+				target: gid,
+				intent: "fire-and-forget",
+				mode: "follow_up",
+				message: "check-bridge-delivery: M1 cell — this send must be refused naming M1.",
+			},
+		},
+	});
+	const preCutSend = await await_(3, "tools/call entwurf_v2 (pre-cut sender record)");
+	const preCutSendBody: string = preCutSend?.result?.content?.[0]?.text ?? JSON.stringify(preCutSend);
+	ok(
+		"D7: a pre-cut sender record refuses the send NAMING the M1 command (not a generic identity error)",
+		preCutSend?.result?.isError === true && preCutSendBody.includes(M1_MIGRATE_COMMAND),
+		`--- response ---\n${preCutSendBody}`,
+	);
+	ok(
+		'D7: the refusal does NOT claim "no live meta-sender marker" (the marker exists — F10\'s false cause)',
+		!preCutSendBody.includes("no live meta-sender marker"),
+		`--- response ---\n${preCutSendBody}`,
+	);
+
+	send({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "entwurf_self", arguments: {} } });
+	const preCutSelf = await await_(4, "tools/call entwurf_self (pre-cut sender record)");
+	const preCutSelfBody: string = preCutSelf?.result?.content?.[0]?.text ?? JSON.stringify(preCutSelf);
+	ok(
+		"D8: entwurf_self on a pre-cut record refuses NAMING the M1 command (not 'missing env')",
+		preCutSelf?.result?.isError === true && preCutSelfBody.includes(M1_MIGRATE_COMMAND),
+		`--- response ---\n${preCutSelfBody}`,
+	);
+	ok(
+		"D8: the entwurf_self refusal names the marker's citizen (the garden id is known, not anonymous)",
+		preCutSelfBody.includes(sender.record.gardenId),
+		`--- response ---\n${preCutSelfBody}`,
+	);
+
+	// D9/D10 — the remaining M1 surfaces: the dispatch TARGET path and the inbox read.
+	// Sender restored to v3 (so sender resolution succeeds); the RECEIVER record is
+	// rewritten pre-cut instead. Both surfaces read the record via
+	// readMetaIdentityByGardenId, whose error names M1 — these cells pin that the
+	// naming SURVIVES to the artifact response on each path.
+	await fsp.writeFile(senderRecordFile, senderRecordV3Bytes);
+	const receiverRecordFile = path.join(sessionsDir, `${gid}.meta.json`);
+	await fsp.writeFile(
+		receiverRecordFile,
+		`${JSON.stringify({
+			schemaVersion: 2,
+			gardenId: gid,
+			backend: "claude-code",
+			nativeSessionId: receiver.record.nativeSessionId,
+			cwd: tmp,
+			model: null,
+			transcriptPath: null,
+			parentGardenId: null,
+			isEntwurf: false,
+			createdAt: "2026-03-01T12:00:00.000Z",
+			recordUpdatedAt: "2026-03-01T12:30:00.000Z",
+		})}\n`,
+	);
+
+	send({
+		jsonrpc: "2.0",
+		id: 5,
+		method: "tools/call",
+		params: {
+			name: "entwurf_v2",
+			arguments: {
+				target: gid,
+				intent: "fire-and-forget",
+				mode: "follow_up",
+				message: "check-bridge-delivery: M1 cell — pre-cut TARGET must be refused naming M1.",
+			},
+		},
+	});
+	const preCutTarget = await await_(5, "tools/call entwurf_v2 (pre-cut target record)");
+	const preCutTargetBody: string = preCutTarget?.result?.content?.[0]?.text ?? JSON.stringify(preCutTarget);
+	ok(
+		"D9: a pre-cut TARGET record refuses the dispatch NAMING the M1 command",
+		preCutTarget?.result?.isError === true && preCutTargetBody.includes(M1_MIGRATE_COMMAND),
+		`--- response ---\n${preCutTargetBody}`,
+	);
+
+	send({
+		jsonrpc: "2.0",
+		id: 6,
+		method: "tools/call",
+		params: { name: "entwurf_inbox_read", arguments: { gardenId: gid } },
+	});
+	const preCutInbox = await await_(6, "tools/call entwurf_inbox_read (pre-cut record)");
+	const preCutInboxBody: string = preCutInbox?.result?.content?.[0]?.text ?? JSON.stringify(preCutInbox);
+	ok(
+		"D10: entwurf_inbox_read on a pre-cut record refuses NAMING the M1 command",
+		preCutInbox?.result?.isError === true && preCutInboxBody.includes(M1_MIGRATE_COMMAND),
+		`--- response ---\n${preCutInboxBody}`,
 	);
 } finally {
 	try {

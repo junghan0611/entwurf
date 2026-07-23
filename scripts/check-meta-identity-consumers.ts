@@ -15,7 +15,10 @@
  *     AND pre-cut records via `onSkip` (skipped honestly, never fatal to the
  *     scan), and — THE G1 invariant — throws on a nativeSessionId duplicated
  *     across two records (authority ambiguity: upsert must never mint a
- *     duplicate id for an existing citizen).
+ *     duplicate id for an existing citizen),
+ *   - birthPiCitizen succeeds on a store holding pre-cut records AND hands the
+ *     skips back (meeting a pre-cut record is never silent — the M1 contract;
+ *     a silent skip is how a mixed store forms with nobody told).
  */
 
 import assert from "node:assert/strict";
@@ -30,6 +33,7 @@ import {
 	scanIdentityByNativeId,
 	serializeMetaIdentity,
 } from "../pi-extensions/lib/meta-session.ts";
+import { birthPiCitizen } from "../pi-extensions/lib/pi-citizen-birth.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -140,6 +144,30 @@ try {
 	);
 	ok("scan ignores non-.meta.json entries", !skipped.includes("not-a-record.txt"));
 	ok("scan returns null on no match", scanIdentityByNativeId(entries, "native-none", readRaw) === null);
+
+	// --- pi birth SURFACES what its scan skipped (the M1 contract) --------------
+	// The scan surviving a pre-cut record is by design; meeting one SILENTLY is not:
+	// a fresh V3 citizen minted beside an unmigrated store is how a mixed store
+	// forms with nobody told (observed live 2026-07-23). Birth must succeed AND
+	// hand the skips back so its caller can point at M1 once.
+	{
+		const birth = birthPiCitizen({
+			nativeSessionId: "pi-fresh-on-precut-store",
+			cwd: "/synthetic/proj",
+			sessionsDir: dir,
+			controlSocketDir: path.join(dir, "sockets"),
+		});
+		ok("birth on a store holding a pre-cut record still succeeds (create)", birth.action === "create");
+		ok(
+			"birth surfaces the skipped pre-cut record by filename",
+			birth.skippedRecords.some((s) => s.filename === `${GID_V2}.meta.json`),
+		);
+		ok(
+			"the surfaced skip message names the M1 migrate command",
+			birth.skippedRecords.some((s) => s.filename === `${GID_V2}.meta.json` && s.message.includes(M1_MIGRATE_COMMAND)),
+		);
+		fs.rmSync(birth.recordPath, { force: true });
+	}
 
 	// --- G1: duplicate nativeSessionId = authority ambiguity --------------------
 	const GID_DUP = "20260301T120004-eeeeee";

@@ -177,6 +177,12 @@ export function requireNullableString(value: unknown, field: string): string | n
 export function describe(value: unknown): string {
 	if (value === null) return "null";
 	if (typeof value === "string") return `string ${JSON.stringify(value)}`;
+	// Primitives carry their VALUE, not just their type: `got number` cannot tell a
+	// v1 record from a v2 one, and that distinction is exactly what the M1 runbook
+	// needs from a schemaVersion rejection (F9).
+	if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
+		return `${typeof value} ${String(value)}`;
+	}
 	return `${typeof value}`;
 }
 

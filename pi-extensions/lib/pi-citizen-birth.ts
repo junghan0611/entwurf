@@ -59,6 +59,12 @@ export interface PiCitizenBirth {
 	recordPath: string;
 	/** `<controlSocketDir>/<gardenId>.sock` — the ONE address the socket may carry. */
 	socketPath: string;
+	/** Store entries the address scan could not read (pre-cut v1/v2 records, corrupt
+	 * files). The scan survives them by design — but meeting a pre-cut record must
+	 * never be SILENT (the M1 contract), so the caller surfaces these once. Each
+	 * message is the V3 reader's own error, which names the M1 command for a
+	 * pre-cut record. */
+	skippedRecords: { filename: string; message: string }[];
 }
 
 /**
@@ -70,6 +76,7 @@ export interface PiCitizenBirth {
  * refuse the control server, no `PI_SESSION_ID` leak, loud stderr.
  */
 export function birthPiCitizen(input: PiCitizenBirthInput): PiCitizenBirth {
+	const skippedRecords: { filename: string; message: string }[] = [];
 	const result = upsertMetaSession({
 		input: {
 			backend: "pi",
@@ -80,6 +87,7 @@ export function birthPiCitizen(input: PiCitizenBirthInput): PiCitizenBirth {
 		},
 		dir: input.sessionsDir,
 		now: input.now,
+		onSkip: (filename, err) => skippedRecords.push({ filename, message: err.message }),
 	});
 	return {
 		gardenId: result.record.gardenId,
@@ -87,5 +95,6 @@ export function birthPiCitizen(input: PiCitizenBirthInput): PiCitizenBirth {
 		record: result.record,
 		recordPath: result.path,
 		socketPath: controlSocketPathIn(input.controlSocketDir, result.record.gardenId),
+		skippedRecords,
 	};
 }

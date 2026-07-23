@@ -1166,6 +1166,19 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 		residentGardenId = birth.gardenId;
+		// Meeting a pre-cut record must never be silent (the M1 contract): the scan
+		// skips what the V3 reader refuses, and skipping is fine — minting a fresh V3
+		// citizen beside an unmigrated store is exactly how a mixed store forms
+		// without anyone being told. ONE aggregated line, session_start only (turn_end
+		// re-attaches every turn and would repeat it forever).
+		if (birth.skippedRecords.length > 0) {
+			const first = birth.skippedRecords[0];
+			process.stderr.write(
+				`[entwurf-control] ${birth.skippedRecords.length} meta-record(s) in the store are unreadable ` +
+					`by V3 production and were skipped while resolving this session's address — ` +
+					`e.g. ${first?.filename}: ${first?.message}\n`,
+			);
+		}
 		await startControlServer(pi, state, ctx, birth.socketPath);
 		updateStatus(ctx, true, birth.gardenId);
 		updateSessionEnv(ctx, true, birth.gardenId);
@@ -1175,15 +1188,20 @@ export default function (pi: ExtensionAPI) {
 	 * dynamic import fence (the seam lives in the `.ts`-extension lane). */
 	const birthResidentCitizen = async (ctx: ExtensionContext): Promise<PiCitizenBirth> => {
 		const mod = (await import(PI_CITIZEN_BIRTH_MODULE)) as unknown as PiCitizenBirthModule;
+		// getSessionFile() names the path pi WILL use, whether or not anything is on
+		// disk yet — pi writes the file only at the first assistant turn. Recording
+		// the path before the file exists plants a phantom resume target that later
+		// masks the precise "no turn yet" resume refusal (F7), so only a transcript
+		// that is actually on disk is recorded.
 		const sessionFile = ctx.sessionManager.getSessionFile();
+		const transcriptPath = sessionFile && existsSync(sessionFile) ? sessionFile : undefined;
 		const model = ctx.model?.provider && ctx.model?.id ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
 		return mod.birthPiCitizen({
 			nativeSessionId: ctx.sessionManager.getSessionId(),
 			cwd: ctx.cwd || process.cwd(),
-			// undefined KEEPS a recorded value: pi writes the session file only at the
-			// first assistant turn, so a fresh start must not clear a known transcript.
+			// undefined KEEPS a recorded value: a fresh start must not clear a known transcript.
 			model,
-			transcriptPath: sessionFile ?? undefined,
+			transcriptPath,
 			controlSocketDir: ENTWURF_DIR,
 		});
 	};
@@ -1270,6 +1288,7 @@ interface PiCitizenBirth {
 	action: "create" | "attach";
 	recordPath: string;
 	socketPath: string;
+	skippedRecords: { filename: string; message: string }[];
 }
 
 interface PiCitizenBirthModule {

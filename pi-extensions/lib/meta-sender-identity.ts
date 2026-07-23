@@ -21,7 +21,10 @@
  *   1. pid + start-key (readMetaSenderMarker): the owner is still the very process that wrote it,
  *      so a dead session's pid, reused by something else, cannot inherit its garden-id.
  *   2. the backing meta-record: the record store is the authority — a marker whose record was
- *      deleted, or whose backend/nativeSessionId drifted from it, names nobody.
+ *      deleted, or whose backend/nativeSessionId drifted from it, names nobody. A record that
+ *      EXISTS but cannot be read (a pre-cut v1/v2 record, a corrupt body) is a THROW instead
+ *      (EntwurfSenderRecordUnreadableError): the cause is knowable, so folding it into
+ *      "names nobody" would misreport the failure and hide the M1 migration pointer (F10).
  *
  * Every candidate is collected and validated BEFORE one is chosen. A first-match loop would make
  * the answer depend on which pid or backend happened to be read first; here lookup order carries
@@ -32,6 +35,7 @@ import {
 	type MetaBackend,
 	type MetaIdentity,
 	type MetaSenderMarker,
+	metaRecordExistsByGardenId,
 	parentPid,
 	readMetaIdentityByGardenId,
 	readMetaSenderMarker,
@@ -76,16 +80,44 @@ export class EntwurfSenderIdentityAmbiguityError extends Error {
 	}
 }
 
-/** The record store is the authority; the marker is only a pid→garden hint it must agree with. */
-function trustMarker(marker: MetaSenderMarker): TrustedMetaSender | null {
-	try {
-		// dual-read (3D-4 commit1): identity-only check, so it survives the v2 cut.
-		const identity = readMetaIdentityByGardenId(marker.gardenId);
-		if (identity.backend !== marker.backend || identity.nativeSessionId !== marker.nativeSessionId) return null;
-		return { marker, identity };
-	} catch {
-		return null;
+/**
+ * A live sender marker names a garden citizen whose record file EXISTS but cannot be READ
+ * (a pre-cut v1/v2 record awaiting M1 migration, or a corrupt body). This is a hard stop,
+ * never a downgrade: the caller has an identity — it is just unreadable — so resolving to
+ * anonymous/"no marker" would report a false cause and prescribe a useless fix (re-opening
+ * the session re-mints the same unreadable state; observed live as F10). The quoted cause
+ * carries the record reader's own message, which names the M1 command for a pre-cut record.
+ */
+export class EntwurfSenderRecordUnreadableError extends Error {
+	readonly gardenId: string;
+	constructor(marker: MetaSenderMarker, cause: Error) {
+		super(
+			`entwurf-bridge refused: this process's sender marker is live and names garden id ` +
+				`${marker.gardenId} (backend ${marker.backend}, owner pid ${marker.ownerPid}), but that ` +
+				`citizen's meta-record cannot be read: ${cause.message} ` +
+				`This is NOT a missing-marker problem — re-opening the session will not fix it; ` +
+				`the record itself must become readable first.`,
+		);
+		this.name = "EntwurfSenderRecordUnreadableError";
+		this.gardenId = marker.gardenId;
 	}
+}
+
+/** The record store is the authority; the marker is only a pid→garden hint it must agree with.
+ * Three distinct outcomes, never collapsed (F10): a DELETED record → null (the marker names
+ * nobody); a record that EXISTS but cannot be read → throw EntwurfSenderRecordUnreadableError
+ * (the cause is knowable and nameable — swallowing it reported "no marker", the wrong cause);
+ * a readable record whose backend/nativeSessionId drifted from the marker → null (stale hint). */
+function trustMarker(marker: MetaSenderMarker): TrustedMetaSender | null {
+	if (!metaRecordExistsByGardenId(marker.gardenId)) return null;
+	let identity: MetaIdentity;
+	try {
+		identity = readMetaIdentityByGardenId(marker.gardenId);
+	} catch (err) {
+		throw new EntwurfSenderRecordUnreadableError(marker, err instanceof Error ? err : new Error(String(err)));
+	}
+	if (identity.backend !== marker.backend || identity.nativeSessionId !== marker.nativeSessionId) return null;
+	return { marker, identity };
 }
 
 export interface ResolveTrustedMetaSenderOptions {
@@ -103,6 +135,8 @@ export interface ResolveTrustedMetaSenderOptions {
  * 0 trusted → null (anonymous — or a hard refusal upstream under REQUIRE_META_SENDER).
  * 1 trusted → that identity.
  * 2+ distinct → throw EntwurfSenderIdentityAmbiguityError.
+ * a marker whose record exists but cannot be read → throw EntwurfSenderRecordUnreadableError
+ *   (a pre-cut/corrupt record is a knowable cause, never folded into "no marker" — F10).
  *
  * Markers that agree on the SAME garden-id are not a conflict: an older release wrote a marker for
  * the parent AND the grandparent, and both can still sit on disk pointing at one citizen.

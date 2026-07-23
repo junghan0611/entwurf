@@ -193,6 +193,34 @@ function main(): void {
 		ok("bounded payload still carries every peer", bounded.payload.peers.length === 40);
 	}
 
+	// ── diagnostics sharing one cause AGGREGATE in text (F8) ────────────────────
+	// An unmigrated pre-cut store degrades EVERY record with the identical message;
+	// 177 copies of that sentence buried the one citizen line the listing existed to
+	// show. Same (kind + message) → ONE ×N line with a subject sample; a distinct
+	// message keeps its own classic line; the JSON payload keeps every diagnostic.
+	{
+		const sharedMsg = 'meta-record "schemaVersion" must be 3 (got number 2) — migrate the store.';
+		const uniform = Array.from({ length: 177 }, (_, i) => ({
+			kind: "meta-record-read-error" as const,
+			filename: `20260612T${String(100000 + i).slice(-6)}-cccccc.meta.json`,
+			message: sharedMsg,
+		}));
+		const distinct = {
+			kind: "meta-record-read-error" as const,
+			filename: "20260612T999998-dddddd.meta.json",
+			message: "body/filename drift: this one is different.",
+		};
+		const agg = renderEntwurfPeers({ facts: { peers: [], socketOnly: [] }, diagnostics: [...uniform, distinct] }, DIR);
+		ok("uniform diagnostics collapse to one ×N line", agg.text.includes("meta-record-read-error ×177:"));
+		ok("the shared message appears exactly once in the text", agg.text.split(sharedMsg).length - 1 === 1);
+		ok("the aggregated line samples subjects and counts the omitted rest", agg.text.includes("… +174 more"));
+		ok(
+			"a distinct-message diagnostic keeps its own classic line",
+			agg.text.includes("- meta-record-read-error 20260612T999998-dddddd.meta.json: body/filename drift"),
+		);
+		ok("payload still carries every individual diagnostic", agg.payload.diagnostics.length === 178);
+	}
+
 	// ── WIRING guard: bridge handler calls the provider+render, not getLiveSessions ──
 	{
 		const here = path.dirname(fileURLToPath(import.meta.url));

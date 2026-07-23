@@ -109,6 +109,55 @@ function renderDiagnosticLine(d: EntwurfDiagnostic): string {
 	}
 }
 
+/** The per-diagnostic subject (the thing the shared message is ABOUT). */
+function diagnosticSubject(d: EntwurfDiagnostic): string {
+	switch (d.kind) {
+		case "meta-record-read-error":
+			return d.filename;
+		case "garden-id-socket-conflict":
+		case "socket-symlink-rejected":
+			return d.gardenId;
+		case "malformed-socket-name":
+			return d.name;
+		case "socket-dir-read-error":
+			return "";
+	}
+}
+
+const DIAGNOSTIC_SAMPLE_MAX = 3;
+
+/**
+ * Group diagnostics sharing (kind + message) into ONE line carrying the count and a
+ * subject sample. An unmigrated pre-cut store degrades every record identically, and
+ * repeating that sentence per record buried the one citizen line under 177 copies of
+ * it (F8) — the aggregated form says how many + which fix ONCE. A group of one renders
+ * exactly the classic per-item line; distinct messages stay distinct lines, and the
+ * JSON payload keeps every individual diagnostic (aggregation is text-only).
+ */
+function renderDiagnosticLines(diagnostics: EntwurfDiagnostic[]): string[] {
+	const groups = new Map<string, EntwurfDiagnostic[]>();
+	for (const d of diagnostics) {
+		const key = `${d.kind}:${d.message}`;
+		const group = groups.get(key);
+		if (group) group.push(d);
+		else groups.set(key, [d]);
+	}
+	const lines: string[] = [];
+	for (const group of groups.values()) {
+		const first = group[0] as EntwurfDiagnostic;
+		if (group.length === 1) {
+			lines.push(renderDiagnosticLine(first));
+			continue;
+		}
+		const subjects = group.map(diagnosticSubject).filter((s) => s.length > 0);
+		const sample = subjects.slice(0, DIAGNOSTIC_SAMPLE_MAX).join(", ");
+		const omitted = subjects.length - Math.min(subjects.length, DIAGNOSTIC_SAMPLE_MAX);
+		const suffix = subjects.length > 0 ? ` (${sample}${omitted > 0 ? `, … +${omitted} more` : ""})` : "";
+		lines.push(`- ${first.kind} ×${group.length}: ${first.message}${suffix}`);
+	}
+	return lines;
+}
+
 function compactLines(lines: string[], max: number = 32): string[] {
 	if (lines.length <= max) return lines;
 	const omitted = lines.length - max;
@@ -138,7 +187,7 @@ export function renderEntwurfPeers(result: EntwurfFactsResult, controlDir: strin
 		"",
 		section("Socket-only control sockets (no meta-record):", socketOnly.map(renderSocketOnlyLine), { compact: true }),
 		"",
-		section("Diagnostics:", diagnostics.map(renderDiagnosticLine)),
+		section("Diagnostics:", renderDiagnosticLines(diagnostics)),
 	].join("\n");
 
 	const payload: EntwurfPeersPayload = {

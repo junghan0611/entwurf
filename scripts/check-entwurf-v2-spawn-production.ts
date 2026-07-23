@@ -506,6 +506,17 @@ async function main(): Promise<void> {
 			const gidNoFile = mintRecord("0199dddd-1111-4222-8333-444455556666", null);
 			rejects(gidNoFile, "no recorded transcriptPath", "9 transcriptPath null → nothing to resume");
 
+			// transcriptPath recorded but the file is GONE (deleted transcript, or a
+			// phantom path from a pre-guard birth). The refusal must name THIS cause —
+			// before the existence check it fell through readSessionIdentity's ENOENT
+			// swallow and lied "no recorded model" (F7).
+			const gidGhost = mintRecord("0199abcd-1111-4222-8333-444455556666", path.join(world, "never-written.jsonl"));
+			rejects(
+				gidGhost,
+				"does not exist on disk",
+				"9 transcriptPath names a missing file → refused as missing, not as no-model",
+			);
+
 			// transcript with no model_change → no recorded model.
 			const nativeNoModel = "0199eeee-1111-4222-8333-444455556666";
 			const fileNoModel = writeTranscript("no-model.jsonl", sessionLine(nativeNoModel));

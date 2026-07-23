@@ -28,6 +28,7 @@
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { getEntwurfExplicitExtensions, mirrorChildStderr, readSessionIdentity } from "./entwurf-core.ts";
 import { buildResumePiArgs } from "./entwurf-resume-args.ts";
@@ -136,6 +137,18 @@ export function resolveResumeLaunchIdentity(plan: SpawnBgPlan): LaunchIdentity {
 		throw new Error(
 			`entwurf-v2-spawn-production: ${plan.sessionId} has no recorded transcriptPath — ` +
 				`the citizen never wrote a session file (no turn yet), so there is nothing to resume.`,
+		);
+	}
+	// A recorded path is only a resume target while the file is actually on disk.
+	// Without this check a missing transcript falls through readSessionIdentity's
+	// ENOENT swallow and surfaces as "no recorded model" — the wrong cause (F7):
+	// the transcript was deleted, or the record carries a phantom path minted
+	// before birth guarded on file existence.
+	if (!existsSync(sessionFile)) {
+		throw new Error(
+			`entwurf-v2-spawn-production: ${plan.sessionId} recorded transcriptPath "${sessionFile}" ` +
+				`does not exist on disk — the transcript was deleted, or the record carries a phantom ` +
+				`path from a pre-guard birth; nothing to resume.`,
 		);
 	}
 	const identity = readSessionIdentity(sessionFile);
