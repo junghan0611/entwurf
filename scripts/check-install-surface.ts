@@ -22,6 +22,16 @@
  *        smoke that swaps HOME into a sandbox swaps XDG_DATA_HOME with it — moving HOME
  *        alone still writes real install-state below the inherited XDG root, which is
  *        exactly how a verification sweep polluted a live host's provenance (2026-07-14).
+ *   S5d  a gate may isolate by PROCESS BOUNDARY instead of by HOME swap: lines inside a
+ *        `CONTAINER_RUNNER_EOF` heredoc run in a container, so their $HOME is not this
+ *        host's and S5 must not read them as host writes. The exemption covers the BLOCK,
+ *        never the file — the same file's host half stays under the tripwire — and it is
+ *        verified, not declared: exactly one block, and its command must START with
+ *        `docker run` (containing the token is not enough — `echo docker run … <<TAG`
+ *        contains it while executing right here).
+ *   S7   the release operator surface is one repo-local Agent Skill shared by Claude Code and
+ *        pi: project settings point pi at `.claude/skills`, land/prepare/make/publish coexist in
+ *        one SKILL.md, the exact-SHA CI oracle ships beside it, and retired prompt copies stay absent.
  *
  * HONEST SCOPE — what a green run does and does not mean. S1-S4 are structural: they read the
  * dispatch graph and the build manifest, so they hold for any entrypoint written in this repo's
@@ -36,7 +46,8 @@
  * Read-only: parses sources, spawns nothing.
  */
 
-import { readdirSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -246,12 +257,64 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	// the override is set. Sandboxing the agent dir is not isolation for them; only HOME is.
 	const HOME_ROOTED = new Set(["install", "setup", "setup:links"]);
 
+	// A THIRD isolation shape, alongside "swaps HOME" and "is a LIVE gate": code that never
+	// runs on this host at all. #51's artifact-consumer gate ships its runner as a heredoc fed
+	// to `docker run`, so its `$HOME` is the container's, and every live-path write inside it is
+	// correct. A whole-file exemption would be too blunt — that file also has real host code
+	// (pack, chmod, digest) that must stay under the tripwire — so exempt the BLOCK, not the file.
+	//
+	// The exemption is not a promise, it is checked: the reserved tag only silences lines when
+	// the file demonstrably hands that heredoc to `docker run`. Laundering host code through the
+	// reserved name is itself an offense, reported below. (Same discipline as S5c: match the
+	// construct, then demand the isolation — never the other way round.)
+	const CONTAINER_TAG = "CONTAINER_RUNNER_EOF";
+	const containerLaunderers: string[] = [];
+	function containerBlock(f: string, lines: string[]): Set<number> {
+		const inside = new Set<number>();
+		const openers = lines.flatMap((l, i) => (l.includes(`<<'${CONTAINER_TAG}'`) ? [i] : []));
+		const closers = lines.flatMap((l, i) => (l.trim() === CONTAINER_TAG ? [i] : []));
+		if (openers.length === 0 && closers.length === 0) return inside;
+
+		// Exactly one block, exactly one terminator. Several blocks (or a stray
+		// terminator) make "which lines are exempt" ambiguous, and an ambiguous
+		// exemption is the thing to fail on, not to resolve by guessing.
+		if (openers.length !== 1 || closers.length !== 1) {
+			containerLaunderers.push(
+				`scripts/${f}: expected exactly one '${CONTAINER_TAG}' block, found ${openers.length} opener(s) and ${closers.length} terminator(s) — an ambiguous exemption is refused, never guessed`,
+			);
+			return inside;
+		}
+		const opensAt = openers[0] as number;
+		const closesAt = closers[0] as number;
+		if (closesAt <= opensAt) {
+			containerLaunderers.push(`scripts/${f}:${opensAt + 1} '${CONTAINER_TAG}' terminator precedes its opener`);
+			return inside;
+		}
+
+		// The heredoc word sits on the `docker run` command line or a continuation of it, so
+		// walk back over backslash continuations to find the command it actually feeds — and
+		// ANCHOR on that command's first word. Merely CONTAINING the token is not enough:
+		// `echo docker run ... <<'TAG'` contains it while executing on this host, which is
+		// exactly the laundering this rule exists to refuse.
+		let cmdStart = opensAt;
+		while (cmdStart > 0 && /\\\s*$/.test(lines[cmdStart - 1] as string)) cmdStart -= 1;
+		if (!/^\s*docker\s+run\b/.test(lines[cmdStart] as string)) {
+			containerLaunderers.push(
+				`scripts/${f}:${opensAt + 1} opens a '${CONTAINER_TAG}' block whose command starts with \`${(lines[cmdStart] as string).trim().split(/\s+/)[0] ?? "?"}\`, not \`docker run\` — the container exemption cannot be claimed for host code`,
+			);
+			return inside;
+		}
+		for (let i = opensAt + 1; i < closesAt; i += 1) inside.add(i);
+		return inside;
+	}
+
 	const offenders: { file: string; line: number; text: string }[] = [];
 	const xdgOffenders: string[] = [];
 	const agentDirXdgOffenders: string[] = [];
 	for (const f of readdirSync(path.join(REPO, "scripts"))) {
 		if (!/^(smoke|check)-.*\.sh$/.test(f) || LIVE_GATES.has(f)) continue;
 		const lines = readFileSync(path.join(REPO, "scripts", f), "utf8").split("\n");
+		const inContainer = containerBlock(f, lines);
 
 		// The install smokes DO write "$HOME/.claude/…" — legally, because they first swap the
 		// process HOME to a sandbox (`export HOME="$TMP/home"`), after which $HOME no longer names
@@ -321,11 +384,17 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 
 		lines.forEach((line, i) => {
 			if (/^\s*#/.test(line)) return;
+			if (inContainer.has(i)) return; // executes in the container, not on this host
 			if (!WRITE_TO_LIVE.test(line)) return;
 			const sandboxed = swapAt !== -1 && i > swapAt;
 			if (!sandboxed) offenders.push({ file: f, line: i + 1, text: line.trim() });
 		});
 	}
+	ok(
+		`S5d: the '${CONTAINER_TAG}' exemption is a single block whose command STARTS with \`docker run\` (verified, not declared)`,
+		containerLaunderers.length === 0,
+		containerLaunderers.join("\n"),
+	);
 	ok(
 		"S5: no offline smoke carries an obvious write to the real $HOME (static tripwire, not a sandbox proof)",
 		offenders.length === 0,
@@ -346,6 +415,147 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 		"S5c: every mutating run.sh drive in the offline floor is sandboxed at every root it writes",
 		agentDirXdgOffenders.length === 0,
 		agentDirXdgOffenders.join("\n"),
+	);
+}
+
+// ── S7: one multi-harness release skill, no pi-only prompt copies ───────────
+// Claude Code discovers `.claude/skills` natively. Pi sees the SAME directory only
+// through project settings — without that one line the skill works in Claude and is
+// invisible here, recreating the split this migration removes. Keep every authority mode in
+// one file, and ship one executable exact-SHA CI oracle so both harnesses classify the same run.
+{
+	const settingsRel = ".pi/settings.json";
+	const skillRel = ".claude/skills/entwurf-release/SKILL.md";
+	const ciOracleRel = ".claude/skills/entwurf-release/scripts/verify-exact-ci.sh";
+	const retiredRels = [".pi/prompts/prepare-release.md", ".pi/prompts/make-release.md"];
+	// Read the CANDIDATE INDEX, not the operator's working tree. An untracked skill
+	// can make local discovery and every working-tree read green while CI receives
+	// no file at all. `git show :path` also rejects intent-to-add/unstaged-content
+	// laundering: the bytes judged here are exactly the bytes a commit would carry.
+	const readCandidate = (file: string): string | null => {
+		try {
+			return execFileSync("git", ["show", `:${file}`], {
+				cwd: REPO,
+				encoding: "utf8",
+				stdio: ["ignore", "pipe", "ignore"],
+			});
+		} catch {
+			return null;
+		}
+	};
+	const readCandidateMode = (file: string): string | null => {
+		const stage = execFileSync("git", ["ls-files", "--stage", "--", file], { cwd: REPO, encoding: "utf8" }).trim();
+		return stage === "" ? null : (stage.split(/\s+/, 1)[0] ?? null);
+	};
+	const settingsText = readCandidate(settingsRel);
+	const skill = readCandidate(skillRel);
+	const ciOracle = readCandidate(ciOracleRel);
+	const ciOracleMode = readCandidateMode(ciOracleRel);
+	ok(
+		"S7a: the candidate index carries the shared release skill and exact-SHA CI oracle",
+		settingsText !== null && skill !== null && ciOracle !== null,
+		[settingsText === null ? settingsRel : "", skill === null ? skillRel : "", ciOracle === null ? ciOracleRel : ""]
+			.filter(Boolean)
+			.join("\n"),
+	);
+	let settings: {
+		skills?: unknown;
+		packages?: unknown;
+		entwurfProvider?: { mcpServers?: { "entwurf-bridge"?: { command?: unknown; args?: unknown } } };
+	} = {};
+	let settingsParseError = "";
+	if (settingsText !== null) {
+		try {
+			settings = JSON.parse(settingsText);
+		} catch (error) {
+			settingsParseError = error instanceof Error ? error.message : String(error);
+		}
+	}
+	ok(
+		"S7b: candidate pi settings load the Claude-native repo skill directory",
+		settingsText === null ||
+			(settingsParseError === "" && Array.isArray(settings.skills) && settings.skills.includes("../.claude/skills")),
+		settingsParseError || `${settingsRel}: expected skills to include ../.claude/skills`,
+	);
+	ok(
+		"S7c: candidate project settings keep the local package source portable",
+		settingsText === null ||
+			(Array.isArray(settings.packages) && settings.packages.length === 1 && settings.packages[0] === ".."),
+		`${settingsRel}: expected packages to be the settings-relative repo root '..'`,
+	);
+	const bridge = settings.entwurfProvider?.mcpServers?.["entwurf-bridge"];
+	ok(
+		"S7d: candidate project settings use the stable entwurf-bridge bin, never a host-absolute path",
+		settingsText === null ||
+			(bridge?.command === "entwurf-bridge" && Array.isArray(bridge.args) && bridge.args.length === 0),
+		`${settingsRel}: expected entwurfProvider.mcpServers.entwurf-bridge to use the stable bin`,
+	);
+	const skillIsAscii = skill !== null && [...skill].every((char) => (char.codePointAt(0) ?? 128) <= 127);
+	const oracleIsAscii = ciOracle !== null && [...ciOracle].every((char) => (char.codePointAt(0) ?? 128) <= 127);
+	const skillAcceptsPrerelease =
+		skill !== null &&
+		skill.includes("version must be SemVer, optionally with a prerelease suffix") &&
+		skill.includes("(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?");
+	ok(
+		"S7e: one English-only skill owns all four authority modes and accepts SemVer prereleases",
+		skill === null ||
+			(/^name:\s*entwurf-release$/m.test(skill) &&
+				skill.includes("# LAND") &&
+				skill.includes("# PREPARE") &&
+				skill.includes("# MAKE") &&
+				skill.includes("# PUBLISH") &&
+				skillAcceptsPrerelease &&
+				skillIsAscii),
+		`${skillRel}: missing name, four authority modes, prerelease contract, or English/ASCII-only surface`,
+	);
+	ok(
+		"S7g: the executable ASCII CI oracle binds headSha and all three required jobs",
+		ciOracle === null ||
+			(ciOracle.includes("headSha") &&
+				ciOracle.includes('"check"') &&
+				ciOracle.includes('"install-surface"') &&
+				ciOracle.includes('"artifact-consumer"') &&
+				ciOracleMode === "100755" &&
+				oracleIsAscii),
+		`${ciOracleRel}: missing executable mode, exact-SHA classification, required jobs, or ASCII-only content`,
+	);
+	const retired = retiredRels.filter((file) => readCandidate(file) !== null);
+	ok(
+		"S7f: the candidate index omits the retired pi-only release prompts (no second release SSOT)",
+		retired.length === 0,
+		retired.join("\n"),
+	);
+}
+
+// ── S6: tracked first-party sources are TEXT ────────────────────────────────
+// A single stray NUL byte makes a source file `data` to file(1) and BINARY to git:
+// `git diff` stops showing content, and every reviewer and safety hook that reads the
+// diff is reading nothing. That is not a cosmetic defect — it is a hole straight
+// through the review surface, and it is silent because tsc, biome and the test run all
+// keep passing (a NUL inside a JS string literal is perfectly valid code).
+// This is not hypothetical: a `.join("\0")` typo shipped in a new gate here on
+// 2026-07-22 and was caught by cross-review reading `file`, not by any gate.
+{
+	const tracked = execFileSync(
+		"git",
+		["ls-files", "--cached", "--", "*.ts", "*.js", "*.sh", "*.py", "*.json", "*.md"],
+		{
+			cwd: REPO,
+			encoding: "utf8",
+		},
+	)
+		.split("\n")
+		.filter(Boolean)
+		// `git ls-files --cached` still names an unstaged deletion. Release-surface
+		// migrations deliberately delete tracked prompt files before the commit
+		// workflow stages them; absence is not binary content and must not crash this
+		// read-only gate before it can inspect the candidate files that remain.
+		.filter((f) => existsSync(path.join(REPO, f)));
+	const binary = tracked.filter((f) => readFileSync(path.join(REPO, f)).includes(0));
+	ok(
+		`S6: all ${tracked.length} present tracked first-party text sources are NUL-free (git shows them as diffable text)`,
+		tracked.length >= 20 && binary.length === 0,
+		binary.length ? binary.map((f) => `${f}: contains a NUL byte`).join("\n") : "git ls-files returned too few files",
 	);
 }
 

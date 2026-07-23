@@ -843,9 +843,21 @@ function probeExtensionRoot(name: string, localRoot: string, remoteRoot: string)
 	return null;
 }
 
-// <pkgroot>/pi-extensions/lib/entwurf-core.ts → <pkgroot>. entwurf-core runs from
-// source in every surface (pi native + MCP, both via --experimental-strip-types),
-// so import.meta.url always points at this source file, never a bundled copy.
+// <pkgroot>/pi-extensions/lib/entwurf-core.ts → <pkgroot>.
+//
+// The "runs from source in every surface, never a bundled copy" claim that used to
+// stand here is FALSE and was false from 0.12.1: the bridge build emits a copy at
+// mcp/entwurf-bridge/dist/pi-extensions/lib/entwurf-core.js, three levels deeper, where
+// `../..` lands inside dist/ instead of the package root. That is the SAME location-
+// arithmetic class as the capability-registry corpse (a function whose whole behaviour
+// is arithmetic on its own path is only as correct as the layout it is executed from).
+//
+// It is not the same bug: this seam is a BEST-EFFORT local-extension probe reached only
+// for `packageNeedle === "entwurf"` on a non-remote spawn, and a wrong root returns null
+// from probeExtensionRoot() and falls through to the settings/source mapping — it does
+// not throw the way a missing registry did. Nothing has verified what the emitted copy
+// resolves to at runtime, so do not upgrade this comment to a claim of correctness
+// without a gate that asks the shipped copy from where it lives.
 function resolveSelfRoot(): string | null {
 	try {
 		const here = path.dirname(fileURLToPath(import.meta.url));

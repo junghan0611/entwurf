@@ -18,6 +18,12 @@
  *     it cannot back.
  *   - record-backing is NOT checked by the reader (recordBacked is the deliverability
  *     predicate's explicit fact, so an absent record and a dead owner stay distinct).
+ *
+ * NOT proved here any more: launch topology. The tail-exec / retained-wrapper cells and
+ * the missing-carrier contract were retired together with the shell form (#51 B/B2);
+ * check-hook-launch-topology now drives the shipped exec-form argv and asserts the owner
+ * join for real. Marker semantics are launch-form independent, which is exactly why that
+ * migration did not disturb anything below.
  */
 
 import assert from "node:assert/strict";
@@ -142,11 +148,21 @@ const hookSrc = readFileSync(path.join(REPO_DIR, "pi-extensions", "meta-bridge-h
 
 ok("hook imports + calls writeMetaReceiverMarker", /writeMetaReceiverMarker/.test(hookSrc));
 
-// ownerPid is process.ppid ONLY — never the grandparent (parentPid). The receiver
-// owner is the watchPaths subscriber (the Claude CLI); a grandparent (login shell)
-// outlives the session and would resurrect the ghost active-receiver leak.
-ok("receiver marker ownerPid is process.ppid", /ownerPid\s*=\s*process\.ppid/.test(hookSrc));
-ok("hook does NOT use parentPid (no grandparent owner)", !/parentPid\s*\(/.test(hookSrc));
+// Under the exec-form launch contract the owner is simply this hook's parent: Claude
+// execs the shipped launcher, which execs the hook and hands it the same pid. The
+// retired shell-$PPID carrier and its ancestry walk existed only to survive a shell
+// Claude chose; assert they are GONE, so a future edit cannot quietly reintroduce a
+// second owner source that the manifest no longer feeds. Whether the parent really is
+// Claude is proven by execution in check-hook-launch-topology, not by reading source.
+ok("hook no longer reads a $PPID owner carrier", !/ENTWURF_META_HOOK_OWNER_PID/.test(hookSrc));
+ok("hook no longer walks ancestry to validate an owner", !/parentPid\s*\(/.test(hookSrc));
+ok("hook resolves the owner from its exec-form parent", /process\.ppid/.test(hookSrc));
+// Removing the carrier removed a fail-closed the exec form does NOT replace: an
+// already-open Claude session still holding the OLD cached shell command reaches this
+// NEW hook with a wrapper as its parent. The launcher stamps an explicit provenance
+// token for exactly that case, and the hook must refuse to mint any presence without
+// it. Without this assertion the marker's honesty depends on nobody deleting one line.
+ok("hook requires exec-launch provenance before trusting its parent", /ENTWURF_META_HOOK_LAUNCH/.test(hookSrc));
 
 // UserPromptSubmit must early-return BEFORE the receiver marker write — it cannot
 // arm a watch, so it must never mint a presence. Check the early-return appears
@@ -181,5 +197,14 @@ ok(
 	"receiver marker write sits within the watch-arm region (near inbox.signal)",
 	signalAt >= 0 && recvWriteAt > signalAt,
 );
+
+// ── launch topology is NOT this gate's job any more ─────────────────────────
+// The two shell-topology cells (tail-exec / retained-wrapper) and the missing-carrier
+// contract that used to live here were retired with the shell form itself (#51 B/B2).
+// Keeping them would have meant defending a launch form the repo no longer ships.
+// What replaced them is check-hook-launch-topology, which drives the SHIPPED exec-form
+// argv through the shipped launcher and asserts the owner join for real. This gate
+// stays on marker SEMANTICS, which are launch-form independent — that separation is
+// the reason the migration did not have to rewrite the marker contract.
 
 console.log(`\ncheck-meta-receiver-marker: ${passed} checks passed`);

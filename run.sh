@@ -84,9 +84,12 @@ Usage:
   ./run.sh check-meta-v3-record        # deterministic gate (#50 hard cut): V3 record contract — canonical serialize/round-trip/mint, parseMetaRecordAny V3-only naming the M1 command, strayness inversion production half, no API
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
+  ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
+  ./run.sh check-bridge-delivery      # deterministic gate (IN pnpm check): demo scene 3 recovered — seed strict meta-sender + armed receiver citizens in an isolated temp world, scrub ambient pi/sender carriers, drive the BUILT DIST ENTRY over MCP stdio through a real tools/call entwurf_v2, assert the .msg landed under the seeded sender + doorbell poked. DELIVERS through the artifact, not from source. ENTWURF_DELIVERY_SUBJECT=<launcher> replays the same scene against another consumer artifact (check-pack-install passes the npm-installed bin). No model/network/cost; stale or missing dist FAILS
   ./run.sh check-meta-migration-readers # deterministic gate (#50 hard cut): frozen v1/v2 readers + version fences + strict v2 keyset + meta-migration import allowlist, no API
   ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
-  ./run.sh check-meta-receiver-marker # deterministic gate (SE-2 slice 2b): meta-receiver presence marker — write/read round-trip garden-id keyed + atomic 0600, dead-owner start-key guard reads null, armProvenance limited to arm-capable events (UserPromptSubmit can't mint presence), reader doesn't gate on record existence
+  ./run.sh check-meta-receiver-marker # deterministic gate (SE-2): receiver marker round-trip/start-key/provenance, UserPromptSubmit cannot mint presence, reader does not gate on record existence — marker SEMANTICS only; launch topology moved to check-hook-launch-topology
+  ./run.sh check-hook-launch-topology # #51 gate 1: shipped hooks.json is exec form through hook-launch.sh, launcher is loud on an empty argv (older Claude's silent args drop), exec preserves the pid so the hook's parent is Claude, and a space/$/backtick plugin path survives as one argv element
   ./run.sh check-meta-identity-consumers # deterministic gate (#50 hard cut): V3-only consumer seam — read/scan by body, pre-cut skipped via onSkip, G1 duplicate ambiguity throw, no API
   ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const), slot stays (3D-4), no API
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
@@ -125,6 +128,7 @@ Usage:
   ./run.sh smoke-meta-async-drift     # 1.0.0 meta-bridge step 1: drift sentinel — version pins + Claude binary undocumented-behavior markers (LIVE=1 adds plugin watch-arm probe)
   ./run.sh smoke-meta-honesty         # 1.0.0 meta-bridge: honesty regression gate (#30 blockers) — doorbell counts ALL msgs honestly + hook logs failures as ERROR (best-effort, no scream). Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-meta-install-state   # 1.0.0 meta-bridge Phase 2: stateful install/uninstall + store-doctor regression gate. Offline/deterministic (deps: bash+node+python3)
+  ./run.sh check-meta-doctor-oracle   # 0.12.8 (#51): detection power of the release ORACLE — healthy fixture must reach `doctor: PASS`, then 21 planted defects (retired shell form, partial hand-patch, launcher bypass/repoint/provenance loss, malformed exec args, owner type drift, extra leaf/group, doorbell asyncRewake/path/timeout, no live bridge, stale receiver, ambiguous/missing cache, missing hook log/writer, failing CLI probes) must each turn it FAIL naming their own cause, plus a positive case pinning that a long-writing CLI is NOT a false negative. Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-agy-install-state    # agy MCP + exact permission ownership regression (120): isolated HOME+XDG, adopt/state/inverse, symlink refuse, setup degrade. Offline/deterministic
   ./run.sh smoke-agy-statusline-state # agy ambient garden-id statusLine install/doctor/inverse regression (62). Offline/deterministic
   ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression (37). Offline/deterministic
@@ -136,7 +140,7 @@ Usage:
 
   ./run.sh install-meta-bridge        # INTERNAL part of `setup` (native-harness plugin) + doctor recovery path — prefer `setup`; stateful GLOBAL install (plugin + USER MCP + settings keyset, honest uninstall state)
   ./run.sh uninstall-meta-bridge      # 1.0.0 meta-bridge Phase 2: stateful GLOBAL uninstall (restore only keys/items captured in install-state)
-  ./run.sh doctor-meta-bridge         # 1.0.0 meta-bridge Phase 2: fail-loud doctor — toolchain + state + plugin/MCP + store scan + hook errors + SessionStart evidence + writer-version parity (source↔assembled↔installed: FAIL on a stale deployed meta-record writer)
+  ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is not yet verified/certified and stays nonzero for this cut (future validation may reopen it). Detection power is held by check-meta-doctor-oracle
   ./run.sh install-agy-bridge         # 봉인 7: agy MCP install adapter — register ONE entwurf-bridge server in the agy mcp_config (adopt file / create / REFUSE symlink), stable bin command, install-state under $XDG_DATA_HOME/entwurf/agy-bridge/
   ./run.sh uninstall-agy-bridge       # 봉인 7: honest inverse of install-agy-bridge from install-state (restore preimage / remove key; refuse if config became a symlink)
   ./run.sh doctor-agy-bridge          # fail-loud doctor: MCP config + exact permission rule + state + live probe label
@@ -150,8 +154,10 @@ Usage:
   ./run.sh meta-bridge-managed-keys   # 0.10.0 meta-bridge: print the SSOT of settings keys entwurf OWNS (consumers read this to stay disjoint — keyset-owner invariant)
   ./run.sh check-keyset-overlap <fragment.json...>  # 0.10.0 meta-bridge: PREVENTIVE keyset guard — fail if a consumer fragment collides with any pi-owned key (cross-repo; not in pnpm check)
   ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
+  ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
-  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.80.x peers
+  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.80.x peers + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands)
+  ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to entwurf alias
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
   ./run.sh setup:links [--force]      # repair ~/.pi/agent/entwurf-targets.json link (use --force to replace a stale operator file or wrong symlink; a .bak is taken)
@@ -256,10 +262,18 @@ preflight_dep_integrity() {
   # (accessSync follows the link).
   #
   # Probe set = the BUNDLED runtime `dependencies` only. The `@earendil-works/pi-*`
-  # peer trio is intentionally EXCLUDED: pi-managed installs omit peers
-  # (--legacy-peer-deps) and the pi loader provides that runtime itself, so the
-  # trio is legitimately absent from node_modules on the npm path. pi runtime
-  # presence/version is covered by check-pi-runtime-version / check-pi-import-surface.
+  # peer trio is intentionally EXCLUDED, and the reason depends on the lane — the old
+  # blanket claim ("the pi loader provides that runtime itself") was true for only one
+  # of them and is corrected here:
+  #   pi-managed install — pi omits peers (--legacy-peer-deps) and its own loader
+  #     supplies the runtime, so the trio is legitimately absent.
+  #   neutral npm/pnpm install — nothing supplies it. The optional peer is simply
+  #     unresolved (entwurf-preflight.ts:51), and the owned-outcome lane that needs it
+  #     is dead on that host. Excluding the trio from this probe is still right (a hard
+  #     require would reject every consumer install), but it is a KNOWN GAP, not proof
+  #     that the runtime is present by another route.
+  # pi runtime presence/version is covered by check-pi-runtime-version /
+  # check-pi-import-surface, neither of which runs on a consumer host.
   local probe=(
     "@modelcontextprotocol/sdk" "@agentclientprotocol/sdk" "@agentclientprotocol/claude-agent-acp"
     "@anthropic-ai/sdk" "zod"
@@ -573,6 +587,31 @@ check_entwurf_capabilities() {
   run_ts scripts/check-entwurf-capabilities.ts
 }
 
+check_capability_bundle_reach() {
+  # The gate check-entwurf-capabilities structurally cannot be. That gate imports
+  # metaCapabilitiesFilePath() from ../pi-extensions/lib/ — the one location where
+  # its relative path arithmetic is correct — so "the registry resolves" is a
+  # tautology there. This one DISCOVERS every shipped copy of the module and
+  # re-asks each from where it actually lives, including the bridge bundle emit at
+  # mcp/entwurf-bridge/dist/pi-extensions/lib/ that answers the real entwurf_v2.
+  # Requires a built bridge; a missing dist FAILS (never skips).
+  run_ts scripts/check-capability-bundle-reach.ts
+}
+
+check_bridge_delivery() {
+  # demo/demo.sh scene 3, recovered as a deterministic gate. demo drove two real pi
+  # panes so it proved DELIVERY through the installed binary (at model cost); what
+  # replaced it split in half — matrix-live C2 delivers but from repo source
+  # in-process, while bridge-boot/pack-install/install-container run the artifact but
+  # only tools/list. entwurf_v2 through the shipped bundle was never executed once,
+  # and it shipped dead through 0.12.8-repair.0. This seeds an armed self-fetch
+  # citizen (C2 recipe) into an env-isolated temp world, then drives the BUILT DIST
+  # ENTRY as its own process over MCP stdio through a real tools/call entwurf_v2 and
+  # asserts the .msg physically landed + the doorbell was poked. Seeder is source,
+  # subject is the artifact, separate processes. No model, no network, no cost.
+  run_ts scripts/check-bridge-delivery.ts
+}
+
 check_meta_migration_readers() {
   # Deterministic gate for the #50 schema hard cut: the FROZEN migration surface
   # (meta-migration.ts). Frozen v1/v2 readers still parse their own shapes —
@@ -607,6 +646,17 @@ check_meta_receiver_marker() {
   # UserPromptSubmit cannot mint presence; reader does NOT gate on record existence
   # (recordBacked is the deliverability predicate's fact). Real tmpdir, no API.
   run_ts scripts/check-meta-receiver-marker.ts
+}
+
+check_hook_launch_topology() {
+  # #51 gate 1, deliberately built only AFTER the B/B2 verdict. Binds the SHIPPED
+  # hooks.json to real child topology: every leaf is exec form through the shipped
+  # hook-launch.sh, the launcher refuses an empty argv (the only visible symptom of an
+  # older Claude silently dropping `args`), and `exec` preserves the pid so the hook's
+  # parent is the process that stood in for Claude. Includes a plugin path containing
+  # space/$/backtick/;& — under exec form that is one opaque argv element, which is
+  # exactly what the retired shell form could not promise. No API, no live session.
+  run_ts scripts/check-hook-launch-topology.ts
 }
 
 check_meta_identity_consumers() {
@@ -1418,6 +1468,361 @@ EOF
   )
 }
 
+check_node_floor_coherence() {
+  # #51 gate 3. The Node floor is declared across SIX contract surfaces
+  # (package.json engines, run.sh setup preflight, meta-bridge install + doctor,
+  # docs/setup-clean-host.md, mcp/entwurf-bridge/start.sh) plus the CI runner's
+  # node-version, and TWO of those are live judgment logic (the installer `die`,
+  # the doctor ok/bad branch), not prose. Before this gate they were bound to
+  # nothing: the contract said one thing, CI exercised another, and the docs
+  # advertised a dual "recommended / minimum" floor that no consumer image ever
+  # ran. That is the same shape as check-dep-versions' regression — the
+  # assertion was removed and the declaration survived, advertising a coverage
+  # that had stopped existing.
+  #
+  # package.json engines.node is the SSOT; every other spelling is DERIVED and
+  # compared against it. There must be exactly ONE number to move.
+  (cd "$REPO_DIR" && node --input-type=module <<'EOF'
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+
+const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+const declared = pkg.engines?.node;
+// The derived sites below compare MAJORS only (`-lt 24`, `>= 24`). A SSOT of
+// `>=24.3.0` would therefore be unenforceable: installer and doctor would bless
+// 24.0 while the contract demanded 24.3, and this gate would print green. The
+// supported axis is a MAJOR lane, so pin the SSOT to a `.0.0` floor and reject
+// anything finer rather than silently under-enforcing it. (Raising this to a
+// minor floor means implementing a full semver compare at every derived site.)
+assert.match(String(declared), /^>=\d+\.0\.0$/,
+  `package.json engines.node must be a major-lane floor ">=<major>.0.0" — the derived sites compare majors only and cannot enforce a finer floor (got ${declared ?? 'nothing'})`);
+const MAJOR = Number(String(declared).slice(2).split('.')[0]);
+
+// The gate itself must not run BELOW the axis it certifies: a coherence green
+// printed by an unsupported runtime is exactly the "declared ≠ verified" split
+// this gate exists to close.
+const runner = Number(process.versions.node.split('.')[0]);
+assert.ok(runner >= MAJOR,
+  `this gate is running on Node ${process.versions.node}, below the floor it certifies (${declared}) — a green from an unsupported runtime proves nothing`);
+
+// Every site that must agree with the SSOT. `min` is the guard-the-guard: if a
+// pattern ever stops matching, the site has drifted out of the gate and we fail
+// loud instead of passing vacuously on zero matches.
+const SITES = [
+  ['run.sh', /process\.versions\.node\.split\("\."\)\[0\]\) >= (\d+)/g, 1, 'setup preflight logic'],
+  ['run.sh', /entwurf requires Node >= (\d+)/g, 1, 'setup preflight message'],
+  ['scripts/meta-bridge-install.sh', /NODE_MAJOR" -lt (\d+)/g, 1, 'installer die condition'],
+  ['scripts/meta-bridge-install.sh', /entwurf requires Node >= (\d+)/g, 1, 'installer die message'],
+  ['scripts/meta-bridge-doctor.sh', /MJ:-0}" -ge (\d+)/g, 1, 'doctor judgment logic'],
+  ['scripts/meta-bridge-doctor.sh', /need >= (\d+)/g, 1, 'doctor bad message'],
+  // Anchored to the Node ROW, not to any `>=x.y.z` in the file. The loose pattern
+  // matched the Claude Code floor row the moment that table grew one (2026-07-22) and
+  // read its major as the Node major. A site rule has to name its own site.
+  ['docs/setup-clean-host.md', /\| Node \| \*\*`>=(\d+)\.\d+\.\d+`\*\*/g, 1, 'clean-host pin matrix'],
+  ['mcp/entwurf-bridge/start.sh', /Node >= (\d+) \(engines\.node/g, 1, 'bridge launcher header'],
+  ['.github/workflows/ci.yml', /node-version: (\d+)/g, 2, 'CI runner node-version'],
+];
+
+let bound = 0;
+for (const [file, re, min, label] of SITES) {
+  const text = readFileSync(file, 'utf8');
+  const hits = [...text.matchAll(re)];
+  assert.ok(hits.length >= min,
+    `${file}: ${label} — pattern matched ${hits.length} time(s), expected >= ${min}. The declaration left the gate; re-bind it instead of deleting the assertion.`);
+  for (const [decl, major] of hits) {
+    assert.equal(Number(major), MAJOR,
+      `${file}: ${label} declares Node major ${major} in "${decl.trim()}", but engines.node is ${declared}`);
+  }
+  bound += hits.length;
+}
+
+// Sweep the tracked first-party contract TEXT surfaces, NOT just the files
+// already registered above. The first cut of this gate swept only SITES' own
+// files and therefore could not see a declaration in an UNREGISTERED file —
+// which is precisely how `mcp/entwurf-bridge/start.sh` kept advertising the old
+// floor while the gate printed green (review lane, 2026-07-21). A sweep scoped
+// to what is already bound is not a safety net; it is a restatement.
+// pnpm-lock.yaml is excluded on purpose: those engine ranges belong to third-
+// party dependencies and are not this repo's supported axis.
+// `--cached` ONLY — deliberately not `--others`. The corpus must be the
+// candidate contract (what is tracked/staged), never the operator's working
+// directory: an un-ignored scratch file would otherwise turn this gate RED on
+// one host and green on another, which is the read-coupling this cut exists to
+// remove (rule 11 — a gate may not READ operator state any more than WRITE it).
+// A genuinely new source file enters `--cached` the moment it is staged, i.e.
+// before the commit that would ship it. (Review lane, 2026-07-21.)
+const tracked = execFileSync('git', ['ls-files', '--cached', '--', '*.sh', '*.json', '*.ts', '*.md', '*.yml', '*.yaml'], { encoding: 'utf8' })
+  .split('\n')
+  .filter((f) => f && f !== 'pnpm-lock.yaml' && f !== 'CHANGELOG.md' && f !== 'NEXT.md');
+assert.ok(tracked.length >= 20,
+  `git ls-files returned ${tracked.length} first-party files — the sweep lost its corpus and would pass vacuously`);
+
+// A floor declaration = the word node, then a comparison operator, then a
+// two-digit major. Case-insensitive: the miss above was literally a capital N.
+const FLOOR_DECL = /node[^0-9\n]{0,20}(?:>=|-lt|-ge|-gt)\s*(\d{2})/gi;
+let swept = 0;
+for (const file of tracked) {
+  // `git ls-files --cached` still names an UNSTAGED deletion. That is a valid
+  // release-surface migration before the commit workflow stages it, not an
+  // unreadable candidate file. Skip ENOENT only; every other read failure crashes.
+  let text;
+  try { text = readFileSync(file, 'utf8'); }
+  catch (error) {
+    if (error?.code === 'ENOENT') continue;
+    throw error;
+  }
+  for (const line of text.split('\n')) {
+    if (line.includes('check_node_floor_coherence') || line.includes('FLOOR_DECL')) continue;
+    for (const [decl, major] of line.matchAll(FLOOR_DECL)) {
+      swept++;
+      assert.equal(Number(major), MAJOR,
+        `${file}: unregistered Node floor "${decl.trim()}" — expected major ${MAJOR}. Bind it in SITES or fix it.`);
+    }
+  }
+}
+assert.ok(swept >= 6,
+  `sweep found only ${swept} node floor declarations across ${tracked.length} tracked files — the pattern rotted and would pass vacuously`);
+
+// `bound` is the real declaration count; SITES.length is the number of RULES
+// (the CI rule alone matches two node-version lines). Naming the rule count a
+// declaration count would be this gate telling a small lie about its own reach.
+console.log(`[check-node-floor-coherence] ok — Node >=${MAJOR} is coherent across engines.node, ${bound} bound declarations from ${SITES.length} site rules, and ${swept} declarations swept over ${tracked.length} tracked first-party contract text surfaces (single supported axis, no legacy lane). Non-text carriers (e.g. a Dockerfile \`FROM node:*\`) are OUTSIDE this pattern and must be bound by their own gate.`);
+EOF
+  )
+}
+
+check_claude_floor_coherence() {
+  # #51 policy A. The Claude Code floor is a THREE-PART version, unlike the Node
+  # floor's major lane: the discriminator lives in the patch position (2.1.138 drops
+  # `args`, 2.1.139 introduces the exec form, 2.1.217 is the version actually proven
+  # in a live session). So it cannot borrow check-node-floor-coherence's major-only
+  # comparison and needs its own binding.
+  #
+  # package.json `entwurf.claudeCodeFloor` is the SSOT. The installer and the doctor
+  # DERIVE it at runtime through scripts/meta-bridge-claude-floor.sh, so they carry no
+  # literal to drift — that shared file is itself part of the contract and is asserted
+  # below. What remains are the human-facing declarations (the launcher's refusal
+  # message, docs, AGENTS) plus every fake `claude` CLI stub the gates spawn: a stub
+  # that reports a version BELOW the floor would make the doctor legitimately refuse
+  # its own fixture, so those are bound too — as `>=`, not equality, since a stub may
+  # honestly claim a newer version.
+  (cd "$REPO_DIR" && node --input-type=module <<'EOF'
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+
+const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
+const declared = pkg.entwurf?.claudeCodeFloor;
+assert.match(String(declared), /^>=\d+\.\d+\.\d+$/,
+  `package.json entwurf.claudeCodeFloor must be a ">=X.Y.Z" spec (got ${declared ?? 'nothing'})`);
+const FLOOR = String(declared).slice(2);
+const cmp = (a, b) => {
+  const x = a.split('.').map(Number), y = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+  return 0;
+};
+
+// The installer and doctor must DERIVE, never retype. If either grows a literal
+// floor, the number stops being single and this gate has to say so.
+const DERIVERS = ['scripts/meta-bridge-install.sh', 'scripts/meta-bridge-doctor.sh'];
+for (const file of DERIVERS) {
+  const text = readFileSync(file, 'utf8');
+  assert.ok(text.includes('meta-bridge-claude-floor.sh'),
+    `${file}: must source scripts/meta-bridge-claude-floor.sh — the floor is derived from package.json, never retyped`);
+  assert.ok(text.includes('claude_floor_satisfied'),
+    `${file}: sources the floor helper but never calls claude_floor_satisfied — a floor that is read and not enforced is decoration`);
+  const stray = [...text.matchAll(/Claude Code >=\s*(\d+\.\d+\.\d+)/g)];
+  for (const [decl, ver] of stray) {
+    assert.equal(ver, FLOOR, `${file}: hardcodes "${decl.trim()}" but the SSOT floor is ${FLOOR}`);
+  }
+}
+
+// Exact-equality declarations: prose and user-facing text that names the floor.
+const SITES = [
+  ['pi/meta-bridge/entwurf-meta-receive/scripts/hook-launch.sh', /Claude Code >= (\d+\.\d+\.\d+)/g, 1, 'launcher refusal message'],
+  ['scripts/meta-bridge-claude-floor.sh', /THE FLOOR IS (\d+\.\d+\.\d+)/g, 1, 'floor helper rationale header'],
+  ['docs/setup-clean-host.md', /`>=(\d+\.\d+\.\d+)`\*\* — the exec-form hook floor/g, 1, 'clean-host pin matrix'],
+  ['AGENTS.md', /Claude Code `>=(\d+\.\d+\.\d+)`/g, 1, 'AGENTS rule 13'],
+  ['README.md', /supported floor `>=(\d+\.\d+\.\d+)`/g, 1, 'README doctor description'],
+  ['scripts/check-hook-launch-topology.ts', /\/(\d+)\\\.(\d+)\\\.(\d+)\//g, 1, 'topology gate floor assertion'],
+];
+let bound = 0;
+for (const [file, re, min, label] of SITES) {
+  const text = readFileSync(file, 'utf8');
+  const hits = [...text.matchAll(re)];
+  assert.ok(hits.length >= min,
+    `${file}: ${label} — pattern matched ${hits.length} time(s), expected >= ${min}. The declaration left the gate; re-bind it instead of deleting the assertion.`);
+  for (const hit of hits) {
+    const ver = hit.length > 2 ? `${hit[1]}.${hit[2]}.${hit[3]}` : hit[1];
+    assert.equal(ver, FLOOR, `${file}: ${label} declares ${ver} in "${hit[0].trim()}", but the SSOT floor is ${FLOOR}`);
+  }
+  bound += hits.length;
+}
+
+// Every fake `claude` CLI a gate spawns. These are not prose: the doctor reads them
+// and judges the version, so a stub below the floor turns a healthy fixture RED for
+// the wrong reason. Swept over tracked files rather than a registered list, because
+// the miss this repo already paid for was a declaration in an UNREGISTERED file.
+const tracked = execFileSync('git', ['ls-files', '--cached', '--', '*.sh', '*.ts'], { encoding: 'utf8' })
+  .split('\n').filter(Boolean);
+assert.ok(tracked.length >= 20, `git ls-files returned ${tracked.length} files — the sweep lost its corpus`);
+const STUB = /echo\s+"(\d+\.\d+\.\d+) \(Claude Code\)"/g;
+let stubs = 0;
+for (const file of tracked) {
+  for (const [decl, ver] of readFileSync(file, 'utf8').matchAll(STUB)) {
+    stubs++;
+    assert.ok(cmp(ver, FLOOR) >= 0,
+      `${file}: fake claude CLI reports ${ver} in "${decl.trim()}", BELOW the floor ${FLOOR} — the doctor would refuse this fixture for the version, not for what the fixture is testing`);
+  }
+}
+assert.ok(stubs >= 4,
+  `sweep found only ${stubs} fake claude version stubs — the pattern rotted and would pass vacuously`);
+
+// The sweep above can only judge stubs that ANSWER `--version`. A fake `claude` with
+// no version arm at all is invisible to it — and that is not hypothetical: adding the
+// installer's floor check turned three such stubs into silent installer deaths on the
+// first full run (2026-07-22), caught by the smoke rather than by this gate. A gate
+// that binds only the declarations that exist is the same "sweep what is already
+// bound" mistake check-node-floor-coherence had to fix. So: if a file MINTS a fake
+// claude, that stub must be able to say who it is.
+const MINT = /(?:cat|tee)\s*>+\s*"?\$?\{?\w+\}?\/claude"?\s*<<-?\s*'?(\w+)'?/g;
+let stubsMinted = 0;
+for (const file of tracked) {
+  const text = readFileSync(file, 'utf8');
+  for (const m of text.matchAll(MINT)) {
+    stubsMinted++;
+    const body = text.slice(m.index + m[0].length);
+    const end = body.search(new RegExp(`^\\s*${m[1]}\\s*$`, 'm'));
+    const stub = end >= 0 ? body.slice(0, end) : body;
+    assert.ok(stub.includes('--version'),
+      `${file}: a fake \`claude\` stub is minted here with no \`--version\` arm. The installer and doctor read the version to enforce the floor, so this stub makes them die (or pass) for a reason that has nothing to do with what the fixture is testing.`);
+  }
+}
+assert.ok(stubsMinted >= 4,
+  `sweep found only ${stubsMinted} fake claude stub definitions — the mint pattern rotted and would pass vacuously`);
+
+// PROSE SWEEP over the tracked contract text, not just SITES' own files. Binding only
+// the declarations someone remembered to register is the "sweep what is already bound"
+// restatement check-node-floor-coherence had to fix, and this gate shipped with the same
+// shape: measured 2026-07-22, THREE floor declarations (DELIVERY.md x2, the clean-host
+// upgrade note) sat outside SITES, so moving the floor would have left them advertising
+// the old number while this gate printed green.
+//
+// Scope is deliberately narrow: only a COMPARISON (`>=`) next to the word Claude is a
+// floor declaration. A bare "Claude Code 2.1.217 actual session" in VERIFY/BASELINE is an
+// OBSERVATION — the version some evidence was taken at — and must not be rewritten when
+// the floor moves. CHANGELOG.md and NEXT.md are excluded for the same reason
+// check-node-floor-coherence excludes them: they are history, and history keeps the number
+// it was written with.
+const proseCorpus = execFileSync('git', ['ls-files', '--cached', '--', '*.sh', '*.json', '*.ts', '*.md', '*.yml', '*.yaml'], { encoding: 'utf8' })
+  .split('\n')
+  .filter((f) => f && f !== 'pnpm-lock.yaml' && f !== 'CHANGELOG.md' && f !== 'NEXT.md');
+assert.ok(proseCorpus.length >= 20,
+  `git ls-files returned ${proseCorpus.length} first-party files — the prose sweep lost its corpus and would pass vacuously`);
+const FLOOR_DECL = /[Cc]laude[^0-9\n]{0,24}>=\s*(\d+\.\d+\.\d+)/g;
+let sweptProse = 0;
+for (const file of proseCorpus) {
+  // As above, an unstaged deletion remains in `git ls-files --cached` until the
+  // commit workflow stages it. Skip only that ENOENT transition; do not hide any
+  // other read failure.
+  let text;
+  try { text = readFileSync(file, 'utf8'); }
+  catch (error) {
+    if (error?.code === 'ENOENT') continue;
+    throw error;
+  }
+  for (const line of text.split('\n')) {
+    if (line.includes('check_claude_floor_coherence') || line.includes('FLOOR_DECL')) continue;
+    for (const [decl, ver] of line.matchAll(FLOOR_DECL)) {
+      sweptProse++;
+      assert.equal(ver, FLOOR,
+        `${file}: unregistered Claude Code floor declaration "${decl.trim()}" — the SSOT floor is ${FLOOR}. Bind it in SITES or fix it.`);
+    }
+  }
+}
+assert.ok(sweptProse >= 8,
+  `prose sweep found only ${sweptProse} Claude floor declarations across ${proseCorpus.length} tracked files — the pattern rotted and would pass vacuously`);
+
+console.log(`[check-claude-floor-coherence] ok — Claude Code >=${FLOOR} is coherent across package.json (SSOT), ${DERIVERS.length} runtime derivers that never retype it, ${bound} bound declarations from ${SITES.length} site rules, ${stubs} fake-CLI version declarations (>= floor, since a stub may honestly claim newer), ${stubsMinted} minted fake-claude stubs each able to answer --version, and ${sweptProse} floor declarations swept over ${proseCorpus.length} tracked contract text surfaces (observations without a comparison operator are OUT of scope; CHANGELOG/NEXT keep their history).`);
+EOF
+  )
+
+  # The shared detector is called from a bare assignment under `set -euo pipefail`.
+  # A failed or unparseable probe must therefore return success-with-empty so each
+  # caller reaches its own explicit NOT CERTIFIED / install-refusal diagnosis instead
+  # of dying at the assignment. The long-writer cell reproduces the old early-reader
+  # SIGPIPE class with 128 KiB before the version line; the parser must consume it all.
+  local probe_tmp
+  probe_tmp="$(mktemp -d -t entwurf-claude-floor.XXXXXX)"
+  cat > "$probe_tmp/claude" <<'SH'
+#!/usr/bin/env bash
+[ "${1:-}" = "--version" ] || exit 2
+case "${FAKE_CLAUDE_VERSION_MODE:-ok}" in
+  ok)          printf '%s\n' 'diagnostic prelude' '2.1.217 (Claude Code)' ;;
+  unparseable) printf '%s\n' 'Claude Code version unknown' ;;
+  nonzero)     printf '%s\n' '2.1.217 (failed probe)'; exit 7 ;;
+  longwriter)  python3 - <<'PY'
+import sys
+sys.stdout.write("x" * (128 * 1024) + "\n2.1.217 (Claude Code)\n")
+PY
+    ;;
+esac
+SH
+  chmod +x "$probe_tmp/claude"
+  for mode in ok longwriter; do
+    FAKE_CLAUDE_VERSION_MODE="$mode" PATH="$probe_tmp:$PATH" bash -c '
+      set -euo pipefail
+      source "$1"
+      [ "$(claude_detected_version)" = 2.1.217 ]
+    ' _ "$REPO_DIR/scripts/meta-bridge-claude-floor.sh"
+  done
+  for mode in unparseable nonzero; do
+    FAKE_CLAUDE_VERSION_MODE="$mode" PATH="$probe_tmp:$PATH" bash -c '
+      set -euo pipefail
+      source "$1"
+      [ -z "$(claude_detected_version)" ]
+    ' _ "$REPO_DIR/scripts/meta-bridge-claude-floor.sh"
+  done
+  ok "[check-claude-floor-coherence] detector returns the intended value for normal, nonzero, unparseable, and 128-KiB long-writer probes"
+
+  # Do not stop at helper behavior: prove both production callers reach THEIR OWN
+  # diagnostic branches. Every writable/readable root is sandboxed; these probes stop
+  # before an installer side effect and let the doctor finish its normal FAIL summary.
+  local probe_home="$probe_tmp/home" install_out doctor_out
+  mkdir -p "$probe_home" "$probe_tmp/xdg-data" "$probe_tmp/xdg-state" "$probe_tmp/xdg-cache" "$probe_tmp/agent"
+  if install_out="$(env \
+      HOME="$probe_home" XDG_DATA_HOME="$probe_tmp/xdg-data" XDG_STATE_HOME="$probe_tmp/xdg-state" XDG_CACHE_HOME="$probe_tmp/xdg-cache" \
+      PI_CODING_AGENT_DIR="$probe_tmp/agent" CLAUDE_CONFIG_DIR="$probe_home/.claude" \
+      FAKE_CLAUDE_VERSION_MODE=unparseable PATH="$probe_tmp:$PATH" \
+      bash "$REPO_DIR/scripts/meta-bridge-install.sh" 2>&1)"; then
+    echo "[check-claude-floor-coherence] FAIL: installer accepted an unparseable Claude version" >&2
+    rm -rf "$probe_tmp"
+    return 1
+  fi
+  case "$install_out" in
+    *"meta-bridge-install: could not read a version from 'claude --version'"*) ;;
+    *) echo "[check-claude-floor-coherence] FAIL: installer died before its own unidentifiable-version diagnosis: $install_out" >&2; rm -rf "$probe_tmp"; return 1 ;;
+  esac
+  ok "[check-claude-floor-coherence] installer reaches its own unidentifiable-version refusal branch"
+
+  if doctor_out="$(env \
+      HOME="$probe_home" XDG_DATA_HOME="$probe_tmp/xdg-data" XDG_STATE_HOME="$probe_tmp/xdg-state" XDG_CACHE_HOME="$probe_tmp/xdg-cache" \
+      PI_CODING_AGENT_DIR="$probe_tmp/agent" CLAUDE_CONFIG_DIR="$probe_home/.claude" \
+      FAKE_CLAUDE_VERSION_MODE=nonzero PATH="$probe_tmp:$PATH" \
+      bash "$REPO_DIR/scripts/meta-bridge-doctor.sh" 2>&1)"; then
+    echo "[check-claude-floor-coherence] FAIL: doctor certified a failed Claude version probe" >&2
+    rm -rf "$probe_tmp"
+    return 1
+  fi
+  case "$doctor_out" in
+    *"could not read a version from 'claude --version' — NOT CERTIFIED"*"meta-bridge doctor: FAIL"*) ;;
+    *) echo "[check-claude-floor-coherence] FAIL: doctor did not reach its own NOT CERTIFIED branch and final FAIL summary: $doctor_out" >&2; rm -rf "$probe_tmp"; return 1 ;;
+  esac
+  ok "[check-claude-floor-coherence] doctor reaches its own NOT CERTIFIED branch and final FAIL summary"
+  rm -rf "$probe_tmp"
+}
+
 check_pi_import_surface() {
   # 0.11 Stage 0 (동결결정 9): the bridge may reference @earendil-works/pi-*
   # ONLY by the package root. ANY subpath (`/dist`, `/core`, `/src`, `/foo`, …)
@@ -1986,10 +2391,19 @@ check_pack() {
     "pi/meta-bridge/entwurf-meta-receive/.claude-plugin/plugin.json"
     "pi/meta-bridge/entwurf-meta-receive/hooks/hooks.json"
     "pi/meta-bridge/entwurf-meta-receive/scripts/doorbell.sh"
+    # 0.12.8 (#51) — the exec form names hook-launch.sh as the EXECUTABLE, so its
+    # absence is not a degraded path: install dies at the chmod and no hook can run.
+    # It rides a per-FILE entry in the files array (not a whole directory), so one
+    # deleted line drops it from the tarball while every other gate stays green.
+    "pi/meta-bridge/entwurf-meta-receive/scripts/hook-launch.sh"
     "pi-extensions/meta-bridge-hook.ts"
     "pi-extensions/lib/meta-session.ts"
     "pi-extensions/lib/session-id.js"
     "scripts/meta-bridge-install.sh"
+    # Both the installer and the doctor `source` this floor helper under `set -e`.
+    # Missing, the doctor dies before printing a single line — the release oracle
+    # would be silent rather than red.
+    "scripts/meta-bridge-claude-floor.sh"
     "scripts/meta-bridge-state.py"
   )
 
@@ -2168,10 +2582,15 @@ _check_pack_install_impl() {
     "pi/meta-bridge/entwurf-meta-receive/.claude-plugin/plugin.json"
     "pi/meta-bridge/entwurf-meta-receive/hooks/hooks.json"
     "pi/meta-bridge/entwurf-meta-receive/scripts/doorbell.sh"
+    # 0.12.8 (#51) — see check-pack: the exec form's executable and the floor helper
+    # both callers source. The install smoke below asserts the ASSEMBLED launcher is
+    # executable; this asserts the artifact it is assembled FROM actually shipped.
+    "pi/meta-bridge/entwurf-meta-receive/scripts/hook-launch.sh"
     "pi-extensions/meta-bridge-hook.ts"
     "pi-extensions/lib/meta-session.ts"
     "pi-extensions/lib/session-id.js"
     "scripts/meta-bridge-install.sh"
+    "scripts/meta-bridge-claude-floor.sh"
     "scripts/meta-bridge-state.py"
   )
   for f in "${tar_required[@]}"; do
@@ -2227,6 +2646,14 @@ _check_pack_install_impl() {
 
   printf '%s\n' '{ "name": "entwurf-install-smoke", "version": "0.0.0", "private": true }' > "$tmp/package.json"
 
+  # pi-agent-core is pinned even though we never import it: pi-coding-agent depends
+  # on it by CARET (`^0.80.7`), so with no lockfile in this fresh temp project it
+  # floats to whatever pi published last — and that newer core then drags a NESTED
+  # pi-ai of its own. Measured 2026-07-21: pinning only the three we import left
+  # pi-agent-core@0.80.10 + pi-ai@0.80.10 in the tree while the gate still announced
+  # "pinned pi 0.80.7". The gate would then be verifying an UNVERIFIED runtime — the
+  # exact class this cut exists to close. Pin every @earendil-works package that
+  # constitutes the pi runtime, not just the ones whose types we touch.
   echo "[check-pack-install] pnpm add into $tmp (with 0.80.x peers + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
@@ -2234,12 +2661,27 @@ _check_pack_install_impl() {
     "@earendil-works/pi-ai@0.80.7" \
     "@earendil-works/pi-coding-agent@0.80.7" \
     "@earendil-works/pi-tui@0.80.7" \
+    "@earendil-works/pi-agent-core@0.80.7" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
     echo "$install_log" | tail -10 | sed 's/^/    /' >&2
     return 1
   }
+
+  # A pin is a wish until the resolved tree is read back. Assert it: EVERY
+  # @earendil-works pi package present — direct or transitive, top level or nested —
+  # must be the pinned 0.80.7. Anything else means an unpinned caret floated and the
+  # rest of this gate would be exercising a runtime nobody verified, while still
+  # printing "pinned pi 0.80.7". Fail loud instead of proving the wrong floor.
+  local leaked_pi
+  leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | grep '^@earendil-works+pi-' | grep -v '@0\.80\.7' || true)
+  if [ -n "$leaked_pi" ]; then
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.80.7):"
+    printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works pi package is 0.80.7"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the
@@ -2432,7 +2874,7 @@ sys.exit(0 if any(isinstance(s,str) and s.endswith('/node_modules/@junghanacs/en
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "${FAKE_CLAUDE_LOG:?}"
 case "$1${2:+ $2}" in
-  "--version") echo "2.1.197 (Claude Code)" ;;
+  "--version") echo "2.1.217 (Claude Code)" ;;
   "plugin validate") : ;;
   "plugin uninstall") : ;;
   "plugin marketplace") : ;;
@@ -2474,6 +2916,25 @@ SH
   fi
   if grep -qE 'meta-bridge-hook\.ts|__HOOK_ENTRY__|__NODE_BIN__' "$installed_hooks_json"; then
     fail "[check-pack-install] installed hooks.json references a raw .ts entry or an unbaked placeholder (__HOOK_ENTRY__/__NODE_BIN__): $installed_hooks_json"
+    return 1
+  fi
+  # Exec-form launch contract on all three owner hooks: `command` is the shipped
+  # launcher and the baked entry travels in `args`. Counting the launcher alone would
+  # pass a manifest whose args were emptied, so require the pair on the same leaf.
+  if [ "$(grep -c 'scripts/hook-launch\.sh' "$installed_hooks_json" || true)" -ne 4 ]; then
+    fail "[check-pack-install] installed hooks.json does not route all 4 hooks (3 owner + FileChanged) through the shipped hook-launch.sh: $installed_hooks_json"
+    return 1
+  fi
+  if [ "$(grep -c 'meta-bridge-hook\.js"' "$installed_hooks_json" || true)" -ne 3 ]; then
+    fail "[check-pack-install] installed hooks.json lost the baked hook entry in the exec-form args on one of SessionStart/CwdChanged/UserPromptSubmit: $installed_hooks_json"
+    return 1
+  fi
+  if grep -q 'ENTWURF_META_HOOK_OWNER_PID' "$installed_hooks_json"; then
+    fail "[check-pack-install] installed hooks.json still carries the RETIRED shell-\$PPID owner carrier: $installed_hooks_json"
+    return 1
+  fi
+  if [ ! -x "$stable_asm/entwurf-meta-receive/scripts/hook-launch.sh" ]; then
+    fail "[check-pack-install] assembled hook-launch.sh is missing or not executable — the exec form names it as the executable, so a lost +x bit is ENOEXEC at session open"
     return 1
   fi
   if [ -e "$npm_pkg/pi/meta-bridge/.assembled/entwurf-meta-receive" ]; then
@@ -2602,6 +3063,32 @@ JS
     return 1
   fi
   echo "[check-pack-install] installed bridge boot pass (dist boots under node_modules, pi-free: $boot_out)"
+
+  # 0.12.8 — installed bridge DELIVERY regression. The boot probe above stops at
+  # tools/list, and so did every other artifact gate: `entwurf_v2` had never once been
+  # CALLED through a shipped bundle. That blind spot shipped a DEAD send path from the
+  # birth of the dist (0.12.1) through 0.12.8-repair.0 — the bundle carried no
+  # capability registry, so every real send died `ENOENT entwurf-capabilities.json`
+  # while the registry-free verbs (entwurf_self/entwurf_peers) stayed green and hid it.
+  # Had this probe existed, that corpse would have been RED at the first pack.
+  #
+  # Same scene as check-bridge-delivery, different cell: there the subject is the
+  # checkout's dist, here it is THIS npm-installed tree — peer-free, hoisted deps, the
+  # globally installed consumer world — driven through the installed BIN, so start.sh's node_modules→dist
+  # branch is itself under test rather than bypassed. The gate seeds strict sender +
+  # receiver citizens from repo source in a separate process and asserts the .msg
+  # physically landed under that sender; the env-isolated temp world
+  # (PI_CODING_AGENT_DIR + every ENTWURF_META_* root + ENTWURF_DIR, with ambient
+  # pi/sender carriers and NODE_PATH stripped) lives inside it. No model, no network.
+  # HOME/XDG are the sandbox roots this function already uses, so the drive cannot read
+  # the operator's real store (rule 11).
+  local delivery_out
+  if ! delivery_out=$(HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" ENTWURF_DELIVERY_SUBJECT="$installed_start" run_ts scripts/check-bridge-delivery.ts 2>&1); then
+    fail "[check-pack-install] installed bridge DELIVERY failed — the npm-installed MCP server boots but cannot deliver an entwurf_v2 send (the 0.12.1→0.12.8-repair.0 registry corpse):"
+    echo "$delivery_out" | tail -20 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] installed bridge delivery pass (tools/call entwurf_v2 through the installed bin landed a .msg)"
 
   # 0.12.7 — installed AGY IMPRINT regression. The npm bin resolves through a
   # node_modules symlink; raw scripts/agy-imprint.ts is therefore forbidden by
@@ -2922,14 +3409,17 @@ setup_all() {
   require_cmd pi
   require_cmd node
 
-  # MCP bridge launchers run via `node --experimental-strip-types` (stable in
-  # Node 23.6, experimental from 22.6). Anything older lacks the flag, and an
-  # ACP session would hit a cryptic "unknown argument" rather than a clear
-  # setup-time error. Fail early with an actionable message. package.json
-  # engines.node mirrors this floor.
-  if ! node -e 'const [M,m]=process.versions.node.split(".").map(Number); process.exit((M>22||(M===22&&m>=6))?0:1)'; then
-    echo "[setup] entwurf requires Node >= 22.6.0 (got $(node -v))" >&2
-    echo "[setup] MCP bridge launchers depend on --experimental-strip-types." >&2
+  # Node 24+ is the SINGLE supported axis (GLG, 2026-07-21). The floor is not
+  # derived from a feature gate: type-stripping alone would only demand 23.6.
+  # It is derived from what is actually verified — this repo designs and proves
+  # BOTH boundaries (dev-clone native-TS/ESM, installed compiled-JS) on Node 24,
+  # and no 22 lane is maintained or tested. A floor nobody exercises is a
+  # declaration, not a contract; #51 exists because this repo shipped several.
+  # DO NOT reintroduce a "24 recommended / 22 minimum" dual declaration.
+  # check-node-floor-coherence binds every spelling of this floor.
+  if ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 24 ? 0 : 1)'; then
+    echo "[setup] entwurf requires Node >= 24 (got $(node -v))" >&2
+    echo "[setup] Node 24+ is the only supported runtime axis; there is no Node 22 lane." >&2
     exit 1
   fi
 
@@ -3475,6 +3965,12 @@ case "$cmd" in
   check-meta-migration-readers)
     check_meta_migration_readers
     ;;
+  check-capability-bundle-reach)
+    check_capability_bundle_reach
+    ;;
+  check-bridge-delivery)
+    check_bridge_delivery
+    ;;
   check-meta-mailbox-state-write)
     check_meta_mailbox_state_write
     ;;
@@ -3483,6 +3979,9 @@ case "$cmd" in
     ;;
   check-meta-identity-consumers)
     check_meta_identity_consumers
+    ;;
+  check-hook-launch-topology)
+    check_hook_launch_topology
     ;;
   check-meta-capability-source)
     check_meta_capability_source
@@ -3684,6 +4183,16 @@ case "$cmd" in
     # duplicate/drift records. Offline + deterministic (deps bash+node+python3).
     (cd "$REPO_DIR" && bash scripts/smoke-meta-install-state.sh)
     ;;
+  check-meta-doctor-oracle)
+    # 0.12.8 (#51): detection-power gate for the release ORACLE itself. doctor-meta-bridge
+    # decides whether a host is certified, yet its GREEN path had no coverage — the two
+    # existing doctor drives both expect exit 1 and neither has a plugin cache, so the
+    # installed-form classification and synthetic owner join never ran under any gate.
+    # This stands up a healthy fixture (real assembly + planted cache + live owner +
+    # fake bridge), proves PASS, then plants 21 defects that must each turn it red WITH
+    # THE MESSAGE THAT NAMES THEM. Offline + deterministic (deps bash+node+python3).
+    (cd "$REPO_DIR" && bash scripts/check-meta-doctor-oracle.sh)
+    ;;
   smoke-agy-install-state)
     # 봉인 8 regression gate for the agy MCP install adapter: install→doctor→uninstall in an
     # ISOLATED HOME+XDG with a fake stable bin + fake pgrep/ss — adopt (preserve unrelated) +
@@ -3746,7 +4255,10 @@ case "$cmd" in
     # XDG data dir ($XDG_DATA_HOME/entwurf/meta-bridge/.assembled — dev clone and
     # installed package alike, never the checkout) and runs marketplace add +
     # install --scope user, so every native Claude Code session auto-loads it.
-    # Idempotent; Linux/macOS only (Windows fail-fast).
+    # Idempotent; Linux is the only currently certified axis for the #51 repair cut.
+    # Darwin fails loud as not-yet-verified because the strict doctor cannot currently
+    # certify its live owner join; future validation may reopen it. Uninstall permits Darwin
+    # so an older macOS install is not stranded without an honest inverse.
     (cd "$REPO_DIR" && bash scripts/meta-bridge-install.sh "$@")
     ;;
   uninstall-meta-bridge)
@@ -3893,6 +4405,12 @@ case "$cmd" in
   check-dep-versions)
     check_dep_versions
     ;;
+  check-node-floor-coherence)
+    check_node_floor_coherence
+    ;;
+  check-claude-floor-coherence)
+    check_claude_floor_coherence
+    ;;
   check-install-preflight)
     check_install_preflight
     ;;
@@ -3949,6 +4467,16 @@ case "$cmd" in
     ;;
   check-pack-install)
     check_pack_install
+    ;;
+  check-install-container)
+    # 0.12.8 (#51 gate C): the Linux artifact-CONSUMER lane. check-pack-install is
+    # the strongest HOST gate and still only ever proves this machine's shape —
+    # checkout present, every tree operator-owned, project-local install. This
+    # hands ONE candidate tarball, read-only, to a container that has never seen
+    # the repo, installs it globally as a non-root user, freezes the package, and
+    # then consumes it. Dev-clone-only (hard rule 10): the script itself REFUSES
+    # from under node_modules rather than re-packing the installed copy.
+    (cd "$REPO_DIR" && bash scripts/check-install-container.sh "$@")
     ;;
   sync-auth)
     sync_auth

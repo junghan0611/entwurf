@@ -7,8 +7,14 @@
  * NOT cwd (one repo can hold many sessions) and not a wire field (neither host carries one).
  *
  * Measured 2026-07-13 on both backends: hook.ppid == bridge.ppid == the native host pid, same
- * start-key. The extra `parentPid(ppid)` candidate covers a host that runs its hook through a
- * shell wrapper, which shifts the shared ancestor one step up.
+ * start-key. Later, the same Claude Code version produced both that direct join and a retained
+ * `/bin/bash -c` command-hook wrapper; ordinary shell tests did not reproduce the difference, so
+ * its trigger inside Claude's spawn path stayed unknown — and that is why the shell form was
+ * abandoned rather than patched. The plugin now declares the EXEC form, which puts no shell on
+ * the launch path at all (#51 B2, 2026-07-22), so the hook's parent IS Claude structurally and
+ * the marker is written under plain `process.ppid`. The extra `parentPid(ppid)` read candidate
+ * remains compatibility for an MCP host wrapper; the hook never writes a blind grandparent
+ * marker because that may be the long-lived login shell.
  *
  * Two guards make a marker an IDENTITY rather than a hint, and a candidate is only trusted after
  * BOTH pass:

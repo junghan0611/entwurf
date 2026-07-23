@@ -34,6 +34,16 @@ case "$REPO" in
   */node_modules/@junghanacs/entwurf) LIB_EXT="js" ;;
   *)                                  LIB_EXT="ts" ;;
 esac
+# THE writer module for this mode, derived once. An installed package carries the
+# tsc-emitted `.js` (Node refuses strip-types below node_modules); a dev clone carries
+# the `.ts` source. Two sections need it — the delivery self-diagnostic (which imports
+# it to seed its throwaway citizens) and writer-version parity (which hashes it) — and
+# a second derivation is a second thing to forget when the layout moves.
+if [ "$LIB_EXT" = "js" ]; then
+  SRC_MS="$REPO/mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
+else
+  SRC_MS="$REPO/pi-extensions/lib/meta-session.ts"
+fi
 # shellcheck source=scripts/meta-bridge-hook-log.sh
 source "$REPO/scripts/meta-bridge-hook-log.sh"
 
@@ -56,17 +66,43 @@ echo "meta-bridge doctor"
 echo "config=$CLAUDE_CFG  agent-dir=$AGENT"
 
 echo "[platform]"
+# The #51 repair contract is Linux-only because certification requires discovery of
+# each live bridge process's environment through /proc. Darwin is not an install lane
+# for this cut and must stay nonzero here too — never downgrade unsupported to a
+# static/synthetic PASS.
 case "$(uname -s)" in
-  Linux | Darwin) ok "$(uname -s) supported" ;;
-  *) bad "$(uname -s) unsupported (Linux/macOS only)" ;;
+  Linux)  ok "Linux supported — the certified live axis (live owner join is instrumentable)" ;;
+  Darwin) bad "macOS is NOT YET VERIFIED/CERTIFIED for this repair cut: strict live-owner certification currently requires /proc. The installer refuses Darwin; this doctor remains nonzero for diagnosis/legacy cleanup. Future validation may reopen the lane." ;;
+  *) bad "$(uname -s) unsupported (Claude meta-bridge repair cut is Linux-only)" ;;
 esac
 
 echo "[toolchain]"
-if command -v claude >/dev/null; then ok "claude: $(claude --version 2>/dev/null | head -1)"; else bad "claude not on PATH"; fi
+if command -v claude >/dev/null; then
+  # The Claude floor is a CONTRACT check, not a courtesy line. Upstream gives no
+  # fail-loud of its own: an older Claude validates the exec-form manifest, then at
+  # runtime drops `args`, runs `command` alone, and reports the hook as
+  # `exit_code: 0, outcome: "success"` (measured on 2.1.138, #51 B). Every other tier
+  # in this doctor would therefore look plausible on a host that can never wake, so
+  # the version has to be judged, not printed.
+  # shellcheck source=scripts/meta-bridge-claude-floor.sh
+  source "$REPO/scripts/meta-bridge-claude-floor.sh"
+  CLAUDE_FLOOR="$(claude_floor_version "$REPO" 2>/dev/null || true)"
+  CLAUDE_VER="$(claude_detected_version)"
+  if [ -z "$CLAUDE_FLOOR" ]; then
+    bad "cannot read the Claude Code floor from package.json (entwurf.claudeCodeFloor) — NOT CERTIFIED: the doctor may not certify a launch contract whose floor it cannot read"
+  elif [ -z "$CLAUDE_VER" ]; then
+    bad "could not read a version from 'claude --version' — NOT CERTIFIED: entwurf requires Claude Code >= $CLAUDE_FLOOR and an unidentifiable runtime is not a supported one"
+  elif claude_floor_satisfied "$CLAUDE_VER" "$CLAUDE_FLOOR"; then
+    ok "claude $CLAUDE_VER (>= $CLAUDE_FLOOR, exec-form launch contract supported)"
+  else
+    bad "claude $CLAUDE_VER is below the supported floor >= $CLAUDE_FLOOR. The hooks use the shell-less exec form; this Claude silently DROPS the hook args, runs the command alone, and still reports success — the bridge cannot wake. There is no shell-form fallback: update Claude Code, then re-run ./run.sh install-meta-bridge."
+  fi
+else bad "claude not on PATH"; fi
 if command -v python3 >/dev/null; then ok "python3: $(python3 --version 2>/dev/null | head -1) (doorbell JSON parser)"; else bad "python3 not on PATH — FileChanged wake runtime would silently die"; fi
 if command -v node >/dev/null; then
-  NV="$(node -p 'process.versions.node' 2>/dev/null || echo 0)"; MJ="${NV%%.*}"; MN="$(printf '%s' "$NV" | cut -d. -f2)"
-  if [ "${MJ:-0}" -gt 22 ] || { [ "${MJ:-0}" -eq 22 ] && [ "${MN:-0}" -ge 6 ]; }; then ok "node $NV (>= 22.6 strip-types)"; else bad "node $NV too old (need >= 22.6)"; fi
+  # Node 24+ single supported axis (GLG, 2026-07-21) — rationale in run.sh setup preflight.
+  NV="$(node -p 'process.versions.node' 2>/dev/null || echo 0)"; MJ="${NV%%.*}"
+  if [ "${MJ:-0}" -ge 24 ]; then ok "node $NV (>= 24, supported axis)"; else bad "node $NV too old (need >= 24; there is no Node 22 lane)"; fi
 else bad "node not on PATH"; fi
 
 echo "[managed config state]"
@@ -109,14 +145,27 @@ else:
     print("true" if row.get("enabled") is True else "false")
     errors = row.get("errors")
     print("; ".join(str(x) for x in errors) if isinstance(errors, list) else "")
+    # installPath is the AUTHORITY for which cached artifact Claude loads. Globbing
+    # the version dirs and taking the first match inspects a lexicographically-first
+    # directory, which after any plugin version bump is the OLD one — the doctor would
+    # then certify a stale artifact while Claude runs a different one.
+    print(row.get("installPath") if isinstance(row.get("installPath"), str) else "")
 ' "$PLUGIN@$MKT_NAME" 2>/dev/null || true)"
+PLUGIN_ROOT=""
+# The ONE plugin-presence fact for this run. Later sections must reuse it instead of
+# re-invoking the CLI: two calls can disagree, and the silent-miss guard reading a
+# different snapshot than this section is how a hard failure becomes a benign warn.
+PLUGIN_PRESENCE="unknown"
 if [ -n "$PLUGIN_FACT" ]; then
   PLUGIN_PRESENT="$(printf '%s\n' "$PLUGIN_FACT" | sed -n '1p')"
   PLUGIN_ENABLED="$(printf '%s\n' "$PLUGIN_FACT" | sed -n '2p')"
   PLUGIN_ERRORS="$(printf '%s\n' "$PLUGIN_FACT" | sed -n '3p')"
+  PLUGIN_ROOT="$(printf '%s\n' "$PLUGIN_FACT" | sed -n '4p')"
   if [ "$PLUGIN_PRESENT" = "absent" ]; then
+    PLUGIN_PRESENCE="absent"
     bad "$PLUGIN@$MKT_NAME not installed — run ./run.sh install-meta-bridge"
   else
+    PLUGIN_PRESENCE="present"
     ok "$PLUGIN@$MKT_NAME present"
     if [ -n "$PLUGIN_ERRORS" ]; then
       bad "enabled=$PLUGIN_ENABLED but FAILED TO LOAD: $PLUGIN_ERRORS — the SessionStart hook is not running; re-run ./run.sh install-meta-bridge"
@@ -126,45 +175,369 @@ if [ -n "$PLUGIN_FACT" ]; then
       bad "installed but NOT enabled"
     fi
   fi
-# Compatibility fallback for a Claude floor whose plugin list has no --json surface.
-elif claude plugin list 2>/dev/null | grep -q "$PLUGIN@$MKT_NAME"; then
-  ok "$PLUGIN@$MKT_NAME present"
-  claude plugin list 2>/dev/null | grep -A3 "$PLUGIN@$MKT_NAME" | grep -qi "enabled" && ok "enabled (text fallback; load errors unavailable)" || bad "installed but NOT enabled"
 else
-  bad "$PLUGIN@$MKT_NAME not installed — run ./run.sh install-meta-bridge"
+  # Compatibility fallback for a Claude floor whose plugin list has no --json surface.
+  # Two failure shapes must stay apart, and neither may be swallowed:
+  #   * `<cli> | grep -q` under pipefail is a RACE, not a test — grep exits at the first
+  #     match, the still-writing CLI dies of SIGPIPE, and a present plugin reads as absent.
+  #   * `$(... || true)` is the opposite error: it throws away the CLI's exit code, so a
+  #     FAILING probe that happened to print a plausible line reads as healthy.
+  # So: capture with the assignment as the if-condition (keeps rc, survives `set -e`),
+  # then match the content without a pipe.
+  if PLUGIN_LIST_TEXT="$(claude plugin list 2>/dev/null)"; then
+    case "$PLUGIN_LIST_TEXT" in
+      *"$PLUGIN@$MKT_NAME"*)
+        PLUGIN_PRESENCE="present"
+        ok "$PLUGIN@$MKT_NAME present (text fallback)"
+        PLUGIN_LIST_TAIL="$(printf '%s\n' "$PLUGIN_LIST_TEXT" | grep -A3 -- "$PLUGIN@$MKT_NAME" || true)"
+        case "$PLUGIN_LIST_TAIL" in
+          *[Ee]nabled*) ok "enabled (text fallback; load errors unavailable)" ;;
+          *) bad "installed but NOT enabled" ;;
+        esac
+        ;;
+      *)
+        PLUGIN_PRESENCE="absent"
+        bad "$PLUGIN@$MKT_NAME not installed — run ./run.sh install-meta-bridge"
+        ;;
+    esac
+  else
+    PLUGIN_LIST_RC=$?
+    bad "'claude plugin list' failed (exit $PLUGIN_LIST_RC) and '--json' was unavailable — plugin state is UNKNOWN, so nothing on this host can be certified. Fix the Claude CLI, then re-run."
+  fi
 fi
 
-echo "[baked node path still resolves (NixOS store-churn guard)]"
-CACHE_HOOKS="$(ls "$CLAUDE_CFG/plugins/cache/$MKT_NAME/$PLUGIN/"*/hooks/hooks.json 2>/dev/null | head -1 || true)"
-if [ -n "$CACHE_HOOKS" ]; then
-  # `[ -n "$CACHE_HOOKS" ]` proves the file EXISTS, not that the pattern matches.
-  # If a future hooks.json drifts the command format, grep finds nothing, exits 1,
-  # and under `set -euo pipefail` the doctor would abort here instead of reaching
-  # the parse-drift diagnostic below. Swallow grep's nonzero in-pipe (same idiom as
-  # line 158) so BAKED="" routes to that bad(...): an installed hooks.json exists but
-  # the doctor cannot read its load-bearing hook command, so the store-churn guard is
-  # blind — a verify-impossible state must fail loud, not pass as a soft warn (A3b).
-  # Match either hook artifact (0.12.5): installed ships meta-bridge-hook.js, dev
-  # clones meta-bridge-hook.ts. Capture the whole command so we run the SAME entry
-  # file the live hook runs (never a hardcoded extension that drifts from install).
-  HOOK_CMD="$({ grep -oE '"command": "[^ ]+ \$\{CLAUDE_PLUGIN_ROOT\}/meta-bridge-hook\.(ts|js)"' "$CACHE_HOOKS" || true; } | head -1)"
-  BAKED="$(printf '%s' "$HOOK_CMD" | sed -E 's/.*"command": "([^ ]+) .*/\1/')"
-  HOOK_FILE="$(printf '%s' "$HOOK_CMD" | sed -E 's#.*/([^/"]+)"$#\1#')"
+echo "[installed hook launch form + baked node path (NixOS store-churn guard)]"
+# Resolve the ONE cached artifact root, then make every later section read it.
+# `claude plugin list --json`.installPath names the directory Claude actually loads;
+# only when that field is unavailable do we glob, and then an ambiguous multi-version
+# cache is a FAILURE, never a guess — hooks, the synthetic drive, and writer-version
+# parity must all judge the same root or a green verdict is about the wrong artifact.
+CACHE_ROOT=""
+CACHE_HOOKS=""
+CACHE_SOURCE=""
+CACHE_GLOB="$CLAUDE_CFG/plugins/cache/$MKT_NAME/$PLUGIN"
+if [ -n "$PLUGIN_ROOT" ] && [ "${PLUGIN_ROOT#/}" = "$PLUGIN_ROOT" ]; then
+  # A relative installPath resolves against whatever cwd happens to be current, so the
+  # "authority" would name a different directory per caller. Refuse it as authority.
+  bad "plugin installPath is not absolute ($PLUGIN_ROOT) — a cwd-dependent path cannot be the authority for which artifact Claude loads."
+elif [ -n "$PLUGIN_ROOT" ]; then
+  CACHE_ROOT="$PLUGIN_ROOT"
+  CACHE_SOURCE="plugin installPath (authoritative)"
+else
+  CACHE_CANDIDATES="$(ls -d "$CACHE_GLOB/"*/ 2>/dev/null || true)"
+  CACHE_COUNT="$(printf '%s' "$CACHE_CANDIDATES" | grep -c . || true)"
+  if [ "${CACHE_COUNT:-0}" -gt 1 ]; then
+    # Refuse to guess. Lexicographic-first is the OLD version after any bump, so a
+    # guess here certifies an artifact Claude does not load.
+    bad "installPath unavailable AND the plugin cache holds $CACHE_COUNT version directories — the doctor cannot tell which artifact Claude loads, so it certifies none of them: $(printf '%s' "$CACHE_CANDIDATES" | tr '\n' ' '). Re-run ./run.sh install-meta-bridge to leave exactly one."
+  elif [ "${CACHE_COUNT:-0}" -eq 1 ]; then
+    CACHE_ROOT="$(printf '%s' "$CACHE_CANDIDATES" | sed 's:/*$::')"
+    CACHE_SOURCE="unambiguous cache glob (installPath unavailable)"
+  else
+    # A registered-but-absent artifact runs NO hook at all. This was a WARN, so the
+    # doctor skipped BOTH the form classification and the synthetic owner join and
+    # still exited 0 — a plugin row in `claude plugin list` carried the whole verdict.
+    bad "no cached plugin artifact under $CACHE_GLOB/ — the plugin is registered but nothing is on disk, so no hook runs and no owner marker is ever written. Re-run ./run.sh install-meta-bridge."
+  fi
+fi
+if [ -n "$CACHE_ROOT" ]; then
+  if [ -f "$CACHE_ROOT/hooks/hooks.json" ]; then
+    CACHE_HOOKS="$CACHE_ROOT/hooks/hooks.json"
+    ok "active cached artifact resolved from $CACHE_SOURCE: $CACHE_ROOT"
+  else
+    bad "the cached artifact Claude loads has no hooks/hooks.json ($CACHE_SOURCE): $CACHE_ROOT — re-run ./run.sh install-meta-bridge."
+  fi
+fi
+if [ -z "$CACHE_HOOKS" ]; then
+  BAKED=""
+  HOOK_FILE=""
+  HOOK_COMMAND=""
+elif ! command -v python3 >/dev/null; then
+  BAKED=""
+  HOOK_FILE=""
+  HOOK_COMMAND=""
+  bad "cannot inspect installed hook owner topology: python3 is missing (toolchain failure above); the launch form was NOT classified"
+else
+  # Classify the INSTALLED launch form, do not merely pattern-match one command.
+  # Claude command hooks have two launch forms: shell form (`command` runs through a
+  # shell) and exec form (`args` present → no shell at all). Since #51 B/B2 the
+  # AUTHORIZED form is exec, through the shipped `hook-launch.sh`: no shell means the
+  # hook's parent is Claude on every host, which is what retired the `$PPID` carrier.
+  # A shell-form manifest is now the refused one — but an unreadable-command message
+  # would call that "drift" and send the operator hand-patching hooks.json. So name
+  # the form, then judge it.
+  #
+  # All THREE owner hooks are read. Reading only SessionStart passed a manifest whose
+  # other two hooks were still stale — exactly the hand-patch class this cut refuses.
+  # The FileChanged doorbell is reported separately (line 4): its asyncRewake/timeout
+  # are the wake path, and losing them must not blank the owner command layer 2 drives.
+  if HOOK_PARSE="$(python3 - "$CACHE_HOOKS" "$REPO/pi/meta-bridge/$PLUGIN/hooks/hooks.json" "$CACHE_ROOT" <<'PY' 2>&1
+import json, re, sys
+
+inst_path, tmpl_path, cache_root = sys.argv[1], sys.argv[2], sys.argv[3]
+OWNER_EVENTS = ("SessionStart", "CwdChanged", "UserPromptSubmit")
+# The authorized owner launch: `command` is the shipped launcher, `args` is the real
+# argv (baked node + baked hook entry). The launcher is named exactly, not merely
+# "some executable" — an exec form pointing anywhere else is not this contract, and
+# it is the launcher that carries the empty-argv fail-loud an older Claude needs.
+LAUNCHER = "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launch.sh"
+ENTRY_ARG = re.compile(r"\$\{CLAUDE_PLUGIN_ROOT\}/(meta-bridge-hook\.(?:ts|js))")
+
+try:
+    manifest = json.load(open(inst_path, encoding="utf-8"))
+except Exception as exc:
+    raise SystemExit(f"cannot parse installed hooks.json: {exc}")
+try:
+    tmpl_text = open(tmpl_path, encoding="utf-8").read()
+    template = json.loads(tmpl_text)
+except Exception as exc:
+    raise SystemExit(
+        f"cannot read the SHIPPED hook template ({tmpl_path}): {exc}. Without it there is nothing "
+        "to compare the installed manifest against, so no form can be certified."
+    )
+
+
+def leaf(event, source=None):
+    """First leaf of the first group. Shape is validated separately — never assume it."""
+    src = manifest if source is None else source
+    try:
+        return src["hooks"][event][0]["hooks"][0]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise SystemExit(f"hooks.{event}: no hook leaf in the installed manifest ({exc})")
+
+
+# ── container shape ────────────────────────────────────────────────────────
+# Claude executes EVERY matcher group and EVERY leaf. Reading leaf[0][0] and calling
+# the manifest supported would let an appended group or leaf run uninspected.
+inst_events = manifest.get("hooks")
+if not isinstance(inst_events, dict):
+    raise SystemExit("installed hooks.json has no `hooks` object")
+if set(inst_events) != set(template["hooks"]):
+    extra = sorted(set(inst_events) - set(template["hooks"]))
+    missing = sorted(set(template["hooks"]) - set(inst_events))
+    raise SystemExit(
+        f"installed hook EVENT SET differs from the shipped template (unexpected: {extra}, missing: {missing})"
+    )
+for event, tmpl_groups in template["hooks"].items():
+    groups = inst_events.get(event)
+    if not isinstance(groups, list) or len(groups) != len(tmpl_groups):
+        raise SystemExit(
+            f"hooks.{event}: expected exactly {len(tmpl_groups)} matcher group(s) as shipped, found "
+            f"{len(groups) if isinstance(groups, list) else type(groups).__name__} — every extra group "
+            "also runs, and an uninspected group cannot be certified"
+        )
+    for i, (group, tmpl_group) in enumerate(zip(groups, tmpl_groups)):
+        if not isinstance(group, dict) or set(group) != set(tmpl_group):
+            raise SystemExit(f"hooks.{event}[{i}]: group keys differ from the shipped template")
+        if group.get("matcher") != tmpl_group.get("matcher"):
+            raise SystemExit(
+                f"hooks.{event}[{i}]: matcher is {group.get('matcher')!r}, shipped contract is "
+                f"{tmpl_group.get('matcher')!r}"
+            )
+        leaves, tmpl_leaves = group.get("hooks"), tmpl_group.get("hooks")
+        if not isinstance(leaves, list) or len(leaves) != len(tmpl_leaves):
+            raise SystemExit(
+                f"hooks.{event}[{i}]: expected exactly {len(tmpl_leaves)} hook leaf/leaves as shipped, "
+                f"found {len(leaves) if isinstance(leaves, list) else type(leaves).__name__} — every "
+                "extra leaf also runs"
+            )
+
+
+# ── owner launch form ──────────────────────────────────────────────────────
+def classify(hook):
+    """exec-launcher | exec-other | malformed-exec | non-command | corrupt | shell.
+
+    Order matters, and it is not the order the fields appear in. The leaf TYPE is
+    checked before `args`, because a `prompt` leaf that happens to carry an args array
+    is a type defect, not a malformed exec form — reporting it as the latter would give
+    two different defects the same message and let one mutation's red be credited to
+    the other. Diagnose the most fundamental break first.
+    """
+    if not isinstance(hook, dict):
+        return "corrupt"
+    if hook.get("type") != "command":
+        return "non-command"
+    command = hook.get("command")
+    if not (isinstance(command, str) and command != ""):
+        return "corrupt"
+    args = hook.get("args")
+    if args is not None:
+        # Only a STRUCTURALLY VALID exec form earns a form name. A string/number `args`
+        # is corruption wearing exec form's clothes and must not be excused as one.
+        if not (isinstance(args, list) and all(isinstance(a, str) for a in args)):
+            return "malformed-exec"
+        # Authorized only through the shipped launcher with both argv elements. An
+        # exec form that skips the launcher would run fine on a current Claude and
+        # then degrade SILENTLY on an older one — the exact failure this contract
+        # exists to make loud.
+        if command == LAUNCHER and len(args) == 2 and ENTRY_ARG.fullmatch(args[1]):
+            return "exec-launcher"
+        return "exec-other"
+    return "shell"
+
+
+forms = {event: classify(leaf(event)) for event in OWNER_EVENTS}
+distinct = sorted(set(forms.values()))
+detail = ", ".join(f"{event}={forms[event]}" for event in OWNER_EVENTS)
+if len(distinct) > 1:
+    raise SystemExit(
+        f"owner hooks disagree on launch form ({detail}) — a partially hand-patched manifest. "
+        "Every owner hook must carry the same authorized form; re-run ./run.sh install-meta-bridge."
+    )
+
+form = distinct[0]
+if form == "shell":
+    raise SystemExit(
+        "installed owner hooks use SHELL FORM, which this release no longer authorizes: "
+        f"{leaf('SessionStart').get('command')!r}. Under shell form the process that ends up as the "
+        "hook's parent depends on which shell the host picked and how the command was assembled — "
+        "the same Claude version produced both a direct join and a retained `/bin/bash -c` wrapper "
+        "(#51). Markers would be keyed to whatever that shell leaves behind. Re-run "
+        "./run.sh install-meta-bridge to restore the exec form; existing Claude sessions must then "
+        "restart."
+    )
+if form == "exec-other":
+    raise SystemExit(
+        "installed owner hooks are exec form but do NOT go through the shipped "
+        f"{LAUNCHER} with [<node>, <hook entry>] argv: command={leaf('SessionStart').get('command')!r}, "
+        f"args={leaf('SessionStart').get('args')!r}. That launcher is not decoration — it is the only "
+        "thing that turns an older Claude's SILENT `args` drop into a visible failure (such a Claude "
+        "runs `command` alone and still reports exit 0 / success). Re-run ./run.sh install-meta-bridge."
+    )
+if form == "malformed-exec":
+    raise SystemExit(
+        f"MALFORMED exec-form hook ({detail}) — `args` is present but the leaf is not a valid exec "
+        "form (needs type=command, a non-empty string command, and args as an array of strings). "
+        "This is CORRUPTION, not the recognized upstream exec form, and Claude's behaviour on it is "
+        "undefined. Re-run ./run.sh install-meta-bridge."
+    )
+if form in ("non-command", "corrupt"):
+    raise SystemExit(
+        f"installed owner hook is not a usable command hook ({detail}) — type must be `command` with "
+        "a non-empty string command. Re-run ./run.sh install-meta-bridge."
+    )
+commands = {event: (leaf(event)["command"], tuple(leaf(event)["args"])) for event in OWNER_EVENTS}
+if len(set(commands.values())) != 1:
+    detail = "; ".join(f"{event}={commands[event]!r}" for event in OWNER_EVENTS)
+    raise SystemExit(f"owner hooks share a form but not a launch argv — {detail}")
+
+command, argv = commands["SessionStart"]
+baked_node, baked_entry = argv[0], ENTRY_ARG.fullmatch(argv[1]).group(1)
+
+# ── exact equality against the shipped template ────────────────────────────
+# The installer bakes exactly two values into the template. So "the deployed manifest
+# equals what we shipped, modulo those two" is the whole contract — and it is what makes
+# per-field allowlists unnecessary: a doorbell pointed at /tmp/evil, a timeout of 999, an
+# added field, all surface here instead of slipping through a suffix or isinstance test.
+expected = json.loads(
+    tmpl_text.replace("__NODE_BIN__", baked_node).replace("__HOOK_ENTRY__", baked_entry)
+)
+
+
+def first_difference(a, b, path="hooks.json"):
+    if isinstance(a, dict) and isinstance(b, dict):
+        for key in sorted(set(a) | set(b)):
+            if key not in a:
+                return f"{path}.{key}: missing (shipped: {b[key]!r})"
+            if key not in b:
+                return f"{path}.{key}: unexpected ({a[key]!r})"
+            found = first_difference(a[key], b[key], f"{path}.{key}")
+            if found:
+                return found
+        return None
+    if isinstance(a, list) and isinstance(b, list):
+        if len(a) != len(b):
+            return f"{path}: {len(a)} entries, shipped {len(b)}"
+        for i, (x, y) in enumerate(zip(a, b)):
+            found = first_difference(x, y, f"{path}[{i}]")
+            if found:
+                return found
+        return None
+    return None if a == b else f"{path}: {a!r}, shipped {b!r}"
+
+
+diff = first_difference(manifest, expected)
+if diff:
+    raise SystemExit(
+        f"installed manifest DIFFERS from the shipped hook template at {diff}. The installer bakes "
+        "only the node path and the hook entry filename, so every other difference is drift or a "
+        "hand edit. Re-run ./run.sh install-meta-bridge."
+    )
+
+# Doorbell reported separately for legibility. Its correctness now comes from the exact
+# template equality above, not from a loose per-field test. It says the wake wiring is
+# DECLARED as shipped; it does NOT say exit-2 → wake holds at runtime (#51 B2).
+bell = leaf("FileChanged")
+doorbell = (
+    f"ok FileChanged doorbell matches the shipped static contract exactly "
+    f"(command={bell['command']}, args={bell['args']}, asyncRewake={bell['asyncRewake']}, "
+    f"timeout={bell['timeout']}); runtime exit-2 wake was observed at Claude 2.1.217 (#51 B2) but "
+    "is not re-proven by this static read"
+)
+
+# Resolve the argv EXACTLY the way Claude does for an exec form: substitute the
+# plugin-root placeholder into each element as a plain string, with no shell parsing.
+# The doctor then execs these three strings directly. Driving them through `bash -c`
+# instead — as this section did while the shell form was authorized — would put back
+# the very interpreter the exec form removes, and would break outright on a plugin
+# path containing a space, a `$`, or a backtick.
+def resolve(s):
+    return s.replace("${CLAUDE_PLUGIN_ROOT}", cache_root)
+
+
+print(baked_node)
+print(baked_entry)
+print(resolve(command))
+print(resolve(argv[1]))
+print(doorbell)
+PY
+)"; then
+    BAKED="$(printf '%s\n' "$HOOK_PARSE" | sed -n '1p')"
+    HOOK_FILE="$(printf '%s\n' "$HOOK_PARSE" | sed -n '2p')"
+    HOOK_LAUNCHER="$(printf '%s\n' "$HOOK_PARSE" | sed -n '3p')"
+    HOOK_ENTRY_ARG="$(printf '%s\n' "$HOOK_PARSE" | sed -n '4p')"
+    HOOK_COMMAND="$HOOK_LAUNCHER $BAKED $HOOK_ENTRY_ARG"
+    HOOK_DOORBELL="$(printf '%s\n' "$HOOK_PARSE" | sed -n '5p')"
+    ok "launch form: exec form through the shipped hook-launch.sh (no shell on the path) — supported, and identical across all 3 owner hooks"
+    case "$HOOK_DOORBELL" in
+      ok\ *)  ok "${HOOK_DOORBELL#ok }" ;;
+      *)      bad "${HOOK_DOORBELL#bad }. Re-run ./run.sh install-meta-bridge." ;;
+    esac
+  else
+    BAKED=""
+    HOOK_FILE=""
+    HOOK_COMMAND=""
+    HOOK_LAUNCHER=""
+    HOOK_ENTRY_ARG=""
+    bad "installed hook launch form is UNSUPPORTED — $HOOK_PARSE"
+  fi
+
   if [ -n "$BAKED" ] && [ -x "$BAKED" ]; then
     ok "baked node exists + executable: $BAKED"
-    CACHE_ROOT="$(cd "$(dirname "$CACHE_HOOKS")/.." && pwd)"
     TMP_AGENT="$(mktemp -d 2>/dev/null || mktemp -d -t entwurf-doctor-hook)"
     HOOK_ENV='{"session_id":"doctor-synthetic-native","transcript_path":"/tmp/entwurf-doctor-synthetic-transcript.jsonl","cwd":"/tmp","hook_event_name":"SessionStart","model":{"id":"doctor-model"}}'
-    if HOOK_OUT="$(printf '%s' "$HOOK_ENV" | env PI_CODING_AGENT_DIR="$TMP_AGENT" CLAUDE_PLUGIN_ROOT="$CACHE_ROOT" "$BAKED" "$CACHE_ROOT/$HOOK_FILE" 2>&1)" && printf '%s' "$HOOK_OUT" | grep -q 'hookSpecificOutput'; then
-      ok "cached SessionStart hook executes cleanly in an isolated temp agent dir"
+    printf '%s' "$HOOK_ENV" > "$TMP_AGENT/hook-input.json"
+    # Drive the SAME argv Claude execs, from the SAME resolved artifact root, with NO
+    # shell in between — which is the whole point of the exec form and is now what the
+    # doctor reproduces. Run it as a foreground child (not a pipeline or command-
+    # substitution grandchild), so this still-live doctor shell (`$$`) stands in for
+    # Claude: hook-launch.sh `exec`s the payload, keeping that pid, so the hook's parent
+    # is `$$`. The marker key under `$$` is therefore evidence of the owner join itself,
+    # not merely of hook output — and it is evidence for EVERY host, because there is no
+    # host-chosen shell left to behave differently.
+    if env PI_CODING_AGENT_DIR="$TMP_AGENT" CLAUDE_PLUGIN_ROOT="$CACHE_ROOT" \
+         "$HOOK_LAUNCHER" "$BAKED" "$HOOK_ENTRY_ARG" \
+         < "$TMP_AGENT/hook-input.json" > "$TMP_AGENT/hook-output.txt" 2>&1 \
+       && grep -q 'hookSpecificOutput' "$TMP_AGENT/hook-output.txt" \
+       && [ -f "$TMP_AGENT/meta-senders/claude-code/$$.json" ]; then
+      ok "installed owner argv execs directly (no shell) through hook-launch.sh and keys its sender marker to the live host pid"
     else
-      bad "cached SessionStart hook failed to execute — stale plugin cache / unsupported TS syntax / broken bundle. Re-run install-meta-bridge from the intended surface. Detail: $(printf '%s' "$HOOK_OUT" | tr '\n' ' ' | cut -c1-300)"
+      bad "installed owner argv failed owner-join execution — stale plugin cache / broken bundle / non-executable launcher. Re-run install-meta-bridge. Detail: $(tr '\n' ' ' < "$TMP_AGENT/hook-output.txt" | cut -c1-300)"
     fi
     rm -rf "$TMP_AGENT" 2>/dev/null || true
-  elif [ -n "$BAKED" ]; then bad "baked node path is DEAD (nix GC / version bump?): $BAKED — re-run ./run.sh install-meta-bridge"
-  else bad "could not parse baked node path from $CACHE_HOOKS — hook command format drift; doctor cannot verify the NixOS store-churn guard. Re-run ./run.sh install-meta-bridge or update the doctor parser."; fi
-else
-  warn "no installed hooks.json in cache (plugin not installed?)"
+  elif [ -n "$BAKED" ]; then
+    bad "baked node path is DEAD (nix GC / version bump?): $BAKED — re-run ./run.sh install-meta-bridge"
+  fi
 fi
 
 echo "[statusline — garden identity visible in native Claude]"
@@ -205,14 +578,271 @@ echo "[receiver MCP reach — entwurf_inbox_read in EVERY native session, NOT pl
 # /tmp session would wake with no way to record its receipt). USER scope is.
 # So probe from a neutral non-project cwd, exactly like a real native session.
 if command -v claude >/dev/null; then
-	MCP_GET="$(cd /tmp && claude mcp get entwurf-bridge 2>/dev/null || true)"
-	if printf '%s\n' "$MCP_GET" | grep -q "Scope: User config" && printf '%s\n' "$MCP_GET" | grep -q "Status: .*Connected"; then
+	# rc AND content, pipe-free (same class as the installer's post-install check): a
+	# piped `grep -q` can SIGPIPE the CLI into a false negative, while `|| true` would
+	# let a FAILING probe with plausible output read as a healthy reach.
+	# NB: capture rc WITHOUT `!`. Under `if ! cmd; then`, `$?` inside the branch is the
+	# status of the negation (always 0), so the real exit code would be lost and the
+	# message would report a failure as "exit 0".
+	if MCP_GET="$(cd /tmp && claude mcp get entwurf-bridge 2>/dev/null)"; then
+		MCP_GET_RC=0
+	else
+		MCP_GET_RC=$?
+	fi
+	if [ "$MCP_GET_RC" -ne 0 ]; then
+		bad "'claude mcp get entwurf-bridge' failed from /tmp (exit $MCP_GET_RC) — USER-scope receiver reach is UNKNOWN, not proven. A woken session may have no way to record its receipt."
+	elif case "$MCP_GET" in *"Scope: User config"*) true ;; *) false ;; esac &&
+	     case "$MCP_GET" in *Connected*) true ;; *) false ;; esac; then
 		ok "entwurf-bridge reachable from a neutral cwd (/tmp) as USER-scope MCP — every native session can entwurf_inbox_read"
 	else
 		bad "entwurf-bridge is not USER-scope+Connected from /tmp — a native session outside the wired project cannot entwurf_inbox_read, so a woken receipt is never recorded. A PROJECT-scoped ~/.mcp.json is not enough; wire it USER scope: claude mcp add -s user entwurf-bridge -e ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code -- bash \"$REPO/mcp/entwurf-bridge/start.sh\""
 	fi
 else
 	warn "claude not on PATH — cannot probe MCP reach"
+fi
+
+echo "[bridge delivery self-diagnostic — the LIVE command actually DELIVERS]"
+# Every section above reads SHAPE: the manifest equals the shipped template, the tool is
+# reachable, the hook keys a marker. None of them SENDS anything. That gap is how a dead
+# send path shipped from the birth of the dist (0.12.1) through 0.12.8-repair.0 — the
+# bridge bundle carried no capability registry, so every real entwurf_v2 died
+# `ENOENT ... entwurf-capabilities.json` while tools/list, entwurf_self and entwurf_peers
+# (which never read it) stayed green, and THIS doctor said PASS on a host that could not
+# send one message. An oracle that never delivers judges shape, not function.
+#
+# TWO AXES, kept apart on purpose:
+#   OWNERSHIP  the live entry equals what desired_mcp() would write — drift is loud.
+#   DELIVERY   the LIVE entry, drift included, seeds citizens in a throwaway world and
+#              lands exactly one .msg.
+# Delivery is driven from the LIVE value and never from a recomputed desired one: on a
+# drifted host the recomputed command can deliver while the command Claude actually execs
+# cannot, and that green would be about a bridge nobody runs. Same rule as the artifact
+# root above — judge the thing Claude loads.
+#
+# COST: none. No model, no network, no API. The probe writes only inside its own mktemp
+# world (PI_CODING_AGENT_DIR + the four meta dirs + ENTWURF_DIR all redirected), so the
+# operator's real store, mailbox and sockets cannot be touched — a doctor that delivered
+# into the real mailbox would be a doctor nobody could afford to run twice.
+if ! command -v python3 >/dev/null || ! command -v node >/dev/null; then
+  bad "cannot run the delivery self-diagnostic without python3 + node — DELIVERY IS UNPROVEN, not fine"
+else
+  # Claude Code keeps user-scope MCP in ~/.claude.json, NOT in settings.json — mirror
+  # meta-bridge-state.py:claude_root_config_path() exactly, including its HOME anchoring
+  # (CLAUDE_CONFIG_DIR does not move this file, and pretending it does would read an
+  # empty config on an isolated-config host and call the miss "no bridge wired").
+  LIVE_MCP="$(python3 - <<'PY'
+import json, os
+p = os.path.join(os.path.expanduser('~'), '.claude.json')
+try:
+    d = json.load(open(p))
+except Exception:
+    d = None
+e = (d.get('mcpServers') or {}).get('entwurf-bridge') if isinstance(d, dict) else None
+print(json.dumps(e, sort_keys=True) if isinstance(e, dict) else '')
+PY
+)"
+  if [ -z "$LIVE_MCP" ]; then
+    bad "no live mcpServers.entwurf-bridge in ~/.claude.json — Claude has no entwurf bridge to exec, so nothing can be delivered. Re-run ./run.sh install-meta-bridge."
+  else
+    # Human-readable argv for the verdict lines, so a green names the command it was about.
+    LIVE_MCP_DESC="$(LIVE_MCP="$LIVE_MCP" python3 -c 'import json,os; e=json.loads(os.environ["LIVE_MCP"]); print(" ".join([e.get("command","")] + list(e.get("args") or [])))' 2>/dev/null || true)"
+    [ -n "$LIVE_MCP_DESC" ] || LIVE_MCP_DESC="(unprintable live command)"
+    # Ownership axis. `|| true` on the pipeline only: a state.py failure must read as
+    # UNKNOWN-and-loud below, never abort the doctor before the delivery drive.
+    DESIRED_MCP="$( { python3 "$REPO/scripts/meta-bridge-state.py" desired-mcp --repo "$REPO" \
+      | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin), sort_keys=True))'; } 2>/dev/null || true)"
+    if [ -z "$DESIRED_MCP" ]; then
+      bad "could not compute the desired MCP entry (meta-bridge-state.py desired-mcp failed) — live-vs-desired ownership is UNKNOWN"
+    elif [ "$LIVE_MCP" = "$DESIRED_MCP" ]; then
+      ok "live mcpServers.entwurf-bridge equals desired_mcp() for this mode (installed: bin shim; clone: this checkout's start.sh)"
+    else
+      bad "live mcpServers.entwurf-bridge DRIFTED from desired_mcp(): live=$LIVE_MCP desired=$DESIRED_MCP — re-run ./run.sh install-meta-bridge (delivery below is still driven from the LIVE value, which is what Claude execs)"
+    fi
+
+    # Delivery axis. The writer module is imported by the probe to seed its citizens; a
+    # missing one is a broken install, not a reason to skip the drive quietly.
+    if [ ! -f "$SRC_MS" ]; then
+      bad "delivery self-diagnostic cannot seed: writer module missing at $SRC_MS — reinstall @junghanacs/entwurf"
+    else
+      # Mode split for the PROBE ITSELF: under node_modules Node refuses strip-types, so
+      # the installed lane imports the emitted `.js` with plain node. Array (never an
+      # empty one) so bash 3.2 + `set -u` cannot trip on the expansion.
+      if [ "$LIB_EXT" = "js" ]; then
+        PROBE_NODE=(node)
+      else
+        PROBE_NODE=(node --experimental-strip-types --disable-warning=ExperimentalWarning)
+      fi
+      if DELIVERY_OUT=$(PROBE_MCP_JSON="$LIVE_MCP" PROBE_MODULE="$SRC_MS" "${PROBE_NODE[@]}" --input-type=module <<'JS' 2>&1
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const entry = JSON.parse(process.env.PROBE_MCP_JSON);
+if (typeof entry.command !== 'string' || entry.command.trim() === '') {
+  console.error('live mcpServers.entwurf-bridge has no command');
+  process.exit(1);
+}
+const { upsertMetaSession, writeMetaSenderMarker, writeMetaReceiverMarker } =
+  await import(pathToFileURL(process.env.PROBE_MODULE).href);
+
+const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'entwurf-doctor-delivery-'));
+const agent = path.join(tmp, 'agent');
+const sessionsDir = path.join(agent, 'meta-sessions');
+const mailboxDir = path.join(agent, 'meta-mailbox');
+const receiversDir = path.join(agent, 'meta-receivers');
+const sendersDir = path.join(agent, 'meta-senders');
+for (const d of [sessionsDir, mailboxDir, receiversDir, sendersDir]) await fsp.mkdir(d, { recursive: true });
+
+// SENDER — this probe process is the parent the bridge child will see, so a sender
+// marker keyed to it is exactly what a real SessionStart hook writes for a native
+// session. Not decoration: the live env sets ENTWURF_BRIDGE_REQUIRE_META_SENDER=1
+// (anonymous sends are refused on the Claude install path) and the probe KEEPS that
+// env, so the identity join is under test alongside the delivery.
+const sender = upsertMetaSession({
+  input: { backend: 'claude-code', nativeSessionId: `doctor-delivery-sender-${process.pid}`, cwd: tmp },
+  dir: sessionsDir,
+});
+writeMetaSenderMarker({
+  backend: 'claude-code',
+  gardenId: sender.record.gardenId,
+  nativeSessionId: sender.record.nativeSessionId,
+  cwd: tmp,
+  ownerPid: process.pid,
+  sendersDir,
+});
+writeMetaReceiverMarker({
+  gardenId: sender.record.gardenId,
+  backend: 'claude-code',
+  nativeSessionId: sender.record.nativeSessionId,
+  ownerPid: process.pid,
+  armProvenance: 'session-start',
+  receiversDir,
+});
+
+// RECEIVER — a DIFFERENT citizen, armed by a live owner pid (this process). An unarmed
+// target is correctly fail-closed as mailbox-undeliverable, so an unarmed probe could
+// never separate "the artifact cannot read its registry" from "nobody is listening".
+const receiver = upsertMetaSession({
+  input: { backend: 'claude-code', nativeSessionId: `doctor-delivery-receiver-${process.pid}`, cwd: tmp },
+  dir: sessionsDir,
+});
+const gid = receiver.record.gardenId;
+writeMetaReceiverMarker({
+  gardenId: gid,
+  backend: 'claude-code',
+  nativeSessionId: receiver.record.nativeSessionId,
+  ownerPid: process.pid,
+  armProvenance: 'session-start',
+  receiversDir,
+});
+
+// The live env wins over the ambient one (it is part of the command under test); the
+// isolation vars win over both, because a probe that could reach the operator's real
+// store is not a probe.
+const env = {
+  ...process.env,
+  ...(entry.env && typeof entry.env === 'object' ? entry.env : {}),
+  PI_CODING_AGENT_DIR: agent,
+  ENTWURF_META_SESSIONS_DIR: sessionsDir,
+  ENTWURF_META_MAILBOX_DIR: mailboxDir,
+  ENTWURF_META_RECEIVERS_DIR: receiversDir,
+  ENTWURF_META_SENDERS_DIR: sendersDir,
+  ENTWURF_DIR: path.join(tmp, 'sockets'),
+};
+// Harness identity is AMBIENT, not part of the live MCP entry. The bridge checks a
+// complete PI_SESSION_ID + PI_AGENT_ID pair before marker discovery; inheriting them
+// from a pi-run doctor silently turns this seeded meta-sender proof into a pi-identity
+// proof. An explicit marker-path carrier can bypass the isolated pid lookup the same
+// way. Scrub all three so the marker above is the only possible strict sender.
+delete env.PI_SESSION_ID;
+delete env.PI_AGENT_ID;
+delete env.ENTWURF_META_SENDER_MARKER;
+delete env.NODE_PATH;
+
+let child = null;
+let stderr = '';
+let verdict = 0;
+const bail = (msg) => { console.error(msg); verdict = 1; };
+try {
+  child = spawn(entry.command, Array.isArray(entry.args) ? entry.args : [], { stdio: ['pipe', 'pipe', 'pipe'], env });
+  child.on('error', (e) => { stderr += `spawn error: ${String(e)}\n`; });
+  child.stderr.on('data', (d) => { stderr += d.toString(); });
+  const replies = new Map();
+  let buf = '';
+  child.stdout.on('data', (d) => {
+    buf += d.toString();
+    const lines = buf.split('\n');
+    buf = lines.pop() ?? '';
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t) continue;
+      try { const m = JSON.parse(t); if (typeof m?.id === 'number') replies.set(m.id, m); } catch {}
+    }
+  });
+  const send = (o) => child.stdin.write(`${JSON.stringify(o)}\n`);
+  const awaitId = (id, what) => new Promise((resolve, reject) => {
+    const t0 = Date.now();
+    const iv = setInterval(() => {
+      if (replies.has(id)) { clearInterval(iv); resolve(replies.get(id)); }
+      else if (Date.now() - t0 > 20000) { clearInterval(iv); reject(new Error(`timeout waiting for ${what}\n${stderr.slice(0, 800)}`)); }
+    }, 50);
+  });
+
+  send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+  const listed = await awaitId(1, 'tools/list');
+  const names = (listed?.result?.tools ?? []).map((t) => t?.name);
+  if (!names.includes('entwurf_v2')) bail(`the live command booted but registers no entwurf_v2 (tools: ${names.join(',') || 'none'})`);
+
+  if (verdict === 0) {
+    send({
+      jsonrpc: '2.0',
+      id: 2,
+      method: 'tools/call',
+      params: {
+        name: 'entwurf_v2',
+        arguments: {
+          target: gid,
+          intent: 'fire-and-forget',
+          mode: 'follow_up',
+          message: 'doctor-meta-bridge delivery self-diagnostic (throwaway citizen).',
+        },
+      },
+    });
+    const called = await awaitId(2, 'tools/call entwurf_v2');
+    const body = called?.result?.content?.[0]?.text ?? JSON.stringify(called);
+    const box = path.join(mailboxDir, gid);
+    const files = fs.existsSync(box) ? fs.readdirSync(box) : [];
+    const messages = files.filter((f) => f.endsWith('.msg'));
+    if (called?.result?.isError === true || messages.length !== 1 || !fs.existsSync(path.join(box, 'inbox.signal'))) {
+      bail(`the live command did not deliver — response: ${String(body).slice(0, 400)} | mailbox: ${files.join(',') || 'empty'}`);
+    } else {
+      const landedBody = fs.readFileSync(path.join(box, messages[0]), 'utf8');
+      const fromMeta = landedBody.includes('from:        meta-session/claude-code @');
+      const fromSeed = landedBody.includes(`session:     ${sender.record.gardenId} (meta-session, replyable`);
+      if (!fromMeta || !fromSeed) {
+        bail(`the message landed under the WRONG sender identity (ambient pi/marker carrier bypass) — body: ${landedBody.slice(0, 500)}`);
+      }
+    }
+  }
+} catch (e) {
+  bail(String(e instanceof Error ? e.message : e));
+} finally {
+  try { child?.kill('SIGTERM'); } catch {}
+  await fsp.rm(tmp, { recursive: true, force: true });
+}
+if (verdict === 0) console.log('delivered: one .msg landed + doorbell poked; seeded meta-sender identity joined');
+process.exit(verdict);
+JS
+      ); then
+        ok "live bridge command DELIVERS — $DELIVERY_OUT (seeded citizens in a temp world, real tools/call entwurf_v2 through: $LIVE_MCP_DESC)"
+      else
+        bad "live bridge command CANNOT DELIVER — it may boot and answer tools/list while every real entwurf_v2 send dies (the 0.12.1→0.12.8-repair.0 registry corpse class). Detail: $(printf '%s' "$DELIVERY_OUT" | tr '\n' ' ' | cut -c1-400)"
+      fi
+    fi
+  fi
 fi
 
 echo "[meta-record store]"
@@ -282,15 +912,150 @@ if [ -f "$HOOK_LOG" ]; then
   else
     bad "no sender marker evidence in hook log — native sessions may receive mail but send as anonymous external-mcp. Re-run ./run.sh install-meta-bridge, then trigger a Claude prompt/SessionStart so the updated hook writes the marker."
   fi
-else warn "no hook log yet ($HOOK_LOG) — open a Claude Code session first"; fi
+else
+  # Absent log = the two assertions above (unrecovered ERROR, sender-marker evidence)
+  # never ran. As a WARN that silently removed both from the verdict while the doctor
+  # still printed PASS.
+  bad "NOT CERTIFIED — no hook log at $HOOK_LOG, so neither the unrecovered-ERROR check nor the sender-marker evidence check could run. Open a Claude Code session and run this doctor again."
+fi
 if [ "${CC_COUNT:-0}" -ge 1 ]; then
   ok "$CC_COUNT claude-code meta-record(s) landed (garden citizen proven)"
 else
-  if claude plugin list 2>/dev/null | grep -q "$PLUGIN@$MKT_NAME"; then
+  # Reuse the presence fact decided ONCE above — never re-probe the CLI here. A second
+  # call can answer differently from the first, and this branch turns a hard SILENT-MISS
+  # failure into a benign warn, so a disagreeing snapshot is exactly how the dangerous
+  # case would go quiet.
+  if [ "$PLUGIN_PRESENCE" = "present" ]; then
     bad "plugin installed but ZERO claude-code meta-records — SILENT MISS. Open a Claude Code session; if still zero, inspect $HOOK_LOG."
+  elif [ "$PLUGIN_PRESENCE" = "unknown" ]; then
+    bad "ZERO claude-code meta-records and plugin state is UNKNOWN (the plugin-list probe failed above) — this cannot be read as a fresh install."
   else
     warn "no meta-records yet (plugin not installed)"
   fi
+fi
+
+# Runtime complement to the installed-command contract above. On Linux, inspect
+# every live entwurf MCP process rooted in THIS agent dir and prove its candidate
+# owner pid has a live, record-backed sender marker plus the matching receiver
+# marker. This catches the observed retained-wrapper failure when an MCP child is
+# present: reinstall updated cache files, but an already-running Claude process still executes the old in-memory hook and
+# keeps writing dead wrapper pids. A restart is then required, not another install.
+echo "[live Claude MCP owner join]"
+if command -v python3 >/dev/null; then
+  if JOIN_OUT="$(python3 - "$AGENT" "$META_SESSIONS" <<'PY' 2>&1
+import json, os, sys
+from pathlib import Path
+
+agent = Path(sys.argv[1]).expanduser().resolve()
+store = Path(sys.argv[2]).expanduser().resolve()
+proc = Path("/proc")
+if not proc.is_dir():
+    # rc=3 is a PLATFORM verdict, distinct from rc=2 ("no session open right now").
+    # The runtime this doctor verifies has a `ps` fallback for start-key/ppid, but
+    # bridge DISCOVERY needs per-process environ, which has no portable equivalent
+    # here — so the live tier is unreachable, not merely unobserved.
+    print("live owner join is NOT INSTRUMENTABLE on this platform: /proc is unavailable, so entwurf MCP children cannot be discovered")
+    raise SystemExit(3)
+
+def stat_fields(pid):
+    text = Path(f"/proc/{pid}/stat").read_text()
+    return text[text.rfind(")") + 2:].split()
+
+def parent(pid):
+    try: return int(stat_fields(pid)[1])
+    except Exception: return None
+
+def start_key(pid):
+    try: return "linux:" + stat_fields(pid)[19]
+    except Exception: return ""
+
+def process_agent(env):
+    raw = env.get("PI_CODING_AGENT_DIR")
+    home = env.get("HOME", str(Path.home()))
+    if raw:
+        if raw == "~": raw = home
+        elif raw.startswith("~/"): raw = str(Path(home) / raw[2:])
+        return Path(raw).resolve()
+    return (Path(home) / ".pi" / "agent").resolve()
+
+bridges = []
+for p in proc.glob("[0-9]*"):
+    try:
+        pairs = p.joinpath("environ").read_bytes().split(b"\0")
+        env = {k.decode(): v.decode(errors="replace") for x in pairs if b"=" in x for k, v in [x.split(b"=", 1)]}
+        if env.get("ENTWURF_BRIDGE_REQUIRE_META_SENDER") != "1": continue
+        if env.get("ENTWURF_BRIDGE_EXTERNAL_AGENT_ID") != "external-mcp/claude-code": continue
+        if process_agent(env) != agent: continue
+        bridges.append((int(p.name), parent(int(p.name))))
+    except (OSError, ValueError):
+        continue
+if not bridges:
+    print("no live Claude entwurf MCP process for this agent dir — the live owner join was NOT measured")
+    raise SystemExit(2)
+
+records = {}
+for f in store.glob("*.meta.json"):
+    try:
+        d = json.loads(f.read_text())
+        if d.get("backend") == "claude-code" and isinstance(d.get("gardenId"), str): records[d["gardenId"]] = d
+    except Exception:
+        pass  # the full store doctor reports corruption separately
+
+failures = []
+for bridge_pid, bridge_parent in bridges:
+    candidates = []
+    if bridge_parent: candidates.append(bridge_parent)
+    grand = parent(bridge_parent) if bridge_parent else None
+    if grand and grand not in candidates: candidates.append(grand)
+    live = []
+    for owner in candidates:
+        f = agent / "meta-senders" / "claude-code" / f"{owner}.json"
+        try:
+            d = json.loads(f.read_text())
+            if d.get("ownerPid") == owner and d.get("ownerStartKey") == start_key(owner) and start_key(owner):
+                live.append(d)
+        except Exception:
+            pass
+    gids = {d.get("gardenId") for d in live if isinstance(d.get("gardenId"), str)}
+    if len(gids) != 1:
+        failures.append(f"bridge pid={bridge_pid} owner-candidates={candidates}: live sender garden ids={sorted(gids)}")
+        continue
+    gid = next(iter(gids))
+    sender = next(d for d in live if d.get("gardenId") == gid)
+    record = records.get(gid)
+    if not record or record.get("nativeSessionId") != sender.get("nativeSessionId"):
+        failures.append(f"bridge pid={bridge_pid} owner={sender.get('ownerPid')}: sender {gid} is not record-backed")
+        continue
+    try:
+        receiver = json.loads((agent / "meta-receivers" / f"{gid}.json").read_text())
+    except Exception:
+        receiver = {}
+    owner = sender.get("ownerPid")
+    if receiver.get("ownerPid") != owner or receiver.get("ownerStartKey") != start_key(owner) or receiver.get("nativeSessionId") != sender.get("nativeSessionId"):
+        failures.append(f"bridge pid={bridge_pid} owner={owner}: receiver marker for {gid} is absent/stale/mismatched")
+if failures:
+    print("; ".join(failures))
+    raise SystemExit(1)
+print(f"{len(bridges)} live Claude MCP process(es): sender + receiver owner join is live and record-backed")
+PY
+)"; then
+    ok "$JOIN_OUT"
+  else
+    JOIN_RC=$?
+    # Every path below is a FAILURE. This section is the one that measures the axis
+    # this cut exists to fix, and it used to WARN and let the doctor exit 0 — so a
+    # PASS could be printed having never observed a single live owner join. An oracle
+    # whose central evidence is optional is not an oracle. The three causes stay
+    # distinguishable, because "your install is broken" and "nothing was measured"
+    # send an operator to completely different places.
+    case "$JOIN_RC" in
+      2) bad "NOT CERTIFIED — $JOIN_OUT. Nothing here says the install is broken: the evidence simply does not exist yet. Open a Claude Code session (or restart the affected one) and run this doctor again." ;;
+      3) bad "NOT CERTIFIED on this platform — $JOIN_OUT. This repair cut currently certifies the Claude meta-bridge on Linux only; static/synthetic evidence cannot certify $(uname -s), and future native validation may reopen that lane." ;;
+      *) bad "$JOIN_OUT. Re-run install-meta-bridge, restart the affected Claude session(s), then run doctor again." ;;
+    esac
+  fi
+else
+  bad "cannot validate live Claude MCP owner join without python3"
 fi
 
 # ── writer-version parity (source ↔ assembled ↔ installed) ──────────────────
@@ -315,15 +1080,17 @@ registry_for_ms() { # $1=bundle meta-session.ts → sibling plugin-root registry
 
 # Source authority for parity depends on the mode: an installed bundle carries the
 # dist `.js`, so compare it against the dist `.js` (same tsc pipeline → hash-equal);
-# a dev clone carries the `.ts`, so compare against the `.ts` source.
-if [ "$LIB_EXT" = "js" ]; then
-  SRC_MS="$REPO/mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
-else
-  SRC_MS="$REPO/pi-extensions/lib/meta-session.ts"
-fi
+# a dev clone carries the `.ts`, so compare against the `.ts` source. That mode split
+# is `SRC_MS`, derived once at the top of this script.
 SRC_REG="$REPO/pi/entwurf-capabilities.json"
 ASM_MS="$ASM/$PLUGIN/lib/meta-session.$LIB_EXT"
-INST_MS="$(ls "$CLAUDE_CFG"/plugins/cache/"$MKT_NAME"/"$PLUGIN"/*/lib/meta-session."$LIB_EXT" 2>/dev/null | head -1 || true)"
+# Read the SAME artifact root the hook sections judged. Re-globbing here could hash a
+# different version directory than the one whose hooks.json was classified — the two
+# halves of the verdict would then be about two different installs.
+INST_MS=""
+if [ -n "$CACHE_ROOT" ] && [ -f "$CACHE_ROOT/lib/meta-session.$LIB_EXT" ]; then
+  INST_MS="$CACHE_ROOT/lib/meta-session.$LIB_EXT"
+fi
 
 ASM_ROOT="$(registry_for_ms "$ASM_MS")"
 INST_ROOT="$(registry_for_ms "${INST_MS:-}")"
@@ -349,7 +1116,9 @@ done
 echo "  store     : v1=$sv1 v2=$sv2 v3=$sv3  (production reads v3 only; v1/v2 wait for the M1 migrate)"
 
 if [ -z "${INST_MS:-}" ]; then
-  warn "no installed bundle to compare — run ./run.sh install-meta-bridge"
+  # Whether the DEPLOYED writer is stale is the whole point of this section. Skipping
+  # it as a WARN meant "we could not look" was printed alongside PASS.
+  bad "no installed writer bundle to compare (expected lib/meta-session.$LIB_EXT under the resolved artifact root${CACHE_ROOT:+ $CACHE_ROOT}) — the deployed writer version is UNKNOWN, so a stale writer cannot be ruled out. Re-run ./run.sh install-meta-bridge."
 elif [ "$inst_h" = "$src_h" ]; then
   ok "deployed writer matches source ($inst_v) — no version lag"
 else

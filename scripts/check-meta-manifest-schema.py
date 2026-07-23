@@ -12,6 +12,13 @@
 # committed manifests to the MINIMAL keyset confirmed to validate on the lowest
 # supported Claude, independent of whatever CLI version happens to run here.
 #
+# Scope correction (#51, 2026-07-22): "minimal" means no DECORATIVE keys. It never
+# meant "no load-bearing keys", and the hook `args` array is load-bearing — it is the
+# exec form. Measurement also retired the fear that motivated excluding it: an older
+# Claude does not reject unknown hook keys, it accepts them and then silently discards
+# the value at runtime while reporting success. A closed schema you cannot detect is
+# not protection, so the protection moved to the version floor and the launcher.
+#
 # It also asserts meta-bridge-state.py::desired_mcp() picks the stable `entwurf-bridge`
 # bin for an installed package and the clone's start.sh for a dev clone (the other
 # 0.12.1 install-surface fragility: baking the pnpm store path goes stale on peer bumps).
@@ -92,9 +99,44 @@ if hooks is not None:
         for j, entry in enumerate(entries):
             subset(f"hooks.{event}[{j}]", entry, {"matcher", "hooks"})
             for k, h in enumerate(entry.get("hooks", []) if isinstance(entry, dict) else []):
-                # asyncRewake/timeout are load-bearing on the FileChanged doorbell —
-                # allowed, NOT decorative. Anything beyond this set must be reviewed.
-                subset(f"hooks.{event}[{j}].hooks[{k}]", h, {"type", "command", "asyncRewake", "timeout"})
+                # asyncRewake/timeout are load-bearing on the FileChanged doorbell and
+                # `args` is load-bearing on every hook (it IS the exec form) — allowed,
+                # NOT decorative. Anything beyond this set must be reviewed.
+                #
+                # `args` was previously excluded on the theory that an older Claude's
+                # closed schema might REJECT it. #51 B measured that theory and it is
+                # false: 2.1.138 accepts the key (unknown-key passthrough), then drops
+                # the array at runtime and reports the hook as `exit_code: 0,
+                # outcome: success`. So the minimal keyset never bought protection from
+                # that version — it only kept us on a launch form whose topology no host
+                # could guarantee. The real defenses are the `>=2.1.217` floor
+                # (check-claude-floor-coherence) and hook-launch.sh refusing an empty
+                # argv. The marketplace/plugin manifests below stay minimal: the closed-
+                # schema lesson that produced this gate was about a DECORATIVE key
+                # (`description`), and that lesson is untouched.
+                subset(f"hooks.{event}[{j}].hooks[{k}]", h, {"type", "command", "args", "asyncRewake", "timeout"})
+
+    # Every hook launches through the shipped launcher in EXEC form: `command` is
+    # hook-launch.sh and the baked argv travels in `args`. No shell is on the path, so
+    # the hook's parent is Claude itself on every host — that is the identity contract
+    # the retired `$PPID` carrier used to approximate. Asserted here as committed text;
+    # check-hook-launch-topology drives it for real.
+    expected_owner_command = "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launch.sh"
+    expected_owner_args = ["__NODE_BIN__", "${CLAUDE_PLUGIN_ROOT}/__HOOK_ENTRY__"]
+    for event in ("SessionStart", "CwdChanged", "UserPromptSubmit"):
+        try:
+            leaf = hooks["hooks"][event][0]["hooks"][0]
+            command, args = leaf["command"], leaf.get("args")
+        except (KeyError, IndexError, TypeError):
+            bad(f"hooks.{event}: cannot find load-bearing command hook")
+            continue
+        if command == expected_owner_command and args == expected_owner_args:
+            ok(f"hooks.{event}: exec form through the shipped hook-launch.sh")
+        else:
+            bad(
+                f"hooks.{event}: owner launch drifted; got command={command!r} args={args!r}, "
+                f"want command={expected_owner_command!r} args={expected_owner_args!r}"
+            )
 
 # --- desired_mcp() installed-vs-clone dual-mode ------------------------------
 def desired_mcp(repo: str):

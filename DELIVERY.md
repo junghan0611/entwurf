@@ -95,7 +95,7 @@ When a level is **not applicable** or **conditional**, say so explicitly. For
 example, Codex app-server delivery is conditional on a loaded thread and control
 socket; direct Codex TUI is a different surface.
 
-## Current capability matrix (2026-07-13)
+## Current capability matrix (2026-07-22)
 
 This matrix is a snapshot of what the raw probes have established. It should be
 updated when a backend version changes the delivery surface.
@@ -110,7 +110,7 @@ the `D0–D8` capability level:
 | Harness / surface | Status | Highest current level | Transport | Notes |
 |---|---|---:|---|---|
 | **pi native Entwurf** | shipped | D7+ | Unix control socket + pi followUp/custom messages | Replyable pi session. This is the resident baseline, not an external meta-session. `entwurf_v2` treats a record-less but live pi control socket as a socket-only `fire-and-forget` target; record-less *dormant* resume is intentionally not claimed. |
-| **Claude Code interactive 2.1.163** | shipped | D6, D7 partial, D8 partial | Plugin/global `SessionStart` arms `watchPaths`; external write triggers `FileChanged`; `asyncRewake` wakes idle session | Active idle wake proven without pty. `Stop` alone is piggyback-only. `asyncRewake` is a doorbell; body is self-fetched from mailbox. D8 partial: duplicate/read idempotence, honest unread counts, and level-triggered body drain are gated; empirical wake-edge bounds and unread-heartbeat backstop remain open (#34). |
+| **Claude Code interactive >=2.1.217** | shipped *(Linux is the only certified axis in this repair cut)* | D6, D7 partial, D8 partial | Exec-form global plugin: `SessionStart` arms `watchPaths`; external write triggers exec-form `FileChanged`; `asyncRewake` wakes idle session | B2 direct-native at 2.1.217 on one NixOS host proved per-element argv, no shell expansion, parent join, and exit-2 idle wake. B at 2.1.138 proved the negative: `args` discarded while Claude reported success, so installer/doctor enforce 2.1.217 and there is no shell fallback. The launcher provenance token keeps an old cached command fail-closed. Active idle wake is D6; D7/D8 remain partial as before. The Linux container's planted cache/owner/bridge are fixtures, not a second native-host proof. |
 | **Antigravity / agy** | shipped | D6, D7 partial | Native LS gRPC `agentapi send-message` (native-push) | `PreInvocation` automatically births/attaches by native `conversationId` and writes the record-backed pid/start-key sender marker; `entwurf_v2` fire-and-forget probes and direct-injects through the antigravity adapter with a one-shot re-probe retry. Three managed adapters own MCP+one exact permission, statusline, and hook separately. `entwurf_register_native` remains an explicit/manual fallback, not the normal birth path. Live sender→sibling→same-gid reply passed on 2026-07-13, re-verified at **agy 1.1.0** on 2026-07-14 (13/13 LIVE checks); D7 stays partial because there is no canonical transcript/content receipt owned by the smoke. |
 | **Codex app-server-backed TUI 0.136.0** | verified-probe | D6, D7 (status) | WebSocket-over-UDS `turn/start` into the live `threadId` | **Demonstrated, no managed standalone, no cloud.** `codex app-server --listen unix://<owned 0700 dir>` + plain `codex` auto-attach (or `--remote unix://`). Full message injection (agy-like, not a doorbell); `thread/status/changed` gives completion observation. D8 robustness (dedupe / crash recovery / ordering policy) is not tested. `turn/steer` is active-turn steering, not idle wake. |
 | **Codex embedded TUI 0.136.0** | deferred | D0 partial | Native state DB / rollout transcript only | Standalone Embedded TUI binds no socket; no `FileChanged`/`asyncRewake` in Codex hooks; not retrofittable. Identify-only via state DB / rollout. |
@@ -120,6 +120,24 @@ the `D0–D8` capability level:
 ## Backend notes
 
 ### Claude Code — filesystem event wake, not socket push
+
+The current launch contract is **exec-only at Claude Code >=2.1.217**. All four
+hook leaves run the shipped `hook-launch.sh` as `command` with the real argv in
+`args`; the launcher stamps non-identity launch provenance and `exec`s the payload.
+A hook reached through an old cached shell command still mints its record but writes
+no sender/receiver marker, so an upgrade mismatch is fail-closed. Reinstall the
+meta-bridge and restart all old Claude sessions before judging delivery.
+
+Evidence boundary: B/B2 were real Claude sessions and therefore direct-native
+runtime evidence, but both ran on one NixOS host. `check-hook-launch-topology` is a
+deterministic execution proof of the shipped argv; `check-install-container` uses a
+fake Claude, planted plugin cache, stand-in owner, and fake live bridge. Those fixtures
+prove package/oracle behavior, not actual native session wake. A claimed Linux host
+is accepted only when its **installed** strict doctor sees the live owner join and
+exits 0; missing evidence is `NOT CERTIFIED`, not a partial delivery PASS. macOS is
+not yet verified/certified for this repair cut: install refuses Darwin, doctor stays
+nonzero, and only the uninstaller keeps Darwin support so an older managed install
+can be removed. Future native validation may reopen that lane.
 
 A missing local listening socket does **not** imply idle wake is impossible.
 Claude Code interactive can be woken by a supported filesystem-event path:

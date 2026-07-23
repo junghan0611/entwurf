@@ -572,12 +572,24 @@ export function parseMetaCapabilityRegistry(json: string): MetaCapabilityRegistr
 }
 
 /**
- * The packaged capability registry path. Two layouts resolve:
+ * The packaged capability registry path. This function's ENTIRE behaviour is
+ * arithmetic on its own file location, so it is only ever as correct as the layout
+ * it is executed from — which is why it is gated by check-capability-bundle-reach
+ * (which re-asks every shipped copy from where it lives) and NOT by the source-path
+ * gates (calling it from its own source dir can never fail).
+ *
+ * Two layouts resolve:
  *  - repo / npm package: `pi-extensions/lib/` → `<root>/pi/entwurf-capabilities.json`.
- *  - bundled meta-bridge plugin: `../../pi` would ESCAPE the plugin dir (the plugin
- *    is installed under a version dir in the Claude plugin cache), so the registry
- *    travels AT the plugin root and resolves via `../` from `lib/`.
- *    meta-bridge-install.sh copies it there; doctor-meta-bridge asserts its presence.
+ *  - a BUNDLE that carries the module at its own root: `../../pi` would escape the
+ *    bundle, so the registry travels AT the bundle root and resolves via `../` from
+ *    `lib/`. Two bundles ship this way, and each needs its own copy step:
+ *      · meta-bridge plugin — installed under a version dir in the Claude plugin
+ *        cache; meta-bridge-install.sh copies it, doctor-meta-bridge asserts it.
+ *      · entwurf-bridge MCP dist — `mcp/entwurf-bridge/dist/pi-extensions/lib/`,
+ *        three levels deeper than the source; build-bridge.sh copies it. This is
+ *        the copy that answers entwurf_v2, and it shipped with NO registry through
+ *        0.12.8-repair.0: sends died ENOENT while the registry-free verbs
+ *        (entwurf_self/entwurf_peers) stayed green and hid it.
  * Repo path is tried first, so repo/package behaviour is unchanged; the bundle
  * fallback only engages where the repo layout is absent.
  */
@@ -874,10 +886,13 @@ export function defaultMetaMailboxDir(): string {
  * MCP process does not know which garden-id session it belongs to, so the sender
  * envelope degrades to anonymous `external-mcp` and the receiver has no reply
  * address. The hook DOES know the garden-id (it just minted the record), and the
- * hook + the MCP child run under the SAME Claude Code parent process. So the hook
- * writes a marker keyed by that parent pid; the MCP reads the marker for its OWN
- * `process.ppid` and promotes itself to a replyable meta-session sender. This
- * uses process ancestry, NOT cwd inference (same repo / multiple sessions would
+ * hook + the MCP child run under the SAME Claude Code owner process. Under the
+ * exec-form launch contract the hook's parent IS Claude — Claude execs
+ * `hook-launch.sh`, which `exec`s the hook and hands it that same pid — so the hook
+ * writes the marker under `process.ppid` and the MCP reads the marker for its OWN
+ * `process.ppid`. Both sides name the one owner on every host, with no shell on the
+ * path to be mistaken for it and nothing to carry in an env var.
+ * This uses process ancestry, NOT cwd inference (same repo / multiple sessions would
  * make cwd ambiguous). `ENTWURF_META_SENDERS_DIR` overrides for tests.
  */
 export function defaultMetaSendersDir(): string {
@@ -1087,7 +1102,7 @@ export interface MetaReceiverMarker {
 	gardenId: string;
 	backend: MetaBackend;
 	nativeSessionId: string;
-	/** The pid holding the watchPaths idle-wake subscription (the native CLI = hook's process.ppid). */
+	/** The pid holding watchPaths (validated explicit hook-owner carrier = native CLI pid). */
 	ownerPid: number;
 	/** processStartKey(ownerPid) at write time — the dead-owner / pid-reuse guard. */
 	ownerStartKey: string;

@@ -13,7 +13,8 @@
 # --experimental-strip-types. The clone lives outside node_modules so strip-types
 # is allowed, edits are picked up with no build step, and a leftover dist/ (e.g.
 # emitted by `prepack` during a `pnpm check` pack gate) can never silently shadow
-# the source. Node >= 22.6 (engines.node in ../../package.json).
+# the source. Node >= 24 (engines.node in ../../package.json is the SSOT;
+# check-node-floor-coherence binds this comment to it).
 #
 # Env file loading is strictly opt-in — the launcher never reads any dotfile
 # unless ENTWURF_BRIDGE_ENV_FILE points at one. Rationale: entwurf is a

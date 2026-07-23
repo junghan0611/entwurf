@@ -25,7 +25,9 @@
 # Idempotent: re-running removes the prior marketplace/plugin first, so a
 # `nix rebuild` that moved node just re-bakes and re-installs cleanly.
 #
-# Platform: Linux + macOS only. Windows fails fast (no "untested but maybe works").
+# Platform: Linux only for the #51 repair cut. macOS cannot reach the strict
+# live-owner certification tier, so accepting an install there would advertise a
+# surface this release can never certify. Windows and every other platform fail fast.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -62,24 +64,38 @@ esac
 
 die() { echo "meta-bridge-install: $*" >&2; exit 1; }
 
-# --- platform gate (Linux/macOS only) ---------------------------------------
+# --- platform gate (Linux-only repair contract) -----------------------------
 case "$(uname -s)" in
-  Linux | Darwin) ;;
-  *) die "unsupported platform '$(uname -s)'. meta-bridge supports Linux + macOS only (Windows is fail-fast, not silently attempted)." ;;
+  Linux) ;;
+  Darwin) die "macOS is not yet verified/certified for this repair cut. Strict live-owner certification currently requires /proc, so Darwin install is refused rather than left NOT CERTIFIED; future validation may reopen this lane." ;;
+  *) die "unsupported platform '$(uname -s)'. The Claude meta-bridge repair cut supports Linux only (no unverified fallback)." ;;
 esac
 
 # --- toolchain gate ---------------------------------------------------------
 command -v claude >/dev/null || die "'claude' CLI not on PATH. Install Claude Code first."
 command -v python3 >/dev/null || die "'python3' not on PATH. The FileChanged doorbell parses hook JSON with python3; install refuses a silently-dead wake runtime."
+# Claude Code floor (#51 policy A, 2026-07-22). This gate is the entwurf-side
+# fail-loud, and it has to exist because UPSTREAM GIVES NONE: an older Claude passes
+# `claude plugin validate` on the exec-form manifest (unknown-key passthrough) and
+# then at runtime drops `args`, runs `command` alone, and reports the hook as
+# `exit_code: 0, outcome: "success"` (measured on 2.1.138). Nothing about that install
+# looks wrong from the outside. If we do not refuse the version here, the user gets a
+# meta-bridge that installs clean, validates clean, and never wakes.
+# shellcheck source=scripts/meta-bridge-claude-floor.sh
+source "$REPO/scripts/meta-bridge-claude-floor.sh"
+CLAUDE_FLOOR="$(claude_floor_version "$REPO")" || die "cannot read the Claude Code floor from package.json (entwurf.claudeCodeFloor)."
+CLAUDE_VER="$(claude_detected_version)"
+[ -n "$CLAUDE_VER" ] || die "could not read a version from 'claude --version'. entwurf requires Claude Code >= $CLAUDE_FLOOR and refuses to install against an unidentifiable runtime."
+claude_floor_satisfied "$CLAUDE_VER" "$CLAUDE_FLOOR" || die "claude $CLAUDE_VER is below the supported floor >= $CLAUDE_FLOOR. The meta-bridge hooks use the shell-less exec form; an older Claude silently DROPS the hook's args and still reports success, so this install would look healthy and never wake. There is no shell-form fallback — update Claude Code and re-run."
 NODE_BIN="$(command -v node)" || die "'node' not on PATH (the hook needs it to run the entry shell)."
-# Need TypeScript type-stripping: native default >= 23.6, --experimental-strip-types >= 22.6.
+# Node 24+ is the SINGLE supported axis (GLG, 2026-07-21) — see run.sh setup
+# preflight for why the floor is 24 and not the 23.6 type-stripping feature gate.
 NODE_VER="$(node -p 'process.versions.node')"
 NODE_MAJOR="${NODE_VER%%.*}"
-NODE_MINOR="$(printf '%s' "$NODE_VER" | cut -d. -f2)"
-if [ "$NODE_MAJOR" -lt 22 ] || { [ "$NODE_MAJOR" -eq 22 ] && [ "$NODE_MINOR" -lt 6 ]; }; then
-  die "node $NODE_VER too old; meta-bridge entry needs >= 22.6.0 (TypeScript strip-types)."
+if [ "$NODE_MAJOR" -lt 24 ]; then
+  die "node $NODE_VER too old; entwurf requires Node >= 24 (single supported runtime axis, no Node 22 lane)."
 fi
-echo "[meta-bridge-install] platform=$(uname -s) node=$NODE_VER ($NODE_BIN) python3=$(command -v python3)"
+echo "[meta-bridge-install] platform=$(uname -s) node=$NODE_VER ($NODE_BIN) claude=$CLAUDE_VER (floor >= $CLAUDE_FLOOR) python3=$(command -v python3)"
 
 # Capture the user's pre-install values BEFORE any Claude CLI helper can mutate
 # settings.json / ~/.claude.json. Re-runs preserve the first snapshot, so
@@ -106,11 +122,20 @@ cp "$REPO/pi-extensions/lib/session-id.js" "$ASM/$PLUGIN/lib/session-id.js"
 # (the repo `../../pi` path escapes the plugin dir under the cache version dir).
 # Without this, a v2 writer throws on every mint/parse. doctor-meta-bridge asserts it.
 cp "$REPO/pi/entwurf-capabilities.json" "$ASM/$PLUGIN/entwurf-capabilities.json"
-chmod +x "$ASM/$PLUGIN/scripts/doorbell.sh"
+# Both shipped hook scripts must be executable: the exec form names them as the
+# executable directly (no shell to fall back on), so a lost +x bit is a hard
+# ENOEXEC at session open rather than a degraded path.
+chmod +x "$ASM/$PLUGIN/scripts/doorbell.sh" "$ASM/$PLUGIN/scripts/hook-launch.sh"
 # Bake the node abspath AND the hook entry filename into hooks.json — the two
 # templated surfaces (0.12.5: HOOK_ENTRY is meta-bridge-hook.js when installed,
-# .ts in a dev clone). mailbox / meta-record dirs resolve at runtime inside the
-# hook itself (<pi-agent-dir>, fixed ~/).
+# .ts in a dev clone). They now live inside the exec form's `args` array, so the
+# textual bake is unchanged while the launch contract is not: every hook is
+# `command` = the shipped hook-launch.sh, `args` = the real argv. No shell is on the
+# path, so the hook's parent is Claude on every host (#51 B2) — that is what retired
+# the shell `$PPID` carrier and its ancestry walk. hook-launch.sh refuses an empty
+# argv, which is the only visible symptom an older Claude gives when it drops `args`.
+# mailbox / meta-record dirs resolve at runtime inside the hook itself
+# (<pi-agent-dir>, fixed ~/).
 # The plugin owns ONLY the wake/record hooks; the receiver-side entwurf_inbox_read
 # tool is NOT the plugin's job. It comes from USER-scope entwurf-bridge MCP
 # wiring (`claude mcp add -s user ...`), never a plugin .mcp.json duplicate.
@@ -169,8 +194,23 @@ case "$REPO" in
       -e ENTWURF_BRIDGE_REQUIRE_META_SENDER=1 \
       -- bash "$REPO/mcp/entwurf-bridge/start.sh" >/dev/null ;;
 esac
-(cd /tmp && claude mcp get entwurf-bridge 2>/dev/null | grep -q "Scope: User config") || \
-  die "post-install: entwurf-bridge is not reachable as USER-scope MCP from /tmp"
+# Capture, THEN match — and require BOTH the exit code and the content.
+# `<cli> | grep -q` under `set -o pipefail` is a race, not a test: grep exits at the
+# first match and closes the pipe, the still-writing CLI dies of SIGPIPE (141), and
+# pipefail reports that as a failed check — a FALSE "not reachable" die on a correctly
+# wired host. But `$(... || true)` is the opposite error: it discards the CLI's exit
+# code, so a FAILING `claude mcp get` that still printed a plausible line would PASS.
+# The honest test needs both halves, so the assignment IS the if-condition (which also
+# keeps `set -e` from killing the script on a nonzero probe).
+if MCP_REACH_OUT="$(cd /tmp && claude mcp get entwurf-bridge 2>/dev/null)"; then
+  case "$MCP_REACH_OUT" in
+    *"Scope: User config"*) ;;
+    *) die "post-install: entwurf-bridge is not reachable as USER-scope MCP from /tmp" ;;
+  esac
+else
+  MCP_REACH_RC=$?
+  die "post-install: 'claude mcp get entwurf-bridge' failed (exit $MCP_REACH_RC) — the USER-scope MCP wiring could not be verified, so this install is not confirmed."
+fi
 echo "[meta-bridge-install] installed entwurf-bridge MCP (scope: user = global receiver tools)"
 
 # Re-assert the repo-owned keyset through our stateful manager. The Claude CLI

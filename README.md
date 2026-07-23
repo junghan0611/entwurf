@@ -188,18 +188,48 @@ claude mcp add --scope user entwurf-bridge \
 
 If the host does not inherit the npm bin directory, use an absolute path to the
 bin or `start.sh`. For a garden-native Claude Code meta-session (replyable by
-garden id), run:
+garden id), run this on Linux. The #51 repair cut refuses new macOS meta-bridge
+installs because its strict live-owner doctor currently depends on `/proc`; macOS
+is **not yet verified/certified for this cut**, not permanently impossible, and
+future native validation may reopen it. Package-level `os` is intentionally
+unrestricted, and Darwin uninstall remains available for legacy cleanup.
 
 ```bash
 entwurf install-meta-bridge
 entwurf doctor-meta-bridge
 ```
 
+> **Upgrade action:** after installing a package that moves the hook launch form, run `entwurf install-meta-bridge` and restart **every already-open Claude Code session** before trusting send/receive. A new hook reached through an old cached command fails closed: it may still mint a garden record, but the owner join it depends on is not the one the old command produces. Reinstall materializes the matching manifest; restart makes live Claude processes load it. This release moves to the exec form and requires Claude Code `>=2.1.217`; `install-meta-bridge` and `doctor-meta-bridge` refuse anything older outright, because an older Claude drops the hook's `args` silently and still reports success.
+
 On npm/pnpm-installed packages, `doctor-meta-bridge` must use prebuilt JS for its
 store scan and defer repo-only source-shape gates; Node refuses strip-types for
-raw `.ts` helpers under `node_modules`. If the doctor reports
+raw `.ts` helpers under `node_modules`. It also refuses any Claude Code below the
+supported floor `>=2.1.217` (an older one silently drops the hook's `args` and still
+reports success, so nothing else in the output could be trusted), checks Claude's
+installed hooks are the exec form through the shipped `hook-launch.sh`, and on Linux
+verifies every live Claude MCP process joins to live sender/receiver markers.
+`launch form is UNSUPPORTED` means reinstall the meta-bridge; a live-owner-join failure after
+that means restart the affected Claude session so it loads the new manifest. If no
+matching MCP child exists the doctor reports `NOT CERTIFIED` and **exits nonzero** — a
+host whose live tier could not be measured is not a certified host, and that is worded
+differently from a broken install on purpose. If the doctor reports
 `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, reinstall a current package before
 trusting the floor result.
+
+**Repair-cut evidence boundary.** The required Linux `artifact-consumer` CI job
+installs one read-only candidate tarball globally as a non-root user in a Node 24
+container that cannot see the checkout, records the tarball digest and image
+identity, freezes the package root, and drives the strict doctor. Its Claude cache,
+owner process, and live bridge are deliberately synthetic fixtures; that job proves
+the package-consumer/oracle shape, not a real Claude lifecycle. The direct B/B2
+runtime evidence came from actual Claude 2.1.138/2.1.217 sessions on one NixOS host.
+A production host is certified only when a **new session using the installed
+artifact** makes `doctor-meta-bridge` exit 0 with the live join. See the explicit
+support matrix and release order in [VERIFY.md](./VERIFY.md). For the release
+artifact, first preserve one `npm pack` output, then run
+`ENTWURF_CANDIDATE_TGZ=/absolute/path/to/candidate.tgz ./run.sh check-install-container`;
+the gate prints that canonical path and sha256 and consumes it without re-packing.
+Only that accepted file may be published with `--tag repair`.
 
 After upgrading a globally installed package, reinstall the native-harness surface you use before trusting it:
 
@@ -221,7 +251,7 @@ For manual configuration, [`pi/settings.reference.json`](./pi/settings.reference
 shows the pi adapter settings shape, and the external-host examples below show
 plain MCP registrations.
 
-> **First time on a clean Ubuntu / Debian / macOS host?** See the [clean-host walk-through](./docs/setup-clean-host.md) — Node/npm install, auth-free bridge boot, optional pi adapter verification, and authenticated runtime smokes.
+> **First time on a clean Linux host (Ubuntu / Debian / NixOS)?** See the [clean-host walk-through](./docs/setup-clean-host.md) — Node/npm install, auth-free bridge boot, optional pi adapter verification, and authenticated runtime smokes. The neutral package may install elsewhere, but Linux is this repair cut's only currently certified Claude meta-bridge axis: its installer refuses macOS and its doctor remains `NOT CERTIFIED`/nonzero because the live owner join is not yet instrumented. Future native validation may reopen the macOS lane.
 
 > **Post-install checks.** `entwurf check-bridge` (or `./run.sh check-bridge` from a clone) proves the `entwurf-bridge` MCP surface loads with no backend auth needed. To prove the **ACP backend actually answers** — the bridge spawns Claude through the pi provider path and a real turn comes back — run `LIVE=1 entwurf smoke-acp-provider-live` from an installed package/clone with pi and Claude auth available. Package-source routing is pinned deterministically by `run.sh check-package-source-routing`, which runs inside `pnpm check` and the release gate.
 

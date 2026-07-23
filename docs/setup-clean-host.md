@@ -18,19 +18,51 @@ or the pi adapter read whatever auth the user already trusts on the host
 
 ## Reference target
 
-Written against a clean Ubuntu / Debian / macOS host reachable via SSH, here
-called `cleanhost`. `nvm` keeps the path identical across them.
+Written against a clean **Linux** host (Ubuntu / Debian / NixOS) reachable via
+SSH, here called `cleanhost`. `nvm` keeps the Node path independent of the distro.
+The neutral npm package may install elsewhere, but Linux is this repair cut's only
+currently certified Claude meta-bridge axis. macOS has no `/proc` bridge discovery
+and is not yet verified/certified for this cut, so its installer refuses new wiring
+and its strict doctor stays `NOT CERTIFIED`/nonzero.
+This is not permanent; future native validation may reopen the lane, while Darwin
+uninstall remains available for older managed state.
 
 ```bash
 ssh cleanhost 'uname -a; whoami; which git node npm pi claude agy 2>/dev/null'
 # expect on a fully clean host: git present, node/npm/pi/claude absent
 ```
 
+### What the automated Linux consumer already proves
+
+The required CI job `artifact-consumer` runs `check-install-container` against one
+candidate tarball in a Node 24 Linux image that has never seen the checkout. It
+records the artifact sha256 plus image id/repository digest, mounts only that tarball
+read-only, installs globally as non-root through an isolated npm prefix, resolves all
+five bins through PATH, freezes the package root, checks the regular-file path+sha256
+manifest across `install-meta-bridge`, boots MCP `tools/list`, and drives the strict
+doctor. This closes the installed package shape; it does **not** replace this real-host
+walk-through. Its fake Claude CLI, planted plugin cache, stand-in owner, and `/proc`
+bridge are fixtures, so they cannot prove native plugin installation, real hook spawn,
+or idle wake.
+
+Default CI lets the gate pack once into a temporary directory. Release acceptance
+instead preserves the `npm pack` output and passes its absolute path as
+`ENTWURF_CANDIDATE_TGZ`; the gate verifies package name/version, prints canonical
+path+sha256, and consumes that exact file without chmod/copy/re-pack. The accepted
+file is the one later published with `--tag repair` (full commands in VERIFY.md).
+
+The direct runtime complement is #51 B/B2: actual Claude sessions on one NixOS host
+showed 2.1.138 dropping `args` while reporting success and 2.1.217 honoring exec argv
+and waking on FileChanged exit 2. A target host is still accepted only after installing
+the released artifact, opening a new Claude session, and obtaining installed-doctor
+exit 0.
+
 ## Pin matrix
 
 | Component | Pin / floor | Source of truth |
 |---|---|---|
-| Node | **24** recommended; `>=22.6.0` minimum | `engines.node` (Node strip-types / ESM runtime) |
+| Node | **`>=24.0.0`** — single supported axis, no Node 22 lane | `engines.node` (bound by `check-node-floor-coherence`) |
+| Claude Code | **`>=2.1.217`** — the exec-form hook floor; an older Claude drops the hook's `args` silently and still reports success, so there is no fallback lane | `entwurf.claudeCodeFloor` (bound by `check-claude-floor-coherence`) |
 | npm | bundled with Node 24 | public package install path |
 | entwurf | `@junghanacs/entwurf` | neutral npm package; exposes `entwurf`, `entwurf-bridge`, `entwurf-statusline`, `entwurf-agy-statusline`, and `entwurf-agy-imprint` bins |
 | pi binary | **optional**, `@earendil-works/pi-coding-agent >=0.80.7 <0.81` | needed only for the pi adapter / ACP provider / spawn-bg resume lane |
@@ -148,22 +180,40 @@ Drift points:
 
 For an external Claude Code session to be replyable by garden id, install the
 meta-bridge plugin globally. This is still a neutral npm-package command; it
-registers Claude Code USER-scope MCP + the SessionStart hook.
+registers Claude Code USER-scope MCP + the SessionStart hook. For this repair cut,
+perform and certify this stage on Linux only. The installer rejects Darwin with a
+“not yet verified/certified for this repair cut” diagnosis and the macOS doctor stays
+nonzero until future native validation supplies a real live-owner measurement.
 
 ```bash
 entwurf install-meta-bridge
 entwurf doctor-meta-bridge
 ```
 
+> **Upgrades are not live-reload safe across this hook-launch cut.** Re-run `install-meta-bridge`, then restart **all already-open Claude Code sessions** before trusting send/receive. A new hook reached through the old cached command does not get the owner join it depends on, even though a meta-record may still land; reinstall pairs the artifact and the manifest, and restart makes the native process load that pair. This release also refuses Claude Code below `>=2.1.217` at install and doctor time — an older Claude silently drops the hook's `args`, runs the command alone, and still reports the hook as successful, so there is no fallback lane to fall into.
+
 On an installed package (`.../node_modules/@junghanacs/entwurf`), the doctor must
 not try to strip-types-run raw `.ts` helpers or hooks. In the output, check for
-these 0.12.5 floor-regression signals:
+these floor-regression signals:
 
 ```text
-ok    cached SessionStart hook executes cleanly in an isolated temp agent dir
+ok    claude 2.1.217 (>= 2.1.217, exec-form launch contract supported)
+ok    launch form: exec form through the shipped hook-launch.sh (no shell on the path)
+ok    installed owner argv execs directly (no shell) through hook-launch.sh and keys its sender marker to the live host pid
+ok    <N> live Claude MCP process(es): sender + receiver owner join is live and record-backed
 ok    full store scan: no corrupt records, duplicate nativeSessionId, body/filename drift, or backend↔wakeMode contradiction
 ok    check-entwurf-v2-surface: shipped surface source present; exhaustive source-shape gate is a repo/release invariant (not run under node_modules)
 ```
+
+The live-process line is **not** a warning any more. If no matching Claude MCP child
+is open — or the host has no `/proc` — the doctor reports `NOT CERTIFIED` and exits
+nonzero, because only the static + synthetic checks were possible and neither of them
+can measure the live join. A host whose live tier was never measured is an
+unmeasured host, not a passing one. An `UNSUPPORTED` launch form needs reinstall; a
+failed live owner join after reinstall means the already-open Claude process still
+holds the old hook definition in memory and must be restarted — the hook itself
+refuses to write markers in that state rather than keying them to whatever the old
+command's shell left behind.
 
 If any of those sections reports `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`,
 the host is still running a pre-0.12.5 package or a broken tarball. Reinstall the
@@ -290,5 +340,14 @@ rm -rf ~/.nvm
 This walk-through is a verification floor underneath release cuts: neutral npm
 install, installed bridge boot, optional pi adapter registration, Claude
 meta-bridge verification where used, all three agy doctors plus a fresh native
-round trip where used, and at least one authenticated ACP runtime smoke. GLG owns
-the publish/tag decision.
+round trip where used, and at least one authenticated ACP runtime smoke. For the
+repair cut, preserve the exact package version, candidate tarball sha256, container
+image identity, host OS, Claude version, and installed doctor output together. The
+approved repaired candidate is `0.12.8-repair.1` under dist-tag `repair`;
+`0.12.8-repair.0` was published but its installed bridge cannot deliver and must not
+be reused. Registry `latest` must stay `0.12.7` during this repair cut. Promotion waits
+for fresh maintainer + secondary-host installed-doctor evidence and a separately authorized
+stable `0.12.8` cut. The repair.1 version bump still waits for the separate
+post-landing prepare commit and its own three CI jobs. GLG owns every version, tag,
+publish, push, and host-reinstall decision; the complete ordered checklist is in
+VERIFY.md §Repair-cut order.

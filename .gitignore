@@ -1,16 +1,16 @@
 node_modules/
-# Local pi state (operator's settings.json, etc.) stays ignored. Repo-shared
-# pi prompts live in .pi/prompts/ and ARE tracked — that path is the SSOT for
-# /make-release.
+# Local pi state stays ignored, but the project settings file is shared: it points
+# pi at the same repo-local Agent Skills Claude Code discovers natively.
 .pi/*
-!.pi/prompts/
+!.pi/settings.json
 .tmp-verify/
 /.agent-shell/
 /.codex
-# This repo is a daily-driver bridge primarily exercised through pi, not
-# through Claude Code in this cwd. The .claude/ scratch directory stays out
-# of git entirely — slash commands have been migrated to .pi/prompts/.
-/.claude/
+# Claude local state stays ignored. Repo-local Agent Skills are the shared
+# Claude Code/pi operator surface and therefore travel with the repository.
+/.claude/*
+!/.claude/skills/
+!/.claude/skills/**
 
 CHECKLIST.md
 *.html

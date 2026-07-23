@@ -45,6 +45,7 @@ cat > "$INS_BIN/claude" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_CLAUDE_LOG"
 case "$1${2:+ $2}" in
+  "--version")   echo "2.1.217 (Claude Code)" ;;
   "plugin list") printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
   "mcp get")     printf '%s\n' "Scope: User config" "Status: Connected" ;;
   *) : ;;
@@ -60,6 +61,74 @@ if env HOME="$INS_HOME" CLAUDE_CONFIG_DIR="$INS_HOME/.claude" XDG_DATA_HOME="$IN
   if printf '%s' "$MKT_ADD" | grep -Fq "$INS_XDG/entwurf/meta-bridge/.assembled"; then ok "claude plugin marketplace add received the XDG artifact path"; else bad "marketplace add did not point at XDG: $MKT_ADD"; fi
 else
   bad "real install-meta-bridge failed under isolated HOME/XDG/fake-claude:"$'\n'"$(cat "$INS_LOG" 2>/dev/null)"
+fi
+
+# ── Claude CLI probe honesty: rc AND content, with no pipe ──────────────────
+# The post-install USER-scope MCP check used `claude mcp get … | grep -q …` under
+# `set -o pipefail`. That is a race, not a test: grep exits at the first match and
+# closes the pipe, the still-writing CLI dies of SIGPIPE, and pipefail reports the
+# healthy host as broken. It surfaced as an INTERMITTENT install failure.
+# The fixture makes it DETERMINISTIC: the fake CLI prints the matching line and then a
+# tail larger than the 64 KiB pipe buffer, so the writer is guaranteed to still be
+# writing when grep leaves. Both directions are pinned — the old shape must die on this
+# fixture (else the fixture proves nothing), and the shipped installer must survive it.
+PROBE_HOME="$TMP/probe-home"; PROBE_XDG="$TMP/probe-xdg"; PROBE_BIN="$TMP/probe-bin"
+mkdir -p "$PROBE_HOME/.claude" "$PROBE_BIN"
+echo '{}' > "$PROBE_HOME/.claude/settings.json"
+echo '{}' > "$PROBE_HOME/.claude.json"
+python3 - "$TMP/probe-tail" <<'PY'
+from pathlib import Path
+import sys
+Path(sys.argv[1]).write_bytes(b"x" * (128 * 1024))  # > the usual 64 KiB pipe buffer
+PY
+cat > "$PROBE_BIN/claude" <<'SH'
+#!/usr/bin/env bash
+case "$1${2:+ $2}" in
+  "mcp get")
+    printf '%s\n' "Scope: User config" "Status: ✔ Connected"
+    [ "${FAKE_MCP_RC:-0}" != 0 ] && exit "$FAKE_MCP_RC"
+    # Keep writing well past the pipe buffer: a reader that leaves early SIGPIPEs us.
+    cat "$FAKE_MCP_TAIL"
+    exit $? ;;
+  "--version")   echo "2.1.217 (Claude Code)" ;;
+  "plugin list") printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
+  *) : ;;
+esac
+exit 0
+SH
+chmod +x "$PROBE_BIN/claude"
+
+set +e
+( set -o pipefail; cd /tmp && env FAKE_MCP_TAIL="$TMP/probe-tail" PATH="$PROBE_BIN:$PATH" \
+    claude mcp get entwurf-bridge 2>/dev/null | grep -q "Scope: User config" )
+OLD_SHAPE_RC=$?
+set -e
+if [ "$OLD_SHAPE_RC" -ne 0 ]; then
+  ok "fixture reproduces the defect deterministically: the old \`cli | grep -q\` shape exits $OLD_SHAPE_RC on a long-writing CLI"
+else
+  bad "fixture did NOT reproduce the SIGPIPE/pipefail defect — the regression below would prove nothing"
+fi
+
+if env HOME="$PROBE_HOME" CLAUDE_CONFIG_DIR="$PROBE_HOME/.claude" XDG_DATA_HOME="$PROBE_XDG" \
+       FAKE_MCP_TAIL="$TMP/probe-tail" PATH="$PROBE_BIN:$PATH" \
+       bash "$REPO/scripts/meta-bridge-install.sh" >"$TMP/probe-install.log" 2>&1; then
+  ok "shipped installer survives a long-writing \`claude mcp get\` (no SIGPIPE false negative)"
+else
+  bad "installer still fails on a long-writing CLI probe:"$'\n'"$(tail -3 "$TMP/probe-install.log" | sed 's/^/        /')"
+fi
+
+# The opposite error: swallowing rc. A FAILING probe that still printed a plausible
+# line must NOT be read as a verified install.
+set +e
+env HOME="$PROBE_HOME" CLAUDE_CONFIG_DIR="$PROBE_HOME/.claude" XDG_DATA_HOME="$PROBE_XDG" \
+    FAKE_MCP_TAIL="$TMP/probe-tail" FAKE_MCP_RC=3 PATH="$PROBE_BIN:$PATH" \
+    bash "$REPO/scripts/meta-bridge-install.sh" >"$TMP/probe-rc.log" 2>&1
+PROBE_RC_CODE=$?
+set -e
+if [ "$PROBE_RC_CODE" -ne 0 ] && grep -q "failed (exit 3)" "$TMP/probe-rc.log"; then
+  ok "installer refuses a FAILING mcp-get probe even when its output matches (rc is not discarded)"
+else
+  bad "installer accepted a nonzero mcp-get probe with matching output (exit $PROBE_RC_CODE):"$'\n'"$(tail -3 "$TMP/probe-rc.log" | sed 's/^/        /')"
 fi
 
 export HOME="$TMP/home"
@@ -269,6 +338,7 @@ FAKE_BIN="$TMP/fake-bin"; mkdir -p "$FAKE_BIN"
 cat > "$FAKE_BIN/claude" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$FAKE_CLAUDE_LOG"
+[ "$1" = "--version" ] && echo "2.1.217 (Claude Code)"
 exit 0
 SH
 chmod +x "$FAKE_BIN/claude"
@@ -522,7 +592,7 @@ if [ "${1:-} ${2:-} ${3:-}" = "plugin list --json" ]; then
   exit 0
 fi
 case "$1${2:+ $2}" in
-  "--version") echo "2.1.167 (Claude Code)" ;;
+  "--version") echo "2.1.217 (Claude Code)" ;;
   "plugin list") printf '%s\n' "entwurf-meta-receive@meta-bridge-local" "  Status: enabled" ;;
   "mcp get") printf '%s\n' "Scope: User config" "Status: ✔ Connected" ;;
   *) : ;;
@@ -562,6 +632,35 @@ if [ "$DOC_CACHE_CODE" -eq 1 ] && printf '%s\n' "$DOC_CACHE_OUT" | grep -q 'enab
 else
   bad "doctor did not surface enabled-but-cache-miss as a hard load failure:"$'\n'"$DOC_CACHE_OUT"
 fi
+
+# #51 repair support boundary. Fake only `uname -s`: no macOS implementation is
+# emulated. New Darwin install must refuse as not-yet-certified, doctor must stay
+# nonzero with the same evidence wording, while uninstall MUST get past the platform
+# gate so an older managed install is not stranded (it then honestly fails on our
+# fixture's intentionally absent state file).
+PLATFORM_BIN="$TMP/platform-bin"; mkdir -p "$PLATFORM_BIN"
+cat > "$PLATFORM_BIN/uname" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' Darwin
+SH
+chmod +x "$PLATFORM_BIN/uname"
+set +e
+DARWIN_INSTALL_OUT="$(env HOME="$DOC_HOME" XDG_DATA_HOME="$TMP/darwin-xdg" PI_CODING_AGENT_DIR="$DOC_AGENT" PATH="$PLATFORM_BIN:$DOC_BIN:$PATH" bash "$REPO/scripts/meta-bridge-install.sh" 2>&1)"
+DARWIN_INSTALL_CODE=$?
+DARWIN_DOCTOR_OUT="$(env HOME="$DOC_HOME" CLAUDE_CONFIG_DIR="$DOC_CFG" PI_CODING_AGENT_DIR="$DOC_AGENT" ENTWURF_META_SESSIONS_DIR="$DOC_STORE" PATH="$PLATFORM_BIN:$DOC_BIN:$PATH" bash "$REPO/scripts/meta-bridge-doctor.sh" 2>&1)"
+DARWIN_DOCTOR_CODE=$?
+DARWIN_UNINSTALL_OUT="$(env HOME="$TMP/darwin-clean-home" XDG_DATA_HOME="$TMP/darwin-clean-xdg" PATH="$PLATFORM_BIN:$PATH" bash "$REPO/scripts/meta-bridge-uninstall.sh" 2>&1)"
+DARWIN_UNINSTALL_CODE=$?
+set -e
+if [ "$DARWIN_INSTALL_CODE" -ne 0 ] && printf '%s\n' "$DARWIN_INSTALL_OUT" | grep -q 'not yet verified/certified for this repair cut'; then
+  ok "Darwin install is refused fail-loud as not-yet-certified (future validation may reopen)"
+else bad "Darwin install did not enforce the repair-cut evidence boundary:"$'\n'"$DARWIN_INSTALL_OUT"; fi
+if [ "$DARWIN_DOCTOR_CODE" -ne 0 ] && printf '%s\n' "$DARWIN_DOCTOR_OUT" | grep -q 'NOT YET VERIFIED/CERTIFIED for this repair cut' && printf '%s\n' "$DARWIN_DOCTOR_OUT" | grep -q 'meta-bridge doctor: FAIL'; then
+  ok "Darwin doctor stays nonzero and reaches its final NOT-YET-CERTIFIED verdict"
+else bad "Darwin doctor did not hold the repair-cut evidence boundary:"$'\n'"$DARWIN_DOCTOR_OUT"; fi
+if [ "$DARWIN_UNINSTALL_CODE" -ne 0 ] && printf '%s\n' "$DARWIN_UNINSTALL_OUT" | grep -q 'install state missing' && ! printf '%s\n' "$DARWIN_UNINSTALL_OUT" | grep -q 'unsupported platform'; then
+  ok "Darwin uninstall passes the platform gate and reaches honest state preflight (legacy inverse retained)"
+else bad "Darwin uninstall was blocked by the support hard-cut instead of reaching honest inverse preflight:"$'\n'"$DARWIN_UNINSTALL_OUT"; fi
 
 # ⓪ 경계 종료 단언: 이 smoke 전체(install 조립 + state + wrapper-uninstall + doctor)가
 # 끝난 뒤에도 checkout 안에는 live marketplace source가 생기지 않았다 — source
