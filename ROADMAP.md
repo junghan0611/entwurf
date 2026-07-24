@@ -59,7 +59,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | 기능 | 증거 |
 |---|---|
 | v2 pi live send | `smoke-entwurf-v2-matrix-live` C1 |
-| v2 recordless live pi socket-only send (A1 narrow) | matrix-live C1b |
+| v2 record-less socket 거부 — 모든 intent pre-probe `record-less-socket`, 원인+M1 명명 (#50 C4; A1 narrow 은퇴) | matrix-live C1b |
 | v2 dormant pi → spawn-bg resume (실 `pi --entwurf-control` child + model turn) | `smoke-entwurf-v2-spawn-resume-live` |
 | v2 active Claude Code meta → meta-mailbox enqueue + doorbell | matrix-live C2 |
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
@@ -224,11 +224,13 @@ parentGardenId:null, isEntwurf:false, createdAt, recordUpdatedAt }`. `model`/`tr
 - **pi resume = no-lock append:** `SessionManager`는 신규 첫 flush만 `openSync(wx)`(생성 가드). resume은
   plain `appendFileSync`(락 없음) → pi는 동시-resume self-guard 안 함 → v2는 target=존재 시민이라 항상
   resume → **per-gid lockfile이 유일 가드.**
-- **pi liveness:** 소켓 = `~/.pi/entwurf-control/<gid>.sock`(파일명=garden_id). LIVE/STALE authority =
-  socket connect + RPC `get_info`(`entwurf-control.ts`에 `isSocketAlive`/`getLiveSessionsWithInfo`/
-  `gcStaleSockets`). `ss`/`kill -0`은 디버그 보조일 뿐 authority 아님.
-- **pi tmux 부팅:** `pi --session-id <gid> --entwurf-control --approve --provider … --model …` → 소켓 생성·
-  trust prompt 없음·TUI ready. controlled invariant(`--approve` 주입) live-smoke 게이트화 가능.
+- **pi liveness:** 소켓 = `~/.pi/entwurf-control/<gid>.sock`(파일명=garden_id, record가 키). LIVE/STALE
+  authority = `probeSocketLiveness`(3-value connect probe) — 목록은 `scanSocketProbes`, GC는
+  `gcStaleSockets`(#50 C4: `isSocketAlive`/`getLiveSessionsWithInfo` 소켓-스캔 lane은 삭제됨).
+  `ss`/`kill -0`은 디버그 보조일 뿐 authority 아님.
+- **pi tmux 부팅:** `pi --entwurf-control --approve --provider … --model …` → record가 주소를 민팅하고
+  소켓 생성·trust prompt 없음·TUI ready (#50 C2: `--session-id` 주입 계약 은퇴). controlled
+  invariant(`--approve` 주입) live-smoke 게이트화 가능.
 
 ---
 

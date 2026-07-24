@@ -109,13 +109,13 @@ Usage:
   ./run.sh check-entwurf-v2-spawn-production # deterministic gate (0.11 Stage 0 step 5c-3c): production SpawnBgResumeDeps factory (makeProductionSpawnBgResumeDeps) wiring the 5c-3a watcher's 6 IO seams — no real pi/socket/timer (that=opt-in smoke-entwurf-v2-spawn-live, OUT of pnpm check). socketWatchVerdict: address-conflict→forged (reject, never wait)/alive→alive/dead·indeterminate→wait; spawnChild builds v2-control argv (--entwurf-control, no --no-extensions, -p+prompt, --approve, cwd authority); awaitSocketAlive connectable→resolve / symlink→reject without connect / dead→wait→alive / abort-clears; awaitChildExit code + listener cleanup; awaitTimeout schedule + abort-clear; killChild=SIGTERM; proc-less child fails loud
   ./run.sh smoke-entwurf-v2-spawn-live # LIVE phase gate (0.11 Stage 0 step 5c-3c, D5) — OUT of pnpm check, needs LIVE=1. Exercises the production SpawnBgResumeDeps against REAL OS objects: S1 real unix socket → awaitSocketAlive resolves (real lstat+probe), symlink→forged, absent→abort settles; S2 real child → spawn-event resolve + SIGTERM kill + exit-code capture; S3 watcher integration → real timeout→kill→child-exited→release ×1. Does NOT spawn a real pi resume (that=5d matrix). Run before 5d: LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live
   ./run.sh smoke-entwurf-v2-spawn-resume-live # 0.11.0 (A) ACCEPTANCE gate — OUT of pnpm check, needs LIVE=1. The FULL spawn-bg resident lifecycle: mint backend=pi identity → seed a REAL dormant pi session (one-shot into ~/.pi/agent/sessions) → runEntwurfV2(owned-outcome) routes dormant→spawn-bg resume → a REAL detached pi --entwurf-control child stands its socket up, resumes, DOES a model turn. Asserts executed/spawn-bg/socket-alive/released + lock released ×1 + no lock file + pid alive + socket connectable + resume USER & assistant OK nonces in the session JSONL. Model-in-loop IN. The gate v1 deprecation (0.12) is predicated on. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live
-  ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b socket-only (record-less live pi → control-socket sent / owned→bad-target, A1 narrow), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
+  ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b record-less socket (#50 C4: live record-less pi → EVERY intent rejected pre-probe record-less-socket, no lock, rendered hint names record authority + M1), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
   ./run.sh smoke-agy-native-push-live  # 봉인 8 LIVE acceptance for the native-push (agy) rail — OUT of pnpm check, needs LIVE=1 + AGY_CONVERSATION_ID (a live agy conversation). Drives the REAL antigravity adapter + register core + runEntwurfV2 (production deps): doctor-static preflight (dangling→FAIL, the ③ gate), probe route, register create/attach idempotency, fire→native-push delivered, post-send re-probe (D7 partial), owned-outcome→native-push-no-resume-authority, bogus-conv→native-push-probe-indeterminate. Meta-store isolated to a temp dir (only the agy round-trip is real; no real-store residue). LIVE=1 AGY_CONVERSATION_ID=<convId> ./run.sh smoke-agy-native-push-live
-  ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b pi 4-value, facts-only keyset; union: PeerFact+SocketOnlyFact by gardenId, dormant→dead, F3 indeterminate preserved, non-pi+socket fail-loud; pure, no IO
+  ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b pi 4-value, facts-only keyset; union: PeerFact + RecordLessSocketFact by gardenId (#50 C4: record-less socket = diagnostic subject, gid+liveness only), dormant→dead, F3 indeterminate preserved, non-pi+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-listing          # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4a): META-STORE axis listAllMetaIdentities — explicit-partial: parse failure / body-filename drift → explicit {filename,message} error (verbatim, no synthetic fields), valid records still listed (corrupt doesn't blind); mode strict throws / collect partial; entries/readRecord injected, no IO
   ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — listAllMetaIdentities→scanSocketProbes→pre-quarantine non-pi/socket conflicts→resolveFactList(clean)→{facts,diagnostics}; C-원칙: expected corruption (parse/collision)→diagnostics (listing survives), impossible invariant (dup/unprobed)→throw; collision quarantines BOTH PeerFact+socket; deps injected, no IO
-  ./run.sh check-entwurf-peers-surface # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4c): MCP entwurf_peers RENDER renderEntwurfPeers — legacy `sessions` = projection of facts (alive only, no 2nd scan), socketPath via controlSocketPath (SSOT), count=projection length, three distinct arrays, NO verb-routing key (JSON deep scan) NOR word (text), diagnostics both surfaces, empty→(none), unsupported shown, enrich→(not enriched); WIRING guard: bridge calls provider+render, getLiveSessions gone; facts fabricated, no IO
+  ./run.sh check-entwurf-peers-surface # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4c): MCP entwurf_peers RENDER renderEntwurfPeers (#50 C4) — payload keyset exactly {peers, diagnostics}; FORBIDDEN keys sessions/socketOnly/controlDir/socketPath/count + no .sock in text (socket is transport, never identity); record-less socket = aggregated record-less-socket diagnostic (F8, liveness-keyed message, alive names M1); NO verb-routing key (JSON deep scan) NOR word (text), diagnostics both surfaces, empty→(none), unsupported shown; WIRING guard: both surfaces call provider+render, getLiveSessions + /entwurf-sessions gone; facts fabricated, no IO
   ./run.sh check-entwurf-self-address # deterministic gate (SE-1/SE-2 slice 1): self-addressability honesty predicate computeSelfAddressability — pi replyable ⟺ live socket; meta ⟺ recordBacked ∧ ownerAlive ∧ watchArmed (regression-proof record-present rows); SOURCE GUARD buildStrictPiSenderEnvelope drops hardcoded replyable:true + existsSync-probes socket, entwurf_self renders alive vs expected. meta watchArmed wired in slice 2 (same release block)
   ./run.sh check-entwurf-deliverability # deterministic gate (SE-1/SE-2 slice 2c): conversational-mailbox deliverability predicate — computeMetaReceiverActive (recordBacked ∧ ownerAlive ∧ watchArmed) + mailboxConversationalDeliverable (self-fetch AND active); direct-inject pi refused (SE-1), self-fetch dead/unarmed refused (SE-2); self-address shares the same atom
   ./run.sh check-entwurf-mailbox-guard # deterministic gate (SE-1/SE-2 slice 2d): guarded mailbox enqueue — PURE 0-call (undeliverable target leaves injected enqueue uncalled) + TMPDIR snapshot (refused send leaves mailbox byte-identical, accepted writes one .msg) + fact gathering from record/capability/receiver-marker
@@ -123,7 +123,7 @@ Usage:
   ./run.sh check-native-push-register # deterministic gate (봉인 5): registerNativeConversation (entwurf_register_native core) via fake adapter + isolated mkdtemp store — live probe→CREATE, re-register→ATTACH (same gid, cwd refreshed, no dup), not-live probe→REFUSE (throws, no record), receiver-marker abstinence (보정① source guard)
   ./run.sh check-agy-sender-identity # deterministic gate (#46 sender lane): WHO is calling the bridge — real agy hook as a child process writes an antigravity sender marker keyed by its PARENT pid (never on upsert failure), and resolveTrustedMetaSenderIdentity over isolated stores yields 0→null / 1→identity on EITHER backend / two distinct live identities on one owner pid→THROW (never guess, never downgrade to anonymous). This is what turns an agy send from external-mcp/unknown-host into a replyable garden citizen
   ./run.sh check-package-source-routing # deterministic gate (#29): package-source -> install-root mapping + fail-fast routing (local/git/npm/missing/project/no-source × local+remote, self-root, resume), no backend
-  ./run.sh new-session-id             # print one fresh garden-native session id for operator launchers (--session-id)
+  ./run.sh new-session-id             # print one fresh garden id from the generateSessionId SSOT (#50 C2: no launcher injection — the record layer is the consumer; pi mints its own session id)
   ./run.sh smoke-resident-garden-guard # live resident --entwurf-control garden guard (negative 0-token; SMOKE_RGG_POSITIVE=1 for positive)
   ./run.sh smoke-meta-async-drift     # 1.0.0 meta-bridge step 1: drift sentinel — version pins + Claude binary undocumented-behavior markers (LIVE=1 adds plugin watch-arm probe)
   ./run.sh smoke-meta-honesty         # 1.0.0 meta-bridge: honesty regression gate (#30 blockers) — doorbell counts ALL msgs honestly + hook logs failures as ERROR (best-effort, no scream). Offline/deterministic (deps: bash+node+python3)
@@ -1143,16 +1143,17 @@ check_entwurf_fact_provider() {
 }
 
 check_entwurf_peers_surface() {
-  # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4c): the MCP
-  # entwurf_peers RENDER/PAYLOAD layer renderEntwurfPeers. Legacy `sessions` is a
-  # PROJECTION of facts (alive pi citizens + alive socket-only), NOT a second scan
-  # (a re-run getLiveSessions would bypass the provider quarantine); socketPath via
-  # controlSocketPath (SSOT, no correlation-authority drift); count = projection
-  # length not peers.length; three distinct arrays (peers/socketOnly/diagnostics);
-  # NO verb-routing field in JSON (deep key scan) NOR word in text (title leak);
-  # diagnostics in both surfaces; empty → "(none)"; unsupported shown; enrich null
-  # → "(not enriched)". WIRING guard: bridge calls listEntwurfFacts+renderEntwurfPeers,
-  # getLiveSessions gone. Facts fabricated, no IO (only static source read).
+  # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4c; #50 C4
+  # re-author): the MCP entwurf_peers RENDER/PAYLOAD layer renderEntwurfPeers.
+  # Payload keyset is exactly {peers, diagnostics} — the legacy `sessions`
+  # projection, socketOnly section, controlDir/count and every socketPath left
+  # with the socket identity axis; FORBIDDEN_C4_KEYS + "no .sock in text" pin
+  # that. A record-less socket surfaces ONLY as an aggregated record-less-socket
+  # diagnostic (F8, liveness-keyed message). NO verb-routing field in JSON (deep
+  # key scan) NOR word in text (title leak); diagnostics in both surfaces; empty
+  # → "(none)"; unsupported shown. WIRING guard: both surfaces call
+  # listEntwurfFacts+renderEntwurfPeers; getLiveSessions and the /entwurf-sessions
+  # socket-scan command stay gone. Facts fabricated, no IO (only static source read).
   run_ts scripts/check-entwurf-peers-surface.ts
 }
 
@@ -4050,9 +4051,9 @@ case "$cmd" in
     check_agy_sender_identity
     ;;
   new-session-id)
-    # Garden launcher helper: print one fresh garden sessionId (SSOT:
-    # generateSessionId). Used by the operator alias to make every
-    # --entwurf-control session a garden citizen. Stdout = the id only.
+    # Print one fresh garden sessionId (SSOT: generateSessionId). #50 C2 retired
+    # the operator-launcher --session-id injection; the record layer is the
+    # consumer that mints garden addresses. Stdout = the id only.
     run_ts scripts/new-session-id.ts
     ;;
   smoke-resident-garden-guard)
