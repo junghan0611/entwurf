@@ -7,9 +7,10 @@
  *
  * Three verbs, one authority order:
  *   migrate [--drop-parentage]
- *     classify → REFUSE before any write on a store it cannot fully read
- *     (malformed / stray-key / half-migrated / body-filename drift / duplicate
- *     nativeSessionId) → backup the WHOLE store dir to a sibling
+ *     classify → REFUSE before any write on a store outside the record-entry
+ *     domain (non-regular-file entry / malformed / stray-key / half-migrated /
+ *     body-filename drift / duplicate nativeSessionId) → backup the WHOLE
+ *     store dir to a sibling
  *     `<store>.v3-migration-backup-<ts>/` (staged copy + atomic rename — the
  *     final name exists only once the copy COMPLETED; a failed copy leaves at
  *     most a `.partial-` leaf the restore grammar refuses) → rewrite every
@@ -28,11 +29,13 @@
  *     never a symlink); a foreign, nested, forged-suffix, or look-alike is refused,
  *     because copying an
  *     unrelated tree over the address authority is a manual `cp`, not a verb.
- *     The name alone is still not enough: every record entry must be a REGULAR
- *     file (classify reads through a link; the copy would land the link) and
- *     the backup must CLASSIFY clean (fully readable, zero problems, ≥1 record
- *     — v1/v2/v3 all legitimate) before the current store moves; a perfect
- *     name over unreadable, linked, or empty bytes is refused, store untouched.
+ *     The name alone is still not enough: the backup must CLASSIFY clean under
+ *     the ONE record-entry domain classifyStore holds for every verb (regular
+ *     files only, fully readable, zero problems, ≥1 record — v1/v2/v3 all
+ *     legitimate) before the current store moves; a perfect name over
+ *     unreadable, linked, or empty bytes is refused, store untouched. The
+ *     shared domain is the invariant: migrate accepted ⇒ the backup migrate
+ *     printed is a backup restore accepts.
  *     Scope is the
  *     STORE only: mailbox receipt state is deliberately NOT rolled back — the
  *     v1 receipt migration is state-wins and idempotent, so a post-restore
@@ -107,8 +110,9 @@ function usage(code: number): never {
 				`\`${M1_MIGRATE_COMMAND_INSTALLED.replace(/ migrate$/, "")} <verb>\` — the M1 one-shot migration)`,
 			"",
 			"  migrate [--drop-parentage]  backup the store, rewrite every v1/v2 record as v3, re-verify non-V3=0.",
-			"                              Refuses BEFORE any write: a store with malformed/drifted/duplicate records,",
-			"                              or a v2 record carrying non-null parentGardenId / isEntwurf=true without the flag.",
+			"                              Refuses BEFORE any write: a store with malformed/drifted/duplicate or",
+			"                              non-regular-file records, or a v2 record carrying non-null parentGardenId /",
+			"                              isEntwurf=true without the flag.",
 			"  verify                      read-only: exit 0 iff every record is strict v3 (non-V3=0).",
 			"  restore <backup-dir>        rollback: verify the backup is THIS store's fully readable, non-empty",
 			"                              `.v3-migration-backup-<ts>` sibling, then move the current store aside",
@@ -155,11 +159,16 @@ interface Classification {
 }
 
 /**
- * Read + classify every `.meta.json` in the store. schemaVersion picks the ONE
- * parser a body must satisfy (a record is legible to exactly one schema — the
- * strayness invariant), then filename agreement and nativeSessionId uniqueness
- * hold across ALL versions. Anything else is a problem the migration refuses to
- * write over — M1 migrates a readable store; it never repairs a corrupt one.
+ * Read + classify every `.meta.json` in the store. The record-entry domain is
+ * regular files only (lstat-checked BEFORE the read — a symlink would classify
+ * by its target's bytes while a byte copy lands the link), then schemaVersion
+ * picks the ONE parser a body must satisfy (a record is legible to exactly one
+ * schema — the strayness invariant), then filename agreement and
+ * nativeSessionId uniqueness hold across ALL versions. Anything else is a
+ * problem the migration refuses to write over — M1 migrates a readable store;
+ * it never repairs a corrupt one. This function is the SINGLE rule-site for
+ * every verb, store and backup alike: that is what makes "migrate accepted ⇒
+ * the backup migrate printed restores" a theorem instead of a hope.
  */
 function classifyStore(dir: string): Classification {
 	const records: ClassifiedRecord[] = [];
@@ -169,10 +178,31 @@ function classifyStore(dir: string): Classification {
 
 	for (const filename of fs.readdirSync(dir).sort()) {
 		if (!filename.endsWith(".meta.json")) continue;
-		// The read itself is classification input, not a precondition: a
-		// directory-shaped entry (EISDIR), a dangling symlink, an unreadable file
-		// or a raced-away one is a PROBLEM this surface reports and refuses over —
-		// never an uncaught crash (M3: "classify → REFUSE" has no crash branch).
+		// The record-entry DOMAIN is regular files only, held HERE so every verb
+		// (verify, migrate preflight, post-write disk verification, restore backup
+		// classification) applies the same rule — a per-verb guard drifts, and the
+		// drift broke the machine sentence "migrate accepted ⇒ its backup
+		// restores" once already: migrate followed a symlink record while restore
+		// refused it, so M1 authored a backup its own rollback verb rejected.
+		let entryStat: fs.Stats;
+		try {
+			entryStat = fs.lstatSync(path.join(dir, filename));
+		} catch (err) {
+			problems.push({ filename, message: `unreadable: ${err instanceof Error ? err.message : String(err)}` });
+			continue;
+		}
+		if (!entryStat.isFile()) {
+			const kind = entryStat.isSymbolicLink() ? "symlink" : entryStat.isDirectory() ? "directory" : "special file";
+			problems.push({
+				filename,
+				message: `not a regular file (got ${kind}) — the record domain is regular files only, for store and backup alike`,
+			});
+			continue;
+		}
+		// The read itself is classification input, not a precondition: an
+		// unreadable file or a raced-away one is a PROBLEM this surface reports
+		// and refuses over — never an uncaught crash (M3: "classify → REFUSE"
+		// has no crash branch).
 		let raw: string;
 		try {
 			raw = fs.readFileSync(path.join(dir, filename), "utf8");
@@ -466,31 +496,14 @@ function cmdRestore(storeDir: string, backupArg: string): number {
 	// The name proves provenance, not completeness: staging+rename means migrate
 	// never leaves a half-copy under the final name, but a manual cp or a damaged
 	// disk still can. This verb puts the backup in AUTHORITY, so classify it
-	// exactly as migrate classifies a store BEFORE the current store moves —
-	// v1/v2/v3 are all legitimate (the backup holds pre-cut bytes), but a
-	// malformed/drifted/duplicate record or an empty dir is not an M1 backup
-	// (migrate refuses those stores and never backs up an empty one).
-	//
-	// First, the record entries must be REGULAR FILES: classifyStore reads
-	// THROUGH a symlink, so a link would classify by its target's bytes while
-	// the copy lands the link itself — the authority would dangle on a foreign
-	// path. migrate authors only regular files; refuse the shape.
-	try {
-		for (const entry of fs.readdirSync(backupDir).sort()) {
-			if (!entry.endsWith(".meta.json")) continue;
-			if (!fs.lstatSync(path.join(backupDir, entry)).isFile()) {
-				console.error(
-					`REFUSE: ${backupDir} holds a non-regular-file record entry: ${entry} — an M1 backup contains ` +
-						"only regular record files, so migrate did not author this dir. The current store was NOT touched.",
-				);
-				return 1;
-			}
-		}
-	} catch (err) {
-		const cause = err instanceof Error ? err.message : String(err);
-		console.error(`REFUSE: cannot inspect backup contents ${backupDir}: ${cause}`);
-		return 1;
-	}
+	// with the SAME classifyStore migrate uses — one record-entry domain
+	// (regular files only, fully readable, no drift/duplicates), which is what
+	// makes the machine sentence hold: a store migrate ACCEPTED classifies
+	// clean, its backup is a byte copy, so the backup migrate PRINTED is a
+	// backup this verb accepts. v1/v2/v3 are all legitimate (the backup holds
+	// pre-cut bytes), but a problem record or an empty dir is not an M1 backup
+	// (migrate refuses those stores and never backs up an empty one). No extra
+	// guard lives here — a second rule-site is where the last drift came from.
 	const backupClass = classifyStore(backupDir);
 	const backupRecords = backupClass.counts.v1 + backupClass.counts.v2 + backupClass.counts.v3;
 	if (backupClass.problems.length > 0) {

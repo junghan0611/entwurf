@@ -32,10 +32,13 @@
  *     foreign tree is refused (a wrong path must never replace the authority).
  *   - backup completeness (S16/S17): the final backup name is claimed by an
  *     atomic rename AFTER the staged copy completes, so a mid-copy failure
- *     never leaves a half-backup under the trusted name; restore requires
- *     regular-file record entries and classifies the backup like a store
- *     (zero problems, ≥1 record) BEFORE the current store moves, and an
- *     uninspectable path names its real lstat cause.
+ *     never leaves a half-backup under the trusted name; restore classifies
+ *     the backup like a store (zero problems, ≥1 record) BEFORE the current
+ *     store moves, and an uninspectable path names its real lstat cause.
+ *   - ONE record-entry domain (S18): the regular-file rule lives in
+ *     classifyStore — the single rule-site verify, migrate and restore share —
+ *     so an out-of-domain store refuses at the front door and the machine
+ *     invariant holds: migrate accepted ⇒ the backup migrate PRINTED restores.
  *   - prescriptions (R1): the pre-cut FAIL and the rollback line each name BOTH
  *     invocation forms — `./run.sh …` for a dev clone AND `entwurf …` for an
  *     installed package. The hosts that actually meet a pre-cut store are
@@ -309,7 +312,7 @@ const s1 = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
 	}
 }
 
-// ── S13 (M3): an unreadable entry is a problem, never an uncaught crash ──────
+// ── S13 (M3): an out-of-domain entry is a problem, never an uncaught crash ───
 {
 	const DIR_ENTRY = "20260312T000000-eeee12.meta.json";
 	const w = makeWorld({ [`${V2_GID}.meta.json`]: v2Body() });
@@ -317,9 +320,9 @@ const s1 = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
 	const env = { store: w.store, mailbox: w.mailbox };
 	const mig = runCli(["migrate"], env);
 	ok(
-		"S13 a directory-shaped .meta.json is classified `unreadable` and refused (no uncaught crash)",
+		"S13 a directory-shaped .meta.json is refused as out-of-domain, naming the kind (no uncaught crash)",
 		mig.status === 1 &&
-			mig.stderr.includes("unreadable") &&
+			mig.stderr.includes("not a regular file (got directory)") &&
 			mig.stderr.includes(DIR_ENTRY) &&
 			mig.stderr.includes("no backup taken"),
 		mig.stdout + mig.stderr,
@@ -330,8 +333,8 @@ const s1 = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
 	);
 	const ver = runCli(["verify"], env);
 	ok(
-		"S13 verify reports the same unreadable entry read-only",
-		ver.status === 1 && ver.stderr.includes("unreadable") && ver.stderr.includes(DIR_ENTRY),
+		"S13 verify reports the same out-of-domain entry read-only",
+		ver.status === 1 && ver.stderr.includes("not a regular file") && ver.stderr.includes(DIR_ENTRY),
 		ver.stdout + ver.stderr,
 	);
 }
@@ -660,10 +663,10 @@ const s1 = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
 		rl.stdout + rl.stderr,
 	);
 
-	// (e) a symlink RECORD inside a perfect-name backup is refused: classify
-	//     reads THROUGH the link (it would validate the target's bytes) while
-	//     the copy lands the link itself — the authority would dangle on a
-	//     foreign path. migrate authors only regular files; the shape refuses.
+	// (e) a symlink RECORD inside a perfect-name backup is refused by the SAME
+	//     classifier (not a restore-local guard): the domain is regular files
+	//     only, because classify reads THROUGH a link while a byte copy lands
+	//     the link itself — the authority would dangle on a foreign path.
 	const linked = `${w.store}.v3-migration-backup-20260105T000000`;
 	fs.mkdirSync(linked);
 	const linkTarget = path.join(w.root, "elsewhere.json");
@@ -671,9 +674,9 @@ const s1 = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
 	fs.symlinkSync(linkTarget, path.join(linked, `${V3_GID}.meta.json`));
 	const rlk = runCli(["restore", linked], env);
 	ok(
-		"S16 a symlink record inside a perfect-name backup is refused (regular files only)",
+		"S16 a symlink record inside a perfect-name backup is refused (one domain: regular files only)",
 		rlk.status === 1 &&
-			rlk.stderr.includes("non-regular-file record entry") &&
+			rlk.stderr.includes("not a regular file (got symlink)") &&
 			rlk.stderr.includes(`${V3_GID}.meta.json`) &&
 			fs.readFileSync(path.join(w.store, `${V3_GID}.meta.json`), "utf8") === V3_BODY &&
 			fs.readdirSync(w.root).every((n) => !n.startsWith("store.pre-restore-")),
@@ -723,6 +726,64 @@ const s1 = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
 		"S17 a leftover staging leaf is refused by restore (not a final-name backup)",
 		rs.status === 1 && rs.stderr.includes("not a backup OF THIS store"),
 		rs.stdout + rs.stderr,
+	);
+}
+
+// ── S18: ONE record-entry domain — the round-trip invariant is machine-held ──
+// GPT symmetry review: restore refused symlink records while migrate's
+// classifier followed them, so migrate ACCEPTED a symlink-record store,
+// authored a backup preserving the links, and its own restore verb refused
+// that backup — "rollback 가능" broke. The regular-file rule now lives in
+// classifyStore, the single rule-site every verb shares, pinned from both
+// sides: (a) the out-of-domain store is refused at the FRONT door (verify +
+// migrate, before any write), (b) a store migrate accepts yields a PRINTED
+// backup restore accepts — the invariant "migrate accepted ⇒ its backup
+// restores", driven by the exact path migrate printed, not a dir listing.
+{
+	// (a) a symlink record pointing at PERFECTLY VALID v2 bytes: the refusal is
+	//     about the entry's shape, not its content — a read-through would pass.
+	const w = makeWorld({});
+	const target = path.join(w.root, "valid-target.json");
+	fs.writeFileSync(target, v2Body());
+	fs.symlinkSync(target, path.join(w.store, `${V2_GID}.meta.json`));
+	const env = { store: w.store, mailbox: w.mailbox };
+	const ver = runCli(["verify"], env);
+	ok(
+		"S18 verify refuses a symlink record even when its target bytes are valid v2",
+		ver.status === 1 &&
+			ver.stderr.includes("not a regular file (got symlink)") &&
+			ver.stderr.includes(`${V2_GID}.meta.json`),
+		ver.stdout + ver.stderr,
+	);
+	const mig = runCli(["migrate"], env);
+	ok(
+		"S18 migrate refuses the same store BEFORE any write (same classifier, same domain)",
+		mig.status === 1 &&
+			mig.stderr.includes("not a regular file (got symlink)") &&
+			mig.stderr.includes("no backup taken"),
+		mig.stdout + mig.stderr,
+	);
+	ok(
+		"S18 the refusal took no backup and left the symlink record a symlink",
+		backups(w).length === 0 && fs.lstatSync(path.join(w.store, `${V2_GID}.meta.json`)).isSymbolicLink(),
+	);
+
+	// (b) the machine sentence, driven end to end: migrate accepts a regular-file
+	//     store, prints its backup path, and THAT string restores rc=0.
+	const w2 = makeWorld({ [`${V2_GID}.meta.json`]: v2Body() });
+	const env2 = { store: w2.store, mailbox: w2.mailbox };
+	const mig2 = runCli(["migrate"], env2);
+	const printed = mig2.stdout.match(/^backup: (.+) \(\d+ record\(s\)\)$/m)?.[1];
+	ok(
+		"S18 migrate on an in-domain store exits 0 and prints the backup path it took",
+		mig2.status === 0 && typeof printed === "string",
+		mig2.stdout + mig2.stderr,
+	);
+	const res2 = runCli(["restore", printed as string], env2);
+	ok(
+		"S18 the EXACT printed backup restores rc=0 — migrate accepted ⇒ its backup restores",
+		res2.status === 0 && fs.readFileSync(path.join(w2.store, `${V2_GID}.meta.json`), "utf8") === v2Body(),
+		res2.stdout + res2.stderr,
 	);
 }
 
