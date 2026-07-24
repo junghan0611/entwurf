@@ -283,6 +283,16 @@ model 없음, pi backend는 birth에 transcript 미확정. `recordUpdatedAt` = r
   - **관찰 규율**: 이 결함이 다시 나오면 표본을 여기 누적한다 — 시각, 동시 부하, 어느 스모크,
     모델 발화. 인과가 서기 전에는 고치지 않는다(GLG 결정). MUST tier는 유지 — 실패는 **우리 결함**이며
     advisory로 내리면 그 결함이 묻힌다.
+  - **표본 3 (2026-07-24 22:38 KST, 페블 검수 세션)** — `smoke-acp-bundled-mcp-live`,
+    `LIVE=1 release-gate` @ `cbda097` 17스텝 중 16번째에서 FAIL (MUST 16/1/0, 나머지 ACP 10종 + v2-send 전부 PASS).
+    **이번엔 머신이 조용했다** — 외부 동시 프로세스 없는 순차 aggregate 단독 실행. "외부 동시부하 필요" 가설은
+    이 표본으로 약화; "무거운 라이브 시퀀스 후반부" 상관만 남는다. 모델 발화(자동 보존 transcript, 이날 랜딩한
+    보존 장치의 첫 실전 작동): "현재 세션에 노출된 실제 도구 스키마에는 `mcp__entwurf-bridge__entwurf_self`가
+    없습니다. Bash, Edit, Read, Skill, Write만 호출 가능한 상태라, 존재하지 않는 도구를 호출할 수는 없습니다."
+    — 부재를 읽고 호출 거부(aggregate 표본과 같은 반응형). 턴 전 단언은 전부 GREEN(record birth, socket,
+    get_info, prompt RPC 수락, extension_error 없음) — 정확히 tool schema만 비었다. 직후 격리 재실행 PASS
+    (14 checks — 격리 누적 4/4 PASS). 원본 transcript:
+    `~/.pi/agent/entwurf-readiness-race-samples/entwurf-smoke-acp-bundled-mcp-live-FAIL-2026-07-24T13-38-07-945Z.log`.
 - **repair/v2-core-debt 승격분 (2026-07-24):**
   - `@earendil-works/pi-ai/providers/all` loader alias 이행 검토 — pi 0.81+가 추가한 4번째 alias.
     `/compat`이 살아있어 강제 아님(deprecated 주석만 그쪽을 가리킴). 별도 단독 cut.
