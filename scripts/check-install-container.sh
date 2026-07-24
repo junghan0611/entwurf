@@ -153,6 +153,14 @@ echo "[check-install-container] image $IMAGE id=$IMAGE_ID repoDigest=$IMAGE_DIGE
 # shell stands in for Claude during the owner fixture, and a real owner must be >1.
 # Running the consumer itself as PID 1 would correctly trip the hook's reparented-
 # orphan guard and make the synthetic join vacuously impossible.
+# The frozen upgrade fixtures travel as DATA in an env var, not as a mount. They
+# are host state — the meta-record store a machine already had before this cut —
+# so they must reach the container without giving it a repo directory to see.
+# Mounting fixtures/ would have weakened the structural-invisibility claim above
+# for no gain; the tar carries its own sha256 manifest and the container verifies
+# it on arrival, which is the property that actually matters.
+FIXTURES_B64="$(cd "$REPO/fixtures" && tar -cz meta-store | base64 -w0)"
+
 set +e
 docker run --rm -i \
   --user node \
@@ -160,6 +168,7 @@ docker run --rm -i \
   -e HOME=/home/node \
   -e NODE_PATH= \
   -e "EXPECTED_FLOOR_MAJOR=$FLOOR_MAJOR" \
+  -e "FIXTURES_B64=$FIXTURES_B64" \
   -v "$TGZ_PATH:/artifact/$TGZ_NAME:ro" \
   "$IMAGE" \
   bash -c 'bash -s -- "$1"; rc=$?; exit "$rc"' _ "/artifact/$TGZ_NAME" <<'CONTAINER_RUNNER_EOF'
@@ -435,6 +444,164 @@ fi
 ASM="$HOME/.local/share/entwurf/meta-bridge/.assembled"
 [ -f "$ASM/$PLUGIN/meta-bridge-hook.js" ] || bad "assembled bundle has no compiled hook JS at $ASM/$PLUGIN/meta-bridge-hook.js"
 [ -f "$ASM/$PLUGIN/meta-bridge-hook.ts" ] && bad "assembled bundle shipped a raw .ts hook — installed packages must run compiled JS"
+
+# ── 7b. the upgrade host-state matrix ────────────────────────────────────────
+# Everything above meets a machine with no meta-record store at all. That is the
+# CLEAN host — the one state nobody doubted. A real fleet is not clean: an
+# existing development machine already carries a store this cut cannot read, and
+# until now no cell had ever handed the candidate artifact such a host.
+#
+# Each state below gets its own HOME, its own Claude config, its own agent dir
+# and its own fake-Claude log, so a refusal's byte fence means "this host was not
+# touched", not "the previous state's writes are still there".
+echo "[upgrade host-state matrix]"
+FIXROOT="$HOME/fixtures"
+mkdir -p "$FIXROOT" "$HOME/logs"
+printf '%s' "${FIXTURES_B64:?fixture payload missing}" | base64 -d | tar -xz -C "$FIXROOT"
+if (cd "$FIXROOT/meta-store" && sha256sum -c MANIFEST.sha256 >/dev/null 2>&1); then
+  ok "frozen upgrade fixtures arrived intact (sha256 manifest re-verified inside the container)"
+else
+  die "upgrade fixtures failed their own manifest inside the container — the host state under test is not the state it claims"
+fi
+
+new_host() { # $1=state -> host root on stdout
+  local st="$1" root="$HOME/hosts/$1"
+  rm -rf "$root"; mkdir -p "$root/.claude" "$root/agent"
+  echo '{}' > "$root/.claude/settings.json"
+  echo '{}' > "$root/.claude.json"
+  : > "$root/fake-claude.log"
+  if [ "$st" != absent ]; then
+    mkdir -p "$root/agent/meta-sessions"
+    node -e '
+      const fs = require("node:fs"), path = require("node:path");
+      const [fix, state, dest] = process.argv.slice(1);
+      const hosts = JSON.parse(fs.readFileSync(path.join(fix, "hosts.json"), "utf8"));
+      for (const id of hosts[state]) {
+        fs.copyFileSync(path.join(fix, "records", id + ".meta.json"), path.join(dest, id + ".meta.json"));
+      }
+    ' "$FIXROOT/meta-store" "$st" "$root/agent/meta-sessions"
+  fi
+  printf '%s' "$root"
+}
+
+in_host() { # $1=host root, rest=command
+  local root="$1"; shift
+  env HOME="$root" \
+      CLAUDE_CONFIG_DIR="$root/.claude" \
+      PI_CODING_AGENT_DIR="$root/agent" \
+      FAKE_CLAUDE_LOG="$root/fake-claude.log" \
+      "$@"
+}
+
+# Persistent regular files below the host root, with the fake-Claude log checked
+# separately as an exact zero-invocation signal. This manifest does not cover
+# permissions, ownership, symlink targets, or empty directories.
+host_bytes() { (find "$1" -type f ! -name fake-claude.log -print0 | sort -z | xargs -0r sha256sum) 2>/dev/null || true; }
+store_bytes() { (find "$1/agent/meta-sessions" -type f -print0 2>/dev/null | sort -z | xargs -0r sha256sum) 2>/dev/null || true; }
+
+# — state: already migrated. A V3-only host must install like any other, and the
+#   install must not touch the store it was gated on.
+V3H="$(new_host v3-only)"
+V3_STORE_BEFORE="$(store_bytes "$V3H")"
+if in_host "$V3H" entwurf install-meta-bridge >"$HOME/logs/v3-only.log" 2>&1; then
+  ok "V3-only host: install-meta-bridge PASSES (an already-migrated machine is not punished)"
+else
+  tail -12 "$HOME/logs/v3-only.log" | sed 's/^/        /'
+  bad "V3-only host: install-meta-bridge FAILED — the gate rejects a store that certifies"
+fi
+if [ "$V3_STORE_BEFORE" = "$(store_bytes "$V3H")" ]; then
+  ok "V3-only host: the seeded record is byte-identical after a successful install (install activates, it never migrates)"
+else
+  bad "V3-only host: install mutated the meta-record store"
+fi
+
+# — state: pre-cut, and carrying parentage values only a human may discard.
+PCH="$(new_host v2-parentage)"
+PC_BEFORE="$(host_bytes "$PCH")"
+if in_host "$PCH" entwurf install-meta-bridge >"$HOME/logs/precut.log" 2>&1; then
+  tail -12 "$HOME/logs/precut.log" | sed 's/^/        /'
+  bad "pre-cut host: install-meta-bridge ACCEPTED a store the runtime cannot read"
+else
+  ok "pre-cut host: install-meta-bridge REFUSES"
+fi
+if [ "$PC_BEFORE" = "$(host_bytes "$PCH")" ]; then
+  ok "pre-cut host: the refusal left every persistent regular file unchanged (path+sha256 manifest below the host root)"
+else
+  bad "pre-cut host: the refusal still mutated the host:"$'\n'"$(diff <(printf '%s\n' "$PC_BEFORE") <(printf '%s\n' "$(host_bytes "$PCH")") | sed 's/^/        /' | head -8)"
+fi
+if [ -s "$PCH/fake-claude.log" ]; then
+  bad "pre-cut host: the claude CLI was invoked before the refusal — the store gate must decide first:"$'\n'"$(sed 's/^/        /' "$PCH/fake-claude.log")"
+else
+  ok "pre-cut host: ZERO claude invocations before the refusal (no external CLI contact at all)"
+fi
+if grep -q 'entwurf meta-bridge-migrate-v3 migrate' "$HOME/logs/precut.log"; then
+  ok "pre-cut host: the refusal names the INSTALLED migrate form — the only one this consumer can type"
+else
+  bad "pre-cut host: the refusal did not hand this consumer a command it can run"
+fi
+
+# — the operator's move, from inside the container, through the global shim.
+if in_host "$PCH" entwurf meta-bridge-migrate-v3 migrate >"$HOME/logs/precut-migrate.log" 2>&1; then
+  bad "pre-cut host: migrate discarded parentage values without --drop-parentage"
+else
+  ok "pre-cut host: plain migrate REFUSES to discard parentage on the operator's behalf"
+fi
+if [ -n "$(find "$PCH/agent" -maxdepth 1 -name 'meta-sessions.v3-migration-backup-*' 2>/dev/null)" ]; then
+  bad "pre-cut host: the refused migrate left a backup — it began work it should not have"
+else
+  ok "pre-cut host: the refused migrate took no backup (store untouched)"
+fi
+
+if in_host "$PCH" entwurf meta-bridge-migrate-v3 migrate --drop-parentage >"$HOME/logs/precut-drop.log" 2>&1; then
+  ok "pre-cut host: explicit --drop-parentage migrates"
+else
+  tail -12 "$HOME/logs/precut-drop.log" | sed 's/^/        /'
+  bad "pre-cut host: --drop-parentage FAILED"
+fi
+PC_BACKUP="$(find "$PCH/agent" -maxdepth 1 -type d -name 'meta-sessions.v3-migration-backup-*' | head -1)"
+if [ -n "$PC_BACKUP" ]; then
+  WANT="$(sha256sum "$FIXROOT/meta-store/records/20260305T000000-dddd05.meta.json" | cut -d' ' -f1)"
+  GOT="$(sha256sum "$PC_BACKUP/20260305T000000-dddd05.meta.json" 2>/dev/null | cut -d' ' -f1)"
+  if [ "$WANT" = "$GOT" ]; then
+    ok "pre-cut host: the discarded parentage survives in the backup as the ORIGINAL frozen bytes"
+  else
+    bad "pre-cut host: backup bytes are not the original record (fixture $WANT, backup $GOT)"
+  fi
+else
+  bad "pre-cut host: --drop-parentage rewrote the store without a backup"
+fi
+if in_host "$PCH" entwurf meta-bridge-migrate-v3 verify 2>&1 | grep -q 'non-V3=0'; then
+  ok "pre-cut host: the migrated store certifies non-V3=0 through the global shim"
+else
+  bad "pre-cut host: the migrated store does not certify"
+fi
+if in_host "$PCH" entwurf install-meta-bridge >"$HOME/logs/precut-retry.log" 2>&1; then
+  ok "pre-cut host: install-meta-bridge PASSES on the retry — the prescribed upgrade sequence lands on a consumer machine"
+else
+  tail -20 "$HOME/logs/precut-retry.log" | sed 's/^/        /'
+  bad "pre-cut host: install-meta-bridge STILL fails after the prescribed migration"
+fi
+if grep -q 'plugin install' "$PCH/fake-claude.log"; then
+  ok "pre-cut host: the retry actually did the work (plugin install reached)"
+else
+  bad "pre-cut host: the retry exited 0 without installing the plugin"
+fi
+
+# — state: mixed. A machine that opened one session under the new cut now has a
+#   v3 record sitting beside its pre-cut ones. It is still not installable, and
+#   this is the state a "just pull and re-setup" upgrade actually produces.
+MXH="$(new_host mixed)"
+MX_BEFORE="$(host_bytes "$MXH")"
+if in_host "$MXH" entwurf install-meta-bridge >"$HOME/logs/mixed.log" 2>&1; then
+  bad "mixed host: install-meta-bridge ACCEPTED a store holding both v2 and v3 records"
+else
+  ok "mixed host: install-meta-bridge REFUSES a half-migrated store"
+fi
+if [ "$MX_BEFORE" = "$(host_bytes "$MXH")" ]; then
+  ok "mixed host: the refusal left every persistent regular file unchanged"
+else
+  bad "mixed host: the refusal mutated the host"
+fi
 
 # ── 8. doctor fixture, built only from package artifacts ─────────────────────
 echo "[doctor fixture]"

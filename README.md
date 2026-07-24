@@ -239,13 +239,28 @@ Only that accepted file may be published with `--tag repair`.
 > form. `entwurf_peers` behaves differently on purpose — it keeps listing and folds
 > the unreadable records into a **diagnostic** line, because a facts surface that
 > dies on corruption tells you less than one that shows what it could and could not
-> read. Either way a pre-cut record is never treated as an address. You do not have
-> to wait to meet this:
+> read. Either way a pre-cut record is never treated as an address.
+>
+> **The installer entrypoints will not cross that boundary silently.** `setup`,
+> `install` and `install-meta-bridge` each certify the store *before* they write
+> anything: on a host that still holds v1/v2 records they refuse, name the
+> migrate verb in both invocation forms, and leave your settings, plugin registry
+> and `auth.json` untouched. That covers the commands entwurf owns — it is not a
+> claim about every way new code can reach a machine (see the ordering note
+> below). So an upgrade through those commands is a refusal you answer, not a
+> broken install you diagnose:
 >
 > ```bash
 > entwurf meta-bridge-migrate-v3 verify    # read-only: how many v1/v2 records, any problems
 > entwurf meta-bridge-migrate-v3 migrate   # writes a backup first, then converts in place
 > ```
+>
+> The refusal is a **preflight, not a lock**: it certifies the store as it stands
+> at that moment. On a host whose pi/Claude settings point straight at a checkout,
+> a `git pull` can put the new code in front of live sessions before you run
+> anything at all, so order the upgrade explicitly — **quiesce the sessions on
+> that host → pull → migrate → `setup` → reopen**. The gates prove the sequence
+> lands; they cannot prove a session that keeps writing through it.
 >
 > `migrate` copies the whole store to a sibling
 > `meta-sessions.v3-migration-backup-<timestamp>` **before** touching anything, and

@@ -7,7 +7,7 @@
 	},
 	"files": {
 		"ignoreUnknown": true,
-		"includes": ["**", "!node_modules", "!.git", "!.tmp-verify-models"]
+		"includes": ["**", "!node_modules", "!.git", "!.tmp-verify-models", "!fixtures"]
 	},
 	"formatter": {
 		"enabled": true,

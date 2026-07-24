@@ -158,8 +158,9 @@ Usage:
   ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
   ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
-  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (0.82.x) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands)
-  ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
+  ./run.sh check-upgrade-gate         # SOURCE cell of the 3-cell upgrade proof (IN pnpm check): seeds each host state an upgrading machine can be in (absent/empty/v3-only/v2-only/mixed/parentage-bearing/malformed/mixed-problem) from the FROZEN fixtures in fixtures/meta-store, then drives the real `run.sh install` / `setup` at it — pre-cut REFUSES before activation writes (persistent regular-file manifest unchanged), the refusal names the right repair order, migrate's backup holds the original fixture bytes, the retry PASSES, and parentage is only ever discarded by an explicit --drop-parentage. No model/network/cost
+  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (0.82.x) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the INSTALLED upgrade lifecycle on a seeded pre-cut host (REFUSE before activation writes / zero Claude invocations → installed migrate --drop-parentage → backup holds the frozen original bytes → non-V3=0 → install-meta-bridge PASSES)
+  ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the UPGRADE host-state matrix (clean / V3-only store bytes unchanged / pre-cut REFUSE→migrate→retry PASS / mixed REFUSE) seeded from the frozen fixtures, which arrive as a manifest-verified tar in an env var rather than a mount. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to entwurf alias
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
   ./run.sh remove [project-dir]       # remove entwurf entries from project .pi/settings.json (project scope only; global user-scope citizen left intact)
@@ -243,6 +244,65 @@ PY
 # import (per-package "exports" maps forbid that uniformly) and NOT a bare
 # `test -d node_modules`, which a dir-move breaks at the symlink-store level
 # while the top-level dir still looks present.
+# The pre-cut store gate, in one place (#50 M1 / #51 upgrade lane). Every
+# activation surface this repo owns wires up V3-ONLY readers (parse, birth,
+# peers, self, v2, inbox, store-doctor). On a host whose meta-record store still
+# holds v1/v2 records, activating them produces a host that installs clean,
+# validates clean, and then rejects at RUNTIME — the same "healthy install that
+# never works" class the Claude floor gate exists to prevent, and the reason an
+# existing development host cannot simply pull this cut and re-setup.
+#
+# READ-ONLY by construction: it asks the migrate command's own `verify` verb and
+# reports. It never migrates, and it never passes --drop-parentage — discarding
+# a parentage value is the operator's conscious act (LOCKED PROTOCOL 5/6/7), not
+# an install side effect.
+#
+# The verdict is delegated rather than re-derived: store resolution (env +
+# default) and the aggregated non-V3 count live in the migrate command, and a
+# second implementation here would be a second truth that drifts. An absent
+# store and a v3-only store both exit 0, so a clean host and an
+# already-migrated host need no special case.
+#
+# WHAT THIS DOES NOT CLAIM: it is a preflight, not a lock. A session that writes
+# a record between this check and the writes that follow is not prevented — the
+# contract this proves is the ordering on a QUIESCED host. The rollout procedure
+# for a host whose settings point straight at a checkout (quiesce sessions →
+# pull → migrate → setup) is the operational half, and it lives in the README.
+preflight_v3_store() {
+  local surface="$1" verdict
+  # A tree carrying run.sh but not scripts/ is a broken checkout, not a host with
+  # a bad store. Say so, rather than letting node's MODULE_NOT_FOUND stack stand
+  # in for a verdict this gate never reached.
+  if [ ! -f "$REPO_DIR/scripts/meta-bridge-migrate-v3.ts" ]; then
+    fail "[$surface] cannot certify the meta-record store: $REPO_DIR/scripts/meta-bridge-migrate-v3.ts is missing (incomplete checkout or package)."
+    exit 1
+  fi
+  if verdict="$(run_ts scripts/meta-bridge-migrate-v3.ts verify 2>&1)"; then
+    echo "[$surface] meta-record store certifies V3-only ($(printf '%s\n' "$verdict" | grep -o 'non-V3=[0-9]*' | head -1))"
+    return 0
+  fi
+  printf '%s\n' "$verdict" >&2
+  fail "[$surface] refused BEFORE any write: this host's meta-record store did not certify as V3-only (verdict above)."
+  echo "       Every surface this step activates is V3-only, so proceeding would wire a host that installs clean and then rejects at runtime." >&2
+  # The prescription must match the DIAGNOSIS. Pre-cut v1/v2 records are what M1
+  # converts; malformed / unreadable / ambiguous records are problems the migrate
+  # verb refuses to cross. Those axes can coexist, so a mixed-problem store must
+  # repair its problems FIRST and migrate only afterwards. Printing "run migrate"
+  # as the immediate action there hands an operator mid-blackout a command that
+  # cannot help, which is the failure mode this whole gate exists to avoid.
+  local has_problems=1 has_precut=1
+  printf '%s\n' "$verdict" | grep -q ' / 0 problem(s)' && has_problems=0
+  printf '%s\n' "$verdict" | grep -q 'pre-cut v[0-9][0-9]* record' && has_precut=0
+  if [ "$has_problems" -eq 0 ] && [ "$has_precut" -eq 0 ]; then
+    echo "       Nothing was written. Migrate the store with the command the verdict names, then re-run this step." >&2
+  elif [ "$has_problems" -ne 0 ] && [ "$has_precut" -eq 0 ]; then
+    echo "       Nothing was written. Repair the reported problems FIRST — migration refuses to start while any remain. After repair, if the reported pre-cut records remain, run the migrate command named above, then re-run this step." >&2
+  else
+    echo "       Nothing was written. This is NOT a migration case — the verdict reports records the store migration cannot convert (malformed, unreadable, or ambiguous). Resolve those, then re-run this step." >&2
+  fi
+  exit 1
+}
+
 preflight_dep_integrity() {
   command -v node >/dev/null 2>&1 || { fail "node not on PATH — cannot verify repo dependency integrity"; exit 1; }
   # Each wired pi-extension / MCP bridge / ACP backend root-imports its bundled
@@ -352,6 +412,17 @@ install_local_package() {
   project_dir=$(normalize_project_dir "$1")
   agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
   preflight_dep_integrity
+  # Pre-cut store gate — repeated here on purpose. `setup` already gated, but
+  # `run.sh install` reaches this function directly, and this is the step that
+  # registers entwurf in project + USER scope packages[] (= the V3-only
+  # extensions load from any cwd). A gate only at the setup entrypoint would be
+  # bypassed by the documented direct call.
+  #
+  # It sits AFTER dependency integrity because both are read-only and a broken
+  # checkout has to fail as a broken checkout: this gate runs a script out of
+  # scripts/, so on a tree that has run.sh and nothing else it would otherwise
+  # preempt the dep verdict with a less true one. Still ahead of every write.
+  preflight_v3_store install
   # Fail BEFORE any settings write if either target config already has a corrupt
   # shape. The packages[] SSOT and provider writer run in two separate steps, so
   # without this preflight a bad entwurfProvider could leave a half-installed
@@ -2413,6 +2484,13 @@ check_pack() {
     '\.tmp-verify/'
     '\.agent-(reports|shell)/'
     'pi/meta-bridge/\.assembled/'
+    # Upgrade-proof fixtures are HOST STATE, not package content. They are the
+    # synthetic pre-cut store the three cells seed a fake machine with; shipping
+    # them would put look-alike meta-records inside every user's install for no
+    # consumer benefit (the cells that read them are dev-only surfaces an
+    # installed package already refuses). Kept out of the files allowlist AND
+    # asserted here, so a future `files:` edit cannot quietly start shipping them.
+    '^fixtures/'
     # Python bytecode residue — `scripts/` ships whole via the files allowlist,
     # which BYPASSES .gitignore/.npmignore for its contents, so a `pnpm check`
     # run's generated scripts/__pycache__/*.pyc rode into the 0.12.6 tarball. The
@@ -2598,6 +2676,8 @@ _check_pack_install_impl() {
     '^plugins/' '^node_modules/'
     '\.tmp-verify/' '\.agent-(reports|shell)/'
     'pi/meta-bridge/\.assembled/'
+    # Upgrade-proof fixtures are host state, never package content (see check-pack).
+    '^fixtures/'
     # Python bytecode residue (see check-pack forbidden note): scripts/ ships
     # whole, so generated pyc bypasses ignore files — this cross-checks the actual
     # tarball, not just the dry-run resolver.
@@ -3177,6 +3257,131 @@ JS
   fi
   echo "[check-pack-install] installed operator commands pass (new-session-id id-shaped, doctor-pi-provider reaches its verdict, meta-bridge-prune walks a 0-record store, migrate-v3 verify certifies it)"
 
+  # ── #51 upgrade lane: the INSTALLED lifecycle on a host that already carries a
+  # pre-cut store. Everything above this line meets an empty store, which is the
+  # one host state that was never in doubt. This is the state an existing
+  # development machine is actually in on upgrade day, driven end to end through
+  # the npm-installed bin — not the checkout:
+  #
+  #     seeded v2 store → installed install-meta-bridge REFUSES (zero Claude
+  #     calls, persistent regular-file manifest unchanged) → installed migrate REFUSES the
+  #     parentage values → installed migrate --drop-parentage → verify non-V3=0
+  #     → installed install-meta-bridge PASSES
+  #
+  # The store is seeded from the FROZEN fixtures (fixtures/meta-store, sha256
+  # manifest), the same bytes check-upgrade-gate and check-install-container use,
+  # so `backup == original` is a comparison against a constant this code cannot
+  # move. HOME is the sandbox root and no store env override is set: the default
+  # <pi-agent-dir>/meta-sessions resolution is part of what gets proven.
+  local pc_home="$npm_tmp/precut-home" pc_cfg="$npm_tmp/precut-claude"
+  local pc_claude_log="$npm_tmp/precut-fake-claude.log"
+  local pc_store="$pc_home/.pi/agent/meta-sessions"
+  mkdir -p "$pc_home/.pi/agent" "$pc_cfg"
+  : > "$pc_claude_log"
+  if ! bash "$REPO_DIR/fixtures/seed-store.sh" v2-parentage "$pc_store" >/dev/null; then
+    fail "[check-pack-install] could not seed the frozen pre-cut fixture store (fixtures/meta-store drifted from its manifest?)"
+    return 1
+  fi
+  local pc_env=(HOME="$pc_home" XDG_DATA_HOME="$pc_home/.local/share" XDG_STATE_HOME="$pc_home/.local/state" XDG_CACHE_HOME="$pc_home/.cache" CLAUDE_CONFIG_DIR="$pc_cfg" FAKE_CLAUDE_LOG="$pc_claude_log" PATH="$fake_claude_dir:$npmroot/node_modules/.bin:$PATH")
+  local pc_before pc_after pc_out pc_rc
+  pc_before=$(cd "$pc_home" && find . -type f -exec sha256sum {} + 2>/dev/null | sort)
+
+  set +e
+  pc_out=$(env "${pc_env[@]}" "$npm_pkg/run.sh" install-meta-bridge 2>&1); pc_rc=$?
+  set -e
+  if [ "$pc_rc" = 0 ]; then
+    fail "[check-pack-install] installed install-meta-bridge ACCEPTED a pre-cut store — the upgrade gate is missing from the packaged artifact:"
+    echo "$pc_out" | tail -12 | sed 's/^/    /' >&2
+    return 1
+  fi
+  pc_after=$(cd "$pc_home" && find . -type f -exec sha256sum {} + 2>/dev/null | sort)
+  if [ "$pc_before" != "$pc_after" ]; then
+    fail "[check-pack-install] the refused install-meta-bridge still wrote to the host:"
+    diff <(printf '%s\n' "$pc_before") <(printf '%s\n' "$pc_after") | sed 's/^/    /' >&2
+    return 1
+  fi
+  if [ -n "$(find "$pc_cfg" -type f 2>/dev/null)" ]; then
+    fail "[check-pack-install] the refused install-meta-bridge created Claude config under $pc_cfg"
+    return 1
+  fi
+  # ZERO claude invocations, not merely zero mutating ones. The installer decides
+  # platform, python3, node and the host's own store before it ever touches the
+  # external CLI, so a store refusal is provably free of outside contact — and an
+  # empty log is an assertion that cannot rot the way an allow-list of "harmless"
+  # subcommands would.
+  if [ -s "$pc_claude_log" ]; then
+    fail "[check-pack-install] the refused install-meta-bridge invoked the claude CLI before refusing (the store gate must decide first):"
+    sed 's/^/    /' "$pc_claude_log" >&2
+    return 1
+  fi
+  echo "[check-pack-install] pre-cut host: installed install-meta-bridge REFUSED before any write (host regular-file manifest unchanged, zero Claude invocations)"
+
+  # The refusal has to be actionable from a packaged host, which cannot type ./run.sh.
+  if ! printf '%s' "$pc_out" | grep -q 'entwurf meta-bridge-migrate-v3 migrate'; then
+    fail "[check-pack-install] the installed refusal never named the INSTALLED migrate invocation form:"
+    echo "$pc_out" | tail -12 | sed 's/^/    /' >&2
+    return 1
+  fi
+
+  # Parentage: the installed migrate must refuse to discard a value on its own.
+  set +e
+  pc_out=$(env "${pc_env[@]}" PI_CODING_AGENT_DIR="$pc_home/.pi/agent" "$installed_entwurf" meta-bridge-migrate-v3 migrate 2>&1); pc_rc=$?
+  set -e
+  if [ "$pc_rc" = 0 ]; then
+    fail "[check-pack-install] installed migrate discarded parentage without --drop-parentage:"
+    echo "$pc_out" | tail -12 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if [ -n "$(find "$pc_home/.pi/agent" -maxdepth 1 -name 'meta-sessions.v3-migration-backup-*' 2>/dev/null)" ]; then
+    fail "[check-pack-install] the refused installed migrate left a backup behind — it started work it should never have begun"
+    return 1
+  fi
+
+  set +e
+  pc_out=$(env "${pc_env[@]}" PI_CODING_AGENT_DIR="$pc_home/.pi/agent" "$installed_entwurf" meta-bridge-migrate-v3 migrate --drop-parentage 2>&1); pc_rc=$?
+  set -e
+  if [ "$pc_rc" != 0 ]; then
+    fail "[check-pack-install] installed migrate --drop-parentage FAILED on the seeded pre-cut store:"
+    echo "$pc_out" | tail -20 | sed 's/^/    /' >&2
+    return 1
+  fi
+  local pc_backup pc_want pc_got
+  pc_backup=$(find "$pc_home/.pi/agent" -maxdepth 1 -type d -name 'meta-sessions.v3-migration-backup-*' | head -1)
+  if [ -z "$pc_backup" ]; then
+    fail "[check-pack-install] installed migrate rewrote the store without taking a backup"
+    return 1
+  fi
+  # The backup must hold the ORIGINAL bytes — compared against the checked-in
+  # fixture hash, never against a re-serialization by the code under test.
+  pc_want=$(awk '$2 ~ /20260305T000000-dddd05/ { print $1 }' "$REPO_DIR/fixtures/meta-store/MANIFEST.sha256")
+  pc_got=$(sha256sum "$pc_backup/20260305T000000-dddd05.meta.json" 2>/dev/null | cut -d' ' -f1)
+  if [ -z "$pc_want" ] || [ "$pc_want" != "$pc_got" ]; then
+    fail "[check-pack-install] the installed migrate's backup does not hold the original parentage-bearing bytes (fixture $pc_want, backup $pc_got)"
+    return 1
+  fi
+
+  set +e
+  pc_out=$(env "${pc_env[@]}" PI_CODING_AGENT_DIR="$pc_home/.pi/agent" "$installed_entwurf" meta-bridge-migrate-v3 verify 2>&1); pc_rc=$?
+  set -e
+  if [ "$pc_rc" != 0 ] || ! printf '%s' "$pc_out" | grep -q 'non-V3=0'; then
+    fail "[check-pack-install] the migrated store does not certify non-V3=0 through the installed bin: $pc_out"
+    return 1
+  fi
+
+  set +e
+  pc_out=$(env "${pc_env[@]}" "$npm_pkg/run.sh" install-meta-bridge 2>&1); pc_rc=$?
+  set -e
+  if [ "$pc_rc" != 0 ]; then
+    fail "[check-pack-install] installed install-meta-bridge STILL failed after the prescribed migration — the documented upgrade path does not land:"
+    echo "$pc_out" | tail -20 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! grep -q 'plugin install' "$pc_claude_log"; then
+    fail "[check-pack-install] the post-migration install never reached the plugin install step (it exited 0 without doing the work)"
+    return 1
+  fi
+  echo "[check-pack-install] pre-cut host lifecycle pass (REFUSE → installed migrate --drop-parentage with original bytes in the backup → non-V3=0 → install-meta-bridge PASSES)"
+
   # A dev-only gate has NO compiled twin by design. Under an installed package run_ts must
   # REFUSE it with a legible message — never fall back to raw .ts (that just re-raises the
   # fence error) and never exit 0 (a silent no-op would let CI "pass" a gate it never ran).
@@ -3196,7 +3401,23 @@ JS
     echo "$devgate_out" | tail -6 | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] dev-only gate refusal pass (installed package refuses check-* legibly, no raw-.ts fallback, no silent exit 0)"
+  # Same rule, different mechanism. check-upgrade-gate is a SHELL gate, so run_ts
+  # never sees it — `scripts/` ships whole and the dispatch would happily run it
+  # from under node_modules, where its fixtures deliberately do not exist. Without
+  # the script's own guard it would die on a missing fixture path instead of
+  # saying it is dev-clone-only, which is hard rule 10 failing quietly. Drive it.
+  local shgate_out shgate_rc=0
+  shgate_out=$(HOME="$npmhome" XDG_DATA_HOME="$op_xdg_data" XDG_STATE_HOME="$op_xdg_state" XDG_CACHE_HOME="$op_xdg_cache" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" check-upgrade-gate 2>&1) || shgate_rc=$?
+  if [ "$shgate_rc" -eq 0 ]; then
+    fail "[check-pack-install] the shell-side dev-only gate (check-upgrade-gate) exited 0 from an installed package — it cannot have run"
+    return 1
+  fi
+  if ! printf '%s' "$shgate_out" | grep -q 'dev-clone-only surface'; then
+    fail "[check-pack-install] check-upgrade-gate under an installed package did not REFUSE as dev-clone-only (it failed some other way — probably on the fixtures the tarball deliberately omits):"
+    echo "$shgate_out" | tail -6 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] dev-only gate refusal pass (installed package refuses check-* legibly via run_ts, and the shell-side check-upgrade-gate refuses on its own guard; no raw-.ts fallback, no silent exit 0)"
 
   # 0.12.4 — installed STORE-DOCTOR regression. meta-bridge-doctor.sh's full store
   # scan runs the prebuilt dist JS when it lives under node_modules (strip-types
@@ -3432,6 +3653,14 @@ setup_all() {
   echo "[setup] project: $project_dir"
   echo "[setup] scope:   entwurf v2 package + detected native-harness bridges + pi adapter"
   echo "[setup] verification: v2 install smoke (entwurf-bridge; LIVE substrate = release-gate)"
+
+  # Pre-cut store gate FIRST — ahead of pnpm install, sync_auth (which creates
+  # and rewrites ~/.pi/agent/auth.json) and every settings writer below. On an
+  # existing development host this is the only step standing between a `git pull`
+  # of this cut and a V3-only activation over a v1/v2 store; putting it inside
+  # install_local_package would already be one auth.json write too late. The
+  # migrate CLI imports node builtins only, so it runs before dependencies exist.
+  preflight_v3_store setup
 
   (cd "$REPO_DIR" && pnpm install --frozen-lockfile)
   sync_auth
@@ -4492,6 +4721,13 @@ case "$cmd" in
     ;;
   check-acp-carrier-augment)
     check_acp_carrier_augment
+    ;;
+  check-upgrade-gate)
+    # SOURCE cell of the three-cell upgrade proof (#50 M1 / #51): an existing
+    # development host that already carries a pre-cut store must be refused
+    # BEFORE any write, told which verb fixes it, and then succeed on the retry.
+    # Hermetic (mkdtemp worlds + the store env seam); no model, no network.
+    (cd "$REPO_DIR" && bash scripts/check-upgrade-gate.sh "$@")
     ;;
   check-pack)
     check_pack
