@@ -6,7 +6,7 @@
 
 ## NOW (2026-07-24 오전 갱신)
 
-- Current: **세 문장 목표 ①②③ 전부 코드로 성립 + C4 교차 검수 2라운드 완료(승인, 되돌림 0) + 결함 9건 전항 반영.** 총 **25커밋** push 대기. **GPT 검수로 넘길 준비 완료 — 알려진 미해결 결함 0건.**
+- Current: **세 문장 목표 ①②③ 전부 코드로 성립 + C4 교차 검수 2라운드 완료(승인, 되돌림 0) + 결함 9건 전항 반영.** 총 **26커밋** push 대기. **GPT 검수로 넘길 준비 완료 — C4 축 미해결 결함 0건.** 열려 있는 것은 결함이 아니라 **미착수 레인 하나**: M1(아래 §6 「오늘의 실상태」 — 모든 거부 표면이 지목하는 `meta-bridge-migrate-v3`가 아직 dispatch 없는 예약 이름이다).
 - **C4 교차 검수 R1 (오푸스, GLG 위임 headless 세션 — 보고서 `/tmp/entwurf-c4-review/report.md`)**: 독립 full check EXIT=0(2332 단언) + **변이 8종을 스크래치 트리에 심어 게이트 자기충족 검증 — 7종 RED**(A1 부활·sessions 부활·익명 기본 복귀·REQUIRE 재성장·M1 명명 제거·wantsReply 회귀·folding 제거), 라이브 로그 내부 대조로 aggregate가 C4 트리에서 돌았음 확인. 판단 기록 3건 전부 동의. 뚫린 1종(hatch 봉투 replyable:true를 아무 게이트도 못 잡음)이 F3. → 결함 6건(F1~F6).
 - **R1 수선 (페블)**: `e906f8f` F1/F2/F4/F6 — README 발신 정책 4곳+hatch 문서화+Codex 절, run.sh usage·주석 5곳, ROADMAP 원장 3곳, provider doc + **AGENTS 승격 2건**(판단① self/peers 경계, "무효화된 문장 찾기" 규율+대상 목록). `f757a33` F3/F5 — D12에 `(external, non-replyable)` 단언+`replyable —` 부정 단언, 감산 잔재 2건 결합 삭제, **biome `noUnusedImports`=error(결합 규칙 첫 기계 backstop)**.
 - **검수 R2 + 수선 (오푸스, 같은 세션)**: 수선 후 full check EXIT=0(2328 단언 — 회계 일치: `shouldListAsLive` 동반 삭제 −5, 신설 D12 +1). **변이 재실행 3종**: R1에서 유일하게 뚫렸던 `replyable:true`가 이제 D12로 RED, 미사용 import 재도입이 `biome check` EXIT=1, `noUnreachable`도 여전히 RED(**그룹 오버라이드가 나머지 recommended 규칙을 끄지 않았음을 확인** — 껐다면 backstop을 얻으며 lint를 약화시킨 셈). F1~F6 전항 확인. 새 결함 3건(G1~G3)을 오푸스가 직접 수선 → 이 커밋.
@@ -91,6 +91,7 @@ main 승격은 **당분간 보류**(GLG 2026-07-23) — 브랜치에서 C3 → C
 
    **cut 순서**: ① F2 wantsReply → ② dispatch rail(taxonomy `record-less-socket` 신설 + `socket-only-no-resume-authority` 삭제 + A1 narrow/ResumePolicy 삭제) → ③ facts/listing(socketOnly→진단 강등, sessions/controlDir/enrich/`/entwurf-sessions` 삭제) → ④ 발신 신원 기본 뒤집기(installer/doctor/oracle/컨테이너 게이트 동반 재저작; install 표면이라 push 전 check-pack-install + check-install-container 로컬 실측).
 6. **M1 + H7 레인 (라이브 cutover)**: M1 operator command(backup `meta-sessions.v3-migration-backup-<ts>/` → migrate → verify non-V3=0 → restore/rollback 증명, fixture: V1/V3-already/malformed/stray-key/mismatch/half-migrated; duplicate는 파일명=gardenId 구조상 불가라 제외). 173+ record 라이브 전환: quiesce(설치본 v2 writer가 계속 민팅 중 — writer 정지 순서 포함 runbook 필수) → backup → M1 → non-V3=0 → 새 런타임. self-host blackout 예상 — cut 직전 ids/HEAD/patch 고정, 끊긴 동안 GLG 수동 릴레이, 양방향 delivery 복구 전 다음 cut 금지. **방아쇠는 GLG.**
+   - **오늘의 실상태 (오푸스 실측 2026-07-24)**: `M1_MIGRATE_COMMAND`(`./run.sh meta-bridge-migrate-v3 migrate`)는 **이름만 예약돼 있고 `run.sh`에 dispatch case가 없다.** 지금 그 명령을 치면 run.sh 전체 usage를 뱉고 EXIT=1 — 친 명령이 왜 없는지는 한 줄도 안 나온다. C1이 이름을 먼저 예약한 건 F7/F10 수선이 모든 거부 표면의 문구를 한 번에 authoring 할 수 있게 한 옳은 순서였지만, **그 결과 v2 store 운영자에게 주는 처방이 오늘은 dangling name이다**(peers/self/v2/inbox/birth/store-doctor 전 표면 공통). M1 레인의 첫 산출물이 이걸 닫는다. 레인을 더 미룰 거면 최소한 예약된 이름이 **자기 이유를 대며** 거부하게 만드는 3줄 dispatch가 중간 처방 — 다만 그건 M1 표면 설계에 속하므로 GLG 판단.
 
 커밋 규율: 각 커밋은 삭제 + 게이트 재저작 + GREEN이 한 몸. RED는 커밋하지 않는다. 정상 라우팅의 새 dual-authority 금지.
 
