@@ -2117,7 +2117,7 @@ check_acp_provider_surface() {
 check_acp_sdk_surface() {
   # Deterministic gate for the S2a ACP SDK dependency surface. Pins the three
   # ACP runtime deps to the current oracle versions (@agentclientprotocol/sdk
-  # 1.1.0 + claude-agent-acp 0.54.1 + @anthropic-ai/sdk 0.100.1), locks the
+  # 1.3.0 + claude-agent-acp 0.61.0 + @anthropic-ai/sdk 0.100.1), locks the
   # peer-resolution that keeps claude-agent-sdk satisfiable (0.100.1, not the
   # stale 0.91.1), asserts the wire SDK still value-exports the symbols the raw
   # turn needs (silent-rename gate), and forbids any source-level anthropic SDK

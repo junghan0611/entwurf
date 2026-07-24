@@ -259,7 +259,7 @@ model 없음, pi backend는 birth에 transcript 미확정. `recordUpdatedAt` = r
   명령이 #50 C2에서 삭제되며 대상을 잃었고, `entwurf.ts` source guard refinement는 v1 본체가 0.12
   cutover에서 제거되며 같이 사라졌다.
 - **Dep bump(별도 트랙):** claude-agent-acp / ACP SDK bump는 `check-acp-sdk-surface`와 raw LIVE로 잠근다.
-  0.12.3 준비선은 claude-agent-acp 0.54.1 / sdk 1.1.0이며 model forcing은 `session/set_config_option(configId="model")`.
+  현재 준비선은 claude-agent-acp 0.61.0 / sdk 1.3.0이며 model forcing은 `session/set_config_option(configId="model")`.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.
