@@ -29,7 +29,7 @@
 
 import { type FactList, isNonPiGardenIdSocketConflict, resolveFactList } from "./entwurf-facts.ts";
 import { isLivenessSupported } from "./entwurf-v2-contract.ts";
-import { listAllMetaIdentities, M1_MIGRATE_COMMAND, type MetaBackendV2 } from "./meta-session.ts";
+import { listAllMetaIdentities, M1_PRESCRIPTION, type MetaBackendV2 } from "./meta-session.ts";
 import { type SocketScanDeps, scanSocketProbes } from "./socket-discovery.ts";
 import type { SocketLiveness } from "./socket-probe.ts";
 
@@ -59,7 +59,7 @@ export function recordLessSocketMessage(liveness: SocketLiveness): string {
 			return (
 				"a LIVE control socket no meta-record claims — not an addressable citizen (the record is the " +
 				"sole address authority). Restart the pre-record-era resident under the current runtime so " +
-				`session_start births its record, or migrate a pre-cut store with \`${M1_MIGRATE_COMMAND}\`.`
+				`session_start births its record, or migrate a pre-cut store with ${M1_PRESCRIPTION}.`
 			);
 		case "dead":
 			return (

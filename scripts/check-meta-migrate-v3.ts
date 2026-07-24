@@ -296,6 +296,76 @@ const s1 = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
 	}
 }
 
+// ── S13 (M3): an unreadable entry is a problem, never an uncaught crash ──────
+{
+	const DIR_ENTRY = "20260312T000000-eeee12.meta.json";
+	const w = makeWorld({ [`${V2_GID}.meta.json`]: v2Body() });
+	fs.mkdirSync(path.join(w.store, DIR_ENTRY));
+	const env = { store: w.store, mailbox: w.mailbox };
+	const mig = runCli(["migrate"], env);
+	ok(
+		"S13 a directory-shaped .meta.json is classified `unreadable` and refused (no uncaught crash)",
+		mig.status === 1 &&
+			mig.stderr.includes("unreadable") &&
+			mig.stderr.includes(DIR_ENTRY) &&
+			mig.stderr.includes("no backup taken"),
+		mig.stdout + mig.stderr,
+	);
+	ok(
+		"S13 the refusal wrote nothing (v2 sibling byte-identical, no backup dir)",
+		backups(w).length === 0 && fs.readFileSync(path.join(w.store, `${V2_GID}.meta.json`), "utf8") === v2Body(),
+	);
+	const ver = runCli(["verify"], env);
+	ok(
+		"S13 verify reports the same unreadable entry read-only",
+		ver.status === 1 && ver.stderr.includes("unreadable") && ver.stderr.includes(DIR_ENTRY),
+		ver.stdout + ver.stderr,
+	);
+}
+
+// ── S14 (M2): a crash AFTER the backup prints the rollback prescription ──────
+{
+	const w = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
+	// Plant the citizen's mailbox path as a regular FILE: the receipts migration's
+	// mkdir fails AFTER the backup was taken — the exact window M2 covers. A file
+	// blocker (not chmod) so the scenario holds even when the gate runs as root.
+	fs.writeFileSync(path.join(w.mailbox, V1_GID), "not a directory");
+	const env = { store: w.store, mailbox: w.mailbox };
+	const mig = runCli(["migrate"], env);
+	const b = backups(w);
+	ok(
+		"S14 a mid-write crash exits 1 and prints the restore prescription with the backup path",
+		mig.status === 1 &&
+			b.length === 1 &&
+			mig.stderr.includes("FAIL mid-migration") &&
+			mig.stderr.includes(`restore ${path.join(w.root, b[0] as string)}`),
+		mig.stdout + mig.stderr,
+	);
+	ok(
+		"S14 the prescription never swallows the cause (the fs error is still printed)",
+		mig.stderr.includes("EEXIST") || mig.stderr.includes("ENOTDIR"),
+		mig.stderr,
+	);
+	ok(
+		"S14 crash-order held: the record is still v1 (receipts migrate before the record write)",
+		fs.readFileSync(path.join(w.store, `${V1_GID}.meta.json`), "utf8") === V1_BODY,
+	);
+	// The printed prescription actually works: clear the blocker, restore, re-run.
+	fs.rmSync(path.join(w.mailbox, V1_GID));
+	const backupA = path.join(w.root, b[0] as string);
+	const res = runCli(["restore", backupA], env);
+	ok("S14 the prescribed restore succeeds once the cause is cleared", res.status === 0, res.stdout + res.stderr);
+	// Drop the consumed backup before the re-run: stamp() has second resolution,
+	// and a same-second re-run must not trip the backup-exists refusal.
+	fs.rmSync(backupA, { recursive: true, force: true });
+	const rerun = runCli(["migrate"], env);
+	ok(
+		"S14 the re-run completes the interrupted migration (v1→v3 1)",
+		rerun.status === 0 && rerun.stdout.includes("v1→v3 1"),
+		rerun.stdout + rerun.stderr,
+	);
+}
+
 // ── S8: parentage disposition — refuse without the flag, loud drop with it ───
 {
 	const P1 = "20260310T000000-aaaa10";

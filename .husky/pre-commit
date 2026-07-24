@@ -1,21 +1,13 @@
 #!/usr/bin/env sh
 # entwurf pre-commit gate.
 #
-# `pnpm check` already covers the entire static-quality surface:
-#
-#   - biome check .
-#   - tsc --noEmit
-#   - run.sh check-mcp        (mcp normalizer assertions)
-#   - run.sh check-models     (curated codex/claude context windows)
-#   - run.sh check-backends   (launch + meta + overlay assertions)
-#   - run.sh check-registration (per-runtime provider semantics)
-#   - run.sh check-dep-versions (pin drift across package.json/run.sh/README)
-#   - run.sh check-sdk-surface  (every (connection as any) cast in acp-bridge.ts annotated SDK_CAST_OK/DEBT)
-#
-# That is the single source of truth for "does this commit hold the bridge's
-# invariants". The hook just wires it in. Anything beyond this — runtime
-# smoke, dual-backend interview, resume continuity — stays manual; entwurf
-# is a daily-driver bridge and those gates need a real ACP subprocess.
+# `pnpm check` is the entire static-quality surface: biome check, the 3-config
+# tsc fence, and every deterministic check-*/smoke-* gate wired into
+# package.json's `check` chain (run.sh usage documents each one). That chain is
+# the SSOT — this comment deliberately does NOT enumerate it, because a
+# hand-copied list here rotted once already (it named five 0.4-era gates that
+# no longer exist). The hook just wires the SSOT in. Anything beyond it —
+# LIVE smokes, release-gate — stays explicit; those need real backends.
 #
 # Bypass with `git commit --no-verify` only when you genuinely understand
 # why the gate complained — the typical answer is "fix the underlying

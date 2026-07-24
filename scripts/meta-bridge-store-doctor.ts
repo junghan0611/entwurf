@@ -31,8 +31,9 @@ for (const filename of fs.readdirSync(dir).sort()) {
 	scanned += 1;
 	const file = path.join(dir, filename);
 	try {
-		// dual-read (3D-4 commit1): parseMetaIdentity reads v1 AND v2 and normalizes,
-		// so doctor's gardenId/nativeSessionId checks survive the v2 cut.
+		// V3-only (#50 hard cut): parseMetaIdentity reads schemaVersion 3 alone; a
+		// pre-cut v1/v2 record fails loud here naming the M1 migrate command —
+		// exactly the per-file prescription this scan's report wants.
 		const id = parseMetaIdentity(fs.readFileSync(file, "utf8"));
 		const expectedFilename = `${id.gardenId}.meta.json`;
 		if (filename !== expectedFilename) {

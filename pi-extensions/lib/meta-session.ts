@@ -278,12 +278,27 @@ export function requireNullableGardenId(value: unknown, field: string): string |
  */
 export const M1_MIGRATE_COMMAND = "./run.sh meta-bridge-migrate-v3 migrate";
 
+/**
+ * The installed-package form of the same verb: the npm bin `entwurf` IS run.sh,
+ * so both strings dispatch the identical surface. Named separately because the
+ * hosts that actually meet a pre-cut store are INSTALLED hosts with no checkout
+ * — a `./run.sh …` prescription is not typeable there (M4).
+ */
+export const M1_MIGRATE_COMMAND_INSTALLED = "entwurf meta-bridge-migrate-v3 migrate";
+
+/**
+ * The one prescription every rejection surface prints — names BOTH invocation
+ * forms so the fix is typeable on a dev clone AND an installed host. Extends
+ * (never replaces) the `M1_MIGRATE_COMMAND` substring the gates assert.
+ */
+export const M1_PRESCRIPTION = `\`${M1_MIGRATE_COMMAND}\` (from an installed package: \`${M1_MIGRATE_COMMAND_INSTALLED}\`)`;
+
 /** The uniform "this record predates the v3 hard cut" error, naming the M1 fix. */
 function nonV3RecordMessage(version: unknown): string {
 	return (
 		`meta-record "schemaVersion" must be ${META_SCHEMA_VERSION_V3} (got ${describe(version)}). ` +
 		`v1/v2 records predate the #50 hard cut and normal routing is v3-only — ` +
-		`migrate the store with \`${M1_MIGRATE_COMMAND}\` (the M1 operator command).`
+		`migrate the store with ${M1_PRESCRIPTION} — the M1 operator command.`
 	);
 }
 
@@ -331,7 +346,7 @@ export function parseMetaRecordV3(json: string): MetaIdentity {
 		throw new MetaRecordError(
 			`v3 meta-record carries unexpected key(s) ${stray.map((k) => `"${k}"`).join(", ")} ` +
 				`(allowed: ${META_IDENTITY_KEYS.join(", ")}). A pre-cut v2 record still carrying ` +
-				`parentGardenId/isEntwurf must be migrated with \`${M1_MIGRATE_COMMAND}\`, never read directly.`,
+				`parentGardenId/isEntwurf must be migrated with ${M1_PRESCRIPTION}, never read directly.`,
 		);
 	}
 	return {
@@ -1257,7 +1272,7 @@ export function upsertMetaSession(opts: UpsertMetaSessionOptions): UpsertMetaSes
 	return { action: decision.action, record: decision.record, dir, path: file };
 }
 
-/** tmp-file + rename so a crash never leaves a half-written record (v2 identity write). */
+/** tmp-file + rename so a crash never leaves a half-written record (v3 identity write). */
 function atomicWriteIdentity(file: string, identity: MetaIdentity): void {
 	const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
 	fs.writeFileSync(tmp, serializeMetaIdentity(identity), { mode: 0o600 });
@@ -1640,9 +1655,12 @@ export interface V1DeliveryReceipts {
 }
 
 /**
- * Migrate a v1 record's delivery receipts into the mailbox state store (3D-4),
- * called by upsert BEFORE it rewrites a v1 file as v2 so a pre-3D-2 receipt is not
- * lost. Per-field merge, STATE WINS: a v1 timestamp only fills a state field that
+ * Migrate a v1 record's delivery receipts into the mailbox state store (3D-4).
+ * The live-upsert caller died with the #50 hard cut (a v1 file can no longer
+ * reach attach); the sole remaining caller is the M1 operator command
+ * (scripts/meta-bridge-migrate-v3.ts), which runs this BEFORE rewriting a v1
+ * file as v3 so a pre-3D-2 receipt is not lost.
+ * Per-field merge, STATE WINS: a v1 timestamp only fills a state field that
  * is still null (`state[f] ?? v1[f]`); a state value already there is never
  * overwritten. ONLY the 3 timestamps move — wakeMode/deliveryLevel are capability
  * (registry), and a stray key would trip the receipt-state strict keyset (H2).

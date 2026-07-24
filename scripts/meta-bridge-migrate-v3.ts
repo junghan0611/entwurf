@@ -22,7 +22,10 @@
  *     rollback: move the current store aside to `<store>.pre-restore-<ts>/`
  *     (nothing is destroyed), then copy the M1 backup back. Only
  *     `.v3-migration-backup-` dirs are accepted — restoring an arbitrary dir
- *     over the address authority is a manual `cp`, not a verb.
+ *     over the address authority is a manual `cp`, not a verb. Scope is the
+ *     STORE only: mailbox receipt state is deliberately NOT rolled back — the
+ *     v1 receipt migration is state-wins and idempotent, so a post-restore
+ *     re-run refills the same null fields and never overwrites a value.
  *
  * Field mapping (information-preserving; the backup keeps original bytes):
  *   v1 → v3: delivery receipts migrate FIRST into mailbox state
@@ -58,17 +61,22 @@ import {
 	defaultMetaSessionsDir,
 	describe,
 	M1_MIGRATE_COMMAND,
+	M1_MIGRATE_COMMAND_INSTALLED,
 	type MetaIdentity,
 	migrateV1DeliveryReceipts,
 	parseMetaRecordV3,
 	serializeMetaIdentity,
 } from "../pi-extensions/lib/meta-session.ts";
 
+/** The restore verb spelled from the migrate SSOT — every rollback prescription prints this. */
+const M1_RESTORE_COMMAND = `${M1_MIGRATE_COMMAND.replace(/ migrate$/, "")} restore`;
+
 function usage(code: number): never {
 	console.error(
 		[
 			"usage: node --experimental-strip-types scripts/meta-bridge-migrate-v3.ts <verb> [args]",
-			`       (operators: \`${M1_MIGRATE_COMMAND.replace(/ migrate$/, "")} <verb>\` — the M1 one-shot migration)`,
+			`       (dev clone: \`${M1_MIGRATE_COMMAND.replace(/ migrate$/, "")} <verb>\` · installed package: ` +
+				`\`${M1_MIGRATE_COMMAND_INSTALLED.replace(/ migrate$/, "")} <verb>\` — the M1 one-shot migration)`,
 			"",
 			"  migrate [--drop-parentage]  backup the store, rewrite every v1/v2 record as v3, re-verify non-V3=0.",
 			"                              Refuses BEFORE any write: a store with malformed/drifted/duplicate records,",
@@ -132,7 +140,17 @@ function classifyStore(dir: string): Classification {
 
 	for (const filename of fs.readdirSync(dir).sort()) {
 		if (!filename.endsWith(".meta.json")) continue;
-		const raw = fs.readFileSync(path.join(dir, filename), "utf8");
+		// The read itself is classification input, not a precondition: a
+		// directory-shaped entry (EISDIR), a dangling symlink, an unreadable file
+		// or a raced-away one is a PROBLEM this surface reports and refuses over —
+		// never an uncaught crash (M3: "classify → REFUSE" has no crash branch).
+		let raw: string;
+		try {
+			raw = fs.readFileSync(path.join(dir, filename), "utf8");
+		} catch (err) {
+			problems.push({ filename, message: `unreadable: ${err instanceof Error ? err.message : String(err)}` });
+			continue;
+		}
 		let body: unknown;
 		try {
 			body = JSON.parse(raw);
@@ -296,45 +314,58 @@ function cmdMigrate(storeDir: string, mailboxDir: string, dropParentage: boolean
 	fs.cpSync(storeDir, backupDir, { recursive: true });
 	console.log(`backup: ${backupDir} (${records.length} record(s))`);
 
+	// Once writing starts, EVERY exit path must name the rollback (M2): a raw
+	// stack trace mid-blackout with no prescription is exactly when the operator
+	// needs one most. The catch re-prints the error and the restore command; it
+	// never swallows the cause.
 	let receiptsMigrated = 0;
-	for (const r of preCut) {
-		if (r.v1) {
-			// Crash-order: receipts BEFORE the record rewrite. If we die between the
-			// two the record is still v1 and the re-run re-migrates (state-wins merge
-			// is idempotent) — the reverse order would lose the receipt permanently.
-			const state = migrateV1DeliveryReceipts({ gardenId: r.v1.gardenId, delivery: r.v1.delivery, mailboxDir });
-			if (state !== null) {
-				receiptsMigrated += 1;
-				console.log(`  receipts → mailbox state: ${r.v1.gardenId}`);
+	try {
+		for (const r of preCut) {
+			if (r.v1) {
+				// Crash-order: receipts BEFORE the record rewrite. If we die between the
+				// two the record is still v1 and the re-run re-migrates (state-wins merge
+				// is idempotent) — the reverse order would lose the receipt permanently.
+				const state = migrateV1DeliveryReceipts({ gardenId: r.v1.gardenId, delivery: r.v1.delivery, mailboxDir });
+				if (state !== null) {
+					receiptsMigrated += 1;
+					console.log(`  receipts → mailbox state: ${r.v1.gardenId}`);
+				}
 			}
+			if (r.v2 && (r.v2.parentGardenId !== null || r.v2.isEntwurf === true)) {
+				console.log(
+					`  dropped ${r.filename}: parentGardenId=${r.v2.parentGardenId === null ? "null" : `"${r.v2.parentGardenId}"`} isEntwurf=${r.v2.isEntwurf} (preserved in backup)`,
+				);
+			}
+			atomicWrite(path.join(storeDir, r.filename), serializeMetaIdentity(toV3(r)));
 		}
-		if (r.v2 && (r.v2.parentGardenId !== null || r.v2.isEntwurf === true)) {
-			console.log(
-				`  dropped ${r.filename}: parentGardenId=${r.v2.parentGardenId === null ? "null" : `"${r.v2.parentGardenId}"`} isEntwurf=${r.v2.isEntwurf} (preserved in backup)`,
-			);
-		}
-		atomicWrite(path.join(storeDir, r.filename), serializeMetaIdentity(toV3(r)));
-	}
 
-	// Verify from DISK, not from memory — the certification is what a fresh
-	// reader sees, and its failure names the rollback path.
-	const after = classifyStore(storeDir);
-	const nonV3 = after.counts.v1 + after.counts.v2 + after.problems.length;
-	if (nonV3 > 0) {
-		printProblems(after.problems);
+		// Verify from DISK, not from memory — the certification is what a fresh
+		// reader sees, and its failure names the rollback path.
+		const after = classifyStore(storeDir);
+		const nonV3 = after.counts.v1 + after.counts.v2 + after.problems.length;
+		if (nonV3 > 0) {
+			printProblems(after.problems);
+			console.error(
+				`verify FAIL after migration: ${after.counts.v1} v1 / ${after.counts.v2} v2 / ${after.problems.length} problem(s) remain. ` +
+					`The backup is intact — roll back with \`${M1_RESTORE_COMMAND} ${backupDir}\`.`,
+			);
+			return 1;
+		}
+		console.log(
+			`migrated: v1→v3 ${counts.v1}, v2→v3 ${counts.v2}, kept v3 ${counts.v3}` +
+				(receiptsMigrated > 0 ? ` (${receiptsMigrated} v1 receipt set(s) → mailbox state)` : ""),
+		);
+		console.log(`verify: non-V3=0 (${after.counts.v3} record(s))`);
+		console.log(`rollback (if needed): ${M1_RESTORE_COMMAND} ${backupDir}`);
+		return 0;
+	} catch (err) {
+		console.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
 		console.error(
-			`verify FAIL after migration: ${after.counts.v1} v1 / ${after.counts.v2} v2 / ${after.problems.length} problem(s) remain. ` +
-				`The backup is intact — roll back with \`${M1_MIGRATE_COMMAND.replace(/ migrate$/, "")} restore ${backupDir}\`.`,
+			`FAIL mid-migration: the store may hold a mix of migrated and pre-cut records. ` +
+				`The backup is intact — roll back with \`${M1_RESTORE_COMMAND} ${backupDir}\`, fix the cause above, re-run.`,
 		);
 		return 1;
 	}
-	console.log(
-		`migrated: v1→v3 ${counts.v1}, v2→v3 ${counts.v2}, kept v3 ${counts.v3}` +
-			(receiptsMigrated > 0 ? ` (${receiptsMigrated} v1 receipt set(s) → mailbox state)` : ""),
-	);
-	console.log(`verify: non-V3=0 (${after.counts.v3} record(s))`);
-	console.log(`rollback (if needed): ${M1_MIGRATE_COMMAND.replace(/ migrate$/, "")} restore ${backupDir}`);
-	return 0;
 }
 
 function cmdRestore(storeDir: string, backupArg: string): number {
@@ -354,8 +385,9 @@ function cmdRestore(storeDir: string, backupArg: string): number {
 		console.error(`REFUSE: backup dir IS the store dir: ${backupDir}`);
 		return 1;
 	}
+	let asideDir: string | null = null;
 	if (fs.existsSync(storeDir)) {
-		const asideDir = `${storeDir}.pre-restore-${stamp()}`;
+		asideDir = `${storeDir}.pre-restore-${stamp()}`;
 		if (fs.existsSync(asideDir)) {
 			console.error(`REFUSE: aside dir already exists: ${asideDir} — wait a second and re-run.`);
 			return 1;
@@ -363,7 +395,21 @@ function cmdRestore(storeDir: string, backupArg: string): number {
 		fs.renameSync(storeDir, asideDir);
 		console.log(`current store moved aside (nothing destroyed): ${asideDir}`);
 	}
-	fs.cpSync(backupDir, storeDir, { recursive: true });
+	// Same M2 contract as migrate: once the store moved aside, every exit path
+	// must say where the data lives — the aside holds the replaced store, the
+	// backup is untouched, so a failed copy destroys nothing.
+	try {
+		fs.cpSync(backupDir, storeDir, { recursive: true });
+	} catch (err) {
+		console.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
+		console.error(
+			`FAIL mid-restore: the copy from the backup did not complete. Nothing is lost — ` +
+				`the backup is untouched (${backupDir})` +
+				(asideDir === null ? "." : ` and the replaced store sits at ${asideDir}.`) +
+				" Fix the cause above and re-run the same restore.",
+		);
+		return 1;
+	}
 	const restored = fs.readdirSync(storeDir).filter((f) => f.endsWith(".meta.json")).length;
 	console.log(`restored: ${backupDir} → ${storeDir} (${restored} record(s); the backup stays intact)`);
 	return 0;

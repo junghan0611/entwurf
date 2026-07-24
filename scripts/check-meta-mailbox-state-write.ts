@@ -15,8 +15,8 @@
  *    (state.json never created) — invariant ⑥;
  *  - a state-store drift makes the read throw fail-loud (partial failure surfaces).
  *
- * Scope is 3D-4 ONLY. The record is written as v2 by upsertMetaSession; enqueue/read
- * read identity (dual-read) and mutate only the mailbox state.
+ * Scope is 3D-4 ONLY. The record is written as v3 by upsertMetaSession (#50 hard
+ * cut); enqueue/read read the V3-only identity and mutate only the mailbox state.
  */
 
 import assert from "node:assert/strict";
