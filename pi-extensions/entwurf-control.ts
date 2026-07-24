@@ -1025,11 +1025,16 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	pi.registerMessageRenderer(SESSION_MESSAGE_TYPE, renderSessionMessage);
-	// Layer B (ACP path) sender-side UI box. Registered unconditionally — even
-	// in a session that is not exposing a control socket (no `--entwurf-control`),
-	// an ACP backend may still use the MCP `entwurf_v2` to message OTHER
-	// sessions. The renderer is needed here for the [entwurf sent →] box to
-	// appear in this session's transcript when it sends.
+	// Layer B (ACP path) sender-side UI box. Registered unconditionally because
+	// renderer registration happens at extension load, BEFORE we know whether
+	// this session ends up with a routable identity: `updateSessionEnv` only
+	// publishes PI_SESSION_ID once a garden id exists, and clears it otherwise.
+	// A session without `--entwurf-control` therefore does NOT send — a bundled
+	// `entwurf_v2` sender call there fails loud on the missing envelope (the
+	// documented provider-vs-citizen boundary), and this renderer simply never
+	// fires. Registering it up front keeps one registration path instead of a
+	// conditional seam, and guarantees the [entwurf sent →] box exists for every
+	// session that DOES send.
 	pi.registerMessageRenderer(ENTWURF_SENT_MESSAGE_TYPE, renderSentMessage);
 
 	if (shouldRegisterControlTools(pi)) {

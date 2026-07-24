@@ -50,9 +50,11 @@ ok(
 );
 ok("shipped registry includes the pi backend", reg.backends.pi !== undefined);
 
-// 2. drift guard — for the three backends the live const still owns, the JSON
-//    must agree field-for-field (so the new source cannot silently diverge from
-//    META_BACKEND_DESCRIPTORS before 3D cuts the live consumer over).
+// 2. drift guard — the JSON must agree field-for-field with the const for the
+//    three backends it still describes. 3D-3 already cut the live consumer over
+//    to the registry, so this is no longer a pre-cut-over guard: the const now
+//    exists ONLY as this reference, and the assertion is what keeps the live
+//    source from silently diverging from the shape it was cut over from.
 for (const backend of ["claude-code", "antigravity", "codex"] as const) {
 	const live = META_BACKEND_DESCRIPTORS[backend];
 	const cap = reg.backends[backend];

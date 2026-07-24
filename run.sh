@@ -93,7 +93,7 @@ Usage:
   ./run.sh check-meta-receiver-marker # deterministic gate (SE-2): receiver marker round-trip/start-key/provenance, UserPromptSubmit cannot mint presence, reader does not gate on record existence — marker SEMANTICS only; launch topology moved to check-hook-launch-topology
   ./run.sh check-hook-launch-topology # #51 gate 1: shipped hooks.json is exec form through hook-launch.sh, launcher is loud on an empty argv (older Claude's silent args drop), exec preserves the pid so the hook's parent is Claude, and a space/$/backtick plugin path survives as one argv element
   ./run.sh check-meta-identity-consumers # deterministic gate (#50 hard cut): V3-only consumer seam — read/scan by body, pre-cut skipped via onSkip, G1 duplicate ambiguity throw, no API
-  ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const), slot stays (3D-4), no API
+  ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const); the record.delivery slot 3D-3 preserved was deleted by 3D-4, no API
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
   ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
   ./run.sh check-entwurf-v2-contract   # deterministic gate (0.11 Stage 0 step 4-pre, 동결결정 10 + Fable R1-R5): FROZEN entwurf_v2 contract — R1 backend liveness domain (pi only; claude/codex/agy=unsupported, not folded), 6-cell intent×liveness table (single verdict, 2 allow/4 reject), N1 indeterminate-no-spawn, Q2 owned-live-no-autosend, R3 table↔receipt round-trip, R5 taxonomy, schema↔types drift; pure, no API
@@ -158,7 +158,7 @@ Usage:
   ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
   ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
-  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.80.x peers + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands)
+  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (0.82.x) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to entwurf alias
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
@@ -490,22 +490,24 @@ check_meta_v3_record() {
 
 check_mailbox_receipt_state() {
   # Deterministic gate for 0.11 Stage 0 step 3B: the mailbox receipt state
-  # schema + store — the new home for the read-receipt before v2 drops
-  # record.delivery (NEXT.md 고정순서 4). Pure schema round-trip + strict
-  # keyset, then the fs store (stamp → persist → read-back) in a temp mailbox
-  # dir. Schema/store only — no live enqueue/read dual-write (that is 3D). No
-  # backend, no hook, no API.
+  # schema + store — the SOLE home of the read-receipt since 3D-4 deleted
+  # record.delivery with the rest of delivery{} (#50 is V3-only, and v3 never
+  # had the field). Pure schema round-trip + strict keyset, then the fs store
+  # (stamp → persist → read-back) in a temp mailbox dir. Schema/store only —
+  # the live enqueue/read path landed in 3D-4 and is gated by
+  # check-meta-mailbox-state-write. No backend, no hook, no API.
   run_ts scripts/check-mailbox-receipt-state.ts
 }
 
 check_entwurf_capabilities() {
   # Deterministic gate for 0.11 Stage 0 step 3C: the backend capability source
-  # (pi/entwurf-capabilities.json) — the new home for wakeMode/deliveryLevel/
-  # nativeIdLabel before v2 drops them from the record (frozen decision 1).
-  # Asserts coverage == META_BACKENDS_V2 (pi included), agreement with the live
-  # META_BACKEND_DESCRIPTORS for the three existing backends (drift guard), and
-  # strict keyset/coverage/field crashes. Parser/gate only — no live routing,
-  # no record/descriptor consumer change (that is 3D). No backend, no API.
+  # (pi/entwurf-capabilities.json) — the SOLE home of wakeMode/deliveryLevel/
+  # nativeIdLabel since 3D-4 dropped delivery{} from the record (frozen decision
+  # 1; v3 never carried it). Asserts coverage == META_BACKENDS_V2 (pi included),
+  # agreement with META_BACKEND_DESCRIPTORS for the three existing backends —
+  # which since the 3D-3 cut-over survives ONLY as that drift-guard reference —
+  # and strict keyset/coverage/field crashes. Parser/gate only — the consumer
+  # seam it feeds is gated by check-meta-capability-source. No backend, no API.
   run_ts scripts/check-entwurf-capabilities.ts
 }
 
@@ -628,8 +630,9 @@ check_meta_capability_source() {
   # Proves the seam is registry-DRIVEN (a doctored registry injection is followed),
   # mint sources delivery metadata through it, the parse drift guard is now
   # registry-sourced, and the cut-over preserves behaviour (registry ≡ const for the
-  # 3 backends). The record.delivery.wakeMode SLOT stays (removal is 3D-4); only the
-  # SOURCE moves. check-entwurf-capabilities still owns the registry ≡ const drift
+  # 3 backends). At 3D-3 only the SOURCE moved and the record.delivery.wakeMode SLOT
+  # still existed; 3D-4 then deleted that slot with the rest of delivery{}, so today
+  # the registry is the sole home. check-entwurf-capabilities still owns the registry ≡ const drift
   # guard. Pure — no fs writes, no backend, no hook, no API.
   run_ts scripts/check-meta-capability-source.ts
 }
@@ -1071,10 +1074,11 @@ smoke_acp_v2_send_live() {
   # PROGRAMMATICALLY (no model in the loop) and smoke-acp-bundled-mcp-live is
   # RECEIVE-only (entwurf_self reads identity, writes no `.msg`). This is the SEND half
   # of "a Claude behind ACP is a garden citizen" — the half GLG hit as missing in real
-  # use on 2026-07-24. MUST, not BEHAVIOR: the model is TOLD to call the tool, so this
-  # is an explicit tool-call capability like the self smoke, not the autonomous
-  # tool-selection question the BEHAVIOR lane owns. Model override:
-  # ENTWURF_ACP_PROVIDER_MODEL.
+  # use on 2026-07-24. MUST, not BEHAVIOR: the model is TOLD which tool to call, so a
+  # failure here is a defect in OUR wiring, not a model preference — which is exactly
+  # what its one measured failure turned out to be (see the MCP-readiness note in the
+  # script header). It was briefly demoted on a misread of that sample and restored
+  # once the transcripts were read. Model override: ENTWURF_ACP_PROVIDER_MODEL.
   #   LIVE=1 ./run.sh smoke-acp-v2-send-live
   run_ts scripts/smoke-acp-v2-send-live.ts
 }
@@ -1360,9 +1364,10 @@ assert.equal(peerTui, piAi,
 
 // peerDependencies must be a CLOSED range (0.11 Stage 0, drift-proofing): the
 // floor tracks the devDep pin so a consumer can't install against a pi lacking
-// the 0.80 public trust exports the bridge imports, AND an upper bound at the
-// next minor stops a fresh install from silently pulling a future pi (0.81+)
-// whose internal export surface has drifted from the one we typecheck against.
+// the public trust exports the bridge imports at the pinned minor, AND an upper
+// bound at the next minor stops a fresh install from silently pulling a future
+// pi (past the declared ceiling — 0.83+ at the current 0.82.0 pin) whose
+// internal export surface has drifted from the one we typecheck against.
 // pi moves its public surface every minor (the 0.79→0.80 getModels→provider-
 // factory churn is exactly this), so an open `>=` floor is exactly how the next
 // installer re-acquires the drift. Expected
@@ -2198,8 +2203,9 @@ check_acp_prompt_builder() {
   # Proves prompt SCOPE follows bootstrapPath: new=full transcript (history
   # carrier), reuse/resume/load=latest user delta (first user after last
   # assistant, SessionStart hook skipped, image marker kept, prior history
-  # excluded so a reuse session is not re-injected its own history). Pure, no
-  # session store yet — locks the builder before S2d wires the reuse paths.
+  # excluded so a reuse session is not re-injected its own history). Pure — it
+  # touches no session store; the store and the reuse paths it feeds landed in
+  # S2d-1b and carry their own gates (check-acp-session-store / -session-reuse).
   section "ACP prompt builder (S2d bootstrapPath prompt scope)"
   run_ts scripts/check-acp-prompt-builder.ts
 }
@@ -2618,9 +2624,10 @@ _check_pack_install_impl() {
   # repo packages with; --ignore-workspace stops it from re-attaching
   # to our pnpm-workspace.yaml; --ignore-scripts blocks the husky
   # prepare hook (and any future install scripts) from running inside
-  # the consumer project. Peer deps are pinned to the 0.80.x release
-  # baseline so the smoke matches the same shape an external pi user
-  # would have after `pi install`.
+  # the consumer project. Peer deps are pinned to the CURRENT pi release
+  # baseline (0.82.x — the pins below are what check-dep-versions binds to
+  # the package.json devDep) so the smoke matches the same shape an external
+  # pi user would have after `pi install`.
   local tmp npm_tmp
   tmp=$(mktemp -d -t entwurf-install-smoke.XXXXXX)
   # Separate tree for the npm-managed regression below: npm install must NOT be
@@ -3744,8 +3751,14 @@ release_gate() {
 
   # BEHAVIOR lane (0.11.0, GLG+GPT+Opus): a SEPARATE advisory counter for
   # model-in-loop gates that probe whether the *model* autonomously selects the
-  # MCP entwurf surface (vs. bypassing via Bash/Terminal/pi-CLI). These gates are
-  # flaky by the model's nature (Claude Sonnet's MCP-vs-Bash choice is
+  # MCP entwurf surface (vs. bypassing via Bash/Terminal/pi-CLI). Scope note
+  # (2026-07-24): a gate that TELLS the model which tool to call does NOT belong
+  # here. That was tried for smoke-acp-v2-send-live on a PASS/PASS/FAIL sample
+  # read as instruction-following flake, and the reading was wrong — the transcript
+  # of both failures shows the model calling the tool and the RUNTIME answering
+  # "No such tool available", i.e. an MCP readiness defect of ours. Advisory is for
+  # what the model chooses, never for what our wiring fails to deliver. These gates
+  # are flaky by the model's nature (Claude Sonnet's MCP-vs-Bash choice is
   # non-deterministic on 0.79.4), so a single flake must NOT block the cut. They
   # are NEVER folded into `failc`/`pass` — exit authority below is `failc` only.
   # Honesty rails: (1) "non-blocking" is NOT "pass" — a BEHAVIOR-FAIL is surfaced

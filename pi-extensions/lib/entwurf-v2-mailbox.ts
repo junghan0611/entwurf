@@ -11,8 +11,9 @@
  * Two consumers, one body:
  *   - the 5c-2a send hand's `deps.sendViaMailbox(plan, lock)` fallback seam
  *     (entwurf-v2-send.ts) — a dead control socket re-resolved into a mailbox plan.
- *   - the future 5d dispatch runner's direct unsupported-citizen fire-and-forget path
- *     (the decider hands back a meta-mailbox plan with a NULL lock).
+ *   - the 5d dispatch runner's direct unsupported-citizen fire-and-forget path
+ *     (the decider hands back a meta-mailbox plan with a NULL lock) — landed, and
+ *     wired in the production runner (entwurf-v2-production.ts).
  * Both call `executeMetaMailboxSend`; the hand reaches it through the async
  * `sendViaMailbox(plan, lock)` adapter the production factory builds.
  *

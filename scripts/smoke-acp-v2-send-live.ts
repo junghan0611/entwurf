@@ -32,6 +32,21 @@
 // The isolated world also keeps the operator's live store and mailbox clean: a
 // smoke that delivers into the real garden would page a human.
 //
+// KNOWN OPEN DEFECT this gate catches — bundled-MCP readiness (2026-07-24). Two
+// independent failures were first read as the model declining an explicit
+// instruction, and the transcripts said otherwise: the model DID call, and the
+// runtime answered `No such tool available: mcp__entwurf-bridge__entwurf_v2` (the
+// sibling smoke-acp-bundled-mcp-live failed the same way in the same aggregate, its
+// model reporting that only Read/Bash/Edit/Write/Skill were exposed). The window is
+// structural: claude-agent-acp 0.61.0's createSession awaits only
+// `initializationResult()`, and this backend prompts right after
+// (acp/backend.ts:718-790) — nothing waits for the configured MCP servers to reach
+// `connected`, though claude-agent-sdk 0.3.217 exposes exactly that via
+// `mcpServerStatus()`. Both observed hits came under heavy concurrent load, which
+// is correlation, not established cause. So this gate stays MUST: its failures are
+// OURS. Until the readiness wait exists, a FAIL here is a real release blocker and
+// must not be re-read as model flakiness.
+//
 // LIVE-only — kept OUT of `pnpm check`; honest skip when LIVE!=1 (skip = CI safety,
 // NOT an acceptance PASS). Model override: ENTWURF_ACP_PROVIDER_MODEL (default sonnet).
 
@@ -236,13 +251,44 @@ async function main(): Promise<void> {
 		ok("the doorbell inbox.signal was poked", existsSync(path.join(boxDir, "inbox.signal")));
 
 		const body = await fsp.readFile(path.join(boxDir, msgs[0] as string), "utf8");
-		ok("the delivered body carries the nonce intact", body.includes(nonce));
-		ok("the landed sender agentId is the ACP model", body.includes(`from:        ${ACP_PROVIDER}/${ACP_MODEL}`));
-		ok("the landed sender session IS the resident's own garden id", body.includes(senderGid));
-		ok("the landed sender is replyable (a peer can answer it)", /\(replyable — reply via entwurf_v2/.test(body));
+
+		// GPT cross-review (2026-07-24): these identity assertions used to be
+		// substring scans over the WHOLE body, which is a false-green hole — the
+		// model can learn its own gid (a bundled `entwurf_self` call) and echo it
+		// into the message PAYLOAD, satisfying every `includes()` even if the
+		// rendered envelope were wrong. The envelope is the thing under test, so
+		// split the body at the renderer's separator and assert the header lines
+		// ANCHORED and the payload EXACTLY. Then a payload can never stand in for
+		// an envelope. Format owner: pi-extensions/lib/meta-mailbox-body.ts.
+		const SEPARATOR = "────────────────────────────────────────";
+		const sepAt = body.indexOf(`\n${SEPARATOR}\n`);
+		ok("the delivered body carries the rendered envelope separator", sepAt !== -1);
+		const header = body.slice(0, sepAt + 1);
+		const payload = body.slice(sepAt + 1 + SEPARATOR.length + 1);
+
+		// ACP_MODEL is operator-overridable (ENTWURF_ACP_PROVIDER_MODEL), so it is
+		// UNTRUSTED regex input: a `.` in a model name would silently become a
+		// wildcard (false green) and a `(` would crash the compile. Escape every
+		// interpolation, including the gid, before it reaches a pattern.
+		const rx = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		ok("the payload is EXACTLY the nonce (no envelope text folded into it)", payload === `${nonce}\n`);
+		ok(
+			"the landed sender agentId is the ACP model (anchored envelope line)",
+			new RegExp(`^ {2}from: {8}${rx(ACP_PROVIDER)}/${rx(ACP_MODEL)} @ \\S`, "m").test(header),
+		);
+		ok(
+			"the landed sender session IS the resident's own garden id, replyable (anchored envelope line)",
+			new RegExp(
+				`^ {2}session: {5}${rx(senderGid)} \\(replyable — reply via entwurf_v2 to this sessionId, intent=fire-and-forget\\)$`,
+				"m",
+			).test(header),
+		);
+		// The gid reached the mailbox through the envelope, not through anything the
+		// model typed: it is never in the prompt, and it must not be in the payload.
+		ok("the sender gid appears ONLY in the envelope, never in the payload", !payload.includes(senderGid));
 		// origin=pi-session renders WITHOUT the "meta-session, " qualifier; a self-fetch
 		// origin would render "(meta-session, replyable…)". Pin the pi-session shape.
-		ok("the landed sender renders as a pi-session, not a meta-session", !body.includes("(meta-session"));
+		ok("the landed sender renders as a pi-session, not a meta-session", !header.includes("(meta-session"));
 	} finally {
 		if (resident) await terminateChild(resident);
 		if (process.env.ENTWURF_KEEP_SMOKE_WORLD === "1") {

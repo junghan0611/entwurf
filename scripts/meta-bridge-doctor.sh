@@ -1066,9 +1066,20 @@ fi
 # records me" is the INSTALLED bundle; a mismatch vs source is a loud FAIL.
 echo
 echo "writer-version parity"
-livewrite_schema() { # $1=meta-session.ts → v2|v1|absent
+livewrite_schema() { # $1=meta-session.<ext> → v3|v2|v1|absent
   [ -f "$1" ] || { echo "absent"; return; }
-  if grep -q "serializeMetaIdentity" "$1"; then echo "v2"; else echo "v1"; fi
+  # THREE-valued, and the order matters. `serializeMetaIdentity` marks the identity
+  # writer, but BOTH v2 and v3 carry it — it is not a schema discriminator. This
+  # returned a flat "v2" for any identity writer, which after #50 made the oracle
+  # print `source: v2` three rows above `store: v1=0 v2=0 v3=N`; returning a flat
+  # "v3" instead would be the mirror lie, labelling a STALE deployed v2 bundle as
+  # current. The actual discriminator is the schema constant the writer mints with,
+  # so ask for it first and fall back to identity-presence only to separate v2 from
+  # the pre-identity v1 writer. A stale-deploy verdict is the whole point of this
+  # section, so it must be able to SAY "v2".
+  if grep -q "META_SCHEMA_VERSION_V3" "$1"; then echo "v3"
+  elif grep -q "serializeMetaIdentity" "$1"; then echo "v2"
+  else echo "v1"; fi
 }
 hash12() { [ -f "$1" ] && sha256sum "$1" | cut -c1-12 || echo "------------"; }
 registry_for_ms() { # $1=bundle meta-session.ts → sibling plugin-root registry path
@@ -1126,19 +1137,22 @@ if [ -f "$ASM_MS" ] && [ "$asm_h" != "$src_h" ]; then
   warn "assembled bundle differs from source ($asm_v vs $src_v) — stale .assembled; install re-assembles it"
 fi
 
-# v2 writer dependency: loadMetaCapabilityRegistry reads entwurf-capabilities.json
-# at runtime. In the bundle layout it must sit at the plugin ROOT (resolved via
-# `../` from lib/). A v2 bundle WITHOUT it throws on every mint/parse — a silent
-# hook break that hash parity alone cannot see (it only hashes meta-session.ts).
-check_registry_dep() { # $1=bundle meta-session.ts  $2=label  $3=registry-path  $4=registry-hash
+# Identity-writer dependency: loadMetaCapabilityRegistry reads
+# entwurf-capabilities.json at runtime. In the bundle layout it must sit at the
+# plugin ROOT (resolved via `../` from lib/). An identity bundle WITHOUT it throws
+# on every mint/parse — a silent hook break that hash parity alone cannot see (it
+# only hashes meta-session.<ext>). BOTH v2 and v3 writers carry this dependency,
+# so the messages report the bundle's MEASURED schema rather than hardcoding "v2".
+check_registry_dep() { # $1=bundle meta-session.<ext>  $2=label  $3=registry-path  $4=registry-hash
   local ms="$1" label="$2" reg="$3" reg_h="$4"
   [ -f "$ms" ] && grep -q "serializeMetaIdentity" "$ms" || return 0 # v1/absent: no registry dep
+  local schema; schema="$(livewrite_schema "$ms")"
   if [ ! -f "$reg" ]; then
-    bad "$label is v2 but MISSING entwurf-capabilities.json at plugin root ($reg) — the v2 writer throws on mint/parse (silent hook break). Re-run ./run.sh install-meta-bridge (now bundles the registry)."
+    bad "$label is $schema but MISSING entwurf-capabilities.json at plugin root ($reg) — the $schema writer throws on mint/parse (silent hook break). Re-run ./run.sh install-meta-bridge (now bundles the registry)."
   elif [ "$reg_h" != "$src_reg_h" ]; then
-    bad "$label v2 carries a STALE capability registry: $reg_h vs source=$src_reg_h ($reg). Re-run ./run.sh install-meta-bridge so the live writer and its load-bearing registry move together."
+    bad "$label $schema carries a STALE capability registry: $reg_h vs source=$src_reg_h ($reg). Re-run ./run.sh install-meta-bridge so the live writer and its load-bearing registry move together."
   else
-    ok "$label v2 carries capability registry ($reg, $reg_h)"
+    ok "$label $schema carries capability registry ($reg, $reg_h)"
   fi
 }
 check_registry_dep "$ASM_MS" "assembled" "${ASM_REG:-}" "$asm_reg_h"

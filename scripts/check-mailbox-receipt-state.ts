@@ -10,9 +10,12 @@
  * 보면 lastReadAt가 남는다". ENTWURF_META_MAILBOX_DIR / explicit mailboxDir keep this
  * off the operator's real ~/.pi/agent/meta-mailbox.
  *
- * Scope is 3B ONLY: schema + store. The live enqueue/read dual-write and the
- * record.delivery removal land in step 3D (NEXT.md 끊을 지점 ②) — no live-path
- * assertions here, and wakeMode/deliveryLevel (capability, step 3C) are out.
+ * Scope is 3B ONLY: schema + store. Both sequels have since LANDED — 3D-4 wired
+ * the live enqueue/read path (gated by check-meta-mailbox-state-write) and
+ * deleted `record.delivery` with the rest of `delivery{}`, and #50 cut the store
+ * to V3-only, where that field never existed. So mailbox state is now the sole
+ * receipt authority, not merely its future home. This file still carries no
+ * live-path assertions, and wakeMode/deliveryLevel (capability, step 3C) are out.
  */
 
 import assert from "node:assert/strict";
