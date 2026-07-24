@@ -274,6 +274,34 @@ prompt, and if so quote the visible text exactly:
 
 # HISTORY (pointer)
 
+2026-07-24 dependency-uplift acceptance at exact HEAD
+`7cbeb29b6afcfbaf4fc28da3b7929037c339113d` (branch `repair/v2-core-debt`): pi
+runtime **0.80.7 → 0.82.0** and Claude ACP **claude-agent-acp 0.54.1 → 0.61.0 /
+ACP SDK 1.1.0 → 1.3.0** as two separate cuts, with `@anthropic-ai/sdk` held at
+**0.100.1** (measured through the real module graph: claude-agent-sdk 0.3.217's
+`>=0.93.0` peer resolves to 0.100.1 there; dropping the direct pin under this
+repo's `autoInstallPeers:false` leaves only 0.91.1 and the peer goes unmet).
+Deterministic 3 cells all EXIT=0 on Node 24 Linux — checkout (`pnpm
+build-bridge && pnpm check`), installed tree (`check-pack-install`: resolved
+tree holds only `@earendil-works@0.82.0`, loader drove the pinned pi, installed
+bin delivered a `.msg`), clean consumer (`ENTWURF_REQUIRE_DOCKER=1
+check-install-container`, candidate `junghanacs-entwurf-0.12.8-repair.1.tgz`
+**sha256 `ab5dee07585c8d7a4f8f174cedea0051489ae1a26766ff1baf8edd7377d5bac7`**,
+11391060 bytes, image `sha256:f1158c7f34cf35a047bf0513c38282bb2fa253529e5ae404b32c6d93697410be`).
+Live: `LIVE=1 ./run.sh release-gate` measured **MUST 17/0/0 + BEHAVIOR 1/0,
+EXIT=0** at this HEAD — the first aggregate to include
+`smoke-acp-v2-send-live`, which closes the SEND half of ACP citizenship (an ACP
+model calls `entwurf_v2` and the `.msg` lands carrying the resident's own garden
+id, `entwurf/<model>`, replyable — a gid never present in the prompt). Two
+stale claims were retired against measurement rather than argument: the
+extension-loader `/compat` shim survives 0.82.0 (root / `/compat` / `/oauth`
+untouched; `/providers/all` is an addition, and the curated Claude anchors are
+byte-identical across the bump), and the "one-shot bundled-MCP teardown hang"
+that a gate comment used as its rationale does not reproduce on this
+combination. What a plain `pi -p` genuinely lacks is garden identity, and only
+without `--entwurf-control` — now documented as a provider/citizen boundary
+instead of read as a defect.
+
 2026-07-24 record-era aggregate floor: `LIVE=1 ./run.sh release-gate` measured
 **MUST 16/0/0 + BEHAVIOR 1/0, EXIT=0** on the `repair/v2-core-debt` branch after
 the #50 C1–C3 cuts and the observability repair — the first aggregate run since
