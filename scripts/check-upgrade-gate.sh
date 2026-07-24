@@ -290,9 +290,15 @@ mig="$(node --experimental-strip-types "${MIGRATE[@]}" migrate 2>&1)"; rc2=$?
 set -e
 if [ "$rc2" = 0 ]; then ok "D3 migrate succeeds on that same host"; else bad "D3 migrate failed" "$mig"; fi
 
+# Assignment substitutions below carry `|| true`: under set -euo pipefail a
+# failing probe inside `var=$(...)` kills the gate AT THE ASSIGNMENT, so the
+# bad() arm it feeds would be unreachable dead code — a missing file or anchor
+# must land in the comparison as an empty value and fail THERE, in words.
+# (Measured: a tampered installer that lost the F6 anchor line ended the gate
+# right after F5 with no diagnostic, no F7/F8, no summary line.)
 backup="$(backup_dirs | head -1)"
 if [ -n "$backup" ]; then
-  got="$(sha256sum "$backup/20260302T000000-bbbb02.meta.json" | cut -d' ' -f1)"
+  got="$(sha256sum "$backup/20260302T000000-bbbb02.meta.json" | cut -d' ' -f1)" || true
   if [ "$got" = "$FIXTURE_V2_PLAIN_SHA" ]; then
     ok "D4 the backup holds the ORIGINAL bytes (sha256 == the frozen fixture, not a re-serialization)"
   else
@@ -336,8 +342,8 @@ set -e
 if [ "$rcd" = 0 ]; then ok "E5 explicit --drop-parentage migrates"; else bad "E5 --drop-parentage failed" "$dropped"; fi
 
 backup="$(backup_dirs | head -1)"
-parent_sha="$(sha256sum "$backup/20260305T000000-dddd05.meta.json" 2>/dev/null | cut -d' ' -f1)"
-entwurf_sha="$(sha256sum "$backup/20260306T000000-eeee06.meta.json" 2>/dev/null | cut -d' ' -f1)"
+parent_sha="$(sha256sum "$backup/20260305T000000-dddd05.meta.json" 2>/dev/null | cut -d' ' -f1)" || true
+entwurf_sha="$(sha256sum "$backup/20260306T000000-eeee06.meta.json" 2>/dev/null | cut -d' ' -f1)" || true
 if [ "$parent_sha" = "$FIXTURE_V2_PARENT_SHA" ] && [ "$entwurf_sha" = "$FIXTURE_V2_ENTWURF_SHA" ]; then
   ok "E6 the discarded parentage survives in the backup as ORIGINAL bytes"
 else
@@ -369,7 +375,7 @@ esac
 # Static order: in setup_all the gate must precede sync_auth (the first writer of
 # ~/.pi/agent/auth.json); in install_local_package it must precede the settings
 # writers. A future edit that moves a mutation above the gate fails here.
-gate_ln=$(grep -n 'preflight_v3_store setup' "$REPO/run.sh" | head -1 | cut -d: -f1)
+gate_ln=$(grep -n 'preflight_v3_store setup' "$REPO/run.sh" | head -1 | cut -d: -f1) || true
 auth_ln=$(awk '/^setup_all\(\)/,/^}/{ if ($0 ~ /^  sync_auth$/) { print NR; exit } }' "$REPO/run.sh")
 if [ -n "$gate_ln" ] && [ -n "$auth_ln" ] && [ "$gate_ln" -lt "$auth_ln" ]; then
   ok "F4 setup_all calls the gate before sync_auth (line $gate_ln < $auth_ln)"
@@ -387,8 +393,8 @@ fi
 
 # Anchor on the line that RUNS the check, not on the comment that introduces it —
 # a comment can survive an edit that moved the code out from under it.
-mb_gate=$(grep -n 'MIGRATE_CMD\[@\]}" verify' "$REPO/scripts/meta-bridge-install.sh" | head -1 | cut -d: -f1)
-mb_write=$(grep -n 'meta-bridge-state.py" prepare' "$REPO/scripts/meta-bridge-install.sh" | head -1 | cut -d: -f1)
+mb_gate=$(grep -n 'MIGRATE_CMD\[@\]}" verify' "$REPO/scripts/meta-bridge-install.sh" | head -1 | cut -d: -f1) || true
+mb_write=$(grep -n 'meta-bridge-state.py" prepare' "$REPO/scripts/meta-bridge-install.sh" | head -1 | cut -d: -f1) || true
 if [ -n "$mb_gate" ] && [ -n "$mb_write" ] && [ "$mb_gate" -lt "$mb_write" ]; then
   ok "F6 meta-bridge-install.sh RUNS verify before its pre-install state snapshot (line $mb_gate < $mb_write)"
 else
