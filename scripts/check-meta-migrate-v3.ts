@@ -28,6 +28,11 @@
  *   - restore: store bytes return to the pre-migration originals, the current
  *     store survives as a `.pre-restore-` aside, the backup stays intact, and
  *     non-backup dirs are refused.
+ *   - prescriptions (R1): the pre-cut FAIL and the rollback line each name BOTH
+ *     invocation forms — `./run.sh …` for a dev clone AND `entwurf …` for an
+ *     installed package. The hosts that actually meet a pre-cut store are
+ *     installed hosts where `./run.sh` is not typeable, and the rollback is
+ *     printed at the one moment (mid-blackout) an untypeable command costs most.
  */
 
 import assert from "node:assert/strict";
@@ -346,6 +351,14 @@ const s1 = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
 		mig.stderr.includes("EEXIST") || mig.stderr.includes("ENOTDIR"),
 		mig.stderr,
 	);
+	// R1: THIS command is the one an installed host runs (that is why the compiled
+	// twin ships) — a rollback it cannot type is the M4 defect one level down.
+	ok(
+		"S14 the rollback prescription names BOTH invocation forms with the concrete backup path",
+		mig.stderr.includes(`./run.sh meta-bridge-migrate-v3 restore ${path.join(w.root, b[0] as string)}`) &&
+			mig.stderr.includes(`entwurf meta-bridge-migrate-v3 restore ${path.join(w.root, b[0] as string)}`),
+		mig.stderr,
+	);
 	ok(
 		"S14 crash-order held: the record is still v1 (receipts migrate before the record write)",
 		fs.readFileSync(path.join(w.store, `${V1_GID}.meta.json`), "utf8") === V1_BODY,
@@ -451,6 +464,14 @@ const s1 = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
 	ok(
 		"S9 a store without parentage values gets NO --drop-parentage note (the probe never cries wolf)",
 		!ver.stderr.includes("--drop-parentage"),
+		ver.stderr,
+	);
+	// R1: the host that meets a pre-cut store is an INSTALLED host with no
+	// checkout — a `./run.sh …`-only prescription is not typeable there.
+	ok(
+		"S9 the pre-cut FAIL names BOTH invocation forms (dev clone + installed package)",
+		ver.stderr.includes("./run.sh meta-bridge-migrate-v3 migrate") &&
+			ver.stderr.includes("entwurf meta-bridge-migrate-v3 migrate"),
 		ver.stderr,
 	);
 	ok(

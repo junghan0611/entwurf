@@ -60,7 +60,7 @@ const tmpRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "psa-state
 const sessionsDir = path.join(tmpRoot, "meta-sessions");
 const mailboxDir = path.join(tmpRoot, "meta-mailbox");
 
-// Seed a real v2 citizen via the upsert write path (the create that writes v2).
+// Seed a real citizen via the upsert write path (the create that writes v3).
 function seed(nativeSessionId: string): string {
 	const res = upsertMetaSession({
 		dir: sessionsDir,

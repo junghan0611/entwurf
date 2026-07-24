@@ -62,14 +62,31 @@ import {
 	describe,
 	M1_MIGRATE_COMMAND,
 	M1_MIGRATE_COMMAND_INSTALLED,
+	M1_PRESCRIPTION,
 	type MetaIdentity,
 	migrateV1DeliveryReceipts,
 	parseMetaRecordV3,
 	serializeMetaIdentity,
 } from "../pi-extensions/lib/meta-session.ts";
 
-/** The restore verb spelled from the migrate SSOT — every rollback prescription prints this. */
+/** The restore verb spelled from each migrate SSOT — the two invocation forms of the rollback. */
 const M1_RESTORE_COMMAND = `${M1_MIGRATE_COMMAND.replace(/ migrate$/, "")} restore`;
+const M1_RESTORE_COMMAND_INSTALLED = `${M1_MIGRATE_COMMAND_INSTALLED.replace(/ migrate$/, "")} restore`;
+
+/**
+ * The rollback prescription for a concrete backup dir, naming BOTH invocation
+ * forms — the same contract `M1_PRESCRIPTION` carries for the migrate verb.
+ * THIS command is the one an installed host runs (that is why the compiled twin
+ * ships), so printing only `./run.sh …` here would hand an operator mid-blackout
+ * a command that host cannot type. Keeps `restore <dir>` as a literal substring
+ * in both halves, so a gate asserting the prescribed path still matches.
+ */
+function restorePrescription(backupDir: string): string {
+	return (
+		`\`${M1_RESTORE_COMMAND} ${backupDir}\` ` +
+		`(from an installed package: \`${M1_RESTORE_COMMAND_INSTALLED} ${backupDir}\`)`
+	);
+}
 
 function usage(code: number): never {
 	console.error(
@@ -255,8 +272,8 @@ function cmdVerify(storeDir: string): number {
 		return 0;
 	}
 	console.error(`verify FAIL: ${storeDir} is not a clean v3-only store`);
-	if (counts.v1 > 0) console.error(`FAIL pre-cut v1 record ×${counts.v1} — migrate with \`${M1_MIGRATE_COMMAND}\``);
-	if (counts.v2 > 0) console.error(`FAIL pre-cut v2 record ×${counts.v2} — migrate with \`${M1_MIGRATE_COMMAND}\``);
+	if (counts.v1 > 0) console.error(`FAIL pre-cut v1 record ×${counts.v1} — migrate with ${M1_PRESCRIPTION}`);
+	if (counts.v2 > 0) console.error(`FAIL pre-cut v2 record ×${counts.v2} — migrate with ${M1_PRESCRIPTION}`);
 	printProblems(problems);
 	// Pre-quiesce honesty: say NOW whether migrate will demand --drop-parentage,
 	// so the operator learns it from the read-only probe, not mid-blackout.
@@ -347,7 +364,7 @@ function cmdMigrate(storeDir: string, mailboxDir: string, dropParentage: boolean
 			printProblems(after.problems);
 			console.error(
 				`verify FAIL after migration: ${after.counts.v1} v1 / ${after.counts.v2} v2 / ${after.problems.length} problem(s) remain. ` +
-					`The backup is intact — roll back with \`${M1_RESTORE_COMMAND} ${backupDir}\`.`,
+					`The backup is intact — roll back with ${restorePrescription(backupDir)}.`,
 			);
 			return 1;
 		}
@@ -356,13 +373,13 @@ function cmdMigrate(storeDir: string, mailboxDir: string, dropParentage: boolean
 				(receiptsMigrated > 0 ? ` (${receiptsMigrated} v1 receipt set(s) → mailbox state)` : ""),
 		);
 		console.log(`verify: non-V3=0 (${after.counts.v3} record(s))`);
-		console.log(`rollback (if needed): ${M1_RESTORE_COMMAND} ${backupDir}`);
+		console.log(`rollback (if needed): ${restorePrescription(backupDir)}`);
 		return 0;
 	} catch (err) {
 		console.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
 		console.error(
 			`FAIL mid-migration: the store may hold a mix of migrated and pre-cut records. ` +
-				`The backup is intact — roll back with \`${M1_RESTORE_COMMAND} ${backupDir}\`, fix the cause above, re-run.`,
+				`The backup is intact — roll back with ${restorePrescription(backupDir)}, fix the cause above, re-run.`,
 		);
 		return 1;
 	}

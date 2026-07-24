@@ -191,25 +191,33 @@ function isoNow(now: Date): string {
 }
 
 // ---------------------------------------------------------------------------
-// meta-record v2 — identity-only shape (0.11 Stage 0 step 3A)
+// meta-record identity shape — the LIVE schema is v3 (#50 hard cut)
 //
-// v2 strips the delivery/read-receipt aspect OUT of the record (it moves to a
-// separate mailbox state file in step 3B) and keeps only IDENTITY: who this
-// citizen is, never its delivery bookkeeping. The deltas vs v1 (verified
-// against the frozen ledger in NEXT.md):
+// HISTORY (how the shape got here). v2 (0.11 Stage 0 step 3A) stripped the
+// delivery/read-receipt aspect OUT of the record — it moved to a separate
+// mailbox state file (step 3B) — and kept only IDENTITY: who this citizen is,
+// never its delivery bookkeeping. Its deltas vs v1 were:
 //   - backend gains `pi` (the 4th meta backend — pi sessions become citizens)
 //   - transcriptPath required → nullable (pi birth may not know it yet)
 //   - new nullable identity fields: model, parentGardenId, isEntwurf
 //   - lastSeen → recordUpdatedAt (a record touch time, NOT liveness)
 //   - delivery{} removed entirely
+// v3 (#50 C1) then dropped `parentGardenId` + `isEntwurf`: a call is not
+// parentage and there is no species boolean (LOCKED PROTOCOL 5/6).
 //
-// This block is READER + NORMALIZER ONLY. There is deliberately NO v2 writer /
-// serializer / disk upsert here yet: step 3A's gate is "synthetic v1 fixture →
-// normalized v2 identity golden GREEN", and 3A must not introduce a v2 writer
-// before that golden + its GPT review (NEXT.md 끊을 지점 ①).
+// WHAT LIVES HERE NOW: the whole v3 axis — reader, normalizer, canonical
+// serializer, minter and the FS upsert (`upsertMetaSession`, below). The 3A-era
+// "reader + normalizer only, no writer yet" staging is over; the v1/v2 parsers
+// it staged for are FROZEN in meta-migration.ts, reachable only through the M1
+// operator command.
 // ---------------------------------------------------------------------------
 
-/** Bump only on a breaking v2 identity-shape change; the v2 parser refuses other versions. */
+/**
+ * The FROZEN v2 schema number. v2 is a CLOSED schema — it will never gain a
+ * field or bump again; only the M1 migration surface still reads it. Kept here
+ * (not in meta-migration.ts) because the strayness invariant needs both halves
+ * spelled from one place.
+ */
 export const META_SCHEMA_VERSION_V2 = 2 as const;
 
 /**
@@ -225,9 +233,14 @@ export const META_BACKENDS_V2 = ["claude-code", "antigravity", "codex", "pi"] as
 export type MetaBackendV2 = (typeof META_BACKENDS_V2)[number];
 
 /**
- * The v2 identity-only record. Field order mirrors the frozen ledger's jsonc so
- * a future serializer stays byte-stable. No delivery aspect — that is mailbox
- * state (step 3B), referenced by gardenId, never embedded in identity.
+ * The LIVE identity record — v3 (`schemaVersion: 3`). The name carries no
+ * version suffix on purpose: this is the one shape normal routing mints, reads
+ * and writes, and `MetaIdentityV2` (meta-migration.ts) is the frozen ancestor,
+ * not a sibling. Field order mirrors the frozen ledger's jsonc so the serializer
+ * stays byte-stable. No delivery aspect — that is mailbox state (step 3B),
+ * referenced by gardenId, never embedded in identity. No parentage/species axis
+ * — #50 dropped `parentGardenId` + `isEntwurf`, and the v3 parser REJECTS them
+ * as stray keys.
  */
 export interface MetaIdentity {
 	schemaVersion: typeof META_SCHEMA_VERSION_V3;
@@ -385,19 +398,19 @@ export function normalizeMetaIdentity(record: MetaIdentity): MetaIdentity {
 // ---------------------------------------------------------------------------
 // v3 write shape + V3-only reader (#50 hard cut; was 0.11 3D-1 dual-read)
 //
-// Pure functions only: the canonical v2 serializer and the version-dispatching
-// reader. NO fs upsert, NO live readMetaInbox/enqueueMetaMessage change, NO
-// record.delivery removal — those are 3D-2/3/4. This step just makes "write a v2
-// identity" and "read any version into an identity" exist + gated, so 3D-4 can
-// wire the FS upsert onto a proven writer.
+// Pure functions: the canonical v3 serializer and the v3 reader. 0.11 staged
+// these as write-shape-first (3D-1) with the fs upsert following in 3D-4; both
+// landed, and #50 then collapsed the version dispatch to v3 alone. The fs upsert
+// that consumes this serializer is `upsertMetaSession`, further down this file.
 // ---------------------------------------------------------------------------
 
 /**
- * Canonical serialization of a v2 identity: stable key order (the frozen ledger
+ * Canonical serialization of a v3 identity: stable key order (the frozen ledger
  * jsonc order), 2-space indent, trailing newline. Deterministic — re-serializing
  * the same identity is byte-identical, and the output round-trips through
- * parseMetaRecordV2. This is the v2 WRITE shape; the FS upsert that uses it is
- * step 3D-4, not here.
+ * `parseMetaRecordV3`. This is the ONE write shape in production; the M1
+ * migration command writes through it too, so a migrated record is byte-identical
+ * to a freshly minted one.
  */
 export function serializeMetaIdentity(identity: MetaIdentity): string {
 	const ordered = {
@@ -430,10 +443,11 @@ export interface MetaIdentityMintInput {
 }
 
 /**
- * Mint a brand-new v2 identity at the session's true birth (3D-4). The v2 analog
- * of mintMetaRecord — generates the garden id, stamps createdAt == recordUpdatedAt,
- * and carries identity only (no delivery; the receipt lives in mailbox state).
- * Omitted nullable axes default to null / isEntwurf false.
+ * Mint a brand-new v3 identity at the session's true birth (3D-4). Generates the
+ * garden id, stamps createdAt == recordUpdatedAt, and carries identity only (no
+ * delivery; the receipt lives in mailbox state). Omitted nullable axes
+ * (model/transcriptPath) default to null — the two axes a birth caller may not
+ * know yet. There is no parentage or species axis to default: #50 deleted both.
  */
 export function mintMetaIdentity(input: MetaIdentityMintInput, now: Date = new Date()): MetaIdentity {
 	const backend = requireBackendV2(input.backend);
@@ -470,9 +484,10 @@ export function parseMetaIdentity(json: string): MetaIdentity {
 // ---------------------------------------------------------------------------
 // capability source — backend capability registry (0.11 Stage 0 step 3C)
 //
-// v2 identity (step 3A) drops the backend honesty metadata (wakeMode /
-// deliveryLevel / nativeIdLabel) out of the per-session record: it is NOT per
-// session, it is per BACKEND. Its new home is a registry data file
+// The identity-only cut (step 3A) dropped the backend honesty metadata (wakeMode
+// / deliveryLevel / nativeIdLabel) out of the per-session record — it is NOT per
+// session, it is per BACKEND — and v3 has never carried it either. Its home is
+// a registry data file
 // `pi/entwurf-capabilities.json` (frozen decision 1 — a registry FILE). "이
 // 시민은 self-fetch 인가 / pi 는 어떻게 깨우나" is answered by capability, not
 // by identity.
@@ -482,7 +497,9 @@ export function parseMetaIdentity(json: string): MetaIdentity {
 // 3D-3 then cut mint/parse over to this registry via the `metaCapabilityFor` seam
 // (defined below `metaCapabilitiesFilePath`): the registry is now the LIVE source of
 // wakeMode/deliveryLevel, and `META_BACKEND_DESCRIPTORS` survives only as the
-// drift-guard reference. Removing wakeMode from the record itself lands in step 3D-4.
+// drift-guard reference. 3D-4 then removed wakeMode from the record itself — the
+// live v3 identity carries no delivery aspect at all, so capability is the ONLY
+// source and there is no per-record copy left to drift against it.
 // The 3C gate (check-entwurf-capabilities) still asserts the JSON AGREES with the
 // const for the three existing backends (the drift guard) and COVERS exactly
 // META_BACKENDS_V2 (pi included).
@@ -630,8 +647,9 @@ export function metaCapabilitiesFilePath(): string {
 // backend honesty metadata (wakeMode/deliveryLevel) from the registry via the seam
 // below, NOT from the const. The const survives ONLY as the drift-guard reference
 // in check-entwurf-capabilities (registry ≡ const for the 3 existing backends), so
-// the cut-over is behaviour-preserving. The record.delivery.wakeMode SLOT stays
-// (its removal is 3D-4); only its SOURCE moves.
+// the cut-over is behaviour-preserving: at 3D-3 only the SOURCE moved and the
+// record.delivery.wakeMode SLOT still existed. 3D-4 then deleted that slot with
+// the rest of `delivery{}`, so today the registry is the sole home.
 // ---------------------------------------------------------------------------
 
 /** Memoized packaged registry; the file is immutable at runtime, so caching is honest (not stateful lying). */
@@ -795,18 +813,19 @@ export interface UpsertDecision {
 }
 
 /**
- * The pure core of the `upsert` CLI (3D-4: v2 identity). Keyed on RECORD
- * EXISTENCE, never on a backend `source` field:
+ * The pure core of the `upsert` CLI (3D-4; v3 identity since the #50 cut). Keyed
+ * on RECORD EXISTENCE, never on a backend `source` field:
  *   - existing present → ATTACH: keep identity (gardenId, createdAt,
  *     nativeSessionId), bump recordUpdatedAt, and apply the 3-value merge to the
  *     nullable axes + always-refresh cwd. Identity drift (a different backend for
  *     the same nativeSessionId) is corruption → throw.
- *   - absent → CREATE: mint a fresh v2 identity.
+ *   - absent → CREATE: mint a fresh v3 identity.
  *
- * 3-value attach merge (G5): for model/transcriptPath/parentGardenId an input of
- * `undefined` KEEPS the existing value (a pi-birth caller that does not know the
- * transcript must not wipe a previously-recorded one), `null` explicitly clears
- * it, a string sets it. cwd is required and always refreshed.
+ * 3-value attach merge (G5): for model/transcriptPath — the two nullable axes v3
+ * still has — an input of `undefined` KEEPS the existing value (a pi-birth caller
+ * that does not know the transcript must not wipe a previously-recorded one),
+ * `null` explicitly clears it, a string sets it. cwd is required and always
+ * refreshed. `parentGardenId` was a third merge axis until #50 deleted it.
  *
  * Idempotent by construction: calling it twice with the same input yields one
  * attach after the first create, never a second id. `existing` is the normalized
@@ -1476,21 +1495,21 @@ export function readMetaInbox(opts: ReadMetaInboxOptions): ReadMetaInboxResult {
 }
 
 // ---------------------------------------------------------------------------
-// mailbox receipt state — the receipt authority's new home (0.11 Stage 0 3B)
+// mailbox receipt state — the receipt authority (0.11 Stage 0 3B)
 //
-// Today the read-receipt lives at `record.delivery.lastReadAt` (stamped by
-// readMetaInbox). v2 identity (step 3A) drops `delivery{}` out of the record, so
-// the receipt timestamps need a new home BEFORE that removal (NEXT.md 고정순서
+// The read-receipt lives at `<meta-mailbox>/<gardenId>/state.json` — a SIBLING of
+// the inbox.signal/.msg traffic it accounts for, so the receipt sits with the
+// mailbox (volatile delivery bookkeeping), not with identity. It used to live at
+// `record.delivery.lastReadAt`; 3A/3B built this home FIRST because the record
+// could not drop `delivery{}` before its replacement existed (NEXT.md 고정순서
 // 4: "delivery 제거 전 mailbox receipt state schema 먼저 못박음 ... 대체 state
-// 없이 제거 금지"). That home is `<meta-mailbox>/<gardenId>/state.json` — a
-// SIBLING of the inbox.signal/.msg traffic it accounts for, so the receipt lives
-// with the mailbox (volatile delivery bookkeeping), not with identity.
+// 없이 제거 금지"). 3D-4 then made that removal, and #50 carried it into v3:
+// there is no receipt slot on the record at all any more.
 //
-// This block is the SCHEMA + STORE only. It does NOT yet re-wire the live
-// enqueue/read path (that dual-write + the eventual record.delivery removal land
-// in step 3D, behind NEXT.md 끊을 지점 ②, so the "정당한 update vs regression"
-// gate-rewrite stays in one reviewed place). wakeMode/deliveryLevel are NOT here
-// — those are capability, not receipt (step 3C).
+// This block is the SCHEMA + STORE. The live enqueue/read path re-wire landed in
+// 3D-4 (the dual-write era is over — the state store is the sole receipt
+// authority; see `enqueueMetaMessage`/`readMetaInbox` below).
+// wakeMode/deliveryLevel are NOT here — those are capability, not receipt (3C).
 // ---------------------------------------------------------------------------
 
 /** Bump only on a breaking receipt-state shape change; the parser refuses other versions. */
