@@ -1,6 +1,8 @@
 /**
  * check-socket-probe — deterministic gate for 0.11 Stage 0 (F3 fix): the
- * three-valued control-socket liveness probe and its GC/listing policies.
+ * three-valued control-socket liveness probe and its GC policy. (Listing policy
+ * is no longer this module's: `shouldListAsLive` left with its last consumer in
+ * #50 C4 — indeterminate now reaches the surface as a fact instead of hidden.)
  *
  * Proves:
  *   - classifyConnectError is a pure boundary: ECONNREFUSED/ENOENT → dead;

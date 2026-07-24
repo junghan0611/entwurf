@@ -230,9 +230,15 @@ ownership mismatch — run the doctor from the surface that intentionally owns t
 install, or reinstall from the other surface. Restart already-open Claude Code
 sessions after changing the meta-bridge install.
 
-A plain external MCP host can call tools but is non-replyable. A garden-native
-meta-session has a garden id, a mailbox, and a trusted sender marker; it can call
-`entwurf_self`, receive mailbox wakeups, and be replied to by garden id.
+A plain external MCP host can call the read surfaces (`entwurf_peers`,
+`entwurf_inbox_read`), but an `entwurf_v2` send is **refused by default** (#50 C4:
+"if we don't know who sent it, we don't send it") — it has no authoritative sender.
+A deliberately-anonymous host may wire the explicit
+`ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1` hatch and then delivers external and
+non-replyable; see README §"Wiring `entwurf-bridge` into an external MCP host".
+A garden-native meta-session has a garden id, a mailbox, and a trusted sender
+marker; it can call `entwurf_self`, receive mailbox wakeups, and be replied to by
+garden id.
 
 ## Stage 5 — Antigravity native citizen (optional)
 
@@ -302,14 +308,21 @@ If the backend CLI fails directly (`claude -p "ping"`), fix that upstream first.
 ## Stage 7 — garden/control-socket surface (optional)
 
 To address a long-lived pi session from another session or an external MCP host,
-open it with `--entwurf-control`. A garden-native `--session-id` is required —
-a raw pi-assigned uuid hard-exits before any model turn.
+open it with `--entwurf-control`. No id injection and no special launcher
+(#50 C2): pi mints its own session id (a `uuidv7` is normal), `session_start`
+attaches that session to its meta-record, and the **record** mints the garden id
+everything addressable hangs off.
 
 ```bash
-pi --session-id "$(entwurf new-session-id)" \
-  --entwurf-control --provider entwurf --model claude-sonnet-5
-# control socket: ~/.pi/entwurf-control/<garden-id>.sock
+pi --entwurf-control --provider entwurf --model claude-sonnet-5
 ```
+
+The control socket is `~/.pi/entwurf-control/<record gardenId>.sock` — keyed on
+the id the record minted, which is *not* pi's session id. Read the address off
+`entwurf_peers` (or `entwurf_self` from inside the session) instead of guessing
+the filename. If the record cannot be written the control server is refused,
+`PI_SESSION_ID` stays unset, and the reason is on stderr: an unaddressable
+resident must never survive quietly.
 
 Use `entwurf_peers` to discover citizens and `entwurf_v2` to deliver by garden
 id. Do not choose the transport by hand: the same-looking id may name a live pi

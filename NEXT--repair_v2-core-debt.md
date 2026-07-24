@@ -6,10 +6,14 @@
 
 ## NOW (2026-07-24 오전 갱신)
 
-- Current: **세 문장 목표 ①②③ 전부 코드로 성립 + C4 교차 검수 완료(조건부 승인, 되돌림 0) + 수선 반영 완료.** 총 23커밋 push 대기.
-- **C4 교차 검수 (오푸스, GLG 위임 tmux headless 세션 — 보고서 `/tmp/entwurf-c4-review/report.md`)**: 독립 full check EXIT=0(2332 단언) + **변이 8종을 스크래치 트리에 심어 게이트 자기충족 검증 — 7종 RED**(A1 부활·sessions 부활·익명 기본 복귀·REQUIRE 재성장·M1 명명 제거·wantsReply 회귀·folding 제거), 라이브 로그 내부 대조로 aggregate가 C4 트리에서 돌았음 확인. 판단 기록 3건 전부 동의. 뚫린 1종(hatch 봉투 replyable:true를 아무 게이트도 못 잡음)이 F3.
-- **수선 반영 (페블)**: `e906f8f` F1/F2/F4/F6 — README 발신 정책 4곳+hatch 문서화+Codex 절, run.sh usage·주석 5곳, ROADMAP 원장 3곳, provider doc + **AGENTS 승격 2건**(판단① self/peers 경계, "무효화된 문장 찾기" 규율+대상 목록 — F1 부류 세 번째라 규율에 목록을 박음). `f757a33` F3/F5 — D12에 `(external, non-replyable)` 단언+`replyable —` 부정 단언, 감산 잔재 2건 결합 삭제, **biome `noUnusedImports`=error(결합 규칙 첫 기계 backstop)**.
-- Next: (1) GLG: **push 여부**(23커밋; 오푸스 노트 — F1 수선이 랜딩됐으므로 "README 따라 깐 Codex 호스트 발신 거부 노출" 우려는 해소됨) + **M1 방아쇠** → (2) M1+H7 레인 (runbook은 §6, "V3-already" 전제).
+- Current: **세 문장 목표 ①②③ 전부 코드로 성립 + C4 교차 검수 2라운드 완료(승인, 되돌림 0) + 결함 9건 전항 반영.** 총 **25커밋** push 대기. **GPT 검수로 넘길 준비 완료 — 알려진 미해결 결함 0건.**
+- **C4 교차 검수 R1 (오푸스, GLG 위임 headless 세션 — 보고서 `/tmp/entwurf-c4-review/report.md`)**: 독립 full check EXIT=0(2332 단언) + **변이 8종을 스크래치 트리에 심어 게이트 자기충족 검증 — 7종 RED**(A1 부활·sessions 부활·익명 기본 복귀·REQUIRE 재성장·M1 명명 제거·wantsReply 회귀·folding 제거), 라이브 로그 내부 대조로 aggregate가 C4 트리에서 돌았음 확인. 판단 기록 3건 전부 동의. 뚫린 1종(hatch 봉투 replyable:true를 아무 게이트도 못 잡음)이 F3. → 결함 6건(F1~F6).
+- **R1 수선 (페블)**: `e906f8f` F1/F2/F4/F6 — README 발신 정책 4곳+hatch 문서화+Codex 절, run.sh usage·주석 5곳, ROADMAP 원장 3곳, provider doc + **AGENTS 승격 2건**(판단① self/peers 경계, "무효화된 문장 찾기" 규율+대상 목록). `f757a33` F3/F5 — D12에 `(external, non-replyable)` 단언+`replyable —` 부정 단언, 감산 잔재 2건 결합 삭제, **biome `noUnusedImports`=error(결합 규칙 첫 기계 backstop)**.
+- **검수 R2 + 수선 (오푸스, 같은 세션)**: 수선 후 full check EXIT=0(2328 단언 — 회계 일치: `shouldListAsLive` 동반 삭제 −5, 신설 D12 +1). **변이 재실행 3종**: R1에서 유일하게 뚫렸던 `replyable:true`가 이제 D12로 RED, 미사용 import 재도입이 `biome check` EXIT=1, `noUnreachable`도 여전히 RED(**그룹 오버라이드가 나머지 recommended 규칙을 끄지 않았음을 확인** — 껐다면 backstop을 얻으며 lint를 약화시킨 셈). F1~F6 전항 확인. 새 결함 3건(G1~G3)을 오푸스가 직접 수선 → 이 커밋.
+  - **G1** `docs/setup-clean-host.md` Stage 7이 pre-C2 launcher를 가르쳤다 — `--session-id` 주입 + **존재하지 않는 hard-exit 가드 주장** + 틀린 소켓 경로 주석(record가 자기 gid를 민팅하므로 주입한 id로는 소켓이 안 선다), `:233`은 pre-C4 sender 문장. **원인: AGENTS 대상 목록에 `docs/`가 없었다** — 규율의 구멍이 미스가 난 자리와 같았다. 목록에 `docs/**` 추가(+ 왜 install 가이드가 README보다 비싼지).
+  - **G2** `f757a33` 자신이 `shouldListAsLive`의 정책 산문 2줄을 남겼다(`socket-probe.ts` 모듈 doc, `check-socket-probe.ts` 헤더). 같이 발견된 pre-C4 잔재(모듈 doc이 브릿지를 소비자로 지목 — 브릿지는 socket-probe를 import하지 않는다)도 정정. **기계 backstop은 심볼을 잡지 산문을 못 잡는다**는 실증.
+  - **G3** NEXT 커밋 수 off-by-one(23 → 실측 24).
+- Next: (1) **GPT 검수** — 알려진 결함 0 상태에서 시작 → (2) GLG: **push 여부**(25커밋) + **M1 방아쇠** → (3) M1+H7 레인 (runbook은 §6, "V3-already" 전제).
 - 대기: Ⅰ-4 `smoke-agy-native-push-live`(살아있는 `AGY_CONVERSATION_ID` 필요), 「기계가 말하는 장치」(게이트별 마지막 PASS × rail 대조 — 오푸스 최우선 후보; F5의 biome backstop이 같은 계열의 첫 조각).
 - Do not touch: fresh sibling mint/#47, Cortex/#48, 0.12.9 ACP 의존성, backend auth, transcript hydration, 라이브 `install-meta-bridge`(M1 전 금지).
 
