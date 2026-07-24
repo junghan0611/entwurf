@@ -305,6 +305,14 @@ pi --provider entwurf --model claude-sonnet-5 -p "reply with ok only"
 If the backend CLI fails directly (`claude -p "ping"`), fix that upstream first.
 `entwurf` surfaces missing auth; it does not repair it.
 
+**This smoke proves the PROVIDER surface, not the garden one.** It shows auth,
+model routing, and one real turn — nothing more. A plain `pi -p` run is not a
+garden citizen: with no `--entwurf-control` there is no routable control socket,
+so entwurf deliberately leaves `PI_SESSION_ID` unset and a bundled
+`entwurf_self` / `entwurf_v2` call **fails loud** naming the missing wiring.
+That is the contract, not a defect — an address a peer cannot route to is worse
+than none. For the garden surface (citizen birth, addressable sends) use Stage 7.
+
 ## Stage 7 — garden/control-socket surface (optional)
 
 To address a long-lived pi session from another session or an external MCP host,

@@ -12,12 +12,20 @@
 // GLG verified this by hand (entwurf_self → sessionId/agentId/socketState alive); this
 // codifies that hand-check into a repeatable gate.
 //
-// WHY resident/RPC, not `pi -p` one-shot. A `pi -p` one-shot + bundled tool-call
-// hangs on closeSession/teardown — that hang is diagnostic backlog, NOT this smoke's
-// subject, and NOT the 0.11.0 release circuit (whose bundled-MCP evidence was always
-// resident/RPC). So this smoke RESTORES the 0.11.0 circuit: it drives the bundled
-// bridge through a long-lived `pi --entwurf-control --mode rpc` resident, the same
-// stdin-RPC / stdout-event-stream driver as scripts/resident-rpc-drive.ts.
+// WHY resident/RPC, not `pi -p` one-shot. The resident IS the circuit this release
+// ships: a long-lived socket-citizen that stays addressable across turns, driven the
+// same way as scripts/resident-rpc-drive.ts (stdin RPC / stdout event stream).
+//
+// This comment previously gave a different reason — that a `pi -p` one-shot with a
+// bundled tool-call "hangs on closeSession/teardown". That claim was re-tested on
+// 2026-07-24 against pi 0.82.0 + claude-agent-acp 0.61.0 + ACP SDK 1.3.0 and did NOT
+// reproduce: the one-shot exits 0 both with and without a bundled tool call. It is
+// kept here as history, not as a live claim. What a one-shot genuinely lacks is
+// garden identity, and only when launched WITHOUT `--entwurf-control`: no routable
+// control socket means PI_SESSION_ID stays unset by contract, so entwurf_self fails
+// loud (see docs/setup-clean-host.md Stage 6). WITH the flag, a one-shot answers
+// entwurf_self correctly — so the choice here is about exercising the long-lived
+// circuit, not about avoiding a defect.
 //
 // METHOD (resident-rpc-drive shape): launch a real resident on an ACP model, send one
 // `{type:"prompt"}` over stdin asking the model to call mcp__entwurf-bridge__entwurf_self,

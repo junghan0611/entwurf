@@ -1041,11 +1041,42 @@ smoke_acp_bundled_mcp_live() {
   # model, only in the bridge env — + agentId + socketState alive) and agent_end
   # DIRECTLY from the stdout RPC event stream (resident-rpc-drive shape). Complements
   # smoke-acp-mcp-live (tiny isolated probe): this proves the REAL bundled bridge with
-  # envelope injection. NOT `pi -p` one-shot (that bundled-MCP teardown hang is
-  # diagnostic backlog, not the 0.11.0 release circuit). Model override:
-  # ENTWURF_ACP_PROVIDER_MODEL.
+  # envelope injection.
+  #
+  # Why the resident/RPC circuit and not a `pi -p` one-shot: the resident IS the
+  # long-lived socket-citizen circuit this release ships — a citizen that stays
+  # addressable across turns. (This comment used to justify the choice by a
+  # "bundled-MCP teardown hang" in one-shot mode; that claim was re-tested on
+  # 2026-07-24 against pi 0.82.0 + claude-agent-acp 0.61.0 and did NOT reproduce
+  # — one-shot exits 0, with and without a bundled tool call. The circuit, not a
+  # hang, is the reason.) A one-shot run WITHOUT `--entwurf-control` is a
+  # provider-surface run and has no garden identity by contract; see
+  # docs/setup-clean-host.md Stage 6. Model override: ENTWURF_ACP_PROVIDER_MODEL.
   #   LIVE=1 ./run.sh smoke-acp-bundled-mcp-live
   run_ts scripts/smoke-acp-bundled-mcp-live.ts
+}
+
+smoke_acp_v2_send_live() {
+  # S2g LIVE 4 (axis 4) — an ACP-backed model SENDS through entwurf_v2 and the message
+  # lands in a peer's mailbox carrying the sender's real garden identity. OUT of pnpm
+  # check, needs LIVE=1. Seeds an isolated world (store+mailbox+receivers under one temp
+  # root) holding ONE armed self-fetch receiver, launches a real `pi --entwurf-control
+  # --mode rpc` resident on an ACP model with that world in its env, and drives one turn
+  # asking the model to call mcp__entwurf-bridge__entwurf_v2 at that exact target with a
+  # nonce. Asserts ON DISK: exactly one `.msg`, doorbell poked, nonce intact, and the
+  # rendered sender naming the RESIDENT's own gid + entwurf/<model> + replyable +
+  # pi-session shape. The sender gid is never in the prompt.
+  #
+  # WHY it is not covered elsewhere: smoke-entwurf-v2-matrix-live dispatches
+  # PROGRAMMATICALLY (no model in the loop) and smoke-acp-bundled-mcp-live is
+  # RECEIVE-only (entwurf_self reads identity, writes no `.msg`). This is the SEND half
+  # of "a Claude behind ACP is a garden citizen" — the half GLG hit as missing in real
+  # use on 2026-07-24. MUST, not BEHAVIOR: the model is TOLD to call the tool, so this
+  # is an explicit tool-call capability like the self smoke, not the autonomous
+  # tool-selection question the BEHAVIOR lane owns. Model override:
+  # ENTWURF_ACP_PROVIDER_MODEL.
+  #   LIVE=1 ./run.sh smoke-acp-v2-send-live
+  run_ts scripts/smoke-acp-v2-send-live.ts
 }
 
 smoke_acp_rgg_live() {
@@ -3833,6 +3864,7 @@ release_gate() {
   run_live_step "smoke-acp-mcp-live (S2g: operator mcpServers reach the live ACP session)"  gate env LIVE=1 bash "$self" smoke-acp-mcp-live
   run_live_step "smoke-acp-skill-live (S2g: operator skillPlugins reach the live ACP session)" gate env LIVE=1 bash "$self" smoke-acp-skill-live
   run_live_step "smoke-acp-bundled-mcp-live (S2g axis 3: bundled entwurf-bridge via 0.11.0 resident/RPC circuit)" gate env LIVE=1 bash "$self" smoke-acp-bundled-mcp-live
+  run_live_step "smoke-acp-v2-send-live (S2g axis 4: an ACP model SENDS via entwurf_v2, landing as itself)" gate env LIVE=1 bash "$self" smoke-acp-v2-send-live
 
   # 4. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
   #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never
@@ -4045,6 +4077,9 @@ case "$cmd" in
     ;;
   smoke-acp-bundled-mcp-live)
     smoke_acp_bundled_mcp_live
+    ;;
+  smoke-acp-v2-send-live)
+    smoke_acp_v2_send_live
     ;;
   smoke-acp-carrier-augment-live)
     smoke_acp_carrier_augment_live

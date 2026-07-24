@@ -201,6 +201,14 @@ LIVE=1 ./run.sh release-gate /path/to/consumer-project
 pi --provider entwurf --model claude-sonnet-5 -p "reply with ok only"   # one-turn smoke
 ```
 
+The one-turn smoke is a **provider**-surface check (auth + model routing + a real
+turn). It does not make that session addressable: without `--entwurf-control`
+there is no routable control socket, so `PI_SESSION_ID` stays unset by design and
+a bundled `entwurf_self` / `entwurf_v2` call fails loud. Garden citizenship and
+addressable sends require `--entwurf-control` (measured 2026-07-24: the same
+one-shot with that flag returns its own gid and delivers `entwurf_v2` to a peer
+mailbox with `origin=pi-session`, `replyable=true`).
+
 `setup` runs `pnpm install` + project/user-scope install + detected native-harness wiring (Claude and/or agy) + the v2 install smoke. A green setup proves the required core path and reports optional-harness degradation; it does **not** replace the native-harness doctors. The full aggregate live floor is still `LIVE=1 ./run.sh release-gate`, with agy's conversation-id-gated round trip verified separately.
 
 ### 1.4 Cross-install / cross-backend parity (optional, high-value)
