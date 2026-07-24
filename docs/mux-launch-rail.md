@@ -35,7 +35,7 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
   1. `scripts/raw-async-delivery/repro-{plugin-idle-wake,addressed-routing}.sh` — 각인(`set-option @entwurf_garden_id`)과 `capture-pane` 폴링의 유일한 소스.
   2. **`demo/demo.sh` — 가장 완전한 launch 실물이자 유일한 pane 단위 소비자.** 아래 §"demo.sh가 뒤집는 전제" 참조. `demo/demo-baseline.sh`도 동형.
   3. `scripts/smoke-agy-native-push-live.ts` — 코드가 아니라 주석/수동 절차(“agy를 tmux로 띄우고 `capture-pane`으로 관찰”)로만 tmux에 의존. driver가 서면 이 수동 관찰이 첫 소비자 후보.
-- `tmuxTarget`은 **프로덕션/스키마 필드가 아님** — fixture 2줄뿐(`check-entwurf-capabilities.ts:110`, `check-meta-record-v2.ts:188`, 둘 다 `"psa:3.1"`). 즉 "네이밍 중립화"는 cosmetic이고, 진짜 `muxTarget`/`paneTarget` 필드는 프로덕션 spawn이 생길 때 **새로 정의**하는 것(기존 prod 필드 rename 아님).
+- `tmuxTarget`은 **프로덕션/스키마 필드가 아님** — fixture로만 등장한다(`check-entwurf-capabilities.ts:110`의 `"psa:3.1"`, 그리고 v3/v2 파서의 stray-key 거부 fixture `check-meta-v3-record.ts:188`·`check-meta-migration-readers.ts:136` — 스키마가 이 키를 거부한다는 증명이지, 저장하는 필드가 아니다). **[#50 재검증 2026-07-24]** 07-12 실측이 인용한 `check-meta-record-v2.ts:188`은 hard cut이 그 파일을 `check-meta-v3-record.ts`로 개명하며 이동했다(라인 번호는 우연히 동일). 즉 "네이밍 중립화"는 cosmetic이고, 진짜 `muxTarget`/`paneTarget` 필드는 프로덕션 spawn이 생길 때 **새로 정의**하는 것(기존 prod 필드 rename 아님).
 
 ### repro 4동작 → driver 메서드 매핑 (tmuxDriver 이식 대상)
 

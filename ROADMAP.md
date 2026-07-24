@@ -197,11 +197,20 @@ model 없음, pi backend는 birth에 transcript 미확정. `recordUpdatedAt` = r
 
 ## 동결 결정 (frozen decisions — 재설계 금지)
 
+> 번호는 고정이다 — 코드가 "frozen decision N"으로 참조한다(4·7·8·9·10 등). 뒤집힌 항목은
+> 지우지 말고 취소선으로 남긴다: 번호를 재조정하면 그 참조가 깨지고, 빈 자리가 "왜 없지"를 낳는다.
+
 1. 능력 레지스트리 = 별도 `entwurf-capabilities.json`(launch allowlist와 별 관심사).
-2. v1→v2 = `parseMetaRecordV1/V2`→`normalizeMetaIdentity` dual-read + lazy normalize, 새 write는 v2.
-3. correlation = 소켓파일명 + tmux `@garden_id`. **env probe 폐기**(상속 누수); lineage는 launcher가
-   `PARENT_SESSION_ID`를 명시 set. 안전 tmux 필드 = `@garden_id`+`pane_id`+`pane_pid`만(`pane_title`은
-   shell 의존이라 authority 금지).
+2. ~~v1→v2 = `parseMetaRecordV1/V2`→`normalizeMetaIdentity` dual-read + lazy normalize, 새 write는 v2.~~
+   **#50 hard cut이 이 결정을 뒤집었다 — 재설계 금지 대상 아님(오히려 되살리는 것이 금지다).** 프로덕션은
+   V3-only(`parseMetaRecordAny`=v3 only), dual-read는 삭제됐고 v1/v2 reader는 `meta-migration.ts` 한 주소에
+   frozen. pre-cut store는 명시적 M1(`./run.sh meta-bridge-migrate-v3 migrate`)로만 옮긴다. 아래 「meta-record
+   V3」 절 참조.
+3. ~~correlation = 소켓파일명 + tmux `@garden_id`; env probe 폐기; lineage는 launcher가 `PARENT_SESSION_ID`를
+   명시 set.~~ **C1–C3가 이 correlation/lineage 설계를 대체했다.** 주소축은 meta-record 하나이고(LOCKED
+   PROTOCOL 1), record엔 parent/lastCaller/worker tree가 없다(LOCKED PROTOCOL 5) — `PARENT_SESSION_ID`도
+   tmux `@garden_id` correlation도 코드에 없다. socket은 record gardenId로 키잉되는 내부 transport일 뿐
+   (C4, LOCKED PROTOCOL 3).
 4. preflight/facts owner = **단일 TS 모듈**. launcher / global `project_trust` handler / MCP fact tool은
    결과만 소비, 누구도 prefix/trust 판정 재구현 안 함. **trust ≠ discovery**: trust는 launch-time 단일
    cwd만; peers/discovery는 trust 불필요.

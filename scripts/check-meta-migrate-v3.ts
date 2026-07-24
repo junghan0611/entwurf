@@ -27,7 +27,9 @@
  *     and writes nothing; a migrated store certifies non-V3=0.
  *   - restore: store bytes return to the pre-migration originals, the current
  *     store survives as a `.pre-restore-` aside, the backup stays intact, and
- *     non-backup dirs are refused.
+ *     ONLY a sibling backup OF THIS store is accepted — a foreign look-alike, a
+ *     dir nested inside a real backup, and a bare-substring name are all refused
+ *     (a wrong path must never cut the store over to an unrelated tree).
  *   - prescriptions (R1): the pre-cut FAIL and the rollback line each name BOTH
  *     invocation forms — `./run.sh …` for a dev clone AND `entwurf …` for an
  *     installed package. The hosts that actually meet a pre-cut store are
@@ -512,9 +514,61 @@ const s1 = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
 	ok("S10 restore refuses a nonexistent backup dir", missing.status === 1, missing.stderr);
 	const notBackup = runCli(["restore", s1.mailbox], env);
 	ok(
-		"S10 restore refuses a dir that is not an M1 backup",
-		notBackup.status === 1 && notBackup.stderr.includes("not an M1 backup"),
+		"S10 restore refuses a dir that is not this store's backup",
+		notBackup.status === 1 && notBackup.stderr.includes("not a backup OF THIS store"),
 		notBackup.stderr,
+	);
+}
+
+// ── S15: restore is a SIBLING-only rollback — foreign / nested / look-alike ───
+// A bare `.v3-migration-backup-` substring is not proof a dir is THIS store's
+// backup. A look-alike under another store, or a dir nested inside a real
+// backup, must NOT replace the address authority (an operator handing a wrong
+// path mid-blackout would otherwise cut the store over to an unrelated tree).
+{
+	const w = makeWorld({ [`${V3_GID}.meta.json`]: V3_BODY });
+	const env = { store: w.store, mailbox: w.mailbox };
+	const storeBefore = storeBytes(w);
+
+	// (a) a foreign look-alike: the name mimics a backup but it is NOT a sibling of
+	//     THIS store — the exact `foreign.v3-migration-backup-<x>` GPT reproduced.
+	const foreign = path.join(w.root, "foreign.v3-migration-backup-forged");
+	fs.mkdirSync(foreign);
+	fs.writeFileSync(
+		path.join(foreign, "20260909T000000-fake09.meta.json"),
+		V3_BODY.replace(V3_GID, "20260909T000000-fake09"),
+	);
+	const rf = runCli(["restore", foreign], env);
+	ok(
+		"S15 a foreign look-alike backup is refused (not this store's sibling)",
+		rf.status === 1 && rf.stderr.includes("not a backup OF THIS store"),
+		rf.stdout + rf.stderr,
+	);
+
+	// (b) a dir nested one level inside a correctly-named sibling backup.
+	const realSibling = `${w.store}.v3-migration-backup-20260101T000000`;
+	fs.mkdirSync(path.join(realSibling, "inner"), { recursive: true });
+	const rn = runCli(["restore", path.join(realSibling, "inner")], env);
+	ok(
+		"S15 a dir nested inside a real backup is refused (one path segment only)",
+		rn.status === 1 && rn.stderr.includes("not a backup OF THIS store"),
+		rn.stdout + rn.stderr,
+	);
+
+	ok(
+		"S15 both refusals wrote nothing — the store is byte-untouched, no aside taken",
+		fs.readdirSync(w.root).every((n) => !n.startsWith("store.pre-restore-")) &&
+			[...storeBefore].every(([f, bytes]) => fs.readFileSync(path.join(w.store, f), "utf8") === bytes),
+	);
+
+	// (c) the genuine sibling, filled to match its name, IS accepted — the guard
+	//     admits the real thing, not just rejects the fakes.
+	fs.writeFileSync(path.join(realSibling, `${V3_GID}.meta.json`), V3_BODY);
+	const rok = runCli(["restore", realSibling], env);
+	ok(
+		"S15 the genuine sibling backup of THIS store is accepted",
+		rok.status === 0 && rok.stdout.includes("restored:"),
+		rok.stdout + rok.stderr,
 	);
 }
 

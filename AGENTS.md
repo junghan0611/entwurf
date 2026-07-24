@@ -127,7 +127,7 @@ pnpm typecheck                              # 3-config tsc fence (root + mcp + s
 pnpm check                                  # full static floor: lint + typecheck + every check-*/smoke-* below
 ./run.sh check-entwurf-v2-matrix            # the decider's state×intent table, read as an SSOT (REAL decideDispatch)
 ./run.sh check-entwurf-v2-decider           # + -contract / -lock / -release / -send / -send-fallback / -mailbox / -runner / -production / -surface / -spawn / -spawn-production
-./run.sh check-meta-session                 # + -record-v2 / -dual-read / -migration / -mailbox-state-write / -receiver-marker / -capability-source / -dual-consumers / -listing
+./run.sh check-meta-session                 # + -v3-record / -migration-readers / -migrate-v3 / -mailbox-state-write / -receiver-marker / -capability-source / -identity-consumers / -listing (#50: record-v2→v3-record, dual-read deleted, migration→migration-readers, dual-consumers→identity-consumers)
 ./run.sh check-meta-doctor-oracle           # detection power of the release oracle: healthy fixture reaches `doctor: PASS`, 21 planted defects each turn it FAIL naming their own cause
 ./run.sh check-native-push-adapter          # agy probe/route leaf; separate from pi socket and mailbox liveness
 ./run.sh check-agy-sender-identity          # record-backed pid/start-key sender resolution + ambiguity refusal
@@ -228,7 +228,7 @@ Messages are thrown, not awaited.
 | `pi-extensions/meta-bridge-hook.ts` | Claude Code `SessionStart` hook: register a mailbox-backed garden meta-session |
 | `pi-extensions/lib/entwurf-v2-*.ts` | v2 substrate: contract / lock / decider / matrix / release / send / mailbox / native-push / runner / production / surface / spawn(+production) |
 | `pi-extensions/lib/native-push/` | Antigravity adapter probe/route, direct-inject hand, explicit native registration core |
-| `pi-extensions/lib/meta-*.ts` | meta-record authority, mailbox state, dual-read/migration, receiver/sender identity |
+| `pi-extensions/lib/meta-*.ts` | V3-only meta-record authority (`meta-session.ts`), mailbox state, frozen v1/v2 legacy readers isolated in `meta-migration.ts` (M1 surface only), receiver/sender identity |
 | `scripts/agy-{bridge,statusline-bridge,hooks-bridge}.*` | three state-backed agy install/doctor/inverse surfaces |
 | `scripts/agy-imprint.ts` | agy `PreInvocation` automatic birth + record-backed sender marker |
 | `pi-extensions/lib/entwurf-core.ts` | shared core (session-file lookup, identity read, explicit-extension args); some v1 exports now dead pending routing cleanup |

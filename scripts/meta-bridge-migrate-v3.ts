@@ -20,9 +20,12 @@
  *     lines), naming the migrate verb.
  *   restore <backup-dir>
  *     rollback: move the current store aside to `<store>.pre-restore-<ts>/`
- *     (nothing is destroyed), then copy the M1 backup back. Only
- *     `.v3-migration-backup-` dirs are accepted — restoring an arbitrary dir
- *     over the address authority is a manual `cp`, not a verb. Scope is the
+ *     (nothing is destroyed), then copy the M1 backup back. Only a SIBLING
+ *     backup OF THIS store is accepted — exactly
+ *     `<resolved-store>.v3-migration-backup-<ts>` (one path segment); a foreign,
+ *     nested, or bare-substring look-alike is refused, because copying an
+ *     unrelated tree over the address authority is a manual `cp`, not a verb.
+ *     Scope is the
  *     STORE only: mailbox receipt state is deliberately NOT rolled back — the
  *     v1 receipt migration is state-wins and idempotent, so a post-restore
  *     re-run refills the same null fields and never overwrites a value.
@@ -391,10 +394,23 @@ function cmdRestore(storeDir: string, backupArg: string): number {
 		console.error(`REFUSE: backup dir does not exist (or is not a directory): ${backupDir}`);
 		return 1;
 	}
-	if (!path.basename(backupDir).includes(".v3-migration-backup-")) {
+	// A backup migrate took is a SIBLING of THIS store, named exactly
+	// `<resolved-store>.v3-migration-backup-<ts>` — one path segment, no nesting.
+	// A bare `.v3-migration-backup-` substring is not enough: a look-alike under
+	// another store (`foreign.v3-migration-backup-x`) or nested inside a backup
+	// (`store.v3-migration-backup-x/inner`) would sail through and replace the
+	// address authority with an unrelated tree. Restoring anything else is a
+	// manual `cp`, not this verb. (To restore a backup taken of a DIFFERENT store,
+	// point ENTWURF_META_SESSIONS_DIR at that store — then this backup is ITS
+	// sibling and the check passes honestly.)
+	const expectedPrefix = `${path.resolve(storeDir)}.v3-migration-backup-`;
+	const tail = backupDir.startsWith(expectedPrefix) ? backupDir.slice(expectedPrefix.length) : null;
+	if (tail === null || tail.length === 0 || tail.includes(path.sep)) {
 		console.error(
-			`REFUSE: ${backupDir} is not an M1 backup (expected a \`<store>.v3-migration-backup-<ts>\` dir). ` +
-				"restore only restores M1 backups — copying any other dir over the store is a manual operation.",
+			`REFUSE: ${backupDir} is not a backup OF THIS store. An M1 backup is a sibling named exactly ` +
+				`\`${expectedPrefix}<ts>\` (one segment) — a foreign, nested, or look-alike dir is refused. ` +
+				"To roll a different store back, point ENTWURF_META_SESSIONS_DIR at it; copying an arbitrary " +
+				"dir over the address authority is a manual `cp`, not a verb.",
 		);
 		return 1;
 	}
