@@ -4,11 +4,13 @@
 >
 > 설계문서(HOP.md, .agent-reports/)는 폐기했다 — 내용은 git history와 #50에 보존. 종이보다 코드. 터질 수 있는 지점을 아는 채로 터지는 건 실패가 아니다.
 
-## NOW (2026-07-24 저녁)
+## NOW (2026-07-24 오전 갱신)
 
-- Current: **세 문장 목표 ①②③ 전부 코드로 성립.** C4 4 cut + docs 랜딩, aggregate `LIVE=1 release-gate` MUST 16/16 + BEHAVIOR 1/1 EXIT=0. 총 21커밋 push 대기.
-- Next: (1) **오푸스 교차 검수** — 대상은 C4 6커밋(`7ab0c7b`~`924f7d9`)과 「상태 2026-07-24」의 판단 기록 3건. A4 선행 조건(라이브 실측)은 이미 충족 → (2) GLG: push 여부 + **M1 방아쇠** → (3) M1+H7 레인 (runbook은 §6, "V3-already" 전제).
-- 대기: Ⅰ-4 `smoke-agy-native-push-live`(살아있는 `AGY_CONVERSATION_ID` 필요), 「기계가 말하는 장치」(게이트별 마지막 PASS × rail 대조 — 오푸스 최우선 후보, 덧셈 레인이라 C4와 분리해 둠. aggregate 실측 2회가 이미 데이터 포인트).
+- Current: **세 문장 목표 ①②③ 전부 코드로 성립 + C4 교차 검수 완료(조건부 승인, 되돌림 0) + 수선 반영 완료.** 총 23커밋 push 대기.
+- **C4 교차 검수 (오푸스, GLG 위임 tmux headless 세션 — 보고서 `/tmp/entwurf-c4-review/report.md`)**: 독립 full check EXIT=0(2332 단언) + **변이 8종을 스크래치 트리에 심어 게이트 자기충족 검증 — 7종 RED**(A1 부활·sessions 부활·익명 기본 복귀·REQUIRE 재성장·M1 명명 제거·wantsReply 회귀·folding 제거), 라이브 로그 내부 대조로 aggregate가 C4 트리에서 돌았음 확인. 판단 기록 3건 전부 동의. 뚫린 1종(hatch 봉투 replyable:true를 아무 게이트도 못 잡음)이 F3.
+- **수선 반영 (페블)**: `e906f8f` F1/F2/F4/F6 — README 발신 정책 4곳+hatch 문서화+Codex 절, run.sh usage·주석 5곳, ROADMAP 원장 3곳, provider doc + **AGENTS 승격 2건**(판단① self/peers 경계, "무효화된 문장 찾기" 규율+대상 목록 — F1 부류 세 번째라 규율에 목록을 박음). `f757a33` F3/F5 — D12에 `(external, non-replyable)` 단언+`replyable —` 부정 단언, 감산 잔재 2건 결합 삭제, **biome `noUnusedImports`=error(결합 규칙 첫 기계 backstop)**.
+- Next: (1) GLG: **push 여부**(23커밋; 오푸스 노트 — F1 수선이 랜딩됐으므로 "README 따라 깐 Codex 호스트 발신 거부 노출" 우려는 해소됨) + **M1 방아쇠** → (2) M1+H7 레인 (runbook은 §6, "V3-already" 전제).
+- 대기: Ⅰ-4 `smoke-agy-native-push-live`(살아있는 `AGY_CONVERSATION_ID` 필요), 「기계가 말하는 장치」(게이트별 마지막 PASS × rail 대조 — 오푸스 최우선 후보; F5의 biome backstop이 같은 계열의 첫 조각).
 - Do not touch: fresh sibling mint/#47, Cortex/#48, 0.12.9 ACP 의존성, backend auth, transcript hydration, 라이브 `install-meta-bridge`(M1 전 금지).
 
 ## 상태 (2026-07-24 저녁)
