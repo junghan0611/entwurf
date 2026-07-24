@@ -88,6 +88,7 @@ Usage:
   ./run.sh smoke-pi-attach            # deterministic gate (#50 C2 checkpoint + C3 ACP tail): a pi session attaches as a V3 meta-record citizen (backend:"pi"), the gardenId is the RECORD's not pi's session id, the control socket is keyed on it, a re-open ATTACHES to the same address (never a second mint), the BUILT DIST ENTRY driven over MCP stdio lists the citizen + delivers entwurf_v2 to that socket with an RPC ack, and the ACP identity chain lands a send AS the host record (enrichMcpServersWithEnvelope env → bridge sender = host gardenId). mkdtemp-isolated; the live store is never read
   ./run.sh check-bridge-delivery      # deterministic gate (IN pnpm check): demo scene 3 recovered — seed strict meta-sender + armed receiver citizens in an isolated temp world, scrub ambient pi/sender carriers, drive the BUILT DIST ENTRY over MCP stdio through a real tools/call entwurf_v2, assert the .msg landed under the seeded sender + doorbell poked. DELIVERS through the artifact, not from source. ENTWURF_DELIVERY_SUBJECT=<launcher> replays the same scene against another consumer artifact (check-pack-install passes the npm-installed bin). No model/network/cost; stale or missing dist FAILS
   ./run.sh check-meta-migration-readers # deterministic gate (#50 hard cut): frozen v1/v2 readers + version fences + strict v2 keyset + meta-migration import allowlist, no API
+  ./run.sh check-meta-migrate-v3       # deterministic gate (#50 M1): the REAL operator CLI driven as a subprocess over synthetic stores — v1 receipts→mailbox state + field map, mixed-store idempotence (no-op takes no backup), refusal preflight (malformed/stray-key/half-migrated/drift/duplicate = zero writes), parentage disposition (--drop-parentage), verify non-V3=0, restore round-trip. No API
   ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
   ./run.sh check-meta-receiver-marker # deterministic gate (SE-2): receiver marker round-trip/start-key/provenance, UserPromptSubmit cannot mint presence, reader does not gate on record existence — marker SEMANTICS only; launch topology moved to check-hook-launch-topology
   ./run.sh check-hook-launch-topology # #51 gate 1: shipped hooks.json is exec form through hook-launch.sh, launcher is loud on an empty argv (older Claude's silent args drop), exec preserves the pid so the hook's parent is Claude, and a space/$/backtick plugin path survives as one argv element
@@ -151,6 +152,7 @@ Usage:
   ./run.sh uninstall-agy-hooks        # honest inverse of install-agy-hooks from install-state
   ./run.sh doctor-agy-hooks           # fail-loud doctor for agy hooks.json imprint wiring
   ./run.sh meta-bridge-prune          # 1.0.0 meta-bridge Phase 4: LISTING-ONLY store hygiene — classify orphan/stale/ambiguous/keep, print manual rm commands, delete NOTHING ([dir] [--ttl-days N])
+  ./run.sh meta-bridge-migrate-v3 <migrate|verify|restore>  # #50 M1 one-shot store migration (the verb every v3-only rejection names): migrate [--drop-parentage] = backup + v1/v2→v3 + verify non-V3=0; verify = read-only certification; restore <backup-dir> = rollback from the M1 backup
   ./run.sh meta-bridge-managed-keys   # 0.10.0 meta-bridge: print the SSOT of settings keys entwurf OWNS (consumers read this to stay disjoint — keyset-owner invariant)
   ./run.sh check-keyset-overlap <fragment.json...>  # 0.10.0 meta-bridge: PREVENTIVE keyset guard — fail if a consumer fragment collides with any pi-owned key (cross-repo; not in pnpm check)
   ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
@@ -556,6 +558,22 @@ check_meta_migration_readers() {
   # meta-migration.ts reachable only through the M1 operator surface + its gate.
   # Pure functions + a source scan; no backend, no hook, no API.
   run_ts scripts/check-meta-migration-readers.ts
+}
+
+check_meta_migrate_v3() {
+  # Deterministic gate for the M1 operator command (#50 → H7). Drives the REAL
+  # scripts/meta-bridge-migrate-v3.ts as a subprocess (the exact dev-clone form
+  # this file dispatches) over synthetic stores isolated via
+  # ENTWURF_META_SESSIONS_DIR/ENTWURF_META_MAILBOX_DIR: v1→v3 field map with
+  # receipts landing in mailbox state, mixed-store idempotence (v3 bytes
+  # untouched, no-op takes no backup), the refusal preflight (malformed /
+  # stray-key / half-migrated / body-filename drift / duplicate nativeSessionId
+  # = exit 1, zero writes, no backup), the parentage disposition (non-null
+  # parentGardenId / isEntwurf=true refused without --drop-parentage), verify
+  # non-V3=0 both ways, and the restore round-trip (pre-migration bytes return,
+  # aside dir kept, backup intact). Results asserted with the PRODUCTION v3
+  # reader. No backend, no hook, no API.
+  run_ts scripts/check-meta-migrate-v3.ts
 }
 
 check_meta_mailbox_state_write() {
@@ -2309,6 +2327,10 @@ check_pack() {
     "mcp/entwurf-bridge/dist/scripts/doctor-pi-provider.js"
     "mcp/entwurf-bridge/dist/scripts/new-session-id.js"
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-prune.js"
+    # #50 M1 — the one-shot store-migration operator command. The hosts that need it
+    # are installed hosts on a pre-cut v2 store; without this twin the prescription
+    # every v3-only rejection names would be dead exactly where it matters.
+    "mcp/entwurf-bridge/dist/scripts/meta-bridge-migrate-v3.js"
     # 0.12.5 — the node_modules-safe plugin hook + its lib. install-meta-bridge copies
     # these compiled JS into the assembled plugin when installed (raw .ts can't
     # strip-types under node_modules). meta-session.js is shared with the store-doctor
@@ -2501,6 +2523,9 @@ _check_pack_install_impl() {
     "mcp/entwurf-bridge/dist/scripts/doctor-pi-provider.js"
     "mcp/entwurf-bridge/dist/scripts/new-session-id.js"
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-prune.js"
+    # #50 M1 — the store-migration operator command (see check-pack). The installed-
+    # command regression below certifies a 0-record store through the real bin.
+    "mcp/entwurf-bridge/dist/scripts/meta-bridge-migrate-v3.js"
     # 0.12.5 — node_modules-safe plugin hook + lib (see check-pack). The installed
     # hook regression below runs exactly this compiled JS from under node_modules.
     "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook.js"
@@ -3099,7 +3124,20 @@ JS
     echo "$op_out" | tail -8 | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] installed operator commands pass (new-session-id id-shaped, doctor-pi-provider reaches its verdict, meta-bridge-prune walks a 0-record store)"
+
+  # #50 M1 — the migration command must reach its verdict from under node_modules
+  # (verify on the sandbox 0-record store certifies vacuously). The exit code alone
+  # can't tell a verdict from a fence crash, so read the certification line.
+  if ! op_out=$(HOME="$npmhome" XDG_DATA_HOME="$op_xdg_data" XDG_STATE_HOME="$op_xdg_state" XDG_CACHE_HOME="$op_xdg_cache" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" meta-bridge-migrate-v3 verify 2>&1); then
+    fail "[check-pack-install] installed 'entwurf meta-bridge-migrate-v3 verify' FAILED on a 0-record store:"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! printf '%s' "$op_out" | grep -q 'non-V3=0'; then
+    fail "[check-pack-install] installed 'entwurf meta-bridge-migrate-v3 verify' never reached its certification line: $op_out"
+    return 1
+  fi
+  echo "[check-pack-install] installed operator commands pass (new-session-id id-shaped, doctor-pi-provider reaches its verdict, meta-bridge-prune walks a 0-record store, migrate-v3 verify certifies it)"
 
   # A dev-only gate has NO compiled twin by design. Under an installed package run_ts must
   # REFUSE it with a legible message — never fall back to raw .ts (that just re-raises the
@@ -3888,6 +3926,9 @@ case "$cmd" in
   check-meta-migration-readers)
     check_meta_migration_readers
     ;;
+  check-meta-migrate-v3)
+    check_meta_migrate_v3
+    ;;
   check-capability-bundle-reach)
     check_capability_bundle_reach
     ;;
@@ -4295,6 +4336,20 @@ case "$cmd" in
     # 막힘 ②: honest inverse of expose-dev-bin — remove ONLY our managed link + state (REFUSE if
     # it became foreign). The raw script (no wrapper) so an operator sees a loud failure.
     (cd "$REPO_DIR" && bash scripts/dev-bin.sh remove "$@")
+    ;;
+  meta-bridge-migrate-v3)
+    # #50 M1 — the ONE-SHOT schema-migration operator command (LOCKED PROTOCOL 7:
+    # installed operator command only, never hook-automated). Every v3-only
+    # rejection surface (parse/birth/peers/self/v2/inbox/store-doctor) names this
+    # verb as the fix. migrate = classify → refuse-before-write on an unreadable
+    # store or a non-null parentGardenId/isEntwurf=true without --drop-parentage
+    # (#50: Call ≠ parentage) → whole-dir backup to `<store>.v3-migration-backup-<ts>/`
+    # → atomic v1/v2→v3 rewrite (v1 receipts to mailbox state first) → re-verify
+    # non-V3=0. verify = read-only certification. restore <backup-dir> = rollback
+    # (current store moved aside, never destroyed). Store resolution is env+default
+    # only — the H7 runbook targets THE live store.
+    shift || true
+    run_ts scripts/meta-bridge-migrate-v3.ts "$@"
     ;;
   meta-bridge-prune)
     # 1.0.0 meta-bridge Phase 4: LISTING-ONLY janitor for the meta-session store.

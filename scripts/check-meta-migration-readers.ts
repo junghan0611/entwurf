@@ -152,7 +152,9 @@ throws("v2 reader rejects an unknown backend", () =>
 const REPO = path.resolve(import.meta.dirname, "..");
 const ALLOWED_IMPORTERS = new Set([
 	"scripts/check-meta-migration-readers.ts",
-	// Reserved for the M1 operator surface (built in the H7 lane):
+	// The M1 operator surface — the single door back into v3 production for a
+	// pre-cut record. Its gate (check-meta-migrate-v3) drives it as a subprocess
+	// with hand-written fixture JSON, so the gate needs no entry here.
 	"scripts/meta-bridge-migrate-v3.ts",
 ]);
 const SCAN_ROOTS = ["pi-extensions", "mcp/src", "scripts"];

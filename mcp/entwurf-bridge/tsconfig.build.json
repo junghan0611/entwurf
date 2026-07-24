@@ -83,6 +83,15 @@
 	// maintenance verb. check-*/smoke-* stay OUT on purpose — they are dev-clone-only
 	// and run_ts refuses them under an installed package rather than emitting 70+
 	// gate leaves into the tarball.
+	//
+	// WHY meta-bridge-migrate-v3 rides this build (#50 M1): it is the ONE operator
+	// command every v3-only rejection surface names, and the hosts that need it most
+	// are INSTALLED hosts sitting on a pre-cut v2 store — exactly where run.sh lives
+	// under node_modules and a dev-clone-only surface would be a dangling
+	// prescription. Its repo imports (meta-session.ts + meta-migration.ts) are lib
+	// leaves the bridge graph tolerates; the frozen-reader import allowlist
+	// (check-meta-migration-readers gate e) still holds because the allowlist scans
+	// source paths, and this emit is the same source's compiled twin.
 	"include": [
 		"./src/index.ts",
 		"../../protocol.js",
@@ -91,6 +100,7 @@
 		"../../scripts/doctor-pi-provider.ts",
 		"../../scripts/new-session-id.ts",
 		"../../scripts/meta-bridge-prune.ts",
+		"../../scripts/meta-bridge-migrate-v3.ts",
 		"../../pi-extensions/meta-bridge-hook.ts"
 	]
 }

@@ -4,16 +4,17 @@
 >
 > 설계문서(HOP.md, .agent-reports/)는 폐기했다 — 내용은 git history와 #50에 보존. 종이보다 코드. 터질 수 있는 지점을 아는 채로 터지는 건 실패가 아니다.
 
-## NOW (2026-07-24 오전 갱신)
+## NOW (2026-07-24 오전 갱신 → M1 랜딩)
 
-- Current: **세 문장 목표 ①②③ 전부 코드로 성립 + C4 교차 검수 2라운드 완료(승인, 되돌림 0) + 결함 9건 전항 반영.** 총 **26커밋** push 대기. **GPT 검수로 넘길 준비 완료 — C4 축 미해결 결함 0건.** 열려 있는 것은 결함이 아니라 **미착수 레인 하나**: M1(아래 §6 「오늘의 실상태」 — 모든 거부 표면이 지목하는 `meta-bridge-migrate-v3`가 아직 dispatch 없는 예약 이름이다).
+- **M1 operator command 랜딩 (페블 2026-07-24, 오푸스 검수 대기).** `scripts/meta-bridge-migrate-v3.ts` — allowlist가 예약해둔 바로 그 경로에, 3 verb(`migrate [--drop-parentage]` / `verify` / `restore <backup-dir>`), env+default store 해석(dir argv 없음 — H7 runbook은 THE live store를 겨눈다). dangling name 종료: run.sh dispatch + usage + `pnpm check` 편입(`check-meta-migrate-v3`, CLI를 서브프로세스로 모는 52단언 — §6 fixture 6종 + parentage 처분 + verify 집계(F8 ×N) + restore 왕복) + tsconfig.build emit + check-pack/tar_required 목록 + check-pack-install 설치본 verify 드라이브. **판단 기록(오푸스 검토 대상) 3건**: ① non-null `parentGardenId`/`isEntwurf=true`는 기본 REFUSE(쓰기 0) + `--drop-parentage`가 명시 처분 — 백업이 원본 바이트 보존(#50 Call ≠ parentage; 이 호스트 실측 0건이라 cutover는 이 경로를 안 탐), ② migrate는 classify-first all-or-nothing — malformed/stray/half-migrated/drift/**duplicate nativeSessionId**까지 전부 쓰기 전 거부(blackout 중 발견보다 quiesce 전 발견이 싸다), ③ restore는 `.v3-migration-backup-` 이름만 수용 + 현 store를 `.pre-restore-<ts>`로 옮겨두고 복사(아무것도 파괴 안 함).
+- Current: **세 문장 목표 ①②③ 전부 코드로 성립 + C4 교차 검수 2라운드 완료(승인, 되돌림 0) + 결함 9건 전항 반영 + M1 command 랜딩.** push 대기. 남은 것은 **H7 라이브 cutover 하나** (§6 runbook, 방아쇠는 GLG).
 - **C4 교차 검수 R1 (오푸스, GLG 위임 headless 세션 — 보고서 `/tmp/entwurf-c4-review/report.md`)**: 독립 full check EXIT=0(2332 단언) + **변이 8종을 스크래치 트리에 심어 게이트 자기충족 검증 — 7종 RED**(A1 부활·sessions 부활·익명 기본 복귀·REQUIRE 재성장·M1 명명 제거·wantsReply 회귀·folding 제거), 라이브 로그 내부 대조로 aggregate가 C4 트리에서 돌았음 확인. 판단 기록 3건 전부 동의. 뚫린 1종(hatch 봉투 replyable:true를 아무 게이트도 못 잡음)이 F3. → 결함 6건(F1~F6).
 - **R1 수선 (페블)**: `e906f8f` F1/F2/F4/F6 — README 발신 정책 4곳+hatch 문서화+Codex 절, run.sh usage·주석 5곳, ROADMAP 원장 3곳, provider doc + **AGENTS 승격 2건**(판단① self/peers 경계, "무효화된 문장 찾기" 규율+대상 목록). `f757a33` F3/F5 — D12에 `(external, non-replyable)` 단언+`replyable —` 부정 단언, 감산 잔재 2건 결합 삭제, **biome `noUnusedImports`=error(결합 규칙 첫 기계 backstop)**.
 - **검수 R2 + 수선 (오푸스, 같은 세션)**: 수선 후 full check EXIT=0(2328 단언 — 회계 일치: `shouldListAsLive` 동반 삭제 −5, 신설 D12 +1). **변이 재실행 3종**: R1에서 유일하게 뚫렸던 `replyable:true`가 이제 D12로 RED, 미사용 import 재도입이 `biome check` EXIT=1, `noUnreachable`도 여전히 RED(**그룹 오버라이드가 나머지 recommended 규칙을 끄지 않았음을 확인** — 껐다면 backstop을 얻으며 lint를 약화시킨 셈). F1~F6 전항 확인. 새 결함 3건(G1~G3)을 오푸스가 직접 수선 → 이 커밋.
   - **G1** `docs/setup-clean-host.md` Stage 7이 pre-C2 launcher를 가르쳤다 — `--session-id` 주입 + **존재하지 않는 hard-exit 가드 주장** + 틀린 소켓 경로 주석(record가 자기 gid를 민팅하므로 주입한 id로는 소켓이 안 선다), `:233`은 pre-C4 sender 문장. **원인: AGENTS 대상 목록에 `docs/`가 없었다** — 규율의 구멍이 미스가 난 자리와 같았다. 목록에 `docs/**` 추가(+ 왜 install 가이드가 README보다 비싼지).
   - **G2** `f757a33` 자신이 `shouldListAsLive`의 정책 산문 2줄을 남겼다(`socket-probe.ts` 모듈 doc, `check-socket-probe.ts` 헤더). 같이 발견된 pre-C4 잔재(모듈 doc이 브릿지를 소비자로 지목 — 브릿지는 socket-probe를 import하지 않는다)도 정정. **기계 backstop은 심볼을 잡지 산문을 못 잡는다**는 실증.
   - **G3** NEXT 커밋 수 off-by-one(23 → 실측 24).
-- Next: (1) **GPT 검수** — 알려진 결함 0 상태에서 시작 → (2) GLG: **push 여부**(25커밋) + **M1 방아쇠** → (3) M1+H7 레인 (runbook은 §6, "V3-already" 전제).
+- Next: (1) **오푸스 교차 검수** (M1 커밋 — 위 판단 기록 3건 포함) → (2) GLG: **push 여부** → (3) **H7 라이브 cutover** (runbook은 §6, "V3-already" 전제 — M1 fixture가 이미 커버).
 - 대기: Ⅰ-4 `smoke-agy-native-push-live`(살아있는 `AGY_CONVERSATION_ID` 필요), 「기계가 말하는 장치」(게이트별 마지막 PASS × rail 대조 — 오푸스 최우선 후보; F5의 biome backstop이 같은 계열의 첫 조각).
 - Do not touch: fresh sibling mint/#47, Cortex/#48, 0.12.9 ACP 의존성, backend auth, transcript hydration, 라이브 `install-meta-bridge`(M1 전 금지).
 
@@ -90,8 +91,8 @@ main 승격은 **당분간 보류**(GLG 2026-07-23) — 브랜치에서 C3 → C
    **의도적으로 유지**: liveness 어휘(4-value fact — socket이라는 단어 없이 의미 전달), quarantine 진단들(이미 진단), socket-discovery/probe/grammar SSOT(internal transport), stale socket sweep(GC=process resource), `entwurf_self`의 socketPath/mailboxPath 라인(자기 transport 상태 진단이며 identity 목록 표면이 아님 — **C4 범위 밖으로 판단, 오푸스 검토 대상**).
 
    **cut 순서**: ① F2 wantsReply → ② dispatch rail(taxonomy `record-less-socket` 신설 + `socket-only-no-resume-authority` 삭제 + A1 narrow/ResumePolicy 삭제) → ③ facts/listing(socketOnly→진단 강등, sessions/controlDir/enrich/`/entwurf-sessions` 삭제) → ④ 발신 신원 기본 뒤집기(installer/doctor/oracle/컨테이너 게이트 동반 재저작; install 표면이라 push 전 check-pack-install + check-install-container 로컬 실측).
-6. **M1 + H7 레인 (라이브 cutover)**: M1 operator command(backup `meta-sessions.v3-migration-backup-<ts>/` → migrate → verify non-V3=0 → restore/rollback 증명, fixture: V1/V3-already/malformed/stray-key/mismatch/half-migrated; duplicate는 파일명=gardenId 구조상 불가라 제외). 173+ record 라이브 전환: quiesce(설치본 v2 writer가 계속 민팅 중 — writer 정지 순서 포함 runbook 필수) → backup → M1 → non-V3=0 → 새 런타임. self-host blackout 예상 — cut 직전 ids/HEAD/patch 고정, 끊긴 동안 GLG 수동 릴레이, 양방향 delivery 복구 전 다음 cut 금지. **방아쇠는 GLG.**
-   - **오늘의 실상태 (오푸스 실측 2026-07-24)**: `M1_MIGRATE_COMMAND`(`./run.sh meta-bridge-migrate-v3 migrate`)는 **이름만 예약돼 있고 `run.sh`에 dispatch case가 없다.** 지금 그 명령을 치면 run.sh 전체 usage를 뱉고 EXIT=1 — 친 명령이 왜 없는지는 한 줄도 안 나온다. C1이 이름을 먼저 예약한 건 F7/F10 수선이 모든 거부 표면의 문구를 한 번에 authoring 할 수 있게 한 옳은 순서였지만, **그 결과 v2 store 운영자에게 주는 처방이 오늘은 dangling name이다**(peers/self/v2/inbox/birth/store-doctor 전 표면 공통). M1 레인의 첫 산출물이 이걸 닫는다. 레인을 더 미룰 거면 최소한 예약된 이름이 **자기 이유를 대며** 거부하게 만드는 3줄 dispatch가 중간 처방 — 다만 그건 M1 표면 설계에 속하므로 GLG 판단.
+6. **M1 + H7 레인 (라이브 cutover)**: ~~M1 operator command~~ → **M1 DONE (2026-07-24, 위 NOW 참조)** — backup `<store>.v3-migration-backup-<ts>/` → migrate → verify non-V3=0 → restore 전부 코드+52단언 게이트로 성립. fixture: V1/V3-already/malformed/stray-key/mismatch(drift)/half-migrated **+ duplicate nativeSessionId**(gardenId 중복은 파일명 구조상 불가로 제외가 맞았지만 nativeSessionId 중복은 가능해서 preflight 거부에 편입). **남은 것 = H7 라이브 전환**: 182+ record(V3 1 + v2 181+, 세션마다 증가): quiesce(설치본 v2 writer가 계속 민팅 중 — writer 정지 순서 포함 runbook 필수) → `verify`로 사전 분류 확인(read-only) → `migrate`(backup 자동) → non-V3=0 → 새 런타임. self-host blackout 예상 — cut 직전 ids/HEAD/patch 고정, 끊긴 동안 GLG 수동 릴레이, 양방향 delivery 복구 전 다음 cut 금지. 실패 시 `restore <backup-dir>`가 즉시 롤백. **방아쇠는 GLG.**
+   - ~~오늘의 실상태: dangling name~~ → **닫힘 (M1 랜딩)**: `./run.sh meta-bridge-migrate-v3 migrate`는 이제 실명령이다. 전 거부 표면(peers/self/v2/inbox/birth/store-doctor)의 처방이 실행 가능한 이름을 가리킨다.
 
 커밋 규율: 각 커밋은 삭제 + 게이트 재저작 + GREEN이 한 몸. RED는 커밋하지 않는다. 정상 라우팅의 새 dual-authority 금지.
 
@@ -183,7 +184,7 @@ M1 계약("v2를 만나는 순간 M1을 이름으로 지목")이 이제 **경로
 **Ⅴ. 라이브 상태 (M1이 여는 문)**
 13. 라이브 store 182개, 세션마다 증가. mixed 상태(V3 1 + v2 181) 지속.
 14. 형제 채널 비대칭 여전 — pi 쪽은 V3로 붙고, Claude Code 쪽은 v2라 **자기 자신이 안 보인다**. 교차 검수가 아직 GLG 수동 릴레이다.
-15. M1 미착수. 위 13·14가 여기서 풀린다 (Ⅲ-8은 cut④가 이미 닫았다).
+15. ~~M1 미착수~~ → **M1 command 랜딩 (2026-07-24, NOW 참조).** 위 13·14는 명령이 아니라 **H7 실행**이 푼다 — 방아쇠는 GLG.
 
 ### 🔴 가장 예리한 것 — A4 규칙만으로는 A3형 구멍이 다시 뚫린다
 

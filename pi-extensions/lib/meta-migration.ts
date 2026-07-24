@@ -5,10 +5,11 @@
  * meta-session.ts is now V3-only: normal routing mints, serializes, reads and
  * validates schemaVersion-3 identities and nothing else. The v2 parser + keyset
  * that used to live there are FROZEN here — v2 is a closed schema (it will never
- * gain a field again), so this snapshot is a stable base the M1 migration lane
- * (H7 live cutover) builds `migrateToV3` / backup / restore / verify-loop on top
- * of. C1 only ISOLATES these readers; it neither runs a migration nor deletes the
- * v2 parser.
+ * gain a field again), so this snapshot is the stable base the M1 operator
+ * command (scripts/meta-bridge-migrate-v3.ts: backup → migrate → verify
+ * non-V3=0 → restore) reads a pre-cut store through. C1 only ISOLATED these
+ * readers; the M1 surface is the sole consumer that runs a migration, and it
+ * never deletes the v2 parser.
  *
  * IMPORT ALLOWLIST (check-meta-migration-readers): the frozen readers
  * (`parseMetaRecordV1`, `parseMetaRecordV2`, `META_IDENTITY_V2_KEYS`, the frozen

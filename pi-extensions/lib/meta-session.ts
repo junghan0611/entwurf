@@ -269,11 +269,12 @@ export function requireNullableGardenId(value: unknown, field: string): string |
 }
 
 /**
- * The reserved name of the M1 migration operator command (built in the H7
- * live-cutover lane, not C1). V3-only production points at it BY NAME the moment
- * it meets a pre-cut (v1/v2) record, so the error is honest about the fix — a
- * precise forward reference, not a live command yet (gate h). When the M1 lane
- * lands, this constant becomes its `run.sh` verb.
+ * The name of the M1 migration operator command. V3-only production points at it
+ * BY NAME the moment it meets a pre-cut (v1/v2) record, so the error is honest
+ * about the fix. C1 reserved the name so every rejection surface could be
+ * authored at once; the M1 lane made it LIVE — run.sh dispatches the verb to
+ * scripts/meta-bridge-migrate-v3.ts (backup → migrate → verify non-V3=0 →
+ * restore), gated by check-meta-migrate-v3.
  */
 export const M1_MIGRATE_COMMAND = "./run.sh meta-bridge-migrate-v3 migrate";
 
