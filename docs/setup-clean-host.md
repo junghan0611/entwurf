@@ -219,6 +219,15 @@ If any of those sections reports `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`,
 the host is still running a pre-0.12.5 package or a broken tarball. Reinstall the
 current package and re-run `entwurf install-meta-bridge && entwurf doctor-meta-bridge`.
 
+Store invariant (only for a host that is NOT clean): this walkthrough assumes no
+prior `~/.pi/agent/meta-sessions`. A host that already has one from before the #50
+hard cut holds v1/v2 records, and production reads **schemaVersion 3 only** — so
+every identity surface there fails loud until you run the one-time migration
+(`entwurf meta-bridge-migrate-v3 verify` to look, `… migrate` to convert; it takes
+a full backup first and `… restore <backup-dir>` reverses it). Once per host, and
+the refusal itself prints the command if you meet it before reading this. A truly
+clean host has nothing to migrate and can ignore this paragraph.
+
 Upgrade invariant: every global npm/pnpm package upgrade must be followed by
 `entwurf install-meta-bridge` from that same installed binary and then
 `entwurf doctor-meta-bridge`. Installed statusline/MCP entries use stable bin

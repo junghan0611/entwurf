@@ -231,6 +231,28 @@ artifact, first preserve one `npm pack` output, then run
 the gate prints that canonical path and sha256 and consumes it without re-packing.
 Only that accepted file may be published with `--tag repair`.
 
+> **Upgrading a host that already has a meta-record store — one-time V3 migration.**
+> Production reads **schemaVersion 3 only** (#50 hard cut). A host whose
+> `~/.pi/agent/meta-sessions` predates that cut holds v1/v2 records, so the first
+> session after the upgrade fails loud on every identity surface (`entwurf_self`,
+> `entwurf_peers`, `entwurf_v2`, inbox) until the store is migrated. This is
+> deliberate — a record the current reader cannot parse must never be treated as an
+> address — and the refusal names the command to run, in both dev-clone and
+> installed form. You do not have to wait for it:
+>
+> ```bash
+> entwurf meta-bridge-migrate-v3 verify    # read-only: how many v1/v2 records, any problems
+> entwurf meta-bridge-migrate-v3 migrate   # writes a backup first, then converts in place
+> ```
+>
+> `migrate` copies the whole store to a sibling
+> `meta-sessions.v3-migration-backup-<timestamp>` **before** touching anything, and
+> only a completed copy gets that name; `restore <backup-dir>` puts it back and
+> destroys nothing. Records carrying `parentGardenId`/`isEntwurf` are refused until
+> you pass `--drop-parentage`, so the discard is a decision you make, not one the
+> tool makes for you. Run this **once per host**, before the first session that
+> needs garden identity there.
+
 After upgrading a globally installed package, reinstall the native-harness surface you use before trusting it:
 
 ```bash

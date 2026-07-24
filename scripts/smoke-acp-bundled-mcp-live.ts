@@ -292,6 +292,27 @@ async function main(): Promise<void> {
 			resident.exitCode === null && resident.signalCode === null,
 		);
 	} catch (err) {
+		// The 30-line tail below is what a reader sees in an aggregate log; it is often
+		// not enough. On 2026-07-24 this gate's failure was explained by a model line
+		// stating that only Read/Bash/Edit/Write/Skill were exposed — recoverable here,
+		// but the sibling send smoke printed nothing and its transcript had to be dug
+		// out of the pi session JSONL. So persist the FULL transcript too, and name it.
+		try {
+			const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+			const file = path.join(os.tmpdir(), `entwurf-smoke-acp-bundled-mcp-live-FAIL-${stamp}.log`);
+			await fsp.writeFile(
+				file,
+				`# smoke-acp-bundled-mcp-live FAILURE\n# ${err instanceof Error ? err.message : String(err)}\n\n` +
+					`## event stream\n${cap?.stream ?? "(no turn captured)"}\n\n` +
+					`## resident stderr tail\n${stderrTail || "(empty)"}\n`,
+				"utf8",
+			);
+			console.error(`[smoke-acp-bundled-mcp-live] FAILURE transcript: ${file}`);
+		} catch {
+			console.error(
+				"[smoke-acp-bundled-mcp-live] could not write the failure transcript (reporting the original error)",
+			);
+		}
 		if (cap)
 			console.error(`[smoke-acp-bundled-mcp-live] stream tail:\n${cap.stream.split("\n").slice(-30).join("\n")}`);
 		if (stderrTail)

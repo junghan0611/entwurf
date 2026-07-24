@@ -82,6 +82,26 @@ function ok(label: string, cond: boolean): void {
 	passed++;
 }
 
+/** On failure, persist the turn transcript outside the temp world and name the file.
+ * Best-effort: an artifact write must never mask the real assertion error. */
+async function writeFailureArtifact(cap: { stream: string } | null, stderrTail: string, err: unknown): Promise<void> {
+	try {
+		const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+		const file = path.join(os.tmpdir(), `entwurf-smoke-acp-v2-send-live-FAIL-${stamp}.log`);
+		await fsp.writeFile(
+			file,
+			`# smoke-acp-v2-send-live FAILURE\n# ${err instanceof Error ? err.message : String(err)}\n` +
+				`# model: ${ACP_PROVIDER}/${ACP_MODEL}\n\n` +
+				`## event stream\n${cap?.stream ?? "(no turn captured)"}\n\n` +
+				`## resident stderr tail\n${stderrTail || "(empty)"}\n`,
+			"utf8",
+		);
+		console.error(`[smoke-acp-v2-send-live] FAILURE transcript: ${file}`);
+	} catch {
+		console.error("[smoke-acp-v2-send-live] could not write the failure transcript (reporting the original error)");
+	}
+}
+
 function sleep(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -289,6 +309,17 @@ async function main(): Promise<void> {
 		// origin=pi-session renders WITHOUT the "meta-session, " qualifier; a self-fetch
 		// origin would render "(meta-session, replyable…)". Pin the pi-session shape.
 		ok("the landed sender renders as a pi-session, not a meta-session", !header.includes("(meta-session"));
+	} catch (err) {
+		// A model-in-loop failure is unreadable without the turn it failed on. Both
+		// 2026-07-24 failures of this gate were first misdiagnosed as "the model
+		// declined the instruction" and only the stream showed the truth — the model
+		// DID call and the runtime answered `No such tool available`. That stream was
+		// only recoverable from the pi session JSONL, because the tail here prints
+		// under ENTWURF_SMOKE_VERBOSE and a CI/aggregate run does not set it. So a
+		// FAILURE now always leaves the transcript on disk, outside the world dir the
+		// finally block is about to delete, and says where.
+		await writeFailureArtifact(cap, stderrTail, err);
+		throw err;
 	} finally {
 		if (resident) await terminateChild(resident);
 		if (process.env.ENTWURF_KEEP_SMOKE_WORLD === "1") {
