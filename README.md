@@ -159,7 +159,7 @@ because Node refuses to strip `.ts` files under `node_modules`.
 ### Pi adapter / ACP plugin lane
 
 To use the `entwurf` provider inside pi, install a compatible pi binary
-separately (`@earendil-works/pi-coding-agent >=0.80.7 <0.81`). Then point pi at
+separately (`@earendil-works/pi-coding-agent >=0.82.0 <0.83`). Then point pi at
 the npm-installed package or development clone:
 
 ```bash

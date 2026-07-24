@@ -65,7 +65,7 @@ exit 0.
 | Claude Code | **`>=2.1.217`** — the exec-form hook floor; an older Claude drops the hook's `args` silently and still reports success, so there is no fallback lane | `entwurf.claudeCodeFloor` (bound by `check-claude-floor-coherence`) |
 | npm | bundled with Node 24 | public package install path |
 | entwurf | `@junghanacs/entwurf` | neutral npm package; exposes `entwurf`, `entwurf-bridge`, `entwurf-statusline`, `entwurf-agy-statusline`, and `entwurf-agy-imprint` bins |
-| pi binary | **optional**, `@earendil-works/pi-coding-agent >=0.80.7 <0.81` | needed only for the pi adapter / ACP provider / spawn-bg resume lane |
+| pi binary | **optional**, `@earendil-works/pi-coding-agent >=0.82.0 <0.83` | needed only for the pi adapter / ACP provider / spawn-bg resume lane |
 | Antigravity `agy` | **optional**, operator-installed/authenticated native CLI | needed only for the shipped native-push citizen lane; entwurf never moves its auth |
 
 ## Stage 0 — Node 24 via nvm
@@ -155,7 +155,7 @@ If the host will run pi sessions or the Claude ACP provider through pi, install
 a compatible pi binary separately and wire the target project.
 
 ```bash
-npm install -g @earendil-works/pi-coding-agent@0.80.7
+npm install -g @earendil-works/pi-coding-agent@0.82.0
 pi --version
 
 mkdir -p ~/entwurf-smoke
@@ -172,7 +172,7 @@ Drift points:
   `entwurf-bridge`. (The `entwurf-targets.json` link is gone — #50 C3 removed the
   target registry; a leftover operator link is inert.)
 - Older pi versions may silently miss the provider/extension surface. Use the
-  pinned floor (`>=0.80.7 <0.81`) for release verification.
+  pinned floor (`>=0.82.0 <0.83`) for release verification.
 - A host that only uses the external MCP bridge can skip this stage until it
   needs `owned-outcome` spawn-bg resume or pi-native control sockets.
 
