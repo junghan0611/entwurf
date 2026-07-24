@@ -294,6 +294,18 @@ model 없음, pi backend는 birth에 transcript 미확정. `recordUpdatedAt` = r
     (14 checks — 격리 누적 4/4 PASS). 원본 transcript:
     `~/.pi/agent/entwurf-readiness-race-samples/entwurf-smoke-acp-bundled-mcp-live-FAIL-2026-07-24T13-38-07-945Z.log`.
 - **repair/v2-core-debt 승격분 (2026-07-24):**
+  - **[GLG 결정 대기 — 에이전트 무접촉] `core.hooksPath` 이중화.** 이 리포 `.git/config`의
+    `core.hooksPath=.husky/_`가 전역 안전 레일(`~/repos/gh/agent-config/git-hooks`)을 덮는다.
+    husky엔 `pre-push`가 없어 push 시 identity/secret 스캔이 0회 돈다(공개 리포라 원래 strict 대상).
+    방향 ⓐ husky 훅이 전역 스캐너를 역방향 호출, ⓑ hooksPath를 전역으로 되돌리고 husky를 그 아래
+    체인(전역 훅이 이미 `_delegate.sh`로 repo-local을 부르게 설계됨 — 설계 의도에 부합). 어느 쪽도
+    에이전트가 임의로 바꾸지 않는다(AGENTS: hooksPath 변경은 GLG 명시 요청). 대체물 = push 전
+    `bash ~/repos/gh/agent-config/git-hooks/_scan.sh range origin/<branch> HEAD` 수동 실행.
+  - **[아는 채로 두는 한계] `check-upgrade-gate` C6~C8의 Claude sentinel 봉인.** PATH-local
+    sentinel(나머지 PATH 유지)이 store 게이트 회귀 시 Claude 접촉을 기록·차단(F8)하지만, 그 개입
+    자체가 회귀 시나리오에서 C6~C8이 claude floor 너머를 검증하지 못하게 한다 — 게이트는 어차피
+    C6/C7/F8로 RED이므로 수용. 더 깨끗한 봉인은 없다: claude만 PATH에서 빼면 node/python3까지
+    잃고, 통과하는 fake claude를 주면 셀의 의미가 바뀐다.
   - `@earendil-works/pi-ai/providers/all` loader alias 이행 검토 — pi 0.81+가 추가한 4번째 alias.
     `/compat`이 살아있어 강제 아님(deprecated 주석만 그쪽을 가리킴). 별도 단독 cut.
   - identity 계약 cut: `check-entwurf-session-identity`의 256-id 유일성 단언은 생일충돌 ~0.2%/run의

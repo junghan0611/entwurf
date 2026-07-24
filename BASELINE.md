@@ -274,6 +274,29 @@ prompt, and if so quote the visible text exactly:
 
 # HISTORY (pointer)
 
+2026-07-24 (night) upgrade-harness + review acceptance at exact HEAD
+`cbda097` (branch `repair/v2-core-debt`, merged to main the same night — the
+hard-cut branch chronicle lives in issue #50): the three-cell harness gained
+the UPGRADE axis — `setup` / `install` / `install-meta-bridge` refuse a
+pre-cut (v1/v2) meta-record store BEFORE their first write, prescribe on
+three axes (pre-cut → migrate; problems → repair first; both → repair FIRST,
+then migrate), and the proof seeds every host state from frozen fixture bytes
+(`fixtures/meta-store`, sha256-manifested, excluded from the tarball).
+Deterministic cells at this HEAD: `pnpm check` EXIT=0 (source cell
+`check-upgrade-gate` 57/0), `check-pack-install` EXIT=0,
+`ENTWURF_REQUIRE_DOCKER=1 check-install-container` EXIT=0 — candidate
+`junghanacs-entwurf-0.12.8-repair.1.tgz` **sha256
+`db17165f962c938d71ef97cb7a86252549dc91b00d5ec67f63ec65b41039e6dc`**,
+11413738 bytes, image `sha256:f1158c7f34cf35a047bf0513c38282bb2fa253529e5ae404b32c6d93697410be`.
+Live at this HEAD: `LIVE=1 release-gate` **MUST 16/1/0 + BEHAVIOR 1/0,
+EXIT=1** — the single FAIL is `smoke-acp-bundled-mcp-live`, the known
+bundled-MCP readiness race (ROADMAP 「🔴 OPEN」, GLG: observe, don't fix;
+sample recorded with transcript; isolated re-run PASS 4/4). Every other MUST
+passed at this HEAD, including `smoke-acp-v2-send-live` (send identity /
+replyability) and the matrix honest-reject. **A release cut stays blocked on
+that red by the gate's own words; the merge to main was GLG's explicit call
+with the race documented as an open observation item.**
+
 2026-07-24 dependency-uplift acceptance at exact HEAD
 `7cbeb29b6afcfbaf4fc28da3b7929037c339113d` (branch `repair/v2-core-debt`): pi
 runtime **0.80.7 → 0.82.0** and Claude ACP **claude-agent-acp 0.54.1 → 0.61.0 /
