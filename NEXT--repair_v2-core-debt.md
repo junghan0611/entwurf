@@ -6,7 +6,7 @@
 
 ## NOW (2026-07-24 — M1 레인 종료. 남은 것은 GLG 실행 2건)
 
-> **다음 세션 첫 3분**: 코드 작업은 없다. `git rev-list --count origin/repair/v2-core-debt..HEAD`(= **30**, push 대기분) 확인 → GLG의 **push 지시**를 받으면 push, **H7 방아쇠**를 받으면 §6 runbook의 🔴 순서 불변식부터 읽는다. 그 둘 중 어느 것도 아니면 「대기」 줄의 백로그로 간다. 검수는 전부 닫혔다 — **열려 있는 결함 0**. (main 대비는 70커밋 — 승격은 별개 절차, 「머지 후 리듬」 참조.)
+> **다음 세션 첫 3분**: 코드 작업은 없다. push 대기분은 `git rev-list --count origin/repair/v2-core-debt..HEAD`로 **그 자리에서 센다** — 이 문서에 숫자를 박지 않는다(커밋 하나에 바로 썩는다: G3·M6·R3가 전부 그 병이었다). GLG의 **push 지시**를 받으면 push, **H7 방아쇠**를 받으면 §6 runbook의 🔴 순서 불변식부터 읽는다. 그 둘 중 어느 것도 아니면 「대기」 줄의 백로그로 간다. 검수는 전부 닫혔다 — **열려 있는 결함 0**.
 
 - **M1 검수 3라운드 종결 (2026-07-24).** 랜딩 `04f55b5`(페블) → 오푸스 R1 검수(결함 M1~M6, 되돌림 0, 판단 3건 전부 동의) → 페블 수선 `2a4fe13`/`95c15ff` → 오푸스 R2 검수(M1·M2·M3 닫힘 확인, 잔여 3건 R1~R3) → **오푸스가 직접 마감(이 커밋)**. 게이트 `check-meta-migrate-v3` **64단언**, 독립 full check EXIT=0.
   - **R1 (실행 위험이 있던 유일한 잔여)** — M4가 프로덕션 거부 표면은 닫았는데 **M1 명령 자신의 출력 5곳**이 dev-clone 형식만 인쇄했다: 설치본 호스트가 `entwurf meta-bridge-migrate-v3 migrate`로 부르고 실패하면 못 치는 `./run.sh … restore`를 처방받는다 — **blackout 한복판에서**. `restorePrescription()` + verify의 `M1_PRESCRIPTION` 전환으로 전부 양형식. 게이트 2단언 신설(S9/S14), **컴파일 twin으로 실측 확인**(설치본이 실제로 도는 바이트).
@@ -18,7 +18,7 @@
 - **레인 밖 발견 — GLG 결정 대기 (에이전트 무접촉)**: 이 리포 `.git/config`의 `core.hooksPath=.husky/_`가 전역 안전 레일(`~/repos/gh/agent-config/git-hooks`)을 덮는다. husky엔 `pre-push`가 없어 **push 시 identity/secret 스캔이 0회** 돈다(공개 `junghan0611/entwurf`이라 원래 strict 대상). 두 방향: ⓐ `.husky/pre-commit`·신설 `pre-push`가 `_delegate.sh`의 역방향으로 전역 스캐너를 호출, ⓑ `core.hooksPath`를 전역으로 되돌리고 husky를 그 아래 체인(전역 훅이 이미 `_delegate.sh`로 repo-local을 부르게 설계돼 있음 — ⓑ가 설계 의도에 맞다). **어느 쪽도 에이전트가 임의로 바꾸지 않는다**(AGENTS: hooksPath 변경은 GLG 명시 요청). 그때까지는 push 전 수동 실행이 대체물: `bash ~/repos/gh/agent-config/git-hooks/_scan.sh range origin/<branch> HEAD`.
 - Current: **세 문장 목표 ①②③ + M1 전부 코드로 성립. 교차 검수 6라운드(C3 / C4-R1·C4-R2 / M1-R1·M1-R2·M1-마감) 전부 승인, 열린 결함 0.** 남은 것은 실행 2건 — **push**(GLG 명시 지시)와 **H7 라이브 cutover**(§6 runbook, 방아쇠 GLG).
 - **검증 기준 (다음 세션이 뭘 돌려야 하는가)**: 코드를 건드렸다면 `pnpm build-bridge && pnpm check`(EXIT=0). install 표면(pack manifest/bin/hook/dist 목록)을 건드렸다면 **추가로** `./run.sh check-pack-install` + `ENTWURF_REQUIRE_DOCKER=1 ./run.sh check-install-container`. 이 마감 커밋 시점 실측은 아래 「마감 실측」 표.
-- Next: (1) GLG: **push 여부** — origin 대비 30커밋, identity/secret strict 스캔 clean 실측(아래 「마감 실측」) → (2) **H7 라이브 cutover** (runbook §6 — **🔴 순서 불변식 필독**: migrate와 새 런타임 설치 사이에 세션 0) → (3) merge 절차(§「머지 후 리듬」: 승격 직전 LIVE 2종 1회 PASS + 이 파일 삭제 + main NEXT #49-C 폐기 표기).
+- Next: (1) GLG: **push 여부** — identity/secret strict 스캔 clean 실측 완료(아래 「마감 실측」; push 직전 같은 명령으로 재확인) → (2) **H7 라이브 cutover** (runbook §6 — **🔴 순서 불변식 필독**: migrate와 새 런타임 설치 사이에 세션 0) → (3) merge 절차(§「머지 후 리듬」: 승격 직전 LIVE 2종 1회 PASS + 이 파일 삭제 + main NEXT #49-C 폐기 표기).
 - 대기: Ⅰ-4 `smoke-agy-native-push-live`(살아있는 `AGY_CONVERSATION_ID` 필요), 「기계가 말하는 장치」(게이트별 마지막 PASS × rail 대조 — 오푸스 최우선 후보; F5의 biome backstop이 같은 계열의 첫 조각).
 - Do not touch: fresh sibling mint/#47, Cortex/#48, 0.12.9 ACP 의존성, backend auth, transcript hydration, 라이브 `install-meta-bridge`(M1 전 금지), **`core.hooksPath`/`.git-hooks-mode`**(GLG 명시 요청 없이는 금지 — 위 「레인 밖 발견」).
 
@@ -32,7 +32,7 @@
 | `ENTWURF_REQUIRE_DOCKER=1 check-install-container` | **EXIT=0** (Node 24 Linux consumer, 후보 tgz sha256 `159f4004…`) |
 | R1 실물 확인 | **컴파일 twin**(설치본이 실제로 도는 바이트)이 롤백 처방을 양형식으로 인쇄 — dev clone + `entwurf …` |
 | 라이브 store | read-only `verify` = **1 v3 / 189 v2 / 0 problem**, 쓰기 0, 백업/aside 디렉토리 0 (무접촉) |
-| push 안전 스캔 | `_scan.sh range origin/repair/v2-core-debt HEAD` **strict EXIT=0 clean** (30커밋) |
+| push 안전 스캔 | `_scan.sh range origin/repair/v2-core-debt HEAD` **strict EXIT=0 clean** — 이 마감 시점의 push 대기분 전체 |
 
 ## 상태 (2026-07-24 저녁)
 
