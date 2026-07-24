@@ -4,36 +4,90 @@
 >
 > 설계문서(HOP.md, .agent-reports/)는 폐기했다 — 내용은 git history와 #50에 보존. 종이보다 코드. 터질 수 있는 지점을 아는 채로 터지는 건 실패가 아니다.
 
-## NOW (2026-07-24 — M1 레인 종료. 남은 것은 GLG 실행 2건)
+## NOW (2026-07-24 — hard-cut 구현 종료, main 수용 레인 시작)
 
-> **다음 세션 첫 3분**: 코드 작업은 없다. push 대기분은 `git rev-list --count origin/repair/v2-core-debt..HEAD`로 **그 자리에서 센다** — 이 문서에 숫자를 박지 않는다(커밋 하나에 바로 썩는다: G3·M6·R3가 전부 그 병이었다). GLG의 **push 지시**를 받으면 push, **H7 방아쇠**를 받으면 §6의 🔴 순서 불변식 + ⚠️ 실행 체크리스트부터 읽는다(체크리스트의 ★ 빈칸을 GLG와 채우는 것이 H7 첫 일). 그 둘 중 어느 것도 아니면 「대기」 줄의 백로그로 간다. push 차단 결함은 0 — GPT 검수 4건 중 코드 위험 2건(restore foreign backup, 문서 V2 잔재)은 이 라운드에 닫았고, H7 runbook은 방아쇠 전 작업으로 §6에 명시.
+> **다음 오푸스의 첫 3분**: 아래 「TO MAIN」을 먼저 읽는다. 이 브랜치의 끝은 H7만도, dependency bump만도 아니다. **H7로 현재 pin의 record 세계를 GLG 환경에서 먼저 살린 뒤 → pi와 ACP를 서로 분리해 올리고 → 최종 pin의 설치 산출물로 delivery를 끝까지 증명한 뒤에만 main으로 간다.** merge 뒤 잊힐 일을 main NEXT로 넘기지 않는다. push 대기분은 `git rev-list --count origin/repair/v2-core-debt..HEAD`로 그 자리에서 세고, push/H7은 각각 GLG 명시 지시를 받는다.
 
-- **M1 검수 3라운드 종결 (2026-07-24).** 랜딩 `04f55b5`(페블) → 오푸스 R1 검수(결함 M1~M6, 되돌림 0, 판단 3건 전부 동의) → 페블 수선 `2a4fe13`/`95c15ff` → 오푸스 R2 검수(M1·M2·M3 닫힘 확인, 잔여 3건 R1~R3) → **오푸스가 직접 마감(`9e0ae46` 등)** → **GPT 교차 검수 4건(아래) 처리(이 커밋)**. 게이트 `check-meta-migrate-v3` **68단언**, 독립 full check EXIT=0.
+> GPT 검수 4건과 그 뒤 핸드오프 검수가 찾은 restore guard tail까지 현재 워킹트리에서 닫혔다. sibling symlink→foreign과 forged suffix를 직접 RED로 만들고, real-directory timestamp sibling만 허용했다(S15, 70단언). full check + installed tree + checkout-invisible container가 모두 GREEN이다. **다음 오푸스가 새로 파야 할 첫 축은 H7 준비**이며, 닫힌 수선을 다시 반복하지 않는다.
+
+- **M1 검수 3라운드 종결 (2026-07-24).** 랜딩 `04f55b5`(페블) → 오푸스 R1 검수(결함 M1~M6, 되돌림 0, 판단 3건 전부 동의) → 페블 수선 `2a4fe13`/`95c15ff` → 오푸스 R2 검수(M1·M2·M3 닫힘 확인, 잔여 3건 R1~R3) → **오푸스가 직접 마감(`9e0ae46` 등)** → **GPT 교차 검수 4건(아래) 처리(`33ce266`) + 핸드오프 검수 restore tail 수선(현재 워킹트리)**. 게이트 `check-meta-migrate-v3` **70단언**, 독립 full check EXIT=0.
   - **R1 (실행 위험이 있던 유일한 잔여)** — M4가 프로덕션 거부 표면은 닫았는데 **M1 명령 자신의 출력 5곳**이 dev-clone 형식만 인쇄했다: 설치본 호스트가 `entwurf meta-bridge-migrate-v3 migrate`로 부르고 실패하면 못 치는 `./run.sh … restore`를 처방받는다 — **blackout 한복판에서**. `restorePrescription()` + verify의 `M1_PRESCRIPTION` 전환으로 전부 양형식. 게이트 2단언 신설(S9/S14), **컴파일 twin으로 실측 확인**(설치본이 실제로 도는 바이트).
   - **R2** — 새 규율(`scripts/**` 어휘 grep)을 돌리니 최대 밀집지가 **cut이 실제로 다시 쓴 `meta-session.ts`**였다: `MetaIdentity`(프로덕션 v3 타입)의 doc이 "The v2 identity-only record", 직렬화기가 "v2 WRITE shape … round-trips through `parseMetaRecordV2`"(그 심볼은 이 파일에서 allowlist 금지), minter가 삭제된 `isEntwurf`를 기본값으로 명명, `decideUpsert` doc이 삭제된 `parentGardenId`를 merge 축으로 나열(**같은 함수의 body 주석은 이미 정확했다**) + 0.11 단계빌드의 미래시제 화석 4곳("no v2 writer here **yet**", "lands in step 3D-4", "**Today** the read-receipt lives at record.delivery"). 전 항 수선.
   - **R3** — 단언 수 드리프트가 두 줄 중 한 줄만 고쳐져 있었다(§6에 52 생존). 양쪽 64로 정정.
   - **규율 일반화 (이번 라운드의 진짜 산출물)**: 세 라운드 연속 "디렉토리를 하나 더 추가"로 대응했다(`docs/` → `scripts/` → lib). AGENTS의 그 항목을 **목록에서 방법으로** 바꿨다 — 단위는 리포 전체, 두 축(① 은퇴한 어휘 repo-wide grep 후 tombstone/live-claim 판정, ② 착지한 계획의 미래시제 grep). **바꾸자마자 축②가 9번째를 잡았다**: `check-entwurf-capabilities.ts` 헤더가 "3D는 아직 안 왔고 const가 여전히 authority"라고 가르치고 있었다(3D-3/3D-4 둘 다 착지 완료).
-- **M1 operator command (`04f55b5`)**: `scripts/meta-bridge-migrate-v3.ts` — allowlist가 예약해둔 바로 그 경로에, 3 verb(`migrate [--drop-parentage]` / `verify` / `restore <backup-dir>`), env+default store 해석(dir argv 없음 — H7 runbook은 THE live store를 겨눈다). dangling name 종료: run.sh dispatch + usage + `pnpm check` 편입(`check-meta-migrate-v3`, CLI를 서브프로세스로 모는 **68단언** — §6 fixture 6종 + duplicate nativeSessionId + parentage 처분 + verify 집계(F8 ×N) + restore 왕복 + M2/M3 예외 경로) + tsconfig.build emit + check-pack/tar_required 목록 + check-pack-install 설치본 verify 드라이브. **판단 기록 3건 전부 오푸스 동의**: ① parentage 기본 REFUSE + `--drop-parentage` 명시 처분(verify가 blackout 전에 예고), ② classify-first all-or-nothing + duplicate nativeSessionId 편입, ③ restore는 아무것도 파괴하지 않음.
+- **M1 operator command (`04f55b5`)**: `scripts/meta-bridge-migrate-v3.ts` — allowlist가 예약해둔 바로 그 경로에, 3 verb(`migrate [--drop-parentage]` / `verify` / `restore <backup-dir>`), env+default store 해석(dir argv 없음 — H7 runbook은 THE live store를 겨눈다). dangling name 종료: run.sh dispatch + usage + `pnpm check` 편입(`check-meta-migrate-v3`, CLI를 서브프로세스로 모는 **70단언** — §6 fixture 6종 + duplicate nativeSessionId + parentage 처분 + verify 집계(F8 ×N) + restore 왕복 + M2/M3 예외 경로) + tsconfig.build emit + check-pack/tar_required 목록 + check-pack-install 설치본 verify 드라이브. **판단 기록 3건 전부 오푸스 동의**: ① parentage 기본 REFUSE + `--drop-parentage` 명시 처분(verify가 blackout 전에 예고), ② classify-first all-or-nothing + duplicate nativeSessionId 편입, ③ restore는 아무것도 파괴하지 않음.
 - **M1~M6 처리 내역 (전부 코드 되돌림 0)**: **M1** runbook 순서 — §6에 반영, H7 전 필독. **M2** 쓰기 시작 후 예외가 처방 없이 raw stack으로 나가던 것 → migrate/restore 양쪽 try/catch가 restore/aside 처방을 인쇄(원인 스택은 그대로 보존), 게이트 S14가 백업 후 크래시를 실제 제조해 처방 문구+복구 경로(restore→재실행 완주)까지 증명. **M3** `readFileSync`가 try 밖이라 EISDIR 등에서 크래시 → unreadable을 problem으로 분류, S13이 디렉토리형 엔트리로 증명(migrate 거부+verify read-only 동일 보고). **M4** 설치본 처방 — `M1_PRESCRIPTION` 신설(`M1_MIGRATE_COMMAND_INSTALLED` = `entwurf meta-bridge-migrate-v3 migrate`): parse/birth/peers/self/v2/inbox 전 거부 표면이 dev clone + 설치본 양형식을 명명, 게이트 substring 단언은 전부 보존됨(문장 확장이지 교체가 아님). **M5** 산문 수선 — store-doctor "dual-read" 주장, mailbox-state-write 게이트 "written as v2" 주장, husky 유물 주석(존재하지 않는 0.4시대 게이트 5종 열거), + **AGENTS 목록에 `scripts/**` BY NAME 승격 — 그 규율을 즉시 실행해 오푸스 목록 밖 2건 추가 발견·수선**(atomicWriteIdentity "(v2 identity write)", migrateV1DeliveryReceipts "called by upsert" — 그 호출자는 C2 때 죽었다). **M6** 이 문서 단언 수 정정(두 줄 중 한 줄만 닫혀 R3로 이월).
 - **레인 밖 발견 — GLG 결정 대기 (에이전트 무접촉)**: 이 리포 `.git/config`의 `core.hooksPath=.husky/_`가 전역 안전 레일(`~/repos/gh/agent-config/git-hooks`)을 덮는다. husky엔 `pre-push`가 없어 **push 시 identity/secret 스캔이 0회** 돈다(공개 `junghan0611/entwurf`이라 원래 strict 대상). 두 방향: ⓐ `.husky/pre-commit`·신설 `pre-push`가 `_delegate.sh`의 역방향으로 전역 스캐너를 호출, ⓑ `core.hooksPath`를 전역으로 되돌리고 husky를 그 아래 체인(전역 훅이 이미 `_delegate.sh`로 repo-local을 부르게 설계돼 있음 — ⓑ가 설계 의도에 맞다). **어느 쪽도 에이전트가 임의로 바꾸지 않는다**(AGENTS: hooksPath 변경은 GLG 명시 요청). 그때까지는 push 전 수동 실행이 대체물: `bash ~/repos/gh/agent-config/git-hooks/_scan.sh range origin/<branch> HEAD`.
-- Current: **세 문장 목표 ①②③ + M1 전부 코드로 성립. 교차 검수 6라운드(C3 / C4-R1·C4-R2 / M1-R1·M1-R2·M1-마감) 전부 승인, 열린 결함 0.** 남은 것은 실행 2건 — **push**(GLG 명시 지시)와 **H7 라이브 cutover**(§6 runbook, 방아쇠 GLG).
+- Current: **세 문장 목표 ①②③ + M1은 현재 pin에서 코드로 성립하고 교차검수·restore tail 수선을 통과했다.** 현재 알려진 push 차단 결함은 0이다. 남은 줄기는 **commit/push(checkpoint) → H7(current-pin baseline) → pi uplift → ACP uplift → final artifact delivery acceptance → main merge**다.
 - **검증 기준 (다음 세션이 뭘 돌려야 하는가)**: 코드를 건드렸다면 `pnpm build-bridge && pnpm check`(EXIT=0). install 표면(pack manifest/bin/hook/dist 목록)을 건드렸다면 **추가로** `./run.sh check-pack-install` + `ENTWURF_REQUIRE_DOCKER=1 ./run.sh check-install-container`. 이 마감 커밋 시점 실측은 아래 「마감 실측」 표.
-- **GPT 교차 검수 (2026-07-24, M1-마감 후) — 4건 처리**: ① **[높음·확증] restore가 foreign backup 수용** — `path.basename().includes(".v3-migration-backup-")` substring만 봐서 `foreign.v3-migration-backup-x`(이 store의 sibling 아님)를 rc=0으로 복원, `/evil` record가 주소 권위가 됐다(직접 재현). 수선: `<resolved-store>.v3-migration-backup-<ts>` 정확한 prefix + 단일 세그먼트(nested 거부)로 조임, 게이트 S15 신설(foreign/nested/look-alike 거부 + 진짜 sibling 수용). ② **[중간·확증] repo-wide 산문 sweep 미완** — **내 R2 grep이 `--include=*.ts`로 한정돼 `.md`를 빠뜨렸다**(규율을 "단위는 리포 전체"로 일반화해놓고 실행에서 어긴 아이러니). ROADMAP 동결결정 2(dual-read)·3(PARENT_SESSION_ID/tmux correlation) = #50이 뒤집은 죽은 결정을 "재설계 금지"로 박아둠 → 취소선+무효화 명시, AGENTS:130(삭제 gate 4종 나열)·231(dual-read/migration)·docs/mux:38(삭제된 `check-meta-record-v2.ts` 인용) 정정. ③ **[중간·운영] H7 §6이 "runbook" 자칭하나 순서 불변식뿐** — 실행 체크리스트(quiesce 확인/exact candidate/판정 증거)를 명령 수준으로 재구성, GLG 환경 의존은 ★ 빈칸으로 명시(H7 방아쇠 전 필수). ④ **[낮음·확증] NEXT "M1 전 금지"** → "H7 전 금지"로 정정(M1 코드는 끝났다). 판정 동의: push 차단은 ①②뿐이었고 닫았다, ③은 H7 전, 아키텍처·C1~C4/M1 본체 승인.
-- Next: (1) GLG: **push 여부** — identity/secret strict 스캔 clean(아래 「마감 실측」; push 직전 같은 명령으로 재확인) → (2) **H7 라이브 cutover** (§6 — 🔴 순서 불변식 + ⚠️ 실행 체크리스트의 ★ 빈칸부터 GLG와 채운다) → (3) merge 절차(§「머지 후 리듬」: 승격 직전 LIVE 2종 1회 PASS + 이 파일 삭제 + main NEXT #49-C 폐기 표기).
-- 대기: Ⅰ-4 `smoke-agy-native-push-live`(살아있는 `AGY_CONVERSATION_ID` 필요), 「기계가 말하는 장치」(게이트별 마지막 PASS × rail 대조 — 오푸스 최우선 후보; F5의 biome backstop이 같은 계열의 첫 조각).
-- Do not touch: fresh sibling mint/#47, Cortex/#48, 0.12.9 ACP 의존성, backend auth, transcript hydration, 라이브 `install-meta-bridge`(**M1 코드는 끝났다 — 금지는 H7 원자 전환 순간까지다**: 지금 라이브 store는 v2 189 + v3 1인데 V3-only 아티팩트를 미리 깔면 store-doctor가 전 record를 거부한다. "M1 전"이 아니라 "H7 전"으로 읽어라), **`core.hooksPath`/`.git-hooks-mode`**(GLG 명시 요청 없이는 금지 — 위 「레인 밖 발견」).
+- **GPT 교차 검수 (2026-07-24, M1-마감 후) — 4건 처리**: ① **[높음·확증] restore가 foreign backup 수용** — `path.basename().includes(".v3-migration-backup-")` substring만 봐서 `foreign.v3-migration-backup-x`(이 store의 sibling 아님)를 rc=0으로 복원, `/evil` record가 주소 권위가 됐다(직접 재현). 수선: `<resolved-store>.v3-migration-backup-<ts>` 정확한 prefix + 단일 세그먼트(nested 거부)로 조임, 게이트 S15 신설(foreign/nested/look-alike 거부 + 진짜 sibling 수용). ② **[중간·확증] repo-wide 산문 sweep 미완** — **내 R2 grep이 `--include=*.ts`로 한정돼 `.md`를 빠뜨렸다**(규율을 "단위는 리포 전체"로 일반화해놓고 실행에서 어긴 아이러니). ROADMAP 동결결정 2(dual-read)·3(PARENT_SESSION_ID/tmux correlation) = #50이 뒤집은 죽은 결정을 "재설계 금지"로 박아둠 → 취소선+무효화 명시, AGENTS:130(삭제 gate 4종 나열)·231(dual-read/migration)·docs/mux:38(삭제된 `check-meta-record-v2.ts` 인용) 정정. ③ **[중간·운영] H7 §6이 "runbook" 자칭하나 순서 불변식뿐** — 실행 체크리스트(quiesce 확인/exact candidate/판정 증거)를 명령 수준으로 재구성, GLG 환경 의존은 ★ 빈칸으로 명시(H7 방아쇠 전 필수). ④ **[낮음·확증] NEXT "M1 전 금지"** → "H7 전 금지"로 정정(M1 코드는 끝났다). 판정 동의: 당시 push 차단 ①②를 닫았고, 후속 검수가 ①의 symlink/suffix 우회를 추가 발견해 `lstat`+정확한 timestamp grammar+S15 mutation으로 현재 워킹트리에서 닫았다. ③은 H7 전, 아키텍처·C1~C4/M1 본체 승인.
+- Next: 아래 「TO MAIN」 1→5를 순서대로 닫는다. **H7과 dependency uplift를 한 cut에 섞지 않는다.** 현재 pin으로 H7을 먼저 성공시켜 hard-cut과 upstream 변화의 실패 원인을 분리한다.
+- 대기(merge 비차단): Ⅰ-4 `smoke-agy-native-push-live`는 살아있는 `AGY_CONVERSATION_ID`가 있을 때만. 「기계가 말하는 장치」(게이트별 마지막 PASS × rail 대조)는 별도 후속이며 이 브랜치의 main 수용 조건을 늘리는 핑계로 쓰지 않는다.
+- Do not touch: fresh sibling mint/#47, Cortex/#48, backend auth, transcript hydration, 새 DB/planner/worker tree. 라이브 `install-meta-bridge`는 **H7 원자 전환 순간까지 금지**(지금 mixed store에 V3-only 아티팩트를 미리 깔지 않는다). `core.hooksPath`/`.git-hooks-mode`는 GLG 명시 요청 없이는 금지. **pi/ACP dependency uplift는 이제 이 브랜치의 명시적 범위지만 H7 성공 뒤에만 착수한다.**
 
-### 마감 실측 (2026-07-24, 마감 커밋의 최종 바이트)
+### 현재 실측 (2026-07-24, restore tail 수선 바이트)
 
 | 검증 | 결과 |
 |---|---|
-| 독립 full `pnpm check` | **EXIT=0** — ok줄 **2396**. 회계 연속 일치: 2382(M1 랜딩) → +8(S13·S14) → +2(R1) → +4(GPT #1 S15) = 2396 |
-| `check-meta-migrate-v3` | **68단언** (S15 restore sibling-only 4단언 신설) |
-| `./run.sh check-pack-install` | **EXIT=0** — 설치본 bin이 `migrate-v3 verify`로 0-record store 인증까지 |
-| `ENTWURF_REQUIRE_DOCKER=1 check-install-container` | **EXIT=0** (Node 24 Linux consumer, 후보 tgz sha256 `902efbcd…`) |
-| GPT #1 재현→수선 실물 확인 | `foreign.v3-migration-backup-forged`(이 store의 sibling 아님)가 **수선 전 rc=0 복원** → **수선 후 rc=1 거부 + store 무접촉**(직접 재현) |
-| 라이브 store | read-only `verify` = **1 v3 / 189 v2 / 0 problem / parentage 0**, 쓰기 0, 백업/aside 0 (무접촉) |
-| push 안전 스캔 | `_scan.sh range origin/repair/v2-core-debt HEAD` **strict EXIT=0 clean** — 이 마감 시점의 push 대기분 전체 |
+| 독립 full `pnpm check` | **EXIT=0** — 앞선 2396 + S15 mutation 2개 = **2398 회계** |
+| `check-meta-migrate-v3` | **70단언** — foreign/nested/forged-suffix/symlink 4종 RED + genuine sibling GREEN |
+| `./run.sh check-pack-install` | **EXIT=0** — 설치본 bin/compiled twin 포함 |
+| `ENTWURF_REQUIRE_DOCKER=1 check-install-container` | **EXIT=0** — Node 24 checkout-invisible consumer, tgz sha256 `c21233ef7fa6bc6d2dbb391d981a2f4b111737b819122525ead4efe5495e1f62` |
+| restore differential | sibling symlink→foreign **수선 전 rc=0 store 교체** → 수선 후 rc=1; forged suffix도 rc=1; 모든 거부에서 store byte/aside 무접촉 |
+| 라이브 store | 이번 수선은 synthetic store만 사용 — 라이브 store write/backup/aside 무접촉 |
+| push 안전 스캔 | 마지막 committed HEAD까지 clean 실측. 현재 워킹트리를 commit/stage한 뒤 push 직전 `_scan.sh range origin/repair/v2-core-debt HEAD` 재실행 |
+
+## TO MAIN — 새 오푸스가 닫을 남은 줄기 (순서 고정)
+
+> **브랜치 종료 정의:** “코드가 맞다”가 아니라 **최종 dependency pin의 exact 설치 산출물이 record-backed 시민을 만들고, 실제 `entwurf_v2` delivery를 수신면까지 착지시키며, sender identity/replyability와 honest reject를 함께 증명했다**가 끝이다. 이 증거와 현재 계약을 durable docs로 승격한 뒤 branch NEXT를 삭제하고 main에 넣는다.
+
+### 1. Baseline checkpoint + H7 — 현재 pin으로 hard-cut을 먼저 살린다
+
+- 기준 조합: pi packages **0.80.7**, `claude-agent-acp` **0.54.1**, ACP SDK **1.1.0**, Anthropic SDK **0.100.1**. 이 조합은 지금까지의 deterministic/LIVE/artifact 증거가 있는 원인 분리용 baseline이다.
+- push는 GLG 명시 지시 때만: 직전 strict `_scan.sh range` 재실행 → push → exact-SHA CI 3 jobs GREEN 확인.
+- H7 방아쇠 전에 §6의 ★를 **명령과 실제 대상 값으로 채운다**: quiesce 방법/확인, exact candidate HEAD·tgz·sha256와 설치 명령, 왕복 시민 2명, rollback threshold.
+- H7 성공 정의: `verify non-V3=0` + installed `doctor-meta-bridge` rc=0 + pi↔Claude 양방향 live delivery 1회(각 방향 sender garden id 일치) + 새 세션이 V3만 mint. 실패 시 dependency bump로 도망가지 말고 baseline에서 restore/원인 수선.
+- **금지:** H7 전에 pi/ACP pin을 움직이지 않는다. migration/runtime 교체와 upstream API 변화를 섞으면 어느 축이 채널을 죽였는지 판별할 수 없다.
+
+### 2. pi uplift — 0.80.7 → npm current 0.81.1, 단독 cut
+
+- `0.81.1`은 2026-07-24 `npm view` 실측값이다. 착수 시 다시 조회하고 값이 움직였으면 무작정 추종하지 말고 delta/범위를 GLG에게 먼저 보고한다.
+- 별도 commit/cut. `@earendil-works/pi-ai`·`pi-coding-agent`·`pi-tui`와 install-smoke의 `pi-agent-core`를 같은 exact version으로 묶고 peer range/ceiling을 새 minor에 맞춘다. 숫자를 손으로 흩뿌리지 말고 package.json 파생을 우선한다.
+- 먼저 0.81 release/API delta를 카탈로그화하고 다음 load-bearing seam을 실행으로 확인한다: extension loader alias map, `/compat`의 `getModels`, public imports, session_start/new/fork/reload, `--session <abs>` resume, model catalogue/curated anchors, `--entwurf-control` lifecycle.
+- 필수 게이트: `check-dep-versions`, `check-pi-runtime-version`, `check-pi-import-surface`, `check-pack-install`의 resolved-tree exact pin, `smoke-pi-attach`, resident birth/attach/replacement, dormant spawn-resume, ACP-model host의 record garden id 전달.
+- 0.81에서 `/compat` 또는 loader 계약이 바뀌면 0.80 shim을 억지로 보존하지 말고 새 public/loader surface로 hard-cut한다. 숨은 alias/fallback 금지.
+
+### 3. Claude ACP uplift — pi GREEN 뒤 0.54.1 → npm current 0.61.0, 단독 cut
+
+- `0.61.0`/`1.3.0`은 2026-07-24 `npm view` 실측값이다. 착수 시 다시 조회하고 움직였으면 새 delta를 먼저 판정한다.
+- `@agentclientprotocol/claude-agent-acp` **0.61.0**과 `@agentclientprotocol/sdk` **1.3.0**을 목표로 한다. `@anthropic-ai/sdk`는 현재 `0.100.1`을 기계적으로 유지/상승하지 말고 새 adapter·claude-agent-sdk의 peer graph를 읽어 **한 runtime resolution**으로 결정하고 gate 문구도 함께 옮긴다.
+- 먼저 adapter/SDK changelog·exports·protocol delta를 읽고 다음 seam을 검증한다: spawn/handshake, exclude-tools와 tool narrowing, isolated overlay/auth boundary, config/meta shape, event mapper, prompt delta, in-memory session reuse, carrier/first-user augment, model forcing.
+- 필수 증거: `check-acp-sdk-surface`가 새 peer graph를 실제 runtime context에서 읽음 + raw ACP turn + overlay/tool-surface + provider turn + session reuse/carrier + ACP socket-citizen + bundled MCP delivery. 버전 문자열만 바꿔 GREEN을 만들지 않는다.
+- pi uplift와 같은 commit에 넣지 않는다. ACP cut에서 pi 코드를 고쳐야 한다면 교차-contract 변화로 명시하고 두 축의 gate를 모두 다시 돌린다.
+
+### 4. Final delivery acceptance — 최종 pin·최종 바이트에서 전부 다시
+
+**결정론/산출물 3셀(모두 필수):**
+
+1. checkout built dist: `pnpm build-bridge && pnpm check` — `check-bridge-delivery`가 실제 MCP `tools/call`→socket/mailbox 착지와 seeded sender를 본다.
+2. installed tree: `./run.sh check-pack-install` — 설치된 bin/shim의 같은 delivery scene, resolved pi/ACP dependency tree exactness.
+3. clean consumer: `ENTWURF_REQUIRE_DOCKER=1 ./run.sh check-install-container` — checkout 비가시·global PATH shim·non-root·frozen package root에서 doctor delivery self-diagnostic까지.
+
+**LIVE(최종 HEAD에서 신선한 증거 필수):**
+
+- `LIVE=1 ./run.sh release-gate <fresh-scratch>` MUST 전부 GREEN. BEHAVIOR는 분리 기록.
+- `smoke-resident-garden-guard` BIRTH/ATTACH/REPLACEMENT/POSITIVE.
+- `smoke-entwurf-v2-matrix-live`: live pi send + active Claude mailbox + honest reject.
+- `smoke-entwurf-v2-spawn-resume-live`: dormant record → exact transcript resume → 실제 모델 턴 → sender block/wantsReply/lock release.
+- ACP: socket-citizen + raw turn + overlay + provider + reuse/carrier + bundled MCP. aggregate가 일부를 안 부르면 해당 gate를 명시 실행한다.
+- **사람이 눈으로 보낸 것으로 대체 금지:** harness가 target garden id, delivery receipt/착지 파일 또는 socket ack, landed sender garden id·origin·replyable을 assert해야 한다. “tools/list가 된다”는 delivery 증거가 아니다.
+
+### 5. Durable docs + merge cleanup — branch에서 끝낸 뒤 잊는다
+
+- 최종 버전/계약을 `package.json`에서 파생해 AGENTS Runtime Dependencies, README, `docs/setup-clean-host.md`, run.sh 주석/사용법, version/coherence gates를 함께 갱신한다. 0.80/0.54 설명이 live claim으로 남지 않게 repo-wide 두 축 grep.
+- 최종 evidence를 VERIFY/BASELINE에 남긴다: exact HEAD, candidate sha256, Node/Linux 축, deterministic 3셀, LIVE gate 결과, H7 전후 store/왕복 사실. 세션 서사는 NEXT에만 두고 durable 문서에는 재현 가능한 계약과 증거만 둔다.
+- main merge 직전: main의 무효화된 #49-C 계획 폐기 표기, branch NEXT의 아직 유효한 장기 항목만 ROADMAP/이슈로 승격, 이 파일 삭제. version/tag/publish는 별도 release authority이며 merge 요청만으로 실행하지 않는다.
+- **main 수용 금지 조건:** H7 미완, dependency 두 축 중 하나 미완, 최종 artifact delivery 3셀 중 하나 미실행/SKIP, 최종 LIVE evidence가 pre-bump HEAD, 문서에 옛 pin/live claim 생존.
 
 ## 상태 (2026-07-24 저녁)
 
@@ -45,7 +99,7 @@
   - **G2** `f757a33` 자신이 `shouldListAsLive`의 정책 산문 2줄을 남겼다(`socket-probe.ts` 모듈 doc, `check-socket-probe.ts` 헤더). 같이 발견된 pre-C4 잔재(모듈 doc이 브릿지를 소비자로 지목 — 브릿지는 socket-probe를 import하지 않는다)도 정정. **기계 backstop은 심볼을 잡지 산문을 못 잡는다**는 실증.
   - **G3** NEXT 커밋 수 off-by-one(23 → 실측 24).
 
-- **C4 랜딩 — 목표 ② "entwurf는 socket을 모른다" 코드로 성립 (페블, 오푸스 검수 대기).** 4 cut + 문서 수선, 커밋마다 full check GREEN: `be12348` cut① F2(spawn-bg plan `wantsReply` → dormant `<sender_info>` live rail 동형) · `d76d9f7` cut② dispatch rail(A1 narrow 삭제 — record-less socket은 모든 intent pre-probe `record-less-socket` 거부, 원인+M1 명명; `socket-only-no-resume-authority` 은퇴, +212/−312) · `5d99173` cut③ 목록 표면(legacy `sessions` projection·`controlDir`·socketOnly 섹션·per-socket get_info enrich·`/entwurf-sessions` 삭제 — peers = 시민+진단 2섹션, record-less는 F8 집계 진단, +352/−518) · `bc3f72d` cut④ 발신 신원(익명 발신 기본 거부, `ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1`이 유일한 문서화 hatch, REQUIRE env 은퇴 — installer/doctor/oracle/컨테이너 동반 재저작, D11/D12 신설) · `924f7d9` docs(README의 A1 시대 문장 3곳+dispatch 표, **pre-C2 `--session-id` launcher 섹션**, DELIVERY 행 — "무효화된 기존 문장 찾기" 규율 적용).
+- **C4 랜딩 — 목표 ② "entwurf는 socket을 모른다" 코드로 성립 (페블, 오푸스 교차검수·후속 수선 완료).** 4 cut + 문서 수선, 커밋마다 full check GREEN: `be12348` cut① F2(spawn-bg plan `wantsReply` → dormant `<sender_info>` live rail 동형) · `d76d9f7` cut② dispatch rail(A1 narrow 삭제 — record-less socket은 모든 intent pre-probe `record-less-socket` 거부, 원인+M1 명명; `socket-only-no-resume-authority` 은퇴, +212/−312) · `5d99173` cut③ 목록 표면(legacy `sessions` projection·`controlDir`·socketOnly 섹션·per-socket get_info enrich·`/entwurf-sessions` 삭제 — peers = 시민+진단 2섹션, record-less는 F8 집계 진단, +352/−518) · `bc3f72d` cut④ 발신 신원(익명 발신 기본 거부, `ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1`이 유일한 문서화 hatch, REQUIRE env 은퇴 — installer/doctor/oracle/컨테이너 동반 재저작, D11/D12 신설) · `924f7d9` docs(README의 A1 시대 문장 3곳+dispatch 표, **pre-C2 `--session-id` launcher 섹션**, DELIVERY 행 — "무효화된 기존 문장 찾기" 규율 적용).
 - **C4 실측 (2026-07-24)**: `check-pack-install` EXIT=0 + `ENTWURF_REQUIRE_DOCKER=1 check-install-container` EXIT=0(새 후보 tgz sha256 `d526378a…`) + **aggregate `LIVE=1 release-gate` MUST PASS=16 FAIL=0 SKIP=0 + BEHAVIOR PASS=1, EXIT=0** (record 시대 두 번째 aggregate GREEN — "게이트 신선도 장치"의 둘째 데이터 포인트). matrix-live 20/20: **실제 record-less resident의 live socket이 두 intent 모두 pre-probe 거부 + lock 무접촉 + 렌더가 record 권위와 M1을 명명** — C4 강등의 라이브 증명. spawn-resume-live 23/23(openai-codex/gpt-5.4 구독 1턴) — wantsReply 실린 dormant rail 실배달.
 - 판단 기록(오푸스 검토 대상): ① `entwurf_self`의 socketPath/mailboxPath 라인은 자기 transport 진단으로 보고 C4 범위 밖 유지, ② record-less-socket을 **pre-probe**(null liveness)로 분류 — presence lstat은 liveness 측정이 아니라는 근거, A1의 "살아있는 걸 absent로 부르지 마라"는 `bad-target`과의 분리로 계승, ③ D12 hatch의 배달 본문은 external-mcp를 정직하게 명명.
 
@@ -76,10 +130,10 @@
 ## 목표 (GLG 2026-07-23 재확인) — 세 문장
 
 1. **pi가 meta-record로 entwurf가 동작한다.** → C2로 코어 달성, **C3가 잔여 사슬을 걷었다** — 옛 권위(marker/name-tag/name grammar/header-scan/registry) 전부 삭제, record가 유일한 문.
-2. **entwurf는 socket 인터페이스를 아예 모른다.** record가 유일한 주소 축이고 socket은 dispatch 내부 transport일 뿐(PROTOCOL 3) — 사용자 표면(peers/facts/dispatch 의미론)에 socket이 identity로 비치지 않는다. → **C4 랜딩 (2026-07-24, 위 상태 참조) — 오푸스 검수만 남음.**
+2. **entwurf는 socket 인터페이스를 아예 모른다.** record가 유일한 주소 축이고 socket은 dispatch 내부 transport일 뿐(PROTOCOL 3) — 사용자 표면(peers/facts/dispatch 의미론)에 socket이 identity로 비치지 않는다. → **C4 랜딩 + 오푸스 교차검수·후속 수선 완료 (2026-07-24, 위 상태 참조).**
 3. **pi 뒤에 ACP로 붙은 클로드도 entwurf를 meta-record로 쓴다.** → **C3 tail로 게이트 고정** (smoke-pi-attach P8: 실물 enrich env → 브릿지 → 발신이 host record 신원으로 착지). PROTOCOL 8(pi host가 record 소유).
 
-main 승격은 **당분간 보류**(GLG 2026-07-23) — 브랜치에서 C3 → C4 → M1+H7까지 계속 간다.
+main 승격은 **브랜치 종료 조건 충족까지 보류**(GLG 2026-07-24 갱신) — C3/C4/M1 구현 뒤에도 H7(current pin) → pi 0.81 → Claude ACP 0.61/SDK 1.3 → final artifact delivery acceptance를 이 브랜치에서 끝낸다.
 
 ## NOW — vertical slice: pi-attach 테스트까지 최단 경로 → **달성 (C2 + smoke GREEN, 검수 승인)**
 
@@ -116,7 +170,7 @@ main 승격은 **당분간 보류**(GLG 2026-07-23) — 브랜치에서 C3 → C
    **의도적으로 유지**: liveness 어휘(4-value fact — socket이라는 단어 없이 의미 전달), quarantine 진단들(이미 진단), socket-discovery/probe/grammar SSOT(internal transport), stale socket sweep(GC=process resource), `entwurf_self`의 socketPath/mailboxPath 라인(자기 transport 상태 진단이며 identity 목록 표면이 아님 — **C4 범위 밖으로 판단, 오푸스 검토 대상**).
 
    **cut 순서**: ① F2 wantsReply → ② dispatch rail(taxonomy `record-less-socket` 신설 + `socket-only-no-resume-authority` 삭제 + A1 narrow/ResumePolicy 삭제) → ③ facts/listing(socketOnly→진단 강등, sessions/controlDir/enrich/`/entwurf-sessions` 삭제) → ④ 발신 신원 기본 뒤집기(installer/doctor/oracle/컨테이너 게이트 동반 재저작; install 표면이라 push 전 check-pack-install + check-install-container 로컬 실측).
-6. **M1 + H7 레인 (라이브 cutover)**: ~~M1 operator command~~ → **M1 DONE (2026-07-24, 위 NOW 참조)** — backup `<store>.v3-migration-backup-<ts>/` → migrate → verify non-V3=0 → restore 전부 코드+68단언 게이트로 성립. fixture: V1/V3-already/malformed/stray-key/mismatch(drift)/half-migrated **+ duplicate nativeSessionId** + restore sibling-only(foreign/nested/look-alike 거부). **남은 것 = H7 라이브 전환.**
+6. **M1 + H7 레인 (라이브 cutover)**: ~~M1 operator command~~ → **M1 DONE (2026-07-24, 위 NOW 참조)** — backup `<store>.v3-migration-backup-<ts>/` → migrate → verify non-V3=0 → restore 전부 코드+70단언 게이트로 성립. fixture: V1/V3-already/malformed/stray-key/mismatch(drift)/half-migrated **+ duplicate nativeSessionId** + restore real-sibling-only(foreign/nested/forged-suffix/symlink 거부). **남은 것 = H7 라이브 전환.**
 
    **🔴 순서 불변식 (확정 — H7 전 필독): migrate와 새 런타임 설치는 한 원자 단계다 — 그 사이에 어떤 세션도 뜨지 않는다.** 구 런타임(설치본 v2 훅)의 세션이 하나라도 뜨면: v2 시대 `scanIdentityByNativeId`가 방금 v3로 옮긴 자기 record를 판독 불가로 skip → match 0 → 같은 `nativeSessionId`의 v2를 **새 gardenId로 재민팅** → v3/v2 쌍이 duplicate nativeSessionId가 되어 판단②가 store 전체를 REFUSE — migrate 재실행이 blackout 한복판에서 막힌다(오늘의 mixed store가 정확히 이 메커니즘의 역방향 실증). 사고 시 `meta-bridge-prune`이 ambiguous로 잡아 manual rm을 인쇄한다.
 
@@ -252,13 +306,13 @@ A3(MUST-tier 라이브 3종이 C2 이후 죽어 있었는데 아무도 몰랐다
 - **`.ts` 편집 후 `pnpm build-bridge` 먼저.** check-bridge-delivery는 stale dist에 설계상 RED — 자기 변경과 무관해 보이는 "artifact is not stale" RED를 만나면 빌드 누락이다. 새 리듬: `pnpm build-bridge && pnpm check` (빌드 ~5s). pre-commit hook이 full check를 강제한다.
 - 로컬 check 세금 +76s — check-meta-doctor-oracle 단독 73s(oracle 실측, thinkpad보다 빠름). CI는 push마다 3 job(check / install-surface / artifact-consumer), 전부 GitHub 러너라 oracle 부담 0.
 - **`pnpm check`는 CI 표면의 3분의 1이다 (2026-07-23 실측).** CI 3 job 중 `check-pack-install`과 `check-install-container`는 로컬 aggregate에 **없다** — C3 cut 2가 pack manifest·`setup:links`·run.sh −108줄로 install 표면을 크게 건드렸는데 두 게이트는 `f677284` 이후 이 브랜치에서 한 번도 안 돌았다. 오푸스가 오라클 로컬에서 셋 다 실행: `pnpm check` EXIT=0 / `./run.sh check-pack-install` EXIT=0 / `ENTWURF_REQUIRE_DOCKER=1 ./run.sh check-install-container` EXIT=0(Node 24 Linux consumer, 후보 tgz sha256 `82656026…`). **install 표면을 건드린 커밋은 푸시 전 이 둘을 로컬에서 돌려라** — pre-commit hook은 aggregate만 강제한다.
-- **M1+H7 전까지 라이브 `install-meta-bridge` 금지.** 라이브 177 record는 v2, 프로덕션은 V3-only — 지금 라이브에 새 아티팩트를 깔면 store-doctor가 전 record를 거부한다. main 승격 후 릴리즈를 자르더라도 기존 v2 store 호스트(이 oracle 포함)는 M1 migration 전 설치 금지. 신규 설치는 무관(처음부터 V3 mint).
-- **main 승격은 당분간 보류(GLG 2026-07-23).** 기술적 조건(C2+smoke GREEN)은 충족됐으나 브랜치에서 C3→C4→M1+H7까지 계속 간다. 승격 시점이 오면 추가 조건: **승격 직전 `smoke-resident-garden-guard` LIVE 1회 PASS**(C2 검수 권고) + **재저작된 `smoke-entwurf-v2-spawn-resume-live` LIVE 1회 PASS**(C3 재저작 후 미실측 — dormant rail의 수용 증거 없이 승격하면 C2가 가르친 silent de-scope). 승격 전 이 파일 삭제(boot sector 규칙).
+- **H7 원자 전환 전까지 라이브 `install-meta-bridge` 금지.** 라이브 store는 pre-cut v2와 V3가 섞여 있고 프로덕션은 V3-only다. H7은 current-pin candidate로 migration+install을 한 원자 단계로 실행한다. 신규 설치는 처음부터 V3 mint라 별개다.
+- **main 승격 조건은 2026-07-24 확대됐다.** H7만으로 merge하지 않는다. H7 baseline 성공 뒤 pi 0.81 축과 Claude ACP 0.61/SDK 1.3 축을 각각 검증하고, 최종 HEAD에서 deterministic artifact 3셀 + LIVE delivery acceptance를 새로 얻는다. 상세는 상단 「TO MAIN」이 SSOT다. 승격 전 이 파일 삭제(boot sector 규칙).
 - **main `NEXT.md`의 #49-C 블록은 hard cut이 통째로 무효화했다 (머지 때 정리).** 그 계획의 대상(`--session-id` handoff 버그, marker pre-socket guard, `smoke-session-id-name` 유지)은 C2/C3가 rail 자체를 삭제해 주제가 사라졌다. 머지 시점에 main NEXT에서 #49-C를 폐기 표기하고 #49-E만 남긴다.
 
 ## Do not touch
 
-fresh sibling mint/#47 mux, Cortex/#48, 0.12.9 ACP 의존성 작업, backend auth, transcript hydration, 새 DB/planner/worker 트리.
+fresh sibling mint/#47 mux, Cortex/#48, backend auth, transcript hydration, 새 DB/planner/worker 트리. **단 pi 0.81과 Claude ACP 0.61/SDK 1.3 dependency uplift는 상단 「TO MAIN」에 따라 이 브랜치에서 완료한다.**
 
 ## SSOT
 

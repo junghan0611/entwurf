@@ -20,10 +20,11 @@
  *     lines), naming the migrate verb.
  *   restore <backup-dir>
  *     rollback: move the current store aside to `<store>.pre-restore-<ts>/`
- *     (nothing is destroyed), then copy the M1 backup back. Only a SIBLING
- *     backup OF THIS store is accepted — exactly
- *     `<resolved-store>.v3-migration-backup-<ts>` (one path segment); a foreign,
- *     nested, or bare-substring look-alike is refused, because copying an
+ *     (nothing is destroyed), then copy the M1 backup back. Only a real
+ *     directory that is a SIBLING backup OF THIS store is accepted — exactly
+ *     `<resolved-store>.v3-migration-backup-<YYYYMMDDTHHMMSS>` (one path segment,
+ *     never a symlink); a foreign, nested, forged-suffix, or look-alike is refused,
+ *     because copying an
  *     unrelated tree over the address authority is a manual `cp`, not a verb.
  *     Scope is the
  *     STORE only: mailbox receipt state is deliberately NOT rolled back — the
@@ -390,12 +391,22 @@ function cmdMigrate(storeDir: string, mailboxDir: string, dropParentage: boolean
 
 function cmdRestore(storeDir: string, backupArg: string): number {
 	const backupDir = path.resolve(backupArg);
-	if (!fs.existsSync(backupDir) || !fs.statSync(backupDir).isDirectory()) {
-		console.error(`REFUSE: backup dir does not exist (or is not a directory): ${backupDir}`);
+	let backupStat: fs.Stats;
+	try {
+		// M1 creates a real sibling directory. statSync would follow a sibling
+		// symlink into an unrelated tree and let that tree replace the address
+		// authority; lstat keeps the leaf itself inside the trust decision.
+		backupStat = fs.lstatSync(backupDir);
+	} catch {
+		console.error(`REFUSE: backup path does not exist: ${backupDir}`);
 		return 1;
 	}
-	// A backup migrate took is a SIBLING of THIS store, named exactly
-	// `<resolved-store>.v3-migration-backup-<ts>` — one path segment, no nesting.
+	if (!backupStat.isDirectory()) {
+		console.error(`REFUSE: backup path is not a real directory (symlinks refused): ${backupDir}`);
+		return 1;
+	}
+	// A backup migrate took is a real-directory SIBLING of THIS store, named
+	// `<resolved-store>.v3-migration-backup-<YYYYMMDDTHHMMSS>` — one segment.
 	// A bare `.v3-migration-backup-` substring is not enough: a look-alike under
 	// another store (`foreign.v3-migration-backup-x`) or nested inside a backup
 	// (`store.v3-migration-backup-x/inner`) would sail through and replace the
@@ -405,10 +416,10 @@ function cmdRestore(storeDir: string, backupArg: string): number {
 	// sibling and the check passes honestly.)
 	const expectedPrefix = `${path.resolve(storeDir)}.v3-migration-backup-`;
 	const tail = backupDir.startsWith(expectedPrefix) ? backupDir.slice(expectedPrefix.length) : null;
-	if (tail === null || tail.length === 0 || tail.includes(path.sep)) {
+	if (tail === null || !/^\d{8}T\d{6}$/.test(tail)) {
 		console.error(
 			`REFUSE: ${backupDir} is not a backup OF THIS store. An M1 backup is a sibling named exactly ` +
-				`\`${expectedPrefix}<ts>\` (one segment) — a foreign, nested, or look-alike dir is refused. ` +
+				`\`${expectedPrefix}<YYYYMMDDTHHMMSS>\` (one segment) — a foreign, nested, or look-alike dir is refused. ` +
 				"To roll a different store back, point ENTWURF_META_SESSIONS_DIR at it; copying an arbitrary " +
 				"dir over the address authority is a manual `cp`, not a verb.",
 		);

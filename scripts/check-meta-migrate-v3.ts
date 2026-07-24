@@ -27,9 +27,9 @@
  *     and writes nothing; a migrated store certifies non-V3=0.
  *   - restore: store bytes return to the pre-migration originals, the current
  *     store survives as a `.pre-restore-` aside, the backup stays intact, and
- *     ONLY a sibling backup OF THIS store is accepted — a foreign look-alike, a
- *     dir nested inside a real backup, and a bare-substring name are all refused
- *     (a wrong path must never cut the store over to an unrelated tree).
+ *     ONLY a real-directory timestamp sibling backup OF THIS store is accepted —
+ *     a foreign look-alike, nested dir, forged suffix, or sibling symlink into a
+ *     foreign tree is refused (a wrong path must never replace the authority).
  *   - prescriptions (R1): the pre-cut FAIL and the rollback line each name BOTH
  *     invocation forms — `./run.sh …` for a dev clone AND `entwurf …` for an
  *     installed package. The hosts that actually meet a pre-cut store are
@@ -520,11 +520,11 @@ const s1 = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
 	);
 }
 
-// ── S15: restore is a SIBLING-only rollback — foreign / nested / look-alike ───
-// A bare `.v3-migration-backup-` substring is not proof a dir is THIS store's
-// backup. A look-alike under another store, or a dir nested inside a real
-// backup, must NOT replace the address authority (an operator handing a wrong
-// path mid-blackout would otherwise cut the store over to an unrelated tree).
+// ── S15: restore is a REAL SIBLING backup — no foreign/nested/symlink ────────
+// A name is not provenance. The leaf must be a real directory (not a symlink),
+// be the sibling of THIS store, and carry the exact timestamp grammar stamp()
+// emits. Otherwise a plausible path could replace the address authority with an
+// unrelated tree mid-blackout.
 {
 	const w = makeWorld({ [`${V3_GID}.meta.json`]: V3_BODY });
 	const env = { store: w.store, mailbox: w.mailbox };
@@ -555,18 +555,40 @@ const s1 = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
 		rn.stdout + rn.stderr,
 	);
 
+	// (c) a sibling with the right prefix but a suffix stamp() never emits.
+	const forgedSuffix = `${w.store}.v3-migration-backup-forged`;
+	fs.mkdirSync(forgedSuffix);
+	const rfs = runCli(["restore", forgedSuffix], env);
 	ok(
-		"S15 both refusals wrote nothing — the store is byte-untouched, no aside taken",
+		"S15 a sibling with a forged non-timestamp suffix is refused",
+		rfs.status === 1 && rfs.stderr.includes("not a backup OF THIS store"),
+		rfs.stdout + rfs.stderr,
+	);
+
+	// (d) the exact sibling+timestamp spelling is still not enough when its leaf is
+	//     a symlink into the foreign tree. statSync followed this and reproduced the
+	//     original authority replacement under a more convincing name.
+	const symlinkSibling = `${w.store}.v3-migration-backup-20260101T000001`;
+	fs.symlinkSync(foreign, symlinkSibling, "dir");
+	const rsl = runCli(["restore", symlinkSibling], env);
+	ok(
+		"S15 a timestamp-shaped sibling symlink to a foreign tree is refused",
+		rsl.status === 1 && rsl.stderr.includes("symlinks refused"),
+		rsl.stdout + rsl.stderr,
+	);
+
+	ok(
+		"S15 all four refusals wrote nothing — the store is byte-untouched, no aside taken",
 		fs.readdirSync(w.root).every((n) => !n.startsWith("store.pre-restore-")) &&
 			[...storeBefore].every(([f, bytes]) => fs.readFileSync(path.join(w.store, f), "utf8") === bytes),
 	);
 
-	// (c) the genuine sibling, filled to match its name, IS accepted — the guard
-	//     admits the real thing, not just rejects the fakes.
+	// (e) the genuine real-directory sibling, filled to match its name, IS accepted
+	//     — the guard admits the actual M1 shape, not just rejects the fakes.
 	fs.writeFileSync(path.join(realSibling, `${V3_GID}.meta.json`), V3_BODY);
 	const rok = runCli(["restore", realSibling], env);
 	ok(
-		"S15 the genuine sibling backup of THIS store is accepted",
+		"S15 the genuine real-directory timestamp sibling of THIS store is accepted",
 		rok.status === 0 && rok.stdout.includes("restored:"),
 		rok.stdout + rok.stderr,
 	);
