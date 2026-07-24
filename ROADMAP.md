@@ -253,13 +253,26 @@ model 없음, pi backend는 birth에 transcript 미확정. `recordUpdatedAt` = r
 
 ## Backlog 트랙 (0.12.x 이후, GLG 재오픈 시)
 
+- **repair/v2-core-debt 승격분 (2026-07-24):**
+  - `@earendil-works/pi-ai/providers/all` loader alias 이행 검토 — pi 0.81+가 추가한 4번째 alias.
+    `/compat`이 살아있어 강제 아님(deprecated 주석만 그쪽을 가리킴). 별도 단독 cut.
+  - identity 계약 cut: `check-entwurf-session-identity`의 256-id 유일성 단언은 생일충돌 ~0.2%/run의
+    확률 주장(2026-07-24 pre-commit 실발화 1회). 게이트 계약 재정의 vs 프로덕션 mint same-second
+    충돌 가드(file-exists 재시도) 중 택일 — 후자면 게이트가 그 가드를 검증.
+  - **기계가 말하는 장치:** 게이트별 마지막 PASS 시각을 기록하고 커밋이 건드린 rail과 대조해
+    "X를 건드렸는데 X를 덮는 MUST 게이트 마지막 PASS가 N일 전"을 자동으로 말하게 한다 —
+    A3(라이브 3종이 한 달 죽어 있던 사건)의 근본 처방. MUST-tier 신선도는 사람 규율(A4/VERIFY)만으로는 재발한다.
+  - `smoke-agy-native-push-live` 실행(살아있는 `AGY_CONVERSATION_ID` 필요) + H7 이후 agy 배선 확인
+    (claudecode GREEN이므로 확인만 남음).
+  - C4 tail(선택): `PI_SESSION_ID` seam(pi host env → 번들 브릿지 envelope)의 결정적 게이트화 —
+    live 증거는 `smoke-acp-bundled-mcp-live`가 이미 보유.
 - **Post-0.10 meta-bridge:** #34 잔여(empirical probe 4종 + unread-mailbox heartbeat), Phase 4 GC 자동화
   (`--apply`/TTL/liveness 코드화), step 7 `entwurf_peers(includeMeta)` 발견성.
 - ~~**Carried 0.9**~~ — 세 항목 전부 **주제 소멸**: `/gnew` T3 확장과 `/gnew` empty-session GC는
   명령이 #50 C2에서 삭제되며 대상을 잃었고, `entwurf.ts` source guard refinement는 v1 본체가 0.12
   cutover에서 제거되며 같이 사라졌다.
 - **Dep bump(별도 트랙):** claude-agent-acp / ACP SDK bump는 `check-acp-sdk-surface`와 raw LIVE로 잠근다.
-  현재 준비선은 claude-agent-acp 0.61.0 / sdk 1.3.0이며 model forcing은 `session/set_config_option(configId="model")`.
+  ~~준비선 0.61.0 / 1.3.0~~ → **랜딩 완료(2026-07-24 `5f5a18d`, pi 0.82.0은 `dfa3967`)** — 다음 bump부터 이 트랙 절차 재사용. model forcing은 `session/set_config_option(configId="model")`.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.
