@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 3,
+  "gardenId": "20260401T000000-cccc03",
+  "backend": "pi",
+  "nativeSessionId": "native-v3-0003",
+  "cwd": "/synthetic/p3",
+  "model": null,
+  "transcriptPath": null,
+  "createdAt": "2026-04-01T00:00:00.000Z",
+  "recordUpdatedAt": "2026-04-01T00:00:00.000Z"
+}

@@ -83,7 +83,7 @@ Warnings make agents blame themselves and flail. Broken tool state must surface 
 2. **Dispatch is a function of liveness, not session type.** `entwurf_v2` never asks "is this a resume or a send" up front — it probes the target on its own rail and routes: live pi→control-socket, dormant pi→spawn-bg resume, active self-fetch→meta-mailbox, live native conversation→native-push. State is computed, never stored (a stored liveness bit is a lie).
 3. **A reject is honest, never cosmetic.** When a target cannot receive (dead, drifted identity, wrong state×intent), the decider returns a reject — no `✓ delivered`, no `.msg` written, no signal poke. Silent degraded "delivery" is forbidden.
 4. **MCP injection**: only via explicit `mcpServers` wiring. No ambient `~/.mcp.json` scanning, no automatic retrieval.
-5. **Meta-record authority is the record body, never the filename.** `scanByNativeId` scans `.meta.json` bodies, throws on duplicate `nativeSessionId` (authority ambiguity is fail-fast), and never derives identity from a filename. A meta-record is nullable-at-birth (`model`/`transcriptPath` null until known); a backend↔wakeMode contradiction is corrupt-and-crash.
+5. **Meta-record authority is the record body, never the filename.** `scanIdentityByNativeId` scans `.meta.json` bodies, throws on duplicate `nativeSessionId` (authority ambiguity is fail-fast), and never derives identity from a filename. A meta-record is nullable-at-birth (`model`/`transcriptPath` null until known). Production reads schemaVersion-3 records only (#50 hard cut); a pre-cut v1/v2 record fails loud naming the M1 migrate command, and the frozen legacy readers live solely in `pi-extensions/lib/meta-migration.ts`.
 6. **GC reclaims process resources only — never data.** meta-records and transcripts (the denote-id memory layer) are preserved; dormant/stale entries are archived/TTL'd, not deleted.
 7. **This is not a second harness**: no prompt reconstruction, no transcript hydration, no tool result ledger, no harness emulation. Native bridges front only a garden id plus their narrow delivery rail (Claude mailbox or agy native-push); they do not scrape transcripts or run a replacement control daemon.
 8. **Auth boundary is deployment-surface-agnostic**. This repo does not provide, copy, proxy, decrypt, or mediate any backend's credentials. Native-harness sessions read whatever auth state is visible in their own process filesystem; nothing here moves that.
@@ -127,7 +127,7 @@ pnpm typecheck                              # 3-config tsc fence (root + mcp + s
 pnpm check                                  # full static floor: lint + typecheck + every check-*/smoke-* below
 ./run.sh check-entwurf-v2-matrix            # the decider's state×intent table, read as an SSOT (REAL decideDispatch)
 ./run.sh check-entwurf-v2-decider           # + -contract / -lock / -release / -send / -send-fallback / -mailbox / -runner / -production / -surface / -spawn / -spawn-production
-./run.sh check-meta-session                 # + -record-v2 / -dual-read / -migration / -mailbox-state-write / -receiver-marker / -capability-source / -dual-consumers / -listing
+./run.sh check-meta-session                 # + -v3-record / -migration-readers / -migrate-v3 / -mailbox-state-write / -receiver-marker / -capability-source / -identity-consumers / -listing (#50: record-v2→v3-record, dual-read deleted, migration→migration-readers, dual-consumers→identity-consumers)
 ./run.sh check-meta-doctor-oracle           # detection power of the release oracle: healthy fixture reaches `doctor: PASS`, 21 planted defects each turn it FAIL naming their own cause
 ./run.sh check-native-push-adapter          # agy probe/route leaf; separate from pi socket and mailbox liveness
 ./run.sh check-agy-sender-identity          # record-backed pid/start-key sender resolution + ambiguity refusal
@@ -164,26 +164,49 @@ If a gate fails or a claim drops below its needed evidence level, do not commit.
 
 Uses `entwurf` instead of `delegate` to avoid ecosystem collisions. spawn-bg resume creates a sibling, not a worker.
 
-- **Surface** — MCP `entwurf-bridge`: `entwurf_v2`, `entwurf_self`, `entwurf_peers`, `entwurf_inbox_read`, `entwurf_register_native` (explicit/manual fallback for an already-running native conversation). pi-native (`pi-extensions/entwurf-control.ts`): `entwurf_v2`, `entwurf_peers` tools + `/entwurf-sessions`, `/gnew` (`/garden-new`) commands. The v1 `entwurf` / `entwurf_resume` / `entwurf_send` tools and the `/entwurf` / `/entwurf-send` / `/entwurf-status` commands are **removed**.
+- **Surface** — MCP `entwurf-bridge`: `entwurf_v2`, `entwurf_self`, `entwurf_peers`, `entwurf_inbox_read`, `entwurf_register_native` (explicit/manual fallback for an already-running native conversation). pi-native (`pi-extensions/entwurf-control.ts`): `entwurf_v2`, `entwurf_peers` tools (#50 C4 removed the socket-scan `/entwurf-sessions` command). The v1 `entwurf` / `entwurf_resume` / `entwurf_send` tools and the `/entwurf` / `/entwurf-send` / `/entwurf-status` commands are **removed**.
 - **`entwurf_v2` is the one delivery verb.** Given a garden id, it classifies the target (live pi vs. dormant pi vs. mailbox meta-session vs. native-push citizen — a bare garden id does not reveal this) and routes correctly. It does **not** mint a fresh sibling: spawn-bg resumes an *already-identified* citizen, while native-register binds an *already-running* conversation. Fresh creation was the v1 `entwurf` verb and remains deferred.
 - **`entwurf_peers`** is a read-only fact surface (liveness / capability / identity / cwd-history). Do not bake verb-routing (`resumable`/`sendable`) into the fact layer; routing is the decider's job.
-- **`entwurf_self`** returns the authoritative identity envelope (pi-session env, or a trusted meta-session sender marker) and is identity-required.
-- Target registry: `pi/entwurf-targets.json` (spawn-bg resume allowlist). Identity Preservation Rule: no model override on resume.
+- **`entwurf_self`** returns the authoritative identity envelope (pi-session env, or a trusted meta-session sender marker) and is identity-required. Its socketPath/mailboxPath lines are the CALLER's own transport diagnostics, not an identity surface — that is why they survive #50 C4 while `entwurf_peers` forbids every socket-shaped key/path (the peers listing points at OTHER citizens, where a socket path is an address claim).
+- The target registry (`pi/entwurf-targets.json` + `setup:links`) is **gone** (#50 C3): v2 never spawns from a model tuple — `entwurf_v2` resumes an already-identified record-backed citizen, and dormant-resume authorization is record existence + the transcript-header ↔ `record.nativeSessionId` integrity check (the old `requireEntwurf` name-tag and resume-marker env are deleted). Bridge-extension routing survives as `getRegistryRouting` (caller-supplied tuple, ← resolve-acp-bridge). Identity Preservation Rule: no model override on resume.
 - `PI_SHELL_ACP_V2_ONLY=1` was the v1-refusal flag; with v1 removed on this branch its guard (`entwurf-v2-only.ts`) is gone too. `runEntwurfV2` was always flag-clean.
 
 > **Source-agnostic does not mean harness-agnostic.** 어디서 던지든 — GLG / sibling / external MCP host — entwurf 의 *target* 은 garden citizen 이다. spawn-bg resume 의 spawn surface 는 pi 자식 프로세스만 띄운다 (`pi --entwurf-control` keep-alive resident). 외부 MCP host 가 닿을 때도 target 은 이미 식별된 citizen 이어야 한다. *Model* 은 free axis (어느 형제 학교 모델이든), *spawn target* 은 harness 정합 axis.
 
 > **Naming pair.** *Entwurf* (기투, projection-of-self) — a resident agent throws siblings forward (resume / messaging). The resident-side counterpart is *Mitsein* (공존, being-with), defined in the resident's own knowledge base (cwd-scoped, not a global persona). This repo owns the entwurf substrate; resident-side conventions live where the resident wakes.
 
-### Garden launcher — the resident session is garden-native or it blows up (0.9.0)
+### Resident identity — the record is the address (#50 C2)
 
-Garden identity covers the operator's OWN `--entwurf-control` session, not just spawned children. A `--entwurf-control` session's header `id` MUST be a garden sessionId (`YYYYMMDDTHHMMSS-[0-9a-f]{6}`); pi assigns a `uuidv7` when `--session-id` is absent, so the launcher injects it and `entwurf-control` only enforces.
+A `--entwurf-control` session is a garden citizen because it has a **meta-record**, not
+because its session id has a particular shape. pi mints its own id (a uuidv7 is normal);
+`birthPiCitizen` upserts `(backend:"pi", nativeSessionId)` at `session_start`, the record
+mints the `gardenId`, and everything addressable hangs off that one string.
 
-- **Launch:** `pi --session-id "$(run.sh new-session-id)" --entwurf-control …` (operator alias). The id is fixed at launch — an extension cannot change it after pi's `newSession`. `run.sh new-session-id` is the `generateSessionId` SSOT; never reimplement the format in the shell.
-- **In-process new:** builtin `/new` stays blocked under `--entwurf-control` because it mints a uuid before extensions can inject an id. Use `/gnew` (alias `/garden-new`) for a same-terminal fresh garden session; it pre-creates a valid garden JSONL header and `switchSession()`es into it, so no uuid moment exists. A `/gnew` session quit before the first turn may appear in resume lists with message count 0; that is intentional, not an orphan. (`/gnew` births a fresh *operator* session in the same terminal — it is not the deferred programmatic fresh-sibling-minting capability.)
-- **Enforcement:** non-garden id under `--entwurf-control` → loud stderr + notify + `process.exit(1)` at `session_start`, **before any model turn**. A bare `throw` / `ctx.shutdown()` there is swallowed by pi's runner (verified: the turn ran, 26k tokens leaked), so the guard hard-exits. No uuid / back-compat path — "보이면 바로 터진다".
-- **Status label = 🪛 (the forged screwdriver, the North Star), NOT the word "entwurf".** `🪛 ready` before the first assistant turn (file not on disk → model changeable), `🪛 <gardenId>` after (file written → model locked). The id's presence is the model-lock lifecycle signal.
-- **Resident name is lazy + `control`-tagged, never `entwurf` — with one sessionId-bound exception.** Set on the first turn via `pi.setSessionName(buildGardenSessionName(...))`. `buildGardenSessionName` is registry-FREE and FORBIDS the `entwurf` tag — the `entwurf` tag is the v2 resume resident marker, so an **operator** resident must never carry it (else a general operator session becomes resumable as a child). The narrow exception: a **v2 spawn-bg authorized Entwurf child** — marked by env `ENTWURF_V2_RESUME_RESIDENT_SESSION_ID` (sessionId-bound) — **keeps** its `entwurf`-tagged name and stays re-resumable when it dies. Only that marker-authorized child is exempt. Gates: `check-entwurf-session-identity` (deterministic) + the v2 child exception via `check-entwurf-v2-spawn-production` + `smoke-entwurf-v2-spawn-resume-live`.
+- **Launch:** `pi --entwurf-control …`. No `--session-id` injection — that was the old
+  launcher's job and it is gone, together with `run.sh new-session-id`'s role in launching
+  (the generator itself stays; the record uses it to mint garden ids).
+- **In-process new/resume:** pi's own. `/new`, `/fork`, `/clone` and RPC session replacement
+  all just fire `session_start`, which attaches the new session as its own citizen and
+  rebinds the socket to its address. The `/gnew` command, the pre-switch cancels and the
+  garden-format hard exit are deleted — there is no id to police (LOCKED PROTOCOL 2).
+- **Socket:** `~/.pi/entwurf-control/<gardenId>.sock`, keyed on the RECORD's id. A socket
+  carrying pi's session id is the pre-cut address and a gate failure.
+- **`PI_SESSION_ID`** carries the gardenId, so every child MCP process reads back a
+  routable address (`entwurf_self`), never pi's internal id.
+- **Failure is loud, not cosmetic:** if the record cannot be written (unreadable store,
+  duplicate native id, a pre-cut v1/v2 store naming the M1 command) the control server is
+  refused, `PI_SESSION_ID` stays unset, and the reason is on stderr. An unaddressable
+  resident must not survive quietly — that is the guard's surviving purpose.
+- **Status label = 🪛 (the forged screwdriver, the North Star), NOT the word "entwurf".**
+  `🪛 ready` before the first assistant turn (session file not on disk → model changeable),
+  `🪛 <gardenId>` after (file written → model locked).
+- **The resident session NAME is pi's.** The `control`-tagged garden name mirror, its
+  `entwurf`-tag refusal and the sessionId-bound resume-marker exemption are gone with the id
+  they mirrored. Dormant-resume authorization is record existence (LOCKED PROTOCOL 6) plus
+  the transcript-header ↔ `record.nativeSessionId` integrity check (#50 C3).
+- Gates: `smoke-pi-attach` (deterministic, in `pnpm check`: record birth · record-keyed
+  socket · attach-on-reopen · artifact delivers to the socket) + `smoke-resident-garden-guard`
+  (LIVE, the same contract driven through a real `pi` process).
 
 ### Send-is-throw
 
@@ -199,18 +222,18 @@ Messages are thrown, not awaited.
 |------|---------|
 | `pi-extensions/acp-provider.ts` | ACP plugin entry: registers the package provider `entwurf` + curated Claude model surface; wires `streamSimple` to the real ACP backend |
 | `pi-extensions/lib/acp/*.ts` | ACP plugin internals: curated Claude surface + no-auth sentinel (`models.ts`), Claude config overlay (`overlay.ts`), tool surface + exclude-tools preflight (`tool-surface.ts`), ACP→pi event mapper (`event-mapper.ts`), pi Context→ACP prompt (`context.ts`), spawn-per-turn `streamSimple` backend (`backend.ts`) |
-| `pi-extensions/entwurf-control.ts` | control plane: `--entwurf-control` socket, RPC, `entwurf_v2` / `entwurf_peers` tools, `/entwurf-sessions` / `/gnew` |
+| `pi-extensions/entwurf-control.ts` | control plane: record attach at session_start, `--entwurf-control` socket (keyed on the record gardenId), RPC, `entwurf_v2` / `entwurf_peers` tools |
+| `pi-extensions/lib/pi-citizen-birth.ts` | the #50 C2 attach seam: pi session → meta-record upsert → control-socket address |
 | `pi-extensions/model-lock.ts` | package-provider model lock (pi.extension) |
 | `pi-extensions/meta-bridge-hook.ts` | Claude Code `SessionStart` hook: register a mailbox-backed garden meta-session |
-| `pi-extensions/lib/entwurf-v2-*.ts` | v2 substrate: contract / lock / decider / matrix / release / send / mailbox / native-push / runner / production / surface / spawn(+production) + resume-marker |
+| `pi-extensions/lib/entwurf-v2-*.ts` | v2 substrate: contract / lock / decider / matrix / release / send / mailbox / native-push / runner / production / surface / spawn(+production) |
 | `pi-extensions/lib/native-push/` | Antigravity adapter probe/route, direct-inject hand, explicit native registration core |
-| `pi-extensions/lib/meta-*.ts` | meta-record authority, mailbox state, dual-read/migration, receiver/sender identity |
+| `pi-extensions/lib/meta-*.ts` | V3-only meta-record authority (`meta-session.ts`), mailbox state, frozen v1/v2 legacy readers isolated in `meta-migration.ts` (M1 surface only), receiver/sender identity |
 | `scripts/agy-{bridge,statusline-bridge,hooks-bridge}.*` | three state-backed agy install/doctor/inverse surfaces |
 | `scripts/agy-imprint.ts` | agy `PreInvocation` automatic birth + record-backed sender marker |
 | `pi-extensions/lib/entwurf-core.ts` | shared core (session-file lookup, identity read, explicit-extension args); some v1 exports now dead pending routing cleanup |
 | `protocol.js` | dependency-free shared wire constants (`<project-context` marker); single source for tsc emit + strip-types MCP paths |
 | `run.sh` | install (incl. `install-meta-bridge`), check-*/smoke-* gates, release-gate |
-| `pi/entwurf-targets.json` | spawn-bg resume target allowlist |
 | `mcp/entwurf-bridge/` | MCP server exposing `entwurf_v2`, `entwurf_self`, `entwurf_peers`, `entwurf_inbox_read` |
 
 ## Typecheck Boundary
@@ -234,14 +257,19 @@ Code-level invariants pinned at the same time:
 
 ## Runtime Dependencies
 
-- `@modelcontextprotocol/sdk` and `zod` are the substrate runtime deps. With the Claude-first ACP plugin shipped, the Claude/ACP backend deps are pinned alongside them: `@agentclientprotocol/claude-agent-acp` (`0.54.1`), `@agentclientprotocol/sdk` (`1.1.0`), `@anthropic-ai/sdk` (`0.100.1`). Codex/Gemini ACP packages stay out of scope; Codex is native/probe, agy is the shipped native-push Google lane, and Gemini ACP remains compatibility history rather than a current target.
-- `pi` (`@earendil-works/pi-ai`) on PATH at the pinned range (`>= 0.80.7 < 0.81` — devDep exact `0.80.7` + next-minor ceiling). Mismatches are caught by `check-dep-versions` / `check-pi-runtime-version`. 0.80 moved the standalone root `getModels()` to the deprecated `@earendil-works/pi-ai/compat` entrypoint; the curated Claude surface (`pi-extensions/lib/acp/models.ts`) imports `getModels` from `/compat` — the single subpath allowlisted in `check-pi-import-surface`. NOT the 0.80 provider-factory `providers/anthropic` subpath: although it typechecks, pi's extension loader (jiti alias map in pi-coding-agent `core/extensions/loader.ts`) resolves only the bare root, `/compat`, and `/oauth` for extensions — a `providers/*` import resolves to the unresolvable `dist/compat.js/providers/…` and crashes extension load (caught live by `smoke-resident-garden-guard`, not by static typecheck). This `/compat` use is an **extension-loader compatibility shim** chosen by loader constraint, not a preference for a deprecated API — the `<0.81` ceiling guards it; when 0.81 changes `compat` or the loader alias map, re-evaluate against whatever root/loader surface 0.81 then exposes.
+- `@modelcontextprotocol/sdk` and `zod` are the substrate runtime deps. With the Claude-first ACP plugin shipped, the Claude/ACP backend deps are pinned alongside them: `@agentclientprotocol/claude-agent-acp` (`0.61.0`), `@agentclientprotocol/sdk` (`1.3.0`), `@anthropic-ai/sdk` (`0.100.1` — kept: `claude-agent-sdk@0.3.217`'s peer floor is `>=0.93.0`, so 0.100.1 satisfies it and a mechanical rise to the newest SDK is NOT taken). Codex/Gemini ACP packages stay out of scope; Codex is native/probe, agy is the shipped native-push Google lane, and Gemini ACP remains compatibility history rather than a current target.
+- `pi` (`@earendil-works/pi-ai`) on PATH at the pinned range (`>= 0.82.0 < 0.83` — devDep exact `0.82.0` + next-minor ceiling). Mismatches are caught by `check-dep-versions` / `check-pi-runtime-version`. 0.80 moved the standalone root `getModels()` to the deprecated `@earendil-works/pi-ai/compat` entrypoint; the curated Claude surface (`pi-extensions/lib/acp/models.ts`) imports `getModels` from `/compat` — the single subpath allowlisted in `check-pi-import-surface`. NOT a provider-factory subpath such as `providers/anthropic`: although it typechecks, pi's extension loader (jiti alias map in pi-coding-agent `core/extensions/loader.ts`) resolves only FOUR pi-ai specifiers for extensions — the bare root, `/compat`, `/oauth`, and (added in 0.81) `/providers/all` — so any other `providers/*` import resolves to the unresolvable `dist/compat.js/providers/…` and crashes extension load (caught live by `smoke-resident-garden-guard`, not by static typecheck). This `/compat` use is an **extension-loader compatibility shim** chosen by loader constraint, not a preference for a deprecated API — the `<0.83` ceiling guards it.
+  - **The re-evaluation this line demanded has been done (2026-07-24, pi `v0.80.7..v0.82.0` source-diffed + both versions installed and `getModels("anthropic")` compared).** The shim holds: root / `/compat` / `/oauth` are untouched in the alias map, `getModels` is still exported from `/compat` (as `getBuiltinModels`, deprecation text now pointing at `/providers/all`), and the curated anchors are byte-identical across the bump (14 models, `claude-opus-4-8` + `claude-sonnet-5`, same `cost` / `contextWindow` / `maxTokens` / `reasoning`). What 0.81 ADDED — the `/providers/all` alias and native `registerProvider(provider)` registration — is a new surface, not a replacement forced on us; migrating the curated read off deprecated `/compat` onto it is a **separate cut**, deliberately kept out of the version bump. Re-evaluate again at the `<0.83` ceiling.
 
 ## Working Style
 
 - Surgical changes. One thing at a time.
 - Ask: does this belong in pi? In the resident's own repo? Or here?
 - Removal on this branch is gate-verified: subtract source AND its gate/case/script together (the 결합 규칙) so `pnpm check` stays green and never goes silently red.
+- **Every repair/removal commit hunts the sentences it invalidated** — adding the new fact without deleting the old claim has now shipped **eight** times (dead registry link → stale NEXT diagnosis → A1/launcher prose surviving C4 → `docs/setup-clean-host.md` teaching the deleted `--session-id` launcher *and a hard-exit guard that no longer exists* → the `shouldListAsLive` removal leaving its own policy sentences behind → the store-doctor claiming dual-read three cuts after V3-only · a gate header claiming v2 writes → **the schema module itself: `MetaIdentity`/serializer/minter/`decideUpsert` doc comments calling the live v3 shape "v2", one of them defaulting a field #50 deleted, while the same function's body comment was already correct**). **Stop extending the directory list — that is what failed three rounds running (`docs/`, then `scripts/`, then the lib the cut actually rewrote).** The unit is the REPO, and the sweep is a method, two axes:
+  1. **Retired vocabulary → repo-wide grep.** Before committing, write down what the cut retired: deleted symbol names, the schema/authority words it demoted (`dual-read`, `v2 identity`, `socketOnly`), the command form it replaced. `grep -rn` each across the whole tree (not only touched files — a schema cut invalidates prose in consumers it never edits), then judge every hit: a *tombstone* ("`X` is GONE since #50") is the goal, a *live claim* ("`X` reads v1 AND v2") is the defect.
+  2. **Landed plans → future-tense grep.** A cut that LANDS invalidates its own plan sentences: `yet` · `not here` · `Today …` · `does NOT yet` · `lands in step N` · `will land`. Staged-build headers are written in future tense and nobody returns to them when the step ships.
+  Surfaces to cover at minimum: README · AGENTS · DELIVERY · VERIFY · ROADMAP · `docs/**` (an install walkthrough is a new host's first surface, so a stale command there costs more than a stale README line) · run.sh usage lines AND dispatch/function comments · `scripts/**` operator & gate scripts · **the module the cut rewrote, all of it — being the file you edited is not evidence its other 40 comments were read**. A deleted symbol's *prose* is not deleted by the compiler or by biome — only by this sweep.
 - Keep docs calibrated: strong language is fine; unbacked language is not.
 - Resist the urge to make the substrate more magical than necessary.
 

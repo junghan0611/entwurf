@@ -10,13 +10,15 @@
  * is predicated on: until a real spawn-bg resume is seen LIVE, there is no honest ground to
  * turn the v1 entwurf surface off.
  *
- * The FULL loop (no synthetic stand-in):
- *   1. mint a `backend=pi` meta identity in a temp store → take its gardenId as the seed id.
- *   2. seed a REAL dormant pi session: a one-shot `pi --mode json -p --no-extensions` under
- *      that gid writes a saved session JSONL into the REAL `~/.pi/agent/sessions` (the dir
- *      `findSessionFileById` / `resolveResumeLaunchIdentity` read — NOT env-redirected, because
- *      this smoke validates the production resume path, not a fixture path). No control socket
- *      survives the one-shot → the citizen is DORMANT.
+ * The FULL loop (no synthetic stand-in, record authority — #50 C2/C3):
+ *   1. seed a REAL dormant pi session: a one-shot `pi --mode json -p --no-extensions` (NO
+ *      --session-id / --name — pi owns its id and name, LOCKED PROTOCOL 2) writes a saved
+ *      session JSONL into the REAL `~/.pi/agent/sessions`. No control socket survives the
+ *      one-shot → the citizen-to-be is DORMANT.
+ *   2. mint the `backend=pi` meta-record in a temp store from the SEED's OWN identity:
+ *      nativeSessionId = the seed's JSONL header id, transcriptPath = the seed file. The
+ *      record's gardenId is the citizen's address; resolveResumeLaunchIdentity resolves the
+ *      transcript from the record and verifies header id === nativeSessionId (C3).
  *   3. drive the production `runEntwurfV2({intent:"owned-outcome"})` → the decider routes a
  *      dormant in-domain pi citizen to spawn-bg resume (DISPATCH_TABLE owned-outcome×dormant) →
  *      the production spawn factory launches a REAL detached `pi --entwurf-control` resume child.
@@ -49,7 +51,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SenderEnvelope } from "../pi-extensions/lib/entwurf-control-rpc.ts";
-import { buildSessionName, findSessionFileById, readSessionIdentity } from "../pi-extensions/lib/entwurf-core.ts";
+import { readSessionIdentity } from "../pi-extensions/lib/entwurf-core.ts";
 import { type LockClaim, lockPathFor, releaseLock as realReleaseLock } from "../pi-extensions/lib/entwurf-v2-lock.ts";
 import { makeProductionEntwurfV2Deps } from "../pi-extensions/lib/entwurf-v2-production.ts";
 import type { EntwurfV2RunResult } from "../pi-extensions/lib/entwurf-v2-runner.ts";
@@ -136,6 +138,34 @@ async function terminateResident(pid: number, sockPath: string, graceMs = 3_000)
 	}
 }
 
+// Where pi's one-shot seed lands its session JSONL: the REAL agent sessions base,
+// under the cwd-encoded dir for our unique temp cwd. The encoding is pi's layout
+// ("--" + cwd with "/"→"-" + "--"); the temp cwd is unique to this run, so the
+// dir contains ONLY our seed and removing it on success can touch nothing else.
+function seedSessionDirFor(cwd: string): string {
+	const encoded = `--${cwd.replace(/^\//, "").replace(/\//g, "-")}--`;
+	return path.join(os.homedir(), ".pi", "agent", "sessions", encoded);
+}
+
+// The seed's own identity: header line of the one .jsonl pi wrote for our cwd.
+// A local helper, not an entwurf-core import — the header-scan lookup died with
+// C3; this reads pi's file for SEEDING purposes only (the production resume path
+// never scans, it follows record.transcriptPath).
+function readSeedHeader(file: string): { id?: string; cwd?: string } | null {
+	try {
+		const first = readFileSync(file, "utf8").split("\n", 1)[0]?.trim();
+		if (!first) return null;
+		const entry = JSON.parse(first) as { type?: string; id?: unknown; cwd?: unknown };
+		if (entry.type !== "session") return null;
+		return {
+			id: typeof entry.id === "string" && entry.id ? entry.id : undefined,
+			cwd: typeof entry.cwd === "string" && entry.cwd ? entry.cwd : undefined,
+		};
+	} catch {
+		return null;
+	}
+}
+
 function smokeSender(gardenId: string, cwd: string): SenderEnvelope {
 	return {
 		sessionId: gardenId,
@@ -216,41 +246,16 @@ async function main(): Promise<void> {
 	const releasedGids: string[] = [];
 
 	try {
-		// ── 1. mint a backend=pi meta identity; its gardenId is the seed/resume id ──
-		const minted = upsertMetaSession({
-			input: { backend: "pi", nativeSessionId: `smoke-resume-${process.pid}`, cwd: tmp, model },
-			dir: sessionsDir,
-		});
-		gid = minted.record.gardenId;
-		artifacts["gid"] = gid;
-		const sockPath = path.join(REAL_CONTROL_DIR, `${gid}${SOCKET_SUFFIX}`);
-		artifacts["socket"] = sockPath;
-		artifacts["lock"] = lockPathFor(gid, lockDir);
-
-		// fresh gid must collide with NOTHING (GPT pin 1 + F1): no live socket, no saved session.
-		ok("fresh gid has no pre-existing control socket", !existsSync(controlSocketPath(gid, REAL_CONTROL_DIR)));
-		ok("fresh gid has no saved session yet (dormant-to-be)", findSessionFileById(gid) === null);
-
-		// ── 2. seed a REAL dormant pi session (one-shot, no control socket survives) ──
+		// ── 1. seed a REAL dormant pi session (one-shot; pi owns id + name — no
+		//       --session-id / --name, LOCKED PROTOCOL 2) ──
 		const nonce = `${process.pid.toString(36)}${Date.now().toString(36)}`;
 		artifacts["nonce"] = nonce;
-		const seedName = buildSessionName({
-			sessionId: gid,
-			provider,
-			model,
-			rawTitle: "spawn resume live seed",
-			tags: ["entwurf"], // F1: resolveResumeLaunchIdentity reads requireEntwurf:true.
-		});
 		const seedArgs = [
 			"--mode",
 			"json",
 			"-p",
 			"--no-extensions",
 			"--approve",
-			"--session-id",
-			gid,
-			"--name",
-			seedName,
 			"--provider",
 			provider,
 			"--model",
@@ -261,31 +266,67 @@ async function main(): Promise<void> {
 		seedStderrTail = `${seed.stdout ?? ""}\n${seed.stderr ?? ""}`.split("\n").slice(-12).join("\n");
 		ok("seed pi one-shot exited 0", seed.status === 0);
 
-		// ── 3. the seed must have written a resumable identity (F3 + GPT pin 5) ──
-		// Poll briefly: the JSONL flush/rename can lag the process exit.
+		// ── 2. discover the seed's OWN identity (file + header id) and mint the record ──
+		// The temp cwd is unique to this run, so pi's cwd-encoded session dir holds
+		// exactly our seed. Poll briefly: the JSONL flush/rename can lag process exit.
+		const seedDir = seedSessionDirFor(tmp);
+		artifacts["seedDir"] = seedDir;
+		let seedHeaderId: string | undefined;
 		let identity: ReturnType<typeof readSessionIdentity> = null;
 		{
 			const deadline = Date.now() + SEED_IDENTITY_POLL_MS;
 			while (Date.now() < deadline) {
-				const file = findSessionFileById(gid);
-				if (file) {
-					const id = readSessionIdentity(file, { requireEntwurf: true });
-					if (id?.modelId && id.provider && id.cwd) {
+				let jsonls: string[] = [];
+				try {
+					jsonls = (await fsp.readdir(seedDir)).filter((f) => f.endsWith(".jsonl"));
+				} catch {
+					/* dir not created yet */
+				}
+				if (jsonls.length === 1) {
+					const file = path.join(seedDir, jsonls[0]);
+					const header = readSeedHeader(file);
+					const id = readSessionIdentity(file);
+					if (header?.id && id?.modelId && id.provider && id.cwd) {
 						seedFile = file;
+						seedHeaderId = header.id;
 						identity = id;
 						break;
 					}
+				} else if (jsonls.length > 1) {
+					throw new Error(`seed dir ${seedDir} holds ${jsonls.length} sessions — expected exactly the one seed.`);
 				}
 				await sleep(POLL_MS);
 			}
 		}
 		artifacts["seedFile"] = seedFile ?? "(none)";
-		ok("seed session file is resolvable by gid", seedFile !== null);
-		ok("seed recorded a resumable entwurf identity (requireEntwurf)", identity !== null);
+		ok("seed session file discovered under the seed cwd dir", seedFile !== null);
+		ok("seed header carries pi's own session id", typeof seedHeaderId === "string" && seedHeaderId.length > 0);
+		ok("seed recorded a resumable identity", identity !== null);
 		ok("seed header cwd === temp cwd (cold-resume authority, #9)", identity?.cwd === tmp);
 		ok("seed recorded provider matches the target", identity?.provider === provider);
 		ok("seed recorded modelId matches the target", identity?.modelId === model);
-		ok("seed header id === gid", identity?.sessionId === gid);
+		ok("seed header id === readSessionIdentity id (one reader, one truth)", identity?.sessionId === seedHeaderId);
+
+		// The record is minted FROM the seed's identity: nativeSessionId = pi's own
+		// header id, transcriptPath = the seed file (what a real turn_end records).
+		// Its gardenId is the citizen's address — never pi's session id (#50 C2).
+		const minted = upsertMetaSession({
+			input: {
+				backend: "pi",
+				nativeSessionId: seedHeaderId as string,
+				cwd: tmp,
+				model,
+				transcriptPath: seedFile,
+			},
+			dir: sessionsDir,
+		});
+		gid = minted.record.gardenId;
+		artifacts["gid"] = gid;
+		const sockPath = path.join(REAL_CONTROL_DIR, `${gid}${SOCKET_SUFFIX}`);
+		artifacts["socket"] = sockPath;
+		artifacts["lock"] = lockPathFor(gid, lockDir);
+		ok("record gardenId is not pi's session id (record mints the address)", gid !== seedHeaderId);
+		ok("fresh gid has no pre-existing control socket", !existsSync(controlSocketPath(gid, REAL_CONTROL_DIR)));
 
 		// resume-time append boundary: count seed lines so the nonce poll scans ONLY the resume.
 		const seedLineCount = readFileSync(seedFile as string, "utf8")

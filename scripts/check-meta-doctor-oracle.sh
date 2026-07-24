@@ -218,8 +218,7 @@ fi
 # Fake live entwurf MCP child of this same stand-in Claude pid. The doctor discovers it
 # by env + agent dir, so a UNIQUE sandbox agent dir keeps it from colliding with the
 # operator's real bridges in /proc.
-env ENTWURF_BRIDGE_REQUIRE_META_SENDER=1 \
-    ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code \
+env ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code \
     PI_CODING_AGENT_DIR="$AGENT" \
     sleep 600 &
 BRIDGE_PID=$!
@@ -454,8 +453,7 @@ wait "$BRIDGE_PID" 2>/dev/null || true
 SAVED_BRIDGE="$BRIDGE_PID"
 BRIDGE_PID=""
 expect_red "no live Claude MCP process" "NOT CERTIFIED — no live Claude entwurf MCP process"
-env ENTWURF_BRIDGE_REQUIRE_META_SENDER=1 \
-    ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code \
+env ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code \
     PI_CODING_AGENT_DIR="$AGENT" \
     sleep 600 &
 BRIDGE_PID=$!

@@ -43,8 +43,6 @@ export interface PeerFact {
 	nativeSessionId: string;
 	cwd: string;
 	model: string | null;
-	parentGardenId: string | null;
-	isEntwurf: boolean;
 	createdAt: string;
 	recordUpdatedAt: string;
 	// — the single computed fact: 4-value liveness (R1/R3b). NOT a verb. —
@@ -70,8 +68,6 @@ export function resolvePeerFact(identity: MetaIdentity, socket: SocketLiveness |
 		nativeSessionId: identity.nativeSessionId,
 		cwd: identity.cwd,
 		model: identity.model,
-		parentGardenId: identity.parentGardenId,
-		isEntwurf: identity.isEntwurf,
 		createdAt: identity.createdAt,
 		recordUpdatedAt: identity.recordUpdatedAt,
 		liveness: factLivenessOf(identity.backend, socket),
@@ -112,59 +108,45 @@ export function isNonPiGardenIdSocketConflict(
 // (설계 동결 2026-06-11, GPT힣 + Fable 수렴 — NEXT.md "step 4 slice 2 설계 동결")
 
 /**
- * The SOCKET-axis input to the union: one 3-value probe of a control socket plus
- * its get_info-derived runtime enrich. Slice-3 wiring fills this by probing the
- * control-socket dir AND every in-domain citizen's canonical socket path with
- * `probeSocketLiveness` (3-value, indeterminate preserved). `liveness` is the
- * 3-value `SocketLiveness` — never `unsupported`, because a probe genuinely ran.
- * The enrich fields are probe-derived RUNTIME facts (the get_info RPC), labelled
- * as such — they are NOT meta-record identity and NOT synthetic; a `null` means
- * the RPC did not surface that field (see `infoError`).
+ * The SOCKET-axis input to the union: one 3-value probe of a control socket.
+ * Slice-3 wiring fills this by probing the control-socket dir AND every
+ * in-domain citizen's canonical socket path with `probeSocketLiveness` (3-value,
+ * indeterminate preserved). `liveness` is the 3-value `SocketLiveness` — never
+ * `unsupported`, because a probe genuinely ran. Liveness only (#50 C4): the old
+ * per-socket get_info runtime enrich decorated the retired socket-only listing.
  */
 export interface SocketProbe {
 	gardenId: string;
 	liveness: SocketLiveness;
-	cwd: string | null;
-	model: string | null;
-	idle: boolean | null;
-	infoError: string | null;
 }
 
 /**
- * A record-less control-socket probe — a socket path that no meta-record citizen
- * claims. The canonical case is "socket-only pi": a live pi session that predates
- * the pi meta-record writer, or one caught in a deploy-lag / crash window. But
- * `liveness` is the full 3-value `SocketLiveness`, NOT only `alive` — a
- * dir-present stale socket arrives as `dead` and a load-stalled one as
- * `indeterminate`; both stay in the listing (hiding a dead socket is GC's job,
- * not the listing's, and an indeterminate socket-only — "not unlinked, not live"
- * — is the most worth surfacing). Kept as a DISTINCT fact kind, never folded into
- * `PeerFact` and never given a 5th liveness value: "this socket has no citizen"
- * is a statement whose SUBJECT is the socket, not a citizen, so it must not
- * borrow the citizen-keyed 4-value liveness enum (the sibling of R1 — do not
- * collapse a different subject). All fields are the socket filename (gardenId =
- * 동결결정3 correlation authority) + probe-derived runtime facts.
+ * A record-less control socket — a socket path that no meta-record citizen
+ * claims (a pre-record-era resident, a mixed/pre-cut store, a crash window, or
+ * a stale/planted file). #50 C4: this is a DIAGNOSTIC subject, not a citizen —
+ * the record is the sole address authority, so the provider folds each of these
+ * into a `record-less-socket` diagnostic (naming the cause + fix) instead of a
+ * peer-adjacent listing section. `liveness` stays the full 3-value
+ * `SocketLiveness` (an alive one is the most worth surfacing — something real
+ * answers that nothing addresses), and it must never borrow the citizen-keyed
+ * 4-value enum: the SUBJECT is the socket, not a citizen (the sibling of R1 —
+ * do not collapse a different subject).
  */
-export interface SocketOnlyFact {
-	kind: "socket-only";
+export interface RecordLessSocketFact {
 	gardenId: string;
 	liveness: SocketLiveness;
-	cwd: string | null;
-	model: string | null;
-	idle: boolean | null;
-	infoError: string | null;
 }
 
 /**
- * The union output. Two arrays, NOT one discriminated array: the surface layer
- * (slice 4) may tag a `PeerFact` with `kind:"peer"` when it merges the sections,
- * but the pure core keeps `PeerFact`'s slice-1 keyset untouched (no `kind` field
- * baked onto it). `entwurf_peers` reports both sections so the new listing fully
- * replaces the old live-pi discovery.
+ * The union output. Two arrays, NOT one discriminated array: `peers` are
+ * citizens (the only identity axis); `recordLessSockets` are diagnostic
+ * subjects the provider (slice 4b) converts into `record-less-socket`
+ * diagnostics — the pure core only does the union math and never shapes a
+ * user-facing message.
  */
 export interface FactList {
 	peers: PeerFact[];
-	socketOnly: SocketOnlyFact[];
+	recordLessSockets: RecordLessSocketFact[];
 }
 
 /**
@@ -184,9 +166,11 @@ export interface FactList {
  *   - out-of-domain citizen WITH a control socket at its gardenId → fail-loud
  *     (address ambiguity; a non-pi citizen must not own a pi control socket).
  *   - out-of-domain citizen without a socket → `unsupported` (via resolvePeerFact).
- *   - a probed gardenId with NO citizen → `SocketOnlyFact` (socket-only pi).
- * A gardenId is never emitted as both a `PeerFact` and a `SocketOnlyFact`; once a
- * pi meta-record writer ships, a socket-only entry is promoted to a `PeerFact`.
+ *   - a probed gardenId with NO citizen → `RecordLessSocketFact` (#50 C4: a
+ *     diagnostic subject the provider folds into a `record-less-socket`
+ *     diagnostic — never a citizen).
+ * A gardenId is never emitted as both a `PeerFact` and a `RecordLessSocketFact`;
+ * a record-less socket becomes a `PeerFact` the moment a record claims the gid.
  */
 export function resolveFactList(identities: MetaIdentity[], socketProbes: SocketProbe[]): FactList {
 	const probeMap = new Map<string, SocketProbe>();
@@ -227,18 +211,10 @@ export function resolveFactList(identities: MetaIdentity[], socketProbes: Socket
 		consumed.add(gid);
 	}
 
-	const socketOnly: SocketOnlyFact[] = [];
+	const recordLessSockets: RecordLessSocketFact[] = [];
 	for (const probe of socketProbes) {
 		if (consumed.has(probe.gardenId)) continue;
-		socketOnly.push({
-			kind: "socket-only",
-			gardenId: probe.gardenId,
-			liveness: probe.liveness,
-			cwd: probe.cwd,
-			model: probe.model,
-			idle: probe.idle,
-			infoError: probe.infoError,
-		});
+		recordLessSockets.push({ gardenId: probe.gardenId, liveness: probe.liveness });
 	}
 
 	// Sort by gardenId with a plain `<` compare (not localeCompare) so both fact
@@ -246,6 +222,6 @@ export function resolveFactList(identities: MetaIdentity[], socketProbes: Socket
 	const byGardenId = (a: { gardenId: string }, b: { gardenId: string }): number =>
 		a.gardenId < b.gardenId ? -1 : a.gardenId > b.gardenId ? 1 : 0;
 	peers.sort(byGardenId);
-	socketOnly.sort(byGardenId);
-	return { peers, socketOnly };
+	recordLessSockets.sort(byGardenId);
+	return { peers, recordLessSockets };
 }

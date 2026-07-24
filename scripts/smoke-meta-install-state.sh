@@ -486,7 +486,7 @@ settings={
   'permissions': {'allow': ['Read'], 'deny': ['Agent']},
   'env': {'DISABLE_AUTOCOMPACT': '1'}
 }
-root={'mcpServers': {'entwurf-bridge': {'type':'stdio','command':'bash','args':[repo + '/mcp/entwurf-bridge/start.sh'],'env': {'ENTWURF_BRIDGE_EXTERNAL_AGENT_ID':'external-mcp/claude-code','ENTWURF_BRIDGE_REQUIRE_META_SENDER':'1'}}}}
+root={'mcpServers': {'entwurf-bridge': {'type':'stdio','command':'bash','args':[repo + '/mcp/entwurf-bridge/start.sh'],'env': {'ENTWURF_BRIDGE_EXTERNAL_AGENT_ID':'external-mcp/claude-code'}}}}
 json.dump(settings, open(cfg + '/settings.json','w'), indent=2); open(cfg + '/settings.json','a').write('\n')
 json.dump(root, open(home + '/.claude.json','w'), indent=2); open(home + '/.claude.json','a').write('\n')
 PY
@@ -517,21 +517,15 @@ valid_record() {
   local gid="$1" native="$2"
   cat <<JSON
 {
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "gardenId": "$gid",
   "backend": "claude-code",
   "nativeSessionId": "$native",
-  "transcriptPath": "/tmp/$native.jsonl",
   "cwd": "/tmp",
+  "model": null,
+  "transcriptPath": "/tmp/$native.jsonl",
   "createdAt": "2026-06-06T00:00:00.000Z",
-  "lastSeen": "2026-06-06T00:00:00.000Z",
-  "delivery": {
-    "wakeMode": "self-fetch",
-    "deliveryLevel": "D6",
-    "lastEnqueuedAt": null,
-    "lastDeliveredAt": null,
-    "lastReadAt": null
-  }
+  "recordUpdatedAt": "2026-06-06T00:00:00.000Z"
 }
 JSON
 }
@@ -561,9 +555,9 @@ rm "$STORE/20260606T000002-cccccc.meta.json"
 python3 - <<'PY'
 import json, os
 p=os.environ['STORE'] + '/20260606T000001-bbbbbb.meta.json'
-d=json.load(open(p)); d['delivery']['wakeMode']='direct-inject'; json.dump(d, open(p,'w'), indent=2); open(p,'a').write('\n')
+d=json.load(open(p)); d['isEntwurf']=True; json.dump(d, open(p,'w'), indent=2); open(p,'a').write('\n')
 PY
-if node --experimental-strip-types "$STORE_DOCTOR" "$STORE" >/dev/null 2>&1; then bad "store doctor missed backend↔wakeMode contradiction"; else ok "store doctor fails on backend↔wakeMode contradiction"; fi
+if node --experimental-strip-types "$STORE_DOCTOR" "$STORE" >/dev/null 2>&1; then bad "store doctor missed a stray pre-cut field (isEntwurf)"; else ok "store doctor fails on a stray pre-cut field (isEntwurf resurrection)"; fi
 
 # Doctor fail-loud regression (B1'): meta-bridge-doctor.sh must surface a managed-
 # config drift, NOT die silently at the "[managed config state]" header. A bare

@@ -94,8 +94,8 @@ for (const filename of fs.readdirSync(dir).sort()) {
 	if (!filename.endsWith(".meta.json")) continue;
 	scanned += 1;
 	const file = path.join(dir, filename);
-	// dual-read (3D-4 commit1): parseMetaIdentity reads v1 AND v2, normalizing to
-	// identity (transcriptPath nullable, lastSeen → recordUpdatedAt).
+	// V3-only (#50 hard cut): a pre-cut (v1/v2) record fails parse and lands in
+	// the corrupt/manual-only bucket until the M1 operator command migrates it.
 	let id: MetaIdentity;
 	try {
 		id = parseMetaIdentity(fs.readFileSync(file, "utf8"));

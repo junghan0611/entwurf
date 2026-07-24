@@ -2,8 +2,8 @@
  * entwurf-bridge — MCP adapter exposing selected pi-side tools to ACP hosts.
  *
  * Ownership: this adapter lives inside `entwurf` alongside the v2 entwurf
- * orchestration surface (pi-extensions/entwurf-control.ts + lib/entwurf-v2-*.ts +
- * pi/entwurf-targets.json). See AGENTS.md §Entwurf Orchestration.
+ * orchestration surface (pi-extensions/entwurf-control.ts + lib/entwurf-v2-*.ts).
+ * See AGENTS.md §Entwurf Orchestration.
  *
  * Wiring: registered only via entwurfProvider.mcpServers in pi settings.
  * No ambient discovery. The bridge never auto-promotes pi extension tools.
@@ -12,9 +12,10 @@
  * as a local skill should live as a skill, not here):
  *   - entwurf_v2      — canonical delivery surface for existing garden citizens; the decider
  *                       chooses live control-socket send / dormant spawn-bg resume / meta-mailbox.
- *   - entwurf_peers   — entwurf fact surface: garden citizens (meta-records) + record-less control
- *                       sockets, each with liveness; legacy `sessions` projection retained. Brain =
- *                       pi-extensions/lib/entwurf-fact-provider (listEntwurfFacts) + entwurf-peers-render.
+ *   - entwurf_peers   — entwurf fact surface: garden citizens (meta-records) with liveness +
+ *                       diagnostics (#50 C4: record-less sockets surface THERE, never as identity).
+ *                       Brain = pi-extensions/lib/entwurf-fact-provider (listEntwurfFacts) +
+ *                       entwurf-peers-render.
  *   - entwurf_self    — own session identity envelope (sessionId, agentId, cwd, timestamp)
  *   - entwurf_inbox_read — receiver half of the meta-bridge mailbox path: drain your own
  *                       inbox by garden id + stamp the D7 read-receipt (readMetaInbox: lastReadAt).
@@ -48,6 +49,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import { controlSocketPathIn, defaultControlSocketDir } from "../../../pi-extensions/lib/control-socket-path.js";
 import { receiverMarkerMatchesIdentity } from "../../../pi-extensions/lib/entwurf-deliverability.ts";
 import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provider.ts";
 import { renderEntwurfPeers } from "../../../pi-extensions/lib/entwurf-peers-render.ts";
@@ -67,20 +69,18 @@ import {
 import { registerNativeConversation } from "../../../pi-extensions/lib/native-push/register.ts";
 
 const HOME = os.homedir();
-const DEFAULT_ENTWURF_DIR = path.join(HOME, ".pi", "entwurf-control");
-const ENTWURF_DIR = process.env.ENTWURF_DIR ?? DEFAULT_ENTWURF_DIR;
-const SOCKET_SUFFIX = ".sock";
+// Directory SOURCE is this adapter's own policy — the bridge honours an explicit
+// ENTWURF_DIR override the pi side does not. The path GRAMMAR is the shared leaf.
+const ENTWURF_DIR = process.env.ENTWURF_DIR ?? defaultControlSocketDir(HOME);
 
 // ============================================================================
-// Live control-socket discovery for entwurf_peers now lives in the TS
-// fact-provider (pi-extensions/lib/entwurf-fact-provider.ts → listEntwurfFacts),
-// which the entwurf_peers handler calls + renders (entwurf-peers-render.ts). The
-// old bridge-local `getLiveSessions`/`isSocketAlive` (alive-only scan) was
-// removed: a separate scan would bypass the provider's quarantine and resurrect
-// the symlink-forgery + F3 splits. The legacy `sessions` payload is kept as a
-// PROJECTION of those facts (alive only), not a second scan. PM layer separation
-// is unchanged: this is still the *active* control-socket world, NOT the saved
-// entwurf-session world that entwurf_resume reads from ~/.pi/agent/sessions.
+// Live control-socket discovery for entwurf_peers lives in the TS fact-provider
+// (pi-extensions/lib/entwurf-fact-provider.ts → listEntwurfFacts), which the
+// entwurf_peers handler calls + renders (entwurf-peers-render.ts). The old
+// bridge-local `getLiveSessions`/`isSocketAlive` (alive-only scan) was removed:
+// a separate scan would bypass the provider's quarantine and resurrect the
+// symlink-forgery + F3 splits. #50 C4 removed the legacy `sessions` projection
+// too — socket paths are dispatch-internal transport, never identity rows.
 // ============================================================================
 
 // ============================================================================
@@ -108,11 +108,14 @@ const server = new McpServer({ name: "entwurf-bridge", version: "0.1.0" });
 // (timestamp UTC, displayed in KST). `entwurf_self` is authoritative-identity
 // required: it returns either a pi-session envelope or a trusted meta-session
 // envelope (garden id from the sender marker). Plain anonymous external hosts
-// still fail. v2 delivery is identity-enhanced, not identity-required: a native
-// Claude Code meta-session with a live sender marker is replyable by garden id; an
-// explicitly wired external MCP host with no marker may still deliver (unless
-// REQUIRE is set) but is marked external/non-replyable so the receiver sees the
-// origin honestly.
+// fail. #50 C4: v2 delivery is identity-REQUIRED by default — "if we don't know
+// who sent it, we don't send it" holds on every install surface, not only where
+// an installer remembered to set a flag. The ONE documented escape hatch is
+// ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1 (explicit operator wiring): it restores
+// the old behaviour for a deliberately-anonymous external MCP host, and the send
+// still goes out marked external/non-replyable so the receiver sees the origin
+// honestly. The retired opt-in ENTWURF_BRIDGE_REQUIRE_META_SENDER is not read —
+// a stale copy of it in an old install env is inert (its demand is the default).
 class EntwurfEnvelopeWiringError extends Error {
 	constructor(missing: string[]) {
 		super(
@@ -135,18 +138,20 @@ interface SenderEnvelope {
 	replyable?: boolean;
 }
 
-// REQUIRE_META_SENDER closes the "anonymous send" hole: when set (the Claude Code
-// user-scope install sets it), a send with no pi-session identity AND no trusted
-// meta-sender marker is refused rather than going out as anonymous external-mcp.
+// #50 C4: anonymous sends are refused BY DEFAULT — a send with no pi-session
+// identity AND no trusted meta-sender marker does not go out as anonymous
+// external-mcp unless the operator explicitly wired the escape hatch.
 // "If we don't know who sent it, we don't send it."
 class EntwurfSenderIdentityError extends Error {
 	constructor() {
 		super(
-			"entwurf-bridge refused: no authoritative sender identity. " +
-				"ENTWURF_BRIDGE_REQUIRE_META_SENDER=1 forbids anonymous external sends, and no live meta-sender " +
+			"entwurf-bridge refused: no authoritative sender identity. Anonymous external sends are " +
+				"refused by default, and no pi-session env (PI_SESSION_ID + PI_AGENT_ID) or live meta-sender " +
 				"marker was found for this process. The native SessionStart hook writes that marker (keyed by the " +
 				"Claude Code parent pid + start-time) — open this session through the installed meta-bridge so your " +
-				"garden-id is registered, then retry.",
+				"garden-id is registered, then retry. A deliberately-anonymous external MCP host may set " +
+				"ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1 (explicit operator wiring; the send is then marked " +
+				"external/non-replyable).",
 		);
 	}
 }
@@ -164,7 +169,11 @@ function buildStrictPiSenderEnvelope(): SenderEnvelope {
 	// reply when its control socket is actually live (SE-1). A session running
 	// without --entwurf-control has PI_SESSION_ID but no socket — it must report
 	// replyable:false, not the old hardcoded true. Probe the canonical path.
-	const socketPath = path.join(ENTWURF_DIR, `${sessionId}${SOCKET_SUFFIX}`);
+	// `sessionId` is non-empty past the `missing`/throw guard above, but that guard
+	// narrows through an array length, which TS cannot follow — same reason the
+	// return below asserts. The old inline template hid this by stringifying
+	// `undefined` into the path; the shared grammar takes a real `string`.
+	const socketPath = controlSocketPathIn(ENTWURF_DIR, sessionId as string);
 	const self = computeSelfAddressability({
 		origin: "pi-session",
 		socketAlive: existsSync(socketPath),
@@ -261,8 +270,9 @@ async function buildSendSenderEnvelope(): Promise<SenderEnvelope> {
 	const meta = await buildTrustedMetaSenderEnvelope(cwd);
 	if (meta) return meta;
 
-	// No marker. Anonymous external is allowed ONLY when not explicitly forbidden.
-	if (process.env.ENTWURF_BRIDGE_REQUIRE_META_SENDER === "1") {
+	// No marker. #50 C4: anonymous external is refused UNLESS the operator wired the
+	// explicit escape hatch — identity-required is the default, not an install flag.
+	if (process.env.ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER !== "1") {
 		throw new EntwurfSenderIdentityError();
 	}
 	return {
@@ -319,8 +329,8 @@ server.tool(
 		"caller — chooses the transport. Note: entwurf_v2 dispatches to EXISTING targets; " +
 		"brand-new sibling creation is deferred to a later v2 lane. " +
 		"CHOOSING INTENT (read this — picking wrong is rejected, never auto-fixed): to message / " +
-		"reply / hand off a peer that entwurf_peers shows as liveness=alive (a live pi OR a " +
-		"socket-citizen) use intent: fire-and-forget — it routes to the live control-socket; set " +
+		"reply / hand off a peer that entwurf_peers shows as liveness=alive (a live pi citizen) " +
+		"use intent: fire-and-forget — it routes to the live control-socket; set " +
 		"wants_reply:true if you need an answer (wants_reply is NOT owned-outcome). For a meta-session " +
 		"(liveness=unsupported, e.g. Claude Code) replies are ALSO fire-and-forget (→ mailbox). " +
 		"owned-outcome is ONLY for waking a DORMANT pi citizen (spawn-bg resume); on a live target it " +
@@ -393,7 +403,7 @@ server.tool(
 				// Render the socket honestly: alive vs expected (path computable but no
 				// live socket). The old code synthesized the path and printed it as if
 				// it existed — a lie when the session has no --entwurf-control (SE-1).
-				const socketPath = path.join(ENTWURF_DIR, `${sender.sessionId}${SOCKET_SUFFIX}`);
+				const socketPath = controlSocketPathIn(ENTWURF_DIR, sender.sessionId);
 				const socketState = existsSync(socketPath) ? "alive" : "expected";
 				extra.socketPath = socketPath;
 				extra.socketState = socketState;
@@ -416,9 +426,10 @@ server.tool(
 
 server.tool(
 	"entwurf_peers",
-	"List the entwurf fact surface: garden citizens (from meta-records) AND record-less control " +
-		"sockets, each with its liveness. A legacy `sessions` projection (alive pi sessions only) is " +
-		"retained for old consumers. Pair with entwurf_v2 to address a peer by garden id. " +
+	"List the entwurf fact surface: garden citizens (from meta-records) with their liveness, " +
+		"plus diagnostics. The record is the sole address axis — a control socket no record claims " +
+		"is a `record-less-socket` diagnostic (migration/stale state), never a peer row. Pair with " +
+		"entwurf_v2 to address a peer by garden id. " +
 		"This reports FACTS, never verbs: `liveness` is a fact (alive/dead/indeterminate, or " +
 		"`unsupported` for a backend with no control-socket probe such as claude-code); the dispatch " +
 		"decision (send vs resume) is computed LATER by the entwurf_v2 contract from that liveness, " +
@@ -442,11 +453,10 @@ server.tool(
 			const result = await listEntwurfFacts({
 				metaEntries,
 				readRecord: (filename) => readFileSync(path.join(sessionsDir, filename), "utf8"),
-				// Socket axis: same dir the legacy scan used. controlSocketPath (SSOT)
-				// builds the derived socketPath, so scan and render cannot drift.
+				// Socket axis: the same dir dispatch uses (grammar SSOT), scan-internal only.
 				socket: { dir: ENTWURF_DIR },
 			});
-			const { text } = renderEntwurfPeers(result, ENTWURF_DIR);
+			const { text } = renderEntwurfPeers(result);
 			return textOk(text);
 		} catch (err) {
 			return textErr(`entwurf_peers error: ${err instanceof Error ? err.message : String(err)}`);

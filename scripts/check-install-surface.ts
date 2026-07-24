@@ -251,11 +251,12 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			.replace(EXEC_TOKEN, "$1")
 			.replace(/"(?:[^"\\]|\\.)*"/g, '""')
 			.replace(/'(?:[^'\\]|\\.)*'/g, "''");
-	const RUNSH_DRIVE = /(?:\$\{?RUN\}?|run\.sh)\s+(install|setup:links|setup|remove-user-scope|remove)\b/;
-	// ensure_agent_dir_symlinks() hard-codes "$HOME/.pi/agent" and ignores PI_CODING_AGENT_DIR
-	// entirely (run.sh:424), so these commands relink the operator's REAL agent dir no matter how
-	// the override is set. Sandboxing the agent dir is not isolation for them; only HOME is.
-	const HOME_ROOTED = new Set(["install", "setup", "setup:links"]);
+	const RUNSH_DRIVE = /(?:\$\{?RUN\}?|run\.sh)\s+(install|setup|remove-user-scope|remove)\b/;
+	// install/setup write the operator's REAL user-scope surfaces under "$HOME"
+	// (user settings.json registration ignores PI_CODING_AGENT_DIR), so sandboxing
+	// the agent dir is not isolation for them; only HOME is. (setup:links died with
+	// the target registry — #50 C3.)
+	const HOME_ROOTED = new Set(["install", "setup"]);
 
 	// A THIRD isolation shape, alongside "swaps HOME" and "is a LIVE gate": code that never
 	// runs on this host at all. #51's artifact-consumer gate ships its runner as a heredoc fed
@@ -358,7 +359,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 			if (!agentOk) missing.push("PI_CODING_AGENT_DIR or HOME (real ~/.pi/agent/settings.json)");
 			if (HOME_ROOTED.has(cmd) && !homeOk)
 				missing.push(
-					"HOME (ensure_agent_dir_symlinks hard-codes $HOME/.pi/agent — the agent-dir override does not reach it)",
+					"HOME (install/setup write user-scope settings under $HOME/.pi/agent — the agent-dir override does not reach them)",
 				);
 			if (missing.length)
 				agentDirXdgOffenders.push(

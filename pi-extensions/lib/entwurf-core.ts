@@ -33,7 +33,7 @@
  * the spawned pi --model matches what the downstream ACP backend expects.
  */
 
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -65,9 +65,6 @@ const AGENT_DIR = process.env.PI_CODING_AGENT_DIR
 const PI_SETTINGS_PATH = process.env.PI_SETTINGS_PATH
 	? expandTilde(process.env.PI_SETTINGS_PATH)
 	: path.join(AGENT_DIR, "settings.json");
-export const SESSIONS_BASE = path.join(AGENT_DIR, "sessions");
-const ENTWURF_TARGETS_PATH = process.env.ENTWURF_TARGETS_PATH ?? path.join(AGENT_DIR, "entwurf-targets.json");
-export const DEFAULT_ENTWURF_MODEL = "openai-codex/gpt-5.4";
 export const ENTWURF_CODEX_ACP_ENV = "ENTWURF_ACP_FOR_CODEX";
 
 // Currently unused: remote/SSH entwurf is fail-fast in 0.9.0 (garden-native
@@ -82,59 +79,6 @@ function shellQuote(value: string): string {
 // Types
 // ============================================================================
 
-export interface EntwurfSyncOptions {
-	host?: string;
-	cwd?: string;
-	/** Caller-provided provider id (e.g. "entwurf", "openai-codex"). Optional;
-	 *  if model is qualified ("provider/name") or unambiguous in the registry,
-	 *  this can be omitted. See resolveEntwurfTarget for resolution rules. */
-	provider?: string;
-	model?: string;
-	signal?: AbortSignal;
-	onUpdate?: (text: string) => void;
-}
-
-export interface EntwurfResult {
-	task: string;
-	host: string;
-	exitCode: number;
-	output: string;
-	turns: number;
-	cost: number;
-	model?: string;
-	error?: string;
-	stopReason?: string;
-	/**
-	 * Durable garden-native session handle (`YYYYMMDDTHHMMSS-[0-9a-f]{6}` = JSONL
-	 * header id). The single public resume handle — pass this to entwurf_v2 (dormant-resume).
-	 */
-	sessionId: string;
-	/** Diagnostic only — resolved by header scan after the run. Never a public handle. */
-	sessionFile?: string;
-	explicitExtensions: string[];
-	warnings: string[];
-}
-
-export interface AssistantMessageLike {
-	role?: string;
-	content?: unknown;
-	usage?: { cost?: { total?: number } };
-	model?: string;
-	provider?: string;
-	stopReason?: string;
-	errorMessage?: string;
-}
-
-export interface SessionAnalysis {
-	lastAssistantText: string | null;
-	lastError: string | null;
-	lastStopReason: string | null;
-	lastModel: string | null;
-	lastProvider: string | null;
-	turns: number;
-	cost: number;
-}
-
 export interface ExplicitExtensionSpec {
 	name: string;
 	localPath: string;
@@ -144,17 +88,6 @@ export interface ExplicitExtensionSpec {
 // ============================================================================
 // Path / model helpers
 // ============================================================================
-
-export function cwdToSessionDir(cwd: string): string {
-	const normalized = cwd.replace(/\/$/, "");
-	const dirName = "--" + normalized.replace(/^\//, "").replace(/\//g, "-") + "--";
-	return path.join(SESSIONS_BASE, dirName);
-}
-
-export function resolveEntwurfModel(model?: string): string {
-	const trimmed = model?.trim();
-	return trimmed ? trimmed : DEFAULT_ENTWURF_MODEL;
-}
 
 export function isClaudeModel(model?: string): boolean {
 	return typeof model === "string" && /(^|\/)claude-/.test(model);
@@ -178,39 +111,15 @@ export function normalizeCodexEntwurfModelForAcp(model?: string): string | undef
 	return model.startsWith("openai-codex/") ? model.slice("openai-codex/".length) : model;
 }
 
-// ============================================================================
-// Entwurf Target Registry (v1) — narrow door
-//
-// SSOT for what (provider, model) pairs may be spawned via entwurf.
-// File: ~/.pi/agent/entwurf-targets.json (override with ENTWURF_TARGETS_PATH).
-// See entwurf/AGENTS.md §Entwurf Orchestration (Entwurf Target Registry) for principle and schema.
-//
-// Spawn flow goes through this gate. Resume flow does NOT — Identity Preservation
-// Rule states that an existing being is preserved as-is, regardless of current
-// policy. Removing a target from the registry only stops new spawns; it does
-// not retroactively forbid resuming sessions that were already created.
-// ============================================================================
-
-export interface EntwurfTarget {
-	provider: string;
-	model: string;
-	enabled: boolean;
-	/** When true, this target is excluded from bare-model auto-resolution. Caller
-	 *  must specify provider explicitly to use it. Useful for test-only routings
-	 *  (e.g. ACP GPT alongside default native GPT). */
-	explicitOnly?: boolean;
-}
-
-export interface EntwurfRegistry {
-	entwurfTargets: EntwurfTarget[];
-}
-
-export class EntwurfRegistryError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "EntwurfRegistryError";
-	}
-}
+// The Entwurf Target Registry is GONE (#50 C3). `pi/entwurf-targets.json` and its
+// reader chain (loadEntwurfTargets / resolveEntwurfTarget / EntwurfRegistryError +
+// the ~/.pi/agent symlink machinery) were the v1 "narrow door" for spawn-model
+// policy — but v2 never spawns from a model tuple: entwurf_v2 resumes an
+// already-identified record-backed citizen, and the model axis is the citizen's
+// own (Identity Preservation Rule). The last readers were the RT-dead
+// buildSessionName mirror and the v1 spawn guard, both swept with this cut.
+// Bridge-extension routing for provider=entwurf survives below (getRegistryRouting
+// ← scripts/resolve-acp-bridge.ts) and takes a caller-supplied target — no file.
 
 // Raised when a spawn is routed to provider=entwurf but the bridge extension
 // cannot be resolved from settings package sources or the loaded module self-root.
@@ -221,98 +130,6 @@ export class EntwurfRoutingError extends Error {
 		super(message);
 		this.name = "EntwurfRoutingError";
 	}
-}
-
-// Positive-only cache. We intentionally do NOT cache EntwurfRegistryError —
-// caching a missing/broken registry once would make the same MCP/pi process
-// refuse every subsequent entwurf spawn even after the operator fixed the
-// file (e.g. ran `./run.sh setup:links` to relink the canonical registry).
-// That negative-cache trap was the root cause of the v0.4.x oracle install
-// regression: a stale operator file produced an EntwurfRegistryError on
-// first call, and the cached error survived the symlink repair.
-//
-// We keep a positive cache for hot-path performance, but invalidate it via
-// the file's mtime so that operator edits to entwurf-targets.json are
-// picked up on the next call without process restart.
-interface CachedRegistry {
-	registry: EntwurfRegistry;
-	mtimeMs: number;
-}
-let cachedRegistry: CachedRegistry | null = null;
-
-export function loadEntwurfTargets(): EntwurfRegistry {
-	let stat: fs.Stats;
-	try {
-		stat = fs.statSync(ENTWURF_TARGETS_PATH);
-	} catch {
-		// Missing — never cache. Operator may relink at any time and the next
-		// call must see the new file.
-		throw new EntwurfRegistryError(
-			`Entwurf target registry not found at ${ENTWURF_TARGETS_PATH}. ` +
-				`Without it, every entwurf spawn is refused. Run \`./run.sh setup:links\` ` +
-				`or create the file manually (see entwurf/pi/entwurf-targets.json for the canonical shape).`,
-		);
-	}
-
-	if (cachedRegistry && cachedRegistry.mtimeMs === stat.mtimeMs) {
-		return cachedRegistry.registry;
-	}
-
-	let raw: unknown;
-	try {
-		raw = JSON.parse(fs.readFileSync(ENTWURF_TARGETS_PATH, "utf-8"));
-	} catch (e) {
-		throw new EntwurfRegistryError(
-			`Failed to parse ${ENTWURF_TARGETS_PATH}: ${e instanceof Error ? e.message : String(e)}`,
-		);
-	}
-
-	if (typeof raw !== "object" || raw === null || !("entwurfTargets" in raw)) {
-		throw new EntwurfRegistryError(
-			`Invalid registry shape in ${ENTWURF_TARGETS_PATH}: expected { entwurfTargets: [...] }`,
-		);
-	}
-
-	const targetsRaw = (raw as { entwurfTargets: unknown }).entwurfTargets;
-	if (!Array.isArray(targetsRaw)) {
-		throw new EntwurfRegistryError(`Invalid entwurfTargets in ${ENTWURF_TARGETS_PATH}: must be an array`);
-	}
-
-	const targets: EntwurfTarget[] = [];
-	for (let i = 0; i < targetsRaw.length; i++) {
-		const t = targetsRaw[i];
-		if (typeof t !== "object" || t === null) {
-			throw new EntwurfRegistryError(`Entry #${i} is not an object`);
-		}
-		const obj = t as Record<string, unknown>;
-		if (typeof obj.provider !== "string" || !obj.provider.trim()) {
-			throw new EntwurfRegistryError(`Entry #${i}: provider must be a non-empty string`);
-		}
-		if (typeof obj.model !== "string" || !obj.model.trim()) {
-			throw new EntwurfRegistryError(`Entry #${i}: model must be a non-empty string`);
-		}
-		if (typeof obj.enabled !== "boolean") {
-			throw new EntwurfRegistryError(`Entry #${i}: enabled must be a boolean`);
-		}
-		if (obj.explicitOnly !== undefined && typeof obj.explicitOnly !== "boolean") {
-			throw new EntwurfRegistryError(`Entry #${i}: explicitOnly must be boolean if present`);
-		}
-		targets.push({
-			provider: obj.provider.trim(),
-			model: obj.model.trim(),
-			enabled: obj.enabled,
-			explicitOnly: obj.explicitOnly === true ? true : undefined,
-		});
-	}
-
-	const registry: EntwurfRegistry = { entwurfTargets: targets };
-	cachedRegistry = { registry, mtimeMs: stat.mtimeMs };
-	return registry;
-}
-
-/** Test-only hook to reset the in-memory cache (e.g. between test runs). */
-export function _resetEntwurfRegistryCache(): void {
-	cachedRegistry = null;
 }
 
 // ============================================================================
@@ -340,325 +157,47 @@ export function mirrorChildStderr(proc: ChildProcess): void {
 	proc.on("close", () => writer.end());
 }
 
-// ============================================================================
-// Spawn guard — one entwurf spawn per (session, target) per process.
-//
-// Shared by pi native tool (pi-extensions/entwurf.ts) and the MCP bridge
-// (mcp/entwurf-bridge). Both paths must go through this gate before calling
-// runEntwurfSync / runEntwurfAsync. entwurf_v2 resume deliberately bypasses it.
-//
-// Map key is the caller-provided sessionId:
-//   - pi native: pi.sessionManager.getSessionId()
-//   - MCP bridge: process.pid (the MCP subprocess is one Claude session)
-// Resets on process restart, which is the intended lifetime.
-// ============================================================================
+// The v1 spawn guard ("one entwurf spawn per (session, target) per process" —
+// usedEntwurfTargets / ensureEntwurfOncePerTarget / markEntwurfTargetUsed /
+// resolveGuardTargetKey) is GONE with the registry it consulted (#50 C3). Its
+// callers died in the v1 sync-body sweep; entwurf_v2 never used it.
 
-const usedEntwurfTargets = new Map<string, Set<string>>();
-
-export function ensureEntwurfOncePerTarget(sessionId: string, targetKey: string): void {
-	const seen = usedEntwurfTargets.get(sessionId);
-	if (seen && seen.has(targetKey)) {
-		throw new Error(`entwurf to ${targetKey} already exists in this session. Use entwurf_v2 to continue.`);
-	}
-}
-
-export function markEntwurfTargetUsed(sessionId: string, targetKey: string): void {
-	let seen = usedEntwurfTargets.get(sessionId);
-	if (!seen) {
-		seen = new Set();
-		usedEntwurfTargets.set(sessionId, seen);
-	}
-	seen.add(targetKey);
-}
-
-export function resolveGuardTargetKey(provider: string | undefined, model: string | undefined): string {
-	const fallbackModel = model && model.trim() ? model : DEFAULT_ENTWURF_MODEL;
-	const target = resolveEntwurfTarget({ provider, model: fallbackModel });
-	return `${target.provider}/${target.model}`;
-}
-
-/** Test-only: reset the guard state so unit tests can reuse a single process. */
-export function _resetUsedEntwurfTargets(): void {
-	usedEntwurfTargets.clear();
-}
-
+/** A caller-supplied (provider, model) tuple for bridge-extension routing.
+ * The registry that used to resolve/validate these is gone (#50 C3); the one
+ * live producer is scripts/resolve-acp-bridge.ts, which names its tuple inline. */
 export interface ResolvedTarget {
 	provider: string;
 	model: string;
 	explicitOnly: boolean;
 }
 
-/**
- * Resolve caller input to an exact (provider, model) tuple from the registry.
- *
- * Resolution rules (narrow door):
- *   1. Qualified `provider/model` in `model` → split, exact lookup.
- *   2. `provider` + `model` both given → exact lookup.
- *   3. Bare `model` only → registry entries matching that model name where
- *      `explicitOnly !== true`:
- *        - 0 candidates → reject.
- *        - 1 candidate → use it.
- *        - 2+ candidates → reject as ambiguous.
- *
- * In all paths the resolved tuple must be present in the registry with
- * `enabled: true`. Otherwise `EntwurfRegistryError` is thrown.
- */
-export function resolveEntwurfTarget(input: { provider?: string; model?: string }): ResolvedTarget {
-	const registry = loadEntwurfTargets();
-	const enabled = registry.entwurfTargets.filter((t) => t.enabled);
+// The v1 session-file readers that used to sit here — extractTextContent,
+// readSessionHeader (the bounded header read), analyzeSessionFileLike (the
+// streamed last-assistant-state scan) — are GONE (#50 C3). Their last consumers
+// were the header-scan lookup below and the retired --session-id/--name
+// substrate smoke; the record owns lookup now and nothing analyzes a transcript
+// body from this module anymore. readSessionIdentity below is the one surviving
+// transcript reader (resume identity only).
 
-	let provider = input.provider?.trim() || undefined;
-	let model = input.model?.trim() || undefined;
-
-	if (!model) {
-		throw new EntwurfRegistryError("entwurf: model is required");
-	}
-
-	// Path 1: qualified `provider/model` in model field
-	if (!provider && model.includes("/")) {
-		const slash = model.indexOf("/");
-		provider = model.slice(0, slash).trim();
-		model = model.slice(slash + 1).trim();
-		if (!provider || !model) {
-			throw new EntwurfRegistryError(`entwurf: malformed qualified model id "${input.model}"`);
-		}
-	}
-
-	// Paths 1 & 2: exact tuple lookup
-	if (provider) {
-		const found = enabled.find((t) => t.provider === provider && t.model === model);
-		if (!found) {
-			throw new EntwurfRegistryError(
-				`entwurf: (provider="${provider}", model="${model}") is not in the entwurf target ` +
-					`registry, or is disabled. Allowed: ${describeRegistryEntries(enabled)}`,
-			);
-		}
-		return { provider: found.provider, model: found.model, explicitOnly: found.explicitOnly === true };
-	}
-
-	// Path 3: bare model — auto-resolve excluding explicitOnly
-	const candidates = enabled.filter((t) => t.model === model && t.explicitOnly !== true);
-	if (candidates.length === 0) {
-		const sameModel = enabled.filter((t) => t.model === model);
-		if (sameModel.length > 0) {
-			throw new EntwurfRegistryError(
-				`entwurf: model "${model}" exists in registry only as explicitOnly target(s). ` +
-					`Specify provider explicitly. Available: ${describeRegistryEntries(sameModel)}`,
-			);
-		}
-		throw new EntwurfRegistryError(
-			`entwurf: model "${model}" is not in the entwurf target registry. ` +
-				`Allowed: ${describeRegistryEntries(enabled)}`,
-		);
-	}
-	if (candidates.length > 1) {
-		throw new EntwurfRegistryError(
-			`entwurf: bare model "${model}" is ambiguous (${candidates.length} candidates). ` +
-				`Specify provider explicitly. Candidates: ${describeRegistryEntries(candidates)}`,
-		);
-	}
-	const only = candidates[0];
-	return { provider: only.provider, model: only.model, explicitOnly: false };
-}
-
-function describeRegistryEntries(entries: EntwurfTarget[]): string {
-	if (entries.length === 0) return "(none)";
-	return entries.map((t) => `${t.provider}/${t.model}${t.explicitOnly ? " [explicitOnly]" : ""}`).join(", ");
-}
-
-// ============================================================================
-// Content extraction
-// ============================================================================
-
-export function extractTextContent(content: unknown): string {
-	if (typeof content === "string") return content;
-	if (!Array.isArray(content)) return "";
-	const texts: string[] = [];
-	for (const block of content) {
-		if (
-			typeof block === "object" &&
-			block !== null &&
-			"type" in block &&
-			(block as { type?: unknown }).type === "text" &&
-			"text" in block &&
-			typeof (block as { text?: unknown }).text === "string"
-		) {
-			texts.push((block as { text: string }).text);
-		}
-	}
-	return texts.join("\n\n");
-}
-
-export function parseMessages(messages: AssistantMessageLike[]): string {
-	return messages
-		.filter((msg) => msg.role === "assistant")
-		.map((msg) => extractTextContent(msg.content).trim())
-		.filter(Boolean)
-		.join("\n\n");
-}
+const SESSION_READ_CHUNK_BYTES = 64 * 1024;
 
 /**
- * Read the pi session JSONL header (first non-empty line, `type:"session"`).
- *
- * Returns the structural identity carried in the header: pi `id` (= the durable
- * sessionId) and original `cwd`. The header is the sole resume-time authority;
- * the Pi filename `<created-at>_<sessionId>.jsonl` is only a discovery aid.
- *
- * Why this exists (issue #9):
- *   `runEntwurfResumeSync` originally fell back to `process.cwd()` when no
- *   explicit `cwd` was passed. Through the MCP `entwurf_v2` resume surface, the
- *   resumer is a different process from the original spawner, so its cwd is
- *   unrelated to the saved session's cwd. The child pi then started in the
- *   resumer's cwd, the entwurf bridge persisted that cwd in its session
- *   cache, and on lookup `isPersistedSessionCompatible` saw a cwd mismatch
- *   against the Scene 1 record. The bridge discarded the record, started a
- *   `newSession`, and the backend lost all prior-turn memory — even though the
- *   pi JSONL itself was hydrated correctly.
- *
- *   Reading the header cwd here lets `runEntwurfResumeSync` align the child's
- *   spawn cwd with the original spawn, which keeps the bridge's
- *   `pi:<sessionId>` -> `acpSessionId` continuity intact.
- *
- * Invariant (see issue #10): the single identity carrier is `sessionId`. This
- * helper returns `id` alongside `cwd` so future peer-handle work can reuse it
- * without re-reading the file.
- */
-const SESSION_HEADER_READ_BYTES = 8192;
-const SESSION_ANALYSIS_CHUNK_BYTES = 64 * 1024;
-
-export function readSessionHeader(sessionFile: string): { id?: string; cwd?: string } | null {
-	let fd: number | undefined;
-	try {
-		fd = fs.openSync(sessionFile, "r");
-		const buffer = Buffer.alloc(SESSION_HEADER_READ_BYTES);
-		const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
-		if (bytesRead <= 0) return null;
-
-		// Session header is the first JSONL line. Read only a bounded prefix so
-		// header scans over many large transcripts cannot load/split whole files.
-		const prefix = buffer.subarray(0, bytesRead).toString("utf8");
-		const newlineIdx = prefix.indexOf("\n");
-		const trimmed = (newlineIdx >= 0 ? prefix.slice(0, newlineIdx) : prefix).trim();
-		if (!trimmed) return null;
-
-		const entry = JSON.parse(trimmed) as { type?: string; id?: unknown; cwd?: unknown };
-		if (entry.type !== "session") return null;
-		const id = typeof entry.id === "string" && entry.id.length > 0 ? entry.id : undefined;
-		const cwd = typeof entry.cwd === "string" && entry.cwd.length > 0 ? entry.cwd : undefined;
-		return { id, cwd };
-	} catch {
-		return null;
-	} finally {
-		if (fd !== undefined) {
-			try {
-				fs.closeSync(fd);
-			} catch {
-				/* best-effort close */
-			}
-		}
-	}
-}
-
-/**
- * Parse a pi session JSONL file and extract the latest assistant state.
- * Pure file I/O — safe to use from MCP bridge or pi runtime.
- */
-export function analyzeSessionFileLike(sessionFile: string): SessionAnalysis {
-	const analysis: SessionAnalysis = {
-		lastAssistantText: null,
-		lastError: null,
-		lastStopReason: null,
-		lastModel: null,
-		lastProvider: null,
-		turns: 0,
-		cost: 0,
-	};
-
-	// Per-line accumulation. Identical semantics to the old
-	// `readFileSync().trim().split("\n")` pass (last-wins fields, turn/cost
-	// accumulation, malformed lines skipped) but streamed so a multi-MB
-	// transcript is never held whole in memory at once.
-	const processLine = (line: string): void => {
-		const trimmed = line.trim();
-		if (!trimmed) return;
-		try {
-			const entry = JSON.parse(trimmed) as { type?: string; message?: AssistantMessageLike };
-			if (entry.type !== "message" || entry.message?.role !== "assistant") return;
-
-			const msg = entry.message;
-			analysis.turns++;
-
-			const text = extractTextContent(msg.content).trim();
-			if (text) analysis.lastAssistantText = text;
-			if (typeof msg.errorMessage === "string" && msg.errorMessage.trim()) {
-				analysis.lastError = msg.errorMessage.trim();
-			}
-			if (typeof msg.stopReason === "string") analysis.lastStopReason = msg.stopReason;
-			if (typeof msg.model === "string") analysis.lastModel = msg.model;
-			if (typeof msg.provider === "string") analysis.lastProvider = msg.provider;
-
-			const c = msg.usage?.cost?.total;
-			if (typeof c === "number") analysis.cost += c;
-		} catch {
-			/* skip malformed lines */
-		}
-	};
-
-	let fd: number | undefined;
-	try {
-		fd = fs.openSync(sessionFile, "r");
-		const chunk = Buffer.alloc(SESSION_ANALYSIS_CHUNK_BYTES);
-		// `leftover` holds a partial trailing line carried across chunk reads.
-		// Splitting on the newline BYTE (0x0a) and decoding each complete line
-		// independently keeps multibyte UTF-8 from being corrupted at a chunk
-		// boundary (a newline never falls inside a multibyte sequence).
-		let leftover = Buffer.alloc(0);
-		let bytesRead = 0;
-		// biome-ignore lint/suspicious/noAssignInExpressions: standard read loop
-		while ((bytesRead = fs.readSync(fd, chunk, 0, chunk.length, null)) > 0) {
-			const buf =
-				leftover.length > 0 ? Buffer.concat([leftover, chunk.subarray(0, bytesRead)]) : chunk.subarray(0, bytesRead);
-			let start = 0;
-			let nl = buf.indexOf(0x0a, start);
-			while (nl !== -1) {
-				processLine(buf.toString("utf8", start, nl));
-				start = nl + 1;
-				nl = buf.indexOf(0x0a, start);
-			}
-			// Copy the remainder before the next read overwrites `chunk`.
-			leftover = Buffer.from(buf.subarray(start));
-		}
-		if (leftover.length > 0) processLine(leftover.toString("utf8"));
-	} catch {
-		/* file not readable */
-	} finally {
-		if (fd !== undefined) {
-			try {
-				fs.closeSync(fd);
-			} catch {
-				/* best-effort close */
-			}
-		}
-	}
-
-	return analysis;
-}
-
-/**
- * Recorded session identity — the resume authority (locked grammar, NEXT.md
- * "Authority separation"):
+ * Recorded session identity — the resume authority (NEXT.md "Authority
+ * separation"):
  *   - model authority = the session's FIRST `model_change` (provider + modelId),
  *     NOT the last assistant message's `model` field. A session that drifted to
  *     a different model on a later `model_change` is corrupt for our purposes
  *     (entwurf children run `pi -p --model <M>` non-interactively, so a healthy
  *     entwurf session has exactly one model_change) — refuse rather than follow
  *     the drift.
- *   - the session_info `name` is a display/search/integrity mirror: if present
- *     and canonical, its sessionId / provider / model must mirror the header id
- *     and the first model_change, else the metadata is corrupt → fail-fast.
+ *   - the session NAME is pi's (LOCKED PROTOCOL 2) and is not read at all. The
+ *     old name-mirror integrity check and the `requireEntwurf` name-tag
+ *     authorization are gone (#50 C3): resume authorization is record existence,
+ *     and transcript integrity is the caller's header-id ↔ record.nativeSessionId
+ *     check (entwurf-v2-spawn-production.resolveResumeLaunchIdentity).
  */
 export interface RecordedSessionIdentity {
-	/** JSONL header `id` (the durable sessionId). */
+	/** JSONL header `id` (pi's own session id — the record's `nativeSessionId`). */
 	sessionId?: string;
 	/** JSONL header `cwd` (cold-resume authority). */
 	cwd?: string;
@@ -673,33 +212,19 @@ export interface RecordedSessionIdentity {
  * Returns `null` when the session has no `model_change` (never reached an
  * identity) so callers can refuse with their own "no recorded model" result.
  * **Throws** `SessionIdentityError` on model-identity drift (a later
- * `model_change` differs from the first) or on a corrupt session-name mirror
- * (the name's sessionId / provider / model disagree with the header / first
- * model_change). This is the fail-fast that replaces the old "follow the last
- * assistant message's model" behavior.
- *
- * `requireEntwurf` (resume paths): tightens the contract to the locked 0.9.0
- * rule "entwurf 여부 = session name tag 중 'entwurf' 존재; 없으면 Entwurf 세션
- * 아님; compatibility 없음". A general pi session (no name, non-canonical name,
- * or canonical name without the `entwurf` tag) must NOT be resumable as an
- * Entwurf session — it throws instead. lookup/resume authority is still the
- * header id/cwd; the name is only the integrity/discovery mirror being asserted.
+ * `model_change` differs from the first). This is the fail-fast that replaces
+ * the old "follow the last assistant message's model" behavior.
  */
-export function readSessionIdentity(
-	sessionFile: string,
-	opts?: { requireEntwurf?: boolean },
-): RecordedSessionIdentity | null {
-	const requireEntwurf = opts?.requireEntwurf === true;
+export function readSessionIdentity(sessionFile: string): RecordedSessionIdentity | null {
 	let headerId: string | undefined;
 	let headerCwd: string | undefined;
 	let first: { provider: string; modelId: string } | undefined;
 	let drift: { provider: string; modelId: string } | undefined;
-	let latestName: string | undefined;
 
 	const onLine = (line: string): void => {
 		const t = line.trim();
 		if (!t) return;
-		let e: { type?: string; id?: unknown; cwd?: unknown; provider?: unknown; modelId?: unknown; name?: unknown };
+		let e: { type?: string; id?: unknown; cwd?: unknown; provider?: unknown; modelId?: unknown };
 		try {
 			e = JSON.parse(t);
 		} catch {
@@ -714,15 +239,13 @@ export function readSessionIdentity(
 			if (!provider || !modelId) return;
 			if (!first) first = { provider, modelId };
 			else if ((provider !== first.provider || modelId !== first.modelId) && !drift) drift = { provider, modelId };
-		} else if (e.type === "session_info") {
-			if (typeof e.name === "string" && e.name) latestName = e.name;
 		}
 	};
 
 	let fd: number | undefined;
 	try {
 		fd = fs.openSync(sessionFile, "r");
-		const chunk = Buffer.alloc(SESSION_ANALYSIS_CHUNK_BYTES);
+		const chunk = Buffer.alloc(SESSION_READ_CHUNK_BYTES);
 		let leftover = Buffer.alloc(0);
 		let bytesRead = 0;
 		// biome-ignore lint/suspicious/noAssignInExpressions: standard read loop
@@ -759,53 +282,6 @@ export function readSessionIdentity(
 				`but a later model_change=${drift.provider}/${drift.modelId}. Resume identity is locked to the first ` +
 				`model_change; a differing later change is treated as corrupt/drift — refusing to resume.`,
 		);
-	}
-
-	// Name integrity mirror. In the general path a missing/non-canonical name is
-	// not itself a failure; only a canonical name that disagrees is corrupt.
-	const parsed = latestName ? parseSessionName(latestName) : null;
-	if (parsed) {
-		if (headerId && parsed.sessionId !== headerId) {
-			throw new SessionIdentityError(
-				`Session name sessionId mirror mismatch: name carries "${parsed.sessionId}" but header id is ` +
-					`"${headerId}" (corrupt metadata).`,
-			);
-		}
-		if (parsed.provider !== first.provider || parsed.model !== first.modelId) {
-			throw new SessionIdentityError(
-				`Session name provider/model mirror mismatch: name carries "${parsed.provider}/${parsed.model}" but ` +
-					`first model_change is "${first.provider}/${first.modelId}" (corrupt metadata).`,
-			);
-		}
-	}
-
-	// Entwurf-resume strictness (locked 0.9.0 rule). A session is an Entwurf
-	// session ONLY if its canonical name carries the `entwurf` tag — there is no
-	// compatibility path for the old `*_entwurf-<taskId>.jsonl` filename species.
-	if (requireEntwurf) {
-		if (!headerId) {
-			throw new SessionIdentityError(
-				`Refusing Entwurf resume of "${sessionFile}": session header has no id. Not an Entwurf session.`,
-			);
-		}
-		if (!latestName) {
-			throw new SessionIdentityError(
-				`Refusing Entwurf resume of sessionId "${headerId}": no session_info name. The Entwurf marker is the ` +
-					`name's \`entwurf\` tag; a session with no name is not an Entwurf session (no compatibility path).`,
-			);
-		}
-		if (!parsed) {
-			throw new SessionIdentityError(
-				`Refusing Entwurf resume of sessionId "${headerId}": session name "${latestName}" is not canonical ` +
-					`(cannot parse the locked grammar). Not an Entwurf session.`,
-			);
-		}
-		if (!parsed.tags.includes("entwurf")) {
-			throw new SessionIdentityError(
-				`Refusing Entwurf resume of sessionId "${headerId}": session name tags [${parsed.tags.join(", ")}] do not ` +
-					`include "entwurf". The Entwurf marker is the name's \`entwurf\` tag — this is a general pi session.`,
-			);
-		}
 	}
 
 	return { sessionId: headerId, cwd: headerCwd, provider: first.provider, modelId: first.modelId };
@@ -1051,13 +527,10 @@ export function getEntwurfExplicitExtensions(
 }
 
 /**
- * Registry-driven routing — used by spawn (runEntwurfSync). Replaces the
- * heuristic getEntwurfExplicitExtensions for paths that have already gone
- * through resolveEntwurfTarget (i.e., the (provider, model) tuple is known
- * to be in the registry and is the explicit caller intent).
- *
- * Resume path (runEntwurfResumeSync) intentionally still uses the heuristic
- * helper — Identity Preservation Rule, no registry consultation.
+ * Bridge-extension routing for a caller-supplied (provider, model) tuple. The
+ * registry that used to validate the tuple is gone (#50 C3 — the name survives
+ * for call-site stability); the live caller is OPS package routing
+ * (scripts/resolve-acp-bridge.ts), which names its target inline.
  */
 export function getRegistryRouting(
 	target: ResolvedTarget,
@@ -1076,9 +549,7 @@ export function getRegistryRouting(
 	// entwurf targets need the bridge extension injected. If it can't be
 	// resolved, fail-fast — NOT warning-only. A warning-then-spawn path puts a
 	// child on `pi --no-extensions --provider entwurf`, which dies with
-	// `Unknown provider "entwurf"` before any session file exists (#29). The
-	// throw is caught by the same tool-surface try/catch that handles
-	// EntwurfRegistryError, and surfaces as a failed entwurf.
+	// `Unknown provider "entwurf"` before any session file exists (#29).
 	const acpBridge = resolveExplicitExtensionSpec("entwurf", isRemote);
 	if (!acpBridge) {
 		throw new EntwurfRoutingError(
@@ -1128,37 +599,24 @@ export function enrichTaskWithProjectContext(task: string, cwd: string): string 
 	}
 }
 
-// Saved entwurf session lookup is by JSONL header `id` (= sessionId), not by
-// filename species. See findSessionFileById / findSessionFilesById below in the
-// "Garden session identity & name grammar" block — header scan is the sole
-// authority; filenames are a Pi artifact and are never parsed for logic.
-
 // ============================================================================
-// Garden session identity & name grammar (0.9.0 / 1.0.0) — locked SSOT
+// Garden session identity (record era)
 //
-// See NEXT.md "Locked — session identity & name grammar". This block is the
-// ONLY place that assembles or parses a session name; nothing builds it by hand.
+// The 0.9.0/1.0.0 "session identity & name grammar" block that stood here — the
+// canonical name grammar `{sessionId}=={provider}/{model}--{titleSlug}__{tags}`
+// with buildSessionName / parseSessionName / isEntwurfSessionName / slugifyTitle
+// / isKnownProviderModel — is GONE (#50 C3). It existed to mirror the garden
+// address into pi's session NAME while the address WAS pi's session id. The
+// meta-record mints the address now (C2), the name is pi's alone (LOCKED
+// PROTOCOL 2), and no code assembles or parses a session name anymore. The
+// garden-id grammar itself (YYYYMMDDTHHMMSS-[0-9a-f]{6}) lives on in
+// ./session-id.js as the RECORD's gardenId shape.
 //
-// Authority separation (do not blur):
-//   - lookup / resume authority  = JSONL header `id` + header `cwd`. Filenames
-//     are a Pi artifact and are NEVER parsed for logic.
-//   - model authority            = JSONL first `model_change` + the
-//     provider/model re-supplied on resume.
-//   - session name               = display / search / integrity-mirror only.
-//     title and tags carry zero logic. A name's provider/model mismatch is NOT
-//     a routing signal — it is corrupt-metadata, surfaced via fail-fast.
-//
-// Grammar:
-//   sessionId = YYYYMMDDTHHMMSS-[0-9a-f]{6}          (= JSONL header id)
-//   name      = {sessionId}=={provider}/{model}--{titleSlug}__{tag}_{tag}
-//     ==  signature delimiter | --  title delimiter
-//     __  tag-section start   | _   tag separator
-//   provider/model = entwurf-targets.json EXACT tuple (no regex model
-//                    invention; `.`-bearing models gpt-5.5 / gemini-3.1-pro-preview
-//                    are real).
-//   titleSlug      = ascii slug, lowercase, hyphen ok, NO underscore. Raw title
-//                    is free input; the builder canonicalizes it.
-//   tags           = lowercase alnum, `_`-separated. `entwurf` tag ⇒ Entwurf.
+// Earlier in the same sweep (#50 C2): the resident-name builder
+// (`buildGardenSessionName`), the garden-id resident guard
+// (`assertGardenNativeSessionId`), the spawn collision pre-check and the
+// in-process garden-session birth writer (`/gnew`) — all made pi's session id
+// BE the garden address; the record owns it now.
 // ============================================================================
 
 export class SessionIdentityError extends Error {
@@ -1173,212 +631,6 @@ export class SessionIdentityError extends Error {
 // runtimes — same rationale as protocol.js). Imported above for internal use and
 // re-exported here so every existing `entwurf-core` importer keeps working.
 export { formatSessionTimestamp, generateSessionId, isValidSessionId, SESSION_ID_RE };
-
-const SESSION_TAG_RE = /^[a-z0-9]+$/;
-/** Canonical titleSlug: lowercase-alnum words joined by single hyphens, no edges. */
-const TITLE_SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-/**
- * Canonicalize a human/agent raw title into an ascii slug. lowercase; every
- * non-`[a-z0-9]` run (spaces, unicode, punctuation, `_`, `__`) collapses to a
- * single `-`; trimmed. Empty → fallback (`untitled`). underscore is destroyed
- * here so a raw title can never smuggle a tag delimiter into the slug.
- */
-export function slugifyTitle(rawTitle: string | undefined, fallback = "untitled"): string {
-	const norm = (s: string) =>
-		s
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, "-")
-			.replace(/^-+|-+$/g, "");
-	return norm(rawTitle ?? "") || norm(fallback) || "untitled";
-}
-
-/**
- * Exact-tuple membership against the entwurf target registry. Existence, not
- * `enabled` — a session may have been spawned while the target was enabled and
- * later disabled; its name must still validate. Integrity mirror, not a routing gate.
- */
-export function isKnownProviderModel(provider: string, model: string): boolean {
-	let targets: EntwurfTarget[];
-	try {
-		targets = loadEntwurfTargets().entwurfTargets;
-	} catch {
-		return false;
-	}
-	return targets.some((t) => t.provider === provider && t.model === model);
-}
-
-export interface BuildSessionNameInput {
-	sessionId: string;
-	provider: string;
-	model: string;
-	/** Free human/agent input; canonicalized to a slug by the builder. */
-	rawTitle?: string;
-	/** lowercase-alnum tags. `entwurf` marks an Entwurf session. */
-	tags?: string[];
-}
-
-export interface ParsedSessionName {
-	sessionId: string;
-	provider: string;
-	model: string;
-	titleSlug: string;
-	tags: string[];
-}
-
-/**
- * Assemble a canonical session name — the ONLY way to produce a `--name` value.
- * Validates sessionId grammar, registry tuple, tag charset; canonicalizes title.
- * Throws SessionIdentityError on any violation; corrupt metadata must never reach `--name`.
- */
-export function buildSessionName(input: BuildSessionNameInput): string {
-	const { sessionId, provider, model, rawTitle, tags = [] } = input;
-
-	if (!isValidSessionId(sessionId)) {
-		throw new SessionIdentityError(`Invalid sessionId "${sessionId}": expected YYYYMMDDTHHMMSS-[0-9a-f]{6}.`);
-	}
-	if (!provider || provider.includes("/") || provider.includes("=") || provider.includes("--")) {
-		throw new SessionIdentityError(`Invalid provider "${provider}" for session name.`);
-	}
-	if (!model || model.includes("/") || model.includes("=") || model.includes("--")) {
-		throw new SessionIdentityError(`Invalid model "${model}" for session name.`);
-	}
-	if (!isKnownProviderModel(provider, model)) {
-		throw new SessionIdentityError(
-			`provider/model "${provider}/${model}" is not an exact tuple in the entwurf target registry. ` +
-				`Session names mirror a real (provider, model); do not invent one.`,
-		);
-	}
-	for (const tag of tags) {
-		if (!SESSION_TAG_RE.test(tag)) {
-			throw new SessionIdentityError(`Invalid tag "${tag}": tags must match /^[a-z0-9]+$/.`);
-		}
-	}
-
-	const titleSlug = slugifyTitle(rawTitle);
-	const base = `${sessionId}==${provider}/${model}--${titleSlug}`;
-	return tags.length > 0 ? `${base}__${tags.join("_")}` : base;
-}
-
-/**
- * Parse a canonical session name into its fields. Returns `null` on any
- * structural violation. Pure string work — does NOT consult the registry, so it
- * stays usable for diagnostics on a name whose target was later removed.
- */
-export function parseSessionName(name: string): ParsedSessionName | null {
-	if (typeof name !== "string") return null;
-
-	const sigIdx = name.indexOf("==");
-	if (sigIdx < 0) return null;
-	const sessionId = name.slice(0, sigIdx);
-	if (!isValidSessionId(sessionId)) return null;
-
-	const rest = name.slice(sigIdx + 2);
-
-	// First `--` is the title delimiter. provider/model and titleSlug each carry
-	// only single hyphens (registry models have no `--`; slugify collapses runs),
-	// so the first `--` is unambiguous.
-	const titleIdx = rest.indexOf("--");
-	if (titleIdx < 0) return null;
-	const providerModel = rest.slice(0, titleIdx);
-	const titleAndTags = rest.slice(titleIdx + 2);
-
-	const slashIdx = providerModel.indexOf("/");
-	if (slashIdx < 0) return null;
-	const provider = providerModel.slice(0, slashIdx);
-	const model = providerModel.slice(slashIdx + 1);
-	if (!provider || !model || model.includes("/")) return null;
-
-	let titleSlug = titleAndTags;
-	let tags: string[] = [];
-	const tagIdx = titleAndTags.indexOf("__");
-	if (tagIdx >= 0) {
-		titleSlug = titleAndTags.slice(0, tagIdx);
-		tags = titleAndTags.slice(tagIdx + 2).split("_");
-		if (tags.some((t) => !SESSION_TAG_RE.test(t))) return null;
-	}
-	// canonical-only: a parseable name must carry a slug the builder could emit
-	// (lowercase-alnum + single hyphens). Rejects spaces/uppercase/unicode and
-	// any raw delimiter that slipped through.
-	if (!TITLE_SLUG_RE.test(titleSlug)) return null;
-
-	return { sessionId, provider, model, titleSlug, tags };
-}
-
-/** `entwurf` tag present ⇒ Entwurf session. Reads name as a discovery hint only. */
-export function isEntwurfSessionName(name: string): boolean {
-	const parsed = parseSessionName(name);
-	return parsed ? parsed.tags.includes("entwurf") : false;
-}
-
-/** Resident-session tag. The top-level `--entwurf-control` operator session. */
-export const RESIDENT_SESSION_TAG = "control";
-
-/**
- * Garden-native session name for a TOP-LEVEL operator session (the resident
- * `--entwurf-control` session), NOT an Entwurf child.
- *
- * Same locked grammar as buildSessionName, with two deliberate differences:
- *   - provider/model are validated by charset + presence only, NOT against the
- *     Entwurf Target Registry. The operator's own session may run any native
- *     model (e.g. deepseek/deepseek-v4-pro) that is not an Entwurf spawn target;
- *     mirroring the live ctx.model must not be gated by the spawn registry
- *     (readSessionIdentity's name mirror is registry-free, so this parses fine).
- *   - the `entwurf` tag is FORBIDDEN. `entwurf` is the resume marker
- *     (readSessionIdentity `requireEntwurf`) — a resident session must never be
- *     resumable as an Entwurf child. The resident tag is `control`.
- *
- * Symmetric safety: buildSessionName (child) carries `entwurf`; this builder
- * refuses it. The two name species cannot be confused.
- */
-export function buildGardenSessionName(input: BuildSessionNameInput): string {
-	const { sessionId, provider, model, rawTitle, tags = [] } = input;
-
-	if (!isValidSessionId(sessionId)) {
-		throw new SessionIdentityError(`Invalid sessionId "${sessionId}": expected YYYYMMDDTHHMMSS-[0-9a-f]{6}.`);
-	}
-	if (!provider || provider.includes("/") || provider.includes("=") || provider.includes("--")) {
-		throw new SessionIdentityError(`Invalid provider "${provider}" for garden session name.`);
-	}
-	if (!model || model.includes("/") || model.includes("=") || model.includes("--")) {
-		throw new SessionIdentityError(`Invalid model "${model}" for garden session name.`);
-	}
-	for (const tag of tags) {
-		if (!SESSION_TAG_RE.test(tag)) {
-			throw new SessionIdentityError(`Invalid tag "${tag}": tags must match /^[a-z0-9]+$/.`);
-		}
-		if (tag === "entwurf") {
-			throw new SessionIdentityError(
-				`A resident garden session name must not carry the "entwurf" tag — that tag is the Entwurf resume ` +
-					`marker and would make this operator session resumable as an Entwurf child. Use "${RESIDENT_SESSION_TAG}".`,
-			);
-		}
-	}
-
-	const titleSlug = slugifyTitle(rawTitle);
-	const base = `${sessionId}==${provider}/${model}--${titleSlug}`;
-	return tags.length > 0 ? `${base}__${tags.join("_")}` : base;
-}
-
-/**
- * Garden-native enforcement for the resident `--entwurf-control` session: the
- * session header id MUST be a garden sessionId. pi assigns a uuidv7 when the
- * launcher did not pass `--session-id` (session-manager `newSession`), so a
- * non-garden id here means the session was not born through the garden launcher.
- * Throws — there is no backward-compatibility path for uuid sessions under
- * `--entwurf-control`. The caller escalates (notify + refuse server + shutdown);
- * a bare throw from a session_start handler is swallowed by the extension runner.
- */
-export function assertGardenNativeSessionId(sessionId: string | undefined): void {
-	if (!isValidSessionId(sessionId)) {
-		throw new SessionIdentityError(
-			`Non-garden session id "${sessionId ?? "(none)"}" under --entwurf-control. Expected ` +
-				`YYYYMMDDTHHMMSS-[0-9a-f]{6}. Launch through the garden launcher that passes ` +
-				`--session-id "<generated>" (see entwurf README §Garden launcher / run.sh new-session-id) ` +
-				`so every --entwurf-control session is a garden citizen. No uuid / back-compat path.`,
-		);
-	}
-}
 
 /** Screwdriver icon for the resident-session status label (GLGMAN's tool). */
 export const RESIDENT_STATUS_ICON = "🪛";
@@ -1395,651 +647,9 @@ export function computeResidentStatusLabel(input: { sessionId: string; sessionFi
 	return input.sessionFileExists ? `${RESIDENT_STATUS_ICON} ${input.sessionId}` : `${RESIDENT_STATUS_ICON} ready`;
 }
 
-/**
- * All session files whose JSONL header `id` equals `sessionId`, across every
- * cwd-encoded session dir. Header is the sole authority — every `.jsonl` header
- * is read; the filename is NOT used to pre-filter (a renamed/relocated file with
- * the right header still matches, a filename-only match with a different header
- * does not). Returns `[]` on invalid id or missing base.
- */
-export function findSessionFilesById(sessionId: string): string[] {
-	if (!isValidSessionId(sessionId)) return [];
-	let dirs: string[];
-	try {
-		dirs = fs.readdirSync(SESSIONS_BASE);
-	} catch {
-		return [];
-	}
-	const matches: string[] = [];
-	for (const dir of dirs) {
-		const dirPath = path.join(SESSIONS_BASE, dir);
-		let files: string[];
-		try {
-			if (!fs.statSync(dirPath).isDirectory()) continue;
-			files = fs.readdirSync(dirPath);
-		} catch {
-			continue;
-		}
-		for (const file of files) {
-			if (!file.endsWith(".jsonl")) continue;
-			const full = path.join(dirPath, file);
-			if (readSessionHeader(full)?.id === sessionId) matches.push(full);
-		}
-	}
-	return matches;
-}
-
-/**
- * Resolve a sessionId to its single session file by header scan. `null` if none,
- * the path if exactly one, and **throws** `SessionIdentityError` if the same
- * header id exists in more than one session (the wrong-cwd duplicate footgun) —
- * resume must never silently pick one of several ambiguous sessions.
- */
-export function findSessionFileById(sessionId: string): string | null {
-	const matches = findSessionFilesById(sessionId);
-	if (matches.length === 0) return null;
-	if (matches.length > 1) {
-		throw new SessionIdentityError(
-			`sessionId "${sessionId}" is ambiguous: ${matches.length} sessions carry this header id ` +
-				`(${matches.join(", ")}). This is the wrong-cwd duplicate footgun; refuse rather than guess.`,
-		);
-	}
-	return matches[0] ?? null;
-}
-
-/**
- * Parent-side collision pre-check before spawning with `--session-id`. Throws if
- * any existing session (in ANY cwd dir) already carries this header id —
- * `--session-id` would otherwise silently open/append to it. Duplicate-across-cwd
- * is included on purpose (the wrong-cwd footgun).
- */
-export function assertSessionIdAvailableForSpawn(sessionId: string): void {
-	if (!isValidSessionId(sessionId)) {
-		throw new SessionIdentityError(`Refusing to spawn with invalid sessionId "${sessionId}".`);
-	}
-	const existing = findSessionFilesById(sessionId);
-	if (existing.length > 0) {
-		throw new SessionIdentityError(
-			`sessionId "${sessionId}" already exists (${existing.length}): ${existing.join(", ")}. ` +
-				`Spawning with this id would append to an existing session, not create a new one.`,
-		);
-	}
-}
-
-// ============================================================================
-// In-process garden-native session birth (/gnew)
-// ============================================================================
-
-/**
- * pi's `CURRENT_SESSION_VERSION` at our pinned dep (0.78). This module MUST NOT
- * import pi (see file header), so the version is mirrored here. A header written
- * at the current version avoids a migrate-on-open rewrite; if pi later bumps the
- * version, the dep-bump track owns this constant. The garden id survives a
- * migration rewrite either way (migration preserves the header id), so a stale
- * version is a cosmetic rewrite, never a torn identity.
- */
-export const GARDEN_SESSION_FILE_VERSION = 3;
-
-export interface CreateGardenSessionFileInput {
-	/** Absolute cwd recorded in the header. Must be the live session cwd. */
-	cwd: string;
-	/**
-	 * The live session dir to write into — pass `ctx.sessionManager.getSessionDir()`,
-	 * NOT a value recomputed from cwd. The live dir is the authority; recomputing it
-	 * risks a mismatch with where pi actually keeps this session family.
-	 */
-	sessionDir: string;
-	/** Test seam — a fixed id to force the collision path. Defaults to a fresh one. */
-	sessionId?: string;
-	/** Test seam for the file timestamp / id stamp. Defaults to now. */
-	now?: Date;
-}
-
-export interface CreatedGardenSessionFile {
-	sessionId: string;
-	sessionFile: string;
-}
-
-/**
- * Pre-create an EMPTY garden-native session JSONL (header only) that
- * `ctx.switchSession(file)` can adopt in-process WITHOUT a torn identity.
- *
- * Why a precreated file + switchSession, and not `ctx.newSession({setup})`:
- * pi's `newSession()` runs `SessionManager.create()` (which mints a fresh uuid)
- * and fires `session_start` BEFORE the `setup` callback could re-stamp the id —
- * so the backend/bridge identity (PI_SESSION_ID, control socket, ACP stream
- * sessionId) binds to the uuid first and a later header rewrite only tears it.
- * `switchSession()` instead runs `SessionManager.open(file)`, which reads the
- * header id BEFORE `session_start`, so the garden id is the identity from the
- * very first bind. No uuid moment ever exists.
- *
- * THE TRAP this guards: `SessionManager.setSessionFile()` silently calls
- * `newSession()` (→ a fresh uuid, and rewrites the file) if it opens a file whose
- * header is empty/invalid. So the ONLY thing standing between us and a torn
- * identity is this header being perfectly valid. We therefore write with `wx`
- * (never overwrite), then read the bytes back and assert they parse to the exact
- * header — unlinking and throwing on ANY mismatch so a corrupt header can never
- * reach `switchSession`. Fail-closed: a broken write yields no session, not a uuid.
- *
- * Filename mirrors pi's own convention (`<iso-with-:.replaced>_<id>.jsonl`) so the
- * file is indistinguishable from a launcher-born garden session on disk.
- */
-export function createGardenSessionFile(input: CreateGardenSessionFileInput): CreatedGardenSessionFile {
-	const { cwd, sessionDir, now = new Date() } = input;
-	const sessionId = input.sessionId ?? generateSessionId(now);
-
-	if (!isValidSessionId(sessionId)) {
-		throw new SessionIdentityError(`Refusing to create garden session file with invalid id "${sessionId}".`);
-	}
-	if (!cwd || !path.isAbsolute(cwd)) {
-		throw new SessionIdentityError(`createGardenSessionFile requires an absolute cwd, got "${cwd}".`);
-	}
-	if (!sessionDir || !path.isAbsolute(sessionDir)) {
-		throw new SessionIdentityError(
-			`createGardenSessionFile requires an absolute sessionDir (ctx.sessionManager.getSessionDir()), got "${sessionDir}".`,
-		);
-	}
-
-	// Collision pre-check (header scan across ALL cwd dirs): switching into an id
-	// that already exists would APPEND to that session, not create a new one.
-	assertSessionIdAvailableForSpawn(sessionId);
-
-	const timestamp = now.toISOString();
-	const fileTimestamp = timestamp.replace(/[:.]/g, "-"); // pi's filename convention
-	const sessionFile = path.join(sessionDir, `${fileTimestamp}_${sessionId}.jsonl`);
-
-	const header = { type: "session", version: GARDEN_SESSION_FILE_VERSION, id: sessionId, timestamp, cwd };
-	const line = `${JSON.stringify(header)}\n`;
-
-	fs.mkdirSync(sessionDir, { recursive: true });
-
-	// wx — never overwrite. A file already at this exact path is a hard refuse (an
-	// in-flight same-ms collision the header scan could miss). Fail-closed.
-	try {
-		fs.writeFileSync(sessionFile, line, { flag: "wx" });
-	} catch (err) {
-		if ((err as NodeJS.ErrnoException)?.code === "EEXIST") {
-			throw new SessionIdentityError(
-				`Garden session file already exists at ${sessionFile}; refusing to overwrite (wx).`,
-			);
-		}
-		throw err;
-	}
-
-	// Fail-closed read-back: parse the bytes we just wrote and assert the full
-	// header shape. ANY mismatch → unlink + throw, so switchSession never opens a
-	// header that would re-mint a uuid (the setSessionFile trap above).
-	let readBack: { type?: unknown; version?: unknown; id?: unknown; cwd?: unknown; timestamp?: unknown };
-	try {
-		const raw = fs.readFileSync(sessionFile, "utf8");
-		const firstLine = raw.split("\n", 1)[0] ?? "";
-		readBack = JSON.parse(firstLine) as typeof readBack;
-	} catch (err) {
-		try {
-			fs.unlinkSync(sessionFile);
-		} catch {
-			/* best-effort */
-		}
-		throw new SessionIdentityError(
-			`Garden session file read-back failed for ${sessionFile}: ${err instanceof Error ? err.message : String(err)}.`,
-		);
-	}
-	if (
-		readBack.type !== "session" ||
-		readBack.version !== GARDEN_SESSION_FILE_VERSION ||
-		readBack.id !== sessionId ||
-		readBack.cwd !== cwd ||
-		readBack.timestamp !== timestamp
-	) {
-		try {
-			fs.unlinkSync(sessionFile);
-		} catch {
-			/* best-effort */
-		}
-		throw new SessionIdentityError(
-			`Garden session file read-back mismatch for ${sessionFile}: wrote ` +
-				`{type:session,version:${GARDEN_SESSION_FILE_VERSION},id:${sessionId},timestamp:${timestamp},cwd:${cwd}} but read ` +
-				`${JSON.stringify(readBack)}. Refusing to switch into a header that would re-mint a uuid.`,
-		);
-	}
-
-	return { sessionId, sessionFile };
-}
-
-/**
- * Best-effort removal of a garden session file we created but never adopted —
- * the `switchSession` was cancelled or threw, so the file is an orphan. Guarded:
- * only unlinks if the file STILL carries our header id AND has no entries beyond
- * the header, so we never delete a session that meanwhile gained content or a
- * different identity (a successful switch leaves a legitimate empty session that
- * we keep, exactly like a launcher-born session quit before its first turn).
- */
-export function removeUnadoptedGardenSessionFile(sessionFile: string, sessionId: string): void {
-	try {
-		if (readSessionHeader(sessionFile)?.id !== sessionId) return; // not ours / re-minted — leave it
-		const raw = fs.readFileSync(sessionFile, "utf8");
-		const nonEmptyLines = raw.split("\n").filter((l) => l.trim().length > 0);
-		if (nonEmptyLines.length > 1) return; // gained entries — it's a real session now
-		fs.unlinkSync(sessionFile);
-	} catch {
-		/* best-effort; an orphan header-only file is harmless litter, not a leak */
-	}
-}
-
-/**
- * Scope lock for 0.9.0 garden-native session identity: spawn/resume/status are
- * local-FS only. The sessionId collision pre-check (`assertSessionIdAvailableForSpawn`)
- * and the resume header scan (`findSessionFileById`) walk `~/.pi/agent/sessions`
- * on the local machine; they cannot see a remote host's filesystem. Remote (SSH)
- * entwurf identity is parked under #11. Fail-fast here rather than silently spawn
- * a remote session whose id we can neither pre-check nor later resume.
- */
-export function assertLocalOnlyEntwurf(host: string | undefined): void {
-	if (host && host !== "local") {
-		throw new SessionIdentityError(
-			`Remote entwurf host "${host}" is out of scope in 0.9.0 garden-native session identity (#11). ` +
-				`sessionId collision pre-check and header-scan resume are local-filesystem only. ` +
-				`Run the entwurf locally; remote/SSH identity is a later phase.`,
-		);
-	}
-}
-
-export interface EntwurfResumeOptions {
-	host?: string;
-	// cwd is a debug/migration escape hatch only. The authority for cold resume
-	// is the saved session header cwd (see INVARIANT block in
-	// runEntwurfResumeSync and #9). Passing options.cwd routinely forfeits
-	// backend continuity. The resumer's `process.cwd()` is NEVER a fallback.
-	cwd?: string;
-	// Identity Preservation Rule (see AGENTS.md): the resume API intentionally
-	// does NOT accept a `model` override. The model identity is locked to the
-	// session's recorded value. host may change (resume from a different
-	// machine); model may not; cwd is bound to the saved session header.
-	signal?: AbortSignal;
-	onUpdate?: (text: string) => void;
-}
-
-// ============================================================================
-// Internal: spawn pi and collect message_end events.  Shared by sync + resume.
-// ============================================================================
-
-interface CollectInput {
-	command: string;
-	args: string[];
-	cwd?: string;
-	signal?: AbortSignal;
-	onUpdate?: (text: string) => void;
-	result: EntwurfResult;
-}
-
-function collectPiRun({ command, args, cwd, signal, onUpdate, result }: CollectInput): Promise<EntwurfResult> {
-	const messages: AssistantMessageLike[] = [];
-
-	return new Promise<EntwurfResult>((resolve) => {
-		const proc = spawn(command, args, { cwd, shell: false, stdio: ["ignore", "pipe", "pipe"] });
-		mirrorChildStderr(proc);
-
-		let buffer = "";
-		let stderr = "";
-
-		const processLine = (line: string) => {
-			if (!line.trim()) return;
-			let event: { type: string; message?: AssistantMessageLike; [k: string]: unknown };
-			try {
-				event = JSON.parse(line);
-			} catch {
-				return;
-			}
-
-			if (event.type === "message_end" && event.message) {
-				messages.push(event.message);
-				if (event.message.role === "assistant") {
-					result.turns++;
-					const usage = event.message.usage;
-					if (typeof usage?.cost?.total === "number") result.cost += usage.cost.total;
-					if (event.message.model) result.model = event.message.model;
-					if (typeof event.message.stopReason === "string") result.stopReason = event.message.stopReason;
-					if (typeof event.message.errorMessage === "string" && event.message.errorMessage.trim()) {
-						result.error = event.message.errorMessage.trim();
-					}
-
-					const latest = extractTextContent(event.message.content).trim();
-					if (latest && onUpdate) onUpdate(latest);
-				}
-			}
-		};
-
-		proc.stdout.on("data", (data: Buffer) => {
-			buffer += data.toString();
-			const lines = buffer.split("\n");
-			buffer = lines.pop() || "";
-			for (const line of lines) processLine(line);
-		});
-
-		proc.stderr.on("data", (data: Buffer) => {
-			stderr += data.toString();
-		});
-
-		proc.on("close", (code) => {
-			if (buffer.trim()) processLine(buffer);
-			result.exitCode = code ?? 0;
-			if (!result.error && result.stopReason === "error") {
-				result.error = "Entwurf model returned stopReason=error";
-			}
-			const assistantText = parseMessages(messages).trim();
-			result.output = assistantText || result.error || stderr || "(no output)";
-			if (code !== 0 && stderr && !result.error) result.error = stderr.slice(0, 500);
-			if ((result.error || result.stopReason === "error") && result.exitCode === 0) result.exitCode = 1;
-			resolve(result);
-		});
-
-		proc.on("error", (err) => {
-			result.exitCode = 1;
-			result.error = err.message;
-			result.output = "(spawn failed)";
-			resolve(result);
-		});
-
-		if (signal) {
-			const kill = () => {
-				proc.kill("SIGTERM");
-				setTimeout(() => {
-					if (!proc.killed) proc.kill("SIGKILL");
-				}, 5000);
-			};
-			if (signal.aborted) kill();
-			else signal.addEventListener("abort", kill, { once: true });
-		}
-	});
-}
-
-// ============================================================================
-// runEntwurfResumeSync — revive a saved entwurf session by sessionId
-//
-// Contract:
-//   - Input: sessionId (YYYYMMDDTHHMMSS-[0-9a-f]{6} = JSONL header id) + prompt
-//   - Resolves the saved session file via findSessionFileById (header scan;
-//     throws on the wrong-cwd duplicate footgun, never guesses)
-//   - Reads model + provider from the session's FIRST model_change
-//     (readSessionIdentity) — NOT the last assistant turn — and reuses BOTH
-//     verbatim; a later differing model_change is treated as corrupt drift
-//   - Forces the child cwd to the saved header cwd, then spawns sync
-//     `pi --session-id <sessionId> ... <prompt>` so Pi appends to the SAME
-//     session file (the wrong-cwd footgun would otherwise create a new one)
-//   - Does NOT touch ~/.pi/entwurf-control; works regardless of whether the
-//     original entwurf process is still alive
-//
-// Identity Preservation Rule (AGENTS.md, intentionally hard-coded here):
-//   - This API does NOT accept a `model` override. The model identity is
-//     locked to whatever the session recorded at first spawn.
-//   - cwd is bound to the saved header (the resume authority); model MAY NOT
-//     change. An explicit options.cwd is a debug/migration escape hatch only.
-//   - If the session has no recorded model (empty / corrupted / never reached a
-//     model_change) we refuse the resume rather than fall back to a default.
-//
-// Scope lock (0.9.0 / NEXT.md Phase 3b): local only. Remote/SSH resume is
-// parked under #11 and fails fast at the top (header scan is local-FS).
-// ============================================================================
-
-export async function runEntwurfResumeSync(
-	sessionId: string,
-	prompt: string,
-	options: EntwurfResumeOptions,
-): Promise<EntwurfResult> {
-	const host = options.host ?? "local";
-	assertLocalOnlyEntwurf(host);
-
-	// Header scan is the sole lookup authority; readSessionIdentity then extracts
-	// the resume identity from the FIRST model_change (not the last assistant
-	// message) and integrity-checks the name mirror. Both can throw
-	// SessionIdentityError (wrong-cwd duplicate footgun, model drift, corrupt name
-	// mirror) — convert to a clean failed-resume result rather than an exception so
-	// the tool surface renders it like the other pre-spawn guards.
-	let sessionFile: string | null;
-	let identity: RecordedSessionIdentity | null;
-	try {
-		sessionFile = findSessionFileById(sessionId);
-		identity = sessionFile ? readSessionIdentity(sessionFile, { requireEntwurf: true }) : null;
-	} catch (err) {
-		if (err instanceof SessionIdentityError) {
-			return {
-				task: prompt,
-				host,
-				exitCode: 1,
-				output: err.message,
-				turns: 0,
-				cost: 0,
-				sessionId,
-				sessionFile: undefined,
-				explicitExtensions: [],
-				warnings: [],
-				error: "session_identity_corrupt",
-			};
-		}
-		throw err;
-	}
-	if (!sessionFile) {
-		return {
-			task: prompt,
-			host,
-			exitCode: 1,
-			output: `No saved entwurf session found for sessionId "${sessionId}" under ${SESSIONS_BASE}`,
-			turns: 0,
-			cost: 0,
-			sessionId,
-			sessionFile: undefined,
-			explicitExtensions: [],
-			warnings: [],
-			error: "session_not_found",
-		};
-	}
-
-	// Identity Preservation Rule (AGENTS.md): the session's recorded model is the
-	// only legitimate source of identity for a resume, and the authority is the
-	// FIRST model_change (readSessionIdentity), never invented and never overridden.
-	// If the session never reached a model_change we refuse.
-	const recordedModel = identity?.modelId;
-	const recordedProvider = identity?.provider;
-
-	if (!identity || !recordedModel) {
-		return {
-			task: prompt,
-			host,
-			exitCode: 1,
-			output:
-				`Cannot resume sessionId "${sessionId}": session has no recorded model ` +
-				`(file empty, corrupted, or never reached a model_change). ` +
-				`Start a fresh entwurf instead — identity must come from the session.`,
-			turns: 0,
-			cost: 0,
-			sessionId,
-			sessionFile,
-			explicitExtensions: [],
-			warnings: [],
-			error: "session_identity_missing",
-		};
-	}
-
-	const effectiveModel = resolveEntwurfModel(recordedModel);
-	// Pass recordedProvider so the resume path re-injects entwurf when the
-	// original spawn went through it (registry is bypassed on resume per Identity
-	// Preservation Rule — so the bridge signal must come from the session itself).
-	const explicitExtensions = getEntwurfExplicitExtensions(effectiveModel, false, recordedProvider);
-	// Explicit ACP intent that can't resolve the bridge — fail-fast rather than
-	// spawn a guaranteed-broken `--provider entwurf` child (#29). Returned as
-	// an error result to match this function's other pre-spawn guards (session
-	// identity / cwd), which the tool surface renders as a failed resume.
-	if (explicitExtensions.unresolvedAcpIntent) {
-		return {
-			task: prompt,
-			host,
-			exitCode: 1,
-			output: explicitExtensions.warnings.join(" "),
-			turns: 0,
-			cost: 0,
-			sessionId,
-			sessionFile,
-			explicitExtensions: [],
-			warnings: explicitExtensions.warnings,
-			error: "acp_bridge_unresolved",
-		};
-	}
-	const resumeProvider = explicitExtensions.provider ?? recordedProvider;
-
-	// INVARIANT (#9 / #10): saved session header cwd is the authority for cold
-	// resume, and now doubly so — `--session-id` resolves the session file
-	// relative to the child's cwd (cwdToSessionDir). If we spawned in the wrong
-	// cwd, Pi would NOT find the saved file and would silently create a NEW
-	// session under that id (the wrong-cwd footgun proven live in
-	// smoke-session-id-name T3). Forcing child cwd = header cwd makes Pi resolve
-	// `--session-id` to the existing file and append. `options.cwd` is a
-	// debug/migration escape hatch only; the resumer's `process.cwd()` is NEVER a
-	// fallback. We fail-fast when neither carrier is available.
-	const headerCwd = identity.cwd ?? undefined;
-	if (!options.cwd && !headerCwd) {
-		return {
-			task: prompt,
-			host,
-			exitCode: 1,
-			output:
-				`Cannot resume sessionId "${sessionId}": saved session header has no cwd ` +
-				`and no explicit cwd override was provided. The header cwd is the ` +
-				`authority for cold resume (see #9). Re-spawn from the original cwd, ` +
-				`or pass an explicit options.cwd if you are intentionally migrating.`,
-			turns: 0,
-			cost: 0,
-			sessionId,
-			sessionFile,
-			explicitExtensions: [],
-			warnings: [],
-			error: "session_cwd_missing",
-		};
-	}
-	const effectiveCwd = options.cwd ?? headerCwd;
-
-	const piArgs = ["--mode", "json", "-p", "--no-extensions", ...explicitExtensions.args, "--session-id", sessionId];
-	if (resumeProvider) piArgs.push("--provider", resumeProvider);
-	piArgs.push("--model", explicitExtensions.modelOverride ?? effectiveModel);
-	piArgs.push(prompt);
-
-	const result: EntwurfResult = {
-		task: prompt,
-		host,
-		exitCode: 0,
-		output: "",
-		turns: 0,
-		cost: 0,
-		sessionId,
-		sessionFile,
-		explicitExtensions: [...explicitExtensions.names],
-		warnings: [...explicitExtensions.warnings],
-	};
-
-	return collectPiRun({
-		command: "pi",
-		args: piArgs,
-		cwd: effectiveCwd,
-		signal: options.signal,
-		onUpdate: options.onUpdate,
-		result,
-	});
-}
-
-// ============================================================================
-// runEntwurfSync — spawn pi and collect result
-// ============================================================================
-
-export async function runEntwurfSync(task: string, options: EntwurfSyncOptions): Promise<EntwurfResult> {
-	const host = options.host ?? "local";
-	// Scope lock (0.9.0 / NEXT.md Phase 3b): garden-native session identity is
-	// local-FS only — the sessionId collision pre-check and the header-scan resume
-	// path cannot see a remote filesystem. Remote (SSH) entwurf is parked under #11.
-	assertLocalOnlyEntwurf(host);
-	const effectiveCwd = options.cwd ?? process.cwd();
-	const enrichedTask = enrichTaskWithProjectContext(task, effectiveCwd);
-
-	// Resolve through the Entwurf Target Registry. This is the spawn gate:
-	// unregistered (provider, model) pairs are rejected here. Resume path does
-	// NOT pass through this — Identity Preservation Rule.
-	const fallbackModel = options.model && options.model.trim() ? options.model : DEFAULT_ENTWURF_MODEL;
-	const target = resolveEntwurfTarget({ provider: options.provider, model: fallbackModel });
-
-	// Parent generates the durable sessionId and pre-checks for collision before
-	// spawn (async spawn can't self-report; sync is uniform with it). The name is
-	// a display/search/integrity mirror — built only via buildSessionName.
-	const sessionId = generateSessionId();
-	assertSessionIdAvailableForSpawn(sessionId);
-	const sessionName = buildSessionName({
-		sessionId,
-		provider: target.provider,
-		model: target.model,
-		rawTitle: task.slice(0, 80),
-		tags: ["entwurf", "sync"],
-	});
-	const routing = getRegistryRouting(target, false);
-
-	const command = "pi";
-	const args = [
-		"--mode",
-		"json",
-		"-p",
-		"--no-extensions",
-		...routing.args,
-		"--session-id",
-		sessionId,
-		"--name",
-		sessionName,
-		"--provider",
-		routing.provider,
-		"--model",
-		routing.modelOverride ?? target.model,
-		enrichedTask,
-	];
-
-	const result: EntwurfResult = {
-		task,
-		host,
-		exitCode: 0,
-		output: "",
-		turns: 0,
-		cost: 0,
-		sessionId,
-		explicitExtensions: [...routing.names],
-		warnings: [...routing.warnings],
-	};
-
-	const finished = await collectPiRun({
-		command,
-		args,
-		cwd: effectiveCwd,
-		signal: options.signal,
-		onUpdate: options.onUpdate,
-		result,
-	});
-	// Diagnostic only: resolve the Pi-named session file after the run. Header
-	// scan is the authority; the filename is never parsed for logic.
-	finished.sessionFile = findSessionFilesById(sessionId)[0];
-	return finished;
-}
-
-// ============================================================================
-// Shared summary formatter (used by both pi native and MCP surfaces)
-// ============================================================================
-
-export function formatSyncSummary(result: EntwurfResult): string {
-	return [
-		`Session ID: ${result.sessionId}`,
-		`Host: ${result.host}`,
-		`Turns: ${result.turns}`,
-		`Cost: $${result.cost.toFixed(4)}`,
-		result.model ? `Model: ${result.model}` : null,
-		result.stopReason ? `Stop reason: ${result.stopReason}` : null,
-		result.explicitExtensions.length ? `Compat: ${result.explicitExtensions.join(", ")}` : null,
-		result.warnings.length ? `Warnings: ${result.warnings.join(" | ")}` : null,
-		result.error ? `Error: ${result.error}` : null,
-		"",
-		result.output,
-	]
-		.filter(Boolean)
-		.join("\n");
-}
+// The global header-scan lookup (`findSessionFilesById` / `findSessionFileById` —
+// "every cwd dir, header id is the authority") and its remote scope-lock
+// (`assertLocalOnlyEntwurf`) are GONE (#50 C3). They existed to resolve a garden id
+// to a pi session FILE while the garden id WAS pi's session id; the meta-record now
+// carries `transcriptPath` directly (resolveResumeLaunchIdentity), so nothing scans
+// `~/.pi/agent/sessions` anymore and the wrong-cwd duplicate footgun has no subject.

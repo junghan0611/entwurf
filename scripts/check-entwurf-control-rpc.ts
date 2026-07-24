@@ -29,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import {
 	fetchControlSocketRuntimeInfo,
 	formatRuntimeModel,
+	formatSenderInfoBlock,
 	parseGetInfoResponseData,
 	type RpcSendCommand,
 	sendRpcCommand,
@@ -90,12 +91,20 @@ async function main(): Promise<void> {
 		ok("1: lib imports only node:net (value)", /import \* as net from "node:net";/.test(code));
 	}
 
-	// ── 2: extraction guard — surface imports shared runtime helper, no fork ────
+	// ── 2: extraction guard — surface consumes the shared lib, never forks it ───
+	// (#50 C4 re-author: the `/entwurf-sessions` socket-scan lane was the last
+	// fetchControlSocketRuntimeInfo consumer on this surface; with it gone the
+	// guard pins "imports the shared wire SSOT, defines/calls no RPC client of
+	// its own" — the helper itself stays in the lib for the live smokes.)
 	{
 		const src = await fs.readFile(CONTROL_SRC, "utf8");
 		ok(
-			"2: entwurf-control imports fetchControlSocketRuntimeInfo from the shared lib",
-			/from "\.\/lib\/entwurf-control-rpc\.js"/.test(src) && /\bfetchControlSocketRuntimeInfo\b/.test(src),
+			"2: entwurf-control imports the shared wire SSOT (lib/entwurf-control-rpc.js)",
+			/from "\.\/lib\/entwurf-control-rpc\.js"/.test(src) && /\bformatSenderInfoBlock\b/.test(src),
+		);
+		ok(
+			"2: entwurf-control no longer references fetchControlSocketRuntimeInfo (#50 C4 — its lane is gone)",
+			!/\bfetchControlSocketRuntimeInfo\b/.test(src),
 		);
 		ok("2: entwurf-control no longer DEFINES sendRpcCommand", !/(async\s+)?function\s+sendRpcCommand\s*\(/.test(src));
 		ok("2: entwurf-control does not call sendRpcCommand directly", !/[^.]\bsendRpcCommand\s*\(/.test(src));
@@ -179,6 +188,32 @@ async function main(): Promise<void> {
 				);
 			},
 		);
+	}
+
+	// ── 6. formatSenderInfoBlock — THE <sender_info> synthesis (#50 C3) ─────────
+	// One formatter feeds BOTH rails (live receiver + dormant resume prompt), so
+	// the exact string shape is a contract, not an implementation detail.
+	{
+		const base = {
+			sessionId: "20260613T091000-98363c",
+			agentId: "pi/claude-opus-4-8",
+			cwd: "/w",
+			timestamp: "2026-06-13T09:10:00.000Z",
+		};
+		ok(
+			"6: minimal envelope → exact block (leading blank line, required fields only)",
+			formatSenderInfoBlock(base) ===
+				`\n\n<sender_info>{"sessionId":"20260613T091000-98363c","agentId":"pi/claude-opus-4-8","cwd":"/w","timestamp":"2026-06-13T09:10:00.000Z"}</sender_info>`,
+		);
+		const full = formatSenderInfoBlock({ ...base, origin: "pi-session", replyable: false }, true);
+		ok(
+			"6: origin/replyable/wants_reply present when set (replyable:false is a FACT, not omitted)",
+			full.includes('"origin":"pi-session"') &&
+				full.includes('"replyable":false') &&
+				full.includes('"wants_reply":true'),
+		);
+		ok("6: wants_reply omitted unless explicitly true", !formatSenderInfoBlock(base, false).includes("wants_reply"));
+		ok("6: undefined origin/replyable render nothing", !formatSenderInfoBlock(base).includes("origin"));
 	}
 
 	console.log(`\ncheck-entwurf-control-rpc: ${passed} checks passed`);

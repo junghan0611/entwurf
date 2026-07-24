@@ -458,9 +458,9 @@ ok(
 // cannot enforce it — these semantic fixtures (the SSOT predicate the 5b decider
 // mints against) do.
 eq(
-	"？6: PRE_PROBE_REJECT_REASONS = bad-target/target-locked/target-address-conflict",
+	"？6: PRE_PROBE_REJECT_REASONS = bad-target/target-locked/target-address-conflict/record-less-socket",
 	[...PRE_PROBE_REJECT_REASONS],
-	["bad-target", "target-locked", "target-address-conflict"],
+	["bad-target", "target-locked", "target-address-conflict", "record-less-socket"],
 );
 // the partition is exhaustive + disjoint: every reject reason is pre-probe XOR not.
 for (const r of ENTWURF_V2_REJECT_REASONS) {
@@ -476,22 +476,24 @@ for (const r of RESOLVER_REJECT_REASONS) {
 // a resume verdict, so observedLiveness is the honest measured dormant).
 ok("？6: untrusted-fail-fast is post-probe (1B — runs after lock+probe)", !isPreProbeReject("untrusted-fail-fast"));
 
-// A1: socket-only-no-resume-authority — owned-outcome × dormant against a record-less
-// socket-only endpoint, refused by the `allowResume:false` guard AFTER the probe. Like
-// untrusted-fail-fast it is post-probe (non-null) and NOT a table-resolver cell; it is in
-// the master enum but neither PRE_PROBE nor RESOLVER. It exists so a LIVE/addressable
-// socket-only citizen is never mislabeled the pre-probe `bad-target` (absent) lie.
+// #50 C4: record-less-socket — a gid-shaped non-symlink control socket with NO
+// meta-record. The record is the sole address authority, so this is refused for
+// EVERY intent BEFORE any lock/probe (pre-probe, null liveness) as a migration/
+// diagnostic state — never the `bad-target` (absent) lie, and never dispatchable
+// (the retired A1 socket-only acceptance and its post-probe
+// socket-only-no-resume-authority guard are gone from the enum).
 ok(
-	"taxonomy: socket-only-no-resume-authority is in the enum",
-	(ENTWURF_V2_REJECT_REASONS as readonly string[]).includes("socket-only-no-resume-authority"),
+	"taxonomy: record-less-socket is in the enum",
+	(ENTWURF_V2_REJECT_REASONS as readonly string[]).includes("record-less-socket"),
+);
+ok("？6: record-less-socket is pre-probe (#50 C4 — no citizen, no probe)", isPreProbeReject("record-less-socket"));
+ok(
+	"taxonomy: record-less-socket is NOT a resolver reason (target-resolution stage, not a table cell)",
+	!(RESOLVER_REJECT_REASONS as readonly string[]).includes("record-less-socket"),
 );
 ok(
-	"？6: socket-only-no-resume-authority is post-probe (A1 guard — runs after lock+probe)",
-	!isPreProbeReject("socket-only-no-resume-authority"),
-);
-ok(
-	"taxonomy: socket-only-no-resume-authority is NOT a resolver reason (allowResume:false guard, not a table cell)",
-	!(RESOLVER_REJECT_REASONS as readonly string[]).includes("socket-only-no-resume-authority"),
+	"taxonomy: the retired socket-only-no-resume-authority is GONE from the enum (#50 C4)",
+	!(ENTWURF_V2_REJECT_REASONS as readonly string[]).includes("socket-only-no-resume-authority"),
 );
 
 // rejectObservedLivenessWellFormed: pre-probe ⇒ null only; post-probe ⇒ value only.
@@ -504,12 +506,7 @@ for (const r of PRE_PROBE_REJECT_REASONS) {
 		);
 	}
 }
-for (const r of [
-	...RESOLVER_REJECT_REASONS,
-	...NATIVE_PUSH_REJECT_REASONS,
-	"untrusted-fail-fast" as const,
-	"socket-only-no-resume-authority" as const,
-]) {
+for (const r of [...RESOLVER_REJECT_REASONS, ...NATIVE_PUSH_REJECT_REASONS, "untrusted-fail-fast" as const]) {
 	ok(
 		`？6: well-formed('${r}', null) = false (post-probe must carry a value)`,
 		!rejectObservedLivenessWellFormed(r, null),
@@ -570,12 +567,7 @@ for (const r of PRE_PROBE_REJECT_REASONS) {
 		passed++;
 	}
 }
-for (const r of [
-	...RESOLVER_REJECT_REASONS,
-	...NATIVE_PUSH_REJECT_REASONS,
-	"untrusted-fail-fast" as const,
-	"socket-only-no-resume-authority" as const,
-]) {
+for (const r of [...RESOLVER_REJECT_REASONS, ...NATIVE_PUSH_REJECT_REASONS, "untrusted-fail-fast" as const]) {
 	assert.throws(
 		() => makeRejectReceipt(r, null),
 		/ill-formed reject/,

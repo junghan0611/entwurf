@@ -21,6 +21,7 @@
  */
 
 import assert from "node:assert/strict";
+import { formatSenderInfoBlock } from "../pi-extensions/lib/entwurf-control-rpc.ts";
 import type { DispatchInput } from "../pi-extensions/lib/entwurf-v2-decider.ts";
 import type { AcquireLockResult, LockClaim } from "../pi-extensions/lib/entwurf-v2-lock.ts";
 import {
@@ -49,15 +50,13 @@ const CONTROL_DIR = "/fake/ctl";
 
 function identity(backend: MetaIdentity["backend"], gardenId = GID): MetaIdentity {
 	return {
-		schemaVersion: 2,
+		schemaVersion: 3,
 		gardenId,
 		backend,
 		nativeSessionId: "n",
 		cwd: "/home/junghan/repos/gh/entwurf",
 		model: null,
 		transcriptPath: null,
-		parentGardenId: null,
-		isEntwurf: false,
 		createdAt: "2026-06-13T01:00:00.000Z",
 		recordUpdatedAt: "2026-06-13T01:00:00.000Z",
 	};
@@ -106,6 +105,7 @@ const SPAWN_PLAN: SpawnBgPlan = {
 	sessionId: GID,
 	cwd: "/home/junghan/repos/gh/entwurf",
 	prompt: "p",
+	wantsReply: true,
 	launchArgs: [],
 	expectedSocketPath: `${CONTROL_DIR}/${GID}.sock`,
 	observeTimeoutMs: 30_000,
@@ -143,6 +143,12 @@ function makeSpiedFactory(over: {
 	rpc?: "success" | "dead-throw";
 	classifyDead?: boolean;
 	spawnChildThrows?: boolean;
+	/** #50 C3 — capture the plan reaching the spawn factory's resolveIdentity, then
+	 * stop the resume (throw → spawn-start-failed) so the prompt is observable
+	 * without a watcher. */
+	spawnResolveCapture?: (plan: SpawnBgPlan) => void;
+	/** #50 C3 — a caller with no authoritative sender (senderProvider → undefined). */
+	noSender?: boolean;
 	/** the native-push adapter probe result (only reached on a native-push backend). */
 	nativePushProbe?: NativePushProbeResult;
 	/** SE-2 2d-3 — the target's receiver presence marker: "active" (matches identity,
@@ -160,7 +166,10 @@ function makeSpiedFactory(over: {
 		nativePushSend: [],
 	};
 	const opts: ProductionEntwurfV2Opts = {
-		senderProvider: () => ({ sessionId: "self", agentId: "pi/x", cwd: "/cwd", timestamp: "2026-06-13T00:00:00.000Z" }),
+		senderProvider: () =>
+			over.noSender
+				? undefined
+				: { sessionId: "self", agentId: "pi/x", cwd: "/cwd", timestamp: "2026-06-13T00:00:00.000Z" },
 		lockDir: LOCK_DIR,
 		sessionsDir: SESSIONS_DIR,
 		mailboxDir: MAILBOX_DIR,
@@ -232,6 +241,12 @@ function makeSpiedFactory(over: {
 				spawnChild: over.spawnChildThrows
 					? () => {
 							throw new Error("spawn boom");
+						}
+					: undefined,
+				resolveIdentity: over.spawnResolveCapture
+					? (plan) => {
+							over.spawnResolveCapture?.(plan);
+							throw new Error("capture stop");
 						}
 					: undefined,
 			},
@@ -346,6 +361,45 @@ async function main(): Promise<void> {
 		);
 	}
 
+	// ── C2: #50 C3 — the dormant rail carries the caller edge (<sender_info>) ──
+	{
+		// The spawn-bg prompt reaching the factory is the plan prompt PLUS the same
+		// <sender_info> block the live socket rail's receiver synthesizes — one
+		// formatter, one shape, so a resumed citizen never wakes to an anonymous task.
+		const cap: { prompt: string | null } = { prompt: null };
+		const { deps } = makeSpiedFactory({
+			spawnResolveCapture: (plan) => {
+				cap.prompt = plan.prompt;
+			},
+		});
+		const res = await deps.executor.resumeSpawnBg(SPAWN_PLAN, lockClaim());
+		ok("C2: capture-stop surfaced as spawn-start-failed (released)", res.kind === "spawn-start-failed");
+		// #50 F2: the plan's wantsReply threads into the SAME formatter call the live
+		// rail's receiver makes, so wants_reply:true survives the dormant rail.
+		const expected =
+			SPAWN_PLAN.prompt +
+			formatSenderInfoBlock(
+				{ sessionId: "self", agentId: "pi/x", cwd: "/cwd", timestamp: "2026-06-13T00:00:00.000Z" },
+				SPAWN_PLAN.wantsReply,
+			);
+		ok("C2: spawn-bg prompt = task + the SHARED <sender_info> block", cap.prompt === expected);
+		ok("C2: wants_reply rides the dormant <sender_info> (#50 F2)", cap.prompt?.includes('"wants_reply":true') === true);
+		ok("C2: the plan object handed to the executor is NOT mutated", SPAWN_PLAN.prompt === "p");
+	}
+	{
+		// No authoritative sender → the prompt goes out untouched (never a half-empty
+		// or fabricated envelope).
+		const cap: { prompt: string | null } = { prompt: null };
+		const { deps } = makeSpiedFactory({
+			noSender: true,
+			spawnResolveCapture: (plan) => {
+				cap.prompt = plan.prompt;
+			},
+		});
+		await deps.executor.resumeSpawnBg(SPAWN_PLAN, lockClaim());
+		ok("C2b: no sender → raw prompt (no fabricated envelope)", cap.prompt === "p");
+	}
+
 	// ── D: meta-mailbox hand enqueues onto the wired dirs ─────────────────────
 	{
 		const { deps, spies } = makeSpiedFactory({});
@@ -421,50 +475,43 @@ async function main(): Promise<void> {
 		ok("E3: drifted marker → enqueue NEVER called (presence ≠ identity match)", spies.enqueue.length === 0);
 	}
 
-	// ── F: A1 narrow (0.11.0) — record-LESS live pi control socket → socket-only target ──
+	// ── F: #50 C4 — record-LESS control socket → pre-probe record-less-socket reject ──
 	// resolveTarget finds no meta-record, does ONE record-side lstat (inspectPath), sees a
-	// non-symlink socket → socketOnlyPi. fire-and-forget then routes to control-socket execute
-	// (in-domain: acquired under the wired lockDir). The same presence hint with a symlink /
-	// absent socket stays bad-target; owned-outcome on a LIVE socket-only target rejects
-	// owned-live-no-autosend POST-probe (lock acquired), never the pre-lock bad-target lie.
-	{
+	// non-symlink socket → recordLessSocket. EVERY intent then rejects pre-probe as
+	// `record-less-socket` (migration/diagnostic state): no lock, no under-lock probe, no
+	// plan — the record is the sole address authority. The same presence hint with a
+	// symlink / absent socket stays plain bad-target (never trust a symlink).
+	for (const intent of ["fire-and-forget", "owned-outcome"] as const) {
 		const { deps, spies } = makeSpiedFactory({ recordExists: false, inspectKind: "socket-file", probe: "alive" });
-		const decision = await deps.decide({ target: GID, intent: "fire-and-forget", message: "m" });
+		const decision = await deps.decide({ target: GID, intent, message: "m" });
 		ok(
-			"F: recordless + live socket → control-socket execute (socket-only pi)",
-			decision.kind === "execute" && decision.plan.transport === "control-socket",
+			`F: recordless + live socket + ${intent} → reject record-less-socket (pre-probe)`,
+			decision.kind === "reject" &&
+				decision.receipt.reason === "record-less-socket" &&
+				decision.receipt.observedLiveness === null,
 		);
-		ok("F: resolveTarget did ONE record-side lstat (presence hint)", spies.inspectPath.length === 1);
-		ok(
-			"F: acquired under the wired lockDir (in-domain)",
-			spies.acquire.length === 1 && spies.acquire[0].dir === LOCK_DIR,
-		);
+		ok(`F: resolveTarget did ONE record-side lstat (presence hint, ${intent})`, spies.inspectPath.length === 1);
+		ok(`F: record-less socket is never lock-acquired (${intent})`, spies.acquire.length === 0);
 	}
 	{
-		// record absent + a SYMLINKED socket → NOT promoted (never trust a symlink) → bad-target.
+		// record absent + a SYMLINKED socket → NOT counted (never trust a symlink) → bad-target.
 		const { deps, spies } = makeSpiedFactory({ recordExists: false, inspectKind: "address-conflict" });
 		const decision = await deps.decide({ target: GID, intent: "fire-and-forget", message: "m" });
-		ok("F: recordless + symlinked socket → reject bad-target", decision.kind === "reject");
-		ok("F: symlinked socket-only is never lock-acquired", spies.acquire.length === 0);
+		ok(
+			"F: recordless + symlinked socket → reject bad-target",
+			decision.kind === "reject" && decision.receipt.reason === "bad-target",
+		);
+		ok("F: symlinked record-less socket is never lock-acquired", spies.acquire.length === 0);
 	}
 	{
 		// record absent + NO socket at all → plain bad-target.
 		const { deps, spies } = makeSpiedFactory({ recordExists: false, inspectKind: "absent" });
 		const decision = await deps.decide({ target: GID, intent: "fire-and-forget", message: "m" });
-		ok("F: recordless + no socket → reject bad-target", decision.kind === "reject");
-		ok("F: no-socket target is never lock-acquired", spies.acquire.length === 0);
-	}
-	{
-		// owned-outcome on a record-less LIVE socket → owned-live-no-autosend (honest table
-		// verdict), NOT the `bad-target` lie. It runs the in-domain path (lock acquired + probed),
-		// then the table rejects owned×live — a live citizen is never reported absent.
-		const { deps, spies } = makeSpiedFactory({ recordExists: false, inspectKind: "socket-file", probe: "alive" });
-		const decision = await deps.decide({ target: GID, intent: "owned-outcome", message: "do X" });
 		ok(
-			"F: socket-only + owned-outcome(live) → reject owned-live-no-autosend (NOT bad-target)",
-			decision.kind === "reject" && decision.receipt.reason === "owned-live-no-autosend",
+			"F: recordless + no socket → reject bad-target",
+			decision.kind === "reject" && decision.receipt.reason === "bad-target",
 		);
-		ok("F: socket-only owned-outcome(live) acquires a lock (in-domain, no pre-lock lie)", spies.acquire.length === 1);
+		ok("F: no-socket target is never lock-acquired", spies.acquire.length === 0);
 	}
 
 	console.log(`\ncheck-entwurf-v2-production: ${passed} checks passed`);

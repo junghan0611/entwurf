@@ -40,15 +40,13 @@ const GID_B = "20260611T222222-bbbbbb";
 function rec(gardenId: string, over: Partial<MetaIdentity> = {}): string {
 	const backend: MetaBackendV2 = "pi";
 	return serializeMetaIdentity({
-		schemaVersion: 2,
+		schemaVersion: 3,
 		gardenId,
 		backend,
 		nativeSessionId: `n-${gardenId}`,
 		cwd: "/x",
 		model: null,
 		transcriptPath: null,
-		parentGardenId: null,
-		isEntwurf: false,
 		createdAt: "2026-06-11T00:00:00.000Z",
 		recordUpdatedAt: "2026-06-11T00:00:00.000Z",
 		...over,

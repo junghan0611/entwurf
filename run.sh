@@ -73,26 +73,27 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # ONE confident install: pnpm install + install + meta-bridge (if native harness) + v2 install smoke (LIVE substrate = release-gate)
-  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, retargeted smoke-session-id-name, RGG) + the ACP plugin acceptance floor (11 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). LIVE-gated MUST steps HONEST-SKIP when LIVE!=1 (a CUT needs LIVE=1, SKIP=0). --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
+  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). LIVE-gated MUST steps HONEST-SKIP when LIVE!=1 (a CUT needs LIVE=1, SKIP=0). --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
   ./run.sh check-entwurf-bridge-pi-free # deterministic gate (0.12.1 A, IN pnpm check): static — bridge index eager value-import closure must carry no @earendil-works/pi-* (type-only + dynamic import excluded); proves the meta-bridge boots pi-free
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
-  ./run.sh check-entwurf-session-identity # deterministic gate for locked garden session identity & name grammar (sessionId/buildSessionName/parse/collision), no API
-  ./run.sh check-meta-session          # deterministic gate (#30 step 2): meta-record mint/serialize/parse + scanByNativeId body-authority + idempotent decideUpsert, no API
-  ./run.sh check-meta-record-v2        # deterministic golden gate (0.11 Stage 0 step 3A): synthetic v1 fixture → normalizeMetaIdentity v2 identity golden + dual-read version fences, no API
+  ./run.sh check-entwurf-session-identity # deterministic gate for record-era session identity (garden-id grammar + readSessionIdentity: first-model_change authority, name-blind — #50 C3), no API
+  ./run.sh check-meta-session          # deterministic gate (#30 step 2, V3-only): fs store — idempotent decideUpsert/upsertMetaSession + mailbox enqueue/read + receipt state, no API
+  ./run.sh check-meta-v3-record        # deterministic gate (#50 hard cut): V3 record contract — canonical serialize/round-trip/mint, parseMetaRecordAny V3-only naming the M1 command, strayness inversion production half, no API
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_BACKENDS_V2 + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
+  ./run.sh smoke-pi-attach            # deterministic gate (#50 C2 checkpoint + C3 ACP tail): a pi session attaches as a V3 meta-record citizen (backend:"pi"), the gardenId is the RECORD's not pi's session id, the control socket is keyed on it, a re-open ATTACHES to the same address (never a second mint), the BUILT DIST ENTRY driven over MCP stdio lists the citizen + delivers entwurf_v2 to that socket with an RPC ack, and the ACP identity chain lands a send AS the host record (enrichMcpServersWithEnvelope env → bridge sender = host gardenId). mkdtemp-isolated; the live store is never read
   ./run.sh check-bridge-delivery      # deterministic gate (IN pnpm check): demo scene 3 recovered — seed strict meta-sender + armed receiver citizens in an isolated temp world, scrub ambient pi/sender carriers, drive the BUILT DIST ENTRY over MCP stdio through a real tools/call entwurf_v2, assert the .msg landed under the seeded sender + doorbell poked. DELIVERS through the artifact, not from source. ENTWURF_DELIVERY_SUBJECT=<launcher> replays the same scene against another consumer artifact (check-pack-install passes the npm-installed bin). No model/network/cost; stale or missing dist FAILS
-  ./run.sh check-meta-dual-read        # deterministic gate (0.11 Stage 0 step 3D-1): v2 write shape (serializeMetaIdentity) + dual-read dispatcher (parseMetaRecordAny/parseMetaIdentity) + write→read round-trip, pure, no API
+  ./run.sh check-meta-migration-readers # deterministic gate (#50 hard cut): frozen v1/v2 readers + version fences + strict v2 keyset + meta-migration import allowlist, no API
+  ./run.sh check-meta-migrate-v3       # deterministic gate (#50 M1): the REAL operator CLI driven as a subprocess over synthetic stores — v1 receipts→mailbox state + field map, mixed-store idempotence (no-op takes no backup), refusal preflight (malformed/stray-key/half-migrated/drift/duplicate = zero writes), parentage disposition (--drop-parentage), verify non-V3=0, restore round-trip. No API
   ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
   ./run.sh check-meta-receiver-marker # deterministic gate (SE-2): receiver marker round-trip/start-key/provenance, UserPromptSubmit cannot mint presence, reader does not gate on record existence — marker SEMANTICS only; launch topology moved to check-hook-launch-topology
   ./run.sh check-hook-launch-topology # #51 gate 1: shipped hooks.json is exec form through hook-launch.sh, launcher is loud on an empty argv (older Claude's silent args drop), exec preserves the pid so the hook's parent is Claude, and a space/$/backtick plugin path survives as one argv element
-  ./run.sh check-meta-migration        # deterministic gate (0.11 Stage 0 step 3D-4 commit2): v1→v2 delivery-receipt migration (per-field state-wins, 3 timestamps, no-op when nothing to fill) + crash-order inside upsert (migrate before v2 rewrite; drift throws with record still v1), no API
-  ./run.sh check-meta-dual-consumers   # deterministic gate (0.11 Stage 0 step 3D-4): delivery-agnostic dual-read seam — readMetaIdentityByGardenId + scanIdentityByNativeId read v1 AND v2, cross-schema duplicate = ambiguity throw (G1); v1-only raw readers remain for v1-fixture gates, no API
-  ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const), slot stays (3D-4), no API
+  ./run.sh check-meta-identity-consumers # deterministic gate (#50 hard cut): V3-only consumer seam — read/scan by body, pre-cut skipped via onSkip, G1 duplicate ambiguity throw, no API
+  ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const); the record.delivery slot 3D-3 preserved was deleted by 3D-4, no API
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
   ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
   ./run.sh check-entwurf-v2-contract   # deterministic gate (0.11 Stage 0 step 4-pre, 동결결정 10 + Fable R1-R5): FROZEN entwurf_v2 contract — R1 backend liveness domain (pi only; claude/codex/agy=unsupported, not folded), 6-cell intent×liveness table (single verdict, 2 allow/4 reject), N1 indeterminate-no-spawn, Q2 owned-live-no-autosend, R3 table↔receipt round-trip, R5 taxonomy, schema↔types drift; pure, no API
@@ -109,13 +110,13 @@ Usage:
   ./run.sh check-entwurf-v2-spawn-production # deterministic gate (0.11 Stage 0 step 5c-3c): production SpawnBgResumeDeps factory (makeProductionSpawnBgResumeDeps) wiring the 5c-3a watcher's 6 IO seams — no real pi/socket/timer (that=opt-in smoke-entwurf-v2-spawn-live, OUT of pnpm check). socketWatchVerdict: address-conflict→forged (reject, never wait)/alive→alive/dead·indeterminate→wait; spawnChild builds v2-control argv (--entwurf-control, no --no-extensions, -p+prompt, --approve, cwd authority); awaitSocketAlive connectable→resolve / symlink→reject without connect / dead→wait→alive / abort-clears; awaitChildExit code + listener cleanup; awaitTimeout schedule + abort-clear; killChild=SIGTERM; proc-less child fails loud
   ./run.sh smoke-entwurf-v2-spawn-live # LIVE phase gate (0.11 Stage 0 step 5c-3c, D5) — OUT of pnpm check, needs LIVE=1. Exercises the production SpawnBgResumeDeps against REAL OS objects: S1 real unix socket → awaitSocketAlive resolves (real lstat+probe), symlink→forged, absent→abort settles; S2 real child → spawn-event resolve + SIGTERM kill + exit-code capture; S3 watcher integration → real timeout→kill→child-exited→release ×1. Does NOT spawn a real pi resume (that=5d matrix). Run before 5d: LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live
   ./run.sh smoke-entwurf-v2-spawn-resume-live # 0.11.0 (A) ACCEPTANCE gate — OUT of pnpm check, needs LIVE=1. The FULL spawn-bg resident lifecycle: mint backend=pi identity → seed a REAL dormant pi session (one-shot into ~/.pi/agent/sessions) → runEntwurfV2(owned-outcome) routes dormant→spawn-bg resume → a REAL detached pi --entwurf-control child stands its socket up, resumes, DOES a model turn. Asserts executed/spawn-bg/socket-alive/released + lock released ×1 + no lock file + pid alive + socket connectable + resume USER & assistant OK nonces in the session JSONL. Model-in-loop IN. The gate v1 deprecation (0.12) is predicated on. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live
-  ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b socket-only (record-less live pi → control-socket sent / owned→bad-target, A1 narrow), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
+  ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b record-less socket (#50 C4: live record-less pi → EVERY intent rejected pre-probe record-less-socket, no lock, rendered hint names record authority + M1), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
   ./run.sh smoke-agy-native-push-live  # 봉인 8 LIVE acceptance for the native-push (agy) rail — OUT of pnpm check, needs LIVE=1 + AGY_CONVERSATION_ID (a live agy conversation). Drives the REAL antigravity adapter + register core + runEntwurfV2 (production deps): doctor-static preflight (dangling→FAIL, the ③ gate), probe route, register create/attach idempotency, fire→native-push delivered, post-send re-probe (D7 partial), owned-outcome→native-push-no-resume-authority, bogus-conv→native-push-probe-indeterminate. Meta-store isolated to a temp dir (only the agy round-trip is real; no real-store residue). LIVE=1 AGY_CONVERSATION_ID=<convId> ./run.sh smoke-agy-native-push-live
-  ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b pi 4-value, facts-only keyset; union: PeerFact+SocketOnlyFact by gardenId, dormant→dead, F3 indeterminate preserved, non-pi+socket fail-loud; pure, no IO
+  ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b pi 4-value, facts-only keyset; union: PeerFact + RecordLessSocketFact by gardenId (#50 C4: record-less socket = diagnostic subject, gid+liveness only), dormant→dead, F3 indeterminate preserved, non-pi+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-listing          # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4a): META-STORE axis listAllMetaIdentities — explicit-partial: parse failure / body-filename drift → explicit {filename,message} error (verbatim, no synthetic fields), valid records still listed (corrupt doesn't blind); mode strict throws / collect partial; entries/readRecord injected, no IO
   ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — listAllMetaIdentities→scanSocketProbes→pre-quarantine non-pi/socket conflicts→resolveFactList(clean)→{facts,diagnostics}; C-원칙: expected corruption (parse/collision)→diagnostics (listing survives), impossible invariant (dup/unprobed)→throw; collision quarantines BOTH PeerFact+socket; deps injected, no IO
-  ./run.sh check-entwurf-peers-surface # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4c): MCP entwurf_peers RENDER renderEntwurfPeers — legacy `sessions` = projection of facts (alive only, no 2nd scan), socketPath via controlSocketPath (SSOT), count=projection length, three distinct arrays, NO verb-routing key (JSON deep scan) NOR word (text), diagnostics both surfaces, empty→(none), unsupported shown, enrich→(not enriched); WIRING guard: bridge calls provider+render, getLiveSessions gone; facts fabricated, no IO
+  ./run.sh check-entwurf-peers-surface # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4c): MCP entwurf_peers RENDER renderEntwurfPeers (#50 C4) — payload keyset exactly {peers, diagnostics}; FORBIDDEN keys sessions/socketOnly/controlDir/socketPath/count + no .sock in text (socket is transport, never identity); record-less socket = aggregated record-less-socket diagnostic (F8, liveness-keyed message, alive names M1); NO verb-routing key (JSON deep scan) NOR word (text), diagnostics both surfaces, empty→(none), unsupported shown; WIRING guard: both surfaces call provider+render, getLiveSessions + /entwurf-sessions gone; facts fabricated, no IO
   ./run.sh check-entwurf-self-address # deterministic gate (SE-1/SE-2 slice 1): self-addressability honesty predicate computeSelfAddressability — pi replyable ⟺ live socket; meta ⟺ recordBacked ∧ ownerAlive ∧ watchArmed (regression-proof record-present rows); SOURCE GUARD buildStrictPiSenderEnvelope drops hardcoded replyable:true + existsSync-probes socket, entwurf_self renders alive vs expected. meta watchArmed wired in slice 2 (same release block)
   ./run.sh check-entwurf-deliverability # deterministic gate (SE-1/SE-2 slice 2c): conversational-mailbox deliverability predicate — computeMetaReceiverActive (recordBacked ∧ ownerAlive ∧ watchArmed) + mailboxConversationalDeliverable (self-fetch AND active); direct-inject pi refused (SE-1), self-fetch dead/unarmed refused (SE-2); self-address shares the same atom
   ./run.sh check-entwurf-mailbox-guard # deterministic gate (SE-1/SE-2 slice 2d): guarded mailbox enqueue — PURE 0-call (undeliverable target leaves injected enqueue uncalled) + TMPDIR snapshot (refused send leaves mailbox byte-identical, accepted writes one .msg) + fact gathering from record/capability/receiver-marker
@@ -123,8 +124,7 @@ Usage:
   ./run.sh check-native-push-register # deterministic gate (봉인 5): registerNativeConversation (entwurf_register_native core) via fake adapter + isolated mkdtemp store — live probe→CREATE, re-register→ATTACH (same gid, cwd refreshed, no dup), not-live probe→REFUSE (throws, no record), receiver-marker abstinence (보정① source guard)
   ./run.sh check-agy-sender-identity # deterministic gate (#46 sender lane): WHO is calling the bridge — real agy hook as a child process writes an antigravity sender marker keyed by its PARENT pid (never on upsert failure), and resolveTrustedMetaSenderIdentity over isolated stores yields 0→null / 1→identity on EITHER backend / two distinct live identities on one owner pid→THROW (never guess, never downgrade to anonymous). This is what turns an agy send from external-mcp/unknown-host into a replyable garden citizen
   ./run.sh check-package-source-routing # deterministic gate (#29): package-source -> install-root mapping + fail-fast routing (local/git/npm/missing/project/no-source × local+remote, self-root, resume), no backend
-  ./run.sh smoke-session-id-name      # live 3-turn substrate smoke (Phase 3a): Pi 0.78 --session-id/--name through the bridge — header id/cwd, session_info name, append-not-recreate, spawn-only name, wrong-cwd footgun evidence
-  ./run.sh new-session-id             # print one fresh garden-native session id for operator launchers (--session-id)
+  ./run.sh new-session-id             # print one fresh garden id from the generateSessionId SSOT (#50 C2: no launcher injection — the record layer is the consumer; pi mints its own session id)
   ./run.sh smoke-resident-garden-guard # live resident --entwurf-control garden guard (negative 0-token; SMOKE_RGG_POSITIVE=1 for positive)
   ./run.sh smoke-meta-async-drift     # 1.0.0 meta-bridge step 1: drift sentinel — version pins + Claude binary undocumented-behavior markers (LIVE=1 adds plugin watch-arm probe)
   ./run.sh smoke-meta-honesty         # 1.0.0 meta-bridge: honesty regression gate (#30 blockers) — doorbell counts ALL msgs honestly + hook logs failures as ERROR (best-effort, no scream). Offline/deterministic (deps: bash+node+python3)
@@ -152,16 +152,17 @@ Usage:
   ./run.sh uninstall-agy-hooks        # honest inverse of install-agy-hooks from install-state
   ./run.sh doctor-agy-hooks           # fail-loud doctor for agy hooks.json imprint wiring
   ./run.sh meta-bridge-prune          # 1.0.0 meta-bridge Phase 4: LISTING-ONLY store hygiene — classify orphan/stale/ambiguous/keep, print manual rm commands, delete NOTHING ([dir] [--ttl-days N])
+  ./run.sh meta-bridge-migrate-v3 <migrate|verify|restore>  # #50 M1 one-shot store migration (the verb every v3-only rejection names): migrate [--drop-parentage] = backup + v1/v2→v3 + verify non-V3=0; verify = read-only certification; restore <backup-dir> = rollback from the M1 backup
   ./run.sh meta-bridge-managed-keys   # 0.10.0 meta-bridge: print the SSOT of settings keys entwurf OWNS (consumers read this to stay disjoint — keyset-owner invariant)
   ./run.sh check-keyset-overlap <fragment.json...>  # 0.10.0 meta-bridge: PREVENTIVE keyset guard — fail if a consumer fragment collides with any pi-owned key (cross-repo; not in pnpm check)
   ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
   ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
-  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with 0.80.x peers + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands)
-  ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
+  ./run.sh check-upgrade-gate         # SOURCE cell of the 3-cell upgrade proof (IN pnpm check): seeds each host state an upgrading machine can be in (absent/empty/v3-only/v2-only/mixed/parentage-bearing/malformed/mixed-problem) from the FROZEN fixtures in fixtures/meta-store, then drives the real `run.sh install` / `setup` at it — pre-cut REFUSES before activation writes (persistent regular-file manifest unchanged), the refusal names the right repair order, migrate's backup holds the original fixture bytes, the retry PASSES, and parentage is only ever discarded by an explicit --drop-parentage. No model/network/cost
+  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (0.82.x) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the INSTALLED upgrade lifecycle on a seeded pre-cut host (REFUSE before activation writes / zero Claude invocations → installed migrate --drop-parentage → backup holds the frozen original bytes → non-V3=0 → install-meta-bridge PASSES)
+  ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the UPGRADE host-state matrix (clean / V3-only store bytes unchanged / pre-cut REFUSE→migrate→retry PASS / mixed REFUSE) seeded from the frozen fixtures, which arrive as a manifest-verified tar in an env var rather than a mount. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to entwurf alias
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
-  ./run.sh setup:links [--force]      # repair ~/.pi/agent/entwurf-targets.json link (use --force to replace a stale operator file or wrong symlink; a .bak is taken)
   ./run.sh remove [project-dir]       # remove entwurf entries from project .pi/settings.json (project scope only; global user-scope citizen left intact)
   ./run.sh remove-user-scope          # explicit GLOBAL inverse of install's user-scope citizen: drop entwurf from ~/.pi/agent/settings.json packages[] (affects ALL cwds — shared entry, not per-project)
 
@@ -243,6 +244,65 @@ PY
 # import (per-package "exports" maps forbid that uniformly) and NOT a bare
 # `test -d node_modules`, which a dir-move breaks at the symlink-store level
 # while the top-level dir still looks present.
+# The pre-cut store gate, in one place (#50 M1 / #51 upgrade lane). Every
+# activation surface this repo owns wires up V3-ONLY readers (parse, birth,
+# peers, self, v2, inbox, store-doctor). On a host whose meta-record store still
+# holds v1/v2 records, activating them produces a host that installs clean,
+# validates clean, and then rejects at RUNTIME — the same "healthy install that
+# never works" class the Claude floor gate exists to prevent, and the reason an
+# existing development host cannot simply pull this cut and re-setup.
+#
+# READ-ONLY by construction: it asks the migrate command's own `verify` verb and
+# reports. It never migrates, and it never passes --drop-parentage — discarding
+# a parentage value is the operator's conscious act (LOCKED PROTOCOL 5/6/7), not
+# an install side effect.
+#
+# The verdict is delegated rather than re-derived: store resolution (env +
+# default) and the aggregated non-V3 count live in the migrate command, and a
+# second implementation here would be a second truth that drifts. An absent
+# store and a v3-only store both exit 0, so a clean host and an
+# already-migrated host need no special case.
+#
+# WHAT THIS DOES NOT CLAIM: it is a preflight, not a lock. A session that writes
+# a record between this check and the writes that follow is not prevented — the
+# contract this proves is the ordering on a QUIESCED host. The rollout procedure
+# for a host whose settings point straight at a checkout (quiesce sessions →
+# pull → migrate → setup) is the operational half, and it lives in the README.
+preflight_v3_store() {
+  local surface="$1" verdict
+  # A tree carrying run.sh but not scripts/ is a broken checkout, not a host with
+  # a bad store. Say so, rather than letting node's MODULE_NOT_FOUND stack stand
+  # in for a verdict this gate never reached.
+  if [ ! -f "$REPO_DIR/scripts/meta-bridge-migrate-v3.ts" ]; then
+    fail "[$surface] cannot certify the meta-record store: $REPO_DIR/scripts/meta-bridge-migrate-v3.ts is missing (incomplete checkout or package)."
+    exit 1
+  fi
+  if verdict="$(run_ts scripts/meta-bridge-migrate-v3.ts verify 2>&1)"; then
+    echo "[$surface] meta-record store certifies V3-only ($(printf '%s\n' "$verdict" | grep -o 'non-V3=[0-9]*' | head -1))"
+    return 0
+  fi
+  printf '%s\n' "$verdict" >&2
+  fail "[$surface] refused BEFORE any write: this host's meta-record store did not certify as V3-only (verdict above)."
+  echo "       Every surface this step activates is V3-only, so proceeding would wire a host that installs clean and then rejects at runtime." >&2
+  # The prescription must match the DIAGNOSIS. Pre-cut v1/v2 records are what M1
+  # converts; malformed / unreadable / ambiguous records are problems the migrate
+  # verb refuses to cross. Those axes can coexist, so a mixed-problem store must
+  # repair its problems FIRST and migrate only afterwards. Printing "run migrate"
+  # as the immediate action there hands an operator mid-blackout a command that
+  # cannot help, which is the failure mode this whole gate exists to avoid.
+  local has_problems=1 has_precut=1
+  printf '%s\n' "$verdict" | grep -q ' / 0 problem(s)' && has_problems=0
+  printf '%s\n' "$verdict" | grep -q 'pre-cut v[0-9][0-9]* record' && has_precut=0
+  if [ "$has_problems" -eq 0 ] && [ "$has_precut" -eq 0 ]; then
+    echo "       Nothing was written. Migrate the store with the command the verdict names, then re-run this step." >&2
+  elif [ "$has_problems" -ne 0 ] && [ "$has_precut" -eq 0 ]; then
+    echo "       Nothing was written. Repair the reported problems FIRST — migration refuses to start while any remain. After repair, if the reported pre-cut records remain, run the migrate command named above, then re-run this step." >&2
+  else
+    echo "       Nothing was written. This is NOT a migration case — the verdict reports records the store migration cannot convert (malformed, unreadable, or ambiguous). Resolve those, then re-run this step." >&2
+  fi
+  exit 1
+}
+
 preflight_dep_integrity() {
   command -v node >/dev/null 2>&1 || { fail "node not on PATH — cannot verify repo dependency integrity"; exit 1; }
   # Each wired pi-extension / MCP bridge / ACP backend root-imports its bundled
@@ -352,6 +412,17 @@ install_local_package() {
   project_dir=$(normalize_project_dir "$1")
   agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
   preflight_dep_integrity
+  # Pre-cut store gate — repeated here on purpose. `setup` already gated, but
+  # `run.sh install` reaches this function directly, and this is the step that
+  # registers entwurf in project + USER scope packages[] (= the V3-only
+  # extensions load from any cwd). A gate only at the setup entrypoint would be
+  # bypassed by the documented direct call.
+  #
+  # It sits AFTER dependency integrity because both are read-only and a broken
+  # checkout has to fail as a broken checkout: this gate runs a script out of
+  # scripts/, so on a tree that has run.sh and nothing else it would otherwise
+  # preempt the dep verdict with a less true one. Still ahead of every write.
+  preflight_v3_store install
   # Fail BEFORE any settings write if either target config already has a corrupt
   # shape. The packages[] SSOT and provider writer run in two separate steps, so
   # without this preflight a bad entwurfProvider could leave a half-installed
@@ -366,7 +437,6 @@ install_local_package() {
   # bin `entwurf-bridge` (ownership-classified: absent/managed-current/managed-legacy adopt, a
   # true user-override is left untouched) + prune legacy bundles. project remove is the inverse.
   python3 "$REPO_DIR/scripts/register-pi-provider.py" install "$project_dir/.pi/settings.json" "$REPO_DIR" --scope project
-  ensure_agent_dir_symlinks
   register_user_scope_citizen
 }
 
@@ -411,87 +481,10 @@ remove_user_scope_citizen() {
   python3 "$REPO_DIR/scripts/register-pi-provider.py" remove "$agent_dir/settings.json" "$REPO_DIR" --scope user --state "$pp_state"
 }
 
-# Ensure agent-level resources that entwurf code reads from
-# ~/.pi/agent/ are wired up at install time. Currently:
-#   - entwurf-targets.json — pi-extensions/lib/entwurf-core.ts reads
-#     ~/.pi/agent/entwurf-targets.json. The package ships the canonical
-#     version at $REPO_DIR/pi/entwurf-targets.json. Without this symlink
-#     any entwurf tool call throws EntwurfRegistryError (lazy load — no
-#     surface during plain `pi --model ...` runs but blocks delegation
-#     immediately when the operator first calls entwurf).
-#
-# Fail-fast policy (added v0.5.0): drift between canonical and the
-# operator's link/file is treated as a bug to fix, not noise to preserve.
-# The v0.4.x oracle install regression came from a stale operator-copied
-# entwurf-targets.json that previous installs silently kept "as operator
-# file"; the only signal was a sentinel failure several minutes later.
-#
-# Two explicit exits are honored:
-#   1. `./run.sh setup:links --force` — back up + overwrite with canonical
-#   2. `ENTWURF_TARGETS_PATH=/path/to/custom.json` — tells entwurf-core
-#      to read elsewhere, freeing this slot from any policy obligation
-#
-# Idempotent for the happy path. Lazy registry load means a corrected
-# file/symlink is picked up on the next entwurf call without restarting
-# pi or the MCP bridge process.
-ensure_agent_dir_symlinks() {
-  local agent_dir="$HOME/.pi/agent"
-  mkdir -p "$agent_dir"
-
-  local target="$REPO_DIR/pi/entwurf-targets.json"
-  local link="$agent_dir/entwurf-targets.json"
-  local force="${1:-}"
-
-  if [ ! -f "$target" ]; then
-    fail "canonical registry missing at $target — repo install is broken"
-    exit 1
-  fi
-
-  if [ -L "$link" ]; then
-    local current
-    current=$(readlink "$link")
-    if [ "$current" = "$target" ]; then
-      return 0  # already correct, silent
-    fi
-    if [ "$force" = "--force" ]; then
-      rm -f "$link"
-      ln -s "$target" "$link"
-      echo "install: relinked $link -> $target (was -> $current)"
-      return 0
-    fi
-    fail "stale entwurf-targets symlink at $link"
-    echo "       points to: $current" >&2
-    echo "       expected:  $target" >&2
-    echo "       Fix with one of:" >&2
-    echo "         ./run.sh setup:links --force      # relink to canonical" >&2
-    echo "         export ENTWURF_TARGETS_PATH=$current  # honor your override explicitly" >&2
-    exit 1
-  fi
-
-  if [ -e "$link" ]; then
-    if cmp -s "$link" "$target"; then
-      return 0  # operator copy is byte-identical to canonical, silent
-    fi
-    if [ "$force" = "--force" ]; then
-      local backup="${link}.bak.$(date +%Y%m%d-%H%M%S)"
-      mv "$link" "$backup"
-      ln -s "$target" "$link"
-      echo "install: replaced stale $link with symlink -> $target (backup: $backup)"
-      return 0
-    fi
-    fail "stale entwurf-targets file at $link (drifts from canonical)"
-    echo "       canonical: $target" >&2
-    echo "       diff (link vs canonical):" >&2
-    diff -u "$link" "$target" | sed 's/^/         /' >&2 || true
-    echo "       Fix with one of:" >&2
-    echo "         ./run.sh setup:links --force      # back up + replace with symlink to canonical" >&2
-    echo "         export ENTWURF_TARGETS_PATH=$link  # honor your file as an explicit override" >&2
-    exit 1
-  fi
-
-  ln -s "$target" "$link"
-  echo "install: linked $link -> $target"
-}
+# The ~/.pi/agent/entwurf-targets.json symlink machinery (ensure_agent_dir_symlinks
+# + the `setup:links` command) is GONE (#50 C3): the target registry it linked has
+# no reader anymore — v2 resumes record-backed citizens and never resolves a spawn
+# model from a file. An operator's existing link/copy is inert; nothing reads it.
 
 remove_local_package() {
   local project_dir
@@ -539,53 +532,53 @@ check_shell_quote() {
 }
 
 check_entwurf_session_identity() {
-  # Deterministic gate for the locked garden session identity & name grammar
-  # (NEXT.md "Locked — session identity & name grammar"): sessionId validator,
-  # buildSessionName/parseSessionName round-trip incl. `.`-bearing registry
-  # models, titleSlug canonicalization, registry exact-tuple membership, name=
-  # info-only invariants, and header-scan collision pre-check. Isolates registry
-  # + sessions base to a temp dir. No backend, no API, no spawn.
+  # Deterministic gate for the record-era session identity contract: garden-id
+  # grammar (validator/generator — the RECORD's gardenId shape), readSessionIdentity
+  # (first model_change authority, drift fail-fast, name-blind — #50 C3), and the
+  # 🪛 status label. Isolates the sessions base to a temp dir. No backend, no API,
+  # no spawn.
   run_ts scripts/check-entwurf-session-identity.ts
 }
 
 check_meta_session() {
-  # Deterministic gate for the 1.0.0 meta-bridge record authority (#30 step 2):
-  # mint/serialize/parse round-trip + crash-on-malformed, scanByNativeId lookup
-  # authority BY RECORD BODY (not filename, proven with a decoy filename in a
-  # real temp dir), idempotent existence-keyed decideUpsert + identity-drift
+  # Deterministic gate for the meta-bridge STORE authority (#30 step 2, V3-only
+  # since the #50 cut — the pure record contract moved to check-meta-v3-record,
+  # the scan/read seam to check-meta-identity-consumers): idempotent
+  # existence-keyed decideUpsert + identity-drift
   # refusal, and the pre-drilled read-receipt mutators. Pure functions; no
   # backend, no hook, no API.
   run_ts scripts/check-meta-session.ts
 }
 
-check_meta_record_v2() {
-  # Deterministic golden gate for 0.11 Stage 0 step 3A: the v1→v2 identity
-  # normalize seam. A synthetic, sanitized v1 fixture normalizes to a
-  # hand-written v2 identity literal (golden), plus dual-read version fences
-  # and v2 field-contract crashes. Reader/normalizer only — no v2 writer yet.
-  # Kept separate from check-meta-session so 3D's v1-gate rewrites leave this
-  # back-compat golden untouched. Pure functions; no backend, no hook, no API.
-  run_ts scripts/check-meta-record-v2.ts
+check_meta_v3_record() {
+  # Deterministic gate for the #50 schema hard cut: the V3 production record
+  # contract. Canonical v3 serialize + round-trip, v3 mint, parseMetaRecordAny
+  # V3-only (a pre-cut v1/v2 body throws naming the M1 operator command), and
+  # the production half of the strayness inversion (parentGardenId/isEntwurf
+  # rejected as stray). Pure functions; no backend, no hook, no API.
+  run_ts scripts/check-meta-v3-record.ts
 }
 
 check_mailbox_receipt_state() {
   # Deterministic gate for 0.11 Stage 0 step 3B: the mailbox receipt state
-  # schema + store — the new home for the read-receipt before v2 drops
-  # record.delivery (NEXT.md 고정순서 4). Pure schema round-trip + strict
-  # keyset, then the fs store (stamp → persist → read-back) in a temp mailbox
-  # dir. Schema/store only — no live enqueue/read dual-write (that is 3D). No
-  # backend, no hook, no API.
+  # schema + store — the SOLE home of the read-receipt since 3D-4 deleted
+  # record.delivery with the rest of delivery{} (#50 is V3-only, and v3 never
+  # had the field). Pure schema round-trip + strict keyset, then the fs store
+  # (stamp → persist → read-back) in a temp mailbox dir. Schema/store only —
+  # the live enqueue/read path landed in 3D-4 and is gated by
+  # check-meta-mailbox-state-write. No backend, no hook, no API.
   run_ts scripts/check-mailbox-receipt-state.ts
 }
 
 check_entwurf_capabilities() {
   # Deterministic gate for 0.11 Stage 0 step 3C: the backend capability source
-  # (pi/entwurf-capabilities.json) — the new home for wakeMode/deliveryLevel/
-  # nativeIdLabel before v2 drops them from the record (frozen decision 1).
-  # Asserts coverage == META_BACKENDS_V2 (pi included), agreement with the live
-  # META_BACKEND_DESCRIPTORS for the three existing backends (drift guard), and
-  # strict keyset/coverage/field crashes. Parser/gate only — no live routing,
-  # no record/descriptor consumer change (that is 3D). No backend, no API.
+  # (pi/entwurf-capabilities.json) — the SOLE home of wakeMode/deliveryLevel/
+  # nativeIdLabel since 3D-4 dropped delivery{} from the record (frozen decision
+  # 1; v3 never carried it). Asserts coverage == META_BACKENDS_V2 (pi included),
+  # agreement with META_BACKEND_DESCRIPTORS for the three existing backends —
+  # which since the 3D-3 cut-over survives ONLY as that drift-guard reference —
+  # and strict keyset/coverage/field crashes. Parser/gate only — the consumer
+  # seam it feeds is gated by check-meta-capability-source. No backend, no API.
   run_ts scripts/check-entwurf-capabilities.ts
 }
 
@@ -614,14 +607,46 @@ check_bridge_delivery() {
   run_ts scripts/check-bridge-delivery.ts
 }
 
-check_meta_dual_read() {
-  # Deterministic gate for 0.11 Stage 0 step 3D-1: the v2 write shape
-  # (serializeMetaIdentity) + the dual-read dispatcher (parseMetaRecordAny /
-  # parseMetaIdentity). Canonical serialize + round-trip + version dispatch +
-  # unknown-version crash. Pure functions only — no fs upsert wiring, no
-  # readMetaInbox/enqueueMetaMessage change, no record.delivery removal (3D-2/3/4).
-  # No backend, no hook, no API.
-  run_ts scripts/check-meta-dual-read.ts
+smoke_pi_attach() {
+  # The #50 C2 checkpoint gate: pi attaches as a meta-record citizen and the BUILT
+  # ARTIFACT routes that garden id to its control socket. Two halves, deliberately
+  # different in kind: the record+address half drives `birthPiCitizen` (the exact seam
+  # entwurf-control's session_start calls) so the gate is deterministic and lives in
+  # `pnpm check`; the delivery half spawns the dist entry as its own process and speaks
+  # MCP stdio (check-bridge-delivery's driver, socket-rail fixture). P4 is the one with
+  # teeth — re-opening the same pi session must ATTACH to the same gardenId, never mint
+  # a second address under peers that already hold it. P8 (#50 C3 tail) gates goal 3:
+  # the REAL ACP env enrichment carries the host record's gardenId into the bridge
+  # child, and a send from that child lands AS the host record identity. That a REAL
+  # pi process runs the seam is the LIVE axis (smoke-resident-garden-guard), not this one.
+  run_ts scripts/smoke-pi-attach.ts
+}
+
+check_meta_migration_readers() {
+  # Deterministic gate for the #50 schema hard cut: the FROZEN migration surface
+  # (meta-migration.ts). Frozen v1/v2 readers still parse their own shapes —
+  # including parentGardenId/isEntwurf, the fields V3 rejects (the frozen half of
+  # the strayness inversion) — version fences hold across all pairs, the v2
+  # keyset stays strict, and the IMPORT ALLOWLIST static scan keeps
+  # meta-migration.ts reachable only through the M1 operator surface + its gate.
+  # Pure functions + a source scan; no backend, no hook, no API.
+  run_ts scripts/check-meta-migration-readers.ts
+}
+
+check_meta_migrate_v3() {
+  # Deterministic gate for the M1 operator command (#50 → H7). Drives the REAL
+  # scripts/meta-bridge-migrate-v3.ts as a subprocess (the exact dev-clone form
+  # this file dispatches) over synthetic stores isolated via
+  # ENTWURF_META_SESSIONS_DIR/ENTWURF_META_MAILBOX_DIR: v1→v3 field map with
+  # receipts landing in mailbox state, mixed-store idempotence (v3 bytes
+  # untouched, no-op takes no backup), the refusal preflight (malformed /
+  # stray-key / half-migrated / body-filename drift / duplicate nativeSessionId
+  # = exit 1, zero writes, no backup), the parentage disposition (non-null
+  # parentGardenId / isEntwurf=true refused without --drop-parentage), verify
+  # non-V3=0 both ways, and the restore round-trip (pre-migration bytes return,
+  # aside dir kept, backup intact). Results asserted with the PRODUCTION v3
+  # reader. No backend, no hook, no API.
+  run_ts scripts/check-meta-migrate-v3.ts
 }
 
 check_meta_mailbox_state_write() {
@@ -660,26 +685,13 @@ check_hook_launch_topology() {
   run_ts scripts/check-hook-launch-topology.ts
 }
 
-check_meta_migration() {
-  # Deterministic gate for 0.11 Stage 0 step 3D-4 commit2: the v1→v2 delivery-receipt
-  # migration (migrateV1DeliveryReceipts) + its crash-order inside upsert. Per-field
-  # STATE WINS, 3 timestamps only; v1-all-null / state-already-wins are no-ops (no
-  # state.json). Crash-order: a v1 record's receipts migrate to state BEFORE the v2
-  # rewrite (proven via upsert attach), and a drift'd state makes migrate throw with
-  # the record STILL v1 (recoverable: next attach re-migrates). Temp dir, no API.
-  run_ts scripts/check-meta-migration.ts
-}
-
-check_meta_dual_consumers() {
-  # Deterministic gate for 0.11 Stage 0 step 3D-4: the delivery-agnostic dual-read
-  # seam. readMetaIdentityByGardenId + scanIdentityByNativeId read v1 AND v2 records and
-  # return normalized identity, so the live consumers (enqueue/read, MCP marker, prune,
-  # store-doctor, the v2 upsert's existence scan) survive the v2 cut. Proves cross-schema
-  # match + THE G1 invariant (a nativeSessionId duplicated across a v1 AND v2 file is
-  # authority ambiguity → throw, so the v2 upsert never duplicate-mints) + v1 normalize +
-  # body/filename drift fail-fast. The v1-only raw readers remain for v1-fixture gates.
-  # Temp dir, no API.
-  run_ts scripts/check-meta-dual-consumers.ts
+check_meta_identity_consumers() {
+  # Deterministic gate for the V3-only identity consumer seam (#50 hard cut).
+  # readMetaIdentityByGardenId reads v3 to identity (drift fail-fast, pre-cut v2
+  # names the M1 command), scanIdentityByNativeId matches by BODY (decoy filename
+  # still found), skips malformed/pre-cut via onSkip, and throws on THE G1
+  # invariant (duplicate nativeSessionId = authority ambiguity). Temp dir, no API.
+  run_ts scripts/check-meta-identity-consumers.ts
 }
 
 check_meta_capability_source() {
@@ -689,8 +701,9 @@ check_meta_capability_source() {
   # Proves the seam is registry-DRIVEN (a doctored registry injection is followed),
   # mint sources delivery metadata through it, the parse drift guard is now
   # registry-sourced, and the cut-over preserves behaviour (registry ≡ const for the
-  # 3 backends). The record.delivery.wakeMode SLOT stays (removal is 3D-4); only the
-  # SOURCE moves. check-entwurf-capabilities still owns the registry ≡ const drift
+  # 3 backends). At 3D-3 only the SOURCE moved and the record.delivery.wakeMode SLOT
+  # still existed; 3D-4 then deleted that slot with the rest of delivery{}, so today
+  # the registry is the sole home. check-entwurf-capabilities still owns the registry ≡ const drift
   # guard. Pure — no fs writes, no backend, no hook, no API.
   run_ts scripts/check-meta-capability-source.ts
 }
@@ -1100,27 +1113,55 @@ smoke_acp_bundled_mcp_live() {
   # model turn over the stdin RPC asking it to call mcp__entwurf-bridge__entwurf_self;
   # captures the identity envelope (the resident's own fresh gid — never told to the
   # model, only in the bridge env — + agentId + socketState alive) and agent_end
-  # DIRECTLY from the stdout RPC event stream (gnew-rpc-drive shape). Complements
+  # DIRECTLY from the stdout RPC event stream (resident-rpc-drive shape). Complements
   # smoke-acp-mcp-live (tiny isolated probe): this proves the REAL bundled bridge with
-  # envelope injection. NOT `pi -p` one-shot (that bundled-MCP teardown hang is
-  # diagnostic backlog, not the 0.11.0 release circuit). Model override:
-  # ENTWURF_ACP_PROVIDER_MODEL.
+  # envelope injection.
+  #
+  # Why the resident/RPC circuit and not a `pi -p` one-shot: the resident IS the
+  # long-lived socket-citizen circuit this release ships — a citizen that stays
+  # addressable across turns. (This comment used to justify the choice by a
+  # "bundled-MCP teardown hang" in one-shot mode; that claim was re-tested on
+  # 2026-07-24 against pi 0.82.0 + claude-agent-acp 0.61.0 and did NOT reproduce
+  # — one-shot exits 0, with and without a bundled tool call. The circuit, not a
+  # hang, is the reason.) A one-shot run WITHOUT `--entwurf-control` is a
+  # provider-surface run and has no garden identity by contract; see
+  # docs/setup-clean-host.md Stage 6. Model override: ENTWURF_ACP_PROVIDER_MODEL.
   #   LIVE=1 ./run.sh smoke-acp-bundled-mcp-live
   run_ts scripts/smoke-acp-bundled-mcp-live.ts
+}
+
+smoke_acp_v2_send_live() {
+  # S2g LIVE 4 (axis 4) — an ACP-backed model SENDS through entwurf_v2 and the message
+  # lands in a peer's mailbox carrying the sender's real garden identity. OUT of pnpm
+  # check, needs LIVE=1. Seeds an isolated world (store+mailbox+receivers under one temp
+  # root) holding ONE armed self-fetch receiver, launches a real `pi --entwurf-control
+  # --mode rpc` resident on an ACP model with that world in its env, and drives one turn
+  # asking the model to call mcp__entwurf-bridge__entwurf_v2 at that exact target with a
+  # nonce. Asserts ON DISK: exactly one `.msg`, doorbell poked, nonce intact, and the
+  # rendered sender naming the RESIDENT's own gid + entwurf/<model> + replyable +
+  # pi-session shape. The sender gid is never in the prompt.
+  #
+  # WHY it is not covered elsewhere: smoke-entwurf-v2-matrix-live dispatches
+  # PROGRAMMATICALLY (no model in the loop) and smoke-acp-bundled-mcp-live is
+  # RECEIVE-only (entwurf_self reads identity, writes no `.msg`). This is the SEND half
+  # of "a Claude behind ACP is a garden citizen" — the half GLG hit as missing in real
+  # use on 2026-07-24. MUST, not BEHAVIOR: the model is TOLD which tool to call, so a
+  # failure here is a defect in OUR wiring, not a model preference — which is exactly
+  # what its one measured failure turned out to be (see the MCP-readiness note in the
+  # script header). It was briefly demoted on a misread of that sample and restored
+  # once the transcripts were read. Model override: ENTWURF_ACP_PROVIDER_MODEL.
+  #   LIVE=1 ./run.sh smoke-acp-v2-send-live
+  run_ts scripts/smoke-acp-v2-send-live.ts
 }
 
 smoke_acp_rgg_live() {
   # S2e-2 — ACP-provider resident garden guard (RGG). Thin wrapper (GPT c32a6c8):
   # runs the SHARED resident-garden-guard runner against the entwurf provider
   # target with the DETERMINISTIC half only (SMOKE_RGG_POSITIVE=0). What this lane
-  # treats as release-blocking is that garden-native resident discipline (uuid
-  # refuse / new·clone cancel / legacy-resume pre-cancel / gnew clean birth) holds
-  # under the ACP provider too — the guard logic is provider-agnostic. The positive
-  # GNEW T3 (model autonomously calling entwurf_self) is N/A here BY ACP BOUNDARY:
-  # the ACP child is spawned with mcpServers:[] so it has no entwurf_self call
-  # surface (plugin stays lightweight, no ambient MCP — S2b/S2d boundary). To
-  # observe that boundary directly, run the shared runner with SMOKE_RGG_POSITIVE=1
-  # and ENTWURF_LIVE_TARGET set (T3 will report N/A, not a real failure).
+  # treats as release-blocking is that resident CITIZEN discipline (#50 C2: record
+  # birth, record-keyed socket, attach-on-reopen, no pi-session-id socket) holds
+  # under the ACP provider too — the logic is provider-agnostic. The POSITIVE cell
+  # (one real turn completing transcriptPath/model) is the only model-in-loop part.
   # Target override: ENTWURF_RGG_TARGET (default entwurf/claude-sonnet-5).
   #   ./run.sh smoke-acp-rgg-live
   local target="${ENTWURF_RGG_TARGET:-entwurf/claude-sonnet-5}"
@@ -1180,6 +1221,16 @@ check_entwurf_facts() {
   run_ts scripts/check-entwurf-facts.ts
 }
 
+check_control_socket_path() {
+  # Deterministic gate: the control-socket path grammar `<dir>/<gid>.sock` has ONE
+  # definition (pi-extensions/lib/control-socket-path.js) instead of one per
+  # importer. Two duties: the leaf's own forward/inverse/round-trip behaviour
+  # including the null case, and a re-implementation fence over all three adapters
+  # (socket-discovery, entwurf-control, the MCP bridge) so a local ".sock" literal,
+  # an inline join, an inline filename parse, or a dropped leaf import goes RED.
+  run_ts scripts/check-control-socket-path.ts
+}
+
 check_socket_discovery() {
   # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 3): the
   # SOCKET-axis wiring scanSocketProbes. Probes the union of (dir sockets) ∪
@@ -1216,16 +1267,17 @@ check_entwurf_fact_provider() {
 }
 
 check_entwurf_peers_surface() {
-  # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4c): the MCP
-  # entwurf_peers RENDER/PAYLOAD layer renderEntwurfPeers. Legacy `sessions` is a
-  # PROJECTION of facts (alive pi citizens + alive socket-only), NOT a second scan
-  # (a re-run getLiveSessions would bypass the provider quarantine); socketPath via
-  # controlSocketPath (SSOT, no correlation-authority drift); count = projection
-  # length not peers.length; three distinct arrays (peers/socketOnly/diagnostics);
-  # NO verb-routing field in JSON (deep key scan) NOR word in text (title leak);
-  # diagnostics in both surfaces; empty → "(none)"; unsupported shown; enrich null
-  # → "(not enriched)". WIRING guard: bridge calls listEntwurfFacts+renderEntwurfPeers,
-  # getLiveSessions gone. Facts fabricated, no IO (only static source read).
+  # Deterministic gate for 0.11 Stage 0 step 4 (fact-provider slice 4c; #50 C4
+  # re-author): the MCP entwurf_peers RENDER/PAYLOAD layer renderEntwurfPeers.
+  # Payload keyset is exactly {peers, diagnostics} — the legacy `sessions`
+  # projection, socketOnly section, controlDir/count and every socketPath left
+  # with the socket identity axis; FORBIDDEN_C4_KEYS + "no .sock in text" pin
+  # that. A record-less socket surfaces ONLY as an aggregated record-less-socket
+  # diagnostic (F8, liveness-keyed message). NO verb-routing field in JSON (deep
+  # key scan) NOR word in text (title leak); diagnostics in both surfaces; empty
+  # → "(none)"; unsupported shown. WIRING guard: both surfaces call
+  # listEntwurfFacts+renderEntwurfPeers; getLiveSessions and the /entwurf-sessions
+  # socket-scan command stay gone. Facts fabricated, no IO (only static source read).
   run_ts scripts/check-entwurf-peers-surface.ts
 }
 
@@ -1325,25 +1377,11 @@ check_package_source_routing() {
 }
 
 
-smoke_session_id_name() {
-  # LIVE 3-turn substrate smoke (Phase 3a) for Pi 0.78 --session-id/--name,
-  # exercised through the bridge but NOT through the Entwurf tool surface, so it
-  # lands independently of the taskId->sessionId migration. Spawns real cheap
-  # sonnet turns (auth + tokens) and asserts: header id/cwd, session_info name as
-  # info layer, append-not-recreate, spawn-only name, and the wrong-cwd footgun
-  # as documented evidence. Isolated via a temp PI_CODING_AGENT_DIR.
-  section "smoke: --session-id / --name substrate (direct pi, no Entwurf API)"
-  if ! command -v pi >/dev/null 2>&1; then
-    fail "[smoke-session-id-name] pi binary not on PATH — cannot run live substrate proof"
-    return 1
-  fi
-  run_ts scripts/smoke-session-id-name.ts || {
-    fail "[smoke-session-id-name] live substrate smoke failed"
-    return 1
-  }
-  ok "[smoke-session-id-name] --session-id/--name substrate proven (append + spawn-only name + wrong-cwd footgun)"
-  return 0
-}
+# smoke-session-id-name is GONE (#50 C3): it proved the pi --session-id/--name
+# substrate entwurf used to stand on. C2 removed every entwurf use of that
+# substrate (the record mints the address; pi owns id and name), so the smoke's
+# subject no longer exists. The resident identity axis is covered by
+# smoke-pi-attach (deterministic, in pnpm check) + smoke-resident-garden-guard (LIVE).
 
 
 
@@ -1397,13 +1435,14 @@ assert.equal(peerTui, piAi,
 
 // peerDependencies must be a CLOSED range (0.11 Stage 0, drift-proofing): the
 // floor tracks the devDep pin so a consumer can't install against a pi lacking
-// the 0.80 public trust exports the bridge imports, AND an upper bound at the
-// next minor stops a fresh install from silently pulling a future pi (0.81+)
-// whose internal export surface has drifted from the one we typecheck against.
+// the public trust exports the bridge imports at the pinned minor, AND an upper
+// bound at the next minor stops a fresh install from silently pulling a future
+// pi (past the declared ceiling — 0.83+ at the current 0.82.0 pin) whose
+// internal export surface has drifted from the one we typecheck against.
 // pi moves its public surface every minor (the 0.79→0.80 getModels→provider-
 // factory churn is exactly this), so an open `>=` floor is exactly how the next
 // installer re-acquires the drift. Expected
-// shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.80.7 <0.81`).
+// shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.82.0 <0.83`).
 const [piMaj, piMin] = piAi.split('.').map(Number);
 assert.equal(piMaj, 0,
   `pi pin major must stay 0 for the next-minor ceiling rule (got ${piAi}); revisit check-dep-versions when pi reaches 1.x`);
@@ -1672,9 +1711,21 @@ const tracked = execFileSync('git', ['ls-files', '--cached', '--', '*.sh', '*.ts
   .split('\n').filter(Boolean);
 assert.ok(tracked.length >= 20, `git ls-files returned ${tracked.length} files — the sweep lost its corpus`);
 const STUB = /echo\s+"(\d+\.\d+\.\d+) \(Claude Code\)"/g;
+// `git ls-files --cached` still names an UNSTAGED deletion (same contract as the
+// node-floor sweep): a valid release-surface migration before the commit workflow
+// stages it. Skip ENOENT only; every other read failure crashes.
+const readTracked = (file) => {
+  try { return readFileSync(file, 'utf8'); }
+  catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+};
 let stubs = 0;
 for (const file of tracked) {
-  for (const [decl, ver] of readFileSync(file, 'utf8').matchAll(STUB)) {
+  const text = readTracked(file);
+  if (text === null) continue;
+  for (const [decl, ver] of text.matchAll(STUB)) {
     stubs++;
     assert.ok(cmp(ver, FLOOR) >= 0,
       `${file}: fake claude CLI reports ${ver} in "${decl.trim()}", BELOW the floor ${FLOOR} — the doctor would refuse this fixture for the version, not for what the fixture is testing`);
@@ -1693,7 +1744,8 @@ assert.ok(stubs >= 4,
 const MINT = /(?:cat|tee)\s*>+\s*"?\$?\{?\w+\}?\/claude"?\s*<<-?\s*'?(\w+)'?/g;
 let stubsMinted = 0;
 for (const file of tracked) {
-  const text = readFileSync(file, 'utf8');
+  const text = readTracked(file);
+  if (text === null) continue;
   for (const m of text.matchAll(MINT)) {
     stubsMinted++;
     const body = text.slice(m.index + m[0].length);
@@ -2172,7 +2224,7 @@ check_acp_provider_surface() {
 check_acp_sdk_surface() {
   # Deterministic gate for the S2a ACP SDK dependency surface. Pins the three
   # ACP runtime deps to the current oracle versions (@agentclientprotocol/sdk
-  # 1.1.0 + claude-agent-acp 0.54.1 + @anthropic-ai/sdk 0.100.1), locks the
+  # 1.3.0 + claude-agent-acp 0.61.0 + @anthropic-ai/sdk 0.100.1), locks the
   # peer-resolution that keeps claude-agent-sdk satisfiable (0.100.1, not the
   # stale 0.91.1), asserts the wire SDK still value-exports the symbols the raw
   # turn needs (silent-rename gate), and forbids any source-level anthropic SDK
@@ -2222,8 +2274,9 @@ check_acp_prompt_builder() {
   # Proves prompt SCOPE follows bootstrapPath: new=full transcript (history
   # carrier), reuse/resume/load=latest user delta (first user after last
   # assistant, SessionStart hook skipped, image marker kept, prior history
-  # excluded so a reuse session is not re-injected its own history). Pure, no
-  # session store yet — locks the builder before S2d wires the reuse paths.
+  # excluded so a reuse session is not re-injected its own history). Pure — it
+  # touches no session store; the store and the reuse paths it feeds landed in
+  # S2d-1b and carry their own gates (check-acp-session-store / -session-reuse).
   section "ACP prompt builder (S2d bootstrapPath prompt scope)"
   run_ts scripts/check-acp-prompt-builder.ts
 }
@@ -2382,6 +2435,10 @@ check_pack() {
     "mcp/entwurf-bridge/dist/scripts/doctor-pi-provider.js"
     "mcp/entwurf-bridge/dist/scripts/new-session-id.js"
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-prune.js"
+    # #50 M1 — the one-shot store-migration operator command. The hosts that need it
+    # are installed hosts on a pre-cut v2 store; without this twin the prescription
+    # every v3-only rejection names would be dead exactly where it matters.
+    "mcp/entwurf-bridge/dist/scripts/meta-bridge-migrate-v3.js"
     # 0.12.5 — the node_modules-safe plugin hook + its lib. install-meta-bridge copies
     # these compiled JS into the assembled plugin when installed (raw .ts can't
     # strip-types under node_modules). meta-session.js is shared with the store-doctor
@@ -2390,7 +2447,6 @@ check_pack() {
     "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
-    "pi/entwurf-targets.json"
     "pi/meta-bridge/.claude-plugin/marketplace.json"
     "pi/meta-bridge/entwurf-meta-receive/.claude-plugin/plugin.json"
     "pi/meta-bridge/entwurf-meta-receive/hooks/hooks.json"
@@ -2428,6 +2484,13 @@ check_pack() {
     '\.tmp-verify/'
     '\.agent-(reports|shell)/'
     'pi/meta-bridge/\.assembled/'
+    # Upgrade-proof fixtures are HOST STATE, not package content. They are the
+    # synthetic pre-cut store the three cells seed a fake machine with; shipping
+    # them would put look-alike meta-records inside every user's install for no
+    # consumer benefit (the cells that read them are dev-only surfaces an
+    # installed package already refuses). Kept out of the files allowlist AND
+    # asserted here, so a future `files:` edit cannot quietly start shipping them.
+    '^fixtures/'
     # Python bytecode residue — `scripts/` ships whole via the files allowlist,
     # which BYPASSES .gitignore/.npmignore for its contents, so a `pnpm check`
     # run's generated scripts/__pycache__/*.pyc rode into the 0.12.6 tarball. The
@@ -2575,13 +2638,15 @@ _check_pack_install_impl() {
     "mcp/entwurf-bridge/dist/scripts/doctor-pi-provider.js"
     "mcp/entwurf-bridge/dist/scripts/new-session-id.js"
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-prune.js"
+    # #50 M1 — the store-migration operator command (see check-pack). The installed-
+    # command regression below certifies a 0-record store through the real bin.
+    "mcp/entwurf-bridge/dist/scripts/meta-bridge-migrate-v3.js"
     # 0.12.5 — node_modules-safe plugin hook + lib (see check-pack). The installed
     # hook regression below runs exactly this compiled JS from under node_modules.
     "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook.js"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
-    "pi/entwurf-targets.json"
     "pi/meta-bridge/.claude-plugin/marketplace.json"
     "pi/meta-bridge/entwurf-meta-receive/.claude-plugin/plugin.json"
     "pi/meta-bridge/entwurf-meta-receive/hooks/hooks.json"
@@ -2611,6 +2676,8 @@ _check_pack_install_impl() {
     '^plugins/' '^node_modules/'
     '\.tmp-verify/' '\.agent-(reports|shell)/'
     'pi/meta-bridge/\.assembled/'
+    # Upgrade-proof fixtures are host state, never package content (see check-pack).
+    '^fixtures/'
     # Python bytecode residue (see check-pack forbidden note): scripts/ ships
     # whole, so generated pyc bypasses ignore files — this cross-checks the actual
     # tarball, not just the dry-run resolver.
@@ -2637,9 +2704,10 @@ _check_pack_install_impl() {
   # repo packages with; --ignore-workspace stops it from re-attaching
   # to our pnpm-workspace.yaml; --ignore-scripts blocks the husky
   # prepare hook (and any future install scripts) from running inside
-  # the consumer project. Peer deps are pinned to the 0.80.x release
-  # baseline so the smoke matches the same shape an external pi user
-  # would have after `pi install`.
+  # the consumer project. Peer deps are pinned to the CURRENT pi release
+  # baseline (0.82.x — the pins below are what check-dep-versions binds to
+  # the package.json devDep) so the smoke matches the same shape an external
+  # pi user would have after `pi install`.
   local tmp npm_tmp
   tmp=$(mktemp -d -t entwurf-install-smoke.XXXXXX)
   # Separate tree for the npm-managed regression below: npm install must NOT be
@@ -2651,21 +2719,21 @@ _check_pack_install_impl() {
   printf '%s\n' '{ "name": "entwurf-install-smoke", "version": "0.0.0", "private": true }' > "$tmp/package.json"
 
   # pi-agent-core is pinned even though we never import it: pi-coding-agent depends
-  # on it by CARET (`^0.80.7`), so with no lockfile in this fresh temp project it
+  # on it by CARET (`^0.82.0`), so with no lockfile in this fresh temp project it
   # floats to whatever pi published last — and that newer core then drags a NESTED
   # pi-ai of its own. Measured 2026-07-21: pinning only the three we import left
   # pi-agent-core@0.80.10 + pi-ai@0.80.10 in the tree while the gate still announced
   # "pinned pi 0.80.7". The gate would then be verifying an UNVERIFIED runtime — the
   # exact class this cut exists to close. Pin every @earendil-works package that
   # constitutes the pi runtime, not just the ones whose types we touch.
-  echo "[check-pack-install] pnpm add into $tmp (with 0.80.x peers + typebox)"
+  echo "[check-pack-install] pnpm add into $tmp (with 0.82.x peers + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.80.7" \
-    "@earendil-works/pi-coding-agent@0.80.7" \
-    "@earendil-works/pi-tui@0.80.7" \
-    "@earendil-works/pi-agent-core@0.80.7" \
+    "@earendil-works/pi-ai@0.82.0" \
+    "@earendil-works/pi-coding-agent@0.82.0" \
+    "@earendil-works/pi-tui@0.82.0" \
+    "@earendil-works/pi-agent-core@0.82.0" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -2675,17 +2743,17 @@ _check_pack_install_impl() {
 
   # A pin is a wish until the resolved tree is read back. Assert it: EVERY
   # @earendil-works pi package present — direct or transitive, top level or nested —
-  # must be the pinned 0.80.7. Anything else means an unpinned caret floated and the
+  # must be the pinned 0.82.0. Anything else means an unpinned caret floated and the
   # rest of this gate would be exercising a runtime nobody verified, while still
-  # printing "pinned pi 0.80.7". Fail loud instead of proving the wrong floor.
+  # printing "pinned pi 0.82.0". Fail loud instead of proving the wrong floor.
   local leaked_pi
-  leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | grep '^@earendil-works+pi-' | grep -v '@0\.80\.7' || true)
+  leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | grep '^@earendil-works+pi-' | grep -v '@0\.82\.0' || true)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.80.7):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.82.0):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works pi package is 0.80.7"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works pi package is 0.82.0"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the
@@ -2788,8 +2856,8 @@ _check_pack_install_impl() {
   # additionally died because start.sh tried strip-types under node_modules.
   # Prove `entwurf`/`entwurf-bridge` bins exist, `run.sh install` writes settings
   # from the hoisted layout, and the installed bridge boots from dist. HOME is
-  # redirected to a throwaway dir so ensure_agent_dir_symlinks operates on a temp
-  # ~/.pi/agent and never touches the operator's real targets link.
+  # redirected to a throwaway dir so the install's user-scope writes (settings.json
+  # registration under $HOME/.pi/agent) land in a temp home, never the operator's.
   if ! command -v npm >/dev/null 2>&1; then
     fail "[check-pack-install] npm not on PATH — cannot run npm-managed install regression"
     return 1
@@ -3174,7 +3242,145 @@ JS
     echo "$op_out" | tail -8 | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] installed operator commands pass (new-session-id id-shaped, doctor-pi-provider reaches its verdict, meta-bridge-prune walks a 0-record store)"
+
+  # #50 M1 — the migration command must reach its verdict from under node_modules
+  # (verify on the sandbox 0-record store certifies vacuously). The exit code alone
+  # can't tell a verdict from a fence crash, so read the certification line.
+  if ! op_out=$(HOME="$npmhome" XDG_DATA_HOME="$op_xdg_data" XDG_STATE_HOME="$op_xdg_state" XDG_CACHE_HOME="$op_xdg_cache" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" meta-bridge-migrate-v3 verify 2>&1); then
+    fail "[check-pack-install] installed 'entwurf meta-bridge-migrate-v3 verify' FAILED on a 0-record store:"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! printf '%s' "$op_out" | grep -q 'non-V3=0'; then
+    fail "[check-pack-install] installed 'entwurf meta-bridge-migrate-v3 verify' never reached its certification line: $op_out"
+    return 1
+  fi
+  echo "[check-pack-install] installed operator commands pass (new-session-id id-shaped, doctor-pi-provider reaches its verdict, meta-bridge-prune walks a 0-record store, migrate-v3 verify certifies it)"
+
+  # ── #51 upgrade lane: the INSTALLED lifecycle on a host that already carries a
+  # pre-cut store. Everything above this line meets an empty store, which is the
+  # one host state that was never in doubt. This is the state an existing
+  # development machine is actually in on upgrade day, driven end to end through
+  # the npm-installed bin — not the checkout:
+  #
+  #     seeded v2 store → installed install-meta-bridge REFUSES (zero Claude
+  #     calls, persistent regular-file manifest unchanged) → installed migrate REFUSES the
+  #     parentage values → installed migrate --drop-parentage → verify non-V3=0
+  #     → installed install-meta-bridge PASSES
+  #
+  # The store is seeded from the FROZEN fixtures (fixtures/meta-store, sha256
+  # manifest), the same bytes check-upgrade-gate and check-install-container use,
+  # so `backup == original` is a comparison against a constant this code cannot
+  # move. HOME is the sandbox root and no store env override is set: the default
+  # <pi-agent-dir>/meta-sessions resolution is part of what gets proven.
+  local pc_home="$npm_tmp/precut-home" pc_cfg="$npm_tmp/precut-claude"
+  local pc_claude_log="$npm_tmp/precut-fake-claude.log"
+  local pc_store="$pc_home/.pi/agent/meta-sessions"
+  mkdir -p "$pc_home/.pi/agent" "$pc_cfg"
+  : > "$pc_claude_log"
+  if ! bash "$REPO_DIR/fixtures/seed-store.sh" v2-parentage "$pc_store" >/dev/null; then
+    fail "[check-pack-install] could not seed the frozen pre-cut fixture store (fixtures/meta-store drifted from its manifest?)"
+    return 1
+  fi
+  local pc_env=(HOME="$pc_home" XDG_DATA_HOME="$pc_home/.local/share" XDG_STATE_HOME="$pc_home/.local/state" XDG_CACHE_HOME="$pc_home/.cache" CLAUDE_CONFIG_DIR="$pc_cfg" FAKE_CLAUDE_LOG="$pc_claude_log" PATH="$fake_claude_dir:$npmroot/node_modules/.bin:$PATH")
+  local pc_before pc_after pc_out pc_rc
+  pc_before=$(cd "$pc_home" && find . -type f -exec sha256sum {} + 2>/dev/null | sort)
+
+  set +e
+  pc_out=$(env "${pc_env[@]}" "$npm_pkg/run.sh" install-meta-bridge 2>&1); pc_rc=$?
+  set -e
+  if [ "$pc_rc" = 0 ]; then
+    fail "[check-pack-install] installed install-meta-bridge ACCEPTED a pre-cut store — the upgrade gate is missing from the packaged artifact:"
+    echo "$pc_out" | tail -12 | sed 's/^/    /' >&2
+    return 1
+  fi
+  pc_after=$(cd "$pc_home" && find . -type f -exec sha256sum {} + 2>/dev/null | sort)
+  if [ "$pc_before" != "$pc_after" ]; then
+    fail "[check-pack-install] the refused install-meta-bridge still wrote to the host:"
+    diff <(printf '%s\n' "$pc_before") <(printf '%s\n' "$pc_after") | sed 's/^/    /' >&2
+    return 1
+  fi
+  if [ -n "$(find "$pc_cfg" -type f 2>/dev/null)" ]; then
+    fail "[check-pack-install] the refused install-meta-bridge created Claude config under $pc_cfg"
+    return 1
+  fi
+  # ZERO claude invocations, not merely zero mutating ones. The installer decides
+  # platform, python3, node and the host's own store before it ever touches the
+  # external CLI, so a store refusal is provably free of outside contact — and an
+  # empty log is an assertion that cannot rot the way an allow-list of "harmless"
+  # subcommands would.
+  if [ -s "$pc_claude_log" ]; then
+    fail "[check-pack-install] the refused install-meta-bridge invoked the claude CLI before refusing (the store gate must decide first):"
+    sed 's/^/    /' "$pc_claude_log" >&2
+    return 1
+  fi
+  echo "[check-pack-install] pre-cut host: installed install-meta-bridge REFUSED before any write (host regular-file manifest unchanged, zero Claude invocations)"
+
+  # The refusal has to be actionable from a packaged host, which cannot type ./run.sh.
+  if ! printf '%s' "$pc_out" | grep -q 'entwurf meta-bridge-migrate-v3 migrate'; then
+    fail "[check-pack-install] the installed refusal never named the INSTALLED migrate invocation form:"
+    echo "$pc_out" | tail -12 | sed 's/^/    /' >&2
+    return 1
+  fi
+
+  # Parentage: the installed migrate must refuse to discard a value on its own.
+  set +e
+  pc_out=$(env "${pc_env[@]}" PI_CODING_AGENT_DIR="$pc_home/.pi/agent" "$installed_entwurf" meta-bridge-migrate-v3 migrate 2>&1); pc_rc=$?
+  set -e
+  if [ "$pc_rc" = 0 ]; then
+    fail "[check-pack-install] installed migrate discarded parentage without --drop-parentage:"
+    echo "$pc_out" | tail -12 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if [ -n "$(find "$pc_home/.pi/agent" -maxdepth 1 -name 'meta-sessions.v3-migration-backup-*' 2>/dev/null)" ]; then
+    fail "[check-pack-install] the refused installed migrate left a backup behind — it started work it should never have begun"
+    return 1
+  fi
+
+  set +e
+  pc_out=$(env "${pc_env[@]}" PI_CODING_AGENT_DIR="$pc_home/.pi/agent" "$installed_entwurf" meta-bridge-migrate-v3 migrate --drop-parentage 2>&1); pc_rc=$?
+  set -e
+  if [ "$pc_rc" != 0 ]; then
+    fail "[check-pack-install] installed migrate --drop-parentage FAILED on the seeded pre-cut store:"
+    echo "$pc_out" | tail -20 | sed 's/^/    /' >&2
+    return 1
+  fi
+  local pc_backup pc_want pc_got
+  pc_backup=$(find "$pc_home/.pi/agent" -maxdepth 1 -type d -name 'meta-sessions.v3-migration-backup-*' | head -1)
+  if [ -z "$pc_backup" ]; then
+    fail "[check-pack-install] installed migrate rewrote the store without taking a backup"
+    return 1
+  fi
+  # The backup must hold the ORIGINAL bytes — compared against the checked-in
+  # fixture hash, never against a re-serialization by the code under test.
+  pc_want=$(awk '$2 ~ /20260305T000000-dddd05/ { print $1 }' "$REPO_DIR/fixtures/meta-store/MANIFEST.sha256")
+  pc_got=$(sha256sum "$pc_backup/20260305T000000-dddd05.meta.json" 2>/dev/null | cut -d' ' -f1)
+  if [ -z "$pc_want" ] || [ "$pc_want" != "$pc_got" ]; then
+    fail "[check-pack-install] the installed migrate's backup does not hold the original parentage-bearing bytes (fixture $pc_want, backup $pc_got)"
+    return 1
+  fi
+
+  set +e
+  pc_out=$(env "${pc_env[@]}" PI_CODING_AGENT_DIR="$pc_home/.pi/agent" "$installed_entwurf" meta-bridge-migrate-v3 verify 2>&1); pc_rc=$?
+  set -e
+  if [ "$pc_rc" != 0 ] || ! printf '%s' "$pc_out" | grep -q 'non-V3=0'; then
+    fail "[check-pack-install] the migrated store does not certify non-V3=0 through the installed bin: $pc_out"
+    return 1
+  fi
+
+  set +e
+  pc_out=$(env "${pc_env[@]}" "$npm_pkg/run.sh" install-meta-bridge 2>&1); pc_rc=$?
+  set -e
+  if [ "$pc_rc" != 0 ]; then
+    fail "[check-pack-install] installed install-meta-bridge STILL failed after the prescribed migration — the documented upgrade path does not land:"
+    echo "$pc_out" | tail -20 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! grep -q 'plugin install' "$pc_claude_log"; then
+    fail "[check-pack-install] the post-migration install never reached the plugin install step (it exited 0 without doing the work)"
+    return 1
+  fi
+  echo "[check-pack-install] pre-cut host lifecycle pass (REFUSE → installed migrate --drop-parentage with original bytes in the backup → non-V3=0 → install-meta-bridge PASSES)"
 
   # A dev-only gate has NO compiled twin by design. Under an installed package run_ts must
   # REFUSE it with a legible message — never fall back to raw .ts (that just re-raises the
@@ -3195,7 +3401,23 @@ JS
     echo "$devgate_out" | tail -6 | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] dev-only gate refusal pass (installed package refuses check-* legibly, no raw-.ts fallback, no silent exit 0)"
+  # Same rule, different mechanism. check-upgrade-gate is a SHELL gate, so run_ts
+  # never sees it — `scripts/` ships whole and the dispatch would happily run it
+  # from under node_modules, where its fixtures deliberately do not exist. Without
+  # the script's own guard it would die on a missing fixture path instead of
+  # saying it is dev-clone-only, which is hard rule 10 failing quietly. Drive it.
+  local shgate_out shgate_rc=0
+  shgate_out=$(HOME="$npmhome" XDG_DATA_HOME="$op_xdg_data" XDG_STATE_HOME="$op_xdg_state" XDG_CACHE_HOME="$op_xdg_cache" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" check-upgrade-gate 2>&1) || shgate_rc=$?
+  if [ "$shgate_rc" -eq 0 ]; then
+    fail "[check-pack-install] the shell-side dev-only gate (check-upgrade-gate) exited 0 from an installed package — it cannot have run"
+    return 1
+  fi
+  if ! printf '%s' "$shgate_out" | grep -q 'dev-clone-only surface'; then
+    fail "[check-pack-install] check-upgrade-gate under an installed package did not REFUSE as dev-clone-only (it failed some other way — probably on the fixtures the tarball deliberately omits):"
+    echo "$shgate_out" | tail -6 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] dev-only gate refusal pass (installed package refuses check-* legibly via run_ts, and the shell-side check-upgrade-gate refuses on its own guard; no raw-.ts fallback, no silent exit 0)"
 
   # 0.12.4 — installed STORE-DOCTOR regression. meta-bridge-doctor.sh's full store
   # scan runs the prebuilt dist JS when it lives under node_modules (strip-types
@@ -3212,9 +3434,10 @@ JS
   fi
   local sd_fixture="$npm_tmp/store-fixture"
   mkdir -p "$sd_fixture"
-  # One valid v2 record: filename == "${gardenId}.meta.json" (no drift), unique
-  # nativeSessionId (no dupe). gardenId must match YYYYMMDDTHHMMSS-[0-9a-f]{6}.
-  printf '%s\n' '{"schemaVersion":2,"gardenId":"20990101T000000-abcdef","backend":"claude-code","nativeSessionId":"native-store-doctor-fixture","cwd":"/tmp/entwurf-fixture","model":null,"transcriptPath":null,"parentGardenId":null,"isEntwurf":false,"createdAt":"2099-01-01T00:00:00.000Z","recordUpdatedAt":"2099-01-01T00:00:00.000Z"}' \
+  # One valid v3 record (#50 hard cut keyset — no parentGardenId/isEntwurf):
+  # filename == "${gardenId}.meta.json" (no drift), unique nativeSessionId (no
+  # dupe). gardenId must match YYYYMMDDTHHMMSS-[0-9a-f]{6}.
+  printf '%s\n' '{"schemaVersion":3,"gardenId":"20990101T000000-abcdef","backend":"claude-code","nativeSessionId":"native-store-doctor-fixture","cwd":"/tmp/entwurf-fixture","model":null,"transcriptPath":null,"createdAt":"2099-01-01T00:00:00.000Z","recordUpdatedAt":"2099-01-01T00:00:00.000Z"}' \
     > "$sd_fixture/20990101T000000-abcdef.meta.json"
   local sd_out
   if ! sd_out=$(node "$installed_store_doctor" "$sd_fixture" 2>&1); then
@@ -3430,6 +3653,14 @@ setup_all() {
   echo "[setup] project: $project_dir"
   echo "[setup] scope:   entwurf v2 package + detected native-harness bridges + pi adapter"
   echo "[setup] verification: v2 install smoke (entwurf-bridge; LIVE substrate = release-gate)"
+
+  # Pre-cut store gate FIRST — ahead of pnpm install, sync_auth (which creates
+  # and rewrites ~/.pi/agent/auth.json) and every settings writer below. On an
+  # existing development host this is the only step standing between a `git pull`
+  # of this cut and a V3-only activation over a v1/v2 store; putting it inside
+  # install_local_package would already be one auth.json write too late. The
+  # migrate CLI imports node builtins only, so it runs before dependencies exist.
+  preflight_v3_store setup
 
   (cd "$REPO_DIR" && pnpm install --frozen-lockfile)
   sync_auth
@@ -3655,12 +3886,12 @@ expose_dev_bin() {
 # Design invariants (NEXT Step 1e + GPT-5.5 reviews):
 #   - v2-native live floor: the MUST tier is the v2 dispatch substrate
 #     (smoke-entwurf-v2-matrix-live + smoke-entwurf-v2-spawn-resume-live, opt-in
-#     LIVE), the MCP bridge (check-bridge), and the garden-native substrate/guard
-#     (smoke-session-id-name on a pi-native target via ENTWURF_LIVE_TARGET,
-#     and smoke-resident-garden-guard).
+#     LIVE), the MCP bridge (check-bridge), and the resident citizen guard
+#     (smoke-resident-garden-guard).
 #   - ACP plugin acceptance floor (S0~S2g): the 11 ACP LIVE smokes
 #     (socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/
-#     memory-containment/rgg + S2g mcp/skill config passthrough + S2g axis-3 bundled-mcp resident/RPC)
+#     memory-containment/rgg + S2g mcp/skill config passthrough + S2g axis-3 bundled-mcp resident/RPC
+#     + S2g axis-4 v2-send: an ACP model SENDS via entwurf_v2 and lands as itself)
 #     are MUST, not BEHAVIOR — they prove programmatic transport/provider/backend
 #     invariants of the ACP plugin on the v2 core, so a failure is a release
 #     defect, not an advisory model-in-loop signal. Each is LIVE-gated honest-SKIP.
@@ -3693,12 +3924,10 @@ release_gate() {
   # regardless of the operator's cwd. `-e "$REPO_DIR/..."` (extension load) and
   # every other path the gates touch are absolute, so the cd is safe.
   #
-  # The two garden-native identity gates (smoke-session-id-name,
-  # smoke-resident-garden-guard) also take no project arg but are exempt from
-  # the repo-pollution concern by construction: the substrate smoke runs every
-  # pi turn under its own os.tmpdir() agent dir + cwds (mkdtemp, cleaned up),
-  # and the guard is wired here as the NEGATIVE path only — a 0-token fail-fast
-  # that writes no session file at all.
+  # The identity gate (smoke-resident-garden-guard) also takes no project arg
+  # but is exempt from the repo-pollution concern by construction: it is wired
+  # here as the NEGATIVE path only — a 0-token fail-fast that writes no session
+  # file at all.
   #
   # smoke-acp-bundled-mcp-live is a DELIBERATE exception to the PWD=project_dir
   # routing: it runs its resident with cwd=os.tmpdir() and relies on the
@@ -3751,8 +3980,16 @@ release_gate() {
 
   # BEHAVIOR lane (0.11.0, GLG+GPT+Opus): a SEPARATE advisory counter for
   # model-in-loop gates that probe whether the *model* autonomously selects the
-  # MCP entwurf surface (vs. bypassing via Bash/Terminal/pi-CLI). These gates are
-  # flaky by the model's nature (Claude Sonnet's MCP-vs-Bash choice is
+  # MCP entwurf surface (vs. bypassing via Bash/Terminal/pi-CLI). Scope note
+  # (2026-07-24): a gate that TELLS the model which tool to call does NOT belong
+  # here. That was tried for smoke-acp-v2-send-live on a PASS/PASS/FAIL sample
+  # read as instruction-following flake, and the reading was wrong — in both
+  # failures the tool was simply ABSENT from the session's schema (one model called
+  # it and the RUNTIME answered "No such tool available"; the other read the schema,
+  # saw no such tool, and declined to invent a result). An MCP readiness defect of
+  # ours, either way. Advisory is for what the model chooses, never for what our
+  # wiring fails to deliver. These gates
+  # are flaky by the model's nature (Claude Sonnet's MCP-vs-Bash choice is
   # non-deterministic on 0.79.4), so a single flake must NOT block the cut. They
   # are NEVER folded into `failc`/`pass` — exit authority below is `failc` only.
   # Honesty rails: (1) "non-blocking" is NOT "pass" — a BEHAVIOR-FAIL is surfaced
@@ -3794,22 +4031,19 @@ release_gate() {
   #    with PWD=project_dir (via gate()) so cwd-derived pi session dirs land in
   #    the scratch project, never the repo — see the note above.
   #
-  #    Foundational garden-native identity gates run first (0.9.0, #28): the
-  #    substrate proof (Pi --session-id/--name through the bridge) and the
-  #    resident --entwurf-control guard (non-garden id → 0-token fail-fast,
-  #    PLUS the positive path: a garden id resident actually boots, gets a
-  #    control-tagged name, and is never entwurf-resumable). If the identity
-  #    foundation is broken, every Entwurf live gate below is meaningless, so
-  #    fail fast here. Negative path is 0-token; positive path is ~1 cheap turn;
-  #    the substrate smoke is a few cheap turns.
-  run_step "smoke-session-id-name (3a substrate)" gate bash "$self" smoke-session-id-name
-  # RGG split (0.11.0): the deterministic half (negative/id-safety + /gnew
-  # zero-token live path) is release-blocking and stays here as a must-pass with
-  # SMOKE_RGG_POSITIVE=0. The model-in-loop half (post-/gnew backend entwurf_self
-  # identity turn [T3] + positive garden --session-id model turn) is gated behind
-  # SMOKE_RGG_POSITIVE=1 and runs in the BEHAVIOR lane below — advisory, because
-  # it depends on the backend child autonomously calling entwurf_self.
-  run_step "smoke-resident-garden-guard (3c guard: negative/id-safety + /gnew 0-token, deterministic)" gate env SMOKE_RGG_POSITIVE=0 bash "$self" smoke-resident-garden-guard
+  #    The foundational identity gate runs first: the resident --entwurf-control
+  #    citizen discipline (#50 C2: a raw resident becomes a record-backed citizen
+  #    on a record-keyed socket, and a re-open attaches to the same address). If
+  #    the identity foundation is broken, every Entwurf live gate below is
+  #    meaningless, so fail fast here. (The old smoke-session-id-name substrate
+  #    proof is gone with the substrate itself — #50 C3; smoke-pi-attach carries
+  #    the deterministic half inside pnpm check.)
+  # RGG split: the 0-token half (BIRTH: record + record-keyed socket / ATTACH:
+  # re-open keeps the address / REPLACEMENT: in-process /new is pi's again) is
+  # release-blocking and stays here as a must-pass with SMOKE_RGG_POSITIVE=0. The
+  # model-in-loop half (one turn completing transcriptPath + model on the record)
+  # is gated behind SMOKE_RGG_POSITIVE=1 in the BEHAVIOR lane below.
+  run_step "smoke-resident-garden-guard (3c citizen: record birth / record-keyed socket / attach-on-reopen, 0-token)" gate env SMOKE_RGG_POSITIVE=0 bash "$self" smoke-resident-garden-guard
   run_step "check-bridge"                   gate bash "$self" check-bridge
   # D4-c: the v2 dispatch substrate sentinel (5d-5). A SINGLE run (NOT backend-looped — it proves
   # production runEntwurfV2 deps + real pi control-socket RPC + real mailbox enqueue + v2 lock, not
@@ -3875,6 +4109,7 @@ release_gate() {
   run_live_step "smoke-acp-mcp-live (S2g: operator mcpServers reach the live ACP session)"  gate env LIVE=1 bash "$self" smoke-acp-mcp-live
   run_live_step "smoke-acp-skill-live (S2g: operator skillPlugins reach the live ACP session)" gate env LIVE=1 bash "$self" smoke-acp-skill-live
   run_live_step "smoke-acp-bundled-mcp-live (S2g axis 3: bundled entwurf-bridge via 0.11.0 resident/RPC circuit)" gate env LIVE=1 bash "$self" smoke-acp-bundled-mcp-live
+  run_live_step "smoke-acp-v2-send-live (S2g axis 4: an ACP model SENDS via entwurf_v2, landing as itself)" gate env LIVE=1 bash "$self" smoke-acp-v2-send-live
 
   # 4. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
   #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never
@@ -3885,12 +4120,12 @@ release_gate() {
   #     transport/provider/backend smoke is a release defect, not advisory. The old
   #     v1 floor gates (session-messaging / xt-tool-surface / sentinel) do not exist
   #     on the v2 core — the v1 entwurf verbs they exercised are gone.
-  # SMOKE_RGG_POSITIVE=1 re-runs the FULL guard with its positives enabled (not a
-  # positive-only mode) — the deterministic paths run again here too, but only the
-  # two model-in-loop turns (post-/gnew entwurf_self identity [T3] + positive
-  # garden model turn) are the reason this run is advisory; the deterministic half
-  # is already release-blocking via the POSITIVE=0 must-pass step above.
-  run_behavior_step "smoke-resident-garden-guard (positives enabled: post-/gnew entwurf_self identity turn [T3] + positive garden model turn)" gate env SMOKE_RGG_POSITIVE=1 bash "$self" smoke-resident-garden-guard
+  # SMOKE_RGG_POSITIVE=1 re-runs the FULL guard with its positive enabled (not a
+  # positive-only mode) — the 0-token cells run again here too, but the one
+  # model-in-loop turn (turn_end completing the record's transcriptPath + model) is
+  # the reason this run is advisory; the 0-token half is already release-blocking
+  # via the POSITIVE=0 must-pass step above.
+  run_behavior_step "smoke-resident-garden-guard (positive enabled: one turn completes the record's transcriptPath + model)" gate env SMOKE_RGG_POSITIVE=1 bash "$self" smoke-resident-garden-guard
 
   # 5. Summary — two tiers. MUST is release-blocking and owns the exit code; the
   #    word "green" is reserved for the MUST tier. BEHAVIOR is advisory and is
@@ -3956,8 +4191,8 @@ case "$cmd" in
   check-meta-session)
     check_meta_session
     ;;
-  check-meta-record-v2)
-    check_meta_record_v2
+  check-meta-v3-record)
+    check_meta_v3_record
     ;;
   check-mailbox-receipt-state)
     check_mailbox_receipt_state
@@ -3965,14 +4200,20 @@ case "$cmd" in
   check-entwurf-capabilities)
     check_entwurf_capabilities
     ;;
+  check-meta-migration-readers)
+    check_meta_migration_readers
+    ;;
+  check-meta-migrate-v3)
+    check_meta_migrate_v3
+    ;;
   check-capability-bundle-reach)
     check_capability_bundle_reach
     ;;
   check-bridge-delivery)
     check_bridge_delivery
     ;;
-  check-meta-dual-read)
-    check_meta_dual_read
+  smoke-pi-attach)
+    smoke_pi_attach
     ;;
   check-meta-mailbox-state-write)
     check_meta_mailbox_state_write
@@ -3980,14 +4221,11 @@ case "$cmd" in
   check-meta-receiver-marker)
     check_meta_receiver_marker
     ;;
+  check-meta-identity-consumers)
+    check_meta_identity_consumers
+    ;;
   check-hook-launch-topology)
     check_hook_launch_topology
-    ;;
-  check-meta-migration)
-    check_meta_migration
-    ;;
-  check-meta-dual-consumers)
-    check_meta_dual_consumers
     ;;
   check-meta-capability-source)
     check_meta_capability_source
@@ -4085,6 +4323,9 @@ case "$cmd" in
   smoke-acp-bundled-mcp-live)
     smoke_acp_bundled_mcp_live
     ;;
+  smoke-acp-v2-send-live)
+    smoke_acp_v2_send_live
+    ;;
   smoke-acp-carrier-augment-live)
     smoke_acp_carrier_augment_live
     ;;
@@ -4096,6 +4337,9 @@ case "$cmd" in
     ;;
   check-entwurf-facts)
     check_entwurf_facts
+    ;;
+  check-control-socket-path)
+    check_control_socket_path
     ;;
   check-socket-discovery)
     check_socket_discovery
@@ -4128,9 +4372,9 @@ case "$cmd" in
     check_agy_sender_identity
     ;;
   new-session-id)
-    # Garden launcher helper: print one fresh garden sessionId (SSOT:
-    # generateSessionId). Used by the operator alias to make every
-    # --entwurf-control session a garden citizen. Stdout = the id only.
+    # Print one fresh garden sessionId (SSOT: generateSessionId). #50 C2 retired
+    # the operator-launcher --session-id injection; the record layer is the
+    # consumer that mints garden addresses. Stdout = the id only.
     run_ts scripts/new-session-id.ts
     ;;
   smoke-resident-garden-guard)
@@ -4373,6 +4617,22 @@ case "$cmd" in
     # it became foreign). The raw script (no wrapper) so an operator sees a loud failure.
     (cd "$REPO_DIR" && bash scripts/dev-bin.sh remove "$@")
     ;;
+  meta-bridge-migrate-v3)
+    # #50 M1 — the ONE-SHOT schema-migration operator command (LOCKED PROTOCOL 7:
+    # installed operator command only, never hook-automated). Every v3-only
+    # rejection surface (parse/birth/peers/self/v2/inbox/store-doctor) names this
+    # verb as the fix. migrate = classify → refuse-before-write on an unreadable
+    # store or a non-null parentGardenId/isEntwurf=true without --drop-parentage
+    # (#50: Call ≠ parentage) → whole-dir backup to `<store>.v3-migration-backup-<ts>/`
+    # (staged copy + atomic rename: the final name exists only once the copy
+    # completed) → atomic v1/v2→v3 rewrite (v1 receipts to mailbox state first)
+    # → re-verify non-V3=0. verify = read-only certification. restore <backup-dir>
+    # = rollback (only THIS store's fully readable, non-empty timestamp sibling;
+    # current store moved aside, never destroyed). Store resolution is env+default
+    # only — the H7 runbook targets THE live store.
+    shift || true
+    run_ts scripts/meta-bridge-migrate-v3.ts "$@"
+    ;;
   meta-bridge-prune)
     # 1.0.0 meta-bridge Phase 4: LISTING-ONLY janitor for the meta-session store.
     # doctor reds on corrupt/duplicate/drift but intentionally does NOT fail on
@@ -4401,9 +4661,6 @@ case "$cmd" in
     ;;
   check-package-source-routing)
     check_package_source_routing
-    ;;
-  smoke-session-id-name)
-    smoke_session_id_name
     ;;
   check-dep-versions)
     check_dep_versions
@@ -4465,6 +4722,13 @@ case "$cmd" in
   check-acp-carrier-augment)
     check_acp_carrier_augment
     ;;
+  check-upgrade-gate)
+    # SOURCE cell of the three-cell upgrade proof (#50 M1 / #51): an existing
+    # development host that already carries a pre-cut store must be refused
+    # BEFORE any write, told which verb fixes it, and then succeed on the retry.
+    # Hermetic (mkdtemp worlds + the store env seam); no model, no network.
+    (cd "$REPO_DIR" && bash scripts/check-upgrade-gate.sh "$@")
+    ;;
   check-pack)
     check_pack
     ;;
@@ -4486,12 +4750,6 @@ case "$cmd" in
     ;;
   install)
     install_local_package "$TARGET_PROJECT_DIR"
-    ;;
-  setup:links)
-    # Repair / refresh ~/.pi/agent/entwurf-targets.json without re-running
-    # the full setup flow. Pass --force to overwrite a stale operator file
-    # or a wrong symlink (a backup is taken for regular files).
-    ensure_agent_dir_symlinks "${2:-}"
     ;;
   remove)
     remove_local_package "$TARGET_PROJECT_DIR"

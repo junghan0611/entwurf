@@ -1,0 +1,21 @@
+{
+  "_comment": [
+    "Host states an upgrading machine can actually be in, each a list of record",
+    "files from ./records/. The record files are the frozen bytes; a host state is",
+    "only a composition of them, so the same v2 record is byte-identical whether it",
+    "sits alone (v2-only) or beside a v3 record (mixed). Seed with ../seed-store.sh.",
+    "absent and empty carry no records and need no entry-list beyond []."
+  ],
+  "absent": [],
+  "empty": [],
+  "v3-only": ["20260401T000000-cccc03"],
+  "v2-only": ["20260302T000000-bbbb02"],
+  "mixed": ["20260302T000000-bbbb02", "20260401T000000-cccc03"],
+  "mixed-problem": ["20260302T000000-bbbb02", "20260307T000000-ffff07"],
+  "v2-parentage": [
+    "20260302T000000-bbbb02",
+    "20260305T000000-dddd05",
+    "20260306T000000-eeee06"
+  ],
+  "malformed": ["20260307T000000-ffff07"]
+}

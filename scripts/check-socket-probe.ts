@@ -1,13 +1,14 @@
 /**
  * check-socket-probe — deterministic gate for 0.11 Stage 0 (F3 fix): the
- * three-valued control-socket liveness probe and its GC/listing policies.
+ * three-valued control-socket liveness probe and its GC policy. (Listing policy
+ * is no longer this module's: `shouldListAsLive` left with its last consumer in
+ * #50 C4 — indeterminate now reaches the surface as a fact instead of hidden.)
  *
  * Proves:
  *   - classifyConnectError is a pure boundary: ECONNREFUSED/ENOENT → dead;
  *     timeout/EACCES/unknown/undefined → indeterminate (default = don't destroy),
  *   - shouldUnlinkOnGc reclaims ONLY dead (the F3 invariant: indeterminate and
  *     alive both survive the sweep),
- *   - shouldListAsLive lists ONLY alive (indeterminate hidden but not unlinked),
  *   - probeSocketLiveness end-to-end on the two REPRODUCIBLE cases:
  *       (a) a real listening socket  → "alive"  → survives GC,
  *       (b) a nonexistent path       → "dead"   → eligible for GC.
@@ -26,20 +27,9 @@ import { promises as fs } from "node:fs";
 import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
-import {
-	classifyConnectError,
-	probeSocketLiveness,
-	type SocketLiveness,
-	shouldListAsLive,
-	shouldUnlinkOnGc,
-} from "../pi-extensions/lib/socket-probe.ts";
+import { classifyConnectError, probeSocketLiveness, shouldUnlinkOnGc } from "../pi-extensions/lib/socket-probe.ts";
 
 let passed = 0;
-function ok(label: string, cond: boolean): void {
-	assert.ok(cond, label);
-	console.log(`  ok    ${label}`);
-	passed++;
-}
 function eq(label: string, actual: unknown, expected: unknown): void {
 	assert.strictEqual(actual, expected, label);
 	console.log(`  ok    ${label}`);
@@ -59,19 +49,6 @@ eq("GC unlinks dead", shouldUnlinkOnGc("dead"), true);
 eq("GC keeps indeterminate (F3: load-stalled live socket survives)", shouldUnlinkOnGc("indeterminate"), false);
 eq("GC keeps alive", shouldUnlinkOnGc("alive"), false);
 
-// ── Listing policy: list ONLY alive; GC scope ⊂ listing-hidden scope ───────
-eq("list alive", shouldListAsLive("alive"), true);
-eq("list hides dead", shouldListAsLive("dead"), false);
-eq("list hides indeterminate", shouldListAsLive("indeterminate"), false);
-// Structural invariant: nothing that GC reclaims is ever listed as live, and
-// the set GC reclaims (dead) is strictly narrower than the set hidden from the
-// listing (dead + indeterminate) — so a hidden socket is never auto-destroyed.
-for (const liveness of ["alive", "dead", "indeterminate"] as SocketLiveness[]) {
-	if (shouldUnlinkOnGc(liveness)) {
-		ok(`invariant: GC-reclaimed (${liveness}) is not listed live`, !shouldListAsLive(liveness));
-	}
-}
-
 // ── Integration: two reproducible cases on real paths ──────────────────────
 async function integration(): Promise<void> {
 	const dir = await fs.mkdtemp(path.join(os.tmpdir(), "socket-probe-"));
@@ -88,7 +65,6 @@ async function integration(): Promise<void> {
 		const live = await probeSocketLiveness(liveSock);
 		eq("integration: listening socket → alive", live, "alive");
 		eq("integration: alive socket survives GC", shouldUnlinkOnGc(live), false);
-		ok("integration: alive socket is listed", shouldListAsLive(live));
 	} finally {
 		await new Promise<void>((resolve) => server.close(() => resolve()));
 	}

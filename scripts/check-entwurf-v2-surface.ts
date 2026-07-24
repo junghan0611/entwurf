@@ -267,6 +267,17 @@ async function main(): Promise<void> {
 			"2B: actionableRejectHint returns undefined for a reject with no next step",
 			actionableRejectHint("bad-target") === undefined,
 		);
+		// #50 C4: the record-less-socket reject must name the TRUE cause (no record
+		// claims the socket; the record is the address authority) AND the M1 fix —
+		// a migration-shaped state never surfaces as a bare reason code.
+		const rls = actionableRejectHint("record-less-socket") ?? "";
+		ok(
+			"2C: record-less-socket hint names the record authority + both fixes (restart / M1)",
+			rls.includes("NO meta-record claims it") &&
+				rls.includes("sole address authority") &&
+				rls.includes("restart it under the current runtime") &&
+				rls.includes("meta-bridge-migrate-v3 migrate"),
+		);
 	}
 
 	// ── 6: parseEntwurfPrefixRootsEnv (5d-4b operator-policy SSOT) ─────────────

@@ -6,7 +6,7 @@
  * filesystem and the SAME facts can feed pi-native / doctor / v2 dispatch later
  * (a handler that did its own brain work would deny them that reuse).
  *
- * Three hard rules carried from the frozen contract (동결결정 10):
+ * Two hard rules carried from the frozen contract (동결결정 10 + #50 C4):
  *   - FACTS ONLY, NO VERB-ROUTING. Neither the payload nor the text may carry a
  *     `sendable`/`resumable`/`dispatch`/`action`/`transport`/`mailboxDeliverable`
  *     field or word. Whether a target is sent-to or resumed is computed at call
@@ -14,40 +14,23 @@
  *     listing is exactly what makes `entwurf_peers` lie. The gate scans both the
  *     JSON keys AND the text for the forbidden words (a section title like
  *     "resumable peers" leaks routing that a key scan would miss).
- *   - THREE SECTIONS, NEVER MERGED. `peers` (citizens, 4-value liveness) and
- *     `socketOnly` (record-less sockets, 3-value liveness) are DISTINCT subjects
- *     (slice 2's two-array split); `diagnostics` is a third. Merging them into one
- *     array collapses the subject separation at the surface.
- *   - LEGACY `sessions` IS A PROJECTION OF FACTS, not a second scan. We do NOT
- *     re-run the old `getLiveSessions` (a separate live-socket scan would bypass
- *     the provider's quarantine — a non-pi citizen colliding with a socket, which
- *     `listEntwurfFacts` removes from BOTH normal arrays, could reappear in
- *     `sessions`). `sessions` is derived from the SAME facts: alive pi citizens +
- *     alive socket-only entries. Its socketPath is built by `controlSocketPath`
- *     (the SSOT helper), never re-concatenated, so the filename↔gardenId
- *     correlation authority (동결결정3) cannot drift between scan and render.
+ *   - CITIZENS AND DIAGNOSTICS, NEVER MERGED. `peers` (citizens, 4-value
+ *     liveness) is the ONLY identity section; `diagnostics` is the other. The
+ *     record is the sole address axis (#50 C4), so nothing socket-shaped appears
+ *     as identity: the old socket-only section is a `record-less-socket`
+ *     diagnostic now, and the legacy `sessions` projection (sessionId +
+ *     socketPath rows — the pre-record socket-scan worldview) is gone with the
+ *     `controlDir` it exposed. Socket paths are dispatch-internal transport.
  */
 
 import type { EntwurfDiagnostic, EntwurfFactsResult } from "./entwurf-fact-provider.ts";
-import type { PeerFact, SocketOnlyFact } from "./entwurf-facts.ts";
-import { controlSocketPath } from "./socket-discovery.ts";
+import type { PeerFact } from "./entwurf-facts.ts";
 
-/** The legacy-compatible active-session shape (sessionId + socketPath), retained
- * for old consumers. A PROJECTION of the facts (alive only), not a second scan. */
-export interface LegacySession {
-	sessionId: string;
-	socketPath: string;
-}
-
-/** The full `entwurf_peers` JSON payload. `sessions` is the legacy projection;
- * `peers`/`socketOnly`/`diagnostics` are the additive facts surface. NO
- * verb-routing field anywhere (the gate enforces this by deep key scan). */
+/** The full `entwurf_peers` JSON payload: citizens + diagnostics, nothing else.
+ * NO verb-routing field anywhere (the gate enforces this by deep key scan) and
+ * NO socket path / socket-derived identity row (#50 C4). */
 export interface EntwurfPeersPayload {
-	controlDir: string;
-	count: number;
-	sessions: LegacySession[];
 	peers: PeerFact[];
-	socketOnly: SocketOnlyFact[];
 	diagnostics: EntwurfDiagnostic[];
 }
 
@@ -56,43 +39,9 @@ export interface EntwurfPeersRender {
 	payload: EntwurfPeersPayload;
 }
 
-/**
- * Derive the legacy `sessions` projection from the facts: an active session is an
- * alive pi citizen OR an alive record-less socket. `peers` and `socketOnly` are
- * gid-disjoint (resolveFactList guarantees a gid is in one or the other, never
- * both), so the concatenation needs no dedup. socketPath via `controlSocketPath`
- * (SSOT). Sorted by sessionId for determinism.
- */
-function deriveSessions(peers: PeerFact[], socketOnly: SocketOnlyFact[], controlDir: string): LegacySession[] {
-	const sessions: LegacySession[] = [];
-	for (const p of peers) {
-		if (p.backend === "pi" && p.liveness === "alive") {
-			sessions.push({ sessionId: p.gardenId, socketPath: controlSocketPath(p.gardenId, controlDir) });
-		}
-	}
-	for (const s of socketOnly) {
-		if (s.liveness === "alive") {
-			sessions.push({ sessionId: s.gardenId, socketPath: controlSocketPath(s.gardenId, controlDir) });
-		}
-	}
-	sessions.sort((a, b) => (a.sessionId < b.sessionId ? -1 : a.sessionId > b.sessionId ? 1 : 0));
-	return sessions;
-}
-
 function renderPeerLine(p: PeerFact): string {
 	const model = p.model ?? "(unknown)";
-	const entwurf = p.isEntwurf ? " entwurf" : "";
-	return `- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  cwd=${p.cwd}  model=${model}${entwurf}`;
-}
-
-function renderSocketOnlyLine(s: SocketOnlyFact): string {
-	// Null enrich is "(not enriched)" — NOT "(unknown)", which would read as
-	// identity-unknown rather than not-yet-fetched / not available for this socket.
-	const cwd = s.cwd ?? "(not enriched)";
-	const model = s.model ?? "(not enriched)";
-	const idle = s.idle === null ? "" : `  idle=${s.idle ? "yes" : "no"}`;
-	const infoError = s.infoError === null ? "" : `  infoError=${s.infoError}`;
-	return `- ${s.gardenId}  liveness=${s.liveness}  cwd=${cwd}  model=${model}${idle}${infoError}`;
+	return `- ${p.gardenId}  backend=${p.backend}  liveness=${p.liveness}  cwd=${p.cwd}  model=${model}`;
 }
 
 function renderDiagnosticLine(d: EntwurfDiagnostic): string {
@@ -101,6 +50,8 @@ function renderDiagnosticLine(d: EntwurfDiagnostic): string {
 			return `- meta-record-read-error ${d.filename}: ${d.message}`;
 		case "garden-id-socket-conflict":
 			return `- garden-id-socket-conflict ${d.gardenId} (backend=${d.backend}): ${d.message}`;
+		case "record-less-socket":
+			return `- record-less-socket ${d.gardenId} (${d.liveness}): ${d.message}`;
 		case "socket-symlink-rejected":
 			return `- socket-symlink-rejected ${d.gardenId}: ${d.message}`;
 		case "malformed-socket-name":
@@ -108,6 +59,58 @@ function renderDiagnosticLine(d: EntwurfDiagnostic): string {
 		case "socket-dir-read-error":
 			return `- socket-dir-read-error: ${d.message}`;
 	}
+}
+
+/** The per-diagnostic subject (the thing the shared message is ABOUT). */
+function diagnosticSubject(d: EntwurfDiagnostic): string {
+	switch (d.kind) {
+		case "meta-record-read-error":
+			return d.filename;
+		case "garden-id-socket-conflict":
+		case "record-less-socket":
+		case "socket-symlink-rejected":
+			return d.gardenId;
+		case "malformed-socket-name":
+			return d.name;
+		case "socket-dir-read-error":
+			return "";
+	}
+}
+
+const DIAGNOSTIC_SAMPLE_MAX = 3;
+
+/**
+ * Group diagnostics sharing (kind + message) into ONE line carrying the count and a
+ * subject sample. An unmigrated pre-cut store degrades every record identically, and
+ * repeating that sentence per record buried the one citizen line under 177 copies of
+ * it (F8) — the aggregated form says how many + which fix ONCE. A group of one renders
+ * exactly the classic per-item line; distinct messages stay distinct lines, and the
+ * JSON payload keeps every individual diagnostic (aggregation is text-only). The
+ * `record-less-socket` messages are liveness-keyed for exactly this reason: same-state
+ * sockets share a message and fold into one line per liveness.
+ */
+function renderDiagnosticLines(diagnostics: EntwurfDiagnostic[]): string[] {
+	const groups = new Map<string, EntwurfDiagnostic[]>();
+	for (const d of diagnostics) {
+		const key = `${d.kind}:${d.message}`;
+		const group = groups.get(key);
+		if (group) group.push(d);
+		else groups.set(key, [d]);
+	}
+	const lines: string[] = [];
+	for (const group of groups.values()) {
+		const first = group[0] as EntwurfDiagnostic;
+		if (group.length === 1) {
+			lines.push(renderDiagnosticLine(first));
+			continue;
+		}
+		const subjects = group.map(diagnosticSubject).filter((s) => s.length > 0);
+		const sample = subjects.slice(0, DIAGNOSTIC_SAMPLE_MAX).join(", ");
+		const omitted = subjects.length - Math.min(subjects.length, DIAGNOSTIC_SAMPLE_MAX);
+		const suffix = subjects.length > 0 ? ` (${sample}${omitted > 0 ? `, … +${omitted} more` : ""})` : "";
+		lines.push(`- ${first.kind} ×${group.length}: ${first.message}${suffix}`);
+	}
+	return lines;
 }
 
 function compactLines(lines: string[], max: number = 32): string[] {
@@ -126,29 +129,20 @@ function section(title: string, lines: string[], opts: { compact?: boolean } = {
 
 /**
  * Shape the facts into the `entwurf_peers` text + JSON. Pure over its inputs.
- * `controlDir` is the same directory the socket scan used — passing it here (not
- * re-deriving) keeps the socketPath SSOT.
+ * The provider has already folded every record-less socket into a
+ * `record-less-socket` diagnostic (#50 C4), so `facts.recordLessSockets` is not
+ * re-rendered here — diagnostics are the single channel for non-citizen state.
  */
-export function renderEntwurfPeers(result: EntwurfFactsResult, controlDir: string): EntwurfPeersRender {
-	const { peers, socketOnly } = result.facts;
+export function renderEntwurfPeers(result: EntwurfFactsResult): EntwurfPeersRender {
+	const { peers } = result.facts;
 	const { diagnostics } = result;
-	const sessions = deriveSessions(peers, socketOnly, controlDir);
 
 	const text = [
 		section("Garden citizens (meta-record):", peers.map(renderPeerLine), { compact: true }),
 		"",
-		section("Socket-only control sockets (no meta-record):", socketOnly.map(renderSocketOnlyLine), { compact: true }),
-		"",
-		section("Diagnostics:", diagnostics.map(renderDiagnosticLine)),
+		section("Diagnostics:", renderDiagnosticLines(diagnostics)),
 	].join("\n");
 
-	const payload: EntwurfPeersPayload = {
-		controlDir,
-		count: sessions.length,
-		sessions,
-		peers,
-		socketOnly,
-		diagnostics,
-	};
+	const payload: EntwurfPeersPayload = { peers, diagnostics };
 	return { text, payload };
 }

@@ -9,9 +9,11 @@
 //                                  last assistant; the trailing-group FIRST user
 //                                  so the SessionStart hook message is skipped).
 //
-// This gate proves the split deterministically — BEFORE the session store that
-// produces the reuse paths exists, so the builder is correct the moment it is
-// wired. Pure/deterministic — IN pnpm check.
+// This gate proves the split deterministically. It was written BEFORE the
+// session store that produces the reuse paths existed, so that the builder was
+// correct the moment it got wired; that store has since landed (S2d-1b, gated by
+// check-acp-session-store / check-acp-session-reuse) and this gate stays the
+// pure scope lock over it. Pure/deterministic — IN pnpm check.
 
 import { strict as assert } from "node:assert";
 import type { Context } from "@earendil-works/pi-ai";

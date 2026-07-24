@@ -24,6 +24,7 @@ import type { SenderEnvelope } from "./entwurf-control-rpc.ts";
 import type { DispatchInput, EntwurfV2Mode } from "./entwurf-v2-decider.ts";
 import { makeProductionEntwurfV2Deps, type ProductionEntwurfV2Opts } from "./entwurf-v2-production.ts";
 import { type EntwurfV2RunResult, runEntwurfV2 } from "./entwurf-v2-runner.ts";
+import { M1_PRESCRIPTION } from "./meta-session.ts";
 
 /** The operator-policy SSOT for v2 dispatch's preflight prefix-auto-approve roots (5d-4b).
  * ONE shared env var feeds BOTH surfaces (pi-native + MCP) — a pi session and an MCP child
@@ -116,6 +117,16 @@ export function actionableRejectHint(reason: string): string | undefined {
 		case "native-push-probe-indeterminate":
 			// Host up, but no LS port served the conversation — inconclusive, not a hard dead.
 			return "native-push host is up but no port served this conversation (probe inconclusive). Retry once the conversation is loaded, or verify the conversation id.";
+		case "record-less-socket":
+			// #50 C4: name the true cause AND the fix — a bare socket is a migration/
+			// diagnostic state, not an addressable citizen (the record is the address).
+			return (
+				"a control socket exists at this garden id but NO meta-record claims it — the record is the " +
+				"sole address authority, so a bare socket is not an addressable citizen. If a pre-record-era " +
+				"resident owns that socket, restart it under the current runtime (session_start births its " +
+				`record); if the store predates the #50 hard cut, migrate with ${M1_PRESCRIPTION} ` +
+				"— the M1 operator command. A stale/forged socket should be removed."
+			);
 		default:
 			return undefined;
 	}

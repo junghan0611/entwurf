@@ -35,13 +35,14 @@ Verification here is not a benchmark. In production we exchange short turns and 
 
 - **Deterministic floor:** `pnpm check` — the full `check-*` gate set (~60 gates). Run first; it is the cheap, machine-checkable layer.
 - **Live floor:** `LIVE=1 ./run.sh release-gate <scratch-project-dir>` — `pnpm check` + the v2-native live gates + the ACP plugin acceptance floor. It reports a **two-tier summary**:
-  - **MUST tier** (release-blocking — owns the exit code; "green" applies only here): `pnpm check`, `smoke-entwurf-v2-spawn-resume-live`, `smoke-entwurf-v2-matrix-live`, `check-bridge`, `smoke-session-id-name`, the resident-garden-guard negative/id-safety + `/gnew` zero-token half, and the `smoke-acp-*-live` ACP plugin smokes (socket-citizen / raw-turn / overlay / provider / session-reuse / carrier-augment / memory-containment / rgg / mcp / skill / bundled-mcp).
-  - **BEHAVIOR tier** (advisory, non-blocking): the resident-garden-guard positive (a model-in-loop `entwurf_self` turn). A BEHAVIOR FAIL is surfaced with its artifact path but **never blocks the cut**.
+  - **MUST tier** (release-blocking — owns the exit code; "green" applies only here): `pnpm check`, `smoke-entwurf-v2-spawn-resume-live`, `smoke-entwurf-v2-matrix-live`, `check-bridge`, the resident-garden-guard zero-token half (record birth / record-keyed socket / attach-on-reopen), and the `smoke-acp-*-live` ACP plugin smokes (socket-citizen / raw-turn / overlay / provider / session-reuse / carrier-augment / memory-containment / rgg / mcp / skill / bundled-mcp / v2-send). (`smoke-session-id-name` is gone — #50 C3: its `--session-id`/`--name` substrate has no entwurf consumer anymore.)
+  - **BEHAVIOR tier** (advisory, non-blocking): the resident-garden-guard positive (a model-in-loop `entwurf_self` turn). A BEHAVIOR FAIL is surfaced with its artifact path but **never blocks the cut**. The lane holds what the model *chooses*, never what our wiring fails to deliver — a gate that TELLS the model which tool to call stays MUST, because its failure is ours — measured 2026-07-24, when the tool turned out to be absent from the session schema in both observed failures (the bundled-MCP readiness gap recorded in `scripts/smoke-acp-v2-send-live.ts`).
   - LIVE-gated MUST steps honest-skip when `LIVE!=1`; a real cut needs `LIVE=1` with `SKIP=0`. A green MUST gate is **necessary, not sufficient** — GLG authorizes the cut.
+  - **When cost-bearing MUST gates run (fixed 2026-07-23, the F6/F7 lesson):** a commit that touches a rail a MUST-tier live gate covers runs that gate **before cross-review is requested** — never parked behind "run it at approval time". Deferring a wired gate to a human decision is what let F6/F7 ship reviewed-and-approved; the wiring exists so the verdict never depends on who pressed enter. "배선이 없어 못 한 것은 OK, 배선이 있는데 안 돌린 것은 우리가 남긴 구멍이다." Model-in-loop cost is spent via the subscription-backed `entwurf` provider where the gate allows it, a free-tier native model otherwise; cost is a reason to pick the cheap target, not to skip the gate.
 
 > The aggregate release gate does not own a live agy conversation id, so agy's real native-push round trip is a separate acceptance axis: three fail-loud doctors plus `LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live`, followed by a fresh-conversation sender/reply check after package install. Its deterministic install/sender gates are already inside `pnpm check`; do not misreport the aggregate gate as live agy evidence.
 >
-> The authoritative per-cut counts live in BASELINE.md's HISTORY and CHANGELOG/git, not inline here (they drift against `run.sh`). Most recent recorded aggregate floor: **2026-06-27 — MUST 17/0/0 + BEHAVIOR 1/0**.
+> The authoritative per-cut counts live in BASELINE.md's HISTORY and CHANGELOG/git, not inline here (they drift against `run.sh`). Most recent recorded aggregate: **2026-07-24 (night) — MUST 16/1/0 + BEHAVIOR 1/0, EXIT=1** at `cbda097` — the single FAIL is the known bundled-MCP readiness race (ROADMAP 「🔴 OPEN」, observe-don't-fix; isolated re-runs pass). Most recent all-green floor: **2026-07-24 — MUST 17/0/0 + BEHAVIOR 1/0, EXIT=0** at `7cbeb29b6afcfbaf4fc28da3b7929037c339113d` (the dependency-uplift HEAD: pi 0.82.0 + claude-agent-acp 0.61.0 / ACP SDK 1.3.0). The step count moved 16→17 with `smoke-acp-v2-send-live`; earlier that day it had moved 17→16 with the v2-cutover smoke retirements. A release cut requires the aggregate red to be resolved or explicitly ruled by GLG.
 
 ### Artifact / host certification matrix — #51 repair cut
 
@@ -199,6 +200,14 @@ cd "$REPO_DIR" && ./run.sh setup "$PROJECT_DIR"
 LIVE=1 ./run.sh release-gate /path/to/consumer-project
 pi --provider entwurf --model claude-sonnet-5 -p "reply with ok only"   # one-turn smoke
 ```
+
+The one-turn smoke is a **provider**-surface check (auth + model routing + a real
+turn). It does not make that session addressable: without `--entwurf-control`
+there is no routable control socket, so `PI_SESSION_ID` stays unset by design and
+a bundled `entwurf_self` / `entwurf_v2` call fails loud. Garden citizenship and
+addressable sends require `--entwurf-control` (measured 2026-07-24: the same
+one-shot with that flag returns its own gid and delivers `entwurf_v2` to a peer
+mailbox with `origin=pi-session`, `replyable=true`).
 
 `setup` runs `pnpm install` + project/user-scope install + detected native-harness wiring (Claude and/or agy) + the v2 install smoke. A green setup proves the required core path and reports optional-harness degradation; it does **not** replace the native-harness doctors. The full aggregate live floor is still `LIVE=1 ./run.sh release-gate`, with agy's conversation-id-gated round trip verified separately.
 

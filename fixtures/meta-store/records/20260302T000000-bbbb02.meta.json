@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "gardenId": "20260302T000000-bbbb02",
+  "backend": "claude-code",
+  "nativeSessionId": "native-v2-0002",
+  "cwd": "/synthetic/p2",
+  "model": "claude-opus-4",
+  "transcriptPath": null,
+  "parentGardenId": null,
+  "isEntwurf": false,
+  "createdAt": "2026-03-02T00:00:00.000Z",
+  "recordUpdatedAt": "2026-03-02T01:00:00.000Z"
+}

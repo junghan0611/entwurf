@@ -16,10 +16,10 @@
  * cannot reuse the legacy `getLiveSessions` (alive-only listing): folding the
  * hidden indeterminate/dead sockets into "absent" would resurrect the F3 split.
  *
- * This slice fills the LIVENESS axis and, for live sockets, best-effort runtime
- * enrich via the control RPC `get_info` (cwd / model / idle). `SocketProbe`'s
- * enrich fields remain nullable-by-design: a dead/indeterminate socket or a
- * failed enrich is HONEST, not synthetic, and carries `infoError` when known.
+ * This slice fills the LIVENESS axis only (#50 C4): the old per-socket `get_info`
+ * runtime enrich (cwd / model / idle) is gone with the socket-only quasi-citizen
+ * listing it decorated — a record-less socket is a diagnostic subject now, and a
+ * citizen's cwd/model come from its meta-record, never from RPC-ing its socket.
  *
  * Three socket-axis hazards are surfaced (slice 4c, Fable 검수), never swallowed:
  *   - SYMLINK (P1, security): a `<gid>.sock` that is a symlink can redirect to
@@ -52,16 +52,22 @@
 
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
-import * as path from "node:path";
-import { fetchControlSocketRuntimeInfo, formatRuntimeModel } from "./entwurf-control-rpc.ts";
+import {
+	CONTROL_SOCKET_SUFFIX,
+	controlSocketPathIn,
+	defaultControlSocketDir,
+	gardenIdFromSocketFilename,
+} from "./control-socket-path.js";
 import type { SocketProbe } from "./entwurf-facts.ts";
 import { SESSION_ID_RE } from "./session-id.js";
 import { probeSocketLiveness, type SocketLiveness } from "./socket-probe.ts";
 
 /** Canonical control-socket directory; the socket filename IS the gardenId
- * (동결결정3 correlation authority). */
-export const CONTROL_SOCKET_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
-export const SOCKET_SUFFIX = ".sock";
+ * (동결결정3 correlation authority). Directory SOURCE stays here (HOME-derived);
+ * only the path GRAMMAR lives in `control-socket-path.js`. */
+export const CONTROL_SOCKET_DIR = defaultControlSocketDir(os.homedir());
+/** Re-export of the grammar SSOT's suffix. Consumers and gates keep this name. */
+export const SOCKET_SUFFIX = CONTROL_SOCKET_SUFFIX;
 
 // A control-socket filename is a bare garden id. We reuse the repo-wide
 // `SESSION_ID_RE` SSOT (not a local copy): 동결결정3 makes the socket filename the
@@ -71,7 +77,7 @@ export const SOCKET_SUFFIX = ".sock";
 // correlate to and is ignored.
 
 export function controlSocketPath(gardenId: string, dir: string = CONTROL_SOCKET_DIR): string {
-	return path.join(dir, `${gardenId}${SOCKET_SUFFIX}`);
+	return controlSocketPathIn(dir, gardenId);
 }
 
 /**
@@ -100,17 +106,17 @@ export type TargetSocketInspection =
 	| { kind: "indeterminate"; socketPath: string; error: string };
 
 /**
- * A1 narrow (0.11.0): does this PROBE-FREE single-lstat inspection of a gid's canonical
- * control socket mean a record-LESS pi endpoint is addressable as a socket-only target?
- * TRUE only for a confirmed NON-SYMLINK socket file (`socket-file`); a symlinked /
- * absent / not-socket / `indeterminate` path is conservatively NOT promoted (never trust a
- * symlink, never claim a target on an unprovable lstat). Shared by the v2 production
- * `resolveTarget` so the socket-only acceptance uses the SAME lstat classification the
- * listing/conflict paths use — listing↔dispatch cannot drift on what counts as a real
- * control socket. The decider still does its own under-lock `inspectSocket` probe; this is
- * only the presence hint that promotes `bad-target` → fire-and-forget socket-only pi.
+ * #50 C4: does this PROBE-FREE single-lstat inspection of a gid's canonical control
+ * socket confirm a REAL record-less socket? TRUE only for a confirmed NON-SYMLINK
+ * socket file (`socket-file`); a symlinked / absent / not-socket / `indeterminate`
+ * path is conservatively NOT counted (never trust a symlink, never claim a state on
+ * an unprovable lstat). Shared by the v2 production `resolveTarget` so the dispatch
+ * reject uses the SAME lstat classification the listing/conflict paths use —
+ * listing↔dispatch cannot drift on what counts as a real control socket. This is
+ * only the presence hint that turns a plain `bad-target` into the honest
+ * `record-less-socket` reject (migration/diagnostic state) — no probe, no acceptance.
  */
-export function isSocketOnlyPiCandidate(inspection: TargetSocketInspection): boolean {
+export function isRecordLessSocketCandidate(inspection: TargetSocketInspection): boolean {
 	return inspection.kind === "socket-file";
 }
 
@@ -202,18 +208,10 @@ export interface SocketDirEntry {
 	isSymbolicLink: boolean;
 }
 
-export interface SocketRuntimeInfo {
-	cwd: string | null;
-	model: string | null;
-	idle: boolean | null;
-}
-
 export interface SocketScanDeps {
 	dir: string;
 	readdir: (dir: string) => Promise<SocketDirEntry[]>;
 	probe: (socketPath: string) => Promise<SocketLiveness>;
-	/** Best-effort live-socket runtime enrich. Called only when liveness === "alive". */
-	getInfo: (socketPath: string) => Promise<SocketRuntimeInfo>;
 }
 
 /**
@@ -233,8 +231,8 @@ export interface SocketScanResult {
 
 /**
  * Probe the union of (control sockets present in `dir`) ∪ (`piCitizenGardenIds`)
- * and return one `SocketProbe` per gardenId (liveness + live get_info enrich), plus
- * the three surfaced hazards. A missing directory (ENOENT) is the normal empty
+ * and return one `SocketProbe` per gardenId (liveness only, #50 C4), plus the
+ * three surfaced hazards. A missing directory (ENOENT) is the normal empty
  * (`dirError=null`) — the in-domain citizens are still probed (their absent
  * canonical paths read `dead`); any OTHER readdir failure sets `dirError`. A
  * symlinked `*.sock` is never probed (P1): a citizen owning one is forced `dead`,
@@ -252,15 +250,6 @@ export async function scanSocketProbes(
 			return dirents.map((e) => ({ name: e.name, isSymbolicLink: e.isSymbolicLink() }));
 		});
 	const probe = deps.probe ?? ((p: string) => probeSocketLiveness(p));
-	// Deterministic gates commonly inject fake readdir/probe over fake paths. In that
-	// case, default enrich must stay no-op unless the test explicitly injects getInfo.
-	// Real production calls inject neither readdir nor probe, so they get live RPC
-	// enrich by default.
-	const getInfo =
-		deps.getInfo ??
-		(deps.readdir || deps.probe
-			? async (): Promise<SocketRuntimeInfo> => ({ cwd: null, model: null, idle: null })
-			: getRuntimeInfoOverControlSocket);
 
 	let entries: SocketDirEntry[] = [];
 	let dirError: string | null = null;
@@ -280,8 +269,8 @@ export async function scanSocketProbes(
 	const symlinkedGardenIds: string[] = [];
 	const malformedNames: string[] = [];
 	for (const entry of entries) {
-		if (!entry.name.endsWith(SOCKET_SUFFIX)) continue;
-		const gid = entry.name.slice(0, -SOCKET_SUFFIX.length);
+		const gid = gardenIdFromSocketFilename(entry.name);
+		if (gid === null) continue;
 		if (!SESSION_ID_RE.test(gid)) {
 			malformedNames.push(entry.name);
 			continue;
@@ -315,32 +304,9 @@ export async function scanSocketProbes(
 		} else {
 			liveness = await probe(controlSocketPath(gardenId, dir));
 		}
-		let cwd: string | null = null;
-		let model: string | null = null;
-		let idle: boolean | null = null;
-		let infoError: string | null = null;
-		if (liveness === "alive") {
-			try {
-				const info = await getInfo(controlSocketPath(gardenId, dir));
-				cwd = info.cwd;
-				model = info.model;
-				idle = info.idle;
-			} catch (err) {
-				infoError = err instanceof Error ? err.message : String(err);
-			}
-		}
-		probes.push({ gardenId, liveness, cwd, model, idle, infoError });
+		probes.push({ gardenId, liveness });
 	}
 	symlinkedGardenIds.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 	malformedNames.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 	return { probes, symlinkedGardenIds, malformedNames, dirError };
-}
-
-async function getRuntimeInfoOverControlSocket(socketPath: string): Promise<SocketRuntimeInfo> {
-	const info = await fetchControlSocketRuntimeInfo(socketPath, { timeout: 1500 });
-	return {
-		cwd: info.cwd ?? null,
-		model: formatRuntimeModel(info) ?? null,
-		idle: info.idle ?? null,
-	};
 }

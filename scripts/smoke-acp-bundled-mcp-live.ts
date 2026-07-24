@@ -12,14 +12,22 @@
 // GLG verified this by hand (entwurf_self → sessionId/agentId/socketState alive); this
 // codifies that hand-check into a repeatable gate.
 //
-// WHY resident/RPC, not `pi -p` one-shot. A `pi -p` one-shot + bundled tool-call
-// hangs on closeSession/teardown — that hang is diagnostic backlog, NOT this smoke's
-// subject, and NOT the 0.11.0 release circuit (whose bundled-MCP evidence was always
-// resident/RPC). So this smoke RESTORES the 0.11.0 circuit: it drives the bundled
-// bridge through a long-lived `pi --entwurf-control --mode rpc` resident, the same
-// stdin-RPC / stdout-event-stream driver as scripts/gnew-rpc-drive.ts.
+// WHY resident/RPC, not `pi -p` one-shot. The resident IS the circuit this release
+// ships: a long-lived socket-citizen that stays addressable across turns, driven the
+// same way as scripts/resident-rpc-drive.ts (stdin RPC / stdout event stream).
 //
-// METHOD (gnew-rpc-drive shape): launch a real resident on an ACP model, send one
+// This comment previously gave a different reason — that a `pi -p` one-shot with a
+// bundled tool-call "hangs on closeSession/teardown". That claim was re-tested on
+// 2026-07-24 against pi 0.82.0 + claude-agent-acp 0.61.0 + ACP SDK 1.3.0 and did NOT
+// reproduce: the one-shot exits 0 both with and without a bundled tool call. It is
+// kept here as history, not as a live claim. What a one-shot genuinely lacks is
+// garden identity, and only when launched WITHOUT `--entwurf-control`: no routable
+// control socket means PI_SESSION_ID stays unset by contract, so entwurf_self fails
+// loud (see docs/setup-clean-host.md Stage 6). WITH the flag, a one-shot answers
+// entwurf_self correctly — so the choice here is about exercising the long-lived
+// circuit, not about avoiding a defect.
+//
+// METHOD (resident-rpc-drive shape): launch a real resident on an ACP model, send one
 // `{type:"prompt"}` over stdin asking the model to call mcp__entwurf-bridge__entwurf_self,
 // and capture — DIRECTLY from the stdout RPC event stream — the identity envelope
 // (the resident's own freshly-minted gid, agentId entwurf/<model>, socketState
@@ -37,13 +45,14 @@
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { fetchControlSocketRuntimeInfo, formatRuntimeModel } from "../pi-extensions/lib/entwurf-control-rpc.ts";
-import { generateSessionId } from "../pi-extensions/lib/entwurf-core.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { waitForPiRecord } from "./lib/pi-record-discovery.ts";
 
 const ACP_PROVIDER = "entwurf";
 const ACP_MODEL = process.env.ENTWURF_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-5";
@@ -100,7 +109,7 @@ interface TurnCapture {
 }
 
 // Drive exactly one model turn over the resident's stdin RPC and capture the stdout
-// event stream until `agent_end` (or a hard turn timeout). Mirrors gnew-rpc-drive.ts.
+// event stream until `agent_end` (or a hard turn timeout). Mirrors resident-rpc-drive.ts.
 function driveSelfTurn(child: ChildProcess, prompt: string): Promise<TurnCapture> {
 	return new Promise((resolve) => {
 		const cap: TurnCapture = {
@@ -157,47 +166,48 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	const gid = generateSessionId();
-	const sockPath = path.join(REAL_CONTROL_DIR, `${gid}${SOCKET_SUFFIX}`);
 	const tmp = os.tmpdir();
-
-	// A fresh gid must not collide with a pre-existing socket (else teardown deletes
-	// someone else's live socket). Fail loud rather than risk it.
-	ok("fresh gid has no pre-existing control socket", !existsSync(sockPath));
+	// Post-C2 the RECORD mints the address (`--session-id` injection is gone): isolate
+	// the resident's store to a temp dir so the freshly-born record is discoverable
+	// from an empty store AND no smoke garbage lands in the operator's live store
+	// (a pre-rewrite run minted a stray cwd=/tmp V3 record there, 2026-07-23). Only
+	// the STORE moves — auth.json (subscription login) and the control dir stay real.
+	const smokeStore = await fsp.mkdtemp(path.join(os.tmpdir(), "acp-s2g-store-"));
 
 	console.error(`[smoke-acp-bundled-mcp-live] repo:  ${REPO_ROOT}`);
-	console.error(
-		`[smoke-acp-bundled-mcp-live] gid:   ${gid} (never told to the model — only the bridge env carries it)`,
-	);
 	console.error(`[smoke-acp-bundled-mcp-live] model: ${ACP_PROVIDER}/${ACP_MODEL}`);
 
+	let gid = "";
+	let sockPath = "";
 	let stderrTail = "";
 	let resident: ChildProcess | null = null;
 	let cap: TurnCapture | null = null;
 	try {
 		resident = spawn(
 			"pi",
-			[
-				...REPO_EXTENSION_ARGS,
-				"--session-id",
-				gid,
-				"--entwurf-control",
-				"--provider",
-				ACP_PROVIDER,
-				"--model",
-				ACP_MODEL,
-				"--mode",
-				"rpc",
-			],
-			{ cwd: tmp, stdio: ["pipe", "pipe", "pipe"], detached: false },
+			[...REPO_EXTENSION_ARGS, "--entwurf-control", "--provider", ACP_PROVIDER, "--model", ACP_MODEL, "--mode", "rpc"],
+			{
+				cwd: tmp,
+				stdio: ["pipe", "pipe", "pipe"],
+				detached: false,
+				env: { ...process.env, ENTWURF_META_SESSIONS_DIR: smokeStore },
+			},
 		);
 		resident.stderr?.on("data", (b: Buffer) => {
 			stderrTail = (stderrTail + b.toString()).slice(-4000);
 		});
 
-		// The resident stands its control socket up (turn-free citizenship — S1).
+		// The resident births its record (the address authority) and stands its control
+		// socket up on that gardenId (turn-free citizenship — S1).
+		const bornGid = await waitForPiRecord(smokeStore, BOOT_TIMEOUT_MS);
+		ok(`ACP-model resident birthed its own V3 record (${ACP_PROVIDER}/${ACP_MODEL})`, bornGid !== null);
+		gid = bornGid as string;
+		sockPath = path.join(REAL_CONTROL_DIR, `${gid}${SOCKET_SUFFIX}`);
+		console.error(
+			`[smoke-acp-bundled-mcp-live] gid:   ${gid} (never told to the model — only the bridge env carries it)`,
+		);
 		const up = await waitForSocket(sockPath, BOOT_TIMEOUT_MS);
-		ok(`ACP-model resident stood up a control socket (${ACP_PROVIDER}/${ACP_MODEL})`, up);
+		ok(`ACP-model resident stood up a control socket keyed on the record gardenId (${gid})`, up);
 
 		// Citizen fact: get_info answers and reports the un-reverted ACP model (QM1).
 		const info = await fetchControlSocketRuntimeInfo(sockPath, { timeout: 3_000 });
@@ -282,6 +292,28 @@ async function main(): Promise<void> {
 			resident.exitCode === null && resident.signalCode === null,
 		);
 	} catch (err) {
+		// The 30-line tail below is what a reader sees in an aggregate log; it is often
+		// not enough. On 2026-07-24 this gate's failure was explained by a model line
+		// stating that only Read/Bash/Edit/Write/Skill were exposed — recoverable here,
+		// but the sibling send smoke printed nothing and its transcript had to be dug
+		// out of the pi session JSONL. So persist the whole captured turn event stream
+		// (this smoke's own stdout capture, not the session JSONL) too, and name it.
+		try {
+			const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+			const file = path.join(os.tmpdir(), `entwurf-smoke-acp-bundled-mcp-live-FAIL-${stamp}.log`);
+			await fsp.writeFile(
+				file,
+				`# smoke-acp-bundled-mcp-live FAILURE\n# ${err instanceof Error ? err.message : String(err)}\n\n` +
+					`## event stream\n${cap?.stream ?? "(no turn captured)"}\n\n` +
+					`## resident stderr tail\n${stderrTail || "(empty)"}\n`,
+				"utf8",
+			);
+			console.error(`[smoke-acp-bundled-mcp-live] FAILURE transcript: ${file}`);
+		} catch {
+			console.error(
+				"[smoke-acp-bundled-mcp-live] could not write the failure transcript (reporting the original error)",
+			);
+		}
 		if (cap)
 			console.error(`[smoke-acp-bundled-mcp-live] stream tail:\n${cap.stream.split("\n").slice(-30).join("\n")}`);
 		if (stderrTail)
@@ -289,6 +321,7 @@ async function main(): Promise<void> {
 		throw err;
 	} finally {
 		if (resident) await terminateChild(resident);
+		await fsp.rm(smokeStore, { recursive: true, force: true }).catch(() => {});
 	}
 
 	// Hygiene: after teardown the control socket file is gone — no process/socket residue.

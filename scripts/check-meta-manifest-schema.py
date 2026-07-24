@@ -170,16 +170,19 @@ if clone is not None:
     else:
         bad(f"desired_mcp(clone-shaped) should wire bash start.sh, got {clone.get('command')} {args}")
 
-# both modes must keep the canonical sender env
+# both modes must keep the canonical sender env. #50 C4: identity-required is the
+# bridge DEFAULT, so the retired REQUIRE flag must stay gone — an installer that
+# re-grows it would imply the default flipped back.
 for label, entry in (("installed", installed), ("clone", clone)):
     if entry is None:
         continue
     env = entry.get("env", {})
-    if env.get("ENTWURF_BRIDGE_REQUIRE_META_SENDER") == "1" and \
-       env.get("ENTWURF_BRIDGE_EXTERNAL_AGENT_ID") == "external-mcp/claude-code":
-        ok(f"desired_mcp({label}) carries canonical sender env")
+    if env.get("ENTWURF_BRIDGE_EXTERNAL_AGENT_ID") == "external-mcp/claude-code" and \
+       "ENTWURF_BRIDGE_REQUIRE_META_SENDER" not in env and \
+       "ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER" not in env:
+        ok(f"desired_mcp({label}) carries canonical sender env (no retired/escape flags)")
     else:
-        bad(f"desired_mcp({label}) dropped canonical sender env: {env}")
+        bad(f"desired_mcp({label}) sender env drifted: {env}")
 
 if fail:
     print("check-meta-manifest-schema FAIL")

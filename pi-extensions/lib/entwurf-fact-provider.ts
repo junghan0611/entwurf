@@ -29,22 +29,50 @@
 
 import { type FactList, isNonPiGardenIdSocketConflict, resolveFactList } from "./entwurf-facts.ts";
 import { isLivenessSupported } from "./entwurf-v2-contract.ts";
-import { listAllMetaIdentities, type MetaBackendV2 } from "./meta-session.ts";
+import { listAllMetaIdentities, M1_PRESCRIPTION, type MetaBackendV2 } from "./meta-session.ts";
 import { type SocketScanDeps, scanSocketProbes } from "./socket-discovery.ts";
+import type { SocketLiveness } from "./socket-probe.ts";
 
 /** A listing-surface problem, surfaced explicitly rather than hidden or thrown.
  * Kind-tagged so the render layer shows provenance; each carries only verbatim
- * facts (never a half-parsed identity). The last three are socket-axis hazards
- * folded from `scanSocketProbes` (slice 4c, Fable 검수): a symlinked socket is a
- * correlation-authority forgery attempt (P1), a malformed `*.sock` name a visible
- * drop (P3), a non-ENOENT dir-read failure asymmetric loss of the socket axis
- * (P2e②). */
+ * facts (never a half-parsed identity). `record-less-socket` (#50 C4) is the
+ * demoted socket-only listing: a socket no record claims is a migration/
+ * diagnostic state, not a citizen, and its message names the cause + fix. The
+ * last three are socket-axis hazards folded from `scanSocketProbes` (slice 4c,
+ * Fable 검수): a symlinked socket is a correlation-authority forgery attempt
+ * (P1), a malformed `*.sock` name a visible drop (P3), a non-ENOENT dir-read
+ * failure asymmetric loss of the socket axis (P2e②). */
 export type EntwurfDiagnostic =
 	| { kind: "meta-record-read-error"; filename: string; message: string }
 	| { kind: "garden-id-socket-conflict"; gardenId: string; backend: MetaBackendV2; message: string }
+	| { kind: "record-less-socket"; gardenId: string; liveness: SocketLiveness; message: string }
 	| { kind: "socket-symlink-rejected"; gardenId: string; message: string }
 	| { kind: "malformed-socket-name"; name: string; message: string }
 	| { kind: "socket-dir-read-error"; message: string };
+
+/** The #50 C4 demotion messages, one per probed liveness so the F8 aggregation
+ * groups same-state sockets into one line. Each names the true cause (no record
+ * claims the socket; the record is the sole address authority) and the fix. */
+export function recordLessSocketMessage(liveness: SocketLiveness): string {
+	switch (liveness) {
+		case "alive":
+			return (
+				"a LIVE control socket no meta-record claims — not an addressable citizen (the record is the " +
+				"sole address authority). Restart the pre-record-era resident under the current runtime so " +
+				`session_start births its record, or migrate a pre-cut store with ${M1_PRESCRIPTION}.`
+			);
+		case "dead":
+			return (
+				"a stale control socket no meta-record claims — not addressable; a leftover from a hard-killed " +
+				"or pre-record-era session (removing it is GC's job, not the listing's)."
+			);
+		case "indeterminate":
+			return (
+				"a control socket no meta-record claims and the probe was inconclusive — not addressable; " +
+				"re-check once the host is responsive."
+			);
+	}
+}
 
 export interface EntwurfFactsResult {
 	facts: FactList;
@@ -65,20 +93,22 @@ function diagnosticSortKey(d: EntwurfDiagnostic): string {
 			return `0:${d.filename}`;
 		case "garden-id-socket-conflict":
 			return `1:${d.gardenId}`;
-		case "socket-symlink-rejected":
+		case "record-less-socket":
 			return `2:${d.gardenId}`;
+		case "socket-symlink-rejected":
+			return `3:${d.gardenId}`;
 		case "malformed-socket-name":
-			return `3:${d.name}`;
+			return `4:${d.name}`;
 		case "socket-dir-read-error":
-			return "4:";
+			return "5:";
 	}
 }
 
 /**
  * Assemble the facts-only listing. Pure over its injected deps (no direct IO) so
  * the gate drives it without a filesystem; slice 4c supplies the real readdir /
- * readFile / probe. Live socket probes may carry get_info runtime enrich
- * (cwd/model/idle); null remains honest and renders as "not enriched".
+ * readFile / probe. Probes are gid + liveness only (#50 C4 — the per-socket
+ * get_info enrich left with the socket-only quasi-citizen listing).
  */
 export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfFactsResult> {
 	const diagnostics: EntwurfDiagnostic[] = [];
@@ -148,6 +178,18 @@ export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfF
 	const cleanIdentities = identities.filter((i) => !conflictGids.has(i.gardenId));
 	const cleanProbes = probes.filter((p) => !conflictGids.has(p.gardenId));
 	const facts: FactList = resolveFactList(cleanIdentities, cleanProbes);
+
+	// 5. #50 C4 demotion: a record-less socket is a diagnostic, not a listing
+	//    section. One diagnostic per socket (subjects aggregate at render, F8);
+	//    the message is liveness-keyed so same-state sockets group into one line.
+	for (const s of facts.recordLessSockets) {
+		diagnostics.push({
+			kind: "record-less-socket",
+			gardenId: s.gardenId,
+			liveness: s.liveness,
+			message: recordLessSocketMessage(s.liveness),
+		});
+	}
 
 	diagnostics.sort((a, b) => {
 		const ka = diagnosticSortKey(a);

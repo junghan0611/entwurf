@@ -24,13 +24,14 @@
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchControlSocketRuntimeInfo, formatRuntimeModel } from "../pi-extensions/lib/entwurf-control-rpc.ts";
-import { generateSessionId } from "../pi-extensions/lib/entwurf-core.ts";
 import { scanSocketProbes } from "../pi-extensions/lib/socket-discovery.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { waitForPiRecord } from "./lib/pi-record-discovery.ts";
 
 const ACP_PROVIDER = "entwurf";
 const ACP_MODEL = process.env.ENTWURF_S1_MODEL?.trim() || "claude-opus-4-8";
@@ -81,41 +82,43 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	const gid = generateSessionId();
-	const sockPath = path.join(REAL_CONTROL_DIR, `${gid}${SOCKET_SUFFIX}`);
 	const tmp = os.tmpdir();
+	// Post-C2 the RECORD mints the address (`--session-id` injection is gone), so the
+	// resident's store is isolated to a temp dir: discovery reads the freshly-born
+	// record from an empty store, and no smoke garbage lands in the operator's live
+	// store (a pre-rewrite run minted a stray cwd=/tmp V3 record there, 2026-07-23).
+	// Only the STORE is redirected — the agent dir (auth.json = subscription login)
+	// stays real, and the socket still stands up in the real control dir.
+	const smokeStore = await fsp.mkdtemp(path.join(os.tmpdir(), "acp-s1-store-"));
 
-	// B3: a fresh gid must not collide with a pre-existing socket (else teardown would
-	// delete someone else's live socket). Fail loud rather than risk it.
-	ok("fresh gid has no pre-existing control socket", !existsSync(sockPath));
-
+	let gid = "";
+	let sockPath = "";
 	let stderrTail = "";
 	let resident: ChildProcess | null = null;
 	try {
 		// Launch a real resident on the ACP model, in rpc mode (non-TTY safe, turn-free).
 		resident = spawn(
 			"pi",
-			[
-				...REPO_EXTENSION_ARGS,
-				"--session-id",
-				gid,
-				"--entwurf-control",
-				"--provider",
-				ACP_PROVIDER,
-				"--model",
-				ACP_MODEL,
-				"--mode",
-				"rpc",
-			],
-			{ cwd: tmp, stdio: ["pipe", "ignore", "pipe"], detached: false },
+			[...REPO_EXTENSION_ARGS, "--entwurf-control", "--provider", ACP_PROVIDER, "--model", ACP_MODEL, "--mode", "rpc"],
+			{
+				cwd: tmp,
+				stdio: ["pipe", "ignore", "pipe"],
+				detached: false,
+				env: { ...process.env, ENTWURF_META_SESSIONS_DIR: smokeStore },
+			},
 		);
 		resident.stderr?.on("data", (b: Buffer) => {
 			stderrTail = (stderrTail + b.toString()).slice(-4000);
 		});
 
-		// QM2 (part 1): launch with an ACP model does not die — the socket comes up.
+		// QM2 (part 1): launch with an ACP model does not die — the resident births its
+		// V3 record (the address authority) and stands the socket up on that gardenId.
+		const bornGid = await waitForPiRecord(smokeStore, BOOT_TIMEOUT_MS);
+		ok(`ACP-model resident birthed its own V3 record (${ACP_PROVIDER}/${ACP_MODEL})`, bornGid !== null);
+		gid = bornGid as string;
+		sockPath = path.join(REAL_CONTROL_DIR, `${gid}${SOCKET_SUFFIX}`);
 		const up = await waitForSocket(sockPath, BOOT_TIMEOUT_MS);
-		ok(`ACP-model resident stood up a control socket (${ACP_PROVIDER}/${ACP_MODEL})`, up);
+		ok(`ACP-model resident stood up a control socket keyed on the record gardenId (${gid})`, up);
 
 		// Citizenship + get_info: the resident answers the control RPC like a native sibling.
 		const info = await fetchControlSocketRuntimeInfo(sockPath, { timeout: 3_000 });
@@ -127,13 +130,14 @@ async function main(): Promise<void> {
 			info.modelProvider === ACP_PROVIDER && info.modelId === ACP_MODEL,
 		);
 
-		// Citizen facts present: idle + cwd are get_info-enriched fields the peers surface shows.
+		// Citizen facts present on the control RPC surface (#50 C4: the peers listing
+		// itself no longer get_info-enriches — cwd/model are record facts there).
 		ok("get_info reports idle=true (no turn running)", info.idle === true);
 		ok("get_info reports the resident cwd", info.cwd === tmp);
 
 		// Peers-visible: the gid shows up in the REAL socket-discovery scan (the socket
-		// axis that feeds entwurf_peers' socketOnly section) as a live citizen — not just
-		// reachable by a direct get_info, but discoverable on the production fact surface.
+		// axis entwurf_peers folds into citizen liveness) as alive — not just reachable
+		// by a direct get_info, but discoverable on the production fact surface.
 		const scan = await scanSocketProbes([]);
 		const probe = scan.probes.find((p) => p.gardenId === gid);
 		ok("gid is peers-visible on the socket-discovery fact surface, liveness=alive", probe?.liveness === "alive");
@@ -152,6 +156,7 @@ async function main(): Promise<void> {
 		);
 	} finally {
 		if (resident) await terminateChild(resident);
+		await fsp.rm(smokeStore, { recursive: true, force: true }).catch(() => {});
 	}
 
 	// Hygiene (B): after teardown the resident's control socket file is gone — the

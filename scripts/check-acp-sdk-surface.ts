@@ -3,12 +3,12 @@
 // Pins the ACP runtime deps to the current behavior-oracle versions and locks
 // the peer-resolution that makes the Claude ACP adapter satisfiable:
 //
-//   @agentclientprotocol/sdk              1.1.0    wire SDK (acp-bridge import source)
-//   @agentclientprotocol/claude-agent-acp 0.54.1   Claude adapter (spawn binary)
+//   @agentclientprotocol/sdk              1.3.0    wire SDK (acp-bridge import source)
+//   @agentclientprotocol/claude-agent-acp 0.61.0   Claude adapter (spawn binary)
 //   @anthropic-ai/sdk                     0.100.1  peer-resolution pin ONLY (see below)
 //
 // The anthropic SDK is NOT an API client / auth surface here. It is a direct
-// dep solely to satisfy @anthropic-ai/claude-agent-sdk@0.3.197's peer floor
+// dep solely to satisfy @anthropic-ai/claude-agent-sdk@0.3.217's peer floor
 // (>=0.93.0); drop it and the tree resolves a stale 0.91.1 so the peer goes
 // unmet — a failure that would only surface at the first raw turn. The
 // lockfile proves the same shape. Source-level import / API-client
@@ -25,7 +25,7 @@
 
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 
@@ -42,8 +42,8 @@ const read = (p: string): string => readFileSync(resolve(repoRoot, p), "utf8");
 const pkg = JSON.parse(read("package.json")) as { dependencies?: Record<string, string> };
 const deps = pkg.dependencies ?? {};
 const PINS: Record<string, string> = {
-	"@agentclientprotocol/sdk": "1.1.0",
-	"@agentclientprotocol/claude-agent-acp": "0.54.1",
+	"@agentclientprotocol/sdk": "1.3.0",
+	"@agentclientprotocol/claude-agent-acp": "0.61.0",
 	[ANTHROPIC_SDK]: "0.100.1",
 };
 for (const [name, ver] of Object.entries(PINS)) {
@@ -63,13 +63,13 @@ for (const [name, ver] of Object.entries(PINS)) {
 const lock = read("pnpm-lock.yaml");
 assert.match(
 	lock,
-	/@agentclientprotocol\/claude-agent-acp@0\.54\.1\(@anthropic-ai\/sdk@0\.100\.1/,
-	"pnpm-lock: claude-agent-acp@0.54.1 must peer-resolve @anthropic-ai/sdk@0.100.1 (peer-pin), not the stale 0.91.1",
+	/@agentclientprotocol\/claude-agent-acp@0\.61\.0\(@anthropic-ai\/sdk@0\.100\.1/,
+	"pnpm-lock: claude-agent-acp@0.61.0 must peer-resolve @anthropic-ai/sdk@0.100.1 (peer-pin), not the stale 0.91.1",
 );
 assert.match(
 	lock,
-	/@anthropic-ai\/claude-agent-sdk@0\.3\.197\(@anthropic-ai\/sdk@0\.100\.1/,
-	"pnpm-lock: claude-agent-sdk@0.3.197 must peer-resolve @anthropic-ai/sdk@0.100.1 — else its >=0.93.0 peer floor is unmet",
+	/@anthropic-ai\/claude-agent-sdk@0\.3\.217\(@anthropic-ai\/sdk@0\.100\.1/,
+	"pnpm-lock: claude-agent-sdk@0.3.217 must peer-resolve @anthropic-ai/sdk@0.100.1 — else its >=0.93.0 peer floor is unmet",
 );
 
 // ---------------------------------------------------------------------------
@@ -108,8 +108,8 @@ const casEntry = adapterRequire.resolve("@anthropic-ai/claude-agent-sdk");
 const casInfo = pkgInfoFromEntry(casEntry);
 assert.equal(
 	casInfo.version,
-	"0.3.197",
-	`@anthropic-ai/claude-agent-sdk must runtime-resolve to 0.3.197 from the adapter context (got ${casInfo.version})`,
+	"0.3.217",
+	`@anthropic-ai/claude-agent-sdk must runtime-resolve to 0.3.217 from the adapter context (got ${casInfo.version})`,
 );
 const casRequire = createRequire(resolve(casInfo.dir, "package.json"));
 const sdkEntry = casRequire.resolve(ANTHROPIC_SDK);
@@ -124,26 +124,35 @@ assert.equal(
 // (2c) adapter-context wire-SDK + MCP-SDK runtime resolve — the ACP dep bump's
 //      real fault surface. Lock text (layer 2) freezes the publish floor; these probe
 //      the LIVE module graph the adapter actually traverses: the adapter must SEE
-//      the same wire SDK the backend imports at root (1.1.0), and claude-agent-sdk
+//      the same wire SDK the backend imports at root (1.3.0), and claude-agent-sdk
 //      must SEE its declared MCP peer (1.29.x). Cheap edges, both newly relevant
-//      after the 0.50→0.54 / 0.29→1.1 bump.
+//      after the 0.54→0.61 / 1.1→1.3 bump.
 // ---------------------------------------------------------------------------
 const wireEntry = adapterRequire.resolve("@agentclientprotocol/sdk");
 const wireInfo = pkgInfoFromEntry(wireEntry);
 assert.equal(
 	wireInfo.version,
-	"1.1.0",
-	`@agentclientprotocol/sdk must runtime-resolve to 1.1.0 from the adapter context (got ${wireInfo.version}) — the adapter and the backend must share one wire SDK`,
+	"1.3.0",
+	`@agentclientprotocol/sdk must runtime-resolve to 1.3.0 from the adapter context (got ${wireInfo.version}) — the adapter and the backend must share one wire SDK`,
 );
 // @modelcontextprotocol/sdk gates its bare specifier behind "exports", so a
-// require.resolve of the package ROOT throws (no resolvable entry) — read the
-// installed package.json directly instead. pnpm hoists ONE mcp instance shared
-// by our root dep, pi, and claude-agent-sdk's ^1.29.0 peer, so the installed
-// copy IS the version the adapter/claude-agent-sdk edge resolves.
-const mcpPkg = JSON.parse(read("node_modules/@modelcontextprotocol/sdk/package.json")) as { version?: string };
+// require.resolve of the package ROOT throws (no resolvable entry) — resolve a
+// real SUBPATH instead and walk up to its package.json.
+//
+// This used to read the repo's own hoisted copy and justify it with "pnpm
+// hoists ONE mcp instance". That is true of today's lockfile, which is exactly
+// why it asserted nothing: the read never traversed the edge it claimed to
+// verify, so a nested @modelcontextprotocol/sdk under claude-agent-sdk would
+// leave this gate GREEN while the adapter loaded a peer no gate had seen. A
+// probe whose subject is "whatever the root happens to hoist" is a coincidence,
+// not a check. Resolve FROM the claude-agent-sdk context so the assertion binds
+// the real adapter → claude-agent-sdk → MCP edge, the same way the anthropic
+// SDK peer above is bound.
+const mcpEntry = casRequire.resolve("@modelcontextprotocol/sdk/server/index.js");
+const mcpInfo = pkgInfoFromEntry(mcpEntry);
 assert.ok(
-	typeof mcpPkg.version === "string" && mcpPkg.version.startsWith("1.29."),
-	`@modelcontextprotocol/sdk must be 1.29.x (got ${mcpPkg.version}) — claude-agent-sdk 0.3.197 declares a ^1.29.0 peer`,
+	mcpInfo.version.startsWith("1.29."),
+	`@modelcontextprotocol/sdk must runtime-resolve to 1.29.x from the claude-agent-sdk context (got ${mcpInfo.version}) — claude-agent-sdk 0.3.217 declares a ^1.29.0 peer`,
 );
 
 // ---------------------------------------------------------------------------
@@ -178,7 +187,12 @@ const tracked = execFileSync("git", ["ls-files", "*.ts", "*.js", "*.mjs", "*.cjs
 	encoding: "utf8",
 })
 	.split("\n")
-	.filter(Boolean);
+	.filter(Boolean)
+	// `git ls-files` still names an UNSTAGED deletion (same contract as
+	// check-install-surface / the run.sh floor sweeps): a release-surface
+	// migration deletes tracked files before the commit workflow stages them;
+	// absence cannot import the SDK and must not crash this read-only sweep.
+	.filter((f) => existsSync(resolve(repoRoot, f)));
 
 // Specifier-shaped: any module binding to the anthropic SDK, in any of the
 // forms a source file could reach it — static `from`, `export ... from`,

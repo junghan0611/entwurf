@@ -16,14 +16,18 @@
  * extra setup.
  *
  * Enables inter-session communication via Unix domain sockets. When enabled
- * with the `--entwurf-control` flag, each pi session creates a control socket
- * at `~/.pi/entwurf-control/<session-id>.sock` that accepts JSON-RPC commands.
+ * with the `--entwurf-control` flag, each pi session upserts its meta-record and
+ * creates a control socket at `~/.pi/entwurf-control/<gardenId>.sock` — the
+ * RECORD's garden id, not pi's session id (#50 C2) — that accepts JSON-RPC
+ * commands.
  *
  * Features:
  * - Register the canonical `entwurf_v2` dispatch tool for existing garden citizens.
- * - Expose `entwurf_peers` facts and `/entwurf-sessions` for operator inspection.
+ * - Expose `entwurf_peers` facts for operator inspection (#50 C4: the socket-scan
+ *   `/entwurf-sessions` command is gone — the record listing is the only surface).
  * - Maintain the resident control socket used by v2 live-send / spawn-bg paths.
- * - Keep `/gnew` garden-native in-process session birth.
+ * - Attach this pi session to its meta-record at session_start (#50 C2) and key
+ *   the control socket on the record's gardenId.
  *
  * Send-is-throw still applies at the control-socket protocol layer: a `send` RPC
  * ack confirms the receiver enqueued the message (`message_processed` semantics)
@@ -31,13 +35,13 @@
  * callers use `entwurf_v2`, whose decider chooses send / spawn-bg / mailbox.
  *
  * Usage:
- *   pi --session-id <garden-id> --entwurf-control
+ *   pi --entwurf-control      (no id injection: pi owns its id, the record owns
+ *                              the address)
  *
- * Addressing is sessionId-only. The sessionId (a garden id for
- * garden-native sessions, or a pi-assigned uuidv7 otherwise) is the only stable
- * identity a peer needs; alias / sessionName surfaces are deliberately not
- * exposed. Use entwurf_peers (or /entwurf-sessions) to discover live
- * sessions; pass the sessionId to entwurf_v2. Note that this is independent
+ * Addressing is garden-id-only. The garden id comes from this session's
+ * meta-record (pi's own session id is the record's `nativeSessionId`, never an
+ * address); alias / sessionName surfaces are deliberately not exposed. Use
+ * entwurf_peers to discover citizens; pass the gardenId to entwurf_v2. Note that this is independent
  * of agent-config's --session-control extension, which lives under
  * ~/.pi/session-control/ and may keep its own alias surface.
  *
@@ -77,26 +81,15 @@ import type {
 import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { Box, type Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { ENTWURF_SENT_MESSAGE_TYPE } from "../protocol.js";
+import { CONTROL_SOCKET_SUFFIX, controlSocketPathIn, defaultControlSocketDir } from "./lib/control-socket-path.js";
 import {
-	fetchControlSocketRuntimeInfo,
-	formatRuntimeModel,
+	formatSenderInfoBlock,
 	type RpcCommand,
 	type RpcResponse,
 	type SenderEnvelope,
 } from "./lib/entwurf-control-rpc.js";
-import {
-	assertGardenNativeSessionId,
-	buildGardenSessionName,
-	computeResidentStatusLabel,
-	createGardenSessionFile,
-	isValidSessionId,
-	parseSessionName,
-	RESIDENT_SESSION_TAG,
-	readSessionHeader,
-	removeUnadoptedGardenSessionFile,
-} from "./lib/entwurf-core.js";
-import { isV2ResumeResidentAuthorized } from "./lib/entwurf-v2-resume-marker.js";
-import { probeSocketLiveness, shouldListAsLive, shouldUnlinkOnGc } from "./lib/socket-probe.js";
+import { computeResidentStatusLabel } from "./lib/entwurf-core.js";
+import { probeSocketLiveness, shouldUnlinkOnGc } from "./lib/socket-probe.js";
 
 // The `--entwurf-control` socket protocol (wire types + the newline-JSON client) now lives
 // in the ctx-free SSOT `lib/entwurf-control-rpc.ts` so the 5d entwurf_v2 production
@@ -106,8 +99,9 @@ export type { SenderEnvelope } from "./lib/entwurf-control-rpc.js";
 
 const ENTWURF_FLAG = "entwurf-control";
 const EMACS_AGENT_SOCKET_FLAG = "emacs-agent-socket";
-const ENTWURF_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
-const SOCKET_SUFFIX = ".sock";
+// Directory SOURCE is this adapter's own policy (HOME-derived); the path GRAMMAR
+// comes from the `.js` leaf both runtime lanes can import.
+const ENTWURF_DIR = defaultControlSocketDir(os.homedir());
 const SESSION_MESSAGE_TYPE = "entwurf-message";
 // Sender-side UI marker. Layer B (ACP path) emits a CustomMessage with this
 // customType so the operator sees a first-class [entwurf sent →] box paired
@@ -133,6 +127,15 @@ interface SocketState {
 	context: ExtensionContext | null;
 }
 
+// The resident's GARDEN ADDRESS (#50 C2) — minted by this session's meta-record at
+// session_start, never by pi. One pi process hosts one resident session, so a
+// module-level binding is the same scope ENTWURF_DIR already has, and it lets the
+// ctx-only surfaces (sender envelope, get_info) report the address without
+// re-deriving it from pi's session id — which is now a DIFFERENT string (the record's
+// `nativeSessionId`) and must never be published as an address. Null until the record
+// is written, and cleared on shutdown.
+let residentGardenId: string | null = null;
+
 // ============================================================================
 // Utilities
 // ============================================================================
@@ -144,7 +147,7 @@ function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
 }
 
 function getSocketPath(sessionId: string): string {
-	return path.join(ENTWURF_DIR, `${sessionId}${SOCKET_SUFFIX}`);
+	return controlSocketPathIn(ENTWURF_DIR, sessionId);
 }
 
 function isSafeSessionId(sessionId: string): boolean {
@@ -184,7 +187,7 @@ async function gcStaleSockets(): Promise<void> {
 			await fs.unlink(path.join(ENTWURF_DIR, entry.name)).catch(() => {});
 			continue;
 		}
-		if (!entry.name.endsWith(SOCKET_SUFFIX)) continue;
+		if (!entry.name.endsWith(CONTROL_SOCKET_SUFFIX)) continue;
 		const fullPath = path.join(ENTWURF_DIR, entry.name);
 		// F3: reclaim ONLY a demonstrably dead socket. A timeout / unknown-error
 		// probe is indeterminate (a live socket may have stalled under load) and
@@ -196,81 +199,12 @@ async function gcStaleSockets(): Promise<void> {
 	}
 }
 
-// Listing wrapper over the shared three-valued probe: a session is "alive" for
-// listing/reachability only on a positive connect (shouldListAsLive). An
-// indeterminate probe is hidden from listings but — unlike GC above — never
-// unlinked, so it can reappear once the stall clears.
-async function isSocketAlive(socketPath: string): Promise<boolean> {
-	return shouldListAsLive(await probeSocketLiveness(socketPath));
-}
-
-type LiveSessionInfo = {
-	sessionId: string;
-	socketPath: string;
-};
-
-type EnrichedSession = LiveSessionInfo & {
-	cwd?: string;
-	modelId?: string;
-	modelProvider?: string;
-	idle?: boolean;
-	infoError?: string;
-};
-
 function abbreviateHome(cwd: string | undefined): string {
 	if (!cwd) return "(unknown)";
 	const home = os.homedir();
 	if (cwd === home) return "~";
 	if (cwd.startsWith(`${home}${path.sep}`)) return `~${cwd.slice(home.length)}`;
 	return cwd;
-}
-
-async function getLiveSessions(): Promise<LiveSessionInfo[]> {
-	await ensureControlDir();
-	const entries = await fs.readdir(ENTWURF_DIR, { withFileTypes: true });
-	const sessions: LiveSessionInfo[] = [];
-
-	for (const entry of entries) {
-		if (!entry.name.endsWith(SOCKET_SUFFIX)) continue;
-		const socketPath = path.join(ENTWURF_DIR, entry.name);
-		const alive = await isSocketAlive(socketPath);
-		if (!alive) continue;
-		const sessionId = entry.name.slice(0, -SOCKET_SUFFIX.length);
-		if (!isSafeSessionId(sessionId)) continue;
-		sessions.push({ sessionId, socketPath });
-	}
-
-	sessions.sort((a, b) => a.sessionId.localeCompare(b.sessionId));
-	return sessions;
-}
-
-// Enrich each live session with cwd/model/idle by RPC-querying its socket.
-// Per-session failures are surfaced as `infoError` so the operator sees
-// exactly which session is unreachable instead of silently dropping it.
-async function getLiveSessionsWithInfo(): Promise<EnrichedSession[]> {
-	const sessions = await getLiveSessions();
-	const enriched: EnrichedSession[] = [];
-	for (const session of sessions) {
-		try {
-			// Shared parse/RPC SSOT (lib/entwurf-control-rpc.ts) — a `!success` reply
-			// throws there, so it lands in the same catch and surfaces as `infoError`
-			// (behavior-preserving: the message is still `response.error ?? "get_info failed"`).
-			const info = await fetchControlSocketRuntimeInfo(session.socketPath, { timeout: 1500 });
-			enriched.push({
-				...session,
-				cwd: info.cwd,
-				modelId: info.modelId,
-				modelProvider: info.modelProvider,
-				idle: info.idle,
-			});
-		} catch (e) {
-			enriched.push({
-				...session,
-				infoError: e instanceof Error ? e.message : String(e),
-			});
-		}
-	}
-	return enriched;
 }
 
 function writeResponse(socket: net.Socket, response: RpcResponse): void {
@@ -473,7 +407,9 @@ function parseSenderInfo(text: string): SenderInfo | null {
 //   2. `<ctx.model.provider>/<ctx.model.id>` reconstructed from the live pi context
 //   3. undefined → envelope omitted
 function buildLocalSenderEnvelope(ctx: ExtensionContext): SenderEnvelope | undefined {
-	const sessionId = ctx.sessionManager.getSessionId();
+	// The GARDEN address, not pi's session id (#50 C2): a peer replies to what it
+	// reads here, and only the record gardenId is routable.
+	const sessionId = residentGardenId;
 	if (!sessionId) return undefined;
 	const cwd = ctx.cwd;
 	if (!cwd) return undefined;
@@ -718,9 +654,10 @@ async function handleCommand(
 		return;
 	}
 
-	// Get session metadata (cwd, model, idle) — used by /entwurf-sessions enrichment.
+	// Get session metadata (cwd, model, idle) for the control RPC surface.
 	if (command.type === "get_info") {
-		const sessionId = ctx.sessionManager.getSessionId();
+		// Report the GARDEN address (#50 C2) — what a caller passes back to entwurf_v2.
+		const sessionId = residentGardenId;
 		const modelInfo = ctx.model ? { id: ctx.model.id, provider: ctx.model.provider } : null;
 		respond(true, "get_info", {
 			sessionId,
@@ -818,20 +755,10 @@ async function handleCommand(
 		// Synthesize <sender_info> JSON at the receiver side. Caller code paths
 		// (entwurf-bridge entwurf_v2, the pi-native entwurf_v2 senderProvider via buildLocalSenderEnvelope)
 		// pass the envelope structurally and never touch the message body — the
-		// canonical XML-style payload is constructed here once. We emit
-		// wants_reply only when the sender explicitly set it true; an undefined
-		// or false value omits the field entirely so the receiver renders nothing.
-		const senderInfoBlock = sender
-			? `\n\n<sender_info>${JSON.stringify({
-					sessionId: sender.sessionId,
-					agentId: sender.agentId,
-					cwd: sender.cwd,
-					timestamp: sender.timestamp,
-					...(sender.origin ? { origin: sender.origin } : {}),
-					...(typeof sender.replyable === "boolean" ? { replyable: sender.replyable } : {}),
-					...(wantsReply ? { wants_reply: true } : {}),
-				})}</sender_info>`
-			: "";
+		// canonical XML-style payload is the shared formatSenderInfoBlock SSOT
+		// (#50 C3: the dormant spawn-resume rail appends the same block to its
+		// prompt, so both rails render one shape).
+		const senderInfoBlock = sender ? formatSenderInfoBlock(sender, wantsReply) : "";
 
 		const mode = command.mode ?? "steer";
 		const isIdle = ctx.isIdle();
@@ -947,11 +874,14 @@ async function createServer(pi: ExtensionAPI, state: SocketState, socketPath: st
 // The RPC client `sendRpcCommand` + `RpcClientOptions` now live in
 // lib/entwurf-control-rpc.ts (imported above) — see the RPC Types note for why.
 
-async function startControlServer(pi: ExtensionAPI, state: SocketState, ctx: ExtensionContext): Promise<void> {
+async function startControlServer(
+	pi: ExtensionAPI,
+	state: SocketState,
+	ctx: ExtensionContext,
+	socketPath: string,
+): Promise<void> {
 	await ensureControlDir();
 	await gcStaleSockets();
-	const sessionId = ctx.sessionManager.getSessionId();
-	const socketPath = getSocketPath(sessionId);
 
 	if (state.socketPath === socketPath && state.server) {
 		state.context = ctx;
@@ -980,86 +910,45 @@ async function stopControlServer(state: SocketState): Promise<void> {
 	await removeSocket(socketPath);
 }
 
-function updateStatus(ctx: ExtensionContext | null, enabled: boolean): void {
+function updateStatus(ctx: ExtensionContext | null, enabled: boolean, gardenId: string | null): void {
 	if (!ctx?.hasUI) return;
-	if (!enabled) {
+	if (!enabled || !gardenId) {
 		ctx.ui.setStatus(STATUS_KEY, undefined);
 		return;
 	}
 	// Screwdriver (🪛) label, NOT the word "entwurf" — the status label is a UI
 	// affordance for the resident session and must not be confused with the
-	// `entwurf` session-name tag (the Entwurf resume marker). The garden id shows
+	// `entwurf` session-name tag (the Entwurf resume marker). The GARDEN id shows
 	// only once the session file exists (= first assistant turn = model locked);
 	// before that it reads `🪛 ready` (model still changeable). See
 	// computeResidentStatusLabel.
-	const sessionId = ctx.sessionManager.getSessionId();
 	const sessionFile = ctx.sessionManager.getSessionFile();
 	const sessionFileExists = !!sessionFile && existsSync(sessionFile);
-	ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("dim", computeResidentStatusLabel({ sessionId, sessionFileExists })));
+	ctx.ui.setStatus(
+		STATUS_KEY,
+		ctx.ui.theme.fg("dim", computeResidentStatusLabel({ sessionId: gardenId, sessionFileExists })),
+	);
 }
 
-/**
- * Set the resident session's garden name ONCE, on the first turn that has
- * written the session file. Spawn-only-name rule: a session already carrying a
- * canonical garden name (resume) is left untouched. New operator residents are
- * named with the `control` tag, never `entwurf`. Existing `entwurf`-tagged names
- * are accepted ONLY for a sessionId-bound v2 spawn-bg resume child (an authorized
- * Entwurf child resident, left unchanged so it stays re-resumable) — see the tag
- * branch below. Title slug is the cwd basename (home → `home`); a Korean first
- * message would ASCII-slugify to `untitled`, so cwd is the stable choice.
- */
-function maybeSetResidentName(pi: ExtensionAPI, ctx: ExtensionContext): void {
-	const sessionId = ctx.sessionManager.getSessionId();
-	if (!isValidSessionId(sessionId)) return; // non-garden id is handled (shutdown) by the guard
-	const sessionFile = ctx.sessionManager.getSessionFile();
-	if (!sessionFile || !existsSync(sessionFile)) return; // file not written yet (pre first assistant turn)
-	const existing = ctx.sessionManager.getSessionName();
-	const parsedExisting = existing ? parseSessionName(existing) : null;
-	if (parsedExisting) {
-		// A canonical name whose id mirror disagrees with the header id is an invariant
-		// breach — always a crash (never a cosmetic naming choice).
-		if (parsedExisting.sessionId !== sessionId) {
-			process.stderr.write(`[entwurf-control] corrupt resident session name: ${existing}\n`);
-			process.exit(1);
-		}
-		// The `entwurf` tag is the Entwurf resume marker. An OPERATOR resident must never carry
-		// it (it would advertise a live citizen as also dormant-resumable). The ONE exception is
-		// a v2 spawn-bg resume promoting a dormant Entwurf session to a live resident: that child
-		// SHOULD keep its `entwurf` tag (so it is re-resumable once it dies), and is authorized by
-		// the sessionId-bound env marker its production launcher planted. Keep the name unchanged.
-		if (parsedExisting.tags.includes("entwurf")) {
-			if (isV2ResumeResidentAuthorized(sessionId)) return; // authorized Entwurf child resident
-			process.stderr.write(`[entwurf-control] corrupt resident session name: ${existing}\n`);
-			process.exit(1);
-		}
-		return; // already garden-named (resume) — do not re-set
-	}
-	const provider = ctx.model?.provider;
-	const model = ctx.model?.id;
-	if (!provider || !model) return; // model not resolved yet — a later turn will catch it
-	const cwd = ctx.cwd || process.cwd();
-	const cwdSlug = cwd === os.homedir() ? "home" : path.basename(cwd) || "home";
-	try {
-		pi.setSessionName(
-			buildGardenSessionName({ sessionId, provider, model, rawTitle: cwdSlug, tags: [RESIDENT_SESSION_TAG] }),
-		);
-	} catch (err) {
-		// Odd ctx.model chars (slash/`--`) would throw — log, never crash the
-		// resident session over a display name.
-		process.stderr.write(
-			`[entwurf-control] resident garden name not set: ${err instanceof Error ? err.message : String(err)}\n`,
-		);
-	}
-}
+// The resident session NAME is pi's (LOCKED PROTOCOL 2, #50 C2). The garden-name
+// mirror that used to be set here — `buildGardenSessionName` + the `control` tag,
+// the `entwurf`-tag crash, and the v2-resume-marker exemption that authorized it —
+// is GONE with the id it mirrored. A name was a second place the address lived; the
+// record is the only one now, so there is nothing left to keep in sync and nothing
+// to crash over. (The dormant-resume authorization that leaned on the `entwurf` tag
+// moved to record existence — see entwurf-v2-spawn-production.)
 
-function updateSessionEnv(ctx: ExtensionContext | null, enabled: boolean): void {
-	if (!enabled) {
+function updateSessionEnv(ctx: ExtensionContext | null, enabled: boolean, gardenId: string | null): void {
+	if (!enabled || !gardenId) {
 		delete process.env.PI_SESSION_ID;
 		delete process.env.PI_AGENT_ID;
 		return;
 	}
 	if (!ctx) return;
-	process.env.PI_SESSION_ID = ctx.sessionManager.getSessionId();
+	// PI_SESSION_ID carries the GARDEN address, not pi's session id: it is the
+	// canonical sender carrier every child MCP process reads back (`entwurf_self`),
+	// and an address a peer cannot route to is worse than none.
+	process.env.PI_SESSION_ID = gardenId;
 	if (ctx.model?.provider && ctx.model?.id) {
 		process.env.PI_AGENT_ID = `${ctx.model.provider}/${ctx.model.id}`;
 	} else {
@@ -1136,43 +1025,46 @@ export default function (pi: ExtensionAPI) {
 	};
 
 	pi.registerMessageRenderer(SESSION_MESSAGE_TYPE, renderSessionMessage);
-	// Layer B (ACP path) sender-side UI box. Registered unconditionally — even
-	// in a session that is not exposing a control socket (no `--entwurf-control`),
-	// an ACP backend may still use the MCP `entwurf_v2` to message OTHER
-	// sessions. The renderer is needed here for the [entwurf sent →] box to
-	// appear in this session's transcript when it sends.
+	// Layer B (ACP path) sender-side UI box. Registered unconditionally because
+	// renderer registration happens at extension load, BEFORE we know whether
+	// this session ends up with a routable identity: `updateSessionEnv` only
+	// publishes PI_SESSION_ID once a garden id exists, and clears it otherwise.
+	// A session without `--entwurf-control` therefore does NOT send — a bundled
+	// `entwurf_v2` sender call there fails loud on the missing envelope (the
+	// documented provider-vs-citizen boundary), and this renderer simply never
+	// fires. Registering it up front keeps one registration path instead of a
+	// conditional seam, and guarantees the [entwurf sent →] box exists for every
+	// session that DOES send.
 	pi.registerMessageRenderer(ENTWURF_SENT_MESSAGE_TYPE, renderSentMessage);
 
 	if (shouldRegisterControlTools(pi)) {
 		registerListSessionsTool(pi);
 		registerEntwurfV2Tool(pi);
 	}
-	registerControlSessionsCommand(pi, () => {});
-	registerGardenNewCommand(pi);
 
-	// Session-replacement identity invariant (0.9.0): under --entwurf-control you
-	// cannot birth or enter a non-garden resident session IN-PROCESS. /new, /fork,
-	// /clone, RPC new_session, ctx.newSession and keybindings all mint a pi
-	// uuidv7 (no --session-id reaches an in-process switch, and the pre-switch
-	// hook result carries only { cancel } — it cannot inject an id, which is
-	// launch-fixed). Without this, such a mint reaches the session_start garden
-	// guard and hard-exits the WHOLE pi process — a terrible UX for a routine
-	// /new. So cancel the mint at the pre-event and point at the garden launcher.
-	const refuseInProcessMint = (ctx: ExtensionContext, what: string, why: string) => {
-		// Lead with the remedy: a TUI notify can truncate a long line, so the
-		// actionable alternative (/gnew) must come BEFORE the technical why and the
-		// shell-launcher fallback — otherwise a blocked /new looks like a dead end.
-		const msg =
-			`[entwurf-control] ${what} is blocked under --entwurf-control. ` +
-			`Use /gnew (or /garden-new) for a same-terminal fresh garden session. ` +
-			`(${why}) ` +
-			`To launch/resume from a shell, use the garden launcher (pia / pit / pihome — they pass --session-id), ` +
-			`or run pi --session-id "$(run.sh new-session-id)" --entwurf-control ...`;
-		// stderr ALWAYS — the durable record even if the TUI swallows the notify.
-		process.stderr.write(`${msg}\n`);
-		if (ctx.hasUI) ctx.ui.notify(`🪛 ${msg}`, "error");
-	};
+	// The in-process mint refusals (`/new`, `/fork`, `/clone`, RPC new_session) are
+	// GONE with the id grammar they defended (#50 C2). They existed because pi mints a
+	// uuidv7 for an in-process session and the garden guard hard-exited on a non-garden
+	// id — so a routine `/new` would have killed the whole pi process. Neither half is
+	// true any more: pi's id is now just `nativeSessionId`, and a fresh in-process
+	// session simply attaches as a new citizen at its session_start. `/gnew` went with
+	// them (there is nothing left for it to pre-create), and pi's own `/new` / `/resume`
+	// are pi's again — LOCKED PROTOCOL 2.
 
+	/**
+	 * Establish this session's garden ADDRESS (record upsert) and stand its socket up
+	 * on that address. The record decides create-vs-attach on `(backend:"pi",
+	 * nativeSessionId)`, so a reload/resume of the same pi session re-attaches to the
+	 * SAME gardenId — the address does not move under peers that already hold it.
+	 *
+	 * A failure here is fatal to the control surface, never cosmetic: no address means
+	 * no routable socket, so refuse the server, leak nothing into PI_SESSION_ID, and say
+	 * why. This replaces the garden-id hard exit — the failing condition changed from
+	 * "the launcher didn't inject an id" to "the store could not give this session an
+	 * address", which is a real infrastructure fault (unreadable store, duplicate native
+	 * id) rather than a launch-style mismatch. A pre-cut (v1/v2) store lands here naming
+	 * the M1 command, which is the honest reading of "this host has not migrated yet".
+	 */
 	const refreshServer = async (ctx: ExtensionContext) => {
 		// --emacs-agent-socket is independent of --entwurf-control: export it
 		// before the control-server branch so an Emacs frontend works even in a
@@ -1181,41 +1073,65 @@ export default function (pi: ExtensionAPI) {
 		const enabled = pi.getFlag(ENTWURF_FLAG) === true;
 		if (!enabled) {
 			await stopControlServer(state);
-			updateStatus(ctx, false);
-			updateSessionEnv(ctx, false);
+			residentGardenId = null;
+			updateStatus(ctx, false, null);
+			updateSessionEnv(ctx, false, null);
 			return;
 		}
-		// Garden-native enforcement (0.9.0): a resident --entwurf-control session
-		// MUST have a garden header id. pi assigns a uuidv7 when the launcher did
-		// not pass --session-id, which means this session was not born through the
-		// garden launcher. No back-compat path. A bare throw in this session_start
-		// handler is swallowed by the extension runner (runner.ts try/catch →
-		// emitError), so escalate explicitly: refuse the control server, do not
-		// leak a uuid into PI_SESSION_ID, loud-notify, and shut pi down.
-		const sessionId = ctx.sessionManager.getSessionId();
+		let birth: PiCitizenBirth;
 		try {
-			assertGardenNativeSessionId(sessionId);
+			birth = await birthResidentCitizen(ctx);
 		} catch (err) {
 			const reason = err instanceof Error ? err.message : String(err);
-			// stderr ALWAYS: process.exit truncates TUI rendering, so this is the
-			// durable record of why the session refused to start.
-			process.stderr.write(`[entwurf-control] ${reason}\n`);
-			if (ctx.hasUI) ctx.ui.notify(`🪛 ${reason}`, "error");
-			// ctx.shutdown() alone does NOT stop the in-flight startup — verified
-			// live: the model turn still ran (26k tokens) after a session_start
-			// guard that only called shutdown. Hard-exit so a non-garden
-			// --entwurf-control session cannot proceed at all: no turn, no socket
-			// (the guard returns before startControlServer), no PI_SESSION_ID leak.
-			// "보이면 바로 터진다." The guard runs before agent_start, so exiting
-			// here means the model is never invoked.
-			process.exit(1);
+			// stderr ALWAYS: the TUI may swallow a notify, and this is the durable
+			// record of why the control surface refused to come up.
+			process.stderr.write(`[entwurf-control] no garden address for this session: ${reason}\n`);
+			if (ctx.hasUI) ctx.ui.notify(`🪛 no garden address: ${reason}`, "error");
+			await stopControlServer(state);
+			residentGardenId = null;
+			updateStatus(ctx, false, null);
+			updateSessionEnv(ctx, false, null);
+			return;
 		}
-		await startControlServer(pi, state, ctx);
-		updateStatus(ctx, true);
-		updateSessionEnv(ctx, true);
-		// On a warm start (reload/resume) the file may already exist — set the
-		// garden name now; on a fresh start it's a no-op until the first turn_end.
-		maybeSetResidentName(pi, ctx);
+		residentGardenId = birth.gardenId;
+		// Meeting a pre-cut record must never be silent (the M1 contract): the scan
+		// skips what the V3 reader refuses, and skipping is fine — minting a fresh V3
+		// citizen beside an unmigrated store is exactly how a mixed store forms
+		// without anyone being told. ONE aggregated line, session_start only (turn_end
+		// re-attaches every turn and would repeat it forever).
+		if (birth.skippedRecords.length > 0) {
+			const first = birth.skippedRecords[0];
+			process.stderr.write(
+				`[entwurf-control] ${birth.skippedRecords.length} meta-record(s) in the store are unreadable ` +
+					`by V3 production and were skipped while resolving this session's address — ` +
+					`e.g. ${first?.filename}: ${first?.message}\n`,
+			);
+		}
+		await startControlServer(pi, state, ctx, birth.socketPath);
+		updateStatus(ctx, true, birth.gardenId);
+		updateSessionEnv(ctx, true, birth.gardenId);
+	};
+
+	/** Upsert the record for the CURRENT pi session. Reached through the non-literal
+	 * dynamic import fence (the seam lives in the `.ts`-extension lane). */
+	const birthResidentCitizen = async (ctx: ExtensionContext): Promise<PiCitizenBirth> => {
+		const mod = (await import(PI_CITIZEN_BIRTH_MODULE)) as unknown as PiCitizenBirthModule;
+		// getSessionFile() names the path pi WILL use, whether or not anything is on
+		// disk yet — pi writes the file only at the first assistant turn. Recording
+		// the path before the file exists plants a phantom resume target that later
+		// masks the precise "no turn yet" resume refusal (F7), so only a transcript
+		// that is actually on disk is recorded.
+		const sessionFile = ctx.sessionManager.getSessionFile();
+		const transcriptPath = sessionFile && existsSync(sessionFile) ? sessionFile : undefined;
+		const model = ctx.model?.provider && ctx.model?.id ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
+		return mod.birthPiCitizen({
+			nativeSessionId: ctx.sessionManager.getSessionId(),
+			cwd: ctx.cwd || process.cwd(),
+			// undefined KEEPS a recorded value: a fresh start must not clear a known transcript.
+			model,
+			transcriptPath,
+			controlSocketDir: ENTWURF_DIR,
+		});
 	};
 
 	// session_start is the unified post-event for the whole session lifecycle
@@ -1230,72 +1146,39 @@ export default function (pi: ExtensionAPI) {
 		await refreshServer(ctx);
 	});
 
-	// Pre-switch guard — cancel an in-process resident mint BEFORE session_start
-	// fires, so the hard guard never has to hard-exit the process. Covers every
-	// entry point (slash, RPC, keybinding, ctx.newSession) because pi routes them
-	// all through AgentSessionRuntime.{newSession,switchSession} → emitBeforeSwitch.
-	// Only active under --entwurf-control; plain sessions keep /new and /resume
-	// unrestricted.
-	pi.on("session_before_switch", async (event, ctx) => {
-		if (pi.getFlag(ENTWURF_FLAG) !== true) return {};
-		if (event.reason === "new") {
-			refuseInProcessMint(
-				ctx,
-				"/new (in-process new session)",
-				"an in-process new session gets a non-garden uuid the garden guard rejects.",
-			);
-			return { cancel: true };
-		}
-		if (event.reason === "resume" && event.targetSessionFile) {
-			// Pre-cancel a resume INTO a non-garden (legacy uuid) session so it fails
-			// friendly here rather than hard-exiting at the session_start guard. A
-			// garden target passes through; an unreadable header is left to the
-			// session_start backstop.
-			let targetId: string | null = null;
-			try {
-				targetId = readSessionHeader(event.targetSessionFile)?.id ?? null;
-			} catch {
-				targetId = null;
-			}
-			if (targetId) {
-				try {
-					assertGardenNativeSessionId(targetId);
-				} catch {
-					refuseInProcessMint(ctx, "resume", `the target session id "${targetId}" is not garden-native.`);
-					return { cancel: true };
-				}
-			}
-		}
-		return {};
-	});
-
-	// Fork/clone always mints a fresh uuid child — never garden-native in-process.
-	pi.on("session_before_fork", async (_event, ctx) => {
-		if (pi.getFlag(ENTWURF_FLAG) !== true) return {};
-		refuseInProcessMint(
-			ctx,
-			"/fork (session fork/clone)",
-			"a forked session gets a non-garden uuid the garden guard rejects.",
-		);
-		return { cancel: true };
-	});
+	// No session_before_switch / session_before_fork guards: `/new`, `/fork`, `/clone`
+	// and RPC session replacement are pi's own again (#50 C2). Each replacement fires
+	// session_start, which attaches the new pi session to its own record — the socket
+	// simply rebinds to the new address. There is no id to police at the pre-event.
 
 	pi.on("session_shutdown", async () => {
-		updateStatus(state.context, false);
-		updateSessionEnv(state.context, false);
+		updateStatus(state.context, false, null);
+		updateSessionEnv(state.context, false, null);
+		residentGardenId = null;
 		await stopControlServer(state);
 	});
 
-	// turn_end is subscribed ONLY for the resident-session garden lifecycle (0.9.0):
-	// the first assistant turn writes the session file, which (a) flips the status
-	// label from `🪛 ready` to `🪛 <gardenId>` (file-exists = model-locked signal)
-	// and (b) is when the now-locked model lets us set the resident garden name.
-	// This is NOT a send/delivery channel — send-is-throw still holds (the send RPC
-	// ack remains the entire delivery contract); this handler never sends.
+	// turn_end refreshes the RECORD, not a name (#50 C2). pi writes the session file
+	// at the first assistant turn and the model is locked by then, so this is where
+	// `transcriptPath` (the resume target) and `model` become known — an idempotent
+	// attach on the same `nativeSessionId`, so the gardenId never moves. It also
+	// flips the 🪛 label from `ready` to the garden id (file-exists = model locked).
+	// This is NOT a send/delivery channel — send-is-throw still holds; it never sends.
 	pi.on("turn_end", async (_event, ctx) => {
 		if (pi.getFlag(ENTWURF_FLAG) !== true) return;
-		maybeSetResidentName(pi, ctx);
-		updateStatus(ctx, true);
+		try {
+			const birth = await birthResidentCitizen(ctx);
+			residentGardenId = birth.gardenId;
+			updateStatus(ctx, true, birth.gardenId);
+		} catch (err) {
+			// The address already exists (session_start established it); a failed
+			// refresh must not take the live socket down mid-session. Report and keep
+			// serving on the address we hold.
+			process.stderr.write(
+				`[entwurf-control] meta-record refresh failed: ${err instanceof Error ? err.message : String(err)}\n`,
+			);
+			updateStatus(ctx, true, residentGardenId);
+		}
 	});
 }
 
@@ -1321,6 +1204,31 @@ const ENTWURF_SELF_ADDRESS_MODULE = "./lib/entwurf-self-address.ts";
 const ENTWURF_FACT_PROVIDER_MODULE = "./lib/entwurf-fact-provider.ts";
 const ENTWURF_PEERS_RENDER_MODULE = "./lib/entwurf-peers-render.ts";
 const META_SESSION_MODULE = "./lib/meta-session.ts";
+// The #50 C2 attach seam. Same fence, same reason: it is a lib→lib VALUE importer
+// (upsertMetaSession) carrying an explicit `.ts` extension, which the emit-capable
+// root program cannot resolve — so it is reached by a NON-LITERAL dynamic import.
+const PI_CITIZEN_BIRTH_MODULE = "./lib/pi-citizen-birth.ts";
+
+/** The birth result this surface consumes. Mirrors `lib/pi-citizen-birth.ts`'s
+ * `PiCitizenBirth` — the local contract that keeps the fence out of root tsc. */
+interface PiCitizenBirth {
+	gardenId: string;
+	action: "create" | "attach";
+	recordPath: string;
+	socketPath: string;
+	skippedRecords: { filename: string; message: string }[];
+}
+
+interface PiCitizenBirthModule {
+	birthPiCitizen(input: {
+		nativeSessionId: string;
+		cwd: string;
+		model?: string | null;
+		transcriptPath?: string | null;
+		sessionsDir?: string;
+		controlSocketDir: string;
+	}): PiCitizenBirth;
+}
 
 type SelfAddressabilityFn = (facts: {
 	origin: "pi-session" | "meta-session" | "external-mcp";
@@ -1422,7 +1330,7 @@ the mailbox path is lock-free, guarded by active-receiver deliverability), and r
 - wants_reply: reply hint for a live send (optional, default false).
 
 CHOOSING INTENT (picking wrong is rejected, never auto-fixed): to message / reply / hand off a peer
-that entwurf_peers shows as liveness=alive (a live pi OR a socket-citizen), use intent: fire-and-forget
+that entwurf_peers shows as liveness=alive (a live pi citizen), use intent: fire-and-forget
 — it routes to the live control-socket; set wants_reply:true if you need an answer (wants_reply is NOT
 owned-outcome). For a meta-session (liveness=unsupported, e.g. Claude Code), replies are ALSO
 fire-and-forget (→ mailbox). owned-outcome is ONLY for waking a DORMANT pi citizen (spawn-bg resume);
@@ -1503,7 +1411,7 @@ interface EntwurfFactProviderModule {
 }
 
 interface EntwurfPeersRenderModule {
-	renderEntwurfPeers(result: unknown, controlDir: string): { text: string; payload: unknown };
+	renderEntwurfPeers(result: unknown): { text: string; payload: unknown };
 }
 
 interface MetaSessionModule {
@@ -1529,7 +1437,7 @@ async function renderEntwurfPeersForSurface(): Promise<{ text: string; payload: 
 		socket: { dir: ENTWURF_DIR },
 	});
 	const render = (await import(ENTWURF_PEERS_RENDER_MODULE)) as unknown as EntwurfPeersRenderModule;
-	return render.renderEntwurfPeers(result, ENTWURF_DIR);
+	return render.renderEntwurfPeers(result);
 }
 
 function registerListSessionsTool(pi: ExtensionAPI): void {
@@ -1540,7 +1448,7 @@ function registerListSessionsTool(pi: ExtensionAPI): void {
 		name: "entwurf_peers",
 		label: "List Garden Citizens",
 		description:
-			"List the entwurf fact surface across BOTH rails: garden citizens from meta-records (including active self-fetch meta receivers such as claude-code) and record-less control sockets, each with liveness. A legacy `sessions` projection is retained for alive pi control-socket sessions only. Pair with entwurf_v2 to address a peer by garden id; this surface reports facts, never per-row routing verbs.",
+			"List the entwurf fact surface: garden citizens from meta-records (including active self-fetch meta receivers such as claude-code) with liveness, plus diagnostics. The record is the sole address axis (#50 C4) — a control socket no record claims surfaces as a record-less-socket diagnostic, never a peer row. Pair with entwurf_v2 to address a peer by garden id; this surface reports facts, never per-row routing verbs.",
 		parameters: Type.Object({}),
 		async execute(
 			_toolCallId: string,
@@ -1564,129 +1472,4 @@ function registerListSessionsTool(pi: ExtensionAPI): void {
 			}
 		},
 	});
-}
-
-function registerControlSessionsCommand(pi: ExtensionAPI, setSessions: (sessions: EnrichedSession[]) => void): void {
-	pi.registerCommand("entwurf-sessions", {
-		description: "List controllable sessions (from entwurf-control sockets)",
-		handler: async (_args, ctx) => {
-			if (pi.getFlag(ENTWURF_FLAG) !== true) {
-				if (ctx.hasUI) {
-					ctx.ui.notify("Entwurf control not enabled — relaunch pi with --entwurf-control", "warning");
-				}
-				return;
-			}
-
-			const sessions = await getLiveSessionsWithInfo();
-			setSessions(sessions);
-
-			const currentSessionId = ctx.sessionManager.getSessionId();
-
-			if (sessions.length === 0) {
-				pi.sendMessage(
-					{
-						customType: "entwurf-sessions",
-						content: "No live sessions found.",
-						display: true,
-					},
-					{ triggerTurn: false },
-				);
-				return;
-			}
-
-			const lines: string[] = ["Controllable sessions:", ""];
-			sessions.forEach((s, idx) => {
-				const current = s.sessionId === currentSessionId ? "  (current)" : "";
-				const idShort = `${s.sessionId.slice(0, 8)}…${s.sessionId.slice(-4)}`;
-				lines.push(`[${idx + 1}] ${idShort}${current}`);
-				if (s.infoError) {
-					lines.push(`    error: ${s.infoError}`);
-				} else {
-					lines.push(`    cwd:   ${abbreviateHome(s.cwd)}`);
-					const modelLabel = formatRuntimeModel({ modelId: s.modelId, modelProvider: s.modelProvider }) ?? "(unknown)";
-					lines.push(`    model: ${modelLabel}`);
-					const idleLabel = s.idle === undefined ? "?" : s.idle ? "yes" : "no  (turn in progress)";
-					lines.push(`    idle:  ${idleLabel}`);
-				}
-				lines.push("");
-			});
-
-			pi.sendMessage(
-				{
-					customType: "entwurf-sessions",
-					content: lines.join("\n").trimEnd(),
-					display: true,
-				},
-				{ triggerTurn: false },
-			);
-		},
-	});
-}
-
-// /gnew (+ /garden-new) — birth a NEW garden-native session IN-PROCESS, same
-// terminal, without the uuid that /new would mint. Builtin /new stays blocked
-// under --entwurf-control (it cannot be made garden-native: the pre-switch hook
-// result carries only { cancel }, no id injection). /gnew instead pre-creates an
-// empty garden-native session file and ctx.switchSession()es into it: switchSession
-// runs SessionManager.open(file), which reads the garden header id BEFORE
-// session_start, so the backend/bridge identity (PI_SESSION_ID, control socket,
-// backend sessionId) binds to the garden id from the first moment — no torn
-// identity. The whole path runs at 0 tokens (it's a command, not a model turn) and
-// is headless-testable via RPC `prompt "/gnew"` (session.prompt intercepts the
-// leading slash → the registered command handler, whose ctx has switchSession).
-function registerGardenNewCommand(pi: ExtensionAPI): void {
-	const register = (name: string) => {
-		pi.registerCommand(name, {
-			description: "Birth a NEW garden-native session in-process (garden id; --entwurf-control safe)",
-			handler: async (_args, ctx) => {
-				if (pi.getFlag(ENTWURF_FLAG) !== true) {
-					if (ctx.hasUI) {
-						ctx.ui.notify(`/${name} only applies under --entwurf-control — relaunch with the flag`, "warning");
-					}
-					return;
-				}
-				// Never replace the session mid-turn.
-				await ctx.waitForIdle();
-
-				let created: { sessionId: string; sessionFile: string } | undefined;
-				try {
-					created = createGardenSessionFile({
-						cwd: ctx.cwd,
-						sessionDir: ctx.sessionManager.getSessionDir(),
-					});
-				} catch (err) {
-					const msg = err instanceof Error ? err.message : String(err);
-					process.stderr.write(`[entwurf-control] /${name} could not create garden session file: ${msg}\n`);
-					if (ctx.hasUI) ctx.ui.notify(`🪛 garden-new failed: ${msg}`, "error");
-					return;
-				}
-
-				try {
-					const result = await ctx.switchSession(created.sessionFile);
-					if (result.cancelled) {
-						// A garden header should pass the pre-switch guard, so a cancel is
-						// unexpected — remove the orphan rather than leave litter, and report.
-						removeUnadoptedGardenSessionFile(created.sessionFile, created.sessionId);
-						process.stderr.write(`[entwurf-control] /${name} switch cancelled for ${created.sessionId}\n`);
-						if (ctx.hasUI) ctx.ui.notify("🪛 garden-new switch cancelled", "warning");
-						return;
-					}
-				} catch (err) {
-					// Switch threw (e.g. cwd vanished): the file we wrote is an unadopted
-					// orphan — clean it up. try/catch keeps the failure path leak-free.
-					removeUnadoptedGardenSessionFile(created.sessionFile, created.sessionId);
-					const msg = err instanceof Error ? err.message : String(err);
-					process.stderr.write(`[entwurf-control] /${name} switch failed for ${created.sessionId}: ${msg}\n`);
-					if (ctx.hasUI) ctx.ui.notify(`🪛 garden-new switch failed: ${msg}`, "error");
-					return;
-				}
-				// Switch succeeded → the session is REPLACED. `ctx` now refers to the old
-				// session and must not be touched; the new session's name, control socket
-				// and PI_SESSION_ID are bound by the session_start handler on the garden id.
-				// The 🪛 status bar flipping to the new id is the confirmation. Return now.
-			},
-		});
-	};
-	register("gnew");
-	register("garden-new");
 }

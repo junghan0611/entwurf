@@ -10,14 +10,17 @@
  * behavior suite.
  *
  * FOUR cells (GPT verdict — model-in-loop is OUT, this is a transport/lock/enqueue gate):
- *   C1 control-socket — a real `pi --entwurf-control` resident (a pi citizen with a live
- *      socket) → decider routes fire-and-forget/live to control-socket → real RPC send →
- *      lock acquire→release ×1 → no lock garbage.
- *   C1b socket-only (A1 narrow) — a real `pi --entwurf-control` resident with NO meta-record
- *      (the operator-greeted record-less case) → resolveTarget promotes its live control socket
- *      to a socket-only pi endpoint → fire-and-forget routes to control-socket (outcome=sent),
- *      while owned-outcome on the SAME record-less target is refused (bad-target, no spawn).
- *      This is the LIVE proof that closes the gap C1's hand-minted record was hiding.
+ *   C1 control-socket — a real `pi --entwurf-control` resident BIRTHS its own V3 record
+ *      (#50 C2: the record mints the address; `--session-id` injection is gone), the smoke
+ *      DISCOVERS that record and dispatches at its gardenId → decider routes
+ *      fire-and-forget/live to control-socket → real RPC send → lock acquire→release ×1 →
+ *      no lock garbage. This is the live birth→record→socket→dispatch chain in one cell.
+ *   C1b record-less socket (#50 C4) — the same real resident, but its record is written to
+ *      a HIDDEN store (a second temp dir): from the decider's store view the live socket is
+ *      RECORD-LESS → EVERY intent is refused pre-probe as `record-less-socket` (the record
+ *      is the sole address authority; a bare socket is a migration/diagnostic state, not an
+ *      addressable citizen), the surface hint names the true cause + the M1 command, and no
+ *      lock/RPC ever reaches the live socket.
  *   C2 meta-mailbox (deliverable) — a self-fetch citizen (claude-code) with an ARMED receiver
  *      marker → decider routes to meta-mailbox → a real `.msg` + signal is enqueued → lock-free
  *      path (no lock file) → no garbage beyond the one message.
@@ -50,17 +53,18 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SenderEnvelope } from "../pi-extensions/lib/entwurf-control-rpc.ts";
-import { generateSessionId } from "../pi-extensions/lib/entwurf-core.ts";
 import { lockPathFor } from "../pi-extensions/lib/entwurf-v2-lock.ts";
 import { makeProductionEntwurfV2Deps } from "../pi-extensions/lib/entwurf-v2-production.ts";
 import type { EntwurfV2RunResult } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import { runEntwurfV2 } from "../pi-extensions/lib/entwurf-v2-runner.ts";
+import { renderEntwurfV2Result } from "../pi-extensions/lib/entwurf-v2-surface.ts";
 import {
 	metaRecordExistsByGardenId,
 	upsertMetaSession,
 	writeMetaReceiverMarker,
 } from "../pi-extensions/lib/meta-session.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { waitForPiRecord } from "./lib/pi-record-discovery.ts";
 
 // pi's control socket lives at the canonical dir keyed by session id — pi owns this path, so
 // C1 must point the decider's controlSocketDir at the REAL dir (a fresh gid avoids collision).
@@ -163,49 +167,33 @@ async function main(): Promise<void> {
 	try {
 		// ── C1: control-socket — real `pi --entwurf-control` resident ──────────────
 		{
-			// DECIDER IDENTITY FIXTURE (NOT a writer E2E — R1): a real pi session does NOT
-			// self-write a meta-record (SE-1), but v2 production resolveTarget reads the target
-			// via metaRecordExists/readIdentity, so to exercise the control-socket TRANSPORT we
-			// hand-mint a backend=pi citizen and launch pi under the minted gid (record.gardenId ==
-			// the live socket's session id). nativeSessionId here is synthetic; the future pi
-			// writer's real shape is nativeSessionId==sessionId — irrelevant to this transport probe.
-			const minted = upsertMetaSession({
-				input: { backend: "pi", nativeSessionId: `smoke-c1-${process.pid}`, cwd: tmp, model },
-				dir: sessionsDir,
-			});
-			residentGid = minted.record.gardenId;
-			const sockPath = path.join(REAL_CONTROL_DIR, `${residentGid}${SOCKET_SUFFIX}`);
-			artifacts["C1.gid"] = residentGid;
-			artifacts["C1.socket"] = sockPath;
-			// B3: the fresh gid must not collide with a pre-existing socket — else cleanup would
-			// delete someone else's live socket. Fail loud rather than risk it.
-			ok("C1 fresh gid has no pre-existing control socket", !existsSync(sockPath));
-
+			// Post-C2 the resident IS the record writer: session_start births a V3
+			// backend:"pi" citizen (into the env-isolated temp store this smoke exported)
+			// and keys its socket on the RECORD gardenId. No `--session-id` injection —
+			// that argv died with the cut — so the smoke discovers the address from the
+			// record, exactly as a peer would.
+			//
 			// B1: drive the resident in `--mode rpc` with stdin held open (keepalive). A non-TTY
 			// interactive `pi` (stdin ignored) can abort or silently exit; rpc mode is the control
 			// substrate this cell actually probes (model UI is irrelevant here).
 			resident = spawn(
 				"pi",
-				[
-					...REPO_EXTENSION_ARGS,
-					"--session-id",
-					residentGid,
-					"--entwurf-control",
-					"--provider",
-					provider,
-					"--model",
-					model,
-					"--mode",
-					"rpc",
-				],
+				[...REPO_EXTENSION_ARGS, "--entwurf-control", "--provider", provider, "--model", model, "--mode", "rpc"],
 				{ cwd: tmp, stdio: ["pipe", "ignore", "pipe"], detached: false },
 			);
 			resident.stderr?.on("data", (b: Buffer) => {
 				stderrTail = (stderrTail + b.toString()).slice(-2000);
 			});
 
+			const bornGid = await waitForPiRecord(sessionsDir, BOOT_TIMEOUT_MS);
+			ok("C1 the resident BIRTHED its own V3 backend:pi record (the address authority)", bornGid !== null);
+			residentGid = bornGid as string;
+			const sockPath = path.join(REAL_CONTROL_DIR, `${residentGid}${SOCKET_SUFFIX}`);
+			artifacts["C1.gid"] = residentGid;
+			artifacts["C1.socket"] = sockPath;
+
 			const up = await waitForSocket(sockPath, BOOT_TIMEOUT_MS);
-			ok("C1 real `pi --entwurf-control` stood up a control socket", up);
+			ok("C1 the control socket is keyed on the record gardenId (not pi's session id)", up);
 
 			const result: EntwurfV2RunResult = await runEntwurfV2(
 				{ target: residentGid, intent: "fire-and-forget", message: "matrix-live C1 control-socket probe" },
@@ -229,73 +217,73 @@ async function main(): Promise<void> {
 			}
 		}
 
-		// ── C1b: A1 narrow — RECORD-LESS live pi control socket → socket-only target ─
-		// The operator-greeted case the deterministic gates model: a real `pi --entwurf-control`
-		// resident with NO meta-record. resolveTarget finds no record, sees a live non-symlink
-		// control socket (presence hint), promotes it to a socket-only pi endpoint, and routes
-		// fire-and-forget to control-socket — the end-to-end proof that closes the gap C1's
-		// hand-minted record was hiding. owned-outcome on the SAME record-less target is refused
-		// (bad-target, no spawn). Unlike C1, NO upsertMetaSession is called for this gid.
+		// ── C1b: #50 C4 — RECORD-LESS live pi control socket → pre-probe reject ─────
+		// A live control socket whose owning record the decider's store CANNOT see. Post-C2
+		// every resident births a record, so record-lessness is manufactured honestly: the
+		// resident writes its record into a HIDDEN second store (env override on the child
+		// only) while the decider keeps reading the main store. resolveTarget finds no record,
+		// sees a live non-symlink control socket (presence hint) — and rejects EVERY intent
+		// pre-probe as `record-less-socket`: the record is the sole address authority, so the
+		// live socket is a migration/diagnostic state, never a delivery target. No lock is
+		// taken and no RPC reaches the resident; the rendered hint names the cause + M1.
 		{
-			c1bGid = generateSessionId();
-			const sockPath = path.join(REAL_CONTROL_DIR, `${c1bGid}${SOCKET_SUFFIX}`);
-			artifacts["C1b.gid"] = c1bGid;
-			artifacts["C1b.socket"] = sockPath;
-			ok("C1b fresh gid has no pre-existing control socket", !existsSync(sockPath));
-			// The gap-closing precondition: this gid is genuinely RECORD-LESS (C1 minted one).
-			ok(
-				"C1b target has NO meta-record (record-less, the operator-greeted case)",
-				!metaRecordExistsByGardenId(c1bGid, sessionsDir),
-			);
+			const hiddenStore = path.join(tmp, "sessions-c1b-hidden");
+			await fsp.mkdir(hiddenStore, { recursive: true });
 
 			resident = spawn(
 				"pi",
-				[
-					...REPO_EXTENSION_ARGS,
-					"--session-id",
-					c1bGid,
-					"--entwurf-control",
-					"--provider",
-					provider,
-					"--model",
-					model,
-					"--mode",
-					"rpc",
-				],
-				{ cwd: tmp, stdio: ["pipe", "ignore", "pipe"], detached: false },
+				[...REPO_EXTENSION_ARGS, "--entwurf-control", "--provider", provider, "--model", model, "--mode", "rpc"],
+				{
+					cwd: tmp,
+					stdio: ["pipe", "ignore", "pipe"],
+					detached: false,
+					env: { ...process.env, ENTWURF_META_SESSIONS_DIR: hiddenStore },
+				},
 			);
 			resident.stderr?.on("data", (b: Buffer) => {
 				stderrTail = (stderrTail + b.toString()).slice(-2000);
 			});
 
+			const bornGid = await waitForPiRecord(hiddenStore, BOOT_TIMEOUT_MS);
+			ok("C1b the resident birthed its record into the HIDDEN store", bornGid !== null);
+			c1bGid = bornGid as string;
+			const sockPath = path.join(REAL_CONTROL_DIR, `${c1bGid}${SOCKET_SUFFIX}`);
+			artifacts["C1b.gid"] = c1bGid;
+			artifacts["C1b.socket"] = sockPath;
+			// The gap-closing precondition: from the DECIDER's store view this gid is record-less.
+			ok(
+				"C1b target has NO meta-record in the decider's store (record-less, the operator-greeted case)",
+				!metaRecordExistsByGardenId(c1bGid, sessionsDir),
+			);
+
 			const up = await waitForSocket(sockPath, BOOT_TIMEOUT_MS);
 			ok("C1b real record-less `pi --entwurf-control` stood up a control socket", up);
 
-			const result: EntwurfV2RunResult = await runEntwurfV2(
-				{ target: c1bGid, intent: "fire-and-forget", message: "matrix-live C1b record-less socket-only probe" },
-				prodDeps(smokeSender(c1bGid, tmp)),
-			);
-			ok(
-				"C1b record-less live pi → socket-only control-socket RPC, outcome=sent",
-				result.kind === "executed" &&
-					result.transport === "control-socket" &&
-					result.outcome.transport === "control-socket" &&
-					result.outcome.outcome === "sent",
-			);
-			ok("C1b lock released (no lock file left for the socket-only target)", !existsSync(lockPathFor(c1bGid, lockDir)));
-
-			// owned-outcome on the record-less but LIVE target → owned-live-no-autosend (the honest
-			// table verdict), NOT the `bad-target` lie: the live resident is a real addressable
-			// citizen. spawn-bg still never opens (allowResume:false guard; no record = no resume
-			// authority). The no-spawn invariant is also pinned deterministically in the gate.
-			const owned: EntwurfV2RunResult = await runEntwurfV2(
-				{ target: c1bGid, intent: "owned-outcome", message: "matrix-live C1b owned must be refused" },
-				prodDeps(smokeSender(c1bGid, tmp)),
-			);
-			ok(
-				"C1b record-less(live) + owned-outcome → rejected owned-live-no-autosend (NOT bad-target, no spawn)",
-				owned.kind === "rejected" && owned.receipt.reason === "owned-live-no-autosend",
-			);
+			for (const intent of ["fire-and-forget", "owned-outcome"] as const) {
+				const result: EntwurfV2RunResult = await runEntwurfV2(
+					{ target: c1bGid, intent, message: `matrix-live C1b record-less probe (${intent})` },
+					prodDeps(smokeSender(c1bGid, tmp)),
+				);
+				ok(
+					`C1b record-less LIVE socket + ${intent} → rejected record-less-socket (pre-probe, null liveness)`,
+					result.kind === "rejected" &&
+						result.receipt.reason === "record-less-socket" &&
+						result.receipt.observedLiveness === null,
+				);
+				// Pre-probe reject ⇒ the per-gid lock was never taken (no lock file, not even a
+				// released one's leftovers) — the live resident was never touched.
+				ok(`C1b NO lock file for the record-less target (${intent})`, !existsSync(lockPathFor(c1bGid, lockDir)));
+				// Observability (#50 F10 discipline): the rendered reject names the true cause
+				// AND the M1 fix — never a bare reason code on this migration-shaped state.
+				const rendered = renderEntwurfV2Result(result);
+				ok(
+					`C1b rendered reject names the record authority + M1 (${intent})`,
+					rendered.isError &&
+						rendered.text.includes("record-less-socket") &&
+						rendered.text.includes("NO meta-record claims it") &&
+						rendered.text.includes("meta-bridge-migrate-v3 migrate"),
+				);
+			}
 
 			if (resident) {
 				await terminateChild(resident);

@@ -224,12 +224,20 @@ ok("buildStrictPiSenderEnvelope calls computeSelfAddressability", /computeSelfAd
 // Scoped to THIS function body (not a broad grep): the pi-session envelope must NOT
 // hardcode `replyable: true`; it must derive from the predicate result.
 ok("buildStrictPiSenderEnvelope no longer hardcodes `replyable: true`", !/replyable:\s*true/.test(piBody));
-// existsSync alone is too loose — pin that it probes the CANONICAL socket path
-// (ENTWURF_DIR + sessionId + SOCKET_SUFFIX), not some other file, so the honesty
-// signal cannot drift to a path that does not represent this session's socket.
+// existsSync alone is too loose — pin that it probes the CANONICAL socket path,
+// not some other file, so the honesty signal cannot drift to a path that does not
+// represent this session's socket.
+//
+// This assertion used to match a MENTION of `ENTWURF_DIR` + `SOCKET_SUFFIX` in the
+// body, which pinned a LOCAL re-implementation of the socket-path grammar instead
+// of forbidding one — the bridge was one of three independent producers of
+// `<dir>/<gid>.sock`. The grammar now has a single definition
+// (`pi-extensions/lib/control-socket-path.js`), so the assertion pins the SHARED
+// call: the dir is still this adapter's own policy (ENTWURF_DIR honours the env
+// override the pi side does not), but the join is not re-authored here.
 ok(
-	"buildStrictPiSenderEnvelope existsSync-probes the canonical socket (ENTWURF_DIR + sessionId + SOCKET_SUFFIX)",
-	/existsSync\s*\(/.test(piBody) && /ENTWURF_DIR/.test(piBody) && /SOCKET_SUFFIX/.test(piBody),
+	"buildStrictPiSenderEnvelope existsSync-probes the canonical socket via the shared grammar (controlSocketPathIn(ENTWURF_DIR, …))",
+	/existsSync\s*\(/.test(piBody) && /controlSocketPathIn\s*\(\s*ENTWURF_DIR\s*,/.test(piBody),
 );
 
 const selfRegion = toolRegion("entwurf_self");

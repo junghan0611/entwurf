@@ -71,9 +71,78 @@ case "$(uname -s)" in
   *) die "unsupported platform '$(uname -s)'. The Claude meta-bridge repair cut supports Linux only (no unverified fallback)." ;;
 esac
 
-# --- toolchain gate ---------------------------------------------------------
-command -v claude >/dev/null || die "'claude' CLI not on PATH. Install Claude Code first."
+# --- toolchain gate, part 1: this machine's own runtime ---------------------
+# Split deliberately. Everything here is a fact about the local host that costs
+# nothing to read; the Claude CLI contact comes AFTER the store gate below, so a
+# host that must be refused over its own data is refused without entwurf having
+# invoked an external CLI at all. That is what lets the upgrade cells fence the
+# refusal at "zero claude invocations" rather than "no MUTATING claude call".
 command -v python3 >/dev/null || die "'python3' not on PATH. The FileChanged doorbell parses hook JSON with python3; install refuses a silently-dead wake runtime."
+NODE_BIN="$(command -v node)" || die "'node' not on PATH (the hook needs it to run the entry shell)."
+# Node 24+ is the SINGLE supported axis (GLG, 2026-07-21) — see run.sh setup
+# preflight for why the floor is 24 and not the 23.6 type-stripping feature gate.
+NODE_VER="$(node -p 'process.versions.node')"
+NODE_MAJOR="${NODE_VER%%.*}"
+if [ "$NODE_MAJOR" -lt 24 ]; then
+  die "node $NODE_VER too old; entwurf requires Node >= 24 (single supported runtime axis, no Node 22 lane)."
+fi
+
+# --- pre-cut store gate (#50 M1 / #51) --------------------------------------
+# The meta-record store this host ALREADY carries decides whether an install may
+# proceed at all. Every surface this install wires up (parse, birth, peers, self,
+# v2, inbox, store-doctor) is V3-only, so on a host whose store still holds v1/v2
+# records the install would validate clean, install clean, and then reject at
+# runtime — the exact "installs healthy, never works" shape the Claude floor gate
+# below exists to prevent. Refuse HERE instead.
+#
+# Placement is the contract: this runs BEFORE meta-bridge-state.py takes its
+# pre-install snapshot, which is the first line that can touch user config. A
+# refused install therefore leaves settings.json / ~/.claude.json / the plugin
+# registry byte-untouched. The verdict chooses the next move: migrate cleanly
+# readable pre-cut records, or repair malformed/unreadable records first.
+#
+# The verdict comes from the migrate command's OWN `verify` verb, not a bash
+# re-read of the store: store resolution (env + default) and the aggregated
+# non-V3 count live there, and a second implementation here would be a second
+# truth that can drift. An absent store and a v3-only store both exit 0, so a
+# clean host and an already-migrated host need no special case.
+case "$REPO" in
+  */node_modules/@junghanacs/entwurf)
+    MIGRATE_ENTRY="$REPO/mcp/entwurf-bridge/dist/scripts/meta-bridge-migrate-v3.js"
+    MIGRATE_CMD=("$NODE_BIN" "$MIGRATE_ENTRY") ;;
+  *)
+    MIGRATE_ENTRY="$REPO/scripts/meta-bridge-migrate-v3.ts"
+    MIGRATE_CMD=("$NODE_BIN" --experimental-strip-types "$MIGRATE_ENTRY") ;;
+esac
+[ -f "$MIGRATE_ENTRY" ] || die "store-migration artifact missing: $MIGRATE_ENTRY (installed package ships it via prepack build-bridge → dist; reinstall @junghanacs/entwurf, or run 'pnpm run build-bridge' in a dev clone). Install refuses rather than skip the pre-cut store gate."
+if STORE_VERDICT="$("${MIGRATE_CMD[@]}" verify 2>&1)"; then
+  echo "[meta-bridge-install] meta-record store certifies V3-only ($(printf '%s\n' "$STORE_VERDICT" | grep -o 'non-V3=[0-9]*' | head -1)) — install may proceed"
+else
+  printf '%s\n' "$STORE_VERDICT" >&2
+  # Prescription must match diagnosis (same rule as run.sh's preflight_v3_store).
+  # The axes are independent: a store may contain BOTH pre-cut records and a
+  # malformed/unreadable one. M1 converts the former only after every problem is
+  # repaired; recommending migrate first would send the operator at a command
+  # that is guaranteed to refuse.
+  STORE_HAS_PROBLEMS=1
+  STORE_HAS_PRECUT=1
+  printf '%s\n' "$STORE_VERDICT" | grep -q ' / 0 problem(s)' && STORE_HAS_PROBLEMS=0
+  printf '%s\n' "$STORE_VERDICT" | grep -q 'pre-cut v[0-9][0-9]* record' && STORE_HAS_PRECUT=0
+  if [ "$STORE_HAS_PROBLEMS" -eq 0 ] && [ "$STORE_HAS_PRECUT" -eq 0 ]; then
+    die "this host's meta-record store still holds pre-cut records (see the verify output above). Every surface this install wires up is V3-only, so installing over them would produce a plugin that installs clean and then rejects at runtime. NO user config was touched. Migrate the store with the command the verdict names, then re-run install-meta-bridge."
+  fi
+  if [ "$STORE_HAS_PROBLEMS" -ne 0 ] && [ "$STORE_HAS_PRECUT" -eq 0 ]; then
+    die "this host's meta-record store has BOTH pre-cut records and problems migration cannot convert. NO user config was touched. Repair the reported problems FIRST — migration refuses to start while any remain. After repair, if the pre-cut records remain, run the migrate command named above, then re-run install-meta-bridge."
+  fi
+  die "this host's meta-record store did not certify as V3-only (see the verify output above), and this is NOT a migration case — the verdict reports records the store migration cannot convert (malformed, unreadable, or ambiguous). NO user config was touched. Resolve those records, then re-run install-meta-bridge."
+fi
+
+# --- toolchain gate, part 2: the external Claude CLI ------------------------
+# FIRST contact with anything outside this machine's own runtime. Everything
+# above — platform, python3, node, and the host's own meta-record store — is
+# decided without invoking `claude` even once, so a refusal there is provably
+# free of external side effects.
+command -v claude >/dev/null || die "'claude' CLI not on PATH. Install Claude Code first."
 # Claude Code floor (#51 policy A, 2026-07-22). This gate is the entwurf-side
 # fail-loud, and it has to exist because UPSTREAM GIVES NONE: an older Claude passes
 # `claude plugin validate` on the exec-form manifest (unknown-key passthrough) and
@@ -87,14 +156,6 @@ CLAUDE_FLOOR="$(claude_floor_version "$REPO")" || die "cannot read the Claude Co
 CLAUDE_VER="$(claude_detected_version)"
 [ -n "$CLAUDE_VER" ] || die "could not read a version from 'claude --version'. entwurf requires Claude Code >= $CLAUDE_FLOOR and refuses to install against an unidentifiable runtime."
 claude_floor_satisfied "$CLAUDE_VER" "$CLAUDE_FLOOR" || die "claude $CLAUDE_VER is below the supported floor >= $CLAUDE_FLOOR. The meta-bridge hooks use the shell-less exec form; an older Claude silently DROPS the hook's args and still reports success, so this install would look healthy and never wake. There is no shell-form fallback — update Claude Code and re-run."
-NODE_BIN="$(command -v node)" || die "'node' not on PATH (the hook needs it to run the entry shell)."
-# Node 24+ is the SINGLE supported axis (GLG, 2026-07-21) — see run.sh setup
-# preflight for why the floor is 24 and not the 23.6 type-stripping feature gate.
-NODE_VER="$(node -p 'process.versions.node')"
-NODE_MAJOR="${NODE_VER%%.*}"
-if [ "$NODE_MAJOR" -lt 24 ]; then
-  die "node $NODE_VER too old; entwurf requires Node >= 24 (single supported runtime axis, no Node 22 lane)."
-fi
 echo "[meta-bridge-install] platform=$(uname -s) node=$NODE_VER ($NODE_BIN) claude=$CLAUDE_VER (floor >= $CLAUDE_FLOOR) python3=$(command -v python3)"
 
 # Capture the user's pre-install values BEFORE any Claude CLI helper can mutate
@@ -181,17 +242,15 @@ claude mcp remove pi-tools-bridge -s user >/dev/null 2>&1 || true
 # which the trailing `apply` re-asserts as the SSOT. An installed package ($REPO ends
 # in node_modules/@junghanacs/entwurf) wires the STABLE `entwurf-bridge` bin shim; baking
 # the pnpm store path here would go stale on any peer/version bump. A dev clone pins to
-# this clone's start.sh. Both branches carry the same two env vars desired_mcp() writes.
+# this clone's start.sh. Both branches carry the same env desired_mcp() writes.
 case "$REPO" in
   */node_modules/@junghanacs/entwurf)
     claude mcp add -s user entwurf-bridge \
       -e ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code \
-      -e ENTWURF_BRIDGE_REQUIRE_META_SENDER=1 \
       -- entwurf-bridge >/dev/null ;;
   *)
     claude mcp add -s user entwurf-bridge \
       -e ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code \
-      -e ENTWURF_BRIDGE_REQUIRE_META_SENDER=1 \
       -- bash "$REPO/mcp/entwurf-bridge/start.sh" >/dev/null ;;
 esac
 # Capture, THEN match — and require BOTH the exit code and the content.

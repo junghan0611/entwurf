@@ -4,14 +4,15 @@
  * deps (no IO) and proves the throw-vs-diagnostics policy:
  *
  *   - basic assembly: pi citizen + claude citizen + record-less socket →
- *     2 peers (pi alive / claude unsupported) + 1 socketOnly, 0 diagnostics,
+ *     2 peers (pi alive / claude unsupported) + the record-less socket folded
+ *     into ONE `record-less-socket` diagnostic (#50 C4: a diagnostic subject,
+ *     never a listing section) whose message names the cause + fix (M1),
  *   - corrupt record → meta-record-read-error diagnostic, listing NOT blinded,
  *   - gardenId↔socket collision (non-pi citizen + same-gid socket) → BOTH sides
  *     quarantined (gid in neither peers nor socketOnly) + one
  *     garden-id-socket-conflict diagnostic, and listEntwurfFacts does NOT throw
  *     (expected external-state corruption → diagnostics, not a crash),
  *   - the conflict diagnostic carries backend + gardenId ONLY (no identity field),
- *   - enrich stays null (probe-only slice),
  *   - socket-axis hazards folded (slice 4c, Fable 검수): a symlinked socket →
  *     socket-symlink-rejected diagnostic (P1), a malformed *.sock name →
  *     malformed-socket-name diagnostic (P3), a non-ENOENT dir-read failure →
@@ -43,15 +44,13 @@ const GID_CONFLICT = "20260611T333333-cccccc"; // claude citizen + same-gid sock
 
 function rec(gardenId: string, backend: MetaBackendV2): string {
 	return serializeMetaIdentity({
-		schemaVersion: 2,
+		schemaVersion: 3,
 		gardenId,
 		backend,
 		nativeSessionId: `n-${gardenId}`,
 		cwd: "/x",
 		model: null,
 		transcriptPath: null,
-		parentGardenId: null,
-		isEntwurf: false,
 		createdAt: "2026-06-11T00:00:00.000Z",
 		recordUpdatedAt: "2026-06-11T00:00:00.000Z",
 	});
@@ -109,18 +108,44 @@ async function main(): Promise<void> {
 			),
 		);
 		ok(
-			"basic: 2 peers + 1 socketOnly + 0 diagnostics",
-			r.facts.peers.length === 2 && r.facts.socketOnly.length === 1 && r.diagnostics.length === 0,
+			"basic: 2 peers + 1 record-less fact + 1 record-less-socket diagnostic (#50 C4)",
+			r.facts.peers.length === 2 && r.facts.recordLessSockets.length === 1 && r.diagnostics.length === 1,
 		);
 		ok("basic: pi citizen alive", r.facts.peers.find((p) => p.gardenId === GID_PI)?.liveness === "alive");
 		ok(
 			"basic: claude citizen unsupported",
 			r.facts.peers.find((p) => p.gardenId === GID_CLAUDE)?.liveness === "unsupported",
 		);
-		ok("basic: record-less socket → socketOnly", r.facts.socketOnly[0]?.gardenId === GID_SOCKET_ONLY);
+		const rls = r.diagnostics[0];
 		ok(
-			"basic: enrich null (probe-only slice)",
-			r.facts.socketOnly[0]?.cwd === null && r.facts.socketOnly[0]?.model === null,
+			"basic: the record-less socket IS the diagnostic (kind + gid + liveness)",
+			rls?.kind === "record-less-socket" && rls.gardenId === GID_SOCKET_ONLY && rls.liveness === "alive",
+		);
+		if (rls && rls.kind === "record-less-socket") {
+			ok(
+				"basic: alive record-less message names the record authority + M1 (#50 F10 discipline)",
+				rls.message.includes("no meta-record claims") &&
+					rls.message.includes("sole address authority") &&
+					rls.message.includes("meta-bridge-migrate-v3 migrate"),
+			);
+			const keys = Object.keys(rls).sort();
+			assert.deepStrictEqual(
+				keys,
+				["gardenId", "kind", "liveness", "message"],
+				`record-less-socket diagnostic keyset drift: ${keys.join(",")}`,
+			);
+			ok("basic: record-less-socket diagnostic keyset exact", true);
+		}
+		// A DEAD record-less socket groups under a different (stale) message — no M1
+		// pointer for a leftover file, so same-state sockets aggregate per liveness.
+		const r2 = await listEntwurfFacts(deps({}, { [GID_SOCKET_ONLY]: "dead" }));
+		const rls2 = r2.diagnostics[0];
+		ok(
+			"basic: dead record-less socket → stale-flavored message (no M1, distinct group)",
+			rls2?.kind === "record-less-socket" &&
+				rls2.liveness === "dead" &&
+				rls2.message.includes("stale") &&
+				!rls2.message.includes("meta-bridge-migrate-v3"),
 		);
 	}
 
@@ -152,8 +177,12 @@ async function main(): Promise<void> {
 		);
 		ok("collision: conflict gid NOT in peers", !r.facts.peers.some((p) => p.gardenId === GID_CONFLICT));
 		ok(
-			"collision: conflict gid NOT in socketOnly (both quarantined)",
-			!r.facts.socketOnly.some((s) => s.gardenId === GID_CONFLICT),
+			"collision: conflict gid NOT in recordLessSockets (both quarantined)",
+			!r.facts.recordLessSockets.some((s) => s.gardenId === GID_CONFLICT),
+		);
+		ok(
+			"collision: quarantined gid raises NO record-less-socket diagnostic (conflict owns it)",
+			!r.diagnostics.some((d) => d.kind === "record-less-socket" && d.gardenId === GID_CONFLICT),
 		);
 		ok(
 			"collision: pi citizen still present (listing survives)",
@@ -200,8 +229,8 @@ async function main(): Promise<void> {
 			!r.facts.peers.some((p) => p.gardenId === GID_CONFLICT),
 		);
 		ok(
-			"symlink-collision: gid NOT in socketOnly (symlink never probed)",
-			!r.facts.socketOnly.some((s) => s.gardenId === GID_CONFLICT),
+			"symlink-collision: gid NOT in recordLessSockets (symlink never probed)",
+			!r.facts.recordLessSockets.some((s) => s.gardenId === GID_CONFLICT),
 		);
 		ok(
 			"symlink-collision: pi citizen still present",
@@ -304,12 +333,14 @@ function diagnosticKey(d: { kind: string; filename?: string; gardenId?: string; 
 			return `0:${d.filename}`;
 		case "garden-id-socket-conflict":
 			return `1:${d.gardenId}`;
-		case "socket-symlink-rejected":
+		case "record-less-socket":
 			return `2:${d.gardenId}`;
+		case "socket-symlink-rejected":
+			return `3:${d.gardenId}`;
 		case "malformed-socket-name":
-			return `3:${d.name}`;
+			return `4:${d.name}`;
 		default:
-			return "4:";
+			return "5:";
 	}
 }
 

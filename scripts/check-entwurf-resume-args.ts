@@ -28,7 +28,11 @@ function ok(label: string, cond: boolean): void {
 	passed++;
 }
 
-const GID = "20260613T091000-98363c";
+// The resume target is a session FILE now (#50 C2), not a garden id: the record owns
+// the address, so argv only has to name WHICH transcript to reopen. An absolute path
+// is the production shape (record.transcriptPath).
+const SESSION_FILE =
+	"/home/op/.pi/agent/sessions/-home-op-repo/2026-06-13T09-10-00-000Z_019e8faa-04ea-7b73-bf2c-1465d525c2e8.jsonl";
 // Real production shape: getEntwurfExplicitExtensions emits `-e <path>` (entwurf-core.ts),
 // NOT `--extension`. The builder spreads verbatim, but the fixture mirrors production so the
 // "preserved exactly once" assertion exercises the token the launcher actually passes.
@@ -45,7 +49,7 @@ function main(): void {
 	{
 		const args = buildResumePiArgs({
 			variant: "legacy",
-			sessionId: GID,
+			sessionFile: SESSION_FILE,
 			explicitExtensionArgs: EXT,
 			provider: "entwurf",
 			model: "claude-opus-4-8",
@@ -58,7 +62,8 @@ function main(): void {
 		ok("4 legacy keeps ext args exactly once", args.filter((a) => a === "-e").length === 1);
 		ok("6 legacy provider laid out", valueAfter(args, "--provider") === "entwurf");
 		ok("6 legacy model laid out", valueAfter(args, "--model") === "claude-opus-4-8");
-		ok("6 legacy session-id laid out", valueAfter(args, "--session-id") === GID);
+		ok("6 legacy resumes by exact FILE (--session <abs path>)", valueAfter(args, "--session") === SESSION_FILE);
+		ok("6 legacy carries NO --session-id (the id is pi's own now)", !args.includes("--session-id"));
 		// model + prompt are the last three tokens: --model <m> <prompt>
 		ok(
 			"6 legacy --model <m> <prompt> tail",
@@ -72,7 +77,7 @@ function main(): void {
 	{
 		const args = buildResumePiArgs({
 			variant: "v2-control",
-			sessionId: GID,
+			sessionFile: SESSION_FILE,
 			explicitExtensionArgs: EXT,
 			provider: "entwurf",
 			model: "claude-opus-4-8",
@@ -89,7 +94,11 @@ function main(): void {
 		ok("5 v2 --approve is before the prompt", args.indexOf("--approve") < args.length - 1);
 		ok("6 v2 provider laid out", valueAfter(args, "--provider") === "entwurf");
 		ok("6 v2 model laid out", valueAfter(args, "--model") === "claude-opus-4-8");
-		ok("6 v2 session-id laid out", valueAfter(args, "--session-id") === GID);
+		ok("6 v2 resumes by exact FILE (--session <abs path>)", valueAfter(args, "--session") === SESSION_FILE);
+		ok(
+			"6 v2 carries NO --session-id (a garden id would MINT a session, not resume one)",
+			!args.includes("--session-id"),
+		);
 		ok(
 			"6 v2 --model <m> <prompt> tail",
 			args[args.length - 3] === "--model" &&
@@ -102,7 +111,7 @@ function main(): void {
 	{
 		const args = buildResumePiArgs({
 			variant: "legacy",
-			sessionId: GID,
+			sessionFile: SESSION_FILE,
 			explicitExtensionArgs: [],
 			provider: null,
 			model: "m",
@@ -116,7 +125,7 @@ function main(): void {
 	for (const provider of [null, undefined] as const) {
 		const args = buildResumePiArgs({
 			variant: "v2-control",
-			sessionId: GID,
+			sessionFile: SESSION_FILE,
 			explicitExtensionArgs: [],
 			provider,
 			model: "m",
@@ -130,7 +139,7 @@ function main(): void {
 	// ── 7. no cross-contamination across variants over the same identity ──────────────
 	{
 		const base = {
-			sessionId: GID,
+			sessionFile: SESSION_FILE,
 			explicitExtensionArgs: EXT,
 			provider: "entwurf",
 			model: "m",

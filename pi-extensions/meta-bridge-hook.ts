@@ -14,7 +14,7 @@
  *     -> stdout hookSpecificOutput.watchPaths  (SessionStart / CwdChanged only)
  *
  * The record is keyed/looked-up by `native_session_id` (THE authority,
- * scanByNativeId); the idle-wake mailbox is keyed by GARDEN id — that is the
+ * scanIdentityByNativeId); the idle-wake mailbox is keyed by GARDEN id — that is the
  * whole point of the meta-bridge over the raw per-session prototype: one garden
  * address a sender can target, decoupled from the backend's native id grammar.
  *

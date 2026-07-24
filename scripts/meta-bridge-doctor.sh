@@ -698,9 +698,8 @@ for (const d of [sessionsDir, mailboxDir, receiversDir, sendersDir]) await fsp.m
 
 // SENDER — this probe process is the parent the bridge child will see, so a sender
 // marker keyed to it is exactly what a real SessionStart hook writes for a native
-// session. Not decoration: the live env sets ENTWURF_BRIDGE_REQUIRE_META_SENDER=1
-// (anonymous sends are refused on the Claude install path) and the probe KEEPS that
-// env, so the identity join is under test alongside the delivery.
+// session. Not decoration: the bridge refuses anonymous sends by default (#50 C4),
+// so the identity join is under test alongside the delivery.
 const sender = upsertMetaSession({
   input: { backend: 'claude-code', nativeSessionId: `doctor-delivery-sender-${process.pid}`, cwd: tmp },
   dir: sessionsDir,
@@ -983,7 +982,6 @@ for p in proc.glob("[0-9]*"):
     try:
         pairs = p.joinpath("environ").read_bytes().split(b"\0")
         env = {k.decode(): v.decode(errors="replace") for x in pairs if b"=" in x for k, v in [x.split(b"=", 1)]}
-        if env.get("ENTWURF_BRIDGE_REQUIRE_META_SENDER") != "1": continue
         if env.get("ENTWURF_BRIDGE_EXTERNAL_AGENT_ID") != "external-mcp/claude-code": continue
         if process_agent(env) != agent: continue
         bridges.append((int(p.name), parent(int(p.name))))
@@ -1063,14 +1061,25 @@ fi
 # DEPLOYED bundle (what the live SessionStart hook runs) is not re-assembled, so
 # new sessions are still written by the old writer — invisibly. "source complete"
 # ≠ "deployed complete". This section makes the running writer version legible:
-# live-write schema = does the bundle carry serializeMetaIdentity (v2 identity
-# write) or only mintMetaRecord (v1). Hash = drift catch. The authority for "what
+# live-write schema = does the bundle carry serializeMetaIdentity (the identity
+# write) or only the pre-identity v1 writer. Hash = drift catch. The authority for "what
 # records me" is the INSTALLED bundle; a mismatch vs source is a loud FAIL.
 echo
 echo "writer-version parity"
-livewrite_schema() { # $1=meta-session.ts → v2|v1|absent
+livewrite_schema() { # $1=meta-session.<ext> → v3|v2|v1|absent
   [ -f "$1" ] || { echo "absent"; return; }
-  if grep -q "serializeMetaIdentity" "$1"; then echo "v2"; else echo "v1"; fi
+  # THREE-valued, and the order matters. `serializeMetaIdentity` marks the identity
+  # writer, but BOTH v2 and v3 carry it — it is not a schema discriminator. This
+  # returned a flat "v2" for any identity writer, which after #50 made the oracle
+  # print `source: v2` three rows above `store: v1=0 v2=0 v3=N`; returning a flat
+  # "v3" instead would be the mirror lie, labelling a STALE deployed v2 bundle as
+  # current. The actual discriminator is the schema constant the writer mints with,
+  # so ask for it first and fall back to identity-presence only to separate v2 from
+  # the pre-identity v1 writer. A stale-deploy verdict is the whole point of this
+  # section, so it must be able to SAY "v2".
+  if grep -q "META_SCHEMA_VERSION_V3" "$1"; then echo "v3"
+  elif grep -q "serializeMetaIdentity" "$1"; then echo "v2"
+  else echo "v1"; fi
 }
 hash12() { [ -f "$1" ] && sha256sum "$1" | cut -c1-12 || echo "------------"; }
 registry_for_ms() { # $1=bundle meta-session.ts → sibling plugin-root registry path
@@ -1106,14 +1115,14 @@ echo "  assembled : $asm_v  ($asm_h)  registry=$asm_reg_h"
 echo "  installed : $inst_v  ($inst_h)  registry=$inst_reg_h  ${INST_MS:-<none>}"
 
 # store reality — distribution of schemaVersion across landed records.
-sv1=0; sv2=0
+sv1=0; sv2=0; sv3=0
 for mf in "$META_SESSIONS"/*.meta.json; do
   [ -f "$mf" ] || continue
   case "$(grep -o '"schemaVersion"[[:space:]]*:[[:space:]]*[0-9]*' "$mf" | grep -o '[0-9]*$' | head -1)" in
-    1) sv1=$((sv1 + 1)) ;; 2) sv2=$((sv2 + 1)) ;;
+    1) sv1=$((sv1 + 1)) ;; 2) sv2=$((sv2 + 1)) ;; 3) sv3=$((sv3 + 1)) ;;
   esac
 done
-echo "  store     : v1=$sv1 v2=$sv2  (dual-read reads both)"
+echo "  store     : v1=$sv1 v2=$sv2 v3=$sv3  (production reads v3 only; v1/v2 wait for the M1 migrate)"
 
 if [ -z "${INST_MS:-}" ]; then
   # Whether the DEPLOYED writer is stale is the whole point of this section. Skipping
@@ -1128,19 +1137,22 @@ if [ -f "$ASM_MS" ] && [ "$asm_h" != "$src_h" ]; then
   warn "assembled bundle differs from source ($asm_v vs $src_v) — stale .assembled; install re-assembles it"
 fi
 
-# v2 writer dependency: loadMetaCapabilityRegistry reads entwurf-capabilities.json
-# at runtime. In the bundle layout it must sit at the plugin ROOT (resolved via
-# `../` from lib/). A v2 bundle WITHOUT it throws on every mint/parse — a silent
-# hook break that hash parity alone cannot see (it only hashes meta-session.ts).
-check_registry_dep() { # $1=bundle meta-session.ts  $2=label  $3=registry-path  $4=registry-hash
+# Identity-writer dependency: loadMetaCapabilityRegistry reads
+# entwurf-capabilities.json at runtime. In the bundle layout it must sit at the
+# plugin ROOT (resolved via `../` from lib/). An identity bundle WITHOUT it throws
+# on every mint/parse — a silent hook break that hash parity alone cannot see (it
+# only hashes meta-session.<ext>). BOTH v2 and v3 writers carry this dependency,
+# so the messages report the bundle's MEASURED schema rather than hardcoding "v2".
+check_registry_dep() { # $1=bundle meta-session.<ext>  $2=label  $3=registry-path  $4=registry-hash
   local ms="$1" label="$2" reg="$3" reg_h="$4"
   [ -f "$ms" ] && grep -q "serializeMetaIdentity" "$ms" || return 0 # v1/absent: no registry dep
+  local schema; schema="$(livewrite_schema "$ms")"
   if [ ! -f "$reg" ]; then
-    bad "$label is v2 but MISSING entwurf-capabilities.json at plugin root ($reg) — the v2 writer throws on mint/parse (silent hook break). Re-run ./run.sh install-meta-bridge (now bundles the registry)."
+    bad "$label is $schema but MISSING entwurf-capabilities.json at plugin root ($reg) — the $schema writer throws on mint/parse (silent hook break). Re-run ./run.sh install-meta-bridge (now bundles the registry)."
   elif [ "$reg_h" != "$src_reg_h" ]; then
-    bad "$label v2 carries a STALE capability registry: $reg_h vs source=$src_reg_h ($reg). Re-run ./run.sh install-meta-bridge so the live writer and its load-bearing registry move together."
+    bad "$label $schema carries a STALE capability registry: $reg_h vs source=$src_reg_h ($reg). Re-run ./run.sh install-meta-bridge so the live writer and its load-bearing registry move together."
   else
-    ok "$label v2 carries capability registry ($reg, $reg_h)"
+    ok "$label $schema carries capability registry ($reg, $reg_h)"
   fi
 }
 check_registry_dep "$ASM_MS" "assembled" "${ASM_REG:-}" "$asm_reg_h"

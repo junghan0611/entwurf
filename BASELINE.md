@@ -274,6 +274,67 @@ prompt, and if so quote the visible text exactly:
 
 # HISTORY (pointer)
 
+2026-07-24 (night) upgrade-harness + review acceptance at exact HEAD
+`cbda097` (branch `repair/v2-core-debt`, merged to main the same night — the
+hard-cut branch chronicle lives in issue #50): the three-cell harness gained
+the UPGRADE axis — `setup` / `install` / `install-meta-bridge` refuse a
+pre-cut (v1/v2) meta-record store BEFORE their first write, prescribe on
+three axes (pre-cut → migrate; problems → repair first; both → repair FIRST,
+then migrate), and the proof seeds every host state from frozen fixture bytes
+(`fixtures/meta-store`, sha256-manifested, excluded from the tarball).
+Deterministic cells at this HEAD: `pnpm check` EXIT=0 (source cell
+`check-upgrade-gate` 57/0), `check-pack-install` EXIT=0,
+`ENTWURF_REQUIRE_DOCKER=1 check-install-container` EXIT=0 — candidate
+`junghanacs-entwurf-0.12.8-repair.1.tgz` **sha256
+`db17165f962c938d71ef97cb7a86252549dc91b00d5ec67f63ec65b41039e6dc`**,
+11413738 bytes, image `sha256:f1158c7f34cf35a047bf0513c38282bb2fa253529e5ae404b32c6d93697410be`.
+Live at this HEAD: `LIVE=1 release-gate` **MUST 16/1/0 + BEHAVIOR 1/0,
+EXIT=1** — the single FAIL is `smoke-acp-bundled-mcp-live`, the known
+bundled-MCP readiness race (ROADMAP 「🔴 OPEN」, GLG: observe, don't fix;
+sample recorded with transcript; isolated re-run PASS 4/4). Every other MUST
+passed at this HEAD, including `smoke-acp-v2-send-live` (send identity /
+replyability) and the matrix honest-reject. **A release cut stays blocked on
+that red by the gate's own words; the merge to main was GLG's explicit call
+with the race documented as an open observation item.**
+
+2026-07-24 dependency-uplift acceptance at exact HEAD
+`7cbeb29b6afcfbaf4fc28da3b7929037c339113d` (branch `repair/v2-core-debt`): pi
+runtime **0.80.7 → 0.82.0** and Claude ACP **claude-agent-acp 0.54.1 → 0.61.0 /
+ACP SDK 1.1.0 → 1.3.0** as two separate cuts, with `@anthropic-ai/sdk` held at
+**0.100.1** (measured through the real module graph: claude-agent-sdk 0.3.217's
+`>=0.93.0` peer resolves to 0.100.1 there; dropping the direct pin under this
+repo's `autoInstallPeers:false` leaves only 0.91.1 and the peer goes unmet).
+Deterministic 3 cells all EXIT=0 on Node 24 Linux — checkout (`pnpm
+build-bridge && pnpm check`), installed tree (`check-pack-install`: resolved
+tree holds only `@earendil-works@0.82.0`, loader drove the pinned pi, installed
+bin delivered a `.msg`), clean consumer (`ENTWURF_REQUIRE_DOCKER=1
+check-install-container`, candidate `junghanacs-entwurf-0.12.8-repair.1.tgz`
+**sha256 `ab5dee07585c8d7a4f8f174cedea0051489ae1a26766ff1baf8edd7377d5bac7`**,
+11391060 bytes, image `sha256:f1158c7f34cf35a047bf0513c38282bb2fa253529e5ae404b32c6d93697410be`).
+Live: `LIVE=1 ./run.sh release-gate` measured **MUST 17/0/0 + BEHAVIOR 1/0,
+EXIT=0** at this HEAD — the first aggregate to include
+`smoke-acp-v2-send-live`, which closes the SEND half of ACP citizenship (an ACP
+model calls `entwurf_v2` and the `.msg` lands carrying the resident's own garden
+id, `entwurf/<model>`, replyable — a gid never present in the prompt). Two
+stale claims were retired against measurement rather than argument: the
+extension-loader `/compat` shim survives 0.82.0 (root / `/compat` / `/oauth`
+untouched; `/providers/all` is an addition, and the curated Claude anchors are
+byte-identical across the bump), and the "one-shot bundled-MCP teardown hang"
+that a gate comment used as its rationale does not reproduce on this
+combination. What a plain `pi -p` genuinely lacks is garden identity, and only
+without `--entwurf-control` — now documented as a provider/citizen boundary
+instead of read as a defect.
+
+2026-07-24 record-era aggregate floor: `LIVE=1 ./run.sh release-gate` measured
+**MUST 16/0/0 + BEHAVIOR 1/0, EXIT=0** on the `repair/v2-core-debt` branch after
+the #50 C1–C3 cuts and the observability repair — the first aggregate run since
+2026-06-27 (every individual smoke had been green, but the two-tier summary and
+exit code of the aggregate command itself had gone unverified for the whole
+hard-cut window; three MUST live smokes were found dead on the pre-C2 address
+contract and re-authored in the same pass). The step count moved 17→16 with the
+v2-cutover smoke retirements. Evidence log: `/tmp/pi-tmux-release-gate.log`
+(scratch `/tmp/entwurf-rg-scratch-20260724`).
+
 2026-07-22 repair evidence: Linux artifact-consumer C is committed locally as
 `328c66e` (not yet pushed at the time of this baseline update); B/B2 direct-native
 observations and the exec-only production cut are documented in issue #51 and
@@ -303,4 +364,4 @@ baselines — live in **CHANGELOG.md and git history**, including the gate names
 their era (several of which, e.g. `smoke-all` / `smoke-async-resume` /
 `smoke-compaction-policy` / `sentinel` / `xt-tool-surface`, were retired in the
 v2 cutover). The live calibration reference is the current release floor in
-[VERIFY.md](./VERIFY.md) §0A — most recent: **2026-06-27 MUST 17/0/0 + BEHAVIOR 1/0**.
+[VERIFY.md](./VERIFY.md) §0A — most recent: **2026-07-24 MUST 16/0/0 + BEHAVIOR 1/0**.

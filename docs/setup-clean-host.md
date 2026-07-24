@@ -65,7 +65,7 @@ exit 0.
 | Claude Code | **`>=2.1.217`** — the exec-form hook floor; an older Claude drops the hook's `args` silently and still reports success, so there is no fallback lane | `entwurf.claudeCodeFloor` (bound by `check-claude-floor-coherence`) |
 | npm | bundled with Node 24 | public package install path |
 | entwurf | `@junghanacs/entwurf` | neutral npm package; exposes `entwurf`, `entwurf-bridge`, `entwurf-statusline`, `entwurf-agy-statusline`, and `entwurf-agy-imprint` bins |
-| pi binary | **optional**, `@earendil-works/pi-coding-agent >=0.80.7 <0.81` | needed only for the pi adapter / ACP provider / spawn-bg resume lane |
+| pi binary | **optional**, `@earendil-works/pi-coding-agent >=0.82.0 <0.83` | needed only for the pi adapter / ACP provider / spawn-bg resume lane |
 | Antigravity `agy` | **optional**, operator-installed/authenticated native CLI | needed only for the shipped native-push citizen lane; entwurf never moves its auth |
 
 ## Stage 0 — Node 24 via nvm
@@ -155,7 +155,7 @@ If the host will run pi sessions or the Claude ACP provider through pi, install
 a compatible pi binary separately and wire the target project.
 
 ```bash
-npm install -g @earendil-works/pi-coding-agent@0.80.7
+npm install -g @earendil-works/pi-coding-agent@0.82.0
 pi --version
 
 mkdir -p ~/entwurf-smoke
@@ -168,11 +168,11 @@ pi -e "$(npm root -g)/@junghanacs/entwurf" --list-models entwurf
 ```
 
 Drift points:
-- `entwurf install .` writes `.pi/settings.json`, registers the bundled
-  `entwurf-bridge`, and links `~/.pi/agent/entwurf-targets.json` to the package's
-  `pi/entwurf-targets.json`.
+- `entwurf install .` writes `.pi/settings.json` and registers the bundled
+  `entwurf-bridge`. (The `entwurf-targets.json` link is gone — #50 C3 removed the
+  target registry; a leftover operator link is inert.)
 - Older pi versions may silently miss the provider/extension surface. Use the
-  pinned floor (`>=0.80.7 <0.81`) for release verification.
+  pinned floor (`>=0.82.0 <0.83`) for release verification.
 - A host that only uses the external MCP bridge can skip this stage until it
   needs `owned-outcome` spawn-bg resume or pi-native control sockets.
 
@@ -219,6 +219,19 @@ If any of those sections reports `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`,
 the host is still running a pre-0.12.5 package or a broken tarball. Reinstall the
 current package and re-run `entwurf install-meta-bridge && entwurf doctor-meta-bridge`.
 
+Store invariant (only for a host that is NOT clean): this walkthrough assumes no
+prior `~/.pi/agent/meta-sessions`. A host that already has one from before the #50
+hard cut holds v1/v2 records, and production reads **schemaVersion 3 only**.
+`entwurf_self`, `entwurf_v2`, and inbox reads fail loud on those records;
+`entwurf_peers` keeps its fact listing alive and reports them as diagnostics.
+The owned `setup` / `install` / `install-meta-bridge` entrypoints refuse before
+activation writes rather than crossing this boundary silently. Run the one-time
+migration (`entwurf meta-bridge-migrate-v3 verify` to look, `… migrate` to
+convert; it takes a full backup first and `… restore <backup-dir>` reverses it).
+Once per host. A truly clean host has nothing to migrate and can ignore this
+paragraph. This refusal is a preflight, not a lock: for checkout-backed installs,
+quiesce sessions before pull, then migrate, setup, and reopen.
+
 Upgrade invariant: every global npm/pnpm package upgrade must be followed by
 `entwurf install-meta-bridge` from that same installed binary and then
 `entwurf doctor-meta-bridge`. Installed statusline/MCP entries use stable bin
@@ -230,9 +243,15 @@ ownership mismatch — run the doctor from the surface that intentionally owns t
 install, or reinstall from the other surface. Restart already-open Claude Code
 sessions after changing the meta-bridge install.
 
-A plain external MCP host can call tools but is non-replyable. A garden-native
-meta-session has a garden id, a mailbox, and a trusted sender marker; it can call
-`entwurf_self`, receive mailbox wakeups, and be replied to by garden id.
+A plain external MCP host can call the read surfaces (`entwurf_peers`,
+`entwurf_inbox_read`), but an `entwurf_v2` send is **refused by default** (#50 C4:
+"if we don't know who sent it, we don't send it") — it has no authoritative sender.
+A deliberately-anonymous host may wire the explicit
+`ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1` hatch and then delivers external and
+non-replyable; see README §"Wiring `entwurf-bridge` into an external MCP host".
+A garden-native meta-session has a garden id, a mailbox, and a trusted sender
+marker; it can call `entwurf_self`, receive mailbox wakeups, and be replied to by
+garden id.
 
 ## Stage 5 — Antigravity native citizen (optional)
 
@@ -299,17 +318,32 @@ pi --provider entwurf --model claude-sonnet-5 -p "reply with ok only"
 If the backend CLI fails directly (`claude -p "ping"`), fix that upstream first.
 `entwurf` surfaces missing auth; it does not repair it.
 
+**This smoke proves the PROVIDER surface, not the garden one.** It shows auth,
+model routing, and one real turn — nothing more. A plain `pi -p` run is not a
+garden citizen: with no `--entwurf-control` there is no routable control socket,
+so entwurf deliberately leaves `PI_SESSION_ID` unset and a bundled
+`entwurf_self` / `entwurf_v2` call **fails loud** naming the missing wiring.
+That is the contract, not a defect — an address a peer cannot route to is worse
+than none. For the garden surface (citizen birth, addressable sends) use Stage 7.
+
 ## Stage 7 — garden/control-socket surface (optional)
 
 To address a long-lived pi session from another session or an external MCP host,
-open it with `--entwurf-control`. A garden-native `--session-id` is required —
-a raw pi-assigned uuid hard-exits before any model turn.
+open it with `--entwurf-control`. No id injection and no special launcher
+(#50 C2): pi mints its own session id (a `uuidv7` is normal), `session_start`
+attaches that session to its meta-record, and the **record** mints the garden id
+everything addressable hangs off.
 
 ```bash
-pi --session-id "$(entwurf new-session-id)" \
-  --entwurf-control --provider entwurf --model claude-sonnet-5
-# control socket: ~/.pi/entwurf-control/<garden-id>.sock
+pi --entwurf-control --provider entwurf --model claude-sonnet-5
 ```
+
+The control socket is `~/.pi/entwurf-control/<record gardenId>.sock` — keyed on
+the id the record minted, which is *not* pi's session id. Read the address off
+`entwurf_peers` (or `entwurf_self` from inside the session) instead of guessing
+the filename. If the record cannot be written the control server is refused,
+`PI_SESSION_ID` stays unset, and the reason is on stderr: an unaddressable
+resident must never survive quietly.
 
 Use `entwurf_peers` to discover citizens and `entwurf_v2` to deliver by garden
 id. Do not choose the transport by hand: the same-looking id may name a live pi

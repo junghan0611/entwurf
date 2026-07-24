@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 2,
+  "gardenId": "20260306T000000-eeee06",
+  "backend": "pi",
+  "nativeSessionId": "native-v2-0006",
+  "cwd": "/synthetic/p6",
+  "model": "entwurf/claude-sonnet-5",
+  "transcriptPath": null,
+  "parentGardenId": null,
+  "isEntwurf": true,
+  "createdAt": "2026-03-06T00:00:00.000Z",
+  "recordUpdatedAt": "2026-03-06T01:00:00.000Z"
+}

@@ -1,15 +1,16 @@
 /**
  * socket-probe — single source of truth for control-socket liveness.
  *
- * Why this is a shared lib (not a per-file copy): the entwurf-control
- * extension (`pi-extensions/entwurf-control.ts`) AND the MCP bridge
- * (`mcp/entwurf-bridge/src/index.ts`) both probe `~/.pi/entwurf-control/*.sock`.
- * They used to carry independent `isSocketAlive` copies. If only one side
- * learned the three-valued classification the two probes would diverge — the
- * bridge routes a timeout target one way (mailbox fallback) while the
- * extension's GC reclaims the same socket. Both now consume this module so the
- * liveness semantics are identical on every surface. (0.11 Stage 0 step 4
- * plans a probe lib extraction anyway; this is its first slice.)
+ * Why this is a shared lib (not a per-file copy): every surface that asks
+ * "is this control socket live?" must answer identically. The entwurf-control
+ * extension (`pi-extensions/entwurf-control.ts`, GC) and the v2 dispatch/listing
+ * path (`socket-discovery.ts` → `entwurf-fact-provider.ts`, and the production
+ * decider deps) used to carry independent `isSocketAlive` copies. If only one
+ * side learned the three-valued classification the two probes would diverge —
+ * dispatch routes a timeout target one way while GC reclaims the same socket.
+ * All of them consume this module instead. (The bridge no longer probes at all:
+ * its socket-scan lane went with #50 C4, so it reaches liveness only through
+ * the fact provider.)
  *
  * Three-valued, not boolean — the F3 fix. A connect probe can mean three
  * different things, and collapsing them to a boolean is what let
@@ -19,7 +20,12 @@
  *   - alive          → a listener accepted the connection (positive proof)
  *   - dead           → ECONNREFUSED / ENOENT only (positive proof of absence)
  *   - indeterminate  → timeout, EACCES, or any other/unknown error
- *                      (no proof either way — keep the file, hide from listing)
+ *                      (no proof either way — keep the file, never destroy it)
+ *
+ * This module owns ONE policy, `shouldUnlinkOnGc` (GC reclaims dead only). The
+ * old listing policy (`shouldListAsLive`) left with its last consumer in #50 C4:
+ * `indeterminate` is now carried all the way to the surface as a fact, not
+ * hidden — `entwurf_peers` shows it and the v2 decider rejects on it by name.
  */
 
 import * as net from "node:net";
@@ -47,16 +53,6 @@ export function classifyConnectError(code: string | undefined): "dead" | "indete
  */
 export function shouldUnlinkOnGc(liveness: SocketLiveness): boolean {
 	return liveness === "dead";
-}
-
-/**
- * Listing policy: a session appears in the live listing only on a positive
- * connect. Indeterminate is hidden from the listing (preserving the prior
- * boolean listing semantics) but — unlike GC — is NOT unlinked. dead is hidden
- * too. This keeps "what GC reclaims" strictly narrower than "what is listed".
- */
-export function shouldListAsLive(liveness: SocketLiveness): boolean {
-	return liveness === "alive";
 }
 
 /**
