@@ -136,14 +136,23 @@ assert.equal(
 	`@agentclientprotocol/sdk must runtime-resolve to 1.3.0 from the adapter context (got ${wireInfo.version}) — the adapter and the backend must share one wire SDK`,
 );
 // @modelcontextprotocol/sdk gates its bare specifier behind "exports", so a
-// require.resolve of the package ROOT throws (no resolvable entry) — read the
-// installed package.json directly instead. pnpm hoists ONE mcp instance shared
-// by our root dep, pi, and claude-agent-sdk's ^1.29.0 peer, so the installed
-// copy IS the version the adapter/claude-agent-sdk edge resolves.
-const mcpPkg = JSON.parse(read("node_modules/@modelcontextprotocol/sdk/package.json")) as { version?: string };
+// require.resolve of the package ROOT throws (no resolvable entry) — resolve a
+// real SUBPATH instead and walk up to its package.json.
+//
+// This used to read the repo's own hoisted copy and justify it with "pnpm
+// hoists ONE mcp instance". That is true of today's lockfile, which is exactly
+// why it asserted nothing: the read never traversed the edge it claimed to
+// verify, so a nested @modelcontextprotocol/sdk under claude-agent-sdk would
+// leave this gate GREEN while the adapter loaded a peer no gate had seen. A
+// probe whose subject is "whatever the root happens to hoist" is a coincidence,
+// not a check. Resolve FROM the claude-agent-sdk context so the assertion binds
+// the real adapter → claude-agent-sdk → MCP edge, the same way the anthropic
+// SDK peer above is bound.
+const mcpEntry = casRequire.resolve("@modelcontextprotocol/sdk/server/index.js");
+const mcpInfo = pkgInfoFromEntry(mcpEntry);
 assert.ok(
-	typeof mcpPkg.version === "string" && mcpPkg.version.startsWith("1.29."),
-	`@modelcontextprotocol/sdk must be 1.29.x (got ${mcpPkg.version}) — claude-agent-sdk 0.3.217 declares a ^1.29.0 peer`,
+	mcpInfo.version.startsWith("1.29."),
+	`@modelcontextprotocol/sdk must runtime-resolve to 1.29.x from the claude-agent-sdk context (got ${mcpInfo.version}) — claude-agent-sdk 0.3.217 declares a ^1.29.0 peer`,
 );
 
 // ---------------------------------------------------------------------------
