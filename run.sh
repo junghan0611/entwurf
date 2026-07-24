@@ -4344,9 +4344,11 @@ case "$cmd" in
     # verb as the fix. migrate = classify → refuse-before-write on an unreadable
     # store or a non-null parentGardenId/isEntwurf=true without --drop-parentage
     # (#50: Call ≠ parentage) → whole-dir backup to `<store>.v3-migration-backup-<ts>/`
-    # → atomic v1/v2→v3 rewrite (v1 receipts to mailbox state first) → re-verify
-    # non-V3=0. verify = read-only certification. restore <backup-dir> = rollback
-    # (current store moved aside, never destroyed). Store resolution is env+default
+    # (staged copy + atomic rename: the final name exists only once the copy
+    # completed) → atomic v1/v2→v3 rewrite (v1 receipts to mailbox state first)
+    # → re-verify non-V3=0. verify = read-only certification. restore <backup-dir>
+    # = rollback (only THIS store's fully readable, non-empty timestamp sibling;
+    # current store moved aside, never destroyed). Store resolution is env+default
     # only — the H7 runbook targets THE live store.
     shift || true
     run_ts scripts/meta-bridge-migrate-v3.ts "$@"

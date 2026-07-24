@@ -10,9 +10,11 @@
  *     classify → REFUSE before any write on a store it cannot fully read
  *     (malformed / stray-key / half-migrated / body-filename drift / duplicate
  *     nativeSessionId) → backup the WHOLE store dir to a sibling
- *     `<store>.v3-migration-backup-<ts>/` → rewrite every v1/v2 record as v3
- *     (atomic tmp+rename per file) → re-verify from disk (non-V3=0).
- *     Idempotent: a v3-only store is a loud no-op that takes NO backup.
+ *     `<store>.v3-migration-backup-<ts>/` (staged copy + atomic rename — the
+ *     final name exists only once the copy COMPLETED; a failed copy leaves at
+ *     most a `.partial-` leaf the restore grammar refuses) → rewrite every
+ *     v1/v2 record as v3 (atomic tmp+rename per file) → re-verify from disk
+ *     (non-V3=0). Idempotent: a v3-only store is a loud no-op, NO backup.
  *   verify
  *     read-only certification: exit 0 iff every `.meta.json` parses as strict
  *     v3, agrees with its filename, and no nativeSessionId is claimed twice.
@@ -26,6 +28,11 @@
  *     never a symlink); a foreign, nested, forged-suffix, or look-alike is refused,
  *     because copying an
  *     unrelated tree over the address authority is a manual `cp`, not a verb.
+ *     The name alone is still not enough: every record entry must be a REGULAR
+ *     file (classify reads through a link; the copy would land the link) and
+ *     the backup must CLASSIFY clean (fully readable, zero problems, ≥1 record
+ *     — v1/v2/v3 all legitimate) before the current store moves; a perfect
+ *     name over unreadable, linked, or empty bytes is refused, store untouched.
  *     Scope is the
  *     STORE only: mailbox receipt state is deliberately NOT rolled back — the
  *     v1 receipt migration is state-wins and idempotent, so a post-restore
@@ -103,8 +110,9 @@ function usage(code: number): never {
 			"                              Refuses BEFORE any write: a store with malformed/drifted/duplicate records,",
 			"                              or a v2 record carrying non-null parentGardenId / isEntwurf=true without the flag.",
 			"  verify                      read-only: exit 0 iff every record is strict v3 (non-V3=0).",
-			"  restore <backup-dir>        rollback: move the current store aside (<store>.pre-restore-<ts>/) and",
-			"                              copy the M1 backup back. Accepts only `.v3-migration-backup-` dirs.",
+			"  restore <backup-dir>        rollback: verify the backup is THIS store's fully readable, non-empty",
+			"                              `.v3-migration-backup-<ts>` sibling, then move the current store aside",
+			"                              (<store>.pre-restore-<ts>/) and copy the M1 backup back.",
 			"",
 			"store   = ENTWURF_META_SESSIONS_DIR || <PI_CODING_AGENT_DIR|~/.pi/agent>/meta-sessions",
 			"mailbox = ENTWURF_META_MAILBOX_DIR  || <PI_CODING_AGENT_DIR|~/.pi/agent>/meta-mailbox (v1 receipts land here)",
@@ -332,7 +340,30 @@ function cmdMigrate(storeDir: string, mailboxDir: string, dropParentage: boolean
 		console.error(`REFUSE: backup dir already exists: ${backupDir} — wait a second and re-run.`);
 		return 1;
 	}
-	fs.cpSync(storeDir, backupDir, { recursive: true });
+	// The final timestamp name is the restore verb's trust anchor: "this name
+	// exists" must mean "this backup is COMPLETE". So the copy lands in a
+	// staging leaf first and only an atomic rename claims the final name — a
+	// crash or ENOSPC mid-copy leaves at most a `.partial-` leaf the restore
+	// grammar refuses, never a plausible half-backup under the trusted name.
+	const stagingDir = `${backupDir}.partial-${process.pid}`;
+	try {
+		fs.cpSync(storeDir, stagingDir, { recursive: true });
+		fs.renameSync(stagingDir, backupDir);
+	} catch (err) {
+		try {
+			// Best-effort: the partial leaf may hold the very bytes that filled the
+			// disk; if even this fails, the restore grammar refuses the leaf anyway.
+			fs.rmSync(stagingDir, { recursive: true, force: true });
+		} catch {
+			// the refusal below must still print — never crash inside the cleanup
+		}
+		console.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
+		console.error(
+			"REFUSE: could not take a complete backup — nothing was written to the store and no final-name " +
+				"backup exists. Fix the cause above and re-run.",
+		);
+		return 1;
+	}
 	console.log(`backup: ${backupDir} (${records.length} record(s))`);
 
 	// Once writing starts, EVERY exit path must name the rollback (M2): a raw
@@ -397,8 +428,11 @@ function cmdRestore(storeDir: string, backupArg: string): number {
 		// symlink into an unrelated tree and let that tree replace the address
 		// authority; lstat keeps the leaf itself inside the trust decision.
 		backupStat = fs.lstatSync(backupDir);
-	} catch {
-		console.error(`REFUSE: backup path does not exist: ${backupDir}`);
+	} catch (err) {
+		// EACCES / ENOTDIR / EIO are NOT "does not exist" — mid-blackout the
+		// operator steers by this line, so the refusal carries the real cause.
+		const cause = err instanceof Error ? err.message : String(err);
+		console.error(`REFUSE: cannot inspect backup path ${backupDir}: ${cause}`);
 		return 1;
 	}
 	if (!backupStat.isDirectory()) {
@@ -427,6 +461,52 @@ function cmdRestore(storeDir: string, backupArg: string): number {
 	}
 	if (backupDir === path.resolve(storeDir)) {
 		console.error(`REFUSE: backup dir IS the store dir: ${backupDir}`);
+		return 1;
+	}
+	// The name proves provenance, not completeness: staging+rename means migrate
+	// never leaves a half-copy under the final name, but a manual cp or a damaged
+	// disk still can. This verb puts the backup in AUTHORITY, so classify it
+	// exactly as migrate classifies a store BEFORE the current store moves —
+	// v1/v2/v3 are all legitimate (the backup holds pre-cut bytes), but a
+	// malformed/drifted/duplicate record or an empty dir is not an M1 backup
+	// (migrate refuses those stores and never backs up an empty one).
+	//
+	// First, the record entries must be REGULAR FILES: classifyStore reads
+	// THROUGH a symlink, so a link would classify by its target's bytes while
+	// the copy lands the link itself — the authority would dangle on a foreign
+	// path. migrate authors only regular files; refuse the shape.
+	try {
+		for (const entry of fs.readdirSync(backupDir).sort()) {
+			if (!entry.endsWith(".meta.json")) continue;
+			if (!fs.lstatSync(path.join(backupDir, entry)).isFile()) {
+				console.error(
+					`REFUSE: ${backupDir} holds a non-regular-file record entry: ${entry} — an M1 backup contains ` +
+						"only regular record files, so migrate did not author this dir. The current store was NOT touched.",
+				);
+				return 1;
+			}
+		}
+	} catch (err) {
+		const cause = err instanceof Error ? err.message : String(err);
+		console.error(`REFUSE: cannot inspect backup contents ${backupDir}: ${cause}`);
+		return 1;
+	}
+	const backupClass = classifyStore(backupDir);
+	const backupRecords = backupClass.counts.v1 + backupClass.counts.v2 + backupClass.counts.v3;
+	if (backupClass.problems.length > 0) {
+		printProblems(backupClass.problems);
+		console.error(
+			`REFUSE: ${backupDir} is not a completely readable M1 backup (${backupClass.problems.length} problem(s) above) — ` +
+				"the current store was NOT touched. A backup this verb cannot fully read must never become the " +
+				"address authority; recover the intended bytes manually before retrying.",
+		);
+		return 1;
+	}
+	if (backupRecords === 0) {
+		console.error(
+			`REFUSE: ${backupDir} holds no meta-record — migrate backs a store up only when it has records to ` +
+				"migrate, so an empty dir under the backup name is not an M1 backup. The current store was NOT touched.",
+		);
 		return 1;
 	}
 	let asideDir: string | null = null;

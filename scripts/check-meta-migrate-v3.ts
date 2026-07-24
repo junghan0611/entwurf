@@ -30,6 +30,12 @@
  *     ONLY a real-directory timestamp sibling backup OF THIS store is accepted —
  *     a foreign look-alike, nested dir, forged suffix, or sibling symlink into a
  *     foreign tree is refused (a wrong path must never replace the authority).
+ *   - backup completeness (S16/S17): the final backup name is claimed by an
+ *     atomic rename AFTER the staged copy completes, so a mid-copy failure
+ *     never leaves a half-backup under the trusted name; restore requires
+ *     regular-file record entries and classifies the backup like a store
+ *     (zero problems, ≥1 record) BEFORE the current store moves, and an
+ *     uninspectable path names its real lstat cause.
  *   - prescriptions (R1): the pre-cut FAIL and the rollback line each name BOTH
  *     invocation forms — `./run.sh …` for a dev clone AND `entwurf …` for an
  *     installed package. The hosts that actually meet a pre-cut store are
@@ -591,6 +597,132 @@ const s1 = makeWorld({ [`${V1_GID}.meta.json`]: V1_BODY });
 		"S15 the genuine real-directory timestamp sibling of THIS store is accepted",
 		rok.status === 0 && rok.stdout.includes("restored:"),
 		rok.stdout + rok.stderr,
+	);
+}
+
+// ── S16: the backup NAME is provenance, its CONTENT must classify clean ──────
+// GPT follow-up reproduction: a valid-name backup holding a malformed record
+// restored with rc=0 and made that record the address authority. Restore now
+// classifies the backup exactly as migrate classifies a store BEFORE the
+// current store moves — zero problems, at least one record (v1/v2/v3 all
+// legitimate: an M1 backup holds pre-cut bytes).
+{
+	const w = makeWorld({ [`${V3_GID}.meta.json`]: V3_BODY });
+	const env = { store: w.store, mailbox: w.mailbox };
+	const storeBefore = storeBytes(w);
+
+	// (a) a malformed record under a perfect sibling+timestamp name
+	const broken = `${w.store}.v3-migration-backup-20260102T000000`;
+	fs.mkdirSync(broken);
+	fs.writeFileSync(path.join(broken, "broken.meta.json"), "{ not json");
+	const rb = runCli(["restore", broken], env);
+	ok(
+		"S16 a valid-name backup with a malformed record is refused naming the problem",
+		rb.status === 1 && rb.stderr.includes("not valid JSON") && rb.stderr.includes("NOT touched"),
+		rb.stdout + rb.stderr,
+	);
+
+	// (b) an empty dir under the backup name — migrate never takes an empty backup
+	const empty = `${w.store}.v3-migration-backup-20260103T000000`;
+	fs.mkdirSync(empty);
+	const re = runCli(["restore", empty], env);
+	ok(
+		"S16 an empty dir under the backup name is refused (an M1 backup is never empty)",
+		re.status === 1 && re.stderr.includes("no meta-record"),
+		re.stdout + re.stderr,
+	);
+
+	// (c) body/filename drift inside the backup — same classifier, same refusal
+	const drifted = `${w.store}.v3-migration-backup-20260104T000000`;
+	fs.mkdirSync(drifted);
+	fs.writeFileSync(path.join(drifted, "20260909T000000-fake09.meta.json"), V3_BODY);
+	const rd = runCli(["restore", drifted], env);
+	ok(
+		"S16 a drifted record inside the backup is refused (classified like a store)",
+		rd.status === 1 && rd.stderr.includes("body/filename drift"),
+		rd.stdout + rd.stderr,
+	);
+
+	ok(
+		"S16 every content refusal left the store byte-untouched with no aside",
+		fs.readdirSync(w.root).every((n) => !n.startsWith("store.pre-restore-")) &&
+			[...storeBefore].every(([f, bytes]) => fs.readFileSync(path.join(w.store, f), "utf8") === bytes),
+	);
+
+	// (d) an uninspectable path names the REAL cause — ENOTDIR is not "does not
+	//     exist", and mid-blackout the operator steers by this line.
+	const plainFile = path.join(w.root, "plain-file");
+	fs.writeFileSync(plainFile, "x");
+	const rl = runCli(["restore", path.join(plainFile, "child")], env);
+	ok(
+		"S16 an uninspectable backup path carries the real lstat cause (ENOTDIR)",
+		rl.status === 1 && rl.stderr.includes("cannot inspect backup path") && rl.stderr.includes("ENOTDIR"),
+		rl.stdout + rl.stderr,
+	);
+
+	// (e) a symlink RECORD inside a perfect-name backup is refused: classify
+	//     reads THROUGH the link (it would validate the target's bytes) while
+	//     the copy lands the link itself — the authority would dangle on a
+	//     foreign path. migrate authors only regular files; the shape refuses.
+	const linked = `${w.store}.v3-migration-backup-20260105T000000`;
+	fs.mkdirSync(linked);
+	const linkTarget = path.join(w.root, "elsewhere.json");
+	fs.writeFileSync(linkTarget, V3_BODY);
+	fs.symlinkSync(linkTarget, path.join(linked, `${V3_GID}.meta.json`));
+	const rlk = runCli(["restore", linked], env);
+	ok(
+		"S16 a symlink record inside a perfect-name backup is refused (regular files only)",
+		rlk.status === 1 &&
+			rlk.stderr.includes("non-regular-file record entry") &&
+			rlk.stderr.includes(`${V3_GID}.meta.json`) &&
+			fs.readFileSync(path.join(w.store, `${V3_GID}.meta.json`), "utf8") === V3_BODY &&
+			fs.readdirSync(w.root).every((n) => !n.startsWith("store.pre-restore-")),
+		rlk.stdout + rlk.stderr,
+	);
+}
+
+// ── S17: a backup copy that cannot complete never claims the final name ──────
+// The copy lands in a `.partial-<pid>` staging leaf and only an atomic rename
+// claims `<store>.v3-migration-backup-<ts>` — so the final name existing MEANS
+// the backup completed. The failure is forced root-proof via Linux PATH_MAX:
+// the store's own paths stay fully readable/writable, but the longer staging
+// sibling's inner paths overflow 4096, so the copy dies exactly mid-backup.
+{
+	const w = makeWorld({});
+	let parent = w.root;
+	while (parent.length + 201 <= 4024) parent = path.join(parent, "d".repeat(200));
+	const pad = 4024 - parent.length - 1;
+	if (pad > 0) parent = path.join(parent, "d".repeat(pad));
+	const deepStore = path.join(parent, "store");
+	fs.mkdirSync(deepStore, { recursive: true });
+	fs.writeFileSync(path.join(deepStore, `${V2_GID}.meta.json`), v2Body());
+	const env = { store: deepStore, mailbox: w.mailbox };
+	const mig = runCli(["migrate"], env);
+	ok(
+		"S17 a mid-copy backup failure refuses loudly with the cause (no uncaught crash)",
+		mig.status === 1 && mig.stderr.includes("ENAMETOOLONG") && mig.stderr.includes("complete backup"),
+		mig.stdout + mig.stderr,
+	);
+	const finalNamed = fs.readdirSync(parent).filter((n) => /^store\.v3-migration-backup-\d{8}T\d{6}$/.test(n));
+	ok(
+		"S17 no final-name backup exists after the failure (staging never got renamed)",
+		finalNamed.length === 0,
+		fs.readdirSync(parent).join(", "),
+	);
+	ok(
+		"S17 the store is byte-untouched (the copy failed BEFORE any record rewrite)",
+		fs.readFileSync(path.join(deepStore, `${V2_GID}.meta.json`), "utf8") === v2Body(),
+	);
+
+	// A staging leaf a hard crash could leave behind is refused by the restore
+	// grammar — its tail is `<ts>.partial-<pid>`, not the exact timestamp.
+	const leftover = `${deepStore}.v3-migration-backup-20260101T000000.partial-99999`;
+	fs.mkdirSync(leftover);
+	const rs = runCli(["restore", leftover], env);
+	ok(
+		"S17 a leftover staging leaf is refused by restore (not a final-name backup)",
+		rs.status === 1 && rs.stderr.includes("not a backup OF THIS store"),
+		rs.stdout + rs.stderr,
 	);
 }
 
