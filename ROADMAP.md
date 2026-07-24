@@ -255,11 +255,16 @@ model 없음, pi backend는 birth에 transcript 미확정. `recordUpdatedAt` = r
 
 - **🔴 OPEN — 번들 MCP readiness race (2026-07-24 검수에서 발견, GLG: "고치지 말고 더 지켜본다").**
   `pi --entwurf-control` resident의 첫 턴에서 번들 `entwurf-bridge` MCP 도구가 세션 tool schema에
-  **가끔 없다.** 모델은 호출하고 런타임이 `No such tool available: mcp__entwurf-bridge__entwurf_v2`로
-  답한다. 독립 2회 관측(`smoke-acp-v2-send-live` 19:00, `smoke-acp-bundled-mcp-live` aggregate 19:30) —
-  후자에서는 모델이 "콜 가능한 도구는 Read/Bash/Edit/Write/Skill뿐"이라고 명시했다. 격리 재실행은
-  3/3 PASS이고 둘 다 **무거운 동시 부하** 아래였다(상관이지 인과 아님). dist rm/build race는 배제됨
-  (dev-location branch는 항상 TS source 실행).
+  **가끔 없다.** 독립 2회 관측이며 **모델의 반응은 서로 달랐다 — 공통 원인이 가려지기 쉬웠던 지점이다**:
+  - `smoke-acp-v2-send-live` (19:00) — 모델이 **호출했고** 런타임이
+    `[tool:failed] … No such tool available: mcp__entwurf-bridge__entwurf_v2`로 답했다.
+  - `smoke-acp-bundled-mcp-live` (aggregate, 19:30) — 모델이 **스키마를 먼저 읽고 호출하지 않았다**:
+    "콜 가능한 도구는 Read/Bash/Edit/Write/Skill뿐 … 존재하지 않는 도구 호출 결과를 지어내지 않겠다."
+  두 표본 모두 **도구가 세션 스키마에 없었다**는 사실은 같다. 격리 재실행은 3/3 PASS.
+  부하 조건은 **표본마다 다르고 인과가 아니다**: 19:00 표본은 백그라운드 `pnpm check`와 실제로 동시였고,
+  aggregate 표본은 앞선 라이브 턴 10여 개 뒤의 무거운 시퀀스 후반부였다 — 다만 순차 게이트는 이전 child를
+  종료하므로 **그 실패 순간에 동시 프로세스가 있었다는 증거는 아직 없다.** load association은 상관일 뿐이다.
+  dist rm/build race는 배제됨(dev-location branch는 항상 TS source 실행).
   - **구조**: claude-agent-acp 0.61.0 `createSession()`은 `await q.initializationResult()`만 기다리고
     즉시 반환(`acp-agent.js:3942-4058, 4174-4177`), 우리 backend는 model enforce 후 곧바로 prompt
     (`acp/backend.ts:718-790`). **configured MCP가 `connected`에 이르길 기다리는 층이 없다.**

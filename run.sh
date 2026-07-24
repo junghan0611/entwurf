@@ -3754,10 +3754,12 @@ release_gate() {
   # MCP entwurf surface (vs. bypassing via Bash/Terminal/pi-CLI). Scope note
   # (2026-07-24): a gate that TELLS the model which tool to call does NOT belong
   # here. That was tried for smoke-acp-v2-send-live on a PASS/PASS/FAIL sample
-  # read as instruction-following flake, and the reading was wrong — the transcript
-  # of both failures shows the model calling the tool and the RUNTIME answering
-  # "No such tool available", i.e. an MCP readiness defect of ours. Advisory is for
-  # what the model chooses, never for what our wiring fails to deliver. These gates
+  # read as instruction-following flake, and the reading was wrong — in both
+  # failures the tool was simply ABSENT from the session's schema (one model called
+  # it and the RUNTIME answered "No such tool available"; the other read the schema,
+  # saw no such tool, and declined to invent a result). An MCP readiness defect of
+  # ours, either way. Advisory is for what the model chooses, never for what our
+  # wiring fails to deliver. These gates
   # are flaky by the model's nature (Claude Sonnet's MCP-vs-Bash choice is
   # non-deterministic on 0.79.4), so a single flake must NOT block the cut. They
   # are NEVER folded into `failc`/`pass` — exit authority below is `failc` only.

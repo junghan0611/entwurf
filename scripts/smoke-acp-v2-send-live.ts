@@ -34,10 +34,16 @@
 //
 // KNOWN OPEN DEFECT this gate catches — bundled-MCP readiness (2026-07-24). Two
 // independent failures were first read as the model declining an explicit
-// instruction, and the transcripts said otherwise: the model DID call, and the
-// runtime answered `No such tool available: mcp__entwurf-bridge__entwurf_v2` (the
-// sibling smoke-acp-bundled-mcp-live failed the same way in the same aggregate, its
-// model reporting that only Read/Bash/Edit/Write/Skill were exposed). The window is
+// instruction, and the transcripts said otherwise: in both, the entwurf tool was
+// ABSENT from the session's schema. The two models then behaved differently, which
+// is why the shared cause was easy to miss — in this gate's failure (a standalone
+// run) the model called anyway and the runtime answered `No such tool available:
+// mcp__entwurf-bridge__entwurf_v2`; in the sibling smoke-acp-bundled-mcp-live's
+// failure (a separate run, half an hour later, inside a release-gate aggregate) the
+// model read its schema first, reported that only Read/Bash/Edit/Write/Skill were
+// exposed, and refused to invent a result for a tool it did not have. Two
+// independent runs, different behaviour, one defect: the server was not there to be
+// called. The window is
 // structural: claude-agent-acp 0.61.0's createSession awaits only
 // `initializationResult()`, and this backend prompts right after
 // (acp/backend.ts:718-790) — nothing waits for the configured MCP servers to reach
@@ -82,8 +88,9 @@ function ok(label: string, cond: boolean): void {
 	passed++;
 }
 
-/** On failure, persist the turn transcript outside the temp world and name the file.
- * Best-effort: an artifact write must never mask the real assertion error. */
+/** On failure, persist the CAPTURED TURN EVENT STREAM (what this smoke saw on the
+ * resident's stdout — not the pi session JSONL) outside the temp world, and name the
+ * file. Best-effort: an artifact write must never mask the real assertion error. */
 async function writeFailureArtifact(cap: { stream: string } | null, stderrTail: string, err: unknown): Promise<void> {
 	try {
 		const stamp = new Date().toISOString().replace(/[:.]/g, "-");
