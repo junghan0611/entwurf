@@ -50,16 +50,6 @@ export function shouldUnlinkOnGc(liveness: SocketLiveness): boolean {
 }
 
 /**
- * Listing policy: a session appears in the live listing only on a positive
- * connect. Indeterminate is hidden from the listing (preserving the prior
- * boolean listing semantics) but — unlike GC — is NOT unlinked. dead is hidden
- * too. This keeps "what GC reclaims" strictly narrower than "what is listed".
- */
-export function shouldListAsLive(liveness: SocketLiveness): boolean {
-	return liveness === "alive";
-}
-
-/**
  * Probe a control socket and classify it. Positive connect → alive; a
  * connect-time error is routed through `classifyConnectError`; a connect that
  * neither connects nor errors within `timeoutMs` → indeterminate (the load

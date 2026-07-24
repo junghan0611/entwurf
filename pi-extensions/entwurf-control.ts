@@ -81,12 +81,7 @@ import type {
 import { getMarkdownTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { Box, type Container, Markdown, Spacer, Text } from "@earendil-works/pi-tui";
 import { ENTWURF_SENT_MESSAGE_TYPE } from "../protocol.js";
-import {
-	CONTROL_SOCKET_SUFFIX,
-	controlSocketPathIn,
-	defaultControlSocketDir,
-	gardenIdFromSocketFilename,
-} from "./lib/control-socket-path.js";
+import { CONTROL_SOCKET_SUFFIX, controlSocketPathIn, defaultControlSocketDir } from "./lib/control-socket-path.js";
 import {
 	formatSenderInfoBlock,
 	type RpcCommand,

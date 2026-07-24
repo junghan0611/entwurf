@@ -565,6 +565,17 @@ try {
 			landedBody.includes("external-mcp") && !landedBody.includes("meta-session/claude-code"),
 			`--- mailbox body ---\n${landedBody || "(missing)"}`,
 		);
+		// Review F3: pin BOTH halves of the hatch's honesty. The body must say there
+		// is no reply address — the exact formatter string for a non-replyable
+		// non-meta sender — and must never advertise one: a hatch envelope drifting
+		// to replyable:true would render "(replyable — reply via entwurf_v2 to this
+		// sessionId …)" and send the receiver dispatching at the phantom gid
+		// "external-mcp" (bad-target). No other gate covers the anonymous branch.
+		ok(
+			"D12: the landed body says non-replyable (no phantom reply address, F3)",
+			landedBody.includes("(external, non-replyable)") && !/replyable —/.test(landedBody),
+			`--- mailbox body ---\n${landedBody || "(missing)"}`,
+		);
 	}
 } finally {
 	try {
