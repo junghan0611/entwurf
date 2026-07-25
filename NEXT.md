@@ -58,8 +58,23 @@
   진단해 한 바퀴 낭비했다. **소스 수정 → `pnpm run build-bridge` → 3셀** 순서를 지킬 것.
 - **실호스트 사실**: 이 개발 PC의 store는 **213 record certified** — merge 후 fresh-cut 없이
   `setup`이 통과한다.
-- **▶ 다음 걸음 — #47 mux launch rail (0.12.x).** 착수 전 `docs/mux-launch-rail.md`. 이 컷에서
-  mux lineage 산문이 `callerGardenId`로 정정됐다(호출 사건 ≠ 계보).
+- **[2026-07-25] release 전 fresh-cut closure 완료 (4·5라운드).** 새 소비자인 destructive
+  fresh-cut이 기존 read/dispatch helper의 `unknown→absent/dead` 안전 방향을 뒤집은 뒤 남아 있던
+  도달면을 열거해 닫았다. 최종 4커밋은 `c408683`(surface dir ENOENT-only) → `eecb2d5`
+  (directory kind · common parent-writability preflight · partial-move report · doctor rc 처방) →
+  `e5cb4a1`(W_OK 증거보다 강한 산문 제거) → `9015431`(socket entry ENOENT-only · installed
+  doctor compiled-entry guard). **정직한 수용 경계:** 결함 부류 전체가 영구히 사라졌다는 주장이
+  아니라, 파괴적 동사의 열거된 도달 폐포(fresh-cut 본체 + 두 doctor caller) 안에서 존재·생존·
+  판정 질문을 하는 자리를 fail-closed로 만들고 실제 위험마다 detector를 붙였다. 새 destructive
+  소비자가 생길 때의 primitive 승격은 후속이다. GPT 최종 독립 실행:
+  `pnpm run build-bridge && pnpm check` **EXIT=0**, fresh-cut gate **141/0**; exact HEAD
+  `9015431`, clean tree. #52 duplicate read/birth race와 empty start-key 정책은 의도적 후속.
+- **▶ 다음 걸음 — 0.12.8 stable landing 준비, 그 뒤 #47.** 구현 closure는 release-ready다.
+  단 #51 계약상 `land 0.12.8` 전 maintainer + secondary Linux host에서 published
+  `0.12.8-repair.1` 설치 → `install-meta-bridge` → 모든 기존 Claude 재시작 → 새 live MCP 세션 →
+  installed `doctor-meta-bridge` exit 0 증거를 BASELINE HISTORY에 먼저 남겨야 한다. 버전은
+  **0.12.8 stable**(VERIFY 예약; 0.13.0은 ROADMAP의 Cortex #48 예약). 착수 전
+  `docs/mux-launch-rail.md`; mux lineage는 `callerGardenId`(호출 사건 ≠ 계보).
 
 ## OPEN
 
@@ -73,10 +88,12 @@
    목표가 아니라 churn 카탈로그를 뽑는 관측 실행이고, RED는 데이터다.
 3. **🔴 release 차단 관측 — 번들 MCP readiness race (변동 없음).** 인과가 서기 전에는 고치지
    않는다(GLG 결정). SSOT는 **ROADMAP 「🔴 OPEN — 번들 MCP readiness race」**.
-4. **release lane (0.12.8-repair.1, 방아쇠는 GLG):** `land` → `prepare`(CHANGELOG 재승격 —
-   fresh-cut 뺄셈 + 이 재검수 수선 6건 포함) → `make`(LIVE 재획득) → `publish`(`repair`
-   dist-tag만; `latest=0.12.7` 유지 확정). merge ≠ release. container 증거는 워킹트리 수용
-   증거이지 release-preserved tgz가 아니므로 `make` 때 exact candidate를 다시 보존·결속한다.
+4. **release lane (0.12.8 stable, 방아쇠는 GLG):** 두 Linux installed-host proof + BASELINE
+   기록 → `land` → `prepare`(CHANGELOG에 fresh-cut 뺄셈 + 재검수 closure 승격, package
+   `0.12.8`, release skill의 repair-only U2를 dist-tag별 계약으로 정정) → `make`(LIVE 재획득) →
+   `publish … latest`. publish 후 `latest=0.12.8`, 기존 `repair=0.12.8-repair.1`을 보존한다.
+   merge/push ≠ release. 워킹트리 container 증거는 release-preserved tgz가 아니므로 `make` 때
+   exact candidate를 다시 보존·결속한다.
 5. **후속·별건:** ⓐ 오푸스가 #50에 남긴 readiness upstream 인과 확정 코멘트 정정 — GLG 승인 후
    ⓑ BASELINE fresh-cut HISTORY 기록 여부는 release prepare 때 판단 ⓒ #48 cortex(0.13.0, PR
    #40은 PARK) ⓓ Meta sender 모델 표기(비차단, optional display field).
