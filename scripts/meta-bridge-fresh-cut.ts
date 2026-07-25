@@ -295,7 +295,9 @@ function inspectMarkers(
 		// marker never NAMED an owner — unprovable, so it refuses the cut like every other
 		// unreadable marker. A numeric one that cannot own (`<= 1`, non-integer, unsafe)
 		// IS a claim, and it is refuted BY CONSTRUCTION: no writer in this tree can mint it
-		// any more, and "this session is owned by init" is false on its face. That is a
+		// any more, and on the axis this repo certifies "this session is owned by init" is
+		// false on its face (a container harness running AS pid 1 is a real but UNSUPPORTED
+		// shape — see isPlausibleOwnerPid; it fails closed at the writers). That is a
 		// proof of INVALIDITY — strictly stronger than the proof of death this loop already
 		// acts on — so it is clearable residue, never `live` and never `uncertain`. Without
 		// this row a single reparented-owner marker left quiescence unprovable by the ONE

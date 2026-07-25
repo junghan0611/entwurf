@@ -323,6 +323,15 @@ Only that accepted file may be published under the explicitly authorized lane:
 > from the dead ones** (`refuted:`), because a proof of invalidity is a different
 > finding from a proof of death — and a stronger one.
 >
+> **Scope of that rule.** "A native session is never owned by init" is a property of the
+> axis entwurf certifies — a Linux desktop/workstation host, where init is the service
+> manager and every harness descends from a login session. A container that runs the
+> harness **as pid 1** is a real shape, and there the marker would name a genuine owner.
+> That host is **unsupported and fails closed**: the writers refuse the marker, so the
+> session still gets its meta-record but never claims reply-addressability — a lost
+> capability rather than a false identity. Reopening that lane needs new evidence and a
+> new contract, not a looser predicate.
+>
 > That agy row is not symmetry for its own sake: `entwurf_register_native` writes a
 > record and **no marker at all**, and `entwurf_v2` dispatches to such a citizen
 > straight off the record, so marker absence is the *normal* state of a live,

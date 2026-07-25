@@ -57,9 +57,18 @@ Usage: register-pi-package.py <settings.json> <repo_dir> [--remove]
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
+
+# The serializer rules are SHARED with register-pi-provider.py — both write the same
+# settings file, and a copied indent-detector is how the second writer stayed open after
+# the first one was closed (#53 B). sys.path[0] already holds this directory when the
+# script is run by path, which is how run.sh and every gate invoke it; the explicit
+# insert keeps the import true under any other invocation form.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pi_settings_io import detect_indent, dumps  # noqa: E402
 
 # A leading `<scheme>:` means the string is a package SPEC (npm:, git:, https:),
 # never a filesystem path — so it is never resolved against the settings dir.
@@ -121,18 +130,6 @@ def is_entwurf_source(source: str, repo_dir: str, settings_dir: str | None = Non
     return local_like and Path(p).name == "entwurf"
 
 
-def _detect_indent(text: str) -> str | int:
-    """The file's own indent unit (a tab, or N spaces), defaulting to 2.
-
-    A tracked settings file is owned by the repo's formatter, and json.dumps has no
-    idea of that. This does NOT make a rewrite formatter-clean — biome also decides
-    where short arrays collapse onto one line — it only stops a rewrite from
-    silently restyling a file we do not own.
-    """
-    m = re.search(r"\n([ \t]+)\S", text)
-    if not m:
-        return 2
-    return "\t" if m.group(1)[0] == "\t" else len(m.group(1))
 
 
 def _load(settings_path: Path) -> dict:
@@ -176,9 +173,8 @@ def _entwurf_matches(packages: list, repo_dir: str, settings_dir: str) -> list:
 
 
 def _write(settings_path: Path, data: dict, original_text: str | None) -> None:
-    """Serialize with the file's own indentation (see _detect_indent)."""
-    indent = _detect_indent(original_text) if original_text is not None else 2
-    settings_path.write_text(json.dumps(data, indent=indent) + "\n")
+    """Serialize with the file's own indentation (pi_settings_io.detect_indent)."""
+    settings_path.write_text(dumps(data, detect_indent(original_text)))
 
 
 def _read_text(settings_path: Path) -> str | None:

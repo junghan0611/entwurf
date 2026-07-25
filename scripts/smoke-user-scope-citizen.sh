@@ -282,5 +282,87 @@ printf '{\n\t"packages": [\n\t\t"/old/moved/entwurf"\n\t]\n}\n' > "$S"
 python3 "$REG" "$S" "$FAKE_REPO" >/dev/null
 if grep -q $'^\t"packages"' "$S"; then ok "13 a rewrite preserves the file's tab indentation (never forces 2 spaces)"; else bad "13 the rewrite restyled a file it does not own: $(cat -A "$S" | head -3)"; fi
 
+# ── 14. THE cell #53 B needed: the whole `run.sh install` drive, end to end ──
+# Cells 11–13 call ONE python writer. That is what let the second round ship: the same
+# settings file has TWO writers (register-pi-package for packages[], register-pi-provider
+# for entwurfProvider.mcpServers) plus a user-scope side effect, and closing only the
+# first left `install` still re-serializing this repo's tracked, biome-governed bytes at
+# indent=2 — semantically a no-op, byte-wise a RED `pnpm check` diagnosed as "formatting".
+# A per-writer cell can never see that; only the real drive can. So this one runs
+# `run.sh install <checkout>` for real and demands sha256 + mtime invariance.
+#
+# The checkout is a stand-in: run.sh resolves its OWN symlinks to find REPO_DIR, so
+# run.sh is COPIED (a link would point the drive back at the operator's real repo) while
+# the trees it only reads are linked. That makes REPO_DIR == the stand-in, which is the
+# shape that matters — `".."` in <checkout>/.pi/settings.json resolves to the very repo
+# being registered, exactly as it does in a dev clone.
+CK="$TMP/checkout"
+mkdir -p "$CK/.pi"
+cp "$REPO/run.sh" "$CK/run.sh"
+for entry in scripts node_modules package.json mcp pi-extensions pi protocol.js; do
+  [ -e "$REPO/$entry" ] && ln -s "$REPO/$entry" "$CK/$entry"
+done
+CKS="$CK/.pi/settings.json"
+ck_seed=""
+if (cd "$REPO" && git show :.pi/settings.json) > "$CKS" 2>/dev/null && [ -s "$CKS" ]; then
+  ck_seed="candidate index"
+elif cp "$REPO/.pi/settings.json" "$CKS" 2>/dev/null; then
+  ck_seed="worktree"
+fi
+# Landing is PROVEN before any product verdict — a bad seed or a drive that died for its
+# own reasons is SETUP MISS, never "install dirtied the file".
+if [ ! -s "$CKS" ]; then
+  bad "14 SETUP MISS: could not seed the stand-in checkout's .pi/settings.json"
+elif ! python3 -c "
+import json,sys
+d=json.load(open(sys.argv[1]))
+sys.exit(0 if d.get('packages')==['..'] and isinstance(d.get('entwurfProvider'),dict) else 1)" "$CKS"; then
+  bad "14 SETUP MISS: the seed ($ck_seed) is not the committed portable form (packages ['..'] + entwurfProvider)"
+else
+  CK_BEFORE="$(sha256sum "$CKS" | cut -d' ' -f1)"; CK_MT="$(stat -c %Y "$CKS")"
+  sleep 1
+  set +e
+  # Isolated on the same line as the drive, not only by the exports above: this is a
+  # MUTATING run.sh command and it writes through three roots (agent dir, XDG state,
+  # $HOME for the user-scope registration). check-install-surface S5c matches the drive
+  # and then demands exactly these — which is why the path is unquoted here, so the
+  # tripwire can SEE the drive it is meant to police.
+  ck_out="$(HOME="$TMP/home" XDG_DATA_HOME="$TMP/xdg" XDG_STATE_HOME="$TMP/state" XDG_CACHE_HOME="$TMP/cache" PI_CODING_AGENT_DIR="$TMP/agent14" bash $CK/run.sh install "$CK" 2>&1)"
+  ck_rc=$?
+  set -e
+  if [ "$ck_rc" != 0 ]; then
+    bad "14 SETUP MISS: the stand-in \`run.sh install\` drive did not complete (exit $ck_rc) — no byte verdict from a drive that failed for its own reasons" "$ck_out"
+  else
+    ok "14 the stand-in \`run.sh install\` drive completed (seed: $ck_seed)"
+    if [ "$CK_BEFORE" = "$(sha256sum "$CKS" | cut -d' ' -f1)" ] && [ "$CK_MT" = "$(stat -c %Y "$CKS")" ]; then
+      ok "14b end-to-end: install left the tracked .pi/settings.json byte-identical (sha256 + mtime)"
+    else
+      bad "14b \`run.sh install\` rewrote the tracked settings file — one of its writers does not know the contract" "$(diff <(printf '%s' "$CK_BEFORE") <(sha256sum "$CKS" | cut -d' ' -f1); cat -A "$CKS" | head -6)"
+    fi
+    # The drive really did reach the writers (a no-op that never ran proves nothing), and
+    # the user-scope side effect landed in the sandbox rather than the operator's home.
+    case "$ck_out" in
+      *"entwurf-bridge"*) ok "14c the provider writer really ran (it reported its classification)" ;;
+      *) bad "14c the drive never reached the provider writer — 14b would be vacuous" "$ck_out" ;;
+    esac
+    if [ -f "$TMP/agent14/settings.json" ]; then
+      ok "14d the user-scope registration landed in the SANDBOX agent dir (isolation held)"
+    else
+      bad "14d the user-scope citizen was not written under the sandboxed PI_CODING_AGENT_DIR" "$ck_out"
+    fi
+  fi
+fi
+
+# 15. WIRING: both writers of this one file must share the serializer, not copy it.
+#     A duplicated indent-detector is how the provider writer stayed open after the
+#     package writer was closed; a parity check is cheaper than a third round.
+for w in register-pi-package.py register-pi-provider.py; do
+  if grep -q "from pi_settings_io import" "$REPO/scripts/$w"; then
+    ok "15 $w routes through the shared pi_settings_io serializer"
+  else
+    bad "15 $w serializes settings on its own again (copied rule = the #53 B shape)"
+  fi
+done
+
 echo
 if [ "$fail" -eq 0 ]; then echo "smoke-user-scope-citizen: PASS"; else echo "smoke-user-scope-citizen: FAIL (see above)"; exit 1; fi

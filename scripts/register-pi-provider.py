@@ -39,6 +39,16 @@ import json
 import os
 import sys
 
+# Shared with register-pi-package.py: both writers touch the SAME settings file, so the
+# "no write when nothing changes / keep the file's indent unit" rules live in one module
+# instead of being remembered at each call site. Closing only the packages writer for
+# #53 B left THIS one restyling the repo's own tracked, biome-governed settings on every
+# `install` — semantically a no-op, byte-wise a RED `pnpm check`. sys.path[0] already
+# holds this directory when the script is run by path (how run.sh and the gates invoke
+# it); the explicit insert keeps the import true under any other invocation form.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pi_settings_io import detect_indent, dumps, unchanged  # noqa: E402
+
 SERVER_KEY = "entwurf-bridge"
 BARE_COMMAND = "entwurf-bridge"
 STATE_SCHEMA_VERSION = 1
@@ -78,9 +88,14 @@ def _atomic_write(path: str, text: str) -> None:
     os.replace(tmp, path)
 
 
-def _load(path: str) -> dict:
+def _read(path: str) -> str:
+    if not os.path.exists(path):
+        return ""
     with open(path, "r", encoding="utf-8") as fh:
-        raw = fh.read()
+        return fh.read()
+
+
+def _parse_settings(path: str, raw: str) -> dict:
     if raw.strip() == "":
         return {}
     try:
@@ -92,8 +107,31 @@ def _load(path: str) -> dict:
     return data
 
 
+def _load(path: str) -> dict:
+    return _parse_settings(path, _read(path))
+
+
 def _dump(data: dict) -> str:
+    """For files THIS script owns end to end (the install-state record), where no
+    formatter has a claim. A settings file goes through _persist instead."""
     return json.dumps(data, indent=2) + "\n"
+
+
+def _persist(path: str, before: dict, after: dict, original_text: str) -> bool:
+    """Write a SETTINGS file — but only if `after` actually differs from what was
+    loaded, and then in the file's own indent unit. Returns True when it wrote.
+
+    This is the whole of #53 B on this writer. `install` is documented as idempotent
+    and a managed-current classification changes nothing, yet the old unconditional
+    `_atomic_write` re-serialized the document every time: this repo's committed
+    `.pi/settings.json` is tab-indented with compact arrays, came back at indent=2, and
+    took `pnpm check` RED at its first step — reported as a formatting error, which is
+    what sent the diagnosis away from "install wrote this" (#53 B, both rounds).
+    """
+    if unchanged(before, after):
+        return False
+    _atomic_write(path, dumps(after, detect_indent(original_text)))
+    return True
 
 
 def _now() -> str:
@@ -140,7 +178,11 @@ def cmd_install(settings_path: str, repo_dir: str, scope: str, state_path: str) 
         _die(3, f"register-pi-provider: refusing to adopt {settings_path} — it is a symlink to {target} "
                 f"(someone else's SSOT). Manage it there, or replace it with a regular file, then retry.")
 
-    data = _load(settings_path) if os.path.exists(settings_path) else {}
+    raw = _read(settings_path)
+    # Parsed TWICE on purpose: everything below mutates in place, so `before` has to be
+    # an independent document or the comparison would be against itself.
+    before = _parse_settings(settings_path, raw)
+    data = _parse_settings(settings_path, raw)
     provider, servers = _provider_servers(data, create=True)
     _prune_legacy(servers, repo_dir)   # independent of entwurf-bridge ownership
     existing = servers.get(SERVER_KEY)
@@ -149,11 +191,12 @@ def cmd_install(settings_path: str, repo_dir: str, scope: str, state_path: str) 
 
     if ownership == "user-override":
         # DO NOT overwrite our key, DO NOT own it (no state). doctor reports it as unowned. Still
-        # persist so any legacy prune above (and a materialized parent) is written.
+        # persist IF the legacy prune above (or a materialized parent) actually changed something.
         sys.stdout.write(
             f"install: preserved entwurfProvider.mcpServers.{SERVER_KEY} (user override, NOT owned: {existing_cmd!r})\n"
         )
-        _atomic_write(settings_path, _dump(data))
+        if not _persist(settings_path, before, data, raw):
+            sys.stdout.write(f"install: no change — {settings_path} left untouched (bytes and mtime stable)\n")
         return
 
     # absent / managed-current / managed-legacy → normalize to the bare stable bin.
@@ -164,10 +207,15 @@ def cmd_install(settings_path: str, repo_dir: str, scope: str, state_path: str) 
     else:
         newval["args"] = []
     servers[SERVER_KEY] = newval
-    _atomic_write(settings_path, _dump(data))
+    wrote = _persist(settings_path, before, data, raw)
     sys.stdout.write(
         f"install: {ownership} → entwurfProvider.mcpServers.{SERVER_KEY} = {BARE_COMMAND} (bare stable bin)\n"
     )
+    # The desired value AND the legacy prune both already held: nothing to say to the
+    # file. Reported so an operator (and the gate) can tell "already correct" from
+    # "rewritten to the same thing" — only the first leaves a tracked file alone.
+    if not wrote:
+        sys.stdout.write(f"install: no change — {settings_path} left untouched (bytes and mtime stable)\n")
 
     if scope == "user":
         if state_path:
@@ -201,7 +249,9 @@ def cmd_remove(settings_path: str, repo_dir: str, scope: str, state_path: str) -
         if os.path.islink(managed):
             _die(3, f"register-pi-provider: refusing to uninstall — {managed} became a symlink since install.")
         if os.path.exists(managed):
-            data = _load(managed)
+            raw = _read(managed)
+            before = _parse_settings(managed, raw)
+            data = _parse_settings(managed, raw)
             provider, servers = _provider_servers(data, create=False)
             # honest inverse: absent/managed-* → remove OUR key (a legacy repo path is NOT
             # restored — it was our old managed value, not a user value).
@@ -211,7 +261,9 @@ def cmd_remove(settings_path: str, repo_dir: str, scope: str, state_path: str) -
                     provider.pop("mcpServers", None)
             if isinstance(provider, dict) and not provider:
                 data.pop("entwurfProvider", None)
-            _atomic_write(managed, _dump(data))
+            # Same rule as install: an inverse that has nothing left to undo must not
+            # restyle the file on its way out.
+            _persist(managed, before, data, raw)
         os.remove(state_path)
         sys.stdout.write(f"remove: removed our {SERVER_KEY} key (ownership={state.get('ownership')}) from {managed}\n")
         return
@@ -222,7 +274,9 @@ def cmd_remove(settings_path: str, repo_dir: str, scope: str, state_path: str) -
         return
     if os.path.islink(settings_path):
         _die(3, f"register-pi-provider: refusing to touch {settings_path} — it is a symlink.")
-    data = _load(settings_path)
+    raw = _read(settings_path)
+    before = _parse_settings(settings_path, raw)
+    data = _parse_settings(settings_path, raw)
     provider, servers = _provider_servers(data, create=False)
     if not isinstance(servers, dict):
         sys.stdout.write("remove: no entwurfProvider.mcpServers — nothing to do.\n")
@@ -242,7 +296,11 @@ def cmd_remove(settings_path: str, repo_dir: str, scope: str, state_path: str) -
         sys.stdout.write(f"remove: preserved entwurfProvider.mcpServers.{SERVER_KEY} (user override: {existing_cmd!r})\n")
     else:  # absent
         sys.stdout.write(f"remove: entwurfProvider.mcpServers.{SERVER_KEY} already absent.\n")
-    _atomic_write(settings_path, _dump(data))
+    # `absent` + nothing pruned is the common case on a clean checkout, and it used to
+    # rewrite the file anyway — a project `remove` restyled the tracked settings exactly
+    # as install did.
+    if not _persist(settings_path, before, data, raw):
+        sys.stdout.write(f"remove: no change — {settings_path} left untouched (bytes and mtime stable)\n")
 
 
 def _parse(argv: list):

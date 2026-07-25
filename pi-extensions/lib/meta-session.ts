@@ -1172,10 +1172,23 @@ export function startKeyScheme(key: string): StartKeyScheme | null {
  * A pid ≤ 1 is refuted BY CONSTRUCTION, which is why this predicate is shared by
  * both writers and every reader instead of living at one call site: 0 and
  * negatives address process GROUPS rather than a process (the rule
- * {@link probePidExistence} already holds), and no native session in this tree is
- * owned by init. Writers refuse to mint it, readers refuse to honor it, and the
- * cut treats it as clearable residue rather than an owner claim — a proof of
- * INVALIDITY, which is stronger than the proof of death the cut already acts on.
+ * {@link probePidExistence} already holds), and on the axis this repo certifies no
+ * native session is owned by init.
+ *
+ * THAT LAST CLAUSE IS A POLICY, NOT A LAW OF PROCESSES. The certified axis is a
+ * Linux desktop/workstation host, where init is the service manager and every
+ * native harness is a descendant of a login session. A container that runs the
+ * harness AS pid 1 is a real shape in the world, and there `ownerPid: 1` would name
+ * a genuine owner — so such a host is simply UNSUPPORTED here and fails CLOSED: the
+ * writers refuse to mint the marker, so the session keeps its meta-record but never
+ * claims reply-addressability, which costs a capability instead of granting a false
+ * identity. Do not read this predicate as "pid 1 can never own anything"; read it as
+ * "this repo does not certify a host where it does". Widening the axis means new
+ * evidence and a new contract, not a quiet loosening of the bound.
+ *
+ * Writers refuse to mint it, readers refuse to honor it, and the cut treats it as
+ * clearable residue rather than an owner claim — a proof of INVALIDITY, which is
+ * stronger than the proof of death the cut already acts on.
  */
 export function isPlausibleOwnerPid(pid: unknown): pid is number {
 	return Number.isSafeInteger(pid) && (pid as number) > 1;
