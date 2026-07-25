@@ -4608,6 +4608,7 @@ case "$cmd" in
   remove-dev-bin)
     # 막힘 ②: honest inverse of expose-dev-bin — remove ONLY our managed link + state (REFUSE if
     # it became foreign). The raw script (no wrapper) so an operator sees a loud failure.
+    shift || true
     (cd "$REPO_DIR" && bash scripts/dev-bin.sh remove "$@")
     ;;
   meta-bridge-fresh-cut)

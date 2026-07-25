@@ -42,14 +42,19 @@ mkdir -p "$(dirname "$SET")" "$SB/bin"
 # fake stable bin (on PATH) — the renderer the statusLine command resolves to.
 printf '#!/usr/bin/env bash\necho fake-agy-statusline\n' > "$SB/bin/entwurf-agy-statusline"
 chmod +x "$SB/bin/entwurf-agy-statusline"
-# Keep THIS fake authoritative: drop the dir holding a REAL entwurf-agy-statusline (a dev host
-# that ran setup exposes one at ~/.local/bin) so the dangling-command test is not masked by it.
-_real_sl="$(command -v entwurf-agy-statusline 2>/dev/null || true)"
-_real_sl_dir="${_real_sl%/*}"
-if [ -n "$_real_sl_dir" ]; then
-  PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vFx "$_real_sl_dir" | paste -sd: -)"
-fi
-export PATH="$SB/bin:$PATH"
+# Keep THIS fake authoritative: drop EVERY original PATH dir that already carries a real
+# entwurf-agy-statusline. A maintainer can have both the managed dev link (~/.local/bin) and
+# the registry package shim (pnpm/bin); filtering only `command -v`'s first hit let the second
+# one mask the dangling-command cell after a real installed-host acceptance run.
+_clean_path=""
+while IFS= read -r _dir; do
+  [ -n "$_dir" ] || continue
+  if [ -e "$_dir/entwurf-agy-statusline" ] || [ -L "$_dir/entwurf-agy-statusline" ]; then
+    continue
+  fi
+  _clean_path="${_clean_path:+$_clean_path:}$_dir"
+done < <(printf '%s\n' "$PATH" | tr ':' '\n')
+export PATH="$SB/bin:$_clean_path"
 export AGY_SETTINGS_CONFIG="$SET"
 
 fake_agy() { # install/remove a fake `pgrep` that reports (or not) a live agy

@@ -69,12 +69,14 @@
   소비자가 생길 때의 primitive 승격은 후속이다. GPT 최종 독립 실행:
   `pnpm run build-bridge && pnpm check` **EXIT=0**, fresh-cut gate **141/0**; exact HEAD
   `9015431`, clean tree. #52 duplicate read/birth race와 empty start-key 정책은 의도적 후속.
-- **▶ 다음 걸음 — 0.12.8 stable landing 준비, 그 뒤 #47.** 구현 closure는 release-ready다.
-  단 #51 계약상 `land 0.12.8` 전 maintainer + secondary Linux host에서 published
-  `0.12.8-repair.1` 설치 → `install-meta-bridge` → 모든 기존 Claude 재시작 → 새 live MCP 세션 →
-  installed `doctor-meta-bridge` exit 0 증거를 BASELINE HISTORY에 먼저 남겨야 한다. 버전은
-  **0.12.8 stable**(VERIFY 예약; 0.13.0은 ROADMAP의 Cortex #48 예약). 착수 전
-  `docs/mux-launch-rail.md`; mux lineage는 `callerGardenId`(호출 사건 ≠ 계보).
+- **▶ 다음 걸음 — 0.12.8 stable landing/prepare, 그 뒤 #47.** 구현 closure는 release-ready다.
+  #51의 land 전제였던 published `0.12.8-repair.1` maintainer + secondary Linux installed-native
+  proof는 2026-07-25 두 호스트 모두 doctor PASS로 닫혀 BASELINE HISTORY에 기록됐다. host proof
+  중 실제 `./run.sh remove-dev-bin`이 command 이름을 하위 script 인자로 넘기는 operator inverse
+  결함을 발견해 one-line dispatch 수선했다 — 이 새 pre-version HEAD를 land/push하고 exact-SHA
+  CI를 다시 얻은 뒤 `prepare 0.12.8`로 간다. 버전은 **0.12.8 stable**(VERIFY 예약;
+  0.13.0은 ROADMAP의 Cortex #48 예약). 착수 전 `docs/mux-launch-rail.md`; mux lineage는
+  `callerGardenId`(호출 사건 ≠ 계보).
 
 ## OPEN
 
@@ -89,7 +91,7 @@
 3. **🔴 release 차단 관측 — 번들 MCP readiness race (변동 없음).** 인과가 서기 전에는 고치지
    않는다(GLG 결정). SSOT는 **ROADMAP 「🔴 OPEN — 번들 MCP readiness race」**.
 4. **release lane (0.12.8 stable, 방아쇠는 GLG):** 두 Linux installed-host proof + BASELINE
-   기록 → `land` → `prepare`(CHANGELOG에 fresh-cut 뺄셈 + 재검수 closure 승격, package
+   기록 **완료** → 새 remove-dev-bin 수선 HEAD `land` → `prepare`(CHANGELOG에 fresh-cut 뺄셈 + 재검수 closure 승격, package
    `0.12.8`, release skill의 repair-only U2를 dist-tag별 계약으로 정정) → `make`(LIVE 재획득) →
    `publish … latest`. publish 후 `latest=0.12.8`, 기존 `repair=0.12.8-repair.1`을 보존한다.
    merge/push ≠ release. 워킹트리 container 증거는 release-preserved tgz가 아니므로 `make` 때

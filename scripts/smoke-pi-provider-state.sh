@@ -43,16 +43,20 @@ FAKE_REPO="$SB/checkout/entwurf"
 LEGACY_CMD="$FAKE_REPO/mcp/entwurf-bridge/start.sh"
 
 # fake stable bin on PATH so the bare command RESOLVES in the doctor. Keep THIS fake
-# authoritative: drop the dir that holds a REAL entwurf-bridge (this dev host exposes one at
-# ~/.local/bin) so the dangling test is not masked by it.
+# authoritative: drop EVERY original PATH dir that carries a real entwurf-bridge. A maintainer
+# can have both the managed dev link and the registry package shim; filtering only command -v's
+# first hit lets the second one mask the dangling-command cell.
 printf '#!/usr/bin/env bash\necho fake-bridge\n' > "$SB/bin/entwurf-bridge"
 chmod +x "$SB/bin/entwurf-bridge"
-_real_bridge="$(command -v entwurf-bridge 2>/dev/null || true)"
-_real_dir="${_real_bridge%/*}"
-if [ -n "$_real_dir" ]; then
-  PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vFx "$_real_dir" | paste -sd: -)"
-fi
-export PATH="$SB/bin:$PATH"
+_clean_path=""
+while IFS= read -r _dir; do
+  [ -n "$_dir" ] || continue
+  if [ -e "$_dir/entwurf-bridge" ] || [ -L "$_dir/entwurf-bridge" ]; then
+    continue
+  fi
+  _clean_path="${_clean_path:+$_clean_path:}$_dir"
+done < <(printf '%s\n' "$PATH" | tr ':' '\n')
+export PATH="$SB/bin:$_clean_path"
 
 reg()    { python3 "$REG" "$@"; }
 doctor() { PI_PROVIDER_GLOBAL_SETTINGS="$GLOBAL" PI_PROVIDER_PROJECT_SETTINGS="$PROJECT" PI_PROVIDER_STATE="$STATE" \

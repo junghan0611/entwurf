@@ -274,6 +274,28 @@ prompt, and if so quote the visible text exactly:
 
 # HISTORY (pointer)
 
+2026-07-25 repair.1 installed-native host acceptance (stable-promotion prerequisite):
+the published registry artifact `@junghanacs/entwurf@0.12.8-repair.1` was installed
+fresh on two Linux hosts (maintainer + secondary) through the package's stable bins.
+Each host ran installed `entwurf install-meta-bridge`, opened a NEW real Claude Code
+session with a live MCP child, and ran the installed `entwurf doctor-meta-bridge`
+against an isolated clean `PI_CODING_AGENT_DIR`; both doctors reached **PASS**, including
+the live MCP owner join and a physical `entwurf_v2` delivery. The maintainer host first
+proved the oracle's value by failing when its managed dev-bin shadowed the registry
+`entwurf-bridge`: the installed v2 hook wrote a v2 record while the checkout's v3 bridge
+refused it. Removing the managed dev bin made PATH resolve the registry bridge, after
+which the same native proof passed. The test-created v2 record from that failed mixed-path
+attempt was preserved under `meta-sessions.proof-failed-20260725T165227/`; the maintainer's
+V3 development wiring was restored after acceptance. This closes VERIFY's two-host
+repair.1 prerequisite for a separately authorized stable `0.12.8`; it is host
+corroboration of the published repair artifact, not evidence for the future stable
+candidate, which still earns exact-SHA CI, LIVE, and preserved-artifact acceptance.
+Exact pre-version closure checkpoint `28a52fe2d6e9ca29b657a33e5c80ff4debda2f0f`
+passed GitHub Actions run [30149759311](https://github.com/junghan0611/entwurf/actions/runs/30149759311):
+`check`, `install-surface`, and `artifact-consumer` all success. The host proof then found
+a one-line `remove-dev-bin` dispatch defect, so the eventual stable landing HEAD must earn
+a fresh exact-SHA run; this checkpoint is not reused as that acceptance.
+
 2026-07-24 (night) upgrade-harness + review acceptance at exact HEAD
 `cbda097` (branch `repair/v2-core-debt`, merged to main the same night — the
 hard-cut branch chronicle lives in issue #50): the three-cell harness gained
