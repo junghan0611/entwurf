@@ -770,6 +770,45 @@ else
   rm -rf "$SANDBOX/roparent"
 fi
 
+# The same absent-is-ENOENT-alone rule one level further down: at the ENTRY.
+# `readdir` needs only READ on a directory while `lstat` needs SEARCH — different
+# bits — so a readable-but-unsearchable socket dir LISTS every socket and then
+# fails EACCES on each one. Folding that into "raced away — nothing to cut"
+# skipped the whole surface SILENTLY: C4 above proves this exact world cuts when
+# the dir is searchable, so flipping one bit must not turn a listener into an
+# absence. Permission bits are a no-op for uid 0, so this row declares itself
+# vacuous under root rather than passing for the wrong reason.
+if [ "$(id -u)" = 0 ]; then
+  ok "F18 vacuous under uid 0: permission bits cannot make a directory unsearchable for root, so the class this row drives cannot occur here"
+else
+  reset_world prevgen
+  mkdir -p "$ENTWURF_DIR"
+  node -e '
+    const net = require("node:net");
+    const s = net.createServer().listen(process.argv[1], () => process.exit(0));
+  ' "$ENTWURF_DIR/20260305T000000-dddd05.sock"
+  if [ -S "$ENTWURF_DIR/20260305T000000-dddd05.sock" ]; then
+    chmod 444 "$ENTWURF_DIR"
+    store_before="$(store_bytes)"
+    set +e
+    out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+    set -e
+    chmod 755 "$ENTWURF_DIR"
+    if [ "$rc" != 0 ] && [ "$store_before" = "$(store_bytes)" ] && [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+      ok "F18 a socket ENTRY that readdir lists but lstat cannot inspect REFUSES the cut (a listener may be live behind it)"
+    else
+      bad "F18 the cut skipped an uninspectable socket entry and archived the generation under it" "$out"
+    fi
+    case "$out" in
+      *"UNCERTAIN control socket"*) ok "F18b the refusal names the socket surface as UNCERTAIN" ;;
+      *) bad "F18b the refusal does not name the uninspectable socket entry" "$out" ;;
+    esac
+  else
+    bad "F18 could not stage a socket file — the entry-level cell cannot run"
+  fi
+  rm -rf "$ENTWURF_DIR"
+fi
+
 # ── G. an archive collision is a NO-OP, never a half-cut ─────────────────────
 echo "[check-fresh-cut-gate] G. archive-destination preflight"
 reset_world prevgen
@@ -1116,6 +1155,37 @@ else
   bad "I8d the crash refusal reached the Claude CLI or mutated the host"
 fi
 rm -f "$SANDBOX/fakebin/node"
+
+# I9 — guard the doctor entry the mode actually RUNS. An installed package ships
+# `scripts/` (so the SOURCE .ts is present) while a broken prepack can leave the
+# COMPILED twin missing; there `run_ts` returns its OWN 1, indistinguishable from
+# the doctor's exit 1 "certification defects" — so the rc branch prescribed the
+# destructive cut from an artifact failure. meta-bridge-install.sh was already
+# immune because it guards the entry it runs; run.sh checked the .ts in both modes.
+# Smallest fixture that reaches the branch: a node_modules-shaped tree carrying the
+# source but no dist twin, with the gate function called directly (check-pack-install
+# owns the full installed-package lane — this row must not grow into a second one).
+fake_pkg="$SANDBOX/nm/node_modules/@junghanacs/entwurf"
+mkdir -p "$fake_pkg/scripts"
+cp "$REPO/run.sh" "$fake_pkg/run.sh"
+cp "$REPO/scripts/meta-bridge-store-doctor.ts" "$fake_pkg/scripts/"
+set +e
+out="$(RUNSH="$fake_pkg/run.sh" bash -c 'set --; source "$RUNSH" >/dev/null; preflight_v3_store install' 2>&1)"; rc=$?
+set -e
+if [ "$rc" != 0 ]; then
+  ok "I9 an installed tree missing the COMPILED doctor twin refuses the step"
+else
+  bad "I9 the step proceeded although the doctor entry it would run does not exist" "$out"
+fi
+case "$out" in
+  *meta-bridge-fresh-cut*) bad "I9b an ARTIFACT failure still prescribed the cut verb (run_ts's own exit 1 read as a defect list)" "$out" ;;
+  *) ok "I9b no cut prescription from a missing doctor artifact (both callers, one rule)" ;;
+esac
+case "$out" in
+  *"ARTIFACT failure"*) ok "I9c the refusal names the artifact failure, not a store verdict" ;;
+  *) bad "I9c the refusal does not name the artifact cause" "$out" ;;
+esac
+rm -rf "$SANDBOX/nm"
 
 echo
 echo "[check-fresh-cut-gate] passed=$PASSED failed=$FAILED"

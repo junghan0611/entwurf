@@ -269,11 +269,27 @@ PY
 # pull → fresh-cut → setup) is the operational half, and it lives in the README.
 preflight_v3_store() {
   local surface="$1" verdict
-  # A tree carrying run.sh but not scripts/ is a broken checkout, not a host with
-  # a bad store. Say so, rather than letting node's MODULE_NOT_FOUND stack stand
-  # in for a verdict this gate never reached.
-  if [ ! -f "$REPO_DIR/scripts/meta-bridge-store-doctor.ts" ]; then
-    fail "[$surface] cannot certify the meta-record store: $REPO_DIR/scripts/meta-bridge-store-doctor.ts is missing (incomplete checkout or package)."
+  # A tree carrying run.sh but not the doctor is a broken checkout/package, not a
+  # host with a bad store. Say so, rather than letting node's MODULE_NOT_FOUND
+  # stack stand in for a verdict this gate never reached.
+  #
+  # Guard the entry `run_ts` will ACTUALLY run — dev clone .ts, installed package
+  # the dist .js twin — the way meta-bridge-install.sh already guards its own
+  # DOCTOR_ENTRY. Checking the source .ts in both modes was a guard over the wrong
+  # file: an installed package ships scripts/ (so the .ts is present) while a
+  # broken prepack can leave the compiled twin missing, and there `run_ts` returns
+  # its OWN 1 — indistinguishable from the doctor's exit 1 "certification defects",
+  # so the rc branch below prescribed the destructive cut from an artifact failure
+  # (2026-07-25 closure round; install.sh was already immune).
+  local doctor_entry
+  case "$REPO_DIR" in
+    */node_modules/*) doctor_entry="$REPO_DIR/mcp/entwurf-bridge/dist/scripts/meta-bridge-store-doctor.js" ;;
+    *) doctor_entry="$REPO_DIR/scripts/meta-bridge-store-doctor.ts" ;;
+  esac
+  if [ ! -f "$doctor_entry" ]; then
+    fail "[$surface] cannot certify the meta-record store: the store-doctor entry this mode runs is missing ($doctor_entry)."
+    echo "       This is a doctor/ARTIFACT failure, not a store verdict — no cut can help and none is prescribed." >&2
+    echo "       Reinstall @junghanacs/entwurf (the package ships the compiled twin via prepack build-bridge), or run 'pnpm run build-bridge' in a dev clone, then re-run this step." >&2
     exit 1
   fi
   # The doctor's EXIT CODE is the verdict (see its header): 1 = certification defects,

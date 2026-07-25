@@ -433,8 +433,20 @@ async function main(): Promise<number> {
 			let entryStat: fs.Stats;
 			try {
 				entryStat = fs.lstatSync(file);
-			} catch {
-				continue; // raced away — nothing to cut
+			} catch (err) {
+				// The SAME rule the surface dirs hold, one level down at the ENTRY: absent is
+				// ENOENT alone. `readdir` needs only READ on the directory while `lstat` needs
+				// SEARCH — different bits — so a readable-but-unsearchable socket dir lists
+				// every socket and then fails EACCES on each one. Folding that into "raced
+				// away" skipped the whole surface SILENTLY and cut under live listeners
+				// (2026-07-25 closure round: the directory-layer fix had not reached here).
+				if ((err as { code?: unknown }).code === "ENOENT") continue; // raced away — nothing to cut
+				violations.push({
+					surface: "control socket",
+					detail: `${filename} could not be inspected (${err instanceof Error ? err.message : String(err)}): a listener may be live behind it`,
+					kind: "uncertain",
+				});
+				continue;
 			}
 			if (entryStat.isSymbolicLink()) {
 				// A symlinked socket can redirect a probe to another session's listener
