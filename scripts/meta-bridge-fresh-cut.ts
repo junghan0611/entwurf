@@ -44,7 +44,9 @@
  *     writer's `.tmp` half-marker, any entry no marker layout explains, a
  *     native-push conversation that probes indeterminate / cannot be probed, or
  *     a surface DIRECTORY that cannot be inspected at all (absent is ENOENT
- *     alone — a dir behind an unsearchable ancestor is unknown, not empty).
+ *     alone — a dir behind an unsearchable ancestor is unknown, not empty — and
+ *     the name must hold an actual directory: a symlinked surface is never
+ *     walked or renamed).
  * Only a marker whose named owner demonstrably no longer holds that pid is dead,
  * and only a dead marker/socket is cleared.
  *
@@ -57,11 +59,12 @@
  * and why).
  *
  * Idempotent and crash-safe by shape: the WHOLE move plan is preflighted — every
- * archive destination checked — before the first rename, so a collision refusal
- * is a true no-op instead of a half-cut generation; then each directory moves in
- * a single atomic rename. A crash between the two renames leaves a half-cut
- * generation that a simple re-run finishes (with its own stamp). Running on a
- * clean/empty host just opens a fresh generation and says so.
+ * archive destination checked, every source parent proven writable — before the
+ * first rename, so a deterministic refusal is a true no-op instead of a half-cut
+ * generation; then each directory moves in a single atomic rename. A failure
+ * BETWEEN renames (the world changed under us) reports exactly what already
+ * moved (`archived so far:`) and a re-run finishes the cut with its own stamp.
+ * Running on a clean/empty host just opens a fresh generation and says so.
  */
 
 import * as fs from "node:fs";
@@ -119,33 +122,64 @@ interface QuiesceViolation {
 	kind: "live" | "uncertain";
 }
 
-/** Existence WITHOUT following a link — a dangling symlink still occupies the name. */
-function pathExists(target: string): boolean {
+/**
+ * May an archive destination name be used? `false` is ENOENT alone (the name is
+ * provably free — a dangling symlink still occupies it, via lstat). Any other
+ * errno throws: a name we cannot inspect is not a free one.
+ */
+function archiveDestOccupied(dest: string): boolean {
 	try {
-		fs.lstatSync(target);
+		fs.lstatSync(dest);
 		return true;
-	} catch {
-		return false;
+	} catch (err) {
+		if ((err as { code?: unknown }).code === "ENOENT") return false;
+		throw new Error(
+			`cannot inspect archive destination ${dest}: ${err instanceof Error ? err.message : String(err)}. ` +
+				"Nothing was moved.",
+		);
 	}
 }
 
 /**
  * Classify a surface DIRECTORY the way {@link inspectRecordEntry} classifies a
- * record path: `absent` is ENOENT alone. Every other errno — EACCES on an
- * ANCESTOR (stat cannot even reach the path), ENOTDIR, ELOOP — is `uninspectable`,
- * and an uninspectable surface must never read as an absent one: `existsSync`
- * answered `false` for a socket dir behind an unsearchable ancestor, which
- * silently passed that whole surface through the quiesce gate and archived the
- * store under it (2026-07-25 second fresh-eyes round — the same laundering the
- * first round fixed in certifyActiveStoreDir, one level up at the directory
- * layer). The caller turns `uninspectable` into an UNCERTAIN refusal naming the
- * surface; a dir that classifies `present` can still fail its readdir, which
- * stays fail-loud.
+ * record path — with a KIND contract on top, because every consumer of this
+ * answer either walks the directory or RENAMES it:
+ *
+ *   - `directory` — an actual directory (lstat, never followed). Its readdir can
+ *     still fail, which stays fail-loud.
+ *   - `absent` — ENOENT alone.
+ *   - `irregular` — the name is held by something that is NOT a directory: a
+ *     symlink (even to a directory), a file, a fifo. Never walked and never
+ *     renamed: readdir would inspect the TARGET while rename would move the
+ *     LINK, so the cut would quiesce-check one thing and archive another.
+ *   - `uninspectable` — every other errno: EACCES on an ANCESTOR (stat cannot
+ *     even reach the path), ENOTDIR, ELOOP. Must never read as absent:
+ *     `existsSync` answered `false` for a socket dir behind an unsearchable
+ *     ancestor, which silently passed that whole surface through the quiesce
+ *     gate and archived the store under it (2026-07-25 second fresh-eyes round —
+ *     the same laundering the first round fixed in certifyActiveStoreDir, one
+ *     level up at the directory layer).
+ *
+ * Callers fold `irregular` and `uninspectable` into the same consequence — an
+ * UNCERTAIN refusal naming the surface — because both mean "this surface cannot
+ * be proven quiesced from here".
  */
-function classifySurfaceDir(dir: string): { state: "present" | "absent" } | { state: "uninspectable"; detail: string } {
+type SurfaceDirState =
+	| { state: "directory" }
+	| { state: "absent" }
+	| { state: "irregular"; detail: string }
+	| { state: "uninspectable"; detail: string };
+
+function classifySurfaceDir(dir: string): SurfaceDirState {
 	try {
-		fs.lstatSync(dir);
-		return { state: "present" };
+		const st = fs.lstatSync(dir);
+		if (st.isDirectory()) return { state: "directory" };
+		return {
+			state: "irregular",
+			detail: st.isSymbolicLink()
+				? "the name is held by a SYMLINK — walking would inspect its target while renaming would move the link, so it is never followed"
+				: "the name is held by a non-directory (file/fifo/special)",
+		};
 	} catch (err) {
 		if ((err as { code?: unknown }).code === "ENOENT") return { state: "absent" };
 		return { state: "uninspectable", detail: err instanceof Error ? err.message : String(err) };
@@ -187,11 +221,8 @@ function inspectMarkers(dir: string, label: string): { violations: QuiesceViolat
 	};
 	const dirState = classifySurfaceDir(dir);
 	if (dirState.state === "absent") return { violations, deadFiles };
-	if (dirState.state === "uninspectable") {
-		uncertain(
-			dir,
-			`directory could not be inspected (${dirState.detail}): an unreadable surface is not a quiesced one`,
-		);
+	if (dirState.state !== "directory") {
+		uncertain(dir, `surface could not be inspected (${dirState.detail}): an unreadable surface is not a quiesced one`);
 		return { violations, deadFiles };
 	}
 	// depth 0 = the marker root, depth 1 = a backend subdir. Nothing deeper is part
@@ -306,7 +337,7 @@ async function inspectNativePushCitizens(storeDir: string): Promise<QuiesceViola
 	const label = "native-push conversation";
 	const dirState = classifySurfaceDir(storeDir);
 	if (dirState.state === "absent") return violations;
-	if (dirState.state === "uninspectable") {
+	if (dirState.state !== "directory") {
 		violations.push({
 			surface: label,
 			detail: `store ${storeDir} could not be inspected (${dirState.detail}): its citizens cannot be probed, so their liveness is unprovable`,
@@ -384,14 +415,14 @@ async function main(): Promise<number> {
 	const violations: QuiesceViolation[] = [];
 	const deadSockets: string[] = [];
 	const socketDirState = classifySurfaceDir(socketDir);
-	if (socketDirState.state === "uninspectable") {
+	if (socketDirState.state === "irregular" || socketDirState.state === "uninspectable") {
 		violations.push({
 			surface: "control socket",
 			detail: `socket dir ${socketDir} could not be inspected (${socketDirState.detail}): a listener may be live behind it`,
 			kind: "uncertain",
 		});
 	}
-	if (socketDirState.state === "present") {
+	if (socketDirState.state === "directory") {
 		for (const filename of fs.readdirSync(socketDir).sort()) {
 			if (!filename.endsWith(CONTROL_SOCKET_SUFFIX)) continue;
 			const file = path.join(socketDir, filename);
@@ -454,19 +485,33 @@ async function main(): Promise<number> {
 		// die at the mailbox mkdir, a half-cut nobody asked for.
 		const dirState = classifySurfaceDir(dir);
 		if (dirState.state === "absent") continue;
-		if (dirState.state === "uninspectable") {
+		if (dirState.state !== "directory") {
 			throw new Error(
-				`cannot inspect ${dir} (${dirState.detail}) — refusing to plan a cut over a surface that cannot be read. Nothing was moved.`,
+				`cannot archive ${dir} (${dirState.detail}) — refusing to plan a cut over a surface that cannot be read. Nothing was moved.`,
 			);
 		}
 		if (fs.readdirSync(dir).length === 0) continue;
+		// The rename is `<dir>` → `<dir>.archive-<ts>`, a sibling, so ONE parent must
+		// be writable per entry. Store and mailbox can live under DIFFERENT parents
+		// (env overrides), and a parent that is readable but not writable fails only
+		// at its own rename — after an earlier entry already moved: a half-cut. Refuse
+		// the deterministic case here, before anything moves.
+		try {
+			fs.accessSync(path.dirname(dir), fs.constants.W_OK);
+		} catch (err) {
+			throw new Error(
+				`cannot archive ${dir}: its parent directory ${path.dirname(dir)} is not writable ` +
+					`(${err instanceof Error ? err.message : String(err)}) — the rename would fail there after other ` +
+					"surfaces had already moved. Nothing was moved.",
+			);
+		}
 		plan.push({ src: dir, dest: `${dir}.archive-${ts}` });
 	}
 	// Preflight EVERY destination before the first rename. Checking each one just
 	// before its own move made a refusal destructive: with both dirs to archive, a
 	// collision on the mailbox landed after the store had already been renamed —
 	// a half-cut generation nobody asked for, reported as "nothing happened".
-	const collisions = plan.filter(({ dest }) => pathExists(dest));
+	const collisions = plan.filter(({ dest }) => archiveDestOccupied(dest));
 	if (collisions.length > 0) {
 		for (const { dest } of collisions) console.error(`ARCHIVE EXISTS: ${dest}`);
 		console.error(
@@ -478,7 +523,28 @@ async function main(): Promise<number> {
 	}
 	const archived: string[] = [];
 	for (const { src, dest } of plan) {
-		fs.renameSync(src, dest);
+		try {
+			fs.renameSync(src, dest);
+		} catch (err) {
+			// The preflights above close the deterministic causes (collision, unreadable
+			// surface, non-writable parent), so landing here means the world changed under
+			// us. What must NOT happen is the report hiding what already moved: a generic
+			// FAIL over a partial move reads as "nothing happened".
+			console.error(
+				`FAIL mid-cut: renaming ${src} → ${dest} failed (${err instanceof Error ? err.message : String(err)}).`,
+			);
+			if (archived.length === 0) {
+				console.error("Nothing had been moved yet — this failure is a no-op; fix the cause and re-run.");
+			} else {
+				for (const done of archived) console.error(`archived so far: ${done}`);
+				console.error(
+					"This generation is HALF-CUT: the directories above are already archived while the failed one is " +
+						"not. Fix the cause and re-run the same command — the re-run archives the remainder under its " +
+						"own stamp — or inspect by hand.",
+				);
+			}
+			return 1;
+		}
 		archived.push(dest);
 	}
 	let cleared = 0;

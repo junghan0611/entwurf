@@ -128,6 +128,12 @@ if [ "$STORE_RC" -eq 0 ]; then
 elif [ "$STORE_RC" -eq 3 ]; then
   printf '%s\n' "$STORE_VERDICT" | head -8 >&2
   die "this host's meta-record store could not be READ (see above). NO user config was touched. This is an ACCESS problem, not a generation problem — a fresh-cut CANNOT fix it and is not what to run here. Repair the store path's ownership/permissions, or point ENTWURF_META_SESSIONS_DIR at the intended store, then re-run install-meta-bridge."
+elif [ "$STORE_RC" -ne 1 ]; then
+  # Only exit 1 IS a defect list (the doctor's EXIT CONTRACT). 2/9/134/139/… mean
+  # the doctor itself failed, so no store verdict exists — and a destructive cut
+  # must never be prescribed from a crash.
+  printf '%s\n' "$STORE_VERDICT" | head -8 >&2
+  die "the store-doctor itself FAILED (exit $STORE_RC — neither a defect list nor an access verdict). NO user config was touched. This is a doctor/runtime failure, not a store verdict — diagnose the output above (broken package artifact, bad node runtime), then re-run install-meta-bridge."
 else
   printf '%s\n' "$STORE_VERDICT" | head -8 >&2
   die "this host's meta-record store holds record(s) the live generation cannot read (see the scan above). Every surface this install wires up is V3-only, and the store carries no cross-generation continuity. NO user config was touched. Quiesce this host's sessions, archive the generation with \`entwurf meta-bridge-fresh-cut\` (dev clone: \`./run.sh meta-bridge-fresh-cut\`), then re-run install-meta-bridge."

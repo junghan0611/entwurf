@@ -150,13 +150,13 @@ Usage:
   ./run.sh uninstall-agy-hooks        # honest inverse of install-agy-hooks from install-state
   ./run.sh doctor-agy-hooks           # fail-loud doctor for agy hooks.json imprint wiring
   ./run.sh meta-bridge-prune          # 1.0.0 meta-bridge Phase 4: LISTING-ONLY store hygiene — classify orphan/stale/ambiguous/keep, print manual rm commands, delete NOTHING ([dir] [--ttl-days N])
-  ./run.sh meta-bridge-fresh-cut      # the ONE generation verb (the verb every v3-only rejection names): quiesce-check live sockets/markers, archive meta-sessions/ + meta-mailbox/ to `<dir>.archive-<ts>`, clear dead transport residue, open an empty v3 generation. No migration, no restore — the archive is forensic only
+  ./run.sh meta-bridge-fresh-cut      # the ONE generation verb (the verb every v3-only rejection names): quiesce-check live sockets/markers/native-push conversations (refusing any surface it cannot inspect), archive meta-sessions/ + meta-mailbox/ to `<dir>.archive-<ts>`, clear dead transport residue, open an empty v3 generation. No migration, no restore — the archive is forensic only
   ./run.sh meta-bridge-managed-keys   # 0.10.0 meta-bridge: print the SSOT of settings keys entwurf OWNS (consumers read this to stay disjoint — keyset-owner invariant)
   ./run.sh check-keyset-overlap <fragment.json...>  # 0.10.0 meta-bridge: PREVENTIVE keyset guard — fail if a consumer fragment collides with any pi-owned key (cross-repo; not in pnpm check)
   ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
   ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
-  ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm check): seeds host states inline (clean/empty/v3-only/previous-generation/malformed), then drives the real `run.sh install` / `setup` at them — a store the live schema cannot read REFUSES before activation writes (persistent regular-file manifest unchanged), the refusal names fresh-cut in both invocation forms, fresh-cut archives the generation (original bytes intact in the archive) and opens an empty one, the retry PASSES, and a live marker/socket makes fresh-cut refuse (quiesce gate). No model/network/cost
+  ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm check): seeds host states inline (clean/empty/v3-only/previous-generation/malformed), then drives the real `run.sh install` / `setup` at them — a store the live schema cannot read REFUSES before activation writes (persistent regular-file manifest unchanged), the refusal names fresh-cut in both invocation forms, fresh-cut archives the generation (original bytes intact in the archive) and opens an empty one, the retry PASSES, and a live marker/socket/native-push conversation — or any surface the cut cannot inspect — makes fresh-cut refuse (quiesce gate). No model/network/cost
   ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (0.82.x) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to entwurf alias
@@ -291,6 +291,16 @@ preflight_v3_store() {
     fail "[$surface] refused BEFORE any write: this host's meta-record store could not be READ (details above)."
     echo "       Nothing was written. This is an ACCESS problem, not a generation problem — a fresh-cut CANNOT fix it and is not what to run here." >&2
     echo "       Repair the store path's ownership/permissions, or point ENTWURF_META_SESSIONS_DIR at the intended store, then re-run this step." >&2
+    exit 1
+  fi
+  # Only exit 1 IS a defect list (the doctor's EXIT CONTRACT). Anything else —
+  # 2 (usage), a node crash (9/134/139), a killed process — means the DOCTOR never
+  # delivered a store verdict, and prescribing a destructive cut from a crash
+  # would send the operator at an archive command over a store nobody examined.
+  if [ "$rc" -ne 1 ]; then
+    printf '%s\n' "$verdict" | head -8 >&2
+    fail "[$surface] cannot certify the meta-record store: the store-doctor itself FAILED (exit $rc — neither a defect list nor an access verdict)."
+    echo "       This is a doctor/runtime failure, not a store verdict. Nothing was written. Diagnose the output above (broken checkout/package, bad node runtime), then re-run this step." >&2
     exit 1
   fi
   # Aggregate, never a wall: a large previous-generation store fails every

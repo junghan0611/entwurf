@@ -635,25 +635,24 @@ else
 fi
 
 # DIRECTORY-level laundering (2026-07-25 second fresh-eyes round): `existsSync`
-# answers false for a path it cannot even STAT — an EACCES-blocked ANCESTOR —
-# which read a whole quiesce surface as "absent" and cut straight through it.
-# Absent is ENOENT alone, the same rule certifyActiveStoreDir already holds one
-# level down. One case per surface dir the cut consults: sockets (F12), the
-# marker walk (F13), the native-push record walk (F14), and the archive plan's
-# mailbox leg (F15) — the one surface with no quiesce row of its own, where
-# planning past an unreadable path would rename the store and THEN die: a
-# half-cut. Each case restores the blocked dir's mode before asserting, so the
-# sandbox trap can clean up.
+# answers false for a path it cannot even STAT — an EACCES-blocked ancestor, an
+# ENOTDIR path — which read a whole quiesce surface as "absent" and cut straight
+# through it. Absent is ENOENT alone, the same rule certifyActiveStoreDir already
+# holds one level down. One case per surface input the cut consults: sockets
+# (F12), the marker walk (F13), the native-push record walk (F14), and the
+# archive plan's mailbox leg (F15) — the one surface with no quiesce row of its
+# own, where planning past an unreadable path would rename the store and THEN
+# die: a half-cut. The ancestor here is a regular FILE (ENOTDIR), section I's
+# driver: deterministic and independent of permission bits root would ignore —
+# it takes the same non-ENOENT branch EACCES does.
 reset_world prevgen
-mkdir -p "$SANDBOX/blocked/sockets"
-chmod 000 "$SANDBOX/blocked"
+printf 'not a dir\n' > "$SANDBOX/blocked"
 store_before="$(store_bytes)"
 set +e
 out="$(ENTWURF_DIR="$SANDBOX/blocked/sockets" node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
 set -e
-chmod 755 "$SANDBOX/blocked"
 if [ "$rc" != 0 ]; then
-  ok "F12 a socket dir behind an unsearchable ancestor REFUSES the cut"
+  ok "F12 a socket dir behind an uninspectable ancestor REFUSES the cut"
 else
   bad "F12 the cut read an uninspectable socket dir as an absent one and proceeded" "$out"
 fi
@@ -666,18 +665,16 @@ if [ "$store_before" = "$(store_bytes)" ] && [ -z "$(find "$SANDBOX" -maxdepth 1
 else
   bad "F12c the refused cut still moved the generation"
 fi
-rm -rf "$SANDBOX/blocked"
+rm -f "$SANDBOX/blocked"
 
 reset_world prevgen
-mkdir -p "$SANDBOX/blocked/agent"
-chmod 000 "$SANDBOX/blocked"
+printf 'not a dir\n' > "$SANDBOX/blocked"
 store_before="$(store_bytes)"
 set +e
 out="$(PI_CODING_AGENT_DIR="$SANDBOX/blocked/agent" node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
 set -e
-chmod 755 "$SANDBOX/blocked"
 if [ "$rc" != 0 ] && [ "$store_before" = "$(store_bytes)" ]; then
-  ok "F13 marker dirs behind an unsearchable ancestor REFUSE the cut (nothing moved)"
+  ok "F13 marker dirs behind an uninspectable ancestor REFUSE the cut (nothing moved)"
 else
   bad "F13 the cut read uninspectable marker dirs as absent ones" "$out"
 fi
@@ -685,18 +682,15 @@ case "$out" in
   *"UNCERTAIN sender marker"*) ok "F13b the refusal names the marker surface as UNCERTAIN" ;;
   *) bad "F13b the refusal does not name the uninspectable marker surface" "$out" ;;
 esac
-rm -rf "$SANDBOX/blocked"
+rm -f "$SANDBOX/blocked"
 
 reset_world absent
-mkdir -p "$SANDBOX/blocked/store"
-printf '{ not even json' > "$SANDBOX/blocked/store/junk.meta.json"
-chmod 000 "$SANDBOX/blocked"
+printf 'not a dir\n' > "$SANDBOX/blocked"
 set +e
 out="$(ENTWURF_META_SESSIONS_DIR="$SANDBOX/blocked/store" node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
 set -e
-chmod 755 "$SANDBOX/blocked"
-if [ "$rc" != 0 ] && [ -f "$SANDBOX/blocked/store/junk.meta.json" ]; then
-  ok "F14 a store behind an unsearchable ancestor REFUSES the cut (bytes intact)"
+if [ "$rc" != 0 ] && [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name '*.archive-*')" ]; then
+  ok "F14 a store behind an uninspectable ancestor REFUSES the cut"
 else
   bad "F14 the cut read an uninspectable store as an absent one" "$out"
 fi
@@ -704,16 +698,14 @@ case "$out" in
   *"UNCERTAIN native-push conversation"*) ok "F14b the refusal says why: its citizens cannot be probed" ;;
   *) bad "F14b the refusal does not name the uninspectable store surface" "$out" ;;
 esac
-rm -rf "$SANDBOX/blocked"
+rm -f "$SANDBOX/blocked"
 
 reset_world prevgen
-mkdir -p "$SANDBOX/blocked/mailbox"
-chmod 000 "$SANDBOX/blocked"
+printf 'not a dir\n' > "$SANDBOX/blocked"
 store_before="$(store_bytes)"
 set +e
 out="$(ENTWURF_META_MAILBOX_DIR="$SANDBOX/blocked/mailbox" node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
 set -e
-chmod 755 "$SANDBOX/blocked"
 if [ "$rc" != 0 ] && [ "$store_before" = "$(store_bytes)" ] && [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
   ok "F15 an uninspectable mailbox refuses at the PLAN, before the store rename — no half-cut"
 else
@@ -723,7 +715,60 @@ case "$out" in
   *"refusing to plan a cut over a surface that cannot be read"*) ok "F15b the refusal names the plan-stage cause" ;;
   *) bad "F15b the refusal does not name the unreadable plan surface" "$out" ;;
 esac
-rm -rf "$SANDBOX/blocked"
+rm -f "$SANDBOX/blocked"
+
+# The KIND half of the same contract: lstat SUCCESS is not "present" either. A
+# surface name held by a SYMLINK is never walked or renamed — readdir would
+# inspect the TARGET while rename would move the LINK, so the cut would
+# quiesce-check one thing and archive another. One representative surface (the
+# store, where the rename risk is real bytes).
+reset_world absent
+mkdir -p "$SANDBOX/realstore"
+printf '{ leftover' > "$SANDBOX/realstore/20260305T000000-dddd05.meta.json"
+ln -s "$SANDBOX/realstore" "$SANDBOX/linkstore"
+set +e
+out="$(ENTWURF_META_SESSIONS_DIR="$SANDBOX/linkstore" node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+set -e
+if [ "$rc" != 0 ] && [ -L "$SANDBOX/linkstore" ] && [ -f "$SANDBOX/realstore/20260305T000000-dddd05.meta.json" ]; then
+  ok "F16 a SYMLINKED store surface refuses the cut (the link is never walked or renamed)"
+else
+  bad "F16 the cut walked (or renamed) a symlinked store surface" "$out"
+fi
+case "$out" in
+  *SYMLINK*) ok "F16b the refusal names the symlink kind" ;;
+  *) bad "F16b the refusal does not name the symlink" "$out" ;;
+esac
+rm -rf "$SANDBOX/realstore" "$SANDBOX/linkstore"
+
+# The parent-writability half of the half-cut guard: store and mailbox may live
+# under DIFFERENT parents (env overrides), and a readable-but-unwritable parent
+# fails only at its own rename — after the store already moved. The plan
+# preflights rename-ability per entry, before anything moves. Permission bits
+# are a no-op for uid 0, so under root this class cannot occur and the row is
+# vacuously green — said out loud rather than silently skipped.
+if [ "$(id -u)" = 0 ]; then
+  ok "F17 vacuous under uid 0: permission bits cannot make a parent non-writable for root, so the class this row drives cannot occur here"
+else
+  reset_world prevgen
+  mkdir -p "$SANDBOX/roparent/mailbox"
+  printf 'msg' > "$SANDBOX/roparent/mailbox/stale.msg"
+  chmod 555 "$SANDBOX/roparent"
+  store_before="$(store_bytes)"
+  set +e
+  out="$(ENTWURF_META_MAILBOX_DIR="$SANDBOX/roparent/mailbox" node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+  set -e
+  chmod 755 "$SANDBOX/roparent"
+  if [ "$rc" != 0 ] && [ "$store_before" = "$(store_bytes)" ] && [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+    ok "F17 a non-writable archive parent refuses at the PLAN, before the store rename — no half-cut"
+  else
+    bad "F17 the cut planned past a non-writable parent (the store would move, then the mailbox rename dies)" "$out"
+  fi
+  case "$out" in
+    *"is not writable"*) ok "F17b the refusal names the non-writable parent" ;;
+    *) bad "F17b the refusal does not name the parent-writability cause" "$out" ;;
+  esac
+  rm -rf "$SANDBOX/roparent"
+fi
 
 # ── G. an archive collision is a NO-OP, never a half-cut ─────────────────────
 echo "[check-fresh-cut-gate] G. archive-destination preflight"
@@ -1003,6 +1048,74 @@ if [ "$before" = "$(host_bytes)" ]; then
 else
   bad "I6e the packaged install path mutated the host before refusing"
 fi
+
+# I7/I8 — a doctor CRASH is not a store verdict. The doctor's EXIT CONTRACT says
+# only 1 is a defect list and only 3 is an access verdict; both callers used to
+# fold every other nonzero (usage 2, node crash 9/134/139) into "certification
+# defects" and prescribe the destructive cut from a crash over a store nobody
+# examined. Driver: a PATH node shim that crashes ONLY the doctor invocation
+# (exit 9 = node's own bad-option code) and execs the real node for everything
+# else — deterministic, root-independent, and the seeded store is one the real
+# doctor would CERTIFY, so the refusal provably comes from the crash.
+REAL_NODE="$(command -v node)"
+cat > "$SANDBOX/fakebin/node" <<SH
+#!/bin/sh
+case "\$*" in
+  *meta-bridge-store-doctor*) echo "simulated doctor crash (gate I7/I8)" >&2; exit 9 ;;
+esac
+exec "$REAL_NODE" "\$@"
+SH
+chmod +x "$SANDBOX/fakebin/node"
+
+reset_world v3
+before="$(host_bytes)"
+set +e
+out="$("$REPO/run.sh" install "$PROJ" 2>&1)"; rc=$?
+set -e
+if [ "$rc" != 0 ]; then
+  ok "I7 a doctor crash (unknown exit) refuses install"
+else
+  bad "I7 install proceeded although the doctor never delivered a verdict" "$out"
+fi
+case "$out" in
+  *meta-bridge-fresh-cut*) bad "I7b a doctor crash still prescribed the cut verb" "$out" ;;
+  *) ok "I7b no cut prescription from a crash (a crash is not a store verdict)" ;;
+esac
+case "$out" in
+  *"store-doctor itself FAILED"*) ok "I7c the refusal names the doctor failure, with its exit code" ;;
+  *) bad "I7c the refusal does not name the doctor failure" "$out" ;;
+esac
+if [ "$before" = "$(host_bytes)" ]; then
+  ok "I7d nothing was written"
+else
+  bad "I7d the crash refusal mutated the host"
+fi
+
+reset_world v3
+before="$(host_bytes)"
+claude_before="$(claude_lines)"
+set +e
+out="$(bash "$REPO/scripts/meta-bridge-install.sh" 2>&1)"; rc=$?
+set -e
+if [ "$rc" != 0 ]; then
+  ok "I8 meta-bridge-install.sh refuses on a doctor crash too"
+else
+  bad "I8 the packaged install path proceeded although the doctor never delivered a verdict" "$out"
+fi
+case "$out" in
+  *meta-bridge-fresh-cut*) bad "I8b the second caller still prescribed the cut verb from a crash" "$out" ;;
+  *) ok "I8b the second caller never prescribes the cut from a crash (both callers, one rule)" ;;
+esac
+case "$out" in
+  *"store-doctor itself FAILED"*) ok "I8c its refusal names the doctor failure too" ;;
+  *) bad "I8c the second caller does not name the doctor failure" "$out" ;;
+esac
+if [ "$claude_before" = "$(claude_lines)" ] && [ "$before" = "$(host_bytes)" ]; then
+  ok "I8d it refused ahead of any Claude contact and touched no user config"
+else
+  bad "I8d the crash refusal reached the Claude CLI or mutated the host"
+fi
+rm -f "$SANDBOX/fakebin/node"
 
 echo
 echo "[check-fresh-cut-gate] passed=$PASSED failed=$FAILED"

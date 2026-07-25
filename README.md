@@ -296,7 +296,9 @@ Only that accepted file may be published with `--tag repair`.
 > quiesce half itself: a live control socket, a marker whose owner process is
 > still running, a **native-push (agy) conversation its own adapter probe answers
 > alive**, or **any surface it cannot prove is gone** — an indeterminate socket, an
-> unreadable or symlinked marker, a conversation that probes indeterminate —
+> unreadable or symlinked marker, a conversation that probes indeterminate, a
+> surface directory it cannot even inspect (absent is ENOENT alone, and the name
+> must hold an actual directory — a symlinked surface is never followed) —
 > refuses the cut before anything moves. Cutting needs proof of death, not absence
 > of proof of life.
 >
