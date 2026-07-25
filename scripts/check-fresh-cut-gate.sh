@@ -634,6 +634,97 @@ else
   ok "F10 the cut never compares a start-key inline (the fail-open path stays closed)"
 fi
 
+# DIRECTORY-level laundering (2026-07-25 second fresh-eyes round): `existsSync`
+# answers false for a path it cannot even STAT — an EACCES-blocked ANCESTOR —
+# which read a whole quiesce surface as "absent" and cut straight through it.
+# Absent is ENOENT alone, the same rule certifyActiveStoreDir already holds one
+# level down. One case per surface dir the cut consults: sockets (F12), the
+# marker walk (F13), the native-push record walk (F14), and the archive plan's
+# mailbox leg (F15) — the one surface with no quiesce row of its own, where
+# planning past an unreadable path would rename the store and THEN die: a
+# half-cut. Each case restores the blocked dir's mode before asserting, so the
+# sandbox trap can clean up.
+reset_world prevgen
+mkdir -p "$SANDBOX/blocked/sockets"
+chmod 000 "$SANDBOX/blocked"
+store_before="$(store_bytes)"
+set +e
+out="$(ENTWURF_DIR="$SANDBOX/blocked/sockets" node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+set -e
+chmod 755 "$SANDBOX/blocked"
+if [ "$rc" != 0 ]; then
+  ok "F12 a socket dir behind an unsearchable ancestor REFUSES the cut"
+else
+  bad "F12 the cut read an uninspectable socket dir as an absent one and proceeded" "$out"
+fi
+case "$out" in
+  *"UNCERTAIN control socket"*) ok "F12b the refusal names the socket surface as UNCERTAIN" ;;
+  *) bad "F12b the refusal does not name the uninspectable socket surface" "$out" ;;
+esac
+if [ "$store_before" = "$(store_bytes)" ] && [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+  ok "F12c nothing was archived"
+else
+  bad "F12c the refused cut still moved the generation"
+fi
+rm -rf "$SANDBOX/blocked"
+
+reset_world prevgen
+mkdir -p "$SANDBOX/blocked/agent"
+chmod 000 "$SANDBOX/blocked"
+store_before="$(store_bytes)"
+set +e
+out="$(PI_CODING_AGENT_DIR="$SANDBOX/blocked/agent" node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+set -e
+chmod 755 "$SANDBOX/blocked"
+if [ "$rc" != 0 ] && [ "$store_before" = "$(store_bytes)" ]; then
+  ok "F13 marker dirs behind an unsearchable ancestor REFUSE the cut (nothing moved)"
+else
+  bad "F13 the cut read uninspectable marker dirs as absent ones" "$out"
+fi
+case "$out" in
+  *"UNCERTAIN sender marker"*) ok "F13b the refusal names the marker surface as UNCERTAIN" ;;
+  *) bad "F13b the refusal does not name the uninspectable marker surface" "$out" ;;
+esac
+rm -rf "$SANDBOX/blocked"
+
+reset_world absent
+mkdir -p "$SANDBOX/blocked/store"
+printf '{ not even json' > "$SANDBOX/blocked/store/junk.meta.json"
+chmod 000 "$SANDBOX/blocked"
+set +e
+out="$(ENTWURF_META_SESSIONS_DIR="$SANDBOX/blocked/store" node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+set -e
+chmod 755 "$SANDBOX/blocked"
+if [ "$rc" != 0 ] && [ -f "$SANDBOX/blocked/store/junk.meta.json" ]; then
+  ok "F14 a store behind an unsearchable ancestor REFUSES the cut (bytes intact)"
+else
+  bad "F14 the cut read an uninspectable store as an absent one" "$out"
+fi
+case "$out" in
+  *"UNCERTAIN native-push conversation"*) ok "F14b the refusal says why: its citizens cannot be probed" ;;
+  *) bad "F14b the refusal does not name the uninspectable store surface" "$out" ;;
+esac
+rm -rf "$SANDBOX/blocked"
+
+reset_world prevgen
+mkdir -p "$SANDBOX/blocked/mailbox"
+chmod 000 "$SANDBOX/blocked"
+store_before="$(store_bytes)"
+set +e
+out="$(ENTWURF_META_MAILBOX_DIR="$SANDBOX/blocked/mailbox" node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+set -e
+chmod 755 "$SANDBOX/blocked"
+if [ "$rc" != 0 ] && [ "$store_before" = "$(store_bytes)" ] && [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+  ok "F15 an uninspectable mailbox refuses at the PLAN, before the store rename — no half-cut"
+else
+  bad "F15 the cut planned past an unreadable mailbox (store renamed, then died: a half-cut)" "$out"
+fi
+case "$out" in
+  *"refusing to plan a cut over a surface that cannot be read"*) ok "F15b the refusal names the plan-stage cause" ;;
+  *) bad "F15b the refusal does not name the unreadable plan surface" "$out" ;;
+esac
+rm -rf "$SANDBOX/blocked"
+
 # ── G. an archive collision is a NO-OP, never a half-cut ─────────────────────
 echo "[check-fresh-cut-gate] G. archive-destination preflight"
 reset_world prevgen

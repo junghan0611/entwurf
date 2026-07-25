@@ -41,8 +41,10 @@
  *   - UNCERTAIN — an INDETERMINATE socket (F3: indeterminate is not dead), a
  *     SYMLINKED socket or marker (never followed), a marker that cannot name its
  *     owner (malformed JSON, missing `ownerPid`/`ownerStartKey`), a crashed
- *     writer's `.tmp` half-marker, any entry no marker layout explains, or a
- *     native-push conversation that probes indeterminate / cannot be probed.
+ *     writer's `.tmp` half-marker, any entry no marker layout explains, a
+ *     native-push conversation that probes indeterminate / cannot be probed, or
+ *     a surface DIRECTORY that cannot be inspected at all (absent is ENOENT
+ *     alone — a dir behind an unsearchable ancestor is unknown, not empty).
  * Only a marker whose named owner demonstrably no longer holds that pid is dead,
  * and only a dead marker/socket is cleared.
  *
@@ -128,6 +130,29 @@ function pathExists(target: string): boolean {
 }
 
 /**
+ * Classify a surface DIRECTORY the way {@link inspectRecordEntry} classifies a
+ * record path: `absent` is ENOENT alone. Every other errno — EACCES on an
+ * ANCESTOR (stat cannot even reach the path), ENOTDIR, ELOOP — is `uninspectable`,
+ * and an uninspectable surface must never read as an absent one: `existsSync`
+ * answered `false` for a socket dir behind an unsearchable ancestor, which
+ * silently passed that whole surface through the quiesce gate and archived the
+ * store under it (2026-07-25 second fresh-eyes round — the same laundering the
+ * first round fixed in certifyActiveStoreDir, one level up at the directory
+ * layer). The caller turns `uninspectable` into an UNCERTAIN refusal naming the
+ * surface; a dir that classifies `present` can still fail its readdir, which
+ * stays fail-loud.
+ */
+function classifySurfaceDir(dir: string): { state: "present" | "absent" } | { state: "uninspectable"; detail: string } {
+	try {
+		fs.lstatSync(dir);
+		return { state: "present" };
+	} catch (err) {
+		if ((err as { code?: unknown }).code === "ENOENT") return { state: "absent" };
+		return { state: "uninspectable", detail: err instanceof Error ? err.message : String(err) };
+	}
+}
+
+/**
  * Walk a marker directory and classify every entry as LIVE, DEAD or UNCERTAIN.
  *
  * The walk accepts the UNION of both marker layouts — a `.json` at the root and a
@@ -156,12 +181,19 @@ function pathExists(target: string): boolean {
 function inspectMarkers(dir: string, label: string): { violations: QuiesceViolation[]; deadFiles: string[] } {
 	const violations: QuiesceViolation[] = [];
 	const deadFiles: string[] = [];
-	if (!fs.existsSync(dir)) return { violations, deadFiles };
-
 	const markerFiles: { file: string; shown: string }[] = [];
 	const uncertain = (shown: string, why: string): void => {
 		violations.push({ surface: label, detail: `${shown} — ${why}`, kind: "uncertain" });
 	};
+	const dirState = classifySurfaceDir(dir);
+	if (dirState.state === "absent") return { violations, deadFiles };
+	if (dirState.state === "uninspectable") {
+		uncertain(
+			dir,
+			`directory could not be inspected (${dirState.detail}): an unreadable surface is not a quiesced one`,
+		);
+		return { violations, deadFiles };
+	}
 	// depth 0 = the marker root, depth 1 = a backend subdir. Nothing deeper is part
 	// of any marker layout, so it is inspected by hand rather than swept.
 	const walk = (root: string, prefix: string, depth: number): void => {
@@ -271,8 +303,17 @@ function inspectMarkers(dir: string, label: string): { violations: QuiesceViolat
  */
 async function inspectNativePushCitizens(storeDir: string): Promise<QuiesceViolation[]> {
 	const violations: QuiesceViolation[] = [];
-	if (!fs.existsSync(storeDir)) return violations;
 	const label = "native-push conversation";
+	const dirState = classifySurfaceDir(storeDir);
+	if (dirState.state === "absent") return violations;
+	if (dirState.state === "uninspectable") {
+		violations.push({
+			surface: label,
+			detail: `store ${storeDir} could not be inspected (${dirState.detail}): its citizens cannot be probed, so their liveness is unprovable`,
+			kind: "uncertain",
+		});
+		return violations;
+	}
 	for (const entry of fs.readdirSync(storeDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
 		if (!entry.name.endsWith(".meta.json")) continue;
 		if (!entry.isFile()) {
@@ -342,7 +383,15 @@ async function main(): Promise<number> {
 	// ── quiesce gate: refuse before any move ─────────────────────────────────
 	const violations: QuiesceViolation[] = [];
 	const deadSockets: string[] = [];
-	if (fs.existsSync(socketDir)) {
+	const socketDirState = classifySurfaceDir(socketDir);
+	if (socketDirState.state === "uninspectable") {
+		violations.push({
+			surface: "control socket",
+			detail: `socket dir ${socketDir} could not be inspected (${socketDirState.detail}): a listener may be live behind it`,
+			kind: "uncertain",
+		});
+	}
+	if (socketDirState.state === "present") {
 		for (const filename of fs.readdirSync(socketDir).sort()) {
 			if (!filename.endsWith(CONTROL_SOCKET_SUFFIX)) continue;
 			const file = path.join(socketDir, filename);
@@ -398,8 +447,19 @@ async function main(): Promise<number> {
 	const ts = stamp();
 	const plan: { src: string; dest: string }[] = [];
 	for (const dir of [storeDir, mailboxDir]) {
-		// An absent or EMPTY dir holds no generation — nothing to archive.
-		if (!fs.existsSync(dir) || fs.readdirSync(dir).length === 0) continue;
+		// An absent or EMPTY dir holds no generation — nothing to archive. Absent is
+		// ENOENT alone: the gate above already refused an uninspectable STORE, but the
+		// mailbox has no quiesce surface of its own, so this is where an unreadable
+		// mailbox path must fail — planning past it would rename the store and then
+		// die at the mailbox mkdir, a half-cut nobody asked for.
+		const dirState = classifySurfaceDir(dir);
+		if (dirState.state === "absent") continue;
+		if (dirState.state === "uninspectable") {
+			throw new Error(
+				`cannot inspect ${dir} (${dirState.detail}) — refusing to plan a cut over a surface that cannot be read. Nothing was moved.`,
+			);
+		}
+		if (fs.readdirSync(dir).length === 0) continue;
 		plan.push({ src: dir, dest: `${dir}.archive-${ts}` });
 	}
 	// Preflight EVERY destination before the first rename. Checking each one just
