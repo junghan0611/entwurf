@@ -256,9 +256,18 @@ Only that accepted file may be published with `--tag repair`.
 > **readable by the live schema**, **named by its own body**, and the **unique
 > holder of its `nativeSessionId`**. All five defect kinds — previous generation,
 > corruption, drift, duplicate, symlink — collapse to the same prescription, so
-> there is nothing to diagnose or branch on. Note the deliberate scope: the refusal
-> guards *identity writes*, not every mailbox poke; a call-relay does not re-scan
-> the whole store on each message.
+> there is nothing to diagnose or branch on.
+>
+> Note the deliberate scope, stated as it actually is. A **store-wide** scan runs on
+> **identity writes** and in the doctor — not on every mailbox poke; a call-relay does
+> not re-scan the whole store per message. What every **targeted read** does hold is
+> the per-entry half of the same contract: `readMetaIdentityByGardenId` refuses a
+> record that is not a regular file (a symlink is never followed, in *either*
+> direction) and one whose body disagrees with its name, naming the verb. What it
+> does **not** do is prove store-wide uniqueness on the read path, so on a store that
+> would fail certification two records can still claim one `nativeSessionId` and
+> `entwurf_peers` will list both as citizens. That is a **known open gap**, not a
+> promise: closing it on the dispatch path is [#52](https://github.com/junghan0611/entwurf/issues/52).
 >
 > There is **no migrator and no legacy reader anywhere in this repo** — carrying
 > old records forward would serve a continuity the system deliberately does not
@@ -285,9 +294,29 @@ Only that accepted file may be published with `--tag repair`.
 > anything at all, so order the upgrade explicitly — **quiesce the sessions on
 > that host → pull → fresh-cut → `setup` → reopen**. `fresh-cut` enforces the
 > quiesce half itself: a live control socket, a marker whose owner process is
-> still running, or **any surface it cannot prove is gone** — an indeterminate
-> socket, an unreadable or symlinked marker — refuses the cut before anything
-> moves. Cutting needs proof of death, not absence of proof of life.
+> still running, a **native-push (agy) conversation its own adapter probe answers
+> alive**, or **any surface it cannot prove is gone** — an indeterminate socket, an
+> unreadable or symlinked marker, a conversation that probes indeterminate —
+> refuses the cut before anything moves. Cutting needs proof of death, not absence
+> of proof of life.
+>
+> That agy row is not symmetry for its own sake: `entwurf_register_native` writes a
+> record and **no marker at all**, and `entwurf_v2` dispatches to such a citizen
+> straight off the record, so marker absence is the *normal* state of a live,
+> fully deliverable conversation. A socket+marker scan alone would call that host
+> quiesced. Quiescing agy is also what makes the cut legal — with no host process
+> the probe answers *dead* — so the rule can never trap you on a host you have
+> already closed.
+>
+> **What quiescence is proven over, exactly.** The live-schema-readable identities of
+> the current generation, plus the transport artifacts (sockets, markers). A record the
+> live schema *cannot* read is archived without probing it, and that is not a claim
+> that its session exited — only that those bytes front no addressable citizen here,
+> since every targeted address/dispatch path refuses them. The alternative deadlocks the cut on the very
+> store it exists to clear, and salvaging ids out of an unreadable shape in order to
+> probe it would be the legacy reader this repo deleted. A native conversation that
+> outlives a cut simply gets a **new** garden id from its next hook or registration —
+> re-birth in the new generation, never continuity of the old address.
 
 After upgrading a globally installed package, reinstall the native-harness surface you use before trusting it:
 

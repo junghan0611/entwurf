@@ -118,8 +118,16 @@ case "$REPO" in
     DOCTOR_CMD=("$NODE_BIN" --experimental-strip-types "$DOCTOR_ENTRY") ;;
 esac
 [ -f "$DOCTOR_ENTRY" ] || die "store-doctor artifact missing: $DOCTOR_ENTRY (installed package ships it via prepack build-bridge → dist; reinstall @junghanacs/entwurf, or run 'pnpm run build-bridge' in a dev clone). Install refuses rather than skip the store gate."
-if STORE_VERDICT="$("${DOCTOR_CMD[@]}" 2>&1)"; then
+# The doctor's EXIT CODE carries the verdict (see its header): 1 = certification defects,
+# 3 = the store could not be READ. They take OPPOSITE prescriptions, so branch on it — the
+# last line printed here is the one that gets acted on.
+STORE_RC=0
+STORE_VERDICT="$("${DOCTOR_CMD[@]}" 2>&1)" || STORE_RC=$?
+if [ "$STORE_RC" -eq 0 ]; then
   echo "[meta-bridge-install] meta-record store certifies clean v3 ($(printf '%s\n' "$STORE_VERDICT" | tail -1)) — install may proceed"
+elif [ "$STORE_RC" -eq 3 ]; then
+  printf '%s\n' "$STORE_VERDICT" | head -8 >&2
+  die "this host's meta-record store could not be READ (see above). NO user config was touched. This is an ACCESS problem, not a generation problem — a fresh-cut CANNOT fix it and is not what to run here. Repair the store path's ownership/permissions, or point ENTWURF_META_SESSIONS_DIR at the intended store, then re-run install-meta-bridge."
 else
   printf '%s\n' "$STORE_VERDICT" | head -8 >&2
   die "this host's meta-record store holds record(s) the live generation cannot read (see the scan above). Every surface this install wires up is V3-only, and the store carries no cross-generation continuity. NO user config was touched. Quiesce this host's sessions, archive the generation with \`entwurf meta-bridge-fresh-cut\` (dev clone: \`./run.sh meta-bridge-fresh-cut\`), then re-run install-meta-bridge."

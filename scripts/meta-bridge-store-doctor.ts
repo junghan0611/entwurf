@@ -11,9 +11,22 @@
  * wins at runtime.
  *
  * It never prunes, repairs or picks a winner: the operator archives the generation.
+ *
+ * EXIT CONTRACT — the verdict is the exit code, not a string a caller has to guess:
+ *   0 — certified. Every `.meta.json` passes; the runtime may write here.
+ *   1 — CERTIFICATION defects. The prescription is the fresh-cut verb.
+ *   2 — usage error (bad argv).
+ *   3 — the store could not be READ (EACCES on it or an ancestor, ENOTDIR, …). A
+ *       different prescription entirely: repair access/path. A fresh-cut CANNOT fix this
+ *       and would fail on the same errno, so a caller must never print that advice here.
+ * Callers branch on the code (`run.sh preflight_v3_store`, `meta-bridge-install.sh`);
+ * before this split, both ended their refusal with "archive the generation with
+ * fresh-cut" no matter the cause, which sent the operator — or an agent reading the last
+ * line — at a command guaranteed to fail (2026-07-25 fresh-eyes review).
  */
 
 import {
+	type ActiveStoreCertification,
 	activeStoreRefusal,
 	certifyActiveStoreDir,
 	defaultMetaSessionsDir,
@@ -28,7 +41,22 @@ if (process.argv.length > 3) {
 	process.exit(2);
 }
 
-const cert = certifyActiveStoreDir(dir);
+// A store that cannot be READ is a different verdict from a store full of defects, and it
+// earns a different sentence: there is nothing to archive, and a fresh-cut would fail on
+// the same errno. Say that plainly instead of letting an uncaught stack stand in for a
+// verdict — or, worse, prescribing a cut that cannot help.
+let cert: ActiveStoreCertification & { dir: string };
+try {
+	cert = certifyActiveStoreDir(dir);
+} catch (err) {
+	console.error(`FAIL: ${err instanceof Error ? err.message : String(err)}`);
+	console.error(
+		"This is an ACCESS problem, not a generation problem — archiving the generation cannot fix it. " +
+			"Repair the store path's ownership/permissions (or point ENTWURF_META_SESSIONS_DIR at the intended " +
+			"store), then re-run.",
+	);
+	process.exit(3); // see the EXIT CONTRACT above: 3 = unreadable store, NOT a defect list
+}
 
 if (cert.defects.length > 0) {
 	// Per-entry causes first (the preflight shows the head of this list, and counts

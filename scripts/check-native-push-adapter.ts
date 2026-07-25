@@ -68,6 +68,15 @@ interface FakeConfig {
 	sendCodes?: number[];
 	/** simulate a TIMEOUT kill (code 124) on every get-conversation-metadata call. */
 	metadataTimeout?: boolean;
+	/**
+	 * Override the exit code of the `pgrep` host scan. Default: derived from `pids`
+	 * (0 with matches, 1 without) — pgrep's ONE nonzero that means "no such process".
+	 * Anything else here is a scan FAILURE (2 usage, 3 fatal, 124 timeout kill, 127
+	 * spawn failure), which must never read as a departed host.
+	 */
+	pgrepCode?: number;
+	/** Override the `pgrep` stdout (to drive an exit-0 answer that names no pid). */
+	pgrepStdout?: string;
 }
 
 function makeFakeRunner(config: FakeConfig): { runner: NativePushRunner; calls: ExecCall[] } {
@@ -78,8 +87,9 @@ function makeFakeRunner(config: FakeConfig): { runner: NativePushRunner; calls: 
 			calls.push({ argv: [...argv], env: opts?.env, timeoutMs: opts?.timeoutMs });
 			const a = [...argv];
 			if (a[0] === "pgrep") {
-				const code = config.pids.length > 0 ? 0 : 1;
-				return { code, stdout: config.pids.length ? `${config.pids.join("\n")}\n` : "", stderr: "" };
+				const code = config.pgrepCode ?? (config.pids.length > 0 ? 0 : 1);
+				const stdout = config.pgrepStdout ?? (config.pids.length ? `${config.pids.join("\n")}\n` : "");
+				return { code, stdout, stderr: code === 0 || code === 1 ? "" : "pgrep: scan failed" };
 			}
 			if (a[0] === "ss") {
 				return { code: 0, stdout: config.ss, stderr: "" };
@@ -145,6 +155,41 @@ function makeFakeRunner(config: FakeConfig): { runner: NativePushRunner; calls: 
 		"no-host: dead reason names the missing host process",
 		result.status === "dead" && /no live agy process/.test(result.reason),
 	);
+}
+
+// ── a FAILED host scan is not a departed host ────────────────────────────────
+// pgrep(1) uses exit 1 for "no match" and 2/3 for its own errors; the runner reports a
+// missing binary as 127 and a timeout kill as 124. Folding every nonzero into "no host"
+// was survivable while only a dispatch consumed it (a false dead just refuses delivery)
+// and became fail-OPEN when the fresh-cut quiesce gate began reading the same verdict as
+// proof that nothing is running (2026-07-25 fresh-eyes review).
+for (const [code, what] of [
+	[127, "pgrep missing from PATH (spawn failure)"],
+	[2, "pgrep usage error"],
+	[124, "host scan timed out"],
+] as const) {
+	const { runner } = makeFakeRunner({ pids: [], ss: "", serving: () => false, pgrepCode: code });
+	const adapter = createAntigravityAdapter({ runner, binary: FAKE_BINARY });
+	const result = await adapter.probe(CONV);
+	ok(`scan-failure ${code} (${what}): probe → indeterminate, NOT dead`, result.status === "indeterminate");
+	ok(
+		`scan-failure ${code}: the reason says the scan failed and names the exit code`,
+		result.status === "indeterminate" && /host scan failed/.test(result.reason) && result.reason.includes(String(code)),
+	);
+}
+{
+	// Exit 0 promises a match, so unparsable output means we misread the scan — never that
+	// the host is gone.
+	const { runner } = makeFakeRunner({
+		pids: [],
+		ss: "",
+		serving: () => false,
+		pgrepCode: 0,
+		pgrepStdout: "not-a-pid\n",
+	});
+	const adapter = createAntigravityAdapter({ runner, binary: FAKE_BINARY });
+	const result = await adapter.probe(CONV);
+	ok("scan exit 0 naming no parsable pid: probe → indeterminate", result.status === "indeterminate");
 }
 
 // ── indeterminate: host alive but no LS port serves the conversation ─────────

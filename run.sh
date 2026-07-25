@@ -276,9 +276,22 @@ preflight_v3_store() {
     fail "[$surface] cannot certify the meta-record store: $REPO_DIR/scripts/meta-bridge-store-doctor.ts is missing (incomplete checkout or package)."
     exit 1
   fi
-  if verdict="$(run_ts scripts/meta-bridge-store-doctor.ts 2>&1)"; then
+  # The doctor's EXIT CODE is the verdict (see its header): 1 = certification defects,
+  # 3 = the store could not be READ. Those take OPPOSITE prescriptions, and this function
+  # prints the last line the operator (or an agent) acts on — so it must branch on the
+  # code rather than end every refusal with "archive the generation".
+  local rc=0
+  verdict="$(run_ts scripts/meta-bridge-store-doctor.ts 2>&1)" || rc=$?
+  if [ "$rc" -eq 0 ]; then
     echo "[$surface] meta-record store certifies clean v3 ($(printf '%s\n' "$verdict" | tail -1))"
     return 0
+  fi
+  if [ "$rc" -eq 3 ]; then
+    printf '%s\n' "$verdict" | head -8 >&2
+    fail "[$surface] refused BEFORE any write: this host's meta-record store could not be READ (details above)."
+    echo "       Nothing was written. This is an ACCESS problem, not a generation problem — a fresh-cut CANNOT fix it and is not what to run here." >&2
+    echo "       Repair the store path's ownership/permissions, or point ENTWURF_META_SESSIONS_DIR at the intended store, then re-run this step." >&2
+    exit 1
   fi
   # Aggregate, never a wall: a large previous-generation store fails every
   # record with the same cause, so show the first few + a count (F8 lesson).

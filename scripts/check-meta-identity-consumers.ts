@@ -30,8 +30,10 @@ import {
 	certifyActiveStore,
 	certifyActiveStoreDir,
 	FRESH_CUT_COMMAND,
+	listAllMetaIdentities,
 	type MetaIdentity,
 	MetaRecordError,
+	metaRecordExistsByGardenId,
 	readMetaIdentityByGardenId,
 	serializeMetaIdentity,
 } from "../pi-extensions/lib/meta-session.ts";
@@ -314,6 +316,155 @@ withStore(
 		"an absent store certifies as empty (a host with no generation is not broken)",
 		cert.defects.length === 0 && cert.scanned === 0,
 	);
+}
+
+// --- ONE contract in BOTH directions: the targeted READ holds rule 1 too ----
+// Certification refuses a symlinked record on write; the targeted read used to
+// FOLLOW it (existsSync + readFileSync resolve the link), so the contract held
+// only where nobody was being addressed — the doctor refused an entry that v2
+// dispatch, `entwurf_self` and the sender-marker trust all resolved, from bytes
+// the store does not own. Found by the 2026-07-25 fresh-eyes review; both
+// directions now hold the same rule.
+withStore(
+	(dir) => {
+		record(dir, GID_A, "native-a");
+		const outside = path.join(dir, "..", `psa-idcons-outside-${process.pid}`);
+		fs.mkdirSync(outside, { recursive: true });
+		const forged = path.join(outside, "forged.json");
+		// Impeccable v3 bytes — the point is WHERE they live, not whether they parse.
+		fs.writeFileSync(forged, serializeMetaIdentity(identity(GID_B, "native-forged")));
+		fs.symlinkSync(forged, path.join(dir, `${GID_B}.meta.json`));
+	},
+	(dir) => {
+		const cert = certifyActiveStoreDir(dir);
+		ok(
+			"certification refuses the symlinked record (rule 1)",
+			cert.defects.some((d) => d.filename === `${GID_B}.meta.json` && d.message.includes("not a regular file")),
+		);
+		throwsNaming(
+			"the TARGETED read refuses the same entry instead of following it (one contract, both directions)",
+			() => readMetaIdentityByGardenId(GID_B, dir),
+			"not a regular file",
+		);
+		throwsNaming(
+			"that refusal names the fresh-cut verb (the one prescription every defect collapses to)",
+			() => readMetaIdentityByGardenId(GID_B, dir),
+			FRESH_CUT_COMMAND,
+		);
+		ok(
+			"a regular-file neighbour in the same store still reads (the refusal is per-entry, not a store-wide read block)",
+			readMetaIdentityByGardenId(GID_A, dir).nativeSessionId === "native-a",
+		);
+		fs.rmSync(path.join(dir, "..", `psa-idcons-outside-${process.pid}`), { recursive: true, force: true });
+	},
+);
+
+// --- every refusal names the verb, including the drift diagnostics -----------
+// A record whose body disagrees with its name is unreachable by garden id, so it
+// earns the SAME prescription as any other defect. The drift paths used to say
+// "Remove or fix it" and name no verb, which contradicted the promise that the
+// read surfaces fail loud naming fresh-cut in both invocation forms.
+withStore(
+	(dir) => {
+		write(dir, `${GID_A}.meta.json`, serializeMetaIdentity(identity(GID_B, "native-drift")));
+	},
+	(dir) => {
+		throwsNaming(
+			"body/filename drift on a targeted read names the fresh-cut verb",
+			() => readMetaIdentityByGardenId(GID_A, dir),
+			FRESH_CUT_COMMAND,
+		);
+		const listed = listAllMetaIdentities(fs.readdirSync(dir), (f) => fs.readFileSync(path.join(dir, f), "utf8"));
+		ok(
+			"the listing's drift diagnostic names the verb too (a facts surface still says what to do)",
+			listed.errors.length === 1 && (listed.errors[0]?.message ?? "").includes(FRESH_CUT_COMMAND),
+		);
+	},
+);
+
+// --- an inspection FAILURE is never reported as an absent citizen ------------
+// `entwurf_v2` splits soft from hard on exactly this question: a MISSING record is a
+// soft `bad-target`, a present-but-corrupt one must fail loud. `existsSync` answered
+// `false` for an entry it merely could not stat, so an unreadable store looked like a
+// clean "no such citizen" — the fail-open shape (2026-07-25 fresh-eyes review). ENOENT
+// alone is absence; a broken store SHAPE (ENOTDIR here) is a failure to inspect.
+{
+	const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-shape-"));
+	try {
+		const brokenStore = path.join(tmp, "store-is-actually-a-file");
+		fs.writeFileSync(brokenStore, "not a store\n");
+		throwsNaming(
+			"the existence check THROWS on a broken store shape instead of answering false",
+			() => metaRecordExistsByGardenId(GID_A, brokenStore),
+			"inspection failure",
+		);
+		throwsNaming(
+			"the targeted read refuses the same way (one inspect seam, both surfaces)",
+			() => readMetaIdentityByGardenId(GID_A, brokenStore),
+			"inspection failure",
+		);
+		ok(
+			"a genuine absence still answers false — ENOENT alone is absence",
+			metaRecordExistsByGardenId(GID_A, path.join(tmp, "no-such-store")) === false,
+		);
+		ok(
+			"a symlinked record answers PRESENT so the refusal comes from the loud read, not a silent negative",
+			(() => {
+				const dir = path.join(tmp, "store");
+				fs.mkdirSync(dir);
+				fs.symlinkSync(path.join(tmp, "elsewhere.json"), path.join(dir, `${GID_A}.meta.json`));
+				return metaRecordExistsByGardenId(GID_A, dir) === true;
+			})(),
+		);
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true });
+	}
+}
+
+// --- an unreadable STORE is not an empty store -------------------------------
+// The store-wide half of the same rule. `existsSync` answers false for a directory it
+// merely cannot search, so an ancestor-EACCES store certified as "0 records, no defects"
+// — the doctor and the install preflight would call an unreadable host clean. ENOENT
+// alone is an absent store (a host that never had a generation is not broken).
+{
+	const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-unreadable-"));
+	try {
+		ok(
+			"an absent store still certifies as empty (ENOENT alone)",
+			certifyActiveStoreDir(path.join(tmp, "never-existed")).defects.length === 0,
+		);
+		// ENOTDIR — deterministic, and it takes the same errno branch EACCES does (only
+		// ENOENT is special-cased), so it pins the classifier without needing a permission
+		// bit that root would ignore.
+		const notADir = path.join(tmp, "store-is-a-file");
+		fs.writeFileSync(notADir, "not a store\n");
+		assert.throws(
+			() => certifyActiveStoreDir(notADir),
+			(err: unknown) => err instanceof MetaRecordError && /failure to inspect the store/.test(err.message),
+			"a non-directory store path must not certify as empty",
+		);
+		console.log("  ok    a store path that is not a directory THROWS instead of certifying empty");
+		passed++;
+		// The permission form of the same failure, where the platform allows proving it.
+		if (typeof process.getuid === "function" && process.getuid() !== 0) {
+			const blocked = path.join(tmp, "blocked");
+			fs.mkdirSync(path.join(blocked, "store"), { recursive: true });
+			fs.chmodSync(blocked, 0o000);
+			try {
+				assert.throws(
+					() => certifyActiveStoreDir(path.join(blocked, "store")),
+					(err: unknown) => err instanceof MetaRecordError && /failure to inspect the store/.test(err.message),
+					"a store behind an unsearchable ancestor must not certify as empty",
+				);
+				console.log("  ok    a store whose ancestor cannot be searched THROWS instead of certifying empty");
+				passed++;
+			} finally {
+				fs.chmodSync(blocked, 0o700);
+			}
+		}
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true });
+	}
 }
 
 console.log(`[check-meta-identity-consumers] ${passed} assertions ok`);

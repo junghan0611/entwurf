@@ -751,14 +751,32 @@ export function certifyActiveStore(
 /**
  * The fs-bound certification: read a store directory and certify it. `withFileTypes`
  * classifies without following links (a symlinked record is `isFile() === false`),
- * which is what makes rule 1 above enforceable. A missing directory is a certified
- * empty store — a host that has never had a generation is not a broken one.
+ * which is what makes rule 1 above enforceable.
+ *
+ * A store that is NOT THERE is a certified empty one — a host that has never had a
+ * generation is not a broken host. That is ENOENT and only ENOENT. Any other errno —
+ * EACCES on the store or on an ancestor, ENOTDIR when the path is not a directory at all
+ * — is a failure to READ the store, and answering "certified, 0 records" there would let
+ * the doctor and the install preflight call an unreadable host clean (2026-07-25
+ * fresh-eyes review; `existsSync` returns false for a directory it merely cannot search,
+ * which is the same laundering {@link inspectRecordEntry} refuses on the targeted path).
  */
 export function certifyActiveStoreDir(dir: string): ActiveStoreCertification & { dir: string } {
 	const resolved = path.resolve(expandTilde(dir));
-	if (!fs.existsSync(resolved)) return { dir: resolved, scanned: 0, records: [], defects: [] };
-	const entries: ActiveStoreEntry[] = fs
-		.readdirSync(resolved, { withFileTypes: true })
+	let dirents: fs.Dirent[];
+	try {
+		dirents = fs.readdirSync(resolved, { withFileTypes: true });
+	} catch (err) {
+		if ((err as { code?: unknown }).code === "ENOENT") {
+			return { dir: resolved, scanned: 0, records: [], defects: [] };
+		}
+		throw new MetaRecordError(
+			`cannot read the meta-record store ${resolved}: ${err instanceof Error ? err.message : String(err)}. ` +
+				"That is a failure to inspect the store, not an empty store — refusing to certify a store this " +
+				"process cannot read.",
+		);
+	}
+	const entries: ActiveStoreEntry[] = dirents
 		.sort((a, b) => a.name.localeCompare(b.name))
 		.map((entry) => ({ filename: entry.name, regularFile: entry.isFile() }));
 	return {
@@ -842,7 +860,10 @@ export function listAllMetaIdentities(
 		if (identity.gardenId !== expected) {
 			errors.push({
 				filename,
-				message: `body/filename drift: body gardenId "${identity.gardenId}" ≠ filename. The body is the authority; this file is corrupt.`,
+				message:
+					`body/filename drift: body gardenId "${identity.gardenId}" ≠ filename. The body is the authority; ` +
+					`this file is corrupt and a garden-id lookup can never reach it. ` +
+					`Archive the generation with ${FRESH_CUT_PRESCRIPTION}.`,
 			});
 			continue;
 		}
@@ -1473,6 +1494,36 @@ function recordFileFor(sessionsDir: string, gardenId: string): string {
 	return path.join(path.resolve(expandTilde(sessionsDir)), `${id}.meta.json`);
 }
 
+/** What an lstat says about a record path — the ENTRY ITSELF, never its link target. */
+type RecordEntryKind = "absent" | "regular-file" | "irregular";
+
+/**
+ * The one place a targeted record path is inspected, separating the three answers a
+ * routing decision actually needs.
+ *
+ * `absent` is reserved for **ENOENT alone**. Every other errno — EACCES, ELOOP,
+ * ENOTDIR (a store whose shape is broken), ENAMETOOLONG — means the entry could not be
+ * inspected, and reporting "no such citizen" there would launder an inspection FAILURE
+ * into a clean negative: `entwurf_v2` would call an unreadable store a soft
+ * `bad-target` instead of failing loud. Unknown fails loud here, the same rule the
+ * marker verdicts and the socket probe hold.
+ *
+ * lstat, never stat, so a symlink is classified as what it is rather than silently
+ * resolved into bytes this store does not own.
+ */
+function inspectRecordEntry(file: string): RecordEntryKind {
+	try {
+		return fs.lstatSync(file).isFile() ? "regular-file" : "irregular";
+	} catch (err) {
+		if ((err as { code?: unknown }).code === "ENOENT") return "absent";
+		throw new MetaRecordError(
+			`cannot inspect meta-record ${path.basename(file)} under ${path.dirname(file)}: ` +
+				`${err instanceof Error ? err.message : String(err)}. That is an inspection failure, not an absent ` +
+				`citizen — refusing to report "no record" from a store this process cannot read.`,
+		);
+	}
+}
+
 /**
  * The identity read-by-gardenId. Read the file, body is SSOT, fail-fast on
  * body/filename gardenId drift; V3-only via parseMetaIdentity (an unreadable
@@ -1485,16 +1536,31 @@ export function readMetaIdentityByGardenId(
 ): MetaIdentity {
 	const id = requireGardenId(gardenId);
 	const file = recordFileFor(sessionsDir, id);
-	if (!fs.existsSync(file)) {
+	const kind = inspectRecordEntry(file);
+	if (kind === "absent") {
 		throw new MetaRecordError(
 			`no meta-record for garden id "${id}" under ${path.dirname(file)} — not a garden citizen, cannot deliver.`,
+		);
+	}
+	// Rule 1 of {@link certifyActiveStore}, enforced HERE too — the one place a live
+	// dispatch reads a record. Certifying the store on WRITE while this read followed the
+	// link made the contract true only where nobody was being addressed: the doctor
+	// refused a symlinked entry that v2 dispatch, `entwurf_self` and the sender-marker
+	// trust all resolved happily, from bytes the store does not own (2026-07-25
+	// fresh-eyes review). One contract means both directions hold it.
+	if (kind === "irregular") {
+		throw new MetaRecordError(
+			`meta-record ${id}.meta.json is not a regular file (symlink/directory/special) — a record's bytes must ` +
+				`live in the store itself, so this entry is never followed and cannot address a citizen. ` +
+				`Inspect and remove it by hand, or archive the generation with ${FRESH_CUT_PRESCRIPTION}.`,
 		);
 	}
 	const identity = parseMetaIdentity(fs.readFileSync(file, "utf8"));
 	if (identity.gardenId !== id) {
 		throw new MetaRecordError(
 			`meta-record body/filename drift: ${id}.meta.json contains gardenId "${identity.gardenId}". ` +
-				`The body is the authority; this file is corrupt. Remove or fix it.`,
+				`The body is the authority; this file is corrupt and a garden-id lookup can never reach it. ` +
+				`Archive the generation with ${FRESH_CUT_PRESCRIPTION}.`,
 		);
 	}
 	return identity;
@@ -1504,13 +1570,20 @@ export function readMetaIdentityByGardenId(
  * Probe-free existence check for a garden citizen's meta-record. Used by the 5d
  * entwurf_v2 production `resolveTarget`: a MISSING record is a soft `bad-target`
  * (identity:null), but a PRESENT-but-corrupt record must fail loud — so the producer
- * `existsSync`-checks here FIRST and only calls `readMetaIdentityByGardenId` when this
- * returns true, leaving drift/corruption as the lone throw (never matched by message
- * string). Validates the gid (F2-P1) like its read sibling.
+ * checks here FIRST and only calls `readMetaIdentityByGardenId` when this returns true,
+ * leaving drift/corruption as the lone throw (never matched by message string).
+ * Validates the gid (F2-P1) like its read sibling.
+ *
+ * It shares {@link inspectRecordEntry} with that sibling for one reason: `existsSync`
+ * answers `false` for an entry it merely could not stat (EACCES on the store, ELOOP),
+ * which turned an unreadable store into a soft `bad-target` — a clean-looking "no such
+ * citizen" for a host that is actually broken. An entry that EXISTS but is not a
+ * regular file also answers `true` here, so the refusal comes from the read (loud, with
+ * a cause) rather than from a silent negative.
  */
 export function metaRecordExistsByGardenId(gardenId: string, sessionsDir: string = defaultMetaSessionsDir()): boolean {
 	const id = requireGardenId(gardenId);
-	return fs.existsSync(recordFileFor(sessionsDir, id));
+	return inspectRecordEntry(recordFileFor(sessionsDir, id)) !== "absent";
 }
 
 export interface EnqueueMetaMessageOptions {

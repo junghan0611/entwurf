@@ -15,7 +15,11 @@
 # certification verdict on the three defects that PARSE (drift / duplicate /
 # symlink), where a reader-only check is happy and the address space is broken.
 # F proves quiescence is demonstrated rather than assumed. G proves a collision
-# refusal moves nothing.
+# refusal moves nothing. H covers the surface a marker walk cannot see at all: a
+# native-push (agy) citizen holds a record and NO marker, so its liveness is asked
+# from the record through the adapter probe the dispatch itself uses. I holds the
+# other half of the prescription: a store that cannot be READ is not a store with
+# defects, and the refusal must not send the operator at a cut that cannot help.
 #
 # There is no frozen-fixture apparatus here: fresh-cut never rewrites a byte
 # (the archive is a rename), so the only byte claim is `archived == seeded`,
@@ -661,7 +665,255 @@ case "$out" in
   *) bad "G3 the refusal never claimed the no-op" "$out" ;;
 esac
 
+# ── H. the MARKER-LESS live surface: native-push conversations ───────────────
+# A socket+marker walk is not the whole world. `entwurf_register_native` proves an
+# agy conversation is alive and then writes ONLY the record (register.ts 보정①: no
+# receiver marker), and the v2 decider dispatches to it straight off that record
+# (nativePushProbe(identity)) with no marker in the path. So marker ABSENCE is the
+# normal state of a fully deliverable agy citizen — and a cut that reads quiescence
+# from markers alone archived a live conversation's address (found by the 2026-07-25
+# fresh-eyes review, GPT's cell ①).
+#
+# The three probe rows are driven for real through fakes, never asserted from prose:
+# the adapter takes its host scan from `pgrep`/`ss` on PATH and its metadata call from
+# $AGY_BIN, so a PATH-local fake pins each row deterministically — including DEAD,
+# which must not depend on whether the operator running `pnpm check` happens to have
+# agy open.
+echo "[check-fresh-cut-gate] H. native-push conversations (the marker-less surface)"
+mkdir -p "$SANDBOX/npfake"
+cat > "$SANDBOX/npfake/ss" <<'SH'
+#!/bin/sh
+echo 'LISTEN 0 128 127.0.0.1:41234 0.0.0.0:* users:(("agy",pid=4242,fd=7))'
+SH
+cat > "$SANDBOX/npfake/agy-serves" <<'SH'
+#!/bin/sh
+echo '{"conversationMetadata":{"id":"agy-conv-live"}}'
+SH
+cat > "$SANDBOX/npfake/agy-serves-nothing" <<'SH'
+#!/bin/sh
+exit 1
+SH
+chmod +x "$SANDBOX/npfake"/*
+np_host() { # $1 = live|absent|broken — what the fake `pgrep -x agy` reports
+  case "$1" in
+    live)   printf '#!/bin/sh\necho 4242\n' > "$SANDBOX/npfake/pgrep" ;;
+    absent) printf '#!/bin/sh\nexit 1\n' > "$SANDBOX/npfake/pgrep" ;;
+    # 127 = the runner's spawn-failure code (pgrep not on PATH). The scan did not run;
+    # that is NOT pgrep's exit 1 ("no such process").
+    broken) printf '#!/bin/sh\nexit 127\n' > "$SANDBOX/npfake/pgrep" ;;
+  esac
+  chmod +x "$SANDBOX/npfake/pgrep"
+}
+np_cut() { env PATH="$SANDBOX/npfake:$PATH" AGY_BIN="$SANDBOX/npfake/$1" node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1; }
+seed_agy() {
+  mkdir -p "$ENTWURF_META_SESSIONS_DIR"
+  # A live agy citizen as register_native leaves it: a v3 record and NO marker anywhere.
+  cat > "$ENTWURF_META_SESSIONS_DIR/20260406T000000-aaaa06.meta.json" <<'JSON'
+{
+  "schemaVersion": 3,
+  "gardenId": "20260406T000000-aaaa06",
+  "backend": "antigravity",
+  "nativeSessionId": "agy-conv-live",
+  "cwd": "/tmp/proj",
+  "model": null,
+  "transcriptPath": null,
+  "createdAt": "2026-04-06T00:00:00.000Z",
+  "recordUpdatedAt": "2026-04-06T00:00:00.000Z"
+}
+JSON
+}
+
+# H1 — the conversation's host is gone: the ONE row that may cut. This is also the
+# escape hatch that keeps the policy usable — quiescing agy (what the refusal asks
+# for) is exactly what makes the cut legal, so no agy record can trap an operator.
+reset_world empty; seed_agy
+np_host absent
+set +e
+out="$(np_cut agy-serves)"; rc=$?
+set -e
+if [ "$rc" = 0 ] && [ -n "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+  ok "H1 an agy record whose host process is gone does NOT block the cut (dead is a probe answer, not an assumption)"
+else
+  bad "H1 the cut refused a provably hostless agy conversation — the quiesce escape hatch is closed" "$out"
+fi
+
+# H2 — the bug this section exists for: LIVE conversation, no marker, no socket.
+reset_world empty; seed_agy
+store_before="$(store_bytes)"
+np_host live
+set +e
+out="$(np_cut agy-serves)"; rc=$?
+set -e
+if [ "$rc" != 0 ]; then
+  ok "H2 a LIVE agy conversation with NO marker REFUSES the cut"
+else
+  bad "H2 the cut archived a live marker-less agy conversation's address" "$out"
+fi
+case "$out" in
+  *LIVE*native-push*) ok "H2b the refusal names it as a LIVE native-push surface (not a generic marker line)" ;;
+  *) bad "H2b the refusal never named the native-push surface" "$out" ;;
+esac
+if [ "$store_before" = "$(store_bytes)" ] && [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+  ok "H2c the refused cut moved nothing (the live citizen keeps its address)"
+else
+  bad "H2c the store moved despite a live native-push conversation"
+fi
+
+# H3 — host up, but nothing serves this conversation: absence of proof, not death.
+reset_world empty; seed_agy
+np_host live
+set +e
+out="$(np_cut agy-serves-nothing)"; rc=$?
+set -e
+if [ "$rc" != 0 ] && [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+  ok "H3 an agy conversation that probes INDETERMINATE refuses the cut (fail-closed, same rule as the socket)"
+else
+  bad "H3 an unprovable native-push conversation was treated as dead" "$out"
+fi
+case "$out" in
+  *UNCERTAIN*) ok "H3b it is reported UNCERTAIN, distinct from a proven-live conversation" ;;
+  *) bad "H3b the indeterminate probe was not reported as uncertainty" "$out" ;;
+esac
+
+# H4 — the ONE record this walk passes over, and the reason it may. A previous-
+# generation agy record is unreadable by every live read path (readMetaIdentityByGardenId,
+# resolveTarget, the sender-marker trust each throw), so nothing can dispatch to it: its
+# bytes are unreachable address, not a live connection. Proven with the host reporting
+# LIVE — if the walk ever probed what it cannot parse, this would refuse forever.
+reset_world empty
+mkdir -p "$ENTWURF_META_SESSIONS_DIR"
+cat > "$ENTWURF_META_SESSIONS_DIR/20260407T000000-bbbb07.meta.json" <<'JSON'
+{
+  "schemaVersion": 2,
+  "gardenId": "20260407T000000-bbbb07",
+  "backend": "antigravity",
+  "nativeSessionId": "agy-conv-live",
+  "cwd": "/tmp/proj",
+  "createdAt": "2026-04-07T00:00:00.000Z",
+  "recordUpdatedAt": "2026-04-07T00:00:00.000Z"
+}
+JSON
+np_host live
+set +e
+out="$(np_cut agy-serves)"; rc=$?
+set -e
+if [ "$rc" = 0 ]; then
+  ok "H4 an UNREADABLE agy record does not block the cut (no read path can reach that citizen)"
+else
+  bad "H4 a record the live schema cannot read blocked the cut — a previous generation would be uncuttable" "$out"
+fi
+
+# H6 — a host scan that could not RUN must not read as a departed host. This is the
+# second half of "dead is a proof": the adapter used to fold every nonzero pgrep exit
+# into "no matching process", so a missing/broken pgrep would have handed the cut a
+# `dead` verdict for a conversation nobody ever looked for.
+reset_world empty; seed_agy
+np_host broken
+set +e
+out="$(np_cut agy-serves)"; rc=$?
+set -e
+if [ "$rc" != 0 ] && [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+  ok "H6 a FAILED host scan refuses the cut (a broken probe is not proof of death)"
+else
+  bad "H6 a failed host scan was read as a dead conversation and the cut proceeded" "$out"
+fi
+case "$out" in
+  *UNCERTAIN*scan*) ok "H6b the refusal says the SCAN failed (not that the conversation is gone)" ;;
+  *) bad "H6b the refusal did not name the failed scan" "$out" ;;
+esac
+
+# H5 — WIRING: the verdict must come from the adapter probe the DISPATCH uses. A cut
+# that re-implemented liveness (or asked only about markers) is the regression.
+if grep -q 'resolveNativePushAdapter(' "$REPO/scripts/meta-bridge-fresh-cut.ts" &&
+   grep -q 'nativePushSupported(' "$REPO/scripts/meta-bridge-fresh-cut.ts"; then
+  ok "H5 the cut asks the same native-push adapter probe the v2 decider dispatches on"
+else
+  bad "H5 the cut no longer routes native-push liveness through the adapter probe"
+fi
+
+# ── I. an unreadable store takes the OPPOSITE prescription ───────────────────
+# The doctor now separates "certification defects" (exit 1 → fresh-cut) from "the store
+# could not be read" (exit 3 → repair access/path). This section guards the thing that
+# actually gets acted on: the LAST line of the refusal. Both callers used to end every
+# refusal with "archive the generation with fresh-cut" regardless of cause, so an
+# unreadable store sent the operator — or an agent following the final instruction — at a
+# command guaranteed to fail on the same errno (2026-07-25 fresh-eyes review).
+#
+# ENOTDIR is the driver: a store PATH that is a regular file. Deterministic, and it takes
+# the same errno branch EACCES does (only ENOENT means "absent"), so the cell does not
+# depend on a permission bit that root would ignore.
+echo "[check-fresh-cut-gate] I. an unreadable store is not an uncertified one"
+reset_world absent
+printf 'not a store\n' > "$ENTWURF_META_SESSIONS_DIR"
+before="$(host_bytes)"
+set +e
+out="$("$REPO/run.sh" install "$PROJ" 2>&1)"; rc=$?
+set -e
+if [ "$rc" != 0 ]; then
+  ok "I1 install REFUSES a store it cannot read"
+else
+  bad "I1 install proceeded on a store it could not read" "$out"
+fi
+case "$out" in
+  *"could not be READ"*) ok "I2 the refusal names the ACCESS cause, not a defect count" ;;
+  *) bad "I2 the refusal did not name the access failure" "$out" ;;
+esac
+# The test is whether the refusal NAMES THE VERB as the thing to run — not whether the
+# words "fresh-cut" appear at all. Saying "a fresh-cut CANNOT fix it" is the correct
+# warning; printing `meta-bridge-fresh-cut` as the next command is the bug.
+case "$out" in
+  *meta-bridge-fresh-cut*) bad "I3 the refusal still names the cut verb as the next command" "$out" ;;
+  *) ok "I3 the refusal never names the cut verb as the fix (the one place that advice is wrong)" ;;
+esac
+case "$out" in
+  *"ACCESS problem"*) ok "I4 it says which kind of problem this is, in the doctor's own words" ;;
+  *) bad "I4 the refusal never distinguished access from generation" "$out" ;;
+esac
+if [ "$before" = "$(host_bytes)" ]; then
+  ok "I5 the refusal left every persistent regular file unchanged"
+else
+  bad "I5 the access refusal mutated the host"
+fi
+
+# I6 — the OTHER caller, driven for real. The defect this section exists for was that
+# BOTH install preflights ended every refusal with the cut verb, so pinning only
+# `run.sh install` leaves half of it unguarded: D6 checks that the doctor runs before the
+# state snapshot, not what the refusal finally advises. `meta-bridge-install.sh` takes no
+# argv and its store gate sits ahead of both the Claude CLI gate and the state snapshot,
+# so the sandbox can drive it directly.
+reset_world absent
+printf 'not a store\n' > "$ENTWURF_META_SESSIONS_DIR"
+before="$(host_bytes)"
+claude_lines() { if [ -f "$FRESH_CUT_GATE_CLAUDE_SENTINEL" ]; then wc -l < "$FRESH_CUT_GATE_CLAUDE_SENTINEL"; else echo 0; fi; }
+claude_before="$(claude_lines)"
+set +e
+out="$(bash "$REPO/scripts/meta-bridge-install.sh" 2>&1)"; rc=$?
+set -e
+if [ "$rc" != 0 ]; then
+  ok "I6 meta-bridge-install.sh REFUSES a store it cannot read"
+else
+  bad "I6 the packaged install path proceeded on a store it could not read" "$out"
+fi
+case "$out" in
+  *"could not be READ"*) ok "I6b its refusal names the ACCESS cause too" ;;
+  *) bad "I6b the second caller did not name the access failure" "$out" ;;
+esac
+case "$out" in
+  *meta-bridge-fresh-cut*) bad "I6c the second caller still names the cut verb as the fix" "$out" ;;
+  *) ok "I6c the second caller never names the cut verb either (both callers, one rule)" ;;
+esac
+if [ "$claude_before" = "$(claude_lines)" ]; then
+  ok "I6d it refused ahead of any Claude contact (PATH sentinel untouched)"
+else
+  bad "I6d the refusal reached the Claude CLI before refusing"
+fi
+if [ "$before" = "$(host_bytes)" ]; then
+  ok "I6e no user config was touched"
+else
+  bad "I6e the packaged install path mutated the host before refusing"
+fi
+
 echo
 echo "[check-fresh-cut-gate] passed=$PASSED failed=$FAILED"
 [ "$FAILED" = 0 ] || exit 1
-echo "[check-fresh-cut-gate] SOURCE cell green — activation refuses an unreadable store before writing, names fresh-cut in both forms, the cut archives the generation behind a quiesce gate, and the retry lands."
+echo "[check-fresh-cut-gate] SOURCE cell green — an UNCERTIFIABLE generation refuses activation before writing and names fresh-cut in both invocation forms, while an INACCESSIBLE store refuses too and names access repair instead; the cut archives the generation behind a quiesce gate that also sees the marker-less native-push surface; and the retry lands."

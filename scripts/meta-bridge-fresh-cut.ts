@@ -34,15 +34,25 @@
  * address archived out from under it — that severs the very reply path a running
  * agent is serving. Refusing needs no proof of life; CUTTING needs proof of
  * death. The gate refuses on both cases and names which one it saw:
- *   - LIVE — an ALIVE control socket (a listener accepted the probe), or a
+ *   - LIVE — an ALIVE control socket (a listener accepted the probe), a
  *     sender/receiver marker whose owner pid is still the same process (pid +
- *     start-key match, the pid-reuse guard);
+ *     start-key match, the pid-reuse guard), or a native-push (agy) conversation
+ *     whose own adapter probe answers ALIVE;
  *   - UNCERTAIN — an INDETERMINATE socket (F3: indeterminate is not dead), a
  *     SYMLINKED socket or marker (never followed), a marker that cannot name its
  *     owner (malformed JSON, missing `ownerPid`/`ownerStartKey`), a crashed
- *     writer's `.tmp` half-marker, or any entry no marker layout explains.
+ *     writer's `.tmp` half-marker, any entry no marker layout explains, or a
+ *     native-push conversation that probes indeterminate / cannot be probed.
  * Only a marker whose named owner demonstrably no longer holds that pid is dead,
  * and only a dead marker/socket is cleared.
+ *
+ * THE MARKER WALK IS NOT THE WHOLE WORLD. A native-push (agy) citizen is registered
+ * with NO marker of any kind and is dispatched straight off its record, so marker
+ * absence is its NORMAL deliverable state — a socket+marker scan would call such a host
+ * quiesced while a live conversation was still being served. Those citizens are
+ * therefore asked from the records themselves, via the adapter probe that dispatch uses
+ * (see {@link inspectNativePushCitizens}, which also states the one case it passes over
+ * and why).
  *
  * Idempotent and crash-safe by shape: the WHOLE move plan is preflighted — every
  * archive destination checked — before the first rename, so a collision refusal
@@ -56,15 +66,19 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { CONTROL_SOCKET_SUFFIX, defaultControlSocketDir } from "../pi-extensions/lib/control-socket-path.js";
+import { nativePushSupported } from "../pi-extensions/lib/entwurf-v2-contract.ts";
 import {
 	classifyMarkerOwner,
 	defaultMetaMailboxDir,
 	defaultMetaReceiversDir,
 	defaultMetaSendersDir,
 	defaultMetaSessionsDir,
+	type MetaIdentity,
+	parseMetaIdentity,
 	probePidExistence,
 	processStartKey,
 } from "../pi-extensions/lib/meta-session.ts";
+import { resolveNativePushAdapter } from "../pi-extensions/lib/native-push/adapter.ts";
 import { probeSocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
 
 function usage(code: number): never {
@@ -216,6 +230,102 @@ function inspectMarkers(dir: string, label: string): { violations: QuiesceViolat
 	return { violations, deadFiles };
 }
 
+/**
+ * The native-push surface — the ONE live citizen kind that leaves no marker behind.
+ *
+ * The socket+marker walk above proves nothing about an agy conversation.
+ * `entwurf_register_native` proves the conversation is ALIVE with an adapter probe and
+ * then writes ONLY the record — "NO receiver marker is written here" (register.ts,
+ * 보정①) — and the v2 decider reaches it the same way, `nativePushProbe(identity)` off
+ * the record alone with no marker anywhere in the path (only the mailbox rail requires
+ * an active-receiver marker). So for this backend a marker's ABSENCE is the normal
+ * state of a fully deliverable citizen, and archiving its record severs the exact
+ * reply path a running agent is serving.
+ *
+ * The verdict is the adapter's own 3-value probe, and its coordinates are what make
+ * this enforceable without trapping the operator: no host process at all is `dead`
+ * (quiescing agy — the very thing a refusal asks for — is what makes the cut legal), a
+ * host serving this conversation is `alive`, and a live host that does not serve it is
+ * `indeterminate` — fail-closed, the same rule the socket probe holds.
+ *
+ * WHY AN UNREADABLE RECORD IS PASSED OVER — and what that claim is NOT. It is the only
+ * record this walk skips, and the claim is deliberately narrow: NOT "that native session
+ * has exited", only "these bytes are not an address authority in the live runtime, so
+ * they front no current-generation garden surface". Every path that ADDRESSES a citizen
+ * goes through the live schema — `readMetaIdentityByGardenId`, the v2 `resolveTarget`,
+ * the sender-marker trust — and each THROWS on a record this parser refuses, so nothing
+ * can dispatch to it. (`entwurf_peers` still LISTS it as a diagnostic; a facts surface
+ * reporting what it could not read is not an address.) A record we CAN read is the
+ * opposite case: it is precisely what a dispatch would use.
+ *
+ * The alternatives are both worse, which is why this is the shape. Refusing every
+ * unreadable record would deadlock the cut on exactly the previous-generation store it
+ * exists to clear. Salvaging `backend`/`nativeSessionId` out of a shape the live schema
+ * rejects, in order to probe it, would BE the legacy reader this repo deleted —
+ * synthesizing authority from bytes we just declared unreadable.
+ *
+ * A native conversation that outlives the cut is not stranded: its next hook or
+ * `register_native` mints it a record in the NEW generation. That is re-birth under a
+ * NEW garden id, never continuity of the old one — the policy's first sentence, working
+ * as designed. The archived record is never read again.
+ */
+async function inspectNativePushCitizens(storeDir: string): Promise<QuiesceViolation[]> {
+	const violations: QuiesceViolation[] = [];
+	if (!fs.existsSync(storeDir)) return violations;
+	const label = "native-push conversation";
+	for (const entry of fs.readdirSync(storeDir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+		if (!entry.name.endsWith(".meta.json")) continue;
+		if (!entry.isFile()) {
+			// A symlink/dir/special wearing a record's name: its bytes live where this store
+			// has no ownership, so it is never followed — and never assumed harmless either.
+			violations.push({
+				surface: label,
+				detail: `${entry.name} is not a regular file — its bytes are outside this store and are never followed; inspect it by hand`,
+				kind: "uncertain",
+			});
+			continue;
+		}
+		let identity: MetaIdentity;
+		try {
+			identity = parseMetaIdentity(fs.readFileSync(path.join(storeDir, entry.name), "utf8"));
+		} catch {
+			continue; // unreachable by every read path — see the contract above
+		}
+		if (!nativePushSupported(identity.backend)) continue;
+		let status: string;
+		let reason: string;
+		try {
+			const probe = await resolveNativePushAdapter(identity.backend).probe(identity.nativeSessionId);
+			status = probe.status;
+			reason = probe.status === "alive" ? `route ${probe.route.lsAddress}` : probe.reason;
+		} catch (err) {
+			// A probe that cannot run is not a dead conversation.
+			violations.push({
+				surface: label,
+				detail: `${entry.name} (${identity.backend} ${identity.nativeSessionId}) could not be probed (${
+					err instanceof Error ? err.message : String(err)
+				}): liveness unprovable`,
+				kind: "uncertain",
+			});
+			continue;
+		}
+		if (status === "alive") {
+			violations.push({
+				surface: label,
+				detail: `${entry.name} — ${identity.backend} conversation ${identity.nativeSessionId} is LIVE (${reason})`,
+				kind: "live",
+			});
+		} else if (status !== "dead") {
+			violations.push({
+				surface: label,
+				detail: `${entry.name} — ${identity.backend} conversation ${identity.nativeSessionId} probes ${status} (${reason})`,
+				kind: "uncertain",
+			});
+		}
+	}
+	return violations;
+}
+
 async function main(): Promise<number> {
 	const args = process.argv.slice(2);
 	if (args.includes("-h") || args.includes("--help")) usage(0);
@@ -268,6 +378,8 @@ async function main(): Promise<number> {
 	const senders = inspectMarkers(sendersDir, "sender marker");
 	const receivers = inspectMarkers(receiversDir, "receiver marker");
 	violations.push(...senders.violations, ...receivers.violations);
+	// The marker-less surface, asked from the records themselves (see the contract above).
+	violations.push(...(await inspectNativePushCitizens(storeDir)));
 
 	if (violations.length > 0) {
 		for (const v of violations) console.error(`${v.kind === "live" ? "LIVE" : "UNCERTAIN"} ${v.surface}: ${v.detail}`);
