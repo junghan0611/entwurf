@@ -17,6 +17,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
+	isPlausibleOwnerPid,
 	parentPid,
 	processStartKey,
 	upsertMetaSession,
@@ -165,8 +166,16 @@ function imprint(raw: string): void {
 		// Written only after the upsert above: the record store is the identity authority, and a
 		// marker pointing at a garden-id with no record would be a window of un-backed identity.
 		// A failed marker costs reply-addressability, never the session — log and move on.
+		//
+		// The owner rule is `isPlausibleOwnerPid`, the SAME predicate the Claude hook
+		// and every reader hold. This writer used to ask `> 0` on its own, so THIS hook
+		// could mint `meta-senders/antigravity/1.json` through the very reparenting that
+		// stranded a host's fresh-cut (#53 A): agy exits, the imprint is reparented to
+		// init, and `process.ppid` reads 1. Refusing is fail-closed — it costs reply
+		// addressability for that turn and is logged; honoring it would cost the operator
+		// their generation cut, with no in-band way to get it back.
 		const ownerPid = process.ppid;
-		if (typeof ownerPid === "number" && ownerPid > 0) {
+		if (isPlausibleOwnerPid(ownerPid)) {
 			try {
 				writeMetaSenderMarker({
 					backend: "antigravity",
@@ -181,6 +190,11 @@ function imprint(raw: string): void {
 					`sender-marker-failed pid=${ownerPid} gardenId=${result.record.gardenId} ${err instanceof Error ? err.message : String(err)}`,
 				);
 			}
+		} else {
+			logLine(
+				`sender-marker-refused pid=${ownerPid} gardenId=${result.record.gardenId} implausible owner pid ` +
+					"(<= 1: this imprint was reparented, so its parent is not the agy process that owns the turn)",
+			);
 		}
 	} catch (err) {
 		logLine(

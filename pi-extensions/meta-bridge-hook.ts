@@ -49,6 +49,7 @@ import * as path from "node:path";
 import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
+	isPlausibleOwnerPid,
 	type MetaReceiverArmProvenance,
 	upsertMetaSession,
 	writeMetaReceiverMarker,
@@ -140,7 +141,12 @@ const META_HOOK_LAUNCH_TOKEN = "hook-launch/v1";
  *    no token means we do not know what our parent is, so we claim nothing.
  * 2. A PLAUSIBLE LIVE PARENT. A reparented orphan (ppid 0/1) is not an owner, and
  *    minting a marker for init would be exactly the "blind ancestor" false-positive
- *    the old ancestry walk existed to prevent.
+ *    the old ancestry walk existed to prevent. The rule is `isPlausibleOwnerPid`,
+ *    shared with the other writer and with every reader: this side already refused
+ *    what all three readers accepted, and one host's leftover `ownerPid: 1` marker
+ *    then blocked its fresh-cut until the file was deleted by hand (#53 A). A
+ *    predicate only one layer knows is how that drift happened, so it is no longer
+ *    written out by hand here.
  *
  * Failing closed costs only reply-addressability, and the doctor sees the ERROR. The
  * opposite — a marker keyed to a transient wrapper — is a lie a sender acts on.
@@ -148,7 +154,7 @@ const META_HOOK_LAUNCH_TOKEN = "hook-launch/v1";
 function resolveMetaHookOwnerPid(): number | null {
 	if (process.env[META_HOOK_LAUNCH_ENV] !== META_HOOK_LAUNCH_TOKEN) return null;
 	const ownerPid = process.ppid;
-	if (!Number.isSafeInteger(ownerPid) || ownerPid <= 1) return null;
+	if (!isPlausibleOwnerPid(ownerPid)) return null;
 	return ownerPid;
 }
 

@@ -501,7 +501,8 @@ register_user_scope_citizen() {
 # exists to hold). Same explicit-global-lifecycle shape as install/uninstall-meta-bridge.
 # Uses the same is_entwurf_source SSOT + --remove, so it never over-deletes a look-alike
 # (entwurf-notes, openclaw-entwurf) and preserves every other package/key. Idempotent:
-# no entwurf entry → no-op.
+# no entwurf entry → no-op. A settings-relative entry naming this repo is preserved and
+# reported rather than deleted — install never writes that form (#53 B).
 remove_user_scope_citizen() {
   local agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
   python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR" --remove
@@ -525,7 +526,10 @@ remove_local_package() {
   preflight_pi_settings_shapes "$project_dir/.pi/settings.json" "$(mktemp -u)"
   # packages[] cleanup via the shared SSOT — same is_entwurf_source predicate as
   # install, so remove never over-deletes a look-alike repo (entwurf-notes, …)
-  # that install would never have registered.
+  # that install would never have registered. Same rule, one shape further (#53 B):
+  # register only ever WRITES the absolute path, so a settings-RELATIVE entry naming
+  # this repo (the committed `".."` in <repo>/.pi/settings.json) is source, not
+  # install state — remove leaves it and says so instead of editing tracked bytes.
   python3 "$REPO_DIR/scripts/register-pi-package.py" "$project_dir/.pi/settings.json" "$REPO_DIR" --remove
   # entwurfProvider.mcpServers.entwurf-bridge cleanup (project scope) via the shared SSOT: strip
   # our-managed shapes (the bare stable bin AND the legacy repo start.sh path — a true user

@@ -59,12 +59,16 @@ const liveIdentity = (): MetaIdentity => ({
 	createdAt: "2026-06-14T01:00:00.000Z",
 	recordUpdatedAt: "2026-06-14T01:00:00.000Z",
 });
+// The owner pid is a plausible one on purpose: these markers are injected straight
+// into the pure predicate, which never reads the field — but a fixture carrying
+// `ownerPid: 1` would model a marker no writer can mint and no reader honors
+// (isPlausibleOwnerPid, #53 A), and fixtures are read as claims about the world.
 const liveMarker = () =>
 	({
 		gardenId: GARDEN,
 		backend: "claude-code",
 		nativeSessionId: "n-a",
-		ownerPid: 1,
+		ownerPid: 4242,
 		ownerStartKey: "x",
 		ownerKind: "claude-code-cli",
 		armProvenance: "session-start",
@@ -77,7 +81,7 @@ const driftMarker = () =>
 		gardenId: GARDEN,
 		backend: "claude-code",
 		nativeSessionId: "n-OTHER",
-		ownerPid: 1,
+		ownerPid: 4242,
 		ownerStartKey: "x",
 		ownerKind: "claude-code-cli",
 		armProvenance: "session-start",

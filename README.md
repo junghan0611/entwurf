@@ -304,6 +304,25 @@ Only that accepted file may be published under the explicitly authorized lane:
 > refuses the cut before anything moves. Cutting needs proof of death, not absence
 > of proof of life.
 >
+> **One marker is cleared without proving death, and it is the exception that keeps
+> this path open.** A marker whose recorded `ownerPid` cannot own anything — `1`
+> (init), `0`, a negative or non-integer — is *refuted by construction*: no writer in
+> this tree can mint one any more, so on a current install it is **legacy or corrupt
+> residue** — a pre-fix writer whose parent had been reparented to init (the retired
+> shell-form Claude hook; the agy imprint, which asked only `> 0` until this repair),
+> or a foreign/damaged marker, the only way a non-integer pid appears at all. The one
+> file actually observed was a shell-form hook reparented to init. Honoring it was not
+> merely wrong, it was a trap: init runs for the whole boot and its start-key does not
+> change while it does, so the owner verdict is `live` and **the very action this
+> refusal prescribes cannot change that** — you quiesce every session, exactly as
+> told, and the cut refuses again. (Deleting the marker removes the claim rather than
+> refuting the verdict; a reboot recomputes the key with no contract either way.)
+> Meanwhile the one repair this page names could not run: on the affected host the cut
+> stayed blocked until the marker file was removed by hand (#53 A, measured on a second
+> Linux host 2026-07-25). Such a marker is now swept as residue and **reported apart
+> from the dead ones** (`refuted:`), because a proof of invalidity is a different
+> finding from a proof of death — and a stronger one.
+>
 > That agy row is not symmetry for its own sake: `entwurf_register_native` writes a
 > record and **no marker at all**, and `entwurf_v2` dispatches to such a citizen
 > straight off the record, so marker absence is the *normal* state of a live,

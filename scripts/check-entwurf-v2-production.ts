@@ -63,13 +63,15 @@ function identity(backend: MetaIdentity["backend"], gardenId = GID): MetaIdentit
 }
 
 /** A receiver presence marker. Matches the record identity (gardenId/backend/nativeSessionId)
- * unless `nativeSessionId` is overridden to simulate an identity-drifted/foreign marker. */
+ * unless `nativeSessionId` is overridden to simulate an identity-drifted/foreign marker.
+ * The owner pid is a plausible one: the predicate never reads it, but a fixture carrying
+ * `ownerPid: 1` would model a marker no writer can mint and no reader honors (#53 A). */
 function receiverMarker(gid: string, backend: string, nativeSessionId = "n"): MetaReceiverMarker {
 	return {
 		gardenId: gid,
 		backend: backend as MetaReceiverMarker["backend"],
 		nativeSessionId,
-		ownerPid: 1,
+		ownerPid: 4242,
 		ownerStartKey: "x",
 		ownerKind: "claude-code-cli",
 		armProvenance: "session-start",

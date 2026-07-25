@@ -1137,6 +1137,71 @@ export function startKeyScheme(key: string): StartKeyScheme | null {
 }
 
 /**
+ * CAN this pid own a native session at all? — the question one layer ABOVE
+ * {@link classifyMarkerOwner}, and the one no marker consumer used to ask.
+ *
+ * `classifyMarkerOwner` answers "is the process this marker NAMES still the one
+ * running", and for pid 1 the honest answer is YES: init is up for as long as the
+ * host is, and its start-key does not change while it runs. So an `ownerPid: 1`
+ * marker classifies `live` for the whole boot, and — this is the operational
+ * point — THE ACTION THE REFUSAL PRESCRIBES CANNOT CHANGE THAT. Quiescing every
+ * session leaves init running under the same start-key, so the operator does the
+ * one thing they were told to do and the cut refuses again. (Deleting the marker
+ * removes the CLAIM; it never refutes the verdict — which is exactly why the
+ * affected host's only way out was a hand `rm`.) A reboot is not a dependable
+ * remedy either: pid 1's key is `linux:<starttime in ticks since boot>` and init
+ * starts within a few ticks, so the recorded value can simply come up again —
+ * there is no contract in either direction, and this is not evidence that it must.
+ * What was MEASURED (#53 A, second Linux host, 2026-07-25) is that the cut stayed
+ * blocked until the file was deleted by hand, while `0.12.8` names that same cut
+ * as the one repair for a pre-v3 store: the documented upgrade path had no in-band
+ * exit. The pure rule is not wrong there; the marker's CLAIM is.
+ *
+ * WHERE SUCH A MARKER COMES FROM — stated at the size of the evidence. After this
+ * fix no writer in THIS tree can mint one, so on a current install it is legacy or
+ * corrupt residue. Legacy has more than one source: the retired shell-form Claude
+ * hook (wrapper shell exits first → hook REPARENTED to init → reads `ppid = 1`),
+ * and the agy imprint, which asked only `> 0` until #53 A and could mint the same
+ * shape through the same reparenting. Corrupt is a real class too — this predicate
+ * also refutes non-integer and unsafe-integer pids, which no writer here has ever
+ * produced, so a foreign or damaged marker is the only way they appear. The ONE
+ * file actually observed was a shell-form Claude hook reparented to init. None of
+ * these is a zombie: a zombie is reaped, its pid is freed, the start-key stops
+ * matching, and the marker resolves itself.
+ *
+ * A pid ≤ 1 is refuted BY CONSTRUCTION, which is why this predicate is shared by
+ * both writers and every reader instead of living at one call site: 0 and
+ * negatives address process GROUPS rather than a process (the rule
+ * {@link probePidExistence} already holds), and no native session in this tree is
+ * owned by init. Writers refuse to mint it, readers refuse to honor it, and the
+ * cut treats it as clearable residue rather than an owner claim — a proof of
+ * INVALIDITY, which is stronger than the proof of death the cut already acts on.
+ */
+export function isPlausibleOwnerPid(pid: unknown): pid is number {
+	return Number.isSafeInteger(pid) && (pid as number) > 1;
+}
+
+/**
+ * The write-side half of {@link isPlausibleOwnerPid}. A marker naming an
+ * impossible owner is not a degraded marker, it is a lie that outlives every
+ * process that could refute it — so minting one THROWS rather than warns, and no
+ * future writer can reintroduce #53 A by forgetting the predicate at its own call
+ * site (both current writers still ask it first, and fail closed in their own
+ * words).
+ */
+function requireOwnerPid(ownerPid: number, kind: string): number {
+	if (!isPlausibleOwnerPid(ownerPid)) {
+		throw new Error(
+			`refusing to write a ${kind} marker for owner pid ${ownerPid}: a pid <= 1 cannot own a native session ` +
+				"(pid 1 is init — a reparented orphan is not an owner). Quiescing the sessions, which is what " +
+				"meta-bridge-fresh-cut asks for when it refuses, would not refute such a marker, so it would keep " +
+				"blocking the cut on this host (#53 A).",
+		);
+	}
+	return ownerPid;
+}
+
+/**
  * THE rule for "is the process this marker names still the one running?" — the one
  * place a `dead` verdict may be produced, so no caller re-derives it from
  * `processStartKey`'s ambiguous "" (see that function's contract).
@@ -1227,15 +1292,18 @@ export interface WriteMetaSenderMarkerOptions {
 export function writeMetaSenderMarker(opts: WriteMetaSenderMarkerOptions): string {
 	const backend = requireBackend(opts.backend);
 	const gardenId = requireGardenId(opts.gardenId);
-	const file = metaSenderMarkerPath(backend, opts.ownerPid, opts.sendersDir ?? defaultMetaSendersDir());
+	// Refused BEFORE the path is built: an impossible owner must not even leave a
+	// backend directory behind, let alone a marker keyed to its pid.
+	const ownerPid = requireOwnerPid(opts.ownerPid, "sender");
+	const file = metaSenderMarkerPath(backend, ownerPid, opts.sendersDir ?? defaultMetaSendersDir());
 	fs.mkdirSync(path.dirname(file), { recursive: true });
 	const marker: MetaSenderMarker = {
 		backend,
 		gardenId,
 		nativeSessionId: requireNonEmptyString(opts.nativeSessionId, "nativeSessionId"),
 		cwd: requireNonEmptyString(opts.cwd, "cwd"),
-		ownerPid: opts.ownerPid,
-		ownerStartKey: processStartKey(opts.ownerPid),
+		ownerPid,
+		ownerStartKey: processStartKey(ownerPid),
 		updatedAt: isoNow(opts.now ?? new Date()),
 	};
 	const tmp = `${file}.${crypto.randomBytes(4).toString("hex")}.tmp`;
@@ -1278,12 +1346,18 @@ export function readMetaSenderMarker(opts: ReadMetaSenderMarkerOptions): MetaSen
 			ownerStartKey: requireNonEmptyString(raw.ownerStartKey, "ownerStartKey"),
 			updatedAt: requireNonEmptyString(raw.updatedAt, "updatedAt"),
 		};
+		// Plausibility comes FIRST and is never opt-out: it is a property of the CLAIM,
+		// not of the owner's current state, so `verifyOwner: false` (inspection) does not
+		// reach past it either. An `ownerPid: 1` marker is a reparented orphan's residue
+		// and would otherwise keep granting a dead citizen's sender identity for as long
+		// as the host is up — the pid-reuse guard cannot catch it, because init IS still
+		// the same process (#53 A). This also subsumes the old `Number.isInteger` check.
+		if (!isPlausibleOwnerPid(marker.ownerPid)) return null;
 		// pid-reuse guard (unless explicitly disabled): the owner pid must STILL be
 		// the same process that wrote the marker. A bare pid is reused; pid+startKey
 		// is boot-unique, so a stale marker from a dead session fails here instead of
 		// granting a wrong-identity send.
 		if (opts.verifyOwner !== false) {
-			if (!Number.isInteger(marker.ownerPid)) return null;
 			const liveKey = processStartKey(marker.ownerPid);
 			if (!liveKey || liveKey !== marker.ownerStartKey) return null;
 		}
@@ -1349,14 +1423,15 @@ export interface WriteMetaReceiverMarkerOptions {
 export function writeMetaReceiverMarker(opts: WriteMetaReceiverMarkerOptions): string {
 	const gardenId = requireGardenId(opts.gardenId);
 	const backend = requireBackend(opts.backend);
+	const ownerPid = requireOwnerPid(opts.ownerPid, "receiver");
 	const file = metaReceiverMarkerPath(gardenId, opts.receiversDir ?? defaultMetaReceiversDir());
 	fs.mkdirSync(path.dirname(file), { recursive: true });
 	const marker: MetaReceiverMarker = {
 		gardenId,
 		backend,
 		nativeSessionId: requireNonEmptyString(opts.nativeSessionId, "nativeSessionId"),
-		ownerPid: opts.ownerPid,
-		ownerStartKey: processStartKey(opts.ownerPid),
+		ownerPid,
+		ownerStartKey: processStartKey(ownerPid),
 		ownerKind: requireNonEmptyString(opts.ownerKind ?? "claude-code-cli", "ownerKind"),
 		armProvenance: requireArmProvenance(opts.armProvenance),
 		updatedAt: isoNow(opts.now ?? new Date()),
@@ -1403,8 +1478,11 @@ export function readMetaReceiverMarker(opts: ReadMetaReceiverMarkerOptions): Met
 			armProvenance: requireArmProvenance(raw.armProvenance),
 			updatedAt: requireNonEmptyString(raw.updatedAt, "updatedAt"),
 		};
+		// Same rule as the sender marker, and for the same reason one layer over: an
+		// impossible owner is not a live one, so a refuted marker must never read back
+		// as an ACTIVE RECEIVER and pull the mailbox rail into delivering to a void.
+		if (!isPlausibleOwnerPid(marker.ownerPid)) return null;
 		if (opts.verifyOwner !== false) {
-			if (!Number.isInteger(marker.ownerPid)) return null;
 			const liveKey = processStartKey(marker.ownerPid);
 			if (!liveKey || liveKey !== marker.ownerStartKey) return null;
 		}

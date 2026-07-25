@@ -107,6 +107,60 @@ ok(
 	readMetaReceiverMarker({ gardenId: ghostGarden, receiversDir: DIR, verifyOwner: false }) !== null,
 );
 
+// ── the owner CLAIM, one layer above liveness (#53 A) ───────────────────────
+// A marker naming pid 1 passes the pid-reuse guard on a running Linux host: init is
+// still the very process the marker named, so its start-key matches. The claim is
+// what is false — init owns no Claude session. Such a marker is legacy or corrupt
+// residue (any pre-fix writer that was reparented to init; a foreign/damaged file);
+// the one observed was a shell-form hook. Honoring it made a dead garden id read as
+// an ACTIVE RECEIVER and, one surface over, left meta-bridge-fresh-cut unable to be
+// unblocked by the action it prescribes (#53 A).
+const initGarden = "20260614T130000-cccccc";
+const initKey = processStartKey(1);
+ok("this host CAN read a start key for pid 1 (the residue cells are not vacuous)", initKey !== "");
+writeFileSync(
+	metaReceiverMarkerPath(initGarden, DIR),
+	`${JSON.stringify({
+		gardenId: initGarden,
+		backend: "claude-code",
+		nativeSessionId: "n-init",
+		ownerPid: 1,
+		ownerStartKey: initKey, // the REAL key: the pid-reuse guard would pass
+		ownerKind: "claude-code-cli",
+		armProvenance: "session-start",
+		updatedAt: "2026-06-10T16:03:10.000Z",
+	})}\n`,
+);
+ok(
+	"an init-owned marker reads as null — pid 1 cannot own a session, however live init is",
+	readMetaReceiverMarker({ gardenId: initGarden, receiversDir: DIR }) === null,
+);
+ok(
+	"the classifier itself still says LIVE for it — the refusal is a CLAIM rule, not a liveness one",
+	classifyMarkerOwner(initKey, { currentStartKey: processStartKey(1), pidExists: probePidExistence(1) }) === "live",
+);
+ok(
+	"verifyOwner:false does NOT reach past plausibility (it opts out of liveness, not of validity)",
+	readMetaReceiverMarker({ gardenId: initGarden, receiversDir: DIR, verifyOwner: false }) === null,
+);
+let initWriteRejected = false;
+try {
+	writeMetaReceiverMarker({
+		gardenId: initGarden,
+		backend: "claude-code",
+		nativeSessionId: "n-init",
+		ownerPid: 1,
+		armProvenance: "session-start",
+		receiversDir: DIR,
+	});
+} catch {
+	initWriteRejected = true;
+}
+ok(
+	"minting an init-owned receiver marker THROWS at the write boundary (no writer can reintroduce it)",
+	initWriteRejected,
+);
+
 // ── armProvenance constraint ────────────────────────────────────────────────
 ok(
 	"arm provenances are exactly the arm-capable events",

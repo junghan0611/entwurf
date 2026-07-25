@@ -48,6 +48,9 @@ import {
 import {
 	FRESH_CUT_COMMAND,
 	type MetaIdentity,
+	metaRecordExistsByGardenId,
+	processStartKey,
+	readMetaSenderMarker,
 	upsertMetaSession,
 	writeMetaSenderMarker,
 } from "../pi-extensions/lib/meta-session.ts";
@@ -358,6 +361,86 @@ try {
 			trusted?.identity.gardenId === record.record.gardenId,
 		);
 	}
+	// ── #53 A: an init-owned marker names NOBODY, however live init is ─────────
+	// The shape measured on a second Linux host: `meta-senders/claude-code/1.json`,
+	// pid 1, and the REAL start-key for init — so the pid-reuse guard PASSES and
+	// classifyMarkerOwner answers `live` for as long as the host is up. The defect is
+	// one layer up: init owns no Claude session. THIS gate's own writer is one of the
+	// two that could produce the shape before #53 A — the agy imprint asked `> 0`
+	// while the Claude hook already refused `<= 1` — so "only the shell-form hook
+	// could have written it" was never true. After this cut no writer in the tree can.
+	{
+		clearMarkers();
+		const record = upsertMetaSession({
+			input: { backend: "claude-code", nativeSessionId: "sess-init", cwd: REPO_DIR },
+		});
+		const initKey = processStartKey(1);
+		ok("this host CAN read a start key for pid 1 (the residue cells are not vacuous)", initKey !== "");
+		const initDir = path.join(SENDERS_DIR, "claude-code");
+		fs.mkdirSync(initDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(initDir, "1.json"),
+			`${JSON.stringify({
+				backend: "claude-code",
+				gardenId: record.record.gardenId,
+				nativeSessionId: "sess-init",
+				cwd: REPO_DIR,
+				ownerPid: 1,
+				ownerStartKey: initKey,
+				updatedAt: "2026-06-10T16:03:10.000Z",
+			})}\n`,
+		);
+		ok(
+			"an init-owned sender marker reads as null — it grants no identity",
+			readMetaSenderMarker({ backend: "claude-code", ownerPid: 1, sendersDir: SENDERS_DIR }) === null,
+		);
+		ok(
+			"...while its record is present and readable, so the refusal is about the marker's CLAIM",
+			metaRecordExistsByGardenId(record.record.gardenId),
+		);
+		// End to end, with pid 1 supplied as an explicit candidate: the answer is
+		// "nobody" — not an identity, and not a throw either. Stated at the size of the
+		// evidence: the DEFAULT candidate set is only the bridge's parent and grandparent,
+		// so pid 1 enters it just when the native host itself was reparented (a detached
+		// Claude). Reachable, not observed — the affected host's own launch shape
+		// (bridge → claude → bash → wrapper) never had 1 among its candidates, and no
+		// wrong-identity read was measured there. The cut's deadlock is the proven half;
+		// this is the code-path half.
+		let identityThrew: unknown = null;
+		let identityAnswer: unknown = "unset";
+		try {
+			identityAnswer = resolveTrustedMetaSenderIdentity({ ownerPids: [1], sendersDir: SENDERS_DIR });
+		} catch (err) {
+			identityThrew = err;
+		}
+		ok(
+			"resolving with pid 1 as a candidate yields NO identity (and no throw)",
+			identityAnswer === null && identityThrew === null,
+		);
+		let initWriteRejected = false;
+		try {
+			writeMetaSenderMarker({
+				backend: "claude-code",
+				gardenId: record.record.gardenId,
+				nativeSessionId: "sess-init",
+				cwd: REPO_DIR,
+				ownerPid: 1,
+				sendersDir: SENDERS_DIR,
+			});
+		} catch {
+			initWriteRejected = true;
+		}
+		ok("minting an init-owned sender marker THROWS at the write boundary", initWriteRejected);
+		// WIRING: the agy imprint is the SECOND writer, and the one that still asked
+		// `> 0` on its own while the Claude hook already refused `<= 1`. A predicate only
+		// one writer knows is how #53 A drifted in; both must reach the shared one.
+		ok(
+			"the agy imprint routes its owner pid through the shared predicate",
+			/isPlausibleOwnerPid\(ownerPid\)/.test(fs.readFileSync(HOOK, "utf8")),
+		);
+		clearMarkers();
+	}
+
 	ok(
 		"antigravity is a native-push backend → its replyable comes from the adapter probe",
 		nativePushSupported("antigravity"),

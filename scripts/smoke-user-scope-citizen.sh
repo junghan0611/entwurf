@@ -9,6 +9,11 @@
 # statusline `?` had a tripwire; THIS omission had none and hid until GLG hit it
 # in another repo. This gate is that missing tripwire: if the registration ever
 # regresses, `pnpm check` goes red.
+#
+# Cells 11–13 close the second omission (#53 B): every case here drove a fake
+# settings file with ABSOLUTE entries, so the portable, settings-relative form this
+# repo actually commits was never registered against — and `setup` duplicated and
+# restyled the tracked file for four cuts without a single gate seeing it.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -186,6 +191,96 @@ assert d['defaultProvider']=='openai-codex', 'run.sh remove-user-scope dropped a
 " 2>/dev/null; then ok "run.sh remove-user-scope drops the global citizen, preserves unrelated (SSOT reached via shell)"; else bad "run.sh remove-user-scope path failed"; fi
 # idempotent: a second remove-user-scope is a clean no-op (no crash on absent entry)
 if XDG_DATA_HOME="$TMP/xdg" PI_CODING_AGENT_DIR="$AGENT_DIR" bash "$RUN" remove-user-scope >/dev/null 2>&1; then ok "run.sh remove-user-scope is idempotent (no-op second run)"; else bad "run.sh remove-user-scope second run crashed"; fi
+
+# ── 11–13. #53 B: install must not dirty a tracked, formatter-governed settings file
+# The cell whose ABSENCE let this ship. Every case above drove a fake settings file
+# with absolute entries, so the one shape this repo actually commits — the portable,
+# settings-relative `".."` that check-install-surface S7c pins — was never registered
+# against. `setup` therefore appended the absolute path BESIDE it and rewrote the
+# tracked, biome-owned bytes at indent=2, and `pnpm check` died at step 1 reading
+# "format error" instead of "install wrote this".
+#
+# The seed is the repo's OWN committed settings, copied into a stand-in checkout so
+# `".."` resolves to that clone rather than to the real repo (nothing here touches
+# $REPO). Setup landing is PROVEN before any product verdict: if the seed is not the
+# portable form, this says SETUP MISS in its own name instead of blaming the code.
+CLONE="$TMP/selfclone"; mkdir -p "$CLONE/.pi"
+CS="$CLONE/.pi/settings.json"
+seed_src=""
+if (cd "$REPO" && git show :.pi/settings.json) > "$CS" 2>/dev/null && [ -s "$CS" ]; then
+  seed_src="candidate index"
+elif cp "$REPO/.pi/settings.json" "$CS" 2>/dev/null; then
+  seed_src="worktree"
+fi
+if [ ! -s "$CS" ]; then
+  bad "11 SETUP MISS: could not seed this repo's own .pi/settings.json (no git object, no worktree file)"
+elif ! python3 -c "
+import json,sys
+p=json.load(open(sys.argv[1])).get('packages')
+sys.exit(0 if p==['..'] else 1)" "$CS"; then
+  bad "11 SETUP MISS: the seed ($seed_src) is not the committed portable form (packages != ['..']) — product verdict withheld"
+else
+  BEFORE="$(sha256sum "$CS" | cut -d' ' -f1)"; MT_B="$(stat -c %Y "$CS")"; sleep 1
+  OUT_SELF="$(python3 "$REG" "$CS" "$CLONE")"
+  AFTER="$(sha256sum "$CS" | cut -d' ' -f1)"; MT_A="$(stat -c %Y "$CS")"
+  if printf '%s' "$OUT_SELF" | grep -q 'no-op'; then
+    ok "11 register against this repo's OWN committed settings is a no-op (seed: $seed_src)"
+  else
+    bad "11 register duplicated/absolutized the portable '..' entry" "$OUT_SELF"
+  fi
+  if [ "$BEFORE" = "$AFTER" ] && [ "$MT_B" = "$MT_A" ]; then
+    ok "11b the tracked, formatter-governed bytes are UNCHANGED (sha256 + mtime)"
+  else
+    bad "11b install rewrote the tracked settings file (sha $BEFORE -> $AFTER, mtime $MT_B -> $MT_A)"
+  fi
+  # The inverse direction of the same asymmetry: the shared matcher now RECOGNIZES
+  # `".."`, so an uninstall that deleted it would edit committed source — the same
+  # defect pointed the other way. remove leaves it and says so; dry-run agrees,
+  # because both ask one predicate.
+  BEFORE_R="$(sha256sum "$CS" | cut -d' ' -f1)"
+  OUT_RM="$(python3 "$REG" "$CS" "$CLONE" --remove)"
+  OUT_DRY="$(python3 "$REG" "$CS" "$CLONE" --remove --dry-run)"
+  if [ "$BEFORE_R" = "$(sha256sum "$CS" | cut -d' ' -f1)" ]; then
+    ok "11c --remove does NOT delete the committed portable entry (bytes unchanged)"
+  else
+    bad "11c --remove edited the repo's committed settings source" "$OUT_RM"
+  fi
+  if printf '%s' "$OUT_RM" | grep -q 'kept 1 settings-relative'; then
+    ok "11d the inverse REPORTS what it deliberately left behind (never a silent partial uninstall)"
+  else
+    bad "11d --remove left the entry without saying so" "$OUT_RM"
+  fi
+  if printf '%s' "$OUT_DRY" | grep -q 'no entwurf packages\[\] entry to remove'; then
+    ok "11e --dry-run agrees with remove (one predicate, no over-report)"
+  else
+    bad "11e --dry-run disagreed with what remove actually does" "$OUT_DRY"
+  fi
+fi
+
+# 12. the state a pre-fix `setup` already left on real hosts: the portable entry AND
+#     the absolute one. The repair must collapse onto the PORTABLE form — absolutizing
+#     it would fix the duplicate and dirty the tracked bytes in the same breath.
+DUP="$TMP/dupclone"; mkdir -p "$DUP/.pi"
+DS="$DUP/.pi/settings.json"
+cat > "$DS" <<JSON
+{"packages": ["..", "$DUP", "../../repos/gh/andenken"]}
+JSON
+python3 "$REG" "$DS" "$DUP" >/dev/null
+if python3 -c "
+import json
+p=json.load(open('$DS'))['packages']
+assert p.count('..')==1, f'the portable entry did not survive as the sole self-reference: {p}'
+assert '$DUP' not in p, f'the absolute path was written beside/instead of the portable one: {p}'
+assert '../../repos/gh/andenken' in p, 'unrelated relative package dropped'
+" 2>/dev/null; then ok "12 a duplicated ('..' + absolute) settings file repairs onto the PORTABLE entry"; else bad "12 the duplicate repair absolutized or dropped the portable entry: $(cat "$DS")"; fi
+
+# 13. a genuine rewrite keeps the file's own indent unit. Narrow by design: it does
+#     NOT make the output formatter-clean (biome also decides where short arrays
+#     collapse), which is why byte-identity for this repo's own file rests on the
+#     no-op above, not on the writer's style.
+printf '{\n\t"packages": [\n\t\t"/old/moved/entwurf"\n\t]\n}\n' > "$S"
+python3 "$REG" "$S" "$FAKE_REPO" >/dev/null
+if grep -q $'^\t"packages"' "$S"; then ok "13 a rewrite preserves the file's tab indentation (never forces 2 spaces)"; else bad "13 the rewrite restyled a file it does not own: $(cat -A "$S" | head -3)"; fi
 
 echo
 if [ "$fail" -eq 0 ]; then echo "smoke-user-scope-citizen: PASS"; else echo "smoke-user-scope-citizen: FAIL (see above)"; exit 1; fi

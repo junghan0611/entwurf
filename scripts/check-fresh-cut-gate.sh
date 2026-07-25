@@ -620,6 +620,165 @@ else
   bad "F8 the cut refused (or kept) a marker whose owner pid is provably absent" "$cut_out"
 fi
 
+# THE RESIDUE ROW (#53 A, measured on a second Linux host 2026-07-25). A marker
+# naming pid 1 is the one shape that is neither live, uncertain nor dead: init runs
+# for the whole boot and its start-key does not change while it does, so
+# classifyMarkerOwner answers `live` and THE ACTION THE REFUSAL PRESCRIBES cannot
+# change that — the operator quiesces every session, as told, and the cut refuses
+# again. Yet 0.12.8 refuses install on a pre-v3 store and names THIS cut as the only
+# repair, so that host was stuck until the file was removed by hand. The pure
+# classifier is right; the marker's claim is refuted by construction (no writer in
+# this tree can mint one any more — see the isPlausibleOwnerPid cells in
+# check-meta-receiver-marker / check-agy-sender-identity), so it is clearable
+# residue. The recorded key must be THIS host's real key for pid 1, or the marker
+# would classify `dead` on a key mismatch and the cell would pass while the bug
+# lived.
+init_key="$(node --experimental-strip-types -e '
+  import("'"$REPO"'/pi-extensions/lib/meta-session.ts").then((m) => process.stdout.write(m.processStartKey(1)));
+')"
+if [ -z "$init_key" ]; then
+  bad "F19 SETUP MISS: could not read this host's start key for pid 1 — the residue cells cannot run"
+else
+for surface in senders receivers; do
+  reset_world prevgen
+  case "$surface" in
+    senders)
+      mkdir -p "$PI_CODING_AGENT_DIR/meta-senders/claude-code"
+      ghost="$PI_CODING_AGENT_DIR/meta-senders/claude-code/1.json"
+      cat > "$ghost" <<JSON
+{
+  "backend": "claude-code",
+  "gardenId": "20260305T000000-dddd05",
+  "nativeSessionId": "prevgen-native-1",
+  "cwd": "/tmp/prevgen",
+  "ownerPid": 1,
+  "ownerStartKey": "$init_key",
+  "updatedAt": "2026-06-10T16:03:10.000Z"
+}
+JSON
+      ;;
+    receivers)
+      mkdir -p "$PI_CODING_AGENT_DIR/meta-receivers"
+      ghost="$PI_CODING_AGENT_DIR/meta-receivers/20260305T000000-dddd05.json"
+      cat > "$ghost" <<JSON
+{
+  "gardenId": "20260305T000000-dddd05",
+  "backend": "claude-code",
+  "nativeSessionId": "prevgen-native-1",
+  "ownerPid": 1,
+  "ownerStartKey": "$init_key",
+  "ownerKind": "claude-code-cli",
+  "armProvenance": "session-start",
+  "updatedAt": "2026-06-10T16:03:10.000Z"
+}
+JSON
+      ;;
+  esac
+  set +e
+  cut_out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rcr=$?
+  set -e
+  if [ "$rcr" = 0 ]; then
+    ok "F19 an init-owned $surface marker does NOT block the cut (refuted, not live)"
+  else
+    bad "F19 an init-owned $surface marker still deadlocks the cut — the upgrade path is closed" "$cut_out"
+  fi
+  if [ ! -e "$ghost" ]; then
+    ok "F20 the refuted $surface marker was cleared as residue"
+  else
+    bad "F20 the refuted $surface marker survived the cut"
+  fi
+  case "$cut_out" in
+    *refuted:*) ok "F21 the cut reports it as REFUTED, distinct from a proven-dead owner ($surface)" ;;
+    *) bad "F21 the cut disguised a proof of invalidity as a proof of death ($surface)" "$cut_out" ;;
+  esac
+done
+# The complement, and the reason F19 is a repair rather than a gate bypass: a marker
+# whose owner is genuinely live still refuses. C1 holds that for a real live pid; this
+# row proves the residue rule did not widen into "any marker the cut dislikes".
+if [ -z "$start_key" ]; then
+  bad "F22 SETUP MISS: no start key for this gate's own pid — the live-complement cell cannot run"
+else
+  reset_world prevgen
+  mkdir -p "$PI_CODING_AGENT_DIR/meta-senders/claude-code"
+  cat > "$PI_CODING_AGENT_DIR/meta-senders/claude-code/$$.json" <<JSON
+{
+  "backend": "claude-code",
+  "gardenId": "20260305T000000-dddd05",
+  "ownerPid": $$,
+  "ownerStartKey": "$start_key",
+  "updatedAt": "2026-03-05T00:00:00.000Z"
+}
+JSON
+  store_before="$(store_bytes)"
+  set +e
+  cut_out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rcl=$?
+  set -e
+  if [ "$rcl" != 0 ] && [ "$store_before" = "$(store_bytes)" ]; then
+    ok "F22 a LIVE owner still blocks the cut (the residue rule did not widen)"
+  else
+    bad "F22 the residue rule widened into a live owner — a running citizen would lose its address" "$cut_out"
+  fi
+  case "$cut_out" in
+    *"LIVE sender marker"*) ok "F22b the live owner is still reported LIVE, never refuted away" ;;
+    *) bad "F22b a live owner stopped being reported as live" "$cut_out" ;;
+  esac
+fi
+fi
+
+# POST-CUT CLEANUP IS REPORTED, NOT LAUNDERED. The sweep runs AFTER the archive has
+# moved, so a failure there must not throw away the story of what DID happen — and it
+# must not be swallowed either, because this command's own output claims the residue
+# was `cleared`. A bare `catch {}` around the unlink read EACCES/EROFS/an immutable
+# attribute as "raced away" (cross-review 2026-07-25, on the very loop #53 A added).
+# ENOENT alone is already-gone; everything else is named and turns the exit nonzero
+# while the success lines stay.
+if [ -z "$init_key" ]; then
+  bad "F23 SETUP MISS: no start key for pid 1 — the cleanup-failure cell cannot seed its marker"
+elif [ "$(id -u)" = 0 ]; then
+  ok "F23 vacuous under uid 0: permission bits cannot make a directory unwritable for root, so the class this row drives cannot occur here"
+else
+  reset_world prevgen
+  mkdir -p "$PI_CODING_AGENT_DIR/meta-senders/claude-code"
+  stuck_dir="$PI_CODING_AGENT_DIR/meta-senders/claude-code"
+  stuck="$stuck_dir/1.json"
+  cat > "$stuck" <<JSON
+{
+  "backend": "claude-code",
+  "gardenId": "20260305T000000-dddd05",
+  "ownerPid": 1,
+  "ownerStartKey": "$init_key",
+  "updatedAt": "2026-06-10T16:03:10.000Z"
+}
+JSON
+  # r-x: the walk can still readdir + lstat + read the marker, but the unlink needs
+  # WRITE on the parent and fails EACCES. Restored right after, or the sandbox trap
+  # (and reset_world) could not clean up.
+  chmod a-w "$stuck_dir"
+  set +e
+  cut_out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rcc=$?
+  set -e
+  chmod u+w "$stuck_dir"
+  if [ "$rcc" != 0 ]; then
+    ok "F23 an unremovable marker makes the cut exit NONZERO (a partial sweep never reads as a clean one)"
+  else
+    bad "F23 the cut reported success while a file it claims to have cleared is still there" "$cut_out"
+  fi
+  case "$cut_out" in
+    *"FAIL post-cut cleanup"*) ok "F23b the failure is NAMED as post-cut cleanup, with the file and the errno" ;;
+    *) bad "F23b the unlink failure was laundered into 'raced away'" "$cut_out" ;;
+  esac
+  if [ -n "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+    ok "F23c the archive still happened and is still reported — this is NOT a half-cut"
+  else
+    bad "F23c a cleanup failure threw away the generation move" "$cut_out"
+  fi
+  case "$cut_out" in
+    *"not a half-cut"*) ok "F23d the refusal tells the operator the store is safe and what to re-run" ;;
+    *) bad "F23d the failure left the operator unable to tell a cleanup miss from a half-cut" "$cut_out" ;;
+  esac
+  rm -f "$stuck"
+fi
+
 # WIRING: the cut must ASK for the verdict, never compute it from a start-key. An
 # inline `processStartKey(...) === recorded` is precisely how "" (UNKNOWN) was read
 # as "dead" before this review — a fail-open path that must not come back.

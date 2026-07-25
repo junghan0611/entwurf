@@ -24,7 +24,8 @@
  *   - meta-sessions/  (identity records)  → ARCHIVED  (`<dir>.archive-<ts>`)
  *   - meta-mailbox/   (messages+receipts) → ARCHIVED  (`<dir>.archive-<ts>`)
  *   - meta-senders/, meta-receivers/ markers → CLEARED (disposable process
- *     state; the quiesce gate has already proven every owner pid is gone)
+ *     state; the quiesce gate has already proven every owner pid is gone — or,
+ *     for a refuted marker, that no such owner could ever have existed)
  *   - control sockets (*.sock)            → CLEARED if probed dead (the GC
  *     rule: only a demonstrably dead socket may be unlinked)
  *   - native transcripts, andenken/embedding axes, install ownership state
@@ -49,6 +50,28 @@
  *     walked or renamed).
  * Only a marker whose named owner demonstrably no longer holds that pid is dead,
  * and only a dead marker/socket is cleared.
+ *
+ * ONE class is neither live, uncertain nor dead: a marker whose `ownerPid` cannot
+ * own anything (`<= 1` — init, or a non-pid number). It is REFUTED BY CONSTRUCTION
+ * rather than proven dead: after #53 A no writer in this tree can mint one
+ * (`isPlausibleOwnerPid` at both writers and at the write boundary), so on a current
+ * install it is LEGACY or CORRUPT residue — a pre-fix writer whose parent had been
+ * reparented to init (the retired shell-form Claude hook; the agy imprint, which
+ * asked only `> 0` until this cut), or a foreign/damaged marker, which is the only
+ * way a non-integer pid can appear at all. The one file actually observed was a
+ * shell-form Claude hook reparented to init.
+ *
+ * Reading it as an owner is not merely wrong, it is a trap: init runs for the whole
+ * boot and its start-key does not change while it does, so `classifyMarkerOwner`
+ * answers `live` and THE ACTION THIS REFUSAL PRESCRIBES CANNOT CHANGE THAT — the
+ * operator quiesces every session, exactly as told, and the cut refuses again.
+ * (Deleting the marker removes the claim rather than refuting the verdict, and a
+ * reboot recomputes the key with no contract either way — neither is a remedy this
+ * cut may lean on.) Meanwhile 0.12.8 names this very cut as the one repair for a
+ * pre-v3 store, so the host was stuck until the file was deleted by hand (#53 A,
+ * measured 2026-07-25). Such a marker is therefore clearable residue, swept with the
+ * dead ones but COUNTED AND REPORTED APART from them, because invalidity and death
+ * are different findings.
  *
  * THE MARKER WALK IS NOT THE WHOLE WORLD. A native-push (agy) citizen is registered
  * with NO marker of any kind and is dispatched straight off its record, so marker
@@ -82,6 +105,7 @@ import {
 	defaultMetaReceiversDir,
 	defaultMetaSendersDir,
 	defaultMetaSessionsDir,
+	isPlausibleOwnerPid,
 	type MetaIdentity,
 	parseMetaIdentity,
 	probePidExistence,
@@ -216,18 +240,22 @@ function classifySurfaceDir(dir: string): SurfaceDirState {
  * address out from under it. An unreadable marker at REST is disposable residue; an
  * unreadable marker as EVIDENCE OF QUIESCENCE is no evidence at all.
  */
-function inspectMarkers(dir: string, label: string): { violations: QuiesceViolation[]; deadFiles: string[] } {
+function inspectMarkers(
+	dir: string,
+	label: string,
+): { violations: QuiesceViolation[]; deadFiles: string[]; refutedFiles: string[] } {
 	const violations: QuiesceViolation[] = [];
 	const deadFiles: string[] = [];
+	const refutedFiles: string[] = [];
 	const markerFiles: { file: string; shown: string }[] = [];
 	const uncertain = (shown: string, why: string): void => {
 		violations.push({ surface: label, detail: `${shown} — ${why}`, kind: "uncertain" });
 	};
 	const dirState = classifySurfaceDir(dir);
-	if (dirState.state === "absent") return { violations, deadFiles };
+	if (dirState.state === "absent") return { violations, deadFiles, refutedFiles };
 	if (dirState.state !== "directory") {
 		uncertain(dir, `surface could not be inspected (${dirState.detail}): an unreadable surface is not a quiesced one`);
-		return { violations, deadFiles };
+		return { violations, deadFiles, refutedFiles };
 	}
 	// depth 0 = the marker root, depth 1 = a backend subdir. Nothing deeper is part
 	// of any marker layout, so it is inspected by hand rather than swept.
@@ -263,13 +291,26 @@ function inspectMarkers(dir: string, label: string): { violations: QuiesceViolat
 			uncertain(shown, `unreadable marker (${err instanceof Error ? err.message : String(err)}): owner unprovable`);
 			continue;
 		}
-		const ownerPid =
-			typeof raw.ownerPid === "number" && Number.isInteger(raw.ownerPid) && raw.ownerPid > 0 ? raw.ownerPid : null;
-		const ownerStartKey = typeof raw.ownerStartKey === "string" ? raw.ownerStartKey : "";
-		if (ownerPid === null) {
-			uncertain(shown, "no positive-integer `ownerPid`: owner unprovable");
+		// Two different failures, deliberately kept apart. NO numeric `ownerPid` means the
+		// marker never NAMED an owner — unprovable, so it refuses the cut like every other
+		// unreadable marker. A numeric one that cannot own (`<= 1`, non-integer, unsafe)
+		// IS a claim, and it is refuted BY CONSTRUCTION: no writer in this tree can mint it
+		// any more, and "this session is owned by init" is false on its face. That is a
+		// proof of INVALIDITY — strictly stronger than the proof of death this loop already
+		// acts on — so it is clearable residue, never `live` and never `uncertain`. Without
+		// this row a single reparented-owner marker left quiescence unprovable by the ONE
+		// action the refusal prescribes, and the repair 0.12.8 names could not run until
+		// the file was deleted by hand (#53 A, measured 2026-07-25).
+		if (typeof raw.ownerPid !== "number") {
+			uncertain(shown, "no numeric `ownerPid`: owner unprovable");
 			continue;
 		}
+		if (!isPlausibleOwnerPid(raw.ownerPid)) {
+			refutedFiles.push(file);
+			continue;
+		}
+		const ownerPid = raw.ownerPid;
+		const ownerStartKey = typeof raw.ownerStartKey === "string" ? raw.ownerStartKey : "";
 		if (ownerStartKey === "") {
 			uncertain(shown, "no `ownerStartKey`: a bare pid cannot distinguish the owner from a reused pid");
 			continue;
@@ -294,7 +335,7 @@ function inspectMarkers(dir: string, label: string): { violations: QuiesceViolat
 			deadFiles.push(file);
 		}
 	}
-	return { violations, deadFiles };
+	return { violations, deadFiles, refutedFiles };
 }
 
 /**
@@ -400,6 +441,32 @@ async function inspectNativePushCitizens(storeDir: string): Promise<QuiesceViola
 		}
 	}
 	return violations;
+}
+
+/**
+ * Remove the files a completed cut is contracted to clear, and report what it could
+ * not. ENOENT is the ONLY tolerated failure — the file raced away, which is the goal
+ * state. Every other errno is a real refusal to delete (EACCES, EPERM under a
+ * sticky-bit parent, EROFS, an immutable attribute, an LSM denial), and a bare
+ * `catch {}` here would launder all of them into "raced away" while the command's own
+ * output still said `cleared:`. That is the Crash-Don't-Warn shape this repo removes,
+ * not a shortcut it tolerates — the caller decides what to do with the failures,
+ * because by this point the archive has already moved and throwing would cost the
+ * operator the story of what DID happen.
+ */
+function clearFiles(files: string[]): { cleared: number; failures: { file: string; reason: string }[] } {
+	const failures: { file: string; reason: string }[] = [];
+	let cleared = 0;
+	for (const file of files) {
+		try {
+			fs.unlinkSync(file);
+			cleared += 1;
+		} catch (err) {
+			if ((err as { code?: unknown }).code === "ENOENT") continue; // raced away — already gone is the goal state
+			failures.push({ file, reason: err instanceof Error ? err.message : String(err) });
+		}
+	}
+	return { cleared, failures };
 }
 
 async function main(): Promise<number> {
@@ -567,15 +634,12 @@ async function main(): Promise<number> {
 		}
 		archived.push(dest);
 	}
-	let cleared = 0;
-	for (const file of [...senders.deadFiles, ...receivers.deadFiles, ...deadSockets]) {
-		try {
-			fs.unlinkSync(file);
-			cleared += 1;
-		} catch {
-			// raced away — already gone is the goal state
-		}
-	}
+	// Both sweeps go through ONE remover so they cannot drift to different meanings of
+	// "could not remove". Counted APART, because a dead marker is an owner we PROVED
+	// left while a refuted one never named an owner that could exist, and folding the
+	// two would dress a proof of invalidity up as a proof of death.
+	const dead = clearFiles([...senders.deadFiles, ...receivers.deadFiles, ...deadSockets]);
+	const refuted = clearFiles([...senders.refutedFiles, ...receivers.refutedFiles]);
 	fs.mkdirSync(storeDir, { recursive: true });
 	fs.mkdirSync(mailboxDir, { recursive: true });
 
@@ -584,12 +648,37 @@ async function main(): Promise<number> {
 	} else {
 		for (const dir of archived) console.log(`archived: ${dir}`);
 	}
-	if (cleared > 0) console.log(`cleared: ${cleared} dead marker/socket file(s) (disposable process state)`);
+	if (dead.cleared > 0) console.log(`cleared: ${dead.cleared} dead marker/socket file(s) (disposable process state)`);
+	if (refuted.cleared > 0) {
+		console.log(
+			`refuted: ${refuted.cleared} legacy/corrupt marker(s) named an owner pid that cannot own a session ` +
+				"(<= 1, or not a pid at all); REFUTED BY CONSTRUCTION, not proven dead, and cleared. The observed " +
+				"case was a hook reparented to init before it read its own parent.",
+		);
+	}
 	console.log(`fresh generation open: ${storeDir} (empty, v3-only)`);
 	console.log(
 		"untouched: native transcripts, andenken/embedding memory axes, install state. " +
 			"The archive is forensic only — no runtime reads it and there is no restore verb.",
 	);
+
+	// The generation IS cut by now, so a cleanup failure must not throw away that
+	// story — but it must not be swallowed either: this command's own report claims
+	// the residue was "cleared". Say exactly which files survived and why, keep the
+	// success lines above (this is not a half-cut), and exit nonzero so no caller
+	// reads a partial sweep as a clean one.
+	const cleanupFailures = [...dead.failures, ...refuted.failures];
+	if (cleanupFailures.length > 0) {
+		for (const { file, reason } of cleanupFailures) console.error(`FAIL post-cut cleanup: ${file} — ${reason}`);
+		console.error(
+			`FAIL post-cut cleanup: ${cleanupFailures.length} marker/socket file(s) above could NOT be removed. The ` +
+				"generation was archived and the fresh generation is open — this is not a half-cut, and install/citizen " +
+				"birth are no longer blocked by the store. What survived is disposable process state sitting in the new " +
+				"generation's surfaces, and it will refuse the NEXT cut. Fix the cause (permissions, a read-only mount, " +
+				"an immutable attribute) and re-run the same command, or remove those files by hand.",
+		);
+		return 1;
+	}
 	return 0;
 }
 

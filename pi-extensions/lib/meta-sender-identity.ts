@@ -16,8 +16,13 @@
  * remains compatibility for an MCP host wrapper; the hook never writes a blind grandparent
  * marker because that may be the long-lived login shell.
  *
- * Two guards make a marker an IDENTITY rather than a hint, and a candidate is only trusted after
- * BOTH pass:
+ * Three guards make a marker an IDENTITY rather than a hint, and a candidate is only trusted
+ * after ALL of them pass:
+ *   0. a PLAUSIBLE owner (isPlausibleOwnerPid, shared with both writers and the generation cut):
+ *      pid <= 1 cannot own a session, and guard 1 cannot catch it — for as long as the host
+ *      is up, init IS still the very process the marker named. This is a rule about the
+ *      marker's CLAIM, not about the owner's state, which is why it is asked first and is
+ *      not opt-out (#53 A).
  *   1. pid + start-key (readMetaSenderMarker): the owner is still the very process that wrote it,
  *      so a dead session's pid, reused by something else, cannot inherit its garden-id.
  *   2. the backing meta-record: the record store is the authority — a marker whose record was
@@ -32,6 +37,7 @@
  */
 
 import {
+	isPlausibleOwnerPid,
 	type MetaBackend,
 	type MetaIdentity,
 	type MetaSenderMarker,
@@ -148,9 +154,13 @@ export function resolveTrustedMetaSenderIdentity(opts: ResolveTrustedMetaSenderO
 		const marker = readMetaSenderMarker({ markerPath: opts.markerPath });
 		if (marker) markers.push(marker);
 	} else {
-		const ownerPids = (opts.ownerPids ?? [process.ppid, parentPid(process.ppid) ?? 0]).filter(
-			(p): p is number => typeof p === "number" && p > 0,
-		);
+		// The candidate filter asks the same question the marker readers ask — CAN this
+		// pid own a session — so it uses the same predicate rather than a second `> 0`
+		// literal. The default set is only the bridge's parent and grandparent, so init
+		// enters it just when the native host itself was reparented (a detached/daemonized
+		// Claude): narrow, but reachable, and a candidate that cannot be an owner has no
+		// business reaching the read at all (#53 A).
+		const ownerPids = (opts.ownerPids ?? [process.ppid, parentPid(process.ppid) ?? 0]).filter(isPlausibleOwnerPid);
 		for (const ownerPid of [...new Set(ownerPids)]) {
 			for (const backend of META_SENDER_BACKENDS) {
 				const marker = readMetaSenderMarker({ backend, ownerPid, sendersDir: opts.sendersDir });
