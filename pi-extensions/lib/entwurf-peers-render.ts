@@ -81,7 +81,7 @@ const DIAGNOSTIC_SAMPLE_MAX = 3;
 
 /**
  * Group diagnostics sharing (kind + message) into ONE line carrying the count and a
- * subject sample. An unmigrated pre-cut store degrades every record identically, and
+ * subject sample. A store left from a previous generation degrades every record identically, and
  * repeating that sentence per record buried the one citizen line under 177 copies of
  * it (F8) — the aggregated form says how many + which fix ONCE. A group of one renders
  * exactly the classic per-item line; distinct messages stay distinct lines, and the

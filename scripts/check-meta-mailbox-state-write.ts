@@ -1,7 +1,7 @@
 /**
  * check-meta-mailbox-state-write — deterministic gate for 0.11 Stage 0 step 3D-4
  * commit2 (the cut). Renamed from check-meta-mailbox-dualwrite: after the cut the
- * receipt is no longer DUAL-written (record.delivery is gone from the v2 record) —
+ * receipt is no longer DUAL-written (there is no record.delivery on the identity record) —
  * it lives SOLELY in the mailbox state store. A real temp sessions+mailbox dir; no
  * backend, no network, no hook. Safe in the `pnpm check` static floor.
  *

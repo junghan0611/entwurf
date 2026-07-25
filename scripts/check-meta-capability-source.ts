@@ -6,10 +6,8 @@
  * file). Safe in the `pnpm check` static floor.
  *
  * Live consumers of the seam: the v2 decider/production deliverability and the
- * mailbox guard, plus the frozen v1 reader's wakeMode drift guard (which lives
- * in meta-migration.ts and is gated by check-meta-migration-readers — the V3
- * identity record carries no delivery aspect, so V3 mint/parse never source
- * capability).
+ * mailbox guard (the V3 identity record carries no delivery aspect, so V3
+ * mint/parse never source capability).
  *
  * Proves:
  *  - the lookup seam is registry-DRIVEN — fed a doctored registry,

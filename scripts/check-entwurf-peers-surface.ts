@@ -33,7 +33,7 @@ import { type EntwurfFactsResult, recordLessSocketMessage } from "../pi-extensio
 import type { PeerFact } from "../pi-extensions/lib/entwurf-facts.ts";
 import { renderEntwurfPeers } from "../pi-extensions/lib/entwurf-peers-render.ts";
 import type { FactLiveness } from "../pi-extensions/lib/entwurf-v2-contract.ts";
-import type { MetaBackendV2 } from "../pi-extensions/lib/meta-session.ts";
+import type { MetaCitizenBackend } from "../pi-extensions/lib/meta-session.ts";
 import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
 
 let passed = 0;
@@ -47,7 +47,7 @@ const FORBIDDEN = ["sendable", "resumable", "dispatch", "action", "transport", "
 // #50 C4: socket-shaped identity must not reappear on this surface.
 const FORBIDDEN_C4_KEYS = ["sessions", "socketOnly", "controlDir", "socketPath", "count"];
 
-function peer(gardenId: string, backend: MetaBackendV2, liveness: FactLiveness): PeerFact {
+function peer(gardenId: string, backend: MetaCitizenBackend, liveness: FactLiveness): PeerFact {
 	return {
 		gardenId,
 		backend,
@@ -138,7 +138,7 @@ function main(): void {
 		"record-less alive diagnostic line in text (gid + liveness + cause)",
 		text.includes(`- record-less-socket ${GID_SOCK_ALIVE} (alive):`) && text.includes("no meta-record claims"),
 	);
-	ok("record-less alive diagnostic names M1 (#50 F10 discipline)", text.includes("meta-bridge-migrate-v3 migrate"));
+	ok("record-less alive diagnostic names fresh-cut (#50 F10 discipline)", text.includes("meta-bridge-fresh-cut"));
 	ok(
 		"record-less dead socket keeps its own (stale) line — distinct message group",
 		text.includes(`- record-less-socket ${GID_SOCK_DEAD} (dead):`),
@@ -187,12 +187,12 @@ function main(): void {
 	}
 
 	// ── diagnostics sharing one cause AGGREGATE in text (F8) ────────────────────
-	// An unmigrated pre-cut store degrades EVERY record with the identical message;
+	// A previous-generation store degrades EVERY record with the identical message;
 	// 177 copies of that sentence buried the one citizen line the listing existed to
 	// show. Same (kind + message) → ONE ×N line with a subject sample; a distinct
 	// message keeps its own classic line; the JSON payload keeps every diagnostic.
 	{
-		const sharedMsg = 'meta-record "schemaVersion" must be 3 (got number 2) — migrate the store.';
+		const sharedMsg = 'meta-record "schemaVersion" must be 3 (got number 2).';
 		const uniform = Array.from({ length: 177 }, (_, i) => ({
 			kind: "meta-record-read-error" as const,
 			filename: `20260612T${String(100000 + i).slice(-6)}-cccccc.meta.json`,

@@ -22,7 +22,7 @@
 import assert from "node:assert/strict";
 import {
 	listAllMetaIdentities,
-	type MetaBackendV2,
+	type MetaCitizenBackend,
 	type MetaIdentity,
 	serializeMetaIdentity,
 } from "../pi-extensions/lib/meta-session.ts";
@@ -38,7 +38,7 @@ const GID_A = "20260611T111111-aaaaaa";
 const GID_B = "20260611T222222-bbbbbb";
 
 function rec(gardenId: string, over: Partial<MetaIdentity> = {}): string {
-	const backend: MetaBackendV2 = "pi";
+	const backend: MetaCitizenBackend = "pi";
 	return serializeMetaIdentity({
 		schemaVersion: 3,
 		gardenId,

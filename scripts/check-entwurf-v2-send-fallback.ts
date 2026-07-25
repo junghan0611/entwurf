@@ -35,7 +35,7 @@ import {
 	type DeadFallbackDeps,
 	resolveDeadControlSendFallback,
 } from "../pi-extensions/lib/entwurf-v2-send-fallback.ts";
-import type { MetaBackendV2, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
+import type { MetaCitizenBackend, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
 import type { TargetSocketInspection } from "../pi-extensions/lib/socket-discovery.ts";
 import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
 
@@ -62,7 +62,7 @@ function lockClaim(gardenId = GID): LockClaim {
 	};
 }
 
-function identity(backend: MetaBackendV2): MetaIdentity {
+function identity(backend: MetaCitizenBackend): MetaIdentity {
 	return {
 		schemaVersion: 3,
 		gardenId: GID,
@@ -259,7 +259,7 @@ async function main(): Promise<void> {
 	}
 
 	// ── 9b: #50 C4 — a record that VANISHED mid-dispatch while its socket remains
-	// re-resolves to the honest `record-less-socket` reject (migration/diagnostic
+	// re-resolves to the honest `record-less-socket` reject (a diagnostic
 	// state), never a retry into a socket the record no longer authorizes, and never
 	// the `bad-target` "absent" lie. Pre-probe: the fallback must NOT re-enter the
 	// in-domain inspect/probe path for it (inspectCalls === 0). A plain vanished

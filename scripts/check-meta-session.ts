@@ -5,8 +5,7 @@
  *
  * Proves the STORE contract the hook/CLI/mailbox stand on (V3-only; the pure
  * record read/write contract is check-meta-v3-record, the consumer seam is
- * check-meta-identity-consumers, the frozen legacy readers are
- * check-meta-migration-readers):
+ * check-meta-identity-consumers):
  *   - decideUpsert keys on record existence (idempotent), refuses identity drift;
  *   - upsertMetaSession creates/attaches atomically on the real fs (v3 bytes);
  *   - mailbox enqueue/read + the honest receipt state;

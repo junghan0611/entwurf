@@ -1,33 +1,32 @@
 /**
- * check-meta-v3-record — deterministic gate for the #50 schema hard cut: the V3
- * production record contract. Pure functions; no fs, no backend, no API. Safe in
- * the `pnpm check` static floor.
+ * check-meta-v3-record — deterministic gate for the ONE live record schema (v3).
+ * Pure functions; no fs, no backend, no API. Safe in the `pnpm check` static
+ * floor.
  *
- * Proves the PRODUCTION half of the cut:
+ * Proves the record contract:
  *   - serializeMetaIdentity is canonical (stable order, 2-space, trailing \n,
- *     schemaVersion 3 first) and carries neither the v1 delivery aspect nor the
- *     removed v2 fields (`parentGardenId`/`isEntwurf`),
+ *     schemaVersion 3 first) and carries no retired-field residue
+ *     (`delivery`/`lastSeen`/`parentGardenId`/`isEntwurf`),
  *   - serialize → parse round-trips byte-stably through parseMetaRecordV3 and
  *     parseMetaIdentity,
  *   - mintMetaIdentity mints schemaVersion-3 identities (pi backend included),
- *   - parseMetaRecordAny is V3-ONLY: a pre-cut (v1/v2) body throws an error that
- *     names the M1 operator command VERBATIM (gate h — the error text is the
- *     operator's road back in), unknown/missing versions crash,
- *   - strayness inversion, production half (gate f): a body carrying
- *     `parentGardenId`/`isEntwurf` is rejected by the V3 parser as stray. The
- *     frozen half (the migration readers still ACCEPTING them) lives in
- *     check-meta-migration-readers.
+ *   - the reader is V3-ONLY with no legacy reader anywhere: any other
+ *     schemaVersion throws an error that names the fresh-cut command VERBATIM
+ *     (the error text is the operator's one road back in — the generation cut),
+ *     showing the actual rejected version value, and unknown/missing versions
+ *     crash,
+ *   - strict keyset: a body carrying any retired or unknown field is rejected
+ *     as stray, never coerced.
  */
 
 import assert from "node:assert/strict";
 import {
-	M1_MIGRATE_COMMAND,
+	FRESH_CUT_COMMAND,
 	type MetaIdentity,
 	MetaRecordError,
 	mintMetaIdentity,
 	normalizeMetaIdentity,
 	parseMetaIdentity,
-	parseMetaRecordAny,
 	parseMetaRecordV3,
 	serializeMetaIdentity,
 } from "../pi-extensions/lib/meta-session.ts";
@@ -144,37 +143,38 @@ ok(
 );
 golden("normalizeMetaIdentity is a stable copy (idempotent)", normalizeMetaIdentity(minted), minted);
 
-// --- parseMetaRecordAny is V3-only; pre-cut errors name the M1 command ------
+// --- the reader is V3-only; foreign-generation errors name fresh-cut --------
 throwsNaming(
-	"parseMetaRecordAny(v1 body) throws naming the M1 migrate command",
-	() => parseMetaRecordAny(V1_BODY),
-	M1_MIGRATE_COMMAND,
+	"parseMetaIdentity(v1 body) throws naming the fresh-cut command",
+	() => parseMetaIdentity(V1_BODY),
+	FRESH_CUT_COMMAND,
 );
 throwsNaming(
-	"parseMetaRecordAny(v2 body) throws naming the M1 migrate command",
-	() => parseMetaRecordAny(V2_BODY),
-	M1_MIGRATE_COMMAND,
+	"parseMetaIdentity(v2 body) throws naming the fresh-cut command",
+	() => parseMetaIdentity(V2_BODY),
+	FRESH_CUT_COMMAND,
 );
-// The rejection must show the VALUE, not just the type: `got number` cannot tell a
-// v1 store from a v2 one, and the M1 runbook needs exactly that distinction (F9).
+// The rejection must show the VALUE, not just the type: `got number` cannot say
+// WHICH foreign generation a store carries, and the operator deciding on a cut
+// deserves the actual number (F9).
 throwsNaming(
-	"parseMetaRecordAny(v2 body) rejection shows the actual version value (got number 2)",
-	() => parseMetaRecordAny(V2_BODY),
+	"parseMetaIdentity(v2 body) rejection shows the actual version value (got number 2)",
+	() => parseMetaIdentity(V2_BODY),
 	"(got number 2)",
 );
 throwsNaming(
-	"parseMetaRecordAny(v1 body) rejection shows the actual version value (got number 1)",
-	() => parseMetaRecordAny(V1_BODY),
+	"parseMetaIdentity(v1 body) rejection shows the actual version value (got number 1)",
+	() => parseMetaIdentity(V1_BODY),
 	"(got number 1)",
 );
-throws("parseMetaRecordAny: invalid JSON throws", () => parseMetaRecordAny("{nope"));
-throws("parseMetaRecordAny: array (non-object) throws", () => parseMetaRecordAny("[]"));
-throws("parseMetaRecordAny: unknown schemaVersion (4) throws", () =>
-	parseMetaRecordAny(JSON.stringify({ ...V3_IDENTITY, schemaVersion: 4 })),
+throws("parseMetaIdentity: invalid JSON throws", () => parseMetaIdentity("{nope"));
+throws("parseMetaIdentity: array (non-object) throws", () => parseMetaIdentity("[]"));
+throws("parseMetaIdentity: unknown schemaVersion (4) throws", () =>
+	parseMetaIdentity(JSON.stringify({ ...V3_IDENTITY, schemaVersion: 4 })),
 );
-throws("parseMetaRecordAny: missing schemaVersion throws", () => parseMetaRecordAny(JSON.stringify({ gardenId: "x" })));
+throws("parseMetaIdentity: missing schemaVersion throws", () => parseMetaIdentity(JSON.stringify({ gardenId: "x" })));
 
-// --- strayness inversion, production half (gate f) --------------------------
+// --- strict keyset: retired/unknown fields are stray, never coerced ----------
 throws("parseMetaRecordV3 rejects a body carrying parentGardenId (stray key)", () =>
 	parseMetaRecordV3(JSON.stringify({ ...V3_PI_IDENTITY, parentGardenId: null })),
 );

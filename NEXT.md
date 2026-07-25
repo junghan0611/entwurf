@@ -1,30 +1,106 @@
-# NEXT — main: #50 hard-cut 랜딩 이후
+# NEXT — fresh-cut 뺄셈이 main에 들어갔다 — 다음은 #47
 
 > NEXT는 부트 섹터다. 닫힌 역사는 CHANGELOG/git/이슈에, 장기 방향은 ROADMAP/이슈에 둔다.
-> (0.12.8-repair.1 릴리즈 레인의 옛 원장과 #51 doctor/harness 진단 변천은 이 파일의 git history와 #50·#51에 보존되어 있다.)
 
 ## NOW
 
-- **[2026-07-24] `repair/v2-core-debt`(93+ 커밋) merge in — #50 hard-cut 완료.** meta-record가 유일한 주소 권위(V3-only), entwurf는 socket을 모른다(내부 transport일 뿐), pi 네이티브(GPT 구독)와 ACP 클로드 모두 record 시민으로 발신·수신한다. M1 migrate CLI(85단언 게이트) + H7 라이브 전환(194 v3, 양방향 왕복 실증) + pi 0.82.0 / claude-agent-acp 0.61.0 / ACP SDK 1.3.0 uplift + 업그레이드 하네스 3셀 확장까지 이 merge에 들어 있다. **작업기 전체는 [#50 작업기 코멘트](https://github.com/junghan0611/entwurf/issues/50)**, 증거 원장은 BASELINE HISTORY(`cbda097` 항목)와 CHANGELOG/git. 브랜치는 참고용으로 보존(삭제 금지 — GLG).
-- **⚠️ 이 main을 pull하는 pre-cut 개발 PC는 호스트당 1회 V3 마이그레이션이 필요하다.** 순서: 그 호스트 세션 quiesce → pull → `entwurf meta-bridge-migrate-v3 verify`(읽기 전용) → `… migrate`(백업 자동) → `setup` → 재개. `setup`/`install`/`install-meta-bridge` 세 진입점이 pre-cut store를 **쓰기 전에 REFUSE**하고 처방을 인쇄한다 — 3축: pre-cut만이면 migrate, problem이 섞였으면 **복구 먼저**, problem만이면 migration 아님(README migration 절 + `check-upgrade-gate` 3셀이 증명). `--drop-parentage`는 언제나 운영자의 명시 결정이다.
-- **🔴 release 차단 관측 — 번들 MCP readiness race.** `LIVE=1 release-gate`가 MUST red를 낼 수 있다(`cbda097`에서 16/1/0 — 유일 FAIL이 이 race). 인과가 서기 전에는 고치지 않는다(GLG 결정). 구조 판독·처방 3안·표본 원장은 **ROADMAP 「🔴 OPEN — 번들 MCP readiness race」**가 SSOT — 재발 시 그곳에 시각·부하·스모크·모델 발화를 누적한다.
-- **release lane (0.12.8-repair.1, 방아쇠는 GLG):** `land`(pre-version HEAD push + exact-SHA CI) → `prepare`(CHANGELOG 재승격 — repair.0 이후 전체, hard-cut 포함) → `make`(LIVE 재획득 필수 — 위 race red의 해소 또는 GLG 명시 판정 필요) → `publish`(`repair` dist-tag만; **`latest=0.12.7` 유지 확정**). 현재 npm의 `repair=0.12.8-repair.0`은 배달 불능 바이트로 불변 존재 — 새 publish까지 신규 설치자는 그걸 받는다. maintainer 호스트 installed doctor rc=1은 구판 설치의 기대 상태(클린 재설치 후에만 GREEN).
-- **컷 불변(재론 금지):** Claude floor `>=2.1.217`(SSOT는 `package.json` `entwurf.claudeCodeFloor` 파생) · Linux 유일 certified axis(Darwin은 installer 거부 + doctor NOT CERTIFIED) · Node 24+ 단일 지원축.
+- **[2026-07-25] fresh-cut 뺄셈 main merge 완료 (#50 닫힘).** 마이그레이션 레인 전체가 부채로
+  판정되어 삭제됐다: `meta-migration.ts` · `meta-bridge-migrate-v3.ts`(M1 3-verb) · 게이트 2개 ·
+  `check-upgrade-gate.sh` · `fixtures/` 동결 바이트 장치. 대체물은 동사 하나
+  (`meta-bridge-fresh-cut`)와 계약 하나(`certifyActiveStore`)다. **동결 정책 4문장의 SSOT는
+  README 「Generations」 절**, 불변은 AGENTS #5.
+- **fresh-eyes 재검수(페블·지피티, 오후)에서 blocker 6건이 나와 전부 수선했다.** 세 번째 검수
+  라운드가 값을 냈다는 것이 이 컷의 기록에서 가장 중요한 사실이다 — **발견 6건은 전부 지피티
+  손에서 나왔고**, 앞선 3자 검수(페블·오푸스·지피티)가 놓친 것들이다. 공통 형태가 하나였다:
+  **이 컷이 새로 선언한 계약과, 그 계약을 모르는 기존 읽기/probe 경로 사이의 갭.**
+  1. **marker 없는 live agy conversation을 cut이 archive했다.** `entwurf_register_native`는
+     probe로 liveness를 증명한 뒤 record만 쓰고 marker를 쓰지 않으며(보정①), v2 decider는
+     `nativePushProbe(identity)`로 record만 보고 dispatch한다(mailbox 분기만 receiver marker를
+     요구) — 즉 **marker 부재가 배달 가능한 live 시민의 정상 상태**다. socket+marker 스캔만으로
+     quiesce를 읽던 게이트가 그 주소를 발밑에서 archive했다. → `inspectNativePushCitizens`:
+     읽히는 record 중 native-push backend를 **dispatch가 쓰는 그 adapter probe**로 확인
+     (alive=LIVE / indeterminate·probe실패=UNCERTAIN / dead=통과).
+     **읽히지 않는 record는 통과** — 근거는 "그 세션이 죽었다"가 아니라 "모든 targeted address
+     경로가 그 바이트에서 refuse하므로 도달 가능한 시민이 아니다"이고, 대안(전부 refuse =
+     이전 세대 store에서 영구 교착 / id salvage = 삭제한 legacy reader 부활)이 둘 다 더 나쁘다.
+     살아남은 conversation은 **새 gardenId로 re-birth**(continuity 아님).
+     escape hatch가 성립한다: agy를 닫으면 probe가 `dead`라 cut이 합법화된다.
+  2. **targeted read가 symlink record를 follow했다.** certification은 거부하는데
+     `readMetaIdentityByGardenId`가 `existsSync`+`readFileSync`로 링크를 따라가, 새 계약이
+     "아무도 주소로 쓰지 않는 곳에서만" 참이었다. → `lstat` regular-file 계약을 read에도.
+  3. **inspect 실패가 absent로 세탁됐다 — 두 층에서.** `existsSync`는 stat조차 못 한 항목에
+     `false`를 주므로 (a) targeted: 읽을 수 없는 store가 v2에서 soft `bad-target`으로
+     (b) store-wide: `certifyActiveStoreDir`가 **certified-empty**로 보였다(doctor·install이
+     unreadable 호스트를 clean이라 보고). → shared `inspectRecordEntry` + readdir 직접 try:
+     **ENOENT만 absence**, EACCES/ENOTDIR/기타는 hard throw.
+  4. **`pgrep`의 모든 nonzero를 dead로 접었다.** exit 1(no match)과 2/3/124/127(scan 실패)이 한
+     값이 되어, PATH에 pgrep이 없으면 live conversation이 "provably hostless"가 됐다. dispatch
+     소비자에게는 false dead가 배달 거부로 끝나 무해했지만, destructive 소비자가 생긴 순간
+     fail-open. → exit 1만 no-match, 나머지는 probe `indeterminate`.
+  5. **drift/diagnostic 경로가 fresh-cut verb를 명명하지 않았다** ("Remove or fix it"). → 명명.
+  6. **preflight가 doctor의 판정을 정반대 처방으로 덮었다.** doctor가 "ACCESS problem, a cut
+     cannot fix it"이라 해도 `preflight_v3_store`/`meta-bridge-install.sh`의 **마지막 줄**은
+     무조건 "archive the generation with fresh-cut"이었다 — 오퍼레이터(그리고 마지막 명령을
+     따르는 에이전트)를 같은 errno로 실패할 명령에 보냈다. → doctor에 **EXIT CONTRACT**
+     (`0` certified / `1` certification defects → cut / `2` usage / `3` store unreadable →
+     access·path 수리)를 박고 두 호출자가 rc로 분기. access 분기는 cut 동사를 이름 대지 않는다.
+- **증거 (수선 후 exact worktree, 3셀 전부 GREEN)**: ① `pnpm check` EXIT=0 —
+  `check-fresh-cut-gate` **115/0**(H 8셀: native-push 3행 + 읽히지 않는 record 통과 + scan 실패
+  refuse + 배선 / I 10셀: unreadable store는 uncertified store가 아니며, **두 install caller를
+  모두 실제 구동**), `check-meta-identity-consumers` **39**, `check-native-push-adapter` **44**
+  ② `check-pack-install` EXIT=0 ③ `ENTWURF_REQUIRE_DOCKER=1 check-install-container` exit=0
+  (artifact sha256 `44a0405189fd901061008d9b91ff1648f6211b95a9048dec4b13c2e8d8573188`).
+  주의: 이 container 증거는 워킹트리 수용 증거이지 release-preserved tgz가 아니다.
+  **mutation 증거**: ①의 배선 한 줄을 지우면 H2/H2b/H2c/H3이 RED가 되고 출력이 정확히 그 구멍의
+  형상(`archived: …/store.archive-…`)을 보인다.
+- **검수 과정에서 배운 것 하나(다음 팀이 같은 데 빠지지 않게):** `.ts`를 고친 뒤 `pnpm check`가
+  `check-bridge-delivery`의 **dist staleness** 단언에서 죽는다. 원인을 "검증 중 편집"으로 잘못
+  진단해 한 바퀴 낭비했다. **소스 수정 → `pnpm run build-bridge` → 3셀** 순서를 지킬 것.
+- **실호스트 사실**: 이 개발 PC의 store는 **213 record certified** — merge 후 fresh-cut 없이
+  `setup`이 통과한다.
+- **▶ 다음 걸음 — #47 mux launch rail (0.12.x).** 착수 전 `docs/mux-launch-rail.md`. 이 컷에서
+  mux lineage 산문이 `callerGardenId`로 정정됐다(호출 사건 ≠ 계보).
 
-## BLOCKED RETURN — #49
+## OPEN
 
-1. ~~**C — fresh mint와 strict resume 분리.**~~ **폐기 (2026-07-24, #50 hard-cut이 주제 자체를 삭제).** C가 겨눈 rail이 더는 없다: `--session-id` 주입·marker 사슬·header-scan·`smoke-session-id-name`은 C2/C3가 삭제했고, resume 권위는 meta-record다(`record.transcriptPath` → `--session <절대경로>`, 헤더↔`nativeSessionId` 검증 게이트 포함). #49 본문 §C와 §C 최종 범위 코멘트는 역사 기록으로만 남는다.
-2. **E — floor purity.** 설계 SSOT는 **#41의 두 코멘트**(본 설계 + 실기기 보정). 첫 전체 floor 실행은 green이 목표가 아니라 **churn 카탈로그를 뽑는 관측 실행**이고, RED는 데이터다.
+1. **#52 — duplicate `nativeSessionId`가 read/discovery에서 라우팅된다.** 이 컷의 회귀가 아니라
+   **미완의 개선**이다(main에서는 duplicate 생성 자체를 막지 않았고, 이 컷이 쓰기에서 막기
+   시작했다). 유입 경로에 외부 오염뿐 아니라 **concurrent birth race**도 있다(upsert
+   certification은 트랜잭션이 아님 — 두 writer가 같은 clean snapshot을 보고 서로 다른 gid를
+   mint 가능). 읽기 전면 차단은 README가 명시적으로 좁힌 범위와 부딪히는 **정책 결정**이라 별건.
+   표면 5개 + 재현 3줄은 이슈 본문에.
+2. **#49 E — floor purity.** 설계 SSOT는 **#41의 두 코멘트**. 첫 전체 floor 실행은 green이
+   목표가 아니라 churn 카탈로그를 뽑는 관측 실행이고, RED는 데이터다.
+3. **🔴 release 차단 관측 — 번들 MCP readiness race (변동 없음).** 인과가 서기 전에는 고치지
+   않는다(GLG 결정). SSOT는 **ROADMAP 「🔴 OPEN — 번들 MCP readiness race」**.
+4. **release lane (0.12.8-repair.1, 방아쇠는 GLG):** `land` → `prepare`(CHANGELOG 재승격 —
+   fresh-cut 뺄셈 + 이 재검수 수선 6건 포함) → `make`(LIVE 재획득) → `publish`(`repair`
+   dist-tag만; `latest=0.12.7` 유지 확정). merge ≠ release. container 증거는 워킹트리 수용
+   증거이지 release-preserved tgz가 아니므로 `make` 때 exact candidate를 다시 보존·결속한다.
+5. **후속·별건:** ⓐ 오푸스가 #50에 남긴 readiness upstream 인과 확정 코멘트 정정 — GLG 승인 후
+   ⓑ BASELINE fresh-cut HISTORY 기록 여부는 release prepare 때 판단 ⓒ #48 cortex(0.13.0, PR
+   #40은 PARK) ⓓ Meta sender 모델 표기(비차단, optional display field).
+
+## 런북 — pre-cut 호스트가 이 컷을 pull할 때
+
+그 호스트 세션 quiesce(**agy conversation 포함** — 살아있으면 cut이 거부한다) → pull →
+`entwurf meta-bridge-fresh-cut` → `setup` → 재개. 이전 세대는 `meta-sessions.archive-<ts>`로
+남고 아무도 읽지 않는다. 순서를 외울 필요는 없다 — 게이트가 각 단계에서 거부하며 무엇을 할지
+말한다. store를 **읽을 수 없는** 경우는 cut이 아니라 권한/경로 수리다(게이트가 구분해 말한다).
+
+## 컷 불변 (재론 금지)
+
+Claude floor `>=2.1.217` · Linux 유일 certified axis · Node 24+ 단일 지원축 ·
+`MetaCitizenBackend` 어휘(`MetaBackendV2` 잔재 0).
 
 ## RECENT
 
-- **[2026-07-24] #50 hard-cut 브랜치 merge** — 위 NOW 첫 항목. 검수 세션(오푸스→GPT 교차검수 4라운드→페블 최종)의 상세와 F8 legibility 수선(`cbda097`)까지 #50 작업기에 있다.
-- **[2026-07-13] evidence boundary:** 동일 agy pid에서 여러 conversation이 동시에 model invocation을 수행하면 단일 marker가 last-writer로 덮인다. 현재 agy의 process-per-session·직렬 invocation에 기대며, 같은 pid 동시성은 지원하지 않는다.
-- **수동 항목:** `smoke-meta-async-drift`는 외부 바이너리 pin에 의존해 CI에 못 넣는다. 컷 체크리스트의 수동 항목 (2026-07-14 green: claude 2.1.208 / codex 0.144.1 / agy 1.1.2).
-
-## AFTER
-
-1. **#47 mux launch rail — 0.12.x.** 착수 전 `docs/mux-launch-rail.md`를 읽는다.
-2. **#48 cortex — 0.13.0.** PR #40은 PARK. mux 기반과 backend adapter 검증이 선 뒤에만 연다.
-3. **Meta sender 모델 표기 — 비차단.** `agentId=meta-session/<backend>`는 `AGENTS.md` 계약대로 정상이다. 모델 표시는 agentId를 바꾸지 말고 optional display field로 별도 설계한다.
-4. **장기 항목 원장은 ROADMAP** — 「repair/v2-core-debt 승격분」(loader alias, identity 계약 cut, 기계가 말하는 장치, agy live smoke, C4 tail, hooksPath 결정, sentinel 봉인 한계)과 「🔴 OPEN — 번들 MCP readiness race」.
+- **[2026-07-25] fresh-cut 뺄셈** — 위 NOW. 페블 `7f10eaf`(뺄셈 본체) + 오푸스 `38b1e44`(GPT
+  3라운드 수선) + fresh-eyes 재검수 수선(이 merge의 마지막 커밋). net −1,100줄 뺄셈에 수선분이
+  얹혔다.
+- **[2026-07-24] #50 hard-cut 브랜치 merge** — meta-record가 유일한 주소 권위(V3-only).
+  증거 원장은 BASELINE HISTORY(`cbda097`)와 CHANGELOG/git.
+- **[2026-07-13] evidence boundary:** 동일 agy pid 다중 conversation 동시 invocation 시 marker
+  last-writer 덮임. process-per-session·직렬 invocation에 기댄다.
+- **수동 항목:** `smoke-meta-async-drift`는 외부 바이너리 pin 의존으로 CI 제외. 컷 체크리스트의
+  수동 항목 (2026-07-14 green: claude 2.1.208 / codex 0.144.1 / agy 1.1.2).

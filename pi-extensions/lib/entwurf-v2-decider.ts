@@ -63,8 +63,8 @@ import type { AcquireLockResult, LockClaim, LockConflict } from "./entwurf-v2-lo
 import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
-	type MetaBackendV2,
 	type MetaCapability,
+	type MetaCitizenBackend,
 	type MetaIdentity,
 	metaCapabilityFor,
 } from "./meta-session.ts";
@@ -185,7 +185,7 @@ export interface TargetResolution {
 	 * #50 C4: a record-LESS gid whose canonical control socket exists as a confirmed
 	 * non-symlink socket file (a single PROBE-FREE lstat — `isRecordLessSocketCandidate`).
 	 * The record is the sole address authority, so this is NOT an addressable citizen:
-	 * the decider rejects it pre-probe as `record-less-socket` — a migration/diagnostic
+	 * the decider rejects it pre-probe as `record-less-socket` — a diagnostic
 	 * state named honestly, never the `bad-target` "absent" lie (something real answers
 	 * to the gid) and never a dispatchable endpoint (the retired A1 narrow). Only
 	 * meaningful when `identity === null`; a record-backed citizen never sets it.
@@ -277,7 +277,7 @@ function requireGardenId(target: string): string {
  */
 export function resolveMailboxWakeModeCapability(
 	identity: MetaIdentity,
-	capabilityFor: (backend: MetaBackendV2) => MetaCapability = metaCapabilityFor,
+	capabilityFor: (backend: MetaCitizenBackend) => MetaCapability = metaCapabilityFor,
 ): boolean {
 	return capabilityFor(identity.backend).wakeMode === "self-fetch";
 }
@@ -306,7 +306,7 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 
 	// 2b. #50 C4: a record-LESS control socket is NOT an addressable citizen. The record
 	// is the sole address authority (목표 ②), so EVERY intent is refused pre-probe with
-	// `record-less-socket` — a migration/diagnostic state named honestly. NOT `bad-target`
+	// `record-less-socket` — a diagnostic state named honestly. NOT `bad-target`
 	// (something real answers to this gid; "absent" would hide the state the reject exists
 	// to surface), and no lock/probe runs (no citizen ⇒ nothing in-domain to measure).
 	// The retired A1 narrow used to route this through the probe table as a dispatchable

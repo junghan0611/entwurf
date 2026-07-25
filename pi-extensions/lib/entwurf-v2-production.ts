@@ -273,7 +273,7 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 	const resolveTarget = async (gid: string): Promise<TargetResolution> => {
 		// MISSING record → not a citizen. A record-LESS, gid-shaped, NON-SYMLINK control
 		// socket is still distinguished from a plain absent gid (#50 C4): the decider
-		// rejects it as `record-less-socket` (migration/diagnostic state) instead of the
+		// rejects it as `record-less-socket` (a diagnostic state) instead of the
 		// `bad-target` "absent" lie. This is PROBE-FREE — a single `inspectPath` lstat
 		// (NO connect), the SAME seam the pre-probe conflict uses — and
 		// `isRecordLessSocketCandidate` counts ONLY a confirmed non-symlink socket

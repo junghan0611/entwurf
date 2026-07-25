@@ -32,10 +32,13 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+	classifyMarkerOwner,
 	META_RECEIVER_ARM_PROVENANCES,
 	metaReceiverMarkerPath,
+	probePidExistence,
 	processStartKey,
 	readMetaReceiverMarker,
+	startKeyScheme,
 	writeMetaReceiverMarker,
 } from "../pi-extensions/lib/meta-session.ts";
 
@@ -196,6 +199,93 @@ const signalAt = hookSrc.search(/inbox\.signal/);
 ok(
 	"receiver marker write sits within the watch-arm region (near inbox.signal)",
 	signalAt >= 0 && recvWriteAt > signalAt,
+);
+
+// ── the marker-OWNER verdict: dead must be proven ───────────────────────────
+// `processStartKey` returns "" for a pid that is gone AND for one it merely cannot
+// read (hidepid /proc, no ps). For granting identity that ambiguity is free — both
+// refuse. For a DESTRUCTIVE caller (the generation cut) it inverts: reading "" as
+// "the owner left" archives a live citizen's address. So the verdict lives in one
+// pure rule over injected facts, and these cells pin every row of it.
+ok(
+	"owner verdict: current key equals the recorded one → live",
+	classifyMarkerOwner("linux:111", { currentStartKey: "linux:111", pidExists: true }) === "live",
+);
+ok(
+	"owner verdict: a DIFFERENT current key proves the recorded owner is gone (pid reused) → dead",
+	classifyMarkerOwner("linux:111", { currentStartKey: "linux:222", pidExists: true }) === "dead",
+);
+ok(
+	"owner verdict: unreadable current key + pid PROVEN absent → dead",
+	classifyMarkerOwner("linux:111", { currentStartKey: "", pidExists: false }) === "dead",
+);
+ok(
+	"owner verdict: unreadable current key + pid still EXISTS → uncertain (never cut)",
+	classifyMarkerOwner("linux:111", { currentStartKey: "", pidExists: true }) === "uncertain",
+);
+ok(
+	"owner verdict: unreadable current key + pid existence UNPROVABLE (EPERM/hidepid) → uncertain",
+	classifyMarkerOwner("linux:111", { currentStartKey: "", pidExists: null }) === "uncertain",
+);
+ok(
+	"owner verdict: a marker that records no start-key names no owner → uncertain",
+	classifyMarkerOwner("", { currentStartKey: "linux:111", pidExists: true }) === "uncertain",
+);
+// A different key only proves change when both keys MEASURE THE SAME THING.
+// `linux:<ticks since boot>` and `ps:<wall-clock lstart>` describe one process with
+// different numbers, so a cross-scheme mismatch is incomparable, not a death proof.
+ok(
+	"start-key scheme: linux/ps are recognized, anything else is not",
+	startKeyScheme("linux:12345") === "linux" &&
+		startKeyScheme("ps:Thu Jul 24 10:00:00 2026") === "ps" &&
+		startKeyScheme("garbage") === null &&
+		startKeyScheme("linux:notdigits") === null &&
+		startKeyScheme("ps:") === null &&
+		startKeyScheme("") === null,
+);
+ok(
+	"owner verdict: an UNRECOGNIZED recorded key is a malformed marker, never a death proof → uncertain",
+	classifyMarkerOwner("garbage", { currentStartKey: "linux:111", pidExists: true }) === "uncertain",
+);
+ok(
+	"owner verdict: an unrecognized CURRENT key means we cannot read the owner → uncertain",
+	classifyMarkerOwner("linux:111", { currentStartKey: "garbage", pidExists: true }) === "uncertain",
+);
+ok(
+	"owner verdict: ps-recorded vs linux-current is INCOMPARABLE (same process, two coordinate systems) → uncertain",
+	classifyMarkerOwner("ps:Thu Jul 24 10:00:00 2026", { currentStartKey: "linux:111", pidExists: true }) === "uncertain",
+);
+ok(
+	"owner verdict: linux-recorded vs ps-current is equally incomparable → uncertain",
+	classifyMarkerOwner("linux:111", { currentStartKey: "ps:Thu Jul 24 10:00:00 2026", pidExists: true }) === "uncertain",
+);
+ok(
+	"owner verdict: same-scheme linux mismatch IS a death proof → dead",
+	classifyMarkerOwner("linux:111", { currentStartKey: "linux:222", pidExists: true }) === "dead",
+);
+ok(
+	"owner verdict: same-scheme ps mismatch is a death proof too → dead",
+	classifyMarkerOwner("ps:Thu Jul 24 10:00:00 2026", {
+		currentStartKey: "ps:Fri Jul 25 11:00:00 2026",
+		pidExists: true,
+	}) === "dead",
+);
+ok(
+	"owner verdict: an unrecognized recorded key stays uncertain even when the pid is GONE",
+	classifyMarkerOwner("garbage", { currentStartKey: "", pidExists: false }) === "uncertain",
+);
+// The fs-bound probe, on facts we can actually stage: this process exists, and a
+// non-positive pid must never reach `kill` (that addresses a process GROUP).
+ok("pid probe: this very process is proven to exist", probePidExistence(process.pid) === true);
+ok("pid probe: a non-positive pid is refused before the syscall, never broadcast", probePidExistence(0) === false);
+ok("pid probe: a non-integer pid is refused too", probePidExistence(1.5) === false);
+// Round trip through the real pair: our own marker facts must read as `live`.
+ok(
+	"owner verdict on THIS process's real facts (start-key + probe) → live",
+	classifyMarkerOwner(processStartKey(process.pid), {
+		currentStartKey: processStartKey(process.pid),
+		pidExists: probePidExistence(process.pid),
+	}) === "live",
 );
 
 // ── launch topology is NOT this gate's job any more ─────────────────────────

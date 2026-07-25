@@ -36,16 +36,20 @@ import {
 	isLivenessSupported,
 	LIVENESS_DOMAIN_BACKENDS,
 } from "../pi-extensions/lib/entwurf-v2-contract.ts";
-import { META_BACKENDS_V2, type MetaBackendV2, type MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
+import {
+	META_CITIZEN_BACKENDS,
+	type MetaCitizenBackend,
+	type MetaIdentity,
+} from "../pi-extensions/lib/meta-session.ts";
 import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
 
 // Derive the backend coverage from the SSOT registry so a NEW backend in
-// META_BACKENDS_V2 auto-extends this gate (Fable/GPT non-blocking suggestion):
+// META_CITIZEN_BACKENDS auto-extends this gate (Fable/GPT non-blocking suggestion):
 // out-of-domain backends must all resolve to `unsupported`, the in-domain set is
 // the only one with a defined liveness predicate. A drift assertion below pins
 // the in-domain set to ["pi"] so widening the domain forces new R3b coverage.
-const OUT_OF_DOMAIN = META_BACKENDS_V2.filter((b) => !isLivenessSupported(b));
-const IN_DOMAIN = META_BACKENDS_V2.filter((b) => isLivenessSupported(b));
+const OUT_OF_DOMAIN = META_CITIZEN_BACKENDS.filter((b) => !isLivenessSupported(b));
+const IN_DOMAIN = META_CITIZEN_BACKENDS.filter((b) => isLivenessSupported(b));
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -54,7 +58,7 @@ function ok(label: string, cond: boolean): void {
 	passed++;
 }
 
-function identity(backend: MetaBackendV2, over: Partial<MetaIdentity> = {}): MetaIdentity {
+function identity(backend: MetaCitizenBackend, over: Partial<MetaIdentity> = {}): MetaIdentity {
 	return {
 		schemaVersion: 3,
 		gardenId: "20260611T093858-14984d",
@@ -104,7 +108,7 @@ ok(
 );
 
 // ── liveness always ∈ FACT_LIVENESSES ──────────────────────────────────────
-for (const backend of META_BACKENDS_V2) {
+for (const backend of META_CITIZEN_BACKENDS) {
 	for (const socket of SOCKET_INPUTS) {
 		const fact = resolvePeerFact(identity(backend), socket);
 		ok(

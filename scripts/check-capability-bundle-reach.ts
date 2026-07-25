@@ -26,7 +26,7 @@
  *   - B3: the bytes it reaches are the shipped `pi/entwurf-capabilities.json`
  *         (reaching a stale/divergent copy is not reach),
  *   - B4: the live load seam `metaCapabilityFor()` returns for every
- *         META_BACKENDS_V2 backend without throwing — the real `entwurf_v2` path.
+ *         META_CITIZEN_BACKENDS backend without throwing — the real `entwurf_v2` path.
  *
  * Deterministic: filesystem + import only. No backend, no network, no API, no
  * record write. Safe in the `pnpm check` static floor.
@@ -112,7 +112,7 @@ for (const copy of copies) {
 
 	// B4 — the live seam the real entwurf_v2 send goes through. B2 proves a file is
 	// there; this proves the load path actually returns instead of throwing.
-	for (const backend of mod.META_BACKENDS_V2) {
+	for (const backend of mod.META_CITIZEN_BACKENDS) {
 		let threw: string | null = null;
 		try {
 			mod.metaCapabilityFor(backend);

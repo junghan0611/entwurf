@@ -114,7 +114,7 @@ export type TargetSocketInspection =
  * reject uses the SAME lstat classification the listing/conflict paths use —
  * listing↔dispatch cannot drift on what counts as a real control socket. This is
  * only the presence hint that turns a plain `bad-target` into the honest
- * `record-less-socket` reject (migration/diagnostic state) — no probe, no acceptance.
+ * `record-less-socket` reject (a diagnostic state) — no probe, no acceptance.
  */
 export function isRecordLessSocketCandidate(inspection: TargetSocketInspection): boolean {
 	return inspection.kind === "socket-file";

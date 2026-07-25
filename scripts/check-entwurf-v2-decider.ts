@@ -48,7 +48,7 @@ import {
 	type TargetResolution,
 } from "../pi-extensions/lib/entwurf-v2-decider.ts";
 import type { AcquireLockResult, LockClaim } from "../pi-extensions/lib/entwurf-v2-lock.ts";
-import type { MetaBackendV2, MetaCapability, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
+import type { MetaCapability, MetaCitizenBackend, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
 import type { NativePushProbeResult } from "../pi-extensions/lib/native-push/adapter.ts";
 import { controlSocketPath, type TargetSocketInspection } from "../pi-extensions/lib/socket-discovery.ts";
 import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
@@ -63,7 +63,7 @@ function ok(label: string, cond: boolean): void {
 const GID = "20260612T100000-aaaaaa";
 const CWD = "/home/junghan/repos/gh/entwurf";
 
-function identity(backend: MetaBackendV2): MetaIdentity {
+function identity(backend: MetaCitizenBackend): MetaIdentity {
 	return {
 		schemaVersion: 3,
 		gardenId: GID,
@@ -555,7 +555,7 @@ async function main(): Promise<void> {
 	// ── #50 C4: record-less socket (identity null + recordLessSocket) ──────────
 	// The record is the sole address authority, so a bare control socket is NOT an
 	// addressable citizen — EVERY intent rejects pre-probe as `record-less-socket`
-	// (migration/diagnostic state, observedLiveness=null): no lock, no inspect, no
+	// (a diagnostic state, observedLiveness=null): no lock, no inspect, no
 	// probe, no mailbox seam, no plan. NOT `bad-target` (something real answers to
 	// the gid — "absent" would hide the state). The retired A1 narrow used to accept
 	// ff sends into this socket; that acceptance must never come back.

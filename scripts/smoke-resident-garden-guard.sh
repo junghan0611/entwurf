@@ -48,8 +48,8 @@
 # ISOLATION. This is a LIVE gate and drives the real `pi` binary, but it points
 # PI_CODING_AGENT_DIR at a temp dir so its records and sessions never land in the
 # operator's store. That is not decoration during the #50 window: the live store is
-# still v2 and V3-only production would mint fresh V3 records beside pre-cut ones,
-# manufacturing exactly the mixed store M1 exists to prevent. Control sockets stay in
+# unreadable and the strict upsert would refuse the birth — exactly the mixed-store
+# hazard the fresh-cut generation policy exists to prevent. Control sockets stay in
 # the real ENTWURF_DIR (ephemeral runtime files, removed at shutdown) so the socket
 # assertions observe the same directory a real resident uses.
 #

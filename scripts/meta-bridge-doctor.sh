@@ -1122,7 +1122,7 @@ for mf in "$META_SESSIONS"/*.meta.json; do
     1) sv1=$((sv1 + 1)) ;; 2) sv2=$((sv2 + 1)) ;; 3) sv3=$((sv3 + 1)) ;;
   esac
 done
-echo "  store     : v1=$sv1 v2=$sv2 v3=$sv3  (production reads v3 only; v1/v2 wait for the M1 migrate)"
+echo "  store     : v1=$sv1 v2=$sv2 v3=$sv3  (production reads v3 only; any other generation waits for the fresh-cut)"
 
 if [ -z "${INST_MS:-}" ]; then
   # Whether the DEPLOYED writer is stale is the whole point of this section. Skipping

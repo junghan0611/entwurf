@@ -28,7 +28,7 @@
  */
 
 import { type FactLiveness, factLivenessOf, isLivenessSupported } from "./entwurf-v2-contract.ts";
-import type { MetaBackendV2, MetaIdentity } from "./meta-session.ts";
+import type { MetaCitizenBackend, MetaIdentity } from "./meta-session.ts";
 import type { SocketLiveness } from "./socket-probe.ts";
 
 /**
@@ -39,7 +39,7 @@ import type { SocketLiveness } from "./socket-probe.ts";
 export interface PeerFact {
 	// — identity + cwd-history facts (verbatim from the meta-record) —
 	gardenId: string;
-	backend: MetaBackendV2;
+	backend: MetaCitizenBackend;
 	nativeSessionId: string;
 	cwd: string;
 	model: string | null;
@@ -122,7 +122,7 @@ export interface SocketProbe {
 
 /**
  * A record-less control socket — a socket path that no meta-record citizen
- * claims (a pre-record-era resident, a mixed/pre-cut store, a crash window, or
+ * claims (a pre-record-era resident, a store left from a previous generation, a crash window, or
  * a stale/planted file). #50 C4: this is a DIAGNOSTIC subject, not a citizen —
  * the record is the sole address authority, so the provider folds each of these
  * into a `record-less-socket` diagnostic (naming the cause + fix) instead of a

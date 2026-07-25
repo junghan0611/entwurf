@@ -8,8 +8,8 @@
  *   - orphan (transcript gone) / stale (recordUpdatedAt older than ttl) are
  *     SUGGESTED for manual prune with the exact rm command printed — but removed
  *     by no one here. transcript-gone is a strong abandonment signal, not proof; a
- *     backend path migration / cleanup / config-dir change can also vacate it. A
- *     NULL transcriptPath (v2 nullable-at-birth, e.g. pi) is "unknown", NOT gone —
+ *     backend path move / cleanup / config-dir change can also vacate it. A
+ *     NULL transcriptPath (nullable-at-birth, e.g. pi) is "unknown", NOT gone —
  *     never orphan on null; only a non-empty string path that no longer exists.
  *   - corrupt JSON / body↔filename drift / duplicate nativeSessionId are
  *     AMBIGUOUS / manual-only: the operator decides which authority survives.
@@ -94,8 +94,9 @@ for (const filename of fs.readdirSync(dir).sort()) {
 	if (!filename.endsWith(".meta.json")) continue;
 	scanned += 1;
 	const file = path.join(dir, filename);
-	// V3-only (#50 hard cut): a pre-cut (v1/v2) record fails parse and lands in
-	// the corrupt/manual-only bucket until the M1 operator command migrates it.
+	// V3-only (#50 hard cut): a record from a previous generation fails parse and
+	// lands in the corrupt/manual-only bucket until the operator archives that
+	// generation with fresh-cut. Nothing here carries it forward.
 	let id: MetaIdentity;
 	try {
 		id = parseMetaIdentity(fs.readFileSync(file, "utf8"));

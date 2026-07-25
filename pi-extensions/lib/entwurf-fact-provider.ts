@@ -29,22 +29,22 @@
 
 import { type FactList, isNonPiGardenIdSocketConflict, resolveFactList } from "./entwurf-facts.ts";
 import { isLivenessSupported } from "./entwurf-v2-contract.ts";
-import { listAllMetaIdentities, M1_PRESCRIPTION, type MetaBackendV2 } from "./meta-session.ts";
+import { FRESH_CUT_PRESCRIPTION, listAllMetaIdentities, type MetaCitizenBackend } from "./meta-session.ts";
 import { type SocketScanDeps, scanSocketProbes } from "./socket-discovery.ts";
 import type { SocketLiveness } from "./socket-probe.ts";
 
 /** A listing-surface problem, surfaced explicitly rather than hidden or thrown.
  * Kind-tagged so the render layer shows provenance; each carries only verbatim
  * facts (never a half-parsed identity). `record-less-socket` (#50 C4) is the
- * demoted socket-only listing: a socket no record claims is a migration/
- * diagnostic state, not a citizen, and its message names the cause + fix. The
+ * demoted socket-only listing: a socket no record claims is a diagnostic
+ * state, not a citizen, and its message names the cause + fix. The
  * last three are socket-axis hazards folded from `scanSocketProbes` (slice 4c,
  * Fable 검수): a symlinked socket is a correlation-authority forgery attempt
  * (P1), a malformed `*.sock` name a visible drop (P3), a non-ENOENT dir-read
  * failure asymmetric loss of the socket axis (P2e②). */
 export type EntwurfDiagnostic =
 	| { kind: "meta-record-read-error"; filename: string; message: string }
-	| { kind: "garden-id-socket-conflict"; gardenId: string; backend: MetaBackendV2; message: string }
+	| { kind: "garden-id-socket-conflict"; gardenId: string; backend: MetaCitizenBackend; message: string }
 	| { kind: "record-less-socket"; gardenId: string; liveness: SocketLiveness; message: string }
 	| { kind: "socket-symlink-rejected"; gardenId: string; message: string }
 	| { kind: "malformed-socket-name"; name: string; message: string }
@@ -59,7 +59,8 @@ export function recordLessSocketMessage(liveness: SocketLiveness): string {
 			return (
 				"a LIVE control socket no meta-record claims — not an addressable citizen (the record is the " +
 				"sole address authority). Restart the pre-record-era resident under the current runtime so " +
-				`session_start births its record, or migrate a pre-cut store with ${M1_PRESCRIPTION}.`
+				`session_start births its record; if the store predates the current generation, quiesce and ` +
+				`archive it with ${FRESH_CUT_PRESCRIPTION}.`
 			);
 		case "dead":
 			return (

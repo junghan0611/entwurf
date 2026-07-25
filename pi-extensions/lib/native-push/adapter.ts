@@ -162,15 +162,41 @@ export function createAntigravityAdapter(deps: AntigravityAdapterDeps): NativePu
 	const binary = deps.binary ?? resolveAgyBinary();
 	const processName = deps.processName ?? "agy";
 
+	/**
+	 * ALL matching host pids (raw-agy-send.sh:16's `head -1` corrected here). Throws when
+	 * the scan itself failed — the caller turns that into `indeterminate`.
+	 *
+	 * NOT EVERY NONZERO EXIT IS THE SAME ANSWER. pgrep(1): 0 = matched, **1 = no match**,
+	 * 2 = usage error, 3 = fatal; the runner additionally reports a spawn failure (pgrep
+	 * missing from PATH) as 127 and a timeout kill as 124. Folding all of those into "no
+	 * matching process" made a BROKEN SCAN indistinguishable from a quiet host. That was
+	 * survivable while the only consumer was a dispatch — a false `dead` merely refuses a
+	 * delivery — but it is fail-OPEN the moment a destructive caller reads the same verdict
+	 * as "provably hostless" and archives a live conversation's address (2026-07-25
+	 * fresh-eyes review, on the fresh-cut quiesce gate).
+	 */
 	async function scanHostPids(): Promise<number[]> {
-		// pgrep -x <name> — ALL matching pids (raw-agy-send.sh:16 `head -1` corrected here).
 		const r = await runner.exec(["pgrep", "-x", processName]);
-		if (r.code !== 0) return []; // pgrep exit != 0 → no matching process
-		return r.stdout
+		if (r.code === 1) return []; // the ONE nonzero that means "no such process"
+		if (r.code !== 0) {
+			throw new Error(
+				`\`pgrep -x ${processName}\` exited ${r.code} (${r.stderr.trim() || "no stderr"}) — the host scan FAILED, ` +
+					"so whether a host process exists is unknown; that is not the same as pgrep's exit 1 (no match).",
+			);
+		}
+		const pids = r.stdout
 			.split("\n")
 			.map((s) => s.trim())
 			.filter((s) => /^[0-9]+$/.test(s))
 			.map((s) => Number(s));
+		// Exit 0 promises at least one match, so an empty parse means we misread the output
+		// rather than that the host is gone.
+		if (pids.length === 0) {
+			throw new Error(
+				`\`pgrep -x ${processName}\` exited 0 but named no parsable pid — the host scan output could not be read.`,
+			);
+		}
+		return pids;
 	}
 
 	async function servesConversation(lsAddress: string, conversationId: string): Promise<boolean> {
@@ -187,7 +213,19 @@ export function createAntigravityAdapter(deps: AntigravityAdapterDeps): NativePu
 		id: "antigravity",
 
 		async probe(nativeSessionId) {
-			const pids = await scanHostPids();
+			let pids: number[];
+			try {
+				pids = await scanHostPids();
+			} catch (err) {
+				// A scan we could not run is not a departed host. `indeterminate` is the honest
+				// value and it already carries the right consequence on both rails: a dispatch
+				// rejects as `native-push-probe-indeterminate`, and the fresh-cut quiesce gate
+				// refuses the cut instead of archiving a maybe-live conversation.
+				return {
+					status: "indeterminate",
+					reason: `host scan failed: ${err instanceof Error ? err.message : String(err)}`,
+				};
+			}
 			if (pids.length === 0) {
 				return { status: "dead", reason: `no live ${processName} process (native-push target has no host)` };
 			}
