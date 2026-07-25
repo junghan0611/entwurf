@@ -534,7 +534,7 @@ valid_record "20260606T000000-aaaaaa" "native-a" > "$STORE/20260606T000000-aaaaa
 valid_record "20260606T000001-bbbbbb" "native-b" > "$STORE/20260606T000001-bbbbbb.meta.json"
 
 STATUS_INPUT_MATCH='{"session_id":"native-a","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-sonnet-5"},"context_window":{"context_window_size":200000,"used_percentage":2,"current_usage":{"input_tokens":10}}}'
-STATUS_INPUT_MISS='{"session_id":"native-missing","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-opus-4-8"}}'
+STATUS_INPUT_MISS='{"session_id":"native-missing","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-opus-5"}}'
 STATUS_INPUT_READY='{"workspace":{"current_dir":"/tmp"},"model":{"id":"claude-haiku-4-5"}}'
 STATUS_OUT_MATCH="$(printf '%s' "$STATUS_INPUT_MATCH" | ENTWURF_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
 if [ "$(printf '%s\n' "$STATUS_OUT_MATCH" | wc -l | tr -d ' ')" = "2" ]; then ok "statusline renders exactly two rows"; else bad "statusline should render two rows: $STATUS_OUT_MATCH"; fi

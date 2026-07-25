@@ -86,7 +86,7 @@ D2 receiver_armed: pass
 D3 addressed_enqueue: pass
 D4 idle_active_wake: pass
 D5 context_injection: pass token=AGY-PARITY-3399
-D6 continuity: pass session_id=<native-id> model=claude-opus-4-8
+D6 continuity: pass session_id=<native-id> model=claude-opus-5
 D7 completion_reply: partial reason="no garden outbox yet"
 D8 robustness: partial reason="loop guard present; crash recovery not tested"
 ```

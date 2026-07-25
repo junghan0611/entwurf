@@ -18,14 +18,14 @@
 // Why `/compat` and NOT the 0.80 provider-factory subpath (the pi-ai
 // providers/anthropic subpath): this file is loaded by pi's
 // EXTENSION loader (pi-coding-agent `core/extensions/loader.ts`), whose jiti
-// alias map resolves ONLY three pi-ai specifiers for extensions — the bare root,
-// `/compat`, and `/oauth` — all to `ai/dist/compat.js`. A `providers/*` subpath
-// is NOT in that map: jiti prefix-matches the bare `@earendil-works/pi-ai` alias
-// and appends the remainder, yielding the unresolvable
-// `…/dist/compat.js/providers/anthropic` (verified live: extension load crash,
-// invisible to static typecheck which resolves against node_modules `exports`).
-// So `/compat` is the SINGLE sanctioned extension entrypoint for the old global
-// model-catalog API, and the SINGLE allowlisted exception in
+// alias map resolves FOUR pi-ai specifiers for extensions — the bare root,
+// `/compat`, `/oauth`, and (since pi 0.81) `/providers/all`. Other `providers/*`
+// subpaths are NOT in that map: jiti prefix-matches the bare
+// `@earendil-works/pi-ai` alias and appends the remainder, yielding the
+// unresolvable `…/dist/compat.js/providers/anthropic` (verified live: extension
+// load crash, invisible to static typecheck which resolves against node_modules
+// `exports`). So `/compat` remains the SINGLE sanctioned extension entrypoint
+// this repo uses for the old global model-catalog API, and the SINGLE allowlisted exception in
 // `run.sh check-pi-import-surface`. `getModels` here is compat's deprecated
 // re-export of `getBuiltinModels`. When pi removes compat we migrate to whatever
 // the loader then exposes.
@@ -50,13 +50,13 @@ export const ENTWURF_ACP_NO_AUTH_SENTINEL = "entwurf-no-auth";
 // both axes (protocol smoke + agent interview) — do not extend casually.
 // Exported so the claude backend adapter (backend-adapter.ts) can answer
 // `routeModel` without re-deriving the set from curatedClaudeModels().
-export const SUPPORTED_ANTHROPIC_MODEL_IDS = ["claude-sonnet-5", "claude-opus-4-8"] as const;
+export const SUPPORTED_ANTHROPIC_MODEL_IDS = ["claude-sonnet-5", "claude-opus-5"] as const;
 
 /** The anchor model whose absence is a hard registry regression, not a soft skip. */
-export const CURATED_ANCHOR_MODEL_ID = "claude-opus-4-8";
+export const CURATED_ANCHOR_MODEL_ID = "claude-opus-5";
 
-// Anthropic's registry reports 1M for both Sonnet 5 and Opus 4.8, and the
-// entwurf surface now exposes the full 1M for BOTH. Sonnet 5's 1M window is the
+// Anthropic's registry reports 1M for both Sonnet 5 and Opus 5, and the
+// entwurf surface exposes the full 1M for BOTH. Sonnet 5's 1M window is the
 // whole point of the 0.12.3 bump — it is the compact-free long-context floor the
 // earlier 200K Sonnet cap could not provide. We still clamp to a 1M ceiling so a
 // future registry value can't silently inflate the surface past what we verify.

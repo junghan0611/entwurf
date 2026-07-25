@@ -21,7 +21,7 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
 **정렬:** fresh launch를 **mux-visible surface로 먼저 통일**한다. pi-native GPT도 bg/detached `pi -p`로 숨기지 않고 투명하게 pane/session으로 보이며 같은 launch 관문을 통과 → pi를 Claude Code/Codex/Antigravity와 같은 급의 "4번째 하네스"로 세운다. pi 전용 headless/bg 최적화는 GLG가 나중에 명시할 때 별도 레인.
 
 - v1 본체(**제거됨**): `runEntwurfSync`/`runEntwurfResumeSync`는 v1 sync-body dead-island sweep에서 삭제됐다 — 자산이 필요하면 git history에서 복원. 삭제 전에는 fresh-mint 본체(registry gate `resolveEntwurfTarget`(미등록 reject) + session-id/name/cwd-enrich)와 resume(registry 우회)였다. launch arg SSOT `entwurf-resume-args.ts`는 유지. 주: fresh-mint는 `--no-extensions` one-shot worker이지 `-p`/control 경로 아님.
-- **레지스트리 현황(`6d06ad0` 이후):** `entwurf/claude-sonnet-5`·`entwurf/claude-opus-4-8`(ACP claude), `openai-codex/gpt-5.4|5.5`(native), `entwurf/gemini-3.1-pro-preview`(ACP gemini, explicitOnly). **ACP Codex 엔트리는 삭제됨** — 즉 "Claude Code에서 새 GPT 불러줘"는 레지스트리가 하드 차단. mux 레인이 서야 되살릴 수 있음.
+- **레지스트리 현황(`6d06ad0` 이후):** `entwurf/claude-sonnet-5`·`entwurf/claude-opus-5`(ACP claude), `openai-codex/gpt-5.4|5.5`(native), `entwurf/gemini-3.1-pro-preview`(ACP gemini, explicitOnly). **ACP Codex 엔트리는 삭제됨** — 즉 "Claude Code에서 새 GPT 불러줘"는 레지스트리가 하드 차단. mux 레인이 서야 되살릴 수 있음.
 
 ## ② mux-agnostic spawn/launch surface
 

@@ -992,12 +992,12 @@ smoke_entwurf_v2_spawn_live() {
 smoke_acp_socket_citizen_live() {
   # S1 acceptance smoke (ACP plugin on v2) — OUT of pnpm check, needs LIVE=1.
   # Spawns a REAL `pi --entwurf-control` resident on an ACP model
-  # (entwurf/claude-opus-4-8) and proves it is a first-class socket-citizen:
+  # (entwurf/claude-opus-5) and proves it is a first-class socket-citizen:
   # the control socket stands up, get_info answers with the ACP model (model-lock
   # did NOT revert — QM1), idle/cwd are reported, and the fail-loud streamSimple
   # stub never fires (turn-free launch — QM2). No prompt is sent: S1 proves
   # citizenship, never a backend turn (that is S2). Honest skip when LIVE!=1.
-  # Model override: ENTWURF_S1_MODEL (default claude-opus-4-8).
+  # Model override: ENTWURF_S1_MODEL (default claude-opus-5).
   #   LIVE=1 ./run.sh smoke-acp-socket-citizen-live
   run_ts scripts/smoke-acp-socket-citizen-live.ts
 }
@@ -1446,12 +1446,12 @@ assert.equal(peerTui, piAi,
 // floor tracks the devDep pin so a consumer can't install against a pi lacking
 // the public trust exports the bridge imports at the pinned minor, AND an upper
 // bound at the next minor stops a fresh install from silently pulling a future
-// pi (past the declared ceiling — 0.83+ at the current 0.82.0 pin) whose
+// pi (past the declared ceiling — 0.83+ at the current 0.82.1 pin) whose
 // internal export surface has drifted from the one we typecheck against.
 // pi moves its public surface every minor (the 0.79→0.80 getModels→provider-
 // factory churn is exactly this), so an open `>=` floor is exactly how the next
 // installer re-acquires the drift. Expected
-// shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.82.0 <0.83`).
+// shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.82.1 <0.83`).
 const [piMaj, piMin] = piAi.split('.').map(Number);
 assert.equal(piMaj, 0,
   `pi pin major must stay 0 for the next-minor ceiling rule (got ${piAi}); revisit check-dep-versions when pi reaches 1.x`);
@@ -1906,13 +1906,13 @@ check_pi_import_surface() {
   # 0.80 moved the standalone root `getModels()` to the deprecated `/compat`
   # entrypoint. This repo's pi-extensions/** are loaded by pi's EXTENSION loader
   # (pi-coding-agent `core/extensions/loader.ts`), whose jiti alias map resolves
-  # ONLY three pi-ai specifiers for extensions — the bare root, `/compat`, and
-  # `/oauth` — all to `ai/dist/compat.js`. A `providers/*` subpath is NOT in that
+  # FOUR pi-ai specifiers for extensions — the bare root, `/compat`, `/oauth`, and
+  # (since pi 0.81) `/providers/all`. Other `providers/*` subpaths are NOT in that
   # map: jiti prefix-matches the bare `@earendil-works/pi-ai` alias and appends
   # the remainder, producing the unresolvable `…/dist/compat.js/providers/
   # anthropic` (verified live: extension load crash — invisible to static
   # typecheck, which resolves against node_modules `exports`). So `/compat` is the
-  # sanctioned extension entrypoint for the old global model-catalog API
+  # sanctioned extension entrypoint this repo uses for the old global model-catalog API
   # (lib/acp/models.ts: `getModels`), and the ONLY allowlisted exception. The
   # allow-pattern is closing-quote-anchored (`@earendil-works/pi-ai/compat["'\`]`)
   # so it permits ONLY that exact specifier: `/compat-foo`, `/oauth`, every
@@ -2719,7 +2719,7 @@ _check_pack_install_impl() {
   printf '%s\n' '{ "name": "entwurf-install-smoke", "version": "0.0.0", "private": true }' > "$tmp/package.json"
 
   # pi-agent-core is pinned even though we never import it: pi-coding-agent depends
-  # on it by CARET (`^0.82.0`), so with no lockfile in this fresh temp project it
+  # on it by CARET (`^0.82.1`), so with no lockfile in this fresh temp project it
   # floats to whatever pi published last — and that newer core then drags a NESTED
   # pi-ai of its own. Measured 2026-07-21: pinning only the three we import left
   # pi-agent-core@0.80.10 + pi-ai@0.80.10 in the tree while the gate still announced
@@ -2730,10 +2730,10 @@ _check_pack_install_impl() {
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.82.0" \
-    "@earendil-works/pi-coding-agent@0.82.0" \
-    "@earendil-works/pi-tui@0.82.0" \
-    "@earendil-works/pi-agent-core@0.82.0" \
+    "@earendil-works/pi-ai@0.82.1" \
+    "@earendil-works/pi-coding-agent@0.82.1" \
+    "@earendil-works/pi-tui@0.82.1" \
+    "@earendil-works/pi-agent-core@0.82.1" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -2743,17 +2743,17 @@ _check_pack_install_impl() {
 
   # A pin is a wish until the resolved tree is read back. Assert it: EVERY
   # @earendil-works pi package present — direct or transitive, top level or nested —
-  # must be the pinned 0.82.0. Anything else means an unpinned caret floated and the
+  # must be the pinned 0.82.1. Anything else means an unpinned caret floated and the
   # rest of this gate would be exercising a runtime nobody verified, while still
-  # printing "pinned pi 0.82.0". Fail loud instead of proving the wrong floor.
+  # printing "pinned pi 0.82.1". Fail loud instead of proving the wrong floor.
   local leaked_pi
-  leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | grep '^@earendil-works+pi-' | grep -v '@0\.82\.0' || true)
+  leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | grep '^@earendil-works+pi-' | grep -v '@0\.82\.1' || true)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.82.0):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.82.1):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works pi package is 0.82.0"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works pi package is 0.82.1"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the
@@ -2838,14 +2838,14 @@ _check_pack_install_impl() {
   # opus anchor (CURATED_ANCHOR_MODEL_ID in lib/acp/models.ts — the model whose
   # absence is a hard registry regression). Checking only one would let half the
   # surface drop silently.
-  for anchor in "claude-sonnet-5" "claude-opus-4-8"; do
+  for anchor in "claude-sonnet-5" "claude-opus-5"; do
     if ! grep -q "$anchor" <<<"$loader_out"; then
       fail "[check-pack-install] pi loader output missing curated Claude model $anchor:"
       echo "$loader_out" | tail -10 | sed 's/^/    /' >&2
       return 1
     fi
   done
-  echo "[check-pack-install] pi loader smoke pass (entwurf registered, claude-sonnet-5 + claude-opus-4-8 anchor)"
+  echo "[check-pack-install] pi loader smoke pass (entwurf registered, claude-sonnet-5 + claude-opus-5 anchor)"
 
   # npm-managed neutral install regression — the README's PRIMARY install path is
   # now `npm install @junghanacs/entwurf` (NOT `pi install npm:...`). This layout
@@ -2926,7 +2926,7 @@ sys.exit(0 if any(isinstance(s,str) and s.endswith('/node_modules/@junghanacs/en
     echo "$foreign_out" | tail -10 | sed 's/^/    /' >&2
     return 1
   }
-  if grep -qi "Unknown option" <<<"$foreign_out" || ! grep -q "claude-opus-4-8" <<<"$foreign_out"; then
+  if grep -qi "Unknown option" <<<"$foreign_out" || ! grep -q "claude-opus-5" <<<"$foreign_out"; then
     fail "[check-pack-install] foreign-cwd --entwurf-control did not load the entwurf extension from user scope:"
     echo "$foreign_out" | tail -10 | sed 's/^/    /' >&2
     return 1

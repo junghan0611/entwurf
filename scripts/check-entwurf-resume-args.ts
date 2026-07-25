@@ -52,7 +52,7 @@ function main(): void {
 			sessionFile: SESSION_FILE,
 			explicitExtensionArgs: EXT,
 			provider: "entwurf",
-			model: "claude-opus-4-8",
+			model: "claude-opus-5",
 			prompt: "continue the task",
 		});
 		ok("1 legacy has --no-extensions", args.includes("--no-extensions"));
@@ -61,14 +61,14 @@ function main(): void {
 		ok("3 legacy prompt is the final positional", args[args.length - 1] === "continue the task");
 		ok("4 legacy keeps ext args exactly once", args.filter((a) => a === "-e").length === 1);
 		ok("6 legacy provider laid out", valueAfter(args, "--provider") === "entwurf");
-		ok("6 legacy model laid out", valueAfter(args, "--model") === "claude-opus-4-8");
+		ok("6 legacy model laid out", valueAfter(args, "--model") === "claude-opus-5");
 		ok("6 legacy resumes by exact FILE (--session <abs path>)", valueAfter(args, "--session") === SESSION_FILE);
 		ok("6 legacy carries NO --session-id (the id is pi's own now)", !args.includes("--session-id"));
 		// model + prompt are the last three tokens: --model <m> <prompt>
 		ok(
 			"6 legacy --model <m> <prompt> tail",
 			args[args.length - 3] === "--model" &&
-				args[args.length - 2] === "claude-opus-4-8" &&
+				args[args.length - 2] === "claude-opus-5" &&
 				args[args.length - 1] === "continue the task",
 		);
 	}
@@ -80,7 +80,7 @@ function main(): void {
 			sessionFile: SESSION_FILE,
 			explicitExtensionArgs: EXT,
 			provider: "entwurf",
-			model: "claude-opus-4-8",
+			model: "claude-opus-5",
 			prompt: "resume now",
 			launchArgs: ["--approve"],
 		});
@@ -93,7 +93,7 @@ function main(): void {
 		ok("5 v2 includes launchArgs --approve", args.includes("--approve"));
 		ok("5 v2 --approve is before the prompt", args.indexOf("--approve") < args.length - 1);
 		ok("6 v2 provider laid out", valueAfter(args, "--provider") === "entwurf");
-		ok("6 v2 model laid out", valueAfter(args, "--model") === "claude-opus-4-8");
+		ok("6 v2 model laid out", valueAfter(args, "--model") === "claude-opus-5");
 		ok("6 v2 resumes by exact FILE (--session <abs path>)", valueAfter(args, "--session") === SESSION_FILE);
 		ok(
 			"6 v2 carries NO --session-id (a garden id would MINT a session, not resume one)",
@@ -102,7 +102,7 @@ function main(): void {
 		ok(
 			"6 v2 --model <m> <prompt> tail",
 			args[args.length - 3] === "--model" &&
-				args[args.length - 2] === "claude-opus-4-8" &&
+				args[args.length - 2] === "claude-opus-5" &&
 				args[args.length - 1] === "resume now",
 		);
 	}

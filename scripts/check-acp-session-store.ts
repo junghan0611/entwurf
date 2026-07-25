@@ -85,7 +85,7 @@ const baseInput = (): BridgeConfigInput => ({
 	);
 	// Model drift → different signature.
 	assert.notEqual(
-		bridgeConfigSignature({ ...baseInput(), modelId: "claude-opus-4-8" }),
+		bridgeConfigSignature({ ...baseInput(), modelId: "claude-opus-5" }),
 		bridgeConfigSignature(baseInput()),
 		"model drift changes the signature",
 	);
@@ -186,7 +186,7 @@ const baseInput = (): BridgeConfigInput => ({
 	const params = facts({ contextMessageSignatures: ["user:text:a", "assistant:text:b"] });
 	assert.ok(isCompatible(facts(), params), "prefix history + same cfg → compatible");
 	assert.ok(!isCompatible(facts({ cwd: "/other" }), params), "cwd drift → incompatible");
-	assert.ok(!isCompatible(facts({ modelId: "claude-opus-4-8" }), params), "model drift → incompatible");
+	assert.ok(!isCompatible(facts({ modelId: "claude-opus-5" }), params), "model drift → incompatible");
 	assert.ok(!isCompatible(facts({ bridgeConfigSignature: "different" }), params), "signature drift → incompatible");
 	assert.ok(
 		!isCompatible(facts({ contextMessageSignatures: ["user:text:EDITED"] }), params),
@@ -292,7 +292,7 @@ const baseInput = (): BridgeConfigInput => ({
 	assert.throws(
 		() =>
 			decideBootstrap(params("process-scoped"), {
-				existing: { ...aliveCompat, modelId: "claude-opus-4-8" },
+				existing: { ...aliveCompat, modelId: "claude-opus-5" },
 			}),
 		SessionModelLockedError,
 		"live model mismatch throws SessionModelLockedError",

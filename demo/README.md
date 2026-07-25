@@ -113,7 +113,7 @@ The demo launch lines correspond to your shell aliases:
 
 | Alias | Model id | Use as |
 |---|---|---|
-| `piao` | `entwurf/claude-opus-4-8` | `SENDER_MODEL` (precision scenes) |
+| `piao` | `entwurf/claude-opus-5` | `SENDER_MODEL` (precision scenes) |
 | `pias` | `entwurf/claude-sonnet-5` | `SENDER_MODEL` (default) |
 | `piat` | `entwurf/gpt-5.4` | `PEER_MODEL` (default) |
 | `piat5` | `entwurf/gpt-5.5` | either |
@@ -137,7 +137,7 @@ SCENE_DELAY=30 FINAL_PAUSE=10 bash demo.sh
 
 ## Prerequisites
 
-- `pi` on PATH (current floor 0.82.0)
+- `pi` on PATH (current floor 0.82.1)
 - `entwurf` provider configured + auth ready for the selected sender/peer models
 - `asciinema` installed
 - `agg` installed (optional — only for GIF conversion)

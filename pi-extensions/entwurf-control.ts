@@ -525,7 +525,7 @@ const renderSessionMessage: MessageRenderer = (message, { expanded }, theme) => 
 // from the native call site until the schema grows the field.
 interface SentBoxData {
 	to: string; // target sessionId
-	from?: string; // sender agentId, e.g. "entwurf/claude-opus-4-8"
+	from?: string; // sender agentId, e.g. "entwurf/claude-opus-5"
 	cwd?: string; // sender cwd (raw, abbreviateHome applied at render)
 	timestamp?: string; // ISO 8601 UTC; rendered in KST
 	mode?: string; // "steer" | "follow_up" | string passed through

@@ -65,7 +65,7 @@ function identity(backend: MetaCitizenBackend, over: Partial<MetaIdentity> = {})
 		backend,
 		nativeSessionId: "native-abc",
 		cwd: "/home/junghan/repos/gh/entwurf",
-		model: "claude-opus-4-8",
+		model: "claude-opus-5",
 		transcriptPath: "/home/junghan/.claude/projects/x/native-abc.jsonl",
 		createdAt: "2026-06-11T00:38:58.000Z",
 		recordUpdatedAt: "2026-06-11T02:40:00.000Z",

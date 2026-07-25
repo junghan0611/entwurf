@@ -113,7 +113,7 @@ export function resolveAcpBackendAdapter(modelId: string): { adapter: AcpBackend
 
 | seam (adapter method) | claude (shipped, 0.12) | cortex (PR #40) |
 |---|---|---|
-| **routeModel + curatedModels** | unprefixed `getModels("anthropic")` rows (`claude-sonnet-5`, `claude-opus-4-8`); native id == curated id | hand-curated `cortex-auto` / `cortex-claude-sonnet-5` (pi-ai has no cortex source); `cortex-` prefix routes via `routeModel`; launch strips the prefix to recover the native `-m` value |
+| **routeModel + curatedModels** | unprefixed `getModels("anthropic")` rows (`claude-sonnet-5`, `claude-opus-5`); native id == curated id | hand-curated `cortex-auto` / `cortex-claude-sonnet-5` (pi-ai has no cortex source); `cortex-` prefix routes via `routeModel`; launch strips the prefix to recover the native `-m` value |
 | **resolveAdapterSettings + configSignatureFields** | both no-op (`undefined` / `{}`) — claude has no own settings | parse `cortexConnection` off the raw block → opaque `adapterSettings`; fold `{ cortexConnection: conn ?? null }` into the signature (a connection change invalidates a reused session) |
 | **resolveLaunch** | `@agentclientprotocol/claude-agent-acp` npm bin resolve; `CLAUDE_AGENT_ACP_COMMAND` override | `cortex acp serve` resolved from PATH (+ `-c <conn>` `-m <native>`); `CORTEX_ACP_COMMAND` override via `bash -lc`, selection flags appended so the bridge's choice wins |
 | **launchEnvDefaults** | `claudeLaunchEnvDefaults()` (`CLAUDE_CONFIG_DIR`) | `SNOWFLAKE_HOME` = overlay, `CORTEX_DISABLE_AUTO_APPLY_PROFILES=1` |

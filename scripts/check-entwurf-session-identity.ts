@@ -103,7 +103,7 @@ try {
 		fileA,
 		sessionLine(idA, "/identity/a") +
 			mc("openai-codex", "gpt-5.5") +
-			msg({ content: "drifted", model: "claude-opus-4-8", provider: "entwurf" }),
+			msg({ content: "drifted", model: "claude-opus-5", provider: "entwurf" }),
 	);
 	const recA = readSessionIdentity(fileA);
 	eq(recA?.provider, "openai-codex", "identity: provider = first model_change (not assistant message)");
@@ -115,7 +115,7 @@ try {
 	const fileB = path.join(idDir, `2026-06-03T22-00-00-000Z_${idB}.jsonl`);
 	fs.writeFileSync(
 		fileB,
-		sessionLine(idB, "/identity/b") + mc("entwurf", "claude-opus-4-8") + mc("openai-codex", "gpt-5.5"),
+		sessionLine(idB, "/identity/b") + mc("entwurf", "claude-opus-5") + mc("openai-codex", "gpt-5.5"),
 	);
 	throws(() => readSessionIdentity(fileB), "identity: later model_change drift → fail-fast");
 
@@ -124,7 +124,7 @@ try {
 	//    judge — identity must resolve from the transcript alone, no throw.
 	const idC = "20260603T220000-3333cc";
 	const fileC = path.join(idDir, `2026-06-03T22-00-00-000Z_${idC}.jsonl`);
-	const mismatchName = `${idC}==entwurf/claude-opus-4-8--x__entwurf`;
+	const mismatchName = `${idC}==entwurf/claude-opus-5--x__entwurf`;
 	fs.writeFileSync(fileC, sessionLine(idC, "/identity/c") + mc("openai-codex", "gpt-5.5") + infoLine(mismatchName));
 	noThrow(() => readSessionIdentity(fileC), "identity: name provider/model disagreement is pi's business — no throw");
 	eq(readSessionIdentity(fileC)?.modelId, "gpt-5.5", "identity: model still resolves from first model_change");
@@ -172,10 +172,10 @@ try {
 	const fileG = path.join(idDir, `2026-06-03T23-00-00-000Z_${idG}.jsonl`);
 	fs.writeFileSync(
 		fileG,
-		sessionLine(idG, "/identity/g") + mc("entwurf", "claude-opus-4-8") + infoLine("not a canonical name"),
+		sessionLine(idG, "/identity/g") + mc("entwurf", "claude-opus-5") + infoLine("not a canonical name"),
 	);
 	noThrow(() => readSessionIdentity(fileG), "name-blind: non-canonical name resolves like any pi session");
-	eq(readSessionIdentity(fileG)?.modelId, "claude-opus-4-8", "name-blind: identity from model_change only");
+	eq(readSessionIdentity(fileG)?.modelId, "claude-opus-5", "name-blind: identity from model_change only");
 	eq(readSessionIdentity.length, 1, "name-blind: readSessionIdentity takes exactly one arg (no opts, compiler-pinned)");
 
 	// ========================================================================

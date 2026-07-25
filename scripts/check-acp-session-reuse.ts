@@ -33,7 +33,7 @@ import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Context, Message, Model } from "@earendil-works/pi-ai";
 
 const sonnet = { id: "claude-sonnet-5" } as unknown as Model<Api>;
-const opus = { id: "claude-opus-4-8" } as unknown as Model<Api>;
+const opus = { id: "claude-opus-5" } as unknown as Model<Api>;
 
 type Stream = AsyncIterable<AssistantMessageEvent> & {
 	result: () => Promise<{ stopReason: string; errorMessage?: string }>;

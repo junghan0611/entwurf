@@ -196,14 +196,14 @@ async function main(): Promise<void> {
 	{
 		const base = {
 			sessionId: "20260613T091000-98363c",
-			agentId: "pi/claude-opus-4-8",
+			agentId: "pi/claude-opus-5",
 			cwd: "/w",
 			timestamp: "2026-06-13T09:10:00.000Z",
 		};
 		ok(
 			"6: minimal envelope → exact block (leading blank line, required fields only)",
 			formatSenderInfoBlock(base) ===
-				`\n\n<sender_info>{"sessionId":"20260613T091000-98363c","agentId":"pi/claude-opus-4-8","cwd":"/w","timestamp":"2026-06-13T09:10:00.000Z"}</sender_info>`,
+				`\n\n<sender_info>{"sessionId":"20260613T091000-98363c","agentId":"pi/claude-opus-5","cwd":"/w","timestamp":"2026-06-13T09:10:00.000Z"}</sender_info>`,
 		);
 		const full = formatSenderInfoBlock({ ...base, origin: "pi-session", replyable: false }, true);
 		ok(

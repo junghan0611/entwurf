@@ -59,7 +59,7 @@ const IDENTITY: LaunchIdentity = {
 	cwd: "/home/test/repo",
 	explicitExtensionArgs: ["-e", "/path/to/entwurf/index.ts"],
 	provider: "entwurf",
-	model: "claude-opus-4-8",
+	model: "claude-opus-5",
 };
 
 // True if `p` has NOT settled after a macrotask tick (all pending microtasks drained).
@@ -224,7 +224,7 @@ async function main(): Promise<void> {
 		ok("2 argv carries plan.launchArgs (--approve)", args.includes("--approve"));
 		ok("2 argv carries the ext args", args.includes("-e"));
 		ok("2 argv carries provider", args[args.indexOf("--provider") + 1] === "entwurf");
-		ok("2 argv carries model", args[args.indexOf("--model") + 1] === "claude-opus-4-8");
+		ok("2 argv carries model", args[args.indexOf("--model") + 1] === "claude-opus-5");
 		// #50 C2: argv names the exact transcript FILE, never a garden id. `--session-id`
 		// would CREATE a session at that id when it is missing — post-cut the garden id is
 		// never a pi session id, so the old flag would have minted an empty session and
