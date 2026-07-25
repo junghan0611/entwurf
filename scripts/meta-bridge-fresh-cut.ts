@@ -59,11 +59,15 @@
  * and why).
  *
  * Idempotent and crash-safe by shape: the WHOLE move plan is preflighted — every
- * archive destination checked, every source parent proven writable — before the
- * first rename, so a deterministic refusal is a true no-op instead of a half-cut
- * generation; then each directory moves in a single atomic rename. A failure
- * BETWEEN renames (the world changed under us) reports exactly what already
- * moved (`archived so far:`) and a re-run finishes the cut with its own stamp.
+ * archive destination checked, every source parent probed for write permission —
+ * before the first rename, so the COMMON deterministic refusals are true no-ops
+ * instead of half-cut generations; then each directory moves in a single atomic
+ * rename. No preflight can promise the rename: a permission probe does not see a
+ * sticky-bit parent holding a foreign-owned entry, an immutable attribute, a
+ * read-only mount or an LSM denial, and the world can change under us besides.
+ * That is why the loop, not the plan, carries the honesty: a failure BETWEEN
+ * renames reports exactly what already moved (`archived so far:`) and a re-run
+ * finishes the cut with its own stamp.
  * Running on a clean/empty host just opens a fresh generation and says so.
  */
 
@@ -494,8 +498,9 @@ async function main(): Promise<number> {
 		// The rename is `<dir>` → `<dir>.archive-<ts>`, a sibling, so ONE parent must
 		// be writable per entry. Store and mailbox can live under DIFFERENT parents
 		// (env overrides), and a parent that is readable but not writable fails only
-		// at its own rename — after an earlier entry already moved: a half-cut. Refuse
-		// the deterministic case here, before anything moves.
+		// at its own rename — after an earlier entry already moved: a half-cut. This
+		// probe answers the COMMON permission case before anything moves; it is not a
+		// promise the rename will succeed (see the loop below).
 		try {
 			fs.accessSync(path.dirname(dir), fs.constants.W_OK);
 		} catch (err) {
@@ -526,10 +531,13 @@ async function main(): Promise<number> {
 		try {
 			fs.renameSync(src, dest);
 		} catch (err) {
-			// The preflights above close the deterministic causes (collision, unreadable
-			// surface, non-writable parent), so landing here means the world changed under
-			// us. What must NOT happen is the report hiding what already moved: a generic
-			// FAIL over a partial move reads as "nothing happened".
+			// The preflights above close the COMMON deterministic causes (collision,
+			// unreadable surface, non-writable parent) — they do not close all of them: a
+			// sticky-bit parent holding a foreign-owned entry, an immutable attribute, a
+			// read-only mount or an LSM denial each pass a W_OK probe and fail here, and
+			// the world can change under us besides. So this path is load-bearing, not a
+			// formality. What must NOT happen is the report hiding what already moved: a
+			// generic FAIL over a partial move reads as "nothing happened".
 			console.error(
 				`FAIL mid-cut: renaming ${src} → ${dest} failed (${err instanceof Error ? err.message : String(err)}).`,
 			);
