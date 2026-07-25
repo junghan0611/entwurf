@@ -19,7 +19,7 @@
  *      a HIDDEN store (a second temp dir): from the decider's store view the live socket is
  *      RECORD-LESS → EVERY intent is refused pre-probe as `record-less-socket` (the record
  *      is the sole address authority; a bare socket is a migration/diagnostic state, not an
- *      addressable citizen), the surface hint names the true cause + the M1 command, and no
+ *      addressable citizen), the surface hint names the true cause + the fresh-cut command, and no
  *      lock/RPC ever reaches the live socket.
  *   C2 meta-mailbox (deliverable) — a self-fetch citizen (claude-code) with an ARMED receiver
  *      marker → decider routes to meta-mailbox → a real `.msg` + signal is enqueued → lock-free
@@ -225,7 +225,7 @@ async function main(): Promise<void> {
 		// sees a live non-symlink control socket (presence hint) — and rejects EVERY intent
 		// pre-probe as `record-less-socket`: the record is the sole address authority, so the
 		// live socket is a migration/diagnostic state, never a delivery target. No lock is
-		// taken and no RPC reaches the resident; the rendered hint names the cause + M1.
+		// taken and no RPC reaches the resident; the rendered hint names the cause + fresh-cut.
 		{
 			const hiddenStore = path.join(tmp, "sessions-c1b-hidden");
 			await fsp.mkdir(hiddenStore, { recursive: true });
@@ -274,14 +274,14 @@ async function main(): Promise<void> {
 				// released one's leftovers) — the live resident was never touched.
 				ok(`C1b NO lock file for the record-less target (${intent})`, !existsSync(lockPathFor(c1bGid, lockDir)));
 				// Observability (#50 F10 discipline): the rendered reject names the true cause
-				// AND the M1 fix — never a bare reason code on this migration-shaped state.
+				// AND the fresh-cut fix — never a bare reason code on this generation-boundary state.
 				const rendered = renderEntwurfV2Result(result);
 				ok(
-					`C1b rendered reject names the record authority + M1 (${intent})`,
+					`C1b rendered reject names the record authority + fresh-cut (${intent})`,
 					rendered.isError &&
 						rendered.text.includes("record-less-socket") &&
 						rendered.text.includes("NO meta-record claims it") &&
-						rendered.text.includes("meta-bridge-migrate-v3 migrate"),
+						rendered.text.includes("meta-bridge-fresh-cut"),
 				);
 			}
 

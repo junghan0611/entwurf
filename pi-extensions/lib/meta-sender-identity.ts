@@ -22,9 +22,9 @@
  *      so a dead session's pid, reused by something else, cannot inherit its garden-id.
  *   2. the backing meta-record: the record store is the authority — a marker whose record was
  *      deleted, or whose backend/nativeSessionId drifted from it, names nobody. A record that
- *      EXISTS but cannot be read (a pre-cut v1/v2 record, a corrupt body) is a THROW instead
+ *      EXISTS but cannot be read (a previous-generation record, a corrupt body) is a THROW instead
  *      (EntwurfSenderRecordUnreadableError): the cause is knowable, so folding it into
- *      "names nobody" would misreport the failure and hide the M1 migration pointer (F10).
+ *      "names nobody" would misreport the failure and hide the fresh-cut pointer (F10).
  *
  * Every candidate is collected and validated BEFORE one is chosen. A first-match loop would make
  * the answer depend on which pid or backend happened to be read first; here lookup order carries

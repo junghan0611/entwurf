@@ -35,7 +35,7 @@ import {
 	type DeadFallbackDeps,
 	resolveDeadControlSendFallback,
 } from "../pi-extensions/lib/entwurf-v2-send-fallback.ts";
-import type { MetaBackendV2, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
+import type { MetaCitizenBackend, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
 import type { TargetSocketInspection } from "../pi-extensions/lib/socket-discovery.ts";
 import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
 
@@ -62,7 +62,7 @@ function lockClaim(gardenId = GID): LockClaim {
 	};
 }
 
-function identity(backend: MetaBackendV2): MetaIdentity {
+function identity(backend: MetaCitizenBackend): MetaIdentity {
 	return {
 		schemaVersion: 3,
 		gardenId: GID,

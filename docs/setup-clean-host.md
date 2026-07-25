@@ -220,17 +220,20 @@ the host is still running a pre-0.12.5 package or a broken tarball. Reinstall th
 current package and re-run `entwurf install-meta-bridge && entwurf doctor-meta-bridge`.
 
 Store invariant (only for a host that is NOT clean): this walkthrough assumes no
-prior `~/.pi/agent/meta-sessions`. A host that already has one from before the #50
-hard cut holds v1/v2 records, and production reads **schemaVersion 3 only**.
-`entwurf_self`, `entwurf_v2`, and inbox reads fail loud on those records;
-`entwurf_peers` keeps its fact listing alive and reports them as diagnostics.
-The owned `setup` / `install` / `install-meta-bridge` entrypoints refuse before
-activation writes rather than crossing this boundary silently. Run the one-time
-migration (`entwurf meta-bridge-migrate-v3 verify` to look, `… migrate` to
-convert; it takes a full backup first and `… restore <backup-dir>` reverses it).
-Once per host. A truly clean host has nothing to migrate and can ignore this
-paragraph. This refusal is a preflight, not a lock: for checkout-backed installs,
-quiesce sessions before pull, then migrate, setup, and reopen.
+prior `~/.pi/agent/meta-sessions`. Production reads **schemaVersion 3 only** and
+the repo carries no legacy reader or migrator — the active store provides no
+cross-generation continuity (sessions flow; memory lives in the native
+transcripts and the embedding axes). On a store the live schema cannot read,
+`entwurf_self`, `entwurf_v2`, and inbox reads fail loud; `entwurf_peers` keeps
+its fact listing alive and reports the records as diagnostics. The owned
+`setup` / `install` / `install-meta-bridge` entrypoints refuse before activation
+writes rather than crossing this boundary silently. The one prescription is the
+generation cut: `entwurf meta-bridge-fresh-cut` (quiesce-checked; archives the
+whole previous generation to a timestamped sibling and opens an empty one — the
+archive is forensic only, no restore verb). Once per boundary. A truly clean
+host has nothing to cut and can ignore this paragraph. The refusal is a
+preflight, not a lock: for checkout-backed installs, quiesce sessions before
+pull, then fresh-cut, setup, and reopen.
 
 Upgrade invariant: every global npm/pnpm package upgrade must be followed by
 `entwurf install-meta-bridge` from that same installed binary and then

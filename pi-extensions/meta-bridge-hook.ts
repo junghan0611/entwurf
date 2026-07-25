@@ -205,7 +205,6 @@ function main(): void {
 	try {
 		const result = upsertMetaSession({
 			input: { backend: "claude-code", nativeSessionId: sessionId, transcriptPath, cwd, model },
-			onSkip: (filename, e) => logLine("WARN", `scan skipped ${filename}: ${e.message}`),
 		});
 		gardenId = result.record.gardenId;
 		logLine("INFO", `${result.action} record ${path.basename(result.path)} (event=${eventName}, native=${sessionId})`);

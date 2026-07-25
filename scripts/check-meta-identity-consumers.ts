@@ -1,24 +1,23 @@
 /**
  * check-meta-identity-consumers — deterministic gate for the V3-only identity
- * consumer seam (#50 hard cut; successor of the 3D-4 dual-read gate). A real
- * temp dir; no backend, no network, no hook. Safe in the `pnpm check` static
- * floor.
+ * consumer seam. A real temp dir; no backend, no network, no hook. Safe in the
+ * `pnpm check` static floor.
  *
  * Proves the consumers every live path stands on (MCP sender-marker check,
  * prune, store-doctor, the upsert existence scan):
  *   - readMetaIdentityByGardenId reads a V3 file to identity; body/filename
- *     gardenId drift fails fast (body is SSOT); a PRE-CUT (v2) file throws the
- *     error that names the M1 operator command; a missing record throws the
- *     "not a garden citizen" error,
+ *     gardenId drift fails fast (body is SSOT); a previous-generation (v2)
+ *     file throws the error that names the fresh-cut command; a missing record
+ *     throws the "not a garden citizen" error,
  *   - scanIdentityByNativeId matches a V3 record by nativeSessionId, returns
  *     null on no match, ignores non-`.meta.json` entries, surfaces malformed
- *     AND pre-cut records via `onSkip` (skipped honestly, never fatal to the
- *     scan), and — THE G1 invariant — throws on a nativeSessionId duplicated
- *     across two records (authority ambiguity: upsert must never mint a
- *     duplicate id for an existing citizen),
- *   - birthPiCitizen succeeds on a store holding pre-cut records AND hands the
- *     skips back (meeting a pre-cut record is never silent — the M1 contract;
- *     a silent skip is how a mixed store forms with nobody told).
+ *     AND previous-generation records via `onSkip` (the pure scan reports;
+ *     policy lives in the writer), and — THE G1 invariant — throws on a
+ *     nativeSessionId duplicated across two records (authority ambiguity:
+ *     upsert must never mint a duplicate id for an existing citizen),
+ *   - birthPiCitizen REFUSES a store holding any unreadable record (the strict
+ *     upsert: writing beside a record the live schema cannot read is how a
+ *     mixed store forms — the refusal names fresh-cut, before any write).
  */
 
 import assert from "node:assert/strict";
@@ -26,7 +25,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-	M1_MIGRATE_COMMAND,
+	FRESH_CUT_COMMAND,
 	type MetaIdentity,
 	MetaRecordError,
 	readMetaIdentityByGardenId,
@@ -67,7 +66,7 @@ const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-"
 try {
 	fs.writeFileSync(path.join(dir, `${GID_A}.meta.json`), serializeMetaIdentity(identity(GID_A, "native-a")));
 	fs.writeFileSync(path.join(dir, `${GID_B}.meta.json`), serializeMetaIdentity(identity(GID_B, "native-b")));
-	// A pre-cut v2 record, raw JSON on purpose (production has no v2 writer).
+	// A previous-generation v2 record, raw JSON on purpose (production has no v2 writer).
 	fs.writeFileSync(
 		path.join(dir, `${GID_V2}.meta.json`),
 		`${JSON.stringify(
@@ -97,9 +96,9 @@ try {
 		readMetaIdentityByGardenId(GID_A, dir).nativeSessionId === "native-a",
 	);
 	throwsNaming(
-		"readMetaIdentityByGardenId on a pre-cut v2 file names the M1 migrate command",
+		"readMetaIdentityByGardenId on a previous-generation v2 file names the fresh-cut command",
 		() => readMetaIdentityByGardenId(GID_V2, dir),
-		M1_MIGRATE_COMMAND,
+		FRESH_CUT_COMMAND,
 	);
 	throwsNaming(
 		"readMetaIdentityByGardenId on a missing record: not a garden citizen",
@@ -139,34 +138,46 @@ try {
 	);
 	fs.rmSync(path.join(dir, "19990101T000000-deadbe.meta.json"));
 	ok(
-		"scan surfaces malformed AND pre-cut records via onSkip (skipped, not fatal)",
+		"scan surfaces malformed AND previous-generation records via onSkip (the pure scan reports)",
 		skipped.includes("malformed.meta.json") && skipped.includes(`${GID_V2}.meta.json`),
 	);
 	ok("scan ignores non-.meta.json entries", !skipped.includes("not-a-record.txt"));
 	ok("scan returns null on no match", scanIdentityByNativeId(entries, "native-none", readRaw) === null);
 
-	// --- pi birth SURFACES what its scan skipped (the M1 contract) --------------
-	// The scan surviving a pre-cut record is by design; meeting one SILENTLY is not:
-	// a fresh V3 citizen minted beside an unmigrated store is how a mixed store
-	// forms with nobody told (observed live 2026-07-23). Birth must succeed AND
-	// hand the skips back so its caller can point at M1 once.
+	// --- pi birth REFUSES a store it cannot fully read (the strict upsert) ------
+	// Writing a fresh V3 citizen beside a record the live schema cannot read is
+	// how a mixed store forms with nobody told (observed live 2026-07-23). The
+	// strict upsert refuses BEFORE any write and names the generation cut.
+	throwsNaming(
+		"birth on a store holding an unreadable record REFUSES naming the fresh-cut command",
+		() =>
+			birthPiCitizen({
+				nativeSessionId: "pi-fresh-on-prevgen-store",
+				cwd: "/synthetic/proj",
+				sessionsDir: dir,
+				controlSocketDir: path.join(dir, "sockets"),
+			}),
+		FRESH_CUT_COMMAND,
+	);
+	ok(
+		"the refused birth wrote nothing (no record minted for the new native id)",
+		scanIdentityByNativeId(fs.readdirSync(dir), "pi-fresh-on-prevgen-store", readRaw) === null,
+	);
+
+	// --- birth SUCCEEDS once the store is clean (the same seam, post-cut) -------
 	{
-		const birth = birthPiCitizen({
-			nativeSessionId: "pi-fresh-on-precut-store",
-			cwd: "/synthetic/proj",
-			sessionsDir: dir,
-			controlSocketDir: path.join(dir, "sockets"),
-		});
-		ok("birth on a store holding a pre-cut record still succeeds (create)", birth.action === "create");
-		ok(
-			"birth surfaces the skipped pre-cut record by filename",
-			birth.skippedRecords.some((s) => s.filename === `${GID_V2}.meta.json`),
-		);
-		ok(
-			"the surfaced skip message names the M1 migrate command",
-			birth.skippedRecords.some((s) => s.filename === `${GID_V2}.meta.json` && s.message.includes(M1_MIGRATE_COMMAND)),
-		);
-		fs.rmSync(birth.recordPath, { force: true });
+		const cleanDir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-clean-"));
+		try {
+			const birth = birthPiCitizen({
+				nativeSessionId: "pi-fresh-on-clean-store",
+				cwd: "/synthetic/proj",
+				sessionsDir: cleanDir,
+				controlSocketDir: path.join(cleanDir, "sockets"),
+			});
+			ok("birth on a clean store succeeds (create)", birth.action === "create");
+		} finally {
+			fs.rmSync(cleanDir, { recursive: true, force: true });
+		}
 	}
 
 	// --- G1: duplicate nativeSessionId = authority ambiguity --------------------

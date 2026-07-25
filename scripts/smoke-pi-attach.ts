@@ -40,7 +40,7 @@
  *
  * ISOLATION (AGENTS.md Hard Rule 11): every root the record/socket/mailbox paths read
  * is redirected into one mkdtemp world and passed explicitly — this gate never reads
- * the operator's live store, and the live store's 173 pre-cut records can neither
+ * the operator's live store, and whatever the live store carries can neither
  * fail it nor be touched by it.
  */
 

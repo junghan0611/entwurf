@@ -24,7 +24,7 @@
  */
 
 import type { NativePushBackend } from "../entwurf-v2-contract.ts";
-import { type MetaBackendV2, type UpsertAction, upsertMetaSession } from "../meta-session.ts";
+import { type MetaCitizenBackend, type UpsertAction, upsertMetaSession } from "../meta-session.ts";
 import { type NativePushAdapter, resolveNativePushAdapter } from "./adapter.ts";
 
 export interface RegisterNativeConversationInput {
@@ -80,7 +80,7 @@ export async function registerNativeConversation(
 	// the caller-stated value (refreshed on attach). NO receiver marker is written here (보정①).
 	const result = upsertMetaSession({
 		input: {
-			backend: input.backend satisfies MetaBackendV2,
+			backend: input.backend satisfies MetaCitizenBackend,
 			nativeSessionId: input.nativeSessionId,
 			cwd: input.cwd,
 			model: null,

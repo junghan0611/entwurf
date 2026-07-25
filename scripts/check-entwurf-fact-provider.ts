@@ -6,7 +6,7 @@
  *   - basic assembly: pi citizen + claude citizen + record-less socket →
  *     2 peers (pi alive / claude unsupported) + the record-less socket folded
  *     into ONE `record-less-socket` diagnostic (#50 C4: a diagnostic subject,
- *     never a listing section) whose message names the cause + fix (M1),
+ *     never a listing section) whose message names the cause + fix (fresh-cut),
  *   - corrupt record → meta-record-read-error diagnostic, listing NOT blinded,
  *   - gardenId↔socket collision (non-pi citizen + same-gid socket) → BOTH sides
  *     quarantined (gid in neither peers nor socketOnly) + one
@@ -25,7 +25,7 @@
 import assert from "node:assert/strict";
 import * as path from "node:path";
 import { type EntwurfFactsDeps, listEntwurfFacts } from "../pi-extensions/lib/entwurf-fact-provider.ts";
-import { type MetaBackendV2, serializeMetaIdentity } from "../pi-extensions/lib/meta-session.ts";
+import { type MetaCitizenBackend, serializeMetaIdentity } from "../pi-extensions/lib/meta-session.ts";
 import { SOCKET_SUFFIX, type SocketDirEntry } from "../pi-extensions/lib/socket-discovery.ts";
 import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
 
@@ -42,7 +42,7 @@ const GID_CLAUDE = "20260611T112732-0f42b6"; // claude citizen, no socket
 const GID_SOCKET_ONLY = "20260611T222222-bbbbbb"; // live socket, no record
 const GID_CONFLICT = "20260611T333333-cccccc"; // claude citizen + same-gid socket
 
-function rec(gardenId: string, backend: MetaBackendV2): string {
+function rec(gardenId: string, backend: MetaCitizenBackend): string {
 	return serializeMetaIdentity({
 		schemaVersion: 3,
 		gardenId,
@@ -123,10 +123,10 @@ async function main(): Promise<void> {
 		);
 		if (rls && rls.kind === "record-less-socket") {
 			ok(
-				"basic: alive record-less message names the record authority + M1 (#50 F10 discipline)",
+				"basic: alive record-less message names the record authority + fresh-cut (#50 F10 discipline)",
 				rls.message.includes("no meta-record claims") &&
 					rls.message.includes("sole address authority") &&
-					rls.message.includes("meta-bridge-migrate-v3 migrate"),
+					rls.message.includes("meta-bridge-fresh-cut"),
 			);
 			const keys = Object.keys(rls).sort();
 			assert.deepStrictEqual(
@@ -136,16 +136,16 @@ async function main(): Promise<void> {
 			);
 			ok("basic: record-less-socket diagnostic keyset exact", true);
 		}
-		// A DEAD record-less socket groups under a different (stale) message — no M1
+		// A DEAD record-less socket groups under a different (stale) message — no fresh-cut
 		// pointer for a leftover file, so same-state sockets aggregate per liveness.
 		const r2 = await listEntwurfFacts(deps({}, { [GID_SOCKET_ONLY]: "dead" }));
 		const rls2 = r2.diagnostics[0];
 		ok(
-			"basic: dead record-less socket → stale-flavored message (no M1, distinct group)",
+			"basic: dead record-less socket → stale-flavored message (no fresh-cut prescription, distinct group)",
 			rls2?.kind === "record-less-socket" &&
 				rls2.liveness === "dead" &&
 				rls2.message.includes("stale") &&
-				!rls2.message.includes("meta-bridge-migrate-v3"),
+				!rls2.message.includes("meta-bridge-fresh-cut"),
 		);
 	}
 

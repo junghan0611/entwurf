@@ -6,7 +6,7 @@
  * Proves the capability registry (`pi/entwurf-capabilities.json`) — the sole home
  * of wakeMode/deliveryLevel/nativeIdLabel now that no identity record carries
  * them (3D-4 dropped `delivery{}`; v3 never had it):
- *   - the shipped file parses + COVERS exactly META_BACKENDS_V2 (pi included),
+ *   - the shipped file parses + COVERS exactly META_CITIZEN_BACKENDS (pi included),
  *   - it AGREES with `META_BACKEND_DESCRIPTORS` for the three existing backends.
  *     3D-3 cut mint/parse over to the registry via the `metaCapabilityFor` seam,
  *     so the registry is the LIVE authority and the const survives ONLY as this
@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
 	META_BACKEND_DESCRIPTORS,
-	META_BACKENDS_V2,
+	META_CITIZEN_BACKENDS,
 	MetaRecordError,
 	metaCapabilitiesFilePath,
 	parseMetaCapabilityRegistry,
@@ -43,10 +43,10 @@ function throws(label: string, fn: () => unknown): void {
 const SHIPPED = fs.readFileSync(metaCapabilitiesFilePath(), "utf8");
 const reg = parseMetaCapabilityRegistry(SHIPPED);
 
-// 1. coverage — the shipped file covers exactly META_BACKENDS_V2, pi included.
+// 1. coverage — the shipped file covers exactly META_CITIZEN_BACKENDS, pi included.
 ok(
-	"shipped registry covers exactly META_BACKENDS_V2 (pi included)",
-	[...META_BACKENDS_V2].sort().join(",") === Object.keys(reg.backends).sort().join(","),
+	"shipped registry covers exactly META_CITIZEN_BACKENDS (pi included)",
+	[...META_CITIZEN_BACKENDS].sort().join(",") === Object.keys(reg.backends).sort().join(","),
 );
 ok("shipped registry includes the pi backend", reg.backends.pi !== undefined);
 

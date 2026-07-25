@@ -48,7 +48,7 @@ import {
 	type TargetResolution,
 } from "../pi-extensions/lib/entwurf-v2-decider.ts";
 import type { AcquireLockResult, LockClaim } from "../pi-extensions/lib/entwurf-v2-lock.ts";
-import type { MetaBackendV2, MetaCapability, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
+import type { MetaCapability, MetaCitizenBackend, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
 import type { NativePushProbeResult } from "../pi-extensions/lib/native-push/adapter.ts";
 import { controlSocketPath, type TargetSocketInspection } from "../pi-extensions/lib/socket-discovery.ts";
 import type { SocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
@@ -63,7 +63,7 @@ function ok(label: string, cond: boolean): void {
 const GID = "20260612T100000-aaaaaa";
 const CWD = "/home/junghan/repos/gh/entwurf";
 
-function identity(backend: MetaBackendV2): MetaIdentity {
+function identity(backend: MetaCitizenBackend): MetaIdentity {
 	return {
 		schemaVersion: 3,
 		gardenId: GID,

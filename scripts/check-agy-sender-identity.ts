@@ -21,7 +21,7 @@
  *     - 1 trusted → that identity, on EITHER backend (the claude-code-only lookup was the bug)
  *     - marker with no backing record → null (a hint is not an identity)
  *     - marker whose nativeSessionId drifted from its record → null
- *     - marker with an EXISTING but unreadable (pre-cut v2) record → THROW quoting the M1
+ *     - marker with an EXISTING but unreadable (previous-generation v2) record → THROW quoting the fresh-cut
  *       command (F10 — the null collapse reported "no marker found", the wrong cause)
  *     - 2 distinct live identities on one owner pid → THROW (never guess, never downgrade)
  *     - 2 markers naming the SAME identity → NOT a conflict (an older release wrote parent AND
@@ -46,7 +46,7 @@ import {
 	resolveTrustedMetaSenderIdentity,
 } from "../pi-extensions/lib/meta-sender-identity.ts";
 import {
-	M1_MIGRATE_COMMAND,
+	FRESH_CUT_COMMAND,
 	type MetaIdentity,
 	upsertMetaSession,
 	writeMetaSenderMarker,
@@ -235,8 +235,8 @@ try {
 		ok("marker whose nativeSessionId drifted from its record → null", resolve() === null);
 	}
 
-	// THE F10 CASE. A live marker whose record EXISTS but is a pre-cut v2 file must
-	// THROW naming the marker's citizen AND the M1 command — never resolve to null.
+	// THE F10 CASE. A live marker whose record EXISTS but is a previous-generation v2 file must
+	// THROW naming the marker's citizen AND the fresh-cut command — never resolve to null.
 	// The null collapse is exactly what made the live surface claim "no live
 	// meta-sender marker was found" (three false claims) and prescribe re-opening
 	// the session (a fix that re-mints the same failure).
@@ -254,7 +254,7 @@ try {
 			ownerPid: OWNER,
 			sendersDir: SENDERS_DIR,
 		});
-		// Rewrite the record as a raw pre-cut v2 body (production has no v2 writer).
+		// Rewrite the record as a raw previous-generation v2 body (production has no v2 writer).
 		fs.writeFileSync(
 			path.join(SESSIONS_DIR, `${gid}.meta.json`),
 			`${JSON.stringify({
@@ -278,7 +278,7 @@ try {
 			threw = err;
 		}
 		ok(
-			"marker with an EXISTING but pre-cut (v2) record → THROW, never null (the F10 collapse)",
+			"marker with an EXISTING but previous-generation (v2) record → THROW, never null (the F10 collapse)",
 			threw instanceof EntwurfSenderRecordUnreadableError,
 		);
 		ok(
@@ -286,8 +286,8 @@ try {
 			threw instanceof EntwurfSenderRecordUnreadableError && threw.gardenId === gid && threw.message.includes(gid),
 		);
 		ok(
-			"the refusal quotes the record reader's cause, which names the M1 migrate command",
-			threw instanceof Error && threw.message.includes(M1_MIGRATE_COMMAND),
+			"the refusal quotes the record reader's cause, which names the fresh-cut command",
+			threw instanceof Error && threw.message.includes(FRESH_CUT_COMMAND),
 		);
 		fs.rmSync(path.join(SESSIONS_DIR, `${gid}.meta.json`), { force: true });
 	}

@@ -9,11 +9,14 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { parseMetaIdentity } from "../pi-extensions/lib/meta-session.ts";
+import { defaultMetaSessionsDir, parseMetaIdentity } from "../pi-extensions/lib/meta-session.ts";
 
-const dir = process.argv[2];
-if (!dir) {
-	console.error("usage: node --experimental-strip-types scripts/meta-bridge-store-doctor.ts <meta-sessions-dir>");
+// Optional dir argv (doctor wrappers pass one); default = THE live store, the
+// same env+default resolution every runtime surface uses — so the install
+// preflight and a bare doctor run certify the store production will read.
+const dir = process.argv[2] ?? defaultMetaSessionsDir();
+if (process.argv.length > 3) {
+	console.error("usage: node --experimental-strip-types scripts/meta-bridge-store-doctor.ts [meta-sessions-dir]");
 	process.exit(2);
 }
 
@@ -31,8 +34,8 @@ for (const filename of fs.readdirSync(dir).sort()) {
 	scanned += 1;
 	const file = path.join(dir, filename);
 	try {
-		// V3-only (#50 hard cut): parseMetaIdentity reads schemaVersion 3 alone; a
-		// pre-cut v1/v2 record fails loud here naming the M1 migrate command —
+		// V3-only: parseMetaIdentity reads schemaVersion 3 alone; a record from a
+		// previous generation fails loud here naming the fresh-cut command —
 		// exactly the per-file prescription this scan's report wants.
 		const id = parseMetaIdentity(fs.readFileSync(file, "utf8"));
 		const expectedFilename = `${id.gardenId}.meta.json`;

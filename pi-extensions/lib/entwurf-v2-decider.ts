@@ -63,8 +63,8 @@ import type { AcquireLockResult, LockClaim, LockConflict } from "./entwurf-v2-lo
 import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
-	type MetaBackendV2,
 	type MetaCapability,
+	type MetaCitizenBackend,
 	type MetaIdentity,
 	metaCapabilityFor,
 } from "./meta-session.ts";
@@ -277,7 +277,7 @@ function requireGardenId(target: string): string {
  */
 export function resolveMailboxWakeModeCapability(
 	identity: MetaIdentity,
-	capabilityFor: (backend: MetaBackendV2) => MetaCapability = metaCapabilityFor,
+	capabilityFor: (backend: MetaCitizenBackend) => MetaCapability = metaCapabilityFor,
 ): boolean {
 	return capabilityFor(identity.backend).wakeMode === "self-fetch";
 }

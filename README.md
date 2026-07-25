@@ -231,47 +231,47 @@ artifact, first preserve one `npm pack` output, then run
 the gate prints that canonical path and sha256 and consumes it without re-packing.
 Only that accepted file may be published with `--tag repair`.
 
-> **Upgrading a host that already has a meta-record store — one-time V3 migration.**
-> Production reads **schemaVersion 3 only** (#50 hard cut). A host whose
-> `~/.pi/agent/meta-sessions` predates that cut holds v1/v2 records, and until it is
-> migrated the sender surfaces there refuse: `entwurf_self`, `entwurf_v2` and the
-> inbox **fail loud**, naming the command to run in both dev-clone and installed
-> form. `entwurf_peers` behaves differently on purpose — it keeps listing and folds
-> the unreadable records into a **diagnostic** line, because a facts surface that
-> dies on corruption tells you less than one that shows what it could and could not
-> read. Either way a pre-cut record is never treated as an address.
+> **Generations — the fresh-cut policy.** The bridge is a call-relay, never a
+> memory layer: a meta-record is routing state for a *live* session, and memory
+> lives in the native transcripts and the embedding axes outside this repo.
+> Sessions flow. Four sentences fix the whole policy:
+>
+> 1. The active citizen store is **v3-only** and provides **no cross-generation
+>    address or resume continuity**.
+> 2. If even one record in the store is unreadable to the live schema, ordinary
+>    install/runtime **refuses to write** and demands the explicit fresh-cut verb.
+> 3. `fresh-cut` quiesces first, then moves the whole previous generation to a
+>    timestamped archive (`meta-sessions.archive-<ts>`, `meta-mailbox.archive-<ts>`)
+>    and opens an empty live generation.
+> 4. The archive is **forensic bytes only**: no runtime reads it and no restore
+>    verb exists. Native transcripts and the memory axes are never touched.
+>
+> There is **no migrator and no legacy reader anywhere in this repo** — carrying
+> old records forward would serve a continuity the system deliberately does not
+> promise. When the store cannot be read, the sender surfaces (`entwurf_self`,
+> `entwurf_v2`, the inbox) **fail loud** naming the verb in both invocation
+> forms; `entwurf_peers` keeps listing and folds unreadable records into a
+> **diagnostic** line, because a facts surface that dies on corruption tells you
+> less than one that shows what it could and could not read.
 >
 > **The installer entrypoints will not cross that boundary silently.** `setup`,
 > `install` and `install-meta-bridge` each certify the store *before* they write
-> anything: on a host that still holds v1/v2 records they refuse, name the
-> migrate verb in both invocation forms, and leave your settings, plugin registry
-> and `auth.json` untouched. That covers the commands entwurf owns — it is not a
-> claim about every way new code can reach a machine (see the ordering note
-> below). So an upgrade through those commands is a refusal you answer, not a
-> broken install you diagnose:
+> anything: on a host the live schema cannot read they refuse, name the verb, and
+> leave your settings, plugin registry and `auth.json` untouched. So an upgrade
+> through those commands is a refusal you answer, not a broken install you
+> diagnose:
 >
 > ```bash
-> entwurf meta-bridge-migrate-v3 verify    # read-only: how many v1/v2 records, any problems
-> entwurf meta-bridge-migrate-v3 migrate   # writes a backup first, then converts in place
+> entwurf meta-bridge-fresh-cut   # quiesce-checked: archive the old generation, open an empty one
 > ```
 >
 > The refusal is a **preflight, not a lock**: it certifies the store as it stands
 > at that moment. On a host whose pi/Claude settings point straight at a checkout,
 > a `git pull` can put the new code in front of live sessions before you run
 > anything at all, so order the upgrade explicitly — **quiesce the sessions on
-> that host → pull → migrate → `setup` → reopen**. The gates prove the sequence
-> lands; they cannot prove a session that keeps writing through it.
->
-> `migrate` copies the whole store to a sibling
-> `meta-sessions.v3-migration-backup-<timestamp>` **before** touching anything, and
-> only a completed copy gets that name; `restore <backup-dir>` puts it back and
-> destroys nothing. A v2 record normally carries `parentGardenId: null` and
-> `isEntwurf: false` and converts silently; what `migrate` refuses without
-> `--drop-parentage` is a record with a **non-null `parentGardenId` or
-> `isEntwurf: true`** — v3 has no parentage or species axis, so discarding those
-> values stays a decision you make, not one the tool makes for you. `verify` names
-> the count in advance. Run this **once per host**, before the first session that
-> needs garden identity there.
+> that host → pull → fresh-cut → `setup` → reopen**. `fresh-cut` enforces the
+> quiesce half itself: a live control socket or a marker whose owner process is
+> still running refuses the cut before anything moves.
 
 After upgrading a globally installed package, reinstall the native-harness surface you use before trusting it:
 
@@ -572,7 +572,7 @@ In ACP-backed and external native-harness sessions, `entwurf-bridge` exposes fiv
 
 ### `entwurf_v2` — canonical dispatch verb
 
-`entwurf_v2` / `runEntwurfV2` is the canonical v2 dispatch verb over **existing** garden targets — record-backed citizens only (#50 C4: the record is the sole address authority; a record-less control socket rejects pre-probe as `record-less-socket`, a migration/diagnostic state, never a delivery target). You give a target garden id plus an intent (`fire-and-forget` or `owned-outcome`); one decider reads the target's liveness as a fact and picks the transport from a frozen table keyed on **both** the target's state **and** the intent — never on state alone — then reports one outcome under the v2 lock policy. Pi control-socket and spawn-bg paths take a per-target lock; mailbox and native-push are lock-free, with deliverability guarded by their own receiver/probe evidence:
+`entwurf_v2` / `runEntwurfV2` is the canonical v2 dispatch verb over **existing** garden targets — record-backed citizens only (#50 C4: the record is the sole address authority; a record-less control socket rejects pre-probe as `record-less-socket`, a diagnostic state, never a delivery target). You give a target garden id plus an intent (`fire-and-forget` or `owned-outcome`); one decider reads the target's liveness as a fact and picks the transport from a frozen table keyed on **both** the target's state **and** the intent — never on state alone — then reports one outcome under the v2 lock policy. Pi control-socket and spawn-bg paths take a per-target lock; mailbox and native-push are lock-free, with deliverability guarded by their own receiver/probe evidence:
 
 | target state | intent | transport |
 |---|---|---|
@@ -586,13 +586,13 @@ In ACP-backed and external native-harness sessions, `entwurf-bridge` exposes fiv
 | live native-push conversation | fire-and-forget | native-push direct injection |
 | dead / indeterminate native-push conversation | fire-and-forget | **reject** (`native-push-target-dead` / `native-push-probe-indeterminate`) |
 | native-push | owned-outcome | **reject** (`native-push-no-resume-authority`) |
-| record-less control socket (no meta-record) | any | **reject** (`record-less-socket` — pre-probe; migration/diagnostic state, #50 C4) |
+| record-less control socket (no meta-record) | any | **reject** (`record-less-socket` — pre-probe; diagnostic state, #50 C4) |
 
 **`entwurf_v2` is the canonical surface for garden-id delivery.** When you have a garden id and want to reach whoever it names — message, reply, or hand-off — `entwurf_v2` is the one surface that reads whether the target is live pi, dormant pi, mailbox-backed Claude Code, or native-push Antigravity and routes correctly; *when unsure which transport, use `entwurf_v2`*. This prevents callers from guessing a rail from the shape of an id.
 
 What v2 provides is a **deterministic dispatch substrate** that moves the "which transport?" decision out of the fallible caller/model and into the decider, with transport-appropriate locking and an honest reject (no `✓ delivered`, no `.msg` garbage) when a target cannot receive. What it does **not** do is **fresh sibling creation** — minting a brand-new sibling from a provider/model/prompt is a deferred lane (the `dormant pi → spawn-bg resume` row above resumes an *already-identified* citizen, it does not mint one). The meta-mailbox row requires an **active** self-fetch receiver; native-push requires a record-backed, probe-alive native conversation and never borrows mailbox state. Claude↔Claude / Claude tmux-live transport is a later lane (the contract enum names `tmux-live` but no production path executes it).
 
-A live pi target is *reached* over its control socket, but the socket is dispatch-internal transport, never identity (#50 C4). A control socket that no meta-record claims — a pre-record-era resident, a mixed/pre-cut store, or a stale/planted file — is refused for **every** intent as `record-less-socket`, and the reject names the fix (restart the resident so `session_start` births its record, or run the M1 migration). `entwurf_peers` reports the same state as an aggregated `record-less-socket` diagnostic rather than a peer row.
+A live pi target is *reached* over its control socket, but the socket is dispatch-internal transport, never identity (#50 C4). A control socket that no meta-record claims — a pre-record-era resident, an unreadable store, or a stale/planted file — is refused for **every** intent as `record-less-socket`, and the reject names the fix (restart the resident so `session_start` births its record, or quiesce and run the fresh-cut). `entwurf_peers` reports the same state as an aggregated `record-less-socket` diagnostic rather than a peer row.
 
 > **Direction.** An Entwurf core (peer identity / garden id / inbox / liveness / dispatch / replyability / evidence) could later extract into its own repo with per-backend plugins; today this repo holds the v2 core + meta-bridge + ACP plugin together. ACP is one plugin, not the boundary — rationale: [#38](https://github.com/junghan0611/entwurf/issues/38).
 

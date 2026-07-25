@@ -171,12 +171,6 @@
 		// (entwurf-control.ts) reaches it via a NON-LITERAL dynamic import so the fence never
 		// enters the emit-capable root program. Typechecked by scripts/tsconfig.json via its
 		// gate (smoke-pi-attach.ts).
-		"pi-extensions/lib/pi-citizen-birth.ts",
-		// meta-migration.ts is the FROZEN v1/v2 legacy reader snapshot, isolated out of the
-		// V3-only production path (#50 hard cut) — a lib→lib VALUE importer (the require*/describe
-		// validators + MetaRecordError from meta-session.ts) with explicit `.ts`-extension imports,
-		// same fence. Typechecked by scripts/tsconfig.json via its gate
-		// (check-meta-migration-import-allowlist.ts). The M1 operator lane (H7) builds on it.
-		"pi-extensions/lib/meta-migration.ts"
+		"pi-extensions/lib/pi-citizen-birth.ts"
 	]
 }

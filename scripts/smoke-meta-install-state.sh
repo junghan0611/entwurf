@@ -557,7 +557,7 @@ import json, os
 p=os.environ['STORE'] + '/20260606T000001-bbbbbb.meta.json'
 d=json.load(open(p)); d['isEntwurf']=True; json.dump(d, open(p,'w'), indent=2); open(p,'a').write('\n')
 PY
-if node --experimental-strip-types "$STORE_DOCTOR" "$STORE" >/dev/null 2>&1; then bad "store doctor missed a stray pre-cut field (isEntwurf)"; else ok "store doctor fails on a stray pre-cut field (isEntwurf resurrection)"; fi
+if node --experimental-strip-types "$STORE_DOCTOR" "$STORE" >/dev/null 2>&1; then bad "store doctor missed a stray retired field (isEntwurf)"; else ok "store doctor fails on a stray retired field (isEntwurf resurrection)"; fi
 
 # Doctor fail-loud regression (B1'): meta-bridge-doctor.sh must surface a managed-
 # config drift, NOT die silently at the "[managed config state]" header. A bare

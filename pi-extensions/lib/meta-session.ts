@@ -133,9 +133,6 @@ export const META_BACKEND_DESCRIPTORS: Record<MetaBackend, MetaBackendDescriptor
 // Validation helpers (crash, don't warn)
 // ---------------------------------------------------------------------------
 
-// The require*/describe validators are exported for meta-migration.ts, the frozen
-// V1/V2 reader snapshot (#50). Its parser must validate against the SAME primitives
-// as production, so drift between the V3 and legacy readers is impossible.
 export function requireNonEmptyString(value: unknown, field: string): string {
 	if (typeof value !== "string" || value.length === 0) {
 		throw new MetaRecordError(`meta-record field "${field}" must be a non-empty string (got ${describe(value)}).`);
@@ -145,7 +142,7 @@ export function requireNonEmptyString(value: unknown, field: string): string {
 
 /** Validate the 3-backend NATIVE bridge axis (sender/receiver markers, capability
  * drift guard). Not a record-schema validator: identity records take
- * `requireBackendV2` (which admits `pi`); markers stay native-3 because a pi
+ * `requireCitizenBackend` (which admits `pi`); markers stay native-3 because a pi
  * session's sender identity is env-authored, never marker-authored. */
 export function requireBackend(value: unknown): MetaBackend {
 	if (typeof value !== "string" || !META_BACKENDS.includes(value as MetaBackend)) {
@@ -177,9 +174,9 @@ export function requireNullableString(value: unknown, field: string): string | n
 export function describe(value: unknown): string {
 	if (value === null) return "null";
 	if (typeof value === "string") return `string ${JSON.stringify(value)}`;
-	// Primitives carry their VALUE, not just their type: `got number` cannot tell a
-	// v1 record from a v2 one, and that distinction is exactly what the M1 runbook
-	// needs from a schemaVersion rejection (F9).
+	// Primitives carry their VALUE, not just their type: `got number` cannot say
+	// WHICH foreign schemaVersion a rejected record carried, and the operator
+	// deciding on a fresh cut deserves the actual number (F9).
 	if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
 		return `${typeof value} ${String(value)}`;
 	}
@@ -191,52 +188,34 @@ function isoNow(now: Date): string {
 }
 
 // ---------------------------------------------------------------------------
-// meta-record identity shape — the LIVE schema is v3 (#50 hard cut)
+// meta-record identity shape — the LIVE schema is v3, the ONLY schema this repo
+// can read (#50 hard cut, completed by the fresh-cut subtraction).
 //
-// HISTORY (how the shape got here). v2 (0.11 Stage 0 step 3A) stripped the
-// delivery/read-receipt aspect OUT of the record — it moved to a separate
-// mailbox state file (step 3B) — and kept only IDENTITY: who this citizen is,
-// never its delivery bookkeeping. Its deltas vs v1 were:
-//   - backend gains `pi` (the 4th meta backend — pi sessions become citizens)
-//   - transcriptPath required → nullable (pi birth may not know it yet)
-//   - new nullable identity fields: model, parentGardenId, isEntwurf
-//   - lastSeen → recordUpdatedAt (a record touch time, NOT liveness)
-//   - delivery{} removed entirely
-// v3 (#50 C1) then dropped `parentGardenId` + `isEntwurf`: a call is not
-// parentage and there is no species boolean (LOCKED PROTOCOL 5/6).
+// There is no history ladder here on purpose. The bridge is a call-relay: a
+// record is routing state for a LIVE session, never memory (memory lives in the
+// native transcript and the andenken embedding axes). Sessions flow — a session
+// from before a schema generation is never resumed through this store, so the
+// repo carries NO reader, migrator or fixture for any earlier shape. When the
+// schema next changes, bump the version, and the upgrade story stays the same
+// one sentence: quiesce → fresh-cut (archive the whole generation) → go.
+// (#50: a call is not parentage and there is no species boolean — LOCKED
+// PROTOCOL 5/6 — which is why v3 carries no parentage/species axis.)
 //
-// WHAT LIVES HERE NOW: the whole v3 axis — reader, normalizer, canonical
-// serializer, minter and the FS upsert (`upsertMetaSession`, below). The 3A-era
-// "reader + normalizer only, no writer yet" staging is over; the v1/v2 parsers
-// it staged for are FROZEN in meta-migration.ts, reachable only through the M1
-// operator command.
+// WHAT LIVES HERE: the whole v3 axis — reader, normalizer, canonical
+// serializer, minter and the FS upsert (`upsertMetaSession`, below).
 // ---------------------------------------------------------------------------
 
-/**
- * The FROZEN v2 schema number. v2 is a CLOSED schema — it will never gain a
- * field or bump again; only the M1 migration surface still reads it. Kept here
- * (not in meta-migration.ts) because the strayness invariant needs both halves
- * spelled from one place.
- */
-export const META_SCHEMA_VERSION_V2 = 2 as const;
-
-/**
- * v3 = the hard-cut identity schema (#50): v2 minus `parentGardenId` + `isEntwurf`.
- * Call ≠ parentage and there is no `isEntwurf` species boolean (LOCKED PROTOCOL #5).
- * Normal production is V3-only; V1/V2 readers survive solely in the M1 migration
- * surface (`meta-migration.ts`), never imported by the normal routing path.
- */
+/** The one live identity schema number. */
 export const META_SCHEMA_VERSION_V3 = 3 as const;
 
-/** v2 backends = the three v1 backends + `pi` (pi joins as the 4th meta citizen). */
-export const META_BACKENDS_V2 = ["claude-code", "antigravity", "codex", "pi"] as const;
-export type MetaBackendV2 = (typeof META_BACKENDS_V2)[number];
+/** The 4 record-citizen backends: the three native backends + `pi` itself. */
+export const META_CITIZEN_BACKENDS = ["claude-code", "antigravity", "codex", "pi"] as const;
+export type MetaCitizenBackend = (typeof META_CITIZEN_BACKENDS)[number];
 
 /**
  * The LIVE identity record — v3 (`schemaVersion: 3`). The name carries no
- * version suffix on purpose: this is the one shape normal routing mints, reads
- * and writes, and `MetaIdentityV2` (meta-migration.ts) is the frozen ancestor,
- * not a sibling. Field order mirrors the frozen ledger's jsonc so the serializer
+ * version suffix on purpose: this is the ONE shape the repo mints, reads and
+ * writes. Field order mirrors the frozen ledger's jsonc so the serializer
  * stays byte-stable. No delivery aspect — that is mailbox state (step 3B),
  * referenced by gardenId, never embedded in identity. No parentage/species axis
  * — #50 dropped `parentGardenId` + `isEntwurf`, and the v3 parser REJECTS them
@@ -245,7 +224,7 @@ export type MetaBackendV2 = (typeof META_BACKENDS_V2)[number];
 export interface MetaIdentity {
 	schemaVersion: typeof META_SCHEMA_VERSION_V3;
 	gardenId: string;
-	backend: MetaBackendV2;
+	backend: MetaCitizenBackend;
 	nativeSessionId: string;
 	cwd: string;
 	model: string | null;
@@ -254,74 +233,57 @@ export interface MetaIdentity {
 	recordUpdatedAt: string;
 }
 
-export function requireBackendV2(value: unknown): MetaBackendV2 {
-	if (typeof value !== "string" || !META_BACKENDS_V2.includes(value as MetaBackendV2)) {
+export function requireCitizenBackend(value: unknown): MetaCitizenBackend {
+	if (typeof value !== "string" || !META_CITIZEN_BACKENDS.includes(value as MetaCitizenBackend)) {
 		throw new MetaRecordError(
-			`meta-record "backend" must be one of ${META_BACKENDS_V2.join(" | ")} (got ${describe(value)}).`,
+			`meta-record "backend" must be one of ${META_CITIZEN_BACKENDS.join(" | ")} (got ${describe(value)}).`,
 		);
 	}
-	return value as MetaBackendV2;
-}
-
-export function requireBoolean(value: unknown, field: string): boolean {
-	if (typeof value !== "boolean") {
-		throw new MetaRecordError(`meta-record field "${field}" must be a boolean (got ${describe(value)}).`);
-	}
-	return value;
-}
-
-export function requireNullableGardenId(value: unknown, field: string): string | null {
-	if (value === null) return null;
-	const id = requireNonEmptyString(value, field);
-	if (!SESSION_ID_RE.test(id)) {
-		throw new MetaRecordError(
-			`meta-record "${field}" must be null or match YYYYMMDDTHHMMSS-[0-9a-f]{6} (got "${id}").`,
-		);
-	}
-	return id;
+	return value as MetaCitizenBackend;
 }
 
 /**
- * The name of the M1 migration operator command. V3-only production points at it
- * BY NAME the moment it meets a pre-cut (v1/v2) record, so the error is honest
- * about the fix. C1 reserved the name so every rejection surface could be
- * authored at once; the M1 lane made it LIVE — run.sh dispatches the verb to
- * scripts/meta-bridge-migrate-v3.ts (backup → migrate → verify non-V3=0 →
- * restore), gated by check-meta-migrate-v3.
+ * The name of the fresh-cut operator command. The bridge is a call-relay, not a
+ * memory layer: sessions flow, memory lives in the transcript + embedding axes,
+ * and the active store provides NO continuity across schema generations. So the
+ * moment production meets a record it cannot read, the honest fix is not a
+ * migration — it is an explicit generation cut: archive the whole previous
+ * generation and open an empty v3 store. run.sh dispatches this name to
+ * scripts/meta-bridge-fresh-cut.ts.
  */
-export const M1_MIGRATE_COMMAND = "./run.sh meta-bridge-migrate-v3 migrate";
+export const FRESH_CUT_COMMAND = "./run.sh meta-bridge-fresh-cut";
 
 /**
  * The installed-package form of the same verb: the npm bin `entwurf` IS run.sh,
  * so both strings dispatch the identical surface. Named separately because the
- * hosts that actually meet a pre-cut store are INSTALLED hosts with no checkout
- * — a `./run.sh …` prescription is not typeable there (M4).
+ * hosts that actually meet a previous-generation store are INSTALLED hosts with
+ * no checkout — a `./run.sh …` prescription is not typeable there.
  */
-export const M1_MIGRATE_COMMAND_INSTALLED = "entwurf meta-bridge-migrate-v3 migrate";
+export const FRESH_CUT_COMMAND_INSTALLED = "entwurf meta-bridge-fresh-cut";
 
 /**
  * The one prescription every rejection surface prints — names BOTH invocation
  * forms so the fix is typeable on a dev clone AND an installed host. Extends
- * (never replaces) the `M1_MIGRATE_COMMAND` substring the gates assert.
+ * (never replaces) the `FRESH_CUT_COMMAND` substring the gates assert.
  */
-export const M1_PRESCRIPTION = `\`${M1_MIGRATE_COMMAND}\` (from an installed package: \`${M1_MIGRATE_COMMAND_INSTALLED}\`)`;
+export const FRESH_CUT_PRESCRIPTION = `\`${FRESH_CUT_COMMAND}\` (from an installed package: \`${FRESH_CUT_COMMAND_INSTALLED}\`)`;
 
-/** The uniform "this record predates the v3 hard cut" error, naming the M1 fix. */
+/** The uniform "this record is not a live-generation v3 record" error, naming the fresh-cut fix. */
 function nonV3RecordMessage(version: unknown): string {
 	return (
 		`meta-record "schemaVersion" must be ${META_SCHEMA_VERSION_V3} (got ${describe(version)}). ` +
-		`v1/v2 records predate the #50 hard cut and normal routing is v3-only — ` +
-		`migrate the store with ${M1_PRESCRIPTION} — the M1 operator command.`
+		`The active store is v3-only and carries no cross-generation continuity (sessions flow; ` +
+		`memory lives in the transcript and embedding axes, never here) — archive the previous ` +
+		`generation and open a fresh one with ${FRESH_CUT_PRESCRIPTION}.`
 	);
 }
 
 /**
- * The EXACT key set a v3 identity record may carry — the #50 hard cut is exactly
- * the v2 keyset minus `parentGardenId` + `isEntwurf`. v3 is strict: any key
- * outside this set fails fast. This is HALF of the strayness invariant: a pre-cut
- * v2 record still carrying `parentGardenId`/`isEntwurf` is REJECTED here as stray,
- * while meta-migration.ts's frozen v2 keyset keeps ACCEPTING them — so a record is
- * legible to exactly one schema and reaches v3 production only through M1.
+ * The EXACT key set a v3 identity record may carry. v3 is strict: any key
+ * outside this set fails fast — a record from a previous generation (or any
+ * foreign shape) is simply unreadable here, never coerced. There is no legacy
+ * reader anywhere in the repo; the fresh-cut command is the only answer to an
+ * unreadable store.
  */
 const META_IDENTITY_KEYS: readonly string[] = [
 	"schemaVersion",
@@ -350,22 +312,21 @@ export function parseMetaRecordV3(json: string): MetaIdentity {
 	if (obj.schemaVersion !== META_SCHEMA_VERSION_V3) {
 		throw new MetaRecordError(nonV3RecordMessage(obj.schemaVersion));
 	}
-	// Strict keyset: v3 dropped parentGardenId + isEntwurf, so a pre-cut v2 record
-	// still carrying them arrives with stray keys and is REJECTED (strayness
-	// reversal, gate f). It must go through the M1 migration surface, never silent
-	// coercion — so the message names M1, not just "unexpected key".
+	// Strict keyset: any key outside the v3 set makes the record unreadable —
+	// stray keys are never coerced away. A record from a previous generation
+	// carrying retired fields lands here, and the fix is the generation cut.
 	const stray = Object.keys(obj).filter((k) => !META_IDENTITY_KEYS.includes(k));
 	if (stray.length > 0) {
 		throw new MetaRecordError(
 			`v3 meta-record carries unexpected key(s) ${stray.map((k) => `"${k}"`).join(", ")} ` +
-				`(allowed: ${META_IDENTITY_KEYS.join(", ")}). A pre-cut v2 record still carrying ` +
-				`parentGardenId/isEntwurf must be migrated with ${M1_PRESCRIPTION}, never read directly.`,
+				`(allowed: ${META_IDENTITY_KEYS.join(", ")}). A record from a previous generation is ` +
+				`never read or coerced — archive the generation with ${FRESH_CUT_PRESCRIPTION}.`,
 		);
 	}
 	return {
 		schemaVersion: META_SCHEMA_VERSION_V3,
 		gardenId: requireGardenId(obj.gardenId),
-		backend: requireBackendV2(obj.backend),
+		backend: requireCitizenBackend(obj.backend),
 		nativeSessionId: requireNonEmptyString(obj.nativeSessionId, "nativeSessionId"),
 		cwd: requireNonEmptyString(obj.cwd, "cwd"),
 		model: requireNullableString(obj.model, "model"),
@@ -376,10 +337,9 @@ export function parseMetaRecordV3(json: string): MetaIdentity {
 }
 
 /**
- * Normalize a parsed v3 identity into a fresh, key-stable copy. In V3-only
- * production the dual-read v1/v2 collapse is GONE (it moved to the M1 migration
- * surface); this stays as the one place that hands every consumer a canonical,
- * key-ordered identity object, so a caller never depends on incidental key order.
+ * Normalize a parsed v3 identity into a fresh, key-stable copy — the one place
+ * that hands every consumer a canonical, key-ordered identity object, so a
+ * caller never depends on incidental key order.
  */
 export function normalizeMetaIdentity(record: MetaIdentity): MetaIdentity {
 	return {
@@ -396,21 +356,16 @@ export function normalizeMetaIdentity(record: MetaIdentity): MetaIdentity {
 }
 
 // ---------------------------------------------------------------------------
-// v3 write shape + V3-only reader (#50 hard cut; was 0.11 3D-1 dual-read)
-//
-// Pure functions: the canonical v3 serializer and the v3 reader. 0.11 staged
-// these as write-shape-first (3D-1) with the fs upsert following in 3D-4; both
-// landed, and #50 then collapsed the version dispatch to v3 alone. The fs upsert
-// that consumes this serializer is `upsertMetaSession`, further down this file.
+// v3 write shape + reader — pure functions: the canonical serializer and the
+// one reader. The fs upsert that consumes this serializer is
+// `upsertMetaSession`, further down this file.
 // ---------------------------------------------------------------------------
 
 /**
  * Canonical serialization of a v3 identity: stable key order (the frozen ledger
  * jsonc order), 2-space indent, trailing newline. Deterministic — re-serializing
  * the same identity is byte-identical, and the output round-trips through
- * `parseMetaRecordV3`. This is the ONE write shape in production; the M1
- * migration command writes through it too, so a migrated record is byte-identical
- * to a freshly minted one.
+ * `parseMetaRecordV3`. This is the ONE write shape in the repo.
  */
 export function serializeMetaIdentity(identity: MetaIdentity): string {
 	const ordered = {
@@ -435,7 +390,7 @@ export function serializeMetaIdentity(identity: MetaIdentity): string {
  * mint (create) has no existing value, so undefined collapses to null.
  */
 export interface MetaIdentityMintInput {
-	backend: MetaBackendV2;
+	backend: MetaCitizenBackend;
 	nativeSessionId: string;
 	cwd: string;
 	model?: string | null;
@@ -450,7 +405,7 @@ export interface MetaIdentityMintInput {
  * know yet. There is no parentage or species axis to default: #50 deleted both.
  */
 export function mintMetaIdentity(input: MetaIdentityMintInput, now: Date = new Date()): MetaIdentity {
-	const backend = requireBackendV2(input.backend);
+	const backend = requireCitizenBackend(input.backend);
 	const ts = isoNow(now);
 	return {
 		schemaVersion: META_SCHEMA_VERSION_V3,
@@ -466,19 +421,12 @@ export function mintMetaIdentity(input: MetaIdentityMintInput, now: Date = new D
 }
 
 /**
- * V3-only reader. The dual-read dispatch to v1/v2 is GONE from production (#50):
- * those parsers live only in the M1 migration surface (meta-migration.ts). A
- * pre-cut (v1/v2) or unknown version throws `nonV3RecordMessage`, which names the
- * M1 command (gate h). The name is kept (`…Any`) for call-site stability, but with
- * one schema in production it now means exactly "parse the sole live version".
+ * Parse a v3 record straight to a fresh, key-stable identity copy. There is one
+ * schema in this repo, so this is THE reader; any other version throws
+ * `nonV3RecordMessage`, which names the fresh-cut command.
  */
-export function parseMetaRecordAny(json: string): MetaIdentity {
-	return parseMetaRecordV3(json);
-}
-
-/** Parse a v3 record straight to a fresh, key-stable identity copy. */
 export function parseMetaIdentity(json: string): MetaIdentity {
-	return normalizeMetaIdentity(parseMetaRecordAny(json));
+	return normalizeMetaIdentity(parseMetaRecordV3(json));
 }
 
 // ---------------------------------------------------------------------------
@@ -502,7 +450,7 @@ export function parseMetaIdentity(json: string): MetaIdentity {
 // source and there is no per-record copy left to drift against it.
 // The 3C gate (check-entwurf-capabilities) still asserts the JSON AGREES with the
 // const for the three existing backends (the drift guard) and COVERS exactly
-// META_BACKENDS_V2 (pi included).
+// META_CITIZEN_BACKENDS (pi included).
 //
 // pi's wakeMode = direct-inject (NOT self-fetch): pi's live wake path is the
 // entwurf-control socket — `pi.sendMessage(... triggerTurn ...)` injects the
@@ -528,7 +476,7 @@ export interface MetaCapability {
 /** The whole registry: schema version + one capability per v2 backend. */
 export interface MetaCapabilityRegistry {
 	schemaVersion: typeof CAPABILITY_SCHEMA_VERSION;
-	backends: Record<MetaBackendV2, MetaCapability>;
+	backends: Record<MetaCitizenBackend, MetaCapability>;
 }
 
 const CAPABILITY_TOP_KEYS: readonly string[] = ["schemaVersion", "backends"];
@@ -563,7 +511,7 @@ function parseCapabilityEntry(value: unknown, backend: string): MetaCapability {
 /**
  * Parse + fully validate untrusted JSON into a capability registry. Strict:
  * schemaVersion fence, top-level + per-entry keyset, and COVERAGE — the backend
- * keys must be exactly META_BACKENDS_V2 (no missing, no extra). A registry that
+ * keys must be exactly META_CITIZEN_BACKENDS (no missing, no extra). A registry that
  * forgets pi, or smuggles an unknown backend, is rejected.
  */
 export function parseMetaCapabilityRegistry(json: string): MetaCapabilityRegistry {
@@ -596,15 +544,15 @@ export function parseMetaCapabilityRegistry(json: string): MetaCapabilityRegistr
 		throw new MetaRecordError(`capability registry "backends" must be an object (got ${describe(backends)}).`);
 	}
 	const present = Object.keys(backends).sort();
-	const expected = [...META_BACKENDS_V2].sort();
+	const expected = [...META_CITIZEN_BACKENDS].sort();
 	if (present.length !== expected.length || !expected.every((b, i) => b === present[i])) {
 		throw new MetaRecordError(
 			`capability registry must cover exactly ${expected.join(", ")} (got ${present.join(", ")}).`,
 		);
 	}
 	const entries = backends as Record<string, unknown>;
-	const out = {} as Record<MetaBackendV2, MetaCapability>;
-	for (const backend of META_BACKENDS_V2) {
+	const out = {} as Record<MetaCitizenBackend, MetaCapability>;
+	for (const backend of META_CITIZEN_BACKENDS) {
 		out[backend] = parseCapabilityEntry(entries[backend], backend);
 	}
 	return { schemaVersion: CAPABILITY_SCHEMA_VERSION, backends: out };
@@ -671,14 +619,14 @@ export function loadMetaCapabilityRegistry(): MetaCapabilityRegistry {
  * The capability for one backend, from the registry (3D-3 live source). The
  * optional `registry` injection lets a gate prove the value is registry-DRIVEN
  * (feed a doctored registry → the lookup follows it), distinguishing "read from
- * the registry" from "hardcoded off the const". Param is `MetaBackendV2` (all 4):
- * `backends` is `Record<MetaBackendV2, …>`, so the lookup is total — mint/parse
+ * the registry" from "hardcoded off the const". Param is `MetaCitizenBackend` (all 4):
+ * `backends` is `Record<MetaCitizenBackend, …>`, so the lookup is total — mint/parse
  * still pass the 3 `MetaBackend` values (a subset), and the v2 decider's mailbox
- * deliverability passes the unsupported backends (which are MetaBackendV2 to the
+ * deliverability passes the unsupported backends (which are MetaCitizenBackend to the
  * type system even though pi never reaches that call at runtime).
  */
 export function metaCapabilityFor(
-	backend: MetaBackendV2,
+	backend: MetaCitizenBackend,
 	registry: MetaCapabilityRegistry = loadMetaCapabilityRegistry(),
 ): MetaCapability {
 	return registry.backends[backend];
@@ -696,8 +644,8 @@ export function metaRecordFilename(record: MetaIdentity): string {
  * JSONLs). NOT a filename parse, NOT an index lookup — those are at best derived
  * caches. The directory listing + record reading is injected so this stays a
  * pure function (the step-3 CLI supplies the real fs). V3-only via
- * parseMetaIdentity — a pre-cut record is skipped (surfaced through `onSkip`)
- * like any other unreadable entry; M1 is the only door back in. This is the scan
+ * parseMetaIdentity — an unreadable entry is surfaced through `onSkip`, and the
+ * strict upsert turns any skip into a refusal naming fresh-cut. This is the scan
  * the upsert uses: the existence check MUST recognize every V3 record or it
  * would mint a duplicate id for an existing citizen (G1).
  *
@@ -836,7 +784,7 @@ export function decideUpsert(
 	input: MetaIdentityMintInput,
 	now: Date = new Date(),
 ): UpsertDecision {
-	const backend = requireBackendV2(input.backend);
+	const backend = requireCitizenBackend(input.backend);
 	const nativeSessionId = requireNonEmptyString(input.nativeSessionId, "nativeSessionId");
 	const cwd = requireNonEmptyString(input.cwd, "cwd");
 
@@ -1244,10 +1192,7 @@ export interface UpsertMetaSessionOptions {
 	input: MetaIdentityMintInput;
 	/** Override the store directory (defaults to {@link defaultMetaSessionsDir}). */
 	dir?: string;
-	/** Override the mailbox dir (defaults to {@link defaultMetaMailboxDir}) — only the v1→v2 receipt migration touches it. */
-	mailboxDir?: string;
 	now?: Date;
-	onSkip?: (filename: string, err: Error) => void;
 }
 
 export interface UpsertMetaSessionResult {
@@ -1260,31 +1205,42 @@ export interface UpsertMetaSessionResult {
 
 /**
  * Idempotent fs upsert (writes v3 identity). Scan the store by
- * `nativeSessionId` with the V3-only identity scan (a pre-cut record is skipped
- * as unreadable — M1 is the only door back in),
- * decide create vs attach on EXISTENCE, and write atomically as v3. On attach the
- * file is the existing garden id's record (same path, rewritten in place);
- * on create it is a fresh `<gardenId>.meta.json`. A duplicate `nativeSessionId`
- * throws (via the scan) rather than silently picking one.
+ * `nativeSessionId`, decide create vs attach on EXISTENCE, and write atomically
+ * as v3. On attach the file is the existing garden id's record (same path,
+ * rewritten in place); on create it is a fresh `<gardenId>.meta.json`. A
+ * duplicate `nativeSessionId` throws (via the scan) rather than silently
+ * picking one.
  *
- * Crash-order (3D-4): when the matched file is still v1, its delivery receipts are
- * migrated to the mailbox state store BEFORE the v2 rewrite. If the process dies
- * between the two, the record is still v1 → the next attach re-migrates (state-wins
- * merge is idempotent), so no receipt is lost. The reverse order would lose the
- * receipt permanently. The write is tmp-file + rename so a crash never leaves a
- * half-written record (#30 crash-safety).
+ * STRICT STORE (the guard boundary): every writer — pi birth, the Claude hook,
+ * agy imprint, `entwurf_register_native` — funnels through here, so this is
+ * where the generation policy has teeth. A store entry the v3 reader cannot
+ * parse (previous generation, foreign bytes, corruption) fails the WHOLE upsert
+ * BEFORE any write, naming the fresh-cut command. Ordinary runtime never writes
+ * around an unreadable record — the operator cuts a fresh generation, once, and
+ * the store is clean again. The write is tmp-file + rename so a crash never
+ * leaves a half-written record (#30 crash-safety).
  */
 export function upsertMetaSession(opts: UpsertMetaSessionOptions): UpsertMetaSessionResult {
 	const dir = path.resolve(expandTilde(opts.dir ?? defaultMetaSessionsDir()));
 	fs.mkdirSync(dir, { recursive: true });
 	const entries = fs.readdirSync(dir);
 	const readRaw = (filename: string) => fs.readFileSync(path.join(dir, filename), "utf8");
-	const existing = scanIdentityByNativeId(entries, opts.input.nativeSessionId, readRaw, opts.onSkip);
-
-	// V3-only production: a matched record is already v3 (parseMetaRecordAny rejects
-	// any pre-cut version, naming M1), so the old v1→v2 receipt crash-migration is
-	// gone from this path — a v1 file cannot reach a live upsert. Migrating a
-	// genuinely-old v1 store is the M1 operator command's job (H7 lane), not attach.
+	const unreadable: { filename: string; message: string }[] = [];
+	const existing = scanIdentityByNativeId(entries, opts.input.nativeSessionId, readRaw, (filename, err) =>
+		unreadable.push({ filename, message: err.message }),
+	);
+	if (unreadable.length > 0) {
+		const shown = unreadable
+			.slice(0, 3)
+			.map((s) => `${s.filename}: ${s.message}`)
+			.join("\n  ");
+		throw new MetaRecordError(
+			`meta-record store ${dir} holds ${unreadable.length} record(s) this generation cannot read — ` +
+				`refusing to write (the active store is v3-only and carries no cross-generation continuity). ` +
+				`Archive the generation and open a fresh one with ${FRESH_CUT_PRESCRIPTION}.\n  ${shown}` +
+				(unreadable.length > 3 ? `\n  … and ${unreadable.length - 3} more` : ""),
+		);
+	}
 	const decision = decideUpsert(existing, opts.input, opts.now);
 	const file = path.join(dir, metaRecordFilename(decision.record));
 	atomicWriteIdentity(file, decision.record);
@@ -1324,8 +1280,8 @@ function recordFileFor(sessionsDir: string, gardenId: string): string {
 
 /**
  * The identity read-by-gardenId. Read the file, body is SSOT, fail-fast on
- * body/filename gardenId drift; V3-only via parseMetaIdentity (a pre-cut record
- * throws, naming the M1 command). This is what the live path uses (enqueue/read,
+ * body/filename gardenId drift; V3-only via parseMetaIdentity (an unreadable
+ * record throws, naming fresh-cut). This is what the live path uses (enqueue/read,
  * the MCP sender-marker check).
  */
 export function readMetaIdentityByGardenId(
@@ -1664,56 +1620,4 @@ export function stampMailboxReceipt(
 	fs.writeFileSync(tmp, serializeMailboxReceiptState(updated), { mode: 0o600 });
 	fs.renameSync(tmp, file);
 	return updated;
-}
-
-/** The v1 delivery receipt timestamps that migrate to mailbox state (the 3 only — wakeMode/deliveryLevel are capability). */
-export interface V1DeliveryReceipts {
-	lastEnqueuedAt: string | null;
-	lastDeliveredAt: string | null;
-	lastReadAt: string | null;
-}
-
-/**
- * Migrate a v1 record's delivery receipts into the mailbox state store (3D-4).
- * The live-upsert caller died with the #50 hard cut (a v1 file can no longer
- * reach attach); the sole remaining caller is the M1 operator command
- * (scripts/meta-bridge-migrate-v3.ts), which runs this BEFORE rewriting a v1
- * file as v3 so a pre-3D-2 receipt is not lost.
- * Per-field merge, STATE WINS: a v1 timestamp only fills a state field that
- * is still null (`state[f] ?? v1[f]`); a state value already there is never
- * overwritten. ONLY the 3 timestamps move — wakeMode/deliveryLevel are capability
- * (registry), and a stray key would trip the receipt-state strict keyset (H2).
- *
- * "Migrating nothing is not a receipt": if no v1 value fills a null state field
- * (state already wins on every field, or v1 had nothing), this is a NO-OP — no
- * write, no state.json creation — returning null. Otherwise it writes the merged
- * state atomically (tmp+rename, mirroring stampMailboxReceipt) and returns it.
- */
-export function migrateV1DeliveryReceipts(opts: {
-	gardenId: string;
-	delivery: V1DeliveryReceipts;
-	mailboxDir?: string;
-}): MailboxReceiptState | null {
-	const gardenId = requireGardenId(opts.gardenId);
-	const mailboxDir = opts.mailboxDir ?? defaultMetaMailboxDir();
-	const current = readMailboxReceiptState({ gardenId, mailboxDir });
-	const merged: MailboxReceiptState = {
-		...current,
-		lastEnqueuedAt: current.lastEnqueuedAt ?? opts.delivery.lastEnqueuedAt,
-		lastDeliveredAt: current.lastDeliveredAt ?? opts.delivery.lastDeliveredAt,
-		lastReadAt: current.lastReadAt ?? opts.delivery.lastReadAt,
-	};
-	if (
-		merged.lastEnqueuedAt === current.lastEnqueuedAt &&
-		merged.lastDeliveredAt === current.lastDeliveredAt &&
-		merged.lastReadAt === current.lastReadAt
-	) {
-		return null; // no-write / no-create — migrating nothing is not a receipt
-	}
-	const file = mailboxReceiptStatePath(mailboxDir, gardenId);
-	fs.mkdirSync(path.dirname(file), { recursive: true });
-	const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
-	fs.writeFileSync(tmp, serializeMailboxReceiptState(merged), { mode: 0o600 });
-	fs.renameSync(tmp, file);
-	return merged;
 }

@@ -24,8 +24,8 @@ import {
 	receiverMarkerMatchesIdentity,
 } from "./entwurf-deliverability.ts";
 import {
-	type MetaBackendV2,
 	type MetaCapability,
+	type MetaCitizenBackend,
 	type MetaIdentity,
 	type MetaReceiverMarker,
 	metaCapabilityFor,
@@ -39,7 +39,7 @@ export interface MailboxGuardDeps {
 	/** Read the target's receiver presence marker (null = no live, armed receiver). */
 	readReceiverMarker?: (gardenId: string) => MetaReceiverMarker | null;
 	/** Resolve a backend's capability (wake mode). */
-	capabilityFor?: (backend: MetaBackendV2) => MetaCapability;
+	capabilityFor?: (backend: MetaCitizenBackend) => MetaCapability;
 }
 
 /**

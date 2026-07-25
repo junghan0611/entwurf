@@ -28,7 +28,7 @@
 import assert from "node:assert/strict";
 import * as path from "node:path";
 import { resolveFactList } from "../pi-extensions/lib/entwurf-facts.ts";
-import type { MetaBackendV2, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
+import type { MetaCitizenBackend, MetaIdentity } from "../pi-extensions/lib/meta-session.ts";
 import {
 	controlSocketPath,
 	inspectControlSocketPath,
@@ -218,7 +218,7 @@ async function main(): Promise<void> {
 
 	// ── end-to-end: scanSocketProbes → resolveFactList (dormant resumable) ──────
 	{
-		const identity = (gid: string, backend: MetaBackendV2): MetaIdentity => ({
+		const identity = (gid: string, backend: MetaCitizenBackend): MetaIdentity => ({
 			schemaVersion: 3,
 			gardenId: gid,
 			backend,

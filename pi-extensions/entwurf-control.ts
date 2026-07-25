@@ -1062,8 +1062,9 @@ export default function (pi: ExtensionAPI) {
 	 * why. This replaces the garden-id hard exit — the failing condition changed from
 	 * "the launcher didn't inject an id" to "the store could not give this session an
 	 * address", which is a real infrastructure fault (unreadable store, duplicate native
-	 * id) rather than a launch-style mismatch. A pre-cut (v1/v2) store lands here naming
-	 * the M1 command, which is the honest reading of "this host has not migrated yet".
+	 * id) rather than a launch-style mismatch. A store the live schema cannot read lands
+	 * here naming the fresh-cut command — the honest reading of "this host has not cut
+	 * its generation yet".
 	 */
 	const refreshServer = async (ctx: ExtensionContext) => {
 		// --emacs-agent-socket is independent of --entwurf-control: export it
@@ -1094,19 +1095,11 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 		residentGardenId = birth.gardenId;
-		// Meeting a pre-cut record must never be silent (the M1 contract): the scan
-		// skips what the V3 reader refuses, and skipping is fine — minting a fresh V3
-		// citizen beside an unmigrated store is exactly how a mixed store forms
-		// without anyone being told. ONE aggregated line, session_start only (turn_end
-		// re-attaches every turn and would repeat it forever).
-		if (birth.skippedRecords.length > 0) {
-			const first = birth.skippedRecords[0];
-			process.stderr.write(
-				`[entwurf-control] ${birth.skippedRecords.length} meta-record(s) in the store are unreadable ` +
-					`by V3 production and were skipped while resolving this session's address — ` +
-					`e.g. ${first?.filename}: ${first?.message}\n`,
-			);
-		}
+		// An unreadable record can no longer be skipped: the strict upsert throws
+		// before writing, so a dirty store lands in the catch above — loud stderr
+		// naming the fresh-cut command, control server refused. There is no mixed
+		// store to warn about; the store is either clean or this session has no
+		// address.
 		await startControlServer(pi, state, ctx, birth.socketPath);
 		updateStatus(ctx, true, birth.gardenId);
 		updateSessionEnv(ctx, true, birth.gardenId);
@@ -1216,7 +1209,6 @@ interface PiCitizenBirth {
 	action: "create" | "attach";
 	recordPath: string;
 	socketPath: string;
-	skippedRecords: { filename: string; message: string }[];
 }
 
 interface PiCitizenBirthModule {

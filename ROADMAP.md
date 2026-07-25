@@ -59,7 +59,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | 기능 | 증거 |
 |---|---|
 | v2 pi live send | `smoke-entwurf-v2-matrix-live` C1 |
-| v2 record-less socket 거부 — 모든 intent pre-probe `record-less-socket`, 원인+M1 명명 (#50 C4; A1 narrow 은퇴) | matrix-live C1b |
+| v2 record-less socket 거부 — 모든 intent pre-probe `record-less-socket`, 원인+fresh-cut 명명 (#50 C4; A1 narrow 은퇴) | matrix-live C1b |
 | v2 dormant pi → spawn-bg resume (실 `pi --entwurf-control` child + model turn) | `smoke-entwurf-v2-spawn-resume-live` |
 | v2 active Claude Code meta → meta-mailbox enqueue + doorbell | matrix-live C2 |
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
@@ -121,7 +121,7 @@ Sonnet에서 flaky라 한 번의 flake가 컷을 막으면 안 된다. 우회/�
 - **Claude Code tmux-live / Claude↔Claude live transport** — v2 production transport 구현(현재 enum만).
 - ~~**recordless dormant pi resume**~~ — **#50 C4가 이 lane의 전제를 닫았다**: record가 유일한 주소
   권위이고(목표 ②), record-less socket은 시민이 아니라 진단 대상이다. 재오픈하려면 "record 없이
-  resume authority"가 아니라 "그 resident를 record로 데려오는 경로"(재시작 / M1)를 설계해야 한다.
+  resume authority"가 아니라 "그 resident를 record로 데려오는 경로"(재시작)를 설계해야 한다.
 - **GC** (meta-record 누적) — `entwurf_peers` default live+recent+cwd 제한, dormant/meta 옵션화,
   stale marker·read body GC, record archive/TTL/lastSeen. **GC = 프로세스 자원 회수만, 데이터 삭제 아님.**
 - **SE-3 readability** — 정직한 `replyable:false`가 버그로 오인되는 silent degraded addressability(가독성).
@@ -187,11 +187,12 @@ dispatch substrate + meta-bridge + ACP plugin을 한 몸으로 들고 간다.
 createdAt, recordUpdatedAt }`. `model`/`transcriptPath` nullable 근거 = 어느 백엔드도 birth stdin에
 model 없음, pi backend는 birth에 transcript 미확정. `recordUpdatedAt` = record touch time(liveness 아님).
 
-**프로덕션은 schemaVersion 3만 읽는다.** v1/v2 record를 만나면 fail-loud로 M1 명령
-(`./run.sh meta-bridge-migrate-v3 migrate`)을 이름으로 지목하고, frozen legacy reader는
-`pi-extensions/lib/meta-migration.ts` 한 주소에만 산다. 은퇴한 v2 필드 `parentGardenId`/`isEntwurf`는
-**stray key로 거부된다** — 되살리지 마라(LOCKED PROTOCOL 6: record-backed pi 시민은 전부 sibling,
-`isEntwurf` 종 boolean 부활 금지). v1 receipt 필드는 mailbox state로 이동한 그대로.
+**프로덕션은 schemaVersion 3만 읽고, repo에는 legacy reader/migrator가 없다 (fresh-cut 뺄셈).**
+읽지 못하는 record를 만나면 fail-loud로 fresh-cut 동사(`entwurf meta-bridge-fresh-cut`)를 이름으로
+지목한다 — 이전 세대는 통째로 archive되고 빈 세대가 열린다. active store는 세대 간 주소/resume
+연속성을 제공하지 않는다(세션은 흘러가고, 기억은 native transcript와 임베딩 축에 있다). 은퇴한
+v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되살리지 마라(LOCKED PROTOCOL 6:
+record-backed pi 시민은 전부 sibling, `isEntwurf` 종 boolean 부활 금지).
 
 ---
 
@@ -202,10 +203,10 @@ model 없음, pi backend는 birth에 transcript 미확정. `recordUpdatedAt` = r
 
 1. 능력 레지스트리 = 별도 `entwurf-capabilities.json`(launch allowlist와 별 관심사).
 2. ~~v1→v2 = `parseMetaRecordV1/V2`→`normalizeMetaIdentity` dual-read + lazy normalize, 새 write는 v2.~~
-   **#50 hard cut이 이 결정을 뒤집었다 — 재설계 금지 대상 아님(오히려 되살리는 것이 금지다).** 프로덕션은
-   V3-only(`parseMetaRecordAny`=v3 only), dual-read는 삭제됐고 v1/v2 reader는 `meta-migration.ts` 한 주소에
-   frozen. pre-cut store는 명시적 M1(`./run.sh meta-bridge-migrate-v3 migrate`)로만 옮긴다. 아래 「meta-record
-   V3」 절 참조.
+   **#50 hard cut이 이 결정을 뒤집었고, fresh-cut 뺄셈이 완결했다 — 재설계 금지 대상 아님(오히려
+   되살리는 것이 금지다).** 프로덕션은 V3-only, dual-read와 legacy reader/migrator는 repo에서 삭제됐다.
+   읽지 못하는 store는 명시적 fresh-cut(`entwurf meta-bridge-fresh-cut`)으로 세대를 끊는다. 아래
+   「meta-record V3」 절 참조.
 3. ~~correlation = 소켓파일명 + tmux `@garden_id`; env probe 폐기; lineage는 launcher가 `PARENT_SESSION_ID`를
    명시 set.~~ **C1–C3가 이 correlation/lineage 설계를 대체했다.** 주소축은 meta-record 하나이고(LOCKED
    PROTOCOL 1), record엔 parent/lastCaller/worker tree가 없다(LOCKED PROTOCOL 5) — `PARENT_SESSION_ID`도
