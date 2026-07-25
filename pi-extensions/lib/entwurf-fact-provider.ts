@@ -36,8 +36,8 @@ import type { SocketLiveness } from "./socket-probe.ts";
 /** A listing-surface problem, surfaced explicitly rather than hidden or thrown.
  * Kind-tagged so the render layer shows provenance; each carries only verbatim
  * facts (never a half-parsed identity). `record-less-socket` (#50 C4) is the
- * demoted socket-only listing: a socket no record claims is a migration/
- * diagnostic state, not a citizen, and its message names the cause + fix. The
+ * demoted socket-only listing: a socket no record claims is a diagnostic
+ * state, not a citizen, and its message names the cause + fix. The
  * last three are socket-axis hazards folded from `scanSocketProbes` (slice 4c,
  * Fable 검수): a symlinked socket is a correlation-authority forgery attempt
  * (P1), a malformed `*.sock` name a visible drop (P3), a non-ENOENT dir-read

@@ -1,15 +1,23 @@
 #!/usr/bin/env node
 /**
- * meta-bridge-store-doctor — fail-loud full scan for meta-session records.
+ * meta-bridge-store-doctor — fail-loud certification of the ACTIVE meta-record store.
  *
- * The store is the authority for native→garden lookup. Doctor must therefore
- * refuse corrupt records, duplicate nativeSessionId authorities, and body ↔
- * filename drift instead of auto-pruning or silently picking one.
+ * The store is the authority for native→garden lookup, so the doctor asks EXACTLY
+ * the question every identity writer asks: `certifyActiveStore` in meta-session.ts
+ * (regular files, live schema, body↔filename agreement, globally unique
+ * nativeSessionId). One contract, one code path — a store this doctor certifies is
+ * a store the runtime will write to, and one it refuses is one no writer may touch.
+ * Two implementations of "is this store ok" would drift, and the weaker one always
+ * wins at runtime.
+ *
+ * It never prunes, repairs or picks a winner: the operator archives the generation.
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import { defaultMetaSessionsDir, parseMetaIdentity } from "../pi-extensions/lib/meta-session.ts";
+import {
+	activeStoreRefusal,
+	certifyActiveStoreDir,
+	defaultMetaSessionsDir,
+} from "../pi-extensions/lib/meta-session.ts";
 
 // Optional dir argv (doctor wrappers pass one); default = THE live store, the
 // same env+default resolution every runtime surface uses — so the install
@@ -20,49 +28,19 @@ if (process.argv.length > 3) {
 	process.exit(2);
 }
 
-const failures: string[] = [];
-const nativeToFiles = new Map<string, string[]>();
-let scanned = 0;
+const cert = certifyActiveStoreDir(dir);
 
-if (!fs.existsSync(dir)) {
-	console.log(`meta-store scan ok: ${dir} does not exist yet (0 records)`);
-	process.exit(0);
-}
-
-for (const filename of fs.readdirSync(dir).sort()) {
-	if (!filename.endsWith(".meta.json")) continue;
-	scanned += 1;
-	const file = path.join(dir, filename);
-	try {
-		// V3-only: parseMetaIdentity reads schemaVersion 3 alone; a record from a
-		// previous generation fails loud here naming the fresh-cut command —
-		// exactly the per-file prescription this scan's report wants.
-		const id = parseMetaIdentity(fs.readFileSync(file, "utf8"));
-		const expectedFilename = `${id.gardenId}.meta.json`;
-		if (filename !== expectedFilename) {
-			failures.push(
-				`${filename}: body/filename drift — body gardenId=${id.gardenId}, expected filename ${expectedFilename}`,
-			);
-		}
-		const files = nativeToFiles.get(id.nativeSessionId) ?? [];
-		files.push(filename);
-		nativeToFiles.set(id.nativeSessionId, files);
-	} catch (err) {
-		failures.push(`${filename}: ${err instanceof Error ? err.message : String(err)}`);
-	}
-}
-
-for (const [nativeSessionId, files] of nativeToFiles.entries()) {
-	if (files.length > 1) {
-		failures.push(
-			`duplicate nativeSessionId ${JSON.stringify(nativeSessionId)} in ${files.join(", ")} — authority ambiguity; prune manually`,
-		);
-	}
-}
-
-if (failures.length > 0) {
-	for (const failure of failures) console.error(`FAIL: ${failure}`);
+if (cert.defects.length > 0) {
+	// Per-entry causes first (the preflight shows the head of this list, and counts
+	// these `FAIL` lines), then the count + prescription ONCE. `shown = 0` keeps the
+	// summary from repeating every cause a second time — on a large previous
+	// generation that doubled the wall.
+	for (const defect of cert.defects) console.error(`FAIL: ${defect.filename}: ${defect.message}`);
+	console.error(activeStoreRefusal(cert, 0));
 	process.exit(1);
 }
 
-console.log(`meta-store scan ok: ${scanned} record(s) scanned, no corrupt/duplicate/drift records`);
+console.log(
+	`meta-store scan ok: ${cert.scanned} record(s) certified in ${cert.dir} ` +
+		"(regular files, live schema, no body/filename drift, unique nativeSessionId)",
+);

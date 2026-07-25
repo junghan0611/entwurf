@@ -259,7 +259,7 @@ async function main(): Promise<void> {
 	}
 
 	// ── 9b: #50 C4 — a record that VANISHED mid-dispatch while its socket remains
-	// re-resolves to the honest `record-less-socket` reject (migration/diagnostic
+	// re-resolves to the honest `record-less-socket` reject (a diagnostic
 	// state), never a retry into a socket the record no longer authorizes, and never
 	// the `bad-target` "absent" lie. Pre-probe: the fallback must NOT re-enter the
 	// in-domain inspect/probe path for it (inspectCalls === 0). A plain vanished

@@ -41,12 +41,12 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
 
 | repro (tmux) | driver 메서드 | 세부 |
 |---|---|---|
-| `tmux new-session -d -s <n> -x 200 -y 50` + `set-option @entwurf_garden_id/@entwurf_parent_garden_id` | `launch(spec)` | detached, geometry는 spec. **namespace 각인** → tmux server가 lineage 레지스트리(형 통찰). driver는 opaque 문자열만 새김(의미 모름) |
+| `tmux new-session -d -s <n> -x 200 -y 50` + `set-option @entwurf_garden_id/@entwurf_caller_garden_id` | `launch(spec)` | detached, geometry는 spec. **namespace 각인** → tmux server가 "누가 이 pane을 열었나"의 관찰면. driver는 opaque 문자열만 새김(의미 모름). **각인은 계보가 아니라 launch 사건이다**(#50: call ≠ parentage — `parentGardenId`/`isEntwurf`는 스키마에서 삭제됐고 v3 파서가 거부한다). 열어준 시민이 소유자가 되지 않으며, 열린 시민은 다음 순간 그를 부를 수 있다 |
 | `tmux send-keys -t <n> -l "<text>"` | `pasteText(target,text)` | literal 주입만. `-l`/paste-buffer 여지(arbitrary prompt 안전) |
 | `tmux send-keys -t <n> Enter` | `sendKey(target,key)` | 단일 키 |
 | (조합) `pasteText→sendKey(Enter)→sleep(1)→sendKey(Enter)` | **driver 아님 → launch-profile(claude-code, 착수 7)** | 더블-Enter 제출은 mux 차이 아니라 CC TUI submit policy. driver에 박으면 pi-native/타 TUI 오염 |
 | `tmux capture-pane -t <n> -p` | `capture(target)` | raw pane text만. 폴링(`grep -qE '●\s*READY'`)은 호출측 책임 |
-| `tmux list-sessions -F …` | `list(): MuxSessionView[]` | ★ 활성 파악 + 각인 읽어 lineage. **view, not fact** — authority(socket/meta-record/probe) 아님, 교차검증·진단 전용. 미각인은 optional 부재(throw 아님) |
+| `tmux list-sessions -F …` | `list(): MuxSessionView[]` | ★ 활성 파악 + 각인 읽어 gardenId/호출자. **view, not fact** — authority(socket/meta-record/probe) 아님, 교차검증·진단 전용. 미각인은 optional 부재(throw 아님) |
 | `tmux kill-session -t <n>` | `kill(target)` | idempotent — `\|\|true` 셸 대신 runner `okExitCodes` |
 | (암묵 `has-session`) | `isAlive(target)?` | 선택 |
 
@@ -61,7 +61,7 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
 | `list-panes -s -F '#{pane_id}'`, `%N`로 `send-keys -t` | pane id 타겟팅 | demo 주석 그대로: **`%N`은 operator의 `base-index`/`pane-base-index` 설정과 무관하게 안정**. session명+인덱스 타겟팅은 사용자 설정에 흔들린다 → **handle은 `%N`** |
 | `wait_for_new_socket` (control socket 등장 폴링) | **launch 완료판정의 authority** | repro의 `capture-pane \| grep READY`는 **view**, demo의 socket 등장이 **fact**. 3겹 불변식 §"view, not fact"와 정확히 정합 → `driver.capture()`는 진단용으로 남기고 **launch 성공 판정에 쓰지 말 것** |
 | `asciinema --command "tmux attach -t <s>"` | 관찰 경로 | 후속 `openMuxTarget` manual 레이어의 실물 선례 (attach/switch는 core driver 아님) |
-| 각인(`set-option @entwurf_garden_id`) **없음** | — | lineage 각인은 **repro가 유일 소스**. driver가 둘을 합쳐야 완전해진다(demo의 launch 정확성 + repro의 각인) |
+| 각인(`set-option @entwurf_garden_id`) **없음** | — | 각인은 **repro가 유일 소스**. driver가 둘을 합쳐야 완전해진다(demo의 launch 정확성 + repro의 각인) |
 
 **요컨대 driver의 소비자는 셋이고, 이식 대상은 repro 하나가 아니라 `repro ∪ demo`다.**
 
@@ -95,7 +95,7 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
      isAlive?(t: MuxTarget): Promise<boolean>;
    }
    export type MuxLaunchSpec = {
-     gardenId: string; parentGardenId?: string;   // → @entwurf_garden_id / @entwurf_parent_garden_id 각인(namespace)
+     gardenId: string; callerGardenId?: string;   // → @entwurf_garden_id / @entwurf_caller_garden_id 각인(namespace). 호출 사건, 계보 아님
      command: string[]; env?: Record<string, string>;  // argv 직접 전달 (demo 실측) — 타이핑 launch 아님
      geometry?: { cols: number; rows: number };    // default 200×50 (demo는 220×50)
      cwd?: string;
@@ -107,7 +107,7 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
    // handle = tmux pane id(`%N`) — operator의 base-index/pane-base-index 설정에 흔들리지 않는 유일한 안정 좌표(demo 실측)
    export type MuxTarget = { readonly __brand: unique symbol; driverId: "tmux" | "zmx"; gardenId: string; handle: string; driverData?: unknown };
    // MuxSessionView = tmux ls 관찰 스냅샷. dispatch authority 아님(socket/meta-record/probe가 authority). conflict는 diagnostic bucket
-   export type MuxSessionView = { driverId: "tmux" | "zmx"; handle: string; gardenId?: string; parentGardenId?: string; observedAt: number; raw?: string };
+   export type MuxSessionView = { driverId: "tmux" | "zmx"; handle: string; gardenId?: string; callerGardenId?: string; observedAt: number; raw?: string };
    export function createTmuxDriver(deps: { runner: MuxRunner; sleep?: (ms: number) => Promise<void> }): MuxDriver; // argv 순수부/부수효과 분리
    export const tmuxDriver: MuxDriver;              // createTmuxDriver({ runner: realRunner })
    export const DRIVERS: readonly MuxDriver[] = [tmuxDriver /*, zmxDriver */];
@@ -117,7 +117,7 @@ v2에 spawn이 "없는" 게 아니다. `entwurf_v2 owned-outcome`은 **기존 do
    - submit quirk(더블-Enter)는 **여기 없음** — claude-code launch-profile(7)이 소유. `pi-native-gpt`는 자기 submit policy.
    - `driver.ts`는 leaf: `entwurf-core`/mint import 금지. 역방향(mint→`lib/mux`) 금지는 7의 import-boundary 게이트.
 
-2. **`tmuxDriver` 구현** — 이식 대상은 **`repro ∪ demo`**(repro만 보면 pane을 못 여는 driver가 나온다): demo에서 **argv launch + `split-window` pane 생성 + `%N` handle**, repro에서 **각인 + `capture-pane`**. 각 메서드는 `plan*(): string[][]`(argv) 계산 → injectable runner 실행. geometry/`@entwurf_garden_id`/`@entwurf_parent_garden_id`는 spec. 더블-Enter는 **여기 아님**. launch 성공 판정에 `capture()`를 쓰지 말 것(authority는 control socket 등장 — demo `wait_for_new_socket`). repro/demo 스크립트는 그대로 두되 프로덕션 경로가 driver를 쓰게 하고, 종국엔 **`demo/demo.sh`가 driver 위로 올라오는 게 이 레인의 실물 인수 테스트**다.
+2. **`tmuxDriver` 구현** — 이식 대상은 **`repro ∪ demo`**(repro만 보면 pane을 못 여는 driver가 나온다): demo에서 **argv launch + `split-window` pane 생성 + `%N` handle**, repro에서 **각인 + `capture-pane`**. 각 메서드는 `plan*(): string[][]`(argv) 계산 → injectable runner 실행. geometry/`@entwurf_garden_id`/`@entwurf_caller_garden_id`는 spec. 더블-Enter는 **여기 아님**. launch 성공 판정에 `capture()`를 쓰지 말 것(authority는 control socket 등장 — demo `wait_for_new_socket`). repro/demo 스크립트는 그대로 두되 프로덕션 경로가 driver를 쓰게 하고, 종국엔 **`demo/demo.sh`가 driver 위로 올라오는 게 이 레인의 실물 인수 테스트**다.
 3. **deterministic 게이트 `check-mux-driver.ts`** — 실제 tmux 없이 fake runner로 tmuxDriver 구동: primitive별 argv/순서 단언, `@entwurf_garden_id` 각인 단언, kill idempotency(`okExitCodes`), `resolveMuxDriver` fail-fast. `check-acp-*` 스타일. `pnpm check` 체인 + `run.sh` dispatch 배선.
 4. **`zmxDriver` 스텁** — 같은 interface로 `DRIVERS=[tmux,zmx]`가 컴파일되게. 미구현 op는 fail-loud. **zmx 확보 = 설치면 계약(#47 코멘트): `command -v zmx` probe → optional, 없으면 tmux fallback; 능동 확보는 upstream prebuilt self-fetch(opt-in), nix flake/external-packages.sh/특정 하네스 PATH 전제 금지.**
 5. **enum 공존** — `ENTWURF_V2_TRANSPORTS`에 `zmx-live` 추가(`tmux-live`와 공존). schema↔types 게이트 갱신 **+ `DispatchVerdict`의 resume union도 같이 확장(GPT 지적 — 놓치면 타입 갈라짐)**. mux 종류를 별도 필드로 빼는 추상화는 금지(enum 나열 > 추상화 두께).

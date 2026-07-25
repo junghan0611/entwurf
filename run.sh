@@ -288,7 +288,7 @@ preflight_v3_store() {
   if [ -n "$nfail" ] && [ "$nfail" -gt 8 ] 2>/dev/null; then
     echo "       … and $((nfail - 8)) more record(s) with causes (full scan: the store-doctor)" >&2
   fi
-  fail "[$surface] refused BEFORE any write: this host's meta-record store holds record(s) the live generation cannot read (details above)."
+  fail "[$surface] refused BEFORE any write: this host's meta-record store holds entry/entries the live generation cannot certify (details above)."
   echo "       Every surface this step activates is V3-only, and the store carries no cross-generation continuity — sessions flow; memory lives in the transcript and embedding axes." >&2
   echo "       Nothing was written. Quiesce this host's sessions, archive the generation with \`./run.sh meta-bridge-fresh-cut\` (from an installed package: \`entwurf meta-bridge-fresh-cut\`), then re-run this step." >&2
   exit 1
@@ -616,7 +616,7 @@ smoke_pi_attach() {
 check_meta_mailbox_state_write() {
   # Deterministic gate for 0.11 Stage 0 step 3D-4 commit2 (the cut). Renamed from
   # check-meta-mailbox-dualwrite: after the cut the receipt is no longer dual-written
-  # (record.delivery is gone from the v2 record) — it lives SOLELY in the mailbox
+  # (there is no record.delivery on the identity record) — it lives SOLELY in the mailbox
   # state store. Asserts the meta-record FILE is byte-identical before/after enqueue
   # AND read (enqueue/read no longer touch the record — invariant ⑤), the state
   # carries lastEnqueuedAt/lastReadAt with field isolation, lastDeliveredAt is never
@@ -652,10 +652,11 @@ check_hook_launch_topology() {
 check_meta_identity_consumers() {
   # Deterministic gate for the V3-only identity consumer seam (#50 hard cut).
   # readMetaIdentityByGardenId reads v3 to identity (drift fail-fast, a
-  # foreign-generation record names fresh-cut), scanIdentityByNativeId matches
-  # by BODY (decoy filename still found), surfaces unreadable entries via
-  # onSkip while the strict upsert refuses them, and throws on THE G1
-  # invariant (duplicate nativeSessionId = authority ambiguity). Temp dir, no API.
+  # foreign-generation record names fresh-cut), and certifyActiveStore holds the
+  # ONE active-store contract the doctor and every writer share: regular files,
+  # live schema, no body/filename drift, globally unique nativeSessionId (THE G1
+  # invariant). Each rule is proven on its own store, and a writer refuses even a
+  # defect that involves neither of its own ids. Temp dir, no API.
   run_ts scripts/check-meta-identity-consumers.ts
 }
 
@@ -3399,8 +3400,12 @@ JSON
     echo "$sd_out" | tail -15 | sed 's/^/    /' >&2
     return 1
   fi
-  if ! grep -q "1 record(s) scanned" <<<"$sd_out"; then
-    fail "[check-pack-install] installed store-doctor scanned but did not report the fixture record (parseMetaIdentity path not exercised?): $sd_out"
+  # Anchored on the doctor's own count line: this cell exists to prove the emitted
+  # dist actually PARSED the fixture (not that it merely ran), so the number is the
+  # claim. If the doctor's wording changes, change it here in the same commit —
+  # a silent anchor miss would make this cell pass on a doctor that saw nothing.
+  if ! grep -q "1 record(s) certified" <<<"$sd_out"; then
+    fail "[check-pack-install] installed store-doctor ran but did not report certifying the fixture record (certifyActiveStore path not exercised, or its count line was reworded without updating this anchor): $sd_out"
     return 1
   fi
   echo "[check-pack-install] installed store-doctor scan pass (dist JS scans under node_modules with plain node: $sd_out)"

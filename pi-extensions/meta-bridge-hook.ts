@@ -13,8 +13,8 @@
  *     -> arm watchPath <mailbox>/<gardenId>/inbox.signal   idle-wake doorbell
  *     -> stdout hookSpecificOutput.watchPaths  (SessionStart / CwdChanged only)
  *
- * The record is keyed/looked-up by `native_session_id` (THE authority,
- * scanIdentityByNativeId); the idle-wake mailbox is keyed by GARDEN id — that is the
+ * The record is keyed/looked-up by `native_session_id` (THE authority, resolved
+ * from the certified store); the idle-wake mailbox is keyed by GARDEN id — that is the
  * whole point of the meta-bridge over the raw per-session prototype: one garden
  * address a sender can target, decoupled from the backend's native id grammar.
  *

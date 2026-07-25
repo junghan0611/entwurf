@@ -5,10 +5,11 @@
  * Policy (frozen, 4 sentences):
  *   1. The active citizen store is v3-only and provides NO cross-generation
  *      address or resume continuity — the bridge is a call-relay, never memory.
- *   2. If even one record in the store is unreadable to the live schema,
- *      ordinary install/runtime REFUSES to write and demands this explicit verb.
- *   3. fresh-cut quiesces first, then moves the whole previous generation to a
- *      timestamped archive and opens an empty live generation.
+ *   2. If even one entry in the store fails certification, install and citizen
+ *      birth/registration REFUSE before writing and demand this explicit verb.
+ *   3. fresh-cut REQUIRES quiescence — it verifies it and refuses while any
+ *      surface is live or unprovable — then moves the whole previous generation
+ *      to a timestamped archive and opens an empty live generation.
  *   4. The archive is forensic bytes only: no runtime reads it and no restore
  *      verb exists. Native transcripts and the andenken memory axes are never
  *      touched — sessions flow; memory lives there, not here.
@@ -30,19 +31,25 @@
  *                                          → UNTOUCHED
  *
  * QUIESCE GATE (refuse before any move): a LIVE citizen must never have its
- * address archived out from under it — that severs the very reply path a
- * running agent is serving. The gate refuses on:
- *   - an ALIVE control socket (a listener accepted the probe),
- *   - an INDETERMINATE control socket (no proof either way — never cut under
- *     uncertainty; F3: indeterminate is not dead),
- *   - a SYMLINKED socket entry (never probed — inspect and remove manually),
- *   - a sender/receiver marker whose owner pid is still the same live process
- *     (pid + start-key match, the pid-reuse guard).
+ * address archived out from under it — that severs the very reply path a running
+ * agent is serving. Refusing needs no proof of life; CUTTING needs proof of
+ * death. The gate refuses on both cases and names which one it saw:
+ *   - LIVE — an ALIVE control socket (a listener accepted the probe), or a
+ *     sender/receiver marker whose owner pid is still the same process (pid +
+ *     start-key match, the pid-reuse guard);
+ *   - UNCERTAIN — an INDETERMINATE socket (F3: indeterminate is not dead), a
+ *     SYMLINKED socket or marker (never followed), a marker that cannot name its
+ *     owner (malformed JSON, missing `ownerPid`/`ownerStartKey`), a crashed
+ *     writer's `.tmp` half-marker, or any entry no marker layout explains.
+ * Only a marker whose named owner demonstrably no longer holds that pid is dead,
+ * and only a dead marker/socket is cleared.
  *
- * Idempotent and crash-safe by shape: each directory moves in a single atomic
- * rename; a crash between the two renames leaves a half-cut generation that a
- * simple re-run finishes (with its own stamp). Running on a clean/empty host
- * just opens a fresh generation and says so.
+ * Idempotent and crash-safe by shape: the WHOLE move plan is preflighted — every
+ * archive destination checked — before the first rename, so a collision refusal
+ * is a true no-op instead of a half-cut generation; then each directory moves in
+ * a single atomic rename. A crash between the two renames leaves a half-cut
+ * generation that a simple re-run finishes (with its own stamp). Running on a
+ * clean/empty host just opens a fresh generation and says so.
  */
 
 import * as fs from "node:fs";
@@ -50,10 +57,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { CONTROL_SOCKET_SUFFIX, defaultControlSocketDir } from "../pi-extensions/lib/control-socket-path.js";
 import {
+	classifyMarkerOwner,
 	defaultMetaMailboxDir,
 	defaultMetaReceiversDir,
 	defaultMetaSendersDir,
 	defaultMetaSessionsDir,
+	probePidExistence,
 	processStartKey,
 } from "../pi-extensions/lib/meta-session.ts";
 import { probeSocketLiveness } from "../pi-extensions/lib/socket-probe.ts";
@@ -86,49 +95,125 @@ function stamp(now: Date = new Date()): string {
 interface QuiesceViolation {
 	surface: string;
 	detail: string;
+	/**
+	 * `live` = we PROVED something is still running. `uncertain` = we could not
+	 * prove it is gone. Both refuse the cut; they are reported apart so the
+	 * operator knows whether to close a session or to inspect a file.
+	 */
+	kind: "live" | "uncertain";
+}
+
+/** Existence WITHOUT following a link — a dangling symlink still occupies the name. */
+function pathExists(target: string): boolean {
+	try {
+		fs.lstatSync(target);
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 /**
- * Marker files whose owner pid is still the same live process (pid+startKey).
- * Layouts differ per marker kind and BOTH must be walked: sender markers live
- * one level down (`<senders>/<backend>/<pid>.json` — metaSenderMarkerPath),
- * receiver markers at the top (`<receivers>/<gardenId>.json`). A scan that only
- * saw the top level would call a host quiesced while a live agy/Claude sender
- * marker sat in its backend subdir.
+ * Walk a marker directory and classify every entry as LIVE, DEAD or UNCERTAIN.
+ *
+ * The walk accepts the UNION of both marker layouts — a `.json` at the root and a
+ * `.json` one backend-subdir down — rather than policing which kind belongs where:
+ * sender markers live one level down (`<senders>/<backend>/<pid>.json`,
+ * metaSenderMarkerPath) and receiver markers at the root
+ * (`<receivers>/<gardenId>.json`), and liveness is proven from each marker's own
+ * owner facts, not from its position. What matters is that BOTH depths are visited:
+ * a scan that only saw the root would call a host quiesced while a live agy/Claude
+ * sender marker sat in its backend subdir. Anything deeper than one level is not
+ * part of any layout and is inspected by hand instead of swept.
+ *
+ * DEAD IS A PROOF, NOT A DEFAULT — and the proof is not ours to compute here: the
+ * verdict comes from `classifyMarkerOwner`, because `processStartKey` returns ""
+ * for a pid that is gone AND for one we merely cannot read, so comparing keys
+ * inline turns "unknown" into "left" (fail-open). Everything unprovable is
+ * UNCERTAIN and REFUSES the cut: malformed JSON, a missing/non-positive owner
+ * field, a symlinked or non-regular marker, a `.tmp` half-write, an unexpected
+ * layout entry, and an owner whose start-key cannot be read while its pid may
+ * still exist. This is the rule the socket probe already holds (`indeterminate`
+ * refuses, never "probably dead") — a destructive generation cut must be
+ * fail-closed, because the cost of guessing wrong is archiving a running citizen's
+ * address out from under it. An unreadable marker at REST is disposable residue; an
+ * unreadable marker as EVIDENCE OF QUIESCENCE is no evidence at all.
  */
-function liveMarkerOwners(dir: string, label: string): { live: QuiesceViolation[]; deadFiles: string[] } {
-	const live: QuiesceViolation[] = [];
+function inspectMarkers(dir: string, label: string): { violations: QuiesceViolation[]; deadFiles: string[] } {
+	const violations: QuiesceViolation[] = [];
 	const deadFiles: string[] = [];
-	if (!fs.existsSync(dir)) return { live, deadFiles };
+	if (!fs.existsSync(dir)) return { violations, deadFiles };
+
 	const markerFiles: { file: string; shown: string }[] = [];
-	for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-		if (entry.isFile() && entry.name.endsWith(".json")) {
-			markerFiles.push({ file: path.join(dir, entry.name), shown: entry.name });
-		} else if (entry.isDirectory()) {
-			const sub = path.join(dir, entry.name);
-			for (const name of fs.readdirSync(sub).sort()) {
-				if (name.endsWith(".json")) markerFiles.push({ file: path.join(sub, name), shown: `${entry.name}/${name}` });
+	const uncertain = (shown: string, why: string): void => {
+		violations.push({ surface: label, detail: `${shown} — ${why}`, kind: "uncertain" });
+	};
+	// depth 0 = the marker root, depth 1 = a backend subdir. Nothing deeper is part
+	// of any marker layout, so it is inspected by hand rather than swept.
+	const walk = (root: string, prefix: string, depth: number): void => {
+		for (const entry of fs.readdirSync(root, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+			const shown = `${prefix}${entry.name}`;
+			if (entry.isSymbolicLink()) {
+				uncertain(shown, "SYMLINK entry: its target is outside this directory's ownership and is never followed");
+			} else if (entry.isDirectory()) {
+				if (depth > 0) {
+					uncertain(shown, "unexpected nested directory (marker layouts are at most one level deep)");
+				} else {
+					walk(path.join(root, entry.name), `${shown}/`, depth + 1);
+				}
+			} else if (!entry.isFile()) {
+				uncertain(shown, "unexpected non-regular entry (fifo/socket/device)");
+			} else if (entry.name.endsWith(".json")) {
+				markerFiles.push({ file: path.join(root, entry.name), shown });
+			} else {
+				// Includes a crashed writer's `<name>.<hex>.tmp` half-marker: it may be
+				// the partial write of a LIVE owner, so it is inspected, never assumed.
+				uncertain(shown, "not a `.json` marker: cannot say whose process it belongs to");
 			}
 		}
-	}
+	};
+	walk(dir, "", 0);
+
 	for (const { file, shown } of markerFiles) {
-		let ownerPid: number | null = null;
-		let ownerStartKey = "";
+		let raw: Record<string, unknown>;
 		try {
-			const raw = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
-			if (typeof raw.ownerPid === "number" && Number.isInteger(raw.ownerPid)) ownerPid = raw.ownerPid;
-			if (typeof raw.ownerStartKey === "string") ownerStartKey = raw.ownerStartKey;
-		} catch {
-			// unreadable marker = disposable residue (a marker we cannot trust is
-			// "no authoritative owner" — same rule the sender-marker reader applies)
+			raw = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+		} catch (err) {
+			uncertain(shown, `unreadable marker (${err instanceof Error ? err.message : String(err)}): owner unprovable`);
+			continue;
 		}
-		if (ownerPid !== null && ownerStartKey !== "" && processStartKey(ownerPid) === ownerStartKey) {
-			live.push({ surface: label, detail: `${shown} (owner pid ${ownerPid} is still running)` });
+		const ownerPid =
+			typeof raw.ownerPid === "number" && Number.isInteger(raw.ownerPid) && raw.ownerPid > 0 ? raw.ownerPid : null;
+		const ownerStartKey = typeof raw.ownerStartKey === "string" ? raw.ownerStartKey : "";
+		if (ownerPid === null) {
+			uncertain(shown, "no positive-integer `ownerPid`: owner unprovable");
+			continue;
+		}
+		if (ownerStartKey === "") {
+			uncertain(shown, "no `ownerStartKey`: a bare pid cannot distinguish the owner from a reused pid");
+			continue;
+		}
+		// The verdict is NEVER derived here. `processStartKey` returns "" both for a pid
+		// that is GONE and for one merely UNREADABLE (hidepid /proc, no ps), so a
+		// destructive caller comparing keys itself reads "unknown" as "left" — fail-open,
+		// the exact bug review 2026-07-25 found in this function. classifyMarkerOwner is
+		// the one place a `dead` verdict is allowed to come from.
+		const verdict = classifyMarkerOwner(ownerStartKey, {
+			currentStartKey: processStartKey(ownerPid),
+			pidExists: probePidExistence(ownerPid),
+		});
+		if (verdict === "live") {
+			violations.push({ surface: label, detail: `${shown} (owner pid ${ownerPid} is still running)`, kind: "live" });
+		} else if (verdict === "uncertain") {
+			uncertain(
+				shown,
+				`owner pid ${ownerPid} could not be proven gone (its start-key is unreadable and the pid may still exist)`,
+			);
 		} else {
 			deadFiles.push(file);
 		}
 	}
-	return { live, deadFiles };
+	return { violations, deadFiles };
 }
 
 async function main(): Promise<number> {
@@ -163,6 +248,7 @@ async function main(): Promise<number> {
 				violations.push({
 					surface: "control socket",
 					detail: `${filename} is a SYMLINK — inspect and remove manually`,
+					kind: "uncertain",
 				});
 				continue;
 			}
@@ -171,37 +257,57 @@ async function main(): Promise<number> {
 				deadSockets.push(file);
 			} else {
 				// alive AND indeterminate both refuse: when we don't know, we don't cut.
-				violations.push({ surface: "control socket", detail: `${filename} probes ${liveness}` });
+				violations.push({
+					surface: "control socket",
+					detail: `${filename} probes ${liveness}`,
+					kind: liveness === "alive" ? "live" : "uncertain",
+				});
 			}
 		}
 	}
-	const senders = liveMarkerOwners(sendersDir, "sender marker");
-	const receivers = liveMarkerOwners(receiversDir, "receiver marker");
-	violations.push(...senders.live, ...receivers.live);
+	const senders = inspectMarkers(sendersDir, "sender marker");
+	const receivers = inspectMarkers(receiversDir, "receiver marker");
+	violations.push(...senders.violations, ...receivers.violations);
 
 	if (violations.length > 0) {
-		for (const v of violations) console.error(`LIVE ${v.surface}: ${v.detail}`);
+		for (const v of violations) console.error(`${v.kind === "live" ? "LIVE" : "UNCERTAIN"} ${v.surface}: ${v.detail}`);
+		const live = violations.filter((v) => v.kind === "live").length;
+		const unknown = violations.length - live;
 		console.error(
-			`REFUSE: ${violations.length} live/uncertain surface(s) above — a running citizen must not have its ` +
-				"address archived out from under it. Quiesce those sessions (close them / let them exit), " +
+			`REFUSE: ${live} live and ${unknown} unprovable surface(s) above — a running citizen must not have its ` +
+				"address archived out from under it, and an unprovable owner is not a dead one. " +
+				"Quiesce those sessions (close them / let them exit), inspect anything listed UNCERTAIN, " +
 				"then re-run the same command. Nothing was moved.",
 		);
 		return 1;
 	}
 
-	// ── the cut: archive the generation, clear dead transport residue ────────
+	// ── the cut: plan the moves, preflight the whole plan, then rename ───────
 	const ts = stamp();
-	const archived: string[] = [];
+	const plan: { src: string; dest: string }[] = [];
 	for (const dir of [storeDir, mailboxDir]) {
 		// An absent or EMPTY dir holds no generation — nothing to archive.
 		if (!fs.existsSync(dir) || fs.readdirSync(dir).length === 0) continue;
-		const archiveDir = `${dir}.archive-${ts}`;
-		if (fs.existsSync(archiveDir)) {
-			console.error(`REFUSE: archive dir already exists: ${archiveDir} — wait a second and re-run.`);
-			return 1;
-		}
-		fs.renameSync(dir, archiveDir);
-		archived.push(archiveDir);
+		plan.push({ src: dir, dest: `${dir}.archive-${ts}` });
+	}
+	// Preflight EVERY destination before the first rename. Checking each one just
+	// before its own move made a refusal destructive: with both dirs to archive, a
+	// collision on the mailbox landed after the store had already been renamed —
+	// a half-cut generation nobody asked for, reported as "nothing happened".
+	const collisions = plan.filter(({ dest }) => pathExists(dest));
+	if (collisions.length > 0) {
+		for (const { dest } of collisions) console.error(`ARCHIVE EXISTS: ${dest}`);
+		console.error(
+			`REFUSE: ${collisions.length} archive destination(s) above already exist — this generation's stamp is ` +
+				"taken (a cut in the same second, or leftovers from an interrupted one). Nothing was moved: " +
+				"wait a second and re-run, or move those directories aside first.",
+		);
+		return 1;
+	}
+	const archived: string[] = [];
+	for (const { src, dest } of plan) {
+		fs.renameSync(src, dest);
+		archived.push(dest);
 	}
 	let cleared = 0;
 	for (const file of [...senders.deadFiles, ...receivers.deadFiles, ...deadSockets]) {

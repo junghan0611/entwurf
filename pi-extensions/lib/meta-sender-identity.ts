@@ -82,11 +82,11 @@ export class EntwurfSenderIdentityAmbiguityError extends Error {
 
 /**
  * A live sender marker names a garden citizen whose record file EXISTS but cannot be READ
- * (a pre-cut v1/v2 record awaiting M1 migration, or a corrupt body). This is a hard stop,
- * never a downgrade: the caller has an identity — it is just unreadable — so resolving to
+ * (a record from a previous generation, or a corrupt body). This is a hard stop, never a
+ * downgrade: the caller has an identity — it is just unreadable — so resolving to
  * anonymous/"no marker" would report a false cause and prescribe a useless fix (re-opening
  * the session re-mints the same unreadable state; observed live as F10). The quoted cause
- * carries the record reader's own message, which names the M1 command for a pre-cut record.
+ * carries the record reader's own message, which names the fresh-cut verb.
  */
 export class EntwurfSenderRecordUnreadableError extends Error {
 	readonly gardenId: string;
@@ -137,7 +137,7 @@ export interface ResolveTrustedMetaSenderOptions {
  * 1 trusted → that identity.
  * 2+ distinct → throw EntwurfSenderIdentityAmbiguityError.
  * a marker whose record exists but cannot be read → throw EntwurfSenderRecordUnreadableError
- *   (a pre-cut/corrupt record is a knowable cause, never folded into "no marker" — F10).
+ *   (a previous-generation/corrupt record is a knowable cause, never folded into "no marker" — F10).
  *
  * Markers that agree on the SAME garden-id are not a conflict: an older release wrote a marker for
  * the parent AND the grandparent, and both can still sit on disk pointing at one citizen.

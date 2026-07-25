@@ -555,7 +555,7 @@ async function main(): Promise<void> {
 	// ── #50 C4: record-less socket (identity null + recordLessSocket) ──────────
 	// The record is the sole address authority, so a bare control socket is NOT an
 	// addressable citizen — EVERY intent rejects pre-probe as `record-less-socket`
-	// (migration/diagnostic state, observedLiveness=null): no lock, no inspect, no
+	// (a diagnostic state, observedLiveness=null): no lock, no inspect, no
 	// probe, no mailbox seam, no plan. NOT `bad-target` (something real answers to
 	// the gid — "absent" would hide the state). The retired A1 narrow used to accept
 	// ff sends into this socket; that acceptance must never come back.

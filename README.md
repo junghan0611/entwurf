@@ -232,19 +232,33 @@ the gate prints that canonical path and sha256 and consumes it without re-packin
 Only that accepted file may be published with `--tag repair`.
 
 > **Generations — the fresh-cut policy.** The bridge is a call-relay, never a
-> memory layer: a meta-record is routing state for a *live* session, and memory
-> lives in the native transcripts and the embedding axes outside this repo.
-> Sessions flow. Four sentences fix the whole policy:
+> memory layer: a meta-record is routing state for a **current-generation**
+> citizen, and memory lives in the native transcripts and the embedding axes
+> outside this repo. Sessions flow. Four sentences fix the whole policy:
 >
 > 1. The active citizen store is **v3-only** and provides **no cross-generation
 >    address or resume continuity**.
-> 2. If even one record in the store is unreadable to the live schema, ordinary
->    install/runtime **refuses to write** and demands the explicit fresh-cut verb.
-> 3. `fresh-cut` quiesces first, then moves the whole previous generation to a
->    timestamped archive (`meta-sessions.archive-<ts>`, `meta-mailbox.archive-<ts>`)
->    and opens an empty live generation.
+> 2. If even one entry in the store fails certification, **install and citizen
+>    birth/registration refuse before writing** and demand the explicit fresh-cut
+>    verb.
+> 3. `fresh-cut` **requires quiescence** — it verifies it and refuses while any
+>    surface is live *or* unprovable, never closing a session for you — then moves
+>    the whole previous generation to a timestamped archive
+>    (`meta-sessions.archive-<ts>`, `meta-mailbox.archive-<ts>`) and opens an
+>    empty live generation.
 > 4. The archive is **forensic bytes only**: no runtime reads it and no restore
 >    verb exists. Native transcripts and the memory axes are never touched.
+>
+> **Certification** is one shared contract (`certifyActiveStore`), held identically
+> by the install doctor and by all four identity writers — pi birth, the Claude
+> `SessionStart` hook, the agy imprint, `entwurf_register_native`. Every
+> `.meta.json` must be a **regular file** (a symlink is refused, never followed),
+> **readable by the live schema**, **named by its own body**, and the **unique
+> holder of its `nativeSessionId`**. All five defect kinds — previous generation,
+> corruption, drift, duplicate, symlink — collapse to the same prescription, so
+> there is nothing to diagnose or branch on. Note the deliberate scope: the refusal
+> guards *identity writes*, not every mailbox poke; a call-relay does not re-scan
+> the whole store on each message.
 >
 > There is **no migrator and no legacy reader anywhere in this repo** — carrying
 > old records forward would serve a continuity the system deliberately does not
@@ -256,7 +270,7 @@ Only that accepted file may be published with `--tag repair`.
 >
 > **The installer entrypoints will not cross that boundary silently.** `setup`,
 > `install` and `install-meta-bridge` each certify the store *before* they write
-> anything: on a host the live schema cannot read they refuse, name the verb, and
+> anything: on a host that fails certification they refuse, name the verb, and
 > leave your settings, plugin registry and `auth.json` untouched. So an upgrade
 > through those commands is a refusal you answer, not a broken install you
 > diagnose:
@@ -270,8 +284,10 @@ Only that accepted file may be published with `--tag repair`.
 > a `git pull` can put the new code in front of live sessions before you run
 > anything at all, so order the upgrade explicitly — **quiesce the sessions on
 > that host → pull → fresh-cut → `setup` → reopen**. `fresh-cut` enforces the
-> quiesce half itself: a live control socket or a marker whose owner process is
-> still running refuses the cut before anything moves.
+> quiesce half itself: a live control socket, a marker whose owner process is
+> still running, or **any surface it cannot prove is gone** — an indeterminate
+> socket, an unreadable or symlinked marker — refuses the cut before anything
+> moves. Cutting needs proof of death, not absence of proof of life.
 
 After upgrading a globally installed package, reinstall the native-harness surface you use before trusting it:
 

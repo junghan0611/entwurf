@@ -18,7 +18,7 @@
  *   C1b record-less socket (#50 C4) — the same real resident, but its record is written to
  *      a HIDDEN store (a second temp dir): from the decider's store view the live socket is
  *      RECORD-LESS → EVERY intent is refused pre-probe as `record-less-socket` (the record
- *      is the sole address authority; a bare socket is a migration/diagnostic state, not an
+ *      is the sole address authority; a bare socket is a diagnostic state, not an
  *      addressable citizen), the surface hint names the true cause + the fresh-cut command, and no
  *      lock/RPC ever reaches the live socket.
  *   C2 meta-mailbox (deliverable) — a self-fetch citizen (claude-code) with an ARMED receiver
@@ -224,7 +224,7 @@ async function main(): Promise<void> {
 		// only) while the decider keeps reading the main store. resolveTarget finds no record,
 		// sees a live non-symlink control socket (presence hint) — and rejects EVERY intent
 		// pre-probe as `record-less-socket`: the record is the sole address authority, so the
-		// live socket is a migration/diagnostic state, never a delivery target. No lock is
+		// live socket is a diagnostic state, never a delivery target. No lock is
 		// taken and no RPC reaches the resident; the rendered hint names the cause + fresh-cut.
 		{
 			const hiddenStore = path.join(tmp, "sessions-c1b-hidden");

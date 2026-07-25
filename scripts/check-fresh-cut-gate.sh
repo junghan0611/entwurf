@@ -5,10 +5,17 @@
 #
 # The contract under test (the fresh-cut policy, 4 frozen sentences):
 #   1. the active store is v3-only, no cross-generation continuity;
-#   2. any unreadable record → install/setup REFUSE before writing, naming the
-#      explicit fresh-cut verb in both invocation forms;
-#   3. fresh-cut quiesces, archives the whole generation, opens an empty one;
+#   2. any entry that fails CERTIFICATION → install/setup REFUSE before writing,
+#      naming the explicit fresh-cut verb in both invocation forms;
+#   3. fresh-cut REQUIRES quiescence (live OR unprovable both refuse) and archives
+#      the whole generation through one preflighted plan, opening an empty one;
 #   4. the archive is forensic only — no runtime reads it, no restore verb.
+#
+# A–D drive the activation path. E pins the doctor and the writers to ONE
+# certification verdict on the three defects that PARSE (drift / duplicate /
+# symlink), where a reader-only check is happy and the address space is broken.
+# F proves quiescence is demonstrated rather than assumed. G proves a collision
+# refusal moves nothing.
 #
 # There is no frozen-fixture apparatus here: fresh-cut never rewrites a byte
 # (the archive is a rename), so the only byte claim is `archived == seeded`,
@@ -102,11 +109,71 @@ seed_malformed() {
   mkdir -p "$ENTWURF_META_SESSIONS_DIR"
   printf '{ this is not json' > "$ENTWURF_META_SESSIONS_DIR/20260307T000000-ffff07.meta.json"
 }
+# The three defects that PARSE. Each one is legible v3 bytes, so a reader-only
+# check waves them through — and each one breaks the store as an ADDRESS SPACE.
+# They exist as their own host states because the writers used to ask a narrower
+# question than the doctor: "is there a record for MY native id".
+seed_drift() {
+  mkdir -p "$ENTWURF_META_SESSIONS_DIR"
+  # Valid V3 body parked under a name that is not its garden id: a garden-id
+  # lookup can never reach it.
+  cat > "$ENTWURF_META_SESSIONS_DIR/wrong-name.meta.json" <<'JSON'
+{
+  "schemaVersion": 3,
+  "gardenId": "20260403T000000-eeee03",
+  "backend": "pi",
+  "nativeSessionId": "native-drift",
+  "cwd": "/tmp/proj",
+  "model": null,
+  "transcriptPath": null,
+  "createdAt": "2026-04-03T00:00:00.000Z",
+  "recordUpdatedAt": "2026-04-03T00:00:00.000Z"
+}
+JSON
+}
+seed_dup() {
+  mkdir -p "$ENTWURF_META_SESSIONS_DIR"
+  # Two records claiming ONE native session: the store cannot say which garden id
+  # owns it. Neither is the id of the session a writer is about to birth.
+  for gid in 20260404T000000-aaaa04 20260404T000001-bbbb04; do
+    cat > "$ENTWURF_META_SESSIONS_DIR/$gid.meta.json" <<JSON
+{
+  "schemaVersion": 3,
+  "gardenId": "$gid",
+  "backend": "pi",
+  "nativeSessionId": "dup-native",
+  "cwd": "/tmp/proj",
+  "model": null,
+  "transcriptPath": null,
+  "createdAt": "2026-04-04T00:00:00.000Z",
+  "recordUpdatedAt": "2026-04-04T00:00:00.000Z"
+}
+JSON
+  done
+}
+seed_symlink() {
+  mkdir -p "$ENTWURF_META_SESSIONS_DIR" "$SANDBOX/outside"
+  cat > "$SANDBOX/outside/real.json" <<'JSON'
+{
+  "schemaVersion": 3,
+  "gardenId": "20260405T000000-ffff05",
+  "backend": "pi",
+  "nativeSessionId": "native-symlinked",
+  "cwd": "/tmp/proj",
+  "model": null,
+  "transcriptPath": null,
+  "createdAt": "2026-04-05T00:00:00.000Z",
+  "recordUpdatedAt": "2026-04-05T00:00:00.000Z"
+}
+JSON
+  # The bytes are impeccable; the store just does not own where they live.
+  ln -s "$SANDBOX/outside/real.json" "$ENTWURF_META_SESSIONS_DIR/20260405T000000-ffff05.meta.json"
+}
 
 # One sandbox, reset between cases. The exported roots never change, only their
 # contents. $1 = one or more seed states (comma-separated) or "absent"/"empty".
 reset_world() {
-  rm -rf "$SANDBOX/home" "$SANDBOX/proj" "$SANDBOX/store" "$SANDBOX/mailbox" "$SANDBOX/sockets"
+  rm -rf "$SANDBOX/home" "$SANDBOX/proj" "$SANDBOX/store" "$SANDBOX/mailbox" "$SANDBOX/sockets" "$SANDBOX/outside"
   rm -rf "$SANDBOX"/store.* "$SANDBOX"/mailbox.*
   mkdir -p "$HOME" "$PROJ" "$PI_CODING_AGENT_DIR"
   case "$1" in
@@ -127,7 +194,7 @@ store_bytes() { (find "$ENTWURF_META_SESSIONS_DIR" -type f -print0 2>/dev/null |
 
 # ── A. the host-state matrix against `run.sh install` ────────────────────────
 echo "[check-fresh-cut-gate] A. host-state matrix — run.sh install"
-for state in absent empty v3 prevgen malformed prevgen,malformed; do
+for state in absent empty v3 prevgen malformed prevgen,malformed drift dup symlink; do
   case "$state" in
     absent|empty|v3) expect=pass ;;
     *) expect=refuse ;;
@@ -344,6 +411,255 @@ if [ -e "$FRESH_CUT_GATE_CLAUDE_SENTINEL" ]; then
 else
   ok "D8 offline source cell made zero Claude invocations (PATH sentinel stayed untouched)"
 fi
+
+# ── E. ONE contract: the doctor and the writers certify the same store ───────
+# A store certified by the install doctor but written to by the runtime under a
+# looser rule is the real defect; these cells pin the two verdicts together on
+# each defect that PARSES (drift / duplicate / symlink), where a reader-only
+# check is happy and the address space is broken.
+echo "[check-fresh-cut-gate] E. doctor ↔ writer symmetry (one active-store contract)"
+doctor_run() { node --experimental-strip-types "$REPO/scripts/meta-bridge-store-doctor.ts" 2>&1; }
+# The install path reaches the store through the DOCTOR, so a doctor-only cell
+# proves only half of "one contract". This drives the other half for real: the pi
+# birth seam, the exact function all four identity writers funnel through.
+writer_probe() {
+  node --experimental-strip-types -e '
+    import(process.argv[1] + "/pi-extensions/lib/pi-citizen-birth.ts")
+      .then((m) => {
+        m.birthPiCitizen({
+          nativeSessionId: "gate-writer-probe",
+          cwd: "/tmp/proj",
+          sessionsDir: process.env.ENTWURF_META_SESSIONS_DIR,
+          controlSocketDir: process.env.ENTWURF_DIR,
+        });
+        process.exit(0);
+      })
+      .catch((err) => {
+        process.stderr.write(`${(err && err.message) || err}\n`);
+        process.exit(1);
+      });
+  ' "$REPO" 2>&1
+}
+for state in v3 drift dup symlink; do
+  case "$state" in v3) want=0 ;; *) want=1 ;; esac
+  reset_world "$state"
+  store_before="$(store_bytes)"
+  set +e
+  dout="$(doctor_run)"; drc=$?
+  wout="$(writer_probe)"; wrc=$?
+  set -e
+  if [ "$drc" = "$want" ] && [ "$wrc" = "$want" ]; then
+    ok "E/$state the doctor and the WRITER reach the same verdict (both exit $want)"
+  else
+    bad "E/$state split verdict: doctor=$drc writer=$wrc (wanted $want) — two contracts for one store" "$dout
+       --- writer ---
+$wout"
+  fi
+  if [ "$want" = 1 ]; then
+    if [ "$store_before" = "$(store_bytes)" ]; then
+      ok "E/$state the refused writer left the store byte-untouched (refused BEFORE writing)"
+    else
+      bad "E/$state the writer mutated the store it was refused on"
+    fi
+    case "$wout" in
+      *"meta-bridge-fresh-cut"*) ok "E/$state the writer's refusal names the fresh-cut verb" ;;
+      *) bad "E/$state the writer refused without naming the prescription" "$wout" ;;
+    esac
+  fi
+done
+reset_world drift
+set +e
+dout="$(doctor_run)"
+set -e
+case "$dout" in
+  *"meta-bridge-fresh-cut"*) ok "E5 the doctor's refusal names the one prescription (no per-defect branch)" ;;
+  *) bad "E5 the doctor refused without naming fresh-cut" "$dout" ;;
+esac
+
+# ── F. quiescence must be PROVEN, not assumed ────────────────────────────────
+# The cut is destructive, so every surface it clears must be demonstrably dead.
+# A marker we cannot read is not evidence of a departed owner — it is the absence
+# of evidence, and it used to be swept as "disposable residue".
+echo "[check-fresh-cut-gate] F. quiesce needs proof (uncertain ⇒ REFUSE)"
+expect_uncertain_refusal() {
+  local label="$1" store_before out rc
+  store_before="$(store_bytes)"
+  set +e
+  out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+  set -e
+  if [ "$rc" != 0 ]; then
+    ok "$label: fresh-cut REFUSES"
+  else
+    bad "$label: fresh-cut cut a generation without proving quiescence" "$out"
+  fi
+  if [ "$store_before" = "$(store_bytes)" ] && [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+    ok "$label: the refused cut archived nothing"
+  else
+    bad "$label: the refused cut still moved the generation"
+  fi
+  LAST_CUT_OUT="$out"
+}
+
+reset_world prevgen
+mkdir -p "$PI_CODING_AGENT_DIR/meta-senders/claude-code"
+printf '{broken' > "$PI_CODING_AGENT_DIR/meta-senders/claude-code/999.json"
+expect_uncertain_refusal "F1 malformed sender marker"
+case "$LAST_CUT_OUT" in
+  *UNCERTAIN*) ok "F1b the refusal reports it as UNCERTAIN, distinct from a proven-live surface" ;;
+  *) bad "F1b the refusal never distinguished uncertainty from liveness" "$LAST_CUT_OUT" ;;
+esac
+
+reset_world prevgen
+mkdir -p "$PI_CODING_AGENT_DIR/meta-senders/claude-code"
+# Readable JSON, but no ownerStartKey: a bare pid cannot tell an owner from a
+# reused pid, so it proves nothing either way.
+printf '{ "ownerPid": 999 }' > "$PI_CODING_AGENT_DIR/meta-senders/claude-code/999.json"
+expect_uncertain_refusal "F2 sender marker with no ownerStartKey"
+
+reset_world prevgen
+mkdir -p "$PI_CODING_AGENT_DIR/meta-receivers" "$SANDBOX/outside"
+printf '{ "ownerPid": 1, "ownerStartKey": "linux:1" }' > "$SANDBOX/outside/marker.json"
+ln -s "$SANDBOX/outside/marker.json" "$PI_CODING_AGENT_DIR/meta-receivers/20260305T000000-dddd05.json"
+expect_uncertain_refusal "F3 symlinked receiver marker"
+
+reset_world prevgen
+mkdir -p "$PI_CODING_AGENT_DIR/meta-senders/claude-code"
+# A crashed writer's half-marker (the real writer is tmp+rename): it may be the
+# partial write of a LIVE owner.
+printf '{ "ownerPid": 99' > "$PI_CODING_AGENT_DIR/meta-senders/claude-code/999.deadbeef.tmp"
+expect_uncertain_refusal "F4 crashed writer's .tmp half-marker"
+
+reset_world prevgen
+mkdir -p "$PI_CODING_AGENT_DIR/meta-senders/claude-code/unexpected"
+printf '{ "ownerPid": 1, "ownerStartKey": "linux:1" }' > "$PI_CODING_AGENT_DIR/meta-senders/claude-code/unexpected/deep.json"
+expect_uncertain_refusal "F5 entry nested deeper than any marker layout"
+
+# The one shape that IS proof: a marker naming a pid whose start-key no longer
+# matches (process exited, or the pid was reused). Here the pid is alive and the
+# key is deliberately wrong — the pid-reuse guard's exact case.
+reset_world prevgen
+mkdir -p "$PI_CODING_AGENT_DIR/meta-senders/claude-code"
+# The stale key must be in the SAME coordinate system this host actually mints, or
+# the mismatch would be incomparable (uncertain) instead of a death proof — the
+# pure classifier owns the cross-scheme rows; this cell owns the same-scheme one.
+case "$start_key" in
+  linux:*) stale_key="linux:1" ;;
+  ps:*)    stale_key="ps:Thu Jan  1 00:00:00 1970" ;;
+  *)       stale_key="" ;;
+esac
+if [ -z "$stale_key" ]; then
+  bad "F6 could not derive a same-scheme stale key from this host's own start key ('$start_key')"
+else
+stale_marker="$PI_CODING_AGENT_DIR/meta-senders/claude-code/$$.json"
+cat > "$stale_marker" <<JSON
+{
+  "backend": "claude-code",
+  "gardenId": "20260305T000000-dddd05",
+  "ownerPid": $$,
+  "ownerStartKey": "$stale_key",
+  "updatedAt": "2026-03-05T00:00:00.000Z"
+}
+JSON
+set +e
+cut_out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rcf=$?
+set -e
+if [ "$rcf" = 0 ]; then
+  ok "F6 a marker whose owner start-key no longer matches IS proof of death — the cut proceeds"
+else
+  bad "F6 the cut refused a provably stale marker (pid-reuse guard inverted)" "$cut_out"
+fi
+if [ ! -e "$stale_marker" ]; then
+  ok "F7 the provably-dead marker was cleared with the generation"
+else
+  bad "F7 the dead marker survived the cut"
+fi
+fi
+
+# A marker whose recorded key is NOT a key this repo mints (garbage / truncated /
+# foreign writer) while its pid is very much alive: the value differs from the
+# current key, and reading that difference as death would archive a live citizen.
+reset_world prevgen
+mkdir -p "$PI_CODING_AGENT_DIR/meta-senders/claude-code"
+cat > "$PI_CODING_AGENT_DIR/meta-senders/claude-code/$$.json" <<JSON
+{
+  "backend": "claude-code",
+  "gardenId": "20260305T000000-dddd05",
+  "ownerPid": $$,
+  "ownerStartKey": "garbage",
+  "updatedAt": "2026-03-05T00:00:00.000Z"
+}
+JSON
+expect_uncertain_refusal "F11 unrecognized start-key on a LIVE owner pid"
+
+# The OTHER dead row, driven for real: a pid that no longer exists at all. Its
+# start-key is unreadable (""), so the verdict rests on the pid probe — and only a
+# definite "no such process" may answer. `bash -c 'echo $$'` prints the pid of a
+# subshell that has already exited.
+reset_world prevgen
+mkdir -p "$PI_CODING_AGENT_DIR/meta-receivers"
+gone_pid="$(bash -c 'echo $$')"
+gone_marker="$PI_CODING_AGENT_DIR/meta-receivers/20260305T000000-dddd05.json"
+cat > "$gone_marker" <<JSON
+{
+  "gardenId": "20260305T000000-dddd05",
+  "ownerPid": $gone_pid,
+  "ownerStartKey": "linux:1",
+  "updatedAt": "2026-03-05T00:00:00.000Z"
+}
+JSON
+set +e
+cut_out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rcgone=$?
+set -e
+if [ "$rcgone" = 0 ] && [ ! -e "$gone_marker" ]; then
+  ok "F8 a marker whose pid no longer exists is proven dead — cut proceeds and clears it"
+else
+  bad "F8 the cut refused (or kept) a marker whose owner pid is provably absent" "$cut_out"
+fi
+
+# WIRING: the cut must ASK for the verdict, never compute it from a start-key. An
+# inline `processStartKey(...) === recorded` is precisely how "" (UNKNOWN) was read
+# as "dead" before this review — a fail-open path that must not come back.
+if grep -q 'classifyMarkerOwner(' "$REPO/scripts/meta-bridge-fresh-cut.ts"; then
+  ok "F9 the cut routes its owner verdict through classifyMarkerOwner"
+else
+  bad "F9 the cut no longer asks classifyMarkerOwner — a second dead-verdict rule has appeared"
+fi
+if inline_cmp=$(grep -nE 'processStartKey\([^)]*\)[[:space:]]*[=!]==' "$REPO/scripts/meta-bridge-fresh-cut.ts"); then
+  bad "F10 the cut compares a start-key inline again (\"\" means UNKNOWN, so this reads unreadable as dead)" "$inline_cmp"
+else
+  ok "F10 the cut never compares a start-key inline (the fail-open path stays closed)"
+fi
+
+# ── G. an archive collision is a NO-OP, never a half-cut ─────────────────────
+echo "[check-fresh-cut-gate] G. archive-destination preflight"
+reset_world prevgen
+mkdir -p "$ENTWURF_META_MAILBOX_DIR/20260305T000000-dddd05"
+printf 'hello\n' > "$ENTWURF_META_MAILBOX_DIR/20260305T000000-dddd05/0001.msg"
+store_before="$(store_bytes)"
+# Occupy the MAILBOX destination — the second move in the plan — for this second
+# and the next two, so whichever stamp the cut computes, its first move looks free
+# and its second collides. That ordering is the whole point: checking each
+# destination just before its own rename archived the store, then refused.
+for off in 0 1 2; do
+  mkdir -p "$SANDBOX/mailbox.archive-$(date -d "+$off seconds" +%Y%m%dT%H%M%S)"
+done
+set +e
+out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rcg=$?
+set -e
+if [ "$rcg" != 0 ]; then
+  ok "G1 an occupied archive destination REFUSES the cut"
+else
+  bad "G1 the cut proceeded into an occupied destination" "$out"
+fi
+if [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ] && [ "$store_before" = "$(store_bytes)" ]; then
+  ok "G2 the collision refusal moved NOTHING — the store never left its place (no half-cut generation)"
+else
+  bad "G2 half-cut generation: the store was archived before the mailbox collision was seen"
+fi
+case "$out" in
+  *"Nothing was moved"*) ok "G3 the refusal states its own no-op guarantee" ;;
+  *) bad "G3 the refusal never claimed the no-op" "$out" ;;
+esac
 
 echo
 echo "[check-fresh-cut-gate] passed=$PASSED failed=$FAILED"

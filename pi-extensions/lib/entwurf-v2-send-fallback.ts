@@ -90,7 +90,7 @@ export async function resolveDeadControlSendFallback(
 	// Probe-free target resolution first — a vanished target or a quarantined address
 	// short-circuits before any inspect/probe (mirrors decideDispatch steps 2). #50 C4:
 	// a record that vanished mid-dispatch while its control socket remains re-resolves to
-	// `record-less-socket` — the honest migration/diagnostic state, never a retry into a
+	// `record-less-socket` — the honest diagnostic state, never a retry into a
 	// socket the record no longer authorizes. A genuinely absent target is bad-target.
 	const resolution = await deps.resolveTarget(gardenId);
 	if (resolution.identity === null) {

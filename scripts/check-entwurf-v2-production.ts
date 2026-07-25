@@ -478,7 +478,7 @@ async function main(): Promise<void> {
 	// ── F: #50 C4 — record-LESS control socket → pre-probe record-less-socket reject ──
 	// resolveTarget finds no meta-record, does ONE record-side lstat (inspectPath), sees a
 	// non-symlink socket → recordLessSocket. EVERY intent then rejects pre-probe as
-	// `record-less-socket` (migration/diagnostic state): no lock, no under-lock probe, no
+	// `record-less-socket` (a diagnostic state): no lock, no under-lock probe, no
 	// plan — the record is the sole address authority. The same presence hint with a
 	// symlink / absent socket stays plain bad-target (never trust a symlink).
 	for (const intent of ["fire-and-forget", "owned-outcome"] as const) {

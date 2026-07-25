@@ -9,13 +9,13 @@
  * hydrate or replay it).
  *
  * Two layers, clearly sectioned:
- *   1. RECORD functions + types (mint / serialize / parse / scanIdentityByNativeId /
+ *   1. RECORD functions + types (mint / serialize / parse / certifyActiveStore /
  *      decideUpsert), the backend-agnostic authority. Pure beyond an injected
  *      `now`; backend capability (wakeMode/deliveryLevel) comes from the packaged
  *      registry via a cached fs read (loadMetaCapabilityRegistry) — see that seam
  *      below.
  *   2. The thin FS-BOUND STORE (step 3): `upsertMetaSession` wraps the pure core
- *      (readdir → `scanIdentityByNativeId` → `decideUpsert` → atomic write) with the real
+ *      (readdir → `certifyActiveStore` → `decideUpsert` → atomic write) with the real
  *      filesystem. It lives in this module (not a sibling `*-store.ts`) on purpose:
  *      the typecheck fence forbids a root-config lib importing another `.ts` lib
  *      via a `.ts` specifier (tsc-emit) while the same `.js` specifier is
@@ -34,7 +34,7 @@
  *   - garden id = `generateSessionId` (the single SSOT grammar), minted at the
  *     session's true birth. Reused, never re-derived.
  *   - lookup authority = SCAN the record bodies by top-level `native_session_id`
- *     (see scanIdentityByNativeId), symmetric with 0.9.0 `findSessionFileById`. Any
+ *     (see certifyActiveStore), symmetric with 0.9.0 `findSessionFileById`. Any
  *     native→garden index is an OPTIONAL derived cache, never the source of
  *     truth — "needs a DB" is the denote-instinct tripwire.
  *   - create-vs-attach keys on RECORD EXISTENCE, not the backend `source` field
@@ -383,8 +383,8 @@ export function serializeMetaIdentity(identity: MetaIdentity): string {
 }
 
 /**
- * Fields a v2 caller supplies; garden id + timestamps are derived. The nullable
- * identity axes (model/transcriptPath/parentGardenId) are OPTIONAL at the input
+ * Fields a writer supplies; garden id + timestamps are derived. The nullable
+ * identity axes (model/transcriptPath) are OPTIONAL at the input
  * boundary so attach can distinguish three intents (3D-4 G5): `undefined` = keep
  * the existing value, `null` = explicit unknown/clear, a string = set/refresh.
  * mint (create) has no existing value, so undefined collapses to null.
@@ -466,7 +466,7 @@ export function parseMetaIdentity(json: string): MetaIdentity {
 /** Bump only on a breaking capability-registry shape change; the parser refuses other versions. */
 export const CAPABILITY_SCHEMA_VERSION = 1 as const;
 
-/** One backend's capability — the honesty metadata that leaves the v2 record. */
+/** One backend's capability — the honesty metadata that stays OUT of the identity record. */
 export interface MetaCapability {
 	wakeMode: WakeMode;
 	deliveryLevel: string;
@@ -637,52 +637,159 @@ export function metaRecordFilename(record: MetaIdentity): string {
 	return `${record.gardenId}.meta.json`;
 }
 
+/** One reason the active store is not certifiable, naming its own entry + cause. */
+export interface ActiveStoreDefect {
+	filename: string;
+	message: string;
+}
+
 /**
- * THE lookup authority. Scan the record BODIES in a meta-session directory and
- * return the identity whose top-level `nativeSessionId` matches, or null. This is
- * the `.meta.json` analog of 0.9.0 `findSessionFileById` (which header-scans pi
- * JSONLs). NOT a filename parse, NOT an index lookup — those are at best derived
- * caches. The directory listing + record reading is injected so this stays a
- * pure function (the step-3 CLI supplies the real fs). V3-only via
- * parseMetaIdentity — an unreadable entry is surfaced through `onSkip`, and the
- * strict upsert turns any skip into a refusal naming fresh-cut. This is the scan
- * the upsert uses: the existence check MUST recognize every V3 record or it
- * would mint a duplicate id for an existing citizen (G1).
- *
- * The scan runs to completion (does NOT stop at the first match): the
- * native→garden mapping MUST be unique, so two records claiming the same
- * `nativeSessionId` is an authority ambiguity — `MetaRecordError`, fail-fast,
- * never silently pick one (that would make `upsert` mint a second id / route a
- * message to the wrong garden citizen). Identity-only: it reads
- * backend/nativeSessionId, never delivery.
+ * A `.meta.json` entry as the certification sees it. `regularFile` is false for a
+ * symlink, directory, fifo or device wearing a record's name: the bytes
+ * production would read then live somewhere this store does not own, so the
+ * certification refuses instead of following the link.
  */
-export function scanIdentityByNativeId(
-	entries: readonly string[],
-	nativeSessionId: string,
+export interface ActiveStoreEntry {
+	filename: string;
+	regularFile: boolean;
+}
+
+export interface ActiveStoreCertification {
+	/** `.meta.json` entries examined (regular or not). */
+	scanned: number;
+	/** The parsed records — trustworthy ONLY when `defects` is empty. */
+	records: { filename: string; identity: MetaIdentity }[];
+	/** Every reason this store is not certifiable. Empty = certified. */
+	defects: ActiveStoreDefect[];
+}
+
+/**
+ * THE active-store certification — ONE contract, shared by the install doctor and
+ * every identity writer. A store is certified when every `.meta.json` entry is:
+ *
+ *   1. a REGULAR file — a symlink/dir/fifo named `<gid>.meta.json` is refused,
+ *      never followed (the bytes it points at are outside this store's ownership,
+ *      so no scan of this directory can certify them);
+ *   2. readable by the LIVE schema (v3 — a previous generation cannot be read
+ *      and is never coerced);
+ *   3. named by its own body (`<gardenId>.meta.json`) — the body stays the
+ *      authority, but a wrong path breaks garden-id lookup, so drift is
+ *      corruption of the ACTIVE store even though the bytes parse;
+ *   4. the unique holder of its `nativeSessionId` across the WHOLE store — the
+ *      native→garden mapping is one-to-one or a writer attaches to the wrong
+ *      citizen (and a reader routes a message to it).
+ *
+ * Every defect collapses to ONE prescription: archive the generation with
+ * fresh-cut. That is what a clean live store IS — this generation's records and
+ * nothing else. The certification never repairs, never prunes and never picks a
+ * winner among duplicates.
+ *
+ * Pure over injected (entries, readRecord); {@link certifyActiveStoreDir} binds
+ * the real fs. A writer must consult `records` only after finding `defects` empty.
+ *
+ * This is deliberately the only store-wide scan a writer runs. Before it, the
+ * upsert asked one narrow question — "is there a record for MY nativeSessionId?"
+ * — and therefore wrote straight past a drifted, duplicated or symlinked
+ * neighbour that the doctor would have refused: two contracts for one store, and
+ * the runtime held the weaker one.
+ */
+export function certifyActiveStore(
+	entries: readonly ActiveStoreEntry[],
 	readRecord: (filename: string) => string,
-	onSkip?: (filename: string, err: Error) => void,
-): MetaIdentity | null {
-	const target = requireNonEmptyString(nativeSessionId, "nativeSessionId");
-	const matches: { filename: string; identity: MetaIdentity }[] = [];
-	for (const filename of entries) {
-		if (!filename.endsWith(".meta.json")) continue;
-		let identity: MetaIdentity;
-		try {
-			identity = parseMetaIdentity(readRecord(filename));
-		} catch (err) {
-			onSkip?.(filename, err instanceof Error ? err : new Error(String(err)));
+): ActiveStoreCertification {
+	const records: { filename: string; identity: MetaIdentity }[] = [];
+	const defects: ActiveStoreDefect[] = [];
+	const byNative = new Map<string, string[]>();
+	let scanned = 0;
+	for (const entry of entries) {
+		if (!entry.filename.endsWith(".meta.json")) continue;
+		scanned += 1;
+		if (!entry.regularFile) {
+			defects.push({
+				filename: entry.filename,
+				message:
+					"not a regular file (symlink/directory/special) — a record's bytes must live in the store " +
+					"itself; this entry is never followed. Inspect and remove it by hand.",
+			});
 			continue;
 		}
-		if (identity.nativeSessionId === target) matches.push({ filename, identity });
+		let identity: MetaIdentity;
+		try {
+			identity = parseMetaIdentity(readRecord(entry.filename));
+		} catch (err) {
+			defects.push({ filename: entry.filename, message: err instanceof Error ? err.message : String(err) });
+			continue;
+		}
+		const expected = metaRecordFilename(identity);
+		if (entry.filename !== expected) {
+			defects.push({
+				filename: entry.filename,
+				message:
+					`body/filename drift — body gardenId=${identity.gardenId}, expected filename ${expected}. ` +
+					"The body is the authority, so this file is corrupt: a garden-id lookup would never find it.",
+			});
+			continue;
+		}
+		const seen = byNative.get(identity.nativeSessionId) ?? [];
+		seen.push(entry.filename);
+		byNative.set(identity.nativeSessionId, seen);
+		records.push({ filename: entry.filename, identity });
 	}
-	if (matches.length > 1) {
-		throw new MetaRecordError(
-			`ambiguous meta-record authority: nativeSessionId "${target}" matched ${matches.length} records ` +
-				`(${matches.map((m) => m.filename).join(", ")}). The native→garden mapping must be unique — ` +
-				`fail-fast rather than silently picking one. Remove the duplicate(s).`,
-		);
+	for (const [nativeSessionId, files] of byNative.entries()) {
+		if (files.length > 1) {
+			defects.push({
+				filename: files[0] as string,
+				message:
+					`duplicate nativeSessionId ${JSON.stringify(nativeSessionId)} in ${files.join(", ")} — ` +
+					"the native→garden mapping must be unique; this store cannot say which record owns that session.",
+			});
+		}
 	}
-	return matches.length === 1 ? (matches[0] as { identity: MetaIdentity }).identity : null;
+	return { scanned, records, defects };
+}
+
+/**
+ * The fs-bound certification: read a store directory and certify it. `withFileTypes`
+ * classifies without following links (a symlinked record is `isFile() === false`),
+ * which is what makes rule 1 above enforceable. A missing directory is a certified
+ * empty store — a host that has never had a generation is not a broken one.
+ */
+export function certifyActiveStoreDir(dir: string): ActiveStoreCertification & { dir: string } {
+	const resolved = path.resolve(expandTilde(dir));
+	if (!fs.existsSync(resolved)) return { dir: resolved, scanned: 0, records: [], defects: [] };
+	const entries: ActiveStoreEntry[] = fs
+		.readdirSync(resolved, { withFileTypes: true })
+		.sort((a, b) => a.name.localeCompare(b.name))
+		.map((entry) => ({ filename: entry.name, regularFile: entry.isFile() }));
+	return {
+		dir: resolved,
+		...certifyActiveStore(entries, (filename) => fs.readFileSync(path.join(resolved, filename), "utf8")),
+	};
+}
+
+/**
+ * The refusal an uncertifiable ACTIVE store earns, in the words both the runtime
+ * writers and the install doctor use. One prescription, both invocation forms —
+ * every defect kind (previous generation, corruption, drift, duplicate, symlink)
+ * is answered by archiving the generation, so there is nothing to branch on.
+ */
+export function activeStoreRefusal(cert: ActiveStoreCertification & { dir: string }, shown = 3): string {
+	const headline =
+		`meta-record store ${cert.dir} holds ${cert.defects.length} entry/entries this generation cannot certify — ` +
+		`refusing to write (the active store is v3-only and carries no cross-generation continuity). ` +
+		`Archive the generation and open a fresh one with ${FRESH_CUT_PRESCRIPTION}.`;
+	// `shown = 0` is for a caller that ALREADY printed every cause per entry (the
+	// store-doctor): repeating them here doubles the wall on a large previous
+	// generation, which is exactly the aggregation lesson F8 taught. The count and
+	// the prescription are said once either way.
+	if (shown <= 0) return headline;
+	const head = cert.defects
+		.slice(0, shown)
+		.map((d) => `${d.filename}: ${d.message}`)
+		.join("\n  ");
+	return (
+		`${headline}\n  ${head}` + (cert.defects.length > shown ? `\n  … and ${cert.defects.length - shown} more` : "")
+	);
 }
 
 /** One unreadable meta-record, surfaced as an explicit fact — file + message
@@ -777,7 +884,7 @@ export interface UpsertDecision {
  *
  * Idempotent by construction: calling it twice with the same input yields one
  * attach after the first create, never a second id. `existing` is the normalized
- * identity from scanIdentityByNativeId (V3-only).
+ * identity the caller found among the CERTIFIED records (V3-only).
  */
 export function decideUpsert(
 	existing: MetaIdentity | null,
@@ -795,7 +902,7 @@ export function decideUpsert(
 		throw new MetaRecordError(
 			`decideUpsert called with existing record for a different nativeSessionId ` +
 				`(existing="${existing.nativeSessionId}", input="${nativeSessionId}"). ` +
-				`The caller must pass the record found by scanIdentityByNativeId(input.nativeSessionId).`,
+				`The caller must pass the certified record whose nativeSessionId equals input.nativeSessionId.`,
 		);
 	}
 	if (existing.backend !== backend) {
@@ -914,9 +1021,18 @@ export function defaultMetaReceiversDir(): string {
  * A boot-unique identity for a live process: pid is reused, but pid + start-time
  * is unique within a boot. Linux reads `/proc/<pid>/stat` field 22 (starttime in
  * clock ticks); macOS/BSD falls back to `ps -o lstart=`. Returns "" when the pid
- * is gone or unreadable — a "" key never matches, so a dead/reused owner fails
- * the marker check. This is what stops a stale marker (process exited, pid reused
- * by a new Claude session) from granting the wrong garden-id sender identity.
+ * is gone **or merely unreadable** (hidepid `/proc`, no `ps`) — a "" key never
+ * matches, so a dead/reused owner fails the marker check. This is what stops a
+ * stale marker (process exited, pid reused by a new Claude session) from granting
+ * the wrong garden-id sender identity.
+ *
+ * READ THE RETURN VALUE FOR WHAT IT IS: "" is UNKNOWN, never "gone". For granting
+ * identity that distinction is free — unknown and gone both refuse, so "" is
+ * fail-CLOSED. For a destructive decision it inverts: treating "" as "the owner
+ * left" is fail-OPEN, and that is how a generation cut could archive a live
+ * citizen's address (caught in review 2026-07-25). Anything deciding whether an
+ * owner is GONE must go through {@link classifyMarkerOwner}, never compare keys
+ * itself.
  */
 export function processStartKey(pid: number): string {
 	if (!Number.isInteger(pid) || pid <= 0) return "";
@@ -940,6 +1056,95 @@ export function processStartKey(pid: number): string {
 		// pid gone or ps unavailable
 	}
 	return "";
+}
+
+/**
+ * Does this pid exist RIGHT NOW? `true` / `false` are proofs; `null` means the
+ * question could not be answered and the caller must not guess.
+ *
+ * `process.kill(pid, 0)` sends no signal, it only asks the kernel: success = the
+ * process exists and we may signal it, `ESRCH` = definitively no such process,
+ * `EPERM` = it EXISTS but belongs to someone else. `EPERM` is therefore evidence
+ * of existence, never of absence — but it is not proof that it is the SAME
+ * process the marker named, so it maps to `null` (unprovable), the conservative
+ * side for every destructive caller.
+ *
+ * A non-positive pid returns `false` rather than reaching the syscall: `kill(0)`
+ * and `kill(-n)` address process GROUPS, and a marker's malformed pid must never
+ * become a broadcast.
+ */
+export function probePidExistence(pid: number): boolean | null {
+	if (!Number.isInteger(pid) || pid <= 0) return false;
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (err) {
+		const code = (err as { code?: unknown }).code;
+		if (code === "ESRCH") return false;
+		// EPERM = alive but foreign; anything else = we simply do not know.
+		return null;
+	}
+}
+
+/** The observations a marker-owner verdict needs, injected so the rule stays pure. */
+export interface MarkerOwnerFacts {
+	/** `processStartKey(ownerPid)` — "" is UNKNOWN, never "gone". */
+	currentStartKey: string;
+	/** `probePidExistence(ownerPid)` — `null` = unprovable. */
+	pidExists: boolean | null;
+}
+
+/**
+ * `live` = proven still the same process. `dead` = proven no longer it.
+ * `uncertain` = neither could be proven, so no destructive action may proceed.
+ */
+export type MarkerOwnerVerdict = "live" | "dead" | "uncertain";
+
+/**
+ * The two coordinate systems {@link processStartKey} can mint. They are NOT
+ * comparable to each other: `linux:<starttime ticks since boot>` and `ps:<lstart
+ * wall-clock text>` describe the same process with different numbers, so a
+ * mismatch ACROSS schemes says nothing about whether the process changed.
+ */
+export type StartKeyScheme = "linux" | "ps";
+
+/** The scheme of a start key, or `null` when it is not a key this repo mints. */
+export function startKeyScheme(key: string): StartKeyScheme | null {
+	if (/^linux:\d+$/.test(key)) return "linux";
+	if (/^ps:.+$/.test(key)) return "ps";
+	return null;
+}
+
+/**
+ * THE rule for "is the process this marker names still the one running?" — the one
+ * place a `dead` verdict may be produced, so no caller re-derives it from
+ * `processStartKey`'s ambiguous "" (see that function's contract).
+ *
+ *   recorded key unrecognized              → uncertain (no owner is named at all)
+ *   current key "", pid proven absent      → dead      (nothing holds that pid)
+ *   current key "", pid present/unprovable → uncertain
+ *   current key unrecognized               → uncertain (we cannot read the owner)
+ *   keys exactly equal                     → live
+ *   same scheme, different value           → dead      (pid now holds another process)
+ *   different schemes                      → uncertain (incomparable coordinates)
+ *
+ * Two rows carry the whole point. First, a MISSING current key is not absence of
+ * an owner — only a definite "no such process" is (EPERM, hidepid `/proc` and a
+ * missing `ps` all stay uncertain). Second, a DIFFERENT key only proves change
+ * when both keys measure the same thing: a marker written while `/proc` was
+ * unreadable carries `ps:…`, and the same live process reads back as `linux:…`
+ * once `/proc` is available — treating that as proof of death would archive a
+ * running citizen. An unrecognized key (garbage, a truncated write, a foreign
+ * writer) is likewise never evidence; it is a malformed marker.
+ */
+export function classifyMarkerOwner(recordedStartKey: string, facts: MarkerOwnerFacts): MarkerOwnerVerdict {
+	const recorded = startKeyScheme(recordedStartKey);
+	if (recorded === null) return "uncertain";
+	if (facts.currentStartKey === "") return facts.pidExists === false ? "dead" : "uncertain";
+	const current = startKeyScheme(facts.currentStartKey);
+	if (current === null) return "uncertain";
+	if (facts.currentStartKey === recordedStartKey) return "live";
+	return current === recorded ? "dead" : "uncertain";
 }
 
 /** The parent pid of a pid (one ancestry step), or null when unknown. */
@@ -1204,43 +1409,33 @@ export interface UpsertMetaSessionResult {
 }
 
 /**
- * Idempotent fs upsert (writes v3 identity). Scan the store by
- * `nativeSessionId`, decide create vs attach on EXISTENCE, and write atomically
- * as v3. On attach the file is the existing garden id's record (same path,
- * rewritten in place); on create it is a fresh `<gardenId>.meta.json`. A
- * duplicate `nativeSessionId` throws (via the scan) rather than silently
- * picking one.
+ * Idempotent fs upsert (writes v3 identity). CERTIFY the whole active store, then
+ * decide create-vs-attach on record EXISTENCE and write atomically as v3. On
+ * attach the file is the existing garden id's record (same path, rewritten in
+ * place); on create it is a fresh `<gardenId>.meta.json`.
  *
  * STRICT STORE (the guard boundary): every writer — pi birth, the Claude hook,
- * agy imprint, `entwurf_register_native` — funnels through here, so this is
- * where the generation policy has teeth. A store entry the v3 reader cannot
- * parse (previous generation, foreign bytes, corruption) fails the WHOLE upsert
- * BEFORE any write, naming the fresh-cut command. Ordinary runtime never writes
- * around an unreadable record — the operator cuts a fresh generation, once, and
- * the store is clean again. The write is tmp-file + rename so a crash never
- * leaves a half-written record (#30 crash-safety).
+ * agy imprint, `entwurf_register_native` — funnels through here, so this is where
+ * the generation policy has teeth, and it holds the SAME contract the install
+ * doctor holds ({@link certifyActiveStore}): regular files, live schema, no
+ * body/filename drift, globally unique `nativeSessionId`. Any defect fails the
+ * WHOLE upsert BEFORE any write, naming the fresh-cut verb. Ordinary runtime
+ * never writes around an uncertifiable store — the operator cuts a fresh
+ * generation, once, and it is clean again.
+ *
+ * A narrower scan is not a smaller version of this: asking only about MY
+ * `nativeSessionId` writes happily beside a drifted or duplicated record that the
+ * doctor refuses, which is how a host ends up certified by one surface and not
+ * the other. The write is tmp-file + rename so a crash never leaves a
+ * half-written record (#30 crash-safety).
  */
 export function upsertMetaSession(opts: UpsertMetaSessionOptions): UpsertMetaSessionResult {
 	const dir = path.resolve(expandTilde(opts.dir ?? defaultMetaSessionsDir()));
 	fs.mkdirSync(dir, { recursive: true });
-	const entries = fs.readdirSync(dir);
-	const readRaw = (filename: string) => fs.readFileSync(path.join(dir, filename), "utf8");
-	const unreadable: { filename: string; message: string }[] = [];
-	const existing = scanIdentityByNativeId(entries, opts.input.nativeSessionId, readRaw, (filename, err) =>
-		unreadable.push({ filename, message: err.message }),
-	);
-	if (unreadable.length > 0) {
-		const shown = unreadable
-			.slice(0, 3)
-			.map((s) => `${s.filename}: ${s.message}`)
-			.join("\n  ");
-		throw new MetaRecordError(
-			`meta-record store ${dir} holds ${unreadable.length} record(s) this generation cannot read — ` +
-				`refusing to write (the active store is v3-only and carries no cross-generation continuity). ` +
-				`Archive the generation and open a fresh one with ${FRESH_CUT_PRESCRIPTION}.\n  ${shown}` +
-				(unreadable.length > 3 ? `\n  … and ${unreadable.length - 3} more` : ""),
-		);
-	}
+	const cert = certifyActiveStoreDir(dir);
+	if (cert.defects.length > 0) throw new MetaRecordError(activeStoreRefusal(cert));
+	const target = requireNonEmptyString(opts.input.nativeSessionId, "nativeSessionId");
+	const existing = cert.records.find((record) => record.identity.nativeSessionId === target)?.identity ?? null;
 	const decision = decideUpsert(existing, opts.input, opts.now);
 	const file = path.join(dir, metaRecordFilename(decision.record));
 	atomicWriteIdentity(file, decision.record);
@@ -1345,8 +1540,8 @@ export function enqueueMetaMessage(opts: EnqueueMetaMessageOptions): EnqueueMeta
 	const sessionsDir = opts.sessionsDir ?? defaultMetaSessionsDir();
 	const recordFile = recordFileFor(sessionsDir, opts.gardenId);
 	// 3D-4: read IDENTITY (V3-only) — confirms the citizen exists and
-	// normalizes the gardenId. The record is no longer mutated; the v2 record carries
-	// no delivery, so the enqueue receipt lives SOLELY in the mailbox state store.
+	// normalizes the gardenId. The record is no longer mutated; the identity record
+	// carries no delivery, so the enqueue receipt lives SOLELY in the mailbox state store.
 	const citizen = readMetaIdentityByGardenId(opts.gardenId, sessionsDir);
 	if (typeof opts.body !== "string" || opts.body.length === 0) {
 		throw new MetaRecordError("enqueueMetaMessage: body must be a non-empty string.");
@@ -1361,7 +1556,7 @@ export function enqueueMetaMessage(opts: EnqueueMetaMessageOptions): EnqueueMeta
 	fs.writeFileSync(messagePath, opts.body, { mode: 0o600 });
 
 	// 3D-4 the cut: the enqueue receipt lives SOLELY in the mailbox state store now
-	// (record.delivery removed from the v2 record). No record write. Stamped before the
+	// (there is no `record.delivery` on the identity record). No record write. Stamped before the
 	// signal poke so all state is settled before the watch fires. A state-stamp throw
 	// surfaces fail-loud — no rollback: the `.msg` may already be written, but the
 	// caller never gets a silent success.

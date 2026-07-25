@@ -428,7 +428,7 @@ server.tool(
 	"entwurf_peers",
 	"List the entwurf fact surface: garden citizens (from meta-records) with their liveness, " +
 		"plus diagnostics. The record is the sole address axis — a control socket no record claims " +
-		"is a `record-less-socket` diagnostic (migration/stale state), never a peer row. Pair with " +
+		"is a `record-less-socket` diagnostic (a stale/diagnostic state), never a peer row. Pair with " +
 		"entwurf_v2 to address a peer by garden id. " +
 		"This reports FACTS, never verbs: `liveness` is a fact (alive/dead/indeterminate, or " +
 		"`unsupported` for a backend with no control-socket probe such as claude-code); the dispatch " +
