@@ -1,4 +1,4 @@
-# NEXT — fresh-cut 뺄셈이 main에 들어갔다 — 다음은 #47
+# NEXT — 0.12.8 stable이 prepare까지 섰다 — 다음은 GLG 승인 후 make
 
 > NEXT는 부트 섹터다. 닫힌 역사는 CHANGELOG/git/이슈에, 장기 방향은 ROADMAP/이슈에 둔다.
 
@@ -69,14 +69,30 @@
   소비자가 생길 때의 primitive 승격은 후속이다. GPT 최종 독립 실행:
   `pnpm run build-bridge && pnpm check` **EXIT=0**, fresh-cut gate **141/0**; exact HEAD
   `9015431`, clean tree. #52 duplicate read/birth race와 empty start-key 정책은 의도적 후속.
-- **▶ 다음 걸음 — 0.12.8 stable landing/prepare, 그 뒤 #47.** 구현 closure는 release-ready다.
-  #51의 land 전제였던 published `0.12.8-repair.1` maintainer + secondary Linux installed-native
-  proof는 2026-07-25 두 호스트 모두 doctor PASS로 닫혀 BASELINE HISTORY에 기록됐다. host proof
-  중 실제 `./run.sh remove-dev-bin`이 command 이름을 하위 script 인자로 넘기는 operator inverse
-  결함을 발견해 one-line dispatch 수선했다 — 이 새 pre-version HEAD를 land/push하고 exact-SHA
-  CI를 다시 얻은 뒤 `prepare 0.12.8`로 간다. 버전은 **0.12.8 stable**(VERIFY 예약;
-  0.13.0은 ROADMAP의 Cortex #48 예약). 착수 전 `docs/mux-launch-rail.md`; mux lineage는
-  `callerGardenId`(호출 사건 ≠ 계보).
+- **▶ 다음 걸음 — GLG 승인이 있으면 `entwurf-release make 0.12.8`, 그 뒤 #47.** land와 prepare가
+  닫혔다. **land**: `0.12.8-repair.1`의 two-host installed-native proof(2026-07-25, BASELINE
+  HISTORY) 뒤 발견한 `remove-dev-bin` dispatch 수선까지 얹은 pre-version HEAD `1345688`이
+  exact-SHA CI [30150824225](https://github.com/junghan0611/entwurf/actions/runs/30150824225)에서
+  `check`·`install-surface`·`artifact-consumer` 전부 success. **prepare**: package `0.12.8` +
+  CHANGELOG 0.12.8 섹션 + release skill의 dist-tag별 U2 계약 + README/VERIFY/BASELINE/DELIVERY/
+  setup의 stable 승격 문구가 로컬 커밋 하나로 서 있고 트리는 clean이다. LIVE 재획득 완료 —
+  `LIVE=1 ./run.sh release-gate`가 **MUST 17/0/0 + BEHAVIOR 1/0, EXIT=0**
+  (`/tmp/entwurf-release-gate-0.12.8.u9y9IX/release-gate.log`), 이번 실행에서는 번들 MCP
+  readiness race가 뜨지 않았다(`smoke-acp-bundled-mcp-live` PASS). **push/tag/candidate/publish는
+  하지 않았다** — 전부 make/publish 소유다. 0.13.0은 ROADMAP의 Cortex #48 예약. 착수 전
+  `docs/mux-launch-rail.md`; mux lineage는 `callerGardenId`(호출 사건 ≠ 계보).
+- **prepare 독립검수 4건, 전부 그 커밋 안에서 닫혔다.** ① **`check-install-surface` S7은 워킹트리가
+  아니라 candidate index를 읽는다** — unstaged SKILL.md는 게이트에 보이지 않았고, stage하자마자
+  새 문구의 em dash 3개가 S7e(ASCII-only)를 RED로 만들었다. **release-prep 바이트는 게이트를
+  돌리기 전에 stage한다**(이번 컷이 준 재사용 가능한 교훈). ② U2 stable 분기가 "never a hand-kept
+  literal"을 선언하면서 `repair` 리터럴을 단언했다(고치려던 `latest="0.12.7"`과 같은 형태) → U0가
+  두 dist-tag를 모두 포획하고 "publish한 레인 = $VERSION, 건드리지 않은 레인 = U0 포획값" 대칭
+  계약으로 교체, 6셀 예행 확인. ③ CHANGELOG의 "two gates / about 2,900 lines"가 재현되지 않는다 →
+  게이트 3개 · 삭제 파일 2,404줄. ④ BASELINE 판정표의 두 Linux 행이 아직 `pending`이라 같은 파일
+  HISTORY와 모순이었고, CHANGELOG/VERIFY의 "BASELINE HISTORY" 인용이 반대 문장으로 떨어졌다 →
+  실측에 맞췄다. `repair cut` 문자열은 설치기가 실제로 뱉고 게이트가 단언하는 값이라
+  (`meta-bridge-install.sh` ↔ `smoke-meta-install-state.sh`) 인용문은 보존하고 문서 자체 목소리인
+  current claim만 정정했다.
 
 ## OPEN
 
@@ -90,14 +106,26 @@
    목표가 아니라 churn 카탈로그를 뽑는 관측 실행이고, RED는 데이터다.
 3. **🔴 release 차단 관측 — 번들 MCP readiness race (변동 없음).** 인과가 서기 전에는 고치지
    않는다(GLG 결정). SSOT는 **ROADMAP 「🔴 OPEN — 번들 MCP readiness race」**.
-4. **release lane (0.12.8 stable, 방아쇠는 GLG):** 두 Linux installed-host proof + BASELINE
-   기록 **완료** → 새 remove-dev-bin 수선 HEAD `land` → `prepare`(CHANGELOG에 fresh-cut 뺄셈 + 재검수 closure 승격, package
-   `0.12.8`, release skill의 repair-only U2를 dist-tag별 계약으로 정정) → `make`(LIVE 재획득) →
-   `publish … latest`. publish 후 `latest=0.12.8`, 기존 `repair=0.12.8-repair.1`을 보존한다.
-   merge/push ≠ release. 워킹트리 container 증거는 release-preserved tgz가 아니므로 `make` 때
-   exact candidate를 다시 보존·결속한다.
-5. **후속·별건:** ⓐ 오푸스가 #50에 남긴 readiness upstream 인과 확정 코멘트 정정 — GLG 승인 후
-   ⓑ BASELINE fresh-cut HISTORY 기록 여부는 release prepare 때 판단 ⓒ #48 cortex(0.13.0, PR
+4. **release lane (0.12.8 stable, 방아쇠는 GLG):** 두 Linux installed-host proof · `land` ·
+   `prepare` **완료**. 남은 것은 `make 0.12.8`(prepared HEAD push → exact-SHA CI → preserved
+   candidate + container acceptance → tag → GitHub release) → `publish 0.12.8 <candidate> latest`.
+   publish 후 `latest=0.12.8`, 기존 `repair=0.12.8-repair.1`을 보존한다. merge/push ≠ release.
+   워킹트리 container 증거는 release-preserved tgz가 아니므로 `make` 때 exact candidate를 다시
+   보존·결속한다.
+5. **🟡 게이트 flake — fresh-cut G셀(archive-destination preflight)이 자기 setup 실패를 제품 결함으로
+   읽는다.** 셀은 충돌지를 `지금+0/1/2초` 세 개로만 점유하는데, 컷은 node 기동과 quiesce 스캔을
+   **끝낸 뒤에야** 스탬프를 찍는다(`meta-bridge-fresh-cut.ts:494`의 `const ts = stamp()`). 유휴에선
+   0–1초라 창에 들어오지만 부하가 걸리면 벗어나 **충돌이 아예 생기지 않고**, 그런데도 G1–G3은
+   "컷이 충돌을 무시했다"로 RED가 된다. 2026-07-25 prepare에서 같은 바이트 위 141/0 → 138/3 →
+   141/0을 관측했다(pre-commit 1회 차단). **제품 결함 아님** — 충돌 preflight 자체는 F15/F17이
+   따로 지킨다. 수선 방향은 두 가지를 함께: ⓐ 창을 30초로 넓히고 ⓑ **seed가 실제로 착지했는지
+   증명한 뒤에만** 제품을 판정한다(컷이 고른 스탬프가 seed 집합 밖이면 `SETUP MISS`로 RED — 여전히
+   빨갛지만 원인을 자기 이름으로 부른다). GLG 승인 시 release-prep과 **별개 커밋**으로 낸다 —
+   release skill P0가 구현 수선을 prepare 커밋에 섞는 것을 금지한다.
+6. **후속·별건:** ⓐ 오푸스가 #50에 남긴 readiness upstream 인과 확정 코멘트 정정 — GLG 승인 후
+   ⓑ **판단 완료** — prepare에서 fresh-cut 전용 BASELINE HISTORY 항목은 만들지 않았다. operator
+   면에 실제로 필요했던 수선은 판정표를 실측(두 호스트 doctor PASS)에 맞추는 것이었고, stable
+   아티팩트의 host proof는 publish 뒤 작업이다 ⓒ #48 cortex(0.13.0, PR
    #40은 PARK) ⓓ Meta sender 모델 표기(비차단, optional display field).
 
 ## 런북 — pre-cut 호스트가 이 컷을 pull할 때

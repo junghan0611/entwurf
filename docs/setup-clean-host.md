@@ -20,8 +20,8 @@ or the pi adapter read whatever auth the user already trusts on the host
 
 Written against a clean **Linux** host (Ubuntu / Debian / NixOS) reachable via
 SSH, here called `cleanhost`. `nvm` keeps the Node path independent of the distro.
-The neutral npm package may install elsewhere, but Linux is this repair cut's only
-currently certified Claude meta-bridge axis. macOS has no `/proc` bridge discovery
+The neutral npm package may install elsewhere, but Linux is the only currently
+certified Claude meta-bridge axis. macOS has no `/proc` bridge discovery
 and is not yet verified/certified for this cut, so its installer refuses new wiring
 and its strict doctor stays `NOT CERTIFIED`/nonzero.
 This is not permanent; future native validation may reopen the lane, while Darwin
@@ -180,7 +180,7 @@ Drift points:
 
 For an external Claude Code session to be replyable by garden id, install the
 meta-bridge plugin globally. This is still a neutral npm-package command; it
-registers Claude Code USER-scope MCP + the SessionStart hook. For this repair cut,
+registers Claude Code USER-scope MCP + the SessionStart hook. For this cut,
 perform and certify this stage on Linux only. The installer rejects Darwin with a
 “not yet verified/certified for this repair cut” diagnosis and the macOS doctor stays
 nonzero until future native validation supplies a real live-owner measurement.
@@ -377,14 +377,12 @@ rm -rf ~/.nvm
 This walk-through is a verification floor underneath release cuts: neutral npm
 install, installed bridge boot, optional pi adapter registration, Claude
 meta-bridge verification where used, all three agy doctors plus a fresh native
-round trip where used, and at least one authenticated ACP runtime smoke. For the
-repair cut, preserve the exact package version, candidate tarball sha256, container
-image identity, host OS, Claude version, and installed doctor output together. The
-approved repaired candidate is `0.12.8-repair.1` under dist-tag `repair`;
-`0.12.8-repair.0` was published but its installed bridge cannot deliver and must not
-be reused. Registry `latest` must stay `0.12.7` during this repair cut. Promotion waits
-for fresh maintainer + secondary-host installed-doctor evidence and a separately authorized
-stable `0.12.8` cut. The repair.1 version bump still waits for the separate
-post-landing prepare commit and its own three CI jobs. GLG owns every version, tag,
-publish, push, and host-reinstall decision; the complete ordered checklist is in
-VERIFY.md §Repair-cut order.
+round trip where used, and at least one authenticated ACP runtime smoke. Preserve
+the exact package version, candidate tarball sha256, container image identity,
+host OS, Claude version, and installed doctor output together. The repair history
+is fixed: `0.12.8-repair.0` cannot deliver, while published
+`0.12.8-repair.1` passed installed-native doctors on maintainer + secondary Linux
+hosts and remains under dist-tag `repair`. Stable promotion publishes accepted
+`0.12.8` bytes under `latest` and must preserve `repair=0.12.8-repair.1`.
+GLG owns every version, tag, publish, push, and host-reinstall decision; the
+complete ordered checklist is in VERIFY.md §Stable 0.12.8 order.

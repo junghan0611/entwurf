@@ -188,7 +188,7 @@ claude mcp add --scope user entwurf-bridge \
 
 If the host does not inherit the npm bin directory, use an absolute path to the
 bin or `start.sh`. For a garden-native Claude Code meta-session (replyable by
-garden id), run this on Linux. The #51 repair cut refuses new macOS meta-bridge
+garden id), run this on Linux. entwurf refuses new macOS meta-bridge
 installs because its strict live-owner doctor currently depends on `/proc`; macOS
 is **not yet verified/certified for this cut**, not permanently impossible, and
 future native validation may reopen it. Package-level `os` is intentionally
@@ -216,7 +216,7 @@ differently from a broken install on purpose. If the doctor reports
 `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, reinstall a current package before
 trusting the floor result.
 
-**Repair-cut evidence boundary.** The required Linux `artifact-consumer` CI job
+**Release evidence boundary.** The required Linux `artifact-consumer` CI job
 installs one read-only candidate tarball globally as a non-root user in a Node 24
 container that cannot see the checkout, records the tarball digest and image
 identity, freezes the package root, and drives the strict doctor. Its Claude cache,
@@ -229,7 +229,9 @@ support matrix and release order in [VERIFY.md](./VERIFY.md). For the release
 artifact, first preserve one `npm pack` output, then run
 `ENTWURF_CANDIDATE_TGZ=/absolute/path/to/candidate.tgz ./run.sh check-install-container`;
 the gate prints that canonical path and sha256 and consumes it without re-packing.
-Only that accepted file may be published with `--tag repair`.
+Only that accepted file may be published under the explicitly authorized lane:
+`--tag latest` for stable `0.12.8`, while preserving
+`repair=0.12.8-repair.1`.
 
 > **Generations — the fresh-cut policy.** The bridge is a call-relay, never a
 > memory layer: a meta-record is routing state for a **current-generation**
@@ -340,7 +342,7 @@ For manual configuration, [`pi/settings.reference.json`](./pi/settings.reference
 shows the pi adapter settings shape, and the external-host examples below show
 plain MCP registrations.
 
-> **First time on a clean Linux host (Ubuntu / Debian / NixOS)?** See the [clean-host walk-through](./docs/setup-clean-host.md) — Node/npm install, auth-free bridge boot, optional pi adapter verification, and authenticated runtime smokes. The neutral package may install elsewhere, but Linux is this repair cut's only currently certified Claude meta-bridge axis: its installer refuses macOS and its doctor remains `NOT CERTIFIED`/nonzero because the live owner join is not yet instrumented. Future native validation may reopen the macOS lane.
+> **First time on a clean Linux host (Ubuntu / Debian / NixOS)?** See the [clean-host walk-through](./docs/setup-clean-host.md) — Node/npm install, auth-free bridge boot, optional pi adapter verification, and authenticated runtime smokes. The neutral package may install elsewhere, but Linux is the only currently certified Claude meta-bridge axis: its installer refuses macOS and its doctor remains `NOT CERTIFIED`/nonzero because the live owner join is not yet instrumented. Future native validation may reopen the macOS lane.
 
 > **Post-install checks.** `entwurf check-bridge` (or `./run.sh check-bridge` from a clone) proves the `entwurf-bridge` MCP surface loads with no backend auth needed. To prove the **ACP backend actually answers** — the bridge spawns Claude through the pi provider path and a real turn comes back — run `LIVE=1 entwurf smoke-acp-provider-live` from an installed package/clone with pi and Claude auth available. Package-source routing is pinned deterministically by `run.sh check-package-source-routing`, which runs inside `pnpm check` and the release gate.
 

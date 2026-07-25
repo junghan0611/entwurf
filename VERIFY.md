@@ -44,7 +44,7 @@ Verification here is not a benchmark. In production we exchange short turns and 
 >
 > The authoritative per-cut counts live in BASELINE.md's HISTORY and CHANGELOG/git, not inline here (they drift against `run.sh`). Most recent recorded aggregate: **2026-07-24 (night) — MUST 16/1/0 + BEHAVIOR 1/0, EXIT=1** at `cbda097` — the single FAIL is the known bundled-MCP readiness race (ROADMAP 「🔴 OPEN」, observe-don't-fix; isolated re-runs pass). Most recent all-green floor: **2026-07-24 — MUST 17/0/0 + BEHAVIOR 1/0, EXIT=0** at `7cbeb29b6afcfbaf4fc28da3b7929037c339113d` (the dependency-uplift HEAD: pi 0.82.0 + claude-agent-acp 0.61.0 / ACP SDK 1.3.0). The step count moved 16→17 with `smoke-acp-v2-send-live`; earlier that day it had moved 17→16 with the v2-cutover smoke retirements. A release cut requires the aggregate red to be resolved or explicitly ruled by GLG.
 
-### Artifact / host certification matrix — #51 repair cut
+### Artifact / host certification matrix — #51 repair line → 0.12.8 stable
 
 Do not collapse package evidence, fixture evidence, and a certified native host into
 one word such as “green.” They answer different questions.
@@ -56,69 +56,56 @@ one word such as “green.” They answer different questions.
 | Linux artifact consumer | `check-install-container` in the required `artifact-consumer` CI job | **L3 package evidence:** one read-only candidate `.tgz`; checkout/repo `node_modules` invisible; non-root `npm install -g`; PATH shims; frozen package root; regular-file path+sha256 fence; canonical artifact path+sha256 and Node 24 image identity printed. Default CI packs once; `ENTWURF_CANDIDATE_TGZ` consumes a preserved caller artifact without re-pack. | Certifies the Linux package-consumer shape. Its fake Claude, planted plugin cache, stand-in owner, and `/proc` bridge are explicitly **fixtures**: they do not prove Claude installed the cache or that a real native Claude session woke. |
 | Direct Claude negative (B) | Claude Code 2.1.138 actual session | **L4 direct-native**, one NixOS host: fixture loaded (shell canary), `args` dropped, hook reported `exit_code: 0, outcome: success` | Justifies entwurf-side fail-loud and no old-version fallback. It did not run the final production argv shape. |
 | Direct Claude positive (B2) | Claude Code 2.1.217 actual session | **L4 direct-native**, one NixOS host: per-element args, literal `${HOME}`, direct parent join, FileChanged exit 2 → idle wake | Justifies the proven floor and exec-form contract. It is not a second-OS acceptance run. |
-| Linux installed host | `doctor-meta-bridge` after package install, a **new** Claude session, and a live MCP child | **L3 host corroboration:** installed artifact + live `/proc` owner join | Exit 0 is certification. Missing live evidence is `NOT CERTIFIED` and nonzero; static/synthetic success never substitutes. Maintainer and secondary Linux-host acceptance remains post-release work. |
+| Linux installed host | `doctor-meta-bridge` after package install, a **new** Claude session, and a live MCP child | **L3 host corroboration:** installed artifact + live `/proc` owner join | Published `0.12.8-repair.1` passed on maintainer + secondary Linux hosts on 2026-07-25 (BASELINE HISTORY). Missing live evidence is still `NOT CERTIFIED`; stable `0.12.8` earns its own package/CI/LIVE evidence. |
 | macOS Claude meta-bridge | New install is refused: strict live-owner certification cannot yet discover the MCP process without `/proc` | **Not yet verified/certified for this repair cut**; doctor nonzero | Linux is the only current certified axis. Darwin uninstall remains the honest inverse for older installs; the neutral package has no `os` restriction. This is not a permanent impossibility claim—future native validation may reopen macOS. |
-| WSL2 / Windows | No release lane | Unverified | Not supported by this repair cut. |
+| WSL2 / Windows | No release lane | Unverified | Not supported by this cut. |
 
 The artifact-consumer run prints both the tarball sha256 and container image
 identity. Preserve those in the cut record. A synthetic doctor PASS proves the
 oracle can recognize a fully supplied fixture; only the installed doctor against a
 new native session proves that a real host supplied those layers.
 
-### Repair-cut order (current execution; authority is mode-specific)
+### Stable 0.12.8 order (current execution; authority is mode-specific)
 
 The repo-local `entwurf-release` skill is a checkpointed state machine. Each mode
-is a separate authorization; one mode never implies the next.
+is a separate authorization; one mode never implies the next. The repair history
+remains in CHANGELOG: repair.0 was field-broken, repair.1 restored delivery, and
+on 2026-07-25 its installed artifact passed the real native doctor on maintainer
+and secondary Linux hosts. That closed the explicit prerequisite for promoting
+this line to stable `0.12.8`; it does not transfer CI/LIVE/candidate evidence to
+the new stable bytes.
 
-`0.12.8-repair.0` completed this whole state machine and was published under the
-`repair` dist-tag on 2026-07-22, but field evidence then proved its installed MCP
-bundle could not deliver: the dist omitted `entwurf-capabilities.json`, so every
-`entwurf_v2` send died ENOENT while tools/list and the old shape-only doctor stayed
-green. npm versions are immutable; the repaired cut is therefore
-`0.12.8-repair.1`. A pre-version CI pack still carries the old package version as
-a disposable gate artifact; it must never be preserved as the release candidate
-or published.
-
-1. Finish and review the delivery-bundle repair, all four consumer cells, the
-   cross-harness sender-identity isolation, and the release-contract documentation.
-2. `land 0.12.8-repair.1` pushes only that clean **pre-version landing HEAD** and
-   requires a push-triggered `ci.yml` run whose `headSha` is exactly that commit.
-   All three jobs must be green: `check`, `install-surface`, and
-   `artifact-consumer`. This first run is an isolation/provenance checkpoint; the
-   later version-HEAD run also contains the production changes.
-3. `prepare 0.12.8-repair.1` promotes a new changelog section, sets the package
-   version, reruns the deterministic and LIVE gates, and creates the release-prep
-   commit. It never pushes. Evidence from repair.0 is historical and cannot be
-   reused for this HEAD.
-4. `make 0.12.8-repair.1` pushes that clean prepared HEAD and requires the same
-   three jobs on that exact version commit. Only after the second exact-SHA CI is
-   green does it preserve and accept one candidate without repacking:
+1. `land 0.12.8` pushes only the clean **pre-version landing HEAD** and requires
+   a push-triggered `ci.yml` run whose `headSha` is exactly that commit. Current
+   accepted landing: `1345688001ed6629bd0f58996a36134e7b7874bc`, run
+   [30150824225](https://github.com/junghan0611/entwurf/actions/runs/30150824225),
+   with `check`, `install-surface`, and `artifact-consumer` all success.
+2. `prepare 0.12.8` promotes the changelog, sets the package version, reruns the
+   deterministic and LIVE gates, and creates the release-prep commit. It never
+   pushes, tags, creates a candidate, or publishes.
+3. `make 0.12.8` pushes that clean prepared HEAD and requires the same three jobs
+   on that exact version commit. Only after the second exact-SHA CI is green does
+   it preserve and accept one candidate without repacking:
 
    ```bash
-   ARTIFACT_DIR=$(mktemp -d /tmp/entwurf-release-candidate-0.12.8-repair.1.XXXXXX)
+   ARTIFACT_DIR=$(mktemp -d /tmp/entwurf-release-candidate-0.12.8.XXXXXX)
    bash scripts/with-dist-lock.sh npm pack --dry-run=false --pack-destination "$ARTIFACT_DIR"
-   CANDIDATE="$(realpath "$ARTIFACT_DIR/junghanacs-entwurf-0.12.8-repair.1.tgz")"
+   CANDIDATE="$(realpath "$ARTIFACT_DIR/junghanacs-entwurf-0.12.8.tgz")"
    sha256sum "$CANDIDATE"
    ENTWURF_REQUIRE_DOCKER=1 ENTWURF_CANDIDATE_TGZ="$CANDIDATE" \
      ./run.sh check-install-container | tee "$ARTIFACT_DIR/acceptance.log"
    ```
 
-   The gate must print `candidate mode: caller-preserved exact artifact (no repack)`,
-   the same canonical path, the same SHA-256, and the image identity. `make` then
-   tags that exact prepared SHA and creates the GitHub release. Keep the candidate
-   and acceptance log; do not let a later step silently repack different bytes.
-5. Only an explicit `publish 0.12.8-repair.1 <absolute-candidate> repair`
-   invocation may run `npm publish "$CANDIDATE" --tag repair`. It verifies
-   `repair=0.12.8-repair.1`, `latest=0.12.7`, and a registry-installed smoke.
-   This cut moves only `repair`; `latest` promotion is outside this mode.
-6. Only after publication, clean-reinstall the maintainer and secondary Linux host.
-   Restart all old Claude sessions, open a new session, then require the
-   **installed** `doctor-meta-bridge` to exit 0. A validate result or manual marker
-   observation cannot override doctor RED. After both hosts prove delivery GREEN,
-   GLG may separately authorize a stable `0.12.8` cut and move `latest`.
+   The gate must print caller-preserved candidate mode, the same canonical path
+   and SHA-256, and the image identity. `make` then tags the exact prepared SHA
+   and creates the GitHub release. Never repack accepted bytes.
+4. Only an explicit `publish 0.12.8 <absolute-candidate> latest` may publish the
+   accepted file. Registry proof requires `latest=0.12.8` while preserving
+   `repair=0.12.8-repair.1`, followed by the registry-installed smoke.
 
 Invoking `land`, `prepare`, `make`, or `publish` grants only that named mode's
-authority. Host reinstall remains a separate GLG authorization.
+authority. `prepare` stops at a local commit; `make` and `publish` remain separate
+GLG decisions.
 
 ### Verifying the two capabilities a gate cannot fully judge
 

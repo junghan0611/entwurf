@@ -4,6 +4,34 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.12.8 — 2026-07-25
+
+### Changed
+
+- **ACTION REQUIRED — hosts carrying a pre-v3 meta-record store refuse install and every identity write until an explicit generation cut.** The active citizen store is v3-only and carries no cross-generation address or resume continuity: sessions flow; memory lives in native transcripts and the embedding axes, never in the bridge. `install` / `setup` / citizen birth / `entwurf_register_native` refuse before writing when the store cannot certify and name the one repair verb: quiesce sessions, run `entwurf meta-bridge-fresh-cut` (dev clone: `./run.sh meta-bridge-fresh-cut`), then retry. The cut archives `meta-sessions/` + `meta-mailbox/` as forensic siblings and opens an empty v3 generation; no runtime reads the archive and no restore verb exists.
+- **#50 hard cut: the meta-record is the only address authority.** V3 drops `parentGardenId` + `isEntwurf`, removes the v1 `entwurf` / `entwurf_resume` / `entwurf_send` tools and `/entwurf*` commands, deletes `pi/entwurf-targets.json` + `setup:links`, and authorizes dormant resume through record existence plus transcript-header ↔ `record.nativeSessionId` integrity. A call is not parentage and there is no species boolean.
+- **The migration lane is deleted, not deprecated.** `meta-migration.ts`, the M1 backup/migrate/restore command, three gates (`check-meta-migrate-v3`, `check-meta-migration-readers`, `check-upgrade-gate`), and the frozen byte fixtures — 2,404 lines of deleted files, for continuity the substrate does not promise — are replaced by one generation verb (`meta-bridge-fresh-cut`) and one writer/doctor contract (`certifyActiveStore`). The whole upgrade story is quiesce → fresh-cut → go.
+- **The runtime pins move together.** Pi rises 0.80.7 → 0.82.0 under the closed peer range and doc gates; Claude ACP rises to `@agentclientprotocol/claude-agent-acp 0.61.0` + `@agentclientprotocol/sdk 1.3.0`, with `@anthropic-ai/sdk 0.100.1` retained. The ACP send gate proves a provider model can send as its host socket-citizen.
+
+### Fixed
+
+- **One active-store contract is shared by the doctor and every identity writer.** `certifyActiveStore` requires each `.meta.json` to be a regular file, readable by the live schema, named by its own body, and the unique holder of its `nativeSessionId`; it runs store-wide before every identity write. Targeted reads enforce the per-entry half and never follow a symlink. Duplicate uniqueness on read/discovery remains tracked separately in #52.
+- **Unknown is never silently converted to absent or dead on the fresh-cut path.** ENOENT alone means absence across record, store, directory and socket-entry inspection; EACCES/ENOTDIR/ELOOP and symlink/non-directory surfaces refuse as UNCERTAIN. The quiesce gate also probes marker-less native-push citizens through the same adapter dispatch uses, and `pgrep` exit 1 alone means no host while scan failures stay indeterminate. Five directory inputs across four code paths and the socket-entry layer are covered by F12–F18.
+- **The archive plan refuses common half-cut causes before moving and reports every partial move honestly.** Store and mailbox may have different parents, so each planned rename preflights parent writability and every destination is inspected with ENOENT-only absence before the first move. No permission probe can promise a rename (sticky bit, immutable attributes, read-only mounts and LSMs remain possible); if a rename fails, the loop prints each `archived so far:` path, calls the generation HALF-CUT, and gives the exact retry/manual-inspection prescription.
+- **Only a doctor verdict earns a destructive prescription.** Both store-doctor callers map exit 1 to certification defects → fresh-cut and exit 3 to access repair; usage, crash and unknown exits are doctor/runtime failures and prescribe no cut. `run.sh` also guards the actual doctor entry selected by its mode (source `.ts` vs installed compiled `.js`), so a missing artifact cannot collide with the doctor's defect exit. I7–I9 drive both callers and the installed-artifact seam.
+- **The installed-host acceptance closed two operator/test seams.** `./run.sh remove-dev-bin` now shifts its own command name before invoking the honest inverse. Stable-bin smokes remove every pre-existing provider/statusline bin directory from their sandbox PATH, so a maintainer carrying both dev links and registry shims cannot mask a dangling-command negative.
+
+### Carried from the repair line
+
+- Exec-form Claude hooks + the enforced Claude Code `>=2.1.217` floor (repair.0), and the capability registry beside the emitted MCP bridge with live-command physical delivery in `doctor-meta-bridge` (repair.1), are promoted to `latest`. After publication the required registry shape is `latest=0.12.8`, `repair=0.12.8-repair.1`.
+
+### Verification
+
+- Pre-version landing HEAD `1345688001ed6629bd0f58996a36134e7b7874bc` passed exact-SHA GitHub Actions run [30150824225](https://github.com/junghan0611/entwurf/actions/runs/30150824225): `check`, `install-surface`, and `artifact-consumer` all success.
+- Published `0.12.8-repair.1` passed installed `doctor-meta-bridge` on maintainer + secondary Linux hosts after a new real Claude session opened with a live MCP child; both runs included physical `entwurf_v2` delivery and live owner join (BASELINE HISTORY).
+- On the stable prepared tree, `LIVE=1 ./run.sh release-gate` is all green — **MUST PASS=17 FAIL=0 SKIP=0** (its first step is the full `pnpm check`; the run includes `smoke-acp-bundled-mcp-live` and `smoke-acp-v2-send-live`) and **BEHAVIOR PASS=1 FAIL=0**, EXIT=0 — at scratch `/tmp/entwurf-release-gate-0.12.8.u9y9IX`, complete log `/tmp/entwurf-release-gate-0.12.8.u9y9IX/release-gate.log`, per-step artifact paths printed inside it. The static gate judges the **candidate index**, so the release-prep bytes were staged before the run, not merely present in the working tree.
+- The prepared-HEAD exact-SHA CI, the preserved candidate and its container acceptance, the tag, the GitHub release, and `latest` publication remain deliberately deferred to `make` / `publish`.
+
 ## 0.12.8-repair.1 — 2026-07-22
 
 ### Fixed

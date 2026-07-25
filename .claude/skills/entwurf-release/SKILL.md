@@ -17,13 +17,13 @@ entry.
 ## Invocation
 
 ```text
-# Claude Code
-/entwurf-release land 0.12.8-repair.1
-/entwurf-release prepare 0.12.8-repair.1
-/entwurf-release make 0.12.8-repair.1
-/entwurf-release publish 0.12.8-repair.1 /absolute/path/to/candidate.tgz repair
+# Claude Code - stable example
+/entwurf-release land 0.12.8
+/entwurf-release prepare 0.12.8
+/entwurf-release make 0.12.8
+/entwurf-release publish 0.12.8 /absolute/path/to/candidate.tgz latest
 
-# pi
+# pi - prerelease/repair example
 /skill:entwurf-release land 0.12.8-repair.1
 /skill:entwurf-release prepare 0.12.8-repair.1
 /skill:entwurf-release make 0.12.8-repair.1
@@ -565,6 +565,13 @@ CANDIDATE="<absolute candidate argument>"
 DIST_TAG="<dist-tag argument>"
 case "$CANDIDATE" in /*) ;; *) echo "ABORT: candidate path must be absolute"; exit 1 ;; esac
 case "$DIST_TAG" in ""|*[!0-9A-Za-z._-]*) echo "ABORT: invalid or missing dist-tag"; exit 1 ;; esac
+# Every publication must prove it did not move the lane it does not own. Capture
+# both dist-tags before U1 and assert the untouched lane against its own captured
+# value; a version literal kept by hand in this file rots at the next cut. An
+# absent tag reads as the empty string, and preserving absence is a valid result.
+PRE_PUBLISH_LATEST=$(npm view @junghanacs/entwurf dist-tags.latest)
+PRE_PUBLISH_REPAIR=$(npm view @junghanacs/entwurf dist-tags.repair)
+export PRE_PUBLISH_LATEST PRE_PUBLISH_REPAIR
 CANDIDATE=$(realpath "$CANDIDATE")
 test -f "$CANDIDATE"
 test "$(node -p "require('./package.json').version")" = "$VERSION"
@@ -611,29 +618,37 @@ test "$(sha256sum "$CANDIDATE" | cut -d' ' -f1)" = "$CANDIDATE_SHA256"
 
 ## U2. Verify dist-tags
 
+Apply the lane-specific dist-tag contract. The published lane must equal this
+version, and the lane this publication did not touch must still hold the exact
+value captured in U0. Stable publication moves `latest` and preserves the
+accepted repair line; repair publication moves `repair` and preserves whatever
+stable version was current immediately before U1. Read both from the same
+post-publish registry snapshot, and never assert a hand-kept literal.
+
 ```bash
 DIST_TAGS=$(npm view @junghanacs/entwurf dist-tags --json)
-DIST_TAGS="$DIST_TAGS" VERSION="$VERSION" DIST_TAG="$DIST_TAG" node - <<'NODE'
+case "$DIST_TAG" in
+  latest) PRESERVED_TAG=repair; PRESERVED="${PRE_PUBLISH_REPAIR?capture it in U0 before U1}" ;;
+  repair) PRESERVED_TAG=latest; PRESERVED="${PRE_PUBLISH_LATEST?capture it in U0 before U1}" ;;
+  *) echo "ABORT: release policy has no preservation contract for dist-tag $DIST_TAG" >&2; exit 1 ;;
+esac
+DIST_TAGS="$DIST_TAGS" VERSION="$VERSION" DIST_TAG="$DIST_TAG" \
+PRESERVED_TAG="$PRESERVED_TAG" PRESERVED="$PRESERVED" node - <<'NODE'
 const tags = JSON.parse(process.env.DIST_TAGS);
 const version = process.env.VERSION;
 const distTag = process.env.DIST_TAG;
-if (tags[distTag] !== version) {
-  throw new Error(`dist-tag ${distTag}=${tags[distTag]}, expected ${version}`);
+const preservedTag = process.env.PRESERVED_TAG;
+const preserved = process.env.PRESERVED;
+const seen = (name) => tags[name] ?? "";
+const shown = (name) => seen(name) || "(absent)";
+if (seen(distTag) !== version) {
+  throw new Error(`dist-tag ${distTag}=${shown(distTag)}, expected ${version}`);
 }
-console.log(`registry dist-tag: ${distTag}=${version}`);
+if (seen(preservedTag) !== preserved) {
+  throw new Error(`dist-tag ${preservedTag}=${shown(preservedTag)}, expected preserved ${preserved || "(absent)"}`);
+}
+console.log(`registry ${distTag} publication: ${distTag}=${version} ${preservedTag}=${shown(preservedTag)}`);
 NODE
-```
-
-For the current #51 repair contract, additionally require:
-
-```bash
-test "$DIST_TAG" = repair
-DIST_TAGS="$DIST_TAGS" VERSION="$VERSION" node -e '
-const t=JSON.parse(process.env.DIST_TAGS);
-const version=process.env.VERSION;
-if(t.latest!=="0.12.7") throw new Error(`latest moved to ${t.latest}`);
-if(t.repair!==version) throw new Error(`repair is ${t.repair}, expected ${version}`);
-console.log(`registry: latest=${t.latest} repair=${t.repair}`);'
 ```
 
 ## U3. Prove the registry-installed package
