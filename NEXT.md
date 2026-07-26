@@ -1,11 +1,11 @@
-# NEXT — #52·#54 closure candidate를 로컬 커밋 — 다음 세션에서 마지막 차단·close 판단
+# NEXT — #52·#54 closure candidate push — Oracle 검수 뒤 마지막 차단·close 판단
 
 > NEXT는 부트 섹터다. 닫힌 역사는 CHANGELOG/git/이슈에, 장기 방향은 ROADMAP/이슈에 둔다.
 
 ## NOW
 
-- **Stem: 현재 closure candidate는 로컬 커밋으로만 고정한다. push·#52/#54 close·0.12.9 prepare는
-  다음 세션의 마지막 차단 검수 뒤 결정한다.** #52는 discovery와 실제 dispatch/resume 경계에서
+- **Stem: closure candidate `273be59` + `668f16f`를 `origin/main`에 push했다. Oracle 서버
+  교차검수와 아래 마지막 차단 뒤 #52/#54 close·0.12.9 prepare를 결정한다.** #52는 discovery와 실제 dispatch/resume 경계에서
   중복 `nativeSessionId`를 거부하고 static symlink/drift false-rival과 unreadable-rival fail-open을
   막았다. #54는 no-move / usage / incomplete transition / cut-complete-cleanup-incomplete를 서로 다른
   exit로 고정했다.
@@ -41,8 +41,8 @@
    따라간다(재현: kind snapshot은 regular, reader 결과는 `FOREIGN`). Linux certified axis에서
    `O_RDONLY|O_NOFOLLOW`로 open → `fstat` regular 확인 → fd read/close하는 shared reader를 만들고
    `makeStoreRecordReader`와 `readMetaIdentityByGardenId`가 함께 써야 한다. 실제 symlink를 helper에
-   직접 넣어 target bytes를 반환하지 않음과 fd close를 gate로 고정한다. 이 검수 전 #52·#54 close,
-   push, 0.12.9 prepare 금지.
+   직접 넣어 target bytes를 반환하지 않음과 fd close를 gate로 고정한다. 이 검수 전 #52·#54 close와
+   0.12.9 prepare 금지.
 2. **#47 — 다음 제품 축.** 착수 전 `docs/mux-launch-rail.md`를 다시 읽는다. mux lineage에서
    `callerGardenId`는 호출 사건이지 계보가 아니다. 0.13.0은 #48 Cortex 좌표를 예약한다.
 3. **#49 E — floor purity.** 설계 SSOT는 #41의 두 코멘트. 첫 전체 floor 실행은 green 획득이 아니라
@@ -79,8 +79,8 @@ v3-only · 세대 간 주소/resume 연속성 없음 · record body가 identity 
 - **[2026-07-26] #52·#54 closure candidate:** duplicate discovery/dispatch quarantine + kind-carrying
   static-symlink refusal, fresh-cut 5-state exit contract. Opus 구현 뒤 GPT 교차검수가 symlink/drift
   false-rival과 unreadable-rival fail-open을 잡았고, 제품 seam·mutation gate로 함께 수선했다. Full
-  `pnpm check` green. Final-component regular→symlink 교체 경쟁은 위 OPEN 1로 남겼다; push와 이슈
-  close는 다음 세션 판단이다.
+  `pnpm check` green. 두 커밋은 Oracle 검수를 위해 `origin/main`에 push했다. Final-component
+  regular→symlink 교체 경쟁은 위 OPEN 1로 남겼고 이슈 close는 다음 세션 판단이다.
 - **[2026-07-25] 0.12.8 stable:** land `1345688` → prepare/tag `e31c28f` → make → GLG publish.
   CHANGELOG 0.12.8과 [#50 코멘트](https://github.com/junghan0611/entwurf/issues/50#issuecomment-5077959254)가 원장.
 - **[2026-07-25] fresh-cut 뺄셈 (#50):** migration lane 14 files/2,404 lines 삭제; 동사 하나와
