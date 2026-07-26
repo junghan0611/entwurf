@@ -1,10 +1,15 @@
-# NEXT — 0.12.8 stable과 #53 설치 경계가 닫혔다 — 다음 축은 #47
+# NEXT — #52·#54 closure candidate를 로컬 커밋 — 다음 세션에서 마지막 차단·close 판단
 
 > NEXT는 부트 섹터다. 닫힌 역사는 CHANGELOG/git/이슈에, 장기 방향은 ROADMAP/이슈에 둔다.
 
 ## NOW
 
-- **Stem: 0.12.8 stable 출하 완료. 다음 축은 #47.** `latest=0.12.8` ·
+- **Stem: 현재 closure candidate는 로컬 커밋으로만 고정한다. push·#52/#54 close·0.12.9 prepare는
+  다음 세션의 마지막 차단 검수 뒤 결정한다.** #52는 discovery와 실제 dispatch/resume 경계에서
+  중복 `nativeSessionId`를 거부하고 static symlink/drift false-rival과 unreadable-rival fail-open을
+  막았다. #54는 no-move / usage / incomplete transition / cut-complete-cleanup-incomplete를 서로 다른
+  exit로 고정했다.
+- **0.12.8 stable 출하 완료.** `latest=0.12.8` ·
   `repair=0.12.8-repair.1` 보존. 태그 `v0.12.8` = `e31c28f`, make CI
   [30152323861](https://github.com/junghan0611/entwurf/actions/runs/30152323861), candidate sha256
   `7c7e8985823391ec6dfae918e08c4aed1fafd06b7415806b2d591b0cb95891f3`. 게이트가 본 바이트 =
@@ -31,22 +36,25 @@
 
 ## OPEN
 
-1. **▶ #47 — 다음 제품 축.** 착수 전 `docs/mux-launch-rail.md`를 다시 읽는다. mux lineage에서
+1. **▶ #52 마지막 차단 — final-component symlink swap.** `readActiveStoreEntries`/target `lstat`가
+   regular를 확인한 뒤 실제 `readFileSync(path)` 전에 path가 symlink로 교체되면 foreign bytes를
+   따라간다(재현: kind snapshot은 regular, reader 결과는 `FOREIGN`). Linux certified axis에서
+   `O_RDONLY|O_NOFOLLOW`로 open → `fstat` regular 확인 → fd read/close하는 shared reader를 만들고
+   `makeStoreRecordReader`와 `readMetaIdentityByGardenId`가 함께 써야 한다. 실제 symlink를 helper에
+   직접 넣어 target bytes를 반환하지 않음과 fd close를 gate로 고정한다. 이 검수 전 #52·#54 close,
+   push, 0.12.9 prepare 금지.
+2. **#47 — 다음 제품 축.** 착수 전 `docs/mux-launch-rail.md`를 다시 읽는다. mux lineage에서
    `callerGardenId`는 호출 사건이지 계보가 아니다. 0.13.0은 #48 Cortex 좌표를 예약한다.
-2. **#52 — duplicate `nativeSessionId`가 read/discovery에서 라우팅된다.** 쓰기 certification은
-   막지만 read 전면은 아직 아니다. 외부 오염뿐 아니라 concurrent birth race도 가능하다. 읽기
-   전면 차단은 README가 명시한 targeted-read 범위와 맞물리는 정책 결정이다.
-3. **#54 — fresh-cut exit contract.** post-cut cleanup 실패는 세대 archive와 fresh v3 open이 이미
-   끝난 상태인데 pre-cut refusal/half-cut과 같은 rc=1이다. fail-closed와 F23을 유지하면서
-   no-move / half-cut / cut-complete-cleanup-failure를 구분하고 `cut && setup` 런북이 상태를 알게 한다.
-4. **#49 E — floor purity.** 설계 SSOT는 #41의 두 코멘트. 첫 전체 floor 실행은 green 획득이 아니라
+3. **#49 E — floor purity.** 설계 SSOT는 #41의 두 코멘트. 첫 전체 floor 실행은 green 획득이 아니라
    churn 카탈로그 관측이며 RED가 데이터다.
-5. **🔴 번들 MCP readiness race.** 인과가 서기 전에는 고치지 않는다(GLG 결정). SSOT는 ROADMAP의
+4. **🔴 번들 MCP readiness race.** 인과가 서기 전에는 고치지 않는다(GLG 결정). SSOT는 ROADMAP의
    「🔴 OPEN — 번들 MCP readiness race」. 0.12.8 release gate에서는 재현되지 않았다.
-6. **🟡 `check-fresh-cut-gate` G셀 flake.** archive collision seed가 `지금+0/1/2초`뿐이라 node 기동과
+5. **🟡 `check-fresh-cut-gate` G셀 flake.** archive collision seed가 `지금+0/1/2초`뿐이라 node 기동과
    quiesce scan이 늦으면 충돌 자체가 착지하지 않고 G1–G3이 제품 결함으로 오인한다. 제품의 collision
    preflight는 F15/F17이 별도로 지킨다. 수선은 창 확대 + seed 착지 증명 후 제품 판정; 미착지는
    `SETUP MISS`로 자기 원인을 말한다.
+6. **#55 — subtraction fallout 수집함.** #52·#54가 push 후 닫히면 이슈 본문에서 완료된 child로
+   이동하고, readiness race·G셀 flake와 새 비차단 관측만 남긴다.
 7. **후속·별건:** ⓐ #50 readiness upstream 인과 확정 코멘트 정정(GLG 승인 후) ⓑ Meta sender 모델
    표기(optional display field) ⓒ refuted marker의 prune/doctor listing은 선택적 관측성 개선.
 
@@ -55,8 +63,10 @@
 세션 quiesce(agy conversation 포함) → pull/install → `entwurf meta-bridge-fresh-cut` → `setup` →
 재개. 이전 세대는 `meta-sessions.archive-<ts>`로 남고 runtime은 읽지 않는다. store unreadable은
 cut이 아니라 권한/경로 수리다. doctor EXIT CONTRACT는 `0` certified / `1` 결함→cut / `2` usage /
-`3` unreadable→access 수리. fresh-cut 뒤 disposable cleanup만 실패한 경우는 #54가 exit contract를
-닫기 전까지 명시적 출력으로 판별한다.
+`3` unreadable→access 수리. fresh-cut 자체는 `0` complete / `1` NOTHING MOVED / `2` usage /
+`3` cut transition incomplete / `4` cut complete·residue cleanup incomplete다. Exit 4에서 `setup`은
+가능하지만, 새 시민이 태어난 뒤 fresh-cut을 다시 돌리면 새 세대까지 archive한다. 따라서 재실행은
+`setup` 전에만 하고, 이미 진행했다면 출력이 이름 붙인 residue를 수동으로 수선한다.
 
 ## 컷 불변
 
@@ -66,6 +76,11 @@ v3-only · 세대 간 주소/resume 연속성 없음 · record body가 identity 
 
 ## RECENT
 
+- **[2026-07-26] #52·#54 closure candidate:** duplicate discovery/dispatch quarantine + kind-carrying
+  static-symlink refusal, fresh-cut 5-state exit contract. Opus 구현 뒤 GPT 교차검수가 symlink/drift
+  false-rival과 unreadable-rival fail-open을 잡았고, 제품 seam·mutation gate로 함께 수선했다. Full
+  `pnpm check` green. Final-component regular→symlink 교체 경쟁은 위 OPEN 1로 남겼다; push와 이슈
+  close는 다음 세션 판단이다.
 - **[2026-07-25] 0.12.8 stable:** land `1345688` → prepare/tag `e31c28f` → make → GLG publish.
   CHANGELOG 0.12.8과 [#50 코멘트](https://github.com/junghan0611/entwurf/issues/50#issuecomment-5077959254)가 원장.
 - **[2026-07-25] fresh-cut 뺄셈 (#50):** migration lane 14 files/2,404 lines 삭제; 동사 하나와

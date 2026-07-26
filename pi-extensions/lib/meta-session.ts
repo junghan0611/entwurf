@@ -268,6 +268,64 @@ export const FRESH_CUT_COMMAND_INSTALLED = "entwurf meta-bridge-fresh-cut";
  */
 export const FRESH_CUT_PRESCRIPTION = `\`${FRESH_CUT_COMMAND}\` (from an installed package: \`${FRESH_CUT_COMMAND_INSTALLED}\`)`;
 
+/**
+ * THE fresh-cut EXIT CONTRACT (#54) — the store doctor's `0/1/2/3` has a sibling here.
+ *
+ * The cut used to answer `1` for three world-states that are not each other, and the
+ * documented chain `fresh-cut && setup` therefore stopped on all of them alike. What
+ * distinguishes them is not severity, it is **what already moved**:
+ *
+ *   - `COMPLETE` (0) — the generation is archived (or there was none), the fresh v3
+ *     store is open, and every dead/refuted marker and socket is gone. `&& setup` is
+ *     exactly right here.
+ *   - `NO_MOVE` (1) — the cut REFUSED before touching anything: a live or unprovable
+ *     surface, an occupied archive destination, a surface that could not be read or
+ *     planned, or a first rename that failed. The host is what it was; fix the named
+ *     cause and re-run the same command. Nothing downstream may proceed, because the
+ *     store the install refused is still there.
+ *   - `USAGE` (2) — the operator asked for something this verb does not have. Same
+ *     number the `-h` path and the store doctor use, so a wrapper never has to learn a
+ *     second convention.
+ *   - `HALF_CUT` (3) — a failure arrived AFTER at least one archive move, so the cut
+ *     transition is incomplete and the fresh generation is not confirmed open. This
+ *     state wants inspection before anything else runs; a re-run can finish the cut
+ *     under its own stamp.
+ *   - `CLEANUP_INCOMPLETE` (4) — the cut IS done: the generation moved, the fresh
+ *     generation is open, install and citizen birth are no longer blocked by the
+ *     store. What survived is disposable process state (marker/socket residue) that
+ *     could not be unlinked. A runbook may run `setup` here but may not call the host
+ *     clean. Re-running fresh-cut is safe only before a new citizen is born; after
+ *     that, repair the named residue manually rather than archiving the new generation.
+ *
+ * Still fail-closed: only `COMPLETE` is zero. #54 asked for the states to become
+ * distinguishable, not for cleanup failure to become success.
+ *
+ * Frozen numbers. A caller — a shell runbook, CI, another agent — reads these, so
+ * renumbering is a breaking change to every chain that branches on them.
+ */
+export const FRESH_CUT_EXIT = {
+	COMPLETE: 0,
+	NO_MOVE: 1,
+	USAGE: 2,
+	HALF_CUT: 3,
+	CLEANUP_INCOMPLETE: 4,
+} as const;
+
+export type FreshCutExit = (typeof FRESH_CUT_EXIT)[keyof typeof FRESH_CUT_EXIT];
+
+/**
+ * The mid-cut verdict, as a function rather than a branch, so the distinction #54 is
+ * about can be EXECUTED by a gate instead of grepped for.
+ *
+ * A rename that fails is not one event: if nothing had moved yet it is a refusal that
+ * happens to arrive late ({@link FRESH_CUT_EXIT.NO_MOVE} — the host is untouched), and
+ * if something had, it is a genuine {@link FRESH_CUT_EXIT.HALF_CUT}. The old code said
+ * both of those in prose and neither of them in its exit status.
+ */
+export function midCutExit(archivedCount: number): typeof FRESH_CUT_EXIT.NO_MOVE | typeof FRESH_CUT_EXIT.HALF_CUT {
+	return archivedCount === 0 ? FRESH_CUT_EXIT.NO_MOVE : FRESH_CUT_EXIT.HALF_CUT;
+}
+
 /** The uniform "this record is not a live-generation v3 record" error, naming the fresh-cut fix. */
 function nonV3RecordMessage(version: unknown): string {
 	return (

@@ -92,6 +92,15 @@
  * renames reports exactly what already moved (`archived so far:`) and a re-run
  * finishes the cut with its own stamp.
  * Running on a clean/empty host just opens a fresh generation and says so.
+ *
+ * EXIT CONTRACT (#54) — `FRESH_CUT_EXIT`, defined beside the verb's own name in
+ * meta-session.ts because a runbook and a gate must read the same numbers:
+ * `0` complete · `1` nothing moved · `2` usage · `3` cut transition incomplete ·
+ * `4` cut complete but marker/socket cleanup incomplete. The three failure states
+ * were all hidden behind one `1` before, which is why the documented `fresh-cut && setup` chain stopped
+ * identically on a refusal that changed nothing and on a cut that had already
+ * unblocked the install. Only `0` is success — #54 asked for the states to become
+ * DISTINGUISHABLE, not for a failed sweep to become a pass.
  */
 
 import * as fs from "node:fs";
@@ -105,8 +114,10 @@ import {
 	defaultMetaReceiversDir,
 	defaultMetaSendersDir,
 	defaultMetaSessionsDir,
+	FRESH_CUT_EXIT,
 	isPlausibleOwnerPid,
 	type MetaIdentity,
+	midCutExit,
 	parseMetaIdentity,
 	probePidExistence,
 	processStartKey,
@@ -128,6 +139,20 @@ function usage(code: number): never {
 			"store   = ENTWURF_META_SESSIONS_DIR || <PI_CODING_AGENT_DIR|~/.pi/agent>/meta-sessions",
 			"mailbox = ENTWURF_META_MAILBOX_DIR  || <PI_CODING_AGENT_DIR|~/.pi/agent>/meta-mailbox",
 			"sockets = ENTWURF_DIR               || ~/.pi/entwurf-control",
+			"",
+			"EXIT CONTRACT (#54) — what already moved, not how bad it was:",
+			`  ${FRESH_CUT_EXIT.COMPLETE}  cut complete: generation archived (or none existed), fresh v3 store open,`,
+			"     residue cleared. `&& setup` is correct here.",
+			`  ${FRESH_CUT_EXIT.NO_MOVE}  NOTHING MOVED: a live/unprovable surface, an occupied archive destination,`,
+			"     an unreadable surface, or a first rename that failed. The host is unchanged —",
+			"     fix the named cause and re-run. Do NOT run setup: the store it refused is still there.",
+			`  ${FRESH_CUT_EXIT.USAGE}  usage.`,
+			`  ${FRESH_CUT_EXIT.HALF_CUT}  CUT TRANSITION INCOMPLETE: at least one archive move happened,`,
+			"     but the fresh generation is not confirmed open. Inspect, or re-run to finish under a new stamp.",
+			`  ${FRESH_CUT_EXIT.CLEANUP_INCOMPLETE}  CUT COMPLETE, CLEANUP INCOMPLETE: the generation IS archived and the fresh`,
+			"     generation IS open — install and citizen birth are unblocked, so setup may run —",
+			"     but marker/socket residue survived. Prefer fixing it and re-running BEFORE setup; after new citizen birth,",
+			"     remove the named residue manually instead of archiving the new generation with another cut.",
 		].join("\n"),
 	);
 	process.exit(code);
@@ -362,7 +387,8 @@ function inspectMarkers(
  * record this walk skips, and the claim is deliberately narrow: NOT "that native session
  * has exited", only "these bytes are not an address authority in the live runtime, so
  * they front no current-generation garden surface". Every path that ADDRESSES a citizen
- * goes through the live schema — `readMetaIdentityByGardenId`, the v2 `resolveTarget`,
+ * goes through the live schema — `readAddressableMetaIdentity` (v2 `resolveTarget` and
+ * the pi resume), `readMetaIdentityByGardenId` (the relay reads),
  * the sender-marker trust — and each THROWS on a record this parser refuses, so nothing
  * can dispatch to it. (`entwurf_peers` still LISTS it as a diagnostic; a facts surface
  * reporting what it could not read is not an address.) A record we CAN read is the
@@ -471,10 +497,13 @@ function clearFiles(files: string[]): { cleared: number; failures: { file: strin
 	return { cleared, failures };
 }
 
+/** Surfaces this process has already renamed into an archive — see the rename loop. */
+let archivedSoFar = 0;
+
 async function main(): Promise<number> {
 	const args = process.argv.slice(2);
-	if (args.includes("-h") || args.includes("--help")) usage(0);
-	if (args.length > 0) usage(2);
+	if (args.includes("-h") || args.includes("--help")) usage(FRESH_CUT_EXIT.COMPLETE);
+	if (args.length > 0) usage(FRESH_CUT_EXIT.USAGE);
 
 	const storeDir = defaultMetaSessionsDir();
 	const mailboxDir = defaultMetaMailboxDir();
@@ -556,7 +585,7 @@ async function main(): Promise<number> {
 				"Quiesce those sessions (close them / let them exit), inspect anything listed UNCERTAIN, " +
 				"then re-run the same command. Nothing was moved.",
 		);
-		return 1;
+		return FRESH_CUT_EXIT.NO_MOVE;
 	}
 
 	// ── the cut: plan the moves, preflight the whole plan, then rename ───────
@@ -605,9 +634,15 @@ async function main(): Promise<number> {
 				"taken (a cut in the same second, or leftovers from an interrupted one). Nothing was moved: " +
 				"wait a second and re-run, or move those directories aside first.",
 		);
-		return 1;
+		return FRESH_CUT_EXIT.NO_MOVE;
 	}
 	const archived: string[] = [];
+	// Mirrored to module scope for the ONE reader that cannot see this array: the
+	// top-level rejection handler. Everything from here on can still throw — the
+	// `mkdirSync` that opens the fresh generation, most obviously — and a handler that
+	// answered a flat `1` there would tell a runbook "nothing moved" about a host whose
+	// generation is already in an archive. A single-shot CLI may hold one fact in module
+	// scope when the alternative is an exit status that lies (#54).
 	for (const { src, dest } of plan) {
 		try {
 			fs.renameSync(src, dest);
@@ -632,9 +667,13 @@ async function main(): Promise<number> {
 						"own stamp — or inspect by hand.",
 				);
 			}
-			return 1;
+			// The prose above already distinguished these two; the STATUS did not, and a
+			// runbook reads the status (#54). `midCutExit` is the SSOT so the words and the
+			// number cannot drift apart.
+			return midCutExit(archived.length);
 		}
 		archived.push(dest);
+		archivedSoFar = archived.length;
 	}
 	// Both sweeps go through ONE remover so they cannot drift to different meanings of
 	// "could not remove". Counted APART, because a dead marker is an owner we PROVED
@@ -677,11 +716,13 @@ async function main(): Promise<number> {
 				"generation was archived and the fresh generation is open — this is not a half-cut, and install/citizen " +
 				"birth are no longer blocked by the store. What survived is disposable process state sitting in the new " +
 				"generation's surfaces, and it will refuse the NEXT cut. Fix the cause (permissions, a read-only mount, " +
-				"an immutable attribute) and re-run the same command, or remove those files by hand.",
+				`an immutable attribute) and re-run the same command BEFORE \`setup\`, or remove those files by hand. EXIT ` +
+				`${FRESH_CUT_EXIT.CLEANUP_INCOMPLETE}: the cut is DONE, so \`setup\` may proceed — but once a new citizen is ` +
+				"born, another fresh-cut would archive that new generation too; repair the named residue manually instead.",
 		);
-		return 1;
+		return FRESH_CUT_EXIT.CLEANUP_INCOMPLETE;
 	}
-	return 0;
+	return FRESH_CUT_EXIT.COMPLETE;
 }
 
 main().then(
@@ -689,6 +730,10 @@ main().then(
 	(err) => {
 		console.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
 		console.error("FAIL: fresh-cut did not complete — the message above names the cause; re-run after fixing it.");
-		process.exit(1);
+		// Not a flat 1: the ONE thing a caller must know from a crash is whether the host
+		// still holds its generation. Every refusal that reaches here from before the first
+		// rename really is a no-op (its own message says so); anything after it is a
+		// an incomplete cut transition and must not be mistaken for a no-op (#54).
+		process.exit(midCutExit(archivedSoFar));
 	},
 );

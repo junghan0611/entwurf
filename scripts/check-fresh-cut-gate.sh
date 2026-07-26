@@ -9,7 +9,9 @@
 #      naming the explicit fresh-cut verb in both invocation forms;
 #   3. fresh-cut REQUIRES quiescence (live OR unprovable both refuse) and archives
 #      the whole generation through one preflighted plan, opening an empty one;
-#   4. the archive is forensic only — no runtime reads it, no restore verb.
+#   4. the archive is forensic only — no runtime reads it, no restore verb;
+#   5. exit status reports what already moved: complete / no-move / usage /
+#      incomplete cut transition / complete-with-cleanup-residue.
 #
 # A–D drive the activation path. E pins the doctor and the writers to ONE
 # certification verdict on the three defects that PARSE (drift / duplicate /
@@ -20,6 +22,7 @@
 # from the record through the adapter probe the dispatch itself uses. I holds the
 # other half of the prescription: a store that cannot be READ is not a store with
 # defects, and the refusal must not send the operator at a cut that cannot help.
+# J executes the #54 exit contract, including the cut-complete cleanup-failure state.
 #
 # There is no frozen-fixture apparatus here: fresh-cut never rewrites a byte
 # (the archive is a rename), so the only byte claim is `archived == seeded`,
@@ -984,10 +987,10 @@ done
 set +e
 out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rcg=$?
 set -e
-if [ "$rcg" != 0 ]; then
-  ok "G1 an occupied archive destination REFUSES the cut"
+if [ "$rcg" = 1 ]; then
+  ok "G1 an occupied archive destination REFUSES the cut with the NO-MOVE status (exit 1)"
 else
-  bad "G1 the cut proceeded into an occupied destination" "$out"
+  bad "G1 the cut proceeded into an occupied destination, or refused with the wrong status (rc=$rcg, want 1)" "$out"
 fi
 if [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ] && [ "$store_before" = "$(store_bytes)" ]; then
   ok "G2 the collision refusal moved NOTHING — the store never left its place (no half-cut generation)"
@@ -1345,6 +1348,145 @@ case "$out" in
   *) bad "I9c the refusal does not name the artifact cause" "$out" ;;
 esac
 rm -rf "$SANDBOX/nm"
+
+# ── J. the EXIT CONTRACT (#54): the status says WHAT ALREADY MOVED ───────────
+# Three world-states used to share one `1`, so the documented `fresh-cut && setup`
+# chain stopped identically on a refusal that changed nothing and on a cut that had
+# already unblocked the install. These cells pin each reachable code to the state it
+# names — the point is not that failures are nonzero, it is that a caller can BRANCH.
+echo "[check-fresh-cut-gate] J. exit contract"
+
+# J1/J2 — the two states that need no host at all.
+set +e
+help_out="$(node --experimental-strip-types "${FRESH_CUT[@]}" --help 2>&1)"; rc=$?
+set -e
+if [ "$rc" = 0 ]; then ok "J1 --help exits 0"; else bad "J1 --help exited $rc" "$help_out"; fi
+case "$help_out" in
+  *"EXIT CONTRACT"*) ok "J1b --help PRINTS the contract (an operator can read it where they hit it)" ;;
+  *) bad "J1b --help never printed the exit contract" "$help_out" ;;
+esac
+set +e
+bad_out="$(node --experimental-strip-types "${FRESH_CUT[@]}" --wat 2>&1)"; rc=$?
+set -e
+if [ "$rc" = 2 ]; then ok "J2 an unknown argument is USAGE (exit 2), never a store verdict"; else bad "J2 unknown arg exited $rc, want 2" "$bad_out"; fi
+
+# J3 — the success state, distinct from every failure below.
+reset_world prevgen
+set +e
+out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+set -e
+if [ "$rc" = 0 ]; then ok "J3 a complete cut exits 0"; else bad "J3 a complete cut exited $rc" "$out"; fi
+
+# J4 — quiesce refusal is NO-MOVE (1), the same code as the collision refusal in G1,
+# because they are the same world-state: the host is exactly what it was.
+reset_world prevgen
+start_key="$(node --experimental-strip-types -e '
+  import("'"$REPO"'/pi-extensions/lib/meta-session.ts").then((m) => process.stdout.write(m.processStartKey(Number(process.argv[1]))));
+' "$$")"
+if [ -z "$start_key" ]; then
+  bad "J4 could not compute a start key for the gate's own pid"
+else
+  mkdir -p "$PI_CODING_AGENT_DIR/meta-senders/claude-code"
+  cat > "$PI_CODING_AGENT_DIR/meta-senders/claude-code/$$.json" <<JSON
+{
+  "backend": "claude-code",
+  "gardenId": "20260305T000000-dddd05",
+  "nativeSessionId": "prevgen-native-1",
+  "cwd": "/tmp/prevgen",
+  "ownerPid": $$,
+  "ownerStartKey": "$start_key",
+  "updatedAt": "2026-03-05T00:00:00.000Z"
+}
+JSON
+  set +e
+  out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+  set -e
+  if [ "$rc" = 1 ]; then ok "J4 a quiesce refusal is NO-MOVE (exit 1) — same code as any other untouched host"; else bad "J4 quiesce refusal exited $rc, want 1" "$out"; fi
+  rm -f "$PI_CODING_AGENT_DIR/meta-senders/claude-code/$$.json"
+fi
+
+# J5 — THE state #54 was opened for: the cut IS done and the cleanup is not. Staged by
+# taking write permission off the socket surface AFTER a dead socket is parked in it:
+# readdir/lstat/probe all still work (r-x), the unlink does not. Root bypasses DAC, so
+# it cannot prove anything here and says so instead of passing vacuously.
+if [ "$(id -u)" = 0 ]; then
+  echo "  skip  J5 post-cut cleanup failure needs a non-root uid (DAC is what stages it)"
+else
+  reset_world prevgen
+  mkdir -p "$ENTWURF_DIR"
+  node -e '
+    const net = require("node:net");
+    net.createServer().listen(process.argv[1], () => process.exit(0));
+  ' "$ENTWURF_DIR/20260305T000000-dddd05.sock"
+  if [ ! -S "$ENTWURF_DIR/20260305T000000-dddd05.sock" ]; then
+    bad "J5 could not stage a dead socket — the cleanup-failure cells cannot run"
+  else
+    chmod 0500 "$ENTWURF_DIR"
+    set +e
+    out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rc=$?
+    set -e
+    chmod 0700 "$ENTWURF_DIR"
+    if [ "$rc" = 4 ]; then
+      ok "J5 a cut whose post-cut cleanup failed exits 4 — NOT the 1 that means nothing moved"
+    else
+      bad "J5 post-cut cleanup failure exited $rc, want 4" "$out"
+    fi
+    if [ -n "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ]; then
+      ok "J5b …and the generation really WAS archived (the 4 is a claim about a cut that happened)"
+    else
+      bad "J5b exit 4 was reported although nothing was archived" "$out"
+    fi
+    if [ -d "$ENTWURF_META_SESSIONS_DIR" ] && [ -z "$(find "$ENTWURF_META_SESSIONS_DIR" -name '*.meta.json' 2>/dev/null)" ]; then
+      ok "J5c …and the fresh generation is open and empty"
+    else
+      bad "J5c the fresh generation was not opened" "$out"
+    fi
+    case "$out" in
+      *"FAIL post-cut cleanup"*) ok "J5d the report still names every file it could not remove" ;;
+      *) bad "J5d the cleanup failure was silent" "$out" ;;
+    esac
+    # The whole point of distinguishing this state: the operator may go on.
+    set +e
+    out2="$("$REPO/run.sh" install "$PROJ" 2>&1)"; rc2=$?
+    set -e
+    if [ "$rc2" = 0 ]; then
+      ok "J5e install PASSES after an exit-4 cut — the store no longer blocks it, which is what 4 means"
+    else
+      bad "J5e install still refused after a completed cut (then 4 is describing the wrong state)" "$out2"
+    fi
+    rm -f "$ENTWURF_DIR/20260305T000000-dddd05.sock"
+  fi
+fi
+
+# J6 — the INCOMPLETE-TRANSITION verdict, EXECUTED. A real post-move failure needs a
+# rename/open step to fail after another move succeeded, and every unprivileged way to stage that is closed by the plan
+# preflight (collision, unreadable surface, non-writable parent) — the remaining causes
+# (immutable attr, read-only mount, LSM) all need privileges this gate must not take. So
+# the branch calls one exported decision function and the gate drives THAT, rather than
+# asserting the state by grep and calling it proven.
+half="$(node --experimental-strip-types -e '
+  import("'"$REPO"'/pi-extensions/lib/meta-session.ts").then((m) => {
+    process.stdout.write([m.midCutExit(0), m.midCutExit(1), m.midCutExit(2), m.FRESH_CUT_EXIT.HALF_CUT].join(","));
+  });
+')"
+if [ "$half" = "1,3,3,3" ]; then
+  ok "J6 midCutExit: a first-rename failure is NO-MOVE (1), any post-move failure is CUT-TRANSITION-INCOMPLETE (3)"
+else
+  bad "J6 midCutExit verdicts drifted (got '$half', want '1,3,3,3')"
+fi
+# …and the branch really routes through it, so the executed verdict is the shipped one.
+if grep -q 'return midCutExit(archived.length);' "$REPO/scripts/meta-bridge-fresh-cut.ts"; then
+  ok "J6b the mid-cut branch returns midCutExit(...), not a hand-written literal"
+else
+  bad "J6b the mid-cut branch no longer routes through midCutExit — J6 would be vacuous"
+fi
+# The crash path is the one place a wrong answer is invisible: it reports a status for a
+# state nobody inspected, so it must ask the same function rather than assume a no-op.
+if grep -q 'process.exit(midCutExit(archivedSoFar));' "$REPO/scripts/meta-bridge-fresh-cut.ts"; then
+  ok "J6c the top-level crash handler answers with midCutExit too (never a flat 'nothing moved')"
+else
+  bad "J6c the crash handler exits a fixed code — a post-rename crash would claim nothing moved"
+fi
 
 echo
 echo "[check-fresh-cut-gate] passed=$PASSED failed=$FAILED"

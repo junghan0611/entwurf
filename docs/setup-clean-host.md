@@ -235,6 +235,17 @@ host has nothing to cut and can ignore this paragraph. The refusal is a
 preflight, not a lock: for checkout-backed installs, quiesce sessions before
 pull, then fresh-cut, setup, and reopen.
 
+Read the cut's exit status rather than only chaining it (#54; `--help` prints the
+contract): `0` complete → run `setup`; `1` NOTHING MOVED — a live/unprovable
+surface, an occupied archive destination, an unreadable surface — fix the named
+cause and re-run, and do not run `setup`, because the store it refused is still
+there; `2` usage; `3` CUT TRANSITION INCOMPLETE — at least one archive move
+happened but the fresh generation is not confirmed open — inspect, or re-run to
+finish under a new stamp; `4` the cut is COMPLETE but marker/socket residue could
+not be unlinked — `setup` may run. Prefer fixing the named residue and re-running
+before `setup`; if new citizens have already been born, remove it manually rather
+than fresh-cutting their new generation. Only `0` is success.
+
 Upgrade invariant: every global npm/pnpm package upgrade must be followed by
 `entwurf install-meta-bridge` from that same installed binary and then
 `entwurf doctor-meta-bridge`. Installed statusline/MCP entries use stable bin

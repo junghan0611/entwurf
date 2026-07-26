@@ -328,6 +328,23 @@ Only that accepted file may be published under the explicitly authorized lane:
 > entwurf meta-bridge-fresh-cut   # quiesce-checked: archive the old generation, open an empty one
 > ```
 >
+> **Read its exit status, don't just chain it.** The cut answers with a contract
+> ([#54](https://github.com/junghan0611/entwurf/issues/54), `--help` prints it), because
+> "it failed" is not one world-state:
+>
+> | exit | what already moved | what to do |
+> |---|---|---|
+> | `0` | the cut is complete | run `setup` |
+> | `1` | **nothing** — a live/unprovable surface, an occupied archive destination, an unreadable surface | fix the named cause, re-run. **Do not** run `setup`: the store it refused is still there |
+> | `2` | nothing — usage error | fix the command |
+> | `3` | the cut transition is **incomplete** after at least one archive move; the fresh generation is not confirmed open | inspect, or re-run to finish under a new stamp |
+> | `4` | the cut is **complete**; marker/socket residue could not be unlinked | `setup` may run. Prefer repairing the named residue before `setup`; if new citizens have already been born, remove it manually — another fresh-cut would archive their generation too |
+>
+> Only `0` is success — a failed sweep never becomes a pass. `fresh-cut && setup` is
+> still the right chain for the common path; the codes are there so a runbook, CI or an
+> agent can tell a refusal that changed nothing from a cut that already unblocked the
+> install. An exit-4 re-run is safe only before `setup` or any new citizen birth.
+>
 > The refusal is a **preflight, not a lock**: it certifies the store as it stands
 > at that moment. On a host whose pi/Claude settings point straight at a checkout,
 > a `git pull` can put the new code in front of live sessions before you run
