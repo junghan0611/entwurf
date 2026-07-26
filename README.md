@@ -303,6 +303,35 @@ Only that accepted file may be published under the explicitly authorized lane:
 > read the path, which is how both `entwurf_peers` bindings came to follow a symlinked
 > record while the doctor refused the very same entry.
 >
+> A kind carried alongside a **name** is still only half of it, because a name can stop
+> meaning what it meant. `lstat`-then-`readFileSync(path)` classifies one entry and reads
+> another: replace the final path component with a symlink in between, and the read
+> follows it into foreign bytes while every test on a settled store stays green. So the
+> bytes of a record come from exactly one place — `readStoreRecordFile`, shared by the
+> store-wide reader and by `readMetaIdentityByGardenId` — which opens with `O_NOFOLLOW`
+> (a symlink fails the **open**, before a byte is read), decides the kind by `fstat` on
+> **that file description** rather than on a name, and closes it in a `finally`. It also
+> opens `O_NONBLOCK`, because classify-then-open never had to care that `open(fifo,
+> O_RDONLY)` blocks until a writer appears, and deciding on the fd does. The reader does
+> not flatten errno: callers still separate a record that raced away (`ENOENT`, skipped)
+> from one that cannot be read (`EACCES`, loud) from one that was swapped (`ELOOP`,
+> refused) — and the rival scan's raced-away skip depends on exactly that.
+>
+> That reader does not replace the `lstat` classification in front of the targeted read;
+> the two hold **different** things, and collapsing them into "one enforcement point"
+> was itself a regression (caught in review before shipping). The classification decides
+> POLICY on a settled store **without opening anything**, which is what lets a socket, a
+> device or a mode-000 directory earn the certification's own sentence — an `open` would
+> answer `ENXIO` or `EACCES` there, errnos that say nothing about regularity, and the
+> targeted read would start calling the host unreadable where the doctor calls the entry
+> non-regular. Two contracts for one store is precisely the defect rule 1 exists to
+> prevent. The fd layer decides the RACE: after a regular snapshot, its errno verdicts
+> (`ELOOP`, `ENXIO`, a non-regular `fstat`) collapse back onto the settled sentences
+> through one pure classifier, so a race never teaches the operator a second vocabulary
+> for one state of the world. Because the classification answers first, those branches
+> are unreachable from any settled store — which is why the classifier is pure and pinned
+> with synthetic errnos rather than by a store on disk.
+>
 > This is not only a defence against external corruption. `upsertMetaSession` certifies
 > and then writes, which is **not a transaction**, so two concurrent births — two
 > `SessionStart` hooks, an `entwurf_register_native` racing an agy imprint — can both

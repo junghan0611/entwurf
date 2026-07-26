@@ -28,6 +28,7 @@
  */
 
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -35,13 +36,16 @@ import {
 	type ActiveStoreEntry,
 	certifyActiveStore,
 	certifyActiveStoreDir,
+	classifyRecordReadFailure,
 	FRESH_CUT_COMMAND,
 	listAllMetaIdentities,
 	type MetaIdentity,
 	MetaRecordError,
 	makeStoreRecordReader,
 	metaRecordExistsByGardenId,
+	NOT_REGULAR_ENTRY_CODE,
 	nativeSessionIdRivals,
+	type RecordReadFailure,
 	readActiveStoreEntries,
 	readAddressableMetaIdentity,
 	readMetaIdentityByGardenId,
@@ -430,6 +434,253 @@ withStore(
 	} finally {
 		fs.rmSync(tmp, { recursive: true, force: true });
 	}
+}
+
+// --- #52: rule 1 survives the RACE, not just the settled store ---------------
+// The cells above hand the reader an entry that was already a symlink when the scan
+// classified it. The defect this pins is the other order: the entry is a REGULAR FILE at
+// classification time and a symlink by the time the bytes are read. `lstat`-then-
+// `readFileSync(path)` classifies one entry and reads another, so it followed the swap
+// into foreign bytes while every "is it a symlink" test on a settled store stayed green.
+// A plain already-a-symlink read cannot fail that way, so it cannot prove this.
+{
+	const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-toctou-"));
+	try {
+		const dir = path.join(tmp, "store");
+		const outside = path.join(tmp, "outside");
+		fs.mkdirSync(dir);
+		fs.mkdirSync(outside);
+		const FOREIGN = serializeMetaIdentity(identity(GID_B, "native-foreign"));
+		const foreign = path.join(outside, "foreign.json");
+		fs.writeFileSync(foreign, FOREIGN);
+
+		const filename = `${GID_B}.meta.json`;
+		const target = path.join(dir, filename);
+		record(dir, GID_B, "native-own");
+
+		// The snapshot the production scan takes — and it says REGULAR, which is the whole
+		// point: every kind-based guard downstream is now working from a true-but-stale fact.
+		const snapshot = readActiveStoreEntries(dir).find((e) => e.filename === filename);
+		ok("toctou: the entry is classified as a regular file BEFORE the swap", snapshot?.regularFile === true);
+
+		// …now the swap, in the window the old code left open.
+		fs.unlinkSync(target);
+		fs.symlinkSync(foreign, target);
+
+		let followed: string | null = null;
+		let raced: unknown;
+		try {
+			followed = makeStoreRecordReader(dir)(filename);
+		} catch (err) {
+			raced = err;
+		}
+		ok("toctou: the shared reader refuses the swapped entry instead of returning bytes", followed === null);
+		ok(
+			"toctou: not one byte of the FOREIGN file is read (the refusal is the open, not a later parse)",
+			followed !== FOREIGN,
+		);
+		ok(
+			"toctou: the refusal keeps its errno (ELOOP), so callers can still tell it from ENOENT",
+			(raced as { code?: unknown } | undefined)?.code === "ELOOP",
+		);
+		// LAYER 1 — the settled store, classified WITHOUT opening anything. These are not
+		// the race mapping (that is pinned purely, further down): the `lstat` policy answers
+		// first here, which is exactly what must keep happening. Deleting this layer in
+		// favour of the fd looked like removing a duplicate and regressed every shape whose
+		// `open` errno is not about regularity — a socket (ENXIO) and a mode-000 directory
+		// (EACCES) both became "inspection failure" instead of the certification's own
+		// sentence (2026-07-26 cross-review round 3, reproduced).
+		throwsNaming(
+			"settled: a symlinked record earns the not-a-regular-file refusal without being opened",
+			() => readMetaIdentityByGardenId(GID_B, dir),
+			"not a regular file",
+		);
+		throwsNaming(
+			"settled: …and that refusal names the fresh-cut verb",
+			() => readMetaIdentityByGardenId(GID_B, dir),
+			FRESH_CUT_COMMAND,
+		);
+
+		// A fifo is why the open carries O_NONBLOCK: `open(fifo, O_RDONLY)` BLOCKS until a
+		// writer appears, so deciding the kind ON THE FD would hang every scan on a host
+		// where nobody is writing — a hazard classify-then-read did not have. The cell must
+		// therefore be able to FAIL on a regression, and a blocking call in this process can
+		// only hang: the gate would be killed by whatever timeout wraps it, which is not an
+		// assertion (verified: dropping the flag made this gate hang until SIGTERM, rc=124).
+		// So the read runs in a CHILD with a bounded timeout, and the timeout IS the failure.
+		{
+			const fifoDir = path.join(tmp, "fifo-store");
+			fs.mkdirSync(fifoDir);
+			const fifo = path.join(fifoDir, `${GID_A}.meta.json`);
+			// No silent skip: Linux is the only certified axis, so a host without `mkfifo`
+			// cannot quietly downgrade this proof — it fails here instead.
+			execFileSync("mkfifo", [fifo], { stdio: "ignore" });
+			const childSrc = path.join(tmp, "fifo-child.mjs");
+			const lib = new URL("../pi-extensions/lib/meta-session.ts", import.meta.url).pathname;
+			fs.writeFileSync(
+				childSrc,
+				`import { makeStoreRecordReader, NOT_REGULAR_ENTRY_CODE } from ${JSON.stringify(lib)};\n` +
+					`try {\n` +
+					`  makeStoreRecordReader(${JSON.stringify(fifoDir)})(${JSON.stringify(`${GID_A}.meta.json`)});\n` +
+					`  console.log("RETURNED-BYTES");\n` +
+					`} catch (err) {\n` +
+					`  console.log(err?.code === NOT_REGULAR_ENTRY_CODE ? "REFUSED-NOT-REGULAR" : "OTHER:" + err?.code);\n` +
+					`}\n`,
+			);
+			let verdict: string;
+			try {
+				verdict = execFileSync(process.execPath, [childSrc], { timeout: 10_000, encoding: "utf8" }).trim();
+			} catch (err) {
+				const e = err as { code?: unknown; killed?: boolean };
+				const timedOut = e.code === "ETIMEDOUT" || e.killed === true;
+				verdict = timedOut ? "BLOCKED-ON-OPEN (the open never returned — O_NONBLOCK is gone)" : `CHILD-FAILED: ${err}`;
+			}
+			ok(
+				`a fifo is refused as not-a-regular-file and the open RETURNS (O_NONBLOCK) — child said ${verdict}`,
+				verdict === "REFUSED-NOT-REGULAR",
+			);
+		}
+
+		// Every refusal above runs through a `finally closeSync`. A reader that leaks the
+		// description on the refusing paths would exhaust the process's fds on a store full
+		// of them, which is a slow death rather than a loud one — so it gets counted.
+		if (fs.existsSync("/proc/self/fd")) {
+			const openFds = (): number => fs.readdirSync("/proc/self/fd").length;
+			const goodDir = path.join(tmp, "good-store");
+			fs.mkdirSync(goodDir);
+			record(goodDir, GID_A, "native-a");
+			const read = makeStoreRecordReader(goodDir);
+			read(`${GID_A}.meta.json`); // warm any lazy fd the runtime opens on first read
+			const before = openFds();
+			for (let i = 0; i < 200; i++) {
+				read(`${GID_A}.meta.json`);
+				try {
+					makeStoreRecordReader(dir)(filename); // the ELOOP path
+				} catch {}
+			}
+			ok("the reader closes its fd on BOTH the returning and the refusing path", openFds() === before);
+		}
+
+		// LAYER 2 — the race mapping, pinned PURELY. With layer 1 in front of it, no settled
+		// store can reach these branches, so a runtime cell cannot hold them: the previous
+		// round's "targeted mapping" cells were vacuous for exactly that reason and passed
+		// with the mapping deleted. A pure errno classifier is the seam that IS decidable,
+		// and a synthetic errno takes the same branch a real one does.
+		{
+			const cases: [unknown, RecordReadFailure, string][] = [
+				["ENOENT", "absent", "a record that vanished mid-read is absence, and absence alone"],
+				["ELOOP", "irregular", "O_NOFOLLOW refusing a swapped-in symlink is the settled symlink verdict"],
+				["ENXIO", "irregular", "a socket swapped in mid-read says what lstat would have said, not 'unreadable'"],
+				[NOT_REGULAR_ENTRY_CODE, "irregular", "the fstat verdict (directory/fifo on the fd) is irregular too"],
+				["EACCES", "unreadable", "an unreadable entry stays LOUD — never laundered into a clean negative"],
+				["ENOTDIR", "unreadable", "a broken store shape is an inspection failure"],
+				[undefined, "unreadable", "an errno-less failure is unreadable, never absence"],
+			];
+			for (const [code, expected, why] of cases) {
+				ok(`race mapping: ${String(code)} → ${expected} — ${why}`, classifyRecordReadFailure(code) === expected);
+			}
+		}
+
+		// A UNIX SOCKET wearing a record's name — the shape that exposed the regression. It
+		// is pinned in BOTH layers: classified non-regular without being opened here, and
+		// (if it were swapped in mid-read) mapped from ENXIO to the same sentence above. What
+		// this cell holds is the CONTRACT — certification and the targeted read must say the
+		// same thing about one entry — not layer 1's existence: with ENXIO mapped, an
+		// fd-only build still answers correctly here. The cell that holds layer 1 is the
+		// mode-000 directory below, whose errno (EACCES) is genuinely about permission and
+		// so cannot stand in for a regularity verdict. Both are needed; neither replaces the
+		// other. (Verified by mutation: removing layer 1 leaves this cell green and reds
+		// that one.)
+		{
+			const sockStore = path.join(tmp, "socket-store");
+			fs.mkdirSync(sockStore);
+			const sockPath = path.join(sockStore, `${GID_A}.meta.json`);
+			const binder = path.join(tmp, "bind-socket.mjs");
+			fs.writeFileSync(
+				binder,
+				'import net from "node:net";\n' +
+					"const srv = net.createServer();\n" +
+					"srv.listen(process.argv[2], () => { srv.unref(); process.exit(0); });\n",
+			);
+			execFileSync(process.execPath, [binder, sockPath], { timeout: 10_000, stdio: "ignore" });
+			ok("socket-shaped record: the entry really is a socket on disk", fs.lstatSync(sockPath).isSocket());
+			throwsNaming(
+				"socket-shaped record: the TARGETED read calls it not-a-regular-file (not 'inspection failure')",
+				() => readMetaIdentityByGardenId(GID_A, sockStore),
+				"not a regular file",
+			);
+			throwsNaming(
+				"socket-shaped record: …naming the fresh-cut verb, like every other rule-1 defect",
+				() => readMetaIdentityByGardenId(GID_A, sockStore),
+				FRESH_CUT_COMMAND,
+			);
+			ok(
+				"socket-shaped record: certification says the same thing (one contract, both directions)",
+				certifyActiveStoreDir(sockStore).defects.some(
+					(d) => d.filename === `${GID_A}.meta.json` && d.message.includes("not a regular file"),
+				),
+			);
+			ok(
+				"socket-shaped record: the listing reports it as a diagnostic, never as a citizen",
+				(() => {
+					const listed = listAllMetaIdentities(readActiveStoreEntries(sockStore), makeStoreRecordReader(sockStore));
+					return listed.identities.length === 0 && (listed.errors[0]?.message ?? "").includes("not a regular file");
+				})(),
+			);
+		}
+
+		// The contract BOUNDARY, stated rather than assumed: a mode-000 directory is refused
+		// as non-regular by the classification, and its EACCES-on-open is never consulted.
+		// (If layer 1 were removed again, this cell reads "inspection failure" and goes red.)
+		if (typeof process.getuid === "function" && process.getuid() !== 0) {
+			const specialStore = path.join(tmp, "mode000-dir-store");
+			const entry = path.join(specialStore, `${GID_A}.meta.json`);
+			fs.mkdirSync(entry, { recursive: true });
+			fs.chmodSync(entry, 0o000);
+			try {
+				throwsNaming(
+					"a mode-000 DIRECTORY record is non-regular by classification — its open EACCES is never reached",
+					() => readMetaIdentityByGardenId(GID_A, specialStore),
+					"not a regular file",
+				);
+			} finally {
+				fs.chmodSync(entry, 0o700);
+			}
+		}
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true });
+	}
+}
+
+// --- #52: both production readers converge on the one fd reader --------------
+// The runtime cells above can only prove the seam they are pointed at. This is the
+// fence that keeps a third `readFileSync(<path>)` from growing back at either boundary —
+// the same structural discipline `readActiveStoreEntries` holds for the entry kind, and
+// the one `pi_settings_io` learned when a second settings writer was missed.
+{
+	const src = fs.readFileSync(new URL("../pi-extensions/lib/meta-session.ts", import.meta.url), "utf8");
+	const bodyOf = (decl: string): string => {
+		const start = src.indexOf(decl);
+		assert.ok(start >= 0, `source fence: ${decl} not found`);
+		const next = src.indexOf("\nexport ", start + decl.length);
+		return src.slice(start, next < 0 ? undefined : next);
+	};
+	for (const decl of ["export function makeStoreRecordReader", "export function readMetaIdentityByGardenId"]) {
+		const body = bodyOf(decl);
+		ok(
+			`source fence: ${decl.replace("export function ", "")} reads through readStoreRecordFile`,
+			/readStoreRecordFile\(/.test(body),
+		);
+		ok(
+			`source fence: ${decl.replace("export function ", "")} keeps no path-based readFileSync`,
+			!/fs\.readFileSync\(/.test(body),
+		);
+	}
+	const reader = bodyOf("export function readStoreRecordFile");
+	ok("source fence: the fd reader opens with O_NOFOLLOW (a swapped symlink fails the open)", /O_NOFOLLOW/.test(reader));
+	ok("source fence: …and with O_NONBLOCK, so a fifo cannot block the open", /O_NONBLOCK/.test(reader));
+	ok("source fence: …decides the kind on the fd via fstat, not on the name", /fstatSync\(fd\)/.test(reader));
+	ok("source fence: …and closes the description in a finally", /finally \{\n\t\tfs\.closeSync\(fd\);/.test(reader));
 }
 
 // --- rule 1: a `.meta.json` that is not a regular file ------------------------

@@ -848,13 +848,77 @@ export function readActiveStoreEntries(dir: string): ActiveStoreEntry[] {
 		.map((entry) => ({ filename: entry.name, regularFile: entry.isFile() }));
 }
 
-/** The reader every store-WIDE scan pairs with {@link readActiveStoreEntries}. Callers
- * must only hand it entries they have already classified as regular files — the kind
- * check is the caller's, because only the caller knows whether a non-regular entry is a
- * defect (certification), a diagnostic (listing) or a non-candidate (the rival scan). */
+/** The errno {@link readStoreRecordFile} raises for an entry whose OPEN succeeded but
+ * whose file description is not a regular file — a directory, a fifo, a device. There is
+ * no operating-system errno for "you opened the wrong KIND of thing", so this is a
+ * synthesized one; every real errno is passed through untouched. */
+export const NOT_REGULAR_ENTRY_CODE = "ENTWURF_ENOTREG";
+
+const O_NOFOLLOW_FLAG = typeof fs.constants.O_NOFOLLOW === "number" ? fs.constants.O_NOFOLLOW : 0;
+const O_NONBLOCK_FLAG = typeof fs.constants.O_NONBLOCK === "number" ? fs.constants.O_NONBLOCK : 0;
+
+/**
+ * Read a record's bytes with the entry KIND decided on the very file description the
+ * read will use.
+ *
+ * `lstat`-then-`readFileSync(path)` classifies one entry and reads another. Between
+ * those two syscalls the final path component can be replaced by a symlink, and the read
+ * then follows it into bytes the store does not own — rule 1 laundered by a race rather
+ * than by a missing check (2026-07-26 cross-review). A path looked up twice cannot hold
+ * the rule; one open file description can:
+ *
+ *   `O_NOFOLLOW` — a symlink at the FINAL component fails the OPEN with `ELOOP`, so
+ *                  foreign bytes are refused before one of them is read. Intermediate
+ *                  components resolve as they always have: the shape of the store
+ *                  DIRECTORY is a separate question, and this seam does not widen into
+ *                  it.
+ *   `O_NONBLOCK` — opening a fifo `O_RDONLY` BLOCKS until some writer appears, so a
+ *                  named pipe dropped in the store would hang every scan on a host where
+ *                  nobody is writing. Classify-then-open never had that window; this flag
+ *                  is what buys it back. It is a no-op for regular files, and it does not
+ *                  decide anything — the fstat below is what refuses the fifo.
+ *   `fstat(fd)`  — the kind of THIS description, not of a name. A directory opens fine on
+ *                  Linux, so without it the refusal would arrive later as a stranger
+ *                  errno from the read.
+ *
+ * Errno is deliberately NOT flattened here. The callers separate raced-away (`ENOENT`)
+ * from unreadable (`EACCES`) from refused (`ELOOP`), and a wrapper that turned all three
+ * into one `MetaRecordError` would silently kill the rival scan's raced-away skip — the
+ * loudest possible regression, since every concurrent birth would then refuse dispatch.
+ * Shaping a message is the job of the caller that knows what the answer is FOR.
+ */
+export function readStoreRecordFile(file: string): string {
+	if (O_NOFOLLOW_FLAG === 0) {
+		throw new MetaRecordError(
+			`cannot read meta-record ${path.basename(file)} safely: this platform exposes no O_NOFOLLOW, so a record ` +
+				"read cannot refuse a symlink swapped in at the final component. entwurf certifies Linux only.",
+		);
+	}
+	const fd = fs.openSync(file, fs.constants.O_RDONLY | O_NOFOLLOW_FLAG | O_NONBLOCK_FLAG);
+	try {
+		if (!fs.fstatSync(fd).isFile()) {
+			const err = new Error(
+				`meta-record ${path.basename(file)} is not a regular file (directory/fifo/device) — a record's bytes ` +
+					"must live in the store itself, so this entry is never read.",
+			) as Error & { code: string };
+			err.code = NOT_REGULAR_ENTRY_CODE;
+			throw err;
+		}
+		return fs.readFileSync(fd, "utf8");
+	} finally {
+		fs.closeSync(fd);
+	}
+}
+
+/** The reader every store-WIDE scan pairs with {@link readActiveStoreEntries}. The
+ * caller's entry kind decides the POLICY — whether a non-regular entry is a defect
+ * (certification), a diagnostic (listing) or a non-candidate (the rival scan) — because
+ * only the caller knows that. What the caller cannot know is whether the entry is still
+ * that kind at the instant of the read, so {@link readStoreRecordFile} re-decides it on
+ * the fd and refuses there. Snapshot kind for the verdict, fd kind for the bytes. */
 export function makeStoreRecordReader(dir: string): (filename: string) => string {
 	const resolved = path.resolve(expandTilde(dir));
-	return (filename: string) => fs.readFileSync(path.join(resolved, filename), "utf8");
+	return (filename: string) => readStoreRecordFile(path.join(resolved, filename));
 }
 
 export function certifyActiveStoreDir(dir: string): ActiveStoreCertification & { dir: string } {
@@ -1755,12 +1819,60 @@ function inspectRecordEntry(file: string): RecordEntryKind {
 		return fs.lstatSync(file).isFile() ? "regular-file" : "irregular";
 	} catch (err) {
 		if ((err as { code?: unknown }).code === "ENOENT") return "absent";
-		throw new MetaRecordError(
-			`cannot inspect meta-record ${path.basename(file)} under ${path.dirname(file)}: ` +
-				`${err instanceof Error ? err.message : String(err)}. That is an inspection failure, not an absent ` +
-				`citizen — refusing to report "no record" from a store this process cannot read.`,
-		);
+		throw recordInspectionFailure(file, err);
 	}
+}
+
+/**
+ * How a FAILED record read is classified when the entry was already snapshotted as a
+ * regular file — that is, a race: the entry changed between the classification and the
+ * open. Pure, errno-only, so the branch a synthetic errno takes is exactly the branch a
+ * real one takes (the 2026-07-26 cross-review found the previous shape unprovable: with
+ * the classification in front of it, no settled store could reach these branches at all,
+ * and a cell that claimed to pin them passed with the mapping deleted).
+ *
+ * Every verdict here collapses onto the answer the SETTLED store already gives, because a
+ * race must not teach the operator a second vocabulary for one state of the world:
+ *
+ *   - `ENOENT`  — the record went away mid-read. Absence, and absence alone.
+ *   - `ELOOP`   — `O_NOFOLLOW` refused a symlink at the final component.
+ *   - `ENXIO`   — a socket (or a device with no driver behind it) is what the name now
+ *                 points at. `lstat` calls that irregular, so an open that trips over it
+ *                 must say the same thing rather than "this host is unreadable".
+ *   - {@link NOT_REGULAR_ENTRY_CODE} — the fd opened, and `fstat` says it is a directory
+ *                 or a fifo.
+ *   - anything else (EACCES, ENOTDIR, EIO…) — an inspection FAILURE, which stays loud and
+ *                 must never be laundered into a clean "no such citizen".
+ */
+export type RecordReadFailure = "absent" | "irregular" | "unreadable";
+
+export function classifyRecordReadFailure(code: unknown): RecordReadFailure {
+	if (code === "ENOENT") return "absent";
+	if (code === "ELOOP" || code === "ENXIO" || code === NOT_REGULAR_ENTRY_CODE) return "irregular";
+	return "unreadable";
+}
+
+/** The three refusals a targeted read can reach from EITHER layer — the settled
+ * classification or a raced read. One text each, so a race and a quiet store say the same
+ * sentence to the operator. */
+function recordInspectionFailure(file: string, err: unknown): MetaRecordError {
+	return new MetaRecordError(
+		`cannot inspect meta-record ${path.basename(file)} under ${path.dirname(file)}: ` +
+			`${err instanceof Error ? err.message : String(err)}. That is an inspection failure, not an absent ` +
+			`citizen — refusing to report "no record" from a store this process cannot read.`,
+	);
+}
+function absentRecordRefusal(id: string, file: string): MetaRecordError {
+	return new MetaRecordError(
+		`no meta-record for garden id "${id}" under ${path.dirname(file)} — not a garden citizen, cannot deliver.`,
+	);
+}
+function irregularRecordRefusal(id: string): MetaRecordError {
+	return new MetaRecordError(
+		`meta-record ${id}.meta.json is not a regular file (symlink/directory/special) — a record's bytes must ` +
+			`live in the store itself, so this entry is never followed and cannot address a citizen. ` +
+			`Inspect and remove it by hand, or archive the generation with ${FRESH_CUT_PRESCRIPTION}.`,
+	);
 }
 
 /**
@@ -1775,26 +1887,44 @@ export function readMetaIdentityByGardenId(
 ): MetaIdentity {
 	const id = requireGardenId(gardenId);
 	const file = recordFileFor(sessionsDir, id);
+	// TWO LAYERS, AND THEY ARE NOT THE SAME RULE TWICE.
+	//
+	// Layer 1 — POLICY, on a settled store. Rule 1 of {@link certifyActiveStore}, enforced
+	// HERE too, because this is the one place a live dispatch reads a record. Certifying
+	// the store on WRITE while this read followed the link made the contract true only
+	// where nobody was being addressed: the doctor refused a symlinked entry that v2
+	// dispatch, `entwurf_self` and the sender-marker trust all resolved happily, from bytes
+	// the store does not own (2026-07-25 fresh-eyes review). It classifies WITHOUT OPENING,
+	// which is the point — a socket, a device, a mode-000 directory each earn the
+	// certification's own sentence instead of whatever errno an `open` would have tripped
+	// over (ENXIO, EACCES), and nothing special is opened to find out what it is. Deleting
+	// this layer in favour of the fd alone looked like removing a duplicate enforcement
+	// point and was actually a regression on all three shapes (2026-07-26 cross-review,
+	// round 3 — found by GPT, reproduced here).
+	//
+	// Layer 2 — the RACE, on the bytes actually returned. A verdict about a name stops
+	// being true the moment something replaces what the name points at, so the read
+	// re-decides on its own fd. Its errno verdicts collapse onto layer 1's sentences via
+	// {@link classifyRecordReadFailure}, which is pure so that the branches stay provable:
+	// with layer 1 in front of it, no settled store can reach them.
 	const kind = inspectRecordEntry(file);
-	if (kind === "absent") {
-		throw new MetaRecordError(
-			`no meta-record for garden id "${id}" under ${path.dirname(file)} — not a garden citizen, cannot deliver.`,
-		);
+	if (kind === "absent") throw absentRecordRefusal(id, file);
+	if (kind === "irregular") throw irregularRecordRefusal(id);
+	let raw: string;
+	try {
+		raw = readStoreRecordFile(file);
+	} catch (err) {
+		if (err instanceof MetaRecordError) throw err;
+		switch (classifyRecordReadFailure((err as { code?: unknown }).code)) {
+			case "absent":
+				throw absentRecordRefusal(id, file);
+			case "irregular":
+				throw irregularRecordRefusal(id);
+			default:
+				throw recordInspectionFailure(file, err);
+		}
 	}
-	// Rule 1 of {@link certifyActiveStore}, enforced HERE too — the one place a live
-	// dispatch reads a record. Certifying the store on WRITE while this read followed the
-	// link made the contract true only where nobody was being addressed: the doctor
-	// refused a symlinked entry that v2 dispatch, `entwurf_self` and the sender-marker
-	// trust all resolved happily, from bytes the store does not own (2026-07-25
-	// fresh-eyes review). One contract means both directions hold it.
-	if (kind === "irregular") {
-		throw new MetaRecordError(
-			`meta-record ${id}.meta.json is not a regular file (symlink/directory/special) — a record's bytes must ` +
-				`live in the store itself, so this entry is never followed and cannot address a citizen. ` +
-				`Inspect and remove it by hand, or archive the generation with ${FRESH_CUT_PRESCRIPTION}.`,
-		);
-	}
-	const identity = parseMetaIdentity(fs.readFileSync(file, "utf8"));
+	const identity = parseMetaIdentity(raw);
 	if (identity.gardenId !== id) {
 		throw new MetaRecordError(
 			`meta-record body/filename drift: ${id}.meta.json contains gardenId "${identity.gardenId}". ` +
