@@ -4,6 +4,25 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.12.9 — 2026-07-26
+
+### Changed
+
+- **The curated ACP surface adopts Claude Opus 5 on pi 0.82.1.** The deliberately narrow two-model surface keeps Sonnet 5 and replaces the Opus 4.8 anchor with Opus 5 (1M context, 128K max output, reasoning enabled). The pi runtime pin, closed peer range, lockfile, install gates, and current-version docs move together; source review of pi 0.82.1 confirmed the extension-loader aliases and `/compat` catalog seam are unchanged.
+- **`meta-bridge-fresh-cut` now reports the transition that actually occurred.** Exit 0 means the cut completed, 1 means nothing moved, 2 is usage, 3 means the cut transition is incomplete, and 4 means the generation was archived and the fresh v3 store opened but residue cleanup is incomplete. The command help, `run.sh` usage, operator docs, and deterministic decision/source-fence cells carry the same contract; exit 4 may proceed to `setup`, while rerunning after a new citizen is born would archive the new generation too.
+
+### Fixed
+
+- **A marker that cannot plausibly own a session no longer blocks the only repair verb or grants identity indefinitely.** The Claude hook, agy imprint, marker write boundary, all sender/receiver readers, fresh-cut inspection, and sender-candidate filtering share one `isPlausibleOwnerPid` policy. On the currently certified Linux desktop/workstation axis, pid 1 is refuted by construction and reported separately from a proven-dead owner; the cut clears that residue instead of waiting forever on init. A container running the harness as pid 1 remains unsupported and fails closed rather than quietly widening the evidence boundary.
+- **`setup` preserves the repository's tracked pi settings across the full install path.** Both writers of `.pi/settings.json` now share one serializer, recognize the portable relative package entry as the same checkout, and leave already-satisfied bytes untouched. The end-to-end gate plants the candidate-index settings in a stand-in checkout, drives the real `run.sh install`, and requires byte and mtime identity, covering both writers and user-scope side effects rather than only a helper.
+- **Duplicate `nativeSessionId` claims are quarantined on discovery and refused wherever a record becomes an address.** `entwurf_peers` lists neither rival while preserving unrelated citizens and naming diagnostics; canonical `entwurf_v2` dispatch checks the store before choosing any transport, and dormant pi resume uses the same addressable read. A regular unreadable rival fails loud because it might be the duplicate, while symlinked, drifted, or unparseable neighbours remain certification/listing defects without being promoted into addressable rivals. The deliberately narrower raw mailbox and marker paths retain the per-entry half of the contract; that boundary and its promotion rule remain tracked in #55.
+- **Record bytes now come from the same opened file description that proves their kind.** `readStoreRecordFile` opens with `O_NOFOLLOW` so a final-component regular-to-symlink swap fails before a byte is read, uses `fstat` on that fd, reads through the fd, and closes in a `finally`. `O_NONBLOCK` prevents the fd-classification repair from introducing a FIFO hang. The preceding `lstat` classification remains a separate policy layer so settled sockets, devices, and mode-000 directories receive the certification contract's non-regular verdict instead of leaking `ENXIO`/`EACCES` as a second vocabulary.
+
+### Verification
+
+- Pre-version landing HEAD `aaab00fbd293300d25c294580bb19bd3a88ad757` passed exact-SHA GitHub Actions run [30186472796](https://github.com/junghan0611/entwurf/actions/runs/30186472796): `check`, `install-surface`, and `artifact-consumer` all success.
+- The prepared tree passed an independent `pnpm check`, then `LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.12.9.8NSzz7` completed all green: **MUST PASS=17 FAIL=0 SKIP=0** and **BEHAVIOR PASS=1 FAIL=0**, EXIT=0. Full log: `/tmp/entwurf-release-gate-0.12.9.8NSzz7/release-gate.log`; per-step artifact paths are preserved inside it. Prepared-HEAD exact-SHA CI and preserved-candidate acceptance remain deliberately deferred to `make`.
+
 ## 0.12.8 — 2026-07-25
 
 ### Changed

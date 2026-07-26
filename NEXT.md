@@ -1,9 +1,16 @@
-# NEXT — #52·#54 closure accepted — land CI 뒤 close·0.12.9 prepare
+# NEXT — 0.12.9 prepared locally — make→publish→#52·#54 close
 
 > NEXT는 부트 섹터다. 닫힌 역사는 CHANGELOG/git/이슈에, 장기 방향은 ROADMAP/이슈에 둔다.
 
 ## NOW
 
+- **0.12.9 release-prep가 로컬 clean commit으로 넘어간다.** pre-version HEAD `aaab00f`는 exact-SHA
+  CI [30186472796](https://github.com/junghan0611/entwurf/actions/runs/30186472796)의 `check` ·
+  `install-surface` · `artifact-consumer`가 모두 success다. package/CHANGELOG를 0.12.9로 올린 뒤
+  독립 `pnpm check`와 fresh scratch `/tmp/entwurf-release-gate-0.12.9.8NSzz7`의 LIVE gate가
+  **MUST 17/0/0 + BEHAVIOR 1/0, exit 0**으로 끝났다. 다음 권한 경계는 `make 0.12.9`; prepare는
+  push/tag/candidate/publish를 하지 않는다. GLG 지시로 #52·#54는 npm publish와 registry proof 뒤
+  닫고, #55는 수집함으로 계속 연다.
 - **Stem: #52의 마지막 차단(final-component symlink swap)을 `ea7d00c`에 착지했다. Oracle 4차가
   clean으로 수렴했고 GLG가 commit/push와 0.12.9 release land를 승인했다.** 레코드 바이트는 이제
   `readStoreRecordFile` 하나에서만 나온다:
@@ -70,11 +77,11 @@
 
 ## OPEN
 
-1. **▶ `land 0.12.9` — pre-version HEAD를 push하고 exact-SHA CI 3개가 green이면 #52·#54를
-   닫는다.** #55에는 canonical `entwurf_v2` 밖 raw/marker 경계를 기록한다. Oracle 교차검수는 제품
-   계약·문서·87 assertions·격리 mutation 4건·독립 full `pnpm check`를 확인했다. `O_NONBLOCK` 제거는
-   정지가 아니라 bounded child의 `BLOCKED-ON-OPEN` rc=1이며, errno 통과와 두 caller 수렴도
-   gate-held다. close 뒤 `/entwurf-release prepare 0.12.9`가 CHANGELOG·버전·LIVE gate를 소유한다.
+1. **▶ `/entwurf-release make 0.12.9` — 별도 GLG 승인 뒤에만 실행한다.** prepared HEAD를 ordinary
+   push하고 그 exact SHA의 CI 3잡이 green인 뒤, 보존할 candidate 하나를 pack하고 checkout-invisible
+   Linux consumer로 같은 바이트를 수용한다. 그 다음에만 `v0.12.9` tag와 GitHub release를 만든다.
+   npm은 여전히 별도 `/entwurf-release publish 0.12.9 <candidate> latest` 권한 경계다. registry-installed
+   U3와 `latest=0.12.9` / repair lane 보존을 증명한 뒤 준비된 원장으로 #52·#54를 닫는다.
 2. **#47 — 다음 제품 축.** 착수 전 `docs/mux-launch-rail.md`를 다시 읽는다. mux lineage에서
    `callerGardenId`는 호출 사건이지 계보가 아니다. 0.13.0은 #48 Cortex 좌표를 예약한다.
 3. **#49 E — floor purity.** 설계 SSOT는 #41의 두 코멘트. 첫 전체 floor 실행은 green 획득이 아니라
@@ -85,8 +92,9 @@
    quiesce scan이 늦으면 충돌 자체가 착지하지 않고 G1–G3이 제품 결함으로 오인한다. 제품의 collision
    preflight는 F15/F17이 별도로 지킨다. 수선은 창 확대 + seed 착지 증명 후 제품 판정; 미착지는
    `SETUP MISS`로 자기 원인을 말한다.
-6. **#55 — subtraction fallout 수집함.** #52·#54가 push 후 닫히면 이슈 본문에서 완료된 child로
-   이동하고, readiness race·G셀 flake와 새 비차단 관측만 남긴다.
+6. **#55 — subtraction fallout 수집함.** #52·#54는 0.12.9 npm publish와 registry proof 뒤 닫고,
+   그때 이슈 본문에서 완료된 child로 이동한다. #55 자체에는 readiness race·G셀 flake와 새 비차단
+   관측을 계속 남긴다.
 7. **후속·별건:** ⓐ #50 readiness upstream 인과 확정 코멘트 정정(GLG 승인 후) ⓑ Meta sender 모델
    표기(optional display field) ⓒ refuted marker의 prune/doctor listing은 선택적 관측성 개선.
 
