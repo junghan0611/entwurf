@@ -19,6 +19,12 @@
  *   - birthPiCitizen REFUSES on every one of those defects, naming fresh-cut,
  *     BEFORE any write — including defects that have nothing to do with the
  *     session being born.
+ *   - readAddressableMetaIdentity (#52) — the read a DISPATCH does: the targeted
+ *     contract PLUS store-wide `nativeSessionId` uniqueness. The two reads are
+ *     deliberately different functions, so this gate pins BOTH halves of that
+ *     split: the addressable read refuses a duplicate, and the plain targeted read
+ *     still does NOT scan (the README promise that a call-relay does not re-scan
+ *     the store per message is a contract, not an oversight).
  */
 
 import assert from "node:assert/strict";
@@ -33,7 +39,11 @@ import {
 	listAllMetaIdentities,
 	type MetaIdentity,
 	MetaRecordError,
+	makeStoreRecordReader,
 	metaRecordExistsByGardenId,
+	nativeSessionIdRivals,
+	readActiveStoreEntries,
+	readAddressableMetaIdentity,
 	readMetaIdentityByGardenId,
 	serializeMetaIdentity,
 } from "../pi-extensions/lib/meta-session.ts";
@@ -181,6 +191,245 @@ try {
 	ok("the refused birth wrote nothing (record count unchanged)", recordCount(dir) === before);
 } finally {
 	fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// --- #52: the ADDRESSABLE read holds the store-wide uniqueness rule ----------
+// A duplicate `nativeSessionId` needs no corruption to appear: `upsertMetaSession`
+// certifies and then writes, which is not a transaction, so two concurrent births can
+// both read one clean snapshot and mint different garden ids for one native session.
+// Dispatching at either id then reaches the SAME conversation/transcript twice.
+withStore(
+	(dir) => {
+		record(dir, GID_A, "native-shared");
+		record(dir, GID_B, "native-shared");
+		record(dir, GID_C, "native-c");
+	},
+	(dir) => {
+		throwsNaming(
+			"the addressable read REFUSES a garden id that does not hold its nativeSessionId alone",
+			() => readAddressableMetaIdentity(GID_A, dir),
+			"must be unique",
+		);
+		throwsNaming(
+			"…from EITHER side of the pair (neither rival is silently preferred)",
+			() => readAddressableMetaIdentity(GID_B, dir),
+			"must be unique",
+		);
+		throwsNaming(
+			"the duplicate refusal names the fresh-cut command, like every other store defect",
+			() => readAddressableMetaIdentity(GID_A, dir),
+			FRESH_CUT_COMMAND,
+		);
+		ok(
+			"the refusal NAMES the rival file, so the operator can see both records",
+			(() => {
+				try {
+					readAddressableMetaIdentity(GID_A, dir);
+					return false;
+				} catch (err) {
+					return err instanceof MetaRecordError && err.message.includes(`${GID_B}.meta.json`);
+				}
+			})(),
+		);
+		ok(
+			"an unrelated citizen in the SAME store still reads addressably (no store-wide contagion)",
+			readAddressableMetaIdentity(GID_C, dir).nativeSessionId === "native-c",
+		);
+		// The other half of the split, stated as a REQUIREMENT rather than a leftover: the
+		// plain targeted read is what the mailbox poke / sender-marker trust / entwurf_self
+		// use, and turning it store-wide is the design README explicitly does not have.
+		ok(
+			"the plain targeted read still answers on a duplicated store (it does NOT scan — README scope)",
+			readMetaIdentityByGardenId(GID_A, dir).gardenId === GID_A,
+		);
+	},
+);
+
+// --- #52: the rival scan itself (pure) — a RIVAL is an ADDRESSABLE record -----
+// The blind spots are claims about REACHABILITY, and each has to be pinned separately
+// from "the scan works", because getting any of them wrong quarantines a healthy
+// citizen. GPT's cross-review found two of them open in the first cut of this: a
+// symlinked neighbour was FOLLOWED and counted, and a drifted one was counted too.
+{
+	const own = identity(GID_A, "native-shared");
+	const map: Record<string, string> = {
+		[`${GID_A}.meta.json`]: serializeMetaIdentity(own),
+		[`${GID_B}.meta.json`]: serializeMetaIdentity(identity(GID_B, "native-shared")),
+		[`${GID_C}.meta.json`]: serializeMetaIdentity(identity(GID_C, "native-c")),
+		"malformed.meta.json": "{nope\n",
+		"not-a-record.txt": "ignore me\n",
+	};
+	const touched: string[] = [];
+	const read = (f: string): string => {
+		touched.push(f);
+		const v = map[f];
+		if (v === undefined) throw new Error(`ENOENT: ${f}`);
+		return v;
+	};
+	const all = (irregular: readonly string[] = []): ActiveStoreEntry[] =>
+		Object.keys(map).map((filename) => ({ filename, regularFile: !irregular.includes(filename) }));
+
+	const rivals = nativeSessionIdRivals(own, all(), read);
+	ok("rival scan finds the other holder", rivals.length === 1 && rivals[0] === `${GID_B}.meta.json`);
+	ok("the record's OWN file is never its own rival", !rivals.includes(`${GID_A}.meta.json`));
+	ok(
+		"an unparseable neighbour is skipped, not thrown on (one corrupt file must not break addressing)",
+		nativeSessionIdRivals(identity(GID_C, "native-c"), all(), read).length === 0,
+	);
+
+	// Rule 1 at the rival scan: a non-regular entry is not a candidate AND its bytes are
+	// never touched. Reading it "just to check" would break the rule in the act of
+	// enforcing it — the callback log is what makes that assertion real rather than
+	// inferred from the verdict.
+	touched.length = 0;
+	const withSymlink = nativeSessionIdRivals(own, all([`${GID_B}.meta.json`]), read);
+	ok("a NON-REGULAR neighbour is not a rival (symlinked bytes cannot claim an address)", withSymlink.length === 0);
+	ok(
+		"…and its bytes were NEVER read — the reader was not called for it (rule 1: never followed)",
+		!touched.includes(`${GID_B}.meta.json`),
+	);
+
+	// A drifted neighbour is unreachable by garden-id lookup from either name, so it
+	// cannot compete for an address — the certification and the listing still call it a
+	// defect, but it must not blind a healthy citizen.
+	{
+		const driftMap: Record<string, string> = {
+			[`${GID_A}.meta.json`]: serializeMetaIdentity(own),
+			// filename B, body claims C, and C shares A's native id
+			[`${GID_B}.meta.json`]: serializeMetaIdentity(identity(GID_C, "native-shared")),
+		};
+		const driftRead = (f: string): string => driftMap[f] ?? "";
+		const driftEntries: ActiveStoreEntry[] = Object.keys(driftMap).map((filename) => ({
+			filename,
+			regularFile: true,
+		}));
+		ok(
+			"a DRIFTED neighbour is not a rival (no garden id can reach it, so it addresses nothing)",
+			nativeSessionIdRivals(own, driftEntries, driftRead).length === 0,
+		);
+	}
+
+	// The other direction: a candidate we could not READ is an unanswered question, not
+	// a clean scan. Parse failure and read failure are different facts and must not
+	// share one catch.
+	{
+		const failRead = (f: string): string => {
+			if (f === `${GID_B}.meta.json`) {
+				const err = new Error("EACCES: permission denied") as Error & { code?: string };
+				err.code = "EACCES";
+				throw err;
+			}
+			return map[f] ?? "";
+		};
+		let threw = false;
+		try {
+			nativeSessionIdRivals(own, all(), failRead);
+		} catch (err) {
+			threw = err instanceof MetaRecordError && err.message.includes("unanswered question");
+		}
+		ok("an UNREADABLE regular candidate THROWS — it may be the duplicate (never skipped)", threw);
+
+		// ENOENT is the one exception, and the one this repo already recognises: a file
+		// that vanished between the readdir and the read is not in the store.
+		const goneRead = (f: string): string => {
+			if (f === `${GID_B}.meta.json`) {
+				const err = new Error("ENOENT: no such file") as Error & { code?: string };
+				err.code = "ENOENT";
+				throw err;
+			}
+			return map[f] ?? "";
+		};
+		ok(
+			"a neighbour that RACED AWAY (ENOENT) is skipped — it is not in the store, so it holds nothing",
+			nativeSessionIdRivals(own, all(), goneRead).length === 0,
+		);
+	}
+}
+
+// --- #52: the same three shapes, driven through the REAL fs binding ----------
+// The pure cells above pin the rule; these pin that the production binding hands it
+// entries with the right kind. A pure-only proof would have passed while the fs path
+// still did a bare-name readdir and followed symlinks — which is exactly what shipped.
+{
+	const tmp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "psa-idcons-addr-"));
+	try {
+		// A symlink whose target lives OUTSIDE the store and holds the same native id.
+		const dir = path.join(tmp, "symlink-store");
+		const outside = path.join(tmp, "outside");
+		fs.mkdirSync(dir);
+		fs.mkdirSync(outside);
+		record(dir, GID_A, "native-shared");
+		const foreign = path.join(outside, "foreign.json");
+		fs.writeFileSync(foreign, serializeMetaIdentity(identity(GID_B, "native-shared")));
+		fs.symlinkSync(foreign, path.join(dir, `${GID_B}.meta.json`));
+		ok(
+			"fs: a SYMLINKED duplicate does not quarantine the healthy regular record",
+			readAddressableMetaIdentity(GID_A, dir).gardenId === GID_A,
+		);
+		ok(
+			"fs: the listing reports that symlink as a diagnostic and lists the healthy citizen",
+			(() => {
+				const listed = listAllMetaIdentities(readActiveStoreEntries(dir), makeStoreRecordReader(dir));
+				return (
+					listed.identities.length === 1 &&
+					listed.identities[0]?.gardenId === GID_A &&
+					listed.errors.length === 1 &&
+					listed.errors[0]?.filename === `${GID_B}.meta.json` &&
+					listed.errors[0]?.message.includes("not a regular file")
+				);
+			})(),
+		);
+
+		// A drifted duplicate through the real binding.
+		const driftDir = path.join(tmp, "drift-store");
+		fs.mkdirSync(driftDir);
+		record(driftDir, GID_A, "native-shared");
+		fs.writeFileSync(
+			path.join(driftDir, `${GID_B}.meta.json`),
+			serializeMetaIdentity(identity(GID_C, "native-shared")),
+		);
+		ok(
+			"fs: a DRIFTED duplicate does not quarantine the healthy record either",
+			readAddressableMetaIdentity(GID_A, driftDir).gardenId === GID_A,
+		);
+
+		if (typeof process.getuid === "function" && process.getuid() !== 0) {
+			// A regular, valid, genuine duplicate this process cannot read.
+			const blindDir = path.join(tmp, "unreadable-rival");
+			fs.mkdirSync(blindDir);
+			record(blindDir, GID_A, "native-shared");
+			const rival = path.join(blindDir, `${GID_B}.meta.json`);
+			fs.writeFileSync(rival, serializeMetaIdentity(identity(GID_B, "native-shared")));
+			fs.chmodSync(rival, 0o000);
+			try {
+				throwsNaming(
+					"fs: an UNREADABLE rival makes the addressable read REFUSE (it may be the duplicate)",
+					() => readAddressableMetaIdentity(GID_A, blindDir),
+					"unanswered question",
+				);
+			} finally {
+				fs.chmodSync(rival, 0o600);
+			}
+
+			// The store-level vacuity guard: if the readdir itself fails, the question was
+			// never asked, and answering it anyway is the same fail-open shape.
+			const unlistable = path.join(tmp, "store");
+			fs.mkdirSync(unlistable);
+			record(unlistable, GID_A, "native-a");
+			fs.chmodSync(unlistable, 0o100); // --x: the targeted read still works, readdir does not
+			try {
+				throwsNaming(
+					"fs: an unlistable store makes the addressable read REFUSE, never answer 'unique'",
+					() => readAddressableMetaIdentity(GID_A, unlistable),
+					"failure to inspect the store",
+				);
+			} finally {
+				fs.chmodSync(unlistable, 0o700);
+			}
+		}
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true });
+	}
 }
 
 // --- rule 1: a `.meta.json` that is not a regular file ------------------------
@@ -374,7 +623,7 @@ withStore(
 			() => readMetaIdentityByGardenId(GID_A, dir),
 			FRESH_CUT_COMMAND,
 		);
-		const listed = listAllMetaIdentities(fs.readdirSync(dir), (f) => fs.readFileSync(path.join(dir, f), "utf8"));
+		const listed = listAllMetaIdentities(readActiveStoreEntries(dir), makeStoreRecordReader(dir));
 		ok(
 			"the listing's drift diagnostic names the verb too (a facts surface still says what to do)",
 			listed.errors.length === 1 && (listed.errors[0]?.message ?? "").includes(FRESH_CUT_COMMAND),

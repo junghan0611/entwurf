@@ -61,7 +61,7 @@
  *    Send-is-throw cleanup; see note above.)
  */
 
-import { existsSync, promises as fs, readFileSync } from "node:fs";
+import { existsSync, promises as fs } from "node:fs";
 import * as net from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -1396,7 +1396,7 @@ The decider — not this surface — chooses the transport.`,
 
 interface EntwurfFactProviderModule {
 	listEntwurfFacts(params: {
-		metaEntries: readonly string[];
+		metaEntries: readonly { filename: string; regularFile: boolean }[];
 		readRecord: (filename: string) => string;
 		socket: { dir: string };
 	}): Promise<unknown>;
@@ -1408,22 +1408,22 @@ interface EntwurfPeersRenderModule {
 
 interface MetaSessionModule {
 	defaultMetaSessionsDir(): string;
+	readActiveStoreEntries(dir: string): { filename: string; regularFile: boolean }[];
+	makeStoreRecordReader(dir: string): (filename: string) => string;
 }
 
 async function renderEntwurfPeersForSurface(): Promise<{ text: string; payload: unknown }> {
 	const meta = (await import(META_SESSION_MODULE)) as unknown as MetaSessionModule;
 	const sessionsDir = meta.defaultMetaSessionsDir();
-	let metaEntries: string[] = [];
-	try {
-		metaEntries = (await fs.readdir(sessionsDir)).filter((name) => name.endsWith(".meta.json"));
-	} catch (err) {
-		if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") throw err;
-	}
-
+	// Entries carry their KIND. The name-only readdir this used to do left `readRecord`
+	// free to follow a symlinked `.meta.json` into bytes the store does not own — rule 1
+	// held in the doctor and not on the surface operators actually read (pre-existing;
+	// surfaced by the #52 duplicate pass, which would let such a symlink quarantine the
+	// healthy record it shadowed).
 	const provider = (await import(ENTWURF_FACT_PROVIDER_MODULE)) as unknown as EntwurfFactProviderModule;
 	const result = await provider.listEntwurfFacts({
-		metaEntries,
-		readRecord: (filename) => readFileSync(path.join(sessionsDir, filename), "utf8"),
+		metaEntries: meta.readActiveStoreEntries(sessionsDir),
+		readRecord: meta.makeStoreRecordReader(sessionsDir),
 		// Same socket axis as the legacy live-session scan, but merged with the
 		// meta-record rail by listEntwurfFacts so meta-mailbox citizens are discoverable too.
 		socket: { dir: ENTWURF_DIR },

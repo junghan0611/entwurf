@@ -21,6 +21,9 @@
  *
  * `resolveTarget` (QB1): a MISSING meta-record is a soft `bad-target` (identity:null); a
  * PRESENT-but-corrupt record fails LOUD (the read throws drift) — never matched by string.
+ * "Corrupt" includes a record that does not hold its `nativeSessionId` alone (#52): the read
+ * here is the ADDRESSABLE one, so the store-wide uniqueness half runs at this boundary and
+ * nowhere cheaper. Absent stays soft; ambiguous never does.
  * `preProbeAddressConflict` (QB2): a single record-side `lstat` (NO connect) of the target's
  * canonical socket path; `indeterminate` (EACCES/unknown) fails loud rather than silently
  * claiming "no conflict". The decider's later `inspectSocket` probe is a SEPARATE step.
@@ -84,7 +87,7 @@ import {
 	type MetaReceiverMarker,
 	metaCapabilityFor,
 	metaRecordExistsByGardenId,
-	readMetaIdentityByGardenId,
+	readAddressableMetaIdentity,
 	readMetaReceiverMarker,
 } from "./meta-session.ts";
 import {
@@ -110,6 +113,9 @@ import { classifyConnectError, probeSocketLiveness, type SocketLiveness } from "
  */
 export interface ProductionEntwurfV2Seams {
 	metaRecordExists: (gid: string, sessionsDir: string) => boolean;
+	/** The ADDRESSABLE read (#52): the per-entry contract plus store-wide `nativeSessionId`
+	 * uniqueness. This is a dispatch, so the id it returns is about to become an address —
+	 * a duplicate here would direct-inject one native session under two garden ids. */
 	readIdentity: (gid: string, sessionsDir: string) => MetaIdentity;
 	/** Read the target's receiver presence marker (null = absent / dead owner / corrupt). The
 	 * SE-2 2d-3 active-receiver source; the factory's `mailboxDeliverabilityFor` closure verifies
@@ -222,7 +228,7 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 	const s = opts.seams ?? {};
 	const io: ProductionEntwurfV2Seams = {
 		metaRecordExists: s.metaRecordExists ?? metaRecordExistsByGardenId,
-		readIdentity: s.readIdentity ?? readMetaIdentityByGardenId,
+		readIdentity: s.readIdentity ?? readAddressableMetaIdentity,
 		readReceiverMarker: s.readReceiverMarker ?? ((gid: string) => readMetaReceiverMarker({ gardenId: gid })),
 		inspectPath: s.inspectPath ?? inspectControlSocketPath,
 		acquireLock: s.acquireLock ?? realAcquireLock,

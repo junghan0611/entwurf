@@ -29,7 +29,12 @@
 
 import { type FactList, isNonPiGardenIdSocketConflict, resolveFactList } from "./entwurf-facts.ts";
 import { isLivenessSupported } from "./entwurf-v2-contract.ts";
-import { FRESH_CUT_PRESCRIPTION, listAllMetaIdentities, type MetaCitizenBackend } from "./meta-session.ts";
+import {
+	type ActiveStoreEntry,
+	FRESH_CUT_PRESCRIPTION,
+	listAllMetaIdentities,
+	type MetaCitizenBackend,
+} from "./meta-session.ts";
 import { type SocketScanDeps, scanSocketProbes } from "./socket-discovery.ts";
 import type { SocketLiveness } from "./socket-probe.ts";
 
@@ -82,7 +87,9 @@ export interface EntwurfFactsResult {
 
 export interface EntwurfFactsDeps {
 	/** Meta-store axis: the `.meta.json` entry names + a record reader. */
-	metaEntries: readonly string[];
+	/** Store entries WITH their kind (`readActiveStoreEntries`), never bare names: the
+	 * listing must be able to refuse a symlinked record without following it. */
+	metaEntries: readonly ActiveStoreEntry[];
 	readRecord: (filename: string) => string;
 	/** Socket axis: injected into scanSocketProbes (controlDir/readdir/probe). */
 	socket?: Partial<SocketScanDeps>;

@@ -63,6 +63,8 @@ interface SocketOpts {
 	extraNames?: string[];
 	/** readdir throws with this code (e.g. "EACCES" / "ENOENT") (P2e②). */
 	readdirErrorCode?: string;
+	/** `.meta.json` entries that are NOT regular files (symlink/dir/special). */
+	irregularMeta?: string[];
 }
 
 function deps(
@@ -72,7 +74,13 @@ function deps(
 ): EntwurfFactsDeps {
 	const symlinkSet = new Set(opts.symlinks ?? []);
 	return {
-		metaEntries: Object.keys(meta),
+		// Kind-carrying entries, like the real bindings: the listing must be able to refuse a
+		// symlinked record without following it. `irregularMeta` names the ones that are not
+		// regular files.
+		metaEntries: Object.keys(meta).map((filename) => ({
+			filename,
+			regularFile: !(opts.irregularMeta ?? []).includes(filename),
+		})),
 		readRecord: (f: string) => {
 			const v = meta[f];
 			if (v === undefined) throw new Error(`ENOENT: ${f}`);

@@ -261,15 +261,53 @@ Only that accepted file may be published under the explicitly authorized lane:
 > there is nothing to diagnose or branch on.
 >
 > Note the deliberate scope, stated as it actually is. A **store-wide** scan runs on
-> **identity writes** and in the doctor — not on every mailbox poke; a call-relay does
-> not re-scan the whole store per message. What every **targeted read** does hold is
-> the per-entry half of the same contract: `readMetaIdentityByGardenId` refuses a
-> record that is not a regular file (a symlink is never followed, in *either*
-> direction) and one whose body disagrees with its name, naming the verb. What it
-> does **not** do is prove store-wide uniqueness on the read path, so on a store that
-> would fail certification two records can still claim one `nativeSessionId` and
-> `entwurf_peers` will list both as citizens. That is a **known open gap**, not a
-> promise: closing it on the dispatch path is [#52](https://github.com/junghan0611/entwurf/issues/52).
+> **identity writes**, in the doctor, and on the two read surfaces below — not on every
+> mailbox poke; a call-relay does not re-scan the whole store per message. What every
+> **targeted read** holds is the per-entry half of the same contract:
+> `readMetaIdentityByGardenId` refuses a record that is not a regular file (a symlink is
+> never followed, in *either* direction) and one whose body disagrees with its name,
+> naming the verb. That is what the mailbox poke, the sender-marker trust and
+> `entwurf_self` use, and it is all they need.
+>
+> Store-wide **uniqueness** is checked on the read snapshot at the two places where it
+> is both affordable and load-bearing ([#52](https://github.com/junghan0611/entwurf/issues/52),
+> 0.12.9):
+>
+> - **Discovery** — `listAllMetaIdentities`, and so `entwurf_peers`, already reads the
+>   whole store, so the check is free. Two records claiming one `nativeSessionId` are
+>   **not** two citizens: *neither* is listed (the store cannot say which one owns that
+>   session, and a facts surface may not mint an authority the certification refuses),
+>   both become diagnostics naming each other, and every unrelated citizen keeps listing.
+> - **Dispatch** — `readAddressableMetaIdentity`, used by v2 `resolveTarget` and by the
+>   pi resume path. Those are the moments a record stops being data and becomes an
+>   **address**, they happen once per dispatch next to a socket connect and a spawn, and
+>   a duplicate there means direct-injecting one live conversation under two garden ids,
+>   or resuming one transcript twice under two per-garden-id locks. It fails **loud**; a
+>   soft `bad-target` is reserved for a record that is genuinely absent.
+>
+> **A rival is a record that could be addressed instead** — narrower than "a file whose
+> bytes mention the same id". A **symlinked** entry is not a candidate and is *never
+> read* (rule 1 again: following it to see whether it counts would break the rule in the
+> act of enforcing it, and let planted foreign bytes quarantine a healthy citizen); a
+> **drifted** or **unparseable** neighbour is not a candidate either, because no garden
+> id can reach it. All three remain certification defects and the listing reports them as
+> diagnostics — they just may not blind a healthy record. The opposite case is a
+> **regular `.meta.json` this process cannot read**: that one might BE the duplicate, so
+> it fails loud rather than being skipped, because "holds it alone" from a scan that
+> never asked is the same vacuous pass in miniature. (`ENOENT` alone is the exception —
+> a file that vanished mid-scan is not in the store.)
+>
+> Both store-wide read scans take entries **with their kind** from one shared
+> `readActiveStoreEntries`, rather than each binding doing its own name-only `readdir`.
+> That is what makes rule 1 structural: a scan handed bare names has no choice but to
+> read the path, which is how both `entwurf_peers` bindings came to follow a symlinked
+> record while the doctor refused the very same entry.
+>
+> This is not only a defence against external corruption. `upsertMetaSession` certifies
+> and then writes, which is **not a transaction**, so two concurrent births — two
+> `SessionStart` hooks, an `entwurf_register_native` racing an agy imprint — can both
+> observe one clean store and mint different garden ids for one native session. A
+> duplicate can therefore appear on a host where nothing was ever corrupted.
 >
 > There is **no migrator and no legacy reader anywhere in this repo** — carrying
 > old records forward would serve a continuity the system deliberately does not

@@ -52,12 +52,17 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { type AcpKeyValue, type AcpMcpServer, enrichMcpServersWithEnvelope } from "../pi-extensions/lib/acp/config.ts";
-import { listAllMetaIdentities, parseMetaRecordV3 } from "../pi-extensions/lib/meta-session.ts";
+import {
+	listAllMetaIdentities,
+	makeStoreRecordReader,
+	parseMetaRecordV3,
+	readActiveStoreEntries,
+} from "../pi-extensions/lib/meta-session.ts";
 import { birthPiCitizen } from "../pi-extensions/lib/pi-citizen-birth.ts";
 
 /** Record count in the isolated store, read the same way production reads it. */
 function citizenCount(dir: string): number {
-	return listAllMetaIdentities(fs.readdirSync(dir), (f) => fs.readFileSync(path.join(dir, f), "utf8"), {
+	return listAllMetaIdentities(readActiveStoreEntries(dir), makeStoreRecordReader(dir), {
 		mode: "strict",
 	}).identities.length;
 }

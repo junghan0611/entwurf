@@ -40,8 +40,7 @@
  *   - no user-specific paths baked in; env-configurable with safe defaults
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import * as fs from "node:fs/promises";
+import { existsSync } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as process from "node:process";
@@ -63,6 +62,8 @@ import {
 import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
+	makeStoreRecordReader,
+	readActiveStoreEntries,
 	readMetaInbox,
 	readMetaReceiverMarker,
 } from "../../../pi-extensions/lib/meta-session.ts";
@@ -441,18 +442,15 @@ server.tool(
 	{},
 	async () => {
 		try {
-			// Meta-store axis: list `.meta.json` entries (ENOENT = fresh install =
-			// empty; any other readdir failure is a real error, not a silent empty).
+			// Meta-store axis: entries WITH their kind (ENOENT = fresh install = empty; any
+			// other readdir failure is a real error, not a silent empty). The name-only
+			// readdir that used to live here made rule 1 unenforceable on this surface —
+			// `readRecord` would follow a symlinked `.meta.json` to bytes the store does not
+			// own, while the doctor refused that same entry. One store, one contract.
 			const sessionsDir = defaultMetaSessionsDir();
-			let metaEntries: string[] = [];
-			try {
-				metaEntries = (await fs.readdir(sessionsDir)).filter((n) => n.endsWith(".meta.json"));
-			} catch (err) {
-				if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") throw err;
-			}
 			const result = await listEntwurfFacts({
-				metaEntries,
-				readRecord: (filename) => readFileSync(path.join(sessionsDir, filename), "utf8"),
+				metaEntries: readActiveStoreEntries(sessionsDir),
+				readRecord: makeStoreRecordReader(sessionsDir),
 				// Socket axis: the same dir dispatch uses (grammar SSOT), scan-internal only.
 				socket: { dir: ENTWURF_DIR },
 			});

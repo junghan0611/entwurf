@@ -165,7 +165,8 @@ try {
 	// ---- T-name-blind: the reader takes NO options and never reads the name (#50 C3) ----
 	// The old `requireEntwurf` name-tag authorization (0.9.0 "entwurf 여부 = name tag")
 	// is deleted, not just unused: resume authorization is record existence
-	// (readMetaIdentityByGardenId) + the header-id ↔ record.nativeSessionId integrity
+	// (readAddressableMetaIdentity — the record must also hold its nativeSessionId
+	// alone, #52) + the header-id ↔ record.nativeSessionId integrity
 	// check in resolveResumeLaunchIdentity. A session with no name, a non-canonical
 	// name, or no `entwurf` tag resolves identity exactly like any other pi session.
 	const idG = "20260603T230000-7777aa";

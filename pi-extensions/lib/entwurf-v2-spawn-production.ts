@@ -35,7 +35,7 @@ import { buildResumePiArgs } from "./entwurf-resume-args.ts";
 import type { LockClaim } from "./entwurf-v2-lock.ts";
 import { releaseLock } from "./entwurf-v2-lock.ts";
 import type { SpawnBgPlan, SpawnBgResumeDeps, SpawnedChild } from "./entwurf-v2-spawn.ts";
-import { readMetaIdentityByGardenId } from "./meta-session.ts";
+import { readAddressableMetaIdentity } from "./meta-session.ts";
 import { inspectControlSocketPath, type LstatLike, mapInspectionToLiveness } from "./socket-discovery.ts";
 import { probeSocketLiveness, type SocketLiveness } from "./socket-probe.ts";
 
@@ -120,13 +120,19 @@ export interface LaunchIdentity {
  * record remembers whose it is — a mismatch means the transcriptPath is stale or
  * foreign, and resuming it would put a turn into a different being's session).
  *
+ * That check is per-record, and per-record is not enough: the v2 lock domain is keyed on
+ * GARDEN ID, so two records sharing one `nativeSessionId` would each pass their own
+ * integrity check and resume the SAME transcript concurrently under two different locks.
+ * Hence {@link readAddressableMetaIdentity} rather than the plain targeted read (#52) —
+ * a resume is exactly the moment a record stops being data and becomes an address.
+ *
  * Everything else is unchanged authority: readSessionIdentity (first model_change) for
  * provider/model/cwd, getEntwurfExplicitExtensions for bridge re-injection (#29 fail-fast).
  * Throws on anything that makes a resume impossible; each throw becomes the watcher's
  * `spawn-start-failed` (no child to watch → release), never a silent no-op.
  */
 export function resolveResumeLaunchIdentity(plan: SpawnBgPlan): LaunchIdentity {
-	const record = readMetaIdentityByGardenId(plan.sessionId);
+	const record = readAddressableMetaIdentity(plan.sessionId);
 	if (record.backend !== "pi") {
 		throw new Error(
 			`entwurf-v2-spawn-production: ${plan.sessionId} is a ${record.backend} citizen — spawn-bg resume is the pi rail.`,

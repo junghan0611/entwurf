@@ -760,28 +760,50 @@ export function certifyActiveStore(
  * the doctor and the install preflight call an unreadable host clean (2026-07-25
  * fresh-eyes review; `existsSync` returns false for a directory it merely cannot search,
  * which is the same laundering {@link inspectRecordEntry} refuses on the targeted path).
+ *
+ * Split out of {@link certifyActiveStoreDir} so that EVERY store-wide scan in this repo
+ * — the certification, the `entwurf_peers` listing, the rival scan — gets its entries
+ * from one function that carries the ENTRY KIND. A binding that does its own
+ * `readdir()` gets names only, so the next thing it does is `readFileSync`, and rule 1
+ * ("a symlink is refused, never followed — its bytes live where this store has no
+ * ownership") quietly stops holding on that surface. That is not hypothetical: both
+ * `entwurf_peers` bindings hand-rolled exactly that readdir, and the #52 duplicate pass
+ * then let a symlink pointing at foreign bytes quarantine a healthy regular record.
+ * The rule has to be structural, not remembered at each call site — the same lesson
+ * `pi_settings_io` learned about the settings writers.
  */
-export function certifyActiveStoreDir(dir: string): ActiveStoreCertification & { dir: string } {
+export function readActiveStoreEntries(dir: string): ActiveStoreEntry[] {
 	const resolved = path.resolve(expandTilde(dir));
 	let dirents: fs.Dirent[];
 	try {
 		dirents = fs.readdirSync(resolved, { withFileTypes: true });
 	} catch (err) {
-		if ((err as { code?: unknown }).code === "ENOENT") {
-			return { dir: resolved, scanned: 0, records: [], defects: [] };
-		}
+		if ((err as { code?: unknown }).code === "ENOENT") return [];
 		throw new MetaRecordError(
 			`cannot read the meta-record store ${resolved}: ${err instanceof Error ? err.message : String(err)}. ` +
 				"That is a failure to inspect the store, not an empty store — refusing to certify a store this " +
 				"process cannot read.",
 		);
 	}
-	const entries: ActiveStoreEntry[] = dirents
+	return dirents
 		.sort((a, b) => a.name.localeCompare(b.name))
 		.map((entry) => ({ filename: entry.name, regularFile: entry.isFile() }));
+}
+
+/** The reader every store-WIDE scan pairs with {@link readActiveStoreEntries}. Callers
+ * must only hand it entries they have already classified as regular files — the kind
+ * check is the caller's, because only the caller knows whether a non-regular entry is a
+ * defect (certification), a diagnostic (listing) or a non-candidate (the rival scan). */
+export function makeStoreRecordReader(dir: string): (filename: string) => string {
+	const resolved = path.resolve(expandTilde(dir));
+	return (filename: string) => fs.readFileSync(path.join(resolved, filename), "utf8");
+}
+
+export function certifyActiveStoreDir(dir: string): ActiveStoreCertification & { dir: string } {
+	const resolved = path.resolve(expandTilde(dir));
 	return {
 		dir: resolved,
-		...certifyActiveStore(entries, (filename) => fs.readFileSync(path.join(resolved, filename), "utf8")),
+		...certifyActiveStore(readActiveStoreEntries(resolved), makeStoreRecordReader(resolved)),
 	};
 }
 
@@ -824,6 +846,24 @@ export interface ListIdentitiesResult {
 }
 
 /**
+ * Group already-parsed identities by the id that must be unique across a store.
+ * Insertion-ordered (Map), so every consumer reports rivals in the order it read them.
+ *
+ * Keeps the listing's duplicate pass deterministic and separate from its quarantine
+ * loop. Certification and the addressable read apply the same `nativeSessionId` equality
+ * rule at different granularities, but do not call this listing-specific grouping helper.
+ */
+function groupByNativeSessionId(identities: readonly MetaIdentity[]): Map<string, MetaIdentity[]> {
+	const byNative = new Map<string, MetaIdentity[]>();
+	for (const identity of identities) {
+		const seen = byNative.get(identity.nativeSessionId);
+		if (seen) seen.push(identity);
+		else byNative.set(identity.nativeSessionId, [identity]);
+	}
+	return byNative;
+}
+
+/**
  * Scan every meta-record in a store into identities + explicit read errors.
  * Pure over injected (entries, readRecord) so gates drive it without IO; the
  * fact-provider (slice 4b) supplies the real readdir/readFile.
@@ -837,18 +877,41 @@ export interface ListIdentitiesResult {
  * is impossible: the filename IS `<gardenId>.meta.json`, so the filesystem
  * already enforces uniqueness — only body/filename drift can split authority.
  *
+ * It takes {@link ActiveStoreEntry} — filename PLUS kind — for the same reason the
+ * certification does: rule 1 says a symlinked record is refused and NEVER FOLLOWED, and
+ * a scan handed bare names cannot obey that, because the only thing it can do next is
+ * read the path. Both `entwurf_peers` bindings used to hand-roll a name-only readdir,
+ * so this surface read foreign bytes through a symlink while the doctor refused the
+ * same entry — one store, two contracts again. A non-regular entry is now a diagnostic
+ * whose bytes are never touched.
+ *
+ * Store-wide UNIQUENESS of `nativeSessionId` is enforced here as well (#52) — free,
+ * because this function already reads the whole store. See the loop below for why both
+ * rivals become errors rather than one becoming a winner.
+ *
  * mode "collect" (default) returns partial results; "strict" throws if ANY
  * record was unreadable (doctor / gate callers wanting all-or-nothing).
  */
 export function listAllMetaIdentities(
-	entries: readonly string[],
+	entries: readonly ActiveStoreEntry[],
 	readRecord: (filename: string) => string,
 	opts: { mode?: "collect" | "strict" } = {},
 ): ListIdentitiesResult {
 	const identities: MetaIdentity[] = [];
 	const errors: MetaRecordReadError[] = [];
-	for (const filename of entries) {
+	for (const entry of entries) {
+		const filename = entry.filename;
 		if (!filename.endsWith(".meta.json")) continue;
+		if (!entry.regularFile) {
+			errors.push({
+				filename,
+				message:
+					"not a regular file (symlink/directory/special) — a record's bytes must live in the store " +
+					"itself, so this entry is never followed and cannot name a citizen. Inspect and remove it by " +
+					`hand, or archive the generation with ${FRESH_CUT_PRESCRIPTION}.`,
+			});
+			continue;
+		}
 		let identity: MetaIdentity;
 		try {
 			identity = parseMetaIdentity(readRecord(filename));
@@ -868,6 +931,33 @@ export function listAllMetaIdentities(
 			continue;
 		}
 		identities.push(identity);
+	}
+	// Rule 4 of {@link certifyActiveStore}, enforced HERE too (#52). This scan already
+	// holds every record in its hand, so uniqueness costs NOTHING to check — and a
+	// facts surface that reports two records claiming one `nativeSessionId` as two
+	// healthy citizens is describing a store the doctor calls uncertifiable as clean.
+	// That is the sharpest form of the gap: not a missing guard, a WRONG FACT.
+	//
+	// Both rivals leave `identities` and become errors, never one winner: the store
+	// genuinely cannot say which record owns that session, so picking either would
+	// mint the authority the certification refuses to mint. Everyone else keeps
+	// listing — the same rule an unreadable record follows, because one broken pair
+	// must not blind `entwurf_peers` (the 0.10 lesson).
+	for (const [nativeSessionId, holders] of groupByNativeSessionId(identities)) {
+		if (holders.length < 2) continue;
+		const files = holders.map((h) => metaRecordFilename(h));
+		for (const holder of holders) {
+			const index = identities.indexOf(holder);
+			if (index >= 0) identities.splice(index, 1);
+			errors.push({
+				filename: metaRecordFilename(holder),
+				message:
+					`duplicate nativeSessionId ${JSON.stringify(nativeSessionId)} — also claimed by ` +
+					`${files.filter((f) => f !== metaRecordFilename(holder)).join(", ")}. The native→garden mapping ` +
+					`must be unique; this store cannot say which record owns that session, so NEITHER is listed as ` +
+					`a citizen. Archive the generation with ${FRESH_CUT_PRESCRIPTION}.`,
+			});
+		}
 	}
 	if (opts.mode === "strict" && errors.length > 0) {
 		throw new MetaRecordError(
@@ -1675,6 +1765,125 @@ export function readMetaIdentityByGardenId(
 export function metaRecordExistsByGardenId(gardenId: string, sessionsDir: string = defaultMetaSessionsDir()): boolean {
 	const id = requireGardenId(gardenId);
 	return inspectRecordEntry(recordFileFor(sessionsDir, id)) !== "absent";
+}
+
+/**
+ * Pure: which OTHER records in this store claim `identity`'s `nativeSessionId`.
+ * Returns their filenames, sorted; empty means `identity` holds it alone.
+ *
+ * A RIVAL IS A RECORD THAT COULD BE ADDRESSED INSTEAD. That is the whole test, and it
+ * is narrower than "a file whose bytes mention the same id" — three neighbour shapes
+ * are therefore NOT candidates, and skipping them is a claim about reachability, not
+ * leniency:
+ *
+ *   - NON-REGULAR (symlink/dir/special): rule 1 of {@link certifyActiveStore} says such
+ *     an entry is refused and never followed, because its bytes live where this store
+ *     has no ownership. So it is skipped WITHOUT BEING READ — following it to see
+ *     whether it "counts" would break the rule in the act of enforcing it, and let a
+ *     planted symlink to foreign bytes quarantine a healthy citizen.
+ *   - BODY/FILENAME DRIFT: a record whose body names a different garden id is
+ *     unreachable by garden-id lookup from either name, so it can never be dispatched
+ *     to and cannot compete for an address.
+ *   - UNPARSEABLE by the live schema: same reason — no read path can reach it.
+ *
+ * All three are real certification defects, and the certification and the listing both
+ * say so. What they must not do is blind a healthy citizen, which is the 0.10 "corrupt
+ * blocks registration forever" mistake wearing a new hat.
+ *
+ * A CANDIDATE WE COULD NOT READ IS A DIFFERENT ANSWER AND THROWS. A regular
+ * `.meta.json` this process cannot read might be a genuine duplicate; skipping it would
+ * report "holds it alone" from a scan that never asked, which is exactly the vacuous
+ * pass the store-level readdir guard refuses one level up. ENOENT is the one exception
+ * and the one this repo already recognises everywhere (`inspectRecordEntry`, the cut's
+ * socket walk, `clearFiles`): a file that vanished between the readdir and the read is
+ * not in the store, so it holds nothing.
+ *
+ * The identity's OWN file is excluded by filename, not by identity equality: the caller
+ * has already proven body and filename agree, and a rival is by definition a different
+ * file.
+ */
+export function nativeSessionIdRivals(
+	identity: MetaIdentity,
+	entries: readonly ActiveStoreEntry[],
+	readRecord: (filename: string) => string,
+): string[] {
+	const own = metaRecordFilename(identity);
+	const rivals: string[] = [];
+	for (const entry of entries) {
+		const filename = entry.filename;
+		if (!filename.endsWith(".meta.json") || filename === own) continue;
+		if (!entry.regularFile) continue; // never followed — see rule 1 above
+		let raw: string;
+		try {
+			raw = readRecord(filename);
+		} catch (err) {
+			if ((err as { code?: unknown }).code === "ENOENT") continue; // raced away — holds nothing
+			throw new MetaRecordError(
+				`cannot read meta-record ${filename} while proving that ${own} holds nativeSessionId ` +
+					`${JSON.stringify(identity.nativeSessionId)} alone: ` +
+					`${err instanceof Error ? err.message : String(err)}. That record may be a duplicate, so this ` +
+					`is an unanswered question, not a clean scan — refusing to dispatch at an address this process ` +
+					`cannot certify.`,
+			);
+		}
+		let other: MetaIdentity;
+		try {
+			other = parseMetaIdentity(raw);
+		} catch {
+			continue; // unreachable by the live schema — not an addressable rival
+		}
+		if (metaRecordFilename(other) !== filename) continue; // drifted — unreachable by garden id
+		if (other.nativeSessionId === identity.nativeSessionId) rivals.push(filename);
+	}
+	return rivals.sort();
+}
+
+/**
+ * The read a DISPATCH does (#52) — the targeted read PLUS the store-wide half of the
+ * contract that a targeted read cannot see on its own.
+ *
+ * WHY THIS IS A SECOND FUNCTION AND NOT A CHANGE TO {@link readMetaIdentityByGardenId}:
+ * the cost is real and the README says so out loud — a call-relay does not re-scan the
+ * whole store per message, and the mailbox poke, the sender-marker trust and
+ * `entwurf_self` keep the per-entry half exactly as before. What separates the callers
+ * is not how careful they are, it is what they DO with the answer: these two turn
+ * `nativeSessionId` into an ADDRESS — a native-push injection into a live conversation,
+ * a pi resume against a transcript — and each does it ONCE per dispatch, next to a
+ * socket connect and a process spawn. One readdir there is nothing; the same readdir
+ * per relayed message is the design the store deliberately does not have.
+ *
+ * The failure it prevents is not hypothetical corruption. `upsertMetaSession` certifies
+ * and then writes, which is not a transaction: two concurrent births — two SessionStart
+ * hooks, an `entwurf_register_native` racing an agy imprint — can both read one clean
+ * snapshot and mint DIFFERENT garden ids for one native session. Nothing was ever
+ * corrupted on such a host, and yet both ids would direct-inject the same conversation,
+ * or resume one transcript twice under two per-garden-id locks.
+ *
+ * Fails LOUD, never soft: a duplicate is corruption of the address space, and QB1
+ * reserves the soft `bad-target` answer for a record that is simply ABSENT.
+ */
+export function readAddressableMetaIdentity(
+	gardenId: string,
+	sessionsDir: string = defaultMetaSessionsDir(),
+): MetaIdentity {
+	const identity = readMetaIdentityByGardenId(gardenId, sessionsDir);
+	const dir = path.resolve(expandTilde(sessionsDir));
+	// Entries carry their KIND (readActiveStoreEntries), so the rival scan can refuse a
+	// symlinked neighbour without reading it. A bare-name readdir here would have made
+	// rule 1 unenforceable at exactly the surface that turns a record into an address.
+	// A store that cannot be listed throws from there — answering "unique" from a scan
+	// that never happened is the vacuous pass this whole check exists to refuse.
+	const rivals = nativeSessionIdRivals(identity, readActiveStoreEntries(dir), makeStoreRecordReader(dir));
+	if (rivals.length > 0) {
+		throw new MetaRecordError(
+			`meta-record ${metaRecordFilename(identity)} shares nativeSessionId ` +
+				`${JSON.stringify(identity.nativeSessionId)} with ${rivals.join(", ")} — the native→garden mapping ` +
+				`must be unique, so this store cannot say which record owns that session and dispatching at either ` +
+				`garden id would reach the same native session twice. Archive the generation with ` +
+				`${FRESH_CUT_PRESCRIPTION}.`,
+		);
+	}
+	return identity;
 }
 
 export interface EnqueueMetaMessageOptions {
