@@ -1,14 +1,48 @@
-# NEXT — #52·#54 closure candidate push — Oracle 검수 뒤 마지막 차단·close 판단
+# NEXT — #52·#54 closure accepted — land CI 뒤 close·0.12.9 prepare
 
 > NEXT는 부트 섹터다. 닫힌 역사는 CHANGELOG/git/이슈에, 장기 방향은 ROADMAP/이슈에 둔다.
 
 ## NOW
 
-- **Stem: closure candidate `273be59` + `668f16f`를 `origin/main`에 push했다. Oracle 서버
-  교차검수와 아래 마지막 차단 뒤 #52/#54 close·0.12.9 prepare를 결정한다.** #52는 discovery와 실제 dispatch/resume 경계에서
-  중복 `nativeSessionId`를 거부하고 static symlink/drift false-rival과 unreadable-rival fail-open을
-  막았다. #54는 no-move / usage / incomplete transition / cut-complete-cleanup-incomplete를 서로 다른
-  exit로 고정했다.
+- **Stem: #52의 마지막 차단(final-component symlink swap)을 `ea7d00c`에 착지했다. Oracle 4차가
+  clean으로 수렴했고 GLG가 commit/push와 0.12.9 release land를 승인했다.** 레코드 바이트는 이제
+  `readStoreRecordFile` 하나에서만 나온다:
+  `O_RDONLY|O_NOFOLLOW|O_NONBLOCK` open → `fstat(fd).isFile()` → `readFileSync(fd)` →
+  `finally closeSync`. `makeStoreRecordReader`(store-wide)와 `readMetaIdentityByGardenId`(targeted)가
+  이 하나로 수렴하고 두 경계에 path-based `readFileSync`는 남지 않았다. errno는 감싸지 않는다 —
+  rival scan의 raced-away skip이 `ENOENT` 식별에 걸려 있어서, 평평한 wrapper는 동시 출생마다
+  dispatch를 거부하게 만든다. `O_NONBLOCK`은 fd 분류가 새로 들여온 위험(fifo가 `open`을 무한
+  블록)을 되막는 것이고, classify-then-read에는 없던 창이다.
+- **[교차검수 2·3차] GPT가 게이트 결함 2건과 내 오정정 1건을 잡았고 전부 수선했다.**
+  ⓐ targeted ELOOP 매핑 셀이 공허했다 — 매핑 줄을 지워도 74/74 green(재현함). ⓑ fifo 셀은
+  O_NONBLOCK 회귀 시 RED가 아니라 무한 정지였다(rc=124 재현) → read를 bounded child로 옮겨
+  timeout이 곧 assertion failure가 되게 했고 `mkfifo` 부재는 loud fail로 바꿨다.
+  ⓒ **ⓐ의 내 첫 수선이 틀렸다.** "집행점이 둘이면 하나는 실행되지 않는다"며 `lstat` 선판정을
+  걷어냈는데, 두 층은 중복이 아니라 서로 다른 것을 지킨다. 선판정은 settled non-regular를 **열지
+  않고** 분류하고, fd는 regular 스냅샷 뒤 swap을 잡는다. 걷어낸 결과 소켓 레코드가 `ENXIO`,
+  mode-000 디렉터리가 `EACCES`로 새어 `inspection failure`가 됐다 — certification은 여전히
+  non-regular라고 말하므로 **한 store에 계약이 둘**이 됐고, 이는 rule 1이 막으려던 바로 그 결함이다
+  (직접 재현 확인). 선판정을 복원하고, race errno 매핑만 순수 함수 `classifyRecordReadFailure`로
+  분리해 synthetic errno로 고정했다(도달 불가 분기는 디스크가 아니라 순수 함수로 증명한다).
+- **검수 증거:** 구현 세션과 Oracle 교차검수가 각각 full `pnpm check` exit 0;
+  `check-meta-identity-consumers` **87**(이전 62); `check-fresh-cut-gate` **166/0**;
+  `check-bridge-delivery` 19; `check-agy-sender-identity` 37; `check-meta-receiver-marker` 51. full gate가
+  소스 변경 뒤 dist를 재빌드했고 설치 경로도 `readStoreRecordFile`을 담아 stale-dist 착시가 아니다.
+  **뮤테이션 2건으로 게이트가 무는 것을 확인했다** — store-wide
+  reader를 path-based로 되돌리면 TOCTOU 런타임 셀이, targeted read를 되돌리면 source fence가 RED.
+  **격리 사본 뮤테이션 4건 전부 rc=1로 물린다** — race 매핑 irregular 분기 삭제 / `ENXIO`만 삭제 /
+  layer 1(`lstat` 선판정) 삭제 / `O_NONBLOCK` 삭제.
+- **셀 역할 분담(혼동 금지):** layer 1을 잡는 것은 **mode-000 디렉터리 셀**이다. 소켓 셀은 `ENXIO`가
+  race 매핑에 있어서 fd-only 빌드에서도 통과하므로, 그것이 지키는 것은 layer 1의 존재가 아니라
+  **certification↔targeted 동일 계약**이다. 뮤테이션으로 확인했다(layer 1 제거 시 소켓 셀 green,
+  mode-000 셀 RED). 둘 다 필요하고 서로를 대체하지 않는다.
+- **증명 경계:** race 분기는 settled store에서 도달 불가라 디스크가 아니라 순수 함수로 고정한다.
+  store-wide 쪽 TOCTOU 창은 호출자가 kind 스냅샷을 쥐는 구조라 게이트가 직접 재현하고, 두 caller가
+  한 helper로 수렴한다는 것은 source fence가 잡는다.
+- **직전 push: closure candidate `273be59` + `668f16f`.** #52는 discovery와 실제 dispatch/resume
+  경계에서 중복 `nativeSessionId`를 거부하고 static symlink/drift false-rival과 unreadable-rival
+  fail-open을 막았다. #54는 no-move / usage / incomplete transition /
+  cut-complete-cleanup-incomplete를 서로 다른 exit로 고정했다.
 - **0.12.8 stable 출하 완료.** `latest=0.12.8` ·
   `repair=0.12.8-repair.1` 보존. 태그 `v0.12.8` = `e31c28f`, make CI
   [30152323861](https://github.com/junghan0611/entwurf/actions/runs/30152323861), candidate sha256
@@ -36,13 +70,11 @@
 
 ## OPEN
 
-1. **▶ #52 마지막 차단 — final-component symlink swap.** `readActiveStoreEntries`/target `lstat`가
-   regular를 확인한 뒤 실제 `readFileSync(path)` 전에 path가 symlink로 교체되면 foreign bytes를
-   따라간다(재현: kind snapshot은 regular, reader 결과는 `FOREIGN`). Linux certified axis에서
-   `O_RDONLY|O_NOFOLLOW`로 open → `fstat` regular 확인 → fd read/close하는 shared reader를 만들고
-   `makeStoreRecordReader`와 `readMetaIdentityByGardenId`가 함께 써야 한다. 실제 symlink를 helper에
-   직접 넣어 target bytes를 반환하지 않음과 fd close를 gate로 고정한다. 이 검수 전 #52·#54 close와
-   0.12.9 prepare 금지.
+1. **▶ `land 0.12.9` — pre-version HEAD를 push하고 exact-SHA CI 3개가 green이면 #52·#54를
+   닫는다.** #55에는 canonical `entwurf_v2` 밖 raw/marker 경계를 기록한다. Oracle 교차검수는 제품
+   계약·문서·87 assertions·격리 mutation 4건·독립 full `pnpm check`를 확인했다. `O_NONBLOCK` 제거는
+   정지가 아니라 bounded child의 `BLOCKED-ON-OPEN` rc=1이며, errno 통과와 두 caller 수렴도
+   gate-held다. close 뒤 `/entwurf-release prepare 0.12.9`가 CHANGELOG·버전·LIVE gate를 소유한다.
 2. **#47 — 다음 제품 축.** 착수 전 `docs/mux-launch-rail.md`를 다시 읽는다. mux lineage에서
    `callerGardenId`는 호출 사건이지 계보가 아니다. 0.13.0은 #48 Cortex 좌표를 예약한다.
 3. **#49 E — floor purity.** 설계 SSOT는 #41의 두 코멘트. 첫 전체 floor 실행은 green 획득이 아니라
@@ -76,6 +108,12 @@ v3-only · 세대 간 주소/resume 연속성 없음 · record body가 identity 
 
 ## RECENT
 
+- **[2026-07-26] address-read 수선 `ea7d00c`:** 레코드 바이트를 fd 하나로 모았다. 교훈은 #53과
+  같은 모양이다 — 규칙을 "모든 호출자가 기억하기"가 아니라 "한 함수만 통과하기"로 만들면 구조가
+  대신 지킨다. 다만 이번엔 한 겹 더 있다: **엔트리의 kind를 이름에 붙여 옮기는 것만으로는 부족하고,
+  바이트를 내주는 그 file description 위에서 다시 판정해야 한다.** 이름은 두 syscall 사이에 뜻이
+  바뀔 수 있다. 새 계약이 새 위험(fifo 블로킹)을 들여왔고 `O_NONBLOCK`으로 되막았다 — 뺄셈이
+  아니라 교환이었음을 기록해 둔다.
 - **[2026-07-26] #52·#54 closure candidate:** duplicate discovery/dispatch quarantine + kind-carrying
   static-symlink refusal, fresh-cut 5-state exit contract. Opus 구현 뒤 GPT 교차검수가 symlink/drift
   false-rival과 unreadable-rival fail-open을 잡았고, 제품 seam·mutation gate로 함께 수선했다. Full
