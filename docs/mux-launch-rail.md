@@ -1,5 +1,10 @@
 # mux launch rail — fresh spawn을 mux-visible surface로 통일
 
+> **Queue status (2026-07-27): #48 Cortex → #56 Codex 뒤 #47에서 재검수.** 아래 인터페이스와 착수
+> 순서는 0.12 이전 repro/demo에서 만든 설계 기록이며 현재 구현 명세가 아니다. current production의
+> fresh-mint 빈칸과 실제 소비자를 다시 inventory하기 전에는 파일/타입/enum을 복사하지 않는다.
+> 현재 호스트는 tmux 3.6a이고 zmx는 PATH에 없다 — 이것은 선택 결론이 아니라 새 spike의 시작점이다.
+>
 > **EXPIRING DOC — 착수하면 죽는다.** 이 문서는 영구 SSOT가 아니라 **작업 중 비계(scaffold)**다.
 > 내용의 3/4(인터페이스 shape · driver 매핑 표 · 착수 8단계)는 *아직 안 쓴 코드*일 뿐이라
 > 코드가 서는 순간 중복이 된다. 살아남을 유산은 갈 곳이 이미 정해져 있다:

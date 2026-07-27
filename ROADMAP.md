@@ -7,13 +7,24 @@
 
 ---
 
-## 현재 — 0.12.x: agy shipped, mux next, Cortex는 0.13.0
+## 현재 — 0.12.9 shipped; 0.12.10은 ACP 수선 컷 (Cortex는 rail 정리 뒤)
 
 이 repo는 **entwurf-core(v2 garden-citizen dispatch) + native-harness bridges + pi adapter + ACP plugin**이다.
-0.12.0의 `pi-shell-acp`→`entwurf` hard-cut은 끝났다. 현재 0.12.x는 Claude mailbox, pi socket/resume,
-Antigravity native-push를 한 garden-id dispatch 표면에서 출하하며, 다음 0.12.x 구현은 mux-visible fresh
-spawn(#47)이다. Cortex backend(#48)는 0.13.0에 예약한다. Pi는 오늘 가장 깊이 붙은 adapter지만,
-프로젝트의 본질은 **garden id로 호명 가능한 형제 세션 사이의 얇은 dispatch substrate**다.
+0.12.0의 `pi-shell-acp`→`entwurf` hard-cut과 0.12.9의 record-address/fresh-cut closure는 끝났다.
+Claude mailbox, pi socket/resume, Antigravity native-push가 한 garden-id dispatch 표면으로 출하됐다.
+
+**2026-07-27 축 전환(GLG 지시).** 직전 계획은 `#48 Cortex → 0.13.0`이었으나 뒤집혔다. ACP Claude가
+실사용에서 형제에게 닿지 못하는 상태가 발견됐고 — 번들 `entwurf-bridge` MCP 도구가 세션 tool schema에서
+빠지는 증상 — GLG의 판단은 *"기본도 안되는데 cortex를 품을 수는 없어"*다. 이어서 범위도 좁혔다:
+*"0.13.0 안가고 지금 수선하면 0.12.10으로 acp 수정 및 rail 문서 업데이트만."* 따라서 순서는
+**0.12.10(= `claude-agent-acp` 0.62.0 핀 + rail 문서 수선) → readiness 인과 규명 → #48 Cortex ACP →
+#56 Codex native citizen → #47 mux driver**다. reference adapter가 모델을 outbound sibling dispatch까지
+데려간다는 것을 증명해야 두 번째 backend를 태운다 —
+증명 없는 rail 위에서는 adapter 버그와 rail 버그를 구분할 수 없다(`docs/acp-backend-rail.md` §11).
+0.13.0은 지금 열지 않는다. 네 이슈 lane 모두 과거 가설과 증거의 묶음이지 현재 구현
+명세가 아니며, 각 lane은 현재 main·현재 upstream·현재 live surface를 다시 audit한 뒤 범위를 정한다.
+Pi는 오늘 가장 깊이 붙은 adapter지만, 프로젝트의 본질은 **garden id로 호명 가능한 형제 세션 사이의 얇은
+dispatch substrate**다.
 
 v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라졌다. `entwurf_v2`가 척추다.
 기존 citizen 대상 send/reply/resume → `entwurf_v2`; 무에서 새 형제를 만드는 fresh creation은 deferred lane.
@@ -31,10 +42,10 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 |---|---|---|---|
 | **pi** | shipped | control-socket adapter + spawn-bg resume host. ACP plugin도 pi provider/model로 들어온다. | `pnpm check`, v2 matrix/spawn LIVE, release-gate MUST |
 | **Claude Code** | shipped | SessionStart meta-bridge → garden id + mailbox + trusted marker. Transcript를 가져오지 않는다. | meta-session gates, mailbox/deliverability, `doctor-meta-bridge` |
-| **ACP Claude** | shipped | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. | ACP LIVE smokes + release-gate MUST |
-| **Codex** | verified probe | direct/native delivery evidence exists; no managed native-citizen lifecycle yet. Default is not ACP. | DELIVERY.md raw probe / external MCP evidence |
+| **ACP Claude** | shipped, **model-facing outbound half unreliable — 현재 lane** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Turn/provider path ships, 그리고 host resident는 record/socket citizen으로 계속 주소 가능하다(S1이 turn-free로 증명). 다만 번들 `entwurf-bridge` MCP 도구가 첫 턴에 세션 schema에서 빠지는 관측이 있어, 그 시민 안의 **ACP 모델이 형제에게 나가는(outbound dispatch)** 절반은 아직 신뢰 구간이 아니다(🔴 readiness race). | ACP LIVE smokes + release-gate MUST |
+| **Codex** | verified probe / #56 queued | direct/native delivery evidence exists; no managed native-citizen lifecycle yet. Default is not ACP. Re-audit app-server/hooks on the shipping line before implementation. | DELIVERY.md raw probe / #56 |
 | **Antigravity (`agy`)** | shipped | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push; managed MCP/permission, statusline, hook adapters. | agy deterministic gates + doctors + 2026-07-13 live round trip |
-| **Cortex / governed ACP** | deferred | future non-Claude ACP backend candidate. | design lane only |
+| **Cortex / governed ACP** | queued **after** the ACP Claude rail settles; audit required | PR #40 is open but merge-dirty (adapter core itself is conflict-free) and its old spawn-registry premise was deleted by #50; it also declares one pending deliverable. Rebase scope and live Cortex compatibility must be re-derived when the lane opens. | PR #40 / #48 / `docs/acp-backend-rail.md` §11 |
 | **Gemini CLI** | deprecated path | replaced by Antigravity direction for current Google individual tiers. | README migration note |
 
 ### ACP plugin boundary
@@ -294,6 +305,112 @@ record-backed pi 시민은 전부 sibling, `isEntwurf` 종 boolean 부활 금지
     get_info, prompt RPC 수락, extension_error 없음) — 정확히 tool schema만 비었다. 직후 격리 재실행 PASS
     (14 checks — 격리 누적 4/4 PASS). 원본 transcript:
     `~/.pi/agent/entwurf-readiness-race-samples/entwurf-smoke-acp-bundled-mcp-live-FAIL-2026-07-24T13-38-07-945Z.log`.
+  - **표본 4 (2026-07-27 10:24–10:25 KST, pi 0.82.1 + claude-agent-acp 0.62.0 + claude 2.1.220)** — 핀 업 직후
+    citizen 3종 순차 실행, **3/3 PASS**: `smoke-acp-socket-citizen-live` 10 checks,
+    `smoke-acp-bundled-mcp-live` 14 checks(번들 bridge가 세션에 도달), `smoke-acp-v2-send-live` 15 assertions.
+    조용한 머신(loadavg 1.24), 총 24초.
+    **이 표본의 한계를 분명히 한다 — 상관 조건을 재현하지 않았다.** 실패 표본 3개는 전부 *무거운* 조건에서
+    나왔다(19:00 백그라운드 `pnpm check` 동시, 19:30 라이브 턴 10여 개 뒤 aggregate 후반, 22:38 17스텝
+    release-gate 후반). 24초짜리 3종 순차는 구조적으로 이미 4/4 PASS였던 **격리 재실행과 같은 조건**이다.
+    따라서 이 표본은 격리 누적을 5/5로 올릴 뿐, "무거운 시퀀스 후반부" 상관에 대해서는 **아무 말도 하지 않는다.**
+    green은 fix 증거가 아니다. 상관 조건을 실제로 치려면 `LIVE=1 ./run.sh release-gate` 전체(표본 3을 낳은 그것)를
+    돌려야 한다. 아래 ordering probe는 표본을 늘리는 대신 **다른 질문**(이 서버가 지연된 MCP를 기다리는가)을 친다.
+  - **현재 claude-agent-acp 노출면에 관측 경로가 없다는 실증 (2026-07-27).** claude-agent-acp 0.62.0 `dist`가 방출하는
+    `sessionUpdate` 종류는 `agent_message_chunk` / `agent_thought_chunk` / `available_commands_update` /
+    `config_option_update` / `current_mode_update` / `plan` / `session_info_update` / `tool_call` /
+    `tool_call_update` / `usage_update` **전부이며 MCP 상태를 알리는 것은 하나도 없다.**
+    즉 client가 prompt 전에 readiness를 *읽을* 방법은 현재 ACP 표면에 존재하지 않는다 —
+    처방 ②는 "폴링을 추가한다"가 아니라 "없는 신호를 먼저 만든다"는 뜻이다.
+  - **ordering probe 설계 (다음 한 걸음, 아직 미구현).** 간헐적 창을 관측하려 하지 말고 **입력 변수를 통제**한다.
+    `scripts/fixtures/probe-mcp-server.ts`에 env 기동 지연(`PROBE_MCP_STARTUP_DELAY_MS`)을 넣는다.
+    **probe 단위는 단발 delayed run이 아니라 paired control/intervention이다.** 단발로는 아무 판정도 서지 않는다:
+    A처럼 보여도 `newSession`의 다른 작업이 우연히 더 걸린 것일 수 있고, B처럼 보여도 `delay=0`에서 이미
+    실패했을 수 있으며, D는 probe가 스스로 만든 timeout일 수 있다 — 턴에는 30초 경계가 **셋**이다
+    (`INITIALIZE_TIMEOUT_MS` · `NEW_SESSION_TIMEOUT_MS` · `SET_MODEL_TIMEOUT_MS`,
+    `pi-extensions/lib/acp/backend.ts:81-83`) + `PROMPT_TIMEOUT_MS` 600초.
+    따라서 ⑴ 동일 pin/config/fixture의 `delay=0` **control**(기대 도구가 visible **그리고** callable),
+    ⑵ newSession·set-model 두 30초 경계보다 충분히 작은 `D` **intervention**, ⑶ **A 판정에는 nonzero D가
+    최소 2개(`D1`,`D2`) 필수** — "latency가 D를 따라 이동"이 판별자인데 점 하나로는 scaling을 못 본다.
+    D 하나면 ordering 관측까지만이고 wait 판정은 **유보**한다(B·C·D는 첫 intervention에서 읽어도 된다),
+    ⑷ 모든 이벤트에 `runId`를 실어 결합.
+    **production sequence의 중간 단계를 계측에 넣어라:** 실제는 `newSession → enforceModel(setSessionConfigOption)
+    → prompt`이고, 지연된 MCP가 `enforceModel` 동안 해소되거나 거기서 fail-loud할 수 있다. newSession/prompt만
+    마킹하면 그 둘을 C나 D로 오독한다. 최소 ACP-side 마커 =
+    `newSession start/end → setSessionConfigOption(model) start/end → prompt start/end`.
+    **판정 공간 밖에 run-invalidating state가 둘 있고 어느 것도 D가 아니다.** **P0(INVALID BASELINE)**:
+    `delay=0` control 자체가 실패(거기서의 `initialize` 실패 포함) → 중지, intervention 판정 안 함.
+    **I0(INVALID RUN)**: control은 통과했는데 *intervention* run이 `initialize`에서 실패 → injected delay가
+    그 phase에 닿을 수 없으므로 환경 drift다. intervention 판정 중지, artifact 보존, 같은 pair **1회 재실행**.
+    재발하면 더 돌리지 말고 environment·initialize 원인 규명으로 전환한다. (P0는 원인명이 아니라 "control이
+    판정 가능한 baseline이 아니다"라는 **상태명**이므로 artifact에 `reason=initialize|tool-unavailable|…`를 남긴다.)
+    **먼저 id를 실측하라 — hardcode 금지.** provider-bound tool id는 source MCP 이름과 다르다 — 이 repo 실측이
+    source `entwurf_v2` → runtime `mcp__entwurf-bridge__entwurf_v2`다. delayed run에서 모델이 bare `probe_nonce`를
+    추측 호출해 `No such tool`을 받아도 실제 provider-bound id는 schema에 있었을 수 있으며, 그건 alias·model
+    오류이지 absence가 아니다.
+    **두 layer는 request-id namespace를 공유하지 않으므로 우리가 통제하는 argument로 correlate한다.** ACP
+    `tool_call`의 `toolCallId`는 Claude tool-use id이고(`acp-agent.js`가 `toolUse.id`/`tool_use_id`/`message.uuid`로
+    만든다), fixture가 보는 JSON-RPC id는 MCP client가 따로 민 것이다 — `acp-agent.js`에 `jsonrpc`는 **0회**
+    등장하므로 둘이 같다는 보장 자체가 없다. "request id로 join"은 측정이 아니라 가정이다. 대신
+    ⓐ probe fixture tool에 **필수 correlation field**(`probeRunId`)를 둔다 → ⓑ prompt가 이번 run의 unique
+    `probeRunId`를 **정확한 argument로** 넣어 호출하게 한다 → ⓒ control의 ACP `tool_call`(provider-bound tool
+    name + `rawInput.probeRunId`)과 fixture `tools/call.params.arguments.probeRunId`를 **`runId` + `probeRunId`**로
+    join한다 → ⓓ 그 ACP 이벤트에서 관측한 provider-bound tool name을 **`expectedProviderToolId`**로 저장한다
+    (실측, hardcode 금지). ACP `toolCallId`와 MCP JSON-RPC id는 artifact에 보존하되 **cross-layer equality·join
+    key로 쓰지 않는다.** 아래 모든 absence 주장은 그 실측값과 비교한다.
+    **P0 승격은 서사가 아니라 마커로 판정한다** — "과거 표본과 같아 보인다"는 판정 술어가 아니고, 그 추론이야말로
+    이 probe가 대체하려는 것이다:
+    ⑴ `tools_list_response_forwarded` 없음 → MCP handshake/fixture/config 후보, **승격 금지** /
+    ⑵ 기대 도구의 `tools/call`이 fixture에 도달했으나 실패 → dispatch는 이미 성립했고 실행 실패이지
+    schema absence 아님, **금지** / ⑶ `tools_list_response_forwarded` **그리고** 명시적 호출 프롬프트 전송
+    **그리고** fixture `tools/call` 마커 **없음** **그리고** 런타임 `No such tool available: <id>`의
+    `<id> === expectedProviderToolId` → **직접 schema-absence 증거**, pre-turn assertion·config 유효 시
+    **승격 가능** / ⑷ 같은 조건인데 `<id>`가 bare 이름이나 다른 alias → model·alias mismatch, **금지** /
+    ⑸ call marker 없음 + 직접 런타임 에러 없음 + 모델이 "도구가 없다"고 말만 함 → model-compliance·증거불충분,
+    **모델 발화 단독 승격 금지** / ⑹ **같은 `runId`·같은 prompt request에 귀속된** provider-bound schema
+    snapshot을 `tools_list_response_forwarded` **이후**에 떠서 `expectedProviderToolId` 부재 확인 →
+    ⑶과 동급으로 허용. 순서 `forwarded < snapshot`을 닫아야 한다 — prompt 이후 임의 시점의 캡처는 dynamic
+    update 때문에 같은 주장이 아니다. 가능하면 snapshot은 provider가 모델 요청에 실제로 넘긴 tool-definition
+    set이어야 하며 재구성이 아니어야 한다.
+    나열되지 않은 조합은 기본값 **P0/inconclusive**. ②/③의 경계는 에러 문구가 아니라 fixture `tools/call`
+    마커의 유무로 갈린다.
+    순서는 ⓐ `P0` 사실로 artifact 보존·기록 → ⓑ setup/pin/config/fixture/model-compliance 분류 →
+    ⓒ 위에서 승격 가능한 행일 때만 이 원장의 새 표본으로 **승격**. control 실패를 B나 D에 섞는 것도 금지다.
+    A: delayed run이 ordering을 유지하고 **동시에** `newSession` latency가 `D1`,`D2`를 따라 이동 → 이 서버·이
+    경로의 wait 증거(일반 보증 아님) / B: control은 callable PASS인데 delayed run은 `newSession`/`enforceModel`/
+    prompt가 wire-availability보다 앞서고 absence·`No such tool` → delay window가 failure mode에 **충분** /
+    C: control PASS, delayed run이 앞서지만 이후 direct tool-call 마커 성공 → client fence 없이 late·dynamic
+    readiness / D: 경계보다 충분히 작은 D인데 error·timeout → fail-loud 관측이며 **반드시 phase 이름을 붙이되,
+    delay가 실제로 닿는 phase만 D다**(어느 wire request id/method가 timeout했는지로 이름 붙인다):
+    `D-newSession` / `D-enforceModel` / `D-prompt`(600초 경계, 도구 부재와 별도 분류).
+    `INITIALIZE_TIMEOUT_MS`도 기록은 하되 거기서의 실패는 위 P0·I0이지 **D가 아니다**.
+    **B가 나와도 2026-07-24 3표본의 원인이 확정되지는 않는다** — controlled delay가 같은 증상을 만들 수 있다는
+    causal sufficiency와 과거 incident attribution은 다른 주장이다. 도구 present 1회로는 A와 C를 구분하지
+    못해 기제를 전면 반증하지도 못한다.
+    **따라서 probe는 계측을 동반해야 한다:** fixture 프로세스 기동 → delay start/end → MCP transport
+    connect/initialize/tool-list/tool-call, 그리고 client 쪽 **전체** ACP 시퀀스 — `newSession` start/end →
+    `setSessionConfigOption(model)` start/end → prompt start/end. 여기서 set-model을 빠뜨리면 `enforceModel`
+    정지가 C나 D로 오독된다.
+    probe 자체의 호출 마커와 런타임 `No such tool`을 분리한다 — 모델 발화만으로 schema ordering을 추론하는 것이
+    원래 3표본을 읽기 어렵게 만든 바로 그 실수다.
+    **마커 정의가 A/C를 가른다 — 그리고 이걸 "ready"라고 부르지 않는다:** `server.connect()`도 initialize
+    *수신*도 아니고, **fixture handler의 return도 아니다**(직렬화와 write에 걸리는 만큼 마커가 앞당겨진다).
+    구현 가능한 한 점으로 고정한다 — **`tools_list_response_forwarded`** = MCP-side wire proxy가 기대 도구가
+    담긴 `tools/list` 응답 프레임 **전체**를 downstream stdio에 `write()`하고 **write callback을 받은 시점**.
+    이것은 **wire-availability proxy**이지 readiness가 아니다(바이트를 넘겼다는 뜻이지 client가 파싱·설치했다는
+    뜻이 아니다) — 모든 기술에서 계속 wire-availability로 부른다. **실제 callability는 오직** 기대 도구에 대한
+    `tools/call` 요청이 fixture에 도달한 별도 마커로만 확정한다. 그래서 ACP 쪽 proxy와 **별도로** fixture/MCP 쪽
+    wire 계측이 필요하다. 최소 비교는
+    한 타임라인 위의 `tools_list_response_forwarded ↔ newSession end ↔ prompt request start`다. 모든 참여 프로세스는
+    하나의 append-only NDJSON event log(`runId` + 공유 wall-clock + pid + monotonic per-process counter)에 쓴다.
+    **client seam을 명시하지 않으면 이 계측은 실행 불가능하다** — 제품 turn loop를 고치지 않기로 했으므로
+    ⓐ **ACP stdio wire proxy**(자식 stdio에 개입해 JSON-RPC 프레임을 타임스탬프; 실 production 경로를 관측)
+    또는 ⓑ **probe 전용 raw client**(`smoke-acp-raw-turn-live`가 이미 하는 방식; 단 production sequence와
+    동일한 호출·인자·순서임을 게이트로 묶어야 한다 — 아니면 lookalike를 재는 것) 중 하나를 명시적으로 고른다.
+    `session ready` progress notice를 읽고 타이밍을 추정하는 것은 금지 — probe가 대체하려는 바로 그 간접추론이다.
+    **probe가 답하는 질문은 좁다:** "이 서버는 지연된 MCP를 기다리는가, prompt가 먼저 열리는가, fail-loud인가."
+    모든 처방이 이 사실에 의존하므로 값어치가 있지만, 이것은 인과 질문의 **입력**이지 결론이 아니다.
+    probe는 backend 무관(operator MCP 서버 + paired control/intervention run)이라 `cortex acp serve`에도 그대로 겨눠 §11-3의 "미측정"
+    질문을 대칭 가정 없이 잴 수 있다.
 - **repair/v2-core-debt 승격분 (2026-07-24):**
   - **[GLG 결정 대기 — 에이전트 무접촉] `core.hooksPath` 이중화.** 이 리포 `.git/config`의
     `core.hooksPath=.husky/_`가 전역 안전 레일(`~/repos/gh/agent-config/git-hooks`)을 덮는다.
@@ -326,6 +443,16 @@ record-backed pi 시민은 전부 sibling, `isEntwurf` 종 boolean 부활 금지
   cutover에서 제거되며 같이 사라졌다.
 - **Dep bump(별도 트랙):** claude-agent-acp / ACP SDK bump는 `check-acp-sdk-surface`와 raw LIVE로 잠근다.
   ~~준비선 0.61.0 / 1.3.0~~ → **랜딩 완료(2026-07-24 `5f5a18d`, pi 0.82.0은 `dfa3967`)** — 다음 bump부터 이 트랙 절차 재사용. model forcing은 `session/set_config_option(configId="model")`.
+  - **2026-07-27 bump — claude-agent-acp 0.61.0 → 0.62.0 (ACP SDK는 1.3.0 유지).** 이 트랙 절차대로 잠갔다:
+    ⑴ `check-acp-sdk-surface`를 0.62.0 / claude-agent-sdk 0.3.219로 이동(핀·lock peer-resolution·runtime probe)
+    후 PASS, ⑵ `LIVE=1 ./run.sh smoke-acp-raw-turn-live` **2026-07-27 10:49:15 KST 실행 → PASS**
+    (launch source = `package:@agentclientprotocol/claude-agent-acp`, PATH fallback 아님; model `claude-sonnet-5`,
+    `stopReason=end_turn`, NDJSON 32,593 bytes 캡처, EXIT=0). **성격: dependency refresh.** upstream `dist/`는 0.61.0과 바이트 동일이고
+    변경은 선언 의존성뿐(claude-agent-sdk 0.3.217→0.3.219; devDep anthropic sdk는 우리에게 닿지 않음).
+    `@anthropic-ai/sdk 0.100.1`은 유지 — 0.3.219의 peer floor를 실측했고 `>=0.93.0`으로 불변이라
+    기계적 상향을 취하지 않는다(`@modelcontextprotocol/sdk ^1.29.0` → 1.29.0, `zod ^4.0.0` → 4.3.6 충족).
+    **readiness race와 무관하다**: 0.62.0은 explicit readiness wait를 추가하지 않는다. 다만 transitive
+    SDK가 움직였으므로 MCP startup timing이 동일하다고 주장하지 않는다 — 새 fence가 없다는 것만 확정이다.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.
