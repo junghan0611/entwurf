@@ -4,6 +4,25 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.12.10 — 2026-07-27
+
+### Changed
+
+- **The Claude ACP dependency rail moves to `@agentclientprotocol/claude-agent-acp` 0.62.0.** The paired SDK surface fence now covers Claude Agent SDK 0.3.219; this is a dependency refresh, not a claim that MCP readiness timing changed.
+- **The ACP rail document now names its unresolved readiness question precisely.** The ordered probe records wire availability, `newSession`, model enforcement, and prompt boundaries before any adapter remedy or Cortex work is considered.
+- **Gate qualification is part of the deterministic floor.** Committed defect mutants run in an isolated snapshot and must fail their named `[QK:<claim>]` oracle; the agy permission contract is likewise covered by an independent literal matrix.
+
+### Fixed
+
+- **All citizen rails now share the same record authority without inventing pi privilege.** Control-socket, self-fetch, and native-push capability differences remain explicit while stale pi-special address and transport prose is removed.
+- **The shipped pi and MCP tool descriptions tell the complete v2 dispatch truth.** Native-push direct injection, its three-valued probe rejects, mailbox deliverability, control-socket lock scope, and spawn-bg's separate relaunch transport are described and regression-fenced on both surfaces.
+- **Native-push self-awareness and agy permissions follow their actual rail.** Native-push never advertises an inbox; normal-path agy approval covers `entwurf_v2`, `entwurf_peers`, and `entwurf_self` with per-rule ownership, strict state migration, and separate runtime/ownership doctor verdicts.
+
+### Verification
+
+- Pre-version landing HEAD `9a501b30f0e7d82307d885f1a1eb9d91c79c5f16` passed exact-SHA GitHub Actions run [30252596435](https://github.com/junghan0611/entwurf/actions/runs/30252596435): `check`, `install-surface`, and `artifact-consumer` all success.
+- The prepared tree passed `pnpm check`; `LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.12.10.d4gC9v` completed all green: **MUST PASS=17 FAIL=0 SKIP=0** and **BEHAVIOR PASS=1 FAIL=0**, EXIT=0. Full log: `/tmp/entwurf-release-gate-0.12.10.d4gC9v/release-gate.log`; per-step artifacts are preserved in that log. Prepared-HEAD exact-SHA CI and preserved-candidate acceptance remain deliberately deferred to `make`.
+
 ## 0.12.9 — 2026-07-26
 
 ### Changed
