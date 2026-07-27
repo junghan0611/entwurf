@@ -127,9 +127,11 @@ Usage:
   ./run.sh smoke-meta-honesty         # 1.0.0 meta-bridge: honesty regression gate (#30 blockers) — doorbell counts ALL msgs honestly + hook logs failures as ERROR (best-effort, no scream). Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-meta-install-state   # 1.0.0 meta-bridge Phase 2: stateful install/uninstall + store-doctor regression gate. Offline/deterministic (deps: bash+node+python3)
   ./run.sh check-meta-doctor-oracle   # 0.12.8 (#51): detection power of the release ORACLE — healthy fixture must reach `doctor: PASS`, then 21 planted defects (retired shell form, partial hand-patch, launcher bypass/repoint/provenance loss, malformed exec args, owner type drift, extra leaf/group, doorbell asyncRewake/path/timeout, no live bridge, stale receiver, ambiguous/missing cache, missing hook log/writer, failing CLI probes) must each turn it FAIL naming their own cause, plus a positive case pinning that a long-writing CLI is NOT a false negative. Offline/deterministic (deps: bash+node+python3)
-  ./run.sh smoke-agy-install-state    # agy MCP + exact permission ownership regression (167): isolated HOME+XDG, adopt/state/inverse, symlink refuse, setup degrade. Offline/deterministic
-  ./run.sh smoke-agy-statusline-state # agy ambient garden-id statusLine install/doctor/inverse regression (62). Offline/deterministic
-  ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression (37). Offline/deterministic
+  ./run.sh smoke-agy-install-state    # agy MCP + exact permission ownership regression: isolated HOME+XDG, adopt/state/inverse, symlink refuse, setup degrade. Offline/deterministic
+  ./run.sh check-agy-permission-matrix # AGY permission CONTRACT SPACE as a literal table (55 cells): parser-state × operation × settings × ownership × precedence with stated exclusion rules; expectations are hand-written literals, never read from the SUT. Offline/deterministic (deps: python3)
+  ./run.sh check-gate-qualification    # kill-proof qualification (the gate-of-gates): runner self-test (classifier truth table + synthetic negatives incl. wrong-reason/hang/control-red/impurity) + committed mutant manifests (scripts/mutants/*.json) run in an isolated snapshot repo under control→mutant→restore→control; the real checkout is never written. Evidence = claim IDs + killed mutant IDs, never assertion counts
+  ./run.sh smoke-agy-statusline-state # agy ambient garden-id statusLine install/doctor/inverse regression. Offline/deterministic
+  ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression. Offline/deterministic
   ./run.sh smoke-user-scope-citizen   # 0.12.6 install-boundary: pi packages[] registration SSOT (register-pi-package.py) — idempotent + preserves unrelated + normalizes stale + remove symmetry + fails loud. Offline/hermetic (deps: bash+python3)
   ./run.sh smoke-meta-prune           # 1.0.0 meta-bridge Phase 4: listing-only store janitor regression gate — classify keep/orphan/stale/ambiguous, delete nothing. Offline/deterministic (deps: bash+node)
   ./run.sh smoke-meta-keyset-guard    # 0.10.0 meta-bridge: keyset-owner guard regression — check-keyset-overlap + managed-keys SSOT (disjoint passes, collisions fail). Offline/hermetic (deps: bash+python3)
@@ -4430,6 +4432,25 @@ case "$cmd" in
     # uninstall, symlink refuse, dangling FAIL, create-new inverse, and ⓪ checkout impurity 0.
     # Offline + deterministic (deps: bash+python3).
     (cd "$REPO_DIR" && bash scripts/smoke-agy-install-state.sh)
+    ;;
+  check-agy-permission-matrix)
+    # The agy permission engine's CONTRACT SPACE as a literal table (55 cells + stated
+    # exclusions R2/R4-R7): parser-state × operation × settings × ownership × precedence.
+    # Every recent permission defect was an unenumerated cell of this matrix; this gate
+    # states the axes and exhausts the meaningful product, with hand-written literal
+    # expectations (oracle independence — nothing is read back from the SUT). Sandbox
+    # per cell; offline + deterministic (deps: python3).
+    (cd "$REPO_DIR" && python3 scripts/check-agy-permission-matrix.py)
+    ;;
+  check-gate-qualification)
+    # Kill-proof qualification — the gate-of-gates. Proves the committed defect mutants
+    # (scripts/mutants/*.json) make their gates fail BOUNDED and FOR THE CLAIMED REASON
+    # ([QK:<claim>] token on a failure line), inside an isolated snapshot repo under the
+    # control→mutant→restore→control state machine; the real checkout is never written
+    # (HEAD + work-surface content hash asserted identical before/after). The runner is negative-controlled
+    # first: zero-match/multi-match/survived/wrong-reason/hang(+pgroup grandchild kill)/
+    # control-red/impurity all must classify red before any real manifest counts.
+    run_ts scripts/check-gate-qualification.ts
     ;;
   smoke-agy-statusline-state)
     # #46 Task 1 regression gate for the agy statusLine install adapter: install→doctor→uninstall

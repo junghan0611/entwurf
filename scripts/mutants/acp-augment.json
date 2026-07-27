@@ -1,0 +1,30 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-augment",
+	"mutants": [
+		{
+			"claim": "AUGMENT-BUDGET-FITS",
+			"title": "shrinking the augment cap re-opens the tail-cut that hid AGENTS rules + cwd from ACP siblings",
+			"subject": "pi-extensions/lib/acp/augment.ts",
+			"find": ["const MAX_AUGMENT_BYTES = 50 * 1024;"],
+			"replace": ["const MAX_AUGMENT_BYTES = 20 * 1024;"],
+			"gate": ["bash", "run.sh", "check-acp-carrier-augment"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:AUGMENT-BUDGET-FITS]",
+			"signatureSource": "scripts/check-acp-carrier-augment.ts"
+		},
+		{
+			"claim": "AUGMENT-TRUNC-MARKER",
+			"title": "silent truncation: dropping the honest marker leaves a cut augment with no trace",
+			"subject": "pi-extensions/lib/acp/augment.ts",
+			"find": [
+				"\tconst marker = `\\n\\n[entwurf: context augment truncated to ${MAX_AUGMENT_BYTES} bytes; read AGENTS.md files directly if more detail is needed.]`;"
+			],
+			"replace": ["\tconst marker = \"\";"],
+			"gate": ["bash", "run.sh", "check-acp-carrier-augment"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:AUGMENT-TRUNC-MARKER]",
+			"signatureSource": "scripts/check-acp-carrier-augment.ts"
+		}
+	]
+}

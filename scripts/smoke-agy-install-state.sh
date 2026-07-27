@@ -473,7 +473,7 @@ RULE="${RULES%% *}"   # first rule, for the single-string cases below
 # pinned here, literally, once. Over-granting is the failure this catches: a permission we take and
 # do not need is not a smaller bug than one we forget.
 EXPECT_RULES='mcp(entwurf-bridge/entwurf_v2) mcp(entwurf-bridge/entwurf_peers) mcp(entwurf-bridge/entwurf_self)'
-want "contract: the auto-granted rule set is EXACTLY the three normal-path tools, in order" \
+want "contract: the auto-granted rule set is EXACTLY the three normal-path tools, in order [QK:AGY-EXACT-RULE-SET]" \
   "[ \"$RULES\" = \"$EXPECT_RULES\" ]"
 # Named negatives, not just an equality: these two are the tools a future edit is most likely to add
 # by reflex ("grant everything the server exposes"), and each would be a grant we never justified —
@@ -497,7 +497,7 @@ want "permission: install grants EVERY normal-path rule into permissions.allow" 
 # changed to a rule set; the MCP install-state's layout never moved and must stay 1. Sharing one
 # constant makes the version a lie in whichever file did not change — a later reader branching on it
 # would be branching on noise, and "the schema bumped" would stop meaning "the shape changed".
-want "state schemas are independent: MCP install-state stays at its own version (1)" \
+want "state schemas are independent: MCP install-state stays at its own version (1) [QK:AGY-SCHEMA-VERSIONS-APART]" \
   "[ \"\$(python3 -c \"import json;print(json.load(open('$STATE'))['schemaVersion'])\")\" = 1 ]"
 want "state schemas are independent: permission-state carries the rule-set version (2)" \
   "[ \"\$(python3 -c \"import json;print(json.load(open('$PSTATE'))['schemaVersion'])\")\" = 2 ]"
@@ -618,7 +618,7 @@ json.dump({'schemaVersion':2,'managedSettingsPath':os.path.abspath('$SETTINGS'),
            'rules':'''$RULES'''.split(),'rulesExistedBefore':{}}, open('$PSTATE','w'))"
 PRE_S="$(python3 -c "import hashlib;print(hashlib.sha256(open('$SETTINGS','rb').read()).hexdigest())")"
 PRE_P="$(python3 -c "import hashlib;print(hashlib.sha256(open('$PSTATE','rb').read()).hexdigest())")"
-want "malformed state: INSTALL refuses an unreadable prior instead of re-capturing provenance" \
+want "malformed state: INSTALL refuses an unreadable prior instead of re-capturing provenance [QK:AGY-INSTALL-MALFORMED-PRIOR]" \
   "! bash '$BRIDGE' install >/dev/null 2>&1"
 want "malformed state: the refused install left settings AND state byte-identical" \
   "[ \"\$(python3 -c \"import hashlib;print(hashlib.sha256(open('$SETTINGS','rb').read()).hexdigest())\")\" = '$PRE_S' ] && \
@@ -628,7 +628,7 @@ want "malformed state: the refused install left settings AND state byte-identica
 # to run inside the settings-exists branch, so on this host it was first reached in the closing
 # message — AFTER os.remove(state_path). The safety check destroyed the only record of what we owed.
 rm -f "$SETTINGS"
-want "malformed state: uninstall refuses when the settings file is absent (nothing to guess from)" \
+want "malformed state: uninstall refuses when the settings file is absent (nothing to guess from) [QK:AGY-UNINSTALL-VALIDATE-FIRST]" \
   "! bash '$BRIDGE' uninstall >/dev/null 2>&1"
 want "malformed state: the refused uninstall did NOT delete the permission-state" \
   "[ -f '$PSTATE' ]"
@@ -638,7 +638,7 @@ want "malformed state: the refused uninstall did NOT delete the permission-state
 # unreadable. Hard rule 13: runtime truth and ownership truth are separate axes.
 python3 -c "import json;json.dump({'permissions':{'allow':'''$RULES'''.split()}},open('$SETTINGS','w'))"
 if bash "$BRIDGE" doctor >/dev/null 2>&1; then
-  die "corrupt-ownership: doctor must FAIL on an unreadable permission-state even when runtime is fine"
+  die "corrupt-ownership: doctor must FAIL on an unreadable permission-state even when runtime is fine [QK:AGY-DOCTOR-OWNERSHIP-AXIS]"
 fi
 ok "permission: doctor FAILS on a path-correct but UNREADABLE permission-state (ownership axis)"
 DOC_OUT="$(bash "$BRIDGE" doctor 2>&1 || true)"

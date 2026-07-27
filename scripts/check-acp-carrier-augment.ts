@@ -287,7 +287,11 @@ function ctxWith(firstUser: string): Context {
 	writeFileSync(join(bigHome, "AGENTS.md"), "X".repeat(80 * 1024));
 	const big = buildPiContextAugment({ backend: "claude", cwd: tmp, mcpServerNames: [], homeDir: bigHome });
 	assert.ok(Buffer.byteLength(big, "utf8") <= 50 * 1024, "augment is truncated to the 50KB cap");
-	assert.match(big, /context augment truncated to \d+ bytes/, "truncation leaves an honest marker");
+	assert.match(
+		big,
+		/context augment truncated to \d+ bytes/,
+		"truncation leaves an honest marker [QK:AUGMENT-TRUNC-MARKER]",
+	);
 }
 
 // ===========================================================================
@@ -308,7 +312,7 @@ function ctxWith(firstUser: string): Context {
 	assert.doesNotMatch(
 		actual,
 		/context augment truncated/,
-		"repo AGENTS.md + 12KB global baseline fits without truncation",
+		"repo AGENTS.md + 12KB global baseline fits without truncation [QK:AUGMENT-BUDGET-FITS]",
 	);
 	assert.ok(
 		actual.includes(`Current working directory: ${REPO_DIR}`),

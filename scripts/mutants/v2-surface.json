@@ -1,0 +1,87 @@
+{
+	"schemaVersion": 1,
+	"lane": "v2-surface",
+	"mutants": [
+		{
+			"claim": "V2SURF-MCP-LOCK-DOMAIN",
+			"title": "MCP long description reverts to the false \"socket paths take a per-target lock\" claim",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\t\t\"(delivered / rejected / lock-retained / delivered-but-lock-dirty). LOCK POLICY (do not \" +",
+				"\t\t\"over-generalize it): the per-target lock is taken for a control-socket-DOMAIN dispatch, which is \" +",
+				"\t\t\"both the live send AND the dormant cell's spawn-bg resume — spawn-bg is a separate relaunch \" +",
+				"\t\t\"transport yet it still runs under that domain's lock. The mailbox and native-push rails are \" +",
+				"\t\t\"lock-free: the mailbox is guarded instead by active-receiver deliverability, and native-push by \" +",
+				"\t\t\"its adapter probe. The decider — not the \" +"
+			],
+			"replace": [
+				"\t\t\"(delivered / rejected / lock-retained / delivered-but-lock-dirty). LOCK POLICY: socket paths \" +",
+				"\t\t\"take a per-target lock; the mailbox path does not. The decider — not the \" +"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2SURF-MCP-LOCK-DOMAIN]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "V2SURF-PI-MODE-SCOPE",
+			"title": "pi-native mode param reverts to \"Delivery mode for a live send\" (false for native-push)",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": [
+				"\t\t\t\tdescription:",
+				"\t\t\t\t\t\"Injection style for a CONTROL-SOCKET send only: steer (immediate) or follow_up (after task). \" +",
+				"\t\t\t\t\t\"The mailbox, native-push, and spawn-bg plans carry no mode, so it has no effect on those rails.\","
+			],
+			"replace": [
+				"\t\t\t\tdescription:",
+				"\t\t\t\t\t\"Delivery mode for a live send: steer (immediate, interrupt the current turn) or follow_up \" +",
+				"\t\t\t\t\t\"(queued after the current task finishes running to completion).\","
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2SURF-PI-MODE-SCOPE]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "V2SURF-INBOX-SCOPE-HONESTY",
+			"title": "entwurf_inbox_read reverts to the false \"drains your own inbox\" access claim (SCOPE paragraph gone)",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\t\t\"doorbell is only a wake attempt, not a read. An empty inbox mutates nothing. \" +",
+				"\t\t\"SCOPE — read this literally: the garden id is CALLER-SUPPLIED and is NOT verified against \" +",
+				"\t\t\"your own identity (a host with no garden record of its own can call this too). So passing \" +",
+				"\t\t\"another citizen's garden id drains THEIR mail and stamps THEIR receipt, and they will never \" +",
+				"\t\t\"see those messages. Pass only the id from your own doorbell notice or your own meta-record; \" +",
+				"\t\t\"use entwurf_self if you need to confirm which id that is. \" +"
+			],
+			"replace": [
+				"\t\t\"doorbell is only a wake attempt, not a read. An empty inbox mutates nothing. \" +",
+				"\t\t\"This tool drains your own meta-bridge inbox and stamps the read receipt on your meta-record. \" +"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2SURF-INBOX-SCOPE-HONESTY]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "V2SURF-MERGED-REJECT",
+			"title": "MCP long description merges the two owned rejects back under backend-liveness-unsupported",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\t\t\"owned-outcome is ONLY for waking a DORMANT socket-domain citizen (spawn-bg resume, currently \" +",
+				"\t\t\"backend pi); on a live target it is rejected as owned-live-no-autosend. Neither self-fetch nor \" +",
+				"\t\t\"native-push has resume authority, but they reject under DIFFERENT reasons — self-fetch as \" +",
+				"\t\t\"backend-liveness-unsupported, native-push as native-push-no-resume-authority. \" +"
+			],
+			"replace": [
+				"\t\t\"owned-outcome is ONLY for waking a DORMANT socket-domain citizen (spawn-bg resume, currently \" +",
+				"\t\t\"backend pi); on a live target it is rejected as owned-live-no-autosend, and on self-fetch and \" +",
+				"\t\t\"native-push alike it is rejected as backend-liveness-unsupported. \" +"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2SURF-MERGED-REJECT]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		}
+	]
+}

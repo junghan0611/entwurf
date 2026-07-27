@@ -150,7 +150,7 @@ function row(facts: SelfAddressabilityFacts): { replyable: boolean; socketState:
 
 	// A native-push citizen must NOT be able to buy replyability with mailbox facts.
 	ok(
-		"meta/native-push + owner-alive + watch-armed but probe-dead → NOT replyable (mailbox facts cannot rescue it)",
+		"meta/native-push + owner-alive + watch-armed but probe-dead → NOT replyable (mailbox facts cannot rescue it) [QK:SELFADDR-RAIL-FACT-LEAK]",
 		row(push({ recordBacked: true, ownerAlive: true, watchArmed: true, probeAlive: false })).replyable === false,
 	);
 }
@@ -226,7 +226,10 @@ const piBody = functionBody("buildStrictPiSenderEnvelope");
 ok("buildStrictPiSenderEnvelope calls computeSelfAddressability", /computeSelfAddressability\s*\(/.test(piBody));
 // Scoped to THIS function body (not a broad grep): the pi-session envelope must NOT
 // hardcode `replyable: true`; it must derive from the predicate result.
-ok("buildStrictPiSenderEnvelope no longer hardcodes `replyable: true`", !/replyable:\s*true/.test(piBody));
+ok(
+	"buildStrictPiSenderEnvelope no longer hardcodes `replyable: true` [QK:SELFADDR-NO-HARDCODED-REPLYABLE]",
+	!/replyable:\s*true/.test(piBody),
+);
 // existsSync alone is too loose — pin that it probes the CANONICAL socket path,
 // not some other file, so the honesty signal cannot drift to a path that does not
 // represent this session's socket.
@@ -334,7 +337,7 @@ function metaRailRenderIsHonest(region: string): { honest: boolean; reason: stri
 
 {
 	const verdict = metaRailRenderIsHonest(selfRegion);
-	ok(`entwurf_self renders the meta rail honestly (${verdict.reason})`, verdict.honest);
+	ok(`entwurf_self renders the meta rail honestly [QK:SELFADDR-RAIL-RENDER] (${verdict.reason})`, verdict.honest);
 	ok(
 		"entwurf_self reads the rail from the builder (not re-derived at the render site)",
 		/self\.metaDeliveryDomain/.test(selfRegion),

@@ -87,7 +87,7 @@ function assertRailSemantics(tag: string, longDescRaw: string, intentDescRaw: st
 	const intentDesc = modelText(intentDescRaw);
 	const modeDesc = modelText(modeDescRaw);
 	ok(
-		`${tag} — long description scopes the per-target lock to the control-socket DOMAIN`,
+		`${tag} — long description scopes the per-target lock to the control-socket DOMAIN [QK:V2SURF-MCP-LOCK-DOMAIN]`,
 		/control-socket-DOMAIN\s+dispatch/.test(longDesc) && /lock-free/.test(longDesc),
 	);
 	ok(
@@ -145,7 +145,7 @@ function assertRailSemantics(tag: string, longDescRaw: string, intentDescRaw: st
 	}
 	ok(`${tag} — mode param is isolated (non-vacuous)`, modeDesc.length > 60);
 	ok(
-		`${tag} — mode param scopes itself to a CONTROL-SOCKET send and denies the other rails`,
+		`${tag} — mode param scopes itself to a CONTROL-SOCKET send and denies the other rails [QK:V2SURF-PI-MODE-SCOPE]`,
 		/CONTROL-SOCKET send/.test(modeDesc) && /no mode/.test(modeDesc),
 	);
 	ok(
@@ -613,7 +613,7 @@ async function main(): Promise<void> {
 			ok(`5: MCP — ${what} is isolated (non-vacuous)`, text.length > 120);
 			ok(`5: MCP — ${what} names the native-push rail`, /native-push/.test(text));
 			ok(
-				`5: MCP — ${what} separates the self-fetch and native-push owned rejects`,
+				`5: MCP — ${what} separates the self-fetch and native-push owned rejects [QK:V2SURF-MERGED-REJECT]`,
 				/backend-liveness-unsupported/.test(text) && /native-push-no-resume-authority/.test(text),
 			);
 			ok(
@@ -672,7 +672,7 @@ async function main(): Promise<void> {
 		const inboxText = modelText(inboxBlock);
 		ok("5: MCP — entwurf_inbox_read block is isolated (non-vacuous)", inboxText.length > 200);
 		ok(
-			"5: MCP — entwurf_inbox_read states the garden id is CALLER-SUPPLIED and unverified",
+			"5: MCP — entwurf_inbox_read states the garden id is CALLER-SUPPLIED and unverified [QK:V2SURF-INBOX-SCOPE-HONESTY]",
 			/CALLER-SUPPLIED/.test(inboxText) && /NOT verified against your own identity/.test(inboxText),
 		);
 		ok(

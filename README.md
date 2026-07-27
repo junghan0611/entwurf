@@ -662,10 +662,15 @@ entwurf owns **no** memory layer at all — the ACP plugin's boundary explicitly
 ```bash
 pnpm check                              # full deterministic floor (all check-* gates, incl. check-acp-*)
 ./run.sh check-bridge                   # entwurf-bridge direct MCP smoke (no backend auth)
-./run.sh smoke-agy-install-state        # agy MCP + exact permission ownership (167 checks)
-./run.sh smoke-agy-statusline-state     # agy ambient garden-id install surface (62 checks)
-./run.sh smoke-agy-hooks-state          # agy PreInvocation birth hook (37 checks)
-./run.sh check-agy-sender-identity      # record-backed pid/start-key sender identity (28 checks)
+./run.sh smoke-agy-install-state        # agy MCP + exact permission ownership lifecycle (install/uninstall/doctor/inverse)
+./run.sh smoke-agy-statusline-state     # agy ambient garden-id install surface
+./run.sh smoke-agy-hooks-state          # agy PreInvocation birth hook
+./run.sh check-agy-sender-identity      # record-backed pid/start-key sender identity
+
+# source-maintainer only — qualification snapshots the git work surface, and both
+# commands are source-contract gates rather than installed operator checks:
+./run.sh check-agy-permission-matrix    # AGY permission contract space as a literal table (declared cells + stated exclusions)
+./run.sh check-gate-qualification       # kill-proof: committed defect mutants must turn their gates red for the claimed reason
 
 # agy LIVE acceptance — requires an already-running conversation:
 LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live
@@ -680,6 +685,14 @@ LIVE=1 ./run.sh smoke-acp-carrier-augment-live  # augment delivery + empty-carri
 
 LIVE=1 ./run.sh release-gate /tmp/scratch       # the single cut gate (MUST + BEHAVIOR, SKIP=0 for a real cut)
 ```
+
+`pnpm check` already includes the two maintainer gates: the AGY permission contract
+matrix and the full committed-mutant gate qualification run on every pass. A gate a
+release touches must kill its known defect for the claimed `[QK:<claim>]` reason —
+the descriptions above name what each smoke covers, and no check count is quality
+evidence on its own. Gate qualification needs the git work surface, while the matrix
+is the source permission-contract gate; both run from a clone, never as a post-install
+operator step.
 
 ## Custom skills
 
@@ -795,7 +808,7 @@ This repo also doubles as the maintainer's working laboratory for agent-harness 
 
 ## Verification surfaces
 
-- **[VERIFY.md](./VERIFY.md)** — agent-driven. One ACP-bridged identity runs the script against another and records what it sees. Carries the Evidence Levels L0–L5 rung ladder and the Claims Ledger so each claim is parked at the rung it has actually reached.
+- **[VERIFY.md](./VERIFY.md)** — agent-driven. One ACP-bridged identity runs the script against another and records what it sees. Carries the Evidence Levels L0–L5 rung ladder and the Claims Ledger so each claim is parked at the rung it has actually reached, and owns the deterministic-floor kill-proof protocol (gate qualification and its `[QK:<claim>]` coordinates).
 - **[BASELINE.md](./BASELINE.md)** — operator-driven. The maintainer runs the interview directly (no agent in the verifier seat) and the result is recorded.
 - **[DELIVERY.md](./DELIVERY.md)** — capability-coordinate. The cross-harness yardstick for one question: can an already-running native session receive an async message without pretending pi owns the backend transcript? Records the per-backend async-delivery level (`D0–D8`) each harness actually reaches instead of collapsing into works/doesn't.
 

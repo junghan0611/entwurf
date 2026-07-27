@@ -1,0 +1,17 @@
+{
+	"schemaVersion": 1,
+	"lane": "meta-identity",
+	"mutants": [
+		{
+			"claim": "META-FIFO-NONBLOCK",
+			"title": "removing O_NONBLOCK makes a fifo-shaped record block the open — the 7/26 mutation evidence, committed",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\tconst fd = fs.openSync(file, fs.constants.O_RDONLY | O_NOFOLLOW_FLAG | O_NONBLOCK_FLAG);"],
+			"replace": ["\tconst fd = fs.openSync(file, fs.constants.O_RDONLY | O_NOFOLLOW_FLAG);"],
+			"gate": ["bash", "run.sh", "check-meta-identity-consumers"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:META-FIFO-NONBLOCK]",
+			"signatureSource": "scripts/check-meta-identity-consumers.ts"
+		}
+	]
+}

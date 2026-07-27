@@ -118,6 +118,8 @@ LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live
 ```
 
 - `pnpm check` is the static floor and includes the detailed `check-*`/offline smoke matrix.
+- **Kill-proof discipline (gate qualification).** A gate is a test only if re-planting a closed defect turns it red for the claimed reason. `check-gate-qualification` proves that automatically: committed mutants in `scripts/mutants/` must be KILLED at their `[QK:<claim>]` signature inside an isolated snapshot repo (control→mutant→restore→control; the real checkout is never written). Gates a release touches carry such manifests; assertion counts are never evidence — claim IDs + killed mutant IDs are. `check-agy-permission-matrix` holds the enumerated permission contract space; matrix cells change by axis/rule edits, never by appending cases.
+- **When changing a contract/gate:** name the production subject and an oracle independent of it; give the failing assertion a stable `[QK:<claim>]` label and add/update the exact-once mutant in `scripts/mutants/*.json`; if the contract is combinatorial, update the literal matrix axes/cells/exclusions together with their declared counts; then verify focused gate → `check-gate-qualification` → `pnpm check`, in that order. `MUTANT-STALE`/`SURVIVED`/`WRONG-REASON`/`CONTROL-RED`/`HANG`/`IMPURE` are red — never substitute an assertion count for a kill.
 - Run LIVE gates with `PWD` in scratch so session artifacts do not land in the repo.
 - Release acceptance and evidence levels are defined in [VERIFY.md](./VERIFY.md); recorded host evidence is in [BASELINE.md](./BASELINE.md).
 - A failed gate or evidence downgrade blocks commit/release. Pipes can be connected and the water can still taste wrong.

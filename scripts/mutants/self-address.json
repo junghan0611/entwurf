@@ -1,0 +1,59 @@
+{
+	"schemaVersion": 1,
+	"lane": "self-address",
+	"mutants": [
+		{
+			"claim": "SELFADDR-RAIL-RENDER",
+			"title": "entwurf_self reverts to an empty self-fetch guard + unconditional mailbox render (ordering-not-containment)",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\t\t\t\tif (rail === \"self-fetch\") {",
+				"\t\t\t\t\tconst mailboxPath = path.join(defaultMetaMailboxDir(), sender.sessionId);",
+				"\t\t\t\t\textra.mailboxPath = mailboxPath;",
+				"\t\t\t\t\tlines.push(`mailboxPath: ${mailboxPath}`);",
+				"\t\t\t\t} else if (rail === \"native-push\") {"
+			],
+			"replace": [
+				"\t\t\t\tif (rail === \"self-fetch\") {",
+				"\t\t\t\t}",
+				"\t\t\t\tconst mailboxPath = path.join(defaultMetaMailboxDir(), sender.sessionId);",
+				"\t\t\t\textra.mailboxPath = mailboxPath;",
+				"\t\t\t\tlines.push(`mailboxPath: ${mailboxPath}`);",
+				"\t\t\t\tif (rail === \"native-push\") {"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-self-address"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:SELFADDR-RAIL-RENDER]",
+			"signatureSource": "scripts/check-entwurf-self-address.ts"
+		},
+		{
+			"claim": "SELFADDR-NO-HARDCODED-REPLYABLE",
+			"title": "buildStrictPiSenderEnvelope hardcodes replyable: true again (env presence read as reachability)",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\torigin: \"pi-session\",", "\t\treplyable: self.replyable,", "\t};", "}"],
+			"replace": ["\t\torigin: \"pi-session\",", "\t\treplyable: true,", "\t};", "}"],
+			"gate": ["bash", "run.sh", "check-entwurf-self-address"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:SELFADDR-NO-HARDCODED-REPLYABLE]",
+			"signatureSource": "scripts/check-entwurf-self-address.ts"
+		},
+		{
+			"claim": "SELFADDR-RAIL-FACT-LEAK",
+			"title": "the native-push predicate lets a mailbox fact (watchArmed) buy replyability — behavioral, not text",
+			"subject": "pi-extensions/lib/entwurf-self-address.ts",
+			"find": [
+				"\t\t\t\t\tconst push = nativePushDeliverable({ recordBacked: facts.recordBacked, probeAlive: facts.probeAlive });"
+			],
+			"replace": [
+				"\t\t\t\t\tconst push = nativePushDeliverable({",
+				"\t\t\t\t\t\trecordBacked: facts.recordBacked,",
+				"\t\t\t\t\t\tprobeAlive: facts.probeAlive === true || facts.watchArmed === true,",
+				"\t\t\t\t\t});"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-self-address"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:SELFADDR-RAIL-FACT-LEAK]",
+			"signatureSource": "scripts/check-entwurf-self-address.ts"
+		}
+	]
+}

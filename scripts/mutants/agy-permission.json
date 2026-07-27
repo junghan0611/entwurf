@@ -1,0 +1,144 @@
+{
+	"schemaVersion": 1,
+	"lane": "agy-permission",
+	"mutants": [
+		{
+			"claim": "AGY-EXACT-RULE-SET",
+			"title": "over-grant: adding entwurf_inbox_read to ALLOW_RULES must die at the independent literal oracle",
+			"subject": "scripts/agy-bridge-config.py",
+			"find": [
+				"ALLOW_RULES = tuple(f\"mcp({SERVER_KEY}/{tool})\" for tool in (\"entwurf_v2\", \"entwurf_peers\", \"entwurf_self\"))"
+			],
+			"replace": [
+				"ALLOW_RULES = tuple(",
+				"    f\"mcp({SERVER_KEY}/{tool})\" for tool in (\"entwurf_v2\", \"entwurf_peers\", \"entwurf_self\", \"entwurf_inbox_read\")",
+				")"
+			],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:AGY-EXACT-RULE-SET]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "AGY-INSTALL-MALFORMED-PRIOR",
+			"title": "install reverts to a shallow prior-state check (empty provenance map passes all()) and re-captures",
+			"subject": "scripts/agy-bridge-config.py",
+			"find": [
+				"        try:",
+				"            _prior_rules, prior_existed = _parse_permission_state(prior)",
+				"        except _PermissionStateError as exc:",
+				"            _die(4, f\"agy-bridge: prior permission install-state is unusable — {exc}. Refusing to \"",
+				"                    \"overwrite provenance this entwurf cannot read; inspect it by hand.\")",
+				"        for rule in ALLOW_RULES:",
+				"            if rule in prior_existed:",
+				"                rules_existed[rule] = prior_existed[rule]"
+			],
+			"replace": [
+				"        if prior.get(\"schemaVersion\") == 1:",
+				"            legacy_rule = prior.get(\"rule\")",
+				"            if isinstance(legacy_rule, str) and isinstance(prior.get(\"ruleExistedBefore\"), bool):",
+				"                if legacy_rule in ALLOW_RULES:",
+				"                    rules_existed[legacy_rule] = prior[\"ruleExistedBefore\"]",
+				"        else:",
+				"            prior_existed = prior.get(\"rulesExistedBefore\")",
+				"            if isinstance(prior_existed, dict) and all(isinstance(v, bool) for v in prior_existed.values()):",
+				"                for rule in ALLOW_RULES:",
+				"                    if rule in prior_existed:",
+				"                        rules_existed[rule] = prior_existed[rule]"
+			],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:AGY-INSTALL-MALFORMED-PRIOR]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "AGY-UNINSTALL-VALIDATE-FIRST",
+			"title": "uninstall validates the state only inside the settings-exists branch (refusal after mutation)",
+			"subject": "scripts/agy-bridge-config.py",
+			"find": [
+				"    ours = _owned_rules(state)",
+				"",
+				"    if os.path.islink(settings_path):",
+				"        _die(3, f\"agy-bridge: refusing to uninstall — {settings_path} became a symlink since install \"",
+				"                f\"(someone else's SSOT now). Resolve by hand.\")",
+				"",
+				"    if os.path.exists(settings_path):",
+				"        data = _load_config(settings_path)"
+			],
+			"replace": [
+				"    if os.path.islink(settings_path):",
+				"        _die(3, f\"agy-bridge: refusing to uninstall — {settings_path} became a symlink since install \"",
+				"                f\"(someone else's SSOT now). Resolve by hand.\")",
+				"",
+				"    ours = []",
+				"    if os.path.exists(settings_path):",
+				"        data = _load_config(settings_path)",
+				"        ours = _owned_rules(state)"
+			],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:AGY-UNINSTALL-VALIDATE-FIRST]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "AGY-DOCTOR-OWNERSHIP-AXIS",
+			"title": "the state-doctor rounds a path-correct but unreadable ownership record up to ok",
+			"subject": "scripts/agy-bridge-config.py",
+			"find": [
+				"    try:",
+				"        rules, _existed = _parse_permission_state(state)",
+				"    except _PermissionStateError as exc:",
+				"        sys.stdout.write(f\"corrupt {exc}\\n\")",
+				"        return",
+				"    sys.stdout.write(f\"ok {len(rules)}\\n\")"
+			],
+			"replace": ["    sys.stdout.write(\"ok 0\\n\")"],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:AGY-DOCTOR-OWNERSHIP-AXIS]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "AGY-CROSS-LIST-BROAD-FIRST",
+			"title": "broad-most-covering runs only within each list, so a deny-exact shadows an ask-broad host wrongly",
+			"subject": "scripts/agy-bridge-config.py",
+			"find": [
+				"    for rule_set, scope in ((BROAD_RULES, \"broad\"), (ALLOW_RULES, \"exact\")):",
+				"        for list_name in SHADOWING_LISTS:",
+				"            rules = perms.get(list_name)",
+				"            if not isinstance(rules, list):",
+				"                continue",
+				"            for rule in rules:",
+				"                if rule in rule_set:",
+				"                    sys.stdout.write(f\"shadowed-by-{list_name} {scope} {rule}\\n\")",
+				"                    return"
+			],
+			"replace": [
+				"    for list_name in SHADOWING_LISTS:",
+				"        rules = perms.get(list_name)",
+				"        if not isinstance(rules, list):",
+				"            continue",
+				"        for rule_set, scope in ((BROAD_RULES, \"broad\"), (ALLOW_RULES, \"exact\")):",
+				"            for rule in rules:",
+				"                if rule in rule_set:",
+				"                    sys.stdout.write(f\"shadowed-by-{list_name} {scope} {rule}\\n\")",
+				"                    return"
+			],
+			"gate": ["bash", "run.sh", "check-agy-permission-matrix"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:AGY-CROSS-LIST-BROAD-FIRST]",
+			"signatureSource": "scripts/check-agy-permission-matrix.py"
+		},
+		{
+			"claim": "AGY-SCHEMA-VERSIONS-APART",
+			"title": "re-merging the two state schema constants stamps a lying version onto the MCP install-state",
+			"subject": "scripts/agy-bridge-config.py",
+			"find": ["STATE_SCHEMA_VERSION = 1  # MCP install-state (server key + preimage); shape unchanged"],
+			"replace": ["STATE_SCHEMA_VERSION = 2  # re-merged with the permission version (the schema re-merge defect)"],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:AGY-SCHEMA-VERSIONS-APART]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		}
+	]
+}

@@ -536,7 +536,7 @@ withStore(
 				verdict = timedOut ? "BLOCKED-ON-OPEN (the open never returned — O_NONBLOCK is gone)" : `CHILD-FAILED: ${err}`;
 			}
 			ok(
-				`a fifo is refused as not-a-regular-file and the open RETURNS (O_NONBLOCK) — child said ${verdict}`,
+				`a fifo is refused as not-a-regular-file and the open RETURNS (O_NONBLOCK) [QK:META-FIFO-NONBLOCK] — child said ${verdict}`,
 				verdict === "REFUSED-NOT-REGULAR",
 			);
 		}

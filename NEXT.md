@@ -375,6 +375,81 @@
   - **릴리즈 영향:** 이건 GPT `…-01deb3`의 라운드 2 GO **이후** 추가된 델타다. GO는 이 변경을 덮지 않으므로
     **재검수가 필요하다.**
 
+- **I. 검증 게이트 적격성 체계(kill-proof) — 구현 완료(Claude Code `…-99f19a`, 2026-07-27 16:3x, GLG+GPT 설계 합의 GO).**
+  `452fe29` 이후 델타이므로 **GPT 재검수 대상**이다. 커밋/푸시 없음.
+  - **runner:** `scripts/lib/mutation-qualify.ts` + `scripts/check-gate-qualification.ts`. committed mutant
+    manifest는 `scripts/mutants/*.json` 5 lane **16 mutants** — 이번 컷의 수동 음성 대조(§F ⒜~⒟·NEG,
+    §H ⒢⒣⒤⒥⒦)와 7/26 O_NONBLOCK "verified by mutation" 산문의 committed화다. 격리 snapshot repo
+    (tracked+untracked 복제 + temp git baseline + node_modules 공유 dependency symlink(선정 gate는 read-only로 취급); **실 checkout 무접촉**,
+    HEAD+work-surface 내용 해시 전후 동일 assert), unique gate마다 CONTROL-PRE → mutants(적용→실행→복원→sha 대조) →
+    CONTROL-POST, verdict는 pure classifier {KILLED, SURVIVED, WRONG-REASON, HANG, MUTANT-STALE,
+    MULTI-MATCH, CONTROL-RED, IMPURE} 진리표 소진. signature는 `[QK:<claim>]` 토큰이 **failure line**에
+    있어야 KILLED — ok 라인의 토큰은 무시되고, 엉뚱한 assertion red는 WRONG-REASON으로 거부된다.
+    runner 자체가 매 실행 synthetic fixture로 음성 대조된다(malformed manifest/duplicate claim/path
+    escape/untracked subject/zero-match/multi-match/survived/wrong-reason/hang+**pgroup grandchild 실사살**/
+    control-red(가짜 KILLED 차단)/state-poison(CONTROL-POST red)/stray write(tree-manifest impurity)/
+    stale snapshot sweep).
+  - **16/16 KILLED, 전체 ~81s.** 실측이 합의 임계(~120s) 미만이라 **tier 분리 없이 전체가 pnpm check
+    상주**(합의문 조건 그대로; 초과하게 되면 fast/full 재개봉). 대상 게이트 5종의 해당 assertion 라벨에
+    `[QK:]` 토큰을 심었다 — 라벨/토큰이 사라지면 manifest 검증이 loud하게 깨진다(의도된 마찰).
+    킬 목록: AGY-EXACT-RULE-SET · AGY-INSTALL-MALFORMED-PRIOR · AGY-UNINSTALL-VALIDATE-FIRST ·
+    AGY-DOCTOR-OWNERSHIP-AXIS · AGY-CROSS-LIST-BROAD-FIRST · AGY-SCHEMA-VERSIONS-APART ·
+    V2SURF-MCP-LOCK-DOMAIN · V2SURF-PI-MODE-SCOPE · V2SURF-INBOX-SCOPE-HONESTY · V2SURF-MERGED-REJECT ·
+    SELFADDR-RAIL-RENDER · SELFADDR-NO-HARDCODED-REPLYABLE · SELFADDR-RAIL-FACT-LEAK(behavioral) ·
+    AUGMENT-BUDGET-FITS · AUGMENT-TRUNC-MARKER · META-FIFO-NONBLOCK(10.1s bounded).
+  - **AGY permission matrix:** `scripts/check-agy-permission-matrix.py` — contract space를 리터럴 테이블
+    **55 cells**로 소진(install 13 / uninstall 15 / doctor 19 / state-doctor 8) + 제외 규칙 R2·R4~R7을
+    출력에 명시(빈 칸은 침묵이 아니라 결정). oracle은 전부 손기입 리터럴, `permission-rules` 되먹임 0.
+    음성 대조 완료: within-list broad-first 결함을 temp 사본 SUT에 재식 → **정확히 D16에서** red.
+  - **배선:** package.json check 체인(smoke-agy 뒤 matrix, 말미 qualification) · run.sh usage/case ·
+    AGENTS Verification 규율 1줄("assertion 수는 증거가 아니다") · VERIFY §0A 문단(evidence level
+    L0–L5 무변경 — 판별력 측정이지 새 등급이 아님을 명시).
+  - **runner 결함 1건 자체 발견·수선:** 최초 버전이 TMPDIR까지 invocation 디렉터리로 펜싱해 unix socket
+    sun_path 108바이트 한계를 넘겼고 check-meta-identity-consumers CONTROL-PRE가 red였다(runner-side
+    원인). TMPDIR은 상속으로 되돌림 — 게이트들의 자체 mkdtemp+cleanup 규율이 그 축을 이미 소유한다.
+    CONTROL 계약이 이 결함을 잡았다: control 없이는 이게 가짜 KILLED로 샜을 자리다.
+  - **GPT 재검수 1차(#57, 16:46) → 차단 4 + 과장 2, 전부 수선 완료(16:5x).**
+    ⑴ P0-1 snapshot 탈출: tracked SYMLINK subject면 read/write가 링크를 따라 snapshot 밖을 변형할 수
+    있었다. origin 검증(lstat regular non-symlink + realpath containment, subject와 signatureSource
+    양쪽) **그리고** mutation 직전 runtime guard(validateManifestSet를 우회하는 self-test 주입 경로까지
+    커버) 이중으로 막고, 실제 tracked symlink → 외부 파일 fixture로 end-to-end 거부 + 외부 바이트
+    불변을 self-negative로 증명했다. signatureSource는 index가 아니라 **work surface**(tracked ∪
+    untracked-non-ignored = snapshot 복제 집합) 기준 — 첫 커밋 전의 새 게이트 파일이 자기 claim을
+    들 수 있어야 해서다.
+    ⑵ P0-2 classifier false KILLED: exit=null(non-timeout signal crash)이 KILLED로 반올림됐다 →
+    WRONG-REASON으로 분류, 진리표 행 추가.
+    ⑶ P0-3 matrix 자체가 committed kill-proof가 아니었다(내 보고의 "temp 재식→D16 red"는 1회성 수동
+    이었다) → AGY-CROSS-LIST-BROAD-FIRST mutant의 gate를 smoke에서 `check-agy-permission-matrix`로
+    재지정(16 상한 유지), D16 cell id에 `[QK:AGY-CROSS-LIST-BROAD-FIRST]` 토큰, smoke의 중복 토큰 제거
+    → 이제 매 pnpm check가 CONTROL→mutant(1.1s KILLED)→CONTROL로 증명한다.
+    ⑷ P0-4 matrix oracle 조임: nonzero cell은 hand-written `stderr_token` 없으면 table-integrity
+    red(구조 강제) + 13개 cell에 손기입 stderr 토큰 · 성공 install state는 **exact keyset + 전 안정
+    필드 + installedAt UTC 형식**(`state_exact`, I01~I07) · 총 55에 더해 operation별 {13,15,19,8} +
+    ID 시퀀스(I01..S08)를 결정적으로 assert.
+    ⑸ P1-5 origin tripwire: porcelain 텍스트 해시는 이미-M인 파일의 바이트 변화를 못 본다 →
+    work-surface **내용 해시**(path/type/mode/content sha)로 교체, "수정→해시 이동, 같은 M에서 바이트만
+    재변경→또 이동, 복원→원위치"를 fixture로 증명.
+    ⑹ P1-6 stale prose(runGateBounded "TMPDIR fenced") 교정.
+    수선 후: self-test 54→**66 checks**, **16/16 KILLED 유지(~81s)**, matrix 단독 EXIT=0,
+    smoke 167 유지, `git diff --check` PASS.
+  - **#57 완결성 감사 2차(Claude Code `…-8ef417`, 2026-07-27 17:1x) — GAP 3건 발견·수선.**
+    ⑴ #57 본문이 요구하는 "exhaustive truth-table behavior"가 대표 9행 샘플뿐이었고 산문은 "소진"을
+    주장했다(과장) → 144행 전수 소진(2 control × 3 match × 2 timeout × 3 exit × 2 signature ×
+    2 restore)을 독립 서술 oracle + **KILLED iff 7-way conjunction** 단독 assert로 추가.
+    ⑵ runner의 `String.replace(find, string)`이 치환 패턴(`$&`/`$'`/`` $` ``/`$$`)을 해석해, 그런
+    문자를 가진 미래 mutant가 선언과 **다른 바이트**를 심을 수 있었다(현 16개는 무해) → function
+    replacement로 리터럴化 + `$&` 리터럴 착지를 KILLED로 증명하는 SELFTEST-DOLLAR fixture.
+    ⑶ mutants/ 디렉터리가 비거나 manifest가 merge에서 유실되면 "0/0 killed" **vacuous green** →
+    lane 인벤토리 리터럴 핀(acp-augment 2 / agy-permission 6 / meta-identity 1 / self-address 3 /
+    v2-surface 4 = 16; matrix EXPECTED_CELLS와 같은 규율).
+    감사 후: self-test 66→**68 checks**, **16/16 KILLED 유지**(phase-2 실측 합 ~76s), matrix 55 단독
+    EXIT=0, origin HEAD+work-surface 해시 전후 동일, `git diff --check` PASS.
+    ⑷ docs gap→fixed(GPT 지시, docs-only): AGENTS Verification에 "When changing a contract/gate"
+    체크리스트 · README Smoke commands에 source-maintainer 게이트 2종 소개 + "(N checks)" 개수 서술을
+    capability 서술로 교체 · README Verification surfaces에 VERIFY의 kill-proof protocol 소유 명시 ·
+    VERIFY deterministic floor의 "~60 gates"/"cheap" 제거(package.json check가 SSOT) · run.sh usage의
+    bare regression 개수 3건 제거. 기능/게이트/manifest 무변경, `pnpm check` 재실행 없음(직전 EXIT=0 유효).
+
 - **G. 검증 규율 — 이 컷에서 반복된 실패는 한 종류다.**
   **"만들었다"와 "작동한다"를 구분하지 않은 것.** 실제 사고:
   ⑴ GPT#1이 focused 게이트 6개 PASS를 full PASS로 보고 → `check-entwurf-v2-spawn-production`이 red였다
