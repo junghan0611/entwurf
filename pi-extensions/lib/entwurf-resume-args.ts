@@ -1,40 +1,40 @@
 /**
  * entwurf-resume-args — the SINGLE source of truth for the `pi` argv a resume spawn is
- * launched with (0.11 Stage 0 step 5c-3b). Two variants share this builder so the legacy
- * async-entwurf worker and the v2 spawn-bg resident citizen can NEVER drift in their launch
- * shape — the one place the `--no-extensions` / `--entwurf-control` decision lives.
+ * launched with (0.11 Stage 0 step 5c-3b). One place owns the
+ * `--no-extensions` / `--entwurf-control` decision so the launch shape cannot drift.
  *
- * The load-bearing difference (A1):
- *   - legacy — a one-shot async worker. `pi -p <prompt>` runs the resume turn and EXITS;
- *     `proc.on('close')` then delivers the followUp. It is launched `--no-extensions` AND
- *     WITHOUT `--entwurf-control` precisely BECAUSE a control-socket server would keep
- *     `pi -p` from exiting (entwurf.ts:22 — that keep-alive was a bug for a one-shot worker).
- *   - v2-control — a RESIDENT, addressable garden citizen. The resume turn STILL runs via
- *     `-p <prompt>` (the prompt-as-turn authority is unchanged), but the child is launched
- *     WITH `--entwurf-control` and WITHOUT `--no-extensions`, so the very keep-alive legacy
- *     avoided is now the GOAL: the resumed session stands its control socket up and stays
- *     live. The 5c-3a watcher's `socket-alive` is exactly that "resumed citizen is up and
- *     addressable" observation (→ release the per-gid lock, child lives on); `child-exited`
- *     is the early-exit/failure observation. `plan.launchArgs` (`--approve` or empty, from
- *     the decider's preflight) rides along as pi flags before the prompt.
+ * The shipped posture (A1): a RESIDENT, addressable garden citizen. The resume turn runs via
+ * `-p <prompt>` (the prompt-as-turn authority), and the child is launched WITH
+ * `--entwurf-control` and WITHOUT `--no-extensions` — the keep-alive is the GOAL here: the
+ * resumed session stands its control socket up and stays addressable. The 5c-3a watcher's
+ * `socket-alive` is exactly that "resumed citizen is up" observation (→ release the per-gid
+ * lock, child lives on); `child-exited` is the early-exit/failure observation.
+ * `plan.launchArgs` (`--approve` or empty, from the decider's preflight) rides along as pi
+ * flags before the prompt.
+ *
+ * A second `legacy` one-shot posture (`--no-extensions`, no control socket, so `pi -p` could
+ * exit) lived here until 2026-07-27 and was removed with its launcher and the v1 verbs.
  *
  * Provider/model identity is the caller's existing authority (readSessionIdentity /
  * getEntwurfExplicitExtensions) — this builder only LAYS OUT argv, it never resolves
- * identity. `explicitExtensionArgs` is preserved verbatim in BOTH variants: a recorded
- * `provider=entwurf` resume needs the bridge re-injected to resolve the provider, and
- * dropping it when `--no-extensions` is removed would re-introduce the "Unknown provider"
- * footgun (#29). (A future slice may dedup against settings-loaded extensions; not here.)
+ * identity. `explicitExtensionArgs` is preserved verbatim: a recorded `provider=entwurf`
+ * resume needs the bridge re-injected to resolve the provider, and dropping it would
+ * re-introduce the "Unknown provider" footgun (#29). (A future slice may dedup against
+ * settings-loaded extensions; not here.)
  *
- * This module is import-free on purpose: the legacy launcher (entwurf-async.ts) is
- * root-typechecked and imports it as `./entwurf-resume-args.js`, while the v2 adapter and
- * the gate import the same source — a self-contained string builder keeps both configs happy.
+ * This module is import-free on purpose: the v2 adapter and the gate import the same source,
+ * and a self-contained string builder keeps both tsconfigs happy.
  */
 
-export type ResumeArgsVariant = "legacy" | "v2-control";
+/** The one shipped launch posture: a resident citizen (`--entwurf-control`, extensions
+ * loaded). The `legacy` one-shot variant was removed with its launcher (2026-07-27) — an
+ * exported branch no product path took was what let this module's prose claim a second
+ * live consumer for months. Reviving a one-shot posture means adding it back deliberately,
+ * with a consumer, not un-deleting a dead enum member. */
+export type ResumeArgsVariant = "v2-control";
 
 export interface ResumePiArgsInput {
-	/** legacy = one-shot worker (`--no-extensions`, no control socket); v2-control =
-	 * resident citizen (`--entwurf-control`, extensions loaded). */
+	/** v2-control = resident citizen (`--entwurf-control`, extensions loaded). */
 	variant: ResumeArgsVariant;
 	/** ABSOLUTE path of the session JSONL to resume — pi's `--session <path>` (#50 C2).
 	 * It replaced `--session-id <gardenId>`, which did two jobs that are no longer the
@@ -46,7 +46,7 @@ export interface ResumePiArgsInput {
 	 * instead of resuming one. A path cannot do that. */
 	sessionFile: string;
 	/** The explicit `--extension …` re-injection (ACP bridge / provider resolution).
-	 * Preserved verbatim in BOTH variants — load-bearing for a entwurf resume. */
+	 * Preserved verbatim — load-bearing for a entwurf resume. */
 	explicitExtensionArgs: readonly string[];
 	/** Recorded provider (may be null/undefined — then no `--provider` flag is emitted). */
 	provider: string | null | undefined;
@@ -54,37 +54,31 @@ export interface ResumePiArgsInput {
 	model: string;
 	/** The resume prompt — the final positional, run as the model turn under `-p`. */
 	prompt: string;
-	/** v2-control ONLY: the decider's `plan.launchArgs` (`["--approve"]` or `[]`). Ignored
-	 * for legacy (the legacy path computes its own preflight elsewhere). */
+	/** The decider's `plan.launchArgs` (`["--approve"]` or `[]`). */
 	launchArgs?: readonly string[];
 }
 
 /**
- * Build the `pi` argv for a resume spawn. The SHARED prefix is `--mode json -p` (headless
- * JSON child, prompt-as-turn); the variant then chooses the extension/socket posture; the
- * SHARED suffix is `[…ext args] --session <file> [--provider <p>] --model <m> <prompt>`.
+ * Build the `pi` argv for a resume spawn. The prefix is `--mode json -p` (headless JSON
+ * child, prompt-as-turn); then the resident posture; then
+ * `[…ext args] --session <file> [--provider <p>] --model <m> <prompt>`.
  *
  * Invariants the gate pins:
- *   - legacy  carries `--no-extensions` and NO `--entwurf-control`.
  *   - v2-control carries `--entwurf-control` and NO `--no-extensions`, plus `-p` + prompt.
- *   - `explicitExtensionArgs` appears exactly once in both.
- *   - `launchArgs` is included for v2-control (before the suffix) and ignored for legacy.
- *   - provider/model/prompt identity is laid out identically in both.
+ *   - `explicitExtensionArgs` appears exactly once.
+ *   - `launchArgs` is included before the suffix.
+ *   - provider/model/prompt identity layout is fixed.
  */
 export function buildResumePiArgs(input: ResumePiArgsInput): string[] {
 	const args: string[] = ["--mode", "json", "-p"];
 
-	if (input.variant === "legacy") {
-		// One-shot worker: no extensions, no control socket (so `pi -p` can exit).
-		args.push("--no-extensions");
-	} else {
-		// Resident citizen: stand the control socket up (A1) and keep extensions loaded.
-		// The keep-alive legacy avoided is the goal here. `--approve`/launchArgs ride along.
-		args.push("--entwurf-control");
-		args.push(...(input.launchArgs ?? []));
-	}
+	// Resident citizen: stand the control socket up (A1) and keep extensions loaded. The
+	// keep-alive the removed one-shot launcher had to avoid is precisely the goal here —
+	// the resumed session must stay addressable. `--approve`/launchArgs ride along.
+	args.push("--entwurf-control");
+	args.push(...(input.launchArgs ?? []));
 
-	// Shared suffix — identical identity layout in both variants.
+	// Suffix — the fixed identity layout.
 	args.push(...input.explicitExtensionArgs);
 	args.push("--session", input.sessionFile);
 	if (input.provider) args.push("--provider", input.provider);

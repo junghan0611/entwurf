@@ -23,7 +23,7 @@
 import assert from "node:assert/strict";
 import {
 	type FactList,
-	isNonPiGardenIdSocketConflict,
+	isOutOfSocketDomainGardenIdConflict,
 	type PeerFact,
 	type RecordLessSocketFact,
 	resolveFactList,
@@ -247,7 +247,7 @@ const GID_SOCKET_ONLY = "20260611T135517-5f0d25";
 	} catch {
 		threw = true;
 	}
-	ok("dedup/authority: non-pi citizen + control socket at same gid → fail-loud", threw);
+	ok("dedup/authority: out-of-socket-domain citizen + same-gid socket → fail-loud", threw);
 }
 
 // ── dedup (동결3): pi citizen + its socket → PeerFact only, never both ────────
@@ -333,11 +333,11 @@ const GID_SOCKET_ONLY = "20260611T135517-5f0d25";
 	);
 }
 
-// ── isNonPiGardenIdSocketConflict: the SHARED record-side conflict predicate ──
+// ── isOutOfSocketDomainGardenIdConflict: shared record-side predicate ──────
 // (fact-provider listing + v2 decider dispatch consume this same fn — 4c 재유도
 // 금지 동형). The union over socketGids ∪ symlinkedGardenIds is the fact-provider:125
 // gap closure: a symlinked socket is never probed, so its gid is absent from
-// socketGids; the predicate must STILL flag a non-pi citizen owning it.
+// socketGids; the predicate must STILL flag an out-of-domain citizen owning it.
 {
 	const G = "20260611T444444-dddddd";
 	const realSockets = new Set([G]);
@@ -345,21 +345,21 @@ const GID_SOCKET_ONLY = "20260611T135517-5f0d25";
 	const empty = new Set<string>();
 	for (const piBackend of IN_DOMAIN) {
 		ok(
-			`conflict-predicate: in-domain (${piBackend}) is NEVER a non-pi conflict (even with a colliding socket)`,
-			!isNonPiGardenIdSocketConflict(piBackend, G, realSockets, symlinked),
+			`conflict-predicate: socket-domain (${piBackend}) is not a record-side conflict`,
+			!isOutOfSocketDomainGardenIdConflict(piBackend, G, realSockets, symlinked),
 		);
 	}
 	ok(
-		"conflict-predicate: non-pi + real socket → conflict",
-		isNonPiGardenIdSocketConflict("claude-code", G, realSockets, empty),
+		"conflict-predicate: out-of-socket-domain + real socket → conflict",
+		isOutOfSocketDomainGardenIdConflict("claude-code", G, realSockets, empty),
 	);
 	ok(
-		"conflict-predicate: non-pi + SYMLINKED socket only → conflict (the :125 gap)",
-		isNonPiGardenIdSocketConflict("claude-code", G, empty, symlinked),
+		"conflict-predicate: out-of-socket-domain + symlinked socket → conflict",
+		isOutOfSocketDomainGardenIdConflict("claude-code", G, empty, symlinked),
 	);
 	ok(
-		"conflict-predicate: non-pi + no socket of either kind → no conflict",
-		!isNonPiGardenIdSocketConflict("claude-code", G, empty, empty),
+		"conflict-predicate: out-of-socket-domain + no socket → no conflict",
+		!isOutOfSocketDomainGardenIdConflict("claude-code", G, empty, empty),
 	);
 }
 

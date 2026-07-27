@@ -452,32 +452,72 @@ rm -f "$LEGACY" "$DLINK" "$DSTATE"
 unset ENTWURF_DEV_BIN_DIR ENTWURF_BRIDGE_TARGET ENTWURF_AGY_STATUSLINE_TARGET
 
 # ── K: permission grant — the OTHER half of a usable bridge ───────────────────
-# Registering the server only makes the tool REACHABLE. agy defaults every `mcp` action to Ask, so
-# without an allow rule every entwurf_v2 call stops for a y/n — a registered-but-ungranted bridge is
-# half-installed. We grant exactly ONE string in `permissions.allow`; the operator's own rules are
-# preserved, never managed (granting ourselves command(*) would be their trust decision, not ours).
+# Registering the server only makes the tools REACHABLE. agy defaults every `mcp` action to Ask, so
+# without an allow rule every call stops for a y/n — a registered-but-ungranted bridge is
+# half-installed. We grant ONE NARROW STRING PER NORMAL-PATH TOOL in `permissions.allow` (every
+# tool the server exposes is visible to the model; auto-granting is the smaller, deliberate set).
+# The operator's own rules are preserved, never managed (granting ourselves command(*) would be their
+# trust decision, not ours). The rule list comes from the config engine, never retyped here — a
+# second copy is how a newly shipped tool silently stops being granted.
 SETTINGS="$HOME/.gemini/antigravity-cli/settings.json"
 SLSTATE="$XDG_DATA_HOME/entwurf/agy-statusline/install-state.json"
 STATUSLINE="$REPO_DIR/scripts/agy-statusline-bridge.sh"
-RULE='mcp(entwurf-bridge/entwurf_v2)'
+RULES="$(python3 "$REPO_DIR/scripts/agy-bridge-config.py" permission-rules)"
+RULE="${RULES%% *}"   # first rule, for the single-string cases below
+
+# ── INDEPENDENT CONTRACT ─────────────────────────────────────────────────────
+# Everything below drives the SUT with $RULES, which the SUT itself printed. That is the right way
+# to keep operator messages and assertions from drifting — but as an ORACLE it is circular: adding
+# entwurf_inbox_read to ALLOW_RULES, or swapping entwurf_peers for something else, would sail
+# through every rule-set assertion because the expectation moved with the code. So the SET ITSELF is
+# pinned here, literally, once. Over-granting is the failure this catches: a permission we take and
+# do not need is not a smaller bug than one we forget.
+EXPECT_RULES='mcp(entwurf-bridge/entwurf_v2) mcp(entwurf-bridge/entwurf_peers) mcp(entwurf-bridge/entwurf_self)'
+want "contract: the auto-granted rule set is EXACTLY the three normal-path tools, in order" \
+  "[ \"$RULES\" = \"$EXPECT_RULES\" ]"
+# Named negatives, not just an equality: these two are the tools a future edit is most likely to add
+# by reflex ("grant everything the server exposes"), and each would be a grant we never justified —
+# inbox_read names a rail native-push does not have, register_native is a manual fallback the normal
+# birth path never calls.
+for forbidden in entwurf_inbox_read entwurf_register_native; do
+  want "contract: '$forbidden' is NOT auto-granted (we do not take permissions the normal path never uses)" \
+    "! printf '%s' \"$RULES\" | grep -qF 'mcp(entwurf-bridge/$forbidden)'"
+done
 has_rule() { python3 -c "
 import json,sys
 d=json.load(open('$1'))
-sys.exit(0 if '$RULE' in (d.get('permissions') or {}).get('allow', []) else 1)"; }
+allow=(d.get('permissions') or {}).get('allow', [])
+sys.exit(0 if all(r in allow for r in '''$RULES'''.split()) else 1)"; }
 
 rm -f "$SETTINGS" "$PSTATE" "$STATE" "$GLOBAL"
 bash "$BRIDGE" install >/dev/null 2>&1
-want "permission: install grants the rule into permissions.allow" "has_rule '$SETTINGS'"
+want "permission: install grants EVERY normal-path rule into permissions.allow" "has_rule '$SETTINGS'"
+
+# TWO state files, TWO schemas, versioned APART. The permission state moved to 2 when its shape
+# changed to a rule set; the MCP install-state's layout never moved and must stay 1. Sharing one
+# constant makes the version a lie in whichever file did not change — a later reader branching on it
+# would be branching on noise, and "the schema bumped" would stop meaning "the shape changed".
+want "state schemas are independent: MCP install-state stays at its own version (1)" \
+  "[ \"\$(python3 -c \"import json;print(json.load(open('$STATE'))['schemaVersion'])\")\" = 1 ]"
+want "state schemas are independent: permission-state carries the rule-set version (2)" \
+  "[ \"\$(python3 -c \"import json;print(json.load(open('$PSTATE'))['schemaVersion'])\")\" = 2 ]"
+# The defect this pins (measured 2026-07-27 on a live agy citizen): install granted entwurf_v2 only,
+# so entwurf_peers and entwurf_self prompted for a y/n on every call while the doctor reported green.
+# A grant for the tool we happen to check first must never stand in for the whole surface.
+want "permission: a PARTIAL grant is not reported as configured (agy still prompts on the rest)" \
+  "printf '{\"permissions\":{\"allow\":[\"%s\"]}}\n' '$RULE' > '$SETTINGS'; \
+   [ \"\$(python3 '$REPO_DIR/scripts/agy-bridge-config.py' permission-doctor '$SETTINGS' | cut -d' ' -f1)\" = partially-configured ]"
+bash "$BRIDGE" install >/dev/null 2>&1
 
 # IDEMPOTENCY, and not only of the file: a re-install must not rewrite PROVENANCE either. Re-reading
 # the rule we ourselves wrote as "the operator already had it" would strand it forever (the inverse
 # would decline to remove it). Installers are re-run on every upgrade, so this path is the norm.
 bash "$BRIDGE" install >/dev/null 2>&1
 bash "$BRIDGE" install >/dev/null 2>&1
-want "permission: re-install is idempotent (rule appears exactly once)" \
-  "[ \"\$(python3 -c \"import json;print(json.load(open('$SETTINGS'))['permissions']['allow'].count('$RULE'))\")\" = 1 ]"
-want "permission: re-install does NOT re-attribute OUR rule to the operator (provenance is sticky)" \
-  "[ \"\$(python3 -c \"import json;print(json.load(open('$PSTATE'))['ruleExistedBefore'])\")\" = False ]"
+want "permission: re-install is idempotent (every rule appears exactly once)" \
+  "[ \"\$(python3 -c \"import json;a=json.load(open('$SETTINGS'))['permissions']['allow'];print(max(a.count(r) for r in '''$RULES'''.split()))\")\" = 1 ]"
+want "permission: re-install does NOT re-attribute OUR rules to the operator (provenance is sticky)" \
+  "[ \"\$(python3 -c \"import json;e=json.load(open('$PSTATE'))['rulesExistedBefore'];print(any(e.values()))\")\" = False ]"
 
 # Honest inverse after those re-installs: WE created the file and both containers, so nothing of
 # ours may survive. (Before the provenance fix, install×2 → uninstall left the rule behind.)
@@ -496,16 +536,145 @@ bash "$BRIDGE" uninstall >/dev/null 2>&1
 want "permission: uninstall takes back ONLY our rule, leaving the operator's structure intact" \
   "python3 -c \"import json,sys;p=json.load(open('$SETTINGS'))['permissions'];sys.exit(0 if p['allow']==['command(*)'] and p['deny']==['read_file(/etc)'] else 1)\""
 
-# The rule was ALREADY the operator's before we ever installed → it was never ours to take away.
+# The rules were ALREADY the operator's before we ever installed → never ours to take away. Written
+# as the FULL set so that nothing here is ours: provenance is per rule, so a host where the operator
+# granted some and we added the rest is the MIXED case, pinned separately below.
+python3 -c "import json;json.dump({'permissions':{'allow':'''$RULES'''.split()}},open('$SETTINGS','w'))"
+bash "$BRIDGE" install >/dev/null 2>&1
+want "permission: an operator's pre-existing rules are recorded as theirs (rulesExistedBefore)" \
+  "[ \"\$(python3 -c \"import json;e=json.load(open('$PSTATE'))['rulesExistedBefore'];print(all(e.values()))\")\" = True ]"
+bash "$BRIDGE" uninstall >/dev/null 2>&1
+want "permission: uninstall does NOT revoke rules the operator already had" "has_rule '$SETTINGS'"
+
+# ── v1 → v2 permission-state migration, from a REAL v1 fixture ───────────────
+# A shipped host is mid-migration right now: its permission-state was written by an entwurf that
+# granted one rule and recorded `rule`/`ruleExistedBefore`. The release contract is that upgrading
+# carries that answer instead of re-capturing it — a re-capture would read the rule WE wrote as the
+# operator's and strand it, or read THEIRS as ours and delete it. Prose claimed this; now the gate
+# owns it, including a direct uninstall from an unmigrated v1 state.
+V1_RULE="$RULE"                      # what a v1 install granted
+V1_OTHER="${RULES#* }"; V1_OTHER="${V1_OTHER%% *}"   # second rule: operator-owned in this fixture
+V1_NEW="${RULES##* }"                # third rule: nobody has it yet → ours on migration
+rm -f "$STATE" "$PSTATE"
+python3 -c "import json;json.dump({'permissions':{'allow':['$V1_RULE','$V1_OTHER']}},open('$SETTINGS','w'))"
+python3 -c "
+import json,os
+json.dump({'schemaVersion':1,'managedSettingsPath':os.path.abspath('$SETTINGS'),
+           'rule':'$V1_RULE','detectMode':'adopt-regular-file','settingsExistedBefore':True,
+           'permissionsExistedBefore':True,'allowExistedBefore':True,'ruleExistedBefore':False,
+           'installedAt':'2026-07-26T00:00:18Z'}, open('$PSTATE','w'))"
+want "v1→v2: a v1 permission-state uninstalls on its own shape (removes ours, keeps theirs)" \
+  "bash '$BRIDGE' uninstall >/dev/null 2>&1 && python3 -c \"import json,sys;a=json.load(open('$SETTINGS'))['permissions']['allow'];sys.exit(0 if a==['$V1_OTHER'] else 1)\""
+
+# Now the migration proper: same v1 fixture, but install (upgrade) runs first.
+rm -f "$STATE" "$PSTATE"
+python3 -c "import json;json.dump({'permissions':{'allow':['$V1_RULE','$V1_OTHER']}},open('$SETTINGS','w'))"
+python3 -c "
+import json,os
+json.dump({'schemaVersion':1,'managedSettingsPath':os.path.abspath('$SETTINGS'),
+           'rule':'$V1_RULE','detectMode':'adopt-regular-file','settingsExistedBefore':True,
+           'permissionsExistedBefore':True,'allowExistedBefore':True,'ruleExistedBefore':False,
+           'installedAt':'2026-07-26T00:00:18Z'}, open('$PSTATE','w'))"
+bash "$BRIDGE" install >/dev/null 2>&1
+want "v1→v2: install migrates the state in place (schemaVersion 2, per-rule provenance)" \
+  "[ \"\$(python3 -c \"import json;s=json.load(open('$PSTATE'));print(s['schemaVersion']==2 and isinstance(s.get('rulesExistedBefore'),dict))\")\" = True ]"
+# The three-way answer, which is the whole point of per-rule provenance:
+#   the v1 rule stays OURS (carried, not re-read)  ·  the operator's rule stays THEIRS
+#   the newly granted tool becomes OURS
+want "v1→v2: provenance is carried per rule (v1 rule ours, operator's rule theirs, new rule ours)" \
+  "[ \"\$(python3 -c \"import json;e=json.load(open('$PSTATE'))['rulesExistedBefore'];print(e['$V1_RULE'] is False and e['$V1_OTHER'] is True and e['$V1_NEW'] is False)\")\" = True ]"
+bash "$BRIDGE" uninstall >/dev/null 2>&1
+want "v1→v2: the migrated inverse takes back only ours and leaves the operator's rule" \
+  "python3 -c \"import json,sys;a=json.load(open('$SETTINGS'))['permissions']['allow'];sys.exit(0 if a==['$V1_OTHER'] else 1)\""
+
+# A state shape we cannot read must REFUSE, never fall through to "nothing was theirs" and revoke.
+rm -f "$STATE" "$PSTATE"
+python3 -c "import json;json.dump({'permissions':{'allow':'''$RULES'''.split()}},open('$SETTINGS','w'))"
+python3 -c "
+import json,os
+json.dump({'schemaVersion':99,'managedSettingsPath':os.path.abspath('$SETTINGS')}, open('$PSTATE','w'))"
+want "malformed state: an unknown schemaVersion FAILS the uninstall instead of guessing" \
+  "! bash '$BRIDGE' uninstall >/dev/null 2>&1"
+want "malformed state: and the operator's rules are still there afterwards (no blind revoke)" \
+  "has_rule '$SETTINGS'"
+# The specific deletion hazard: a v2 state whose provenance map is EMPTY. Read permissively, every
+# rule reads as "not theirs" and the inverse revokes the operator's whole set.
+python3 -c "
+import json,os
+json.dump({'schemaVersion':2,'managedSettingsPath':os.path.abspath('$SETTINGS'),
+           'rules':'''$RULES'''.split(),'rulesExistedBefore':{}}, open('$PSTATE','w'))"
+want "malformed state: an INCOMPLETE provenance map fails loud (it must not promote their rules to ours)" \
+  "! bash '$BRIDGE' uninstall >/dev/null 2>&1"
+want "malformed state: the operator's rules survive the incomplete-provenance refusal" \
+  "has_rule '$SETTINGS'"
+
+# INSTALL must refuse the same unreadable prior, not silently re-capture over it. A shallow shape
+# check (dict? values bool?) passes an EMPTY map — all() of nothing is true — and the reinstall then
+# rewrote provenance from disk, which is exactly the re-capture this state file exists to prevent:
+# every rule would be recorded as the operator's and the inverse would decline to remove any of it.
+python3 -c "
+import json,os
+json.dump({'schemaVersion':2,'managedSettingsPath':os.path.abspath('$SETTINGS'),
+           'rules':'''$RULES'''.split(),'rulesExistedBefore':{}}, open('$PSTATE','w'))"
+PRE_S="$(python3 -c "import hashlib;print(hashlib.sha256(open('$SETTINGS','rb').read()).hexdigest())")"
+PRE_P="$(python3 -c "import hashlib;print(hashlib.sha256(open('$PSTATE','rb').read()).hexdigest())")"
+want "malformed state: INSTALL refuses an unreadable prior instead of re-capturing provenance" \
+  "! bash '$BRIDGE' install >/dev/null 2>&1"
+want "malformed state: the refused install left settings AND state byte-identical" \
+  "[ \"\$(python3 -c \"import hashlib;print(hashlib.sha256(open('$SETTINGS','rb').read()).hexdigest())\")\" = '$PRE_S' ] && \
+   [ \"\$(python3 -c \"import hashlib;print(hashlib.sha256(open('$PSTATE','rb').read()).hexdigest())\")\" = '$PRE_P' ]"
+
+# A refusal must leave the world untouched even when the settings file is GONE. The validation used
+# to run inside the settings-exists branch, so on this host it was first reached in the closing
+# message — AFTER os.remove(state_path). The safety check destroyed the only record of what we owed.
+rm -f "$SETTINGS"
+want "malformed state: uninstall refuses when the settings file is absent (nothing to guess from)" \
+  "! bash '$BRIDGE' uninstall >/dev/null 2>&1"
+want "malformed state: the refused uninstall did NOT delete the permission-state" \
+  "[ -f '$PSTATE' ]"
+
+# DOCTOR must not round a corrupt ownership record up to green. Runtime here is perfect — all three
+# rules present, agy prompts on nothing — while the record that tells our grants from theirs is
+# unreadable. Hard rule 13: runtime truth and ownership truth are separate axes.
+python3 -c "import json;json.dump({'permissions':{'allow':'''$RULES'''.split()}},open('$SETTINGS','w'))"
+if bash "$BRIDGE" doctor >/dev/null 2>&1; then
+  die "corrupt-ownership: doctor must FAIL on an unreadable permission-state even when runtime is fine"
+fi
+ok "permission: doctor FAILS on a path-correct but UNREADABLE permission-state (ownership axis)"
+DOC_OUT="$(bash "$BRIDGE" doctor 2>&1 || true)"
+want "permission: the corrupt-ownership report names the axis and does not blame runtime" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'CORRUPT (permission)'"
+rm -f "$STATE" "$PSTATE"
+
+# CROSS-LIST scope: broad-most-covering is a statement about the whole file, not about one list.
+# A deny of ONE exact tool next to an ask of the server-wide rule is a host where EVERYTHING is
+# shadowed; naming the exact hit because `deny` is scanned first would tell the operator their other
+# grants still work while agy prompts on all of them.
+python3 -c "
+import json
+json.dump({'permissions':{'allow':'''$RULES'''.split(),
+                          'deny':['${RULES##* }'],
+                          'ask':['mcp(entwurf-bridge)']}}, open('$SETTINGS','w'))"
+want "cross-list shadow: a broad rule in ANY list outranks an exact hit in a higher-precedence list" \
+  "[ \"\$(python3 '$REPO_DIR/scripts/agy-bridge-config.py' permission-doctor '$SETTINGS' | cut -d' ' -f2)\" = broad ]"
+DOC_OUT="$(bash "$BRIDGE" doctor 2>&1 || true)"
+want "cross-list shadow: the report says EVERY call is blocked, not 'other grants still work'" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'EVERY entwurf tool call'"
+rm -f "$STATE" "$PSTATE"
+
+# MIXED provenance — the shape agy's own "always allow" prompt creates, one rule at a time. The
+# operator owns one; we add the rest; the inverse must split them exactly, taking back only ours.
+rm -f "$STATE" "$PSTATE"
 printf '{"permissions":{"allow":["%s"]}}\n' "$RULE" > "$SETTINGS"
 bash "$BRIDGE" install >/dev/null 2>&1
-want "permission: an operator's pre-existing rule is recorded as theirs (ruleExistedBefore)" \
-  "[ \"\$(python3 -c \"import json;print(json.load(open('$PSTATE'))['ruleExistedBefore'])\")\" = True ]"
+want "permission: mixed provenance is recorded per rule (theirs stays theirs, ours stays ours)" \
+  "[ \"\$(python3 -c \"import json;e=json.load(open('$PSTATE'))['rulesExistedBefore'];print(e['$RULE'] is True and sum(1 for v in e.values() if v is False)==len(e)-1)\")\" = True ]"
 bash "$BRIDGE" uninstall >/dev/null 2>&1
-want "permission: uninstall does NOT revoke a rule the operator already had" "has_rule '$SETTINGS'"
+want "permission: uninstall keeps THEIR rule and removes only the ones WE added" \
+  "python3 -c \"import json,sys;a=json.load(open('$SETTINGS'))['permissions']['allow'];sys.exit(0 if a==['$RULE'] else 1)\""
 
 # ── K2: TWO adapters, ONE file — element ownership is what keeps them apart ────
-# The statusline adapter owns the `statusLine` subtree of this same settings.json; we own one string
+# The statusline adapter owns the `statusLine` subtree of this same settings.json; we own our rules
 # in `permissions.allow`. Neither may restore a whole-file preimage, or uninstalling one would
 # silently revert the other. Both orders, both inverses.
 rm -f "$SETTINGS" "$PSTATE" "$SLSTATE"
@@ -550,6 +719,22 @@ ok "permission: doctor FAILS when a higher-precedence ask/deny rule shadows our 
 DOC_OUT="$(bash "$BRIDGE" doctor 2>&1 || true)"
 want "permission: the shadow report names the offending list and rule" \
   "printf '%s' \"\$DOC_OUT\" | grep -q 'SHADOWED'"
+want "permission: a BROAD shadow is described as covering EVERY entwurf tool call" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'EVERY entwurf tool call'"
+
+# SCOPE HONESTY: an EXACT shadow takes one tool, not the surface. Saying "every entwurf tool call is
+# blocked" when only entwurf_self is sends the operator hunting a wildcard that is not there. The
+# verdict stays red — a granted tool that agy still stops on is not green — but the diagnosis must
+# match what agy will actually do.
+EXACT_SHADOW="${RULES##* }"   # last rule in the set, shadowed alone
+python3 -c "
+import json
+json.dump({'permissions':{'allow':'''$RULES'''.split(),'ask':['$EXACT_SHADOW']}}, open('$SETTINGS','w'))"
+if bash "$BRIDGE" doctor >/dev/null 2>&1; then die "exact-shadow: doctor should FAIL when one of our tools is shadowed"; fi
+ok "permission: doctor FAILS when an EXACT rule shadows one granted tool (still not green)"
+DOC_OUT="$(bash "$BRIDGE" doctor 2>&1 || true)"
+want "permission: an EXACT shadow names that ONE tool and does NOT claim every call is blocked" \
+  "printf '%s' \"\$DOC_OUT\" | grep -qF '$EXACT_SHADOW' && printf '%s' \"\$DOC_OUT\" | grep -q 'that ONE tool' && ! printf '%s' \"\$DOC_OUT\" | grep -q 'EVERY entwurf tool call'"
 
 # THE MIRROR OF IT: the same rules that shadow our allow from ask/deny COVER it from allow. An
 # operator who granted a broad mcp(*) has already made entwurf_v2 callable — reporting that host as
@@ -588,11 +773,11 @@ want "permission: an operator wildcard does NOT mask drift of the rule WE instal
 want "permission: the owned-drift report names both axes (our grant gone, their rule covering)" \
   "printf '%s' \"\$DOC_OUT\" | grep -q 'DRIFT' && printf '%s' \"\$DOC_OUT\" | grep -qF 'mcp(*)'"
 
-# …but an operator's OWN pre-existing rule vanishing is not our drift: ruleExistedBefore=true means
-# the rule was never ours to lose. Their file, their edit; the wildcard covering it stays a NOTE.
+# …but an operator's OWN pre-existing rules vanishing is not our drift: rulesExistedBefore all true
+# means nothing here was ours to lose. Their file, their edit; the wildcard covering it stays a NOTE.
 rm -f "$STATE" "$PSTATE"
-printf '{"permissions":{"allow":["%s"]}}\n' "$RULE" > "$SETTINGS"
-bash "$BRIDGE" install >/dev/null 2>&1   # rule pre-existed → recorded as theirs
+python3 -c "import json;json.dump({'permissions':{'allow':'''$RULES'''.split()}},open('$SETTINGS','w'))"
+bash "$BRIDGE" install >/dev/null 2>&1   # rules pre-existed → recorded as theirs
 python3 -c "import json;d=json.load(open('$SETTINGS'));d['permissions']['allow']=['mcp(*)'];json.dump(d,open('$SETTINGS','w'))"
 if ! bash "$BRIDGE" doctor >/dev/null 2>&1; then
   die "covered: losing the OPERATOR's own pre-existing rule must not be reported as OUR drift"

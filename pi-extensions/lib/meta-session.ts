@@ -1,12 +1,12 @@
 /**
- * meta-session — 1.0.0 garden-native meta-bridge, step 2: the RECORD AUTHORITY.
+ * meta-session — the shared V3 garden-citizen RECORD AUTHORITY.
  *
- * Backend-agnostic garden layer (#30). A *meta-session* is the bib card for a
- * native backend session (Claude Code / Antigravity / Codex) that has NO pi
- * JSONL of its own: an opaque pointer record that makes the native session a
- * garden citizen — addressable + wakeable by a garden id — WITHOUT pretending pi
- * owns its transcript (Hard Rule #8: reference the backend transcript, never
- * hydrate or replay it).
+ * This module entered through the native meta-bridge (#30), then became the one
+ * identity store for every addressable citizen, including `backend:"pi"` (#50).
+ * A record is a backend-owned-session bib card: it binds the backend's native id
+ * and transcript pointer to a garden id without taking over that backend's runtime,
+ * auth, or transcript. The module name is history; the live identity schema is not
+ * a native-only or pi-exception axis.
  *
  * Two layers, clearly sectioned:
  *   1. RECORD functions + types (mint / serialize / parse / certifyActiveStore /
@@ -61,7 +61,7 @@ import { generateSessionId, SESSION_ID_RE } from "./session-id.js";
 // Errors
 // ---------------------------------------------------------------------------
 
-/** A meta-record is malformed, or an input violates the record contract. */
+/** A garden-citizen record is malformed, or an input violates the record contract. */
 export class MetaRecordError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -142,8 +142,9 @@ export function requireNonEmptyString(value: unknown, field: string): string {
 
 /** Validate the 3-backend NATIVE bridge axis (sender/receiver markers, capability
  * drift guard). Not a record-schema validator: identity records take
- * `requireCitizenBackend` (which admits `pi`); markers stay native-3 because a pi
- * session's sender identity is env-authored, never marker-authored. */
+ * `requireCitizenBackend` (which admits `pi`). Markers stay native-3 because the
+ * pi adapter carries its record-established garden id into children via env rather
+ * than using the native-hook pid marker rail. */
 export function requireBackend(value: unknown): MetaBackend {
 	if (typeof value !== "string" || !META_BACKENDS.includes(value as MetaBackend)) {
 		throw new MetaRecordError(
@@ -208,7 +209,7 @@ function isoNow(now: Date): string {
 /** The one live identity schema number. */
 export const META_SCHEMA_VERSION_V3 = 3 as const;
 
-/** The 4 record-citizen backends: the three native backends + `pi` itself. */
+/** Every backend admitted by the one V3 record-citizen schema. */
 export const META_CITIZEN_BACKENDS = ["claude-code", "antigravity", "codex", "pi"] as const;
 export type MetaCitizenBackend = (typeof META_CITIZEN_BACKENDS)[number];
 
@@ -510,15 +511,11 @@ export function parseMetaIdentity(json: string): MetaIdentity {
 // const for the three existing backends (the drift guard) and COVERS exactly
 // META_CITIZEN_BACKENDS (pi included).
 //
-// pi's wakeMode = direct-inject (NOT self-fetch): pi's live wake path is the
-// entwurf-control socket — `pi.sendMessage(... triggerTurn ...)` injects the
-// body straight into the model-visible turn, which is direct-inject by the
-// WakeMode definition (the last-1cm: who puts the body in front of the model).
-// self-fetch is Claude's mailbox path (the model must call its inbox-read MCP).
-// pi's dormant→resume→mailbox path is self-fetch-shaped, so pi is really
-// BIMODAL; a single wakeMode field cannot express both. Splitting it
-// (mailboxWakeMode vs controlSocketWakeMode) is out of 3C scope — for now the
-// single field reports pi's primary live capability (direct-inject) honestly.
+// `wakeMode` describes the last centimetre, not citizen rank. The control-socket
+// adapter injects the body into a pi turn, so backend `pi` is `direct-inject`;
+// Claude's mailbox is `self-fetch`; native-push adapters are direct injection.
+// Dormant spawn-bg resume is a separate transport/ownership decision and does not
+// turn the pi record into a mailbox citizen.
 // ---------------------------------------------------------------------------
 
 /** Bump only on a breaking capability-registry shape change; the parser refuses other versions. */

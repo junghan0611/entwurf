@@ -7,8 +7,11 @@
  *
  * Proves:
  *   - PURE truth table (computeSelfAddressability, facts injected): pi replyable ⟺
- *     socketAlive; meta replyable ⟺ recordBacked ∧ ownerAlive ∧ watchArmed; external
- *     never replyable. socketState alive/expected/none is its own assertable field.
+ *     socketAlive; external never replyable; and meta replyability splits by RAIL —
+ *     self-fetch ⟺ recordBacked ∧ ownerAlive ∧ watchArmed, native-push ⟺ recordBacked ∧
+ *     probeAlive (a separate axis: an agy citizen never arms a mailbox watch, so the
+ *     self-fetch atom would make it un-replyable forever), and an unsupplied rail is
+ *     fail-closed. socketState alive/expected/none is its own assertable field.
  *   - The two REGRESSION-PROOF rows the lock requires (record-present, not all-absent):
  *       (b) meta record present + owner-dead (start-key mismatch) → false
  *       (c) meta record present + watch-unarmed → false
@@ -245,6 +248,183 @@ ok(
 	"entwurf_self existsSync-probes the pi socket (alive vs expected, no synthesized path lie)",
 	/existsSync\s*\(/.test(selfRegion),
 );
+
+// ── SLICE INTEGRITY (before any claim is read off the slice) ─────────────────
+// A source-slice assertion is only as good as its boundaries. `toolRegion` counts
+// parens, so an unbalanced paren inside a string literal would silently widen the
+// slice to a LATER tool and let a neighbour's text satisfy an assertion about this
+// one. Pin both ends explicitly instead of trusting the counter: the slice must
+// contain THIS tool's own error label and must NOT reach the next `server.tool(`.
+ok("entwurf_self slice contains its own handler tail (start boundary real)", /entwurf_self error:/.test(selfRegion));
+ok(
+	"entwurf_self slice stops before the next tool (end boundary real, no silent widen)",
+	!/entwurf_peers/.test(selfRegion) && !/entwurf_inbox_read/.test(selfRegion),
+);
+
+// ── F-1: entwurf_self must render the RAIL, never a universal mailbox ────────
+// The defect: `origin === "meta-session"` unconditionally synthesized
+// `<mailboxDir>/<gardenId>`. `origin` is sender PROVENANCE; the rail is the second
+// axis. A native-push citizen (antigravity) has NO mailbox at all (AGENTS Hard Rule
+// 10, VERIFY "No mailbox/receiver-marker evidence counts on this rail"), so that
+// branch printed a path that will never exist and taught the model mailbox semantics
+// its own rail does not have. Pinned PER RAIL, as one reusable predicate so the same
+// judgement can be driven over negative controls below.
+/** Brace-balanced body of the `if (<guard>) { … }` that follows `guard`, or null. */
+function branchBody(region: string, guard: string): string | null {
+	const at = region.indexOf(guard);
+	if (at < 0) return null;
+	const open = region.indexOf("{", at);
+	if (open < 0) return null;
+	let depth = 0;
+	for (let i = open; i < region.length; i++) {
+		const c = region[i];
+		if (c === "{") depth++;
+		else if (c === "}") {
+			depth--;
+			if (depth === 0) return region.slice(open, i + 1);
+		}
+	}
+	return null;
+}
+
+function metaRailRenderIsHonest(region: string): { honest: boolean; reason: string } {
+	// The mailbox path may be built at most once in the whole render branch…
+	const mailboxCalls = region.split("defaultMetaMailboxDir(").length - 1;
+	if (mailboxCalls !== 1) {
+		return { honest: false, reason: `expected exactly 1 defaultMetaMailboxDir() call, found ${mailboxCalls}` };
+	}
+	// …and that one call must sit INSIDE the self-fetch branch body. Ordering alone is not
+	// containment: an `if (rail === "self-fetch") {}` with an EMPTY body followed by an
+	// unconditional mailbox build satisfies "guard appears before mailbox" while still
+	// synthesizing a mailbox for every rail — the exact defect this predicate exists to
+	// reject. Extract the body by brace-counting and require the call to be in it.
+	const selfFetchBody = branchBody(region, 'rail === "self-fetch"');
+	if (selfFetchBody === null) {
+		return { honest: false, reason: 'no brace-balanced `rail === "self-fetch"` branch body' };
+	}
+	const inBranch = selfFetchBody.split("defaultMetaMailboxDir(").length - 1;
+	if (inBranch !== 1) {
+		return {
+			honest: false,
+			reason: `the self-fetch branch BODY must build the mailbox path exactly once, found ${inBranch} (ordering is not containment)`,
+		};
+	}
+	const pushBody = branchBody(region, 'rail === "native-push"');
+	if (pushBody === null) {
+		return { honest: false, reason: 'no brace-balanced `rail === "native-push"` branch body' };
+	}
+	// The native-push branch must deny an inbox AND keep the direct-inject claim conditional
+	// on the probe: a dead probe has no live conversation to inject into, so an unconditional
+	// "injects a reply into this live conversation" invents the very rail F-1 is about.
+	if (!/no inbox/.test(pushBody)) {
+		return { honest: false, reason: "the native-push branch does not state that there is no inbox" };
+	}
+	if (!/while the adapter probe is alive/.test(pushBody)) {
+		return {
+			honest: false,
+			reason: "the native-push branch states direct injection unconditionally (a dead probe has no live conversation)",
+		};
+	}
+	return {
+		honest: true,
+		reason:
+			"the sole mailbox build is INSIDE the self-fetch branch body; native-push denies an inbox and gates injection on the probe",
+	};
+}
+
+{
+	const verdict = metaRailRenderIsHonest(selfRegion);
+	ok(`entwurf_self renders the meta rail honestly (${verdict.reason})`, verdict.honest);
+	ok(
+		"entwurf_self reads the rail from the builder (not re-derived at the render site)",
+		/self\.metaDeliveryDomain/.test(selfRegion),
+	);
+
+	// NEGATIVE CONTROLS — two KINDS, because a gate that only rejects the exact old
+	// sentence would pass a version where the branch is simply gone (and vice versa).
+	// Driving the same predicate over synthetic sources is what proves this assertion
+	// BLOCKS, not merely that it exists.
+	const retiredUnconditional = [
+		'} else if (sender.origin === "meta-session") {',
+		"\tconst mailboxPath = path.join(defaultMetaMailboxDir(), sender.sessionId);",
+		"\textra.mailboxPath = mailboxPath;",
+		"}",
+	].join("\n");
+	ok(
+		"NEGATIVE 1/3 (exact false sentence): the retired unconditional meta-session mailbox is REJECTED",
+		metaRailRenderIsHonest(retiredUnconditional).honest === false,
+	);
+
+	const selfFetchOnlyNoPushBranch = [
+		"const rail = self.metaDeliveryDomain;",
+		'if (rail === "self-fetch") {',
+		"\tconst mailboxPath = path.join(defaultMetaMailboxDir(), sender.sessionId);",
+		"\textra.mailboxPath = mailboxPath;",
+		"}",
+	].join("\n");
+	ok(
+		"NEGATIVE 2/3 (omission): a self-fetch-guarded render with the native-push branch DELETED is REJECTED",
+		metaRailRenderIsHonest(selfFetchOnlyNoPushBranch).honest === false,
+	);
+
+	// NEGATIVE 3/3 — the form the FIRST version of this predicate wrongly accepted (caught in
+	// cross-review, 2026-07-27): every marker present, guard textually BEFORE the mailbox, yet
+	// the guard's body is empty and the mailbox is built unconditionally. Ordering satisfied,
+	// containment violated. This row is why the predicate brace-counts the branch body.
+	const guardedInNameOnly = [
+		"const rail = self.metaDeliveryDomain;",
+		'if (rail === "self-fetch") { }',
+		"const mailboxPath = path.join(defaultMetaMailboxDir(), sender.sessionId);",
+		"extra.mailboxPath = mailboxPath;",
+		'if (rail === "native-push") {',
+		'\tlines.push("mailbox: none — no inbox; direct-inject only while the adapter probe is alive");',
+		"}",
+	].join("\n");
+	ok(
+		"NEGATIVE 3/3 (ordering-but-not-containment): an EMPTY self-fetch guard followed by an unconditional mailbox build is REJECTED",
+		metaRailRenderIsHonest(guardedInNameOnly).honest === false,
+	);
+}
+
+// ── F-1: the identity-wiring errors must not teach one backend's hook as THE hook ──
+// Both native backends mint a garden id from their OWN hook (Claude Code SessionStart,
+// Antigravity PreInvocation). Naming only SessionStart/Claude sent an agy operator
+// looking for a hook its backend never runs.
+{
+	/** Extract a `class NAME extends Error { ... }` body by brace-counting. */
+	const classBody = (name: string): string => {
+		const sig = `class ${name} extends Error {`;
+		const at = src.indexOf(sig);
+		assert.ok(at >= 0, `${name} present in MCP source`);
+		const open = src.indexOf("{", at);
+		let depth = 0;
+		for (let i = open; i < src.length; i++) {
+			const c = src[i];
+			if (c === "{") depth++;
+			else if (c === "}") {
+				depth--;
+				if (depth === 0) return src.slice(open, i + 1);
+			}
+		}
+		throw new Error(`class ${name} body never closed`);
+	};
+
+	// Anchored per class (not a repo-wide grep) so a mention somewhere else in the file
+	// cannot make either row vacuously green.
+	for (const cls of ["EntwurfEnvelopeWiringError", "EntwurfSenderIdentityError"]) {
+		const body = classBody(cls);
+		ok(
+			`${cls} names BOTH native hooks (SessionStart AND PreInvocation)`,
+			/SessionStart/.test(body) && /PreInvocation/.test(body),
+		);
+		ok(
+			`${cls} no longer presents SessionStart/Claude as THE marker writer`,
+			!/The native SessionStart hook writes that marker/.test(body) &&
+				!/whose SessionStart hook wrote a live/.test(body) &&
+				!/keyed by the\s+Claude Code parent pid/.test(body),
+		);
+	}
+}
 
 // ── SE-2 2e-b: meta-session sender replyability from the receiver presence marker ──
 // Identity stays trusted (record-backed), but `replyable` is now derived from whether

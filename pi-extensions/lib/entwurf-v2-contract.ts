@@ -7,25 +7,28 @@
  * `entwurf-v2-contract-schema.ts` (0.12.1 B-1) so this module — which the
  * harness-neutral MCP bridge reaches at boot — carries no pi dependency.
  *
- * Why a frozen contract BEFORE the fact-provider (step 4): with the legacy
- * 3-verb surface (`entwurf`/`entwurf_resume`/`entwurf_send`) still live, building
- * discovery first bakes verb-routing into the fact layer and `entwurf_peers`
- * goes wrong (동결결정 10 순서 근거). So the SHAPE is locked here; the facts read
- * it; dispatch computes from facts at call time (step 5). The legacy 3-verb
- * surface is untouched — this is purely additive (동결결정 10 scope A).
+ * Why a frozen contract BEFORE the fact-provider (step 4): the legacy 3-verb
+ * surface (`entwurf`/`entwurf_resume`/`entwurf_send`) was still live when this
+ * was written, and building discovery first would have baked verb-routing into
+ * the fact layer, taking `entwurf_peers` wrong (동결결정 10 순서 근거). So the
+ * SHAPE is locked here; the facts read it; dispatch computes from facts at call
+ * time (step 5). Those v1 verbs were REMOVED in the 0.12 cutover — the ordering
+ * argument is history, but the layering it produced is the live design.
  *
  * Source-verified invariants folded in (Opus 실측 + GPT 보정 + Fable R1-R5, 2026-06-11):
  *  - F1: caller intent is DECLARED in the input, so the contract a caller
  *    receives is deterministic — never computed from liveness at call time.
  *    `owned-outcome` (caller owns completion) ≠ `fire-and-forget` (ack only).
- *  - R1: the liveness predicate is defined PER-BACKEND. Only pi (direct-inject,
- *    control-socket) has one initially; claude-code is self-fetch with no socket,
- *    so its liveness is `unsupported`, NOT folded into dead/indeterminate — that
- *    fold is the identity-split trap. `unsupported` is a 4th FACT value, not a
- *    4th dispatch column: an out-of-domain backend rejects before the table.
+ *  - R1: liveness is defined PER CAPABILITY DOMAIN. The control-socket domain
+ *    currently contains backend `pi`; claude-code is self-fetch with no socket,
+ *    so its socket liveness is `unsupported`, NOT folded into dead/indeterminate.
+ *    This is transport capability, not identity rank: every target is first a
+ *    record citizen. `unsupported` is a 4th FACT value, not a 4th table column.
  *  - R2: `target` is the garden-id of an EXISTING citizen. spawn-new is out of
- *    v2 scope (legacy `entwurf` keeps it; additive later). Absent/typo gid =
- *    `bad-target` (so F6 "오타 gid가 신규 spawn 사고 막기" holds automatically).
+ *    v2 scope — it was the legacy `entwurf` verb's, and since that verb's removal
+ *    fresh creation is a deferred capability with NO surface, not a fallback that
+ *    still exists elsewhere. Absent/typo gid = `bad-target` (so F6 "오타 gid가
+ *    신규 spawn 사고 막기" holds automatically).
  *  - N1/F3: an `indeterminate` target never spawns. N2: `fire-and-forget` to a
  *    `dormant` target is "reject for now" (mailbox-wake lacks a reply-correlation
  *    id in the substrate; an additive extension later, not a permanent no).
@@ -67,16 +70,16 @@ export const DISPATCH_LIVENESSES = ["live", "dormant", "indeterminate"] as const
 export type DispatchLiveness = (typeof DISPATCH_LIVENESSES)[number];
 
 // ── Backend liveness domain (R1 + F4) ──────────────────────────────────────
-// Backends whose SOCKET liveness predicate is DEFINED — the pi control-socket
-// domain ONLY (connect + RPC `get_info`, entwurf-control.ts). It stays ["pi"].
+// Backends whose SOCKET liveness predicate is DEFINED. The control-socket
+// capability domain currently contains `pi` (connect + RPC `get_info`).
 // claude-code (self-fetch, no socket) has no liveness predicate at all → `unsupported`.
 // codex/antigravity are direct-inject; antigravity's liveness IS measured, but by the
 // SEPARATE native-push adapter rail (a live app-server conversation probe), NOT this
 // pi-socket domain — so it must NEVER be added here. Adding it would pull agy into the
-// pi socket table (inspectSocket/probeSocket are socket-only); the fact layer keeps
-// reporting agy `unsupported` = "outside the pi-socket liveness domain", NOT
+// control-socket table (inspectSocket/probeSocket are socket-only); the fact layer keeps
+// reporting agy `unsupported` = "outside the control-socket liveness domain", NOT
 // unreachable (the native-push rail measures it — entwurf-v2-decider.ts). Widening
-// THIS set is a deliberate future decision (Stage 1+), gated by a REAL pi-shaped
+// THIS set is a deliberate future decision, gated by a real compatible
 // control-socket predicate — never by silently mapping sessions to dead/indeterminate
 // (R1 핵심). check-entwurf-facts pins this == ["pi"] and asserts the native-push
 // domain is disjoint from it.
@@ -89,12 +92,12 @@ export function isLivenessSupported(backend: string): boolean {
 
 // ── Native-push backend domain (봉인 2/4) ───────────────────────────────────
 // A backend whose liveness is measured by the SEPARATE native-push adapter rail (a
-// live app-server conversation probe — antigravity's LS gRPC), NOT the pi control
-// socket. This domain is DISJOINT from LIVENESS_DOMAIN_BACKENDS (pi socket): an agy
-// session is `unsupported` at the pi-socket FACT level (entwurf_peers) yet fully
+// live app-server conversation probe — antigravity's LS gRPC), NOT a control
+// socket. This domain is DISJOINT from LIVENESS_DOMAIN_BACKENDS: an agy session
+// is `unsupported` on the socket FACT axis (entwurf_peers) yet fully
 // measured + deliverable on the native-push axis. The two are separate rails on
 // purpose — check-entwurf-facts pins both sets and asserts their intersection is ∅
-// (a backend can never be in both a socket-liveness domain and a native-push domain).
+// (a backend can never be in both domains).
 export const NATIVE_PUSH_BACKENDS = ["antigravity"] as const;
 export type NativePushBackend = (typeof NATIVE_PUSH_BACKENDS)[number];
 
@@ -239,8 +242,9 @@ export const ENTWURF_V2_ACTIONS = ["send", "resume"] as const;
 export const ENTWURF_V2_OWNERSHIPS = ["ack-only", "owned"] as const;
 // Delivery mode of the message to the target (how it is injected) — steer =
 // interrupt the current turn, follow_up = queue after it. A SEPARATE axis from
-// both the intent/ownership axis (F1) and the liveness-routing axis; the legacy
-// entwurf_send carries the same steer|follow_up surface.
+// both the intent/ownership axis (F1) and the liveness-routing axis. The removed
+// v1 `entwurf_send` carried the same steer|follow_up surface, so this axis is
+// inherited vocabulary, not a second live delivery verb.
 export const ENTWURF_V2_MODES = ["steer", "follow_up"] as const;
 
 export type DispatchVerdict =
@@ -252,7 +256,10 @@ export type DispatchVerdict =
 // intent × dispatch-liveness → exactly one verdict (Q2). v2-initial ALLOWS
 // exactly two cells (fire-and-forget+live = send; owned-outcome+dormant =
 // resume); the other four reject. The reject cells are honest "지금은 없음"
-// locks (N2) — the legacy 3-verb surface still covers those flows unchanged.
+// locks (N2). They were written while the legacy 3-verb surface still covered
+// those flows; that surface is GONE, so a reject cell is now a real absence with
+// no fallback verb behind it — reopening one takes a new contract, never a
+// quiet re-admission.
 export const DISPATCH_TABLE: Record<EntwurfIntent, Record<DispatchLiveness, DispatchVerdict>> = {
 	"fire-and-forget": {
 		live: { action: "send", transport: "control-socket", ownership: "ack-only" },

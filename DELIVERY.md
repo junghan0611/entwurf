@@ -213,11 +213,12 @@ three markers) but **not** simultaneous model invocation by two conversations
 under one agy pid: one marker file would be last-writer-wins, so that concurrency
 is explicitly unsupported.
 
-Current deterministic floor: `smoke-agy-install-state` 140 checks,
+Current deterministic floor: `smoke-agy-install-state` 167 checks,
 `smoke-agy-statusline-state` 69, `smoke-agy-hooks-state` 44,
 `check-agy-sender-identity` 28, plus the shared self-address/native-push gates.
-The bridge installer owns only `mcp(entwurf-bridge/entwurf_v2)` in
-`permissions.allow`; broad YOLO policy stays operator-owned. Live 2026-07-13
+The bridge installer owns one narrow rule per normal-path tool
+(`entwurf_v2`, `entwurf_peers`, `entwurf_self`) in `permissions.allow`;
+broad YOLO policy stays operator-owned. Live 2026-07-13
 (agy 1.0.x): automatic birth → gid/statusline → record-backed sender → sibling
 delivery → same-gid native-push reply passed. Live 2026-07-14 (**agy 1.1.0**):
 re-verified on the new minor — `entwurf_self` answered without a permission

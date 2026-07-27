@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-# entwurf-demo.sh — one-shot recorded demo of entwurf entwurf flow.
+# entwurf-demo.sh — one-shot recorded demo of the entwurf flow.
+#
+# ARCHIVED pre-0.12 evidence — NOT a runnable recipe. The scenes below drive the
+# retired v1 verbs (`entwurf` / `entwurf_resume` / `entwurf_send`), which the 0.12
+# cutover removed; a run would fail at scene 1. Kept for historical comparison only.
+# See demo/README.md. Scene 3's delivery proof was recovered as a deterministic gate
+# (scripts/check-bridge-delivery.ts); the v2-native retake is a post-0.12 follow-up.
 #
 # Layout (tmux, 220x50):
 #   pane 0 (top)    — peer pi (codex, gpt-5.4)       — idle, waits for greeting

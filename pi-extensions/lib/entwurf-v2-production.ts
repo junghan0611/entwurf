@@ -42,7 +42,7 @@ import {
 	mailboxConversationalDeliverable,
 	receiverMarkerMatchesIdentity,
 } from "./entwurf-deliverability.ts";
-import { isNonPiGardenIdSocketConflict } from "./entwurf-facts.ts";
+import { isOutOfSocketDomainGardenIdConflict } from "./entwurf-facts.ts";
 // 0.12.1 B-2: TYPE-ONLY import — `entwurf-preflight.ts` value-imports
 // `@earendil-works/pi-coding-agent` (ProjectTrustStore), so a static value-import
 // here would re-couple the harness-neutral MCP bridge to pi at boot
@@ -189,7 +189,7 @@ async function lazyProductionPreflight(input: PreflightInput): Promise<Preflight
 }
 
 /** Map a record-side socket inspection to the singleton (socketGids, symlinkedGids) the
- * `isNonPiGardenIdSocketConflict` predicate consumes. `indeterminate` fails LOUD (QB2): an
+ * `isOutOfSocketDomainGardenIdConflict` predicate consumes. `indeterminate` fails LOUD (QB2): an
  * unprovable conflict must NOT be folded to "no conflict" — that would silently allow an
  * unsupported-backend mailbox send onto a quarantined address. */
 function conflictSetsFor(
@@ -294,20 +294,23 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 			};
 		}
 		const identity = io.readIdentity(gid, sessionsDir);
-		// `preProbeAddressConflict` is the record-side NON-PI conflict ONLY (B1). An in-domain
-		// (pi) target's socket lstat/connect MUST run UNDER the lock in the decider's later
-		// `inspectSocket` step (1C: lock BEFORE lstat/connect) — so a pi target short-circuits
-		// here with NO pre-lock lstat. Doing the lstat here would (a) be a needless pre-lock IO
-		// and (b) turn a pi target's `indeterminate` lstat into a top-level throw, stealing it
-		// from the under-lock `inspectSocket → indeterminate → indeterminate-no-spawn` path.
+		// This pre-probe conflict applies only OUTSIDE the control-socket capability domain.
+		// An in-domain target's lstat/connect MUST run under the later per-target lock, so it
+		// short-circuits here with no pre-lock IO. Otherwise an indeterminate lstat would be
+		// stolen from the under-lock `inspectSocket → indeterminate-no-spawn` path.
 		if (isLivenessSupported(identity.backend)) {
 			return { identity, preProbeAddressConflict: false };
 		}
-		// Only an unsupported (non-pi) citizen reaches the record-side lstat: a single lstat (no
-		// connect) of the canonical path; `indeterminate` fails loud (QB2 — never "no conflict").
+		// Only a citizen outside the control-socket domain reaches this record-side lstat;
+		// `indeterminate` fails loud (QB2 — never silently "no conflict").
 		const inspection = await io.inspectPath(controlSocketPath(gid, controlSocketDir));
 		const { socketGids, symlinkedGids } = conflictSetsFor(gid, inspection);
-		const preProbeAddressConflict = isNonPiGardenIdSocketConflict(identity.backend, gid, socketGids, symlinkedGids);
+		const preProbeAddressConflict = isOutOfSocketDomainGardenIdConflict(
+			identity.backend,
+			gid,
+			socketGids,
+			symlinkedGids,
+		);
 		return { identity, preProbeAddressConflict };
 	};
 

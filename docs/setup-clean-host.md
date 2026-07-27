@@ -263,9 +263,13 @@ A plain external MCP host can call the read surfaces (`entwurf_peers`,
 A deliberately-anonymous host may wire the explicit
 `ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1` hatch and then delivers external and
 non-replyable; see README §"Wiring `entwurf-bridge` into an external MCP host".
-A garden-native meta-session has a garden id, a mailbox, and a trusted sender
-marker; it can call `entwurf_self`, receive mailbox wakeups, and be replied to by
-garden id.
+A garden-native meta-session has a garden id and a trusted sender marker, so it can
+call `entwurf_self` and be addressed by garden id. **Whether it has a mailbox depends
+on its rail**: a self-fetch backend (Claude Code) has a drainable inbox and receives
+mailbox wakeups, while a native-push backend (Antigravity) has **no mailbox and no
+idle-wake watch at all** — a reply is injected straight into its live conversation, and
+it is reachable only while the adapter probe finds that conversation. Do not assume a
+mailbox from "garden-native meta-session".
 
 ## Stage 5 — Antigravity native citizen (optional)
 
@@ -287,7 +291,9 @@ entwurf doctor-agy-hooks
 What these commands own:
 
 - `install-agy-bridge`: one MCP server in `~/.gemini/config/mcp_config.json`
-  and exactly `mcp(entwurf-bridge/entwurf_v2)` in
+  and one narrow rule per tool the normal agy workflow calls —
+  `mcp(entwurf-bridge/entwurf_v2)`, `mcp(entwurf-bridge/entwurf_peers)`,
+  `mcp(entwurf-bridge/entwurf_self)` — in
   `~/.gemini/antigravity-cli/settings.json`'s permission allow-list;
 - `install-agy-statusline`: the `statusLine` subtree only, pointing at
   `entwurf-agy-statusline`;

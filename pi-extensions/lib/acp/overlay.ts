@@ -9,9 +9,11 @@
 // operator entries a backend needs (credentials, caches, built-in skills)
 // reachable through a TIGHT symlink whitelist — nothing else.
 //
-// Scope (NEXT §스코프 / §S2-scout 핀3): Claude-only on this lane. Codex/Gemini
-// overlays (CODEX_HOME / admin.toml) are 0.11.0 behavior-oracle territory and
-// out of scope — the bridge backends are not in v2 yet.
+// Scope (NEXT §스코프 / §S2-scout 핀3): Claude-only on this lane. Claude is the one
+// shipped ACP backend, so this materializer is written for its config surface alone.
+// Codex/Gemini overlays (CODEX_HOME / admin.toml) are behavior-oracle territory and
+// out of scope here; a SECOND ACP backend enters only once the entry conditions in
+// docs/acp-backend-rail.md are met, and it brings its own overlay.
 //
 // Two deliberate divergences from the literal 0.11.0 illustrative comment block
 // (the 0.11.0 CODE already does both — only its top doc-comment drew projects/

@@ -109,7 +109,7 @@ GLG decisions.
 
 ### Verifying the two capabilities a gate cannot fully judge
 
-- **Garden-id delivery:** discover a target with `entwurf_peers`, then `entwurf_v2` with the correct intent — `fire-and-forget` for live pi, mailbox-backed meta, or native-push targets; `owned-outcome` only to wake a dormant record-backed pi citizen. Picking the wrong intent is rejected, never auto-fixed.
+- **Garden-id delivery:** discover a target with `entwurf_peers`, then `entwurf_v2` with the correct intent — `fire-and-forget` for live pi, mailbox-backed meta, or native-push targets; `owned-outcome` only on a dormant target in the control-socket liveness domain (currently backend `pi`), where it selects **spawn-bg — a relaunch transport, not the control-socket rail that carries live sends**; the launch leaf checks backend authority. Picking the wrong intent is rejected, never auto-fixed.
 - **ACP continuity:** a direct `pi --provider entwurf --model claude-sonnet-5` turn, or the `smoke-acp-session-reuse-live` gate (process-scoped reuse + recall). Multi-turn reuse is proven by that gate, not by any v1 resume tool.
 - **agy citizenship:** in a fresh agy conversation, the first `PreInvocation` must yield a garden id, `entwurf_self` must report `agentId=meta-session/antigravity` and `replyable:true` only while the native probe is alive, and a reply to that same garden id must direct-inject into the same conversation. No mailbox/receiver-marker evidence counts on this rail.
 

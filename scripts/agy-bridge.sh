@@ -39,12 +39,15 @@ COMMAND="${AGY_BRIDGE_COMMAND:-entwurf-bridge}"
 STATE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/agy-bridge"
 STATE_FILE="$STATE_DIR/install-state.json"
 # agy's settings.json — the SAME file the statusline adapter owns, but a DIFFERENT element: it owns
-# the `statusLine` subtree, we own one string in `permissions.allow`. Element-level ownership on
+# the `statusLine` subtree, we own a few strings in `permissions.allow`. Element-level ownership on
 # both sides is what lets two adapters share a file without either clobbering the other (or the
 # operator's own rules). Tracked in its own state file so each half has an honest inverse.
 SETTINGS_FILE="${AGY_SETTINGS_CONFIG:-$HOME/.gemini/antigravity-cli/settings.json}"
 PERMISSION_STATE_FILE="$STATE_DIR/permission-state.json"
-ALLOW_RULE="mcp(entwurf-bridge/entwurf_v2)"
+# One narrow allow rule per tool the NORMAL agy workflow calls (all five MCP tools are visible to
+# the model; these are the ones auto-granted). Read from the config engine, never retyped here:
+# a second copy of this list is a drift bug waiting for the next tool we ship.
+ALLOW_RULES="$(python3 "$CONFIG_PY" permission-rules)"
 
 log()  { printf '%s\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -131,8 +134,8 @@ install_permission() {
   set -e
   case "$rc" in
     0) log "  permission: ${out} in $SETTINGS_FILE" ;;
-    3) fail "permission refused (symlink) — $SETTINGS_FILE is someone else's SSOT; left intact. The MCP server is registered but NOT granted, so agy would prompt on every entwurf_v2 call. Add '$ALLOW_RULE' to permissions.allow there, or replace the symlink with a regular file and re-run." ;;
-    4) fail "permission invalid JSON — $SETTINGS_FILE could not be parsed; left intact. The MCP server is registered but NOT granted, so agy would prompt on every entwurf_v2 call. Repair that file, then re-run." ;;
+    3) fail "permission refused (symlink) — $SETTINGS_FILE is someone else's SSOT; left intact. The MCP server is registered but NOT granted, so agy would prompt on every entwurf tool call. Add these to permissions.allow there: $ALLOW_RULES — or replace the symlink with a regular file and re-run." ;;
+    4) fail "permission invalid JSON — $SETTINGS_FILE could not be parsed; left intact. The MCP server is registered but NOT granted, so agy would prompt on every entwurf tool call. Repair that file, then re-run." ;;
     *) fail "permission could not be granted (rc=$rc) — ${out}" ;;
   esac
 }
@@ -162,7 +165,7 @@ do_uninstall() {
   case "$rc" in
     0) log "  permission: ${out}" ;;
     2) : ;;                              # never granted → nothing to undo (idempotent)
-    3) fail "permission refused (symlink) — $SETTINGS_FILE became a symlink since install; our rule is STILL THERE. Remove '$ALLOW_RULE' from permissions.allow by hand at the link target." ;;
+    3) fail "permission refused (symlink) — $SETTINGS_FILE became a symlink since install; our rules are STILL THERE. Remove ours from permissions.allow by hand at the link target: $ALLOW_RULES" ;;
     *) fail "permission could not be revoked (rc=$rc) — ${out}" ;;
   esac
 }
@@ -209,7 +212,14 @@ doctor_permission() {
   status="$(python3 "$CONFIG_PY" permission-doctor "$SETTINGS_FILE")"
   case "$status" in
     configured)
-      log "  permission ($SETTINGS_FILE): allow → '$ALLOW_RULE' (agy calls entwurf_v2 without prompting)"; return 0 ;;
+      log "  permission ($SETTINGS_FILE): allow → $ALLOW_RULES (agy calls every entwurf tool without prompting)"; return 0 ;;
+    partially-configured\ *)
+      # SOME of our tools are granted and some are not. agy stops for a y/n on exactly the missing
+      # ones, so the bridge half-works — the most confusing shape there is ("it worked yesterday
+      # when I sent a message, why is it asking now?"). Name the missing rules, never round up to
+      # configured because the tool the operator happened to try first was granted.
+      log "  permission ($SETTINGS_FILE): DRIFT — granted, but NOT for: ${status#partially-configured } . agy defaults mcp to Ask, so every call to those tools prompts. Fix: ./run.sh install-agy-bridge"
+      return 1 ;;
     covered-by-allow\ *)
       # The operator's own broader rule already grants our tool, so entwurf_v2 does NOT prompt —
       # calling this DRIFT would be a false red about a working surface. But it is THEIR rule, not
@@ -228,27 +238,45 @@ except Exception:
     sys.exit(1)
 p = s.get("managedSettingsPath")
 same = isinstance(p, str) and os.path.isabs(p) and os.path.abspath(p) == os.path.abspath(sys.argv[2])
-sys.exit(0 if same and s.get("ruleExistedBefore") is False else 1)' "$PERMISSION_STATE_FILE" "$SETTINGS_FILE"; then
-        log "  permission ($SETTINGS_FILE): DRIFT — entwurf installed '$ALLOW_RULE' here and it is now GONE. Your '$covering' still covers the tool, so agy does not prompt today — but the grant entwurf owns (and repairs) no longer exists. Fix: ./run.sh install-agy-bridge"
+# Owned = WE added at least one rule. schemaVersion 2 answers per rule (`rulesExistedBefore`);
+# schemaVersion 1 had a single `ruleExistedBefore`. Read both — an old state file must not silently
+# report "we own nothing" and turn owned drift into a green NOTE.
+existed = s.get("rulesExistedBefore")
+if isinstance(existed, dict):
+    owned = any(v is False for v in existed.values())
+else:
+    owned = s.get("ruleExistedBefore") is False
+sys.exit(0 if same and owned else 1)' "$PERMISSION_STATE_FILE" "$SETTINGS_FILE"; then
+        log "  permission ($SETTINGS_FILE): DRIFT — entwurf installed its allow rules here ($ALLOW_RULES) and they are now GONE. Your '$covering' still covers the tools, so agy does not prompt today — but the grant entwurf owns (and repairs) no longer exists. Fix: ./run.sh install-agy-bridge"
         return 1
       fi
-      log "  permission ($SETTINGS_FILE): NOTE — we own no rule here, but your '$covering' in permissions.allow already matches $ALLOW_RULE, so agy calls entwurf_v2 without prompting. That grant is YOURS: narrow '$covering' and entwurf_v2 starts prompting again. Run ./run.sh install-agy-bridge if you want the narrow rule owned (and repaired) by entwurf."
+      log "  permission ($SETTINGS_FILE): NOTE — we own no rule here, but your '$covering' in permissions.allow already matches our tools, so agy calls them without prompting. That grant is YOURS: narrow '$covering' and every entwurf tool starts prompting again. Run ./run.sh install-agy-bridge if you want the narrow rules ($ALLOW_RULES) owned (and repaired) by entwurf."
       return 0 ;;
     not-configured|absent)
-      local what="'$ALLOW_RULE' NOT granted"
+      local what="none of $ALLOW_RULES granted"
       [ "$status" = absent ] && what="settings file absent, so no grant"
       if [ "$installed" -eq 1 ]; then
-        log "  permission ($SETTINGS_FILE): DRIFT — $what, but the bridge IS installed. agy defaults mcp to Ask, so EVERY entwurf_v2 call prompts: the server is registered and unusable without a y/n. Fix: ./run.sh install-agy-bridge"
+        log "  permission ($SETTINGS_FILE): DRIFT — $what, but the bridge IS installed. agy defaults mcp to Ask, so EVERY entwurf tool call prompts: the server is registered and unusable without a y/n. Fix: ./run.sh install-agy-bridge"
         return 1
       fi
       log "  permission ($SETTINGS_FILE): $what (bridge not installed here — nothing to grant yet)"; return 0 ;;
     invalid-json)
       log "  permission ($SETTINGS_FILE): INVALID JSON — cannot read the permission engine's config"; return 1 ;;
     shadowed-by-*)
-      local list rule
+      local list rest scope rule
       list="${status%% *}"; list="${list#shadowed-by-}"
-      rule="${status#* }"
-      log "  permission ($SETTINGS_FILE): SHADOWED — your '$list' list carries '$rule', and agy evaluates Deny > Ask > Allow, so it OVERRIDES our allow of '$ALLOW_RULE'. agy will keep prompting (or blocking) on every entwurf_v2 call until that rule is narrowed."; return 1 ;;
+      rest="${status#* }"          # "<scope> <rule>"
+      scope="${rest%% *}"
+      rule="${rest#* }"
+      # Say what is actually blocked. A broad rule takes the whole server; an exact rule takes ONE
+      # tool and the rest keep working — reporting that as a total outage sends the operator hunting
+      # the wrong config. Red either way: a tool we grant that agy still stops on is not green.
+      if [ "$scope" = broad ]; then
+        log "  permission ($SETTINGS_FILE): SHADOWED — your '$list' list carries '$rule', and agy evaluates Deny > Ask > Allow, so it OVERRIDES our allow of $ALLOW_RULES. agy will keep prompting (or blocking) on EVERY entwurf tool call until that rule is narrowed."
+      else
+        log "  permission ($SETTINGS_FILE): SHADOWED — your '$list' list carries '$rule', and agy evaluates Deny > Ask > Allow, so it OVERRIDES our allow of that ONE tool. Our other grants still work; agy will keep prompting (or blocking) on that tool alone until the rule is removed."
+      fi
+      return 1 ;;
     *) log "  permission ($SETTINGS_FILE): unexpected status '$status'"; return 1 ;;
   esac
 }
@@ -323,6 +351,23 @@ do_doctor() {
     elif [ "$pmanaged" != "$expected_settings" ]; then
       log "  state: FOREIGN TARGET (permission) — permission-state manages '$pmanaged', but agy reads '$expected_settings'. The grant recorded there is not the grant on this host."
       hard_fail=1
+    else
+      # Pointing at the right file is not the same as being READABLE. The schema and the per-rule
+      # provenance are what tell OUR grants from the operator's; without them the inverse cannot run
+      # and we would only find out at uninstall time. Runtime can be perfect (all rules present, agy
+      # prompting on nothing) while this axis is broken — hard rule 13 keeps them separate, so this
+      # is red on its own evidence and never rounded up by a green permission line above.
+      local pstate
+      pstate="$(python3 "$CONFIG_PY" permission-state-doctor "$PERMISSION_STATE_FILE")"
+      case "$pstate" in
+        ok\ *) : ;;
+        corrupt\ *)
+          log "  state: CORRUPT (permission) — the ownership record cannot be read: ${pstate#corrupt }. Runtime may be fine, but entwurf can no longer tell ITS grants from yours, so uninstall will refuse. Fix: ./run.sh install-agy-bridge (or delete $PERMISSION_STATE_FILE by hand once you have checked permissions.allow yourself)."
+          hard_fail=1 ;;
+        *)
+          log "  state: unexpected permission-state verdict '$pstate'"
+          hard_fail=1 ;;
+      esac
     fi
   fi
 

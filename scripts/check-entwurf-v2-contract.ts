@@ -8,7 +8,7 @@
  * by prose. Pure; no backend, no socket, no API.
  *
  * Proves:
- *   - R1 domain guard: only pi is in the liveness domain; claude-code / codex /
+ *   - R1 domain guard: the control-socket domain currently contains pi; claude-code / codex /
  *     antigravity are `unsupported` — NEVER folded into dead/indeterminate.
  *   - the 6-cell table is exhaustive and every cell is a SINGLE verdict (Q2):
  *     exactly two allow cells (ff+live=send, owned+dormant=resume), four reject.
@@ -92,7 +92,7 @@ function enumValues(schema: unknown): string[] {
 
 const SOCKET_LIVENESSES = ["alive", "dead", "indeterminate"] as const;
 
-// ── R1: backend liveness domain — only pi, others unsupported ──────────────
+// ── R1: control-socket capability domain — currently pi ────────────────────
 eq("domain: pi is supported", isLivenessSupported("pi"), true);
 eq("domain: claude-code unsupported (self-fetch, no socket)", isLivenessSupported("claude-code"), false);
 eq("domain: codex unsupported (no probe surface yet)", isLivenessSupported("codex"), false);

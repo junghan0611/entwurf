@@ -18,9 +18,10 @@
  *    drains its own inbox on wake. A DIRECT-INJECT backend (pi / codex / antigravity)
  *    has no mailbox drain at all — enqueuing for it is the SE-1 false success
  *    ("✓ delivered" into a void). So deliverable = wakeMode === "self-fetch" AND the
- *    receiver is active. This is the guard that the v1 fallback, MCP v1, pi-native v1,
- *    and the v2 decider/send-fallback enqueue sites must all pass before writing a
- *    .msg (slice 2d).
+ *    receiver is active. Every enqueue site must pass this guard before writing a .msg
+ *    (slice 2d). The shipped sites are the v2 decider and its send-fallback re-resolve;
+ *    the v1 fallback / MCP v1 / pi-native v1 sites this once also listed were removed in
+ *    the 0.12 cutover — do not read them as live.
  *
  *  - nativePushDeliverable(facts): the SEPARATE deliverability predicate for a
  *    NATIVE-PUSH backend (antigravity). A native-push citizen has no mailbox and no
@@ -89,9 +90,12 @@ export interface ReceiverIdentityFacts {
  * Does this presence marker actually belong to the target identity? A marker that is
  * absent, or whose garden id / backend / native session id has drifted from the record,
  * is NOT this receiver — fail-closed (a stale/foreign marker must never raise a dead
- * target to "active"). The single source of truth for "marker ↔ identity match" shared
- * by the v1 mailbox guard (gatherMailboxDeliverabilityFacts) and the v2 production
- * `mailboxDeliverabilityFor` seam, so the two paths cannot drift to different meanings.
+ * target to "active"). The single source of truth for "marker ↔ identity match". Its
+ * PRODUCTION consumers are the v2 `mailboxDeliverabilityFor` seam and the MCP bridge's
+ * `entwurf_self`. There is no second implementation: `entwurf-mailbox-guard.ts` used to
+ * wrap this atom with its own enqueue orchestration, had ZERO production importers (import
+ * graph measured 2026-07-27), and was DELETED rather than left as a green gate proving only
+ * retired behaviour. A new enqueue site consults this predicate through that seam.
  */
 export function receiverMarkerMatchesIdentity(
 	marker: ReceiverIdentityFacts | null | undefined,

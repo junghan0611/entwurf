@@ -499,9 +499,13 @@ async function main(): Promise<void> {
 			// missing record → not a garden citizen (readMetaIdentityByGardenId fail-fast).
 			rejects("20260101T000000-facade", "not a garden citizen", "9 recordless gid → not a citizen");
 
-			// non-pi citizen → spawn-bg resume is the pi rail.
+			// A citizen outside the spawn-bg capability domain cannot use that rail.
 			const gidClaude = mintRecord("claude-native-1", null, "claude-code");
-			rejects(gidClaude, "the pi rail", "9 non-pi citizen → refused (pi rail)");
+			rejects(
+				gidClaude,
+				"spawn-bg resume is a host-adapter capability",
+				"9 out-of-domain citizen → refused (spawn-bg rail)",
+			);
 
 			// pi citizen with no recorded transcript (no turn yet) → nothing to resume.
 			const gidNoFile = mintRecord("0199dddd-1111-4222-8333-444455556666", null);

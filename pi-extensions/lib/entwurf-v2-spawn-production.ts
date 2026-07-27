@@ -135,7 +135,9 @@ export function resolveResumeLaunchIdentity(plan: SpawnBgPlan): LaunchIdentity {
 	const record = readAddressableMetaIdentity(plan.sessionId);
 	if (record.backend !== "pi") {
 		throw new Error(
-			`entwurf-v2-spawn-production: ${plan.sessionId} is a ${record.backend} citizen — spawn-bg resume is the pi rail.`,
+			`entwurf-v2-spawn-production: ${plan.sessionId} is a ${record.backend} citizen — ` +
+				`spawn-bg resume is a host-adapter capability, and its domain currently contains backend pi only. ` +
+				`This is a relaunch capability, not the control-socket rail and not citizen rank.`,
 		);
 	}
 	const sessionFile = record.transcriptPath;

@@ -1,19 +1,20 @@
 /**
  * check-entwurf-resume-args — deterministic gate for the 5c-3b resume-argv SSOT
- * (`buildResumePiArgs`). It pins the load-bearing A1 difference between the legacy one-shot
- * worker and the v2 spawn-bg RESIDENT citizen so the two launch shapes can never drift:
+ * (`buildResumePiArgs`). It pins the RESIDENT citizen launch shape so it cannot drift.
+ * This gate once carried a second `legacy` one-shot variant as a contrast; that launcher
+ * and its enum member were removed 2026-07-27, and the half of A1 that still ships is
+ * asserted directly instead — a resumed citizen stands its control socket up and never
+ * emits the one-shot `--no-extensions`:
  *
- *   1. legacy carries `--no-extensions` and NO `--entwurf-control`.
  *   2. v2-control carries `--entwurf-control` and NO `--no-extensions`.
- *   3. BOTH keep the headless prefix `--mode json -p` and run the prompt as the final
- *      positional (the prompt-as-turn authority is unchanged in v2 — `-p` is NOT dropped).
- *   4. `explicitExtensionArgs` is preserved verbatim, exactly once, in BOTH variants
+ *   3. The headless prefix `--mode json -p` stays and the prompt is the final positional
+ *      (the prompt-as-turn authority is unchanged in v2 — `-p` is NOT dropped).
+ *   4. `explicitExtensionArgs` is preserved verbatim, exactly once
  *      (load-bearing for a recorded `provider=entwurf` resume; #29 footgun).
- *   5. v2-control includes `plan.launchArgs` (`--approve` / empty) as flags BEFORE the
- *      prompt; legacy ignores launchArgs entirely.
- *   6. provider/model identity is laid out identically in both; a null/undefined provider
- *      emits NO `--provider` flag; `--model <m>` and `<prompt>` are the last three tokens.
- *   7. no cross-contamination: the legacy-only and v2-only flags never leak into the other.
+ *   5. `plan.launchArgs` (`--approve` / empty) ride as flags BEFORE the prompt.
+ *   6. a null/undefined provider emits NO `--provider` flag; `--model <m>` and `<prompt>`
+ *      are the last three tokens.
+ *   7. the resident posture is exact: `--entwurf-control` present, `--no-extensions` never.
  *
  * Pure string assembly — no IO, no spawn.
  */
@@ -45,34 +46,6 @@ function valueAfter(args: readonly string[], flag: string): string | undefined {
 }
 
 function main(): void {
-	// ── legacy variant ──────────────────────────────────────────────────────────────
-	{
-		const args = buildResumePiArgs({
-			variant: "legacy",
-			sessionFile: SESSION_FILE,
-			explicitExtensionArgs: EXT,
-			provider: "entwurf",
-			model: "claude-opus-5",
-			prompt: "continue the task",
-		});
-		ok("1 legacy has --no-extensions", args.includes("--no-extensions"));
-		ok("1 legacy has NO --entwurf-control", !args.includes("--entwurf-control"));
-		ok("3 legacy headless prefix --mode json -p", args[0] === "--mode" && args[1] === "json" && args[2] === "-p");
-		ok("3 legacy prompt is the final positional", args[args.length - 1] === "continue the task");
-		ok("4 legacy keeps ext args exactly once", args.filter((a) => a === "-e").length === 1);
-		ok("6 legacy provider laid out", valueAfter(args, "--provider") === "entwurf");
-		ok("6 legacy model laid out", valueAfter(args, "--model") === "claude-opus-5");
-		ok("6 legacy resumes by exact FILE (--session <abs path>)", valueAfter(args, "--session") === SESSION_FILE);
-		ok("6 legacy carries NO --session-id (the id is pi's own now)", !args.includes("--session-id"));
-		// model + prompt are the last three tokens: --model <m> <prompt>
-		ok(
-			"6 legacy --model <m> <prompt> tail",
-			args[args.length - 3] === "--model" &&
-				args[args.length - 2] === "claude-opus-5" &&
-				args[args.length - 1] === "continue the task",
-		);
-	}
-
 	// ── v2-control variant ──────────────────────────────────────────────────────────
 	{
 		const args = buildResumePiArgs({
@@ -107,20 +80,6 @@ function main(): void {
 		);
 	}
 
-	// ── 5. legacy IGNORES launchArgs (no --approve leaks in) ──────────────────────────
-	{
-		const args = buildResumePiArgs({
-			variant: "legacy",
-			sessionFile: SESSION_FILE,
-			explicitExtensionArgs: [],
-			provider: null,
-			model: "m",
-			prompt: "p",
-			launchArgs: ["--approve"], // present in input but legacy must ignore it
-		});
-		ok("5 legacy ignores launchArgs (no --approve)", !args.includes("--approve"));
-	}
-
 	// ── 6. null/undefined provider emits NO --provider flag ───────────────────────────
 	for (const provider of [null, undefined] as const) {
 		const args = buildResumePiArgs({
@@ -136,20 +95,23 @@ function main(): void {
 		ok(`6 provider=${provider}: --model <m> <prompt> still tail`, args.slice(-3).join(" ") === "--model m p");
 	}
 
-	// ── 7. no cross-contamination across variants over the same identity ──────────────
+	// ── 7. the resident posture is exact: the one-shot flag never reappears ───────────
+	// The `legacy` variant was removed 2026-07-27, so the old cross-contamination pair is
+	// gone. What must NOT rot is the A1 half that still ships: a resumed citizen stands its
+	// control socket up, which means `--no-extensions` (the one-shot flag that let `pi -p`
+	// exit) can never be emitted here again.
 	{
-		const base = {
+		const v2 = buildResumePiArgs({
 			sessionFile: SESSION_FILE,
 			explicitExtensionArgs: EXT,
 			provider: "entwurf",
 			model: "m",
 			prompt: "p",
 			launchArgs: ["--approve"],
-		} as const;
-		const legacy = buildResumePiArgs({ ...base, variant: "legacy" });
-		const v2 = buildResumePiArgs({ ...base, variant: "v2-control" });
-		ok("7 legacy-only flag absent from v2", !v2.includes("--no-extensions"));
-		ok("7 v2-only flag absent from legacy", !legacy.includes("--entwurf-control") && !legacy.includes("--approve"));
+			variant: "v2-control",
+		});
+		ok("7 resident posture never emits the one-shot --no-extensions", !v2.includes("--no-extensions"));
+		ok("7 resident posture stands the control socket up", v2.includes("--entwurf-control"));
 	}
 
 	console.log(`\ncheck-entwurf-resume-args: ${passed} checks passed`);

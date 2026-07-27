@@ -1,9 +1,10 @@
 /**
  * check-entwurf-deliverability — deterministic gate for the conversational-mailbox
- * deliverability predicate (SE-1/SE-2 slice 2c). This is the predicate the enqueue
- * sites (v1 fallback, MCP v1, pi-native v1, v2 decider/send-fallback) must consult in
- * slice 2d before writing a .msg, so a reply never rots in a dead session's mailbox
- * (SE-2) and is never enqueued for a backend that has no mailbox drain (SE-1, pi).
+ * deliverability predicate (SE-1/SE-2 slice 2c). This is the predicate an enqueue site
+ * must consult in slice 2d before writing a .msg, so a reply never rots in a dead
+ * session's mailbox (SE-2) and is never enqueued for a backend that has no mailbox drain
+ * (SE-1, pi). The SHIPPED sites are the v2 decider and its send-fallback re-resolve; the
+ * v1 fallback / MCP v1 / pi-native v1 sites were removed in the 0.12 cutover.
  *
  * Proves:
  *   - computeMetaReceiverActive: the shared atom — active ⟺ recordBacked ∧ ownerAlive ∧
@@ -124,8 +125,10 @@ ok(
 
 // ── receiverMarkerMatchesIdentity: the marker ↔ identity SSOT (SE-2 2d-3) ───
 // A present marker only raises a receiver to active when it agrees with the record on
-// garden/backend/native id. The v1 mailbox guard AND the v2 production deliverability seam
-// both route through this one helper, so presence-only false-positives are closed in both.
+// garden/backend/native id. The v2 production deliverability seam and the MCP bridge's
+// entwurf_self both route through this one helper, so presence-only false-positives are
+// closed on every shipped path — and there is no second implementation to drift from since
+// entwurf-mailbox-guard.ts (production importers: 0) was deleted 2026-07-27.
 const ID = { gardenId: "20260612T100000-aaaaaa", backend: "claude-code", nativeSessionId: "n-1" };
 ok(
 	"marker matches identity on all three axes → true",

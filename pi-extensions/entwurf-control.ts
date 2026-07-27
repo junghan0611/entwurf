@@ -108,9 +108,10 @@ const SESSION_MESSAGE_TYPE = "entwurf-message";
 // with the receive-side [entwurf received ⟵] box. The provider-level context
 // filter in index.ts drops this customType before the LLM sees it — colocated
 // with the emitter so sessions without --entwurf-control are still protected.
-// Layer A (native path) reuses the same Box builder via renderSentMessage() but
-// does NOT emit a CustomMessage; the native tool result already lives in the
-// toolResult role and never enters LLM context as a user message.
+// There is no second emitter: the v1 native send path ("Layer A") that also drew
+// this box through renderSentMessage() was removed in the 0.12 cutover, and
+// renderSentMessage is now registered for exactly one customType (see
+// registerMessageRenderer below). Do not describe a native sender-side box.
 const SENDER_INFO_PATTERN = /<sender_info>[\s\S]*?<\/sender_info>/g;
 
 // ============================================================================
@@ -509,8 +510,8 @@ const renderSessionMessage: MessageRenderer = (message, { expanded }, theme) => 
 };
 
 // Sender-side payload — what renderSentMessage needs to draw the [entwurf sent →]
-// box. Carried verbatim by both Layer A (native renderResult) and Layer B
-// (CustomMessage details for ACP path). All four envelope fields are intentionally
+// box. Carried by the ACP path's CustomMessage `details` — the ONLY carrier since
+// the v1 native renderResult path was removed (0.12 cutover). All four envelope fields are intentionally
 // echoed in the box even though the sender is "this same session" — operators
 // reading a busy multi-session transcript should be able to verify at a glance
 // which 담당자 is on the wire (cwd) and which model identity (agentId) actually
@@ -520,9 +521,10 @@ const renderSessionMessage: MessageRenderer = (message, { expanded }, theme) => 
 // re-renders (resize, expand toggle) keep showing the moment the message was
 // actually delivered rather than drifting forward to "now".
 //
-// wants_reply mirrors the receive-side etiquette badge. Native schema does not
-// yet expose it (see registerSessionTool's entwurfSendParameters); leave undefined
-// from the native call site until the schema grows the field.
+// wants_reply mirrors the receive-side etiquette badge. It stays optional because
+// the box is drawn from a CustomMessage whose `details` may predate the field; the
+// v1 `registerSessionTool` / `entwurfSendParameters` schema this note used to point
+// at is gone (0.12 cutover), so there is no native call site left to grow.
 interface SentBoxData {
 	to: string; // target sessionId
 	from?: string; // sender agentId, e.g. "entwurf/claude-opus-5"
@@ -1274,9 +1276,18 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 		target: Type.String({ description: "Target garden id (use entwurf_peers to discover)" }),
 		intent: StringEnum(["fire-and-forget", "owned-outcome"] as const, {
 			description:
-				"fire-and-forget = send/reply/hand-off to a LIVE or meta-session target (set wants_reply for an answer); " +
-				"owned-outcome = wake a DORMANT pi via spawn-bg resume ONLY — on a live target it is rejected " +
-				"(owned-live-no-autosend) and never auto-converted",
+				"fire-and-forget = send/reply/hand-off to a LIVE socket target (currently backend pi) or to any " +
+				"citizen with no socket liveness — the decider picks that citizen's rail, and a rail can also " +
+				"REJECT: self-fetch (e.g. Claude Code) → meta-bridge mailbox while that mailbox is DELIVERABLE, " +
+				"else rejected as mailbox-undeliverable; native-push (e.g. Antigravity) → direct injection into " +
+				"its live conversation, which has NO mailbox, and its probe is three-valued — alive: injected, " +
+				"dead: native-push-target-dead, indeterminate: native-push-probe-indeterminate (two rejects, " +
+				"not one). " +
+				"Set wants_reply for an answer. " +
+				"owned-outcome = wake a DORMANT socket-domain citizen via spawn-bg resume ONLY — on a live target " +
+				"rejected as owned-live-no-autosend, on self-fetch as backend-liveness-unsupported, on " +
+				"native-push as native-push-no-resume-authority (both lack resume authority, but the reasons " +
+				"differ because native-push IS probe-measured), and never auto-converted",
 		}),
 		message: Type.String({
 			description:
@@ -1285,7 +1296,9 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 		}),
 		mode: Type.Optional(
 			StringEnum(["steer", "follow_up"] as const, {
-				description: "Delivery mode for a live send: steer (immediate) or follow_up (after task)",
+				description:
+					"Injection style for a CONTROL-SOCKET send only: steer (immediate) or follow_up (after task). " +
+					"The mailbox, native-push, and spawn-bg plans carry no mode, so it has no effect on those rails.",
 			}),
 		),
 		wants_reply: Type.Optional(Type.Boolean({ description: "Human-conversation reply hint (default false)" })),
@@ -1299,6 +1312,11 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 		wants_reply?: boolean;
 	};
 
+	// TS2589 ("type instantiation is excessively deep") workaround: pi's registerTool
+	// generic infers the handler signature from the TypeBox schema, and this schema is
+	// deep enough to blow the instantiation budget. Casting the FUNCTION (not the
+	// argument) keeps the schema itself typed while stopping the inference walk.
+	// Revisit when pi's registerTool takes an explicit params type parameter.
 	const registerTool = pi.registerTool as (def: any) => void;
 
 	registerTool({
@@ -1306,28 +1324,51 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 		label: "Dispatch (v2)",
 		description: `CANONICAL delivery surface for a garden id. When you have a garden id and want to
 reach whoever it names — message / reply / hand-off — use THIS verb. A garden id alone does not
-reveal whether the target is a live pi session, a dormant pi session, or a Claude Code meta-session,
+reveal which rail that citizen answers on — a live socket session, a dormant one, a mailbox-backed
+self-fetch session, or a native-push session —
 and entwurf_v2 is the one surface that reads that and routes correctly (so "when unsure which
 transport, use entwurf_v2"). It dispatches to EXISTING targets; brand-new sibling creation is deferred
 to a later v2 lane. Dispatch to a garden citizen through the unified entwurf_v2 verb: the 5b decider
-picks the transport (live control-socket send / spawn-bg resume / meta-mailbox enqueue) from the
-target's liveness + your intent, runs it under the v2 lock policy (pi paths take a per-target lock;
-the mailbox path is lock-free, guarded by active-receiver deliverability), and reports one outcome
-(delivered / rejected / lock-retained / delivered-but-lock-dirty).
+picks the transport (live control-socket send / spawn-bg resume / meta-mailbox enqueue / native-push
+direct injection) from the target's liveness + your intent, runs it under the v2 lock policy, and reports
+one outcome (delivered / rejected / lock-retained / delivered-but-lock-dirty).
+
+LOCK POLICY (do not over-generalize it): the per-target lock is taken for a control-socket-DOMAIN
+dispatch, which is BOTH the live send AND the dormant cell's spawn-bg resume — spawn-bg is a separate
+relaunch transport yet it still runs under that domain's lock. The mailbox and native-push rails are
+lock-free: the mailbox is guarded instead by active-receiver deliverability, and native-push by its
+adapter probe.
 
 - target: the garden id of the citizen to reach (required).
 - intent: fire-and-forget (a send with no owned result) or owned-outcome (you own the result).
 - message: the message/prompt to dispatch (required).
-- mode: steer or follow_up for a live send (optional).
-- wants_reply: reply hint for a live send (optional, default false).
+- mode: steer or follow_up for a CONTROL-SOCKET send (optional). The mailbox, native-push, and
+  spawn-bg plans carry no mode, so it has no effect on those rails — a native-push send IS live and
+  still ignores it.
+- wants_reply: reply hint; it rides every rail (optional, default false).
 
 CHOOSING INTENT (picking wrong is rejected, never auto-fixed): to message / reply / hand off a peer
-that entwurf_peers shows as liveness=alive (a live pi citizen), use intent: fire-and-forget
-— it routes to the live control-socket; set wants_reply:true if you need an answer (wants_reply is NOT
-owned-outcome). For a meta-session (liveness=unsupported, e.g. Claude Code), replies are ALSO
-fire-and-forget (→ mailbox). owned-outcome is ONLY for waking a DORMANT pi citizen (spawn-bg resume);
-on a live target it is rejected as owned-live-no-autosend, on an unsupported backend as
-backend-liveness-unsupported, and is NEVER auto-converted — so pick the right intent up front.
+that entwurf_peers shows as liveness=alive (a live socket citizen, currently backend pi), use intent:
+fire-and-forget — it routes to the live control-socket; set wants_reply:true if you need an answer
+(wants_reply is NOT owned-outcome). Replies to a citizen with NO socket liveness
+(liveness=unsupported) are ALSO fire-and-forget, and the decider picks that citizen's own rail: a
+self-fetch backend (e.g. Claude Code) gets the meta-bridge mailbox, while a native-push backend
+(e.g. Antigravity) gets direct injection into its live conversation and has NO mailbox at all — do
+not assume mailbox semantics for every unsupported citizen. A native-push target IS measured by its
+own adapter probe, and that probe is THREE-valued, so the send is never silently queued: alive →
+injected; dead → rejected as native-push-target-dead; indeterminate → rejected as
+native-push-probe-indeterminate. Those last two stay separate on purpose — "we could not establish
+it" is not "it is gone". THERE IS A THIRD RESULT, so do not read
+liveness=unsupported as "reachable by some rail": the mailbox path delivers only to a DELIVERABLE
+citizen (a self-fetch backend whose receiver is live and armed), so a terminated Claude Code session —
+and any record whose backend has no adapter on this lane, e.g. codex — is rejected as
+mailbox-undeliverable rather than queued into an inbox nobody drains. unsupported means only "this
+backend has no control-socket probe".
+owned-outcome is ONLY for waking a DORMANT socket-domain citizen (spawn-bg resume, currently backend
+pi); on a live target it is rejected as owned-live-no-autosend. Neither self-fetch nor native-push
+has resume authority, but they reject under DIFFERENT reasons — self-fetch as
+backend-liveness-unsupported, native-push as native-push-no-resume-authority.
+It is NEVER auto-converted — so pick the right intent up front.
 
 The decider — not this surface — chooses the transport.`,
 		parameters: entwurfV2Parameters,
@@ -1433,8 +1474,9 @@ async function renderEntwurfPeersForSurface(): Promise<{ text: string; payload: 
 }
 
 function registerListSessionsTool(pi: ExtensionAPI): void {
-	// Same TS2589 workaround as registerSessionTool — see the comment block
-	// in that function for the revisit conditions.
+	// Same TS2589 workaround as registerEntwurfV2Tool — see the comment block there
+	// for the revisit conditions. (It used to point at registerSessionTool, which was
+	// removed in the 0.12 cutover, so the pointer dangled.)
 	const registerTool = pi.registerTool as (def: any) => void;
 	registerTool({
 		name: "entwurf_peers",

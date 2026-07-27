@@ -1,14 +1,29 @@
 /**
  * entwurf-core — sync entwurf execution, host-agnostic.
  *
- * Single implementation shared by:
- *   - pi-extensions/entwurf.ts (pi native tool surface)
- *   - mcp/entwurf-bridge/src/index.ts (MCP tool surface for ACP hosts)
+ * DIRECT importers, MEASURED from the import graph (2026-07-27) — not from memory:
+ *   - pi-extensions/entwurf-control.ts (the pi adapter)
+ *   - pi-extensions/lib/entwurf-v2-spawn-production.ts (v2 spawn-bg launch identity)
+ *   - pi-extensions/lib/project-trust-handler.ts · lib/acp/augment.ts ·
+ *     lib/native-push/adapter.ts
+ *   - plus gates/smokes (check-shell-quote, check-package-source-routing, …)
+ *
+ * The MCP bridge is a TRANSITIVE consumer, not a direct one, and the distinction is the
+ * whole point: `mcp/entwurf-bridge/src/index.ts → entwurf-v2-surface.ts →
+ * entwurf-v2-production.ts → entwurf-v2-spawn-production.ts → entwurf-core.ts`. So the old
+ * header's claim — that the bridge imports this shared implementation the way a v1 tool
+ * surface did — was false, but so is "the bridge does not reach it": it reaches it at
+ * runtime, only for spawn-bg production.
+ *
+ * NOT consumers on any path: `pi-extensions/entwurf.ts` (the v1 pi native tool surface) and
+ * `pi-extensions/lib/entwurf-async.ts` were REMOVED in the 0.12 cutover. Do not reintroduce
+ * either as a live consumer.
  *
  * This module MUST NOT import anything from @earendil-works/pi-coding-agent or any
- * other pi runtime API. It is pure Node + @sinclair/typebox-free.  Anything that
- * requires pi's ExtensionAPI (sendMessage, appendEntry, sessionManager) belongs
- * in the async entwurf path, which stays in pi-extensions/entwurf.ts for now.
+ * other pi runtime API. It is pure Node + @sinclair/typebox-free. Anything that
+ * requires pi's ExtensionAPI (sendMessage, appendEntry, sessionManager) belongs to a
+ * pi-adapter surface, never here — the v1 async entwurf path that used to hold that
+ * work went away with `pi-extensions/entwurf.ts`.
  *
  * Scope:
  *   - sync execution (spawn pi, collect message_end events, return summary)
@@ -67,9 +82,11 @@ const PI_SETTINGS_PATH = process.env.PI_SETTINGS_PATH
 	: path.join(AGENT_DIR, "settings.json");
 export const ENTWURF_CODEX_ACP_ENV = "ENTWURF_ACP_FOR_CODEX";
 
-// Currently unused: remote/SSH entwurf is fail-fast in 0.9.0 (garden-native
-// identity is local-FS only). Retained for #11 remote revival; parity-gated by
-// scripts/check-shell-quote.ts across entwurf.ts / entwurf-core.ts / entwurf-async.ts.
+// Currently unused: remote/SSH entwurf is fail-fast (garden-native identity is
+// local-FS only). Retained for #11 remote revival and pinned by
+// scripts/check-shell-quote.ts, whose SOURCE_SITES is now THIS FILE ALONE — the
+// entwurf.ts / entwurf-async.ts halves of that former parity check were removed
+// with those files, so there is no cross-file parity left to assert.
 // biome-ignore lint/correctness/noUnusedVariables: retained for #11 remote revival; parity-gated.
 function shellQuote(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;

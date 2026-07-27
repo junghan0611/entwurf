@@ -9,7 +9,12 @@
  * from the bridge boot closure would re-couple the harness-neutral meta-bridge to
  * pi (the `check-entwurf-bridge-pi-free` gate fails if it does). The bridge needs
  * the contract CONSTANTS + `resolveDispatch` (pi-free core), never these schemas.
- * Consumers: the pi MCP-tool param surface and `check-entwurf-v2-contract`.
+ * Consumer: `check-entwurf-v2-contract` ONLY. This is a gate-side REPRESENTATION of the
+ * frozen contract, not a shipped tool schema — measured 2026-07-27, nothing else in the
+ * import graph reaches it. The two surfaces a model actually reads build their own:
+ * `pi-extensions/entwurf-control.ts` (TypeBox `entwurfV2Parameters` + tool description) and
+ * `mcp/entwurf-bridge/src/index.ts` (Zod). Change a model-facing description THERE; changing
+ * it here reaches no model, and `check-entwurf-v2-surface` is what pins those two.
  *
  * StringEnum (typebox 1.x) inside Type.Object (typebox 0.34) — the same mix the
  * existing entwurf tools use. The logic types in the core are hand-written unions,
@@ -37,7 +42,7 @@ export const EntwurfV2InputSchema = Type.Object(
 		target: Type.String({
 			pattern: SESSION_ID_RE.source,
 			description:
-				"garden-id of an EXISTING citizen (pattern-enforced). spawn-new is out of v2 scope (legacy entwurf keeps it); a malformed/typo gid is bad-target.",
+				"garden-id of an EXISTING citizen (pattern-enforced). Fresh sibling creation is out of scope on every current surface — there is no fallback verb that still spawns. A malformed/typo gid is bad-target, never a new spawn.",
 		}),
 		intent: StringEnum(ENTWURF_INTENTS, {
 			description:

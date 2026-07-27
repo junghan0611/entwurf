@@ -2,10 +2,11 @@
  * entwurf-v2-lock — the per-gid dispatch lock primitive (0.11 Stage 0 step 5a,
  * 버킷 B F2). LOAD-BEARING: the guard against a double-spawn of the same dormant
  * target by two V2 dispatchers that share the substrate through different entry
- * points. SCOPE (honest): this protects v2/v2 only. The legacy `entwurf_resume`
- * is unchanged (동결결정 10 scope A) and does NOT take this lock, so v2/legacy
- * concurrent resume is a KNOWN residual gap (rare — single-orchestrator practice),
- * closed only at full cut-over. Do not read this header as "v2/legacy is guarded".
+ * points. SCOPE (honest): this protects v2/v2 only. It was written while the legacy
+ * `entwurf_resume` still ran unchanged (동결결정 10 scope A) without taking this
+ * lock, which left a v2/legacy concurrent-resume gap. That verb was REMOVED in the
+ * 0.12 cutover, so the gap is closed by subtraction — not by this lock growing to
+ * cover it. Any NEW resume entry point must take this lock or the gap reopens.
  *
  * ENVIRONMENT ASSUMPTION (stale reclaim): `hostname` equality is used as the
  * proxy for "same machine", so a holder pid is reclaim-probed with kill(0) only

@@ -203,7 +203,7 @@ model 없음, pi backend는 birth에 transcript 미확정. `recordUpdatedAt` = r
 지목한다 — 이전 세대는 통째로 archive되고 빈 세대가 열린다. active store는 세대 간 주소/resume
 연속성을 제공하지 않는다(세션은 흘러가고, 기억은 native transcript와 임베딩 축에 있다). 은퇴한
 v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되살리지 마라(LOCKED PROTOCOL 6:
-record-backed pi 시민은 전부 sibling, `isEntwurf` 종 boolean 부활 금지).
+모든 record-backed 시민은 sibling이며 backend/transport로 존재 등급을 나누지 말고, `isEntwurf` 종 boolean 부활 금지).
 
 ---
 

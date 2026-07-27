@@ -26,7 +26,7 @@
  *      MCP-schema bypass for pi-native/internal callers).
  *   2. resolveTarget     — no citizen → bad-target; a record-less control socket →
  *      record-less-socket (#50 C4: the record is the sole address authority);
- *      quarantined (non-pi gid sharing a socket/symlink) → target-address-conflict.
+ *      quarantined (out-of-socket-domain record sharing a socket/symlink) → target-address-conflict.
  *      PROBE-FREE.
  *   3. backend           → isLivenessSupported.
  *   4. acquireLock       — IN-DOMAIN ONLY (？7), BEFORE lstat/connect, so the probe
@@ -47,7 +47,7 @@
  */
 
 import type { MailboxDeliverabilityResult } from "./entwurf-deliverability.ts";
-import { isNonPiGardenIdSocketConflict } from "./entwurf-facts.ts";
+import { isOutOfSocketDomainGardenIdConflict } from "./entwurf-facts.ts";
 import type { PreflightOutcome } from "./entwurf-preflight.ts";
 import {
 	type EntwurfIntent,
@@ -75,7 +75,7 @@ import type { SocketLiveness } from "./socket-probe.ts";
 
 // Re-export the shared conflict predicate so producers of a TargetResolution have a
 // single import site for it (it is the SAME fn the fact-provider listing uses).
-export { isNonPiGardenIdSocketConflict };
+export { isOutOfSocketDomainGardenIdConflict };
 
 // ── observe timeout (？3) ───────────────────────────────────────────────────
 // The bounded wait 5c's release-watcher gives a spawned child to surface its
@@ -172,8 +172,8 @@ export type DispatchDecision =
 
 // ── target resolution (E: single-target, not a whole-store scan) ────────────
 // A non-null identity is an existing citizen. `preProbeAddressConflict` is the
-// PROBE-FREE, record-side conflict (non-pi gid sharing a real/symlinked socket —
-// isNonPiGardenIdSocketConflict). The production wrapper computes it with a single
+// PROBE-FREE record-side conflict: a backend outside the control-socket domain
+// sharing a real/symlinked socket (`isOutOfSocketDomainGardenIdConflict`). Production uses one
 // readMetaIdentityByGardenId + a target socket/symlink check; the gate injects it.
 // Do NOT call listEntwurfFacts here to find the target — its socket probe would run
 // before the lock (the 1C TOCTOU). The shared predicate is the only thing the
@@ -377,12 +377,12 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 		return { kind: "execute", receipt, plan, lock: null };
 	}
 
-	// 4-5. in-domain (record-backed pi): lock → inspect → route (cwd from the record).
+	// 4-5. control-socket domain (currently backend pi): lock → inspect → route.
 	return decideInDomain(gardenId, input, deps, ctx, identity.cwd);
 }
 
-// ── in-domain probe (steps 4-5) — record-backed pi ONLY (#50 C4: a record-less
-// socket rejects pre-probe and never reaches here) ──────────────────────────────
+// ── control-socket-domain probe (steps 4-5; currently backend pi). Every target
+// is record-backed; a record-less socket rejects before this branch. ────────────
 // The lock lifecycle (B2) lives here: acquire BEFORE lstat/connect, every reject path
 // releases explicitly (rejectAfterRelease), every execute path that keeps the lock sets
 // retainLock=true, and a thrown IO error releases the still-held lock before rethrowing so

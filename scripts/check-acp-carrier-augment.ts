@@ -18,6 +18,7 @@ import { strict as assert } from "node:assert";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Context } from "@earendil-works/pi-ai";
 import {
 	buildPiContextAugment,
@@ -32,6 +33,7 @@ import { buildClaudeSessionMeta } from "../pi-extensions/lib/acp/tool-surface.ts
 import { ENTWURF_PROJECT_CONTEXT_OPEN_TAG } from "../protocol.js";
 
 const tmp = mkdtempSync(join(tmpdir(), "acp-carrier-augment-"));
+const REPO_DIR = fileURLToPath(new URL("..", import.meta.url));
 const BRIDGE_MARK = "operating through entwurf";
 
 // ===========================================================================
@@ -288,10 +290,36 @@ function ctxWith(firstUser: string): Context {
 	assert.match(big, /context augment truncated to \d+ bytes/, "truncation leaves an honest marker");
 }
 
+// ===========================================================================
+// 9) The shipped repo AGENTS.md fits with a realistic operator-global budget.
+//    This guards the real 2026-07-27 failure: project AGENTS.md alone exceeded
+//    the cap, tail-cutting its own later rules plus Current date/cwd. The cap
+//    remains an honest fallback; the maintained package prompt must not hit it.
+// ===========================================================================
+{
+	const budgetHome = mkdtempSync(join(tmpdir(), "acp-budget-home-"));
+	writeFileSync(join(budgetHome, "AGENTS.md"), "H".repeat(12 * 1024));
+	const actual = buildPiContextAugment({
+		backend: "claude",
+		cwd: REPO_DIR,
+		mcpServerNames: ["entwurf-bridge"],
+		homeDir: budgetHome,
+	});
+	assert.doesNotMatch(
+		actual,
+		/context augment truncated/,
+		"repo AGENTS.md + 12KB global baseline fits without truncation",
+	);
+	assert.ok(
+		actual.includes(`Current working directory: ${REPO_DIR}`),
+		"non-truncated augment retains the trailing cwd fact",
+	);
+}
+
 console.log(
 	"[check-acp-carrier-augment] ok — engraving carrier: pure/deterministic, sorted mcp interpolation, " +
 		"empty/whitespace/missing → null, shipped-default → non-empty v1 lever (preset replaced), carrier absent → no _meta.systemPrompt key, carrier change → " +
 		"signature change (stable carrier → stable signature); augment: prepended on `new` only (reuse delta has none), " +
 		"wire-only so it never enters contextMessageSignatures, entwurf cwd/AGENTS.md de-dup (present → drop only that " +
-		"section, home kept; absent → kept), day-granularity date, 50KB truncation marker",
+		"section, home kept; absent → kept), day-granularity date, 50KB truncation marker, shipped AGENTS budget",
 );

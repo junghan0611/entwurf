@@ -30,11 +30,142 @@ import {
 	toDispatchInput,
 } from "../pi-extensions/lib/entwurf-v2-surface.ts";
 
+/** Cut ONE model-facing string out of a registration block so two descriptions in the same
+ * block cannot satisfy an assertion for each other (round-4 masking, 2026-07-27). Returns ""
+ * when either marker is missing, which the callers' `length > 120` guard turns into a loud
+ * failure rather than a silent pass. */
+function sliceDescription(block: string, startMarker: string, endMarker: string): string {
+	const s = block.indexOf(startMarker);
+	if (s === -1) return "";
+	const e = block.indexOf(endMarker, s + startMarker.length);
+	return e === -1 ? "" : block.slice(s, e);
+}
+
 let passed = 0;
 function ok(label: string, cond: boolean): void {
 	assert.ok(cond, label);
 	console.log(`  ok    ${label}`);
 	passed++;
+}
+
+/**
+ * Collapse a model-facing string's SOURCE form into the text the model actually reads:
+ * drop TS string-concat glue between adjacent literals and normalize whitespace.
+ */
+function modelText(slice: string): string {
+	return slice
+		.replace(/["']\s*\+\s*["']/g, "")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+/**
+ * F-2 (2026-07-27): the two model-facing surfaces described the lock, `mode`, and the
+ * unsupported-citizen outcome set in ways the code does not support. Measured against
+ * source, not prose:
+ *  - LOCK: `entwurf-v2-decider.ts` returns a held claim ONLY on the control-socket-domain
+ *    branch — and that branch covers the live send AND the dormant cell's spawn-bg resume.
+ *    The mailbox and native-push branches both carry `lock: null`. "socket paths take a
+ *    per-target lock" read as "the socket transport locks", which got spawn-bg (a SEPARATE
+ *    relaunch transport that nonetheless locks) and native-push (a live send that does NOT)
+ *    exactly backwards.
+ *  - MODE: `mode` exists on exactly ONE ExecutionPlan variant, `control-socket`. The
+ *    meta-mailbox and native-push plans have no such field and spawn-bg says so in a comment.
+ *    "mode applies to a live send" is false for native-push, which IS a live send.
+ *  - THIRD RESULT: `resolveDispatch` downgrades the unsupported fire-and-forget cell to
+ *    `mailbox-undeliverable` when the separate deliverability fact is false, so an
+ *    `unsupported` citizen has THREE outcomes (mailbox / native-push / reject), not two.
+ *
+ * Applied to BOTH surfaces from one predicate so they cannot drift apart again.
+ */
+function assertRailSemantics(tag: string, longDescRaw: string, intentDescRaw: string, modeDescRaw: string): void {
+	// Compare the text the MODEL reads, not the shape the author happened to type. pi-native
+	// wraps inside one template literal; the MCP surface wraps by `+`-concatenating literals.
+	// Without this normalization the same sentence matches on one surface and not the other,
+	// and the assertion silently measures line-wrapping instead of meaning.
+	const longDesc = modelText(longDescRaw);
+	const intentDesc = modelText(intentDescRaw);
+	const modeDesc = modelText(modeDescRaw);
+	ok(
+		`${tag} — long description scopes the per-target lock to the control-socket DOMAIN`,
+		/control-socket-DOMAIN\s+dispatch/.test(longDesc) && /lock-free/.test(longDesc),
+	);
+	ok(
+		`${tag} — long description says spawn-bg ALSO runs under that domain's lock`,
+		/spawn-bg/.test(longDesc) && /still runs under that domain's lock/.test(longDesc),
+	);
+	ok(
+		`${tag} — long description says the mailbox AND native-push rails are lock-free`,
+		/mailbox and native-push rails are lock-free/.test(longDesc),
+	);
+	// NEGATIVE (exact false sentence): the shipped wording, whitespace-tolerant because the
+	// pi-native template literal wrapped it across a newline.
+	ok(
+		`${tag} — long description no longer says "socket paths … per-target lock"`,
+		!/socket\s+paths\s+(take a )?per-target lock/.test(longDesc),
+	);
+	ok(`${tag} — long description scopes mode to a CONTROL-SOCKET send`, /CONTROL-SOCKET send/.test(longDesc));
+	// NEGATIVE (exact false sentence), both shipped spellings.
+	ok(
+		`${tag} — long description no longer applies mode to "a live send"`,
+		!/\bfor a live send\b/.test(longDesc) && !/mode\/wants_reply apply to a live send/.test(longDesc),
+	);
+	ok(
+		`${tag} — long description names the THIRD result for an unsupported citizen`,
+		/mailbox-undeliverable/.test(longDesc) && /THIRD RESULT/.test(longDesc),
+	);
+	ok(
+		`${tag} — intent param names a rail's reject, not only its allow cell`,
+		/mailbox-undeliverable/.test(intentDesc) && /native-push-target-dead/.test(intentDesc),
+	);
+	// The native-push probe is THREE-valued (NATIVE_PUSH_DISPATCH_TABLE): alive / dead /
+	// indeterminate. Both surfaces collapsed it to two and labelled indeterminate as dead —
+	// reporting an unestablished probe as a measured death. Presence of both reason names is
+	// not enough: they must sit next to the liveness they belong to, or a text can list both
+	// names while still mapping them the wrong way round. So require ADJACENCY — the liveness
+	// word appears in the run of text immediately preceding its reason.
+	const adjacent = (text: string, liveness: string, reason: string): boolean => {
+		const at = text.indexOf(reason);
+		if (at < 0) return false;
+		return new RegExp(`\\b${liveness}\\b`, "i").test(text.slice(Math.max(0, at - 90), at));
+	};
+	for (const [which, text] of [
+		["long description", longDesc],
+		["intent param", intentDesc],
+	] as const) {
+		ok(
+			`${tag} — ${which} keeps the native-push probe 3-valued (dead ≠ indeterminate)`,
+			/native-push-target-dead/.test(text) && /native-push-probe-indeterminate/.test(text),
+		);
+		ok(
+			`${tag} — ${which} maps dead→native-push-target-dead and indeterminate→native-push-probe-indeterminate (adjacency, not just presence)`,
+			adjacent(text, "dead", "native-push-target-dead") &&
+				adjacent(text, "indeterminate", "native-push-probe-indeterminate"),
+		);
+	}
+	ok(`${tag} — mode param is isolated (non-vacuous)`, modeDesc.length > 60);
+	ok(
+		`${tag} — mode param scopes itself to a CONTROL-SOCKET send and denies the other rails`,
+		/CONTROL-SOCKET send/.test(modeDesc) && /no mode/.test(modeDesc),
+	);
+	ok(
+		`${tag} — mode param no longer calls itself "Delivery mode for a live send"`,
+		!/Delivery mode for a live send/.test(modeDesc) && !/\bfor a live send\b/.test(modeDesc),
+	);
+}
+
+/**
+ * Containment-disjointness is NOT enough to prove a description slice is tight. Round 5
+ * (2026-07-27) shipped a "long description" slice of 4,468 chars that SPANNED the parameter
+ * entries because a bare `description:` marker matched the `target` param first — and two
+ * over-wide slices can still be mutually non-containing. So pin the ABSENCE of every
+ * parameter marker in the long-description slice: if the slice ever swallows the schema
+ * again, this fails instead of silently satisfying the schema's own text.
+ */
+function assertLongDescExcludesParams(tag: string, longDesc: string, markers: readonly string[]): void {
+	for (const marker of markers) {
+		ok(`${tag} — long description slice excludes the \`${marker}\` parameter marker`, !longDesc.includes(marker));
+	}
 }
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -339,17 +470,87 @@ async function main(): Promise<void> {
 			"4: pi-native — NO static import of the self-address fence (TS5097 stays closed)",
 			!/import[^;]*from\s*"\.\/lib\/entwurf-self-address\.(js|ts)"/.test(code),
 		);
-		// Caller-intent steer (live-peer owned-outcome bug): the description must tell the model
-		// to use fire-and-forget for a LIVE/alive peer and that owned-outcome is dormant-only and
-		// NEVER auto-converted — the preventive fix (the decider must not auto-convert).
+		// Every SHIPPED rail must appear in the model-facing text. Measured 2026-07-27: both
+		// surfaces described only control-socket/spawn-bg/mailbox and told the model that an
+		// `unsupported` citizen is reached "→ mailbox" — false for Antigravity, whose native-push
+		// rail is intercepted BEFORE the mailbox mini-table and has no mailbox at all. A model
+		// reading that would pick mailbox semantics for a citizen that has none.
+		//
+		// Scope this to the registration block, NOT the whole file: the first version of this
+		// assertion swept `src`, so deleting the sentence from the description still passed on an
+		// unrelated `native-push` string elsewhere in the module. A rail-completeness claim that
+		// any import line can satisfy is not a claim.
+		const piV2Start = src.indexOf("function registerEntwurfV2Tool");
+		const piV2End = src.indexOf("\nfunction ", piV2Start + 1);
+		// Require a REAL end marker. `piV2End === -1 ? undefined : …` would silently widen the
+		// block to end-of-file and keep passing, which is the opposite of the fail-loud this
+		// scope exists for.
 		ok(
-			"4: pi-native — description steers live/alive peer → fire-and-forget",
-			/liveness=alive/.test(src) && /fire-and-forget/.test(src),
+			"4: pi-native — registration block is isolated (non-vacuous scope for the description checks)",
+			piV2Start !== -1 && piV2End > piV2Start,
 		);
+		const piV2Block = src.slice(piV2Start, piV2End);
+		ok("4: pi-native — registration block is substantial", piV2Block.length > 500);
+		// BLOCK SCOPE IS NOT ENOUGH — the two model-facing strings mask each other. Measured
+		// 2026-07-27 (round 4): the `intent` param description was corrected to split the two
+		// reject reasons while the LONG tool description still advertised the merged, false one,
+		// and this gate stayed green at 51 checks because both live in the same block and only
+		// ONE had to carry each literal. So slice them apart and require EACH to be true.
+		// The start marker MUST be unique to the long description. Measured 2026-07-27 (round 5):
+		// a bare `description:` matched the `target` PARAM first, so this "long description"
+		// slice was 4,468 chars spanning target + intent + the long text — the very masking the
+		// split was added to remove. An over-wide slice is a silent pass, so pin the exact
+		// backtick opening instead, and assert the two slices are actually disjoint.
+		const piLongDesc = sliceDescription(piV2Block, "description: `CANONICAL", "\n\t\tparameters:");
+		const piIntentDesc = sliceDescription(piV2Block, "intent: StringEnum(", "message:");
 		ok(
-			"4: pi-native — description says owned-outcome is dormant-only + never auto-converted",
-			/owned-outcome is ONLY for waking a DORMANT pi/.test(src) && /NEVER auto-converted/.test(src),
+			"4: pi-native — long/intent slices are disjoint (neither can satisfy the other's claim)",
+			piLongDesc.length > 0 &&
+				piIntentDesc.length > 0 &&
+				!piLongDesc.includes(piIntentDesc) &&
+				!piIntentDesc.includes(piLongDesc),
 		);
+		for (const [what, text] of [
+			["long tool description", piLongDesc],
+			["intent param description", piIntentDesc],
+		] as const) {
+			ok(`4: pi-native — ${what} is isolated (non-vacuous)`, text.length > 120);
+			ok(`4: pi-native — ${what} names the native-push rail`, /native-push/.test(text));
+			// The two no-resume-authority rejects are DIFFERENT reasons: a native-push backend IS
+			// probe-measured, so calling its reject `backend-liveness-unsupported` is the exact lie
+			// `entwurf-v2-contract.ts:143` warns about in so many words.
+			ok(
+				`4: pi-native — ${what} separates the self-fetch and native-push owned rejects`,
+				/backend-liveness-unsupported/.test(text) && /native-push-no-resume-authority/.test(text),
+			);
+			// Direct tripwire for the exact sentence that shipped: merging the two backends under
+			// one reason. Presence-only pins cannot catch this — the merged claim can sit right
+			// beside the correct literals.
+			ok(
+				`4: pi-native — ${what} never merges the two backends under one reject reason`,
+				!/self-fetch and native-push alike/.test(text),
+			);
+			// Caller-intent steer (live-peer owned-outcome bug): owned-outcome is dormant-only and
+			// NEVER auto-converted. Pinned PER STRING — the file-wide version of this check could
+			// be satisfied by whichever description still carried it.
+			ok(
+				`4: pi-native — ${what} says owned-outcome is dormant-only + never auto-converted`,
+				/DORMANT socket-domain citizen/.test(text) && /auto-converted/.test(text),
+			);
+		}
+		ok("4: pi-native — long description denies native-push a mailbox", /NO mailbox/.test(piLongDesc));
+		ok(
+			"4: pi-native — long description steers live/alive peer → fire-and-forget",
+			/liveness=alive/.test(piLongDesc) && /fire-and-forget/.test(piLongDesc),
+		);
+		assertLongDescExcludesParams("4: pi-native", piLongDesc, [
+			"target: Type.String(",
+			"intent: StringEnum(",
+			"mode: Type.Optional(",
+			"wants_reply: Type.Optional(",
+		]);
+		const piModeDesc = sliceDescription(piV2Block, "mode: Type.Optional(", "wants_reply:");
+		assertRailSemantics("4: pi-native", piLongDesc, piIntentDesc, piModeDesc);
 	}
 
 	// ── 5: MCP bridge wiring guard ────────────────────────────────────────────
@@ -369,7 +570,16 @@ async function main(): Promise<void> {
 		// adapter, and must NOT itself reach for a legacy transport (the decider routes).
 		const v2Start = src.indexOf('"entwurf_v2"');
 		const after = src.indexOf("server.tool(", v2Start + 1);
-		const v2Block = src.slice(v2Start, after === -1 ? undefined : after);
+		// F-6: require a REAL end boundary, the same fail-loud rule block 4 already applies.
+		// `after === -1 ? undefined : after` meant that the moment the NEXT `server.tool(` was
+		// renamed, reordered, or removed, this block silently widened to end-of-file — and every
+		// "must NOT appear in the v2 block" assertion below would then be reading other tools'
+		// text. A boundary that disappears has to fail, not grow.
+		ok(
+			"5: MCP — v2 registration block has a REAL end boundary (next server.tool present)",
+			v2Start !== -1 && after > v2Start,
+		);
+		const v2Block = src.slice(v2Start, after);
 		ok("5: MCP — v2 handler builds buildSendSenderEnvelope()", /buildSendSenderEnvelope\(\)/.test(v2Block));
 		ok("5: MCP — v2 handler passes senderProvider: () => sender", /senderProvider:\s*\(\)\s*=>\s*sender/.test(v2Block));
 		ok(
@@ -380,15 +590,118 @@ async function main(): Promise<void> {
 			"5: MCP — v2 handler routes through the runner, NOT legacy rpcCall/enqueueMetaMessage",
 			!/\brpcCall\(/.test(v2Block) && !/\benqueueMetaMessage\(/.test(v2Block),
 		);
-		// Caller-intent steer — same preventive guidance on the MCP surface (a sibling reaching
-		// in over MCP reads this description, not the pi-native one).
+		// Same shipped-rail completeness rule as the pi-native surface (4), and split the SAME
+		// two ways: the long tool description and the `intent` param description must EACH be
+		// true on their own (see the round-4 masking note in block 4).
+		// Same fail-loud rule as block 4: a missing marker would make `slice(0, -1)` return
+		// nearly the whole block and sail past the length guard, so assert the boundary first.
+		const mcpSchemaStart = v2Block.indexOf("\t{");
+		ok("5: MCP — schema boundary marker is present (slice cannot silently widen)", mcpSchemaStart > 0);
+		const mcpLongDesc = v2Block.slice(0, mcpSchemaStart);
+		const mcpIntentDesc = sliceDescription(v2Block, "intent: z", "message: z");
 		ok(
-			"5: MCP — description steers live/alive peer → fire-and-forget",
-			/liveness=alive/.test(src) && /fire-and-forget/.test(src),
+			"5: MCP — long/intent slices are disjoint (neither can satisfy the other's claim)",
+			mcpLongDesc.length > 0 &&
+				mcpIntentDesc.length > 0 &&
+				!mcpLongDesc.includes(mcpIntentDesc) &&
+				!mcpIntentDesc.includes(mcpLongDesc),
+		);
+		for (const [what, text] of [
+			["long tool description", mcpLongDesc],
+			["intent param description", mcpIntentDesc],
+		] as const) {
+			ok(`5: MCP — ${what} is isolated (non-vacuous)`, text.length > 120);
+			ok(`5: MCP — ${what} names the native-push rail`, /native-push/.test(text));
+			ok(
+				`5: MCP — ${what} separates the self-fetch and native-push owned rejects`,
+				/backend-liveness-unsupported/.test(text) && /native-push-no-resume-authority/.test(text),
+			);
+			ok(
+				`5: MCP — ${what} never merges the two backends under one reject reason`,
+				!/self-fetch and native-push alike/.test(text),
+			);
+			// Same per-string caller-intent pin as block 4 (a sibling reaching in over MCP reads
+			// THIS description, not the pi-native one).
+			ok(
+				`5: MCP — ${what} says owned-outcome is dormant-only + never auto-converted`,
+				/DORMANT socket-domain citizen/.test(text) && /auto-converted/.test(text),
+			);
+		}
+		ok("5: MCP — long description denies native-push a mailbox", /NO mailbox/.test(mcpLongDesc));
+		ok(
+			"5: MCP — long description steers live/alive peer → fire-and-forget",
+			/liveness=alive/.test(mcpLongDesc) && /fire-and-forget/.test(mcpLongDesc),
+		);
+		assertLongDescExcludesParams("5: MCP", mcpLongDesc, ["target: z", "intent: z", "mode: z", "wants_reply: z"]);
+		const mcpModeDesc = sliceDescription(v2Block, "mode: z", "wants_reply: z");
+		assertRailSemantics("5: MCP", mcpLongDesc, mcpIntentDesc, mcpModeDesc);
+
+		// entwurf_peers is a FACT surface, but it still told the model what `unsupported` means —
+		// and "does NOT mean unreachable" is false for a record whose backend has no adapter on
+		// this lane (codex, or a self-fetch citizen that has exited): `resolveDispatch` rejects it
+		// as mailbox-undeliverable. Sliced with the same real-boundary rule as the v2 block.
+		const peersStart = src.indexOf('"entwurf_peers"');
+		const peersAfter = src.indexOf("server.tool(", peersStart + 1);
+		ok(
+			"5: MCP — entwurf_peers block has a REAL end boundary (next server.tool present)",
+			peersStart !== -1 && peersAfter > peersStart,
+		);
+		const peersBlock = src.slice(peersStart, peersAfter);
+		ok("5: MCP — entwurf_peers block is isolated (non-vacuous)", peersBlock.length > 200);
+		ok(
+			"5: MCP — entwurf_peers names the THIRD answer (a reject), not just the two allow rails",
+			/mailbox-undeliverable/.test(peersBlock) && /native-push-target-dead/.test(peersBlock),
 		);
 		ok(
-			"5: MCP — description says owned-outcome is dormant-only + never auto-converted",
-			/owned-outcome is ONLY for waking a DORMANT pi/.test(src) && /NEVER auto-converted/.test(src),
+			"5: MCP — entwurf_peers no longer claims `unsupported` does NOT mean unreachable",
+			!/does NOT mean unreachable/.test(peersBlock),
+		);
+
+		// F-7: entwurf_inbox_read described itself as draining "your own" inbox while the handler
+		// passes the CALLER-SUPPLIED gardenId straight to readMetaInbox with no comparison against
+		// an authoritative self identity. README/setup-clean-host deliberately keep that surface open
+		// (a plain external host with no garden record may call the read tools), so the honest repair
+		// is the description, not a new guard — but a false access claim must not survive either.
+		const inboxStart = src.indexOf('"entwurf_inbox_read"');
+		const inboxAfter = src.indexOf("server.tool(", inboxStart + 1);
+		ok(
+			"5: MCP — entwurf_inbox_read block has a REAL end boundary (next server.tool present)",
+			inboxStart !== -1 && inboxAfter > inboxStart,
+		);
+		const inboxBlock = src.slice(inboxStart, inboxAfter);
+		const inboxText = modelText(inboxBlock);
+		ok("5: MCP — entwurf_inbox_read block is isolated (non-vacuous)", inboxText.length > 200);
+		ok(
+			"5: MCP — entwurf_inbox_read states the garden id is CALLER-SUPPLIED and unverified",
+			/CALLER-SUPPLIED/.test(inboxText) && /NOT verified against your own identity/.test(inboxText),
+		);
+		ok(
+			"5: MCP — entwurf_inbox_read warns that a foreign id drains THEIR mail and stamps THEIR receipt",
+			/drains THEIR mail and stamps THEIR receipt/.test(inboxText),
+		);
+		// NEGATIVE (exact false sentence): the shipped "your own inbox" access claim.
+		ok(
+			"5: MCP — entwurf_inbox_read no longer claims it drains `your own` inbox",
+			!/your own meta-bridge inbox/.test(inboxText) && !/receipt on your meta-record/.test(inboxText),
+		);
+		// The description↔handler agreement has to be pinned on the HANDLER's side too, and
+		// `readMetaInbox({ gardenId })` alone does not do it: a handler could resolve its
+		// authoritative self and enforce equality FIRST and still end in that same call, leaving
+		// this row green while the description's "not verified" sentence became false. So require
+		// the pass-through POSITIVELY *and* require the absence of any identity-equality guard.
+		// If a future change decides to enforce own-inbox (a behaviour change — see NEXT §QUEUE 1),
+		// this goes red and forces the description to change with it.
+		ok(
+			"5: MCP — entwurf_inbox_read passes the caller's gardenId straight to readMetaInbox",
+			/readMetaInbox\(\{ gardenId \}\)/.test(inboxBlock),
+		);
+		const inboxIdentityGuard =
+			/buildAuthoritativeSelfEnvelope|buildTrustedMetaSenderEnvelope|resolveTrustedMetaSenderIdentity/.test(
+				inboxBlock,
+			) || /sender\.sessionId|self\.envelope|envelope\.sessionId/.test(inboxBlock);
+		ok(
+			"5: MCP — entwurf_inbox_read resolves NO authoritative self identity (so 'caller-supplied, not verified' is true)",
+			!inboxIdentityGuard,
 		);
 	}
 

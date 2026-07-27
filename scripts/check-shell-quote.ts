@@ -6,7 +6,8 @@
  * Backticks and `$(...)` inside a user prompt got executed by the remote shell
  * before pi ever saw them. The fix introduced `shellQuote()` (POSIX `'...'`
  * with `'\''` escape) in two places:
- *   - pi-extensions/lib/entwurf-core.ts (legacy sync spawn/resume helper while v2 extraction is in progress)
+ *   - pi-extensions/lib/entwurf-core.ts (the one remaining site; the entwurf.ts /
+ *     entwurf-async.ts siblings this once cross-checked were removed in 0.12)
  *
  * This script enforces two invariants:
  *   1. `shellQuote()` source matches the reference implementation byte-for-byte.

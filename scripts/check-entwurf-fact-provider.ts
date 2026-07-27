@@ -8,7 +8,7 @@
  *     into ONE `record-less-socket` diagnostic (#50 C4: a diagnostic subject,
  *     never a listing section) whose message names the cause + fix (fresh-cut),
  *   - corrupt record → meta-record-read-error diagnostic, listing NOT blinded,
- *   - gardenId↔socket collision (non-pi citizen + same-gid socket) → BOTH sides
+ *   - gardenId↔socket collision (out-of-socket-domain citizen + same-gid socket) → BOTH sides
  *     quarantined (gid in neither peers nor socketOnly) + one
  *     garden-id-socket-conflict diagnostic, and listEntwurfFacts does NOT throw
  *     (expected external-state corruption → diagnostics, not a crash),
@@ -214,16 +214,16 @@ async function main(): Promise<void> {
 		}
 	}
 
-	// ── non-pi citizen + SYMLINKED socket: the fact-provider:125 gap (closed) ───
-	// A non-pi record sharing its gid with a *symlinked* `*.sock`. The symlink is
+	// ── out-of-socket-domain citizen + symlinked socket (closed gap) ──────────
+	// Such a record shares its gid with a *symlinked* `*.sock`. The symlink is
 	// never probed, so its gid is absent from socketGids — the old socketGids-only
-	// check missed this and the non-pi citizen survived as a clean PeerFact while
+	// check missed this and the out-of-domain citizen survived as a clean PeerFact while
 	// the legacy send path still followed the symlink to a forged receiver. The
-	// shared isNonPiGardenIdSocketConflict predicate unions socketGids with the
+	// shared isOutOfSocketDomainGardenIdConflict predicate unions socketGids with the
 	// symlinked gids, so the citizen is now quarantined (gid in NEITHER peers nor
 	// socketOnly) and the conflict diagnostic is raised — alongside the existing
 	// socket-symlink-rejected one (both are honest: symlink-rejected = "not probed",
-	// conflict = "non-pi address split").
+	// conflict = "out-of-socket-domain address split").
 	{
 		const r = await listEntwurfFacts(
 			deps(
@@ -233,7 +233,7 @@ async function main(): Promise<void> {
 			),
 		);
 		ok(
-			"symlink-collision: non-pi citizen quarantined (NOT in peers)",
+			"symlink-collision: out-of-socket-domain citizen quarantined (NOT in peers)",
 			!r.facts.peers.some((p) => p.gardenId === GID_CONFLICT),
 		);
 		ok(

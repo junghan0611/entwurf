@@ -66,8 +66,9 @@ import {
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
 import { waitForPiRecord } from "./lib/pi-record-discovery.ts";
 
-// pi's control socket lives at the canonical dir keyed by session id — pi owns this path, so
-// C1 must point the decider's controlSocketDir at the REAL dir (a fresh gid avoids collision).
+// pi's control socket lives at the canonical dir keyed by the RECORD's garden id (#50 C4: the
+// record is the sole address authority — never a transcript/session id; :196 below proves it),
+// so C1 must point the decider's controlSocketDir at the REAL dir (a fresh gid avoids collision).
 const REAL_CONTROL_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
 const SOCKET_SUFFIX = ".sock";
 // Release-gate topology: repo-under-test, not deployment smoke. Load only this

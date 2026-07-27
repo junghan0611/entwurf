@@ -5,8 +5,8 @@
  * (one-way: provider → facts / socket-discovery / meta-session) — no import cycle
  * with `entwurf-facts.ts` (which owns `SocketProbe`/`resolveFactList`).
  *
- *   listAllMetaIdentities → pi gid 추출 → scanSocketProbes(piGids)
- *     → pre-quarantine non-pi/socket conflicts → resolveFactList(clean)
+ *   listAllMetaIdentities → socket-domain gid extraction → scanSocketProbes
+ *     → pre-quarantine out-of-domain/socket conflicts → resolveFactList(clean)
  *     → { facts, diagnostics }
  *
  * Two throw-vs-diagnostics policies, kept distinct (GPT힣 C-원칙):
@@ -20,14 +20,14 @@
  *     — that is not a re-implementation of the collision rule, it is input
  *     sanitation that leaves the pure-core invariant intact.
  *
- * The non-pi+socket collision quarantines BOTH sides (the PeerFact AND the
- * socket): gardenId is the universal address and a send path reads the socket
+ * An out-of-socket-domain record/socket collision quarantines BOTH sides (the
+ * PeerFact AND the socket): gardenId is the universal address and a send path
  * first, so surfacing the record alone (as a clean `unsupported` PeerFact) while
  * a same-gid socket exists would be half a lie. Both leave the normal output;
  * one diagnostic carries the fact. (pi + same-gid socket = the normal merge.)
  */
 
-import { type FactList, isNonPiGardenIdSocketConflict, resolveFactList } from "./entwurf-facts.ts";
+import { type FactList, isOutOfSocketDomainGardenIdConflict, resolveFactList } from "./entwurf-facts.ts";
 import { isLivenessSupported } from "./entwurf-v2-contract.ts";
 import {
 	type ActiveStoreEntry,
@@ -130,8 +130,8 @@ export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfF
 	// 2. socket axis — probe (dir sockets) ∪ (in-domain citizen canonical paths).
 	//    Its three hazards (symlink forgery / malformed name / dir-read error) are
 	//    folded into diagnostics here so the listing survives but never lies.
-	const piGids = identities.filter((i) => isLivenessSupported(i.backend)).map((i) => i.gardenId);
-	const scan = await scanSocketProbes(piGids, deps.socket ?? {});
+	const socketDomainGids = identities.filter((i) => isLivenessSupported(i.backend)).map((i) => i.gardenId);
+	const scan = await scanSocketProbes(socketDomainGids, deps.socket ?? {});
 	const probes = scan.probes;
 	const socketGids = new Set(probes.map((p) => p.gardenId));
 	const symlinkedGids = new Set(scan.symlinkedGardenIds);
@@ -158,24 +158,22 @@ export async function listEntwurfFacts(deps: EntwurfFactsDeps): Promise<EntwurfF
 		});
 	}
 
-	// 3. pre-quarantine non-pi citizens that collide with a control socket. The
-	//    predicate is SHARED with the v2 decider (isNonPiGardenIdSocketConflict) so
-	//    listing and dispatch cannot drift, and it unions socketGids with the
-	//    symlinkedGids: a symlinked socket is never probed (absent from socketGids),
-	//    so the old socketGids-only check let a non-pi citizen with a forged
-	//    (symlinked) socket survive as a clean PeerFact while the legacy send path
-	//    still followed the symlink — the gap this closes.
+	// 3. Pre-quarantine citizens outside the control-socket capability domain that
+	//    collide with a control socket. The predicate is SHARED with v2 dispatch so
+	//    listing and dispatch cannot drift. It unions real and symlinked socket gids:
+	//    the earlier real-socket-only check let an out-of-domain record survive as a
+	//    clean PeerFact beside a forged symlink receiver.
 	const conflictGids = new Set<string>();
 	for (const id of identities) {
-		if (isNonPiGardenIdSocketConflict(id.backend, id.gardenId, socketGids, symlinkedGids)) {
+		if (isOutOfSocketDomainGardenIdConflict(id.backend, id.gardenId, socketGids, symlinkedGids)) {
 			conflictGids.add(id.gardenId);
 			diagnostics.push({
 				kind: "garden-id-socket-conflict",
 				gardenId: id.gardenId,
 				backend: id.backend,
 				message:
-					`non-pi citizen (${id.backend}) shares its gardenId with a control socket (real or symlinked) — address ` +
-					"ambiguity; both the citizen and the socket are quarantined from the listing.",
+					`out-of-socket-domain citizen (${id.backend}) shares its gardenId with a control socket ` +
+					"(real or symlinked) — address ambiguity; both sides are quarantined from the listing.",
 			});
 		}
 	}

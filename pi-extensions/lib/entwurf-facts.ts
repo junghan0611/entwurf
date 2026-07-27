@@ -75,27 +75,27 @@ export function resolvePeerFact(identity: MetaIdentity, socket: SocketLiveness |
 }
 
 /**
- * A non-pi RECORD whose gardenId collides with a control socket — a real (probed)
- * one OR a symlinked/forged one. The gardenId is the universal address (동결결정3),
- * so a non-pi citizen sharing it with a socket means a send-path that reaches the
- * socket first hits a DIFFERENT receiver than the record names — an address split.
+ * An OUT-OF-SOCKET-DOMAIN record whose gardenId collides with a control socket —
+ * a real (probed) one OR a symlinked/forged one. The gardenId is the universal
+ * address, so a citizen without socket capability sharing it with a socket means
+ * the socket reaches a DIFFERENT receiver than the record names — an address split.
  * Both the citizen and the socket are quarantined from the facts listing.
  *
  * The union `socketGids ∪ symlinkedGardenIds` is load-bearing: `socketGids` are
  * gids with a real probed `*.sock`, but `symlinkedGardenIds` are NEVER probed (P1)
  * and so are absent from `socketGids`. Looking at `socketGids` alone (the
- * fact-provider:125 gap this closes) let a non-pi citizen with a *symlinked* socket
+ * fact-provider:125 gap this closes) let an out-of-domain citizen with a *symlinked* socket
  * survive as a clean PeerFact while the legacy send path still followed the symlink
  * to a forged receiver. Both axes claim the gid → both must quarantine it.
  *
- * SCOPE: this is the RECORD-side, non-pi conflict only — shared by the fact-provider
- * (listing) and the v2 decider (dispatch) so the two cannot drift (4c "재유도 금지"
- * 동형; only the observation-bit source is parameterized). A pi citizen whose own
- * canonical socket is a symlink is NOT this predicate's concern — that is a
+ * SCOPE: this is the record-side, out-of-socket-domain conflict only — shared by
+ * listing and dispatch so they cannot drift; only the observation-bit source is
+ * parameterized. A citizen IN the socket domain whose own canonical socket is a
+ * symlink is NOT this predicate's concern — that is a
  * target-specific lstat conflict the decider's `inspectTargetControlSocket` raises
  * as `address-conflict`, kept deliberately separate (GPT 1차 검수 C).
  */
-export function isNonPiGardenIdSocketConflict(
+export function isOutOfSocketDomainGardenIdConflict(
 	backend: string,
 	gardenId: string,
 	socketGids: ReadonlySet<string>,
@@ -163,8 +163,8 @@ export interface FactList {
  *     `indeterminate` and strand a dormant citizen as un-resumable); a dormant
  *     citizen's absent socket file is probed to `dead` (ENOENT) by the wiring and
  *     arrives here AS `dead` → dormant → resumable.
- *   - out-of-domain citizen WITH a control socket at its gardenId → fail-loud
- *     (address ambiguity; a non-pi citizen must not own a pi control socket).
+ *   - out-of-socket-domain citizen WITH a control socket at its gardenId → fail-loud
+ *     (address ambiguity; a backend without socket capability cannot own that rail).
  *   - out-of-domain citizen without a socket → `unsupported` (via resolvePeerFact).
  *   - a probed gardenId with NO citizen → `RecordLessSocketFact` (#50 C4: a
  *     diagnostic subject the provider folds into a `record-less-socket`
@@ -202,7 +202,7 @@ export function resolveFactList(identities: MetaIdentity[], socketProbes: Socket
 			if (probeMap.has(gid)) {
 				throw new Error(
 					`resolveFactList: out-of-domain citizen ${gid} (${identity.backend}) has a control socket — ` +
-						"address ambiguity (a non-pi citizen must not own a pi control socket)",
+						"address ambiguity (an out-of-socket-domain citizen cannot own a control socket)",
 				);
 			}
 			socket = null;

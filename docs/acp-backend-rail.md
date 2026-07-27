@@ -5,16 +5,19 @@
 > `adapterSettings` seam). The rail is in the tree and unchanged through the 0.12.x hotfix lane.
 >
 > **The ACP Claude rail comes first; cortex is the lane after it (GLG, 2026-07-27) — read §11 before writing
-> cortex code.** The first tightening ships as the **0.12.10** patch cut (the `claude-agent-acp` 0.62.0 pin plus
-> this document); the causal work on readiness continues after it, and cortex opens only once the rail is
-> settled. The adapter seam is ready; the *rail underneath it* is not yet proven. ACP Claude — this rail's own
+> cortex code.** The first tightening ships as the **0.12.10** patch cut, whose scope is **four** items, not two:
+> the `claude-agent-acp` 0.62.0 pin, this document, the removal of pi special-casing left in code and comments,
+> and the AGENTS carrier-budget gate. The causal work on readiness continues after it, and cortex opens only
+> once the rail is settled — a fourth backend cannot be added while "pi is different" survives in the prose a
+> new adapter author would read. The adapter seam is ready; the *rail underneath it* is not yet proven. ACP Claude — this rail's own
 > reference adapter — has been observed reaching the model with the bundled `entwurf-bridge` MCP tools **absent
 > from the session tool schema**: an addressable citizen whose ACP model could not exercise outbound sibling
 > dispatch (the resident keeps its record and socket throughout — §11-2). The verified gap is a
 > **missing client-side readiness guarantee in the common turn loop**, not a fault in `claudeAdapter`, and a
 > second backend inherits that gap (whether it inherits the *race* depends on its own server — see §11-3). Entry
-> order is therefore fixed — **pi (substrate) → ACP Claude proven to exercise outbound sibling dispatch →
-> cortex lands**. §11 carries the
+> order is therefore fixed by implementation dependency — **record-backed pi host adapter → ACP Claude
+> proven to exercise outbound sibling dispatch → cortex lands**. This is not citizen rank: every addressed
+> session uses the same V3 record authority. §11 carries the
 > evidence at its honest strength, the measured PR #40 landing surface, and the gate cortex must clear.
 >
 > This document is the shipped Claude rail baseline, **not** a current cortex merge plan. Read the historical
@@ -348,16 +351,23 @@ Added 2026-07-27, after the 0.12.9 closure and before any cortex code is written
 disagree about readiness, §11 is newer and wins.
 
 **Release framing.** This is deliberately *not* pinned to one version number. The `claude-agent-acp` 0.62.0 pin
-and this section ship together as **0.12.10**, a patch cut that tightens the rail and records what is known. The
-open causal question (§11-7) outlives that cut, and cortex (#48) opens after it is settled — not on a date.
+and this section ship as part of **0.12.10** — a patch cut whose full scope is the pin, this document, the
+removal of pi special-casing from code/comments, and the AGENTS carrier-budget gate (`NEXT.md` §NOW is the
+authority on that list). It tightens the rail and records what is known. The open causal question (§11-7)
+outlives that cut, and cortex (#48) opens after it is settled — not on a date.
 
-### 11-1. Order: pi → ACP Claude citizen → cortex
+### 11-1. Implementation order: record-backed pi host → ACP Claude → cortex
 
-The ACP rail is not free-standing — every ACP turn runs inside a pi process. The provider is registered by
-`pi-extensions/acp-provider.ts`, the turn is driven by pi's runner calling our `streamSimple`, and a
-citizen-grade session is a real `pi --entwurf-control` resident. So the substrate is tightened first (pi is
-pinned at **0.82.1** under `>=0.82.1 <0.83`, which is also current upstream), then the rail's **reference**
-adapter is proven, and only then does a second adapter enter.
+The ACP plugin is not free-standing — every ACP turn currently runs inside a pi host process. The provider is
+registered by `pi-extensions/acp-provider.ts`, pi's runner calls our `streamSimple`, and the host becomes
+addressable through the same V3 record authority as every other citizen before it opens the control socket.
+Therefore the **host adapter path** is verified first (pi pinned at **0.82.1** under `>=0.82.1 <0.83`), then the
+rail's reference adapter, then a second ACP adapter. This is dependency order, not a privileged identity order:
+backend `pi` differs only because it currently owns the **control-socket capability domain** plus today's
+**host-adapter relaunch capability**. Those are two statements, not one domain: the dormant socket-liveness
+branch selects `spawn-bg`, and `resolveResumeLaunchIdentity` is what checks backend authority at the launch
+leaf. There is **no separate spawn-domain predicate** — do not write "spawn-resume domain" until one exists
+(`AGENTS.md` §Capability domains, `VERIFY.md`).
 
 Cortex is not waiting on its own quality. It is waiting on the rail having **one adapter that demonstrably
 carries a model all the way to outbound sibling dispatch**. A

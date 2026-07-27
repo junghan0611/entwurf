@@ -271,15 +271,15 @@ async function main(): Promise<void> {
 		ok("A: B1 — a pi target does NO pre-lock lstat (inspectPath unused)", spies.inspectPath.length === 0);
 	}
 
-	// ── A2: B1 — a NON-pi target DOES record-side lstat the conflict (pre-lock) ─
+	// ── A2: out-of-socket-domain target checks record-side conflict pre-lock ──
 	{
 		// claude-code (unsupported) + a symlink at the canonical path → record-side conflict →
 		// the decider rejects target-address-conflict BEFORE acquiring (no lock for a quarantined
 		// address). The lstat-only inspectPath ran exactly once; acquire never did.
 		const { deps, spies } = makeSpiedFactory({ backend: "claude-code", inspectKind: "address-conflict" });
 		const decision = await deps.decide({ target: GID, intent: "fire-and-forget", message: "m" });
-		ok("A2: non-pi conflict → reject", decision.kind === "reject");
-		ok("A2: non-pi target lstat'd the conflict exactly once", spies.inspectPath.length === 1);
+		ok("A2: out-of-socket-domain conflict → reject", decision.kind === "reject");
+		ok("A2: out-of-domain target lstat'd the conflict exactly once", spies.inspectPath.length === 1);
 		ok("A2: a quarantined target is never lock-acquired", spies.acquire.length === 0);
 	}
 
@@ -316,7 +316,7 @@ async function main(): Promise<void> {
 		ok("A3b: no send attempted on a dead target", spies.nativePushSend.length === 0);
 	}
 
-	// ── A3: QB2 — a non-pi indeterminate lstat FAILS LOUD (never "no conflict") ─
+	// ── A3: out-of-domain indeterminate lstat fails loud ─────────────────────
 	{
 		const { deps } = makeSpiedFactory({ backend: "claude-code", inspectKind: "indeterminate" });
 		let threw = false;
@@ -325,7 +325,7 @@ async function main(): Promise<void> {
 		} catch {
 			threw = true;
 		}
-		ok("A3: non-pi indeterminate lstat → decide throws (QB2 fail-loud)", threw);
+		ok("A3: out-of-domain indeterminate lstat → decide throws (QB2 fail-loud)", threw);
 	}
 
 	// ── B: control sendOverSocket builds RpcSendCommand + maps + lockDir release ─

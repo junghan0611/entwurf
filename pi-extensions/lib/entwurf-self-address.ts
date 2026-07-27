@@ -3,14 +3,13 @@
  *
  * "Can a reply to THIS session actually land where its model will see it?"
  *
- * Today both the MCP bridge (buildStrictPiSenderEnvelope /
- * buildTrustedMetaSenderEnvelope / entwurf_self) and pi-native answer that from env
- * presence alone and hardcode `replyable: true`: a pi session with no
- * --entwurf-control socket, or a meta citizen whose owner has exited / whose
- * idle-watch was never armed, all claim replyable while delivery silently fails
- * (SE-1: "all layers say yes, only delivery says no" = a Crash-Don't-Warn
- * violation). This module is the single truth-table both surfaces compute from,
- * with every fact INJECTED (no IO) so the gate can pin each row.
+ * This module closed the former split where the MCP and native pi surfaces inferred
+ * `replyable: true` from identity-carrier presence alone. Identity and reachability
+ * are separate: pi's env carries the garden id established by record birth, while
+ * replyability requires its control socket; a native marker must be record-backed,
+ * while replyability additionally requires its own rail's live facts. This is the
+ * single truth-table both surfaces compute from, with every fact INJECTED (no IO) so
+ * the gate can pin each row.
  *
  * Axes by origin:
  *  - pi-session:  replyable ⟺ a live control socket exists at the canonical path.
@@ -33,7 +32,7 @@
  *                 — which never arms a watch — would report replyable:false forever.
  *  - external-mcp: never replyable — no authoritative reply address.
  *
- * `origin` stays identity PROVENANCE (where the sender identity came from), never a rail.
+ * `origin` stays sender-carrier PROVENANCE, never the citizen identity authority and never a rail.
  * Which rail a meta citizen's reply rides is a SECOND axis — `metaDeliveryDomain`, derived
  * by the caller from `nativePushSupported(backend)`, not from `wakeMode` (direct-inject also
  * covers codex/pi, which have no native-push adapter). Fail-closed: an unsupplied domain is
