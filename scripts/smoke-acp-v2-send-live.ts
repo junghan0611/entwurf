@@ -32,26 +32,41 @@
 // The isolated world also keeps the operator's live store and mailbox clean: a
 // smoke that delivers into the real garden would page a human.
 //
-// KNOWN OPEN DEFECT this gate catches — bundled-MCP readiness (2026-07-24). Two
-// independent failures were first read as the model declining an explicit
-// instruction, and the transcripts said otherwise: in both, the entwurf tool was
-// ABSENT from the session's schema. The two models then behaved differently, which
-// is why the shared cause was easy to miss — in this gate's failure (a standalone
-// run) the model called anyway and the runtime answered `No such tool available:
-// mcp__entwurf-bridge__entwurf_v2`; in the sibling smoke-acp-bundled-mcp-live's
-// failure (a separate run, half an hour later, inside a release-gate aggregate) the
-// model read its schema first, reported that only Read/Bash/Edit/Write/Skill were
-// exposed, and refused to invent a result for a tool it did not have. Two
-// independent runs, different behaviour, one defect: the server was not there to be
-// called. The window is
-// structural: claude-agent-acp 0.61.0's createSession awaits only
+// KNOWN OPEN DEFECT this gate catches — bundled-MCP readiness (2026-07-24).
+// SSOT for the ledger and the claim tiers: ROADMAP 「번들 MCP readiness race」 +
+// docs/acp-backend-rail.md §11. Keep this comment at the strength those carry.
+//
+// OBSERVED (established): in three runs the entwurf tool was ABSENT from the
+// session's schema — the same SYMPTOM each time, reached by two different model
+// behaviours, which is why one shared symptom was easy to miss. In this gate's
+// failure (a standalone run) the model called anyway and the runtime answered
+// `No such tool available: mcp__entwurf-bridge__entwurf_v2`; in the sibling
+// smoke-acp-bundled-mcp-live's failure (a separate run, half an hour later,
+// inside a release-gate aggregate) the model read its schema first, reported that
+// only Read/Bash/Edit/Write/Skill were exposed, and refused to invent a result for
+// a tool it did not have.
+//
+// ESTABLISHED CONTRACT GAP (not the same as a cause): there is no client-side
+// readiness fence on this path. claude-agent-acp's createSession awaits only
 // `initializationResult()`, and this backend prompts right after
 // (acp/backend.ts:718-790) — nothing waits for the configured MCP servers to reach
-// `connected`, though claude-agent-sdk 0.3.217 exposes exactly that via
-// `mcpServerStatus()`. Both observed hits came under heavy concurrent load, which
-// is correlation, not established cause. So this gate stays MUST: its failures are
-// OURS. Until the readiness wait exists, a FAIL here is a real release blocker and
-// must not be re-read as model flakiness.
+// `connected`, though claude-agent-sdk exposes exactly that via
+// `mcpServerStatus()`.
+//
+// OPEN (do NOT write as settled): whether that missing fence is what produced the
+// three observations. No controlled repro exists yet, and the load association is
+// correlation only. Do not restate this as "one defect" or "the cause".
+//
+// Bump note: measured at claude-agent-acp 0.61.0 / claude-agent-sdk 0.3.217;
+// re-checked at the 2026-07-27 bump to 0.62.0 / 0.3.219 — the adapter's `dist/` is
+// byte-identical across 0.61.0→0.62.0 and adds no readiness fence. That is an
+// unchanged ABSENCE of any explicit wait, not an unchanged window: the transitive
+// SDK moved and MCP startup lives inside it, so effective timing may differ.
+//
+// So this gate stays MUST: it TELLS the model which tool to call, so a failure
+// here is OURS, not model preference. While the symptom and the contract gap
+// remain unresolved, a FAIL here is a real release blocker and must not be
+// re-read as model flakiness.
 //
 // LIVE-only — kept OUT of `pnpm check`; honest skip when LIVE!=1 (skip = CI safety,
 // NOT an acceptance PASS). Model override: ENTWURF_ACP_PROVIDER_MODEL (default sonnet).
