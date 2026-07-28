@@ -61,3 +61,8 @@ demo/compaction-policy-smoke/fixtures/
 # when Phase 2 npm/ClawHub publish lands (tarball owns dist via the
 # package `files` allowlist).
 plugins/*/node_modules/
+
+# §11-7 ordering-probe LIVE artifacts (shared NDJSON event log + classification
+# per paired run) — preserved locally for forensics/promotion, never committed;
+# promotion into any ledger is a manual, doc-side act.
+/.probe-artifacts/

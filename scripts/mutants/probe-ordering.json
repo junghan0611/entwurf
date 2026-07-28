@@ -1,0 +1,255 @@
+{
+	"schemaVersion": 1,
+	"lane": "probe-ordering",
+	"mutants": [
+		{
+			"claim": "VERDICT-A-NEEDS-TWO-DELAYS",
+			"title": "letting a single nonzero delay reach an A verdict — one point cannot show latency scaling (§11-7)",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\tif (distinctDelays.size >= 2 && inBand && growsWithD) {"],
+			"replace": ["\tif (distinctDelays.size >= 1 && inBand && growsWithD) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-A-NEEDS-TWO-DELAYS]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-I0-NEVER-D",
+			"title": "reading an intervention initialize failure as D-newSession — the injected delay cannot reach initialize",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": [
+				"\t\treturn { ...base, kind: \"I0\", promotable: false, evidence: facts.initialize.error ?? \"initialize failed\" };"
+			],
+			"replace": [
+				"\t\treturn { ...base, kind: \"D-newSession\", promotable: false, evidence: facts.initialize.error ?? \"initialize failed\" };"
+			],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-I0-NEVER-D]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-B-PROMOTION-RULES",
+			"title": "promoting any No-such-tool absence — alias/bare-name mismatches would enter the readiness ledger",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": [
+				"\t\tif (ranAhead && expectedProviderToolId !== undefined && facts.noSuchToolId === expectedProviderToolId) {"
+			],
+			"replace": ["\t\tif (ranAhead && facts.noSuchToolId !== undefined) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-B-PROMOTION-RULES]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-B-REQUIRES-RANAHEAD",
+			"title": "dropping the ran-ahead premise from B — an exact-id absence with ordering kept is not the delayed-window failure mode",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": [
+				"\t\tif (ranAhead && expectedProviderToolId !== undefined && facts.noSuchToolId === expectedProviderToolId) {"
+			],
+			"replace": ["\t\tif (expectedProviderToolId !== undefined && facts.noSuchToolId === expectedProviderToolId) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-B-REQUIRES-RANAHEAD]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-P0-CONTROL-FAIL",
+			"title": "waving a callable-less control through as a judgeable baseline (visible-and-callable is the P0 floor)",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": [
+				"\tif (!facts.fixtureToolCall) return \"tool-unavailable\";",
+				"\tif (facts.acpProviderToolId === undefined) return \"tool-unavailable\";"
+			],
+			"replace": [
+				"\tif (!facts.fixtureToolCall) return undefined;",
+				"\tif (facts.acpProviderToolId === undefined) return undefined;"
+			],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-P0-CONTROL-FAIL]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-TIMEOUTS-MATCH-PRODUCTION",
+			"title": "probe prompt boundary drifting from production (120s was the raw smoke's value) — D readings would measure the wrong timeout",
+			"subject": "scripts/lib/probe-acp-turn.ts",
+			"find": ["\tpromptMs: 600_000,"],
+			"replace": ["\tpromptMs: 120_000,"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-TIMEOUTS-MATCH-PRODUCTION]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-SEQ-ORDER",
+			"title": "probe-branded clientInfo — a different stimulus than production means the probe measures a lookalike",
+			"subject": "scripts/lib/probe-acp-turn.ts",
+			"find": ["\t\t\tclientInfo: { name: \"entwurf\", version: \"s2d\" },"],
+			"replace": ["\t\t\tclientInfo: { name: \"entwurf-probe\", version: \"s11-7\" },"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-SEQ-ORDER]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-FIXTURE-WIRE-MARKER",
+			"title": "dropping the tools_list_response_forwarded stamp — without the wire-availability marker A and C are indistinguishable",
+			"subject": "scripts/fixtures/probe-mcp-server.ts",
+			"find": ["\t\t\t\temit(PROBE_EVENTS.toolsListResponseForwarded, { jsonrpcId: msg.id, tools: toolNames });"],
+			"replace": ["\t\t\t\t// marker intentionally not emitted"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-FIXTURE-WIRE-MARKER]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-FIXTURE-RUNID-REQUIRED",
+			"title": "making probeRunId optional — without the required join key cross-layer correlation degrades to inference",
+			"subject": "scripts/fixtures/probe-mcp-server.ts",
+			"find": ["\t\t{ probeRunId: z.string().describe(\"The exact probeRunId string given in the prompt.\") },"],
+			"replace": ["\t\t{},"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-FIXTURE-RUNID-REQUIRED]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-NOWIRE-CANDIDATE",
+			"title": "reading a wire-marker-less absence as B — a fixture that never served would manufacture a sufficiency verdict (§11-7 :631/:638)",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": [
+				"\t\treturn {",
+				"\t\t\t...base,",
+				"\t\t\tkind: \"inconclusive\",",
+				"\t\t\tpromotable: false,",
+				"\t\t\tevidence:",
+				"\t\t\t\t\"no tools_list_response_forwarded — MCP handshake / fixture / config candidate, not server-behavior evidence\",",
+				"\t\t};"
+			],
+			"replace": [
+				"\t\treturn {",
+				"\t\t\t...base,",
+				"\t\t\tkind: \"B\",",
+				"\t\t\tpromotable: false,",
+				"\t\t\tevidence:",
+				"\t\t\t\t\"no tools_list_response_forwarded — MCP handshake / fixture / config candidate, not server-behavior evidence\",",
+				"\t\t};"
+			],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-NOWIRE-CANDIDATE]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-SAMEMS-AMBIGUOUS",
+			"title": "reading ordering-kept off a same-ms cross-process tie — the shared axis cannot order equal-ms stamps from different pids",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\t\tfacts.wireForwardedMs < facts.newSessionEndMs;"],
+			"replace": ["\t\tfacts.wireForwardedMs <= facts.newSessionEndMs;"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-SAMEMS-AMBIGUOUS]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-A-TRACKING-BAND",
+			"title": "dropping the excess upper bound — a 10s stall at D=2s would count as \"latency tracks D\"",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\t\t\tr.newSessionExcessMs <= r.delayMs + A_LATENCY_SLACK_MS,"],
+			"replace": ["\t\t\tNumber.isFinite(r.newSessionExcessMs),"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-A-TRACKING-BAND]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-NO-PROSE-ERROR-SCAN",
+			"title": "scanning agent prose for No-such-tool — the model could mint the runtime marker by saying the sentence",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": ["\t\t\t\t\tif (typeof t === \"string\") collectedText += t;"],
+			"replace": [
+				"\t\t\t\t\tif (typeof t === \"string\") {",
+				"\t\t\t\t\t\tcollectedText += t;",
+				"\t\t\t\t\t\tscanStructuredNoSuchTool({ content: [{ type: \"text\", text: t }] });",
+				"\t\t\t\t\t}"
+			],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-NO-PROSE-ERROR-SCAN]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-MALFORMED-INVALIDATES",
+			"title": "judging a log with malformed lines — the corrupted line could be the wire marker whose absence becomes \"evidence\"",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": ["\tif (malformed.length > 0) {"],
+			"replace": ["\tif (malformed.length > 9999) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-MALFORMED-INVALIDATES]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-LOG-EVENT-VOCABULARY",
+			"title": "accepting any string as an event name — a typo'd marker would read as a marker that never fired, and absence is what §11-7 judges",
+			"subject": "scripts/lib/probe-event-log.ts",
+			"find": ["\tif (!isProbeEventName(e.event)) return false;"],
+			"replace": ["\tif (typeof e.event !== \"string\") return false;"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-LOG-EVENT-VOCABULARY]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-LOG-ENVELOPE-SCHEMA",
+			"title": "letting a JSON-valid line with a broken sort axis in as an event — a non-numeric tsMs makes the comparator NaN and the ordering reads meaningless",
+			"subject": "scripts/lib/probe-event-log.ts",
+			"find": [
+				"\tif (!Number.isSafeInteger(e.seq) || (e.seq as number) < 0) return false;",
+				"\tif (!Number.isSafeInteger(e.pid) || (e.pid as number) <= 0) return false;",
+				"\tif (!Number.isSafeInteger(e.tsMs) || (e.tsMs as number) <= 0) return false;",
+				"\tif (typeof e.ts !== \"string\" || Date.parse(e.ts) !== e.tsMs) return false;"
+			],
+			"replace": ["\t// structural envelope checks intentionally removed"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-LOG-ENVELOPE-SCHEMA]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-LOG-ENVELOPE-AUTHORITY",
+			"title": "letting a caller's payload carry a reserved envelope key — the writer's own runId/marker/sort axis could be rewritten by the line it rides in",
+			"subject": "scripts/lib/probe-event-log.ts",
+			"find": ["\tfor (const key of RESERVED_EVENT_KEYS) {"],
+			"replace": ["\tfor (const key of [] as string[]) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-LOG-ENVELOPE-AUTHORITY]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-LOG-PAYLOAD-SCHEMA",
+			"title": "judging payload the parser never typed — a perfect envelope around ok:\"true\" reads as a phase FAILURE instead of invalidating the run",
+			"subject": "scripts/lib/probe-event-log.ts",
+			"find": ["\t\t\tif (!isWellFormedEnvelope(parsed) || !payloadHoldsContract(parsed)) {"],
+			"replace": ["\t\t\tif (!isWellFormedEnvelope(parsed)) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-LOG-PAYLOAD-SCHEMA]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-LOG-WIRE-MARKER-NAMES-TOOL",
+			"title": "accepting a wire marker that names no expected tool — a fixture that served nothing would still supply the wire-availability stamp that ran-ahead, C and B are read against",
+			"subject": "scripts/lib/probe-event-log.ts",
+			"find": ["\t\tArray.isArray(e.tools) && e.tools.every(isString) && e.tools.includes(PROBE_EXPECTED_TOOL),"],
+			"replace": ["\t\tArray.isArray(e.tools),"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-LOG-WIRE-MARKER-NAMES-TOOL]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		}
+	]
+}

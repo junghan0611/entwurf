@@ -130,6 +130,7 @@ Usage:
   ./run.sh smoke-agy-install-state    # agy MCP + exact permission ownership regression: isolated HOME+XDG, adopt/state/inverse, symlink refuse, setup degrade. Offline/deterministic
   ./run.sh check-agy-permission-matrix # AGY permission CONTRACT SPACE as a literal table (55 cells): parser-state × operation × settings × ownership × precedence with stated exclusion rules; expectations are hand-written literals, never read from the SUT. Offline/deterministic (deps: python3)
   ./run.sh check-gate-qualification    # kill-proof qualification (the gate-of-gates): runner self-test (classifier truth table + synthetic negatives incl. wrong-reason/hang/control-red/impurity) + committed mutant manifests (scripts/mutants/*.json) run in an isolated snapshot repo under control→mutant→restore→control; the real checkout is never written. Evidence = claim IDs + killed mutant IDs, never assertion counts
+  ./run.sh check-probe-ordering        # §11-7 ordering-probe deterministic gate: raw-client SAMENESS pinned to backend.ts (sequence/args/timeouts/permission policy — the probe may never measure a lookalike), phase attribution incl. set-model, probe-mode fixture wire markers (delay honored, probeRunId REQUIRED, smoke-acp-mcp-live legacy compat), event-log door integrity (reserved keys refused at write; unknown marker name, broken sort axis, or a payload the classifier cannot judge on is MALFORMED, never a quiet event), and the §11-7 paired-verdict truth table (P0/I0 outside the space, phase-qualified D, B promotion ladder, C, A two-delay rule). Offline/deterministic; kill-proofed via scripts/mutants/probe-ordering.json
   ./run.sh smoke-agy-statusline-state # agy ambient garden-id statusLine install/doctor/inverse regression. Offline/deterministic
   ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression. Offline/deterministic
   ./run.sh smoke-user-scope-citizen   # 0.12.6 install-boundary: pi packages[] registration SSOT (register-pi-package.py) — idempotent + preserves unrelated + normalizes stale + remove symmetry + fails loud. Offline/hermetic (deps: bash+python3)
@@ -4451,6 +4452,26 @@ case "$cmd" in
     # first: zero-match/multi-match/survived/wrong-reason/hang(+pgroup grandchild kill)/
     # control-red/impurity all must classify red before any real manifest counts.
     run_ts scripts/check-gate-qualification.ts
+    ;;
+  check-probe-ordering)
+    # §11-7 ordering-probe gate (docs/acp-backend-rail.md §11-7): the raw-client seam is
+    # only admissible "bound by a gate asserting it issues the same calls, arguments, and
+    # order as the backend's real sequence" — this is that gate. Sameness over a recording
+    # fake + backend.ts SOURCE pins (order/clientInfo/timeouts/permission policy), phase
+    # attribution (set-model included), the probe-mode fixture's wire instrumentation
+    # (real child, raw JSON-RPC, no API), the shared log's contract at its door — envelope
+    # (the evidence line's own runId/marker/sort axis cannot be rewritten by a payload) AND
+    # payload (every field the classifier judges on is typed there) — and the PURE
+    # paired-verdict truth table.
+    run_ts scripts/check-probe-ordering.ts
+    ;;
+  smoke-acp-ordering-probe-live)
+    # §11-7 ordering probe — LIVE paired-run instrument, OUT of pnpm check. Control
+    # (delay=0, must be visible AND callable) + interventions D1/D2 against the SAME
+    # pins/config/fixture; classifies A/A-withheld/B/C/D-<phase> or P0/I0, preserves
+    # the shared NDJSON log + classification under .probe-artifacts/ (gitignored).
+    #   LIVE=1 ./run.sh smoke-acp-ordering-probe-live
+    run_ts scripts/smoke-acp-ordering-probe-live.ts
     ;;
   smoke-agy-statusline-state)
     # #46 Task 1 regression gate for the agy statusLine install adapter: install→doctor→uninstall

@@ -748,3 +748,61 @@ MCP-readiness before `newSession` returns? — by measurement rather than by ass
 **Not in scope for this probe:** choosing a prescription, adding an adapter member, or editing the product turn
 loop (the wire proxy / raw client seam above exists precisely so the turn loop stays untouched). Design follows
 evidence, not the other way around.
+
+### 11-7-a. As built (2026-07-28)
+
+The client seam chosen is the **probe-dedicated raw client**, bound by its required gate:
+
+- driver `scripts/lib/probe-acp-turn.ts` (sequence + phase markers + production timeouts), shared NDJSON log
+  `scripts/lib/probe-event-log.ts`, PURE classifier `scripts/lib/probe-verdict.ts`;
+- fixture `scripts/fixtures/probe-mcp-server.ts` in probe mode (env `PROBE_MCP_EVENT_LOG`): startup delay,
+  REQUIRED `probeRunId`, and `tools_list_response_forwarded` stamped on the stdio **write callback** — the SDK
+  transport's own `send()` resolves on buffered-write/drain, which is exactly the false-green this section
+  forbids, so the fixture swaps in a callback-forwarding transport; legacy mode (env absent) stays
+  byte-compatible with `smoke-acp-mcp-live`;
+- gate `./run.sh check-probe-ordering` (IN `pnpm check`): sameness pinned to `backend.ts` source
+  (order/args/clientInfo/timeouts/permission policy), phase attribution incl. set-model, fixture wire
+  instrumentation against a real child, event-log door integrity (envelope + payload), and the
+  paired-verdict truth table — 19 claims are
+  mutant-qualified via `scripts/mutants/probe-ordering.json` under check-gate-qualification, and
+  [QK:*] tokens ⇔ qualified claims 1:1 by design (the remaining assertions carry plain messages;
+  the gate header lists the two review-pinned-only properties);
+- the classifier reads B **only** off the full delta+marker combination (the turn RAN AHEAD of
+  wire-availability ∧ wire-forwarded ∧ no fixture tools/call ∧ runtime No-such-tool naming the
+  measured id): a wire-marker-less absence stays an MCP handshake / fixture / config **candidate**,
+  an alias-id error stays a model/alias mismatch, an exact-id absence without running ahead is an
+  unlisted finding, and a same-ms cross-process stamp tie is unordered (strict inequalities on the
+  ordering reads). The runtime No-such-tool marker is extracted from structured tool frames only —
+  never agent prose — and a malformed event line invalidates the run with an INVALIDATED
+  classification on the artifact's face (GPT reviews 2026-07-28 tightened all of these);
+- the shared log's ENVELOPE is a contract at the door, not a shape the writer happens to emit:
+  `{seq,pid,ts,tsMs,runId,event}` belongs to the writer (a payload carrying one of those keys is
+  REFUSED at write time, never merged), `ts` is derived from a single `tsMs` clock read, and a
+  JSON-valid line whose marker name is outside the vocabulary or whose sort axis is broken counts as
+  MALFORMED — i.e. it takes the INVALIDATED path instead of entering the events array. Both decisive
+  §11-7 reads are absence and ordering, so an unknown marker name (absence that looks like a marker
+  that never fired) and a non-numeric `tsMs` (a NaN comparator, ordering read off file order) are
+  exactly the corruptions that would look healthy. The two-clock-read straddle was not hypothetical:
+  re-parsing the two artifacts from the 2026-07-28 LIVE runs finds exactly one line each whose `ts`
+  and `tsMs` disagree by 1 ms (`fixture_process_start`, where module init sat between the two reads).
+  Those pre-contract artifacts therefore re-parse as INVALIDATED — they stay forensic records, and any
+  promotion needs a fresh pair run under the contract, never a re-read of them;
+- the same door types the PAYLOAD, because the classifier judges on payload and a perfect envelope can
+  still carry a lie: `ok === true` is false for `"true"`, so a corrupted phase end would read as a phase
+  FAILURE (D / P0) rather than invalidate the run, and a `tools_list_response_forwarded` whose `tools`
+  does not name `probe_nonce` is not wire-availability at all yet would still drive ran-ahead, C and B.
+  Every event the classifier reads payload off therefore carries a rule, and `PAYLOAD_CONTRACT_EVENTS`
+  is pinned in the gate against a hand-written literal so a new classifier read cannot land without one.
+  The rules are typed-if-present exactly where the WRITER legitimately has nothing to record — a
+  tools/call stamped before validation (a model calling with no join key IS the absence reading) and an
+  ACP frame carrying neither name nor title (the classifier reads that as P0/unmeasured) — so the
+  contract never manufactures an INVALIDATED run out of real model behavior. `probe_nonce` itself is now
+  defined once in `probe-event-log.ts` and imported by fixture and classifier: three private copies of
+  the string the wire marker is checked against could drift apart in silence;
+- instrument `LIVE=1 ./run.sh smoke-acp-ordering-probe-live`: control + D1 + D2 (defaults 2 s / 8 s, both well below
+  the 30 s boundaries), REAL emitted claudeAdapter/config modules injected (the emit-then-import pattern), the
+  I0 bounded one-retry, artifacts under `.probe-artifacts/` (gitignored, preserved).
+
+The one property the gate does not mutant-prove is the write-callback **timing** itself (a cross-process
+microsecond ordering); the marker's existence and attribution are proven, the callback placement is
+review-pinned in the fixture source.
