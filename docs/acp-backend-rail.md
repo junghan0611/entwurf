@@ -806,3 +806,30 @@ The client seam chosen is the **probe-dedicated raw client**, bound by its requi
 The one property the gate does not mutant-prove is the write-callback **timing** itself (a cross-process
 microsecond ordering); the marker's existence and attribution are proven, the callback placement is
 review-pinned in the fixture source.
+
+### 11-7-b. First measurement under the door contract (2026-07-28) — inconclusive
+
+Artifact `.probe-artifacts/acp-ordering/2026-07-28T09-13-06-523Z` (gitignored, local forensics). 57 events,
+**0 malformed** — the first evidence that the tightened door is calibrated rather than merely strict: a real
+paired run passes it without being turned into an INVALIDATED artifact.
+
+- **Control (D=0) PASSED**, so the baseline is judgeable: the wire marker landed at +1416 ms and `newSession`
+  returned at +2021 ms (ordering kept), the tool was called, the nonce came back. Measured provider-bound id:
+  `mcp__probe__probe_nonce` — the pair's `expectedProviderToolId`, never hardcoded.
+- **D1 (2 s):** `newSession` returned at +1541 ms and the prompt started at +1546 ms, but the wire marker did
+  not arrive until +3416 ms. The turn RAN AHEAD of wire availability by ~1.9 s. No fixture tools/call, no
+  runtime `No such tool`, `carriesNonce=false`, `stopReason=end_turn`.
+- **D2 (8 s):** `newSession` returned at +1647 ms and the entire turn ended at +6673 ms while the fixture was
+  still inside its startup delay (`fixture_delay_end` at +9384 ms). That run produced no
+  `tools_list_response_forwarded` at all.
+
+**Verdict: `inconclusive`, promotable=false.** Both interventions show the turn running ahead of wire
+availability, which is evidence-SHAPED against the A (wait) reading on this server and this path — and the
+ladder still refuses to promote it, correctly. D1 carries no runtime `No such tool` naming the measured id
+because the model never attempted the call, and model silence is not evidence, so it is not delta-B. D2 has no
+wire marker at all, so per :631 it stays an MCP handshake / fixture / config **candidate**. Nothing here
+changes the product turn loop, the rail's prescription, or a release note.
+
+**What the next pair has to change:** the decisive marker exists only if the model ATTEMPTS the call inside
+the delayed window. Re-run with a prompt/strategy that forces the attempt, then re-judge against the same
+marker set. Until then the §11-7 question stays open with the instrument admissible and the measurement owed.

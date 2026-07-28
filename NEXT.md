@@ -1,4 +1,4 @@
-# NEXT — ACP Claude rail 먼저, 0.12.10으로 수선 컷 (Cortex는 그 뒤)
+# NEXT — ACP rail 검증 우선: §11-7 측정이 아직 owed (Cortex는 그 뒤)
 
 > NEXT는 부트 섹터다. 이슈는 설계 SSOT가 아니라 과거 가설과 증거의 묶음이다.
 > 다음 세션은 이슈를 구현하지 말고 **현재 main·현재 upstream·현재 live surface를 먼저 검수**한다.
@@ -9,35 +9,45 @@
 > 이어서: *"0.13.0 안가고 지금 수선하면 0.12.10으로 acp 수정 및 rail 문서 업데이트만 들어가도 좋겠다."*
 > → **0.13.0은 지금 가지 않는다.** readiness 인과 규명은 그 뒤에 이어지고, #48 Cortex는 rail이 정리된 다음에 연다.
 
-> **2026-07-27 스코프 확대 (GLG 지시).** *"pi가 특별하네스에서 이제 meta-record를 활용하는 동일하네스로
-> 내렸어. 근데 혹시 관련 코드나 주석에서 특별대우를 하는게 남아있다면 다 정리해야 0.12.10 컷을 한다.
-> 그래야 다음 릴리즈 0.13.0에서 cortex를 acp로 배포할수있어."*
-> → 0.12.10은 **acp 0.62.0 핀 + rail 문서 + pi 특별대우 잔재 제거 + AGENTS 예산 게이트** 넷이다.
-> 앞의 둘만으로는 **NO-GO**. cortex를 4번째 backend로 태우기 전에 "pi는 다르다"는 서술이 코드에 남아
-> 있으면 안 된다 — 같은 혼동이 새 adapter에서 반복된다.
+## NOW — §11-7 probe는 섰다, 측정이 아직 판정 불가
 
-## NOW — 0.12.10 수선 컷 (acp 핀 + rail 문서 + pi 잔재 + AGENTS 게이트), rail의 남은 질문
+> **2026-07-28 (GLG 지시).** *"0.12.11 갈 필요 없거든. 이거 이번에 잘 막았으면 다음 작업 준비하면 되거든.
+> 검증 미진한 것을 기록해둬야 이어서 검증부터 하고 구멍 막고 다음 작업할 거야."*
+> → 릴리즈 컷이 아니라 **검증 미결을 보존하는 마침표**다. 다음 세션은 새 작업을 열기 전에 아래 미결부터 닫는다.
 
-> **2026-07-27 15:44 commit boundary (GLG 지시).** §F의 surface/rail 수선과 §H의 AGY permission
-> 수선을 한 원자 집합으로 먼저 커밋해 다음 작업의 clean baseline을 만든다. GPT가 독립 실행한 pre-commit
-> `pnpm check`는 EXIT=0, tarball 275, `git diff --check` PASS다. **이 커밋은 push/release GO가 아니다.**
-> 다음 한 걸음은 `검증 게이트 적격성` 체계다: 제품 결함을 다시 심었을 때 기존 gate가 bounded 시간 안에
-> **기대한 이유로** red가 되는 kill proof를 CI에 보존한다. assertion 개수나 NEXT의 수동 음성 대조는
-> 적격성 증거가 아니다. `…-99f19a`가 편집 없이 설계안을 준비하고, GLG+GPT 합의 뒤 구현한다.
->
-> §F·§H는 닫힌 제품 수선의 근거이고 §G는 새 검증 lane의 사고 기록이다. native-push의 기회적 host 실측을
-> LIVE acceptance로 과장하지 말고, gate qualification이 끝나기 전에는 이 commit을 push/prepare하지 마라.
+- **Current:** §11-7 ordering probe가 게이트와 함께 main에 있다 — `4a629be`, push 완료.
+  `pnpm check` EXIT=0, gate-qualification **35/35 killed**(lane `probe-ordering` 19).
+  계약 아래 첫 LIVE pair도 돌았고 **malformed 0**이지만 **verdict는 `inconclusive`** — 계측기는 admissible,
+  측정은 아직 owed다. 수치·근거는 `docs/acp-backend-rail.md` **§11-7-b**에 있다. 여기서 반복하지 않는다.
+- **Next:** (1) 모델이 지연 창 안에서 **호출을 시도하도록** 프롬프트/전략을 바꿔 LIVE pair 재실행 →
+  (2) D1에서 측정된 id를 지목하는 런타임 `No such tool`이 뜨는지로 delta-B 재판정 →
+  (3) 그때만 원인·처방을 논한다. probe 1회는 결론이 아니다.
+- **검증 미결 — 다음 세션이 먼저 닫을 것:**
+  - **판정 불가 자체가 미결이다.** A(대기 가설)는 이 서버·이 경로에서 반박 *방향*이지만 승격 가능한 증거는
+    없다. `inconclusive`를 "문제 없음"으로 읽지 마라.
+  - **중복 마커 정책이 열려 있다.** `deriveRunFacts`는 `events.find()`로 **첫 마커만** 읽는다.
+    `tools_list_response_forwarded`는 first-wins가 옳지만(클라이언트가 tools/list를 여러 번 부를 수 있고
+    wire availability는 최초 forward다), **한 run에 phase end가 두 번 나오면 두 번째가 조용히 무시된다.**
+    parser가 아니라 **classifier 정책**이고 §11-7 문서 측 합의가 필요하다 — 임의로 닫지 마라.
+  - **D1 evidence 문자열이 ran-ahead를 노출하지 않는다.** 분류는 계약대로 inconclusive가 맞지만, artifact만
+    읽어서는 "턴이 wire보다 앞섰다"는 관측이 안 보인다. 판정 결함이 아니라 진단 가능성 결함이다.
+  - **계약 이전 artifact 2개는 재파싱하면 INVALIDATED다**(ts/tsMs 1 ms straddle 실측 2건). 포렌식 기록으로만
+    쓰고 승격 근거로 재사용하지 마라.
+- **Blocker:** 없음. LIVE 재실행은 실 API를 쓰므로 GLG 승인 사안이다.
+- **읽을 곳:** `docs/acp-backend-rail.md` §11-7 → §11-7-a(as built) → **§11-7-b(첫 측정)** →
+  `scripts/check-probe-ordering.ts` 헤더(5축 + review-pinned 목록) → `scripts/lib/probe-event-log.ts` 문 계약.
+- **Do not touch:** 이 증거로 product turn loop(`backend.ts`)·rail 처방·릴리즈 노트를 바꾸지 마라.
+  classifier/verdict 의미는 §11-7 문서 합의 없이 손대지 않는다. **LIVE 재판정 없이 0.12.11을 컷하지 마라.**
+
+## LEDGER — 0.12.10 컷 (닫힘, 2026-07-27 출하)
+
+> 아래 A–I·G는 **닫힌 컷의 사고 이력**이다. 결과는 `CHANGELOG.md` 0.12.10에, 설계는
+> `docs/acp-backend-rail.md` §11에, kill-proof는 `scripts/mutants/*.json`에 승격돼 있다.
+> 되묻기 전에 거기부터 읽어라. 0.12.10 스코프는 acp 0.62.0 핀 + rail 문서 + pi 특별대우 잔재 제거 +
+> AGENTS 예산 게이트 넷이었고, 넷 다 닫혔다.
 
 - **계기:** GLG가 실사용에서 ACP Claude가 entwurf를 못 쓰는 걸 봤다. 문서상 shipped인데 실제로는
   형제에게 닿지 못하는 상태였다. 번들 `entwurf-bridge` MCP 도구가 세션 tool schema에서 빠지는 증상.
-- **Current:** v0.12.9가 tag/GitHub/npm `latest`로 출하됐다. #52·#54·#49는 닫혔고 #55는 비차단
-  subtraction finding 수집함으로 연다. pi 0.82.1 = upstream latest.
-  §F·§H까지의 전체 워킹트리를 이 **commit boundary**로 묶었다. 파일 수나 assertion 수를 품질 지표로
-  읽지 마라. 이 경계의 독립 pre-commit 증거는 `pnpm check` EXIT=0, `git diff --check` PASS,
-  tarball 275다. push와 release authority는 없고, 다음 검증 적격성 작업은 이 clean baseline에서 시작한다.
-- **읽을 곳:** `AGENTS.md` → `docs/acp-backend-rail.md` **§11** → `ROADMAP.md` "번들 MCP readiness race"
-  → `pi-extensions/lib/acp/backend.ts`(turn loop) → `scripts/smoke-acp-v2-send-live.ts` 헤더.
-  §11이 §1–§10보다 최신이며 우선한다.
 - **A. dep 핀 업 — 완료(2026-07-27).** `claude-agent-acp` 0.61.0 → **0.62.0**. ROADMAP "Dep bump" 트랙
   절차대로 `check-acp-sdk-surface`를 0.62.0 / claude-agent-sdk 0.3.219로 옮기고 green 확인.
   **성격은 dependency refresh다** — upstream `dist/`는 0.61.0과 바이트 동일이고 explicit readiness wait를
@@ -472,15 +482,9 @@
 
 ## QUEUE — 순서는 고정, 각 lane은 다시 검수
 
-1. **0.12.10 — acp 0.62.0 핀 + rail 문서 + pi 잔재 제거 + AGENTS 예산 게이트.** 위 NOW의 A·D·E.
-   **blocker 7건 + 재검수 finding 10건 모두 닫혔고, GPT `…-01deb3`가 라운드 2에서 코드/게이트 GO를 줬다**
-   (2026-07-27 14:26; GPT가 focused를 독립 재실행해 121/42/30 PASS + `git diff --check` PASS 확인).
-
-   **현재 경계:** GLG 지시로 §F·§H 전체를 먼저 커밋해 clean baseline을 만든다. 이 커밋은 push 권한이나
-   0.12.10 prepare 권한이 아니다. **다음 한 걸음은 검증 게이트 적격성 체계**다. 최소 계약은
-   production subject · 독립 oracle · committed kill proof · expected failure signature · timeout ·
-   refusal byte-identity · operation/state 곱집합이다. 이번 release에서 touch한 고위험 gate를 우선
-   적격화하고, 그 결과를 독립 검수한 뒤에만 push/exact-SHA CI/prepare 순서로 복귀한다.
+1. **0.12.10 — 닫힘(2026-07-27 출하).** acp 0.62.0 핀 + rail 문서 + pi 잔재 제거 + AGENTS 예산 게이트
+   넷 다 들어갔고, 검증 게이트 적격성(kill-proof) 체계도 같이 섰다. 아래 소절은 그 컷의 판정 기록이며
+   **다시 실행할 작업이 아니다** — 결과는 `CHANGELOG.md` 0.12.10을 읽어라.
 
    **판정 완료된 2건 — 되묻지 마라:**
    - **F-7은 describe로 확정(GPT 승인).** own-inbox 강제는 `README.md:530`·`:616`·
@@ -490,24 +494,23 @@
    - **`entwurf-mailbox-guard.ts`는 삭제됐다(GPT 판정).** production importer 0이었고, production-shaped
      gate가 별도 구현만 green으로 만드는 건 false assurance였다. 되살리지 마라.
 
-   **협업 배선(2026-07-27):** GLG가 검수를 GPT 세션에 맡기고 구현을 Claude 세션에 맡겼다. GPT 세션은
-   컨텍스트 한계로 **셋이 소진**됐다(`…-01c13f` → `…-ef188b` → `…-2786af`). 새 세션에 맥락을 다시 실어
-   보내는 비용이 크므로 **NEXT.md가 인수인계면이다** — 메시지가 아니라 이 파일에 남겨라.
-   검수 요청은 `entwurf_v2`로 살아 있는 GPT 세션에 보내고, 판정이 오면 여기에 반영한다.
-   세 atomic set이다: ⑴ 커밋된 `2bd5564`(dep 핀) ⑵ 커밋된 `3e8f4c8`(rail §11) ⑶ **이번 boundary commit**
-   (AGENTS 압축 + 예산 게이트 + capability-domain 정리 + surface/AGY permission 수선). ⑶ 다음에는
-   **검증 적격성 commit을 별도로 쌓고**, 둘을 함께 검수한 뒤 push(GLG 명시 요청 필요) → exact-SHA CI 3잡 →
-   `prepare 0.12.10`(CHANGELOG + 버전 + LIVE release-gate 17스텝)으로 간다.
-   **17스텝 aggregate는 readiness race 표본 3을 낳은 바로 그 조건이다** — green이든 red든 상관 조건의
-   표본이 하나 나온다. 다만 그건 부산물이고, red가 나와도 §11-7 probe 없이 인과 판정은 하지 않는다.
+   **협업 배선 — 이 규칙은 계속 산다.** GLG가 검수를 GPT 세션에, 구현을 Claude 세션에 맡긴다.
+   두 하네스 모두 컨텍스트 한계로 세션이 소진되므로(0.12.10 컷에서 GPT 셋, 07-28에 구현·검수 페어가
+   동시에) **NEXT.md가 인수인계면이다** — 메시지가 아니라 이 파일에 남겨라. 검수 요청은 `entwurf_v2`로
+   살아 있는 세션에 보내고, 판정이 오면 여기에 반영한다.
+   **17스텝 release-gate aggregate는 readiness race 표본 3을 낳은 바로 그 조건이다** — 다음 릴리즈에서
+   green이든 red든 상관 조건의 표본이 하나 더 나온다. 그건 부산물이고, red가 나와도 §11-7 측정 없이
+   인과 판정은 하지 않는다.
    **검증 규율(이번 컷에서 두 번 샜다):** ⓐ `pnpm check`를 파이프로 받지 마라 —
    `pnpm check | tail`은 `tail`의 종료 코드를 반환해 실패를 green으로 보고한다. 로그 파일 + `EXIT=$?`로
    분리한다. ⓑ focused 게이트만 돌리고 끝내지 마라 — GPT의 focused 6개 PASS 뒤에도
    `check-entwurf-v2-spawn-production`이 red였다(테스트 기대값만 옮기고 프로덕션 메시지를 안 고친 것).
    ⓒ `pi-extensions/` 소스를 고쳤으면 `pnpm run build-bridge`를 먼저 돌려라 — 안 하면
    `check-bridge-delivery`가 stale dist로 red다.
-2. **readiness — §11-7 ordering probe 구현.** 0.12.10 뒤. ordering 결과를 A/B/C/D로 **분류**하고,
-   causal attribution에 무엇이 더 필요한지 정한 뒤에만 처방을 논한다. probe 1회는 결론이 아니다.
+2. **readiness — §11-7 ordering probe: 구현 완료(`4a629be`), 측정 미결.** probe·게이트·mutant 19종은
+   main에 있다. 남은 것은 **판정 가능한 LIVE 측정**이다 — 계약 아래 첫 pair는 `inconclusive`(§11-7-b).
+   ordering 결과를 A/B/C/D로 **분류**하고, causal attribution에 무엇이 더 필요한지 정한 뒤에만 처방을
+   논한다. probe 1회는 결론이 아니다. 위 NOW의 "검증 미결" 4건이 이 lane의 실제 다음 작업이다.
 3. **#48 — Cortex ACP support.** reference adapter가 모델을 outbound sibling dispatch까지 데려간다는 것을
    증명한 뒤에 두 번째 backend를 태운다.
    - PR #40은 OPEN·`DIRTY`, head `3dd6f5fa530c2f91e436abc3b4d79dbc2adc4d53` — #48이 인용한 `d8baf79`와 다르고,
@@ -530,6 +533,18 @@
    인터페이스부터 복사하지 않는다. 현재 호스트는 tmux 3.6a, zmx는 PATH에 없다. current production의
    fresh-mint 빈칸과 실제 repro/demo 소비자를 다시 inventory한 뒤 tmux/zmx primitive 경계를 정한다.
    mux는 identity/lineage/dispatch authority가 아니다.
+
+## RECENT — §11-7 probe landing (2026-07-28)
+
+- `4a629be` push 완료(`a3f74e2..4a629be`). 12파일 +2999/-13: probe 드라이버·공유 로그·순수 분류기·
+  fixture 계측·결정론 게이트·LIVE 계측기·mutant 19종. 오늘 커밋은 이것 하나다.
+- pre-commit 훅이 `pnpm check` 전체를 돌므로 커밋에 수 분 걸린다. 파이프로 받지 말고 로그 파일 +
+  `EXIT=$?`로 분리해라(§G 규율 ⓐ와 같은 함정을 오늘 또 밟았다).
+- GPT 검수 3라운드가 접혀 있다: ⑴ B 승격 사다리(ranAhead·측정 id·same-ms) ⑵ event-log **envelope** 계약
+  ⑶ event-log **payload** 계약. 3라운드 도중 자격심사가 실제 회귀를 잡았다 — payload 규칙이 envelope
+  claim을 대신 증명해 `PROBE-LOG-ENVELOPE-SCHEMA` mutant가 SURVIVED. 테스트 라인을 payload 규칙 없는
+  `run_start`로 옮겨 격리를 복구했다. **mutant는 자기 코드로 죽어야 한다.**
+- 0.12.11은 컷하지 않는다(GLG). CHANGELOG `## Unreleased`에 이 커밋 하나가 있다.
 
 ## RECENT — 0.12.9 closure (2026-07-26~27)
 
