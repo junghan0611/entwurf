@@ -88,18 +88,23 @@ function claudeContextWindow(model: { id: string; contextWindow: number }): numb
 // snowflake/cortex model source, so this surface is HAND-CURATED. Every id
 // carries the reserved `cortex-` prefix (§9-1): the prefix is the SINGLE routing
 // authority (backend-adapter.ts `routeModel`) and keeps the ids off the Claude
-// native ids Cortex routes to (`cortex-claude-sonnet-4-6` vs the unprefixed
-// `claude-sonnet-5` the claude adapter owns). `resolveLaunch` strips the prefix
-// to recover the native `-m` value (`cortex-auto` → no -m; Cortex picks its own
-// default). Adding an id here is the same verify-both-axes commitment as the
-// Claude set — do not extend casually.
+// native ids Cortex routes to (`cortex-claude-sonnet-5` vs the unprefixed
+// `claude-sonnet-5` the claude adapter owns). `routeModel` strips the prefix to
+// recover the native id, which is enforced per-turn via
+// session/set_config_option — never a launch `-m` pin (CP0-M).
+//
+// The 4-row set is the GLG-decided curation (2026-07-29) — a subset of the 11
+// native ids cortex v1.1.52 exposed live when authenticated. A curated id that
+// the running cortex no longer serves fails LOUD at set-model, before the
+// prompt (measured: `Unsupported model: …` names the live set). Adding an id
+// here is the same verify-both-axes commitment as the Claude set — do not
+// extend casually.
 export const CORTEX_MODEL_PREFIX = "cortex-";
 export const SUPPORTED_CORTEX_MODEL_IDS = [
 	"cortex-auto",
-	"cortex-claude-opus-4-6",
-	"cortex-claude-haiku-4-5",
-	"cortex-claude-sonnet-4-6",
-	"cortex-openai-gpt-5.2",
+	"cortex-claude-opus-5",
+	"cortex-claude-sonnet-5",
+	"cortex-openai-gpt-5.4",
 ] as const;
 
 // Hand-set conservative context window. Cortex reports the LIVE window via its
@@ -109,14 +114,16 @@ const CORTEX_CONTEXT_DEFAULT = 200_000;
 
 /**
  * The curated Cortex model rows handed to the single `entwurf` provider via
- * `allCuratedModels()`. Derived from the Claude anchor's registry metadata
- * (Cortex's default model family is Claude) with id / name / contextWindow
- * overridden; the `cortex-` prefix keeps them from colliding with the Claude
- * curated ids. Same row shape as `curatedClaudeModels()` (AcpModelRow).
+ * `allCuratedModels()`. The two Claude rows ride their OWN registry base
+ * (opus-5 / sonnet-5); `auto` (default family Claude) and the GPT row (no pi-ai
+ * source) ride the sonnet-5 base as a metadata floor. id / name / contextWindow
+ * are overridden; the `cortex-` prefix keeps them from colliding with the
+ * Claude curated ids. Same row shape as `curatedClaudeModels()` (AcpModelRow).
  */
 export function curatedCortexModels() {
-	const base = requireRegistryModel(ANTHROPIC_MODELS_ALL, "claude-sonnet-5");
-	const row = (id: string, name: string) => ({
+	const sonnetBase = requireRegistryModel(ANTHROPIC_MODELS_ALL, "claude-sonnet-5");
+	const opusBase = requireRegistryModel(ANTHROPIC_MODELS_ALL, "claude-opus-5");
+	const row = (id: string, name: string, base: RegistryModel) => ({
 		id,
 		name,
 		reasoning: base.reasoning,
@@ -126,11 +133,10 @@ export function curatedCortexModels() {
 		maxTokens: base.maxTokens,
 	});
 	return [
-		row("cortex-auto", "Cortex · Auto"),
-		row("cortex-claude-opus-4-6", "Cortex · Claude Opus 4.6"),
-		row("cortex-claude-haiku-4-5", "Cortex · Claude Haiku 4.5"),
-		row("cortex-claude-sonnet-4-6", "Cortex · Claude Sonnet 4.6"),
-		row("cortex-openai-gpt-5.2", "Cortex · OpenAI GPT-5.2"),
+		row("cortex-auto", "Cortex · Auto", sonnetBase),
+		row("cortex-claude-opus-5", "Cortex · Claude Opus 5", opusBase),
+		row("cortex-claude-sonnet-5", "Cortex · Claude Sonnet 5", sonnetBase),
+		row("cortex-openai-gpt-5.4", "Cortex · OpenAI GPT-5.4", sonnetBase),
 	];
 }
 

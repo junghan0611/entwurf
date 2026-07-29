@@ -29,6 +29,7 @@
 // which is exactly the "mailbox absence by design" the plugin commits to
 // (no meta-bridge hook on this child's settings surface → no mailbox).
 
+import { createHash } from "node:crypto";
 import {
 	existsSync,
 	lstatSync,
@@ -42,6 +43,8 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
+import type { AcpMcpServer } from "./config.js";
 
 /** Operator's real Claude config dir — the symlink-passthrough SOURCE. */
 export const CLAUDE_REAL_CONFIG_DIR = join(homedir(), ".claude");
@@ -222,149 +225,223 @@ export function ensureClaudeConfigOverlay(
 }
 
 // ============================================================================
-// Cortex config overlay — isolate `cortex acp serve`'s Snowflake home from the
-// operator's `~/.snowflake/`, while passing backend auth through (trust
-// invariant / AGENTS §Operating boundaries). The cortex column of the ACP rail
-// (docs/acp-backend-rail.md §4/§6).
+// Cortex dual-HOME overlay — the as-measured containment for `cortex acp serve`
+// (CP0 audit 2026-07-29, Cortex Code v1.1.52; docs/acp-backend-rail.md §4/§11-8).
 // ============================================================================
 //
-// Path-resolution invariant (verified in PR #40 against Cortex Code v1.1.8 bundle
-// source — the `ZO()` home resolver and `cx()` cortex-dir helper):
+// Why this is NOT the claude-shaped `SNOWFLAKE_HOME`-only overlay PR #40 shipped
+// (each point is a measured defect, not a preference — §11-8 D-numbers):
 //
-//   ZO()  = process.env.SNOWFLAKE_HOME ?? path.join(os.homedir(), ".snowflake")
-//   cx()  = path.join(ZO(), "cortex")
-//   connections.toml = join(ZO(), "connections.toml")            // AUTH
-//   config.toml      = join(ZO(), "config.toml")                 // connection config
-//   cortex/cache     = join(cx(), "cache")                       // AUTH credential cache
-//   cortex/skills    = join(cx(), "skills")                      // operator skills
-//   cortex/{conversations,profiles,memory,logs,mcp.json,hooks}  // operator state — hidden
+//   - D2: cortex reads `CONFIG_DIRS = [".claude", ".cortex"]` at `homedir()` and
+//     `~/.claude/skills` — a SNOWFLAKE_HOME redirect cannot move that axis. An
+//     overlay session carrying only auth symlinks still advertised the
+//     operator's 42 `~/.claude/skills` entries. Cortex has no
+//     `CLAUDE_CONFIG_DIR`-equivalent redirect knob (string occurs 0 times in the
+//     binary), so the only containment that closes the leak is an ISOLATED HOME:
+//     measured global-scope skill count 0, hook trace 0, bundled/project surface
+//     intact. Scope note: `homedir()`-anchored *operator-global* state is what
+//     the isolation closes; explicit cwd PROJECT scope (`<cwd>/.claude/*`) is
+//     retained by contract — a sibling working in a repo sees that repo's
+//     declared project surface.
+//   - D3: `CORTEX_HOME` beats `SNOWFLAKE_HOME` in cortex's own resolver, so one
+//     ambient operator variable would silently bypass the whole overlay. The
+//     adapter REFUSES to spawn when `CORTEX_HOME` is present at all (empty
+//     string included) — same presence-refusal family as the ordering probe's
+//     `CLAUDE_CODE_EXECUTABLE` precondition (backend-adapter.ts).
+//   - D9: cortex ACP `newSession` reads only `cwd` and `_meta` — the wire
+//     `mcpServers` param the backend-invariant turn loop passes is IGNORED. The
+//     explicit `entwurfProvider.mcpServers` (envelope-enriched) are therefore
+//     PROJECTED into the overlay-private `$SNOWFLAKE_HOME/cortex/mcp.json` (the
+//     door `cortex mcp add` writes). Exact-author every spawn; an entry type the
+//     file cannot represent fails loud BEFORE spawn (no silent drop).
+//   - D10: an isolated HOME also cuts `~/.pi/agent` (garden store, sockets,
+//     spawn surface) off the bundled entwurf-bridge — tools reach the model but
+//     see an EMPTY garden. Dual-HOME closes it: the `entwurf-bridge` mcp.json
+//     entry ALONE gets `HOME=<real operator home>` restored; every other MCP
+//     child stays in the isolated home. The real home is captured by the parent
+//     as an absolute path BEFORE spawn — never re-derived inside the child.
+//   - D4: cortex self-updates on launch by default, and `acp serve` accepts no
+//     `--no-auto-update` (the global flag position boots a TUI with exit 0 —
+//     protocol corruption, not a server). The one remaining door is the overlay
+//     writing `"autoUpdate": false` into its own `cortex/settings.json`. That is
+//     a mid-turn self-replacement OFF switch, not a version pin.
+//   - D5/F: auth passthrough is the measured MINIMUM: `connections.toml`,
+//     `config.toml` (optional — absent on the measured host),
+//     `cortex/cache/credential_cache` (auth succeeded with exactly this set).
+//     The WHOLE `cortex/cache` leaks operator tool_outputs/tip history; operator
+//     `cortex/skills` and operator `cortex/mcp.json` are denied outright.
+//     Symlink-through only — entwurf never copies/parses/mediates the Snowflake
+//     credential (AGENTS §ACP Plugin Boundary, Hard Rule 9).
 //
-// Setting SNOWFLAKE_HOME relocates the entire base, so the overlay owns the base
-// dir (= SNOWFLAKE_HOME) and its `cortex/` subtree. We symlink ONLY the auth +
-// skills surfaces through to the operator's real `~/.snowflake/`; every other
-// entry is left unlinked so Cortex materializes fresh empty state inside the
-// overlay rather than reading operator conversations / profiles / memory / hooks
-// / MCP config. Bundled Snowflake skills live under `~/.local/share/cortex/`,
-// OUTSIDE SNOWFLAKE_HOME, so they are unaffected. The bridge NEVER copies,
-// parses, or mediates Snowflake credentials — symlink-through only.
-export const CORTEX_REAL_HOME = join(homedir(), ".snowflake");
-export const CORTEX_CONFIG_OVERLAY_HOME = join(homedir(), ".pi", "agent", "cortex-config-overlay");
+// The overlay is SESSION/CHILD-SCOPED, never a static shared dir: two residents
+// with different envelopes/configs would race one mcp.json. Scope id =
+// `<host pid>-<sha256(scopeKey) 12 hex>`; the scope dir is torn down and
+// exact-rewritten on every spawn (the prior child for the key is already dead —
+// backend.ts tears it down before a "new" decision spawns), which is also the
+// memory containment: nothing cortex wrote into the isolated home survives into
+// the next session. Scope dirs whose host pid is gone are swept opportunistically.
 
-// Base-level (`~/.snowflake/*`) auth passthrough. connections.toml is the
-// credential/connection definition Cortex reads on launch; config.toml carries
-// connection defaults. Symlink-through only.
-const CORTEX_OVERLAY_PASSTHROUGH_BASE: ReadonlySet<string> = new Set(["connections.toml", "config.toml"]);
+/** Root under which per-session cortex dual-HOME overlays are materialized. */
+export const CORTEX_OVERLAYS_ROOT = join(homedir(), ".pi", "agent", "cortex-overlays");
 
-// cortex-subdir (`~/.snowflake/cortex/*`) passthrough. `cache` holds the
-// credential token cache (auth — keep working); `skills` mirrors the operator
-// skills passthrough the claude overlay grants.
-const CORTEX_OVERLAY_PASSTHROUGH_CORTEX: ReadonlySet<string> = new Set(["cache", "skills"]);
+/** The name of the ONE mcp.json entry whose child gets the real operator HOME
+ *  restored (D10 dual-HOME). Everything else stays in the isolated home. */
+export const CORTEX_DUAL_HOME_BRIDGE_SERVER = "entwurf-bridge";
 
-// cortex-subdir state swept every spawn (Memory containment, VERIFY L5). pi owns
-// persistence; the backend must not run a parallel memory/conversation layer
-// that survives across pi sessions. Overlay-owned empty trees, nuked + recreated
-// each spawn so nothing Cortex wrote in a prior session leaks into the next.
-const CORTEX_OVERLAY_SWEPT_DIRS: ReadonlySet<string> = new Set(["conversations", "memory", "profiles", "logs"]);
+export interface CortexOverlayParams {
+	/** Session/child scope discriminator (PI_SESSION_ID, else a cwd-derived key).
+	 *  Identity for overlay-dir separation only — never an address authority. */
+	scopeKey: string;
+	/** Normalized + envelope-enriched MCP servers to project into mcp.json. */
+	mcpServers: readonly AcpMcpServer[];
+	/** Absolute real operator HOME captured by the parent BEFORE spawn (D10). */
+	realHome: string;
+	/** Real snowflake home (auth source). Defaults to `<realHome>/.snowflake`. */
+	realSnowflakeHome?: string;
+	/** Overlay root override (tests). Defaults to CORTEX_OVERLAYS_ROOT. */
+	overlaysRoot?: string;
+	/** pid-liveness probe override (tests) for the dead-scope sweep. */
+	isPidAlive?: (pid: number) => boolean;
+}
 
-function cortexSymlinkPassthrough(realBase: string, overlayBase: string, entry: string): void {
-	const realPath = join(realBase, entry);
-	const overlayPath = join(overlayBase, entry);
-	if (!existsSync(realPath)) {
-		try {
-			lstatSync(overlayPath);
-			rmSync(overlayPath, { recursive: true, force: true });
-		} catch {
-			// Doesn't exist — fine.
+export interface CortexOverlayResult {
+	/** Isolated HOME for the cortex child (spawn env HOME). */
+	home: string;
+	/** Isolated snowflake home (spawn env SNOWFLAKE_HOME) = `<home>/.snowflake`. */
+	snowflakeHome: string;
+	/** The scope dir owning both (for diagnostics/teardown). */
+	scopeDir: string;
+}
+
+/** Deterministic per-(host process, session key) overlay dir name. */
+export function cortexOverlayScopeId(scopeKey: string, pid: number = process.pid): string {
+	const digest = createHash("sha256").update(scopeKey).digest("hex").slice(0, 12);
+	return `${pid}-${digest}`;
+}
+
+/** Overlay-authored `$SNOWFLAKE_HOME/cortex/settings.json` — D4's one door. */
+export function cortexOverlaySettingsJson(): string {
+	return `${JSON.stringify({ autoUpdate: false }, null, "\t")}\n`;
+}
+
+/**
+ * Project the (envelope-enriched) explicit server list into cortex's
+ * `$SNOWFLAKE_HOME/cortex/mcp.json` shape (D9). Only stdio entries are measured
+ * through this door — an http/sse entry fails loud BEFORE spawn rather than
+ * being silently dropped. The `entwurf-bridge` entry alone carries
+ * `HOME=<realHome>` (D10); a bridge-declared HOME env is overridden, not merged.
+ */
+export function projectCortexMcpJson(servers: readonly AcpMcpServer[], realHome: string): string {
+	const out: Record<string, { type: "stdio"; command: string; args: string[]; env: Record<string, string> }> = {};
+	for (const server of servers) {
+		if ("type" in server && (server.type === "http" || server.type === "sse")) {
+			throw new Error(
+				`entwurf: cortex mcp.json projection cannot represent ${server.type} server ` +
+					`${JSON.stringify(server.name)} — only stdio entries are measured through ` +
+					`$SNOWFLAKE_HOME/cortex/mcp.json (CP0 D9). Remove it from entwurfProvider.mcpServers ` +
+					`for cortex models or front it with a stdio bridge.`,
+			);
 		}
-		return;
+		const stdio = server as { name: string; command: string; args: string[]; env: { name: string; value: string }[] };
+		const env: Record<string, string> = {};
+		for (const kv of stdio.env) env[kv.name] = kv.value;
+		if (stdio.name === CORTEX_DUAL_HOME_BRIDGE_SERVER) env.HOME = realHome;
+		out[stdio.name] = { type: "stdio", command: stdio.command, args: [...stdio.args], env };
 	}
+	return `${JSON.stringify({ mcpServers: out }, null, "\t")}\n`;
+}
+
+function cortexPidAlive(pid: number): boolean {
 	try {
-		const existing = lstatSync(overlayPath);
-		if (existing.isSymbolicLink()) {
-			if (readlinkSync(overlayPath) === realPath) return;
-			unlinkSync(overlayPath);
-		} else {
-			rmSync(overlayPath, { recursive: true, force: true });
-		}
-	} catch {
-		// Doesn't exist — fall through to symlink.
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		// EPERM = alive but not ours; anything else (ESRCH) = gone.
+		return (error as NodeJS.ErrnoException).code === "EPERM";
 	}
+}
+
+/**
+ * Opportunistic GC of overlay scope dirs whose HOST pid is gone (process
+ * resources only — the overlay holds no records/transcripts worth preserving;
+ * conversations state is contained BY DESIGN, Hard Rule 8 does not apply to it).
+ * Entries not matching the scope-id grammar are left alone.
+ */
+export function sweepDeadCortexOverlays(
+	overlaysRoot: string,
+	isPidAlive: (pid: number) => boolean = cortexPidAlive,
+): void {
+	let entries: string[];
+	try {
+		entries = readdirSync(overlaysRoot);
+	} catch {
+		return; // root absent — nothing to sweep
+	}
+	for (const entry of entries) {
+		const match = /^(\d+)-[0-9a-f]{12}$/.exec(entry);
+		if (!match) continue;
+		const pid = Number(match[1]);
+		if (pid === process.pid) continue;
+		if (isPidAlive(pid)) continue;
+		try {
+			rmSync(join(overlaysRoot, entry), { recursive: true, force: true });
+		} catch {
+			// Best-effort GC; a stuck dir is retried on the next spawn.
+		}
+	}
+}
+
+/** Symlink `realPath` at `overlayPath` when the operator actually has it.
+ *  The scope dir is freshly rebuilt by the caller, so no stale-link repair. */
+function cortexLinkIfExists(realPath: string, overlayPath: string): void {
+	if (!existsSync(realPath)) return;
 	try {
 		symlinkSync(realPath, overlayPath);
 	} catch (error) {
 		console.error(
-			`[entwurf:cortex-overlay] symlink failed for ${entry}: ${error instanceof Error ? error.message : String(error)}`,
+			`[entwurf:cortex-overlay] symlink failed for ${overlayPath}: ${error instanceof Error ? error.message : String(error)}`,
 		);
 	}
 }
 
 /**
- * The launch-env override a cortex ACP child spawn carries. STATIC (no settings
- * dependence): redirect Cortex's `ZO()` Snowflake-home resolver at the pi-owned
- * overlay, and pin operator profile auto-apply OFF (profiles can inject
- * settings / system-prompt / MCP). process.env wins at the spawn merge, so an
- * operator who explicitly exports SNOWFLAKE_HOME keeps full control.
+ * Materialize the session-scoped cortex dual-HOME overlay: tear down the scope
+ * dir and exact-rewrite it (auth symlinks + authored settings.json/mcp.json).
+ * Returns the isolated HOME/SNOWFLAKE_HOME the spawn env must carry.
  */
-export function cortexLaunchEnvDefaults(overlayHome: string = CORTEX_CONFIG_OVERLAY_HOME): {
-	SNOWFLAKE_HOME: string;
-	CORTEX_DISABLE_AUTO_APPLY_PROFILES: string;
-} {
-	return { SNOWFLAKE_HOME: overlayHome, CORTEX_DISABLE_AUTO_APPLY_PROFILES: "1" };
-}
-
-/**
- * Materialize / refresh the Cortex config overlay. Idempotent: re-symlinks auth
- * (connections.toml / config.toml / credential cache) + skills from the real
- * `~/.snowflake/`, sweeps overlay-owned conversation / profile / memory / log
- * state, and strips any stale operator-state symlink off the current allowlist.
- * Safe to call on every cortex ACP session bootstrap.
- */
-export function ensureCortexConfigOverlay(
-	realHome: string = CORTEX_REAL_HOME,
-	overlayHome: string = CORTEX_CONFIG_OVERLAY_HOME,
-	overlayCortexDir: string = join(overlayHome, "cortex"),
-): void {
-	mkdirSync(overlayHome, { recursive: true });
-	mkdirSync(overlayCortexDir, { recursive: true });
-
-	const realCortexDir = join(realHome, "cortex");
-
-	// Auth passthrough — base level (connections.toml, config.toml).
-	for (const entry of CORTEX_OVERLAY_PASSTHROUGH_BASE) {
-		cortexSymlinkPassthrough(realHome, overlayHome, entry);
+export function ensureCortexDualHomeOverlay(params: CortexOverlayParams): CortexOverlayResult {
+	if (!params.realHome || !params.realHome.startsWith("/")) {
+		throw new Error(
+			`entwurf: cortex dual-HOME overlay requires an absolute realHome captured by the parent (got ${JSON.stringify(params.realHome)})`,
+		);
 	}
-	// Auth + skills passthrough — cortex subdir (cache, skills).
-	for (const entry of CORTEX_OVERLAY_PASSTHROUGH_CORTEX) {
-		cortexSymlinkPassthrough(realCortexDir, overlayCortexDir, entry);
-	}
+	const overlaysRoot = params.overlaysRoot ?? CORTEX_OVERLAYS_ROOT;
+	const realSnowflake = params.realSnowflakeHome ?? join(params.realHome, ".snowflake");
+	sweepDeadCortexOverlays(overlaysRoot, params.isPidAlive ?? cortexPidAlive);
 
-	// Memory containment — sweep overlay-owned state dirs every spawn, replacing
-	// any prior symlink to operator data and discarding overlay-written state from
-	// previous sessions.
-	for (const entry of CORTEX_OVERLAY_SWEPT_DIRS) {
-		const overlayPath = join(overlayCortexDir, entry);
-		rmSync(overlayPath, { recursive: true, force: true });
-		mkdirSync(overlayPath, { recursive: true });
-	}
+	const scopeDir = join(overlaysRoot, cortexOverlayScopeId(params.scopeKey));
+	// Exact rewrite (never merge): the prior child for this scope key is already
+	// torn down (backend.ts closes it before a "new" decision spawns), so
+	// everything it wrote — conversations, logs, $HOME dotfiles — is discarded
+	// here. rmSync does not follow symlinks, so the real auth files are untouched.
+	rmSync(scopeDir, { recursive: true, force: true });
 
-	// Stale cleanup — remove any overlay cortex/ entry NOT on the passthrough/swept
-	// allowlist that is a symlink (a migration artifact pointing at operator state:
-	// mcp.json, hooks, secrets, …). Cortex-authored regular files/dirs are left
-	// alone so within-overlay runtime state is not wiped mid-life.
-	let entries: string[];
-	try {
-		entries = readdirSync(overlayCortexDir);
-	} catch {
-		entries = [];
-	}
-	for (const entry of entries) {
-		if (CORTEX_OVERLAY_PASSTHROUGH_CORTEX.has(entry)) continue;
-		if (CORTEX_OVERLAY_SWEPT_DIRS.has(entry)) continue;
-		const overlayPath = join(overlayCortexDir, entry);
-		try {
-			if (lstatSync(overlayPath).isSymbolicLink()) rmSync(overlayPath, { force: true });
-		} catch {
-			// Doesn't exist — fine.
-		}
-	}
+	const home = join(scopeDir, "home");
+	const snowflakeHome = join(home, ".snowflake");
+	const cortexDir = join(snowflakeHome, "cortex");
+	mkdirSync(join(cortexDir, "cache"), { recursive: true });
+
+	// D5/F — measured-minimum auth passthrough (symlink-through only).
+	cortexLinkIfExists(join(realSnowflake, "connections.toml"), join(snowflakeHome, "connections.toml"));
+	cortexLinkIfExists(join(realSnowflake, "config.toml"), join(snowflakeHome, "config.toml"));
+	cortexLinkIfExists(
+		join(realSnowflake, "cortex", "cache", "credential_cache"),
+		join(cortexDir, "cache", "credential_cache"),
+	);
+
+	// D4 — runtime self-replacement off; D9 — explicit-server projection.
+	writeFileSync(join(cortexDir, "settings.json"), cortexOverlaySettingsJson(), "utf8");
+	writeFileSync(join(cortexDir, "mcp.json"), projectCortexMcpJson(params.mcpServers, params.realHome), "utf8");
+
+	return { home, snowflakeHome, scopeDir };
 }

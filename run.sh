@@ -1186,24 +1186,25 @@ smoke_acp_cortex_live() {
   # dignity, invariant #7): cortex is a deterministic-gated (check-acp-cortex) +
   # on-demand-live surface, NEVER a claude-release blocker — so it is deliberately
   # absent from release-gate's 11-smoke ACP acceptance floor. Drives one real
-  # cortex ACP turn through the entwurf provider path. HONEST-SKIP (exit 0) when
-  # LIVE!=1 OR `cortex` is not on PATH — the live turn needs `cortex` installed +
-  # a prior `cortex auth login` (Hard Rule #8: entwurf never provides/proxies the
-  # Snowflake credential — it reads the operator's existing local auth through the
-  # overlay). PR #40 called this `smoke-cortex`; the canonical family name is
-  # smoke-acp-cortex-live (matches the smoke-acp-*-live floor + check-acp-cortex).
-  #   LIVE=1 ./run.sh smoke-acp-cortex-live
+  # cortex ACP turn through the entwurf provider path (outbound entwurf_v2 +
+  # dual-HOME overlay facts + process-group reclaim — CP2, rail §11-8).
+  # HONEST-SKIP (exit 0) when LIVE!=1 OR `cortex` is not on PATH OR no
+  # connection is pinned — the live turn needs `cortex` installed with the
+  # operator's own web-login auth already present (there is no `cortex auth`
+  # subcommand — CP0 D6), reached read-only through the overlay's credential
+  # symlinks (AGENTS §ACP Plugin Boundary: entwurf never provides/proxies the
+  # Snowflake credential). The connection must ride the adapter seam
+  # (ENTWURF_ACP_CORTEX_CONNECTION) because the dual-HOME overlay denies the
+  # operator settings.json where a default would live. PR #40 called this
+  # `smoke-cortex`; the canonical family name is smoke-acp-cortex-live.
+  #   LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live
   if [ "${LIVE:-}" != "1" ]; then
-    echo "[smoke-acp-cortex-live] skipped — set LIVE=1 to run (needs cortex on PATH + a prior 'cortex auth login')."
+    echo "[smoke-acp-cortex-live] skipped — set LIVE=1 (+ ENTWURF_ACP_CORTEX_CONNECTION) to run."
     return 0
   fi
   if ! command -v cortex >/dev/null 2>&1; then
-    echo "[smoke-acp-cortex-live] skipped — cortex not on PATH (install Snowflake Cortex Code + run 'cortex auth login')."
+    echo "[smoke-acp-cortex-live] skipped — cortex not on PATH (install Snowflake Cortex Code and complete its own login flow)."
     return 0
-  fi
-  if [ ! -f "$REPO_DIR/scripts/smoke-acp-cortex-live.ts" ]; then
-    fail "[smoke-acp-cortex-live] scripts/smoke-acp-cortex-live.ts not found — the on-demand live cortex smoke script is a PENDING deliverable (docs/acp-backend-rail.md §6). run.sh is wired; author the script to complete the target."
-    return 1
   fi
   run_ts scripts/smoke-acp-cortex-live.ts
 }

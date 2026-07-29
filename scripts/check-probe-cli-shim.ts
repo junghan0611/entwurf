@@ -103,6 +103,15 @@ process.stdin.on("data", (c) => process.stdout.write(c));
  *  attribution §11-7-c binds to). */
 const STREAM_CLI = fakeCli(
 	"stream-cli",
+	// The per-turn response is delayed 5 ms: the receive-axis binding is a STRICT
+	// `receivedAtMs > anchor` at millisecond resolution and a same-ms tie is the
+	// instrument's documented fail-closed (§11-7-c cond. 2). A localhost fake CLI
+	// answers a stdin frame in under a millisecond, so an immediate response
+	// MANUFACTURES that tie nondeterministically — measured 2026-07-29: anchor and
+	// per-turn receivedAtMs landed on the same ms in ~10% of runs, failing
+	// section 3 ahead of whatever claim the run was qualifying (WRONG-REASON
+	// noise across the whole mutant lane). The delay keeps the fixture on the
+	// section's actual subject: ordering, not tie semantics.
 	`const line = (o) => process.stdout.write(JSON.stringify(o) + "\\n");
 line({ type: "system", subtype: "init", tools: ["BOOT_ONLY"], mcp_servers: [], model: "fake" });
 let buf = "";
@@ -115,9 +124,11 @@ process.stdin.on("data", (c) => {
 		let o;
 		try { o = JSON.parse(raw); } catch { continue; }
 		if (o.type !== "user") continue;
-		line({ type: "system", subtype: "init", tools: ["mcp__probe__probe_nonce", "Bash"],
-			mcp_servers: [{ name: "probe", status: "connected" }], model: "fake" });
-		line({ type: "result", subtype: "success" });
+		setTimeout(() => {
+			line({ type: "system", subtype: "init", tools: ["mcp__probe__probe_nonce", "Bash"],
+				mcp_servers: [{ name: "probe", status: "connected" }], model: "fake" });
+			line({ type: "result", subtype: "success" });
+		}, 5);
 	}
 });
 `,

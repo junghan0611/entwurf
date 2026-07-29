@@ -19,10 +19,11 @@
 
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import type { AcpConnectionLike } from "./acp-client.js";
-import type { ResolvedAcpConfig } from "./config.js";
+import { enrichMcpServersWithEnvelope, type ResolvedAcpConfig } from "./config.js";
 import { loadEngraving } from "./engraving.js";
 import {
 	CORTEX_MODEL_PREFIX,
@@ -31,12 +32,7 @@ import {
 	SUPPORTED_ANTHROPIC_MODEL_IDS,
 	SUPPORTED_CORTEX_MODEL_IDS,
 } from "./models.js";
-import {
-	claudeLaunchEnvDefaults,
-	cortexLaunchEnvDefaults,
-	ensureClaudeConfigOverlay,
-	ensureCortexConfigOverlay,
-} from "./overlay.js";
+import { claudeLaunchEnvDefaults, ensureClaudeConfigOverlay, ensureCortexDualHomeOverlay } from "./overlay.js";
 import { buildClaudeSessionMeta } from "./tool-surface.js";
 
 // POSIX-safe single-quote wrapper for shell arg interpolation. Byte-for-byte
@@ -317,7 +313,7 @@ export const cortexAdapter: AcpBackendAdapter = {
 	backend: "cortex",
 
 	// Cortex owns the reserved `cortex-` prefix (§9-1). routeModel strips it to the
-	// native id: `cortex-auto` → "auto", `cortex-claude-sonnet-4-6` → "claude-sonnet-4-6".
+	// native id: `cortex-auto` → "auto", `cortex-claude-sonnet-5` → "claude-sonnet-5".
 	routeModel(modelId) {
 		if (!SUPPORTED_CORTEX_IDS.has(modelId)) return undefined;
 		return { nativeModelId: modelId.slice(CORTEX_MODEL_PREFIX.length) };
@@ -343,17 +339,17 @@ export const cortexAdapter: AcpBackendAdapter = {
 	},
 
 	// `cortex acp serve` resolved from PATH (the CLI itself IS the ACP server — no
-	// `*-acp` npm package, unlike claude). `-c <conn>` / `-m <native>` appended;
-	// `auto` emits no `-m` (Cortex picks its own default). CORTEX_ACP_COMMAND
-	// override runs via `bash -lc` with the selection flags appended so the
-	// bridge's choice wins (later yargs args override earlier ones).
-	resolveLaunch({ nativeModelId, config }) {
+	// `*-acp` npm package, unlike claude). `-c <conn>` appended when a connection
+	// is pinned. NO `-m`: the model is enforced per-turn via
+	// session/set_config_option (enforceModel below, CP0-M measured GO) and a
+	// launch pin would be a SECOND model authority that drifts from it.
+	// CORTEX_ACP_COMMAND override runs via `bash -lc` with the selection flags
+	// appended so the bridge's choice wins (later yargs args override earlier ones).
+	resolveLaunch({ config }) {
 		const settings = config.adapterSettings as CortexAdapterSettings | undefined;
 		const connection = settings?.cortexConnection?.trim() || undefined;
-		const nativeModel = nativeModelId && nativeModelId !== "auto" ? nativeModelId : undefined;
 		const selectionArgs: string[] = [];
 		if (connection) selectionArgs.push("-c", connection);
-		if (nativeModel) selectionArgs.push("-m", nativeModel);
 		const override = process.env.CORTEX_ACP_COMMAND?.trim();
 		if (override) {
 			const command = selectionArgs.length > 0 ? `${override} ${selectionArgs.map(shellQuote).join(" ")}` : override;
@@ -362,15 +358,44 @@ export const cortexAdapter: AcpBackendAdapter = {
 		return { command: "cortex", args: ["acp", "serve", ...selectionArgs] };
 	},
 
+	// The overlay location is SESSION-SCOPED (never static), so the spawn env
+	// rides ensureOverlay(...).envOverrides; there is no static launch env. The
+	// v1.1.8-era CORTEX_DISABLE_AUTO_APPLY_PROFILES knob was retired with the
+	// dual-HOME redesign: profiles now live inside the overlay-owned isolated
+	// home (empty by construction), and the knob is unmeasured on v1.1.52.
 	launchEnvDefaults() {
-		return cortexLaunchEnvDefaults();
+		return {};
 	},
 
-	ensureOverlay() {
-		// SNOWFLAKE_HOME rides launchEnvDefaults(); the overlay materialization
-		// contributes no extra spawn env (mirrors claude's CLAUDE_CONFIG_DIR shape).
-		ensureCortexConfigOverlay();
-		return { envOverrides: {} };
+	// Dual-HOME containment (CP0 D2/D3/D9/D10 — see the overlay module header):
+	// refuse an ambient CORTEX_HOME outright, then materialize the session-scoped
+	// isolated HOME with auth symlinks, `autoUpdate:false`, and the mcp.json
+	// projection of the envelope-enriched explicit servers (cortex ignores the
+	// wire mcpServers param, so this file IS how tools reach a cortex session).
+	ensureOverlay({ cwd, modelId, config }) {
+		// D3 — presence refusal, empty string included: upstream's resolver treats
+		// a set-but-empty CORTEX_HOME differently from unset, and one ambient value
+		// would silently bypass SNOWFLAKE_HOME (the probe's CLAUDE_CODE_EXECUTABLE
+		// precondition is the same family). Refuse the ambiguity; never pick a side.
+		if ("CORTEX_HOME" in process.env) {
+			throw new Error(
+				"entwurf: CORTEX_HOME is present in the environment (empty string included) — it overrides " +
+					"SNOWFLAKE_HOME inside cortex and would bypass the dual-HOME overlay entirely (CP0 D3). " +
+					"Unset it to run a cortex ACP turn.",
+			);
+		}
+		const piSessionId = process.env.PI_SESSION_ID?.trim() || undefined;
+		const scopeKey = piSessionId ? `pi:${piSessionId}` : `cwd:${cwd}`;
+		// Same envelope enrichment the turn loop applies to the wire list — the
+		// projection must carry PI_SESSION_ID/PI_AGENT_ID to the bridge child or a
+		// cortex sibling loses its caller identity (entwurf_self/entwurf_v2).
+		const enriched = enrichMcpServersWithEnvelope(config.mcpServers, { modelId, piSessionId });
+		const overlay = ensureCortexDualHomeOverlay({
+			scopeKey,
+			mcpServers: enriched,
+			realHome: homedir(),
+		});
+		return { envOverrides: { HOME: overlay.home, SNOWFLAKE_HOME: overlay.snowflakeHome } };
 	},
 
 	// Carrier-less (§9-4): Cortex ACP exposes no `_meta.systemPrompt` and has no
@@ -387,12 +412,20 @@ export const cortexAdapter: AcpBackendAdapter = {
 		return undefined;
 	},
 
-	// Launch-pinned: the native model is fixed by `cortex acp serve -m` at spawn.
-	// Cortex exposes its model surface via session config options keyed by
-	// cortex-native ids, NOT the spec-baseline set-model the bridge calls for
-	// claude — and it would reject the pi-prefixed curated id. No-op here (§9-6).
-	async enforceModel() {
-		return;
+	// Per-turn enforcement via session/set_config_option — the SAME wire call the
+	// claude adapter makes, measured live against cortex v1.1.52 (CP0-M): the
+	// option id is "model", accepted values are the NATIVE ids (`auto`,
+	// `claude-sonnet-5`, `openai-gpt-5.4`, …), and a value cortex no longer
+	// serves fails loud BEFORE the prompt (`Unsupported model: …`). PR #40's
+	// launch-time `-m` pin was retired for this: set-model is the single model
+	// authority (resolveLaunch never passes `-m`), and "auto" is set explicitly
+	// rather than treated as an unspoken default.
+	async enforceModel({ connection, acpSessionId, nativeModelId, modelId }) {
+		const setConfig = connection.setSessionConfigOption;
+		if (typeof setConfig !== "function") {
+			throw new Error(`setSessionConfigOption unsupported — cannot enforce model ${modelId}`);
+		}
+		await setConfig.call(connection, { sessionId: acpSessionId, configId: "model", value: nativeModelId });
 	},
 
 	// A connection change must invalidate a reused session (§4/§7). Flat,

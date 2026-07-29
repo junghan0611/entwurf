@@ -1,0 +1,159 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-cortex",
+	"mutants": [
+		{
+			"claim": "CORTEX-CURATED-FOUR-ROWS",
+			"title": "dropping a curated row silently shrinks the GLG-decided 4-row cortex surface",
+			"subject": "pi-extensions/lib/acp/models.ts",
+			"find": [
+				"export const SUPPORTED_CORTEX_MODEL_IDS = [",
+				"\t\"cortex-auto\",",
+				"\t\"cortex-claude-opus-5\",",
+				"\t\"cortex-claude-sonnet-5\",",
+				"\t\"cortex-openai-gpt-5.4\",",
+				"] as const;"
+			],
+			"replace": [
+				"export const SUPPORTED_CORTEX_MODEL_IDS = [",
+				"\t\"cortex-auto\",",
+				"\t\"cortex-claude-sonnet-5\",",
+				"\t\"cortex-openai-gpt-5.4\",",
+				"] as const;"
+			],
+			"gate": ["bash", "run.sh", "check-acp-cortex"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CORTEX-CURATED-FOUR-ROWS]",
+			"signatureSource": "scripts/check-acp-cortex.ts"
+		},
+		{
+			"claim": "CORTEX-AUTH-NARROW-CREDENTIAL-CACHE",
+			"title": "widening the auth passthrough to the whole cortex/cache leaks operator tool_outputs/tip_history into the child",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": [
+				"\tcortexLinkIfExists(",
+				"\t\tjoin(realSnowflake, \"cortex\", \"cache\", \"credential_cache\"),",
+				"\t\tjoin(cortexDir, \"cache\", \"credential_cache\"),",
+				"\t);"
+			],
+			"replace": [
+				"\trmSync(join(cortexDir, \"cache\"), { recursive: true, force: true });",
+				"\tcortexLinkIfExists(join(realSnowflake, \"cortex\", \"cache\"), join(cortexDir, \"cache\"));"
+			],
+			"gate": ["bash", "run.sh", "check-acp-cortex"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CORTEX-AUTH-NARROW-CREDENTIAL-CACHE]",
+			"signatureSource": "scripts/check-acp-cortex.ts"
+		},
+		{
+			"claim": "CORTEX-AUTOUPDATE-OFF",
+			"title": "flipping autoUpdate back on lets the cortex runtime replace itself on launch mid-rail (D4)",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\treturn `${JSON.stringify({ autoUpdate: false }, null, \"\\t\")}\\n`;"],
+			"replace": ["\treturn `${JSON.stringify({ autoUpdate: true }, null, \"\\t\")}\\n`;"],
+			"gate": ["bash", "run.sh", "check-acp-cortex"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CORTEX-AUTOUPDATE-OFF]",
+			"signatureSource": "scripts/check-acp-cortex.ts"
+		},
+		{
+			"claim": "CORTEX-BRIDGE-DUAL-HOME",
+			"title": "dropping the bridge-only real-HOME restore leaves the garden store cut off — tools reach the model but see an empty garden (D10)",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\t\tif (stdio.name === CORTEX_DUAL_HOME_BRIDGE_SERVER) env.HOME = realHome;"],
+			"replace": ["\t\tvoid realHome;"],
+			"gate": ["bash", "run.sh", "check-acp-cortex"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CORTEX-BRIDGE-DUAL-HOME]",
+			"signatureSource": "scripts/check-acp-cortex.ts"
+		},
+		{
+			"claim": "CORTEX-MCP-NON-STDIO-FAILLOUD",
+			"title": "silently dropping a non-stdio server advertises a config the session does not have (D9 fail-loud)",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": [
+				"\t\tif (\"type\" in server && (server.type === \"http\" || server.type === \"sse\")) {",
+				"\t\t\tthrow new Error(",
+				"\t\t\t\t`entwurf: cortex mcp.json projection cannot represent ${server.type} server ` +",
+				"\t\t\t\t\t`${JSON.stringify(server.name)} — only stdio entries are measured through ` +",
+				"\t\t\t\t\t`$SNOWFLAKE_HOME/cortex/mcp.json (CP0 D9). Remove it from entwurfProvider.mcpServers ` +",
+				"\t\t\t\t\t`for cortex models or front it with a stdio bridge.`,",
+				"\t\t\t);",
+				"\t\t}"
+			],
+			"replace": [
+				"\t\tif (\"type\" in server && (server.type === \"http\" || server.type === \"sse\")) {",
+				"\t\t\tcontinue;",
+				"\t\t}"
+			],
+			"gate": ["bash", "run.sh", "check-acp-cortex"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CORTEX-MCP-NON-STDIO-FAILLOUD]",
+			"signatureSource": "scripts/check-acp-cortex.ts"
+		},
+		{
+			"claim": "CORTEX-OVERLAY-SESSION-SCOPED",
+			"title": "a static shared overlay dir lets two residents overwrite one mcp.json/envelope",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\tconst scopeDir = join(overlaysRoot, cortexOverlayScopeId(params.scopeKey));"],
+			"replace": ["\tconst scopeDir = join(overlaysRoot, \"shared\");"],
+			"gate": ["bash", "run.sh", "check-acp-cortex"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CORTEX-OVERLAY-SESSION-SCOPED]",
+			"signatureSource": "scripts/check-acp-cortex.ts"
+		},
+		{
+			"claim": "CORTEX-HOME-PRESENCE-REFUSED",
+			"title": "a truthy check instead of presence lets an empty-string CORTEX_HOME slip past the refusal (D3 E2b nuance)",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\tif (\"CORTEX_HOME\" in process.env) {"],
+			"replace": ["\t\tif (process.env.CORTEX_HOME) {"],
+			"gate": ["bash", "run.sh", "check-acp-cortex"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CORTEX-HOME-PRESENCE-REFUSED]",
+			"signatureSource": "scripts/check-acp-cortex.ts"
+		},
+		{
+			"claim": "CORTEX-LAUNCH-NO-MODEL-PIN",
+			"title": "re-introducing the launch -m pin creates a second model authority that drifts from per-turn set-model",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": [
+				"\tresolveLaunch({ config }) {",
+				"\t\tconst settings = config.adapterSettings as CortexAdapterSettings | undefined;",
+				"\t\tconst connection = settings?.cortexConnection?.trim() || undefined;",
+				"\t\tconst selectionArgs: string[] = [];"
+			],
+			"replace": [
+				"\tresolveLaunch({ config, nativeModelId }) {",
+				"\t\tconst settings = config.adapterSettings as CortexAdapterSettings | undefined;",
+				"\t\tconst connection = settings?.cortexConnection?.trim() || undefined;",
+				"\t\tconst selectionArgs: string[] = [\"-m\", nativeModelId];"
+			],
+			"gate": ["bash", "run.sh", "check-acp-cortex"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CORTEX-LAUNCH-NO-MODEL-PIN]",
+			"signatureSource": "scripts/check-acp-cortex.ts"
+		},
+		{
+			"claim": "CORTEX-ENFORCE-SET-MODEL",
+			"title": "enforcing a constant instead of the native id silently answers with the wrong model (CP0-M)",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": [
+				"\t\tawait setConfig.call(connection, { sessionId: acpSessionId, configId: \"model\", value: nativeModelId });",
+				"\t},",
+				"",
+				"\t// A connection change must invalidate a reused session (§4/§7). Flat,"
+			],
+			"replace": [
+				"\t\tawait setConfig.call(connection, { sessionId: acpSessionId, configId: \"model\", value: \"auto\" });",
+				"\t},",
+				"",
+				"\t// A connection change must invalidate a reused session (§4/§7). Flat,"
+			],
+			"gate": ["bash", "run.sh", "check-acp-cortex"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CORTEX-ENFORCE-SET-MODEL]",
+			"signatureSource": "scripts/check-acp-cortex.ts"
+		}
+	]
+}

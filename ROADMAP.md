@@ -45,7 +45,7 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 | **ACP Claude** | shipped, **model-facing outbound half unreliable — 현재 lane** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Turn/provider path ships, 그리고 host resident는 record/socket citizen으로 계속 주소 가능하다(S1이 turn-free로 증명). 다만 번들 `entwurf-bridge` MCP 도구가 첫 턴에 세션 schema에서 빠지는 관측이 있어, 그 시민 안의 **ACP 모델이 형제에게 나가는(outbound dispatch)** 절반은 아직 신뢰 구간이 아니다(🔴 readiness race). | ACP LIVE smokes + release-gate MUST |
 | **Codex** | verified probe / #56 queued | direct/native delivery evidence exists; no managed native-citizen lifecycle yet. Default is not ACP. Re-audit app-server/hooks on the shipping line before implementation. | DELIVERY.md raw probe / #56 |
 | **Antigravity (`agy`)** | shipped | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push; managed MCP/permission, statusline, hook adapters. | agy deterministic gates + doctors + 2026-07-13 live round trip |
-| **Cortex / governed ACP** | queued **after** the ACP Claude rail settles; audit required | PR #40 is open but merge-dirty (adapter core itself is conflict-free) and its old spawn-registry premise was deleted by #50; it also declares one pending deliverable. Rebase scope and live Cortex compatibility must be re-derived when the lane opens. | PR #40 / #48 / `docs/acp-backend-rail.md` §11 |
+| **Cortex / governed ACP** | **landed (0.13.0)** — hvkiefer's PR #40 adapter transplanted with the CP0-audit revisions (dual-HOME overlay, mcp.json projection, per-turn set-model, 4-row curation) | the audit record is `docs/acp-backend-rail.md` §11-8 (defects D1–D10 + landed contract); deterministic gate `check-acp-cortex` + mutant lane `acp-cortex`; CP2 live smoke `smoke-acp-cortex-live` stays outside the claude-only release floor | PR #40 / #48 / `docs/acp-backend-rail.md` §4/§6/§11-8 |
 | **Gemini CLI** | deprecated path | replaced by Antigravity direction for current Google individual tiers. | README migration note |
 
 ### ACP plugin boundary
@@ -101,7 +101,7 @@ non-claude **throw** 가드. **백엔드 추가 레일이 0.11.0보다 후퇴**(
   레일을 표준궤로 못박는 것이 곧 0.12.0에 담을 내용이다.
 - **7 seam:** `resolveLaunch` · `ensureOverlay`(auth passthrough+state hiding) · `buildSessionMeta`
   (carrier; cortex=undefined→first-user augment) · curated models+prefix 라우팅(`inferBackendFromModel`) ·
-  model enforcement(claude=`session/set_config_option` / cortex=launch-time `-m` pin) ·
+  model enforcement(both landed backends: per-turn `session/set_config_option`; a launch-pinned backend would be the no-op case) ·
   settings+`bridgeConfigSignature` · gates(`check-backends`/`check-models`/`smoke-cortex`).
 - **역할 분담:** GLG가 레일(인터페이스 + claude 리팩터)을 깔고, 기여자(hvkiefer)가 PR #40을 0.12.0
   `lib/acp/` 어댑터 하나로 포팅한다. 설계 SSOT = `docs/acp-backend-rail.md`. GPT 논의 후 확정.

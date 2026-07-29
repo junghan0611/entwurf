@@ -64,7 +64,7 @@ Detailed incident histories belong in CHANGELOG/issues/BASELINE and source-adjac
 - The common turn sequence stays backend-invariant: spawn → initialize → newSession → enforceModel → prompt → event map.
 - Rich operator/project context rides the **first user message augment**, not a large system prompt. The actual callable schema is the tool truth; prose never grants a tool.
 - A backend may have no carrier or use launch-time model pinning; those asymmetries stay inside its adapter.
-- Claude is the reference adapter. Cortex enters only after the current rail conditions in `docs/acp-backend-rail.md` and `NEXT.md` are satisfied.
+- Claude is the reference adapter. Cortex is the second landed adapter (0.13.0): session-scoped dual-HOME containment, overlay-private `mcp.json` projection (its ACP server ignores the wire `mcpServers` param), `CORTEX_HOME` presence refusal, per-turn set-model. Audit record and contract: `docs/acp-backend-rail.md` §11-8.
 - entwurf never supplies, copies, proxies, decrypts, or bypasses vendor credentials/subscriptions. It uses the operator's existing local authenticated backend.
 
 ## Citizen Identity and Dispatch
@@ -114,6 +114,7 @@ LIVE=1 ./run.sh release-gate /path/to/scratch
 LIVE=1 ./run.sh smoke-acp-socket-citizen-live
 LIVE=1 ./run.sh smoke-acp-bundled-mcp-live
 LIVE=1 ./run.sh smoke-acp-v2-send-live
+LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live   # on-demand; outside the claude release floor
 LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live
 ```
 
