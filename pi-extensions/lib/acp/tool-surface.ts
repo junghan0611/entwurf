@@ -10,10 +10,18 @@
 //      if pi has excluded a built-in the backend will still expose, the declared
 //      surface diverges from the actual one — we fail fast rather than lie.
 //
-// Claude-only scope (NEXT §스코프). The function keeps a `backend` field so the
-// honest-divergence logic stays explicit and the matrix gate can exercise both
-// the "claude narrows via tools" and "native always exposes" branches, but the
-// only backend this lane supplies is claude.
+// The module's TWO jobs have different backend scopes — do not collapse them:
+//   - `buildClaudeSessionMeta` is claude-only by CONSTRUCTION, with exactly one
+//     caller (`claudeAdapter.buildSessionMeta`). Cortex exposes no
+//     `_meta.systemPrompt` and no tools/permission declaration surface (native
+//     tools + its own overlay mcp.json projection), so its adapter returns
+//     `undefined` and that function is never reached for a cortex turn.
+//   - `assertExcludeToolsHonored` is BACKEND-INVARIANT: backend.ts runs it for
+//     every adapter before any spawn, passing `backend: adapter.backend` and the
+//     resolved `config.tools`. A cortex turn DOES enter this module through it.
+// That split is why the `backend` field exists: the honest-divergence logic stays
+// explicit and the matrix gate can exercise both the "claude narrows via tools"
+// and "native always exposes" branches.
 //
 // Carrier guard (NEXT §S2-scout 핀1): `buildClaudeSessionMeta` only attaches
 // `_meta.systemPrompt` when a caller passes one. The shipped S2d path passes the

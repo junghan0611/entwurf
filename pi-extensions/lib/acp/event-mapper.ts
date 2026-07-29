@@ -4,11 +4,18 @@
 // AssistantMessageEvent protocol (text/thinking blocks + tool/permission
 // notices + usage), maintaining a running `partial: AssistantMessage`.
 //
-// Claude-only collapse (NEXT §스코프 + oracle F): the 0.11.0 event-mapper
+// Single-dialect collapse (NEXT §스코프 + oracle F): the 0.11.0 event-mapper
 // reconciled three backend dialects (Claude rawOutput=array / Codex
 // CallToolResult / Gemini content[]) plus an entwurf_v2 sent-box custom promotion.
-// This lane drives ONLY claude-agent-acp, so the dialect collapses to one
-// (rawOutput=array) and the entwurf/gemini/codex special-casing is dropped.
+// This lane collapsed that to ONE dialect (rawOutput=array) and dropped the
+// entwurf/gemini/codex special-casing.
+//
+// This module is COMMON layer, not a claude module: the cortex landing reused THIS
+// FILE with no adapter branch and no edit, and the CP2 LIVE turn ran through it.
+// (That is a fact about this mapper only — the landing did touch other common files,
+// e.g. backend.ts's overlay call site.) The collapse is therefore a standing bet,
+// not a proof: a future backend whose session_notification dialect differs from
+// rawOutput=array reopens this file rather than forking it per backend.
 //
 // CRITICAL boundary (GPT S2c Q3): an ACP `tool_call` / `tool_call_update` is
 // rendered as an INFORMATIONAL TEXT NOTICE, never a structured pi `toolcall_*`

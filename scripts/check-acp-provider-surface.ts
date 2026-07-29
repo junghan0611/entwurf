@@ -1,5 +1,6 @@
 // Deterministic gate for the ACP provider registration surface (S0 loader/fence,
-// updated S2c when the real backend replaced the fail-loud stub).
+// updated S2c when the real backend replaced the fail-loud stub, and again in
+// 0.13 when cortex joined claude on the adapter rail).
 //
 // Three layers:
 //   (1 lib)     loads the REAL lib modules and asserts the curated Claude
@@ -8,9 +9,12 @@
 //               imports resolve to real emitted `.js`), imports the compiled
 //               acp-provider.js, and drives its default export against a fake pi
 //               that captures registerProvider — real execution capture of the
-//               actual entry, idempotency included, and that streamSimple is the
-//               real streamShellAcp backend (by name, NOT invoked — that spawns);
+//               actual entry, idempotency included, the EXACT curated model set
+//               BOTH adapters contribute, and that streamSimple is the real
+//               streamShellAcp backend (by name, NOT invoked — that spawns);
 //   (3 source)  an auxiliary source-shape lock on acp-provider.ts.
+//
+// [QK:*] labels mark the claims kill-qualified by scripts/mutants/acp-cortex.json.
 //
 // Layer 2 is the GPT-reviewed resolution to a fence tension: acp-provider.ts
 // imports its lib with `.js` suffixes (the root/jiti runtime convention), which
@@ -22,7 +26,7 @@
 
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync, rmdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
@@ -30,6 +34,8 @@ import {
 	curatedClaudeModels,
 	ENTWURF_ACP_NO_AUTH_SENTINEL,
 	PROVIDER_ID,
+	SUPPORTED_ANTHROPIC_MODEL_IDS,
+	SUPPORTED_CORTEX_MODEL_IDS,
 } from "../pi-extensions/lib/acp/models.ts";
 
 // ---------------------------------------------------------------------------
@@ -120,6 +126,32 @@ try {
 	for (const want of ["claude-sonnet-5", CURATED_ANCHOR_MODEL_ID]) {
 		assert.ok(capIds.includes(want), `entry model surface missing ${want} (got: ${capIds.join(", ") || "none"})`);
 	}
+
+	// The REAL entry must register the curated rows of EVERY adapter on the rail —
+	// claude's 2 unprefixed ids AND cortex's 4 `cortex-` ids. This is the JOIN
+	// claim, distinct from the per-backend data claims: check-acp-cortex pins the
+	// 4-row cortex curation in models.ts, but nothing there proves those rows
+	// actually reach `pi.registerProvider`. An entry that filtered `cortex-` out
+	// of `allCuratedModels()` would leave models.ts and check-acp-cortex fully
+	// green while the operator's model list silently lost the whole backend.
+	//
+	// Set comparison (sorted, exact) — not `includes`: a substring/anchor probe
+	// cannot see a row that VANISHED, and the cortex ids contain the claude ids as
+	// substrings. Expected is derived from the two source id constants so there is
+	// one SSOT; the literal 6 below is the independent floor that catches a
+	// curation list mutated to empty (which would move expected and captured
+	// together).
+	const expectedIds = [...SUPPORTED_ANTHROPIC_MODEL_IDS, ...SUPPORTED_CORTEX_MODEL_IDS].slice().sort();
+	assert.equal(
+		expectedIds.length,
+		6,
+		`curated id constants must total 6 rows (claude 2 + cortex 4) — got ${expectedIds.length}: ${expectedIds.join(", ")}`,
+	);
+	assert.deepEqual(
+		capIds.slice().sort(),
+		expectedIds,
+		`[QK:CORTEX-PROVIDER-SIX-ROW-SURFACE] compiled entry must register the EXACT curated set of both adapters (claude 2 + cortex 4) — got: ${capIds.join(", ") || "none"}`,
+	);
 	assert.equal(typeof cap.cfg.streamSimple, "function", "entry streamSimple must be a function");
 	// Regression guard: the entry must wire the REAL backend (streamShellAcp),
 	// not the removed S0 stub. We check by name rather than invoking — invoking
@@ -131,6 +163,17 @@ try {
 	);
 } finally {
 	rmSync(TMP_EMIT, { recursive: true, force: true });
+	try {
+		// The emit created `.tmp-verify/` as TMP_EMIT's parent. This gate now carries
+		// a mutant lane, so it runs inside check-gate-qualification's PURITY-checked
+		// snapshot, whose tree manifest walks ignored paths too — a leftover empty
+		// parent dir reads as IMPURE drift. Remove it when empty; a concurrent
+		// sibling gate's emit keeps it alive and the rmdir just fails.
+		// (Same repair as check-acp-cortex / check-acp-session-reuse.)
+		rmdirSync(".tmp-verify");
+	} catch {
+		// non-empty or already gone — fine either way
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +197,7 @@ assert.ok(!/backend-stub/.test(entrySrc), "entry must not import the removed S0 
 
 console.log(
 	`[check-acp-provider-surface] ok — compiled entry registers ${PROVIDER_ID} once (idempotent) with the no-auth ` +
-		`sentinel + curated Claude surface (sonnet + ${CURATED_ANCHOR_MODEL_ID}) + real streamShellAcp backend (S2c); ` +
-		`lib surface verified live (${models.length} model(s))`,
+		`sentinel + the EXACT curated set of both adapters (claude ${SUPPORTED_ANTHROPIC_MODEL_IDS.length} incl. ` +
+		`${CURATED_ANCHOR_MODEL_ID} + cortex ${SUPPORTED_CORTEX_MODEL_IDS.length}) + real streamShellAcp backend (S2c); ` +
+		`claude lib surface verified live (${models.length} model(s))`,
 );

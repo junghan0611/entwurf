@@ -32,7 +32,7 @@
 			"WebFetch",
 			"WebSearch"
 		],
-		"codexDisabledFeatures": ["image_generation", "tool_suggest", "tool_search", "multi_agent", "apps", "memories"],
+		"cortexConnection": "MY_SNOWFLAKE_CONNECTION",
 		"mcpServers": {
 			"entwurf-bridge": {
 				"command": "/path/to/entwurf/mcp/entwurf-bridge/start.sh",

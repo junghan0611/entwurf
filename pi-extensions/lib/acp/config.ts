@@ -8,11 +8,23 @@
 // config and hands it to the backend so the documented passthrough actually
 // reaches `newSession`.
 //
-// Claude-only scope (NEXT §스코프). Ported from the v0.11.0 behavior oracle
-// (index.ts `loadProviderSettings`/`readSettingsFile` + acp-bridge.ts
+// Scope. Ported from the v0.11.0 behavior oracle (index.ts
+// `loadProviderSettings`/`readSettingsFile` + acp-bridge.ts
 // `normalizeMcpServers`/`enrichMcpServersWithEnvelope`) — structure new, behavior
-// preserved. Codex/Gemini fields (codexDisabledFeatures, …) are out of scope and
-// deliberately NOT carried.
+// preserved. Retired Codex/Gemini-era fields (codexDisabledFeatures, …) are NOT
+// carried and are silently ignored if present.
+//
+// The COMMON keys parsed here are Claude-SHAPED by origin (tools / permissionAllow /
+// disallowedTools / settingSources / skillPlugins are claude-agent-acp's surface).
+// What varies per backend is whether they are PROJECTED ONTO THE BACKEND SESSION —
+// not whether they are read at all. Cortex runs native tools and reaches MCP through
+// its own overlay mcp.json projection, so none of those keys shape a cortex session;
+// they nonetheless stay live on the common path, where backend.ts reads `tools` for
+// the backend-invariant exclude-tools preflight and folds every one of them into
+// `bridgeConfigSignature` (so changing one still invalidates a reused cortex
+// session). Backend-OWNED settings never land here: they ride the opaque
+// `adapterSettings` seam (§10 B), which is what keeps a backend-named key like
+// `cortexConnection` off this common shape.
 //
 // PURITY / SIGNATURE contract (NEXT oracle C / 핀1 / GPT `…2f9325` boost):
 //   - `normalizeMcpServers` is pure: a SORTED, validated server list + a sha256
@@ -71,7 +83,9 @@ export interface ProviderSettings {
 	disallowedTools?: string[];
 }
 
-/** The fully-resolved Claude provider config the backend hands to newSession. */
+/** The fully-resolved common provider config the turn loop hands to newSession.
+ *  Claude-shaped by origin; a backend reads only the fields it consumes, and its
+ *  OWN keys ride `adapterSettings`. */
 export interface ResolvedAcpConfig {
 	/** Operator-declared backend (diagnostic guard only — see ProviderSettings.backend).
 	 *  backend.ts asserts this matches the adapter the model id routes to. */

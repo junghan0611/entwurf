@@ -85,7 +85,9 @@ function loadCarrierlessOperatorEngraving(backend: string, mcpServerNames: reado
 }
 
 export interface PiContextAugmentParams {
-	/** Claude-only this cut; kept as a field so the narrative names the backend. */
+	/** The routed backend ("claude" | "cortex"). Load-bearing, not decorative: the
+	 *  narrative names it AND `CARRIER_LESS_BACKENDS` keys off it to decide whether
+	 *  the operator engraving leads the augment. */
 	backend: string;
 	cwd: string;
 	mcpServerNames: readonly string[];

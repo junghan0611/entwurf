@@ -2,11 +2,19 @@
 //
 // This is the pi-extension entry point that registers `entwurf` as a pi
 // session provider/model. It is intentionally THIN: it stands up the provider
-// surface (curated Claude anchor + no-auth sentinel) and wires streamSimple to
-// the real ACP backend (lib/acp/backend.ts — spawn-per-turn claude-agent-acp).
-// It does NOT build a socket/peers/citizen protocol or touch the v2 core —
-// socket-citizenship is supplied by the host `--entwurf-control` pi session
-// (AGENTS §ACP Plugin Boundary).
+// surface (every registered adapter's curated rows + the no-auth sentinel) and
+// wires streamSimple to the real ACP backend (lib/acp/backend.ts — a
+// spawn-per-turn ACP child, `claude-agent-acp` or `cortex acp serve` depending
+// on which adapter the model id routes to). It does NOT build a
+// socket/peers/citizen protocol or touch the v2 core — socket-citizenship is
+// supplied by the host `--entwurf-control` pi session (AGENTS §ACP Plugin
+// Boundary).
+//
+// The model set comes from `allCuratedModels()` — the union across the adapter
+// registry (backend-adapter.ts), NOT a per-backend list spelled here. Adding a
+// backend therefore never edits this file. check-acp-provider-surface pins that
+// the compiled entry really registers the EXACT union
+// ([QK:CORTEX-PROVIDER-SIX-ROW-SURFACE]).
 //
 // Fence: this entry rides the emit-capable root tsconfig (it is not in the root
 // `exclude` list); its lib modules are imported with `.js` suffixes (the root
@@ -49,14 +57,16 @@ export default function (pi: ExtensionAPI) {
 		apiKey: ENTWURF_ACP_NO_AUTH_SENTINEL,
 		api: "entwurf",
 		models: allCuratedModels(),
-		// S2c: real ACP backend. Spawn-per-turn claude-agent-acp drive + event
-		// mapping (lib/acp/backend.ts). The S0 fail-loud stub is gone — the
-		// provider path is open. Backend auth still belongs to the operator's own
-		// Claude CLI child (no-auth sentinel above); this plugin only orchestrates.
+		// S2c: real ACP backend. Spawn-per-turn ACP child + event mapping
+		// (lib/acp/backend.ts); the routed adapter decides WHICH child. The S0
+		// fail-loud stub is gone — the provider path is open. Backend auth still
+		// belongs to the operator's own backend CLI child (no-auth sentinel above);
+		// this plugin only orchestrates.
 		streamSimple: streamShellAcp,
 	});
 
-	// Mark only AFTER a successful registration. If curatedClaudeModels() (a
+	// Mark only AFTER a successful registration. If allCuratedModels() (which
+	// fail-fasts on an unowned/duplicate curated id, and whose claude rows carry a
 	// fail-loud anchor check) or registerProvider throws, the runtime is not left
 	// poisoned with a "registered" marker — a retry can register cleanly.
 	markRegisteredOnRuntime(pi);

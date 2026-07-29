@@ -1182,18 +1182,22 @@ smoke_acp_rgg_live() {
 smoke_acp_cortex_live() {
   # On-demand LIVE smoke for the Cortex (Snowflake Cortex Code) ACP backend — the
   # first NON-claude adapter on the rail (docs/acp-backend-rail.md §6). OUT of
-  # `pnpm check` AND OUTSIDE the claude-only LIVE release floor (capability
-  # dignity, invariant #7): cortex is a deterministic-gated (check-acp-cortex) +
-  # on-demand-live surface, NEVER a claude-release blocker — so it is deliberately
-  # absent from release-gate's 11-smoke ACP acceptance floor. Drives one real
+  # `pnpm check` AND OUTSIDE the claude-only aggregate LIVE floor (capability
+  # dignity, invariant #7): a host with no cortex install / no Snowflake auth must
+  # not redden a release for a backend it does not run, so this is deliberately
+  # absent from release-gate's 11-smoke ACP acceptance floor. That is a WIRING
+  # decision, not a lower evidence bar — a cut that SHIPS cortex still owes a
+  # deliberate run of this smoke, and the aggregate gate's silence is not a pass
+  # (rail §11-8 tail). Drives one real
   # cortex ACP turn through the entwurf provider path (outbound entwurf_v2 +
   # dual-HOME overlay facts + process-group reclaim — CP2, rail §11-8).
   # HONEST-SKIP (exit 0) when LIVE!=1 OR `cortex` is not on PATH OR no
   # connection is pinned — the live turn needs `cortex` installed with the
   # operator's own web-login auth already present (there is no `cortex auth`
-  # subcommand — CP0 D6), reached read-only through the overlay's credential
-  # symlinks (AGENTS §ACP Plugin Boundary: entwurf never provides/proxies the
-  # Snowflake credential). The connection must ride the adapter seam
+  # subcommand — CP0 D6), reached through the overlay's narrow credential
+  # symlinks — narrow in WHICH paths are reachable (D5), not read-only: a symlink
+  # carries no write protection (AGENTS §ACP Plugin Boundary: entwurf never
+  # provides/proxies the Snowflake credential). The connection must ride the adapter seam
   # (ENTWURF_ACP_CORTEX_CONNECTION) because the dual-HOME overlay denies the
   # operator settings.json where a default would live. PR #40 called this
   # `smoke-cortex`; the canonical family name is smoke-acp-cortex-live.
@@ -2243,12 +2247,16 @@ EOF
 }
 
 check_acp_provider_surface() {
-  # Deterministic gate for the S0 ACP provider loader/fence slice. Loads the REAL
-  # provider lib modules and asserts the registration surface: one surface name,
-  # curated Claude anchor present with full ProviderModelConfig rows, no-auth
-  # sentinel shape, and a FAIL-LOUD streamSimple (calling it throws — no native
-  # fallback, no empty-but-successful stream). Pure, no pi runtime, no API.
-  section "ACP provider surface (S0 loader/fence)"
+  # Deterministic gate for the ACP provider registration surface. Loads the REAL
+  # provider lib modules AND compiles + drives the REAL entry against a fake pi,
+  # asserting: one surface name, the no-auth sentinel shape, full
+  # ProviderModelConfig rows on the curated claude anchor, the EXACT curated model
+  # set both adapters contribute (claude 2 + cortex 4 —
+  # [QK:CORTEX-PROVIDER-SIX-ROW-SURFACE], the claim that catches an entry which
+  # silently drops a whole backend), and that streamSimple is the real
+  # streamShellAcp backend (checked BY NAME, never invoked — invoking spawns an
+  # ACP child). Pure, no pi runtime, no API.
+  section "ACP provider surface (registration + both-adapter model set)"
   run_ts scripts/check-acp-provider-surface.ts
 }
 
@@ -2883,18 +2891,45 @@ _check_pack_install_impl() {
     echo "$loader_out" | tail -10 | sed 's/^/    /' >&2
     return 1
   fi
-  # Verify the full curated Claude surface is visible: the Sonnet row AND the
-  # opus anchor (CURATED_ANCHOR_MODEL_ID in lib/acp/models.ts — the model whose
-  # absence is a hard registry regression). Checking only one would let half the
-  # surface drop silently.
-  for anchor in "claude-sonnet-5" "claude-opus-5"; do
-    if ! grep -q "$anchor" <<<"$loader_out"; then
-      fail "[check-pack-install] pi loader output missing curated Claude model $anchor:"
-      echo "$loader_out" | tail -10 | sed 's/^/    /' >&2
-      return 1
-    fi
-  done
-  echo "[check-pack-install] pi loader smoke pass (entwurf registered, claude-sonnet-5 + claude-opus-5 anchor)"
+  # Verify the EXACT curated surface the installed package registers — both
+  # backends (claude 2 rows + cortex 4 rows = 6), as a SET, not as anchors.
+  #
+  # Why exact-set and not `grep -q <id>`: the cortex ids CONTAIN the claude ids
+  # as substrings (`cortex-claude-sonnet-5` matches a bare `claude-sonnet-5`
+  # grep), so a substring probe could go green on a surface that dropped every
+  # unprefixed Claude row. And an anchor-only probe cannot see a MISSING cortex
+  # row at all — that is exactly the installed-consumer gap this assertion
+  # closes: the source-side sets are pinned by check-acp-cortex /
+  # check-acp-provider-surface, but only THIS gate proves the ids survive the
+  # pack → install → pi-loader path into a real consumer's model list.
+  #
+  # Parse rows whose FIRST field is the provider `entwurf` (pi prints a
+  # `provider model context …` table; the header row's first field is
+  # `provider`, so it drops out) and take the second field as the model id.
+  local loader_ids loader_expected
+  loader_ids=$(awk '$1 == "entwurf" { print $2 }' <<<"$loader_out" | LC_ALL=C sort)
+  loader_expected=$(printf '%s\n' \
+    claude-opus-5 \
+    claude-sonnet-5 \
+    cortex-auto \
+    cortex-claude-opus-5 \
+    cortex-claude-sonnet-5 \
+    cortex-openai-gpt-5.4 | LC_ALL=C sort)
+  if [ "$loader_ids" != "$loader_expected" ]; then
+    fail "[check-pack-install] installed provider model set drifted — expected exactly 6 curated ids (claude 2 + cortex 4):"
+    echo "  expected:" >&2
+    echo "$loader_expected" | sed 's/^/    /' >&2
+    echo "  actual (entwurf rows):" >&2
+    echo "${loader_ids:-<none>}" | sed 's/^/    /' >&2
+    echo "  raw loader output:" >&2
+    echo "$loader_out" | tail -15 | sed 's/^/    /' >&2
+    return 1
+  fi
+  # Name the set on SUCCESS too, not only in the failure branch — same principle as
+  # the pinned-pi version assert above: a gate that cannot name what it proved has
+  # proved nothing, and "6 rows" without the ids cannot be audited from a CI log.
+  echo "[check-pack-install] pi loader smoke pass (entwurf registered; exact 6-row curated set: claude 2 + cortex 4):"
+  echo "$loader_ids" | sed 's/^/    /'
 
   # npm-managed neutral install regression — the README's PRIMARY install path is
   # now `npm install @junghanacs/entwurf` (NOT `pi install npm:...`). This layout
@@ -3786,7 +3821,7 @@ wire_agy_bridge() {
   # whatever agy the CI/dev host happens to have — production leaves it unset (= `command -v
   # agy`, no regression). Same override spirit as agy-bridge.sh's AGY_MCP_CONFIG/AGY_BRIDGE_COMMAND.
   if ! command -v "${AGY_BIN:-agy}" >/dev/null 2>&1; then
-    echo "[setup] no agy on PATH — skipping agy bridge wiring (no state; pi/Claude-only host)"
+    echo "[setup] no agy on PATH — skipping agy bridge wiring (no state; this host runs no Antigravity)"
     return 0
   fi
   section "agy bridge install (native harness detected: Antigravity)"
@@ -3839,7 +3874,7 @@ wire_agy_bridge() {
 # stable bin entwurf-agy-statusline, exposed by expose_dev_bin above.
 wire_agy_statusline() {
   if ! command -v "${AGY_BIN:-agy}" >/dev/null 2>&1; then
-    echo "[setup] no agy on PATH — skipping agy statusLine wiring (no state; pi/Claude-only host)"
+    echo "[setup] no agy on PATH — skipping agy statusLine wiring (no state; this host runs no Antigravity)"
     return 0
   fi
   section "agy statusLine install (native harness detected: Antigravity)"
@@ -3877,7 +3912,7 @@ wire_agy_statusline() {
 # garden id after the first invocation.
 wire_agy_hooks() {
   if ! command -v "${AGY_BIN:-agy}" >/dev/null 2>&1; then
-    echo "[setup] no agy on PATH — skipping agy hooks wiring (no state; pi/Claude-only host)"
+    echo "[setup] no agy on PATH — skipping agy hooks wiring (no state; this host runs no Antigravity)"
     return 0
   fi
   section "agy hooks install (native harness detected: Antigravity)"

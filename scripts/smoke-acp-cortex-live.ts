@@ -29,8 +29,11 @@
 // entwurf/<cortex model>, the overlay scope dir + its mcp.json projection, and
 // (after teardown) that no process still lives inside this run's overlay.
 //
-// LIVE-only and OUTSIDE the claude-only release floor (capability dignity):
-// honest skip when LIVE!=1, when `cortex` is not on PATH, or when
+// LIVE-only and OUTSIDE the claude-only AGGREGATE release floor (capability
+// dignity): a host that runs no cortex must not redden a claude release. That is
+// a wiring decision — shipping cortex still owes a deliberate run of this smoke,
+// and the aggregate gate's silence is not a pass (rail §11-8 tail).
+// Honest skip when LIVE!=1, when `cortex` is not on PATH, or when
 // ENTWURF_ACP_CORTEX_CONNECTION is unset — the overlay denies the operator's
 // cortex settings.json (where a default connection would live), so the
 // connection must arrive through the adapter's own env/settings seam, and

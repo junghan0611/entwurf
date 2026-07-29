@@ -180,6 +180,17 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:ACP-OVERLAY-SESSIONKEY-WIRED]",
 			"signatureSource": "scripts/check-acp-session-reuse.ts"
+		},
+		{
+			"claim": "CORTEX-PROVIDER-SIX-ROW-SURFACE",
+			"title": "filtering the cortex rows out of the REAL provider entry drops the whole backend from the operator's model list while models.ts and check-acp-cortex stay green",
+			"subject": "pi-extensions/acp-provider.ts",
+			"find": ["\t\tmodels: allCuratedModels(),"],
+			"replace": ["\t\tmodels: allCuratedModels().filter((m) => !m.id.startsWith(\"cortex-\")),"],
+			"gate": ["bash", "run.sh", "check-acp-provider-surface"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CORTEX-PROVIDER-SIX-ROW-SURFACE]",
+			"signatureSource": "scripts/check-acp-provider-surface.ts"
 		}
 	]
 }

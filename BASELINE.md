@@ -6,12 +6,16 @@ silently drifted into a different identity / context surface. Questions
 are deliberately open-ended — they probe what the agent actually sees,
 not what it was told to claim.
 
-The 0.12 shipped ACP backend is **Claude**; the main question bank below is the
-Claude ACP baseline. Antigravity (`agy`) is also shipped, but as a native-push
-garden citizen rather than an ACP backend, so it has a separate citizen/round-trip
-baseline below instead of being forced into Claude's overlay questions. Codex
-(pi-native / delivery probe) and Gemini (historical non-goal ACP probe) remain
-reference axes, not the shipped ACP baseline.
+The released 0.12 ACP backend is **Claude**, and the main question bank below is the
+Claude ACP baseline. The working tree carries an unreleased **0.13 candidate** that
+adds **Snowflake Cortex Code** as a second ACP backend; it has no question bank of its
+own yet, and the Claude bank must not be run against it verbatim — cortex is
+system-prompt-carrier-less and runs its own native tool surface, so the overlay/engraving
+questions below would grade it against a surface it does not have. Antigravity (`agy`)
+is also shipped, but as a native-push garden citizen rather than an ACP backend, so it
+has a separate citizen/round-trip baseline below instead of being forced into Claude's
+overlay questions. Codex (pi-native / delivery probe) and Gemini (historical non-goal
+ACP probe) remain reference axes, not a shipped ACP baseline.
 
 ## Release-host baseline — #51 repair cut
 

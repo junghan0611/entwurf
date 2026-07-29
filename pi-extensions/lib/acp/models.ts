@@ -1,14 +1,17 @@
-// ACP plugin — curated Claude model surface (S0 loader/fence slice).
+// ACP plugin — curated model surface (S0 loader/fence slice; cortex rows added
+// in 0.13).
 //
 // entwurf is an ACP *plugin* on the v2 core, NOT a general-purpose
 // Anthropic provider. It deliberately does not expose the full pi-ai model
-// registry — the surface is curated to the Claude anchor the plugin commits to
-// driving through a real ACP backend (the backend lands in S2; S0 only stands
-// the provider/model surface up).
+// registry — the surface is curated to the ids the plugin commits to driving
+// through a real ACP backend.
 //
-// Claude-first scope (NEXT §스코프): Codex is already a native garden citizen
-// and Gemini / major tools use native, so the curated surface is Claude-only on
-// this lane. A second governed backend would EXTEND this set — it does not change
+// Two curated sets live here, one per adapter on the rail
+// (backend-adapter.ts): the unprefixed Claude ids (the reference backend) and
+// the `cortex-` prefixed Snowflake Cortex Code ids (the second backend, landed
+// 0.13.0 — docs/acp-backend-rail.md §6/§11-8). Codex is already a native garden
+// citizen and Gemini/major tools use native, so neither is an ACP backend here.
+// A third governed backend EXTENDS this file the same way — it does not change
 // the pattern.
 
 // pi 0.80 migration: the standalone root `getModels()` moved to the deprecated

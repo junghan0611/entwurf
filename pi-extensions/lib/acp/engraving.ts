@@ -44,7 +44,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ENGRAVING_PATH = join(HERE, "prompts", "engraving.md");
 
 export interface EngravingParams {
-	/** Claude-only this cut; kept as a field so the `{{backend}}` token interpolates. */
+	/** Always "claude" in practice — a system-prompt-carrier-less backend (cortex)
+	 *  returns null from `loadCarrier` WITHOUT calling this loader, so claudeAdapter is
+	 *  its only caller. Kept as a field so the `{{backend}}` token interpolates. */
 	backend: string;
 	/** MCP server names exposed to the session. SORTED before render for determinism. */
 	mcpServerNames: readonly string[];

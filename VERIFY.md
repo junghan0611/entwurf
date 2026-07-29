@@ -1,8 +1,8 @@
 # VERIFY.md
 
-Agent-driven verification guide for the current `entwurf` 0.12.x surface.
+Agent-driven verification guide for the `entwurf` surface as it stands in the working tree — the last **released** line is 0.12.x, and the tree carries an unreleased **0.13 candidate**. The candidate carries more than one change (the probe/ordering lane and dependency work also sit unreleased); the change relevant to *this guide* is the second ACP backend. Rows below marked 0.12 are the released baseline; where the candidate differs, it says so.
 
-> **Current surface.** The bundled MCP server, `entwurf-bridge`, exposes five tools: `entwurf_v2`, `entwurf_peers`, `entwurf_self`, `entwurf_inbox_read`, and `entwurf_register_native` (an explicit/manual fallback for binding an already-running native conversation). The shipped ACP backend is **Claude**. Antigravity (`agy`) is a separate shipped **native-push citizen** lane, not an ACP backend: automatic `PreInvocation` birth + sender identity + live probe/direct injection. Codex is pi-native by default and has native delivery probe evidence; Gemini is a non-goal/historical ACP probe on 0.12. The 0.4.x `session-bridge` adapter, the 0.11.0 fat-bridge (`acp-bridge.ts` / `ensureBridgeSession`), and the v1 `entwurf` / `entwurf_resume` / `entwurf_send` verbs are **retired** — rows mentioning them survive in CHANGELOG/git as historical baseline, never as a runnable recipe.
+> **Current surface.** The bundled MCP server, `entwurf-bridge`, exposes five tools: `entwurf_v2`, `entwurf_peers`, `entwurf_self`, `entwurf_inbox_read`, and `entwurf_register_native` (an explicit/manual fallback for binding an already-running native conversation). The ACP backends are **Claude** (the reference, 0.12) and, on the 0.13 candidate, **Snowflake Cortex Code** (`cortex-` prefixed ids; deterministic axis `check-acp-cortex` in `pnpm check`, LIVE axis `smoke-acp-cortex-live` on demand — see [docs/acp-backend-rail.md](./docs/acp-backend-rail.md) §11-8 for the measured contract and its limits). Antigravity (`agy`) is a separate shipped **native-push citizen** lane, not an ACP backend: automatic `PreInvocation` birth + sender identity + live probe/direct injection. Codex is pi-native by default and has native delivery probe evidence; Gemini is a non-goal/historical ACP probe on 0.12. The 0.4.x `session-bridge` adapter, the 0.11.0 fat-bridge (`acp-bridge.ts` / `ensureBridgeSession`), and the v1 `entwurf` / `entwurf_resume` / `entwurf_send` verbs are **retired** — rows mentioning them survive in CHANGELOG/git as historical baseline, never as a runnable recipe.
 
 This is a **working document, not a metrics document**. The deterministic and live gates carry the machine-checkable invariants; this file carries only what a gate cannot judge — the human/agent reading of *whether the bridge is honestly itself*. Where a former manual procedure is now a gate, it is named as a pointer rather than re-spelled as a runnable script.
 
@@ -203,6 +203,8 @@ mailbox with `origin=pi-session`, `replyable=true`).
 
 Compare a fresh self-awareness report across axes: (1) same backend, different install path — answer must be path-invariant; (2) same backend, different machine — identical native tool list + MCP server/tool set; (3) different backend, same bridge — same garden capability but **different** native tool surface (a Claude session reporting another backend's native tools is a fail); (4) native pi routing vs ACP-bridged, same model — the native target reports no `entwurf-bridge` MCP (capability via pi's extension surface), while the ACP target reports it as the single MCP server. Honest "native: I cannot tell" hedging is PASS on the native side. Claude axes 1–4 are closed. agy is graded by the separate native-citizen checklist above, not by pretending it has Claude's ACP overlay. Gemini remains probe-only on 0.12.
 
+**Cortex (0.13 candidate) on axis 3.** Cortex is the first real *different backend, same bridge* subject, and it is the sharpest form of this axis: a cortex session must report the garden capability (`entwurf-bridge` reachable, record-backed peers) while its native tool surface is cortex's own, never Claude's — a cortex session listing Claude's built-ins is a fail. Two contract facts to grade against rather than re-derive: the callable identifier shape is the same `mcp__<server>__<tool>` convention as Claude (**measured**, §11-8), and cortex is **system-prompt-carrier-less**, so the operator engraving arrives at the head of the first-user augment instead of in a system prompt — a cortex session claiming a system-prompt engraving is reporting something it does not have. Axis 1 (install-path invariance) is exactly what the installed-consumer acceptance lane is opening; axis 2 (second machine) is unrun.
+
 ---
 
 ## 1A. Main Agent Evaluation — Is `entwurf` Claude strong enough?
@@ -253,10 +255,11 @@ The literal callable identifier differs per backend — probe by asking the agen
 | Backend | Literal identifier | Outer sep | Inner server name |
 |---|---|---|---|
 | Claude | `mcp__entwurf-bridge__entwurf_v2` | `__` | `entwurf-bridge` (hyphen) |
+| Cortex *(0.13 candidate)* | `mcp__entwurf-bridge__entwurf_v2` | `__` | `entwurf-bridge` (hyphen) — same shape as Claude, **measured** (§11-8) |
 | Codex | `mcp__entwurf_bridge__.entwurf_v2` | `__` | `entwurf_bridge` (underscore) + **literal dot** |
 | Gemini *(probe)* | `mcp_entwurf-bridge_entwurf_v2` | `_` (single) | `entwurf-bridge`, no dot |
 
-A Claude session reporting the underscore form, or any cross-shape leak, is a backend-identification leak. Shipped 0.12 baseline is Claude; the Codex/Gemini rows are reference for the probe lanes.
+A Claude session reporting the underscore form, or any cross-shape leak, is a backend-identification leak. Released 0.12 baseline is Claude; cortex joins it on the 0.13 candidate and is the one row whose shape had to be *measured* rather than assumed (identical to Claude's — so this row cannot discriminate Claude from Cortex, and the tool-surface axis in §1.4 is what does). The Codex/Gemini rows are reference for the probe lanes.
 
 ### 2.2 MCP injection visibility — equal across resume/load/new
 
