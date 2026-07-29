@@ -719,7 +719,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 	// Extend this inventory and the manifests TOGETHER, never silently.
 	const EXPECTED_LANE_MUTANTS: Record<string, number> = {
 		"acp-augment": 2,
-		"acp-cortex": 9,
+		"acp-cortex": 11,
 		"agy-permission": 6,
 		"meta-identity": 1,
 		"probe-ordering": 83,

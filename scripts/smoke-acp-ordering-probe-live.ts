@@ -372,11 +372,14 @@ async function runOne(
 		const carrier = claudeAdapter.loadCarrier({ mcpServerNames: configMod.mcpServerNames(config), config });
 
 		// Production spawn: adapter launch + overlay + env defaults over process.env.
+		// sessionKey mirrors resolveSessionKey's cwd fallback (this probe runs with
+		// no opts.sessionId / PI_SESSION_ID); claude's overlay ignores it.
 		const overlay = claudeAdapter.ensureOverlay({
 			cwd: scratch,
 			modelId: MODEL_ID,
 			nativeModelId: NATIVE_MODEL_ID,
 			config,
+			sessionKey: `cwd:${scratch}`,
 		});
 		const launch = claudeAdapter.resolveLaunch({
 			cwd: scratch,

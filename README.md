@@ -10,7 +10,7 @@ npm package: <https://www.npmjs.com/package/@junghanacs/entwurf>
 
 Legacy package: [`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@junghanacs/pi-shell-acp). `entwurf` is its 0.12+ successor line: the same work renamed around the garden-citizen dispatch substrate rather than the pi adapter.
 
-> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code is shipped as a mailbox-backed meta-session; Antigravity (`agy`) is shipped as a native-push citizen with automatic `PreInvocation` birth, ambient garden-id status, and a managed MCP/permission install surface. Codex has a launch-mode-specific verified delivery probe documented in [DELIVERY.md](./DELIVERY.md), but no managed native-citizen install lane yet. The ACP plugin is Claude-first; Cortex/vendor-governed ACP backends are future lanes.
+> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code is shipped as a mailbox-backed meta-session; Antigravity (`agy`) is shipped as a native-push citizen with automatic `PreInvocation` birth, ambient garden-id status, and a managed MCP/permission install surface. Codex has a launch-mode-specific verified delivery probe documented in [DELIVERY.md](./DELIVERY.md), but no managed native-citizen install lane yet. The ACP plugin ships two backends through one adapter rail: Claude (the reference) and Snowflake Cortex Code (landed in 0.13.0 under a session-scoped dual-HOME containment — [docs/acp-backend-rail.md](./docs/acp-backend-rail.md) §11-8).
 
 <details>
 <summary>Watch archived pre-0.12 demo (2131×1142 GIF, click to expand)</summary>
@@ -462,13 +462,22 @@ plain MCP registrations.
 
 ### Backend prerequisites
 
-The ACP plugin is **Claude-first**. The Claude ACP server package (`@agentclientprotocol/claude-agent-acp`, pinned with `@agentclientprotocol/sdk`) ships as a pinned `dependency` of `entwurf`; backend authentication still belongs to the operator's local `claude` CLI / runtime. Once the bridge is installed, the resolver picks the ACP server in this order:
+**Claude is the reference ACP backend.** The Claude ACP server package (`@agentclientprotocol/claude-agent-acp`, pinned with `@agentclientprotocol/sdk`) ships as a pinned `dependency` of `entwurf`; backend authentication still belongs to the operator's local `claude` CLI / runtime. Once the bridge is installed, the resolver picks the ACP server in this order:
 
 1. **`CLAUDE_AGENT_ACP_COMMAND` env override** — explicit override for an alternative binary or a wrapper command.
 2. **`require.resolve(...)` against the bundled package dependency** (`@agentclientprotocol/claude-agent-acp`). This is the default path; no extra global install needed.
 3. **`PATH:claude-agent-acp` fallback** — used when the package resolution fails (e.g. a hand-edited `node_modules`).
 
-The curated model registry exposes Claude models only, so the ACP backend is Claude. Codex is *not* an ACP backend here — a native Codex session is already a first-class garden citizen via direct injection, so it needs no ACP plugin (see [AGENTS.md](./AGENTS.md)). Vendor / governed CLIs (e.g. Cortex) are a later ACP backend lane.
+The curated model registry exposes the unprefixed Claude ids plus the `cortex-` prefixed Cortex rows (below). Codex is *not* an ACP backend here — a native Codex session is already a first-class garden citizen via direct injection, so it needs no ACP plugin (see [AGENTS.md](./AGENTS.md)).
+
+**Snowflake Cortex Code is the second landed ACP backend** (0.13.0; audit record and contract: [docs/acp-backend-rail.md](./docs/acp-backend-rail.md) §11-8). Operator surface:
+
+- **Curated ids (4):** `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`. The `cortex-` prefix routes; the model is enforced per turn via ACP set-model, so an id the running cortex no longer serves fails loud before the prompt.
+- **CLI + auth:** `cortex` must be on PATH and already authenticated through Cortex's **own web-login flow** (there is no `cortex auth` subcommand; entwurf never supplies or proxies the Snowflake credential — the overlay symlinks only `connections.toml`, optional `config.toml`, and the credential cache through, read-only).
+- **Connection:** pin a Snowflake connection with `entwurfProvider.cortexConnection` in settings or per-shell via `ENTWURF_ACP_CORTEX_CONNECTION` (env wins). `entwurfProvider.backend: "cortex"` is an optional diagnostic guard, never the router.
+- **`CORTEX_HOME` must be unset.** It outranks `SNOWFLAKE_HOME` inside cortex and would bypass the dual-HOME containment, so the adapter refuses the spawn when it is present at all (empty string included).
+- **Containment:** each session runs under an isolated HOME (operator-global `~/.claude`/`~/.cortex` skills, hooks and settings are structurally unreachable; explicit `<cwd>/.claude` project scope is retained), with the explicit `entwurfProvider.mcpServers` projected into an overlay-private `cortex/mcp.json` — cortex's ACP server ignores the wire `mcpServers` parameter, so this projection is how tools reach a cortex session. Only the `entwurf-bridge` entry gets the real operator HOME back (the garden store axis).
+- **Live check:** `LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> entwurf smoke-acp-cortex-live` (or `./run.sh …` from a clone) drives one real cortex turn: outbound `entwurf_v2` delivery as `entwurf/<cortex model>`, overlay disk facts, and process-group reclaim. It is deliberately outside the claude-only LIVE release floor.
 
 ### Emacs frontends
 

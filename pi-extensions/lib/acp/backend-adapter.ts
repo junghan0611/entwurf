@@ -81,13 +81,19 @@ export interface AcpCarrierParams {
 
 /** ensureOverlay input — cwd + (native) model id + the resolved config. A backend
  *  whose overlay/env depends on its OWN settings reads them off `config.adapterSettings`
- *  here; backend.ts never inspects config. Same shape as AcpLaunchParams (overlay and
- *  launch are distinct phases, so they keep distinct names). */
+ *  here; backend.ts never inspects config. Same shape as AcpLaunchParams plus the
+ *  session key (overlay and launch are distinct phases, so they keep distinct names). */
 export interface AcpOverlayParams {
 	cwd: string;
 	modelId: string;
 	nativeModelId: string;
 	config: ResolvedAcpConfig;
+	/** The AUTHORITATIVE per-session key backend.ts already computed
+	 *  (resolveSessionKey: opts.sessionId → PI_SESSION_ID → cwd). A session-scoped
+	 *  overlay MUST scope on this value, never on an ambient re-derivation — the
+	 *  re-derived form drops `opts.sessionId`, so two sessions in one process/cwd
+	 *  would alias one overlay (GPT review 2026-07-29, cortex P0-1). */
+	sessionKey: string;
 }
 
 /** buildSessionMeta input — mirrors the newSession `_meta` inputs. */
@@ -372,7 +378,7 @@ export const cortexAdapter: AcpBackendAdapter = {
 	// isolated HOME with auth symlinks, `autoUpdate:false`, and the mcp.json
 	// projection of the envelope-enriched explicit servers (cortex ignores the
 	// wire mcpServers param, so this file IS how tools reach a cortex session).
-	ensureOverlay({ cwd, modelId, config }) {
+	ensureOverlay({ modelId, config, sessionKey }) {
 		// D3 — presence refusal, empty string included: upstream's resolver treats
 		// a set-but-empty CORTEX_HOME differently from unset, and one ambient value
 		// would silently bypass SNOWFLAKE_HOME (the probe's CLAUDE_CODE_EXECUTABLE
@@ -384,22 +390,26 @@ export const cortexAdapter: AcpBackendAdapter = {
 					"Unset it to run a cortex ACP turn.",
 			);
 		}
+		// The scope authority is the AUTHORITATIVE params.sessionKey backend.ts
+		// computed — never an ambient re-derivation, which would drop opts.sessionId
+		// and alias two same-process/cwd sessions onto one overlay (P0-1). The
+		// envelope below still reads PI_SESSION_ID: that is the identity CARRIER for
+		// the bridge child (the same source the turn loop's wire enrichment uses),
+		// a different axis from overlay-dir scoping.
 		const piSessionId = process.env.PI_SESSION_ID?.trim() || undefined;
-		const scopeKey = piSessionId ? `pi:${piSessionId}` : `cwd:${cwd}`;
-		// Same envelope enrichment the turn loop applies to the wire list — the
-		// projection must carry PI_SESSION_ID/PI_AGENT_ID to the bridge child or a
-		// cortex sibling loses its caller identity (entwurf_self/entwurf_v2).
 		const enriched = enrichMcpServersWithEnvelope(config.mcpServers, { modelId, piSessionId });
 		const overlay = ensureCortexDualHomeOverlay({
-			scopeKey,
+			scopeKey: sessionKey,
 			mcpServers: enriched,
 			realHome: homedir(),
 		});
 		return { envOverrides: { HOME: overlay.home, SNOWFLAKE_HOME: overlay.snowflakeHome } };
 	},
 
-	// Carrier-less (§9-4): Cortex ACP exposes no `_meta.systemPrompt` and has no
-	// developer_instructions / GEMINI_SYSTEM_MD equivalent. loadCarrier returns
+	// System-prompt-carrier-less (§9-4/§11-8): Cortex ACP exposes no
+	// `_meta.systemPrompt` and has no developer_instructions / GEMINI_SYSTEM_MD
+	// equivalent. (It does READ `_meta` — a caller-session-id seam, measured but
+	// unexplored and deliberately not part of this contract.) loadCarrier returns
 	// null WITHOUT calling loadEngraving, so the cortex turn never touches the
 	// shipped-engraving / appendSystemPrompt signature; buildSessionMeta returns
 	// undefined so backend.ts omits the `_meta` key entirely. The operator

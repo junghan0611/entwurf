@@ -1,54 +1,43 @@
-# NEXT — 0.13.0 cortex 랜딩 완료: LIVE 증거 확인 후 릴리즈 컷 판단
+# NEXT — cortex 랜딩 로컬 완결: 다음 세션은 fresh replicant 검수 + installed-consumer acceptance (release 아님)
 
-> NEXT는 부트 섹터다. 다음 세션은 이슈/과거 가설이 아니라 **현재 main·현재 게이트·§11-8**을 먼저 본다.
+> NEXT는 부트 섹터다. 상세 근거는 `docs/acp-backend-rail.md` §11-8과 `VERIFY.md`가 SSOT — 여기 다시 쓰지 않는다.
 
-## NOW — cortex 어댑터 랜딩 (2026-07-29, GPT 계약 → 페블 구현)
+## Current
 
-**계약 출처:** GPT(`openai-codex/gpt-5.6-sol`)가 CP0 evidence(오푸스 측정, D1~D10) 위에서 합의한
-8항목 계약을 GLG가 전달. 문서 SSOT는 `docs/acp-backend-rail.md` **§11-8** (D1~D10 + A~F 판정).
+- **로컬 커밋 3개, push 금지 유지 (GLG/GPT 지시).** origin/main(`f1ead4b`) 대비 ahead:
+  1. `f4b20bb` — hvkiefer PR #40 이식 (저작성 보존)
+  2. `f18ecfe` — CP0 계약 수선 (dual-HOME/D9 투영/D3/D4/D5/E/4행 큐레이션 + 게이트/뮤턴트/스모크/문서)
+  3. `<이번 커밋>` — GPT P0 리뷰 수선: ⑴ overlay scope가 backend의 authoritative
+     `resolveSessionKey`(opts.sessionId 우선)를 명시 carrier로 받도록 배선(P0-1; adapter의 ambient
+     재유도 제거, `AcpOverlayParams.sessionKey`), ⑵ repo-wide stale prose 스윕(README/DELIVERY/rail
+     §11-3 실측 강도 교체/run.sh 게이트 코멘트/carrier-less → system-prompt-carrier-less).
+- **검증 상태:** mutant lane `acp-cortex` 11 claims (신규: `CORTEX-OVERLAY-KEY-IS-SESSION-KEY`,
+  `ACP-OVERLAY-SESSIONKEY-WIRED`), 전체 suite 110/110 목표 — 마지막 커밋의 훅 체인 통과 로그가 증거.
+- **CP2 LIVE PASS 23/23** (2026-07-29, thinkpad, conn XD75151, `entwurf/cortex-claude-sonnet-5`):
+  outbound `entwurf_v2` envelope 배달 + overlay 디스크 사실 + process-group 회수. P0-1 수선은 scope
+  key의 출처만 바꾸며(값은 그 LIVE 조건에서 동일) runtime overlay semantics 불변 → 재실행 불요 판정.
 
-- **이식:** hvkiefer의 PR #40 커밋 `3dd6f5f`를 cherry-pick으로 저작성 보존 이식(충돌 6파일은
-  main 기준 해소), 그 위에 CP0 계약 수선 커밋을 쌓았다. CHANGELOG 크레딧 유지.
-- **수선 축 (전부 §11-8 D-번호에 핀):**
-  - dual-HOME overlay (D2/D10) — 세션 스코프 격리 HOME + `.snowflake`, entwurf-bridge 항목에만
-    real HOME 복원. `pi-extensions/lib/acp/overlay.ts`.
-  - mcp.json 투영 (D9) — cortex `newSession`은 wire `mcpServers`를 무시하므로 envelope-enriched
-    명시 서버를 overlay-private `cortex/mcp.json`으로 exact-author. non-stdio는 spawn 전 fail-loud.
-  - `CORTEX_HOME` presence 거부 (D3, 빈 문자열 포함) / `autoUpdate:false` (D4) /
-    최소 인증 passthrough = connections.toml + config.toml(optional) + credential_cache (D5/F).
-  - 모델 강제 = per-turn `setSessionConfigOption("model", native)` — launch `-m` 폐기 (E/CP0-M).
-  - 큐레이션 4행 (D7): `cortex-auto` / `cortex-claude-opus-5` / `cortex-claude-sonnet-5` /
-    `cortex-openai-gpt-5.4`.
-- **게이트:** `check-acp-cortex` (pnpm check 內) + mutant lane `acp-cortex` 9 claims — 전부 KILLED.
-  CP2 LIVE = `LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live`
-  (outbound entwurf_v2 + overlay 디스크 사실 + process-group 회수). claude 릴리즈 플로어 밖.
-- **LIVE 결과 (이 세션):** **PASS 23/23** (2026-07-29, thinkpad, connection XD75151, model
-  `entwurf/cortex-claude-sonnet-5`): resident가 V3 record citizen으로 탄생 → dual-HOME overlay 디스크
-  사실(autoUpdate:false, mcp.json 투영, bridge HOME 복원, envelope 2종) → 모델이
-  `mcp__entwurf-bridge__entwurf_v2`로 nonce를 peer mailbox에 정확히 1건 배달(sender gid는 프롬프트에
-  없었고 envelope로만 도달, `from: entwurf/cortex-claude-sonnet-5` anchored) → teardown 후 overlay 內
-  프로세스 잔존 0. CP0 owed ①(outbound v2 실송신) 종결.
-- **부수 수선:** `check-probe-cli-shim` 섹션3 same-ms tie 플레이크 봉합 — STREAM_CLI per-turn
-  응답에 5ms 지연(측정: anchor==receivedAtMs tie가 run의 ~10%에서 임의 claim을 WRONG-REASON으로
-  오염). 계측기(shim)는 무접촉, 게이트 픽스처만 수정. probe lane 재검수 시 참고.
+## Next session first move — fresh replicant review + installed-consumer acceptance (NOT release)
 
-## 다음 한 걸음
+1. **repo-wide current-prose sweep** 재검 (AGENTS working-style 2축).
+2. **tarball/installed-JS consumer 축:** `check-install-surface` + `check-pack-install` + Docker
+   `check-install-container`.
+3. **scratch HOME에서 installed package**가 4개 cortex 모델을 등록하고 dual-HOME/mcp projection을
+   실제로 쓰는지.
+4. **실제 operator installed surface**에서 cold-start / reuse / outbound v2 반복.
+5. **negative paths:** `CORTEX_HOME` set / auth·connection 부재 / unsupported model / non-stdio
+   server / teardown.
+6. **readiness gap은 §11-3·#55 known-open 강도 유지** — fence 즉흥 구현 금지.
 
-1. **GLG: 커밋 검토 + push 결정.** 커밋 2개(이식 `f4b20bb` hvkiefer / 수선+문서+게이트)가 로컬에
-   있다. push는 GLG 지시로만.
-2. push 후 0.13.0 릴리즈 컷 여부 판단 (tag-release 스킬; CHANGELOG Unreleased가 이미 정리돼 있다).
-3. GPT 코디네이터에 랜딩 보고 — §11-8과 LIVE 결과를 가리키면 된다.
+## Do not
 
-## owed (랜딩이 주장하지 않는 것 — §11-8에 기록됨)
+- version/tag/publish/release 금지, push 금지 (GLG 지시 대기).
+- readiness fence 구현 금지 (§11-7 lane 소유).
+- `CORTEX_HOME`을 오퍼레이터 셸에 export하지 말 것 — cortex 턴 전부 거부(설계).
+- cortex 버전 핀 금지 (GLG: 유연하게) — 드리프트는 set-model fail-loud가 잡는다.
 
-- project hook이 실재하는 리포에서의 cwd project hook 발화 (계약상 project scope는 허용).
-- `_meta` caller-session-id seam의 의미 (측정됐으나 미탐색 — 계약 승격 안 함).
-- 인증 유무 `configOptions` `[mode]`↔`[model]` 분기 원인.
-- **rail-level readiness fence (§11-3/§11-7)** — cortex도 mcp.json 문 기준으로 race를 상속함이
-  hand-client 강도로 측정됨. 이 랜딩은 그 질문을 닫지 않는다. #55/probe lane이 소유.
+## 참고 (probe lane에 넘길 사실)
 
-## 금지/주의
-
-- `CORTEX_HOME`을 오퍼레이터 셸에 export하지 말 것 — cortex 턴이 전부 거부된다(설계).
-- cortex 버전 핀 금지 (GLG: 유연하게). 동작 검증은 게이트가, 드리프트는 set-model fail-loud가 잡는다.
-- probe-ordering/probe-cli-shim lane은 별도 축 — cortex 작업이 §11-7 결론을 인용하지 않게 유지.
+- `check-probe-cli-shim` 섹션3 same-ms tie 플레이크를 봉합했다(STREAM_CLI per-turn 응답 5ms 지연;
+  계측기 무접촉). anchor==receivedAtMs tie가 run의 ~10%에서 임의 claim을 WRONG-REASON으로 오염시키던
+  실측 근거는 f18ecfe 커밋 메시지와 게이트 픽스처 주석에 있다.

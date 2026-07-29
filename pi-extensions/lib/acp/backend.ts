@@ -644,7 +644,11 @@ export function streamAcpTurn(
 			pushAcpLifecycleNotice(state, `preparing ${adapter.backend} session`);
 			// GPT §9-5: materialize the overlay first, then spawn with launchEnvDefaults
 			// + overlay.envOverrides merged over process.env (defaultDeps spawnChild).
-			const overlay = adapter.ensureOverlay({ cwd, modelId: model.id, nativeModelId, config });
+			// sessionKey is the AUTHORITATIVE per-session identity (resolveSessionKey:
+			// opts.sessionId → PI_SESSION_ID → cwd) — a session-scoped overlay must
+			// scope on it, so it rides the params explicitly and the adapter never
+			// re-derives a weaker key from ambient env (P0-1).
+			const overlay = adapter.ensureOverlay({ cwd, modelId: model.id, nativeModelId, config, sessionKey });
 			const launch = adapter.resolveLaunch({ cwd, modelId: model.id, nativeModelId, config });
 			child = deps.spawnChild(launch, cwd, { ...adapter.launchEnvDefaults(), ...overlay.envOverrides });
 			const spawned = child;

@@ -22,7 +22,7 @@
 //      session-scoped dirs with exact rewrite + dead-pid sweep;
 //   6. CORTEX_HOME ambient presence (empty string INCLUDED) refuses the spawn
 //      (D3 — upstream consumers disagree about empty);
-//   7. carrier-less augment (§9-4) — the operator engraving OVERRIDE rides the
+//   7. system-prompt-carrier-less augment (§9-4/§11-8) — the operator engraving OVERRIDE rides the
 //      first-user augment; a carrier backend (claude) never folds it in.
 //
 // [QK:*] labels mark the claims kill-qualified by scripts/mutants/acp-cortex.json
@@ -329,7 +329,7 @@ const enrichedServers: AcpMcpServer[] = [
 }
 
 // ---------------------------------------------------------------------------
-// Layer A.3 — carrier-less augment (§9-4): the operator engraving override
+// Layer A.3 — system-prompt-carrier-less augment (§9-4/§11-8): the operator engraving override
 // rides the FIRST-USER AUGMENT for cortex; claude (a carrier backend) never
 // folds it in; no override → no engraving injected.
 // ---------------------------------------------------------------------------
@@ -412,7 +412,13 @@ try {
 				command: string;
 				args: string[];
 			};
-			ensureOverlay: (p: { cwd: string; modelId: string; nativeModelId: string; config: unknown }) => {
+			ensureOverlay: (p: {
+				cwd: string;
+				modelId: string;
+				nativeModelId: string;
+				config: unknown;
+				sessionKey: string;
+			}) => {
 				envOverrides: Record<string, string>;
 			};
 			enforceModel: (p: {
@@ -521,6 +527,7 @@ try {
 		modelId: "cortex-claude-sonnet-5",
 		nativeModelId: "claude-sonnet-5",
 		config: { mcpServers: enrichedServers, adapterSettings: { cortexConnection: null } },
+		sessionKey: "pi:gate-sess-42",
 	};
 	process.env.CORTEX_HOME = "";
 	assert.throws(
@@ -570,6 +577,20 @@ try {
 		"the adapter must restore the parent-captured real HOME on the bridge entry (dual-HOME)",
 	);
 	delete process.env.PI_SESSION_ID;
+
+	// P0-1 (GPT review 2026-07-29) — the adapter scopes on the AUTHORITATIVE
+	// params.sessionKey, never an ambient re-derivation: backend.ts's key is
+	// opts.sessionId → PI_SESSION_ID → cwd, so two sessions in one process/cwd
+	// with different opts.sessionId (and no PI_SESSION_ID) are separate in the
+	// registry and MUST get separate overlays — an ambient re-derivation would
+	// alias them onto one mcp.json.
+	const overlayK1 = mod.cortexAdapter.ensureOverlay({ ...overlayParams, sessionKey: "pi:key-one" });
+	const overlayK2 = mod.cortexAdapter.ensureOverlay({ ...overlayParams, sessionKey: "pi:key-two" });
+	assert.notEqual(
+		overlayK1.envOverrides.HOME,
+		overlayK2.envOverrides.HOME,
+		"two session keys (same cwd, no PI_SESSION_ID) must materialize DIFFERENT overlay homes — the adapter scopes on params.sessionKey alone [QK:CORTEX-OVERLAY-KEY-IS-SESSION-KEY]",
+	);
 
 	// (6) CP0-M — enforceModel sends the NATIVE id through the SAME wire call the
 	// claude adapter makes (session/set_config_option, configId "model").

@@ -2374,18 +2374,27 @@ check_acp_carrier_augment() {
 
 check_acp_cortex() {
   # Deterministic gate for the Cortex (Snowflake Cortex Code) ACP backend — the
-  # first non-claude adapter on the rail (docs/acp-backend-rail.md §4/§6/§9). The
-  # cortex source landed as one `cortexAdapter` object (backend-adapter.ts) + its
-  # curated surface (models.ts) + config overlay (overlay.ts); the 결합 규칙
-  # requires the gate to land WITH it, and §6 said EXTEND the check-acp-* family,
-  # so cortex's whole deterministic axis lives here. Locks: cortex curated rows
-  # register through the REAL registry path (allCuratedModels, no collision), the
-  # `cortex-` prefix routes to cortexAdapter, prefix-strip recovers the native -m
-  # (cortex-auto → no -m), overlay auth-through symlinks connections/config/cache/
-  # skills (never copies — Hard Rule #8) + SNOWFLAKE_HOME redirect, and the
+  # first non-claude adapter on the rail, landed 0.13.0 on the CP0-measured
+  # contract (docs/acp-backend-rail.md §4/§6/§11-8). The cortex source is one
+  # `cortexAdapter` object (backend-adapter.ts) + its curated surface (models.ts)
+  # + the dual-HOME overlay (overlay.ts); the 결합 규칙 requires the gate to land
+  # WITH it, and §6 said EXTEND the check-acp-* family, so cortex's whole
+  # deterministic axis lives here. Locks (each §11-8 D-pinned): the GLG-decided
+  # 4-row curation rides real registry bases and the `cortex-` prefix routes to
+  # cortexAdapter; launch is `cortex acp serve` with NO -m — the model is
+  # enforced per turn via session/set_config_option with the native id (E);
+  # CORTEX_HOME presence (empty included) refuses the spawn (D3); the dual-HOME
+  # overlay isolates HOME+SNOWFLAKE_HOME per session key (P0-1: scope =
+  # backend-passed resolveSessionKey, never ambient), passes through only
+  # connections.toml / optional config.toml / credential_cache (D5/F — never the
+  # whole cache, never skills; symlink-through, no copies — AGENTS §ACP Plugin
+  # Boundary), authors autoUpdate:false (D4), and projects envelope-enriched
+  # explicit servers into cortex/mcp.json with the real HOME restored on
+  # entwurf-bridge alone (D9/D10), non-stdio failing loud; the
   # CORTEX_ACP_COMMAND override single-quotes shell-metachar connection tokens.
   # The gate self-manages the tsc-emit layer for the .js-suffixed backend-adapter
-  # imports; no auth, no spawn, no live cortex needed.
+  # imports; no auth, no spawn, no live cortex needed. Kill-qualified via the
+  # `acp-cortex` mutant lane under check-gate-qualification.
   section "ACP cortex backend (Snowflake Cortex Code — 1st non-claude adapter)"
   run_ts scripts/check-acp-cortex.ts
 }

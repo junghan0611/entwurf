@@ -26,7 +26,7 @@
 
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -735,8 +735,71 @@ try {
 			"showToolNotifications is display-only — never perturbs the bridge config signature (no spurious rebuild)",
 		);
 	}
+
+	// ----------------------------------------------------------------------
+	// Section I — overlay scope wiring (P0-1, GPT review 2026-07-29): the turn
+	// loop hands adapter.ensureOverlay the AUTHORITATIVE resolveSessionKey value
+	// (opts.sessionId → PI_SESSION_ID → cwd). A session-scoped overlay (cortex)
+	// scopes its dir on this key, so two same-process/cwd sessions with
+	// different opts.sessionId must reach the adapter as two DIFFERENT keys —
+	// an ambient re-derivation (PI_SESSION_ID/cwd only) would alias them onto
+	// one overlay/mcp.json. Captured by wrapping the routed claudeAdapter's
+	// ensureOverlay on the compiled module (claude ignores the params, so a
+	// no-op stub is behavior-safe for these two turns).
+	// ----------------------------------------------------------------------
+	{
+		const captured: string[] = [];
+		const originalEnsureOverlay = adapterMod.claudeAdapter.ensureOverlay;
+		adapterMod.claudeAdapter.ensureOverlay = (p: { sessionKey: string }) => {
+			captured.push(p.sessionKey);
+			return { envOverrides: {} };
+		};
+		const savedPiSessionId = process.env.PI_SESSION_ID;
+		delete process.env.PI_SESSION_ID;
+		try {
+			const h = makeHarness(recordDir);
+			await collect(
+				backend.streamAcpTurn(
+					sonnet,
+					{ messages: [{ role: "user", content: "hi NONCE-I1", timestamp: 0 }] },
+					{ sessionId: "gate-I-one" },
+					h.deps,
+				) as Stream,
+			);
+			await collect(
+				backend.streamAcpTurn(
+					sonnet,
+					{ messages: [{ role: "user", content: "hi NONCE-I2", timestamp: 0 }] },
+					{ sessionId: "gate-I-two" },
+					h.deps,
+				) as Stream,
+			);
+			assert.deepEqual(
+				captured,
+				["pi:gate-I-one", "pi:gate-I-two"],
+				"the turn loop must pass adapter.ensureOverlay the AUTHORITATIVE resolveSessionKey value (opts.sessionId " +
+					"first) — two sessions in one process/cwd must arrive as two DIFFERENT overlay scope keys " +
+					"[QK:ACP-OVERLAY-SESSIONKEY-WIRED]",
+			);
+		} finally {
+			adapterMod.claudeAdapter.ensureOverlay = originalEnsureOverlay;
+			if (savedPiSessionId === undefined) delete process.env.PI_SESSION_ID;
+			else process.env.PI_SESSION_ID = savedPiSessionId;
+		}
+	}
 } finally {
 	rmSync(TMP_EMIT, { recursive: true, force: true });
+	try {
+		// The emit created `.tmp-verify/` as TMP_EMIT's parent. This gate now runs
+		// inside check-gate-qualification's PURITY-checked snapshot (it is the gate
+		// for the ACP-OVERLAY-SESSIONKEY-WIRED mutant), and the snapshot tree
+		// manifest walks ignored paths too — a leftover empty parent dir reads as
+		// IMPURE drift. Remove it when empty; a concurrent sibling gate's emit
+		// keeps it alive and the rmdir just fails.
+		rmdirSync(".tmp-verify");
+	} catch {
+		// non-empty or already gone — fine either way
+	}
 	rmSync(recordDir, { recursive: true, force: true });
 }
 

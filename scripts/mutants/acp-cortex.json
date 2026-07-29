@@ -154,6 +154,32 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:CORTEX-ENFORCE-SET-MODEL]",
 			"signatureSource": "scripts/check-acp-cortex.ts"
+		},
+		{
+			"claim": "CORTEX-OVERLAY-KEY-IS-SESSION-KEY",
+			"title": "re-deriving the overlay scope from ambient env drops opts.sessionId — two same-process/cwd sessions alias one overlay/mcp.json",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\t\tconst overlay = ensureCortexDualHomeOverlay({", "\t\t\tscopeKey: sessionKey,"],
+			"replace": ["\t\tconst overlay = ensureCortexDualHomeOverlay({", "\t\t\tscopeKey: piSessionId ?? \"static\","],
+			"gate": ["bash", "run.sh", "check-acp-cortex"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CORTEX-OVERLAY-KEY-IS-SESSION-KEY]",
+			"signatureSource": "scripts/check-acp-cortex.ts"
+		},
+		{
+			"claim": "ACP-OVERLAY-SESSIONKEY-WIRED",
+			"title": "passing a cwd-derived key instead of resolveSessionKey's value silently merges distinct sessions' overlay scopes at the production call site",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tconst overlay = adapter.ensureOverlay({ cwd, modelId: model.id, nativeModelId, config, sessionKey });"
+			],
+			"replace": [
+				"\t\t\tconst overlay = adapter.ensureOverlay({ cwd, modelId: model.id, nativeModelId, config, sessionKey: `cwd:${cwd}` });"
+			],
+			"gate": ["bash", "run.sh", "check-acp-session-reuse"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACP-OVERLAY-SESSIONKEY-WIRED]",
+			"signatureSource": "scripts/check-acp-session-reuse.ts"
 		}
 	]
 }

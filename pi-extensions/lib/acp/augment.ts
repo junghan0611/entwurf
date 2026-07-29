@@ -38,7 +38,9 @@ const MAX_AUGMENT_BYTES = 50 * 1024;
 
 // Carrier-less backends expose no `_meta.systemPrompt` (docs/acp-backend-rail.md
 // §9-4). claude folds the operator engraving into that carrier; a carrier-less
-// backend (cortex, the first) has nowhere to put it — so its operator engraving
+// backend (cortex, the first — precisely: SYSTEM-PROMPT-carrier-less, since
+// cortex does read `_meta` for an unpromoted caller-session-id seam, §11-8)
+// has nowhere to put it — so its operator engraving
 // rides HERE, prepended as the LEADING section of the first-user augment. It
 // travels on the WIRE only (new-only, never the config signature), so an
 // engraving change applies to the NEXT new cortex session rather than
@@ -104,7 +106,7 @@ export function buildPiContextAugment(params: PiContextAugmentParams): string {
 
 	const sections: string[] = [];
 
-	// Carrier-less backend (cortex): the operator engraving leads the augment,
+	// System-prompt-carrier-less backend (cortex): the operator engraving leads the augment,
 	// since there is no `_meta.systemPrompt` carrier to hold it. null when no
 	// override is configured — the shipped claude default is never injected here.
 	if (CARRIER_LESS_BACKENDS.has(params.backend)) {

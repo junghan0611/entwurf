@@ -437,25 +437,31 @@ taken while cortex was *not* the next lane. 11-3 is why the lane change re-opens
 
 ### 11-3. What cortex inherits is the contract gap — not, provably, the race
 
-Be precise about what transfers. MCP servers reach a session through the **backend-invariant** part of the turn:
-`backend.ts` enriches the normalized servers with the session envelope and passes `mcpServers: wireMcpServers`
-straight into `connection.newSession(...)`. A cortex session receives the bundled `entwurf-bridge` by exactly
-that path, and meets exactly the same absence of a client-side wait. Nothing in `cortexAdapter` can change that.
+Be precise about what transfers. For CLAUDE, MCP servers reach a session through the **backend-invariant**
+part of the turn: `backend.ts` enriches the normalized servers with the session envelope and passes
+`mcpServers: wireMcpServers` straight into `connection.newSession(...)`, with no client-side wait.
 
-**What that does NOT establish** is that cortex reproduces the race. The race requires a *server* that can
-return `newSession` before its MCP servers are usable. Cortex's ACP server is a different implementation and may
-well guarantee readiness before it returns — in which case the same missing client-side fence is harmless there.
-So the honest statement is: **cortex inherits the missing client-side readiness guarantee (a contract gap); it
-inherits the race only if its server has the same behavior, which is unmeasured.** Measure it; do not assume
-symmetry in either direction.
+**The cortex half of this section was superseded by measurement (CP0 2026-07-29 — §11-8 D9).** An earlier
+draft assumed a cortex session receives `entwurf-bridge` "by exactly that path"; measured against v1.1.52,
+cortex's ACP `newSession` reads only `cwd` and `_meta` and **ignores the wire `mcpServers` param entirely** —
+its transport is the overlay-private `$SNOWFLAKE_HOME/cortex/mcp.json` the landed adapter authors (§4). And
+the race question is no longer symmetric-by-assumption: through that mcp.json door, paired hand-client runs
+(D=0/2 s/6 s) showed `newSession` returning flat (~1.1–1.4 s) while wire-availability trailed by up to
+~5.9 s, and the production `enforceModel` step (1–2 ms) does not absorb the gap — **cortex launches MCP
+during `newSession` but does not await the handshake, i.e. it inherits the race on its own door.** That
+evidence is hand-client strength (not `check-probe-ordering`-qualified, one run per cell), and
+"prompt slot ahead of wire" remains a client-side proxy — actual tool-schema absence in a live cortex turn
+has not been demonstrated. The client-side readiness fence stays the open rail-level question (#55, §11-7);
+the cortex landing neither settles nor hides it.
 
 But the two prescriptions recorded in ROADMAP were both scoped to Claude internals:
 
 - **① patch `claude-agent-acp` so `createSession` bounded-waits** — does nothing for `cortex acp serve`, which
   is a different ACP server implementation entirely.
 - **② expose MCP status as an ACP extension and poll before prompting** — requires the ACP *server* to expose
-  readiness. `claude-agent-sdk` has `mcpServerStatus()`; whether Cortex's ACP server exposes any equivalent is
-  **unmeasured**. Probe it during the audit rather than assuming symmetry.
+  readiness. `claude-agent-sdk` has `mcpServerStatus()`; Cortex's ACP server was **measured** during the CP0
+  audit: its `initialize` capabilities carry no MCP-status surface either (§11-8), so ② has no near-term
+  payoff on either landed backend.
 
 So tool readiness is a **rail-level contract question**, not a Claude bug — and it is still an *open question*,
 not a decided design. Do not pre-commit to a shape. An optional adapter member is one candidate, but before it
