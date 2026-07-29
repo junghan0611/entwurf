@@ -633,22 +633,35 @@ correlation is decisive, and this probe exists precisely to stop settling for in
 | `tools_list_response_forwarded` **and** explicit call prompt sent **and** *no* fixture `tools/call` marker **and** runtime `No such tool available: <id>` where `<id> === expectedProviderToolId` | **direct schema-absence evidence** | **Yes**, if pre-turn assertions and config were valid |
 | same as above but `<id>` is the bare name or any other alias | model / alias mismatch | **No** |
 | no call marker, no direct runtime error, only model prose saying the tool is missing | model-compliance / insufficient evidence | **No** — model prose alone never promotes |
-| a provider-bound schema snapshot **for this same `runId` and prompt request**, taken *after* `tools_list_response_forwarded`, showing `expectedProviderToolId` absent | equivalent to the direct runtime error | **Yes**, same condition |
+| a **Claude CLI-reported available tool-name snapshot** (SDK `system`/`init.tools`) for this same `runId` and prompt ordinal, taken *after* `tools_list_response_forwarded`, showing `expectedProviderToolId` absent | `B-name-snapshot` — a *controlled* absence reading, **weaker** than the row above | **Yes**, under the extra conditions in §11-7-c |
 
 Any combination not listed stays **P0 / inconclusive** by default. Note the ②/③ boundary is decided by one
 marker, not by reading the error text: a fixture `tools/call` marker means dispatch resolved and execution
 failed; a direct no-such-tool claim requires that marker to be **absent**.
 
-**A schema snapshot must be time-closed, or it is a different claim.** The ordering the last row requires is
+**The last two rows are NOT the same strength, and the earlier draft of this table said they were.** It called a
+snapshot "equivalent to the direct runtime error". They are not equivalent, and conflating them would let a weaker
+instrument inherit a stronger claim (GPT review 2026-07-29):
+
+- the **runtime `No such tool`** row is the model's own dispatch failing against the id we measured — the failure
+  mode itself, observed;
+- a **name snapshot** is a *report* of what the CLI says it had available at turn init. It is a `string[]` of tool
+  NAMES, not tool definitions, and it is the CLI's account of the turn rather than the request payload the model
+  was actually served. It can carry an absence claim; it cannot carry the failure.
+
+So the snapshot row is named `B-name-snapshot` and kept separate. What it may say is narrow: *in this paired run,
+the injected delay was sufficient to produce a CLI-reported name-set absence.* What it may never say is that the
+2026-07-24 incidents are explained — controlled sufficiency is not historical attribution. The seam, its
+conditions, and its limits are §11-7-c; **it is not instrumented yet**, so no run may currently reach this row.
+
+**A snapshot must be time-closed, or it is a different claim.** The ordering the row requires is
 
 ```text
-tools_list_response_forwarded  <  provider-bound schema snapshot for THIS prompt/model request
+tools_list_response_forwarded  <  CLI-reported tool-name snapshot for THIS prompt ordinal
 ```
 
-and the snapshot has to be attributed to the same `runId` and prompt request id. A capture taken at an arbitrary
-moment after the prompt says nothing — dynamic updates mean the set can change underneath it. Where possible the
-snapshot should be the tool-definition set the provider actually handed to the model request, not a
-reconstruction.
+and the snapshot has to be attributed to the same `runId` and the same serialized prompt ordinal. A capture taken
+at an arbitrary moment after the prompt says nothing — dynamic updates mean the set can change underneath it.
 
 Order of operations stays: record the run as a **P0 / INVALID BASELINE** fact with its artifact → classify
 setup / pin / config / fixture / model-compliance → promote into the readiness ledger **only** on a row marked
@@ -749,6 +762,109 @@ MCP-readiness before `newSession` returns? — by measurement rather than by ass
 loop (the wire proxy / raw client seam above exists precisely so the turn loop stays untouched). Design follows
 evidence, not the other way around.
 
+#### 11-7-0. The observation window, the two log doors, and the two axes (2026-07-29)
+
+Three contract additions came out of cross-review of the first LIVE pair. Each closes a way the probe could
+report a fact about ITSELF as a fact about the server.
+
+**⑴ The observation window.** Absence is only a reading when we kept looking long enough to have seen the
+marker. After the turn settles the runner holds the ACP child open until the FIRST of:
+
+| the window closes on | `reason` | what a missing wire marker then means |
+|---|---|---|
+| the wire marker landing | `wire-marker` | n/a — it landed |
+| the ACP child exiting on its own | `child-exit` | **CENSORED** → `INVALIDATED`, never an attribution |
+| the deadline passing | `deadline` | the window was **sufficient** → a real handshake / fixture / config candidate |
+| the turn failing at a phase | `run-failed` | moot — the phase reading (`D-*`) owns the run |
+
+and stamps `probe_observation_window_end {reason, markerSeen, deadlineBasis, waitedMs}` **before** teardown.
+That stamp is SELF-REPORTED, so the classifier checks it rather than believing it: `markerSeen` must match
+whether the run's log actually carries `tools_list_response_forwarded`, `wire-marker` implies seen, and
+`deadline` / `child-exit` both imply unseen. Any disagreement INVALIDATES the run — otherwise a close claiming
+the marker was seen, in a run that has none, would walk a censored run straight into the candidate branch. The
+check lives in the run's shared validity list, so the **control is held to it too**: a baseline free to claim a
+wire marker it never logged is not a baseline. The post-delay slack is a **constant, not an env knob**: a shrinkable window could close early and then
+call its own absence "deadline-sufficient".
+The deadline is anchored on the fixture's OWN `fixture_delay_start` / `fixture_delay_end` markers plus a bounded
+post-delay slack — never on run start, because the injected delay begins when the fixture process boots, which
+is itself some way into `newSession`; a run-start-relative deadline would drift with spawn latency and silently
+shorten the window it claims to guarantee. The basis actually used is recorded, so a reader can tell a
+well-anchored window from a fallback one. **A rejected alternative:** bounding `D` below the measured turn
+duration. It reads like the same fix and is not — it is a noisy heuristic over a quantity that varies per run,
+and it would put a stimulus parameter at the mercy of the model's verbosity. `D` keeps its timeout-boundary
+condition only; the window, not the delay, is what has to be sufficient.
+
+**⑵ Two doors on the log, not one.** `readProbeEvents` already refused broken LINES (`malformed`). It now also
+refuses a broken STREAM (`sequenceViolations`): per writing pid, walking the RAW APPEND ORDER, `seq` must
+strictly increase (a repeat is two lines claiming one slot; gaps are fine, the counter is process-wide) and
+`tsMs` must not run backwards (one process reads one clock). **Before the sort, on purpose** — validating after
+would be circular, since the comparator would have already rewritten the order under examination and a writer
+whose clock stepped would come out looking perfectly ordered. The header had claimed a "monotonic per-process
+counter" since the probe landed while the door checked only that `seq` was a non-negative safe integer: a
+stated property the evidence never had to keep.
+
+The writer key is **(runId, pid)**, not pid alone: the fixture is a fresh child per run and the OS reuses pids,
+so a later run's fixture may legitimately restart its counter at 0 — and cross-run ordering is not something
+any verdict reads.
+
+Alongside it, **runner-owned marker topology** is now exactly-once: `run_start`, `probe_observation_window_end`
+and `run_end` appear once each; every phase start/end pair appears at most once, never an end without a start,
+never out of order, and always from ONE pid. Beyond the pairs, the **phase-to-phase production order** is
+pinned — `initialize → newSession → enforceModel → prompt`, with a failed run being a **prefix** of that
+sequence and never a hole. Checking only start<end inside each phase would pass a log whose phases were wholly
+transposed while every pair looked intact. Three further shapes are closed: `run_start` must precede the first
+phase; the **first FAILED phase must be the last one reached** (a tidy prefix whose second phase reports
+`ok:false` still describes a driver that carried on, which ours never does); and `prompt_reply` follows
+`prompt_end` — the real writer order, since the runner stamps the reply after `driveProbeTurn` returns — with
+exactly one reply on a successful prompt and none on a failed one. Order is compared on `seq`, not timestamps — all runner markers
+come from one process, so `seq` is exact where a same-millisecond pair is not. This is deliberately **narrow**:
+`acp_tool_call_raw` repeats by design, a model may produce several tool calls, and a client may re-request
+`tools/list`. Those are repeatable markers under an earliest-wins read, and sweeping them into an exactly-once
+rule was proposed here and rejected as over-broad.
+
+**⑶ Two axes, reported separately.** One verdict let an unsettled question hide a settled one (§11-7-b). Every
+intervention now carries both:
+
+- **(a) `ordering` — the ordering observation**, from marker timestamps alone:
+  `wire-before-newSession-end` · `wire-before-prompt-request` (`newSession` end < wire < `promptStart`) ·
+  `prompt-request-ahead-of-wire` · `censored` · `unknown` (no marker under a sufficient window, or a same-ms
+  cross-process tie, which is unordered at this resolution).
+- **(b) `failure` — the callability reading**: `callable` · `C` · `B` · `candidate-handshake` · `inconclusive`.
+
+**Every (a) value is named for the comparison it IS, never for a conclusion.** The first cut named them
+`wait-observed` / `no-wait`, and review rejected that (2026-07-29): `promptStart` is a **client-side proxy** —
+the moment *we* issued the ACP prompt request — and a server may accept that request and then wait internally
+for the MCP install before serving the model. `promptStart < wire` therefore establishes exactly one thing:
+we issued the prompt request first. It is **not** proof the server did not wait. The mirror error is equally
+easy: `wire < newSessionEnd` on its own is an ordering, not "the server waited"; only A's latency scaling
+across two delays turns it into wait evidence. B/C use the prompt comparison as a stated **premise**, and no
+layer may say "the turn was opened against tool set X" or "the schema was fixed at T" until the provider-side
+snapshot of §11-7-c exists to show it.
+
+The three ordering comparisons are kept as three named flags — `newSessionOrderingKept`, `newSessionRanAhead`,
+`promptRanAhead` — rather than one `ranAhead`, because **A and B/C do not share an axis**. A's axis is
+`wire < newSessionEnd` plus latency scaling across two delays. B/C's causal window is `promptStart < wire`: the
+prompt request is where the turn is opened against whatever tool set exists at that moment. `newSessionRanAhead`
+is a diagnostic and never a B/C verdict input. Collapsing the three — in either direction — silently breaks one
+of the two readings, which is why each is separately mutant-qualified.
+
+**The exit contract asks three questions, not one.** The runner reports `status.validity` (fatal: `P0` / `I0` /
+`INVALIDATED` — nothing was measured), `status.orderingMeasurement` (did axis (a) produce a comparison), and
+`status.failureVerdict` (axis (b)). It exits non-zero only when the run produced *nothing*. A pair that lost an intervention reports
+`validity: partial` with the discarded runs listed in `status.invalidRuns` — calling that plain `valid` would
+hide a missing delay point behind a healthy label, and `A` in particular is a claim about the whole series. Previously any
+composite verdict outside the judgeable list failed the run, which reported a pair that had successfully
+measured its ordering axis as a failure because the callability axis had no marker — the same conflation the
+axes exist to undo. `orderingMeasurement: measured` says a comparison was recorded; it is **not** a claim that
+the server waited or did not.
+
+The pair-level `ordering.summary` is deliberately **not** called "wait" either: `wire-before-newSession-end`
+means every judgeable intervention put the wire before `newSession` end, while the WAIT verdict (`A`)
+additionally requires the latency scaling. And evidence strings now carry the deltas — prompt↔wire, `newSession`↔wire, and how much turn
+remained after the wire — because §11-7-b classified D1 correctly and still left a reader unable to see the
+1.9 s ran-ahead or the 2.3 s of turn that followed the marker. That was a diagnosability defect, distinct from
+a verdict defect, and it is fixed as one.
+
 ### 11-7-a. As built (2026-07-28)
 
 The client seam chosen is the **probe-dedicated raw client**, bound by its required gate:
@@ -807,7 +923,7 @@ The one property the gate does not mutant-prove is the write-callback **timing**
 microsecond ordering); the marker's existence and attribution are proven, the callback placement is
 review-pinned in the fixture source.
 
-### 11-7-b. First measurement under the door contract (2026-07-28) — inconclusive
+### 11-7-b. First measurement under the door contract (2026-07-28) — re-read 2026-07-29
 
 Artifact `.probe-artifacts/acp-ordering/2026-07-28T09-13-06-523Z` (gitignored, local forensics). 57 events,
 **0 malformed** — the first evidence that the tightened door is calibrated rather than merely strict: a real
@@ -823,13 +939,105 @@ paired run passes it without being turned into an INVALIDATED artifact.
   still inside its startup delay (`fixture_delay_end` at +9384 ms). That run produced no
   `tools_list_response_forwarded` at all.
 
-**Verdict: `inconclusive`, promotable=false.** Both interventions show the turn running ahead of wire
-availability, which is evidence-SHAPED against the A (wait) reading on this server and this path — and the
-ladder still refuses to promote it, correctly. D1 carries no runtime `No such tool` naming the measured id
-because the model never attempted the call, and model silence is not evidence, so it is not delta-B. D2 has no
-wire marker at all, so per :631 it stays an MCP handshake / fixture / config **candidate**. Nothing here
-changes the product turn loop, the rail's prescription, or a release note.
+**Verdict as first reported: `inconclusive`, promotable=false.** Cross-review on 2026-07-29 found that reading
+wrong in two places, and both are now closed in the classifier.
 
-**What the next pair has to change:** the decisive marker exists only if the model ATTEMPTS the call inside
-the delayed window. Re-run with a prompt/strategy that forces the attempt, then re-judge against the same
-marker set. Until then the §11-7 question stays open with the instrument admissible and the measurement owed.
+**Read the rest of this section as FORENSICS, not as a re-classification.** This artifact predates the
+observation-window protocol, so it carries no `probe_observation_window_end` on any run — which means the
+current classifier **INVALIDATES it on topology, control included**, and correctly so. It cannot be re-judged,
+and no verdict below may be quoted as one. What survives re-reading is narrower and still worth keeping: the
+raw timestamps, and a diagnosis of what the first reading did with them.
+
+**D1's timestamps carry a fact the single verdict hid.** `promptStart` (+1546 ms) precedes the wire marker
+(+3416 ms) by ~1.9 s. That comparison is made of two timestamps and nothing else — it does not depend on what
+the model chose to do. Under the axis vocabulary it is **`prompt-request-ahead-of-wire`**, and that is the
+whole of it: *we issued the prompt request before the tools reached the wire.* It is **not** a finding that the
+server did not wait — the server may have accepted that request and waited internally, and these stamps cannot
+see inside it. Server-wait remains **undetermined**. What the first reading got wrong was structural rather
+than factual: by folding one verdict over both questions, a recorded comparison was reported as though nothing
+had been observed. Hence the two axes.
+
+**D2 was misattributed, and the cause was ours.** It was filed as an MCP handshake / fixture / config candidate
+because it produced no wire marker. The artifact says otherwise. The runner tore the ACP child down the instant
+the turn settled at +6673 ms — while the fixture was still inside its 8 s delay. The fixture then went on to
+log `fixture_delay_end` at +9384 ms, `fixture_transport_connected` at +9385 ms and `fixture_initialize_received`
+at +9388 ms — **2.7 s after `run_end`** — and stopped there. In the control, `fixture_initialize_received` →
+`fixture_tools_list_received` took 14 ms. So the marker was ~14 ms away when the observation window closed.
+The absence was **right-censored**: a fact about our teardown, reported as a finding about the server. Under the
+current contract a run shaped like this reads **INVALIDATED (`observation-window-closed`)** — stated as the
+diagnosis it is, since this artifact itself is invalidated on topology before any of that is reached. The
+observation-window protocol exists so the shape cannot recur.
+
+**Nothing here changes the product turn loop, the rail's prescription, or a release note.** The one thing the
+pair leaves behind is a forensic timestamp fact on D1 — `prompt-request-ahead-of-wire`, from one pair, on this
+server and this path — plus the D2 censoring diagnosis. Neither is a server-wait verdict, and neither is
+admissible evidence under the current door. **A judgeable measurement still has to be taken.**
+
+**What the next pair has to change — and what it must NOT try.** The obvious move, "re-run with a prompt that
+forces the attempt", was proposed here and is now withdrawn. The prompt was already
+`Call the probe_nonce tool now with probeRunId set to exactly "…"`, and D1 shows why strengthening it cannot
+work: the wire marker landed at +3416 ms with the turn still running until +5737 ms — **2.3 s of open window
+after the tools reached the wire** — and the model still did not call. It could not: the tool was not in the
+schema its prompt request was served with, and a compliant model does not call what it cannot see. There is
+also no forcing mechanism to reach for — `tool_choice` / `toolChoice` appears **zero times** across
+`@agentclientprotocol/claude-agent-acp` 0.62.0 and `@agentclientprotocol/sdk`; ACP `session/prompt` has no
+forced-tool parameter. So delta-B's runtime `No such tool` is not reachable by stimulus tuning on a compliant
+model, and repeating the prompt is not a plan. The oracle has to change instead — §11-7-c.
+
+
+### 11-7-c. The `B-name-snapshot` seam — agreed design, NOT yet instrumented (2026-07-29)
+
+Delta-B's runtime `No such tool` is unreachable by stimulus tuning (§11-7-b). The oracle has to change, and the
+one that can carry an absence claim without depending on model compliance is a snapshot of what the CLI reports
+as available. Where that lives was measured, not assumed:
+
+- `@anthropic-ai/claude-agent-sdk` 0.3.219 `sdk.d.ts:4412` — `SDKSystemMessage` (`subtype: 'init'`) carries
+  **`tools: string[]`** and **`mcp_servers: {name,status}[]`**, and `acp-agent.js:1573-1587` notes it
+  **re-emits per turn**, which is the per-prompt attribution the ladder requires.
+- **The current ACP stdio seam cannot see it.** That same handler consumes only `capabilities` and
+  `fast_mode_state` and drops the rest; the message never crosses the ACP wire. Ruled out by measurement, not
+  by preference.
+- **`acp-agent.js:4085`** resolves `pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE ?? (await
+  claudeCliPath())`. That env var is a **supported executable override seam** — upstream's own `--cli` path
+  delegates through `claudeCliPath()` the same way. It is *not* an upstream sanction of instrumentation
+  wrappers, and this document does not claim it is.
+- A local HTTP proxy via `ANTHROPIC_BASE_URL` would give the true request payload including full tool schemas.
+  It is **NO-GO**: it intermediates the operator's auth request, which is the boundary Hard Rule #8 draws.
+  Therefore historical sufficiency stays open — the strongest reachable oracle is deliberately not the ground
+  truth, and that asymmetry is recorded rather than papered over.
+
+**The seam, when built:** a probe-only shim at `CLAUDE_CODE_EXECUTABLE` that execs the real CLI and tees its
+stream-json stdout, under these conditions (all agreed in cross-review before any code):
+
+1. The runner resolves the native binary through upstream `claudeCliPath()` **before** setting the override and
+   passes that exact path to the shim by a separate probe env var. Never a bare `claude` off `PATH` — that is
+   stimulus drift. The deep import is a **version-pinned internal resolver dependency** (the package exposes it
+   through an `exports` wildcard, not a root public export), and its disappearance must break an offline gate.
+2. Attribution is by **serialized prompt ordinal**, not by any native request id: ACP prompts are pinned
+   one-at-a-time and the runner's prompt ordinal binds to the shim's observed init ordinal with exactly-one
+   cardinality. A follow-up prompt is ordinal 2.
+3. The shim preserves argv / stdin / stdout / stderr / exit / signal, and logs **no** auth, env, argv or prompt
+   body — only allowlisted init fields (`tools`, `mcp_servers` status, `model`) plus ordinal and timing. It
+   keeps a bounded in-memory line buffer for NDJSON framing; every other byte is exact-passthrough and then
+   discarded.
+4. It **scrubs its own env from the child**: `CLAUDE_CODE_EXECUTABLE` and every probe-private variable are
+   removed before exec, or the override re-propagates to grandchildren and produces recursion or env drift.
+   An operator who was already using `CLAUDE_CODE_EXECUTABLE` keeps their meaning, because the exact path their
+   setting resolved to is what gets executed.
+5. Control and intervention use the **same** shim — a tee changes timing, and only a shared one keeps the pair
+   a delta. Byte-transparency, backpressure, and exit/signal propagation are proved by a fake-CLI deterministic
+   gate.
+6. The snapshot timestamp is an **interval**, not a point: full-init-line received ↔ downstream write callback.
+   A wire marker overlapping that interval is unordered; only `wire < snapshotReceived` reads as "after".
+7. Promotion floor: the **control** snapshot must contain `expectedProviderToolId` with the fixture call and
+   nonce echo succeeding (calibration), and only then may an intervention with snapshot absence +
+   `promptRanAhead` + no fixture call + valid topology and window read `B-name-snapshot`. `mcp_servers.status`
+   is a supporting fact and never a substitute for the name set.
+
+Its upstream assumptions — the `claudeCliPath` export, and `CLAUDE_CODE_EXECUTABLE` winning over
+`...userProvidedOptions` by key order at `acp-agent.js:4085` — are load-bearing and order-dependent, so they
+belong to `check-probe-ordering` / the `probe-ordering` mutant lane as the consuming gate, with
+`check-acp-sdk-surface` keeping only its own version facts. One oracle, one consumer binding. `node_modules`
+can never be a mutant subject, so the qualified subject is a tracked inspector validated against synthetic
+source fixtures (correct order · `userProvidedOptions` inverted to win · export absent) and then applied to the
+installed dist.

@@ -17,12 +17,8 @@
 			"claim": "VERDICT-I0-NEVER-D",
 			"title": "reading an intervention initialize failure as D-newSession — the injected delay cannot reach initialize",
 			"subject": "scripts/lib/probe-verdict.ts",
-			"find": [
-				"\t\treturn { ...base, kind: \"I0\", promotable: false, evidence: facts.initialize.error ?? \"initialize failed\" };"
-			],
-			"replace": [
-				"\t\treturn { ...base, kind: \"D-newSession\", promotable: false, evidence: facts.initialize.error ?? \"initialize failed\" };"
-			],
+			"find": ["\t\t\tkind: \"I0\","],
+			"replace": ["\t\t\tkind: \"D-newSession\","],
 			"gate": ["bash", "run.sh", "check-probe-ordering"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:VERDICT-I0-NEVER-D]",
@@ -33,9 +29,11 @@
 			"title": "promoting any No-such-tool absence — alias/bare-name mismatches would enter the readiness ledger",
 			"subject": "scripts/lib/probe-verdict.ts",
 			"find": [
-				"\t\tif (ranAhead && expectedProviderToolId !== undefined && facts.noSuchToolId === expectedProviderToolId) {"
+				"\t\t\tdeltas.promptRanAhead &&",
+				"\t\t\texpectedProviderToolId !== undefined &&",
+				"\t\t\tfacts.noSuchToolId === expectedProviderToolId"
 			],
-			"replace": ["\t\tif (ranAhead && facts.noSuchToolId !== undefined) {"],
+			"replace": ["\t\t\tdeltas.promptRanAhead &&", "\t\t\ttrue &&", "\t\t\tfacts.noSuchToolId !== undefined"],
 			"gate": ["bash", "run.sh", "check-probe-ordering"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:VERDICT-B-PROMOTION-RULES]",
@@ -46,9 +44,15 @@
 			"title": "dropping the ran-ahead premise from B — an exact-id absence with ordering kept is not the delayed-window failure mode",
 			"subject": "scripts/lib/probe-verdict.ts",
 			"find": [
-				"\t\tif (ranAhead && expectedProviderToolId !== undefined && facts.noSuchToolId === expectedProviderToolId) {"
+				"\t\t\tdeltas.promptRanAhead &&",
+				"\t\t\texpectedProviderToolId !== undefined &&",
+				"\t\t\tfacts.noSuchToolId === expectedProviderToolId"
 			],
-			"replace": ["\t\tif (expectedProviderToolId !== undefined && facts.noSuchToolId === expectedProviderToolId) {"],
+			"replace": [
+				"\t\t\ttrue &&",
+				"\t\t\texpectedProviderToolId !== undefined &&",
+				"\t\t\tfacts.noSuchToolId === expectedProviderToolId"
+			],
 			"gate": ["bash", "run.sh", "check-probe-ordering"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:VERDICT-B-REQUIRES-RANAHEAD]",
@@ -117,26 +121,10 @@
 		},
 		{
 			"claim": "VERDICT-NOWIRE-CANDIDATE",
-			"title": "reading a wire-marker-less absence as B — a fixture that never served would manufacture a sufficiency verdict (§11-7 :631/:638)",
+			"title": "reading a wire-marker-less absence as B — a fixture that never served would manufacture a sufficiency verdict (§11-7 promotion ladder)",
 			"subject": "scripts/lib/probe-verdict.ts",
-			"find": [
-				"\t\treturn {",
-				"\t\t\t...base,",
-				"\t\t\tkind: \"inconclusive\",",
-				"\t\t\tpromotable: false,",
-				"\t\t\tevidence:",
-				"\t\t\t\t\"no tools_list_response_forwarded — MCP handshake / fixture / config candidate, not server-behavior evidence\",",
-				"\t\t};"
-			],
-			"replace": [
-				"\t\treturn {",
-				"\t\t\t...base,",
-				"\t\t\tkind: \"B\",",
-				"\t\t\tpromotable: false,",
-				"\t\t\tevidence:",
-				"\t\t\t\t\"no tools_list_response_forwarded — MCP handshake / fixture / config candidate, not server-behavior evidence\",",
-				"\t\t};"
-			],
+			"find": ["\t\tfailure = \"candidate-handshake\";"],
+			"replace": ["\t\tfailure = \"B\";"],
 			"gate": ["bash", "run.sh", "check-probe-ordering"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:VERDICT-NOWIRE-CANDIDATE]",
@@ -146,8 +134,8 @@
 			"claim": "VERDICT-SAMEMS-AMBIGUOUS",
 			"title": "reading ordering-kept off a same-ms cross-process tie — the shared axis cannot order equal-ms stamps from different pids",
 			"subject": "scripts/lib/probe-verdict.ts",
-			"find": ["\t\tfacts.wireForwardedMs < facts.newSessionEndMs;"],
-			"replace": ["\t\tfacts.wireForwardedMs <= facts.newSessionEndMs;"],
+			"find": ["\t\tnewSessionOrderingKept: w !== undefined && n !== undefined && w < n,"],
+			"replace": ["\t\tnewSessionOrderingKept: w !== undefined && n !== undefined && w <= n,"],
 			"gate": ["bash", "run.sh", "check-probe-ordering"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:VERDICT-SAMEMS-AMBIGUOUS]",
@@ -184,8 +172,8 @@
 			"claim": "PROBE-MALFORMED-INVALIDATES",
 			"title": "judging a log with malformed lines — the corrupted line could be the wire marker whose absence becomes \"evidence\"",
 			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
-			"find": ["\tif (malformed.length > 0) {"],
-			"replace": ["\tif (malformed.length > 9999) {"],
+			"find": ["\tif (malformed.length > 0 || sequenceViolations.length > 0) {"],
+			"replace": ["\tif (malformed.length > 9999 || sequenceViolations.length > 9999) {"],
 			"gate": ["bash", "run.sh", "check-probe-ordering"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:PROBE-MALFORMED-INVALIDATES]",
@@ -249,6 +237,231 @@
 			"gate": ["bash", "run.sh", "check-probe-ordering"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:PROBE-LOG-WIRE-MARKER-NAMES-TOOL]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-LOG-WINDOW-REASON-VOCAB",
+			"title": "opening the window-close vocabulary — an unknown reason would fall through to whatever branch consumes it",
+			"subject": "scripts/lib/probe-event-log.ts",
+			"find": ["\t\ttypeof e.reason === \"string\" && WINDOW_REASONS.has(e.reason) && isBoolean(e.markerSeen),"],
+			"replace": ["\t\ttypeof e.reason === \"string\" && isBoolean(e.markerSeen),"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-LOG-WINDOW-REASON-VOCAB]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-LOG-SEQ-STRICTLY-INCREASING",
+			"title": "allowing a repeated per-pid seq — two lines claiming one slot are unorderable within their millisecond",
+			"subject": "scripts/lib/probe-event-log.ts",
+			"find": ["\t\tif (priorSeq !== undefined && e.seq <= priorSeq) {"],
+			"replace": ["\t\tif (priorSeq !== undefined && e.seq < priorSeq) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-LOG-SEQ-STRICTLY-INCREASING]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-LOG-TS-NO-REGRESSION",
+			"title": "dropping the per-pid clock-regression check — rewritten stamps are exactly what the ordering reads are made of",
+			"subject": "scripts/lib/probe-event-log.ts",
+			"find": ["\t\tif (priorTsMs !== undefined && e.tsMs < priorTsMs) {"],
+			"replace": ["\t\tif (priorTsMs !== undefined && e.tsMs < 0) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-LOG-TS-NO-REGRESSION]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-LOG-RAW-ORDER-BEFORE-SORT",
+			"title": "validating per-writer order AFTER the sort — the comparator would have already rewritten the order being checked",
+			"subject": "scripts/lib/probe-event-log.ts",
+			"find": ["\tconst sequenceViolations = findSequenceViolations(events);"],
+			"replace": [
+				"\tconst sequenceViolations = findSequenceViolations([...events].sort((a, b) => a.tsMs - b.tsMs || a.pid - b.pid || a.seq - b.seq));"
+			],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-LOG-RAW-ORDER-BEFORE-SORT]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-RUNNER-EXACTLY-ONCE-INVENTORY",
+			"title": "retiring the observation-window close from the runner exactly-once set — a topology rule would lapse in silence",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\tPROBE_EVENTS.runStart,", "\tPROBE_EVENTS.observationWindowEnd,", "\tPROBE_EVENTS.runEnd,"],
+			"replace": ["\tPROBE_EVENTS.runStart,", "\tPROBE_EVENTS.runEnd,"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-RUNNER-EXACTLY-ONCE-INVENTORY]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-CENSORED-NOT-CANDIDATE",
+			"title": "filing a right-censored run as an MCP handshake/fixture/config candidate — the 2026-07-28 D2 misattribution",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\tif (!facts.windowMarkerSeen && facts.windowReason !== \"deadline\") {"],
+			"replace": ["\tif (!facts.windowMarkerSeen && facts.windowReason === \"run-failed\") {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-CENSORED-NOT-CANDIDATE]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-RUNNER-TOPOLOGY-EXACTLY-ONCE",
+			"title": "tolerating a duplicated runner-owned marker — the log would stop describing one run",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": [
+				"\t\tif (n !== 1) violations.push(`${name} appears ${n} times — the runner emits it exactly once per run`);"
+			],
+			"replace": [
+				"\t\tif (n > 2) violations.push(`${name} appears ${n} times — the runner emits it exactly once per run`);"
+			],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-RUNNER-TOPOLOGY-EXACTLY-ONCE]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-ORDERING-AXIS-REPORTED",
+			"title": "dropping no-wait from the (a) summary — a settled ordering observation would be hidden by an unsettled (b) axis",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": [
+				"\t\t\tr.ordering === \"wire-before-newSession-end\" ||",
+				"\t\t\tr.ordering === \"wire-before-prompt-request\" ||",
+				"\t\t\tr.ordering === \"prompt-request-ahead-of-wire\","
+			],
+			"replace": [
+				"\t\t\tr.ordering === \"wire-before-newSession-end\" ||",
+				"\t\t\tr.ordering === \"wire-before-prompt-request\","
+			],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-ORDERING-AXIS-REPORTED]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-EVIDENCE-EXPOSES-DELTAS",
+			"title": "hiding the post-wire turn time from the evidence — §11-7-b classified D1 correctly and still could not be read",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": [
+				"\tif (d.postWireTurnMs !== undefined) parts.push(`${d.postWireTurnMs}ms of turn remained after wire`);"
+			],
+			"replace": [
+				"\tif (d.postWireTurnMs === undefined) parts.push(`${d.postWireTurnMs}ms of turn remained after wire`);"
+			],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-EVIDENCE-EXPOSES-DELTAS]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-B-WINDOW-IS-PROMPT",
+			"title": "deciding B on the newSession axis — the causal window is the prompt request, where the turn is opened against the tool set that exists then",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": [
+				"\t\t\tdeltas.promptRanAhead &&",
+				"\t\t\texpectedProviderToolId !== undefined &&",
+				"\t\t\tfacts.noSuchToolId === expectedProviderToolId"
+			],
+			"replace": [
+				"\t\t\tdeltas.newSessionRanAhead &&",
+				"\t\t\texpectedProviderToolId !== undefined &&",
+				"\t\t\tfacts.noSuchToolId === expectedProviderToolId"
+			],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-B-WINDOW-IS-PROMPT]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-LOG-WRITER-KEY-PER-RUN",
+			"title": "keying the stream door on pid alone — a reused pid restarting its counter in a later run would be called corrupt",
+			"subject": "scripts/lib/probe-event-log.ts",
+			"find": ["\t\tconst key = `${e.runId}\\u0000${e.pid}`;"],
+			"replace": ["\t\tconst key = `${e.pid}`;"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-LOG-WRITER-KEY-PER-RUN]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-WINDOW-MARKER-COHERENCE",
+			"title": "believing the self-reported window flag — a close claiming markerSeen=true with no wire marker would enter the candidate branch",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\tif (markerSeen !== wireInLog) {"],
+			"replace": ["\tif (markerSeen !== wireInLog && wireInLog) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-WINDOW-MARKER-COHERENCE]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-PHASE-PRODUCTION-ORDER",
+			"title": "checking only start<end within each phase — a log whose phases ran out of production order would pass",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\tif (reachedNames.join(\">\") !== expectedPrefix.join(\">\")) {"],
+			"replace": ["\tif (reachedNames.length > 99) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-PHASE-PRODUCTION-ORDER]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-WINDOW-SLACK-IS-CONSTANT",
+			"title": "reopening the post-delay slack as an env knob — a shrunken window would call its own early close deadline-sufficient",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": ["const POST_DELAY_SLACK_MS = 5_000;"],
+			"replace": ["const POST_DELAY_SLACK_MS = Number(process.env.PROBE_POST_DELAY_SLACK_MS ?? \"5000\") || 5000;"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-WINDOW-SLACK-IS-CONSTANT]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "RUNNER-EXIT-CONTRACT-SPLIT",
+			"title": "failing the run on the composite verdict alone — a pair that measured its ordering axis would be reported as a failed run",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": [
+				"\tif (classification.status.validity !== \"valid\" && classification.status.validity !== \"partial\") {"
+			],
+			"replace": ["\tif (classification.verdict === \"never\") {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RUNNER-EXIT-CONTRACT-SPLIT]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-PHASE-SEQUENTIAL",
+			"title": "dropping the phase-to-phase sequencing check — transposed phases with intact pairs would be judged as a run",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\t\tif (prevEnd !== undefined && thisStart !== undefined && !(prevEnd < thisStart)) {"],
+			"replace": ["\t\tif (prevEnd !== undefined && thisStart !== undefined && false) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-PHASE-SEQUENTIAL]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-CONTROL-HELD-TO-COHERENCE",
+			"title": "letting the control skip the run-validity bar — a baseline free to claim a wire marker it never logged is not a baseline",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\tif (controlFacts.validityViolations.length > 0) {"],
+			"replace": ["\tif (controlFacts.topologyViolations.length > 0) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-CONTROL-HELD-TO-COHERENCE]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-STATUS-NAMES-INVALID-RUNS",
+			"title": "dropping the discarded runs from a fatal status — the only record of what was thrown out, and why, would vanish",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\t\t\tstatus: runStatus(\"INVALIDATED\", ordering, \"not-judged\", readings),"],
+			"replace": ["\t\t\tstatus: runStatus(\"INVALIDATED\", ordering, \"not-judged\"),"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-STATUS-NAMES-INVALID-RUNS]",
 			"signatureSource": "scripts/check-probe-ordering.ts"
 		}
 	]

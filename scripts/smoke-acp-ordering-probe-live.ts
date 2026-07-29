@@ -131,6 +131,115 @@ function approveAllPermission(params: { options?: Array<{ optionId: string; kind
 
 const NO_SUCH_TOOL_RE = /No such tool(?: available)?:?\s*"?([\w:.-]+)"?/i;
 
+// ---------------------------------------------------------------------------
+// The OBSERVATION WINDOW (§11-7, GPT review 2026-07-29).
+//
+// The first LIVE pair tore the ACP child down the instant the turn settled. At
+// D=8000ms that happened while the fixture was still inside its injected delay:
+// the fixture went on to finish its delay and complete `initialize` 2.7 s AFTER
+// run_end, and the tools/list it would have forwarded ~14 ms later never
+// happened, because the client that would have asked was gone. The classifier
+// then read that self-inflicted absence as an MCP handshake / fixture / config
+// candidate — an attribution about the SERVER derived from a fact about OUR
+// teardown.
+//
+// So absence is only a reading when we kept looking long enough to have seen the
+// marker. After the turn settles the runner keeps the child alive until the
+// FIRST of:
+//   - the wire marker lands            → reason `wire-marker`   (marker seen)
+//   - the ACP child exits on its own   → reason `child-exit`    (CENSORED)
+//   - the deadline passes              → reason `deadline`      (window sufficient)
+// and stamps `probe_observation_window_end` with which one it was, BEFORE
+// teardown. Only `deadline` lets a missing marker be read as evidence.
+//
+// The deadline is anchored on the FIXTURE'S OWN delay markers, never on run
+// start: the injected delay begins when the fixture process boots, which is
+// itself some way into newSession, so a run-start-relative deadline would drift
+// with spawn latency and silently shorten the window it claims to guarantee.
+// ---------------------------------------------------------------------------
+
+/** Grace kept after the fixture's delay ends before calling the window closed.
+ *  A CONSTANT, deliberately not an env knob: this value is what lets a missing
+ *  wire marker be read as evidence at all, so an operator (or a stray export)
+ *  able to shrink it could make the probe close its own window early and then
+ *  call that absence "deadline-sufficient" (GPT review 2026-07-29). The earlier
+ *  `Number(env) || 5000` form accepted 0 and negatives outright. */
+const POST_DELAY_SLACK_MS = 5_000;
+/** Boot allowance used only when the fixture logged no delay marker at all. */
+const FIXTURE_BOOT_ALLOWANCE_MS = 5_000;
+const WINDOW_POLL_MS = 100;
+
+function runEventsOf(logPath: string, runId: string) {
+	return readProbeEvents(logPath).events.filter((e) => e.runId === runId);
+}
+
+/** Did the wire-availability marker for this run land? */
+function wireMarkerSeen(logPath: string, runId: string): boolean {
+	return runEventsOf(logPath, runId).some((e) => e.event === PROBE_EVENTS.toolsListResponseForwarded);
+}
+
+/** Deadline for THIS run, recomputed each poll because the fixture's delay
+ *  markers may still be arriving while we wait. Returns the absolute ms plus the
+ *  basis actually used, which is recorded so a reader can tell a well-anchored
+ *  window from a fallback one. */
+function windowDeadline(
+	logPath: string,
+	runId: string,
+	delayMs: number,
+	windowOpenedMs: number,
+): { deadlineMs: number; basis: "fixture-delay-end" | "fixture-delay-start" | "no-fixture-delay-marker" } {
+	const events = runEventsOf(logPath, runId);
+	const delayEnd = events.find((e) => e.event === PROBE_EVENTS.fixtureDelayEnd);
+	if (delayEnd) return { deadlineMs: delayEnd.tsMs + POST_DELAY_SLACK_MS, basis: "fixture-delay-end" };
+	const delayStart = events.find((e) => e.event === PROBE_EVENTS.fixtureDelayStart);
+	if (delayStart) return { deadlineMs: delayStart.tsMs + delayMs + POST_DELAY_SLACK_MS, basis: "fixture-delay-start" };
+	return {
+		deadlineMs: windowOpenedMs + delayMs + FIXTURE_BOOT_ALLOWANCE_MS + POST_DELAY_SLACK_MS,
+		basis: "no-fixture-delay-marker",
+	};
+}
+
+/** Hold the window open past the turn, then stamp how it closed. */
+async function observeWindowClose(
+	logPath: string,
+	runId: string,
+	delayMs: number,
+	child: ChildProcessByStdio<Writable, Readable, Readable>,
+	log: (event: ProbeEventName, payload?: Record<string, unknown>) => void,
+): Promise<void> {
+	const openedMs = Date.now();
+	let reason: "wire-marker" | "child-exit" | "deadline";
+	let basis = windowDeadline(logPath, runId, delayMs, openedMs).basis;
+	for (;;) {
+		if (wireMarkerSeen(logPath, runId)) {
+			reason = "wire-marker";
+			break;
+		}
+		// The child ending is NOT the deadline being met — we stop looking because
+		// the thing being observed is gone, which is precisely a censored reading.
+		if (child.exitCode !== null || child.signalCode !== null) {
+			reason = "child-exit";
+			break;
+		}
+		const d = windowDeadline(logPath, runId, delayMs, openedMs);
+		basis = d.basis;
+		if (Date.now() >= d.deadlineMs) {
+			reason = "deadline";
+			break;
+		}
+		await new Promise((r) => setTimeout(r, WINDOW_POLL_MS));
+	}
+	// Re-read rather than trusting the loop's exit branch: the marker can land in
+	// the same tick the child exits, and a marker seen is a marker seen.
+	const markerSeen = wireMarkerSeen(logPath, runId);
+	log(PROBE_EVENTS.observationWindowEnd, {
+		reason: markerSeen ? "wire-marker" : reason,
+		markerSeen,
+		deadlineBasis: basis,
+		waitedMs: Date.now() - openedMs,
+	});
+}
+
 interface RunOutcome {
 	record: ProbeRunRecord;
 	ok: boolean;
@@ -308,10 +417,19 @@ async function runOne(
 				stopReason: result.stopReason,
 				textTail: collectedText.slice(-TEXT_TAIL_CAP),
 			});
+			await observeWindowClose(logPath, runId, delayMs, spawned, log);
 			log(PROBE_EVENTS.runEnd, { ok: true });
 			return { record, ok: true };
 		} catch (err) {
 			const phase = err instanceof ProbePhaseError ? err.phase : "unknown";
+			// The window question is moot once a phase failed — the phase reading
+			// owns the run — but the marker is stamped anyway so the exactly-once
+			// runner topology holds on this path too.
+			log(PROBE_EVENTS.observationWindowEnd, {
+				reason: "run-failed",
+				markerSeen: wireMarkerSeen(logPath, runId),
+				phase,
+			});
 			log(PROBE_EVENTS.runEnd, { ok: false, phase, error: err instanceof Error ? err.message : String(err) });
 			console.error(`[smoke-acp-ordering-probe-live] ${runId}: turn failed at ${phase}`);
 			console.error(`[smoke-acp-ordering-probe-live] ${runId}: stderr tail:\n${stderrTail.slice(-10).join("")}`);
@@ -355,12 +473,12 @@ async function main(): Promise<void> {
 	// Attempt 2 exists ONLY for the I0 policy: control passed but an intervention
 	// failed at initialize (environment drift) → re-run the same pair ONCE.
 	let roster = await runRoster(logPath, 1);
-	let { events, malformed } = readProbeEvents(logPath);
+	let { events, malformed, sequenceViolations } = readProbeEvents(logPath);
 	let classification = classifyProbe(roster, events);
 	if (classification.verdict === "I0") {
 		console.error("[smoke-acp-ordering-probe-live] I0 — re-running the same pair once (§11-7 bounded retry)");
 		roster = await runRoster(logPath, 2);
-		({ events, malformed } = readProbeEvents(logPath));
+		({ events, malformed, sequenceViolations } = readProbeEvents(logPath));
 		classification = classifyProbe(roster, events);
 	}
 
@@ -371,15 +489,23 @@ async function main(): Promise<void> {
 	// directory alone must find INVALIDATED as the verdict, never a
 	// judgeable-looking thin-log classification (GPT review round 2). The
 	// thin-log reading is preserved INSIDE the wrapper for forensics only.
-	if (malformed.length > 0) {
-		writeFileSync(join(artifactDir, "malformed-lines.txt"), `${malformed.join("\n")}\n`);
+	// The stream door is the same kind of refusal one layer out: individually valid
+	// lines whose per-writer order cannot be trusted. `tsMs`/`seq` ARE the ordering
+	// evidence, so a log that cannot vouch for them cannot answer §11-7 either.
+	if (malformed.length > 0 || sequenceViolations.length > 0) {
+		if (malformed.length > 0) writeFileSync(join(artifactDir, "malformed-lines.txt"), `${malformed.join("\n")}\n`);
+		if (sequenceViolations.length > 0) {
+			writeFileSync(join(artifactDir, "sequence-violations.txt"), `${sequenceViolations.join("\n")}\n`);
+		}
+		const reason = malformed.length > 0 ? "malformed-event-log" : "event-log-order-violation";
 		writeFileSync(
 			join(artifactDir, "classification.json"),
 			`${JSON.stringify(
 				{
 					verdict: "INVALIDATED",
-					reason: "malformed-event-log",
+					reason,
 					malformedLines: malformed.length,
+					sequenceViolations,
 					thinLogClassificationForForensicsOnly: classification,
 				},
 				null,
@@ -387,13 +513,18 @@ async function main(): Promise<void> {
 			)}\n`,
 		);
 		fail(
-			`${malformed.length} malformed event line(s) — the log is not a judgeable record; ` +
-				`run INVALIDATED, artifact preserved at ${artifactDir}`,
+			`${malformed.length} malformed line(s) and ${sequenceViolations.length} per-writer order violation(s) — ` +
+				`the log is not a judgeable record; run INVALIDATED, artifact preserved at ${artifactDir}`,
 		);
 	}
 	writeFileSync(join(artifactDir, "classification.json"), `${JSON.stringify(classification, null, 2)}\n`);
 
-	console.log(`[smoke-acp-ordering-probe-live] verdict: ${classification.verdict}`);
+	console.log(`[smoke-acp-ordering-probe-live] validity: ${classification.status.validity}`);
+	console.log(
+		`  (a) ordering measurement: ${classification.status.orderingMeasurement} — ${classification.ordering.summary}`,
+	);
+	console.log(`  (b) failure verdict:      ${classification.status.failureVerdict}`);
+	console.log(`  composite verdict: ${classification.verdict}`);
 	console.log(`  ${classification.detail}`);
 	console.log(`  expectedProviderToolId: ${classification.expectedProviderToolId ?? "(unmeasured)"}`);
 	for (const r of classification.interventions) {
@@ -404,10 +535,46 @@ async function main(): Promise<void> {
 	}
 	console.log(`  artifact preserved: ${artifactDir}`);
 
-	const judgeable = ["A", "A-withheld", "B", "C", "D-newSession", "D-enforceModel", "D-prompt"];
-	if (!judgeable.includes(classification.verdict)) {
-		fail(`verdict ${classification.verdict} — not a judgeable measurement (artifact preserved for classification)`);
+	// EXIT CONTRACT — three separate questions, not one (GPT review 2026-07-29).
+	// The old contract failed the run whenever the composite verdict was not one of
+	// the judgeable labels, which meant a pair that successfully MEASURED its
+	// ordering axis was reported as a failed run because the callability axis had
+	// no marker. That is the same conflation the two axes exist to undo.
+	//
+	//   1. fatal validity — under P0 / I0 / INVALIDATED nothing was measured;
+	//   2. axis (a) — did an ordering comparison get made at all;
+	//   3. axis (b) — the callability verdict, which may legitimately be
+	//      inconclusive without the run having failed.
+	//
+	// A run exits non-zero only when it produced NOTHING: fatal validity, or both
+	// axes empty. `measured` on axis (a) is NOT a claim that the server waited or
+	// did not — it says the comparison exists and is recorded.
+	if (classification.status.validity !== "valid" && classification.status.validity !== "partial") {
+		fail(
+			`validity ${classification.status.validity} — nothing was measured (artifact preserved for classification): ${classification.detail}`,
+		);
 	}
+	if (classification.status.invalidRuns.length > 0) {
+		// A pair that lost a delay point still reports what it measured, but it may
+		// never be read as a complete series — A in particular needs every point.
+		console.log(
+			`  PARTIAL: ${classification.status.invalidRuns.map((r) => `${r.runId}=${r.reason}`).join(", ")} — ` +
+				"this pair is missing delay point(s); do not read it as a complete series",
+		);
+	}
+	const judgeableFailure = ["B", "C", "callable"];
+	if (
+		classification.status.orderingMeasurement !== "measured" &&
+		!judgeableFailure.includes(classification.status.failureVerdict)
+	) {
+		fail(
+			`neither axis produced a measurement (ordering=${classification.status.orderingMeasurement}, ` +
+				`failure=${classification.status.failureVerdict}) — artifact preserved for classification`,
+		);
+	}
+	console.log(
+		"[smoke-acp-ordering-probe-live] run completed with a recorded measurement — this is NOT a claim about server wait behavior",
+	);
 }
 
 await main();

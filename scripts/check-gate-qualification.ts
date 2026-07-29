@@ -721,7 +721,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"acp-augment": 2,
 		"agy-permission": 6,
 		"meta-identity": 1,
-		"probe-ordering": 19,
+		"probe-ordering": 37,
 		"self-address": 3,
 		"v2-surface": 4,
 	};

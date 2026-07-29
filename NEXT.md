@@ -9,35 +9,68 @@
 > 이어서: *"0.13.0 안가고 지금 수선하면 0.12.10으로 acp 수정 및 rail 문서 업데이트만 들어가도 좋겠다."*
 > → **0.13.0은 지금 가지 않는다.** readiness 인과 규명은 그 뒤에 이어지고, #48 Cortex는 rail이 정리된 다음에 연다.
 
-## NOW — §11-7 probe는 섰다, 측정이 아직 판정 불가
+## NOW — §11-7 계측기 수선 완료, LIVE 재측정만 남았다
 
-> **2026-07-28 (GLG 지시).** *"0.12.11 갈 필요 없거든. 이거 이번에 잘 막았으면 다음 작업 준비하면 되거든.
-> 검증 미진한 것을 기록해둬야 이어서 검증부터 하고 구멍 막고 다음 작업할 거야."*
-> → 릴리즈 컷이 아니라 **검증 미결을 보존하는 마침표**다. 다음 세션은 새 작업을 열기 전에 아래 미결부터 닫는다.
+> **2026-07-29 (GLG 지시).** *"구멍이 다 막혀있으면 다음 작업으로 갈거야."* → 검수 결과 구멍은 안 막혀
+> 있었고, GPT 교차검수(`openai-codex/gpt-5.6-sol`)와 계약을 합의해 **오프라인으로 닫을 수 있는 것은 전부
+> 닫았다.** 남은 하나는 실 API가 필요하다. Cortex는 그 뒤다.
 
-- **Current:** §11-7 ordering probe가 게이트와 함께 main에 있다 — `4a629be`, push 완료.
-  `pnpm check` EXIT=0, gate-qualification **35/35 killed**(lane `probe-ordering` 19).
-  계약 아래 첫 LIVE pair도 돌았고 **malformed 0**이지만 **verdict는 `inconclusive`** — 계측기는 admissible,
-  측정은 아직 owed다. 수치·근거는 `docs/acp-backend-rail.md` **§11-7-b**에 있다. 여기서 반복하지 않는다.
-- **Next:** (1) 모델이 지연 창 안에서 **호출을 시도하도록** 프롬프트/전략을 바꿔 LIVE pair 재실행 →
-  (2) D1에서 측정된 id를 지목하는 런타임 `No such tool`이 뜨는지로 delta-B 재판정 →
-  (3) 그때만 원인·처방을 논한다. probe 1회는 결론이 아니다.
-- **검증 미결 — 다음 세션이 먼저 닫을 것:**
-  - **판정 불가 자체가 미결이다.** A(대기 가설)는 이 서버·이 경로에서 반박 *방향*이지만 승격 가능한 증거는
-    없다. `inconclusive`를 "문제 없음"으로 읽지 마라.
-  - **중복 마커 정책이 열려 있다.** `deriveRunFacts`는 `events.find()`로 **첫 마커만** 읽는다.
-    `tools_list_response_forwarded`는 first-wins가 옳지만(클라이언트가 tools/list를 여러 번 부를 수 있고
-    wire availability는 최초 forward다), **한 run에 phase end가 두 번 나오면 두 번째가 조용히 무시된다.**
-    parser가 아니라 **classifier 정책**이고 §11-7 문서 측 합의가 필요하다 — 임의로 닫지 마라.
-  - **D1 evidence 문자열이 ran-ahead를 노출하지 않는다.** 분류는 계약대로 inconclusive가 맞지만, artifact만
-    읽어서는 "턴이 wire보다 앞섰다"는 관측이 안 보인다. 판정 결함이 아니라 진단 가능성 결함이다.
-  - **계약 이전 artifact 2개는 재파싱하면 INVALIDATED다**(ts/tsMs 1 ms straddle 실측 2건). 포렌식 기록으로만
-    쓰고 승격 근거로 재사용하지 마라.
-- **Blocker:** 없음. LIVE 재실행은 실 API를 쓰므로 GLG 승인 사안이다.
-- **읽을 곳:** `docs/acp-backend-rail.md` §11-7 → §11-7-a(as built) → **§11-7-b(첫 측정)** →
-  `scripts/check-probe-ordering.ts` 헤더(5축 + review-pinned 목록) → `scripts/lib/probe-event-log.ts` 문 계약.
-- **Do not touch:** 이 증거로 product turn loop(`backend.ts`)·rail 처방·릴리즈 노트를 바꾸지 마라.
-  classifier/verdict 의미는 §11-7 문서 합의 없이 손대지 않는다. **LIVE 재판정 없이 0.12.11을 컷하지 마라.**
+- **Current:** 계측기 수선이 main 작업트리에 있다(커밋 전). `pnpm check` 결과는 아래 검증란 참조.
+  `check-gate-qualification` **53/53 killed**(lane `probe-ordering` 19 → **37**). 수선 축:
+  ⑴ **관측창 프로토콜** — runner가 turn 종료 후에도 (wire marker | child-exit | deadline)까지 child를
+  살려두고 `probe_observation_window_end {reason, markerSeen, deadlineBasis, waitedMs}`를 찍은 뒤 teardown.
+  deadline은 fixture 자신의 delay 마커 + bounded slack 기준(run start 기준 아님).
+  ⑵ **문(door) 2겹 + topology** — 라인 문(malformed)에 더해 **스트림 문**(**(runId,pid)** 단위 seq strictly
+  increasing, clock 역행 금지, **원본 append order에서** 검증 — sort 후는 순환이고, pid는 재사용된다),
+  runner-owned 마커 exactly-once + **phase 간 production order(실패는 prefix, 구멍 아님)**,
+  그리고 **window 마커 coherence 검증**(markerSeen ↔ 실제 wire 이벤트, reason ↔ flag) — **control도 동일 기준**.
+  추가로 run_start가 첫 phase보다 앞설 것, **최초 실패 phase가 마지막 도달 phase일 것**,
+  prompt_reply는 prompt_end 뒤(성공이면 정확히 1, 실패면 0).
+  slack은 env 노브가 아니라 상수다.
+  ⑷ **exit 계약 3분할** — `status.validity`(치명) / `status.orderingMeasurement` / `status.failureVerdict`.
+  아무것도 못 얻었을 때만 non-zero. `measured`는 "server가 기다렸다/안 기다렸다"는 뜻이 **아니다**.
+  intervention을 하나라도 잃으면 `validity: partial` + `status.invalidRuns`로 드러낸다(A는 전 계열 주장이므로).
+  ⑶ **판정 축 2분할** — (a) ordering
+  `wire-before-newSession-end|wire-before-prompt-request|prompt-request-ahead-of-wire|censored|unknown`,
+  (b) failure `callable|C|B|candidate-handshake|inconclusive`. **값 이름은 전부 비교 그 자체**이고 결론이
+  아니다 — `promptStart`는 client 측 proxy라 `promptStart < wire`는 "우리가 prompt request를 먼저 보냈다"만
+  말하고 server no-wait를 증명하지 않는다(2차 검수 판정). ordering flag는
+  `newSessionOrderingKept`/`newSessionRanAhead`/`promptRanAhead` 셋으로 분리(A는 newSession 축,
+  B/C는 promptStart 축). evidence에 delta 3종 노출.
+- **첫 측정 artifact는 재판독이 아니라 포렌식이다(`docs/acp-backend-rail.md` §11-7-b).**
+  그 artifact에는 window 마커가 없어 **현 classifier가 control부터 topology로 INVALIDATE한다.** 다시 판정할
+  수 없고, 어떤 verdict도 인용하면 안 된다. 남는 건 둘뿐이다: ⑴ D1의 타임스탬프 사실
+  `prompt-request-ahead-of-wire`(promptStart +1546ms < wire +3416ms) — **server-wait은 여전히 미확정**이다.
+  ⑵ D2 right-censor 진단 — run_end +6673ms 직후 teardown했는데 fixture는 +9384/+9385/+9388ms까지 진행했고
+  control에서 initialize→tools_list가 14ms였으니 마커는 14ms 앞에 있었다.
+- **Next — 먼저 GLG의 순서 결정을 받아라. 결정 전에 착수하지 마라.**
+  §11-7의 다음 한 걸음이 LIVE인지 seam인지가 아직 열려 있다. 2026-07-29 세션은 여기서 닫혔고, GLG가
+  **결정을 다음 세션으로 넘겼다.** 두 안을 그대로 옮겨 적는다:
+  - **A안 (기존 QUEUE 순서):** LIVE pair 재실행 → (a)축 측정 확보 → 그 뒤 §11-7-c seam.
+  - **B안 (GPT 검수자 제안, 직전 세션의 권고안):** §11-7-c seam 먼저 구현 → **LIVE 한 번**으로 (a)+(b)
+    동시 확보. 근거: 지금 LIVE를 돌려도 (b)축은 다시 inconclusive가 유력하다 — 모델은 자기 스키마에 없는
+    도구를 부를 수 없고 강제 수단도 없다(§11-7-b 실측). 유료 실행을 한 번 아낀다. 대신 seam은 §11-7 probe
+    최초 랜딩에 맞먹는 덩어리다.
+  - 어느 쪽이든 **LIVE는 실 API라 GLG 승인 사안**이고, seam 구현은 §11-7-c의 조건 1~7을 그대로 따른다.
+- **닫은 검증 미결(2026-07-28 목록 대비):** 중복 마커 정책 → **닫힘**(topology exactly-once, 단 반복 가능
+  마커는 earliest-wins로 명시 분리). D1 evidence ran-ahead 미노출 → **닫힘**(delta 3종 문자열 노출).
+  seq 미검증 → **닫힘**(스트림 문). 계약 이전 artifact 2개 → 포렌식 전용 규율 유지(window 마커가 없으므로
+  재파싱하면 topology로 INVALIDATED된다 — 의도된 결과다).
+- **남은 미결:** **판정 가능한 LIVE 측정 그 자체.** 계측기는 admissible, 측정은 여전히 owed.
+  그리고 **프롬프트 강화로는 delta-B에 도달할 수 없다**(§11-7-b): D1은 wire 이후 2.3초 창이 열려 있었는데도
+  모델이 호출하지 않았고, acp 0.62.0 + sdk dist 전체에 `tool_choice`/`toolChoice`가 **0건**이다.
+  stimulus가 아니라 oracle을 바꿔야 한다 — 그래서 §11-7-c다.
+- **Blocker:** 없음. LIVE는 GLG 승인 사안.
+- **관측된 flake 1건(내 변경과 무관, 기록만):** `smoke-meta-install-state`의 SIGPIPE 재현 픽스처가
+  **부하 중 1회** `fixture did NOT reproduce the SIGPIPE/pipefail defect`로 red였다. 같은 트리에서 3연속
+  재실행은 green이고, clean tree에서도 green이다. `claude mcp get | grep -q`가 파이프 버퍼를 채우기 전에
+  reader가 먼저 빠지는 타이밍 의존이라 결정론 바닥에 flaky assertion이 하나 있는 셈이다. 이번 컷의 범위가
+  아니라 손대지 않았다 — 다음에 이 게이트를 열 사람이 재현 방식(고정 크기 write + 동기화)을 다시 볼 것.
+- **읽을 곳:** `docs/acp-backend-rail.md` **§11-7-0**(관측창·문·축) → §11-7-a → **§11-7-b**(재판독) →
+  **§11-7-c**(seam 설계, 미구현) → `scripts/lib/probe-verdict.ts` 머리말 → `scripts/lib/probe-event-log.ts` 문 계약.
+- **Do not touch:** product turn loop(`backend.ts`)·rail 처방·릴리즈 노트를 이 증거로 바꾸지 마라.
+  `ANTHROPIC_BASE_URL` 프록시 seam은 **NO-GO**(Hard Rule #8). `D < turn duration` 규칙은 **기각됐다** —
+  다시 제안하지 마라. LIVE 재판정 없이 0.12.11을 컷하지 마라.
 
 ## LEDGER — 0.12.10 컷 (닫힘, 2026-07-27 출하)
 
@@ -507,10 +540,12 @@
    `check-entwurf-v2-spawn-production`이 red였다(테스트 기대값만 옮기고 프로덕션 메시지를 안 고친 것).
    ⓒ `pi-extensions/` 소스를 고쳤으면 `pnpm run build-bridge`를 먼저 돌려라 — 안 하면
    `check-bridge-delivery`가 stale dist로 red다.
-2. **readiness — §11-7 ordering probe: 구현 완료(`4a629be`), 측정 미결.** probe·게이트·mutant 19종은
-   main에 있다. 남은 것은 **판정 가능한 LIVE 측정**이다 — 계약 아래 첫 pair는 `inconclusive`(§11-7-b).
-   ordering 결과를 A/B/C/D로 **분류**하고, causal attribution에 무엇이 더 필요한지 정한 뒤에만 처방을
-   논한다. probe 1회는 결론이 아니다. 위 NOW의 "검증 미결" 4건이 이 lane의 실제 다음 작업이다.
+2. **readiness — §11-7 ordering probe: 계측기 수선 완료, 측정 미결. 착수 전 위 NOW의 A/B 순서 결정부터.** probe·게이트·mutant 37종이
+   있다. 남은 것은 **판정 가능한 LIVE 측정**이고, 그 다음이 §11-7-c `B-name-snapshot` seam 구현이다
+   (shim + inspector + synthetic fixture 3종 + fake-CLI 결정론 게이트 + QK mutant — probe 최초 랜딩에
+   맞먹는 별도 덩어리로 잡아라). 착수 순서는 교차검수 합의대로
+   관측창/censor → topology+seq door → 축 분리/evidence → 결정론 게이트+mutant → **LIVE** 이고,
+   앞의 넷은 닫혔다. probe 1회는 결론이 아니다.
 3. **#48 — Cortex ACP support.** reference adapter가 모델을 outbound sibling dispatch까지 데려간다는 것을
    증명한 뒤에 두 번째 backend를 태운다.
    - PR #40은 OPEN·`DIRTY`, head `3dd6f5fa530c2f91e436abc3b4d79dbc2adc4d53` — #48이 인용한 `d8baf79`와 다르고,
@@ -525,6 +560,47 @@
      쓸지, 타깃을 빼고 낼지 먼저 정한다.
    - **미측정:** `cortex acp serve`의 ACP protocol 호환성, hook 발화 여부(§11-6 — 번들 hook이
      `SNOWFLAKE_HOME` 오버레이 밖에 있다).
+   - **2026-07-29 재실측 — 표준궤가 §11-5 기록보다 더 벌어져 있다(그 절은 07-27 상태다):**
+     - **conflict가 4개가 아니라 6개다.** `git merge-tree main pr40` 오늘 실측: 기록된 `CHANGELOG.md` ·
+       `docs/acp-backend-rail.md` · `package.json` · `run.sh` 에 더해 **`.gitignore`** 와
+       **`scripts/check-shell-quote.ts`**. 어댑터 코어는 여전히 무충돌이다 — rail 설계는 버텼다.
+     - **진짜 drift는 PR40의 check 체인이다.** 게이트 집합 비교: main **84** vs PR40 **73**. PR40에만 있는
+       6개 중 **5개는 main에서 삭제된 게이트**다 — `check-meta-record-v2` · `check-meta-dual-read` ·
+       `check-meta-migration` · `check-meta-dual-consumers` · **`check-entwurf-mailbox-guard`**(§F GPT 판정으로
+       삭제). run.sh·scripts에 파일 자체가 없다(실측). PR40 쪽 package.json을 채택하면 삭제된 게이트가
+       부활해 즉시 red다. main에만 있는 건 17개(`check-gate-qualification` · `check-probe-ordering` ·
+       `check-agy-permission-matrix` · `smoke-pi-attach` · `check-fresh-cut-gate` …).
+       → **해소 규칙: main 체인 + `check-acp-cortex` 하나 추가. PR40의 package.json 쪽은 통째로 버린다.**
+     - `check-shell-quote` 충돌도 실질이다: PR40이 `SOURCE_SITES`에 `backend-adapter.ts`(cortex
+       `CORTEX_ACP_COMMAND` 인용)를 더하는데 main은 §F sweep에서 헤더를 "the one remaining site"로 좁혀놨다.
+       두 번째 site 부활은 정당한 변경이니 **헤더 문장까지 같이 고쳐라.**
+     - **PR40이 태어난 뒤 생긴 규율:** `AGENTS.md:122` — 게이트를 들이면 `[QK:]` 라벨 + `scripts/mutants/`
+       exact-once mutant + `EXPECTED_LANE_MUTANTS` 갱신이 필수다. PR40(07-08)은 이 체계(07-27 신설) 이전이라
+       mutant가 0이다. **cortex lane mutant는 우리가 쓴다** — 기여자 몫이 아니다.
+     - **#48 이슈 전제 ②는 실행 불가다:** `pi/entwurf-targets.json`도 `resolveEntwurfTarget`도 없다
+       (`entwurf-core.ts:130-139`이 #50 C3 삭제를 기록). "두 레지스트리 중 ②를 채워라"는 성립하지 않는다.
+     - **③ live smoke는 여전히 미배달**이지만 `run.sh`의 `smoke_acp_cortex_live`는 cortex가 PATH에 없으면
+       **honest-skip(exit 0)** 이라 오라클 CI를 깨지 않는다. fail-loud는 `LIVE=1` + cortex 설치 상태에서만.
+   - **GPT 검수자 판정(2026-07-29) — overlay default-deny 결함.** PR40 cortex overlay에는 claude rail이 가진
+     **기본-거부 arm이 없다.** main `overlay.ts`의 claude stale cleanup은 네 갈래다: passthrough skip /
+     empty-dir skip / `OVERLAY_BINARY_OWNED`(`.claude.json`,`backups`,`settings.json`)는 **symlink일 때만**
+     제거 / **그 외 전부 `rmSync` 무조건 삭제**. PR40은 마지막 arm이 없어 나머지 전부를 binary-owned처럼
+     다룬다(기본값이 deny→allow로 뒤집힘). 수선: `CORTEX_OVERLAY_BINARY_OWNED` 명시 집합 + 그 밖은 무조건
+     삭제. **집합 내용은 노트북 fresh-home trace 후 확정**(오라클엔 cortex 미설치). 게이트는 stale symlink만
+     심어 이 축을 못 잡으므로 **regular file/dir negative fixture + QK mutant**가 필요하다.
+   - **env 우선순위는 행동이 계약이고 PR40 주석이 틀렸다.** `backend.ts:649` + `:300`의
+     `{ ...process.env, ...extraEnv }`라 **launchEnvDefaults가 process.env를 이긴다.** 인터페이스 주석
+     (`backend-adapter.ts:139`)이 행동과 맞다. PR40 `overlay.ts`의 "process.env wins at the spawn merge…"
+     한 문단만 고쳐라 — **행동을 바꾸는 게 아니다.** operator가 export한 `SNOWFLAKE_HOME`이 이기면 overlay
+     containment가 조용히 무너진다. operator 통제는 entwurf 소유 knob(`CORTEX_ACP_COMMAND`,
+     `CORTEX_CONNECTION_ENV`)으로 간다.
+   - **기기 경계:** 오라클엔 cortex가 없다(`which cortex` 없음 · `~/.local/share/cortex` 없음 ·
+     `~/.snowflake` 없음 · `external-packages.sh`에 항목 없음). **오라클 가능:** merge 해소, package.json 체인
+     정정, check-shell-quote 수선, cortex lane mutant 작성, `check-acp-cortex` 결정론 게이트 실행(바이너리
+     불필요). **노트북 필수:** `cortex acp serve` ACP 호환성, 모델 표면 v1.1.47 재실측(PR40 목록은 v1.1.8
+     시점 `cortex-claude-opus-4-6`/`-sonnet-4-6`/`cortex-openai-gpt-5.2`), §11-6 bundled hook의 ACP 턴 발화,
+     `smoke-acp-cortex-live` 실주행. **rail §11-6은 "this host"라고만 적어 기기를 안 밝힌다 — 그 관측은
+     노트북 것이다. host provenance를 명시하지 않으면 다음 세션이 오라클 재현 실패를 결함으로 오독한다.**
 4. **#56 — Codex native citizen.** #48 뒤 착수. 로컬 Codex는 현재 0.145.0으로 이슈의 fresh evidence와
    같지만, app-server-backed launch / default UDS / native hooks / `thread/loaded/list` / call-ticket 설계는
    다시 실측한다. Codex는 ACP backend가 아니며 existing `native-push` leaf를 재사용한다는 경계도 코드와

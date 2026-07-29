@@ -2,7 +2,7 @@
 //
 // §11-7 allows the probe a raw client ONLY "bound by a gate asserting it issues
 // the same calls, arguments, and order as the backend's real sequence" — THIS is
-// that gate. Five axes, no live API anywhere:
+// that gate. Seven axes, no live API anywhere:
 //
 //   1) SAMENESS — driveProbeTurn over a recording fake connection must issue
 //      initialize → newSession → enforceModel → prompt with production-shaped
@@ -25,12 +25,26 @@
 //      every PAYLOAD field the classifier judges on is typed there too, since a
 //      perfect envelope around `ok: "true"` reads as a phase failure and a wire
 //      marker naming no expected tool is not wire-availability at all.
+//   4b) EVENT LOG STREAM INTEGRITY — the second door, one layer out: per writing
+//      pid, on the RAW APPEND ORDER, seq must strictly increase and the clock may
+//      not run backwards. Checked BEFORE the sort, because a post-sort check is
+//      circular — the comparator would have rewritten the order under examination.
 //   5) VERDICT TRUTH TABLE — synthetic paired logs replay through the PURE
 //      classifier: P0/I0 outside the verdict space, phase-qualified D, the B
 //      promotion ladder (exact measured id only), C, and A's two-delay rule.
+//   6) OBSERVATION WINDOW + RUNNER TOPOLOGY — what puts a run OUTSIDE the space:
+//      a window closed by child-exit with the marker unseen is CENSORED, never an
+//      MCP handshake/fixture/config attribution (the 2026-07-28 D2 misreading),
+//      while the SAME absence under a window held to its deadline is a real
+//      candidate. Runner-owned markers are exactly-once; repeatable ones are not
+//      swept in with them.
+//   7) TWO AXES — (a) the server-wait observation and (b) the callability reading
+//      are reported separately, so a settled ordering fact is not buried by an
+//      unsettled failure axis. A keeps the newSession axis; B/C's causal window is
+//      promptStart, and the evidence carries both deltas plus the post-wire turn.
 //
 // Kill-proof, stated at its honest strength: scripts/mutants/probe-ordering.json
-// qualifies 19 claims — each carries a [QK:...] signature appearing EXACTLY once
+// qualifies 37 claims — each carries a [QK:...] signature appearing EXACTLY once
 // below, and check-gate-qualification proves its mutant dies at that signature.
 // [QK:*] tokens and qualified claims are 1:1 BY DESIGN: an assertion without a
 // mutant carries a plain message, so "killed claim IDs, never assertion counts"
@@ -70,10 +84,11 @@ import {
 	PROBE_EVENTS,
 	PROBE_EXPECTED_TOOL,
 	type ProbeEvent,
+	type ProbeWindowReason,
 	RESERVED_EVENT_KEYS,
 	readProbeEvents,
 } from "./lib/probe-event-log.ts";
-import { classifyProbe, DELAY_WELL_BELOW_MS, type ProbeRunRecord } from "./lib/probe-verdict.ts";
+import { classifyProbe, DELAY_WELL_BELOW_MS, type ProbeRunRecord, RUNNER_EXACTLY_ONCE } from "./lib/probe-verdict.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BACKEND_SRC = readFileSync(join(REPO_ROOT, "pi-extensions", "lib", "acp", "backend.ts"), "utf8");
@@ -347,15 +362,40 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 		"No-such-tool is scanned ONLY off structured tool frames, never agent prose [QK:PROBE-NO-PROSE-ERROR-SCAN]",
 	);
 
-	// A malformed event line is run-invalidating: the missing line could be the
-	// very wire marker whose absence the classifier would then read as evidence —
-	// and the preserved classification.json must say INVALIDATED on its face,
-	// never a judgeable-looking thin-log verdict.
+	// A broken event log is run-invalidating on BOTH doors: a malformed line could
+	// be the very wire marker whose absence the classifier would then read as
+	// evidence, and a stream whose per-writer order cannot be trusted cannot carry
+	// an ordering verdict at all. The preserved classification.json must say
+	// INVALIDATED on its face, never a judgeable-looking thin-log verdict.
+	//
+	// Pinned as the WHOLE guard, not the substring `if (malformed.length > 0)`:
+	// that shorter form also matches the artifact-writing line right below it, so
+	// a mutant could disable the guard and still satisfy the pin. It did — this
+	// assertion SURVIVED its own mutant until the pin was tightened (2026-07-29).
+	// The post-delay slack is what lets a missing wire marker be read as evidence:
+	// an operator-shrinkable window could close early and then be called
+	// "deadline-sufficient". It is a constant, and no env may reach it.
 	assert.ok(
-		RUNNER_SRC.includes("if (malformed.length > 0)") &&
+		RUNNER_SRC.includes("const POST_DELAY_SLACK_MS = 5_000;") && !RUNNER_SRC.includes("PROBE_POST_DELAY_SLACK_MS"),
+		"the observation window's post-delay slack is a CONSTANT with no env override [QK:PROBE-WINDOW-SLACK-IS-CONSTANT]",
+	);
+
+	// The exit contract asks three separate questions. Failing the run on the
+	// composite verdict alone reported a pair that MEASURED its ordering axis as a
+	// failed run, purely because the callability axis had no marker.
+	assert.ok(
+		RUNNER_SRC.includes('classification.status.validity !== "valid" && classification.status.validity !== "partial"') &&
+			RUNNER_SRC.includes("do not read it as a complete series") &&
+			RUNNER_SRC.includes('classification.status.orderingMeasurement !== "measured"') &&
+			RUNNER_SRC.includes("NOT a claim about server wait behavior"),
+		"the runner's exit contract separates fatal validity from the two axes, and claims no server-wait conclusion [QK:RUNNER-EXIT-CONTRACT-SPLIT]",
+	);
+
+	assert.ok(
+		RUNNER_SRC.includes("if (malformed.length > 0 || sequenceViolations.length > 0) {") &&
 			RUNNER_SRC.includes("run INVALIDATED") &&
 			RUNNER_SRC.includes('verdict: "INVALIDATED"'),
-		"the runner refuses to judge a log carrying malformed lines and writes an INVALIDATED classification [QK:PROBE-MALFORMED-INVALIDATES]",
+		"the runner refuses to judge a log with malformed lines OR per-writer order violations, and writes an INVALIDATED classification [QK:PROBE-MALFORMED-INVALIDATES]",
 	);
 }
 
@@ -770,6 +810,7 @@ const INIT_PARAMS = {
 			PROBE_EVENTS.fixtureToolsCallReceived,
 			PROBE_EVENTS.initializeEnd,
 			PROBE_EVENTS.newSessionEnd,
+			PROBE_EVENTS.observationWindowEnd,
 			PROBE_EVENTS.promptEnd,
 			PROBE_EVENTS.promptReply,
 			PROBE_EVENTS.setModelEnd,
@@ -795,6 +836,138 @@ const INIT_PARAMS = {
 	assert.ok(
 		mixed.events.length === 1 && mixed.malformed.length === 1,
 		"an unparseable line is still malformed and the good line still parses",
+	);
+
+	// The window close is judged payload: `reason` decides whether a missing wire
+	// marker is a reading or our own teardown, so an unknown reason must not fall
+	// through to whatever branch consumes it.
+	const winPath = join(tmp, "payload-window.ndjson");
+	const winStamp = { seq: 0, pid: 7, ts: new Date(2_000).toISOString(), tsMs: 2_000, runId: "w" };
+	appendFileSync(
+		winPath,
+		`${JSON.stringify({ ...winStamp, event: PROBE_EVENTS.observationWindowEnd, reason: "whenever", markerSeen: false })}\n`,
+		"utf8",
+	);
+	appendFileSync(
+		winPath,
+		`${JSON.stringify({ ...winStamp, seq: 1, tsMs: 2_001, ts: new Date(2_001).toISOString(), event: PROBE_EVENTS.observationWindowEnd, reason: "deadline", markerSeen: "no" })}\n`,
+		"utf8",
+	);
+	appendFileSync(
+		winPath,
+		`${JSON.stringify({ ...winStamp, seq: 2, tsMs: 2_002, ts: new Date(2_002).toISOString(), event: PROBE_EVENTS.observationWindowEnd, reason: "deadline", markerSeen: false })}\n`,
+		"utf8",
+	);
+	const win = readProbeEvents(winPath);
+	assert.ok(
+		win.malformed.length === 2 && win.events.length === 1,
+		"an unknown window reason and a non-boolean markerSeen are MALFORMED; the closed vocabulary passes [QK:PROBE-LOG-WINDOW-REASON-VOCAB]",
+	);
+}
+
+// ===========================================================================
+// 4b) EVENT LOG STREAM INTEGRITY — per-writer order, checked on RAW APPEND ORDER
+// ===========================================================================
+{
+	const stream = (lines: Array<Record<string, unknown>>): ReturnType<typeof readProbeEvents> => {
+		const p = join(tmp, `stream-${Math.random().toString(36).slice(2)}.ndjson`);
+		for (const l of lines) appendFileSync(p, `${JSON.stringify(l)}\n`, "utf8");
+		return readProbeEvents(p);
+	};
+	const line = (pid: number, seq: number, tsMs: number, event = PROBE_EVENTS.acpToolCallRaw) => ({
+		seq,
+		pid,
+		ts: new Date(tsMs).toISOString(),
+		tsMs,
+		runId: "s",
+		event,
+	});
+
+	// Clean stream: two writers interleaved, each strictly increasing.
+	const clean = stream([line(1, 0, 100), line(2, 0, 101), line(1, 1, 102), line(2, 1, 103)]);
+	assert.equal(clean.sequenceViolations.length, 0, "interleaved writers, each monotonic, is a clean stream");
+
+	// GAPS are fine — the counter is process-wide, not file-wide, so a process
+	// writing to more than one log skips numbers here by construction.
+	const gapped = stream([line(1, 0, 100), line(1, 7, 101), line(1, 90, 102)]);
+	assert.equal(
+		gapped.sequenceViolations.length,
+		0,
+		"a per-pid seq GAP is not a violation — the counter is process-wide",
+	);
+
+	// A repeat is two lines claiming one slot: within a millisecond they cannot be
+	// ordered against each other at all.
+	const dupSeq = stream([line(1, 5, 100), line(1, 5, 100)]);
+	assert.ok(
+		dupSeq.sequenceViolations.length === 1 && /seq 5 does not exceed/.test(dupSeq.sequenceViolations[0]),
+		"a repeated per-pid seq is a stream violation [QK:PROBE-LOG-SEQ-STRICTLY-INCREASING]",
+	);
+	const backSeq = stream([line(1, 5, 100), line(1, 4, 101)]);
+	assert.equal(backSeq.sequenceViolations.length, 1, "a per-pid seq going backwards is a stream violation");
+
+	// THE claim, asserted BEFORE the clock rule below on purpose: validation runs
+	// on the RAW append order. This log sorts into perfect order — a post-sort
+	// check would see nothing — yet the file itself has pid 1 writing seq 9 before
+	// seq 2. (Ordering matters here: a check moved after the sort also perturbs the
+	// clock-regression case, so this assertion must be the one that fires.)
+	const outOfOrderInFile = stream([line(1, 9, 900), line(1, 2, 200)]);
+	assert.ok(
+		outOfOrderInFile.sequenceViolations.length > 0,
+		"per-writer order is judged on the RAW file order, not after the sort has rewritten it [QK:PROBE-LOG-RAW-ORDER-BEFORE-SORT]",
+	);
+	assert.deepEqual(
+		outOfOrderInFile.events.map((e) => e.seq),
+		[2, 9],
+		"the returned events are still sorted — the violation is reported, not repaired",
+	);
+
+	// One process reads one clock. A regression means the stamps were rewritten or
+	// the clock stepped — and those stamps ARE the ordering evidence.
+	const backTs = stream([line(1, 0, 500), line(1, 1, 499)]);
+	assert.ok(
+		backTs.sequenceViolations.length === 1 && /runs BACKWARDS/.test(backTs.sequenceViolations[0]),
+		"a per-pid tsMs regression is a stream violation [QK:PROBE-LOG-TS-NO-REGRESSION]",
+	);
+	// Different pids are independent: cross-process stamps are not comparable this
+	// way, and demanding it would flag every normal interleaving.
+	assert.equal(
+		stream([line(1, 0, 500), line(2, 0, 499)]).sequenceViolations.length,
+		0,
+		"a LOWER stamp from a DIFFERENT pid is not a regression",
+	);
+
+	// WRITER KEY is (runId, pid). The fixture is a fresh child per run and the OS
+	// reuses pids, so a later run's fixture can legitimately hold the same pid and
+	// restart its counter at 0. Keying on pid alone would call that healthy log
+	// corrupt — and cross-run ordering is not something any verdict reads.
+	const pidReuse = stream([
+		{ ...line(1, 0, 100), runId: "r1" },
+		{ ...line(1, 1, 101), runId: "r1" },
+		{ ...line(1, 0, 200), runId: "r2" },
+		{ ...line(1, 1, 201), runId: "r2" },
+	]);
+	assert.equal(
+		pidReuse.sequenceViolations.length,
+		0,
+		"a reused pid restarting its counter in a LATER run is not a violation — the writer key is (runId, pid) [QK:PROBE-LOG-WRITER-KEY-PER-RUN]",
+	);
+	// …but within one run the same pid is still held to the rule.
+	assert.equal(
+		stream([
+			{ ...line(1, 5, 100), runId: "r1" },
+			{ ...line(1, 5, 101), runId: "r1" },
+		]).sequenceViolations.length,
+		1,
+		"the same pid inside ONE run is still strictly increasing",
+	);
+
+	// Malformed lines never participate: they are not events, so they cannot
+	// manufacture a sequence violation on top of their own refusal.
+	const withMalformed = stream([line(1, 0, 100), { junk: true }, line(1, 1, 101)]);
+	assert.ok(
+		withMalformed.malformed.length === 1 && withMalformed.sequenceViolations.length === 0,
+		"a malformed line is refused at the line door and does not also break the stream door",
 	);
 }
 
@@ -828,16 +1001,44 @@ interface SyntheticRunSpec {
 	providerToolId?: string;
 	noSuchToolId?: string;
 	nonceEchoed?: boolean;
+	/** How the observation window closed. Default: inferred — the marker was seen
+	 *  iff a wire marker exists, and the reason follows from that. `"omit"` drops
+	 *  the marker entirely, which is a TOPOLOGY violation, not a soft default:
+	 *  without it a missing wire marker cannot be told from our own teardown. */
+	window?: { reason?: ProbeWindowReason; markerSeen?: boolean } | "omit";
+	/** Extra runner-owned lines appended verbatim — used to build duplicate /
+	 *  end-without-start topology corruptions. */
+	extra?: (runId: string, base: number) => ProbeEvent[];
+}
+
+/** Close a synthetic run the way the runner does: the observation window is
+ *  stamped BEFORE run_end, on the success and the failure path alike. */
+function closeRun(out: ProbeEvent[], spec: SyntheticRunSpec, at: number, failed: boolean): ProbeEvent[] {
+	const { runId } = spec;
+	if (spec.window !== "omit") {
+		// Read markerSeen off what the run ACTUALLY emitted, never off the spec: the
+		// classifier now checks the self-reported flag against the log, so a helper
+		// that guesses would manufacture incoherent fixtures (a run that failed at
+		// initialize never reaches the wire marker, whatever `wireAt` says).
+		const emittedWire = out.some((e) => e.event === PROBE_EVENTS.toolsListResponseForwarded);
+		const markerSeen = spec.window?.markerSeen ?? emittedWire;
+		const reason: ProbeWindowReason =
+			spec.window?.reason ?? (failed ? "run-failed" : markerSeen ? "wire-marker" : "deadline");
+		out.push(ev(runId, PROBE_EVENTS.observationWindowEnd, at, { reason, markerSeen }));
+	}
+	out.push(ev(runId, PROBE_EVENTS.runEnd, at + 1, { ok: !failed }));
+	if (spec.extra) out.push(...spec.extra(runId, spec.base));
+	return out;
 }
 
 function syntheticRun(spec: SyntheticRunSpec): ProbeEvent[] {
 	const { runId, probeRunId, base } = spec;
 	const nsStart = base + 100;
 	const nsLatency = spec.nsLatency ?? 300;
-	const out: ProbeEvent[] = [ev(runId, PROBE_EVENTS.initializeStart, base)];
+	const out: ProbeEvent[] = [ev(runId, PROBE_EVENTS.runStart, base), ev(runId, PROBE_EVENTS.initializeStart, base)];
 	if (spec.failPhase === "initialize") {
 		out.push(ev(runId, PROBE_EVENTS.initializeEnd, base + 50, { ok: false, error: "init boom" }));
-		return out;
+		return closeRun(out, spec, base + 60, true);
 	}
 	out.push(ev(runId, PROBE_EVENTS.initializeEnd, base + 50, { ok: true }));
 	out.push(ev(runId, PROBE_EVENTS.newSessionStart, nsStart));
@@ -847,14 +1048,14 @@ function syntheticRun(spec: SyntheticRunSpec): ProbeEvent[] {
 		out.push(
 			ev(runId, PROBE_EVENTS.newSessionEnd, nsStart + nsLatency, { ok: false, timedOut: true, error: "ns boom" }),
 		);
-		return out;
+		return closeRun(out, spec, nsStart + nsLatency + 10, true);
 	}
 	out.push(ev(runId, PROBE_EVENTS.newSessionEnd, nsStart + nsLatency, { ok: true }));
 	const smStart = nsStart + nsLatency + 10;
 	out.push(ev(runId, PROBE_EVENTS.setModelStart, smStart));
 	if (spec.failPhase === "enforceModel") {
 		out.push(ev(runId, PROBE_EVENTS.setModelEnd, smStart + 30, { ok: false, error: "sm boom" }));
-		return out;
+		return closeRun(out, spec, smStart + 40, true);
 	}
 	out.push(ev(runId, PROBE_EVENTS.setModelEnd, smStart + 30, { ok: true }));
 	const pStart = smStart + 50;
@@ -877,11 +1078,14 @@ function syntheticRun(spec: SyntheticRunSpec): ProbeEvent[] {
 	}
 	if (spec.failPhase === "prompt") {
 		out.push(ev(runId, PROBE_EVENTS.promptEnd, pStart + 200, { ok: false, error: "p boom" }));
-		return out;
+		return closeRun(out, spec, pStart + 210, true);
 	}
-	out.push(ev(runId, PROBE_EVENTS.promptReply, pStart + 250, { carriesNonce: spec.nonceEchoed ?? true }));
+	// REAL writer order: driveProbeTurn stamps prompt_end and returns, THEN the
+	// runner stamps prompt_reply. The synthetic corpus had these reversed until
+	// the topology rule caught it (GPT review round 2, 2026-07-29).
 	out.push(ev(runId, PROBE_EVENTS.promptEnd, pStart + 300, { ok: true }));
-	return out;
+	out.push(ev(runId, PROBE_EVENTS.promptReply, pStart + 310, { carriesNonce: spec.nonceEchoed ?? true }));
+	return closeRun(out, spec, pStart + 310, false);
 }
 
 const PROVIDER_ID_MEASURED = "mcp__probe__probe_nonce";
@@ -968,8 +1172,8 @@ function intervention(
 
 // --- B promotion ladder — B is ONLY the marker-grade combination ------------
 {
-	// (a) no wire marker at all → NOT B: rail doc :631 files it as an MCP
-	// handshake / fixture / config CANDIDATE and :638 keeps unlisted combinations
+	// (a) no wire marker at all → NOT B: the §11-7 promotion ladder files it as an
+	// MCP handshake / fixture / config CANDIDATE and keeps unlisted combinations
 	// inconclusive. Reading it as B would let a fixture that never served
 	// manufacture a sufficiency verdict (GPT review 2026-07-28).
 	const ctl = passingControl();
@@ -1014,7 +1218,7 @@ function intervention(
 	assert.equal(resB2.promotable, false, "…and never promotes");
 
 	// (c) alias/bare-name No-such-tool → model/alias mismatch, NOT absence
-	// evidence (:634 — the real provider-bound id may have been in schema).
+	// evidence (§11-7 ladder: the real provider-bound id may have been in schema).
 	const alias = intervention("d1", 2000, 10_000, {
 		wireAt: 2600,
 		nsLatency: 300,
@@ -1173,10 +1377,332 @@ function intervention(
 	);
 }
 
+// ===========================================================================
+// 6) OBSERVATION WINDOW + RUNNER TOPOLOGY — what puts a run OUTSIDE the space
+// ===========================================================================
+{
+	const ctl = passingControl();
+
+	// Without the window marker, a missing wire marker cannot be told apart from
+	// our own teardown — so the run is not judged at all rather than judged
+	// permissively. (Re-parsing any artifact written before the window protocol
+	// lands here, which is exactly right: those logs cannot answer the question.)
+	const noWindow = intervention("w0", 2000, 10_000, { wireAt: null, fixtureCall: false, window: "omit" });
+	const resNoWindow = classifyProbe([ctl.record, noWindow.record], [...ctl.events, ...noWindow.events]);
+	// Two independent nets cover this — the exactly-once inventory below AND the
+	// explicit windowReason guard in the classifier — so no SINGLE mutation can
+	// kill it and it carries no [QK:] token. The inventory itself is qualified.
+	assert.ok(
+		resNoWindow.verdict === "INVALIDATED" && resNoWindow.interventions[0].invalidReason === "topology",
+		"a run with no observation-window marker is INVALIDATED for TOPOLOGY — absence cannot be told from our own teardown",
+	);
+	// The exactly-once inventory, as a HAND-WRITTEN literal (never read off the
+	// module under test): dropping a member would retire a topology rule silently.
+	assert.deepEqual(
+		[...RUNNER_EXACTLY_ONCE].sort(),
+		[PROBE_EVENTS.observationWindowEnd, PROBE_EVENTS.runEnd, PROBE_EVENTS.runStart].sort(),
+		"the runner-owned exactly-once marker set is exactly run_start, the window close, and run_end [QK:VERDICT-RUNNER-EXACTLY-ONCE-INVENTORY]",
+	);
+
+	// THE regression the first LIVE pair produced: D2's child was torn down while
+	// the fixture was still inside its injected delay, so the wire marker could
+	// never land — and a wire-marker-less run was filed as an MCP handshake /
+	// fixture / config candidate. That is an attribution about the SERVER derived
+	// from a fact about OUR teardown.
+	const censored = intervention("w1", 8000, 40_000, {
+		wireAt: null,
+		fixtureCall: false,
+		nonceEchoed: false,
+		window: { reason: "child-exit", markerSeen: false },
+	});
+	const resCensored = classifyProbe([ctl.record, censored.record], [...ctl.events, ...censored.events]);
+	assert.equal(
+		resCensored.interventions[0].invalidReason,
+		"observation-window-closed",
+		"a window closed by child-exit with the marker unseen is CENSORED, not a handshake/fixture/config candidate [QK:VERDICT-CENSORED-NOT-CANDIDATE]",
+	);
+	assert.equal(
+		resCensored.interventions[0].ordering,
+		"censored",
+		"…its (a) axis reads censored — a fact about the probe, not an ordering comparison",
+	);
+	assert.notEqual(
+		resCensored.interventions[0].failure,
+		"candidate-handshake",
+		"…and its (b) axis refuses the attribution the first LIVE pair made",
+	);
+	assert.equal(resCensored.verdict, "INVALIDATED", "the pair's only intervention being censored invalidates the pair");
+	// A fatal status still has to NAME what it discarded — `invalidRuns` is a
+	// common field of the status contract, so leaving it empty on the fatal paths
+	// would quietly lose the only record of which runs were thrown out and why.
+	assert.deepEqual(
+		resCensored.status.invalidRuns,
+		[{ runId: "w1", reason: "observation-window-closed" }],
+		"a fatal status still names the discarded run and its reason [QK:VERDICT-STATUS-NAMES-INVALID-RUNS]",
+	);
+
+	// The SAME absence under a window we kept open to its deadline IS a reading:
+	// the difference is entirely whether we looked long enough.
+	const sufficient = intervention("w2", 8000, 70_000, {
+		wireAt: null,
+		fixtureCall: false,
+		nonceEchoed: false,
+		window: { reason: "deadline", markerSeen: false },
+	});
+	const resSufficient = classifyProbe([ctl.record, sufficient.record], [...ctl.events, ...sufficient.events]);
+	assert.equal(
+		resSufficient.interventions[0].failure,
+		"candidate-handshake",
+		"the same absence under a SUFFICIENT window is a handshake/fixture/config candidate (the mutant for this condition is VERDICT-CENSORED-NOT-CANDIDATE — one condition, one kill)",
+	);
+	assert.equal(resSufficient.verdict, "inconclusive", "…still not promotable, and still not B");
+
+	// Runner-owned markers are ours and exactly-once by construction: a duplicate
+	// means the log describing the run is not the run.
+	const dupEnd = intervention("w3", 2000, 100_000, {
+		fixtureCall: true,
+		extra: (runId, base) => [ev(runId, PROBE_EVENTS.runEnd, base + 5_000, { ok: true })],
+	});
+	const resDup = classifyProbe([ctl.record, dupEnd.record], [...ctl.events, ...dupEnd.events]);
+	assert.equal(
+		resDup.verdict,
+		"INVALIDATED",
+		"a duplicated runner-owned marker INVALIDATES the run [QK:VERDICT-RUNNER-TOPOLOGY-EXACTLY-ONCE]",
+	);
+	assert.match(resDup.interventions[0].evidence, /run_end appears 2 times/, "…and the evidence names the duplicate");
+
+	// An end with no start is the same defect seen from the other side.
+	const orphanEnd = intervention("w4", 2000, 130_000, {
+		failPhase: "initialize",
+		extra: (runId, base) => [ev(runId, PROBE_EVENTS.promptEnd, base + 70, { ok: true })],
+	});
+	const resOrphan = classifyProbe([ctl.record, orphanEnd.record], [...ctl.events, ...orphanEnd.events]);
+	assert.equal(
+		resOrphan.verdict,
+		"INVALIDATED",
+		"a phase end with no start INVALIDATES the run — topology precedes I0",
+	);
+	assert.match(resOrphan.interventions[0].evidence, /prompt_end without prompt_start/, "…named exactly");
+
+	// Repeatable markers are NOT swept into the exactly-once rule: the model may
+	// produce several tool-call frames and the client may re-request tools/list.
+	const repeats = intervention("w5", 2000, 160_000, {
+		fixtureCall: true,
+		nsLatency: 2400,
+		wireAt: 2100,
+		extra: (runId, base) => [
+			ev(runId, PROBE_EVENTS.acpToolCallRaw, base + 900, { kind: "tool_call_update", raw: "{}" }),
+			ev(runId, PROBE_EVENTS.acpToolCallRaw, base + 901, { kind: "tool_call_update", raw: "{}" }),
+		],
+	});
+	const resRepeats = classifyProbe([ctl.record, repeats.record], [...ctl.events, ...repeats.events]);
+	assert.notEqual(
+		resRepeats.verdict,
+		"INVALIDATED",
+		"repeatable forensic markers repeating is not a topology violation (enforced, not mutant-qualified: widening the exactly-once set fails every run at once, so no isolated mutant exists)",
+	);
+}
+
+// --- window marker coherence + phase production order -----------------------
+{
+	const ctl = passingControl();
+
+	// The window marker is SELF-REPORTED. A close claiming the marker was seen,
+	// in a run whose log has no wire marker, would walk a censored run straight
+	// into the candidate branch — so the flag is checked against the log.
+	const lying = intervention("c1", 2000, 10_000, {
+		wireAt: null,
+		fixtureCall: false,
+		nonceEchoed: false,
+		window: { reason: "wire-marker", markerSeen: true },
+	});
+	const resLying = classifyProbe([ctl.record, lying.record], [...ctl.events, ...lying.events]);
+	assert.equal(
+		resLying.verdict,
+		"INVALIDATED",
+		"a window close claiming markerSeen=true with no wire marker in the log is INVALIDATED, never a candidate [QK:VERDICT-WINDOW-MARKER-COHERENCE]",
+	);
+	assert.match(resLying.interventions[0].evidence, /contradicts its own evidence/, "…named as a self-contradiction");
+
+	// The SAME bar applies to the CONTROL. Coherence lives in the run's shared
+	// validity list precisely so the baseline cannot claim a wire marker it never
+	// logged — a control free to lie about its own window is not a baseline, and
+	// every intervention is read as a delta against it.
+	const lyingControl = {
+		record: { runId: "ctl-lie", role: "control", delayMs: 0, probeRunId: "prb-ctl-lie" } as ProbeRunRecord,
+		events: syntheticRun({
+			runId: "ctl-lie",
+			probeRunId: "prb-ctl-lie",
+			base: 500_000,
+			wireAt: null, // no wire marker in the log …
+			fixtureCall: true,
+			providerToolId: PROVIDER_ID_MEASURED,
+			nonceEchoed: true,
+			window: { reason: "wire-marker", markerSeen: true }, // … but the close claims one
+		}),
+	};
+	const d1ok = intervention("d1ok", 2000, 540_000, { wireAt: 2100, nsLatency: 2400, fixtureCall: true });
+	const resLyingCtl = classifyProbe([lyingControl.record, d1ok.record], [...lyingControl.events, ...d1ok.events]);
+	assert.ok(
+		resLyingCtl.verdict === "INVALIDATED" && resLyingCtl.control.pass === false,
+		"a CONTROL whose window close contradicts its own log is INVALIDATED before P0 is even considered — the baseline is held to the same bar [QK:VERDICT-CONTROL-HELD-TO-COHERENCE]",
+	);
+	assert.equal(resLyingCtl.interventions.length, 0, "…and no intervention is judged against a baseline that lied");
+
+	// The reason must agree with the flag too: `deadline` and `child-exit` both
+	// mean the marker did not arrive.
+	const wrongReason = intervention("c2", 2000, 40_000, {
+		wireAt: 2200,
+		fixtureCall: true,
+		window: { reason: "deadline", markerSeen: true },
+	});
+	const resWrong = classifyProbe([ctl.record, wrongReason.record], [...ctl.events, ...wrongReason.events]);
+	assert.equal(resWrong.verdict, "INVALIDATED", "reason=deadline with markerSeen=true is an incoherent close");
+
+	// PHASE-TO-PHASE order, not just start<end inside each phase: a log whose
+	// phases are transposed has every pair intact and still does not describe the
+	// driver's sequence. Both fixtures below are otherwise WELL FORMED — they
+	// differ from a healthy run in exactly one way, so the violation they trip is
+	// unambiguous and their mutants cannot die on someone else's assertion.
+	const transposed: ProbeEvent[] = [
+		ev("x1", PROBE_EVENTS.runStart, 300_000),
+		ev("x1", PROBE_EVENTS.initializeStart, 300_000),
+		ev("x1", PROBE_EVENTS.initializeEnd, 300_050, { ok: true }),
+		// prompt BEFORE newSession — each pair is well formed on its own
+		ev("x1", PROBE_EVENTS.promptStart, 300_100),
+		ev("x1", PROBE_EVENTS.promptEnd, 300_200, { ok: true }),
+		ev("x1", PROBE_EVENTS.promptReply, 300_210, { carriesNonce: false }),
+		ev("x1", PROBE_EVENTS.newSessionStart, 300_300),
+		ev("x1", PROBE_EVENTS.newSessionEnd, 300_400, { ok: true }),
+		ev("x1", PROBE_EVENTS.setModelStart, 300_500),
+		ev("x1", PROBE_EVENTS.setModelEnd, 300_530, { ok: true }),
+		ev("x1", PROBE_EVENTS.observationWindowEnd, 300_600, { reason: "deadline", markerSeen: false }),
+		ev("x1", PROBE_EVENTS.runEnd, 300_601, { ok: true }),
+	];
+	const transposedRec: ProbeRunRecord = { runId: "x1", role: "intervention", delayMs: 2000, probeRunId: "prb-x1" };
+	const resTrans = classifyProbe([ctl.record, transposedRec], [...ctl.events, ...transposed]);
+	assert.equal(
+		resTrans.verdict,
+		"INVALIDATED",
+		"transposed phases are a topology violation even though every start/end pair is intact [QK:VERDICT-PHASE-SEQUENTIAL]",
+	);
+	assert.match(
+		resTrans.interventions[0].evidence,
+		/phases are sequential/,
+		"…named as a phase-sequencing violation (all four phases are present, so it is the ORDER that is wrong)",
+	);
+
+	// The prefix rule catches the other shape: a phase that ran without the phases
+	// before it. A failed run is a PREFIX of the production order, never a hole.
+	const hole: ProbeEvent[] = [
+		ev("x2", PROBE_EVENTS.runStart, 400_000),
+		ev("x2", PROBE_EVENTS.initializeStart, 400_000),
+		ev("x2", PROBE_EVENTS.initializeEnd, 400_050, { ok: true }),
+		// newSession skipped entirely — enforceModel and prompt still ran
+		ev("x2", PROBE_EVENTS.setModelStart, 400_100),
+		ev("x2", PROBE_EVENTS.setModelEnd, 400_130, { ok: true }),
+		ev("x2", PROBE_EVENTS.promptStart, 400_200),
+		ev("x2", PROBE_EVENTS.promptEnd, 400_300, { ok: true }),
+		ev("x2", PROBE_EVENTS.promptReply, 400_310, { carriesNonce: false }),
+		ev("x2", PROBE_EVENTS.observationWindowEnd, 400_400, { reason: "deadline", markerSeen: false }),
+		ev("x2", PROBE_EVENTS.runEnd, 400_401, { ok: true }),
+	];
+	const holeRec: ProbeRunRecord = { runId: "x2", role: "intervention", delayMs: 2000, probeRunId: "prb-x2" };
+	const resHole = classifyProbe([ctl.record, holeRec], [...ctl.events, ...hole]);
+	assert.equal(
+		resHole.verdict,
+		"INVALIDATED",
+		"a skipped phase is a topology violation — a failed run is a PREFIX of the production order, never a hole [QK:VERDICT-PHASE-PRODUCTION-ORDER]",
+	);
+	assert.match(resHole.interventions[0].evidence, /prefix of the production order/, "…named as a prefix violation");
+}
+
+// ===========================================================================
+// 7) TWO AXES — an ordering observation is not hidden by a missing (b) marker
+// ===========================================================================
+{
+	const ctl = passingControl();
+
+	// The D1 shape, exactly as measured 2026-07-28: the turn is opened BEFORE the
+	// tools reach the wire, the wire marker lands mid-turn, and the model never
+	// attempts the call. (b) has no marker — model silence is not evidence — but
+	// (a) is settled: this server did NOT wait. Reporting one verdict let the
+	// missing (b) marker bury the (a) fact.
+	const d1 = intervention("a1", 2000, 10_000, {
+		nsLatency: 2000,
+		wireAt: 2200, // promptStart is nsStart+2060, promptEnd nsStart+2360
+		fixtureCall: false,
+		nonceEchoed: false,
+	});
+	const res = classifyProbe([ctl.record, d1.record], [...ctl.events, ...d1.events]);
+	const r = res.interventions[0];
+	assert.equal(r.deltas.promptRanAhead, true, "promptStart precedes the wire marker");
+	assert.equal(
+		r.ordering,
+		"prompt-request-ahead-of-wire",
+		"(a) is a settled COMPARISON: we issued the prompt request before the wire marker landed — named for the comparison, never for a server-wait conclusion",
+	);
+	assert.equal(r.failure, "inconclusive", "(b) has no marker — model silence never promotes");
+	assert.equal(res.verdict, "inconclusive", "the composite verdict stays inconclusive because (b) is unsettled");
+	assert.equal(
+		res.ordering.summary,
+		"prompt-request-ahead-of-wire",
+		"…and the (a) axis is reported on its OWN terms rather than being folded into that verdict [QK:VERDICT-ORDERING-AXIS-REPORTED]",
+	);
+	// Diagnosability: §11-7-b's first artifact classified D1 correctly and still
+	// left a reader unable to SEE the ran-ahead or the turn time left after it.
+	assert.match(r.evidence, /promptStart \d+ms BEFORE wire/, "the evidence exposes the prompt↔wire delta");
+	assert.match(
+		r.evidence,
+		/\d+ms of turn remained after wire/,
+		"the evidence exposes how much turn was left after the wire marker [QK:VERDICT-EVIDENCE-EXPOSES-DELTAS]",
+	);
+
+	// The axis split is load-bearing for B/C, not cosmetic. Here the wire lands
+	// AFTER newSession end but BEFORE the prompt is issued: the newSession axis
+	// says "ran ahead", the causal window says the turn was opened against a wire
+	// that was already available. Only the second one may decide B.
+	const between = intervention("a2", 2000, 40_000, {
+		nsLatency: 2000,
+		wireAt: 2030, // newSessionEnd + 30, promptStart is +60
+		fixtureCall: false,
+		noSuchToolId: PROVIDER_ID_MEASURED,
+		nonceEchoed: false,
+	});
+	const resBetween = classifyProbe([ctl.record, between.record], [...ctl.events, ...between.events]);
+	const rb = resBetween.interventions[0];
+	assert.equal(rb.deltas.newSessionRanAhead, true, "the newSession axis alone would call this ran-ahead");
+	assert.equal(rb.deltas.promptRanAhead, false, "…but the turn was opened AFTER the wire was available");
+	assert.equal(
+		resBetween.verdict,
+		"inconclusive",
+		"exact-id absence with the wire available before the prompt is NOT delta-B — B's window is promptStart, not newSession end [QK:VERDICT-B-WINDOW-IS-PROMPT]",
+	);
+	assert.equal(
+		rb.ordering,
+		"wire-before-prompt-request",
+		"…and (a) records the comparison: the wire marker landed before we issued the prompt request",
+	);
+
+	// A keeps its own axis: `wire < newSessionEnd` plus latency scaling. Replacing
+	// the single ran-ahead flag with the prompt axis would have silently broken it.
+	const k1 = intervention("k1", 2000, 70_000, { wireAt: 100, nsLatency: 2200, fixtureCall: true });
+	const k2 = intervention("k2", 8000, 100_000, { wireAt: 100, nsLatency: 8200, fixtureCall: true });
+	const resA = classifyProbe([ctl.record, k1.record, k2.record], [...ctl.events, ...k1.events, ...k2.events]);
+	assert.equal(resA.verdict, "A", "A still reads off the newSession axis with latency tracking");
+	assert.equal(
+		resA.ordering.summary,
+		"wire-before-newSession-end",
+		"…and the (a) summary is named for the comparison, deliberately NOT 'wait' — the wait verdict needs the scaling A adds",
+	);
+}
+
 rmSync(tmp, { recursive: true, force: true });
 console.log("[check-probe-ordering] PASS — §11-7 probe seam: sameness pinned to backend.ts, phase attribution");
 console.log("  (set-model included), fixture wire markers + required probeRunId + legacy compat, the event-log");
 console.log("  door contract (reserved keys refused; unknown marker / broken axis / unjudgeable payload →");
-console.log("  MALFORMED, while a legitimately absent optional field stays an observation), and the");
+console.log("  MALFORMED, while a legitimately absent optional field stays an observation) plus the stream");
+console.log("  door (per-pid seq/clock judged on RAW append order), the observation-window protocol");
+console.log("  (censored ≠ candidate), runner-owned marker topology, the two reported axes, and the");
 console.log("  paired-verdict truth table (P0/I0 outside the space, phase-qualified D, B promotion ladder, C,");
 console.log("  A's two-delay rule).");
