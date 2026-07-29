@@ -131,6 +131,7 @@ Usage:
   ./run.sh check-agy-permission-matrix # AGY permission CONTRACT SPACE as a literal table (55 cells): parser-state × operation × settings × ownership × precedence with stated exclusion rules; expectations are hand-written literals, never read from the SUT. Offline/deterministic (deps: python3)
   ./run.sh check-gate-qualification    # kill-proof qualification (the gate-of-gates): runner self-test (classifier truth table + synthetic negatives incl. wrong-reason/hang/control-red/impurity) + committed mutant manifests (scripts/mutants/*.json) run in an isolated snapshot repo under control→mutant→restore→control; the real checkout is never written. Evidence = claim IDs + killed mutant IDs, never assertion counts
   ./run.sh check-probe-ordering        # §11-7 ordering-probe deterministic gate: raw-client SAMENESS pinned to backend.ts (sequence/args/timeouts/permission policy — the probe may never measure a lookalike), phase attribution incl. set-model, probe-mode fixture wire markers (delay honored, probeRunId REQUIRED, smoke-acp-mcp-live legacy compat), event-log door integrity (reserved keys refused at write; unknown marker name, broken sort axis, or a payload the classifier cannot judge on is MALFORMED, never a quiet event), and the §11-7 paired-verdict truth table (P0/I0 outside the space, phase-qualified D, B promotion ladder, C, A two-delay rule). Offline/deterministic; kill-proofed via scripts/mutants/probe-ordering.json
+  ./run.sh check-probe-cli-shim        # §11-7-c B-name-snapshot PRODUCER gate: the CLI shim driven as a REAL process against fake CLIs (no API, no cost). Proves what a defect would buy — FABRICATED evidence (a malformed init is never reported as an empty name set; the boot report carries the true target path+sha256 the classifier verifies against the roster), a DESTROYED turn (byte transparency across mid-UTF8/CRLF/oversized/unterminated framing, exit-code fidelity, signal re-raise, inbound signal forwarding, stderr passthrough, stdout backpressure), and LEAKED operator state (exact-allowlist env scrub, no argv/env/prompt body in the log). Offline/deterministic; kill-proofed via scripts/mutants/probe-ordering.json
   ./run.sh smoke-agy-statusline-state # agy ambient garden-id statusLine install/doctor/inverse regression. Offline/deterministic
   ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression. Offline/deterministic
   ./run.sh smoke-user-scope-citizen   # 0.12.6 install-boundary: pi packages[] registration SSOT (register-pi-package.py) — idempotent + preserves unrelated + normalizes stale + remove symmetry + fails loud. Offline/hermetic (deps: bash+python3)
@@ -4464,6 +4465,17 @@ case "$cmd" in
     # payload (every field the classifier judges on is typed there) — and the PURE
     # paired-verdict truth table.
     run_ts scripts/check-probe-ordering.ts
+    ;;
+  check-probe-cli-shim)
+    # §11-7-c producer gate (docs/acp-backend-rail.md §11-7-c condition 5: "Byte-transparency,
+    # backpressure, and exit/signal propagation are proved by a fake-CLI deterministic gate").
+    # The shim sits on the production spawn path of a paid LIVE turn, so this drives it as a
+    # REAL process against fake CLIs and asks what each defect would buy: fabricated absence
+    # evidence (a malformed init reported as an empty name set, a boot report that does not
+    # name what was actually exec'd), a destroyed turn (mangled bytes, a swallowed signal, a
+    # crash reported as exit 0), or leaked operator state (a prefix env scrub, argv/env/prompt
+    # body in the shared log). No API, no network, no cost.
+    run_ts scripts/check-probe-cli-shim.ts
     ;;
   smoke-acp-ordering-probe-live)
     # §11-7 ordering probe — LIVE paired-run instrument, OUT of pnpm check. Control

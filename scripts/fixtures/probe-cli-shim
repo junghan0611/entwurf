@@ -1,0 +1,20 @@
+#!/usr/bin/env node
+// §11-7-c B-name-snapshot producer — the launcher the SDK actually execs.
+//
+// EXTENSIONLESS ON PURPOSE, and that is a contract, not a style choice. The SDK
+// picks its launch branch off a pure suffix test: a path ending in one of
+// SDK_SCRIPT_SUFFIXES (.js/.mjs/.tsx/.ts/.jsx) is run as `node|bun <path>`, and
+// anything else is spawned DIRECTLY. The probe asserts the native branch instead
+// of reproducing the interpreter choice (probe-cli-target.ts), so the instrument
+// itself has to sit on that branch too — hence no extension, a shebang, and the
+// executable bit tracked in git. Renaming this file to *.js would silently move
+// the shim onto the other launch branch.
+//
+// It stays two lines because an extensionless file is outside `tsc --noEmit` and
+// outside biome: every behaviour worth typechecking, linting and mutating lives
+// in ../lib/probe-cli-shim.ts, which check-probe-cli-shim drives as a real
+// process. Node >=24 (package.json engines) with "type": "module" resolves this
+// file as ESM and strips types from the imported .ts SSOT.
+import { runProbeCliShim } from "../lib/probe-cli-shim.ts";
+
+runProbeCliShim();

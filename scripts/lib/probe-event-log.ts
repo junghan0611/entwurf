@@ -67,12 +67,14 @@ export const PROBE_EVENTS = {
 	 *  runner records how the window closed and whether the marker was seen. */
 	observationWindowEnd: "probe_observation_window_end",
 	runEnd: "run_end",
-	// CLI-shim side (§11-7-c B-name-snapshot seam). The CONSUMER contract is
-	// live — classifier + doors judge these — while the PRODUCER (the shim
-	// itself) is not built yet, so no LIVE run can emit them; the deterministic
-	// gate exercises them through synthetic logs. A run's roster entry says
-	// whether the channel was armed (`snapshotInstrumented`), and evidence
-	// without that declaration never promotes.
+	// CLI-shim side (§11-7-c B-name-snapshot seam). Both halves are built and the
+	// LIVE runner ARMS the channel: classifier + doors judge these, and the shim
+	// (scripts/lib/probe-cli-shim.ts) emits them. check-probe-ordering exercises
+	// the consumer side through synthetic logs and check-probe-cli-shim drives the
+	// producer against fake CLIs. A run's roster entry still says whether the
+	// channel was armed (`snapshotInstrumented`) — evidence without that
+	// declaration never promotes, and that stays the contract whatever the runner
+	// currently declares.
 	/** The shim process is up and knows its exec target — payload carries the
 	 *  resolved target path + sha256 so a silently REPLACED override (e.g. the
 	 *  adapter's managed-policy env application overwriting process.env inside

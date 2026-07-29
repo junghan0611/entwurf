@@ -49,11 +49,14 @@
 //      shim event doors, and the snapshot verdict ladder (calibrated control,
 //      exactly-one ordinal binding, interval-ordered absence, roster-armed
 //      channel; B and B-name-snapshot never conflated). The PRODUCER (shim) is
-//      not built yet — the LIVE runner pins the channel unarmed.
+//      gated separately by check-probe-cli-shim, and the LIVE runner now ARMS the
+//      channel — 8d pins that wiring.
 //
 // Kill-proof, stated at its honest strength: scripts/mutants/probe-ordering.json
-// qualifies 56 claims — each carries a [QK:...] signature appearing EXACTLY once
-// below, and check-gate-qualification proves its mutant dies at that signature.
+// qualifies 63 claims for THIS gate — each carries a [QK:...] signature appearing
+// EXACTLY once below, and check-gate-qualification proves its mutant dies at that
+// signature. (The lane also carries the §11-7-c PRODUCER claims, whose signatures
+// live in check-probe-cli-shim.ts; one lane, two consuming gates.)
 // [QK:*] tokens and qualified claims are 1:1 BY DESIGN: an assertion without a
 // mutant carries a plain message, so "killed claim IDs, never assertion counts"
 // stays readable. The remaining assertions are enforced-but-not-mutant-qualified.
@@ -76,6 +79,7 @@ import {
 	mkdtempSync,
 	readFileSync,
 	rmSync,
+	statSync,
 	writeFileSync,
 } from "node:fs";
 import { createRequire } from "node:module";
@@ -1763,9 +1767,10 @@ function intervention(
 
 // ===========================================================================
 // 8) §11-7-c B-name-snapshot seam — CONSUMER side (preconditions, doors,
-//    verdict ladder). The PRODUCER (the CLI shim) is not built yet; these
-//    prove the contract it must satisfy, and the LIVE runner pins its channel
-//    unarmed (snapshotInstrumented: false) until it lands.
+//    verdict ladder). The PRODUCER (the CLI shim) is gated by
+//    check-probe-cli-shim; these prove the contract it must satisfy, and 8d
+//    pins the runner's arming — the order of the ambient refusal against the
+//    deliberate injection, what is injected, and the instrument's runtime graph.
 // ===========================================================================
 
 // --- 8a) CLI-target precondition seam: refusals are NAMED, never fallbacks --
@@ -1976,12 +1981,17 @@ function intervention(
 		RUNNER_SRC.includes("assertNoAmbientOverride(spawnEnv, `composed acp child env for ${runId}`);"),
 		"the COMPOSED spawn env of every ACP child is asserted override-free — launch defaults / overlay overrides could inject what process.env did not carry [QK:RUNNER-TARGET-PRECONDITION-PINNED]",
 	);
+	assert.ok(
+		RUNNER_SRC.includes("snapshotInstrumented: true") && !RUNNER_SRC.includes("snapshotInstrumented: false"),
+		"the snapshot channel is ARMED and no run is left declaring otherwise — a roster mixing armed and unarmed runs " +
+			"would let a run whose shim never reported in pass as an ordinary absence [QK:RUNNER-SNAPSHOT-CHANNEL-ARMED]",
+	);
 	// Pinned as the CONTIGUOUS roster-record shape: the same two stamps also ride
 	// the run_start payload (forensics), so field-by-field includes() would stay
 	// green with the roster copy deleted.
 	assert.ok(
 		RUNNER_SRC.includes(
-			"snapshotInstrumented: false,\n\t\tcliTargetPath: CLI_TARGET.path,\n\t\tcliTargetSha256: CLI_TARGET.sha256,",
+			"snapshotInstrumented: true,\n\t\tcliTargetPath: CLI_TARGET.path,\n\t\tcliTargetSha256: CLI_TARGET.sha256,",
 		),
 		"the pair's expected CLI target identity rides EVERY roster record so the classifier can consume it (condition 5) [QK:RUNNER-TARGET-IDENTITY-IN-ROSTER]",
 	);
@@ -1997,10 +2007,111 @@ function intervention(
 			RUNNER_SRC.includes("`precondition-${err.reason}`"),
 		"the runner resolves the target through upstream claudeCliPath BEFORE any run, and a precondition refusal writes a NAMED classification on the artifact (not stderr alone)",
 	);
+	// --- arming (§11-7-c CP3). The producer exists, so the channel is armed — and
+	//     arming is the point where two things can go quietly wrong: the order of
+	//     the checkpoint against the injection, and WHAT gets injected.
 	assert.ok(
-		RUNNER_SRC.includes("snapshotInstrumented: false"),
-		"the snapshot channel stays UNARMED until the shim (producer half) lands — flipping it is a deliberate act",
+		RUNNER_SRC.includes(
+			"assertNoAmbientOverride(spawnEnv, `composed acp child env for ${runId}`);\n" + "\t\t// ORDER IS THE CONTRACT",
+		) &&
+			RUNNER_SRC.indexOf("assertNoAmbientOverride(spawnEnv") <
+				RUNNER_SRC.indexOf("spawnEnv[AMBIENT_OVERRIDE_ENV] = SHIM_TARGET.path;"),
+		"the ambient-override refusal runs against the env as PRODUCTION composed it, and the probe installs its own " +
+			"override only AFTER. Inverted, the checkpoint would inspect the override the probe itself just injected and " +
+			"REFUSE every run — loudly, but for the wrong reason, and the operator's ambient environment would never be " +
+			"examined at all [QK:RUNNER-ARMING-ORDER]",
 	);
+	assert.ok(
+		RUNNER_SRC.includes(
+			"spawnEnv[AMBIENT_OVERRIDE_ENV] = SHIM_TARGET.path;\n" +
+				"\t\tspawnEnv[PROBE_SHIM_ENV.target] = CLI_TARGET.path;\n" +
+				"\t\tspawnEnv[PROBE_SHIM_ENV.eventLog] = logPath;\n" +
+				"\t\tspawnEnv[PROBE_SHIM_ENV.runId] = runId;",
+		),
+		"the injection is exactly four names: the override pointing at the SHIM, and the three probe-private vars the " +
+			"shim reads — the target it must exec (resolved HERE, never by the shim), the shared log, and this run's id. " +
+			"All four are on the shim's scrub list, so none of them reach the real CLI [QK:RUNNER-SHIM-OVERRIDE-EXACT]",
+	);
+	assert.ok(
+		RUNNER_SRC.includes(
+			"SHIM_TARGET = await resolveProbeCliTarget({ env: {}, resolveNative: async () => PROBE_SHIM });",
+		) && RUNNER_SRC.includes("`precondition-shim-${err.reason}`"),
+		"the instrument passes the SAME precondition asserts as the stimulus — absolute, native branch, present regular " +
+			"file, executable — and a refusal is a NAMED classification on the artifact. A shim that fails any of those " +
+			"either never runs or runs on the OTHER launch branch, and the pair would measure something else " +
+			"[QK:RUNNER-SHIM-PRECONDITION-PINNED]",
+	);
+	// The path the runner points at is checked on DISK too, not just in source: a
+	// pin proves the runner asks for the right file, not that the file can run.
+	{
+		// --- the instrument is a GRAPH. The launcher is a two-line delegate, so
+		//     "control and interventions shared one shim" is a claim about every local
+		//     module a fresh Node process reads — and the boot marker cannot see any of
+		//     it, because it reports the CLI target rather than the instrument.
+		assert.ok(
+			RUNNER_SRC.includes("SHIM_RUNTIME = hashShimRuntime();") &&
+				RUNNER_SRC.includes("shimRehash = hashShimRuntime();") &&
+				RUNNER_SRC.includes('reason: "shim-runtime-drift"') &&
+				RUNNER_SRC.includes('reason: "shim-runtime-unreadable"') &&
+				RUNNER_SRC.includes("JSON.stringify(shimRehash) !== JSON.stringify(SHIM_RUNTIME)"),
+			"the instrument's runtime graph is pinned before the first run and RE-HASHED after the last, on its own axis " +
+				"with its own two names — an edit to the implementation landing between control and intervention is " +
+				"invisible to every other check, including the shim's own boot marker [QK:RUNNER-SHIM-RUNTIME-PINNED]",
+		);
+		{
+			// The runner's list must equal the STATIC LOCAL IMPORT CLOSURE of the
+			// launcher — derived here, never restated, or the list becomes a second
+			// unverified copy that drifts the moment the implementation grows a helper.
+			// node: builtins and package specifiers are out of scope (they are not
+			// tracked files of ours); a DYNAMIC import inside the closure is refused
+			// outright, because a graph that assembles itself at runtime cannot be
+			// pinned at all.
+			const localImportsOf = (file: string): string[] => {
+				const src = readFileSync(file, "utf8");
+				assert.ok(
+					!/\bimport\s*\(/.test(src),
+					`${file} carries a DYNAMIC import — the shim runtime graph would no longer be statically knowable, so it ` +
+						"could not be pinned across a pair",
+				);
+				return [...src.matchAll(/^\s*import\s[^;]*?from\s+"(\.[^"]+)"|^\s*import\s+"(\.[^"]+)"/gm)]
+					.map((m) => m[1] ?? m[2])
+					.map((spec) => resolve(dirname(file), spec));
+			};
+			const launcher = join(REPO_ROOT, "scripts", "fixtures", "probe-cli-shim");
+			const closure: string[] = [];
+			const walk = (file: string): void => {
+				if (closure.includes(file)) return;
+				closure.push(file);
+				for (const next of localImportsOf(file)) walk(next);
+			};
+			walk(launcher);
+			const declared = [
+				...RUNNER_SRC.matchAll(/^\t(?:PROBE_SHIM,|join\(REPO_ROOT, "scripts", "lib", "([^"]+)"\),)$/gm),
+			].map((m) => (m[1] === undefined ? launcher : join(REPO_ROOT, "scripts", "lib", m[1])));
+			assert.deepEqual(
+				[...declared].sort(),
+				[...closure].sort(),
+				"the runner's pinned instrument list is EXACTLY the launcher's static local-import closure — a helper added " +
+					"to the shim without being pinned would otherwise be free to change mid-pair, and a stale entry would " +
+					"pin a file the instrument no longer reads [QK:RUNNER-SHIM-RUNTIME-GRAPH-EXACT]",
+			);
+		}
+		// The path is read OUT OF THE RUNNER rather than restated here, so this
+		// checks the file the runner actually arms. Restating it would pass happily
+		// while the runner pointed somewhere else.
+		const declared = /const PROBE_SHIM = join\(REPO_ROOT, "scripts", "fixtures", "([^"]+)"\);/.exec(RUNNER_SRC);
+		const shimPath = declared ? join(REPO_ROOT, "scripts", "fixtures", declared[1]) : "";
+		assert.ok(
+			declared !== null &&
+				existsSync(shimPath) &&
+				statSync(shimPath).isFile() &&
+				(statSync(shimPath).mode & 0o111) !== 0 &&
+				SDK_SCRIPT_SUFFIXES.every((suffix) => !shimPath.endsWith(suffix)),
+			"the shim the runner arms is present, executable and extensionless ON DISK — the pair is asserted onto the " +
+				"direct-spawn branch, and a script suffix (or a path pointing at nothing) would silently move the " +
+				"instrument to `node|bun <path>` or break the spawn outright [QK:RUNNER-SHIM-ON-DISK-NATIVE]",
+		);
+	}
 }
 
 // --- 8e) shim events at the log door: judged payload is typed there ---------

@@ -654,8 +654,8 @@ the injected delay was sufficient to produce a CLI-reported name-set absence.* W
 2026-07-24 incidents are explained — controlled sufficiency is not historical attribution. The seam, its
 conditions, and its limits are §11-7-c. **The CONSUMER half is instrumented** (2026-07-29: the log doors, the
 classifier ladder, and the runner preconditions exist and are gate-qualified offline); **the PRODUCER — the CLI
-shim — is not built**, and the LIVE runner pins the channel unarmed (`snapshotInstrumented: false`), so no LIVE
-run can currently reach this row.
+shim — is built and the LIVE runner ARMS the channel** (`snapshotInstrumented: true`), so a LIVE run can now
+reach this row.
 
 **A snapshot must be time-closed, or it is a different claim.** The ordering the row requires is
 
@@ -1128,18 +1128,67 @@ set: the `claudeCliPath` export **and its verbatim-env return**, `CLAUDE_CODE_EX
 the probe's own `SDK_SCRIPT_SUFFIXES`, the `node|bun` default-executable choice, and the piped no-shell spawn
 shape.
 
-**Phase 0 status (2026-07-29): the consumer half is BUILT (uncommitted); the producer is owed.** Built offline
+**Phase 0 status (2026-07-29): the consumer half is BUILT and pushed (`982acad`).** Built offline
 and mutant-qualified: the CLI-target precondition seam (`scripts/lib/probe-cli-target.ts` — presence refusal,
 resolution asserts incl. regular-file/executable, hash pinning, the exact scrub allowlist), the runner
 preconditions (ambient + composed-env refusal with artifact-written refusals, target identity on `run_start`
-AND the roster, post-pair drift/unreadable re-hash, channel pinned unarmed), the shim event vocabulary and
+AND the roster, post-pair drift/unreadable re-hash, and — at that time — the channel pinned unarmed), the shim event vocabulary and
 payload doors (envelope-`tsMs` interval end), and the full classifier ladder for `B-name-snapshot`
 (calibration, receive-axis single-prompt binding, interval ordering, roster-armed authority, target-identity
 verification, structural-vs-reading severity split, non-conflation). A second adversarial cross-review
 (2026-07-29, GPT NO-GO round) found and closed four consumer-contract counter-examples — append-axis binding,
 a dual-SSOT interval end, an unsplit severity model, and recorded-but-unconsumed target identity — all now
-gate-pinned with independent kill-qualified claims. Still owed to reach this row on a LIVE pair: the shim
-itself (the fake-CLI matrix of condition 5 comes with it), the runner wiring that arms the channel, and
-GLG-approved LIVE re-measurement. One honesty carve-out carries over from §11-7-a: like the fixture's
-write-callback timing, the shim's downstream write-callback **placement** is review-pinned, not mutant-proven
-— the door's `receivedAtMs ≤ tsMs` rule bounds it, the placement itself lives in source review.
+gate-pinned with independent kill-qualified claims.
+
+**Phase 1 status (2026-07-29): the PRODUCER is BUILT and the channel is ARMED.** The shim
+is `scripts/fixtures/probe-cli-shim` — extensionless and executable, because the suffix IS the launch-branch
+discriminator above, so the instrument has to sit on the same native branch its target is asserted onto — and
+it is two lines delegating to `scripts/lib/probe-cli-shim.ts`, the half `tsc`, biome and the mutant lane can
+actually reach. Measured rather than assumed while building it: Node 24 with `"type": "module"` spawns an
+extensionless shebang file directly (no shell, argv and cwd preserved) and strips types from the imported `.ts`
+SSOT; and the SDK writes BOTH control frames and user frames to the CLI's stdin, so the ordinal anchor counts
+`type:"user"` frames — counting stdin LINES would break the exactly-one binding on every run.
+`scripts/check-probe-cli-shim.ts` drives it as a real process against fake CLIs (no API, no cost) and qualifies
+20 claims.
+
+**The channel is ARMED (2026-07-29).** The runner asserts the composed spawn env override-free as
+PRODUCTION composed it, and only THEN installs `CLAUDE_CODE_EXECUTABLE=<shim>` plus the three probe-private
+vars; inverting those two steps would have the checkpoint inspect the very override the probe just injected, so
+the inversion itself is kill-qualified (`RUNNER-ARMING-ORDER`). The shim passes the SAME preconditions as the
+target — absolute, native branch, present regular file, executable, hashed — and a refusal writes a named
+`precondition-shim-*` classification. Every roster record now declares `snapshotInstrumented: true`, which also
+arms the classifier's calibration floor: a run whose shim did not report in, or reported a different
+path+sha256, is a structural INVALIDATION rather than an ordinary absence.
+
+Condition 5's "same shim" is a claim about the whole INSTRUMENT, not one file, and the adversarial review of
+2026-07-29 is why that is written here: the launcher is a two-line delegate, so what actually runs is a fresh
+Node process reading a local module graph, and an edit to the implementation landing between control and an
+intervention would be invisible to every other check — the shim's boot marker reports the CLI target, not
+itself. The runner therefore pins path+sha256 for the whole static local-import closure before the first run,
+records it in the artifact, and re-hashes it after the last: content drift is `shim-runtime-drift`, an
+unreadable member is `shim-runtime-unreadable`, and both are their own axis, separate from the CLI target's, so
+a stimulus that moved and an instrument that moved are never reported under one name. The closure is not a
+second hand-written list either — `check-probe-ordering` derives it from the launcher's and implementation's
+static local imports, refuses any mismatch, and refuses a dynamic import outright, since a graph that assembles
+itself at runtime cannot be pinned at all. §8d carries eleven runner pins, the lane stands at 83 and the suite
+at 99.
+
+**Paired LIVE evidence (2026-07-29, artifact `2026-07-29T05-06-55-529Z`).** After independent process/stream
+review and 99/99 mutant qualification, the GLG-approved control + D1=2 s + D2=8 s series completed with
+`validity:valid`: the control passed, every run supplied one armed shim boot, and the pinned CLI target and
+four-file instrument graph stayed identical. Axis (a) measured `prompt-request-ahead-of-wire` at both delays.
+Axis (b) remained `inconclusive`, because both CLI init snapshots arrived **before** the delayed tool list reached
+the wire (`snapshot-before-wire`): D1 prompt/newSession were 1681/1755 ms ahead with 2414 ms of turn remaining
+after wire; D2 were 7826/7839 ms ahead and wire arrived 3644 ms after turn end. This is not tool-absence evidence
+and does not promote to `B-name-snapshot`. It is the calibrated boundary the seam was built to expose: the
+instrument is admissible and the reading remains honestly inconclusive. A stronger ground-truth oracle remains
+out of reach without the credential proxy already rejected by Hard Rule #8.
+
+Honesty carve-outs, carried over from §11-7-a and extended by what Phase 1 measured. Like the fixture's
+write-callback timing, the shim's downstream write-callback **placement** is review-pinned, not mutant-proven —
+the door's `receivedAtMs ≤ tsMs` rule bounds it, the placement itself lives in source review, and no timing test
+can separate it from a placement just outside the callback because the shim pauses its source under
+backpressure and thereby couples the read to the write. The **source of that pause** is pinned the same way for
+a measured reason: peak RSS was tried as the discriminator and refused, reading 173–217 MiB for the pausing
+form against 243–252 MiB for the queueing form on an 8x flood — overlapping ranges dominated by GC timing
+rather than by held data, so a threshold there would have bought a flaky gate rather than a proof.

@@ -52,8 +52,10 @@ import type { ResolvedAcpConfig } from "../pi-extensions/lib/acp/config.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
 import { driveProbeTurn, type ProbeMcpEnricher, ProbePhaseError } from "./lib/probe-acp-turn.ts";
 import {
+	AMBIENT_OVERRIDE_ENV,
 	assertNoAmbientOverride,
 	hashFileSha256,
+	PROBE_SHIM_ENV,
 	ProbeCliPreconditionError,
 	type ResolvedProbeCliTarget,
 	resolveProbeCliTarget,
@@ -69,6 +71,27 @@ import { classifyProbe, DELAY_WELL_BELOW_MS, type ProbeRunRecord } from "./lib/p
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PROBE_SERVER = join(REPO_ROOT, "scripts", "fixtures", "probe-mcp-server.ts");
+// §11-7-c producer. EXTENSIONLESS is a contract, not a filename: the SDK routes a
+// script-suffixed executable through `node|bun <path>` and everything else through
+// a direct spawn, and the pair's target is asserted onto that direct branch — so
+// the instrument standing in front of it has to be on the same branch. The asserts
+// below are the SAME ones the target goes through, deliberately.
+const PROBE_SHIM = join(REPO_ROOT, "scripts", "fixtures", "probe-cli-shim");
+// …and the INSTRUMENT is not that one file. The launcher is two lines of delegate;
+// what actually runs is a fresh Node process reading a local module graph, so
+// "control and interventions shared one shim" (§11-7-c condition 5) is a claim
+// about the WHOLE graph. Pinning only the launcher would let an edit to the
+// implementation land between two runs of the same pair, with the boot marker —
+// which reports the CLI target, not the instrument — showing nothing at all
+// (adversarial review 2026-07-29). check-probe-ordering derives this list from the
+// launcher's and implementation's static local imports and refuses any drift, so
+// it is a pinned list rather than a second unverified copy.
+const SHIM_RUNTIME_FILES: readonly string[] = [
+	PROBE_SHIM,
+	join(REPO_ROOT, "scripts", "lib", "probe-cli-shim.ts"),
+	join(REPO_ROOT, "scripts", "lib", "probe-cli-target.ts"),
+	join(REPO_ROOT, "scripts", "lib", "probe-event-log.ts"),
+];
 const MODEL_ID = process.env.ENTWURF_ACP_PROBE_MODEL?.trim() || "claude-sonnet-5";
 const D1_MS = Number(process.env.PROBE_D1_MS ?? "2000") || 2000;
 const D2_MS = Number(process.env.PROBE_D2_MS ?? "8000") || 8000;
@@ -136,6 +159,18 @@ const NATIVE_MODEL_ID = routed.nativeModelId;
 // artifact directory exists, so a refusal leaves a named classification on the
 // artifact instead of stderr alone. Assigned exactly once there.
 let CLI_TARGET: ResolvedProbeCliTarget;
+// The shim, resolved through the same precondition asserts as the target and
+// pinned before any run. Assigned exactly once in main().
+let SHIM_TARGET: ResolvedProbeCliTarget;
+// path+sha256 for every file in the instrument's runtime graph, pinned before the
+// first run and re-hashed after the last. Its own axis, separate from the CLI
+// target's: a stimulus that moved and an INSTRUMENT that moved are different
+// findings and must not be reported under one name.
+let SHIM_RUNTIME: Array<{ path: string; sha256: string }> = [];
+
+function hashShimRuntime(): Array<{ path: string; sha256: string }> {
+	return SHIM_RUNTIME_FILES.map((path) => ({ path, sha256: hashFileSha256(path) }));
+}
 
 // Approve-all permission policy — mirrors backend.ts resolvePermissionResponse
 // (module-private there; check-probe-ordering pins this copy against its source).
@@ -275,19 +310,20 @@ async function runOne(
 	const runId = `run${attempt}-${index}-${Math.random().toString(36).slice(2, 8)}`;
 	const probeRunId = `prb-${Math.random().toString(36).slice(2, 10)}`;
 	const nonce = `MCP_${process.pid.toString(36)}${Date.now().toString(36)}`;
-	// snapshotInstrumented stays FALSE until the §11-7-c shim (the producer half
-	// of the B-name-snapshot channel) lands and is wired here — flipping it is a
-	// deliberate act, not a side effect, and the classifier holds an armed
-	// control to the calibration floor. The pair's expected CLI target identity
-	// rides the roster so the classifier can CONSUME it (condition 5): once the
-	// channel is armed, a shim boot reporting any other path/sha is a
-	// snapshot-topology INVALIDATION, never a quiet substitution.
+	// The B-name-snapshot channel is ARMED: the §11-7-c producer is built and this
+	// run installs it in front of the CLI (below). Arming is a deliberate act —
+	// under it the classifier holds the CONTROL to the calibration floor, so a run
+	// whose shim never reported in, or reported a different target, is a NAMED
+	// structural finding rather than a quiet absence. The pair's expected CLI
+	// target identity rides the roster so the classifier can CONSUME it
+	// (condition 5): a shim boot reporting any other path/sha is a
+	// snapshot-topology INVALIDATION, never a substitution nobody notices.
 	const record: ProbeRunRecord = {
 		runId,
 		role,
 		delayMs,
 		probeRunId,
-		snapshotInstrumented: false,
+		snapshotInstrumented: true,
 		cliTargetPath: CLI_TARGET.path,
 		cliTargetSha256: CLI_TARGET.sha256,
 	};
@@ -353,6 +389,16 @@ async function runOne(
 		// CLI the pair measures, silently (§11-7-c precondition).
 		const spawnEnv = { ...process.env, ...claudeAdapter.launchEnvDefaults(), ...overlay.envOverrides };
 		assertNoAmbientOverride(spawnEnv, `composed acp child env for ${runId}`);
+		// ORDER IS THE CONTRACT (§11-7-c condition 1, GPT GO condition): the refusal
+		// above runs against the env as PRODUCTION composed it, and only then does
+		// the probe install its own override. Inverted, the checkpoint would inspect
+		// the override the probe itself just injected and REFUSE every run — loudly,
+		// but for the wrong reason, and the operator's ambient environment (the one
+		// thing this precondition exists to observe) would never be examined at all.
+		spawnEnv[AMBIENT_OVERRIDE_ENV] = SHIM_TARGET.path;
+		spawnEnv[PROBE_SHIM_ENV.target] = CLI_TARGET.path;
+		spawnEnv[PROBE_SHIM_ENV.eventLog] = logPath;
+		spawnEnv[PROBE_SHIM_ENV.runId] = runId;
 		child = spawn(launch.command, launch.args, {
 			cwd: scratch,
 			env: spawnEnv,
@@ -545,8 +591,54 @@ async function main(): Promise<void> {
 		);
 		fail(`${reason}: ${err instanceof Error ? err.message : String(err)} (artifact preserved at ${artifactDir})`);
 	}
+	// The instrument goes through the SAME gate as the stimulus. `env: {}` because
+	// the ambient refusal already ran against the real environment above; what is
+	// asked here is only the shape question — absolute, native branch (no script
+	// suffix), a present regular file, executable — because a shim that fails any
+	// of those either does not run at all or runs on the OTHER launch branch, and
+	// either way the pair would measure something else. Refusal is a NAMED
+	// classification on the artifact, exactly like the target's.
+	try {
+		SHIM_TARGET = await resolveProbeCliTarget({ env: {}, resolveNative: async () => PROBE_SHIM });
+	} catch (err) {
+		const reason =
+			err instanceof ProbeCliPreconditionError ? `precondition-shim-${err.reason}` : "precondition-shim-unknown";
+		writeFileSync(
+			join(artifactDir, "classification.json"),
+			`${JSON.stringify(
+				{ verdict: "INVALIDATED", reason, message: err instanceof Error ? err.message : String(err) },
+				null,
+				2,
+			)}\n`,
+		);
+		fail(`${reason}: ${err instanceof Error ? err.message : String(err)} (artifact preserved at ${artifactDir})`);
+	}
 	console.error(
 		`[smoke-acp-ordering-probe-live] cli target: ${CLI_TARGET.path} (sha256 ${CLI_TARGET.sha256.slice(0, 12)}…)`,
+	);
+	try {
+		SHIM_RUNTIME = hashShimRuntime();
+	} catch (err) {
+		writeFileSync(
+			join(artifactDir, "classification.json"),
+			`${JSON.stringify(
+				{
+					verdict: "INVALIDATED",
+					reason: "shim-runtime-unreadable",
+					message: err instanceof Error ? err.message : String(err),
+				},
+				null,
+				2,
+			)}\n`,
+		);
+		fail(`shim-runtime-unreadable: ${err instanceof Error ? err.message : String(err)} (artifact at ${artifactDir})`);
+	}
+	writeFileSync(join(artifactDir, "shim-runtime.json"), `${JSON.stringify(SHIM_RUNTIME, null, 2)}\n`);
+	console.error(
+		`[smoke-acp-ordering-probe-live] shim:       ${SHIM_TARGET.path} (sha256 ${SHIM_TARGET.sha256.slice(0, 12)}…) — snapshot channel ARMED`,
+	);
+	console.error(
+		`[smoke-acp-ordering-probe-live] instrument: ${SHIM_RUNTIME.length} runtime files pinned (${SHIM_RUNTIME.map((f) => f.sha256.slice(0, 8)).join(" ")})`,
 	);
 	console.error(`[smoke-acp-ordering-probe-live] model:    ${MODEL_ID} (native ${NATIVE_MODEL_ID})`);
 	console.error(`[smoke-acp-ordering-probe-live] delays:   control=0, D1=${D1_MS}ms, D2=${D2_MS}ms`);
@@ -565,6 +657,47 @@ async function main(): Promise<void> {
 	}
 
 	writeFileSync(join(artifactDir, "roster.json"), `${JSON.stringify(roster, null, 2)}\n`);
+	// The INSTRUMENT's own drift axis. The CLI-target rehash below answers "did the
+	// runs share one stimulus"; this answers "did they share one instrument", and
+	// an edit to the implementation between control and intervention is invisible
+	// to every other check — the shim's boot marker reports the CLI target, not
+	// itself.
+	let shimRehash: Array<{ path: string; sha256: string }>;
+	try {
+		shimRehash = hashShimRuntime();
+	} catch (err) {
+		writeFileSync(
+			join(artifactDir, "classification.json"),
+			`${JSON.stringify(
+				{
+					verdict: "INVALIDATED",
+					reason: "shim-runtime-unreadable",
+					pinned: SHIM_RUNTIME,
+					message: err instanceof Error ? err.message : String(err),
+				},
+				null,
+				2,
+			)}\n`,
+		);
+		fail(
+			`a file in the shim runtime graph became unreadable during the pair — the runs cannot be shown to share one ` +
+				`INSTRUMENT; pair INVALIDATED, artifact preserved at ${artifactDir}`,
+		);
+	}
+	if (JSON.stringify(shimRehash) !== JSON.stringify(SHIM_RUNTIME)) {
+		writeFileSync(
+			join(artifactDir, "classification.json"),
+			`${JSON.stringify(
+				{ verdict: "INVALIDATED", reason: "shim-runtime-drift", pinned: SHIM_RUNTIME, observed: shimRehash },
+				null,
+				2,
+			)}\n`,
+		);
+		fail(
+			`the shim runtime graph changed content during the pair — control and interventions did not run the SAME ` +
+				`instrument; pair INVALIDATED, artifact preserved at ${artifactDir}`,
+		);
+	}
 	// §11-7-c condition 5 — the pair is a delta only while every run resolved the
 	// SAME executable. The path was pinned before the runs; if its content hash
 	// moved underneath the pair (an install, a version switch), the runs did not

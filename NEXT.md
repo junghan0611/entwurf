@@ -9,14 +9,15 @@
 > 이어서: *"0.13.0 안가고 지금 수선하면 0.12.10으로 acp 수정 및 rail 문서 업데이트만 들어가도 좋겠다."*
 > → **0.13.0은 지금 가지 않는다.** readiness 인과 규명은 그 뒤에 이어지고, #48 Cortex는 rail이 정리된 다음에 연다.
 
-## NOW — §11-7 계측기 수선 완료, LIVE 재측정만 남았다
+## NOW — §11-7-c seam과 paired LIVE 완료; 계측기 부채를 닫고 #48로 복귀
 
 > **2026-07-29 (GLG 지시).** *"구멍이 다 막혀있으면 다음 작업으로 갈거야."* → 검수 결과 구멍은 안 막혀
 > 있었고, GPT 교차검수(`openai-codex/gpt-5.6-sol`)와 계약을 합의해 **오프라인으로 닫을 수 있는 것은 전부
-> 닫았다.** 남은 하나는 실 API가 필요하다. Cortex는 그 뒤다.
+> 닫았다.** 그 하나였던 paired LIVE도 valid measurement로 마쳤다. 이제 Cortex로 복귀한다.
 
-- **Current:** 계측기 수선이 main 작업트리에 있다(커밋 전). `pnpm check` 결과는 아래 검증란 참조.
-  `check-gate-qualification` **53/53 killed**(lane `probe-ordering` 19 → **37**). 수선 축:
+- **Current:** 계측기 수선은 **`e270f0d`로 커밋·푸시됐다**(그 시점 `check-gate-qualification` 53/53,
+  lane `probe-ordering` 19 → 37). 그 위에 소비자 절반이 `982acad`로 올라갔고, 아래 Phase 1이
+  생산자 절반이다. 수선 축:
   ⑴ **관측창 프로토콜** — runner가 turn 종료 후에도 (wire marker | child-exit | deadline)까지 child를
   살려두고 `probe_observation_window_end {reason, markerSeen, deadlineBasis, waitedMs}`를 찍은 뒤 teardown.
   deadline은 fixture 자신의 delay 마커 + bounded slack 기준(run start 기준 아님).
@@ -44,11 +45,11 @@
   ⑵ D2 right-censor 진단 — run_end +6673ms 직후 teardown했는데 fixture는 +9384/+9385/+9388ms까지 진행했고
   control에서 initialize→tools_list가 14ms였으니 마커는 14ms 앞에 있었다.
 - **결정 났다(2026-07-29, GLG): B안 — seam 먼저. 배치는 페블 Phase 0 → GPT 재검수 → 오푸스 shim 구현 →
-  페블 적대 검수 → GLG LIVE 승인.** 페블(Claude Fable) 적대 검수가 §11-7-c 문면에서 구멍 3개를 실측으로
+  독립 적대 검수 → GLG LIVE 승인.** 페블(Claude Fable) 적대 검수가 §11-7-c 문면에서 구멍 3개를 실측으로
   확정했고(조건 1·4의 "operator override 의미 보존"은 증명 불가 — `claudeCliPath()`는 ambient override를
   앵무새 반환하고 SDK launch는 접미사 판별로 갈린다; init ordinal 조작적 정의 부재; 러너 `:319`의
   무검증 `...process.env` 상속), GPT가 배치를 합의했다.
-- **Phase 0 — 구현 완료, 미커밋(2026-07-29, 페블). B-name-snapshot의 소비자 절반이 코드로 닫혔다.**
+- **Phase 0 — 완료·푸시됨 `982acad`(2026-07-29, 페블). B-name-snapshot의 소비자 절반이 코드로 닫혔다.**
   ⑴ rail §11-7-c 전면 개정: ambient override **presence 거부** 전제조건(빈 문자열 포함, 보존 약속 삭제,
   거부도 artifact에 named classification), single-prompt ordinal 결합(**receive-축** — append 순서가 아니라
   `receivedAtMs`가 prompt frame 스탬프보다 strictly 뒤; backpressure 반례가 근거), 정확 allowlist
@@ -64,35 +65,79 @@
 - **GPT 2차 검수 GO(2026-07-29 11:01, `…-0755cc`) — Phase 0 소비자 계약 승인.** GPT가 독립 재실행으로
   focused gate·typecheck·lint·**72/72 KILLED**·origin hash 동일까지 확인했다. roster 연속-문자열 핀은
   "fail-red 취약성"이라 현 단계 허용(장기 AST 불요) 판정.
-- **Next: ⑴ 오푸스가 shim(producer) + fake-CLI matrix + 러너 arming 구현(GLG가 착수 시점 결정),
-  ⑵ 페블 process/stream 적대 검수, ⑶ LIVE는 GLG 승인 사안.** producer가 consumer 사다리/문 계약을
-  바꾸면 GPT 재검수. **오푸스 핸드오프 경계 2건(GPT GO 조건, 지키지 않으면 재검수 무효):**
+- **Phase 1 — CP1+CP2 완료(2026-07-29, 오푸스). 생산자 절반이 코드로 섰다.**
+  ⑴ `scripts/fixtures/probe-cli-shim` — **extensionless + exec bit**의 2줄 런처(SDK suffix 판별에서
+  native branch로 남아야 하므로 확장자가 계약이다). ⑵ `scripts/lib/probe-cli-shim.ts` — 실제 구현
+  (타입체크·린트·mutant가 닿는 유일한 절반): 바이트 투명 passthrough(바이트 단위 NDJSON 프레이밍,
+  완성된 라인만 디코드), **downstream write callback 안에서** snapshot/prompt append, exact-allowlist
+  scrub, argv-agnostic, `type:"user"` 프레임만 ordinal, 잘못된 init은 **snapshot을 만들지 않는다**
+  (빈 name set은 곧 absence 주장이므로 조작이다), exit/signal 충실 전달 + self re-raise, stderr는
+  `inherit`(무버퍼 정확 통과), 16 MiB 프레이밍 상한 + 초과 시 parse만 skip(바이트는 무손실, 사이드카
+  기록). ⑶ `scripts/check-probe-cli-shim.ts` — 실 프로세스 × fake CLI 결정론 매트릭스, **QK 20종**,
+  `pnpm check` 체인과 run.sh에 등록됨.
+- **Phase 1 CP3 — arming 완료(2026-07-29, 오푸스, GPT GO 하에).** 러너가 ⑴ production이
+  합성한 composed env에 `assertNoAmbientOverride`를 **먼저** 돌리고, ⑵ **그 뒤에만**
+  `CLAUDE_CODE_EXECUTABLE=<shim>` + exact `PROBE_SHIM_*` 3종을 주입하며, ⑶ shim을 타깃과 **같은 전제조건
+  assert**(absolute·native branch·regular file·X_OK·hash)에 통과시키고 거부는 `precondition-shim-*`로
+  artifact에 이름을 남긴다. ⑷ 모든 roster record가 `snapshotInstrumented: true`. 순서를 뒤집으면 검문이
+  자기 shim을 검사하게 되므로 `RUNNER-ARMING-ORDER`가 그 반전 자체를 죽인다.
+  ⑸ **계측기는 파일 하나가 아니라 런타임 그래프다**(GPT 적대 검수 NO-GO로 드러난 축) — 런처는 2줄
+  delegate라 실제로 도는 건 로컬 모듈 그래프를 읽는 새 Node 프로세스이고, pair 도중 구현이 바뀌면
+  boot marker(=CLI 타깃만 보고)로는 아무도 못 잡는다. 그래서 정적 local-import 폐포 전체의 path+sha256을
+  첫 run 전에 핀해 artifact에 남기고 마지막 run 뒤 rehash한다: drift는 `shim-runtime-drift`,
+  읽기 불가는 `shim-runtime-unreadable`, **CLI 타깃과 별개 축**이다. 목록은 두 번째 손글씨 사본이 아니라
+  게이트가 런처·구현의 정적 import에서 **유도해 exact 일치**를 강제하고, dynamic import는 아예 거부한다.
+  `check-probe-ordering` §8d에 러너 핀 **11종**(신규 7종: arming order · override exact · shim
+  precondition · channel armed · shim on-disk native · runtime pinned · runtime graph exact),
+  lane mutants 56 → **83**, 스위트 총 **99**.
+  CP3 뒤 독립 오푸스 최종 검수와 GPT 재검수를 통과했고, 동결 트리에서 전체 검증과 LIVE까지 마쳤다.
+  **실측 2건(추정 아님):** node 24 + `type:module`에서 extensionless 파일이 shell 없이 직접 spawn되고
+  TS SSOT를 import한다(cwd 무관, argv 보존). SDK는 stdin에 control 프레임과 user 프레임을 같이 쓰므로
+  **라인 수를 세면 ordinal 결합이 매 run 깨진다** — user 프레임만 센다.
+  **RSS는 판별자로 쓰지 않았다:** 8배 flood에서 pause판 173–217 MiB vs 무-pause판 243–252 MiB로 구간이
+  겹쳤다(GC 타이밍 지배). 임계값을 박으면 flaky 게이트를 사는 것이라 §11-7-c 선례대로 **소스 핀**으로 갔다.
+- **최종 검수 + LIVE 완료(2026-07-29).** 독립 오푸스가 동결 트리에서 `pnpm check`, focused gates,
+  lint/typecheck, qualification **99/99 KILLED**를 재실행했고 실제 코드 구멍 0건으로 GO했다. GLG 승인 LIVE
+  paired series도 `validity:valid`, ordering (a) `measured`, failure (b) `inconclusive`로 정상 종료했다.
+  producer가 consumer 사다리/문 계약을 바꾸면 GPT 재검수. **아래 두 경계는 CP3에서 지켜졌다:**
   - **arming 순서**: `assertNoAmbientOverride(composedEnv)`를 **의도적 `CLAUDE_CODE_EXECUTABLE=shim` 주입
     전에** 실행하고, 그 뒤 exact `PROBE_SHIM_*` + override를 주입한다. 검문이 자기 shim을 거부하도록
     순서를 뒤집지 마라.
   - **shim snapshot append는 반드시 downstream stdout write callback 내부**(envelope `tsMs`가 곧 interval
     end인 이유). fake-CLI matrix가 callback placement/backpressure/byte transparency/signal/env privacy를
     증명하기 전에는 `snapshotInstrumented: true` 금지.
-  shim이 오기 전에는 어떤 LIVE run도 B-name-snapshot 행에 도달할 수 없다(채널 unarmed 핀).
+  (이 두 경계는 CP3에서 지켜졌다 — 아래 Phase 1 CP3 참조.)
 - **닫은 검증 미결(2026-07-28 목록 대비):** 중복 마커 정책 → **닫힘**(topology exactly-once, 단 반복 가능
   마커는 earliest-wins로 명시 분리). D1 evidence ran-ahead 미노출 → **닫힘**(delta 3종 문자열 노출).
   seq 미검증 → **닫힘**(스트림 문). 계약 이전 artifact 2개 → 포렌식 전용 규율 유지(window 마커가 없으므로
   재파싱하면 topology로 INVALIDATED된다 — 의도된 결과다).
-- **남은 미결:** **판정 가능한 LIVE 측정 그 자체.** 계측기는 admissible, 측정은 여전히 owed.
-  그리고 **프롬프트 강화로는 delta-B에 도달할 수 없다**(§11-7-b): D1은 wire 이후 2.3초 창이 열려 있었는데도
-  모델이 호출하지 않았고, acp 0.62.0 + sdk dist 전체에 `tool_choice`/`toolChoice`가 **0건**이다.
-  stimulus가 아니라 oracle을 바꿔야 한다 — 그래서 §11-7-c다.
-- **Blocker:** 없음. LIVE는 GLG 승인 사안.
+- **LIVE 결과(artifact `2026-07-29T05-06-55-529Z`):** control PASS, 세 run 모두 armed shim boot와 동일
+  CLI target/runtime graph를 통과했다. D1=2s와 D2=8s 모두 ordering (a)은
+  `prompt-request-ahead-of-wire`로 **measured**. failure (b)은 두 snapshot 모두 wire보다 먼저 도착해
+  `snapshot-before-wire` **inconclusive**였다(D1: prompt 1681ms/newSession 1755ms ahead, wire 뒤 turn 2414ms;
+  D2: 7826ms/7839ms ahead, wire가 turn 종료 3644ms 뒤). 이것은 부재 증거가 아니며 B-name-snapshot으로
+  promote하지 않는다. 반대로 calibration/topology가 valid인 채 이 경계를 정직하게 드러냈으므로 seam의
+  계측기 부채는 닫혔다. 더 강한 ground truth는 기각된 인증 프록시 없이는 도달 불가다.
+- **Blocker:** 없음. §11-7을 더 튜닝하지 말고 #48 Cortex rail로 복귀한다.
+- **관측된 flake 2건째 — 진단까지 났다(내 변경과 무관, 기록만).** `check-fresh-cut-gate`의 G 블록
+  (archive-destination preflight)이 **부하 중 1회** `G1/G2/G3` 셋이 동시에 red였다(passed=163 failed=3,
+  rc=0 want 1). 원인은 픽스처의 **벽시계 창**이다: `scripts/check-fresh-cut-gate.sh:982-984`가 충돌
+  목적지를 `now`·`+1s`·`+2s` **세 초만** 미리 점유하는데, 부하로 cut 프로세스 기동이 2초를 넘기면
+  스탬프가 창 밖으로 나가 목적지가 비고 **컷이 성공해 버린다** — 그러면 "충돌하면 NO-OP"를 재는 세
+  단정이 한꺼번에 무너진다. 관측 근거: 같은 트리에서 전체 `pnpm check` 4회 중 3회 green(166/0)·1회
+  red(163/3), 단독 실행은 4/4 green. 이번 컷의 범위가 아니라 손대지 않았다 — 다음에 이 게이트를 열
+  사람이 창을 넓히거나(또는 컷이 쓸 스탬프를 주입받게) 결정론으로 바꿀 것.
 - **관측된 flake 1건(내 변경과 무관, 기록만):** `smoke-meta-install-state`의 SIGPIPE 재현 픽스처가
   **부하 중 1회** `fixture did NOT reproduce the SIGPIPE/pipefail defect`로 red였다. 같은 트리에서 3연속
   재실행은 green이고, clean tree에서도 green이다. `claude mcp get | grep -q`가 파이프 버퍼를 채우기 전에
   reader가 먼저 빠지는 타이밍 의존이라 결정론 바닥에 flaky assertion이 하나 있는 셈이다. 이번 컷의 범위가
   아니라 손대지 않았다 — 다음에 이 게이트를 열 사람이 재현 방식(고정 크기 write + 동기화)을 다시 볼 것.
 - **읽을 곳:** `docs/acp-backend-rail.md` **§11-7-0**(관측창·문·축) → §11-7-a → **§11-7-b**(재판독) →
-  **§11-7-c**(seam 설계, 미구현) → `scripts/lib/probe-verdict.ts` 머리말 → `scripts/lib/probe-event-log.ts` 문 계약.
+  **§11-7-c**(seam 설계 + Phase 0/1 상태) → `scripts/lib/probe-verdict.ts` 머리말 →
+  `scripts/lib/probe-event-log.ts` 문 계약 → `scripts/lib/probe-cli-shim.ts` 머리말(생산자 3대 성질).
 - **Do not touch:** product turn loop(`backend.ts`)·rail 처방·릴리즈 노트를 이 증거로 바꾸지 마라.
   `ANTHROPIC_BASE_URL` 프록시 seam은 **NO-GO**(Hard Rule #8). `D < turn duration` 규칙은 **기각됐다** —
-  다시 제안하지 마라. LIVE 재판정 없이 0.12.11을 컷하지 마라.
+  다시 제안하지 마라. 이번 inconclusive (b)를 실패 인과나 rail 처방으로 승격하지 마라.
 
 ## LEDGER — 0.12.10 컷 (닫힘, 2026-07-27 출하)
 
@@ -562,13 +607,7 @@
    `check-entwurf-v2-spawn-production`이 red였다(테스트 기대값만 옮기고 프로덕션 메시지를 안 고친 것).
    ⓒ `pi-extensions/` 소스를 고쳤으면 `pnpm run build-bridge`를 먼저 돌려라 — 안 하면
    `check-bridge-delivery`가 stale dist로 red다.
-2. **readiness — §11-7 ordering probe: 계측기 수선 완료, 측정 미결. 착수 전 위 NOW의 A/B 순서 결정부터.** probe·게이트·mutant 37종이
-   있다. 남은 것은 **판정 가능한 LIVE 측정**이고, 그 다음이 §11-7-c `B-name-snapshot` seam 구현이다
-   (shim + inspector + synthetic fixture 3종 + fake-CLI 결정론 게이트 + QK mutant — probe 최초 랜딩에
-   맞먹는 별도 덩어리로 잡아라). 착수 순서는 교차검수 합의대로
-   관측창/censor → topology+seq door → 축 분리/evidence → 결정론 게이트+mutant → **LIVE** 이고,
-   앞의 넷은 닫혔다. probe 1회는 결론이 아니다.
-3. **#48 — Cortex ACP support.** reference adapter가 모델을 outbound sibling dispatch까지 데려간다는 것을
+2. **#48 — Cortex ACP support.** reference adapter가 모델을 outbound sibling dispatch까지 데려간다는 것을
    증명한 뒤에 두 번째 backend를 태운다.
    - PR #40은 OPEN·`DIRTY`, head `3dd6f5fa530c2f91e436abc3b4d79dbc2adc4d53` — #48이 인용한 `d8baf79`와 다르고,
      이슈 전제였던 `pi/entwurf-targets.json` spawn allowlist는 #50에서 삭제됐다. 로컬 Cortex는 **v1.1.47**

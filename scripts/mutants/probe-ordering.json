@@ -614,11 +614,11 @@
 			"title": "dropping the expected target identity from the roster record — the classifier would have nothing to verify shim boots against",
 			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
 			"find": [
-				"\t\tsnapshotInstrumented: false,",
+				"\t\tsnapshotInstrumented: true,",
 				"\t\tcliTargetPath: CLI_TARGET.path,",
 				"\t\tcliTargetSha256: CLI_TARGET.sha256,"
 			],
-			"replace": ["\t\tsnapshotInstrumented: false,"],
+			"replace": ["\t\tsnapshotInstrumented: true,", "\t\tprobeRunId,", "\t\tdelayMs,"],
 			"gate": ["bash", "run.sh", "check-probe-ordering"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:RUNNER-TARGET-IDENTITY-IN-ROSTER]",
@@ -691,6 +691,341 @@
 			"gate": ["bash", "run.sh", "check-probe-ordering"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:VERDICT-SNAPSHOT-CONTAINS-ID-BLOCKS]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "SHIM-NATIVE-BRANCH-LAUNCHER",
+			"title": "moving the shim off the SDK's direct-spawn branch — a shebang the kernel cannot run makes the instrument unlaunchable",
+			"subject": "scripts/fixtures/probe-cli-shim",
+			"find": ["#!/usr/bin/env node"],
+			"replace": ["#!/bin/sh"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-NATIVE-BRANCH-LAUNCHER]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-BYTE-TRANSPARENCY",
+			"title": "forwarding a DECODED string instead of the raw chunk — a chunk boundary inside a multi-byte sequence becomes U+FFFD on the CLI's real wire",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": ["\t\tconst flushed = process.stdout.write(chunk, (err) => {"],
+			"replace": ["\t\tconst flushed = process.stdout.write(chunk.toString(\"utf8\"), (err) => {"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-BYTE-TRANSPARENCY]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-PROMPT-ORDINAL-USER-FRAMES-ONLY",
+			"title": "taking every stdin line as a prompt frame — the SDK's initialize control traffic would blow the exactly-one ordinal binding on every run",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": ["\t\t\tif (isPromptFrame(line)) ordinals.push(++promptOrdinal);"],
+			"replace": ["\t\t\tif (line.length > 0) ordinals.push(++promptOrdinal);"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-PROMPT-ORDINAL-USER-FRAMES-ONLY]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-INIT-REQUIRES-STRING-TOOL-ARRAY",
+			"title": "defaulting a malformed init's name set to [] — an empty set is exactly what the B-name-snapshot ladder reads as absence, so this FABRICATES evidence",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": [
+				"\tif (!Array.isArray(obj.tools) || !obj.tools.every((t) => typeof t === \"string\")) return undefined;"
+			],
+			"replace": ["\tif (!Array.isArray(obj.tools)) return { tools: [], receivedAtMs };"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-INIT-REQUIRES-STRING-TOOL-ARRAY]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-BOOT-TARGET-IDENTITY",
+			"title": "reporting a fabricated target hash at boot — the classifier verifies this against the roster, so a swapped binary would vote in the pair",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": ["\temit(PROBE_EVENTS.shimBoot, { targetPath, targetSha256 });"],
+			"replace": ["\temit(PROBE_EVENTS.shimBoot, { targetPath, targetSha256: \"0\".repeat(64) });"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-BOOT-TARGET-IDENTITY]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-SCRUB-EXACT-ALLOWLIST",
+			"title": "deleting one ordinary operator variable alongside the allowlist — the child loses env this probe never had a claim on, and a sampled comparison would never see it",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": ["\tfor (const name of SHIM_SCRUB_ENV_VARS) delete childEnv[name];"],
+			"replace": ["\tfor (const name of [...SHIM_SCRUB_ENV_VARS, \"HOME\"]) delete childEnv[name];"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-SCRUB-EXACT-ALLOWLIST]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-ARGV-AGNOSTIC-PASSTHROUGH",
+			"title": "treating a non-JSON stdout line as an init snapshot — the `claude auth logout` consumer would start emitting snapshot evidence",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": ["\tif (obj === undefined || obj.type !== \"system\" || obj.subtype !== \"init\") return undefined;"],
+			"replace": ["\tif (obj === undefined) return { tools: [], receivedAtMs };"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-ARGV-AGNOSTIC-PASSTHROUGH]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-LOG-PRIVACY",
+			"title": "logging argv on the boot marker — operator command lines reach the shared evidence log",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": ["\temit(PROBE_EVENTS.shimBoot, { targetPath, targetSha256 });"],
+			"replace": ["\temit(PROBE_EVENTS.shimBoot, { targetPath, targetSha256, argv: process.argv.slice(2) });"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-LOG-PRIVACY]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-EXIT-CODE-FIDELITY",
+			"title": "reporting exit 0 for every child exit — a CLI crash reads to the parent as a completed turn",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": ["\t\t\tprocess.exit(code ?? 0);"],
+			"replace": ["\t\t\tprocess.exit(0);"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-EXIT-CODE-FIDELITY]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-SIGNAL-RERAISE",
+			"title": "synthesising an exit code where the child died on a signal — the parent's wait status loses the real disposition",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": ["\t\t\t\treRaise(signal);"],
+			"replace": ["\t\t\t\tprocess.exit(9);"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-SIGNAL-RERAISE]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-INBOUND-SIGNAL-FORWARDED",
+			"title": "forwarding the wrong signal to the child — teardown semantics the ACP child relies on change under the instrument",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": ["\t\t\tif (!finished) child.kill(signal);"],
+			"replace": ["\t\t\tif (!finished) child.kill(\"SIGKILL\");"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-INBOUND-SIGNAL-FORWARDED]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-SPAWN-ERROR-NAMED",
+			"title": "collapsing an unreadable exec target into an anonymous failure — the operator loses both the errno and the shell-convention status",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": [
+				"\t\tabort(`cannot read exec target ${targetPath}: ${code ?? (err as Error).message}`, exitStatusForErrno(code));"
+			],
+			"replace": ["\t\tabort(\"target unreadable\", 1);"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-SPAWN-ERROR-NAMED]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-OVERSIZED-LINE-PARSE-SKIP",
+			"title": "unbounding the NDJSON framing buffer — a pathological line drives the instrument's memory and the skip stops being recorded",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": ["\t\tif (needed > SHIM_MAX_LINE_BYTES) {"],
+			"replace": ["\t\tif (needed > Number.MAX_SAFE_INTEGER) {"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-OVERSIZED-LINE-PARSE-SKIP]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-SNAPSHOT-IN-WRITE-CALLBACK",
+			"title": "appending the snapshot BEFORE the downstream write — the envelope tsMs stops being the hand-off moment and the interval's end loses its SSOT",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": [
+				"\t\tconst flushed = process.stdout.write(chunk, (err) => {",
+				"\t\t\tif (err) return;",
+				"\t\t\tfor (const snapshot of snapshots) emit(PROBE_EVENTS.shimInitSnapshot, { ...snapshot });"
+			],
+			"replace": [
+				"\t\tfor (const snapshot of snapshots) emit(PROBE_EVENTS.shimInitSnapshot, { ...snapshot });",
+				"\t\tconst flushed = process.stdout.write(chunk, (err) => {",
+				"\t\t\tif (err) return;"
+			],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-SNAPSHOT-IN-WRITE-CALLBACK]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-PROMPT-IN-WRITE-CALLBACK",
+			"title": "stamping the prompt anchor BEFORE the bytes reach the CLI's stdin — 'we saw a newline' replaces 'fully passed to stdin'",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": [
+				"\t\tconst flushed = childStdin.write(chunk, (err) => {",
+				"\t\t\tif (err) return;",
+				"\t\t\tfor (const ordinal of ordinals) emit(PROBE_EVENTS.shimPromptForwarded, { ordinal });"
+			],
+			"replace": [
+				"\t\tfor (const ordinal of ordinals) emit(PROBE_EVENTS.shimPromptForwarded, { ordinal });",
+				"\t\tconst flushed = childStdin.write(chunk, (err) => {",
+				"\t\t\tif (err) return;"
+			],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-PROMPT-IN-WRITE-CALLBACK]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-STDOUT-BACKPRESSURE-PAUSES-SOURCE",
+			"title": "dropping the source pause under write backpressure — peak memory becomes the transcript size instead of the pipe buffers",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": [
+				"\t\tif (!flushed) {",
+				"\t\t\tchildStdout.pause();",
+				"\t\t\tprocess.stdout.once(\"drain\", () => childStdout.resume());",
+				"\t\t}"
+			],
+			"replace": ["\t\tif (!flushed) {", "\t\t\tvoid flushed;", "\t\t\tvoid flushed;", "\t\t}"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-STDOUT-BACKPRESSURE-PAUSES-SOURCE]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-FRAMING-BOUNDED-IN-OBJECTS",
+			"title": "regrowing the framing buffer to the exact size on every read — the byte cap holds but the object cost becomes linear in reads, which is the bound a one-byte-at-a-time peer walks through",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": ["\t\t\twhile (capacity < needed) capacity *= 2;"],
+			"replace": ["\t\t\tcapacity = needed;"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-FRAMING-BOUNDED-IN-OBJECTS]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-OVERSIZE-COUNTED-AT-EOF",
+			"title": "dropping the stream-end finalize — an oversized line that never meets a newline is skipped silently and the diagnostic under-reports it",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": ["\t\tif (this.overflowed) this.overflowCount += 1;", "\t\tthis.reset();", "\t}", "", "\tprivate absorb"],
+			"replace": ["\t\tthis.reset();", "\t}", "", "\tprivate absorb", ""],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-OVERSIZE-COUNTED-AT-EOF]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-STDIN-BACKPRESSURE-PAUSES-SOURCE",
+			"title": "dropping the source pause on the stdin side — a CLI slow to read its input gets absorbed into this process's memory instead of parking the SDK's stream",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": [
+				"\t\tif (!flushed) {",
+				"\t\t\tprocess.stdin.pause();",
+				"\t\t\tchildStdin.once(\"drain\", () => process.stdin.resume());",
+				"\t\t}"
+			],
+			"replace": ["\t\tif (!flushed) {", "\t\t\tvoid flushed;", "\t\t\tvoid flushed;", "\t\t}"],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-STDIN-BACKPRESSURE-PAUSES-SOURCE]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "SHIM-DOWNSTREAM-DEATH-TEARS-DOWN",
+			"title": "merely IGNORING a dead downstream — the source stays parked on a drain that can never arrive and the instrument hangs holding a live CLI open",
+			"subject": "scripts/lib/probe-cli-shim.ts",
+			"find": [
+				"\tprocess.stdout.on(\"error\", (): void => {",
+				"\t\tchildStdout.resume();",
+				"\t\tif (!finished) child.kill(\"SIGTERM\");",
+				"\t});"
+			],
+			"replace": ["\tprocess.stdout.on(\"error\", (): void => {});", "", "", ""],
+			"gate": ["bash", "run.sh", "check-probe-cli-shim"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SHIM-DOWNSTREAM-DEATH-TEARS-DOWN]",
+			"signatureSource": "scripts/check-probe-cli-shim.ts"
+		},
+		{
+			"claim": "RUNNER-ARMING-ORDER",
+			"title": "injecting the probe's own override BEFORE the ambient-override refusal — the checkpoint then inspects the override the probe just installed and REFUSES every run, loudly but for the wrong reason, while the operator's ambient environment is never examined at all",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": ["\t\tassertNoAmbientOverride(spawnEnv, `composed acp child env for ${runId}`);"],
+			"replace": [
+				"\t\tspawnEnv[AMBIENT_OVERRIDE_ENV] = SHIM_TARGET.path;",
+				"\t\tassertNoAmbientOverride(spawnEnv, `composed acp child env for ${runId}`);"
+			],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:RUNNER-ARMING-ORDER]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "RUNNER-SHIM-OVERRIDE-EXACT",
+			"title": "pointing the shim's exec target at itself instead of the resolved CLI — the instrument would recurse rather than measure",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": ["\t\tspawnEnv[PROBE_SHIM_ENV.target] = CLI_TARGET.path;"],
+			"replace": ["\t\tspawnEnv[PROBE_SHIM_ENV.target] = SHIM_TARGET.path;"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:RUNNER-SHIM-OVERRIDE-EXACT]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "RUNNER-SHIM-PRECONDITION-PINNED",
+			"title": "arming a shim that never passed the native-branch/executable asserts — a script-suffixed or unrunnable instrument changes which launch branch the pair measures",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": ["\t\tSHIM_TARGET = await resolveProbeCliTarget({ env: {}, resolveNative: async () => PROBE_SHIM });"],
+			"replace": ["\t\tSHIM_TARGET = { path: PROBE_SHIM, sha256: \"unverified\" };"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:RUNNER-SHIM-PRECONDITION-PINNED]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "RUNNER-SNAPSHOT-CHANNEL-ARMED",
+			"title": "leaving a run declaring the channel unarmed — shim-shaped evidence under an unarmed roster is ignored, so a run whose instrument never reported in reads as an ordinary absence",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": ["\t\tsnapshotInstrumented: true,"],
+			"replace": ["\t\tsnapshotInstrumented: false,"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:RUNNER-SNAPSHOT-CHANNEL-ARMED]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "RUNNER-SHIM-ON-DISK-NATIVE",
+			"title": "arming a script-suffixed shim path — the SDK would run the instrument through `node|bun <path>`, the branch the pair's target is asserted NOT to be on",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": ["const PROBE_SHIM = join(REPO_ROOT, \"scripts\", \"fixtures\", \"probe-cli-shim\");"],
+			"replace": ["const PROBE_SHIM = join(REPO_ROOT, \"scripts\", \"fixtures\", \"probe-cli-shim.mjs\");"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:RUNNER-SHIM-ON-DISK-NATIVE]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "RUNNER-SHIM-RUNTIME-PINNED",
+			"title": "neutralising the post-pair instrument rehash — an implementation edit landing between control and intervention leaves both runs voting as though they shared one shim",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": ["\t\tshimRehash = hashShimRuntime();"],
+			"replace": ["\t\tshimRehash = SHIM_RUNTIME;"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:RUNNER-SHIM-RUNTIME-PINNED]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "RUNNER-SHIM-RUNTIME-GRAPH-EXACT",
+			"title": "dropping a module the shim actually reads from the pinned instrument graph — that file is then free to change mid-pair with nothing observing it",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": ["\tjoin(REPO_ROOT, \"scripts\", \"lib\", \"probe-event-log.ts\"),"],
+			"replace": ["\t// pinned elsewhere"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:RUNNER-SHIM-RUNTIME-GRAPH-EXACT]",
 			"signatureSource": "scripts/check-probe-ordering.ts"
 		}
 	]
