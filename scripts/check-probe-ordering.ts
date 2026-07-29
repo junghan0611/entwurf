@@ -42,9 +42,17 @@
 //      are reported separately, so a settled ordering fact is not buried by an
 //      unsettled failure axis. A keeps the newSession axis; B/C's causal window is
 //      promptStart, and the evidence carries both deltas plus the post-wire turn.
+//   8) §11-7-c B-NAME-SNAPSHOT SEAM (consumer side) — the CLI-target
+//      precondition gate (ambient override refused, native-branch absolute
+//      target only, exact-allowlist scrub), the upstream launch-semantics
+//      inspector (synthetic-validated, applied to the installed dists), the
+//      shim event doors, and the snapshot verdict ladder (calibrated control,
+//      exactly-one ordinal binding, interval-ordered absence, roster-armed
+//      channel; B and B-name-snapshot never conflated). The PRODUCER (shim) is
+//      not built yet — the LIVE runner pins the channel unarmed.
 //
 // Kill-proof, stated at its honest strength: scripts/mutants/probe-ordering.json
-// qualifies 37 claims — each carries a [QK:...] signature appearing EXACTLY once
+// qualifies 56 claims — each carries a [QK:...] signature appearing EXACTLY once
 // below, and check-gate-qualification proves its mutant dies at that signature.
 // [QK:*] tokens and qualified claims are 1:1 BY DESIGN: an assertion without a
 // mutant carries a plain message, so "killed claim IDs, never assertion counts"
@@ -60,7 +68,17 @@
 
 import { strict as assert } from "node:assert";
 import { type ChildProcessByStdio, spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	appendFileSync,
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Readable, Writable } from "node:stream";
@@ -77,6 +95,15 @@ import {
 	ProbePhaseError,
 	type ProbeTurnPhase,
 } from "./lib/probe-acp-turn.ts";
+import {
+	AMBIENT_OVERRIDE_ENV,
+	hashFileSha256,
+	PROBE_SHIM_ENV,
+	ProbeCliPreconditionError,
+	resolveProbeCliTarget,
+	SDK_SCRIPT_SUFFIXES,
+	SHIM_SCRUB_ENV_VARS,
+} from "./lib/probe-cli-target.ts";
 import {
 	appendProbeEvent,
 	PAYLOAD_CONTRACT_EVENTS,
@@ -815,6 +842,9 @@ const INIT_PARAMS = {
 			PROBE_EVENTS.promptReply,
 			PROBE_EVENTS.setModelEnd,
 			PROBE_EVENTS.toolsListResponseForwarded,
+			PROBE_EVENTS.shimBoot,
+			PROBE_EVENTS.shimPromptForwarded,
+			PROBE_EVENTS.shimInitSnapshot,
 		].sort(),
 		"the payload contract covers exactly the events the classifier judges on",
 	);
@@ -1092,7 +1122,7 @@ const PROVIDER_ID_MEASURED = "mcp__probe__probe_nonce";
 
 function passingControl(base = 0): { record: ProbeRunRecord; events: ProbeEvent[] } {
 	return {
-		record: { runId: "ctl", role: "control", delayMs: 0, probeRunId: "prb-ctl" },
+		record: { runId: "ctl", role: "control", delayMs: 0, probeRunId: "prb-ctl", snapshotInstrumented: false },
 		events: syntheticRun({
 			runId: "ctl",
 			probeRunId: "prb-ctl",
@@ -1114,7 +1144,7 @@ function intervention(
 ): { record: ProbeRunRecord; events: ProbeEvent[] } {
 	const probeRunId = `prb-${runId}`;
 	return {
-		record: { runId, role: "intervention", delayMs, probeRunId },
+		record: { runId, role: "intervention", delayMs, probeRunId, snapshotInstrumented: false },
 		events: syntheticRun({ runId, probeRunId, base, ...spec }),
 	};
 }
@@ -1122,7 +1152,13 @@ function intervention(
 // --- P0: control failures invalidate the whole experiment -------------------
 {
 	const ctl = {
-		record: { runId: "ctl", role: "control", delayMs: 0, probeRunId: "prb-ctl" } as ProbeRunRecord,
+		record: {
+			runId: "ctl",
+			role: "control",
+			delayMs: 0,
+			probeRunId: "prb-ctl",
+			snapshotInstrumented: false,
+		} as ProbeRunRecord,
 		events: syntheticRun({ runId: "ctl", probeRunId: "prb-ctl", base: 0, failPhase: "initialize" }),
 	};
 	const d1 = intervention("d1", 2000, 10_000, { wireAt: 2100, nsLatency: 2400, fixtureCall: true });
@@ -1132,7 +1168,13 @@ function intervention(
 	assert.equal(res.interventions.length, 0, "no intervention is judged under P0");
 
 	const ctl2 = {
-		record: { runId: "ctl", role: "control", delayMs: 0, probeRunId: "prb-ctl" } as ProbeRunRecord,
+		record: {
+			runId: "ctl",
+			role: "control",
+			delayMs: 0,
+			probeRunId: "prb-ctl",
+			snapshotInstrumented: false,
+		} as ProbeRunRecord,
 		events: syntheticRun({
 			runId: "ctl",
 			probeRunId: "prb-ctl",
@@ -1195,7 +1237,11 @@ function intervention(
 		nonceEchoed: false,
 	});
 	const resB = classifyProbe([ctl.record, exact.record], [...ctl.events, ...exact.events]);
-	assert.equal(resB.verdict, "B", "marker-complete absence reads B");
+	assert.equal(
+		resB.verdict,
+		"B",
+		"marker-complete absence reads B — the runtime No-such-tool ladder OWNS runtime-error runs; no other channel may stand in for it [QK:VERDICT-RUNTIME-B-LADDER-OWNS]",
+	);
 	assert.equal(resB.promotable, true, "exact measured-id No-such-tool promotes");
 
 	// (b2) same markers but the turn did NOT run ahead (wire forwarded BEFORE
@@ -1529,7 +1575,13 @@ function intervention(
 	// logged — a control free to lie about its own window is not a baseline, and
 	// every intervention is read as a delta against it.
 	const lyingControl = {
-		record: { runId: "ctl-lie", role: "control", delayMs: 0, probeRunId: "prb-ctl-lie" } as ProbeRunRecord,
+		record: {
+			runId: "ctl-lie",
+			role: "control",
+			delayMs: 0,
+			probeRunId: "prb-ctl-lie",
+			snapshotInstrumented: false,
+		} as ProbeRunRecord,
 		events: syntheticRun({
 			runId: "ctl-lie",
 			probeRunId: "prb-ctl-lie",
@@ -1579,7 +1631,13 @@ function intervention(
 		ev("x1", PROBE_EVENTS.observationWindowEnd, 300_600, { reason: "deadline", markerSeen: false }),
 		ev("x1", PROBE_EVENTS.runEnd, 300_601, { ok: true }),
 	];
-	const transposedRec: ProbeRunRecord = { runId: "x1", role: "intervention", delayMs: 2000, probeRunId: "prb-x1" };
+	const transposedRec: ProbeRunRecord = {
+		runId: "x1",
+		role: "intervention",
+		delayMs: 2000,
+		probeRunId: "prb-x1",
+		snapshotInstrumented: false,
+	};
 	const resTrans = classifyProbe([ctl.record, transposedRec], [...ctl.events, ...transposed]);
 	assert.equal(
 		resTrans.verdict,
@@ -1607,7 +1665,13 @@ function intervention(
 		ev("x2", PROBE_EVENTS.observationWindowEnd, 400_400, { reason: "deadline", markerSeen: false }),
 		ev("x2", PROBE_EVENTS.runEnd, 400_401, { ok: true }),
 	];
-	const holeRec: ProbeRunRecord = { runId: "x2", role: "intervention", delayMs: 2000, probeRunId: "prb-x2" };
+	const holeRec: ProbeRunRecord = {
+		runId: "x2",
+		role: "intervention",
+		delayMs: 2000,
+		probeRunId: "prb-x2",
+		snapshotInstrumented: false,
+	};
 	const resHole = classifyProbe([ctl.record, holeRec], [...ctl.events, ...hole]);
 	assert.equal(
 		resHole.verdict,
@@ -1697,12 +1761,579 @@ function intervention(
 	);
 }
 
+// ===========================================================================
+// 8) §11-7-c B-name-snapshot seam — CONSUMER side (preconditions, doors,
+//    verdict ladder). The PRODUCER (the CLI shim) is not built yet; these
+//    prove the contract it must satisfy, and the LIVE runner pins its channel
+//    unarmed (snapshotInstrumented: false) until it lands.
+// ===========================================================================
+
+// --- 8a) CLI-target precondition seam: refusals are NAMED, never fallbacks --
+{
+	const fakeBin = join(tmp, "fake-claude");
+	writeFileSync(fakeBin, "#!/bin/sh\nexit 0\n");
+	chmodSync(fakeBin, 0o755);
+	const fakeScript = join(tmp, "fake-claude.mjs");
+	writeFileSync(fakeScript, "process.exit(0);\n");
+	chmodSync(fakeScript, 0o755);
+	const fakeDir = join(tmp, "fake-claude-dir");
+	mkdirSync(fakeDir, { recursive: true });
+	const fakeNonExec = join(tmp, "fake-claude-noexec");
+	writeFileSync(fakeNonExec, "#!/bin/sh\nexit 0\n");
+	chmodSync(fakeNonExec, 0o644);
+
+	const reasonOf = async (env: Record<string, string | undefined>, target: string): Promise<string> => {
+		try {
+			await resolveProbeCliTarget({ env, resolveNative: async () => target });
+			return "resolved";
+		} catch (err) {
+			return err instanceof ProbeCliPreconditionError ? err.reason : "unexpected-error";
+		}
+	};
+
+	assert.equal(
+		await reasonOf({ [AMBIENT_OVERRIDE_ENV]: "/somewhere/claude" }, fakeBin),
+		"ambient-override-present",
+		"an ambient CLAUDE_CODE_EXECUTABLE is REFUSED before resolution — claudeCliPath() would return it verbatim [QK:PROBE-TARGET-AMBIENT-REFUSED]",
+	);
+	// KEY PRESENCE is the predicate: upstream's `??` treats "" as set and passes
+	// it on while a truthy check treats it as unset — the probe refuses the
+	// ambiguity instead of picking a side (GPT review 2026-07-29).
+	assert.equal(
+		await reasonOf({ [AMBIENT_OVERRIDE_ENV]: "" }, fakeBin),
+		"ambient-override-present",
+		"an EMPTY-string override is still a present key — refused, not treated as unset",
+	);
+	assert.equal(
+		await reasonOf({}, "relative/claude"),
+		"target-not-absolute",
+		"a non-absolute resolved target is refused — it would resolve against the session cwd at spawn time",
+	);
+	assert.equal(
+		await reasonOf({}, fakeScript),
+		"target-script-suffix",
+		"a script-suffixed target is refused — the SDK would take the node|bun branch, which this seam asserts against instead of reproducing [QK:PROBE-TARGET-NATIVE-BRANCH-ONLY]",
+	);
+	assert.equal(
+		await reasonOf({}, join(tmp, "no-such-claude")),
+		"target-missing",
+		"a missing target is refused before a LIVE turn spends money on a spawn error",
+	);
+	assert.equal(
+		await reasonOf({}, fakeDir),
+		"target-not-regular-file",
+		"a directory target is refused — existsSync alone would have taken it happy (GPT review 2026-07-29)",
+	);
+	assert.equal(
+		await reasonOf({}, fakeNonExec),
+		"target-not-executable",
+		"a non-executable regular file is refused (X_OK) — it would fail only after the pair started spending",
+	);
+	const resolved = await resolveProbeCliTarget({ env: {}, resolveNative: async () => fakeBin });
+	assert.ok(
+		resolved.path === fakeBin && resolved.sha256 === hashFileSha256(fakeBin) && /^[0-9a-f]{64}$/.test(resolved.sha256),
+		"an absolute, extensionless, executable regular file resolves with its content hash",
+	);
+}
+
+// --- 8b) upstream override semantics — inspector validated on synthetic
+//     fixtures, THEN applied to the installed dists. node_modules can never be
+//     a mutant subject (§11-7-c), so kill-power here is the synthetic
+//     negatives, not a manifest entry.
+{
+	const inspect = (acpSrc: string, sdkSrc: string): string[] => {
+		const violations: string[] = [];
+		if (!acpSrc.includes("export async function claudeCliPath()")) {
+			violations.push("claudeCliPath export missing from acp-agent.js");
+		}
+		if (!/if \(process\.env\.CLAUDE_CODE_EXECUTABLE\) \{\s*return process\.env\.CLAUDE_CODE_EXECUTABLE;/.test(acpSrc)) {
+			violations.push(
+				"claudeCliPath no longer returns the ambient override VERBATIM — the refusal precondition's premise moved",
+			);
+		}
+		const overrideLine = "pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE ?? (await claudeCliPath())";
+		const iOverride = acpSrc.indexOf(overrideLine);
+		if (iOverride === -1) {
+			violations.push("the env-??-claudeCliPath resolution at the query options literal is gone");
+		} else {
+			const iSpread = acpSrc.indexOf("...userProvidedOptions,");
+			if (iSpread === -1 || iSpread > iOverride) {
+				violations.push(
+					"the explicit pathToClaudeCodeExecutable key no longer follows ...userProvidedOptions — the key-order assumption (override wins) is broken",
+				);
+			}
+		}
+		if (!sdkSrc.includes(JSON.stringify(SDK_SCRIPT_SUFFIXES))) {
+			violations.push(
+				`the SDK's script-suffix discriminator no longer equals ${JSON.stringify(SDK_SCRIPT_SUFFIXES)} — the native-branch assert would drift from upstream`,
+			);
+		}
+		if (!sdkSrc.includes('?"bun":"node"')) {
+			violations.push("the SDK's node|bun default-executable choice moved — the script branch premise changed");
+		}
+		// The no-shell proof is LOCALIZED to the spawn leaf: asserting only that
+		// one spelling of `shell:!0` is absent SOMEWHERE in a megabyte of minified
+		// source proves nothing — `shell:true`, a variable shell, or the leaf
+		// moving entirely would all pass (GPT review 2026-07-29). Pin the
+		// spawnLocalProcess definition window and judge the spawn options THERE.
+		const iLeaf = sdkSrc.indexOf("spawnLocalProcess(");
+		if (iLeaf === -1) {
+			violations.push("the SDK's spawnLocalProcess leaf is gone — the spawn-shape premise has no anchor");
+		} else {
+			const leaf = sdkSrc.slice(iLeaf, iLeaf + 800);
+			if (!leaf.includes('stdio:["pipe","pipe","pipe"]') || !leaf.includes("windowsHide:!0")) {
+				violations.push("the spawn leaf no longer shows piped stdio + windowsHide — spawn semantics premise changed");
+			}
+			if (/\bshell\s*:/.test(leaf)) {
+				violations.push("the spawn leaf carries a `shell:` option — the no-shell premise is broken");
+			}
+		}
+		return violations;
+	};
+
+	// Synthetic fixtures FIRST — an inspector that cannot see the defect it
+	// exists for is no inspector.
+	const goodAcp =
+		"export async function claudeCliPath() {\n" +
+		"    if (process.env.CLAUDE_CODE_EXECUTABLE) {\n        return process.env.CLAUDE_CODE_EXECUTABLE;\n    }\n}\n" +
+		"const options = {\n            ...userProvidedOptions,\n" +
+		"            pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE ?? (await claudeCliPath()),\n};\n";
+	const goodSdk = `x=![".js",".mjs",".tsx",".ts",".jsx"].some((r)=>e.endsWith(r));y=Cs()?"bun":"node";spawnLocalProcess(e){let{command:t,args:r,cwd:n,env:o,signal:i}=e,s=cxe(t,r,{cwd:n,stdio:["pipe","pipe","pipe"],signal:i,env:o,windowsHide:!0})}`;
+	assert.deepEqual(inspect(goodAcp, goodSdk), [], "inspector passes the correct synthetic fixture");
+	const invertedAcp = goodAcp.replace(
+		"            ...userProvidedOptions,\n            pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE ?? (await claudeCliPath()),\n",
+		"            pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE ?? (await claudeCliPath()),\n            ...userProvidedOptions,\n",
+	);
+	assert.ok(
+		inspect(invertedAcp, goodSdk).some((v) => v.includes("key-order")),
+		"inspector catches userProvidedOptions inverted to win over the explicit override key",
+	);
+	assert.ok(
+		inspect(goodAcp.replace("export async function claudeCliPath()", "async function claudeCliPath()"), goodSdk).some(
+			(v) => v.includes("export missing"),
+		),
+		"inspector catches the claudeCliPath export disappearing",
+	);
+	assert.ok(
+		inspect(goodAcp, goodSdk.replace('".mjs",', "")).some((v) => v.includes("discriminator")),
+		"inspector catches the SDK suffix list drifting from the pinned SDK_SCRIPT_SUFFIXES",
+	);
+	// The no-shell negatives must be caught IN THE LEAF WINDOW, in both the
+	// minified and the plain spelling — the global one-spelling absence check
+	// this replaced passed them all.
+	assert.ok(
+		inspect(goodAcp, goodSdk.replace("windowsHide:!0", "windowsHide:!0,shell:!0")).some((v) =>
+			v.includes("no-shell"),
+		) &&
+			inspect(goodAcp, goodSdk.replace("windowsHide:!0", "windowsHide:!0,shell:true")).some((v) =>
+				v.includes("no-shell"),
+			) &&
+			inspect(goodAcp, goodSdk.replace("spawnLocalProcess(", "spawnElsewhere(")).some((v) => v.includes("anchor")),
+		"inspector catches shell:!0 AND shell:true inside the spawn leaf, and the leaf disappearing entirely",
+	);
+
+	// Installed dists — the actual §11-7-c load-bearing assumptions.
+	const rootRequire = createRequire(resolve(REPO_ROOT, "package.json"));
+	const acpPkgJson = rootRequire.resolve("@agentclientprotocol/claude-agent-acp/package.json");
+	const acpDist = readFileSync(join(dirname(acpPkgJson), "dist", "acp-agent.js"), "utf8");
+	const acpRequire = createRequire(acpPkgJson);
+	const sdkEntry = acpRequire.resolve("@anthropic-ai/claude-agent-sdk");
+	let sdkDist = readFileSync(sdkEntry, "utf8");
+	if (!sdkDist.includes(JSON.stringify(SDK_SCRIPT_SUFFIXES))) {
+		const sibling = join(dirname(sdkEntry), "sdk.mjs");
+		if (existsSync(sibling)) sdkDist = readFileSync(sibling, "utf8");
+	}
+	assert.deepEqual(
+		inspect(acpDist, sdkDist),
+		[],
+		"installed acp-agent.js + sdk.mjs still carry every §11-7-c launch-semantics assumption (claudeCliPath verbatim env, override key order, suffix discriminator, node|bun choice, piped no-shell spawn)",
+	);
+}
+
+// --- 8c) the scrub list is an EXACT allowlist, never a prefix pattern -------
+{
+	assert.ok(
+		SHIM_SCRUB_ENV_VARS.includes(AMBIENT_OVERRIDE_ENV) &&
+			Object.values(PROBE_SHIM_ENV).every((v) => SHIM_SCRUB_ENV_VARS.includes(v)) &&
+			SHIM_SCRUB_ENV_VARS.length === 1 + Object.values(PROBE_SHIM_ENV).length &&
+			SHIM_SCRUB_ENV_VARS.every((v) => /^[A-Z][A-Z0-9_]*$/.test(v)),
+		"the shim scrub list is the exact enumerated allowlist — the override plus every probe-private var by literal name, no wildcard/prefix semantics [QK:PROBE-SCRUB-EXACT-ALLOWLIST]",
+	);
+	// The shim env names must not collide with the fixture's — two processes,
+	// two channels, one shared log.
+	const fixtureVals = Object.values(PROBE_ENV) as string[];
+	assert.ok(
+		Object.values(PROBE_SHIM_ENV).every((v) => !fixtureVals.includes(v)),
+		"shim env names are disjoint from the fixture's PROBE_ENV names",
+	);
+}
+
+// --- 8d) runner pins — one assert per claim, so each [QK:] names exactly what
+//     its mutant kills (bundling four claims under one token let one mutant
+//     stand in for all of them; GPT review 2026-07-29) ----------------------
+{
+	assert.ok(
+		RUNNER_SRC.includes("assertNoAmbientOverride(spawnEnv, `composed acp child env for ${runId}`);"),
+		"the COMPOSED spawn env of every ACP child is asserted override-free — launch defaults / overlay overrides could inject what process.env did not carry [QK:RUNNER-TARGET-PRECONDITION-PINNED]",
+	);
+	// Pinned as the CONTIGUOUS roster-record shape: the same two stamps also ride
+	// the run_start payload (forensics), so field-by-field includes() would stay
+	// green with the roster copy deleted.
+	assert.ok(
+		RUNNER_SRC.includes(
+			"snapshotInstrumented: false,\n\t\tcliTargetPath: CLI_TARGET.path,\n\t\tcliTargetSha256: CLI_TARGET.sha256,",
+		),
+		"the pair's expected CLI target identity rides EVERY roster record so the classifier can consume it (condition 5) [QK:RUNNER-TARGET-IDENTITY-IN-ROSTER]",
+	);
+	assert.ok(
+		RUNNER_SRC.includes("rehash = hashFileSha256(CLI_TARGET.path);") &&
+			RUNNER_SRC.includes('reason: "cli-target-drift"') &&
+			RUNNER_SRC.includes('reason: "cli-target-unreadable"'),
+		"the target is RE-HASHED after the pair, and both drift and unreadability write a named INVALIDATED classification [QK:RUNNER-DRIFT-REHASH-PINNED]",
+	);
+	assert.ok(
+		RUNNER_SRC.includes("CLI_TARGET = await resolveProbeCliTarget({") &&
+			RUNNER_SRC.includes('"@agentclientprotocol/claude-agent-acp/dist/acp-agent.js"') &&
+			RUNNER_SRC.includes("`precondition-${err.reason}`"),
+		"the runner resolves the target through upstream claudeCliPath BEFORE any run, and a precondition refusal writes a NAMED classification on the artifact (not stderr alone)",
+	);
+	assert.ok(
+		RUNNER_SRC.includes("snapshotInstrumented: false"),
+		"the snapshot channel stays UNARMED until the shim (producer half) lands — flipping it is a deliberate act",
+	);
+}
+
+// --- 8e) shim events at the log door: judged payload is typed there ---------
+{
+	const stampAt = (seq: number, tsMs: number) => ({ seq, pid: 9, ts: new Date(tsMs).toISOString(), tsMs, runId: "sh" });
+	const doorPath = join(tmp, "payload-shim.ndjson");
+	const lines = [
+		{ ...stampAt(0, 3_000), event: PROBE_EVENTS.shimBoot, targetPath: "/x/claude" }, // sha missing
+		{ ...stampAt(1, 3_001), event: PROBE_EVENTS.shimPromptForwarded, ordinal: 0 }, // ordinal < 1
+		{ ...stampAt(2, 3_002), event: PROBE_EVENTS.shimInitSnapshot, tools: "nope", receivedAtMs: 1 },
+		// interval inverted — receivedAtMs AFTER the event's own envelope stamp
+		// (the downstream-write-callback moment, the interval's single-SSOT end)
+		// would silently un-order the §11-7-c "after the wire" read → refused.
+		{ ...stampAt(3, 3_003), event: PROBE_EVENTS.shimInitSnapshot, tools: ["a"], receivedAtMs: 3_500 },
+		{ ...stampAt(4, 3_004), event: PROBE_EVENTS.shimBoot, targetPath: "/x/claude", targetSha256: "ab12" },
+		{ ...stampAt(5, 3_005), event: PROBE_EVENTS.shimPromptForwarded, ordinal: 1 },
+		{ ...stampAt(6, 3_006), event: PROBE_EVENTS.shimInitSnapshot, tools: ["a", "b"], receivedAtMs: 3_002 },
+	];
+	for (const l of lines) appendFileSync(doorPath, `${JSON.stringify(l)}\n`, "utf8");
+	const door = readProbeEvents(doorPath);
+	assert.ok(
+		door.malformed.length === 4 && door.events.length === 3,
+		"shim payload rules hold at the door: missing target hash, ordinal<1, non-array tools, and receivedAtMs AFTER the envelope stamp are MALFORMED; the well-formed trio passes [QK:PROBE-LOG-SNAPSHOT-PAYLOAD]",
+	);
+}
+
+// --- 8f) the B-name-snapshot verdict ladder over synthetic paired logs ------
+{
+	let shimSeq = 5_000;
+	const shimEv = (runId: string, event: string, tsMs: number, payload: Record<string, unknown>): ProbeEvent =>
+		({ seq: shimSeq++, pid: 9, ts: new Date(tsMs).toISOString(), tsMs, runId, event, ...payload }) as ProbeEvent;
+
+	const EXPECTED_TARGET = { path: "/x/claude", sha256: "ab" } as const;
+
+	/** Shim channel for one run: boot → prompt frame → snapshot(s). The interval
+	 *  END is the snapshot event's own envelope tsMs (`at`), the moment the shim
+	 *  appends inside the downstream write callback; payload carries only
+	 *  `receivedAtMs`. */
+	const shimChannel = (
+		runId: string,
+		base: number,
+		snapshots: Array<{ receivedAtMs: number; at: number; tools: string[] }>,
+		opts: { boot?: boolean; promptForwardedAt?: number; bootTargetSha256?: string } = {},
+	): ProbeEvent[] => {
+		const out: ProbeEvent[] = [];
+		if (opts.boot !== false) {
+			out.push(
+				shimEv(runId, PROBE_EVENTS.shimBoot, base + 150, {
+					targetPath: EXPECTED_TARGET.path,
+					targetSha256: opts.bootTargetSha256 ?? EXPECTED_TARGET.sha256,
+				}),
+			);
+		}
+		out.push(shimEv(runId, PROBE_EVENTS.shimPromptForwarded, opts.promptForwardedAt ?? base + 1_700, { ordinal: 1 }));
+		for (const s of snapshots) {
+			out.push(shimEv(runId, PROBE_EVENTS.shimInitSnapshot, s.at, { tools: s.tools, receivedAtMs: s.receivedAtMs }));
+		}
+		return out;
+	};
+
+	// An armed roster record also CARRIES the expected target identity — the
+	// classifier consumes it (condition 5), fail-closed when absent.
+	const armed = (r: { record: ProbeRunRecord; events: ProbeEvent[] }, shim: ProbeEvent[]) => ({
+		record: {
+			...r.record,
+			snapshotInstrumented: true,
+			cliTargetPath: EXPECTED_TARGET.path,
+			cliTargetSha256: EXPECTED_TARGET.sha256,
+		},
+		events: [...r.events, ...shim],
+	});
+
+	// A calibrated, armed control: channel clean and the snapshot CONTAINS the
+	// measured id (fixture call + nonce echo already hold in passingControl).
+	const armedControl = (base = 0) =>
+		armed(
+			passingControl(base),
+			shimChannel("ctl", base, [{ receivedAtMs: base + 600, at: base + 605, tools: [PROVIDER_ID_MEASURED, "other"] }], {
+				promptForwardedAt: base + 500,
+			}),
+		);
+
+	// Intervention timing shape (base b): nsLatency 1500 → promptStart = b+1660;
+	// wireAt 2000 → wire = b+2100 > promptStart (promptRanAhead).
+	const ranAheadSpec = { wireAt: 2_000, nsLatency: 1_500, fixtureCall: false } as const;
+
+	// (1) full floor → B-name-snapshot, promotable.
+	{
+		const ctl = armedControl();
+		const i1 = armed(
+			intervention("d1", 2_000, 10_000, { ...ranAheadSpec }),
+			shimChannel("d1", 10_000, [{ receivedAtMs: 12_190, at: 12_195, tools: ["unrelated_tool"] }]),
+		);
+		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
+		assert.equal(
+			res.verdict,
+			"B-name-snapshot",
+			"snapshot absence of the measured id + promptRanAhead + wire strictly before the interval + calibrated control → B-name-snapshot [QK:VERDICT-SNAPSHOT-PROMOTES]",
+		);
+		assert.ok(res.promotable && res.status.failureVerdict === "B-name-snapshot", "…and it is promotable on axis (b)");
+		assert.notEqual(
+			res.interventions[0].failure,
+			"B",
+			"…and it NEVER upgrades into runtime B — the report is not the failure",
+		);
+	}
+
+	// (2) armed control with NO shim events at all → named instrument absence.
+	{
+		const ctl = armed(passingControl(20_000), []);
+		const i1 = armed(
+			intervention("d1", 2_000, 30_000, { ...ranAheadSpec }),
+			shimChannel("d1", 30_000, [{ receivedAtMs: 32_190, at: 32_195, tools: ["unrelated_tool"] }]),
+		);
+		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
+		assert.equal(res.verdict, "P0", "an armed control whose shim never reported in cannot calibrate — P0");
+		assert.equal(
+			res.control.p0Reason,
+			"snapshot-instrument-absent",
+			"…and the reason NAMES the missing instrument (a hijacked/replaced override looks exactly like this) [QK:VERDICT-SNAPSHOT-INSTRUMENT-ABSENT]",
+		);
+	}
+
+	// (3) armed control, channel clean, but the snapshot LACKS the measured id.
+	{
+		const ctl = armed(
+			passingControl(40_000),
+			shimChannel("ctl", 40_000, [{ receivedAtMs: 40_600, at: 40_605, tools: ["only_this"] }], {
+				promptForwardedAt: 40_500,
+			}),
+		);
+		const i1 = armed(
+			intervention("d1", 2_000, 50_000, { ...ranAheadSpec }),
+			shimChannel("d1", 50_000, [{ receivedAtMs: 52_190, at: 52_195, tools: ["unrelated_tool"] }]),
+		);
+		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
+		assert.ok(
+			res.verdict === "P0" && res.control.p0Reason === "snapshot-calibration",
+			"a control snapshot that cannot SEE the measured id fails calibration — absence readings need a baseline that shows presence [QK:VERDICT-SNAPSHOT-CALIBRATION]",
+		);
+	}
+
+	// (4) absence + wire before the interval, but the prompt did NOT run ahead.
+	{
+		const ctl = armedControl(60_000);
+		// wireAt 200 → wire = 70_300, promptStart = 71_660 → NOT promptRanAhead;
+		// snapshot received at 72_000 (after the wire) with the id absent.
+		const i1 = armed(
+			intervention("d1", 2_000, 70_000, { wireAt: 200, nsLatency: 1_500, fixtureCall: false }),
+			shimChannel("d1", 70_000, [{ receivedAtMs: 72_000, at: 72_005, tools: ["unrelated_tool"] }]),
+		);
+		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
+		assert.ok(
+			res.verdict === "inconclusive" && !res.promotable,
+			"snapshot absence WITHOUT promptRanAhead is not the delayed-window failure mode — never promoted [QK:VERDICT-SNAPSHOT-REQUIRES-RANAHEAD]",
+		);
+	}
+
+	// (5) the wire marker lands INSIDE the snapshot interval → unordered.
+	{
+		const ctl = armedControl(80_000);
+		// wire = 92_100; interval [92_050, 92_150] straddles it.
+		const i1 = armed(
+			intervention("d1", 2_000, 90_000, { ...ranAheadSpec }),
+			shimChannel("d1", 90_000, [{ receivedAtMs: 92_050, at: 92_150, tools: ["unrelated_tool"] }]),
+		);
+		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
+		assert.ok(
+			res.verdict === "inconclusive" &&
+				!res.promotable &&
+				res.interventions[0].evidence.includes("INSIDE the snapshot interval"),
+			"a wire marker inside the received↔forwarded interval is UNORDERED — only wire strictly before the interval reads as after [QK:VERDICT-SNAPSHOT-INTERVAL-UNORDERED]",
+		);
+	}
+
+	// (6) snapshot received BEFORE the wire → a different claim, not promoted.
+	{
+		const ctl = armedControl(100_000);
+		// wire = 112_100; interval [111_800, 111_805] fully before it.
+		const i1 = armed(
+			intervention("d1", 2_000, 110_000, { ...ranAheadSpec }),
+			shimChannel("d1", 110_000, [{ receivedAtMs: 111_800, at: 111_805, tools: ["unrelated_tool"] }]),
+		);
+		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
+		assert.ok(
+			res.verdict === "inconclusive" && res.interventions[0].evidence.includes("snapshot-before-wire"),
+			"a snapshot that predates wire-availability carries a different claim than the §11-7-c after-the-wire row",
+		);
+	}
+
+	// (7) runtime No-such-tool for the measured id + snapshot absence → the
+	// runtime ladder OWNS the run: B, never B-name-snapshot.
+	{
+		const ctl = armedControl(120_000);
+		const i1 = armed(
+			intervention("d1", 2_000, 130_000, { ...ranAheadSpec, noSuchToolId: PROVIDER_ID_MEASURED }),
+			shimChannel("d1", 130_000, [{ receivedAtMs: 132_190, at: 132_195, tools: ["unrelated_tool"] }]),
+		);
+		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
+		assert.ok(
+			res.verdict === "B" && res.interventions[0].failure === "B",
+			"the model's own dispatch failing is the stronger runtime-B evidence and owns the combined run — the snapshot never substitutes for it",
+		);
+	}
+
+	// (8) TWO snapshots after the prompt frame → the exactly-one binding is a
+	// named violation, never a pick-first.
+	{
+		const ctl = armedControl(140_000);
+		const i1 = armed(
+			intervention("d1", 2_000, 150_000, { ...ranAheadSpec }),
+			shimChannel("d1", 150_000, [
+				{ receivedAtMs: 152_190, at: 152_195, tools: ["unrelated_tool"] },
+				{ receivedAtMs: 152_400, at: 152_405, tools: ["unrelated_tool", PROVIDER_ID_MEASURED] },
+			]),
+		);
+		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
+		assert.ok(
+			res.verdict === "inconclusive" &&
+				!res.promotable &&
+				res.interventions[0].evidence.includes("snapshot-channel-violation"),
+			"reinit/set-model re-emission making the binding ambiguous is a NAMED channel violation — the (b) reading is unavailable, never a pick-first promotion [QK:VERDICT-SNAPSHOT-ORDINAL-EXACTLY-ONE]",
+		);
+		assert.notEqual(res.status.orderingMeasurement, "unobserved", "…while axis (a) still carries its comparison");
+	}
+
+	// (9) full promotion-shaped shim evidence under an UNARMED roster → ignored.
+	// The roster is the authority on what was instrumented; found evidence never
+	// promotes past the declaration.
+	{
+		const ctl = passingControl(160_000); // unarmed
+		const i1raw = intervention("d1", 2_000, 170_000, { ...ranAheadSpec });
+		const i1 = {
+			record: i1raw.record, // snapshotInstrumented: false
+			events: [
+				...i1raw.events,
+				...shimChannel("d1", 170_000, [{ receivedAtMs: 172_190, at: 172_195, tools: ["unrelated_tool"] }]),
+			],
+		};
+		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
+		assert.ok(
+			res.verdict === "inconclusive" && !res.promotable && res.status.failureVerdict !== "B-name-snapshot",
+			"shim-shaped evidence in the log of an UNARMED run is ignored — the roster declares the instrument, evidence alone never promotes [QK:VERDICT-SNAPSHOT-NEEDS-INSTRUMENT-FLAG]",
+		);
+	}
+
+	// (10) the binding is on the RECEIVE axis, not the append axis. Under stdout
+	// backpressure a BOOT-time init (received before the prompt frame) can have
+	// its downstream callback — and therefore its log append — land after the
+	// prompt marker. A seq-only binding would promote that stale set as the turn
+	// snapshot (GPT review 2026-07-29). Timeline: promptStart 191_660 < wire
+	// 191_670 (ranAhead), shim prompt frame stamped 191_700; the ONLY snapshot
+	// was received 191_680 (BEFORE the frame) but appended at 191_750.
+	{
+		const ctl = armedControl(180_000);
+		const i1 = armed(
+			intervention("d1", 2_000, 190_000, { wireAt: 1_570, nsLatency: 1_500, fixtureCall: false }),
+			shimChannel("d1", 190_000, [{ receivedAtMs: 191_680, at: 191_750, tools: ["unrelated_tool"] }]),
+		);
+		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
+		assert.ok(
+			res.verdict === "inconclusive" &&
+				!res.promotable &&
+				res.interventions[0].evidence.includes("snapshot-channel-violation"),
+			"an init RECEIVED before the prompt frame is not a candidate even when its append lands after — the receive axis, not the append/callback axis, binds; zero candidates is a named violation [QK:VERDICT-SNAPSHOT-BINDING-RECEIVE-AXIS]",
+		);
+	}
+
+	// (11) a broken shim IDENTITY on an armed intervention invalidates the RUN —
+	// the shim intermediates the CLI spawn, so a run without the calibrated shim
+	// did not share the pair's launch path, and it may NOT keep voting on axis
+	// (a) (GPT review 2026-07-29: a missing-shim run could otherwise build A/B
+	// causal windows out of a different stimulus).
+	{
+		const ctl = armedControl(200_000);
+		const i1 = armed(intervention("d1", 2_000, 210_000, { ...ranAheadSpec }), []); // armed, NO shim events
+		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
+		assert.ok(
+			res.verdict === "INVALIDATED" &&
+				res.status.invalidRuns.some((r) => r.reason === "snapshot-topology") &&
+				res.ordering.summary === "unobserved" &&
+				res.status.orderingMeasurement !== "measured",
+			"an armed intervention whose shim never reported in is INVALIDATED (snapshot-topology) and votes on NEITHER axis — not a (b)-only degradation [QK:VERDICT-SNAPSHOT-STRUCTURAL-INVALIDATES]",
+		);
+	}
+
+	// (12) the roster's expected target identity is CONSUMED: a shim boot
+	// reporting a different content hash means this run did not execute the
+	// pair's stimulus (env hijack, target swap) → INVALIDATED, never promoted.
+	{
+		const ctl = armedControl(220_000);
+		const i1 = armed(
+			intervention("d1", 2_000, 230_000, { ...ranAheadSpec }),
+			shimChannel("d1", 230_000, [{ receivedAtMs: 232_190, at: 232_195, tools: ["unrelated_tool"] }], {
+				bootTargetSha256: "zz-different",
+			}),
+		);
+		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
+		assert.ok(
+			res.verdict === "INVALIDATED" && res.status.invalidRuns.some((r) => r.reason === "snapshot-topology"),
+			"a shim boot whose target path+sha does not match the roster's expected identity INVALIDATES the run — identity is verified, not merely recorded [QK:VERDICT-SNAPSHOT-TARGET-IDENTITY]",
+		);
+	}
+
+	// (13) a snapshot CONTAINING the measured id blocks the ladder BEFORE the
+	// promotion rung — the absence check is positional, so this rung is what
+	// keeps a present-id snapshot from promoting as absence.
+	{
+		const ctl = armedControl(240_000);
+		const i1 = armed(
+			intervention("d1", 2_000, 250_000, { ...ranAheadSpec }),
+			shimChannel("d1", 250_000, [
+				{ receivedAtMs: 252_190, at: 252_195, tools: [PROVIDER_ID_MEASURED, "unrelated_tool"] },
+			]),
+		);
+		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
+		assert.ok(
+			res.verdict === "inconclusive" &&
+				!res.promotable &&
+				res.interventions[0].evidence.includes("CONTAINS the measured id"),
+			"a snapshot that CONTAINS the measured id reads model-compliance, never absence — the contains-id rung blocks promotion [QK:VERDICT-SNAPSHOT-CONTAINS-ID-BLOCKS]",
+		);
+	}
+}
+
 rmSync(tmp, { recursive: true, force: true });
 console.log("[check-probe-ordering] PASS — §11-7 probe seam: sameness pinned to backend.ts, phase attribution");
 console.log("  (set-model included), fixture wire markers + required probeRunId + legacy compat, the event-log");
 console.log("  door contract (reserved keys refused; unknown marker / broken axis / unjudgeable payload →");
 console.log("  MALFORMED, while a legitimately absent optional field stays an observation) plus the stream");
 console.log("  door (per-pid seq/clock judged on RAW append order), the observation-window protocol");
-console.log("  (censored ≠ candidate), runner-owned marker topology, the two reported axes, and the");
+console.log("  (censored ≠ candidate), runner-owned marker topology, the two reported axes, the");
 console.log("  paired-verdict truth table (P0/I0 outside the space, phase-qualified D, B promotion ladder, C,");
-console.log("  A's two-delay rule).");
+console.log("  A's two-delay rule), and the §11-7-c consumer seam (CLI-target preconditions, upstream");
+console.log("  launch-semantics inspector, shim event doors, B-name-snapshot ladder with calibration and");
+console.log("  the roster-armed channel).");

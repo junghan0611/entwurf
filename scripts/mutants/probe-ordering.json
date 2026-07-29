@@ -463,6 +463,235 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:VERDICT-STATUS-NAMES-INVALID-RUNS]",
 			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-TARGET-AMBIENT-REFUSED",
+			"title": "running under an ambient CLAUDE_CODE_EXECUTABLE — claudeCliPath() returns it verbatim and the pair measures an unpinned executable (§11-7-c)",
+			"subject": "scripts/lib/probe-cli-target.ts",
+			"find": ["\tif (env[AMBIENT_OVERRIDE_ENV] !== undefined) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-TARGET-AMBIENT-REFUSED]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-TARGET-NATIVE-BRANCH-ONLY",
+			"title": "accepting a script-suffixed target — the SDK would take the node|bun branch and the exec semantics the seam is specified against would silently change",
+			"subject": "scripts/lib/probe-cli-target.ts",
+			"find": ["\tif (SDK_SCRIPT_SUFFIXES.some((s) => path.endsWith(s))) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-TARGET-NATIVE-BRANCH-ONLY]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-SCRUB-EXACT-ALLOWLIST",
+			"title": "dropping the override itself from the shim scrub list — the override would re-propagate to grandchildren (recursion/env drift)",
+			"subject": "scripts/lib/probe-cli-target.ts",
+			"find": [
+				"export const SHIM_SCRUB_ENV_VARS: ReadonlyArray<string> = [",
+				"\tAMBIENT_OVERRIDE_ENV,",
+				"\tPROBE_SHIM_ENV.target,"
+			],
+			"replace": ["export const SHIM_SCRUB_ENV_VARS: ReadonlyArray<string> = [", "\tPROBE_SHIM_ENV.target,"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-SCRUB-EXACT-ALLOWLIST]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "RUNNER-TARGET-PRECONDITION-PINNED",
+			"title": "spawning the ACP child without asserting the COMPOSED env is override-free — launch defaults or overlay overrides could hijack which CLI the pair measures",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": ["\t\tassertNoAmbientOverride(spawnEnv, `composed acp child env for ${runId}`);"],
+			"replace": ["\t\t// (composed-env assert removed by mutant)"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RUNNER-TARGET-PRECONDITION-PINNED]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-SNAPSHOT-PROMOTES",
+			"title": "making the B-name-snapshot promotion unreachable — a full-floor absence reading would be reported as inconclusive",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\t\t} else if (wire < facts.snapshotReceivedAtMs) {"],
+			"replace": ["\t\t} else if (false && wire < facts.snapshotReceivedAtMs) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-SNAPSHOT-PROMOTES]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-SNAPSHOT-REQUIRES-RANAHEAD",
+			"title": "promoting a snapshot absence without promptRanAhead — absence outside the delayed-window failure mode would enter the ledger",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\t\t} else if (!deltas.promptRanAhead) {"],
+			"replace": ["\t\t} else if (false) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-SNAPSHOT-REQUIRES-RANAHEAD]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-SNAPSHOT-INTERVAL-UNORDERED",
+			"title": "reading a wire marker INSIDE the snapshot interval as ordered — an overlap would be promoted as an after-the-wire absence",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\t\t} else if (wire < facts.snapshotReceivedAtMs) {"],
+			"replace": ["\t\t} else if (wire <= facts.snapshotForwardedAtMs) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-SNAPSHOT-INTERVAL-UNORDERED]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-SNAPSHOT-ORDINAL-EXACTLY-ONE",
+			"title": "accepting several bound snapshots and reading the first — reinit/set-model re-emission would silently pick a snapshot for the binding",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\t\tif (candidates.length !== 1) {"],
+			"replace": ["\t\tif (candidates.length < 1) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-SNAPSHOT-ORDINAL-EXACTLY-ONE]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-SNAPSHOT-INSTRUMENT-ABSENT",
+			"title": "folding a missing shim into generic calibration — a hijacked/replaced override must be a NAMED absence",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\t\tif (facts.shimBootCount === 0) return \"snapshot-instrument-absent\";"],
+			"replace": ["\t\t// mutant: instrument-absence check removed"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-SNAPSHOT-INSTRUMENT-ABSENT]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-SNAPSHOT-CALIBRATION",
+			"title": "skipping the control-contains-the-id calibration — an instrument that cannot SEE presence would still be allowed to claim absence",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": [
+				"\t\tif (facts.snapshotTools === undefined || !facts.snapshotTools.includes(facts.acpProviderToolId)) {",
+				"\t\t\treturn \"snapshot-calibration\";",
+				"\t\t}"
+			],
+			"replace": ["\t\t// mutant: calibration containment check removed"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-SNAPSHOT-CALIBRATION]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-SNAPSHOT-NEEDS-INSTRUMENT-FLAG",
+			"title": "arming the snapshot channel off event PRESENCE instead of the roster — found-in-the-wild evidence would promote past the instrument declaration",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\t\t...snapshotChannelFacts(run, events),"],
+			"replace": [
+				"\t\t...snapshotChannelFacts(",
+				"\t\t\t{ ...run, snapshotInstrumented: run.snapshotInstrumented === true || events.some((e) => e.event === PROBE_EVENTS.shimBoot) },",
+				"\t\t\tevents,",
+				"\t\t),"
+			],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-SNAPSHOT-NEEDS-INSTRUMENT-FLAG]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROBE-LOG-SNAPSHOT-PAYLOAD",
+			"title": "accepting a receivedAtMs after the envelope stamp at the door — a corrupt interval would silently un-order the after-the-wire read",
+			"subject": "scripts/lib/probe-event-log.ts",
+			"find": ["\t\t(e.receivedAtMs as number) <= e.tsMs,"],
+			"replace": ["\t\ttrue,"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROBE-LOG-SNAPSHOT-PAYLOAD]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "RUNNER-TARGET-IDENTITY-IN-ROSTER",
+			"title": "dropping the expected target identity from the roster record — the classifier would have nothing to verify shim boots against",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": [
+				"\t\tsnapshotInstrumented: false,",
+				"\t\tcliTargetPath: CLI_TARGET.path,",
+				"\t\tcliTargetSha256: CLI_TARGET.sha256,"
+			],
+			"replace": ["\t\tsnapshotInstrumented: false,"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RUNNER-TARGET-IDENTITY-IN-ROSTER]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "RUNNER-DRIFT-REHASH-PINNED",
+			"title": "neutering the post-pair re-hash — a target swapped mid-pair would pass as one stimulus",
+			"subject": "scripts/smoke-acp-ordering-probe-live.ts",
+			"find": ["\t\trehash = hashFileSha256(CLI_TARGET.path);"],
+			"replace": ["\t\trehash = CLI_TARGET.sha256;"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:RUNNER-DRIFT-REHASH-PINNED]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-RUNTIME-B-LADDER-OWNS",
+			"title": "disabling the runtime No-such-tool ladder — runtime-error runs would drift into other channels instead of reading B",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\t} else if (facts.noSuchToolId !== undefined) {"],
+			"replace": ["\t} else if (false && facts.noSuchToolId !== undefined) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-RUNTIME-B-LADDER-OWNS]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-SNAPSHOT-BINDING-RECEIVE-AXIS",
+			"title": "binding candidates on append order alone — under stdout backpressure a boot-time init would promote as the turn snapshot",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\t\t\t\t(e.receivedAtMs as number) > anchor.tsMs,"],
+			"replace": ["\t\t\t\ttrue,"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-SNAPSHOT-BINDING-RECEIVE-AXIS]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-SNAPSHOT-STRUCTURAL-INVALIDATES",
+			"title": "degrading a broken shim identity to a (b)-only reading — a run that did not execute the calibrated shim would keep voting on axis (a)",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\tif (facts.snapshotStructuralViolations.length > 0) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-SNAPSHOT-STRUCTURAL-INVALIDATES]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-SNAPSHOT-TARGET-IDENTITY",
+			"title": "recording the shim's boot target without verifying it — an env hijack swapping the executable would still promote",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": [
+				"\t} else if (boots.length === 1) {",
+				"\t\tif (boot.targetPath !== run.cliTargetPath || boot.targetSha256 !== run.cliTargetSha256) {"
+			],
+			"replace": ["\t} else if (boots.length === 1) {", "\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-SNAPSHOT-TARGET-IDENTITY]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "VERDICT-SNAPSHOT-CONTAINS-ID-BLOCKS",
+			"title": "removing the contains-id rung — a snapshot that SHOWS the tool present would promote as absence",
+			"subject": "scripts/lib/probe-verdict.ts",
+			"find": ["\t\t} else if (facts.snapshotTools.includes(expectedProviderToolId)) {"],
+			"replace": ["\t\t} else if (false) {"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:VERDICT-SNAPSHOT-CONTAINS-ID-BLOCKS]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
 		}
 	]
 }

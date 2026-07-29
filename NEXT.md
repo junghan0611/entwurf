@@ -43,15 +43,37 @@
   `prompt-request-ahead-of-wire`(promptStart +1546ms < wire +3416ms) — **server-wait은 여전히 미확정**이다.
   ⑵ D2 right-censor 진단 — run_end +6673ms 직후 teardown했는데 fixture는 +9384/+9385/+9388ms까지 진행했고
   control에서 initialize→tools_list가 14ms였으니 마커는 14ms 앞에 있었다.
-- **Next — 먼저 GLG의 순서 결정을 받아라. 결정 전에 착수하지 마라.**
-  §11-7의 다음 한 걸음이 LIVE인지 seam인지가 아직 열려 있다. 2026-07-29 세션은 여기서 닫혔고, GLG가
-  **결정을 다음 세션으로 넘겼다.** 두 안을 그대로 옮겨 적는다:
-  - **A안 (기존 QUEUE 순서):** LIVE pair 재실행 → (a)축 측정 확보 → 그 뒤 §11-7-c seam.
-  - **B안 (GPT 검수자 제안, 직전 세션의 권고안):** §11-7-c seam 먼저 구현 → **LIVE 한 번**으로 (a)+(b)
-    동시 확보. 근거: 지금 LIVE를 돌려도 (b)축은 다시 inconclusive가 유력하다 — 모델은 자기 스키마에 없는
-    도구를 부를 수 없고 강제 수단도 없다(§11-7-b 실측). 유료 실행을 한 번 아낀다. 대신 seam은 §11-7 probe
-    최초 랜딩에 맞먹는 덩어리다.
-  - 어느 쪽이든 **LIVE는 실 API라 GLG 승인 사안**이고, seam 구현은 §11-7-c의 조건 1~7을 그대로 따른다.
+- **결정 났다(2026-07-29, GLG): B안 — seam 먼저. 배치는 페블 Phase 0 → GPT 재검수 → 오푸스 shim 구현 →
+  페블 적대 검수 → GLG LIVE 승인.** 페블(Claude Fable) 적대 검수가 §11-7-c 문면에서 구멍 3개를 실측으로
+  확정했고(조건 1·4의 "operator override 의미 보존"은 증명 불가 — `claudeCliPath()`는 ambient override를
+  앵무새 반환하고 SDK launch는 접미사 판별로 갈린다; init ordinal 조작적 정의 부재; 러너 `:319`의
+  무검증 `...process.env` 상속), GPT가 배치를 합의했다.
+- **Phase 0 — 구현 완료, 미커밋(2026-07-29, 페블). B-name-snapshot의 소비자 절반이 코드로 닫혔다.**
+  ⑴ rail §11-7-c 전면 개정: ambient override **presence 거부** 전제조건(빈 문자열 포함, 보존 약속 삭제,
+  거부도 artifact에 named classification), single-prompt ordinal 결합(**receive-축** — append 순서가 아니라
+  `receivedAtMs`가 prompt frame 스탬프보다 strictly 뒤; backpressure 반례가 근거), 정확 allowlist
+  scrub(`SHIM_SCRUB_ENV_VARS`, wildcard 금지), pair target 동일성(path+sha256을 roster에 실어 **classifier가
+  소비** — boot 보고와 대조, drift/unreadable은 INVALIDATED), interval end는 envelope `tsMs` 단일
+  SSOT(assembly-vs-receive 카브아웃 유지), roster-armed 채널 + **위반 2계층 분리**: 구조(shim 정체성 —
+  boot 부재/중복·복수 pid·target 불일치)는 run INVALIDATED `snapshot-topology`, 판독(결합 cardinality)은
+  (b)-only named. B↮B-name-snapshot 불혼합. ⑵ 신규 `scripts/lib/probe-cli-target.ts`(presence 거부/해석/
+  regular-file·X_OK/해시), 러너 전제조건 + 드리프트 재해시, event-log shim 어휘 3종 + payload 문,
+  classifier `B-name-snapshot` 사다리. ⑶ `check-probe-ordering` §8 신설; qualified claims **37 → 56**,
+  lane mutants 37 → 56(전체 53 → 72). GPT 1차 NO-GO가 소비자 계약 반례 4건(P0)을 잡았고 전부
+  독립 QK+mutant로 닫았다 — 검수 루프가 일한 자리다.
+- **GPT 2차 검수 GO(2026-07-29 11:01, `…-0755cc`) — Phase 0 소비자 계약 승인.** GPT가 독립 재실행으로
+  focused gate·typecheck·lint·**72/72 KILLED**·origin hash 동일까지 확인했다. roster 연속-문자열 핀은
+  "fail-red 취약성"이라 현 단계 허용(장기 AST 불요) 판정.
+- **Next: ⑴ 오푸스가 shim(producer) + fake-CLI matrix + 러너 arming 구현(GLG가 착수 시점 결정),
+  ⑵ 페블 process/stream 적대 검수, ⑶ LIVE는 GLG 승인 사안.** producer가 consumer 사다리/문 계약을
+  바꾸면 GPT 재검수. **오푸스 핸드오프 경계 2건(GPT GO 조건, 지키지 않으면 재검수 무효):**
+  - **arming 순서**: `assertNoAmbientOverride(composedEnv)`를 **의도적 `CLAUDE_CODE_EXECUTABLE=shim` 주입
+    전에** 실행하고, 그 뒤 exact `PROBE_SHIM_*` + override를 주입한다. 검문이 자기 shim을 거부하도록
+    순서를 뒤집지 마라.
+  - **shim snapshot append는 반드시 downstream stdout write callback 내부**(envelope `tsMs`가 곧 interval
+    end인 이유). fake-CLI matrix가 callback placement/backpressure/byte transparency/signal/env privacy를
+    증명하기 전에는 `snapshotInstrumented: true` 금지.
+  shim이 오기 전에는 어떤 LIVE run도 B-name-snapshot 행에 도달할 수 없다(채널 unarmed 핀).
 - **닫은 검증 미결(2026-07-28 목록 대비):** 중복 마커 정책 → **닫힘**(topology exactly-once, 단 반복 가능
   마커는 earliest-wins로 명시 분리). D1 evidence ran-ahead 미노출 → **닫힘**(delta 3종 문자열 노출).
   seq 미검증 → **닫힘**(스트림 문). 계약 이전 artifact 2개 → 포렌식 전용 규율 유지(window 마커가 없으므로

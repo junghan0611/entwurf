@@ -67,6 +67,30 @@ export const PROBE_EVENTS = {
 	 *  runner records how the window closed and whether the marker was seen. */
 	observationWindowEnd: "probe_observation_window_end",
 	runEnd: "run_end",
+	// CLI-shim side (§11-7-c B-name-snapshot seam). The CONSUMER contract is
+	// live — classifier + doors judge these — while the PRODUCER (the shim
+	// itself) is not built yet, so no LIVE run can emit them; the deterministic
+	// gate exercises them through synthetic logs. A run's roster entry says
+	// whether the channel was armed (`snapshotInstrumented`), and evidence
+	// without that declaration never promotes.
+	/** The shim process is up and knows its exec target — payload carries the
+	 *  resolved target path + sha256 so a silently REPLACED override (e.g. the
+	 *  adapter's managed-policy env application overwriting process.env inside
+	 *  the ACP child) is a NAMED absence instead of an anonymous no-snapshot. */
+	shimBoot: "shim_boot",
+	/** The serialized prompt input frame for ordinal N was fully written to the
+	 *  real CLI child's stdin. The §11-7-c ordinal binding anchor: only init
+	 *  snapshots observed AFTER this marker are candidates for this prompt. */
+	shimPromptForwarded: "shim_prompt_forwarded",
+	/** One complete `system`/`init` NDJSON line observed on the real CLI's
+	 *  stdout. The snapshot timestamp is an INTERVAL, not a point: payload
+	 *  carries `receivedAtMs` (full line received) and the event's own envelope
+	 *  `tsMs` is the interval END — the shim MUST append this event inside the
+	 *  downstream write callback, so the one clock read that stamps the line IS
+	 *  the callback moment (a separate payload end-field would be a second SSOT
+	 *  the door could not hold coherent; GPT review 2026-07-29). A wire marker
+	 *  inside [receivedAtMs, tsMs] is unordered. */
+	shimInitSnapshot: "shim_init_snapshot",
 } as const;
 
 export type ProbeEventName = (typeof PROBE_EVENTS)[keyof typeof PROBE_EVENTS];
@@ -200,6 +224,20 @@ const PAYLOAD_RULES: Partial<Record<ProbeEventName, PayloadRule>> = {
 	// permissive branch of whatever consumes it, so the vocabulary is closed here.
 	[PROBE_EVENTS.observationWindowEnd]: (e) =>
 		typeof e.reason === "string" && WINDOW_REASONS.has(e.reason) && isBoolean(e.markerSeen),
+	// §11-7-c shim events — every field the classifier judges on is typed at the
+	// door, same bar as the rest. `shim_boot` names the exec target so target
+	// hijack/drift is a named finding; the snapshot's interval END is the
+	// event's own envelope tsMs (stamped in the downstream write callback — one
+	// SSOT), so the door holds `receivedAtMs ≤ tsMs` or the "after the wire"
+	// read would be built on a corrupt interval while looking healthy.
+	[PROBE_EVENTS.shimBoot]: (e) => isString(e.targetPath) && isString(e.targetSha256),
+	[PROBE_EVENTS.shimPromptForwarded]: (e) => Number.isSafeInteger(e.ordinal) && (e.ordinal as number) >= 1,
+	[PROBE_EVENTS.shimInitSnapshot]: (e) =>
+		Array.isArray(e.tools) &&
+		e.tools.every(isString) &&
+		Number.isSafeInteger(e.receivedAtMs) &&
+		(e.receivedAtMs as number) > 0 &&
+		(e.receivedAtMs as number) <= e.tsMs,
 };
 
 /** Exactly the events the classifier judges payload on — the gate pins this

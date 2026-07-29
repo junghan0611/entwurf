@@ -28,8 +28,15 @@
 // classification, and a human verdict land under .probe-artifacts/ (gitignored,
 // preserved — promotion into any ledger is a separate, manual, §11-7-gated act).
 //
-// Exit: 0 = the instrument produced a judgeable verdict (A / A-withheld / B / C
-// / D-*). 1 = P0 / recurring I0 / inconclusive — the artifact is still written.
+// Exit: 0 = the instrument produced a judgeable verdict (A / A-withheld / B /
+// B-name-snapshot / C / D-*). 1 = P0 / recurring I0 / inconclusive — the
+// artifact is still written.
+//
+// §11-7-c preconditions (before any run): refuse an ambient
+// CLAUDE_CODE_EXECUTABLE, resolve the native CLI through upstream
+// claudeCliPath(), and pin the pair's target as path + sha256 (re-hashed after
+// the runs — drift INVALIDATES the pair). The B-name-snapshot CHANNEL is not
+// armed here yet: snapshotInstrumented is pinned false until the shim lands.
 
 import { type ChildProcessByStdio, execFileSync, spawn } from "node:child_process";
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -44,6 +51,13 @@ import type { AcpBackendAdapter } from "../pi-extensions/lib/acp/backend-adapter
 import type { ResolvedAcpConfig } from "../pi-extensions/lib/acp/config.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
 import { driveProbeTurn, type ProbeMcpEnricher, ProbePhaseError } from "./lib/probe-acp-turn.ts";
+import {
+	assertNoAmbientOverride,
+	hashFileSha256,
+	ProbeCliPreconditionError,
+	type ResolvedProbeCliTarget,
+	resolveProbeCliTarget,
+} from "./lib/probe-cli-target.ts";
 import {
 	appendProbeEvent,
 	PROBE_ENV,
@@ -117,6 +131,11 @@ const enrichMcpServersWithEnvelope = configMod.enrichMcpServersWithEnvelope;
 const routed = claudeAdapter.routeModel(MODEL_ID);
 if (!routed) fail(`model ${MODEL_ID} does not route to the claude adapter`);
 const NATIVE_MODEL_ID = routed.nativeModelId;
+
+// §11-7-c precondition gate — resolved in main() BEFORE any run, AFTER the
+// artifact directory exists, so a refusal leaves a named classification on the
+// artifact instead of stderr alone. Assigned exactly once there.
+let CLI_TARGET: ResolvedProbeCliTarget;
 
 // Approve-all permission policy — mirrors backend.ts resolvePermissionResponse
 // (module-private there; check-probe-ordering pins this copy against its source).
@@ -256,7 +275,22 @@ async function runOne(
 	const runId = `run${attempt}-${index}-${Math.random().toString(36).slice(2, 8)}`;
 	const probeRunId = `prb-${Math.random().toString(36).slice(2, 10)}`;
 	const nonce = `MCP_${process.pid.toString(36)}${Date.now().toString(36)}`;
-	const record: ProbeRunRecord = { runId, role, delayMs, probeRunId };
+	// snapshotInstrumented stays FALSE until the §11-7-c shim (the producer half
+	// of the B-name-snapshot channel) lands and is wired here — flipping it is a
+	// deliberate act, not a side effect, and the classifier holds an armed
+	// control to the calibration floor. The pair's expected CLI target identity
+	// rides the roster so the classifier can CONSUME it (condition 5): once the
+	// channel is armed, a shim boot reporting any other path/sha is a
+	// snapshot-topology INVALIDATION, never a quiet substitution.
+	const record: ProbeRunRecord = {
+		runId,
+		role,
+		delayMs,
+		probeRunId,
+		snapshotInstrumented: false,
+		cliTargetPath: CLI_TARGET.path,
+		cliTargetSha256: CLI_TARGET.sha256,
+	};
 	const log = (event: ProbeEventName, payload: Record<string, unknown> = {}) =>
 		appendProbeEvent(logPath, runId, event, payload);
 
@@ -314,9 +348,14 @@ async function runOne(
 			nativeModelId: NATIVE_MODEL_ID,
 			config,
 		});
+		// The COMPOSED env is asserted, not just process.env: launch defaults or
+		// overlay overrides injecting the executable override would hijack which
+		// CLI the pair measures, silently (§11-7-c precondition).
+		const spawnEnv = { ...process.env, ...claudeAdapter.launchEnvDefaults(), ...overlay.envOverrides };
+		assertNoAmbientOverride(spawnEnv, `composed acp child env for ${runId}`);
 		child = spawn(launch.command, launch.args, {
 			cwd: scratch,
-			env: { ...process.env, ...claudeAdapter.launchEnvDefaults(), ...overlay.envOverrides },
+			env: spawnEnv,
 			stdio: ["pipe", "pipe", "pipe"],
 		}) as ChildProcessByStdio<Writable, Readable, Readable>;
 		const spawned = child;
@@ -394,7 +433,17 @@ async function runOne(
 		const stdinWeb = Writable.toWeb(spawned.stdin) as unknown as WritableStream<Uint8Array>;
 		connection = connectAcpClient(ndJsonStream(stdinWeb, stdoutWeb) as never, handlers);
 
-		log(PROBE_EVENTS.runStart, { role, delayMs, probeRunId, model: MODEL_ID, attempt });
+		log(PROBE_EVENTS.runStart, {
+			role,
+			delayMs,
+			probeRunId,
+			model: MODEL_ID,
+			attempt,
+			// The pair's stimulus identity — which CLI binary the ACP child will
+			// resolve — pinned on the artifact per run (§11-7-c condition 5).
+			cliTargetPath: CLI_TARGET.path,
+			cliTargetSha256: CLI_TARGET.sha256,
+		});
 		console.error(`[smoke-acp-ordering-probe-live] ${runId}: role=${role} delay=${delayMs}ms probeRunId=${probeRunId}`);
 
 		const promptText =
@@ -466,6 +515,39 @@ async function main(): Promise<void> {
 	const artifactDir = join(REPO_ROOT, ".probe-artifacts", "acp-ordering", stamp);
 	mkdirSync(artifactDir, { recursive: true });
 	const logPath = join(artifactDir, "events.ndjson");
+	// §11-7-c precondition gate — BEFORE any run. Refuse an ambient
+	// CLAUDE_CODE_EXECUTABLE (claudeCliPath() would return it VERBATIM and the
+	// pair would measure an unpinned executable), resolve the native CLI once
+	// through the upstream resolver, and pin the pair's stimulus identity as
+	// path + sha256. A refusal is a NAMED classification on the artifact, not a
+	// stderr-only exit. The deep import is a version-pinned internal resolver
+	// dependency; its disappearance breaks check-probe-ordering offline, never a
+	// LIVE run first.
+	try {
+		CLI_TARGET = await resolveProbeCliTarget({
+			env: process.env,
+			resolveNative: async () => {
+				const mod = (await import("@agentclientprotocol/claude-agent-acp/dist/acp-agent.js")) as {
+					claudeCliPath: () => Promise<string>;
+				};
+				return mod.claudeCliPath();
+			},
+		});
+	} catch (err) {
+		const reason = err instanceof ProbeCliPreconditionError ? `precondition-${err.reason}` : "precondition-unknown";
+		writeFileSync(
+			join(artifactDir, "classification.json"),
+			`${JSON.stringify(
+				{ verdict: "INVALIDATED", reason, message: err instanceof Error ? err.message : String(err) },
+				null,
+				2,
+			)}\n`,
+		);
+		fail(`${reason}: ${err instanceof Error ? err.message : String(err)} (artifact preserved at ${artifactDir})`);
+	}
+	console.error(
+		`[smoke-acp-ordering-probe-live] cli target: ${CLI_TARGET.path} (sha256 ${CLI_TARGET.sha256.slice(0, 12)}…)`,
+	);
 	console.error(`[smoke-acp-ordering-probe-live] model:    ${MODEL_ID} (native ${NATIVE_MODEL_ID})`);
 	console.error(`[smoke-acp-ordering-probe-live] delays:   control=0, D1=${D1_MS}ms, D2=${D2_MS}ms`);
 	console.error(`[smoke-acp-ordering-probe-live] artifact: ${artifactDir}`);
@@ -483,6 +565,56 @@ async function main(): Promise<void> {
 	}
 
 	writeFileSync(join(artifactDir, "roster.json"), `${JSON.stringify(roster, null, 2)}\n`);
+	// §11-7-c condition 5 — the pair is a delta only while every run resolved the
+	// SAME executable. The path was pinned before the runs; if its content hash
+	// moved underneath the pair (an install, a version switch), the runs did not
+	// share a stimulus and nothing may be judged across them. An UNREADABLE
+	// target at re-hash time (deleted, permissions) is the same finding with its
+	// own name — an uncaught throw here would exit without the INVALIDATED
+	// artifact this block exists to write.
+	let rehash: string;
+	try {
+		rehash = hashFileSha256(CLI_TARGET.path);
+	} catch (err) {
+		writeFileSync(
+			join(artifactDir, "classification.json"),
+			`${JSON.stringify(
+				{
+					verdict: "INVALIDATED",
+					reason: "cli-target-unreadable",
+					cliTargetPath: CLI_TARGET.path,
+					sha256Before: CLI_TARGET.sha256,
+					message: err instanceof Error ? err.message : String(err),
+				},
+				null,
+				2,
+			)}\n`,
+		);
+		fail(
+			`cli target ${CLI_TARGET.path} became unreadable during the pair — the runs cannot be shown to share one ` +
+				`stimulus; pair INVALIDATED, artifact preserved at ${artifactDir}`,
+		);
+	}
+	if (rehash !== CLI_TARGET.sha256) {
+		writeFileSync(
+			join(artifactDir, "classification.json"),
+			`${JSON.stringify(
+				{
+					verdict: "INVALIDATED",
+					reason: "cli-target-drift",
+					cliTargetPath: CLI_TARGET.path,
+					sha256Before: CLI_TARGET.sha256,
+					sha256After: rehash,
+				},
+				null,
+				2,
+			)}\n`,
+		);
+		fail(
+			`cli target ${CLI_TARGET.path} changed content during the pair (sha256 ${CLI_TARGET.sha256} → ${rehash}) — ` +
+				`the runs did not share one stimulus; pair INVALIDATED, artifact preserved at ${artifactDir}`,
+		);
+	}
 	// A corrupted line is a run-invalidating state, not a footnote: the missing
 	// line could be the very wire marker whose absence the classifier would then
 	// read as evidence. The artifact must say so ON ITS FACE — a reader of the
@@ -562,7 +694,7 @@ async function main(): Promise<void> {
 				"this pair is missing delay point(s); do not read it as a complete series",
 		);
 	}
-	const judgeableFailure = ["B", "C", "callable"];
+	const judgeableFailure = ["B", "B-name-snapshot", "C", "callable"];
 	if (
 		classification.status.orderingMeasurement !== "measured" &&
 		!judgeableFailure.includes(classification.status.failureVerdict)

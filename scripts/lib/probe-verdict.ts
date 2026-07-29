@@ -37,7 +37,12 @@
 //       `promptStart < wire` says WE issued the prompt request first and does NOT
 //       show the server failed to wait.
 //   (b) `failure`  — the callability reading: callable | C | B |
-//       candidate-handshake | inconclusive.
+//       B-name-snapshot | candidate-handshake | inconclusive. B-name-snapshot
+//       (§11-7-c) is the CONTROLLED absence reading off the CLI's own per-turn
+//       name set — a REPORT, deliberately weaker than runtime B and never
+//       conflated with it; it needs the roster-armed shim channel, control
+//       calibration, promptRanAhead, and wire strictly before the snapshot
+//       interval.
 // A (the WAIT verdict) still belongs to (a) and still needs `wire <
 // newSessionEnd` plus latency scaling across two delays. B/C's causal window is
 // `promptStart < wire` — used as a stated PREMISE (the prompt request is where
@@ -99,21 +104,52 @@ export type OrderingObservation =
  *   - `C`                   callable, but the prompt request had been issued
  *     ahead of the wire: late / dynamic readiness with no client fence.
  *   - `B`                   the marker-grade absence combination (see below).
+ *   - `B-name-snapshot`     the §11-7-c CONTROLLED absence reading — the CLI's
+ *     own per-turn tool-NAME set, captured by the shim, lacks the measured id
+ *     under the full promotion floor. DELIBERATELY a separate value: it is a
+ *     REPORT of what the CLI said it had, not the model's dispatch failing, so
+ *     it may never inherit `B`'s strength and `B` may never be read off it.
+ *     Only reachable when the run's roster entry declares the snapshot channel
+ *     armed (`snapshotInstrumented`) — evidence without the declared instrument
+ *     never promotes.
  *   - `candidate-handshake` no wire marker under a SUFFICIENT window: an MCP
  *     handshake / fixture / config candidate. Only reachable when the window
  *     closed on its deadline — a censored run never lands here, which is exactly
  *     the misattribution the first LIVE pair produced.
  *   - `inconclusive`        everything else, by default. */
-export type FailureReading = "callable" | "C" | "B" | "candidate-handshake" | "inconclusive";
+export type FailureReading = "callable" | "C" | "B" | "B-name-snapshot" | "candidate-handshake" | "inconclusive";
 
-/** Why a run is INVALIDATED — outside the verdict space entirely, like P0/I0. */
-export type RunInvalidReason = "observation-window-closed" | "topology";
+/** Why a run is INVALIDATED — outside the verdict space entirely, like P0/I0.
+ *  `snapshot-topology` (§11-7-c): the shim's IDENTITY is broken on an armed run
+ *  — no/duplicate boot, several shim pids, or a boot target that does not match
+ *  the roster's expected path+sha. The shim intermediates the CLI spawn, i.e.
+ *  it sits on the TIMING path, so a run that did not execute the calibrated
+ *  shim did not share the pair's launch path and its (a) axis is polluted too —
+ *  unlike a READING failure of the channel, which stays (b)-only. */
+export type RunInvalidReason = "observation-window-closed" | "topology" | "snapshot-topology";
 
 export interface ProbeRunRecord {
 	runId: string;
 	role: "control" | "intervention";
 	delayMs: number;
 	probeRunId: string;
+	/** §11-7-c: whether the CLI-shim snapshot channel was ARMED for this run.
+	 *  The roster is the authority on what was instrumented: shim-shaped events
+	 *  in a log whose roster says `false` are ignored (never promoted), and a
+	 *  `true` here obliges the channel to be present and coherent — the control
+	 *  P0s on a missing/incoherent instrument instead of quietly reading like an
+	 *  uninstrumented pair. The LIVE runner pins `false` until the shim (the
+	 *  producer half) lands. */
+	snapshotInstrumented: boolean;
+	/** §11-7-c condition 5: the pair's EXPECTED CLI target identity, stamped by
+	 *  the runner from its pre-run resolution. The classifier CONSUMES this —
+	 *  an armed run whose shim boot reports a different path or content hash
+	 *  did not execute the pair's stimulus (env hijack, target swap) and is
+	 *  INVALIDATED as `snapshot-topology`; an armed roster that omits the
+	 *  identity is the same finding (nothing to verify against is fail-closed,
+	 *  never fail-open). Unarmed runs carry them as forensics only. */
+	cliTargetPath?: string;
+	cliTargetSha256?: string;
 }
 
 interface PhaseFact {
@@ -158,6 +194,30 @@ export interface RunFacts {
 	 *  §11-7's only callability marker. */
 	fixtureToolCall: boolean;
 	fixtureToolCallMs?: number;
+	/** §11-7-c snapshot channel (populated ONLY when the roster armed it). */
+	snapshotInstrumented: boolean;
+	shimBootCount: number;
+	shimTargetPath?: string;
+	shimTargetSha256?: string;
+	/** STRUCTURAL findings — the shim's identity is broken (no/dup boot, several
+	 *  shim pids, boot target ≠ roster expectation, armed roster without an
+	 *  expected identity). The shim sits on the timing path, so these INVALIDATE
+	 *  the run (`snapshot-topology`) — both axes, not just (b). */
+	snapshotStructuralViolations: string[];
+	/** READING findings — the instrument ran but its exactly-one binding failed
+	 *  (prompt-frame cardinality/ordinal, candidate count ≠ 1). Deliberately NOT
+	 *  run-invalidating: the channel is one instrument on axis (b), and axis (a)
+	 *  plus the runner/fixture markers are untouched by a binding that stuttered
+	 *  — widening one instrument's reading failure over both axes would re-create
+	 *  the very axis-conflation §11-7-0 undid. The CONTROL is stricter: any entry
+	 *  here is a calibration failure and P0s the pair. */
+	snapshotChannelViolations: string[];
+	/** The ONE bound snapshot (§11-7-c: exactly one init RECEIVED after the
+	 *  prompt frame), present only when the channel is clean. The interval end
+	 *  is the event's envelope tsMs (stamped in the downstream write callback). */
+	snapshotTools?: string[];
+	snapshotReceivedAtMs?: number;
+	snapshotForwardedAtMs?: number;
 	/** ACP-side tool_call observed with matching probeRunId (visibility + the
 	 *  provider-bound id measurement). */
 	acpProviderToolId?: string;
@@ -173,6 +233,7 @@ export type InterventionReadingKind =
 	| "D-enforceModel"
 	| "D-prompt"
 	| "B"
+	| "B-name-snapshot"
 	| "C"
 	| "ordering-kept"
 	| "inconclusive";
@@ -228,6 +289,7 @@ export interface ProbeClassification {
 		| "A"
 		| "A-withheld"
 		| "B"
+		| "B-name-snapshot"
 		| "C"
 		| "D-newSession"
 		| "D-enforceModel"
@@ -479,6 +541,139 @@ function runnerTopologyViolations(events: ProbeEvent[]): string[] {
 	return violations;
 }
 
+/** §11-7-c snapshot channel for ONE run. Computed ONLY when the roster armed
+ *  the channel — shim-shaped events under an unarmed roster are ignored, so
+ *  found-in-the-wild evidence can never promote past the instrument declaration.
+ *
+ *  Findings split into TWO severities (GPT review 2026-07-29):
+ *  - STRUCTURAL — the shim's identity is broken (no/dup boot, several pids,
+ *    boot target ≠ the roster's expected path+sha, armed roster without an
+ *    expected identity). These invalidate the RUN: the shim intermediates the
+ *    CLI spawn, so a run without the calibrated shim did not share the pair's
+ *    launch path and its timing axis is polluted too.
+ *  - READING — the instrument ran but the exactly-one binding failed. (b)-only.
+ *
+ *  The ordinal binding is the NARROW single-prompt contract, on purpose: this
+ *  probe drives exactly one serialized prompt per run. A candidate must be
+ *  RECEIVED after the prompt frame passed — `receivedAtMs` strictly greater
+ *  than the prompt-forward stamp — not merely appended after it: under stdout
+ *  backpressure a BOOT-time init can have its downstream callback (and log
+ *  append) land after the prompt marker, and a seq-only binding would promote
+ *  that stale set as the turn snapshot (GPT review 2026-07-29). Same-writer
+ *  `seq` still orders the append as a sanity floor; a same-ms receive tie is
+ *  fail-closed (not a candidate). Zero candidates (the CLI did not re-emit) or
+ *  several (reinitialize / set-model re-emission) is a NAMED reading violation,
+ *  never a pick-first. Multi-prompt generalization is out of §11-7-c scope. */
+function snapshotChannelFacts(
+	run: ProbeRunRecord,
+	events: ProbeEvent[],
+): Pick<
+	RunFacts,
+	| "snapshotInstrumented"
+	| "shimBootCount"
+	| "shimTargetPath"
+	| "shimTargetSha256"
+	| "snapshotStructuralViolations"
+	| "snapshotChannelViolations"
+	| "snapshotTools"
+	| "snapshotReceivedAtMs"
+	| "snapshotForwardedAtMs"
+> {
+	if (run.snapshotInstrumented !== true) {
+		return {
+			snapshotInstrumented: false,
+			shimBootCount: 0,
+			snapshotStructuralViolations: [],
+			snapshotChannelViolations: [],
+		};
+	}
+	const shimNames: ReadonlySet<string> = new Set([
+		PROBE_EVENTS.shimBoot,
+		PROBE_EVENTS.shimPromptForwarded,
+		PROBE_EVENTS.shimInitSnapshot,
+	]);
+	const shim = events.filter((e) => shimNames.has(e.event));
+	const structural: string[] = [];
+	const reading: string[] = [];
+	const boots = shim.filter((e) => e.event === PROBE_EVENTS.shimBoot);
+	const pids = new Set(shim.map((e) => e.pid));
+	if (pids.size > 1) {
+		structural.push(`shim events came from ${pids.size} pids (${[...pids].join(", ")}) — one run has one shim`);
+	}
+	if (boots.length === 0) {
+		structural.push(
+			`no ${PROBE_EVENTS.shimBoot} — the roster armed the snapshot channel but the shim never reported in ` +
+				"(an ambient/managed-policy override replacing the shim looks exactly like this; that hijack must be " +
+				"a NAMED absence, not an anonymous no-snapshot)",
+		);
+	} else if (boots.length > 1) {
+		structural.push(`${PROBE_EVENTS.shimBoot} appears ${boots.length} times — one shim boots once per run`);
+	}
+	const boot = boots[0];
+	// Condition 5: the roster's expected identity is CONSUMED, not just recorded.
+	if (typeof run.cliTargetPath !== "string" || typeof run.cliTargetSha256 !== "string") {
+		structural.push(
+			"armed roster carries no expected CLI target identity (cliTargetPath/cliTargetSha256) — nothing to verify " +
+				"the shim's boot report against; fail-closed",
+		);
+	} else if (boots.length === 1) {
+		if (boot.targetPath !== run.cliTargetPath || boot.targetSha256 !== run.cliTargetSha256) {
+			structural.push(
+				`shim boot reports target ${boot.targetPath} (sha256 ${boot.targetSha256}) but the roster expected ` +
+					`${run.cliTargetPath} (sha256 ${run.cliTargetSha256}) — this run did not execute the pair's stimulus`,
+			);
+		}
+	}
+	const prompts = shim.filter((e) => e.event === PROBE_EVENTS.shimPromptForwarded);
+	let bound: ProbeEvent | undefined;
+	if (prompts.length !== 1) {
+		reading.push(
+			`${PROBE_EVENTS.shimPromptForwarded} appears ${prompts.length} times — the single-prompt binding needs exactly one`,
+		);
+	} else if (prompts[0].ordinal !== 1) {
+		reading.push(
+			`${PROBE_EVENTS.shimPromptForwarded} carries ordinal ${prompts[0].ordinal} — this probe serializes exactly one prompt (ordinal 1)`,
+		);
+	} else {
+		// Candidates must satisfy BOTH orders: append after the anchor (same
+		// writer, exact seq) AND received after the anchor's stamp on the
+		// receive-time axis — the backpressure counter-example above is exactly
+		// a candidate that passes the first and fails the second.
+		const anchor = prompts[0];
+		const candidates = shim.filter(
+			(e) =>
+				e.event === PROBE_EVENTS.shimInitSnapshot &&
+				e.pid === anchor.pid &&
+				e.seq > anchor.seq &&
+				(e.receivedAtMs as number) > anchor.tsMs,
+		);
+		if (candidates.length !== 1) {
+			reading.push(
+				`${candidates.length} init snapshots RECEIVED after the prompt frame — the exactly-one binding is violated ` +
+					"(0 = the CLI did not re-emit init for this turn, or the only post-append snapshot was received " +
+					"before the frame; >1 = reinitialize/set-model re-emission made the binding ambiguous). Never pick-first",
+			);
+		} else {
+			bound = candidates[0];
+		}
+	}
+	const clean = structural.length === 0 && reading.length === 0;
+	return {
+		snapshotInstrumented: true,
+		shimBootCount: boots.length,
+		shimTargetPath: typeof boot?.targetPath === "string" ? boot.targetPath : undefined,
+		shimTargetSha256: typeof boot?.targetSha256 === "string" ? boot.targetSha256 : undefined,
+		snapshotStructuralViolations: structural,
+		snapshotChannelViolations: reading,
+		snapshotTools: clean && bound !== undefined ? (bound.tools as string[]) : undefined,
+		snapshotReceivedAtMs: clean && bound !== undefined ? (bound.receivedAtMs as number) : undefined,
+		// The interval END is the snapshot event's own envelope stamp — the shim
+		// appends inside the downstream write callback, so one clock read IS the
+		// callback moment (no second SSOT to drift).
+		snapshotForwardedAtMs: clean && bound !== undefined ? bound.tsMs : undefined,
+	};
+}
+
 /** Derive one run's facts from the shared log (events already parsed+sorted). */
 export function deriveRunFacts(run: ProbeRunRecord, allEvents: ProbeEvent[]): RunFacts {
 	const events = allEvents.filter((e) => e.runId === run.runId);
@@ -517,6 +712,7 @@ export function deriveRunFacts(run: ProbeRunRecord, allEvents: ProbeEvent[]): Ru
 		wireForwardedMs,
 		fixtureToolCall: fixtureCall !== undefined,
 		fixtureToolCallMs: fixtureCall?.tsMs,
+		...snapshotChannelFacts(run, events),
 		acpProviderToolId: typeof acpCall?.providerToolId === "string" ? acpCall.providerToolId : undefined,
 		noSuchToolId: typeof noSuchTool?.toolId === "string" ? noSuchTool.toolId : undefined,
 		nonceEchoed: reply?.carriesNonce === true,
@@ -537,6 +733,22 @@ function controlP0Reason(facts: RunFacts): string | undefined {
 	if (!facts.fixtureToolCall) return "tool-unavailable";
 	if (facts.acpProviderToolId === undefined) return "tool-unavailable";
 	if (!facts.nonceEchoed) return "nonce-missing";
+	// §11-7-c condition 7 calibration — only when the roster ARMED the channel.
+	// The control must prove the instrument works before any intervention absence
+	// may be read: shim reported in with the EXPECTED target, channel coherent,
+	// and the snapshot CONTAINS the measured id while the fixture call + nonce
+	// echo succeeded (both already held above). A control that cannot show all of
+	// that is not a baseline for an absence claim — and each failure class keeps
+	// its NAME (absent instrument / broken shim identity / broken reading) so a
+	// hijacked override never reads like an uninstrumented pair.
+	if (facts.snapshotInstrumented) {
+		if (facts.shimBootCount === 0) return "snapshot-instrument-absent";
+		if (facts.snapshotStructuralViolations.length > 0) return "snapshot-topology";
+		if (facts.snapshotChannelViolations.length > 0) return "snapshot-calibration";
+		if (facts.snapshotTools === undefined || !facts.snapshotTools.includes(facts.acpProviderToolId)) {
+			return "snapshot-calibration";
+		}
+	}
 	return undefined;
 }
 
@@ -596,6 +808,17 @@ function classifyIntervention(facts: RunFacts, expectedProviderToolId: string | 
 	// them is a measurement of anything. Same list the control is held to.
 	if (facts.validityViolations.length > 0) {
 		return invalid("topology", `run validity violated — ${facts.validityViolations.join(" | ")}`);
+	}
+	// §11-7-c: a broken shim IDENTITY on an armed run invalidates the RUN, not
+	// just the (b) reading — the shim intermediates the CLI spawn, so a run that
+	// did not execute the calibrated shim (missing/dup boot, second pid, wrong
+	// target) did not share the pair's launch path, and letting it keep voting on
+	// axis (a) would build A/B causal windows out of a different stimulus.
+	if (facts.snapshotStructuralViolations.length > 0) {
+		return invalid(
+			"snapshot-topology",
+			`shim identity violated on an armed run — ${facts.snapshotStructuralViolations.join(" | ")}`,
+		);
 	}
 	if (facts.delayMs <= 0 || facts.delayMs >= DELAY_WELL_BELOW_MS) {
 		return {
@@ -710,6 +933,51 @@ function classifyIntervention(facts: RunFacts, expectedProviderToolId: string | 
 			failure = "inconclusive";
 			evidence = `No-such-tool named ${facts.noSuchToolId} but the measured provider-bound id is ${expectedProviderToolId ?? "unmeasured"} — model/alias mismatch, not absence evidence`;
 		}
+	} else if (facts.snapshotInstrumented) {
+		// §11-7-c B-name-snapshot ladder — reachable ONLY in the branch with no
+		// fixture call and no runtime No-such-tool. That placement is the
+		// anti-conflation rule in structure: a runtime No-such-tool run stays on
+		// the runtime ladder above (only the exact measured id reads B there),
+		// and a snapshot absence can never upgrade into B because this branch
+		// cannot assign it. The promotion floor (condition 7): control
+		// calibration already held (P0 gated), snapshot absence of the MEASURED
+		// id, promptRanAhead, wire strictly before the snapshot interval, valid
+		// topology/window (gated above).
+		const wire = facts.wireForwardedMs;
+		if (facts.snapshotChannelViolations.length > 0) {
+			failure = "inconclusive";
+			evidence = `snapshot-channel-violation: ${facts.snapshotChannelViolations.join(" | ")} — the (b) snapshot reading is unavailable for this run; axis (a) and the runner/fixture markers are unaffected (${deltaEvidence(deltas)})`;
+		} else if (
+			expectedProviderToolId === undefined ||
+			facts.snapshotTools === undefined ||
+			facts.snapshotReceivedAtMs === undefined ||
+			facts.snapshotForwardedAtMs === undefined
+		) {
+			failure = "inconclusive";
+			evidence = `snapshot channel clean but the comparison inputs are incomplete (measured id ${expectedProviderToolId ?? "unmeasured"}) — unlisted combination stays inconclusive (${deltaEvidence(deltas)})`;
+		} else if (facts.snapshotTools.includes(expectedProviderToolId)) {
+			failure = "inconclusive";
+			evidence = `the CLI's turn-init name set CONTAINS the measured id ${expectedProviderToolId} yet no tools/call arrived — model-compliance reading, not absence (${deltaEvidence(deltas)})`;
+		} else if (!deltas.promptRanAhead) {
+			failure = "inconclusive";
+			evidence = `snapshot absence of ${expectedProviderToolId} but the prompt request was NOT issued ahead of wire-availability — not the delayed-window failure mode (${deltaEvidence(deltas)})`;
+		} else if (wire < facts.snapshotReceivedAtMs) {
+			// The interval rule (condition 6): only wire STRICTLY before the
+			// interval's start reads as "snapshot after wire". This orders the
+			// REPORT, not the set's assembly — the CLI assembled the name set at
+			// some unobservable earlier moment — so the promoted claim stays "the
+			// CLI's per-turn account, received after wire-availability, lacked the
+			// id", never "the schema was fixed at T".
+			failure = "B-name-snapshot";
+			promotable = true;
+			evidence = `prompt request issued ahead of wire-availability ∧ no fixture tools/call ∧ CLI turn-init name set (received ${facts.snapshotReceivedAtMs - wire}ms after the wire marker) lacks the measured id ${expectedProviderToolId} — the §11-7-c controlled absence reading, WEAKER than runtime-B by design (${deltaEvidence(deltas)})`;
+		} else if (wire <= facts.snapshotForwardedAtMs) {
+			failure = "inconclusive";
+			evidence = `the wire marker lands INSIDE the snapshot interval [received ${facts.snapshotReceivedAtMs}, forwarded ${facts.snapshotForwardedAtMs}] — unordered at this resolution, not promotable (${deltaEvidence(deltas)})`;
+		} else {
+			failure = "inconclusive";
+			evidence = `snapshot-before-wire: the CLI reported its name set before the tools reached the wire — absence there is a different claim than §11-7-c's "after the wire" row (${deltaEvidence(deltas)})`;
+		}
 	} else {
 		// No call marker, no direct runtime error. Model prose alone never promotes
 		// — but the ORDERING observation above is unaffected by that, which is the
@@ -722,11 +990,13 @@ function classifyIntervention(facts: RunFacts, expectedProviderToolId: string | 
 	const kind: InterventionReadingKind =
 		failure === "B"
 			? "B"
-			: failure === "C"
-				? "C"
-				: failure === "callable" && ordering === "wire-before-newSession-end"
-					? "ordering-kept"
-					: "inconclusive";
+			: failure === "B-name-snapshot"
+				? "B-name-snapshot"
+				: failure === "C"
+					? "C"
+					: failure === "callable" && ordering === "wire-before-newSession-end"
+						? "ordering-kept"
+						: "inconclusive";
 
 	return { ...base, kind, ordering, failure, promotable, evidence };
 }
@@ -856,7 +1126,9 @@ export function classifyProbe(runs: ProbeRunRecord[], events: ProbeEvent[]): Pro
 		};
 	}
 
-	const decisive = readings.find((r) => r.kind === "B" || r.kind === "C" || r.kind.startsWith("D-"));
+	const decisive = readings.find(
+		(r) => r.kind === "B" || r.kind === "B-name-snapshot" || r.kind === "C" || r.kind.startsWith("D-"),
+	);
 	if (decisive) {
 		return {
 			...controlResult,

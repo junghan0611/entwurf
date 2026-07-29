@@ -652,7 +652,10 @@ instrument inherit a stronger claim (GPT review 2026-07-29):
 So the snapshot row is named `B-name-snapshot` and kept separate. What it may say is narrow: *in this paired run,
 the injected delay was sufficient to produce a CLI-reported name-set absence.* What it may never say is that the
 2026-07-24 incidents are explained — controlled sufficiency is not historical attribution. The seam, its
-conditions, and its limits are §11-7-c; **it is not instrumented yet**, so no run may currently reach this row.
+conditions, and its limits are §11-7-c. **The CONSUMER half is instrumented** (2026-07-29: the log doors, the
+classifier ladder, and the runner preconditions exist and are gate-qualified offline); **the PRODUCER — the CLI
+shim — is not built**, and the LIVE runner pins the channel unarmed (`snapshotInstrumented: false`), so no LIVE
+run can currently reach this row.
 
 **A snapshot must be time-closed, or it is a different claim.** The ordering the row requires is
 
@@ -829,7 +832,8 @@ intervention now carries both:
   `wire-before-newSession-end` · `wire-before-prompt-request` (`newSession` end < wire < `promptStart`) ·
   `prompt-request-ahead-of-wire` · `censored` · `unknown` (no marker under a sufficient window, or a same-ms
   cross-process tie, which is unordered at this resolution).
-- **(b) `failure` — the callability reading**: `callable` · `C` · `B` · `candidate-handshake` · `inconclusive`.
+- **(b) `failure` — the callability reading**: `callable` · `C` · `B` · `B-name-snapshot` (§11-7-c, only under a
+  roster-armed snapshot channel) · `candidate-handshake` · `inconclusive`.
 
 **Every (a) value is named for the comparison it IS, never for a conclusion.** The first cut named them
 `wait-observed` / `no-wait`, and review rejected that (2026-07-29): `promptStart` is a **client-side proxy** —
@@ -985,7 +989,7 @@ forced-tool parameter. So delta-B's runtime `No such tool` is not reachable by s
 model, and repeating the prompt is not a plan. The oracle has to change instead — §11-7-c.
 
 
-### 11-7-c. The `B-name-snapshot` seam — agreed design, NOT yet instrumented (2026-07-29)
+### 11-7-c. The `B-name-snapshot` seam — consumer half instrumented, producer owed (2026-07-29)
 
 Delta-B's runtime `No such tool` is unreachable by stimulus tuning (§11-7-b). The oracle has to change, and the
 one that can carry an absence claim without depending on model compliance is a snapshot of what the CLI reports
@@ -997,7 +1001,7 @@ as available. Where that lives was measured, not assumed:
 - **The current ACP stdio seam cannot see it.** That same handler consumes only `capabilities` and
   `fast_mode_state` and drops the rest; the message never crosses the ACP wire. Ruled out by measurement, not
   by preference.
-- **`acp-agent.js:4085`** resolves `pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE ?? (await
+- **`acp-agent.js:4083`** resolves `pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_EXECUTABLE ?? (await
   claudeCliPath())`. That env var is a **supported executable override seam** — upstream's own `--cli` path
   delegates through `claudeCliPath()` the same way. It is *not* an upstream sanction of instrumentation
   wrappers, and this document does not claim it is.
@@ -1006,38 +1010,136 @@ as available. Where that lives was measured, not assumed:
   Therefore historical sufficiency stays open — the strongest reachable oracle is deliberately not the ground
   truth, and that asymmetry is recorded rather than papered over.
 
-**The seam, when built:** a probe-only shim at `CLAUDE_CODE_EXECUTABLE` that execs the real CLI and tees its
-stream-json stdout, under these conditions (all agreed in cross-review before any code):
+**The launch semantics the seam sits inside were measured, and they closed the first draft's biggest hole
+(cross-review 2026-07-29).** The SDK does not launch every `pathToClaudeCodeExecutable` the same way: a pure
+suffix test (`.js/.mjs/.tsx/.ts/.jsx` — note `.cjs` is absent, a live sharp edge) sends script paths to
+`node|bun <path> <flags>` (bun iff the adapter itself runs under bun) while anything else is spawned
+**directly** — `child_process.spawn`, no shell, `cwd` = the ACP session cwd, so a relative override resolves
+against the *session* directory and a bare command walks `PATH`. And `claudeCliPath()` returns an ambient
+`CLAUDE_CODE_EXECUTABLE` **verbatim** — no resolution, no validation. So the first draft's condition — "the
+exact path the operator's setting resolved to is what gets executed" — was an unprovable promise: preserving
+arbitrary override shapes means reproducing the suffix discriminator and the interpreter choice, i.e. a second
+copy of upstream launch semantics that can drift in silence. The seam **narrows the precondition honestly
+instead**: the pair's validity comes from control and interventions sharing ONE launch path, not from operator
+override generality, so the probe refuses what it cannot pin. Two more measured facts feed the conditions
+below: `claudeCliPath()` has a **second consumer** (`claude auth logout`, `acp-agent.js:841`), so the shim must
+be argv-agnostic passthrough rather than assume stream-json; and the adapter's `index.js` applies
+managed-policy env onto `process.env` **before** `runAcp()`, so a policy-tier `CLAUDE_CODE_EXECUTABLE` can
+silently replace the shim inside the ACP child — which is why a missing instrument must be a NAMED finding.
 
-1. The runner resolves the native binary through upstream `claudeCliPath()` **before** setting the override and
-   passes that exact path to the shim by a separate probe env var. Never a bare `claude` off `PATH` — that is
-   stimulus drift. The deep import is a **version-pinned internal resolver dependency** (the package exposes it
-   through an `exports` wildcard, not a root public export), and its disappearance must break an offline gate.
-2. Attribution is by **serialized prompt ordinal**, not by any native request id: ACP prompts are pinned
-   one-at-a-time and the runner's prompt ordinal binds to the shim's observed init ordinal with exactly-one
-   cardinality. A follow-up prompt is ordinal 2.
+**The seam:** a probe-only shim at `CLAUDE_CODE_EXECUTABLE` that spawns the real CLI and tees its stream-json
+stdout, under these conditions (agreed in cross-review before any code; amended by the adversarial re-review of
+2026-07-29):
+
+1. **Ambient-override refusal, then resolution, then asserts — never a fallback.** The runner refuses to run
+   if the `CLAUDE_CODE_EXECUTABLE` key is **present at all — an empty string included**: upstream consumers
+   disagree about empty (the `??` at `acp-agent.js:4083` passes "" on as set; a truthy check treats it as
+   unset), and the probe refuses the ambiguity instead of picking a side. A refusal writes a **named
+   `INVALIDATED (precondition-<reason>)` classification onto the artifact**, not stderr alone. In the
+   ambient-clean state the runner resolves the target once through upstream `claudeCliPath()` and **asserts**
+   — absolute path, a regular file, executable (`X_OK`), no script suffix (the same pinned suffix list,
+   applied as a gate, never as launch logic) — then records the target as **path + sha256** and passes it to
+   the shim by a probe env var. The COMPOSED spawn env of every ACP child is asserted override-free too
+   (launch defaults / overlay overrides could inject what `process.env` did not carry). The deep import is a
+   **version-pinned internal resolver dependency** (an `exports`-wildcard subpath, not a root export), and its
+   disappearance breaks `check-probe-ordering` offline, never a LIVE run first. Preserving operator override
+   shapes is **out of probe scope by refusal** — recorded, not papered over.
+2. **Attribution is by the narrow single-prompt binding, not by any native request id.** This probe serializes
+   exactly ONE prompt per run, so the contract is operational and small: the shim stamps when the prompt input
+   frame has fully passed to the CLI's stdin (`shim_prompt_forwarded`, ordinal 1), and the ONLY candidate
+   snapshots are init lines **RECEIVED after that marker — `receivedAtMs` strictly greater than the frame
+   stamp, a same-ms tie fail-closed — not merely appended after it**: under stdout backpressure a boot-time
+   init can have its downstream callback (and log append) land after the prompt marker, and an append-order
+   binding would promote that stale set as the turn snapshot (GPT review 2026-07-29). Same-writer `seq` still
+   orders the append as a sanity floor; boot-time init lines are legal non-candidates. **Exactly one**
+   candidate binds; zero (the CLI did not re-emit, or the only late-appended snapshot was received before the
+   frame) or several (reinitialize / set-model re-emission) is a NAMED reading violation — never a pick-first.
+   Multi-prompt generalization is explicitly out of §11-7-c scope.
 3. The shim preserves argv / stdin / stdout / stderr / exit / signal, and logs **no** auth, env, argv or prompt
    body — only allowlisted init fields (`tools`, `mcp_servers` status, `model`) plus ordinal and timing. It
    keeps a bounded in-memory line buffer for NDJSON framing; every other byte is exact-passthrough and then
-   discarded.
-4. It **scrubs its own env from the child**: `CLAUDE_CODE_EXECUTABLE` and every probe-private variable are
-   removed before exec, or the override re-propagates to grandchildren and produces recursion or env drift.
-   An operator who was already using `CLAUDE_CODE_EXECUTABLE` keeps their meaning, because the exact path their
-   setting resolved to is what gets executed.
-5. Control and intervention use the **same** shim — a tee changes timing, and only a shared one keeps the pair
-   a delta. Byte-transparency, backpressure, and exit/signal propagation are proved by a fake-CLI deterministic
-   gate.
-6. The snapshot timestamp is an **interval**, not a point: full-init-line received ↔ downstream write callback.
-   A wire marker overlapping that interval is unordered; only `wire < snapshotReceived` reads as "after".
-7. Promotion floor: the **control** snapshot must contain `expectedProviderToolId` with the fixture call and
-   nonce echo succeeding (calibration), and only then may an intervention with snapshot absence +
-   `promptRanAhead` + no fixture call + valid topology and window read `B-name-snapshot`. `mcp_servers.status`
-   is a supporting fact and never a substitute for the name set.
+   discarded. It assumes **nothing about its argv**: invoked for anything other than a stream-json turn (e.g.
+   the `auth logout` consumer), it is pure passthrough whose only log line is its boot marker. stderr passes
+   through untouched — the SDK reads a stderr tail for its own diagnostics.
+4. It **scrubs an exact allowlist from the child's env, never a prefix**: `CLAUDE_CODE_EXECUTABLE` plus each
+   probe-private variable **by literal name** (the `SHIM_SCRUB_ENV_VARS` constant is the single source), or the
+   override re-propagates to grandchildren and produces recursion or env drift. A wildcard scrub (`PROBE_*`)
+   would also delete operator env this probe has no claim on. Under condition 1's refusal, deletion IS exact
+   preservation — there is no prior operator value to restore.
+5. Control and intervention use the **same** shim **and the same resolved target — verified, not merely
+   recorded**: the runner pins the target's path + sha256 before the first run, stamps both on every
+   `run_start` (forensics) **and on every roster record (the authoritative copy the classifier consumes)**,
+   and re-hashes after the last run — a content drift INVALIDATES the pair (`cli-target-drift`), an unreadable
+   target at re-hash time likewise (`cli-target-unreadable`), because runs that cannot be shown to share one
+   stimulus are not a delta. On an armed run the shim's own boot report (`shim_boot.targetPath/targetSha256`)
+   **must match the roster's expected identity**; a mismatch — or an armed roster with no expected identity to
+   verify against — is a structural finding under condition 7, so a managed-policy env swap of the target can
+   never promote. Byte-transparency, backpressure, and exit/signal propagation are proved by a fake-CLI
+   deterministic gate.
+6. The snapshot timestamp is an **interval**, not a point: full-init-line received ↔ downstream write
+   callback. The interval's END has **one SSOT**: the snapshot event's own envelope `tsMs` — the shim appends
+   the event *inside* the downstream write callback, so the single clock read that stamps the line IS the
+   callback moment, and the payload carries only `receivedAtMs` (a separate payload end-field would be a
+   second SSOT the log door could not hold coherent; GPT review 2026-07-29 — the door enforces
+   `receivedAtMs ≤ tsMs`, and the callback *placement* is the review-pinned property). A wire marker inside
+   that interval is unordered; only `wire < snapshotReceived` (strict, against the interval's START) reads as
+   "after". **And the interval orders the REPORT, not the assembly**: the CLI assembled its name set at some
+   unobservable earlier moment, so `wire < snapshotReceived` never upgrades into "the schema was fixed at T" —
+   the promoted claim stays "the CLI's per-turn account, received after wire-availability, lacked the id"
+   (§11-7-0's ban restated here on purpose).
+7. **Promotion floor, and the instrument is part of the roster.** A run's roster entry declares whether the
+   snapshot channel was armed (`snapshotInstrumented`); shim-shaped events under an unarmed roster are ignored
+   — found evidence never promotes past the declared instrument. Under an armed roster the **control** must
+   calibrate: shim boot marker present (a missing shim is the NAMED reason `snapshot-instrument-absent` — the
+   managed-policy hijack above looks exactly like this), shim identity intact, channel coherent, and the
+   control snapshot containing `expectedProviderToolId` with the fixture call and nonce echo succeeding
+   (`snapshot-topology` / `snapshot-calibration` otherwise; all are P0 reasons, because an instrument that
+   cannot show presence may not claim absence). Only then may an intervention with snapshot absence of the
+   measured id + `promptRanAhead` + no fixture call + wire strictly before the interval + valid topology and
+   window read `B-name-snapshot`. **Channel failures on an intervention split by severity, and the split is
+   load-bearing (GPT review 2026-07-29):**
+   - **structural — the shim's IDENTITY is broken** (no or duplicate boot marker, shim events from several
+     pids, a boot target that does not match the roster's expected path+sha, an armed roster with no expected
+     identity): the run is **INVALIDATED (`snapshot-topology`)** on BOTH axes. The shim intermediates the CLI
+     spawn — it sits on the timing path — so a run that did not execute the calibrated shim did not share the
+     pair's launch path, and letting it keep voting on axis (a) would build A/B causal windows out of a
+     different stimulus.
+   - **reading — the instrument ran but the exactly-one binding failed** (prompt-frame cardinality/ordinal,
+     candidate count ≠ 1): the (b) snapshot reading is unavailable (named, `inconclusive`) and axis (a)
+     stands — the runner/fixture markers never depended on the binding, and widening a reading failure over
+     both axes would repeat the very conflation §11-7-0 undid.
+   `mcp_servers.status` is a supporting fact and never a substitute for the name set. **`B` and
+   `B-name-snapshot` never mix, in either direction**: a run carrying a runtime `No such tool` stays on the
+   runtime ladder (only the exact measured id reads `B` there), and the snapshot ladder is structurally
+   unreachable in that case; a snapshot absence alone can never be reported as `B`.
+8. **Shim events pass the same log doors as everyone else.** The shim appends to the one shared NDJSON log
+   under the same envelope, vocabulary, and stream rules ((runId, pid) sequencing), and every payload field the
+   classifier judges on is typed at the door — including interval sanity (`received ≤ forwarded`), because an
+   inverted interval would un-order the "after the wire" read while looking healthy. It receives its runId and
+   log path via probe-private env vars that are themselves on the condition-4 scrub list.
 
-Its upstream assumptions — the `claudeCliPath` export, and `CLAUDE_CODE_EXECUTABLE` winning over
-`...userProvidedOptions` by key order at `acp-agent.js:4085` — are load-bearing and order-dependent, so they
-belong to `check-probe-ordering` / the `probe-ordering` mutant lane as the consuming gate, with
-`check-acp-sdk-surface` keeping only its own version facts. One oracle, one consumer binding. `node_modules`
-can never be a mutant subject, so the qualified subject is a tracked inspector validated against synthetic
-source fixtures (correct order · `userProvidedOptions` inverted to win · export absent) and then applied to the
-installed dist.
+Its upstream assumptions are load-bearing and order-dependent, so they live in `check-probe-ordering` / the
+`probe-ordering` mutant lane as the consuming gate, with `check-acp-sdk-surface` keeping only its own version
+facts. One oracle, one consumer binding. `node_modules` can never be a mutant subject, so the subject is a
+**tracked inspector** validated against synthetic source fixtures (correct order · `userProvidedOptions`
+inverted to win · export absent · suffix list drifted) and then applied to the installed dists. The pinned
+set: the `claudeCliPath` export **and its verbatim-env return**, `CLAUDE_CODE_EXECUTABLE` winning over
+`...userProvidedOptions` by key order at `acp-agent.js:4083`, the SDK's script-suffix discriminator equal to
+the probe's own `SDK_SCRIPT_SUFFIXES`, the `node|bun` default-executable choice, and the piped no-shell spawn
+shape.
+
+**Phase 0 status (2026-07-29): the consumer half is BUILT (uncommitted); the producer is owed.** Built offline
+and mutant-qualified: the CLI-target precondition seam (`scripts/lib/probe-cli-target.ts` — presence refusal,
+resolution asserts incl. regular-file/executable, hash pinning, the exact scrub allowlist), the runner
+preconditions (ambient + composed-env refusal with artifact-written refusals, target identity on `run_start`
+AND the roster, post-pair drift/unreadable re-hash, channel pinned unarmed), the shim event vocabulary and
+payload doors (envelope-`tsMs` interval end), and the full classifier ladder for `B-name-snapshot`
+(calibration, receive-axis single-prompt binding, interval ordering, roster-armed authority, target-identity
+verification, structural-vs-reading severity split, non-conflation). A second adversarial cross-review
+(2026-07-29, GPT NO-GO round) found and closed four consumer-contract counter-examples — append-axis binding,
+a dual-SSOT interval end, an unsplit severity model, and recorded-but-unconsumed target identity — all now
+gate-pinned with independent kill-qualified claims. Still owed to reach this row on a LIVE pair: the shim
+itself (the fake-CLI matrix of condition 5 comes with it), the runner wiring that arms the channel, and
+GLG-approved LIVE re-measurement. One honesty carve-out carries over from §11-7-a: like the fixture's
+write-callback timing, the shim's downstream write-callback **placement** is review-pinned, not mutant-proven
+— the door's `receivedAtMs ≤ tsMs` rule bounds it, the placement itself lives in source review.
