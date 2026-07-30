@@ -146,7 +146,7 @@ export function resolveAcpBackendAdapter(modelId: string): { adapter: AcpBackend
 | **ensureOverlay** | `CLAUDE_CONFIG_DIR` whitelist overlay (auth/runtime kept, memory/hooks/projects hidden, `hooks:{}`) | **dual-HOME containment** (§11-8 A): refuse an ambient `CORTEX_HOME` (presence incl. empty — D3); materialize a per-session isolated HOME with `.snowflake` inside it (D2); symlink the measured-minimum auth (`connections.toml` / optional `config.toml` / `cortex/cache/credential_cache` — D5/F); author `autoUpdate:false` (D4); **project** the envelope-enriched explicit `mcpServers` into overlay-private `cortex/mcp.json` with the real operator HOME restored on the `entwurf-bridge` entry alone (D9/D10), non-stdio entries failing loud before spawn; exact rewrite per spawn + dead-pid scope sweep |
 | **loadCarrier + buildSessionMeta** | carrier = the shipped engraving (`loadCarrier` → string); `buildSessionMeta` → `_meta.systemPrompt` (short, pure, billing-safe) | **`loadCarrier` → null, `buildSessionMeta` → undefined** — cortex is *system-prompt-carrier-less* (it has no `_meta.systemPrompt`; it does read `_meta` for a caller-session-id seam that is measured-but-unexplored and not part of this contract — §11-8). The operator engraving rides the first-user augment (`ENTWURF_ACP_ENGRAVING_PATH`) |
 | **enforceModel** | per-turn `setSessionConfigOption({ configId: "model" })` | **the same per-turn `setSessionConfigOption({ configId: "model" })`, with the native id** — measured GO against the live surface (§11-8 CP0-M); a curated id the running cortex no longer serves fails loud *before* the prompt, which is the curation-drift guard |
-| **gates** | `check-acp-*` family + the LIVE `smoke-acp-*-live` floor | `check-acp-cortex` (in `pnpm check`; mutant lane `acp-cortex` under `check-gate-qualification`) + on-demand `LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live` — deliberately OUTSIDE the claude-only aggregate LIVE floor, which means *unwired*, NOT *unneeded*: shipping cortex still owes this run (§11-8 tail) |
+| **gates** | `check-acp-*` family + the LIVE `smoke-acp-*-live` floor | `check-acp-cortex` (in `pnpm check`; mutant lane `acp-cortex` under `check-gate-qualification`) + on-demand `LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live` — deliberately OUTSIDE the claude-only aggregate LIVE floor, which means *unwired*, NOT *unneeded*: the aggregate gate's silence is never a cortex pass, so every cut shipping cortex owes a deliberate run of it — 0.13.0 paid that debt on its landing tree (§11-8 tail) |
 
 **Two design touchstones (updated at the 0.13 landing):**
 1. `loadCarrier` / `buildSessionMeta` must support the **carrier-less case** (cortex). `buildSessionMeta`
@@ -1247,16 +1247,26 @@ in the CP0 audit itself** and was deferred to `smoke-acp-cortex-live` (CP2), tog
 reclaim — an MCP-configured cortex child does **not** exit on stdin EOF (measured twice), so production's
 `killChildGroup` teardown is load-bearing, not hygiene.
 
-**CP2 closed the same day (2026-07-29).** `smoke-acp-cortex-live` ran **PASS 23/23** on thinkpad
-(connection `XD75151`, target `entwurf/cortex-claude-sonnet-5`): outbound `entwurf_v2` delivered to a
-seeded peer as `entwurf/<cortex model>`, overlay disk facts, and process-group reclaim. So the CP0 sentence
-above is history, not an open debt — what remains owed is *reach*, not the capability: the run is
-single-host, single-connection, from a clone, and was **not** repeated after the overlay `sessionKey`
-repair (that change moved the scope key's SOURCE while its VALUE was identical under those LIVE conditions,
-so the runtime overlay semantics it exercised are unchanged — a judgement recorded here rather than a
-re-measurement). Provenance for the numbers is commit `f18ecfe`'s message; this section did not re-run
-them. The installed-consumer axis (cold start / reuse / outbound v2 from a real operator install) is a
-separate lane and is still open.
+**CP2 closed the same day (2026-07-29), and was re-measured on the 0.13.0 landing tree (2026-07-30).**
+`smoke-acp-cortex-live` ran **PASS 23/23** on thinkpad (connection `XD75151`, target
+`entwurf/cortex-claude-sonnet-5`): outbound `entwurf_v2` delivered to a seeded peer as
+`entwurf/<cortex model>`, overlay disk facts, and process-group reclaim. So the CP0 sentence above is
+history, not an open debt. The earlier edition of this paragraph recorded a *judgement* that the overlay
+`sessionKey` repair needed no re-run (same value, different source); that judgement is now retired in
+favour of a measurement — the 23/23 above is the run made **after** that repair, on the landing tree,
+so the shipped claim rests on the code that ships. Provenance is the release cut's own log
+(`/tmp/agent-tmux-entwurf-cortex-live.log`), recorded in BASELINE HISTORY 2026-07-30.
+
+What remains owed is *reach*, not the capability: the run is single-host, single-connection, and driven
+from a clone. The installed-consumer axis is split, and the split is the honest part — the **deterministic**
+half is closed (`check-pack-install` enumerates the exact six curated rows out of the installed package's
+own model list, and the checkout-invisible container gate consumes a candidate `.tgz` clean), while the
+**live** half is a release-blocking `make` tag gate: the preserved exact candidate installed into a fresh
+temporary root must drive one cold `entwurf/cortex-claude-sonnet-5` turn from those installed bytes
+(unique nonce, exit 0, candidate sha256 unchanged before/after, resolved installed root recorded). Until
+that runs, installed-artifact evidence and real-Cortex evidence have never met in one execution. Full
+operator cold-start / reuse / outbound repetition from an install is a wider lane and stays open beyond
+that gate.
 
 **Contract verdicts as landed (the audit's A–F, all GPT-agreed):**
 

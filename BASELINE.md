@@ -7,9 +7,9 @@ are deliberately open-ended — they probe what the agent actually sees,
 not what it was told to claim.
 
 The released 0.12 ACP backend is **Claude**, and the main question bank below is the
-Claude ACP baseline. The working tree carries an unreleased **0.13 candidate** that
-adds **Snowflake Cortex Code** as a second ACP backend; it has no question bank of its
-own yet, and the Claude bank must not be run against it verbatim — cortex is
+Claude ACP baseline. The prepared **0.13.0** cut adds **Snowflake Cortex Code** as a
+second ACP backend; it has no question bank of its own yet (deferred to 0.13.1), and the
+Claude bank must not be run against it verbatim — cortex is
 system-prompt-carrier-less and runs its own native tool surface, so the overlay/engraving
 questions below would grade it against a surface it does not have. Antigravity (`agy`)
 is also shipped, but as a native-push garden citizen rather than an ACP backend, so it
@@ -277,6 +277,41 @@ prompt, and if so quote the visible text exactly:
 ---
 
 # HISTORY (pointer)
+
+2026-07-30 Cortex 0.13.0 acceptance + landing checkpoint (Linux/thinkpad, Cortex Code
+v1.1.52). Pre-version landing HEAD `9f1c7dc9e1fa77103e29a6f1884af7759e1595eb` passed
+exact-SHA GitHub Actions run [30505001694](https://github.com/junghan0611/entwurf/actions/runs/30505001694):
+`check`, `install-surface`, and `artifact-consumer` all success. The non-interference reading rests on what the
+sources prove, not on an inspection of the runner image: the external Cortex CLI is not an npm
+dependency, nothing in install or provider registration looks for the executable,
+`.github/workflows/ci.yml` provisions only checkout, pnpm, and Node 24 (no Cortex install step,
+no Snowflake auth), and the required Linux `artifact-consumer` job ran the candidate inside a
+clean `node:24-bookworm` container and passed. Cells at that tree: `ENTWURF_REQUIRE_DOCKER=1 ./run.sh
+check-install-container` EXIT=0 (40 ok) — candidate `junghanacs-entwurf-0.12.10.tgz`
+**sha256=63342aa8a144011dee86ebea8f0b778c7860e54dc0f1c710438983c679e8af87**, image
+`node:24-bookworm` `id=sha256:fcd0f74fb415c752…`,
+`repoDigest=node@sha256:5711a0d445a1af54…`; `./run.sh check-pack-install` EXIT=0 with the
+installed package's own model list enumerating the **exact six curated rows (claude 2 +
+cortex 4)**; `LIVE=1 ./run.sh smoke-acp-cortex-live` **PASS 23/23**, deliberately rerun
+after the `resolveSessionKey` overlay-scope repair so the claim does not rest on the earlier
+CP2 code — overlay scope dir + `autoUpdate:false` + overlay-private `mcp.json` projection +
+real-operator-HOME restore on the bridge entry, the model's own `entwurf_v2` landing exactly
+one `.msg` on a seeded peer with the gid only in the envelope, and process-group teardown
+leaving nothing alive in that run's overlay. `pnpm check` on the prepared tree includes
+`check-gate-qualification` **111/111 killed** (lane `acp-cortex` twelve), and
+`LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.13.0.drnRyR` was all green —
+**MUST PASS=17 FAIL=0 SKIP=0**, **BEHAVIOR PASS=1 FAIL=0**, EXIT=0. Operator-session (not
+gate) evidence from 2026-07-29 on the same implementation set: a Cortex resident used the
+host pi citizen's garden id instead of inventing one (`agentId=entwurf/cortex-claude-sonnet-5`,
+`backend=pi`, `origin=pi-session`, `replyable=true`) and exchanged real turns across three
+rails — native Claude Code mailbox drain, pi native control socket, and pi ACP Claude Sonnet
+control socket; record `20260729T204101-7aaa6f` remains on disk. **Still pending as a
+release-blocking `make` tag gate:** the preserved exact 0.13.0 candidate installed into a
+fresh temporary root must drive one cold `entwurf/cortex-claude-sonnet-5` turn from those
+installed bytes (unique nonce, exit 0, candidate sha256 unchanged before/after, resolved
+installed root recorded). Installed-artifact evidence and real-Cortex evidence have not yet
+met in one execution; a RED there stops the cut before the tag. Second machine, macOS, and
+WSL2 remain unclaimed for this cut.
 
 2026-07-25 repair.1 installed-native host acceptance (stable-promotion prerequisite):
 the published registry artifact `@junghanacs/entwurf@0.12.8-repair.1` was installed
