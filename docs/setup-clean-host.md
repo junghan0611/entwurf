@@ -1,284 +1,119 @@
-# Clean-host setup walk-through
+# Clean-host setup
 
-End-to-end install of **entwurf** on a host with only `git` available — no
-node, no npm package, no pi binary, no dotfiles. The point is to validate the
-public install surface as an outside user would experience it.
+Current operator recipe for a fresh Linux desktop/workstation. The neutral npm
+package can install elsewhere, but Claude's garden-native meta-bridge is certified
+only on Linux because its strict live-owner join uses `/proc`.
 
-> **Scope.** This is the current entwurf 0.12.x install recipe, including the
-> 0.12.7 Antigravity (`agy`) citizen surface. The base package install is
-> **neutral npm**, not `pi install npm:...`. Pi is an optional adapter lane for
-> the ACP provider / control-socket runtime. Installed packages under
-> `node_modules` must not run raw `.ts` bridge, doctor, or native-hook helpers
-> through Node strip-types.
+## Requirements
 
-`entwurf` is a garden-citizen dispatch substrate and meta-bridge. It does not
-provide, copy, or mediate backend credentials — it lets the official backend CLI
-or the pi adapter read whatever auth the user already trusts on the host
-(AGENTS.md Hard Rule #9).
-
-## Reference target
-
-Written against a clean **Linux** host (Ubuntu / Debian / NixOS) reachable via
-SSH, here called `cleanhost`. `nvm` keeps the Node path independent of the distro.
-The neutral npm package may install elsewhere, but Linux is the only currently
-certified Claude meta-bridge axis. macOS has no `/proc` bridge discovery
-and is not yet verified/certified for this cut, so its installer refuses new wiring
-and its strict doctor stays `NOT CERTIFIED`/nonzero.
-This is not permanent; future native validation may reopen the lane, while Darwin
-uninstall remains available for older managed state.
-
-```bash
-ssh cleanhost 'uname -a; whoami; which git node npm pi claude agy 2>/dev/null'
-# expect on a fully clean host: git present, node/npm/pi/claude absent
-```
-
-### What the automated Linux consumer already proves
-
-The required CI job `artifact-consumer` runs `check-install-container` against one
-candidate tarball in a Node 24 Linux image that has never seen the checkout. It
-records the artifact sha256 plus image id/repository digest, mounts only that tarball
-read-only, installs globally as non-root through an isolated npm prefix, resolves all
-five bins through PATH, freezes the package root, checks the regular-file path+sha256
-manifest across `install-meta-bridge`, boots MCP `tools/list`, and drives the strict
-doctor. This closes the installed package shape; it does **not** replace this real-host
-walk-through. Its fake Claude CLI, planted plugin cache, stand-in owner, and `/proc`
-bridge are fixtures, so they cannot prove native plugin installation, real hook spawn,
-or idle wake.
-
-Default CI lets the gate pack once into a temporary directory. Release acceptance
-instead preserves the `npm pack` output and passes its absolute path as
-`ENTWURF_CANDIDATE_TGZ`; the gate verifies package name/version, prints canonical
-path+sha256, and consumes that exact file without chmod/copy/re-pack. The accepted
-file is the one later published with `--tag repair` (full commands in VERIFY.md).
-
-The direct runtime complement is #51 B/B2: actual Claude sessions on one NixOS host
-showed 2.1.138 dropping `args` while reporting success and 2.1.217 honoring exec argv
-and waking on FileChanged exit 2. A target host is still accepted only after installing
-the released artifact, opening a new Claude session, and obtaining installed-doctor
-exit 0.
-
-## Pin matrix
-
-| Component | Pin / floor | Source of truth |
+| Component | Requirement | Needed for |
 |---|---|---|
-| Node | **`>=24.0.0`** — single supported axis, no Node 22 lane | `engines.node` (bound by `check-node-floor-coherence`) |
-| Claude Code | **`>=2.1.217`** — the exec-form hook floor; an older Claude drops the hook's `args` silently and still reports success, so there is no fallback lane | `entwurf.claudeCodeFloor` (bound by `check-claude-floor-coherence`) |
-| npm | bundled with Node 24 | public package install path |
-| entwurf | `@junghanacs/entwurf` | neutral npm package; exposes `entwurf`, `entwurf-bridge`, `entwurf-statusline`, `entwurf-agy-statusline`, and `entwurf-agy-imprint` bins |
-| pi binary | **optional**, `@earendil-works/pi-coding-agent >=0.82.1 <0.83` | needed only for the pi adapter / ACP provider / spawn-bg resume lane |
-| Antigravity `agy` | **optional**, operator-installed/authenticated native CLI | needed only for the shipped native-push citizen lane; entwurf never moves its auth |
+| Node | **`>=24.0.0`** | package and bridge runtime |
+| npm | bundled with Node | package installation |
+| entwurf | `@junghanacs/entwurf` | all lanes |
+| pi | optional, `@earendil-works/pi-coding-agent >=0.83.0 <0.84` | ACP provider, control sockets, spawn-bg resume |
+| Claude Code | optional, **`>=2.1.217`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
+| Antigravity `agy` | optional, operator-installed and authenticated | native-push citizen |
+| Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
 
-## Stage 0 — Node 24 via nvm
+Claude Code >=2.1.217 is required for the managed exec-hook lifecycle. The package
+never supplies or proxies backend credentials.
+
+## 1. Install Node and entwurf
+
+Use the host's normal Node 24 installation. With nvm:
 
 ```bash
-ssh cleanhost
-
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-source ~/.nvm/nvm.sh
-
 nvm install 24
-nvm alias default 24
-node -v
-npm -v
+nvm use 24
+node --version
+npm --version
 ```
 
-Drift points:
-- Corporate proxy / sudo policy may block `curl | bash`. Fallback: clone `nvm`
-  via git and source `~/.nvm/nvm.sh` directly.
-- **Subshell trap**: `nvm install 24 | tail` runs in a pipe-subshell, so PATH
-  changes do not reach the parent shell. Drop the pipe, or run `nvm use 24` in
-  the same shell afterward.
-
-## Stage 1 — neutral entwurf npm install
-
-Install the public package with npm. This does **not** require pi.
+Global install is simplest when native harnesses should find stable bins from every
+working directory:
 
 ```bash
 npm install -g @junghanacs/entwurf
-
-which entwurf
-which entwurf-bridge
-which entwurf-statusline
-which entwurf-agy-statusline
-which entwurf-agy-imprint
-entwurf --help | head -5
+entwurf --help
+entwurf check-bridge
 ```
 
-`@earendil-works/*` pi packages are optional peers. A neutral npm install should
-not pull them in as package dependencies. That separation is intentional: the
-MCP bridge can boot in Claude Code / Codex / Antigravity without pi present.
-
-## Stage 2 — auth-free bridge boot
-
-Prove the installed MCP server answers `tools/list` from inside `node_modules`.
-This is the first `node_modules` strip-types regression fixed in 0.12.0: Node
-refuses `--experimental-strip-types` for `.ts` under `node_modules`, so the
-installed package must boot the prebuilt JS under `mcp/entwurf-bridge/dist/`.
-The same installed-vs-dev split closes every shipped `.ts`-at-runtime surface on
-that fence: the `doctor-meta-bridge` store-scan helper (0.12.4), the Claude plugin
-hook (0.12.5, compiled `dist/pi-extensions/meta-bridge-hook.js`), and the agy
-`PreInvocation` imprint (0.12.7, compiled `dist/scripts/agy-imprint.js`). Installed
-packages run tsc-emitted JS on these paths; dev clones keep transparent `.ts`
-source execution.
+A project-local installation is also supported:
 
 ```bash
-node --input-type=module <<'JS'
-import { spawn } from 'node:child_process';
-const child = spawn('entwurf-bridge', { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NODE_PATH: '' } });
-let out = '', err = '';
-const timer = setTimeout(() => { child.kill('SIGKILL'); console.error(err || 'timeout'); process.exit(1); }, 5000);
-child.stderr.on('data', d => err += d);
-child.stdout.on('data', d => {
-  out += d;
-  try {
-    const msg = JSON.parse(out.trim());
-    const names = (msg.result?.tools ?? []).map(t => t.name).sort();
-    for (const n of ['entwurf_v2','entwurf_peers','entwurf_self','entwurf_inbox_read','entwurf_register_native']) {
-      if (!names.includes(n)) throw new Error(`missing ${n}: ${names.join(',')}`);
-    }
-    clearTimeout(timer);
-    child.kill('SIGTERM');
-    console.log(names.join(','));
-  } catch {}
-});
-child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) + '\n');
-JS
+mkdir -p ~/entwurf-smoke && cd ~/entwurf-smoke
+npm init -y
+npm install --save-dev @junghanacs/entwurf
+npx entwurf check-bridge
 ```
 
-Expected: a comma-separated tool list containing all five current `entwurf_*`
-tools, exit code 0, no backend auth required. `entwurf_register_native` binds an
-already-running native conversation; it is not a fresh-spawn verb.
+`check-bridge` is auth-free. It proves the installed prebuilt MCP server boots and
+lists the five garden tools; it does not prove a backend model turn or native hook.
 
-## Stage 3 — wire a project for the pi adapter / ACP plugin (optional)
+## 2. Optional pi adapter / ACP plugin
 
-If the host will run pi sessions or the Claude ACP provider through pi, install
-a compatible pi binary separately and wire the target project.
+Install the exact release floor, then wire the project:
 
 ```bash
-npm install -g @earendil-works/pi-coding-agent@0.82.1
+npm install -g @earendil-works/pi-coding-agent@0.83.0
 pi --version
 
-mkdir -p ~/entwurf-smoke
 cd ~/entwurf-smoke
 entwurf install .
-entwurf check-bridge
-
-# pi adapter/provider registration smoke
 pi -e "$(npm root -g)/@junghanacs/entwurf" --list-models entwurf
 ```
 
-Drift points:
-- `entwurf install .` writes `.pi/settings.json` and registers the bundled
-  `entwurf-bridge`. (The `entwurf-targets.json` link is gone — #50 C3 removed the
-  target registry; a leftover operator link is inert.)
-- Older pi versions may silently miss the provider/extension surface. Use the
-  pinned floor (`>=0.82.1 <0.83`) for release verification.
-- A host that only uses the external MCP bridge can skip this stage until it
-  needs `owned-outcome` spawn-bg resume or pi-native control sockets.
+The supported range is `>=0.83.0 <0.84`. It is a hard minimum: installing this
+release onto a 0.82.x pi host upgrades the runtime rather than keeping the older
+minor. A host using only the external MCP bridge can skip pi until it needs a
+control socket or dormant `owned-outcome` resume.
 
-## Stage 4 — Claude Code meta-bridge (optional, garden-native native sessions)
+For daily garden-native pi sessions:
 
-For an external Claude Code session to be replyable by garden id, install the
-meta-bridge plugin globally. This is still a neutral npm-package command; it
-registers Claude Code USER-scope MCP + the SessionStart hook. For this cut,
-perform and certify this stage on Linux only. The installer rejects Darwin with a
-“not yet verified/certified for this repair cut” diagnosis and the macOS doctor stays
-nonzero until future native validation supplies a real live-owner measurement.
+```bash
+cd ~/entwurf-smoke
+pi -e "$(npm root -g)/@junghanacs/entwurf" --entwurf-control
+```
+
+The V3 record births the garden id; do not inject a pi session id manually.
+
+## 3. Optional Claude Code native citizen
+
+First register the MCP bridge if the stable bin is not already present:
+
+```bash
+claude mcp add --scope user entwurf-bridge entwurf-bridge
+```
+
+Then install and certify the mailbox/self-fetch lifecycle:
 
 ```bash
 entwurf install-meta-bridge
+# restart every already-open Claude Code process
+# open a new Claude Code session
 entwurf doctor-meta-bridge
 ```
 
-> **Upgrades are not live-reload safe across this hook-launch cut.** Re-run `install-meta-bridge`, then restart **all already-open Claude Code sessions** before trusting send/receive. A new hook reached through the old cached command does not get the owner join it depends on, even though a meta-record may still land; reinstall pairs the artifact and the manifest, and restart makes the native process load that pair. This release also refuses Claude Code below `>=2.1.217` at install and doctor time — an older Claude silently drops the hook's `args`, runs the command alone, and still reports the hook as successful, so there is no fallback lane to fall into.
+The supported floor `>=2.1.217` is enforced by package metadata through installer
+and doctor gates. Older Claude versions validate an exec-form hook but silently drop
+its `args` at runtime, so there is no shell-form fallback.
 
-On an installed package (`.../node_modules/@junghanacs/entwurf`), the doctor must
-not try to strip-types-run raw `.ts` helpers or hooks. In the output, check for
-these floor-regression signals:
+A doctor PASS requires both ownership and runtime evidence, including a live
+MCP↔sender↔receiver owner join. `NOT CERTIFIED` exits nonzero: a fixture, plugin
+validation, or hand-inspected marker cannot replace a new real session. If the launch
+form is unsupported, reinstall; if ownership is correct but the live join is absent,
+restart the affected session.
 
-```text
-ok    claude 2.1.217 (>= 2.1.217, exec-form launch contract supported)
-ok    launch form: exec form through the shipped hook-launch.sh (no shell on the path)
-ok    installed owner argv execs directly (no shell) through hook-launch.sh and keys its sender marker to the live host pid
-ok    <N> live Claude MCP process(es): sender + receiver owner join is live and record-backed
-ok    full store scan: no corrupt records, duplicate nativeSessionId, body/filename drift, or backend↔wakeMode contradiction
-ok    check-entwurf-v2-surface: shipped surface source present; exhaustive source-shape gate is a repo/release invariant (not run under node_modules)
-```
+New macOS wiring is refused because the live join is not instrumented there. Darwin
+uninstall remains available for cleaning an older managed install; this is an evidence
+boundary, not a permanent impossibility claim.
 
-The live-process line is **not** a warning any more. If no matching Claude MCP child
-is open — or the host has no `/proc` — the doctor reports `NOT CERTIFIED` and exits
-nonzero, because only the static + synthetic checks were possible and neither of them
-can measure the live join. A host whose live tier was never measured is an
-unmeasured host, not a passing one. An `UNSUPPORTED` launch form needs reinstall; a
-failed live owner join after reinstall means the already-open Claude process still
-holds the old hook definition in memory and must be restarted — the hook itself
-refuses to write markers in that state rather than keying them to whatever the old
-command's shell left behind.
+## 4. Optional Antigravity native citizen
 
-If any of those sections reports `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`,
-the host is still running a pre-0.12.5 package or a broken tarball. Reinstall the
-current package and re-run `entwurf install-meta-bridge && entwurf doctor-meta-bridge`.
-
-Store invariant (only for a host that is NOT clean): this walkthrough assumes no
-prior `~/.pi/agent/meta-sessions`. Production reads **schemaVersion 3 only** and
-the repo carries no legacy reader or migrator — the active store provides no
-cross-generation continuity (sessions flow; memory lives in the native
-transcripts and the embedding axes). On a store the live schema cannot read,
-`entwurf_self`, `entwurf_v2`, and inbox reads fail loud; `entwurf_peers` keeps
-its fact listing alive and reports the records as diagnostics. The owned
-`setup` / `install` / `install-meta-bridge` entrypoints refuse before activation
-writes rather than crossing this boundary silently. The one prescription is the
-generation cut: `entwurf meta-bridge-fresh-cut` (quiesce-checked; archives the
-whole previous generation to a timestamped sibling and opens an empty one — the
-archive is forensic only, no restore verb). Once per boundary. A truly clean
-host has nothing to cut and can ignore this paragraph. The refusal is a
-preflight, not a lock: for checkout-backed installs, quiesce sessions before
-pull, then fresh-cut, setup, and reopen.
-
-Read the cut's exit status rather than only chaining it (#54; `--help` prints the
-contract): `0` complete → run `setup`; `1` NOTHING MOVED — a live/unprovable
-surface, an occupied archive destination, an unreadable surface — fix the named
-cause and re-run, and do not run `setup`, because the store it refused is still
-there; `2` usage; `3` CUT TRANSITION INCOMPLETE — at least one archive move
-happened but the fresh generation is not confirmed open — inspect, or re-run to
-finish under a new stamp; `4` the cut is COMPLETE but marker/socket residue could
-not be unlinked — `setup` may run. Prefer fixing the named residue and re-running
-before `setup`; if new citizens have already been born, remove it manually rather
-than fresh-cutting their new generation. Only `0` is success.
-
-Upgrade invariant: every global npm/pnpm package upgrade must be followed by
-`entwurf install-meta-bridge` from that same installed binary and then
-`entwurf doctor-meta-bridge`. Installed statusline/MCP entries use stable bin
-shims and the marketplace source lives in a version-stable operator data dir, but
-package managers still do not re-materialize Claude's plugin bundle/cache. If a
-dev checkout's `./run.sh doctor-meta-bridge` expects repo-owned paths while the
-global install intentionally owns the meta-bridge (or the reverse), that is an
-ownership mismatch — run the doctor from the surface that intentionally owns the
-install, or reinstall from the other surface. Restart already-open Claude Code
-sessions after changing the meta-bridge install.
-
-A plain external MCP host can call the read surfaces (`entwurf_peers`,
-`entwurf_inbox_read`), but an `entwurf_v2` send is **refused by default** (#50 C4:
-"if we don't know who sent it, we don't send it") — it has no authoritative sender.
-A deliberately-anonymous host may wire the explicit
-`ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1` hatch and then delivers external and
-non-replyable; see README §"Wiring `entwurf-bridge` into an external MCP host".
-A garden-native meta-session has a garden id and a trusted sender marker, so it can
-call `entwurf_self` and be addressed by garden id. **Whether it has a mailbox depends
-on its rail**: a self-fetch backend (Claude Code) has a drainable inbox and receives
-mailbox wakeups, while a native-push backend (Antigravity) has **no mailbox and no
-idle-wake watch at all** — a reply is injected straight into its live conversation, and
-it is reachable only while the adapter probe finds that conversation. Do not assume a
-mailbox from "garden-native meta-session".
-
-## Stage 5 — Antigravity native citizen (optional)
-
-If `agy` is already installed and authenticated by the operator, wire the three
-separate ownership atoms. Entwurf does not install agy or copy its auth.
+Install the three independently owned surfaces:
 
 ```bash
-which agy
-
 entwurf install-agy-bridge
 entwurf install-agy-statusline
 entwurf install-agy-hooks
@@ -288,118 +123,78 @@ entwurf doctor-agy-statusline
 entwurf doctor-agy-hooks
 ```
 
-What these commands own:
+The bridge owns one MCP server and narrow rules for the normal tools; the statusline
+owns its subtree; the hook owns one `PreInvocation` entry. Unrelated settings are
+preserved. A fresh conversation initially may show `🪛 ? agy`; the first invocation
+births the record by native `conversationId`, after which the garden id appears.
 
-- `install-agy-bridge`: one MCP server in `~/.gemini/config/mcp_config.json`
-  and one narrow rule per tool the normal agy workflow calls —
-  `mcp(entwurf-bridge/entwurf_v2)`, `mcp(entwurf-bridge/entwurf_peers)`,
-  `mcp(entwurf-bridge/entwurf_self)` — in
-  `~/.gemini/antigravity-cli/settings.json`'s permission allow-list;
-- `install-agy-statusline`: the `statusLine` subtree only, pointing at
-  `entwurf-agy-statusline`;
-- `install-agy-hooks`: one named plugin `PreInvocation` hook pointing at
-  `entwurf-agy-imprint`.
-
-They preserve unrelated user state, record independent install-state under
-`$XDG_DATA_HOME/entwurf/`, and refuse symlink-owned config instead of writing
-through someone else's SSOT. Broad YOLO rules such as `command(*)` and
-`unsandboxed(*)` are operator policy and are never granted by this package.
-
-Restart agy, open a **fresh conversation**, and make one model invocation. The
-hook's first `PreInvocation` births/attaches the conversation by native
-`conversationId`; after that, the statusline should show `🪛 <garden-id> agy`.
-Verify:
-
-1. `entwurf_self` reports that gid with `agentId=meta-session/antigravity` and
-   `replyable:true` while the native route probes alive;
-2. an `entwurf_v2` send from agy reaches a sibling with that sender gid;
-3. a sibling's `entwurf_v2(..., intent=fire-and-forget)` reply to the same gid
-   direct-injects into the same agy conversation.
-
-This rail has no mailbox/receiver marker and no `owned-outcome` authority.
-Same-pid concurrent conversation invocation is not supported; separate agy
-processes have separate pid/start-key sender markers.
-
-## Stage 6 — backend auth and live ACP runtime smoke
-
-Backend authentication is the operator's responsibility and lives entirely
-outside entwurf. For the Claude ACP lane:
+Real native-push acceptance needs an already-running conversation:
 
 ```bash
-curl -fsSL https://claude.ai/install.sh | bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-claude login
-
-cd ~/entwurf-smoke
-pi --provider entwurf --model claude-sonnet-5 -p "reply with ok only"
+LIVE=1 AGY_CONVERSATION_ID=<id> entwurf smoke-agy-native-push-live
 ```
 
-If the backend CLI fails directly (`claude -p "ping"`), fix that upstream first.
-`entwurf` surfaces missing auth; it does not repair it.
+## 5. Optional ACP backend turns
 
-**This smoke proves the PROVIDER surface, not the garden one.** It shows auth,
-model routing, and one real turn — nothing more. A plain `pi -p` run is not a
-garden citizen: with no `--entwurf-control` there is no routable control socket,
-so entwurf deliberately leaves `PI_SESSION_ID` unset and a bundled
-`entwurf_self` / `entwurf_v2` call **fails loud** naming the missing wiring.
-That is the contract, not a defect — an address a peer cannot route to is worse
-than none. For the garden surface (citizen birth, addressable sends) use Stage 7.
-
-## Stage 7 — garden/control-socket surface (optional)
-
-To address a long-lived pi session from another session or an external MCP host,
-open it with `--entwurf-control`. No id injection and no special launcher
-(#50 C2): pi mints its own session id (a `uuidv7` is normal), `session_start`
-attaches that session to its meta-record, and the **record** mints the garden id
-everything addressable hangs off.
+Claude uses the operator's existing local Claude authentication:
 
 ```bash
-pi --entwurf-control --provider entwurf --model claude-sonnet-5
+LIVE=1 entwurf smoke-acp-provider-live
 ```
 
-The control socket is `~/.pi/entwurf-control/<record gardenId>.sock` — keyed on
-the id the record minted, which is *not* pi's session id. Read the address off
-`entwurf_peers` (or `entwurf_self` from inside the session) instead of guessing
-the filename. If the record cannot be written the control server is refused,
-`PI_SESSION_ID` stays unset, and the reason is on stderr: an unaddressable
-resident must never survive quietly.
-
-Use `entwurf_peers` to discover citizens and `entwurf_v2` to deliver by garden
-id. Do not choose the transport by hand: the same-looking id may name a live pi
-socket, a dormant pi record, a mailbox-backed Claude session, or a native-push
-Antigravity conversation.
-
-## Teardown
+Cortex requires an authenticated `cortex` CLI and an explicit connection. Keep
+`CORTEX_HOME` unset; the adapter refuses its presence because it bypasses containment.
 
 ```bash
-# project wiring
-rm -rf ~/entwurf-smoke/.pi
+LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> \
+  entwurf smoke-acp-cortex-live
+```
 
-# native-harness surfaces (if installed)
-entwurf uninstall-meta-bridge 2>/dev/null || true
-entwurf uninstall-agy-hooks 2>/dev/null || true
-entwurf uninstall-agy-statusline 2>/dev/null || true
-entwurf uninstall-agy-bridge 2>/dev/null || true
+The aggregate release gate is Claude-backed and does not run Cortex automatically.
+Its silence is not a Cortex PASS.
 
-# package and optional pi binary
+## 6. Upgrade and repair
+
+After upgrading the package, rerun the managed installers for every native harness
+in use and restart their existing processes. Native plugin caches are not live-reload
+safe across launch-contract changes.
+
+If install or doctor reports an unreadable/old active citizen generation, do not edit
+records by hand:
+
+```bash
+# close pi, Claude, and agy sessions first
+entwurf meta-bridge-fresh-cut
+entwurf setup ~/entwurf-smoke
+```
+
+Read the cut's exit status before chaining setup. The complete quiescence, archive,
+and exit-code contract is [fresh-cut-policy.md](./fresh-cut-policy.md).
+
+## 7. Release acceptance versus host acceptance
+
+- `entwurf check-bridge`: installed MCP bytes boot; no backend auth.
+- `pnpm check`: source deterministic floor; maintainer checkout only.
+- `check-install-container`: checkout-invisible Linux package-consumer shape using
+  fixtures; not a native lifecycle proof.
+- `doctor-meta-bridge`: one installed real Claude host, only with a new live session.
+- `LIVE=1 entwurf release-gate /path/to/scratch`: aggregate runtime acceptance.
+
+Keep these verdicts separate. Current protocol is [VERIFY.md](../VERIFY.md); recorded
+host verdicts are [BASELINE.md](../BASELINE.md).
+
+## Uninstall
+
+Run only the surfaces this host owns:
+
+```bash
+entwurf uninstall-meta-bridge
+entwurf uninstall-agy-hooks
+entwurf uninstall-agy-statusline
+entwurf uninstall-agy-bridge
+entwurf uninstall ~/entwurf-smoke
 npm uninstall -g @junghanacs/entwurf
-npm uninstall -g @earendil-works/pi-coding-agent 2>/dev/null || true
-
-# node via nvm
-nvm uninstall 24
-rm -rf ~/.nvm
 ```
 
-This walk-through is a verification floor underneath release cuts: neutral npm
-install, installed bridge boot, optional pi adapter registration, Claude
-meta-bridge verification where used, all three agy doctors plus a fresh native
-round trip where used, and at least one authenticated ACP runtime smoke. Preserve
-the exact package version, candidate tarball sha256, container image identity,
-host OS, Claude version, and installed doctor output together. The repair history
-is fixed: `0.12.8-repair.0` cannot deliver, while published
-`0.12.8-repair.1` passed installed-native doctors on maintainer + secondary Linux
-hosts and remains under dist-tag `repair`. Stable promotion publishes accepted
-`0.12.8` bytes under `latest` and must preserve `repair=0.12.8-repair.1`.
-GLG owns every version, tag, publish, push, and host-reinstall decision; the
-complete ordered checklist is in VERIFY.md §Stable 0.12.8 order.
+Each managed surface has an honest inverse and preserves unrelated native-harness
+configuration.

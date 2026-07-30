@@ -142,13 +142,13 @@
 				"\t\tawait setConfig.call(connection, { sessionId: acpSessionId, configId: \"model\", value: nativeModelId });",
 				"\t},",
 				"",
-				"\t// A connection change must invalidate a reused session (§4/§7). Flat,"
+				"\t// A connection change must invalidate a reused session (rail: Adapter contract). Flat,"
 			],
 			"replace": [
 				"\t\tawait setConfig.call(connection, { sessionId: acpSessionId, configId: \"model\", value: \"auto\" });",
 				"\t},",
 				"",
-				"\t// A connection change must invalidate a reused session (§4/§7). Flat,"
+				"\t// A connection change must invalidate a reused session (rail: Adapter contract). Flat,"
 			],
 			"gate": ["bash", "run.sh", "check-acp-cortex"],
 			"timeoutSeconds": 300,

@@ -1,10 +1,17 @@
 # VERIFY.md
 
-Agent-driven verification guide for the `entwurf` surface as it stands in the working tree — the last **released** line is 0.12.x, and the tree is the **prepared 0.13.0 cut** (its tag, GitHub release, and publication are separate authorizations that have not run). The cut carries more than one change (the probe/ordering lane sits in it too); the change relevant to *this guide* is the second ACP backend. Rows below marked 0.12 are the released baseline; where 0.13.0 differs, it says so.
+Agent-driven verification guide for the current `entwurf` surface. Machine-checkable
+invariants live in gates; this file defines evidence strength, release acceptance,
+and the manual judgements a gate cannot make.
 
-> **Current surface.** The bundled MCP server, `entwurf-bridge`, exposes five tools: `entwurf_v2`, `entwurf_peers`, `entwurf_self`, `entwurf_inbox_read`, and `entwurf_register_native` (an explicit/manual fallback for binding an already-running native conversation). The ACP backends are **Claude** (the reference, 0.12) and, as of **0.13.0**, **Snowflake Cortex Code** (`cortex-` prefixed ids; deterministic axis `check-acp-cortex` in `pnpm check`, LIVE axis `smoke-acp-cortex-live` on demand — see [docs/acp-backend-rail.md](./docs/acp-backend-rail.md) §11-8 for the measured contract and its limits). Antigravity (`agy`) is a separate shipped **native-push citizen** lane, not an ACP backend: automatic `PreInvocation` birth + sender identity + live probe/direct injection. Codex is pi-native by default and has native delivery probe evidence; Gemini is a non-goal/historical ACP probe on 0.12. The 0.4.x `session-bridge` adapter, the 0.11.0 fat-bridge (`acp-bridge.ts` / `ensureBridgeSession`), and the v1 `entwurf` / `entwurf_resume` / `entwurf_send` verbs are **retired** — rows mentioning them survive in CHANGELOG/git as historical baseline, never as a runnable recipe.
+> **Current surface.** `entwurf-bridge` exposes `entwurf_v2`, `entwurf_peers`,
+> `entwurf_self`, `entwurf_inbox_read`, and `entwurf_register_native`. The ACP
+> backends are Claude and Snowflake Cortex Code. Antigravity is a separate shipped
+> native-push citizen lane; Codex has delivery-probe evidence but no managed citizen
+> lane. Retired v1 verbs and bridge implementations belong only in CHANGELOG/git.
 
-This is a **working document, not a metrics document**. The deterministic and live gates carry the machine-checkable invariants; this file carries only what a gate cannot judge — the human/agent reading of *whether the bridge is honestly itself*. Where a former manual procedure is now a gate, it is named as a pointer rather than re-spelled as a runnable script.
+This is a working protocol, not a metrics ledger. Per-run counts, digests, and release
+chronology belong in [BASELINE.md](./BASELINE.md), CHANGELOG, and release artifacts.
 
 VERIFY.md is the **agent-driven** surface; [BASELINE.md](./BASELINE.md) is the operator-driven one. One ACP-bridged model runs the checks against another and writes down what it sees — if the bridge is faithful, two replicants looking at the same mirror describe the mirror the same way. This is in-bridge cross-validation, not external evidence: verifier and subject share the same bridge, MCP servers, and overlay, so a uniform corruption of those would not surface here (that gap is what the L3+ rungs close).
 
@@ -43,70 +50,27 @@ Verification here is not a benchmark. In production we exchange short turns and 
 
 > The aggregate release gate does not own a live agy conversation id, so agy's real native-push round trip is a separate acceptance axis: three fail-loud doctors plus `LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live`, followed by a fresh-conversation sender/reply check after package install. Its deterministic install/sender gates are already inside `pnpm check`; do not misreport the aggregate gate as live agy evidence.
 >
-> The authoritative per-cut counts live in BASELINE.md's HISTORY and CHANGELOG/git, not inline here (they drift against `run.sh`). Most recent recorded aggregate: **2026-07-24 (night) — MUST 16/1/0 + BEHAVIOR 1/0, EXIT=1** at `cbda097` — the single FAIL is the known bundled-MCP readiness race (ROADMAP 「🔴 OPEN」, observe-don't-fix; isolated re-runs pass). Most recent all-green floor: **2026-07-30 — MUST 17/0/0 + BEHAVIOR 1/0, EXIT=0** on the prepared 0.13.0 tree (parent landing HEAD `9f1c7dc`, scratch `/tmp/entwurf-release-gate-0.13.0.drnRyR`) — the first aggregate completion carrying the cortex adapter and the probe lane; the step count did not move, because the cortex LIVE axis is deliberately outside this aggregate and is run on demand. Before it: **2026-07-24 — MUST 17/0/0 + BEHAVIOR 1/0, EXIT=0** at `7cbeb29b6afcfbaf4fc28da3b7929037c339113d` (the dependency-uplift HEAD: pi 0.82.0 + claude-agent-acp 0.61.0 / ACP SDK 1.3.0). The step count moved 16→17 with `smoke-acp-v2-send-live`; earlier that day it had moved 17→16 with the v2-cutover smoke retirements. A release cut requires the aggregate red to be resolved or explicitly ruled by GLG.
+> Authoritative per-cut counts and digests live in BASELINE/CHANGELOG, not inline
+> here; embedding them in the protocol makes a correct guide stale after every cut.
 
-### Artifact / host certification matrix — #51 repair line → 0.12.8 stable
+### Release acceptance axes
 
-Do not collapse package evidence, fixture evidence, and a certified native host into
-one word such as “green.” They answer different questions.
+Do not collapse source, package, fixture, and native-host evidence into one “green.”
 
-| Axis | Current evidence | Level / limit | Release reading |
-|---|---|---|---|
-| Source checkout | `pnpm check` on Node 24 Linux | Deterministic source floor; not an installed artifact | Necessary; cannot certify a consumer install. |
-| Project-local tarball | `check-pack-install` | Real `.tgz`, but checkout-visible, operator-owned, project-local | Installed-shape evidence; still maintainer-shaped. |
-| Linux artifact consumer | `check-install-container` in the required `artifact-consumer` CI job | **L3 package evidence:** one read-only candidate `.tgz`; checkout/repo `node_modules` invisible; non-root `npm install -g`; PATH shims; frozen package root; regular-file path+sha256 fence; canonical artifact path+sha256 and Node 24 image identity printed. Default CI packs once; `ENTWURF_CANDIDATE_TGZ` consumes a preserved caller artifact without re-pack. | Certifies the Linux package-consumer shape. Its fake Claude, planted plugin cache, stand-in owner, and `/proc` bridge are explicitly **fixtures**: they do not prove Claude installed the cache or that a real native Claude session woke. |
-| Direct Claude negative (B) | Claude Code 2.1.138 actual session | **L4 direct-native**, one NixOS host: fixture loaded (shell canary), `args` dropped, hook reported `exit_code: 0, outcome: success` | Justifies entwurf-side fail-loud and no old-version fallback. It did not run the final production argv shape. |
-| Direct Claude positive (B2) | Claude Code 2.1.217 actual session | **L4 direct-native**, one NixOS host: per-element args, literal `${HOME}`, direct parent join, FileChanged exit 2 → idle wake | Justifies the proven floor and exec-form contract. It is not a second-OS acceptance run. |
-| Linux installed host | `doctor-meta-bridge` after package install, a **new** Claude session, and a live MCP child | **L3 host corroboration:** installed artifact + live `/proc` owner join | Published `0.12.8-repair.1` passed on maintainer + secondary Linux hosts on 2026-07-25 (BASELINE HISTORY). Missing live evidence is still `NOT CERTIFIED`; stable `0.12.8` earns its own package/CI/LIVE evidence. |
-| macOS Claude meta-bridge | New install is refused: strict live-owner certification cannot yet discover the MCP process without `/proc` | **Not yet verified/certified for this repair cut**; doctor nonzero | Linux is the only current certified axis. Darwin uninstall remains the honest inverse for older installs; the neutral package has no `os` restriction. This is not a permanent impossibility claim—future native validation may reopen macOS. |
-| WSL2 / Windows | No release lane | Unverified | Not supported by this cut. |
+| Axis | Required proof | Limit |
+|---|---|---|
+| Source | `pnpm check` | Does not prove an installed consumer. |
+| Packed install | `check-pack-install` | Real tarball, but checkout-visible. |
+| Linux artifact consumer | required `check-install-container` CI job against one preserved candidate | Fixtures prove package/oracle shape, not a real Claude lifecycle. |
+| Exact release commit | all required CI jobs green at the exact SHA | A different green SHA is not transferable evidence. |
+| LIVE runtime | `LIVE=1 ./run.sh release-gate <scratch>` plus any shipped on-demand backend axis | Requires `SKIP=0`; a red wired gate blocks the cut. |
+| Native Claude host | installed strict doctor against a new real session | Missing live join is `NOT CERTIFIED`, not a fixture PASS. |
+| Native agy host | three doctors plus conversation-id-gated native-push round trip | Aggregate release-gate does not own an agy conversation id. |
 
-The artifact-consumer run prints both the tarball sha256 and container image
-identity. Preserve those in the cut record. A synthetic doctor PASS proves the
-oracle can recognize a fully supplied fixture; only the installed doctor against a
-new native session proves that a real host supplied those layers.
-
-### Stable 0.12.8 order (current execution; authority is mode-specific)
-
-The repo-local `entwurf-release` skill is a checkpointed state machine. Each mode
-is a separate authorization; one mode never implies the next. The repair history
-remains in CHANGELOG: repair.0 was field-broken, repair.1 restored delivery, and
-on 2026-07-25 its installed artifact passed the real native doctor on maintainer
-and secondary Linux hosts. That closed the explicit prerequisite for promoting
-this line to stable `0.12.8`; it does not transfer CI/LIVE/candidate evidence to
-the new stable bytes.
-
-1. `land 0.12.8` pushes only the clean **pre-version landing HEAD** and requires
-   a push-triggered `ci.yml` run whose `headSha` is exactly that commit. Current
-   accepted landing: `1345688001ed6629bd0f58996a36134e7b7874bc`, run
-   [30150824225](https://github.com/junghan0611/entwurf/actions/runs/30150824225),
-   with `check`, `install-surface`, and `artifact-consumer` all success.
-2. `prepare 0.12.8` promotes the changelog, sets the package version, reruns the
-   deterministic and LIVE gates, and creates the release-prep commit. It never
-   pushes, tags, creates a candidate, or publishes.
-3. `make 0.12.8` pushes that clean prepared HEAD and requires the same three jobs
-   on that exact version commit. Only after the second exact-SHA CI is green does
-   it preserve and accept one candidate without repacking:
-
-   ```bash
-   ARTIFACT_DIR=$(mktemp -d /tmp/entwurf-release-candidate-0.12.8.XXXXXX)
-   bash scripts/with-dist-lock.sh npm pack --dry-run=false --pack-destination "$ARTIFACT_DIR"
-   CANDIDATE="$(realpath "$ARTIFACT_DIR/junghanacs-entwurf-0.12.8.tgz")"
-   sha256sum "$CANDIDATE"
-   ENTWURF_REQUIRE_DOCKER=1 ENTWURF_CANDIDATE_TGZ="$CANDIDATE" \
-     ./run.sh check-install-container | tee "$ARTIFACT_DIR/acceptance.log"
-   ```
-
-   The gate must print caller-preserved candidate mode, the same canonical path
-   and SHA-256, and the image identity. `make` then tags the exact prepared SHA
-   and creates the GitHub release. Never repack accepted bytes.
-4. Only an explicit `publish 0.12.8 <absolute-candidate> latest` may publish the
-   accepted file. Registry proof requires `latest=0.12.8` while preserving
-   `repair=0.12.8-repair.1`, followed by the registry-installed smoke.
-
-Invoking `land`, `prepare`, `make`, or `publish` grants only that named mode's
-authority. `prepare` stops at a local commit; `make` and `publish` remain separate
-GLG decisions.
+The repo-local `entwurf-release` skill owns the `land → prepare → make → publish`
+state machine. Each mode is a separate GLG authorization. Preserve one candidate,
+accept and publish those exact bytes without repacking, and record its digest and
+consumer image outside this standing protocol.
 
 ### Verifying the two capabilities a gate cannot fully judge
 
@@ -136,7 +100,7 @@ When injecting a fact for a continuity check, use **plaintext that does not trig
 
 ### bridge continuity vs semantic continuity
 
-- **bridge continuity:** same `sessionKey` / same `acpSessionId` via in-memory reuse or persisted resume/load (bootstrap `path=reuse|resume|load`).
+- **bridge continuity:** same `sessionKey` / same `acpSessionId` through in-memory process-scoped reuse. Persisted session records are written for a future resume/load lane but are not consumed today.
 - **semantic continuity:** a fact from a prior turn is retrievable in a later turn.
 
 Either can be alive while the other looks dead (the wording case above is bridge-alive / semantic-looks-dead). When in doubt, change the wording and retry once, and check the `[entwurf:bootstrap]` lines in bridge stderr. No automated smoke separates these yet.
@@ -145,7 +109,7 @@ Either can be alive while the other looks dead (the wording case above is bridge
 
 The goal is not merely "invoke Claude Code." We want:
 
-1. **Session continuity at the agent-shell level** — through ACP session resume/load/new, not re-throwing a text blob.
+1. **Session continuity at the agent-shell level** — process-scoped turns reuse one live ACP session; fresh/turn-scoped paths open a new one rather than reconstructing a transcript inside entwurf.
 2. **Preservation of pi harness semantics** — pi session files / transcripts / memory pipeline stay a shared axis.
 3. **restart-hygienic** — process-scoped reuse continues the same ACP session across turns inside a long-lived resident; persisted records are written/validated for the future resume-load lane, not the live continuity path today.
 4. **Thin bridge** — no second harness built inside this repo.
@@ -201,9 +165,14 @@ mailbox with `origin=pi-session`, `replyable=true`).
 
 ### 1.4 Cross-install / cross-backend parity (optional, high-value)
 
-Compare a fresh self-awareness report across axes: (1) same backend, different install path — answer must be path-invariant; (2) same backend, different machine — identical native tool list + MCP server/tool set; (3) different backend, same bridge — same garden capability but **different** native tool surface (a Claude session reporting another backend's native tools is a fail); (4) native pi routing vs ACP-bridged, same model — the native target reports no `entwurf-bridge` MCP (capability via pi's extension surface), while the ACP target reports it as the single MCP server. Honest "native: I cannot tell" hedging is PASS on the native side. Claude axes 1–4 are closed. agy is graded by the separate native-citizen checklist above, not by pretending it has Claude's ACP overlay. Gemini remains probe-only on 0.12.
+Compare a fresh self-awareness report across axes: (1) same backend, different install path — answer must be path-invariant; (2) same backend, different machine — identical native tool list + MCP server/tool set; (3) different backend, same bridge — same garden capability but **different** native tool surface (a Claude session reporting another backend's native tools is a fail); (4) native pi routing vs ACP-bridged, same model — the native target reports no `entwurf-bridge` MCP (capability via pi's extension surface), while the ACP target reports it as the single MCP server. Honest "native: I cannot tell" hedging is PASS on the native side. agy is graded by its native-citizen checklist, not by pretending it has an ACP overlay.
 
-**Cortex (0.13.0) on axis 3.** Cortex is the first real *different backend, same bridge* subject, and it is the sharpest form of this axis: a cortex session must report the garden capability (`entwurf-bridge` reachable, record-backed peers) while its native tool surface is cortex's own, never Claude's — a cortex session listing Claude's built-ins is a fail. Two contract facts to grade against rather than re-derive: the callable identifier shape is the same `mcp__<server>__<tool>` convention as Claude (**measured**, §11-8), and cortex is **system-prompt-carrier-less**, so the operator engraving arrives at the head of the first-user augment instead of in a system prompt — a cortex session claiming a system-prompt engraving is reporting something it does not have. Axis 1 (install-path invariance) is split as of 0.13.0: the **deterministic** half is closed — `check-pack-install` enumerates the exact six curated rows out of the installed package's own model list — while the **live** half is a release-blocking `make` tag gate (the preserved exact candidate installed into a fresh temporary root driving one cold `entwurf/cortex-claude-sonnet-5` turn from those installed bytes). Until that gate runs, installed-artifact evidence and real-Cortex evidence have never met in one execution. Axis 2 (second machine) is unrun.
+**Cortex on axis 3.** A cortex session must expose the same garden capability
+while keeping cortex's own native tool surface. Its callable MCP identifier shape is
+the same as Claude's, but it has no system-prompt carrier: engraving is prepended to
+the first user augment. Installed-model enumeration is deterministic; candidate-installed
+LIVE Cortex acceptance and its remaining host limits are recorded per cut rather than
+frozen here.
 
 ---
 
@@ -243,7 +212,7 @@ The single-turn / multi-turn / cross-process / persistence-boundary / shutdown i
 | Single-turn prompt extraction, SessionStart hook not mistaken for prompt | `smoke-acp-raw-turn-live`, `check-acp-prompt-builder` |
 | Multi-turn continuity + recall (process-scoped reuse) | `smoke-acp-session-reuse-live`, `check-acp-session-reuse` |
 | Cross-process continuity / cache before-after | `check-acp-session-store` (signature, decideBootstrap, persist/parse) |
-| Lifecycle policy — a turn-scoped `cwd:` fallback is never a persisted resume/load path; process-scoped records are hashed-`sessionKey` records | `check-acp-session-store` (`resolveLifecyclePolicy` turn-scoped→always-new, `decideBootstrap`, sha256 `SessionRecord` build/parse/roundtrip) — the former inline `acp-bridge.ts` repro is retired with the fat-bridge |
+| Lifecycle policy — turn-scoped is always new; process-scoped may reuse only the live in-memory session; persisted records are not a resume/load path today | `check-acp-session-store`, `check-acp-session-reuse` |
 | Tool-call / event mapping | `check-acp-event-mapper`, `smoke-acp-provider-live` |
 | Operator mcpServers / skills reach the live session | `smoke-acp-mcp-live`, `smoke-acp-skill-live`, `check-acp-config` |
 | Overlay isolation + memory containment | `check-acp-overlay`, `smoke-acp-memory-containment-live`, `check-acp-tool-surface` |
@@ -252,18 +221,16 @@ The single-turn / multi-turn / cross-process / persistence-boundary / shutdown i
 
 The literal callable identifier differs per backend — probe by asking the agent to print it **verbatim** (do not ask "hyphen or underscore" — ambiguous between outer separator and inner server name):
 
-| Backend | Literal identifier | Outer sep | Inner server name |
-|---|---|---|---|
-| Claude | `mcp__entwurf-bridge__entwurf_v2` | `__` | `entwurf-bridge` (hyphen) |
-| Cortex *(0.13.0)* | `mcp__entwurf-bridge__entwurf_v2` | `__` | `entwurf-bridge` (hyphen) — same shape as Claude, **measured** (§11-8) |
-| Codex | `mcp__entwurf_bridge__.entwurf_v2` | `__` | `entwurf_bridge` (underscore) + **literal dot** |
-| Gemini *(probe)* | `mcp_entwurf-bridge_entwurf_v2` | `_` (single) | `entwurf-bridge`, no dot |
+| Backend | Literal identifier | Boundary |
+|---|---|---|
+| Claude | `mcp__entwurf-bridge__entwurf_v2` | native Claude tool surface + explicit MCP server |
+| Cortex | `mcp__entwurf-bridge__entwurf_v2` | same identifier shape, different native tool surface |
 
-A Claude session reporting the underscore form, or any cross-shape leak, is a backend-identification leak. Released 0.12 baseline is Claude; cortex joins it in 0.13.0 and is the one row whose shape had to be *measured* rather than assumed (identical to Claude's — so this row cannot discriminate Claude from Cortex, and the tool-surface axis in §1.4 is what does). The Codex/Gemini rows are reference for the probe lanes.
+The identifier cannot distinguish Claude from Cortex; native tools and carrier facts must.
 
-### 2.2 MCP injection visibility — equal across resume/load/new
+### 2.2 MCP injection visibility
 
-The sole MCP responsibility of `entwurf` is to inject `entwurfProvider.mcpServers` equally into `newSession` / `resumeSession` / `loadSession`. Ask "list the visible MCP server names": the registered `entwurf-bridge` appears, unregistered MCPs do not (no automatic `~/.mcp.json` loading); the list is identical every turn; changing `entwurfProvider.mcpServers` changes `bridgeConfigSignature` and forces a new session. `check-acp-config` + `smoke-acp-mcp-live` pin this; the manual check is an honesty corroboration.
+The sole MCP responsibility of `entwurf` is to project explicit `entwurfProvider.mcpServers` into every newly opened backend session. Ask for visible MCP server names: `entwurf-bridge` appears, ambient servers do not, and changing the declaration changes `bridgeConfigSignature` so a live incompatible session is replaced rather than silently reused. `check-acp-config` and `smoke-acp-mcp-live` pin this; the manual check is honesty corroboration.
 
 ### 2.3 Process / cache hygiene — the orphan bound (§gate-external judgement)
 
@@ -274,7 +241,7 @@ AFTER_<BACKEND> ≤ BEFORE_<BACKEND> + (distinct alive
   (sessionKey, backend, modelId, bridgeConfigSignature) tuples this run holds open)
 ```
 
-An **upper bound**, not an equation: child reuse (one `entwurf` + N resumes share one child → delta 0 is expected) and idle reaping push `AFTER` below it; a config-signature or `(provider, model)` switch pushes it up by 1. `AFTER > BEFORE + alive_tuples` is the actionable signal — an unexpected child appeared. Walk the parent chain (`pgrep -af 'claude-agent-acp|codex-acp'` → `ps -o ppid=`); any ACP child whose parent `pi` has exited is an **orphan** — flag and preserve as evidence.
+An **upper bound**, not an equation: child reuse and idle reaping may keep the delta below it; a config-signature or `(provider, model)` switch may add one. `AFTER > BEFORE + alive_tuples` is actionable. Walk the backend process parent chain; any ACP child whose parent `pi` has exited is an orphan—preserve it as evidence.
 
 ### 2.4 pi session record as a shared memory axis
 
@@ -289,7 +256,7 @@ Pass: user/assistant turns accumulate normally; the transcript is not broken/emp
 
 ---
 
-## 3. Pass criteria — the 0.12 release floor
+## 3. Pass criteria — current release floor
 
 The minimum passing bar:
 
@@ -315,7 +282,6 @@ Passing establishes a **release verification floor**, not an 8-hour/day operatio
 - **Retired dedicated smokes, live code invariants** (manual/troubleshooting only — *not* part of the release floor):
   - *Model-switch lock* — entwurf sessions are locked to their starting model. Gate: `check-model-lock` (in `pnpm check`). The dedicated live `smoke-model-switch` was retired in v2; the invariant lives in `pi-extensions/model-lock.ts` (extension guard) + `session-store.ts` `SessionModelLockedError` (the `decideBootstrap` fail-loud model lock).
   - *Cancel / abort cleanup* — `onAbort` → `cancelActivePrompt()` (session stays reusable); the stream catch closes the bridge only on `stopReason === "error"`. Dedicated `smoke-cancel` retired; invariant in code.
-  - *Transcript-poison invalidation (#12)* — **historical (0.11):** a poisoned backend transcript (empty text block ± `cache_control`) returned the same Anthropic 400 forever, handled by a dedicated classifier + `verify-transcript-poison` smoke. Both were retired in the 0.12 cutover; there is **no dedicated classifier or gate on the current surface** — recorded only so the failure mode is not forgotten.
 
 ### Evidence preservation when a problem occurs
 

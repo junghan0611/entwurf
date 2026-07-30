@@ -6,32 +6,43 @@ silently drifted into a different identity / context surface. Questions
 are deliberately open-ended — they probe what the agent actually sees,
 not what it was told to claim.
 
-The released 0.12 ACP backend is **Claude**, and the main question bank below is the
-Claude ACP baseline. The prepared **0.13.0** cut adds **Snowflake Cortex Code** as a
-second ACP backend; it has no question bank of its own yet (deferred to 0.13.1), and the
-Claude bank must not be run against it verbatim — cortex is
-system-prompt-carrier-less and runs its own native tool surface, so the overlay/engraving
-questions below would grade it against a surface it does not have. Antigravity (`agy`)
-is also shipped, but as a native-push garden citizen rather than an ACP backend, so it
-has a separate citizen/round-trip baseline below instead of being forced into Claude's
-overlay questions. Codex (pi-native / delivery probe) and Gemini (historical non-goal
-ACP probe) remain reference axes, not a shipped ACP baseline.
+Claude is the reference ACP backend. Cortex Code has a separate compact baseline
+because it has no system-prompt carrier and keeps its own native tool surface.
+Antigravity (`agy`) is a native-push citizen rather than an ACP backend and therefore
+has a separate citizen/round-trip baseline. Historical Codex/Gemini probes are not
+part of this operator interview.
 
-## Release-host baseline — #51 repair cut
+## Release-host baseline
 
 This table is the operator-facing support/certification view. It complements the
 model interview below; a persuasive answer from the model cannot turn an unmeasured
-host into a certified one.
+host into a certified one. Verdicts are one of **certified** (a real host ran the
+installed doctor green), **shape-only** (gates model the package, no live host),
+or **unverified**.
 
-| Surface | Automated artifact evidence | Direct/native evidence | Current verdict |
-|---|---|---|---|
-| Node 24 Linux package consumer | Required `artifact-consumer` CI: read-only candidate `.tgz`, checkout-invisible, non-root global install, PATH shims, frozen package root, path+sha256 regular-file fence, strict doctor fixture | None required for the package layout itself | Package-consumer shape verified. The planted Claude cache/owner/bridge are synthetic and prove no real Claude lifecycle. |
-| Claude Code 2.1.217 exec form | `check-hook-launch-topology` + `check-claude-floor-coherence`; doctor oracle healthy fixture + 21 defect mutations | B2 actual Claude session on NixOS: args per element, literal `${HOME}`, direct parent, FileChanged exit 2 → idle wake | Runtime behavior verified at 2.1.217 on one host; this is the supported floor. |
-| Claude Code 2.1.138 negative | Launcher empty-argv refusal + installer/doctor floor checks | B actual Claude session on NixOS: args discarded while runtime reported success | Unsupported; no shell-form fallback. |
-| Maintainer NixOS installed package | Gates and B/B2 are green; the published `0.12.8-repair.1` artifact was installed from the registry for acceptance, then the V3 development wiring was restored | 2026-07-25: registry install → installed `install-meta-bridge` → NEW Claude session with a live MCP child → installed doctor **exit 0** (HISTORY) | Host-certified for the published repair artifact, including physical `entwurf_v2` delivery and the live owner join. The doctor first went RED on a managed dev-bin shadowing the registry bridge. This host now runs dev wiring again; stable `0.12.8` earns its own host proof. |
-| Secondary Ubuntu Linux installed package | Linux artifact-consumer gate models the package shape, not this machine | 2026-07-25: same registry artifact, isolated clean `PI_CODING_AGENT_DIR`, NEW Claude session with a live MCP child → installed doctor **exit 0** (HISTORY) | Recovery closed for `0.12.8-repair.1`. Hand-patched hooks and validate output remain non-acceptance; a stable artifact is a separate proof. |
-| macOS Claude meta-bridge | No artifact-consumer job and no `/proc` live join | None | **Not yet verified/certified for this repair cut.** Installer refuses Darwin and doctor remains nonzero; uninstall permits Darwin to remove older managed state. This is not permanent—future native validation may reopen it, and package-level `os` stays unrestricted. |
-| WSL2 / Windows | None | None | Unverified / outside this repair cut. |
+| Surface | Verdict | Evidence |
+|---|---|---|
+| Node 24 Linux package consumer | shape-only | Required `artifact-consumer` CI |
+| Claude Code >=2.1.217 exec form | **certified** — supported floor | Topology + floor gates, doctor oracle; B2 live NixOS session |
+| Claude Code 2.1.138 | **unsupported** | Launcher refuses empty argv; no shell-form fallback |
+| Maintainer NixOS installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 registry install → doctor exit 0 (HISTORY) |
+| Secondary Ubuntu installed package | **certified** for `0.12.8-repair.1` | 2026-07-25 same artifact, isolated agent dir → doctor exit 0 (HISTORY) |
+| macOS Claude meta-bridge | unverified | Installer refuses Darwin; no `/proc` live join |
+| WSL2 / Windows | unverified | None |
+
+Notes the table cannot carry without becoming prose again:
+
+- **shape-only is not a live proof.** The `artifact-consumer` job verifies a read-only
+  candidate `.tgz`, checkout-invisible non-root global install, PATH shims, a frozen
+  package root, the path+sha256 regular-file fence, and a strict doctor fixture. Its
+  planted Claude cache/owner/bridge are synthetic — no real Claude lifecycle runs there.
+- **Both certified hosts are certified for the published repair artifact only**, including
+  physical `entwurf_v2` delivery and the live owner join. Stable cuts earn their own host
+  proof; hand-patched hooks and `plugin validate` output are never acceptance.
+- **The maintainer host first went doctor-RED** on a managed dev-bin shadowing the registry
+  bridge, and now runs dev wiring again.
+- **macOS is not permanently excluded.** Future native validation may reopen it, and the
+  package-level `os` field stays unrestricted.
 
 **Operator acceptance rule:** on a claimed Claude host, reinstall from the released
 artifact, restart every old Claude process, open a new session, and run the doctor
@@ -76,20 +87,16 @@ expected isolation-closed response, **FAIL** = listed failure mode,
 > `check-acp-carrier-augment`) and the live `smoke-acp-memory-containment-live`;
 > this document records the model-side observation.
 
-## Per-ACP-backend specifics
+## Claude-specific surface
 
-Pick the active **ACP backend's** column before pasting a question block. Claude
-is the 0.12 shipped ACP baseline; Codex/Gemini are historical probe reference.
-Do not replace the Gemini column with agy: agy does not use this overlay/carrier
-contract at all, and its shipped baseline is the native-citizen section below.
+The two-round question bank below is the Claude reference baseline.
 
-| Slot | Claude *(shipped)* | Codex *(probe)* | Gemini *(probe)* |
-|---|---|---|---|
-| Config-dir env (Q-L2) | `CLAUDE_CONFIG_DIR` | `CODEX_HOME` / `CODEX_SQLITE_HOME` | `GEMINI_CLI_HOME` |
-| Native dir to compare | `~/.claude/` | `~/.codex/` | `~/.gemini/` |
-| Read-class native tools (Q-L3) | `Read`, `Bash` (ls/find/grep) | `exec_command` | `read_file`, `list_directory`, `glob`, `grep_search` |
-| Project memory file (Q-L4) | `CLAUDE.md` / `.claude/` | `~/.codex/AGENTS.md` | `GEMINI.md` |
-| Memory write target (Q-L5W) | `CLAUDE.md`, hooks, agents | `~/.codex/memories`, AGENTS.md | `GEMINI.md`, `MEMORY.md`, autoMemory inbox |
+| Slot | Expected Claude surface |
+|---|---|
+| Config dir (Q-L2) | `CLAUDE_CONFIG_DIR`, pointing at the entwurf overlay rather than `~/.claude/` |
+| Read-class tools (Q-L3) | `Read`, `Bash` (ls/find/grep) |
+| Project memory (Q-L4) | `CLAUDE.md` / `.claude/`, not inherited through the overlay |
+| Native memory write (Q-L5W) | none; do not create `CLAUDE.md`, hooks, or agents as a memory substitute |
 
 ---
 
@@ -250,179 +257,26 @@ same-process concurrency.
 
 ---
 
-## Probe appendix — Gemini engraving substitution (`Q-H`, not 0.12 baseline)
+## Cortex baseline
 
-Historical Gemini probe, retained for the probe lane only — **not** part of
-the shipped Claude baseline. Gemini's `applySubstitutions` rewrites unknown
-`${name}` tokens; the bridge inserts a U+200B between `$` and `{` in operator
-engraving body so the regex misses while the visual text stays stable. The
-former carrier-isolation canary literal is a doc-era artifact with **no code
-surface on 0.12** — do not assert it as a current expectation.
+Run these checks in a fresh `entwurf/cortex-*` session. Do not grade Cortex against
+Claude's overlay or system-prompt carrier.
 
-Setup (operator side): author a test engraving with literal `${AvailableTools}` /
-`${SubAgents}` / `${arbitrary_unknown_key}` tokens, plumb it through the Gemini
-overlay, open a fresh Gemini ACP session, then ask `Q-H`:
+| ID | Check | PASS | FAIL |
+|---|---|---|---|
+| Q-CX-ID | Backend identity | Identifies Cortex and the selected enforced model; does not claim to be Claude Code. | Reports the Claude backend or an unenforced/default model. |
+| Q-CX-TOOLS | Native surface | Reports Cortex-native tools; garden tools arrive only through `entwurf-bridge`. | Lists Claude's `Read/Bash/Edit/Write` allowlist as its native surface. |
+| Q-CX-MCP | Bridge projection | `entwurf-bridge` is reachable through the overlay-private `cortex/mcp.json`; no ambient operator MCP catalog appears. | Bridge absent, or unrelated operator MCP servers leak in. |
+| Q-CX-CARRIER | Context carrier | Says Cortex has no system-prompt engraving carrier; engraving/context arrived in the first-user augment. | Claims `_meta.systemPrompt` delivered the engraving. |
+| Q-CX-HOME | Containment | Distinguishes isolated HOME from the real operator HOME restored only for the bridge; `CORTEX_HOME` is absent. | Claims broad operator home/config inheritance or a present `CORTEX_HOME`. |
 
-~~~
-[Q-H] Verify whether these three lines are visually present in your system
-prompt, and if so quote the visible text exactly:
-- TOKEN_A = ${AvailableTools}
-- TOKEN_B = ${SubAgents}
-- TOKEN_C = ${arbitrary_unknown_key}
-~~~
-
-- **PASS** — All three quoted with `${...}` visually preserved (the ZWSP is invisible; a PASS looks identical to the input).
-- **FAIL** — TOKEN_A shows a tool list in place of `${AvailableTools}`; any token mutated, dropped, or interpolated.
+The live `smoke-acp-cortex-live` and deterministic `check-acp-cortex` remain the
+oracles. This interview tests whether the model describes that surface honestly.
 
 ---
 
 # HISTORY (pointer)
 
-2026-07-30 Cortex 0.13.0 acceptance + landing checkpoint (Linux/thinkpad, Cortex Code
-v1.1.52). Pre-version landing HEAD `9f1c7dc9e1fa77103e29a6f1884af7759e1595eb` passed
-exact-SHA GitHub Actions run [30505001694](https://github.com/junghan0611/entwurf/actions/runs/30505001694):
-`check`, `install-surface`, and `artifact-consumer` all success. The non-interference reading rests on what the
-sources prove, not on an inspection of the runner image: the external Cortex CLI is not an npm
-dependency, nothing in install or provider registration looks for the executable,
-`.github/workflows/ci.yml` provisions only checkout, pnpm, and Node 24 (no Cortex install step,
-no Snowflake auth), and the required Linux `artifact-consumer` job ran the candidate inside a
-clean `node:24-bookworm` container and passed. Cells at that tree: `ENTWURF_REQUIRE_DOCKER=1 ./run.sh
-check-install-container` EXIT=0 (40 ok) — candidate `junghanacs-entwurf-0.12.10.tgz`
-**sha256=63342aa8a144011dee86ebea8f0b778c7860e54dc0f1c710438983c679e8af87**, image
-`node:24-bookworm` `id=sha256:fcd0f74fb415c752…`,
-`repoDigest=node@sha256:5711a0d445a1af54…`; `./run.sh check-pack-install` EXIT=0 with the
-installed package's own model list enumerating the **exact six curated rows (claude 2 +
-cortex 4)**; `LIVE=1 ./run.sh smoke-acp-cortex-live` **PASS 23/23**, deliberately rerun
-after the `resolveSessionKey` overlay-scope repair so the claim does not rest on the earlier
-CP2 code — overlay scope dir + `autoUpdate:false` + overlay-private `mcp.json` projection +
-real-operator-HOME restore on the bridge entry, the model's own `entwurf_v2` landing exactly
-one `.msg` on a seeded peer with the gid only in the envelope, and process-group teardown
-leaving nothing alive in that run's overlay. `pnpm check` on the prepared tree includes
-`check-gate-qualification` **111/111 killed** (lane `acp-cortex` twelve), and
-`LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.13.0.drnRyR` was all green —
-**MUST PASS=17 FAIL=0 SKIP=0**, **BEHAVIOR PASS=1 FAIL=0**, EXIT=0. Operator-session (not
-gate) evidence from 2026-07-29 on the same implementation set: a Cortex resident used the
-host pi citizen's garden id instead of inventing one (`agentId=entwurf/cortex-claude-sonnet-5`,
-`backend=pi`, `origin=pi-session`, `replyable=true`) and exchanged real turns across three
-rails — native Claude Code mailbox drain, pi native control socket, and pi ACP Claude Sonnet
-control socket; record `20260729T204101-7aaa6f` remains on disk. **Still pending as a
-release-blocking `make` tag gate:** the preserved exact 0.13.0 candidate installed into a
-fresh temporary root must drive one cold `entwurf/cortex-claude-sonnet-5` turn from those
-installed bytes (unique nonce, exit 0, candidate sha256 unchanged before/after, resolved
-installed root recorded). Installed-artifact evidence and real-Cortex evidence have not yet
-met in one execution; a RED there stops the cut before the tag. Second machine, macOS, and
-WSL2 remain unclaimed for this cut.
-
-2026-07-25 repair.1 installed-native host acceptance (stable-promotion prerequisite):
-the published registry artifact `@junghanacs/entwurf@0.12.8-repair.1` was installed
-fresh on two Linux hosts (maintainer + secondary) through the package's stable bins.
-Each host ran installed `entwurf install-meta-bridge`, opened a NEW real Claude Code
-session with a live MCP child, and ran the installed `entwurf doctor-meta-bridge`
-against an isolated clean `PI_CODING_AGENT_DIR`; both doctors reached **PASS**, including
-the live MCP owner join and a physical `entwurf_v2` delivery. The maintainer host first
-proved the oracle's value by failing when its managed dev-bin shadowed the registry
-`entwurf-bridge`: the installed v2 hook wrote a v2 record while the checkout's v3 bridge
-refused it. Removing the managed dev bin made PATH resolve the registry bridge, after
-which the same native proof passed. The test-created v2 record from that failed mixed-path
-attempt was preserved under `meta-sessions.proof-failed-20260725T165227/`; the maintainer's
-V3 development wiring was restored after acceptance. This closes VERIFY's two-host
-repair.1 prerequisite for a separately authorized stable `0.12.8`; it is host
-corroboration of the published repair artifact, not evidence for the future stable
-candidate, which still earns exact-SHA CI, LIVE, and preserved-artifact acceptance.
-Exact pre-version closure checkpoint `28a52fe2d6e9ca29b657a33e5c80ff4debda2f0f`
-passed GitHub Actions run [30149759311](https://github.com/junghan0611/entwurf/actions/runs/30149759311):
-`check`, `install-surface`, and `artifact-consumer` all success. The host proof then found
-a one-line `remove-dev-bin` dispatch defect, so the eventual stable landing HEAD must earn
-a fresh exact-SHA run; this checkpoint is not reused as that acceptance.
-
-2026-07-24 (night) upgrade-harness + review acceptance at exact HEAD
-`cbda097` (branch `repair/v2-core-debt`, merged to main the same night — the
-hard-cut branch chronicle lives in issue #50): the three-cell harness gained
-the UPGRADE axis — `setup` / `install` / `install-meta-bridge` refuse a
-pre-cut (v1/v2) meta-record store BEFORE their first write, prescribe on
-three axes (pre-cut → migrate; problems → repair first; both → repair FIRST,
-then migrate), and the proof seeds every host state from frozen fixture bytes
-(`fixtures/meta-store`, sha256-manifested, excluded from the tarball).
-Deterministic cells at this HEAD: `pnpm check` EXIT=0 (source cell
-`check-upgrade-gate` 57/0), `check-pack-install` EXIT=0,
-`ENTWURF_REQUIRE_DOCKER=1 check-install-container` EXIT=0 — candidate
-`junghanacs-entwurf-0.12.8-repair.1.tgz` **sha256
-`db17165f962c938d71ef97cb7a86252549dc91b00d5ec67f63ec65b41039e6dc`**,
-11413738 bytes, image `sha256:f1158c7f34cf35a047bf0513c38282bb2fa253529e5ae404b32c6d93697410be`.
-Live at this HEAD: `LIVE=1 release-gate` **MUST 16/1/0 + BEHAVIOR 1/0,
-EXIT=1** — the single FAIL is `smoke-acp-bundled-mcp-live`, the known
-bundled-MCP readiness race (ROADMAP 「🔴 OPEN」, GLG: observe, don't fix;
-sample recorded with transcript; isolated re-run PASS 4/4). Every other MUST
-passed at this HEAD, including `smoke-acp-v2-send-live` (send identity /
-replyability) and the matrix honest-reject. **A release cut stays blocked on
-that red by the gate's own words; the merge to main was GLG's explicit call
-with the race documented as an open observation item.**
-
-2026-07-24 dependency-uplift acceptance at exact HEAD
-`7cbeb29b6afcfbaf4fc28da3b7929037c339113d` (branch `repair/v2-core-debt`): pi
-runtime **0.80.7 → 0.82.0** and Claude ACP **claude-agent-acp 0.54.1 → 0.61.0 /
-ACP SDK 1.1.0 → 1.3.0** as two separate cuts, with `@anthropic-ai/sdk` held at
-**0.100.1** (measured through the real module graph: claude-agent-sdk 0.3.217's
-`>=0.93.0` peer resolves to 0.100.1 there; dropping the direct pin under this
-repo's `autoInstallPeers:false` leaves only 0.91.1 and the peer goes unmet).
-Deterministic 3 cells all EXIT=0 on Node 24 Linux — checkout (`pnpm
-build-bridge && pnpm check`), installed tree (`check-pack-install`: resolved
-tree holds only `@earendil-works@0.82.0`, loader drove the pinned pi, installed
-bin delivered a `.msg`), clean consumer (`ENTWURF_REQUIRE_DOCKER=1
-check-install-container`, candidate `junghanacs-entwurf-0.12.8-repair.1.tgz`
-**sha256 `ab5dee07585c8d7a4f8f174cedea0051489ae1a26766ff1baf8edd7377d5bac7`**,
-11391060 bytes, image `sha256:f1158c7f34cf35a047bf0513c38282bb2fa253529e5ae404b32c6d93697410be`).
-Live: `LIVE=1 ./run.sh release-gate` measured **MUST 17/0/0 + BEHAVIOR 1/0,
-EXIT=0** at this HEAD — the first aggregate to include
-`smoke-acp-v2-send-live`, which closes the SEND half of ACP citizenship (an ACP
-model calls `entwurf_v2` and the `.msg` lands carrying the resident's own garden
-id, `entwurf/<model>`, replyable — a gid never present in the prompt). Two
-stale claims were retired against measurement rather than argument: the
-extension-loader `/compat` shim survives 0.82.0 (root / `/compat` / `/oauth`
-untouched; `/providers/all` is an addition, and the curated Claude anchors are
-byte-identical across the bump), and the "one-shot bundled-MCP teardown hang"
-that a gate comment used as its rationale does not reproduce on this
-combination. What a plain `pi -p` genuinely lacks is garden identity, and only
-without `--entwurf-control` — now documented as a provider/citizen boundary
-instead of read as a defect.
-
-2026-07-24 record-era aggregate floor: `LIVE=1 ./run.sh release-gate` measured
-**MUST 16/0/0 + BEHAVIOR 1/0, EXIT=0** on the `repair/v2-core-debt` branch after
-the #50 C1–C3 cuts and the observability repair — the first aggregate run since
-2026-06-27 (every individual smoke had been green, but the two-tier summary and
-exit code of the aggregate command itself had gone unverified for the whole
-hard-cut window; three MUST live smokes were found dead on the pre-C2 address
-contract and re-authored in the same pass). The step count moved 17→16 with the
-v2-cutover smoke retirements. Evidence log: `/tmp/pi-tmux-release-gate.log`
-(scratch `/tmp/entwurf-rg-scratch-20260724`).
-
-2026-07-22 repair evidence: Linux artifact-consumer C is committed locally as
-`328c66e` (not yet pushed at the time of this baseline update); B/B2 direct-native
-observations and the exec-only production cut are documented in issue #51 and
-VERIFY's host matrix. **Post-provenance C was re-proven rather than inheriting the
-earlier green:** the first rerun correctly went RED because its stand-in Claude was
-container PID 1, which the product rejects as an impossible/reparented owner. The
-fixture now keeps an outer PID-1 shell and runs the consumer as pid 8; both default
-pack-once and caller-preserved exact-tgz modes reached doctor PASS with marker
-`ownerPid=8 (>1)` and identical artifact sha256. The preserved file's
-inode/size/mtime/sha tuple was unchanged across acceptance. Evidence logs:
-`/tmp/pi-tmux-entwurf-exact-final.log` and
-`/tmp/pi-tmux-entwurf-default-final.log`; the digest belongs in the external cut log,
-not inside this shipped file (embedding it would mutate the tarball it names).
-This was the `0.12.7-1` gate candidate, **not** the approved release artifact. Exact
-mode was later repeated for `0.12.8-repair.0`, and those accepted bytes were published
-under `repair` on 2026-07-22. Field evidence then invalidated that release: its installed
-MCP dist omitted `entwurf-capabilities.json`, so tools/list and the old doctor stayed
-green while every `entwurf_v2` send died ENOENT. The repaired candidate must be
-`0.12.8-repair.1` and must earn fresh exact-SHA CI, LIVE-gate, preserved-artifact, and
-container evidence; none of repair.0's release evidence transfers. Maintainer/secondary-host
-installed doctor GREEN remains deliberately pending until after repair.1 publication.
-
-
-Per-release baselines — the 0.9.0 garden-native identity cut (17 PASS / 0 FAIL /
-0 SKIP `/gnew`-inclusive gate, #28), and the older 0.8.x / 0.5.0 context-pressure
-baselines — live in **CHANGELOG.md and git history**, including the gate names of
-their era (several of which, e.g. `smoke-all` / `smoke-async-resume` /
-`smoke-compaction-policy` / `sentinel` / `xt-tool-surface`, were retired in the
-v2 cutover). The live calibration reference is the current release floor in
-[VERIFY.md](./VERIFY.md) §0A — most recent: **2026-07-24 MUST 16/0/0 + BEHAVIOR 1/0**.
+Per-release counts, digests, host observations, and incident chronology live in
+[CHANGELOG.md](./CHANGELOG.md), release artifacts, issues, and git history. This
+file keeps only the current operator interview and support verdicts.

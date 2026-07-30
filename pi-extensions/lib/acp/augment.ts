@@ -36,10 +36,10 @@ import type { AcpTextBlock } from "./context.js";
 
 const MAX_AUGMENT_BYTES = 50 * 1024;
 
-// Carrier-less backends expose no `_meta.systemPrompt` (docs/acp-backend-rail.md
-// §9-4). claude folds the operator engraving into that carrier; a carrier-less
+// Carrier-less backends expose no `_meta.systemPrompt` (docs/acp-backend-rail.md,
+// “Cortex Code audit”). claude folds the operator engraving into that carrier; a carrier-less
 // backend (cortex, the first — precisely: SYSTEM-PROMPT-carrier-less, since
-// cortex does read `_meta` for an unpromoted caller-session-id seam, §11-8)
+// cortex does read `_meta` for an unpromoted caller-session-id seam)
 // has nowhere to put it — so its operator engraving
 // rides HERE, prepended as the LEADING section of the first-user augment. It
 // travels on the WIRE only (new-only, never the config signature), so an

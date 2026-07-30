@@ -1,0 +1,80 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-stop-reason",
+	"mutants": [
+		{
+			"claim": "STOP-REFUSAL-NOT-SUCCESS",
+			"title": "a model refusal reported as a finished answer — the turn has no content, yet pi seals it done/stop",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\tcase \"refusal\":\n\t\t\treturn {\n\t\t\t\tstopReason: \"error\",\n\t\t\t\trawStopReason: stopReason,\n\t\t\t\terrorMessage: \"ACP backend stopped with: refusal (the model declined to answer; the turn is incomplete)\",\n\t\t\t};"
+			],
+			"replace": ["\t\tcase \"refusal\":\n\t\t\treturn { stopReason: \"stop\", rawStopReason: stopReason };"],
+			"gate": ["bash", "run.sh", "check-acp-stop-reason"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STOP-REFUSAL-NOT-SUCCESS]",
+			"signatureSource": "scripts/check-acp-stop-reason.ts"
+		},
+		{
+			"claim": "STOP-TURNBUDGET-NOT-SUCCESS",
+			"title": "an exhausted per-turn request budget reported as success — the answer is cut short but pi seals it done",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\tcase \"max_turn_requests\":\n\t\t\treturn {\n\t\t\t\tstopReason: \"error\",\n\t\t\t\trawStopReason: stopReason,\n\t\t\t\terrorMessage:\n\t\t\t\t\t\"ACP backend stopped with: max_turn_requests (the backend's per-turn request budget was exhausted; the turn is incomplete)\",\n\t\t\t};"
+			],
+			"replace": ["\t\tcase \"max_turn_requests\":\n\t\t\treturn { stopReason: \"stop\", rawStopReason: stopReason };"],
+			"gate": ["bash", "run.sh", "check-acp-stop-reason"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STOP-TURNBUDGET-NOT-SUCCESS]",
+			"signatureSource": "scripts/check-acp-stop-reason.ts"
+		},
+		{
+			"claim": "STOP-UNKNOWN-NOT-SUCCESS",
+			"title": "the collapse-to-stop default returns: any reason this build has never seen becomes a clean success",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\tdefault:\n\t\t\treturn {\n\t\t\t\tstopReason: \"error\",\n\t\t\t\trawStopReason: stopReason,\n\t\t\t\terrorMessage: `ACP backend stopped with an unrecognized reason: ${stopReason}`,\n\t\t\t};"
+			],
+			"replace": ["\t\tdefault:\n\t\t\treturn { stopReason: \"stop\", rawStopReason: stopReason };"],
+			"gate": ["bash", "run.sh", "check-acp-stop-reason"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STOP-UNKNOWN-NOT-SUCCESS]",
+			"signatureSource": "scripts/check-acp-stop-reason.ts"
+		},
+		{
+			"claim": "STOP-ABSENT-NOT-SUCCESS",
+			"title": "a prompt result carrying NO stop reason treated as a finished turn instead of an error",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\tcase undefined:\n\t\t\treturn {\n\t\t\t\tstopReason: \"error\",\n\t\t\t\terrorMessage: \"ACP backend ended the turn without a stop reason\",\n\t\t\t};"
+			],
+			"replace": ["\t\tcase undefined:\n\t\t\treturn { stopReason: \"stop\" };"],
+			"gate": ["bash", "run.sh", "check-acp-stop-reason"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STOP-ABSENT-NOT-SUCCESS]",
+			"signatureSource": "scripts/check-acp-stop-reason.ts"
+		},
+		{
+			"claim": "STOP-RAW-PRESERVED",
+			"title": "the raw ACP reason is dropped on the way out, so no consumer can see what the backend actually said",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tif (verdict.rawStopReason !== undefined) state.output.rawStopReason = verdict.rawStopReason;\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-acp-stop-reason"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STOP-RAW-PRESERVED]",
+			"signatureSource": "scripts/check-acp-stop-reason.ts"
+		},
+		{
+			"claim": "STOP-PENDING-SEED",
+			"title": "the stream state seeds success: an in-flight turn already reads as a finished stop before any terminal arrives",
+			"subject": "pi-extensions/lib/acp/event-mapper.ts",
+			"find": ["\t\tstopReason: \"pending\","],
+			"replace": ["\t\tstopReason: \"stop\","],
+			"gate": ["bash", "run.sh", "check-acp-stop-reason"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:STOP-PENDING-SEED]",
+			"signatureSource": "scripts/check-acp-stop-reason.ts"
+		}
+	]
+}

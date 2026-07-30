@@ -9,8 +9,8 @@
 // Two curated sets live here, one per adapter on the rail
 // (backend-adapter.ts): the unprefixed Claude ids (the reference backend) and
 // the `cortex-` prefixed Snowflake Cortex Code ids (the second backend, landed
-// 0.13.0 — docs/acp-backend-rail.md §6/§11-8). Codex is already a native garden
-// citizen and Gemini/major tools use native, so neither is an ACP backend here.
+// 0.13.0 — docs/acp-backend-rail.md “Cortex Code audit”). Codex has native
+// delivery-probe evidence but no managed citizen lane; neither it nor Gemini is an ACP backend here.
 // A third governed backend EXTENDS this file the same way — it does not change
 // the pattern.
 
@@ -87,9 +87,9 @@ function claudeContextWindow(model: { id: string; contextWindow: number }): numb
 // ── Cortex (Snowflake Cortex Code) curated surface ──────────────────────────
 //
 // entwurf's ACP rail is backend-extensible: Cortex is the first NON-claude
-// backend to land through it (docs/acp-backend-rail.md §6). pi-ai carries no
+// backend to land through it (docs/acp-backend-rail.md, “Shipped adapters”). pi-ai carries no
 // snowflake/cortex model source, so this surface is HAND-CURATED. Every id
-// carries the reserved `cortex-` prefix (§9-1): the prefix is the SINGLE routing
+// carries the reserved `cortex-` prefix: the prefix is the SINGLE routing
 // authority (backend-adapter.ts `routeModel`) and keeps the ids off the Claude
 // native ids Cortex routes to (`cortex-claude-sonnet-5` vs the unprefixed
 // `claude-sonnet-5` the claude adapter owns). `routeModel` strips the prefix to

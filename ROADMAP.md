@@ -20,7 +20,7 @@ Claude mailbox, pi socket/resume, Antigravity native-push가 한 garden-id dispa
 **0.12.10(= `claude-agent-acp` 0.62.0 핀 + rail 문서 수선) → readiness 인과 규명 → #48 Cortex ACP →
 #56 Codex native citizen → #47 mux driver**다. reference adapter가 모델을 outbound sibling dispatch까지
 데려간다는 것을 증명해야 두 번째 backend를 태운다 —
-증명 없는 rail 위에서는 adapter 버그와 rail 버그를 구분할 수 없다(`docs/acp-backend-rail.md` §11).
+증명 없는 rail 위에서는 adapter 버그와 rail 버그를 구분할 수 없다(`docs/acp-backend-rail.md` §11-7).
 0.13.0은 지금 열지 않는다. 네 이슈 lane 모두 과거 가설과 증거의 묶음이지 현재 구현
 명세가 아니며, 각 lane은 현재 main·현재 upstream·현재 live surface를 다시 audit한 뒤 범위를 정한다.
 Pi는 오늘 가장 깊이 붙은 adapter지만, 프로젝트의 본질은 **garden id로 호명 가능한 형제 세션 사이의 얇은
@@ -45,7 +45,7 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 | **ACP Claude** | shipped, **model-facing outbound half unreliable — 현재 lane** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Turn/provider path ships, 그리고 host resident는 record/socket citizen으로 계속 주소 가능하다(S1이 turn-free로 증명). 다만 번들 `entwurf-bridge` MCP 도구가 첫 턴에 세션 schema에서 빠지는 관측이 있어, 그 시민 안의 **ACP 모델이 형제에게 나가는(outbound dispatch)** 절반은 아직 신뢰 구간이 아니다(🔴 readiness race). | ACP LIVE smokes + release-gate MUST |
 | **Codex** | verified probe / #56 queued | direct/native delivery evidence exists; no managed native-citizen lifecycle yet. Default is not ACP. Re-audit app-server/hooks on the shipping line before implementation. | DELIVERY.md raw probe / #56 |
 | **Antigravity (`agy`)** | shipped | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push; managed MCP/permission, statusline, hook adapters. | agy deterministic gates + doctors + 2026-07-13 live round trip |
-| **Cortex / governed ACP** | **landed (0.13.0)** — hvkiefer's PR #40 adapter transplanted with the CP0-audit revisions (dual-HOME overlay, mcp.json projection, per-turn set-model, 4-row curation) | the audit record is `docs/acp-backend-rail.md` §11-8 (defects D1–D10 + landed contract); deterministic gate `check-acp-cortex` + mutant lane `acp-cortex`; CP2 live smoke `smoke-acp-cortex-live` stays outside the claude-only release floor | PR #40 / #48 / `docs/acp-backend-rail.md` §4/§6/§11-8 |
+| **Cortex / governed ACP** | **landed (0.13.0)** — hvkiefer's PR #40 adapter transplanted with the CP0-audit revisions (dual-HOME overlay, mcp.json projection, per-turn set-model, 4-row curation) | current D1–D10 contract is `docs/acp-backend-rail.md` “Cortex Code audit”; deterministic gate `check-acp-cortex` + mutant lane `acp-cortex`; CP2 live smoke `smoke-acp-cortex-live` stays outside the claude-only release floor | PR #40 / #48 / `docs/acp-backend-rail.md` |
 | **Gemini CLI** | deprecated path | replaced by Antigravity direction for current Google individual tiers. | README migration note |
 
 ### ACP plugin boundary
@@ -76,7 +76,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability/native-push reject gates |
-| pi 0.82.1 fence | `pnpm check` + release-gate MUST |
+| pi 0.83.0 fence | `pnpm check` + release-gate MUST |
 
 ### Historical — 0.12.0 cutover close checklist
 
@@ -245,7 +245,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **0.82.1** (`>=0.82.1 <0.83`, next-minor 상한).
+  public export → TS 직접 import(재구현 불필요). floor = **0.83.0** (`>=0.83.0 <0.84`, next-minor 상한).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상
@@ -409,7 +409,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     `session ready` progress notice를 읽고 타이밍을 추정하는 것은 금지 — probe가 대체하려는 바로 그 간접추론이다.
     **probe가 답하는 질문은 좁다:** "이 서버는 지연된 MCP를 기다리는가, prompt가 먼저 열리는가, fail-loud인가."
     모든 처방이 이 사실에 의존하므로 값어치가 있지만, 이것은 인과 질문의 **입력**이지 결론이 아니다.
-    probe는 backend 무관(operator MCP 서버 + paired control/intervention run)이라 `cortex acp serve`에도 그대로 겨눠 §11-3의 "미측정"
+    probe는 backend 무관(operator MCP 서버 + paired control/intervention run)이라 `cortex acp serve`에도 그대로 겨눠 rail readiness 축의 "미측정"
     질문을 대칭 가정 없이 잴 수 있다.
 - **repair/v2-core-debt 승격분 (2026-07-24):**
   - **[GLG 결정 대기 — 에이전트 무접촉] `core.hooksPath` 이중화.** 이 리포 `.git/config`의
@@ -453,6 +453,21 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     기계적 상향을 취하지 않는다(`@modelcontextprotocol/sdk ^1.29.0` → 1.29.0, `zod ^4.0.0` → 4.3.6 충족).
     **readiness race와 무관하다**: 0.62.0은 explicit readiness wait를 추가하지 않는다. 다만 transitive
     SDK가 움직였으므로 MCP startup timing이 동일하다고 주장하지 않는다 — 새 fence가 없다는 것만 확정이다.
+  - **2026-07-30 bump — claude-agent-acp 0.62.0 → 0.63.0 + pi 0.82.1 → 0.83.0 (ACP SDK는 1.3.0 유지).**
+    **성격이 직전 bump와 다르다: dependency refresh가 아니라 adapter-code 릴리즈다.** packed tarball
+    137,294 → 142,084 bytes이고 `dist/acp-agent.js`·`dist/tools.js`·`dist/acp-agent.d.ts`가 모두 움직였다
+    (upstream #923 denied-tool resolution, #916 tool_progress heartbeat keying, #917 Bash terminal meta keying;
+    claude-agent-sdk 0.3.219→0.3.220). 그러므로 0.61→0.62의 byte-identical 논거를 재사용하면 안 된다.
+    **우리 표면 도달은 좁고, 그것도 실측이다**: `backend.ts`가 `clientCapabilities: {}`를 보내고 어댑터는
+    terminal meta를 `clientCapabilities._meta.terminal_output === true`로, subagent transcript를 대응 capability로
+    게이팅하므로 둘 다 off. 다만 opt-in 아닌 metadata(`_meta.claudeCode.title`/`.subagent`)와 #916의 재키잉된
+    heartbeat는 wire에 올 수 있고 현재 mapper가 무시할 뿐이다 — "전부 미도달"로 쓰지 않는다.
+    `@anthropic-ai/sdk 0.100.1` 유지 — 0.3.220의 peer floor를 재실측했고 `>=0.93.0`으로 불변이다.
+    pi 천장은 실측으로 올렸다: `packages/coding-agent/src/core/extensions/loader.ts`와 `packages/ai/src/compat.ts`가
+    v0.82.1..v0.83.0 sha256 동일. **readiness race와 무관한 것은 이번에도 같다** — 세 fix 중 어느 것도
+    readiness fence가 아니고 `mcpServerStatus()`는 여전히 호출되지 않는다.
+    동반 계약 변경: pi 0.83의 `"pending"` stop reason과 `rawStopReason`을 채택해 ACP terminal set을 정직하게
+    닫았다(§ACP stop reason 게이트 + `acp-stop-reason` mutant lane 6종).
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.

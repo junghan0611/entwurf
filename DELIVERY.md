@@ -1,285 +1,141 @@
-# DELIVERY.md — Async delivery capability levels
+# Async delivery capability levels
 
-`DELIVERY.md` is the cross-harness yardstick for one question:
+`DELIVERY.md` answers one cross-harness question:
 
-> Can an already-running native agent session receive an async message, without
-> pretending that pi owns the backend transcript?
+> Can an already-running native agent session receive an asynchronous message
+> without pretending that pi owns the backend transcript?
 
-It is **not** a product promise and not a benchmark. It is a diagnostic coordinate
-system. When Claude Code, Antigravity, Codex, pi-native Entwurf, or a future
-harness behaves differently, record the exact delivery level it reaches instead
-of collapsing the result into "works" / "doesn't work".
+It is a diagnostic coordinate system, not a product promise or benchmark. Record
+the highest demonstrated capability instead of collapsing results into “works” or
+“doesn't work.” Evidence quality is tracked separately in [VERIFY.md](./VERIFY.md);
+operator observations live in [BASELINE.md](./BASELINE.md).
 
-Companion surfaces:
+## Scope
 
-- [VERIFY.md](./VERIFY.md) — agent-driven bridge verification and evidence quality (`L0–L5`).
-- [BASELINE.md](./BASELINE.md) — operator-driven identity / overlay baseline interviews.
-- [`scripts/raw-async-delivery/`](./scripts/raw-async-delivery/) — reproducible raw delivery probes.
+Qualifying delivery targets an already-running, backend-owned native session through
+an official surface. It does **not** include:
 
-## Scope and non-goals
+- tmux/pty keystroke injection or transcript scraping;
+- direct writes into backend transcripts or state databases;
+- a fresh prompt/process/thread presented as continuation;
+- transcript hydration or a second tool-result ledger inside entwurf.
 
-This document is about **native live-session delivery** on the current 0.12.x
-surface: a garden citizen points at a backend-owned native session, and async
-messages reach that session through the backend's own supported surface —
-mailbox wake for Claude Code, native-push for agy, or a launch-mode-specific
-probe rail for Codex.
-
-Non-goals:
-
-- no tmux / pty `send-keys` as evidence for native delivery;
-- no backend transcript hydration into pi JSONL;
-- no direct writes into backend transcript databases / JSONL / protobuf files;
-- no new prompt spawn (`claude -p`, fresh Codex thread, etc.) masquerading as
-  delivery into an already-running subscription/native session;
-- no fake pi session or tool-result ledger for an external backend.
-
-A backend may use a socket, filesystem watch, JSON-RPC app server, lifecycle
-hook, or another official surface. The transport differs; the levels below keep
-the judgement comparable.
+A transport may be a socket, filesystem watch, mailbox, lifecycle hook, or native
+API. The levels compare capabilities, not implementation shapes.
 
 ## State vocabulary
 
-Use these words precisely in scripts and docs:
-
 | State | Meaning |
 |---|---|
-| `queued` | Message is durably written to a mailbox / sender queue. The backend has not necessarily seen it. |
-| `triggered` | A backend-supported event fired: socket RPC accepted, hook fired, file watch event observed, etc. |
-| `woke` | An idle interactive session started a new turn without user typing / pty injection. |
-| `injected` | The message or a doorbell pointing at it reached model-visible context through an official channel. |
-| `processed` | The turn ended or the backend acknowledged completion through a supported hook/event. |
-| `replied` | A result returned to the garden/pi side through an explicit reply path (MCP send, outbox, API result). |
+| `queued` | A message is durable; the backend may not have seen it. |
+| `triggered` | A supported event/API accepted the signal. |
+| `woke` | An idle interactive session began a turn without user typing. |
+| `injected` | The message reached model-visible context. |
+| `processed` | A supported event says the turn completed. |
+| `replied` | A result returned through an explicit garden-side path. |
 
-Avoid bare `delivered` unless you define it. Preferred decomposition:
-`queued → triggered → woke → injected → processed → replied`.
+Avoid bare `delivered`; name the observed boundary.
 
-## Delivery levels (D0–D8)
+## Levels (D0–D8)
 
-These are a separate namespace from VERIFY.md evidence levels (`L0–L5`) and
-BASELINE.md overlay layers (`Q-L1` etc.). Mark the highest level reached and any
-partial levels.
+These are independent of VERIFY's `L0–L5` evidence levels and BASELINE's question
+layers.
 
-| Level | Name | PASS criterion | Typical failure / partial |
-|---|---|---|---|
-| **D0** | Live session identity | Can identify the target live session: native id, cwd/project, backend, and enough liveness metadata to address it. | Only transcript files exist; no live-session join key. |
-| **D1** | Native/free continuation | Delivery targets an already-running native/subscription session; no fresh prompt spawn or metered worker is created for the message. | Uses `claude -p`, a fresh Codex thread, or a new pi child instead of the live session. |
-| **D2** | Receiver armed | The receiving session registers an official receive surface: hook/watch path/socket/app-server subscription. | A mailbox exists but no live session is watching or reachable. |
-| **D3** | Addressed enqueue | Sender can queue a message for exactly one target session id; siblings are not broadcast-woken. | Shared signal wakes every session; no per-session address. |
-| **D4** | Idle active wake | An idle interactive session wakes from an external signal with no user typing and no pty/tmux injection. | Piggyback only: message waits until the next human/user turn. |
-| **D5** | Context injection | A unique token / message body reaches model-visible context via an official hook/API path; the model can acknowledge it. | Hook logs show activity, but the model never sees the message. |
-| **D6** | Same session/model continuity | The response comes from the same native session/conversation and same model/subscription path. | A new conversation/process handles the message; model changed silently. |
-| **D7** | Completion / reply observation | Completion or reply can be observed without transcript scraping: Stop/SessionEnd/PostInvocation, outbox, MCP reply, API result, etc. | Wake and context work, but the garden side cannot know when the turn finished except by watching the UI. |
-| **D8** | Operational robustness | Duplicate suppression, delivery markers, loop guards, level-triggered body drain, ordering policy, stale-session handling, and crash recovery are implemented/tested. | Demo works once but can loop, duplicate, reorder, leave unread backlogs, or lose messages. |
+| Level | Capability | PASS criterion |
+|---|---|---|
+| **D0** | Live identity | Native id, cwd/project, backend, and enough liveness data identify one target. |
+| **D1** | Native continuation | The existing native/subscription session receives the message; no fresh worker/thread substitutes for it. |
+| **D2** | Receiver armed | The session exposes a supported watch, hook, socket, subscription, or API route. |
+| **D3** | Addressed enqueue | One target is selected; siblings are not broadcast-woken. |
+| **D4** | Idle wake | An idle session wakes without user typing or pty injection. |
+| **D5** | Context injection | A unique message reaches model-visible context through the supported route. |
+| **D6** | Continuity | The same native session/conversation and model path responds. |
+| **D7** | Completion/reply observation | Completion or reply is observable without transcript scraping. |
+| **D8** | Operational robustness | Dedupe, ordering, stale handling, loop guards, and crash recovery are implemented and tested. |
 
-### Script result contract
+Mark partial or conditional cells explicitly. Capability and evidence are different:
+a D7 claim from one direct-native run may still have only L4 evidence on one host.
 
-Raw probes should print a summary block that a human or later parser can compare
-across harnesses:
+### Probe output
+
+Raw probes under [`scripts/raw-async-delivery/`](./scripts/raw-async-delivery/)
+should print one comparable block:
 
 ```text
 DELIVERY_LEVELS:
-harness=claude-code
-transport=filechanged-watchpaths-asyncrewake
-D0 live_session: pass
-D1 native_free_continuation: pass
-D2 receiver_armed: pass
-D3 addressed_enqueue: pass
-D4 idle_active_wake: pass
-D5 context_injection: pass token=AGY-PARITY-3399
-D6 continuity: pass session_id=<native-id> model=claude-opus-5
-D7 completion_reply: partial reason="no garden outbox yet"
-D8 robustness: partial reason="loop guard present; crash recovery not tested"
+harness=<name>
+transport=<official surface>
+D0 live_identity: pass
+D1 native_continuation: pass
+...
+D7 completion_reply: partial reason="..."
+D8 robustness: partial reason="..."
 ```
 
-When a level is **not applicable** or **conditional**, say so explicitly. For
-example, Codex app-server delivery is conditional on a loaded thread and control
-socket; direct Codex TUI is a different surface.
+## Current matrix
 
-## Current capability matrix (2026-07-22)
+| Harness / surface | Product status | Capability | Transport and boundary |
+|---|---|---|---|
+| **pi native Entwurf** | shipped | D7; D8 partial | Record-addressed Unix control socket. A record-less socket is diagnostic only and never dispatched. |
+| **Claude Code interactive `>=2.1.217`** | shipped; Linux certified | D6; D7/D8 partial | Per-session mailbox + exec-form `FileChanged`/`asyncRewake`. B2 proved idle wake and same-session continuity on one NixOS host. |
+| **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. |
+| **Codex app-server-backed TUI** | verified probe | D7; D8 unproven | WebSocket-over-UDS `turn/start` into a live `threadId`; status events expose completion. No managed citizen lane yet. |
+| **Codex embedded TUI** | deferred | D0 partial | No supported receive socket/hook on the measured standalone shape. |
+| **ACP Claude / Cortex** | shipped runtime, outside this matrix | — | ACP sessions are children launched by entwurf's pi adapter, not already-running native sessions to wake. |
 
-This matrix is a snapshot of what the raw probes have established. It should be
-updated when a backend version changes the delivery surface.
+“Verified probe” means the transport worked in a reproducible raw probe but entwurf
+does not yet own lifecycle, installation, doctors, or release acceptance for it.
+Re-audit backend versions before turning probe evidence into a shipped adapter.
 
-The **Status** column is the current 0.12.x release framing, kept separate from
-the `D0–D8` capability level:
+## Rail notes
 
-- **shipped** — a supported lane: wired, gated, and addressable through the bridge today.
-- **verified-probe** — async delivery proven by a raw probe, but not yet a managed supported citizen lane.
-- **deferred** — not addressable as-is, or needs an extra managed install / cloud surface outside the current release.
+### Claude Code: durable body, edge-triggered wake
 
-| Harness / surface | Status | Highest current level | Transport | Notes |
-|---|---|---:|---|---|
-| **pi native Entwurf** | shipped | D7+ | Unix control socket + pi followUp/custom messages | Replyable pi session. This is the resident baseline, not an external meta-session. The meta-record is the sole address authority (#50 C4): a record-less control socket — live or not — is refused as `record-less-socket` (diagnostic state), never dispatched. |
-| **Claude Code interactive >=2.1.217** | shipped *(Linux is the only certified axis)* | D6, D7 partial, D8 partial | Exec-form global plugin: `SessionStart` arms `watchPaths`; external write triggers exec-form `FileChanged`; `asyncRewake` wakes idle session | B2 direct-native at 2.1.217 on one NixOS host proved per-element argv, no shell expansion, parent join, and exit-2 idle wake. B at 2.1.138 proved the negative: `args` discarded while Claude reported success, so installer/doctor enforce 2.1.217 and there is no shell fallback. The launcher provenance token keeps an old cached command fail-closed. Active idle wake is D6; D7/D8 remain partial as before. The Linux container's planted cache/owner/bridge are fixtures, not a second native-host proof. |
-| **Antigravity / agy** | shipped | D6, D7 partial | Native LS gRPC `agentapi send-message` (native-push) | `PreInvocation` automatically births/attaches by native `conversationId` and writes the record-backed pid/start-key sender marker; `entwurf_v2` fire-and-forget probes and direct-injects through the antigravity adapter with a one-shot re-probe retry. Three managed adapters own MCP+one exact permission, statusline, and hook separately. `entwurf_register_native` remains an explicit/manual fallback, not the normal birth path. Live sender→sibling→same-gid reply passed on 2026-07-13, re-verified at **agy 1.1.0** on 2026-07-14 (13/13 LIVE checks); D7 stays partial because there is no canonical transcript/content receipt owned by the smoke. |
-| **Codex app-server-backed TUI 0.136.0** | verified-probe | D6, D7 (status) | WebSocket-over-UDS `turn/start` into the live `threadId` | **Demonstrated, no managed standalone, no cloud.** `codex app-server --listen unix://<owned 0700 dir>` + plain `codex` auto-attach (or `--remote unix://`). Full message injection (agy-like, not a doorbell); `thread/status/changed` gives completion observation. D8 robustness (dedupe / crash recovery / ordering policy) is not tested. `turn/steer` is active-turn steering, not idle wake. |
-| **Codex embedded TUI 0.136.0** | deferred | D0 partial | Native state DB / rollout transcript only | Standalone Embedded TUI binds no socket; no `FileChanged`/`asyncRewake` in Codex hooks; not retrofittable. Identify-only via state DB / rollout. |
-| **Codex managed-daemon / remote-control 0.136.0** | deferred | D4–D6 conditional | `app-server proxy` newline JSON-RPC over the daemon control socket | Needs the managed standalone install; `remote-control` also enables the **cloud** bridge. Use the bare `--listen` path above for a purely-local setup. |
-| **ACP Claude / Cortex (runtime lane)** | shipped as runtime; deferred as delivery target | — | ACP (via entwurf's pi adapter) | Both ACP backends are **landed runtime lanes** (Claude the reference; Cortex since 0.13.0 under the dual-HOME containment — `docs/acp-backend-rail.md` §11-8), but **not native-async-*delivery* targets**: ACP sessions are bridge-spawned children, not already-running native sessions to wake, so they fall outside this doc's delivery question. `deferred` here means "no async-delivery lane," not "unsupported." |
+Claude's hook contract is exec-only at `>=2.1.217`. `SessionStart` arms a per-session
+watch path; the sender writes durable `*.msg` bodies before poking the signal;
+`FileChanged` emits a doorbell and `asyncRewake` wakes the idle session. The receiver
+then calls `entwurf_inbox_read`, which drains all unread bodies and archives them as
+`*.read`.
 
-## Backend notes
+The signal is edge-triggered and may coalesce, but the message body is level-triggered:
+one successful wake drains the backlog. D8 remains partial until active-turn arrival,
+coalescing bounds, re-arm gaps, and crash/re-poke behavior are measured. A synthetic
+container doctor proves package/oracle shape, not a real Claude wake; a claimed host
+needs the installed strict doctor against a new native session.
 
-### Claude Code — filesystem event wake, not socket push
+### Antigravity: native push
 
-The current launch contract is **exec-only at Claude Code >=2.1.217**. All four
-hook leaves run the shipped `hook-launch.sh` as `command` with the real argv in
-`args`; the launcher stamps non-identity launch provenance and `exec`s the payload.
-A hook reached through an old cached shell command still mints its record but writes
-no sender/receiver marker, so an upgrade mismatch is fail-closed. Reinstall the
-meta-bridge and restart all old Claude sessions before judging delivery.
+`PreInvocation` births or reattaches a citizen by native `conversationId` and writes a
+record-backed sender marker. `entwurf_v2` probes the live conversation and injects
+directly through the native adapter, with one bounded re-probe retry. Replyability is
+`record-backed identity ∧ probe-alive`; mailbox state and owned resume authority do not
+exist on this rail.
 
-Evidence boundary: B/B2 were real Claude sessions and therefore direct-native
-runtime evidence, but both ran on one NixOS host. `check-hook-launch-topology` is a
-deterministic execution proof of the shipped argv; `check-install-container` uses a
-fake Claude, planted plugin cache, stand-in owner, and fake live bridge. Those fixtures
-prove package/oracle behavior, not actual native session wake. A claimed Linux host
-is accepted only when its **installed** strict doctor sees the live owner join and
-exits 0; missing evidence is `NOT CERTIFIED`, not a partial delivery PASS. macOS is
-not yet verified/certified for this repair cut: install refuses Darwin, doctor stays
-nonzero, and only the uninstaller keeps Darwin support so an older managed install
-can be removed. Future native validation may reopen that lane.
+The managed bridge, statusline, and hook installers own separate configuration atoms.
+Same-pid concurrent model invocation by multiple conversations is not claimed because
+the pid/start-key sender marker would be last-writer-wins. Current operator checks are
+in [BASELINE.md](./BASELINE.md); deterministic ownership and sender gates run in
+`pnpm check`.
 
-A missing local listening socket does **not** imply idle wake is impossible.
-Claude Code interactive can be woken by a supported filesystem-event path:
+### Codex: launch mode is part of the capability
 
-1. a plugin or settings hook runs at `SessionStart`;
-2. it emits `watchPaths` for a per-session signal file;
-3. an external sender writes a per-session message and pokes that signal;
-4. `FileChanged` fires while the session is idle;
-5. the hook exits with `asyncRewake` and writes the doorbell to **stderr**;
-6. the same session/model wakes and self-fetches the message body.
+Do not describe “Codex” as one delivery shape. The measured app-server-backed TUI can
+accept `turn/start` for a live thread and report completion; the standalone embedded
+TUI exposed no equivalent receive route. The probe was measured on an older Codex line
+than the current installation, so it must be rerun before implementing the reserved
+0.14.0 managed Codex lane. `turn/steer` is active-turn steering, not idle wake.
 
-#### D8 partial — signal/body separation is level-triggered
+## Recording a new claim
 
-Claude's `FileChanged` signal is an edge: rapid signal writes may coalesce, and a
-true missed edge can leave an idle session with unread mail until another wake or
-backstop occurs. The body is not carried in that edge. Bodies are durable mailbox
-files (`*.msg` before the doorbell, `*.msg.delivered` after the doorbell), and
-`entwurf_inbox_read` drains the whole unread set in one read and archives them as
-`*.read`. Therefore a coalesced doorbell does not drop message bodies: once the
-receiver self-fetches, it consumes all queued bodies, not "one event = one body".
+For every matrix change, record:
 
-Deterministic gates: `check-meta-session` asserts mixed fresh/delivered bodies are
-drained together and re-read is empty; `smoke-meta-honesty` asserts the doorbell's
-unread count matches what the inbox reader will drain. Remaining D8 work is still
-honest/open in #34: empirical FileChanged coalescing bounds, active-turn arrival,
-watchPath edge cases, compact-window re-arm gaps, and a heartbeat/re-poke backstop
-for live sessions with unread mail.
+1. backend version and launch mode;
+2. native session identifier and liveness join;
+3. exact official transport;
+4. highest D-level plus every partial boundary;
+5. evidence level and artifact/log location;
+6. what remains outside entwurf ownership.
 
-Important gotchas live in [`scripts/raw-async-delivery/README.md`](./scripts/raw-async-delivery/README.md):
-`Stop` hooks do not wake idle sessions, bare skills cannot arm startup watches,
-plugins can, and imperatives in injected text can be flagged as prompt injection.
-
-### Antigravity / agy — native push
-
-Antigravity reaches the same delivery levels through a different transport:
-`agy agentapi send-message` over the native LS gRPC surface. This is not a reason
-to make the garden layer backend-specific; it is exactly why the adapter contract
-must describe capability (`D0–D8`) separately from transport.
-
-The raw probe (`scripts/raw-async-delivery/raw-agy-send.sh` — the Live-SSOT method
-`pgrep -x agy` + an LS socket that answers `get-conversation-metadata`) is now
-productionized as the **native-push rail**: `pi-extensions/lib/native-push/adapter.ts`
-(full pid/LS scan, volatile route, 1-shot re-probe retry in the executor hand),
-`registerNativeConversation` (bind an already-running conversation as a garden
-citizen; no spawn), the `entwurf_v2` `native-push` transport (post-probe reject
-taxonomy: `native-push-target-dead` / `-probe-indeterminate` / `-no-resume-authority`),
-and the `install-agy-bridge` install adapter. agy is a `native-push` domain, distinct
-from the pi control-socket liveness domain and from the Claude mailbox self-fetch domain.
-
-#### agy ambient-status axis (install surface, orthogonal to D0–D8)
-
-Beyond delivery, agy carries two more entwurf-owned install surfaces: **ambient
-garden identity in the native statusline** (`entwurf-agy-statusline`) and the
-**`PreInvocation` birth/sender imprint** (`entwurf-agy-imprint`). These are not
-delivery levels — they are install-surface ownership axes with the same discipline
-the delivery rail uses: bare stable bins only (never repo/checkout paths),
-state-backed install/uninstall, element-level adopt-and-preserve with honest
-inverse, symlink refusal, fail-loud doctors, and an honest `?` before identity
-exists.
-
-Identity authority is the native `conversationId` looked up against meta-record
-**bodies**. No cwd back-match, filename-derived identity, or gid invention. agy
-has no `SessionStart`; the earliest hook is `PreInvocation`, so a new conversation
-may briefly render `🪛 ? agy`. On the first invocation the installed hook reads
-`conversationId` + `workspacePaths`, calls `upsertMetaSession` idempotently, and
-writes a sender marker only after the record exists. It always returns the neutral
-`{"injectSteps":[]}` response so identity bookkeeping cannot block the agy loop.
-
-The marker is keyed by the shared host pid + process start-key and is revalidated
-against the record body. Replyability is `recordBacked ∧ probeAlive`, never
-mailbox `watchArmed`. This supports separate agy processes (measured: three pids,
-three markers) but **not** simultaneous model invocation by two conversations
-under one agy pid: one marker file would be last-writer-wins, so that concurrency
-is explicitly unsupported.
-
-Current deterministic floor: `smoke-agy-install-state` 167 checks,
-`smoke-agy-statusline-state` 69, `smoke-agy-hooks-state` 44,
-`check-agy-sender-identity` 28, plus the shared self-address/native-push gates.
-The bridge installer owns one narrow rule per normal-path tool
-(`entwurf_v2`, `entwurf_peers`, `entwurf_self`) in `permissions.allow`;
-broad YOLO policy stays operator-owned. Live 2026-07-13
-(agy 1.0.x): automatic birth → gid/statusline → record-backed sender → sibling
-delivery → same-gid native-push reply passed. Live 2026-07-14 (**agy 1.1.0**):
-re-verified on the new minor — `entwurf_self` answered without a permission
-prompt under the operator's broad allow (gid `20260714T101829-e7fccd`, native
-conversation `21266946-64a6-4a35-a7e5-fc84f0a7f250`), bidirectional native-push
-reply arrived on the same gid, and `LIVE=1 smoke-agy-native-push-live` passed
-13/13; the drift-sentinel agy pin moved to the 1.1 line on this evidence.
-
-### Codex — split by launch mode, not by "Codex"
-
-> **Version verdict (2026-07-14, 0.12.7 cut):** the installed codex is **0.144.1**;
-> every claim in this section was measured at **0.136.0** and has **NOT been
-> re-verified** since. Codex is not a shipped native-citizen lane in 0.12.x, so the
-> drift-sentinel pin moved to the 0.144 line with this explicit non-reverification
-> verdict instead of a fresh probe run. Re-run the raw probes (and re-date the matrix
-> rows) before building any codex adapter on the new line.
-
-Do not describe "Codex" as one delivery shape. The split is the TUI's launch mode:
-
-- **standalone Embedded TUI**: binds no socket, no `FileChanged`/`asyncRewake` in
-  Codex hooks, decision fixed at `run_main` → not addressable, not retrofittable;
-- **app-server-backed TUI**: idle-wake **works**. Run a bare
-  `codex app-server --listen unix://$HOME/.codex/app-server-control/app-server-control.sock`
-  (no managed standalone, no cloud — only the official daemon path needs the
-  managed install). Plain `codex` (no `-c`) auto-attaches to that default socket;
-  an external WebSocket-over-UDS client sends `turn/start` to the live `threadId`.
-  Measured: idle thread woke with zero typing, body injected, model replied,
-  completion observed via `thread/status/changed`.
-
-Sender: `raw-codex-ws-turn-start.py` → bare `--listen` socket (WebSocket, no managed
-standalone, no cloud). A second surface exists but is out of scope here — the managed
-**daemon** control socket (via `codex app-server proxy`) needs the managed standalone
-install, and `remote-control` enables the cloud bridge; we ship only the bare-local
-path. Per-folder `config.toml` `[projects."<path>"]` trust gates project-hook loading,
-not addressability.
-
-A Codex adapter must declare which launch mode + which socket it targets.
-
-## How to use this in the current 0.12.x design
-
-For meta-sessions, peer records should expose capability rather than hiding
-backend differences:
-
-```ts
-type WakeMode = "socket" | "file-watch" | "native-push" | "app-server" | "piggyback" | "none";
-
-type DeliveryPeer = {
-  sessionId: string;              // garden id
-  kind: "pi-session" | "meta-session";
-  backend: "pi" | "claude-code" | "antigravity" | "codex" | string;
-  replyable: boolean;
-  wakeMode: WakeMode;
-  deliveryLevel: "D0" | "D1" | "D2" | "D3" | "D4" | "D5" | "D6" | "D7" | "D8";
-};
-```
-
-MVP rule of thumb:
-
-- expose what is proven;
-- mark partial/conditional honestly;
-- keep transcript ownership native;
-- treat liveness as best-effort hint (`last_seen` + native presence), not as a
-  single authoritative socket/WAL/file check;
-- keep lookup authority in the meta-record scan, not a derived index.
+Keep transcript ownership native, lookup authority in the meta-record, and transport
+asymmetry explicit. Historical probes and per-version chronology belong in CHANGELOG,
+issues, and git history rather than this standing capability contract.

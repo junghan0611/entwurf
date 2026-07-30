@@ -158,7 +158,7 @@ export async function driveProbeTurn(connection: AcpConnectionLike, params: Prob
 		}),
 	);
 
-	// _meta + wire servers exactly as backend.ts assembles them (S2g/§9-4): the
+	// _meta + wire servers exactly as backend.ts assembles them (S2g / carrier-less shape): the
 	// injected production buildSessionMeta (omitted key when undefined) + the
 	// injected production envelope enrichment over the resolved config.
 	const sessionMeta = params.adapter.buildSessionMeta(

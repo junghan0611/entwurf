@@ -39,7 +39,6 @@ export interface AcpStreamIdentity {
 type ObservedToolState = {
 	title: string;
 	status?: string;
-	notifiedRunning?: boolean;
 };
 
 export type AcpPiStreamState = {
@@ -81,7 +80,12 @@ export function createAcpStreamState(
 		provider: identity.provider,
 		model: identity.model,
 		usage: zeroUsage(),
-		stopReason: "stop",
+		// Seed, not a verdict. pi 0.83 added "pending" for exactly this: a partial
+		// streaming message has not observed a terminal reason yet, and every pi
+		// provider seeds it here and treats a stream that ENDS still-pending as an
+		// error rather than a successful stop. Seeding "stop" instead would
+		// pre-claim success for the whole time the turn is in flight.
+		stopReason: "pending",
 		timestamp: opts?.timestamp ?? Date.now(),
 	};
 	return {
@@ -221,22 +225,21 @@ function renderToolUpdate(state: AcpPiStreamState, update: Record<string, unknow
 	const title = titleForTool(update, previous?.title);
 	const status = typeof update?.status === "string" ? (update.status as string) : previous?.status;
 	const updateContent = Array.isArray(update?.content) ? (update.content as unknown[]) : undefined;
-	const meta = update?._meta as { terminal_output?: unknown } | undefined;
-
-	let notifiedRunning = previous?.notifiedRunning;
 
 	if (update.sessionUpdate === "tool_call") {
-		observedTools.set(toolCallId, { title, status, notifiedRunning });
+		observedTools.set(toolCallId, { title, status });
 		pushNotice(state, `\n[tool:start] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}\n`);
 		return;
 	}
 
-	// tool_call_update
-	if (meta?.terminal_output && !notifiedRunning) {
-		notifiedRunning = true;
-		pushNotice(state, `\n[tool:running] ${sanitizeNoticeFragment(title, NOTICE_TITLE_MAX)}\n`);
-	}
-
+	// tool_call_update. There is deliberately no mid-flight `[tool:running]`
+	// notice: it would have to be driven by the adapter's `_meta.terminal_output`,
+	// and that meta is gated upstream on `clientCapabilities._meta.terminal_output
+	// === true` while backend.ts initializes with `clientCapabilities: {}`. So the
+	// branch could never fire for any backend we ship — it claimed a transcript
+	// line the operator was never going to see. Declaring the terminal capability
+	// is a separate axis, not a one-line re-enable: the adapter would then send
+	// terminal widgets/metas this mapper cannot render honestly into a transcript.
 	if (status && status !== previous?.status) {
 		const summary = firstTextContent(update?.rawOutput) ?? firstTextContent(updateContent);
 		const suffix = summary ? ` — ${sanitizeNoticeFragment(summary, NOTICE_SUMMARY_MAX)}` : "";
@@ -250,7 +253,7 @@ function renderToolUpdate(state: AcpPiStreamState, update: Record<string, unknow
 		}
 	}
 
-	observedTools.set(toolCallId, { title, status, notifiedRunning });
+	observedTools.set(toolCallId, { title, status });
 }
 
 /** Push a permission-decision notice (informational text, not a tool call). */

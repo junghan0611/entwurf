@@ -1,12 +1,12 @@
 // Deterministic gate for the Cortex (Snowflake Cortex Code) ACP backend — the
-// first non-claude adapter on the rail (docs/acp-backend-rail.md §4/§6/§11-8).
+// first non-claude adapter on the rail (docs/acp-backend-rail.md, Cortex audit D1–D10).
 // The cortex source lives in one `cortexAdapter` object (backend-adapter.ts) +
 // its curated surface (models.ts) + the dual-HOME overlay (overlay.ts); the
-// 결합 규칙 requires the gate to land WITH it, and §6 said EXTEND the
+// 결합 규칙 requires the gate to land WITH it, and the rail's “Shipped adapters” said EXTEND the
 // `check-acp-*` family, so cortex's whole deterministic axis lives here.
 //
 // The contract under test is the CP0-measured one (v1.1.52, 2026-07-29), not
-// PR #40's v1.1.8-era shape — the D-numbers refer to §11-8:
+// PR #40's v1.1.8-era shape — the D-numbers refer to the current Cortex audit:
 //   1. curated surface is the GLG-decided 4-row set, riding real registry bases;
 //   2. `cortex-` prefix routes to cortexAdapter; prefix-strip recovers the
 //      native id; the unprefixed claude ids are never claimed;
@@ -22,7 +22,7 @@
 //      session-scoped dirs with exact rewrite + dead-pid sweep;
 //   6. CORTEX_HOME ambient presence (empty string INCLUDED) refuses the spawn
 //      (D3 — upstream consumers disagree about empty);
-//   7. system-prompt-carrier-less augment (§9-4/§11-8) — the operator engraving OVERRIDE rides the
+//   7. system-prompt-carrier-less augment — the operator engraving OVERRIDE rides the
 //      first-user augment; a carrier backend (claude) never folds it in.
 //
 // [QK:*] labels mark the claims kill-qualified by scripts/mutants/acp-cortex.json
@@ -329,7 +329,7 @@ const enrichedServers: AcpMcpServer[] = [
 }
 
 // ---------------------------------------------------------------------------
-// Layer A.3 — system-prompt-carrier-less augment (§9-4/§11-8): the operator engraving override
+// Layer A.3 — system-prompt-carrier-less augment: the operator engraving override
 // rides the FIRST-USER AUGMENT for cortex; claude (a carrier backend) never
 // folds it in; no override → no engraving injected.
 // ---------------------------------------------------------------------------

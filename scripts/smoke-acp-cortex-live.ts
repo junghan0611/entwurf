@@ -5,7 +5,7 @@
 //
 //   LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live
 //
-// WHY this exact axis. The CP0 audit (docs/acp-backend-rail.md §11-8) measured
+// WHY this exact axis. The CP0 audit (docs/acp-backend-rail.md, Cortex D1–D10) measured
 // three things no offline gate can prove:
 //   - D9/D10: cortex ignores the wire `mcpServers` param, so the bundled
 //     entwurf-bridge reaches a cortex session ONLY through the overlay-private
@@ -32,7 +32,7 @@
 // LIVE-only and OUTSIDE the claude-only AGGREGATE release floor (capability
 // dignity): a host that runs no cortex must not redden a claude release. That is
 // a wiring decision — shipping cortex still owes a deliberate run of this smoke,
-// and the aggregate gate's silence is not a pass (rail §11-8 tail).
+// and the aggregate gate's silence is not a pass (ACP rail verification boundary).
 // Honest skip when LIVE!=1, when `cortex` is not on PATH, or when
 // ENTWURF_ACP_CORTEX_CONNECTION is unset — the overlay denies the operator's
 // cortex settings.json (where a default connection would live), so the

@@ -10,16 +10,7 @@ npm package: <https://www.npmjs.com/package/@junghanacs/entwurf>
 
 Legacy package: [`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@junghanacs/pi-shell-acp). `entwurf` is its 0.12+ successor line: the same work renamed around the garden-citizen dispatch substrate rather than the pi adapter.
 
-> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code is shipped as a mailbox-backed meta-session; Antigravity (`agy`) is shipped as a native-push citizen with automatic `PreInvocation` birth, ambient garden-id status, and a managed MCP/permission install surface. Codex has a launch-mode-specific verified delivery probe documented in [DELIVERY.md](./DELIVERY.md), but no managed native-citizen install lane yet. The ACP plugin ships two backends through one adapter rail: Claude (the reference) and Snowflake Cortex Code (landed in 0.13.0 under a session-scoped dual-HOME containment — [docs/acp-backend-rail.md](./docs/acp-backend-rail.md) §11-8).
-
-<details>
-<summary>Watch archived pre-0.12 demo (2131×1142 GIF, click to expand)</summary>
-
-> This GIF is historical pre-0.12 evidence and still shows the retired v1 demo flow. The current 0.12 tool surface is `entwurf_v2`; a v2-native demo retake is a follow-up.
-
-![entwurf demo](docs/assets/entwurf-demo.gif)
-
-</details>
+> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code is shipped as a mailbox-backed meta-session; Antigravity (`agy`) is shipped as a native-push citizen with automatic `PreInvocation` birth, ambient garden-id status, and a managed MCP/permission install surface. Codex has a launch-mode-specific verified delivery probe documented in [DELIVERY.md](./DELIVERY.md), but no managed native-citizen install lane yet. The ACP plugin ships two backends through one adapter rail: Claude (the reference) and Snowflake Cortex Code (landed in 0.13.0 under the measured contract in [docs/acp-backend-rail.md](./docs/acp-backend-rail.md#cortex-code-audit-d1d10)).
 
 ```text
 Claude Code / Codex / agy / pi
@@ -65,12 +56,6 @@ native Antigravity / agy
 Claude's `install-meta-bridge` and agy's `install-agy-{bridge,statusline,hooks}` are distinct managed install surfaces because their lifecycle and delivery transports are genuinely different. Codex remains verified probe evidence, not a shipped managed native-citizen lane; see [DELIVERY.md](./DELIVERY.md).
 
 > **Direction.** Inverse of [`pi-acp`](https://github.com/svkozak/pi-acp). `pi-acp` lets external ACP clients talk *to* pi; `entwurf` lets garden citizens talk across harness boundaries — with pi as one adapter, not the center.
-
-> **Project boundary.** `entwurf` is not a fork, plugin, dependency, or integration layer of `oh-my-pi`, and it is not developed in coordination with `oh-my-pi`. Issues in other Pi / ACP projects may be useful as general implementation references, but they are not `entwurf` integration issues unless this repository explicitly links them as such.
-
-> **Anthropic subscription billing.** From 2026-06-15, Anthropic third-party agent paths (ACP, Agent SDK, `claude -p`, entwurf's Claude backend) consume a separate Agent SDK credit pool, distinct from Claude chat and the `claude` CLI used as an interactive terminal. `entwurf` respects that distinction — no bypass, no emulation — and preserves capability dignity across supported backends (see [AGENTS.md](./AGENTS.md) invariants #7, #9, #10). The recommended default runtime leans toward paths outside Anthropic's Agent SDK metering, with Claude invoked when its quality is worth the credit cost. The operator decides the mix.
-
-> **Gemini CLI migration.** Google announced that Gemini CLI stops serving requests for Google AI Pro / Ultra and unpaid individual tiers on **2026-06-18**; those users should migrate to [Antigravity CLI](https://antigravity.google/product/antigravity-cli). See Google's migration note: [Transitioning Gemini CLI to Antigravity CLI](https://developers.googleblog.com/an-important-update-transitioning-gemini-cli-to-antigravity-cli/). The repository still carries existing Gemini adapter code for compatibility, but this README no longer presents Gemini CLI as a recommended setup path during the migration window.
 
 ## Concept primer
 
@@ -159,7 +144,7 @@ because Node refuses to strip `.ts` files under `node_modules`.
 ### Pi adapter / ACP plugin lane
 
 To use the `entwurf` provider inside pi, install a compatible pi binary
-separately (`@earendil-works/pi-coding-agent >=0.82.1 <0.83`). Then point pi at
+separately (`@earendil-works/pi-coding-agent >=0.83.0 <0.84`). Then point pi at
 the npm-installed package or development clone:
 
 ```bash
@@ -177,269 +162,18 @@ as release-critical for the ACP/plugin lane. A host that only uses
 `entwurf-bridge` from Claude Code / Codex / Antigravity does not need pi until it
 tries an `owned-outcome` spawn-bg resume target.
 
-### External MCP host lane
+### Native harness install and doctors
 
-After any npm install, register `entwurf-bridge` with the external host:
-
-```bash
-claude mcp add --scope user entwurf-bridge \
-  entwurf-bridge
-```
-
-If the host does not inherit the npm bin directory, use an absolute path to the
-bin or `start.sh`. For a garden-native Claude Code meta-session (replyable by
-garden id), run this on Linux. entwurf refuses new macOS meta-bridge
-installs because its strict live-owner doctor currently depends on `/proc`; macOS
-is **not yet verified/certified for this cut**, not permanently impossible, and
-future native validation may reopen it. Package-level `os` is intentionally
-unrestricted, and Darwin uninstall remains available for legacy cleanup.
+A plain MCP registration exposes the bridge tools; a **garden-native** session also
+needs entwurf's lifecycle hook and identity marker. Use the managed installers rather
+than editing native-harness state by hand:
 
 ```bash
-entwurf install-meta-bridge
-entwurf doctor-meta-bridge
-```
-
-> **Upgrade action:** after installing a package that moves the hook launch form, run `entwurf install-meta-bridge` and restart **every already-open Claude Code session** before trusting send/receive. A new hook reached through an old cached command fails closed: it may still mint a garden record, but the owner join it depends on is not the one the old command produces. Reinstall materializes the matching manifest; restart makes live Claude processes load it. This release moves to the exec form and requires Claude Code `>=2.1.217`; `install-meta-bridge` and `doctor-meta-bridge` refuse anything older outright, because an older Claude drops the hook's `args` silently and still reports success.
-
-On npm/pnpm-installed packages, `doctor-meta-bridge` must use prebuilt JS for its
-store scan and defer repo-only source-shape gates; Node refuses strip-types for
-raw `.ts` helpers under `node_modules`. It also refuses any Claude Code below the
-supported floor `>=2.1.217` (an older one silently drops the hook's `args` and still
-reports success, so nothing else in the output could be trusted), checks Claude's
-installed hooks are the exec form through the shipped `hook-launch.sh`, and on Linux
-verifies every live Claude MCP process joins to live sender/receiver markers.
-`launch form is UNSUPPORTED` means reinstall the meta-bridge; a live-owner-join failure after
-that means restart the affected Claude session so it loads the new manifest. If no
-matching MCP child exists the doctor reports `NOT CERTIFIED` and **exits nonzero** — a
-host whose live tier could not be measured is not a certified host, and that is worded
-differently from a broken install on purpose. If the doctor reports
-`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`, reinstall a current package before
-trusting the floor result.
-
-**Release evidence boundary.** The required Linux `artifact-consumer` CI job
-installs one read-only candidate tarball globally as a non-root user in a Node 24
-container that cannot see the checkout, records the tarball digest and image
-identity, freezes the package root, and drives the strict doctor. Its Claude cache,
-owner process, and live bridge are deliberately synthetic fixtures; that job proves
-the package-consumer/oracle shape, not a real Claude lifecycle. The direct B/B2
-runtime evidence came from actual Claude 2.1.138/2.1.217 sessions on one NixOS host.
-A production host is certified only when a **new session using the installed
-artifact** makes `doctor-meta-bridge` exit 0 with the live join. See the explicit
-support matrix and release order in [VERIFY.md](./VERIFY.md). For the release
-artifact, first preserve one `npm pack` output, then run
-`ENTWURF_CANDIDATE_TGZ=/absolute/path/to/candidate.tgz ./run.sh check-install-container`;
-the gate prints that canonical path and sha256 and consumes it without re-packing.
-Only that accepted file may be published under the explicitly authorized lane:
-`--tag latest` for stable `0.12.8`, while preserving
-`repair=0.12.8-repair.1`.
-
-> **Generations — the fresh-cut policy.** The bridge is a call-relay, never a
-> memory layer: a meta-record is routing state for a **current-generation**
-> citizen, and memory lives in the native transcripts and the embedding axes
-> outside this repo. Sessions flow. Four sentences fix the whole policy:
->
-> 1. The active citizen store is **v3-only** and provides **no cross-generation
->    address or resume continuity**.
-> 2. If even one entry in the store fails certification, **install and citizen
->    birth/registration refuse before writing** and demand the explicit fresh-cut
->    verb.
-> 3. `fresh-cut` **requires quiescence** — it verifies it and refuses while any
->    surface is live *or* unprovable, never closing a session for you — then moves
->    the whole previous generation to a timestamped archive
->    (`meta-sessions.archive-<ts>`, `meta-mailbox.archive-<ts>`) and opens an
->    empty live generation.
-> 4. The archive is **forensic bytes only**: no runtime reads it and no restore
->    verb exists. Native transcripts and the memory axes are never touched.
->
-> **Certification** is one shared contract (`certifyActiveStore`), held identically
-> by the install doctor and by all four identity writers — pi birth, the Claude
-> `SessionStart` hook, the agy imprint, `entwurf_register_native`. Every
-> `.meta.json` must be a **regular file** (a symlink is refused, never followed),
-> **readable by the live schema**, **named by its own body**, and the **unique
-> holder of its `nativeSessionId`**. All five defect kinds — previous generation,
-> corruption, drift, duplicate, symlink — collapse to the same prescription, so
-> there is nothing to diagnose or branch on.
->
-> Note the deliberate scope, stated as it actually is. A **store-wide** scan runs on
-> **identity writes**, in the doctor, and on the two read surfaces below — not on every
-> mailbox poke; a call-relay does not re-scan the whole store per message. What every
-> **targeted read** holds is the per-entry half of the same contract:
-> `readMetaIdentityByGardenId` refuses a record that is not a regular file (a symlink is
-> never followed, in *either* direction) and one whose body disagrees with its name,
-> naming the verb. That is what the mailbox poke, the sender-marker trust and
-> `entwurf_self` use, and it is all they need.
->
-> Store-wide **uniqueness** is checked on the read snapshot at the two places where it
-> is both affordable and load-bearing ([#52](https://github.com/junghan0611/entwurf/issues/52),
-> 0.12.9):
->
-> - **Discovery** — `listAllMetaIdentities`, and so `entwurf_peers`, already reads the
->   whole store, so the check is free. Two records claiming one `nativeSessionId` are
->   **not** two citizens: *neither* is listed (the store cannot say which one owns that
->   session, and a facts surface may not mint an authority the certification refuses),
->   both become diagnostics naming each other, and every unrelated citizen keeps listing.
-> - **Dispatch** — `readAddressableMetaIdentity`, used by v2 `resolveTarget` and by the
->   pi resume path. Those are the moments a record stops being data and becomes an
->   **address**, they happen once per dispatch next to a socket connect and a spawn, and
->   a duplicate there means direct-injecting one live conversation under two garden ids,
->   or resuming one transcript twice under two per-garden-id locks. It fails **loud**; a
->   soft `bad-target` is reserved for a record that is genuinely absent.
->
-> **A rival is a record that could be addressed instead** — narrower than "a file whose
-> bytes mention the same id". A **symlinked** entry is not a candidate and is *never
-> read* (rule 1 again: following it to see whether it counts would break the rule in the
-> act of enforcing it, and let planted foreign bytes quarantine a healthy citizen); a
-> **drifted** or **unparseable** neighbour is not a candidate either, because no garden
-> id can reach it. All three remain certification defects and the listing reports them as
-> diagnostics — they just may not blind a healthy record. The opposite case is a
-> **regular `.meta.json` this process cannot read**: that one might BE the duplicate, so
-> it fails loud rather than being skipped, because "holds it alone" from a scan that
-> never asked is the same vacuous pass in miniature. (`ENOENT` alone is the exception —
-> a file that vanished mid-scan is not in the store.)
->
-> Both store-wide read scans take entries **with their kind** from one shared
-> `readActiveStoreEntries`, rather than each binding doing its own name-only `readdir`.
-> That is what makes rule 1 structural: a scan handed bare names has no choice but to
-> read the path, which is how both `entwurf_peers` bindings came to follow a symlinked
-> record while the doctor refused the very same entry.
->
-> A kind carried alongside a **name** is still only half of it, because a name can stop
-> meaning what it meant. `lstat`-then-`readFileSync(path)` classifies one entry and reads
-> another: replace the final path component with a symlink in between, and the read
-> follows it into foreign bytes while every test on a settled store stays green. So the
-> bytes of a record come from exactly one place — `readStoreRecordFile`, shared by the
-> store-wide reader and by `readMetaIdentityByGardenId` — which opens with `O_NOFOLLOW`
-> (a symlink fails the **open**, before a byte is read), decides the kind by `fstat` on
-> **that file description** rather than on a name, and closes it in a `finally`. It also
-> opens `O_NONBLOCK`, because classify-then-open never had to care that `open(fifo,
-> O_RDONLY)` blocks until a writer appears, and deciding on the fd does. The reader does
-> not flatten errno: callers still separate a record that raced away (`ENOENT`, skipped)
-> from one that cannot be read (`EACCES`, loud) from one that was swapped (`ELOOP`,
-> refused) — and the rival scan's raced-away skip depends on exactly that.
->
-> That reader does not replace the `lstat` classification in front of the targeted read;
-> the two hold **different** things, and collapsing them into "one enforcement point"
-> was itself a regression (caught in review before shipping). The classification decides
-> POLICY on a settled store **without opening anything**, which is what lets a socket, a
-> device or a mode-000 directory earn the certification's own sentence — an `open` would
-> answer `ENXIO` or `EACCES` there, errnos that say nothing about regularity, and the
-> targeted read would start calling the host unreadable where the doctor calls the entry
-> non-regular. Two contracts for one store is precisely the defect rule 1 exists to
-> prevent. The fd layer decides the RACE: after a regular snapshot, its errno verdicts
-> (`ELOOP`, `ENXIO`, a non-regular `fstat`) collapse back onto the settled sentences
-> through one pure classifier, so a race never teaches the operator a second vocabulary
-> for one state of the world. Because the classification answers first, those branches
-> are unreachable from any settled store — which is why the classifier is pure and pinned
-> with synthetic errnos rather than by a store on disk.
->
-> This is not only a defence against external corruption. `upsertMetaSession` certifies
-> and then writes, which is **not a transaction**, so two concurrent births — two
-> `SessionStart` hooks, an `entwurf_register_native` racing an agy imprint — can both
-> observe one clean store and mint different garden ids for one native session. A
-> duplicate can therefore appear on a host where nothing was ever corrupted.
->
-> There is **no migrator and no legacy reader anywhere in this repo** — carrying
-> old records forward would serve a continuity the system deliberately does not
-> promise. When the store cannot be read, the sender surfaces (`entwurf_self`,
-> `entwurf_v2`, the inbox) **fail loud** naming the verb in both invocation
-> forms; `entwurf_peers` keeps listing and folds unreadable records into a
-> **diagnostic** line, because a facts surface that dies on corruption tells you
-> less than one that shows what it could and could not read.
->
-> **The installer entrypoints will not cross that boundary silently.** `setup`,
-> `install` and `install-meta-bridge` each certify the store *before* they write
-> anything: on a host that fails certification they refuse, name the verb, and
-> leave your settings, plugin registry and `auth.json` untouched. So an upgrade
-> through those commands is a refusal you answer, not a broken install you
-> diagnose:
->
-> ```bash
-> entwurf meta-bridge-fresh-cut   # quiesce-checked: archive the old generation, open an empty one
-> ```
->
-> **Read its exit status, don't just chain it.** The cut answers with a contract
-> ([#54](https://github.com/junghan0611/entwurf/issues/54), `--help` prints it), because
-> "it failed" is not one world-state:
->
-> | exit | what already moved | what to do |
-> |---|---|---|
-> | `0` | the cut is complete | run `setup` |
-> | `1` | **nothing** — a live/unprovable surface, an occupied archive destination, an unreadable surface | fix the named cause, re-run. **Do not** run `setup`: the store it refused is still there |
-> | `2` | nothing — usage error | fix the command |
-> | `3` | the cut transition is **incomplete** after at least one archive move; the fresh generation is not confirmed open | inspect, or re-run to finish under a new stamp |
-> | `4` | the cut is **complete**; marker/socket residue could not be unlinked | `setup` may run. Prefer repairing the named residue before `setup`; if new citizens have already been born, remove it manually — another fresh-cut would archive their generation too |
->
-> Only `0` is success — a failed sweep never becomes a pass. `fresh-cut && setup` is
-> still the right chain for the common path; the codes are there so a runbook, CI or an
-> agent can tell a refusal that changed nothing from a cut that already unblocked the
-> install. An exit-4 re-run is safe only before `setup` or any new citizen birth.
->
-> The refusal is a **preflight, not a lock**: it certifies the store as it stands
-> at that moment. On a host whose pi/Claude settings point straight at a checkout,
-> a `git pull` can put the new code in front of live sessions before you run
-> anything at all, so order the upgrade explicitly — **quiesce the sessions on
-> that host → pull → fresh-cut → `setup` → reopen**. `fresh-cut` enforces the
-> quiesce half itself: a live control socket, a marker whose owner process is
-> still running, a **native-push (agy) conversation its own adapter probe answers
-> alive**, or **any surface it cannot prove is gone** — an indeterminate socket, an
-> unreadable or symlinked marker, a conversation that probes indeterminate, a
-> surface directory it cannot even inspect (absent is ENOENT alone, and the name
-> must hold an actual directory — a symlinked surface is never followed) —
-> refuses the cut before anything moves. Cutting needs proof of death, not absence
-> of proof of life.
->
-> **One marker is cleared without proving death, and it is the exception that keeps
-> this path open.** A marker whose recorded `ownerPid` cannot own anything — `1`
-> (init), `0`, a negative or non-integer — is *refuted by construction*: no writer in
-> this tree can mint one any more, so on a current install it is **legacy or corrupt
-> residue** — a pre-fix writer whose parent had been reparented to init (the retired
-> shell-form Claude hook; the agy imprint, which asked only `> 0` until this repair),
-> or a foreign/damaged marker, the only way a non-integer pid appears at all. The one
-> file actually observed was a shell-form hook reparented to init. Honoring it was not
-> merely wrong, it was a trap: init runs for the whole boot and its start-key does not
-> change while it does, so the owner verdict is `live` and **the very action this
-> refusal prescribes cannot change that** — you quiesce every session, exactly as
-> told, and the cut refuses again. (Deleting the marker removes the claim rather than
-> refuting the verdict; a reboot recomputes the key with no contract either way.)
-> Meanwhile the one repair this page names could not run: on the affected host the cut
-> stayed blocked until the marker file was removed by hand (#53 A, measured on a second
-> Linux host 2026-07-25). Such a marker is now swept as residue and **reported apart
-> from the dead ones** (`refuted:`), because a proof of invalidity is a different
-> finding from a proof of death — and a stronger one.
->
-> **Scope of that rule.** "A native session is never owned by init" is a property of the
-> axis entwurf certifies — a Linux desktop/workstation host, where init is the service
-> manager and every harness descends from a login session. A container that runs the
-> harness **as pid 1** is a real shape, and there the marker would name a genuine owner.
-> That host is **unsupported and fails closed**: the writers refuse the marker, so the
-> session still gets its meta-record but never claims reply-addressability — a lost
-> capability rather than a false identity. Reopening that lane needs new evidence and a
-> new contract, not a looser predicate.
->
-> That agy row is not symmetry for its own sake: `entwurf_register_native` writes a
-> record and **no marker at all**, and `entwurf_v2` dispatches to such a citizen
-> straight off the record, so marker absence is the *normal* state of a live,
-> fully deliverable conversation. A socket+marker scan alone would call that host
-> quiesced. Quiescing agy is also what makes the cut legal — with no host process
-> the probe answers *dead* — so the rule can never trap you on a host you have
-> already closed.
->
-> **What quiescence is proven over, exactly.** The live-schema-readable identities of
-> the current generation, plus the transport artifacts (sockets, markers). A record the
-> live schema *cannot* read is archived without probing it, and that is not a claim
-> that its session exited — only that those bytes front no addressable citizen here,
-> since every targeted address/dispatch path refuses them. The alternative deadlocks the cut on the very
-> store it exists to clear, and salvaging ids out of an unreadable shape in order to
-> probe it would be the legacy reader this repo deleted. A native conversation that
-> outlives a cut simply gets a **new** garden id from its next hook or registration —
-> re-birth in the new generation, never continuity of the old address.
-
-After upgrading a globally installed package, reinstall the native-harness surface you use before trusting it:
-
-```bash
+# Claude Code (Linux-certified axis)
 entwurf install-meta-bridge
 entwurf doctor-meta-bridge
 
+# Antigravity / agy
 entwurf install-agy-bridge
 entwurf install-agy-statusline
 entwurf install-agy-hooks
@@ -448,17 +182,31 @@ entwurf doctor-agy-statusline
 entwurf doctor-agy-hooks
 ```
 
-The installed entries use stable bin shims, but Claude's plugin bundle/cache still has to be re-materialized and agy's three ownership records must be refreshed by their idempotent installers. Restart existing Claude Code and agy processes after reinstall.
+Claude Code uses the supported floor `>=2.1.217`; older versions silently discard the
+exec-hook `args`, so install and doctor fail loud rather than falling back. After any
+upgrade, rerun the installer for the native harness you use and restart its existing
+processes. A claimed Claude host is certified only when a **new** session using the
+installed artifact makes `doctor-meta-bridge` exit 0 with the live owner join.
 
-For manual configuration, [`pi/settings.reference.json`](./pi/settings.reference.json)
-shows the pi adapter settings shape, and the external-host examples below show
-plain MCP registrations.
+Linux is the only currently certified Claude meta-bridge axis. New macOS wiring is
+refused because the strict live-owner doctor depends on `/proc`; Darwin uninstall
+remains available for legacy cleanup, and the neutral package itself has no `os`
+restriction. Detailed diagnosis and clean-host steps live in
+[docs/setup-clean-host.md](./docs/setup-clean-host.md).
 
-> **First time on a clean Linux host (Ubuntu / Debian / NixOS)?** See the [clean-host walk-through](./docs/setup-clean-host.md) — Node/npm install, auth-free bridge boot, optional pi adapter verification, and authenticated runtime smokes. The neutral package may install elsewhere, but Linux is the only currently certified Claude meta-bridge axis: its installer refuses macOS and its doctor remains `NOT CERTIFIED`/nonzero because the live owner join is not yet instrumented. Future native validation may reopen the macOS lane.
+The active citizen store is V3-only. A store that fails certification is never
+silently migrated: quiesce the native sessions, run `entwurf meta-bridge-fresh-cut`,
+then reinstall. The cut archives routing records only—never native transcripts or
+external memory—and no runtime reads the archive. Exit meanings and the complete
+operator contract are in [docs/fresh-cut-policy.md](./docs/fresh-cut-policy.md).
 
-> **Post-install checks.** `entwurf check-bridge` (or `./run.sh check-bridge` from a clone) proves the `entwurf-bridge` MCP surface loads with no backend auth needed. To prove the **ACP backend actually answers** — the bridge spawns Claude through the pi provider path and a real turn comes back — run `LIVE=1 entwurf smoke-acp-provider-live` from an installed package/clone with pi and Claude auth available. Package-source routing is pinned deterministically by `run.sh check-package-source-routing`, which runs inside `pnpm check` and the release gate.
+`entwurf check-bridge` proves the MCP surface boots without backend auth. A real ACP
+turn requires `LIVE=1 entwurf smoke-acp-provider-live`; the full release protocol and
+host evidence boundaries are [VERIFY.md](./VERIFY.md) and [BASELINE.md](./BASELINE.md).
 
-> **Extension set — do not filter.** `entwurf` ships three `pi.extensions` entries as a single set: the ACP provider extension (`pi-extensions/acp-provider.ts`) plus `pi-extensions/entwurf-control.ts` and `pi-extensions/model-lock.ts`. Filtering some out via pi's object-form package configuration can leave the model lock or entwurf-control surface in a broken state. Disable the entire package or none of it unless you know precisely which boundary you are turning off.
+> **Extension set — do not filter.** The ACP provider, `entwurf-control`, and
+> `model-lock` extensions ship as one set. Disable the package as a whole rather than
+> filtering individual entries into a partially wired state.
 
 ### Backend prerequisites
 
@@ -468,20 +216,30 @@ plain MCP registrations.
 2. **`require.resolve(...)` against the bundled package dependency** (`@agentclientprotocol/claude-agent-acp`). This is the default path; no extra global install needed.
 3. **`PATH:claude-agent-acp` fallback** — used when the package resolution fails (e.g. a hand-edited `node_modules`).
 
-The curated model registry exposes the unprefixed Claude ids plus the `cortex-` prefixed Cortex rows (below). Codex is *not* an ACP backend here — a native Codex session is already a first-class garden citizen via direct injection, so it needs no ACP plugin (see [AGENTS.md](./AGENTS.md)).
+The curated model registry exposes unprefixed Claude ids plus `cortex-` rows.
+Codex is not an ACP backend or a shipped managed citizen lane: it has verified
+native-delivery probe evidence, and the reserved 0.14.0 work must turn that evidence
+into lifecycle, identity, installation, and doctors before calling it supported.
 
-**Snowflake Cortex Code is the second landed ACP backend** (0.13.0; audit record and contract: [docs/acp-backend-rail.md](./docs/acp-backend-rail.md) §11-8). Operator surface:
+**Snowflake Cortex Code is the second ACP backend** (contract and audit:
+[docs/acp-backend-rail.md](./docs/acp-backend-rail.md#cortex-code-audit-d1d10)). Curated ids are
+`cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, and
+`cortex-openai-gpt-5.4`.
 
-- **Curated ids (4):** `cortex-auto`, `cortex-claude-opus-5`, `cortex-claude-sonnet-5`, `cortex-openai-gpt-5.4`. The `cortex-` prefix routes; the model is enforced per turn via ACP set-model, so an id the running cortex no longer serves fails loud before the prompt.
-- **CLI + auth:** `cortex` must be on PATH and already authenticated through Cortex's **own web-login flow** (there is no `cortex auth` subcommand; entwurf never supplies or proxies the Snowflake credential — the overlay reaches it by **symlinking through** exactly `connections.toml`, optional `config.toml`, and `cortex/cache/credential_cache`, and nothing else. The narrowing is *which paths are reachable* (§11-8 D5), not a read-only mount: a symlink carries no write protection, so the child holds the same access to those three paths that it would have with the operator's own HOME. What the overlay removes is the rest of the operator's **home** surface — the rest of `cortex/cache`, `~/.claude`/`~/.cortex` skills, home-anchored hooks and settings, and the operator's `cortex/mcp.json`. It does **not** reach cortex's *bundled* plugin/hook surface, which fires from the CLI's own install directory and is outside any HOME the overlay controls — that stays a host fact, not a containment claim (§11-8 D1).)
-- **Connection:** pin a Snowflake connection with `entwurfProvider.cortexConnection` in settings or per-shell via `ENTWURF_ACP_CORTEX_CONNECTION` (env wins). `entwurfProvider.backend: "cortex"` is an optional diagnostic guard, never the router.
-- **`CORTEX_HOME` must be unset.** It outranks `SNOWFLAKE_HOME` inside cortex and would bypass the dual-HOME containment, so the adapter refuses the spawn when it is present at all (empty string included).
-- **Containment:** each session runs under an isolated HOME (operator-global `~/.claude`/`~/.cortex` skills, hooks and settings are structurally unreachable; explicit `<cwd>/.claude` project scope is retained), with the explicit `entwurfProvider.mcpServers` projected into an overlay-private `cortex/mcp.json` — cortex's ACP server ignores the wire `mcpServers` parameter, so this projection is how tools reach a cortex session. Only the `entwurf-bridge` entry gets the real operator HOME back (the garden store axis).
-- **Live check:** `LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> entwurf smoke-acp-cortex-live` (or `./run.sh …` from a clone) drives one real cortex turn: outbound `entwurf_v2` delivery as `entwurf/<cortex model>`, overlay disk facts, and process-group reclaim. It is deliberately **on-demand** — which is a statement about *wiring*, not about *whether cortex needs live evidence*:
+The operator supplies an authenticated `cortex` CLI and selects a connection with
+`entwurfProvider.cortexConnection` or `ENTWURF_ACP_CORTEX_CONNECTION`. `CORTEX_HOME`
+must be absent: the adapter refuses it because it would bypass the session-scoped
+HOME containment. Explicit MCP servers are projected into the overlay-private
+`cortex/mcp.json`; only the bridge receives the real operator HOME needed for the
+garden store.
 
-- The aggregate floor (`LIVE=1 ./run.sh release-gate`) stays claude-only, so a host with no cortex install or no Snowflake auth cannot redden a release for a backend it does not run.
-- That is **not** a claim that cortex ships on deterministic evidence alone. Accepting a cut that ships cortex means running this smoke deliberately, and reading its result — the aggregate gate will not run it for you, and its silence is not a pass.
-- Cortex's always-on axis is the deterministic `check-acp-cortex`, which does ride `pnpm check`.
+`check-acp-cortex` runs in `pnpm check`. Real acceptance is deliberately on demand:
+
+```bash
+LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> entwurf smoke-acp-cortex-live
+```
+
+The aggregate Claude floor does not run this smoke, so silence is not a Cortex PASS.
 
 ### Emacs frontends
 
@@ -538,126 +296,24 @@ Reference shape lives in [`pi/settings.reference.json`](./pi/settings.reference.
 
 **Which keys reach which backend.** `entwurfProvider` is one block for both backends, but its keys are not universal. `tools` / `permissionAllow` / `disallowedTools` / `settingSources` / `skillPlugins` / `appendSystemPrompt` are Claude's declaration surface: they do not shape a cortex session, which runs its own native tools and reaches MCP through the overlay-private `mcp.json` projection instead. They are not inert, though — the bridge still reads `tools` for its backend-invariant exclude-tools preflight and folds all of them into the config signature, so editing one still forces a fresh cortex session. `cortexConnection` is cortex-only. `mcpServers` is the one declaration surface that reaches both, each through its own transport. (`compaction` is a *top-level* pi key, not an `entwurfProvider` one — it is pi's own transcript policy and is not a backend knob at all; see §Compaction.) Unknown and retired keys are ignored rather than rejected, so a key aimed at the wrong backend fails silently: if a cortex session does not show the surface you configured, check that the key is one cortex actually consumes before suspecting the bridge.
 
-### Wiring `entwurf-bridge` into an external MCP host
+### External MCP registration
 
-`entwurf-bridge` can also be registered in a separate MCP-aware harness (Claude Code, Codex CLI, Antigravity/`agy`, …). That host does **not** become a pi session and does **not** need to be ACP-backed. There are now two honest cases:
+`entwurf-bridge` can also be registered in a separate MCP-aware harness (Claude Code,
+Codex CLI, Antigravity). Two shapes exist and they are not interchangeable:
 
-- **plain external MCP host**: no garden meta-record / sender marker. It can call the read surfaces (`entwurf_peers`, `entwurf_inbox_read`), but `entwurf_v2` sends are **refused by default** (#50 C4: "if we don't know who sent it, we don't send it"). The operator may wire the explicit hatch below; the send then goes out external/non-replyable.
-- **garden-native native session**: a trusted lifecycle hook minted a garden id and sender marker — `SessionStart` for Claude Code, `PreInvocation` for agy. It is not a pi control-socket session, but it can be replyable by garden id when its own mailbox/probe rail says so.
-
-**Which verb an external agent should reach for:** to deliver to / reply to a garden id, use **`entwurf_v2`** — it is the canonical delivery surface and the only one that reads whether the target is live pi, dormant pi, mailbox-backed Claude Code, or native-push Antigravity and routes correctly. Discover targets with `entwurf_peers`, confirm your own identity with `entwurf_self`, drain a mailbox with `entwurf_inbox_read`, and use `entwurf_register_native` only as the explicit/manual fallback for binding an already-running agy conversation (normal agy birth is automatic through the installed hook). Fresh sibling creation from nothing is a deferred lane. (The old v1 verbs `entwurf` / `entwurf_resume` / `entwurf_send` are gone.)
-
-Observed: Claude Code, Codex CLI, and Antigravity CLI all reach the read surfaces through this MCP bridge from a plain external host — `entwurf_peers` is a pure fact projection, while `entwurf_inbox_read` is a **mutating drain** (it archives the messages and stamps the read-receipt), so "read" here does not mean side-effect-free; **sending** needs an identity lane. Claude becomes symmetric/replyable through its mailbox-backed meta-session; agy becomes symmetric/replyable through its record-backed sender marker plus live native-push probe. Codex has no managed citizen lifecycle yet, so a Codex host cannot send without the explicit anonymous hatch below.
-
-Prerequisites on the host running the external MCP client:
-
-- `pi` on PATH (for the `owned-outcome` spawn-bg resume path).
-- A live pi session launched with `--entwurf-control` populates `~/.pi/entwurf-control/<gardenId>.sock` — the key is the **record's** garden id, never a transcript/session id (`PI_SESSION_ID` only carries the id record birth already established). Required for `entwurf_v2` control-socket dispatch and `entwurf_peers`.
-
-> **PATH boundary.** MCP servers are often launched by GUI/editor daemons and may not inherit the interactive shell's PATH. If `pi` works in your terminal but an external-host `entwurf_v2` spawn-bg resume fails with `spawn pi ENOENT`, pass a full PATH in the MCP server `env`, set `ENTWURF_BRIDGE_ENV_FILE` to a small shell file that exports PATH, or point the host at a wrapper that can find `pi`. `start.sh` sources only the explicit `ENTWURF_BRIDGE_ENV_FILE`; it never reads personal dotfiles automatically.
-
-Example env file:
+- **plain external MCP host** — no garden meta-record or sender marker. It can read the
+  surfaces, but `entwurf_v2` is **refused by default**: there is no authoritative sender.
+- **garden-native session** — a trusted lifecycle hook minted a garden id, so it is
+  addressable and replyable by that id.
 
 ```bash
-# ~/.config/entwurf-bridge/env.sh
-export PATH="$HOME/.local/share/pnpm:$HOME/.local/bin:$HOME/.nvm/versions/node/v24.15.0/bin:$PATH"
+claude mcp add --scope user entwurf-bridge entwurf-bridge
 ```
 
-Then add it to the external MCP config:
-
-```json
-{
-  "env": {
-    "ENTWURF_BRIDGE_ENV_FILE": "/home/operator/.config/entwurf-bridge/env.sh",
-    "ENTWURF_BRIDGE_EXTERNAL_AGENT_ID": "external-mcp/claude-code"
-  }
-}
-```
-
-**Anonymous sender hatch (explicit, documented — never a default).** The bridge refuses an `entwurf_v2` send when the process has neither pi-session env (`PI_SESSION_ID` + `PI_AGENT_ID`) nor a trusted meta-sender marker (#50 C4). A deliberately-anonymous external host — e.g. a Codex CLI wiring, which has no managed citizen lifecycle — may opt out by adding `"ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER": "1"` to the MCP server `env`. The cost is honest and fixed: the send lands with `origin: "external-mcp"`, `replyable: false` (there is no reply address), and `wants_reply: true` stays pointless. The retired opt-in `ENTWURF_BRIDGE_REQUIRE_META_SENDER` is no longer read — its demand became the default, so a stale copy in an old install env is inert.
-
-Emergency/manual workaround when the MCP server environment is wrong but an existing entwurf session must be resumed: run `pi --session /path/to/entwurf.jsonl ...` from an interactive shell whose PATH is known-good. Treat this as a debug escape hatch, not a replacement for fixing the MCP launch environment.
-
-External/meta-session semantics:
-
-- `entwurf_v2` from a plain external host is **refused by default** (no authoritative sender — #50 C4). With the explicit `ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1` hatch it delivers with `origin: "external-mcp"` / `replyable: false`; there is still no reply address.
-- `entwurf_v2` from a trusted meta-session delivers with `origin: "meta-session"`, and `replyable` is **derived from that sender's own rail — not granted by being trusted**: a self-fetch sender (Claude Code) is replyable only while its receiver is live and armed, and a native-push sender (Antigravity) only while its adapter probe finds the live conversation. Identity survives either way; only `replyable` drops to `false`. When it is `true`, `wants_reply: true` is allowed and the receiver can reply to the sender's garden id.
-- `entwurf_v2` with `intent: "owned-outcome"` to a dormant pi target needs `pi` on PATH (it spawns a `pi --entwurf-control` resume child); async completion followUp requires a replyable pi control-socket caller.
-- `entwurf_self` returns the same authoritative identity for pi sessions **and** trusted meta-sessions. A plain external host with no pi env and no trusted sender marker still fails because there is no reply address to report.
-
-#### Claude Code
-
-Claude Code supports both CLI registration and a separated global MCP config. The separated file is recommended for dotfile / `agent-config` workflows because `~/.claude.json` also carries OAuth-bearing state.
-
-**Option A — CLI add:**
-
-```bash
-claude mcp add --scope user entwurf-bridge \
-  bash /absolute/path/to/entwurf/mcp/entwurf-bridge/start.sh
-```
-
-This writes the entry into `~/.claude.json`'s top-level `mcpServers`. Good for one-off setup; do not version-control the resulting `~/.claude.json`.
-
-**Option B — separated `~/.mcp.json`:**
-
-```json
-{
-  "mcpServers": {
-    "entwurf-bridge": {
-      "type": "stdio",
-      "command": "bash",
-      "args": [
-        "/absolute/path/to/entwurf/mcp/entwurf-bridge/start.sh"
-      ],
-      "env": {
-        "ENTWURF_BRIDGE_EXTERNAL_AGENT_ID": "external-mcp/claude-code"
-      }
-    }
-  }
-}
-```
-
-Claude Code reads `~/.mcp.json` in addition to `~/.claude.json`'s top-level `mcpServers`. The `env` block identifies the calling host on the receiver render — omit it and `entwurf_v2` shows `external-mcp/unknown-host`. If Claude Code permissions are locked down, allow `mcp__*` or `mcp__entwurf-bridge__*` in `~/.claude/settings.json`.
-
-#### Codex CLI
-
-Add the server to `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.entwurf-bridge]
-command = "/absolute/path/to/entwurf/mcp/entwurf-bridge/start.sh"
-```
-
-Codex has no managed citizen lifecycle (no sender marker), so this wiring can read `entwurf_peers`/`entwurf_inbox_read` but `entwurf_v2` sends are refused by default (#50 C4). To send anonymously anyway, add the explicit hatch to the same block: `env = { ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER = "1" }` — the send is then marked external/non-replyable (see the hatch paragraph above).
-
-#### Antigravity CLI (`agy`)
-
-Use the managed install surface rather than editing agy's files by hand:
-
-```bash
-entwurf install-agy-bridge
-entwurf install-agy-statusline
-entwurf install-agy-hooks
-
-entwurf doctor-agy-bridge
-entwurf doctor-agy-statusline
-entwurf doctor-agy-hooks
-```
-
-The three adapters deliberately own different atoms:
-
-- bridge: one `entwurf-bridge` server in `~/.gemini/config/mcp_config.json`, plus one narrow permission string per tool the normal agy workflow calls — `mcp(entwurf-bridge/entwurf_v2)`, `mcp(entwurf-bridge/entwurf_peers)`, `mcp(entwurf-bridge/entwurf_self)` — in `~/.gemini/antigravity-cli/settings.json`. agy defaults every `mcp` action to Ask, so a tool that ships without its own rule stops for a y/n on every call; `entwurf_inbox_read` is deliberately not granted (native-push has no inbox) and neither is the manual `entwurf_register_native` fallback;
-- statusline: the complete `statusLine` subtree pointing at the bare stable bin `entwurf-agy-statusline`;
-- hooks: one named `PreInvocation` hook pointing at the bare stable bin `entwurf-agy-imprint`.
-
-Unrelated servers, permissions, settings, and hooks are preserved; every adapter has a state-backed honest inverse and refuses symlink-owned SSOTs. The installer never grants broad `command(*)`, `unsandboxed(*)`, or other YOLO policy — those remain operator decisions.
-
-The **global** MCP config live agy reads is `~/.gemini/config/mcp_config.json`. `~/.gemini/antigravity-cli/mcp_config.json` is not the global MCP root; the bridge installer one-way cleans only a stale entwurf-owned entry there. After the first model invocation, the imprint hook binds the native `conversationId` to a garden id, the statusline shows `🪛 <garden-id> agy`, and sends from that MCP child carry `agentId=meta-session/antigravity` with `replyable:true` only when the record exists and the live native-push probe succeeds.
-
-#### External-host skills and commands
-
-MCP registration gives the external harness the tools; the host still needs workflow guidance. Put the Mitsein-over-MCP (cross-harness collaboration) rules in that host's instruction file or, when supported, as a host-native skill. Do not assume pi slash commands are portable across external hosts — if a workflow must work across Claude Code, Codex CLI, Antigravity, and future hosts, make it a skill or MCP tool rather than a command shortcut.
-
+Per-harness registration (Claude Code `~/.mcp.json`, Codex `~/.codex/config.toml`, the
+managed `install-agy-*` surfaces), the PATH/env boundary for GUI-launched MCP servers, the
+anonymous-sender hatch, and the full external/meta-session semantics are in
+[docs/external-mcp-host.md](./docs/external-mcp-host.md).
 For the maintained multi-harness setup and skill/command packaging details, see `agent-config`. See also the MCP entry in [Concept primer](#concept-primer), the sender envelope contract in [AGENTS.md](./AGENTS.md), and [Custom skills](#custom-skills) for the in-pi ACP skill surface.
 
 ## Per-backend operating surface
@@ -666,7 +322,8 @@ The Claude ACP backend keeps its native model / API / tools; entwurf shapes only
 
 **Claude** uses `_meta.systemPrompt` for the engraving carrier (kept short and pure — billing-safe; rich operator context rides the first user message instead, see [Context carriers](#context-carriers)) and `CLAUDE_CONFIG_DIR` for a whitelist overlay so auth/runtime entries stay available while operator memory, hooks, agents, history, local settings, and project memory remain hidden. The overlay writes an explicit empty `hooks: {}` because Claude SDK organic compaction needs the configured-empty shape; no operator hook definitions are inherited. The four-tool baseline (`Read`, `Bash`, `Edit`, `Write`) is enforced through `tools` + `permissionAllow`; `Skill` is added automatically when `skillPlugins` is non-empty. Operator context cap override: `ENTWURF_ACP_CLAUDE_CONTEXT=<int>`.
 
-(Codex is *not* an ACP backend here — it reaches the garden natively. The governed-CLI lane is open, not later: Snowflake Cortex Code landed on it in 0.13.0, and a third governed backend would join the same adapter rail.)
+Codex is not an ACP backend here. Its native delivery probe remains separate from
+the governed ACP adapter rail and does not yet constitute a managed garden citizen.
 
 Antigravity is also not an ACP backend. It is a native-push citizen: `PreInvocation` supplies birth/sender identity, `entwurf_v2` probes and direct-injects replies into the live conversation, and no mailbox/receiver marker is involved.
 

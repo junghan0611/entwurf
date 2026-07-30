@@ -15,7 +15,7 @@
 // materializer, and cortex did: `ensureCortexDualHomeOverlay` (+ projectCortexMcpJson /
 // sweepDeadCortexOverlays / cortexOverlayScopeId) lives further down this file with its
 // own D-number rationale — an isolated HOME rather than a redirect knob, because cortex
-// has no CLAUDE_CONFIG_DIR equivalent (§11-8 D2). The two share the module, never the
+// has no CLAUDE_CONFIG_DIR equivalent (ACP rail Cortex audit D2). The two share the module, never the
 // strategy. Codex/Gemini overlays (CODEX_HOME / admin.toml) remain behavior-oracle
 // territory and are out of scope here.
 //
@@ -230,11 +230,11 @@ export function ensureClaudeConfigOverlay(
 
 // ============================================================================
 // Cortex dual-HOME overlay — the as-measured containment for `cortex acp serve`
-// (CP0 audit 2026-07-29, Cortex Code v1.1.52; docs/acp-backend-rail.md §4/§11-8).
+// (CP0 audit 2026-07-29, Cortex Code v1.1.52; docs/acp-backend-rail.md “Cortex Code audit”).
 // ============================================================================
 //
 // Why this is NOT the claude-shaped `SNOWFLAKE_HOME`-only overlay PR #40 shipped
-// (each point is a measured defect, not a preference — §11-8 D-numbers):
+// (each point is a measured defect, not a preference — Cortex audit D-numbers):
 //
 //   - D2: cortex reads `CONFIG_DIRS = [".claude", ".cortex"]` at `homedir()` and
 //     `~/.claude/skills` — a SNOWFLAKE_HOME redirect cannot move that axis. An

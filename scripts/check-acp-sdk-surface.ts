@@ -4,23 +4,38 @@
 // the peer-resolution that makes the Claude ACP adapter satisfiable:
 //
 //   @agentclientprotocol/sdk              1.3.0    wire SDK (acp-bridge import source)
-//   @agentclientprotocol/claude-agent-acp 0.62.0   Claude adapter (spawn binary)
+//   @agentclientprotocol/claude-agent-acp 0.63.0   Claude adapter (spawn binary)
 //   @anthropic-ai/sdk                     0.100.1  peer-resolution pin ONLY (see below)
 //
-// 2026-07-27 bump 0.61.0 → 0.62.0: the adapter's own `dist/` is byte-identical
-// across the two releases; 0.62.0 moves only its declared deps
-// (claude-agent-sdk 0.3.217 → 0.3.219; its devDep anthropic sdk, which does not
-// reach us). So this bump is a dependency refresh that carries NO adapter-code
-// change — and specifically NOT a fix for the bundled-MCP readiness race
-// (ROADMAP 🔴): 0.62.0 adds no explicit readiness fence. Effective runtime
-// behavior is NOT claimed identical: the transitive SDK moved, and MCP startup
-// lives inside it, so timing may differ — what is established is only that no
-// new fence was added.
+// 2026-07-30 bump 0.62.0 → 0.63.0 — an ADAPTER-CODE release, not a dependency
+// refresh. Measured on the packed tarballs: 137,294 → 142,084 bytes, with
+// `dist/acp-agent.js`, `dist/tools.js` and the `dist/acp-agent.d.ts` surface all
+// moved. Three upstream fixes ride it (#923 denied-tool resolution, #916
+// tool_progress heartbeat keying, #917 Bash terminal metas keyed off the
+// announced tool_use id) plus claude-agent-sdk 0.3.219 → 0.3.220.
+//
+// Reachability onto OUR surface is narrower than that list, and is measured, not
+// assumed: `backend.ts` sends `clientCapabilities: {}`, and the adapter gates
+// terminal metas on `clientCapabilities?._meta?.["terminal_output"] === true`
+// and subagent transcript on the matching capability — so both stay off for
+// every backend we ship. What CAN still reach the wire is opt-in-free metadata
+// (`_meta.claudeCode.title` / `.subagent`) and #916's re-keyed heartbeats; the
+// mapper ignores those, so no visible state changes. Do not write this up as
+// "0.63.0 does not reach us" — write what each axis was measured to do.
+//
+// HISTORY — 2026-07-27 bump 0.61.0 → 0.62.0: that one WAS a pure dependency
+// refresh; the adapter's `dist/` was byte-identical across the two releases and
+// only its declared deps moved (claude-agent-sdk 0.3.217 → 0.3.219). It was
+// specifically NOT a fix for the bundled-MCP readiness race (ROADMAP 🔴), and
+// 0.63.0 adds no explicit readiness fence either. Effective runtime behavior is
+// NOT claimed identical across either bump: the transitive SDK moved both times,
+// and MCP startup lives inside it, so timing may differ — what is established is
+// only that no new fence was added.
 //
 // The anthropic SDK is NOT an API client / auth surface here. It is a direct
-// dep solely to satisfy @anthropic-ai/claude-agent-sdk@0.3.219's peer floor
-// (>=0.93.0 — re-measured at 0.3.219, unchanged from 0.3.217, so the 0.100.1
-// pin stands rather than rising mechanically); drop it and the tree resolves a stale 0.91.1 so the peer goes
+// dep solely to satisfy @anthropic-ai/claude-agent-sdk@0.3.220's peer floor
+// (>=0.93.0 — re-measured at 0.3.220, unchanged from 0.3.219 and 0.3.217, so the
+// 0.100.1 pin stands rather than rising mechanically); drop it and the tree resolves a stale 0.91.1 so the peer goes
 // unmet — a failure that would only surface at the first raw turn. The
 // lockfile proves the same shape. Source-level import / API-client
 // instantiation / credential use stays forbidden — asserted in layer (4).
@@ -54,7 +69,7 @@ const pkg = JSON.parse(read("package.json")) as { dependencies?: Record<string, 
 const deps = pkg.dependencies ?? {};
 const PINS: Record<string, string> = {
 	"@agentclientprotocol/sdk": "1.3.0",
-	"@agentclientprotocol/claude-agent-acp": "0.62.0",
+	"@agentclientprotocol/claude-agent-acp": "0.63.0",
 	[ANTHROPIC_SDK]: "0.100.1",
 };
 for (const [name, ver] of Object.entries(PINS)) {
@@ -74,13 +89,13 @@ for (const [name, ver] of Object.entries(PINS)) {
 const lock = read("pnpm-lock.yaml");
 assert.match(
 	lock,
-	/@agentclientprotocol\/claude-agent-acp@0\.62\.0\(@anthropic-ai\/sdk@0\.100\.1/,
-	"pnpm-lock: claude-agent-acp@0.62.0 must peer-resolve @anthropic-ai/sdk@0.100.1 (peer-pin), not the stale 0.91.1",
+	/@agentclientprotocol\/claude-agent-acp@0\.63\.0\(@anthropic-ai\/sdk@0\.100\.1/,
+	"pnpm-lock: claude-agent-acp@0.63.0 must peer-resolve @anthropic-ai/sdk@0.100.1 (peer-pin), not the stale 0.91.1",
 );
 assert.match(
 	lock,
-	/@anthropic-ai\/claude-agent-sdk@0\.3\.219\(@anthropic-ai\/sdk@0\.100\.1/,
-	"pnpm-lock: claude-agent-sdk@0.3.219 must peer-resolve @anthropic-ai/sdk@0.100.1 — else its >=0.93.0 peer floor is unmet",
+	/@anthropic-ai\/claude-agent-sdk@0\.3\.220\(@anthropic-ai\/sdk@0\.100\.1/,
+	"pnpm-lock: claude-agent-sdk@0.3.220 must peer-resolve @anthropic-ai/sdk@0.100.1 — else its >=0.93.0 peer floor is unmet",
 );
 
 // ---------------------------------------------------------------------------
@@ -119,8 +134,8 @@ const casEntry = adapterRequire.resolve("@anthropic-ai/claude-agent-sdk");
 const casInfo = pkgInfoFromEntry(casEntry);
 assert.equal(
 	casInfo.version,
-	"0.3.219",
-	`@anthropic-ai/claude-agent-sdk must runtime-resolve to 0.3.219 from the adapter context (got ${casInfo.version})`,
+	"0.3.220",
+	`@anthropic-ai/claude-agent-sdk must runtime-resolve to 0.3.220 from the adapter context (got ${casInfo.version})`,
 );
 const casRequire = createRequire(resolve(casInfo.dir, "package.json"));
 const sdkEntry = casRequire.resolve(ANTHROPIC_SDK);
@@ -163,7 +178,7 @@ const mcpEntry = casRequire.resolve("@modelcontextprotocol/sdk/server/index.js")
 const mcpInfo = pkgInfoFromEntry(mcpEntry);
 assert.ok(
 	mcpInfo.version.startsWith("1.29."),
-	`@modelcontextprotocol/sdk must runtime-resolve to 1.29.x from the claude-agent-sdk context (got ${mcpInfo.version}) — claude-agent-sdk 0.3.219 declares a ^1.29.0 peer`,
+	`@modelcontextprotocol/sdk must runtime-resolve to 1.29.x from the claude-agent-sdk context (got ${mcpInfo.version}) — claude-agent-sdk 0.3.220 declares a ^1.29.0 peer`,
 );
 
 // ---------------------------------------------------------------------------

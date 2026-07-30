@@ -720,6 +720,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 	const EXPECTED_LANE_MUTANTS: Record<string, number> = {
 		"acp-augment": 2,
 		"acp-cortex": 12,
+		"acp-stop-reason": 6,
 		"agy-permission": 6,
 		"meta-identity": 1,
 		"probe-ordering": 83,

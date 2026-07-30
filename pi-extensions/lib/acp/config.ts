@@ -23,7 +23,7 @@
 // the backend-invariant exclude-tools preflight and folds every one of them into
 // `bridgeConfigSignature` (so changing one still invalidates a reused cortex
 // session). Backend-OWNED settings never land here: they ride the opaque
-// `adapterSettings` seam (§10 B), which is what keeps a backend-named key like
+// `adapterSettings` seam (rail “Adapter contract”), which is what keeps a backend-named key like
 // `cortexConnection` off this common shape.
 //
 // PURITY / SIGNATURE contract (NEXT oracle C / 핀1 / GPT `…2f9325` boost):

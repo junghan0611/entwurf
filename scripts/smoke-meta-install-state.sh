@@ -87,6 +87,10 @@ case "$1${2:+ $2}" in
   "mcp get")
     printf '%s\n' "Scope: User config" "Status: ✔ Connected"
     [ "${FAKE_MCP_RC:-0}" != 0 ] && exit "$FAKE_MCP_RC"
+    # Give grep -q a scheduling window to consume the match and close the pipe
+    # before the long tail starts. Without this, a fast host can buffer the whole
+    # tail before grep exits, making the old broken probe spuriously green.
+    sleep 0.05
     # Keep writing well past the pipe buffer: a reader that leaves early SIGPIPEs us.
     cat "$FAKE_MCP_TAIL"
     exit $? ;;

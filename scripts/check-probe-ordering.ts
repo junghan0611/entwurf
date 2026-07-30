@@ -290,7 +290,7 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 		`set-model start/end are marked between newSession end and prompt start (got ${eventOrder.join(",")})`,
 	);
 
-	// §9-4 shape: an undefined session meta omits the `_meta` KEY entirely.
+	// Carrier-less shape: an undefined session meta omits the `_meta` KEY entirely.
 	const calls2: RecordedCall[] = [];
 	await driveProbeTurn(makeRecordingConnection(calls2), {
 		cwd: "/scratch/gate2",
@@ -305,7 +305,7 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 	});
 	assert.ok(
 		!Object.hasOwn(calls2.find((c) => c.method === "newSession")?.params as object, "_meta"),
-		"undefined session meta omits the _meta KEY entirely (§9-4)",
+		"undefined session meta omits the _meta KEY entirely (carrier-less shape)",
 	);
 
 	// --- production source pins ---------------------------------------------

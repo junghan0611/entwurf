@@ -64,7 +64,8 @@ Detailed incident histories belong in CHANGELOG/issues/BASELINE and source-adjac
 - The common turn sequence stays backend-invariant: spawn → initialize → newSession → enforceModel → prompt → event map.
 - Rich operator/project context rides the **first user message augment**, not a large system prompt. The actual callable schema is the tool truth; prose never grants a tool.
 - A backend may have no carrier or use launch-time model pinning; those asymmetries stay inside its adapter.
-- Claude is the reference adapter. Cortex is the second landed adapter (0.13.0): session-scoped dual-HOME containment, overlay-private `mcp.json` projection (its ACP server ignores the wire `mcpServers` param), `CORTEX_HOME` presence refusal, per-turn set-model. Audit record and contract: `docs/acp-backend-rail.md` §11-8.
+- A streaming assistant message starts `pending`. ACP terminal reasons are mapped explicitly; refusal, exhausted turn budget, unknown, or absent reasons end as errors, and the raw reason is preserved. Never restore a default-to-success branch.
+- Claude is the reference adapter. Cortex is the second landed adapter (0.13.0): session-scoped dual-HOME containment, overlay-private `mcp.json` projection (its ACP server ignores the wire `mcpServers` param), `CORTEX_HOME` presence refusal, per-turn set-model. Current contract: `docs/acp-backend-rail.md` “Cortex Code audit (D1–D10)”.
 - entwurf never supplies, copies, proxies, decrypts, or bypasses vendor credentials/subscriptions. It uses the operator's existing local authenticated backend.
 
 ## Citizen Identity and Dispatch
@@ -146,7 +147,7 @@ LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live
 - Every `.ts` file belongs to one typecheck fence: root emit-capable config, MCP strip-types config, or scripts strip-types config. Do not hide files with `exclude`.
 - Root pi extensions import TypeBox through `@earendil-works/pi-ai`; do not mix direct `@sinclair/typebox` types.
 - MCP/scripts use explicit `.ts` imports where Node strip-types requires them. Installed operator surfaces route to compiled JS.
-- pi runtime range is `>=0.82.1 <0.83` with devDep exact `0.82.1`; re-evaluate loader aliases and `/compat` at the minor ceiling.
+- pi runtime range is `>=0.83.0 <0.84` with devDep exact `0.83.0`; re-evaluate loader aliases and `/compat` at the minor ceiling. Re-measured at the 0.82.1→0.83.0 move: `packages/coding-agent/src/core/extensions/loader.ts` and `packages/ai/src/compat.ts` are byte-identical across the two tags, so the ceiling moved on measurement, not assumption.
 - ACP pins are recorded in `package.json` and checked by `check-dep-versions`/`check-acp-sdk-surface`; do not describe a dependency bump as a behavioral fix without evidence.
 
 ## Working Style

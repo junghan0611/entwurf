@@ -1181,16 +1181,16 @@ smoke_acp_rgg_live() {
 
 smoke_acp_cortex_live() {
   # On-demand LIVE smoke for the Cortex (Snowflake Cortex Code) ACP backend — the
-  # first NON-claude adapter on the rail (docs/acp-backend-rail.md §6). OUT of
+  # first NON-claude adapter on the rail (docs/acp-backend-rail.md, Cortex audit). OUT of
   # `pnpm check` AND OUTSIDE the claude-only aggregate LIVE floor (capability
   # dignity, invariant #7): a host with no cortex install / no Snowflake auth must
   # not redden a release for a backend it does not run, so this is deliberately
   # absent from release-gate's 11-smoke ACP acceptance floor. That is a WIRING
   # decision, not a lower evidence bar — a cut that SHIPS cortex still owes a
   # deliberate run of this smoke, and the aggregate gate's silence is not a pass
-  # (rail §11-8 tail). Drives one real
+  # (ACP rail Cortex verification boundary). Drives one real
   # cortex ACP turn through the entwurf provider path (outbound entwurf_v2 +
-  # dual-HOME overlay facts + process-group reclaim — CP2, rail §11-8).
+  # dual-HOME overlay facts + process-group reclaim — CP2).
   # HONEST-SKIP (exit 0) when LIVE!=1 OR `cortex` is not on PATH OR no
   # connection is pinned — the live turn needs `cortex` installed with the
   # operator's own web-login auth already present (there is no `cortex auth`
@@ -1472,12 +1472,13 @@ assert.equal(peerTui, piAi,
 // floor tracks the devDep pin so a consumer can't install against a pi lacking
 // the public trust exports the bridge imports at the pinned minor, AND an upper
 // bound at the next minor stops a fresh install from silently pulling a future
-// pi (past the declared ceiling — 0.83+ at the current 0.82.1 pin) whose
+// pi (past the declared ceiling — 0.84+ at the current 0.83.0 pin) whose
 // internal export surface has drifted from the one we typecheck against.
 // pi moves its public surface every minor (the 0.79→0.80 getModels→provider-
 // factory churn is exactly this), so an open `>=` floor is exactly how the next
-// installer re-acquires the drift. Expected
-// shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.82.1 <0.83`).
+// installer re-acquires the drift. The floor is also the HARD MINIMUM a consumer
+// install resolves: at `>=0.83.0` an existing 0.82.x host is upgraded, not kept.
+// Expected shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.83.0 <0.84`).
 const [piMaj, piMin] = piAi.split('.').map(Number);
 assert.equal(piMaj, 0,
   `pi pin major must stay 0 for the next-minor ceiling rule (got ${piAi}); revisit check-dep-versions when pi reaches 1.x`);
@@ -2263,7 +2264,7 @@ check_acp_provider_surface() {
 check_acp_sdk_surface() {
   # Deterministic gate for the S2a ACP SDK dependency surface. Pins the three
   # ACP runtime deps to the current oracle versions (@agentclientprotocol/sdk
-  # 1.3.0 + claude-agent-acp 0.62.0 + @anthropic-ai/sdk 0.100.1), locks the
+  # 1.3.0 + claude-agent-acp 0.63.0 + @anthropic-ai/sdk 0.100.1), locks the
   # peer-resolution that keeps claude-agent-sdk satisfiable (0.100.1, not the
   # stale 0.91.1), asserts the wire SDK still value-exports the symbols the raw
   # turn needs (silent-rename gate), and forbids any source-level anthropic SDK
@@ -2306,6 +2307,19 @@ check_acp_event_mapper() {
   # single text block). Pure, no live backend.
   section "ACP event mapper (S2c notification→stream + context)"
   run_ts scripts/check-acp-event-mapper.ts
+}
+
+check_acp_stop_reason() {
+  # Deterministic gate for the ACP stop-reason contract. Drives every member of
+  # the closed ACP terminal set (end_turn / max_tokens / max_turn_requests /
+  # refusal / cancelled), plus an unrecognized reason and an ABSENT one, end to
+  # end through streamAcpTurn against a fake connection — asserting the event
+  # kind, the event reason, and the final message's stopReason / rawStopReason /
+  # errorMessage together. Forbids the collapse-to-"stop" default that reported
+  # refusals and exhausted turn budgets as finished answers. Also pins the
+  # "pending" seed on the freshly created stream state.
+  section "ACP stop reason (terminal set → pi verdict)"
+  run_ts scripts/check-acp-stop-reason.ts
 }
 
 check_acp_prompt_builder() {
@@ -2383,11 +2397,11 @@ check_acp_carrier_augment() {
 check_acp_cortex() {
   # Deterministic gate for the Cortex (Snowflake Cortex Code) ACP backend — the
   # first non-claude adapter on the rail, landed 0.13.0 on the CP0-measured
-  # contract (docs/acp-backend-rail.md §4/§6/§11-8). The cortex source is one
+  # contract (docs/acp-backend-rail.md, Cortex audit D1–D10). The cortex source is one
   # `cortexAdapter` object (backend-adapter.ts) + its curated surface (models.ts)
   # + the dual-HOME overlay (overlay.ts); the 결합 규칙 requires the gate to land
-  # WITH it, and §6 said EXTEND the check-acp-* family, so cortex's whole
-  # deterministic axis lives here. Locks (each §11-8 D-pinned): the GLG-decided
+  # WITH it, extending the check-acp-* family, so cortex's whole
+  # deterministic axis lives here. Locks (each Cortex-audit D-pinned): the GLG-decided
   # 4-row curation rides real registry bases and the `cortex-` prefix routes to
   # cortexAdapter; launch is `cortex acp serve` with NO -m — the model is
   # enforced per turn via session/set_config_option with the native id (E);
@@ -2776,21 +2790,21 @@ _check_pack_install_impl() {
   printf '%s\n' '{ "name": "entwurf-install-smoke", "version": "0.0.0", "private": true }' > "$tmp/package.json"
 
   # pi-agent-core is pinned even though we never import it: pi-coding-agent depends
-  # on it by CARET (`^0.82.1`), so with no lockfile in this fresh temp project it
+  # on it by CARET (`^0.83.0`), so with no lockfile in this fresh temp project it
   # floats to whatever pi published last — and that newer core then drags a NESTED
   # pi-ai of its own. Measured 2026-07-21: pinning only the three we import left
   # pi-agent-core@0.80.10 + pi-ai@0.80.10 in the tree while the gate still announced
   # "pinned pi 0.80.7". The gate would then be verifying an UNVERIFIED runtime — the
   # exact class this cut exists to close. Pin every @earendil-works package that
   # constitutes the pi runtime, not just the ones whose types we touch.
-  echo "[check-pack-install] pnpm add into $tmp (with 0.82.x peers + typebox)"
+  echo "[check-pack-install] pnpm add into $tmp (with 0.83.x peers + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.82.1" \
-    "@earendil-works/pi-coding-agent@0.82.1" \
-    "@earendil-works/pi-tui@0.82.1" \
-    "@earendil-works/pi-agent-core@0.82.1" \
+    "@earendil-works/pi-ai@0.83.0" \
+    "@earendil-works/pi-coding-agent@0.83.0" \
+    "@earendil-works/pi-tui@0.83.0" \
+    "@earendil-works/pi-agent-core@0.83.0" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -2800,17 +2814,17 @@ _check_pack_install_impl() {
 
   # A pin is a wish until the resolved tree is read back. Assert it: EVERY
   # @earendil-works pi package present — direct or transitive, top level or nested —
-  # must be the pinned 0.82.1. Anything else means an unpinned caret floated and the
+  # must be the pinned 0.83.0. Anything else means an unpinned caret floated and the
   # rest of this gate would be exercising a runtime nobody verified, while still
-  # printing "pinned pi 0.82.1". Fail loud instead of proving the wrong floor.
+  # printing "pinned pi 0.83.0". Fail loud instead of proving the wrong floor.
   local leaked_pi
-  leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | grep '^@earendil-works+pi-' | grep -v '@0\.82\.1' || true)
+  leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | grep '^@earendil-works+pi-' | grep -v '@0\.83\.0' || true)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.82.1):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.83.0):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works pi package is 0.82.1"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works pi package is 0.83.0"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the
@@ -3757,7 +3771,7 @@ setup_all() {
   # native-harness meta-bridge, so a relocate/clone needs ONE command — not the
   # install + install-meta-bridge two-pronged split that froze the Claude
   # statusLine on the old path (the 2026-06-23 relocation gap). Detection-gated:
-  # a pi-only host with no native harness skips it cleanly (§10 "있으면 설정,
+  # a pi-only host with no native harness skips it cleanly (rail “Shipped adapters” — "있으면 설정,
   # 없으면 담아준다"); meta-bridge-install.sh is itself idempotent.
   if command -v claude >/dev/null 2>&1; then
     section "meta-bridge install (native harness detected: Claude Code)"
@@ -4833,6 +4847,9 @@ case "$cmd" in
     ;;
   check-acp-event-mapper)
     check_acp_event_mapper
+    ;;
+  check-acp-stop-reason)
+    check_acp_stop_reason
     ;;
   check-acp-prompt-builder)
     check_acp_prompt_builder

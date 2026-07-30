@@ -209,15 +209,61 @@ function resolvePermissionResponse(params: { options?: Array<{ optionId: string;
 	return { outcome: { outcome: "selected", optionId: (allow ?? options[0]).optionId } };
 }
 
-/** ACP prompt stopReason → pi stopReason. */
-function mapPromptStopReason(stopReason: string | undefined): AssistantMessage["stopReason"] {
+/** Verdict for one ACP prompt result — what pi should report, and why. */
+export type AcpStopVerdict = {
+	stopReason: AssistantMessage["stopReason"];
+	/** The raw ACP reason, preserved whenever the wire carried one. */
+	rawStopReason?: string;
+	/** Set exactly when `stopReason` is "error" — carries the reason into the UI. */
+	errorMessage?: string;
+};
+
+/**
+ * ACP prompt stopReason → pi verdict.
+ *
+ * The ACP terminal set is closed (`@agentclientprotocol/sdk` 1.3.0
+ * `schema/types.gen`): end_turn | max_tokens | max_turn_requests | refusal |
+ * cancelled. Only three of those are successful or benign ends. The previous
+ * implementation returned a bare StopReason with `default: "stop"`, which turned
+ * `refusal`, `max_turn_requests`, any future member, AND a missing reason into a
+ * clean successful turn — pi then rendered a silently truncated answer as if the
+ * model had finished. pi 0.83 closed the same hole in its own providers (#7272:
+ * unmapped terminal reasons surface as provider errors, never successful stops)
+ * and added `rawStopReason` so the wire value survives the mapping. This mirrors
+ * that contract rather than inventing a local one.
+ */
+export function mapPromptStopReason(stopReason: string | undefined): AcpStopVerdict {
 	switch (stopReason) {
+		case "end_turn":
+			return { stopReason: "stop", rawStopReason: stopReason };
 		case "max_tokens":
-			return "length";
+			return { stopReason: "length", rawStopReason: stopReason };
 		case "cancelled":
-			return "aborted";
+			return { stopReason: "aborted", rawStopReason: stopReason };
+		case "refusal":
+			return {
+				stopReason: "error",
+				rawStopReason: stopReason,
+				errorMessage: "ACP backend stopped with: refusal (the model declined to answer; the turn is incomplete)",
+			};
+		case "max_turn_requests":
+			return {
+				stopReason: "error",
+				rawStopReason: stopReason,
+				errorMessage:
+					"ACP backend stopped with: max_turn_requests (the backend's per-turn request budget was exhausted; the turn is incomplete)",
+			};
+		case undefined:
+			return {
+				stopReason: "error",
+				errorMessage: "ACP backend ended the turn without a stop reason",
+			};
 		default:
-			return "stop";
+			return {
+				stopReason: "error",
+				rawStopReason: stopReason,
+				errorMessage: `ACP backend stopped with an unrecognized reason: ${stopReason}`,
+			};
 	}
 }
 
@@ -426,15 +472,30 @@ export function streamAcpTurn(
 		};
 	}
 
+	/**
+	 * Seal the turn from the ACP prompt result. "Success" here means the RPC
+	 * returned, not that the turn ended well — a returned `refusal` /
+	 * `max_turn_requests` / unknown / absent reason is sealed as an error event,
+	 * never a `done`. `rawStopReason` carries the wire value out either way.
+	 */
 	function finishSuccess(promptResult: { stopReason?: string }): void {
 		finalizeAcpStreamState(state);
-		const mapped = mapPromptStopReason(promptResult?.stopReason);
-		if (signal?.aborted || mapped === "aborted") {
+		const verdict = mapPromptStopReason(promptResult?.stopReason);
+		if (verdict.rawStopReason !== undefined) state.output.rawStopReason = verdict.rawStopReason;
+		if (signal?.aborted || verdict.stopReason === "aborted") {
 			state.output.stopReason = "aborted";
 			stream.push({ type: "error", reason: "aborted", error: state.output });
+		} else if (verdict.stopReason === "error") {
+			state.output.stopReason = "error";
+			state.output.errorMessage = verdict.errorMessage;
+			stream.push({ type: "error", reason: "error", error: state.output });
 		} else {
-			state.output.stopReason = mapped;
-			stream.push({ type: "done", reason: mapped === "length" ? "length" : "stop", message: state.output });
+			state.output.stopReason = verdict.stopReason;
+			stream.push({
+				type: "done",
+				reason: verdict.stopReason === "length" ? "length" : "stop",
+				message: state.output,
+			});
 		}
 		stream.end();
 	}
@@ -642,7 +703,7 @@ export function streamAcpTurn(
 			// S2f visibility: surface the otherwise-silent bootstrap so a slow
 			// overlay/spawn/init does not read as a hang. Display-only (marked).
 			pushAcpLifecycleNotice(state, `preparing ${adapter.backend} session`);
-			// GPT §9-5: materialize the overlay first, then spawn with launchEnvDefaults
+			// Overlay ordering (rail “Adapter contract”): materialize the overlay first, then spawn with launchEnvDefaults
 			// + overlay.envOverrides merged over process.env (defaultDeps spawnChild).
 			// sessionKey is the AUTHORITATIVE per-session identity (resolveSessionKey:
 			// opts.sessionId → PI_SESSION_ID → cwd) — a session-scoped overlay must
@@ -730,7 +791,7 @@ export function streamAcpTurn(
 				modelId: model.id,
 				piSessionId: process.env.PI_SESSION_ID?.trim() || undefined,
 			});
-			// GPT §9-4: omit the `_meta` KEY entirely for a carrier-less backend
+			// Carrier-less shape (rail “Adapter contract”): omit the `_meta` KEY entirely for a carrier-less backend
 			// (sessionMeta === undefined), not `_meta: undefined`.
 			const newSessionArgs =
 				sessionMeta === undefined

@@ -1,9 +1,10 @@
 // ACP backend adapter rail — the PRODUCT seam by which a curated model id selects
-// which ACP backend (claude / future backend / …) drives a turn. See docs/acp-backend-rail.md §9.
+// which ACP backend (claude / future backend / …) drives a turn. See the adapter contract in
+// docs/acp-backend-rail.md.
 //
 // This seam is DISTINCT from `AcpTurnDeps` (backend.ts), which is the test/runtime
-// seam (fake spawn/connection/clock for the gates). The two are kept apart on
-// purpose (GPT-agreed §9-2): merging them would make a fake-deps fixture look like
+// seam (fake spawn/connection/clock for the gates). Merging them would make a
+// fake-deps fixture look like
 // a fake backend and force the adapter to carry clock/sessionDir/createConnection.
 // The wiring is `defaultDeps(adapter)` — the turn loop in backend.ts stays
 // backend-invariant; only these per-backend functions change with `adapter`.
@@ -217,7 +218,7 @@ function resolveClaudeLaunch(): AcpLaunchSpec {
 export const claudeAdapter: AcpBackendAdapter = {
 	backend: "claude",
 
-	// Claude owns its UNPREFIXED curated ids only (GPT-agreed §9-1). The native id
+	// Claude owns its UNPREFIXED curated ids only (rail “Adapter contract”). The native id
 	// equals the curated id — claude carries no curation prefix to strip.
 	routeModel(modelId) {
 		return SUPPORTED_CLAUDE_IDS.has(modelId) ? { nativeModelId: modelId } : undefined;
@@ -298,13 +299,13 @@ export const claudeAdapter: AcpBackendAdapter = {
  *  adapters claim one id. */
 // ---------------------------------------------------------------------------
 // cortex adapter — Snowflake Cortex Code, the first non-claude backend on the
-// rail (docs/acp-backend-rail.md §4/§6). It adds ZERO to the common layer:
+// rail (docs/acp-backend-rail.md, “Shipped adapters”). It adds ZERO to the common layer:
 // everything cortex-specific lives here + models.ts + overlay.ts + the gates.
 // ---------------------------------------------------------------------------
 
 const SUPPORTED_CORTEX_IDS: ReadonlySet<string> = new Set(SUPPORTED_CORTEX_MODEL_IDS);
 
-/** Cortex's OWN settings (§10 B): a Snowflake connection name, or null. Opaque to
+/** Cortex's OWN settings: a Snowflake connection name, or null. Opaque to
  *  config.ts / backend.ts — only cortexAdapter reads it (casting back). */
 export interface CortexAdapterSettings {
 	cortexConnection: string | null;
@@ -318,7 +319,7 @@ export const CORTEX_CONNECTION_ENV = "ENTWURF_ACP_CORTEX_CONNECTION";
 export const cortexAdapter: AcpBackendAdapter = {
 	backend: "cortex",
 
-	// Cortex owns the reserved `cortex-` prefix (§9-1). routeModel strips it to the
+	// Cortex owns the reserved `cortex-` prefix (rail “Adapter contract”). routeModel strips it to the
 	// native id: `cortex-auto` → "auto", `cortex-claude-sonnet-5` → "claude-sonnet-5".
 	routeModel(modelId) {
 		if (!SUPPORTED_CORTEX_IDS.has(modelId)) return undefined;
@@ -406,7 +407,7 @@ export const cortexAdapter: AcpBackendAdapter = {
 		return { envOverrides: { HOME: overlay.home, SNOWFLAKE_HOME: overlay.snowflakeHome } };
 	},
 
-	// System-prompt-carrier-less (§9-4/§11-8): Cortex ACP exposes no
+	// System-prompt-carrier-less (ACP rail “Cortex Code audit”): Cortex ACP exposes no
 	// `_meta.systemPrompt` and has no developer_instructions / GEMINI_SYSTEM_MD
 	// equivalent. (It does READ `_meta` — a caller-session-id seam, measured but
 	// unexplored and deliberately not part of this contract.) loadCarrier returns
@@ -438,7 +439,7 @@ export const cortexAdapter: AcpBackendAdapter = {
 		await setConfig.call(connection, { sessionId: acpSessionId, configId: "model", value: nativeModelId });
 	},
 
-	// A connection change must invalidate a reused session (§4/§7). Flat,
+	// A connection change must invalidate a reused session (rail: Adapter contract). Flat,
 	// sorted-stable primitive map; reads ONLY the opaque adapterSettings. `backend`
 	// + `nativeModelId` are added by backend.ts.
 	configSignatureFields(adapterSettings) {
@@ -452,7 +453,7 @@ const ADAPTERS: readonly AcpBackendAdapter[] = [claudeAdapter, cortexAdapter];
 /**
  * Resolve the backend adapter that owns `modelId`.
  *
- * GPT-agreed §9-1 fail-fast contract:
+ * Routing fail-fast contract (rail “Adapter contract”):
  *  - 0 matches  → throw (unknown model — no silent default).
  *  - 2+ matches → throw (prefix collision — a startup-visible registry bug).
  *
@@ -476,7 +477,7 @@ export function resolveAcpBackendAdapter(modelId: string): { adapter: AcpBackend
 }
 
 /** Every curated model row across all registered adapters — for provider registration.
- *  GPT-agreed §9-6 registration-time fail-fast: every curated id must route to EXACTLY
+ *  Registration-time fail-fast (rail “Adapter contract”): every curated id must route to EXACTLY
  *  one adapter and no id may be duplicated across adapters. Catching it here means a
  *  prefix-collision / duplicate surfaces at provider registration, not mid-turn. */
 export function allCuratedModels(): AcpModelRow[] {
