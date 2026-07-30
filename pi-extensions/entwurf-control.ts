@@ -1322,55 +1322,26 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 	registerTool({
 		name: "entwurf_v2",
 		label: "Dispatch (v2)",
-		description: `CANONICAL delivery surface for a garden id. When you have a garden id and want to
-reach whoever it names — message / reply / hand-off — use THIS verb. A garden id alone does not
-reveal which rail that citizen answers on — a live socket session, a dormant one, a mailbox-backed
-self-fetch session, or a native-push session —
-and entwurf_v2 is the one surface that reads that and routes correctly (so "when unsure which
-transport, use entwurf_v2"). It dispatches to EXISTING targets; brand-new sibling creation is deferred
-to a later v2 lane. Dispatch to a garden citizen through the unified entwurf_v2 verb: the 5b decider
-picks the transport (live control-socket send / spawn-bg resume / meta-mailbox enqueue / native-push
-direct injection) from the target's liveness + your intent, runs it under the v2 lock policy, and reports
-one outcome (delivered / rejected / lock-retained / delivered-but-lock-dirty).
-
-LOCK POLICY (do not over-generalize it): the per-target lock is taken for a control-socket-DOMAIN
-dispatch, which is BOTH the live send AND the dormant cell's spawn-bg resume — spawn-bg is a separate
-relaunch transport yet it still runs under that domain's lock. The mailbox and native-push rails are
-lock-free: the mailbox is guarded instead by active-receiver deliverability, and native-push by its
-adapter probe.
-
-- target: the garden id of the citizen to reach (required).
-- intent: fire-and-forget (a send with no owned result) or owned-outcome (you own the result).
-- message: the message/prompt to dispatch (required).
-- mode: steer or follow_up for a CONTROL-SOCKET send (optional). The mailbox, native-push, and
-  spawn-bg plans carry no mode, so it has no effect on those rails — a native-push send IS live and
-  still ignores it.
-- wants_reply: reply hint; it rides every rail (optional, default false).
-
-CHOOSING INTENT (picking wrong is rejected, never auto-fixed): to message / reply / hand off a peer
-that entwurf_peers shows as liveness=alive (a live socket citizen, currently backend pi), use intent:
-fire-and-forget — it routes to the live control-socket; set wants_reply:true if you need an answer
-(wants_reply is NOT owned-outcome). Replies to a citizen with NO socket liveness
-(liveness=unsupported) are ALSO fire-and-forget, and the decider picks that citizen's own rail: a
-self-fetch backend (e.g. Claude Code) gets the meta-bridge mailbox, while a native-push backend
-(e.g. Antigravity) gets direct injection into its live conversation and has NO mailbox at all — do
-not assume mailbox semantics for every unsupported citizen. A native-push target IS measured by its
-own adapter probe, and that probe is THREE-valued, so the send is never silently queued: alive →
-injected; dead → rejected as native-push-target-dead; indeterminate → rejected as
-native-push-probe-indeterminate. Those last two stay separate on purpose — "we could not establish
-it" is not "it is gone". THERE IS A THIRD RESULT, so do not read
-liveness=unsupported as "reachable by some rail": the mailbox path delivers only to a DELIVERABLE
-citizen (a self-fetch backend whose receiver is live and armed), so a terminated Claude Code session —
-and any record whose backend has no adapter on this lane, e.g. codex — is rejected as
-mailbox-undeliverable rather than queued into an inbox nobody drains. unsupported means only "this
-backend has no control-socket probe".
-owned-outcome is ONLY for waking a DORMANT socket-domain citizen (spawn-bg resume, currently backend
-pi); on a live target it is rejected as owned-live-no-autosend. Neither self-fetch nor native-push
-has resume authority, but they reject under DIFFERENT reasons — self-fetch as
-backend-liveness-unsupported, native-push as native-push-no-resume-authority.
-It is NEVER auto-converted — so pick the right intent up front.
-
-The decider — not this surface — chooses the transport.`,
+		description: `CANONICAL DELIVERY SURFACE for garden ids: message, reply, or hand off to whoever an id names. The id alone
+does not say which rail that citizen answers on. Give target + intent; the decider picks transport from
+liveness (live socket citizen → control-socket send; dormant socket citizen → spawn-bg resume; deliverable
+self-fetch citizen → meta-bridge mailbox; probe-alive native-push citizen → direct injection into its
+conversation) and reports ONE outcome (delivered / rejected / lock-retained / delivered-but-lock-dirty).
+EXISTING targets only; discover with entwurf_peers. INTENT — picking wrong is rejected, never
+auto-converted. A peer entwurf_peers shows as liveness=alive → fire-and-forget. A citizen with NO socket
+liveness (liveness=unsupported) is ALSO fire-and-forget — unsupported means only "no control-socket probe" —
+and the decider picks its own rail: a self-fetch backend (e.g. Claude Code) gets the mailbox, a native-push
+backend (e.g. Antigravity) gets direct injection and has NO mailbox at all. THERE IS A THIRD RESULT: the
+mailbox delivers only to a DELIVERABLE citizen, so a terminated session, or a backend with no adapter here
+(e.g. codex), is mailbox-undeliverable, not queued for an inbox nobody drains. The native-push probe is
+3-valued: alive → injected; dead → native-push-target-dead; indeterminate → native-push-probe-indeterminate
+(unestablished ≠ gone). owned-outcome wakes a DORMANT socket-domain citizen by spawn-bg resume ONLY — live
+target → owned-live-no-autosend, self-fetch → backend-liveness-unsupported, native-push →
+native-push-no-resume-authority. LOCK: taken for a control-socket-DOMAIN dispatch — the live send AND the
+dormant cell's spawn-bg resume, a separate transport that still runs under that domain's lock. The mailbox
+and native-push rails are lock-free — deliverability and the adapter probe guard them. mode applies to a
+CONTROL-SOCKET send only; other plans carry no mode. wants_reply rides every rail. message caps at 16000
+chars; send an artifact path + digest for more.`,
 		parameters: entwurfV2Parameters,
 		async execute(
 			_toolCallId: string,

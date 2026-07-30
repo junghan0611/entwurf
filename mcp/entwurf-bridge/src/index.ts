@@ -344,54 +344,27 @@ function abbreviateHomeMcp(cwd: string): string {
 // sender replyability).
 server.tool(
 	"entwurf_v2",
-	"CANONICAL DELIVERY SURFACE for garden ids. When you have a garden id and want to reach " +
-		"whoever it names — message / reply / hand-off — use THIS verb. A garden id alone does " +
-		"not tell you which rail that citizen answers on — a live socket citizen, a dormant one, a " +
-		"mailbox-backed self-fetch session, or a native-push session — and entwurf_v2 is the one " +
-		'surface that reads that for you and routes correctly (so "when unsure which transport, use ' +
-		'entwurf_v2"). You give the target ' +
-		"garden id + your intent; the decider picks the transport from the target's liveness " +
-		"(live socket citizen → control-socket send; dormant socket citizen → spawn-bg resume; active " +
-		"deliverable self-fetch citizen → meta-bridge mailbox; probe-alive native-push citizen → direct " +
-		"injection into its live conversation) under the v2 lock policy, and reports ONE outcome " +
-		"(delivered / rejected / lock-retained / delivered-but-lock-dirty). LOCK POLICY (do not " +
-		"over-generalize it): the per-target lock is taken for a control-socket-DOMAIN dispatch, which is " +
-		"both the live send AND the dormant cell's spawn-bg resume — spawn-bg is a separate relaunch " +
-		"transport yet it still runs under that domain's lock. The mailbox and native-push rails are " +
-		"lock-free: the mailbox is guarded instead by active-receiver deliverability, and native-push by " +
-		"its adapter probe. The decider — not the " +
-		"caller — chooses the transport. Note: entwurf_v2 dispatches to EXISTING targets; " +
-		"brand-new sibling creation is deferred to a later v2 lane. " +
-		"CHOOSING INTENT (read this — picking wrong is rejected, never auto-fixed): to message / " +
-		"reply / hand off a peer that entwurf_peers shows as liveness=alive (a live socket citizen, " +
-		"currently backend pi) use intent: fire-and-forget — it routes to the live control-socket; set " +
-		"wants_reply:true if you need an answer (wants_reply is NOT owned-outcome). Replies to a citizen " +
-		"with NO socket liveness (liveness=unsupported) are ALSO fire-and-forget, and the decider picks " +
-		"that citizen's own rail: a self-fetch backend (e.g. Claude Code) gets the meta-bridge mailbox, " +
-		"while a native-push backend (e.g. Antigravity) gets direct injection into its live conversation " +
-		"and has NO mailbox at all — do not assume mailbox semantics for every unsupported citizen. A " +
-		"native-push target IS measured by its own adapter probe, and that probe is THREE-valued, so " +
-		"the send is never silently queued: alive → injected; dead → rejected as " +
-		"native-push-target-dead; indeterminate → rejected as native-push-probe-indeterminate. " +
-		"Those two rejects stay distinct because 'we could not establish it' is not 'it is gone' — " +
-		"collapsing them reports a guess as a fact. THERE IS A " +
-		"THIRD RESULT, so do not read liveness=unsupported as 'reachable by some rail': the mailbox path " +
-		"delivers only to a DELIVERABLE citizen (a self-fetch backend whose receiver is live and armed), " +
-		"so a terminated Claude Code session — and any record whose backend has no adapter on this lane, " +
-		"e.g. codex — is rejected as mailbox-undeliverable rather than queued into an inbox nobody drains. " +
-		"unsupported means only 'this backend has no control-socket probe'. " +
-		"owned-outcome is ONLY for waking a DORMANT socket-domain citizen (spawn-bg resume, currently " +
-		"backend pi); on a live target it is rejected as owned-live-no-autosend. Neither self-fetch nor " +
-		"native-push has resume authority, but they reject under DIFFERENT reasons — self-fetch as " +
-		"backend-liveness-unsupported, native-push as native-push-no-resume-authority. " +
-		"It is NEVER auto-converted — so pick the right intent up front. " +
-		"mode applies to a CONTROL-SOCKET send only — it is the injection style for a live pi turn, and " +
-		"the mailbox, native-push, and spawn-bg plans carry no mode at all, so setting it for those " +
-		"targets changes nothing (a native-push send IS live and still ignores it). wants_reply rides " +
-		"every rail. Use entwurf_peers to discover targets. " +
-		"Payload guidance: message hard cap 16000 chars. For larger reviews/logs, write an " +
-		"artifact and dispatch its path plus a short digest; avoid multi-part sends because " +
-		"mailbox doorbells may coalesce.",
+	"CANONICAL DELIVERY SURFACE for garden ids: message, reply, or hand off to whoever an id names. The id " +
+		"alone does not say which rail that citizen answers on. Give target + intent; the decider picks transport " +
+		"from liveness (live socket citizen → control-socket send; dormant socket citizen → spawn-bg resume; " +
+		"deliverable self-fetch citizen → meta-bridge mailbox; probe-alive native-push citizen → direct injection " +
+		"into its conversation) and reports ONE outcome (delivered / rejected / lock-retained / " +
+		"delivered-but-lock-dirty). EXISTING targets only; discover with entwurf_peers. INTENT — picking wrong is " +
+		"rejected, never auto-converted. A peer entwurf_peers shows as liveness=alive → fire-and-forget. A " +
+		"citizen with NO socket liveness (liveness=unsupported) is ALSO fire-and-forget — unsupported means only " +
+		'"no control-socket probe" — and the decider picks its own rail: a self-fetch backend (e.g. Claude Code) ' +
+		"gets the mailbox, a native-push backend (e.g. Antigravity) gets direct injection and has NO mailbox at " +
+		"all. THERE IS A THIRD RESULT: the mailbox delivers only to a DELIVERABLE citizen, so a terminated " +
+		"session, or a backend with no adapter here (e.g. codex), is mailbox-undeliverable, not queued for an " +
+		"inbox nobody drains. The native-push probe is 3-valued: alive → injected; dead → " +
+		"native-push-target-dead; indeterminate → native-push-probe-indeterminate (unestablished ≠ gone). " +
+		"owned-outcome wakes a DORMANT socket-domain citizen by spawn-bg resume ONLY — live target → " +
+		"owned-live-no-autosend, self-fetch → backend-liveness-unsupported, native-push → " +
+		"native-push-no-resume-authority. LOCK: taken for a control-socket-DOMAIN dispatch — the live send AND " +
+		"the dormant cell's spawn-bg resume, a separate transport that still runs under that domain's lock. The " +
+		"mailbox and native-push rails are lock-free — deliverability and the adapter probe guard them. mode " +
+		"applies to a CONTROL-SOCKET send only; other plans carry no mode. wants_reply rides every rail. message " +
+		"caps at 16000 chars; send an artifact path + digest for more.",
 	{
 		target: z.string().min(1).describe("Target garden id (use entwurf_peers to discover)"),
 		intent: z

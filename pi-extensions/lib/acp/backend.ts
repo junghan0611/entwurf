@@ -55,7 +55,7 @@ import {
 	type ResolvedAcpConfig,
 	resolveProviderConfig,
 } from "./config.js";
-import { buildAcpPrompt } from "./context.js";
+import { type AcpTextBlock, buildAcpPrompt } from "./context.js";
 import {
 	type AcpPiStreamState,
 	applyAcpSessionUpdate,
@@ -78,10 +78,31 @@ import {
 } from "./session-store.js";
 import { assertExcludeToolsHonored, PI_BUILTIN_BACKED_TOOLS } from "./tool-surface.js";
 
+// Bootstrap boundaries ONLY. initialize / newSession / set-model are handshake
+// steps that make no model progress, so a stuck one is a dead session and a cold
+// retry costs nothing — a wall-clock bound is honest there.
+//
+// There is deliberately NO prompt boundary. A running turn is not a failure for
+// having taken long: tool use, reasoning, and provider queueing all legitimately
+// outlive any number we could pick, and the previous 600s absolute cutoff killed
+// turns that were still actively producing tool calls. Worse, the cutoff's own
+// message ("prompt timed out after 600000ms") lands inside pi's transient-error
+// dictionary (`RETRYABLE_PROVIDER_ERROR_PATTERN` in @earendil-works/pi-ai
+// `utils/retry.ts` matches `timed? out` / `timeout`), so pi replayed the SAME
+// full prompt from a cold ACP session up to `retry.maxRetries` times — paying the
+// whole turn again to arrive at the same wall. Elapsed time is not evidence.
+// A prompt now ends only on lifecycle events: it resolves, the operator aborts,
+// or the child dies / its stdio ends (see awaitAcpPromptTurn).
 const INITIALIZE_TIMEOUT_MS = 30_000;
 const NEW_SESSION_TIMEOUT_MS = 30_000;
 const SET_MODEL_TIMEOUT_MS = 30_000;
-const PROMPT_TIMEOUT_MS = 600_000;
+
+// Bounded CLEANUP window after a user abort — not a turn deadline. On abort we
+// send the ACP `session/cancel` notification and give the agent this long to
+// answer the pending prompt with `cancelled` (the protocol's own ending, which
+// maps to aborted). Only if it does not do so within the window do we escalate
+// to process-group teardown, so an abort always returns promptly.
+const ABORT_CANCEL_GRACE_MS = 5_000;
 
 type StdioChild = ChildProcessByStdio<Writable, Readable, Readable>;
 
@@ -121,6 +142,12 @@ export interface AcpTurnDeps {
 	now(): string;
 	/** Record dir override (tests). Defaults to the real session cache dir. */
 	sessionDir?: string;
+	/**
+	 * Post-abort cleanup grace (gates). Defaults to ABORT_CANCEL_GRACE_MS. This is
+	 * the ONLY injectable clock left on the turn path and it bounds cleanup after
+	 * an abort — never a running prompt.
+	 */
+	abortGraceMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +174,24 @@ interface BridgeSession {
 	busy: boolean;
 	/** Mutable per-turn router — see the CRITICAL note in the file header. */
 	activePromptHandler?: (event: AcpBridgeEvent) => void;
+	/**
+	 * The child's own dying words, SESSION-scoped on purpose. The stderr drain is
+	 * installed once at spawn; keeping the buffer on the turn that spawned would
+	 * leave every later reuse turn reporting a bare "ACP connection closed" with
+	 * nothing to diagnose it by (observed 2026-07-30 on a live sonnet reuse turn).
+	 */
+	stderrTail: string[];
+	/** How the child ended, once it has — folded into the prompt-phase error. */
+	exit?: { code: number | null; signal: NodeJS.Signals | null };
+	/** Set while a prompt is in flight so a child death can close it (awaitAcpPromptTurn). */
+	notifyChildGone?: (err: Error) => void;
+	/**
+	 * We are tearing this child down ON PURPOSE (turn-scoped teardown, config
+	 * drift, error/abort cleanup). Its exit is then expected, not news: without
+	 * this flag every ordinary turn-scoped turn would announce its own routine
+	 * teardown to the NEXT turn as if the session had died.
+	 */
+	retiring?: boolean;
 }
 
 const bridgeSessions = new Map<string, BridgeSession>();
@@ -173,21 +218,78 @@ function registerGlobalCleanup(): void {
 	});
 }
 
-/** A retained child died between turns: mark dead + drop from map + retained set. */
-function onChildGone(session: BridgeSession): void {
+/**
+ * The child died: mark dead + drop from map + retained set, RECORD how it ended,
+ * and close any prompt that was waiting on it. Without that last step a
+ * mid-prompt death is only observable through the SDK's generic "ACP connection
+ * closed" rejection, which names neither the exit status nor the stderr.
+ */
+function onChildGone(session: BridgeSession, exit?: { code: number | null; signal: NodeJS.Signals | null }): void {
 	session.alive = false;
+	if (exit) session.exit = exit;
 	if (bridgeSessions.get(session.key) === session) bridgeSessions.delete(session.key);
 	retainedChildren.delete(session.child);
+	if (session.notifyChildGone) {
+		// A turn was waiting on this child — it reports the death itself.
+		session.notifyChildGone(childEndedError(session));
+	} else if (!session.retiring) {
+		// Died BETWEEN turns with no turn to fail and nobody tearing it down, so
+		// nobody has seen it. Without this the next turn would silently open a
+		// fresh child and read as an ordinary cold start, hiding that the backend
+		// session the operator was talking to is gone. A DELIBERATE teardown is
+		// excluded — announcing our own routine cleanup would be noise, not news.
+		unreportedChildEnds.set(session.key, session.exit ?? { code: null, signal: null });
+	}
+}
+
+/** Deaths no turn observed, keyed by sessionKey and announced once by the next turn. */
+const unreportedChildEnds = new Map<string, { code: number | null; signal: NodeJS.Signals | null }>();
+
+/** Read-and-clear: an unreported death is announced exactly once. */
+function takeUnreportedChildEnd(
+	sessionKey: string,
+): { code: number | null; signal: NodeJS.Signals | null } | undefined {
+	const end = unreportedChildEnds.get(sessionKey);
+	if (end) unreportedChildEnds.delete(sessionKey);
+	return end;
+}
+
+/** "exit code 1" / "signal SIGKILL" / "exit code 0, signal SIGTERM" / "no exit status". */
+function describeChildEnd(exit?: { code: number | null; signal: NodeJS.Signals | null }): string {
+	if (!exit) return "no exit status";
+	const parts = [
+		exit.code !== null ? `exit code ${exit.code}` : undefined,
+		exit.signal ? `signal ${exit.signal}` : undefined,
+	].filter(Boolean);
+	return parts.length > 0 ? parts.join(", ") : "no exit status";
+}
+
+/**
+ * The prompt-phase error for a child that died under a live turn.
+ *
+ * Wording is load-bearing: pi classifies a failed assistant message by matching
+ * its errorMessage against `RETRYABLE_PROVIDER_ERROR_PATTERN`, so anything we
+ * author here that reads like "timed out" / "timeout" / "terminated" /
+ * "connection lost" would put a full cold prompt replay back on the table. This
+ * text names the lifecycle fact and nothing that looks transient.
+ * (The appended backend stderr tail is the child's text, not ours.)
+ */
+function childEndedError(session: BridgeSession): Error {
+	return new Error(
+		`entwurf: the ACP backend process ended while the prompt was still in flight (${describeChildEnd(session.exit)}) — ` +
+			"this turn has no answer",
+	);
 }
 
 // ---------------------------------------------------------------------------
 // timeout / launch / permission / stopReason / teardown helpers
 // ---------------------------------------------------------------------------
 
-// Race a promise against a timeout, ALWAYS clearing the timer afterwards. A
-// naive `Promise.race([p, sleep(ms)])` leaves the timer pending when `p` wins —
-// a dangling (here 10-minute) timer that keeps pi's event loop alive long after
+// Race a BOOTSTRAP phase against its timeout, ALWAYS clearing the timer
+// afterwards. A naive `Promise.race([p, sleep(ms)])` leaves the timer pending
+// when `p` wins — a dangling timer that keeps pi's event loop alive long after
 // the turn, so pi would never exit a `-p` run. clearTimeout in finally fixes it.
+// Only initialize / newSession / set-model use this; the prompt has no deadline.
 function withTimeout<T>(label: string, p: Promise<T>, ms: number): Promise<T> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const timeout = new Promise<never>((_, reject) => {
@@ -197,6 +299,80 @@ function withTimeout<T>(label: string, p: Promise<T>, ms: number): Promise<T> {
 	return Promise.race([p, timeout]).finally(() => {
 		if (timer) clearTimeout(timer);
 	});
+}
+
+/**
+ * Await ONE ACP prompt with NO wall-clock deadline — the turn ends on lifecycle
+ * events only. Shared by the new and the reuse turn so both close the same way.
+ *
+ * The three endings:
+ *
+ *   resolve      the agent answered `session/prompt` (any stopReason — the
+ *                verdict mapping is the caller's job).
+ *   child gone   the child exited or its stdio ended. Both are already fatal to
+ *                the request — the SDK rejects every pending response when the
+ *                read loop hits EOF — but the SDK's own error says only "ACP
+ *                connection closed". `notifyChildGone` gets there first with the
+ *                exit status, and the caller appends the session stderr tail.
+ *   abort        the operator cancelled. We send ACP `session/cancel` and let
+ *                the agent end its own turn (`cancelled` → aborted). Escalation
+ *                to process-group teardown happens only after a bounded grace,
+ *                and closing the connection rejects the pending request, so an
+ *                abort is always answered even against a wedged child.
+ *
+ * A stalled-but-alive child is deliberately NOT an ending: a silent turn is not
+ * a failed turn, and nothing here may kill one for being quiet.
+ */
+async function awaitAcpPromptTurn(
+	session: BridgeSession,
+	promptArgs: { sessionId: string; prompt: AcpTextBlock[] },
+	opts: { signal?: AbortSignal; graceMs: number },
+): Promise<{ stopReason?: string }> {
+	let rejectLifecycle: ((err: Error) => void) | undefined;
+	const lifecycle = new Promise<never>((_, reject) => {
+		rejectLifecycle = reject;
+	});
+	// The race's loser stays pending forever when the prompt wins; a rejection
+	// nobody observed would surface as an unhandled rejection at that point.
+	lifecycle.catch(() => {});
+
+	let graceTimer: ReturnType<typeof setTimeout> | undefined;
+	const escalateAbort = (): void => {
+		killChildGroup(session.child, "SIGTERM");
+		// Closing rejects the still-pending ACP request, so the await below settles
+		// even when the child ignores both the cancel notification and the signal.
+		session.connection.close?.(new Error("entwurf: ACP prompt cancelled by the operator"));
+		rejectLifecycle?.(new Error("entwurf: the ACP prompt was cancelled by the operator"));
+	};
+	const onAbort = (): void => {
+		try {
+			session.connection.cancel?.({ sessionId: promptArgs.sessionId });
+		} catch {
+			// best-effort: escalation below is what guarantees the abort returns.
+		}
+		// NOT unref'd, deliberately. This timer is the only thing that finishes an
+		// abort against an agent that ignores session/cancel, so letting the event
+		// loop drain past it would leave the turn unsettled and the child alive.
+		// It is bounded (graceMs) and cleared in the finally below, so the worst it
+		// can do is hold an exiting process for that grace — which is the cleanup
+		// we asked for.
+		graceTimer = setTimeout(escalateAbort, opts.graceMs);
+	};
+
+	session.notifyChildGone = (err) => rejectLifecycle?.(err);
+	const signal = opts.signal;
+	if (signal) {
+		if (signal.aborted) onAbort();
+		else signal.addEventListener("abort", onAbort, { once: true });
+	}
+
+	try {
+		return await Promise.race([session.connection.prompt(promptArgs), lifecycle]);
+	} finally {
+		if (graceTimer) clearTimeout(graceTimer);
+		signal?.removeEventListener("abort", onAbort);
+		session.notifyChildGone = undefined;
+	}
 }
 
 /** Approve-all permission policy (YOLO — oracle F). options empty → cancelled. */
@@ -662,6 +838,7 @@ export function streamAcpTurn(
 		// connection + child so it is not orphaned in retainedChildren (GPT blocker 2).
 		if (decision.path === "new" && existing) {
 			existing.alive = false;
+			existing.retiring = true;
 			if (bridgeSessions.get(sessionKey) === existing) bridgeSessions.delete(sessionKey);
 			retainedChildren.delete(existing.child);
 			existing.connection.close?.();
@@ -700,6 +877,19 @@ export function streamAcpTurn(
 		try {
 			if (signal?.aborted) throw new Error("aborted before launch");
 
+			// A backend session that died BETWEEN turns is announced here, before
+			// the bootstrap notice — otherwise this turn looks like an ordinary
+			// cold start and the operator never learns that the session they were
+			// talking to ended. Announced once (read-and-clear); the turn continues
+			// normally, since opening a fresh child for a NEW user turn is not a
+			// replay of anything.
+			const priorEnd = takeUnreportedChildEnd(sessionKey);
+			if (priorEnd) {
+				pushAcpLifecycleNotice(
+					state,
+					`previous ${adapter.backend} session ended between turns (${describeChildEnd(priorEnd)}) — opening a new one`,
+				);
+			}
 			// S2f visibility: surface the otherwise-silent bootstrap so a slow
 			// overlay/spawn/init does not read as a hang. Display-only (marked).
 			pushAcpLifecycleNotice(state, `preparing ${adapter.backend} session`);
@@ -720,6 +910,11 @@ export function streamAcpTurn(
 				if (stderrTail.length > 50) stderrTail.shift();
 			});
 
+			// Abort during BOOTSTRAP (spawn → initialize → newSession → set-model):
+			// there is no prompt turn for the agent to cancel yet, so the child is
+			// simply torn down. This listener is handed off before the prompt —
+			// awaitAcpPromptTurn installs the protocol-cancel-first one for that
+			// window, and two live listeners would race SIGTERM against the cancel.
 			if (signal) {
 				onAbort = () => killChildGroup(spawned, "SIGTERM");
 				signal.addEventListener("abort", onAbort, { once: true });
@@ -761,9 +956,15 @@ export function streamAcpTurn(
 				alive: true,
 				busy: true,
 				activePromptHandler: undefined,
+				// SAME array the stderr drain above pushes into: the buffer outlives
+				// this turn with the session, so a later reuse turn can still report
+				// the child's dying words.
+				stderrTail,
 			};
 			const sess = session;
-			spawned.once("exit", () => onChildGone(sess));
+			spawned.once("exit", (...args: unknown[]) =>
+				onChildGone(sess, { code: (args[0] as number | null) ?? null, signal: (args[1] as NodeJS.Signals) ?? null }),
+			);
 			spawned.once("error", () => onChildGone(sess));
 
 			await withTimeout(
@@ -837,10 +1038,16 @@ export function streamAcpTurn(
 			// prompt could still sync-reject before the wire write; the next visible
 			// event after this is the backend's own first token / tool notice.
 			pushAcpLifecycleNotice(state, "sending prompt");
-			const promptResult = await withTimeout(
-				"prompt",
-				connection.prompt({ sessionId: acpSessionId, prompt }),
-				PROMPT_TIMEOUT_MS,
+			// Hand the abort window over to the prompt driver: from here on an abort
+			// is a protocol `session/cancel` first, teardown only after the grace.
+			if (signal && onAbort) {
+				signal.removeEventListener("abort", onAbort);
+				onAbort = undefined;
+			}
+			const promptResult = await awaitAcpPromptTurn(
+				session,
+				{ sessionId: acpSessionId, prompt },
+				{ signal, graceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS },
 			);
 
 			session.activePromptHandler = undefined;
@@ -859,6 +1066,7 @@ export function streamAcpTurn(
 				unrefRetainedChild(spawned);
 				persistRecord(session, deps);
 			} else {
+				session.retiring = true;
 				connection.close?.();
 				teardownChild(spawned);
 			}
@@ -872,11 +1080,12 @@ export function streamAcpTurn(
 			// error/abort → drop the (uncertain) session and close its child; an
 			// uncertain connection must never be reused (GPT ④).
 			if (child) {
+				if (session) session.retiring = true;
 				retainedChildren.delete(child);
 				session?.connection.close?.(err);
 				teardownChild(child);
 			}
-			finishError(err, aborted, stderrTail);
+			finishError(err, aborted, session?.stderrTail ?? stderrTail);
 		} finally {
 			if (signal && onAbort) signal.removeEventListener("abort", onAbort);
 		}
@@ -884,7 +1093,6 @@ export function streamAcpTurn(
 
 	// --- reuse: send only the latest user delta to the live ACP session
 	async function runReuseTurn(session: BridgeSession, ctxSigs: string[]): Promise<void> {
-		let onAbort: (() => void) | undefined;
 		try {
 			if (signal?.aborted) throw new Error("aborted before prompt");
 
@@ -893,10 +1101,6 @@ export function streamAcpTurn(
 			pushAcpLifecycleNotice(state, "reusing live session");
 			session.busy = true;
 			session.activePromptHandler = makePromptHandler(session);
-			if (signal) {
-				onAbort = () => killChildGroup(session.child, "SIGTERM");
-				signal.addEventListener("abort", onAbort, { once: true });
-			}
 
 			// The live ACP session already remembers the prior turns → send only the
 			// latest user delta (re-sending the transcript would duplicate history).
@@ -905,10 +1109,12 @@ export function streamAcpTurn(
 
 			// S2f visibility: about to send the delta to the resident child.
 			pushAcpLifecycleNotice(state, "sending prompt");
-			const promptResult = await withTimeout(
-				"prompt",
-				session.connection.prompt({ sessionId: session.acpSessionId, prompt }),
-				PROMPT_TIMEOUT_MS,
+			// A reuse turn has no bootstrap window at all — the prompt driver owns
+			// the whole abort surface (protocol cancel first, teardown after grace).
+			const promptResult = await awaitAcpPromptTurn(
+				session,
+				{ sessionId: session.acpSessionId, prompt },
+				{ signal, graceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS },
 			);
 
 			session.activePromptHandler = undefined;
@@ -925,12 +1131,14 @@ export function streamAcpTurn(
 			session.busy = false;
 			// error/abort on a reused session → drop it and close the child (GPT ④).
 			if (bridgeSessions.get(session.key) === session) bridgeSessions.delete(session.key);
+			session.retiring = true;
 			retainedChildren.delete(session.child);
 			session.connection.close?.(err);
 			teardownChild(session.child);
-			finishError(err, aborted);
-		} finally {
-			if (signal && onAbort) signal.removeEventListener("abort", onAbort);
+			// The SAME diagnostics a new turn reports. Without the session-scoped
+			// tail a mid-turn child death on a resident session surfaced as a bare
+			// "ACP connection closed" with nothing to read it by.
+			finishError(err, aborted, session.stderrTail);
 		}
 	}
 

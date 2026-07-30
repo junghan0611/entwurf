@@ -65,6 +65,7 @@ Detailed incident histories belong in CHANGELOG/issues/BASELINE and source-adjac
 - Rich operator/project context rides the **first user message augment**, not a large system prompt. The actual callable schema is the tool truth; prose never grants a tool.
 - A backend may have no carrier or use launch-time model pinning; those asymmetries stay inside its adapter.
 - A streaming assistant message starts `pending`. ACP terminal reasons are mapped explicitly; refusal, exhausted turn budget, unknown, or absent reasons end as errors, and the raw reason is preserved. Never restore a default-to-success branch.
+- Bootstrap steps carry wall-clock bounds; a running prompt does not. A turn ends only when the agent answers, the operator aborts (ACP `session/cancel` first, bounded cleanup after), or the child dies. Elapsed time is not evidence, and a prompt-phase failure we author must never read as transient to pi's retry classifier — a cutoff plus blind retry replays the whole prompt from cold.
 - Claude is the reference adapter. Cortex is the second landed adapter (0.13.0): session-scoped dual-HOME containment, overlay-private `mcp.json` projection (its ACP server ignores the wire `mcpServers` param), `CORTEX_HOME` presence refusal, per-turn set-model. Current contract: `docs/acp-backend-rail.md` “Cortex Code audit (D1–D10)”.
 - entwurf never supplies, copies, proxies, decrypts, or bypasses vendor credentials/subscriptions. It uses the operator's existing local authenticated backend.
 

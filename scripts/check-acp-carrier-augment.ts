@@ -15,7 +15,7 @@
 // Pure + temp-dir fs, no spawn/child — IN pnpm check.
 
 import { strict as assert } from "node:assert";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -320,10 +320,88 @@ function ctxWith(firstUser: string): Context {
 	);
 }
 
+// ===========================================================================
+// 10) CARRIER PROVENANCE — the augment states what it is, per rail.
+//
+// Measured 2026-07-30: asked where its instructions came from, the Claude ACP
+// model reported the bridge-identity and task-stance paragraphs as its SYSTEM
+// prompt. They are a first-user-message prepend. The model was not lying — on
+// the wire it cannot tell a long first user message from a system prompt, and
+// nothing in the block said which it was. The rails also differ for real
+// (backend-adapter.ts: claude's buildSessionMeta carries `_meta.systemPrompt`;
+// cortex's returns undefined so no `_meta` is sent), so ONE generic sentence
+// would be false on one of them.
+//
+// What this pins is a STATEABILITY claim, not an obedience claim: the boundary
+// must be present and rail-correct in the text the model reads. It cannot make
+// a model answer honestly — it removes the excuse that it had no way to know.
+// ===========================================================================
+{
+	const claudeAug = buildPiContextAugment({ backend: "claude", cwd: tmp, mcpServerNames: [], homeDir: tmp });
+	const cortexAug = buildPiContextAugment({ backend: "cortex", cwd: tmp, mcpServerNames: [], homeDir: tmp });
+
+	for (const [rail, aug] of [
+		["claude", claudeAug],
+		["cortex", cortexAug],
+	] as const) {
+		assert.ok(
+			aug.includes("prepended to the FIRST USER MESSAGE of this session. It is not your system prompt."),
+			`[QK:CARRIER-PROVENANCE-STATED] the ${rail} augment must say what it IS (first-user-message text) and what it ` +
+				"is NOT (the system prompt) — without that line a model reading it has no way to attribute it, and the " +
+				"measured failure was exactly that misattribution",
+		);
+		assert.ok(
+			aug.indexOf("# entwurf: where this text comes from") < aug.indexOf(BRIDGE_MARK),
+			`the ${rail} provenance frame precedes the bridge narrative it is about`,
+		);
+	}
+
+	// Rail-correct, not generic: claude names its carrier and scopes it to the
+	// engraving; cortex denies having one at all.
+	assert.ok(
+		claudeAug.includes("does have a system-prompt carrier (`_meta.systemPrompt`)") &&
+			claudeAug.includes("it carries the operator engraving only"),
+		"[QK:CARRIER-FRAME-NAMES-CLAUDE-CARRIER] the claude frame must name the real carrier AND scope it to the engraving — " +
+			`saying only "this is not your system prompt" leaves the model to guess what the system prompt then is. Got: ${JSON.stringify(claudeAug.slice(0, 500))}`,
+	);
+	assert.ok(
+		cortexAug.includes("carries no system-prompt carrier at all") &&
+			!cortexAug.includes("does have a system-prompt carrier"),
+		"[QK:CARRIER-FRAME-DENIES-CORTEX-CARRIER] the cortex frame must deny the carrier — cortex's buildSessionMeta returns " +
+			`undefined so no _meta is sent; claiming a tiny carrier there would be a lie. Got: ${JSON.stringify(cortexAug.slice(0, 500))}`,
+	);
+
+	// The rail difference is not a doc claim — it is in the adapter source.
+	const adapterSrc = readFileSync(join(REPO_DIR, "pi-extensions/lib/acp/backend-adapter.ts"), "utf8");
+	const cortexAt = adapterSrc.indexOf('backend: "cortex"');
+	assert.ok(cortexAt > 0, "backend-adapter.ts still declares the cortex adapter");
+	assert.match(
+		adapterSrc.slice(cortexAt),
+		/buildSessionMeta\(\)\s*\{\s*return undefined;/,
+		"[QK:CARRIER-RAIL-DIFF-IS-SOURCE-PINNED] cortex's buildSessionMeta must still return undefined — the source fact the " +
+			"cortex frame's 'no carrier at all' sentence rests on. If this ever grows a carrier, the frame becomes a lie.",
+	);
+
+	// DISJOINT SURFACES: the thing the model is told is its system prompt (the
+	// engraving) must not contain the narrative it is told is user text. If the
+	// two ever overlapped, the frame would be unfalsifiable prose.
+	const shippedCarrier = loadEngraving({ backend: "claude", mcpServerNames: [] });
+	assert.ok(shippedCarrier, "shipped carrier is present (fail-loud lever)");
+	assert.ok(
+		!(shippedCarrier as string).includes(BRIDGE_MARK) && !claudeAug.includes(shippedCarrier as string),
+		`the claude carrier and the augment must stay disjoint — the carrier carries the ` +
+			`engraving only and the augment carries the narrative, which is precisely what the provenance frame tells the ` +
+			`model. Carrier: ${JSON.stringify(shippedCarrier)}`,
+	);
+}
+
 console.log(
 	"[check-acp-carrier-augment] ok — engraving carrier: pure/deterministic, sorted mcp interpolation, " +
 		"empty/whitespace/missing → null, shipped-default → non-empty v1 lever (preset replaced), carrier absent → no _meta.systemPrompt key, carrier change → " +
 		"signature change (stable carrier → stable signature); augment: prepended on `new` only (reuse delta has none), " +
 		"wire-only so it never enters contextMessageSignatures, entwurf cwd/AGENTS.md de-dup (present → drop only that " +
-		"section, home kept; absent → kept), day-granularity date, 50KB truncation marker, shipped AGENTS budget",
+		"section, home kept; absent → kept), day-granularity date, 50KB truncation marker, shipped AGENTS budget; " +
+		"provenance: both rails state the augment is first-user-message text and not the system prompt, claude names its " +
+		"tiny engraving-only carrier while cortex denies having one (pinned against cortexAdapter.buildSessionMeta → " +
+		"undefined), and carrier/augment stay disjoint",
 );

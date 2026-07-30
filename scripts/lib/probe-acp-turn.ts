@@ -29,19 +29,28 @@ export interface ProbePhaseTimeouts {
 	initializeMs: number;
 	newSessionMs: number;
 	setModelMs: number;
-	promptMs: number;
 }
 
-// Phase timeouts — MUST equal backend.ts's INITIALIZE/NEW_SESSION/SET_MODEL/
-// PROMPT_TIMEOUT_MS (check-probe-ordering pins them against the source). §11-7:
-// a D verdict is only readable against these boundaries, so the probe may not
-// invent its own.
+// BOOTSTRAP phase timeouts — MUST equal backend.ts's INITIALIZE/NEW_SESSION/
+// SET_MODEL_TIMEOUT_MS (check-probe-ordering pins them against the source).
+// §11-7: a bootstrap-phase D verdict is only readable against production's own
+// boundaries, so the probe may not invent its own.
 export const PROBE_PHASE_TIMEOUTS: ProbePhaseTimeouts = {
 	initializeMs: 30_000,
 	newSessionMs: 30_000,
 	setModelMs: 30_000,
-	promptMs: 600_000,
 };
+
+// The prompt phase has NO production counterpart to match: backend.ts ends a
+// prompt on lifecycle events only (resolve / abort / child gone) and carries no
+// wall-clock cutoff, by policy — an active turn is not a failed turn for being
+// long. This value is therefore the MEASUREMENT HARNESS's own bounded
+// observation horizon: it stops a probe RUN from hanging forever. It is not a
+// production contract, not an equivalence, and not a deadline any §11-7 verdict
+// is read against. Horizon expiry means the run's prompt window is
+// INCONCLUSIVE — the artifact is preserved and read as "not measured", never as
+// a model of production killing a turn.
+export const PROBE_PROMPT_OBSERVATION_MS = 600_000;
 
 /** The two adapter methods the turn drives — satisfied by the REAL claudeAdapter
  *  (emitted) in the LIVE runner and by recording stubs in the gate. */
@@ -108,7 +117,10 @@ export interface ProbeTurnParams {
 	adapter: ProbeAdapterSeam;
 	enrichMcpServers: ProbeMcpEnricher;
 	log: (event: ProbeEventName, payload?: Record<string, unknown>) => void;
+	/** Bootstrap boundaries (production-pinned). Defaults to PROBE_PHASE_TIMEOUTS. */
 	timeouts?: ProbePhaseTimeouts;
+	/** Harness observation horizon for the prompt phase — NOT a production deadline. */
+	promptObservationMs?: number;
 }
 
 export interface ProbeTurnResult {
@@ -196,11 +208,20 @@ export async function driveProbeTurn(connection: AcpConnectionLike, params: Prob
 		}),
 	);
 
-	const promptResult = await runPhase("prompt", PROBE_EVENTS.promptStart, PROBE_EVENTS.promptEnd, log, t.promptMs, () =>
-		connection.prompt({
-			sessionId: acpSessionId,
-			prompt: [{ type: "text", text: params.promptText }],
-		}),
+	// The horizon below bounds THIS MEASUREMENT RUN, not the turn: production has
+	// no prompt deadline, so an expiry here is an inconclusive observation.
+	const promptObservationMs = params.promptObservationMs ?? PROBE_PROMPT_OBSERVATION_MS;
+	const promptResult = await runPhase(
+		"prompt",
+		PROBE_EVENTS.promptStart,
+		PROBE_EVENTS.promptEnd,
+		log,
+		promptObservationMs,
+		() =>
+			connection.prompt({
+				sessionId: acpSessionId,
+				prompt: [{ type: "text", text: params.promptText }],
+			}),
 	);
 
 	return { acpSessionId, stopReason: promptResult?.stopReason };

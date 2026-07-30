@@ -7,16 +7,13 @@
 			"title": "MCP long description reverts to the false \"socket paths take a per-target lock\" claim",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\t\"(delivered / rejected / lock-retained / delivered-but-lock-dirty). LOCK POLICY (do not \" +",
-				"\t\t\"over-generalize it): the per-target lock is taken for a control-socket-DOMAIN dispatch, which is \" +",
-				"\t\t\"both the live send AND the dormant cell's spawn-bg resume — spawn-bg is a separate relaunch \" +",
-				"\t\t\"transport yet it still runs under that domain's lock. The mailbox and native-push rails are \" +",
-				"\t\t\"lock-free: the mailbox is guarded instead by active-receiver deliverability, and native-push by \" +",
-				"\t\t\"its adapter probe. The decider — not the \" +"
+				"\t\t\"native-push-no-resume-authority. LOCK: taken for a control-socket-DOMAIN dispatch — the live send AND \" +",
+				"\t\t\"the dormant cell's spawn-bg resume, a separate transport that still runs under that domain's lock. The \" +",
+				"\t\t\"mailbox and native-push rails are lock-free — deliverability and the adapter probe guard them. mode \" +"
 			],
 			"replace": [
-				"\t\t\"(delivered / rejected / lock-retained / delivered-but-lock-dirty). LOCK POLICY: socket paths \" +",
-				"\t\t\"take a per-target lock; the mailbox path does not. The decider — not the \" +"
+				"\t\t\"native-push-no-resume-authority. LOCK POLICY: socket paths take a per-target lock; the mailbox path \" +",
+				"\t\t\"does not. mode \" +"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 60,
@@ -68,19 +65,33 @@
 			"title": "MCP long description merges the two owned rejects back under backend-liveness-unsupported",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\t\"owned-outcome is ONLY for waking a DORMANT socket-domain citizen (spawn-bg resume, currently \" +",
-				"\t\t\"backend pi); on a live target it is rejected as owned-live-no-autosend. Neither self-fetch nor \" +",
-				"\t\t\"native-push has resume authority, but they reject under DIFFERENT reasons — self-fetch as \" +",
-				"\t\t\"backend-liveness-unsupported, native-push as native-push-no-resume-authority. \" +"
+				"\t\t\"owned-outcome wakes a DORMANT socket-domain citizen by spawn-bg resume ONLY — live target → \" +",
+				"\t\t\"owned-live-no-autosend, self-fetch → backend-liveness-unsupported, native-push → \" +",
+				"\t\t\"native-push-no-resume-authority. LOCK: taken for a control-socket-DOMAIN dispatch — the live send AND \" +"
 			],
 			"replace": [
-				"\t\t\"owned-outcome is ONLY for waking a DORMANT socket-domain citizen (spawn-bg resume, currently \" +",
-				"\t\t\"backend pi); on a live target it is rejected as owned-live-no-autosend, and on self-fetch and \" +",
-				"\t\t\"native-push alike it is rejected as backend-liveness-unsupported. \" +"
+				"\t\t\"owned-outcome wakes a DORMANT socket-domain citizen by spawn-bg resume ONLY — live target → \" +",
+				"\t\t\"owned-live-no-autosend, and on self-fetch and native-push alike it is rejected as \" +",
+				"\t\t\"backend-liveness-unsupported. LOCK: taken for a control-socket-DOMAIN dispatch — the live send AND \" +"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2SURF-MERGED-REJECT]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "V2SURF-DESC-FITS-HOST-CAP",
+			"title": "the v2 tool description grows back past the host's 2048-char cap — the INTENT contract is silently cut off before the model that must choose an intent ever reads it",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\t\"CANONICAL DELIVERY SURFACE for garden ids: message, reply, or hand off to whoever an id names. The id \" +"
+			],
+			"replace": [
+				"\t\"CANONICAL DELIVERY SURFACE for garden ids: message, reply, or hand off to whoever an id names. The id \" +\n\t\t\"PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING \" +\n\t\t\"PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING PADDING \" +"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2SURF-DESC-FITS-HOST-CAP]",
 			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
 		}
 	]

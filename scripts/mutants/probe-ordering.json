@@ -76,14 +76,36 @@
 			"signatureSource": "scripts/check-probe-ordering.ts"
 		},
 		{
-			"claim": "PROBE-TIMEOUTS-MATCH-PRODUCTION",
-			"title": "probe prompt boundary drifting from production (120s was the raw smoke's value) — D readings would measure the wrong timeout",
+			"claim": "PROBE-BOOTSTRAP-TIMEOUTS-MATCH-PRODUCTION",
+			"title": "probe bootstrap boundary drifting from production — a bootstrap-phase D reading would measure the wrong timeout",
 			"subject": "scripts/lib/probe-acp-turn.ts",
-			"find": ["\tpromptMs: 600_000,"],
-			"replace": ["\tpromptMs: 120_000,"],
+			"find": ["\tsetModelMs: 30_000,"],
+			"replace": ["\tsetModelMs: 15_000,"],
 			"gate": ["bash", "run.sh", "check-probe-ordering"],
 			"timeoutSeconds": 120,
-			"signature": "[QK:PROBE-TIMEOUTS-MATCH-PRODUCTION]",
+			"signature": "[QK:PROBE-BOOTSTRAP-TIMEOUTS-MATCH-PRODUCTION]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "NO-PRODUCTION-PROMPT-CUTOFF",
+			"title": "an absolute wall-clock cutoff re-planted on the prompt — active turns die for being long and pi replays the whole prompt as a transient error",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["const ABORT_CANCEL_GRACE_MS = 5_000;"],
+			"replace": ["const PROMPT_TIMEOUT_MS = 600_000;\nconst ABORT_CANCEL_GRACE_MS = 5_000;"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:NO-PRODUCTION-PROMPT-CUTOFF]",
+			"signatureSource": "scripts/check-probe-ordering.ts"
+		},
+		{
+			"claim": "PROMPT-HORIZON-NOT-PRODUCTION",
+			"title": "the harness's prompt observation horizon folded back into the production-pinned set — a probe-invented number would be reported as the turn contract",
+			"subject": "scripts/lib/probe-acp-turn.ts",
+			"find": ["\tsetModelMs: 30_000,\n};"],
+			"replace": ["\tsetModelMs: 30_000,\n\tpromptMs: 600_000,\n};"],
+			"gate": ["bash", "run.sh", "check-probe-ordering"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PROMPT-HORIZON-NOT-PRODUCTION]",
 			"signatureSource": "scripts/check-probe-ordering.ts"
 		},
 		{

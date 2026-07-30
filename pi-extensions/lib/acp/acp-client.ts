@@ -27,6 +27,17 @@ export interface AcpConnectionLike {
 	prompt(params: { sessionId: string; prompt: AcpTextBlock[] }): Promise<{ stopReason?: string }>;
 	setSessionConfigOption?(params: unknown): Promise<unknown>;
 	/**
+	 * ACP `session/cancel` — the PROTOCOL way to end an in-flight prompt turn.
+	 *
+	 * The spec requires the agent to answer the pending `session/prompt` with
+	 * `stopReason: "cancelled"` after this notification, so a user abort ends the
+	 * turn as a protocol event (backend.ts maps cancelled → aborted) instead of a
+	 * signal race. Fire-and-forget by contract: it is a JSON-RPC notification, so
+	 * there is nothing to await and a send failure on an already-closed connection
+	 * must not mask the abort the caller is executing.
+	 */
+	cancel?(params: { sessionId: string }): void;
+	/**
 	 * Closes the underlying SDK connection before child process teardown. With
 	 * the fluent SDK connection this is load-bearing: otherwise a successful
 	 * live turn can print PASS but keep Node's event loop alive.
@@ -76,6 +87,17 @@ export function connectAcpClient(stream: Stream, handlers: AcpClientHandlers): A
 		prompt: (params) =>
 			agent.request(AGENT_METHODS.session_prompt, params as never) as Promise<{ stopReason?: string }>,
 		setSessionConfigOption: (params) => agent.request(AGENT_METHODS.session_set_config_option, params as never),
+		cancel: (params) => {
+			// Notification, not a request: nothing resolves it, and the connection
+			// may already be closing when the operator aborts. Swallow both the sync
+			// throw and the rejected send — the caller's abort path continues either
+			// way (it escalates to teardown after a bounded grace).
+			try {
+				void Promise.resolve(agent.notify(AGENT_METHODS.session_cancel, params as never)).catch(() => {});
+			} catch {
+				// connection already closed — the abort path escalates on its own.
+			}
+		},
 		close: (error) => {
 			// Best-effort by contract (see AcpConnectionLike.close): a teardown-path
 			// close that threw would mask the turn's real error and skip the child

@@ -325,9 +325,11 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     `scripts/fixtures/probe-mcp-server.ts`에 env 기동 지연(`PROBE_MCP_STARTUP_DELAY_MS`)을 넣는다.
     **probe 단위는 단발 delayed run이 아니라 paired control/intervention이다.** 단발로는 아무 판정도 서지 않는다:
     A처럼 보여도 `newSession`의 다른 작업이 우연히 더 걸린 것일 수 있고, B처럼 보여도 `delay=0`에서 이미
-    실패했을 수 있으며, D는 probe가 스스로 만든 timeout일 수 있다 — 턴에는 30초 경계가 **셋**이다
-    (`INITIALIZE_TIMEOUT_MS` · `NEW_SESSION_TIMEOUT_MS` · `SET_MODEL_TIMEOUT_MS`,
-    `pi-extensions/lib/acp/backend.ts:81-83`) + `PROMPT_TIMEOUT_MS` 600초.
+    실패했을 수 있으며, D는 probe가 스스로 만든 timeout일 수 있다 — 턴의 wall-clock 경계는 30초
+    **셋뿐**이고 전부 bootstrap이다(`INITIALIZE_TIMEOUT_MS` · `NEW_SESSION_TIMEOUT_MS` ·
+    `SET_MODEL_TIMEOUT_MS`, `pi-extensions/lib/acp/backend.ts`). **prompt에는 production 경계가 없다**
+    (0.13.1: 진행 중인 턴을 elapsed time으로 죽이지 않는다). probe의 `PROBE_PROMPT_OBSERVATION_MS`는
+    측정 harness의 observation horizon일 뿐 production 계약이 아니다.
     따라서 ⑴ 동일 pin/config/fixture의 `delay=0` **control**(기대 도구가 visible **그리고** callable),
     ⑵ newSession·set-model 두 30초 경계보다 충분히 작은 `D` **intervention**, ⑶ **A 판정에는 nonzero D가
     최소 2개(`D1`,`D2`) 필수** — "latency가 D를 따라 이동"이 판별자인데 점 하나로는 scaling을 못 본다.
@@ -381,7 +383,8 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     C: control PASS, delayed run이 앞서지만 이후 direct tool-call 마커 성공 → client fence 없이 late·dynamic
     readiness / D: 경계보다 충분히 작은 D인데 error·timeout → fail-loud 관측이며 **반드시 phase 이름을 붙이되,
     delay가 실제로 닿는 phase만 D다**(어느 wire request id/method가 timeout했는지로 이름 붙인다):
-    `D-newSession` / `D-enforceModel` / `D-prompt`(600초 경계, 도구 부재와 별도 분류).
+    `D-newSession` / `D-enforceModel` / `D-prompt`(도구 부재와 별도 분류. prompt phase에는 production
+    경계가 없으므로 여기서의 horizon 만료는 production kill의 모사가 아니라 **inconclusive** 관측이다).
     `INITIALIZE_TIMEOUT_MS`도 기록은 하되 거기서의 실패는 위 P0·I0이지 **D가 아니다**.
     **B가 나와도 2026-07-24 3표본의 원인이 확정되지는 않는다** — controlled delay가 같은 증상을 만들 수 있다는
     causal sufficiency와 과거 incident attribution은 다른 주장이다. 도구 present 1회로는 A와 C를 구분하지
@@ -468,6 +471,20 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     readiness fence가 아니고 `mcpServerStatus()`는 여전히 호출되지 않는다.
     동반 계약 변경: pi 0.83의 `"pending"` stop reason과 `rawStopReason`을 채택해 ACP terminal set을 정직하게
     닫았다(§ACP stop reason 게이트 + `acp-stop-reason` mutant lane 6종).
+  - **2026-07-31 bump — claude-agent-acp 0.63.0 → 0.64.0 (ACP SDK 1.3.0·claude-agent-sdk 0.3.220 유지).**
+    **성격: 단일 기능 릴리즈.** upstream checkout(release `9cc5a09`)에서 직접 대조했고 기능 델타는
+    `src/elicitation.ts` **+14줄 하나뿐**이다(commit `d7a65ce`) — AskUserQuestion form의 "Other" 자유입력
+    필드에 공유 마커 `_meta._askUserQuestionCustomAnswer`를 붙여 Codex/Claude 브리지가 같은 표식을
+    알아보게 한다. 배포 패키지 unpackedSize 529,638 → 530,740 B, fileCount 24 → 24. **런타임 의존성은 동일**
+    (`@agentclientprotocol/sdk` 1.3.0, `@anthropic-ai/claude-agent-sdk` 0.3.220)이고, upstream lock의
+    `@modelcontextprotocol/sdk` 1.29.0 → 1.30.0은 **그들의 dev 트리**다 — 우리 해석은 1.29.0 그대로다(실측).
+    `@anthropic-ai/sdk 0.100.1` peer 해석도 재실측으로 불변.
+    **도달성은 "기본 off"보다 강하다 — 소스 변경 없이는 닿을 수 없다.** `backend.ts`의
+    `clientCapabilities: {}`는 config seam이 없는 하드코딩이라 upstream이 `elicitationSupport.form = false`를
+    계산하고, `acp-agent.ts:5358`이 `AskUserQuestion`을 금지하며 `:5449`가 그 목록을 **concat**으로 합치므로
+    오퍼레이터 `disallowedTools`로 제거할 수 없다. 방출 분기(`:4558`)도 같은 플래그에 걸린다. 유일한 레버인
+    `clientCapabilities`를 entwurf가 설정으로 노출하지 않는다. **이 델타에 한정된 주장이고 다른 축으로
+    일반화하지 않는다.** readiness race와도 무관하다 — elicitation 마커는 fence가 아니다.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.

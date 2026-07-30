@@ -4,10 +4,34 @@
 // the peer-resolution that makes the Claude ACP adapter satisfiable:
 //
 //   @agentclientprotocol/sdk              1.3.0    wire SDK (acp-bridge import source)
-//   @agentclientprotocol/claude-agent-acp 0.63.0   Claude adapter (spawn binary)
+//   @agentclientprotocol/claude-agent-acp 0.64.0   Claude adapter (spawn binary)
 //   @anthropic-ai/sdk                     0.100.1  peer-resolution pin ONLY (see below)
 //
-// 2026-07-30 bump 0.62.0 → 0.63.0 — an ADAPTER-CODE release, not a dependency
+// 2026-07-31 bump 0.63.0 → 0.64.0 — a ONE-FEATURE adapter release. Measured
+// against the upstream checkout (release commit 9cc5a09): the entire functional
+// delta is `src/elicitation.ts` +14 lines (commit d7a65ce), which stamps the
+// AskUserQuestion form's "Other" free-text field with a shared
+// `_meta._askUserQuestionCustomAnswer` marker so ACP clients can recognize a
+// custom-answer companion across Codex/Claude bridges. Published package:
+// unpackedSize 529,638 → 530,740 B, fileCount 24 → 24. Runtime deps are
+// IDENTICAL (`@agentclientprotocol/sdk` 1.3.0, `@anthropic-ai/claude-agent-sdk`
+// 0.3.220) — the upstream lock's `@modelcontextprotocol/sdk` 1.29.0 → 1.30.0 is
+// THEIR dev tree; our resolution stays 1.29.0 because our runtime dep set did
+// not move. Re-measured: the anthropic peer still resolves 0.100.1.
+//
+// Reachability is STRONGER than "off by default", and it is measured, not
+// assumed. `backend.ts` sends `clientCapabilities: {}` — a hardcoded literal with
+// no operator-config seam — so upstream computes `elicitationSupport.form =
+// false`. Two independent upstream gates then close the new marker off:
+// `acp-agent.ts:5358` disallows `AskUserQuestion` outright, and `:5449` composes
+// the final list by CONCATENATION (`[...userProvidedOptions.disallowedTools,
+// ...disallowedTools]`), so no operator `disallowedTools` can remove it; and the
+// form-elicitation emission branch at `:4558` is gated on the same flag. The only
+// lever is `clientCapabilities`, which entwurf does not expose to configuration —
+// so this marker cannot reach our wire without an entwurf SOURCE change. That is
+// the honest claim for THIS delta; do not generalize it to other axes.
+//
+// HISTORY — 2026-07-30 bump 0.62.0 → 0.63.0 — an ADAPTER-CODE release, not a dependency
 // refresh. Measured on the packed tarballs: 137,294 → 142,084 bytes, with
 // `dist/acp-agent.js`, `dist/tools.js` and the `dist/acp-agent.d.ts` surface all
 // moved. Three upstream fixes ride it (#923 denied-tool resolution, #916
@@ -69,7 +93,7 @@ const pkg = JSON.parse(read("package.json")) as { dependencies?: Record<string, 
 const deps = pkg.dependencies ?? {};
 const PINS: Record<string, string> = {
 	"@agentclientprotocol/sdk": "1.3.0",
-	"@agentclientprotocol/claude-agent-acp": "0.63.0",
+	"@agentclientprotocol/claude-agent-acp": "0.64.0",
 	[ANTHROPIC_SDK]: "0.100.1",
 };
 for (const [name, ver] of Object.entries(PINS)) {
@@ -89,8 +113,8 @@ for (const [name, ver] of Object.entries(PINS)) {
 const lock = read("pnpm-lock.yaml");
 assert.match(
 	lock,
-	/@agentclientprotocol\/claude-agent-acp@0\.63\.0\(@anthropic-ai\/sdk@0\.100\.1/,
-	"pnpm-lock: claude-agent-acp@0.63.0 must peer-resolve @anthropic-ai/sdk@0.100.1 (peer-pin), not the stale 0.91.1",
+	/@agentclientprotocol\/claude-agent-acp@0\.64\.0\(@anthropic-ai\/sdk@0\.100\.1/,
+	"pnpm-lock: claude-agent-acp@0.64.0 must peer-resolve @anthropic-ai/sdk@0.100.1 (peer-pin), not the stale 0.91.1",
 );
 assert.match(
 	lock,

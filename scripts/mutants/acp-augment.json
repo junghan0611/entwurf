@@ -25,6 +25,58 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:AUGMENT-TRUNC-MARKER]",
 			"signatureSource": "scripts/check-acp-carrier-augment.ts"
+		},
+		{
+			"claim": "CARRIER-PROVENANCE-STATED",
+			"title": "the augment stops saying what it is — the model is back to reading a first-user prepend as its system prompt (the measured 2026-07-30 misattribution)",
+			"subject": "pi-extensions/lib/acp/augment.ts",
+			"find": [
+				"\t\"This block is prepended to the FIRST USER MESSAGE of this session. It is not your system prompt.\";"
+			],
+			"replace": ["\t\"\";"],
+			"gate": ["bash", "run.sh", "check-acp-carrier-augment"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:CARRIER-PROVENANCE-STATED]",
+			"signatureSource": "scripts/check-acp-carrier-augment.ts"
+		},
+		{
+			"claim": "CARRIER-FRAME-NAMES-CLAUDE-CARRIER",
+			"title": "the claude frame stops naming its real engraving-only carrier — the model is told what its system prompt is NOT, but never what it IS",
+			"subject": "pi-extensions/lib/acp/augment.ts",
+			"find": [
+				"\t\t\t\t\t`The ${params.backend} rail does have a system-prompt carrier (\\`_meta.systemPrompt\\`), and entwurf keeps it deliberately tiny: it carries the operator engraving only — never this narrative, never AGENTS.md.`,"
+			],
+			"replace": ["\t\t\t\t\t`The ${params.backend} rail carries no system-prompt carrier at all.`,"],
+			"gate": ["bash", "run.sh", "check-acp-carrier-augment"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:CARRIER-FRAME-NAMES-CLAUDE-CARRIER]",
+			"signatureSource": "scripts/check-acp-carrier-augment.ts"
+		},
+		{
+			"claim": "CARRIER-FRAME-DENIES-CORTEX-CARRIER",
+			"title": "the carrier-less rail is told it has a tiny system-prompt carrier — a flat lie, since cortex's buildSessionMeta sends no _meta at all",
+			"subject": "pi-extensions/lib/acp/augment.ts",
+			"find": [
+				"\t\t\t\t\t`The ${params.backend} rail carries no system-prompt carrier at all — entwurf sends no \\`_meta.systemPrompt\\`, so everything entwurf tells you, including any operator engraving above, arrives here as user-message text.`,"
+			],
+			"replace": [
+				"\t\t\t\t\t`The ${params.backend} rail does have a system-prompt carrier (\\`_meta.systemPrompt\\`), and entwurf keeps it deliberately tiny: it carries the operator engraving only.`,"
+			],
+			"gate": ["bash", "run.sh", "check-acp-carrier-augment"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:CARRIER-FRAME-DENIES-CORTEX-CARRIER]",
+			"signatureSource": "scripts/check-acp-carrier-augment.ts"
+		},
+		{
+			"claim": "CARRIER-RAIL-DIFF-IS-SOURCE-PINNED",
+			"title": "cortex grows a session carrier while the augment still tells it there is none — the frame becomes a lie and no prose check would notice",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tbuildSessionMeta() {\n\t\treturn undefined;\n\t},"],
+			"replace": ["\tbuildSessionMeta() {\n\t\treturn { systemPrompt: \"x\" };\n\t},"],
+			"gate": ["bash", "run.sh", "check-acp-carrier-augment"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:CARRIER-RAIL-DIFF-IS-SOURCE-PINNED]",
+			"signatureSource": "scripts/check-acp-carrier-augment.ts"
 		}
 	]
 }

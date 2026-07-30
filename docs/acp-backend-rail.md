@@ -60,6 +60,31 @@ exhausted turn budget, unknown, and absent reasons end as errors. The original A
 reason is preserved in `rawStopReason`. Returning to a default-success branch is a
 contract violation.
 
+### Prompt lifecycle — who may end a turn
+
+Bootstrap (`initialize`, `newSession`, set-model) carries 30s wall-clock bounds: those
+steps make no model progress, so a stuck one is a dead session. **The prompt carries
+none.** A turn ends only on a lifecycle event:
+
+| Ending | Behavior |
+|---|---|
+| the agent answers | mapped through the terminal set above |
+| the operator aborts | ACP `session/cancel` first — the agent closes its own turn (`cancelled → aborted`); process-group teardown only after a bounded grace, so an abort always returns |
+| the child dies / stdio ends | the turn fails naming the exit status and the session-scoped stderr tail, on both the new and the reuse path |
+
+Elapsed time is not evidence of failure, and a silent turn is not a failed turn: tool
+use, reasoning, and provider queueing all legitimately outrun any number we could pick.
+Suspected stalls are handled by exposing progress, never by a killing timer.
+
+A prompt-phase failure message is also part of the contract. pi classifies a failed
+assistant message by matching its text against `RETRYABLE_PROVIDER_ERROR_PATTERN`
+(`@earendil-works/pi-ai` `utils/retry`), and a "transient" verdict makes it replay the
+WHOLE prompt from a cold session up to `retry.maxRetries` times. Our own prompt-phase
+text must never read as transient — that pairing (absolute cutoff × blind retry) is what
+turned one long turn into four in 0.13.0. Gates: `check-acp-prompt-lifecycle` (behavior,
+with pi's own classifier as the oracle), `check-probe-ordering` (no production prompt
+cutoff in source).
+
 ## Shipped adapters
 
 | Seam | Claude | Cortex Code |
@@ -126,7 +151,7 @@ caller-session `_meta`, and cross-machine certification.
 
 A backend can return `newSession` before its declared MCP server is callable. This was
 observed intermittently on the Claude rail and directly on Cortex's private `mcp.json`
-path. Neither `claude-agent-acp` 0.63.0 nor the Cortex landing adds a client-side
+path. Neither `claude-agent-acp` 0.64.0 nor the Cortex landing adds a client-side
 readiness fence, and `mcpServerStatus()` is not called by the common loop.
 
 ### 11-7-a/b. Instrument and first measurement

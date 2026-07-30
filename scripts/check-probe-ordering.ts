@@ -94,6 +94,7 @@ import { terminateChild } from "./lib/acp-child-cleanup.ts";
 import {
 	driveProbeTurn,
 	PROBE_PHASE_TIMEOUTS,
+	PROBE_PROMPT_OBSERVATION_MS,
 	type ProbeAdapterSeam,
 	type ProbeMcpEnricher,
 	ProbePhaseError,
@@ -319,15 +320,37 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 			initializeMs: PROBE_PHASE_TIMEOUTS.initializeMs,
 			newSessionMs: PROBE_PHASE_TIMEOUTS.newSessionMs,
 			setModelMs: PROBE_PHASE_TIMEOUTS.setModelMs,
-			promptMs: PROBE_PHASE_TIMEOUTS.promptMs,
 		},
 		{
 			initializeMs: timeoutOf("INITIALIZE_TIMEOUT_MS"),
 			newSessionMs: timeoutOf("NEW_SESSION_TIMEOUT_MS"),
 			setModelMs: timeoutOf("SET_MODEL_TIMEOUT_MS"),
-			promptMs: timeoutOf("PROMPT_TIMEOUT_MS"),
 		},
-		"probe phase timeouts EQUAL backend.ts's — D is only readable against production boundaries [QK:PROBE-TIMEOUTS-MATCH-PRODUCTION]",
+		"probe BOOTSTRAP timeouts EQUAL backend.ts's — a bootstrap-phase D is only readable against production " +
+			"boundaries [QK:PROBE-BOOTSTRAP-TIMEOUTS-MATCH-PRODUCTION]",
+	);
+
+	// --- the prompt phase has NO production boundary to match --------------
+	//
+	// backend.ts ends a prompt on lifecycle events only. The probe still needs a
+	// bounded observation horizon so a measurement RUN cannot hang forever, but
+	// that horizon is the harness's own: pinning it to a production number (or
+	// letting production grow one back) would make the probe report a
+	// harness-invented cutoff as if it were the turn contract.
+	const promptCutoffTraces = [/\bPROMPT_TIMEOUT_MS\b/, /withTimeout\(\s*\n?\s*"prompt"/].filter((re) =>
+		re.test(BACKEND_SRC),
+	);
+	assert.equal(
+		promptCutoffTraces.length,
+		0,
+		"[QK:NO-PRODUCTION-PROMPT-CUTOFF] backend.ts carries NO prompt wall-clock — neither a PROMPT_TIMEOUT_MS constant " +
+			'nor a withTimeout("prompt", …) race. A running turn is not a failed turn for being long, and the old 600s ' +
+			`cutoff also fed pi's transient-retry dictionary. Found: ${promptCutoffTraces.join(", ")}`,
+	);
+	assert.ok(
+		PROBE_PROMPT_OBSERVATION_MS > 0 && !("promptMs" in PROBE_PHASE_TIMEOUTS),
+		"[QK:PROMPT-HORIZON-NOT-PRODUCTION] the prompt horizon lives OUTSIDE the production-pinned bootstrap set — it is " +
+			"the harness's own observation bound, and folding it back in would report a harness number as the turn contract",
 	);
 
 	const idx = (needle: string): number => {
@@ -338,10 +361,18 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 	const iInit = idx("connection.initialize({");
 	const iNew = idx("connection.newSession(newSessionArgs)");
 	const iEnforce = idx("adapter.enforceModel({");
-	const iPrompt = BACKEND_SRC.indexOf("connection.prompt({", iEnforce);
+	// The prompt no longer sits inline: runNewTurn hands the wire call to
+	// awaitAcpPromptTurn (the lifecycle-bounded driver), so the ordering pin
+	// follows the dispatch, and the driver's own `session.connection.prompt(...)`
+	// is the single place the wire call lives.
+	const iPrompt = BACKEND_SRC.indexOf("await awaitAcpPromptTurn(", iEnforce);
 	assert.ok(
 		iInit < iNew && iNew < iEnforce && iEnforce < iPrompt && iPrompt !== -1,
 		"backend.ts runNewTurn keeps initialize → newSession → enforceModel → prompt; the probe mirrors THIS sequence",
+	);
+	assert.ok(
+		BACKEND_SRC.includes("await Promise.race([session.connection.prompt(promptArgs), lifecycle])"),
+		"the prompt driver races the wire call against LIFECYCLE endings only — the probe mirrors that same wire call",
 	);
 	assert.ok(
 		BACKEND_SRC.includes('clientInfo: { name: "entwurf", version: "s2d" }'),
@@ -490,7 +521,8 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 		await driveProbeTurn(makeRecordingConnection(calls), {
 			...base,
 			adapter: { buildSessionMeta: () => undefined, enforceModel: () => new Promise<never>(() => {}) },
-			timeouts: { initializeMs: 1000, newSessionMs: 1000, setModelMs: 50, promptMs: 1000 },
+			timeouts: { initializeMs: 1000, newSessionMs: 1000, setModelMs: 50 },
+			promptObservationMs: 1000,
 		});
 		assert.fail("hung set-model must time the turn out");
 	} catch (err) {

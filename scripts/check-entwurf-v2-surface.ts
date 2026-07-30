@@ -162,6 +162,45 @@ function assertRailSemantics(tag: string, longDescRaw: string, intentDescRaw: st
  * parameter marker in the long-description slice: if the slice ever swallows the schema
  * again, this fails instead of silently satisfying the schema's own text.
  */
+/**
+ * HOST TRUNCATION CAP. Measured 2026-07-30 on both Claude ACP and stock Claude Code: a tool
+ * description longer than this is cut mid-sentence and the tail is replaced with `… [truncated]`.
+ * The shipped entwurf_v2 text was 4,022 chars, so everything from the INTENT contract onward —
+ * the reject taxonomy, the three-valued probe, the lock scope — never reached the model that had
+ * to choose an intent. Every other assertion in this file checks that a sentence is PRESENT in
+ * source; none of them can see that the host threw half of it away. This one can.
+ *
+ * Judged on `modelText` (the rendered string), not the source slice: pi-native wraps inside one
+ * template literal and the MCP surface `+`-concatenates, so only the normalized text has the
+ * length the host actually measures.
+ */
+const HOST_DESCRIPTION_CAP = 2048;
+
+/**
+ * The string the HOST measures, recovered from either surface's source scaffolding: drop the
+ * `description:` key and the outer template-literal / string-literal fence, and unescape `\"`.
+ * Counting the raw slice instead would charge the text for punctuation the model never sees —
+ * and the two surfaces carry DIFFERENT punctuation, so the cap would mean two different things.
+ */
+function renderedDescription(raw: string): string {
+	const flat = modelText(raw);
+	// Anchor on the description's own first word rather than on scaffolding: the two surfaces put
+	// DIFFERENT preludes in front of it (the MCP slice starts at the tool name), and counting those
+	// would report a number the host never measures — a cap gate that cites the wrong length gets
+	// quoted as if it were the real one.
+	const from = flat.indexOf("CANONICAL");
+	return (from >= 0 ? flat.slice(from) : flat).replace(/[`"],?$/, "").replace(/\\"/g, '"');
+}
+
+function assertDescriptionFitsHostCap(tag: string, longDescRaw: string): void {
+	const rendered = renderedDescription(longDescRaw);
+	ok(
+		`${tag} — long description fits the host's ${HOST_DESCRIPTION_CAP}-char cap (${rendered.length}) ` +
+			"[QK:V2SURF-DESC-FITS-HOST-CAP]",
+		rendered.length <= HOST_DESCRIPTION_CAP,
+	);
+}
+
 function assertLongDescExcludesParams(tag: string, longDesc: string, markers: readonly string[]): void {
 	for (const marker of markers) {
 		ok(`${tag} — long description slice excludes the \`${marker}\` parameter marker`, !longDesc.includes(marker));
@@ -551,6 +590,7 @@ async function main(): Promise<void> {
 		]);
 		const piModeDesc = sliceDescription(piV2Block, "mode: Type.Optional(", "wants_reply:");
 		assertRailSemantics("4: pi-native", piLongDesc, piIntentDesc, piModeDesc);
+		assertDescriptionFitsHostCap("4: pi-native", piLongDesc);
 	}
 
 	// ── 5: MCP bridge wiring guard ────────────────────────────────────────────
@@ -635,6 +675,7 @@ async function main(): Promise<void> {
 		assertLongDescExcludesParams("5: MCP", mcpLongDesc, ["target: z", "intent: z", "mode: z", "wants_reply: z"]);
 		const mcpModeDesc = sliceDescription(v2Block, "mode: z", "wants_reply: z");
 		assertRailSemantics("5: MCP", mcpLongDesc, mcpIntentDesc, mcpModeDesc);
+		assertDescriptionFitsHostCap("5: MCP", mcpLongDesc);
 
 		// entwurf_peers is a FACT surface, but it still told the model what `unsupported` means —
 		// and "does NOT mean unreachable" is false for a record whose backend has no adapter on

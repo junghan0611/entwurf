@@ -48,6 +48,13 @@ const MAX_AUGMENT_BYTES = 50 * 1024;
 // carrier feeds bridgeConfigSignature.
 const CARRIER_LESS_BACKENDS: ReadonlySet<string> = new Set(["cortex"]);
 
+// The one sentence both rails owe the model: WHAT this block is and what it is
+// NOT. Shared so neither rail's frame can quietly lose it (and so the gate has a
+// single anchor to mutate). Everything after it is rail-specific, because the
+// rails really do differ — see the frame in buildPiContextAugment.
+const PROVENANCE_LEAD =
+	"This block is prepended to the FIRST USER MESSAGE of this session. It is not your system prompt.";
+
 // The env var an operator points at a personal engraving file. Shared surface
 // with the claude carrier (engraving.ts) BY NAME, but read INLINE here (not
 // imported): augment.ts is loaded raw by the strip-types carrier-augment gate,
@@ -115,6 +122,38 @@ export function buildPiContextAugment(params: PiContextAugmentParams): string {
 		const engraving = loadCarrierlessOperatorEngraving(params.backend, params.mcpServerNames);
 		if (engraving) sections.push(engraving);
 	}
+
+	// PROVENANCE FRAME — leads the bridge narrative, and it is not decoration.
+	//
+	// Measured 2026-07-30: asked where its instructions came from, the Claude ACP
+	// model asserted that the two paragraphs below were its system prompt. They
+	// are not — they are text prepended to its FIRST USER MESSAGE. Nothing in the
+	// block said otherwise, and a model has no other way to tell: on the wire a
+	// long first user message and a system prompt read the same. So the block now
+	// states its own provenance, per rail, because the rails genuinely differ
+	// (backend-adapter.ts: claude's buildSessionMeta carries `_meta.systemPrompt`,
+	// cortex's returns undefined so no `_meta` key is sent at all).
+	//
+	// Honest about scope: this makes the boundary STATEABLE, not enforced. It
+	// tells the model what it cannot otherwise observe; it does not stop a model
+	// from guessing anyway.
+	sections.push(
+		CARRIER_LESS_BACKENDS.has(params.backend)
+			? [
+					"# entwurf: where this text comes from",
+					"",
+					PROVENANCE_LEAD,
+					`The ${params.backend} rail carries no system-prompt carrier at all — entwurf sends no \`_meta.systemPrompt\`, so everything entwurf tells you, including any operator engraving above, arrives here as user-message text.`,
+					"If you are asked what your system prompt says, do not quote this block as one.",
+				].join("\n")
+			: [
+					"# entwurf: where this text comes from",
+					"",
+					PROVENANCE_LEAD,
+					`The ${params.backend} rail does have a system-prompt carrier (\`_meta.systemPrompt\`), and entwurf keeps it deliberately tiny: it carries the operator engraving only — never this narrative, never AGENTS.md.`,
+					"So: system prompt = the short engraving; everything below = first-user-message text. If you are asked what your system prompt says, do not quote this block as one.",
+				].join("\n"),
+	);
 
 	// Bridge identity + caller-side sibling stance. The closing line is a
 	// caller-perspective statement: when THIS session throws an entwurf, the peer

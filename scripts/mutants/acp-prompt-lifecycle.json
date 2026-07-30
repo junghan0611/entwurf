@@ -1,0 +1,100 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-prompt-lifecycle",
+	"mutants": [
+		{
+			"claim": "PROMPT-STALL-NOT-KILLED",
+			"title": "an absolute wall clock re-planted on the in-flight prompt — a turn that is still working is cut for being long",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\treturn await Promise.race([session.connection.prompt(promptArgs), lifecycle]);"],
+			"replace": [
+				"\t\treturn await Promise.race([\n\t\t\tsession.connection.prompt(promptArgs),\n\t\t\tlifecycle,\n\t\t\tnew Promise<never>((_, reject) => setTimeout(() => reject(new Error(\"prompt timed out after 100ms\")), 100)),\n\t\t]);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:PROMPT-STALL-NOT-KILLED]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "ABORT-SENDS-PROTOCOL-CANCEL",
+			"title": "abort stops asking the agent to cancel its own turn — back to killing a child mid-tool instead of the protocol ending",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tsession.connection.cancel?.({ sessionId: promptArgs.sessionId });"],
+			"replace": ["\t\t\tvoid promptArgs;"],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:ABORT-SENDS-PROTOCOL-CANCEL]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "ABORT-ESCALATION-BOUNDED",
+			"title": "the post-abort grace ignores the bound it was given — an abort against a wedged agent waits on a clock the caller does not control",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tgraceTimer = setTimeout(escalateAbort, opts.graceMs);"],
+			"replace": ["\t\tgraceTimer = setTimeout(escalateAbort, 5_000);"],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:ABORT-ESCALATION-BOUNDED]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "CHILD-EXIT-DIAGNOSED",
+			"title": "a mid-prompt child death stops reporting HOW it ended — the operator is back to an undiagnosable connection error",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\tconst parts = [\n\t\texit.code !== null ? `exit code ${exit.code}` : undefined,\n\t\texit.signal ? `signal ${exit.signal}` : undefined,\n\t].filter(Boolean);\n\treturn parts.length > 0 ? parts.join(\", \") : \"no exit status\";"
+			],
+			"replace": ["\treturn \"no exit status\";"],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CHILD-EXIT-DIAGNOSED]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "REUSE-CARRIES-CHILD-DIAGNOSTICS",
+			"title": "the reuse path drops the child's stderr tail again — exactly the live sonnet failure that showed only \"ACP connection closed\"",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tfinishError(err, aborted, session.stderrTail);"],
+			"replace": ["\t\t\tfinishError(err, aborted);"],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:REUSE-CARRIES-CHILD-DIAGNOSTICS]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "PROMPT-ERROR-NOT-TRANSIENT",
+			"title": "a prompt-phase lifecycle failure worded as a timeout — pi reclassifies it as transient and cold-replays the whole prompt",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t\"this turn has no answer\","],
+			"replace": ["\t\t\t\"the prompt timed out\","],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:PROMPT-ERROR-NOT-TRANSIENT]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "IDLE-DEATH-ANNOUNCED",
+			"title": "a backend session that died between turns is cleared but never announced — the next turn respawns silently and the operator never learns the session is gone",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tconst priorEnd = takeUnreportedChildEnd(sessionKey);\n\t\t\tif (priorEnd) {\n\t\t\t\tpushAcpLifecycleNotice(\n\t\t\t\t\tstate,\n\t\t\t\t\t`previous ${adapter.backend} session ended between turns (${describeChildEnd(priorEnd)}) — opening a new one`,\n\t\t\t\t);\n\t\t\t}"
+			],
+			"replace": ["\t\t\ttakeUnreportedChildEnd(sessionKey);"],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:IDLE-DEATH-ANNOUNCED]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "RETIRED-TEARDOWN-NOT-ANNOUNCED",
+			"title": "a teardown we performed ourselves is reported as a death — every ordinary turn-scoped turn cries wolf about its own cleanup",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t} else if (!session.retiring) {"],
+			"replace": ["\t} else {"],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:RETIRED-TEARDOWN-NOT-ANNOUNCED]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		}
+	]
+}

@@ -1051,6 +1051,18 @@ smoke_acp_memory_containment_live() {
   run_ts scripts/smoke-acp-memory-containment-live.ts
 }
 
+smoke_acp_long_turn_live() {
+  # 0.13.1 LIVE acceptance for the prompt-lifecycle contract — OUT of pnpm check,
+  # needs LIVE=1. Drives ONE real pi provider turn whose tool work (default
+  # 3 x 240s foreground wait) deliberately outlasts the RETIRED 600s prompt cutoff, and
+  # requires it to finish as ONE turn: the nonce arrives, elapsed > 600000ms, the
+  # persisted transcript shows exactly ONE cold ACP bootstrap (no replay), and no
+  # retry/timeout is reported anywhere. Takes >12 minutes by construction.
+  # Overrides: ENTWURF_ACP_LONG_TURN_{MODEL,SLEEP_SECONDS,ROUNDS,HORIZON_MS}.
+  #   LIVE=1 ./run.sh smoke-acp-long-turn-live
+  run_ts scripts/smoke-acp-long-turn-live.ts
+}
+
 smoke_acp_provider_live() {
   # S2c acceptance smoke (ACP plugin on v2) — OUT of pnpm check, needs LIVE=1.
   # Drives the REAL pi PROVIDER path end to end: a real `pi` loads this
@@ -2264,7 +2276,7 @@ check_acp_provider_surface() {
 check_acp_sdk_surface() {
   # Deterministic gate for the S2a ACP SDK dependency surface. Pins the three
   # ACP runtime deps to the current oracle versions (@agentclientprotocol/sdk
-  # 1.3.0 + claude-agent-acp 0.63.0 + @anthropic-ai/sdk 0.100.1), locks the
+  # 1.3.0 + claude-agent-acp 0.64.0 + @anthropic-ai/sdk 0.100.1), locks the
   # peer-resolution that keeps claude-agent-sdk satisfiable (0.100.1, not the
   # stale 0.91.1), asserts the wire SDK still value-exports the symbols the raw
   # turn needs (silent-rename gate), and forbids any source-level anthropic SDK
@@ -2320,6 +2332,24 @@ check_acp_stop_reason() {
   # "pending" seed on the freshly created stream state.
   section "ACP stop reason (terminal set → pi verdict)"
   run_ts scripts/check-acp-stop-reason.ts
+}
+
+check_acp_prompt_lifecycle() {
+  # Deterministic gate for the ACP prompt LIFECYCLE contract. A prompt has no
+  # wall-clock cutoff: it ends when it resolves, when the operator aborts, or
+  # when the child dies / its stdio ends. Drives streamAcpTurn against a fake
+  # ACP child + connection for eight cells — a quiet in-flight turn is not
+  # sealed and later completes on its ORIGINAL prompt; an abort sends ACP
+  # session/cancel first (cancelled→aborted, no signal to a cooperating child);
+  # a wedged agent is torn down after the bounded grace and still returns; a
+  # mid-prompt child death reports exit status + stderr tail on BOTH the new and
+  # the reuse path; a death BETWEEN turns is announced once by the next turn
+  # while a teardown WE performed stays silent — plus pi's own
+  # isRetryableAssistantError as
+  # the oracle that our prompt-phase failure text is not a transient
+  # (cold-replay) error.
+  section "ACP prompt lifecycle (no wall clock; abort/child-death endings)"
+  run_ts scripts/check-acp-prompt-lifecycle.ts
 }
 
 check_acp_prompt_builder() {
@@ -4407,6 +4437,9 @@ case "$cmd" in
   smoke-acp-provider-live)
     smoke_acp_provider_live
     ;;
+  smoke-acp-long-turn-live)
+    smoke_acp_long_turn_live
+    ;;
   smoke-acp-session-reuse-live)
     smoke_acp_session_reuse_live
     ;;
@@ -4850,6 +4883,9 @@ case "$cmd" in
     ;;
   check-acp-stop-reason)
     check_acp_stop_reason
+    ;;
+  check-acp-prompt-lifecycle)
+    check_acp_prompt_lifecycle
     ;;
   check-acp-prompt-builder)
     check_acp_prompt_builder
