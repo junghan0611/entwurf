@@ -1,4 +1,4 @@
-# NEXT — 0.13.0 published; 0.13.1 runtime-rail work is IN THE TREE, uncommitted
+# NEXT — 0.13.0 published; 0.13.1 runtime-rail work is COMMITTED + PUSHED, LIVE 축 닫힘
 
 > NEXT는 부트 섹터다. ACP 계약과 readiness 경계는 `docs/acp-backend-rail.md`, 검증 계약은 `VERIFY.md`,
 > 기록된 증거는 `BASELINE.md` HISTORY 포인터, dep-bump 트랙 절차는 `ROADMAP.md`의 **Dep bump(별도 트랙)**가
@@ -9,12 +9,12 @@
 - **0.13.0은 완전히 나갔다.** `27e5f09` = `origin/main` = tag `v0.13.0`, GitHub release published
   (2026-07-30T03:19:53Z), npm `@junghanacs/entwurf@0.13.0`이 **`latest`**, exact-SHA CI 2회 success
   (30510354126 · 30510859840). `make`/`publish`는 끝났다 — 다시 실행하지 말 것.
-- **작업트리에 0.13.1 런타임 레일 작업이 커밋되지 않은 채 있다.** 성격은 dep bump + 계약 수선이고,
-  하위호환은 지지 않는다(세션 수명 도구).
-- **정적 축과 설치 축은 전부 닫혔다. 남은 것은 LIVE 둘뿐이다.** 첫 한 걸음:
-  `LIVE=1 ./run.sh smoke-acp-raw-turn-live` (GLG 승인 필요 — 실제 API 호출).
-- **Blocker(environment): oracle에 cortex 미설치** — `smoke-acp-cortex-live`를 여기서 못 돈다.
-  GLG가 설치 중이며, 설치 후 이 세션 밖에서 이어간다.
+- **0.13.1 런타임 레일 작업은 커밋·푸시됐다.** `fea773f` (2026-07-30 17:48 KST, oracle) =
+  `origin/main`. 성격은 dep bump + 계약 수선이고, 하위호환은 지지 않는다(세션 수명 도구).
+  package version은 아직 `0.13.0`이고 그게 맞다 — 버전과 CHANGELOG는 `prepare` 모드가 소유한다.
+- **LIVE 둘 다 닫혔다 (2026-07-30 18:2x KST, thinkpad).** oracle의 cortex 미설치 blocker는
+  thinkpad에 cortex v1.1.52 + Snowflake connection이 있어서 해소됐다. 아래 "검증 실측 — axis 2" 참조.
+- **남은 것은 릴리즈 판단뿐이다.** `/entwurf-release prepare 0.13.1`. 실행 전 아래 "남은 것" 순서를 볼 것.
 
 ## 0.13.1에 들어간 것
 
@@ -68,17 +68,41 @@ stopReason·rawStopReason·errorMessage를 함께 판정한다. `acp-stop-reason
   (`check-entwurf-session-identity`·`check-meta-identity-consumers`·`check-agy-sender-identity`·
   `meta-identity` lane) 전부 green.
 
+## 검증 실측 — axis 2 (2026-07-30 18:0x–18:2x KST, thinkpad)
+
+**두 번째 머신이 처음으로 섰다.** oracle이 `fea773f`를 푸시한 뒤 thinkpad에서 pi를 `0.82.1 → 0.83.0`으로
+올리고(`pi update --self` — SSOT는 `nixos-config/scripts/external-packages.sh`, pnpm 재설치가 아니라
+self-update다) `pnpm install` → `prepare` 훅이 `build-bridge`를 자동 실행해 dist를 재emit했다.
+
+- **정적 축 재현.** `pnpm check` **EXIT=0**, qualification **117/117 KILLED, 8 lanes**,
+  `check-pack` **301 files** — oracle과 같은 숫자.
+- **`check-pack-install` EXIT=0 — axis 2 설치축.** `every @earendil-works pi package is 0.83.0` /
+  `loader runtime: pinned pi 0.83.0 (not the host's global pi)` / `exact 6-row curated set` /
+  dev-only gate refusal / installed store-doctor scan / self-fence(real DATA tree byte-identical).
+- **`smoke-acp-raw-turn-live` PASS** — launch source `package:@agentclientprotocol/claude-agent-acp`
+  (0.63.0), `initialize protocolVersion=1`, model set → `claude-sonnet-5`,
+  **`prompt returned (stopReason=end_turn)`**, reply `"OK"`, 33103 rawBytes NDJSON.
+  0.63.0 어댑터의 wire stop reason을 **실측**했다 — 0.62.0 표본 재사용이 아니다.
+- **`smoke-acp-cortex-live` PASS (23 assertions)** — cortex **v1.1.52**(CP0-M이 실측한 그 버전),
+  connection은 환경에서 주입. `agent_start` → **`agent_end` (no hang)** → **`no extension_error`**.
+  이 세 줄이 stop-reason 하드닝의 cortex 리스크를 닫는다: cortex가 reason을 빠뜨리거나 닫힌 집합 밖
+  값을 실었다면 새 `mapPromptStopReason`이 ERROR로 봉인해 `agent_end`가 아니라 `extension_error`가
+  떴을 것이다. 함께 선 것 — D4 `autoUpdate:false`, D9 mcp.json projection, D10 dual-HOME 복원,
+  CP0에서 빚으로 남긴 **아웃바운드 `entwurf_v2`**(cortex 모델이 자기 자신으로 배달, payload는 nonce
+  정확히 그것뿐), process-group teardown `leaked: none`.
+
+**어댑터 축은 cortex에 도달하지 않는다** — `backend-adapter.ts`의 cortexAdapter는 PATH의
+`cortex acp serve`를 띄우고 `claude-agent-acp`를 `require.resolve`하는 것은 claudeAdapter뿐이다.
+그래서 0.62→0.63 bump의 cortex 리스크는 0이고, 공유되는 것은 pi와 common layer
+(`mapPromptStopReason`은 `backend.ts`에 있고 adapter 분기가 없다)다.
+
 ## 남은 것 — 이 순서로
 
-1. **`LIVE=1 ./run.sh smoke-acp-raw-turn-live` — 필수.** 어댑터 dist가 실제로 움직였으므로 0.62.0
-   시절 LIVE 표본으로 대신할 수 없다. 실제 API 호출이라 GLG 승인 필요. 증거 헤더는 이미
-   `claude-agent-acp@0.63.0`으로 수선돼 있다.
-2. **`LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live`** — oracle에 cortex가
-   깔린 뒤. 이번 컷은 cortex **코드**를 바꾸지 않았지만 그 밑의 **어댑터(0.63.0)와 pi(0.83.0)가 둘 다
-   움직였고**, 0.13.0으로 cortex 사용자가 붙을 수 있게 된 다음 컷이다. rail의 "cortex rail을 바꾸거나
-   싣는 컷은 전용 smoke를 돌려야 한다"에 해당한다고 본다. 판단은 GLG.
-3. GLG 승인 후 커밋. **푸시는 또 별도 승인.**
-4. 그 다음에야 `/entwurf-release prepare 0.13.1` — package version과 CHANGELOG는 **prepare 모드가
+1. ~~`LIVE=1 ./run.sh smoke-acp-raw-turn-live`~~ — **완료 (thinkpad, PASS).**
+2. ~~`LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live`~~ —
+   **완료 (thinkpad, PASS 23 assertions).** oracle의 cortex 미설치 blocker는 axis 2가 흡수했다.
+3. ~~커밋~~ — `fea773f`로 완료·푸시됨.
+4. `/entwurf-release prepare 0.13.1` — package version과 CHANGELOG는 **prepare 모드가
    소유한다.** 지금 트리의 `package.json` version은 아직 `0.13.0`이고 그게 맞다.
    **CHANGELOG 첫 항목은 pi floor가 0.82.x 설치를 깬다는 사실이어야 한다** — patch 번호가 실어주지
    않는 신호를 산문이 대신 싣는다. `0.14.0`은 CODEX 지원에 예약돼 있다(GLG).
@@ -89,7 +113,11 @@ stopReason·rawStopReason·errorMessage를 함께 판정한다. `acp-stop-reason
   inconclusive이고 inconclusive는 "문제 없음"이 아니다. 게다가 그 표본은 0.62.0 어댑터 기준이다.
 - 0.63.0의 세 upstream fix 중 어느 것도 readiness fence가 아니다. `mcpServerStatus()`는 여전히
   호출되지 않는다. bump를 readiness 수정으로 쓰지 말 것.
-- axis 2(두 번째 머신), macOS/WSL2는 계속 비인증.
+- **axis 2(두 번째 머신)는 이제 인증됐다** — thinkpad에서 정적·설치·LIVE 셋 다 GREEN(위 "검증 실측 —
+  axis 2"). 다만 **linux 두 대**일 뿐이다: macOS/WSL2는 계속 비인증이고, axis 2가 섰다고 OS 축이
+  섰다고 쓰지 말 것.
+- cortex LIVE는 **v1.1.52 한 버전, connection 하나**의 표본이다. cortex가 올라가면 stop-reason 표면은
+  다시 측정 대상이다 — 이번 PASS를 cortex 일반에 대한 보증으로 쓰지 말 것.
 
 # DO NOT
 
