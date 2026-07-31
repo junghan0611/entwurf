@@ -104,6 +104,14 @@ auth/runtime state required by the Claude Agent SDK and hides operator memory, h
 agents, history, and local settings. Rich project/operator context rides the first-user
 augment; the system carrier stays short to avoid changing billing semantics.
 
+The carrier owns its own leading boundary. A string `_meta.systemPrompt` replaces the
+`claude_code` preset, but the SDK still prefixes a fixed identity sentence and joins the
+two with nothing, so the loader opens every rendered carrier with one blank line. The
+template cannot supply it — the render is trimmed so operator whitespace never drifts the
+reuse signature. That same rendered string is what `bridgeConfigSignature` folds and what
+`buildSessionMeta` sends; normalizing it at either hop desynchronizes the wire from the
+signature.
+
 `clientCapabilities` intentionally remains empty. Terminal-output widgets and nested
 subagent transcripts are therefore not requested. Enabling either is a separate
 rendering contract, not a capability bit flip.
@@ -204,7 +212,7 @@ pnpm check
 Live axes:
 
 ```bash
-LIVE=1 ./run.sh release-gate /path/to/scratch
+LIVE=1 ./run.sh release-gate /path/to/scratch --cut
 LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> \
   ./run.sh smoke-acp-cortex-live
 ```

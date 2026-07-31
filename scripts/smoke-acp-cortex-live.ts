@@ -53,6 +53,7 @@ import * as readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { upsertMetaSession, writeMetaReceiverMarker } from "../pi-extensions/lib/meta-session.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { skipLive } from "./lib/live-skip.ts";
 import { waitForPiRecord } from "./lib/pi-record-discovery.ts";
 
 const ACP_PROVIDER = "entwurf";
@@ -189,24 +190,17 @@ function driveTurn(child: ChildProcess, prompt: string): Promise<TurnCapture> {
 
 async function main(): Promise<void> {
 	if (process.env.LIVE !== "1") {
-		console.log(
-			"[smoke-acp-cortex-live] skipped — set LIVE=1 to run (spawns a real cortex ACP resident + one model turn).",
-		);
-		return;
+		skipLive("smoke-acp-cortex-live", "set LIVE=1 to run (spawns a real cortex ACP resident + one model turn).");
 	}
 	const connection = process.env.ENTWURF_ACP_CORTEX_CONNECTION?.trim();
 	if (!connection) {
-		console.log(
-			"[smoke-acp-cortex-live] skipped — set ENTWURF_ACP_CORTEX_CONNECTION=<snowflake connection> (the dual-HOME " +
-				"overlay denies the operator cortex settings.json, so the connection must ride the adapter's own seam).",
+		skipLive(
+			"smoke-acp-cortex-live",
+			"set ENTWURF_ACP_CORTEX_CONNECTION=<snowflake connection> (the dual-HOME overlay denies the operator cortex settings.json, so the connection must ride the adapter's own seam).",
 		);
-		return;
 	}
 	if ("CORTEX_HOME" in process.env) {
-		console.log(
-			"[smoke-acp-cortex-live] skipped — unset CORTEX_HOME first (the adapter refuses its presence, CP0 D3).",
-		);
-		return;
+		skipLive("smoke-acp-cortex-live", "unset CORTEX_HOME first (the adapter refuses its presence, CP0 D3).");
 	}
 
 	// One temp root holding the whole garden this smoke can see: store, mailbox

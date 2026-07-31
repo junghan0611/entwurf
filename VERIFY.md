@@ -42,12 +42,14 @@ Verification here is not a benchmark. In production we exchange short turns and 
 
 - **Deterministic floor:** `pnpm check` — the full `check-*` gate set (the `check` script in `package.json` is the SSOT for what runs). Run first; it is the offline, machine-checkable layer.
 - **Discriminating power of that floor:** `./run.sh check-gate-qualification` (inside `pnpm check`) re-plants committed defect mutants (`scripts/mutants/*.json`, one per closed defect class) in an isolated snapshot repo and requires each to turn its gate red **bounded and at its claimed `[QK:<claim>]` signature** — a wrong-reason red fails, a baseline-red control voids the whole group, and the runner is negative-controlled on every run (zero-match/multi-match/survived/wrong-reason/hang/control-red/impurity). This measures whether the deterministic gates still *block* what they claim to block; it is **not a new evidence level** (L0–L5 are untouched) and never substitutes for LIVE evidence. Per-cut records cite claim IDs + killed mutant IDs — "N checks passed" alone is not evidence. `check-agy-permission-matrix` complements it with the enumerated permission contract space (literal cells + stated exclusion rules, oracle independent of the SUT).
-- **Live floor:** `LIVE=1 ./run.sh release-gate <scratch-project-dir>` — `pnpm check` + the v2-native live gates + the ACP plugin acceptance floor. It reports a **two-tier summary**:
-  - **MUST tier** (release-blocking — owns the exit code; "green" applies only here): `pnpm check`, `smoke-entwurf-v2-spawn-resume-live`, `smoke-entwurf-v2-matrix-live`, `check-bridge`, the resident-garden-guard zero-token half (record birth / record-keyed socket / attach-on-reopen), and the `smoke-acp-*-live` ACP plugin smokes (socket-citizen / raw-turn / overlay / provider / session-reuse / carrier-augment / memory-containment / rgg / mcp / skill / bundled-mcp / v2-send). (`smoke-session-id-name` is gone — #50 C3: its `--session-id`/`--name` substrate has no entwurf consumer anymore.)
+- **Live floor:** `LIVE=1 ./run.sh release-gate <scratch-project-dir> --cut` — `pnpm check` + the v2-native live gates + the ACP plugin acceptance floor. It reports a **two-tier summary**:
+  - **MUST tier** (release-blocking — owns the exit code; "green" applies only here): `pnpm check`, `smoke-entwurf-v2-spawn-resume-live`, `smoke-entwurf-v2-matrix-live`, `check-bridge`, the resident-garden-guard zero-token half (record birth / record-keyed socket / attach-on-reopen), the `smoke-acp-*-live` ACP plugin smokes (socket-citizen / raw-turn / overlay / provider / session-reuse / carrier-augment / memory-containment / rgg / mcp / skill / bundled-mcp / v2-send), the two axes wired in on 2026-07-31 that the aggregate had simply never listed (`smoke-entwurf-v2-spawn-live`, `smoke-claude-native-resume-live`), and `smoke-entwurf-chain-live` — the cross-harness delivery chain (native Claude Code → pi GPT → pi ACP Sonnet → mailbox terminus) proving sender identity and replyability at every hop plus a real read receipt at the end. (`smoke-session-id-name` is gone — #50 C3: its `--session-id`/`--name` substrate has no entwurf consumer anymore.)
   - **BEHAVIOR tier** (advisory, non-blocking): the resident-garden-guard positive (a model-in-loop `entwurf_self` turn). A BEHAVIOR FAIL is surfaced with its artifact path but **never blocks the cut**. The lane holds what the model *chooses*, never what our wiring fails to deliver — a gate that TELLS the model which tool to call stays MUST, because its failure is ours — measured 2026-07-24, when the tool turned out to be absent from the session schema in both observed failures (the bundled-MCP readiness gap recorded in `scripts/smoke-acp-v2-send-live.ts`).
-  - LIVE-gated MUST steps honest-skip when `LIVE!=1`; a real cut needs `LIVE=1` with `SKIP=0`. A green MUST gate is **necessary, not sufficient** — GLG authorizes the cut.
+  - **Every MUST step is invoked and reports its own outcome** (P1 STEP OUTCOME protocol, `scripts/lib/step-outcome.sh`): exit 0 = PASS, exit 97 = SKIP (a prerequisite the step does not have, printed as an `[entwurf:skip]` line), anything else = FAIL. A skip is never counted as a pass — that hole is what let a cortex-less host read as cortex acceptance. Without `--cut` this is the unattended diagnostic: SKIPs are reported and the run still exits 0. **`--cut` makes it acceptance and any MUST SKIP is red**, which is how "a real cut needs `LIVE=1` with `SKIP=0`" stopped being prose. A green MUST gate is **necessary, not sufficient** — GLG authorizes the cut.
   - **When cost-bearing MUST gates run (fixed 2026-07-23, the F6/F7 lesson):** a commit that touches a rail a MUST-tier live gate covers runs that gate **before cross-review is requested** — never parked behind "run it at approval time". Deferring a wired gate to a human decision is what let F6/F7 ship reviewed-and-approved; the wiring exists so the verdict never depends on who pressed enter. "배선이 없어 못 한 것은 OK, 배선이 있는데 안 돌린 것은 우리가 남긴 구멍이다." Model-in-loop cost is spent via the subscription-backed `entwurf` provider where the gate allows it, a free-tier native model otherwise; cost is a reason to pick the cheap target, not to skip the gate.
 
+> **Cortex is an on-demand axis, not an aggregate one.** Its rail needs an external Snowflake connection and login that the host owns, not the repo — so wiring it into the aggregate would block every cut taken on a host without that account. **The 0.13.1 aggregate does not re-certify Cortex**; `LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live` stays a required direct call whenever a cut changes Cortex rail code or an operator elects to certify that host. Its honest-skip behaviour is unchanged: run it without the connection and it reports protocol SKIP, never a pass.
+>
 > A cut that touches the prompt-lifecycle contract (no wall clock on a running turn) owes one long-turn acceptance the aggregate floor is too short to carry: `LIVE=1 ./run.sh smoke-acp-long-turn-live` drives a real turn whose tool work outlasts the retired 600s cutoff and requires exactly one cold ACP bootstrap in the transcript. It takes >12 minutes by construction and is on-demand, not part of `release-gate`.
 >
 > The aggregate release gate does not own a live agy conversation id, so agy's real native-push round trip is a separate acceptance axis: three fail-loud doctors plus `LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live`, followed by a fresh-conversation sender/reply check after package install. Its deterministic install/sender gates are already inside `pnpm check`; do not misreport the aggregate gate as live agy evidence.
@@ -65,7 +67,7 @@ Do not collapse source, package, fixture, and native-host evidence into one “g
 | Packed install | `check-pack-install` | Real tarball, but checkout-visible. |
 | Linux artifact consumer | required `check-install-container` CI job against one preserved candidate | Fixtures prove package/oracle shape, not a real Claude lifecycle. |
 | Exact release commit | all required CI jobs green at the exact SHA | A different green SHA is not transferable evidence. |
-| LIVE runtime | `LIVE=1 ./run.sh release-gate <scratch>` plus any shipped on-demand backend axis | Requires `SKIP=0`; a red wired gate blocks the cut. |
+| LIVE runtime | `LIVE=1 ./run.sh release-gate <scratch> --cut` plus any shipped on-demand backend axis | `--cut` enforces `SKIP=0`; a red wired gate blocks the cut. |
 | Native Claude host | installed strict doctor against a new real session | Missing live join is `NOT CERTIFIED`, not a fixture PASS. |
 | Native agy host | three doctors plus conversation-id-gated native-push round trip | Aggregate release-gate does not own an agy conversation id. |
 
@@ -151,7 +153,7 @@ cd "$REPO_DIR" && ./run.sh setup "$PROJECT_DIR"
 ### 1.2 Live acceptance (optional)
 
 ```bash
-LIVE=1 ./run.sh release-gate /path/to/consumer-project
+LIVE=1 ./run.sh release-gate /path/to/consumer-project --cut
 pi --provider entwurf --model claude-sonnet-5 -p "reply with ok only"   # one-turn smoke
 ```
 
@@ -163,7 +165,7 @@ addressable sends require `--entwurf-control` (measured 2026-07-24: the same
 one-shot with that flag returns its own gid and delivers `entwurf_v2` to a peer
 mailbox with `origin=pi-session`, `replyable=true`).
 
-`setup` runs `pnpm install` + project/user-scope install + detected native-harness wiring (Claude and/or agy) + the v2 install smoke. A green setup proves the required core path and reports optional-harness degradation; it does **not** replace the native-harness doctors. The full aggregate live floor is still `LIVE=1 ./run.sh release-gate`, with agy's conversation-id-gated round trip verified separately.
+`setup` runs `pnpm install` + project/user-scope install + detected native-harness wiring (Claude and/or agy) + the v2 install smoke. A green setup proves the required core path and reports optional-harness degradation; it does **not** replace the native-harness doctors. The full aggregate live floor is still `LIVE=1 ./run.sh release-gate <scratch> --cut` — without `--cut` it is a diagnostic pass, not acceptance — with agy's conversation-id-gated round trip verified separately.
 
 ### 1.4 Cross-install / cross-backend parity (optional, high-value)
 
@@ -265,7 +267,7 @@ The minimum passing bar:
 
 1. **Deterministic floor green:** `pnpm check` passes (lint + typecheck + the `check-*` gate set + `check-pack`).
 2. **All three CI jobs green on the exact release commit:** `check`, `install-surface`, and the required Linux `artifact-consumer`; preserve the latter's tarball digest and image identity.
-3. **Live floor MUST green:** `LIVE=1 ./run.sh release-gate <dir>` reports `MUST PASS=N FAIL=0 SKIP=0`; a BEHAVIOR FAIL is advisory, not blocking.
+3. **Live floor MUST green:** `LIVE=1 ./run.sh release-gate <dir> --cut` exits 0 reporting `MUST PASS=N FAIL=0 SKIP=0`; with `--cut` a single SKIP is red, so the exit code itself now carries this condition. A BEHAVIOR FAIL is advisory, not blocking.
 4. **Native-host doctor green where the Claude meta-bridge is claimed:** a new post-install Claude session exists, live evidence is present, and the installed `doctor-meta-bridge` exits 0. `NOT CERTIFIED` is a release failure for that host, not a skip.
 5. **Honest self-recognition:** the bridged model identifies its actual harness/backend, lists `entwurf-bridge` as the single MCP server with its five current tools, and presents a backend-native (not normalized) tool surface.
 6. **Carrier separation honored:** engraving vs pi-context-augment kept distinct (§1A.0); no bridge-identity narrative attributed to the engraving carrier.

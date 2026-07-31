@@ -55,6 +55,7 @@ import {
 	DEFAULT_CLAUDE_TOOLS,
 } from "../pi-extensions/lib/acp/tool-surface.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { skipLive } from "./lib/live-skip.ts";
 
 const REQUESTED_MODEL_ID = process.env.ENTWURF_ACP_OVERLAY_MODEL ?? "claude-sonnet-5";
 const ALLOW_PATH_FALLBACK = process.env.ENTWURF_ACP_OVERLAY_ALLOW_PATH_FALLBACK === "1";
@@ -76,8 +77,7 @@ function withTimeout<T>(label: string, p: Promise<T>, ms: number): Promise<T> {
 }
 
 if (process.env.LIVE !== "1") {
-	console.error("[smoke-acp-overlay-live] skipped — set LIVE=1 to run the real overlay ACP turn.");
-	process.exit(0);
+	skipLive("smoke-acp-overlay-live", "set LIVE=1 to run the real overlay ACP turn.");
 }
 
 function resolveLaunch(): { command: string; args: string[]; source: string; acceptance: boolean } {

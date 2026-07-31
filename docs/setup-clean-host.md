@@ -178,7 +178,7 @@ and exit-code contract is [fresh-cut-policy.md](./fresh-cut-policy.md).
 - `check-install-container`: checkout-invisible Linux package-consumer shape using
   fixtures; not a native lifecycle proof.
 - `doctor-meta-bridge`: one installed real Claude host, only with a new live session.
-- `LIVE=1 entwurf release-gate /path/to/scratch`: aggregate runtime acceptance.
+- `LIVE=1 entwurf release-gate /path/to/scratch --cut`: aggregate runtime acceptance (`--cut` makes any MUST SKIP red; without it the run is a diagnostic pass).
 
 Keep these verdicts separate. Current protocol is [VERIFY.md](../VERIFY.md); recorded
 host verdicts are [BASELINE.md](../BASELINE.md).

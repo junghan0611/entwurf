@@ -68,6 +68,7 @@ import {
 	DEFAULT_CLAUDE_TOOLS,
 } from "../pi-extensions/lib/acp/tool-surface.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { skipLive } from "./lib/live-skip.ts";
 
 const REQUESTED_MODEL_ID = process.env.ENTWURF_ACP_MEMORY_MODEL ?? "claude-sonnet-5";
 const ALLOW_PATH_FALLBACK = process.env.ENTWURF_ACP_MEMORY_ALLOW_PATH_FALLBACK === "1";
@@ -109,8 +110,7 @@ async function listMemoryFiles(dir: string): Promise<string[]> {
 }
 
 if (process.env.LIVE !== "1") {
-	console.error("[smoke-acp-memory-containment-live] skipped — set LIVE=1 to run the real memory-containment turn.");
-	process.exit(0);
+	skipLive("smoke-acp-memory-containment-live", "set LIVE=1 to run the real memory-containment turn.");
 }
 
 function resolveLaunch(): { command: string; args: string[]; source: string; acceptance: boolean } {

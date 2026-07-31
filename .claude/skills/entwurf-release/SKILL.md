@@ -266,13 +266,17 @@ directory and complete log.
 SCRATCH=$(mktemp -d "/tmp/entwurf-release-gate-${VERSION}.XXXXXX")
 LOG="$SCRATCH/release-gate.log"
 set -o pipefail
-LIVE=1 ./run.sh release-gate "$SCRATCH" 2>&1 | tee "$LOG"
+LIVE=1 ./run.sh release-gate "$SCRATCH" --cut 2>&1 | tee "$LOG"
 ```
 
 The release gate has two tiers:
 
-- `MUST` is release-blocking and owns the exit code. `FAIL` must be zero and a
-  release run must not hide required LIVE work behind `SKIP`.
+- `MUST` is release-blocking and owns the exit code. `FAIL` must be zero, and
+  `--cut` enforces the other half: any MUST `SKIP` makes the run red, so a
+  release run can no longer hide required LIVE work behind a skip. Each step is
+  invoked and reports its own outcome (exit 0 PASS / 97 SKIP / else FAIL); a
+  `[entwurf:skip]` line names the prerequisite that was missing. Drop `--cut`
+  only for an unattended diagnostic pass, which is not acceptance.
 - `BEHAVIOR` is advisory model-in-loop evidence. A failure does not block the
   release, but its PASS/FAIL counts and artifact path must be recorded.
 

@@ -51,6 +51,22 @@ PROVIDER_ID="entwurf"
 # surfaces). Under an installed package it REFUSES rather than falling back to raw
 # .ts — a fallback would just re-raise the fence error with a worse message.
 # check-install-surface pins both halves statically.
+# Release-gate STEP OUTCOME protocol (P1) — loaded LAZILY, never at top level.
+#
+# Only two surfaces need it: `release_gate`, which classifies each step's exit
+# code, and the LIVE smoke wrappers, which return `$ENTWURF_STEP_SKIP_EXIT` when
+# a prerequisite is missing. Both are dev-only. Sourcing it unconditionally at
+# the top made EVERY subcommand depend on `scripts/lib/` being present, and
+# check-fresh-cut-gate I9c caught the consequence immediately: on an installed
+# tree assembled without that path, run.sh died with a bash "No such file"
+# instead of printing the refusal it is supposed to print. An operator verb must
+# never fail on a dev-only dependency, so the load happens where it is used.
+entwurf_require_step_outcome() {
+  [ -n "${ENTWURF_STEP_SKIP_EXIT:-}" ] && return 0
+  # shellcheck source=scripts/lib/step-outcome.sh
+  . "$REPO_DIR/scripts/lib/step-outcome.sh"
+}
+
 run_ts() {
   local rel="$1"; shift
   case "$REPO_DIR" in
@@ -73,7 +89,7 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # ONE confident install: pnpm install + install + meta-bridge (if native harness) + v2 install smoke (LIVE substrate = release-gate)
-  ./run.sh release-gate [project-dir] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). LIVE-gated MUST steps HONEST-SKIP when LIVE!=1 (a CUT needs LIVE=1, SKIP=0). --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
+  ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the two axes the aggregate used to omit silently (spawn-live/claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
   ./run.sh check-entwurf-bridge-pi-free # deterministic gate (0.12.1 A, IN pnpm check): static — bridge index eager value-import closure must carry no @earendil-works/pi-* (type-only + dynamic import excluded); proves the meta-bridge boots pi-free
@@ -129,6 +145,8 @@ Usage:
   ./run.sh check-meta-doctor-oracle   # 0.12.8 (#51): detection power of the release ORACLE — healthy fixture must reach `doctor: PASS`, then 21 planted defects (retired shell form, partial hand-patch, launcher bypass/repoint/provenance loss, malformed exec args, owner type drift, extra leaf/group, doorbell asyncRewake/path/timeout, no live bridge, stale receiver, ambiguous/missing cache, missing hook log/writer, failing CLI probes) must each turn it FAIL naming their own cause, plus a positive case pinning that a long-writing CLI is NOT a false negative. Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-agy-install-state    # agy MCP + exact permission ownership regression: isolated HOME+XDG, adopt/state/inverse, symlink refuse, setup degrade. Offline/deterministic
   ./run.sh check-agy-permission-matrix # AGY permission CONTRACT SPACE as a literal table (55 cells): parser-state × operation × settings × ownership × precedence with stated exclusion rules; expectations are hand-written literals, never read from the SUT. Offline/deterministic (deps: python3)
+  ./run.sh smoke-entwurf-chain-live    # LIVE cross-harness delivery chain: native Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox terminus, proving sender identity/replyable at every hop and a real read receipt at the end. Prerequisites (claude on PATH, pi credentials per backend) report protocol SKIP, never a pass
+  ./run.sh check-release-gate-outcomes  # release-gate STEP OUTCOME protocol (P1): one skip exit code shared by the shell + TS halves, classifier never rounds a skip up to a pass, `--cut` refuses a MUST SKIP while a bare diagnostic stays exit 0, no LIVE smoke keeps the old exit-0 skip shape, and both real skip surfaces are INVOKED and observed to propagate the code
   ./run.sh check-gate-qualification    # kill-proof qualification (the gate-of-gates): runner self-test (classifier truth table + synthetic negatives incl. wrong-reason/hang/control-red/impurity) + committed mutant manifests (scripts/mutants/*.json) run in an isolated snapshot repo under control→mutant→restore→control; the real checkout is never written. Evidence = claim IDs + killed mutant IDs, never assertion counts
   ./run.sh check-probe-ordering        # §11-7 ordering-probe deterministic gate: raw-client SAMENESS pinned to backend.ts (sequence/args/timeouts/permission policy — the probe may never measure a lookalike), phase attribution incl. set-model, probe-mode fixture wire markers (delay honored, probeRunId REQUIRED, smoke-acp-mcp-live legacy compat), event-log door integrity (reserved keys refused at write; unknown marker name, broken sort axis, or a payload the classifier cannot judge on is MALFORMED, never a quiet event), and the §11-7 paired-verdict truth table (P0/I0 outside the space, phase-qualified D, B promotion ladder, C, A two-delay rule). Offline/deterministic; kill-proofed via scripts/mutants/probe-ordering.json
   ./run.sh check-probe-cli-shim        # §11-7-c B-name-snapshot PRODUCER gate: the CLI shim driven as a REAL process against fake CLIs (no API, no cost). Proves what a defect would buy — FABRICATED evidence (a malformed init is never reported as an empty name set; the boot report carries the true target path+sha256 the classifier verifies against the roster), a DESTROYED turn (byte transparency across mid-UTF8/CRLF/oversized/unterminated framing, exit-code fidelity, signal re-raise, inbound signal forwarding, stderr passthrough, stdout backpressure), and LEAKED operator state (exact-allowlist env scrub, no argv/env/prompt body in the log). Offline/deterministic; kill-proofed via scripts/mutants/probe-ordering.json
@@ -984,9 +1002,10 @@ smoke_entwurf_v2_spawn_live() {
   # 5c-3a watcher's timeout→kill→child-exited→release integration on a live process. It does
   # NOT spawn a real `pi --entwurf-control` resume (that is the 5d surface matrix). Run once
   # before 5d and record the result:  LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live
+  entwurf_require_step_outcome
   if [ "${LIVE:-}" != "1" ]; then
-    echo "[smoke-entwurf-v2-spawn-live] skipped — set LIVE=1 to run (spawns real children + opens a real unix socket)."
-    return 0
+    echo "[entwurf:skip] smoke-entwurf-v2-spawn-live — set LIVE=1 to run (spawns real children + opens a real unix socket)."
+    return "$ENTWURF_STEP_SKIP_EXIT"
   fi
   run_ts scripts/smoke-entwurf-v2-spawn-live.ts
 }
@@ -1214,13 +1233,14 @@ smoke_acp_cortex_live() {
   # operator settings.json where a default would live. PR #40 called this
   # `smoke-cortex`; the canonical family name is smoke-acp-cortex-live.
   #   LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live
+  entwurf_require_step_outcome
   if [ "${LIVE:-}" != "1" ]; then
-    echo "[smoke-acp-cortex-live] skipped — set LIVE=1 (+ ENTWURF_ACP_CORTEX_CONNECTION) to run."
-    return 0
+    echo "[entwurf:skip] smoke-acp-cortex-live — set LIVE=1 (+ ENTWURF_ACP_CORTEX_CONNECTION) to run."
+    return "$ENTWURF_STEP_SKIP_EXIT"
   fi
   if ! command -v cortex >/dev/null 2>&1; then
-    echo "[smoke-acp-cortex-live] skipped — cortex not on PATH (install Snowflake Cortex Code and complete its own login flow)."
-    return 0
+    echo "[entwurf:skip] smoke-acp-cortex-live — cortex not on PATH (install Snowflake Cortex Code and complete its own login flow)."
+    return "$ENTWURF_STEP_SKIP_EXIT"
   fi
   run_ts scripts/smoke-acp-cortex-live.ts
 }
@@ -1237,9 +1257,10 @@ smoke_entwurf_v2_matrix_live() {
   # stay deterministic. Honest skip when LIVE!=1 so the release-gate is runnable unattended.
   # Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4).
   #   LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
+  entwurf_require_step_outcome
   if [ "${LIVE:-}" != "1" ]; then
-    echo "[smoke-entwurf-v2-matrix-live] skipped — set LIVE=1 to run (spawns a real pi --entwurf-control + opens a real socket)."
-    return 0
+    echo "[entwurf:skip] smoke-entwurf-v2-matrix-live — set LIVE=1 to run (spawns a real pi --entwurf-control + opens a real socket)."
+    return "$ENTWURF_STEP_SKIP_EXIT"
   fi
   run_ts scripts/smoke-entwurf-v2-matrix-live.ts
 }
@@ -1259,9 +1280,10 @@ smoke_entwurf_v2_spawn_resume_live() {
   # Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4);
   #        ENTWURF_SPAWN_RESUME_ASSISTANT_TIMEOUT_MS (default 180000).
   #   LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live
+  entwurf_require_step_outcome
   if [ "${LIVE:-}" != "1" ]; then
-    echo "[smoke-entwurf-v2-spawn-resume-live] skipped — set LIVE=1 to run (spawns a real pi resume child + opens a real socket)."
-    return 0
+    echo "[entwurf:skip] smoke-entwurf-v2-spawn-resume-live — set LIVE=1 to run (spawns a real pi resume child + opens a real socket)."
+    return "$ENTWURF_STEP_SKIP_EXIT"
   fi
   run_ts scripts/smoke-entwurf-v2-spawn-resume-live.ts
 }
@@ -3833,7 +3855,7 @@ setup_all() {
   wire_agy_hooks
 
   # Deterministic preflight lives in `pnpm check`; live substrate acceptance lives
-  # in `LIVE=1 ./run.sh release-gate <scratch>`. Setup is the install path, so it
+  # in `LIVE=1 ./run.sh release-gate <scratch> --cut`. Setup is the install path, so it
   # verifies the installed MCP bridge boundary only and does NOT run the legacy
   # ACP/v1 session-messaging/sentinel gates.
   section "v2 install smoke: entwurf-bridge (direct MCP protocol)"
@@ -3849,7 +3871,7 @@ setup_all() {
     echo "                           ./run.sh doctor-agy-statusline"
     echo "                           ./run.sh doctor-agy-hooks"
   fi
-  echo "Run 'LIVE=1 ./run.sh release-gate <scratch>' for live substrate acceptance."
+  echo "Run 'LIVE=1 ./run.sh release-gate <scratch> --cut' for live substrate acceptance (--cut refuses any MUST SKIP)."
 }
 
 # wire_agy_bridge — detection-gated, NON-FATAL agy (Antigravity) MCP bridge wiring, folded into
@@ -4033,10 +4055,18 @@ expose_dev_bin() {
 #   - Final release authorization is GLG's, not this script's: a green
 #     run is necessary, and the operator closes the decision.
 release_gate() {
+  entwurf_require_step_outcome
   local -a positional=()
   local a
+  # --cut is the EXECUTABLE half of "a CUT needs LIVE=1, SKIP=0" (P1). Without it
+  # this stays the unattended diagnostic it has always been: SKIPs are reported
+  # and the run still exits 0. With it, any MUST SKIP is red — including the
+  # LIVE!=1 case, which needs no separate assertion because every LIVE-gated step
+  # then skips on its own and the skip counter blocks.
+  local cut_mode=0
   for a in "$@"; do
     case "$a" in
+      --cut) cut_mode=1 ;;
       --allow-skip-gemini) ;;  # accepted-but-ignored: gemini removed from the claude-only floor (back-compat for existing scripts)
       *) positional+=("$a") ;;
     esac
@@ -4087,27 +4117,36 @@ release_gate() {
   }
 
   # LIVE-gated MUST step: a release-blocking gate that needs a real backend turn
-  # (auth/model/credit). When LIVE!=1 it is an HONEST SKIP — counted as SKIP, NOT
-  # PASS — so an unattended `./run.sh release-gate` stays runnable without faking
-  # coverage. A release CUT therefore requires `LIVE=1 ./run.sh release-gate
-  # <scratch>` to land MUST PASS with SKIP=0; a green run that still shows SKIP is
-  # CI safety, never live acceptance. (Same rule the v2 substrate sentinels below
-  # spell out inline; this helper applies it to the ACP plugin acceptance floor.)
+  # (auth/model/credit). It is ALWAYS INVOKED and the step itself reports whether
+  # it could run — that is the whole point of P1. The old shape asked `LIVE=1?`
+  # here and skipped without calling, which meant the summary asserted a skip it
+  # had never confirmed, while a step that WAS called could still exit 0 on a
+  # missing prerequisite (Cortex without a connection) and be counted PASS.
+  # Now one protocol decides: exit 0 = PASS, $ENTWURF_STEP_SKIP_EXIT = SKIP,
+  # anything else = FAIL. A SKIP is never rounded up, and `--cut` refuses any.
+  #
+  # `LIVE` is NOT forced here — it rides the operator's environment into the
+  # child, so `LIVE=1 ./run.sh release-gate` runs the step for real and a bare
+  # invocation gets the step's own honest skip.
   run_live_step() {
     local name="$1"; shift
     section "release-gate step: $name"
-    if [ "${LIVE:-}" = "1" ]; then
-      if "$@"; then
+    local rc=0
+    "$@" || rc=$?
+    case "$(entwurf_step_outcome "$rc")" in
+      PASS)
         ok "$name: PASS"
         results+=("PASS  $name"); pass=$((pass + 1))
-      else
-        fail "$name: FAIL"
+        ;;
+      SKIP)
+        warn "$name: SKIP — the step declined a prerequisite it does not have (see its [entwurf:skip] line above). NOT a live acceptance."
+        results+=("SKIP  $name"); skip=$((skip + 1))
+        ;;
+      *)
+        fail "$name: FAIL (exit $rc)"
         results+=("FAIL  $name"); failc=$((failc + 1))
-      fi
-    else
-      warn "$name: LIVE!=1 — skipped (opt-in: needs auth/model — NOT a live acceptance run)"
-      results+=("SKIP  $name (LIVE!=1)"); skip=$((skip + 1))
-    fi
+        ;;
+    esac
   }
 
   # BEHAVIOR lane (0.11.0, GLG+GPT+Opus): a SEPARATE advisory counter for
@@ -4131,19 +4170,32 @@ release_gate() {
   # deterministic/programmatic must-pass gates above (check-entwurf-v2-*,
   # check-bridge) — this lane is autonomous-tool-selection *behavior*, not
   # *function*. Residual bypass → 0.11.x usability lane.
-  local behavior_pass=0 behavior_failc=0
+  # The lane speaks the same STEP OUTCOME protocol (P1) so a missing prerequisite
+  # here is a BEHAVIOR-SKIP, not a fabricated BEHAVIOR-PASS or a misread
+  # BEHAVIOR-FAIL. Advisory semantics are untouched: none of these counters ever
+  # reaches `failc`, and `--cut` reads the MUST skip counter only.
+  local behavior_pass=0 behavior_failc=0 behavior_skip=0
   local -a behavior_results=()
 
   run_behavior_step() {
     local name="$1"; shift
     section "release-gate BEHAVIOR step (advisory, non-blocking): $name"
-    if "$@"; then
-      ok "$name: BEHAVIOR-PASS"
-      behavior_results+=("BEHAVIOR-PASS  $name"); behavior_pass=$((behavior_pass + 1))
-    else
-      warn "$name: BEHAVIOR-FAIL (advisory — model-in-loop signal; S7=Bash-bypass stays hard-fail here; NOT a cut blocker)"
-      behavior_results+=("BEHAVIOR-FAIL  $name"); behavior_failc=$((behavior_failc + 1))
-    fi
+    local rc=0
+    "$@" || rc=$?
+    case "$(entwurf_step_outcome "$rc")" in
+      PASS)
+        ok "$name: BEHAVIOR-PASS"
+        behavior_results+=("BEHAVIOR-PASS  $name"); behavior_pass=$((behavior_pass + 1))
+        ;;
+      SKIP)
+        warn "$name: BEHAVIOR-SKIP — prerequisite absent (advisory lane; not a signal either way)"
+        behavior_results+=("BEHAVIOR-SKIP  $name"); behavior_skip=$((behavior_skip + 1))
+        ;;
+      *)
+        warn "$name: BEHAVIOR-FAIL (advisory — model-in-loop signal; S7=Bash-bypass stays hard-fail here; NOT a cut blocker)"
+        behavior_results+=("BEHAVIOR-FAIL  $name"); behavior_failc=$((behavior_failc + 1))
+        ;;
+    esac
   }
 
   # 1. Static floor (deterministic; includes the two folded gates).
@@ -4181,41 +4233,20 @@ release_gate() {
   # production runEntwurfV2 deps + real pi control-socket RPC + real mailbox enqueue + v2 lock, not
   # per-backend model behavior). Placed right after check-bridge: the MCP/protocol substrate must be
   # green first so a matrix-live failure reads as "v2 transport/lock/enqueue", not bridge basics.
-  # Opt-in LIVE: it spawns a real `pi --entwurf-control` (needs auth/model), so LIVE!=1 is an HONEST
-  # SKIP (not a PASS) — an unattended release-gate stays runnable without faking coverage. Independent
-  # of --allow-skip-gemini (now a no-op back-compat flag on the claude-only floor; this gates substrate auth).
-  section "release-gate step: smoke-entwurf-v2-matrix-live"
-  if [ "${LIVE:-}" = "1" ]; then
-    if gate env LIVE=1 bash "$self" smoke-entwurf-v2-matrix-live; then
-      ok "smoke-entwurf-v2-matrix-live: PASS"
-      results+=("PASS  smoke-entwurf-v2-matrix-live"); pass=$((pass + 1))
-    else
-      fail "smoke-entwurf-v2-matrix-live: FAIL"
-      results+=("FAIL  smoke-entwurf-v2-matrix-live"); failc=$((failc + 1))
-    fi
-  else
-    warn "smoke-entwurf-v2-matrix-live: LIVE!=1 — skipped (v2 substrate sentinel, opt-in: needs auth/model)"
-    results+=("SKIP  smoke-entwurf-v2-matrix-live (LIVE!=1)"); skip=$((skip + 1))
-  fi
+  # Opt-in LIVE: it spawns a real `pi --entwurf-control` (needs auth/model), so a missing
+  # prerequisite is an HONEST SKIP (not a PASS) — an unattended release-gate stays runnable without
+  # faking coverage. Independent of --allow-skip-gemini (now a no-op back-compat flag on the
+  # claude-only floor; this gates substrate auth). It used to carry its own inline copy of the
+  # PASS/FAIL/SKIP branch; P1 folded it onto `run_live_step` so there is exactly ONE classifier —
+  # a second copy is how a lane silently keeps counting a skip as a pass.
+  run_live_step "smoke-entwurf-v2-matrix-live (D4-c: v2 dispatch substrate sentinel)" gate bash "$self" smoke-entwurf-v2-matrix-live
   # 0.11.0 (A) acceptance: the FULL spawn-bg resident lifecycle — a real `pi` resume child stands
   # its control socket up, does a model turn, lock released ×1. Placed right after matrix-live (the
   # transport sentinel): a spawn-resume failure then reads as "resume/resident lifecycle", not
-  # transport basics. Same opt-in LIVE rule — LIVE!=1 is an HONEST SKIP (model-in-loop, needs
-  # auth/model). NOTE: a 0.11.0 tag REQUIRES `LIVE=1 ./run.sh release-gate` (or this step direct)
-  # to PASS — the SKIP is CI safety, never acceptance.
-  section "release-gate step: smoke-entwurf-v2-spawn-resume-live"
-  if [ "${LIVE:-}" = "1" ]; then
-    if gate env LIVE=1 bash "$self" smoke-entwurf-v2-spawn-resume-live; then
-      ok "smoke-entwurf-v2-spawn-resume-live: PASS"
-      results+=("PASS  smoke-entwurf-v2-spawn-resume-live"); pass=$((pass + 1))
-    else
-      fail "smoke-entwurf-v2-spawn-resume-live: FAIL"
-      results+=("FAIL  smoke-entwurf-v2-spawn-resume-live"); failc=$((failc + 1))
-    fi
-  else
-    warn "smoke-entwurf-v2-spawn-resume-live: LIVE!=1 — skipped (0.11.0 A acceptance, opt-in: needs auth/model)"
-    results+=("SKIP  smoke-entwurf-v2-spawn-resume-live (LIVE!=1)"); skip=$((skip + 1))
-  fi
+  # transport basics. Same opt-in LIVE rule. NOTE: a tag REQUIRES `LIVE=1 ./run.sh release-gate
+  # --cut` (or this step direct) to PASS — a SKIP is CI safety, never acceptance, and `--cut` is
+  # what now enforces that instead of prose.
+  run_live_step "smoke-entwurf-v2-spawn-resume-live (0.11.0 A: full spawn-bg resident lifecycle)" gate bash "$self" smoke-entwurf-v2-spawn-resume-live
 
   # 3b. ACP plugin acceptance floor (S0~S2f live). These prove the ACP plugin's
   #     programmatic transport/provider/backend invariants on the v2 core — NOT
@@ -4230,18 +4261,35 @@ release_gate() {
   #     → first-user augment delivery + empty-carrier billing-clean (핀1) →
   #     ACP-target garden guard (deterministic half). Opt-in LIVE: LIVE!=1 is an
   #     HONEST SKIP via run_live_step (see its note) — a CUT needs LIVE=1, SKIP=0.
-  run_live_step "smoke-acp-socket-citizen-live (S1: turn-free socket citizenship)"        gate env LIVE=1 bash "$self" smoke-acp-socket-citizen-live
-  run_live_step "smoke-acp-raw-turn-live (S2a: pinned ACP pipe + local auth)"             gate env LIVE=1 bash "$self" smoke-acp-raw-turn-live
-  run_live_step "smoke-acp-overlay-live (S2b: config overlay + hooks:{} + tool meta)"     gate env LIVE=1 bash "$self" smoke-acp-overlay-live
-  run_live_step "smoke-acp-provider-live (S2c/S2f: real pi provider path + progress/L3)"  gate env LIVE=1 bash "$self" smoke-acp-provider-live
-  run_live_step "smoke-acp-session-reuse-live (S2d: process-scoped reuse + recall)"       gate env LIVE=1 bash "$self" smoke-acp-session-reuse-live
-  run_live_step "smoke-acp-carrier-augment-live (S2e-1: augment delivery + 핀1 billing)"  gate env LIVE=1 bash "$self" smoke-acp-carrier-augment-live
-  run_live_step "smoke-acp-memory-containment-live (Gate D: no overlay memory leak)"      gate env LIVE=1 bash "$self" smoke-acp-memory-containment-live
-  run_live_step "smoke-acp-rgg-live (S2e-2: ACP-target garden guard, deterministic half)" gate env LIVE=1 bash "$self" smoke-acp-rgg-live
-  run_live_step "smoke-acp-mcp-live (S2g: operator mcpServers reach the live ACP session)"  gate env LIVE=1 bash "$self" smoke-acp-mcp-live
-  run_live_step "smoke-acp-skill-live (S2g: operator skillPlugins reach the live ACP session)" gate env LIVE=1 bash "$self" smoke-acp-skill-live
-  run_live_step "smoke-acp-bundled-mcp-live (S2g axis 3: bundled entwurf-bridge via 0.11.0 resident/RPC circuit)" gate env LIVE=1 bash "$self" smoke-acp-bundled-mcp-live
-  run_live_step "smoke-acp-v2-send-live (S2g axis 4: an ACP model SENDS via entwurf_v2, landing as itself)" gate env LIVE=1 bash "$self" smoke-acp-v2-send-live
+  run_live_step "smoke-acp-socket-citizen-live (S1: turn-free socket citizenship)"        gate bash "$self" smoke-acp-socket-citizen-live
+  run_live_step "smoke-acp-raw-turn-live (S2a: pinned ACP pipe + local auth)"             gate bash "$self" smoke-acp-raw-turn-live
+  run_live_step "smoke-acp-overlay-live (S2b: config overlay + hooks:{} + tool meta)"     gate bash "$self" smoke-acp-overlay-live
+  run_live_step "smoke-acp-provider-live (S2c/S2f: real pi provider path + progress/L3)"  gate bash "$self" smoke-acp-provider-live
+  run_live_step "smoke-acp-session-reuse-live (S2d: process-scoped reuse + recall)"       gate bash "$self" smoke-acp-session-reuse-live
+  run_live_step "smoke-acp-carrier-augment-live (S2e-1: augment delivery + 핀1 billing)"  gate bash "$self" smoke-acp-carrier-augment-live
+  run_live_step "smoke-acp-memory-containment-live (Gate D: no overlay memory leak)"      gate bash "$self" smoke-acp-memory-containment-live
+  run_live_step "smoke-acp-rgg-live (S2e-2: ACP-target garden guard, deterministic half)" gate bash "$self" smoke-acp-rgg-live
+  run_live_step "smoke-acp-mcp-live (S2g: operator mcpServers reach the live ACP session)"  gate bash "$self" smoke-acp-mcp-live
+  run_live_step "smoke-acp-skill-live (S2g: operator skillPlugins reach the live ACP session)" gate bash "$self" smoke-acp-skill-live
+  run_live_step "smoke-acp-bundled-mcp-live (S2g axis 3: bundled entwurf-bridge via 0.11.0 resident/RPC circuit)" gate bash "$self" smoke-acp-bundled-mcp-live
+  run_live_step "smoke-acp-v2-send-live (S2g axis 4: an ACP model SENDS via entwurf_v2, landing as itself)" gate bash "$self" smoke-acp-v2-send-live
+
+  # 3c. The axes the aggregate used to leave out with no stated reason (P2,
+  #     2026-07-31). Three LIVE smokes existed and were simply never wired, so a
+  #     green cut said nothing about them. Under the P1 outcome protocol wiring
+  #     them costs nothing on a host that cannot run them — they SKIP honestly and
+  #     `--cut` names the missing prerequisite — while a host that CAN run them now
+  #     must. Cortex is deliberately NOT here: its rail needs an external Snowflake
+  #     connection the HOST owns, so wiring it would block every cut taken without
+  #     that account; it stays a required DIRECT call for a Cortex-rail cut instead
+  #     (VERIFY 「Cortex is an on-demand axis」). Same for `smoke-acp-long-turn-live`,
+  #     `smoke-agy-native-push-live` and `smoke-acp-ordering-probe-live`: >12min by
+  #     construction, no aggregate-owned agy conversation id, and an opt-in instrument
+  #     rather than acceptance. check-release-gate-outcomes pins that every LIVE smoke
+  #     is either wired here or excluded by a reason the docs still carry.
+  run_live_step "smoke-entwurf-v2-spawn-live (5c-3c: spawn-bg OS substrate on real children/sockets)" gate bash "$self" smoke-entwurf-v2-spawn-live
+  run_live_step "smoke-claude-native-resume-live (native Claude Code resume + meta-bridge neutrality)" gate bash "$self" smoke-claude-native-resume-live
+  run_live_step "smoke-entwurf-chain-live (P3: Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox, identity + receipt)" gate bash "$self" smoke-entwurf-chain-live
 
   # 4. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
   #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never
@@ -4271,21 +4319,44 @@ release_gate() {
   if [ "${#behavior_results[@]}" -gt 0 ]; then
     printf '    %s\n' "${behavior_results[@]}"
   fi
-  echo "    BEHAVIOR: PASS=$behavior_pass  FAIL=$behavior_failc"
+  echo "    BEHAVIOR: PASS=$behavior_pass  FAIL=$behavior_failc  SKIP=$behavior_skip"
   echo "  (per-step artifact paths are printed in each step's output above)"
   if [ "$behavior_failc" -gt 0 ]; then
     echo ""
     warn "BEHAVIOR FAIL present ($behavior_failc) — advisory model-in-loop signal (e.g. S7 Bash-bypass / entwurf_self not autonomously called). Tracked, NOT a cut blocker; see the 0.11.x usability lane."
   fi
-  # Exit authority = MUST `failc` ONLY. A BEHAVIOR fail never blocks the cut.
-  if [ "$failc" -gt 0 ]; then
+  echo ""
+  if [ "$cut_mode" = "1" ]; then
+    echo "  mode: --cut (a MUST SKIP is a BLOCKER — this run is being read as release acceptance)"
+  else
+    echo "  mode: diagnostic (MUST SKIPs are reported, not blocking — re-run with --cut to read this as acceptance)"
+  fi
+  # The verdict as one greppable token, so release evidence can distinguish a
+  # step that RAN AND BROKE from one that NEVER RAN without reading prose. The
+  # counters above stay literal — a policy block is `FAIL=0 SKIP=n` plus
+  # `BLOCKED (MUST SKIP)`, never a synthesized failure.
+  echo "  $(entwurf_release_verdict "$failc" "$skip" "$cut_mode")"
+
+  # Exit authority — MUST tier only, BEHAVIOR never blocks. The releasable
+  # decision lives in scripts/lib/step-outcome.sh so it is one testable function
+  # rather than a branch re-derived here (and re-derived wrong: the pre-P1 branch
+  # read `failc` alone, so a run with 14 SKIPs still printed "all green").
+  if ! entwurf_release_releasable "$failc" "$skip" "$cut_mode"; then
     echo ""
-    fail "release-gate MUST NOT green — $failc release-blocking step(s) failed. Current release is NOT releasable."
+    if [ "$failc" -gt 0 ]; then
+      fail "release-gate MUST NOT green — $failc release-blocking step(s) failed. Current release is NOT releasable."
+    else
+      fail "release-gate --cut REFUSED — $skip release-blocking step(s) SKIPPED, so this run does not prove they were called."
+      echo "  A skipped step is not acceptance. Supply each missing prerequisite (usually LIVE=1 plus the"
+      echo "  per-step env the [entwurf:skip] lines above name) and re-run, or drop --cut to keep this a diagnostic."
+    fi
     echo "  A green MUST gate is necessary but not sufficient; GLG closes the call."
     return 1
   fi
-  if [ "$behavior_failc" -gt 0 ]; then
-    ok "release-gate MUST PASS (all release-blocking steps green); BEHAVIOR FAIL present (advisory). Necessary condition met — GLG authorizes the cut."
+  if [ "$skip" -gt 0 ]; then
+    warn "release-gate MUST has no failures, but $skip step(s) SKIPPED — this is a DIAGNOSTIC run, not live acceptance. A cut needs \`LIVE=1 ./run.sh release-gate <scratch> --cut\` with SKIP=0."
+  elif [ "$behavior_failc" -gt 0 ]; then
+    ok "release-gate MUST PASS (all release-blocking steps ran and are green); BEHAVIOR FAIL present (advisory). Necessary condition met — GLG authorizes the cut."
   else
     ok "release-gate MUST PASS + BEHAVIOR PASS — all green. Necessary condition met — GLG authorizes the cut."
   fi
@@ -4451,6 +4522,15 @@ case "$cmd" in
     ;;
   smoke-acp-bundled-mcp-live)
     smoke_acp_bundled_mcp_live
+    ;;
+  smoke-entwurf-chain-live)
+    # P3 — the cross-harness delivery CHAIN on real authenticated rails:
+    # native Claude Code -> pi GPT -> pi ACP Claude Sonnet -> mailbox terminus,
+    # with sender identity at every hop and a read receipt at the end. Needs
+    # `claude` on PATH plus pi credentials for both pi backends; each missing
+    # prerequisite is an honest protocol SKIP, never a pass.
+    #   LIVE=1 ./run.sh smoke-entwurf-chain-live
+    run_ts scripts/smoke-entwurf-chain-live.ts
     ;;
   smoke-acp-v2-send-live)
     smoke_acp_v2_send_live
@@ -4901,6 +4981,9 @@ case "$cmd" in
     ;;
   check-acp-session-reuse)
     check_acp_session_reuse
+    ;;
+  check-release-gate-outcomes)
+    run_ts scripts/check-release-gate-outcomes.ts
     ;;
   check-acp-carrier-augment)
     check_acp_carrier_augment

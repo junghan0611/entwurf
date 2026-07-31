@@ -313,7 +313,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     나왔다(19:00 백그라운드 `pnpm check` 동시, 19:30 라이브 턴 10여 개 뒤 aggregate 후반, 22:38 17스텝
     release-gate 후반). 24초짜리 3종 순차는 구조적으로 이미 4/4 PASS였던 **격리 재실행과 같은 조건**이다.
     따라서 이 표본은 격리 누적을 5/5로 올릴 뿐, "무거운 시퀀스 후반부" 상관에 대해서는 **아무 말도 하지 않는다.**
-    green은 fix 증거가 아니다. 상관 조건을 실제로 치려면 `LIVE=1 ./run.sh release-gate` 전체(표본 3을 낳은 그것)를
+    green은 fix 증거가 아니다. 상관 조건을 실제로 치려면 `LIVE=1 ./run.sh release-gate <scratch> --cut` 전체(표본 3을 낳은 그것)를
     돌려야 한다. 아래 ordering probe는 표본을 늘리는 대신 **다른 질문**(이 서버가 지연된 MCP를 기다리는가)을 친다.
   - **현재 claude-agent-acp 노출면에 관측 경로가 없다는 실증 (2026-07-27).** claude-agent-acp 0.62.0 `dist`가 방출하는
     `sessionUpdate` 종류는 `agent_message_chunk` / `agent_thought_chunk` / `available_commands_update` /

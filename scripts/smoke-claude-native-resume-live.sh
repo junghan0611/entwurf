@@ -18,11 +18,21 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 if [ "${LIVE:-0}" != "1" ]; then
-  echo "[smoke-claude-native-resume-live] skipped — set LIVE=1 to run (spawns two real Claude Code native turns)."
-  exit 0
+  . "$REPO/scripts/lib/step-outcome.sh"
+  echo "[entwurf:skip] smoke-claude-native-resume-live — set LIVE=1 to run (spawns two real Claude Code native turns)."
+  exit "$ENTWURF_STEP_SKIP_EXIT"
 fi
 
-command -v claude >/dev/null || { echo "FAIL: claude not on PATH" >&2; exit 1; }
+# A missing `claude` is a PREREQUISITE, not a defect: this smoke drives the real
+# native binary, so a host without it has nothing to prove wrong. Under the P1
+# outcome protocol that is a SKIP the aggregate reports and `--cut` refuses —
+# reporting it as FAIL would make a host's own toolchain look like a release
+# defect, and the old exit 1 did exactly that once this smoke joined the gate.
+command -v claude >/dev/null || {
+  . "$REPO/scripts/lib/step-outcome.sh"
+  echo "[entwurf:skip] smoke-claude-native-resume-live — claude not on PATH (install Claude Code and complete its own login flow)."
+  exit "$ENTWURF_STEP_SKIP_EXIT"
+}
 command -v node >/dev/null || { echo "FAIL: node not on PATH" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "FAIL: python3 not on PATH" >&2; exit 1; }
 

@@ -34,6 +34,7 @@ import { Readable, Writable } from "node:stream";
 import { ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import { connectAcpClient } from "../pi-extensions/lib/acp/acp-client.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { skipLive } from "./lib/live-skip.ts";
 
 const REQUESTED_MODEL_ID = process.env.ENTWURF_ACP_RAW_TURN_MODEL ?? "claude-sonnet-5";
 const ALLOW_PATH_FALLBACK = process.env.ENTWURF_ACP_RAW_TURN_ALLOW_PATH_FALLBACK === "1";
@@ -59,8 +60,7 @@ function withTimeout<T>(label: string, p: Promise<T>, ms: number): Promise<T> {
 }
 
 if (process.env.LIVE !== "1") {
-	console.error("[smoke-acp-raw-turn-live] skipped — set LIVE=1 to run the real ACP turn.");
-	process.exit(0);
+	skipLive("smoke-acp-raw-turn-live", "set LIVE=1 to run the real ACP turn.");
 }
 
 // ---------------------------------------------------------------------------

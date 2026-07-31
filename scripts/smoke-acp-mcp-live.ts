@@ -26,6 +26,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { skipLive } from "./lib/live-skip.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PROBE_SERVER = join(REPO_ROOT, "scripts", "fixtures", "probe-mcp-server.ts");
@@ -39,8 +40,7 @@ function fail(msg: string): never {
 }
 
 if (process.env.LIVE !== "1") {
-	console.error("[smoke-acp-mcp-live] skipped — set LIVE=1 to run the real pi provider turn.");
-	process.exit(0);
+	skipLive("smoke-acp-mcp-live", "set LIVE=1 to run the real pi provider turn.");
 }
 
 const STUB_PATTERN = /AcpBackendNotImplementedError|not implemented in S0/i;

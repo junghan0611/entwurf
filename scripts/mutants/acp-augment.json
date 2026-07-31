@@ -77,6 +77,60 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:CARRIER-RAIL-DIFF-IS-SOURCE-PINNED]",
 			"signatureSource": "scripts/check-acp-carrier-augment.ts"
+		},
+		{
+			"claim": "CARRIER-LEADS-ITS-OWN-BLOCK",
+			"title": "the carrier loses its leading boundary — the Claude SDK's fixed sentence swallows the operator engraving again (the measured 2026-07-31 A-join)",
+			"subject": "pi-extensions/lib/acp/engraving.ts",
+			"find": ["export const CARRIER_LEAD_SEPARATOR = \"\\n\\n\";"],
+			"replace": ["export const CARRIER_LEAD_SEPARATOR = \"\";"],
+			"gate": ["bash", "run.sh", "check-acp-carrier-augment"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:CARRIER-LEADS-ITS-OWN-BLOCK]",
+			"signatureSource": "scripts/check-acp-carrier-augment.ts"
+		},
+		{
+			"claim": "CARRIER-OPT-OUT-SURVIVES-SEPARATOR",
+			"title": "the boundary is attached before the emptiness test — an emptied engraving file stops being the opt-out and becomes a whitespace carrier that still replaces the claude_code preset",
+			"subject": "pi-extensions/lib/acp/engraving.ts",
+			"find": [
+				"\tconst body = interpolate(source, params).trim();",
+				"\tif (body.length === 0) return \"\";",
+				"\treturn `${CARRIER_LEAD_SEPARATOR}${body}`;"
+			],
+			"replace": [
+				"\tconst body = `${CARRIER_LEAD_SEPARATOR}${interpolate(source, params).trim()}`;",
+				"\tif (body.length === 0) return \"\";",
+				"\treturn body;"
+			],
+			"gate": ["bash", "run.sh", "check-acp-carrier-augment"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:CARRIER-OPT-OUT-SURVIVES-SEPARATOR]",
+			"signatureSource": "scripts/check-acp-carrier-augment.ts"
+		},
+		{
+			"claim": "CARRIER-STAYS-TINY",
+			"title": "the shipped carrier grows into a real prompt — size, not shape, is what routes an OAuth subscription call to metered extra usage",
+			"subject": "pi-extensions/lib/acp/prompts/engraving.md",
+			"find": ["# Engraving Here"],
+			"replace": [
+				"# Engraving Here\n\n## Operator standing orders\n\n- Address the operator by name and keep the reply language matched to the prompt.\n- Prefer surgical edits over rewrites; verify every claim you make about behavior.\n- Never bypass a commit hook, and never push without an explicit request.\n- Indentation is tabs unless the project's linter says otherwise.\n- When docs and behavior disagree, report it and fix the source of truth.\n- Long-running commands belong in tmux, not in a foreground shell.\n- Record the next concrete move before you stop working.\n\n## Project context\n\nThis checkout is the bridge itself, so treat the adapter contract in the rail doc\nas authoritative and re-read it before touching a gate. The qualification lane is\nthe oracle for every contract claim; a green assertion count proves nothing on\nits own."
+			],
+			"gate": ["bash", "run.sh", "check-acp-carrier-augment"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:CARRIER-STAYS-TINY]",
+			"signatureSource": "scripts/check-acp-carrier-augment.ts"
+		},
+		{
+			"claim": "CARRIER-META-SENDS-CARRIER-VERBATIM",
+			"title": "the meta hop normalizes the carrier — the boundary is stripped back off on the wire while bridgeConfigSignature still folds the bounded value, so the A-join returns and reuse keys on a string the backend never received",
+			"subject": "pi-extensions/lib/acp/tool-surface.ts",
+			"find": ["\t\tmeta.systemPrompt = normalizedSystemPrompt;"],
+			"replace": ["\t\tmeta.systemPrompt = normalizedSystemPrompt.trim();"],
+			"gate": ["bash", "run.sh", "check-acp-carrier-augment"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:CARRIER-META-SENDS-CARRIER-VERBATIM]",
+			"signatureSource": "scripts/check-acp-carrier-augment.ts"
 		}
 	]
 }

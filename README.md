@@ -355,7 +355,8 @@ LIVE=1 ./run.sh smoke-acp-provider-live         # real pi provider path + progre
 LIVE=1 ./run.sh smoke-acp-session-reuse-live    # process-scoped reuse + codeword recall (S2d)
 LIVE=1 ./run.sh smoke-acp-carrier-augment-live  # augment delivery + empty-carrier billing clean (S2e-1)
 
-LIVE=1 ./run.sh release-gate /tmp/scratch       # the single cut gate (MUST + BEHAVIOR, SKIP=0 for a real cut)
+LIVE=1 ./run.sh release-gate /tmp/scratch --cut # the single cut gate (MUST + BEHAVIOR; --cut refuses any MUST SKIP)
+LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live  # Cortex is on-demand: the aggregate does not re-certify it
 ```
 
 `pnpm check` already includes the two maintainer gates: the AGY permission contract
@@ -459,6 +460,8 @@ pi --entwurf-control
 System / developer carriers and rich pi context are separate.
 
 The carrier holds an optional short operator engraving; empty or missing is fine. The runtime default is the bundled `pi-extensions/lib/acp/prompts/engraving.md` (the `# Engraving Here` placeholder, pinned non-empty by a gate); [`prompts/engraving.md`](./prompts/engraving.md) is a documented sample you copy and point the runtime at with `ENTWURF_ACP_ENGRAVING_PATH=/path/to/alt.md`. Template variables: `{{backend}}`, `{{mcp_servers}}`. Do not put AGENTS.md, bridge narrative, or tool catalogs here — large Claude carriers can route OAuth sessions to metered "extra usage" billing.
+
+Your file's own leading and trailing whitespace is trimmed, and the loader then opens the carrier with one blank line. That boundary is not cosmetic: the Claude Agent SDK prefixes its own fixed identity sentence and concatenates the carrier onto it with nothing in between, so without it the engraving's first line reads as the tail of the SDK's sentence (measured 2026-07-31 as `You are a Claude agent, built on Anthropic's Claude Agent SDK.# Engraving Here`). Do not try to supply the boundary from inside the markdown — it is trimmed away before it reaches the wire.
 
 Bridge identity, pi context, `~/AGENTS.md`, `cwd/AGENTS.md`, and date/cwd ride a one-shot first-user prepend (`pi-context-augment.ts`). Entwurf prompts already carry `cwd/AGENTS.md` inside `<project-context ...>`; the augment removes that duplicate. The augment describes capabilities, but the **actual callable schema remains source of truth** — `read` vs `Read` vs `exec_command`, MCP only when schema-visible.
 

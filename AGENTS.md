@@ -112,7 +112,7 @@ pnpm check
 ./run.sh check-install-surface
 ./run.sh check-install-container       # require Docker in release acceptance
 
-LIVE=1 ./run.sh release-gate /path/to/scratch
+LIVE=1 ./run.sh release-gate /path/to/scratch --cut
 LIVE=1 ./run.sh smoke-acp-socket-citizen-live
 LIVE=1 ./run.sh smoke-acp-bundled-mcp-live
 LIVE=1 ./run.sh smoke-acp-v2-send-live

@@ -718,13 +718,14 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 	// manifest lost in a merge must name itself here — "0/0 killed" is not a pass.
 	// Extend this inventory and the manifests TOGETHER, never silently.
 	const EXPECTED_LANE_MUTANTS: Record<string, number> = {
-		"acp-augment": 6,
+		"acp-augment": 10,
 		"acp-cortex": 12,
 		"acp-prompt-lifecycle": 8,
 		"acp-stop-reason": 6,
 		"agy-permission": 6,
 		"meta-identity": 1,
 		"probe-ordering": 85,
+		"release-gate": 8,
 		"self-address": 3,
 		"v2-surface": 5,
 	};

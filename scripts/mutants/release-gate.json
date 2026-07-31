@@ -1,0 +1,105 @@
+{
+	"schemaVersion": 1,
+	"lane": "release-gate",
+	"mutants": [
+		{
+			"claim": "SKIP-EXIT-ONE-PROTOCOL",
+			"title": "the shell and TS halves name different skip codes — every honest skip silently reclassifies, and the summary says nothing",
+			"subject": "scripts/lib/step-outcome.sh",
+			"find": ["ENTWURF_STEP_SKIP_EXIT=97"],
+			"replace": ["ENTWURF_STEP_SKIP_EXIT=96"],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SKIP-EXIT-ONE-PROTOCOL]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
+			"claim": "STEP-OUTCOME-SKIP-NOT-PASS",
+			"title": "the classifier rounds a skip up to PASS — the pre-P1 defect restored at its source: a step that declined is reported as acceptance",
+			"subject": "scripts/lib/step-outcome.sh",
+			"find": ["\t\t\"$ENTWURF_STEP_SKIP_EXIT\") printf 'SKIP\\n' ;;"],
+			"replace": ["\t\t\"$ENTWURF_STEP_SKIP_EXIT\") printf 'PASS\\n' ;;"],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:STEP-OUTCOME-SKIP-NOT-PASS]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
+			"claim": "CUT-REFUSES-SKIP",
+			"title": "--cut stops refusing a MUST SKIP — the release procedure goes back to prose and a 14-SKIP run can be quoted as acceptance",
+			"subject": "scripts/lib/step-outcome.sh",
+			"find": ["\tif [ \"$cut\" = \"1\" ] && [ \"$skipc\" -gt 0 ]; then"],
+			"replace": ["\tif [ \"$cut\" = \"1\" ] && [ \"$skipc\" -lt 0 ]; then"],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CUT-REFUSES-SKIP]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
+			"claim": "NO-SMOKE-SKIPS-WITH-ZERO",
+			"title": "one LIVE smoke goes back to exiting 0 on its skip — the hole re-opens for that lane alone, which is how it survived unnoticed",
+			"subject": "scripts/smoke-acp-mcp-live.ts",
+			"find": ["\tskipLive(\"smoke-acp-mcp-live\", \"set LIVE=1 to run the real pi provider turn.\");"],
+			"replace": [
+				"\tconsole.error(\"[smoke-acp-mcp-live] skipped — set LIVE=1 to run the real pi provider turn.\");",
+				"\tprocess.exit(0);"
+			],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:NO-SMOKE-SKIPS-WITH-ZERO]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
+			"claim": "LIVE-SKIP-IS-PROTOCOL-EXIT",
+			"title": "skipLive exits 0 — every smoke still LOOKS converted (imports, no old shape) while the aggregate reads all of them as PASS",
+			"subject": "scripts/lib/live-skip.ts",
+			"find": ["\tprocess.exit(LIVE_SKIP_EXIT);"],
+			"replace": ["\tprocess.exit(0);"],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:LIVE-SKIP-IS-PROTOCOL-EXIT]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
+			"claim": "WRAPPER-SKIP-IS-PROTOCOL-EXIT",
+			"title": "a run.sh smoke wrapper returns 0 on a missing prerequisite — the second skip surface, where cortex/matrix/spawn decline before their .ts is ever reached",
+			"subject": "run.sh",
+			"find": [
+				"    echo \"[entwurf:skip] smoke-acp-cortex-live — set LIVE=1 (+ ENTWURF_ACP_CORTEX_CONNECTION) to run.\"",
+				"    return \"$ENTWURF_STEP_SKIP_EXIT\""
+			],
+			"replace": [
+				"    echo \"[entwurf:skip] smoke-acp-cortex-live — set LIVE=1 (+ ENTWURF_ACP_CORTEX_CONNECTION) to run.\"",
+				"    return 0"
+			],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:WRAPPER-SKIP-IS-PROTOCOL-EXIT]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
+			"claim": "CUT-VERDICT-NAMES-CAUSE",
+			"title": "a cut blocked only by SKIP reports itself as a FAIL block — the record can no longer tell a broken call from an absent prerequisite",
+			"subject": "scripts/lib/step-outcome.sh",
+			"find": ["\t\tprintf 'cut: BLOCKED (MUST SKIP)\\n'"],
+			"replace": ["\t\tprintf 'cut: BLOCKED (MUST FAIL)\\n'"],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CUT-VERDICT-NAMES-CAUSE]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
+			"claim": "NO-SILENT-AGGREGATE-OMISSION",
+			"title": "the cross-harness delivery chain drops out of the aggregate — a green cut goes back to saying nothing about multi-harness delivery, with no doc stating the exclusion",
+			"subject": "run.sh",
+			"find": [
+				"  run_live_step \"smoke-entwurf-chain-live (P3: Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox, identity + receipt)\" gate bash \"$self\" smoke-entwurf-chain-live"
+			],
+			"replace": ["  : # the chain quietly dropped from the aggregate"],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:NO-SILENT-AGGREGATE-OMISSION]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		}
+	]
+}

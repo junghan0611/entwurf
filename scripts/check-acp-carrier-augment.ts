@@ -38,6 +38,11 @@ const BRIDGE_MARK = "operating through entwurf";
 
 // ===========================================================================
 // 1) loadEngraving is pure/deterministic + interpolates backend/mcp (sorted)
+//
+// This cell owns the BODY of the render. The carrier's leading boundary is cell
+// 11's axis, so the body assertions here match on the tail — a cell that pinned
+// the whole string would fire first on any boundary regression and steal the
+// attribution from the claim that actually owns it.
 // ===========================================================================
 {
 	const file = join(tmp, "engraving.md");
@@ -48,16 +53,15 @@ const BRIDGE_MARK = "operating through entwurf";
 		const a = loadEngraving({ backend: "claude", mcpServerNames: ["zebra", "alpha"] });
 		const b = loadEngraving({ backend: "claude", mcpServerNames: ["zebra", "alpha"] });
 		assert.equal(a, b, "loadEngraving is deterministic: same inputs → same output");
-		assert.equal(a, "backend=claude mcp=alpha, zebra", "interpolates {{backend}} and SORTED {{mcp_servers}}");
+		assert.ok(a?.endsWith("backend=claude mcp=alpha, zebra"), "interpolates {{backend}} and SORTED {{mcp_servers}}");
 		// Order of the input must not change the render (signature-stability guard).
 		assert.equal(
 			loadEngraving({ backend: "claude", mcpServerNames: ["alpha", "zebra"] }),
 			a,
 			"mcpServerNames order does not drift the rendered carrier (sorted)",
 		);
-		assert.equal(
-			loadEngraving({ backend: "claude", mcpServerNames: [] }),
-			"backend=claude mcp=(none registered)",
+		assert.ok(
+			loadEngraving({ backend: "claude", mcpServerNames: [] })?.endsWith("backend=claude mcp=(none registered)"),
 			"no mcp servers → (none registered)",
 		);
 	} finally {
@@ -86,7 +90,15 @@ const BRIDGE_MARK = "operating through entwurf";
 	const prev = process.env.ENTWURF_ACP_ENGRAVING_PATH;
 	process.env.ENTWURF_ACP_ENGRAVING_PATH = whitespace;
 	try {
-		assert.equal(loadEngraving({ backend: "claude", mcpServerNames: [] }), null, "whitespace-only template → null");
+		assert.equal(
+			loadEngraving({ backend: "claude", mcpServerNames: [] }),
+			null,
+			"[QK:CARRIER-OPT-OUT-SURVIVES-SEPARATOR] a whitespace-only override must still be the operator OPT-OUT (null), " +
+				"never a carrier made of nothing but the A-join boundary. Emptiness is decided on the TRIMMED BODY, before " +
+				"the leading separator is attached — attach it first and an emptied engraving file silently becomes a " +
+				'non-empty "\\n\\n" carrier: the opt-out disappears, the claude_code preset gets replaced by whitespace, and ' +
+				"bridgeConfigSignature folds a string the operator never wrote",
+		);
 	} finally {
 		if (prev === undefined) delete process.env.ENTWURF_ACP_ENGRAVING_PATH;
 		else process.env.ENTWURF_ACP_ENGRAVING_PATH = prev;
@@ -106,9 +118,9 @@ const BRIDGE_MARK = "operating through entwurf";
 	// `_meta.systemPrompt` → full preset replacement). That replacement is what
 	// strips the preset's auto-memory section so the model never learns it has a
 	// per-session memory store — the memory containment v1 shipped, restored here.
-	assert.equal(
-		loadEngraving({ backend: "claude", mcpServerNames: [] }),
-		"# Engraving Here",
+	// (`includes`, not `equal`: the leading A-join boundary is cell 11's axis.)
+	assert.ok(
+		loadEngraving({ backend: "claude", mcpServerNames: [] })?.includes("# Engraving Here"),
 		"shipped default engraving is the non-empty v1 lever → string carrier (preset replaced, auto-memory stripped)",
 	);
 
@@ -395,6 +407,149 @@ function ctxWith(firstUser: string): Context {
 	);
 }
 
+// ===========================================================================
+// 11) A-JOIN — the carrier owns its own leading boundary.
+//
+// Measured LIVE 2026-07-31 (0.64.0 adapter, fresh Claude ACP): the system prompt
+// reached the model as
+//   `You are a Claude agent, built on Anthropic's Claude Agent SDK.# Engraving Here`
+// A string-form `_meta.systemPrompt` REPLACES the claude_code preset
+// (acp-agent.js), but the SDK still prefixes its own fixed identity sentence and
+// joins the two with NOTHING — the operator's heading was swallowed into the tail
+// of that sentence.
+//
+// The fix cannot live in engraving.md. The render is trimmed (cell 1's
+// determinism guard: operator file whitespace must not drift
+// bridgeConfigSignature), so a leading blank line in the markdown is eaten before
+// it ever reaches the wire. These cells pin the boundary where it can survive —
+// in the LOADER — and pin the two ways it can be lost again: an opt-out turned
+// into a whitespace carrier (cell 2), and a downstream normalize at the meta hop.
+// ===========================================================================
+{
+	// The exact sentence measured on the wire. Only its CONCATENATION is our
+	// contract — the SDK owns the wording and may change it; what may not change
+	// is that our carrier starts a block of its own after whatever precedes it.
+	const SDK_FIXED_SENTENCE = "You are a Claude agent, built on Anthropic's Claude Agent SDK.";
+
+	const bare = join(tmp, "bare-engraving.md");
+	writeFileSync(bare, "# Operator Engraving");
+	const padded = join(tmp, "padded-engraving.md");
+	writeFileSync(padded, "\n\n\n# Operator Engraving\n\n");
+
+	const prev = process.env.ENTWURF_ACP_ENGRAVING_PATH;
+	let bareCarrier: string | null;
+	let paddedCarrier: string | null;
+	try {
+		process.env.ENTWURF_ACP_ENGRAVING_PATH = bare;
+		bareCarrier = loadEngraving({ backend: "claude", mcpServerNames: [] });
+		process.env.ENTWURF_ACP_ENGRAVING_PATH = padded;
+		paddedCarrier = loadEngraving({ backend: "claude", mcpServerNames: [] });
+	} finally {
+		if (prev === undefined) delete process.env.ENTWURF_ACP_ENGRAVING_PATH;
+		else process.env.ENTWURF_ACP_ENGRAVING_PATH = prev;
+	}
+
+	const shipped = loadEngraving({ backend: "claude", mcpServerNames: [] });
+	assert.ok(shipped, "shipped carrier is present (fail-loud lever)");
+	assert.equal(
+		loadEngraving({ backend: "claude", mcpServerNames: [] }),
+		shipped,
+		"the bounded shipped carrier is still a pure function of its inputs (no per-call drift → no per-turn rebuild)",
+	);
+
+	// Reproduce the SDK join with NO glue of our own — the exact concatenation
+	// acp-agent.js performs — and read the result the way the model does. The
+	// operator-override row is what proves the boundary is the LOADER's: that file
+	// carries no leading whitespace at all.
+	for (const [what, carrier] of [
+		["shipped default", shipped as string],
+		["operator override with no leading whitespace", bareCarrier as string],
+	] as const) {
+		const joined = `${SDK_FIXED_SENTENCE}${carrier}`;
+		const lines = joined.split("\n");
+		assert.ok(
+			lines[0] === SDK_FIXED_SENTENCE && lines[1] === "" && (lines[2]?.length ?? 0) > 0,
+			`[QK:CARRIER-LEADS-ITS-OWN-BLOCK] the ${what} must open its own block after the fixed SDK sentence. The SDK ` +
+				"concatenates that sentence with a string `_meta.systemPrompt` and puts NOTHING between them, and the render " +
+				"is trimmed, so the boundary has to come from the loader — measured 2026-07-31 as the swallowed heading " +
+				`\`…Claude Agent SDK.# Engraving Here\`, which is what taught the model its engraving was part of the SDK's ` +
+				`own sentence. Joined: ${JSON.stringify(joined.slice(0, 160))}`,
+		);
+	}
+
+	// …and the boundary is a loader CONSTANT: whatever the operator's file leads
+	// with, the carrier reads the same. Otherwise file whitespace would drift the
+	// carrier and, through appendSystemPrompt, the reuse signature.
+	assert.equal(
+		paddedCarrier,
+		bareCarrier,
+		"template leading/trailing whitespace never reaches the carrier — the boundary is ours, not the file's",
+	);
+	assert.equal(bareCarrier, "\n\n# Operator Engraving", "the boundary is exactly one blank line + the trimmed body");
+
+	// TINY is the billing axis, not a style rule (engraving.ts header): size, not
+	// shape, is what reclassifies a Claude OAuth subscription call as metered
+	// "extra usage". The boundary costs 2 bytes; the shipped carrier stays a
+	// placeholder and rich context keeps riding the first-user augment.
+	const CARRIER_BUDGET_BYTES = 512;
+	const shippedBytes = Buffer.byteLength(shipped as string, "utf8");
+	assert.ok(
+		shippedBytes <= CARRIER_BUDGET_BYTES,
+		`[QK:CARRIER-STAYS-TINY] the SHIPPED carrier must stay under ${CARRIER_BUDGET_BYTES} bytes — a carrier that grows ` +
+			"materially past the SDK-default size routes subscription (OAuth) calls to metered extra usage, which is an " +
+			"HTTP 400 for an operator with no metered balance. AGENTS.md, the bridge narrative and tool catalogs ride the " +
+			`first-user-message augment, never this carrier. Got ${shippedBytes} bytes: ` +
+			`${JSON.stringify((shipped as string).slice(0, 200))}`,
+	);
+
+	// The LAST hop. backend.ts folds the loadCarrier result into
+	// bridgeConfigSignature (`appendSystemPrompt`) and hands the SAME string to
+	// buildSessionMeta. A normalize here would strip the boundary back off on the
+	// wire while the signature still folded the bounded value: the A-join returns
+	// invisibly AND reuse keys on a string that was never sent.
+	const metaFromShipped = buildClaudeSessionMeta(
+		{
+			modelId: "claude-x",
+			tools: ["Read"],
+			permissionAllow: ["Read(*)"],
+			disallowedTools: [],
+			settingSources: [],
+			strictMcpConfig: false,
+			skillPlugins: [],
+		},
+		shipped as string,
+	);
+	assert.equal(
+		metaFromShipped.systemPrompt,
+		shipped,
+		"[QK:CARRIER-META-SENDS-CARRIER-VERBATIM] `_meta.systemPrompt` must be the loader's string BYTE-FOR-BYTE. " +
+			"backend.ts folds that same string into bridgeConfigSignature's appendSystemPrompt slot, so any normalize at " +
+			"this hop desynchronizes the wire from the signature — reuse would key on a carrier the backend never received, " +
+			`and a trim in particular re-opens the A-join with every gate above still green. Got ${JSON.stringify(metaFromShipped.systemPrompt)}`,
+	);
+
+	// The boundary is signature-relevant, which is what makes the desync above
+	// detectable at all: a build that silently dropped it is judged INCOMPATIBLE
+	// (fresh ACP session with the corrected carrier), never quietly reused.
+	const sigBase = {
+		backend: "claude" as const,
+		modelId: "claude-x",
+		nativeModelId: "claude-x",
+		mcpServersHash: "deadbeef",
+		settingSources: [],
+		strictMcpConfig: true,
+		tools: ["Read", "Bash", "Edit", "Write"],
+		skillPlugins: [],
+		permissionAllow: ["Read(*)"],
+		disallowedTools: [],
+	};
+	assert.notEqual(
+		bridgeConfigSignature({ ...sigBase, appendSystemPrompt: shipped as string }),
+		bridgeConfigSignature({ ...sigBase, appendSystemPrompt: (shipped as string).trim() }),
+		"the boundary is part of the reuse signature — dropping it invalidates a live session instead of passing unnoticed",
+	);
+}
+
 console.log(
 	"[check-acp-carrier-augment] ok — engraving carrier: pure/deterministic, sorted mcp interpolation, " +
 		"empty/whitespace/missing → null, shipped-default → non-empty v1 lever (preset replaced), carrier absent → no _meta.systemPrompt key, carrier change → " +
@@ -403,5 +558,8 @@ console.log(
 		"section, home kept; absent → kept), day-granularity date, 50KB truncation marker, shipped AGENTS budget; " +
 		"provenance: both rails state the augment is first-user-message text and not the system prompt, claude names its " +
 		"tiny engraving-only carrier while cortex denies having one (pinned against cortexAdapter.buildSessionMeta → " +
-		"undefined), and carrier/augment stay disjoint",
+		"undefined), and carrier/augment stay disjoint; A-join: the carrier opens its own block after the SDK's fixed " +
+		"sentence, the boundary is a loader constant (not the template's whitespace, which trim eats) and does not " +
+		"resurrect an opted-out carrier, the shipped carrier stays under the tiny budget, and the meta hop sends the " +
+		"loader string byte-for-byte so the wire and the reuse signature cannot desynchronize",
 );

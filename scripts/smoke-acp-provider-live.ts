@@ -26,6 +26,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { skipLive } from "./lib/live-skip.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL = process.env.ENTWURF_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-5";
@@ -38,8 +39,7 @@ function fail(msg: string): never {
 }
 
 if (process.env.LIVE !== "1") {
-	console.error("[smoke-acp-provider-live] skipped — set LIVE=1 to run the real pi provider turn.");
-	process.exit(0);
+	skipLive("smoke-acp-provider-live", "set LIVE=1 to run the real pi provider turn.");
 }
 
 // A nonce makes the expected reply unique so a stray "OK" elsewhere in the

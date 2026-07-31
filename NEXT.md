@@ -1,4 +1,4 @@
-# NEXT — 0.13.0 published; 0.13.1은 A·B축 + 0.64.0 bump까지 닫혔다 — 남은 것은 prepare뿐
+# NEXT — 0.13.0 published; 0.13.1 delivery chain까지 닫힘, thinkpad Cortex cut만 남음
 
 > NEXT는 부트 섹터다. ACP 계약과 readiness 경계는 `docs/acp-backend-rail.md`, 검증 계약은 `VERIFY.md`,
 > 기록된 증거는 `BASELINE.md` HISTORY 포인터, dep-bump 트랙 절차는 `ROADMAP.md`의 **Dep bump(별도 트랙)**가
@@ -15,10 +15,14 @@
 - **LIVE 둘 다 닫혔다 (2026-07-30 18:2x KST, thinkpad).** oracle의 cortex 미설치 blocker는
   thinkpad에 cortex v1.1.52 + Snowflake connection이 있어서 해소됐다. 아래 "검증 실측 — axis 2" 참조.
 - **B축(prompt lifecycle) 닫힘** — 정적 + LIVE, 아래 "검증 실측 — axis B".
-- **A축(carrier provenance + v2 description) 닫힘** — 아래 "검증 실측 — axis A".
+- **A축 닫힘.** provenance/v2 compression에 더해 Claude SDK 고정 문장과 engraving carrier의 A-join도
+  source + qualification + fresh Opus LIVE로 닫혔다. Sonnet은 carrier를 격리 인용하지 못했으므로
+  carrier 귀속 self-report의 LIVE 표본은 Opus 하나임을 과장하지 말 것.
 - **claude-agent-acp 0.63.0 → 0.64.0 bump 닫힘** — 아래 "0.13.1에 들어간 것 ⑻".
-- **남은 것은 `/entwurf-release prepare 0.13.1` 하나다.** Cortex LIVE 재측정만 빚으로 남는다(oracle에
-  Snowflake connection 없음 — 아래 blocker).
+- **release-gate P1 닫힘 (미커밋).** 모든 step은 `0=PASS / 97=SKIP / else=FAIL`을 보고하고,
+  `release-gate --cut`은 MUST SKIP을 red로 거절한다. `FAIL=0 SKIP=n` 정책 차단과 실제 MUST FAIL을
+  별도 verdict로 보존한다. qualification **143/143**, `pnpm check` PASS. 다음 release blocker는 실제
+  authenticated delivery coverage와 GLG가 요구한 cross-harness chain이다.
 
 ## 0.13.1에 들어간 것
 
@@ -101,9 +105,11 @@ session까지 열고 `Aborted after 3 retry attempts`로 끝냈다. Claude overl
 turn도 600초 wall-clock으로 절단하고 pi retry가 진척 없는 cold replay로 비용을 증폭하는 결합**이다. 이를
 단순 “서비스 터짐”으로 닫지 말고 ACP Claude runtime 계약으로 재현·분류한다.
 
-**Next.** (A) **닫혔다 — 아래 "검증 실측 — axis A".** 원 계획: Claude와 Cortex 각각에 Q-B0-CARRIER/Q-L1 probe를 재실행해 system /
-first-user augment / tool schema / system-reminder 귀속표를 증거로 남긴다 → carrier/augment 경계를 모델이
-정직하게 식별할 최소 계약을 정한다. (B) **닫혔다** — 아래 "검증 실측 — axis B". 소유 경계는 확인된 대로였다:
+**Next.** (A) **닫힘 — 아래 "검증 실측 — axis A".** A-join은 loader-owned
+`trim → CARRIER_LEAD_SEPARATOR → body` 순서로 수선했다. non-empty containment는 유지하며, fresh
+`claude-opus-5` Q-L1이 SDK 고정 문장 뒤의 빈 줄과 독립 `# Engraving Here` header를 직접 인용했다.
+carrier 귀속 self-report는 Opus 1표본이고, Sonnet은 system slot 격리 때문에 인용 불가였다는 한계를 보존한다.
+(B) **닫혔다** — 아래 "검증 실측 — axis B". 소유 경계는 확인된 대로였다:
 600초 absolute timeout은 `backend.ts`의 `PROMPT_TIMEOUT_MS`, 3회 replay는 pi 0.83의 기본 agent-level
 `retry.maxRetries=3`이다(현재 global settings에 override 없음; provider-level retry 기본은 0).
 `prompt timed out after 600000ms`는 pi-ai `isRetryableAssistantError`의 `timed? out`/`timeout` 사전에 정확히
@@ -178,8 +184,8 @@ wire 위에서 긴 first user message와 system prompt는 **구분 불가능**�
 - `smoke-acp-long-turn-live` **PASS** — elapsed **733,207ms**(은퇴한 600초 cutoff를 133초 초과), nonce 도달,
   cold ACP bootstrap **정확히 1회**(리플레이 0), retry/timeout 서명 0건.
 
-**⑷ 최종 정적 축 (A + B + 0.64.0 bump 합산 트리).** `pnpm check` **EXIT=0**, qualification
-**132/132 KILLED, 9 lanes**, `check-pack` **304 files**, **`check-pack-install` EXIT=0**
+**⑷ 최종 정적 축 (A + B + 0.64.0 bump + A-join 합산 트리).** `pnpm check` **EXIT=0**, qualification
+**136/136 KILLED, 9 lanes**, `check-pack` **304 files**, **`check-pack-install` EXIT=0**
 (pi 0.83.0 트리 핀 · loader가 host global이 아닌 pinned pi · exact 6-row curated set · installed hook이
 node_modules-safe compiled JS). focused: `check-acp-sdk-surface`, `check-dep-versions`,
 `check-acp-carrier-augment`, `check-entwurf-v2-surface`(123 checks), `check-acp-prompt-lifecycle`,
@@ -278,20 +284,22 @@ self-update다) `pnpm install` → `prepare` 훅이 `build-bridge`를 자동 실
 2. ~~`LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live`~~ —
    **완료 (thinkpad, PASS 23 assertions).** oracle의 cortex 미설치 blocker는 axis 2가 흡수했다.
 3. ~~커밋~~ — `fea773f`로 완료·푸시됨.
-4. ~~**B축 prompt lifecycle — 정적 + LIVE**~~ — **완료 (oracle, 2026-07-30 밤).** 위 "검증 실측 — axis B".
-   **단 커밋되지 않았다** — 16파일이 워킹트리에 그대로 있다.
-5. ~~**B축 커밋**~~ · ~~**A축 조임**~~ · ~~**0.64.0 bump**~~ — **전부 완료, 커밋·푸시됨 (2026-07-31, oracle).**
-6. **cortex LIVE 재측정 (빚, 유일하게 열린 검증 항목).** common backend(`mapPromptStopReason`·
-   `awaitAcpPromptTurn`은 adapter 분기 없는 `backend.ts`에 있다)를 고쳤으므로 connection 있는 호스트에서
-   `LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live`. **oracle blocker(정확히):**
-   binary는 있다(`~/.local/bin/cortex`, **Cortex Code v1.1.52**) — 없는 것은 Snowflake connection이다:
-   `~/.snowflake/connections.toml` 부재, `~/.snowflake/cortex/settings.json`은 `theme` 키 하나뿐,
-   `ENTWURF_ACP_CORTEX_CONNECTION` 미설정. `smoke-acp-cortex-live:197`이 이 변수로 게이팅되어 지금 돌리면
-   honest-skip이다. **설치·설정·타 기기 우회는 하지 않았다.** thinkpad에는 connection이 있었다.
-7. **다음 새 세션의 첫 행동: `/entwurf-release prepare 0.13.1`.** 트리는 커밋·푸시됐고 정적·LIVE 증거는 위
-   두 절에 다 있다. prepare 전 재검증은 트리가 안 바뀌었다면 불필요하다.
-8. `/entwurf-release prepare 0.13.1` — package version과 CHANGELOG는 **prepare 모드가
-   소유한다.** 지금 트리의 `package.json` version은 아직 `0.13.0`이고 그게 맞다.
+4. ~~**B축 prompt lifecycle — 정적 + LIVE**~~ — **완료·커밋·푸시됨** (`9e406b1`). 위 "검증 실측 — axis B".
+5. ~~**A-join 개행 수선**~~ — **완료, 미커밋.** loader-owned boundary + 4 claims, fresh Opus Q-L1 LIVE가
+   독립 header를 인용했다. P1 합산 qualification은 **143/143**이다. 아래 axis A에 증거를 보존한다.
+6. ~~**release-gate P1 skip 정직성**~~ — **완료, 미커밋.** protocol exit `97`, every-step invocation,
+   diagnostic vs `--cut` authority, 7 QK claims, qualification **143/143**. P5 canonical command은
+   `LIVE=1 ./run.sh release-gate <scratch> --cut`; bare invocation은 SKIP을 보이는 진단일 뿐 acceptance가 아니다.
+7. ~~**실 delivery coverage**~~ — **완료, 미커밋.** Cortex/spawn-live/Claude native resume은 MUST에 편입했고,
+   native Claude Code → pi GPT-5.4 → pi ACP Claude Sonnet → mailbox terminus의 실제 chain은 23 assertions으로
+   PASS했다(각 hop sender gid/replyable, 지름길 배제, durable mailbox read receipt). long-turn은 aggregate 밖의
+   on-demand lifecycle acceptance라 final source set에서 별도 LIVE 재실행 중이다. 현재 oracle `--cut`은
+   Cortex connection 부재 하나만 SKIP=1로 정직하게 BLOCKED한다.
+8. **thinkpad final cut + implementation commits.** thinkpad의 Snowflake connection으로
+   `LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh release-gate <scratch> --cut`가 MUST
+   `FAIL=0 SKIP=0`, `cut: OK`가 되는 것을 log로 보존한다. long-turn PASS까지 받으면 A-join/P1/P2+P3
+   구현을 atomic commits로 닫고, 그 뒤에만 `/entwurf-release prepare 0.13.1`을 coordinator가 실행한다.
+   package version과 CHANGELOG는 **prepare 모드가 소유한다.**
    **CHANGELOG 첫 항목은 pi floor가 0.82.x 설치를 깬다는 사실이어야 한다** — patch 번호가 실어주지
    않는 신호를 산문이 대신 싣는다. `0.14.0`은 CODEX 지원에 예약돼 있다(GLG).
 
@@ -311,9 +319,23 @@ self-update다) `pnpm install` → `prepare` 훅이 `build-bridge`를 자동 실
 - **B는 abort·child death를 관측된 실전 셀로 재현하지 않았다.** 그 둘은 fake ACP child 상대의 게이트가
   진다. `20260730T194358-0061d2`의 실제 sonnet reuse 사망은 여전히 재현 미착수다(위 "후속 셀").
 - **관측(진행 표시) 축은 열려 있다.** B는 죽이지 않는 쪽만 닫았다.
-- **A축은 진술 가능성만 세웠다.** carrier/augment 경계를 모델이 실제로 정직하게 식별하는지는
-  **측정하지 않았다** — 그건 Q-B0-CARRIER/Q-L1 LIVE probe의 몫이고 이번 컷에 없다. 게이트가 지는 것은
-  "문구가 present하고 rail-correct하며 소스에 결박돼 있다"까지다.
+- **Cortex overlay skills projection (deferred, entwurf 소관).** 실제 Cortex ACP overlay는
+  `$HOME/.snowflake/cortex/plugins`만 seed하고 `skills/`는 비워 둔다. host
+  `~/.snowflake/cortex/skills`의 40개는 `./skills/` SSOT 링크가 아닌 흩어진 복사본이라 drift 중이며, session은
+  그 host HOME도 보지 못한다. GLG 방향: overlay builder가 overlay의 Cortex skills 위치에
+  **host `~/.claude/skills/`를 연결**해 Cortex가 격리된 HOME 안에서도 공통 skill surface를 읽게 한다.
+  containment(overlay-private config/auth/mcp)는 유지하며, global host tree 전체를 mount하지 않는다. 구현 전
+  Cortex의 actual discovery path·symlink 허용 여부·host `~/.claude/skills`의 SSOT/ownership을 3-link fixture로
+  확인하고, source+gate+fresh Cortex session에서 skill 목록을 실측한다. `agent-config` 문서의 direct-host skill
+  parity 문구도 이 ACP overlay 예외를 한정해 고친다. **함께 수선:**
+  `docs/acp-backend-rail.md` D1–D2의 `~/.cortex` 표기는 실재 host 경로가 아니다. Cortex skill/config
+  경로는 `$SNOWFLAKE_HOME/cortex/`(실측 host `~/.snowflake/cortex/`, overlay도 그 하위)로 바로잡고,
+  `~`가 overlay HOME으로 확장된다는 사실을 문서의 host/overlay 좌표에 명시한다.
+- **A축 stateability LIVE는 제한적으로 섰다.** fresh Sonnet Q-L1은 provenance frame을 정확히 읽었지만
+  system slot을 인용할 수 없었고, fresh Opus Q-L1만 SDK 문장 + blank line + 독립 carrier header를 인용했다.
+  따라서 carrier 귀속 self-report는 Opus 1표본이며, Q-B0-CARRIER의 네 surface(system / augment / schema /
+  system-reminder) 전체 귀속표는 아직 미측정이다. LIVE는 자기관찰 보고이지 wire dump가 아니다; 게이트는
+  rendered/wire contract와 rail-correct 문구를 지고, SDK 고정 문장은 upstream literal을 우리가 재현한 한계가 있다.
 - **0.64.0의 elicitation 마커 도달성은 이 델타에 한정된 주장이다.** 다른 축(terminal capability,
   subagent transcript, readiness)으로 일반화하지 말 것. bump는 readiness fence를 추가하지 않았다.
 - **`entwurf_v2` 압축은 2,033/2,048자다 — 여유가 15자뿐이다.** 문장을 늘리면 캡 게이트가 먼저 막지만,
@@ -330,7 +352,8 @@ self-update다) `pnpm install` → `prepare` 훅이 `build-bridge`를 자동 실
 - 0.61→0.62의 byte-identical 논거를 0.62→0.63에 재사용하지 말 것.
 - terminal capability를 mapper 수선 없이 켜지 말 것.
 - readiness fence 구현 금지 — ACP rail §11-7/#55 소유.
-- `check-gate-qualification` 중 tree를 건드리지 말 것. `.ts` 수정 뒤 `pnpm run build-bridge`를 빼먹지 말 것.
+- `check-gate-qualification`/`pnpm check` 중 tree를 건드리거나 `NEXT.md`를 저장하지 말 것. work-surface
+  hash가 움직이면 증거가 무효다. `.ts` 수정 뒤 `pnpm run build-bridge`를 빼먹지 말 것.
 - 새 게이트가 `.tmp-verify`를 비운 채 남기지 말 것 — 빈 부모 디렉터리가 IMPURE tree drift로 읽힌다.
 - **문서를 크게 줄인 뒤 § 참조 sweep을 빼먹지 말 것.** 2026-07-30 rail 1317→198줄 압축에서 죽은
   §번호 13건이 소스·게이트·ROADMAP에 남았다(`§4`·`§6`·`§9-x`·`§10`·`§11-3`). 살아있는 섹션 이름으로

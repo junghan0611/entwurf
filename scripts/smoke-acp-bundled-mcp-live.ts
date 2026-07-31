@@ -52,6 +52,7 @@ import * as readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { fetchControlSocketRuntimeInfo, formatRuntimeModel } from "../pi-extensions/lib/entwurf-control-rpc.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { skipLive } from "./lib/live-skip.ts";
 import { waitForPiRecord } from "./lib/pi-record-discovery.ts";
 
 const ACP_PROVIDER = "entwurf";
@@ -160,10 +161,10 @@ function driveSelfTurn(child: ChildProcess, prompt: string): Promise<TurnCapture
 
 async function main(): Promise<void> {
 	if (process.env.LIVE !== "1") {
-		console.log(
-			"[smoke-acp-bundled-mcp-live] skipped — set LIVE=1 to run (spawns a real pi --entwurf-control resident + drives one model turn).",
+		skipLive(
+			"smoke-acp-bundled-mcp-live",
+			"set LIVE=1 to run (spawns a real pi --entwurf-control resident + drives one model turn).",
 		);
-		return;
 	}
 
 	const tmp = os.tmpdir();

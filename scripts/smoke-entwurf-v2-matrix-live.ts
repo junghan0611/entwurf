@@ -64,6 +64,7 @@ import {
 	writeMetaReceiverMarker,
 } from "../pi-extensions/lib/meta-session.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { skipLive } from "./lib/live-skip.ts";
 import { waitForPiRecord } from "./lib/pi-record-discovery.ts";
 
 // pi's control socket lives at the canonical dir keyed by the RECORD's garden id (#50 C4: the
@@ -130,8 +131,7 @@ function smokeSender(gardenId: string, cwd: string): SenderEnvelope {
 
 async function main(): Promise<void> {
 	if (process.env.LIVE !== "1") {
-		console.log("[smoke-entwurf-v2-matrix-live] skipped — set LIVE=1 to run (spawns a real pi + opens a real socket).");
-		return;
+		skipLive("smoke-entwurf-v2-matrix-live", "set LIVE=1 to run (spawns a real pi + opens a real socket).");
 	}
 
 	const { provider, model } = resolveTarget();

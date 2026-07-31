@@ -50,6 +50,7 @@ import { type AcpClientHandlers, connectAcpClient } from "../pi-extensions/lib/a
 import type { AcpBackendAdapter } from "../pi-extensions/lib/acp/backend-adapter.ts";
 import type { ResolvedAcpConfig } from "../pi-extensions/lib/acp/config.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { skipLive } from "./lib/live-skip.ts";
 import { driveProbeTurn, type ProbeMcpEnricher, ProbePhaseError } from "./lib/probe-acp-turn.ts";
 import {
 	AMBIENT_OVERRIDE_ENV,
@@ -103,8 +104,7 @@ function fail(msg: string): never {
 }
 
 if (process.env.LIVE !== "1") {
-	console.error("[smoke-acp-ordering-probe-live] skipped — set LIVE=1 to run the real paired probe.");
-	process.exit(0);
+	skipLive("smoke-acp-ordering-probe-live", "set LIVE=1 to run the real paired probe.");
 }
 
 for (const [label, d] of [

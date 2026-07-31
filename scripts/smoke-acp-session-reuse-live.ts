@@ -25,6 +25,7 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { Api, AssistantMessageEvent, Context, Model } from "@earendil-works/pi-ai";
+import { skipLive } from "./lib/live-skip.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MODEL = process.env.ENTWURF_ACP_PROVIDER_MODEL?.trim() || "claude-sonnet-5";
@@ -46,8 +47,7 @@ function withTimeout<T>(label: string, p: Promise<T>, ms: number): Promise<T> {
 }
 
 if (process.env.LIVE !== "1") {
-	console.error("[smoke-acp-session-reuse-live] skipped — set LIVE=1 to run the real 2-turn reuse acceptance.");
-	process.exit(0);
+	skipLive("smoke-acp-session-reuse-live", "set LIVE=1 to run the real 2-turn reuse acceptance.");
 }
 
 type Stream = AsyncIterable<AssistantMessageEvent> & {

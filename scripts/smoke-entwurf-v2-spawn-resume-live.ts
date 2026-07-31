@@ -59,6 +59,7 @@ import { runEntwurfV2 } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import { resolveResumeLaunchIdentity } from "../pi-extensions/lib/entwurf-v2-spawn-production.ts";
 import { upsertMetaSession } from "../pi-extensions/lib/meta-session.ts";
 import { controlSocketPath } from "../pi-extensions/lib/socket-discovery.ts";
+import { skipLive } from "./lib/live-skip.ts";
 
 // pi owns the canonical control-socket dir; the resume child opens its socket HERE and the
 // decider's expectedSocketPath is built from the SAME dir — they must coincide (a fresh gid
@@ -208,10 +209,7 @@ async function pollForNonce(
 
 async function main(): Promise<void> {
 	if (process.env.LIVE !== "1") {
-		console.log(
-			"[smoke-entwurf-v2-spawn-resume-live] skipped — set LIVE=1 to run (spawns a real pi child + opens a real socket).",
-		);
-		return;
+		skipLive("smoke-entwurf-v2-spawn-resume-live", "set LIVE=1 to run (spawns a real pi child + opens a real socket).");
 	}
 
 	const { provider, model } = resolveTarget();

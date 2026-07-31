@@ -81,6 +81,7 @@ import * as readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { upsertMetaSession, writeMetaReceiverMarker } from "../pi-extensions/lib/meta-session.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { skipLive } from "./lib/live-skip.ts";
 import { waitForPiRecord } from "./lib/pi-record-discovery.ts";
 
 const ACP_PROVIDER = "entwurf";
@@ -196,10 +197,10 @@ function driveTurn(child: ChildProcess, prompt: string): Promise<TurnCapture> {
 
 async function main(): Promise<void> {
 	if (process.env.LIVE !== "1") {
-		console.log(
-			"[smoke-acp-v2-send-live] skipped — set LIVE=1 to run (spawns a real pi --entwurf-control resident + drives one model turn).",
+		skipLive(
+			"smoke-acp-v2-send-live",
+			"set LIVE=1 to run (spawns a real pi --entwurf-control resident + drives one model turn).",
 		);
-		return;
 	}
 
 	// One temp root holding the whole garden this smoke can see: store, mailbox and

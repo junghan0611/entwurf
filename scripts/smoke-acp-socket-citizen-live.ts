@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import { fetchControlSocketRuntimeInfo, formatRuntimeModel } from "../pi-extensions/lib/entwurf-control-rpc.ts";
 import { scanSocketProbes } from "../pi-extensions/lib/socket-discovery.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
+import { skipLive } from "./lib/live-skip.ts";
 import { waitForPiRecord } from "./lib/pi-record-discovery.ts";
 
 const ACP_PROVIDER = "entwurf";
@@ -76,10 +77,10 @@ async function waitForGone(sockPath: string, timeoutMs: number): Promise<boolean
 
 async function main(): Promise<void> {
 	if (process.env.LIVE !== "1") {
-		console.log(
-			"[smoke-acp-socket-citizen-live] skipped — set LIVE=1 to run (spawns a real pi --entwurf-control + opens a real socket).",
+		skipLive(
+			"smoke-acp-socket-citizen-live",
+			"set LIVE=1 to run (spawns a real pi --entwurf-control + opens a real socket).",
 		);
-		return;
 	}
 
 	const tmp = os.tmpdir();

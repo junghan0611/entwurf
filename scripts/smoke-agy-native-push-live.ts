@@ -54,6 +54,7 @@ import { runEntwurfV2 } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import { upsertMetaSession } from "../pi-extensions/lib/meta-session.ts";
 import { antigravityAdapter } from "../pi-extensions/lib/native-push/adapter.ts";
 import { registerNativeConversation } from "../pi-extensions/lib/native-push/register.ts";
+import { skipLive } from "./lib/live-skip.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -79,10 +80,10 @@ function smokeSender(gardenId: string, cwd: string): SenderEnvelope {
 
 async function main(): Promise<void> {
 	if (process.env.LIVE !== "1") {
-		console.log(
-			"[smoke-agy-native-push-live] skipped — set LIVE=1 (+ AGY_CONVERSATION_ID) to run (sends into a real agy conversation).",
+		skipLive(
+			"smoke-agy-native-push-live",
+			"set LIVE=1 (+ AGY_CONVERSATION_ID) to run (sends into a real agy conversation).",
 		);
-		return;
 	}
 
 	// ── doctor-static preflight (runs FIRST; a dangling agy config FAILs here — the ③ gate) ──

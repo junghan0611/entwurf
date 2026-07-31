@@ -35,6 +35,16 @@
 // incompatible and the next turn opens a fresh ACP session with the new carrier.
 // That per-turn rebuild is the accepted cost of the A/B opt-in surface, never the
 // shipped default (which stays cached precisely so a resident never rebuilds).
+//
+// A-JOIN (measured LIVE 2026-07-31, 0.64.0 adapter, fresh Claude ACP): the model's
+// system prompt arrived as
+//   `You are a Claude agent, built on Anthropic's Claude Agent SDK.# Engraving Here`
+// A string-form `_meta.systemPrompt` replaces the `claude_code` preset, but the
+// SDK still PREFIXES its own fixed identity sentence and joins the two with
+// NOTHING — so the operator's heading was swallowed into the tail of the SDK's
+// sentence. The boundary therefore belongs to the CARRIER, and it cannot be
+// delegated to engraving.md: the render is trimmed (below), so a leading blank
+// line in the markdown is eaten before it ever reaches the wire.
 
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -42,6 +52,16 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ENGRAVING_PATH = join(HERE, "prompts", "engraving.md");
+
+/**
+ * The carrier's LEADING boundary — the one the Claude Agent SDK does not supply
+ * (see A-JOIN above). A constant, never derived from the template, so the render
+ * stays a pure function of (template, backend, mcpServerNames) and the operator's
+ * file whitespace can never drift `bridgeConfigSignature`. One blank line is the
+ * whole lever: it puts the carrier's first line at the start of its own block
+ * instead of at the end of the SDK's fixed sentence.
+ */
+export const CARRIER_LEAD_SEPARATOR = "\n\n";
 
 export interface EngravingParams {
 	/** Always "claude" in practice — a system-prompt-carrier-less backend (cortex)
@@ -83,6 +103,22 @@ function interpolate(template: string, params: EngravingParams): string {
 }
 
 /**
+ * Render one template into a wire-ready carrier, or `""` when the template has no
+ * body (the caller turns that into the opt-out / fail-loud branches).
+ *
+ * The ORDER here is the A-join fix. Trim first: the operator template's own
+ * leading/trailing whitespace must not reach the wire (it would drift
+ * bridgeConfigSignature) and the emptiness test must see the BODY — a
+ * separator-only string is an opt-out, not a carrier. Then attach OUR boundary,
+ * which is what the SDK's fixed sentence has nothing of.
+ */
+function renderCarrier(source: string, params: EngravingParams): string {
+	const body = interpolate(source, params).trim();
+	if (body.length === 0) return "";
+	return `${CARRIER_LEAD_SEPARATOR}${body}`;
+}
+
+/**
  * The rendered engraving carrier, or null when an ENV-OVERRIDE engraving file
  * (`ENTWURF_ACP_ENGRAVING_PATH`) is empty, whitespace-only, missing, or
  * unreadable — that null is the operator opt-out. The SHIPPED default, by
@@ -94,6 +130,12 @@ function interpolate(template: string, params: EngravingParams): string {
  * Callers MUST treat null as "no carrier configured" and omit `_meta.systemPrompt`
  * entirely (passing "" as the `appendSystemPrompt` signature input) so
  * subscription billing is never reclassified.
+ *
+ * A non-null carrier always LEADS with `CARRIER_LEAD_SEPARATOR`, and callers must
+ * pass it on BYTE-FOR-BYTE: the same string feeds `bridgeConfigSignature`
+ * (`appendSystemPrompt`) and the wire (`_meta.systemPrompt`), so normalizing it at
+ * either hop both re-opens the A-join and makes reuse key on a string that was
+ * never sent.
  */
 export function loadEngraving(params: EngravingParams): string | null {
 	const filePath = resolveEngravingPath();
@@ -110,7 +152,7 @@ export function loadEngraving(params: EngravingParams): string | null {
 		}
 		return null;
 	}
-	const rendered = interpolate(source, params).trim();
+	const rendered = renderCarrier(source, params);
 	if (rendered.length === 0) {
 		if (isShippedDefault) {
 			throw new Error(
