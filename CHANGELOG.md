@@ -4,6 +4,25 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.13.1 — 2026-07-31
+
+### Changed
+
+- **ACP prompt lifecycle no longer applies a 600-second wall-clock cutoff to a running turn.** Bootstrap remains bounded; user abort sends ACP cancellation before bounded teardown, and child exit/stdio failure now preserves lifecycle phase, exit/signal, and stderr evidence without automatic cold replay.
+- **The release gate now makes actual invocation auditable.** Every MUST step reports PASS, protocol SKIP, or FAIL; `--cut` refuses a MUST SKIP without misreporting it as a failed call. The aggregate includes the native resume, spawn substrate, and authenticated cross-harness delivery chain; Cortex remains an explicitly documented on-demand host-auth axis.
+
+### Fixed
+
+- **Claude's tiny non-empty engraving carrier owns its leading boundary.** The SDK fixed identity sentence and `# Engraving Here` now occupy separate blocks while preserving auto-memory containment, deterministic signature bytes, and the empty override opt-out.
+- **The ACP provenance and v2 dispatch surfaces state their real boundaries.** First-user augment versus system carrier is rail-specific, and the `entwurf_v2` description fits the host tool-description cap.
+
+### Verification
+
+- The versioned release tree passed `pnpm check`, including **144/144** kill-qualified mutants across 10 lanes and `check-pack` at **309 files**.
+- `LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.13.1.LeOQDB --cut` passed: **MUST PASS=20 FAIL=0 SKIP=0**, **BEHAVIOR PASS=1 FAIL=0 SKIP=0**, `cut: OK`. Full log: `/tmp/entwurf-release-gate-0.13.1.LeOQDB/release-gate.log`.
+- On-demand lifecycle acceptance `LIVE=1 ./run.sh smoke-acp-long-turn-live` passed on the final source set: a **733,635ms** turn exceeded the retired 600s cutoff with exactly one cold ACP bootstrap and no replay. Cortex is deliberately aggregate-excluded for this cut because the oracle has no Snowflake connection; its 0.13.0 thinkpad LIVE evidence is carry-forward, not a fresh 0.13.1 host certification.
+- `check-pack-install` packed and installed `0.13.1` into a fresh consumer, proving the installed bridge boot/delivery and previous-generation lifecycle without touching the real data tree. The preserved exact candidate's checkout-invisible Docker consumer acceptance remains a `make` responsibility.
+
 ## 0.13.0 — 2026-07-30
 
 ### Added

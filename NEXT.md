@@ -1,4 +1,4 @@
-# NEXT — 0.13.0 published; 0.13.1 delivery chain까지 닫힘, thinkpad Cortex cut만 남음
+# NEXT — 0.13.1 prepared; fresh `--cut` acceptance closed, awaiting explicit make authority
 
 > NEXT는 부트 섹터다. ACP 계약과 readiness 경계는 `docs/acp-backend-rail.md`, 검증 계약은 `VERIFY.md`,
 > 기록된 증거는 `BASELINE.md` HISTORY 포인터, dep-bump 트랙 절차는 `ROADMAP.md`의 **Dep bump(별도 트랙)**가
@@ -295,11 +295,12 @@ self-update다) `pnpm install` → `prepare` 훅이 `build-bridge`를 자동 실
    PASS했다(각 hop sender gid/replyable, 지름길 배제, durable mailbox read receipt). long-turn은 aggregate 밖의
    on-demand lifecycle acceptance라 final source set에서 별도 LIVE 재실행 중이다. 현재 oracle `--cut`은
    Cortex connection 부재 하나만 SKIP=1로 정직하게 BLOCKED한다.
-8. **thinkpad final cut + implementation commits.** thinkpad의 Snowflake connection으로
-   `LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh release-gate <scratch> --cut`가 MUST
-   `FAIL=0 SKIP=0`, `cut: OK`가 되는 것을 log로 보존한다. long-turn PASS까지 받으면 A-join/P1/P2+P3
-   구현을 atomic commits로 닫고, 그 뒤에만 `/entwurf-release prepare 0.13.1`을 coordinator가 실행한다.
-   package version과 CHANGELOG는 **prepare 모드가 소유한다.**
+8. ~~**thinkpad final cut + implementation commits**~~ — **닫힘 (oracle, 2026-07-31).** Cortex는 external
+   Snowflake connection을 요구하는 documented on-demand axis로 aggregate에서 제외했고 carry-forward로만
+   기록했다. final `LIVE=1 ./run.sh release-gate <scratch> --cut`은 MUST `PASS=20 FAIL=0 SKIP=0`,
+   BEHAVIOR `PASS=1 FAIL=0 SKIP=0`, `cut: OK`; final long-turn은 733,635ms / one bootstrap / no replay.
+   `429d5c3` implementation과 `4150c50` prepare commit이 닫혔다. **다음은 GLG의 명시적
+   `/entwurf-release make 0.13.1` authority뿐이다.**
    **CHANGELOG 첫 항목은 pi floor가 0.82.x 설치를 깬다는 사실이어야 한다** — patch 번호가 실어주지
    않는 신호를 산문이 대신 싣는다. `0.14.0`은 CODEX 지원에 예약돼 있다(GLG).
 
