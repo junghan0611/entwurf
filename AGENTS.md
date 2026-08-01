@@ -12,6 +12,7 @@ For agents that own this repo: invariant principles and reproducible verificatio
 - **다른 하네스의 세션은 형제다.** Claude Code, Codex, Antigravity, pi는 각자의 transcript/auth/runtime을 소유한다. 증명된 lifecycle과 transport가 있을 때 같은 garden address space의 citizen이 된다.
 - **능력을 surface 이름으로 재단하지 않는다.** 도구 이름이나 transport 비대칭은 capability 차이이지 존재의 등급이 아니다.
 - **substrate는 결정적 dispatch만 맡는다.** record에서 identity를 읽고, rail별 liveness와 caller intent로 transport를 고른다. 숨은 hydration, ambient MCP scanning, 근거 없는 tool claim을 만들지 않는다.
+- **adapter를 만들지 installer를 만들지 않는다.** 신규 native harness는 얇은 capability adapter와 수동 wiring guide로 들어온다. 외부 설정의 lossless editor, preimage journal, exact uninstall inverse는 시민 지원의 조건이 아니다.
 - **좁은 tool surface는 규율이다.** entwurf가 backend를 몰 때 sub-agent/todo 없이 한 자루 드라이버로 움직인다. 두 번째 orchestrator로 자라지 않게 한다.
 - **entwurf는 부속품이 아니라 분신을 연다.** resumed/spawned session은 runtime-isolated peer이지 disposable worker가 아니다.
 - **증거가 말을 훈육한다.** README, source, gates, VERIFY, BASELINE이 받치지 않는 강한 주장은 멈춘다.
@@ -28,7 +29,7 @@ For agents that own this repo: invariant principles and reproducible verificatio
 - **entwurf-core (v2)** owns garden-id addressing, peer facts, liveness interfaces, dispatch decisions, rail choice, and delivery evidence.
 - **Record authority** owns citizen identity. Every addressable pi, Claude Code, Antigravity, or future Codex citizen uses the same V3 `MetaIdentity` schema. `backend` selects capability/rail behavior; it does not create an identity hierarchy.
 - **pi adapter** attaches a pi session to a record at `session_start`, hosts the record-keyed control socket, and exposes the native pi tool surface.
-- **Native bridges** register already-running native sessions without taking over their transcript or auth: Claude Code is mailbox/self-fetch; Antigravity is probe-backed native-push; Codex has probe evidence but no shipped managed citizen lane.
+- **Native bridges** register already-running native sessions without taking over their transcript or auth: Claude Code is the certified mailbox/self-fetch reference; Antigravity is the existing probe-backed native-push implementation; Codex has probe evidence only. New native adapters enter through [docs/native-harness-rail.md](./docs/native-harness-rail.md), not by cloning a backend-specific installer/test system.
 - **ACP plugin** registers provider `entwurf` inside a pi host session and drives a backend under an isolated overlay. The host pi session is already a record-backed socket citizen; the plugin does not mint another citizen/socket/peer layer.
 - **One delivery verb:** `entwurf_v2` addresses an existing garden id. Current routes are live control-socket send, dormant spawn-bg resume, active self-fetch mailbox enqueue, and probe-alive native-push. Complementary state×intent pairs reject honestly. Fresh creation is a separate future capability.
 
@@ -48,7 +49,8 @@ For agents that own this repo: invariant principles and reproducible verificatio
 12. **Offline verification never rewires the operator.** Sandbox `HOME`, `PI_CODING_AGENT_DIR`, and every writable `XDG_*` root. LIVE gates alone may touch the real host and must say so. Keep static tripwires and dynamic outer self-fences; neither substitutes for the other.
 13. **Doctors report runtime truth and ownership truth separately.** Runtime coverage does not prove entwurf owns the configuration; broken ownership does not erase visibly working runtime configuration. Final verdict remains red when either required axis fails.
 14. **Native hook ownership is structural.** Claude hooks use the shipped exec-form launcher and provenance token; marker writers/readers share `isPlausibleOwnerPid`; no shell-form fallback, ancestry guess, or retired pid carrier. entwurf requires Claude Code `>=2.1.217` and enforces that floor itself because upstream gives no fail-loud — an older Claude validates the exec manifest, then drops `args` at runtime and reports success. The number is derived from `package.json` `entwurf.claudeCodeFloor`, never retyped as a second source. Currently certified axis is Linux desktop/workstation. Source/gates: `hook-launch.sh`, `meta-session.ts`, `check-hook-launch-topology`, `check-claude-floor-coherence`, `check-meta-doctor-oracle`.
-15. **Crash, don't warn.** Bad config/path/model/store state throws. Empty catches are only for bounded environment probing; operator diagnostics go to stderr.
+15. **New native harnesses fit the rail or stay probes.** Admission uses the five seams and size stops in `docs/native-harness-rail.md`. Operator wiring is documentation by default; do not build arbitrary config mutation, exact inverse, or a backend-specific copy of the conformance framework. A private/unstable surface that cannot fit remains observation evidence, not shipped support.
+16. **Crash, don't warn.** Bad config/path/model/store state throws. Empty catches are only for bounded environment probing; operator diagnostics go to stderr.
 
 Detailed incident histories belong in CHANGELOG/issues/BASELINE and source-adjacent comments, not in this prompt. When a concise rule and old archaeology disagree, verify source + gate and repair the stale prose.
 

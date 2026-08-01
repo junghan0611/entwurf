@@ -7,22 +7,20 @@
 
 ---
 
-## 현재 — 0.12.9 shipped; 0.12.10은 ACP 수선 컷 (Cortex는 rail 정리 뒤)
+## 현재 — 0.13.1 shipped; native-harness admission rail 재설계
 
 이 repo는 **entwurf-core(v2 garden-citizen dispatch) + native-harness bridges + pi adapter + ACP plugin**이다.
-0.12.0의 `pi-shell-acp`→`entwurf` hard-cut과 0.12.9의 record-address/fresh-cut closure는 끝났다.
-Claude mailbox, pi socket/resume, Antigravity native-push가 한 garden-id dispatch 표면으로 출하됐다.
+Claude mailbox, pi socket/resume, Antigravity native-push가 한 garden-id dispatch 표면으로 출하됐고,
+ACP Claude/Cortex는 별도의 backend adapter rail 위에 있다.
 
-**2026-07-27 축 전환(GLG 지시).** 직전 계획은 `#48 Cortex → 0.13.0`이었으나 뒤집혔다. ACP Claude가
-실사용에서 형제에게 닿지 못하는 상태가 발견됐고 — 번들 `entwurf-bridge` MCP 도구가 세션 tool schema에서
-빠지는 증상 — GLG의 판단은 *"기본도 안되는데 cortex를 품을 수는 없어"*다. 이어서 범위도 좁혔다:
-*"0.13.0 안가고 지금 수선하면 0.12.10으로 acp 수정 및 rail 문서 업데이트만."* 따라서 순서는
-**0.12.10(= `claude-agent-acp` 0.62.0 핀 + rail 문서 수선) → readiness 인과 규명 → #48 Cortex ACP →
-#56 Codex native citizen → #47 mux driver**다. reference adapter가 모델을 outbound sibling dispatch까지
-데려간다는 것을 증명해야 두 번째 backend를 태운다 —
-증명 없는 rail 위에서는 adapter 버그와 rail 버그를 구분할 수 없다(`docs/acp-backend-rail.md` §11-7).
-0.13.0은 지금 열지 않는다. 네 이슈 lane 모두 과거 가설과 증거의 묶음이지 현재 구현
-명세가 아니며, 각 lane은 현재 main·현재 upstream·현재 live surface를 다시 audit한 뒤 범위를 정한다.
+**2026-08-01 축 전환(GLG 지시).** 미출하 Codex citizen 시도가 adapter보다 managed installer,
+exact inverse, trust doctor, backend별 gate를 더 크게 만들었다. 이 방향은 다른 harness를 받을 수 없으므로
+중단했다. 신규 native harness는 [docs/native-harness-rail.md](./docs/native-harness-rail.md)의 다섯 seam과
+크기 stop을 통과해야 한다. operator wiring은 문서가 기본이며 arbitrary 외부 config mutation과 exact
+uninstall inverse는 지원 조건이 아니다. Claude Code가 certified reference이고, agy는 이미 출하된 구현을
+새 rail에 대입해 부채와 공통 seam을 판정한다. Codex는 raw probe evidence만 남고 native 구현 계획은 없다.
+같은 모델을 쓰는 경로가 필요하면 pi control-socket citizen 또는 검증된 ACP rail을 우선한다.
+
 Pi는 오늘 가장 깊이 붙은 adapter지만, 프로젝트의 본질은 **garden id로 호명 가능한 형제 세션 사이의 얇은
 dispatch substrate**다.
 
@@ -43,10 +41,18 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 | **pi** | shipped | control-socket adapter + spawn-bg resume host. ACP plugin도 pi provider/model로 들어온다. | `pnpm check`, v2 matrix/spawn LIVE, release-gate MUST |
 | **Claude Code** | shipped | SessionStart meta-bridge → garden id + mailbox + trusted marker. Transcript를 가져오지 않는다. | meta-session gates, mailbox/deliverability, `doctor-meta-bridge` |
 | **ACP Claude** | shipped, **model-facing outbound half unreliable — 현재 lane** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Turn/provider path ships, 그리고 host resident는 record/socket citizen으로 계속 주소 가능하다(S1이 turn-free로 증명). 다만 번들 `entwurf-bridge` MCP 도구가 첫 턴에 세션 schema에서 빠지는 관측이 있어, 그 시민 안의 **ACP 모델이 형제에게 나가는(outbound dispatch)** 절반은 아직 신뢰 구간이 아니다(🔴 readiness race). | ACP LIVE smokes + release-gate MUST |
-| **Codex** | verified probe / #56 queued | direct/native delivery evidence exists; no managed native-citizen lifecycle yet. Default is not ACP. Re-audit app-server/hooks on the shipping line before implementation. | DELIVERY.md raw probe / #56 |
-| **Antigravity (`agy`)** | shipped | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push; managed MCP/permission, statusline, hook adapters. | agy deterministic gates + doctors + 2026-07-13 live round trip |
+| **Codex** | N0 probe only; native implementation not planned | launch-mode-specific delivery observation exists. It is not a citizen lane; use pi/ACP when that capability is sufficient. | DELIVERY.md raw probe |
+| **Antigravity (`agy`)** | shipped compatibility; rail-fit review pending | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push. Existing managed surfaces are retained compatibility, not the template for another adapter. | agy deterministic gates + doctors + 2026-07-13 live round trip |
 | **Cortex / governed ACP** | **landed (0.13.0)** — hvkiefer's PR #40 adapter transplanted with the CP0-audit revisions (dual-HOME overlay, mcp.json projection, per-turn set-model, 4-row curation) | current D1–D10 contract is `docs/acp-backend-rail.md` “Cortex Code audit”; deterministic gate `check-acp-cortex` + mutant lane `acp-cortex`; CP2 live smoke `smoke-acp-cortex-live` stays outside the claude-only release floor | PR #40 / #48 / `docs/acp-backend-rail.md` |
 | **Gemini CLI** | deprecated path | replaced by Antigravity direction for current Google individual tiers. | README migration note |
+
+### Native harness admission rail
+
+Native harness support and external configuration automation are separate axes. A new backend must map
+`birth / sender / liveness / delivery / operator wiring`, reuse common record/dispatch/conformance ownership,
+and stop for scope review before backend-specific production+test exceeds 2,000 lines. Manual wiring can reach
+the highest support tier; a managed installer cannot promote a probe. SSOT:
+[docs/native-harness-rail.md](./docs/native-harness-rail.md).
 
 ### ACP plugin boundary
 

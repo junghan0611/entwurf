@@ -227,5 +227,9 @@ not this standing contract.
 
 - causal MCP-readiness diagnosis and, only with proof, a backend-invariant fence;
 - broader installed-host and cross-machine Cortex evidence;
-- Codex managed native-citizen work on the reserved 0.14.0 lane—separate from ACP;
+- Grok admission through this ACP adapter rail, beginning with the same backend seam audit rather than a native-harness bridge;
 - persisted ACP resume/load, which is not implemented by today's in-memory reuse.
+
+Native-harness admission is a separate boundary documented in
+[`native-harness-rail.md`](./native-harness-rail.md). Codex remains probe evidence there,
+not an implementation queue.

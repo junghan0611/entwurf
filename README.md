@@ -10,7 +10,7 @@ npm package: <https://www.npmjs.com/package/@junghanacs/entwurf>
 
 Legacy package: [`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@junghanacs/pi-shell-acp). `entwurf` is its 0.12+ successor line: the same work renamed around the garden-citizen dispatch substrate rather than the pi adapter.
 
-> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code is shipped as a mailbox-backed meta-session; Antigravity (`agy`) is shipped as a native-push citizen with automatic `PreInvocation` birth, ambient garden-id status, and a managed MCP/permission install surface. Codex has a launch-mode-specific verified delivery probe documented in [DELIVERY.md](./DELIVERY.md), but no managed native-citizen install lane yet. The ACP plugin ships two backends through one adapter rail: Claude (the reference) and Snowflake Cortex Code (landed in 0.13.0 under the measured contract in [docs/acp-backend-rail.md](./docs/acp-backend-rail.md#cortex-code-audit-d1d10)).
+> **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code is the certified native-harness reference as a mailbox-backed meta-session; Antigravity (`agy`) is the existing native-push citizen implementation. Codex has launch-mode-specific probe evidence documented in [DELIVERY.md](./DELIVERY.md), but no native-citizen implementation. New native integrations must fit the small adapter contract in [docs/native-harness-rail.md](./docs/native-harness-rail.md); managed installation is not a support prerequisite. The ACP plugin separately ships two backends through its own adapter rail: Claude (the reference) and Snowflake Cortex Code (landed in 0.13.0 under the measured contract in [docs/acp-backend-rail.md](./docs/acp-backend-rail.md#cortex-code-audit-d1d10)).
 
 ```text
 Claude Code / Codex / agy / pi
@@ -53,7 +53,7 @@ native Antigravity / agy
   ↔ entwurf_v2 native-push
 ```
 
-Claude's `install-meta-bridge` and agy's `install-agy-{bridge,statusline,hooks}` are distinct managed install surfaces because their lifecycle and delivery transports are genuinely different. Codex remains verified probe evidence, not a shipped managed native-citizen lane; see [DELIVERY.md](./DELIVERY.md).
+Claude's `install-meta-bridge` and agy's `install-agy-{bridge,statusline,hooks}` remain compatibility surfaces, not the template for another native backend. New adapters default to an operator wiring guide and read-only inspection instead of a third-party configuration transaction engine. Codex remains probe evidence only; see [docs/native-harness-rail.md](./docs/native-harness-rail.md) and [DELIVERY.md](./DELIVERY.md).
 
 > **Direction.** Inverse of [`pi-acp`](https://github.com/svkozak/pi-acp). `pi-acp` lets external ACP clients talk *to* pi; `entwurf` lets garden citizens talk across harness boundaries — with pi as one adapter, not the center.
 
@@ -165,8 +165,8 @@ tries an `owned-outcome` spawn-bg resume target.
 ### Native harness install and doctors
 
 A plain MCP registration exposes the bridge tools; a **garden-native** session also
-needs entwurf's lifecycle hook and identity marker. Use the managed installers rather
-than editing native-harness state by hand:
+needs entwurf's lifecycle hook and identity marker. The existing certified/reference
+surfaces retain their installers for compatibility:
 
 ```bash
 # Claude Code (Linux-certified axis)
@@ -217,9 +217,10 @@ host evidence boundaries are [VERIFY.md](./VERIFY.md) and [BASELINE.md](./BASELI
 3. **`PATH:claude-agent-acp` fallback** — used when the package resolution fails (e.g. a hand-edited `node_modules`).
 
 The curated model registry exposes unprefixed Claude ids plus `cortex-` rows.
-Codex is not an ACP backend or a shipped managed citizen lane: it has verified
-native-delivery probe evidence, and the reserved 0.14.0 work must turn that evidence
-into lifecycle, identity, installation, and doctors before calling it supported.
+Codex is not an ACP backend or a shipped native citizen lane. It has only verified
+native-delivery probe evidence. Native support is intentionally declined unless a stable
+lifecycle, identity, and delivery adapter fits the small admission rail; managed
+installation and exact uninstall inversion are not promotion requirements.
 
 **Snowflake Cortex Code is the second ACP backend** (contract and audit:
 [docs/acp-backend-rail.md](./docs/acp-backend-rail.md#cortex-code-audit-d1d10)). Curated ids are

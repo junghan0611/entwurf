@@ -78,14 +78,16 @@ D8 robustness: partial reason="..."
 |---|---|---|---|
 | **pi native Entwurf** | shipped | D7; D8 partial | Record-addressed Unix control socket. A record-less socket is diagnostic only and never dispatched. |
 | **Claude Code interactive `>=2.1.217`** | shipped; Linux certified | D6; D7/D8 partial | Per-session mailbox + exec-form `FileChanged`/`asyncRewake`. B2 proved idle wake and same-session continuity on one NixOS host. |
-| **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. |
-| **Codex app-server-backed TUI** | verified probe | D7; D8 unproven | WebSocket-over-UDS `turn/start` into a live `threadId`; status events expose completion. No managed citizen lane yet. |
+| **Antigravity / agy** | shipped compatibility; admission-rail review pending | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. |
+| **Codex app-server-backed TUI** | N0 probe only | D7; D8 unproven | WebSocket-over-UDS `turn/start` into a live `threadId`; status events expose completion. No native citizen implementation is planned unless it later fits the admission rail. |
 | **Codex embedded TUI** | deferred | D0 partial | No supported receive socket/hook on the measured standalone shape. |
 | **ACP Claude / Cortex** | shipped runtime, outside this matrix | — | ACP sessions are children launched by entwurf's pi adapter, not already-running native sessions to wake. |
 
-“Verified probe” means the transport worked in a reproducible raw probe but entwurf
-does not yet own lifecycle, installation, doctors, or release acceptance for it.
-Re-audit backend versions before turning probe evidence into a shipped adapter.
+“N0 probe” means the transport worked in a reproducible raw probe but entwurf does not
+own a citizen lifecycle or release acceptance for it. Installation automation is not a
+promotion criterion. Any future native adapter must first fit
+[docs/native-harness-rail.md](./docs/native-harness-rail.md); an unstable or oversized
+surface remains a probe.
 
 ## Rail notes
 
@@ -111,19 +113,19 @@ directly through the native adapter, with one bounded re-probe retry. Replyabili
 `record-backed identity ∧ probe-alive`; mailbox state and owned resume authority do not
 exist on this rail.
 
-The managed bridge, statusline, and hook installers own separate configuration atoms.
-Same-pid concurrent model invocation by multiple conversations is not claimed because
-the pid/start-key sender marker would be last-writer-wins. Current operator checks are
-in [BASELINE.md](./BASELINE.md); deterministic ownership and sender gates run in
-`pnpm check`.
+The existing bridge, statusline, and hook installers remain compatibility surfaces, not
+the admission pattern for another backend. Same-pid concurrent model invocation by
+multiple conversations is not claimed because the pid/start-key sender marker would be
+last-writer-wins. Current operator checks are in [BASELINE.md](./BASELINE.md);
+deterministic ownership and sender gates run in `pnpm check`.
 
 ### Codex: launch mode is part of the capability
 
-Do not describe “Codex” as one delivery shape. The measured app-server-backed TUI can
-accept `turn/start` for a live thread and report completion; the standalone embedded
-TUI exposed no equivalent receive route. The probe was measured on an older Codex line
-than the current installation, so it must be rerun before implementing the reserved
-0.14.0 managed Codex lane. `turn/steer` is active-turn steering, not idle wake.
+Do not describe “Codex” as one delivery shape. The measured app-server-backed TUI could
+accept `turn/start` for a live thread; the standalone embedded TUI exposed no equivalent
+receive route. This is observation evidence from an older line, not an implementation
+queue. Re-entry requires a stable lifecycle/address/delivery contract that fits the
+native-harness rail. `turn/steer` is active-turn steering, not idle wake.
 
 ## Recording a new claim
 
