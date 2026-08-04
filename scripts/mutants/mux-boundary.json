@@ -22,6 +22,87 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2-DELIVERY-EXCLUDES-MUX]",
 			"signatureSource": "scripts/check-entwurf-v2-contract.ts"
+		},
+		{
+			"claim": "MUX-ANCHOR-REQUIRED",
+			"title": "TMUX is no longer required, so a caller holding only a pane id makes a bare tmux resolve to the DEFAULT server",
+			"subject": "pi-extensions/lib/mux-placement.ts",
+			"find": [
+				"\tif (typeof server !== \"string\" || server.length === 0) return { ok: false, reason: \"no-tmux-context\" };"
+			],
+			"replace": ["\tvoid server;"],
+			"gate": ["bash", "run.sh", "check-mux-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUX-ANCHOR-REQUIRED]",
+			"signatureSource": "scripts/check-mux-placement.ts"
+		},
+		{
+			"claim": "MUX-SELECTOR-NATIVE-ID",
+			"title": "selector validation is disabled, so a forged `-t` value reaches tmux's own parser",
+			"subject": "pi-extensions/lib/mux-placement.ts",
+			"find": ["\tif (!okShape) {"],
+			"replace": ["\tif (false && !okShape) {"],
+			"gate": ["bash", "run.sh", "check-mux-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUX-SELECTOR-NATIVE-ID]",
+			"signatureSource": "scripts/check-mux-placement.ts"
+		},
+		{
+			"claim": "MUX-TMUX-FAILURE-LOUD",
+			"title": "a nonzero or signalled tmux run is swallowed, so `no server running` is laundered into a fact about the pane",
+			"subject": "pi-extensions/lib/mux-placement.ts",
+			"find": ["\tif (run.status === 0) return;"],
+			"replace": ["\tif (run.status === 0 || run.status !== 0) return;"],
+			"gate": ["bash", "run.sh", "check-mux-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUX-TMUX-FAILURE-LOUD]",
+			"signatureSource": "scripts/check-mux-placement.ts"
+		},
+		{
+			"claim": "MUX-ANCHOR-ECHO-BACK",
+			"title": "the pane-id echo-back is dropped, so tmux's rc=0 answer about ANOTHER pane is accepted as the caller's placement",
+			"subject": "pi-extensions/lib/mux-placement.ts",
+			"find": ["\tif (paneId !== anchor) return { ok: false, reason: \"anchor-mismatch\" };"],
+			"replace": ["\t// echo-back dropped"],
+			"gate": ["bash", "run.sh", "check-mux-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUX-ANCHOR-ECHO-BACK]",
+			"signatureSource": "scripts/check-mux-placement.ts"
+		},
+		{
+			"claim": "MUX-APPEND-END-DETACHED",
+			"title": "append drops -a/{end} and becomes a lowest-free-index new-window, a different verb from appending at the session end",
+			"subject": "pi-extensions/lib/mux-placement.ts",
+			"find": [
+				"\treturn [\"new-window\", \"-d\", \"-a\", \"-t\", `${sessionId}:{end}`, \"-P\", \"-F\", APPEND_FORMAT];"
+			],
+			"replace": ["\treturn [\"new-window\", \"-d\", \"-t\", `${sessionId}:`, \"-P\", \"-F\", APPEND_FORMAT];"],
+			"gate": ["bash", "run.sh", "check-mux-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUX-APPEND-END-DETACHED]",
+			"signatureSource": "scripts/check-mux-placement.ts"
+		},
+		{
+			"claim": "MUX-CLOSE-BY-WINDOW-ID",
+			"title": "a failed kill-window is reported as already-gone without proving absence, so a window that is still open reads as closed",
+			"subject": "pi-extensions/lib/mux-placement.ts",
+			"find": ["\treturn ids.includes(windowId) ? null : \"already-gone\";"],
+			"replace": ["\treturn \"already-gone\";"],
+			"gate": ["bash", "run.sh", "check-mux-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUX-CLOSE-BY-WINDOW-ID]",
+			"signatureSource": "scripts/check-mux-placement.ts"
+		},
+		{
+			"claim": "MUX-CONTEXT-BOUND-MUTATION",
+			"title": "context binding matches on the session id alone, so a restarted or foreign server with the same $N is accepted",
+			"subject": "pi-extensions/lib/mux-placement.ts",
+			"find": ["\treturn origin.serverPid === now.serverPid && origin.sessionId === now.sessionId;"],
+			"replace": ["\treturn origin.sessionId === now.sessionId;"],
+			"gate": ["bash", "run.sh", "check-mux-placement"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUX-CONTEXT-BOUND-MUTATION]",
+			"signatureSource": "scripts/check-mux-placement.ts"
 		}
 	]
 }

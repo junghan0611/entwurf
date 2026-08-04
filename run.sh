@@ -979,6 +979,24 @@ check_entwurf_resume_args() {
   run_ts scripts/check-entwurf-resume-args.ts
 }
 
+check_mux_placement() {
+  # Deterministic gate for the T0-b placement primitives (mux-placement.ts): the argv shapes,
+  # the anchor precondition, the parse, and the close classification — everything decidable
+  # without tmux. It does NOT simulate tmux; no fake tmux exists in this repo on purpose.
+  # Topology is judged by check-mux-placement-tmux against a real private server.
+  run_ts scripts/check-mux-placement.ts
+}
+
+check_mux_placement_tmux() {
+  # REAL tmux acceptance: drives the production placement functions against a private fixture
+  # server (unique -S socket, never the operator's), with TMUX/TMUX_PANE actually INHERITED by
+  # a fixture pane. Proves one session throughout, 1,2 -> 1,2,3 -> 1,2,3,4 -> 1,2, surviving
+  # pane pids and focus, stable @window/%pane handles, the display-message rc=0 trap and its
+  # refusal, and both close paths (closed / already-gone). Skips (97) without tmux or /proc.
+  # Operator-run: kept OUT of pnpm check, and it is not a release-gate MUST at T0.
+  run_ts scripts/check-mux-placement-tmux.ts
+}
+
 check_entwurf_v2_spawn_production() {
   # Deterministic gate for 0.11 Stage 0 step 5c-3c: the production SpawnBgResumeDeps factory
   # (makeProductionSpawnBgResumeDeps) wiring the 5c-3a watcher's six IO seams onto the real
@@ -4483,6 +4501,12 @@ case "$cmd" in
     ;;
   check-entwurf-resume-args)
     check_entwurf_resume_args
+    ;;
+  check-mux-placement)
+    check_mux_placement
+    ;;
+  check-mux-placement-tmux)
+    check_mux_placement_tmux
     ;;
   check-entwurf-v2-spawn-production)
     check_entwurf_v2_spawn_production
