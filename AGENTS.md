@@ -26,10 +26,11 @@ For agents that own this repo: invariant principles and reproducible verificatio
 ## Architecture
 
 - **entwurf-core (v2)** owns garden-id addressing, peer facts, liveness interfaces, dispatch decisions, rail choice, and delivery evidence.
-- **Record authority** owns citizen identity. Every addressable pi, Claude Code, Antigravity, or future Codex citizen uses the same V3 `MetaIdentity` schema. `backend` selects capability/rail behavior; it does not create an identity hierarchy.
+- **Record authority** owns citizen identity. Every addressable citizen uses the same V3 `MetaIdentity` schema. `backend` selects capability/rail behavior; it does not create an identity hierarchy.
 - **pi adapter** attaches a pi session to a record at `session_start`, hosts the record-keyed control socket, and exposes the native pi tool surface.
-- **Native bridges** register already-running native sessions without taking over their transcript or auth: Claude Code is mailbox/self-fetch; Antigravity is probe-backed native-push; Codex has probe evidence but no shipped managed citizen lane.
+- **Native bridges** register already-running native sessions without taking over their transcript or auth: Claude Code is mailbox/self-fetch; Antigravity is probe-backed native-push. Codex has archived probe evidence, but its managed native lane was declined because pi already supplies the official GPT provider path; do not duplicate it as a native citizen or ACP backend.
 - **ACP plugin** registers provider `entwurf` inside a pi host session and drives a backend under an isolated overlay. The host pi session is already a record-backed socket citizen; the plugin does not mint another citizen/socket/peer layer.
+- **mux launch rail is not implemented yet.** #47 starts by measuring the caller's current tmux placement and appending windows inside that same operator session. Do not invent a generic driver, harness profile, or creation API before the raw tmux sequence is fixed.
 - **One delivery verb:** `entwurf_v2` addresses an existing garden id. Current routes are live control-socket send, dormant spawn-bg resume, active self-fetch mailbox enqueue, and probe-alive native-push. Complementary state×intent pairs reject honestly. Fresh creation is a separate future capability.
 
 ## Hard Rules
@@ -49,6 +50,7 @@ For agents that own this repo: invariant principles and reproducible verificatio
 13. **Doctors report runtime truth and ownership truth separately.** Runtime coverage does not prove entwurf owns the configuration; broken ownership does not erase visibly working runtime configuration. Final verdict remains red when either required axis fails.
 14. **Native hook ownership is structural.** Claude hooks use the shipped exec-form launcher and provenance token; marker writers/readers share `isPlausibleOwnerPid`; no shell-form fallback, ancestry guess, or retired pid carrier. entwurf requires Claude Code `>=2.1.217` and enforces that floor itself because upstream gives no fail-loud — an older Claude validates the exec manifest, then drops `args` at runtime and reports success. The number is derived from `package.json` `entwurf.claudeCodeFloor`, never retyped as a second source. Currently certified axis is Linux desktop/workstation. Source/gates: `hook-launch.sh`, `meta-session.ts`, `check-hook-launch-topology`, `check-claude-floor-coherence`, `check-meta-doctor-oracle`.
 15. **Crash, don't warn.** Bad config/path/model/store state throws. Empty catches are only for bounded environment probing; operator diagnostics go to stderr.
+16. **mux is launch, never delivery.** A tmux window/pane handle is an ephemeral operator view, not an address: it mints no garden id, stores no record, and reports no liveness. Screen text and keystrokes are never an `entwurf_v2` receipt. The first mux checkpoint is placement only: inspect the caller's current tmux session and append windows there; harness launch and garden semantics come later.
 
 Detailed incident histories belong in CHANGELOG/issues/BASELINE and source-adjacent comments, not in this prompt. When a concise rule and old archaeology disagree, verify source + gate and repair the stale prose.
 

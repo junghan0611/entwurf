@@ -4,6 +4,10 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Removed
+
+- **The unimplemented `tmux-live` receipt transport has been removed from the v2 contract.** A mux window may later expose a runtime, but it is not address authority or delivery evidence.
+
 ## 0.13.1 — 2026-07-31
 
 ### Changed

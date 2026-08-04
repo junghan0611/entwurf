@@ -228,13 +228,12 @@ export const RESOLVER_REJECT_REASONS = [
 // send arm (ack-only), but it requires a live-probe (NATIVE_PUSH_DISPATCH_TABLE),
 // where meta-mailbox is liveness-free. It is NOT a mailbox enqueue and NOT a pi socket
 // send — it is its own rail.
-export const ENTWURF_V2_TRANSPORTS = [
-	"control-socket",
-	"spawn-bg",
-	"tmux-live",
-	"meta-mailbox",
-	"native-push",
-] as const;
+//
+// This list contains DELIVERY outcomes only. A mux may launch a live runtime, but
+// its session handle is neither a receipt transport nor address authority. Once
+// that runtime becomes a record-backed citizen, delivery still uses one of the
+// rails below.
+export const ENTWURF_V2_TRANSPORTS = ["control-socket", "spawn-bg", "meta-mailbox", "native-push"] as const;
 export type EntwurfV2Transport = (typeof ENTWURF_V2_TRANSPORTS)[number];
 
 // Allow-branch facets (exported so the schema↔types gate asserts every enum).
@@ -249,7 +248,7 @@ export const ENTWURF_V2_MODES = ["steer", "follow_up"] as const;
 
 export type DispatchVerdict =
 	| { action: "send"; transport: "control-socket" | "meta-mailbox" | "native-push"; ownership: "ack-only" }
-	| { action: "resume"; transport: "spawn-bg" | "tmux-live"; ownership: "owned" }
+	| { action: "resume"; transport: "spawn-bg"; ownership: "owned" }
 	| { action: "reject"; reason: EntwurfV2RejectReason };
 
 // ── The FROZEN decision table ──────────────────────────────────────────────

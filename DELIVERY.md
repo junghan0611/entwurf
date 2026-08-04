@@ -121,9 +121,10 @@ in [BASELINE.md](./BASELINE.md); deterministic ownership and sender gates run in
 
 Do not describe “Codex” as one delivery shape. The measured app-server-backed TUI can
 accept `turn/start` for a live thread and report completion; the standalone embedded
-TUI exposed no equivalent receive route. The probe was measured on an older Codex line
-than the current installation, so it must be rerun before implementing the reserved
-0.14.0 managed Codex lane. `turn/steer` is active-turn steering, not idle wake.
+TUI exposed no equivalent receive route. This remains archived method evidence, not a
+shipping commitment: GLG closed the managed native Codex lane on 2026-08-01 because pi
+already supplies the official GPT provider path. Entwurf will not duplicate it as a
+native citizen or ACP backend. `turn/steer` is active-turn steering, not idle wake.
 
 ## Recording a new claim
 

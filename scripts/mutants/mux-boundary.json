@@ -1,0 +1,27 @@
+{
+	"schemaVersion": 1,
+	"lane": "mux-boundary",
+	"mutants": [
+		{
+			"claim": "V2-DELIVERY-EXCLUDES-MUX",
+			"title": "a mux launch handle is reintroduced as an entwurf_v2 delivery receipt transport",
+			"subject": "pi-extensions/lib/entwurf-v2-contract.ts",
+			"find": [
+				"export const ENTWURF_V2_TRANSPORTS = [\"control-socket\", \"spawn-bg\", \"meta-mailbox\", \"native-push\"] as const;"
+			],
+			"replace": [
+				"export const ENTWURF_V2_TRANSPORTS = [",
+				"\t\"control-socket\",",
+				"\t\"spawn-bg\",",
+				"\t\"tmux-live\",",
+				"\t\"meta-mailbox\",",
+				"\t\"native-push\",",
+				"] as const;"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-contract"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2-DELIVERY-EXCLUDES-MUX]",
+			"signatureSource": "scripts/check-entwurf-v2-contract.ts"
+		}
+	]
+}

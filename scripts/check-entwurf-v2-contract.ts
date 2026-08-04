@@ -273,6 +273,13 @@ ok(
 		resolveDispatch("fire-and-forget", "unsupported" as FactLiveness, true).ok === true,
 );
 
+// ── Delivery transports: exact set; process launch is not a receipt rail ───
+eq(
+	"[QK:V2-DELIVERY-EXCLUDES-MUX] transport enum is the exact four delivery outcomes; mux launch handles stay out",
+	[...ENTWURF_V2_TRANSPORTS],
+	["control-socket", "spawn-bg", "meta-mailbox", "native-push"],
+);
+
 // ── F-mailbox: transport + taxonomy members present ────────────────────────
 ok(
 	"transport: meta-mailbox present (F-mailbox liveness-free delivery)",

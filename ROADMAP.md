@@ -7,24 +7,27 @@
 
 ---
 
-## 현재 — 0.12.9 shipped; 0.12.10은 ACP 수선 컷 (Cortex는 rail 정리 뒤)
+## 현재 — 0.13.1 shipped; #47 mux launch rail
 
 이 repo는 **entwurf-core(v2 garden-citizen dispatch) + native-harness bridges + pi adapter + ACP plugin**이다.
-0.12.0의 `pi-shell-acp`→`entwurf` hard-cut과 0.12.9의 record-address/fresh-cut closure는 끝났다.
-Claude mailbox, pi socket/resume, Antigravity native-push가 한 garden-id dispatch 표면으로 출하됐다.
+`v0.13.1`은 GitHub와 npm `latest`로 게시됐다. Claude mailbox, pi control-socket/spawn-bg resume,
+Antigravity native-push가 한 garden-id dispatch 표면으로 출하됐고, ACP plugin은 Claude와 Cortex를 pi host
+안에서 연결한다.
 
-**2026-07-27 축 전환(GLG 지시).** 직전 계획은 `#48 Cortex → 0.13.0`이었으나 뒤집혔다. ACP Claude가
-실사용에서 형제에게 닿지 못하는 상태가 발견됐고 — 번들 `entwurf-bridge` MCP 도구가 세션 tool schema에서
-빠지는 증상 — GLG의 판단은 *"기본도 안되는데 cortex를 품을 수는 없어"*다. 이어서 범위도 좁혔다:
-*"0.13.0 안가고 지금 수선하면 0.12.10으로 acp 수정 및 rail 문서 업데이트만."* 따라서 순서는
-**0.12.10(= `claude-agent-acp` 0.62.0 핀 + rail 문서 수선) → readiness 인과 규명 → #48 Cortex ACP →
-#56 Codex native citizen → #47 mux driver**다. reference adapter가 모델을 outbound sibling dispatch까지
-데려간다는 것을 증명해야 두 번째 backend를 태운다 —
-증명 없는 rail 위에서는 adapter 버그와 rail 버그를 구분할 수 없다(`docs/acp-backend-rail.md` §11-7).
-0.13.0은 지금 열지 않는다. 네 이슈 lane 모두 과거 가설과 증거의 묶음이지 현재 구현
-명세가 아니며, 각 lane은 현재 main·현재 upstream·현재 live surface를 다시 audit한 뒤 범위를 정한다.
-Pi는 오늘 가장 깊이 붙은 adapter지만, 프로젝트의 본질은 **garden id로 호명 가능한 형제 세션 사이의 얇은
-dispatch substrate**다.
+**2026-08-01~02 축 전환(GLG 지시).** pi가 공식 provider로 지원하는 Codex/Grok을 위해 native citizen이나
+ACP backend를 중복 구현하지 않는다. #56 Codex native lane은 닫혔고, Codex/Grok 탐구 브랜치는 main 밖에
+격리한다. 거기서 얻은 native/ACP rail 방법론은 필요할 때만 현재 증거로 다시 세운다.
+
+현재 우선순위는 **#47 mux launch rail**이다. 목적은 하네스 수를 늘리는 것이 아니라 새 sibling runtime을
+live/visible window로 열 수 있는 바닥을 세우는 것이다. 첫 단계는 launch profile이 아니다. caller가 현재
+어느 tmux server/session/window/pane에 있는지 읽고, **그 같은 operator session에 window를 append하는 raw
+시퀀스**를 2026-08-04 T0-a에서 실측해 증명했다. 다음은 그 세 동작을 T0-b production shape로 옮기는 것이다.
+record birth·garden identity·liveness·delivery는 아직 연결하지 않으며 mux를 새 v2 delivery transport로
+만들지 않는다. 상세 경계는 `docs/mux-launch-rail.md`, 실행 순서는 active NEXT handoff가 진다.
+
+Pi는 가장 깊이 붙은 adapter지만 프로젝트의 본질은 여전히 **garden id로 호명 가능한 형제 세션 사이의 얇은
+dispatch substrate**다. provider 연결과 TUI/RPC/session lifecycle은 pi에 맡기고, entwurf는 부르는 법과
+배달의 정직한 경계에 집중한다. pi launch profile은 tmux placement primitive가 실물로 선 뒤에만 논한다.
 
 v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라졌다. `entwurf_v2`가 척추다.
 기존 citizen 대상 send/reply/resume → `entwurf_v2`; 무에서 새 형제를 만드는 fresh creation은 deferred lane.
@@ -38,12 +41,12 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 
 ### Current shipped / probe matrix
 
-| Harness / rail | 0.12.x status | 이 repo에서의 정체 | Evidence |
+| Harness / rail | status | 이 repo에서의 정체 | Evidence |
 |---|---|---|---|
 | **pi** | shipped | control-socket adapter + spawn-bg resume host. ACP plugin도 pi provider/model로 들어온다. | `pnpm check`, v2 matrix/spawn LIVE, release-gate MUST |
 | **Claude Code** | shipped | SessionStart meta-bridge → garden id + mailbox + trusted marker. Transcript를 가져오지 않는다. | meta-session gates, mailbox/deliverability, `doctor-meta-bridge` |
 | **ACP Claude** | shipped, **model-facing outbound half unreliable — 현재 lane** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Turn/provider path ships, 그리고 host resident는 record/socket citizen으로 계속 주소 가능하다(S1이 turn-free로 증명). 다만 번들 `entwurf-bridge` MCP 도구가 첫 턴에 세션 schema에서 빠지는 관측이 있어, 그 시민 안의 **ACP 모델이 형제에게 나가는(outbound dispatch)** 절반은 아직 신뢰 구간이 아니다(🔴 readiness race). | ACP LIVE smokes + release-gate MUST |
-| **Codex** | verified probe / #56 queued | direct/native delivery evidence exists; no managed native-citizen lifecycle yet. Default is not ACP. Re-audit app-server/hooks on the shipping line before implementation. | DELIVERY.md raw probe / #56 |
+| **Codex** | native probe archived; managed lane declined | direct/native delivery evidence는 방법론 기록으로 남지만, pi가 공식 GPT provider를 지원하므로 별도 native citizen/ACP backend를 출하하지 않는다. 일반 external MCP host로 명시 배선하는 것은 별개다. | DELIVERY.md raw probe / closed #56 |
 | **Antigravity (`agy`)** | shipped | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push; managed MCP/permission, statusline, hook adapters. | agy deterministic gates + doctors + 2026-07-13 live round trip |
 | **Cortex / governed ACP** | **landed (0.13.0)** — hvkiefer's PR #40 adapter transplanted with the CP0-audit revisions (dual-HOME overlay, mcp.json projection, per-turn set-model, 4-row curation) | current D1–D10 contract is `docs/acp-backend-rail.md` “Cortex Code audit”; deterministic gate `check-acp-cortex` + mutant lane `acp-cortex`; CP2 live smoke `smoke-acp-cortex-live` stays outside the claude-only release floor | PR #40 / #48 / `docs/acp-backend-rail.md` |
 | **Gemini CLI** | deprecated path | replaced by Antigravity direction for current Google individual tiers. | README migration note |
@@ -112,9 +115,10 @@ non-claude **throw** 가드. **백엔드 추가 레일이 0.11.0보다 후퇴**(
 - **Cortex 백엔드 자체의 운영 lane** — 어댑터 레일(위 표준궤 섹션)이 0.12.0에 들어간 *뒤*, 기여자가
   PR #40을 어댑터로 포팅하고 로컬 완전검증(`smoke-cortex`)이 서면 운영 surface로 승격. 레일=0.12.0,
   백엔드 검증=그 위에서. (이전 "vendor CLI 검증되면" 단일 항목을 레일/백엔드로 분리.)
-- **fresh sibling minting (v2 `spawn-fresh`)** — v2 4 transport(control-socket / spawn-bg resume /
-  meta-mailbox / native-push)는 전부 기존 citizen 대상. 무에서 새 형제 만드는 verb는 의도적 부재
-  (능력 구멍을 문서에 못박음, silent regression 아님).
+- **fresh sibling creation** — v2 delivery transport(control-socket / spawn-bg resume / meta-mailbox /
+  native-push)는 전부 기존 citizen 대상이다. #47은 먼저 caller의 현재 tmux placement와 same-session window
+  append만 증명한다. pi profile과 public creation request는 그 primitive가 선 뒤 설계하며, `spawn-fresh`를
+  v2 transport 이름으로 미리 굽지 않는다.
 - **test/release-gate taxonomy (#41)** — 검증 자산을 deterministic / MUST live / BEHAVIOR / utility로 재분류.
 
 ### two-tier release-gate 원리
@@ -129,7 +133,8 @@ Sonnet에서 flaky라 한 번의 flake가 컷을 막으면 안 된다. 우회/�
 ## 가까운 lane
 
 ### Carried post-v2 lanes
-- **Claude Code tmux-live / Claude↔Claude live transport** — v2 production transport 구현(현재 enum만).
+- **mux-visible launch / Claude Code live runtime** — mux는 delivery transport가 아니다. 실행되지 않던
+  `tmux-live`는 2026-08-02 v2 contract/receipt에서 제거됐다. launch 뒤 Claude delivery는 meta-mailbox가 진다.
 - ~~**recordless dormant pi resume**~~ — **#50 C4가 이 lane의 전제를 닫았다**: record가 유일한 주소
   권위이고(목표 ②), record-less socket은 시민이 아니라 진단 대상이다. 재오픈하려면 "record 없이
   resume authority"가 아니라 "그 resident를 record로 데려오는 경로"(재시작)를 설계해야 한다.
@@ -140,17 +145,19 @@ Sonnet에서 flaky라 한 번의 flake가 컷을 막으면 안 된다. 우회/�
   (id를 단속할 대상이 없다 — pi가 자기 세션 id를 민팅하고 record가 주소를 민팅한다). 인-프로세스
   new/fork/clone은 이제 pi 자신의 것이고 `session_start`가 새 시민으로 붙인다.
 
-### fresh-mint lane (v1 제거는 이미 완료)
+### mux launch / fresh creation lane
 - **v1 removal — DONE (v2 core).** v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`), pi-native
-  `entwurf_send`, `/entwurf*` 명령은 모두 제거됨. 현 MCP surface = `entwurf_v2` + `entwurf_peers` +
+  `entwurf_send`, `/entwurf*` 명령은 모두 제거됐다. 현 MCP surface = `entwurf_v2` + `entwurf_peers` +
   `entwurf_self` + `entwurf_inbox_read` + 기존 native conversation을 묶는 수동 fallback
-  `entwurf_register_native`. (옛 "unregister-토글 / V2_ONLY hide" lane은 v1이 사라져 moot.)
-- **🔴 fresh sibling minting = 명시적 연기 (GLG 결정 2026-06-16).** v1 `entwurf.ts`("spawn a dedicated
-  pi process to run a NEW task")가 fresh-mint 본체였고 v2 core에서 통째 삭제됨. v2의 4 transport
-  (control-socket / spawn-bg **resume** / meta-mailbox / native-push)는 전부 **기존** garden citizen 대상 — 무에서
-  새 형제를 만드는 verb는 v2에 없다(능력 구멍을 문서에 못박음, silent regression 아님). fresh-mint의
-  v2 대체(4번째 transport `spawn-fresh` + 11-scenario gate)는 후속 lane. 그동안 이 트리는 "새 분신
-  생성"이 필요한 데일리 드라이버로는 안 쓴다(기존 citizen resume/dispatch 전용).
+  `entwurf_register_native`.
+- **#47 mux launch — NOW, implementation zero.** 원하는 기본 UX는 기존 `entwurf` tmux session의 windows
+  `1,2` 옆에 `3`, 이어 `4`를 append해 같은 keybinding 축으로 오가는 것이다. 첫 generic `new-session` driver는
+  이 placement를 정하지 않은 잘못된 단위라 전부 폐기했다. 2026-08-04 T0-a가 raw tmux로 current placement →
+  same-session append → stable `$session/@window/%pane` → window-only cleanup을 실측해 증명했다. 다음은
+  그 세 동작만 placement controller로 옮기는 T0-b다. generic driver, harness profile, release wiring은 아직 없다.
+- **public fresh creation — tmux placement 실물 뒤.** creation은 새 delivery transport가 아니다. 어떤
+  runtime을 window에 열고 native lifecycle과 어떻게 join할지는 T0 뒤 별도 계약이다. quota, system load,
+  예상 작업량, 과거 담당자 같은 선택 신호는 substrate/driver에 미리 저장하지 않는다.
 
 ---
 

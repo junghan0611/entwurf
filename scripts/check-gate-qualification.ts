@@ -724,6 +724,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"acp-stop-reason": 6,
 		"agy-permission": 6,
 		"meta-identity": 1,
+		"mux-boundary": 1,
 		"probe-ordering": 85,
 		"release-gate": 8,
 		"self-address": 3,
