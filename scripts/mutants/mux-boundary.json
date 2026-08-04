@@ -103,6 +103,95 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:MUX-CONTEXT-BOUND-MUTATION]",
 			"signatureSource": "scripts/check-mux-placement.ts"
+		},
+		{
+			"claim": "MUX-LAUNCH-PRECONDITION-FIRST",
+			"title": "the runtime precondition is skipped, so a window is opened onto a runtime that cannot start and the receipt looks identical to a good launch",
+			"subject": "pi-extensions/lib/mux-launch.ts",
+			"find": ["\tif (!isAbsolute(runtimePath)) {"],
+			"replace": ["\tif (false && !isAbsolute(runtimePath)) {"],
+			"gate": ["bash", "run.sh", "check-mux-launch"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUX-LAUNCH-PRECONDITION-FIRST]",
+			"signatureSource": "scripts/check-mux-launch.ts"
+		},
+		{
+			"claim": "MUX-LAUNCH-PATH-NO-SPLIT",
+			"title": "the whitespace guard is dropped, so tmux re-splits a spaced runtime path and launches a truncated binary with the remainder as an argument",
+			"subject": "pi-extensions/lib/mux-launch.ts",
+			"find": ["\tif (WHITESPACE.test(runtimePath)) {"],
+			"replace": ["\tif (false && WHITESPACE.test(runtimePath)) {"],
+			"gate": ["bash", "run.sh", "check-mux-launch"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUX-LAUNCH-PATH-NO-SPLIT]",
+			"signatureSource": "scripts/check-mux-launch.ts"
+		},
+		{
+			"claim": "MUX-LAUNCH-PATH-HIT-NOT-SKIPPED",
+			"title": "the launchability proof is moved inside the PATH loop's catch, so an unlaunchable FIRST hit is silently skipped and a later entry launches a different install than the operator's own `pi`",
+			"subject": "pi-extensions/lib/mux-launch.ts",
+			"find": [
+				"\t\t} catch {",
+				"\t\t\tcontinue;",
+				"\t\t}",
+				"\t\tassertLaunchTarget(candidate);",
+				"\t\treturn candidate;"
+			],
+			"replace": [
+				"\t\t\tassertLaunchTarget(candidate);",
+				"\t\t} catch {",
+				"\t\t\tcontinue;",
+				"\t\t}",
+				"\t\treturn candidate;"
+			],
+			"gate": ["bash", "run.sh", "check-mux-launch"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUX-LAUNCH-PATH-HIT-NOT-SKIPPED]",
+			"signatureSource": "scripts/check-mux-launch.ts"
+		},
+		{
+			"claim": "MUX-LAUNCH-NO-SHELL-ARGV",
+			"title": "the `--` separator is dropped, so tmux takes the runtime as a shell-command string instead of exec'ing it directly",
+			"subject": "pi-extensions/lib/mux-launch.ts",
+			"find": [
+				"\treturn [\"new-window\", \"-d\", \"-a\", \"-t\", `${sessionId}:{end}`, \"-P\", \"-F\", APPEND_FORMAT, \"--\", runtimePath];"
+			],
+			"replace": [
+				"\treturn [\"new-window\", \"-d\", \"-a\", \"-t\", `${sessionId}:{end}`, \"-P\", \"-F\", APPEND_FORMAT, runtimePath];"
+			],
+			"gate": ["bash", "run.sh", "check-mux-launch"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUX-LAUNCH-NO-SHELL-ARGV]",
+			"signatureSource": "scripts/check-mux-launch.ts"
+		},
+		{
+			"claim": "MUX-LAUNCH-NO-CARRIER",
+			"title": "a window-name carrier is reintroduced into the launch argv, handing tmux's own parser a value this rail did not author",
+			"subject": "pi-extensions/lib/mux-launch.ts",
+			"find": [
+				"\treturn [\"new-window\", \"-d\", \"-a\", \"-t\", `${sessionId}:{end}`, \"-P\", \"-F\", APPEND_FORMAT, \"--\", runtimePath];"
+			],
+			"replace": [
+				"\treturn [\"new-window\", \"-d\", \"-a\", \"-n\", PI_RUNTIME_COMMAND, \"-t\", `${sessionId}:{end}`, \"-P\", \"-F\", APPEND_FORMAT, \"--\", runtimePath];"
+			],
+			"gate": ["bash", "run.sh", "check-mux-launch"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUX-LAUNCH-NO-CARRIER]",
+			"signatureSource": "scripts/check-mux-launch.ts"
+		},
+		{
+			"claim": "MUX-LAUNCH-CORE-IMPORT-FREE",
+			"title": "the launch composition is imported by the delivery core, making fresh launch a dependency of entwurf_v2 delivery",
+			"subject": "pi-extensions/lib/entwurf-v2-production.ts",
+			"find": ["import { isOutOfSocketDomainGardenIdConflict } from \"./entwurf-facts.ts\";"],
+			"replace": [
+				"import { isOutOfSocketDomainGardenIdConflict } from \"./entwurf-facts.ts\";",
+				"import { launchPi as _launchPi } from \"./mux-launch.ts\";"
+			],
+			"gate": ["bash", "run.sh", "check-mux-launch"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUX-LAUNCH-CORE-IMPORT-FREE]",
+			"signatureSource": "scripts/check-mux-launch.ts"
 		}
 	]
 }

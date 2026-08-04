@@ -166,6 +166,12 @@
 		// (entwurf-control.ts) reaches it via a NON-LITERAL dynamic import so the fence never
 		// enters the emit-capable root program. Typechecked by scripts/tsconfig.json via its
 		// gate (smoke-pi-attach.ts).
-		"pi-extensions/lib/pi-citizen-birth.ts"
+		"pi-extensions/lib/pi-citizen-birth.ts",
+		// mux-launch.ts is the T1-a launch composition — a lib→lib VALUE importer (the
+		// placement leaf's grammar/binding/run helpers from mux-placement.ts) with an explicit
+		// `.ts` extension, same fence. mux-placement.ts itself stays in the root program: it
+		// imports nothing local. Typechecked by scripts/tsconfig.json via its gate
+		// (check-mux-launch.ts). No production consumer imports it — docs/mux-launch-rail.md §11.
+		"pi-extensions/lib/mux-launch.ts"
 	]
 }

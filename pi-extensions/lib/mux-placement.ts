@@ -18,6 +18,14 @@
  * It opens a place. `entwurf_v2` still owns delivery (`V2-DELIVERY-EXCLUDES-MUX`), and
  * nothing here mints a garden id.
  *
+ * Beside those three actions, `runTmux` and `requireSameContext` are exported as a NARROW
+ * INTERNAL SEAM for the T1-a launch composition to build on — not a fourth action and not a
+ * public operator surface. Say the risk plainly: `runTmux` takes argv this module did not
+ * author, so boundary 2 below does not protect it. The grammar is enforced by the `build*Args`
+ * builders, and anything reaching for `runTmux` owes its own argv the same validation. Today
+ * its one production consumer is the launch composition (`docs/mux-launch-rail.md` §11); the
+ * shipped delivery path calls neither.
+ *
  * ── Four boundaries, each of which was a real way to touch the wrong thing ──
  *
  * 1. CONTEXT. Both `TMUX` and `TMUX_PANE` must be present and non-empty before anything
@@ -300,7 +308,7 @@ export function assertTmuxOk(label: string, run: TmuxRun): void {
  * `readAnchor` has already refused an environment where `TMUX` is absent, which is what would
  * otherwise silently resolve to the default server.
  */
-function runTmux(args: readonly string[], env: NodeJS.ProcessEnv): TmuxRun {
+export function runTmux(args: readonly string[], env: NodeJS.ProcessEnv): TmuxRun {
 	const res = spawnSync("tmux", args as string[], { env, encoding: "utf8" });
 	if (res.error) throw res.error;
 	return { status: res.status, stdout: res.stdout ?? "", stderr: res.stderr ?? "" };
@@ -337,7 +345,7 @@ export function isSameContext(origin: PlacementContext, now: PlacementContext): 
  * a different session, and an env naming another server would otherwise redirect the whole
  * operation somewhere the caller never looked.
  */
-function requireSameContext(label: string, origin: PlacementContext, env: NodeJS.ProcessEnv): void {
+export function requireSameContext(label: string, origin: PlacementContext, env: NodeJS.ProcessEnv): void {
 	const now = inspectPlacement(env);
 	if (!now.ok) {
 		throw new Error(`mux-placement: ${label} refused — the caller's placement is not resolvable (${now.reason})`);

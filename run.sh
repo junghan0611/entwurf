@@ -997,6 +997,25 @@ check_mux_placement_tmux() {
   run_ts scripts/check-mux-placement-tmux.ts
 }
 
+check_mux_launch() {
+  # Deterministic gate for the T1-a visible launch (mux-launch.ts): the named preconditions
+  # that run BEFORE any window opens, the PATH resolution rule, the `--` argv shape, and the
+  # docs §11 import boundary. It does NOT simulate tmux. The measured trap it exists for — a
+  # failed exec exits 0, prints a handle, and its window is still listed on an immediate
+  # re-read — is judged against a real server by check-mux-launch-tmux.
+  run_ts scripts/check-mux-launch.ts
+}
+
+check_mux_launch_tmux() {
+  # REAL tmux acceptance for T1-a: drives production launchPi against a private fixture server
+  # (unique -S socket, never the operator's) with TMUX/TMUX_PANE actually INHERITED. Proves the
+  # window lands at {end} of the caller's own session, the pane process IS the runtime (no
+  # shell wrapper), focus and the original panes survive, a precondition refusal opens NO
+  # window, and the failed-exec trap is real. The runtime is a fixture stand-in, never the
+  # operator's pi. Skips (97) without tmux or /proc. Operator-run: kept OUT of pnpm check.
+  run_ts scripts/check-mux-launch-tmux.ts
+}
+
 check_entwurf_v2_spawn_production() {
   # Deterministic gate for 0.11 Stage 0 step 5c-3c: the production SpawnBgResumeDeps factory
   # (makeProductionSpawnBgResumeDeps) wiring the 5c-3a watcher's six IO seams onto the real
@@ -4507,6 +4526,12 @@ case "$cmd" in
     ;;
   check-mux-placement-tmux)
     check_mux_placement_tmux
+    ;;
+  check-mux-launch)
+    check_mux_launch
+    ;;
+  check-mux-launch-tmux)
+    check_mux_launch_tmux
     ;;
   check-entwurf-v2-spawn-production)
     check_entwurf_v2_spawn_production
