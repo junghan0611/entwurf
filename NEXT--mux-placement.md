@@ -1,76 +1,60 @@
-# NEXT — mux + 검증 감산 landing 완료; 다음 operator step은 GLG 선택
+# NEXT — mux B/C 절벽을 repo 밖 실측으로 판정한다
 
-> 이 파일은 `mux-placement` 브랜치 전용 boot sector다. merge 전 삭제하고, 살아남을 사실만 durable docs/source로 승격한다.
+> `mux-placement` 브랜치 전용 boot sector. 이 handoff 직전 기준은 `e568980` = `origin/mux-placement`; 폐기된 T1-b 제품 코드는 남아 있지 않다.
+> 새 팀은 이전 구현 세션을 다시 부르지 말고 이 문서와 `docs/mux-launch-rail.md`만 읽는다.
 
 # RAIL — 현재 좌표
 
-- [x] **1. T0-a — raw tmux placement 실측**
-- [x] **2. T0-b — placement leaf** (`mux-placement.ts`) — commit `317387d`
-- [x] **3. T1-a — visible Pi launch** (`mux-launch.ts`) — commit `c55a070`, branch push 완료
-- [x] **4. closure receipt rail — 폐기, 감산 커밋으로 닫음** (GPT 독립 검수 1 Blocker·4 Defect 한 묶음 반영). 검증 스케줄링은 AGENTS.md 규칙 + 경량 pre-commit이 소유한다
-- [x] **5. 검증 감산 lane — chain 분류 + qualification 분리 적용** (GLG 위임 아래 같은 세션에서 실행; 삭제 후보는 증거 축적 후 별도 판단)
-- [x] **6. GPT 최종 검수 + landing/push 완료** — `e7a4ec4`, `origin/mux-placement`
-- [ ] **7. 다음 operator step 선택** ← CURRENT: `entwurf-peek` 수선 또는 repo 밖 baseline; 순서는 GLG 결정
+- [x] **1. placement + visible launch leaf 착지** — T0-a/T0-b `317387d`, T1-a `c55a070`
+- [x] **2. 검증 감산 + branch landing** — `a1f27b9`, `e7a4ec4`, `e568980`
+- [ ] **3. repo 밖 B/C baseline 실측** ← CURRENT: 코드·tool 없이 두 완료점의 차이를 손으로 확인
+- [ ] **4. 제품 완료점 한 줄 확정** ← PAUSED: baseline 뒤 GLG가 B 또는 C를 명시
+- [ ] **5. 선택된 완료점만 구현·검수** ← PAUSED: 4번 승인 전 구현자 호출 금지
 
-**T1-b automatic delegation은 PAUSED:** fresh-token 계약·lookup seam 미설계, 설계 착수 자체가 GLG 승인 사항.
+현재 좌표: 제품 leaf는 착지됨 → B와 C 중 무엇이 제품인지 미결정 → 먼저 실측
 
-# NOW — 2026-08-05 원점 재정비
+# NOW
 
-- **closure receipt rail(+1,364줄)을 착지시키지 않고 폐기했다.** mux 제품 전체(643줄)의 2배가 되는 검증 인프라였다. 매 단계의 지적은 국소적으로 옳았지만 예산과 종료 조건이 없었다 — "메타도구를 고치는 일이 실제 위임보다 커지면 정지"를 검증 인프라에 적용한 첫 사례. 전체 diff는 `.agent-reports/20260805-closure-rail-abandoned.patch`(local-only handoff artifact, gitignored — clone에는 없다. base `c55a070`, SHA256 `cec631fa660818a127b685e2b4c2b535e3e417706a3c352f2d4d31a1ec5d95bc`)에 보존했다.
-- **원래 통증의 최소 해법으로 교체했다.** `.husky/pre-commit`의 unconditional `pnpm check`(현재 check chain 전체 중복 실행)를 빠른 정적 검사(whitespace/lint/typecheck)로 줄였다. full floor 1회는 훅이 아니라 작업 프로토콜이 소유한다.
-- **이번 lane에서 확정한 작업 룰을 AGENTS.md로 승격했다.** "Verification scheduling — when the floor runs"(inner loop / review before floor / qualification 조건부 / full floor 1회 / release 불변)와 "Review triage and lane discipline"(Blocker·Defect·Observation 3등급, 보정 묶음 1회, meta-infra lane 분리, stop signal, 증거만큼만 말하기, 위험 등급 분리).
-- stale prose 교정: AGENTS.md의 "mux launch rail is not implemented yet" → 현재 출하 상태로, CONTRIBUTING.md·run.sh의 "pre-commit이 full check를 돈다" 서술 → 새 훅 동작으로.
-- **GPT 독립 검수(1 Blocker·4 Defect·3 Observation)를 한 보정 묶음으로 반영하고 amend로 닫았다.** Blocker: meta-infra lane 분리 규칙을 기존 removal/repair rule(capability contract의 source-adjacent gate/mutant는 같은 변경에 산다)과 충돌하지 않게 "무관한 검증 기계"로 좁힘. Defect: qualification 문구 교정(이후 감산 lane에서 분리로 대체됨), durable 파일(AGENTS·pre-commit 훅 주석)의 사건 고고학 제거, NEXT 좌표를 commit 후 상태로 갱신, commit body의 gitignored 경로를 local-only로 한정.
+- **Stem:** mux가 제공할 제품 완료점을 B와 C 중 하나로 확정한다.
+- **A — 이미 완료:** existing citizen 발견(`entwurf_peers`)과 전달(`entwurf_v2`).
+- **B — 현재 T1-a:** 같은 tmux session 옆에 fixed plain `pi`를 열고 window/pane handle을 반환한다. garden identity와 delivery는 없다.
+- **C — 별도 절벽:** 새 Pi를 exact garden identity에 결박하고 기존 `entwurf_v2` 전달까지 caller가 이어갈 수 있게 한다.
+- **Next:** repo 파일을 수정하지 않는 임시 runner/raw tmux로 (1) B를 실제 호출하고, (2) 별도 수동 `pi --entwurf-control` 셀에서 identity 확인·delivery 연결의 통증을 관측한 뒤, 무엇이 제품 완료점인지 GLG에게 보고한다.
+- **Verification:** 같은 tmux session, detached window, stable handle, focus 불변을 확인한다. C 셀은 사람이 창과 citizen을 확인한 사실과 correlation 단계 수만 기록하며 시간/cwd 추측을 제품 계약으로 승격하지 않는다.
+- **Blocker:** 없음. 단, 현재 T1-a plain `pi`는 citizen을 만들지 않으므로 B만으로 `entwurf_v2`까지 간다고 주장하지 않는다.
 
-# 감산 lane 실행 결과 — 2026-08-05 같은 세션 (GLG 위임)
+## 구현자 호출 전 필수 한 줄
 
-- 분류표: `.agent-reports/20260805-check-chain-classification.md` (local-only). 판정: default 유지 92 / 이동 1 / 삭제 0.
-- **적용: `check-gate-qualification`을 default `pnpm check`에서 분리.** 이동처 셋 — gate/mutant 변경 lane의 명시 1회, CI `check` job 매 push, release-gate MUST step. release/LIVE acceptance 강도 불변.
-- 비교 기준: pi-mono 실측(check = bounded static 7-leg, build/test는 밖, "규율 + focused test + clean CI가 최종 축") — `.agent-reports/20260805-pi-mono-check-layering.observation.md`.
-- 삭제 후보는 0 — 측정 없이 삭제하지 않는다. smoke-* 개별 시간 관찰을 다음 라운드로.
-- **이동 계약의 source-adjacent backstop이 섰다.** `check-release-gate-outcomes`의 `[QK:QUALIFICATION-SCHEDULING-REACHABLE]` 셀이 topology(default chain 부재 / CI 정확히 1회, pnpm check 뒤 / release_gate MUST step 정확히 1회 + PASS/FAIL 배선 / VERIFY owner 문구)를 정적으로 단언하고, release-gate mutant lane 9번째 exact-once mutant가 그 축 하나를 제거해 claimed reason으로 죽는다.
-- VERIFY의 STEP OUTCOME 보편문을 보정: prerequisite 있는 LIVE MUST는 P1 프로토콜, non-skippable 정적 2단계(`pnpm check`·qualification)는 inline 0/nonzero — SKIP arm 없음. `entwurf-release` skill P4/M0/P8에 qualification 소유권 경계 명시.
+Coordinator는 구현 세션을 열기 전에 아래 문장을 채워 GLG의 확인을 받는다.
 
-# EXACT NEXT
+```text
+이번 lane의 완료점은 [B: visible Pi + handle / C: exact gardenId correlation]이며,
+포함하지 않는 것은 [identity / delivery / scheduler·queue·replacement]다.
+```
 
-Landing은 끝났다. 다음 세션은 GLG가 아래 둘 중 하나를 고른 뒤 그 한 축만 연다.
-
-1. **`entwurf-peek` 수선** (`agent-config`): 현재 상황 dashboard의 Claude Code direct-session 판독과 liveness 과장을 고친다.
-2. **operator-owned baseline** (repo 밖): T1-a로 visible Pi를 열고, 사람 손으로 identity를 확인해 existing `entwurf_v2` delivery를 잇는다.
-
-둘에서 실제 correlation 통증이 관측되기 전에는 T1-b 설계를 열지 않는다.
-
-남은 Observation:
-
-- 두 floor-coherence 게이트의 prose corpus가 `NEXT.md`만 제외하고 `NEXT--<branch>.md`는 포함한다 — 버전 floor 선언(`>=` 비교)을 쓰는 branch NEXT가 나오면 붉어진다. 지금은 green.
-- pre-commit의 `pnpm typecheck` 비용(3-config tsc).
-- smoke-* offline state 게이트 개별 실행 시간.
-
-두 후보의 상세 return 조건과 경계는 위 EXACT NEXT 및 `docs/mux-launch-rail.md`가 진다. 통증이 관측된 뒤에야 T1-b(fresh-token 계약 + strict lookup seam) 설계를 GLG에게 별도 상신한다.
+이 문장이 비어 있으면 설계·구현·gate 작업을 시작하지 않는다. “mux 빈 곳을 채운다”는 완료점 문장이 아니다.
 
 # STOP LINE
 
-GLG 별도 승인 전에는 하지 않는다.
+4번 완료점 승인 전에는 entwurf repo 소스를 수정하지 않는다.
 
-- T1-b identity/dispatch 구현, fresh-token 계약 / lookup seam / 예약 authority의 설계 착수
-- T1-a production consumer 연결, launch shape 확장(focus/switch, window 이름, resume, 다중 동시 launch)
-- peer-placement 저장·추측, 새 public situation-map surface, public spawn verb, `entwurf_v2` 확장
-- record watcher, timeout/retry, unknown-id discovery, task queue, worker pool, role/quota 판단
-- 검증 메타도구 신설 — receipt/cache/selector 부활 포함. 감산 lane도 표 분류를 넘는 도구를 만들지 않는다
-- 추가 push, release
+- T1-a production consumer, public launch/spawn tool, generic driver/profile
+- T1-b token mint, corpus/store preflight, identity lookup/wait, dispatch composition
+- `entwurf_v2` 확장, peer-placement 저장·추측, situation-map surface
+- watcher, retry, queue, worker pool, role/quota/default replacement
+- 새 gate/mutant/receipt/cache/selector 또는 검증 구조 변경
+- `agent-config`의 `entwurf-peek` 수선 — GLG 개인용 optional UX이며 이 제품 판정의 선행조건이 아니다
+- 이 NEXT handoff를 닫는 docs commit 이후의 product commit, push, release
 
 # RECENT
 
-- 2026-08-05: 원점 재정비 — closure rail 폐기, pre-commit 경량화, 작업 룰 AGENTS.md 승격. 페블 진단(검증 44.9k줄 vs 제품 17.6k줄)과 GPT 검수 합의에 따라 GLG가 방향 결정.
-- 2026-08-05: GPT 독립 검수 1 Blocker·4 Defect 한 묶음 반영, amend로 닫음(`a1f27b9`). bootstrap 순서 오류 1회 기록: 새 규칙을 착지시키는 첫 커밋에서 full floor를 독립 검수보다 먼저 돌렸다 — 규칙은 유지하고 오류만 기록한다.
-- 2026-08-05: GLG 위임으로 감산 lane을 같은 세션에서 실행 — pi-mono 직접 실측, chain 분류표 작성, qualification 분리 적용(CI·release-gate·gate 변경 lane으로 이동).
-- 2026-08-05: GPT 최종 검수(1 Blocker·3 Defect) 한 묶음 반영 — scheduling topology oracle+mutant(release-gate lane 9), VERIFY P1 carve-out, release skill 경계 명시, NEXT 좌표 정리. 두 번째 commit amend로 닫고 `mux-placement` branch를 push(`e7a4ec4`).
-- 2026-08-04: T1-a visible launch 구현·독립 검수 보정 → `c55a070` 커밋. qualification 158/158 KILLED. pi `0.83.0` identity 판정(동기 반환 불성립, 사전 주입 성립)으로 T1-b 병목이 upstream에서 entwurf 쪽 fresh-token 계약+lookup seam으로 이동.
-- 2026-08-04: GLG가 목표를 "내 위치 확인 → existing peer면 전달 → 없으면 옆 window에 visible Pi launch"라는 수동 판단의 재현으로 고정. Gas Town 경고로 T1 자동 진행 중단.
-- 2026-08-02: placement 없이 별도 tmux session을 만들던 generic driver 폐기.
+- **2026-08-05 — T1-b 초안 전량 폐기.** 완료점 B/C를 확정하지 않은 채 C 전체를 승인해 제품 691줄 + gate 433줄이 생겼다. GLG 정지 신호 직후 commit/push 없이 삭제했고 제품 코드를 `e568980` 상태로 복원했다. 구현자 문제가 아니라 coordinator의 완료점 확대 해석이었다.
+- **2026-08-05 — PM 판정.** 반복 폐기의 공통 원인은 mux 코드 난이도 자체보다 B(visible launch)와 C(identity correlation)를 한 lane으로 부른 데 있다. 다음 팀은 규칙 복종이 아니라 어느 쪽이 실제 제품인지 모른다는 사실 때문에 repo 밖 baseline부터 한다.
+- **2026-08-05 — 검증 감산.** closure receipt rail(+1,364줄)을 폐기하고 pre-commit을 정적 검사로 줄였다. qualification은 gate/mutant 변경 lane·CI·release-gate가 소유하고 full floor는 frozen candidate에서 1회만 돈다.
 
 # 읽을 곳
 
-- `docs/mux-launch-rail.md` — mux SSOT: situation map §4, T1 분리 §5, identity 판정 §6, evidence seam §7, 만들지 않을 것 §8, 소유권·금지선 §11, receipt 절단선 §12
-- AGENTS.md "Verification scheduling" / "Review triage and lane discipline" — 이번 lane에서 확정한 작업 룰
-- `.agent-reports/20260805-closure-rail-abandoned.patch` — 폐기된 closure rail 전체 diff (증거, gitignored)
+1. 이 문서 — RAIL/NOW/필수 한 줄/STOP LINE
+2. `docs/mux-launch-rail.md` §4–§6 — situation map, B(T1-a), C(T1-b) 절벽
+3. `pi-extensions/lib/mux-launch.ts` — 현재 B의 정확한 receipt와 한계
+4. AGENTS.md — verification scheduling / review triage / one manual action per step
