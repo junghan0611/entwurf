@@ -1,4 +1,4 @@
-# NEXT — mux lane 닫힘; 다음은 검증 감산(subtraction) lane
+# NEXT — mux + 검증 감산 landing 완료; 다음 operator step은 GLG 선택
 
 > 이 파일은 `mux-placement` 브랜치 전용 boot sector다. merge 전 삭제하고, 살아남을 사실만 durable docs/source로 승격한다.
 
@@ -6,11 +6,13 @@
 
 - [x] **1. T0-a — raw tmux placement 실측**
 - [x] **2. T0-b — placement leaf** (`mux-placement.ts`) — commit `317387d`
-- [x] **3. T1-a — visible Pi launch** (`mux-launch.ts`) — commit `c55a070`, push 안 함
+- [x] **3. T1-a — visible Pi launch** (`mux-launch.ts`) — commit `c55a070`, branch push 완료
 - [x] **4. closure receipt rail — 폐기, 감산 커밋으로 닫음** (GPT 독립 검수 1 Blocker·4 Defect 한 묶음 반영). 검증 스케줄링은 AGENTS.md 규칙 + 경량 pre-commit이 소유한다
 - [x] **5. 검증 감산 lane — chain 분류 + qualification 분리 적용** (GLG 위임 아래 같은 세션에서 실행; 삭제 후보는 증거 축적 후 별도 판단)
-- [ ] **6. GPT 최종 검수 보정 반영 완료 → GLG landing/push 판단** ← CURRENT
-- [ ] **7. T1-b automatic delegation** — PAUSED: fresh-token 계약·lookup seam 미설계, 설계 착수 자체가 GLG 승인 사항
+- [x] **6. GPT 최종 검수 + landing/push 완료** — `e7a4ec4`, `origin/mux-placement`
+- [ ] **7. 다음 operator step 선택** ← CURRENT: `entwurf-peek` 수선 또는 repo 밖 baseline; 순서는 GLG 결정
+
+**T1-b automatic delegation은 PAUSED:** fresh-token 계약·lookup seam 미설계, 설계 착수 자체가 GLG 승인 사항.
 
 # NOW — 2026-08-05 원점 재정비
 
@@ -31,8 +33,12 @@
 
 # EXACT NEXT
 
-1. GPT 최종 검수 보정(1 Blocker·3 Defect)이 amend에 반영됐다. 남은 것은 **GPT 확인과 GLG landing/push 판단** 하나다.
-2. 그 뒤 (순서는 GLG 결정): 아래 목록.
+Landing은 끝났다. 다음 세션은 GLG가 아래 둘 중 하나를 고른 뒤 그 한 축만 연다.
+
+1. **`entwurf-peek` 수선** (`agent-config`): 현재 상황 dashboard의 Claude Code direct-session 판독과 liveness 과장을 고친다.
+2. **operator-owned baseline** (repo 밖): T1-a로 visible Pi를 열고, 사람 손으로 identity를 확인해 existing `entwurf_v2` delivery를 잇는다.
+
+둘에서 실제 correlation 통증이 관측되기 전에는 T1-b 설계를 열지 않는다.
 
 남은 Observation:
 
@@ -40,11 +46,7 @@
 - pre-commit의 `pnpm typecheck` 비용(3-config tsc).
 - smoke-* offline state 게이트 개별 실행 시간.
 
-그 뒤 (순서는 GLG 결정):
-
-- **operator dashboard detour — `entwurf-peek` 수선** (`agent-config` 소유). 2026-08-04 native Claude Code session을 직접 지정했는데도 `state: unknown`·메시지 0건·mtime 기반 `done` 오판. Return: direct-session path에서 model/state/recent messages가 나오고, process liveness를 증명하지 못하면 mtime 추정을 사실처럼 말하지 않는다. heuristic dashboard 품질이며 placement SSOT로 승격하지 않는다.
-- **operator-owned baseline** (repo 밖, GLG 소유 script/skill): T1-a로 window+pi를 열고, 새 시민의 identity를 사람 손으로 확인해 `entwurf_v2`를 반복 호출한다. "N개 launch와 N개 identity를 사람이 상관짓는 일"이 실제 병목인지 먼저 측정한다.
-- 통증이 관측된 뒤에야 T1-b(fresh-token 계약 + strict lookup seam) 설계를 GLG에게 별도 상신한다.
+두 후보의 상세 return 조건과 경계는 위 EXACT NEXT 및 `docs/mux-launch-rail.md`가 진다. 통증이 관측된 뒤에야 T1-b(fresh-token 계약 + strict lookup seam) 설계를 GLG에게 별도 상신한다.
 
 # STOP LINE
 
@@ -55,14 +57,14 @@ GLG 별도 승인 전에는 하지 않는다.
 - peer-placement 저장·추측, 새 public situation-map surface, public spawn verb, `entwurf_v2` 확장
 - record watcher, timeout/retry, unknown-id discovery, task queue, worker pool, role/quota 판단
 - 검증 메타도구 신설 — receipt/cache/selector 부활 포함. 감산 lane도 표 분류를 넘는 도구를 만들지 않는다
-- push, release
+- 추가 push, release
 
 # RECENT
 
 - 2026-08-05: 원점 재정비 — closure rail 폐기, pre-commit 경량화, 작업 룰 AGENTS.md 승격. 페블 진단(검증 44.9k줄 vs 제품 17.6k줄)과 GPT 검수 합의에 따라 GLG가 방향 결정.
 - 2026-08-05: GPT 독립 검수 1 Blocker·4 Defect 한 묶음 반영, amend로 닫음(`a1f27b9`). bootstrap 순서 오류 1회 기록: 새 규칙을 착지시키는 첫 커밋에서 full floor를 독립 검수보다 먼저 돌렸다 — 규칙은 유지하고 오류만 기록한다.
 - 2026-08-05: GLG 위임으로 감산 lane을 같은 세션에서 실행 — pi-mono 직접 실측, chain 분류표 작성, qualification 분리 적용(CI·release-gate·gate 변경 lane으로 이동).
-- 2026-08-05: GPT 최종 검수(1 Blocker·3 Defect) 한 묶음 반영 — scheduling topology oracle+mutant(release-gate lane 9), VERIFY P1 carve-out, release skill 경계 명시, NEXT 좌표 정리. 두 번째 commit amend로 닫음.
+- 2026-08-05: GPT 최종 검수(1 Blocker·3 Defect) 한 묶음 반영 — scheduling topology oracle+mutant(release-gate lane 9), VERIFY P1 carve-out, release skill 경계 명시, NEXT 좌표 정리. 두 번째 commit amend로 닫고 `mux-placement` branch를 push(`e7a4ec4`).
 - 2026-08-04: T1-a visible launch 구현·독립 검수 보정 → `c55a070` 커밋. qualification 158/158 KILLED. pi `0.83.0` identity 판정(동기 반환 불성립, 사전 주입 성립)으로 T1-b 병목이 upstream에서 entwurf 쪽 fresh-token 계약+lookup seam으로 이동.
 - 2026-08-04: GLG가 목표를 "내 위치 확인 → existing peer면 전달 → 없으면 옆 window에 visible Pi launch"라는 수동 판단의 재현으로 고정. Gas Town 경고로 T1 자동 진행 중단.
 - 2026-08-02: placement 없이 별도 tmux session을 만들던 generic driver 폐기.
