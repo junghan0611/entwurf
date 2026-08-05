@@ -726,7 +726,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"meta-identity": 1,
 		"mux-boundary": 14,
 		"probe-ordering": 85,
-		"release-gate": 8,
+		"release-gate": 9,
 		"self-address": 3,
 		"v2-surface": 5,
 	};

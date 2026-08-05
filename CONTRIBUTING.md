@@ -29,7 +29,7 @@ These are enforced by code, gates, and review. Do not weaken them in a PR; if yo
 pnpm check
 ```
 
-This wraps the entire static-quality surface (biome, tsc, all `check-*` gates including `check-dep-versions`). Run it once on your frozen commit candidate — the pre-commit hook (`.husky/pre-commit`) carries only fast static checks (whitespace, lint, typecheck), not the full floor, so a green `pnpm check` before commit is the evidence that your change holds (scheduling contract: AGENTS.md "Verification scheduling").
+This wraps the static-quality surface (biome, tsc, the `check-*` gates including `check-dep-versions` — all but the separately scheduled `check-gate-qualification`, which CI runs on every push and a gate-changing PR must run once itself). Run it once on your frozen commit candidate — the pre-commit hook (`.husky/pre-commit`) carries only fast static checks (whitespace, lint, typecheck), not the full floor, so a green `pnpm check` before commit is the evidence that your change holds (scheduling contract: AGENTS.md "Verification scheduling").
 
 For changes that touch backend launch, session lifecycle, or `_meta` shape, also run:
 

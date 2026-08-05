@@ -4245,6 +4245,19 @@ release_gate() {
     results+=("FAIL  static (pnpm check)"); failc=$((failc + 1))
   fi
 
+  # 1b. Discriminating power of that floor. check-gate-qualification left the
+  # default `pnpm check` chain (operator inner-loop cost), so release acceptance
+  # carries it explicitly as its own MUST step: a cut must re-prove the gates
+  # still kill what they claim to kill.
+  section "release-gate step: check-gate-qualification"
+  if (cd "$REPO_DIR" && bash "$self" check-gate-qualification); then
+    ok "check-gate-qualification: PASS"
+    results+=("PASS  check-gate-qualification"); pass=$((pass + 1))
+  else
+    fail "check-gate-qualification: FAIL"
+    results+=("FAIL  check-gate-qualification"); failc=$((failc + 1))
+  fi
+
   # 2. (gemini-availability step removed — claude-only floor; gemini CLI is
   #    deprecated, so the gate no longer asserts a three-backend claim.)
 

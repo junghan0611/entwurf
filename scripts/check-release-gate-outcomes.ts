@@ -321,6 +321,56 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 	}
 }
 
+// ===========================================================================
+// 8. qualification scheduling topology — the subtraction has its own oracle.
+//    check-gate-qualification left the default `pnpm check` chain (operator
+//    inner-loop cost, 2026-08 subtraction). That move is a gate/release
+//    contract: the step must stay REACHABLE on the axes that now own it — the
+//    CI check job on every push and release_gate as its own MUST step — and
+//    must not silently return to the default chain. Without this cell,
+//    deleting the release_gate qualification block or the CI line leaves every
+//    focused gate green while a cut quietly loses its discriminating-power
+//    step.
+// ===========================================================================
+{
+	const pkgCheck = (
+		JSON.parse(readFileSync(join(REPO_DIR, "package.json"), "utf8")) as { scripts: Record<string, string> }
+	).scripts.check;
+	const ciYml = readFileSync(join(REPO_DIR, ".github/workflows/ci.yml"), "utf8");
+	const ciHits = ciYml.split("- run: ./run.sh check-gate-qualification").length - 1;
+	const runShQ = readFileSync(join(REPO_DIR, "run.sh"), "utf8");
+	const qualGateBody = runShQ.slice(runShQ.indexOf("release_gate() {"), runShQ.indexOf("# 5. Summary"));
+	const invocations = qualGateBody.split('bash "$self" check-gate-qualification').length - 1;
+	const verifyDoc = readFileSync(join(REPO_DIR, "VERIFY.md"), "utf8");
+
+	// One claim token, one assert (the qualification runner requires the exact-once
+	// signature); each broken axis names itself in the joined message.
+	const holes: string[] = [];
+	if (pkgCheck.includes("check-gate-qualification"))
+		holes.push(
+			"package.json's default `check` chain contains check-gate-qualification again (doubles every closure floor)",
+		);
+	if (ciHits !== 1) holes.push(`the CI check job runs check-gate-qualification ${ciHits}x (need exactly once)`);
+	if (ciHits === 1 && ciYml.indexOf("- run: pnpm check") > ciYml.indexOf("- run: ./run.sh check-gate-qualification"))
+		holes.push("CI runs qualification before the pnpm check step it qualifies");
+	if (invocations !== 1)
+		holes.push(`release_gate invokes check-gate-qualification ${invocations}x (need exactly one MUST step)`);
+	if (
+		!qualGateBody.includes('results+=("PASS  check-gate-qualification")') ||
+		!qualGateBody.includes('results+=("FAIL  check-gate-qualification")')
+	)
+		holes.push("the release_gate qualification step does not wire PASS/FAIL into the MUST counters");
+	if (!verifyDoc.includes("in the CI `check` job on every push, and as a release-gate MUST step"))
+		holes.push("VERIFY.md no longer names the owners of the moved qualification step");
+	assert.ok(
+		holes.length === 0,
+		"[QK:QUALIFICATION-SCHEDULING-REACHABLE] check-gate-qualification left the default `pnpm check` chain " +
+			"deliberately, so it must stay REACHABLE on the axes that own it now — absent from the default chain, " +
+			"exactly once in the CI check job after pnpm check, exactly once as a release_gate MUST step with its " +
+			`outcome wired, and named in VERIFY. Broken: ${holes.join("; ")}`,
+	);
+}
+
 console.log(
 	"[check-release-gate-outcomes] ok — STEP OUTCOME protocol: one skip exit code shared by the shell and TS halves " +
 		`(${LIVE_SKIP_EXIT}, clear of the per-tool 0..4 and shell 126+ bands), classifier maps 0→PASS / skip→SKIP / ` +
@@ -328,5 +378,7 @@ console.log(
 		"exit 0, no LIVE smoke still carries the pre-P1 exit-0 skip shape, and both real skip surfaces were INVOKED and " +
 		"observed to propagate the code: a smoke with LIVE unset (through run_ts, with its operator-readable marker) and " +
 		"a run.sh wrapper declining its own prerequisite (including the measured LIVE=1 no-cortex-connection cell); and every " +
-		"LIVE smoke is either wired into release_gate or excluded by a sentence the docs still carry",
+		"LIVE smoke is either wired into release_gate or excluded by a sentence the docs still carry; and the moved " +
+		"check-gate-qualification stays reachable on its owners (absent from the default chain, exactly once in CI, " +
+		"exactly once as a release-gate MUST step)",
 );

@@ -24,6 +24,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      # check-gate-qualification left the default local `pnpm check` chain
+      # (operator inner-loop cost). CI machine time still re-proves the gates'
+      # kill-power on every push, so the "exact release SHA has all CI jobs
+      # green" axis keeps full qualification strength.
+      - run: ./run.sh check-gate-qualification
 
   # The install surface has its own job because `pnpm check` is a SOURCE-tree floor: it
   # can only ever prove a dev clone works. Every fence bug this repo has shipped —

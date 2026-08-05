@@ -257,6 +257,11 @@ Do not summarize the aggregate as a fixed number of gates. The current
 `package.json` check script is the SSOT. If any check fails, stop at that axis,
 fix it, and rerun the complete aggregate.
 
+The `check` chain deliberately excludes `check-gate-qualification`: the LIVE
+release gate (P5) runs it as its own MUST step, and the exact-SHA CI `check`
+job (M2) requires it on the release commit. Do not add a manual qualification
+rerun here.
+
 ## P5. Run the LIVE release gate from fresh scratch
 
 Use the `tmux` skill because this command is long-running. Preserve the scratch
@@ -324,7 +329,7 @@ Report:
 - prepared version and commit SHA
 - `pnpm check` result
 - release-gate scratch, log, and artifact paths
-- actual `MUST: PASS=n FAIL=0 SKIP=n`
+- actual `MUST: PASS=n FAIL=0 SKIP=n` (includes the `check-gate-qualification` MUST step)
 - actual `BEHAVIOR: PASS=n FAIL=n`
 - release-specific work deliberately deferred to `make`
 - clean-tree result
@@ -365,6 +370,10 @@ grep -qE "^## ${VERSION}([[:space:]]|$)" CHANGELOG.md
 test "$(node -p "require('./package.json').version")" = "$VERSION"
 pnpm check
 ```
+
+`pnpm check` here is the default static floor without qualification; do not
+duplicate a manual `check-gate-qualification` run in preflight. The exact-SHA
+CI `check` job (M2) is the axis that requires it.
 
 Confirm that a fresh release-gate scratch/log path and its actual MUST/BEHAVIOR
 summary are present in the changelog or durable operator handoff. Do not proceed
