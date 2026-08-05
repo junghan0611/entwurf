@@ -1496,7 +1496,7 @@ check_dep_versions() {
   # docs. Concretely the kind of skew that produced commit 21de0f9's "0.11.1
   # leftover" review comment: package.json bumped to 0.12.0 while README
   # and run.sh's setup gate still claimed 0.11.1. Static check, no
-  # subprocess — fast enough to run inside `pnpm check` and pre-commit.
+  # subprocess — fast enough to run inside `pnpm check`.
   # The doc half of that promise was prose only until 0.12.8 — see the
   # BASELINE DOCS block below, which finally makes this comment true.
   (cd "$REPO_DIR" && node --input-type=module <<'EOF'

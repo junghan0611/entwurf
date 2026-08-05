@@ -30,7 +30,7 @@ For agents that own this repo: invariant principles and reproducible verificatio
 - **pi adapter** attaches a pi session to a record at `session_start`, hosts the record-keyed control socket, and exposes the native pi tool surface.
 - **Native bridges** register already-running native sessions without taking over their transcript or auth: Claude Code is mailbox/self-fetch; Antigravity is probe-backed native-push. Codex has archived probe evidence, but its managed native lane was declined because pi already supplies the official GPT provider path; do not duplicate it as a native citizen or ACP backend.
 - **ACP plugin** registers provider `entwurf` inside a pi host session and drives a backend under an isolated overlay. The host pi session is already a record-backed socket citizen; the plugin does not mint another citizen/socket/peer layer.
-- **mux launch rail is not implemented yet.** #47 starts by measuring the caller's current tmux placement and appending windows inside that same operator session. Do not invent a generic driver, harness profile, or creation API before the raw tmux sequence is fixed.
+- **mux is launch-only and deliberately small.** Shipped: the tmux placement leaf (`mux-placement.ts` — inspect/append/close inside the caller's own session) and the visible pi launch composition (`mux-launch.ts`) above it. Neither has a production consumer and `entwurf_v2` behavior is unchanged. T1-b automatic delegation stays PAUSED behind an undesigned fresh-token contract and lookup seam; starting that design is a separate GLG approval. Do not invent a generic driver, harness profile, or creation API. Ownership and import prohibitions: [docs/mux-launch-rail.md](./docs/mux-launch-rail.md) §11.
 - **One delivery verb:** `entwurf_v2` addresses an existing garden id. Current routes are live control-socket send, dormant spawn-bg resume, active self-fetch mailbox enqueue, and probe-alive native-push. Complementary state×intent pairs reject honestly. Fresh creation is a separate future capability.
 
 ## Hard Rules
@@ -124,10 +124,26 @@ LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live
 
 - `pnpm check` is the static floor and includes the detailed `check-*`/offline smoke matrix.
 - **Kill-proof discipline (gate qualification).** A gate is a test only if re-planting a closed defect turns it red for the claimed reason. `check-gate-qualification` proves that automatically: committed mutants in `scripts/mutants/` must be KILLED at their `[QK:<claim>]` signature inside an isolated snapshot repo (control→mutant→restore→control; the real checkout is never written). Gates a release touches carry such manifests; assertion counts are never evidence — claim IDs + killed mutant IDs are. `check-agy-permission-matrix` holds the enumerated permission contract space; matrix cells change by axis/rule edits, never by appending cases.
-- **When changing a contract/gate:** name the production subject and an oracle independent of it; give the failing assertion a stable `[QK:<claim>]` label and add/update the exact-once mutant in `scripts/mutants/*.json`; if the contract is combinatorial, update the literal matrix axes/cells/exclusions together with their declared counts; then verify focused gate → `check-gate-qualification` → `pnpm check`, in that order. `MUTANT-STALE`/`SURVIVED`/`WRONG-REASON`/`CONTROL-RED`/`HANG`/`IMPURE` are red — never substitute an assertion count for a kill.
+- **When changing a contract/gate:** name the production subject and an oracle independent of it; give the failing assertion a stable `[QK:<claim>]` label and add/update the exact-once mutant in `scripts/mutants/*.json`; if the contract is combinatorial, update the literal matrix axes/cells/exclusions together with their declared counts; then verify the focused gate, and let qualification and the full floor follow the scheduling contract below — once on the frozen candidate, not once per amendment. `MUTANT-STALE`/`SURVIVED`/`WRONG-REASON`/`CONTROL-RED`/`HANG`/`IMPURE` are red — never substitute an assertion count for a kill.
 - Run LIVE gates with `PWD` in scratch so session artifacts do not land in the repo.
 - Release acceptance and evidence levels are defined in [VERIFY.md](./VERIFY.md); recorded host evidence is in [BASELINE.md](./BASELINE.md).
 - A failed gate or evidence downgrade blocks commit/release. Pipes can be connected and the water can still taste wrong.
+
+### Verification scheduling — when the floor runs
+
+Gate quality and gate scheduling are different axes: the gates above define *what* green means; this contract owns *when* each layer runs. It exists because repeating the full floor around every review amendment once cost more than the work it verified (history: CHANGELOG/git).
+
+```text
+implement → affected focused gates → independent review → one amendment bundle
+          → pnpm check once on the frozen candidate (full qualification included) → commit
+```
+
+- **Inner loop:** run only the gates whose subject changed. Do not open the full floor to learn what a focused gate already answers.
+- **Review before floor:** independent review and its corrections close as one bundle before the full floor runs.
+- **Qualification is inside the floor, not beside it.** `check-gate-qualification` already runs inside `pnpm check`, so the full mutant inventory is proven exactly once — on the final floor run. When a gate or mutant changed, the inner loop verifies the affected claim/mutant focused; never add a standalone full qualification pass on top.
+- **Full floor once**, on the frozen commit candidate. While it runs, nothing edits the worktree or index — including the NEXT boot sectors; a moved candidate voids the run's evidence.
+- **pre-commit is not the floor.** `.husky/pre-commit` carries only fast static checks (whitespace, lint, typecheck); the full floor is owned by this protocol, not by the hook. Do not grow the hook back, and do not build receipt/cache machinery to prove the protocol was followed.
+- **Release/LIVE acceptance is untouched.** VERIFY.md floors keep full strength; a shorter inner loop never lowers release evidence.
 
 ## Repository Map
 
@@ -165,6 +181,18 @@ LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live
 - Keep docs calibrated and compact. Implementation archaeology belongs in git/CHANGELOG/issues; AGENTS keeps only invariants needed before acting.
 - Use tabs unless the existing file/linter requires otherwise.
 - GLG decides commit, push, and release gates. Never infer push from a commit request.
+
+### Review triage and lane discipline
+
+An overgrowth is built from locally correct steps; what fails is the absence of a budget and a stop rule. These are that budget.
+
+- **Reproduce one manual operator action per step.** Measure → narrow leaf → visible composition → observe real pain → next step. Never pre-build the general future (orchestrator, watcher, manager, backlog, role system) ahead of an observed bottleneck, and never build structure to compensate for a current model's habits — both burn with the next model or billing change.
+- **Triage review findings into three grades.** *Blocker* (false success, data loss, authority violation): fix in the current lane. *Defect* (real mismatch against the current explicit contract): fix in the amendment bundle. *Observation* (future risk, stronger-proof possibility): record it — it does not open work in the current lane.
+- **One amendment bundle per review.** If the bundle itself surfaces two or more new architecture blockers, stop repairing and go back to the design.
+- **Unrelated meta-infra never rides a capability lane.** The source-adjacent gate/mutant that proves a capability's contract belongs in the same change as that capability — the removal/repair rule above is untouched. What stays out of a feature commit candidate is unrelated verification machinery: scheduling rework, selectors, caches, receipts, floor restructuring. That pain is recorded and handled in its own subtraction lane later.
+- **Stop signal — evidence outgrowing the product.** When verification/meta-tool changes grow larger than the capability change they serve, stop and report to GLG. This is an operator-judgment trigger, deliberately not a mechanized ratio gate.
+- **Claim only what the evidence carries.** "The full floor was green once on the declared candidate" is strong enough; a stronger sentence mints proof obligations, and those obligations mint subsystems.
+- **Risk classes are not equal.** Data loss, identity authority, false delivery success, install destruction, and secrets get fail-closed strength. Doc tense, future possibility, and total environment-byte binding get repaired when seen — they do not justify new gate machinery.
 
 ## Next and References
 

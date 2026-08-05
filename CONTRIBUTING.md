@@ -29,7 +29,7 @@ These are enforced by code, gates, and review. Do not weaken them in a PR; if yo
 pnpm check
 ```
 
-This wraps the entire static-quality surface (biome, tsc, all `check-*` gates including `check-dep-versions`). It is wired into the pre-commit hook (`.husky/pre-commit`), so a clean local commit is the first sign your change holds.
+This wraps the entire static-quality surface (biome, tsc, all `check-*` gates including `check-dep-versions`). Run it once on your frozen commit candidate — the pre-commit hook (`.husky/pre-commit`) carries only fast static checks (whitespace, lint, typecheck), not the full floor, so a green `pnpm check` before commit is the evidence that your change holds (scheduling contract: AGENTS.md "Verification scheduling").
 
 For changes that touch backend launch, session lifecycle, or `_meta` shape, also run:
 
