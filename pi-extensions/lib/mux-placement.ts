@@ -22,9 +22,9 @@
  * INTERNAL SEAM for the T1-a launch composition to build on — not a fourth action and not a
  * public operator surface. Say the risk plainly: `runTmux` takes argv this module did not
  * author, so boundary 2 below does not protect it. The grammar is enforced by the `build*Args`
- * builders, and anything reaching for `runTmux` owes its own argv the same validation. Today
- * its one production consumer is the launch composition (`docs/mux-launch-rail.md` §11); the
- * shipped delivery path calls neither.
+ * builders, and anything reaching for `runTmux` owes its own argv the same validation. Its two
+ * production consumers are the launch and fresh-call compositions (`docs/mux-launch-rail.md`
+ * §11); the shipped delivery path calls neither.
  *
  * ── Four boundaries, each of which was a real way to touch the wrong thing ──
  *

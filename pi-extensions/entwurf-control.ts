@@ -1042,6 +1042,7 @@ export default function (pi: ExtensionAPI) {
 	if (shouldRegisterControlTools(pi)) {
 		registerListSessionsTool(pi);
 		registerEntwurfV2Tool(pi);
+		registerFreshCallTool(pi);
 	}
 
 	// The in-process mint refusals (`/new`, `/fork`, `/clone`, RPC new_session) are
@@ -1453,7 +1454,7 @@ function registerListSessionsTool(pi: ExtensionAPI): void {
 		name: "entwurf_peers",
 		label: "List Garden Citizens",
 		description:
-			"List the entwurf fact surface: garden citizens from meta-records (including active self-fetch meta receivers such as claude-code) with liveness, plus diagnostics. The record is the sole address axis (#50 C4) — a control socket no record claims surfaces as a record-less-socket diagnostic, never a peer row. Pair with entwurf_v2 to address a peer by garden id; this surface reports facts, never per-row routing verbs.",
+			"List the entwurf fact surface: garden citizens from meta-records (including active self-fetch meta receivers such as claude-code) with liveness, plus diagnostics. The record is the sole address axis (#50 C4) — a control socket no record claims surfaces as a record-less-socket diagnostic, never a peer row. Pair with entwurf_v2 to address a peer by garden id; this surface reports facts, never per-row routing verbs. It is facts-only and creates nothing: to open a NEW sibling use entwurf_fresh_call.",
 		parameters: Type.Object({}),
 		async execute(
 			_toolCallId: string,
@@ -1472,6 +1473,90 @@ function registerListSessionsTool(pi: ExtensionAPI): void {
 				const msg = err instanceof Error ? err.message : String(err);
 				return {
 					content: [{ type: "text", text: `entwurf_peers error: ${msg}` }],
+					details: { error: msg },
+				};
+			}
+		},
+	});
+}
+
+// ============================================================================
+// Tool: entwurf_fresh_call
+// ============================================================================
+
+const MUX_FRESH_CALL_MODULE = "./lib/mux-fresh-call.ts";
+
+interface MuxFreshCallModule {
+	freshCall(
+		params: { backend: "pi" | "claude-code"; task: string; callerGardenId: string | null },
+		env?: NodeJS.ProcessEnv,
+	): { ok: boolean };
+	renderFreshCall(result: { ok: boolean }): { text: string; isError: boolean };
+}
+
+/**
+ * The caller identity for this surface is the RESIDENT's garden address — the one the record
+ * minted at session start and keyed the control socket on. It is read from this extension's own
+ * closure, never from a tool parameter and never from `process.env`.
+ *
+ * A caller that could pass an id could pass a WRONG one, and that value would become the address
+ * the sibling calls back to — docs/mux-launch-rail.md §6-b keeps the measured incident. So there
+ * is no parameter to be wrong with.
+ *
+ * A null resident id refuses LOUDLY rather than falling back: without an address to call back to,
+ * the launch would be a window with no way home.
+ */
+function registerFreshCallTool(pi: ExtensionAPI): void {
+	// Same TS2589 workaround as registerEntwurfV2Tool — see the comment block there.
+	const registerTool = pi.registerTool as (def: any) => void;
+	registerTool({
+		name: "entwurf_fresh_call",
+		label: "Open Fresh Sibling",
+		description: `Open ONE fresh visible sibling in the operator's own tmux session and hand it a first task. Two fixed
+backends only: pi, claude-code. The sibling's FIRST action is a callback to you carrying a nonce, and the
+sender envelope of that callback is its garden id — that is how you learn the address of something that did
+not exist a moment ago. This returns a LAUNCH receipt (tmux window/pane plus that nonce) and nothing else:
+it does NOT mean the runtime started, the first turn ran, or the task was delivered. Nothing polls for the
+callback; if it never arrives the window is visible and can be read directly. For EXISTING citizens use
+entwurf_v2 — this tool only creates, and entwurf_peers only reports. There are no provider/model/command/cwd
+knobs: runtime and argv are fixed per backend. Do not put secrets in the task — the launch argv is visible to
+same-user processes on this host.`,
+		parameters: Type.Object({
+			backend: StringEnum(["pi", "claude-code"], {
+				description: "Which fixed runtime to open. Only these two; there is no arbitrary command or model.",
+			}),
+			task: Type.String({
+				minLength: 1,
+				maxLength: 16000,
+				description:
+					"What the sibling should do after it calls you back. Plain instructions; no secrets (see the tool description).",
+			}),
+		}),
+		async execute(
+			_toolCallId: string,
+			params: { backend: "pi" | "claude-code"; task: string },
+			_signal: AbortSignal | undefined,
+			_onUpdate: unknown,
+			_ctx: ExtensionContext,
+		) {
+			try {
+				const mux = (await import(MUX_FRESH_CALL_MODULE)) as unknown as MuxFreshCallModule;
+				const result = mux.freshCall({
+					backend: params.backend,
+					task: params.task,
+					callerGardenId: residentGardenId,
+				});
+				const rendered = mux.renderFreshCall(result);
+				return {
+					content: [{ type: "text", text: rendered.text }],
+					isError: rendered.isError,
+					details: { isError: rendered.isError },
+				};
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				return {
+					content: [{ type: "text", text: `entwurf_fresh_call error: ${msg}` }],
+					isError: true,
 					details: { error: msg },
 				};
 			}

@@ -15,8 +15,8 @@
  *
  * T1-a is launch, NOT delegation. This module does not wait for a garden identity, does not
  * read the meta-record store, does not send a task, and has no idea what `entwurf_v2` is.
- * T1-b (binding the new pi's exact garden id to the request) is PAUSED and nothing here is a
- * step toward it — see `docs/mux-launch-rail.md` §6.
+ * The separate fresh-call composition reuses its precondition helpers but owns first-turn
+ * framing and callback correlation itself — see `docs/mux-launch-rail.md` §6-a and §11.
  *
  * ── What the receipt means, and what it deliberately does NOT ──
  *
@@ -169,12 +169,12 @@ export function assertLaunchTarget(runtimePath: string): void {
  * `::` is a cwd search, and a launch that depends on where the caller stood is the drift this
  * rail refuses.
  */
-export function resolvePiRuntime(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveRuntimeOnPath(command: string, env: NodeJS.ProcessEnv = process.env): string {
 	const raw = env.PATH;
 	const entries = typeof raw === "string" ? raw.split(delimiter).filter((p) => p.length > 0) : [];
 	for (const dir of entries) {
 		if (!isAbsolute(dir)) continue;
-		const candidate = join(dir, PI_RUNTIME_COMMAND);
+		const candidate = join(dir, command);
 		try {
 			if (!statSync(candidate).isFile()) continue;
 			accessSync(candidate, fsConstants.X_OK);
@@ -186,9 +186,20 @@ export function resolvePiRuntime(env: NodeJS.ProcessEnv = process.env): string {
 	}
 	throw new LaunchPreconditionError(
 		"runtime-unresolved",
-		`mux-launch: no executable ${JSON.stringify(PI_RUNTIME_COMMAND)} on PATH — refusing to open a window for a ` +
+		`mux-launch: no executable ${JSON.stringify(command)} on PATH — refusing to open a window for a ` +
 			"runtime that is not installed",
 	);
+}
+
+/**
+ * T1-a's own resolution: the fixed official `pi`. Kept as a named function rather than a call
+ * site with a constant because the launch contract is "this rail opens `pi`", and a caller that
+ * could pass a command would be the carrier this module refuses to have (docs §11). The
+ * generic form above exists only so a SEPARATE composition can apply the SAME preconditions to
+ * its own fixed runtime — not so this one becomes parameterised.
+ */
+export function resolvePiRuntime(env: NodeJS.ProcessEnv = process.env): string {
+	return resolveRuntimeOnPath(PI_RUNTIME_COMMAND, env);
 }
 
 /**

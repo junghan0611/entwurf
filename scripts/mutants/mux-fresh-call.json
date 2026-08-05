@@ -1,0 +1,74 @@
+{
+	"schemaVersion": 1,
+	"lane": "mux-fresh-call",
+	"mutants": [
+		{
+			"claim": "FRESHCALL-PI-ARGV-PROMPT-FIRST",
+			"title": "pi gets the flag before the prompt again — the measured shape that opens a window whose first turn never runs",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t\treturn [prompt, \"--entwurf-control\"];"],
+			"replace": ["\t\t\treturn [\"--entwurf-control\", prompt];"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:FRESHCALL-PI-ARGV-PROMPT-FIRST]",
+			"signatureSource": "scripts/check-mux-fresh-call.ts"
+		},
+		{
+			"claim": "FRESHCALL-CLAUDE-ARGV-EQUALS-FORM",
+			"title": "claude-code goes back to the variadic space form, which swallows the prompt as an option value",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t\treturn [prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]}`];"],
+			"replace": ["\t\t\treturn [prompt, \"--allowedTools\", FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]];"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:FRESHCALL-CLAUDE-ARGV-EQUALS-FORM]",
+			"signatureSource": "scripts/check-mux-fresh-call.ts"
+		},
+		{
+			"claim": "FRESHCALL-CALLBACK-PRECEDES-TASK",
+			"title": "the task is framed before the callback instruction, so a sibling that stalls in the task never names itself",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t`FIRST ACTION, before reading files or anything else: call ${tool} with ` +"],
+			"replace": ["\t\t`FINAL ACTION, after completing the task: call ${tool} with ` +"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:FRESHCALL-CALLBACK-PRECEDES-TASK]",
+			"signatureSource": "scripts/check-mux-fresh-call.ts"
+		},
+		{
+			"claim": "FRESHCALL-RECEIPT-WITHOUT-CORRELATION",
+			"title": "the launch receipt grows a sibling garden-id field, making an async correlation look like a synchronous return",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\tbackend: FreshCallBackend;\n\truntimePath: string;\n\tnonce: string;\n}"],
+			"replace": ["\tbackend: FreshCallBackend;\n\truntimePath: string;\n\tnonce: string;\n\tgardenId?: string;\n}"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:FRESHCALL-RECEIPT-WITHOUT-CORRELATION]",
+			"signatureSource": "scripts/check-mux-fresh-call.ts"
+		},
+		{
+			"claim": "FRESHCALL-PI-SURFACE-IDENTITY-AND-SCHEMA",
+			"title": "native pi takes the caller garden id from the environment instead of its own resident closure — the uuidv7 confusion, reintroduced",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\t\t\tcallerGardenId: residentGardenId,"],
+			"replace": ["\t\t\t\t\tcallerGardenId: process.env.PI_SESSION_ID ?? null,"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:FRESHCALL-PI-SURFACE-IDENTITY-AND-SCHEMA]",
+			"signatureSource": "scripts/check-mux-fresh-call.ts"
+		},
+		{
+			"claim": "FRESHCALL-CLAUDE-SURFACE-IDENTITY-AND-SCHEMA",
+			"title": "the MCP bridge reads the caller garden id straight out of env instead of its authoritative self envelope",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\t\t\tconst self = await buildAuthoritativeSelfEnvelope();\n\t\t\tcallerGardenId = self.envelope.sessionId;"
+			],
+			"replace": ["\t\t\tcallerGardenId = process.env.PI_SESSION_ID ?? null;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:FRESHCALL-CLAUDE-SURFACE-IDENTITY-AND-SCHEMA]",
+			"signatureSource": "scripts/check-mux-fresh-call.ts"
+		}
+	]
+}

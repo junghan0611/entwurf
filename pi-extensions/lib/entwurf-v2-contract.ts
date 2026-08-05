@@ -25,10 +25,9 @@
  *    This is transport capability, not identity rank: every target is first a
  *    record citizen. `unsupported` is a 4th FACT value, not a 4th table column.
  *  - R2: `target` is the garden-id of an EXISTING citizen. spawn-new is out of
- *    v2 scope — it was the legacy `entwurf` verb's, and since that verb's removal
- *    fresh creation is a deferred capability with NO surface, not a fallback that
- *    still exists elsewhere. Absent/typo gid = `bad-target` (so F6 "오타 gid가
- *    신규 spawn 사고 막기" holds automatically).
+ *    v2 scope — fresh creation now has the separate `entwurf_fresh_call` surface,
+ *    never a fallback inside this resolver. Absent/typo gid = `bad-target` (so F6
+ *    "오타 gid가 신규 spawn 사고 막기" holds automatically).
  *  - N1/F3: an `indeterminate` target never spawns. N2: `fire-and-forget` to a
  *    `dormant` target is "reject for now" (mailbox-wake lacks a reply-correlation
  *    id in the substrate; an additive extension later, not a permanent no).

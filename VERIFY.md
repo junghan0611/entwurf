@@ -5,7 +5,7 @@ invariants live in gates; this file defines evidence strength, release acceptanc
 and the manual judgements a gate cannot make.
 
 > **Current surface.** `entwurf-bridge` exposes `entwurf_v2`, `entwurf_peers`,
-> `entwurf_self`, `entwurf_inbox_read`, and `entwurf_register_native`. The ACP
+> `entwurf_fresh_call`, `entwurf_self`, `entwurf_inbox_read`, and `entwurf_register_native`. The ACP
 > backends are Claude and Snowflake Cortex Code. Antigravity is a separate shipped
 > native-push citizen lane; Codex has delivery-probe evidence but no managed citizen
 > lane. Retired v1 verbs and bridge implementations belong only in CHANGELOG/git.
@@ -51,6 +51,8 @@ Verification here is not a benchmark. In production we exchange short turns and 
 > **Cortex is an on-demand axis, not an aggregate one.** Its rail needs an external Snowflake connection and login that the host owns, not the repo — so wiring it into the aggregate would block every cut taken on a host without that account. **The 0.13.1 aggregate does not re-certify Cortex**; `LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live` stays a required direct call whenever a cut changes Cortex rail code or an operator elects to certify that host. Its honest-skip behaviour is unchanged: run it without the connection and it reports protocol SKIP, never a pass.
 >
 > A cut that touches the prompt-lifecycle contract (no wall clock on a running turn) owes one long-turn acceptance the aggregate floor is too short to carry: `LIVE=1 ./run.sh smoke-acp-long-turn-live` drives a real turn whose tool work outlasts the retired 600s cutoff and requires exactly one cold ACP bootstrap in the transcript. It takes >12 minutes by construction and is on-demand, not part of `release-gate`.
+>
+> **Fresh-call LIVE is on-demand, not part of `release-gate`.** `LIVE=1 ./run.sh smoke-mux-fresh-call-live` opens configured Pi and Claude Code siblings, spends two model turns, and preserves their native transcripts; run it directly whenever a cut changes mux fresh-call/launch behavior. Its private tmux servers and fixture-bound entwurf write axes make it deterministic about garden-record/socket residue, but those real native turns should not appear unexpectedly in every aggregate cut.
 >
 > The aggregate release gate does not own a live agy conversation id, so agy's real native-push round trip is a separate acceptance axis: three fail-loud doctors plus `LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live`, followed by a fresh-conversation sender/reply check after package install. Its deterministic install/sender gates are already inside `pnpm check`; do not misreport the aggregate gate as live agy evidence.
 >

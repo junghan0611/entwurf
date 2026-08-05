@@ -238,6 +238,10 @@ function main(): void {
 			"pi-extensions/lib/entwurf-v2-production.ts",
 		];
 		const PRODUCTION_SOURCES = [...walkTs("pi-extensions"), ...walkTs("mcp")].filter((f) => f !== LAUNCH_MODULE);
+		/** The one allowed importer. T1-a shipped with none at all; the fresh-call composition is the
+		 * first, and it is allowed BECAUSE it is the layer above — it reuses the launch preconditions
+		 * rather than copying them, while delivery stays as far away as it ever was. */
+		const FRESH_CALL_MODULE = "pi-extensions/lib/mux-fresh-call.ts";
 		ok(
 			"corpus: the scanned corpus IS the shipped source — both roots, every delivery module and the bridge entrypoint present by name, no build artifacts, and the launch module itself the only exclusion",
 			PRODUCTION_SOURCES.length >= 40 &&
@@ -249,8 +253,10 @@ function main(): void {
 				PRODUCTION_SOURCES.every((f) => !f.includes("node_modules") && !f.includes("/dist/")),
 		);
 		ok(
-			"[QK:MUX-LAUNCH-CORE-IMPORT-FREE] NO production source imports mux-launch — not the four delivery modules, not any other shipped file — and mux-launch imports no entwurf core: launch composition is not a delivery dependency",
-			PRODUCTION_SOURCES.every((m) => !importsLaunch(m)) && !/from\s+"\.\/(entwurf|meta)-[^"]*"/.test(LAUNCH_SRC),
+			"[QK:MUX-LAUNCH-CORE-IMPORT-FREE] launch is not a delivery or core dependency: the ONLY shipped file that may import mux-launch is the fresh-call composition — not the four delivery modules, not anything else — and mux-launch still imports no entwurf core",
+			PRODUCTION_SOURCES.filter((m) => m !== FRESH_CALL_MODULE).every((m) => !importsLaunch(m)) &&
+				importsLaunch(FRESH_CALL_MODULE) &&
+				!/from\s+"\.\/(entwurf|meta)-[^"]*"/.test(LAUNCH_SRC),
 		);
 		ok(
 			"boundary: mux-launch imports only node builtins and the placement leaf",
@@ -260,12 +266,12 @@ function main(): void {
 			"boundary: the placement leaf does not import the launch module — the leaf stays deletable on its own",
 			!importsLaunch("pi-extensions/lib/mux-placement.ts"),
 		);
-		// Prose is not behaviour: the module header names the T1-b vocabulary precisely to say
-		// it does none of it, so this assertion reads CODE with the comments stripped. A check
+		// Prose is not behaviour: the module header names identity vocabulary precisely to say
+		// it owns none of it, so this assertion reads CODE with the comments stripped. A check
 		// that failed on its own documentation would push the boundary out of the docs.
 		const LAUNCH_CODE = LAUNCH_SRC.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 		ok(
-			"boundary: T1-b is untouched — no code here reads a record store, a garden id, or a session-id carrier",
+			"boundary: the launch leaf stays identity-free — no code here reads a record store, a garden id, or a session-id carrier",
 			!/gardenId|nativeSessionId|session-id|meta-session|entwurf_v2/.test(LAUNCH_CODE),
 		);
 

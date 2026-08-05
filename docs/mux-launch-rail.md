@@ -1,9 +1,13 @@
 # mux launch rail — 먼저 같은 tmux session의 window를 다룬다
 
-> **Status (2026-08-04): T0-b와 T1-a 완료.** `pi-extensions/lib/mux-placement.ts`의 세 동사(placement
-> leaf)와 `pi-extensions/lib/mux-launch.ts`의 visible launch가 실물로 섰고, 각각 deterministic +
-> real-tmux gate를 진다. **production consumer는 없다** — 둘 다 import하는 출하 경로가 없고
-> `entwurf_v2` 동작은 이전과 동일하다. **T1-b automatic delegation은 미구현·PAUSED다**(§6).
+> **Status (2026-08-05): T0-b · T1-a 완료, 그 위에 fresh-call composition이 섰다.**
+> `pi-extensions/lib/mux-placement.ts`의 세 동사(placement leaf)와 `pi-extensions/lib/mux-launch.ts`의
+> visible launch는 그대로이고, `pi-extensions/lib/mux-fresh-call.ts`가 **그 둘 위의 유일한 public
+> product path**로 얹혔다 — placement leaf 자체는 launch와 fresh-call 양쪽에서 재사용된다.
+> `entwurf_fresh_call` public tool은 native pi와 MCP bridge 양쪽에 등록된다.
+> delivery(`entwurf_v2`)는 여전히 launch를 import하지 않으며 그 동작도 이전과 동일하다.
+> **§6이 서술한 형태의 T1-b(사전 주입 token → identity lookup)는 CLOSED다** — 미구현인 채로 §6-a의
+> callback correlation에 의해 superseded됐고, 새 증거와 GLG 재승인 없이 다시 열지 않는다.
 > 정확한 다음 행동은 active NEXT handoff가 진다.
 
 ## 1. 출발점 — 무엇을 부를지보다 어디에 여는지가 먼저다
@@ -171,7 +175,7 @@ proven peer placement        어디 보이는가 optional, exact evidence 있을
 그런데 GLG가 손으로 하는 세 동작 — 내 위치 확인 / 옆 window 생성 / pi 실행 — 에는 identity 문제가
 아예 없다. 전부 즉시·로컬 사실이다. 어려운 것은 그 다음이다.
 
-### T1-a — visible Pi launch (완료, production consumer 없음)
+### T1-a — visible Pi launch (완료; 유일한 consumer는 §6-a의 fresh-call composition)
 
 `pi-extensions/lib/mux-launch.ts`. placement leaf에 네 번째 동사를 붙이지 않고 **그 위에 얹은 별도
 composition**이다 — leaf에 command 파라미터를 두는 순간 그것이 leaf가 거부하는 carrier가 되고, leaf의
@@ -224,14 +228,15 @@ launch와 그 순간 구별 불가능하다. window는 몇 밀리초 뒤 `remain
 경우는 **fail loud 하고 orphan을 명시**한다. inventory diff로 "새로 생긴 것"을 추정해 죽이는 것은 이
 rail이 다른 모든 곳에서 금지하는 바로 그 추측이다.
 
-### T1-b — automatic delegation (PAUSED)
+### T1-b — automatic delegation (historical token/lookup design; CLOSED)
 
 ```text
 새 Pi가 낳은 exact garden id를 launch 요청과 결박
   → entwurf_v2로 task 전달
 ```
 
-이것은 identity correlation 문제다. §6의 사실 판정이 통과할 때만 연다.
+이 identity-correlation 문제를 token과 store lookup으로 풀려던 설계는 §6-a의 callback 방식으로
+대체됐다. 아래 §6은 폐기된 선택지의 근거를 보존하며, 현재 구현 방향을 열지 않는다.
 
 ### 왜 fresh call이 어려운가
 
@@ -295,11 +300,11 @@ caller가 fresh token N을 민팅
 않는다. 기존 holder가 하나 있으면 upsert는 실패하지 않고 **ATTACH해서 그 gardenId를 재사용한다.**
 그러면 caller는 자기가 방금 연 세션이 아니라 남의 주소를 상관짓게 된다.
 
-그래서 이 절의 결론은 **"T1-b가 원리적으로 후보로 열렸다"**이지 "correlation이 증명됐다"가 아니다.
-아래 세 조건은 그 후보를 실제로 열려면 먼저 설계돼야 하는 것들이며, 현재 **전부 미설계**다. T1-b는
-**PAUSED 유지**다.
+당시 결론은 **"T1-b가 원리적으로 후보로 열렸다"**이지 "correlation이 증명됐다"가 아니었다.
+아래 세 조건은 그 후보에 필요했지만 전부 미설계로 남았고, §6-a의 callback correlation이 제품 완료점이
+되면서 이 후보는 CLOSED됐다.
 
-### 후보를 열기 전에 설계돼야 하는 것 — 현재 전부 미설계
+### 폐기된 후보에 필요했던 것 — 끝내 미설계
 
 1. **주입하는 것은 garden id가 아니라 caller가 민팅한 opaque native token이다.** 과거에는 launcher가
    `--session-id <gardenId>`를 넣었고, 그것이 pi와 entwurf 두 authority를 한 문자열에 묶었다.
@@ -341,11 +346,59 @@ caller가 fresh token N을 민팅
 | 동기 identity 반환 | **불성립** |
 | fresh-token contract (두 namespace preflight + 경합 처리) | **미설계** |
 | native id → gardenId caller lookup seam | **미구현** |
-| end-to-end T1-b correlation | **미증명 → PAUSED 유지** |
+| end-to-end T1-b correlation | **미증명; §6-a가 다른 방식으로 대체 → CLOSED** |
 
 즉 이 절이 바꾼 것은 **"T1-b가 upstream 때문에 원리적으로 닫혀 있다"는 판정 하나뿐**이다. 그 문은
-닫혀 있지 않다. 그러나 열려 있지도 않다 — 여는 데 필요한 계약이 아직 없다. 구현 승인이 아니며 NEXT의
-STOP LINE이 그대로 유효하고, 다음 순서는 §9의 operator-owned baseline에서 통증을 먼저 재는 것이다.
+닫혀 있지 않다. 그러나 열려 있지도 않다 — 여는 데 필요한 계약이 아직 없다.
+
+**그리고 그 계약은 끝내 설계되지 않았다.** 위 표의 미설계·미구현 항목은 2026-08-05 현재 그대로다.
+
+> **이 문은 이제 닫혔다 (2026-08-05, GLG 판정).** §6-a의 callback correlation이 제품 완료점이 되면서
+> pre-injected token → identity lookup 방식은 **PAUSED가 아니라 superseded/declined**다. "언젠가 열
+> 후보"로 남겨 두면 다음 세션이 다시 설계를 시작한다 — 실제로 이 lane은 그 방식으로 두 번 폐기했다.
+> **새 증거와 GLG의 명시적 재승인 없이 다시 열지 않는다.**
+
+## 6-a. 실제로 열린 문 — callback correlation (fresh-call, 2026-08-05)
+
+§6은 correlation을 **caller가 미리 정한 token으로 나중에 조회하는 문제**로 놓았다. repo 밖 baseline이
+드러낸 것은 그 전제가 틀렸다는 사실이다.
+
+**garden record와 control socket은 첫 turn 이전에 이미 존재한다.** 첫 turn이 돌지 않은 두 셀을 관측했고,
+둘 다 record가 live였고 pi 셀은 socket 파일까지 있었다. 즉 주소는 창이 열리는 순간 있다 — **caller가
+그것을 모를 뿐이다.** 첫 turn이 필요한 이유는 id를 *만들기* 위해서가 아니라 **새 citizen이 그것을 caller에게
+말하기** 위해서다.
+
+그래서 fresh-call은 lookup을 만들지 않는다. launch argv에 first task와 함께 **callback 지시**를 실어
+보내고, 새 citizen의 첫 행동이 기존 `entwurf_v2`로 nonce를 되돌린다. **그 메시지의 sender envelope이
+곧 exact garden id**다 — 우리가 조회한 것이 아니라 delivery 계층이 스스로 붙인 것이다.
+
+| 축 | §6의 T1-b | §6-a의 fresh-call |
+|---|---|---|
+| identity 출처 | caller가 사전 주입한 token으로 **조회** | 새 citizen이 보낸 메시지의 **sender envelope** |
+| 필요한 신규 계약 | fresh-token contract + lookup seam + 경합 처리 | **신규 identity lookup·transport는 없다** — 기존 `entwurf_v2` 전달을 그대로 쓴다. 다만 fresh-call의 first-turn framing과 두 public surface는 **새 계약이다** |
+| 동기성 | 동기 반환을 원함(불성립) | **비동기** — launch receipt와 correlation receipt가 분리된다 |
+| 실패 모드 | 조회 실패·경합 | callback 부재. 감시하지 않고 visible window가 증거 |
+
+**이것이 증명하는 것은 "전달 계층이 그 citizen을 안다"이지 "citizen이 자기를 안다"가 아니다.** 아래
+§6-b가 그 구분을 measured incident로 보존한다.
+
+### 6-b. 왜 sibling에게 자기 id를 묻지 않는가 — measured (2026-08-05)
+
+수동 baseline에서 fresh `--entwurf-control` 셀에 자기 gardenId를 물었다. 그 셀은:
+
+1. 셸에서 `entwurf_self`를 찾다가 exit 127 — **native pi 표면에는 그 도구가 없다.**
+   `entwurf-control.ts`가 노출하는 것은 `entwurf_v2`·`entwurf_peers`(그리고 이제 `entwurf_fresh_call`)뿐이고,
+   `entwurf_self`는 MCP bridge의 도구다.
+2. `mcp/entwurf-bridge/start.sh`를 **스스로 스폰**했다. 그 프로세스는 pi의 MCP child가 아니라 셸의 자식이라
+   pi가 child MCP에 심는 sender carrier를 받지 못했고, 상속된 env의 `PI_SESSION_ID`만 보고 답했다.
+3. 그 uuidv7을 gardenId로 출력했다. **틀렸다.** 진짜 id는 상태줄에 있었고 control socket 파일명이 그것을
+   확증했다. 반환값 자신도 `socketState: "expected"` / `replyable: false`로 자기가 주소가 아님을 말하고
+   있었는데, 그 신호는 읽히지 않았다.
+
+그래서 fresh-call framing은 env 탐색·`entwurf_self`·MCP 직접 spawn을 **명시적으로 금지**하고, 어느 표면도
+caller에게 garden id를 파라미터로 받지 않는다. 받는 순간 이 오답이 callback target이 될 수 있다.
+
+구현 승인 범위와 STOP LINE은 active NEXT handoff가 진다.
 
 ## 7. peer placement evidence seam — 모르면 `unknown`
 
@@ -371,13 +424,12 @@ exact evidence로 인정되는 것은 둘뿐이다.
 
 ## 8. 지금 만들지 않을 것
 
-- T1-b identity correlation / dispatch 배선 (fresh-token 계약, lookup seam, 예약 authority 설계 포함)
-- T1-a 또는 placement leaf의 production consumer — 두 모듈 다 출하 경로에서 import되지 않는다
+- 폐기된 token/lookup correlation 재개 (fresh-token 계약, lookup seam, 예약 authority 포함)
 - launch shape 확장: focus/switch, window 이름, resume, 여러 개 동시 launch
 - peer placement 저장·추측, 또는 새 public situation-map surface
-- public spawn/creation verb, `entwurf_v2` 확장
+- 두 번째 spawn/creation verb 또는 `entwurf_v2` 확장
 - record watcher, timeout/retry, unknown-id discovery
-- fresh citizen minting, dormant citizen resume 배선, record birth/liveness 대기
+- dormant citizen visible-resume 배선, record birth/liveness 대기
 - generic driver/registry, labels/metadata
 - caller-supplied command/cwd/env/window-name/model carrier
 - raw PTY input, capture/history API
@@ -386,20 +438,19 @@ exact evidence로 인정되는 것은 둘뿐이다.
 - task queue, dependency graph, worker pool, role, quota·context 판단
 - release-gate MUST
 
-즉 **tmux 제어가 먼저고 entwurf 연결은 그 뒤**다.
+즉 fresh-call은 여기서 멈추고 mux를 supervisor로 키우지 않는다.
 
-## 9. Baseline은 repo 밖에서 먼저 선다
+## 9. Repo 밖 baseline — 완료된 선행 증거
 
-가장 얇은 baseline은 GLG가 소유한 script/skill이다.
+GLG가 소유한 raw baseline은 다음 순서로 제품 경계를 먼저 증명했다.
 
 1. placement leaf로 필요한 window를 append한다.
 2. 각 window에서 official pi CLI를 실행한다.
 3. 새 시민은 native lifecycle로 record를 낳는다.
 4. caller가 정확한 identity를 얻은 뒤 `entwurf_v2`를 반복 호출한다.
 
-여기서 "N개의 launch와 N개의 identity를 사람이 상관짓는 일"이 실제 병목인지 먼저 측정한다.
-불편이 관측되기 전에 repo 안에 watcher나 composition product를 만들지 않는다. §6이 조건 2를
-성립시켰다는 사실은 이 순서를 앞당기는 근거가 아니다.
+이 baseline에서 사람 correlation이 실제 병목으로 관측됐고, §6-a의 callback sender envelope가
+watcher나 store lookup 없이 그 자리를 대체했다. raw evidence는 active branch handoff가 가리킨다.
 
 ## 10. 폐기한 첫 시도에서 남길 사실
 
@@ -425,7 +476,8 @@ gate, LIVE smoke, release 배선을 전부 제거했다.
 | tmux placement leaf (`mux-placement.ts`) | caller placement, same-session append, stable handle close | harness launch, identity, delivery |
 | T1-a launch composition (`mux-launch.ts`) | 고정 runtime의 precondition 증명, 같은 session에 window+runtime 한 번의 mutation, 로컬 handle receipt | garden identity, record 조회, task delivery, supervision, 어떤 carrier도 |
 | pi/ACP harness adapter | official runtime/session lifecycle, auth, model, transcript, record birth | 프로젝트의 작업자 선택·backlog |
-| **미래 dispatch composition (아직 없음)** | launch receipt와 exact identity를 결박해 `entwurf_v2`까지 잇는 조립 후보 (T1-b) | default worker, retry, 대체자 선정, queue |
+| fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, first-turn framing(callback→task 순서), nonce 민팅, launch receipt | garden identity(표면이 공급), delivery transport, task 분해, supervision |
+| public surfaces (`entwurf-control.ts` · MCP `index.ts`) | 자기 record-backed caller identity, `{backend, task}` schema, 렌더 | argv 문법, placement, identity 민팅 |
 | project policy (repo 밖) | 누구를·언제·무엇으로 부를지, fan-out 횟수, 실패 후 판단 | transport 내부 구현 |
 
 강제 가능한 import 금지선은 넓은 일반론이 아니라 좁은 몇 줄이다. `entwurf-v2-production.ts`는 이미
@@ -438,21 +490,21 @@ entwurf-v2 contract/decider/runner/production  -X-> mux-launch
 mux-placement                                  -X-> entwurf core
 mux-launch                                     -X-> entwurf core
 mux-placement                                  -X-> mux-launch        (leaf는 혼자 삭제 가능해야 한다)
-mux-launch                                      -> mux-placement       (허용된 유일한 방향)
-operator-owned launch baseline                  -> mux-launch + entwurf_v2
+mux-launch                                      -> mux-placement
+mux-fresh-call                                  -> mux-launch + mux-placement
+all other shipped production sources           -X-> mux-launch
 ```
 
-위 네 줄은 `check-mux-launch`가 source에서 직접 검사하고 `MUX-LAUNCH-CORE-IMPORT-FREE` mutant가 지킨다.
-검사 대상은 열거된 몇 파일이 아니라 **출하 source 전체**(`pi-extensions/**` + `mcp/**`, build artifact
-제외)를 걸어서 얻는다 — "production consumer가 없다"가 문장이면 오라클도 그 문장이어야 한다.
+`check-mux-launch`는 출하 source 전체(`pi-extensions/**` + `mcp/**`, build artifact 제외)를 스캔해
+`mux-fresh-call.ts`만 launch를 import하도록 강제하고, delivery/core의 역의존을 금지한다.
+`MUX-LAUNCH-CORE-IMPORT-FREE` mutant는 delivery production root에 금지 import를 심어 이 경계를 죽인다.
 
 leaf가 T1-a composition에 여는 seam도 여기 적는다. `mux-placement.ts`는 세 동사 외에 `runTmux`와
 `requireSameContext`를 export하는데, 이것은 **네 번째 동사도 public operator surface도 아니고 좁은 내부
 seam**이다. 위험을 숨기지 않고 말하면: `runTmux`는 이 모듈이 작성하지 않은 argv를 그대로 받으므로 leaf의
 GRAMMAR 경계가 그것을 지켜주지 않는다. 문법은 `build*Args` builder들이 지키고, `runTmux`에 손을 뻗는
-쪽이 같은 검증을 스스로 져야 한다. 현재 production consumer는 launch composition 하나뿐이고, 출하
-delivery 경로는 둘 다 호출하지 않는다.
-미래 dispatch composition은 기존 delivery composition에 슬쩍 얹지 않는다. 별도 소유권 판정을 받는다.
+쪽이 같은 검증을 스스로 져야 한다. 현재 `runTmux` production consumer는 launch와 fresh-call 두
+composition이고, 각각 source-adjacent gate가 argv 경계를 진다. 출하 delivery 경로는 둘 다 호출하지 않는다.
 
 ## 12. Receipt와 supervision의 절단선
 
@@ -460,10 +512,11 @@ delivery 경로는 둘 다 호출하지 않는다.
 |---|---|---|
 | control-socket send / mailbox enqueue / native injection | **현재 출하된 `entwurf_v2` receipt** | 호출 시 rail이 즉시 진술 |
 | mailbox `lastReadAt` | 후속 evidence, **send receipt 아님** | self-fetch receiver가 나중에 읽은 사실 |
-| window opened (`@window/%pane`) | T0-b leaf를 직접 호출하면 반환되지만 **production consumer 없음** | Entwurf public receipt로 출하되지 않음 |
-| process spawned (`pane_pid`) | **T1-a가 반환하지만 production consumer 없음** | 동기 로컬 사실이며, 그 process가 살아 있다는 주장은 아니다 (§5) |
-| launch가 동기 반환한 native session/garden identity | **없음** (§6 조건 1 불성립) | pi 0.83.0은 제공하지 않는다 |
-| 사전 주입한 native token으로 조회한 gardenId | **T1-b 후보** — pi-side 주입은 성립하나 fresh-token contract 미설계, lookup seam 미구현 (§6) | key가 입력일 때의 strict lookup + bounded wait만 |
+| window opened (`@window/%pane`) | **`entwurf_fresh_call`의 launch receipt로 출하됨** (§6-a) | tmux가 창을 만들었다는 사실까지. 실행 여부·delivery는 주장하지 않는다 |
+| process spawned (`pane_pid`) | 같은 launch receipt에 포함 | 동기 로컬 사실이며, 그 process가 살아 있다는 주장은 아니다 (§5) |
+| launch가 동기 반환한 native session/garden identity | **없음** (§6 조건 1 불성립) | pi 0.83.0은 제공하지 않는다. fresh-call도 동기로는 주지 않는다 |
+| callback 메시지의 sender envelope이 실은 gardenId | **fresh-call의 correlation receipt** (§6-a) — 비동기, caller의 기존 수신면에 도착 | delivery 계층이 붙인 사실이며 sibling의 자기 진술이 아니다 (§6-b) |
+| 사전 주입한 native token으로 조회한 gardenId | **CLOSED** — callback correlation이 대체한 폐기 후보 (§6) | 새 증거 + GLG 재승인 없이는 재개하지 않는다 |
 | unknown record가 나타날 때까지 감시·추측 | 금지된 supervision | 시간에 걸친 발견·상관짓기 |
 | peer stall/context/task outcome, retry·재배정 | Entwurf 밖 supervision | 프로젝트 정책 |
 

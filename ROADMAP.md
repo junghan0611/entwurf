@@ -30,7 +30,7 @@ dispatch substrate**다. provider 연결과 TUI/RPC/session lifecycle은 pi에 �
 배달의 정직한 경계에 집중한다. pi launch profile은 tmux placement primitive가 실물로 선 뒤에만 논한다.
 
 v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라졌다. `entwurf_v2`가 척추다.
-기존 citizen 대상 send/reply/resume → `entwurf_v2`; 무에서 새 형제를 만드는 fresh creation은 deferred lane.
+기존 citizen 대상 send/reply/resume → `entwurf_v2`; 무에서 새 형제를 여는 fresh creation → `entwurf_fresh_call`(별도 verb, launch receipt만 동기 반환).
 
 ### Vocabulary guard — 익숙한 말로 되돌리지 않는다
 
@@ -115,10 +115,13 @@ non-claude **throw** 가드. **백엔드 추가 레일이 0.11.0보다 후퇴**(
 - **Cortex 백엔드 자체의 운영 lane** — 어댑터 레일(위 표준궤 섹션)이 0.12.0에 들어간 *뒤*, 기여자가
   PR #40을 어댑터로 포팅하고 로컬 완전검증(`smoke-cortex`)이 서면 운영 surface로 승격. 레일=0.12.0,
   백엔드 검증=그 위에서. (이전 "vendor CLI 검증되면" 단일 항목을 레일/백엔드로 분리.)
-- **fresh sibling creation** — v2 delivery transport(control-socket / spawn-bg resume / meta-mailbox /
-  native-push)는 전부 기존 citizen 대상이다. #47은 먼저 caller의 현재 tmux placement와 same-session window
-  append만 증명한다. pi profile과 public creation request는 그 primitive가 선 뒤 설계하며, `spawn-fresh`를
-  v2 transport 이름으로 미리 굽지 않는다.
+- **fresh sibling creation** — **landed as `entwurf_fresh_call`** (2026-08-05). v2 delivery transport
+  (control-socket / spawn-bg resume / meta-mailbox / native-push)는 여전히 전부 기존 citizen 대상이고
+  `spawn-fresh`류 transport 이름은 굽지 않았다. 새 verb는 placement leaf → launch → fresh-call composition
+  위에 서며, 새 sibling의 주소는 조회가 아니라 **callback sender envelope**으로 온다
+  (docs/mux-launch-rail.md §6-a). **pre-injected token 기반 identity lookup(§6)은 deferred가 아니라
+  CLOSED다** — callback correlation이 대체했고 새 증거 + GLG 재승인 없이 재개하지 않는다. 남은 deferred는
+  resume용 visible placement와 generic harness profile뿐이다.
 - **test/release-gate taxonomy (#41)** — 검증 자산을 deterministic / MUST live / BEHAVIOR / utility로 재분류.
 
 ### two-tier release-gate 원리

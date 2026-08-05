@@ -171,7 +171,16 @@
 		// placement leaf's grammar/binding/run helpers from mux-placement.ts) with an explicit
 		// `.ts` extension, same fence. mux-placement.ts itself stays in the root program: it
 		// imports nothing local. Typechecked by scripts/tsconfig.json via its gate
-		// (check-mux-launch.ts). No production consumer imports it — docs/mux-launch-rail.md §11.
-		"pi-extensions/lib/mux-launch.ts"
+		// (check-mux-launch.ts). Its ONLY production importer is mux-fresh-call.ts, the composition
+		// one layer above — delivery still never reaches it (docs/mux-launch-rail.md §11).
+		"pi-extensions/lib/mux-launch.ts",
+		// mux-fresh-call.ts is the fresh-call composition on top of the leaf and the launch
+		// module — a lib→lib VALUE importer of BOTH with explicit `.ts` extensions, same fence.
+		// It has production consumers, and each reaches it the way its own fence allows:
+		// entwurf-control.ts through a NON-LITERAL dynamic import (so the fence never enters the
+		// emit-capable root program), the MCP bridge through a static import typechecked by
+		// mcp/tsconfig.json. Typechecked by scripts/tsconfig.json via its gate
+		// (check-mux-fresh-call.ts).
+		"pi-extensions/lib/mux-fresh-call.ts"
 	]
 }

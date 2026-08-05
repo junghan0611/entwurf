@@ -284,6 +284,7 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 	// name → the sentence in the docs that carries its exclusion, and where.
 	const DOCUMENTED_EXCLUSIONS: Record<string, [file: string, sentence: string]> = {
 		"smoke-acp-long-turn-live": ["VERIFY.md", "on-demand, not part of `release-gate`"],
+		"smoke-mux-fresh-call-live": ["VERIFY.md", "Fresh-call LIVE is on-demand, not part of `release-gate`"],
 		"smoke-agy-native-push-live": ["VERIFY.md", "Aggregate release-gate does not own an agy conversation id"],
 		"smoke-acp-ordering-probe-live": ["docs/acp-backend-rail.md", "opt-in paired observation"],
 		// Cortex needs an external Snowflake connection the HOST owns, so an aggregate

@@ -71,6 +71,7 @@ import {
 	readMetaInbox,
 	readMetaReceiverMarker,
 } from "../../../pi-extensions/lib/meta-session.ts";
+import { freshCall, renderFreshCall } from "../../../pi-extensions/lib/mux-fresh-call.ts";
 import { registerNativeConversation } from "../../../pi-extensions/lib/native-push/register.ts";
 
 const HOME = os.homedir();
@@ -507,8 +508,8 @@ server.tool(
 		"is not a departed host. So " +
 		"`unsupported` does not promise reachability either: a record whose backend has no adapter on " +
 		"this lane resolves to that reject. " +
-		"Note: this is the *active* world. It is NOT a fresh-sibling creation surface; pass an " +
-		"existing garden id to entwurf_v2.",
+		"Note: this is the *active* world and it is facts-only — it creates nothing. Pass an " +
+		"existing garden id to entwurf_v2; to open a NEW sibling use entwurf_fresh_call.",
 	{},
 	async () => {
 		try {
@@ -617,6 +618,64 @@ server.tool(
 			);
 		} catch (err) {
 			return textErr(`entwurf_register_native error: ${err instanceof Error ? err.message : String(err)}`);
+		}
+	},
+);
+
+// The caller identity for THIS surface comes from the same authoritative resolution
+// `entwurf_self` uses — BOTH of its certified paths: the pi carrier this child inherited
+// (PI_SESSION_ID + PI_AGENT_ID, which a record minted at birth), or a trusted meta-sender marker
+// the native host's own hook wrote. Neither is a guess and neither is deprecated here.
+//
+// What is refused is a caller-supplied id. The measured failure mode is exactly that: asked for
+// its own garden id, a fresh cell answered with its uuidv7 `PI_SESSION_ID` value read out of the
+// environment by an MCP server it had spawned itself — confidently, and wrong. A sibling launched
+// against that answer would call home to a garden id nobody holds.
+server.tool(
+	"entwurf_fresh_call",
+	"Open ONE fresh visible sibling in the operator's own tmux session and hand it a first task. Two fixed " +
+		"backends only: pi, claude-code. The sibling's FIRST action is a callback to you carrying a nonce, and the " +
+		"sender envelope of that callback is its garden id — that is how you learn the address of something that " +
+		"did not exist a moment ago. This returns a LAUNCH receipt (tmux window/pane plus that nonce) and nothing " +
+		"else: it does NOT mean the runtime started, the first turn ran, or the task was delivered. Nothing polls " +
+		"for the callback; if it never arrives the window is visible and can be read directly. For EXISTING " +
+		"citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. There are no " +
+		"provider/model/command/cwd knobs: runtime and argv are fixed per backend. Do not put secrets in the task " +
+		"— the launch argv is visible to same-user processes on this host. Requires that this agent itself runs " +
+		"inside tmux: without a pane anchor there is no session to open a sibling beside.",
+	{
+		backend: z
+			.enum(["pi", "claude-code"])
+			.describe("Which fixed runtime to open. Only these two; there is no arbitrary command or model."),
+		task: z
+			.string()
+			.min(1)
+			.max(16000)
+			.describe(
+				"What the sibling should do after it calls you back. Plain instructions; no secrets (see the tool description).",
+			),
+	},
+	async ({ backend, task }) => {
+		let callerGardenId: string | null = null;
+		try {
+			const self = await buildAuthoritativeSelfEnvelope();
+			callerGardenId = self.envelope.sessionId;
+		} catch (err) {
+			// ONE error is a legitimate answer here: this host has no authoritative identity at all
+			// (no pi carrier inherited, no trusted marker written), so the sibling would have nowhere
+			// to call home. That normalises to the named refusal.
+			//
+			// Everything else — a corrupt record, an unreadable store, a broken marker — keeps its
+			// own diagnosis and fails loud. Folding those into "you are anonymous" would relabel a
+			// store defect as a wiring choice, and the operator would go looking in the wrong place.
+			if (!(err instanceof EntwurfEnvelopeWiringError)) throw err;
+			callerGardenId = null;
+		}
+		try {
+			const rendered = renderFreshCall(freshCall({ backend, task, callerGardenId }));
+			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
+		} catch (err) {
+			return textErr(`entwurf_fresh_call error: ${err instanceof Error ? err.message : String(err)}`);
 		}
 	},
 );

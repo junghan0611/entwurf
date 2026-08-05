@@ -1006,6 +1006,27 @@ check_mux_launch() {
   run_ts scripts/check-mux-launch.ts
 }
 
+check_mux_fresh_call() {
+  # Deterministic gate for the fresh-call composition (mux-fresh-call.ts) and its TWO public
+  # surfaces. Pins the per-backend argv dialects — both of which were measured to fail the other
+  # way round (flag-before-prompt on pi, variadic --allowedTools on claude-code: window opened,
+  # record and socket minted, turn never ran) — plus the first-turn framing order, the named
+  # refusals, and the fact that each surface supplies its OWN caller identity while the
+  # composition never derives one. No fake tmux: the real-window axis is smoke-mux-fresh-call-live.
+  run_ts scripts/check-mux-fresh-call.ts
+}
+
+smoke_mux_fresh_call_live() {
+  # LIVE acceptance for entwurf_fresh_call — OUT of pnpm check, needs LIVE=1, spends two model
+  # turns. The one axis no deterministic gate reaches: a real window, a real runtime, a real first
+  # turn, and a real nonce callback whose SENDER ENVELOPE carries the new sibling's garden id.
+  # Entwurf-owned write axes (XDG, all four meta roots, v2 locks, cwd) are fixture-bound; Pi also
+  # gets fixture HOME so its control socket is isolated. Runtime-owned auth/config stays real and
+  # native transcripts remain as evidence. Private tmux servers plus entry-set/GID residue checks
+  # prove no fixture citizen lands in the operator's real record or control-socket directories.
+  run_ts scripts/smoke-mux-fresh-call-live.ts
+}
+
 check_mux_launch_tmux() {
   # REAL tmux acceptance for T1-a: drives production launchPi against a private fixture server
   # (unique -S socket, never the operator's) with TMUX/TMUX_PANE actually INHERITED. Proves the
@@ -4542,6 +4563,12 @@ case "$cmd" in
     ;;
   check-mux-launch)
     check_mux_launch
+    ;;
+  check-mux-fresh-call)
+    check_mux_fresh_call
+    ;;
+  smoke-mux-fresh-call-live)
+    smoke_mux_fresh_call_live
     ;;
   check-mux-launch-tmux)
     check_mux_launch_tmux
