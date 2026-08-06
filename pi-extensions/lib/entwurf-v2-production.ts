@@ -8,10 +8,10 @@
  *
  * Three invariants this factory exists to guarantee (each gate-proven):
  *   - ONE lock domain (Q2/QB3). A single `release` closure bound to `lockDir` is the lock
- *     authority for EVERY hand: the decider's `releaseLock`, the control-send hand's
- *     `releaseLock`, AND the spawn watcher's `releaseFn`. The spawn factory's default
- *     `releaseFn` ignores `lockDir` (it would release into the DEFAULT lock dir) — passing
- *     `release` explicitly is what closes that split-brain.
+ *     authority for EVERY hand: the decider's `releaseLock` and the control-send hand's
+ *     `releaseLock`. (A third hand used to share it — the spawn watcher's `releaseFn`,
+ *     whose own default would have released into the DEFAULT lock dir; that split-brain
+ *     went with the transport, the single-authority rule did not.)
  *   - ONE mailbox sender (Q3). A single `makeProductionSendViaMailbox` instance is the
  *     top-level meta-mailbox hand AND the control-send dead-fallback's mailbox enqueue, so a
  *     direct send and a fallback send never drift in sender envelope / dirs.
@@ -30,7 +30,6 @@
  */
 
 import {
-	formatSenderInfoBlock,
 	type RpcClientOptions,
 	type RpcCommand,
 	type RpcResponse,
@@ -43,12 +42,6 @@ import {
 	receiverMarkerMatchesIdentity,
 } from "./entwurf-deliverability.ts";
 import { isOutOfSocketDomainGardenIdConflict } from "./entwurf-facts.ts";
-// 0.12.1 B-2: TYPE-ONLY import — `entwurf-preflight.ts` value-imports
-// `@earendil-works/pi-coding-agent` (ProjectTrustStore), so a static value-import
-// here would re-couple the harness-neutral MCP bridge to pi at boot
-// (check-entwurf-bridge-pi-free). The real preflight is reached ONLY via the lazy
-// `await import()` in `lazyProductionPreflight`, on the owned-outcome resume branch.
-import type { PreflightInput, PreflightOutcome } from "./entwurf-preflight.ts";
 import { isLivenessSupported } from "./entwurf-v2-contract.ts";
 import {
 	type DispatchDeciderDeps,
@@ -74,9 +67,6 @@ import {
 	type RpcSendResult,
 } from "./entwurf-v2-send.ts";
 import { resolveDeadControlSendFallback } from "./entwurf-v2-send-fallback.ts";
-import type { SpawnBgPlan } from "./entwurf-v2-spawn.ts";
-import { executeSpawnBgResume } from "./entwurf-v2-spawn.ts";
-import { makeProductionSpawnBgResumeDeps, type ProductionSpawnOpts } from "./entwurf-v2-spawn-production.ts";
 import {
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
@@ -127,10 +117,6 @@ export interface ProductionEntwurfV2Seams {
 	releaseLock: (claim: LockClaim, deps: { dir?: string }) => unknown;
 	inspectSocket: (gid: string, dir: string) => Promise<TargetSocketInspection>;
 	probeSocket: (socketPath: string) => Promise<SocketLiveness>;
-	// MaybePromise (0.12.1 B-2): the production default is the lazy wrapper, which
-	// `await import()`s the pi-coding-agent-backed preflight only on a resume verdict.
-	// A deterministic gate may still inject a sync spy returning a plain PreflightOutcome.
-	preflight: (input: PreflightInput) => PreflightOutcome | Promise<PreflightOutcome>;
 	classifyConnect: (code: string | undefined) => "dead" | "indeterminate";
 	sendRpc: (socketPath: string, command: RpcCommand, options?: RpcClientOptions) => Promise<{ response: RpcResponse }>;
 	enqueue: (opts: EnqueueMetaMessageOptions) => EnqueueMetaMessageResult;
@@ -139,9 +125,6 @@ export interface ProductionEntwurfV2Seams {
 	 * fake adapter drives both the probe (routing decision) and the send (delivery + retry).
 	 * Default: the real registry resolver. */
 	resolveNativePushAdapter: (backend: string) => NativePushAdapter;
-	/** Extra spawn-factory overrides (timers/spawnChild/probe) for a deterministic spawn gate.
-	 * `releaseFn` is NOT overridable here — the factory injects the shared `release` (QB3). */
-	spawnOverrides: Omit<ProductionSpawnOpts, "releaseFn">;
 }
 
 export interface ProductionEntwurfV2Opts {
@@ -150,42 +133,12 @@ export interface ProductionEntwurfV2Opts {
 	 * control socket actually exists, not a hardcoded true). ONE provider feeds the
 	 * control-socket RPC sender AND the meta-mailbox body sender (they share the envelope). */
 	senderProvider: () => SenderEnvelope | undefined;
-	/** pi agent dir holding `trust.json` (preflight). Omit → preflight's own default. */
-	agentDir?: string;
-	/** Operator-policy auto-approve roots (preflight prefix promotion). No package default. */
-	prefixRoots?: readonly string[];
 	lockDir?: string;
 	sessionsDir?: string;
 	mailboxDir?: string;
 	controlSocketDir?: string;
-	observeTimeoutMs?: number;
-	killGraceMs?: number;
 	/** Gate/smoke seam overrides — defaults are the real IO. */
 	seams?: Partial<ProductionEntwurfV2Seams>;
-}
-
-/**
- * 0.12.1 B-2: the production `preflight` seam default. preflight value-imports
- * `@earendil-works/pi-coding-agent` (ProjectTrustStore), so importing it eagerly
- * would pull pi into the harness-neutral MCP bridge's boot closure. This wrapper
- * defers that to a lazy `await import()` reached ONLY on the owned-outcome resume
- * branch (the decider awaits it). peers/self/list/mailbox-deliver therefore boot
- * with no pi package present.
- *
- * WHAT THIS DEFERRAL DOES NOT DO — corrected 0.12.8. The old sentence framed the
- * pi-less case as an edge ("a pi-less environment that DOES hit a spawn-bg resume
- * surfaces an honest module-not-found"). In a published consumer tree that is not an
- * edge, it is the DEFAULT: `@earendil-works/pi-coding-agent` is an optional peer that
- * a neutral `npm install` does not resolve (entwurf-preflight.ts:51), so this import
- * throws for every installed user and the owned-outcome lane has never lived in any
- * published version. The deferral still buys what it claims — a pi-free boot — and
- * "module-not-found" is still honest, but it is a permanent floor on the install path,
- * not a rare condition. Reviving that lane (declared dep / pi CLI subprocess / PATH
- * resolution) is a separate decision; nothing here should read as if it works today.
- */
-async function lazyProductionPreflight(input: PreflightInput): Promise<PreflightOutcome> {
-	const { preflight } = await import("./entwurf-preflight.ts");
-	return preflight(input);
 }
 
 /** Map a record-side socket inspection to the singleton (socketGids, symlinkedGids) the
@@ -235,12 +188,10 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 		releaseLock: s.releaseLock ?? realReleaseLock,
 		inspectSocket: s.inspectSocket ?? inspectTargetControlSocket,
 		probeSocket: s.probeSocket ?? probeSocketLiveness,
-		preflight: s.preflight ?? lazyProductionPreflight,
 		classifyConnect: s.classifyConnect ?? classifyConnectError,
 		sendRpc: s.sendRpc ?? realSendRpc,
 		enqueue: s.enqueue ?? enqueueMetaMessage,
 		resolveNativePushAdapter: s.resolveNativePushAdapter ?? realResolveNativePushAdapter,
-		spawnOverrides: s.spawnOverrides ?? {},
 	};
 
 	// ── ONE lock domain (Q2/QB3): a single lockDir-bound release for ALL hands ─
@@ -324,8 +275,6 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 		releaseLock: release,
 		inspectSocket,
 		probeSocket,
-		preflightForCwd: (cwd: string): PreflightOutcome | Promise<PreflightOutcome> =>
-			io.preflight({ cwd, agentDir: opts.agentDir, prefixRoots: opts.prefixRoots }),
 		mailboxDeliverabilityFor,
 		// 봉인 4: resolve the native-push adapter for this backend + probe the conversation.
 		// Only reached on a nativePushSupported backend (the decider gates it), so the resolver
@@ -334,7 +283,6 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 			Promise.resolve(io.resolveNativePushAdapter(identity.backend).probe(identity.nativeSessionId)),
 		mailboxDir,
 		sessionsDir,
-		observeTimeoutMs: opts.observeTimeoutMs,
 	};
 
 	// ── control-send hand deps (5c-2): the dead-fallback shares resolveTarget /
@@ -368,28 +316,6 @@ export function makeProductionEntwurfV2Deps(opts: ProductionEntwurfV2Opts): Entw
 	// ── executor: the three transport hands, each pre-bound ───────────────────
 	const executor: DispatchExecutorDeps = {
 		sendControl: (plan, lock) => executeControlSocketSend(plan as ControlSocketPlan, lock, controlSendDeps),
-		resumeSpawnBg: (plan, lock) => {
-			const spawnPlan = plan as SpawnBgPlan;
-			// Caller-edge preservation (#50 C3): the dormant rail delivers the SAME
-			// structured <sender_info> the live socket rail synthesizes at its
-			// receiver — one formatter (entwurf-control-rpc SSOT), appended after the
-			// task text exactly as a live delivery would render it. Without this, a
-			// resumed citizen woke with an anonymous prompt while every other rail
-			// carried the sender envelope.
-			const sender = opts.senderProvider();
-			const prompt = sender ? spawnPlan.prompt + formatSenderInfoBlock(sender, spawnPlan.wantsReply) : spawnPlan.prompt;
-			return executeSpawnBgResume(
-				{ ...spawnPlan, prompt },
-				lock,
-				// QB3: inject the shared lockDir-bound `release` — never the spawn factory's
-				// default releaseFn (which would release into the DEFAULT lock dir).
-				makeProductionSpawnBgResumeDeps({
-					...io.spawnOverrides,
-					killGraceMs: opts.killGraceMs ?? io.spawnOverrides.killGraceMs,
-					releaseFn: release,
-				}),
-			);
-		},
 		sendMailbox: (plan, _lock) => sendViaMailbox(plan as MetaMailboxPlan, _lock as LockClaim),
 		// native-push (봉인 4): the SAME injected adapter resolver drives the executor send,
 		// so the decider's probe and the delivery use one adapter. Lock-free (lock ignored).

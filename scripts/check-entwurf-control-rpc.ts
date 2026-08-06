@@ -191,8 +191,9 @@ async function main(): Promise<void> {
 	}
 
 	// ── 6. formatSenderInfoBlock — THE <sender_info> synthesis (#50 C3) ─────────
-	// One formatter feeds BOTH rails (live receiver + dormant resume prompt), so
-	// the exact string shape is a contract, not an implementation detail.
+	// ONE formatter, and since the visible-first cut exactly one consumer (the live
+	// receiver) — the dormant resume prompt that shared it is gone. The exact string
+	// shape stays a contract so a future VISIBLE resume renders through it, not beside it.
 	{
 		const base = {
 			sessionId: "20260613T091000-98363c",

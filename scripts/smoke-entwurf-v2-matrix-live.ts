@@ -260,7 +260,7 @@ async function main(): Promise<void> {
 			const up = await waitForSocket(sockPath, BOOT_TIMEOUT_MS);
 			ok("C1b real record-less `pi --entwurf-control` stood up a control socket", up);
 
-			for (const intent of ["fire-and-forget", "owned-outcome"] as const) {
+			for (const intent of ["fire-and-forget"] as const) {
 				const result: EntwurfV2RunResult = await runEntwurfV2(
 					{ target: c1bGid, intent, message: `matrix-live C1b record-less probe (${intent})` },
 					prodDeps(smokeSender(c1bGid, tmp)),

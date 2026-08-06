@@ -15,7 +15,8 @@
  * build-parse round-trip / T-no-logic / T-model-immut — the name is pi's and no
  * code assembles or parses one), the header-scan lookup (T-collision), the
  * transcript analyzer, and the remote scope-lock. The meta-record resolves a
- * garden id to its transcript now (see check-entwurf-v2-spawn-production §9).
+ * garden id to its transcript now (see check-resume-launch-identity, which inherited
+ * those cells from the deleted check-entwurf-v2-spawn-production §9).
  *
  * The sessions base is isolated to a temp dir BEFORE the module computes its
  * load-time paths, so the real ~/.pi/agent is never touched.

@@ -21,9 +21,11 @@
 //   - `await import("x")` (dynamic)  → INTENDED lazy boundary       → NOT followed
 //
 // The dynamic-import exemption is deliberate: B-2 makes the pi-coding-agent
-// `preflight` a lazy `await import("./entwurf-preflight.ts")` reached ONLY on an
-// owned-outcome spawn-bg resume, so it is allowed to pull pi at runtime in that
-// one branch. The runtime boot smoke (separate half) is the final authority that
+// `preflight` a lazy `await import("./entwurf-preflight.ts")`, so it is allowed to
+// pull pi at runtime behind that lazy edge. The branch that used to reach it — the
+// owned-outcome resume verdict — is gone, which makes the exemption WIDER than its
+// current need, not narrower: nothing on the v2 dispatch path pulls pi now. The
+// runtime boot smoke (separate half) is the final authority that
 // peers/self/list/mailbox-deliver come up pi-free.
 
 import { existsSync, readFileSync } from "node:fs";
@@ -135,8 +137,7 @@ if (violations.length > 0) {
 	}
 	console.error(
 		"\n  The entwurf-bridge MCP server must boot pi-free. Move the pi value-import behind a\n" +
-			"  type-only import, a pi-side module the bridge does not reach, or a lazy `await import()`\n" +
-			"  on the owned-outcome resume branch only.",
+			"  type-only import, a pi-side module the bridge does not reach, or a lazy `await import()`.",
 	);
 	process.exit(1);
 }

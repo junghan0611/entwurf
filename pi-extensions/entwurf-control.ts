@@ -25,14 +25,14 @@
  * - Register the canonical `entwurf_v2` dispatch tool for existing garden citizens.
  * - Expose `entwurf_peers` facts for operator inspection (#50 C4: the socket-scan
  *   `/entwurf-sessions` command is gone — the record listing is the only surface).
- * - Maintain the resident control socket used by v2 live-send / spawn-bg paths.
+ * - Maintain the resident control socket used by the v2 live-send path.
  * - Attach this pi session to its meta-record at session_start (#50 C2) and key
  *   the control socket on the record's gardenId.
  *
  * Send-is-throw still applies at the control-socket protocol layer: a `send` RPC
  * ack confirms the receiver enqueued the message (`message_processed` semantics)
  * and does not wait for a peer turn result. Public v1 send surfaces were removed;
- * callers use `entwurf_v2`, whose decider chooses send / spawn-bg / mailbox.
+ * callers use `entwurf_v2`, whose decider chooses control-socket send / mailbox / native-push.
  *
  * Usage:
  *   pi --entwurf-control      (no id injection: pi owns its id, the record owns
@@ -758,8 +758,9 @@ async function handleCommand(
 		// (entwurf-bridge entwurf_v2, the pi-native entwurf_v2 senderProvider via buildLocalSenderEnvelope)
 		// pass the envelope structurally and never touch the message body — the
 		// canonical XML-style payload is the shared formatSenderInfoBlock SSOT
-		// (#50 C3: the dormant spawn-resume rail appends the same block to its
-		// prompt, so both rails render one shape).
+		// (#50 C3: this is the ONE renderer since the visible-first cut removed the
+		// dormant spawn-resume rail that used to append the same block to a resume
+		// prompt — a future VISIBLE resume must render through it, not beside it).
 		const senderInfoBlock = sender ? formatSenderInfoBlock(sender, wantsReply) : "";
 
 		const mode = command.mode ?? "steer";
@@ -938,7 +939,8 @@ function updateStatus(ctx: ExtensionContext | null, enabled: boolean, gardenId: 
 // is GONE with the id it mirrored. A name was a second place the address lived; the
 // record is the only one now, so there is nothing left to keep in sync and nothing
 // to crash over. (The dormant-resume authorization that leaned on the `entwurf` tag
-// moved to record existence — see entwurf-v2-spawn-production.)
+// moved to record existence, and that resume rail has since been withdrawn entirely;
+// the record-authoritative remainder lives in resume-launch-identity.ts.)
 
 function updateSessionEnv(ctx: ExtensionContext | null, enabled: boolean, gardenId: string | null): void {
 	if (!enabled || !gardenId) {
@@ -985,7 +987,7 @@ function getStringFlagFromArgv(flagName: string): string | undefined {
 }
 
 // `--emacs-agent-socket <name>` exports PI_EMACS_AGENT_SOCKET so this session's
-// own Bash/emacsclient calls (and any spawn-bg child that inherits this env)
+// own Bash/emacsclient calls (and any child process that inherits this env)
 // target the right Emacs server socket — e.g. `emacsclient -s "$PI_EMACS_AGENT_SOCKET"`.
 // v2-only revival: the original ACP path injected this into the ACP child's spawn
 // env (acp-bridge.ts); with no ACP child on this branch, the consumer IS this pi
@@ -1259,23 +1261,19 @@ interface EntwurfV2SurfaceModule {
 	runAndRenderEntwurfV2FromSurface(
 		params: {
 			target: string;
-			intent: "fire-and-forget" | "owned-outcome";
+			intent: "fire-and-forget";
 			mode?: "steer" | "follow_up";
 			wants_reply?: boolean;
 			message: string;
 		},
-		opts: {
-			senderProvider: () => SenderEnvelope | undefined;
-			agentDir?: string;
-			prefixRoots?: readonly string[];
-		},
+		opts: { senderProvider: () => SenderEnvelope | undefined },
 	): Promise<{ text: string; isError: boolean }>;
 }
 
 function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 	const entwurfV2Parameters = Type.Object({
 		target: Type.String({ description: "Target garden id (use entwurf_peers to discover)" }),
-		intent: StringEnum(["fire-and-forget", "owned-outcome"] as const, {
+		intent: StringEnum(["fire-and-forget"] as const, {
 			description:
 				"fire-and-forget = send/reply/hand-off to a LIVE socket target (currently backend pi) or to any " +
 				"citizen with no socket liveness — the decider picks that citizen's rail, and a rail can also " +
@@ -1285,10 +1283,10 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 				"dead: native-push-target-dead, indeterminate: native-push-probe-indeterminate (two rejects, " +
 				"not one). " +
 				"Set wants_reply for an answer. " +
-				"owned-outcome = wake a DORMANT socket-domain citizen via spawn-bg resume ONLY — on a live target " +
-				"rejected as owned-live-no-autosend, on self-fetch as backend-liveness-unsupported, on " +
-				"native-push as native-push-no-resume-authority (both lack resume authority, but the reasons " +
-				"differ because native-push IS probe-measured), and never auto-converted",
+				"This is the ONLY intent. The second one, owned-outcome, resumed a dormant citizen by launching " +
+				"a hidden background child and was withdrawn under the visible-first rule; it is not selectable, " +
+				"not deprecated-but-tolerated, and a dormant citizen is currently unreachable by this verb and " +
+				"rejects as dormant-fire-forget-unsupported.",
 		}),
 		message: Type.String({
 			description:
@@ -1299,7 +1297,7 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 			StringEnum(["steer", "follow_up"] as const, {
 				description:
 					"Injection style for a CONTROL-SOCKET send only: steer (immediate) or follow_up (after task). " +
-					"The mailbox, native-push, and spawn-bg plans carry no mode, so it has no effect on those rails.",
+					"The mailbox and native-push plans carry no mode, so it has no effect on those rails.",
 			}),
 		),
 		wants_reply: Type.Optional(Type.Boolean({ description: "Human-conversation reply hint (default false)" })),
@@ -1307,7 +1305,7 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 
 	type EntwurfV2Params = {
 		target: string;
-		intent: "fire-and-forget" | "owned-outcome";
+		intent: "fire-and-forget";
 		message: string;
 		mode?: "steer" | "follow_up";
 		wants_reply?: boolean;
@@ -1325,24 +1323,24 @@ function registerEntwurfV2Tool(pi: ExtensionAPI): void {
 		label: "Dispatch (v2)",
 		description: `CANONICAL DELIVERY SURFACE for garden ids: message, reply, or hand off to whoever an id names. The id alone
 does not say which rail that citizen answers on. Give target + intent; the decider picks transport from
-liveness (live socket citizen → control-socket send; dormant socket citizen → spawn-bg resume; deliverable
-self-fetch citizen → meta-bridge mailbox; probe-alive native-push citizen → direct injection into its
-conversation) and reports ONE outcome (delivered / rejected / lock-retained / delivered-but-lock-dirty).
-EXISTING targets only; discover with entwurf_peers. INTENT — picking wrong is rejected, never
-auto-converted. A peer entwurf_peers shows as liveness=alive → fire-and-forget. A citizen with NO socket
-liveness (liveness=unsupported) is ALSO fire-and-forget — unsupported means only "no control-socket probe" —
-and the decider picks its own rail: a self-fetch backend (e.g. Claude Code) gets the mailbox, a native-push
-backend (e.g. Antigravity) gets direct injection and has NO mailbox at all. THERE IS A THIRD RESULT: the
-mailbox delivers only to a DELIVERABLE citizen, so a terminated session, or a backend with no adapter here
-(e.g. codex), is mailbox-undeliverable, not queued for an inbox nobody drains. The native-push probe is
-3-valued: alive → injected; dead → native-push-target-dead; indeterminate → native-push-probe-indeterminate
-(unestablished ≠ gone). owned-outcome wakes a DORMANT socket-domain citizen by spawn-bg resume ONLY — live
-target → owned-live-no-autosend, self-fetch → backend-liveness-unsupported, native-push →
-native-push-no-resume-authority. LOCK: taken for a control-socket-DOMAIN dispatch — the live send AND the
-dormant cell's spawn-bg resume, a separate transport that still runs under that domain's lock. The mailbox
-and native-push rails are lock-free — deliverability and the adapter probe guard them. mode applies to a
-CONTROL-SOCKET send only; other plans carry no mode. wants_reply rides every rail. message caps at 16000
-chars; send an artifact path + digest for more.`,
+liveness (live socket citizen → control-socket send; deliverable self-fetch citizen → meta-bridge mailbox;
+probe-alive native-push citizen → direct injection into its conversation) and reports ONE outcome
+(delivered / rejected / delivered-but-lock-dirty). EXISTING targets only; discover with entwurf_peers.
+A peer entwurf_peers shows as liveness=alive → fire-and-forget. A citizen with NO socket liveness
+(liveness=unsupported) is ALSO fire-and-forget — unsupported means only "no control-socket probe" — and the
+decider picks its own rail: a self-fetch backend (e.g. Claude Code) gets the mailbox, a native-push backend
+(e.g. Antigravity) gets direct injection and has NO mailbox at all. THERE IS A THIRD RESULT: the mailbox
+delivers only to a DELIVERABLE citizen, so a terminated session, or a backend with no adapter here (e.g.
+codex), is mailbox-undeliverable, not queued for an inbox nobody drains. The native-push probe is 3-valued:
+alive → injected; dead → native-push-target-dead; indeterminate → native-push-probe-indeterminate
+(unestablished ≠ gone). DORMANT IS UNREACHABLE: a socket-domain citizen that is not running gets
+dormant-fire-forget-unsupported — same receiver rule as the mailbox, no active drainer means no
+delivery. The intent that used to answer there, owned-outcome, resumed it by
+launching a hidden background child; it was withdrawn under the visible-first rule, so re-open the session
+yourself and dispatch again. LOCK: taken for a control-socket-DOMAIN dispatch. The mailbox and native-push
+rails are lock-free — deliverability and the adapter probe guard them. mode applies to a CONTROL-SOCKET
+send only; other plans carry no mode. wants_reply rides every rail. message caps at 16000 chars; send an
+artifact path + digest for more.`,
 		parameters: entwurfV2Parameters,
 		async execute(
 			_toolCallId: string,
@@ -1382,8 +1380,10 @@ chars; send an artifact path + digest for more.`,
 						mode: params.mode,
 						wants_reply: params.wants_reply,
 					},
-					// agentDir / prefixRoots intentionally omitted here: the surface adapter falls back
-					// to the ENTWURF_PREFIX_ROOTS env SSOT for prefixRoots (5d-4); agentDir stays undefined.
+					// No trust-preflight inputs are passed, and none exist to pass: the preflight on this
+					// path guarded the resume verdict, so it left with `owned-outcome`. `senderProvider`
+					// is the whole options surface now — do NOT re-add an `ENTWURF_PREFIX_ROOTS` fallback
+					// here without a verdict that reads it (nothing on the dispatch path does).
 					{ senderProvider },
 				);
 				return {
@@ -1454,7 +1454,7 @@ function registerListSessionsTool(pi: ExtensionAPI): void {
 		name: "entwurf_peers",
 		label: "List Garden Citizens",
 		description:
-			"List the entwurf fact surface: garden citizens from meta-records (including active self-fetch meta receivers such as claude-code) with liveness, plus diagnostics. The record is the sole address axis (#50 C4) — a control socket no record claims surfaces as a record-less-socket diagnostic, never a peer row. Pair with entwurf_v2 to address a peer by garden id; this surface reports facts, never per-row routing verbs. It is facts-only and creates nothing: to open a NEW sibling use entwurf_fresh_call.",
+			"List the entwurf fact surface: garden citizens from meta-records (including active self-fetch meta receivers such as claude-code) with liveness, plus diagnostics. The record is the sole address axis (#50 C4) — a control socket no record claims surfaces as a record-less-socket diagnostic, never a peer row. Pair with entwurf_v2 to address a peer by garden id; this surface reports facts, never per-row routing verbs. A `dead` row is a REPORTED FACT and nothing more: that citizen is dormant and is currently unreachable by any verb, so listing it grants no action — appearing here is not an invitation to dispatch. It is facts-only and creates nothing: to open a NEW sibling use entwurf_fresh_call.",
 		parameters: Type.Object({}),
 		async execute(
 			_toolCallId: string,

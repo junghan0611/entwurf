@@ -14,14 +14,14 @@
  *   6. in-domain pi + socket-file + probe alive → control-socket plan with the INSPECTED
  *      socketPath; message/mode/wantsReply preserved, same target gid.
  *   7. in-domain pi + absent (ENOENT → dead) → reject (dormant-fire-forget-unsupported);
- *      NEVER a spawn-bg plan, NEVER a mailbox.
+ *      NEVER a mailbox.
  *   8. in-domain pi + probe indeterminate → reject (indeterminate-no-spawn); no mailbox.
  *   9. in-domain pi + inspect indeterminate → reject; no probe connect, no mailbox.
  *  10. address-conflict (symlink) → reject (target-address-conflict).
  *  11. probe throw / inspect throw → PROPAGATE (resolver does not catch; the 5c-2a hand
  *      owns failed+release). The resolver NEVER calls a release seam (it has none).
  *  12. every execute plan targets plan.targetGardenId === lock.gardenId, and is one of
- *      control-socket / meta-mailbox — never spawn-bg.
+ *      control-socket / meta-mailbox only.
  *
  * No real IO — fakes count inspect/probe calls so "short-circuits before probing" is
  * asserted structurally.
@@ -221,7 +221,7 @@ async function main(): Promise<void> {
 		ok("pi + alive → inspected once, probed once", trace.inspectCalls === 1 && trace.probeCalls === 1);
 	}
 
-	// ── 7: in-domain pi + absent (dead) → reject, NEVER spawn-bg/mailbox ───────
+	// ── 7: in-domain pi + absent (dead) → reject, NEVER a mailbox enqueue ─────
 	{
 		const { deps, trace } = makeDeps({
 			resolution: present(identity("pi")),
@@ -324,7 +324,7 @@ async function main(): Promise<void> {
 		ok("inspect throw → propagates", e2 === inspectBoom);
 	}
 
-	// ── 12: every execute plan targets the held gid, never spawn-bg ───────────
+	// ── 12: every execute plan targets the held gid ───────────────────────────
 	{
 		const cases: FakeSpec[] = [
 			{ resolution: present(identity("claude-code")), mailboxDeliverable: true },
@@ -340,9 +340,8 @@ async function main(): Promise<void> {
 			const r = await resolveDeadControlSendFallback(CONTROL_PLAN, lockClaim(), deps);
 			if (r.kind !== "execute") allSameTargetNonSpawn = false;
 			else if (r.plan.targetGardenId !== GID) allSameTargetNonSpawn = false;
-			else if (r.plan.transport === "spawn-bg") allSameTargetNonSpawn = false;
 		}
-		ok("every execute plan: same target gid, never spawn-bg", allSameTargetNonSpawn);
+		ok("every execute plan: same target gid (a SEND fallback never re-targets)", allSameTargetNonSpawn);
 	}
 
 	console.log(`\n[check-entwurf-v2-send-fallback] ${passed} assertions ok`);

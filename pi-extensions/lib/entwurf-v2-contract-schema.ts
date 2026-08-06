@@ -46,7 +46,7 @@ export const EntwurfV2InputSchema = Type.Object(
 		}),
 		intent: StringEnum(ENTWURF_INTENTS, {
 			description:
-				"caller's declared outcome contract (F1): fire-and-forget = ack only, owned-outcome = caller owns completion.",
+				"caller's declared outcome contract (F1). ONE member since the visible-first cut: fire-and-forget = ack only. The second, owned-outcome (caller owns completion), resumed a dormant citizen by launching a hidden background child and was withdrawn — a dormant citizen is currently unreachable by this verb.",
 		}),
 		mode: Type.Optional(
 			StringEnum(ENTWURF_V2_MODES, {

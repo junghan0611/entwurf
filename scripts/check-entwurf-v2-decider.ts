@@ -7,11 +7,11 @@
  *   2. execute ⇒ plan present ∧ receipt.transport === plan.transport ∧
  *      (in-domain ⇒ lock non-null, mailbox ⇒ lock null).
  *   3. pre-probe rejects (bad-target / target-locked / target-address-conflict)
- *      carry observedLiveness=null; untrusted-fail-fast carries the measured
+ *      carry observedLiveness=null; every post-probe reject carries the measured
  *      `dead` (non-null), and the deny path releases the lock (nonce-owned).
- *   4. resume plan has NO mode, HAS wantsReply (#50 F2: the dormant rail's
- *      <sender_info> carries the etiquette marker) + expectedSocketPath/
- *      observeTimeoutMs/releaseWhen; meta-mailbox plan has NO mode.
+ *   4. meta-mailbox plan has NO mode. (The resume-plan cell — no mode, wantsReply,
+ *      expectedSocketPath/observeTimeoutMs/releaseWhen — went with the transport in
+ *      the visible-first cut; there is no plan variant left to hold those fields.)
  *   5. control-socket execute lock non-null; meta-mailbox execute lock null (？7).
  *   6. the unsupported (mailbox) path acquires NO lock (？7).
  *   7. a pre-probe address conflict rejects WITHOUT probing (inspectSocket unused).
@@ -21,8 +21,7 @@
  *      a self-fetch citizen with an INACTIVE receiver is refused (SE-2 2d-3), no plan,
  *      no lock, no probe; the seam is consulted exactly once on the resolved identity.
  *   9. an invalid garden id throws BEFORE any path/lock is built (F2-P1).
- *  10. no spawn-bg plan carries provider/model (D4: 5c-owned launch identity).
- *  11. (B2) a throw AFTER the lock is acquired (inspect/probe/preflight) releases
+ *  11. (B2) a throw AFTER the lock is acquired (inspect/probe) releases
  *      the held lock before the error propagates — no leak. A reject-path
  *      releaseLock that itself throws is RETRIED (the unlink never happened, so the
  *      lock is still ours) and the ORIGINAL error propagates — retry-pinned so a
@@ -31,18 +30,16 @@
  *      diagnostic (pid/lockPath/detail), including the corrupt null-holder case;
  *      no other reject carries one.
  *
- * No IO — the target lookup, lock, socket inspection/probe, and preflight are all
+ * No IO — the target lookup, lock, and socket inspection/probe are all
  * REQUIRED injected deps (the decider keeps NO live IO default); lock
  * acquire/release calls are tracked so "no-lock-retained" is proven, not assumed.
  */
 
 import assert from "node:assert/strict";
-import type { PreflightOutcome } from "../pi-extensions/lib/entwurf-preflight.ts";
 import {
 	type DispatchDeciderDeps,
 	type DispatchDecision,
 	decideDispatch,
-	ENTWURF_V2_OBSERVE_TIMEOUT_MS,
 	type ExecutionPlan,
 	resolveMailboxWakeModeCapability,
 	type TargetResolution,
@@ -89,34 +86,6 @@ function lockClaim(gardenId: string): LockClaim {
 	};
 }
 
-const APPROVE: PreflightOutcome = {
-	kind: "approve",
-	reason: "saved-true",
-	launchArgs: ["--approve"],
-	trustStoreDecision: true,
-	trustStoreInherited: false,
-	hasTrustInputs: true,
-	canonicalCwd: CWD,
-};
-const TRUSTED_NO_ARG: PreflightOutcome = {
-	kind: "trusted-no-arg",
-	reason: "no-trust-inputs",
-	launchArgs: [],
-	trustStoreDecision: null,
-	trustStoreInherited: false,
-	hasTrustInputs: false,
-	canonicalCwd: CWD,
-};
-const DENY: PreflightOutcome = {
-	kind: "deny",
-	reason: "fail-fast",
-	launchArgs: [],
-	trustStoreDecision: null,
-	trustStoreInherited: false,
-	hasTrustInputs: true,
-	canonicalCwd: CWD,
-};
-
 function capability(wakeMode: "self-fetch" | "direct-inject"): MetaCapability {
 	return { wakeMode, deliveryLevel: "D6", nativeIdLabel: "session" };
 }
@@ -126,7 +95,6 @@ interface ScenarioOpts {
 	lock?: "ok" | "conflict";
 	inspection?: TargetSocketInspection;
 	probe?: SocketLiveness;
-	preflight?: PreflightOutcome;
 	/** SE-2 2d-3: the verdict the injected mailboxDeliverabilityFor seam returns on the
 	 * unsupported path. Default false (fail-closed) — the decider trusts the seam, never
 	 * wake-mode alone, so this is how a test asserts both the deliverable and inactive cells. */
@@ -179,7 +147,6 @@ function mkDeps(opts: ScenarioOpts): Tracked {
 			return opts.inspection ?? { kind: "absent", socketPath: controlSocketPath(gardenId, "/fake/ctl") };
 		},
 		probeSocket: async (): Promise<SocketLiveness> => opts.probe ?? "dead",
-		preflightForCwd: () => opts.preflight ?? APPROVE,
 		mailboxDeliverabilityFor: (identity: MetaIdentity) => {
 			mailboxCalls.push(identity);
 			return { deliverable: opts.mailboxDeliverable ?? false, reason: "fake-deliverability" };
@@ -205,7 +172,7 @@ async function main(): Promise<void> {
 	// ── 1+3: bad-target — no citizen → reject, observedLiveness null, NO lock ────
 	{
 		const t = mkDeps({ resolution: { identity: null, preProbeAddressConflict: false } });
-		const d = await decideDispatch({ target: GID, intent: "owned-outcome", message: "hi" }, t.deps);
+		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "hi" }, t.deps);
 		ok("bad-target: reject", d.kind === "reject");
 		ok("bad-target: no plan field", !("plan" in d));
 		ok("bad-target: observedLiveness null (pre-probe)", d.kind === "reject" && d.receipt.observedLiveness === null);
@@ -230,7 +197,7 @@ async function main(): Promise<void> {
 	// ── target-locked: acquire conflict → reject, null, nothing to release ───────
 	{
 		const t = mkDeps({ resolution: { identity: identity("pi"), preProbeAddressConflict: false }, lock: "conflict" });
-		const d = await decideDispatch({ target: GID, intent: "owned-outcome", message: "hi" }, t.deps);
+		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "hi" }, t.deps);
 		ok("target-locked: reject", d.kind === "reject" && d.receipt.reason === "target-locked");
 		ok("target-locked: observedLiveness null (pre-probe)", d.kind === "reject" && d.receipt.observedLiveness === null);
 		ok("target-locked: lock acquire attempted", t.acquireCalls.length === 1);
@@ -253,7 +220,7 @@ async function main(): Promise<void> {
 	// empty/corrupt and there is no pid to show.
 	{
 		const d = await decideDispatch(
-			{ target: GID, intent: "owned-outcome", message: "hi" },
+			{ target: GID, intent: "fire-and-forget", message: "hi" },
 			{
 				resolveTarget: () => ({ identity: identity("pi"), preProbeAddressConflict: false }),
 				acquireLock: () => ({
@@ -270,7 +237,6 @@ async function main(): Promise<void> {
 					throw new Error("target-locked(corrupt): must not probe after a lock conflict");
 				},
 				probeSocket: async () => "dead",
-				preflightForCwd: () => APPROVE,
 				mailboxDeliverabilityFor: () => {
 					throw new Error("target-locked(corrupt): in-domain pi never consults the mailbox seam");
 				},
@@ -298,7 +264,7 @@ async function main(): Promise<void> {
 			lock: "ok",
 			inspection: { kind: "address-conflict", socketPath: "/fake/ctl/s.sock", reason: "symlink" },
 		});
-		const d = await decideDispatch({ target: GID, intent: "owned-outcome", message: "hi" }, t.deps);
+		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "hi" }, t.deps);
 		ok(
 			"postlock-conflict: reject target-address-conflict",
 			d.kind === "reject" && d.receipt.reason === "target-address-conflict",
@@ -311,27 +277,6 @@ async function main(): Promise<void> {
 		ok("postlock-conflict: lock RELEASED (no-lock-retained)", t.releaseCalls.length === 1);
 	}
 
-	// ── owned-outcome + LIVE → owned-live-no-autosend, release ───────────────────
-	{
-		const t = mkDeps({
-			resolution: { identity: identity("pi"), preProbeAddressConflict: false },
-			lock: "ok",
-			inspection: { kind: "socket-file", socketPath: "/fake/ctl/s.sock" },
-			probe: "alive",
-		});
-		const d = await decideDispatch({ target: GID, intent: "owned-outcome", message: "hi" }, t.deps);
-		ok(
-			"owned-live: reject owned-live-no-autosend",
-			d.kind === "reject" && d.receipt.reason === "owned-live-no-autosend",
-		);
-		ok(
-			"owned-live: observedLiveness alive (post-probe, non-null)",
-			d.kind === "reject" && d.receipt.observedLiveness === "alive",
-		);
-		ok("owned-live: lock released", t.releaseCalls.length === 1);
-		ok("owned-live: no plan", !("plan" in d));
-	}
-
 	// ── indeterminate → indeterminate-no-spawn, release ──────────────────────────
 	{
 		const t = mkDeps({
@@ -339,7 +284,7 @@ async function main(): Promise<void> {
 			lock: "ok",
 			inspection: { kind: "indeterminate", socketPath: "/fake/ctl/s.sock", error: "EACCES" },
 		});
-		const d = await decideDispatch({ target: GID, intent: "owned-outcome", message: "hi" }, t.deps);
+		const d = await decideDispatch({ target: GID, intent: "fire-and-forget", message: "hi" }, t.deps);
 		ok(
 			"indeterminate: reject indeterminate-no-spawn",
 			d.kind === "reject" && d.receipt.reason === "indeterminate-no-spawn",
@@ -398,75 +343,6 @@ async function main(): Promise<void> {
 				ok("send-execute: plan keyset exact (no provider/model)", true);
 			}
 		}
-	}
-
-	// ── 2+4+10: spawn-bg RESUME execute (owned + dormant + preflight allow) ──────
-	for (const pf of [APPROVE, TRUSTED_NO_ARG]) {
-		const t = mkDeps({
-			resolution: { identity: identity("pi"), preProbeAddressConflict: false },
-			lock: "ok",
-			inspection: { kind: "absent", socketPath: "/fake/ctl/expected.sock" },
-			preflight: pf,
-		});
-		const d = await decideDispatch(
-			{ target: GID, intent: "owned-outcome", mode: "steer", wantsReply: true, message: "do X" },
-			t.deps,
-		);
-		ok(`resume-execute(${pf.kind}): kind execute`, isExecute(d));
-		if (isExecute(d) && d.plan.transport === "spawn-bg") {
-			ok(`resume-execute(${pf.kind}): receipt.transport === plan.transport`, d.receipt.transport === "spawn-bg");
-			ok(`resume-execute(${pf.kind}): lock RETAINED`, d.lock !== null);
-			ok(`resume-execute(${pf.kind}): NOT released`, t.releaseCalls.length === 0);
-			ok(`resume-execute(${pf.kind}): sessionId === gardenId (D3)`, d.plan.sessionId === GID);
-			ok(`resume-execute(${pf.kind}): prompt = message`, d.plan.prompt === "do X");
-			ok(`resume-execute(${pf.kind}): wantsReply carried (#50 F2)`, d.plan.wantsReply === true);
-			ok(`resume-execute(${pf.kind}): launchArgs from preflight`, d.plan.launchArgs === pf.launchArgs);
-			ok(
-				`resume-execute(${pf.kind}): expectedSocketPath planted`,
-				d.plan.expectedSocketPath === "/fake/ctl/expected.sock",
-			);
-			ok(
-				`resume-execute(${pf.kind}): observeTimeoutMs default`,
-				d.plan.observeTimeoutMs === ENTWURF_V2_OBSERVE_TIMEOUT_MS,
-			);
-			ok(`resume-execute(${pf.kind}): releaseWhen A2 predicate`, d.plan.releaseWhen === "socket-alive-or-child-exited");
-			assert.deepStrictEqual(
-				planKeys(d.plan),
-				[
-					"action",
-					"cwd",
-					"expectedSocketPath",
-					"launchArgs",
-					"observeTimeoutMs",
-					"prompt",
-					"releaseWhen",
-					"sessionId",
-					"targetGardenId",
-					"transport",
-					"wantsReply",
-				],
-				`spawn-bg plan keyset drift: ${planKeys(d.plan).join(",")}`,
-			);
-			ok(`resume-execute(${pf.kind}): NO mode/provider/model in plan`, true);
-		}
-	}
-
-	// ── 1+3: untrusted-fail-fast — resume verdict + preflight DENY → release ─────
-	{
-		const t = mkDeps({
-			resolution: { identity: identity("pi"), preProbeAddressConflict: false },
-			lock: "ok",
-			inspection: { kind: "absent", socketPath: "/fake/ctl/s.sock" },
-			preflight: DENY,
-		});
-		const d = await decideDispatch({ target: GID, intent: "owned-outcome", message: "do X" }, t.deps);
-		ok("untrusted: reject untrusted-fail-fast", d.kind === "reject" && d.receipt.reason === "untrusted-fail-fast");
-		ok(
-			"untrusted: observedLiveness dead (measured, non-null)",
-			d.kind === "reject" && d.receipt.observedLiveness === "dead",
-		);
-		ok("untrusted: lock RELEASED (nonce-owned, no-lock-retained)", t.releaseCalls.length === 1);
-		ok("untrusted: no plan", !("plan" in d));
 	}
 
 	// ── 2+5+6: meta-mailbox SEND execute (unsupported claude + ff + deliverable) ─
@@ -538,20 +414,6 @@ async function main(): Promise<void> {
 		ok("se2-inactive: deliverability seam consulted exactly once", t.mailboxCalls.length === 1);
 	}
 
-	// ── unsupported + owned-outcome → backend-liveness-unsupported, no lock ──────
-	{
-		const t = mkDeps({
-			resolution: { identity: identity("claude-code"), preProbeAddressConflict: false },
-			mailboxDeliverable: true,
-		});
-		const d = await decideDispatch({ target: GID, intent: "owned-outcome", message: "x" }, t.deps);
-		ok(
-			"unsupported-owned: reject backend-liveness-unsupported",
-			d.kind === "reject" && d.receipt.reason === "backend-liveness-unsupported",
-		);
-		ok("unsupported-owned: acquireLock NOT called", t.acquireCalls.length === 0);
-	}
-
 	// ── #50 C4: record-less socket (identity null + recordLessSocket) ──────────
 	// The record is the sole address authority, so a bare control socket is NOT an
 	// addressable citizen — EVERY intent rejects pre-probe as `record-less-socket`
@@ -560,7 +422,7 @@ async function main(): Promise<void> {
 	// the gid — "absent" would hide the state). The retired A1 narrow used to accept
 	// ff sends into this socket; that acceptance must never come back.
 	const recordLess: TargetResolution = { identity: null, preProbeAddressConflict: false, recordLessSocket: true };
-	for (const intent of ["fire-and-forget", "owned-outcome"] as const) {
+	for (const intent of ["fire-and-forget"] as const) {
 		const t = mkDeps({ resolution: recordLess });
 		const d = await decideDispatch({ target: GID, intent, message: "ping" }, t.deps);
 		ok(
@@ -595,7 +457,7 @@ async function main(): Promise<void> {
 			let threw = false;
 			try {
 				await decideDispatch(
-					{ target: GID, intent: "owned-outcome", message: "x" },
+					{ target: GID, intent: "fire-and-forget", message: "x" },
 					{
 						resolveTarget: () => ({ identity: identity("pi"), preProbeAddressConflict: false }),
 						acquireLock: () => ({ ok: true, claim: lockClaim(GID) }),
@@ -604,7 +466,6 @@ async function main(): Promise<void> {
 						},
 						inspectSocket: async () => ({ kind: "absent", socketPath: "/fake/ctl/s.sock" }),
 						probeSocket: async () => "dead",
-						preflightForCwd: () => APPROVE,
 						mailboxDeliverabilityFor: () => ({ deliverable: false, reason: "in-domain pi: seam unused" }),
 						nativePushProbe: () => {
 							throw new Error("lock-leak: in-domain pi never consults the native-push seam");
@@ -631,12 +492,6 @@ async function main(): Promise<void> {
 				throw new Error("probe boom");
 			},
 		});
-		await runThrowing("preflight throw", {
-			// absent → dead → owned-outcome resume verdict → preflight is reached
-			preflightForCwd: () => {
-				throw new Error("preflight boom");
-			},
-		});
 	}
 
 	// ── B2 retry-pin (Fable 2차 권고): a reject-path releaseLock that THROWS is ──
@@ -650,7 +505,7 @@ async function main(): Promise<void> {
 		let caught: unknown = null;
 		try {
 			await decideDispatch(
-				{ target: GID, intent: "owned-outcome", message: "x" },
+				{ target: GID, intent: "fire-and-forget", message: "x" },
 				{
 					resolveTarget: () => ({ identity: identity("pi"), preProbeAddressConflict: false }),
 					acquireLock: () => ({ ok: true, claim: lockClaim(GID) }),
@@ -658,10 +513,9 @@ async function main(): Promise<void> {
 						released.push(c);
 						throw new Error(`release boom ${released.length}`);
 					},
-					// owned-outcome + LIVE → owned-live-no-autosend reject → rejectAfterRelease
+					// fire-and-forget + DORMANT → dormant-fire-forget-unsupported → rejectAfterRelease
 					inspectSocket: async () => ({ kind: "socket-file", socketPath: "/fake/ctl/s.sock" }),
-					probeSocket: async () => "alive",
-					preflightForCwd: () => APPROVE,
+					probeSocket: async () => "dead",
 					mailboxDeliverabilityFor: () => ({ deliverable: false, reason: "in-domain pi: seam unused" }),
 					nativePushProbe: () => {
 						throw new Error("reject-release-throw: in-domain pi never consults the native-push seam");
@@ -701,7 +555,6 @@ async function main(): Promise<void> {
 			probeSocket: async () => {
 				throw new Error("invalid-gid: probeSocket must not be reached");
 			},
-			preflightForCwd: () => APPROVE,
 			mailboxDeliverabilityFor: () => {
 				throw new Error("invalid-gid: mailboxDeliverabilityFor must not be reached");
 			},
@@ -710,7 +563,7 @@ async function main(): Promise<void> {
 			},
 		};
 		try {
-			await decideDispatch({ target: "../etc/passwd", intent: "owned-outcome", message: "x" }, deps);
+			await decideDispatch({ target: "../etc/passwd", intent: "fire-and-forget", message: "x" }, deps);
 		} catch {
 			threw = true;
 		}
@@ -774,19 +627,6 @@ async function main(): Promise<void> {
 			"native-push ff+indeterminate: reject native-push-probe-indeterminate",
 			d.kind === "reject" && d.receipt.reason === "native-push-probe-indeterminate",
 		);
-	}
-	{
-		// owned × alive → reject native-push-no-resume-authority (state-independent), lock-free.
-		const t = mkDeps({
-			resolution: npResolution,
-			nativePush: { status: "alive", route: { lsAddress: "127.0.0.1:5599" } },
-		});
-		const d = await decideDispatch({ target: GID, intent: "owned-outcome", message: "yo" }, t.deps);
-		ok(
-			"native-push owned+alive: reject native-push-no-resume-authority",
-			d.kind === "reject" && d.receipt.reason === "native-push-no-resume-authority",
-		);
-		ok("native-push owned+alive: acquireLock NOT called (lock-free)", t.acquireCalls.length === 0);
 	}
 
 	// The wake-mode capability HELPER stays gate-pinned (renamed; the decider no longer

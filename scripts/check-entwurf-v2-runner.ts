@@ -1,13 +1,11 @@
 /**
  * check-entwurf-v2-runner — deterministic gate for the 5d-1 execute-router
  * (`executeDispatch`). It proves the DECISION→hand routing + the outcome-rich result
- * mapping over injected fake hands, with NO socket/spawn/timer:
+ * mapping over injected fake hands, with NO socket or timer:
  *
  *   1. reject decision        → kind "rejected", receipt+diagnostic carried, NO hand called.
  *   2. control-socket execute → sendControl(plan, lock) called with the SAME plan + lock;
  *      result outcome "sent" → executed{control-socket, outcome:"sent"}.
- *   3. spawn-bg execute       → resumeSpawnBg(plan, lock); a `socket-alive` result rides
- *      executed; a `lock-retained` result ALSO rides executed (fail-closed, not a failure).
  *   4. meta-mailbox execute   → sendMailbox(plan, null) with the NULL lock (？7); success
  *      → executed{meta-mailbox, success:true}.
  *   5. N3 — control rejected with rejectReason → executed{outcome:"rejected", rejectReason}
@@ -16,7 +14,7 @@
  *      finalizedOutcome + releaseFailed:true + retrySafe:false.
  *   7. control hand throws a PLAIN transport error → execution-failed, retrySafe:false,
  *      NO finalizedOutcome / releaseFailed (a failed send, lock already released).
- *   8. spawn / mailbox hand throws → execution-failed, retrySafe:false.
+ *   8. the mailbox hand throws → execution-failed, retrySafe:false.
  *   9. mailbox hand returns {success:false} → CONTRACT VIOLATION (a mailbox has no
  *      in-band reject) → fail loud → execution-failed, NOT a silent success.
  *  (exactly ONE hand runs per execute — the other two are never called — is asserted
@@ -26,7 +24,7 @@
  * over a FAKE `decide` (not the real decider — that is check-entwurf-v2-decider's job):
  *  10. decide called EXACTLY once, with the SAME input.
  *  11. reject decision  → no executor hand called, the rejected result returned.
- *  12. execute decision → the matching executor hand ran (control/spawn/mailbox).
+ *  12. execute decision → the matching executor hand ran (control/mailbox).
  *  13. decide THROWS    → propagates (no decision = no receipt to wrap).
  *  14. executeDispatch result returned VERBATIM (passthrough, no re-wrapping).
  *
@@ -57,7 +55,6 @@ import type {
 	RpcSendResult,
 } from "../pi-extensions/lib/entwurf-v2-send.ts";
 import { SendDeliveredReleaseFailedError } from "../pi-extensions/lib/entwurf-v2-send.ts";
-import type { SpawnBgPlan, SpawnBgResumeResult } from "../pi-extensions/lib/entwurf-v2-spawn.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -88,19 +85,6 @@ const CONTROL_PLAN: ControlSocketPlan = {
 	mode: "follow_up",
 	wantsReply: false,
 	message: "m",
-};
-const SPAWN_PLAN: SpawnBgPlan = {
-	transport: "spawn-bg",
-	action: "resume",
-	targetGardenId: GID,
-	sessionId: GID,
-	cwd: "/home/junghan/repos/gh/entwurf",
-	prompt: "p",
-	wantsReply: false,
-	launchArgs: [],
-	expectedSocketPath: "/fake/ctl/s.sock",
-	observeTimeoutMs: 30_000,
-	releaseWhen: "socket-alive-or-child-exited",
 };
 const MAILBOX_PLAN: MetaMailboxPlan = {
 	transport: "meta-mailbox",
@@ -138,14 +122,12 @@ function executeDecision(plan: ExecutionPlan, lock: LockClaim | null): Extract<D
 interface Trace {
 	calls: string[];
 	controlArgs?: { plan: ControlSocketPlan; lock: LockClaim | null };
-	spawnArgs?: { plan: SpawnBgPlan; lock: LockClaim | null };
 	mailboxArgs?: { plan: MetaMailboxPlan; lock: LockClaim | null };
 	nativePushArgs?: { plan: NativePushPlan; lock: LockClaim | null };
 }
 
 interface FakeSpec {
 	control?: { result: ControlSocketSendResult } | { throw: unknown };
-	spawn?: { result: SpawnBgResumeResult } | { throw: unknown };
 	mailbox?: { result: RpcSendResult } | { throw: unknown };
 	nativePush?: { result: NativePushSendResult } | { throw: unknown };
 }
@@ -159,13 +141,6 @@ function makeDeps(spec: FakeSpec): { deps: DispatchExecutorDeps; trace: Trace } 
 			if (!spec.control) throw new Error("test: sendControl called but no spec");
 			if ("throw" in spec.control) throw spec.control.throw;
 			return spec.control.result;
-		},
-		async resumeSpawnBg(plan, lock) {
-			trace.calls.push("resumeSpawnBg");
-			trace.spawnArgs = { plan, lock };
-			if (!spec.spawn) throw new Error("test: resumeSpawnBg called but no spec");
-			if ("throw" in spec.spawn) throw spec.spawn.throw;
-			return spec.spawn.result;
 		},
 		async sendMailbox(plan, lock) {
 			trace.calls.push("sendMailbox");
@@ -222,41 +197,6 @@ async function main(): Promise<void> {
 			res.kind === "executed" && res.outcome.transport === "control-socket" && res.outcome.outcome === "sent",
 		);
 		ok("2: success receipt carried", res.kind === "executed" && res.receipt === SUCCESS_RECEIPT);
-	}
-
-	// ── 3: spawn-bg execute → socket-alive AND lock-retained both ride executed ─
-	{
-		const lock = lockClaim();
-		const alive = makeDeps({ spawn: { result: { kind: "socket-alive", released: true, pid: 7 } } });
-		const r1 = await executeDispatch(executeDecision(SPAWN_PLAN, lock), alive.deps);
-		ok("3: spawn → only resumeSpawnBg ran", alive.trace.calls.length === 1 && alive.trace.calls[0] === "resumeSpawnBg");
-		ok(
-			"3: spawn plan + lock reach the hand",
-			alive.trace.spawnArgs?.plan === SPAWN_PLAN && alive.trace.spawnArgs?.lock === lock,
-		);
-		ok(
-			"3: socket-alive → executed{spawn-bg, socket-alive}",
-			r1.kind === "executed" && r1.outcome.transport === "spawn-bg" && r1.outcome.result.kind === "socket-alive",
-		);
-
-		const retainedResult: SpawnBgResumeResult = {
-			kind: "lock-retained",
-			released: false,
-			reason: "observe-failed",
-			diagnostic: {
-				targetGardenId: GID,
-				lockPath: "/fake/locks/x.lock",
-				expectedSocketPath: "/fake/ctl/s.sock",
-				observeTimeoutMs: 30_000,
-				killGraceMs: 5_000,
-			},
-		};
-		const retained = makeDeps({ spawn: { result: retainedResult } });
-		const r2 = await executeDispatch(executeDecision(SPAWN_PLAN, lock), retained.deps);
-		ok(
-			"3: lock-retained rides executed (fail-closed, not a failure)",
-			r2.kind === "executed" && r2.outcome.transport === "spawn-bg" && r2.outcome.result.kind === "lock-retained",
-		);
 	}
 
 	// ── 4: meta-mailbox execute → sendMailbox(plan, null), success ────────────
@@ -355,15 +295,8 @@ async function main(): Promise<void> {
 		);
 	}
 
-	// ── 8: spawn / mailbox hand throw → execution-failed ──────────────────────
+	// ── 8: the mailbox hand throws → execution-failed ─────────────────────────
 	{
-		const s = makeDeps({ spawn: { throw: new Error("spawn boom") } });
-		const rs = await executeDispatch(executeDecision(SPAWN_PLAN, lockClaim()), s.deps);
-		ok(
-			"8: spawn throw → execution-failed",
-			rs.kind === "execution-failed" && rs.transport === "spawn-bg" && rs.retrySafe === false,
-		);
-
 		const m = makeDeps({ mailbox: { throw: new Error("enqueue boom") } });
 		const rm = await executeDispatch(executeDecision(MAILBOX_PLAN, null), m.deps);
 		ok(
@@ -444,20 +377,6 @@ async function main(): Promise<void> {
 				rc.kind === "executed" &&
 				rc.outcome.transport === "control-socket",
 		);
-
-		const spw = makeRunDeps(
-			{ decision: executeDecision(SPAWN_PLAN, lock) },
-			{ spawn: { result: { kind: "socket-alive", released: true, pid: 7 } } },
-		);
-		const rsp = await runEntwurfV2(DISPATCH_INPUT, spw.deps);
-		ok(
-			"12: spawn execute → resumeSpawnBg ran, executed{spawn-bg}",
-			spw.trace.calls.length === 1 &&
-				spw.trace.calls[0] === "resumeSpawnBg" &&
-				rsp.kind === "executed" &&
-				rsp.outcome.transport === "spawn-bg",
-		);
-
 		const mbx = makeRunDeps(
 			{ decision: executeDecision(MAILBOX_PLAN, null) },
 			{ mailbox: { result: { success: true } } },

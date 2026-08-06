@@ -10,7 +10,7 @@
 ## 현재 — 0.13.1 shipped; #47 mux launch rail
 
 이 repo는 **entwurf-core(v2 garden-citizen dispatch) + native-harness bridges + pi adapter + ACP plugin**이다.
-`v0.13.1`은 GitHub와 npm `latest`로 게시됐다. Claude mailbox, pi control-socket/spawn-bg resume,
+`v0.13.1`은 GitHub와 npm `latest`로 게시됐다. Claude mailbox, pi control-socket,
 Antigravity native-push가 한 garden-id dispatch 표면으로 출하됐고, ACP plugin은 Claude와 Cortex를 pi host
 안에서 연결한다.
 
@@ -43,7 +43,7 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 
 | Harness / rail | status | 이 repo에서의 정체 | Evidence |
 |---|---|---|---|
-| **pi** | shipped | control-socket adapter + spawn-bg resume host. ACP plugin도 pi provider/model로 들어온다. | `pnpm check`, v2 matrix/spawn LIVE, release-gate MUST |
+| **pi** | shipped | control-socket adapter. ACP plugin도 pi provider/model로 들어온다. relaunch transport는 visible-first cut으로 회수됐다. | `pnpm check`, v2 matrix LIVE, release-gate MUST |
 | **Claude Code** | shipped | SessionStart meta-bridge → garden id + mailbox + trusted marker. Transcript를 가져오지 않는다. | meta-session gates, mailbox/deliverability, `doctor-meta-bridge` |
 | **ACP Claude** | shipped, **model-facing outbound half unreliable — 현재 lane** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Turn/provider path ships, 그리고 host resident는 record/socket citizen으로 계속 주소 가능하다(S1이 turn-free로 증명). 다만 번들 `entwurf-bridge` MCP 도구가 첫 턴에 세션 schema에서 빠지는 관측이 있어, 그 시민 안의 **ACP 모델이 형제에게 나가는(outbound dispatch)** 절반은 아직 신뢰 구간이 아니다(🔴 readiness race). | ACP LIVE smokes + release-gate MUST |
 | **Codex** | native probe archived; managed lane declined | direct/native delivery evidence는 방법론 기록으로 남지만, pi가 공식 GPT provider를 지원하므로 별도 native citizen/ACP backend를 출하하지 않는다. 일반 external MCP host로 명시 배선하는 것은 별개다. | DELIVERY.md raw probe / closed #56 |
@@ -74,7 +74,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 |---|---|
 | v2 pi live send | `smoke-entwurf-v2-matrix-live` C1 |
 | v2 record-less socket 거부 — 모든 intent pre-probe `record-less-socket`, 원인+fresh-cut 명명 (#50 C4; A1 narrow 은퇴) | matrix-live C1b |
-| v2 dormant pi → spawn-bg resume (실 `pi --entwurf-control` child + model turn) | `smoke-entwurf-v2-spawn-resume-live` |
+| v2 dormant pi → honest reject (`dormant-fire-forget-unsupported`, 아무 프로세스도 시작하지 않음) | matrix-live + `check-entwurf-v2-surface` |
 | v2 active Claude Code meta → meta-mailbox enqueue + doorbell | matrix-live C2 |
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
@@ -116,7 +116,7 @@ non-claude **throw** 가드. **백엔드 추가 레일이 0.11.0보다 후퇴**(
   PR #40을 어댑터로 포팅하고 로컬 완전검증(`smoke-cortex`)이 서면 운영 surface로 승격. 레일=0.12.0,
   백엔드 검증=그 위에서. (이전 "vendor CLI 검증되면" 단일 항목을 레일/백엔드로 분리.)
 - **fresh sibling creation** — **landed as `entwurf_fresh_call`** (2026-08-05). v2 delivery transport
-  (control-socket / spawn-bg resume / meta-mailbox / native-push)는 여전히 전부 기존 citizen 대상이고
+  (control-socket / meta-mailbox / native-push)는 여전히 전부 기존 citizen 대상이고
   `spawn-fresh`류 transport 이름은 굽지 않았다. 새 verb는 placement leaf → launch → fresh-call composition
   위에 서며, 새 sibling의 주소는 조회가 아니라 **callback sender envelope**으로 온다
   (docs/mux-launch-rail.md §6-a). **pre-injected token 기반 identity lookup(§6)은 deferred가 아니라
@@ -172,8 +172,8 @@ split은 한 몸인 코드를 *물리적으로 쪼개는* 것이다.
 이것은 **deferred coordinate**(#38), 이번 lane이 아니다. 지금(그리고 rename 직후에도) 이 repo가 v2
 dispatch substrate + meta-bridge + ACP plugin을 한 몸으로 들고 간다.
 
-- v2(garden citizen에 대한 결정적 dispatch substrate: rail-specific liveness×intent → control-socket /
-  spawn-bg resume / meta-mailbox / native-push)는 분리 시 새 `entwurf` repo에서 깨끗이 자랄 후보다.
+- v2(garden citizen에 대한 결정적 dispatch substrate: rail-specific liveness → control-socket /
+  meta-mailbox / native-push)는 분리 시 새 `entwurf` repo에서 깨끗이 자랄 후보다.
 - **entwurf-core** = identity / garden id / inbox / liveness / dispatch / replyability / evidence 추출이
   그 첫 몸.
 - split 전까지 (그리고 rename 후) `entwurf` = **v2 core + meta-bridge + ACP plugin**(v1은 이미 제거됨,

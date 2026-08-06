@@ -89,7 +89,7 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # ONE confident install: pnpm install + install + meta-bridge (if native harness) + v2 install smoke (LIVE substrate = release-gate)
-  ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix/spawn-resume-live, check-bridge, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the two axes the aggregate used to omit silently (spawn-live/claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
+  ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix-live, check-bridge, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
   ./run.sh check-entwurf-bridge-pi-free # deterministic gate (0.12.1 A, IN pnpm check): static — bridge index eager value-import closure must carry no @earendil-works/pi-* (type-only + dynamic import excluded); proves the meta-bridge boots pi-free
@@ -110,22 +110,19 @@ Usage:
   ./run.sh check-meta-capability-source # deterministic gate (0.11 Stage 0 step 3D-3): capability-source cut-over — mint/parse read wakeMode/deliveryLevel from the registry (metaCapabilityFor, registry-driven via injection), not META_BACKEND_DESCRIPTORS; behaviour-preserving (registry ≡ const); the record.delivery slot 3D-3 preserved was deleted by 3D-4, no API
   ./run.sh check-socket-probe          # deterministic gate (0.11 Stage 0, F3): three-valued control-socket liveness (alive|dead|indeterminate) — GC reclaims dead only, indeterminate survives; pure classify + 2-socket integration, no API
   ./run.sh check-project-trust-handler # deterministic gate (0.11 Stage 0, Trust 2층): project_trust handler — decideProjectTrust matrix (escape=inherited-false+interactive+trust-here→{yes,remember:true}; non-interactive→undecided; never undefined) + adapter single-writer, fake prompt, no UI
-  ./run.sh check-entwurf-v2-contract   # deterministic gate (0.11 Stage 0 step 4-pre, 동결결정 10 + Fable R1-R5): FROZEN entwurf_v2 contract — R1 control-socket domain (currently pi; claude/codex/agy=unsupported, not folded), 6-cell intent×liveness table (single verdict, 2 allow/4 reject), N1 indeterminate-no-spawn, Q2 owned-live-no-autosend, R3 table↔receipt round-trip, R5 taxonomy, schema↔types drift; pure, no API
+  ./run.sh check-entwurf-v2-contract   # deterministic gate (0.11 Stage 0 step 4-pre, 동결결정 10 + Fable R1-R5): FROZEN entwurf_v2 contract — R1 control-socket domain (currently pi; claude/codex/agy=unsupported, not folded), 3-cell intent×liveness table (single verdict, 1 allow/2 reject after the visible-first cut), N1 indeterminate-no-spawn, R3 table↔receipt round-trip, R5 taxonomy, schema↔types drift; pure, no API
   ./run.sh check-entwurf-v2-lock       # deterministic gate (0.11 Stage 0 step 5a, 버킷 B F2): per-gid dispatch LOCK primitive — openSync wx atomic acquire, second-acquire=target-locked conflict (holder JSON for human cleanup), nonce-owned release (successor survives late release), stale reclaim same-host+ESRCH-only (EPERM/remote/alive/unknown fail-closed), empty/corrupt=conflict not auto-deleted, F2-P1 malformed gid throws; real temp dir, deps injected
   ./run.sh check-entwurf-v2-decider    # deterministic gate (0.11 Stage 0 step 5b): PURE dispatch decider decideDispatch — frozen 7-step order over injected fakes, lock acquire+release tracked so reject⇒no-plan-no-lock proven; pre-probe rejects observedLiveness=null, send/resume execute keep lock + mailbox no-lock (？7), resume plan no mode/provider/model, invalid gid throws (F2-P1); pure, no IO
-  ./run.sh check-entwurf-v2-matrix     # deterministic gate (0.11 Stage 0 step 5d-5 a): REACHABILITY + LOCK SSOT table — drives REAL decideDispatch over fakes, fixes every (target kind → transport → lock class) cell as one table (control-socket/meta-mailbox/spawn-bg + bad-target/conflict/locked/undeliverable/owned-live/dormant/indeterminate rejects), coverage pass fails on a dropped cell; thin coverage not a decider re-impl; pure, no IO
-  ./run.sh check-entwurf-v2-release    # deterministic gate (0.11 Stage 0 step 5c-1): PURE release-policy reducer (decideReleasePolicy + reduceRelease) — Fable-3 release-after-observation as a state machine; spawn-started is NOT a release event, release on first socket-alive ∨ child-exited (any code) or failed start, socket↔exit race idempotent (single release), lock-nullness invariant enforced; pure, no IO
+  ./run.sh check-entwurf-v2-matrix     # deterministic gate (0.11 Stage 0 step 5d-5 a): REACHABILITY + LOCK SSOT table — drives REAL decideDispatch over fakes, fixes every (target kind → transport → lock class) cell as one table (control-socket/meta-mailbox/native-push + bad-target/conflict/locked/undeliverable/dormant/indeterminate rejects), coverage pass fails on a dropped cell; thin coverage not a decider re-impl; pure, no IO
+  ./run.sh check-entwurf-v2-release    # deterministic gate (0.11 Stage 0 step 5c-1): PURE release-policy reducer (decideReleasePolicy + reduceRelease) — the spawn-observation policy and its four release events went with the transport in the visible-first cut, so the shipped machine is meta-mailbox=never release (no lock) + control-socket=release once on send-final; decideReleasePolicy still enforces the lock-nullness invariant; pure, no IO
   ./run.sh check-entwurf-v2-send       # deterministic gate (0.11 Stage 0 step 5c-2a): control-socket SEND hand (executeControlSocketSend) wiring transport IO onto the 5c-1 reducer — ack→sent, in-band reject→rejected (no fallback), dead→same-lock one-shot re-resolve (control retry / mailbox enqueue), indeterminate→failed+rethrow with NO fallback (no double-delivery); release exactly once, releaseLock throw never masks the send error; IO-via-dep
-  ./run.sh check-entwurf-v2-send-fallback # deterministic gate (0.11 Stage 0 step 5c-2b): same-lock re-resolve RESOLVER (resolveDeadControlSendFallback) — fire-and-forget re-resolve: alive→control retry, dead→reject (NEVER spawn-bg), indeterminate→reject, unsupported+deliverable→mailbox plan, undeliverable/bad-target/conflict→reject; resolver never releases, mis-wire fails loud, inspect/probe throws propagate; no IO (fakes)
-  ./run.sh check-entwurf-v2-runner     # deterministic gate (0.11 Stage 0 step 5d-1): execute-router (executeDispatch) routing an already-decided DispatchDecision to its 5c transport hand → one outcome-rich EntwurfV2RunResult. reject→rejected (no hand) / control/spawn/mailbox→matching hand with decision.lock verbatim / spawn lock-retained rides executed (fail-closed) / N3 rejectReason carried / N1 SendDeliveredReleaseFailedError→execution-failed{finalizedOutcome,releaseFailed,retrySafe:false}; fake hands, no IO
+  ./run.sh check-entwurf-v2-send-fallback # deterministic gate (0.11 Stage 0 step 5c-2b): same-lock re-resolve RESOLVER (resolveDeadControlSendFallback) — fire-and-forget re-resolve: alive→control retry, dead→reject (nothing is ever launched), indeterminate→reject, unsupported+deliverable→mailbox plan, undeliverable/bad-target/conflict→reject; resolver never releases, mis-wire fails loud, inspect/probe throws propagate; no IO (fakes)
+  ./run.sh check-entwurf-v2-runner     # deterministic gate (0.11 Stage 0 step 5d-1): execute-router (executeDispatch) routing an already-decided DispatchDecision to its 5c transport hand → one outcome-rich EntwurfV2RunResult. reject→rejected (no hand) / control/mailbox→matching hand with decision.lock verbatim / N3 rejectReason carried / N1 SendDeliveredReleaseFailedError→execution-failed{finalizedOutcome,releaseFailed,retrySafe:false}; fake hands, no IO
   ./run.sh check-entwurf-v2-mailbox    # deterministic gate (0.11 Stage 0 step 5c-4, LAST 5c transport slice): ENQUEUE-ONLY meta-mailbox SEND body (executeMetaMailboxSend) + production sendViaMailbox adapter — sender→formatMetaMailboxBody with plan.wantsReply threaded (divergence from legacy hard false), sender absent→raw plan.message, enqueue opts EXACTLY {gardenId,body,sessionsDir,mailboxDir}, enqueue throw PROPAGATES (no success:false fold — mailbox has no in-band refuse); adapter NEVER touches lock (release is the hand's job); source guard: no release/routing seam
-  ./run.sh check-entwurf-v2-spawn      # deterministic gate (0.11 Stage 0 step 5c-3a): spawn-bg RESUME watcher hand (executeSpawnBgResume) wiring spawn + socket-observe IO onto the 5c-1 reducer — Fable-3: TIMEOUT IS NOT A RELEASE (bare observeTimeout→killChild, release 0; bounded killGrace then real socket-alive ∨ child-exited releases ×1); spawnChild throw→spawn-start-failed; no observation obtainable (grace elapses / post-spawn watch dep throws)→lock-retained fail-closed (released:false, evidence surfaced), NO direct-release hatch; IO-via-dep, controlled promises
-  ./run.sh check-entwurf-resume-args   # deterministic gate (0.11 Stage 0 step 5c-3b): resume-argv SSOT (buildResumePiArgs) for the v2 spawn-bg RESIDENT citizen — the `legacy` one-shot variant and its async worker were removed 2026-07-27, so the shipped posture is the only one the gate drives: v2-control=--entwurf-control + no --no-extensions (keep-alive is the goal, resumed session stays addressable); keeps --mode json -p + prompt-as-turn (-p NOT dropped); explicitExtensionArgs preserved exactly once (#29); plan.launchArgs (--approve) ride before the prompt; null provider→no --provider
-  ./run.sh check-entwurf-v2-spawn-production # deterministic gate (0.11 Stage 0 step 5c-3c): production SpawnBgResumeDeps factory (makeProductionSpawnBgResumeDeps) wiring the 5c-3a watcher's 6 IO seams — no real pi/socket/timer (that=opt-in smoke-entwurf-v2-spawn-live, OUT of pnpm check). socketWatchVerdict: address-conflict→forged (reject, never wait)/alive→alive/dead·indeterminate→wait; spawnChild builds v2-control argv (--entwurf-control, no --no-extensions, -p+prompt, --approve, cwd authority); awaitSocketAlive connectable→resolve / symlink→reject without connect / dead→wait→alive / abort-clears; awaitChildExit code + listener cleanup; awaitTimeout schedule + abort-clear; killChild=SIGTERM; proc-less child fails loud
-  ./run.sh smoke-entwurf-v2-spawn-live # LIVE phase gate (0.11 Stage 0 step 5c-3c, D5) — OUT of pnpm check, needs LIVE=1. Exercises the production SpawnBgResumeDeps against REAL OS objects: S1 real unix socket → awaitSocketAlive resolves (real lstat+probe), symlink→forged, absent→abort settles; S2 real child → spawn-event resolve + SIGTERM kill + exit-code capture; S3 watcher integration → real timeout→kill→child-exited→release ×1. Does NOT spawn a real pi resume (that=5d matrix). Run before 5d: LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live
-  ./run.sh smoke-entwurf-v2-spawn-resume-live # 0.11.0 (A) ACCEPTANCE gate — OUT of pnpm check, needs LIVE=1. The FULL spawn-bg resident lifecycle: mint backend=pi identity → seed a REAL dormant pi session (one-shot into ~/.pi/agent/sessions) → runEntwurfV2(owned-outcome) routes dormant→spawn-bg resume → a REAL detached pi --entwurf-control child stands its socket up, resumes, DOES a model turn. Asserts executed/spawn-bg/socket-alive/released + lock released ×1 + no lock file + pid alive + socket connectable + resume USER & assistant OK nonces in the session JSONL. Model-in-loop IN. The gate v1 deprecation (0.12) is predicated on. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live
+  ./run.sh check-entwurf-resume-args   # deterministic gate (0.11 Stage 0 step 5c-3b): resume-argv SSOT (buildResumePiArgs) for a RESIDENT pi citizen — the visible-first cut removed its only caller, so the builder is preserved argv-only for the later visible lane — the `legacy` one-shot variant and its async worker were removed 2026-07-27, so the shipped posture is the only one the gate drives: v2-control=--entwurf-control + no --no-extensions (keep-alive is the goal, resumed session stays addressable); keeps --mode json -p + prompt-as-turn (-p NOT dropped); explicitExtensionArgs preserved exactly once (#29); plan.launchArgs (--approve) ride before the prompt; null provider→no --provider
+  ./run.sh check-resume-launch-identity # deterministic gate for resume-launch-identity.ts, the record-authoritative launch-identity leaf preserved through the visible-first cut (spawn-bg and all its callers are gone; this leaf answers "which being is this, and which conversation is theirs"). Temp meta-store fixture: gardenId→record.transcriptPath happy path with header cwd/provider/model; C3 integrity (header id ≠ record.nativeSessionId → refused, never resumed); #52 ADDRESSABLE read (a gid that no longer holds its nativeSessionId alone is refused from EITHER side — the plain targeted read would resume one transcript twice under two locks); cause fidelity per impossible resume incl. the F7 pin (recorded-but-deleted transcript → MISSING, not "no recorded model"); header↔gate SSOT. No spawn/socket/timer
   ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b record-less socket (#50 C4: live record-less pi → EVERY intent rejected pre-probe record-less-socket, no lock, rendered hint names record authority + fresh-cut), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
-  ./run.sh smoke-agy-native-push-live  # 봉인 8 LIVE acceptance for the native-push (agy) rail — OUT of pnpm check, needs LIVE=1 + AGY_CONVERSATION_ID (a live agy conversation). Drives the REAL antigravity adapter + register core + runEntwurfV2 (production deps): doctor-static preflight (dangling→FAIL, the ③ gate), probe route, register create/attach idempotency, fire→native-push delivered, post-send re-probe (D7 partial), owned-outcome→native-push-no-resume-authority, bogus-conv→native-push-probe-indeterminate. Meta-store isolated to a temp dir (only the agy round-trip is real; no real-store residue). LIVE=1 AGY_CONVERSATION_ID=<convId> ./run.sh smoke-agy-native-push-live
+  ./run.sh smoke-agy-native-push-live  # 봉인 8 LIVE acceptance for the native-push (agy) rail — OUT of pnpm check, needs LIVE=1 + AGY_CONVERSATION_ID (a live agy conversation). Drives the REAL antigravity adapter + register core + runEntwurfV2 (production deps): doctor-static preflight (dangling→FAIL, the ③ gate), probe route, register create/attach idempotency, fire→native-push delivered, post-send re-probe (D7 partial), bogus-conv→native-push-probe-indeterminate. Meta-store isolated to a temp dir (only the agy round-trip is real; no real-store residue). LIVE=1 AGY_CONVERSATION_ID=<convId> ./run.sh smoke-agy-native-push-live
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b socket-domain 4-value, facts-only keyset; union: PeerFact + RecordLessSocketFact by gardenId (#50 C4: record-less socket = diagnostic subject, gid+liveness only), dormant→dead, F3 indeterminate preserved, out-of-socket-domain+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-listing          # deterministic gate: META-STORE facts axis — kind-carrying entries; non-regular records are never read, parse/drift become diagnostics, duplicate nativeSessionId quarantines every rival but not unrelated citizens; strict throws / collect partial; pure injected IO
@@ -380,7 +377,7 @@ preflight_dep_integrity() {
   #   pi-managed install — pi omits peers (--legacy-peer-deps) and its own loader
   #     supplies the runtime, so the trio is legitimately absent.
   #   neutral npm/pnpm install — nothing supplies it. The optional peer is simply
-  #     unresolved (entwurf-preflight.ts:51), and the owned-outcome lane that needs it
+  #     unresolved (entwurf-preflight.ts:51), and the project-trust lane that needs it
   #     is dead on that host. Excluding the trio from this probe is still right (a hard
   #     require would reject every consumer install), but it is a KNOWN GAP, not proof
   #     that the runtime is present by another route.
@@ -535,7 +532,7 @@ remove_user_scope_citizen() {
 
 # The ~/.pi/agent/entwurf-targets.json symlink machinery (ensure_agent_dir_symlinks
 # + the `setup:links` command) is GONE (#50 C3): the target registry it linked has
-# no reader anymore — v2 resumes record-backed citizens and never resolves a spawn
+# no reader anymore — v2 addresses record-backed citizens and never resolves a spawn
 # model from a file. An operator's existing link/copy is inert; nothing reads it.
 
 remove_local_package() {
@@ -767,17 +764,17 @@ check_entwurf_v2_contract() {
   # decision table is a constant; the "table cell ↔ dispatch receipt" round-trip
   # is asserted exhaustively — THE executable proof F6 demands ("산문 금지").
   # R1 control-socket capability domain (currently pi; claude-code/codex/antigravity =
-  # unsupported, never folded into dead/indeterminate). 6-cell table, single
-  # verdict per cell (Q2), 2 allow / 4 reject. N1 indeterminate never spawns;
-  # Q2 owned-outcome+live never auto-sends. R5 taxonomy covers table reasons +
-  # pre-claims bad-target/untrusted-fail-fast/target-locked (bucket B F2). Plus
+  # unsupported, never folded into dead/indeterminate). 3-cell table since the
+  # visible-first cut, single verdict per cell, 1 allow / 2 reject. N1
+  # indeterminate never dispatches, and nothing on any cell starts a process.
+  # R5 taxonomy covers table reasons + pre-claims bad-target/target-locked. Plus
   # a schema↔types drift guard on the TypeBox input/receipt. Pure, no API.
   run_ts scripts/check-entwurf-v2-contract.ts
 }
 
 check_entwurf_v2_lock() {
   # Deterministic gate for 0.11 Stage 0 step 5a (버킷 B F2): the per-gid dispatch
-  # LOCK primitive — the only guard against a double-spawn of the same dormant
+  # LOCK primitive — what serializes concurrent in-domain dispatch at one
   # target (pi self-guards CREATE but not RESUME, 검증원장 F2). acquire =
   # openSync(lockPath,"wx") atomic; a second acquire without release =
   # target-locked conflict carrying the holder JSON (F2-P2 human cleanup). release
@@ -796,10 +793,8 @@ check_entwurf_v2_decider() {
   # lookup / lock / socket inspect+probe / preflight / capability), tracking lock
   # acquire+release so "reject ⇒ no plan AND no lock retained" is PROVEN. Covers:
   # bad-target/target-locked/target-address-conflict carry observedLiveness=null
-  # (pre-probe), every other reject + untrusted-fail-fast carry a measured value;
-  # control-socket send + spawn-bg resume execute KEEP the lock, meta-mailbox send
-  # takes NO lock (？7); resume plan has no mode/wantsReply/provider/model but has
-  # expectedSocketPath/observeTimeoutMs/releaseWhen; an invalid gid throws before
+  # (pre-probe), every other reject carries a measured value; a control-socket send
+  # executes KEEPING the lock, meta-mailbox send takes NO lock (？7); an invalid gid throws before
   # any lookup (F2-P1). Pure, no IO, no API.
   run_ts scripts/check-entwurf-v2-decider.ts
 }
@@ -809,9 +804,9 @@ check_entwurf_v2_matrix() {
   # TABLE. Drives the REAL decideDispatch over minimal injected fakes and fixes, as
   # one readable table, every (target kind → transport → lock class) cell the 5d-5
   # claim covers: bad-target/address-conflict/target-locked rejects, unsupported
-  # meta-mailbox (deliverable) vs mailbox-undeliverable (inactive) vs owned reject,
-  # in-domain control-socket (live) / spawn-bg (dormant owned) / released rejects
-  # (owned-live, ff-dormant, indeterminate, under-lock conflict). A coverage pass
+  # meta-mailbox (deliverable) vs mailbox-undeliverable (inactive) reject,
+  # in-domain control-socket (live) / released rejects
+  # (ff-dormant, indeterminate, under-lock conflict). A coverage pass
   # FAILS if any transport / lock class / pre-probe reject is missing — a dropped
   # decider cell cannot pass silently. Thin coverage, NOT a decider re-impl; surface
   # parity stays in check-entwurf-v2-surface. Pure, no IO, no API.
@@ -822,11 +817,10 @@ check_entwurf_v2_release() {
   # Deterministic gate for 0.11 Stage 0 step 5c-1: the PURE release-policy reducer
   # (decideReleasePolicy + reduceRelease) for the 5c transport hand. Proves the
   # Fable-3 "release-after-observation" timing as a pure state machine BEFORE any
-  # spawn/send IO: meta-mailbox=never release (no lock), control-socket=release once
-  # on send-final, spawn-bg=spawn-started is NOT a release event (load-bearing) →
-  # release on the FIRST observed transition (socket-alive ∨ child-exited any code)
-  # or a failed start; socket↔exit race idempotent (single release either order);
-  # decideReleasePolicy enforces the lock-nullness invariant (？7). Pure, no IO.
+  # send IO: meta-mailbox=never release (no lock), control-socket=release once
+  # on send-final. The spawn-observation policy and its four release events went with
+  # the transport in the visible-first cut; decideReleasePolicy still enforces the
+  # lock-nullness invariant (？7). Pure, no IO.
   run_ts scripts/check-entwurf-v2-release.ts
 }
 
@@ -847,11 +841,11 @@ check_entwurf_v2_send_fallback() {
   # (resolveDeadControlSendFallback) the 5c-2a hand calls on a dead connect. Proves the
   # fire-and-forget re-resolve routing over injected fakes (no filesystem): alive->
   # control-socket retry (inspected socketPath) / dead(absent)->reject (dormant-fire-
-  # forget-unsupported, NEVER spawn-bg) / indeterminate->reject / unsupported+deliverable
+  # forget-unsupported, and nothing is launched) / indeterminate->reject / unsupported+deliverable
   # ->meta-mailbox plan (mini-table, no inspect/probe) / unsupported+undeliverable->reject
   # / bad-target + address-conflict->reject pre-probe. Mis-wire (plan/lock gid) fails loud
   # before IO; inspect/probe throws PROPAGATE (the hand owns failed+release); the resolver
-  # has NO release seam; every execute plan keeps the held gid and is never spawn-bg.
+  # has NO release seam; every execute plan keeps the held gid.
   run_ts scripts/check-entwurf-v2-send-fallback.ts
 }
 
@@ -889,8 +883,7 @@ check_entwurf_v2_runner() {
   # routes an already-decided DispatchDecision to its 5c transport hand and maps the outcome
   # to one outcome-rich EntwurfV2RunResult. Proves over injected fake hands (no socket/spawn/
   # timer): reject -> rejected (receipt+diagnostic carried, NO hand called) / control-socket ->
-  # sendControl(plan, lock) / spawn-bg -> resumeSpawnBg (socket-alive AND lock-retained both
-  # ride `executed`, fail-closed is not a failure) / meta-mailbox -> sendMailbox(plan, NULL
+  # sendControl(plan, lock) / meta-mailbox -> sendMailbox(plan, NULL
   # lock, ？7). Carry-overs: N3 control `rejected` carries rejectReason verbatim; N1
   # SendDeliveredReleaseFailedError -> execution-failed{finalizedOutcome, releaseFailed,
   # retrySafe:false}; a plain hand throw -> execution-failed{retrySafe:false} with no
@@ -902,8 +895,9 @@ check_entwurf_v2_surface() {
   # Deterministic gate for 0.11 Stage 0 step 5d-3a: the ctx-free surface adapter
   # (entwurf-v2-surface.ts) + the entwurf-control.ts wiring contract. Proves the pure parts:
   # toDispatchInput (wants_reply→wantsReply, absent mode/wants_reply undefined) / renderEntwurfV2Result
-  # per result kind ({text,isError} surfacing reject diagnostic, control N3 rejectReason, spawn
-  # lock-retained, N1 delivered-but-dirty) / surface ctx-free source guard / entwurf-control
+  # per result kind ({text,isError} surfacing reject diagnostic, control N3 rejectReason,
+  # N1 delivered-but-dirty) + the dormant/indeterminate reject HINTS an operator meets after the
+  # visible-first cut / surface ctx-free source guard / entwurf-control
   # registers entwurf_v2 + reaches the fence via a NON-LITERAL dynamic import (no static fence
   # import → TS5097 stays closed) + decorates sender origin:pi-session/replyable:true.
   run_ts scripts/check-entwurf-v2-surface.ts
@@ -934,10 +928,9 @@ check_entwurf_bridge_pi_free() {
 check_entwurf_v2_production() {
   # Deterministic gate for 0.11 Stage 0 step 5d-2b: makeProductionEntwurfV2Deps — the ctx-free
   # PRODUCTION assembly of runEntwurfV2's deps. Proves the wiring over fake leaf-IO spies (no
-  # real socket/lock/spawn/meta-record): decide wraps decideDispatch and acquires under the
+  # real socket/lock/meta-record): decide wraps decideDispatch and acquires under the
   # wired lockDir / control sendOverSocket builds the RpcSendCommand + maps + releases under
-  # lockDir / QB3 the spawn watcher releases via the SHARED lockDir release (not the spawn
-  # factory default) / the mailbox hand enqueues onto the wired dirs / a dead control send
+  # lockDir / the mailbox hand enqueues onto the wired dirs / a dead control send
   # re-resolves to the SAME sendViaMailbox instance on the SAME dirs (Q3+Q5 no drift).
   run_ts scripts/check-entwurf-v2-production.ts
 }
@@ -953,20 +946,6 @@ check_entwurf_control_rpc() {
   run_ts scripts/check-entwurf-control-rpc.ts
 }
 
-check_entwurf_v2_spawn() {
-  # Deterministic gate for 0.11 Stage 0 step 5c-3a: the spawn-bg RESUME watcher hand
-  # (executeSpawnBgResume) wiring spawn + socket-observe IO onto the 5c-1 reducer. Proves
-  # Fable-3 over injected deferred promises (no real child/socket/timer): TIMEOUT IS NOT A
-  # RELEASE — a bare observeTimeout escalates to killChild (release 0), then a BOUNDED
-  # killGrace waits for a real socket-alive / child-exited to release. socket-alive ∨
-  # child-exited(any code incl. null) -> release exactly once; the loser settling later is a
-  # no-op. spawnChild throw -> spawn-start-failed (release, nothing to watch). No observation
-  # obtainable (grace elapses, or a post-spawn watch dep throws and the exit can't be
-  # observed) -> lock-retained fail-closed (released:false, pid/socket/lockPath surfaced) —
-  # there is NO direct-release hatch; deps.releaseLock is reached ONLY via reduceRelease.
-  run_ts scripts/check-entwurf-v2-spawn.ts
-}
-
 check_entwurf_resume_args() {
   # Deterministic gate for 0.11 Stage 0 step 5c-3b: the resume-argv SSOT
   # (buildResumePiArgs). v2-control is the only shipped shape (the legacy one-shot variant and
@@ -977,6 +956,19 @@ check_entwurf_resume_args() {
   # (provider-resolution footgun #29), plan.launchArgs (--approve) before the prompt, and a
   # null provider emitting no --provider.
   run_ts scripts/check-entwurf-resume-args.ts
+}
+
+check_resume_launch_identity() {
+  # Deterministic gate for resume-launch-identity.ts, the record-authoritative launch-identity
+  # leaf preserved when the visible-first cut deleted spawn-bg and every caller it had. Identity
+  # authority is fail-closed risk, so the preserved leaf does not ship on its header comment:
+  # a temp meta-store fixture drives gardenId → record.transcriptPath → header-id integrity
+  # (a foreign/stale transcript is refused, never resumed), the #52 ADDRESSABLE read (a garden id
+  # that no longer holds its nativeSessionId alone is refused from either side), and cause
+  # fidelity for every impossible resume — including the F7 pin that a recorded-but-deleted
+  # transcript is reported as MISSING rather than as "no recorded model". No spawn, socket, or
+  # timer: the launch this identity would feed is deliberately out of scope.
+  run_ts scripts/check-resume-launch-identity.ts
 }
 
 check_mux_placement() {
@@ -1037,36 +1029,6 @@ check_mux_launch_tmux() {
   run_ts scripts/check-mux-launch-tmux.ts
 }
 
-check_entwurf_v2_spawn_production() {
-  # Deterministic gate for 0.11 Stage 0 step 5c-3c: the production SpawnBgResumeDeps factory
-  # (makeProductionSpawnBgResumeDeps) wiring the 5c-3a watcher's six IO seams onto the real
-  # world — proven WITHOUT a real pi spawn/socket/timer (that is the opt-in
-  # smoke-entwurf-v2-spawn-live, kept OUT of pnpm check). socketWatchVerdict (R2 policy):
-  # address-conflict→forged (reject, never wait), alive→alive, dead/indeterminate→wait.
-  # spawnChild builds the v2-control argv (--entwurf-control, no --no-extensions, -p+prompt,
-  # --approve, ext/provider/model, header cwd). awaitSocketAlive: connectable resolves, forged
-  # (symlink) rejects without connecting, dead→wait→alive, abort clears the sleep. awaitChildExit
-  # resolves the code + removes the listener on abort. awaitTimeout schedules + abort-clears.
-  # killChild=SIGTERM; releaseLock delegates; a proc-less child fails loud (mis-wire).
-  run_ts scripts/check-entwurf-v2-spawn-production.ts
-}
-
-
-smoke_entwurf_v2_spawn_live() {
-  # LIVE phase gate for 0.11 Stage 0 step 5c-3c (D5) — kept OUT of `pnpm check`. Exercises the
-  # production SpawnBgResumeDeps against REAL OS objects (a real unix socket, real child
-  # processes, real timers, real abort teardown) to catch what the deterministic gate's fakes
-  # cannot: actual spawn/exit/error event semantics, real lstat+connect liveness, and the
-  # 5c-3a watcher's timeout→kill→child-exited→release integration on a live process. It does
-  # NOT spawn a real `pi --entwurf-control` resume (that is the 5d surface matrix). Run once
-  # before 5d and record the result:  LIVE=1 ./run.sh smoke-entwurf-v2-spawn-live
-  entwurf_require_step_outcome
-  if [ "${LIVE:-}" != "1" ]; then
-    echo "[entwurf:skip] smoke-entwurf-v2-spawn-live — set LIVE=1 to run (spawns real children + opens a real unix socket)."
-    return "$ENTWURF_STEP_SKIP_EXIT"
-  fi
-  run_ts scripts/smoke-entwurf-v2-spawn-live.ts
-}
 
 smoke_acp_socket_citizen_live() {
   # S1 acceptance smoke (ACP plugin on v2) — OUT of pnpm check, needs LIVE=1.
@@ -1321,29 +1283,6 @@ smoke_entwurf_v2_matrix_live() {
     return "$ENTWURF_STEP_SKIP_EXIT"
   fi
   run_ts scripts/smoke-entwurf-v2-matrix-live.ts
-}
-
-smoke_entwurf_v2_spawn_resume_live() {
-  # The 0.11.0 (A) acceptance gate — kept OUT of `pnpm check`. Unlike matrix-live (a
-  # transport/lock sentinel, model-in-loop OUT) and spawn-live (OS-substrate watcher, no real
-  # pi), this drives the FULL production loop: mint a backend=pi meta identity → seed a REAL
-  # dormant pi session (one-shot `pi --mode json -p --no-extensions` into the REAL
-  # ~/.pi/agent/sessions) → runEntwurfV2(intent=owned-outcome) routes the dormant in-domain pi
-  # citizen to spawn-bg resume → a REAL detached `pi --entwurf-control` child stands its socket
-  # up, resumes, and DOES a model turn. Asserts: executed/spawn-bg/socket-alive/released, lock
-  # released exactly once + no lock file, resident pid alive + socket connectable, and the
-  # resume USER + assistant OK nonces appended to the session JSONL (real work, not just
-  # "process up"). This is the evidence v1 deprecation (0.12) is predicated on. Model-in-loop is
-  # IN. Honest skip when LIVE!=1 (skip = CI safety, NOT an acceptance PASS).
-  # Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4);
-  #        ENTWURF_SPAWN_RESUME_ASSISTANT_TIMEOUT_MS (default 180000).
-  #   LIVE=1 ./run.sh smoke-entwurf-v2-spawn-resume-live
-  entwurf_require_step_outcome
-  if [ "${LIVE:-}" != "1" ]; then
-    echo "[entwurf:skip] smoke-entwurf-v2-spawn-resume-live — set LIVE=1 to run (spawns a real pi resume child + opens a real socket)."
-    return "$ENTWURF_STEP_SKIP_EXIT"
-  fi
-  run_ts scripts/smoke-entwurf-v2-spawn-resume-live.ts
 }
 
 check_entwurf_facts() {
@@ -3723,7 +3662,7 @@ check_pack_install() {
 # NOT run the legacy ACP/v1 Axis 1 interview gates (session-messaging/sentinel):
 # those call removed surfaces and survive only as fail-loud reference subcommands
 # until rewritten onto entwurf_v2. The release-gate owns the heavier live v2
-# substrate proof (matrix-live + spawn-resume-live).
+# substrate proof (matrix-live).
 
 validate_entwurf_bridge() {
   local bridge_dir="$REPO_DIR/mcp/entwurf-bridge"
@@ -4097,7 +4036,7 @@ expose_dev_bin() {
 #
 # Design invariants (NEXT Step 1e + GPT-5.5 reviews):
 #   - v2-native live floor: the MUST tier is the v2 dispatch substrate
-#     (smoke-entwurf-v2-matrix-live + smoke-entwurf-v2-spawn-resume-live, opt-in
+#     (smoke-entwurf-v2-matrix-live, opt-in
 #     LIVE), the MCP bridge (check-bridge), and the resident citizen guard
 #     (smoke-resident-garden-guard).
 #   - ACP plugin acceptance floor (S0~S2g): the 11 ACP LIVE smokes
@@ -4311,13 +4250,9 @@ release_gate() {
   # PASS/FAIL/SKIP branch; P1 folded it onto `run_live_step` so there is exactly ONE classifier —
   # a second copy is how a lane silently keeps counting a skip as a pass.
   run_live_step "smoke-entwurf-v2-matrix-live (D4-c: v2 dispatch substrate sentinel)" gate bash "$self" smoke-entwurf-v2-matrix-live
-  # 0.11.0 (A) acceptance: the FULL spawn-bg resident lifecycle — a real `pi` resume child stands
-  # its control socket up, does a model turn, lock released ×1. Placed right after matrix-live (the
-  # transport sentinel): a spawn-resume failure then reads as "resume/resident lifecycle", not
-  # transport basics. Same opt-in LIVE rule. NOTE: a tag REQUIRES `LIVE=1 ./run.sh release-gate
-  # --cut` (or this step direct) to PASS — a SKIP is CI safety, never acceptance, and `--cut` is
-  # what now enforces that instead of prose.
-  run_live_step "smoke-entwurf-v2-spawn-resume-live (0.11.0 A: full spawn-bg resident lifecycle)" gate bash "$self" smoke-entwurf-v2-spawn-resume-live
+  # The spawn-bg resident-lifecycle acceptance that used to sit here left with the transport in the
+  # visible-first cut. A same-id resume lane will need its own acceptance step; it does not inherit
+  # this one, because what that step proved was a HIDDEN child standing its socket up.
 
   # 3b. ACP plugin acceptance floor (S0~S2f live). These prove the ACP plugin's
   #     programmatic transport/provider/backend invariants on the v2 core — NOT
@@ -4358,7 +4293,6 @@ release_gate() {
   #     construction, no aggregate-owned agy conversation id, and an opt-in instrument
   #     rather than acceptance. check-release-gate-outcomes pins that every LIVE smoke
   #     is either wired here or excluded by a reason the docs still carry.
-  run_live_step "smoke-entwurf-v2-spawn-live (5c-3c: spawn-bg OS substrate on real children/sockets)" gate bash "$self" smoke-entwurf-v2-spawn-live
   run_live_step "smoke-claude-native-resume-live (native Claude Code resume + meta-bridge neutrality)" gate bash "$self" smoke-claude-native-resume-live
   run_live_step "smoke-entwurf-chain-live (P3: Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox, identity + receipt)" gate bash "$self" smoke-entwurf-chain-live
 
@@ -4549,11 +4483,11 @@ case "$cmd" in
   check-entwurf-bridge-pi-free)
     check_entwurf_bridge_pi_free
     ;;
-  check-entwurf-v2-spawn)
-    check_entwurf_v2_spawn
-    ;;
   check-entwurf-resume-args)
     check_entwurf_resume_args
+    ;;
+  check-resume-launch-identity)
+    check_resume_launch_identity
     ;;
   check-mux-placement)
     check_mux_placement
@@ -4572,15 +4506,6 @@ case "$cmd" in
     ;;
   check-mux-launch-tmux)
     check_mux_launch_tmux
-    ;;
-  check-entwurf-v2-spawn-production)
-    check_entwurf_v2_spawn_production
-    ;;
-  smoke-entwurf-v2-spawn-live)
-    smoke_entwurf_v2_spawn_live
-    ;;
-  smoke-entwurf-v2-spawn-resume-live)
-    smoke_entwurf_v2_spawn_resume_live
     ;;
   smoke-entwurf-v2-matrix-live)
     smoke_entwurf_v2_matrix_live
@@ -4824,7 +4749,7 @@ case "$cmd" in
     # 봉인 8 LIVE acceptance gate for the native-push (agy) delivery rail. Drives the REAL
     # antigravity adapter + register core + runEntwurfV2 (production deps) against a live agy
     # conversation (AGY_CONVERSATION_ID): probe route, register create/attach idempotency,
-    # fire→native-push delivered, owned-outcome reject, bogus-conv probe-indeterminate reject.
+    # fire→native-push delivered, bogus-conv probe-indeterminate reject.
     # Meta-store is isolated to a temp dir (only the agy round-trip is real); honest SKIP when
     # LIVE!=1. doctor-static preflight FAILs before the agy bridge is wired (③).
     run_ts scripts/smoke-agy-native-push-live.ts

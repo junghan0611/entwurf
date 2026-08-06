@@ -23,8 +23,6 @@
  *  10. masking guard: on a `failed` send the ORIGINAL send error is rethrown even if
  *      releaseLock itself throws (a release failure must not mask the send failure).
  *  11. lock invariants: null lock / mismatched-gid lock → throws (decideReleasePolicy).
- *  12. contract: a re-resolve into a spawn-bg plan for a SEND → throws AND still
- *      releases the held lock ×1 (lock-leak backstop, not a leak).
  *  13. lock-leak backstop: any UNEXPECTED dep throw after the lock is held
  *      (classifyConnect) still releases ×1 and rethrows the original error.
  *  14. mis-route: a re-resolve returning a DIFFERENT-target control plan fails loud
@@ -94,20 +92,6 @@ const MAILBOX_PLAN = {
 	wantsReply: false,
 	message: "m",
 } as const satisfies Extract<ExecutionPlan, { transport: "meta-mailbox" }>;
-
-const SPAWN_PLAN = {
-	transport: "spawn-bg",
-	action: "resume",
-	targetGardenId: GID,
-	sessionId: GID,
-	cwd: "/home/junghan/repos/gh/entwurf",
-	prompt: "p",
-	wantsReply: false,
-	launchArgs: [],
-	expectedSocketPath: "/fake/ctl/s.sock",
-	observeTimeoutMs: 30_000,
-	releaseWhen: "socket-alive-or-child-exited",
-} as const satisfies Extract<ExecutionPlan, { transport: "spawn-bg" }>;
 
 // A connect-time error with a real `.code` (drives the F3 classifier the way a node
 // net error would). dead = ECONNREFUSED/ENOENT; everything else = indeterminate.
@@ -349,18 +333,6 @@ async function main(): Promise<void> {
 		const { deps: deps2 } = makeDeps({ firstSend: { result: { success: true } } });
 		const mismatchErr = await rejects(() => executeControlSocketSend(CONTROL_PLAN, lockClaim(WRONG_GID), deps2));
 		ok("mismatched-gid lock → throws (mis-paired plan/lock)", mismatchErr instanceof Error);
-	}
-
-	// ── 12: contract — re-resolve into a spawn-bg plan for a SEND → throws,
-	//        AND the held lock is STILL released (lock-leak backstop) ───────────
-	{
-		const { deps, trace } = makeDeps({
-			firstSend: { throwCode: "ECONNREFUSED" },
-			deadFallback: { kind: "execute", plan: SPAWN_PLAN },
-		});
-		const err = await rejects(() => executeControlSocketSend(CONTROL_PLAN, lockClaim(), deps));
-		ok("re-resolve → spawn-bg for a send → throws (contract violation)", err instanceof Error);
-		ok("re-resolve → spawn-bg → lock STILL released ×1 (no leak)", trace.releases.length === 1);
 	}
 
 	// ── 13: lock-leak backstop — an UNEXPECTED dep throw (classifyConnect) after

@@ -333,7 +333,7 @@ caller가 fresh token N을 민팅
    `upsertMetaSession` 내부(`1758-1761`)에만 있고 그것은 write path다. **T1-b caller seam은 미구현이다.**
 
    그 seam을 만들 때도 경계는 유지한다: 그것은 **입력으로 이미 알려진 key에 대한 strict lookup + bounded
-   wait**여야 하며, `spawn-bg resume`이 가진 예외와 같은 부류다. **unknown record가 나타나기를 기다리며
+   wait**여야 한다. **unknown record가 나타나기를 기다리며
    시각·cwd를 비교하는 discovery watcher가 아니다.** 이 구분이 무너지면 T1-b는 열지 않는다.
 
 ### 그래서 지금 무엇이 바뀌는가 — 아무 배선도 바뀌지 않는다
@@ -472,7 +472,7 @@ gate, LIVE smoke, release 배선을 전부 제거했다.
 | 층 | 소유하는 것 | 소유하지 않는 것 |
 |---|---|---|
 | `entwurf` contract/decider/runner | garden id 주소 해석, envelope, rail 선택, delivery receipt/reject | creation, model 선택, task 분해, supervision |
-| 기존 delivery composition (`entwurf-v2-production.ts`) | contract와 이미 출하된 socket/mailbox/native-push/spawn-bg hands의 조립 | fresh launch, tmux placement, 프로젝트 정책 |
+| 기존 delivery composition (`entwurf-v2-production.ts`) | contract와 이미 출하된 socket/mailbox/native-push hands의 조립 | fresh launch, tmux placement, 프로젝트 정책 |
 | tmux placement leaf (`mux-placement.ts`) | caller placement, same-session append, stable handle close | harness launch, identity, delivery |
 | T1-a launch composition (`mux-launch.ts`) | 고정 runtime의 precondition 증명, 같은 session에 window+runtime 한 번의 mutation, 로컬 handle receipt | garden identity, record 조회, task delivery, supervision, 어떤 carrier도 |
 | pi/ACP harness adapter | official runtime/session lifecycle, auth, model, transcript, record birth | 프로젝트의 작업자 선택·backlog |

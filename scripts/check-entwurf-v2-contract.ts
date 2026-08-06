@@ -11,19 +11,19 @@
  *   - R1 domain guard: the control-socket domain currently contains pi; claude-code / codex /
  *     antigravity are `unsupported` — NEVER folded into dead/indeterminate.
  *   - the 6-cell table is exhaustive and every cell is a SINGLE verdict (Q2):
- *     exactly two allow cells (ff+live=send, owned+dormant=resume), four reject.
+ *     ONE allow cell (ff+live=send) plus two rejects — the visible-first cut removed the
+ *     `owned-outcome` row, and with it the only resume/spawn verdict the table had.
  *   - N1/F3: an indeterminate target never spawns (both intents reject it).
- *   - Q2/F1: owned-outcome + live = reject (owned-live-no-autosend), not auto-send.
  *   - F-mailbox: an `unsupported` citizen routes through a SEPARATE intent-keyed
  *     mailbox mini-table (NOT the 6-cell table): ff+deliverable → meta-mailbox/
  *     ack-only, ff+undeliverable → mailbox-undeliverable (fail-closed),
- *     owned → backend-liveness-unsupported. Deliverability is a 2nd fact ignored
+ *     Deliverability is a 2nd fact ignored
  *     in-domain (pi). The N2 asymmetry (dormant-pi reject vs unsupported mailbox)
  *     is pinned side-by-side.
  *   - R3: resolveDispatch round-trip — receipt.observedLiveness === input AND
  *     action/transport/ownership/reason === the table cell, every (intent × liveness).
  *   - R5: taxonomy covers the table reasons + pre-claims bad-target /
- *     untrusted-fail-fast / target-locked (so bucket B F2 won't reopen it), and
+ *     target-locked (so bucket B F2 won't reopen it), and
  *     is PRE-DISPATCH only (no send-fail-fallback member).
  *   - schema ↔ types drift guard: the TypeBox input/receipt property keysets and
  *     the StringEnum members match the hand-written contract constants.
@@ -137,9 +137,9 @@ for (const intent of ENTWURF_INTENTS) {
 		}
 	}
 }
-eq("table has 6 cells (2 intents × 3 liveness)", allowCells + rejectCells, 6);
-eq("v2-initial: exactly 2 allow cells", allowCells, 2);
-eq("v2-initial: exactly 4 reject cells", rejectCells, 4);
+eq("table has 3 cells (1 intent × 3 liveness)", allowCells + rejectCells, 3);
+eq("post-cut: exactly 1 allow cell (fire-and-forget × live)", allowCells, 1);
+eq("post-cut: exactly 2 reject cells (dormant, indeterminate)", rejectCells, 2);
 
 // the two allow cells are exactly the intended ones
 eq("allow: fire-and-forget+live = send/control-socket/ack-only", DISPATCH_TABLE["fire-and-forget"].live, {
@@ -147,13 +147,8 @@ eq("allow: fire-and-forget+live = send/control-socket/ack-only", DISPATCH_TABLE[
 	transport: "control-socket",
 	ownership: "ack-only",
 });
-eq("allow: owned-outcome+dormant = resume/spawn-bg/owned", DISPATCH_TABLE["owned-outcome"].dormant, {
-	action: "resume",
-	transport: "spawn-bg",
-	ownership: "owned",
-});
 
-// ── N1/F3: indeterminate never spawns (both intents reject) ────────────────
+// ── N1/F3: an indeterminate target is never dispatched into ────────────────
 for (const intent of ENTWURF_INTENTS) {
 	const cell = DISPATCH_TABLE[intent].indeterminate;
 	eq(`N1: ${intent}+indeterminate = reject(indeterminate-no-spawn)`, cell, {
@@ -166,12 +161,6 @@ for (const intent of ENTWURF_INTENTS) {
 eq("N2: fire-and-forget+dormant = reject(dormant-fire-forget-unsupported)", DISPATCH_TABLE["fire-and-forget"].dormant, {
 	action: "reject",
 	reason: "dormant-fire-forget-unsupported",
-});
-
-// ── Q2/F1: owned-outcome+live = reject, never auto-send ────────────────────
-eq("Q2: owned-outcome+live = reject(owned-live-no-autosend)", DISPATCH_TABLE["owned-outcome"].live, {
-	action: "reject",
-	reason: "owned-live-no-autosend",
 });
 
 // ── R3: resolveDispatch round-trip — table cell ↔ receipt, every cell ──────
@@ -207,7 +196,7 @@ for (const intent of ENTWURF_INTENTS) {
 // ── F-mailbox: unsupported mailbox mini-table — SEPARATE from the 6-cell table ──
 // The unsupported domain-guard routes through UNSUPPORTED_DISPATCH_TABLE (intent-
 // keyed), NOT the liveness table. Two cells, each a single verdict (Q2).
-eq("mini-table: 2 cells (one per intent)", Object.keys(UNSUPPORTED_DISPATCH_TABLE).length, 2);
+eq("mini-table: 1 cell (one per intent)", Object.keys(UNSUPPORTED_DISPATCH_TABLE).length, 1);
 eq(
 	"mini-table[fire-and-forget] = send/meta-mailbox/ack-only (deliverable path)",
 	UNSUPPORTED_DISPATCH_TABLE["fire-and-forget"],
@@ -217,10 +206,6 @@ eq(
 		ownership: "ack-only",
 	},
 );
-eq("mini-table[owned-outcome] = reject(backend-liveness-unsupported)", UNSUPPORTED_DISPATCH_TABLE["owned-outcome"], {
-	action: "reject",
-	reason: "backend-liveness-unsupported",
-});
 
 // ── F-mailbox: resolveDispatch over the deliverability axis ────────────────
 // fire-and-forget + deliverable → meta-mailbox send (NOT reject); ack-only +
@@ -248,19 +233,6 @@ eq(
 		observedLiveness: "unsupported",
 	},
 );
-// owned-outcome+unsupported still rejects regardless of deliverability — a
-// self-fetch backend has no real liveness for the caller to own (point 3).
-for (const deliverable of [true, false]) {
-	eq(
-		`F-mailbox: owned+unsupported (deliverable=${deliverable}) → reject(backend-liveness-unsupported)`,
-		resolveDispatch("owned-outcome", "unsupported" as FactLiveness, deliverable),
-		{
-			ok: false,
-			reason: "backend-liveness-unsupported",
-			observedLiveness: "unsupported",
-		},
-	);
-}
 
 // ── N2 asymmetry — the two tables are NOT contradictory ────────────────────
 // fire-and-forget+dormant-PI = reject (confirmed not-running → enqueue is silent
@@ -277,7 +249,7 @@ ok(
 eq(
 	"[QK:V2-DELIVERY-EXCLUDES-MUX] transport enum is the exact four delivery outcomes; mux launch handles stay out",
 	[...ENTWURF_V2_TRANSPORTS],
-	["control-socket", "spawn-bg", "meta-mailbox", "native-push"],
+	["control-socket", "meta-mailbox", "native-push"],
 );
 
 // ── F-mailbox: transport + taxonomy members present ────────────────────────
@@ -357,9 +329,9 @@ for (const intent of ENTWURF_INTENTS) {
 			}
 		}
 	}
-	eq("native-push table has 6 cells (2 intents × 3 liveness)", allow + reject, 6);
+	eq("native-push table has 3 cells (1 intent × 3 liveness)", allow + reject, 3);
 	eq("native-push: exactly 1 allow cell (fire-and-forget × alive)", allow, 1);
-	eq("native-push: exactly 5 reject cells", reject, 5);
+	eq("native-push: exactly 2 reject cells (dead, indeterminate)", reject, 2);
 }
 // the one allow cell + the intended reject reasons.
 eq("native-push allow: ff+alive = send/native-push/ack-only", NATIVE_PUSH_DISPATCH_TABLE["fire-and-forget"].alive, {
@@ -376,21 +348,13 @@ eq(
 	NATIVE_PUSH_DISPATCH_TABLE["fire-and-forget"].indeterminate,
 	{ action: "reject", reason: "native-push-probe-indeterminate" },
 );
-// owned-outcome × * = single, state-independent no-resume-authority reject.
-for (const lv of NATIVE_PUSH_LIVENESSES) {
-	eq(
-		`native-push: owned+${lv} = reject(native-push-no-resume-authority)`,
-		NATIVE_PUSH_DISPATCH_TABLE["owned-outcome"][lv],
-		{
-			action: "reject",
-			reason: "native-push-no-resume-authority",
-		},
-	);
-}
-// `backend-liveness-unsupported` is NOT reused for a native-push backend (봉인 1).
+// The removed `owned-outcome` row rejected native-push-no-resume-authority on every
+// liveness. Its reason left the taxonomy with the intent, so assert it is gone rather
+// than leaving a cell that proves retired behavior.
 ok(
-	"native-push: reject reasons never reuse backend-liveness-unsupported (agy IS measured)",
-	!(NATIVE_PUSH_REJECT_REASONS as readonly string[]).includes("backend-liveness-unsupported"),
+	"native-push: the no-resume-authority reason left the taxonomy with the owned-outcome intent",
+	!(NATIVE_PUSH_REJECT_REASONS as readonly string[]).includes("native-push-no-resume-authority") &&
+		!(ENTWURF_V2_REJECT_REASONS as readonly string[]).includes("native-push-no-resume-authority"),
 );
 // resolveNativePushDispatch round-trip: observedLiveness === probed value, verdict === cell.
 for (const intent of ENTWURF_INTENTS) {
@@ -431,7 +395,7 @@ for (const r of NATIVE_PUSH_REJECT_REASONS) {
 for (const r of RESOLVER_REJECT_REASONS) {
 	ok(`taxonomy: resolver reason '${r}' is in the enum`, (ENTWURF_V2_REJECT_REASONS as readonly string[]).includes(r));
 }
-for (const pre of ["bad-target", "untrusted-fail-fast", "target-locked"]) {
+for (const pre of ["bad-target", "target-locked"]) {
 	ok(
 		`taxonomy: pre-claim '${pre}' present (R5 — bucket B won't reopen)`,
 		(ENTWURF_V2_REJECT_REASONS as readonly string[]).includes(pre),
@@ -479,9 +443,13 @@ for (const r of ENTWURF_V2_REJECT_REASONS) {
 for (const r of RESOLVER_REJECT_REASONS) {
 	ok(`？6: resolver reason '${r}' is post-probe (non-null observedLiveness required)`, !isPreProbeReject(r));
 }
-// untrusted-fail-fast is post-probe too (1B: it now runs AFTER lock+probe, only on
-// a resume verdict, so observedLiveness is the honest measured dormant).
-ok("？6: untrusted-fail-fast is post-probe (1B — runs after lock+probe)", !isPreProbeReject("untrusted-fail-fast"));
+// untrusted-fail-fast is GONE from the taxonomy: preflight ran only behind the resume
+// verdict, so the reject it produced left with that verdict. Asserting its absence keeps
+// the enum honest — a reason nothing can emit is not a reason.
+ok(
+	"taxonomy: untrusted-fail-fast is gone (its only producer was the removed resume verdict)",
+	!(ENTWURF_V2_REJECT_REASONS as readonly string[]).includes("untrusted-fail-fast"),
+);
 
 // #50 C4: record-less-socket — a gid-shaped non-symlink control socket with NO
 // meta-record. The record is the sole address authority, so this is refused for
@@ -513,7 +481,7 @@ for (const r of PRE_PROBE_REJECT_REASONS) {
 		);
 	}
 }
-for (const r of [...RESOLVER_REJECT_REASONS, ...NATIVE_PUSH_REJECT_REASONS, "untrusted-fail-fast" as const]) {
+for (const r of [...RESOLVER_REJECT_REASONS, ...NATIVE_PUSH_REJECT_REASONS]) {
 	ok(
 		`？6: well-formed('${r}', null) = false (post-probe must carry a value)`,
 		!rejectObservedLivenessWellFormed(r, null),
@@ -574,7 +542,7 @@ for (const r of PRE_PROBE_REJECT_REASONS) {
 		passed++;
 	}
 }
-for (const r of [...RESOLVER_REJECT_REASONS, ...NATIVE_PUSH_REJECT_REASONS, "untrusted-fail-fast" as const]) {
+for (const r of [...RESOLVER_REJECT_REASONS, ...NATIVE_PUSH_REJECT_REASONS]) {
 	assert.throws(
 		() => makeRejectReceipt(r, null),
 		/ill-formed reject/,

@@ -98,17 +98,12 @@
 		// imports, same fence. Typechecked by scripts/tsconfig.json via its gate
 		// (check-entwurf-v2-send-fallback.ts).
 		"pi-extensions/lib/entwurf-v2-send-fallback.ts",
-		// entwurf-v2-spawn.ts is the spawn-bg RESUME watcher hand (step 5c-3a) — it WIRES
-		// spawn + socket-observe IO onto the release reducer and carries explicit
-		// `.ts`-extension imports that pull the excluded decider/lock/release into the
-		// program, same fence. Typechecked by scripts/tsconfig.json via its gate
-		// (check-entwurf-v2-spawn.ts).
-		"pi-extensions/lib/entwurf-v2-spawn.ts",
-		// entwurf-v2-spawn-production.ts is the 5c-3c PRODUCTION SpawnBgResumeDeps factory — a
-		// lib→lib VALUE importer (spawn child / socket inspect+probe / lock release / resume-argv
-		// builder / identity helpers) with explicit `.ts`-extension imports, same fence.
-		// Typechecked by scripts/tsconfig.json via its gate (check-entwurf-v2-spawn-production.ts).
-		"pi-extensions/lib/entwurf-v2-spawn-production.ts",
+		// resume-launch-identity.ts is the record-authoritative launch-identity leaf preserved
+		// from the retired spawn-bg factory — a lib→lib VALUE importer (readAddressableMetaIdentity /
+		// readSessionIdentity / getEntwurfExplicitExtensions) with explicit `.ts`-extension imports,
+		// same fence. Typechecked by scripts/tsconfig.json via its gate
+		// (check-resume-launch-identity.ts).
+		"pi-extensions/lib/resume-launch-identity.ts",
 		// entwurf-v2-mailbox.ts is the 5c-4 ENQUEUE-ONLY meta-mailbox SEND body + production
 		// sendViaMailbox adapter — a lib→lib VALUE importer (formatMetaMailboxBody /
 		// enqueueMetaMessage) with explicit `.ts`-extension imports that pull the excluded

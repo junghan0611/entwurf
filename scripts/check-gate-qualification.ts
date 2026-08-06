@@ -728,8 +728,9 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"mux-fresh-call": 6,
 		"probe-ordering": 85,
 		"release-gate": 9,
+		"resume-launch-identity": 4,
 		"self-address": 3,
-		"v2-surface": 5,
+		"v2-surface": 7,
 	};
 	const laneTally: Record<string, number> = {};
 	for (const man of manifests) laneTally[man.lane] = (laneTally[man.lane] ?? 0) + man.mutants.length;

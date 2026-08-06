@@ -17,8 +17,32 @@
  *
  * Source-verified invariants folded in (Opus 실측 + GPT 보정 + Fable R1-R5, 2026-06-11):
  *  - F1: caller intent is DECLARED in the input, so the contract a caller
- *    receives is deterministic — never computed from liveness at call time.
- *    `owned-outcome` (caller owns completion) ≠ `fire-and-forget` (ack only).
+ *    receives is deterministic — never computed from liveness at call time. One
+ *    intent remains: `fire-and-forget` (the ack is the end of the contract). The
+ *    second intent, `owned-outcome`, is GONE — see the visible-first note below.
+ *
+ * ── Visible-first subtraction (2026-08-06, GLG) ────────────────────────────
+ * `owned-outcome` and the `spawn-bg` transport are removed from this contract, not
+ * deprecated. The only resume this verb ever had launched a DETACHED, window-less
+ * `pi` child; under the visible-first operating rule a citizen the operator cannot
+ * see must not be started at all, and a reachable hidden path is worse than a
+ * temporary absence of the capability. So the subtraction is a hard cut: the intent
+ * leaves the enum, the transport leaves the table, and an old caller fails schema
+ * validation rather than meeting a polite reject string.
+ *
+ * What this leaves behind, deliberately: a DORMANT in-domain citizen is currently
+ * unreachable (`fire-and-forget` × dormant has always rejected). Visible same-id
+ * resume is a SEPARATE lifecycle capability — a distinct verb over the mux launch
+ * lane, not an intent on this delivery verb — and it is not implemented here. The
+ * leaves it will need (record-authoritative launch identity, the resume argv
+ * builder, the per-target lock, socket inspection) are preserved and still shipped.
+ *
+ * READ THE SCOPE EXACTLY. Background execution is not judged impossible and is not forbidden
+ * forever. It is retired NOW so that no hidden bypass exists while visible-first governance is
+ * being established. A future background lifecycle may be added back as an explicitly
+ * authorized, FIRST-CLASS capability with its own verb and its own receipts. What it must never
+ * be again is what it was here: an automatic fallback, or a hidden branch inside visible resume
+ * or `entwurf_v2`. The shape is what was removed, not the idea of a detached process.
  *  - R1: liveness is defined PER CAPABILITY DOMAIN. The control-socket domain
  *    currently contains backend `pi`; claude-code is self-fetch with no socket,
  *    so its socket liveness is `unsupported`, NOT folded into dead/indeterminate.
@@ -28,8 +52,8 @@
  *    v2 scope — fresh creation now has the separate `entwurf_fresh_call` surface,
  *    never a fallback inside this resolver. Absent/typo gid = `bad-target` (so F6
  *    "오타 gid가 신규 spawn 사고 막기" holds automatically).
- *  - N1/F3: an `indeterminate` target never spawns. N2: `fire-and-forget` to a
- *    `dormant` target is "reject for now" (mailbox-wake lacks a reply-correlation
+ *  - N1/F3: an `indeterminate` target is never launched into. N2: `fire-and-forget`
+ *    to a `dormant` target is "reject for now" (mailbox-wake lacks a reply-correlation
  *    id in the substrate; an additive extension later, not a permanent no).
  *  - Q2: every cell is a SINGLE verdict — no "default", no escape hatch (a
  *    "default reject" would re-admit the call-time nondeterminism F1 closes).
@@ -37,8 +61,7 @@
  *    is NOT a reject — the 0.10.0 meta-bridge mailbox delivers without liveness.
  *    `unsupported` is the "no liveness predicate" fact, not a delivery verdict; so
  *    ff+unsupported routes to the `meta-mailbox` transport, gated by a SEPARATE
- *    `mailboxDeliverable` fact (NOT a column of the 6-cell table — Fable (i)).
- *    owned-outcome+unsupported still rejects (self-fetch needs real liveness).
+ *    `mailboxDeliverable` fact (NOT a column of the 3-cell table — Fable (i)).
  *
  * The decision table here is a constant; `check-entwurf-v2-contract` asserts it
  * exhaustively + proves the "table cell ↔ receipt" round-trip. THAT round-trip
@@ -50,9 +73,15 @@ import type { SocketLiveness } from "./socket-probe.ts";
 
 // ── Caller-declared intent (F1) ────────────────────────────────────────────
 // The outcome contract is an INPUT, not an inference. `fire-and-forget` = the
-// RPC ack is the end of the contract (entwurf-control.ts:29-37). `owned-outcome`
-// = the caller owns the dispatched session's completion.
-export const ENTWURF_INTENTS = ["fire-and-forget", "owned-outcome"] as const;
+// RPC ack is the end of the contract (entwurf-control.ts:29-37).
+//
+// This enum has ONE member on purpose. It kept a second — `owned-outcome`, whose
+// only allow cell launched a hidden detached child — until the visible-first cut
+// (header). A one-member enum is not a smell here: the axis is real (a caller
+// still declares its outcome contract), and the value that is gone is gone from
+// the wire, so an old caller is refused by schema validation instead of being
+// quietly re-routed.
+export const ENTWURF_INTENTS = ["fire-and-forget"] as const;
 export type EntwurfIntent = (typeof ENTWURF_INTENTS)[number];
 
 // ── Liveness axes ──────────────────────────────────────────────────────────
@@ -62,9 +91,11 @@ export const FACT_LIVENESSES = ["alive", "dead", "indeterminate", "unsupported"]
 export type FactLiveness = SocketLiveness | "unsupported";
 
 // DispatchLiveness = the in-domain routing axis the table is keyed on. The
-// socket result maps: alive→live (send), dead→dormant (resume from disk),
-// indeterminate→indeterminate (never spawn). `unsupported` is NOT here — it is
-// handled by the domain guard before the table is consulted.
+// socket result maps: alive→live (send), dead→dormant (unreachable since the
+// visible-first cut), indeterminate→indeterminate (never dispatched into).
+// `unsupported` is NOT here — it is handled by the domain guard before the table
+// is consulted. The axis keeps all three values because they are FACTS about a
+// target; only the verdicts behind two of them changed.
 export const DISPATCH_LIVENESSES = ["live", "dormant", "indeterminate"] as const;
 export type DispatchLiveness = (typeof DISPATCH_LIVENESSES)[number];
 
@@ -134,17 +165,17 @@ export function dispatchLivenessOf(socket: SocketLiveness): DispatchLiveness {
 // attempted. A post-dispatch "send-fail fallback" (transport failed after the
 // verdict) is a SEPARATE axis (bucket B) and must NOT be merged into this enum.
 export const ENTWURF_V2_REJECT_REASONS = [
-	"indeterminate-no-spawn", // N1/F3: never spawn an indeterminate target
+	// The name is inherited vocabulary and stays a frozen wire string: with the spawn
+	// transport gone there is nothing left to spawn, but the RULE it names is intact —
+	// an in-domain target whose probe was inconclusive is never dispatched into. Renaming
+	// a public reject string is its own contract cut, not a side effect of this one.
+	"indeterminate-no-spawn", // N1/F3: never dispatch into an indeterminate target
 	"dormant-fire-forget-unsupported", // N2: fire-and-forget to a dormant target — reject for now
-	"owned-live-no-autosend", // Q2/F1: owned-outcome to a live target is not an auto-send
-	"backend-liveness-unsupported", // R1: backend has no liveness predicate (e.g. claude-code) — owned-outcome only
 	"mailbox-undeliverable", // F-mailbox: fire-and-forget to an unsupported citizen whose mailbox is not deliverable (fail-closed; future pi-backend non-drainable mailbox)
-	"native-push-target-dead", // 봉인 1: fire-and-forget to a native-push (agy) target whose adapter probe found NO live conversation. Post-probe; observedLiveness = dead. NOT `backend-liveness-unsupported` — a native-push backend IS measured, so that name would be a lie.
-	"native-push-probe-indeterminate", // 봉인 1: fire-and-forget to a native-push target whose adapter probe was inconclusive (agy alive but no port served the conv, or a probe error). Post-probe; observedLiveness = indeterminate. Never spawns, never coerced to dead.
-	"native-push-no-resume-authority", // 봉인 1: owned-outcome to a native-push target (any liveness — single, state-independent). A native-push backend has no resume/spawn authority (there is no pi-child to own), so the caller cannot own its completion; use fire-and-forget. Post-probe; observedLiveness = the measured value.
-	"bad-target", // R2: absent/typo garden-id (no existing citizen); spawn-new out of v2 scope
-	"untrusted-fail-fast", // 동결결정 5: controlled launch into an untrusted cwd
-	"record-less-socket", // #50 C4: a gid-shaped non-symlink control socket exists but NO meta-record claims it. The record is the sole address authority (목표 ②), so a bare socket is not an addressable citizen — it is a diagnostic state, refused for EVERY intent before any lock/probe (pre-probe, observedLiveness=null). NOT `bad-target`: something real answers to this gid, and mislabeling it absent would hide the very state the reject exists to surface. Replaces the retired A1-narrow acceptance (and its post-probe `socket-only-no-resume-authority`).
+	"native-push-target-dead", // 봉인 1: fire-and-forget to a native-push (agy) target whose adapter probe found NO live conversation. Post-probe; observedLiveness = dead.
+	"native-push-probe-indeterminate", // 봉인 1: fire-and-forget to a native-push target whose adapter probe was inconclusive (agy alive but no port served the conv, or a probe error). Post-probe; observedLiveness = indeterminate. Never coerced to dead.
+	"bad-target", // R2: absent/typo garden-id (no existing citizen); fresh creation out of v2 scope
+	"record-less-socket", // #50 C4: a gid-shaped non-symlink control socket exists but NO meta-record claims it. The record is the sole address authority (목표 ②), so a bare socket is not an addressable citizen — it is a diagnostic state, refused for EVERY intent before any lock/probe (pre-probe, observedLiveness=null). NOT `bad-target`: something real answers to this gid, and mislabeling it absent would hide the very state the reject exists to surface.
 	"target-locked", // R5 pre-claim for bucket B F2 per-gid lockfile conflict
 	"target-address-conflict", // F3: a quarantined citizen (garden-id-socket-conflict / symlinked socket) — the gid resolves to two different receivers (record vs socket), so dispatch refuses to pick. The ONLY in-band honest channel for a dispatch-level identity-split (the listing diagnostic channel is not visible to a v2 caller, who only gets a receipt). Pre-resolver, like bad-target/target-locked — NOT a RESOLVER_REJECT_REASONS member.
 ] as const;
@@ -160,10 +191,11 @@ export type EntwurfV2RejectReason = (typeof ENTWURF_V2_REJECT_REASONS)[number];
 // in-domain probe was inconclusive (≠ "not looked yet"); `unsupported` means the
 // backend has no predicate (≠ "pre-probe"). So a pre-probe reject's
 // observedLiveness is `null`, NOT one of the four values. Every OTHER reject —
-// the RESOLVER_REJECT_REASONS (5, post-probe) plus `untrusted-fail-fast` (1B: it
-// now runs AFTER the lock+probe, only on a resume verdict, so its observedLiveness
-// is the honest measured `dormant`) — carries a non-null FactLiveness, as does
-// every success. This null/non-null split is REASON-DEPENDENT, so the receipt
+// the RESOLVER_REJECT_REASONS (3, post-probe) and the native-push set (2, also
+// post-probe) — carries a non-null FactLiveness, as does every success. (The
+// visible-first cut removed the one post-probe reject that was NOT a resolver
+// member: `untrusted-fail-fast`, which only ever fired behind a resume verdict.)
+// This null/non-null split is REASON-DEPENDENT, so the receipt
 // schema (which allows null on every reject branch) cannot enforce it alone — the
 // semantic fixture in `check-entwurf-v2-contract` does, via `isPreProbeReject` /
 // `rejectObservedLivenessWellFormed` below (the SSOT 5b mints against).
@@ -184,14 +216,9 @@ export function isPreProbeReject(reason: EntwurfV2RejectReason): reason is PrePr
  * pure SSOT predicate so 5b mints against it and the gate proves it: a pre-probe
  * reject MUST carry `null`; every other reject MUST carry a non-null FactLiveness.
  * Catches the illegal `{ok:false, reason:"bad-target", observedLiveness:"indeterminate"}`
- * (pre-probe with a stamped value) and `{ok:false, reason:"owned-live-no-autosend",
+ * (pre-probe with a stamped value) and `{ok:false, reason:"dormant-fire-forget-unsupported",
  * observedLiveness:null}` (post-probe with no value) — both reason-dependent, so
  * unreachable by the schema's blanket `FactLiveness | null`.
- *
- * NOTE this predicate FREEZES the 1B ordering into the contract: classifying
- * `untrusted-fail-fast` as post-probe (non-null required) encodes "preflight runs
- * AFTER the probe". Moving preflight back ahead of the probe would make its
- * observedLiveness un-measured (null) and reopen this predicate + the enum split.
  */
 export function rejectObservedLivenessWellFormed(
 	reason: EntwurfV2RejectReason,
@@ -200,21 +227,17 @@ export function rejectObservedLivenessWellFormed(
 	return isPreProbeReject(reason) ? observedLiveness === null : observedLiveness !== null;
 }
 
-// Reasons the RESOLVER emits — the in-domain 6-cell table cells PLUS the
-// unsupported domain-guard mini-table (backend-liveness-unsupported for
-// owned-outcome, mailbox-undeliverable for a fail-closed fire-and-forget). NOT
-// just the 6-cell table (the F-mailbox mini-table emits two of these), hence
-// RESOLVER_ not TABLE_. The remaining taxonomy members are produced by stages
-// OTHER than the resolver: `bad-target` (target resolution) and `target-locked`
-// (lockfile) run BEFORE the resolver, while `untrusted-fail-fast` is decided
-// AFTER it — preflight runs only behind a resume verdict (1B), so it is a LATER
-// stage, not an earlier one. All three are pre-claimed in the enum so bucket B
-// does not reopen it.
+// Reasons the RESOLVER emits — the in-domain 3-cell table cells PLUS the
+// unsupported domain-guard mini-table (mailbox-undeliverable for a fail-closed
+// fire-and-forget). NOT just the table (the F-mailbox mini-table emits one of
+// these), hence RESOLVER_ not TABLE_. The remaining taxonomy members are produced
+// by stages BEFORE the resolver: `bad-target` (target resolution) and
+// `target-locked` (lockfile). Both are pre-claimed in the enum so bucket B does
+// not reopen it. There is no longer any AFTER-the-resolver reject: the one that
+// existed, `untrusted-fail-fast`, fired only behind the removed resume verdict.
 export const RESOLVER_REJECT_REASONS = [
 	"indeterminate-no-spawn",
 	"dormant-fire-forget-unsupported",
-	"owned-live-no-autosend",
-	"backend-liveness-unsupported",
 	"mailbox-undeliverable",
 ] as const satisfies readonly EntwurfV2RejectReason[];
 
@@ -231,13 +254,18 @@ export const RESOLVER_REJECT_REASONS = [
 // This list contains DELIVERY outcomes only. A mux may launch a live runtime, but
 // its session handle is neither a receipt transport nor address authority. Once
 // that runtime becomes a record-backed citizen, delivery still uses one of the
-// rails below.
-export const ENTWURF_V2_TRANSPORTS = ["control-socket", "spawn-bg", "meta-mailbox", "native-push"] as const;
+// rails below. `spawn-bg` — the detached, window-less resume child — was removed
+// with `owned-outcome` (header): every remaining transport delivers to a citizen
+// that is already running, so this verb no longer starts a process at all.
+export const ENTWURF_V2_TRANSPORTS = ["control-socket", "meta-mailbox", "native-push"] as const;
 export type EntwurfV2Transport = (typeof ENTWURF_V2_TRANSPORTS)[number];
 
 // Allow-branch facets (exported so the schema↔types gate asserts every enum).
-export const ENTWURF_V2_ACTIONS = ["send", "resume"] as const;
-export const ENTWURF_V2_OWNERSHIPS = ["ack-only", "owned"] as const;
+// Both are single-valued since the cut: the only `resume`/`owned` verdict was the
+// spawn-bg cell. They stay as enums because they are the receipt's own vocabulary
+// and a future visible-resume verb would speak them again.
+export const ENTWURF_V2_ACTIONS = ["send"] as const;
+export const ENTWURF_V2_OWNERSHIPS = ["ack-only"] as const;
 // Delivery mode of the message to the target (how it is injected) — steer =
 // interrupt the current turn, follow_up = queue after it. A SEPARATE axis from
 // both the intent/ownership axis (F1) and the liveness-routing axis. The removed
@@ -247,33 +275,30 @@ export const ENTWURF_V2_MODES = ["steer", "follow_up"] as const;
 
 export type DispatchVerdict =
 	| { action: "send"; transport: "control-socket" | "meta-mailbox" | "native-push"; ownership: "ack-only" }
-	| { action: "resume"; transport: "spawn-bg"; ownership: "owned" }
 	| { action: "reject"; reason: EntwurfV2RejectReason };
 
 // ── The FROZEN decision table ──────────────────────────────────────────────
-// intent × dispatch-liveness → exactly one verdict (Q2). v2-initial ALLOWS
-// exactly two cells (fire-and-forget+live = send; owned-outcome+dormant =
-// resume); the other four reject. The reject cells are honest "지금은 없음"
-// locks (N2). They were written while the legacy 3-verb surface still covered
-// those flows; that surface is GONE, so a reject cell is now a real absence with
-// no fallback verb behind it — reopening one takes a new contract, never a
-// quiet re-admission.
+// intent × dispatch-liveness → exactly one verdict (Q2). THREE cells since the
+// visible-first cut, of which exactly ONE allows: fire-and-forget+live = send.
+// The other two reject. The reject cells are honest "지금은 없음" locks (N2).
+// They were written while the legacy 3-verb surface still covered those flows;
+// that surface is GONE, so a reject cell is a real absence with no fallback verb
+// behind it — reopening one takes a new contract, never a quiet re-admission.
+//
+// The `dormant` cell is the one that now carries the whole cost of the cut: an
+// in-domain citizen that is not running cannot be reached by ANY intent. That is
+// the intended fail-closed state, not an oversight — the resume that used to
+// answer here was hidden, and a visible replacement is a separate capability.
 export const DISPATCH_TABLE: Record<EntwurfIntent, Record<DispatchLiveness, DispatchVerdict>> = {
 	"fire-and-forget": {
 		live: { action: "send", transport: "control-socket", ownership: "ack-only" },
 		dormant: { action: "reject", reason: "dormant-fire-forget-unsupported" },
 		indeterminate: { action: "reject", reason: "indeterminate-no-spawn" },
 	},
-	"owned-outcome": {
-		// wants_reply is etiquette, not ownership — owned+live never auto-sends (Q2/F1).
-		live: { action: "reject", reason: "owned-live-no-autosend" },
-		dormant: { action: "resume", transport: "spawn-bg", ownership: "owned" },
-		indeterminate: { action: "reject", reason: "indeterminate-no-spawn" },
-	},
 };
 
 // ── The unsupported-backend mailbox mini-table (F-mailbox) ─────────────────
-// SEPARATE from the in-domain 6-cell DISPATCH_TABLE (Fable (i)): a backend with no
+// SEPARATE from the in-domain 3-cell DISPATCH_TABLE (Fable (i)): a backend with no
 // pi-socket liveness predicate never enters the liveness-keyed table. Instead the
 // domain guard routes it here, keyed on intent alone. Reaches here: claude-code
 // (self-fetch mailbox) and codex (no adapter yet). Does NOT reach here: antigravity —
@@ -286,17 +311,20 @@ export const DISPATCH_TABLE: Record<EntwurfIntent, Record<DispatchLiveness, Disp
 //    fact is false (fail-closed). The ack is enqueue+doorbell, NOT read, and
 //    observedLiveness stays `unsupported` — the receipt's `meta-mailbox` transport
 //    is what says "this went to the mailbox".
-//  - owned-outcome has no real liveness to own on a self-fetch backend → reject.
 //
 // N2 asymmetry (명문화 — without this the two tables read as contradictory):
 //   fire-and-forget+dormant-PI = reject  vs  fire-and-forget+unsupported-CITIZEN = mailbox.
-//   In-domain `dormant` is a CONFIRMED not-running pi, so enqueuing would be a
-//   silent pileup (resume is the honest place). `unsupported` is UNKNOWN liveness
-//   on a backend we cannot probe, so a best-effort mailbox doorbell is the most we
-//   can honestly offer — there is nothing to resume into.
+//   The axis is NOT which backend a citizen runs, and this cell grants no backend a
+//   privilege. It is one question asked of both: does an ACTIVE RECEIVER actually drain
+//   the mailbox this message would land in? A self-fetch citizen reaches this allow cell
+//   only through the separate `mailboxDeliverable` fact, which IS that receiver check —
+//   when nobody drains, this very cell rejects as `mailbox-undeliverable`. An in-domain
+//   `dormant` pi has no drainer at all: its mailbox reader was the running session, and
+//   the session is confirmed not running, so an enqueue would be a silent pileup no one
+//   ever reads. Same rule, two answers. (It reads as a backend split only if you skip
+//   the deliverability fact — which is exactly what makes claude-code look privileged.)
 export const UNSUPPORTED_DISPATCH_TABLE: Record<EntwurfIntent, DispatchVerdict> = {
 	"fire-and-forget": { action: "send", transport: "meta-mailbox", ownership: "ack-only" },
-	"owned-outcome": { action: "reject", reason: "backend-liveness-unsupported" },
 };
 
 // ── Dispatch receipt (R3) ──────────────────────────────────────────────────
@@ -305,9 +333,9 @@ export const UNSUPPORTED_DISPATCH_TABLE: Record<EntwurfIntent, DispatchVerdict> 
 export type EntwurfV2Receipt =
 	| {
 			ok: true;
-			action: "send" | "resume";
+			action: "send";
 			transport: EntwurfV2Transport;
-			ownership: "ack-only" | "owned";
+			ownership: "ack-only";
 			observedLiveness: FactLiveness;
 	  }
 	// observedLiveness is `FactLiveness | null` (？6): null for the pre-probe
@@ -329,9 +357,9 @@ export type EntwurfV2RejectReceipt = Extract<EntwurfV2Receipt, { ok: false }>;
  * observedLiveness:"indeterminate"}`, which the blanket `FactLiveness | null`
  * schema accepts. This constructor THROWS on a well-formedness violation, so
  * every reject path (resolveDispatch's own mints below + the 5b stages that
- * produce bad-target / target-locked / target-address-conflict / untrusted-
- * fail-fast) routes through one chokepoint and the bypass surface is zero. 5b
- * MUST build rejects with this, never by object literal.
+ * produce bad-target / target-locked / target-address-conflict / record-less-socket)
+ * routes through one chokepoint and the bypass surface is zero. 5b MUST build
+ * rejects with this, never by object literal.
  */
 export function makeRejectReceipt(
 	reason: EntwurfV2RejectReason,
@@ -351,11 +379,11 @@ export function makeRejectReceipt(
  * PURE dispatch decision over already-resolved facts. Before reaching here the
  * caller has resolved the target (→ `bad-target` if no existing citizen) and, for
  * an in-domain backend, acquired the per-gid lock (→ `target-locked`) and probed
- * liveness UNDER that lock. This function only decides the liveness-routed
- * verdict. preflight (→ `untrusted-fail-fast`) is NOT a precondition here: per 1B
- * it runs only AFTER this resolver returns a resume verdict (the sole branch that
- * launches a child into a target cwd), so a send/mailbox verdict never touches it.
- * Do NOT reintroduce a global pre-resolver preflight — that re-breaks F-mailbox.
+ * liveness UNDER that lock. This function only decides the liveness-routed verdict.
+ * There is NO trust preflight anywhere on this path: it existed solely to guard the
+ * resume verdict that launched a child into a target cwd, and that verdict is gone.
+ * Do NOT reintroduce a global pre-resolver preflight — that re-breaks F-mailbox,
+ * and this verb no longer launches anything into any cwd.
  *
  * Two facts in: `liveness` (the 4-value FactLiveness) and `mailboxDeliverable`
  * (F-mailbox — a SEPARATE axis from liveness, NOT a column of either table, NOT
@@ -367,8 +395,8 @@ export function makeRejectReceipt(
  * backend the liveness-routed table is authoritative and the flag is ignored.
  *
  * R1 domain guard runs first: an `unsupported` liveness is routed through the
- * UNSUPPORTED_DISPATCH_TABLE (mailbox mini-table), never the 6-cell table.
- * No spawn, no send, no I/O — step 5 executes the chosen transport.
+ * UNSUPPORTED_DISPATCH_TABLE (mailbox mini-table), never the 3-cell table.
+ * No send, no I/O — step 5 executes the chosen transport.
  */
 export function resolveDispatch(
 	intent: EntwurfIntent,
@@ -394,7 +422,7 @@ export function resolveDispatch(
 		};
 	}
 	// liveness is now narrowed to SocketLiveness; deliverability does not apply.
-	const cell = DISPATCH_TABLE[intent][dispatchLivenessOf(liveness)];
+	const cell: DispatchVerdict = DISPATCH_TABLE[intent][dispatchLivenessOf(liveness)];
 	if (cell.action === "reject") {
 		return makeRejectReceipt(cell.reason, liveness);
 	}
@@ -418,19 +446,15 @@ export function resolveDispatch(
 //   fire-and-forget × alive         → native-push send (the ONE allow cell)
 //   fire-and-forget × dead          → reject native-push-target-dead
 //   fire-and-forget × indeterminate → reject native-push-probe-indeterminate
-//   owned-outcome  × *              → reject native-push-no-resume-authority (state-
-//                                     independent: no pi-child to own; `backend-
-//                                     liveness-unsupported` is NOT reused — false name).
+//
+// The `owned-outcome` row is gone with the intent (header). It had rejected on every
+// liveness with `native-push-no-resume-authority` — a real fact about this rail that
+// simply has no caller left to tell, since no caller can declare that intent.
 export const NATIVE_PUSH_DISPATCH_TABLE: Record<EntwurfIntent, Record<NativePushLiveness, DispatchVerdict>> = {
 	"fire-and-forget": {
 		alive: { action: "send", transport: "native-push", ownership: "ack-only" },
 		dead: { action: "reject", reason: "native-push-target-dead" },
 		indeterminate: { action: "reject", reason: "native-push-probe-indeterminate" },
-	},
-	"owned-outcome": {
-		alive: { action: "reject", reason: "native-push-no-resume-authority" },
-		dead: { action: "reject", reason: "native-push-no-resume-authority" },
-		indeterminate: { action: "reject", reason: "native-push-no-resume-authority" },
 	},
 };
 
@@ -441,7 +465,6 @@ export const NATIVE_PUSH_DISPATCH_TABLE: Record<EntwurfIntent, Record<NativePush
 export const NATIVE_PUSH_REJECT_REASONS = [
 	"native-push-target-dead",
 	"native-push-probe-indeterminate",
-	"native-push-no-resume-authority",
 ] as const satisfies readonly EntwurfV2RejectReason[];
 
 /**

@@ -108,8 +108,8 @@ needs the installed strict doctor against a new native session.
 `PreInvocation` births or reattaches a citizen by native `conversationId` and writes a
 record-backed sender marker. `entwurf_v2` probes the live conversation and injects
 directly through the native adapter, with one bounded re-probe retry. Replyability is
-`record-backed identity ∧ probe-alive`; mailbox state and owned resume authority do not
-exist on this rail.
+`record-backed identity ∧ probe-alive`; mailbox state does not exist on this rail, and no
+rail has resume authority since the visible-first cut.
 
 The managed bridge, statusline, and hook installers own separate configuration atoms.
 Same-pid concurrent model invocation by multiple conversations is not claimed because

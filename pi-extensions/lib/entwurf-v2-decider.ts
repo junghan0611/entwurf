@@ -3,23 +3,22 @@
  * (0.11 Stage 0 step 5b). It turns a caller's (target, intent, …) request plus
  * already-resolvable facts into a single `DispatchDecision`: either a reject
  * receipt, or an execute receipt + an `ExecutionPlan` + (for in-domain backends) a
- * held `LockClaim`. It performs NO transport: no send, no enqueue, no spawn, no
- * release-watcher. Step 5c executes the chosen plan; step 5d registers the MCP
- * surface. The decider only DECIDES.
+ * held `LockClaim`. It performs NO transport: no send, no enqueue, no release-watcher.
+ * Step 5c executes the chosen plan; step 5d registers the MCP surface. The decider
+ * only DECIDES.
+ *
+ * Since the visible-first cut (contract header) this module also starts NO process:
+ * the resume verdict, its trust preflight, and the detached spawn-bg plan are gone.
+ * Every plan it can emit now targets a citizen that is already running.
  *
  * Why a separate pure module (step 4 discipline = gate-first → pure-before-IO →
  * wire): every IO surface the decision needs — the target lookup, the per-gid lock,
- * the lstat/connect socket inspection, the trust preflight, the mailbox-deliverability
- * seam — is INJECTED via `DispatchDeciderDeps`, so the gate drives every branch with
- * fakes and the live wrappers wire the real fns. The plan is shaped so 5c's
- * transport hand consumes it WITHOUT re-deriving any path/arg (socketPath,
- * mailboxDir, sessionsDir, launchArgs are all planted here once — 4c "재유도 금지"):
- * the hand is a plan-keyed dispatcher, never a second brain. The two deliberate
- * exceptions (GPT힣 1차 검수): the spawned child's runtime pid is NOT in the plan
- * (it is born during 5c execution → it is the watcher's release-context, not a plan
- * input), and the launch identity (provider/model) is read by the 5c launcher from
- * the saved session JSONL (its existing authority) — putting that read in the
- * decider would make it impure. So the plan carries no provider/model.
+ * the lstat/connect socket inspection, the mailbox-deliverability seam — is INJECTED
+ * via `DispatchDeciderDeps`, so the gate drives every branch with fakes and the live
+ * wrappers wire the real fns. The plan is shaped so 5c's transport hand consumes it
+ * WITHOUT re-deriving any path/arg (socketPath, mailboxDir, sessionsDir are all
+ * planted here once — 4c "재유도 금지"): the hand is a plan-keyed dispatcher, never a
+ * second brain.
  *
  * The frozen 7-step order (NEXT.md "통합 decider 순서"):
  *   1. requireGardenId   — runtime guard BEFORE any path is built (F2-P1; closes the
@@ -32,8 +31,7 @@
  *   4. acquireLock       — IN-DOMAIN ONLY (？7), BEFORE lstat/connect, so the probe
  *      happens under the lock (the TOCTOU 5a's lock closes).
  *   5. in-domain         — inspectTargetControlSocket (lstat-then-connect, ？2) →
- *      resolveDispatch → on a resume verdict, preflight the target cwd (1B: deny →
- *      nonce-owned release → untrusted-fail-fast) → plan.
+ *      resolveDispatch → control-socket send plan, or a reject that releases the lock.
  *   6. unsupported       — NO lock; deps.mailboxDeliverabilityFor (REQUIRED seam: wake-mode
  *      capability AND a live active-receiver, fail-closed) → resolveDispatch → meta-mailbox
  *      plan or reject. SE-2 2d-3: a terminated/drifted self-fetch citizen is refused, never
@@ -48,7 +46,6 @@
 
 import type { MailboxDeliverabilityResult } from "./entwurf-deliverability.ts";
 import { isOutOfSocketDomainGardenIdConflict } from "./entwurf-facts.ts";
-import type { PreflightOutcome } from "./entwurf-preflight.ts";
 import {
 	type EntwurfIntent,
 	type EntwurfV2Receipt,
@@ -77,17 +74,6 @@ import type { SocketLiveness } from "./socket-probe.ts";
 // single import site for it (it is the SAME fn the fact-provider listing uses).
 export { isOutOfSocketDomainGardenIdConflict };
 
-// ── observe timeout (？3) ───────────────────────────────────────────────────
-// The bounded wait 5c's release-watcher gives a spawned child to surface its
-// control socket / exit. Planted into the resume plan so the hand does not invent
-// a timeout. A standalone constant + env override (NOT a multiple of the probe
-// timeout — a different concern); 30s initial, tunable to 45s after live data.
-export const ENTWURF_V2_OBSERVE_TIMEOUT_MS = ((): number => {
-	const raw = process.env.ENTWURF_V2_OBSERVE_TIMEOUT_MS;
-	const n = raw !== undefined && raw !== "" ? Number(raw) : Number.NaN;
-	return Number.isFinite(n) && n > 0 ? n : 30_000;
-})();
-
 export const ENTWURF_V2_MODE_DEFAULT = "follow_up" as const;
 
 // ── receipt branch aliases ──────────────────────────────────────────────────
@@ -97,9 +83,9 @@ export type EntwurfV2Mode = "steer" | "follow_up";
 
 // ── ExecutionPlan (5c-consumable, no re-derivation) ─────────────────────────
 // Each plan kind carries every value 5c's transport fn needs, planted once by the
-// decider. control-socket send and meta-mailbox send carry the message; spawn-bg
-// resume carries the launch inputs MINUS provider/model (D4: 5c-owned identity
-// read) and MINUS the child pid (born at execution, watcher's release-context).
+// decider. Every remaining kind is a SEND to an already-running citizen: the
+// spawn-bg resume plan (launch inputs, expected socket path, observe timeout) went
+// with the transport in the visible-first cut.
 export type ExecutionPlan =
 	| {
 			transport: "control-socket";
@@ -118,22 +104,6 @@ export type ExecutionPlan =
 			sessionsDir: string;
 			wantsReply: boolean;
 			message: string;
-	  }
-	| {
-			transport: "spawn-bg";
-			action: "resume";
-			targetGardenId: string;
-			sessionId: string;
-			cwd: string;
-			prompt: string;
-			// wantsReply rides the plan so the dormant rail's <sender_info> carries the
-			// same wants_reply etiquette marker a live socket delivery renders (#50 F2).
-			// mode stays live-injection-only (meaningless for a resume prompt).
-			wantsReply: boolean;
-			launchArgs: readonly string[];
-			expectedSocketPath: string;
-			observeTimeoutMs: number;
-			releaseWhen: "socket-alive-or-child-exited";
 	  }
 	// native-push send (봉인 4): direct-inject into a live app-server conversation. LOCK-FREE
 	// (the DispatchDecision carries lock:null). Carries the decider-probed VOLATILE route so
@@ -154,9 +124,9 @@ export type ExecutionPlan =
 // ── DispatchDecision (the decider's only output) ────────────────────────────
 // reject ⇒ NO plan AND NO retained lock (any acquired lock was released before
 // return). execute ⇒ a plan + a receipt whose transport matches plan.transport;
-// `lock` is non-null for an in-domain execute (control-socket send OR spawn-bg
-// resume — both keep the claim so 5c's at-most-once re-resolve runs under the same
-// nonce) and null for the lock-free meta-mailbox path (？7).
+// `lock` is non-null for an in-domain execute (the control-socket send keeps the
+// claim so 5c's at-most-once re-resolve runs under the same nonce) and null for the
+// lock-free meta-mailbox path (？7).
 //
 // A reject's optional machine-readable diagnostic. Only `target-locked` carries one:
 // the `LockConflict` (holder pid/host/createdAt, lockPath, human detail) the lock
@@ -218,10 +188,6 @@ export interface DispatchDeciderDeps {
 	inspectSocket: (gardenId: string) => Promise<TargetSocketInspection>;
 	probeSocket: (socketPath: string) => Promise<SocketLiveness>;
 	// MaybePromise (0.12.1 B-2): production lazy-imports the pi-coding-agent-backed
-	// preflight via `await import()` so the harness-neutral bridge boots pi-free;
-	// only the owned-outcome resume branch (below) awaits it. Sync test fakes that
-	// return a plain PreflightOutcome still satisfy this.
-	preflightForCwd: (cwd: string) => PreflightOutcome | Promise<PreflightOutcome>;
 	/**
 	 * SE-2 slice 2d-3: the REQUIRED mailbox-deliverability seam (no default). The decider
 	 * does NOT judge deliverability itself — it asks this injected fn, which combines the
@@ -246,7 +212,6 @@ export interface DispatchDeciderDeps {
 	nativePushProbe: (identity: MetaIdentity) => NativePushProbeResult | Promise<NativePushProbeResult>;
 	mailboxDir?: string;
 	sessionsDir?: string;
-	observeTimeoutMs?: number;
 }
 
 /**
@@ -290,10 +255,9 @@ export function resolveMailboxWakeModeCapability(
 export async function decideDispatch(input: DispatchInput, deps: DispatchDeciderDeps): Promise<DispatchDecision> {
 	const mailboxDir = deps.mailboxDir ?? defaultMetaMailboxDir();
 	const sessionsDir = deps.sessionsDir ?? defaultMetaSessionsDir();
-	const observeTimeoutMs = deps.observeTimeoutMs ?? ENTWURF_V2_OBSERVE_TIMEOUT_MS;
 	const mode: EntwurfV2Mode = input.mode ?? ENTWURF_V2_MODE_DEFAULT;
 	const wantsReply = input.wantsReply ?? false;
-	const ctx: InDomainCtx = { mode, wantsReply, observeTimeoutMs };
+	const ctx: InDomainCtx = { mode, wantsReply };
 
 	const reject = (receipt: RejectReceipt, diagnostic?: RejectDiagnostic): DispatchDecision =>
 		diagnostic ? { kind: "reject", receipt, diagnostic } : { kind: "reject", receipt };
@@ -378,7 +342,7 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 	}
 
 	// 4-5. control-socket domain (currently backend pi): lock → inspect → route.
-	return decideInDomain(gardenId, input, deps, ctx, identity.cwd);
+	return decideInDomain(gardenId, input, deps, ctx);
 }
 
 // ── control-socket-domain probe (steps 4-5; currently backend pi). Every target
@@ -386,17 +350,14 @@ export async function decideDispatch(input: DispatchInput, deps: DispatchDecider
 // The lock lifecycle (B2) lives here: acquire BEFORE lstat/connect, every reject path
 // releases explicitly (rejectAfterRelease), every execute path that keeps the lock sets
 // retainLock=true, and a thrown IO error releases the still-held lock before rethrowing so
-// the long-lived MCP bridge never pins a gid. `cwd` comes from the meta-record — the only
-// resume authority — so the resume verdict's preflight+spawn always launch into a
-// record-owned working directory.
-type InDomainCtx = { mode: EntwurfV2Mode; wantsReply: boolean; observeTimeoutMs: number };
+// the long-lived MCP bridge never pins a gid.
+type InDomainCtx = { mode: EntwurfV2Mode; wantsReply: boolean };
 
 async function decideInDomain(
 	gardenId: string,
 	input: DispatchInput,
 	deps: DispatchDeciderDeps,
 	ctx: InDomainCtx,
-	cwd: string,
 ): Promise<DispatchDecision> {
 	const { acquireLock, releaseLock, inspectSocket, probeSocket } = deps;
 
@@ -431,37 +392,15 @@ async function decideInDomain(
 
 		const receipt = resolveDispatch(input.intent, liveness, false);
 		if (!receipt.ok) {
-			// resolver reject (owned-live-no-autosend / indeterminate-no-spawn / …) — the
-			// lock was for an in-domain probe that yielded no execute, so release it.
+			// resolver reject (dormant-fire-forget-unsupported / indeterminate-no-spawn) —
+			// the lock was for an in-domain probe that yielded no execute, so release it.
 			return rejectAfterRelease(receipt);
 		}
 
-		if (receipt.action === "resume") {
-			// 1B: preflight runs ONLY here (the sole branch that launches a child into a
-			// target cwd). deny → nonce-owned release → untrusted-fail-fast, with the
-			// honest measured liveness (dormant = the `dead` we just probed).
-			const outcome = await deps.preflightForCwd(cwd);
-			if (outcome.kind === "deny") {
-				return rejectAfterRelease(makeRejectReceipt("untrusted-fail-fast", liveness));
-			}
-			const plan: ExecutionPlan = {
-				transport: "spawn-bg",
-				action: "resume",
-				targetGardenId: gardenId,
-				sessionId: gardenId, // D3: gid is the pi resume authority, not nativeSessionId.
-				cwd,
-				prompt: input.message,
-				wantsReply: ctx.wantsReply,
-				launchArgs: outcome.launchArgs,
-				expectedSocketPath: socketPath,
-				observeTimeoutMs: ctx.observeTimeoutMs,
-				releaseWhen: "socket-alive-or-child-exited",
-			};
-			retainLock = true;
-			return { kind: "execute", receipt, plan, lock };
-		}
-
-		// receipt.action === "send" → control-socket send (lock kept for 5c re-resolve).
+		// `send` is the only action this table can return since the visible-first cut, so
+		// there is exactly one execute shape here → control-socket send (lock kept for the
+		// 5c re-resolve). The resume branch that used to sit above this — preflight the
+		// target cwd, then plan a detached spawn-bg child — is gone with the transport.
 		const plan: ExecutionPlan = {
 			transport: "control-socket",
 			action: "send",

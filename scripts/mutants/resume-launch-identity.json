@@ -1,0 +1,72 @@
+{
+	"schemaVersion": 1,
+	"lane": "resume-launch-identity",
+	"mutants": [
+		{
+			"claim": "RESUME-ID-HEADER-INTEGRITY",
+			"title": "the C3 integrity check is dropped, so a stale or foreign transcriptPath resumes another being's session",
+			"subject": "pi-extensions/lib/resume-launch-identity.ts",
+			"find": [
+				"\tif (identity.sessionId !== record.nativeSessionId) {",
+				"\t\tthrow new Error(",
+				"\t\t\t`resume-launch-identity: ${gardenId} transcript header id \"${identity.sessionId ?? \"(none)\"}\" ` +",
+				"\t\t\t\t`does not match the record's nativeSessionId \"${record.nativeSessionId}\" — the recorded transcriptPath ` +",
+				"\t\t\t\t`is stale or points at a foreign session file; refusing to resume another being's transcript.`,",
+				"\t\t);",
+				"\t}"
+			],
+			"replace": ["\t// integrity check removed"],
+			"gate": ["bash", "run.sh", "check-resume-launch-identity"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUME-ID-HEADER-INTEGRITY]",
+			"signatureSource": "scripts/check-resume-launch-identity.ts"
+		},
+		{
+			"claim": "RESUME-ID-ADDRESSABLE-READ",
+			"title": "the leaf is \"simplified\" back to the plain targeted read, so two records sharing one native session both resolve and resume one transcript under two locks (#52)",
+			"subject": "pi-extensions/lib/resume-launch-identity.ts",
+			"find": ["import { readAddressableMetaIdentity } from \"./meta-session.ts\";"],
+			"replace": ["import { readMetaIdentityByGardenId as readAddressableMetaIdentity } from \"./meta-session.ts\";"],
+			"gate": ["bash", "run.sh", "check-resume-launch-identity"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUME-ID-ADDRESSABLE-READ]",
+			"signatureSource": "scripts/check-resume-launch-identity.ts"
+		},
+		{
+			"claim": "RESUME-ID-MISSING-TRANSCRIPT-CAUSE",
+			"title": "the transcript existence guard is removed, so a deleted transcript falls through readSessionIdentity's ENOENT swallow and is reported as \"no recorded model\" (F7)",
+			"subject": "pi-extensions/lib/resume-launch-identity.ts",
+			"find": [
+				"\tif (!existsSync(sessionFile)) {",
+				"\t\tthrow new Error(",
+				"\t\t\t`resume-launch-identity: ${gardenId} recorded transcriptPath \"${sessionFile}\" ` +",
+				"\t\t\t\t`does not exist on disk — the transcript was deleted, or the record carries a phantom ` +",
+				"\t\t\t\t`path from a pre-guard birth; nothing to resume.`,",
+				"\t\t);",
+				"\t}"
+			],
+			"replace": ["\t// existence guard removed"],
+			"gate": ["bash", "run.sh", "check-resume-launch-identity"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUME-ID-MISSING-TRANSCRIPT-CAUSE]",
+			"signatureSource": "scripts/check-resume-launch-identity.ts"
+		},
+		{
+			"claim": "RESUME-ID-GATE-SSOT",
+			"title": "the preserved leaf's header stops naming the gate that certifies it, so a consumer-zero identity module ships on prose again",
+			"subject": "pi-extensions/lib/resume-launch-identity.ts",
+			"find": [
+				" * So this leaf is preserved deliberately, with no consumer in the shipped tree today.",
+				" * `check-resume-launch-identity` holds its contract so the record-integrity rules below —"
+			],
+			"replace": [
+				" * So this leaf is preserved deliberately for the later visible lane.",
+				" * The record-integrity rules below —"
+			],
+			"gate": ["bash", "run.sh", "check-resume-launch-identity"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUME-ID-GATE-SSOT]",
+			"signatureSource": "scripts/check-resume-launch-identity.ts"
+		}
+	]
+}

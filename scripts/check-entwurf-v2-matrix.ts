@@ -32,7 +32,6 @@
  */
 
 import assert from "node:assert/strict";
-import type { PreflightOutcome } from "../pi-extensions/lib/entwurf-preflight.ts";
 import {
 	type EntwurfIntent,
 	type EntwurfV2Transport,
@@ -86,23 +85,12 @@ function lockClaim(gardenId: string): LockClaim {
 	};
 }
 
-const APPROVE: PreflightOutcome = {
-	kind: "approve",
-	reason: "saved-true",
-	launchArgs: ["--approve"],
-	trustStoreDecision: true,
-	trustStoreInherited: false,
-	hasTrustInputs: true,
-	canonicalCwd: CWD,
-};
-
 // ── injected fakes with call tracking (decider-gate shape, minimal copy) ─────
 interface ScenarioOpts {
 	resolution: TargetResolution;
 	lock?: "ok" | "conflict";
 	inspection?: TargetSocketInspection;
 	probe?: SocketLiveness;
-	preflight?: PreflightOutcome;
 	mailboxDeliverable?: boolean;
 }
 interface Tracked {
@@ -147,7 +135,6 @@ function mkDeps(opts: ScenarioOpts): Tracked {
 			probeCalls.push(socketPath);
 			return opts.probe ?? "dead";
 		},
-		preflightForCwd: () => opts.preflight ?? APPROVE,
 		mailboxDeliverabilityFor: (id: MetaIdentity) => {
 			mailboxCalls.push(id);
 			return { deliverable: opts.mailboxDeliverable ?? false, reason: "fake-deliverability" };
@@ -208,7 +195,7 @@ const ROWS: Row[] = [
 	{
 		name: "bad-target",
 		targetKind: "no citizen",
-		intent: "owned-outcome",
+		intent: "fire-and-forget",
 		scenario: { resolution: { identity: null, preProbeAddressConflict: false } },
 		expect: { decision: "reject", reason: "bad-target", lock: "none" },
 	},
@@ -247,16 +234,6 @@ const ROWS: Row[] = [
 		expect: { decision: "reject", reason: "mailbox-undeliverable", lock: "none" },
 	},
 	{
-		name: "unsupported owned-outcome → reject",
-		targetKind: "claude-code, owned intent",
-		intent: "owned-outcome",
-		scenario: {
-			resolution: { identity: identity("claude-code"), preProbeAddressConflict: false },
-			mailboxDeliverable: true,
-		},
-		expect: { decision: "reject", reason: "backend-liveness-unsupported", lock: "none" },
-	},
-	{
 		name: "in-domain live ff → control-socket",
 		targetKind: "pi, socket alive",
 		intent: "fire-and-forget",
@@ -267,31 +244,6 @@ const ROWS: Row[] = [
 			probe: "alive",
 		},
 		expect: { decision: "execute", transport: "control-socket", lock: "held" },
-	},
-	{
-		name: "in-domain dormant owned → spawn-bg",
-		targetKind: "pi, socket absent (dormant)",
-		intent: "owned-outcome",
-		scenario: {
-			resolution: { identity: identity("pi"), preProbeAddressConflict: false },
-			lock: "ok",
-			inspection: present({ kind: "absent", socketPath: "/fake/ctl/expected.sock" }),
-			probe: "dead",
-			preflight: APPROVE,
-		},
-		expect: { decision: "execute", transport: "spawn-bg", lock: "held" },
-	},
-	{
-		name: "in-domain live owned → reject (no autosend)",
-		targetKind: "pi, socket alive, owned intent",
-		intent: "owned-outcome",
-		scenario: {
-			resolution: { identity: identity("pi"), preProbeAddressConflict: false },
-			lock: "ok",
-			inspection: present({ kind: "socket-file", socketPath: "/fake/ctl/s.sock" }),
-			probe: "alive",
-		},
-		expect: { decision: "reject", reason: "owned-live-no-autosend", lock: "released" },
 	},
 	{
 		name: "in-domain ff dormant → reject",
@@ -308,7 +260,7 @@ const ROWS: Row[] = [
 	{
 		name: "in-domain indeterminate → reject",
 		targetKind: "pi, socket indeterminate (EACCES)",
-		intent: "owned-outcome",
+		intent: "fire-and-forget",
 		scenario: {
 			resolution: { identity: identity("pi"), preProbeAddressConflict: false },
 			lock: "ok",
@@ -418,7 +370,7 @@ async function main(): Promise<void> {
 		if (row.expect.decision === "execute") transports.add(row.expect.transport);
 		else rejectReasons.add(row.expect.reason);
 	}
-	for (const tr of ["control-socket", "meta-mailbox", "spawn-bg"]) {
+	for (const tr of ["control-socket", "meta-mailbox"]) {
 		ok(`coverage: transport "${tr}" exercised`, transports.has(tr));
 	}
 	for (const lc of ["none", "held", "mailbox-null", "released", "acquire-fail"] as LockClass[]) {
@@ -429,8 +381,6 @@ async function main(): Promise<void> {
 		"target-address-conflict",
 		"target-locked",
 		"mailbox-undeliverable",
-		"backend-liveness-unsupported",
-		"owned-live-no-autosend",
 		"dormant-fire-forget-unsupported",
 		"indeterminate-no-spawn",
 	]) {

@@ -1,8 +1,11 @@
 /**
  * check-entwurf-v2-lock — deterministic gate for 0.11 Stage 0 step 5a (버킷 B F2):
- * the per-gid dispatch lock primitive. The lockfile is the ONLY guard against a
+ * the per-gid dispatch lock primitive. Its SHIPPED role is serializing concurrent
+ * in-domain dispatch at one garden id; it was BORN as the only guard against a
  * double-spawn of the same dormant target (pi self-guards CREATE but not RESUME,
- * 검증원장 F2), so this gate pins every invariant the ledger froze.
+ * 검증원장 F2) and that transport left under the visible-first rule. The mechanism
+ * and every invariant the ledger froze are unchanged, so this gate is too — see
+ * entwurf-v2-lock.ts's header for why the strict reclaim rules are kept.
  *
  * Real temp dir (not faked): the `openSync(lockPath,"wx")` OS-level atomicity is
  * the thing under test, so the directory is real; only the CONTENT-shaping deps

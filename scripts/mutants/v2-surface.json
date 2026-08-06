@@ -7,14 +7,10 @@
 			"title": "MCP long description reverts to the false \"socket paths take a per-target lock\" claim",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\t\"native-push-no-resume-authority. LOCK: taken for a control-socket-DOMAIN dispatch — the live send AND \" +",
-				"\t\t\"the dormant cell's spawn-bg resume, a separate transport that still runs under that domain's lock. The \" +",
+				"\t\t\"LOCK: taken for a control-socket-DOMAIN dispatch. The \" +",
 				"\t\t\"mailbox and native-push rails are lock-free — deliverability and the adapter probe guard them. mode \" +"
 			],
-			"replace": [
-				"\t\t\"native-push-no-resume-authority. LOCK POLICY: socket paths take a per-target lock; the mailbox path \" +",
-				"\t\t\"does not. mode \" +"
-			],
+			"replace": ["\t\t\"LOCK POLICY: socket paths take a per-target lock; the mailbox path does not. mode \" +"],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:V2SURF-MCP-LOCK-DOMAIN]",
@@ -25,12 +21,10 @@
 			"title": "pi-native mode param reverts to \"Delivery mode for a live send\" (false for native-push)",
 			"subject": "pi-extensions/entwurf-control.ts",
 			"find": [
-				"\t\t\t\tdescription:",
 				"\t\t\t\t\t\"Injection style for a CONTROL-SOCKET send only: steer (immediate) or follow_up (after task). \" +",
-				"\t\t\t\t\t\"The mailbox, native-push, and spawn-bg plans carry no mode, so it has no effect on those rails.\","
+				"\t\t\t\t\t\"The mailbox and native-push plans carry no mode, so it has no effect on those rails.\","
 			],
 			"replace": [
-				"\t\t\t\tdescription:",
 				"\t\t\t\t\t\"Delivery mode for a live send: steer (immediate, interrupt the current turn) or follow_up \" +",
 				"\t\t\t\t\t\"(queued after the current task finishes running to completion).\","
 			],
@@ -61,22 +55,68 @@
 			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
 		},
 		{
-			"claim": "V2SURF-MERGED-REJECT",
-			"title": "MCP long description merges the two owned rejects back under backend-liveness-unsupported",
+			"claim": "V2SURF-DORMANT-HONESTY",
+			"title": "MCP long description advertises owned-outcome as a selectable dormant verb again and drops the reason a dormant target actually returns",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\t\"owned-outcome wakes a DORMANT socket-domain citizen by spawn-bg resume ONLY — live target → \" +",
-				"\t\t\"owned-live-no-autosend, self-fetch → backend-liveness-unsupported, native-push → \" +",
-				"\t\t\"native-push-no-resume-authority. LOCK: taken for a control-socket-DOMAIN dispatch — the live send AND \" +"
+				"\t\t\"DORMANT IS UNREACHABLE: a socket-domain citizen that is not running gets dormant-fire-forget-unsupported \" +",
+				"\t\t\"— same receiver rule as the mailbox, no active drainer means no delivery. \" +",
+				"\t\t\"The intent that used to answer there, owned-outcome, resumed it by launching a hidden background child \" +",
+				"\t\t\"and was withdrawn under the visible-first rule — re-open the session yourself, then dispatch again. \" +"
 			],
 			"replace": [
-				"\t\t\"owned-outcome wakes a DORMANT socket-domain citizen by spawn-bg resume ONLY — live target → \" +",
-				"\t\t\"owned-live-no-autosend, and on self-fetch and native-push alike it is rejected as \" +",
-				"\t\t\"backend-liveness-unsupported. LOCK: taken for a control-socket-DOMAIN dispatch — the live send AND \" +"
+				"\t\t\"owned-outcome wakes a DORMANT socket-domain citizen by spawn-bg resume ONLY and is never auto-converted. \" +"
 			],
 			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
 			"timeoutSeconds": 60,
-			"signature": "[QK:V2SURF-MERGED-REJECT]",
+			"signature": "[QK:V2SURF-DORMANT-HONESTY]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "V2SURF-INDETERMINATE-NO-START",
+			"title": "the indeterminate hint reverts to a socket that \"answered\" and drops the no-start facts — overclaiming a reply that a permission-refused or timed-out probe never got",
+			"subject": "pi-extensions/lib/entwurf-v2-surface.ts",
+			"find": [
+				"\t\tcase \"indeterminate-no-spawn\":",
+				"\t\t\t// The socket probe did not settle, so liveness is UNKNOWN — an unestablished probe",
+				"\t\t\t// is not a measured death, and dispatching into it could double-deliver. Say",
+				"\t\t\t// \"the PROBE was inconclusive\", never \"the socket answered inconclusively\":",
+				"\t\t\t// `indeterminate` also covers a probe that got no answer at all, was refused by",
+				"\t\t\t// permissions, or timed out, and \"answered\" claims a reply that may never have",
+				"\t\t\t// existed. The wire id is FROZEN and still spells \"-no-spawn\"; it names the rule",
+				"\t\t\t// (never dispatch into an indeterminate target), not a capability that still",
+				"\t\t\t// exists. So the hint's job is to say plainly what did NOT happen: nothing",
+				"\t\t\t// delivered, nothing started.",
+				"\t\t\treturn (",
+				"\t\t\t\t\"the control-socket probe was inconclusive, so the target's liveness is UNKNOWN — this is not a \" +",
+				"\t\t\t\t\"measured death. NOTHING was delivered and NO process was started (the reason id keeps its frozen \" +",
+				"\t\t\t\t\"'-no-spawn' wire spelling from an era when one could be; entwurf_v2 starts nothing on any rail). \" +",
+				"\t\t\t\t\"Re-run entwurf_peers to re-probe; if it stays indeterminate, check for a stale socket file left at \" +",
+				"\t\t\t\t\"that garden id by a session that died without cleaning up.\"",
+				"\t\t\t);"
+			],
+			"replace": [
+				"\t\tcase \"indeterminate-no-spawn\":",
+				"\t\t\treturn \"the target's control socket answered inconclusively; retry.\";"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2SURF-INDETERMINATE-NO-START]",
+			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
+		},
+		{
+			"claim": "V2SURF-PEERS-DEAD-ROW",
+			"title": "entwurf_peers drops the dead-row sentence, so a dormant citizen is listed with nothing saying it is unreachable",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\t\t\"row. A `dead` row is a REPORTED FACT and nothing more: that citizen is dormant and is \" +",
+				"\t\t\"currently unreachable by any verb, so listing it grants no action — appearing here is not \" +",
+				"\t\t\"an invitation to dispatch. In particular `unsupported` does NOT mean mailbox: it means this backend has no \" +"
+			],
+			"replace": ["\t\t\"row. In particular `unsupported` does NOT mean mailbox: it means this backend has no \" +"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-surface"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2SURF-PEERS-DEAD-ROW]",
 			"signatureSource": "scripts/check-entwurf-v2-surface.ts"
 		},
 		{

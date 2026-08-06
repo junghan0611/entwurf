@@ -127,7 +127,7 @@ export async function executeControlSocketSend(
 	const held = lock as LockClaim;
 
 	// Lock-leak backstop: once the lock is held, ANY throw out of the drive — a
-	// contract-violation guard (spawn-bg re-resolve), the mis-route assert, even a buggy
+	// contract-violation guard, the mis-route assert, even a buggy
 	// dep that throws where it should return — must still release the lock before it
 	// propagates. A leaked lock pins the gid forever (5a's worst failure). So convert any
 	// such throw into a `failed` final outcome, run finalizeRelease (which releases on
@@ -212,14 +212,9 @@ async function driveDeadFallback(
 			} catch (err) {
 				return { outcome: "failed", error: err };
 			}
-		case "spawn-bg":
-			// A SEND fallback must never re-resolve into a spawn — that is a decider
-			// contract violation (a send and a spawn are different actions), so fail loud
-			// rather than silently mis-execute.
-			throw new Error("entwurf-v2-send: re-resolve returned a spawn-bg plan for a send fallback (contract violation).");
 		case "native-push":
 			// The dead-control-socket fallback re-resolves only the pi socket domain
-			// (control-socket / mailbox / spawn); it never routes the native-push rail. A
+			// (control-socket / mailbox); it never routes the native-push rail. A
 			// native-push rePlan here is structurally impossible — fail loud.
 			throw new Error(
 				"entwurf-v2-send: re-resolve returned a native-push plan for a send fallback (contract violation).",

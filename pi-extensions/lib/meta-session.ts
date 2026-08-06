@@ -514,7 +514,7 @@ export function parseMetaIdentity(json: string): MetaIdentity {
 // `wakeMode` describes the last centimetre, not citizen rank. The control-socket
 // adapter injects the body into a pi turn, so backend `pi` is `direct-inject`;
 // Claude's mailbox is `self-fetch`; native-push adapters are direct injection.
-// Dormant spawn-bg resume is a separate transport/ownership decision and does not
+// Resuming a dormant citizen is a separate lifecycle capability and does not
 // turn the pi record into a mailbox citizen.
 // ---------------------------------------------------------------------------
 

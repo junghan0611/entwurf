@@ -1,19 +1,18 @@
 /**
  * entwurf-core — sync entwurf execution, host-agnostic.
  *
- * DIRECT importers, MEASURED from the import graph (2026-07-27) — not from memory:
+ * DIRECT importers, RE-MEASURED from the import graph (2026-08-06) — not from memory:
  *   - pi-extensions/entwurf-control.ts (the pi adapter)
- *   - pi-extensions/lib/entwurf-v2-spawn-production.ts (v2 spawn-bg launch identity)
- *   - pi-extensions/lib/project-trust-handler.ts · lib/acp/augment.ts ·
- *     lib/native-push/adapter.ts
- *   - plus gates/smokes (check-shell-quote, check-package-source-routing, …)
+ *   - pi-extensions/lib/resume-launch-identity.ts (record-authoritative launch identity,
+ *     itself consumer-zero since the visible-first cut — see its header)
+ *   - plus gates/smokes (check-shell-quote, check-package-source-routing,
+ *     check-entwurf-session-identity, new-session-id, resolve-acp-bridge)
  *
- * The MCP bridge is a TRANSITIVE consumer, not a direct one, and the distinction is the
- * whole point: `mcp/entwurf-bridge/src/index.ts → entwurf-v2-surface.ts →
- * entwurf-v2-production.ts → entwurf-v2-spawn-production.ts → entwurf-core.ts`. So the old
- * header's claim — that the bridge imports this shared implementation the way a v1 tool
- * surface did — was false, but so is "the bridge does not reach it": it reaches it at
- * runtime, only for spawn-bg production.
+ * The MCP bridge does NOT reach this module on any path, and that changed with the cut:
+ * its one edge ran `index.ts → entwurf-v2-surface.ts → entwurf-v2-production.ts →
+ * entwurf-v2-spawn-production.ts → entwurf-core.ts`, and the spawn-production link was
+ * deleted with the `spawn-bg` transport. Do not restate the old "transitive consumer,
+ * for spawn-bg production" line; re-measure before claiming either way.
  *
  * NOT consumers on any path: `pi-extensions/entwurf.ts` (the v1 pi native tool surface) and
  * `pi-extensions/lib/entwurf-async.ts` were REMOVED in the 0.12 cutover. Do not reintroduce
@@ -131,9 +130,9 @@ export function normalizeCodexEntwurfModelForAcp(model?: string): string | undef
 // The Entwurf Target Registry is GONE (#50 C3). `pi/entwurf-targets.json` and its
 // reader chain (loadEntwurfTargets / resolveEntwurfTarget / EntwurfRegistryError +
 // the ~/.pi/agent symlink machinery) were the v1 "narrow door" for spawn-model
-// policy — but v2 never spawns from a model tuple: entwurf_v2 resumes an
-// already-identified record-backed citizen, and the model axis is the citizen's
-// own (Identity Preservation Rule). The last readers were the RT-dead
+// policy — but v2 never spawns at all, from a model tuple or otherwise: entwurf_v2
+// addresses an already-identified record-backed citizen, and the model axis is the
+// citizen's own (Identity Preservation Rule). The last readers were the RT-dead
 // buildSessionName mirror and the v1 spawn guard, both swept with this cut.
 // Bridge-extension routing for provider=entwurf survives below (getRegistryRouting
 // ← scripts/resolve-acp-bridge.ts) and takes a caller-supplied target — no file.
@@ -211,7 +210,8 @@ const SESSION_READ_CHUNK_BYTES = 64 * 1024;
  *     old name-mirror integrity check and the `requireEntwurf` name-tag
  *     authorization are gone (#50 C3): resume authorization is record existence,
  *     and transcript integrity is the caller's header-id ↔ record.nativeSessionId
- *     check (entwurf-v2-spawn-production.resolveResumeLaunchIdentity).
+ *     check (resume-launch-identity.resolveResumeLaunchIdentity — the leaf that
+ *     outlived the spawn-bg factory it used to sit in).
  */
 export interface RecordedSessionIdentity {
 	/** JSONL header `id` (pi's own session id — the record's `nativeSessionId`). */

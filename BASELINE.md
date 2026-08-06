@@ -245,8 +245,8 @@ the same conversation must have a garden id.
 | Q-AGY-CONCURRENCY | Evidence boundary | Separate agy processes have separate pid/start-key markers; same-pid concurrent model invocation is explicitly reported unsupported. | Claims that one pid can safely identify two simultaneously invoking conversations. |
 
 The replyability formula is **record-backed identity AND live native-push probe**.
-There is intentionally no receiver marker, `watchArmed`, mailbox, or owned-outcome
-resume authority. The model field may exist in the meta-record/status display,
+There is intentionally no receiver marker, `watchArmed`, mailbox, or resume
+authority (no rail has one since the visible-first cut). The model field may exist in the meta-record/status display,
 but `agentId=meta-session/antigravity` is the stable sender contract.
 
 Recorded operator evidence (2026-07-13): automatic birth → gid/statusline → MCP

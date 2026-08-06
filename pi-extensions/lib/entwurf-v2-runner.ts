@@ -6,9 +6,9 @@
  * to the right 5c transport hand, returning ONE outcome-rich `EntwurfV2RunResult`. It performs
  * ZERO IO of its own and makes ZERO routing decisions — `decideDispatch` chose the plan,
  * this only DISPATCHES it. Each hand is an injected dep (the gate fakes them; 5d-2 wires
- * the production `executeControlSocketSend` / `executeSpawnBgResume` / production
- * `sendViaMailbox`), so the routing + result mapping is gate-provable without a socket,
- * spawn, or timer — the same pure-before-IO, IO-via-dep discipline 5b/5c kept.
+ * the production `executeControlSocketSend` / `sendViaMailbox` / native-push sender), so
+ * the routing + result mapping is gate-provable without a socket — the same
+ * pure-before-IO, IO-via-dep discipline 5b/5c kept.
  *
  * Why a result type richer than the receipt: the carry-over contracts from 5c demand it.
  *   - N3 (5c-2b): a dead-path re-resolve `rejected` carries the resolver's `rejectReason`
@@ -19,8 +19,6 @@
  *     re-send would double-deliver. The runner surfaces this as `execution-failed` with
  *     `finalizedOutcome` + `releaseFailed` so the surface renders "delivered, lock dirty,
  *     do NOT retry", never "send failed".
- *   - spawn-bg `lock-retained` is a RETURNED result (fail-closed, not a throw): it rides
- *     the `executed` branch so 5d's surface can render the retained-lock diagnostic.
  *
  * `retrySafe` is conservatively `false` on EVERY `execution-failed`: a thrown send is
  * never confidently retry-safe (an `indeterminate` connect may have delivered to an
@@ -47,17 +45,15 @@ import {
 	SendDeliveredReleaseFailedError,
 	type SendFinalOutcome,
 } from "./entwurf-v2-send.ts";
-import type { SpawnBgPlan, SpawnBgResumeResult } from "./entwurf-v2-spawn.ts";
 
 /**
  * The three transport hands, each PRE-BOUND with its own deps (production or fake). Lock
  * is typed `LockClaim | null` to mirror the real hands EXACTLY — the runner passes
  * `decision.lock` straight through and the hand fails loud on a null/mis-paired lock
- * (control-socket / spawn-bg get a non-null claim; meta-mailbox gets null — ？7).
+ * (control-socket gets a non-null claim; meta-mailbox and native-push get null — ？7 / 봉인 4).
  */
 export interface DispatchExecutorDeps {
 	sendControl: (plan: ControlSocketPlan, lock: LockClaim | null) => Promise<ControlSocketSendResult>;
-	resumeSpawnBg: (plan: SpawnBgPlan, lock: LockClaim | null) => Promise<SpawnBgResumeResult>;
 	sendMailbox: (plan: MetaMailboxPlan, lock: LockClaim | null) => Promise<RpcSendResult>;
 	// native-push (봉인 4): lock-free like meta-mailbox — the runner passes the null lock
 	// verbatim and the hand ignores it. Owns the 1-shot re-probe→re-send retry internally.
@@ -66,12 +62,10 @@ export interface DispatchExecutorDeps {
 
 /** The per-transport success outcome, discriminated by transport so the surface renders
  * each without guessing. `control-socket` carries the optional N3 `rejectReason`;
- * `spawn-bg` carries the whole `SpawnBgResumeResult` (incl. the `lock-retained`
- * fail-closed diagnostic); `meta-mailbox` is always `success:true` (enqueue has no
- * in-band refuse — a failure is a throw, handled as `execution-failed`). */
+ * `meta-mailbox` is always `success:true` (enqueue has no in-band refuse — a failure is
+ * a throw, handled as `execution-failed`). */
 export type ExecutedOutcome =
 	| { transport: "control-socket"; outcome: SendFinalOutcome; rejectReason?: string }
-	| { transport: "spawn-bg"; result: SpawnBgResumeResult }
 	| { transport: "meta-mailbox"; success: true }
 	// native-push carries `retried` so the surface can note the 1-shot re-probe retry fired.
 	| { transport: "native-push"; success: true; retried: boolean };
@@ -140,15 +134,6 @@ export async function executeDispatch(
 					};
 				}
 				// A `failed` send rethrows its original transport error (lock already released).
-				return { kind: "execution-failed", receipt, transport, error: errorMessage(err), retrySafe: false };
-			}
-		}
-		case "spawn-bg": {
-			try {
-				// `lock-retained` is a RETURNED result (fail-closed), not a throw — it rides `executed`.
-				const result = await deps.resumeSpawnBg(plan, lock);
-				return { kind: "executed", receipt, transport, outcome: { transport: "spawn-bg", result } };
-			} catch (err) {
 				return { kind: "execution-failed", receipt, transport, error: errorMessage(err), retrySafe: false };
 			}
 		}

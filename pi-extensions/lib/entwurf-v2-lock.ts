@@ -1,12 +1,21 @@
 /**
  * entwurf-v2-lock — the per-gid dispatch lock primitive (0.11 Stage 0 step 5a,
- * 버킷 B F2). LOAD-BEARING: the guard against a double-spawn of the same dormant
- * target by two V2 dispatchers that share the substrate through different entry
- * points. SCOPE (honest): this protects v2/v2 only. It was written while the legacy
- * `entwurf_resume` still ran unchanged (동결결정 10 scope A) without taking this
- * lock, which left a v2/legacy concurrent-resume gap. That verb was REMOVED in the
- * 0.12 cutover, so the gap is closed by subtraction — not by this lock growing to
- * cover it. Any NEW resume entry point must take this lock or the gap reopens.
+ * 버킷 B F2). LOAD-BEARING, and its SHIPPED ROLE HAS NARROWED: today it serializes
+ * concurrent in-domain dispatch at one garden id, so two V2 dispatchers entering
+ * the substrate through different entry points cannot interleave against the same
+ * control socket.
+ *
+ * It was BORN as a double-spawn guard: the dormant cell's `spawn-bg` resume ran
+ * under this same lock, and "two dispatchers resume one citizen twice" was the
+ * failure it was designed against. That transport was withdrawn under the
+ * visible-first rule, so no shipped path can double-launch anything — the
+ * mechanism below is unchanged, the threat model it currently answers is smaller.
+ * Read every "double-spawn" note in this file as the ORIGINAL motivation, kept
+ * because it explains why the reclaim rules are as strict as they are.
+ *
+ * SCOPE (honest): this protects v2/v2 only. Any NEW resume entry point — the
+ * visible same-id resume, when it lands — MUST take this lock, or the original
+ * concurrent-resume gap reopens the day a relaunch path exists again.
  *
  * ENVIRONMENT ASSUMPTION (stale reclaim): `hostname` equality is used as the
  * proxy for "same machine", so a holder pid is reclaim-probed with kill(0) only

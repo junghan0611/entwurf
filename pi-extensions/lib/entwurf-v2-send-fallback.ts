@@ -18,17 +18,18 @@
  * must read the same row. That pin is also what makes "no resume promotion" structural,
  * not just a 5c-2a guard: the `fire-and-forget` row has NO resume cell —
  *   live          → send / control-socket   (the retry)
- *   dormant(dead) → reject (dormant-fire-forget-unsupported)  ← NOT resume/spawn-bg
+ *   dormant(dead) → reject (dormant-fire-forget-unsupported)  ← nothing is launched
  *   indeterminate → reject (indeterminate-no-spawn)
- * Only `owned-outcome + dormant` is resume/spawn-bg, and an owned-outcome dispatch never
- * yields a control-socket send plan in the first place. So a dead re-resolve can only
- * retry (alive), reject (dead/indeterminate pi), or — on an UNSUPPORTED backend, via the
- * separate mailbox mini-table — enqueue to a deliverable citizen. It can never spawn.
+ * Since the visible-first cut there is no resume cell ANYWHERE — the intent that owned one
+ * is gone from the contract — so a dead re-resolve can only retry (alive), reject
+ * (dead/indeterminate pi), or — on an UNSUPPORTED backend, via the separate mailbox
+ * mini-table — enqueue to a deliverable citizen. It can never start a process.
  *
- * The N2 asymmetry (frozen in entwurf-v2-contract): in-domain `dormant` is a CONFIRMED
- * not-running pi → reject (enqueuing would be a silent pileup; resume is the honest
- * place, and resume is out of a SEND fallback's scope). `unsupported` is UNKNOWN liveness
- * with no socket axis → the mailbox is its honest channel when deliverable.
+ * The N2 asymmetry (frozen in entwurf-v2-contract) is a RECEIVER question, not a backend
+ * privilege: a mailbox is offered only where an active receiver actually drains it. An
+ * `unsupported` citizen gets one exactly while `mailboxDeliverable` holds, and is rejected as
+ * `mailbox-undeliverable` the moment it does not. An in-domain `dormant` pi is a CONFIRMED
+ * not-running session, so nothing would ever drain that enqueue — a silent pileup → reject.
  */
 
 import type { MailboxDeliverabilityResult } from "./entwurf-deliverability.ts";
@@ -143,8 +144,8 @@ export async function resolveDeadControlSendFallback(
 		return { kind: "reject", reason: receipt.reason };
 	}
 	// fire-and-forget + live is the ONLY in-domain allow cell → control-socket send. A
-	// resume/spawn-bg or meta-mailbox transport here would be a frozen-table drift, so
-	// fail loud rather than mis-route a SEND fallback into a child spawn.
+	// meta-mailbox transport here would be a frozen-table drift, so fail loud rather than
+	// mis-route a SEND fallback onto another rail.
 	if (receipt.transport !== "control-socket") {
 		throw new Error(
 			`entwurf-v2-send-fallback: in-domain fire-and-forget re-resolve yielded unexpected transport (${receipt.transport}) — table drift.`,

@@ -7,7 +7,8 @@
  *      pass through, absent `mode`/`wants_reply` stay undefined (decider defaults, no double).
  *   2. renderEntwurfV2Result — each result kind → the right `{ text, isError }`, surfacing the
  *      carry-overs: reject reason + target-locked diagnostic / control N3 rejectReason /
- *      spawn lock-retained diagnostic / N1 delivered-but-lock-dirty.
+ *      N1 delivered-but-lock-dirty — plus the two reject HINTS an operator meets after the
+ *      visible-first cut (dormant-fire-forget-unsupported, indeterminate-no-spawn).
  *   3. surface source guard — `entwurf-v2-surface.ts` is ctx-free (no ExtensionContext/API).
  *   4. control wiring guard — `entwurf-control.ts` registers `entwurf_v2`, reaches the fence
  *      ONLY via a NON-LITERAL dynamic import (a string-const specifier), NEVER a static import
@@ -23,8 +24,6 @@ import { fileURLToPath } from "node:url";
 import type { EntwurfV2RunResult } from "../pi-extensions/lib/entwurf-v2-runner.ts";
 import {
 	actionableRejectHint,
-	ENTWURF_PREFIX_ROOTS_ENV,
-	parseEntwurfPrefixRootsEnv,
 	renderEntwurfV2Result,
 	type SurfaceEntwurfV2Params,
 	toDispatchInput,
@@ -64,13 +63,12 @@ function modelText(slice: string): string {
  * unsupported-citizen outcome set in ways the code does not support. Measured against
  * source, not prose:
  *  - LOCK: `entwurf-v2-decider.ts` returns a held claim ONLY on the control-socket-domain
- *    branch — and that branch covers the live send AND the dormant cell's spawn-bg resume.
- *    The mailbox and native-push branches both carry `lock: null`. "socket paths take a
- *    per-target lock" read as "the socket transport locks", which got spawn-bg (a SEPARATE
- *    relaunch transport that nonetheless locks) and native-push (a live send that does NOT)
- *    exactly backwards.
+ *    branch. The mailbox and native-push branches both carry `lock: null`. "socket paths
+ *    take a per-target lock" read as "the socket transport locks", which got native-push
+ *    (a live send that does NOT lock) exactly backwards. The DOMAIN wording survived the
+ *    visible-first cut; the second in-domain transport it also covered did not.
  *  - MODE: `mode` exists on exactly ONE ExecutionPlan variant, `control-socket`. The
- *    meta-mailbox and native-push plans have no such field and spawn-bg says so in a comment.
+ *    meta-mailbox and native-push plans have no such field.
  *    "mode applies to a live send" is false for native-push, which IS a live send.
  *  - THIRD RESULT: `resolveDispatch` downgrades the unsupported fire-and-forget cell to
  *    `mailbox-undeliverable` when the separate deliverability fact is false, so an
@@ -90,10 +88,9 @@ function assertRailSemantics(tag: string, longDescRaw: string, intentDescRaw: st
 		`${tag} — long description scopes the per-target lock to the control-socket DOMAIN [QK:V2SURF-MCP-LOCK-DOMAIN]`,
 		/control-socket-DOMAIN\s+dispatch/.test(longDesc) && /lock-free/.test(longDesc),
 	);
-	ok(
-		`${tag} — long description says spawn-bg ALSO runs under that domain's lock`,
-		/spawn-bg/.test(longDesc) && /still runs under that domain's lock/.test(longDesc),
-	);
+	// The spawn-bg half of this claim went with the transport itself (visible-first cut): there is
+	// no second in-domain transport left to run under the lock, so asserting one would be a green
+	// gate proving retired behavior. What survives is the DOMAIN scope, pinned just above.
 	ok(
 		`${tag} — long description says the mailbox AND native-push rails are lock-free`,
 		/mailbox and native-push rails are lock-free/.test(longDesc),
@@ -151,6 +148,69 @@ function assertRailSemantics(tag: string, longDescRaw: string, intentDescRaw: st
 	ok(
 		`${tag} — mode param no longer calls itself "Delivery mode for a live send"`,
 		!/Delivery mode for a live send/.test(modeDesc) && !/\bfor a live send\b/.test(modeDesc),
+	);
+}
+
+/**
+ * DORMANT HONESTY — the model-facing replacement for the retired `V2SURF-MERGED-REJECT` claim,
+ * whose subject (two distinct OWNED rejects) left with the `owned-outcome` intent.
+ *
+ * After the visible-first cut a dormant socket-domain citizen is unreachable by every verb, and
+ * these four strings are the only place a caller learns that BEFORE spending a dispatch. So each
+ * one must, on its own:
+ *   - name the reason it will actually get back (`dormant-fire-forget-unsupported`);
+ *   - name the intent that used to answer there (`owned-outcome`) — silently deleting it leaves
+ *     an operator who read last week's docs with no way to find out what happened;
+ *   - say it was `withdrawn`, ADJACENTLY to that name. Presence alone is not enough: naming a
+ *     retired intent without the retirement verb beside it reads as an offer, which is exactly
+ *     the "advertised as selectable" failure this claim exists to forbid;
+ *   - carry NEITHER retired advertisement form (`owned-outcome = …` enum styling, or the old
+ *     "DORMANT socket-domain citizen … never auto-converted" sentence that described picking it).
+ *
+ * ORDER IS LOAD-BEARING, and not for readability. `ok` throws on the FIRST failure, and the kill
+ * signature is read off the failing line — so the `[QK:…]` label must sit on the assertion this
+ * claim's mutant reaches FIRST. That mutant drops the reason AND the withdrawal in one edit; with
+ * the reason check leading, an UNLABELLED line would throw first and the kill would read as
+ * WRONG-REASON. The adjacency check therefore goes first and carries the only token; the other two
+ * run unlabelled behind it — still real assertions, just not this claim's signature.
+ */
+function assertDormantHonesty(tag: string, rawText: string): void {
+	const text = modelText(rawText);
+	const at = text.indexOf("owned-outcome");
+	ok(
+		`${tag} — names the withdrawn intent owned-outcome and says "withdrawn" beside it (not as an offer) [QK:V2SURF-DORMANT-HONESTY]`,
+		at >= 0 && /withdrawn/.test(text.slice(at, at + 200)),
+	);
+	ok(`${tag} — names the reason a dormant target actually returns`, /dormant-fire-forget-unsupported/.test(text));
+	ok(
+		`${tag} — never advertises owned-outcome as selectable`,
+		!/owned-outcome\s*=/.test(text) && !/DORMANT socket-domain citizen/.test(text) && !/auto-converted/.test(text),
+	);
+}
+
+/**
+ * PEERS DEAD-ROW HONESTY. `entwurf_peers` is a FACT surface and stays one: this claim must never
+ * be satisfiable by adding a per-row action/routing field, which is why it is asserted on the
+ * DESCRIPTION and paired with a negative that forbids the row-level fix. What the description owes
+ * a caller is that `dead` is a reported fact carrying no invitation — the citizen is dormant and,
+ * since the visible-first cut, reachable by no verb at all.
+ */
+function assertPeersDeadRowHonesty(tag: string, rawBlock: string): void {
+	const text = modelText(rawBlock);
+	ok(
+		`${tag} — entwurf_peers says a dead/dormant row is a REPORTED FACT that grants no action [QK:V2SURF-PEERS-DEAD-ROW]`,
+		/REPORTED FACT/.test(text) && /grants no action/.test(text) && /not an invitation to dispatch/.test(text),
+	);
+	ok(
+		`${tag} — entwurf_peers calls a dead row currently unreachable by any verb`,
+		/dormant/.test(text) && /unreachable by any verb/.test(text),
+	);
+	// The forbidden repair: teaching the row itself to carry a verb. The facts-only rule is what
+	// keeps this surface from becoming a second dispatch table, so a description that promised a
+	// per-row action would be a worse fix than the confusion it removes.
+	ok(
+		`${tag} — entwurf_peers still denies per-row routing verbs (facts-only)`,
+		/never per-row routing verbs|no per-row routing field/.test(text),
 	);
 }
 
@@ -227,7 +287,7 @@ async function main(): Promise<void> {
 	{
 		const full: SurfaceEntwurfV2Params = {
 			target: GID,
-			intent: "owned-outcome",
+			intent: "fire-and-forget",
 			message: "hi",
 			mode: "steer",
 			wants_reply: true,
@@ -235,7 +295,7 @@ async function main(): Promise<void> {
 		const di = toDispatchInput(full);
 		ok(
 			"1: target/intent/message pass through",
-			di.target === GID && di.intent === "owned-outcome" && di.message === "hi",
+			di.target === GID && di.intent === "fire-and-forget" && di.message === "hi",
 		);
 		ok("1: wants_reply → wantsReply (snake→camel)", di.wantsReply === true);
 		ok("1: mode passes through", di.mode === "steer");
@@ -301,41 +361,9 @@ async function main(): Promise<void> {
 			cr.isError && cr.text.includes("dormant-fire-forget-unsupported"),
 		);
 
-		// spawn lock-retained → fail-closed diagnostic
-		const retained: EntwurfV2RunResult = {
-			kind: "executed",
-			receipt: { ...SUCCESS_RECEIPT, transport: "spawn-bg" },
-			transport: "spawn-bg",
-			outcome: {
-				transport: "spawn-bg",
-				result: {
-					kind: "lock-retained",
-					released: false,
-					reason: "observe-failed",
-					diagnostic: {
-						targetGardenId: GID,
-						lockPath: "/locks/x.lock",
-						expectedSocketPath: "/ctl/x.sock",
-						observeTimeoutMs: 30000,
-						killGraceMs: 5000,
-					},
-				},
-			},
-		};
-		const ret = renderEntwurfV2Result(retained);
-		ok(
-			"2: spawn lock-retained → isError + diagnostic surfaced",
-			ret.isError && ret.text.includes("LOCK RETAINED") && ret.text.includes("/locks/x.lock"),
-		);
-
-		// spawn socket-alive → delivered
-		const alive: EntwurfV2RunResult = {
-			kind: "executed",
-			receipt: { ...SUCCESS_RECEIPT, transport: "spawn-bg" },
-			transport: "spawn-bg",
-			outcome: { transport: "spawn-bg", result: { kind: "socket-alive", released: true, pid: 7 } },
-		};
-		ok("2: spawn socket-alive → not error", !renderEntwurfV2Result(alive).isError);
+		// The two spawn-bg render cells (lock-retained / socket-alive) were deleted with the
+		// transport itself. Nothing renders them anymore, and `EntwurfV2Transport` no longer
+		// admits the literal — a cell kept here would only prove the type is still wrong.
 
 		// meta-mailbox → enqueued
 		const mailbox: EntwurfV2RunResult = {
@@ -373,17 +401,6 @@ async function main(): Promise<void> {
 			!renderEntwurfV2Result(npRetried).isError && renderEntwurfV2Result(npRetried).text.includes("retry"),
 		);
 
-		// native-push owned reject → hint to switch to fire-and-forget
-		const npReject: EntwurfV2RunResult = {
-			kind: "rejected",
-			receipt: { ok: false, reason: "native-push-no-resume-authority", observedLiveness: "alive" },
-		};
-		const npRej = renderEntwurfV2Result(npReject);
-		ok(
-			"2: native-push-no-resume-authority → isError + fire-and-forget hint",
-			npRej.isError && npRej.text.includes("fire-and-forget"),
-		);
-
 		// N1: execution-failed with finalizedOutcome + releaseFailed → delivered-but-dirty
 		const n1: EntwurfV2RunResult = {
 			kind: "execution-failed",
@@ -410,28 +427,65 @@ async function main(): Promise<void> {
 		};
 		ok("2: plain execution-failed → isError", renderEntwurfV2Result(failed).isError);
 
-		// Detour B (B-a): backend-liveness-unsupported reject → still a reject (isError),
-		// but the text carries the actionable "use fire-and-forget → mailbox" hint. The
-		// reject stays honest (reason unchanged, no auto-convert) — only the render guides.
-		const metaReject: EntwurfV2RunResult = {
+		// Detour B (B-a) after the visible-first cut: the two OWNED rejects this block used to
+		// exercise (`backend-liveness-unsupported`, `owned-live-no-autosend`) left the reason
+		// union with the intent that produced them. The cell that now carries the whole cost of
+		// the cut is `dormant-fire-forget-unsupported`, and it is the one an operator actually
+		// meets — so it, not a retired reason, is what this block must prove.
+		const dormantReject: EntwurfV2RunResult = {
 			kind: "rejected",
-			receipt: { ok: false, reason: "backend-liveness-unsupported", observedLiveness: "unsupported" },
+			receipt: { ok: false, reason: "dormant-fire-forget-unsupported", observedLiveness: "dead" },
 		};
-		const mr = renderEntwurfV2Result(metaReject);
+		const dr = renderEntwurfV2Result(dormantReject);
 		ok(
-			"2: backend-liveness-unsupported reject → isError + actionable fire-and-forget/mailbox hint",
-			mr.isError &&
-				mr.text.includes("backend-liveness-unsupported") &&
-				mr.text.includes("fire-and-forget") &&
-				mr.text.includes("mailbox"),
+			"2: dormant-fire-forget-unsupported reject → isError + reason surfaced",
+			dr.isError && dr.text.includes("dormant-fire-forget-unsupported"),
+		);
+		// The dormant hint is the ONLY place a caller learns why an id that entwurf_peers listed
+		// is unreachable. A reader who takes "reject" for "wrong id" goes looking in the wrong
+		// place, so the hint must distinguish the two: record intact, session not running.
+		const dormantHint = actionableRejectHint("dormant-fire-forget-unsupported") ?? "";
+		ok(
+			"2B: dormant hint separates 'record intact' from 'session not running' (not a bad id)",
+			/record is intact/.test(dormantHint) && /session is not running/.test(dormantHint),
 		);
 		ok(
-			"2B: actionableRejectHint guides meta-session owned → fire-and-forget mailbox",
-			(actionableRejectHint("backend-liveness-unsupported") ?? "").includes("fire-and-forget"),
+			"2B: dormant hint names the withdrawn intent and the visible-first rule, and hands the operator the manual move",
+			/owned-outcome|resume that used to answer here/.test(dormantHint) &&
+				/withdrawn/.test(dormantHint) &&
+				/visible-first/.test(dormantHint) &&
+				/Re-open the session yourself/.test(dormantHint),
 		);
+		// The frozen wire id still spells "-no-spawn" although nothing spawns anymore. The id is
+		// deliberately NOT renamed (renaming a public reject is its own contract cut), so the
+		// hint carries the whole correction: probe inconclusive, and nothing ran.
+		const indetReject: EntwurfV2RunResult = {
+			kind: "rejected",
+			receipt: { ok: false, reason: "indeterminate-no-spawn", observedLiveness: "indeterminate" },
+		};
+		const ir = renderEntwurfV2Result(indetReject);
 		ok(
-			"2B: actionableRejectHint guides owned-live → fire-and-forget",
-			(actionableRejectHint("owned-live-no-autosend") ?? "").includes("fire-and-forget"),
+			"2: indeterminate-no-spawn reject → isError + reason surfaced",
+			ir.isError && ir.text.includes("indeterminate-no-spawn"),
+		);
+		const indetHint = actionableRejectHint("indeterminate-no-spawn") ?? "";
+		// ORDER IS LOAD-BEARING (same rule as assertDormantHonesty): `ok` throws on the FIRST
+		// failure and the kill signature is read off the failing line, so the labelled assertion
+		// must be the one this claim's mutant reaches first. Its terse replacement text fails the
+		// length floor too — leading with that UNLABELLED check would throw first and the kill
+		// would read as WRONG-REASON. The no-start facts are also the claim's actual subject, so
+		// they lead and carry the only token; existence/UNKNOWN run unlabelled behind them.
+		ok(
+			"2B: indeterminate hint states NOTHING was delivered and NO process was started " +
+				"[QK:V2SURF-INDETERMINATE-NO-START]",
+			/NOTHING was delivered/.test(indetHint) && /NO process was started/.test(indetHint),
+		);
+		ok("2B: indeterminate hint exists at all (the frozen '-no-spawn' id cannot explain itself)", indetHint.length > 80);
+		// "the PROBE was inconclusive", never "the socket answered": `indeterminate` also covers a
+		// probe that got no answer, was refused by permissions, or timed out.
+		ok(
+			"2B: indeterminate hint says the PROBE was inconclusive and liveness is UNKNOWN, not a measured death",
+			/probe was inconclusive/.test(indetHint) && /UNKNOWN/.test(indetHint) && /not a measured death/.test(indetHint),
 		);
 		ok(
 			"2B: actionableRejectHint returns undefined for a reject with no next step",
@@ -450,22 +504,11 @@ async function main(): Promise<void> {
 		);
 	}
 
-	// ── 6: parseEntwurfPrefixRootsEnv (5d-4b operator-policy SSOT) ─────────────
-	{
-		const D = path.delimiter;
-		ok("6: env name is ENTWURF_PREFIX_ROOTS", ENTWURF_PREFIX_ROOTS_ENV === "ENTWURF_PREFIX_ROOTS");
-		ok("6: undefined → [] (no prefix promotion)", parseEntwurfPrefixRootsEnv(undefined).length === 0);
-		ok("6: empty string → []", parseEntwurfPrefixRootsEnv("").length === 0);
-		ok("6: delimiters-only → []", parseEntwurfPrefixRootsEnv(`${D}${D}`).length === 0);
-		const two = parseEntwurfPrefixRootsEnv(`/repos/gh${D}/repos/work`);
-		ok("6: delimiter-separated → entries", two.length === 2 && two[0] === "/repos/gh" && two[1] === "/repos/work");
-		const trimmed = parseEntwurfPrefixRootsEnv(`  /a ${D} ${D} /b  `);
-		ok("6: trims + drops empty segments", trimmed.length === 2 && trimmed[0] === "/a" && trimmed[1] === "/b");
-		// A nonexistent/typo path is KEPT verbatim (no throw, no validation) — preflight's
-		// normalize handles it, and a typo must never broaden approve nor fail the dispatch.
-		const typo = parseEntwurfPrefixRootsEnv("/this/does/not/exist");
-		ok("6: nonexistent path kept verbatim (no throw)", typo.length === 1 && typo[0] === "/this/does/not/exist");
-	}
+	// ── 6: RETIRED — parseEntwurfPrefixRootsEnv / ENTWURF_PREFIX_ROOTS ────────
+	// The prefix-roots env SSOT existed to feed the trust preflight, and the preflight existed
+	// to guard the resume verdict. Both left with the intent. The surface no longer exports
+	// either symbol, so there is nothing here to certify — and a gate that kept parsing a
+	// deleted export would be testing itself.
 
 	// ── 3: surface source guard — ctx-free ────────────────────────────────────
 	{
@@ -510,7 +553,7 @@ async function main(): Promise<void> {
 			!/import[^;]*from\s*"\.\/lib\/entwurf-self-address\.(js|ts)"/.test(code),
 		);
 		// Every SHIPPED rail must appear in the model-facing text. Measured 2026-07-27: both
-		// surfaces described only control-socket/spawn-bg/mailbox and told the model that an
+		// surfaces described only control-socket/mailbox and told the model that an
 		// `unsupported` citizen is reached "→ mailbox" — false for Antigravity, whose native-push
 		// rail is intercepted BEFORE the mailbox mini-table and has no mailbox at all. A model
 		// reading that would pick mailbox semantics for a citizen that has none.
@@ -555,27 +598,7 @@ async function main(): Promise<void> {
 		] as const) {
 			ok(`4: pi-native — ${what} is isolated (non-vacuous)`, text.length > 120);
 			ok(`4: pi-native — ${what} names the native-push rail`, /native-push/.test(text));
-			// The two no-resume-authority rejects are DIFFERENT reasons: a native-push backend IS
-			// probe-measured, so calling its reject `backend-liveness-unsupported` is the exact lie
-			// `entwurf-v2-contract.ts:143` warns about in so many words.
-			ok(
-				`4: pi-native — ${what} separates the self-fetch and native-push owned rejects`,
-				/backend-liveness-unsupported/.test(text) && /native-push-no-resume-authority/.test(text),
-			);
-			// Direct tripwire for the exact sentence that shipped: merging the two backends under
-			// one reason. Presence-only pins cannot catch this — the merged claim can sit right
-			// beside the correct literals.
-			ok(
-				`4: pi-native — ${what} never merges the two backends under one reject reason`,
-				!/self-fetch and native-push alike/.test(text),
-			);
-			// Caller-intent steer (live-peer owned-outcome bug): owned-outcome is dormant-only and
-			// NEVER auto-converted. Pinned PER STRING — the file-wide version of this check could
-			// be satisfied by whichever description still carried it.
-			ok(
-				`4: pi-native — ${what} says owned-outcome is dormant-only + never auto-converted`,
-				/DORMANT socket-domain citizen/.test(text) && /auto-converted/.test(text),
-			);
+			assertDormantHonesty(`4: pi-native — ${what}`, text);
 		}
 		ok("4: pi-native — long description denies native-push a mailbox", /NO mailbox/.test(piLongDesc));
 		ok(
@@ -591,6 +614,20 @@ async function main(): Promise<void> {
 		const piModeDesc = sliceDescription(piV2Block, "mode: Type.Optional(", "wants_reply:");
 		assertRailSemantics("4: pi-native", piLongDesc, piIntentDesc, piModeDesc);
 		assertDescriptionFitsHostCap("4: pi-native", piLongDesc);
+
+		// 4b: pi-native entwurf_peers. Asserted on THIS surface too, not only the MCP one: the two
+		// descriptions are read by different callers (a resident pi model vs a sibling reaching in
+		// over MCP), and a correction that lands on one of them is a correction half the garden
+		// never sees. Same real-boundary rule as every other slice here.
+		const piPeersStart = src.indexOf('name: "entwurf_peers"');
+		const piPeersEnd = src.indexOf("parameters:", piPeersStart + 1);
+		ok(
+			"4b: pi-native — entwurf_peers description block has a REAL end boundary",
+			piPeersStart !== -1 && piPeersEnd > piPeersStart,
+		);
+		const piPeersBlock = src.slice(piPeersStart, piPeersEnd);
+		ok("4b: pi-native — entwurf_peers description is isolated (non-vacuous)", piPeersBlock.length > 200);
+		assertPeersDeadRowHonesty("4b: pi-native", piPeersBlock);
 	}
 
 	// ── 5: MCP bridge wiring guard ────────────────────────────────────────────
@@ -652,20 +689,7 @@ async function main(): Promise<void> {
 		] as const) {
 			ok(`5: MCP — ${what} is isolated (non-vacuous)`, text.length > 120);
 			ok(`5: MCP — ${what} names the native-push rail`, /native-push/.test(text));
-			ok(
-				`5: MCP — ${what} separates the self-fetch and native-push owned rejects [QK:V2SURF-MERGED-REJECT]`,
-				/backend-liveness-unsupported/.test(text) && /native-push-no-resume-authority/.test(text),
-			);
-			ok(
-				`5: MCP — ${what} never merges the two backends under one reject reason`,
-				!/self-fetch and native-push alike/.test(text),
-			);
-			// Same per-string caller-intent pin as block 4 (a sibling reaching in over MCP reads
-			// THIS description, not the pi-native one).
-			ok(
-				`5: MCP — ${what} says owned-outcome is dormant-only + never auto-converted`,
-				/DORMANT socket-domain citizen/.test(text) && /auto-converted/.test(text),
-			);
+			assertDormantHonesty(`5: MCP — ${what}`, text);
 		}
 		ok("5: MCP — long description denies native-push a mailbox", /NO mailbox/.test(mcpLongDesc));
 		ok(
@@ -697,6 +721,11 @@ async function main(): Promise<void> {
 			"5: MCP — entwurf_peers no longer claims `unsupported` does NOT mean unreachable",
 			!/does NOT mean unreachable/.test(peersBlock),
 		);
+		// Visible-first cut, operator-surface half: a dormant citizen still gets a row here, and a
+		// caller who reads "it is in the list" as "I can dispatch to it" spends a dispatch to find
+		// out otherwise. The FACT stays a fact — no per-row action field, no routing verb, which is
+		// the rule this surface exists under — so the correction has to live in the description.
+		assertPeersDeadRowHonesty("5: MCP", peersBlock);
 
 		// F-7: entwurf_inbox_read described itself as draining "your own" inbox while the handler
 		// passes the CALLER-SUPPLIED gardenId straight to readMetaInbox with no comparison against

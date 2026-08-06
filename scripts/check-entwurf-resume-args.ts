@@ -67,7 +67,7 @@ function main(): void {
 		ok("5 v2 --approve is before the prompt", args.indexOf("--approve") < args.length - 1);
 		ok("6 v2 provider laid out", valueAfter(args, "--provider") === "entwurf");
 		ok("6 v2 model laid out", valueAfter(args, "--model") === "claude-opus-5");
-		ok("6 v2 resumes by exact FILE (--session <abs path>)", valueAfter(args, "--session") === SESSION_FILE);
+		ok("6 the builder targets an exact FILE (--session <abs path>)", valueAfter(args, "--session") === SESSION_FILE);
 		ok(
 			"6 v2 carries NO --session-id (a garden id would MINT a session, not resume one)",
 			!args.includes("--session-id"),

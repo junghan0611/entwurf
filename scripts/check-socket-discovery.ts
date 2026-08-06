@@ -291,7 +291,7 @@ async function main(): Promise<void> {
 	}
 
 	// ── inspectControlSocketPath (5c-3c R1 — the path-addressed SSOT) ────────────────
-	// The 5c-3 spawn-bg watcher observes plan.expectedSocketPath and MUST inspect THAT exact
+	// A resume watcher observes an expected socket path and MUST inspect THAT exact
 	// path (no gid re-derivation). Proves the path-taking core classifies every branch
 	// identically to the gid wrapper, and that the wrapper just feeds it controlSocketPath(gid).
 	{

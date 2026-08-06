@@ -28,8 +28,8 @@
  *     The legacy bridge `getLiveSessions` guarded this (`entry.isSymbolicLink()`);
  *     deriving the listing from facts would drop that guard unless we re-assert it
  *     here. A symlinked socket is NEVER probed: a citizen owning one is forced to
- *     `dead` (→ dormant → resume a fresh process, never SEND to a hijacked
- *     listener); a record-less one is quarantined out of the listing entirely.
+ *     `dead` (→ dormant → an honest reject, never SEND to a hijacked listener);
+ *     a record-less one is quarantined out of the listing entirely.
  *     Both surface as `symlinkedGardenIds`.
  *   - MALFORMED NAME (P3): a `*.sock` whose stem is not a garden id has no citizen
  *     to correlate to and is dropped — but VISIBLY (`malformedNames`), not
@@ -127,7 +127,7 @@ export interface LstatLike {
 
 /**
  * Inspect the EXACT control-socket path given (no gid re-derivation) and classify it by
- * lstat alone. This is the path-addressed core of the inspection: the 5c-3 spawn-bg watcher
+ * lstat alone. This is the path-addressed core of the inspection: a resume watcher
  * observes `plan.expectedSocketPath` and MUST inspect that exact path (its contract forbids
  * re-deriving a path from the gid), so the path-taking form is the SSOT and
  * `inspectTargetControlSocket` is the thin gid→path wrapper over it. `lstatFn` is injectable

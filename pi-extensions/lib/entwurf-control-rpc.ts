@@ -37,12 +37,14 @@ export interface SenderEnvelope {
 
 /**
  * THE `<sender_info>` synthesis — the one place the sender envelope becomes
- * message text. Two consumers, one shape (#50 C3):
+ * message text. ONE consumer since the visible-first cut (#50 C3):
  *   - the live socket rail's RECEIVER (entwurf-control handleCommand("send")
- *     appends it to the delivered customMessage);
- *   - the dormant spawn-resume rail's SENDER (entwurf-v2-production appends it
- *     to the resume prompt, so a resumed citizen wakes knowing who called in
- *     exactly the shape a live delivery would have rendered).
+ *     appends it to the delivered customMessage).
+ *
+ * The second consumer was the dormant spawn-resume rail's SENDER, which appended
+ * the same shape to a resume prompt so a resumed citizen woke knowing who called.
+ * That rail is gone. The shape stays single-sourced here so a future VISIBLE
+ * resume renders an identical envelope rather than inventing a second one.
  * `wants_reply` is emitted only when explicitly true — an unset/false marker
  * renders nothing (etiquette marker, not transport contract).
  */

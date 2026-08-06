@@ -1207,14 +1207,12 @@ case "$REPO" in
     fi
     ;;
 esac
-# prefixRoots operator policy (5d-4b): the shared env SSOT both v2 surfaces read. Display
-# ONLY — the parser SSOT lives in entwurf-v2-surface.ts (proven by check-entwurf-v2-surface);
-# the doctor does NOT re-implement parsing. Unset ⇒ no prefix promotion (the safe default).
-if [ -z "${ENTWURF_PREFIX_ROOTS:-}" ]; then
-  ok "ENTWURF_PREFIX_ROOTS unset → no prefix auto-approve (preflight default trust)"
-else
-  ok "ENTWURF_PREFIX_ROOTS set → operator prefix-approve roots: $ENTWURF_PREFIX_ROOTS"
-fi
+# NOT REPORTED: ENTWURF_PREFIX_ROOTS. It was the operator-policy SSOT that both v2 surfaces
+# read to feed the dispatch-path trust preflight, and that preflight guarded the resume verdict
+# — so it left with `owned-outcome` in the visible-first cut. Nothing on the dispatch path reads
+# the variable now, and a doctor line saying "set → operator prefix-approve roots" would report a
+# knob that does nothing. Reporting an inert setting as live policy is the failure this doctor
+# exists to prevent, so the row is gone rather than softened.
 
 echo
 if [ "$fail" -eq 0 ]; then echo "meta-bridge doctor: PASS"; else echo "meta-bridge doctor: FAIL (see above)"; exit 1; fi

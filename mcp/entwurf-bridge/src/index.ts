@@ -11,7 +11,7 @@
  * Currently exposed tools (scope is deliberately narrow — anything that can live
  * as a local skill should live as a skill, not here):
  *   - entwurf_v2      — canonical delivery surface for existing garden citizens; the decider
- *                       chooses live control-socket send / dormant spawn-bg resume / meta-mailbox.
+ *                       chooses live control-socket send / meta-mailbox enqueue / native-push.
  *   - entwurf_peers   — entwurf fact surface: garden citizens (meta-records) with liveness +
  *                       diagnostics (#50 C4: record-less sockets surface THERE, never as identity).
  *                       Brain = pi-extensions/lib/entwurf-fact-provider (listEntwurfFacts) +
@@ -331,13 +331,12 @@ function abbreviateHomeMcp(cwd: string): string {
 
 // entwurf_v2 — the unified v2 dispatch verb (0.11 step 5d-3b). It hands the
 // target + intent to the 5b decider, which chooses the transport (live
-// control-socket send / spawn-bg resume / meta-mailbox enqueue / native-push
-// direct injection) and reports one outcome. The per-target lock is NOT taken by
-// every rail: the decider locks only a control-socket-domain dispatch, which
-// covers the live send AND the dormant cell's spawn-bg resume; the mailbox and
-// native-push branches carry `lock: null` (entwurf-v2-decider.ts). It runs
+// control-socket send / meta-mailbox enqueue / native-push direct injection) and
+// reports one outcome. The per-target lock is NOT taken by every rail: the decider
+// locks only a control-socket-domain dispatch; the mailbox and native-push branches
+// carry `lock: null` (entwurf-v2-decider.ts). It runs
 // IN-PROCESS here (the same production runner pi-native uses) — NOT a delegating
-// RPC — so control, mailbox, native-push, AND spawn-bg all flow through
+// RPC — so control, mailbox and native-push all flow through
 // `runEntwurfV2`. The sender envelope is
 // `buildSendSenderEnvelope()` verbatim (origin/replyable as resolved) — v2 does
 // NOT gate on replyability (a `wants_reply` from an external/non-replyable caller
@@ -347,11 +346,10 @@ server.tool(
 	"entwurf_v2",
 	"CANONICAL DELIVERY SURFACE for garden ids: message, reply, or hand off to whoever an id names. The id " +
 		"alone does not say which rail that citizen answers on. Give target + intent; the decider picks transport " +
-		"from liveness (live socket citizen → control-socket send; dormant socket citizen → spawn-bg resume; " +
-		"deliverable self-fetch citizen → meta-bridge mailbox; probe-alive native-push citizen → direct injection " +
-		"into its conversation) and reports ONE outcome (delivered / rejected / lock-retained / " +
-		"delivered-but-lock-dirty). EXISTING targets only; discover with entwurf_peers. INTENT — picking wrong is " +
-		"rejected, never auto-converted. A peer entwurf_peers shows as liveness=alive → fire-and-forget. A " +
+		"from liveness (live socket citizen → control-socket send; deliverable self-fetch citizen → meta-bridge " +
+		"mailbox; probe-alive native-push citizen → direct injection into its conversation) and reports ONE " +
+		"outcome (delivered / rejected / delivered-but-lock-dirty). EXISTING targets only; discover with " +
+		"entwurf_peers. A peer entwurf_peers shows as liveness=alive → fire-and-forget. A " +
 		"citizen with NO socket liveness (liveness=unsupported) is ALSO fire-and-forget — unsupported means only " +
 		'"no control-socket probe" — and the decider picks its own rail: a self-fetch backend (e.g. Claude Code) ' +
 		"gets the mailbox, a native-push backend (e.g. Antigravity) gets direct injection and has NO mailbox at " +
@@ -359,26 +357,27 @@ server.tool(
 		"session, or a backend with no adapter here (e.g. codex), is mailbox-undeliverable, not queued for an " +
 		"inbox nobody drains. The native-push probe is 3-valued: alive → injected; dead → " +
 		"native-push-target-dead; indeterminate → native-push-probe-indeterminate (unestablished ≠ gone). " +
-		"owned-outcome wakes a DORMANT socket-domain citizen by spawn-bg resume ONLY — live target → " +
-		"owned-live-no-autosend, self-fetch → backend-liveness-unsupported, native-push → " +
-		"native-push-no-resume-authority. LOCK: taken for a control-socket-DOMAIN dispatch — the live send AND " +
-		"the dormant cell's spawn-bg resume, a separate transport that still runs under that domain's lock. The " +
+		"DORMANT IS UNREACHABLE: a socket-domain citizen that is not running gets dormant-fire-forget-unsupported " +
+		"— same receiver rule as the mailbox, no active drainer means no delivery. " +
+		"The intent that used to answer there, owned-outcome, resumed it by launching a hidden background child " +
+		"and was withdrawn under the visible-first rule — re-open the session yourself, then dispatch again. " +
+		"LOCK: taken for a control-socket-DOMAIN dispatch. The " +
 		"mailbox and native-push rails are lock-free — deliverability and the adapter probe guard them. mode " +
 		"applies to a CONTROL-SOCKET send only; other plans carry no mode. wants_reply rides every rail. message " +
 		"caps at 16000 chars; send an artifact path + digest for more.",
 	{
 		target: z.string().min(1).describe("Target garden id (use entwurf_peers to discover)"),
 		intent: z
-			.enum(["fire-and-forget", "owned-outcome"])
+			.enum(["fire-and-forget"])
 			.describe(
 				"fire-and-forget = send/reply/hand-off to a LIVE socket target or to any citizen with no " +
 					"socket liveness — the decider picks its rail, and a rail can also REJECT (self-fetch → " +
 					"mailbox when deliverable, else mailbox-undeliverable; native-push → alive: direct injection, " +
 					"dead: native-push-target-dead, indeterminate: native-push-probe-indeterminate); set " +
-					"wants_reply for an answer. owned-outcome = " +
-					"wake a DORMANT socket-domain citizen via spawn-bg resume ONLY — on a live target rejected " +
-					"as owned-live-no-autosend, on self-fetch as backend-liveness-unsupported, on native-push as " +
-					"native-push-no-resume-authority, and never auto-converted",
+					"wants_reply for an answer. This is the ONLY intent: owned-outcome, which resumed a dormant " +
+					"citizen by launching a hidden background child, was withdrawn under the visible-first rule. " +
+					"It is not selectable, not deprecated-but-tolerated; a dormant citizen is currently " +
+					"unreachable by this verb and rejects as dormant-fire-forget-unsupported.",
 			),
 		message: z
 			.string()
@@ -392,8 +391,8 @@ server.tool(
 			.optional()
 			.describe(
 				"Injection style for a CONTROL-SOCKET send only: steer (interrupt the current turn) or " +
-					"follow_up (queue after it). The mailbox, native-push, and spawn-bg plans carry no mode, so it " +
-					"has no effect on those rails.",
+					"follow_up (queue after it). The mailbox and native-push plans carry no mode, so it has no " +
+					"effect on those rails.",
 			),
 		wants_reply: z.boolean().optional().describe("Human-conversation reply hint (default false)"),
 	},
@@ -404,8 +403,9 @@ server.tool(
 			const sender = await buildSendSenderEnvelope();
 			const rendered = await runAndRenderEntwurfV2FromSurface(
 				{ target, intent, message, mode, wants_reply },
-				// agentDir / prefixRoots intentionally omitted: runAndRenderEntwurfV2FromSurface falls
-				// back to the ENTWURF_PREFIX_ROOTS env SSOT for prefixRoots (5d-4); agentDir stays undefined.
+				// No trust-preflight inputs are passed, and none exist to pass: the preflight on this
+				// path guarded the resume verdict and left with `owned-outcome`. `senderProvider` is
+				// the whole options surface now (see the pi-native surface for the same note).
 				{ senderProvider: () => sender },
 			);
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
@@ -498,7 +498,9 @@ server.tool(
 		"`unsupported` for a backend with no control-socket probe such as claude-code); the dispatch " +
 		"decision (send vs resume) is computed LATER by the entwurf_v2 contract from that liveness, " +
 		"not here — this surface carries no per-row routing field, so do not read a transport off a " +
-		"row. In particular `unsupported` does NOT mean mailbox: it means this backend has no " +
+		"row. A `dead` row is a REPORTED FACT and nothing more: that citizen is dormant and is " +
+		"currently unreachable by any verb, so listing it grants no action — appearing here is not " +
+		"an invitation to dispatch. In particular `unsupported` does NOT mean mailbox: it means this backend has no " +
 		"control-socket probe. Which rail it answers on is a capability the decider resolves at dispatch " +
 		"time, and there are THREE possible answers, not two — a self-fetch mailbox (only while that " +
 		"mailbox is deliverable), native-push direct injection (only while its adapter probe is alive), " +

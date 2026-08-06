@@ -291,6 +291,7 @@ self-update다) `pnpm install` → `prepare` 훅이 `build-bridge`를 자동 실
    diagnostic vs `--cut` authority, 7 QK claims, qualification **143/143**. P5 canonical command은
    `LIVE=1 ./run.sh release-gate <scratch> --cut`; bare invocation은 SKIP을 보이는 진단일 뿐 acceptance가 아니다.
 7. ~~**실 delivery coverage**~~ — **완료, 미커밋.** Cortex/spawn-live/Claude native resume은 MUST에 편입했고,
+   (`spawn-live`는 이후 visible-first cut에서 transport와 함께 삭제됐다 — 지금 MUST에 없다.)
    native Claude Code → pi GPT-5.4 → pi ACP Claude Sonnet → mailbox terminus의 실제 chain은 23 assertions으로
    PASS했다(각 hop sender gid/replyable, 지름길 배제, durable mailbox read receipt). long-turn은 aggregate 밖의
    on-demand lifecycle acceptance라 final source set에서 별도 LIVE 재실행 중이다. 현재 oracle `--cut`은

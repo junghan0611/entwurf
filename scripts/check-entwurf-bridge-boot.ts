@@ -5,7 +5,7 @@
  * runtime contract that the source-shape gate `check-entwurf-v2-surface` cannot:
  *
  *   - G1a: the server actually BOOTS. start.sh static-imports the whole v2 fence
- *     graph (entwurf-v2-surface → runner → production → decider/lock/send/spawn/
+ *     graph (entwurf-v2-surface → runner → production → decider/lock/send/
  *     mailbox/control-rpc) at top level under strip-types; a strip-types-hostile
  *     construct (enum / namespace / parameter property / `import =`) anywhere in
  *     that graph would crash the server at boot. A parseable tools/list (id:2)
@@ -175,8 +175,8 @@ async function main(): Promise<void> {
 		ok(`G1b: entwurf_v2 schema requires '${r}'`, required.includes(r), `--- inputSchema ---\n${rawSchema}`);
 	}
 	ok(
-		"G1b: entwurf_v2 intent enum == {fire-and-forget, owned-outcome}",
-		setEq(props.intent?.enum, ["fire-and-forget", "owned-outcome"]),
+		"G1b: entwurf_v2 intent enum == {fire-and-forget} (owned-outcome withdrawn: visible-first cut)",
+		setEq(props.intent?.enum, ["fire-and-forget"]),
 		`--- inputSchema ---\n${rawSchema}`,
 	);
 	ok(

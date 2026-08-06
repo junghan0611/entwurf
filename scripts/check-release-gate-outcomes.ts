@@ -243,8 +243,8 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 		viaWrapper.code,
 		LIVE_SKIP_EXIT,
 		`[QK:WRAPPER-SKIP-IS-PROTOCOL-EXIT] a run.sh smoke WRAPPER that declines a prerequisite must return the protocol ` +
-			`SKIP code, not 0 — got exit ${viaWrapper.code}. The wrapper is a skip surface of its own (cortex, matrix, ` +
-			"spawn-live and spawn-resume all decline before their .ts is ever reached), so fixing only the TypeScript " +
+			`SKIP code, not 0 — got exit ${viaWrapper.code}. The wrapper is a skip surface of its own (cortex and matrix ` +
+			"both decline before their .ts is ever reached), so fixing only the TypeScript " +
 			`half would leave the aggregate counting those as PASS. Output: ${JSON.stringify(viaWrapper.output.slice(-300))}`,
 	);
 
@@ -269,7 +269,9 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 //    the gate RUNS; it says nothing about steps the gate never lists. Three LIVE
 //    smokes (cortex, spawn-live, claude-native-resume) sat outside the aggregate
 //    with no stated reason until 2026-07-31, so a green cut was silent about the
-//    second backend, the spawn substrate, and native resume.
+//    second backend, the spawn substrate, and native resume. (spawn-live was
+//    deleted with its transport in the visible-first cut; the incident is kept
+//    verbatim because it is what this rule was derived from.)
 //
 //    So: every LIVE smoke is either WIRED into release_gate or EXCLUDED for a
 //    reason an operator can read in the docs. The exclusion half is checked
@@ -310,7 +312,7 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 			excused,
 			`[QK:NO-SILENT-AGGREGATE-OMISSION] ${name} is neither wired into release_gate nor excluded in the docs. ` +
 				"A LIVE smoke that exists but is never listed makes a green cut silent about the axis it covers — exactly " +
-				"how cortex (the second shipped backend), spawn-live and claude-native-resume went unrun for releases. " +
+				"how cortex (the second shipped backend) and claude-native-resume went unrun for releases. " +
 				"Wire it, or state the exclusion where an operator reads it.",
 		);
 		const [file, sentence] = excused as [string, string];

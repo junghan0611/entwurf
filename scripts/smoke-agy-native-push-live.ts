@@ -4,11 +4,11 @@
  * adapter (pgrep/ss/`agentapi get-conversation-metadata`+`send-message`), the register core,
  * and `runEntwurfV2` with production deps — against a REAL, already-running agy conversation,
  * and asserts the rail end to end: probe finds the volatile route, register create/re-attach is
- * idempotent, a fire-and-forget dispatches over native-push (delivered), an owned-outcome is
- * rejected (no resume authority), and a bogus conversation is rejected (probe-indeterminate).
+ * idempotent, a fire-and-forget dispatches over native-push (delivered), and a bogus conversation
+ * is rejected (probe-indeterminate).
  *
  * This automates what the GPT manual L1~L5 pass proved by hand (register create/attach, v2
- * native-push delivered ×2, owned reject, mailbox/marker/pi-domain non-intrusion) — same
+ * native-push delivered ×2, mailbox/marker/pi-domain non-intrusion) — same
  * production MCP surface, now a repeatable gate.
  *
  * STORE ISOLATION (페블-approved): only the agy CONVERSATION round-trip is real (that is the
@@ -189,20 +189,9 @@ async function main(): Promise<void> {
 		const post = await antigravityAdapter.probe(conversationId);
 		ok("post-send re-probe still alive (delivery target reachable, D7 partial)", post.status === "alive");
 
-		// ── 5. owned-outcome → rejected: a native-push backend has no resume authority ──
-		const owned: EntwurfV2RunResult = await runEntwurfV2(
-			{ target: reg1.gardenId, intent: "owned-outcome", message: "should be rejected" },
-			prodDeps,
-		);
-		ok(
-			"owned-outcome rejected as native-push-no-resume-authority",
-			owned.kind === "rejected" && owned.receipt.reason === "native-push-no-resume-authority",
-		);
-		ok(
-			"owned reject stamped observedLiveness (post-probe, non-null)",
-			owned.kind === "rejected" && owned.receipt.observedLiveness !== null,
-		);
-
+		// ── 5. (retired) the owned-outcome × native-push refusal cell. The intent was removed
+		// from the contract in the visible-first cut, so there is no longer a call to make here:
+		// a caller cannot declare it, and the reason it produced left the taxonomy with it. ──
 		// ── 6. bogus conversation → rejected native-push-probe-indeterminate ──
 		// agy is alive but no LS port serves this fabricated conv id → INDETERMINATE (never coerced
 		// to dead). A meta-record is upserted DIRECTLY (register would refuse a non-live probe), so
