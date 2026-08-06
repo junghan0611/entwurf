@@ -1,6 +1,6 @@
-# NEXT — mux C2 제품 완료; public-harness lifecycle acceptance가 다음이다
+# NEXT — visible-first S0 완료; operator tour 뒤 visible same-id resume가 다음이다
 
-> `mux-placement` branch boot sector. Product base is `e568980`; docs-only checkpoints `acb295f` and `e02fcd2` sit above it. C2 is the product completion point.
+> `mux-placement` branch boot sector. Fresh-call product는 `88d7faa`, runtime-hermetic gate 수선은 `d4b7f97`, hidden resume withdrawal(S0)은 `6f8dd76`에 있다.
 
 # RAIL — 현재 좌표
 
@@ -11,8 +11,8 @@
 - [x] **5. independent review + LIVE** — amendment bundle closed; isolated two-backend LIVE 18 checks green
 - [x] **6. accept commit candidate** — qualification 165/165 + frozen `pnpm check` green; `88d7faa`
 - [~] **7. public-harness lifecycle acceptance** ← HALTED 2026-08-06: 마지막 row(`owned-outcome` → spawn-bg resume)가 **hidden** child를 띄운다는 이유로 coordinator가 중단시켰다. visible-first가 정책이다.
-- [x] **7-S0. visible-first hard cut** ← `owned-outcome` intent와 `spawn-bg` transport를 타입계에서 제거(회수이지 reject 뒤 은폐가 아니다). record-authoritative identity leaf만 `resume-launch-identity.ts`로 보존하고 gate를 붙였다.
-- [ ] **8. visible same-id resume (S1)** ← NEXT LANE: 별도 verb(`entwurf_resume_call` 잠정), mux placement 위의 좁은 composition. `entwurf_v2`로 다시 라우팅하지 않는다. 설계는 `.agent-reports/20260806T112600-visible-resume-design-impact.md` R2. **S1/lifecycle acceptance는 scrubbed parent-transcript artifact를 남겨야 한다 — EXACT NEXT §7.**
+- [x] **7-S0. visible-first hard cut** ← `owned-outcome` intent와 `spawn-bg` transport를 타입계에서 제거(회수이지 reject 뒤 은폐가 아니다). record-authoritative identity leaf만 `resume-launch-identity.ts`로 보존하고 gate를 붙였다. `6f8dd76`; qualification 171/171 + frozen `pnpm check` 92/92 green.
+- [ ] **8. visible same-id resume (S1)** ← CURRENT: GLG가 `entwurf-dev`로 fresh → callback → send → close → dormant/reject 경계를 직접 본 뒤 별도 verb(`entwurf_resume_call` 잠정)를 승인한다. `entwurf_v2`로 다시 라우팅하지 않는다. 설계는 `.agent-reports/20260806T112600-visible-resume-design-impact.md` R2. **S1/lifecycle acceptance는 scrubbed parent-transcript artifact를 남겨야 한다 — EXACT NEXT §7.**
 - [ ] **9. v2-native recorded demo retake** ← PAUSED
 - [ ] **10. branch landing** ← PAUSED. landing handoff는 §7 artifact의 **경로와 digest**를 반드시 싣는다(downstream `entwurf-peek`가 그것을 기다린다).
 
@@ -20,8 +20,8 @@
 
 # NOW
 
-- **Current:** S0(visible-first hard cut)가 소스·gate·mutant·docs까지 닫혔고 coordinator review 대기다. dormant citizen은 지금 어떤 verb로도 닿지 않으며 그것이 의도된 fail-closed 상태다.
-- **Next:** review 통과 후 qualification 1회 + 동결 candidate에서 `pnpm check` 1회 → commit. 그 다음이 S1 visible resume이다.
+- **Current:** S0는 `6f8dd76`으로 닫혔다. dormant citizen은 지금 어떤 verb로도 닿지 않으며 그것이 의도된 fail-closed 상태다. `.claude/skills/entwurf-dev/SKILL.md`가 GLG의 tool 호출을 대신해 현재 제품 경계를 걷는다.
+- **Next:** GLG operator tour(fresh → exact callback id → live send → visible close → dormant/reject) 1회 → 관측된 실제 불편을 기준으로 S1 visible same-id resume 승인·구현.
 - **Blocker:** 없음. lifecycle acceptance chain은 S1이 착지하기 전까지 release MUST로 배선하지 않는다 — hidden resume을 release 성공으로 굳히지 않는다는 것이 중단 사유였다.
 - **Do not touch:** 명시 없는 push/release; `entwurf_v2` 계약 변경; token/store lookup; product watcher/retry/supervisor; arbitrary command/model/provider/cwd/env carrier; issue #63.
 
@@ -46,8 +46,8 @@ caller surface supplies canonical caller gardenId
 ## 현재 증거와 남은 gap
 
 - Focused: typecheck 3 configs; bridge build; fresh-call 38; launch 23; placement 23; affected bridge/peers/identity gates green.
-- Qualification: **165/165 mutants KILLED**; fresh-call QK 6 / exact-once mutants 6 전부 포함.
-- Frozen full floor: **`pnpm check` exit 0**.
+- Qualification: S0 frozen candidate에서 **171/171 mutants KILLED across 13 lanes**; 실행 전후 work-surface hash 동일.
+- Frozen full floor: 같은 tracked candidate에서 **`pnpm check` 92/92, exit 0**.
 - Direct-composition LIVE: real configured Pi + Claude Code, backend별 private tmux server, fixture meta/sender/receiver/mailbox/lock/control axes; two distinct callback sender garden ids; real store/socket residue 없음 — 18 checks green.
 - **미증명:** caller가 public Pi/MCP `entwurf_fresh_call` 표면을 실제 호출하는 축; callback 뒤 같은 fresh citizen에 `entwurf_v2` live send; 그 fresh Pi를 launch handle로 종료해 dormant를 확인하는 연속성. (동일 gardenId resume은 S1의 몫으로 이월됐다.)
 - 현재 `VERIFY.md`는 `smoke-mux-fresh-call-live`를 on-demand로 release aggregate에서 제외한다. 다음 lane은 이 상태를 끝내고 integrated lifecycle gate를 MUST에 배선한다.
