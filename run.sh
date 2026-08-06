@@ -85,6 +85,25 @@ run_ts() {
   esac
 }
 
+# Vitest-backed gate lanes (issue #62). Same authority boundary as run_ts's dev-clone
+# refusal: vitest is a devDependency, so an installed package has no runner and the
+# gate refuses legibly instead of silently passing or crashing on a missing binary.
+run_vitest() {
+  case "$REPO_DIR" in
+    */node_modules/*)
+      echo "entwurf: this gate is a dev-clone-only surface — vitest is a devDependency the installed package does not ship." >&2
+      echo "         (Run it from a checkout after 'pnpm install'.)" >&2
+      return 1
+      ;;
+  esac
+  local bin="$REPO_DIR/node_modules/.bin/vitest"
+  if [ ! -x "$bin" ]; then
+    echo "entwurf: vitest is not installed — run 'pnpm install' in the checkout first." >&2
+    return 1
+  fi
+  (cd "$REPO_DIR" && "$bin" run "$@")
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -1042,13 +1061,14 @@ check_mux_launch() {
 }
 
 check_mux_fresh_call() {
-  # Deterministic gate for the fresh-call composition (mux-fresh-call.ts) and its TWO public
-  # surfaces. Pins the per-backend argv dialects — both of which were measured to fail the other
-  # way round (flag-before-prompt on pi, variadic --allowedTools on claude-code: window opened,
-  # record and socket minted, turn never ran) — plus the first-turn framing order, the named
-  # refusals, and the fact that each surface supplies its OWN caller identity while the
-  # composition never derives one. No fake tmux: the real-window axis is smoke-mux-fresh-call-live.
-  run_ts scripts/check-mux-fresh-call.ts
+  # Transition shim (issue #62): this lane is the vitest pilot, so the gate NAME is preserved
+  # while the contracts live in test/*.test.ts. Same scope as before — the per-backend argv
+  # dialects (both measured to fail the other way round), first-turn framing order, named
+  # refusals, per-surface caller identity — PLUS the runtime axes the retired source-text gate
+  # could not see: real bridge boot → tools/list schema/description, Rust-regex-family pattern
+  # validity on every emitted pattern (the #62 escape), and the schema riding the actual
+  # anthropic-messages request body. No fake tmux: the real-window axis is smoke-mux-fresh-call-live.
+  run_vitest test/mux-fresh-call.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts
 }
 
 smoke_mux_fresh_call_live() {

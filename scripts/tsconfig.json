@@ -26,6 +26,7 @@
 	"exclude": ["../node_modules", "../mcp", "../plugins"],
 	"include": [
 		"./**/*.ts",
+		"../test/**/*.ts",
 		"../pi-extensions/lib/**/*.ts",
 		"../pi-extensions/model-lock.ts",
 		"../pi-extensions/meta-bridge-hook.ts",

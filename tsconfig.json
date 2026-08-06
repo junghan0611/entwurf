@@ -39,6 +39,11 @@
 		"mcp",
 		"scripts",
 		"plugins",
+		// test/ is the vitest pilot lane (issue #62). Its files import product lib
+		// modules with explicit `.ts` extensions, so they live in the
+		// scripts/tsconfig.json fence (allowImportingTsExtensions), not the
+		// emit-capable root program.
+		"test",
 		"pi-extensions/meta-bridge-hook.ts",
 		// project-trust-handler.ts is a lib→lib VALUE importer (it pulls preflight /
 		// formatPreflightDenial from entwurf-preflight.ts), so it must use an explicit
@@ -174,8 +179,8 @@
 		// It has production consumers, and each reaches it the way its own fence allows:
 		// entwurf-control.ts through a NON-LITERAL dynamic import (so the fence never enters the
 		// emit-capable root program), the MCP bridge through a static import typechecked by
-		// mcp/tsconfig.json. Typechecked by scripts/tsconfig.json via its gate
-		// (check-mux-fresh-call.ts).
+		// mcp/tsconfig.json. Typechecked by scripts/tsconfig.json via its vitest lane
+		// (test/mux-fresh-call.test.ts, issue #62 pilot).
 		"pi-extensions/lib/mux-fresh-call.ts",
 		// mux-resume-call.ts is the S1 resume placement composition — a lib→lib VALUE importer of
 		// the launch module and the placement leaf with explicit `.ts` extensions, same fence as

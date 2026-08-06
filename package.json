@@ -93,7 +93,9 @@
 		"@earendil-works/pi-tui": "0.84.0",
 		"@types/node": "^24.3.0",
 		"husky": "^9.1.7",
-		"typescript": "^6.0.2"
+		"rregex": "1.13.1",
+		"typescript": "^6.0.2",
+		"vitest": "4.1.9"
 	},
 	"scripts": {
 		"prepare": "husky 2>/dev/null || true; npm run --silent build-bridge",
@@ -129,6 +131,8 @@
 		"check-pack": "./run.sh check-pack",
 		"check-pack-install": "./run.sh check-pack-install",
 		"check-install-container": "./run.sh check-install-container",
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"test:pack": "pnpm run check-pack && pnpm run check-pack-install",
 		"typecheck": "tsc --noEmit && tsc -p mcp/tsconfig.json && tsc -p scripts/tsconfig.json",
 		"lint": "biome check .",

@@ -9,9 +9,9 @@
 			"find": ["\t\t\treturn [prompt, \"--entwurf-control\", \"--model\", model];"],
 			"replace": ["\t\t\treturn [\"--entwurf-control\", prompt, \"--model\", model];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-PI-ARGV-PROMPT-FIRST]",
-			"signatureSource": "scripts/check-mux-fresh-call.ts"
+			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
 			"claim": "FRESHCALL-CLAUDE-ARGV-EQUALS-FORM",
@@ -24,9 +24,9 @@
 				"\t\t\treturn [prompt, \"--allowedTools\", FRESH_CALL_CALLBACK_TOOL[\"claude-code\"], `--model=${model}`];"
 			],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-CLAUDE-ARGV-EQUALS-FORM]",
-			"signatureSource": "scripts/check-mux-fresh-call.ts"
+			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
 			"claim": "FRESHCALL-PI-MODEL-ARGV",
@@ -35,9 +35,9 @@
 			"find": ["\t\t\treturn [prompt, \"--entwurf-control\", \"--model\", model];"],
 			"replace": ["\t\t\treturn [prompt, \"--entwurf-control\"];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-PI-MODEL-ARGV]",
-			"signatureSource": "scripts/check-mux-fresh-call.ts"
+			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
 			"claim": "FRESHCALL-PI-MODEL-DIALECT",
@@ -46,9 +46,9 @@
 			"find": ["\t\t\treturn [prompt, \"--entwurf-control\", \"--model\", model];"],
 			"replace": ["\t\t\treturn [prompt, \"--entwurf-control\", `--model=${model}`];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-PI-MODEL-DIALECT]",
-			"signatureSource": "scripts/check-mux-fresh-call.ts"
+			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
 			"claim": "FRESHCALL-CLAUDE-MODEL-ARGV",
@@ -59,9 +59,9 @@
 			],
 			"replace": ["\t\t\treturn [prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]}`];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-CLAUDE-MODEL-ARGV]",
-			"signatureSource": "scripts/check-mux-fresh-call.ts"
+			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
 			"claim": "FRESHCALL-CALLBACK-PRECEDES-TASK",
@@ -70,9 +70,9 @@
 			"find": ["\t\t`FIRST ACTION, before reading files or anything else: call ${tool} with ` +"],
 			"replace": ["\t\t`FINAL ACTION, after completing the task: call ${tool} with ` +"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-CALLBACK-PRECEDES-TASK]",
-			"signatureSource": "scripts/check-mux-fresh-call.ts"
+			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
 			"claim": "FRESHCALL-RECEIPT-WITHOUT-CORRELATION",
@@ -83,9 +83,9 @@
 				"\tbackend: FreshCallBackend;\n\tmodel: string;\n\truntimePath: string;\n\tnonce: string;\n\tgardenId?: string;\n}"
 			],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-RECEIPT-WITHOUT-CORRELATION]",
-			"signatureSource": "scripts/check-mux-fresh-call.ts"
+			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
 			"claim": "FRESHCALL-PI-SURFACE-IDENTITY",
@@ -94,9 +94,9 @@
 			"find": ["\t\t\t\t\tcallerGardenId: residentGardenId,"],
 			"replace": ["\t\t\t\t\tcallerGardenId: process.env.PI_SESSION_ID ?? null,"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-PI-SURFACE-IDENTITY]",
-			"signatureSource": "scripts/check-mux-fresh-call.ts"
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
 		},
 		{
 			"claim": "FRESHCALL-PI-MODEL-SCHEMA",
@@ -107,9 +107,9 @@
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-PI-MODEL-SCHEMA]",
-			"signatureSource": "scripts/check-mux-fresh-call.ts"
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
 		},
 		{
 			"claim": "FRESHCALL-CLAUDE-SURFACE-IDENTITY",
@@ -120,9 +120,9 @@
 			],
 			"replace": ["\t\t\tcallerGardenId = process.env.PI_SESSION_ID ?? null;"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-CLAUDE-SURFACE-IDENTITY]",
-			"signatureSource": "scripts/check-mux-fresh-call.ts"
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
 		},
 		{
 			"claim": "FRESHCALL-CLAUDE-MODEL-SCHEMA",
@@ -133,9 +133,31 @@
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
-			"timeoutSeconds": 60,
+			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-CLAUDE-MODEL-SCHEMA]",
-			"signatureSource": "scripts/check-mux-fresh-call.ts"
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-MODEL-PATTERN-HOST-VALID",
+			"title": "the #62 escape replanted: biome's safe fix unescapes the zod model pattern, JS still accepts it, and the Rust-family host validator rejects the whole tool definition",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\t\t.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$/)"],
+			"replace": ["\t\t\t.regex(/^[A-Za-z0-9][A-Za-z0-9._/:[\\]-]*$/)"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-MODEL-PATTERN-HOST-VALID]",
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-MODEL-PATTERN-PROVIDER-VALID",
+			"title": "the same unescape planted on the TypeBox surface rides pi-ai's real anthropic-messages conversion into the request body as an invalid Rust-family pattern",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\t\tpattern: \"^[A-Za-z0-9][A-Za-z0-9._/:\\\\[\\\\]-]*$\","],
+			"replace": ["\t\t\t\tpattern: \"^[A-Za-z0-9][A-Za-z0-9._/:[\\\\]-]*$\","],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-MODEL-PATTERN-PROVIDER-VALID]",
+			"signatureSource": "test/fresh-call-provider.contract.test.ts"
 		}
 	]
 }
