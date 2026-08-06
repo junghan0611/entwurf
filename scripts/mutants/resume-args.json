@@ -1,0 +1,76 @@
+{
+	"schemaVersion": 1,
+	"lane": "resume-args",
+	"mutants": [
+		{
+			"claim": "RESUMEARGS-NO-HEADLESS",
+			"title": "the headless prefix comes back — the shape that puts a JSON stream in the operator's window instead of a session",
+			"subject": "pi-extensions/lib/entwurf-resume-args.ts",
+			"find": ["\tconst args: string[] = [\"--entwurf-control\"];"],
+			"replace": ["\tconst args: string[] = [\"--mode\", \"json\", \"-p\", \"--entwurf-control\"];"],
+			"gate": ["bash", "run.sh", "check-entwurf-resume-args"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMEARGS-NO-HEADLESS]",
+			"signatureSource": "scripts/check-entwurf-resume-args.ts"
+		},
+		{
+			"claim": "RESUMEARGS-CONTROL-FIRST",
+			"title": "the control flag stops leading the argv, so the resumed session's socket posture depends on argv order",
+			"subject": "pi-extensions/lib/entwurf-resume-args.ts",
+			"find": ["\tconst args: string[] = [\"--entwurf-control\"];\n\targs.push(...input.explicitExtensionArgs);"],
+			"replace": [
+				"\tconst args: string[] = [];\n\targs.push(...input.explicitExtensionArgs);\n\targs.push(\"--entwurf-control\");"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-resume-args"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMEARGS-CONTROL-FIRST]",
+			"signatureSource": "scripts/check-entwurf-resume-args.ts"
+		},
+		{
+			"claim": "RESUMEARGS-EXT-ONCE-BEFORE-SESSION",
+			"title": "the bridge args are emitted twice — a different broken argv than dropping them, and just as invisible",
+			"subject": "pi-extensions/lib/entwurf-resume-args.ts",
+			"find": ["\targs.push(...input.explicitExtensionArgs);\n\targs.push(\"--session\", input.sessionFile);"],
+			"replace": [
+				"\targs.push(...input.explicitExtensionArgs);\n\targs.push(...input.explicitExtensionArgs);\n\targs.push(\"--session\", input.sessionFile);"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-resume-args"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMEARGS-EXT-ONCE-BEFORE-SESSION]",
+			"signatureSource": "scripts/check-entwurf-resume-args.ts"
+		},
+		{
+			"claim": "RESUMEARGS-SESSION-IS-FILE",
+			"title": "--session-id returns, which CREATES the id when missing and mints an empty session instead of resuming one",
+			"subject": "pi-extensions/lib/entwurf-resume-args.ts",
+			"find": ["\targs.push(\"--session\", input.sessionFile);"],
+			"replace": ["\targs.push(\"--session-id\", input.sessionFile);"],
+			"gate": ["bash", "run.sh", "check-entwurf-resume-args"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMEARGS-SESSION-IS-FILE]",
+			"signatureSource": "scripts/check-entwurf-resume-args.ts"
+		},
+		{
+			"claim": "RESUMEARGS-PROVIDER-OPTIONAL",
+			"title": "an absent provider is emitted as an empty flag value instead of no flag",
+			"subject": "pi-extensions/lib/entwurf-resume-args.ts",
+			"find": ["\tif (input.provider) args.push(\"--provider\", input.provider);"],
+			"replace": ["\targs.push(\"--provider\", input.provider ?? \"\");"],
+			"gate": ["bash", "run.sh", "check-entwurf-resume-args"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMEARGS-PROVIDER-OPTIONAL]",
+			"signatureSource": "scripts/check-entwurf-resume-args.ts"
+		},
+		{
+			"claim": "RESUMEARGS-NO-PROMPT-TAIL",
+			"title": "a positional rides after the model again — a resume that runs a turn instead of just reopening the window",
+			"subject": "pi-extensions/lib/entwurf-resume-args.ts",
+			"find": ["\targs.push(\"--model\", input.model);"],
+			"replace": ["\targs.push(\"--model\", input.model, \"continue\");"],
+			"gate": ["bash", "run.sh", "check-entwurf-resume-args"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUMEARGS-NO-PROMPT-TAIL]",
+			"signatureSource": "scripts/check-entwurf-resume-args.ts"
+		}
+	]
+}

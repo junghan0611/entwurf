@@ -1,0 +1,32 @@
+{
+	"schemaVersion": 1,
+	"lane": "bridge-boot-resume",
+	"mutants": [
+		{
+			"claim": "BRIDGEBOOT-RESUME-CALL-REGISTERED",
+			"title": "the resume verb is imported but never registered — invisible to every host, while every import-level assertion stays green",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["server.tool(\n\t\"entwurf_resume_call\","],
+			"replace": [
+				"const _unregisteredResumeTool = (...a: unknown[]) => void a;\n_unregisteredResumeTool(\n\t\"entwurf_resume_call\","
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-bridge-boot"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:BRIDGEBOOT-RESUME-CALL-REGISTERED]",
+			"signatureSource": "scripts/check-entwurf-bridge-boot.ts"
+		},
+		{
+			"claim": "BRIDGEBOOT-RESUME-CALL-TARGET-ONLY",
+			"title": "a model knob is added to the resume schema, giving the caller a second way to decide what a resumed citizen is after the record already decided",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\t\t.describe(\"Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers).\"),"],
+			"replace": [
+				"\t\t\t.describe(\"Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers).\"),\n\t\tmodel: z.string().optional().describe(\"Override the recorded model.\"),"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-bridge-boot"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:BRIDGEBOOT-RESUME-CALL-TARGET-ONLY]",
+			"signatureSource": "scripts/check-entwurf-bridge-boot.ts"
+		}
+	]
+}

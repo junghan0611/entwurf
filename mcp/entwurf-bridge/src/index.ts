@@ -60,6 +60,12 @@ import { computeSelfAddressability, type MetaDeliveryDomain } from "../../../pi-
 import { nativePushSupported } from "../../../pi-extensions/lib/entwurf-v2-contract.ts";
 import { runAndRenderEntwurfV2FromSurface } from "../../../pi-extensions/lib/entwurf-v2-surface.ts";
 import {
+	makeVisibleResumeDeps,
+	renderVisibleResume,
+	type VisibleResumeDeps,
+	visibleResume,
+} from "../../../pi-extensions/lib/entwurf-v2-visible-resume.ts";
+import {
 	probeNativeSenderAlive,
 	resolveTrustedMetaSenderIdentity,
 } from "../../../pi-extensions/lib/meta-sender-identity.ts";
@@ -72,6 +78,7 @@ import {
 	readMetaReceiverMarker,
 } from "../../../pi-extensions/lib/meta-session.ts";
 import { freshCall, renderFreshCall } from "../../../pi-extensions/lib/mux-fresh-call.ts";
+import { RESUME_CALL_REJECT_HINT, resumeCall } from "../../../pi-extensions/lib/mux-resume-call.ts";
 import { registerNativeConversation } from "../../../pi-extensions/lib/native-push/register.ts";
 
 const HOME = os.homedir();
@@ -654,6 +661,14 @@ server.tool(
 			.string()
 			.min(1)
 			.max(200)
+			// The `\[` below is USELESS TO JS AND LOAD-BEARING TO THE HOST. zod emits this source
+			// text verbatim as the JSON Schema `pattern`, and the host's tool-schema validator is a
+			// Rust regex engine that rejects an unescaped `[` inside a character class as "unclosed
+			// character class" — a 400 on tools/list that stops EVERY Claude session from opening
+			// (7-M-fix). Biome's safe fix removes it; do not accept that fix. The suppression must
+			// stay on the line DIRECTLY above the expression, or it attaches to nothing and reads
+			// as an unused suppression while the escape goes back to being fixable.
+			// biome-ignore lint/complexity/noUselessEscapeInRegex: emitted to a Rust regex validator, see above
 			.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\[\]-]*$/)
 			.describe("Required runtime model: canonical provider/model for pi, or a Claude Code model id/alias."),
 		task: z
@@ -685,6 +700,47 @@ server.tool(
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
 		} catch (err) {
 			return textErr(`entwurf_fresh_call error: ${err instanceof Error ? err.message : String(err)}`);
+		}
+	},
+);
+
+// The composition root for a visible resume: this surface is the only layer that may know BOTH
+// halves, so it is where the mux launcher is handed to the v2 composition. `entwurf-v2-visible-
+// resume` cannot open a window on its own and `mux-resume-call` cannot read a record — that is
+// the import fence in docs/mux-launch-rail.md §11, expressed as a function argument.
+const visibleResumeLaunch: VisibleResumeDeps["launch"] = (input) => {
+	const launched = resumeCall({ cwd: input.cwd, runtimeArgs: input.runtimeArgs });
+	return launched.ok
+		? { ok: true, handle: launched.receipt }
+		: { ok: false, reason: launched.reason, hint: RESUME_CALL_REJECT_HINT[launched.reason] };
+};
+
+server.tool(
+	"entwurf_resume_call",
+	"Reopen ONE DORMANT pi citizen under its OWN garden id, in a visible window in the operator's own tmux " +
+		"session. The record supplies everything — which transcript, which model, which provider, which cwd — so " +
+		"the only input is the target id: there is no model override, no task, and no prompt. This runs NO turn: " +
+		"the window comes back with the conversation and waits, and talking to it is still entwurf_v2 " +
+		"fire-and-forget on the socket this call stands up. You get TWO receipts and they mean different things: a " +
+		"LAUNCH receipt (tmux made a window and was asked to start pi) and an OBSERVATION receipt (the control " +
+		"socket answered under the same id, or resume-unobserved). Unobserved is a real outcome, not an error to " +
+		"retry — the window is visible, so read it. A citizen that is already LIVE is refused: address it with " +
+		"entwurf_v2 instead. Only pi citizens have a same-id resume, because only they stand a control socket up. " +
+		"Requires that this agent itself runs inside tmux.",
+	{
+		target: z
+			.string()
+			.min(1)
+			.regex(/^\d{8}T\d{6}-[0-9a-f]{6}$/)
+			.describe("Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers)."),
+	},
+	async ({ target }) => {
+		try {
+			const result = await visibleResume(target, makeVisibleResumeDeps(visibleResumeLaunch));
+			const rendered = renderVisibleResume(result);
+			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
+		} catch (err) {
+			return textErr(`entwurf_resume_call error: ${err instanceof Error ? err.message : String(err)}`);
 		}
 	},
 );

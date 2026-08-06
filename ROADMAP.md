@@ -30,7 +30,7 @@ dispatch substrate**다. provider 연결과 TUI/RPC/session lifecycle은 pi에 �
 배달의 정직한 경계에 집중한다. pi launch profile은 tmux placement primitive가 실물로 선 뒤에만 논한다.
 
 v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라졌다. `entwurf_v2`가 척추다.
-기존 citizen 대상 send/reply/resume → `entwurf_v2`; 무에서 새 형제를 여는 fresh creation → `entwurf_fresh_call`(별도 verb, launch receipt만 동기 반환).
+기존 citizen 대상 send/reply → `entwurf_v2`(process를 열지 않으며 dormant는 정직하게 거절); 무에서 새 형제를 여는 fresh creation → `entwurf_fresh_call`(별도 verb, launch receipt만 동기 반환); dormant pi를 같은 garden id로 보이는 창에 다시 세우기 → `entwurf_resume_call {target}`(또 다른 별도 verb, prompt·model override 없음, 턴 없음, launch/observation receipt 분리).
 
 ### Vocabulary guard — 익숙한 말로 되돌리지 않는다
 
@@ -43,9 +43,9 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 
 | Harness / rail | status | 이 repo에서의 정체 | Evidence |
 |---|---|---|---|
-| **pi** | shipped | control-socket adapter. ACP plugin도 pi provider/model로 들어온다. relaunch transport는 visible-first cut으로 회수됐다. | `pnpm check`, v2 matrix LIVE, release-gate MUST |
+| **pi** | shipped | control-socket adapter. ACP plugin도 pi provider/model로 들어온다. delivery 안의 relaunch transport는 visible-first cut으로 회수됐고, 그 자리는 별도 verb `entwurf_resume_call`이 visible same-id resume으로 채웠다. | `pnpm check`, v2 matrix LIVE, release-gate MUST |
 | **Claude Code** | shipped | SessionStart meta-bridge → garden id + mailbox + trusted marker. Transcript를 가져오지 않는다. | meta-session gates, mailbox/deliverability, `doctor-meta-bridge` |
-| **ACP Claude** | shipped, **model-facing outbound half unreliable — 현재 lane** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Turn/provider path ships, 그리고 host resident는 record/socket citizen으로 계속 주소 가능하다(S1이 turn-free로 증명). 다만 번들 `entwurf-bridge` MCP 도구가 첫 턴에 세션 schema에서 빠지는 관측이 있어, 그 시민 안의 **ACP 모델이 형제에게 나가는(outbound dispatch)** 절반은 아직 신뢰 구간이 아니다(🔴 readiness race). | ACP LIVE smokes + release-gate MUST |
+| **ACP Claude** | shipped; **outbound callback verified, intermittent readiness risk still open** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. S1's integrated lifecycle added a real green sample: the ACP model's first action called `entwurf_v2`, returned the nonce callback, then the host survived visible same-id resume and recalled pre-close context. That proves the path works and settles the callback-tool dialect question; it does not erase the earlier intermittent bundled-MCP readiness observations recorded below, which still have no readiness contract. A fenced HOME cannot authenticate this backend, so the release MUST runs that cell under the operator's real HOME while keeping meta roots fixture and proving final real-root invariance. | ACP LIVE smokes + mux lifecycle release-gate MUST |
 | **Codex** | native probe archived; managed lane declined | direct/native delivery evidence는 방법론 기록으로 남지만, pi가 공식 GPT provider를 지원하므로 별도 native citizen/ACP backend를 출하하지 않는다. 일반 external MCP host로 명시 배선하는 것은 별개다. | DELIVERY.md raw probe / closed #56 |
 | **Antigravity (`agy`)** | shipped | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push; managed MCP/permission, statusline, hook adapters. | agy deterministic gates + doctors + 2026-07-13 live round trip |
 | **Cortex / governed ACP** | **landed (0.13.0)** — hvkiefer's PR #40 adapter transplanted with the CP0-audit revisions (dual-HOME overlay, mcp.json projection, per-turn set-model, 4-row curation) | current D1–D10 contract is `docs/acp-backend-rail.md` “Cortex Code audit”; deterministic gate `check-acp-cortex` + mutant lane `acp-cortex`; CP2 live smoke `smoke-acp-cortex-live` stays outside the claude-only release floor | PR #40 / #48 / `docs/acp-backend-rail.md` |
@@ -121,7 +121,7 @@ non-claude **throw** 가드. **백엔드 추가 레일이 0.11.0보다 후퇴**(
   위에 서며, 새 sibling의 주소는 조회가 아니라 **callback sender envelope**으로 온다
   (docs/mux-launch-rail.md §6-a). **pre-injected token 기반 identity lookup(§6)은 deferred가 아니라
   CLOSED다** — callback correlation이 대체했고 새 증거 + GLG 재승인 없이 재개하지 않는다. 남은 deferred는
-  resume용 visible placement와 generic harness profile뿐이다.
+  generic harness profile뿐이다(resume용 visible placement는 S1에서 착지했다).
 - **test/release-gate taxonomy (#41)** — 검증 자산을 deterministic / MUST live / BEHAVIOR / utility로 재분류.
 
 ### two-tier release-gate 원리

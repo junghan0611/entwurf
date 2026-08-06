@@ -129,7 +129,7 @@
 			"title": "MCP drops the required model field from fresh-call while the composition still expects one",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\tmodel: z\n\t\t\t.string()\n\t\t\t.min(1)\n\t\t\t.max(200)\n\t\t\t.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$/)\n\t\t\t.describe(\"Required runtime model: canonical provider/model for pi, or a Claude Code model id/alias.\"),\n"
+				"\t\tmodel: z\n\t\t\t.string()\n\t\t\t.min(1)\n\t\t\t.max(200)\n\t\t\t// The `\\[` below is USELESS TO JS AND LOAD-BEARING TO THE HOST. zod emits this source\n\t\t\t// text verbatim as the JSON Schema `pattern`, and the host's tool-schema validator is a\n\t\t\t// Rust regex engine that rejects an unescaped `[` inside a character class as \"unclosed\n\t\t\t// character class\" — a 400 on tools/list that stops EVERY Claude session from opening\n\t\t\t// (7-M-fix). Biome's safe fix removes it; do not accept that fix. The suppression must\n\t\t\t// stay on the line DIRECTLY above the expression, or it attaches to nothing and reads\n\t\t\t// as an unused suppression while the escape goes back to being fixable.\n\t\t\t// biome-ignore lint/complexity/noUselessEscapeInRegex: emitted to a Rust regex validator, see above\n\t\t\t.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$/)\n\t\t\t.describe(\"Required runtime model: canonical provider/model for pi, or a Claude Code model id/alias.\"),\n"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],

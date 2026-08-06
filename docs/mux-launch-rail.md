@@ -433,20 +433,19 @@ exact evidence로 인정되는 것은 둘뿐이다.
 ## 8. 지금 만들지 않을 것
 
 - 폐기된 token/lookup correlation 재개 (fresh-token 계약, lookup seam, 예약 authority 포함)
-- launch shape 확장: focus/switch, window 이름, resume, 여러 개 동시 launch
+- launch shape 확장: focus/switch, window 이름, 여러 개 동시 launch
 - peer placement 저장·추측, 또는 새 public situation-map surface
-- 두 번째 spawn/creation verb 또는 `entwurf_v2` 확장
+- 두 번째 spawn/creation verb 또는 `entwurf_v2` 확장 (S1의 visible resume은 creation이 아니라 **별도 lifecycle verb**로 착지했고, delivery를 통과하지 않는다)
 - record watcher, timeout/retry, unknown-id discovery
-- dormant citizen visible-resume 배선, record birth/liveness 대기
+- unknown/new record birth 또는 liveness를 발견하려는 대기 (S1의 known-id socket observation은 한 번의 bounded startup observation으로 출하됨)
 - generic driver/registry, labels/metadata
 - caller-supplied command/cwd/env/window-name carrier, 또는 model 외 별도 provider/settings carrier
 - raw PTY input, capture/history API
 - 모든 tmux session을 관리하는 registry
 - zmx adapter, 설치, self-fetch, fallback
 - task queue, dependency graph, worker pool, role, quota·context 판단
-- release-gate MUST
 
-즉 fresh-call은 여기서 멈추고 mux를 supervisor로 키우지 않는다.
+즉 mux는 여기서 멈추고 supervisor로 키우지 않는다. S1이 착지시킨 것은 fresh-call과 대칭인 좁은 verb 하나이고 — `entwurf_resume_call {target}`, prompt·model override·task 없음, 턴 없음, watcher/retry/supervisor 없음 — 통합 lifecycle LIVE는 이제 **release-gate MUST**다(그것이 이 목록에서 빠진 이유다).
 
 ## 9. Repo 밖 baseline — 완료된 선행 증거
 
@@ -484,8 +483,9 @@ gate, LIVE smoke, release 배선을 전부 제거했다.
 | tmux placement leaf (`mux-placement.ts`) | caller placement, same-session append, stable handle close | harness launch, identity, delivery |
 | T1-a launch composition (`mux-launch.ts`) | 고정 runtime의 precondition 증명, 같은 session에 window+runtime 한 번의 mutation, 로컬 handle receipt | garden identity, record 조회, task delivery, supervision, 어떤 carrier도 |
 | pi/ACP harness adapter | official runtime/session lifecycle, auth, model, transcript, record birth | 프로젝트의 작업자 선택·backlog |
+| resume-call composition (`mux-resume-call.ts`) | record가 준 cwd에서의 same-session append(`-c`), 그 cwd의 좁은 전제(absolute / 존재하는 디렉터리 / `#` 없음 — tmux가 `-c`를 format-expand하고 없는 경로를 조용히 `$HOME`으로 폴백하기 때문), launch receipt | garden identity, record 조회, lock, delivery, supervision |
 | fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, explicit model CLI token, first-turn framing(callback→task 순서), nonce 민팅, launch receipt | garden identity(표면이 공급), delivery transport, task 분해, supervision |
-| public surfaces (`entwurf-control.ts` · MCP `index.ts`) | 자기 record-backed caller identity, `{backend, model, task}` schema, 렌더 | argv 문법, placement, identity 민팅 |
+| public surfaces (`entwurf-control.ts` · MCP `index.ts`) | fresh의 record-backed caller identity와 `{backend, model, task}` schema, resume의 target-only schema, 양쪽 렌더, resume launch seam 조립 | argv 문법, placement, identity 민팅 |
 | project policy (repo 밖) | 누구를·언제·무엇으로 부를지, fan-out 횟수, 실패 후 판단 | transport 내부 구현 |
 
 강제 가능한 import 금지선은 넓은 일반론이 아니라 좁은 몇 줄이다. `entwurf-v2-production.ts`는 이미
@@ -500,18 +500,21 @@ mux-launch                                     -X-> entwurf core
 mux-placement                                  -X-> mux-launch        (leaf는 혼자 삭제 가능해야 한다)
 mux-launch                                      -> mux-placement
 mux-fresh-call                                  -> mux-launch + mux-placement
+mux-resume-call                                 -> mux-launch + mux-placement
+entwurf-v2-visible-resume                      -X-> mux-*            (launch는 표면이 주입하는 seam)
+public surfaces                                 -> mux-resume-call + entwurf-v2-visible-resume  (composition root)
 all other shipped production sources           -X-> mux-launch
 ```
 
 `check-mux-launch`는 출하 source 전체(`pi-extensions/**` + `mcp/**`, build artifact 제외)를 스캔해
-`mux-fresh-call.ts`만 launch를 import하도록 강제하고, delivery/core의 역의존을 금지한다.
+`mux-fresh-call.ts`와 `mux-resume-call.ts` **둘만** launch를 import하도록 강제하고(정확한 집합이며 `mux-*` 접두 규칙이 아니다 — 세 번째 모듈은 결정이어야 한다), delivery/core의 역의존을 금지한다.
 `MUX-LAUNCH-CORE-IMPORT-FREE` mutant는 delivery production root에 금지 import를 심어 이 경계를 죽인다.
 
 leaf가 T1-a composition에 여는 seam도 여기 적는다. `mux-placement.ts`는 세 동사 외에 `runTmux`와
 `requireSameContext`를 export하는데, 이것은 **네 번째 동사도 public operator surface도 아니고 좁은 내부
 seam**이다. 위험을 숨기지 않고 말하면: `runTmux`는 이 모듈이 작성하지 않은 argv를 그대로 받으므로 leaf의
 GRAMMAR 경계가 그것을 지켜주지 않는다. 문법은 `build*Args` builder들이 지키고, `runTmux`에 손을 뻗는
-쪽이 같은 검증을 스스로 져야 한다. 현재 `runTmux` production consumer는 launch와 fresh-call 두
+쪽이 같은 검증을 스스로 져야 한다. 현재 `runTmux` production consumer는 launch·fresh-call·resume-call 세
 composition이고, 각각 source-adjacent gate가 argv 경계를 진다. 출하 delivery 경로는 둘 다 호출하지 않는다.
 
 ## 12. Receipt와 supervision의 절단선
@@ -522,6 +525,8 @@ composition이고, 각각 source-adjacent gate가 argv 경계를 진다. 출하 
 | mailbox `lastReadAt` | 후속 evidence, **send receipt 아님** | self-fetch receiver가 나중에 읽은 사실 |
 | window opened (`@window/%pane`) | **`entwurf_fresh_call`의 launch receipt로 출하됨** (§6-a) | tmux가 창을 만들었다는 사실까지. 실행 여부·delivery는 주장하지 않는다 |
 | process spawned (`pane_pid`) | 같은 launch receipt에 포함 | 동기 로컬 사실이며, 그 process가 살아 있다는 주장은 아니다 (§5) |
+| resume launch (`@window/%pane` + target gid + 재개하는 transcript) | **`entwurf_resume_call`의 첫 receipt로 출하됨** | tmux가 창을 만들고 pi 시작을 요청했다는 사실까지. 시민이 돌아왔다는 주장은 아니다 |
+| resume observation (same-gid socket-alive 또는 `resume-unobserved`) | **`entwurf_resume_call`의 두 번째 receipt로 출하됨** | 시민이 다시 주소를 갖는다고 말하는 **유일한** 사실. launch와 절대 합치지 않는다. 미관측은 실패가 아니라 결과이며 창은 열린 채 lock은 해제된다 |
 | launch가 동기 반환한 native session/garden identity | **없음** (§6 조건 1 불성립) | pi 0.83.0은 제공하지 않는다. fresh-call도 동기로는 주지 않는다 |
 | callback 메시지의 sender envelope이 실은 gardenId | **fresh-call의 correlation receipt** (§6-a) — 비동기, caller의 기존 수신면에 도착 | delivery 계층이 붙인 사실이며 sibling의 자기 진술이 아니다 (§6-b) |
 | 사전 주입한 native token으로 조회한 gardenId | **CLOSED** — callback correlation이 대체한 폐기 후보 (§6) | 새 증거 + GLG 재승인 없이는 재개하지 않는다 |

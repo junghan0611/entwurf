@@ -1,0 +1,215 @@
+{
+	"schemaVersion": 1,
+	"lane": "v2-visible-resume",
+	"mutants": [
+		{
+			"claim": "V2RESUME-LIVE-REFUSED",
+			"title": "the live check inverts, so a running citizen gets a second window on its own transcript",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tif (mapped.liveness === \"alive\") {"],
+			"replace": ["\t\tif (mapped.liveness === \"dead\") {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-LIVE-REFUSED]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-INDETERMINATE-NO-START",
+			"title": "an inconclusive probe stops being a refusal, so a citizen that may be running is resumed anyway",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tif (mapped.liveness === \"indeterminate\") {"],
+			"replace": ["\t\tif (mapped.liveness === \"alive\") {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-INDETERMINATE-NO-START]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-CONFLICT-NO-START",
+			"title": "a corrupt control-socket address stops being a refusal and a citizen is stood up behind it",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tif (\"addressConflict\" in mapped) {"],
+			"replace": ["\t\tif (\"addressConflictNever\" in mapped) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-CONFLICT-NO-START]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-LOCKED-NO-RESOLVE",
+			"title": "a lock conflict is read as success, so the record is opened behind another holder's lock",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (!acquired.ok) {"],
+			"replace": ["\tif (!acquired.ok && acquired.conflict.reason !== \"target-locked\") {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-LOCKED-NO-RESOLVE]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-NO-TRANSCRIPT-FAILS-LOUD",
+			"title": "the leaf's cause-rich throw is swallowed into a placeholder identity, so an unresumable citizen opens a window anyway",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": [
+				"\t\tlet identity: LaunchIdentity;",
+				"\t\ttry {",
+				"\t\t\tidentity = deps.resolveIdentity(targetGardenId);",
+				"\t\t} catch (err) {"
+			],
+			"replace": [
+				"\t\tlet identity: LaunchIdentity;",
+				"\t\ttry {",
+				"\t\t\tidentity = deps.resolveIdentity(targetGardenId);",
+				"\t\t} catch (err) {",
+				"\t\t\tif (!(err instanceof ResumeBackendUnsupportedError))",
+				"\t\t\t\treturn { ok: false, reason: \"target-invalid\", detail: String(err) };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-NO-TRANSCRIPT-FAILS-LOUD]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-OBSERVE-IS-BOUNDED-WAIT",
+			"title": "the observation becomes a single immediate probe, which reports every real resume as unobserved (the socket answers ~2-4s later)",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tawait deps.sleep(intervalMs);"],
+			"replace": ["\t\treturn { kind: \"resume-unobserved\", socketPath, waitedMs: deps.now() - started };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-OBSERVE-IS-BOUNDED-WAIT]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-UNOBSERVED-IS-REAL",
+			"title": "a timeout claims the socket answered, turning the one fact that says the citizen is back into a guess",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\treturn { kind: \"resume-unobserved\", socketPath, waitedMs: deps.now() - started };"],
+			"replace": ["\t\t\treturn { kind: \"socket-alive\", socketPath, waitedMs: deps.now() - started };"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-UNOBSERVED-IS-REAL]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-RELEASE-FAILURE-LOUD",
+			"title": "a release that did not release is folded into a green receipt, leaving a held lock nobody is told about",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tif (outcome !== \"released\") {"],
+			"replace": ["\t\tif (outcome !== \"released\" && outcome !== \"not-owned\" && outcome !== \"absent\") {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-RELEASE-FAILURE-LOUD]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-ARGV-FROM-RECORD",
+			"title": "the launcher is handed the caller's own directory instead of the record's, so the citizen returns in the wrong project",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tconst launched = deps.launch({ cwd: identity.cwd, runtimeArgs });"],
+			"replace": ["\t\tconst launched = deps.launch({ cwd: process.cwd(), runtimeArgs });"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-ARGV-FROM-RECORD]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-RECEIPTS-SEPARATE",
+			"title": "the launch receipt absorbs the observation, so 'a window opened' and 'the citizen is back' become one claim",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\tlaunch: { targetGardenId, sessionFile: identity.sessionFile, handle: launched.handle },"],
+			"replace": [
+				"\t\t\tlaunch: { targetGardenId, sessionFile: identity.sessionFile, handle: launched.handle, kind: observation.kind } as ResumeLaunchReceipt,"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-RECEIPTS-SEPARATE]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-RENDER-SEPARATES",
+			"title": "the rendered text merges the two receipts into one sentence, so a reader cannot tell which fact is missing",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": [
+				"\t\t\t`LAUNCH receipt: tmux created that window and was asked to start pi on the transcript above.\\n` +"
+			],
+			"replace": ["\t\t\t`Resume complete.\\n` +"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-RENDER-SEPARATES]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-IDENTITY-BEFORE-WINDOW",
+			"title": "the liveness preflight runs BEFORE the record is read, so dormancy is judged for a citizen whose transcript has not been proven resumable yet",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\tlet identity: LaunchIdentity;"],
+			"replace": ["\t\tawait deps.inspectSocket(targetGardenId);", "\t\tlet identity: LaunchIdentity;"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-IDENTITY-BEFORE-WINDOW]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-TIMEOUT-RELEASES",
+			"title": "the timeout path launches a second time — the relaunch this rail refuses, hidden inside what reads as one bounded wait",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\treturn { kind: \"resume-unobserved\", socketPath, waitedMs: deps.now() - started };"],
+			"replace": [
+				"\t\t\t(deps as VisibleResumeDeps).launch({ cwd: \"/tmp\", runtimeArgs: [] });\n\t\t\treturn { kind: \"resume-unobserved\", socketPath, waitedMs: deps.now() - started };"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-TIMEOUT-RELEASES]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-LOCK-BEFORE-LIVENESS",
+			"title": "the lock stops being taken first, so a competing resume can pass its own dead check while this one is launching",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tconst acquired = deps.acquireLock(targetGardenId);"],
+			"replace": ["\tawait deps.inspectSocket(targetGardenId);\n\tconst acquired = deps.acquireLock(targetGardenId);"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-LOCK-BEFORE-LIVENESS]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-NOT-PI-REFUSED",
+			"title": "an out-of-domain backend is reported as an error instead of a named refusal, so a fine record reads as a broken one",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\t\t\tif (err instanceof ResumeBackendUnsupportedError) {"],
+			"replace": ["\t\t\tif (false && err instanceof ResumeBackendUnsupportedError) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-NOT-PI-REFUSED]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-NOT-PI-BY-FIELD",
+			"title": "the backend is re-derived instead of taken from the typed error, which is the second read this rail refuses",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": [
+				"\t\t\t\t\t\t`${targetGardenId} is a ${err.backend} citizen; only pi citizens stand a control socket up, ` +"
+			],
+			"replace": [
+				"\t\t\t\t\t\t`${targetGardenId} is a citizen of another backend; only pi citizens stand a control socket up, ` +"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-NOT-PI-BY-FIELD]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		},
+		{
+			"claim": "V2RESUME-SHARED-ID-GRAMMAR",
+			"title": "the address grammar is re-implemented locally, where it can drift from the record, the lock path and the socket filename it becomes",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["\tif (!isValidSessionId(targetGardenId)) {"],
+			"replace": ["\tif (!/^\\d{8}T\\d{6}-[0-9a-f]{6}$/.test(targetGardenId)) {"],
+			"gate": ["bash", "run.sh", "check-entwurf-v2-visible-resume"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:V2RESUME-SHARED-ID-GRAMMAR]",
+			"signatureSource": "scripts/check-entwurf-v2-visible-resume.ts"
+		}
+	]
+}

@@ -1045,6 +1045,7 @@ export default function (pi: ExtensionAPI) {
 		registerListSessionsTool(pi);
 		registerEntwurfV2Tool(pi);
 		registerFreshCallTool(pi);
+		registerResumeCallTool(pi);
 	}
 
 	// The in-process mint refusals (`/new`, `/fork`, `/clone`, RPC new_session) are
@@ -1564,6 +1565,90 @@ processes on this host.`,
 				const msg = err instanceof Error ? err.message : String(err);
 				return {
 					content: [{ type: "text", text: `entwurf_fresh_call error: ${msg}` }],
+					isError: true,
+					details: { error: msg },
+				};
+			}
+		},
+	});
+}
+
+// ============================================================================
+// Tool: entwurf_resume_call
+// ============================================================================
+
+const MUX_RESUME_CALL_MODULE = "./lib/mux-resume-call.ts";
+const V2_VISIBLE_RESUME_MODULE = "./lib/entwurf-v2-visible-resume.ts";
+
+interface MuxResumeCallModule {
+	resumeCall(
+		params: { cwd: string; runtimeArgs: readonly string[] },
+		env?: NodeJS.ProcessEnv,
+	): { ok: true; receipt: Record<string, string> } | { ok: false; reason: string };
+	RESUME_CALL_REJECT_HINT: Record<string, string>;
+}
+
+interface VisibleResumeModule {
+	visibleResume(target: string, deps: unknown): Promise<{ ok: boolean }>;
+	makeVisibleResumeDeps(launch: unknown): unknown;
+	renderVisibleResume(result: { ok: boolean }): { text: string; isError: boolean };
+}
+
+/**
+ * Unlike `entwurf_fresh_call`, this tool needs NO caller identity: a resume names an existing
+ * citizen, so the address is the parameter rather than something the sibling has to report back.
+ * What it needs instead is the per-gid lock, which is why the composition lives on the v2 side of
+ * the fence and only the LAUNCH is handed across (docs/mux-launch-rail.md §11).
+ */
+function registerResumeCallTool(pi: ExtensionAPI): void {
+	// Same TS2589 workaround as registerEntwurfV2Tool — see the comment block there.
+	const registerTool = pi.registerTool as (def: any) => void;
+	registerTool({
+		name: "entwurf_resume_call",
+		label: "Resume Dormant Citizen",
+		description: `Reopen ONE DORMANT pi citizen under its OWN garden id, in a visible window in the operator's own tmux
+session. The record supplies everything — which transcript, which model, which provider, which cwd — so the only
+input is the target id: there is no model override, no task, and no prompt. This runs NO turn: the window comes
+back with the conversation and waits, and talking to it is still entwurf_v2 fire-and-forget on the socket this
+call stands up. You get TWO receipts and they mean different things: a LAUNCH receipt (tmux made a window and was
+asked to start pi) and an OBSERVATION receipt (the control socket answered under the same id, or
+resume-unobserved). Unobserved is a real outcome, not an error to retry — the window is visible, so read it. A
+citizen that is already LIVE is refused: address it with entwurf_v2 instead. Only pi citizens have a same-id
+resume, because only they stand a control socket up.`,
+		parameters: Type.Object({
+			target: Type.String({
+				minLength: 1,
+				pattern: "^\\d{8}T\\d{6}-[0-9a-f]{6}$",
+				description: "Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers).",
+			}),
+		}),
+		async execute(
+			_toolCallId: string,
+			params: { target: string },
+			_signal: AbortSignal | undefined,
+			_onUpdate: unknown,
+			_ctx: ExtensionContext,
+		) {
+			try {
+				const mux = (await import(MUX_RESUME_CALL_MODULE)) as unknown as MuxResumeCallModule;
+				const v2 = (await import(V2_VISIBLE_RESUME_MODULE)) as unknown as VisibleResumeModule;
+				const launch = (input: { cwd: string; runtimeArgs: readonly string[] }) => {
+					const launched = mux.resumeCall(input);
+					return launched.ok
+						? { ok: true, handle: launched.receipt }
+						: { ok: false, reason: launched.reason, hint: mux.RESUME_CALL_REJECT_HINT[launched.reason] };
+				};
+				const result = await v2.visibleResume(params.target, v2.makeVisibleResumeDeps(launch));
+				const rendered = v2.renderVisibleResume(result);
+				return {
+					content: [{ type: "text", text: rendered.text }],
+					isError: rendered.isError,
+					details: { isError: rendered.isError },
+				};
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				return {
+					content: [{ type: "text", text: `entwurf_resume_call error: ${msg}` }],
 					isError: true,
 					details: { error: msg },
 				};

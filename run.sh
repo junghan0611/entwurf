@@ -119,10 +119,14 @@ Usage:
   ./run.sh check-entwurf-v2-send-fallback # deterministic gate (0.11 Stage 0 step 5c-2b): same-lock re-resolve RESOLVER (resolveDeadControlSendFallback) — fire-and-forget re-resolve: alive→control retry, dead→reject (nothing is ever launched), indeterminate→reject, unsupported+deliverable→mailbox plan, undeliverable/bad-target/conflict→reject; resolver never releases, mis-wire fails loud, inspect/probe throws propagate; no IO (fakes)
   ./run.sh check-entwurf-v2-runner     # deterministic gate (0.11 Stage 0 step 5d-1): execute-router (executeDispatch) routing an already-decided DispatchDecision to its 5c transport hand → one outcome-rich EntwurfV2RunResult. reject→rejected (no hand) / control/mailbox→matching hand with decision.lock verbatim / N3 rejectReason carried / N1 SendDeliveredReleaseFailedError→execution-failed{finalizedOutcome,releaseFailed,retrySafe:false}; fake hands, no IO
   ./run.sh check-entwurf-v2-mailbox    # deterministic gate (0.11 Stage 0 step 5c-4, LAST 5c transport slice): ENQUEUE-ONLY meta-mailbox SEND body (executeMetaMailboxSend) + production sendViaMailbox adapter — sender→formatMetaMailboxBody with plan.wantsReply threaded (divergence from legacy hard false), sender absent→raw plan.message, enqueue opts EXACTLY {gardenId,body,sessionsDir,mailboxDir}, enqueue throw PROPAGATES (no success:false fold — mailbox has no in-band refuse); adapter NEVER touches lock (release is the hand's job); source guard: no release/routing seam
-  ./run.sh check-entwurf-resume-args   # deterministic gate (0.11 Stage 0 step 5c-3b): resume-argv SSOT (buildResumePiArgs) for a RESIDENT pi citizen — the visible-first cut removed its only caller, so the builder is preserved argv-only for the later visible lane — the `legacy` one-shot variant and its async worker were removed 2026-07-27, so the shipped posture is the only one the gate drives: v2-control=--entwurf-control + no --no-extensions (keep-alive is the goal, resumed session stays addressable); keeps --mode json -p + prompt-as-turn (-p NOT dropped); explicitExtensionArgs preserved exactly once (#29); plan.launchArgs (--approve) ride before the prompt; null provider→no --provider
+  ./run.sh check-entwurf-resume-args   # deterministic gate: resume-argv SSOT (buildResumePiArgs) for the S1 VISIBLE resume. The headless shape was measured wrong for a window before the consumer was written (`-p` is pi's own non-interactive mode), so the one shipped posture is `--entwurf-control` FIRST + ext args exactly once + `--session <abs file>` + optional `--provider` + `--model <m>` — and the gate pins the ABSENCES as hard as the presences: no --mode, no -p, no positional prompt (a resume runs no turn), no --no-extensions, never --session-id (which MINTS a session instead of resuming one)
+  ./run.sh check-mux-resume-call       # deterministic gate: S1 resume PLACEMENT composition (mux-resume-call.ts). No fake tmux. cwd rules are MEASURED tmux 3.6a behaviours, each a way a resume looks successful while being wrong: a nonexistent `-c` exits 0 and lands the child in $HOME (so it is refused HERE), `-c` is FORMAT-EXPANDED so `#{…}` silently rewrites the path and `#(…)` was observed running a command (so `#` is refused), and whitespace measured SAFE (so no escaping layer is owed). Also pins `-c` reaching tmux, runtime after `--`, carrier-free argv, zero identity in this module, and the surface seam that keeps the v2 composition from importing mux
+  ./run.sh check-mux-parent-artifact  # deterministic gate for the tracked scrubbed parent-transcript fixture — a version-pinned sample of the PARENT-SIDE shape (fresh_call toolResult + the later callback custom_message) so downstream never opens a private transcript. Pins event order, the toolCallId join on the RESULT (pi writes no separate toolCall row), the launch nonce reappearing verbatim in the callback body, the <sender_info> envelope field names, and the absence of operator paths / real garden ids / real uuids. NOT placement evidence
+  ./run.sh check-entwurf-v2-visible-resume # deterministic gate: S1 visible-resume COMPOSITION (entwurf-v2-visible-resume.ts) with every seam injected — the whole state machine incl. the timeout branch runs with no tmux/lock/socket/clock. Pins lock BEFORE liveness, identity under the lock and before any window (no-transcript citizen fails loud, opens nothing), live/indeterminate/address-conflict refused unlaunched, observation as a BOUNDED WAIT (measured: socket answers ~2–4s after launch, so one immediate probe would call a successful resume unobserved), exactly ONE launch on every path, timeout → lock released + window left open + nothing retried/killed, failed release throws, and the two receipts staying separate in type and text
   ./run.sh check-resume-launch-identity # deterministic gate for resume-launch-identity.ts, the record-authoritative launch-identity leaf preserved through the visible-first cut (spawn-bg and all its callers are gone; this leaf answers "which being is this, and which conversation is theirs"). Temp meta-store fixture: gardenId→record.transcriptPath happy path with header cwd/provider/model; C3 integrity (header id ≠ record.nativeSessionId → refused, never resumed); #52 ADDRESSABLE read (a gid that no longer holds its nativeSessionId alone is refused from EITHER side — the plain targeted read would resume one transcript twice under two locks); cause fidelity per impossible resume incl. the F7 pin (recorded-but-deleted transcript → MISSING, not "no recorded model"); header↔gate SSOT. No spawn/socket/timer
   ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b record-less socket (#50 C4: live record-less pi → EVERY intent rejected pre-probe record-less-socket, no lock, rendered hint names record authority + fresh-cut), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
   ./run.sh smoke-agy-native-push-live  # 봉인 8 LIVE acceptance for the native-push (agy) rail — OUT of pnpm check, needs LIVE=1 + AGY_CONVERSATION_ID (a live agy conversation). Drives the REAL antigravity adapter + register core + runEntwurfV2 (production deps): doctor-static preflight (dangling→FAIL, the ③ gate), probe route, register create/attach idempotency, fire→native-push delivered, post-send re-probe (D7 partial), bogus-conv→native-push-probe-indeterminate. Meta-store isolated to a temp dir (only the agy round-trip is real; no real-store residue). LIVE=1 AGY_CONVERSATION_ID=<convId> ./run.sh smoke-agy-native-push-live
+  ./run.sh smoke-mux-lifecycle-live  # RELEASE MUST integrated LIVE lifecycle acceptance for mux, through the REAL MCP surface — OUT of pnpm check, needs LIVE=1 and spends model turns (two pi siblings: native + recorded-ACP provider, each resumed once; one Claude Code sibling). tools/call fresh_call -> nonce callback sender envelope -> v2 control send landing in the sibling's own transcript -> resume_call REFUSED while live (window count unchanged) -> stable-handle close (pane gone, socket dead, record kept) -> dormant delivery refused honestly -> public entwurf_resume_call with LAUNCH and OBSERVATION receipts kept apart, same-gid socket alive, zero new citizens, zero lock residue, resumed pane_start_path == RECORD cwd (separate tmux query), transcript byte-identical across the resume -> v2 recall of the pre-close fact. claude-code resume refused target-not-pi, no window opened and no lock residue. LIVE=1 ./run.sh smoke-mux-lifecycle-live
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b socket-domain 4-value, facts-only keyset; union: PeerFact + RecordLessSocketFact by gardenId (#50 C4: record-less socket = diagnostic subject, gid+liveness only), dormant→dead, F3 indeterminate preserved, out-of-socket-domain+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
   ./run.sh check-meta-listing          # deterministic gate: META-STORE facts axis — kind-carrying entries; non-regular records are never read, parse/drift become diagnostics, duplicate nativeSessionId quarantines every rival but not unrelated citizens; strict throws / collect partial; pure injected IO
@@ -947,15 +951,54 @@ check_entwurf_control_rpc() {
 }
 
 check_entwurf_resume_args() {
-  # Deterministic gate for 0.11 Stage 0 step 5c-3b: the resume-argv SSOT
-  # (buildResumePiArgs). v2-control is the only shipped shape (the legacy one-shot variant and
-  # its launcher were removed 2026-07-27). Pins the resident posture: `--entwurf-control`
-  # present + `--no-extensions` never (the keep-alive is the goal — a resumed session stands
-  # its socket up and stays addressable), the headless `--mode json -p` prefix and the
-  # prompt-as-turn positional (`-p` NOT dropped), explicitExtensionArgs preserved exactly once
-  # (provider-resolution footgun #29), plan.launchArgs (--approve) before the prompt, and a
-  # null provider emitting no --provider.
+  # Deterministic gate for the resume-argv SSOT (buildResumePiArgs). S1 replaced the headless
+  # shape with the VISIBLE one, measured against the runtime before the consumer was written:
+  # `-p` is pi's own non-interactive mode, so the old `--mode json -p … <prompt>` prefix would
+  # put a JSON stream in the operator's window instead of a session they can use. Pins the one
+  # shipped posture — `--entwurf-control` FIRST (the resumed session stands its socket up), no
+  # --mode/-p/positional prompt (a resume runs no turn), explicitExtensionArgs exactly once
+  # between the control flag and --session (#29 provider-resolution footgun), --session <abs
+  # file> never --session-id (which MINTS), and a null provider emitting no --provider.
   run_ts scripts/check-entwurf-resume-args.ts
+}
+
+check_mux_parent_artifact() {
+  # Deterministic gate for the tracked scrubbed parent-transcript fixture
+  # (scripts/fixtures/mux-parent-transcript.scrubbed.jsonl). The fixture is a version-pinned
+  # SAMPLE OF THE PARENT-SIDE SHAPE — what an entwurf_fresh_call and the sibling's nonce callback
+  # look like in the transcript of the citizen that made the call — so a downstream parser never
+  # has to open a private transcript to learn it. Structure came from a fixture-only real Pi
+  # parent retake and was then scrubbed. Pins: event order (fresh_call toolResult, then the later
+  # callback custom_message), the toolCallId join on the RESULT (measured: pi writes no separate
+  # toolCall row), the launch nonce reappearing verbatim in the callback body, the <sender_info>
+  # envelope field names, and the absence of any operator path / real garden id / real uuid.
+  # It is NOT placement evidence and the gate says so.
+  run_ts scripts/check-mux-parent-artifact.ts
+}
+
+check_mux_resume_call() {
+  # Deterministic gate for the S1 resume placement composition (mux-resume-call.ts). Same scope
+  # as check-mux-launch/check-mux-fresh-call: no fake tmux, only what is decidable without one.
+  # The cwd rules are MEASURED tmux 3.6a behaviours, each a way a resume looks successful while
+  # being wrong — a nonexistent `-c` exits 0 and lands the child in $HOME, and `-c` is
+  # FORMAT-EXPANDED so `#{…}` rewrites the path and `#(…)` was observed running a command.
+  # Whitespace measured SAFE, so the refusal set stays at two rules with no escaping layer.
+  # Also pins: `-c` reaches tmux, runtime after `--`, carrier-free argv, no identity in this
+  # module, and the surface seam that keeps the v2 composition from importing mux.
+  run_ts scripts/check-mux-resume-call.ts
+}
+
+check_entwurf_v2_visible_resume() {
+  # Deterministic gate for the S1 visible-resume composition (entwurf-v2-visible-resume.ts).
+  # Every seam is injected, so the whole state machine — including the timeout branch — runs
+  # without tmux, a lock file, a socket or a clock. Pins: lock BEFORE liveness, identity under
+  # the lock and before any window (a citizen with no transcript fails loud and opens nothing),
+  # live/indeterminate/address-conflict refused unlaunched, the observation as a BOUNDED WAIT
+  # (measured: the socket answers ~2–4s after launch, so one immediate probe would report a
+  # successful resume as unobserved), exactly one launch on every path, timeout releasing the
+  # lock and leaving the window open, a failed release throwing, and the two receipts staying
+  # separate in both the type and the rendered text.
+  run_ts scripts/check-entwurf-v2-visible-resume.ts
 }
 
 check_resume_launch_identity() {
@@ -1017,6 +1060,27 @@ smoke_mux_fresh_call_live() {
   # native transcripts remain as evidence. Private tmux servers plus entry-set/GID residue checks
   # prove no fixture citizen lands in the operator's real record or control-socket directories.
   run_ts scripts/smoke-mux-fresh-call-live.ts
+}
+
+smoke_mux_lifecycle_live() {
+  # RELEASE MUST integrated LIVE acceptance for the whole mux lifecycle, through the REAL MCP
+  # surface. Needs LIVE=1; spends model turns on the operator's configured runtimes (two pi
+  # siblings — native provider and recorded-ACP provider — each resumed once, plus one Claude
+  # Code sibling). Enters via tools/call on the shipped bridge launcher and follows one citizen
+  # around: fresh_call launch receipt -> nonce callback SENDER ENVELOPE -> entwurf_v2 control
+  # send landing in the sibling's own transcript -> resume_call REFUSED while live (window count
+  # unchanged) -> stable-handle close proving pane/socket gone with the record preserved ->
+  # dormant delivery refused honestly -> public entwurf_resume_call with its LAUNCH and
+  # OBSERVATION receipts kept apart, same-gid socket alive, no new citizen, no lock residue,
+  # resumed pane_start_path == the RECORD's cwd (separate tmux query, never pane text), and the
+  # transcript byte-identical across the resume itself -> entwurf_v2 recalling the fact from
+  # BEFORE the close, which is what proves the same CONVERSATION returned. Claude Code runs the
+  # callback+mailbox half and its resume is refused as target-not-pi with no window opened and no lock residue.
+  # Fixture-fenced writes (XDG, four meta roots, v2 lock dir, control socket via fixture HOME);
+  # the runtime auth roots stay REAL and sibling transcripts remain in the real pi agent dir as
+  # evidence. Private tmux server per cell, bounded teardown, operator real-root entry sets
+  # proven unchanged.
+  run_ts scripts/smoke-mux-lifecycle-live.ts
 }
 
 check_mux_launch_tmux() {
@@ -4295,6 +4359,7 @@ release_gate() {
   #     is either wired here or excluded by a reason the docs still carry.
   run_live_step "smoke-claude-native-resume-live (native Claude Code resume + meta-bridge neutrality)" gate bash "$self" smoke-claude-native-resume-live
   run_live_step "smoke-entwurf-chain-live (P3: Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox, identity + receipt)" gate bash "$self" smoke-entwurf-chain-live
+  run_live_step "smoke-mux-lifecycle-live (mux public-harness lifecycle: fresh -> send -> dormant -> same-id visible resume -> recall)" gate bash "$self" smoke-mux-lifecycle-live
 
   # 4. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
   #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never
@@ -4501,8 +4566,20 @@ case "$cmd" in
   check-mux-fresh-call)
     check_mux_fresh_call
     ;;
+  check-mux-resume-call)
+    check_mux_resume_call
+    ;;
+  check-mux-parent-artifact)
+    check_mux_parent_artifact
+    ;;
+  check-entwurf-v2-visible-resume)
+    check_entwurf_v2_visible_resume
+    ;;
   smoke-mux-fresh-call-live)
     smoke_mux_fresh_call_live
+    ;;
+  smoke-mux-lifecycle-live)
+    smoke_mux_lifecycle_live
     ;;
   check-mux-launch-tmux)
     check_mux_launch_tmux

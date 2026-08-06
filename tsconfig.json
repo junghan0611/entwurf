@@ -176,6 +176,19 @@
 		// emit-capable root program), the MCP bridge through a static import typechecked by
 		// mcp/tsconfig.json. Typechecked by scripts/tsconfig.json via its gate
 		// (check-mux-fresh-call.ts).
-		"pi-extensions/lib/mux-fresh-call.ts"
+		"pi-extensions/lib/mux-fresh-call.ts",
+		// mux-resume-call.ts is the S1 resume placement composition — a lib→lib VALUE importer of
+		// the launch module and the placement leaf with explicit `.ts` extensions, same fence as
+		// mux-fresh-call. Its production consumers reach it the same two ways: entwurf-control.ts
+		// through a NON-LITERAL dynamic import, the MCP bridge through a static import typechecked
+		// by mcp/tsconfig.json. Typechecked by scripts/tsconfig.json via its gate
+		// (check-mux-resume-call.ts).
+		"pi-extensions/lib/mux-resume-call.ts",
+		// entwurf-v2-visible-resume.ts is the S1 visible-resume composition on the V2 side of the
+		// fence — a lib→lib VALUE importer (lock / resume-launch-identity / socket-discovery /
+		// socket-probe / resume-args) with explicit `.ts` extensions, same fence. It never imports
+		// mux: the launcher is an injected seam the SURFACES supply (docs/mux-launch-rail.md §11).
+		// Typechecked by scripts/tsconfig.json via its gate (check-entwurf-v2-visible-resume.ts).
+		"pi-extensions/lib/entwurf-v2-visible-resume.ts"
 	]
 }

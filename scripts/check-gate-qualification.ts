@@ -723,14 +723,19 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"acp-prompt-lifecycle": 8,
 		"acp-stop-reason": 6,
 		"agy-permission": 6,
+		"bridge-boot-resume": 2,
 		"meta-identity": 1,
 		"mux-boundary": 14,
 		"mux-fresh-call": 11,
+		"mux-parent-artifact": 3,
+		"mux-resume-call": 12,
 		"probe-ordering": 85,
-		"release-gate": 9,
-		"resume-launch-identity": 4,
+		"release-gate": 10,
+		"resume-args": 6,
+		"resume-launch-identity": 6,
 		"self-address": 3,
 		"v2-surface": 7,
+		"v2-visible-resume": 17,
 	};
 	const laneTally: Record<string, number> = {};
 	for (const man of manifests) laneTally[man.lane] = (laneTally[man.lane] ?? 0) + man.mutants.length;

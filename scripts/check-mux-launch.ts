@@ -238,10 +238,14 @@ function main(): void {
 			"pi-extensions/lib/entwurf-v2-production.ts",
 		];
 		const PRODUCTION_SOURCES = [...walkTs("pi-extensions"), ...walkTs("mcp")].filter((f) => f !== LAUNCH_MODULE);
-		/** The one allowed importer. T1-a shipped with none at all; the fresh-call composition is the
-		 * first, and it is allowed BECAUSE it is the layer above — it reuses the launch preconditions
-		 * rather than copying them, while delivery stays as far away as it ever was. */
+		/** The allowed importers. T1-a shipped with none at all; the fresh-call composition was the
+		 * first, and S1's resume-call composition is the second. Both are allowed BECAUSE they are
+		 * the layer above — they reuse the launch preconditions rather than copying them, while
+		 * delivery stays as far away as it ever was. The set is exact, not a prefix rule: "any
+		 * mux-* file may import launch" would let a future module in without a decision. */
 		const FRESH_CALL_MODULE = "pi-extensions/lib/mux-fresh-call.ts";
+		const RESUME_CALL_MODULE = "pi-extensions/lib/mux-resume-call.ts";
+		const ALLOWED_LAUNCH_IMPORTERS = [FRESH_CALL_MODULE, RESUME_CALL_MODULE];
 		ok(
 			"corpus: the scanned corpus IS the shipped source — both roots, every delivery module and the bridge entrypoint present by name, no build artifacts, and the launch module itself the only exclusion",
 			PRODUCTION_SOURCES.length >= 40 &&
@@ -253,9 +257,9 @@ function main(): void {
 				PRODUCTION_SOURCES.every((f) => !f.includes("node_modules") && !f.includes("/dist/")),
 		);
 		ok(
-			"[QK:MUX-LAUNCH-CORE-IMPORT-FREE] launch is not a delivery or core dependency: the ONLY shipped file that may import mux-launch is the fresh-call composition — not the four delivery modules, not anything else — and mux-launch still imports no entwurf core",
-			PRODUCTION_SOURCES.filter((m) => m !== FRESH_CALL_MODULE).every((m) => !importsLaunch(m)) &&
-				importsLaunch(FRESH_CALL_MODULE) &&
+			"[QK:MUX-LAUNCH-CORE-IMPORT-FREE] launch is not a delivery or core dependency: the ONLY shipped files that may import mux-launch are the two compositions above it — fresh-call and resume-call — not the four delivery modules, not anything else, and mux-launch still imports no entwurf core",
+			PRODUCTION_SOURCES.filter((m) => !ALLOWED_LAUNCH_IMPORTERS.includes(m)).every((m) => !importsLaunch(m)) &&
+				ALLOWED_LAUNCH_IMPORTERS.every((m) => importsLaunch(m)) &&
 				!/from\s+"\.\/(entwurf|meta)-[^"]*"/.test(LAUNCH_SRC),
 		);
 		ok(

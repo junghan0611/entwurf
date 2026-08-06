@@ -67,6 +67,30 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:RESUME-ID-GATE-SSOT]",
 			"signatureSource": "scripts/check-resume-launch-identity.ts"
+		},
+		{
+			"claim": "RESUME-ID-BACKEND-TYPED-REFUSAL",
+			"title": "the backend miss degrades to a bare Error, so callers must parse a sentence or read the record twice to learn it was a capability boundary",
+			"subject": "pi-extensions/lib/resume-launch-identity.ts",
+			"find": ["\t\tthrow new ResumeBackendUnsupportedError(gardenId, record.backend);"],
+			"replace": [
+				"\t\tthrow new Error(`resume-launch-identity: ${gardenId} is a ${record.backend} citizen — resume is pi-only.`);"
+			],
+			"gate": ["bash", "run.sh", "check-resume-launch-identity"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUME-ID-BACKEND-TYPED-REFUSAL]",
+			"signatureSource": "scripts/check-resume-launch-identity.ts"
+		},
+		{
+			"claim": "RESUME-ID-SESSION-ABSOLUTE",
+			"title": "a relative recorded transcriptPath is accepted, so --session resolves inside the window's own cwd and a different transcript is reopened under a correct-looking receipt",
+			"subject": "pi-extensions/lib/resume-launch-identity.ts",
+			"find": ["\tif (!path.isAbsolute(sessionFile)) {"],
+			"replace": ["\tif (path.isAbsolute(sessionFile) && false) {"],
+			"gate": ["bash", "run.sh", "check-resume-launch-identity"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:RESUME-ID-SESSION-ABSOLUTE]",
+			"signatureSource": "scripts/check-resume-launch-identity.ts"
 		}
 	]
 }

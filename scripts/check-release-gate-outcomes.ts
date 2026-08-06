@@ -374,6 +374,39 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 	);
 }
 
+// ===========================================================================
+// The integrated mux lifecycle is a MUST, and the focused fresh-call LIVE is not
+//
+// Two LIVE smokes now cover the mux rail and they are NOT interchangeable:
+// `smoke-mux-fresh-call-live` drives the composition from SOURCE and is on-demand,
+// while `smoke-mux-lifecycle-live` enters through the real MCP surface and follows a
+// citizen through resume and recall. A cut that ran only the focused one would be
+// green about the axis nobody proved. So the MUST wiring is pinned here, exactly
+// once, together with the doc sentence that keeps the two apart for an operator.
+// ===========================================================================
+{
+	const runSh = readFileSync(join(REPO_DIR, "run.sh"), "utf8");
+	const gateBody = runSh.slice(runSh.indexOf("release_gate() {"), runSh.indexOf("# 5. Summary"));
+	const verify = readFileSync(join(REPO_DIR, "VERIFY.md"), "utf8");
+	const mustSteps = gateBody.split("\n").filter((l) => l.includes('"$self" smoke-mux-lifecycle-live'));
+	const gaps: string[] = [];
+	if (mustSteps.length !== 1)
+		gaps.push(`release_gate runs smoke-mux-lifecycle-live ${mustSteps.length}x (need exactly one MUST step)`);
+	if (mustSteps.length === 1 && !mustSteps[0]?.includes("run_live_step"))
+		gaps.push("the lifecycle step does not go through run_live_step, so its SKIP would not reach the classifier");
+	if (!verify.includes("Fresh-call LIVE is on-demand, not part of `release-gate`"))
+		gaps.push("VERIFY.md no longer excuses the focused fresh-call LIVE from the aggregate");
+	if (!verify.includes("smoke-mux-lifecycle-live"))
+		gaps.push("VERIFY.md does not name the integrated lifecycle MUST at all");
+	assert.ok(
+		gaps.length === 0,
+		"[QK:MUX-LIFECYCLE-IS-RELEASE-MUST] the integrated mux lifecycle LIVE must be a release-gate MUST exactly once " +
+			"and go through run_live_step (so a missing prerequisite is a SKIP the cut refuses, never a silent pass), " +
+			"while the focused fresh-call LIVE stays on-demand and VERIFY keeps the two distinguishable — a cut that " +
+			`ran only the source-level smoke would be green about the surface no one entered. Broken: ${gaps.join("; ")}`,
+	);
+}
+
 console.log(
 	"[check-release-gate-outcomes] ok — STEP OUTCOME protocol: one skip exit code shared by the shell and TS halves " +
 		`(${LIVE_SKIP_EXIT}, clear of the per-tool 0..4 and shell 126+ bands), classifier maps 0→PASS / skip→SKIP / ` +

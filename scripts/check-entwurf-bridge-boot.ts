@@ -190,6 +190,30 @@ async function main(): Promise<void> {
 		`--- inputSchema ---\n${rawSchema}`,
 	);
 
+	// G1e — the S1 resume verb, judged on the RUNTIME surface rather than on source wiring. A
+	// source-level check would still pass if the registration were deleted and only the import
+	// remained; this is the oracle that says the tool is actually registered and its schema has
+	// the shape claimed.
+	//
+	// What it does NOT prove: that a host will ACCEPT that schema. This gate reads the emitted
+	// JSON, it does not run a provider's validator — which is exactly why 7-M-fix's unescaped `[`
+	// got past every gate here while breaking real sessions. Host/provider acceptance is an
+	// uncovered axis, tracked as issue #61, and nothing below should be read as standing in for it.
+	const resume = tools.find((t) => t?.name === "entwurf_resume_call");
+	ok(
+		"[QK:BRIDGEBOOT-RESUME-CALL-REGISTERED] G1e: entwurf_resume_call is registered on the runtime tools/list surface — not merely imported",
+		!!resume,
+	);
+	const resumeSchema = resume?.inputSchema ?? {};
+	const rawResume = JSON.stringify(resumeSchema);
+	const resumeProps = resumeSchema.properties ?? {};
+	const resumeRequired = Array.isArray(resumeSchema.required) ? resumeSchema.required.map(String) : [];
+	ok(
+		"[QK:BRIDGEBOOT-RESUME-CALL-TARGET-ONLY] G1e: entwurf_resume_call takes EXACTLY one required input, target — a model, task or prompt knob here would be a second way to decide what a resumed citizen is, when the record already decided",
+		setEq(Object.keys(resumeProps), ["target"]) && setEq(resumeRequired, ["target"]),
+		`--- inputSchema ---\n${rawResume}`,
+	);
+
 	ok(
 		"G1c: native registration fallback is present",
 		tools.some((t) => t?.name === "entwurf_register_native"),

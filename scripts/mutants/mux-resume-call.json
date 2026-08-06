@@ -1,0 +1,148 @@
+{
+	"schemaVersion": 1,
+	"lane": "mux-resume-call",
+	"mutants": [
+		{
+			"claim": "MUXRESUME-CWD-MISSING-REFUSED",
+			"title": "a deleted recorded cwd is accepted — tmux then opens the window in $HOME and the wrong-project resume looks successful",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["\t\treturn \"cwd-missing\";"],
+			"replace": ["\t\treturn null;"],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-CWD-MISSING-REFUSED]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-CWD-FORMAT-REFUSED",
+			"title": "the '#' refusal stops matching, so tmux format-expands the path it was handed",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["\tif (cwd.includes(\"#\")) return \"cwd-format-token\";"],
+			"replace": ["\tif (cwd.includes(\"\\u0000\")) return \"cwd-format-token\";"],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-CWD-FORMAT-REFUSED]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-CWD-WHITESPACE-OK",
+			"title": "a quoting fear is added back as a whitespace refusal, which would reject real project directories tmux handles fine",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["\tif (cwd.includes(\"#\")) return \"cwd-format-token\";"],
+			"replace": ["\tif (cwd.includes(\"#\") || /\\s/.test(cwd)) return \"cwd-format-token\";"],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-CWD-WHITESPACE-OK]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-ARGV-HAS-CWD",
+			"title": "the -c is dropped, so the citizen comes back in the CALLER's directory instead of its own project",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["\t\t\"-c\",\n\t\tcwd,\n\t\t\"-P\","],
+			"replace": ["\t\t\"-P\","],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-ARGV-HAS-CWD]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-ARGV-RUNTIME-AFTER-DASHDASH",
+			"title": "the `--` separator is dropped, so tmux reads pi's own flags as tmux options",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["\t\t\"--\",\n\t\truntimePath,"],
+			"replace": ["\t\truntimePath,"],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-ARGV-RUNTIME-AFTER-DASHDASH]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-ARGV-CARRIER-FREE",
+			"title": "a window-name carrier is added to the append shape, which is how a placement verb starts growing knobs it does not own",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["\t\t\"-P\","],
+			"replace": ["\t\t\"-n\",\n\t\t\"resume\",\n\t\t\"-P\","],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-ARGV-CARRIER-FREE]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-NO-IDENTITY",
+			"title": "identity vocabulary enters the placement module, which is the first step of a leaf learning whose citizen it is opening",
+			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"find": ["export const RESUME_CALL_RUNTIME = \"pi\";"],
+			"replace": ["export const RESUME_CALL_RUNTIME = \"pi\";\nexport const RESUME_CALL_TARGET_KEY = \"gardenId\";"],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-NO-IDENTITY]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-SURFACE-SEAM",
+			"title": "the v2 composition imports mux directly, collapsing the injected seam that keeps the delivery fence where the boundary gate scans for it",
+			"subject": "pi-extensions/lib/entwurf-v2-visible-resume.ts",
+			"find": ["import { buildResumePiArgs } from \"./entwurf-resume-args.ts\";"],
+			"replace": [
+				"import { buildResumePiArgs } from \"./entwurf-resume-args.ts\";\nimport { RESUME_CALL_RUNTIME } from \"./mux-resume-call.ts\";\nvoid RESUME_CALL_RUNTIME;"
+			],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-SURFACE-SEAM]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-PI-SURFACE-REGISTERED",
+			"title": "the native pi registration is never called, so the verb exists in source and nowhere an operator can reach",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\tregisterResumeCallTool(pi);"],
+			"replace": ["\t\tvoid registerResumeCallTool;"],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-PI-SURFACE-REGISTERED]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-PI-SURFACE-TARGET-ONLY",
+			"title": "a task knob is added to the native schema, re-opening the prompt axis a resume deliberately does not have",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": [
+				"\t\t\t\tdescription: \"Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers).\",\n\t\t\t}),"
+			],
+			"replace": [
+				"\t\t\t\tdescription: \"Garden id of the DORMANT pi citizen to reopen (discover with entwurf_peers).\",\n\t\t\t}),\n\t\t\ttask: Type.String({ description: \"What the resumed citizen should do.\" }),"
+			],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-PI-SURFACE-TARGET-ONLY]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-DESC-CONTRACT-PI",
+			"title": "the native description stops saying a resume runs no turn, so a caller reasonably expects the citizen to act on being reopened",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["This runs NO turn: the window comes\nback with the conversation and waits"],
+			"replace": ["The window comes\nback with the conversation and waits"],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-DESC-CONTRACT-PI]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		},
+		{
+			"claim": "MUXRESUME-DESC-CONTRACT-MCP",
+			"title": "the MCP description drops the dormant-only scope, inviting callers to aim the verb at live citizens it will refuse",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\t\"Reopen ONE DORMANT pi citizen under its OWN garden id, in a visible window in the operator's own tmux \""
+			],
+			"replace": [
+				"\t\"Reopen ONE pi citizen under its OWN garden id, in a visible window in the operator's own tmux \""
+			],
+			"gate": ["bash", "run.sh", "check-mux-resume-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXRESUME-DESC-CONTRACT-MCP]",
+			"signatureSource": "scripts/check-mux-resume-call.ts"
+		}
+	]
+}

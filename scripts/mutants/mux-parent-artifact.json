@@ -1,0 +1,39 @@
+{
+	"schemaVersion": 1,
+	"lane": "mux-parent-artifact",
+	"mutants": [
+		{
+			"claim": "MUXARTIFACT-NONCE-FLOW",
+			"title": "the callback body carries a different nonce than the launch receipt, documenting a correlation rail that does not exist",
+			"subject": "scripts/fixtures/mux-parent-transcript.scrubbed.jsonl",
+			"find": ["mux-fresh-call-000000000000000000000000\\n\\n<sender_info>"],
+			"replace": ["mux-fresh-call-999999999999999999999999\\n\\n<sender_info>"],
+			"gate": ["bash", "run.sh", "check-mux-parent-artifact"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXARTIFACT-NONCE-FLOW]",
+			"signatureSource": "scripts/check-mux-parent-artifact.ts"
+		},
+		{
+			"claim": "MUXARTIFACT-SENDER-INFO-SHAPE",
+			"title": "the envelope's sessionId field is renamed, so the fixture documents a parser that cannot read a real callback",
+			"subject": "scripts/fixtures/mux-parent-transcript.scrubbed.jsonl",
+			"find": ["<sender_info>{\\\"sessionId\\\":"],
+			"replace": ["<sender_info>{\\\"gardenId\\\":"],
+			"gate": ["bash", "run.sh", "check-mux-parent-artifact"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXARTIFACT-SENDER-INFO-SHAPE]",
+			"signatureSource": "scripts/check-mux-parent-artifact.ts"
+		},
+		{
+			"claim": "MUXARTIFACT-RECEIPT-GRAMMAR",
+			"title": "the scrubbed session id is collapsed onto the window sigil, documenting a receipt tmux never emits",
+			"subject": "scripts/fixtures/mux-parent-transcript.scrubbed.jsonl",
+			"find": ["in session $0"],
+			"replace": ["in session @0"],
+			"gate": ["bash", "run.sh", "check-mux-parent-artifact"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:MUXARTIFACT-RECEIPT-GRAMMAR]",
+			"signatureSource": "scripts/check-mux-parent-artifact.ts"
+		}
+	]
+}

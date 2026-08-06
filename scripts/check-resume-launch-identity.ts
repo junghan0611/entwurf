@@ -25,6 +25,13 @@
  *      backend, no recorded transcript, recorded-but-missing file, no model, headerless file. The
  *      missing-file cell is a regression pin: before the existence check that case fell through
  *      `readSessionIdentity`'s ENOENT swallow and lied "no recorded model".
+ *   4b. THE ONE EXPECTED REFUSAL — a backend with no same-id resume is not a defect at all: the
+ *      record is fine and the operator reached past a capability boundary. It alone carries a
+ *      TYPED reason (`target-not-pi`) so the visible-resume composition can match a FIELD instead
+ *      of parsing a sentence or re-reading the record. Everything else here stays a bare throw.
+ *   4c. ABSOLUTE TRANSCRIPT — a relative recorded path would resolve against the WINDOW's own cwd
+ *      at launch, not against this process's, so it names a different file than the one checked
+ *      here. Refused before anything opens.
  *   5. SSOT — the module header names THIS gate, so the preserved leaf cannot advertise a
  *      certification that does not exist.
  *
@@ -36,7 +43,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { serializeMetaIdentity, upsertMetaSession } from "../pi-extensions/lib/meta-session.ts";
-import { resolveResumeLaunchIdentity } from "../pi-extensions/lib/resume-launch-identity.ts";
+import {
+	ResumeBackendUnsupportedError,
+	resolveResumeLaunchIdentity,
+} from "../pi-extensions/lib/resume-launch-identity.ts";
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -117,6 +127,40 @@ function main(): void {
 			"is a claude-code citizen",
 			"4: out-of-domain citizen → refused as a capability-domain miss, not as citizen rank",
 		);
+		// This one refusal is EXPECTED, not a defect: the record is perfectly good and the operator
+		// has reached past a capability boundary. So it is the only failure here that carries a
+		// typed `reason` a caller can match on a FIELD — the visible-resume composition turns it
+		// into `target-not-pi`, and if it degraded to a bare Error that caller would either parse
+		// this sentence or read the record a second time to ask which backend it was.
+		{
+			let caught: Error | null = null;
+			try {
+				resolveResumeLaunchIdentity(gidClaude);
+			} catch (err) {
+				caught = err as Error;
+			}
+			ok(
+				"4: the backend miss is a TYPED refusal carrying reason + backend, not a bare Error [QK:RESUME-ID-BACKEND-TYPED-REFUSAL]",
+				caught instanceof ResumeBackendUnsupportedError &&
+					caught.reason === "target-not-pi" &&
+					caught.backend === "claude-code",
+			);
+		}
+
+		// A RELATIVE recorded path passes existsSync here whenever this process happens to sit in
+		// the right directory, but the launch resolves `--session` inside the window's own
+		// `-c <record cwd>`. Two directories, two files, one receipt that looks correct — so the
+		// leaf refuses before anything opens rather than resuming an unknown transcript.
+		{
+			const nativeRel = "0199ffff-1111-4222-8333-444455556666";
+			writeTranscript("relative.jsonl", sessionLine(nativeRel) + modelLine);
+			const gidRel = mintRecord(nativeRel, "relative.jsonl");
+			rejects(
+				gidRel,
+				"RELATIVE transcriptPath",
+				"4: a relative recorded transcriptPath → refused before launch, because --session would resolve against the WINDOW's cwd, not this one [QK:RESUME-ID-SESSION-ABSOLUTE]",
+			);
+		}
 
 		const gidNoFile = mintRecord("0199dddd-1111-4222-8333-444455556666", null);
 		rejects(gidNoFile, "no recorded transcriptPath", "4: transcriptPath null → nothing to resume");

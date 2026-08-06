@@ -19,8 +19,38 @@
  */
 
 import { existsSync } from "node:fs";
+import path from "node:path";
 import { getEntwurfExplicitExtensions, readSessionIdentity } from "./entwurf-core.ts";
 import { readAddressableMetaIdentity } from "./meta-session.ts";
+
+/**
+ * The ONE expected refusal on this leaf: the target is a citizen of a backend that has no
+ * same-id resume at all.
+ *
+ * Everything else this function throws is a defect in the record, the transcript or the
+ * environment — a stale path, a foreign session file, an unrecorded model, an unresolvable
+ * bridge — and those keep their bare cause-rich `Error`, because a caller cannot act on them
+ * except by looking. A Claude Code or agy garden id is different in kind: nothing is broken,
+ * the operator simply asked a capability boundary to do something it does not cover, and the
+ * honest answer is a named refusal rather than an error report about a store that is fine.
+ *
+ * It carries a `reason` so the caller matches on a FIELD. Parsing the message string would make
+ * the wording load-bearing, and re-reading the record to ask "was it pi?" would read an address
+ * twice and could answer differently the second time.
+ */
+export class ResumeBackendUnsupportedError extends Error {
+	readonly reason = "target-not-pi" as const;
+	readonly backend: string;
+	constructor(gardenId: string, backend: string) {
+		super(
+			`resume-launch-identity: ${gardenId} is a ${backend} citizen — same-id resume is a host-adapter relaunch ` +
+				`capability, and its domain currently contains backend pi only (only pi stands a control socket up). ` +
+				`This is a capability boundary, not the control-socket rail and not citizen rank.`,
+		);
+		this.name = "ResumeBackendUnsupportedError";
+		this.backend = backend;
+	}
+}
 
 /** The launch-time facts `buildResumePiArgs` needs, resolved from the meta-record + the
  * recorded transcript (record authority, #50 C2/C3). */
@@ -65,17 +95,27 @@ export interface LaunchIdentity {
 export function resolveResumeLaunchIdentity(gardenId: string): LaunchIdentity {
 	const record = readAddressableMetaIdentity(gardenId);
 	if (record.backend !== "pi") {
-		throw new Error(
-			`resume-launch-identity: ${gardenId} is a ${record.backend} citizen — ` +
-				`resume is a host-adapter relaunch capability, and its domain currently contains backend pi only. ` +
-				`This is a capability boundary, not the control-socket rail and not citizen rank.`,
-		);
+		throw new ResumeBackendUnsupportedError(gardenId, record.backend);
 	}
 	const sessionFile = record.transcriptPath;
 	if (!sessionFile) {
 		throw new Error(
 			`resume-launch-identity: ${gardenId} has no recorded transcriptPath — ` +
 				`the citizen never wrote a session file (no turn yet), so there is nothing to resume.`,
+		);
+	}
+	// A recorded path is only a resume target while it names ONE file from everywhere. The record
+	// schema types transcriptPath as a nullable string and does not require an absolute path, and
+	// `existsSync` below would happily resolve a relative one against THIS process's cwd — while
+	// the launch resolves `--session <relative>` inside the window's own `-c <record cwd>`. Those
+	// are two different files whenever the two directories differ, and the resume would open the
+	// wrong transcript with a receipt that looks correct. This is a bad record, not an expected
+	// refusal, so it throws with its own cause like every other integrity failure here.
+	if (!path.isAbsolute(sessionFile)) {
+		throw new Error(
+			`resume-launch-identity: ${gardenId} recorded a RELATIVE transcriptPath ${JSON.stringify(sessionFile)} — ` +
+				`a resume resolves --session inside the window's own working directory, so a relative path would name a ` +
+				`different file than the one checked here; refusing rather than resuming an unknown transcript.`,
 		);
 	}
 	// A recorded path is only a resume target while the file is actually on disk.
