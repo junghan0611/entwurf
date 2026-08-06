@@ -79,7 +79,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability/native-push reject gates |
-| pi 0.83.0 fence | `pnpm check` + release-gate MUST |
+| pi 0.84.0 fence | `pnpm check` + release-gate MUST |
 
 ### Historical — 0.12.0 cutover close checklist
 
@@ -255,7 +255,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **0.83.0** (`>=0.83.0 <0.84`, next-minor 상한).
+  public export → TS 직접 import(재구현 불필요). floor = **0.84.0** (`>=0.84.0 <0.85`, next-minor 상한).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상
@@ -495,6 +495,46 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     오퍼레이터 `disallowedTools`로 제거할 수 없다. 방출 분기(`:4558`)도 같은 플래그에 걸린다. 유일한 레버인
     `clientCapabilities`를 entwurf가 설정으로 노출하지 않는다. **이 델타에 한정된 주장이고 다른 축으로
     일반화하지 않는다.** readiness race와도 무관하다 — elicitation 마커는 fence가 아니다.
+  - **2026-08-07 bump — claude-agent-acp 0.64.0 → 0.65.0 + pi 0.83.0 → 0.84.0 (ACP SDK 1.3.0·claude-agent-sdk 0.3.220 유지).**
+    **성격: adapter-code 릴리즈이되 선언 런타임 의존성은 움직이지 않았다.** 이건 앞선 두 성격 어느 쪽도
+    아니다 — 0.61→0.62(dist 바이트 동일 + dep 이동)도, 0.62→0.63(dist 이동 + dep 이동)도 아니다.
+    **앞의 논거를 재사용하지 않는다.** packed tarball 142,307 → 144,665 B, `dist/acp-agent.js`
+    350,538 → 360,823 B·`dist/acp-agent.d.ts` 61,181 → 62,224 B만 움직였고 나머지 dist 파일
+    (elicitation/index/lib/settings/tools/utils, .js+.d.ts)은 전부 바이트 동일, fileCount 24 → 24.
+    선언 의존성은 동일(`@agentclientprotocol/sdk` 1.3.0, `@anthropic-ai/claude-agent-sdk` 0.3.220, `zod` 동일).
+    - **순 기능 델타는 둘뿐이다**(upstream checkout `v0.64.0..v0.65.0`). `src/` 아래 **런타임/프로덕션
+      소스**로 움직인 것은 `src/acp-agent.ts` 한 파일(+280줄)뿐이다 — repo 전체 diff는 이보다 크고
+      그걸 비었다고 주장하지 않는다(`src/tests/acp-agent.test.ts`, 신규 706줄 `examples/simple-client.ts`,
+      CI/release manifest, lockfile). 그 어느 것도 배포 tarball에 실리지 않는다(파일 수 24 불변):
+      #930 `08a62ed`(0.64.1) 구조화된 permission 변경을 option-level `_meta.permission`으로 노출하고 버튼을
+      Deny/Allow Once/Always Allow로 재라벨링, #958 `a84b810`(0.65.0) **steered turn을 interrupt의 result가
+      아니라 SDK `idle`에서 settle**. #938 ExitPlanMode Markdown은 0.64.1에 들어왔다 0.64.2에서 되돌려졌으므로
+      (`4302a4b`) 0.65.0 기준 순 델타 0 — 건너뛴 중간 버전에 숨은 변화는 없다.
+    - **도달성은 기능별로 따로 실측했다.** #930은 **우리 wire에 실제로 온다** — entwurf는
+      `session/request_permission`을 답한다. 그럼에도 무해한 이유는 실측된 것이다: 우리
+      `resolvePermissionResponse`는 라벨이 아니라 **`kind`**(`allow_once`/`allow_always`)로 고르고, 0.65.0도
+      그 kind와 optionId(`reject`/`allow`/`allow_always`)를 그대로 낸다(`acp-agent.ts:4885-4890`).
+      즉 "기능이 off"가 아니라 **라벨 독립성** 주장이다. #958은 **구조적으로 미도달**이다 —
+      새 분기는 전부 `isSteering(turn)` 가드이고 `steeredEchoes`는 `session/steer` 핸들러
+      (`agent.steer`, `:1922`/`:7880`)에서만 채워지는데 entwurf ACP 클라이언트는
+      initialize/newSession/prompt/setSessionConfigOption/cancel만 보낸다. 가드 아닌 유일한 수정
+      (`owesTrailingIdle`)도 비-steering에서 `true`로 접혀 이전 조건과 동치다.
+      (entwurf MCP의 `mode:"steer"`는 우리 control-socket 주입 방식이고 ACP steering과 무관하다.)
+      공개 export `describeAlwaysAllow` 제거도 미도달 — 우리는 어댑터 심볼을 import하지 않고 bin만 spawn한다.
+    - **pi 천장은 실측으로 올렸고, byte-identical 논거는 이번엔 성립하지 않는다.** `packages/ai/src/compat.ts`는
+      v0.83.0..v0.84.0 sha256 동일(`c1212487…`)이지만 **`loader.ts`는 다르다**(`2498fc18…` → `288a8842…`).
+      그 diff 내용으로 올렸다: alias 표 불변(4개 그대로, `pi-ai` → compat 엔트리), `readPiManifest`는
+      `core/pi-manifest.ts`로 이동한 순수 리팩터(같은 `pi.extensions` 계약), `registerMarkdownTransformer`는 가산,
+      새 jiti `virtualModules`/`tsconfigPaths` 분기는 **pi 자신이 .ts 소스로 돌 때만** 걸린다. 유일한 행위 변화인
+      `ExtensionAPI.events`의 liveness assert + `invalidate` 해제는 entwurf에 닿지 않는다 — 우리는 event-bus
+      핸들러를 하나도 등록하지 않는다(실측).
+    - **pi 런타임 별자리가 커졌다.** `pi-coding-agent`의 `@earendil-works` caret 집합이 0.83.0의
+      {agent-core, ai, tui}에서 0.84.0의 {agent-core, ai, **client**, **protocol**, tui}로 늘어,
+      `check-pack-install`이 `pi-client`/`pi-protocol`을 처음으로 핀한다(미핀 시 float — 2026-07-21 사건과 같은 부류).
+    - `@anthropic-ai/sdk 0.100.1` 유지 — 0.3.220의 peer floor를 **재실측**했고 `>=0.93.0`으로 불변이다
+      (`@modelcontextprotocol/sdk ^1.29.0` → 1.29.0, `zod ^4.0.0` → 4.3.6 충족). 기계적 상향을 취하지 않는다.
+    - **readiness race와 무관하다** — 두 기능 어느 것도 readiness fence가 아니고 `mcpServerStatus()`는 여전히
+      호출되지 않는다. 다만 `dist/acp-agent.js`가 10KB 움직였으므로 런타임 타이밍이 동일하다고 주장하지 않는다.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.

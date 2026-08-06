@@ -4,32 +4,76 @@
 // the peer-resolution that makes the Claude ACP adapter satisfiable:
 //
 //   @agentclientprotocol/sdk              1.3.0    wire SDK (acp-bridge import source)
-//   @agentclientprotocol/claude-agent-acp 0.64.0   Claude adapter (spawn binary)
+//   @agentclientprotocol/claude-agent-acp 0.65.0   Claude adapter (spawn binary)
 //   @anthropic-ai/sdk                     0.100.1  peer-resolution pin ONLY (see below)
 //
-// 2026-07-31 bump 0.63.0 → 0.64.0 — a ONE-FEATURE adapter release. Measured
-// against the upstream checkout (release commit 9cc5a09): the entire functional
-// delta is `src/elicitation.ts` +14 lines (commit d7a65ce), which stamps the
-// AskUserQuestion form's "Other" free-text field with a shared
-// `_meta._askUserQuestionCustomAnswer` marker so ACP clients can recognize a
-// custom-answer companion across Codex/Claude bridges. Published package:
-// unpackedSize 529,638 → 530,740 B, fileCount 24 → 24. Runtime deps are
-// IDENTICAL (`@agentclientprotocol/sdk` 1.3.0, `@anthropic-ai/claude-agent-sdk`
-// 0.3.220) — the upstream lock's `@modelcontextprotocol/sdk` 1.29.0 → 1.30.0 is
-// THEIR dev tree; our resolution stays 1.29.0 because our runtime dep set did
-// not move. Re-measured: the anthropic peer still resolves 0.100.1.
+// 2026-08-07 bump 0.64.0 → 0.65.0 — an ADAPTER-CODE release whose DECLARED
+// RUNTIME DEPS DID NOT MOVE. That combination is its own character; it is
+// neither the 0.61→0.62 dependency refresh (dist byte-identical, deps moved) nor
+// the 0.62→0.63 shape (dist moved AND deps moved). Do not reuse either argument.
+// Measured on the packed tarballs: 142,307 → 144,665 B, with `dist/acp-agent.js`
+// 350,538 → 360,823 B and `dist/acp-agent.d.ts` 61,181 → 62,224 B moved; every
+// other dist file (elicitation/index/lib/settings/tools/utils, .js + .d.ts) is
+// byte-identical, and the file set is unchanged at 24. The published
+// `package.json` delta is the version string plus one `example:simple-client`
+// script. Declared deps are IDENTICAL — `@agentclientprotocol/sdk` 1.3.0,
+// `@anthropic-ai/claude-agent-sdk` 0.3.220, `zod` ^3.25.0 || ^4.0.0.
 //
-// Reachability is STRONGER than "off by default", and it is measured, not
-// assumed. `backend.ts` sends `clientCapabilities: {}` — a hardcoded literal with
-// no operator-config seam — so upstream computes `elicitationSupport.form =
-// false`. Two independent upstream gates then close the new marker off:
-// `acp-agent.ts:5358` disallows `AskUserQuestion` outright, and `:5449` composes
-// the final list by CONCATENATION (`[...userProvidedOptions.disallowedTools,
-// ...disallowedTools]`), so no operator `disallowedTools` can remove it; and the
-// form-elicitation emission branch at `:4558` is gated on the same flag. The only
-// lever is `clientCapabilities`, which entwurf does not expose to configuration —
-// so this marker cannot reach our wire without an entwurf SOURCE change. That is
-// the honest claim for THIS delta; do not generalize it to other axes.
+// Net functional delta across the span (upstream checkout, v0.64.0..v0.65.0): the
+// only RUNTIME/production source under `src/` that moved is `src/acp-agent.ts`
+// (+280 net). The repo-wide diff is larger and is deliberately NOT claimed to be
+// empty — it also carries `src/tests/acp-agent.test.ts`, a new 706-line
+// `examples/simple-client.ts`, CI/release manifests, and lockfiles; none of those
+// ship in the published tarball (its file set is unchanged at 24). TWO features
+// survive to 0.65.0 —
+//   #930 `08a62ed` (shipped 0.64.1): structured permission changes exposed as
+//        option-level `_meta.permission { version, changes }`, with the approval
+//        buttons relabeled Deny / Allow Once / Always Allow.
+//   #958 `a84b810` (shipped 0.65.0): a STEERED turn settles at the SDK's `idle`
+//        instead of at the interrupt's `result`, because a steer is delivered at
+//        priority `now` and the CLI ABORTS the running cycle.
+// A third, #938 ExitPlanMode Markdown plan updates, landed in 0.64.1 and was
+// REVERTED in 0.64.2 (`4302a4b`), so it is net-zero at 0.65.0 — the intermediate
+// versions we skip are not a hidden delta.
+//
+// Reachability onto OUR surface, measured per feature — not asserted wholesale:
+//   #930 IS on our wire. entwurf really answers `session/request_permission`
+//        (acp-client.ts CLIENT_METHODS binding → backend.ts `requestPermission`).
+//        It stays behaviour-neutral for a MEASURED reason: our
+//        `resolvePermissionResponse` selects on `kind`
+//        (`allow_once` | `allow_always`), never on the button LABEL, and 0.65.0
+//        still emits those kinds with optionIds `reject`/`allow`/`allow_always`
+//        (acp-agent.ts:4885-4890). The relabeling therefore cannot move our
+//        choice; the added `_meta.permission` is data we do not read. This is a
+//        label-independence claim, NOT "the feature is off".
+//   #958 is UNREACHABLE, by construction rather than by default. Every new branch
+//        is guarded by `isSteering(turn)`, which requires `turn.steeredEchoes`,
+//        and that set is populated ONLY inside the `session/steer` RPC handler
+//        (`agent.steer`, acp-agent.ts:1922/7880). entwurf's ACP client exposes
+//        exactly initialize / newSession / prompt / setSessionConfigOption /
+//        cancel — it never sends `session/steer`, so `steeredEchoes` stays
+//        undefined. The one non-`else if` edit reduces accordingly: the new
+//        `owesTrailingIdle = isAutonomousResult || !isSteering(activeTurn)` is
+//        `true` whenever we are not steering, so the guarded condition collapses
+//        to the pre-0.65.0 one. (`mode: "steer"` in the entwurf MCP surface is
+//        our own control-socket injection style — unrelated to ACP steering.)
+// Also note `describeAlwaysAllow` was REMOVED from the adapter's public exports;
+// entwurf never imports adapter symbols (it resolves the package only to spawn
+// its bin), so that removal cannot reach us.
+//
+// Re-measured, not carried forward: claude-agent-sdk 0.3.220 declares
+// `@anthropic-ai/sdk >=0.93.0`, `@modelcontextprotocol/sdk ^1.29.0`, `zod ^4.0.0`
+// — so the 0.100.1 pin still stands rather than rising mechanically, and our
+// resolution stays 1.29.0.
+//
+// HISTORY — 2026-07-31 bump 0.63.0 → 0.64.0 — a ONE-FEATURE adapter release. The
+// entire functional delta was `src/elicitation.ts` +14 lines (commit d7a65ce),
+// stamping the AskUserQuestion form's "Other" free-text field with a shared
+// `_meta._askUserQuestionCustomAnswer` marker. It could not reach our wire
+// without an entwurf SOURCE change: `backend.ts` sends `clientCapabilities: {}`
+// with no operator-config seam, so upstream computed `elicitationSupport.form =
+// false`, and `AskUserQuestion` was additionally disallowed via a CONCATENATED
+// list no operator `disallowedTools` could shorten.
 //
 // HISTORY — 2026-07-30 bump 0.62.0 → 0.63.0 — an ADAPTER-CODE release, not a dependency
 // refresh. Measured on the packed tarballs: 137,294 → 142,084 bytes, with
@@ -93,7 +137,7 @@ const pkg = JSON.parse(read("package.json")) as { dependencies?: Record<string, 
 const deps = pkg.dependencies ?? {};
 const PINS: Record<string, string> = {
 	"@agentclientprotocol/sdk": "1.3.0",
-	"@agentclientprotocol/claude-agent-acp": "0.64.0",
+	"@agentclientprotocol/claude-agent-acp": "0.65.0",
 	[ANTHROPIC_SDK]: "0.100.1",
 };
 for (const [name, ver] of Object.entries(PINS)) {
@@ -113,8 +157,8 @@ for (const [name, ver] of Object.entries(PINS)) {
 const lock = read("pnpm-lock.yaml");
 assert.match(
 	lock,
-	/@agentclientprotocol\/claude-agent-acp@0\.64\.0\(@anthropic-ai\/sdk@0\.100\.1/,
-	"pnpm-lock: claude-agent-acp@0.64.0 must peer-resolve @anthropic-ai/sdk@0.100.1 (peer-pin), not the stale 0.91.1",
+	/@agentclientprotocol\/claude-agent-acp@0\.65\.0\(@anthropic-ai\/sdk@0\.100\.1/,
+	"pnpm-lock: claude-agent-acp@0.65.0 must peer-resolve @anthropic-ai/sdk@0.100.1 (peer-pin), not the stale 0.91.1",
 );
 assert.match(
 	lock,

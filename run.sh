@@ -1567,13 +1567,13 @@ assert.equal(peerTui, piAi,
 // floor tracks the devDep pin so a consumer can't install against a pi lacking
 // the public trust exports the bridge imports at the pinned minor, AND an upper
 // bound at the next minor stops a fresh install from silently pulling a future
-// pi (past the declared ceiling — 0.84+ at the current 0.83.0 pin) whose
+// pi (past the declared ceiling — 0.85+ at the current 0.84.0 pin) whose
 // internal export surface has drifted from the one we typecheck against.
 // pi moves its public surface every minor (the 0.79→0.80 getModels→provider-
 // factory churn is exactly this), so an open `>=` floor is exactly how the next
 // installer re-acquires the drift. The floor is also the HARD MINIMUM a consumer
-// install resolves: at `>=0.83.0` an existing 0.82.x host is upgraded, not kept.
-// Expected shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.83.0 <0.84`).
+// install resolves: at `>=0.84.0` an existing 0.83.x host is upgraded, not kept.
+// Expected shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.84.0 <0.85`).
 const [piMaj, piMin] = piAi.split('.').map(Number);
 assert.equal(piMaj, 0,
   `pi pin major must stay 0 for the next-minor ceiling rule (got ${piAi}); revisit check-dep-versions when pi reaches 1.x`);
@@ -2359,7 +2359,7 @@ check_acp_provider_surface() {
 check_acp_sdk_surface() {
   # Deterministic gate for the S2a ACP SDK dependency surface. Pins the three
   # ACP runtime deps to the current oracle versions (@agentclientprotocol/sdk
-  # 1.3.0 + claude-agent-acp 0.64.0 + @anthropic-ai/sdk 0.100.1), locks the
+  # 1.3.0 + claude-agent-acp 0.65.0 + @anthropic-ai/sdk 0.100.1), locks the
   # peer-resolution that keeps claude-agent-sdk satisfiable (0.100.1, not the
   # stale 0.91.1), asserts the wire SDK still value-exports the symbols the raw
   # turn needs (silent-rename gate), and forbids any source-level anthropic SDK
@@ -2903,21 +2903,31 @@ _check_pack_install_impl() {
   printf '%s\n' '{ "name": "entwurf-install-smoke", "version": "0.0.0", "private": true }' > "$tmp/package.json"
 
   # pi-agent-core is pinned even though we never import it: pi-coding-agent depends
-  # on it by CARET (`^0.83.0`), so with no lockfile in this fresh temp project it
+  # on it by CARET (`^0.84.0`), so with no lockfile in this fresh temp project it
   # floats to whatever pi published last — and that newer core then drags a NESTED
   # pi-ai of its own. Measured 2026-07-21: pinning only the three we import left
   # pi-agent-core@0.80.10 + pi-ai@0.80.10 in the tree while the gate still announced
   # "pinned pi 0.80.7". The gate would then be verifying an UNVERIFIED runtime — the
   # exact class this cut exists to close. Pin every @earendil-works package that
   # constitutes the pi runtime, not just the ones whose types we touch.
-  echo "[check-pack-install] pnpm add into $tmp (with 0.83.x peers + typebox)"
+  #
+  # The constellation is re-measured at each pi bump, never carried forward. At
+  # 0.84.0 it GREW: pi-coding-agent's @earendil-works caret set went from
+  # {pi-agent-core, pi-ai, pi-tui} at 0.83.0 to {pi-agent-core, pi-ai, pi-client,
+  # pi-protocol, pi-tui}, so pi-client and pi-protocol are pinned here for the
+  # first time. Unpinned they would float exactly like pi-agent-core did in the
+  # 2026-07-21 incident above. (pi-telemetry arrives transitively, not as a
+  # direct caret; the leak assertion below covers it and every other pi package.)
+  echo "[check-pack-install] pnpm add into $tmp (with 0.84.x peers + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.83.0" \
-    "@earendil-works/pi-coding-agent@0.83.0" \
-    "@earendil-works/pi-tui@0.83.0" \
-    "@earendil-works/pi-agent-core@0.83.0" \
+    "@earendil-works/pi-ai@0.84.0" \
+    "@earendil-works/pi-coding-agent@0.84.0" \
+    "@earendil-works/pi-tui@0.84.0" \
+    "@earendil-works/pi-agent-core@0.84.0" \
+    "@earendil-works/pi-client@0.84.0" \
+    "@earendil-works/pi-protocol@0.84.0" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -2927,17 +2937,17 @@ _check_pack_install_impl() {
 
   # A pin is a wish until the resolved tree is read back. Assert it: EVERY
   # @earendil-works pi package present — direct or transitive, top level or nested —
-  # must be the pinned 0.83.0. Anything else means an unpinned caret floated and the
+  # must be the pinned 0.84.0. Anything else means an unpinned caret floated and the
   # rest of this gate would be exercising a runtime nobody verified, while still
-  # printing "pinned pi 0.83.0". Fail loud instead of proving the wrong floor.
+  # printing "pinned pi 0.84.0". Fail loud instead of proving the wrong floor.
   local leaked_pi
-  leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | grep '^@earendil-works+pi-' | grep -v '@0\.83\.0' || true)
+  leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | grep '^@earendil-works+pi-' | grep -v '@0\.84\.0' || true)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.83.0):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.84.0):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works pi package is 0.83.0"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works pi package is 0.84.0"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the

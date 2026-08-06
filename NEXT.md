@@ -1,4 +1,4 @@
-# NEXT — mux lane 머지됨; 다음은 dep bump(pi 0.84 / acp 0.65), 그 뒤 issue #62. 0.13.1은 여전히 make authority 대기
+# NEXT — dep bump(pi 0.84 / acp 0.65) 닫힘; 다음은 issue #62(vitest)를 별도 브랜치에서. 0.13.1은 여전히 make authority 대기
 
 > NEXT는 부트 섹터다. ACP 계약과 readiness 경계는 `docs/acp-backend-rail.md`, 검증 계약은 `VERIFY.md`,
 > 기록된 증거는 `BASELINE.md` HISTORY 포인터, dep-bump 트랙 절차는 `ROADMAP.md`의 **Dep bump(별도 트랙)**가
@@ -16,11 +16,13 @@
   - receipt 축이 늘었다: **LAUNCH**(창이 섰다) / **OBSERVATION**(같은 gid의 socket이 답했다) /
     **recall**(같은 대화가 돌아왔다)은 서로 다른 세 사실이며 앞의 것이 뒤의 것을 함의하지 않는다.
   - 운용 손은 `.claude/skills/entwurf-dev/SKILL.md`가 진다. S1까지 반영돼 있다.
-- **다음 두 걸음은 이 순서다.** ⑴ **dep bump — pi `v0.84.0`, claude-agent-acp `v0.65.0`.**
-  절차는 아래 ROADMAP.md **Dep bump(별도 트랙)** 를 그대로 재사용한다(surface 게이트 이동 →
-  `LIVE=1 ./run.sh smoke-acp-raw-turn-live` → upstream `dist/` 이동 여부로 성격 판정 →
-  pi 천장은 `loader.ts`/`compat.ts` sha256 실측 → peer floor 재실측). main에서 닫는다.
-  ⑵ 그 뒤 **issue #62 (vitest 전환)** 를 **별도 브랜치**에서. main에서 착수하지 않는다.
+- **dep bump가 main에서 닫혔다 — pi `0.84.0`, claude-agent-acp `0.65.0`** (peer `>=0.84.0 <0.85`,
+  devDep exact `0.84.0`). 성격 판정·해시·도달성 실측은 ROADMAP.md **Dep bump(별도 트랙)** 2026-08-07
+  항목이 SSOT다. 이 bump가 남긴 계약 변화 둘: pi 런타임 별자리가 커져 `check-pack-install`이
+  `pi-client`/`pi-protocol`을 핀하고, pi 천장 논거가 "loader/compat 바이트 동일"에서
+  "diff를 읽고 도달성을 판정"으로 바뀌었다.
+- **다음 좌표는 issue #62 (vitest 도입과 손으로 지은 검증면 감산) 이고 별도 브랜치에서 연다.**
+  main이나 capability lane에 meta-infra를 태우지 않는다.
 - **0.13.0은 완전히 나갔다.** `27e5f09` = `origin/main` = tag `v0.13.0`, GitHub release published
   (2026-07-30T03:19:53Z), npm `@junghanacs/entwurf@0.13.0`이 **`latest`**, exact-SHA CI 2회 success
   (30510354126 · 30510859840). `make`/`publish`는 끝났다 — 다시 실행하지 말 것.
@@ -322,16 +324,28 @@ self-update다) `pnpm install` → `prepare` 훅이 `build-bridge`를 자동 실
 9. ~~**mux capability lane**~~ — **닫힘·머지됨 (2026-08-07).** visible fresh call + visible same-id
    resume. `1750af4` · `d8d9452`, CI green. 위 NOW 첫 항목 참조. 이 컷의 범위가 넓어졌으므로
    `prepare` 때 CHANGELOG는 dep bump뿐 아니라 mux verb 두 개를 함께 실어야 한다.
-10. **dep bump — pi `v0.84.0` / claude-agent-acp `v0.65.0`.** ← **NEXT**. main에서 진행한다.
-    ROADMAP.md **Dep bump(별도 트랙)** 절차를 재사용하되, 직전 두 bump의 교훈을 지킨다:
-    upstream `dist/`가 움직였는지로 *dependency refresh*와 *adapter-code 릴리즈*를 가르고,
-    byte-identical 논거를 재사용하지 않으며, peer floor는 기계적 상향 대신 실측한다.
-    pi 천장은 `packages/coding-agent/src/core/extensions/loader.ts`와 `packages/ai/src/compat.ts`의
-    sha256을 v0.83..v0.84 사이에서 대조해 올린다(로컬 체크아웃 `~/repos/3rd/pi/pi-mono`를 태그에 맞춘다).
-    잠금은 `check-acp-sdk-surface` + `LIVE=1 ./run.sh smoke-acp-raw-turn-live`.
-11. **issue #62 — vitest 도입과 손으로 지은 검증면 감산.** dep bump가 닫힌 뒤 **별도 브랜치**에서.
+10. ~~**dep bump — pi `v0.84.0` / claude-agent-acp `v0.65.0`**~~ — **닫힘 (2026-08-07, main).**
+    측정·해시·성격 판정은 ROADMAP.md **Dep bump(별도 트랙)** 2026-08-07 항목이 SSOT다. 다음 lane이
+    알아야 할 durable한 결론만 남긴다:
+    - **acp 0.64.0 → 0.65.0은 세 번째 성격이다** — adapter-code 릴리즈이면서 선언 런타임 의존성은
+      불변. 0.61→0.62(dist 동일+dep 이동)도 0.62→0.63(dist 이동+dep 이동)도 아니므로 **그 두 논거를
+      재사용하면 안 된다.** 순 기능 델타 둘(#930 permission `_meta`+재라벨링, #958 steered turn을
+      `idle`에서 settle). #938은 0.64.1 랜딩 → 0.64.2 revert로 순 델타 0.
+    - **도달성은 기능별로 따로 판정한다.** #930은 우리 wire에 **실제로 온다** —
+      `resolvePermissionResponse`가 라벨이 아니라 `kind`로 골라서 무해한 것이지 기능이 off인 게 아니다
+      (라벨 독립성 주장). #958은 `session/steer`를 보내지 않아 구조적 미도달.
+    - **pi 천장 논거가 바뀌었다.** `compat.ts`는 여전히 바이트 동일이지만 `loader.ts`는 아니다.
+      앞으로 pi 천장은 "두 파일 동일"이 아니라 **diff를 읽고 도달성을 판정**해서 올린다.
+    - **pi 런타임 별자리가 커졌다** — `check-pack-install`이 `pi-client`/`pi-protocol`을 핀한다.
+    - peer floor는 기계적 상향이 아니라 재실측이다: claude-agent-sdk 0.3.220 → `>=0.93.0` 불변,
+      `@anthropic-ai/sdk 0.100.1` 유지.
+    - **이 bump가 닫지 않은 것 둘.** ⑴ `check-acp-sdk-surface`에는 `[QK:]` claim도 mutant manifest도
+      없다 — capability lane에 meta-infra를 태우지 않으려고 만들지 않았다. 그래서 이 게이트는
+      `check-gate-qualification`이 지키지 않는다. ⑵ #930은 **실제 permission 왕복 LIVE 표본이 없다**;
+      kind 기반 선택의 무해함은 소스 실측까지가 증거다.
+11. **issue #62 — vitest 도입과 손으로 지은 검증면 감산.** ← **NEXT**. **별도 브랜치**에서 연다.
     capability lane이나 main에 meta-infra를 태우지 않는다. 이슈 본문에 Phase 0–4와
-    게이트 작성 교훈이 실려 있다.
+    게이트 작성 교훈이 실려 있다. 위 10번이 남긴 mutant manifest 부재도 이 lane에서 함께 볼 후보다.
 
 ## 미결 — 이 컷이 주장하지 않는 것
 

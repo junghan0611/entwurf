@@ -126,6 +126,8 @@ garden id, model, auth, transcript, task, delivery를 모른다. 장소만 다�
 
 2026-08-04 기준 그 조건은 성립하지 않는다. pi 0.83.0의 `<pi>/docs/tmux.md`는 extended-keys 키보드 설정
 문서일 뿐이고, pi는 자신을 어느 window에 놓을지에 대한 어떤 표면도 제공하지 않는다.
+**pi 0.84.0에서 재확인(2026-08-07): 그 `docs/tmux.md`는 v0.83.0..v0.84.0 sha256 동일**
+(`1fa5373d…`)이므로 삭제 조건은 여전히 불성립이다.
 
 ## 4. caller-side situation map — 전체 지도를 보는 쪽은 caller다
 
@@ -244,7 +246,7 @@ process를 여는 것보다 **그 process가 낳은 정확한 record/garden id�
 어렵다. 시각·cwd·새 파일 목록으로 "방금 뜬 것이 아마 이것"이라고 추측하면 watcher·timeout·retry·경합
 처리가 따라오고, 그 순간 Entwurf는 교환기에서 supervisor로 자란다.
 
-## 6. pi `0.83.0` identity 판정 — 앵커 2026-08-04
+## 6. pi identity 판정 — 앵커 2026-08-04 (pi `0.83.0`), 재확인 2026-08-07 (pi `0.84.0`)
 
 T1-b를 열려면 둘 중 하나가 실제 pi lifecycle에서 증명돼야 한다.
 
@@ -253,16 +255,22 @@ T1-b를 열려면 둘 중 하나가 실제 pi lifecycle에서 증명돼야 한�
 2. **사전 주입** — caller가 native identity를 미리 정해 launch에 주입할 수 있고, pi의 native
    lifecycle이 그 identity로 정확히 한 record를 낳는다.
 
-certified pi `0.83.0`의 공식 문서와 dist source를 읽고 판정한다.
+certified pi `0.83.0`의 공식 문서와 dist source를 읽고 판정한다. 아래 표의 pi 측 근거는
+certified pi가 `0.84.0`으로 올라간 뒤 재실측했고 **판정은 그대로다**: `--session-id`와
+`assertValidSessionId` 문법은 살아 있고, `session-manager.ts`의 유일한 v0.83.0..v0.84.0 변경은
+session 디렉터리 스캔이 symlink를 허용하게 된 것(identity minting과 무관)이며, 동기로 identity를
+반환하는 새 표면은 추가되지 않았다. 즉 조건 1은 0.84.0에서도 불성립이다.
 
 ### 읽은 근거
 
-`<pi>` = 설치된 `@earendil-works/pi-coding-agent@0.83.0` 패키지 루트(pnpm global store). 접두사 없는
+`<pi>` = 설치된 `@earendil-works/pi-coding-agent@0.84.0`(현 certified) 패키지 루트(pnpm global store).
+아래 표에서 출처가 `(0.83.0)`으로 적힌 행은 **앵커 시점의 역사적 표본**이고, 그 행의 사실이 0.84.0에서도
+성립하는지는 위 재실측 문단이 따로 진다. 접두사 없는
 경로는 이 repo 기준이다.
 
 | 사실 | 출처 |
 |---|---|
-| `--session-id <id>` "Use exact project session ID, creating it if missing" | `pi --help` (0.83.0) |
+| `--session-id <id>` "Use exact project session ID, creating it if missing" | `pi --help` (0.83.0; 0.84.0에서 잔존 확인) |
 | id 문법 `^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$` | `<pi>/dist/core/session-manager.js:15-19` (`assertValidSessionId`) |
 | flag 검증과 `--session`/`--continue`/`--resume` 상호배제 | `<pi>/dist/main.js:204-224` |
 | 미존재 id → 경고 후 그 id로 신규 생성 | `<pi>/dist/main.js:304-311` |
@@ -527,7 +535,7 @@ composition이고, 각각 source-adjacent gate가 argv 경계를 진다. 출하 
 | process spawned (`pane_pid`) | 같은 launch receipt에 포함 | 동기 로컬 사실이며, 그 process가 살아 있다는 주장은 아니다 (§5) |
 | resume launch (`@window/%pane` + target gid + 재개하는 transcript) | **`entwurf_resume_call`의 첫 receipt로 출하됨** | tmux가 창을 만들고 pi 시작을 요청했다는 사실까지. 시민이 돌아왔다는 주장은 아니다 |
 | resume observation (same-gid socket-alive 또는 `resume-unobserved`) | **`entwurf_resume_call`의 두 번째 receipt로 출하됨** | 시민이 다시 주소를 갖는다고 말하는 **유일한** 사실. launch와 절대 합치지 않는다. 미관측은 실패가 아니라 결과이며 창은 열린 채 lock은 해제된다 |
-| launch가 동기 반환한 native session/garden identity | **없음** (§6 조건 1 불성립) | pi 0.83.0은 제공하지 않는다. fresh-call도 동기로는 주지 않는다 |
+| launch가 동기 반환한 native session/garden identity | **없음** (§6 조건 1 불성립) | pi 0.83.0도 0.84.0도 제공하지 않는다(재실측). fresh-call도 동기로는 주지 않는다 |
 | callback 메시지의 sender envelope이 실은 gardenId | **fresh-call의 correlation receipt** (§6-a) — 비동기, caller의 기존 수신면에 도착 | delivery 계층이 붙인 사실이며 sibling의 자기 진술이 아니다 (§6-b) |
 | 사전 주입한 native token으로 조회한 gardenId | **CLOSED** — callback correlation이 대체한 폐기 후보 (§6) | 새 증거 + GLG 재승인 없이는 재개하지 않는다 |
 | unknown record가 나타날 때까지 감시·추측 | 금지된 supervision | 시간에 걸친 발견·상관짓기 |
