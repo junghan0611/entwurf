@@ -1,4 +1,4 @@
-# NEXT — 0.13.1 prepared; fresh `--cut` acceptance closed, awaiting explicit make authority
+# NEXT — mux lane 머지됨; 다음은 dep bump(pi 0.84 / acp 0.65), 그 뒤 issue #62. 0.13.1은 여전히 make authority 대기
 
 > NEXT는 부트 섹터다. ACP 계약과 readiness 경계는 `docs/acp-backend-rail.md`, 검증 계약은 `VERIFY.md`,
 > 기록된 증거는 `BASELINE.md` HISTORY 포인터, dep-bump 트랙 절차는 `ROADMAP.md`의 **Dep bump(별도 트랙)**가
@@ -6,6 +6,21 @@
 
 # NOW
 
+- **mux capability lane이 main에 들어왔다 (2026-08-07).** visible-first가 정책으로 굳었다.
+  `entwurf_fresh_call {backend, model, task}`이 보이는 tmux 창에 새 형제를 열고,
+  `entwurf_resume_call {target}`이 dormant pi를 **같은 garden id로** 되세운다. hidden background
+  child(`owned-outcome` intent + `spawn-bg` transport)는 타입계에서 제거됐다. 커밋
+  `1750af4`(explicit model carrier) · `d8d9452`(visible same-id resume), 둘 다 CI green,
+  qualification 219 mutants. 통합 LIVE `smoke-mux-lifecycle-live`가 **release-gate MUST**다
+  (`LIVE=1`이 필요하고 모델 턴을 쓴다 — `pnpm check` 밖).
+  - receipt 축이 늘었다: **LAUNCH**(창이 섰다) / **OBSERVATION**(같은 gid의 socket이 답했다) /
+    **recall**(같은 대화가 돌아왔다)은 서로 다른 세 사실이며 앞의 것이 뒤의 것을 함의하지 않는다.
+  - 운용 손은 `.claude/skills/entwurf-dev/SKILL.md`가 진다. S1까지 반영돼 있다.
+- **다음 두 걸음은 이 순서다.** ⑴ **dep bump — pi `v0.84.0`, claude-agent-acp `v0.65.0`.**
+  절차는 아래 ROADMAP.md **Dep bump(별도 트랙)** 를 그대로 재사용한다(surface 게이트 이동 →
+  `LIVE=1 ./run.sh smoke-acp-raw-turn-live` → upstream `dist/` 이동 여부로 성격 판정 →
+  pi 천장은 `loader.ts`/`compat.ts` sha256 실측 → peer floor 재실측). main에서 닫는다.
+  ⑵ 그 뒤 **issue #62 (vitest 전환)** 를 **별도 브랜치**에서. main에서 착수하지 않는다.
 - **0.13.0은 완전히 나갔다.** `27e5f09` = `origin/main` = tag `v0.13.0`, GitHub release published
   (2026-07-30T03:19:53Z), npm `@junghanacs/entwurf@0.13.0`이 **`latest`**, exact-SHA CI 2회 success
   (30510354126 · 30510859840). `make`/`publish`는 끝났다 — 다시 실행하지 말 것.
@@ -304,6 +319,19 @@ self-update다) `pnpm install` → `prepare` 훅이 `build-bridge`를 자동 실
    `/entwurf-release make 0.13.1` authority뿐이다.**
    **CHANGELOG 첫 항목은 pi floor가 0.82.x 설치를 깬다는 사실이어야 한다** — patch 번호가 실어주지
    않는 신호를 산문이 대신 싣는다. `0.14.0`은 CODEX 지원에 예약돼 있다(GLG).
+9. ~~**mux capability lane**~~ — **닫힘·머지됨 (2026-08-07).** visible fresh call + visible same-id
+   resume. `1750af4` · `d8d9452`, CI green. 위 NOW 첫 항목 참조. 이 컷의 범위가 넓어졌으므로
+   `prepare` 때 CHANGELOG는 dep bump뿐 아니라 mux verb 두 개를 함께 실어야 한다.
+10. **dep bump — pi `v0.84.0` / claude-agent-acp `v0.65.0`.** ← **NEXT**. main에서 진행한다.
+    ROADMAP.md **Dep bump(별도 트랙)** 절차를 재사용하되, 직전 두 bump의 교훈을 지킨다:
+    upstream `dist/`가 움직였는지로 *dependency refresh*와 *adapter-code 릴리즈*를 가르고,
+    byte-identical 논거를 재사용하지 않으며, peer floor는 기계적 상향 대신 실측한다.
+    pi 천장은 `packages/coding-agent/src/core/extensions/loader.ts`와 `packages/ai/src/compat.ts`의
+    sha256을 v0.83..v0.84 사이에서 대조해 올린다(로컬 체크아웃 `~/repos/3rd/pi/pi-mono`를 태그에 맞춘다).
+    잠금은 `check-acp-sdk-surface` + `LIVE=1 ./run.sh smoke-acp-raw-turn-live`.
+11. **issue #62 — vitest 도입과 손으로 지은 검증면 감산.** dep bump가 닫힌 뒤 **별도 브랜치**에서.
+    capability lane이나 main에 meta-infra를 태우지 않는다. 이슈 본문에 Phase 0–4와
+    게이트 작성 교훈이 실려 있다.
 
 ## 미결 — 이 컷이 주장하지 않는 것
 
