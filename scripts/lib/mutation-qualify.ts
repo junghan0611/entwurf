@@ -548,6 +548,29 @@ function countOccurrences(haystack: string, needle: string): number {
 	return count;
 }
 
+/** Tail of a red control run's captured output that gets echoed into the log. */
+const CONTROL_TAIL_LINES = 40;
+
+/**
+ * Echo a RED control run's captured output. Without this the runner reports the
+ * verdict (`RED (exit=1 …)`) and DROPS the reason it already holds, which makes a
+ * CONTROL-RED that only reproduces on one host — a CI runner, say — undiagnosable
+ * from its log: the same single line no matter how often it is re-run. A bounded
+ * tail is enough, because a gate names its failure on the way out. Silence is a
+ * finding too, so an empty capture is reported as empty rather than skipped.
+ */
+function logControlOutput(output: string, log: (line: string) => void): void {
+	const body = output.replace(/\s+$/, "");
+	if (body === "") {
+		log("    │ (the control run produced no output — the failure is upstream of the gate's own reporting)");
+		return;
+	}
+	const lines = body.split("\n");
+	const dropped = Math.max(0, lines.length - CONTROL_TAIL_LINES);
+	if (dropped > 0) log(`    │ … ${dropped} earlier line(s) omitted`);
+	for (const line of lines.slice(-CONTROL_TAIL_LINES)) log(`    │ ${line}`);
+}
+
 /**
  * Run every mutant grouped by its gate command, with the control-mutant-restore-
  * control state machine. A red CONTROL-PRE aborts the whole group (every mutant
@@ -593,6 +616,7 @@ export async function qualifyMutants(
 			`  control-pre ${gate.join(" ")}: ${controlPreOk ? "green" : `RED (exit=${pre.exitCode} timedOut=${pre.timedOut})`} in ${pre.seconds.toFixed(1)}s`,
 		);
 		if (!controlPreOk) {
+			logControlOutput(pre.output, log);
 			group.control = "pre-red";
 			for (const m of groupMutants) {
 				group.mutants.push({
@@ -705,6 +729,7 @@ export async function qualifyMutants(
 		log(
 			`  control-post ${gate.join(" ")}: ${controlPostOk ? "green" : `RED (exit=${post.exitCode} timedOut=${post.timedOut}) — restore contamination or gate state leak`} in ${post.seconds.toFixed(1)}s`,
 		);
+		if (!controlPostOk) logControlOutput(post.output, log);
 	}
 
 	const postTree = computeTreeManifest(snapshot.repoDir);
