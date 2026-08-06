@@ -23,6 +23,7 @@
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -55,6 +56,21 @@ const MODULE_SRC = read("pi-extensions/lib/mux-fresh-call.ts");
 const GID = "20260805T000000-abcdef";
 const NONCE = "mux-fresh-call-deadbeefdeadbeefdeadbeef";
 const TASK = "summarise docs/mux-launch-rail.md";
+
+/**
+ * Give a check that needs to pass runtime resolution a hermetic executable `pi`.
+ * The gate must not depend on the developer host having pi on PATH: GitHub's runner
+ * deliberately does not, while every workstation that developed this rail does.
+ */
+function withPiRuntime<T>(run: (env: NodeJS.ProcessEnv) => T): T {
+	const runtimeDir = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-fresh-call-runtime-"));
+	try {
+		fs.writeFileSync(path.join(runtimeDir, "pi"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+		return run({ PATH: runtimeDir });
+	} finally {
+		fs.rmSync(runtimeDir, { recursive: true, force: true });
+	}
+}
 
 function main(): void {
 	// ── argv dialects ────────────────────────────────────────────────────────
@@ -108,7 +124,7 @@ function main(): void {
 	);
 
 	// ── refusals, before any mutation ────────────────────────────────────────
-	const noTmux = { PATH: process.env.PATH } as NodeJS.ProcessEnv;
+	const noTmux = {} as NodeJS.ProcessEnv;
 	ok(
 		"refusal: a null caller identity is named, never defaulted — the sibling would have nowhere to call home",
 		(freshCall({ backend: "pi", task: TASK, callerGardenId: null }, noTmux) as unknown as { reason: string }) &&
@@ -135,10 +151,10 @@ function main(): void {
 				}
 			).reason === "task-too-long",
 	);
+	const outsideTmux = withPiRuntime((env) => freshCall({ backend: "pi", task: TASK, callerGardenId: GID }, env));
 	ok(
 		"refusal: outside tmux the reason is the leaf's own no-tmux-context, not a fallback launch",
-		(freshCall({ backend: "pi", task: TASK, callerGardenId: GID }, noTmux) as { ok: false; reason: string }).reason ===
-			"no-tmux-context",
+		(outsideTmux as { ok: false; reason: string }).reason === "no-tmux-context",
 	);
 	for (const reason of ["caller-identity-unavailable", "task-empty", "task-too-long", "no-tmux-context"] as const) {
 		const { text, isError } = renderFreshCall({ ok: false, reason });
@@ -149,7 +165,7 @@ function main(): void {
 	}
 
 	// ── the two receipts stay apart ──────────────────────────────────────────
-	const returned = freshCall({ backend: "pi", task: TASK, callerGardenId: GID }, noTmux);
+	const returned = outsideTmux;
 	ok(
 		"[QK:FRESHCALL-RECEIPT-WITHOUT-CORRELATION] freshCall answers SYNCHRONOUSLY and its receipt type carries no callback/garden-id/delivered field — the correlation receipt arrives later on the caller's own inbound surface",
 		!(returned instanceof Promise) &&
