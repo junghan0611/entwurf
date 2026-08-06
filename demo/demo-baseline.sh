@@ -76,12 +76,10 @@ tmux kill-session -t "$SESSION" 2>/dev/null || true
 # entwurf siblings can address it if a follow-up demo needs it.
 COMMON_ENV="ENTWURF_DEBUG=1 PI_EMACS_AGENT_SOCKET=$EMACS_SOCKET"
 COMMON_ARGS="--entwurf-control --emacs-agent-socket $EMACS_SOCKET"
-new_session_id() { bash "$REPO_ROOT/run.sh" new-session-id; }
 
 # ---------- start driver (single pane) ----------
-DRIVER_LAUNCH_ID=$(new_session_id)
 tmux new-session -d -s "$SESSION" -n demo -x 220 -y 50 \
-  "$COMMON_ENV pi --session-id $DRIVER_LAUNCH_ID --model $DRIVER_MODEL $COMMON_ARGS 2>>$DRIVER_LOG"
+  "$COMMON_ENV pi --model $DRIVER_MODEL $COMMON_ARGS 2>>$DRIVER_LOG"
 DRIVER_PANE=$(tmux list-panes -s -t "$SESSION" -F '#{pane_id}' | head -1)
 
 # Give pi time to print its banner and reach the prompt.

@@ -77,7 +77,6 @@ tmux kill-session -t "$SESSION" 2>/dev/null || true
 # Plain `2>>` is POSIX sh — works under tmux's default /bin/sh.
 COMMON_ENV="ENTWURF_DEBUG=1 PI_EMACS_AGENT_SOCKET=$EMACS_SOCKET"
 COMMON_ARGS="--entwurf-control --emacs-agent-socket $EMACS_SOCKET"
-new_session_id() { bash "$REPO_ROOT/run.sh" new-session-id; }
 
 # Snapshot pre-existing control sockets so we can detect which one this demo's
 # peer pane creates. Without this, Scene 3 could greet an unrelated live pi
@@ -107,9 +106,8 @@ wait_for_new_socket() {
 # the operator's tmux `base-index` / `pane-base-index` settings.
 
 # ---------- start peer (top pane)  — equivalent to: piat / piag / piat5 ----------
-PEER_LAUNCH_ID=$(new_session_id)
 tmux new-session -d -s "$SESSION" -n demo -x 220 -y 50 \
-  "$COMMON_ENV pi --session-id $PEER_LAUNCH_ID --model $PEER_MODEL $COMMON_ARGS 2>>$PEER_LOG"
+  "$COMMON_ENV pi --model $PEER_MODEL $COMMON_ARGS 2>>$PEER_LOG"
 PEER_PANE=$(tmux list-panes -s -t "$SESSION" -F '#{pane_id}' | head -1)
 
 PEER_ID=$(wait_for_new_socket "$PRE_SOCKETS") || {
@@ -122,9 +120,8 @@ echo "Peer  sessionId: $PEER_ID  pane=$PEER_PANE"
 POST_PEER_SOCKETS=$(ls "$SOCK_DIR"/*.sock 2>/dev/null | sort || true)
 
 # ---------- start sender (bottom pane, split below)  — equivalent to: pias / piao ----------
-SENDER_LAUNCH_ID=$(new_session_id)
 SENDER_PANE=$(tmux split-window -t "$PEER_PANE" -v -P -F '#{pane_id}' \
-  "$COMMON_ENV pi --session-id $SENDER_LAUNCH_ID --model $SENDER_MODEL $COMMON_ARGS 2>>$SENDER_LOG")
+  "$COMMON_ENV pi --model $SENDER_MODEL $COMMON_ARGS 2>>$SENDER_LOG")
 
 SENDER_ID=$(wait_for_new_socket "$POST_PEER_SOCKETS") || {
   echo "ERROR: sender session never registered a control socket. Check $SENDER_LOG." >&2
