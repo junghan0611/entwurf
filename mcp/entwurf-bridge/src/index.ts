@@ -641,14 +641,21 @@ server.tool(
 		"did not exist a moment ago. This returns a LAUNCH receipt (tmux window/pane plus that nonce) and nothing " +
 		"else: it does NOT mean the runtime started, the first turn ran, or the task was delivered. Nothing polls " +
 		"for the callback; if it never arrives the window is visible and can be read directly. For EXISTING " +
-		"citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. There are no " +
-		"provider/model/command/cwd knobs: runtime and argv are fixed per backend. Do not put secrets in the task " +
-		"— the launch argv is visible to same-user processes on this host. Requires that this agent itself runs " +
+		"citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and " +
+		"is passed to the chosen runtime CLI (`provider/model` for pi; model id/alias for Claude Code); there are no " +
+		"arbitrary command/cwd/env knobs. Do not put secrets in the task — model and task argv are visible to " +
+		"same-user processes on this host. Requires that this agent itself runs " +
 		"inside tmux: without a pane anchor there is no session to open a sibling beside.",
 	{
 		backend: z
 			.enum(["pi", "claude-code"])
-			.describe("Which fixed runtime to open. Only these two; there is no arbitrary command or model."),
+			.describe("Which fixed runtime to open. Only these two; there is no arbitrary command."),
+		model: z
+			.string()
+			.min(1)
+			.max(200)
+			.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\[\]-]*$/)
+			.describe("Required runtime model: canonical provider/model for pi, or a Claude Code model id/alias."),
 		task: z
 			.string()
 			.min(1)
@@ -657,7 +664,7 @@ server.tool(
 				"What the sibling should do after it calls you back. Plain instructions; no secrets (see the tool description).",
 			),
 	},
-	async ({ backend, task }) => {
+	async ({ backend, model, task }) => {
 		let callerGardenId: string | null = null;
 		try {
 			const self = await buildAuthoritativeSelfEnvelope();
@@ -674,7 +681,7 @@ server.tool(
 			callerGardenId = null;
 		}
 		try {
-			const rendered = renderFreshCall(freshCall({ backend, task, callerGardenId }));
+			const rendered = renderFreshCall(freshCall({ backend, model, task, callerGardenId }));
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
 		} catch (err) {
 			return textErr(`entwurf_fresh_call error: ${err instanceof Error ? err.message : String(err)}`);

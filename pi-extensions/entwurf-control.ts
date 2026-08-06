@@ -1488,7 +1488,7 @@ const MUX_FRESH_CALL_MODULE = "./lib/mux-fresh-call.ts";
 
 interface MuxFreshCallModule {
 	freshCall(
-		params: { backend: "pi" | "claude-code"; task: string; callerGardenId: string | null },
+		params: { backend: "pi" | "claude-code"; model: string; task: string; callerGardenId: string | null },
 		env?: NodeJS.ProcessEnv,
 	): { ok: boolean };
 	renderFreshCall(result: { ok: boolean }): { text: string; isError: boolean };
@@ -1518,12 +1518,19 @@ sender envelope of that callback is its garden id — that is how you learn the 
 not exist a moment ago. This returns a LAUNCH receipt (tmux window/pane plus that nonce) and nothing else:
 it does NOT mean the runtime started, the first turn ran, or the task was delivered. Nothing polls for the
 callback; if it never arrives the window is visible and can be read directly. For EXISTING citizens use
-entwurf_v2 — this tool only creates, and entwurf_peers only reports. There are no provider/model/command/cwd
-knobs: runtime and argv are fixed per backend. Do not put secrets in the task — the launch argv is visible to
-same-user processes on this host.`,
+entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the
+chosen runtime CLI (provider/model for pi; model id/alias for Claude Code); there are no arbitrary
+command/cwd/env knobs. Do not put secrets in the task — model and task argv are visible to same-user
+processes on this host.`,
 		parameters: Type.Object({
 			backend: StringEnum(["pi", "claude-code"], {
-				description: "Which fixed runtime to open. Only these two; there is no arbitrary command or model.",
+				description: "Which fixed runtime to open. Only these two; there is no arbitrary command.",
+			}),
+			model: Type.String({
+				minLength: 1,
+				maxLength: 200,
+				pattern: "^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$",
+				description: "Required runtime model: canonical provider/model for pi, or a Claude Code model id/alias.",
 			}),
 			task: Type.String({
 				minLength: 1,
@@ -1534,7 +1541,7 @@ same-user processes on this host.`,
 		}),
 		async execute(
 			_toolCallId: string,
-			params: { backend: "pi" | "claude-code"; task: string },
+			params: { backend: "pi" | "claude-code"; model: string; task: string },
 			_signal: AbortSignal | undefined,
 			_onUpdate: unknown,
 			_ctx: ExtensionContext,
@@ -1543,6 +1550,7 @@ same-user processes on this host.`,
 				const mux = (await import(MUX_FRESH_CALL_MODULE)) as unknown as MuxFreshCallModule;
 				const result = mux.freshCall({
 					backend: params.backend,
+					model: params.model,
 					task: params.task,
 					callerGardenId: residentGardenId,
 				});

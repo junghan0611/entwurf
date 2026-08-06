@@ -189,7 +189,7 @@ resolvePiRuntime()                        PATH에서 공식 pi를 절대경로�
 ```
 
 - garden identity를 기다리지 않는다. record store를 읽지 않는다. task를 배달하지 않는다.
-- launch shape는 **고정**이다. caller-supplied command/cwd/env/model/window-name carrier가 없다.
+- 이 T1-a leaf composition의 launch shape는 **고정**이다. caller-supplied command/cwd/env/model/window-name carrier가 없다. 제품 surface인 §6-a fresh-call만 한 층 위에서 explicit model을 runtime CLI token으로 붙인다.
 - `-d`를 유지한다. "visible"은 operator 세션 안의 실제 window라는 뜻이지 focus를 빼앗는다는 뜻이 아니다.
 - T1-b의 어려움을 T1-a에 미리 얹지 않는다. 반대로 **visible launch가 됐다고 automatic delegation까지
   됐다고 말하지 않는다.**
@@ -379,6 +379,14 @@ caller가 fresh token N을 민팅
 | 동기성 | 동기 반환을 원함(불성립) | **비동기** — launch receipt와 correlation receipt가 분리된다 |
 | 실패 모드 | 조회 실패·경합 | callback 부재. 감시하지 않고 visible window가 증거 |
 
+**Model은 ambient default가 아니라 explicit launch input이다 (2026-08-06 operator tour).** 첫 출하 shape는
+`{backend, task}`로 bare runtime을 열었고 실제 사용에서 Pi는 퇴역한 `gpt-5.5`, Claude Code는 의도와
+다른 Opus 5를 골랐다. 이것은 runtime 선택을 존중한 것이 아니라 caller의 선택을 버린 것이다. 그래서
+surface는 `{backend, model, task}`로 좁게 확장되고 composition은 shell 없이 runtime별 실측 CLI 방언으로 전달한다:
+Pi는 `--model <provider/model>` 두 argv token, Claude Code는 `--model=<id-or-alias>` 한 token이다. command/cwd/env carrier나 별도
+provider/settings knob는 여전히 없다. Launch receipt의 model은 **무엇을 요청했는지**만 증명하며 runtime이
+그 model로 turn을 완료했다는 증거는 callback 뒤 self-report/record 축에서 따로 얻는다.
+
 **이것이 증명하는 것은 "전달 계층이 그 citizen을 안다"이지 "citizen이 자기를 안다"가 아니다.** 아래
 §6-b가 그 구분을 measured incident로 보존한다.
 
@@ -431,7 +439,7 @@ exact evidence로 인정되는 것은 둘뿐이다.
 - record watcher, timeout/retry, unknown-id discovery
 - dormant citizen visible-resume 배선, record birth/liveness 대기
 - generic driver/registry, labels/metadata
-- caller-supplied command/cwd/env/window-name/model carrier
+- caller-supplied command/cwd/env/window-name carrier, 또는 model 외 별도 provider/settings carrier
 - raw PTY input, capture/history API
 - 모든 tmux session을 관리하는 registry
 - zmx adapter, 설치, self-fetch, fallback
@@ -476,8 +484,8 @@ gate, LIVE smoke, release 배선을 전부 제거했다.
 | tmux placement leaf (`mux-placement.ts`) | caller placement, same-session append, stable handle close | harness launch, identity, delivery |
 | T1-a launch composition (`mux-launch.ts`) | 고정 runtime의 precondition 증명, 같은 session에 window+runtime 한 번의 mutation, 로컬 handle receipt | garden identity, record 조회, task delivery, supervision, 어떤 carrier도 |
 | pi/ACP harness adapter | official runtime/session lifecycle, auth, model, transcript, record birth | 프로젝트의 작업자 선택·backlog |
-| fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, first-turn framing(callback→task 순서), nonce 민팅, launch receipt | garden identity(표면이 공급), delivery transport, task 분해, supervision |
-| public surfaces (`entwurf-control.ts` · MCP `index.ts`) | 자기 record-backed caller identity, `{backend, task}` schema, 렌더 | argv 문법, placement, identity 민팅 |
+| fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, explicit model CLI token, first-turn framing(callback→task 순서), nonce 민팅, launch receipt | garden identity(표면이 공급), delivery transport, task 분해, supervision |
+| public surfaces (`entwurf-control.ts` · MCP `index.ts`) | 자기 record-backed caller identity, `{backend, model, task}` schema, 렌더 | argv 문법, placement, identity 민팅 |
 | project policy (repo 밖) | 누구를·언제·무엇으로 부를지, fan-out 횟수, 실패 후 판단 | transport 내부 구현 |
 
 강제 가능한 import 금지선은 넓은 일반론이 아니라 좁은 몇 줄이다. `entwurf-v2-production.ts`는 이미
@@ -525,7 +533,7 @@ composition이고, 각각 source-adjacent gate가 argv 경계를 진다. 출하 
 - mux는 launch/visibility이지 delivery transport가 아니다.
 - tmux handle은 garden address나 liveness fact가 아니다.
 - pane text와 keystroke는 `entwurf_v2` receipt가 아니다.
-- driver가 agent identity, model selection, task routing, quota, orchestration을 소유하지 않는다.
+- placement/driver가 agent identity, model policy, task routing, quota, orchestration을 소유하지 않는다. fresh-call은 caller가 이미 고른 model 한 값을 CLI에 정확히 전달할 뿐이다.
 - background/headless 최적화는 live/visible 실물이 선 뒤의 별도 선택이다.
 - 모든 adapter는 삭제 조건을 가진다. 삭제 조건을 말할 수 없는 기능은 core 밖이다.
 - 모델의 현재 버릇을 보정하는 구조(stall 감시, quota 인식, 자동 재배정, "누가 잘하는가" 기록)를 만들지

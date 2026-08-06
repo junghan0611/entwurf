@@ -74,14 +74,25 @@ export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
  * delivery surface, not a claim that a task of this size was measured through tmux. An argv
  * that the OS refuses is a launch failure and fails loud — it never reads as a delivered task. */
 export const TASK_MAX_CHARS = 16000;
+export const MODEL_MAX_CHARS = 200;
+const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/:\[\]-]*$/;
+
+/** A model is an explicit launch input, not ambient process state. The grammar admits canonical
+ * pi provider/model ids, Claude model ids/aliases, and bracketed context variants, while refusing
+ * whitespace and tmux control syntax. It is passed without a shell using each runtime's measured
+ * CLI dialect: Pi takes `--model`, value; Claude Code takes `--model=value`. */
+export function isSafeFreshCallModel(model: string): boolean {
+	return model.length > 0 && model.length <= MODEL_MAX_CHARS && MODEL_PATTERN.test(model);
+}
 
 /**
  * Backend argv AFTER the runtime path. Both orders are MEASURED, and both were measured by
  * getting them wrong first (rail §6-a):
  *
- *   pi          — prompt BEFORE `--entwurf-control`. Flag-first submitted no message at all.
- *   claude-code — prompt, then `--allowedTools=` as ONE token. The space form is variadic and
- *                 eats the prompt as an option value.
+ *   pi          — prompt BEFORE `--entwurf-control`, then `--model`, value as TWO tokens.
+ *                 Flag-first submitted no message; Pi rejects the equals form for `--model`.
+ *   claude-code — prompt, then `--allowedTools=` and `--model=` as ONE token each. The space form
+ *                 for allowedTools is variadic and eats the prompt as an option value.
  *
  * Both failures looked identical from outside: window open, record and socket minted, no turn.
  *
@@ -89,12 +100,12 @@ export const TASK_MAX_CHARS = 16000;
  * permitted, so the option's effect was unobservable. What was observed is that it does no harm
  * to the argv. Permission stays a documented host precondition.
  */
-export function buildBackendArgs(backend: FreshCallBackend, prompt: string): string[] {
+export function buildBackendArgs(backend: FreshCallBackend, prompt: string, model: string): string[] {
 	switch (backend) {
 		case "pi":
-			return [prompt, "--entwurf-control"];
+			return [prompt, "--entwurf-control", "--model", model];
 		case "claude-code":
-			return [prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL["claude-code"]}`];
+			return [prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL["claude-code"]}`, `--model=${model}`];
 	}
 }
 
@@ -136,6 +147,8 @@ export type FreshCallRejectReason =
 	| PlacementRejectReason
 	| LaunchRejectReason
 	| "caller-identity-unavailable"
+	| "model-empty"
+	| "model-invalid"
 	| "task-empty"
 	| "task-too-long";
 
@@ -144,6 +157,7 @@ export type FreshCallRejectReason =
  * garden id — see the module header. */
 export interface FreshCallReceipt extends WindowHandle {
 	backend: FreshCallBackend;
+	model: string;
 	runtimePath: string;
 	nonce: string;
 }
@@ -193,13 +207,16 @@ export function buildFreshCallArgs(
  * against a store, or guesses it: an empty value is a named refusal, not a lookup.
  */
 export function freshCall(
-	params: { backend: FreshCallBackend; task: string; callerGardenId: string | null },
+	params: { backend: FreshCallBackend; model: string; task: string; callerGardenId: string | null },
 	env: NodeJS.ProcessEnv = process.env,
 	nonce: string = mintNonce(),
 ): FreshCallResult {
 	if (typeof params.callerGardenId !== "string" || params.callerGardenId.length === 0) {
 		return { ok: false, reason: "caller-identity-unavailable" };
 	}
+	const model = params.model.trim();
+	if (model.length === 0) return { ok: false, reason: "model-empty" };
+	if (!isSafeFreshCallModel(model)) return { ok: false, reason: "model-invalid" };
 	const task = params.task.trim();
 	if (task.length === 0) return { ok: false, reason: "task-empty" };
 	if (task.length > TASK_MAX_CHARS) return { ok: false, reason: "task-too-long" };
@@ -223,7 +240,7 @@ export function freshCall(
 		callerGardenId: params.callerGardenId,
 		nonce,
 	});
-	const run = runTmux(buildFreshCallArgs(placement, runtimePath, buildBackendArgs(params.backend, prompt)), env);
+	const run = runTmux(buildFreshCallArgs(placement, runtimePath, buildBackendArgs(params.backend, prompt, model)), env);
 	assertTmuxOk("new-window", run);
 
 	let fields: ReturnType<typeof parseWindowFields>;
@@ -247,6 +264,7 @@ export function freshCall(
 			sessionId: placement.sessionId,
 			...fields,
 			backend: params.backend,
+			model,
 			runtimePath,
 			nonce,
 		},
@@ -262,6 +280,8 @@ const REJECT_HINT: Record<FreshCallRejectReason, string> = {
 	"anchor-mismatch": "tmux answered about a different pane than the one asked about",
 	"caller-identity-unavailable":
 		"this surface has no record-backed garden id for the caller, so the sibling would have no address to call back to",
+	"model-empty": "model is empty after trimming; fresh calls require an explicit model",
+	"model-invalid": `model must be one ${MODEL_MAX_CHARS}-character argv-safe id/alias without whitespace or tmux syntax`,
 	"task-empty": "task is empty after trimming",
 	"task-too-long": `task exceeds ${TASK_MAX_CHARS} characters`,
 	"runtime-unresolved": "the backend's runtime is not installed on PATH",
@@ -293,11 +313,12 @@ export function renderFreshCall(result: FreshCallResult): { text: string; isErro
 		text:
 			`[entwurf fresh call →]\n` +
 			`  backend:  ${r.backend} (${r.runtimePath})\n` +
+			`  model:    ${r.model} (requested on the runtime CLI)\n` +
 			`  window:   ${r.windowId} (index ${r.windowIndex}) in session ${r.sessionId}\n` +
 			`  pane:     ${r.paneId} pid ${r.panePid}\n` +
 			`  nonce:    ${r.nonce}\n` +
 			`\n` +
-			`This is a LAUNCH receipt: tmux created that window and was asked to start the runtime. It does ` +
+			`This is a LAUNCH receipt: tmux created that window and was asked to start the runtime with the model above. It does ` +
 			`NOT mean the sibling is running, that its first turn ran, or that the task was delivered.\n` +
 			`The sibling's garden id arrives separately — it calls entwurf_v2 back with the nonce above as its ` +
 			`first action, and the sender envelope of THAT message is the address. Nothing is polling for it; ` +

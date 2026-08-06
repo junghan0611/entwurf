@@ -17,8 +17,8 @@ transcript를 가진 garden citizen이다.
 
 ```text
 /skill:entwurf-dev status
-/skill:entwurf-dev fresh pi 오늘 S0 상태를 한 문장으로 말해
-/skill:entwurf-dev fresh claude-code README의 visible-first 계약을 읽어
+/skill:entwurf-dev fresh pi openai-codex/gpt-5.6-terra 오늘 S0 상태를 한 문장으로 말해
+/skill:entwurf-dev fresh claude-code claude-sonnet-5 README의 visible-first 계약을 읽어
 /skill:entwurf-dev send <garden-id> 지금 상태를 답해줘
 /skill:entwurf-dev tour pi
 /skill:entwurf-dev boundary
@@ -37,14 +37,16 @@ transcript를 가진 garden citizen이다.
 
 호출된 tool schema가 worktree 문서보다 우선한다. 이 스킬은 현재 S0 계약에 맞는다.
 
-- `entwurf_fresh_call` backend는 정확히 `pi | claude-code`다.
+- `entwurf_fresh_call` backend는 정확히 `pi | claude-code`이고 model은 required다.
+- 기본 정책은 Pi=`openai-codex/gpt-5.6-terra`, Claude Code=`claude-sonnet-5`다.
+- GLG가 “entwurf 소넷”이라고 하면 Pi + `entwurf/claude-sonnet-5`다.
 - `entwurf_v2` intent는 정확히 `fire-and-forget` 하나다.
 - `entwurf_peers`는 사실 조회이며 생성·재개 명령이 아니다.
 - shipped resume verb는 없다.
 
-활성 tool schema가 `owned-outcome`을 노출하거나 `entwurf_fresh_call`이 없다면 **아무
-launch/send도 하지 말고** “옛 extension이 로드됐다. Pi control session을 다시
-열어야 한다”고 보고한다. `owned-outcome`은 절대 호출하지 않는다. worktree를 읽고
+활성 tool schema가 `owned-outcome`을 노출하거나, `entwurf_fresh_call`이 없거나, fresh-call의
+required `model` 필드가 없다면 **아무 launch/send도 하지 말고** “옛 extension이 로드됐다.
+Pi control session을 다시 열어야 한다”고 보고한다. `owned-outcome`은 절대 호출하지 않는다. worktree를 읽고
 active runtime이 새 버전이라고 추정하지 않는다.
 
 코드와 문구가 충돌하면 다음 source를 읽고 멈춰서 drift를 보고한다.
@@ -65,23 +67,30 @@ active runtime이 새 버전이라고 추정하지 않는다.
    native-push는 control-socket 밖의 별도 rail이다.
 5. dead row에 메시지를 보내거나 재개를 시도하지 않는다.
 
-### `fresh <backend> <task>` / “새 형제 열어줘”
+### `fresh <backend> [model] <task>` / “새 형제 열어줘”
 
 1. backend가 생략되면 문맥상 명확한 경우에만 선택한다. 불명확하면 `pi`와
    `claude-code` 중 무엇을 열지 한 번만 묻는다.
-2. task가 생략되면 다음처럼 작고 관측 가능한 기본 task를 쓴다.
+2. model이 생략되면 묻지 않고 backend 기본 정책을 적용한다: Pi는
+   `openai-codex/gpt-5.6-terra`, Claude Code는 `claude-sonnet-5`.
+   - “sol/terra/luna” → Pi `openai-codex/gpt-5.6-<tier>`
+   - “entwurf 소넷” → Pi `entwurf/claude-sonnet-5`
+   - “클로드코드 소넷” → Claude Code `claude-sonnet-5`
+   - 그 밖의 model은 GLG가 말한 canonical id/alias를 그대로 쓴다. provider를 추측하지 않는다.
+3. task가 생략되면 다음처럼 작고 관측 가능한 기본 task를 쓴다.
 
    ```text
    callback을 마친 뒤, 자신이 지금 보이는 새 형제로 열렸다는 사실과 현재 cwd를 한 문장으로 보고하고 대기해.
    ```
 
-3. task에 secret, token, credential, private payload를 넣지 않는다. task는 같은 사용자
+4. task에 secret, token, credential, private payload를 넣지 않는다. model과 task는 같은 사용자
    프로세스가 볼 수 있는 launch argv에 실린다.
-4. `entwurf_fresh_call`을 정확히 한 번 호출한다. 실패나 callback 지연을 이유로 자동
+5. `entwurf_fresh_call`을 `{backend, model, task}`로 정확히 한 번 호출한다. 실패나 callback 지연을 이유로 자동
    재시도하지 않는다.
-5. 반환값을 **launch receipt**로만 설명한다. window/pane과 nonce는 “창을 열도록
+6. receipt의 model은 runtime CLI에 요청한 값만 증명한다. 실제 선택/turn 완료 증거로 읽지 않는다.
+7. 반환값을 **launch receipt**로만 설명한다. window/pane과 nonce는 “창을 열도록
    tmux에 요청했다”는 증거이며 runtime 시작, 첫 turn, callback, task 완료 증거가 아니다.
-6. receipt의 nonce를 현재 대화의 pending correlation으로 보존하고 callback을 기다린다.
+8. receipt의 nonce를 현재 대화의 pending correlation으로 보존하고 callback을 기다린다.
    polling, transcript grep, newest-peer 추측을 하지 않는다. 창은 보이므로 callback이
    없으면 GLG가 직접 창을 관측할 수 있다고 말한다.
 
@@ -123,7 +132,7 @@ callback이 없거나 nonce가 다르면 target을 추측하지 않는다.
 
 에이전트가 tool call을 맡고 GLG는 창을 본다.
 
-1. visible fresh Pi를 기본 task와 함께 연다.
+1. visible fresh Pi를 `openai-codex/gpt-5.6-terra`와 기본 task로 연다. GLG가 다른 model을 말했으면 그 값을 쓴다.
 2. exact nonce callback에서 garden id를 얻는다.
 3. 자동으로 다음 메시지를 `wants_reply=true`로 한 번 보낸다.
 
@@ -142,7 +151,7 @@ callback이 없거나 nonce가 다르면 target을 추측하지 않는다.
 
 ### `tour claude-code`
 
-1. visible fresh Claude Code를 연다.
+1. visible fresh Claude Code를 `claude-sonnet-5`로 연다. GLG가 다른 model을 말했으면 그 값을 쓴다.
 2. exact nonce callback에서 garden id를 얻는다.
 3. live handshake를 `wants_reply=true`로 한 번 보낸다.
 4. launch / callback / mailbox delivery receipt를 분리한다.
@@ -154,7 +163,7 @@ callback이 없거나 nonce가 다르면 target을 추측하지 않는다.
 현재 제품 경계를 다음처럼 답한다.
 
 ```text
-가능: visible fresh Pi/Claude Code → exact callback garden id → live delivery
+가능: explicit model로 visible fresh Pi/Claude Code → exact callback garden id → live delivery
 가능: Pi window close → peers에서 dormant 확인 → honest reject 관측
 불가: dormant citizen 자동 재개
 불가: visible same-id resume (S1 미착수)
@@ -167,7 +176,7 @@ callback이 없거나 nonce가 다르면 target을 추측하지 않는다.
 
 | receipt | 증명하는 것 | 증명하지 않는 것 |
 |---|---|---|
-| launch | tmux가 반환한 window/pane 좌표와 nonce | runtime/turn/task 성공 |
+| launch | tmux가 반환한 window/pane 좌표, 요청 model, nonce | runtime의 model 수락/turn/task 성공 |
 | callback | exact nonce를 보낸 sender garden id | placement |
 | delivery | 선택된 rail이 메시지를 받아들였거나 거절함 | 상대 turn 완료 |
 | reply | 상대가 별도 메시지로 답함 | 이전 receipt의 소급 강화 |

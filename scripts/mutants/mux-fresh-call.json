@@ -6,8 +6,8 @@
 			"claim": "FRESHCALL-PI-ARGV-PROMPT-FIRST",
 			"title": "pi gets the flag before the prompt again — the measured shape that opens a window whose first turn never runs",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
-			"find": ["\t\t\treturn [prompt, \"--entwurf-control\"];"],
-			"replace": ["\t\t\treturn [\"--entwurf-control\", prompt];"],
+			"find": ["\t\t\treturn [prompt, \"--entwurf-control\", \"--model\", model];"],
+			"replace": ["\t\t\treturn [\"--entwurf-control\", prompt, \"--model\", model];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:FRESHCALL-PI-ARGV-PROMPT-FIRST]",
@@ -17,11 +17,50 @@
 			"claim": "FRESHCALL-CLAUDE-ARGV-EQUALS-FORM",
 			"title": "claude-code goes back to the variadic space form, which swallows the prompt as an option value",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
-			"find": ["\t\t\treturn [prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]}`];"],
-			"replace": ["\t\t\treturn [prompt, \"--allowedTools\", FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]];"],
+			"find": [
+				"\t\t\treturn [prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]}`, `--model=${model}`];"
+			],
+			"replace": [
+				"\t\t\treturn [prompt, \"--allowedTools\", FRESH_CALL_CALLBACK_TOOL[\"claude-code\"], `--model=${model}`];"
+			],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:FRESHCALL-CLAUDE-ARGV-EQUALS-FORM]",
+			"signatureSource": "scripts/check-mux-fresh-call.ts"
+		},
+		{
+			"claim": "FRESHCALL-PI-MODEL-ARGV",
+			"title": "pi drops its measured two-token model option and silently resolves its ambient default again",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t\treturn [prompt, \"--entwurf-control\", \"--model\", model];"],
+			"replace": ["\t\t\treturn [prompt, \"--entwurf-control\"];"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:FRESHCALL-PI-MODEL-ARGV]",
+			"signatureSource": "scripts/check-mux-fresh-call.ts"
+		},
+		{
+			"claim": "FRESHCALL-PI-MODEL-DIALECT",
+			"title": "pi model argv is unified with Claude Code into the equals form that the real Pi parser rejects",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t\treturn [prompt, \"--entwurf-control\", \"--model\", model];"],
+			"replace": ["\t\t\treturn [prompt, \"--entwurf-control\", `--model=${model}`];"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:FRESHCALL-PI-MODEL-DIALECT]",
+			"signatureSource": "scripts/check-mux-fresh-call.ts"
+		},
+		{
+			"claim": "FRESHCALL-CLAUDE-MODEL-ARGV",
+			"title": "Claude Code drops the explicit model token and silently resolves its ambient Opus default again",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": [
+				"\t\t\treturn [prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]}`, `--model=${model}`];"
+			],
+			"replace": ["\t\t\treturn [prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL[\"claude-code\"]}`];"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:FRESHCALL-CLAUDE-MODEL-ARGV]",
 			"signatureSource": "scripts/check-mux-fresh-call.ts"
 		},
 		{
@@ -39,26 +78,41 @@
 			"claim": "FRESHCALL-RECEIPT-WITHOUT-CORRELATION",
 			"title": "the launch receipt grows a sibling garden-id field, making an async correlation look like a synchronous return",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
-			"find": ["\tbackend: FreshCallBackend;\n\truntimePath: string;\n\tnonce: string;\n}"],
-			"replace": ["\tbackend: FreshCallBackend;\n\truntimePath: string;\n\tnonce: string;\n\tgardenId?: string;\n}"],
+			"find": ["\tbackend: FreshCallBackend;\n\tmodel: string;\n\truntimePath: string;\n\tnonce: string;\n}"],
+			"replace": [
+				"\tbackend: FreshCallBackend;\n\tmodel: string;\n\truntimePath: string;\n\tnonce: string;\n\tgardenId?: string;\n}"
+			],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:FRESHCALL-RECEIPT-WITHOUT-CORRELATION]",
 			"signatureSource": "scripts/check-mux-fresh-call.ts"
 		},
 		{
-			"claim": "FRESHCALL-PI-SURFACE-IDENTITY-AND-SCHEMA",
+			"claim": "FRESHCALL-PI-SURFACE-IDENTITY",
 			"title": "native pi takes the caller garden id from the environment instead of its own resident closure — the uuidv7 confusion, reintroduced",
 			"subject": "pi-extensions/entwurf-control.ts",
 			"find": ["\t\t\t\t\tcallerGardenId: residentGardenId,"],
 			"replace": ["\t\t\t\t\tcallerGardenId: process.env.PI_SESSION_ID ?? null,"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 60,
-			"signature": "[QK:FRESHCALL-PI-SURFACE-IDENTITY-AND-SCHEMA]",
+			"signature": "[QK:FRESHCALL-PI-SURFACE-IDENTITY]",
 			"signatureSource": "scripts/check-mux-fresh-call.ts"
 		},
 		{
-			"claim": "FRESHCALL-CLAUDE-SURFACE-IDENTITY-AND-SCHEMA",
+			"claim": "FRESHCALL-PI-MODEL-SCHEMA",
+			"title": "native pi drops the required model field from fresh-call while the composition still expects one",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": [
+				"\t\t\tmodel: Type.String({\n\t\t\t\tminLength: 1,\n\t\t\t\tmaxLength: 200,\n\t\t\t\tpattern: \"^[A-Za-z0-9][A-Za-z0-9._/:\\\\[\\\\]-]*$\",\n\t\t\t\tdescription: \"Required runtime model: canonical provider/model for pi, or a Claude Code model id/alias.\",\n\t\t\t}),\n"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:FRESHCALL-PI-MODEL-SCHEMA]",
+			"signatureSource": "scripts/check-mux-fresh-call.ts"
+		},
+		{
+			"claim": "FRESHCALL-CLAUDE-SURFACE-IDENTITY",
 			"title": "the MCP bridge reads the caller garden id straight out of env instead of its authoritative self envelope",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
@@ -67,7 +121,20 @@
 			"replace": ["\t\t\tcallerGardenId = process.env.PI_SESSION_ID ?? null;"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 60,
-			"signature": "[QK:FRESHCALL-CLAUDE-SURFACE-IDENTITY-AND-SCHEMA]",
+			"signature": "[QK:FRESHCALL-CLAUDE-SURFACE-IDENTITY]",
+			"signatureSource": "scripts/check-mux-fresh-call.ts"
+		},
+		{
+			"claim": "FRESHCALL-CLAUDE-MODEL-SCHEMA",
+			"title": "MCP drops the required model field from fresh-call while the composition still expects one",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\t\tmodel: z\n\t\t\t.string()\n\t\t\t.min(1)\n\t\t\t.max(200)\n\t\t\t.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$/)\n\t\t\t.describe(\"Required runtime model: canonical provider/model for pi, or a Claude Code model id/alias.\"),\n"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:FRESHCALL-CLAUDE-MODEL-SCHEMA]",
 			"signatureSource": "scripts/check-mux-fresh-call.ts"
 		}
 	]

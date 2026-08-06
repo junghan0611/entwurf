@@ -35,6 +35,10 @@ import { skipLive } from "./lib/live-skip.ts";
 
 const LABEL = "smoke-mux-fresh-call-live";
 const CALLBACK_WAIT_MS = 180_000;
+const LIVE_MODEL = {
+	pi: "openai-codex/gpt-5.6-terra",
+	"claude-code": "claude-sonnet-5",
+} as const;
 
 // Captured BEFORE any redirect: these name the operator's world and must stay untouched.
 const REAL_HOME = os.homedir();
@@ -214,6 +218,7 @@ async function main(): Promise<void> {
 			const result = freshCall(
 				{
 					backend,
+					model: LIVE_MODEL[backend],
 					task: "Reply with the single word ACK and then stop. Do not read files.",
 					callerGardenId: callerGid,
 				},
@@ -224,9 +229,13 @@ async function main(): Promise<void> {
 			nonces.set(backend, result.receipt.nonce);
 			siblingPids.add(Number(result.receipt.panePid));
 			ok(
-				`${backend}: the receipt carries tmux coordinates and the nonce, and nothing about delivery`,
-				Boolean(result.receipt.windowId && result.receipt.paneId && result.receipt.nonce) &&
-					!("gardenId" in result.receipt),
+				`${backend}: the receipt carries tmux coordinates, requested model and nonce, and nothing about delivery`,
+				Boolean(
+					result.receipt.windowId &&
+						result.receipt.paneId &&
+						result.receipt.model === LIVE_MODEL[backend] &&
+						result.receipt.nonce,
+				) && !("gardenId" in result.receipt),
 			);
 		}
 

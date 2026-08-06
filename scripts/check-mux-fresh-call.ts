@@ -13,10 +13,15 @@
  * were all real — only the turn was missing.
  *
  *   FRESHCALL-PI-ARGV-PROMPT-FIRST         pi gets the prompt BEFORE --entwurf-control
+ *   FRESHCALL-PI-MODEL-ARGV                pi gets the explicit model instead of an ambient default
+ *   FRESHCALL-PI-MODEL-DIALECT             pi gets measured `--model`, value tokens; equals is rejected
  *   FRESHCALL-CLAUDE-ARGV-EQUALS-FORM      claude-code gets --allowedTools= as ONE token, after the prompt
- *   FRESHCALL-PI-SURFACE-IDENTITY-AND-SCHEMA      native pi passes its resident id; no identity parameter
- *   FRESHCALL-CLAUDE-SURFACE-IDENTITY-AND-SCHEMA  the bridge uses its canonical authoritative self
- *                                                 envelope (pi carrier OR trusted marker); no identity parameter
+ *   FRESHCALL-CLAUDE-MODEL-ARGV            Claude Code gets the explicit model in equals form
+ *   FRESHCALL-PI-SURFACE-IDENTITY        native pi passes its resident id; no identity parameter
+ *   FRESHCALL-PI-MODEL-SCHEMA            native pi requires model and passes it to the composition
+ *   FRESHCALL-CLAUDE-SURFACE-IDENTITY    the bridge uses its canonical authoritative self
+ *                                        envelope (pi carrier OR trusted marker); no identity parameter
+ *   FRESHCALL-CLAUDE-MODEL-SCHEMA        MCP requires model and passes it to the composition
  *   FRESHCALL-CALLBACK-PRECEDES-TASK       the framing orders the callback before the task
  *   FRESHCALL-RECEIPT-WITHOUT-CORRELATION  the launch receipt is synchronous and claims no delivery
  */
@@ -32,6 +37,8 @@ import {
 	FRESH_CALL_BACKENDS,
 	FRESH_CALL_CALLBACK_TOOL,
 	freshCall,
+	isSafeFreshCallModel,
+	MODEL_MAX_CHARS,
 	renderFreshCall,
 	TASK_MAX_CHARS,
 } from "../pi-extensions/lib/mux-fresh-call.ts";
@@ -56,6 +63,8 @@ const MODULE_SRC = read("pi-extensions/lib/mux-fresh-call.ts");
 const GID = "20260805T000000-abcdef";
 const NONCE = "mux-fresh-call-deadbeefdeadbeefdeadbeef";
 const TASK = "summarise docs/mux-launch-rail.md";
+const PI_MODEL = "entwurf/claude-sonnet-5";
+const CLAUDE_MODEL = "claude-sonnet-5";
 
 /**
  * Give a check that needs to pass runtime resolution a hermetic executable `pi`.
@@ -74,20 +83,31 @@ function withPiRuntime<T>(run: (env: NodeJS.ProcessEnv) => T): T {
 
 function main(): void {
 	// ── argv dialects ────────────────────────────────────────────────────────
-	const piArgs = buildBackendArgs("pi", "PROMPT");
+	const piArgs = buildBackendArgs("pi", "PROMPT", PI_MODEL);
 	ok(
 		"[QK:FRESHCALL-PI-ARGV-PROMPT-FIRST] pi argv is the prompt FIRST, then --entwurf-control — the flag-first order was measured to open a window whose turn never ran",
-		piArgs[0] === "PROMPT" && piArgs[1] === "--entwurf-control" && piArgs.length === 2,
+		piArgs[0] === "PROMPT" && piArgs[1] === "--entwurf-control",
+	);
+	ok(
+		"[QK:FRESHCALL-PI-MODEL-ARGV] pi receives the caller's explicit canonical model instead of resolving an ambient default",
+		piArgs.includes(PI_MODEL) || piArgs.includes(`--model=${PI_MODEL}`),
+	);
+	ok(
+		"[QK:FRESHCALL-PI-MODEL-DIALECT] pi receives the measured `--model`, value tokens — unlike Claude Code, Pi rejects the equals form",
+		piArgs.length === 4 && piArgs[2] === "--model" && piArgs[3] === PI_MODEL && !piArgs.includes(`--model=${PI_MODEL}`),
 	);
 
-	const clArgs = buildBackendArgs("claude-code", "PROMPT");
+	const clArgs = buildBackendArgs("claude-code", "PROMPT", CLAUDE_MODEL);
 	ok(
 		"[QK:FRESHCALL-CLAUDE-ARGV-EQUALS-FORM] claude-code argv is the prompt then a SINGLE --allowedTools=<tool> token — the space form is variadic and was measured to eat the prompt",
 		clArgs[0] === "PROMPT" &&
-			clArgs.length === 2 &&
 			clArgs[1] === `--allowedTools=${FRESH_CALL_CALLBACK_TOOL["claude-code"]}` &&
 			!clArgs[1].includes(" ") &&
 			!clArgs.includes("--allowedTools"),
+	);
+	ok(
+		"[QK:FRESHCALL-CLAUDE-MODEL-ARGV] Claude Code receives the caller's explicit model as one CLI token instead of resolving its ambient Opus default",
+		clArgs.length === 3 && clArgs[2] === `--model=${CLAUDE_MODEL}`,
 	);
 	ok(
 		"argv: neither backend passes a shell string, a window name, a cwd or an env carrier",
@@ -127,36 +147,80 @@ function main(): void {
 	const noTmux = {} as NodeJS.ProcessEnv;
 	ok(
 		"refusal: a null caller identity is named, never defaulted — the sibling would have nowhere to call home",
-		(freshCall({ backend: "pi", task: TASK, callerGardenId: null }, noTmux) as unknown as { reason: string }) &&
-			(freshCall({ backend: "pi", task: TASK, callerGardenId: null }, noTmux) as { ok: false; reason: string })
-				.reason === "caller-identity-unavailable",
+		(freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: null }, noTmux) as unknown as {
+			reason: string;
+		}) &&
+			(
+				freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: null }, noTmux) as {
+					ok: false;
+					reason: string;
+				}
+			).reason === "caller-identity-unavailable",
 	);
 	ok(
 		"refusal: identity is checked BEFORE the tmux context, so an anonymous caller never learns whether tmux was there",
-		(freshCall({ backend: "pi", task: TASK, callerGardenId: "" }, noTmux) as { ok: false; reason: string }).reason ===
-			"caller-identity-unavailable",
+		(
+			freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: "" }, noTmux) as {
+				ok: false;
+				reason: string;
+			}
+		).reason === "caller-identity-unavailable",
+	);
+	ok(
+		"refusal: model is required and validated before runtime or tmux mutation",
+		(
+			freshCall({ backend: "pi", model: " ", task: TASK, callerGardenId: GID }, noTmux) as {
+				ok: false;
+				reason: string;
+			}
+		).reason === "model-empty" &&
+			(
+				freshCall({ backend: "pi", model: "sonnet;split", task: TASK, callerGardenId: GID }, noTmux) as {
+					ok: false;
+					reason: string;
+				}
+			).reason === "model-invalid" &&
+			MODEL_MAX_CHARS === 200 &&
+			isSafeFreshCallModel("claude-sonnet-5[1m]") &&
+			isSafeFreshCallModel("openai-codex/gpt-5.6-terra"),
 	);
 	ok(
 		"refusal: an empty (or whitespace-only) task is refused",
-		(freshCall({ backend: "pi", task: "   \n ", callerGardenId: GID }, noTmux) as { ok: false; reason: string })
-			.reason === "task-empty",
+		(
+			freshCall({ backend: "pi", model: PI_MODEL, task: "   \n ", callerGardenId: GID }, noTmux) as {
+				ok: false;
+				reason: string;
+			}
+		).reason === "task-empty",
 	);
 	ok(
 		`refusal: a task over ${TASK_MAX_CHARS} chars is refused at the interface, not truncated`,
 		TASK_MAX_CHARS === 16000 &&
 			(
-				freshCall({ backend: "pi", task: "x".repeat(TASK_MAX_CHARS + 1), callerGardenId: GID }, noTmux) as {
+				freshCall(
+					{ backend: "pi", model: PI_MODEL, task: "x".repeat(TASK_MAX_CHARS + 1), callerGardenId: GID },
+					noTmux,
+				) as {
 					ok: false;
 					reason: string;
 				}
 			).reason === "task-too-long",
 	);
-	const outsideTmux = withPiRuntime((env) => freshCall({ backend: "pi", task: TASK, callerGardenId: GID }, env));
+	const outsideTmux = withPiRuntime((env) =>
+		freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: GID }, env),
+	);
 	ok(
 		"refusal: outside tmux the reason is the leaf's own no-tmux-context, not a fallback launch",
 		(outsideTmux as { ok: false; reason: string }).reason === "no-tmux-context",
 	);
-	for (const reason of ["caller-identity-unavailable", "task-empty", "task-too-long", "no-tmux-context"] as const) {
+	for (const reason of [
+		"caller-identity-unavailable",
+		"model-empty",
+		"model-invalid",
+		"task-empty",
+		"task-too-long",
+		"no-tmux-context",
+	] as const) {
 		const { text, isError } = renderFreshCall({ ok: false, reason });
 		ok(
 			`refusal renders as a named reason a caller can act on (${reason})`,
@@ -184,6 +248,7 @@ function main(): void {
 			paneId: "%1",
 			panePid: "3",
 			backend: "pi",
+			model: PI_MODEL,
 			runtimePath: "/usr/bin/pi",
 			nonce: NONCE,
 		},
@@ -206,14 +271,19 @@ function main(): void {
 
 	// ── surfaces own identity; the composition never does ────────────────────
 	ok(
-		"[QK:FRESHCALL-PI-SURFACE-IDENTITY-AND-SCHEMA] native pi supplies callerGardenId from its own resident closure and exposes only {backend, task}",
+		"[QK:FRESHCALL-PI-SURFACE-IDENTITY] native pi supplies callerGardenId from its own resident closure and exposes no identity/nonce parameter",
 		/callerGardenId:\s*residentGardenId/.test(PI_SURFACE) &&
 			/name:\s*"entwurf_fresh_call"/.test(PI_SURFACE) &&
 			!/callerGardenId:\s*(params|Type)\./.test(PI_SURFACE) &&
 			!/nonce:\s*(params|Type)\./.test(PI_SURFACE),
 	);
 	ok(
-		"[QK:FRESHCALL-CLAUDE-SURFACE-IDENTITY-AND-SCHEMA] the MCP bridge resolves callerGardenId through the canonical authoritative self envelope — the inherited pi carrier OR a trusted meta-sender marker, both certified — and exposes only {backend, task}",
+		"[QK:FRESHCALL-PI-MODEL-SCHEMA] native pi requires model in its public schema and passes that exact parameter to the composition",
+		/model:\s*Type\.String\(\{[\s\S]{0,180}minLength:\s*1/.test(PI_SURFACE) &&
+			/model:\s*params\.model/.test(PI_SURFACE),
+	);
+	ok(
+		"[QK:FRESHCALL-CLAUDE-SURFACE-IDENTITY] the MCP bridge resolves callerGardenId through the canonical authoritative self envelope — the inherited pi carrier OR a trusted meta-sender marker, both certified — and exposes no identity/nonce parameter",
 		/const self = await buildAuthoritativeSelfEnvelope\(\);\s*callerGardenId = self\.envelope\.sessionId;/.test(
 			MCP_FRESH_BLOCK,
 		) &&
@@ -221,6 +291,11 @@ function main(): void {
 			/backend:\s*z\s*\n?\s*\.enum\(\["pi", "claude-code"\]\)/.test(MCP_FRESH_BLOCK) &&
 			!/callerGardenId:\s*z\./.test(MCP_FRESH_BLOCK) &&
 			!/nonce:\s*z\./.test(MCP_FRESH_BLOCK),
+	);
+	ok(
+		"[QK:FRESHCALL-CLAUDE-MODEL-SCHEMA] MCP requires model in its public schema and passes that exact parameter to the composition",
+		/model:\s*z\s*\n?\s*\.string\(\)[\s\S]{0,80}\.min\(1\)/.test(MCP_FRESH_BLOCK) &&
+			/freshCall\(\{ backend, model, task, callerGardenId \}\)/.test(MCP_FRESH_BLOCK),
 	);
 	ok(
 		"identity: the composition itself never reads env or a store for the caller id — it is given one or it refuses",
@@ -247,7 +322,7 @@ function main(): void {
 		["pi", PI_SURFACE],
 		["mcp", MCP_SURFACE],
 	] as const) {
-		for (const literal of ["LAUNCH receipt", "entwurf_peers only reports", "no secrets", "fixed per backend"]) {
+		for (const literal of ["LAUNCH receipt", "entwurf_peers only reports", "no secrets", "Model is REQUIRED"]) {
 			ok(`${label} description carries the contract literal: ${literal}`, src.includes(literal));
 		}
 	}
