@@ -1,109 +1,76 @@
-# NEXT--issue-62-vitest — vitest 도입 lane (issue #62), Phase 0–2 착지 / Phase 3 대기
+# NEXT--issue-62-vitest — issue #62 Vitest pilot amendment
 
-> 이 파일은 branch `issue-62-vitest`의 disposable 핸드오프다. 머지 전에 삭제한다.
-> 이슈 본문(Phase 0–4)과 코멘트(게이트 작성 교훈 5개)가 계약의 SSOT다.
+> Branch-only disposable handoff for `issue-62-vitest`. Delete before merge after durable facts are promoted to issue #62's canonical ledger. Base is exactly `e405d64`; current pushed pilot is `4bf0c38`.
 
-## RAIL
+# RAIL — 현재 좌표
+
+- [x] **1. Phase 0 baseline** — legacy/framework/combined denominator와 6-class inventory 구현
+- [x] **2. Phase 1–2 pilot** — Vitest 4.1.9, fresh-call 46→44 mapping, runtime schema/provider 관측, 신규 mutants
+- [ ] **3. Review amendment** ← CURRENT: CI RED + 독립 리뷰의 1 blocker/3 defects를 한 bundle로 수선
+- [ ] **4. Frozen candidate acceptance** — independent review → qualification if needed → `pnpm check` → commit only
+- [ ] **5. Phase 3 migration** ← PAUSED: amendment와 exact-SHA CI가 green이 되기 전에는 열지 않는다
+
+현재 좌표: pilot commit `4bf0c38`은 원격에 있으나 CI RED → amendment 필요 → frozen acceptance 전 main/0.14.0 판단 금지
+
+# NOW
+
+- **Current:** GitHub Actions run `31129600532`에서 `check`만 실패했다. `install-surface`와 `artifact-consumer`는 green이다. 2차 Opus 독립 리뷰는 CI 조기 종료 뒤 잔여 check chain 39–95를 전부 실행해 추가 red가 없음을 확인했다.
+- **Next:** GPT-5.6-sol coordinator가 새 Claude Code Opus reviewer를 visible mux로 열고 아래 amendment를 구현·교차검수한다. GLG 권한은 **commit까지만**, push 금지.
+- **Blocker:** `test/fresh-call-provider.contract.test.ts`가 금지된 `@earendil-works/pi-ai/api/anthropic-messages` private subpath를 import한다. `./run.sh check-pi-import-surface`로 CI와 동일하게 재현된다.
+- **Read:** `AGENTS.md`; issue #62 body; canonical ledger comment `#issuecomment-5209613895`; CI run `31129600532`; `4bf0c38`; Opus review 요약 아래.
+- **Do not touch:** Phase 4 감산, source-text 일괄 삭제, push/release, unrelated Claude launcher fix를 이 branch commit에 섞는 일.
+
+## Amendment bundle — 정확히 이 순서
+
+1. **CI import blocker:** provider conversion test를 package root contract가 허용하는 `@earendil-works/pi-ai/compat` surface로 옮긴다. Opus가 loopback capture로 pattern/bounds/description이 동일하게 wire에 실리는 것을 재현했다. 증거 강도를 낮추지 말 것.
+2. **candidate denominator:** `run.sh`의 `check_pi_import_surface` corpus가 `git ls-files` tracked-only라 신규 untracked test를 floor에서 보지 못했다. `--cached --others --exclude-standard` work surface로 고치거나, staging-before-floor를 실행 계약으로 명문화하되 하나의 SSOT로 닫는다. 현재 권고는 gate corpus 확장이다.
+3. **inventory semantic defect:** `H_LIVE`가 산문 속 `LIVE=1`까지 잡아 deterministic `scripts/check-release-gate-outcomes.ts`를 real-live로 오분류한다. 수선 후 expected totals는 hermetic-integration **36**, real-live **21**; combined **193 files / 57,611 lines**, net **+749**는 불변이다. `smoke-meta-async-drift.sh`의 deterministic+LIVE 2-tier도 맞는 이유로 분류되게 판단한다.
+4. **Vitest QK attribution:** `scripts/lib/mutation-qualify.ts`의 line-token scan은 Vitest code frame에 인접한 통과 QK가 찍혀도 claimed signature로 오인할 수 있다. JSON reporter의 실제 failed-test title set 등 Vitest-aware oracle로 좁혀 WRONG-REASON을 KILLED로 올리지 않게 한다. 현재 13 mutants는 맞게 죽었지만 Phase 3 확장 전에 닫는다.
+5. **installed refusal evidence:** `run_vitest`의 node_modules refusal은 수동 재현상 rc=1 + 명시적 dev-clone-only 메시지로 옳다. `check-pack-install`은 run_ts와 shell guard만 소비하므로 `check-mux-fresh-call`의 새 refusal branch를 실제 installed tree에서 한 번 구동해 증거를 붙인다.
+6. **ledger honesty:** canonical ledger의 “`pnpm check` green”은 committed SHA `4bf0c38`에 대해 거짓이다. amendment exact-SHA CI가 green이 된 뒤에만 기존 행을 교정한다. CI green decision row를 추가하고 timing에는 host를 붙인다(thinkpad 약 1.5s, oracle 약 3.2s).
+
+# ACCEPTANCE
 
 ```text
-Phase 0 baseline  ✅  inventory 스크립트 + 실측 스냅샷 (아래)
-Phase 1 pilot     ✅  vitest 4.1.9 exact + fresh-call lane 3파일 + run.sh shim
-Phase 2 equival.  ✅  매핑표(아래) + escape 재식재 red 증명 + flake 5회 0 + 시간 실측
-Phase 3 migration ⬜  lane 단위 — 다음 후보를 GLG/coordinator와 정한 뒤에만
-Phase 4 subtract  ⬜  별도 결정 경계. Phase 1 성공만으로 열지 않는다 (이슈 명문)
+implement focused fixes
+→ affected focused gates
+→ independent Opus review + one amendment correction bundle
+→ gate/mutant changed: check-gate-qualification once
+→ stage the exact candidate index before any index-sensitive full floor
+→ pnpm check once on frozen candidate
+→ commit only (no push)
 ```
 
-## Phase 0 — baseline 실측 (2026-08-07, thinkpad)
+Required evidence:
 
-재현: `node --experimental-strip-types scripts/inventory-verification-surface.ts`.
-coordinator 독립 검수(blocker 1축)로 첫 판을 수선했다: (1) denominator가 scripts/뿐이라
-test/로의 이동이 감산처럼 보였다 → 지금은 **legacy axis(scripts/) + framework axis(test/ +
-vitest.config.ts) + COMBINED total**을 같이 고정하고 per-gate table에 vitest lane도 실린다.
-(2) 스타일 분류는 이슈가 명문화한 의미 분류가 아니었다 → 이슈의 6-class
-(pure-unit / behavioral-contract / source-topology / hermetic-integration / package-install /
-real-live)를 **primary**로, first-match 규칙 + 사유 있는 좁은 override 3건 + **unclassified=0
-단언**(분류 불가 파일은 throw)으로 세웠다. 스타일 축은 secondary로 보존.
+- `./run.sh check-pi-import-surface` green and the test still captures the real pi-ai 0.84 anthropic-messages request body on loopback.
+- inventory output says combined `193 / 57,611`, semantic `hermetic 36 / real-live 21`, unclassified 0.
+- synthetic Vitest code-frame negative proves a passing adjacent QK cannot certify a failing claim.
+- installed package directly refuses `check-mux-fresh-call` for the intended reason.
+- `pnpm test` 44/44, typecheck/lint green, `.only` absent.
+- if gate/mutant changed, qualification reports every mutant KILLED at its own reason; then frozen `pnpm check` green.
+- no file/index edit after final floor; final commit only, no push.
 
-**역사 스냅샷 (e405d64, 브랜치 변경 전 — 재실행 수치와 혼동 금지):**
-- scripts/ 188 files 56,862 lines; 게이트 111 files 41,661 lines
-- 스타일: imports-product 38 / mixed 36 / subprocess 14 / shell 15 / source-text 1 / other 7
-- 뮤턴트 219 / 18 lanes, 45% infra-subject (probe-ordering 85개, 84 infra)
-- 파일럿 구 게이트 `check-mux-fresh-call` 46 checks **0.085s**
+# REVIEW LEDGER
 
-**현재 워크서피스 실측 (amendment 후, HEAD e405d64 + 브랜치 변경):**
-- legacy axis 188 files **56,822** lines · framework axis 5 files **789** lines ·
-  **COMBINED 193 files 57,611 lines** — 이관은 축 간 이동이고 COMBINED가 줄어야만 감산이다
-- 6-class: pure-unit 22 / behavioral-contract 25 / source-topology 4 /
-  hermetic-integration 35 / package-install 5 / real-live 22 / **unclassified 0**
-- 뮤턴트 221 / 19 lanes (mux-fresh-call 11→13)
+## What remains valid from `4bf0c38`
 
-## Phase 1 — pilot 배선
+- Historical denominator: base `scripts/` 188 files / 56,862 lines. Pilot combined surface is 193 files / 57,611 lines, net +749; migration is not subtraction.
+- One typecheck fence: root sees config, scripts fence sees four `test/**` files, mcp sees none; no duplicate/hidden test files.
+- Old 46 = 34 textual `ok()` call sites minus two loop bodies plus 6 refusal rows plus 8 description rows. New 44 tests preserve the contracts; counts are not quality scores.
+- MCP observation is a real bridge boot + `tools/list`; pi observation is real extension registration capture; provider observation is pi-ai conversion to a loopback request body with an intentional HTTP 400, never fake success.
+- New HOST-VALID and PROVIDER-VALID mutants replant the original malformed Rust-family character class and were KILLED at their named QK claims in the reviewed candidate.
 
-- **vitest `4.1.9` exact** — pi-mono `v0.84.0` 태그의 `packages/*/package.json` 실측
-  (v0.83.0 체크아웃도 동일 4.1.9). `rregex 1.13.1` exact (rust-lang/regex WASM).
-- `pnpm test` = `vitest run`; `test:watch`; `vitest.config.ts`는 `fileParallelism: false`
-  (이슈의 subprocess-공유 flake 경고 — serial부터, 완화는 측정 후).
-- typecheck fence: `test/**`는 scripts/tsconfig.json(allowImportingTsExtensions),
-  root exclude에 `"test"` 추가. 한 파일 한 fence 규칙 유지.
-- `run.sh check-mux-fresh-call`은 **transition shim** — `run_vitest`가 파일럿 3파일을 돌린다.
-  installed package(node_modules 하위)에서는 run_ts와 같은 정직한 거절.
-- 뮤턴트 lane `mux-fresh-call`: 11 → **13** (gate argv 불변, signatureSource가 test/*로 이동,
-  timeout 60→120s — vitest 게이트가 구 게이트보다 느린 만큼).
+## Separate urgent lane — never mix into #62 amendment
 
-## Phase 2 — 등가성 매핑표 (구 46 checks → 신 44 tests)
+The oracle host's `~/.local/bin/claude` was found dangling into `/tmp/mux-lifecycle-live-*/xdg-data/claude/versions/2.1.223`. Official install restored `~/.local/share/claude/versions/2.1.223`.
 
-구 게이트 `scripts/check-mux-fresh-call.ts`(삭제됨, git history에 보존) 기준.
+Opus traced the mechanism to `scripts/smoke-mux-lifecycle-live.ts` and the same shape in `scripts/smoke-mux-fresh-call-live.ts`: Claude receives real `HOME` but fixture `XDG_DATA_HOME`; self-update can write the real launcher to a temporary version target, then cleanup deletes the target. This predates #62 and is triggered by LIVE execution, not `pnpm check`. Treat it as a separate install-destruction blocker with its own branch/issue and fail-closed launcher pre/post fence.
 
-| 구 계약 | 신 위치 | 축 변화 |
-|---|---|---|
-| [QK] PI-ARGV-PROMPT-FIRST / PI-MODEL-ARGV / PI-MODEL-DIALECT | test/mux-fresh-call.test.ts | 동일 (runtime unit) |
-| [QK] CLAUDE-ARGV-EQUALS-FORM / CLAUDE-MODEL-ARGV | 〃 | 동일 |
-| argv no-shell-flags · fixed backend set | 〃 | 동일 |
-| [QK] CALLBACK-PRECEDES-TASK · framing gid/nonce/tool/금지 3종 | 〃 | 동일 |
-| refusal 6종 + 렌더 6종 (identity-first 포함) | 〃 | 동일 (it.each) |
-| [QK] RECEIPT-WITHOUT-CORRELATION · 렌더 2종 · no-watcher | 〃 | 동일 (sync runtime + interface source-topology) |
-| composition no-env/store · leaf carrier-free · no delivery import | 〃 | 동일 (구조 계약, 의도적 static) |
-| [QK] PI-MODEL-SCHEMA (구: source regex, `.min(1)`에서 멈춤) | test/fresh-call-surfaces.contract.test.ts | **업그레이드**: 실제 extension registerTool 캡처 → runtime schema의 presence/required/min/max/pattern |
-| [QK] PI-SURFACE-IDENTITY (구: source regex) | 〃 | **업그레이드**: runtime 파라미터 집합 = {backend,model,task} + 행동 판별(PI_SESSION_ID 심고 invalid model — mutant는 model-invalid, 원본은 caller-identity-unavailable; invalid model이라 mutant도 tmux 도달 불가) |
-| [QK] CLAUDE-MODEL-SCHEMA (구: source regex) | 〃 | **업그레이드**: 실제 bridge boot → tools/list runtime schema |
-| [QK] CLAUDE-SURFACE-IDENTITY | 〃 | 유지 (identity-authority 구조 계약 — runtime 관측은 실제 launch 리스크) |
-| desc cap 2048 (구: 소스 파싱 재조립) | 〃 | **업그레이드**: runtime tools/list + 캡처 description, 전 도구로 확대 |
-| contract literals 8종 + world map + facts-only 프레임 | 〃 | runtime description 기준으로 이동. 단 구 literal `no secrets`는 rendered description에 없던 **파일 소스 매칭**이라 `secrets`로 교정 (계약 자체는 유지) |
-| — (신규) [QK] MODEL-PATTERN-HOST-VALID | 〃 | **신규 계약**: tools/list의 모든 pattern이 Rust-regex-family(rregex)에서 컴파일. #62 escape의 결손 계약 |
-| — (신규) 두 표면 pattern 바이트 동일 | 〃 | **신규**: "같은 문법 두 벌 손글씨" 결함류 |
-| — (신규) [QK] MODEL-PATTERN-PROVIDER-VALID | test/fresh-call-provider.contract.test.ts | **신규**: pi-ai 실제 anthropic-messages 변환이 로컬 캡처 서버로 보낸 **실 request body**의 pattern이 등록 pattern 그대로이고 Rust에서 컴파일 (이슈 open question을 pi lane에서 닫음) |
+# DO NOT
 
-**escape 재식재 증명 (2026-08-07 실측).** biome unescape를 zod 표면에 심으면
-HOST-VALID + 두-표면-동일 2셀이 정확히 `unclosed character class`로 red;
-TypeBox 표면에 심으면 PROVIDER-VALID 포함 3셀 red. 원 게이트에서는 둘 다 green이었다.
-
-**시간 실측.** 파일럿 3파일 44 tests **~1.5s** (구 게이트 0.085s — bridge boot/extension
-로드/HTTP 캡처가 실린 대가). flake: 연속 5회 44/44, `.only` 없음.
-
-## 검증 상태 (이 브랜치, 커밋 전)
-
-- focused: check-mux-fresh-call(shim) · check-shell-quote · check-install-surface ·
-  check-pack · check-package-source-routing 전부 PASS. typecheck/lint green.
-  vitest 44/44, flake 연속 5회 0, `.only` 없음.
-- **최종 후보의 qualification / `pnpm check` 수치는 이 문서에 적지 않는다.** 문서를 이 상태로
-  고정한 **뒤** 두 검증을 순서대로 돌리고, 그 뒤에는 아무 파일도 편집하지 않으며, 결과는
-  coordinator 채널 메시지로만 보고한다 — run 이후의 문서 편집은 후보를 움직여 증거를
-  무효화한다(AGENTS 검증 scheduling). 교훈 실측 둘: ⑴ qualification **도중** untracked 문서를
-  써도 origin-drift로 무효가 된다(첫 실행이 그렇게 정직하게 죽었다). ⑵ run **이후**의
-  "수치 기입" 편집도 같은 금지에 걸린다(검수가 잡았다). 수치가 필요한 미래 독자는
-  git log의 커밋 메시지와 coordinator 채널 기록을 본다.
-
-## 다음 한 걸음
-
-1. GLG/coordinator 승인 후 commit (Pebble은 커밋하지 않는다). checkpoint는
-   2026-08-07 05:5x KST에 coordinator(20260807T045821-b349ec)로 발신됨.
-2. Phase 3 첫 lane 후보 결정은 회신 후. 후보 메모: NEXT.md 10번이 남긴
-   `check-acp-sdk-surface`의 QK/mutant 부재도 이 lane 시야에 있다 (이슈 본문).
-
-## DO NOT (이 lane)
-
-- 커밋·푸시는 GLG/coordinator 승인 후 (Pebble은 하지 않는다).
-- Phase 4(감산/뮤턴트 축소)를 Phase 1–2 성공을 근거로 열지 말 것.
-- source-text 검사 일괄 삭제 금지 — 세 종류 세 운명 표(이슈)로 개별 판정.
-- `pnpm format` 전체 실행 금지; 고친 파일만 `npx biome check --write <file>`.
-- qualification/`pnpm check` 중 트리·이 파일 저장 금지.
+- Do not merge or include in 0.14.0 while exact-SHA CI is red.
+- Do not push; GLG decides push after reading the local commit.
+- Do not open Phase 3/4 from pilot success.
+- Do not claim qualification alone proves Vitest QK attribution until the code-frame false-positive is closed.
+- Do not run the two mux LIVE smokes on the operator host until the Claude launcher safety lane is fixed.
