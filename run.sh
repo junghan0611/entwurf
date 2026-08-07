@@ -2455,15 +2455,14 @@ check_acp_provider_surface() {
 }
 
 check_acp_sdk_surface() {
-  # Deterministic gate for the S2a ACP SDK dependency surface. Pins the three
-  # ACP runtime deps to the current oracle versions (@agentclientprotocol/sdk
-  # 1.3.0 + claude-agent-acp 0.65.0 + @anthropic-ai/sdk 0.100.1), locks the
-  # peer-resolution that keeps claude-agent-sdk satisfiable (0.100.1, not the
-  # stale 0.91.1), asserts the wire SDK still value-exports the symbols the raw
-  # turn needs (silent-rename gate), and forbids any source-level anthropic SDK
-  # import / API-client use (the anthropic dep is a peer-pin ONLY).
+  # Transition shim (issue #62 Phase 3): the gate NAME is preserved while the S2a
+  # ACP SDK dependency-surface contracts live in the vitest lane. Same layers as
+  # the retired scripts gate — exact dep pins, pnpm-lock peer-resolution lock,
+  # runtime resolver probes (anthropic peer / shared wire SDK / MCP peer edge),
+  # wire-SDK value-export surface, and the forbidden anthropic-import sweep. The
+  # per-layer mapping table is in the test file's header.
   section "ACP SDK surface (S2a dep pin + peer-resolution + no-client-use)"
-  run_ts scripts/check-acp-sdk-surface.ts
+  run_vitest test/acp-sdk-surface.contract.test.ts
 }
 
 check_acp_overlay() {

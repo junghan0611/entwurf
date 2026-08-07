@@ -134,6 +134,13 @@ const CLASS_OVERRIDES: Record<string, { cls: SemanticClass; reason: string }> = 
 		cls: "source-topology",
 		reason: "reads the shellQuote() implementation sites as text and cross-checks the POSIX escape contract",
 	},
+	// Imports only scripts/lib (the shared launcher-fence), spawns nothing, and its
+	// smoke-wiring reads assemble paths at runtime — so no mechanical rule reaches it.
+	"scripts/check-mux-launcher-fence.ts": {
+		cls: "behavioral-contract",
+		reason:
+			"executes the shared claude-launcher-fence lib against disposable fs fixtures and source-reads both mux LIVE smoke wiring sites",
+	},
 	"scripts/check-mux-parent-artifact.ts": {
 		cls: "source-topology",
 		reason: "asserts the scrubbed parent-transcript fixture's recorded shape — an artifact contract, no product run",

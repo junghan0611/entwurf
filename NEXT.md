@@ -7,28 +7,43 @@
 
 - [x] **1. #62 Phase 0–2 Vitest pilot + amendment** — main exact-SHA CI green
 - [x] **2. #66 exclusive meta-record CREATE** — implementation candidate exact-SHA CI green
-- [ ] **3. #67 launcher-safe mux LIVE** ← CURRENT: merged green main에서 operator Claude launcher fence
-- [ ] **4. #63/#65 계약 결정** — `streamSimple` 의미 → owner-normalized facts projection
-- [ ] **5. #64 field evidence + #62 종료 판정** — formation policy → Phase 3 한 lane 뒤 continue/stop
+- [x] **3. #67 local static boundary** — `8cd9a25`; aggregate static/package and GLG-selected LIVE owed
+- [x] **4. #63 `29cc37b` · pi 0.84.1 `29148b8` · #65 `4d05e38`** — 계약/의존/facts projection local boundaries
+- [x] **5. #64 `164441d` formation policy · #62 Phase 3** — exactly-one Phase3 staged candidate accepted; GLG chose STOP
+- [ ] **6. aggregate tightening** ← CURRENT: qualification → one full floor → package/install →
+  GLG-selected #67 LIVE → landing decision
 
-현재 좌표: #66 final branch acceptance 뒤 main에 착지하는 boot sector → post-main에서 #67 branch를 자른다.
+현재 좌표: 스택 전체(#67→#63→pi 0.84.1→#65→#64→#62 Phase 3)가 local/unpushed로 서 있고, #62 Phase-3
+lane은 staged/reviewed 상태로 정지했다. 남은 것은 집계 조임과 착지 판정이다.
 
 # NOW
 
-- **Current:** #66 branch-acceptance ledger `#issuecomment-5211988509`는 implementation candidate
-  `8c7c9f7`의 exact-SHA CI `31144260575`가 세 job 모두 green임을 보존한다. branch-only handoff는
-  삭제됐고 이 boot sector는 accepted final branch가 main에 fast-forward된 뒤의 좌표를 가리킨다.
-- **Next:** green `main`에서 `issue-67-mux-launcher-fence`를 잘라 두 mux LIVE smoke가 공유하는
-  fail-closed operator Claude launcher fence를 구현한다.
+- **Current:** issue train은 `issue-62-vitest-phase3` 위에 local/unpushed로 쌓여 있다 — #67 `8cd9a25`,
+  #63 `29cc37b`, pi 0.84.1 `29148b8`, #65 `4d05e38`, #64 `164441d`, 그리고 #62 Phase-3 ACP SDK lane은
+  worktree에 **staged/reviewed 후보**로 동결됐다(Phase 3는 GLG STOP 결정으로 정지). 이 stacked train의
+  #67 이후 로컬 커밋은 push되지 않았다.
+- **Next:** aggregate tightening — `check-gate-qualification` → frozen candidate에서 full floor 1회 →
+  package/install acceptance(`check-pack-install`/`check-install-container`) → GLG가 고른 host의 #67 mux
+  LIVE → landing decision.
 - **Blocker:** release는 #67이 real Claude launcher 파괴 경로를 닫고 GLG가 고른 host의 LIVE acceptance를
   통과하기 전까지 막힌다.
-- **Read:** issue #66 branch-acceptance ledger; #67; `AGENTS.md` verification scheduling.
-- **Do not touch:** #66 branch에서 #67 production source를 섞지 말 것; Phase 4를 열지 말 것;
+- **Read:** issue #62 canonical ledger; staged `test/acp-sdk-surface.contract.test.ts`; #67;
+  `AGENTS.md` verification scheduling.
+- **Do not touch:** Phase 4를 열지 말 것;
   `smoke-mux-lifecycle-live`와 `smoke-mux-fresh-call-live`를 static fence review와 GLG의 LIVE-host 승인 전에
   실행하지 말 것.
 
 # RECENT
 
+- **2026-08-07:** #67 `8cd9a25` — 공유 claude-launcher-fence static local boundary. #63 `29cc37b` —
+  `streamSimple` payload hook 결정. pi 0.84.1 `29148b8` — 의존 bump/audit boundary. #65 `4d05e38` —
+  `entwurf meta-facts` owner-normalized store projection. #64 `164441d` — entwurf-dev 두 단계
+  formation/role-grant policy. 전부 local, 미push.
+- **2026-08-07:** #62 Phase 3 — exactly-one lane `check-acp-sdk-surface`가 vitest lane으로 이행돼
+  staged/reviewed 후보로 수락됐고, GLG가 Phase 3 STOP을 선택했다. combined 201 files, 59,884 → 59,772
+  (−112 lines; before는 산술 도출 — base에서 inventory가 launcher-fence unclassified로 throw). 이 숫자는
+  #62 lane-boundary 측정이다; aggregate tightening이 그 뒤 qualification `EXPECTED_LANE_MUTANTS`
+  inventory 수리로 legacy축 +3줄을 더해 최종 aggregate tree는 59,775다.
 - **2026-08-07:** #66 `8c7c9f7`은 exclusive CREATE/ATTACH split과 deterministic QK/mutant evidence를
   닫았고 exact-SHA CI `31144260575`가 세 job 모두 green이다. final branch HEAD CI와 main CI는 별도
   landing receipt다.
@@ -339,9 +354,13 @@ self-update다) `pnpm install` → `prepare` 훅이 `build-bridge`를 자동 실
       없다 — capability lane에 meta-infra를 태우지 않으려고 만들지 않았다. 그래서 이 게이트는
       `check-gate-qualification`이 지키지 않는다. ⑵ #930은 **실제 permission 왕복 LIVE 표본이 없다**;
       kind 기반 선택의 무해함은 소스 실측까지가 증거다.
-11. **issue #62 — vitest 도입과 손으로 지은 검증면 감산.** ← **NEXT**. **별도 브랜치**에서 연다.
-    capability lane이나 main에 meta-infra를 태우지 않는다. 이슈 본문에 Phase 0–4와
-    게이트 작성 교훈이 실려 있다. 위 10번이 남긴 mutant manifest 부재도 이 lane에서 함께 볼 후보다.
+11. **issue #62 — vitest 도입과 손으로 지은 검증면 감산.** Phase 0–2는 main에 있다(`b97cae3`).
+    Phase 3는 **exactly one lane**으로 닫혔다: `check-acp-sdk-surface`가 vitest lane
+    (`test/acp-sdk-surface.contract.test.ts` + `run.sh` shim)으로 이행돼 accepted/staged 상태이고,
+    GLG가 **STOP**을 선택했다 — 추가 lane 없음, 현재는 aggregate tightening(위 RAIL 6)이다.
+    이 lane은 역사적으로 QK/mutant가 없던 게이트의 **equivalence 이행**이라 `[QK:*]`도 mutant도
+    추가하지 않았다(위 10번 ⑴의 정직한 경계는 그대로 남는다 — 이 게이트는 여전히
+    `check-gate-qualification` 밖이다). Phase 4(mutation/source-text 감산)는 여전히 **닫혀 있다**.
 
 ## 미결 — 이 컷이 주장하지 않는 것
 
