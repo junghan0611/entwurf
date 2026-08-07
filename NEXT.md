@@ -1,54 +1,47 @@
-# NEXT — issue train: #66 착지 → #67 안전 blocker → #63/#65 계약 → #64/#62 종료 판정
+# NEXT — landed issue train → independent aggregate review → release decision
 
-> NEXT는 부트 섹터다. 현재 증거는 issue #66 branch-acceptance ledger, 검증 계약은 `VERIFY.md`,
+> NEXT는 부트 섹터다. 현재 구현·관측의 상세 SSOT는 issues #62–#65/#67, 검증 계약은 `VERIFY.md`,
 > ACP 계약은 `docs/acp-backend-rail.md`, 릴리즈 권한 경계는 `.claude/skills/entwurf-release/SKILL.md`가 진다.
 
 # RAIL — 현재 좌표
 
-- [x] **1. #62 Phase 0–2 Vitest pilot + amendment** — main exact-SHA CI green
-- [x] **2. #66 exclusive meta-record CREATE** — implementation candidate exact-SHA CI green
-- [x] **3. #67 local static boundary** — `8cd9a25`; aggregate static/package and GLG-selected LIVE owed
-- [x] **4. #63 `29cc37b` · pi 0.84.1 `29148b8` · #65 `4d05e38`** — 계약/의존/facts projection local boundaries
-- [x] **5. #64 `164441d` formation policy · #62 Phase 3** — exactly-one Phase3 staged candidate accepted; GLG chose STOP
-- [ ] **6. aggregate tightening** ← CURRENT: qualification → one full floor → package/install →
-  GLG-selected #67 LIVE → landing decision
+- [x] **1. #62 Phase 0–2 · #66 record CREATE** — main exact-SHA CI green
+- [x] **2. #67 → #63 → pi 0.84.1 → #65 → #64 → #62 Phase 3** — six-commit issue train landed
+- [x] **3. aggregate static/package + GLG-selected oracle #67 LIVE + exact-SHA landing** — branch/main CI green
+- [x] **4. independent aggregate review amendment** — D1–D4/O6 closed; Blocker 0 · Defect 0
+- [ ] **5. issue closure + next release prepare** ← CURRENT: amendment commit/push/CI → issues close → GLG가 version 명시
 
-현재 좌표: 스택 전체(#67→#63→pi 0.84.1→#65→#64→#62 Phase 3)가 local/unpushed로 서 있고, #62 Phase-3
-lane은 staged/reviewed 상태로 정지했다. 남은 것은 집계 조임과 착지 판정이다.
+현재 좌표: 구현 train과 집계 증거는 main `8224db2`에 섰고, 독립 Opus amendment review는
+**Blocker 0 · Defect 0 · 신규 Observation 0**으로 종료됐다. `NEXT.md` amendment를 frozen candidate로 검증·착지하고
+open issues를 닫은 뒤, GLG가 명시하는 version으로 별도 `prepare` mode를 시작한다.
 
 # NOW
 
-- **Current:** issue train은 `issue-62-vitest-phase3` 위에 local/unpushed로 쌓여 있다 — #67 `8cd9a25`,
-  #63 `29cc37b`, pi 0.84.1 `29148b8`, #65 `4d05e38`, #64 `164441d`, 그리고 #62 Phase-3 ACP SDK lane은
-  worktree에 **staged/reviewed 후보**로 동결됐다(Phase 3는 GLG STOP 결정으로 정지). 이 stacked train의
-  #67 이후 로컬 커밋은 push되지 않았다.
-- **Next:** aggregate tightening — `check-gate-qualification` → frozen candidate에서 full floor 1회 →
-  package/install acceptance(`check-pack-install`/`check-install-container`) → GLG가 고른 host의 #67 mux
-  LIVE → landing decision.
-- **Blocker:** release는 #67이 real Claude launcher 파괴 경로를 닫고 GLG가 고른 host의 LIVE acceptance를
-  통과하기 전까지 막힌다.
-- **Read:** issue #62 canonical ledger; staged `test/acp-sdk-surface.contract.test.ts`; #67;
-  `AGENTS.md` verification scheduling.
-- **Do not touch:** Phase 4를 열지 말 것;
-  `smoke-mux-lifecycle-live`와 `smoke-mux-fresh-call-live`를 static fence review와 GLG의 LIVE-host 승인 전에
-  실행하지 말 것.
+- **Current:** `main`/`origin/main`은 `8224db2`; branch CI `31165335134`와 main CI `31166430205`의
+  `check`/`install-surface`/`artifact-consumer`가 모두 green이다. 동결 tree `5aa4ae52…`에서 qualification
+  247/247(21 lanes), full `pnpm check`, package/install, GLG-selected host `oracle`의 두 #67 mux LIVE가 각각
+  1회 green이었고 launcher 무결성이 내장 fence와 외부 해시에서 유지됐다. 현재 worktree 변경은 독립 재검수가
+  닫힌 `NEXT.md` 한 파일뿐이다.
+- **Next:** 이 문서-only candidate에서 full `pnpm check` 1회 → commit/push/main exact-SHA CI →
+  issues #62–#65/#67 closure. 그 뒤 GLG에게 next release version을 받아 `prepare <version>` 경계를 연다.
+- **Blocker:** code/review blocker 0. release prepare는 version 인자만 기다린다.
+- **Read:** issues #62–#65/#67 aggregate-review ledgers; `8224db2`; `AGENTS.md` verification scheduling;
+  `.claude/skills/entwurf-release/SKILL.md` PREPARE.
+- **Do not touch:** #62 Phase 4를 열지 말 것; observations를 현재 defect로 승격해 새 capability lane을 열지 말 것;
+  명시적 version 없이 release prepare를 시작하거나 make/publish 권한을 추론하지 말 것.
 
 # RECENT
 
-- **2026-08-07:** #67 `8cd9a25` — 공유 claude-launcher-fence static local boundary. #63 `29cc37b` —
-  `streamSimple` payload hook 결정. pi 0.84.1 `29148b8` — 의존 bump/audit boundary. #65 `4d05e38` —
-  `entwurf meta-facts` owner-normalized store projection. #64 `164441d` — entwurf-dev 두 단계
-  formation/role-grant policy. 전부 local, 미push.
-- **2026-08-07:** #62 Phase 3 — exactly-one lane `check-acp-sdk-surface`가 vitest lane으로 이행돼
-  staged/reviewed 후보로 수락됐고, GLG가 Phase 3 STOP을 선택했다. combined 201 files, 59,884 → 59,772
-  (−112 lines; before는 산술 도출 — base에서 inventory가 launcher-fence unclassified로 throw). 이 숫자는
-  #62 lane-boundary 측정이다; aggregate tightening이 그 뒤 qualification `EXPECTED_LANE_MUTANTS`
-  inventory 수리로 legacy축 +3줄을 더해 최종 aggregate tree는 59,775다.
+- **2026-08-07:** six-commit train(`#67 8cd9a25` → `#63 29cc37b` → pi `29148b8` → `#65 4d05e38` →
+  `#64 164441d` → `#62 Phase 3 8224db2`)이 main에 fast-forward됐다. exact-SHA branch/main CI 모두 3 jobs
+  green. 현재 aggregate surface는 **201 files / 59,775 lines**, `check-pack`은 **340 files**다.
+- **2026-08-07:** independent aggregate Opus review는 **0 Blockers / 2 Defects / 5 Observations**; 첫 amendment가
+  D1–D3를 닫았고 재검수에서 D4(Phase-3 before 값의 산술 도출 provenance 누락) 하나를 찾았다. #62 Phase 3의
+  L1/L2/L2b/L2c/L3/L4 mapping, shim, installed refusal, ROADMAP bump provenance는 보존됐다고 확인했다.
+- **2026-08-07:** GLG-selected host `oracle`의 #67 LIVE는 lifecycle **81 checks**와 fresh-call **19 checks**가 green;
+  real Claude launcher는 양 smoke의 shared fence와 독립 before/after 해시 모두에서 불변이었다.
 - **2026-08-07:** #66 `8c7c9f7`은 exclusive CREATE/ATTACH split과 deterministic QK/mutant evidence를
-  닫았고 exact-SHA CI `31144260575`가 세 job 모두 green이다. final branch HEAD CI와 main CI는 별도
-  landing receipt다.
-- **2026-08-07:** 실제 mux LIVE가 fixture `XDG_DATA_HOME` 아래 버전으로 real Claude launcher를 retarget한
-  install-destruction incident를 #67로 기록했다. 이는 `pnpm check` 밖의 release blocker다.
+  닫았고 exact-SHA CI `31144260575`가 세 job 모두 green이다.
 
 # LEDGER — retained release/dependency history
 
@@ -356,8 +349,8 @@ self-update다) `pnpm install` → `prepare` 훅이 `build-bridge`를 자동 실
       kind 기반 선택의 무해함은 소스 실측까지가 증거다.
 11. **issue #62 — vitest 도입과 손으로 지은 검증면 감산.** Phase 0–2는 main에 있다(`b97cae3`).
     Phase 3는 **exactly one lane**으로 닫혔다: `check-acp-sdk-surface`가 vitest lane
-    (`test/acp-sdk-surface.contract.test.ts` + `run.sh` shim)으로 이행돼 accepted/staged 상태이고,
-    GLG가 **STOP**을 선택했다 — 추가 lane 없음, 현재는 aggregate tightening(위 RAIL 6)이다.
+    (`test/acp-sdk-surface.contract.test.ts` + `run.sh` shim)으로 이행돼 `8224db2`로 main에 착지했고,
+    GLG가 **STOP**을 선택했다 — 추가 lane 없음, Phase 4는 닫혀 있다.
     이 lane은 역사적으로 QK/mutant가 없던 게이트의 **equivalence 이행**이라 `[QK:*]`도 mutant도
     추가하지 않았다(위 10번 ⑴의 정직한 경계는 그대로 남는다 — 이 게이트는 여전히
     `check-gate-qualification` 밖이다). Phase 4(mutation/source-text 감산)는 여전히 **닫혀 있다**.
