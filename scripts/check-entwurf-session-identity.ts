@@ -3,8 +3,8 @@
  * identity contract. No backend, no API, no spawn. Pure-string + synthetic-fs.
  *
  *   - T-grammar    the garden-id grammar (session-id.js SSOT): validator +
- *                  generator uniqueness + timestamp format. This is the RECORD's
- *                  gardenId shape now, not pi's session id.
+ *                  generator shape + timestamp format, all on fixed inputs. This
+ *                  is the RECORD's gardenId shape now, not pi's session id.
  *   - T-identity   readSessionIdentity: first model_change is the model authority;
  *                  drift fail-fast; the session NAME is pi's and is never read
  *                  (#50 C3 — the old name-mirror/`requireEntwurf` refusals are
@@ -74,13 +74,16 @@ try {
 	ok(!isValidSessionId("20260603T191245-a3f09c "), "trailing space rejected");
 	ok(!isValidSessionId(123 as unknown), "non-string rejected");
 
-	// generateSessionId: format + uniqueness (same-second parallel spawn safety)
-	const ids = Array.from({ length: 256 }, () => generateSessionId());
-	ok(
-		ids.every((id) => isValidSessionId(id)),
-		"all generated ids valid",
-	);
-	eq(new Set(ids).size, 256, "256 generated ids unique (6-hex suffix)");
+	// generateSessionId on a FIXED Date: deterministic shape proof — the id is the
+	// formatted timestamp prefix + `-` + 6 lowercase hex, and it satisfies the
+	// validator. The suffix is 24 random bits, so batch uniqueness is PROBABILISTIC
+	// (256 ids collide ~0.19% of runs) and is deliberately NOT asserted here — a
+	// deterministic gate must not carry a birthday-bound flake. This gate proves
+	// generator grammar/validator wiring ONLY; the fail-closed production repair
+	// for a minted-gid collision at the record store is tracked in #66, not here.
+	const genId = generateSessionId(new Date(2026, 0, 9, 5, 6, 7));
+	ok(/^20260109T050607-[0-9a-f]{6}$/.test(genId), "generated id = fixed timestamp prefix + 6-hex suffix");
+	ok(isValidSessionId(genId), "generated id passes the validator");
 	eq(formatSessionTimestamp(new Date(2026, 5, 3, 19, 12, 45)), "20260603T191245", "timestamp value (local)");
 
 	// ---- T-identity: resume identity authority = FIRST model_change ----
