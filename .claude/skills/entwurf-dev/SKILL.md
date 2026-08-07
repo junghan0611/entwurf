@@ -1,6 +1,6 @@
 ---
 name: entwurf-dev
-description: "Drive the current entwurf development surface for GLG: list garden citizens, open a fresh visible Pi or Claude Code sibling, correlate its nonce callback to the exact garden id, send/reply through entwurf_v2, reopen a dormant pi citizen under its own garden id with entwurf_resume_call, and walk the whole fresh→send→close→dormant→resume→recall lifecycle on the visible tmux surface without making GLG spell out tool calls. Use when GLG says 분신 열어, 새 형제, 다시 불러, 되살려, resume, entwurf 써보자, 피어 보여줘, 메시지 보내, callback 확인, 개발 투어, or /skill:entwurf-dev."
+description: "Drive the current entwurf development surface for GLG: list garden citizens, open a fresh visible Pi or Claude Code sibling, correlate its nonce callback to the exact garden id, send/reply through entwurf_v2, reopen a dormant pi citizen under its own garden id with entwurf_resume_call, and walk the whole fresh→send→close→dormant→resume→recall lifecycle on the visible tmux surface without making GLG spell out tool calls. Use when GLG says 분신 열어, 새 형제, 다시 불러, 되살려, resume, entwurf 써보자, 피어 보여줘, 메시지 보내, callback 확인, 팀 꾸려, 형성만 해, 개발 투어, or /skill:entwurf-dev."
 user_invocable: true
 ---
 
@@ -230,6 +230,54 @@ transcript는 복원했지만 `--entwurf-control`을 빠뜨려 **주소 없는 �
 대화가 보이는데 `entwurf_peers`는 계속 `dead`였다. 창이 떴다는 것은 시민이 돌아왔다는 뜻이
 아니다.
 
+## 팀 형성 — 형성과 role 권위는 두 단계다 (#64)
+
+여러 형제로 팀을 세울 때 첫 fresh task는 **형성만** 싣는다. 형성과 구현 권위를
+한 task에 섞으면 강한 구현 목록이 약한 안무 문구를 이긴다 — 2026-08-07의 혼합
+task는 형성 전 편집을 일으켰고, 인간이 visible 창에 들어가 turn을 멈추고 role을
+직접 배정해서야 복구됐다. 그 복구 경로(사람이 창에 들어간다)가 정상이며, 이를
+숨기는 watcher/retry/supervisor를 만들지 않는다.
+
+### Phase A — formation-only 첫 task
+
+첫 task에 들어가는 것은 이것뿐이다.
+
+1. 자동 exact-nonce callback (fresh-call 계약이 이미 강제한다);
+2. 지명된 handoff/SSOT 읽기;
+3. topology가 요구하는 visible sibling(s)을 **정확히 한 번** 열기;
+4. 각 callback sender envelope 상관;
+5. 형성 완료/대기 중을 **명시적으로 보고**하고 정지 — 편집·테스트·구현·위임 없음.
+
+구현 체크리스트는 첫 task에 넣지 않는다. `STOP AND WAIT` 문구보다 **구현 내용의
+부재**가 강하다: 실을 권위가 없으면 달아날 것도 없다.
+
+### receipt 경계
+
+launch는 배치 요청을, callback은 주소를 증명한다. 명시적 formation-complete
+보고는 그 시민/팀이 대기 중이라고 스스로 보고할 뿐이다. **셋 중 무엇도 role
+권위를 부여하지 않는다.**
+
+### Phase B — 인간의 첫 직접 grant
+
+exact garden id가 모두 선 뒤, GLG가 첫 **직접 가시** role/implementation grant를
+보낸다. 그 다음에야 코디네이터가 상세 scope/contract를 라우팅할 수 있고, 라우팅은
+두 번째 task가 아니라 조율 세부다. **최신 직접 GLG grant가 코디네이터 라우팅을
+항상 이긴다.** role은 grant마다 새로 주어지는 인간의 결정이며, 지속 role DB·자동
+배정·orchestrator로 대신하지 않는다.
+
+### 교체 코디네이터가 리뷰어를 열 때
+
+코디네이터는 **형성 권위만** 갖는다: 요청된 fresh call을 한 번 호출하고, exact
+callback을 상관하고, 자신과 새 형제의 두 id를 보고하고, 대기한다. sibling을
+열었다는 사실에서 구현 권위가 나오지 않는다.
+
+### 보정
+
+이 절차는 2026-08-07의 두 positive sample(형성/grant 분리 후 별도 라우팅으로
+구현·리뷰가 무사고 진행)과 하나의 negative sample(혼합 task의 형성 전 편집)로
+증명된 **operating practice**다. prompt 문구가 모델 불문의 영구 계약이라는 주장이
+아니다 — 새 모델/backend에서 재관측되면 그 증거로 다시 보정한다.
+
 ## receipt 언어
 
 항상 다음 축을 섞지 않는다.
@@ -238,6 +286,7 @@ transcript는 복원했지만 `--entwurf-control`을 빠뜨려 **주소 없는 �
 |---|---|---|
 | launch | tmux가 반환한 window/pane 좌표, 요청 model, nonce | runtime의 model 수락/turn/task 성공 |
 | callback | exact nonce를 보낸 sender garden id | placement |
+| formation 보고 | 그 시민이 형성 절차를 마치고 대기 중이라고 명시적으로 보고함 | role/implementation 권위 — 그것은 Phase B의 인간 grant다 |
 | observation | 같은 garden id의 control socket이 답했다 | 같은 대화가 돌아왔다는 것 |
 | delivery | 선택된 rail이 메시지를 받아들였거나 거절함 | 상대 turn 완료 |
 | reply | 상대가 별도 메시지로 답함 | 이전 receipt의 소급 강화 |
@@ -262,5 +311,6 @@ observation을 recall로 올려 읽지 않는다** — 창이 열린 것, 주소
   resume 초대도 아니다 — dormant pi를 되세우는 것은 GLG가 요청할 때뿐이다.
 - callback을 기다린다는 이유로 polling하거나 private transcript를 읽지 않는다.
 - raw tmux screen text와 `send-keys`를 delivery/identity 증거로 쓰지 않는다.
-- commit, push, release 권한을 이 스킬 호출에서 추론하지 않는다.
+- commit, push, release 권한을 이 스킬 호출에서 추론하지 않는다. role/implementation
+  권한도 launch·callback·formation 보고에서 추론하지 않는다 — 인간 grant뿐이다.
 - 어떤 reject도 success로 포장하지 않는다.
