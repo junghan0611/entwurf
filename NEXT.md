@@ -5,23 +5,21 @@
 
 # RAIL — 현재 좌표
 
-- [x] **1. #62 Phase 0–2 Vitest pilot + amendment** — candidate `82cbc9b`, exact-SHA CI `31138795095` green
-- [ ] **2. #62 branch close + main 착지** ← CURRENT: handoff 승격·삭제 완료 → final docs commit/CI → merge 판단
-- [ ] **3. #66/#67 안전 blocker** — exclusive record CREATE → Claude launcher-safe mux LIVE
+- [x] **1. #62 Phase 0–2 Vitest pilot + amendment** — code candidate exact-SHA CI green
+- [x] **2. #62 branch closure** — durable ledger promoted, branch-only handoff deleted, final-HEAD CI required before merge
+- [ ] **3. #66/#67 안전 blocker** ← CURRENT: merged main에서 exclusive record CREATE → launcher-safe mux LIVE
 - [ ] **4. #63/#65 계약 결정** — `streamSimple` 의미 → owner-normalized facts projection
 - [ ] **5. #64 field evidence + #62 종료 판정** — formation policy → Phase 3 한 lane 뒤 continue/stop
 
-현재 좌표: #62 구현·첫 exact-SHA CI 완료 → branch handoff를 닫고 final HEAD를 증명한 뒤 issue train을 #66으로 넘긴다.
+현재 좌표: #62 final branch acceptance 뒤 main에 착지하는 boot sector → post-main에서 #66 branch를 자른다.
 
 # NOW
 
-- **Current:** `issue-62-vitest`의 `82cbc9b`가 CI 세 job(`check`, `install-surface`, `artifact-consumer`)을
-  모두 통과했다. canonical ledger `#issuecomment-5209613895`는 223/223, 57,843줄, CI 이력과 #66/#67 분리를
-  반영했다. branch-only handoff는 이 후보에서 삭제됐고 pilot은 main에 아직 없다.
-- **Next:** 이 docs closure를 commit → push → 최종 HEAD의 exact-SHA CI green 확인 → GLG의 main merge 판단.
-  merge 뒤 post-main에서 #66 branch를 자른다.
-- **Blocker:** main merge authority는 GLG에게 있다. release는 #67이 두 mux LIVE smoke의 real Claude launcher
-  파괴 경로를 닫기 전까지 막힌다.
+- **Current:** #62 canonical ledger `#issuecomment-5209613895`는 223/223, 57,843줄, exact-SHA CI 이력과
+  #66/#67 분리를 반영했고 branch-only handoff는 삭제됐다. 이 boot sector는 accepted branch가 main에
+  fast-forward된 뒤의 좌표를 가리킨다.
+- **Next:** merged `main`에서 `issue-66-meta-create-exclusive`를 잘라 exclusive CREATE 구현을 시작한다.
+- **Blocker:** release는 #67이 두 mux LIVE smoke의 real Claude launcher 파괴 경로를 닫기 전까지 막힌다.
 - **Read:** issue #62 canonical ledger; #66; #67; `AGENTS.md` verification scheduling.
 - **Do not touch:** #62 branch에서 #66 production source를 섞지 말 것; Phase 4를 열지 말 것;
   `smoke-mux-lifecycle-live`와 `smoke-mux-fresh-call-live`를 #67 수선 전에 실행하지 말 것.
@@ -29,8 +27,8 @@
 # RECENT
 
 - **2026-08-07:** #62 pilot `4bf0c38` → amendment `bc98184` → deterministic CI repair `82cbc9b`.
-  `bc98184` CI의 24-bit birthday collision은 확률적 gate 결함과 silent record overwrite 위험을 함께 드러냈다.
-  gate는 fixed input으로 고쳤고 production identity repair는 #66으로 분리했다.
+  code candidate와 branch-closure candidate의 exact-SHA CI가 green이다. `bc98184` CI의 24-bit birthday
+  collision은 확률적 gate 결함과 silent record overwrite 위험을 함께 드러냈고 production repair는 #66으로 분리했다.
 - **2026-08-07:** 실제 mux LIVE가 fixture `XDG_DATA_HOME` 아래 버전으로 real Claude launcher를 retarget한
   install-destruction incident를 #67로 기록했다. 이는 `pnpm check` 밖의 release blocker다.
 
