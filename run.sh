@@ -153,6 +153,7 @@ Usage:
   ./run.sh check-entwurf-resume-args   # deterministic gate: resume-argv SSOT (buildResumePiArgs) for the S1 VISIBLE resume. The headless shape was measured wrong for a window before the consumer was written (`-p` is pi's own non-interactive mode), so the one shipped posture is `--entwurf-control` FIRST + ext args exactly once + `--session <abs file>` + optional `--provider` + `--model <m>` — and the gate pins the ABSENCES as hard as the presences: no --mode, no -p, no positional prompt (a resume runs no turn), no --no-extensions, never --session-id (which MINTS a session instead of resuming one)
   ./run.sh check-mux-resume-call       # deterministic gate: S1 resume PLACEMENT composition (mux-resume-call.ts). No fake tmux. cwd rules are MEASURED tmux 3.6a behaviours, each a way a resume looks successful while being wrong: a nonexistent `-c` exits 0 and lands the child in $HOME (so it is refused HERE), `-c` is FORMAT-EXPANDED so `#{…}` silently rewrites the path and `#(…)` was observed running a command (so `#` is refused), and whitespace measured SAFE (so no escaping layer is owed). Also pins `-c` reaching tmux, runtime after `--`, carrier-free argv, zero identity in this module, and the surface seam that keeps the v2 composition from importing mux
   ./run.sh check-mux-parent-artifact  # deterministic gate for the tracked scrubbed parent-transcript fixture — a version-pinned sample of the PARENT-SIDE shape (fresh_call toolResult + the later callback custom_message) so downstream never opens a private transcript. Pins event order, the toolCallId join on the RESULT (pi writes no separate toolCall row), the launch nonce reappearing verbatim in the callback body, the <sender_info> envelope field names, and the absence of operator paths / real garden ids / real uuids. NOT placement evidence
+  ./run.sh check-mux-launcher-fence   # deterministic gate for the shared operator-launcher fence (issue #67): scripts/lib/claude-launcher-fence.ts + its wiring into BOTH mux LIVE smokes. Replants the observed install-destruction shape (real HOME + fixture XDG_DATA_HOME → self-update retargets the real `claude` launcher into the fixture tree, teardown deletes it) wholly inside disposable mkdtemp roots — the real launcher is never inspected. Pins fail-closed preflight, retarget/content-change detection before cleanup, removal BLOCKED on fixture reference / unproven safety / surviving tracked panes, exact operator-parity XDG restore (absent = DELETED, not canonical defaults), the lifecycle cell-branch topology, and one shared helper consumed by both smokes
   ./run.sh check-entwurf-v2-visible-resume # deterministic gate: S1 visible-resume COMPOSITION (entwurf-v2-visible-resume.ts) with every seam injected — the whole state machine incl. the timeout branch runs with no tmux/lock/socket/clock. Pins lock BEFORE liveness, identity under the lock and before any window (no-transcript citizen fails loud, opens nothing), live/indeterminate/address-conflict refused unlaunched, observation as a BOUNDED WAIT (measured: socket answers ~2–4s after launch, so one immediate probe would call a successful resume unobserved), exactly ONE launch on every path, timeout → lock released + window left open + nothing retried/killed, failed release throws, and the two receipts staying separate in type and text
   ./run.sh check-resume-launch-identity # deterministic gate for resume-launch-identity.ts, the record-authoritative launch-identity leaf preserved through the visible-first cut (spawn-bg and all its callers are gone; this leaf answers "which being is this, and which conversation is theirs"). Temp meta-store fixture: gardenId→record.transcriptPath happy path with header cwd/provider/model; C3 integrity (header id ≠ record.nativeSessionId → refused, never resumed); #52 ADDRESSABLE read (a gid that no longer holds its nativeSessionId alone is refused from EITHER side — the plain targeted read would resume one transcript twice under two locks); cause fidelity per impossible resume incl. the F7 pin (recorded-but-deleted transcript → MISSING, not "no recorded model"); header↔gate SSOT. No spawn/socket/timer
   ./run.sh smoke-entwurf-v2-matrix-live # LIVE sentinel (0.11 Stage 0 step 5d-5, D4-b) — OUT of pnpm check, needs LIVE=1. Drives REAL production runEntwurfV2 deps over REAL OS objects, 4 cells: C1 control-socket (real pi --entwurf-control resident → RPC send → lock acquire→release ×1), C1b record-less socket (#50 C4: live record-less pi → EVERY intent rejected pre-probe record-less-socket, no lock, rendered hint names record authority + fresh-cut), C2 meta-mailbox deliverable (armed self-fetch citizen → real .msg enqueue, lock-free), C3 meta-mailbox guard (no armed receiver → reject, no garbage). Model-in-loop OUT (transport/lock/enqueue gate, GPT Q2); negative/timeout stay deterministic. Model: ENTWURF_LIVE_TARGET=<provider>/<model> (default openai-codex/gpt-5.4). LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
@@ -991,6 +992,21 @@ check_entwurf_resume_args() {
   # between the control flag and --session (#29 provider-resolution footgun), --session <abs
   # file> never --session-id (which MINTS), and a null provider emitting no --provider.
   run_ts scripts/check-entwurf-resume-args.ts
+}
+
+check_mux_launcher_fence() {
+  # Deterministic gate for the shared operator-launcher fence (issue #67):
+  # scripts/lib/claude-launcher-fence.ts plus its wiring into BOTH mux LIVE smokes. Replants the
+  # observed install-destruction shape (real HOME + fixture XDG_DATA_HOME → self-update retargets
+  # the real `claude` launcher into the fixture tree, teardown deletes it) entirely inside
+  # disposable mkdtemp roots — the operator's real launcher is never inspected or touched. Pins:
+  # fail-closed preflight (launcher and resolved target present, regular, executable, OUTSIDE the
+  # fixture cleanup root), retarget/content-change detection before cleanup, removal BLOCKED when
+  # the launcher references the fixture OR safety cannot be proven OR tracked panes are not gone
+  # (known reference and unproven state each named as itself), exact operator-parity XDG restore
+  # (absent means DELETED, never canonical defaults; RUNTIME_DIR stays fixture by design), the
+  # lifecycle pi/claude cell-branch topology, and both smokes consuming the one shared helper.
+  run_ts scripts/check-mux-launcher-fence.ts
 }
 
 check_mux_parent_artifact() {
@@ -4665,6 +4681,9 @@ case "$cmd" in
     ;;
   check-mux-parent-artifact)
     check_mux_parent_artifact
+    ;;
+  check-mux-launcher-fence)
+    check_mux_launcher_fence
     ;;
   check-entwurf-v2-visible-resume)
     check_entwurf_v2_visible_resume

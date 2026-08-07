@@ -1,0 +1,123 @@
+{
+	"schemaVersion": 1,
+	"lane": "mux-launcher-fence",
+	"mutants": [
+		{
+			"claim": "LAUNCHFENCE-PREFLIGHT-FAIL-CLOSED",
+			"title": "the preflight stops checking where the launcher RESOLVES to, so a launcher already pointing into the fixture is pinned and launched anyway",
+			"subject": "scripts/lib/claude-launcher-fence.ts",
+			"find": [
+				"\tif (isInside(fixtureRoot, resolvedPath)) {",
+				"\t\tthrow new Error(",
+				"\t\t\t`claude-launcher-fence: fail-closed — the launcher's resolved target ${resolvedPath} is INSIDE the fixture cleanup root ${fixtureRoot}`,",
+				"\t\t);",
+				"\t}"
+			],
+			"replace": ["\t// the launcher-path containment check above already walks the fixture axis"],
+			"gate": ["bash", "run.sh", "check-mux-launcher-fence"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:LAUNCHFENCE-PREFLIGHT-FAIL-CLOSED]",
+			"signatureSource": "scripts/check-mux-launcher-fence.ts"
+		},
+		{
+			"claim": "LAUNCHFENCE-RETARGET-BLOCKS-CLEANUP",
+			"title": "the cleanup guard stops naming a KNOWN symlink-hop fixture reference, so the incident's dangling retarget is demoted to a vague unproven state",
+			"subject": "scripts/lib/claude-launcher-fence.ts",
+			"find": [
+				"\t\tif (isInside(snapshot.fixtureRoot, hop)) {",
+				"\t\t\treturn {",
+				"\t\t\t\tsafeToRemove: false,",
+				"\t\t\t\tproblems: [`the launcher's link target ${hop} lies inside the fixture cleanup root`],",
+				"\t\t\t};",
+				"\t\t}"
+			],
+			"replace": ["\t\t// the realpath walk below covers the symlink hop"],
+			"gate": ["bash", "run.sh", "check-mux-launcher-fence"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:LAUNCHFENCE-RETARGET-BLOCKS-CLEANUP]",
+			"signatureSource": "scripts/check-mux-launcher-fence.ts"
+		},
+		{
+			"claim": "LAUNCHFENCE-CONTENT-CHANGE-DETECTED",
+			"title": "the integrity oracle drops content identity, so an in-place rewrite of the resolved target passes teardown unreported",
+			"subject": "scripts/lib/claude-launcher-fence.ts",
+			"find": [
+				"\t\t} else {",
+				"\t\t\ttry {",
+				"\t\t\t\tif (sha256File(resolvedNow) !== snapshot.sha256) {",
+				"\t\t\t\t\tproblems.push(`the launcher's resolved target ${resolvedNow} changed content (sha256 mismatch)`);",
+				"\t\t\t\t}",
+				"\t\t\t} catch (err) {",
+				"\t\t\t\tproblems.push(",
+				"\t\t\t\t\t`the launcher's resolved target ${resolvedNow} could not be hashed: ${err instanceof Error ? err.message : String(err)}`,",
+				"\t\t\t\t);",
+				"\t\t\t}",
+				"\t\t}"
+			],
+			"replace": ["\t\t}"],
+			"gate": ["bash", "run.sh", "check-mux-launcher-fence"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:LAUNCHFENCE-CONTENT-CHANGE-DETECTED]",
+			"signatureSource": "scripts/check-mux-launcher-fence.ts"
+		},
+		{
+			"claim": "LAUNCHFENCE-XDG-EXACT-RESTORE",
+			"title": "an originally absent XDG variable is filled with a canonical default instead of being deleted — a guess about how the runtime reads its config, not operator parity",
+			"subject": "scripts/lib/claude-launcher-fence.ts",
+			"find": [
+				"\t\tif (original === null || original === undefined) delete env[name];",
+				"\t\telse env[name] = original;"
+			],
+			"replace": [
+				"\t\tif (original === null || original === undefined) env[name] = path.join(env.HOME ?? \"\", \".local\", \"share\");",
+				"\t\telse env[name] = original;"
+			],
+			"gate": ["bash", "run.sh", "check-mux-launcher-fence"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:LAUNCHFENCE-XDG-EXACT-RESTORE]",
+			"signatureSource": "scripts/check-mux-launcher-fence.ts"
+		},
+		{
+			"claim": "LAUNCHFENCE-WIRED-LIFECYCLE",
+			"title": "the lifecycle smoke disconnects the integrity oracle from its teardown, so the fence exists but nothing runs it before fixture removal",
+			"subject": "scripts/smoke-mux-lifecycle-live.ts",
+			"find": ["\tconst launcherProblems = verifyClaudeLauncher(launcherSnapshot);"],
+			"replace": ["\tconst launcherProblems: string[] = [];"],
+			"gate": ["bash", "run.sh", "check-mux-launcher-fence"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:LAUNCHFENCE-WIRED-LIFECYCLE]",
+			"signatureSource": "scripts/check-mux-launcher-fence.ts"
+		},
+		{
+			"claim": "LAUNCHFENCE-LIFECYCLE-CELL-BRANCH",
+			"title": "lifecycle's real-HOME cell env collapses to one branch — exact parity for every cell — silently dropping the ACP pi cell's MEASURED canonical XDG requirement",
+			"subject": "scripts/smoke-mux-lifecycle-live.ts",
+			"find": [
+				"\t\t\t\tif (backend === \"pi\") {",
+				"\t\t\t\t\tserverEnv.XDG_CONFIG_HOME = REAL_XDG_CONFIG_HOME;",
+				"\t\t\t\t\tserverEnv.XDG_DATA_HOME = REAL_XDG_DATA_HOME;",
+				"\t\t\t\t\tserverEnv.XDG_STATE_HOME = REAL_XDG_STATE_HOME;",
+				"\t\t\t\t\tserverEnv.XDG_CACHE_HOME = REAL_XDG_CACHE_HOME;",
+				"\t\t\t\t} else {",
+				"\t\t\t\t\trestoreOriginalXdg(serverEnv, ORIGINAL_XDG);",
+				"\t\t\t\t}"
+			],
+			"replace": ["\t\t\t\trestoreOriginalXdg(serverEnv, ORIGINAL_XDG);"],
+			"gate": ["bash", "run.sh", "check-mux-launcher-fence"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:LAUNCHFENCE-LIFECYCLE-CELL-BRANCH]",
+			"signatureSource": "scripts/check-mux-launcher-fence.ts"
+		},
+		{
+			"claim": "LAUNCHFENCE-WIRED-FRESH-CALL",
+			"title": "the fresh-call smoke disconnects the integrity oracle from its teardown, so only one of the two affected smokes is actually protected",
+			"subject": "scripts/smoke-mux-fresh-call-live.ts",
+			"find": ["\t\tconst launcherProblems = verifyClaudeLauncher(launcherSnapshot);"],
+			"replace": ["\t\tconst launcherProblems: string[] = [];"],
+			"gate": ["bash", "run.sh", "check-mux-launcher-fence"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:LAUNCHFENCE-WIRED-FRESH-CALL]",
+			"signatureSource": "scripts/check-mux-launcher-fence.ts"
+		}
+	]
+}

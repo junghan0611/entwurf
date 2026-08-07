@@ -31,6 +31,13 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import {
+	assessLauncherCleanup,
+	restoreOriginalXdg,
+	snapshotClaudeLauncher,
+	snapshotOriginalXdg,
+	verifyClaudeLauncher,
+} from "./lib/claude-launcher-fence.ts";
 import { skipLive } from "./lib/live-skip.ts";
 
 const LABEL = "smoke-mux-fresh-call-live";
@@ -48,6 +55,9 @@ const REAL_CLAUDE_CONFIG_DIR = ORIGINAL_CLAUDE_CONFIG_DIR || path.join(REAL_HOME
 const REAL_META_SESSIONS =
 	process.env.ENTWURF_META_SESSIONS_DIR?.trim() || path.join(REAL_PI_AGENT_DIR, "meta-sessions");
 const REAL_CONTROL_DIR = path.join(REAL_HOME, ".pi", "entwurf-control");
+// The four XDG roots as the OPERATOR has them — presence and value, captured before any redirect,
+// so the real-HOME Claude cell can be given exact operator-env parity (issue #67).
+const ORIGINAL_XDG = snapshotOriginalXdg(process.env);
 
 let passed = 0;
 function ok(label: string, cond: boolean): void {
@@ -102,6 +112,8 @@ async function main(): Promise<void> {
 	if (process.env.LIVE !== "1")
 		skipLive(LABEL, "LIVE=1 not set — this smoke opens real windows and spends model turns");
 	if (spawnSync("tmux", ["-V"], { encoding: "utf8" }).status !== 0) skipLive(LABEL, "tmux is not installed on PATH");
+	if (spawnSync("sh", ["-c", "command -v claude"], { encoding: "utf8" }).status !== 0)
+		skipLive(LABEL, "the claude runtime is not on PATH — the fixed claude-code backend cannot be opened");
 	if (!fs.existsSync(REAL_PI_AGENT_DIR))
 		skipLive(LABEL, `no pi agent dir at ${REAL_PI_AGENT_DIR} — an unauthenticated pi would fail for the wrong reason`);
 	if (!fs.existsSync(REAL_CLAUDE_CONFIG_DIR))
@@ -115,6 +127,9 @@ async function main(): Promise<void> {
 	const beforeRealStore = entrySet(REAL_META_SESSIONS);
 	const beforeRealSockets = entrySet(REAL_CONTROL_DIR);
 	const originalCwd = process.cwd();
+	// FAIL-CLOSED launcher preflight (issue #67): pin the real claude launcher — path, kind, link,
+	// resolved target and content — before ANY Claude-capable child starts. Throws if it cannot.
+	const launcherSnapshot = snapshotClaudeLauncher({ env: process.env, fixtureRoot: root });
 
 	// ── Every WRITE axis into the fixture; the two auth roots stay real ──────
 	const fenced: Record<string, string> = {
@@ -151,6 +166,7 @@ async function main(): Promise<void> {
 	const siblingPids = new Set<number>();
 	const privateSockets = new Set<string>();
 	let cleanupError: Error | null = null;
+	let runError: unknown = null;
 	try {
 		ok(
 			"fence: every entwurf-owned WRITE root is inside the fixture and none is the operator's home",
@@ -205,6 +221,12 @@ async function main(): Promise<void> {
 			delete env.TMUX_PANE;
 			if (backend === "claude-code") {
 				env.HOME = REAL_HOME;
+				// EXACT operator-env parity on the four XDG roots (issue #67): real HOME plus a
+				// fixture XDG_DATA_HOME is the measured state in which Claude's self-update rewrote
+				// the operator's real launcher into the fixture tree and teardown dangled it. Each
+				// variable is restored to its original value; an originally absent one is DELETED,
+				// never filled with a canonical default.
+				restoreOriginalXdg(env, ORIGINAL_XDG);
 				if (ORIGINAL_CLAUDE_CONFIG_DIR) env.CLAUDE_CONFIG_DIR = ORIGINAL_CLAUDE_CONFIG_DIR;
 				else delete env.CLAUDE_CONFIG_DIR;
 			}
@@ -270,18 +292,49 @@ async function main(): Promise<void> {
 				(gid) => fs.existsSync(meta.defaultMetaSessionsDir()) && entrySet(meta.defaultMetaSessionsDir()).includes(gid),
 			),
 		);
+	} catch (err) {
+		// Captured, not rethrown here: the teardown below must run and its findings must AGGREGATE
+		// with the run error — neither may hide the other.
+		runError = err;
 	} finally {
 		for (const socket of privateSockets) tmux(socket, ["kill-server"], process.env);
 		const panesGone = waitForPidsGone(siblingPids);
 		process.chdir(originalCwd);
-		fs.rmSync(root, { recursive: true, force: true });
+		const problems: string[] = [];
+		// Launcher integrity BEFORE fixture removal, on success and failure alike (issue #67).
+		// Removal happens only when it is PROVEN non-destructive: the launcher demonstrably does
+		// not reference the fixture tree AND every TRACKED launched pane process is proven gone —
+		// a live pane could still rewrite the launcher after the check. (Tracked-pane quiescence
+		// only; this claims nothing about untracked detached descendants.) An unproven state
+		// blocks removal loudly rather than guessing.
+		const launcherProblems = verifyClaudeLauncher(launcherSnapshot);
+		const cleanup = assessLauncherCleanup(launcherSnapshot);
+		for (const p of cleanup.problems) problems.push(`launcher cleanup: ${p}`);
 		if (!panesGone) {
-			cleanupError = new Error(
-				`${LABEL}: sibling pane processes survived private tmux teardown: ${[...siblingPids].join(", ")}`,
+			problems.push(
+				`tracked sibling pane processes were not proven gone after private tmux teardown: ${[...siblingPids].join(", ")}`,
 			);
 		}
+		if (!cleanup.safeToRemove || !panesGone) {
+			problems.push(
+				`fixture removal of ${root} is BLOCKED — ${
+					cleanup.safeToRemove
+						? "tracked pane processes are not proven gone"
+						: "the real claude launcher references the fixture tree or could not be proven safe"
+				}; resolve the named problems above, then remove the tree by hand`,
+			);
+		} else {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+		for (const p of launcherProblems) problems.push(`launcher integrity: ${p}`);
+		if (problems.length > 0) cleanupError = new Error(problems.join("\n  "));
 	}
-	if (cleanupError) throw cleanupError;
+	if (runError || cleanupError) {
+		const parts: string[] = [];
+		if (runError) parts.push(`RUN: ${runError instanceof Error ? runError.message : String(runError)}`);
+		if (cleanupError) parts.push(`CLEANUP:\n  ${cleanupError.message}`);
+		throw new Error(`${LABEL}: run did not complete cleanly —\n\n${parts.join("\n\n")}`);
+	}
 
 	// ── Prove the fence held, by name and by entry set ───────────────────────
 	ok(
@@ -297,6 +350,10 @@ async function main(): Promise<void> {
 	ok(
 		"self-fence: not one fixture sibling garden id appears in the operator's store or leaves a control-socket residue",
 		[...siblingGids].every((gid) => !realStoreNow.includes(gid) && !realSocketsNow.includes(gid)),
+	);
+	ok(
+		"self-fence: the real claude launcher, its link and its resolved target are exactly as pinned before launch",
+		verifyClaudeLauncher(launcherSnapshot).length === 0,
 	);
 
 	console.log(`\n${LABEL}: ${passed} checks passed`);

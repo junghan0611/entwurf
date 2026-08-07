@@ -93,6 +93,13 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+	assessLauncherCleanup,
+	restoreOriginalXdg,
+	snapshotClaudeLauncher,
+	snapshotOriginalXdg,
+	verifyClaudeLauncher,
+} from "./lib/claude-launcher-fence.ts";
 import { skipLive } from "./lib/live-skip.ts";
 
 const LABEL = "smoke-mux-lifecycle-live";
@@ -133,6 +140,11 @@ const REAL_XDG_DATA_HOME = process.env.XDG_DATA_HOME?.trim() || path.join(REAL_H
 const REAL_XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME?.trim() || path.join(REAL_HOME, ".config");
 const REAL_XDG_STATE_HOME = process.env.XDG_STATE_HOME?.trim() || path.join(REAL_HOME, ".local", "state");
 const REAL_XDG_CACHE_HOME = process.env.XDG_CACHE_HOME?.trim() || path.join(REAL_HOME, ".cache");
+// The four XDG roots as the OPERATOR has them — presence and value, captured before any redirect,
+// so the real-HOME Claude Code cell can be given exact operator-env parity (issue #67). Distinct
+// from the REAL_XDG_* constants above, which canonicalise an absent variable to its default path:
+// parity restores absence AS absence.
+const ORIGINAL_XDG = snapshotOriginalXdg(process.env);
 const REAL_META_ROOTS: Record<string, string> = {
 	"meta-sessions": process.env.ENTWURF_META_SESSIONS_DIR?.trim() || path.join(REAL_PI_AGENT_DIR, "meta-sessions"),
 	"meta-mailbox": process.env.ENTWURF_META_MAILBOX_DIR?.trim() || path.join(REAL_PI_AGENT_DIR, "meta-mailbox"),
@@ -390,6 +402,10 @@ async function main(): Promise<void> {
 	const beforeRealRoots: Record<string, string> = {};
 	for (const [name, dir] of Object.entries(REAL_META_ROOTS)) beforeRealRoots[name] = entrySet(dir);
 	const originalCwd = process.cwd();
+	// FAIL-CLOSED launcher preflight (issue #67): pin the real claude launcher — path, kind, link,
+	// resolved target and content — before ANY Claude-capable child starts. Both the Claude Code
+	// cell and the ACP pi cell (whose provider spawns `claude`) are downstream of this pin.
+	const launcherSnapshot = snapshotClaudeLauncher({ env: process.env, fixtureRoot: root });
 
 	// ── Every WRITE axis into the fixture; the two auth roots stay real ──────
 	const fenced: Record<string, string> = {
@@ -573,14 +589,20 @@ async function main(): Promise<void> {
 				if (ORIGINAL_CLAUDE_CONFIG_DIR) serverEnv.CLAUDE_CONFIG_DIR = ORIGINAL_CLAUDE_CONFIG_DIR;
 				else delete serverEnv.CLAUDE_CONFIG_DIR;
 				// The ACP cell additionally needs the real XDG roots: its provider resolves the
-				// bridged runtime through them. Claude Code does NOT — it is given exactly the env
-				// the shipped fresh-call LIVE already proves it boots under (real HOME + config dir,
-				// fixture XDG), because widening that here changed a working cell into a failing one.
+				// bridged runtime through them — a MEASURED requirement, canonicalised paths and
+				// all, preserved as-is. The Claude Code cell instead gets EXACT operator-env parity
+				// on those four variables (issue #67): real HOME plus a fixture XDG_DATA_HOME was
+				// the state in which Claude's self-update rewrote the operator's real launcher into
+				// the fixture tree and teardown dangled it. Parity restores each original value and
+				// DELETES an originally absent variable — not the canonical-path widening that once
+				// turned this working cell into a failing one.
 				if (backend === "pi") {
 					serverEnv.XDG_CONFIG_HOME = REAL_XDG_CONFIG_HOME;
 					serverEnv.XDG_DATA_HOME = REAL_XDG_DATA_HOME;
 					serverEnv.XDG_STATE_HOME = REAL_XDG_STATE_HOME;
 					serverEnv.XDG_CACHE_HOME = REAL_XDG_CACHE_HOME;
+				} else {
+					restoreOriginalXdg(serverEnv, ORIGINAL_XDG);
 				}
 			}
 			if (tmux(socket, ["new-session", "-d", "-s", "fixture", "-c", scratch, "-n", "anchor"], serverEnv).status !== 0) {
@@ -1018,17 +1040,40 @@ async function main(): Promise<void> {
 	const cleanupProblems: string[] = [];
 	for (const bridge of bridges) bridge.close();
 	for (const socket of privateSockets) tmux(socket, ["kill-server"], process.env);
-	if (!(await waitForPidsGone(panePids)))
-		cleanupProblems.push(`fixture pane processes survived teardown: ${[...panePids].join(", ") || "(none)"}`);
-	process.chdir(originalCwd);
-	try {
-		fs.rmSync(root, { recursive: true, force: true });
-	} catch (err) {
+	const panesGone = await waitForPidsGone(panePids);
+	if (!panesGone)
 		cleanupProblems.push(
-			`fixture root ${root} could not be removed: ${err instanceof Error ? err.message : String(err)}`,
+			`tracked fixture pane processes were not proven gone after teardown: ${[...panePids].join(", ") || "(none)"}`,
 		);
+	process.chdir(originalCwd);
+	// Launcher integrity BEFORE fixture removal, on success and failure alike (issue #67). Removal
+	// happens only when it is PROVEN non-destructive: the launcher demonstrably does not reference
+	// the fixture tree AND every TRACKED launched pane process is proven gone — a live pane could
+	// still rewrite the launcher after the check. (Tracked-pane quiescence only; this claims
+	// nothing about untracked detached descendants.) An unproven state blocks removal loudly
+	// rather than guessing.
+	const launcherProblems = verifyClaudeLauncher(launcherSnapshot);
+	const launcherCleanup = assessLauncherCleanup(launcherSnapshot);
+	for (const p of launcherProblems) cleanupProblems.push(`launcher integrity: ${p}`);
+	for (const p of launcherCleanup.problems) cleanupProblems.push(`launcher cleanup: ${p}`);
+	if (!launcherCleanup.safeToRemove || !panesGone) {
+		cleanupProblems.push(
+			`fixture removal of ${root} is BLOCKED — ${
+				launcherCleanup.safeToRemove
+					? "tracked pane processes are not proven gone"
+					: "the real claude launcher references the fixture tree or could not be proven safe"
+			}; resolve the named problems above, then remove the tree by hand`,
+		);
+	} else {
+		try {
+			fs.rmSync(root, { recursive: true, force: true });
+		} catch (err) {
+			cleanupProblems.push(
+				`fixture root ${root} could not be removed: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
+		if (fs.existsSync(root)) cleanupProblems.push(`fixture root ${root} still exists after removal`);
 	}
-	if (fs.existsSync(root)) cleanupProblems.push(`fixture root ${root} still exists after removal`);
 
 	// ── the self-fence proof, on both paths ──────────────────────────────────
 	// Collected rather than thrown, so a failing run reports the run error AND whatever it left
@@ -1072,6 +1117,10 @@ async function main(): Promise<void> {
 	ok(
 		"self-fence: not one fixture garden id appears in any of the operator's real record / mailbox / marker / socket / lock roots",
 		noGidLeaked,
+	);
+	ok(
+		"self-fence: the real claude launcher, its link and its resolved target are exactly as pinned before launch",
+		verifyClaudeLauncher(launcherSnapshot).length === 0,
 	);
 
 	console.log("\n  receipts (kept apart, never folded):");
