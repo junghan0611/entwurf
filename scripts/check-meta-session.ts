@@ -14,6 +14,7 @@
 
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -27,6 +28,7 @@ import {
 	metaRecordFilename,
 	mintMetaIdentity,
 	parseMetaIdentity,
+	publishExclusiveIdentity,
 	readMailboxReceiptState,
 	readMetaInbox,
 	serializeMetaIdentity,
@@ -164,6 +166,173 @@ check("upsertMetaSession: creates the store dir if absent; leaves no .tmp residu
 	} finally {
 		fs.rmSync(base, { recursive: true, force: true });
 	}
+});
+
+// ---------------------------------------------------------------- exclusive CREATE publish (#66 fail-closed)
+check("publishExclusiveIdentity: absent final publishes, round-trips, no tmp residue", () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-session-excl-"));
+	try {
+		const record = mintMetaIdentity(claudeInput({ nativeSessionId: "excl-fresh" }), T0);
+		const file = path.join(dir, metaRecordFilename(record));
+		publishExclusiveIdentity(file, record);
+		assert.deepEqual(parseMetaIdentity(fs.readFileSync(file, "utf8")), record, "published bytes round-trip");
+		assert.deepEqual(
+			fs.readdirSync(dir).filter((f) => f.includes(".tmp-")),
+			[],
+			"normal exclusive publish leaves no tmp residue",
+		);
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+check("publishExclusiveIdentity: pre-planted final REFUSES, victim byte-identical, tmp gone", () => {
+	// Deterministic collision fixture: the minted suffix is random, so the public
+	// upsert seam cannot be forced onto an occupied final path without a
+	// retry/sample trick — the primitive is the production subject here, and the
+	// wiring claim below pins upsert's create branch to it.
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-session-excl-"));
+	try {
+		const victim = mintMetaIdentity(claudeInput({ nativeSessionId: "excl-victim" }), T0);
+		const rival = {
+			...mintMetaIdentity(claudeInput({ nativeSessionId: "excl-rival" }), T1),
+			gardenId: victim.gardenId,
+		};
+		const file = path.join(dir, metaRecordFilename(victim));
+		fs.writeFileSync(file, serializeMetaIdentity(victim));
+		const victimBytes = fs.readFileSync(file);
+		assert.throws(
+			() => publishExclusiveIdentity(file, rival),
+			(err: unknown) => {
+				assert.ok(err instanceof MetaRecordError, "collision throws MetaRecordError");
+				assert.match(err.message, /CREATE collision/, "named collision cause");
+				assert.ok(err.message.includes(victim.gardenId), "error names the colliding garden id");
+				assert.ok(err.message.includes(file), "error names the occupied record path");
+				return true;
+			},
+			"occupied final path must refuse loud, never replace [QK:META-CREATE-EXCLUSIVE]",
+		);
+		assert.ok(fs.readFileSync(file).equals(victimBytes), "victim bytes byte-identical");
+		assert.deepEqual(
+			fs.readdirSync(dir).filter((f) => f.includes(".tmp-")),
+			[],
+			"collision refusal leaves no tmp residue",
+		);
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+/**
+ * Measured official patch seam for the two error-contract cells below: patch the
+ * default CJS fs object, then `syncBuiltinESMExports()` so the production
+ * `import * as fs` namespace binding sees it (measured on this host: the
+ * namespace does NOT see the patch before sync, does after, and restores after
+ * the finally's sync). A non-EEXIST link errno and a post-publish cleanup
+ * failure cannot be forced on the real filesystem synchronously.
+ */
+function withPatchedFs(method: "linkSync" | "unlinkSync", impl: () => never, fn: () => void): void {
+	const real = fs[method];
+	(fs as unknown as Record<string, unknown>)[method] = impl;
+	syncBuiltinESMExports();
+	try {
+		fn();
+	} finally {
+		(fs as unknown as Record<string, unknown>)[method] = real;
+		syncBuiltinESMExports();
+	}
+}
+
+check("publishExclusiveIdentity: non-EEXIST link failure rethrows the ORIGINAL error, tmp cleaned", () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-session-excl-"));
+	try {
+		const record = mintMetaIdentity(claudeInput({ nativeSessionId: "excl-eacces" }), T0);
+		const file = path.join(dir, metaRecordFilename(record));
+		const primary = Object.assign(new Error("EACCES: permission denied, link"), { code: "EACCES" });
+		withPatchedFs(
+			"linkSync",
+			() => {
+				throw primary;
+			},
+			() => {
+				assert.throws(
+					() => publishExclusiveIdentity(file, record),
+					(err: unknown) => {
+						assert.equal(err, primary, "the identical original error object is rethrown (errno/cause intact)");
+						return true;
+					},
+					"non-EEXIST link failure must surface the original error, not a translation",
+				);
+			},
+		);
+		assert.ok(!fs.existsSync(file), "no final record was published");
+		assert.deepEqual(
+			fs.readdirSync(dir).filter((f) => f.includes(".tmp-")),
+			[],
+			"tmp cleaned even when the link failed for a non-EEXIST reason",
+		);
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+check("publishExclusiveIdentity: post-link cleanup failure is LOUD, final stays published, no rollback", () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-session-excl-"));
+	try {
+		const record = mintMetaIdentity(claudeInput({ nativeSessionId: "excl-cleanup" }), T0);
+		const file = path.join(dir, metaRecordFilename(record));
+		withPatchedFs(
+			"unlinkSync",
+			() => {
+				throw Object.assign(new Error("EPERM: operation not permitted, unlink"), { code: "EPERM" });
+			},
+			() => {
+				assert.throws(
+					() => publishExclusiveIdentity(file, record),
+					(err: unknown) => {
+						assert.ok(err instanceof MetaRecordError, "cleanup failure throws MetaRecordError");
+						assert.match(err.message, /already published/, "states the record IS published");
+						assert.match(err.message, /temp cleanup failed/, "names the cleanup failure");
+						assert.ok(err.message.includes(".tmp-"), "names the leftover tmp path");
+						assert.match(
+							err.message,
+							/no successful birth\/registration receipt/,
+							"states the transport-neutral abort consequence",
+						);
+						assert.match(err.message, /will ATTACH/, "states the retry semantics");
+						return true;
+					},
+					"a real cleanup failure after publish must be loud, never a false success [QK:META-CREATE-PUBLISHED-CLEANUP]",
+				);
+			},
+		);
+		assert.deepEqual(
+			parseMetaIdentity(fs.readFileSync(file, "utf8")),
+			record,
+			"the published final record remains and round-trips (no rollback)",
+		);
+		assert.equal(
+			fs.readdirSync(dir).filter((f) => f.includes(".tmp-")).length,
+			1,
+			"the tmp the primitive could not clean is still there (honest state)",
+		);
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+check("upsertMetaSession: CREATE dispatches to the exclusive publish, ATTACH to the replace write", () => {
+	// Structural action-dispatch claim, deliberately minimal: runtime forcing of a
+	// create collision through upsertMetaSession is genuinely unavailable without
+	// a seam (the gid suffix is drawn from randomBytes inside mint), so the
+	// runtime oracles above prove the primitive and this claim proves the wiring.
+	const source = fs.readFileSync(new URL("../pi-extensions/lib/meta-session.ts", import.meta.url), "utf8");
+	assert.ok(
+		source.includes(
+			'if (decision.action === "create") publishExclusiveIdentity(file, decision.record);\n\telse atomicWriteIdentity(file, decision.record);',
+		),
+		"upsertMetaSession must split the write by action: create→exclusive, attach→replace [QK:META-CREATE-WIRING]",
+	);
 });
 
 expectThrows("upsertMetaSession: duplicate nativeSessionId in the store throws (fail-fast)", () => {

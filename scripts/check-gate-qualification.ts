@@ -803,7 +803,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"acp-stop-reason": 6,
 		"agy-permission": 6,
 		"bridge-boot-resume": 2,
-		"meta-identity": 1,
+		"meta-identity": 4,
 		"mux-boundary": 14,
 		"mux-fresh-call": 15,
 		"mux-parent-artifact": 3,

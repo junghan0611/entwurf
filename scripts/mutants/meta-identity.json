@@ -12,6 +12,42 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:META-FIFO-NONBLOCK]",
 			"signatureSource": "scripts/check-meta-identity-consumers.ts"
+		},
+		{
+			"claim": "META-CREATE-EXCLUSIVE",
+			"title": "reverting the exclusive CREATE publish link to rename silently replaces an existing citizen record on a garden-id collision (#66)",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\tfs.linkSync(tmp, file);"],
+			"replace": ["\t\tfs.renameSync(tmp, file);"],
+			"gate": ["bash", "run.sh", "check-meta-session"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:META-CREATE-EXCLUSIVE]",
+			"signatureSource": "scripts/check-meta-session.ts"
+		},
+		{
+			"claim": "META-CREATE-WIRING",
+			"title": "routing the CREATE action back through the replacing attach write reopens the silent-overwrite path at the upsert choke point (#66)",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": [
+				"\tif (decision.action === \"create\") publishExclusiveIdentity(file, decision.record);",
+				"\telse atomicWriteIdentity(file, decision.record);"
+			],
+			"replace": ["\tatomicWriteIdentity(file, decision.record);"],
+			"gate": ["bash", "run.sh", "check-meta-session"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:META-CREATE-WIRING]",
+			"signatureSource": "scripts/check-meta-session.ts"
+		},
+		{
+			"claim": "META-CREATE-PUBLISHED-CLEANUP",
+			"title": "swallowing a post-publish temp-cleanup failure reports a clean create while a stale tmp lingers beside the record (#66 false success)",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\t\tif ((err as { code?: unknown }).code === \"ENOENT\") return;"],
+			"replace": ["\t\treturn;"],
+			"gate": ["bash", "run.sh", "check-meta-session"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:META-CREATE-PUBLISHED-CLEANUP]",
+			"signatureSource": "scripts/check-meta-session.ts"
 		}
 	]
 }

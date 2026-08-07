@@ -1747,8 +1747,13 @@ export interface UpsertMetaSessionResult {
  * A narrower scan is not a smaller version of this: asking only about MY
  * `nativeSessionId` writes happily beside a drifted or duplicated record that the
  * doctor refuses, which is how a host ends up certified by one surface and not
- * the other. The write is tmp-file + rename so a crash never leaves a
- * half-written record (#30 crash-safety).
+ * the other.
+ *
+ * The write is split by ACTION (#66): ATTACH rewrites its OWN record atomically
+ * in place (tmp + rename, #30 crash-safety); CREATE publishes exclusively
+ * (tmp + link) and fails loud if the minted garden id's final path already
+ * exists — certification cannot see a future minted gid, so replacement-free
+ * publish is the only collision safety a create has.
  */
 export function upsertMetaSession(opts: UpsertMetaSessionOptions): UpsertMetaSessionResult {
 	const dir = path.resolve(expandTilde(opts.dir ?? defaultMetaSessionsDir()));
@@ -1759,15 +1764,82 @@ export function upsertMetaSession(opts: UpsertMetaSessionOptions): UpsertMetaSes
 	const existing = cert.records.find((record) => record.identity.nativeSessionId === target)?.identity ?? null;
 	const decision = decideUpsert(existing, opts.input, opts.now);
 	const file = path.join(dir, metaRecordFilename(decision.record));
-	atomicWriteIdentity(file, decision.record);
+	if (decision.action === "create") publishExclusiveIdentity(file, decision.record);
+	else atomicWriteIdentity(file, decision.record);
 	return { action: decision.action, record: decision.record, dir, path: file };
 }
 
-/** tmp-file + rename so a crash never leaves a half-written record (v3 identity write). */
+/**
+ * ATTACH replace primitive: tmp-file + rename so a crash never leaves a
+ * half-written record (#30 crash-safety). rename(2) REPLACES an existing final
+ * path, which is exactly right for attach (the record being rewritten is the
+ * caller's own) and exactly wrong for create — a freshly minted garden id must
+ * never land on this path (#66).
+ */
 function atomicWriteIdentity(file: string, identity: MetaIdentity): void {
 	const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
 	fs.writeFileSync(tmp, serializeMetaIdentity(identity), { mode: 0o600 });
 	fs.renameSync(tmp, file);
+}
+
+/**
+ * CREATE publish primitive: same-directory tmp + `link(2)` to the final path.
+ * link fails with EEXIST when the final path already exists — the kernel makes
+ * the existence check and the publish one atomic step, so there is no
+ * check-then-rename TOCTOU window and a same-second 24-bit garden-id suffix
+ * collision can never silently replace whatever already holds the final path
+ * (#66). The occupied entry's bytes are untouched on refusal; tmp cleanup is
+ * attempted on every path, and a published-with-residue state fails loud.
+ *
+ * @internal Exported only as the production subject for the meta-session gate's
+ * deterministic collision oracle (the minted suffix is random, so the public
+ * upsert seam cannot force a collision deterministically). Not an
+ * operator/package API.
+ */
+export function publishExclusiveIdentity(file: string, identity: MetaIdentity): void {
+	const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
+	fs.writeFileSync(tmp, serializeMetaIdentity(identity), { mode: 0o600 });
+	try {
+		fs.linkSync(tmp, file);
+	} catch (err) {
+		try {
+			fs.unlinkSync(tmp);
+		} catch (cleanupErr) {
+			// The primary link error stays the truth of this publish; a cleanup errno
+			// never masks it. ENOENT is silent (no residue = desired state); any other
+			// cleanup failure is an operator diagnostic on stderr, then the primary throws.
+			if ((cleanupErr as { code?: unknown }).code !== "ENOENT") {
+				process.stderr.write(
+					`[meta-session] tmp cleanup after a failed CREATE publish also failed (${tmp}): ` +
+						`${(cleanupErr as Error).message}\n`,
+				);
+			}
+		}
+		if ((err as { code?: unknown }).code === "EEXIST") {
+			throw new MetaRecordError(
+				`meta-record CREATE collision: garden id "${identity.gardenId}" already has an entry at ` +
+					`${file}. Exclusive publish refused to replace it — the occupied final-path entry was ` +
+					`not modified and no ACTIVE record was published for nativeSessionId ` +
+					`"${identity.nativeSessionId}".`,
+			);
+		}
+		throw err;
+	}
+	try {
+		fs.unlinkSync(tmp);
+	} catch (err) {
+		// ENOENT is the goal state, not a failure: the record is published and no
+		// tmp remains, so there is nothing left to clean.
+		if ((err as { code?: unknown }).code === "ENOENT") return;
+		// Never roll the final back: the record IS published (link succeeded).
+		throw new MetaRecordError(
+			`meta-record CREATE for garden id "${identity.gardenId}" is already published at ${file}, ` +
+				`but temp cleanup failed (${tmp}): ${(err as Error).message}. The caller aborts here, so ` +
+				`it received no successful birth/registration receipt; remove the temp file and retry — ` +
+				`a retry with the same nativeSessionId will ATTACH to the published record, not mint a ` +
+				`second identity.`,
+		);
+	}
 }
 
 // ---------------------------------------------------------------------------

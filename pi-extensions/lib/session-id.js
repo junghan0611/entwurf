@@ -12,8 +12,9 @@
  * every path, so the id grammar has ONE definition instead of one-per-importer.
  *
  * Keep dependency-free except `node:crypto`. The validator/grammar here is the
- * same one the 0.9.0 resident garden guard and entwurf spawn collision pre-check
- * enforce — do NOT fork it.
+ * one every V3 record/address surface shares — do NOT fork it. Collision safety
+ * is NOT a validator/generator concern: it belongs to the record store's
+ * exclusive CREATE publish, which fails loud on an occupied final path.
  */
 
 import { randomBytes } from "node:crypto";
@@ -45,9 +46,11 @@ export function formatSessionTimestamp(now = new Date()) {
 }
 
 /**
- * Durable garden sessionId minted at the session's true birth. 6 hex suffix
- * defeats same-second parallel-spawn collision; callers that spawn still
- * header-scan pre-check (assertSessionIdAvailableForSpawn).
+ * Durable garden sessionId minted at the session's true birth. The 6-hex
+ * (24-bit) suffix makes a same-second collision unlikely, never impossible.
+ * No caller pre-checks availability: collision SAFETY is owned by the record
+ * store's exclusive CREATE publish (upsertMetaSession), which fails loud on
+ * an occupied final path instead of replacing whatever entry holds it.
  *
  * @param {Date} [now]
  * @returns {string}
