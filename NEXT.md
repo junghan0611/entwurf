@@ -1,45 +1,40 @@
-# NEXT — dep bump(pi 0.84 / acp 0.65) 닫힘; 다음은 issue #62(vitest)를 별도 브랜치에서. 0.13.1은 여전히 make authority 대기
+# NEXT — issue train: #62 착지 → #66/#67 안전 blocker → #63/#65 계약 → #64/#62 종료 판정
 
-> NEXT는 부트 섹터다. ACP 계약과 readiness 경계는 `docs/acp-backend-rail.md`, 검증 계약은 `VERIFY.md`,
-> 기록된 증거는 `BASELINE.md` HISTORY 포인터, dep-bump 트랙 절차는 `ROADMAP.md`의 **Dep bump(별도 트랙)**가
-> SSOT다. 릴리즈 모드 경계는 `.claude/skills/entwurf-release/SKILL.md`.
+> NEXT는 부트 섹터다. 현재 증거는 issue #62 canonical ledger, 검증 계약은 `VERIFY.md`,
+> ACP 계약은 `docs/acp-backend-rail.md`, 릴리즈 권한 경계는 `.claude/skills/entwurf-release/SKILL.md`가 진다.
+
+# RAIL — 현재 좌표
+
+- [x] **1. #62 Phase 0–2 Vitest pilot + amendment** — candidate `82cbc9b`, exact-SHA CI `31138795095` green
+- [ ] **2. #62 branch close + main 착지** ← CURRENT: handoff 승격·삭제 완료 → final docs commit/CI → merge 판단
+- [ ] **3. #66/#67 안전 blocker** — exclusive record CREATE → Claude launcher-safe mux LIVE
+- [ ] **4. #63/#65 계약 결정** — `streamSimple` 의미 → owner-normalized facts projection
+- [ ] **5. #64 field evidence + #62 종료 판정** — formation policy → Phase 3 한 lane 뒤 continue/stop
+
+현재 좌표: #62 구현·첫 exact-SHA CI 완료 → branch handoff를 닫고 final HEAD를 증명한 뒤 issue train을 #66으로 넘긴다.
 
 # NOW
 
-- **mux capability lane이 main에 들어왔다 (2026-08-07).** visible-first가 정책으로 굳었다.
-  `entwurf_fresh_call {backend, model, task}`이 보이는 tmux 창에 새 형제를 열고,
-  `entwurf_resume_call {target}`이 dormant pi를 **같은 garden id로** 되세운다. hidden background
-  child(`owned-outcome` intent + `spawn-bg` transport)는 타입계에서 제거됐다. 커밋
-  `1750af4`(explicit model carrier) · `d8d9452`(visible same-id resume), 둘 다 CI green,
-  qualification 219 mutants. 통합 LIVE `smoke-mux-lifecycle-live`가 **release-gate MUST**다
-  (`LIVE=1`이 필요하고 모델 턴을 쓴다 — `pnpm check` 밖).
-  - receipt 축이 늘었다: **LAUNCH**(창이 섰다) / **OBSERVATION**(같은 gid의 socket이 답했다) /
-    **recall**(같은 대화가 돌아왔다)은 서로 다른 세 사실이며 앞의 것이 뒤의 것을 함의하지 않는다.
-  - 운용 손은 `.claude/skills/entwurf-dev/SKILL.md`가 진다. S1까지 반영돼 있다.
-- **dep bump가 main에서 닫혔다 — pi `0.84.0`, claude-agent-acp `0.65.0`** (peer `>=0.84.0 <0.85`,
-  devDep exact `0.84.0`). 성격 판정·해시·도달성 실측은 ROADMAP.md **Dep bump(별도 트랙)** 2026-08-07
-  항목이 SSOT다. 이 bump가 남긴 계약 변화 둘: pi 런타임 별자리가 커져 `check-pack-install`이
-  `pi-client`/`pi-protocol`을 핀하고, pi 천장 논거가 "loader/compat 바이트 동일"에서
-  "diff를 읽고 도달성을 판정"으로 바뀌었다.
-- **다음 좌표는 issue #62 (vitest 도입과 손으로 지은 검증면 감산) 이고 별도 브랜치에서 연다.**
-  main이나 capability lane에 meta-infra를 태우지 않는다.
-- **0.13.0은 완전히 나갔다.** `27e5f09` = `origin/main` = tag `v0.13.0`, GitHub release published
-  (2026-07-30T03:19:53Z), npm `@junghanacs/entwurf@0.13.0`이 **`latest`**, exact-SHA CI 2회 success
-  (30510354126 · 30510859840). `make`/`publish`는 끝났다 — 다시 실행하지 말 것.
-- **0.13.1 런타임 레일 작업은 커밋·푸시됐다.** `fea773f` (2026-07-30 17:48 KST, oracle) =
-  `origin/main`. 성격은 dep bump + 계약 수선이고, 하위호환은 지지 않는다(세션 수명 도구).
-  package version은 아직 `0.13.0`이고 그게 맞다 — 버전과 CHANGELOG는 `prepare` 모드가 소유한다.
-- **LIVE 둘 다 닫혔다 (2026-07-30 18:2x KST, thinkpad).** oracle의 cortex 미설치 blocker는
-  thinkpad에 cortex v1.1.52 + Snowflake connection이 있어서 해소됐다. 아래 "검증 실측 — axis 2" 참조.
-- **B축(prompt lifecycle) 닫힘** — 정적 + LIVE, 아래 "검증 실측 — axis B".
-- **A축 닫힘.** provenance/v2 compression에 더해 Claude SDK 고정 문장과 engraving carrier의 A-join도
-  source + qualification + fresh Opus LIVE로 닫혔다. Sonnet은 carrier를 격리 인용하지 못했으므로
-  carrier 귀속 self-report의 LIVE 표본은 Opus 하나임을 과장하지 말 것.
-- **claude-agent-acp 0.63.0 → 0.64.0 bump 닫힘** — 아래 "0.13.1에 들어간 것 ⑻".
-- **release-gate P1 닫힘 (미커밋).** 모든 step은 `0=PASS / 97=SKIP / else=FAIL`을 보고하고,
-  `release-gate --cut`은 MUST SKIP을 red로 거절한다. `FAIL=0 SKIP=n` 정책 차단과 실제 MUST FAIL을
-  별도 verdict로 보존한다. qualification **143/143**, `pnpm check` PASS. 다음 release blocker는 실제
-  authenticated delivery coverage와 GLG가 요구한 cross-harness chain이다.
+- **Current:** `issue-62-vitest`의 `82cbc9b`가 CI 세 job(`check`, `install-surface`, `artifact-consumer`)을
+  모두 통과했다. canonical ledger `#issuecomment-5209613895`는 223/223, 57,843줄, CI 이력과 #66/#67 분리를
+  반영했다. branch-only handoff는 이 후보에서 삭제됐고 pilot은 main에 아직 없다.
+- **Next:** 이 docs closure를 commit → push → 최종 HEAD의 exact-SHA CI green 확인 → GLG의 main merge 판단.
+  merge 뒤 post-main에서 #66 branch를 자른다.
+- **Blocker:** main merge authority는 GLG에게 있다. release는 #67이 두 mux LIVE smoke의 real Claude launcher
+  파괴 경로를 닫기 전까지 막힌다.
+- **Read:** issue #62 canonical ledger; #66; #67; `AGENTS.md` verification scheduling.
+- **Do not touch:** #62 branch에서 #66 production source를 섞지 말 것; Phase 4를 열지 말 것;
+  `smoke-mux-lifecycle-live`와 `smoke-mux-fresh-call-live`를 #67 수선 전에 실행하지 말 것.
+
+# RECENT
+
+- **2026-08-07:** #62 pilot `4bf0c38` → amendment `bc98184` → deterministic CI repair `82cbc9b`.
+  `bc98184` CI의 24-bit birthday collision은 확률적 gate 결함과 silent record overwrite 위험을 함께 드러냈다.
+  gate는 fixed input으로 고쳤고 production identity repair는 #66으로 분리했다.
+- **2026-08-07:** 실제 mux LIVE가 fixture `XDG_DATA_HOME` 아래 버전으로 real Claude launcher를 retarget한
+  install-destruction incident를 #67로 기록했다. 이는 `pnpm check` 밖의 release blocker다.
+
+# LEDGER — retained release/dependency history
 
 ## 0.13.1에 들어간 것
 
