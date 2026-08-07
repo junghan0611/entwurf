@@ -603,6 +603,58 @@ export function actionableAcpBackendHint(message: string): string | undefined {
 }
 
 /**
+ * pi 0.84 streamSimple hook contract (#63; upstream pi-mono #7372 → doc-only PR
+ * #7576): implementations must invoke `options.onPayload` before sending the
+ * provider request and use any returned replacement.
+ *
+ * On this rail the provider request is the ACP `session/prompt` params — so the
+ * hook receives the EXACT `{sessionId, prompt}` object after the wire content is
+ * fully built (augment / reuse delta included) and immediately before
+ * `connection.prompt`. That is the truthful analogue of the built-in providers'
+ * post-build/pre-send boundary. Replacement is honored fail-closed, never
+ * silently: it must be a non-null, non-array object, keep the bootstrapped
+ * `sessionId`, and carry a non-empty prompt array — prompt rewriting is
+ * upstream-granted power, but entwurf cannot truthfully deliver to an ACP
+ * session it did not open, and an emptied prompt would undo this rail's own
+ * non-empty-prompt invariant; either refuses the turn before the wire.
+ *
+ * `options.onResponse` is an EXPLICIT LOCAL NON-HTTP EXEMPTION and is never
+ * invoked anywhere on this rail: pi hard-types it as HTTP `{status, headers}`
+ * (and the `after_provider_response` extension event re-emits exactly that), and
+ * ACP's terminal result arrives only AFTER the session-update body was already
+ * consumed — both the shape and the "before consuming its body" ordering are
+ * unmappable, so any call would fabricate HTTP evidence that does not exist.
+ * The absence is pinned behaviorally by check-acp-stream-hooks.
+ */
+async function applyProviderPayloadHook<T extends { sessionId: string }>(
+	options: SimpleStreamOptions | undefined,
+	params: T,
+	model: Model<Api>,
+): Promise<T> {
+	const onPayload = options?.onPayload;
+	if (!onPayload) return params;
+	const replacement = await onPayload(params, model);
+	if (replacement === undefined) return params;
+	if (typeof replacement !== "object" || replacement === null || Array.isArray(replacement)) {
+		throw new Error(
+			"entwurf: before_provider_request returned a non-object replacement — the ACP prompt payload must stay a non-null, non-array object",
+		);
+	}
+	if ((replacement as { sessionId?: unknown }).sessionId !== params.sessionId) {
+		throw new Error(
+			"entwurf: before_provider_request changed the ACP sessionId — entwurf cannot truthfully deliver to a session it did not bootstrap; prompt rewriting is allowed, session identity is not",
+		);
+	}
+	const replacementPrompt = (replacement as { prompt?: unknown }).prompt;
+	if (!Array.isArray(replacementPrompt) || replacementPrompt.length === 0) {
+		throw new Error(
+			"entwurf: before_provider_request returned a replacement without a non-empty prompt array — an empty ACP prompt cannot be sent",
+		);
+	}
+	return replacement as T;
+}
+
+/**
  * streamSimple for the entwurf provider. Returns the event stream
  * synchronously and drives the ACP turn on a microtask.
  */
@@ -1038,17 +1090,22 @@ export function streamAcpTurn(
 			// prompt could still sync-reject before the wire write; the next visible
 			// event after this is the backend's own first token / tool notice.
 			pushAcpLifecycleNotice(state, "sending prompt");
+			// #63: the pi streamSimple payload hook sees the EXACT wire params and may
+			// replace them (fail-closed integrity inside the helper). It runs while the
+			// bootstrap abort listener is still armed; the recheck below keeps an abort
+			// raised during a slow handler ahead of the wire write.
+			const wireParams = await applyProviderPayloadHook(options, { sessionId: acpSessionId, prompt }, model);
+			if (signal?.aborted) throw new Error("aborted during payload hook");
 			// Hand the abort window over to the prompt driver: from here on an abort
 			// is a protocol `session/cancel` first, teardown only after the grace.
 			if (signal && onAbort) {
 				signal.removeEventListener("abort", onAbort);
 				onAbort = undefined;
 			}
-			const promptResult = await awaitAcpPromptTurn(
-				session,
-				{ sessionId: acpSessionId, prompt },
-				{ signal, graceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS },
-			);
+			const promptResult = await awaitAcpPromptTurn(session, wireParams, {
+				signal,
+				graceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS,
+			});
 
 			session.activePromptHandler = undefined;
 			session.busy = false;
@@ -1109,13 +1166,15 @@ export function streamAcpTurn(
 
 			// S2f visibility: about to send the delta to the resident child.
 			pushAcpLifecycleNotice(state, "sending prompt");
-			// A reuse turn has no bootstrap window at all — the prompt driver owns
-			// the whole abort surface (protocol cancel first, teardown after grace).
-			const promptResult = await awaitAcpPromptTurn(
-				session,
-				{ sessionId: session.acpSessionId, prompt },
-				{ signal, graceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS },
-			);
+			// #63: same hook boundary as a new turn — the reuse delta is the wire
+			// params here. The recheck keeps an abort raised during a slow handler
+			// ahead of the wire write; the prompt driver then owns the abort surface.
+			const wireParams = await applyProviderPayloadHook(options, { sessionId: session.acpSessionId, prompt }, model);
+			if (signal?.aborted) throw new Error("aborted during payload hook");
+			const promptResult = await awaitAcpPromptTurn(session, wireParams, {
+				signal,
+				graceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS,
+			});
 
 			session.activePromptHandler = undefined;
 			session.busy = false;

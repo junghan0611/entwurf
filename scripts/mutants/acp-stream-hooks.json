@@ -1,0 +1,158 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-stream-hooks",
+	"mutants": [
+		{
+			"claim": "ACPHOOK-PAYLOAD-EXACT-WIRE",
+			"title": "the new-turn send site bypasses the payload hook entirely — the pi-vertex defect: extensions hooking before_provider_request silently observe nothing",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, { sessionId: acpSessionId, prompt }, model);"
+			],
+			"replace": ["\t\t\tconst wireParams = { sessionId: acpSessionId, prompt };"],
+			"gate": ["bash", "run.sh", "check-acp-stream-hooks"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACPHOOK-PAYLOAD-EXACT-WIRE]",
+			"signatureSource": "scripts/check-acp-stream-hooks.ts"
+		},
+		{
+			"claim": "ACPHOOK-REPLACEMENT-ON-WIRE",
+			"title": "the helper validates the replacement and then discards it — the original params always cross the wire, so a payload-rewriting extension silently does nothing",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\treturn replacement as T;"],
+			"replace": ["\treturn params;"],
+			"gate": ["bash", "run.sh", "check-acp-stream-hooks"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACPHOOK-REPLACEMENT-ON-WIRE]",
+			"signatureSource": "scripts/check-acp-stream-hooks.ts"
+		},
+		{
+			"claim": "ACPHOOK-REUSE-PARITY",
+			"title": "the reuse send site bypasses the hook, so resident-session requests become invisible to extensions while cold turns stay covered",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, { sessionId: session.acpSessionId, prompt }, model);"
+			],
+			"replace": ["\t\t\tconst wireParams = { sessionId: session.acpSessionId, prompt };"],
+			"gate": ["bash", "run.sh", "check-acp-stream-hooks"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACPHOOK-REUSE-PARITY]",
+			"signatureSource": "scripts/check-acp-stream-hooks.ts"
+		},
+		{
+			"claim": "ACPHOOK-REJECTION-FAILS-LOUD",
+			"title": "the new-turn call site silently catches a hook rejection and falls back to the original params — a broken extension keeps 'working'",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, { sessionId: acpSessionId, prompt }, model);"
+			],
+			"replace": [
+				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, { sessionId: acpSessionId, prompt }, model).catch(",
+				"\t\t\t\t() => ({ sessionId: acpSessionId, prompt }),",
+				"\t\t\t);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-stream-hooks"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACPHOOK-REJECTION-FAILS-LOUD]",
+			"signatureSource": "scripts/check-acp-stream-hooks.ts"
+		},
+		{
+			"claim": "ACPHOOK-INVALID-REPLACEMENT-REFUSED",
+			"title": "the non-null/non-array object shape check is dropped, so a scalar replacement is refused for the wrong reason (or not at all) instead of by name",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\tif (typeof replacement !== \"object\" || replacement === null || Array.isArray(replacement)) {",
+				"\t\tthrow new Error(",
+				"\t\t\t\"entwurf: before_provider_request returned a non-object replacement — the ACP prompt payload must stay a non-null, non-array object\",",
+				"\t\t);",
+				"\t}"
+			],
+			"replace": ["\t// a JS extension can return anything; the sessionId check below is the real guard"],
+			"gate": ["bash", "run.sh", "check-acp-stream-hooks"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACPHOOK-INVALID-REPLACEMENT-REFUSED]",
+			"signatureSource": "scripts/check-acp-stream-hooks.ts"
+		},
+		{
+			"claim": "ACPHOOK-EMPTY-PROMPT-REFUSED",
+			"title": "the non-empty prompt invariant is dropped from replacement validation, so an extension can rewrite the turn into an empty ACP send",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\tconst replacementPrompt = (replacement as { prompt?: unknown }).prompt;",
+				"\tif (!Array.isArray(replacementPrompt) || replacementPrompt.length === 0) {",
+				"\t\tthrow new Error(",
+				"\t\t\t\"entwurf: before_provider_request returned a replacement without a non-empty prompt array — an empty ACP prompt cannot be sent\",",
+				"\t\t);",
+				"\t}"
+			],
+			"replace": ["\t// the send sites already refuse an empty BUILT prompt; trust the replacement"],
+			"gate": ["bash", "run.sh", "check-acp-stream-hooks"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACPHOOK-EMPTY-PROMPT-REFUSED]",
+			"signatureSource": "scripts/check-acp-stream-hooks.ts"
+		},
+		{
+			"claim": "ACPHOOK-SESSIONID-TAMPER-REFUSED",
+			"title": "the sessionId invariant is dropped under a literal reading of 'use any returned replacement payload' — the prompt is delivered to a session entwurf never bootstrapped",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\tif ((replacement as { sessionId?: unknown }).sessionId !== params.sessionId) {",
+				"\t\tthrow new Error(",
+				"\t\t\t\"entwurf: before_provider_request changed the ACP sessionId — entwurf cannot truthfully deliver to a session it did not bootstrap; prompt rewriting is allowed, session identity is not\",",
+				"\t\t);",
+				"\t}"
+			],
+			"replace": ["\t// upstream says use any returned replacement payload verbatim"],
+			"gate": ["bash", "run.sh", "check-acp-stream-hooks"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACPHOOK-SESSIONID-TAMPER-REFUSED]",
+			"signatureSource": "scripts/check-acp-stream-hooks.ts"
+		},
+		{
+			"claim": "ACPHOOK-ABORT-DURING-HOOK-WINS",
+			"title": "the post-hook abort recheck is dropped, so an abort raised during a slow handler still sends the prompt to the wire",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, { sessionId: acpSessionId, prompt }, model);",
+				"\t\t\tif (signal?.aborted) throw new Error(\"aborted during payload hook\");"
+			],
+			"replace": [
+				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, { sessionId: acpSessionId, prompt }, model);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-stream-hooks"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACPHOOK-ABORT-DURING-HOOK-WINS]",
+			"signatureSource": "scripts/check-acp-stream-hooks.ts"
+		},
+		{
+			"claim": "ACPHOOK-REUSE-ABORT-WINS",
+			"title": "the REUSE call site's post-hook abort recheck is dropped, so an abort raised during a slow handler still sends a second prompt to the resident session",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, { sessionId: session.acpSessionId, prompt }, model);",
+				"\t\t\tif (signal?.aborted) throw new Error(\"aborted during payload hook\");"
+			],
+			"replace": [
+				"\t\t\tconst wireParams = await applyProviderPayloadHook(options, { sessionId: session.acpSessionId, prompt }, model);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-stream-hooks"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACPHOOK-REUSE-ABORT-WINS]",
+			"signatureSource": "scripts/check-acp-stream-hooks.ts"
+		},
+		{
+			"claim": "ACPHOOK-ONRESPONSE-NEVER-CALLED",
+			"title": "someone 'completes' the hook contract by fabricating an HTTP 200 response on turn success — exactly the false evidence the exemption exists to forbid",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tfunction finishSuccess(promptResult: { stopReason?: string }): void {"],
+			"replace": [
+				"\tfunction finishSuccess(promptResult: { stopReason?: string }): void {",
+				"\t\tvoid options?.onResponse?.({ status: 200, headers: {} }, model);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-stream-hooks"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ACPHOOK-ONRESPONSE-NEVER-CALLED]",
+			"signatureSource": "scripts/check-acp-stream-hooks.ts"
+		}
+	]
+}

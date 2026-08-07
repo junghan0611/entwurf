@@ -2520,6 +2520,22 @@ check_acp_prompt_lifecycle() {
   run_ts scripts/check-acp-prompt-lifecycle.ts
 }
 
+check_acp_stream_hooks() {
+  # Deterministic gate for the pi 0.84 streamSimple hook contract on the ACP rail
+  # (#63; upstream pi-mono #7372 → doc-only #7576). before_provider_request
+  # (onPayload) receives the EXACT ACP session/prompt wire params on new AND
+  # reuse turns and its replacement becomes the wire — fail-closed: a non-null/
+  # non-array-object violation, a changed bootstrapped sessionId, or an emptied
+  # prompt array refuses the turn loudly with zero sends, a hook rejection fails
+  # loud, and an abort raised while the hook is awaited wins before the wire
+  # write on BOTH the new and the reuse path. after_provider_response (onResponse)
+  # is an explicit local non-HTTP exemption: ACP has no truthful {status,
+  # headers} and its terminal result arrives after the body was consumed, so the
+  # gate pins ZERO invocations across success/error/abort turns.
+  section "ACP streamSimple hooks (truthful onPayload; onResponse exemption)"
+  run_ts scripts/check-acp-stream-hooks.ts
+}
+
 check_acp_prompt_builder() {
   # Deterministic gate for the S2d bootstrapPath-scoped ACP prompt builder (핀4).
   # Proves prompt SCOPE follows bootstrapPath: new=full transcript (history
@@ -5170,6 +5186,9 @@ case "$cmd" in
     ;;
   check-acp-prompt-lifecycle)
     check_acp_prompt_lifecycle
+    ;;
+  check-acp-stream-hooks)
+    check_acp_stream_hooks
     ;;
   check-acp-prompt-builder)
     check_acp_prompt_builder

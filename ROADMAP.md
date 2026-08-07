@@ -535,6 +535,18 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
       (`@modelcontextprotocol/sdk ^1.29.0` → 1.29.0, `zod ^4.0.0` → 4.3.6 충족). 기계적 상향을 취하지 않는다.
     - **readiness race와 무관하다** — 두 기능 어느 것도 readiness fence가 아니고 `mcpServerStatus()`는 여전히
       호출되지 않는다. 다만 `dist/acp-agent.js`가 10KB 움직였으므로 런타임 타이밍이 동일하다고 주장하지 않는다.
+    - **streamSimple hook 계약 (#63, 실측 종결).** pi 0.84가 `ProviderConfig.streamSimple` 구현 의무로 문서화한
+      `onPayload`/`onResponse`(upstream #7372 → PR #7576, `f27aaf66c`)는 **JSDoc-only 변경**이고, 동기는 HTTP
+      status/headers 기반 telemetry 확장(pi-otel)이 커스텀 provider에서 조용히 죽는 사고다 — 비-HTTP transport
+      의미론은 upstream 어디에도 없다. entwurf의 채택: **onPayload는 진실한 매핑** — 실제 provider request인
+      ACP `session/prompt` `{sessionId, prompt}`를 send 직전(new/reuse 양쪽)에 넘기고 replacement를 wire에 쓰되,
+      non-null·non-array object + bootstrapped sessionId 불변 + 비어있지 않은 prompt array를 fail-closed로
+      요구한다. **onResponse는 의도된 로컬 비-HTTP
+      exemption** — `ProviderResponse`는 `{status, headers}` 하드타입이고 ACP terminal result는 body(알림) 소비
+      **후**에 오므로 어떤 호출도 HTTP 증거 날조다; 절대 호출하지 않고 그 부재를 `check-acp-stream-hooks`가
+      behavioral하게 결박한다(`acp-stream-hooks` mutant lane 10종). reuse 턴에서 payload-rewriting 확장이 backend
+      세션 기억과 pi transcript를 어긋나게 할 수 있는 것은 built-in에도 동일하게 주어진 upstream 권한이며,
+      새 fence를 세우지 않고 여기 기록만 남긴다.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.
