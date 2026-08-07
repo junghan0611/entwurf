@@ -1,0 +1,50 @@
+{
+	"schemaVersion": 1,
+	"lane": "meta-facts",
+	"mutants": [
+		{
+			"claim": "MF-EXIT-UNREADABLE",
+			"title": "answering an unreadable store with exit 0 makes an unreadable host look like an empty one — the false-success class the exit contract exists to refuse (#65)",
+			"subject": "scripts/meta-facts.ts",
+			"find": ["\tprocess.exit(3); // see the EXIT CONTRACT above: 3 = unreadable store, never an empty one"],
+			"replace": ["\tprocess.exit(0); // see the EXIT CONTRACT above: 3 = unreadable store, never an empty one"],
+			"gate": ["bash", "run.sh", "check-meta-facts"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:MF-EXIT-UNREADABLE]",
+			"signatureSource": "scripts/check-meta-facts.ts"
+		},
+		{
+			"claim": "MF-FULL-V3-JOIN",
+			"title": "dropping the kept identities from the projection empties the join while still reporting a certified-looking store (#65 wrong fact)",
+			"subject": "scripts/meta-facts.ts",
+			"find": ["\t\t{ schemaVersion: 1, storeDir: facts.dir, citizens: facts.identities, defects: facts.errors },"],
+			"replace": ["\t\t{ schemaVersion: 1, storeDir: facts.dir, citizens: [], defects: facts.errors },"],
+			"gate": ["bash", "run.sh", "check-meta-facts"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:MF-FULL-V3-JOIN]",
+			"signatureSource": "scripts/check-meta-facts.ts"
+		},
+		{
+			"claim": "MF-DEFECTS-IN-BAND",
+			"title": "dropping the defect list shows a store the certification refuses as clean — the decayed-copy failure mode this surface exists to end (#65 wrong fact)",
+			"subject": "scripts/meta-facts.ts",
+			"find": ["\t\t{ schemaVersion: 1, storeDir: facts.dir, citizens: facts.identities, defects: facts.errors },"],
+			"replace": ["\t\t{ schemaVersion: 1, storeDir: facts.dir, citizens: facts.identities, defects: [] },"],
+			"gate": ["bash", "run.sh", "check-meta-facts"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:MF-DEFECTS-IN-BAND]",
+			"signatureSource": "scripts/check-meta-facts.ts"
+		},
+		{
+			"claim": "MF-USAGE",
+			"title": "disabling the argv guard makes extra positional args silently read the first as a store dir instead of refusing usage (#65)",
+			"subject": "scripts/meta-facts.ts",
+			"find": ["if (process.argv.length > 3 || (arg !== undefined && arg.startsWith(\"-\"))) {"],
+			"replace": ["if (false) {"],
+			"gate": ["bash", "run.sh", "check-meta-facts"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:MF-USAGE]",
+			"signatureSource": "scripts/check-meta-facts.ts"
+		}
+	]
+}

@@ -161,6 +161,7 @@ Usage:
   ./run.sh smoke-mux-lifecycle-live  # RELEASE MUST integrated LIVE lifecycle acceptance for mux, through the REAL MCP surface — OUT of pnpm check, needs LIVE=1 and spends model turns (two pi siblings: native + recorded-ACP provider, each resumed once; one Claude Code sibling). tools/call fresh_call -> nonce callback sender envelope -> v2 control send landing in the sibling's own transcript -> resume_call REFUSED while live (window count unchanged) -> stable-handle close (pane gone, socket dead, record kept) -> dormant delivery refused honestly -> public entwurf_resume_call with LAUNCH and OBSERVATION receipts kept apart, same-gid socket alive, zero new citizens, zero lock residue, resumed pane_start_path == RECORD cwd (separate tmux query), transcript byte-identical across the resume -> v2 recall of the pre-close fact. claude-code resume refused target-not-pi, no window opened and no lock residue. LIVE=1 ./run.sh smoke-mux-lifecycle-live
   ./run.sh check-entwurf-facts         # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 1+2): PURE PeerFact core + resolveFactList union — R1 out-of-domain→unsupported, R3b socket-domain 4-value, facts-only keyset; union: PeerFact + RecordLessSocketFact by gardenId (#50 C4: record-less socket = diagnostic subject, gid+liveness only), dormant→dead, F3 indeterminate preserved, out-of-socket-domain+socket fail-loud; pure, no IO
   ./run.sh check-socket-discovery      # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 3): SOCKET-axis scanSocketProbes — probes (dir sockets) ∪ (in-domain citizen canonical paths) 3-valued; dormant citizen no-file → dead (resumable, not unprobed), stall → indeterminate (F3), dir hygiene/dedup/missing-dir + e2e → resolveFactList; readdir/probe injected, no IO
+  ./run.sh check-meta-facts            # deterministic gate for the meta-facts projection (#65): drives the REAL CLI — full-record join, parse-before-uniqueness, no-winner duplicates, drift/symlink/invalid-UTF-8 defects in-band, deterministic bytes, exit contract 0/2/3, dispatch+emit reachability
   ./run.sh check-meta-listing          # deterministic gate: META-STORE facts axis — kind-carrying entries; non-regular records are never read, parse/drift become diagnostics, duplicate nativeSessionId quarantines every rival but not unrelated citizens; strict throws / collect partial; pure injected IO
   ./run.sh check-entwurf-fact-provider # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4b): ASSEMBLY listEntwurfFacts — listAllMetaIdentities→scanSocketProbes→pre-quarantine out-of-socket-domain/socket conflicts→resolveFactList(clean)→{facts,diagnostics}; C-원칙: expected corruption (parse/collision)→diagnostics (listing survives), impossible invariant (dup/unprobed)→throw; collision quarantines BOTH PeerFact+socket; deps injected, no IO
   ./run.sh check-entwurf-peers-surface # deterministic gate (0.11 Stage 0 step 4, fact-provider slice 4c): MCP entwurf_peers RENDER renderEntwurfPeers (#50 C4) — payload keyset exactly {peers, diagnostics}; FORBIDDEN keys sessions/socketOnly/controlDir/socketPath/count + no .sock in text (socket is transport, never identity); record-less socket = aggregated record-less-socket diagnostic (F8, liveness-keyed message, alive names fresh-cut); NO verb-routing key (JSON deep scan) NOR word (text), diagnostics both surfaces, empty→(none), unsupported shown; WIRING guard: both surfaces call provider+render, getLiveSessions + /entwurf-sessions gone; facts fabricated, no IO
@@ -205,6 +206,7 @@ Usage:
   ./run.sh doctor-agy-hooks           # fail-loud doctor for agy hooks.json imprint wiring
   ./run.sh meta-bridge-prune          # 1.0.0 meta-bridge Phase 4: LISTING-ONLY store hygiene — classify orphan/stale/ambiguous/keep, print manual rm commands, delete NOTHING ([dir] [--ttl-days N])
   ./run.sh meta-bridge-fresh-cut      # the ONE generation verb (the verb every v3-only rejection names): quiesce-check live sockets/markers/native-push conversations (refusing any surface it cannot inspect), archive meta-sessions/ + meta-mailbox/ to `<dir>.archive-<ts>`, clear dead transport residue, open an empty v3 generation. No migration, no restore — the archive is forensic only. EXIT CONTRACT (#54, `--help` prints it): 0 complete / 1 NOTHING MOVED (re-run, do not setup) / 2 usage / 3 cut transition incomplete (inspect) / 4 cut complete but residue cleanup failed (`setup` may run; re-run only before new citizen birth, otherwise remove residue manually)
+  ./run.sh meta-facts                 # #65 owner-normalized READ-ONLY store projection: deterministic JSON {schemaVersion:1, storeDir, citizens: full v3 records sorted by gardenId, defects: {filename,message}} — THE listing contract emitted by the owner so consumers stop copying the certification. No liveness/sockets/transcript contents. EXIT: 0 readable (defects in-band; missing store = empty), 2 usage, 3 unreadable ([dir])
   ./run.sh meta-bridge-managed-keys   # 0.10.0 meta-bridge: print the SSOT of settings keys entwurf OWNS (consumers read this to stay disjoint — keyset-owner invariant)
   ./run.sh check-keyset-overlap <fragment.json...>  # 0.10.0 meta-bridge: PREVENTIVE keyset guard — fail if a consumer fragment collides with any pi-owned key (cross-repo; not in pnpm check)
   ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
@@ -1440,6 +1442,17 @@ check_meta_listing() {
   # salvaged gid string as a fact = synthetic backdoor). mode strict throws on
   # any error, collect returns partial. entries/readRecord injected, no IO.
   run_ts scripts/check-meta-listing.ts
+}
+
+check_meta_facts() {
+  # Deterministic gate for the #65 owner-normalized store projection. Drives the
+  # REAL scripts/meta-facts.ts as a subprocess against sandboxed fixture stores:
+  # full verbatim v3 records in the join, parse-before-uniqueness (a schema-invalid
+  # rival never quarantines a healthy citizen), no-winner duplicates, drift /
+  # symlink / invalid-UTF-8 defects in-band with exit 0, byte-deterministic JSON,
+  # missing store = readable empty store, unreadable store = exit 3 with NO JSON,
+  # usage = exit 2, plus dispatch + compiled-twin emit reachability.
+  run_ts scripts/check-meta-facts.ts
 }
 
 check_entwurf_fact_provider() {
@@ -2733,6 +2746,9 @@ check_pack() {
     # previous-generation store; without this twin the prescription every
     # v3-only rejection names would be dead exactly where it matters.
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-fresh-cut.js"
+    # #65 — the owner-normalized store projection consumers call INSTEAD of
+    # parsing the store; installed hosts are exactly where those consumers live.
+    "mcp/entwurf-bridge/dist/scripts/meta-facts.js"
     # 0.12.5 — the node_modules-safe plugin hook + its lib. install-meta-bridge copies
     # these compiled JS into the assembled plugin when installed (raw .ts can't
     # strip-types under node_modules). meta-session.js is shared with the store-doctor
@@ -2928,6 +2944,8 @@ _check_pack_install_impl() {
     # The generation verb (see check-pack). The installed-command regression below
     # opens a fresh generation on a 0-record sandbox through the real bin.
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-fresh-cut.js"
+    # #65 — the owner-normalized store projection (see check-pack).
+    "mcp/entwurf-bridge/dist/scripts/meta-facts.js"
     # 0.12.5 — node_modules-safe plugin hook + lib (see check-pack). The installed
     # hook regression below runs exactly this compiled JS from under node_modules.
     "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook.js"
@@ -4779,6 +4797,9 @@ case "$cmd" in
   check-meta-listing)
     check_meta_listing
     ;;
+  check-meta-facts)
+    check_meta_facts
+    ;;
   check-entwurf-fact-provider)
     check_entwurf_fact_provider
     ;;
@@ -5121,6 +5142,16 @@ case "$cmd" in
     # + [--ttl-days N] to override.
     shift || true
     run_ts scripts/meta-bridge-prune.ts "$@"
+    ;;
+  meta-facts)
+    # #65 owner-normalized READ-ONLY projection of the meta-record store: the
+    # (gardenId, nativeSessionId, transcriptPath) join as deterministic JSON,
+    # emitted by THE listing contract (listAllMetaIdentities) so consumers stop
+    # carrying a decaying copy of the certification. Defects ride in-band with
+    # exit 0; an unreadable store is exit 3 and never looks empty. No liveness,
+    # no socket paths, no transcript contents, no state.
+    shift || true
+    run_ts scripts/meta-facts.ts "$@"
     ;;
   meta-bridge-managed-keys)
     # 0.10.0 meta-bridge: emit the SSOT of settings.json/~/.claude.json keys that

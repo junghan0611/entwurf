@@ -1090,6 +1090,22 @@ export function listAllMetaIdentities(
 	return { identities, errors };
 }
 
+/**
+ * The fs-bound listing — the same binding shape {@link certifyActiveStoreDir} gives the
+ * certification: one resolved dir, kind-carrying entries, the fd-guarded record reader.
+ * Exists so an in-repo facts surface (`meta-facts`, #65) reuses THE listing contract
+ * instead of re-binding readdir/read by hand — the exact drift that made external
+ * consumers carry a decaying copy of the certification. No semantics of its own:
+ * everything it returns is {@link listAllMetaIdentities} over the real store.
+ */
+export function listAllMetaIdentitiesDir(dir: string): ListIdentitiesResult & { dir: string } {
+	const resolved = path.resolve(expandTilde(dir));
+	return {
+		dir: resolved,
+		...listAllMetaIdentities(readActiveStoreEntries(resolved), makeStoreRecordReader(resolved)),
+	};
+}
+
 export type UpsertAction = "create" | "attach";
 
 export interface UpsertDecision {

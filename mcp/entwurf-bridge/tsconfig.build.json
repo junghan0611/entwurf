@@ -86,6 +86,12 @@
 	// and run_ts refuses them under an installed package rather than emitting 70+
 	// gate leaves into the tarball.
 	//
+	// WHY meta-facts rides this build (#65): it is the operator projection external
+	// consumers call INSTEAD of parsing the store, and those consumers live on
+	// INSTALLED hosts — under node_modules, where run_ts needs a compiled twin.
+	// Its only repo import is meta-session.ts, already emitted for the
+	// store-doctor, so it adds ONE leaf JS and ZERO new deps.
+	//
 	// WHY meta-bridge-fresh-cut rides this build: it is the ONE operator command
 	// every v3-only rejection surface names, and the hosts that need it most are
 	// INSTALLED hosts sitting on a previous-generation store — exactly where
@@ -104,6 +110,7 @@
 		"../../scripts/new-session-id.ts",
 		"../../scripts/meta-bridge-prune.ts",
 		"../../scripts/meta-bridge-fresh-cut.ts",
+		"../../scripts/meta-facts.ts",
 		"../../pi-extensions/meta-bridge-hook.ts"
 	]
 }
