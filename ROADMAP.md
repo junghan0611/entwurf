@@ -79,7 +79,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability/native-push reject gates |
-| pi 0.84.0 fence | `pnpm check` + release-gate MUST |
+| pi 0.84.1 fence | `pnpm check` + release-gate MUST |
 
 ### Historical — 0.12.0 cutover close checklist
 
@@ -255,7 +255,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **0.84.0** (`>=0.84.0 <0.85`, next-minor 상한).
+  public export → TS 직접 import(재구현 불필요). floor = **0.84.1** (`>=0.84.1 <0.85`, next-minor 상한).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상
@@ -547,6 +547,22 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
       behavioral하게 결박한다(`acp-stream-hooks` mutant lane 10종). reuse 턴에서 payload-rewriting 확장이 backend
       세션 기억과 pi transcript를 어긋나게 할 수 있는 것은 built-in에도 동일하게 주어진 upstream 권한이며,
       새 fence를 세우지 않고 여기 기록만 남긴다.
+  - **2026-08-07 bump — pi 0.84.0 → 0.84.1 (claude-agent-acp 0.65.0·ACP SDK 1.3.0 유지).**
+    **성격: patch 릴리즈, 도달 계약 전부 불변/가산.** compare `v0.84.0...v0.84.1`(release `53fa77c`)은
+    30 commits/137 files이지만 load-bearing 파일들이 compare set에 아예 없다 — `packages/ai/src/compat.ts`,
+    coding-agent `core/extensions/loader.ts`·`core/agent-session.ts`·`core/session-manager.ts`, 그리고 #63
+    hook 배선인 `core/sdk.ts`·`core/extensions/runner.ts` 전부 바이트 동일. `SimpleStreamOptions`/
+    `ProviderResponse` 타입 불변(ai/types.ts 델타는 `qwen-token-plan-individual` KnownProvider 가산 하나).
+    reachable 후보 판정: `ToolCallEventResult.terminate`(가산; 우리는 tool_call 핸들러 미등록),
+    `Agent.reset()` active-run 거부(미호출), tool prompt contribution export 리팩터+PI-env 문구 완화
+    (pi-native 표면), `pi auth check` preflight/auth-command 리팩터(CLI 전용; 우리 고정 argv는 help-text
+    델타뿐), `ModelRuntime.refreshOnCreate`(opt-in 가산) — 전부 미도달. Qwen Individual/SQLite backend
+    (별도 패키지, coding-agent 의존성 아님)/TUI/Harness factory/Bun 바이너리는 소스+패키지 별자리로
+    out-of-surface 확인. npm 실측: 외부 의존성 버전 전부 동일(openai 6.26.0, @anthropic-ai/sdk 0.91.1,
+    typebox 1.3.7 등), caret 멤버십 불변({ai, tui, client, protocol, agent-core}+telemetry), coding-agent
+    fileCount 956→968(+86,748B), pi-ai 725→734(Qwen 모듈). **하드 미니멈 판정: floor를 `>=0.84.1 <0.85`로
+    exact devDep과 함께 기계적 이동**(run.sh가 devDep에서 peer 유도, `check-dep-versions`가 오라클,
+    `check-pack-install` 6-row 핀 이동). 새 behavioral gate 불요 — entwurf가 진술하는 계약 변화 없음.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.

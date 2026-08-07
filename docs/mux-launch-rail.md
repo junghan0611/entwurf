@@ -260,10 +260,12 @@ certified pi가 `0.84.0`으로 올라간 뒤 재실측했고 **판정은 그대�
 `assertValidSessionId` 문법은 살아 있고, `session-manager.ts`의 유일한 v0.83.0..v0.84.0 변경은
 session 디렉터리 스캔이 symlink를 허용하게 된 것(identity minting과 무관)이며, 동기로 identity를
 반환하는 새 표면은 추가되지 않았다. 즉 조건 1은 0.84.0에서도 불성립이다.
+0.84.1 재확인(2026-08-07): `session-manager.ts`는 v0.84.0..v0.84.1 compare set에 없다(바이트 동일)
+— 이 판정은 0.84.1에서도 재측정 없이 그대로 선다.
 
 ### 읽은 근거
 
-`<pi>` = 설치된 `@earendil-works/pi-coding-agent@0.84.0`(현 certified) 패키지 루트(pnpm global store).
+`<pi>` = 설치된 `@earendil-works/pi-coding-agent@0.84.0`(이 절의 표본을 뜬 install; 현 certified floor는 0.84.1 — 위 0.84.1 재확인 문단 참조) 패키지 루트(pnpm global store).
 아래 표에서 출처가 `(0.83.0)`으로 적힌 행은 **앵커 시점의 역사적 표본**이고, 그 행의 사실이 0.84.0에서도
 성립하는지는 위 재실측 문단이 따로 진다. 접두사 없는
 경로는 이 repo 기준이다.

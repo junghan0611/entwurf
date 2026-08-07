@@ -168,7 +168,7 @@ implement → affected focused gates → independent review → one amendment bu
 - Every `.ts` file belongs to one typecheck fence: root emit-capable config, MCP strip-types config, or scripts strip-types config. Do not hide files with `exclude`.
 - Root pi extensions import TypeBox through `@earendil-works/pi-ai`; do not mix direct `@sinclair/typebox` types.
 - MCP/scripts use explicit `.ts` imports where Node strip-types requires them. Installed operator surfaces route to compiled JS.
-- pi runtime range is `>=0.84.0 <0.85` with devDep exact `0.84.0`; re-evaluate loader aliases and `/compat` at every minor ceiling. The ceiling moves on measurement, never on assumption, and a previous bump's argument is never reused: at 0.83.0→0.84.0 `compat.ts` was still byte-identical but `loader.ts` was NOT, so the diff itself had to be read and judged reachable-or-not. Per-bump hashes, diff judgments, and reachability findings live in the ROADMAP **Dep bump(별도 트랙)** ledger — keep them there, not here.
+- pi runtime range is `>=0.84.1 <0.85` with devDep exact `0.84.1`; re-evaluate loader aliases and `/compat` at every minor ceiling. The ceiling moves on measurement, never on assumption, and a previous bump's argument is never reused: at 0.83.0→0.84.0 `compat.ts` was still byte-identical but `loader.ts` was NOT, so the diff itself had to be read and judged reachable-or-not. Per-bump hashes, diff judgments, and reachability findings live in the ROADMAP **Dep bump(별도 트랙)** ledger — keep them there, not here.
 - ACP pins are recorded in `package.json` and checked by `check-dep-versions`/`check-acp-sdk-surface`; do not describe a dependency bump as a behavioral fix without evidence.
 
 ## Working Style
