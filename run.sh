@@ -101,6 +101,18 @@ run_vitest() {
     echo "entwurf: vitest is not installed — run 'pnpm install' in the checkout first." >&2
     return 1
   fi
+  if [ -n "${ENTWURF_MUTATION_VITEST_REPORT:-}" ]; then
+    # Qualification asked for structured attribution: a kill is attributed from the
+    # failed TEST TITLES in this report, never from Vitest's code frame (which quotes
+    # the source lines around the assertion — including an adjacent PASSING test's
+    # [QK:…] title). The marker declares the lane structured; the report goes to a
+    # FILE because the runner merges stdout+stderr and one warning line ahead of the
+    # JSON would break the parse. Human output still rides stdout.
+    echo "__ENTWURF_VITEST_JSON__"
+    (cd "$REPO_DIR" && "$bin" run --reporter=default --reporter=json \
+      --outputFile.json="$ENTWURF_MUTATION_VITEST_REPORT" "$@")
+    return
+  fi
   (cd "$REPO_DIR" && "$bin" run "$@")
 }
 
@@ -2039,9 +2051,13 @@ check_pi_import_surface() {
   # pattern catches static `from`, dynamic `import()`, `require()`,
   # `export … from`, side-effect `import "…"`, and whitespace variants alike.
   # Root import `@earendil-works/pi-coding-agent` (no trailing slash) is allowed.
-  # Scans EVERY tracked .ts/.js/.mjs/.cjs source (git ls-files), not a hardcoded
-  # file list — a new root file (acp-bridge.ts, event-mapper.ts, engraving.ts,
-  # pi-context-augment.ts, protocol.js, …) can never silently escape the gate.
+  # Scans the whole git WORK SURFACE (tracked + untracked-non-ignored), not a
+  # hardcoded or index-only file list. The index-only corpus was the #62 measured
+  # escape: a brand-new test file carrying a forbidden subpath was invisible to the
+  # floor until it happened to be staged, so the gate went green on a candidate CI
+  # then rejected. The denominator is re-proved every run against an EXTERNAL
+  # throwaway git repo (never this worktree — the frozen candidate must not be
+  # written to) holding one tracked-clean and one untracked-forbidden fixture.
   #
   # pi 0.80 EXCEPTION — exactly ONE allowlisted subpath:
   #   @earendil-works/pi-ai/compat
@@ -2054,24 +2070,57 @@ check_pi_import_surface() {
   # the remainder, producing the unresolvable `…/dist/compat.js/providers/
   # anthropic` (verified live: extension load crash — invisible to static
   # typecheck, which resolves against node_modules `exports`). So `/compat` is the
-  # sanctioned extension entrypoint this repo uses for the old global model-catalog API
-  # (lib/acp/models.ts: `getModels`), and the ONLY allowlisted exception. The
+  # sanctioned extension entrypoint, and the ONLY allowlisted exception. It has TWO
+  # consumers: lib/acp/models.ts (`getModels`, the old global model-catalog API) and
+  # test/fresh-call-provider.contract.test.ts (`stream`, the loopback provider-conversion
+  # contract — pi-ai 0.84's package ROOT exports no stream/streamAnthropic at all, and
+  # root `lazyStream(model, setup)` only defers the same private import into `setup`,
+  # so /compat is the only surface that can observe the real anthropic request body). The
   # allow-pattern is closing-quote-anchored (`@earendil-works/pi-ai/compat["'\`]`)
   # so it permits ONLY that exact specifier: `/compat-foo`, `/oauth`, every
   # `/providers/*`, and any deeper path stay FORBIDDEN (we use only `/compat`).
   # Do NOT widen this to a `providers/*` subpath — it typechecks but CANNOT
   # resolve under the extension loader.
-  local hits
-  hits=$(cd "$REPO_DIR" && git ls-files '*.ts' '*.js' '*.mjs' '*.cjs' \
-    | grep -vE '^(node_modules|dist)/' \
-    | xargs -r grep -HnE "[\"'\`]@earendil-works/pi-(ai|coding-agent|tui)/" 2>/dev/null \
-    | grep -vE "[\"'\`]@earendil-works/pi-ai/compat[\"'\`]" 2>/dev/null || true)
+  # ONE corpus, TWO callers. The real scan and the denominator fixture must run the
+  # SAME two lines, or the fixture would prove a command the gate does not use.
+  pi_import_work_surface() {
+    git ls-files -z --cached --others --exclude-standard -- '*.ts' '*.js' '*.mjs' '*.cjs'
+  }
+  pi_import_scan() {
+    pi_import_work_surface \
+      | xargs -0r grep -HnE "[\"'\`]@earendil-works/pi-(ai|coding-agent|tui)/" 2>/dev/null \
+      | grep -vE "[\"'\`]@earendil-works/pi-ai/compat[\"'\`]" 2>/dev/null || true
+  }
+
+  local probe_dir probe_hits hits
+  probe_dir=$(mktemp -d "${TMPDIR:-/tmp}/entwurf-pi-import-denominator.XXXXXX")
+  (
+    cd "$probe_dir" || exit 1
+    git -c init.defaultBranch=main init -q .
+    printf '%s\n' 'import { getModels } from "@earendil-works/pi-ai/compat";' > tracked-allowed.ts
+    git add tracked-allowed.ts
+    printf '%s\n' 'import "@earendil-works/pi-ai/private-probe";' > untracked-forbidden.ts
+  ) || { fail "[check-pi-import-surface] could not build the denominator fixture in $probe_dir"; rm -rf "$probe_dir"; return 1; }
+  probe_hits=$(cd "$probe_dir" && pi_import_scan)
+  rm -rf "$probe_dir"
+  # ONE assertion, ONE claim token: the manifest contract requires the signature to
+  # occur exactly once in this file, so both fixture conditions are folded into a
+  # single failure whose message still names which half broke.
+  local saw_untracked_forbidden="no" saw_tracked_allowed="no"
+  grep -qF 'untracked-forbidden.ts' <<<"$probe_hits" && saw_untracked_forbidden="yes"
+  grep -qF 'tracked-allowed.ts' <<<"$probe_hits" && saw_tracked_allowed="yes"
+  if [ "$saw_untracked_forbidden" != "yes" ] || [ "$saw_tracked_allowed" != "no" ]; then
+    fail "[QK:PIIMPORT-WORK-SURFACE] the denominator fixture disagrees with the corpus — untracked-forbidden reached=$saw_untracked_forbidden (want yes: a brand-new forbidden import must not escape until it is staged), tracked-allowed flagged=$saw_tracked_allowed (want no: the /compat exception must survive)"
+    return 1
+  fi
+
+  hits=$(cd "$REPO_DIR" && pi_import_scan)
   if [ -n "$hits" ]; then
     echo "[check-pi-import-surface] FAIL: pi private subpath reference(s) — import @earendil-works/pi-* by the package ROOT only:"
     echo "$hits"
     exit 1
   fi
-  ok "[check-pi-import-surface] pi references are root-only (no private subpath; all tracked ts/js scanned)"
+  ok "[check-pi-import-surface] pi references are root/compat-only across tracked + untracked-non-ignored ts/js; the untracked denominator is proved on an external fixture repo"
 }
 
 check_env_namespace() {
@@ -3640,6 +3689,21 @@ JSON
     echo "$devgate_out" | tail -6 | sed 's/^/    /' >&2
     return 1
   fi
+  # The migrated fresh-call gate takes a third path: run_vitest. Drive that exact
+  # installed branch and require both the nonzero refusal and its intended cause;
+  # an incidental missing file or raw strip-types crash is not consumer evidence.
+  local vitestgate_out vitestgate_rc=0
+  vitestgate_out=$(HOME="$npmhome" XDG_DATA_HOME="$op_xdg_data" XDG_STATE_HOME="$op_xdg_state" XDG_CACHE_HOME="$op_xdg_cache" PI_CODING_AGENT_DIR="$op_agent" "$installed_entwurf" check-mux-fresh-call 2>&1) || vitestgate_rc=$?
+  if [ "$vitestgate_rc" -eq 0 ]; then
+    fail "[check-pack-install] the Vitest-backed check-mux-fresh-call exited 0 from an installed package — the devDependency runner is absent"
+    return 1
+  fi
+  if ! printf '%s' "$vitestgate_out" | grep -q 'dev-clone-only surface' || ! printf '%s' "$vitestgate_out" | grep -q 'vitest is a devDependency'; then
+    fail "[check-pack-install] installed check-mux-fresh-call did not refuse for run_vitest's intended devDependency/dev-clone-only reason:"
+    echo "$vitestgate_out" | tail -6 | sed 's/^/    /' >&2
+    return 1
+  fi
+
   # Same rule, different mechanism. check-fresh-cut-gate is a SHELL gate, so run_ts
   # never sees it — `scripts/` ships whole and the dispatch would happily run it
   # from under node_modules, where the dev sandbox it builds has no business
@@ -3656,7 +3720,7 @@ JSON
     echo "$shgate_out" | tail -6 | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] dev-only gate refusal pass (installed package refuses check-* legibly via run_ts, and the shell-side check-fresh-cut-gate refuses on its own guard; no raw-.ts fallback, no silent exit 0)"
+  echo "[check-pack-install] dev-only gate refusal pass (installed package refuses run_ts and run_vitest checks for their exact causes; shell-side check-fresh-cut-gate refuses on its own guard; no silent exit 0)"
 
   # 0.12.4 — installed STORE-DOCTOR regression. meta-bridge-doctor.sh's full store
   # scan runs the prebuilt dist JS when it lives under node_modules (strip-types

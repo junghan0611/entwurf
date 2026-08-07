@@ -45,8 +45,10 @@ import {
 	originHead,
 	originWorkSurfaceSha,
 	qualifyMutants,
+	readVitestFailedTitles,
 	reportPassed,
 	runGateBounded,
+	signatureAttributedToFailure,
 	signatureOnFailureLine,
 	sweepStaleSnapshots,
 	validateManifest,
@@ -74,6 +76,83 @@ function throws(label: string, fn: () => void, naming: string): void {
 		return;
 	}
 	assert.fail(`${label} — expected a loud refusal, got silence`);
+}
+
+/**
+ * Vitest attribution, proved on the MEASURED false-positive shape (issue #62 review).
+ *
+ * Vitest prints a code frame around the failing assertion, and that frame quotes the
+ * neighbouring source lines — including an adjacent PASSING test's `it("[QK:…]" …)`
+ * title. Measured verbatim on vitest 4.1.9:
+ *
+ *     ×  [QK:B] fails on its first body line
+ *     4|  it("[QK:A] one-liner that passes", () => expect(1).toBe(1));
+ *     5|  it("[QK:B] fails on its first body line", () => {
+ *
+ * The legacy `ok`-line oracle answers TRUE for [QK:A] there — a mutant claiming A
+ * would be certified KILLED by a red that belongs to B. The structured oracle reads
+ * only the failed-test title set, so it must answer FALSE for A and TRUE for B.
+ *
+ * The cell is discriminating in BOTH directions: it asserts that the legacy scanner
+ * really does say TRUE on this input, so the negative is not vacuous.
+ */
+function checkVitestAttribution(): void {
+	// Declared ONCE as a literal: the manifest's exact-once signature rule counts
+	// occurrences of this token in signatureSource, so every other use goes through
+	// the binding.
+	const claimed = "[QK:VITEST-FAILED-TITLE-ATTRIBUTION]";
+	const actualFailure = "[QK:ADJACENT-ACTUAL-FAILURE]";
+	const codeFrame = [
+		"__ENTWURF_VITEST_JSON__",
+		` ×  ${actualFailure} fails on its first body line`,
+		`      4|  it("${claimed} one-liner that passes", () => expect(1).toBe(1));`,
+		`      5|  it("${actualFailure} fails on its first body line", () => {`,
+	].join("\n");
+	const report = JSON.stringify({
+		testResults: [
+			{
+				assertionResults: [
+					{ status: "passed", fullName: `frame probe ${claimed} one-liner that passes` },
+					{ status: "failed", fullName: `frame probe ${actualFailure} fails on its first body line` },
+				],
+			},
+		],
+	});
+
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-attribution-selftest-"));
+	const reportPath = path.join(dir, "vitest-report.json");
+	try {
+		fs.writeFileSync(reportPath, report);
+		const titles = readVitestFailedTitles(codeFrame, reportPath);
+
+		ok(
+			"attribution self-test is not vacuous — the legacy failure-line oracle really does certify the adjacent PASSING claim on this measured code frame",
+			signatureOnFailureLine(codeFrame, claimed),
+		);
+		ok(
+			`${claimed} Vitest attribution reads only structured failed-test titles — an adjacent passing QK quoted by the failing code frame cannot certify the mutant`,
+			!signatureAttributedToFailure(codeFrame, claimed, titles) &&
+				signatureAttributedToFailure(codeFrame, actualFailure, titles),
+		);
+		ok(
+			"a structured lane whose report is missing is UNREADABLE, never a silent fallback to token scanning",
+			readVitestFailedTitles(codeFrame, path.join(dir, "absent.json")) === "unreadable" &&
+				!signatureAttributedToFailure(codeFrame, actualFailure, "unreadable"),
+		);
+		ok(
+			"a gate that printed no marker keeps the legacy failure-line oracle unchanged",
+			readVitestFailedTitles("  not ok 1 boom [QK:LEGACY]", reportPath) === "legacy" &&
+				signatureAttributedToFailure("  not ok 1 boom [QK:LEGACY]", "[QK:LEGACY]", "legacy"),
+		);
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+}
+
+checkVitestAttribution();
+if (process.argv.includes("--attribution-self-test")) {
+	console.log(`[gate-qualification] attribution self-test: ${passed} checks passed`);
+	process.exit(0);
 }
 
 // ═══ Phase 1a — the pure classifier, exhausted as a truth table ═════════════
@@ -726,7 +805,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"bridge-boot-resume": 2,
 		"meta-identity": 1,
 		"mux-boundary": 14,
-		"mux-fresh-call": 13,
+		"mux-fresh-call": 15,
 		"mux-parent-artifact": 3,
 		"mux-resume-call": 12,
 		"probe-ordering": 85,

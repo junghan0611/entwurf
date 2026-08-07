@@ -83,7 +83,33 @@ const H_TEXT = /readFileSync[^\n]*(?:pi-extensions|mcp\/|\.ts["'`]|SOURCE|SRC)|\
 const H_PROC = /\b(?:spawn|spawnSync|execFile|execFileSync|execSync|fork)\s*\(|subprocess\.(?:run|Popen|check_)/;
 const H_NET = /\b(?:http|net)\.createServer|\.listen\(/;
 const H_FS = /from\s+["']node:fs["']|require\(["']node:fs["']\)/;
-const H_LIVE = /process\.env\.LIVE|\bLIVE=1\b/;
+// H_LIVE asks whether the file's OWN CODE reads the LIVE switch — not whether the
+// three letters appear. The naive `\bLIVE=1\b` form classified
+// scripts/check-release-gate-outcomes.ts as real-live because that gate QUOTES the
+// sentence "a CUT needs LIVE=1, SKIP=0" and greps other files for the literal
+// "process.env.LIVE"; it spawns no live turn of its own. So the predicate runs on the
+// CODE-ONLY projection (comments and inert literals blanked, shell expansions kept)
+// and matches a variable READ or an assignment, never prose.
+const H_LIVE = /process\.env\.LIVE\b|\$\{LIVE[:}\-]|\$LIVE\b|(?:^|\n)\s*(?:export\s+)?LIVE=1\b/;
+
+/**
+ * Blank what cannot gate execution, so H_LIVE reads code and not prose.
+ *
+ * TS: `//` and block comments, and the contents of every quoted literal.
+ * Shell: `#` comments and single-quoted literals only — a double-quoted shell string
+ * still expands `${LIVE:-0}`, so blanking it would hide a real read.
+ */
+function codeOnly(body: string, isShell: boolean): string {
+	if (isShell) {
+		return body.replace(/(^|\s)#[^\n]*/g, "$1").replace(/'[^'\n]*'/g, "''");
+	}
+	return body
+		.replace(/\/\*[\s\S]*?\*\//g, "")
+		.replace(/(^|[^:])\/\/[^\n]*/g, "$1")
+		.replace(/`(?:[^`\\]|\\.)*`/g, "``")
+		.replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
+		.replace(/'(?:[^'\\\n]|\\.)*'/g, "''");
+}
 
 type SemanticClass =
 	| "real-live"
@@ -112,6 +138,17 @@ const CLASS_OVERRIDES: Record<string, { cls: SemanticClass; reason: string }> = 
 		cls: "source-topology",
 		reason: "asserts the scrubbed parent-transcript fixture's recorded shape — an artifact contract, no product run",
 	},
+};
+
+/**
+ * A single class name is the file's STRONGEST tier; some gates also ship a weaker
+ * one. Recording that here keeps "real-live" from being read as "never runs without
+ * LIVE=1" — and keeps the reverse, a two-tier gate quietly counted as deterministic,
+ * from passing as honest either. Stale entries throw.
+ */
+const TWO_TIER_NOTES: Record<string, string> = {
+	"scripts/smoke-meta-async-drift.sh":
+		"deterministic default tier (pin/marker/doorbell contract — no model, no network) + LIVE=1 add-on tier that delegates to repro-plugin-idle-wake.sh and spawns one metered `claude -p`. Counted real-live because its strongest tier is a real live turn; `pnpm check` only ever runs the deterministic tier.",
 };
 
 type Style = "imports-product" | "source-text" | "subprocess" | "mixed" | "shell" | "other";
@@ -157,7 +194,7 @@ function classify(rel: string, axis: "legacy" | "framework"): Row {
 	const override = CLASS_OVERRIDES[rel];
 	const cls: SemanticClass | null = override
 		? override.cls
-		: /-live\.(ts|sh)$/.test(base) || H_LIVE.test(body)
+		: /-live\.(ts|sh)$/.test(base) || H_LIVE.test(codeOnly(body, isShell))
 			? "real-live"
 			: /pack|install/.test(base)
 				? "package-install"
@@ -211,7 +248,10 @@ rule predicates (re-derive any number from these):
   H_NET      ${H_NET}
   H_FS       ${H_FS}
   H_LIVE     ${H_LIVE}
-semantic classes, first match wins: override → real-live (name -live | H_LIVE) →
+H_LIVE is applied to the CODE-ONLY projection (comments and inert literals blanked;
+shell double-quoted expansions kept), so a gate that merely QUOTES "LIVE=1" is not
+real-live. Two-tier gates are listed under the class breakdown.
+semantic classes, first match wins: override → real-live (name -live | H_LIVE on code) →
   package-install (name pack|install) → hermetic-integration (.sh | H_PROC | H_NET) →
   source-topology (H_TEXT ∧ ¬H_IMPORTS) → behavioral-contract (H_IMPORTS ∧ (H_TEXT ∨ H_FS)) →
   pure-unit (H_IMPORTS) → ERROR (unclassified is asserted zero)
@@ -252,6 +292,13 @@ for (const c of classes) {
 	console.log(`  ${c.padEnd(21)} ${String(rs.length).padStart(3)} files ${String(sum(rs)).padStart(7)} lines`);
 }
 console.log(`  ${"unclassified".padEnd(21)}   0 files       0 lines (asserted: the classifier throws otherwise)`);
+
+console.log("\ntwo-tier gates (one class name, two execution tiers):");
+for (const [rel, note] of Object.entries(TWO_TIER_NOTES)) {
+	const row = rows.find((r) => r.file === rel);
+	if (!row) throw new Error(`stale TWO_TIER_NOTES entry: ${rel} is not a classified gate — remove or repoint it`);
+	console.log(`  ${rel} [${row.cls}] — ${note}`);
+}
 
 console.log("\nstyle axis (secondary, e405d64-baseline continuity):");
 const styles: Style[] = ["imports-product", "source-text", "subprocess", "mixed", "shell", "other"];

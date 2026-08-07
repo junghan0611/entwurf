@@ -6,18 +6,18 @@
 
 - [x] **1. Phase 0 baseline** — legacy/framework/combined denominator와 6-class inventory 구현
 - [x] **2. Phase 1–2 pilot** — Vitest 4.1.9, fresh-call 46→44 mapping, runtime schema/provider 관측, 신규 mutants
-- [ ] **3. Review amendment** ← CURRENT: CI RED + 독립 리뷰의 1 blocker/3 defects를 한 bundle로 수선
-- [ ] **4. Frozen candidate acceptance** — independent review → qualification if needed → `pnpm check` → commit only
+- [x] **3. Review amendment** — 6개 항목 구현 완료, focused gates green (아래 LEDGER)
+- [ ] **4. Frozen candidate acceptance** ← CURRENT: independent review → correction bundle → `check-gate-qualification` once → `pnpm check` once → commit only
 - [ ] **5. Phase 3 migration** ← PAUSED: amendment와 exact-SHA CI가 green이 되기 전에는 열지 않는다
 
-현재 좌표: pilot commit `4bf0c38`은 원격에 있으나 CI RED → amendment 필요 → frozen acceptance 전 main/0.14.0 판단 금지
+현재 좌표: pilot commit `4bf0c38`은 원격에 있고 그 SHA의 CI는 여전히 RED다. amendment는 worktree에만 있으며 아직 commit 되지 않았다 → frozen acceptance 전 main/0.14.0 판단 금지
 
 # NOW
 
-- **Current:** GitHub Actions run `31129600532`에서 `check`만 실패했다. `install-surface`와 `artifact-consumer`는 green이다. 2차 Opus 독립 리뷰는 CI 조기 종료 뒤 잔여 check chain 39–95를 전부 실행해 추가 red가 없음을 확인했다.
-- **Next:** GPT-5.6-sol coordinator가 새 Claude Code Opus reviewer를 visible mux로 열고 아래 amendment를 구현·교차검수한다. GLG 권한은 **commit까지만**, push 금지.
-- **Blocker:** `test/fresh-call-provider.contract.test.ts`가 금지된 `@earendil-works/pi-ai/api/anthropic-messages` private subpath를 import한다. `./run.sh check-pi-import-surface`로 CI와 동일하게 재현된다.
-- **Read:** `AGENTS.md`; issue #62 body; canonical ledger comment `#issuecomment-5209613895`; CI run `31129600532`; `4bf0c38`; Opus review 요약 아래.
+- **Current:** amendment 6개 항목이 worktree에 구현되어 있고 focused gates가 green이다. commit 없음, push 없음. `4bf0c38`의 CI run `31129600532`는 여전히 RED이며 그 사실은 정정하지 않는다 — amendment는 아직 어떤 SHA도 CI를 통과하지 않았다.
+- **Next:** coordinator(GPT-5.6-sol)의 독립 review → correction bundle → gate/mutant가 바뀌었으므로 `check-gate-qualification` 1회 → frozen candidate에서 `pnpm check` 1회 → commit only.
+- **Blocker:** 없음. 직전 blocker(`@earendil-works/pi-ai/api/anthropic-messages` private subpath)는 `/compat`으로 닫혔다 — 근거는 LEDGER의 pi-ai 0.84 surface 실측.
+- **Read:** `AGENTS.md`; issue #62 body; canonical ledger comment `#issuecomment-5209613895`; CI run `31129600532`; `4bf0c38`; 아래 LEDGER.
 - **Do not touch:** Phase 4 감산, source-text 일괄 삭제, push/release, unrelated Claude launcher fix를 이 branch commit에 섞는 일.
 
 ## Amendment bundle — 정확히 이 순서
@@ -44,7 +44,7 @@ implement focused fixes
 Required evidence:
 
 - `./run.sh check-pi-import-surface` green and the test still captures the real pi-ai 0.84 anthropic-messages request body on loopback.
-- inventory output says combined `193 / 57,611`, semantic `hermetic 36 / real-live 21`, unclassified 0.
+- inventory output says semantic `hermetic 36 / real-live 21`, unclassified 0, files `193`. **Line total은 두 좌표를 구분해 읽는다:** `pilot 4bf0c38 = 57,611`(역사적 좌표, 보존), `amendment work surface = 57,840`(+229, 출처는 amendment 자신이 추가한 줄). 숫자를 맞추려고 검증 코드를 감산하지 않는다.
 - synthetic Vitest code-frame negative proves a passing adjacent QK cannot certify a failing claim.
 - installed package directly refuses `check-mux-fresh-call` for the intended reason.
 - `pnpm test` 44/44, typecheck/lint green, `.only` absent.
@@ -52,6 +52,38 @@ Required evidence:
 - no file/index edit after final floor; final commit only, no push.
 
 # REVIEW LEDGER
+
+## Amendment as implemented (worktree, uncommitted)
+
+| # | 수선 | 증거 |
+|---|---|---|
+| 1 | provider test가 `@earendil-works/pi-ai/compat`의 `stream`을 쓴다 | pi-ai 0.84 package root는 `stream`/`streamAnthropic`을 **export하지 않는다**; root `lazyStream(model, setup)`은 `setup` 안에서 private api 모듈을 다시 import해야 한다. `/compat`의 `stream`·`streamAnthropic` 둘 다 loopback anthropic request body에 `tools[].input_schema.properties.model{pattern,minLength,maxLength}` + description을 private subpath와 동일하게 실어보내는 것을 실측했다. 증거 강도 하락 없음. run.sh allowlist 주석이 두 consumer(`lib/acp/models.ts` getModels, 이 test)를 명시한다 |
+| 2 | `check-pi-import-surface` corpus = `--cached --others --exclude-standard` | `pi_import_work_surface`/`pi_import_scan` 두 helper를 실제 repo와 **외부 mktemp fixture repo** 양쪽에서 동일 호출한다. fixture는 tracked-allowed(`/compat`)와 untracked-forbidden을 함께 두어 분모를 양방향으로 증명한다. worktree에는 아무것도 쓰지 않는다 |
+| 3 | `H_LIVE`를 code-only projection에 적용 | TS는 주석+리터럴 blank, shell은 주석+홑따옴표만 blank(쌍따옴표 안 `${LIVE:-0}` 확장은 실제 read라 보존). `check-release-gate-outcomes.ts` real-live → hermetic-integration. `smoke-meta-async-drift.sh`는 real-live 유지 + 새 `two-tier gates` 섹션이 deterministic 기본 tier / `LIVE=1` add-on tier를 명시(stale entry는 throw) |
+| 4 | Vitest QK 귀속을 failed-test title로 | `fencedEnv`가 `ENTWURF_MUTATION_VITEST_REPORT=<invocationDir>/vitest-report.json`을 넘기고, `run_vitest`가 marker 한 줄 + `--reporter=default --reporter=json --outputFile.json` 으로 돈다. `runGateBounded`가 child close 시점에 읽어 `GateRunResult.failedTitles`(`"legacy" \| "unreadable" \| string[]`)를 채운다. marker가 있는데 report가 없거나 깨지면 `unreadable` → attribution false → WRONG-REASON, **token scan fallback 금지**. legacy node:assert/shell gate는 `ok`-line oracle 그대로 |
+| 5 | installed refusal 증거 | `check-pack-install`이 설치된 tree에서 `check-mux-fresh-call`을 직접 구동해 nonzero + `dev-clone-only surface` + `vitest is a devDependency` 두 문구를 모두 요구한다 |
+| 6 | ledger 정직성 | 아래 “정직하게 남기는 사실” |
+
+Measured numbers (frozen 전 worktree 기준):
+
+- semantic: **hermetic-integration 36 / real-live 21 / unclassified 0** — 요구치 일치.
+- combined: **193 files / 57,840 lines**. 파일 수는 불변, 줄 수는 `57,611`이 아니다. 차이 **+229**는 재분류가 아니라 amendment 자신이 추가한 줄(`run.sh`, `scripts/lib/mutation-qualify.ts`, `scripts/check-gate-qualification.ts`, `scripts/inventory-verification-surface.ts`)이다. `57,611`은 `4bf0c38` 시점 숫자다. 이 문서(`NEXT--*.md`)는 inventory denominator(`scripts/` + `test/` + `vitest.config.ts`) 밖이라 문서 수정은 숫자를 움직이지 않는다.
+- mutant lane: `mux-fresh-call` 13 → **15** (`PIIMPORT-WORK-SURFACE`, `VITEST-FAILED-TITLE-ATTRIBUTION`이 이 pilot lane에 붙는다), `release-gate` 10 유지, `EXPECTED_LANE_MUTANTS` 동시 수정.
+
+수동 replant(둘 다 자기 QK로 죽고 바이트 복원 확인):
+
+- `git ls-files -z --cached`로 되돌림 → `[QK:PIIMPORT-WORK-SURFACE]` rc=1.
+- `assertion.status === "failed") continue`로 되돌림 → `[QK:VITEST-FAILED-TITLE-ATTRIBUTION]` AssertionError rc=1.
+
+attribution self-test는 **비공허**하다: 첫 cell이 legacy failure-line oracle이 그 measured code frame에서 인접 **PASSING** claim을 실제로 TRUE로 인증한다는 것을 먼저 단언한 뒤, 구조화 oracle이 FALSE/TRUE로 갈라지는 것을 본다.
+
+Focused gates green: `check-pi-import-surface`, `check-mux-fresh-call`(44/44, `.only` 없음), attribution self-test(4), `inventory-verification-surface`, `check-pack-install`, `pnpm typecheck`, `pnpm lint`.
+
+## 정직하게 남기는 사실
+
+- `4bf0c38`에 대해 `pnpm check`는 **RED**였다. canonical ledger의 “`pnpm check` green” 행은 그 SHA에 대해 거짓이며, amendment commit의 exact-SHA CI가 green이 되기 전에는 정정하지 않는다.
+- 이 amendment는 **어떤 SHA에서도 CI를 통과한 적이 없다.** 지금 있는 것은 로컬 focused gate 증거뿐이고, full floor(`pnpm check`)와 `check-gate-qualification`은 frozen candidate에서 각각 1회 아직 돌지 않았다.
+- CI green decision row와 host별 timing(thinkpad 약 1.5s, oracle 약 3.2s)은 실제 green이 난 뒤에 적는다.
 
 ## What remains valid from `4bf0c38`
 

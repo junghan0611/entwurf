@@ -158,6 +158,28 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-MODEL-PATTERN-PROVIDER-VALID]",
 			"signatureSource": "test/fresh-call-provider.contract.test.ts"
+		},
+		{
+			"claim": "PIIMPORT-WORK-SURFACE",
+			"title": "the measured #62 escape replanted on the floor itself: check-pi-import-surface falls back to the tracked index, so a brand-new forbidden private-subpath import is invisible until it is staged",
+			"subject": "run.sh",
+			"find": ["    git ls-files -z --cached --others --exclude-standard -- '*.ts' '*.js' '*.mjs' '*.cjs'"],
+			"replace": ["    git ls-files -z --cached -- '*.ts' '*.js' '*.mjs' '*.cjs'"],
+			"gate": ["bash", "run.sh", "check-pi-import-surface"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PIIMPORT-WORK-SURFACE]",
+			"signatureSource": "run.sh"
+		},
+		{
+			"claim": "VITEST-FAILED-TITLE-ATTRIBUTION",
+			"title": "the pilot's kill attribution collects PASSING test titles instead of failed ones, recreating the code-frame false-KILLED hole this lane exists to close",
+			"subject": "scripts/lib/mutation-qualify.ts",
+			"find": ["\t\t\tif (assertion.status !== \"failed\") continue;"],
+			"replace": ["\t\t\tif (assertion.status === \"failed\") continue;"],
+			"gate": ["node", "--experimental-strip-types", "scripts/check-gate-qualification.ts", "--attribution-self-test"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:VITEST-FAILED-TITLE-ATTRIBUTION]",
+			"signatureSource": "scripts/check-gate-qualification.ts"
 		}
 	]
 }

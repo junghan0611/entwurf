@@ -17,7 +17,7 @@
 
 import * as http from "node:http";
 import type { AddressInfo } from "node:net";
-import { stream } from "@earendil-works/pi-ai/api/anthropic-messages";
+import { stream } from "@earendil-works/pi-ai/compat";
 import { RRegex } from "rregex";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { capturePiToolDefinitions, type PiToolDefinition, requireTool } from "./helpers/fresh-call-fixtures.ts";

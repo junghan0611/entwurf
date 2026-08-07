@@ -78,6 +78,70 @@ export function signatureOnFailureLine(output: string, token: string): boolean {
 	return output.split("\n").some((line) => line.includes(token) && !/^\s*ok\b/.test(line));
 }
 
+/** run_vitest prints this line when the runner asked it for a structured report.
+ * Its PRESENCE — not the report's readability — is what declares the lane structured. */
+export const VITEST_STRUCTURED_MARKER = "__ENTWURF_VITEST_JSON__";
+
+/**
+ * What a gate run said about WHICH tests failed.
+ *
+ * - `"legacy"`: no structured marker — a hand-built node:assert/shell gate whose
+ *   `ok`-line oracle is unchanged.
+ * - `"unreadable"`: the marker was printed but the report is missing or malformed.
+ *   This NEVER falls back to token scanning: a structured lane that lost its report
+ *   has no attribution at all, so the mutant is WRONG-REASON, not KILLED.
+ * - a title array: the exact `fullName` of every FAILED test.
+ */
+export type FailedTestTitles = "legacy" | "unreadable" | string[];
+
+/** Read the failed-test titles a vitest gate wrote, if it declared itself structured. */
+export function readVitestFailedTitles(output: string, reportPath: string | null): FailedTestTitles {
+	if (!output.split("\n").some((line) => line.trim() === VITEST_STRUCTURED_MARKER)) return "legacy";
+	if (!reportPath) return "unreadable";
+	let raw: string;
+	try {
+		raw = fs.readFileSync(reportPath, "utf8");
+	} catch {
+		return "unreadable";
+	}
+	let report: {
+		testResults?: Array<{ assertionResults?: Array<{ status?: string; fullName?: string; title?: string }> }>;
+	};
+	try {
+		report = JSON.parse(raw);
+	} catch {
+		return "unreadable";
+	}
+	if (!Array.isArray(report.testResults)) return "unreadable";
+	const titles: string[] = [];
+	for (const suite of report.testResults) {
+		for (const assertion of suite.assertionResults ?? []) {
+			if (assertion.status !== "failed") continue;
+			titles.push(assertion.fullName ?? assertion.title ?? "");
+		}
+	}
+	return titles;
+}
+
+/**
+ * Attribute a kill to its claim. A Vitest failure's CODE FRAME quotes the source lines
+ * around the assertion — including an adjacent PASSING test's `it("[QK:…]" …)` title —
+ * so scanning output lines would certify a claim whose test never failed (measured:
+ * issue #62 review). Structured lanes therefore read only the failed-test title set.
+ */
+export function signatureAttributedToFailure(output: string, token: string, failed: FailedTestTitles): boolean {
+	if (failed === "legacy") return signatureOnFailureLine(output, token);
+	if (failed === "unreadable") return false;
+	return failed.some((title) => title.includes(token));
+}
+
+/** One legible word for the report line, so a WRONG-REASON says WHY it could not attribute. */
+export function describeAttribution(failed: FailedTestTitles): string {
+	if (failed === "legacy") return "failure-line";
+	if (failed === "unreadable") return "vitest-structured-but-unreadable";
+	return `vitest-failed-titles(${failed.length})`;
+}
+
 // ── manifest schema (fail-loud, exact keys) ─────────────────────────────────
 
 export interface MutantSpec {
@@ -430,6 +494,8 @@ export interface GateRunResult {
 	timedOut: boolean;
 	output: string;
 	seconds: number;
+	/** Structured failed-test attribution; `"legacy"` for every non-vitest gate. */
+	failedTitles: FailedTestTitles;
 }
 
 const OUTPUT_CAP = 4 * 1024 * 1024;
@@ -437,12 +503,23 @@ const OUTPUT_CAP = 4 * 1024 * 1024;
 /** Env prefixes the outer fence strips so a gate child starts from a neutral host. */
 const STRIP_ENV_PREFIXES = ["ENTWURF_", "AGY_", "PI_SESSION_ID", "PI_AGENT_ID"];
 
+/** Where a vitest-backed gate writes its machine report for this one invocation. */
+function vitestReportPath(invocationDir: string): string {
+	return path.join(invocationDir, "vitest-report.json");
+}
+
 function fencedEnv(invocationDir: string): NodeJS.ProcessEnv {
 	const env: NodeJS.ProcessEnv = {};
 	for (const [k, v] of Object.entries(process.env)) {
 		if (STRIP_ENV_PREFIXES.some((p) => k === p || k.startsWith(p))) continue;
 		env[k] = v;
 	}
+	// A vitest-backed gate writes its machine report HERE, inside the per-invocation dir
+	// (outside the snapshot repo, so the work-surface purity hash never sees it). The
+	// report is a FILE and not stdout on purpose: `output` merges stdout+stderr, so one
+	// vite warning ahead of the JSON would break the parse and silently downgrade a real
+	// kill to WRONG-REASON. Legacy gates ignore the variable.
+	env.ENTWURF_MUTATION_VITEST_REPORT = vitestReportPath(invocationDir);
 	for (const d of ["home", "xdg-data", "xdg-config", "xdg-cache", "xdg-state"]) {
 		fs.mkdirSync(path.join(invocationDir, d), { recursive: true });
 	}
@@ -499,7 +576,9 @@ export function runGateBounded(opts: {
 		});
 		child.on("close", (code) => {
 			clearTimeout(timer);
-			resolve({ exitCode: code, timedOut, output, seconds: (Date.now() - started) / 1000 });
+			// Read the report BEFORE the caller removes the invocation dir.
+			const failedTitles = readVitestFailedTitles(output, vitestReportPath(opts.invocationDir));
+			resolve({ exitCode: code, timedOut, output, failedTitles, seconds: (Date.now() - started) / 1000 });
 		});
 	});
 }
@@ -702,7 +781,7 @@ export async function qualifyMutants(
 				matchCount: 1,
 				timedOut: run.timedOut,
 				exitCode: run.exitCode,
-				signatureOnFailureLine: signatureOnFailureLine(run.output, m.signature),
+				signatureOnFailureLine: signatureAttributedToFailure(run.output, m.signature, run.failedTitles),
 				restoredOk,
 			});
 			if (!restoredOk) groupImpure = true;
@@ -711,7 +790,9 @@ export async function qualifyMutants(
 				verdict,
 				seconds: run.seconds,
 				subjectSha256: originalSha,
-				detail: `exit=${run.exitCode} timedOut=${run.timedOut} signature=${m.signature}`,
+				detail:
+					`exit=${run.exitCode} timedOut=${run.timedOut} signature=${m.signature}` +
+					` attribution=${describeAttribution(run.failedTitles)}`,
 			});
 			log(
 				`  claim ${m.claim}: ${verdict} in ${run.seconds.toFixed(1)}s (subject ${m.subject} sha256=${originalSha.slice(0, 12)}…)`,
