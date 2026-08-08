@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@agentclientprotocol/claude-agent-acp':
-        specifier: 0.65.0
-        version: 0.65.0(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))
+        specifier: 0.66.0
+        version: 0.66.0(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))
       '@agentclientprotocol/sdk':
         specifier: 1.3.0
         version: 1.3.0(zod@4.3.6)
@@ -54,8 +54,8 @@ importers:
 
 packages:
 
-  '@agentclientprotocol/claude-agent-acp@0.65.0':
-    resolution: {integrity: sha512-GFuunTgevDlOlC/Z3QqVziaUBbeXrTyAS9pBKSikJoJOSSbGkHCvOcCPsSdj+RUCQ0I9czZoBx8z4S+g0q2Xig==}
+  '@agentclientprotocol/claude-agent-acp@0.66.0':
+    resolution: {integrity: sha512-BwalxKsxZzHZGEs+X9hV3biErLE7PHWoao2hmyP3QBWXxvMHbc1F1tzDE95ZA47Fle+KBYf2gKpgy1MJ+ZmVlw==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -1532,7 +1532,7 @@ packages:
 
 snapshots:
 
-  '@agentclientprotocol/claude-agent-acp@0.65.0(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))':
+  '@agentclientprotocol/claude-agent-acp@0.66.0(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))':
     dependencies:
       '@agentclientprotocol/sdk': 1.3.0(zod@4.3.6)
       '@anthropic-ai/claude-agent-sdk': 0.3.220(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(zod@4.3.6)

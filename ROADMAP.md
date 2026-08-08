@@ -563,6 +563,25 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     fileCount 956→968(+86,748B), pi-ai 725→734(Qwen 모듈). **하드 미니멈 판정: floor를 `>=0.84.1 <0.85`로
     exact devDep과 함께 기계적 이동**(run.sh가 devDep에서 peer 유도, `check-dep-versions`가 오라클,
     `check-pack-install` 6-row 핀 이동). 새 behavioral gate 불요 — entwurf가 진술하는 계약 변화 없음.
+  - **2026-08-08 bump — claude-agent-acp 0.65.0 → 0.66.0 (pi 0.84.1·ACP SDK 1.3.0·claude-agent-sdk
+    0.3.220 유지).** **성격: 선언 런타임 의존성 불변의 adapter-code 릴리즈 + 신규 optional extension
+    모듈.** 릴리즈 델타 3건 — #960 dev-dep `globals` 17.8→17.9(그들의 dev 트리, 우리 해석 무관),
+    #964 provider-neutral ACP goal extension 노출(신규 `dist/goal-extension.{js,d.ts,d.ts.map}` 3파일,
+    initialize 응답 top-level `_meta.goal`로 `_session/goal` control method 광고), #967 goal
+    publish/replace 신뢰성 fix(우리가 안 쓰는 goal 경로 내부). npm 실측: unpackedSize 542,197 →
+    554,124 B, fileCount 24 → 27(+goal-extension 3종), 런타임 deps 동일(zod range 포함).
+    **도달성은 축별로 갈린다 — "전부 미도달"이 아니다.** ⑴ 발신: entwurf는 `_session/goal`을 보내지
+    않고 initialize `_meta` 확장 광고를 소비하지 않는다 — #958 steering과 같은 구조적 미도달.
+    ⑵ **prompt 가로채기 — 조건부 도달**: adapter가 매 prompt에 `^\/goal(\s|$)` regex를 돌려 `/goal
+    <obj>`/`/goal clear`를 goal 명령으로 소비한다. 첫 턴은 first-user augment가 앞에 붙어 불가능하지만
+    reuse 턴에서 문자 그대로 `/goal`로 시작하는 메시지는 모델에 전달되는 대신 goal 명령이 된다 —
+    upstream 설계 동작이고 crash 경로는 아니며, fence를 세우지 않고 여기 기록만 남긴다. ⑶ 수신:
+    Claude runtime `active_goal` → `sessionUpdate: "session_info_update"` + `_meta.goal`은 wire에 올 수
+    있고 우리 event-mapper switch의 `default: break`가 무시한다(#916 heartbeat와 같은 부류, 실측).
+    readiness와 무관 — goal extension은 fence가 아니고 `mcpServerStatus`는 0.66.0 소스에도 부재.
+    peer 재실측: claude-agent-sdk 0.3.220 불변이므로 `@anthropic-ai/sdk 0.100.1` peer-pin 유지
+    (vitest L2 lane이 lockfile bytes로 결박). pnpm minimumReleaseAge가 어제 릴리즈를 게이트해
+    `pnpm-workspace.yaml` exclude 항목이 추가됐다(도구 생성, 커밋에 포함).
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.
