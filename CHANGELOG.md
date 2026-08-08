@@ -4,9 +4,48 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.14.0 — 2026-08-08
+
+Two arcs meet in this release. The product arc makes sibling sessions **visible**: opening and resuming a garden citizen is now an explicit, observable act, and the hidden alternatives were removed rather than kept as compatibility surface. The verification arc keeps the product from being swallowed by its own test cost: the everyday gate now runs in under a minute while the release floor stays strict. Claude Code native + pi + the meta-record store remain the main rail; the ACP backends (Claude ACP, Cortex) are optional service adapters on top of it.
+
+### Changed
+
+- **ACTION REQUIRED — the Pi runtime floor is now 0.84.1.** Installing this release upgrades a 0.82.x/0.83.x host rather than leaving it in place: the peer range is `>=0.84.1 <0.85`, the development pin is exactly 0.84.1, and installed-package acceptance pins the expanded Pi package constellation. Claude ACP moves to 0.66.0: the 0.65.0 permission metadata reaches the wire but is label-independent, the steered-turn change stays structurally unreachable because entwurf does not send `session/steer`, and 0.66.0's new goal extension changes no entwurf behavior — entwurf never sends `_session/goal`, does not consume the initialize advert, a `/goal` prompt still reaches the model unchanged (the adapter only adds a goal notification), and that inbound `session_info_update` can reach the wire but falls inert to the event mapper's ignore path.
+- **Delivery is visible-first and single-verb.** `entwurf_v2 fire-and-forget` never starts a process; a dormant control-socket citizen rejects as `dormant-fire-forget-unsupported`, and the reject hint now points at the visible resume verb instead of a manual workaround. The hidden `spawn-bg`/`owned-outcome` resume path and its gates were removed rather than retained as dead compatibility surface.
+- **ACP `streamSimple` honors Pi's request hook contract without fabricating HTTP evidence.** `onPayload` receives and may replace the exact ACP `{sessionId,prompt}` request on new and reused turns under fail-closed validation and abort ordering; `onResponse` is an explicit zero-call exemption because ACP has no truthful HTTP status/header boundary.
+- **Visible team formation and role authority are separate operating phases.** Fresh tasks form exact callback-correlated citizens and stop; the operator's later direct visible grant supplies coordinator/implementer/reviewer authority. No role database, watcher, retry loop, or orchestrator was added.
+- **Verification is tiered by meaning, not by elapsed time.** `pnpm check` is the everyday core — it completes in under 60 seconds on the reference host (36s measured on this candidate) and prints its own wall time; `pnpm run check:full` is the deterministic candidate floor that push CI, the release gate, and `prepublishOnly` all agree on by name. `check-gate-qualification` runs once per frozen candidate, in every push CI check job, and as a release-gate MUST step — never inside the inner loop. The subtraction behind this was loud, not silent: the `probe-ordering` mutant lane's 84 infrastructure replants were succeeded 1:1 by direct assertions with an 84-entry ledger (#70), bringing qualification to 165 mutants across 22 lanes with the infrastructure-subject share down from 111 of 247 to 27 of 165. What did *not* happen is also part of the record: the hand-built surface shrank by only ~1.6% in lines — the cost shape changed, not the mass. Gates move tier only by semantic-class decision.
+
+### Added
+
+- **Visible mux lifecycle verbs now cover both creation and same-id Pi resume.** `entwurf_fresh_call` opens one visible Pi or Claude Code sibling with an explicit runtime model and learns its garden id only from the sibling's exact nonce callback envelope. `entwurf_resume_call` reopens a dormant Pi citizen in the operator's tmux session under its existing garden id, keeps LAUNCH and OBSERVATION receipts separate, and runs no turn; Claude Code honestly refuses same-id resume as `target-not-pi`.
+- **Owner-normalized local identity facts are available through `entwurf meta-facts`.** The deterministic JSON projection exposes the strict V3 garden/native/transcript join and in-band defects by reusing the record owner's parser and store authority, so same-user consumers no longer need to maintain a weaker copy of the certification contract.
+- **Vitest 4.1.9 enters as the standard test runner — a beachhead, not an occupation.** The fresh-call surface/provider lane boots the real bridge, captures native registration and the Anthropic provider conversion path, and validates host-regex patterns against a Rust-family engine; a second lane moves the ACP SDK dependency/resolver contract behind the same stable `run.sh` shim. Two hand-built gates migrated; new contracts now default to being born in the framework, and further migration stays deliberate and lane-by-lane.
+- **An `entwurf-dev` operator skill rides in the repository (not in the npm package).** It is a development/verification tour tool: it lets the operator drive the current surface — list citizens, open a fresh visible sibling, correlate its nonce callback, send, resume — in natural language without memorizing tool calls.
+
+### Fixed
+
+- **Garden-id creation is exclusive across the certified active store.** CREATE writes the record bytes to a same-directory temp file first and publishes with an exclusive `link(2)`; an occupied final path fails loud with a named `MetaRecordError` — the refusal is occupancy-based, there is no retry, no check-then-write TOCTOU window exists, and the occupying record's bytes stay untouched. ATTACH keeps atomic in-place replacement of its own record; a collision surfaces as an error, never as an overwrite.
+- **Mux LIVE smokes cannot delete a retargeted real Claude launcher.** A shared fail-closed fence pins the PATH-selected launcher, link, resolved target, and content before launch; both smokes restore the operator's exact XDG presence/value and verify launcher integrity before conditional fixture cleanup on success and failure paths.
+- **Fresh-call verification now observes the host boundaries that source-text checks missed.** The escaped schema defect is replanted against Rust-family regex compilation and actual provider request bytes, and the session-identity generator oracle no longer relies on a probabilistic collision-free sample.
+
 ### Removed
 
-- **The unimplemented `tmux-live` receipt transport has been removed from the v2 contract.** A mux window may later expose a runtime, but it is not address authority or delivery evidence.
+- **The unimplemented `tmux-live` receipt transport has been removed from the v2 contract.** A mux window is an operator view — it may later expose a runtime, but it is never address authority or delivery evidence.
+- **Injected session ids and hidden background resume are no longer launch substrates.** Fresh identity comes from the callback sender envelope; dormant lifecycle is the explicit visible resume verb.
+
+### Verification
+
+- Pre-version landing HEAD `9e14df518fb33bad59be14af31c64d71107b558d` passed exact-SHA GitHub Actions run [31258659484](https://github.com/junghan0611/entwurf/actions/runs/31258659484): `check`, `install-surface`, and `artifact-consumer` all success.
+- The 0.14.0 prepared tree passed `pnpm run check:full` (full deterministic floor, 303s, exit 0); `check-pack` counted **342 files**.
+- `LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.14.0.r8r31u --cut` completed **MUST PASS=20 FAIL=0 SKIP=0** (including the `check-gate-qualification` MUST step at **165/165 killed across 22 lanes**), **BEHAVIOR PASS=1 FAIL=0 SKIP=0**, `cut: OK`. Full log: `/tmp/entwurf-release-gate-0.14.0.r8r31u/release-gate.log`; per-step scratch/artifact paths are preserved in that log. The active LIVE set is native Claude Code, native pi, and pi+ACP; Cortex stays the documented on-demand host-auth axis, and no model-in-loop AGY step is in the aggregate.
+- Closing verification-surface inventory (the #70 after-picture, measured by `scripts/inventory-verification-surface.ts` on the prepared tree): **203 files / 58,845 lines** combined, against the #62/#70 baseline of 201 files / 59,775 lines — lines below baseline (**−930**) with the file count reported transparently (**+2**).
+- Exact prepared-HEAD CI and the preserved-candidate container acceptance remain `make` responsibilities.
+
+### Notes
+
+- **Known open issues shipped with eyes open:** #60 (native-push drops `wants_reply`/caller envelope), #68 (naming the valid no-transcript resume refusal), #71 (`skipDangerousModePermissionPrompt` pinned while `defaultMode` stays operator-owned), and an observed long-turn error pattern on the optional Claude ACP rail that a post-release audit will reproduce and classify. None of these gates this release; all are tracked.
+- **Ecosystem:** the `agent-config` repository's `entwurf-peek` skill was reworked against this release as its baseline — an advanced-operator density tool, not a requirement.
 
 ## 0.13.1 — 2026-07-31
 
