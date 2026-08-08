@@ -12,7 +12,7 @@
 # DEV CLONE (path is NOT under node_modules): runs src/index.ts via
 # --experimental-strip-types. The clone lives outside node_modules so strip-types
 # is allowed, edits are picked up with no build step, and a leftover dist/ (e.g.
-# emitted by `prepack` during a `pnpm check` pack gate) can never silently shadow
+# emitted by `prepack` during a `pnpm run check:full` pack gate) can never silently shadow
 # the source. Node >= 24 (engines.node in ../../package.json is the SSOT;
 # check-node-floor-coherence binds this comment to it).
 #
@@ -48,7 +48,7 @@ SRC_ENTRY="$HERE/src/index.ts"
 # Mode is decided by LOCATION, not by "does dist happen to exist". A dev clone
 # lives outside node_modules and ALWAYS runs the TS source via strip-types, so an
 # edit is picked up immediately and a stale dist (e.g. left behind by a prior
-# `npm pack`/`prepack` during `pnpm check`) can never silently shadow the source.
+# `npm pack`/`prepack` during `pnpm run check:full`) can never silently shadow the source.
 # An installed package lives under node_modules, where Node refuses strip-types,
 # so it MUST run the prebuilt dist. All chatter goes to stderr so it never
 # confuses an MCP client reading JSON-RPC frames from stdout.

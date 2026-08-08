@@ -32,7 +32,7 @@
 // exactly what this gate must not make. They are cheap — each smoke declines
 // before it does any work.
 //
-// Pure + subprocess, no network/model — IN pnpm check.
+// Pure + subprocess, no network/model — IN pnpm run check:full.
 
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
@@ -326,7 +326,7 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 
 // ===========================================================================
 // 8. qualification scheduling topology — the subtraction has its own oracle.
-//    check-gate-qualification left the default `pnpm check` chain (operator
+//    check-gate-qualification left the default check chains (operator
 //    inner-loop cost, 2026-08 subtraction). That move is a gate/release
 //    contract: the step must stay REACHABLE on the axes that now own it — the
 //    CI check job on every push and release_gate as its own MUST step — and
@@ -334,11 +334,24 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 //    deleting the release_gate qualification block or the CI line leaves every
 //    focused gate green while a cut quietly loses its discriminating-power
 //    step.
+//
+//    TWO claims, because #70 added a second independent contract here. 8a is
+//    REACHABILITY (absent from the default chain; present exactly once in CI and
+//    exactly once as a wired release_gate MUST step; named in VERIFY). 8b is what
+//    the CI step qualifies (the FULL floor, before the qualification run). Each
+//    carries its own replant — one mutant must never stand in for both.
 // ===========================================================================
 {
-	const pkgCheck = (
+	// The default chain is tiered (#70): `check` (core) and `check:full` compose the
+	// named group scripts, so the reachability scan covers EVERY check* script —
+	// qualification sneaking into any group re-doubles the closure floor.
+	const pkgScripts = (
 		JSON.parse(readFileSync(join(REPO_DIR, "package.json"), "utf8")) as { scripts: Record<string, string> }
-	).scripts.check;
+	).scripts;
+	const pkgCheck = Object.entries(pkgScripts)
+		.filter(([name]) => name === "check" || name.startsWith("check:"))
+		.map(([, body]) => body)
+		.join(" && ");
 	const ciYml = readFileSync(join(REPO_DIR, ".github/workflows/ci.yml"), "utf8");
 	const ciHits = ciYml.split("- run: ./run.sh check-gate-qualification").length - 1;
 	const runShQ = readFileSync(join(REPO_DIR, "run.sh"), "utf8");
@@ -354,8 +367,6 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 			"package.json's default `check` chain contains check-gate-qualification again (doubles every closure floor)",
 		);
 	if (ciHits !== 1) holes.push(`the CI check job runs check-gate-qualification ${ciHits}x (need exactly once)`);
-	if (ciHits === 1 && ciYml.indexOf("- run: pnpm check") > ciYml.indexOf("- run: ./run.sh check-gate-qualification"))
-		holes.push("CI runs qualification before the pnpm check step it qualifies");
 	if (invocations !== 1)
 		holes.push(`release_gate invokes check-gate-qualification ${invocations}x (need exactly one MUST step)`);
 	if (
@@ -367,10 +378,31 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 		holes.push("VERIFY.md no longer names the owners of the moved qualification step");
 	assert.ok(
 		holes.length === 0,
-		"[QK:QUALIFICATION-SCHEDULING-REACHABLE] check-gate-qualification left the default `pnpm check` chain " +
+		"[QK:QUALIFICATION-SCHEDULING-REACHABLE] check-gate-qualification left the default check chains " +
 			"deliberately, so it must stay REACHABLE on the axes that own it now — absent from the default chain, " +
-			"exactly once in the CI check job after pnpm check, exactly once as a release_gate MUST step with its " +
+			"exactly once in the CI check job, exactly once as a release_gate MUST step with its " +
 			`outcome wired, and named in VERIFY. Broken: ${holes.join("; ")}`,
+	);
+
+	// 8b. WHAT the CI qualification step qualifies — its own claim, not a branch
+	//     folded into the one above. #70 split the deterministic floor into tiers,
+	//     so "CI runs qualification once" stopped being sufficient evidence on its
+	//     own: qualification on top of the ≤60s core would certify kill-power over
+	//     a floor no candidate ships on. This is ONE contract with one condition —
+	//     the full floor is present in the CI check job AND qualification follows
+	//     it — because a floor that is absent and a floor that runs afterwards
+	//     break the same promise identically. The committed replant qualifies the
+	//     downgrade/omission axis (the tier rename downgrading CI back to core);
+	//     ordering stays directly asserted here and has no incident-earned mutant.
+	const ciFloorAt = ciYml.indexOf("- run: pnpm run check:full");
+	const ciQualAt = ciYml.indexOf("- run: ./run.sh check-gate-qualification");
+	assert.ok(
+		ciFloorAt !== -1 && ciQualAt > ciFloorAt,
+		"[QK:CI-FULL-FLOOR-QUALIFIED] the CI check job owns the FULL deterministic floor (#70): it must run " +
+			"`pnpm run check:full` — not the ≤60s core — and check-gate-qualification must come AFTER it, so the " +
+			"kill-power proof covers the floor a candidate actually ships on. The committed replant qualifies the " +
+			"downgrade/omission axis; ordering is directly asserted by this same oracle. " +
+			`Broken: check:full at index ${ciFloorAt}, qualification at index ${ciQualAt}.`,
 	);
 }
 
@@ -416,5 +448,5 @@ console.log(
 		"a run.sh wrapper declining its own prerequisite (including the measured LIVE=1 no-cortex-connection cell); and every " +
 		"LIVE smoke is either wired into release_gate or excluded by a sentence the docs still carry; and the moved " +
 		"check-gate-qualification stays reachable on its owners (absent from the default chain, exactly once in CI, " +
-		"exactly once as a release-gate MUST step)",
+		"exactly once as a release-gate MUST step) and the CI step qualifies the FULL floor, which runs before it",
 );

@@ -1,7 +1,8 @@
 #!/usr/bin/env sh
 # entwurf pre-commit — fast static safety only, never the full floor.
 #
-# The full `pnpm check` floor is owned by the work protocol: it runs once on
+# The full deterministic floor (`pnpm run check:full`) is owned by the work
+# protocol: it runs once on
 # the frozen commit candidate before the commit is cut (AGENTS.md
 # "Verification scheduling"). This hook keeps only checks too cheap to
 # dominate a commit. Do not grow it back.

@@ -107,7 +107,8 @@ Two axes are required: deterministic/package gates and opt-in LIVE evidence.
 
 ```bash
 pnpm typecheck
-pnpm check
+pnpm check              # everyday core — prints total wall time; ≤60s on oracle
+pnpm run check:full     # full deterministic floor — core + hermetic/package tiers
 ./run.sh check-entwurf-v2-matrix
 ./run.sh check-meta-session
 ./run.sh check-entwurf-bridge-boot
@@ -123,7 +124,7 @@ LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live   # o
 LIVE=1 AGY_CONVERSATION_ID=<id> ./run.sh smoke-agy-native-push-live
 ```
 
-- `pnpm check` is the static floor and includes the detailed `check-*`/offline smoke matrix — all but `check-gate-qualification`, which is scheduled separately (below).
+- The deterministic floor is tiered (#70). `pnpm check` is the everyday core — toolchain (lint + typecheck), the vitest lanes, and the pure-unit / behavioral-contract / source-topology gates plus the cheap static coherence checks. It prints its own total wall time; acceptance is ≤60s on the reference host `oracle` (an operator measurement, never a hard wall-clock gate on arbitrary hosts). `pnpm run check:full` is the full deterministic floor — the core plus the hermetic-integration and package/install tiers — and is what the candidate protocol, push CI, release-gate, and `prepublishOnly` run. Exact membership is the named `check:*` group scripts in `package.json` (the executable SSOT); a gate changes tier by semantic-class decision, never because it happened to get faster or slower. Neither tier includes `check-gate-qualification`, which is scheduled separately (below).
 - **Kill-proof discipline (gate qualification).** A gate is a test only if re-planting a closed defect turns it red for the claimed reason. `check-gate-qualification` proves that automatically: committed mutants in `scripts/mutants/` must be KILLED at their `[QK:<claim>]` signature inside an isolated snapshot repo (control→mutant→restore→control; the real checkout is never written). Gates a release touches carry such manifests; assertion counts are never evidence — claim IDs + killed mutant IDs are. `check-agy-permission-matrix` holds the enumerated permission contract space; matrix cells change by axis/rule edits, never by appending cases.
 - **When changing a contract/gate:** name the production subject and an oracle independent of it; give the failing assertion a stable `[QK:<claim>]` label and add/update the exact-once mutant in `scripts/mutants/*.json`; if the contract is combinatorial, update the literal matrix axes/cells/exclusions together with their declared counts; then verify the focused gate, and let qualification and the full floor follow the scheduling contract below — once on the frozen candidate, not once per amendment. `MUTANT-STALE`/`SURVIVED`/`WRONG-REASON`/`CONTROL-RED`/`HANG`/`IMPURE` are red — never substitute an assertion count for a kill.
 - Run LIVE gates with `PWD` in scratch so session artifacts do not land in the repo.
@@ -136,13 +137,13 @@ Gate quality and gate scheduling are different axes: the gates above define *wha
 
 ```text
 implement → affected focused gates → independent review → one amendment bundle
-          → [gate/mutant changed? check-gate-qualification once] → pnpm check once on the frozen candidate → commit
+          → [gate/mutant changed? check-gate-qualification once] → pnpm run check:full once on the frozen candidate → commit
 ```
 
 - **Inner loop:** run only the gates whose subject changed. Do not open the full floor to learn what a focused gate already answers.
 - **Review before floor:** independent review and its corrections close as one bundle before the full floor runs.
-- **Qualification is scheduled, not ambient.** `check-gate-qualification` is not in the default `pnpm check` chain, so the operator inner loop never re-pays the full mutant inventory. It runs standalone once when a lane changed a gate, mutant, or matrix; machine time re-proves it everywhere else — the CI `check` job runs it on every push, and release-gate carries it as a MUST step.
-- **Full floor once**, on the frozen commit candidate. While it runs, nothing edits the worktree or index — including the NEXT boot sectors; a moved candidate voids the run's evidence.
+- **Qualification is scheduled, not ambient.** `check-gate-qualification` is not in the default check chains (core or full), so the operator inner loop never re-pays the full mutant inventory. It runs standalone once when a lane changed a gate, mutant, or matrix; machine time re-proves it everywhere else — the CI `check` job runs it on every push, and release-gate carries it as a MUST step.
+- **Full floor once** (`pnpm run check:full`), on the frozen commit candidate. While it runs, nothing edits the worktree or index — including the NEXT boot sectors; a moved candidate voids the run's evidence.
 - **pre-commit is not the floor.** `.husky/pre-commit` carries only fast static checks (whitespace, lint, typecheck); the full floor is owned by this protocol, not by the hook. Do not grow the hook back, and do not build receipt/cache machinery to prove the protocol was followed.
 - **Release/LIVE acceptance is untouched.** VERIFY.md floors keep full strength; a shorter inner loop never lowers release evidence.
 

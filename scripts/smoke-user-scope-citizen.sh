@@ -8,7 +8,7 @@
 # cwd because entwurf was absent from ~/.pi/agent/settings.json packages[]).
 # statusline `?` had a tripwire; THIS omission had none and hid until GLG hit it
 # in another repo. This gate is that missing tripwire: if the registration ever
-# regresses, `pnpm check` goes red.
+# regresses, `pnpm run check:full` goes red.
 #
 # Cells 11–13 close the second omission (#53 B): every case here drove a fake
 # settings file with ABSOLUTE entries, so the portable, settings-relative form this

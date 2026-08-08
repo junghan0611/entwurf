@@ -30,8 +30,11 @@
 // the native branch: no shell, piped stdio, inherited cwd), because half of what
 // this gate proves is process semantics that a unit call cannot reach.
 //
-// Kill-proof: scripts/mutants/probe-ordering.json carries one exact-once mutant
-// per [QK:...] signature below. THREE properties are SOURCE-pinned rather than
+// Kill-proof, current contract: this gate's claims are DIRECT [CHECK:<claim>]
+// assertions — enforced on every run, deliberately no longer replant-qualified
+// (issue #70 verification subtraction; the probe-ordering lane's one retained
+// [QK:] mutant is the product-subject prompt-cutoff claim consumed by
+// check-probe-ordering). THREE properties are SOURCE-pinned rather than
 // behaviour-pinned, and §12 states the measurement that sent each one there —
 // this is the same carve-out §11-7-c already records for the fixture's and the
 // shim's write-callback timing, not a softer bar invented here. The two callback
@@ -378,7 +381,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 			(statSync(SHIM_LAUNCHER).mode & 0o111) !== 0 &&
 			LAUNCHER_SRC.startsWith("#!/usr/bin/env node\n"),
 		"the shim launcher is extensionless, executable, and shebang-led — a script suffix would move it onto the SDK's " +
-			"`node|bun <path>` branch, which is NOT the branch the probe's target asserts [QK:SHIM-NATIVE-BRANCH-LAUNCHER]",
+			"`node|bun <path>` branch, which is NOT the branch the probe's target asserts [CHECK:SHIM-NATIVE-BRANCH-LAUNCHER]",
 	);
 	// The launcher must stay a launcher: behaviour belongs in the .ts SSOT, which
 	// is the only half tsc/biome/mutants can reach.
@@ -437,7 +440,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 		sha256(multiByte),
 		"a chunk boundary INSIDE a multi-byte UTF-8 sequence, delivered as two separate reads, still crosses the shim " +
 			"byte-for-byte — the scanner frames on bytes and only complete lines are ever decoded " +
-			"[QK:SHIM-BYTE-TRANSPARENCY]",
+			"[CHECK:SHIM-BYTE-TRANSPARENCY]",
 	);
 
 	// Bulk framing, on top: CRLF pairs, a 300 KB line, and a final line with no
@@ -470,7 +473,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 		forwarded.length === 1 && forwarded[0].ordinal === 1,
 		"the control-request frame is NOT a prompt: the SDK writes initialize control traffic on the same stdin, so " +
 			'counting lines would blow the exactly-one binding on every run — only `type:"user"` frames take an ' +
-			"ordinal [QK:SHIM-PROMPT-ORDINAL-USER-FRAMES-ONLY]",
+			"ordinal [CHECK:SHIM-PROMPT-ORDINAL-USER-FRAMES-ONLY]",
 	);
 
 	// The boot init was RECEIVED before the prompt frame was forwarded, so it is a
@@ -502,7 +505,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 		0,
 		"an init line with no `tools`, a non-array `tools`, or a `tools` holding a non-string yields NO snapshot: " +
 			"reporting it as an EMPTY name set would FABRICATE the absence reading the B-name-snapshot ladder promotes " +
-			"[QK:SHIM-INIT-REQUIRES-STRING-TOOL-ARRAY]",
+			"[CHECK:SHIM-INIT-REQUIRES-STRING-TOOL-ARRAY]",
 	);
 }
 
@@ -516,7 +519,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 		boots.length === 1 && boots[0].targetPath === STREAM_CLI && boots[0].targetSha256 === hashFileSha256(STREAM_CLI),
 		"the shim boots exactly once and reports the REAL path + content hash of what it exec'd — condition 5 has the " +
 			"classifier verify this against the roster's expected identity, so a fabricated or omitted hash would let a " +
-			"swapped binary vote in the pair [QK:SHIM-BOOT-TARGET-IDENTITY]",
+			"swapped binary vote in the pair [CHECK:SHIM-BOOT-TARGET-IDENTITY]",
 	);
 	assert.ok(
 		boots[0].seq < named(run, PROBE_EVENTS.shimInitSnapshot)[0].seq,
@@ -568,7 +571,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 		expectedChildEnv,
 		"the child's env is the launch env MINUS exactly the allowlist and nothing else — every remaining key and value " +
 			"byte-identical. A prefix scrub would eat the PROBE_-shaped operator variable this probe has no claim on, and " +
-			"an incidental deletion anywhere else would move this too [QK:SHIM-SCRUB-EXACT-ALLOWLIST]",
+			"an incidental deletion anywhere else would move this too [CHECK:SHIM-SCRUB-EXACT-ALLOWLIST]",
 	);
 
 	// The `claude auth logout` consumer: not a stream-json turn, so the only line
@@ -576,7 +579,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 	assert.ok(
 		run.events.length === 1 && run.events[0].event === PROBE_EVENTS.shimBoot,
 		"an invocation that is not a stream-json turn is PURE passthrough — `claudeCliPath()` has a second consumer " +
-			"(claude auth logout), and the shim must assume nothing about its argv [QK:SHIM-ARGV-AGNOSTIC-PASSTHROUGH]",
+			"(claude auth logout), and the shim must assume nothing about its argv [CHECK:SHIM-ARGV-AGNOSTIC-PASSTHROUGH]",
 	);
 }
 
@@ -600,7 +603,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 			!logText.includes("SECRET-PROMPT-TEXT") &&
 			!logText.includes("ENTWURF_SHIM_SECRET"),
 		"the shared log carries no argv, no env name or value, and no prompt body — only the allowlisted init fields, " +
-			"an ordinal, and timings [QK:SHIM-LOG-PRIVACY]",
+			"an ordinal, and timings [CHECK:SHIM-LOG-PRIVACY]",
 	);
 }
 
@@ -612,21 +615,21 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 	assert.ok(
 		nonzero.code === 42 && nonzero.signal === null,
 		"a nonzero CLI exit reaches the parent as the SAME code — a wrapper that reports 0 turns a crash into a " +
-			"measurement [QK:SHIM-EXIT-CODE-FIDELITY]",
+			"measurement [CHECK:SHIM-EXIT-CODE-FIDELITY]",
 	);
 
 	const signalled = await runShim({ target: SELF_SIGNAL_CLI, argv: ["SIGKILL"] });
 	assert.ok(
 		signalled.signal === "SIGKILL" && signalled.code === null,
 		"a CLI that dies on a signal makes the SHIM die on that same signal: the parent's wait status must carry the " +
-			"child's real disposition, not a synthesised 128+n exit code [QK:SHIM-SIGNAL-RERAISE]",
+			"child's real disposition, not a synthesised 128+n exit code [CHECK:SHIM-SIGNAL-RERAISE]",
 	);
 
 	const inbound = await runShim({ target: SLEEPER_CLI, signalShim: "SIGTERM" });
 	assert.ok(
 		inbound.signal === "SIGTERM",
 		"a signal sent to the shim is forwarded to the child, whose death then re-raises it here — otherwise the ACP " +
-			"child's teardown would leave the real CLI orphaned [QK:SHIM-INBOUND-SIGNAL-FORWARDED]",
+			"child's teardown would leave the real CLI orphaned [CHECK:SHIM-INBOUND-SIGNAL-FORWARDED]",
 	);
 
 	const stderrRun = await runShim({ target: STDERR_CLI });
@@ -649,7 +652,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 			missing.stderr.includes("[probe-cli-shim] cannot read exec target"),
 		"a target that vanished under the pair fails loud with the shell convention for not-found — the runner asserted " +
 			"it was present, so reaching this is a fact the operator needs in words, on ONE errno mapping shared by the " +
-			"unreadable-at-hash and unspawnable-at-exec paths [QK:SHIM-SPAWN-ERROR-NAMED]",
+			"unreadable-at-hash and unspawnable-at-exec paths [CHECK:SHIM-SPAWN-ERROR-NAMED]",
 	);
 	assert.equal(
 		named(missing, PROBE_EVENTS.shimBoot).length,
@@ -695,7 +698,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 		"a line past the framing bound loses its PARSE, never its BYTES: the oversized line is forwarded verbatim, the " +
 			"scanner recovers at the next newline so the following init still binds, and the skip is recorded in a " +
 			"forensic sidecar rather than as an unknown marker the log door would call MALFORMED " +
-			"[QK:SHIM-OVERSIZED-LINE-PARSE-SKIP]",
+			"[CHECK:SHIM-OVERSIZED-LINE-PARSE-SKIP]",
 	);
 	const diag = JSON.parse(readFileSync(run.diagPath, "utf8").trim()) as Record<string, unknown>;
 	assert.ok(
@@ -733,7 +736,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 		`framing a ${lineBytes / 1024} KiB line out of ${lineBytes} single-byte reads cost ` +
 			`${counted.retainedAllocations} allocations — the bound is a bound on OBJECTS as well as bytes, or a hostile ` +
 			"stream reaches the byte cap holding millions of buffer headers and the 'bounded in-memory line buffer' " +
-			"claim is false exactly where it matters [QK:SHIM-FRAMING-BOUNDED-IN-OBJECTS]",
+			"claim is false exactly where it matters [CHECK:SHIM-FRAMING-BOUNDED-IN-OBJECTS]",
 	);
 }
 
@@ -789,7 +792,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 			"tearing down on the error ends it in ~0.2 s, while merely IGNORING the error parks the source on a drain " +
 			"that can never arrive and it survives until something kills it — with the real CLI still alive behind it. " +
 			"Promptness is the discriminator; the exit disposition is not, because the ignore path can also die of its " +
-			"own unhandled error [QK:SHIM-DOWNSTREAM-DEATH-TEARS-DOWN]",
+			"own unhandled error [CHECK:SHIM-DOWNSTREAM-DEATH-TEARS-DOWN]",
 	);
 }
 
@@ -810,7 +813,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 		diag !== undefined && diag.stdoutLineParseSkipped === 1,
 		"a line that blew the framing bound and then hit EOF WITHOUT a newline is still counted: the scanner finalises at " +
 			"stream end, so the skip diagnostic cannot silently under-report the one shape that never meets a newline " +
-			"[QK:SHIM-OVERSIZE-COUNTED-AT-EOF]",
+			"[CHECK:SHIM-OVERSIZE-COUNTED-AT-EOF]",
 	);
 }
 
@@ -834,7 +837,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 		),
 		"under write backpressure on STDOUT the shim stops READING the CLI rather than letting the writable queue grow — " +
 			"peak memory is then set by the pipe buffers, not by the transcript size, which is what keeps an instrument " +
-			"on a live turn from becoming a memory hazard [QK:SHIM-STDOUT-BACKPRESSURE-PAUSES-SOURCE]",
+			"on a live turn from becoming a memory hazard [CHECK:SHIM-STDOUT-BACKPRESSURE-PAUSES-SOURCE]",
 	);
 	assert.ok(
 		SHIM_SRC.includes(
@@ -845,7 +848,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 		),
 		"the SAME discipline holds on the stdin side: a CLI slow to read its input must park the SDK's stream, not be " +
 			"absorbed into this process's memory. 11b proves the bytes and the EOF survive it; which side does the " +
-			"parking is what is pinned here [QK:SHIM-STDIN-BACKPRESSURE-PAUSES-SOURCE]",
+			"parking is what is pinned here [CHECK:SHIM-STDIN-BACKPRESSURE-PAUSES-SOURCE]",
 	);
 	assert.ok(
 		SHIM_SRC.includes(
@@ -857,7 +860,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 		"the snapshot append lives INSIDE the downstream write callback, so the one clock read that stamps the event IS " +
 			"the hand-off moment — the interval's single-SSOT end (§11-7-c condition 6). Timing cannot separate this " +
 			"placement from one just outside the callback, because the shim pauses its source under backpressure and " +
-			"couples the read to the write, so the shape is pinned here [QK:SHIM-SNAPSHOT-IN-WRITE-CALLBACK]",
+			"couples the read to the write, so the shape is pinned here [CHECK:SHIM-SNAPSHOT-IN-WRITE-CALLBACK]",
 	);
 	assert.ok(
 		SHIM_SRC.includes(
@@ -868,7 +871,7 @@ const CONTROL_FRAME = ndjson({ type: "control_request", request_id: "r1", reques
 		),
 		"the prompt anchor is stamped inside the CHILD-STDIN write callback — 'fully passed to the CLI's stdin', not " +
 			"'we saw a newline'; and an errored write never stamps a hand-off that did not happen " +
-			"[QK:SHIM-PROMPT-IN-WRITE-CALLBACK]",
+			"[CHECK:SHIM-PROMPT-IN-WRITE-CALLBACK]",
 	);
 	assert.ok(
 		SHIM_SRC.includes('stdio: ["pipe", "pipe", "inherit"],') && !/\bshell\s*:/.test(SHIM_SRC),

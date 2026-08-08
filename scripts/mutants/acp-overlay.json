@@ -1,0 +1,17 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-overlay",
+	"mutants": [
+		{
+			"claim": "ACP-OVERLAY-UNATTENDED-BYPASS",
+			"title": "the isolated Claude overlay goes back to authoring permissions.defaultMode \"default\" — the overlay is the only settings authority the ACP child reads, so an unattended entwurf turn suspends on an interactive permission prompt nobody is there to answer, and the session stalls rather than fails",
+			"subject": "pi-extensions/lib/acp/overlay.ts",
+			"find": ["\t\t\tpermissions: { defaultMode: \"bypassPermissions\" },"],
+			"replace": ["\t\t\tpermissions: { defaultMode: \"default\" },"],
+			"gate": ["bash", "run.sh", "check-acp-overlay"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:ACP-OVERLAY-UNATTENDED-BYPASS]",
+			"signatureSource": "scripts/check-acp-overlay.ts"
+		}
+	]
+}

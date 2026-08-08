@@ -120,9 +120,9 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # ONE confident install: pnpm install + install + meta-bridge (if native harness) + v2 install smoke (LIVE substrate = release-gate)
-  ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm check) + the v2-native live gates (v2 matrix-live, check-bridge, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
+  ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
-  ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm check): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
+  ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm run check:full): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
   ./run.sh check-entwurf-bridge-pi-free # deterministic gate (0.12.1 A, IN pnpm check): static — bridge index eager value-import closure must carry no @earendil-works/pi-* (type-only + dynamic import excluded); proves the meta-bridge boots pi-free
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
@@ -133,7 +133,7 @@ Usage:
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_CITIZEN_BACKENDS + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
   ./run.sh smoke-pi-attach            # deterministic gate (#50 C2 checkpoint + C3 ACP tail): a pi session attaches as a V3 meta-record citizen (backend:"pi"), the gardenId is the RECORD's not pi's session id, the control socket is keyed on it, a re-open ATTACHES to the same address (never a second mint), the BUILT DIST ENTRY driven over MCP stdio lists the citizen + delivers entwurf_v2 to that socket with an RPC ack, and the ACP identity chain lands a send AS the host record (enrichMcpServersWithEnvelope env → bridge sender = host gardenId). mkdtemp-isolated; the live store is never read
-  ./run.sh check-bridge-delivery      # deterministic gate (IN pnpm check): demo scene 3 recovered — seed strict meta-sender + armed receiver citizens in an isolated temp world, scrub ambient pi/sender carriers, drive the BUILT DIST ENTRY over MCP stdio through a real tools/call entwurf_v2, assert the .msg landed under the seeded sender + doorbell poked. DELIVERS through the artifact, not from source. ENTWURF_DELIVERY_SUBJECT=<launcher> replays the same scene against another consumer artifact (check-pack-install passes the npm-installed bin). No model/network/cost; stale or missing dist FAILS
+  ./run.sh check-bridge-delivery      # deterministic gate (IN pnpm run check:full): demo scene 3 recovered — seed strict meta-sender + armed receiver citizens in an isolated temp world, scrub ambient pi/sender carriers, drive the BUILT DIST ENTRY over MCP stdio through a real tools/call entwurf_v2, assert the .msg landed under the seeded sender + doorbell poked. DELIVERS through the artifact, not from source. ENTWURF_DELIVERY_SUBJECT=<launcher> replays the same scene against another consumer artifact (check-pack-install passes the npm-installed bin). No model/network/cost; stale or missing dist FAILS
   ./run.sh check-meta-mailbox-state-write # deterministic gate (0.11 Stage 0 step 3D-4 commit2): post-cut receipt is state-only — meta-record file byte-identical across enqueue/read, state carries lastEnqueuedAt/lastReadAt (field isolation), empty inbox no-op on record+state, drift surfaces; no API
   ./run.sh check-meta-receiver-marker # deterministic gate (SE-2): receiver marker round-trip/start-key/provenance, UserPromptSubmit cannot mint presence, reader does not gate on record existence — marker SEMANTICS only; launch topology moved to check-hook-launch-topology
   ./run.sh check-hook-launch-topology # #51 gate 1: shipped hooks.json is exec form through hook-launch.sh, launcher is loud on an empty argv (older Claude's silent args drop), exec preserves the pid so the hook's parent is Claude, and a space/$/backtick plugin path survives as one argv element
@@ -182,8 +182,8 @@ Usage:
   ./run.sh smoke-entwurf-chain-live    # LIVE cross-harness delivery chain: native Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox terminus, proving sender identity/replyable at every hop and a real read receipt at the end. Prerequisites (claude on PATH, pi credentials per backend) report protocol SKIP, never a pass
   ./run.sh check-release-gate-outcomes  # release-gate STEP OUTCOME protocol (P1): one skip exit code shared by the shell + TS halves, classifier never rounds a skip up to a pass, `--cut` refuses a MUST SKIP while a bare diagnostic stays exit 0, no LIVE smoke keeps the old exit-0 skip shape, and both real skip surfaces are INVOKED and observed to propagate the code
   ./run.sh check-gate-qualification    # kill-proof qualification (the gate-of-gates): runner self-test (classifier truth table + synthetic negatives incl. wrong-reason/hang/control-red/impurity) + committed mutant manifests (scripts/mutants/*.json) run in an isolated snapshot repo under control→mutant→restore→control; the real checkout is never written. Evidence = claim IDs + killed mutant IDs, never assertion counts
-  ./run.sh check-probe-ordering        # §11-7 ordering-probe deterministic gate: raw-client SAMENESS pinned to backend.ts (sequence/args/timeouts/permission policy — the probe may never measure a lookalike), phase attribution incl. set-model, probe-mode fixture wire markers (delay honored, probeRunId REQUIRED, smoke-acp-mcp-live legacy compat), event-log door integrity (reserved keys refused at write; unknown marker name, broken sort axis, or a payload the classifier cannot judge on is MALFORMED, never a quiet event), and the §11-7 paired-verdict truth table (P0/I0 outside the space, phase-qualified D, B promotion ladder, C, A two-delay rule). Offline/deterministic; kill-proofed via scripts/mutants/probe-ordering.json
-  ./run.sh check-probe-cli-shim        # §11-7-c B-name-snapshot PRODUCER gate: the CLI shim driven as a REAL process against fake CLIs (no API, no cost). Proves what a defect would buy — FABRICATED evidence (a malformed init is never reported as an empty name set; the boot report carries the true target path+sha256 the classifier verifies against the roster), a DESTROYED turn (byte transparency across mid-UTF8/CRLF/oversized/unterminated framing, exit-code fidelity, signal re-raise, inbound signal forwarding, stderr passthrough, stdout backpressure), and LEAKED operator state (exact-allowlist env scrub, no argv/env/prompt body in the log). Offline/deterministic; kill-proofed via scripts/mutants/probe-ordering.json
+  ./run.sh check-probe-ordering        # §11-7 ordering-probe deterministic gate: raw-client SAMENESS pinned to backend.ts (sequence/args/timeouts/permission policy — the probe may never measure a lookalike), phase attribution incl. set-model, probe-mode fixture wire markers (delay honored, probeRunId REQUIRED, smoke-acp-mcp-live legacy compat), event-log door integrity (reserved keys refused at write; unknown marker name, broken sort axis, or a payload the classifier cannot judge on is MALFORMED, never a quiet event), and the §11-7 paired-verdict truth table (P0/I0 outside the space, phase-qualified D, B promotion ladder, C, A two-delay rule). Offline/deterministic; one product claim (no production prompt cutoff) is replant-qualified via scripts/mutants/probe-ordering.json, while the other assertions are direct [CHECK:*] contracts
+  ./run.sh check-probe-cli-shim        # §11-7-c B-name-snapshot PRODUCER gate: the CLI shim driven as a REAL process against fake CLIs (no API, no cost). Proves what a defect would buy — FABRICATED evidence (a malformed init is never reported as an empty name set; the boot report carries the true target path+sha256 the classifier verifies against the roster), a DESTROYED turn (byte transparency across mid-UTF8/CRLF/oversized/unterminated framing, exit-code fidelity, signal re-raise, inbound signal forwarding, stderr passthrough, stdout backpressure), and LEAKED operator state (exact-allowlist env scrub, no argv/env/prompt body in the log). Offline/deterministic; 20 direct [CHECK:*] contracts, deliberately no longer replant-qualified after #70 subtraction
   ./run.sh smoke-agy-statusline-state # agy ambient garden-id statusLine install/doctor/inverse regression. Offline/deterministic
   ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression. Offline/deterministic
   ./run.sh smoke-user-scope-citizen   # 0.12.6 install-boundary: pi packages[] registration SSOT (register-pi-package.py) — idempotent + preserves unrelated + normalizes stale + remove symmetry + fails loud. Offline/hermetic (deps: bash+python3)
@@ -212,7 +212,7 @@ Usage:
   ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
   ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
-  ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm check): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
+  ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm run check:full): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
   ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (0.82.x) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to entwurf alias
@@ -702,7 +702,7 @@ smoke_pi_attach() {
   # ARTIFACT routes that garden id to its control socket. Two halves, deliberately
   # different in kind: the record+address half drives `birthPiCitizen` (the exact seam
   # entwurf-control's session_start calls) so the gate is deterministic and lives in
-  # `pnpm check`; the delivery half spawns the dist entry as its own process and speaks
+  # `pnpm run check:full`; the delivery half spawns the dist entry as its own process and speaks
   # MCP stdio (check-bridge-delivery's driver, socket-rail fixture). P4 is the one with
   # teeth — re-opening the same pi session must ATTACH to the same gardenId, never mint
   # a second address under peers that already hold it. P8 (#50 C3 tail) gates goal 3:
@@ -947,7 +947,7 @@ check_entwurf_bridge_boot() {
   # source-shape gate check-entwurf-v2-surface cannot — that the whole v2 fence graph LOADS at
   # boot under strip-types (G1a: a parseable tools/list proves it) and that entwurf_v2 is
   # registered on the runtime surface with its schema (G1b). tools/list only → no tools/call,
-  # no lock/fs side effect, no auth → safe in pnpm check. Broad protocol/negative suite stays
+  # no lock/fs side effect, no auth → safe in pnpm run check:full. Broad protocol/negative suite stays
   # in check-bridge/test.sh (D1=A안).
   run_ts scripts/check-entwurf-bridge-boot.ts
 }
@@ -1572,7 +1572,7 @@ check_package_source_routing() {
 # substrate entwurf used to stand on. C2 removed every entwurf use of that
 # substrate (the record mints the address; pi owns id and name), so the smoke's
 # subject no longer exists. The resident identity axis is covered by
-# smoke-pi-attach (deterministic, in pnpm check) + smoke-resident-garden-guard (LIVE).
+# smoke-pi-attach (deterministic, in pnpm run check:full) + smoke-resident-garden-guard (LIVE).
 
 
 
@@ -2469,7 +2469,7 @@ check_acp_overlay() {
   # Deterministic gate for the S2b Claude config overlay materializer. Drives
   # ensureClaudeConfigOverlay against injected temp realDir/overlayDir (no
   # operator ~/.claude touched) and asserts: settings.json hooks:{} +
-  # defaultMode default + autoMemory off; whitelisted entries symlinked;
+  # defaultMode bypassPermissions (unattended turns never prompt) + autoMemory off; whitelisted entries symlinked;
   # projects/sessions overlay-private real dirs (NOT symlinks); operator
   # personal config (CLAUDE.md/settings.local.json/plugins/agents) never leaks;
   # stale symlinks cleaned; binary-owned files preserved; CLAUDE_CONFIG_DIR
@@ -2794,7 +2794,7 @@ check_pack() {
     '\.agent-(reports|shell)/'
     'pi/meta-bridge/\.assembled/'
     # Python bytecode residue — `scripts/` ships whole via the files allowlist,
-    # which BYPASSES .gitignore/.npmignore for its contents, so a `pnpm check`
+    # which BYPASSES .gitignore/.npmignore for its contents, so a `pnpm run check:full`
     # run's generated scripts/__pycache__/*.pyc rode into the 0.12.6 tarball. The
     # files-array `!**/__pycache__` / `!**/*.pyc` negations exclude it; this is the
     # tripwire that fails loud if that negation is ever dropped (결합 규칙).
@@ -2882,7 +2882,7 @@ _check_pack_install_impl() {
 
   echo "[check-pack-install] npm pack -> ${tgz_name}"
   # with-dist-lock: same whole-pack serialization as check-pack — this heavy gate
-  # and a background check-pack (via `pnpm check`) both pack, and unserialized they
+  # and a background check-pack (via `pnpm run check:full`) both pack, and unserialized they
   # race the shared dist dir. The stale-dist sentinel planted just above still
   # proves build-bridge's own `rm -rf dist` clean step under the lock.
   (cd "$REPO_DIR" && bash scripts/with-dist-lock.sh npm pack --dry-run=false --pack-destination "$pack_tmp" 2>&1 | tail -1) || {
@@ -2914,8 +2914,8 @@ _check_pack_install_impl() {
   # Required tarball contents. The old 0.11.0 ACP root files (index.ts,
   # acp-bridge.ts, event-mapper.ts, engraving.ts, pi-context-augment.ts,
   # pi-extensions/entwurf.ts) were removed on v2-only and are GONE — keeping them
-  # here made this heavy gate silently RED (publish-blocking) while `pnpm check`
-  # (which runs only check-pack, not check-pack-install) stayed green. The ACP
+  # here made this heavy gate silently RED (publish-blocking) while the deterministic floor
+  # (check:full runs only check-pack, not check-pack-install) stayed green. The ACP
   # plugin re-enters on v2 as the provider entry + lib/acp/* modules below.
   local tar_required=(
     "package.json" "README.md" "LICENSE" "CHANGELOG.md"
@@ -4058,7 +4058,7 @@ setup_all() {
   # survives while the meta-record is created/attached by conversationId.
   wire_agy_hooks
 
-  # Deterministic preflight lives in `pnpm check`; live substrate acceptance lives
+  # Deterministic preflight lives in `pnpm run check:full`; live substrate acceptance lives
   # in `LIVE=1 ./run.sh release-gate <scratch> --cut`. Setup is the install path, so it
   # verifies the installed MCP bridge boundary only and does NOT run the legacy
   # ACP/v1 session-messaging/sentinel gates.
@@ -4237,7 +4237,7 @@ expose_dev_bin() {
 }
 
 # release-gate — the single command that, when GREEN, is sufficient to cut
-# release cuts. Runs the full static floor (`pnpm check`) followed by the
+# release cuts. Runs the full static floor (`pnpm run check:full`) followed by the
 # v2-native live gates, then emits one PASS/FAIL/SKIP summary. Everything is
 # invoked through run.sh subcommands — never a script in scripts/ directly.
 #
@@ -4402,18 +4402,19 @@ release_gate() {
     esac
   }
 
-  # 1. Static floor (deterministic; includes the two folded gates).
-  section "release-gate step: static (pnpm check)"
-  if (cd "$REPO_DIR" && pnpm check); then
-    ok "static (pnpm check): PASS"
-    results+=("PASS  static (pnpm check)"); pass=$((pass + 1))
+  # 1. Static floor (deterministic; the FULL tier — core plus hermetic/package —
+  #    never the ≤60s everyday core alone).
+  section "release-gate step: static (pnpm run check:full)"
+  if (cd "$REPO_DIR" && pnpm run check:full); then
+    ok "static (pnpm run check:full): PASS"
+    results+=("PASS  static (pnpm run check:full)"); pass=$((pass + 1))
   else
-    fail "static (pnpm check): FAIL"
-    results+=("FAIL  static (pnpm check)"); failc=$((failc + 1))
+    fail "static (pnpm run check:full): FAIL"
+    results+=("FAIL  static (pnpm run check:full)"); failc=$((failc + 1))
   fi
 
   # 1b. Discriminating power of that floor. check-gate-qualification left the
-  # default `pnpm check` chain (operator inner-loop cost), so release acceptance
+  # default check chains (operator inner-loop cost), so release acceptance
   # carries it explicitly as its own MUST step: a cut must re-prove the gates
   # still kill what they claim to kill.
   section "release-gate step: check-gate-qualification"
@@ -4438,7 +4439,7 @@ release_gate() {
   #    the identity foundation is broken, every Entwurf live gate below is
   #    meaningless, so fail fast here. (The old smoke-session-id-name substrate
   #    proof is gone with the substrate itself — #50 C3; smoke-pi-attach carries
-  #    the deterministic half inside pnpm check.)
+  #    the deterministic half inside pnpm run check:full.)
   # RGG split: the 0-token half (BIRTH: record + record-keyed socket / ATTACH:
   # re-open keeps the address / REPLACEMENT: in-process /new is pi's again) is
   # release-blocking and stays here as a must-pass with SMOKE_RGG_POSITIVE=0. The

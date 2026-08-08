@@ -1,7 +1,7 @@
 /**
  * check-meta-identity-consumers — deterministic gate for the V3-only identity
  * consumer seam. A real temp dir; no backend, no network, no hook. Safe in the
- * `pnpm check` static floor.
+ * `pnpm run check:full` static floor.
  *
  * Proves the consumers every live path stands on (MCP sender-marker check, prune,
  * store-doctor, the identity writers):

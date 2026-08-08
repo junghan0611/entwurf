@@ -218,8 +218,9 @@ host evidence boundaries are [VERIFY.md](./VERIFY.md) and [BASELINE.md](./BASELI
 
 The curated model registry exposes unprefixed Claude ids plus `cortex-` rows.
 Codex is not an ACP backend or a shipped managed citizen lane: it has verified
-native-delivery probe evidence, and the reserved 0.14.0 work must turn that evidence
-into lifecycle, identity, installation, and doctors before calling it supported.
+native-delivery probe evidence only. Release 0.14.0 does not add Codex support;
+any future managed lane still owes lifecycle, identity, installation, and doctors
+before calling it supported.
 
 **Snowflake Cortex Code is the second ACP backend** (contract and audit:
 [docs/acp-backend-rail.md](./docs/acp-backend-rail.md#cortex-code-audit-d1d10)). Curated ids are
@@ -233,7 +234,7 @@ HOME containment. Explicit MCP servers are projected into the overlay-private
 `cortex/mcp.json`; only the bridge receives the real operator HOME needed for the
 garden store.
 
-`check-acp-cortex` runs in `pnpm check`. Real acceptance is deliberately on demand:
+`check-acp-cortex` runs in `pnpm run check:full`. Real acceptance is deliberately on demand:
 
 ```bash
 LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> entwurf smoke-acp-cortex-live
@@ -320,7 +321,7 @@ For the maintained multi-harness setup and skill/command packaging details, see 
 
 The Claude ACP backend keeps its native model / API / tools; entwurf shapes only what enters from pi. Claude honors an explicit `CLAUDE_CONFIG_DIR` export when set by the operator.
 
-**Claude** uses `_meta.systemPrompt` for the engraving carrier (kept short and pure — billing-safe; rich operator context rides the first user message instead, see [Context carriers](#context-carriers)) and `CLAUDE_CONFIG_DIR` for a whitelist overlay so auth/runtime entries stay available while operator memory, hooks, agents, history, local settings, and project memory remain hidden. The overlay writes an explicit empty `hooks: {}` because Claude SDK organic compaction needs the configured-empty shape; no operator hook definitions are inherited. The four-tool baseline (`Read`, `Bash`, `Edit`, `Write`) is enforced through `tools` + `permissionAllow`; `Skill` is added automatically when `skillPlugins` is non-empty. Operator context cap override: `ENTWURF_ACP_CLAUDE_CONTEXT=<int>`.
+**Claude** uses `_meta.systemPrompt` for the engraving carrier (kept short and pure — billing-safe; rich operator context rides the first user message instead, see [Context carriers](#context-carriers)) and `CLAUDE_CONFIG_DIR` for a whitelist overlay so auth/runtime entries stay available while operator memory, hooks, agents, history, local settings, and project memory remain hidden. The overlay writes an explicit empty `hooks: {}` because Claude SDK organic compaction needs the configured-empty shape; no operator hook definitions are inherited. It also pins `permissions.defaultMode: "bypassPermissions"` so an unattended ACP turn cannot suspend on an interactive permission prompt; explicit `tools` / `disallowedTools` still constrain the callable surface and backend authentication remains the operator's. The four-tool baseline is `Read`, `Bash`, `Edit`, and `Write`; `permissionAllow` carries their allow declarations, and `Skill` is added automatically when `skillPlugins` is non-empty. Operator context cap override: `ENTWURF_ACP_CLAUDE_CONTEXT=<int>`.
 
 Codex is not an ACP backend here. Its native delivery probe remains separate from
 the governed ACP adapter rail and does not yet constitute a managed garden citizen.
@@ -332,7 +333,8 @@ entwurf owns **no** memory layer at all — the ACP plugin's boundary explicitly
 ## Smoke commands
 
 ```bash
-pnpm check                              # full deterministic floor (all check-* gates, incl. check-acp-*)
+pnpm check                              # everyday core (prints wall time; <=60s on the reference host)
+pnpm run check:full                     # full deterministic floor (adds the hermetic + package/install tiers)
 ./run.sh check-bridge                   # entwurf-bridge direct MCP smoke (no backend auth)
 ./run.sh smoke-agy-install-state        # agy MCP + exact permission ownership lifecycle (install/uninstall/doctor/inverse)
 ./run.sh smoke-agy-statusline-state     # agy ambient garden-id install surface
@@ -359,8 +361,9 @@ LIVE=1 ./run.sh release-gate /tmp/scratch --cut # the single cut gate (MUST + BE
 LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> ./run.sh smoke-acp-cortex-live  # Cortex is on-demand: the aggregate does not re-certify it
 ```
 
-`pnpm check` already includes the two maintainer gates: the AGY permission contract
-matrix and the full committed-mutant gate qualification run on every pass. A gate a
+`pnpm run check:full` includes the AGY permission contract matrix; the committed-mutant
+gate qualification is scheduled separately (`./run.sh check-gate-qualification` — the CI
+`check` job runs it on every push, and release-gate carries it as a MUST step). A gate a
 release touches must kill its known defect for the claimed `[QK:<claim>]` reason —
 the descriptions above name what each smoke covers, and no check count is quality
 evidence on its own. Gate qualification needs the git work surface, while the matrix

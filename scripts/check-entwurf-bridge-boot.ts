@@ -19,7 +19,7 @@
  * Scope boundary (D1=A안): this gate owns boot + current tool registration/schema.
  * The broad protocol/negative suite stays in check-bridge/test.sh. Only a
  * `tools/list` is sent — no `tools/call` — so there is NO lock/filesystem side
- * effect and no auth/model is needed; it lives in `pnpm check`.
+ * effect and no auth/model is needed; it lives in `pnpm run check:full`.
  */
 
 import { spawn } from "node:child_process";

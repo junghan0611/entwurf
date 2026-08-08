@@ -17,7 +17,7 @@ pi-owned key — exact match OR ancestor/descendant (a fragment that sets
 Cross-repo and not hermetic (the fragment path is an argument), so it lives
 OUTSIDE `pnpm check` / release-gate — it is for agent-config CI and manual
 cross-checks. The synthetic-fixture regression of this script's own logic lives
-in `smoke-meta-keyset-guard.sh`, which IS in `pnpm check`.
+in `smoke-meta-keyset-guard.sh`, which IS in `pnpm run check:full`.
 
 usage: check-keyset-overlap.py <consumer-fragment.json> [more.json ...]
 exit 0 = disjoint (invariant holds); exit 1 = overlap (invariant violated);

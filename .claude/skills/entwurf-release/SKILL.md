@@ -250,14 +250,15 @@ resolver produced none.
 ## P4. Run the deterministic floor
 
 ```bash
-pnpm check
+pnpm run check:full
 ```
 
-Do not summarize the aggregate as a fixed number of gates. The current
-`package.json` check script is the SSOT. If any check fails, stop at that axis,
-fix it, and rerun the complete aggregate.
+The FULL tier is the candidate floor; the everyday `pnpm check` core alone is
+never release evidence. Do not summarize the aggregate as a fixed number of
+gates. The current `package.json` check:* scripts are the SSOT. If any check
+fails, stop at that axis, fix it, and rerun the complete aggregate.
 
-The `check` chain deliberately excludes `check-gate-qualification`: the LIVE
+The check chains deliberately exclude `check-gate-qualification`: the LIVE
 release gate (P5) runs it as its own MUST step, and the exact-SHA CI `check`
 job (M2) requires it on the release commit. Do not add a manual qualification
 rerun here.
@@ -291,7 +292,7 @@ hide a BEHAVIOR failure.
 
 ## P6. Apply release-specific pre-commit acceptance
 
-`NEXT.md` and `VERIFY.md` may require gates beyond `pnpm check` and the LIVE
+`NEXT.md` and `VERIFY.md` may require gates beyond `pnpm run check:full` and the LIVE
 release gate. Apply every requirement that belongs before the release-prep
 commit.
 
@@ -327,7 +328,7 @@ git diff-index --quiet HEAD --
 Report:
 
 - prepared version and commit SHA
-- `pnpm check` result
+- `pnpm run check:full` result
 - release-gate scratch, log, and artifact paths
 - actual `MUST: PASS=n FAIL=0 SKIP=n` (includes the `check-gate-qualification` MUST step)
 - actual `BEHAVIOR: PASS=n FAIL=n`
@@ -368,11 +369,12 @@ test -z "$(git tag -l "v${VERSION}")"
 test -z "$(git ls-remote --tags origin "v${VERSION}")"
 grep -qE "^## ${VERSION}([[:space:]]|$)" CHANGELOG.md
 test "$(node -p "require('./package.json').version")" = "$VERSION"
-pnpm check
+pnpm run check:full
 ```
 
-`pnpm check` here is the default static floor without qualification; do not
-duplicate a manual `check-gate-qualification` run in preflight. The exact-SHA
+`pnpm run check:full` here is the full deterministic floor without
+qualification; do not duplicate a manual `check-gate-qualification` run in
+preflight. The exact-SHA
 CI `check` job (M2) is the axis that requires it.
 
 Confirm that a fresh release-gate scratch/log path and its actual MUST/BEHAVIOR

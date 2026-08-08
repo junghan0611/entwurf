@@ -53,13 +53,15 @@
 //      channel — 8d pins that wiring.
 //
 // Kill-proof, stated at its honest strength: scripts/mutants/probe-ordering.json
-// qualifies 63 claims for THIS gate — each carries a [QK:...] signature appearing
-// EXACTLY once below, and check-gate-qualification proves its mutant dies at that
-// signature. (The lane also carries the §11-7-c PRODUCER claims, whose signatures
-// live in check-probe-cli-shim.ts; one lane, two consuming gates.)
-// [QK:*] tokens and qualified claims are 1:1 BY DESIGN: an assertion without a
-// mutant carries a plain message, so "killed claim IDs, never assertion counts"
-// stays readable. The remaining assertions are enforced-but-not-mutant-qualified.
+// now qualifies exactly ONE claim for THIS gate — the product-subject
+// NO-PRODUCTION-PROMPT-CUTOFF replant, whose [QK:] signature appears EXACTLY
+// once below and whose mutant check-gate-qualification proves dies there.
+// Every [CHECK:<claim>] label below is a DIRECT assertion: enforced on every
+// run, deliberately no longer replant-qualified (issue #70 verification
+// subtraction — the dropped qualification replants are ledgered there; the
+// instrument's assertions and behavior are unchanged). The remaining [QK:]
+// token and its qualified claim stay 1:1, so "killed claim IDs, never
+// assertion counts" stays readable.
 // Properties that are review-pinned only (no deterministic mutant exists):
 //   - the write-CALLBACK timing of tools_list_response_forwarded (cross-process
 //     microsecond ordering; existence/attribution IS proven);
@@ -67,7 +69,7 @@
 //     in this handshake; the callback rejects and never stamps — source-visible);
 //   - the writer's SINGLE clock read (a two-read millisecond straddle is a rare
 //     race, so it is pinned in source and made loud by the parser's ts↔tsMs
-//     equality rule, which IS mutant-qualified).
+//     equality rule, which is directly asserted below).
 
 import { strict as assert } from "node:assert";
 import { type ChildProcessByStdio, spawn } from "node:child_process";
@@ -238,7 +240,7 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 			clientCapabilities: {},
 			clientInfo: { name: "entwurf", version: "s2d" },
 		},
-		"initialize params match backend.ts byte-shape [QK:PROBE-SEQ-ORDER]",
+		"initialize params match backend.ts byte-shape [CHECK:PROBE-SEQ-ORDER]",
 	);
 	const newSessionParams = calls[1].params as { cwd: string; mcpServers: unknown; _meta?: unknown };
 	assert.equal(newSessionParams.cwd, "/scratch/gate", "newSession carries the run cwd");
@@ -327,7 +329,7 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 			setModelMs: timeoutOf("SET_MODEL_TIMEOUT_MS"),
 		},
 		"probe BOOTSTRAP timeouts EQUAL backend.ts's — a bootstrap-phase D is only readable against production " +
-			"boundaries [QK:PROBE-BOOTSTRAP-TIMEOUTS-MATCH-PRODUCTION]",
+			"boundaries [CHECK:PROBE-BOOTSTRAP-TIMEOUTS-MATCH-PRODUCTION]",
 	);
 
 	// --- the prompt phase has NO production boundary to match --------------
@@ -349,7 +351,7 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 	);
 	assert.ok(
 		PROBE_PROMPT_OBSERVATION_MS > 0 && !("promptMs" in PROBE_PHASE_TIMEOUTS),
-		"[QK:PROMPT-HORIZON-NOT-PRODUCTION] the prompt horizon lives OUTSIDE the production-pinned bootstrap set — it is " +
+		"[CHECK:PROMPT-HORIZON-NOT-PRODUCTION] the prompt horizon lives OUTSIDE the production-pinned bootstrap set — it is " +
 			"the harness's own observation bound, and folding it back in would report a harness number as the turn contract",
 	);
 
@@ -421,7 +423,7 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 	const scanSites = RUNNER_SRC.split("scanStructuredNoSuchTool").length - 1;
 	assert.ok(
 		scanSites === 2 && !/collectedText \+= t;[^}]*scanStructured/s.test(RUNNER_SRC),
-		"No-such-tool is scanned ONLY off structured tool frames, never agent prose [QK:PROBE-NO-PROSE-ERROR-SCAN]",
+		"No-such-tool is scanned ONLY off structured tool frames, never agent prose [CHECK:PROBE-NO-PROSE-ERROR-SCAN]",
 	);
 
 	// A broken event log is run-invalidating on BOTH doors: a malformed line could
@@ -439,7 +441,7 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 	// "deadline-sufficient". It is a constant, and no env may reach it.
 	assert.ok(
 		RUNNER_SRC.includes("const POST_DELAY_SLACK_MS = 5_000;") && !RUNNER_SRC.includes("PROBE_POST_DELAY_SLACK_MS"),
-		"the observation window's post-delay slack is a CONSTANT with no env override [QK:PROBE-WINDOW-SLACK-IS-CONSTANT]",
+		"the observation window's post-delay slack is a CONSTANT with no env override [CHECK:PROBE-WINDOW-SLACK-IS-CONSTANT]",
 	);
 
 	// The exit contract asks three separate questions. Failing the run on the
@@ -450,14 +452,14 @@ function makeRecordingConnection(calls: RecordedCall[]): AcpConnectionLike {
 			RUNNER_SRC.includes("do not read it as a complete series") &&
 			RUNNER_SRC.includes('classification.status.orderingMeasurement !== "measured"') &&
 			RUNNER_SRC.includes("NOT a claim about server wait behavior"),
-		"the runner's exit contract separates fatal validity from the two axes, and claims no server-wait conclusion [QK:RUNNER-EXIT-CONTRACT-SPLIT]",
+		"the runner's exit contract separates fatal validity from the two axes, and claims no server-wait conclusion [CHECK:RUNNER-EXIT-CONTRACT-SPLIT]",
 	);
 
 	assert.ok(
 		RUNNER_SRC.includes("if (malformed.length > 0 || sequenceViolations.length > 0) {") &&
 			RUNNER_SRC.includes("run INVALIDATED") &&
 			RUNNER_SRC.includes('verdict: "INVALIDATED"'),
-		"the runner refuses to judge a log with malformed lines OR per-writer order violations, and writes an INVALIDATED classification [QK:PROBE-MALFORMED-INVALIDATES]",
+		"the runner refuses to judge a log with malformed lines OR per-writer order violations, and writes an INVALIDATED classification [CHECK:PROBE-MALFORMED-INVALIDATES]",
 	);
 }
 
@@ -615,7 +617,7 @@ const INIT_PARAMS = {
 		assert.equal(tools[0].name, "probe_nonce", "the tool is probe_nonce");
 		assert.ok(
 			tools[0].inputSchema?.required?.includes("probeRunId"),
-			"probe mode REQUIRES probeRunId [QK:PROBE-FIXTURE-RUNID-REQUIRED] — the §11-7 cross-layer join key",
+			"probe mode REQUIRES probeRunId [CHECK:PROBE-FIXTURE-RUNID-REQUIRED] — the §11-7 cross-layer join key",
 		);
 
 		const good = await fx.request({
@@ -657,7 +659,7 @@ const INIT_PARAMS = {
 			PROBE_EVENTS.fixtureToolsCallReceived,
 			PROBE_EVENTS.fixtureToolsCallReplied,
 		]) {
-			assert.ok(names.includes(expected), `fixture stamps ${expected} [QK:PROBE-FIXTURE-WIRE-MARKER]`);
+			assert.ok(names.includes(expected), `fixture stamps ${expected} [CHECK:PROBE-FIXTURE-WIRE-MARKER]`);
 		}
 		const delayStart = events.find((e) => e.event === PROBE_EVENTS.fixtureDelayStart);
 		const delayEnd = events.find((e) => e.event === PROBE_EVENTS.fixtureDelayEnd);
@@ -756,7 +758,7 @@ const INIT_PARAMS = {
 	});
 	assert.ok(
 		refusedEveryKey && !existsSync(authPath),
-		"a payload carrying a reserved envelope key is REFUSED and nothing is written [QK:PROBE-LOG-ENVELOPE-AUTHORITY]",
+		"a payload carrying a reserved envelope key is REFUSED and nothing is written [CHECK:PROBE-LOG-ENVELOPE-AUTHORITY]",
 	);
 
 	const STAMP_MS = 1_700_000_000_000;
@@ -769,7 +771,7 @@ const INIT_PARAMS = {
 	const vocab = readProbeEvents(vocabPath);
 	assert.ok(
 		vocab.events.length === 0 && vocab.malformed.length === 1,
-		"an unknown event name is a MISSING marker, never a quiet extra line [QK:PROBE-LOG-EVENT-VOCABULARY]",
+		"an unknown event name is a MISSING marker, never a quiet extra line [CHECK:PROBE-LOG-EVENT-VOCABULARY]",
 	);
 
 	// Structural envelope: the shared sort axis and its readable twin. A tsMs
@@ -792,7 +794,7 @@ const INIT_PARAMS = {
 	const broken = readProbeEvents(brokenPath);
 	assert.ok(
 		broken.events.length === 0 && broken.malformed.length === brokenLines.length,
-		"a JSON-valid line with a broken envelope is MALFORMED, never an event [QK:PROBE-LOG-ENVELOPE-SCHEMA]",
+		"a JSON-valid line with a broken envelope is MALFORMED, never an event [CHECK:PROBE-LOG-ENVELOPE-SCHEMA]",
 	);
 
 	// Payload contract: the envelope can be perfect and the line still a lie,
@@ -816,7 +818,7 @@ const INIT_PARAMS = {
 	const payloadBroken = readProbeEvents(payloadPath);
 	assert.ok(
 		payloadBroken.events.length === 0 && payloadBroken.malformed.length === badPayloads.length,
-		"a valid envelope with a payload the classifier cannot judge on is MALFORMED [QK:PROBE-LOG-PAYLOAD-SCHEMA]",
+		"a valid envelope with a payload the classifier cannot judge on is MALFORMED [CHECK:PROBE-LOG-PAYLOAD-SCHEMA]",
 	);
 
 	// …and the readings the writer legitimately omits are NOT malformed: the
@@ -852,7 +854,7 @@ const INIT_PARAMS = {
 	const wire = readProbeEvents(wirePath);
 	assert.ok(
 		wire.events.length === 0 && wire.malformed.length === wireLines.length,
-		"a wire marker that does not name the expected tool is not wire-availability [QK:PROBE-LOG-WIRE-MARKER-NAMES-TOOL]",
+		"a wire marker that does not name the expected tool is not wire-availability [CHECK:PROBE-LOG-WIRE-MARKER-NAMES-TOOL]",
 	);
 	const goodWirePath = join(tmp, "payload-wire-ok.ndjson");
 	appendFileSync(
@@ -927,7 +929,7 @@ const INIT_PARAMS = {
 	const win = readProbeEvents(winPath);
 	assert.ok(
 		win.malformed.length === 2 && win.events.length === 1,
-		"an unknown window reason and a non-boolean markerSeen are MALFORMED; the closed vocabulary passes [QK:PROBE-LOG-WINDOW-REASON-VOCAB]",
+		"an unknown window reason and a non-boolean markerSeen are MALFORMED; the closed vocabulary passes [CHECK:PROBE-LOG-WINDOW-REASON-VOCAB]",
 	);
 }
 
@@ -967,7 +969,7 @@ const INIT_PARAMS = {
 	const dupSeq = stream([line(1, 5, 100), line(1, 5, 100)]);
 	assert.ok(
 		dupSeq.sequenceViolations.length === 1 && /seq 5 does not exceed/.test(dupSeq.sequenceViolations[0]),
-		"a repeated per-pid seq is a stream violation [QK:PROBE-LOG-SEQ-STRICTLY-INCREASING]",
+		"a repeated per-pid seq is a stream violation [CHECK:PROBE-LOG-SEQ-STRICTLY-INCREASING]",
 	);
 	const backSeq = stream([line(1, 5, 100), line(1, 4, 101)]);
 	assert.equal(backSeq.sequenceViolations.length, 1, "a per-pid seq going backwards is a stream violation");
@@ -980,7 +982,7 @@ const INIT_PARAMS = {
 	const outOfOrderInFile = stream([line(1, 9, 900), line(1, 2, 200)]);
 	assert.ok(
 		outOfOrderInFile.sequenceViolations.length > 0,
-		"per-writer order is judged on the RAW file order, not after the sort has rewritten it [QK:PROBE-LOG-RAW-ORDER-BEFORE-SORT]",
+		"per-writer order is judged on the RAW file order, not after the sort has rewritten it [CHECK:PROBE-LOG-RAW-ORDER-BEFORE-SORT]",
 	);
 	assert.deepEqual(
 		outOfOrderInFile.events.map((e) => e.seq),
@@ -993,7 +995,7 @@ const INIT_PARAMS = {
 	const backTs = stream([line(1, 0, 500), line(1, 1, 499)]);
 	assert.ok(
 		backTs.sequenceViolations.length === 1 && /runs BACKWARDS/.test(backTs.sequenceViolations[0]),
-		"a per-pid tsMs regression is a stream violation [QK:PROBE-LOG-TS-NO-REGRESSION]",
+		"a per-pid tsMs regression is a stream violation [CHECK:PROBE-LOG-TS-NO-REGRESSION]",
 	);
 	// Different pids are independent: cross-process stamps are not comparable this
 	// way, and demanding it would flag every normal interleaving.
@@ -1016,7 +1018,7 @@ const INIT_PARAMS = {
 	assert.equal(
 		pidReuse.sequenceViolations.length,
 		0,
-		"a reused pid restarting its counter in a LATER run is not a violation — the writer key is (runId, pid) [QK:PROBE-LOG-WRITER-KEY-PER-RUN]",
+		"a reused pid restarting its counter in a LATER run is not a violation — the writer key is (runId, pid) [CHECK:PROBE-LOG-WRITER-KEY-PER-RUN]",
 	);
 	// …but within one run the same pid is still held to the rule.
 	assert.equal(
@@ -1222,7 +1224,7 @@ function intervention(
 		}),
 	};
 	const res2 = classifyProbe([ctl2.record, d1.record], [...ctl2.events, ...d1.events]);
-	assert.equal(res2.verdict, "P0", "control without the callability marker → P0 [QK:VERDICT-P0-CONTROL-FAIL]");
+	assert.equal(res2.verdict, "P0", "control without the callability marker → P0 [CHECK:VERDICT-P0-CONTROL-FAIL]");
 	assert.equal(res2.control.p0Reason, "tool-unavailable", "P0 names tool-unavailable");
 }
 
@@ -1231,7 +1233,7 @@ function intervention(
 	const ctl = passingControl();
 	const d1 = intervention("d1", 2000, 10_000, { failPhase: "initialize" });
 	const res = classifyProbe([ctl.record, d1.record], [...ctl.events, ...d1.events]);
-	assert.equal(res.verdict, "I0", "intervention initialize failure → I0, never D [QK:VERDICT-I0-NEVER-D]");
+	assert.equal(res.verdict, "I0", "intervention initialize failure → I0, never D [CHECK:VERDICT-I0-NEVER-D]");
 }
 
 // --- D: phase-qualified fail-loud readings ----------------------------------
@@ -1260,7 +1262,7 @@ function intervention(
 	assert.equal(
 		resA.verdict,
 		"inconclusive",
-		"absence without the wire marker is a handshake/fixture/config candidate, never B [QK:VERDICT-NOWIRE-CANDIDATE]",
+		"absence without the wire marker is a handshake/fixture/config candidate, never B [CHECK:VERDICT-NOWIRE-CANDIDATE]",
 	);
 	assert.equal(resA.promotable, false, "…and never promotes");
 
@@ -1276,7 +1278,7 @@ function intervention(
 	assert.equal(
 		resB.verdict,
 		"B",
-		"marker-complete absence reads B — the runtime No-such-tool ladder OWNS runtime-error runs; no other channel may stand in for it [QK:VERDICT-RUNTIME-B-LADDER-OWNS]",
+		"marker-complete absence reads B — the runtime No-such-tool ladder OWNS runtime-error runs; no other channel may stand in for it [CHECK:VERDICT-RUNTIME-B-LADDER-OWNS]",
 	);
 	assert.equal(resB.promotable, true, "exact measured-id No-such-tool promotes");
 
@@ -1295,7 +1297,7 @@ function intervention(
 	assert.equal(
 		resB2.verdict,
 		"inconclusive",
-		"exact-id absence WITHOUT running ahead of wire-availability is not delta-B [QK:VERDICT-B-REQUIRES-RANAHEAD]",
+		"exact-id absence WITHOUT running ahead of wire-availability is not delta-B [CHECK:VERDICT-B-REQUIRES-RANAHEAD]",
 	);
 	assert.equal(resB2.promotable, false, "…and never promotes");
 
@@ -1309,7 +1311,7 @@ function intervention(
 		nonceEchoed: false,
 	});
 	const resC = classifyProbe([ctl.record, alias.record], [...ctl.events, ...alias.events]);
-	assert.equal(resC.verdict, "inconclusive", "alias-mismatch absence is not B [QK:VERDICT-B-PROMOTION-RULES]");
+	assert.equal(resC.verdict, "inconclusive", "alias-mismatch absence is not B [CHECK:VERDICT-B-PROMOTION-RULES]");
 	assert.equal(resC.promotable, false, "alias mismatch never promotes");
 }
 
@@ -1358,7 +1360,11 @@ function intervention(
 		nonceEchoed: true,
 	});
 	const one = classifyProbe([ctl.record, d1.record], [...ctl.events, ...d1.events]);
-	assert.equal(one.verdict, "A-withheld", "one nonzero delay → wait verdict WITHHELD [QK:VERDICT-A-NEEDS-TWO-DELAYS]");
+	assert.equal(
+		one.verdict,
+		"A-withheld",
+		"one nonzero delay → wait verdict WITHHELD [CHECK:VERDICT-A-NEEDS-TWO-DELAYS]",
+	);
 	const two = classifyProbe([ctl.record, d1.record, d2.record], [...ctl.events, ...d1.events, ...d2.events]);
 	assert.equal(two.verdict, "A", "two tracking delays → A");
 
@@ -1393,7 +1399,7 @@ function intervention(
 	assert.equal(
 		over.verdict,
 		"A-withheld",
-		"excess overshooting the [0.8·D, D+slack] band is not tracking — A withheld [QK:VERDICT-A-TRACKING-BAND]",
+		"excess overshooting the [0.8·D, D+slack] band is not tracking — A withheld [CHECK:VERDICT-A-TRACKING-BAND]",
 	);
 
 	// In-band per point but NOT growing with D (4.0s → 6.4s excess for 2s → 8s
@@ -1430,7 +1436,7 @@ function intervention(
 	assert.equal(
 		res.verdict,
 		"inconclusive",
-		"a same-ms wire/newSession-end tie is unordered — neither kept nor ahead [QK:VERDICT-SAMEMS-AMBIGUOUS]",
+		"a same-ms wire/newSession-end tie is unordered — neither kept nor ahead [CHECK:VERDICT-SAMEMS-AMBIGUOUS]",
 	);
 
 	// A tie combined with an exact-id No-such-tool must not read B either —
@@ -1473,7 +1479,8 @@ function intervention(
 	const resNoWindow = classifyProbe([ctl.record, noWindow.record], [...ctl.events, ...noWindow.events]);
 	// Two independent nets cover this — the exactly-once inventory below AND the
 	// explicit windowReason guard in the classifier — so no SINGLE mutation can
-	// kill it and it carries no [QK:] token. The inventory itself is qualified.
+	// kill it and it carries no [QK:] token. The inventory itself remains a
+	// direct assertion below (no longer replant-qualified — issue #70 subtraction).
 	assert.ok(
 		resNoWindow.verdict === "INVALIDATED" && resNoWindow.interventions[0].invalidReason === "topology",
 		"a run with no observation-window marker is INVALIDATED for TOPOLOGY — absence cannot be told from our own teardown",
@@ -1483,7 +1490,7 @@ function intervention(
 	assert.deepEqual(
 		[...RUNNER_EXACTLY_ONCE].sort(),
 		[PROBE_EVENTS.observationWindowEnd, PROBE_EVENTS.runEnd, PROBE_EVENTS.runStart].sort(),
-		"the runner-owned exactly-once marker set is exactly run_start, the window close, and run_end [QK:VERDICT-RUNNER-EXACTLY-ONCE-INVENTORY]",
+		"the runner-owned exactly-once marker set is exactly run_start, the window close, and run_end [CHECK:VERDICT-RUNNER-EXACTLY-ONCE-INVENTORY]",
 	);
 
 	// THE regression the first LIVE pair produced: D2's child was torn down while
@@ -1501,7 +1508,7 @@ function intervention(
 	assert.equal(
 		resCensored.interventions[0].invalidReason,
 		"observation-window-closed",
-		"a window closed by child-exit with the marker unseen is CENSORED, not a handshake/fixture/config candidate [QK:VERDICT-CENSORED-NOT-CANDIDATE]",
+		"a window closed by child-exit with the marker unseen is CENSORED, not a handshake/fixture/config candidate [CHECK:VERDICT-CENSORED-NOT-CANDIDATE]",
 	);
 	assert.equal(
 		resCensored.interventions[0].ordering,
@@ -1520,7 +1527,7 @@ function intervention(
 	assert.deepEqual(
 		resCensored.status.invalidRuns,
 		[{ runId: "w1", reason: "observation-window-closed" }],
-		"a fatal status still names the discarded run and its reason [QK:VERDICT-STATUS-NAMES-INVALID-RUNS]",
+		"a fatal status still names the discarded run and its reason [CHECK:VERDICT-STATUS-NAMES-INVALID-RUNS]",
 	);
 
 	// The SAME absence under a window we kept open to its deadline IS a reading:
@@ -1535,7 +1542,7 @@ function intervention(
 	assert.equal(
 		resSufficient.interventions[0].failure,
 		"candidate-handshake",
-		"the same absence under a SUFFICIENT window is a handshake/fixture/config candidate (the mutant for this condition is VERDICT-CENSORED-NOT-CANDIDATE — one condition, one kill)",
+		"the same absence under a SUFFICIENT window is a handshake/fixture/config candidate (one condition, directly asserted; its qualification replant was dropped — issue #70)",
 	);
 	assert.equal(resSufficient.verdict, "inconclusive", "…still not promotable, and still not B");
 
@@ -1549,7 +1556,7 @@ function intervention(
 	assert.equal(
 		resDup.verdict,
 		"INVALIDATED",
-		"a duplicated runner-owned marker INVALIDATES the run [QK:VERDICT-RUNNER-TOPOLOGY-EXACTLY-ONCE]",
+		"a duplicated runner-owned marker INVALIDATES the run [CHECK:VERDICT-RUNNER-TOPOLOGY-EXACTLY-ONCE]",
 	);
 	assert.match(resDup.interventions[0].evidence, /run_end appears 2 times/, "…and the evidence names the duplicate");
 
@@ -1602,7 +1609,7 @@ function intervention(
 	assert.equal(
 		resLying.verdict,
 		"INVALIDATED",
-		"a window close claiming markerSeen=true with no wire marker in the log is INVALIDATED, never a candidate [QK:VERDICT-WINDOW-MARKER-COHERENCE]",
+		"a window close claiming markerSeen=true with no wire marker in the log is INVALIDATED, never a candidate [CHECK:VERDICT-WINDOW-MARKER-COHERENCE]",
 	);
 	assert.match(resLying.interventions[0].evidence, /contradicts its own evidence/, "…named as a self-contradiction");
 
@@ -1633,7 +1640,7 @@ function intervention(
 	const resLyingCtl = classifyProbe([lyingControl.record, d1ok.record], [...lyingControl.events, ...d1ok.events]);
 	assert.ok(
 		resLyingCtl.verdict === "INVALIDATED" && resLyingCtl.control.pass === false,
-		"a CONTROL whose window close contradicts its own log is INVALIDATED before P0 is even considered — the baseline is held to the same bar [QK:VERDICT-CONTROL-HELD-TO-COHERENCE]",
+		"a CONTROL whose window close contradicts its own log is INVALIDATED before P0 is even considered — the baseline is held to the same bar [CHECK:VERDICT-CONTROL-HELD-TO-COHERENCE]",
 	);
 	assert.equal(resLyingCtl.interventions.length, 0, "…and no intervention is judged against a baseline that lied");
 
@@ -1678,7 +1685,7 @@ function intervention(
 	assert.equal(
 		resTrans.verdict,
 		"INVALIDATED",
-		"transposed phases are a topology violation even though every start/end pair is intact [QK:VERDICT-PHASE-SEQUENTIAL]",
+		"transposed phases are a topology violation even though every start/end pair is intact [CHECK:VERDICT-PHASE-SEQUENTIAL]",
 	);
 	assert.match(
 		resTrans.interventions[0].evidence,
@@ -1712,7 +1719,7 @@ function intervention(
 	assert.equal(
 		resHole.verdict,
 		"INVALIDATED",
-		"a skipped phase is a topology violation — a failed run is a PREFIX of the production order, never a hole [QK:VERDICT-PHASE-PRODUCTION-ORDER]",
+		"a skipped phase is a topology violation — a failed run is a PREFIX of the production order, never a hole [CHECK:VERDICT-PHASE-PRODUCTION-ORDER]",
 	);
 	assert.match(resHole.interventions[0].evidence, /prefix of the production order/, "…named as a prefix violation");
 }
@@ -1747,7 +1754,7 @@ function intervention(
 	assert.equal(
 		res.ordering.summary,
 		"prompt-request-ahead-of-wire",
-		"…and the (a) axis is reported on its OWN terms rather than being folded into that verdict [QK:VERDICT-ORDERING-AXIS-REPORTED]",
+		"…and the (a) axis is reported on its OWN terms rather than being folded into that verdict [CHECK:VERDICT-ORDERING-AXIS-REPORTED]",
 	);
 	// Diagnosability: §11-7-b's first artifact classified D1 correctly and still
 	// left a reader unable to SEE the ran-ahead or the turn time left after it.
@@ -1755,7 +1762,7 @@ function intervention(
 	assert.match(
 		r.evidence,
 		/\d+ms of turn remained after wire/,
-		"the evidence exposes how much turn was left after the wire marker [QK:VERDICT-EVIDENCE-EXPOSES-DELTAS]",
+		"the evidence exposes how much turn was left after the wire marker [CHECK:VERDICT-EVIDENCE-EXPOSES-DELTAS]",
 	);
 
 	// The axis split is load-bearing for B/C, not cosmetic. Here the wire lands
@@ -1776,7 +1783,7 @@ function intervention(
 	assert.equal(
 		resBetween.verdict,
 		"inconclusive",
-		"exact-id absence with the wire available before the prompt is NOT delta-B — B's window is promptStart, not newSession end [QK:VERDICT-B-WINDOW-IS-PROMPT]",
+		"exact-id absence with the wire available before the prompt is NOT delta-B — B's window is promptStart, not newSession end [CHECK:VERDICT-B-WINDOW-IS-PROMPT]",
 	);
 	assert.equal(
 		rb.ordering,
@@ -1831,7 +1838,7 @@ function intervention(
 	assert.equal(
 		await reasonOf({ [AMBIENT_OVERRIDE_ENV]: "/somewhere/claude" }, fakeBin),
 		"ambient-override-present",
-		"an ambient CLAUDE_CODE_EXECUTABLE is REFUSED before resolution — claudeCliPath() would return it verbatim [QK:PROBE-TARGET-AMBIENT-REFUSED]",
+		"an ambient CLAUDE_CODE_EXECUTABLE is REFUSED before resolution — claudeCliPath() would return it verbatim [CHECK:PROBE-TARGET-AMBIENT-REFUSED]",
 	);
 	// KEY PRESENCE is the predicate: upstream's `??` treats "" as set and passes
 	// it on while a truthy check treats it as unset — the probe refuses the
@@ -1849,7 +1856,7 @@ function intervention(
 	assert.equal(
 		await reasonOf({}, fakeScript),
 		"target-script-suffix",
-		"a script-suffixed target is refused — the SDK would take the node|bun branch, which this seam asserts against instead of reproducing [QK:PROBE-TARGET-NATIVE-BRANCH-ONLY]",
+		"a script-suffixed target is refused — the SDK would take the node|bun branch, which this seam asserts against instead of reproducing [CHECK:PROBE-TARGET-NATIVE-BRANCH-ONLY]",
 	);
 	assert.equal(
 		await reasonOf({}, join(tmp, "no-such-claude")),
@@ -1994,7 +2001,7 @@ function intervention(
 			Object.values(PROBE_SHIM_ENV).every((v) => SHIM_SCRUB_ENV_VARS.includes(v)) &&
 			SHIM_SCRUB_ENV_VARS.length === 1 + Object.values(PROBE_SHIM_ENV).length &&
 			SHIM_SCRUB_ENV_VARS.every((v) => /^[A-Z][A-Z0-9_]*$/.test(v)),
-		"the shim scrub list is the exact enumerated allowlist — the override plus every probe-private var by literal name, no wildcard/prefix semantics [QK:PROBE-SCRUB-EXACT-ALLOWLIST]",
+		"the shim scrub list is the exact enumerated allowlist — the override plus every probe-private var by literal name, no wildcard/prefix semantics [CHECK:PROBE-SCRUB-EXACT-ALLOWLIST]",
 	);
 	// The shim env names must not collide with the fixture's — two processes,
 	// two channels, one shared log.
@@ -2005,18 +2012,19 @@ function intervention(
 	);
 }
 
-// --- 8d) runner pins — one assert per claim, so each [QK:] names exactly what
-//     its mutant kills (bundling four claims under one token let one mutant
+// --- 8d) runner pins — one assert per claim, each under its own label, so a
+//     source pin stays a DIRECT assertion naming exactly one contract
+//     (bundling four claims under one token let one mutant
 //     stand in for all of them; GPT review 2026-07-29) ----------------------
 {
 	assert.ok(
 		RUNNER_SRC.includes("assertNoAmbientOverride(spawnEnv, `composed acp child env for ${runId}`);"),
-		"the COMPOSED spawn env of every ACP child is asserted override-free — launch defaults / overlay overrides could inject what process.env did not carry [QK:RUNNER-TARGET-PRECONDITION-PINNED]",
+		"the COMPOSED spawn env of every ACP child is asserted override-free — launch defaults / overlay overrides could inject what process.env did not carry [CHECK:RUNNER-TARGET-PRECONDITION-PINNED]",
 	);
 	assert.ok(
 		RUNNER_SRC.includes("snapshotInstrumented: true") && !RUNNER_SRC.includes("snapshotInstrumented: false"),
 		"the snapshot channel is ARMED and no run is left declaring otherwise — a roster mixing armed and unarmed runs " +
-			"would let a run whose shim never reported in pass as an ordinary absence [QK:RUNNER-SNAPSHOT-CHANNEL-ARMED]",
+			"would let a run whose shim never reported in pass as an ordinary absence [CHECK:RUNNER-SNAPSHOT-CHANNEL-ARMED]",
 	);
 	// Pinned as the CONTIGUOUS roster-record shape: the same two stamps also ride
 	// the run_start payload (forensics), so field-by-field includes() would stay
@@ -2025,13 +2033,13 @@ function intervention(
 		RUNNER_SRC.includes(
 			"snapshotInstrumented: true,\n\t\tcliTargetPath: CLI_TARGET.path,\n\t\tcliTargetSha256: CLI_TARGET.sha256,",
 		),
-		"the pair's expected CLI target identity rides EVERY roster record so the classifier can consume it (condition 5) [QK:RUNNER-TARGET-IDENTITY-IN-ROSTER]",
+		"the pair's expected CLI target identity rides EVERY roster record so the classifier can consume it (condition 5) [CHECK:RUNNER-TARGET-IDENTITY-IN-ROSTER]",
 	);
 	assert.ok(
 		RUNNER_SRC.includes("rehash = hashFileSha256(CLI_TARGET.path);") &&
 			RUNNER_SRC.includes('reason: "cli-target-drift"') &&
 			RUNNER_SRC.includes('reason: "cli-target-unreadable"'),
-		"the target is RE-HASHED after the pair, and both drift and unreadability write a named INVALIDATED classification [QK:RUNNER-DRIFT-REHASH-PINNED]",
+		"the target is RE-HASHED after the pair, and both drift and unreadability write a named INVALIDATED classification [CHECK:RUNNER-DRIFT-REHASH-PINNED]",
 	);
 	assert.ok(
 		RUNNER_SRC.includes("CLI_TARGET = await resolveProbeCliTarget({") &&
@@ -2051,7 +2059,7 @@ function intervention(
 		"the ambient-override refusal runs against the env as PRODUCTION composed it, and the probe installs its own " +
 			"override only AFTER. Inverted, the checkpoint would inspect the override the probe itself just injected and " +
 			"REFUSE every run — loudly, but for the wrong reason, and the operator's ambient environment would never be " +
-			"examined at all [QK:RUNNER-ARMING-ORDER]",
+			"examined at all [CHECK:RUNNER-ARMING-ORDER]",
 	);
 	assert.ok(
 		RUNNER_SRC.includes(
@@ -2062,7 +2070,7 @@ function intervention(
 		),
 		"the injection is exactly four names: the override pointing at the SHIM, and the three probe-private vars the " +
 			"shim reads — the target it must exec (resolved HERE, never by the shim), the shared log, and this run's id. " +
-			"All four are on the shim's scrub list, so none of them reach the real CLI [QK:RUNNER-SHIM-OVERRIDE-EXACT]",
+			"All four are on the shim's scrub list, so none of them reach the real CLI [CHECK:RUNNER-SHIM-OVERRIDE-EXACT]",
 	);
 	assert.ok(
 		RUNNER_SRC.includes(
@@ -2071,7 +2079,7 @@ function intervention(
 		"the instrument passes the SAME precondition asserts as the stimulus — absolute, native branch, present regular " +
 			"file, executable — and a refusal is a NAMED classification on the artifact. A shim that fails any of those " +
 			"either never runs or runs on the OTHER launch branch, and the pair would measure something else " +
-			"[QK:RUNNER-SHIM-PRECONDITION-PINNED]",
+			"[CHECK:RUNNER-SHIM-PRECONDITION-PINNED]",
 	);
 	// The path the runner points at is checked on DISK too, not just in source: a
 	// pin proves the runner asks for the right file, not that the file can run.
@@ -2088,7 +2096,7 @@ function intervention(
 				RUNNER_SRC.includes("JSON.stringify(shimRehash) !== JSON.stringify(SHIM_RUNTIME)"),
 			"the instrument's runtime graph is pinned before the first run and RE-HASHED after the last, on its own axis " +
 				"with its own two names — an edit to the implementation landing between control and intervention is " +
-				"invisible to every other check, including the shim's own boot marker [QK:RUNNER-SHIM-RUNTIME-PINNED]",
+				"invisible to every other check, including the shim's own boot marker [CHECK:RUNNER-SHIM-RUNTIME-PINNED]",
 		);
 		{
 			// The runner's list must equal the STATIC LOCAL IMPORT CLOSURE of the
@@ -2125,7 +2133,7 @@ function intervention(
 				[...closure].sort(),
 				"the runner's pinned instrument list is EXACTLY the launcher's static local-import closure — a helper added " +
 					"to the shim without being pinned would otherwise be free to change mid-pair, and a stale entry would " +
-					"pin a file the instrument no longer reads [QK:RUNNER-SHIM-RUNTIME-GRAPH-EXACT]",
+					"pin a file the instrument no longer reads [CHECK:RUNNER-SHIM-RUNTIME-GRAPH-EXACT]",
 			);
 		}
 		// The path is read OUT OF THE RUNNER rather than restated here, so this
@@ -2141,7 +2149,7 @@ function intervention(
 				SDK_SCRIPT_SUFFIXES.every((suffix) => !shimPath.endsWith(suffix)),
 			"the shim the runner arms is present, executable and extensionless ON DISK — the pair is asserted onto the " +
 				"direct-spawn branch, and a script suffix (or a path pointing at nothing) would silently move the " +
-				"instrument to `node|bun <path>` or break the spawn outright [QK:RUNNER-SHIM-ON-DISK-NATIVE]",
+				"instrument to `node|bun <path>` or break the spawn outright [CHECK:RUNNER-SHIM-ON-DISK-NATIVE]",
 		);
 	}
 }
@@ -2166,7 +2174,7 @@ function intervention(
 	const door = readProbeEvents(doorPath);
 	assert.ok(
 		door.malformed.length === 4 && door.events.length === 3,
-		"shim payload rules hold at the door: missing target hash, ordinal<1, non-array tools, and receivedAtMs AFTER the envelope stamp are MALFORMED; the well-formed trio passes [QK:PROBE-LOG-SNAPSHOT-PAYLOAD]",
+		"shim payload rules hold at the door: missing target hash, ordinal<1, non-array tools, and receivedAtMs AFTER the envelope stamp are MALFORMED; the well-formed trio passes [CHECK:PROBE-LOG-SNAPSHOT-PAYLOAD]",
 	);
 }
 
@@ -2241,7 +2249,7 @@ function intervention(
 		assert.equal(
 			res.verdict,
 			"B-name-snapshot",
-			"snapshot absence of the measured id + promptRanAhead + wire strictly before the interval + calibrated control → B-name-snapshot [QK:VERDICT-SNAPSHOT-PROMOTES]",
+			"snapshot absence of the measured id + promptRanAhead + wire strictly before the interval + calibrated control → B-name-snapshot [CHECK:VERDICT-SNAPSHOT-PROMOTES]",
 		);
 		assert.ok(res.promotable && res.status.failureVerdict === "B-name-snapshot", "…and it is promotable on axis (b)");
 		assert.notEqual(
@@ -2263,7 +2271,7 @@ function intervention(
 		assert.equal(
 			res.control.p0Reason,
 			"snapshot-instrument-absent",
-			"…and the reason NAMES the missing instrument (a hijacked/replaced override looks exactly like this) [QK:VERDICT-SNAPSHOT-INSTRUMENT-ABSENT]",
+			"…and the reason NAMES the missing instrument (a hijacked/replaced override looks exactly like this) [CHECK:VERDICT-SNAPSHOT-INSTRUMENT-ABSENT]",
 		);
 	}
 
@@ -2282,7 +2290,7 @@ function intervention(
 		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
 		assert.ok(
 			res.verdict === "P0" && res.control.p0Reason === "snapshot-calibration",
-			"a control snapshot that cannot SEE the measured id fails calibration — absence readings need a baseline that shows presence [QK:VERDICT-SNAPSHOT-CALIBRATION]",
+			"a control snapshot that cannot SEE the measured id fails calibration — absence readings need a baseline that shows presence [CHECK:VERDICT-SNAPSHOT-CALIBRATION]",
 		);
 	}
 
@@ -2298,7 +2306,7 @@ function intervention(
 		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
 		assert.ok(
 			res.verdict === "inconclusive" && !res.promotable,
-			"snapshot absence WITHOUT promptRanAhead is not the delayed-window failure mode — never promoted [QK:VERDICT-SNAPSHOT-REQUIRES-RANAHEAD]",
+			"snapshot absence WITHOUT promptRanAhead is not the delayed-window failure mode — never promoted [CHECK:VERDICT-SNAPSHOT-REQUIRES-RANAHEAD]",
 		);
 	}
 
@@ -2315,7 +2323,7 @@ function intervention(
 			res.verdict === "inconclusive" &&
 				!res.promotable &&
 				res.interventions[0].evidence.includes("INSIDE the snapshot interval"),
-			"a wire marker inside the received↔forwarded interval is UNORDERED — only wire strictly before the interval reads as after [QK:VERDICT-SNAPSHOT-INTERVAL-UNORDERED]",
+			"a wire marker inside the received↔forwarded interval is UNORDERED — only wire strictly before the interval reads as after [CHECK:VERDICT-SNAPSHOT-INTERVAL-UNORDERED]",
 		);
 	}
 
@@ -2365,7 +2373,7 @@ function intervention(
 			res.verdict === "inconclusive" &&
 				!res.promotable &&
 				res.interventions[0].evidence.includes("snapshot-channel-violation"),
-			"reinit/set-model re-emission making the binding ambiguous is a NAMED channel violation — the (b) reading is unavailable, never a pick-first promotion [QK:VERDICT-SNAPSHOT-ORDINAL-EXACTLY-ONE]",
+			"reinit/set-model re-emission making the binding ambiguous is a NAMED channel violation — the (b) reading is unavailable, never a pick-first promotion [CHECK:VERDICT-SNAPSHOT-ORDINAL-EXACTLY-ONE]",
 		);
 		assert.notEqual(res.status.orderingMeasurement, "unobserved", "…while axis (a) still carries its comparison");
 	}
@@ -2386,7 +2394,7 @@ function intervention(
 		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
 		assert.ok(
 			res.verdict === "inconclusive" && !res.promotable && res.status.failureVerdict !== "B-name-snapshot",
-			"shim-shaped evidence in the log of an UNARMED run is ignored — the roster declares the instrument, evidence alone never promotes [QK:VERDICT-SNAPSHOT-NEEDS-INSTRUMENT-FLAG]",
+			"shim-shaped evidence in the log of an UNARMED run is ignored — the roster declares the instrument, evidence alone never promotes [CHECK:VERDICT-SNAPSHOT-NEEDS-INSTRUMENT-FLAG]",
 		);
 	}
 
@@ -2408,7 +2416,7 @@ function intervention(
 			res.verdict === "inconclusive" &&
 				!res.promotable &&
 				res.interventions[0].evidence.includes("snapshot-channel-violation"),
-			"an init RECEIVED before the prompt frame is not a candidate even when its append lands after — the receive axis, not the append/callback axis, binds; zero candidates is a named violation [QK:VERDICT-SNAPSHOT-BINDING-RECEIVE-AXIS]",
+			"an init RECEIVED before the prompt frame is not a candidate even when its append lands after — the receive axis, not the append/callback axis, binds; zero candidates is a named violation [CHECK:VERDICT-SNAPSHOT-BINDING-RECEIVE-AXIS]",
 		);
 	}
 
@@ -2426,7 +2434,7 @@ function intervention(
 				res.status.invalidRuns.some((r) => r.reason === "snapshot-topology") &&
 				res.ordering.summary === "unobserved" &&
 				res.status.orderingMeasurement !== "measured",
-			"an armed intervention whose shim never reported in is INVALIDATED (snapshot-topology) and votes on NEITHER axis — not a (b)-only degradation [QK:VERDICT-SNAPSHOT-STRUCTURAL-INVALIDATES]",
+			"an armed intervention whose shim never reported in is INVALIDATED (snapshot-topology) and votes on NEITHER axis — not a (b)-only degradation [CHECK:VERDICT-SNAPSHOT-STRUCTURAL-INVALIDATES]",
 		);
 	}
 
@@ -2444,7 +2452,7 @@ function intervention(
 		const res = classifyProbe([ctl.record, i1.record], [...ctl.events, ...i1.events]);
 		assert.ok(
 			res.verdict === "INVALIDATED" && res.status.invalidRuns.some((r) => r.reason === "snapshot-topology"),
-			"a shim boot whose target path+sha does not match the roster's expected identity INVALIDATES the run — identity is verified, not merely recorded [QK:VERDICT-SNAPSHOT-TARGET-IDENTITY]",
+			"a shim boot whose target path+sha does not match the roster's expected identity INVALIDATES the run — identity is verified, not merely recorded [CHECK:VERDICT-SNAPSHOT-TARGET-IDENTITY]",
 		);
 	}
 
@@ -2464,7 +2472,7 @@ function intervention(
 			res.verdict === "inconclusive" &&
 				!res.promotable &&
 				res.interventions[0].evidence.includes("CONTAINS the measured id"),
-			"a snapshot that CONTAINS the measured id reads model-compliance, never absence — the contains-id rung blocks promotion [QK:VERDICT-SNAPSHOT-CONTAINS-ID-BLOCKS]",
+			"a snapshot that CONTAINS the measured id reads model-compliance, never absence — the contains-id rung blocks promotion [CHECK:VERDICT-SNAPSHOT-CONTAINS-ID-BLOCKS]",
 		);
 	}
 }

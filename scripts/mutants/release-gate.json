@@ -113,6 +113,17 @@
 			"signatureSource": "scripts/check-release-gate-outcomes.ts"
 		},
 		{
+			"claim": "CI-FULL-FLOOR-QUALIFIED",
+			"title": "the CI check job is downgraded from the full deterministic floor back to the ≤60s everyday core — the #70 tier rename regression, where qualification still runs once on every push but now certifies kill-power over a floor no candidate ships on, and the hermetic/package tiers reach machine time nowhere",
+			"subject": ".github/workflows/ci.yml",
+			"find": ["      - run: pnpm run check:full"],
+			"replace": ["      - run: pnpm check"],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CI-FULL-FLOOR-QUALIFIED]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
 			"claim": "MUX-LIFECYCLE-IS-RELEASE-MUST",
 			"title": "the integrated mux lifecycle stays listed but bypasses run_live_step, so a missing prerequisite returns SKIP into a branch that never classifies it and the cut reads green",
 			"subject": "run.sh",

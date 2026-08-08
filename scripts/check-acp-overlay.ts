@@ -3,8 +3,9 @@
 // Drives ensureClaudeConfigOverlay against INJECTED temp realDir/overlayDir
 // (no operator ~/.claude touched), then asserts the overlay shape the ACP
 // child must see:
-//   - settings.json: permissions.defaultMode "default", autoMemoryEnabled
-//     false, hooks === {} (configured-but-empty → mailbox absence by design);
+//   - settings.json: permissions.defaultMode "bypassPermissions" (unattended
+//     ACP turns never pause on a prompt), autoMemoryEnabled false, hooks === {}
+//     (configured-but-empty → mailbox absence by design);
 //   - whitelisted operator entries symlinked to their real path;
 //   - projects/sessions are overlay-PRIVATE real dirs, NOT symlinks;
 //   - non-whitelist operator entries (CLAUDE.md, settings.local.json, plugins,
@@ -73,7 +74,16 @@ try {
 
 	// settings.json
 	const settings = JSON.parse(readFileSync(join(overlayDir, "settings.json"), "utf8"));
-	assert.equal(settings.permissions?.defaultMode, "default", "settings.permissions.defaultMode must be 'default'");
+	assert.equal(
+		settings.permissions?.defaultMode,
+		"bypassPermissions",
+		"[QK:ACP-OVERLAY-UNATTENDED-BYPASS] the overlay we author must pin permissions.defaultMode to " +
+			"'bypassPermissions'. The isolated overlay is the ONLY authority here — CLAUDE_CONFIG_DIR redirects the " +
+			"SDK away from the operator's native settings, so an unattended entwurf ACP turn inherits nothing and a " +
+			"regression to 'default' suspends that turn on an interactive permission prompt with no operator at the " +
+			"keyboard. The callable surface stays bounded by explicit tools/disallowedTools and backend auth, not by " +
+			"this mode.",
+	);
 	assert.equal(settings.autoMemoryEnabled, false, "settings.autoMemoryEnabled must be false");
 	assert.ok(
 		settings.hooks && typeof settings.hooks === "object" && Object.keys(settings.hooks).length === 0,

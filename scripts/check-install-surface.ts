@@ -226,7 +226,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 // ─── S5 — verification must not rewire the operator's live host ──────────────────────
 {
 	// A LIVE gate legitimately drives the real host (that is what LIVE means). The offline
-	// floor — everything in `pnpm check` — must not: it runs on every commit, and a smoke
+	// floor — everything in the check tiers (`pnpm check` / `pnpm run check:full`) — must not: it runs on every commit, and a smoke
 	// that writes the real ~/.claude, ~/.gemini or ~/.pi would uninstall the operator's
 	// own bridge as a side effect of "testing".
 	const LIVE_GATES = new Set(["smoke-resident-garden-guard.sh", "smoke-meta-async-drift.sh"]);

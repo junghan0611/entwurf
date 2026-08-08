@@ -185,7 +185,10 @@ exit/signal behavior, bounds NDJSON framing, scrubs only the exact probe env all
 and timestamps snapshot/prompt hand-offs inside the downstream write callback. One
 post-wire init snapshot may support the controlled-absence row; malformed, duplicate,
 pre-wire, unarmed, or target-mismatched snapshots invalidate the run rather than proving
-absence. The deterministic mutants in `probe-ordering.json` are the detailed oracle.
+absence. `check-probe-cli-shim` is the detailed producer oracle: its 20 direct
+`[CHECK:*]` assertions remain, while their verification-infra replants were deliberately
+removed by #70. `probe-ordering.json` retains only the product-subject no-production-prompt-cutoff
+replant consumed by `check-probe-ordering`.
 
 Current probe contract and gates:
 
@@ -202,7 +205,7 @@ fail when the callable surface is absent. Do not add sleeps or infer readiness f
 Deterministic floor:
 
 ```bash
-pnpm check
+pnpm run check:full
 ./run.sh check-acp-provider-surface
 ./run.sh check-acp-sdk-surface
 ./run.sh check-acp-session-reuse
@@ -229,5 +232,5 @@ not this standing contract.
 
 - causal MCP-readiness diagnosis and, only with proof, a backend-invariant fence;
 - broader installed-host and cross-machine Cortex evidence;
-- Codex managed native-citizen work on the reserved 0.14.0 lane—separate from ACP;
+- any future Codex managed native-citizen lane—separate from ACP; 0.14.0 does not ship one;
 - persisted ACP resume/load, which is not implemented by today's in-memory reuse.

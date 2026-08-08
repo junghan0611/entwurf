@@ -2,8 +2,8 @@
 //
 // claude-agent-acp's SettingsManager loads the operator's `~/.claude/settings.json`
 // DIRECTLY (CLAUDE_CONFIG_DIR is the only knob that redirects that read). So the
-// operator's native `permissions.defaultMode` ("auto"), hooks, plugins, and
-// per-cwd memory/projects state would otherwise leak into entwurf ACP
+// operator's native `permissions.defaultMode` (whatever its current value), hooks,
+// plugins, and per-cwd memory/projects state would otherwise leak into entwurf ACP
 // sessions. The overlay redirects SettingsManager at a pi-owned directory whose
 // `settings.json` WE author (minimal, `hooks:{}`), while keeping exactly the
 // operator entries a backend needs (credentials, caches, built-in skills)
@@ -105,9 +105,11 @@ export const OVERLAY_BINARY_OWNED: ReadonlySet<string> = new Set([".claude.json"
 
 /**
  * Minimal overlay settings.json. Only fields with a reason to pin:
- *   - `permissions.defaultMode: "default"` neutralizes the operator's native
- *     "auto"; combined with the explicit `tools`/`permissionAllow` surface,
- *     "default" auto-passes every tool we expose without prompts.
+ *   - `permissions.defaultMode: "bypassPermissions"` is deliberate unattended
+ *     ACP operation: a tool call must never suspend a model turn on an interactive
+ *     permission prompt. This does not widen the callable surface — explicit
+ *     `tools`/`disallowedTools` still shape it, and `permissionAllow` still rides
+ *     the inline Claude settings — or bypass backend authentication.
  *   - `autoMemoryEnabled: false` — SDK opt-out for auto-memory (defense in
  *     depth; the tiny non-empty engraving/preset replacement is the primary
  *     write-containment lever for Claude ACP).
@@ -117,7 +119,7 @@ export const OVERLAY_BINARY_OWNED: ReadonlySet<string> = new Set([".claude.json"
 export function overlaySettingsJson(): string {
 	return `${JSON.stringify(
 		{
-			permissions: { defaultMode: "default" },
+			permissions: { defaultMode: "bypassPermissions" },
 			autoMemoryEnabled: false,
 			hooks: {},
 		},

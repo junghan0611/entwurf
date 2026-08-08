@@ -17,7 +17,7 @@
 #     alarm), and must log sender-marker evidence so send-side replyable identity
 #     is not silently lost.
 #
-# Deterministic + offline (no `claude -p`, no network). Safe for pnpm check /
+# Deterministic + offline (no `claude -p`, no network). Safe for pnpm run check:full /
 # pre-commit. Isolates its store via PI_CODING_AGENT_DIR in a temp dir.
 #
 # RUNTIME DEPS: bash + node (the hook runs under `node --experimental-strip-types`)

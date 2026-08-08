@@ -174,7 +174,8 @@ and exit-code contract is [fresh-cut-policy.md](./fresh-cut-policy.md).
 ## 7. Release acceptance versus host acceptance
 
 - `entwurf check-bridge`: installed MCP bytes boot; no backend auth.
-- `pnpm check`: source deterministic floor; maintainer checkout only.
+- `pnpm check` / `pnpm run check:full`: tiered source deterministic floors (everyday
+  core / full candidate floor); maintainer checkout only.
 - `check-install-container`: checkout-invisible Linux package-consumer shape using
   fixtures; not a native lifecycle proof.
 - `doctor-meta-bridge`: one installed real Claude host, only with a new live session.

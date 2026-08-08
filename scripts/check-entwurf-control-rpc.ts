@@ -17,7 +17,7 @@
  *      receiver-stuck backstop the settled-guard preserves).
  *   5. get_info runtime helper parses/formats cwd/model/idle once for every caller.
  *
- * No model / auth / pi process — only `net.Server` on a tmp socket, so it rides `pnpm check`.
+ * No model / auth / pi process — only `net.Server` on a tmp socket, so it rides `pnpm run check:full`.
  */
 
 import assert from "node:assert/strict";

@@ -6,7 +6,7 @@
 // exclude a built-in the Claude child still exposes (`read`); the turn must fail
 // fast into the returned stream as an `error` event — never reach a spawn, never
 // emit `done`. No live backend is launched (the preflight throws first), so this
-// stays deterministic and IN pnpm check.
+// stays deterministic and IN pnpm run check:full.
 //
 // backend.ts imports its siblings with `.js` suffixes (the root/jiti runtime
 // convention), which `node --experimental-strip-types` cannot resolve directly.

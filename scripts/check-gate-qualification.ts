@@ -21,9 +21,9 @@
  *      before/after (P1-5 — porcelain text alone misses byte changes in already-
  *      modified files).
  *
- * No tiers: the full mutant set measured ~80s on the reference host, under the agreed
- * ~120s split threshold, so every run executes every mutant — one command, one truth,
- * no advisory lane. If the set ever outgrows the budget, re-open the fast/full split
+ * No tiers: the committed mutant set is one tier — every run executes every mutant,
+ * one command, one truth, no advisory lane. Runtime is recorded when this runs on a
+ * frozen candidate; if the set ever outgrows its budget, re-open the fast/full split
  * from the design record instead of silently skipping mutants.
  *
  * Evidence: claim IDs + killed mutant IDs, never assertion counts.
@@ -799,6 +799,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 	const EXPECTED_LANE_MUTANTS: Record<string, number> = {
 		"acp-augment": 10,
 		"acp-cortex": 12,
+		"acp-overlay": 1,
 		"acp-prompt-lifecycle": 8,
 		"acp-stop-reason": 6,
 		"acp-stream-hooks": 10,
@@ -811,8 +812,8 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"mux-launcher-fence": 7,
 		"mux-parent-artifact": 3,
 		"mux-resume-call": 12,
-		"probe-ordering": 85,
-		"release-gate": 10,
+		"probe-ordering": 1,
+		"release-gate": 11,
 		"resume-args": 6,
 		"resume-launch-identity": 6,
 		"self-address": 3,

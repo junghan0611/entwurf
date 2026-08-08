@@ -1014,7 +1014,7 @@ esac
 # The three probe rows are driven for real through fakes, never asserted from prose:
 # the adapter takes its host scan from `pgrep`/`ss` on PATH and its metadata call from
 # $AGY_BIN, so a PATH-local fake pins each row deterministically — including DEAD,
-# which must not depend on whether the operator running `pnpm check` happens to have
+# which must not depend on whether the operator running `pnpm run check:full` happens to have
 # agy open.
 echo "[check-fresh-cut-gate] H. native-push conversations (the marker-less surface)"
 mkdir -p "$SANDBOX/npfake"

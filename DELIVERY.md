@@ -115,7 +115,7 @@ The managed bridge, statusline, and hook installers own separate configuration a
 Same-pid concurrent model invocation by multiple conversations is not claimed because
 the pid/start-key sender marker would be last-writer-wins. Current operator checks are
 in [BASELINE.md](./BASELINE.md); deterministic ownership and sender gates run in
-`pnpm check`.
+`pnpm run check:full`.
 
 ### Codex: launch mode is part of the capability
 

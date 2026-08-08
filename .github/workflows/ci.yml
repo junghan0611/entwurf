@@ -23,15 +23,18 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-      # check-gate-qualification left the default local `pnpm check` chain
+      # Push CI owns the FULL deterministic floor (#70 tiering): `pnpm check`
+      # is the operator's ≤60s everyday core, while `check:full` adds the
+      # hermetic-integration and package/install tiers machine time pays for.
+      - run: pnpm run check:full
+      # check-gate-qualification left the default local check chains
       # (operator inner-loop cost). CI machine time still re-proves the gates'
       # kill-power on every push, so the "exact release SHA has all CI jobs
       # green" axis keeps full qualification strength.
       - run: ./run.sh check-gate-qualification
 
-  # The install surface has its own job because `pnpm check` is a SOURCE-tree floor: it
-  # can only ever prove a dev clone works. Every fence bug this repo has shipped —
+  # The install surface has its own job because `pnpm run check:full` is a SOURCE-tree
+  # floor: it can only ever prove a dev clone works. Every fence bug this repo has shipped —
   # start.sh (0.12.1), the store-doctor (0.12.4), the plugin hook (0.12.5), the agy
   # imprint plus three operator commands (0.12.7) — was green on that floor and dead once
   # installed, because Node refuses type-stripping below node_modules. check-pack-install

@@ -1,47 +1,111 @@
-# NEXT — landed issue train → independent aggregate review → release decision
+# NEXT — #69/#70 verification tightening → 0.14.0 candidate rebuild
 
-> NEXT는 부트 섹터다. 현재 구현·관측의 상세 SSOT는 issues #62–#65/#67, 검증 계약은 `VERIFY.md`,
-> ACP 계약은 `docs/acp-backend-rail.md`, 릴리즈 권한 경계는 `.claude/skills/entwurf-release/SKILL.md`가 진다.
+> NEXT는 main workstream의 부트 섹터다. #69/#70의 원문 acceptance와 closing ledger는 issues가 진다.
+> branch `issue-69-70-core-floor`의 세션-국지 상세는 disposable `NEXT--issue-69-70-core-floor.md`가 들고 있고
+> candidate commit 직전에 삭제된다 — durable한 것은 이미 전부 여기와 issues로 승격됐다.
 
 # RAIL — 현재 좌표
 
-- [x] **1. #62 Phase 0–2 · #66 record CREATE** — main exact-SHA CI green
-- [x] **2. #67 → #63 → pi 0.84.1 → #65 → #64 → #62 Phase 3** — six-commit issue train landed
-- [x] **3. aggregate static/package + GLG-selected oracle #67 LIVE + exact-SHA landing** — branch/main CI green
-- [x] **4. independent aggregate review amendment** — D1–D4/O6 closed; Blocker 0 · Defect 0
-- [ ] **5. issue closure + next release prepare** ← CURRENT: amendment commit/push/CI → issues close → GLG가 version 명시
+- [x] **1. #62–#67 issue train + independent closure audit** — main `a90bc4e`, exact-SHA CI green
+- [x] **2. first 0.14.0 prepare baseline** — local-only `33bcb4a`; deterministic/LIVE/package green, 미푸시 (before evidence)
+- [x] **3. #69 truth repair + #70 ≤60s core/subtraction** — tier split + probe 감산 + proof replant 2건 CLOSED
+- [x] **4. Opus tests + B external audit + PM amendment** — Blocker 0 / current-contract Defect 0
+- [x] **5. static/package acceptance — 선행 candidate들에서 성립한 이력** — core/qualification/full/pack/container
+      전부 green으로 통과한 이력이 있다(durable receipt는 RECENT + #70). 현재 fingerprint는 미실행이며
+      6단계 gate를 다시 만족해야 한다
+- [ ] **6. verification-to-commit gate → GLG commit → branch push+CI → archive ref + main realign → land →
+      0.14.0 prepare(LIVE) → make → publish** ← CURRENT
 
-현재 좌표: 구현 train과 집계 증거는 main `8224db2`에 섰고, 독립 Opus amendment review는
-**Blocker 0 · Defect 0 · 신규 Observation 0**으로 종료됐다. `NEXT.md` amendment를 frozen candidate로 검증·착지하고
-open issues를 닫은 뒤, GLG가 명시하는 version으로 별도 `prepare` mode를 시작한다.
+현재 좌표: branch `issue-69-70-core-floor` @ base `a90bc4e`, commit 0. `33bcb4a`는 before evidence로 local main에
+보존하며 이 branch의 조상이 아니다(코드는 `a90bc4e`와 등가; prep delta는 metadata/docs뿐).
 
-# NOW
+# NOW — 구현은 닫혔고, 남은 것은 검증 gate와 authority gate다
 
-- **Current:** `main`/`origin/main`은 `8224db2`; branch CI `31165335134`와 main CI `31166430205`의
-  `check`/`install-surface`/`artifact-consumer`가 모두 green이다. 동결 tree `5aa4ae52…`에서 qualification
-  247/247(21 lanes), full `pnpm check`, package/install, GLG-selected host `oracle`의 두 #67 mux LIVE가 각각
-  1회 green이었고 launcher 무결성이 내장 fence와 외부 해시에서 유지됐다. 현재 worktree 변경은 독립 재검수가
-  닫힌 `NEXT.md` 한 파일뿐이다.
-- **Next:** 이 문서-only candidate에서 full `pnpm check` 1회 → commit/push/main exact-SHA CI →
-  issues #62–#65/#67 closure. 그 뒤 GLG에게 next release version을 받아 `prepare <version>` 경계를 연다.
-- **Blocker:** code/review blocker 0. release prepare는 version 인자만 기다린다.
-- **Read:** issues #62–#65/#67 aggregate-review ledgers; `8224db2`; `AGENTS.md` verification scheduling;
-  `.claude/skills/entwurf-release/SKILL.md` PREPARE.
-- **Do not touch:** #62 Phase 4를 열지 말 것; observations를 현재 defect로 승격해 새 capability lane을 열지 말 것;
-  명시적 version 없이 release prepare를 시작하거나 make/publish 권한을 추론하지 말 것.
+- **Stem:** 0.14.0을 truthful하고 반복 가능한 candidate로 만든다.
+- **Detour 결과:** #69 release-note mechanism drift와 #70 verification cost/duplication을 닫았다. `pnpm check`가
+  everyday core(≤60s, wall time 출력), `pnpm run check:full`이 candidate floor이며 push CI·release-gate·
+  `prepublishOnly`가 같은 이름에 동의한다. `check-gate-qualification`은 두 chain 밖에서 따로 스케줄된다.
+- **CURRENT — verification-to-commit gate (조건이지 상태가 아니다):** branch candidate commit은 아래가 **모두**
+  참일 때에만 허용된다 — ⑴ **현재** commit-candidate fingerprint에 대해 `check-gate-qualification`이 **165/165**,
+  ⑵ 같은 fingerprint에 대해 `pnpm run check:full` GREEN, ⑶ 두 실행 **동안** fingerprint 불변.
+  tracked 파일이 바뀌면 candidate가 이동하므로 gate는 **새 fingerprint에서 다시** 만족돼야 한다.
+  receipt는 disposable branch NEXT가 들고 있고, 삭제 전에 **#70으로 승격**한다.
+  이 문장은 조건만 적고 실행 상태를 적지 않는다 — 그래서 gate를 통과해도 이 tracked 문서를 다시 고칠 필요가 없다.
+- **Gate 충족 시 — GLG commit gate:** branch candidate 1커밋 승인이 다음 한 걸음이다. 커밋에는 미추적 소스 2개가
+  **반드시** staged 돼야 한다 — `scripts/check-elapsed.sh`(두 tier가 실행한다)와
+  `scripts/mutants/acp-overlay.json`(qualification이 `"acp-overlay": 1`을 선언한다). disposable branch NEXT는
+  **제외하고 삭제**한다. **commit은 push를 함의하지 않는다.**
+- **Commit 뒤 — GLG의 별도 branch push gate:** main보다 먼저, **별도 승인된 branch push**로 candidate SHA의
+  exact-SHA CI **세 job green**을 확보한다(run ID 기록). branch push 승인은 main 통합 승인이 아니다.
+- **Archive ref + main realign (별도 GLG authority):** local `33bcb4a`를 custom ref
+  `refs/archive/0.14.0-first-prepare`로 보존한 뒤(**tag 아님**; 지금 만들지 않는다), local `main`을
+  33b → candidate C로 **CAS**(old=33b 확인) 재정렬한다. origin/main은 `a90bc4e` → C **fast-forward**이며
+  force push는 없다.
+- **Then (release skill 순서 SSOT):** `land 0.14.0`(main push + stamp + exact-SHA CI) → `prepare` → `make` →
+  `publish`. 각 모드는 **GLG의 별도 gate**다. **LAND는 PREPARE보다 먼저다**(P0가 `origin/main == HEAD` +
+  exact-SHA CI green을 전제로 검증하고 없으면 land로 돌려보낸다). 조심할 두 곳:
+  ⑴ **LAND main push는 자기 자신의 가시적 main run을 가져야 한다** — `verify-exact-ci`는 branch filter 없이
+  최신 exact-SHA push run을 고르는데 같은 SHA에 선행 branch run이 이미 있으므로, helper 호출/수용 **전에**
+  headBranch=main인 **별개의 run**을 관측하고 branch/main 두 run ID를 모두 기록한다.
+  ⑵ **PREPARE P2는 0.14.0 CHANGELOG 초안 전체를 `refs/archive/0.14.0-first-prepare:CHANGELOG.md`에서
+  복원/재유도**한 뒤 #69 exact truth/ban list를 적용하고 #70 verification/inventory를 갱신한다. 보존된 초안은
+  **증거이지 최종 산문의 authority가 아니다.** P4에서 qualification을 수동 재실행하지 않는다(P5 MUST + M2 CI가 돈다).
+- **Issue/release closure는 GitHub release 뒤다.** PREPARE P7에서 #69/#70을 닫지 않는다 — MAKE까지 열어 두고,
+  M6 GitHub release 검증 뒤 prepared SHA/tag/release를 인용하는 closing ledger를 게시하고 닫는다. PUBLISH는
+  그 뒤의 별도 gate다. **세 종결은 서로 다른 사건이다: 구현 content/review 종결(main 이전, 완료) →
+  branch 종결(승인된 candidate commit 시점에야 성립, 아직 미완) → issue/release 종결(M6 GitHub release
+  검증 이후).** 최종 #69 wording과 #70 closing inventory는 prepare 전에는 존재하지 않는다.
+- **Shape evidence (재유도 말고 대조):** core **≈40s**(≤60s 충족) / full **≈310s** / qualification **165/165**
+  (22 lanes, 27 infra-subject) / pack **342 files** /
+  container artifact sha256 `7c49be19a44b2933ffc0a5f5197c6569c126f8b4a9ec49de3e3a321efc30d82a`.
+  COMBINED inventory 마지막 측정 **203 files / 58,845 lines** (baseline 201/59,775 대비 **−930 lines**);
+  closing inventory는 prepare에서 재측정해 CHANGELOG에 박는다.
+  이 수치들은 **모양(shape)을 대조하라고** 있는 것이지 acceptance 선언이 아니다. acceptance는 위 gate가
+  **현재** fingerprint에서 충족됐는지로만 판정한다. 각 run의 정확한 receipt는 RECENT와 #70이 진다.
+- **LIVE는 위 gate에 없다.** LIVE release gate는 LAND 뒤 PREPARE **P5**에 속한다. 그보다 앞서 돌린 LIVE는
+  release SHA에 묶이지 않는다.
+- **Durable decisions (branch NEXT에서 승격):**
+  - **AGY 이연.** 기존 product/deterministic/LIVE 계약은 그대로 둔다. 이 lane에서 최적화/모델 작업을 하지 않고,
+    lane이 돌아오면 **별도 이슈**다(경로는 pi+ACP 수렴일 가능성이 높다). release-gate aggregate MUST에는 없다.
+  - **추가 subtraction 금지.** 더 줄이는 작업은 closing baseline에서 출발하는 **신규 이슈**로 연다.
+  - **tier 계약 SSOT.** 실행은 `package.json`의 named `check:*` group script, 시점은 `AGENTS.md`
+    "Verification scheduling". gate는 semantic-class 결정으로만 tier를 옮긴다 — 빨라졌다고 이동하지 않는다.
+  - **#69 final truth.** "before write" / owner 기반 거부 / 자동 retry / "same atomic step as the write"라고
+    쓰지 않는다. bytes는 tmp에 먼저 쓰이고, final-path 게시는 배타적 `link(2)`이며 그 `EEXIST`가 점유를 거부한다.
+- **Coordination:** 원 PM 세션 `20260807T174637-340fab`이 compact를 넘어 coordinator를 유지한다.
+  **commit / push / release gate 권한은 GLG만 준다.**
+- **Blocker:** 없음.
+- **Read:** issues #69/#70; `.claude/skills/entwurf-release/SKILL.md`(순서 SSOT); `commit` skill;
+  `AGENTS.md` verification scheduling; `VERIFY.md`.
+- **Do not touch:** local main `33bcb4a`는 archive ref + realign이 **별도 GLG authority로** 실행되기 전까지
+  그대로 둔다(rewrite/force push 금지, archive ref 지금 생성 금지); open §11-7 probe 질문과 protected escape
+  contract를 비용만 보고 삭제하지 말 것; tag/release/publish는 각각 별도 gate.
 
 # RECENT
 
-- **2026-08-07:** six-commit train(`#67 8cd9a25` → `#63 29cc37b` → pi `29148b8` → `#65 4d05e38` →
-  `#64 164441d` → `#62 Phase 3 8224db2`)이 main에 fast-forward됐다. exact-SHA branch/main CI 모두 3 jobs
-  green. 현재 aggregate surface는 **201 files / 59,775 lines**, `check-pack`은 **340 files**다.
-- **2026-08-07:** independent aggregate Opus review는 **0 Blockers / 2 Defects / 5 Observations**; 첫 amendment가
-  D1–D3를 닫았고 재검수에서 D4(Phase-3 before 값의 산술 도출 provenance 누락) 하나를 찾았다. #62 Phase 3의
-  L1/L2/L2b/L2c/L3/L4 mapping, shim, installed refusal, ROADMAP bump provenance는 보존됐다고 확인했다.
-- **2026-08-07:** GLG-selected host `oracle`의 #67 LIVE는 lifecycle **81 checks**와 fresh-call **19 checks**가 green;
-  real Claude launcher는 양 smoke의 shared fence와 독립 before/after 해시 모두에서 불변이었다.
-- **2026-08-07:** #66 `8c7c9f7`은 exclusive CREATE/ATTACH split과 deterministic QK/mutant evidence를
-  닫았고 exact-SHA CI `31144260575`가 세 job 모두 green이다.
+- **2026-08-08:** final branch amendment — 첫 prepare `33bcb4a`에만 있던 public release-truth 산문 2건
+  (README Codex 문장, ACP rail 문서 deferred bullet: 0.14.0은 Codex 지원을 추가하지 않는다)을 branch candidate로
+  흡수하고, durable rail을 갱신했다(branch push+CI, archive ref + main realign, LAND 별개 main run 관측,
+  P2 CHANGELOG 복원, M6 이후 issue closure). 이 tracked 편집으로 candidate는 이동했고 **새 fingerprint에서
+  review + re-gate 대상이다** — receipt는 branch NEXT와 #70이 진다. 앞선 receipt들(`96d2b1e4…`, `c20056f4…`,
+  `deacad2a…` — 각각 qualification 165/165 + `check:full` GREEN)은 **역사이지 현재 binding이 아니다**.
+  binding은 NOW의 gate가 현재 fingerprint에서 충족되는지로만 정해진다.
+- **2026-08-08:** #69/#70 branch 구현 종결. tier split(core/full) + `probe-ordering` manifest **85→1**
+  (삭제된 84 infra replant는 direct `[CHECK:*]` assertion 64/20과 84-entry ledger로 1:1 승계, #70 `5224600228`)
+  + main-path proof replant 2건(`ACP-OVERLAY-UNATTENDED-BYPASS` 신규 lane, `CI-FULL-FLOOR-QUALIFIED` 분리).
+  결과 mutants **247→165**, lanes **21→22**, infra-subject **111→27**.
+- **2026-08-08:** 판정 trail — B advisory GO #70 `5224666718`, #69 ban list 수용 #69 `5224667236`,
+  Opus proof checkpoint #70 `5224742164`, B final triage GO #70 `5224762094`. CI presence+ordering은 **하나의 계약**이고
+  replant는 downgrade/omission을 qualify하며 ordering은 direct assertion으로 남는다.
+- **2026-08-08:** isolated Claude ACP overlay의 `permissions.defaultMode`를 `default`→`bypassPermissions`로 고정했다.
+  native agent-config와 별개로 unattended ACP turn이 permission prompt에서 멈추지 않게 하는 entwurf-owned pin이며,
+  tool narrowing과 backend auth는 그대로다. 이제 전용 replant가 이 계약을 지킨다.
+- **2026-08-08:** B external review와 Opus source audit가 #69의 세 drift를 확인했다: CREATE collision은
+  retry하지 않고, final-path ownership이 아니라 occupancy에서, tmp write 뒤 `link(2)` publication 시 거부한다.
+- **2026-08-08:** Opus oracle upper-bound timing: 이전 `pnpm check` 98 steps / 303.4s. 이 98 leaf는 새 tier로
+  정확히 1:1 매핑됐다(toolchain 2 + Vitest 2 + contracts 58 + hermetic 30 + package 6; missing/extra/duplicate 0).
+- **2026-08-07:** local `33bcb4a` prepare는 full deterministic, release-gate MUST 20/0/0 + BEHAVIOR 1/0/0,
+  0.14.0 real tarball install까지 green이었다. 이 receipt는 새 candidate의 acceptance가 아니라 before baseline이다.
 
 # LEDGER — retained release/dependency history
 
@@ -324,7 +388,9 @@ self-update다) `pnpm install` → `prepare` 훅이 `build-bridge`를 자동 실
    `429d5c3` implementation과 `4150c50` prepare commit이 닫혔다. **다음은 GLG의 명시적
    `/entwurf-release make 0.13.1` authority뿐이다.**
    **CHANGELOG 첫 항목은 pi floor가 0.82.x 설치를 깬다는 사실이어야 한다** — patch 번호가 실어주지
-   않는 신호를 산문이 대신 싣는다. `0.14.0`은 CODEX 지원에 예약돼 있다(GLG).
+   않는 신호를 산문이 대신 싣는다. 0.13.1 make/publish는 완료됐다. 당시의 `0.14.0` CODEX 예약(GLG)은
+   이후 release 결정으로 철회됐다 — 0.14.0은 Codex managed lane을 싣지 않으며, future Codex work에
+   예약된 버전은 없다.
 9. ~~**mux capability lane**~~ — **닫힘·머지됨 (2026-08-07).** visible fresh call + visible same-id
    resume. `1750af4` · `d8d9452`, CI green. 위 NOW 첫 항목 참조. 이 컷의 범위가 넓어졌으므로
    `prepare` 때 CHANGELOG는 dep bump뿐 아니라 mux verb 두 개를 함께 실어야 한다.

@@ -25,7 +25,7 @@
  * WHY THE PI SIDE IS THE SEAM AND NOT A REAL `pi` PROCESS. The record + address half
  * is driven through `birthPiCitizen` — the exact function `entwurf-control.ts`'s
  * session_start calls — so this gate stays deterministic (no model, no network, no
- * cost) and belongs in `pnpm check`. That a REAL `pi --entwurf-control` process
+ * cost) and belongs in `pnpm run check:full`. That a REAL `pi --entwurf-control` process
  * executes that seam is a different axis, owned by the LIVE gate
  * (`smoke-resident-garden-guard`, inverted in this same cut). Two axes, neither
  * pretending to be the other.
