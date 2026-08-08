@@ -577,8 +577,9 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     **무조건 모델에 그대로 전달**된다. `publishGoalFromPrompt`는 그 push **뒤에** `session_info_update`
     알림 하나를 추가로 낼 뿐 input을 치환/억제하지 않는다(acp-agent.js L290/L993/L995 실측; Opus B1
     정정 2026-08-08 — 최초 기록과 커밋 `6929148` 메시지의 "모델에 전달되는 대신 가로챈다"는 문장은
-    코드가 구현하지 않는 메커니즘이며 **이 원장이 SSOT로 대체한다**). 도달 표면이 ⑶의 수신 알림
-    하나로 접히므로 이 bump는 **구조적 미도달**로 판정된다. ⑶ 수신:
+    코드가 구현하지 않는 메커니즘이며 **이 원장이 SSOT로 대체한다**). 발신·prompt 두 축은
+    미도달로 접히고, 남는 것은 ⑶의 수신 알림 하나뿐이다 — 그것도 wire에는 오를 수 있으나 mapper가
+    무시해 무해(inert)하다. 행동 변화 없음. ⑶ 수신:
     Claude runtime `active_goal` → `sessionUpdate: "session_info_update"` + `_meta.goal`은 wire에 올 수
     있고 우리 event-mapper switch의 `default: break`가 무시한다(#916 heartbeat와 같은 부류, 실측).
     readiness와 무관 — goal extension은 fence가 아니고 `mcpServerStatus`는 0.66.0 소스에도 부재.
