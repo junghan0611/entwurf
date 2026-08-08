@@ -100,8 +100,8 @@ entwurf check-bridge
 ```
 
 This writes `.pi/settings.json` in the target project with the absolute path to
-the installed `entwurf-bridge` launcher. It also links the target registry under
-`~/.pi/agent/` for the pi runtime lane. The global install is the easiest path when
+the installed `entwurf-bridge` launcher. (The old `~/.pi/agent/` target-registry
+link is gone — #50 C3; nothing reads it.) The global install is the easiest path when
 Claude Code's USER-scope MCP registration should work from every cwd.
 
 ### From npm — project-local install
@@ -475,7 +475,7 @@ The footer uses ACP `usage_update.used / size` (backend prompt/tools/cache/sessi
 
 Owns: provider registration (`entwurf/...`), ACP subprocess lifecycle + `resume > load > new`, prompt forwarding + ACP event mapping, the bridge surface that exposes pi capabilities such as entwurf to ACP-backed sessions, pi-facing MCP injection via `entwurfProvider.mcpServers`, and bridge-local cleanup and diagnostics.
 
-Does not: reconstruct full history, hydrate backend transcripts into pi history, emulate Claude Code or Codex, run broad multi-agent orchestration (entwurf is narrow, registry-gated, identity-locked), or run a second session model competing with pi.
+Does not: reconstruct full history, hydrate backend transcripts into pi history, emulate Claude Code or Codex, run broad multi-agent orchestration (entwurf is narrow, record-addressed, identity-locked), or run a second session model competing with pi.
 
 Only `pi:<sessionId>` mappings are persisted (`~/.pi/agent/cache/entwurf/sessions/`) — enough to re-attach pi to the same remote ACP session, never enough to act as a second harness. Backend stores (`~/.claude/`, `~/.codex/`) are interoperability side effects, not authority.
 

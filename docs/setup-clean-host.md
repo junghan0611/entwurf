@@ -49,7 +49,7 @@ npx entwurf check-bridge
 ```
 
 `check-bridge` is auth-free. It proves the installed prebuilt MCP server boots and
-lists the five garden tools; it does not prove a backend model turn or native hook.
+lists the seven garden tools; it does not prove a backend model turn or native hook.
 
 ## 2. Optional pi adapter / ACP plugin
 

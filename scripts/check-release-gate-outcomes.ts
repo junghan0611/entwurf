@@ -293,7 +293,7 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 		// that required it would block every cut taken without that account. Excluded —
 		// NOT waived: its direct call stays required for a Cortex-rail cut, and running
 		// it without the connection still reports protocol SKIP rather than a pass.
-		"smoke-acp-cortex-live": ["VERIFY.md", "The 0.13.1 aggregate does not re-certify Cortex"],
+		"smoke-acp-cortex-live": ["VERIFY.md", "The release aggregate does not re-certify Cortex"],
 	};
 
 	const allLive = globSync("scripts/smoke-*live*.{ts,sh}", { cwd: REPO_DIR })

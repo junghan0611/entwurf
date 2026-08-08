@@ -32,22 +32,25 @@ pnpm run check:full     # full deterministic floor — the required PR gate
 
 The deterministic floor is tiered (#70). `pnpm check` is the everyday core (biome, tsc, the vitest lanes, and the fast contract gates); `pnpm run check:full` adds the hermetic-integration and package/install tiers — all but the separately scheduled `check-gate-qualification`, which CI runs on every push and a gate-changing PR must run once itself. Exact membership is the named `check:*` scripts in `package.json`. Run `check:full` once on your frozen commit candidate — the pre-commit hook (`.husky/pre-commit`) carries only fast static checks (whitespace, lint, typecheck), not the full floor, so a green `pnpm run check:full` before commit is the evidence that your change holds (scheduling contract: AGENTS.md "Verification scheduling").
 
-For changes that touch backend launch, session lifecycle, or `_meta` shape, also run:
+For changes that touch backend launch, session lifecycle, or `_meta` shape, also run
+the live ACP smokes that cover the touched rail — at minimum:
 
 ```bash
-./run.sh smoke-all /path/to/your-fixture-project
-./run.sh verify-resume /path/to/your-fixture-project
+LIVE=1 ./run.sh smoke-acp-provider-live
+LIVE=1 ./run.sh smoke-acp-session-reuse-live
 ```
 
-These need a real ACP subprocess, so they stay manual — the hook does not run them.
+These need a real ACP subprocess plus the operator's local backend auth, so they stay
+manual — the hook does not run them. The full aggregate is `LIVE=1 ./run.sh release-gate
+<scratch> --cut` (see [VERIFY.md](./VERIFY.md)).
 
 ## What gets PRs rejected
 
 - adds ambient MCP discovery (project `.mcp.json`, `~/.mcp.json`, etc.) without an explicit `entwurfProvider.mcpServers` opt-in path
-- inherits user / project / local backend config by default (i.e. flips `settingSources` away from `[]`, drops the `CLAUDE_CONFIG_DIR` overlay, removes the codex `-c` config flags)
+- inherits user / project / local backend config by default (i.e. flips `settingSources` away from `[]`, drops the `CLAUDE_CONFIG_DIR` overlay, or weakens cortex's session-scoped HOME containment)
 - weakens `resume > load > new` (e.g. silently downgrading to `new` without a logged invalidation reason)
 - introduces `console.warn` / silent fallback where the bridge should `throw` (see `AGENTS.md` "Never warn. Throw.")
-- changes the Claude, Codex, or Gemini operating surface (tools, skills, MCP, permissions, sandbox) without accounting for all three backends or recording an explicit carve-out
+- changes a backend operating surface (tools, skills, MCP, permissions, sandbox) without accounting for both shipped backends (Claude, Cortex) or recording an explicit carve-out
 - adds a second transcript ledger, a prompt reconstruction layer, or any state that competes with pi's session as the source of truth
 - skews version pins across `package.json`, `run.sh`, and `README.md` (the `check-dep-versions` gate catches this; if it complains, fix all three)
 

@@ -450,11 +450,11 @@ async function main(): Promise<void> {
 			/record is intact/.test(dormantHint) && /session is not running/.test(dormantHint),
 		);
 		ok(
-			"2B: dormant hint names the withdrawn intent and the visible-first rule, and hands the operator the manual move",
+			"2B: dormant hint names the withdrawn intent and the visible-first rule, and hands the operator the resume verb",
 			/owned-outcome|resume that used to answer here/.test(dormantHint) &&
 				/withdrawn/.test(dormantHint) &&
 				/visible-first/.test(dormantHint) &&
-				/Re-open the session yourself/.test(dormantHint),
+				/entwurf_resume_call/.test(dormantHint),
 		);
 		// The frozen wire id still spells "-no-spawn" although nothing spawns anymore. The id is
 		// deliberately NOT renamed (renaming a public reject is its own contract cut), so the

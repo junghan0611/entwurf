@@ -160,7 +160,7 @@ implement → affected focused gates → independent review → one amendment bu
 | `pi-extensions/lib/native-push/` | native-push adapter/probe/register leaf |
 | `pi-extensions/acp-provider.ts` | `entwurf` provider registration |
 | `pi-extensions/lib/acp/` | ACP adapter rail, config/overlay, augment, turn loop, event mapping |
-| `mcp/entwurf-bridge/` | MCP surface for v2/self/peers/inbox/native-register |
+| `mcp/entwurf-bridge/` | MCP surface for v2/self/peers/inbox/native-register/fresh-call/resume-call |
 | `scripts/` | deterministic gates, LIVE smokes, install/doctor surfaces |
 | `run.sh` | installed command and gate dispatcher |
 

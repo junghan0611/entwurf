@@ -78,8 +78,8 @@ export function actionableRejectHint(reason: string): string | undefined {
 			return (
 				"this citizen's record is intact but its session is not running, and delivery has no way to wake it. " +
 				"The resume that used to answer here launched a hidden background child and was withdrawn under the " +
-				"visible-first rule; a visible same-id resume is a separate lifecycle capability and is not available yet. " +
-				"Re-open the session yourself (pi's own --session picker re-attaches to the same garden id), then dispatch again."
+				"visible-first rule; the visible same-id resume is the separate lifecycle verb entwurf_resume_call. " +
+				"Reopen the citizen with entwurf_resume_call {target} (pi targets only; it runs no turn), then dispatch again."
 			);
 		case "indeterminate-no-spawn":
 			// The socket probe did not settle, so liveness is UNKNOWN — an unestablished probe
