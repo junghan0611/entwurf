@@ -572,10 +572,13 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     554,124 B, fileCount 24 → 27(+goal-extension 3종), 런타임 deps 동일(zod range 포함).
     **도달성은 축별로 갈린다 — "전부 미도달"이 아니다.** ⑴ 발신: entwurf는 `_session/goal`을 보내지
     않고 initialize `_meta` 확장 광고를 소비하지 않는다 — #958 steering과 같은 구조적 미도달.
-    ⑵ **prompt 가로채기 — 조건부 도달**: adapter가 매 prompt에 `^\/goal(\s|$)` regex를 돌려 `/goal
-    <obj>`/`/goal clear`를 goal 명령으로 소비한다. 첫 턴은 first-user augment가 앞에 붙어 불가능하지만
-    reuse 턴에서 문자 그대로 `/goal`로 시작하는 메시지는 모델에 전달되는 대신 goal 명령이 된다 —
-    upstream 설계 동작이고 crash 경로는 아니며, fence를 세우지 않고 여기 기록만 남긴다. ⑶ 수신:
+    ⑵ **`/goal` prompt 경로 — 비치환·가산적(가로채기 아님)**: 어댑터는 `/goal`을 local-only 명령
+    집합(`/context`·`/heapdump`·`/extra-usage`)에 넣지 않았고, 프롬프트는 `session.input.push`로
+    **무조건 모델에 그대로 전달**된다. `publishGoalFromPrompt`는 그 push **뒤에** `session_info_update`
+    알림 하나를 추가로 낼 뿐 input을 치환/억제하지 않는다(acp-agent.js L290/L993/L995 실측; Opus B1
+    정정 2026-08-08 — 최초 기록과 커밋 `6929148` 메시지의 "모델에 전달되는 대신 가로챈다"는 문장은
+    코드가 구현하지 않는 메커니즘이며 **이 원장이 SSOT로 대체한다**). 도달 표면이 ⑶의 수신 알림
+    하나로 접히므로 이 bump는 **구조적 미도달**로 판정된다. ⑶ 수신:
     Claude runtime `active_goal` → `sessionUpdate: "session_info_update"` + `_meta.goal`은 wire에 올 수
     있고 우리 event-mapper switch의 `default: break`가 무시한다(#916 heartbeat와 같은 부류, 실측).
     readiness와 무관 — goal extension은 fence가 아니고 `mcpServerStatus`는 0.66.0 소스에도 부재.
