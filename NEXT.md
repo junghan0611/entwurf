@@ -1,4 +1,4 @@
-# NEXT — 0.14.0 rebuilt PREPARE → MAKE → #69/#70 close
+# NEXT — 0.14.0 released/published → #69/#70 close → open-issue 재정렬
 
 > NEXT는 main workstream의 부트 섹터다. #69/#70의 원문 acceptance와 closing ledger는 issues가 진다.
 > branch NEXT는 더 이상 없다 — durable 내용은 candidate commit 전에 전부 여기와 issues로 승격됐고,
@@ -33,18 +33,132 @@
       Python assertion을 발견·수선. closing inventory **203 files / 58,893 lines(−882)**,
       P4 full 299s, qualification **166/166 / 22 lanes**, packed install + checkout-invisible
       container green. 새 P5 LIVE `--cut`도 **MUST 20/0/0 + BEHAVIOR 1/0/0, cut OK**로 재수용했다.
-- [ ] **7. install-surface fix commit → MAKE(GLG 승인됨) → M6 이후 close audit → #69/#70 close →
-      PUBLISH(별도; issue closure를 gate하지 않는다)** ← CURRENT
+- [x] **7. install-surface fix commit → MAKE → GitHub release → PUBLISH** — 전부 완료.
+      fix `95d1c72`가 tag `v0.14.0` = `origin/main`이고, GitHub release는 2026-08-09T06:05:03Z,
+      npm publish는 07:23:43Z(`latest=0.14.0`, `repair=0.12.8-repair.1`).
+- [x] **8. fresh read-only close audit (2026-08-09)** — Blocker 0 / Defect 0 / Observation 4.
+      아래 "CLOSE AUDIT" 절이 receipt다.
+- [ ] **9. #69/#70 close 실행 + open-issue 재정렬** ← CURRENT
 
-현재 좌표: origin/main = `9e14df5`, 로컬 main = **release-prep + install-surface repair commit,
-미푸시** — push는 MAKE M1이 소유한다. prep handoff 뒤 발견된 false-success 수선은 release-prep
-commit에 숨기지 않고 별도 fix commit으로 닫는다.
-Issues #69/#70은 **의도적으로 OPEN**이다 — 구현/리뷰 종결·branch 종결·main LAND·PREPARE는 끝났고,
-issue 종결은 M6 GitHub release 검증 이후의 별개 사건이다.
+현재 좌표: clean tree, HEAD = tag = origin/main = `95d1c721ce0e8f02740df48d5e3104542844d5db`.
+남은 것은 **issue 종결 실행 하나**다 — 감사는 끝났고 게시할 ledger 초안도 있다(중복 주의: 07:27Z에
+병렬 감사자가 #69/#70 양쪽에 close-ready 코멘트를 이미 올려두었다).
 
-# NOW — install-surface repair 수용 완료, MAKE 실행 승인
+# NOW — #69/#70 종결 실행과 open-issue 재정렬
 
-- **Stem:** 버전 숫자가 아니라 **issue truth/closure가 중심**이다.
+- **Stem:** 버전 숫자가 아니라 **issue truth/closure가 중심**이다. 0.14.0은 나갔고, 남은 것은
+  두 이슈를 닫는 행위와 그 아래 깔린 미해결 이슈들의 좌표 재설정이다.
+- **다음 한 수 ⑴ — #69/#70 close.** 감사 완료(아래 CLOSE AUDIT). 게시할 ledger 초안이 있으나
+  **07:27Z에 병렬 감사자가 양쪽에 close-ready 코멘트를 이미 올렸다** — 중복 게시를 피하고 바로
+  닫는 편이 낫다. close는 GLG/PM 권한이다.
+- **다음 한 수 ⑵ — 아래 "OPEN ISSUES" 표대로 재정렬.** 안전축 #71이 머리다. #57은 요구한 시스템이
+  이미 실물로 도는데 열려 있으므로 closing ledger 후보다.
+- **Blocker:** 없음.
+- **다음 세션 첫 행동:** 아래 "권장 순서"를 그대로 집는다. #69/#70을 먼저 닫고(코멘트 중복 확인),
+  그다음 #71. B/C/E 판정은 2026-08-09 HEAD 실측이므로 재진입 때 소스가 움직였는지만 다시 본다.
+- **호스트 상태 (oracle, 2026-08-09):** pi `0.84.0` — 0.14.0의 peer floor는 `>=0.84.1 <0.85`이므로
+  `pi update` 필요. entwurf는 이 호스트에 **global 설치가 없다**(dev 소비면 미설치).
+
+# CLOSE AUDIT — 2026-08-09, fresh read-only 감사 (Blocker 0 / Defect 0 / Observation 4)
+
+독립 재도출로 확인된 것:
+
+- **정렬 축.** clean worktree = local tag `v0.14.0` = remote tag = `origin/main` = GitHub release
+  target, 전부 `95d1c721ce0e8f02740df48d5e3104542844d5db`. npm `latest=0.14.0` / `repair=0.12.8-repair.1`.
+- **게시 바이트 ≡ 태그 바이트.** 게시 tarball `fileCount=342`(= `check-pack`), `mcp/entwurf-bridge/src/index.ts`
+  sha256 `caed2585…`와 수리된 `test.sh` sha256 `9ca02393…`가 `git show v0.14.0:`과 동일. dist 번들의
+  `server.tool(` 호출은 정확히 7회.
+- **#69/#66 CREATE wording.** source(`publishExclusiveIdentity`)와 1:1. 요구 순서 4단계가 문장 안에서
+  위치 오름차순으로 성립(tmp write → exclusive `link(2)` → occupancy refusal → no retry). ban-list 4종
+  ("before write" 류 / owner 기반 refusal / retry 암시 / `same atomic step as the write`) **재발 0건** —
+  `retry` 매치 2건은 둘 다 부정문이다.
+- **#70 inventory 독립 재계산.** legacy 197/57,904 + framework 6/989 = **COMBINED 203 files / 58,893 lines**.
+  baseline 201/59,775 대비 **files +2 / lines −882**. 매니페스트 재계산 **22 lanes / 166 mutants**,
+  `EXPECTED_LANE_MUTANTS` 합계 무드리프트. probe-ordering 감산 1:1 재확인 —
+  `check-probe-ordering.ts` **64** unique `[CHECK:*]` + `check-probe-cli-shim.ts` **20** = **84**.
+- **7-verb equality가 5면 전부에 걸려 있다** — source(`server.tool` ×7) / runtime G1f
+  `[QK:BRIDGEBOOT-PUBLIC-SURFACE-EXACT-SET]` / `check_pack_install` / `check-install-container.sh:324`
+  `EXPECT_TOOLS` / tarball `test.sh:58`. subset이 아니라 equality다.
+- **test.sh dead-assertion이 실제로 산다.** assertion block을 추출해 직접 구동한 결과
+  exact7→exit 0, missing→1, extra→1, legacy v1→1, duplicate→1. `set -euo pipefail` 하에서 `ok:` 줄 앞에서
+  끊긴다. 이 바이트가 npm tarball 안에 그대로 있다.
+- **Receipts.** CI `31297653959`(push/main/`95d1c721`) 3 job success, tag run `31298082503` 동일 SHA
+  3 job success. P5 로그 실재 + sha256 `0e0f7f61…` 일치, 내부에 MUST 20/0/0 · BEHAVIOR 1/0/0 · `cut: OK` ·
+  `166/166 killed across 22 lanes`. #70 protected set(`META-CREATE-*`, `LAUNCHFENCE-*`, `ACPHOOK-*`,
+  FRESHCALL 스키마 replant)은 killed 목록에 전부 생존.
+
+**Observation 4건 (non-blocking, 태그 수정 사유 아님)**
+
+1. #69/#70에 close audit 코멘트가 **이미 올라가 있다**(07:27Z, 병렬 감사자). 중복 게시 주의.
+2. CHANGELOG Changed bullet의 `27 of 165`는 repair 이전 분모다 — shipping 트리는 **27 of 166**이고
+   인벤토리 도구도 그렇게 찍는다. +1의 출처는 같은 문서 Verification 절이 명시한다. 다음 컷 컨벤션.
+3. 게시된 release body에 "Exact prepared-HEAD CI … remain `make` responsibilities" 미래형 문장이 남아
+   결과 run id가 그 자리에 없다.
+4. CHANGELOG heading `2026-08-08` vs tag/release `2026-08-09` 1일 skew(content-finalization 해석).
+
+# OPEN ISSUES — 미해결 검토 (2026-08-09 기준 19건)
+
+## A. 지금 닫는다 — 감사 완료
+
+| # | 상태 |
+|---|---|
+| **#69** CREATE wording 정정 | acceptance 성립. ban-list 0건 재확인. **close 가능** |
+| **#70** ≤60s core floor + 감산 | acceptance 성립. 203/58,893(−882), 166/22, 84 1:1. **close 가능** |
+
+## B. 0.14.0이 "눈 뜨고 안고 나간" 것 — HEAD에서 실재 재확인
+
+셋 다 CHANGELOG Notes가 known open으로 이름을 부른 것이고, 이번 감사에서 **소스로 아직 살아 있음을
+직접 확인**했다.
+
+- **#71 — `skipDangerousModePermissionPrompt`가 `True`로 핀된 채다.** `scripts/meta-bridge-state.py:77`
+  `MANAGED_SETTINGS_SCALARS`에 그대로 있다. 패키지가 global YOLO를 켜지는 않으면서 켠 사람에게 뜨는
+  마지막 경고는 없앤다 — **셋 중 유일한 안전축이고, 그래서 머리다.** 처리 방향은 값 제거(=키를 건드리지
+  않음) 또는 `defaultMode`가 operator 소유임을 근거로 한 명시적 opt-in 전환 중 택일.
+- **#60 — native-push가 `wants_reply`와 caller envelope를 버린다.** `entwurf-v2-native-push.ts:84`가
+  아직 `deliverViaNativePush(adapter, plan.route, plan.nativeSessionId, plan.message)`만 부르고,
+  이 파일에 `wantsReply`/sender envelope 문자열이 **한 군데도 없다**. tool description의
+  "`wants_reply` rides every rail"과 계속 어긋난다. 자동 답장 계약으로 키우지 말 것 — envelope 보존만.
+- **#68 — no-transcript resume refusal에 이름이 없다.** `target-no-transcript`는 트리 어디에도 없고,
+  `entwurf-v2-visible-resume.ts:95`의 reject union에는 `target-not-pi`만 있다. fail-loud는 이미 하지만
+  (`V2RESUME-NO-TRANSCRIPT-FAILS-LOUD`) 소비자가 분기할 이름이 없다.
+
+## C. 사실상 이행됐는데 열려 있는 것 — closing ledger 후보
+
+- **#57 — gate qualification.** "v0.12.10 release-blocking verification debt"로 열렸고, 요구한 시스템은
+  지금 **166 mutants / 22 lanes로 release-gate MUST + CI에서 매 candidate마다 돈다.** 마지막 코멘트는
+  2026-07-27의 second completeness audit이고 그 뒤 1년치가 아니라 4개 릴리즈치 진화가 얹혔다.
+  **acceptance 항목 대 현재 시스템 1:1 대조 후 closing ledger로 닫는 게 맞다** — 다만 #57 원문의
+  개별 acceptance를 실제로 훑는 별도 감사 한 번이 필요하고, 이번 감사 범위 밖이었다.
+
+## D. 의도적으로 열어두는 것 — 버킷 / 방향 / 1.0.0
+
+닫는 대상이 아니다. 다만 **#55는 0.12.7–0.12.9 감산선의 fallout 수집함**인데, 그 뒤 0.13.x·0.14.0이
+두 번 더 감산했으므로 지금 버킷의 준거선이 낡았다 — 재조준 아니면 명시적 봉인이 필요하다.
+
+- #55 post-subtraction fallout 수집함 (준거선 재조준 필요)
+- #44 릴리즈 마인드셋 점검 · #38 peer substrate 방향 · #37 ACP 방향 FAQ · #35 workshop-not-factory 수명주기
+- #39 situational-awareness read-only 채널 · #33 1.0.0 demo gate · #30 1.0.0 garden-native meta-bridge
+
+## E. 큐에 걸린 설계 — 선행조건이 바뀐 것 주의
+
+- **#47 mux driver 원칙.** 마지막 코멘트가 "current order: #48 → #56 → #47"인데 **#48·#56 둘 다 CLOSED**다.
+  게다가 0.14.0이 Codex managed lane을 싣지 않기로 하면서 #56 라인의 의미가 달라졌고, 그 사이 mux 두 verb가
+  실제로 shipped됐다. **큐 문구가 stale이므로 재진입 시 "historical scaffold" 경고대로 현 production의
+  fresh-mint gap부터 실측**할 것.
+- #34 async delivery 미배달 카탈로그 + D8 신뢰성 게이트 · #36 self-model vs harness-capability gap
+- #11 remote(SSH) resume의 child spawn cwd 정렬
+
+## 권장 순서
+
+1. **#69/#70 close** (지금)
+2. **#71** — 안전축, 단독으로 작다
+3. **#57 acceptance 대조 → close** (문서/감사 작업, 코드 아님)
+4. **#60 → #68** — 둘 다 v2 rail 정직성 축이고 #60이 더 크다
+5. #55 준거선 재조준 여부 결정, 그다음 #47 재진입
+
+# RELEASE RECEIPTS — 0.14.0 실행 기록 (2026-08-08~09)
+
+
 - **PREPARE + install-surface repair receipts (2026-08-08~09):** P0 경계 `9e14df5` + exact-SHA run
   31258659484 3 job green. P1 range 39 commits + Unreleased tmux-live bullet reconcile. P2 CHANGELOG
   0.14.0 재구성 — archive 초안을 증거로만 쓰고 전 bullet을 코드·게이트와 1:1 재검증(ban-list
@@ -68,14 +182,13 @@ issue 종결은 M6 GitHub release 검증 이후의 별개 사건이다.
   tree·tag 부재·`check:full` 재실행·CHANGELOG의 gate evidence 확인) → M1 prepared HEAD push +
   stamp → M2 **별개 exact-SHA CI** → M3 prepared HEAD에서 **보존 exact candidate 1개 생성/수용
   (재pack 없음)** → M4 tag → M5 release stamp → M6 GitHub release 검증 → M7 notify.
-- **M6 이후 — issue closure rail.** fresh B/Opus **read-only close audit**: 재작성된 #66 bullet의
-  ban-list 재검사 + **독립적인 #70 inventory 재계산**. closing ledger는 prepared SHA/tag/release를
-  인용하고 files/lines 델타를 **명시**한다 — 최종 shipping 재측정 기준(files 201→203(+2),
-  lines 59,775→58,893(−882)). #69/#70에 게시한 뒤 닫는다. **PUBLISH/npm은 그 뒤의 별도 gate이며
-  issue closure를 gate하지 않는다.**
+- **M6/M7 완료 → close audit 완료.** GitHub release 2026-08-09T06:05:03Z, npm publish 07:23:43Z.
+  fresh read-only close audit은 위 "CLOSE AUDIT" 절이 결과다. **PUBLISH/npm은 issue closure를
+  gate하지 않았고**, 실제 완료 사실은 별도 receipt로 기록한다.
 - **Minor carry-forwards — #69/#70 close 이후에만 연다(지금 열지 말 것):** ⑴ VERIFY.md의 "0.13.1
   aggregate" 표기가 prepare 시점에 stale해지는 관측, ⑵ 기존(pre-existing) MUXARTIFACT QK orphan,
-  ⑶ GitHub Actions Node20 deprecation, ⑷ P2 소비 후 archive ref의 local-only 처리.
+  ⑶ GitHub Actions Node20 deprecation, ⑷ P2 소비 후 archive ref의 local-only 처리,
+  ⑸ CHANGELOG `27 of 165` 분모 표기 컨벤션(위 Observation 2).
 - **Role plan:** PM은 **일차적으로 맥락 보존/routing/authority**를 지고, 실행 가능할 때 긴 구현은
   fresh Fable에, tests/review는 fresh Opus에 위임한다. PM의 일반 능력은 유지되며 bounded
   read-only/수술적 확인은 직접 할 수 있다 — 절대적 no-code/no-test 금지가 아니다.
@@ -84,12 +197,14 @@ issue 종결은 M6 GitHub release 검증 이후의 별개 사건이다.
   릴리즈 완주를 직접 위임했다.
   새 install-surface repair는 Opus `20260809T113423-98ac41`가 독립 감사·수선했고 PM이 diff를
   재검토했다. **GLG는 2026-08-09 이 수선 commit과 MAKE(push/tag/GitHub release)를 승인했다.**
-- **Blocker:** 없음.
+  close audit은 fresh read-only 세션이 별도로 수행했다(편집·게시 권한 없음).
 - **Read:** issues #69/#70; `.claude/skills/entwurf-release/SKILL.md`(순서 SSOT); `commit` skill;
   `AGENTS.md` verification scheduling; `VERIFY.md`.
 - **Do not touch:** `refs/archive/0.14.0-first-prepare`는 P2가 소비할 때까지 그대로 둔다(삭제/tag 승격
   금지); open §11-7 probe 질문과 protected escape contract를 비용만 보고 삭제하지 말 것; carry-forward
-  4건을 지금 이슈로 열지 말 것; tag/release/publish는 각각 별도 gate.
+  5건을 지금 이슈로 열지 말 것; tag/release/publish는 각각 별도 gate.
+- **태그된 릴리즈는 고치지 않는다.** 위 Observation 2–4는 전부 다음 컷의 컨벤션 항목이지
+  `v0.14.0` 재작성 사유가 아니다.
 
 # RECENT
 
