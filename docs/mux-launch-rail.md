@@ -405,7 +405,7 @@ provider/settings knob는 여전히 없다. Launch receipt의 model은 **무엇�
 수동 baseline에서 fresh `--entwurf-control` 셀에 자기 gardenId를 물었다. 그 셀은:
 
 1. 셸에서 `entwurf_self`를 찾다가 exit 127 — **native pi 표면에는 그 도구가 없다.**
-   `entwurf-control.ts`가 노출하는 것은 `entwurf_v2`·`entwurf_peers`(그리고 이제 `entwurf_fresh_call`)뿐이고,
+   `entwurf-control.ts`가 노출하는 것은 `entwurf_v2`·`entwurf_peers`·`entwurf_fresh_call`·`entwurf_resume_call`뿐이고,
    `entwurf_self`는 MCP bridge의 도구다.
 2. `mcp/entwurf-bridge/start.sh`를 **스스로 스폰**했다. 그 프로세스는 pi의 MCP child가 아니라 셸의 자식이라
    pi가 child MCP에 심는 sender carrier를 받지 못했고, 상속된 env의 `PI_SESSION_ID`만 보고 답했다.

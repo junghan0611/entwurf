@@ -27,6 +27,19 @@
 			"timeoutSeconds": 120,
 			"signature": "[QK:BRIDGEBOOT-RESUME-CALL-TARGET-ONLY]",
 			"signatureSource": "scripts/check-entwurf-bridge-boot.ts"
+		},
+		{
+			"claim": "BRIDGEBOOT-PUBLIC-SURFACE-EXACT-SET",
+			"title": "a verb no assertion happens to name (entwurf_fresh_call) is imported but never registered — the public surface silently shrinks while every named check stays green",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["server.tool(\n\t\"entwurf_fresh_call\","],
+			"replace": [
+				"const _unregisteredFreshCallTool = (...a: unknown[]) => void a;\n_unregisteredFreshCallTool(\n\t\"entwurf_fresh_call\","
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-bridge-boot"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:BRIDGEBOOT-PUBLIC-SURFACE-EXACT-SET]",
+			"signatureSource": "scripts/check-entwurf-bridge-boot.ts"
 		}
 	]
 }

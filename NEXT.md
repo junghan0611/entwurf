@@ -27,30 +27,36 @@
       릴리즈의 resume verb를 부정하던 stale 산문 수리)을 `9e14df5`로 랜딩. 최종 pre-prepare
       HEAD = `9e14df5`, exact-SHA run **31258659484**.
 - [x] **6. rebuilt PREPARE — 완료 (2026-08-08 밤).** #69 최종 wording(ban-list 준수 #66 bullet)과
-      #70 closing inventory(203 files / 58,845 lines, −930)를 CHANGELOG 0.14.0에 생성. P4 full
-      303s green, P5 LIVE `--cut` MUST 20/0/0(qualification 165/165, 22 lanes) + BEHAVIOR 1/0/0,
-      prep commit까지. **prepared HEAD는 로컬 전용, 미푸시.**
-- [ ] **7. MAKE(내일, GLG+PM 별도 authority) → M6 이후 close audit → #69/#70 close →
+      #70 closing inventory를 CHANGELOG 0.14.0에 생성하고 prep commit `83124a3`까지 닫았다.
+- [x] **6b. npm 설치면 독립 재감사·수선 + amended-tree 재수용 (2026-08-09).** Opus
+      `20260809T113423-98ac41`가 installed tool surface의 옛 5-verb subset과 `test.sh`의 죽은
+      Python assertion을 발견·수선. closing inventory **203 files / 58,893 lines(−882)**,
+      P4 full 299s, qualification **166/166 / 22 lanes**, packed install + checkout-invisible
+      container green. 새 P5 LIVE `--cut`도 **MUST 20/0/0 + BEHAVIOR 1/0/0, cut OK**로 재수용했다.
+- [ ] **7. install-surface fix commit → MAKE(GLG 승인됨) → M6 이후 close audit → #69/#70 close →
       PUBLISH(별도; issue closure를 gate하지 않는다)** ← CURRENT
 
-현재 좌표: origin/main = `9e14df5`, 로컬 main = **prepared HEAD(P7 prep commit, 미푸시)** — push는
-MAKE M1이 소유한다. 이 NEXT는 선언대로 P7 evidence handoff로 prep commit에 실렸다.
+현재 좌표: origin/main = `9e14df5`, 로컬 main = **release-prep + install-surface repair commit,
+미푸시** — push는 MAKE M1이 소유한다. prep handoff 뒤 발견된 false-success 수선은 release-prep
+commit에 숨기지 않고 별도 fix commit으로 닫는다.
 Issues #69/#70은 **의도적으로 OPEN**이다 — 구현/리뷰 종결·branch 종결·main LAND·PREPARE는 끝났고,
 issue 종결은 M6 GitHub release 검증 이후의 별개 사건이다.
 
-# NOW — PREPARE 완료, MAKE는 내일 GLG(+PM)의 별도 authority
+# NOW — install-surface repair 수용 완료, MAKE 실행 승인
 
 - **Stem:** 버전 숫자가 아니라 **issue truth/closure가 중심**이다.
-- **PREPARE 완료 receipts (2026-08-08 밤):** P0 경계 `9e14df5` + exact-SHA run 31258659484 3 job
-  green. P1 range 39 commits + Unreleased tmux-live bullet reconcile. P2 CHANGELOG 0.14.0 재구성 —
-  archive 초안을 증거로만 쓰고 전 bullet을 코드·게이트와 1:1 재검증(ban-list 준수 #66 bullet,
-  ACTION REQUIRED pi 0.84.1 + acp 0.66.0, 검증 티어링 bullet에 −1.6% 고백 포함, Known open
-  issues/Ecosystem Notes). P3 `npm version 0.14.0` + lockfile 무변경(resolver 무산출) + closing
-  inventory **203 files / 58,845 lines**(baseline 201/59,775 대비 **−930 lines**, files +2 투명).
-  P4 `check:full` 303s exit 0 + pack **342 files**. P5 LIVE
-  `release-gate /tmp/entwurf-release-gate-0.14.0.r8r31u --cut` — **MUST PASS=20 FAIL=0 SKIP=0**
-  (qualification **165/165**, 22 lanes 포함) + **BEHAVIOR PASS=1 FAIL=0 SKIP=0**, `cut: OK`,
-  log 보존. P7 prep commit(이 NEXT 포함). P8 version·changelog·clean green.
+- **PREPARE + install-surface repair receipts (2026-08-08~09):** P0 경계 `9e14df5` + exact-SHA run
+  31258659484 3 job green. P1 range 39 commits + Unreleased tmux-live bullet reconcile. P2 CHANGELOG
+  0.14.0 재구성 — archive 초안을 증거로만 쓰고 전 bullet을 코드·게이트와 1:1 재검증(ban-list
+  준수 #66 bullet, ACTION REQUIRED pi 0.84.1 + acp 0.66.0, 검증 티어링 raw pair, Known open
+  issues/Ecosystem Notes). P3 `npm version 0.14.0` + lockfile 무변경. 설치면 수선 뒤 closing inventory
+  **203 files / 58,893 lines**(baseline 201/59,775 대비 **−882 lines**, files +2 투명). frozen amended
+  tree에서 P4 `check:full` **299s exit 0** + pack **342 files**, qualification **166/166 / 22 lanes**,
+  `check-pack-install`과 required Docker artifact-consumer green. P5 LIVE
+  `release-gate /tmp/entwurf-release-gate-0.14.0-is.52cPh0 --cut` — **MUST PASS=20 FAIL=0 SKIP=0**
+  (qualification **166/166**) + **BEHAVIOR PASS=1 FAIL=0 SKIP=0**, `cut: OK`; complete log
+  `/tmp/claude-1000/-home-junghan-repos-gh-entwurf/4a6914ab-d9da-4f67-9db2-5bf20f0ed168/scratchpad/p5-live.log`
+  (sha256 `0e0f7f6168fa7484aed9db1b42a7b8945e9bcfcdb5745a23c9615992275efb7c`).
 - **Opus P2 검토 완료 (D1 수정 후 GO):** D1 — "51%→16%" before-share가 #62 분모(90/176)와 #70
   baseline(111/247=44.9%)을 혼동 → raw pair **"111 of 247 to 27 of 165"** 로 수정. O1 — core
   예산 주장에 실측 **36s** receipt 부여. O3 — steered-turn 미도달 근거("does not send
@@ -58,14 +64,14 @@ issue 종결은 M6 GitHub release 검증 이후의 별개 사건이다.
   단일성 유지). **P5 델타 면제 명시:** amend 델타는 CHANGELOG 산문뿐이고 어떤 게이트도
   CHANGELOG를 읽지 않으므로 P5 LIVE는 재실행하지 않는다 — 조용한 상속이 아니라 기록된 면제다.
   P4 `check:full`은 amend 후 1회 재실행해 green을 재확인했다.
-- **MAKE — 내일, GLG(+PM) 별도 authority.** `/entwurf-release make 0.14.0`: M0 preflight(clean
+- **MAKE — GLG가 2026-08-09 실행 승인.** `/entwurf-release make 0.14.0`: M0 preflight(clean
   tree·tag 부재·`check:full` 재실행·CHANGELOG의 gate evidence 확인) → M1 prepared HEAD push +
   stamp → M2 **별개 exact-SHA CI** → M3 prepared HEAD에서 **보존 exact candidate 1개 생성/수용
   (재pack 없음)** → M4 tag → M5 release stamp → M6 GitHub release 검증 → M7 notify.
 - **M6 이후 — issue closure rail.** fresh B/Opus **read-only close audit**: 재작성된 #66 bullet의
   ban-list 재검사 + **독립적인 #70 inventory 재계산**. closing ledger는 prepared SHA/tag/release를
-  인용하고 files/lines 델타를 **명시**한다 — 최종 PREPARE 재측정 기준(직전 shape: files 201→203(+2),
-  lines 59,775→58,845(−930)). #69/#70에 게시한 뒤 닫는다. **PUBLISH/npm은 그 뒤의 별도 gate이며
+  인용하고 files/lines 델타를 **명시**한다 — 최종 shipping 재측정 기준(files 201→203(+2),
+  lines 59,775→58,893(−882)). #69/#70에 게시한 뒤 닫는다. **PUBLISH/npm은 그 뒤의 별도 gate이며
   issue closure를 gate하지 않는다.**
 - **Minor carry-forwards — #69/#70 close 이후에만 연다(지금 열지 말 것):** ⑴ VERIFY.md의 "0.13.1
   aggregate" 표기가 prepare 시점에 stale해지는 관측, ⑵ 기존(pre-existing) MUXARTIFACT QK orphan,
@@ -75,8 +81,9 @@ issue 종결은 M6 GitHub release 검증 이후의 별개 사건이다.
   read-only/수술적 확인은 직접 할 수 있다 — 절대적 no-code/no-test 금지가 아니다.
 - **Coordination:** 원 PM 세션 `20260807T174637-340fab`은 컨텍스트 만료로 빠졌고, GLG가
   2026-08-08 밤 Fable(구현, `20260808T173429-6c980e`)+Opus(검수, `20260808T174116-affb28`)에게
-  릴리즈 완주를 직접 위임했다. MAKE 실행은 내일 GLG(+PM)와 진행한다.
-  **commit / push / release gate 권한은 GLG만 준다.**
+  릴리즈 완주를 직접 위임했다.
+  새 install-surface repair는 Opus `20260809T113423-98ac41`가 독립 감사·수선했고 PM이 diff를
+  재검토했다. **GLG는 2026-08-09 이 수선 commit과 MAKE(push/tag/GitHub release)를 승인했다.**
 - **Blocker:** 없음.
 - **Read:** issues #69/#70; `.claude/skills/entwurf-release/SKILL.md`(순서 SSOT); `commit` skill;
   `AGENTS.md` verification scheduling; `VERIFY.md`.

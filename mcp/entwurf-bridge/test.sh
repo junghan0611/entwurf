@@ -40,19 +40,33 @@ OUT="$(jsonrpc)"
 TOOLS_JSON="$(printf '%s\n' "$OUT" | grep '"id":2' | tail -1)"
 [[ -n "$TOOLS_JSON" ]] || fail "missing tools/list response: $OUT"
 
-python3 - <<'PY' <<<"$TOOLS_JSON"
-import json, sys
-obj=json.load(sys.stdin)
-names={t['name'] for t in obj['result']['tools']}
-expected={'entwurf_v2','entwurf_self','entwurf_peers','entwurf_inbox_read','entwurf_register_native'}
-missing=expected-names
+# The payload rides an ENV VAR, not stdin. It used to be `python3 - <<'PY' <<<"$TOOLS_JSON"`,
+# which is TWO redirections onto fd 0: the here-string wins, so python read the tools/list JSON
+# as its PROGRAM (a bare dict literal — valid Python that does nothing) and the here-doc below
+# never ran at all. Every assertion in this block was dead from the day it was written, and the
+# `ok:` line beneath printed unconditionally. Keep exactly one stdin here.
+TOOLS_JSON="$TOOLS_JSON" python3 - <<'PY'
+import json, os
+obj=json.loads(os.environ["TOOLS_JSON"])
+raw=[t['name'] for t in obj['result']['tools']]
+names=set(raw)
+# EXACT set, not a floor. This suite ships inside the tarball and is what an installed
+# `entwurf check-bridge` runs against the dist branch of start.sh, so a subset check here
+# was an artifact-surface hole: a bundle missing entwurf_fresh_call / entwurf_resume_call
+# answered tools/list and passed. Equality also refuses an undecided extra verb; the
+# duplicate arm catches a name registered twice, which set membership cannot see.
+expected={'entwurf_v2','entwurf_self','entwurf_peers','entwurf_inbox_read','entwurf_register_native','entwurf_fresh_call','entwurf_resume_call'}
 legacy={'entwurf','entwurf_resume','entwurf_send'} & names
-if missing:
-    raise SystemExit(f"missing tools: {sorted(missing)}")
+if len(raw)!=len(names):
+    raise SystemExit(f"duplicate tool registrations: {sorted(raw)}")
+# Named negative first, so a resurrected v1 verb keeps its own diagnosis instead of
+# arriving as a nameless "unexpected" entry in the equality message below.
 if legacy:
     raise SystemExit(f"legacy v1 tools still registered: {sorted(legacy)}")
+if names!=expected:
+    raise SystemExit(f"tool set MISMATCH — missing {sorted(expected-names)}, unexpected {sorted(names-expected)}")
 PY
-ok "v2-only tool surface registered"
+ok "public tool surface is EXACTLY the seven garden verbs (no v1 verb, no undecided extra, no duplicate)"
 
 SELF_JSON="$(printf '%s\n' "$OUT" | grep '"id":3' | tail -1)"
 [[ "$SELF_JSON" == *"isError"* ]] || fail "entwurf_self without identity should be an error: $SELF_JSON"

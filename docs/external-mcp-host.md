@@ -113,7 +113,7 @@ entwurf doctor-agy-hooks
 
 The three adapters deliberately own different atoms:
 
-- bridge: one `entwurf-bridge` server in `~/.gemini/config/mcp_config.json`, plus one narrow permission string per tool the normal agy workflow calls — `mcp(entwurf-bridge/entwurf_v2)`, `mcp(entwurf-bridge/entwurf_peers)`, `mcp(entwurf-bridge/entwurf_self)` — in `~/.gemini/antigravity-cli/settings.json`. agy defaults every `mcp` action to Ask, so a tool that ships without its own rule stops for a y/n on every call; `entwurf_inbox_read` is deliberately not granted (native-push has no inbox) and neither is the manual `entwurf_register_native` fallback;
+- bridge: one `entwurf-bridge` server in `~/.gemini/config/mcp_config.json`, plus one narrow permission string per tool the normal agy workflow calls — `mcp(entwurf-bridge/entwurf_v2)`, `mcp(entwurf-bridge/entwurf_peers)`, `mcp(entwurf-bridge/entwurf_self)` — in `~/.gemini/antigravity-cli/settings.json`. agy defaults every `mcp` action to Ask, so a tool that ships without its own rule stops for a y/n on every call; `entwurf_inbox_read` is deliberately not granted (native-push has no inbox), neither is the manual `entwurf_register_native` fallback, and neither are `entwurf_fresh_call` / `entwurf_resume_call` (both launch into the caller's own tmux session, which an agy conversation is not);
 - statusline: the complete `statusLine` subtree pointing at the bare stable bin `entwurf-agy-statusline`;
 - hooks: one named `PreInvocation` hook pointing at the bare stable bin `entwurf-agy-imprint`.
 

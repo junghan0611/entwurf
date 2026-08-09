@@ -804,7 +804,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"acp-stop-reason": 6,
 		"acp-stream-hooks": 10,
 		"agy-permission": 6,
-		"bridge-boot-resume": 2,
+		"bridge-boot-resume": 3,
 		"meta-facts": 4,
 		"meta-identity": 4,
 		"mux-boundary": 14,

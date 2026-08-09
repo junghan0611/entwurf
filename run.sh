@@ -122,7 +122,7 @@ Usage:
   ./run.sh setup [project-dir]        # ONE confident install: pnpm install + install + meta-bridge (if native harness) + v2 install smoke (LIVE substrate = release-gate)
   ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
-  ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b, IN pnpm run check:full): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 registered/schema; tools/list only, no auth/side-effect
+  ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b/G1e/G1f, IN pnpm run check:full): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 and entwurf_resume_call registered/schema + the tools/list surface is EXACTLY the seven shipped garden verbs; tools/list only, no auth/side-effect
   ./run.sh check-entwurf-bridge-pi-free # deterministic gate (0.12.1 A, IN pnpm check): static — bridge index eager value-import closure must carry no @earendil-works/pi-* (type-only + dynamic import excluded); proves the meta-bridge boots pi-free
   ./run.sh check-model-lock           # deterministic unit test for pi-extensions/model-lock.ts (4-quadrant + edge cases, no API)
   ./run.sh check-shell-quote          # POSIX-safety gate for shellQuote (remote SSH arg quoting in entwurf paths) — source parity + behavior matrix, no SSH
@@ -3455,8 +3455,16 @@ function finish(trimmed) {
   try { msg = JSON.parse(trimmed); }
   catch { console.error('unparseable tools/list:', trimmed.slice(0, 300)); if (stderr.trim()) console.error(stderr.trim()); process.exit(1); }
   const names = (msg?.result?.tools ?? []).map((t) => t?.name).sort();
-  for (const need of ['entwurf_v2', 'entwurf_peers', 'entwurf_self', 'entwurf_inbox_read', 'entwurf_register_native']) {
-    if (!names.includes(need)) { console.error('missing MCP tool from installed boot:', need, '— got', names.join(',')); process.exit(1); }
+  // EXACT set, not a floor. The subset form of this assertion named only the five
+  // pre-0.14 verbs, so an ARTIFACT whose bridge boots and answers but carries an older
+  // emitted surface — no entwurf_fresh_call, no entwurf_resume_call — passed the very
+  // gate that exists to catch "green clone, dead consumer". Equality also catches the
+  // other direction the narrow-surface rule cares about: an extra or duplicated verb
+  // reaching hosts without a decision. Written sorted; `names` is sorted above.
+  const EXPECT_TOOLS = ['entwurf_fresh_call', 'entwurf_inbox_read', 'entwurf_peers', 'entwurf_register_native', 'entwurf_resume_call', 'entwurf_self', 'entwurf_v2'];
+  if (names.length !== EXPECT_TOOLS.length || EXPECT_TOOLS.some((n, i) => names[i] !== n)) {
+    console.error('installed MCP tool set MISMATCH — want exactly [' + EXPECT_TOOLS.join(',') + '] got [' + names.join(',') + ']');
+    process.exit(1);
   }
   console.log(names.join(','));
   child.kill('SIGTERM');
@@ -3880,7 +3888,11 @@ validate_entwurf_bridge() {
     return 1
   fi
 
-  log "entwurf-bridge: direct MCP smoke (strip-types launcher, no build step)"
+  # The launcher picks its own mode by LOCATION (dev clone → strip-types source; under
+  # node_modules → prebuilt dist), and this subcommand ships, so an operator running
+  # `entwurf check-bridge` from an npm install reads this line too. Naming only the dev
+  # branch here told that operator the installed bytes were never the subject.
+  log "entwurf-bridge: direct MCP smoke (start.sh as it ships — source under a clone, prebuilt dist under node_modules)"
 
   if ! raw=$(cd "$bridge_dir" && node --input-type=module <<'JS'
 import { spawn } from 'node:child_process';
@@ -3902,12 +3914,16 @@ function finishOk(trimmed) {
     process.exit(1);
   }
   const names = tools.map((t) => t?.name).sort();
-  const expected = ['entwurf_peers', 'entwurf_self', 'entwurf_inbox_read', 'entwurf_register_native', 'entwurf_v2'];
-  for (const name of expected) {
-    if (!names.includes(name)) {
-      console.error(`missing MCP tool: ${name}`);
-      process.exit(1);
-    }
+  // EXACT set, not a floor. This is the assertion behind the operator-facing claim that
+  // `entwurf check-bridge` proves the installed bytes list the seven garden tools — and
+  // under an installed package this launcher IS the dist branch of start.sh, so a subset
+  // check here let an artifact missing entwurf_fresh_call / entwurf_resume_call read as a
+  // green bridge. Equality also refuses an undecided extra verb. Written sorted; `names`
+  // is sorted above.
+  const expected = ['entwurf_fresh_call', 'entwurf_inbox_read', 'entwurf_peers', 'entwurf_register_native', 'entwurf_resume_call', 'entwurf_self', 'entwurf_v2'];
+  if (names.length !== expected.length || expected.some((n, i) => names[i] !== n)) {
+    console.error(`MCP tool set MISMATCH — want exactly [${expected.join(',')}] got [${names.join(',')}]`);
+    process.exit(1);
   }
   console.log(names.join(','));
   child.kill('SIGTERM');

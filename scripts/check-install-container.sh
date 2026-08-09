@@ -316,8 +316,16 @@ function finish(t) {
   if (done) return; done = true; clearTimeout(timer);
   let msg; try { msg = JSON.parse(t); } catch { console.error('unparseable tools/list: ' + t.slice(0, 300)); process.exit(1); }
   const names = (msg?.result?.tools ?? []).map((x) => x?.name).sort();
-  for (const need of ['entwurf_v2', 'entwurf_peers', 'entwurf_self', 'entwurf_inbox_read', 'entwurf_register_native'])
-    if (!names.includes(need)) { console.error('missing MCP tool: ' + need + ' — got ' + names.join(',')); process.exit(1); }
+  // EXACT set, not a floor. This cell consumes bytes it did not build (M3 hands it the
+  // preserved candidate via ENTWURF_CANDIDATE_TGZ), so "which surface did this exact
+  // artifact ship" is precisely the question it owns. The subset form named only the five
+  // pre-0.14 verbs and would have accepted a candidate with no entwurf_fresh_call /
+  // entwurf_resume_call; equality also refuses an extra or duplicated verb.
+  const EXPECT_TOOLS = ['entwurf_fresh_call', 'entwurf_inbox_read', 'entwurf_peers', 'entwurf_register_native', 'entwurf_resume_call', 'entwurf_self', 'entwurf_v2'];
+  if (names.length !== EXPECT_TOOLS.length || EXPECT_TOOLS.some((n, i) => names[i] !== n)) {
+    console.error('MCP tool set MISMATCH — want exactly [' + EXPECT_TOOLS.join(',') + '] got [' + names.join(',') + ']');
+    process.exit(1);
+  }
   console.log(names.join(','));
   child.kill('SIGTERM'); process.exit(0);
 }

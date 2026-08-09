@@ -24,6 +24,18 @@
  *                       garden record may call this — so the surface is "drain the inbox you were
  *                       pointed at", not "drain your own". A rung doorbell is a wake attempt;
  *                       this read is the receipt.
+ *   - entwurf_register_native — explicit/manual fallback binding an ALREADY-RUNNING native
+ *                       conversation (antigravity) to a garden id. Never a spawn.
+ *   - entwurf_fresh_call — open ONE fresh visible sibling in the operator's own tmux session;
+ *                       returns a LAUNCH receipt only, and the new address arrives later as the
+ *                       sender envelope of the sibling's nonce callback.
+ *   - entwurf_resume_call — reopen ONE DORMANT pi citizen under its OWN garden id in a visible
+ *                       window; target-only, runs no turn, LAUNCH and OBSERVATION receipts stay
+ *                       apart.
+ *
+ * That list is the WHOLE public surface — seven verbs — and `check-entwurf-bridge-boot`
+ * (G1f) holds it as an exact set on the runtime tools/list, so a verb added or dropped
+ * here without a decision is red rather than merely undocumented.
  *
  * Removed from this v2-only surface: legacy MCP `entwurf`, `entwurf_resume`, and
  * `entwurf_send`. Use `entwurf_v2` for delivery to existing garden citizens.

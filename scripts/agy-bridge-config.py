@@ -98,13 +98,17 @@ PERMISSION_STATE_SCHEMA_VERSION = 2
 # EVERY call. The bridge was registered and two thirds of it was unusable — the same failure the
 # doctor already names for entwurf_v2, just never checked for the other two.
 #
-# The two tools deliberately NOT here, because a grant we do not need is a grant we should not take:
+# The four tools deliberately NOT here, because a grant we do not need is a grant we should not take:
 #   entwurf_inbox_read   — native-push has no inbox to drain. An agy citizen has no meta-mailbox
 #                          directory at all (measured), so granting it would pre-approve a rail this
 #                          backend does not have.
 #   entwurf_register_native — explicit/manual fallback, not the normal birth path (DELIVERY.md):
 #                          agy births automatically from PreInvocation. Auto-approving a registration
 #                          verb the normal path never calls is exactly the excess this list avoids.
+#   entwurf_fresh_call / entwurf_resume_call — both launch into the CALLER's own tmux session and
+#                          refuse without a pane anchor. An agy conversation is not a tmux client,
+#                          so these are not on its normal path either; the count moved from two to
+#                          four when 0.14 shipped the mux verbs, and the granted set did not.
 ALLOW_RULES = tuple(f"mcp({SERVER_KEY}/{tool})" for tool in ("entwurf_v2", "entwurf_peers", "entwurf_self"))
 # Rules that MATCH one of our tools: its exact grant, the server-wide rule, and the action wildcard.
 # Membership here is a statement about agy's matcher, not about which list the rule sits in — the

@@ -223,6 +223,29 @@ async function main(): Promise<void> {
 		!tools.some((t) => ["entwurf", "entwurf_resume", "entwurf_send"].includes(String(t?.name))),
 	);
 
+	// G1f — the public surface is an EXACT set, judged last so the named assertions above
+	// keep their own diagnosis. Every check before this one is existential: each names one
+	// verb it cares about, so a verb nobody named could be dropped (entwurf_fresh_call was
+	// exactly that) or an undecided one added, with the gate still green. "A narrow tool
+	// surface is discipline" (AGENTS North Star) is a statement about the WHOLE set, and
+	// only equality can carry it. The expected list is written here rather than derived
+	// from the server: an oracle computed from the subject proves nothing.
+	const publicSurface = tools.map((t) => String(t?.name)).sort();
+	const expectedSurface = [
+		"entwurf_fresh_call",
+		"entwurf_inbox_read",
+		"entwurf_peers",
+		"entwurf_register_native",
+		"entwurf_resume_call",
+		"entwurf_self",
+		"entwurf_v2",
+	];
+	ok(
+		"[QK:BRIDGEBOOT-PUBLIC-SURFACE-EXACT-SET] G1f: the runtime tools/list surface is EXACTLY the seven shipped garden verbs — no missing verb, no undecided extra, no duplicate",
+		publicSurface.length === expectedSurface.length && expectedSurface.every((n, i) => publicSurface[i] === n),
+		`--- want ---\n${expectedSurface.join(",")}\n--- got ---\n${publicSurface.join(",")}`,
+	);
+
 	console.log(`\ncheck-entwurf-bridge-boot: ${passed} checks passed`);
 }
 
