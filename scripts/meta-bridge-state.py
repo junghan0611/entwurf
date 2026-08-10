@@ -74,7 +74,6 @@ MANAGED_SETTINGS_SCALARS: list[tuple[str, list[str], Any]] = [
     ("promptSuggestionEnabled", ["promptSuggestionEnabled"], False),
     ("awaySummaryEnabled", ["awaySummaryEnabled"], False),
     ("autoMemoryEnabled", ["autoMemoryEnabled"], False),
-    ("skipDangerousModePermissionPrompt", ["skipDangerousModePermissionPrompt"], True),
     ("verbose", ["verbose"], False),
     ("autoCompactEnabled", ["autoCompactEnabled"], False),
     ("showTurnDuration", ["showTurnDuration"], False),
@@ -83,6 +82,19 @@ MANAGED_SETTINGS_SCALARS: list[tuple[str, list[str], Any]] = [
     ("enableWorkflows", ["enableWorkflows"], False),
     ("workflowKeywordTriggerEnabled", ["workflowKeywordTriggerEnabled"], False),
 ]
+
+# Keys entwurf used to own but now returns to the operator. An old install-state
+# entry is the only authority to undo our prior write; a bare matching value is
+# not provenance and is never changed. apply() consumes each proven old entry
+# exactly once, then uninstall can no longer restore over the operator's choice.
+RETIRED_SETTINGS_SCALARS: list[tuple[str, list[str], Any]] = [
+    ("skipDangerousModePermissionPrompt", ["skipDangerousModePermissionPrompt"], True),
+]
+
+_managed_scalar_names = {name for name, _path, _desired in MANAGED_SETTINGS_SCALARS}
+_retired_scalar_names = {name for name, _path, _last in RETIRED_SETTINGS_SCALARS}
+if overlap := _managed_scalar_names & _retired_scalar_names:
+    raise RuntimeError(f"settings scalar cannot be both managed and retired: {sorted(overlap)}")
 
 
 class StateError(RuntimeError):
@@ -391,6 +403,9 @@ def apply(repo: Path, asm: Path) -> None:
     if not isinstance(root, dict):
         die(f"{claude_root_config_path()} root must be a JSON object")
 
+    for name, path_, last_managed_value in RETIRED_SETTINGS_SCALARS:
+        relinquish_retired_scalar(state, settings, name, path_, last_managed_value)
+
     set_nested(settings, ["enabledPlugins", PLUGIN_REF], True)
     set_nested(settings, ["extraKnownMarketplaces", MARKETPLACE], desired_marketplace(asm))
     for path_, desired in [(["permissions", "allow"], PERMISSION_ALLOW), (["permissions", "deny"], PERMISSION_DENY)]:
@@ -444,6 +459,53 @@ def restore_entry(obj: dict[str, Any], entry: dict[str, Any]) -> None:
             delete_nested(obj, path)
         return
     die(f"unknown state entry kind: {kind}")
+
+
+def settings_state_keys(state: dict[str, Any]) -> dict[str, Any]:
+    """The settings key ledger, or a loud failure.
+
+    `load_state` validates only the envelope (schemaVersion/owner), so a consumer
+    that indexes straight into files.settings.keys turns a corrupt state file into
+    a bare KeyError traceback instead of an operator diagnostic. Ownership
+    decisions read this ledger, so an unreadable one must stop before any write.
+    """
+    files = state.get("files")
+    entry = files.get("settings") if isinstance(files, dict) else None
+    keys = entry.get("keys") if isinstance(entry, dict) else None
+    if not isinstance(keys, dict):
+        die(f"install state {state_path()} has no files.settings.keys ledger; re-run install-meta-bridge")
+    return keys
+
+
+def relinquish_retired_scalar(
+    state: dict[str, Any], settings: dict[str, Any], name: str, path: list[str], last_managed_value: Any
+) -> None:
+    """Return one formerly managed scalar to operator ownership.
+
+    Only a preserved install-state entry proves entwurf wrote this path. If the
+    current value still has the exact JSON scalar type+value we last managed,
+    restore the snapshot. A changed or absent current value is already the
+    operator's and stays untouched. Malformed provenance fails before any file
+    write; silently discarding it would make a still-dangerous value look clean.
+    """
+    keys = settings_state_keys(state)
+    entry = keys.get(name)
+    if entry is None:
+        return
+    if not isinstance(entry, dict) or entry.get("kind") != "scalar" or entry.get("path") != path:
+        die(f"retired scalar state entry {name} is malformed; refusing to discard ownership evidence")
+    original = entry.get("original")
+    if (
+        not isinstance(original, dict)
+        or set(original) != {"existed", "value"}
+        or type(original.get("existed")) is not bool
+    ):
+        die(f"retired scalar state entry {name} has malformed original; refusing to guess")
+
+    existed, value = get_nested(settings, path)
+    if existed and type(value) is type(last_managed_value) and value == last_managed_value:
+        restore_entry(settings, entry)
+    keys.pop(name)
 
 
 def preflight_uninstall() -> None:
@@ -536,6 +598,18 @@ def check(repo: Path, asm: Path) -> None:
         if recorded_asm
         else desired_marketplace(asm)
     )
+    state_settings_keys = settings_state_keys(state)
+    for name, path_, last_managed_value in RETIRED_SETTINGS_SCALARS:
+        if name in state_settings_keys:
+            failures.append(f"install-state still owns retired scalar {name}; re-run install-meta-bridge to relinquish it")
+            continue
+        existed, value = get_nested(settings, path_)
+        if existed and type(value) is type(last_managed_value) and value == last_managed_value:
+            print(
+                f"NOTE: settings {name}={json.dumps(last_managed_value)} is operator-owned; "
+                f"entwurf no longer suppresses or restores this warning choice"
+            )
+
     checks = [
         (["enabledPlugins", PLUGIN_REF], True, "enabled plugin"),
         (["extraKnownMarketplaces", MARKETPLACE], marketplace_expected, "known marketplace"),

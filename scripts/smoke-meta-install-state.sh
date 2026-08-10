@@ -6,6 +6,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 export REPO
+export PYTHONDONTWRITEBYTECODE=1
 STATE="$REPO/scripts/meta-bridge-state.py"
 STORE_DOCTOR="$REPO/scripts/meta-bridge-store-doctor.ts"
 # shellcheck source=scripts/meta-bridge-hook-log.sh
@@ -192,6 +193,136 @@ JSON
 
 py() { python3 "$STATE" "$@" --repo "$REPO" --asm "$ASM"; }
 
+# #71 retirement cells: drive the production leaf directly so JSON scalar type,
+# malformed provenance and one-shot convergence cannot hide inside the larger
+# install fixture below. Three cells carry [QK:] claims backed by exact-once
+# mutants in scripts/mutants/meta-retire.json; each prints its token on the
+# FAILURE line, because signatureOnFailureLine ignores any line starting with
+# `ok`. Cells keep running after a failure so one planted defect reddens exactly
+# its own claim instead of masking the ones behind it.
+if python3 - "$STATE" <<'PY'
+import copy, importlib.util, sys
+
+spec = importlib.util.spec_from_file_location("meta_bridge_state", sys.argv[1])
+assert spec and spec.loader
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+NAME = "skipDangerousModePermissionPrompt"
+PATH = [NAME]
+MISSING = object()
+
+def entry(existed, value):
+    return {"kind": "scalar", "path": PATH, "original": {"existed": existed, "value": value}}
+
+def fixture(current=MISSING, old_entry=MISSING):
+    settings = {} if current is MISSING else {NAME: current}
+    keys = {} if old_entry is MISSING else {NAME: copy.deepcopy(old_entry)}
+    state = {"files": {"settings": {"keys": keys}}}
+    return state, settings
+
+def run(current=MISSING, old_entry=MISSING):
+    state, settings = fixture(current, old_entry)
+    m.relinquish_retired_scalar(state, settings, NAME, PATH, True)
+    return state, settings
+
+failed = 0
+
+def cell(sig, label, fn):
+    global failed
+    text = f"{sig} {label}".strip()
+    try:
+        fn()
+    except Exception as exc:
+        print(f"  FAIL  {text}: {exc!r}")
+        failed = 1
+        return
+    print(f"  ok    {text}")
+
+def compare_type_cells():
+    assert NAME not in run(True, entry(False, None))[1]
+    assert run(True, entry(True, False))[1][NAME] is False
+    assert run(True, entry(True, True))[1][NAME] is True
+    assert run(False, entry(True, False))[1][NAME] is False
+    assert NAME not in run(MISSING, entry(True, False))[1]
+    value = run(1, entry(True, False))[1][NAME]
+    assert type(value) is int and value == 1
+
+cell(
+    "[QK:META-RETIRE-COMPARE-TYPE]",
+    "only an exact bool true with proven provenance is restored; 1 is not true",
+    compare_type_cells,
+)
+
+def malformed_cells():
+    for bad_entry in [
+        {"kind": "map-entry", "path": PATH, "original": {"existed": False, "value": None}},
+        {"kind": "scalar", "path": PATH, "original": {"existed": "no", "value": None}},
+    ]:
+        state, settings = fixture(True, bad_entry)
+        before = copy.deepcopy((state, settings))
+        try:
+            m.relinquish_retired_scalar(state, settings, NAME, PATH, True)
+        except m.StateError:
+            pass
+        else:
+            raise AssertionError("malformed retired provenance was accepted")
+        assert (state, settings) == before
+
+cell(
+    "[QK:META-RETIRE-MALFORMED-SILENT]",
+    "malformed provenance fails loud and mutates neither settings nor state",
+    malformed_cells,
+)
+
+def fresh_cells():
+    for current in [True, False, 1, MISSING]:
+        state, settings = run(current)
+        expected = {} if current is MISSING else {NAME: current}
+        assert settings == expected and NAME not in state["files"]["settings"]["keys"]
+
+cell(
+    "[QK:META-RETIRE-FRESH-TOUCH]",
+    "a provenance-less value is the operator's and is never touched",
+    fresh_cells,
+)
+
+def one_shot_cells():
+    state, settings = fixture(True, entry(True, False))
+    m.relinquish_retired_scalar(state, settings, NAME, PATH, True)
+    assert settings[NAME] is False and NAME not in state["files"]["settings"]["keys"]
+    before = copy.deepcopy((state, settings))
+    m.relinquish_retired_scalar(state, settings, NAME, PATH, True)
+    assert (state, settings) == before
+
+# Recommended, not claimed: one-shot convergence and the disjoint-set guard ride
+# along as ordinary cells so the proof budget stays at the three claims above.
+cell("", "relinquishment consumes the entry once, so a re-run cannot restore again", one_shot_cells)
+
+def structural_cells():
+    assert not m._managed_scalar_names & m._retired_scalar_names
+    # settings_state_keys is the sole reader of the ownership ledger, and
+    # load_state validates only the envelope. A corrupt files/settings/keys shape
+    # must stop with an operator diagnostic BEFORE any write — never a bare
+    # KeyError raised from inside apply(), and never a silent pass that would let
+    # relinquishment reason about ownership it cannot actually read.
+    for broken in [{}, {"files": {}}, {"files": {"settings": {}}}, {"files": {"settings": {"keys": []}}}]:
+        settings = {NAME: True}
+        before = copy.deepcopy((broken, settings))
+        try:
+            m.relinquish_retired_scalar(broken, settings, NAME, PATH, True)
+        except m.StateError:
+            pass
+        else:
+            raise AssertionError(f"corrupt state ledger accepted: {broken!r}")
+        assert (broken, settings) == before
+
+cell("", "retired/managed sets stay disjoint and a corrupt key ledger fails closed", structural_cells)
+sys.exit(failed)
+PY
+then ok "#71 retirement leaf: provenance, bool strictness, malformed refusal, one-shot convergence"
+else bad "#71 retirement leaf cells failed (traceback above)"
+fi
+
 DEV_STATUSLINE="$(python3 "$STATE" desired-statusline --repo "$REPO" | python3 -c 'import json,sys; print(json.load(sys.stdin)["command"])')"
 if [ "$DEV_STATUSLINE" = "$REPO/scripts/meta-bridge-statusline.sh" ]; then ok "dev statusLine pins the checkout script"; else bad "dev statusLine command drifted: $DEV_STATUSLINE"; fi
 FAKE_INSTALLED_REPO="$TMP/npmroot/node_modules/@junghanacs/entwurf"
@@ -212,10 +343,26 @@ assert s['files']['settings']['keys']['env.DISABLE_AUTOCOMPACT']['original']['va
 assert s['files']['settings']['keys']['statusLine']['original']['value']['command'] == '/old/user/statusline.sh'
 assert s['files']['settings']['keys']['promptSuggestionEnabled']['original']['value'] is True
 assert s['files']['settings']['keys']['autoCompactEnabled']['original']['existed'] is False
+assert 'skipDangerousModePermissionPrompt' not in s['files']['settings']['keys']
 assert s['files']['claudeRoot']['keys']['mcpServers.entwurf-bridge']['original']['value']['command'] == 'old'
 PY
-then ok "state captures original scalar/map values and is mode 0600"; else bad "state did not capture original values / mode 0600"; fi
+then ok "state captures original scalar/map values, excludes the retired scalar, and is mode 0600"; else bad "state did not capture original values / retirement / mode 0600"; fi
 
+# Simulate an upgrade from 0.14.0: the old state proves entwurf changed false→true.
+# New apply must restore false and consume that ownership exactly once.
+python3 - <<'PY'
+import json, os
+cfg=os.environ['CLAUDE_CONFIG_DIR']
+sp=cfg + '/settings.json'; stp=cfg + '/entwurf.install-state.json'
+settings=json.load(open(sp)); state=json.load(open(stp))
+settings['skipDangerousModePermissionPrompt']=True
+state['files']['settings']['keys']['skipDangerousModePermissionPrompt']={
+  'kind':'scalar', 'path':['skipDangerousModePermissionPrompt'],
+  'original':{'existed':True, 'value':False}
+}
+json.dump(settings, open(sp,'w'), indent=2); open(sp,'a').write('\n')
+json.dump(state, open(stp,'w'), indent=2); open(stp,'a').write('\n')
+PY
 py apply >/dev/null
 if python3 - <<'PY'
 import json, os
@@ -231,7 +378,9 @@ assert settings['env']['KEEP_ME'] == 'yes'
 assert settings['statusLine']['command'] == os.environ['REPO'] + '/scripts/meta-bridge-statusline.sh'
 for key in ['promptSuggestionEnabled','awaySummaryEnabled','autoMemoryEnabled','verbose','autoCompactEnabled','showTurnDuration','terminalProgressBarEnabled','useAutoModeDuringPlan','enableWorkflows','workflowKeywordTriggerEnabled']:
     assert settings[key] is False, key
-assert settings['skipDangerousModePermissionPrompt'] is True
+assert settings['skipDangerousModePermissionPrompt'] is False
+state=json.load(open(cfg + '/entwurf.install-state.json'))
+assert 'skipDangerousModePermissionPrompt' not in state['files']['settings']['keys']
 for item in ['Bash','Read','Write','Edit','Grep','Glob','WebFetch','WebSearch','Skill','mcp__entwurf-bridge__*']:
     assert item in settings['permissions']['allow'], item
 assert settings['permissions']['allow'].count('Read') == 1
@@ -249,7 +398,24 @@ then ok "apply installs managed keyset without clobbering unrelated keys"; else 
 # (agent-config merge, hand edit) overwrites a pi-owned key, check must fail loud
 # AND name the drifted key so doctor can surface which one. Adversarial flips
 # below; restore with apply afterward so the later cases see a clean keyset.
-if py check >/dev/null 2>&1; then ok "survival check passes on a freshly applied keyset"; else bad "survival check failed right after apply"; fi
+if py check >/dev/null 2>&1; then ok "survival check passes after relinquishing the retired scalar"; else bad "survival check failed right after retirement apply"; fi
+MANAGED_JSON="$(py managed-keys)"
+if printf '%s' "$MANAGED_JSON" | grep -q 'skipDangerousModePermissionPrompt'; then bad "managed-keys still claims the retired operator key"; else ok "managed-keys returns skipDangerousModePermissionPrompt to the operator"; fi
+# A provenance-less true cannot be changed safely, but doctor/check must make it visible.
+python3 - <<'PY'
+import json, os
+p=os.environ['CLAUDE_CONFIG_DIR'] + '/settings.json'
+d=json.load(open(p)); d['skipDangerousModePermissionPrompt']=True
+json.dump(d, open(p,'w'), indent=2); open(p,'a').write('\n')
+PY
+RETIRED_NOTE="$(py check)"
+if printf '%s' "$RETIRED_NOTE" | grep -q 'operator-owned'; then ok "check advises on a provenance-less true without claiming ownership"; else bad "check hid the provenance-less retired true"; fi
+python3 - <<'PY'
+import json, os
+p=os.environ['CLAUDE_CONFIG_DIR'] + '/settings.json'
+d=json.load(open(p)); d['skipDangerousModePermissionPrompt']=False
+json.dump(d, open(p,'w'), indent=2); open(p,'a').write('\n')
+PY
 SURVIVAL_SNAP="$TMP/settings-survival-snapshot.json"
 cp "$CLAUDE_CONFIG_DIR/settings.json" "$SURVIVAL_SNAP"  # exact restore point (array-replace below would drop user items)
 python3 - <<'PY'

@@ -1,0 +1,47 @@
+{
+	"schemaVersion": 1,
+	"lane": "meta-retire",
+	"mutants": [
+		{
+			"claim": "META-RETIRE-COMPARE-TYPE",
+			"title": "comparing the current value without its JSON scalar type lets a truthy 1 pass as the true entwurf wrote, so relinquishment overwrites a value that was never ours (#71)",
+			"subject": "scripts/meta-bridge-state.py",
+			"find": [
+				"    existed, value = get_nested(settings, path)",
+				"    if existed and type(value) is type(last_managed_value) and value == last_managed_value:"
+			],
+			"replace": ["    existed, value = get_nested(settings, path)", "    if existed and value == last_managed_value:"],
+			"gate": ["bash", "run.sh", "smoke-meta-install-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:META-RETIRE-COMPARE-TYPE]",
+			"signatureSource": "scripts/smoke-meta-install-state.sh"
+		},
+		{
+			"claim": "META-RETIRE-MALFORMED-SILENT",
+			"title": "skipping a malformed retired entry instead of failing discards the only evidence that entwurf owns the key, leaving a still-dangerous value looking operator-clean (#71)",
+			"subject": "scripts/meta-bridge-state.py",
+			"find": [
+				"        die(f\"retired scalar state entry {name} is malformed; refusing to discard ownership evidence\")"
+			],
+			"replace": ["        return"],
+			"gate": ["bash", "run.sh", "smoke-meta-install-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:META-RETIRE-MALFORMED-SILENT]",
+			"signatureSource": "scripts/smoke-meta-install-state.sh"
+		},
+		{
+			"claim": "META-RETIRE-FRESH-TOUCH",
+			"title": "synthesising provenance when install-state carries none lets relinquishment rewrite a value the operator set themselves, the exact ownership violation #71 exists to stop",
+			"subject": "scripts/meta-bridge-state.py",
+			"find": ["    if entry is None:", "        return"],
+			"replace": [
+				"    if entry is None:",
+				"        entry = {\"kind\": \"scalar\", \"path\": path, \"original\": {\"existed\": False, \"value\": None}}"
+			],
+			"gate": ["bash", "run.sh", "smoke-meta-install-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:META-RETIRE-FRESH-TOUCH]",
+			"signatureSource": "scripts/smoke-meta-install-state.sh"
+		}
+	]
+}

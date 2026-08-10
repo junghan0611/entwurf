@@ -807,6 +807,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"bridge-boot-resume": 3,
 		"meta-facts": 4,
 		"meta-identity": 4,
+		"meta-retire": 3,
 		"mux-boundary": 14,
 		"mux-fresh-call": 15,
 		"mux-launcher-fence": 7,
