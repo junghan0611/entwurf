@@ -1,10 +1,11 @@
 # mux launch rail — 먼저 같은 tmux session의 window를 다룬다
 
-> **Status (2026-08-05): T0-b · T1-a 완료, 그 위에 fresh-call composition이 섰다.**
+> **Status (2026-08-10): visible fresh-call과 same-id pi resume-call이 출하됐다.**
 > `pi-extensions/lib/mux-placement.ts`의 세 동사(placement leaf)와 `pi-extensions/lib/mux-launch.ts`의
-> visible launch는 그대로이고, `pi-extensions/lib/mux-fresh-call.ts`가 **그 둘 위의 유일한 public
-> product path**로 얹혔다 — placement leaf 자체는 launch와 fresh-call 양쪽에서 재사용된다.
-> `entwurf_fresh_call` public tool은 native pi와 MCP bridge 양쪽에 등록된다.
+> visible launch는 그대로이고, `mux-fresh-call.ts`와 `mux-resume-call.ts`가 그 위의 두 public lifecycle
+> composition으로 섰다 — placement leaf는 launch와 두 composition에서 재사용된다.
+> `entwurf_fresh_call`과 `entwurf_resume_call`은 native pi와 MCP bridge 양쪽에 등록된다. resume의 record
+> authority·lock·same-gid socket observation은 mux가 아니라 `entwurf-v2-visible-resume.ts`가 소유한다.
 > delivery(`entwurf_v2`)는 여전히 launch를 import하지 않으며 그 동작도 이전과 동일하다.
 > **§6이 서술한 형태의 T1-b(사전 주입 token → identity lookup)는 CLOSED다** — 미구현인 채로 §6-a의
 > callback correlation에 의해 superseded됐고, 새 증거와 GLG 재승인 없이 다시 열지 않는다.
@@ -34,11 +35,13 @@ tmux server
 
 ```text
 existing dispatch:   garden identity가 입력이다     — 출하됨 (entwurf_v2)
-fresh explicit call: garden identity가 출력이다     — 미구현 (T1)
+fresh explicit call: garden identity가 callback이다 — 출하됨 (`entwurf_fresh_call`)
+same-id pi resume: existing garden identity가 입력이다 — 출하됨 (`entwurf_resume_call`)
 ```
 
-2026-08-04의 다중 agent 협업은 mux 없이 성공했지만, 그 상대는 GLG가 미리 열어둔 existing citizen이었다.
-그것이 증명한 것은 existing-citizen dispatch이지 fresh explicit call이 아니다.
+2026-08-04의 다중 agent 협업은 mux 없이 existing-citizen dispatch만 증명했다. 그 뒤 0.14.0이 visible
+fresh creation과 same-id pi resume을 별도 lifecycle verb로 출하했다. 둘 중 어느 것도 delivery transport가
+아니며, launch receipt를 task 성공이나 socket observation으로 올려 읽지 않는다.
 
 ## 2. tmux 좌표
 

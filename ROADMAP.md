@@ -7,23 +7,23 @@
 
 ---
 
-## 현재 — 0.13.1 shipped; #47 mux launch rail
+## 현재 — 0.14.0 shipped; visible lifecycle + manual issue sweeper
 
 이 repo는 **entwurf-core(v2 garden-citizen dispatch) + native-harness bridges + pi adapter + ACP plugin**이다.
-`v0.13.1`은 GitHub와 npm `latest`로 게시됐다. Claude mailbox, pi control-socket,
+`v0.14.0`은 GitHub와 npm `latest`로 게시됐다. Claude mailbox, pi control-socket,
 Antigravity native-push가 한 garden-id dispatch 표면으로 출하됐고, ACP plugin은 Claude와 Cortex를 pi host
-안에서 연결한다.
+안에서 연결한다. 0.14.0은 hidden background resume을 철회하고, visible fresh creation과 same-id pi resume을
+각각 `entwurf_fresh_call` / `entwurf_resume_call`로 분리했다. 검증은 ≤60s core와 frozen-candidate full floor로
+계층화했다.
 
 **2026-08-01~02 축 전환(GLG 지시).** pi가 공식 provider로 지원하는 Codex/Grok을 위해 native citizen이나
 ACP backend를 중복 구현하지 않는다. #56 Codex native lane은 닫혔고, Codex/Grok 탐구 브랜치는 main 밖에
 격리한다. 거기서 얻은 native/ACP rail 방법론은 필요할 때만 현재 증거로 다시 세운다.
 
-현재 우선순위는 **#47 mux launch rail**이다. 목적은 하네스 수를 늘리는 것이 아니라 새 sibling runtime을
-live/visible window로 열 수 있는 바닥을 세우는 것이다. 첫 단계는 launch profile이 아니다. caller가 현재
-어느 tmux server/session/window/pane에 있는지 읽고, **그 같은 operator session에 window를 append하는 raw
-시퀀스**를 2026-08-04 T0-a에서 실측해 증명했다. 다음은 그 세 동작을 T0-b production shape로 옮기는 것이다.
-record birth·garden identity·liveness·delivery는 아직 연결하지 않으며 mux를 새 v2 delivery transport로
-만들지 않는다. 상세 경계는 `docs/mux-launch-rail.md`, 실행 순서는 active NEXT handoff가 진다.
+현재 우선순위는 **0.14.0 이후 live defect 정리**다. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
+계약만 둔다. 방향·철학·관찰 중인 가능성은 이 문서가 지며, 재현 가능한 결손이 되면 그때 증거와 다음 측정을
+갖고 이슈로 승격한다. 현재 제품 결손은 native 설정 소유권, no-transcript resume refusal, native-push reply
+handle, ACP Claude 장기 tool-loop 중 connection failure 축이다. 실행 순서는 active NEXT handoff가 진다.
 
 Pi는 가장 깊이 붙은 adapter지만 프로젝트의 본질은 여전히 **garden id로 호명 가능한 형제 세션 사이의 얇은
 dispatch substrate**다. provider 연결과 TUI/RPC/session lifecycle은 pi에 맡기고, entwurf는 부르는 법과
@@ -45,7 +45,7 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 |---|---|---|---|
 | **pi** | shipped | control-socket adapter. ACP plugin도 pi provider/model로 들어온다. delivery 안의 relaunch transport는 visible-first cut으로 회수됐고, 그 자리는 별도 verb `entwurf_resume_call`이 visible same-id resume으로 채웠다. | `pnpm check`, v2 matrix LIVE, release-gate MUST |
 | **Claude Code** | shipped | SessionStart meta-bridge → garden id + mailbox + trusted marker. Transcript를 가져오지 않는다. | meta-session gates, mailbox/deliverability, `doctor-meta-bridge` |
-| **ACP Claude** | shipped; **outbound callback verified, intermittent readiness risk still open** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. S1's integrated lifecycle added a real green sample: the ACP model's first action called `entwurf_v2`, returned the nonce callback, then the host survived visible same-id resume and recalled pre-close context. That proves the path works and settles the callback-tool dialect question; it does not erase the earlier intermittent bundled-MCP readiness observations recorded below, which still have no readiness contract. A fenced HOME cannot authenticate this backend, so the release MUST runs that cell under the operator's real HOME while keeping meta roots fixture and proving final real-root invariance. | ACP LIVE smokes + mux lifecycle release-gate MUST |
+| **ACP Claude** | shipped; **outbound callback verified, retained-child failure under investigation** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Integrated lifecycle proves callback, visible same-id resume and recall. Synthetic long-turn LIVE passes beyond 733s, but a real retained Sonnet tool-loop failed after four reuse turns with `ACP connection closed` (`20260730T194358-0061d2`), and GLG reports the same user-facing shape on hard workloads. The next proof must recover child exit/signal/stderr and classify the workload-shape gap without automatic replay. Earlier intermittent bundled-MCP readiness observations remain separately recorded below. | ACP LIVE smokes + mux lifecycle release-gate MUST + field report |
 | **Codex** | native probe archived; managed lane declined | direct/native delivery evidence는 방법론 기록으로 남지만, pi가 공식 GPT provider를 지원하므로 별도 native citizen/ACP backend를 출하하지 않는다. 일반 external MCP host로 명시 배선하는 것은 별개다. | DELIVERY.md raw probe / closed #56 |
 | **Antigravity (`agy`)** | shipped | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push; managed MCP/permission, statusline, hook adapters. | agy deterministic gates + doctors + 2026-07-13 live round trip |
 | **Cortex / governed ACP** | **landed (0.13.0)** — hvkiefer's PR #40 adapter transplanted with the CP0-audit revisions (dual-HOME overlay, mcp.json projection, per-turn set-model, 4-row curation) | current D1–D10 contract is `docs/acp-backend-rail.md` “Cortex Code audit”; deterministic gate `check-acp-cortex` + mutant lane `acp-cortex`; CP2 live smoke `smoke-acp-cortex-live` stays outside the claude-only release floor | PR #40 / #48 / `docs/acp-backend-rail.md` |
@@ -150,17 +150,16 @@ Sonnet에서 flaky라 한 번의 flake가 컷을 막으면 안 된다. 우회/�
 
 ### mux launch / fresh creation lane
 - **v1 removal — DONE (v2 core).** v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`), pi-native
-  `entwurf_send`, `/entwurf*` 명령은 모두 제거됐다. 현 MCP surface = `entwurf_v2` + `entwurf_peers` +
-  `entwurf_self` + `entwurf_inbox_read` + 기존 native conversation을 묶는 수동 fallback
-  `entwurf_register_native`.
-- **#47 mux launch — NOW, implementation zero.** 원하는 기본 UX는 기존 `entwurf` tmux session의 windows
-  `1,2` 옆에 `3`, 이어 `4`를 append해 같은 keybinding 축으로 오가는 것이다. 첫 generic `new-session` driver는
-  이 placement를 정하지 않은 잘못된 단위라 전부 폐기했다. 2026-08-04 T0-a가 raw tmux로 current placement →
-  same-session append → stable `$session/@window/%pane` → window-only cleanup을 실측해 증명했다. 다음은
-  그 세 동작만 placement controller로 옮기는 T0-b다. generic driver, harness profile, release wiring은 아직 없다.
-- **public fresh creation — tmux placement 실물 뒤.** creation은 새 delivery transport가 아니다. 어떤
-  runtime을 window에 열고 native lifecycle과 어떻게 join할지는 T0 뒤 별도 계약이다. quota, system load,
-  예상 작업량, 과거 담당자 같은 선택 신호는 substrate/driver에 미리 저장하지 않는다.
+  `entwurf_send`, `/entwurf*` 명령은 모두 제거됐다. 현 MCP surface는 정확히 7개다:
+  `entwurf_v2`, `entwurf_peers`, `entwurf_self`, `entwurf_inbox_read`, `entwurf_register_native`,
+  `entwurf_fresh_call`, `entwurf_resume_call`.
+- **visible mux lifecycle — SHIPPED.** tmux placement → fixed-runtime launch → callback-correlated fresh creation과
+  record-authoritative visible same-id pi resume이 0.14.0에 착지했다. mux는 window/pane placement만 소유하고,
+  garden identity·liveness·dispatch·lineage는 계속 entwurf가 소유한다. launch receipt는 runtime/task 성공이
+  아니며 resume의 launch와 socket observation도 합치지 않는다.
+- **driver optionality — deferred, not a current issue.** production은 tmux를 직접 호출하며 generic `DRIVERS`
+  seam이나 zmx backend는 없다. 구체적인 두 번째 driver 수요가 생기기 전에는 비교·추상화를 재개하지 않는다.
+  quota, system load, 예상 작업량, 과거 담당자 같은 선택 신호도 substrate/driver에 저장하지 않는다.
 
 ---
 
@@ -187,6 +186,21 @@ dispatch substrate + meta-bridge + ACP plugin을 한 몸으로 들고 간다.
 - **GC = 프로세스 자원 회수만, 데이터 삭제 절대 아님.** meta-record/transcript(denote-id 기억층) 보존.
 - **garden-id = authority, tmux = ephemeral.** 세션명=path(grouping), window 번호 renumber.
 - **Factory 작업 OUT.** worktree·merge-wall fan-out 없음 → 백엔드 자체 orchestrator로 위임.
+
+### Deferred questions — documents, not OPEN issues
+
+아래는 현재 실행 계약이 아니다. 묵혀 둔 tracker를 만들지 않으며, 실제 결손으로 재현될 때만 증거와 다음
+측정을 갖고 이슈로 승격한다.
+
+- 외부 native transcript는 참조만 한다. normalize·replay·fake pi session 합성은 금지한다.
+- D8 잔여는 empirical missed-delivery probe와 unread-mailbox heartbeat다. 현재 수준은 `DELIVERY.md`가 진다.
+- 1.0.0 demo gate는 render pipeline이 이 제품 층인지 먼저 판정한다. 아니라면 구현하지 않는다.
+- recent-activity adapter는 그것 없이는 불가능한 dispatch 결정을 먼저 이름 대야 한다.
+- core/plugin split은 due condition이 생기기 전까지 무기한 deferred다.
+- remote identity/resume은 의도적으로 fail-fast다. 부활 시 child cwd는 saved session header와 맞춘다.
+- 모델의 자기 capability 진술은 권위가 아니다. 실제 harness/tool schema와 `DELIVERY.md`가 진다.
+- `check-fresh-cut-gate` G-cell의 3초 collision seed는 setup miss를 제품 실패로 오판할 수 있다. 실제 발화하거나
+  이 축을 고치기로 결정할 때 seed 안착 증명 + `G SETUP MISS` 계약으로 승격한다.
 
 ---
 
@@ -604,8 +618,9 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
   소스 reference 동결.
 - **Gemini CLI(2026-06-18 deprecated):** Google AI Pro/Ultra·무료 tier 대상 종료 → Antigravity CLI 이관.
   repo는 Gemini 어댑터 코드를 **호환성용 잔존**, README는 더 이상 추천 setup 경로로 제시 안 함.
-- **Long-term/separate issues:** #11 remote SSH resume cwd(원격 entwurf identity는 의도적 fail-fast),
-  #10 broader ontology RFC, #8 ACP `entwurf_v2` message visibility UX, #2 pi-first context meter, L5 long soak.
+- **Long-term/separate coordinates:** #11 remote SSH resume cwd(원격 entwurf identity는 의도적 fail-fast),
+  #10 broader ontology RFC, #8 ACP `entwurf_v2` message visibility UX, #2 pi-first context meter, L5 long soak. 이 좌표들은
+  OPEN backlog가 아니다. 현재 실행 가능한 결손으로 재현될 때만 새 이슈가 된다.
 
 ---
 

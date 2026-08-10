@@ -101,6 +101,17 @@ A `--entwurf-control` pi session is a citizen for the same reason a native bridg
 - Sender envelope: `{ sessionId, agentId, cwd, timestamp, origin?, replyable? }`.
 - Human-opened and spawned/resumed siblings use the same addressing and messaging semantics.
 
+## Issue queue — a manual sweeper, not a backlog
+
+- OPEN issues are live contracts only, capped at five. A sixth means something closes first; the cap does not bend.
+- A slot is earned by a current defect or executable contract, not by importance, age, or possible future value.
+- Direction, philosophy, frozen invariants and observations without a current action live in `ROADMAP.md`, durable docs, or closed history.
+- Nothing stays open "in case." If a closed problem recurs, it returns as a new issue carrying the new evidence.
+- Anything whose only value is knowing it gets moved to the document that owns it, then closed.
+- A new issue brings the best available observation plus an executable next measurement. Recovering a missing signature may be the first acceptance; an idea with neither evidence nor a next measurement is not an issue.
+- No collection points, umbrella trackers, or fallout buckets. Merge issues only when they share one cause and one acceptance.
+- Sweep manually after a release and before opening an issue. Solved work closes at its durable SHA; it does not wait for the next release.
+
 ## Verification
 
 Two axes are required: deterministic/package gates and opt-in LIVE evidence.
