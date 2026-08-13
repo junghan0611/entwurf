@@ -4,6 +4,35 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.14.1 — 2026-08-13
+
+This patch fills the cross-repository creation gap in the visible mux lifecycle shipped in 0.14.0, so one operator tmux session can form siblings in multiple project roots without borrowing a dormant session as a cwd carrier.
+
+### Added
+
+- **`entwurf_fresh_call` accepts one optional literal absolute `cwd` for cross-repository siblings.** Omitting it (or passing `""`) keeps the caller's current directory; Pi and Claude Code receive the selected directory through their existing visible launch path, and the launch receipt reports the requested value without claiming runtime acceptance.
+
+### Changed
+
+- **The lifecycle selection matrix now separates address, continuity, and project root.** Use `entwurf_v2` for an existing live citizen, `entwurf_resume_call` only for continuity with a dormant Pi citizen under its recorded cwd and garden id, and `entwurf_fresh_call` for a new sibling — omitting `cwd` for the caller's project or passing an absolute `cwd` for another repository. Resume is not a substitute for cross-repository fresh creation.
+
+### Fixed
+
+- **The Claude meta-bridge installer relinquishes its retired ownership of `skipDangerousModePermissionPrompt`.** Proven prior install state is restored once when the value is still exactly entwurf's former managed value; operator-changed or unproven values remain untouched, malformed ownership evidence fails loud, and later uninstall cannot overwrite the returned choice.
+- **The cross-harness chain LIVE smoke no longer inherits the runner's `PI_SESSION_ID` / `PI_AGENT_ID`.** When release-gate (or any pi `--entwurf-control` parent) spawned hop A, the MCP bridge preferred those carriers over A's SessionStart meta-sender marker and stamped the runner's garden id on hop 1 — payload still traversed, identity assertion failed. Child env now strips the pi identity carriers so the Claude hop's own marker is authoritative.
+
+### Verification
+
+- Release-gate candidate: the in-gate `pnpm run check:full` exited 0 in 208s, and `./run.sh check-gate-qualification` killed **173/173** committed mutants.
+- `LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.14.1.j2eAVu --cut` — **MUST PASS=20 FAIL=0 SKIP=0**, **BEHAVIOR PASS=1 FAIL=0 SKIP=0**, `cut: OK`. Full log: `/tmp/entwurf-release-gate-0.14.1.j2eAVu/release-gate.log` (SHA-256 `bdd4d0b332d08c24210e9f56382b5898c0544fb6dffbf70287dade2f00e67c36`).
+- Pre-tag installed-consumer diagnostics also passed: `./run.sh check-pack-install` installed the 0.14.1 tarball and proved the seven-tool boot plus physical delivery; `ENTWURF_REQUIRE_DOCKER=1 ./run.sh check-install-container` reached `container-consumer: PASS` in a checkout-invisible non-root Node 24 consumer (throwaway candidate SHA-256 `48778d33d1088af8078fe6b59ad932fb34ac8564e80bef84c34b25bab2bd5ef6`). These are diagnostic pack-once artifacts, not the preserved release candidate.
+- On the source-owned operator host, `./run.sh install-meta-bridge` completed the retired-warning relinquishment and `./run.sh doctor-meta-bridge` passed with live MCP owner join, physical delivery, and writer parity. Exact prepared-HEAD CI and acceptance of one preserved immutable candidate remain `make` responsibilities.
+
+### Notes
+
+- #76 (subscription-first refusal of `openrouter/*` sibling models), #60, #72, and #75 remain outside this patch.
+- The chain-smoke repair only scrubs ambient pi identity carriers from its children. The MCP bridge's existing pi-carrier precedence is unchanged; any general nested-runner product guard is a separate contract, not part of 0.14.1 or #76.
+
 ## 0.14.0 — 2026-08-08
 
 Two arcs meet in this release. The product arc makes sibling sessions **visible**: opening and resuming a garden citizen is now an explicit, observable act, and the hidden alternatives were removed rather than kept as compatibility surface. The verification arc keeps the product from being swallowed by its own test cost: the everyday gate now runs in under a minute while the release floor stays strict. Claude Code native + pi + the meta-record store remain the main rail; the ACP backends (Claude ACP, Cortex) are optional service adapters on top of it.

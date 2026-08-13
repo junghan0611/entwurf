@@ -1,6 +1,6 @@
 # mux launch rail — 먼저 같은 tmux session의 window를 다룬다
 
-> **Status (2026-08-10): visible fresh-call과 same-id pi resume-call이 출하됐다.**
+> **Status (2026-08-13): visible fresh-call과 same-id pi resume-call이 출하됐고, fresh-call의 optional literal absolute `cwd`도 #73으로 착지했다.**
 > `pi-extensions/lib/mux-placement.ts`의 세 동사(placement leaf)와 `pi-extensions/lib/mux-launch.ts`의
 > visible launch는 그대로이고, `mux-fresh-call.ts`와 `mux-resume-call.ts`가 그 위의 두 public lifecycle
 > composition으로 섰다 — placement leaf는 launch와 두 composition에서 재사용된다.
@@ -395,7 +395,7 @@ caller가 fresh token N을 민팅
 **Model은 ambient default가 아니라 explicit launch input이다 (2026-08-06 operator tour).** 첫 출하 shape는
 `{backend, task}`로 bare runtime을 열었고 실제 사용에서 Pi는 퇴역한 `gpt-5.5`, Claude Code는 의도와
 다른 Opus 5를 골랐다. 이것은 runtime 선택을 존중한 것이 아니라 caller의 선택을 버린 것이다. 그래서
-surface는 `{backend, model, task}`로 좁게 확장되고 composition은 shell 없이 runtime별 실측 CLI 방언으로 전달한다:
+surface는 `{backend, model, task}`로 좁게 확장됐고 composition은 shell 없이 runtime별 실측 CLI 방언으로 전달한다:
 Pi는 `--model <provider/model>` 두 argv token, Claude Code는 `--model=<id-or-alias>` 한 token이다. command/env carrier나 별도
 provider/settings knob는 여전히 없다(cwd는 아래 문단의 좁은 별도 입력이다). Launch receipt의 model은 **무엇을 요청했는지**만 증명하며 runtime이
 그 model로 turn을 완료했다는 증거는 callback 뒤 self-report/record 축에서 따로 얻는다.
@@ -403,7 +403,7 @@ provider/settings knob는 여전히 없다(cwd는 아래 문단의 좁은 별도
 **Cwd도 explicit launch input이다 (#73, 2026-08-13).** cross-repo fresh 상담이 target repo의 cwd를 얻으려고
 dormant record를 `entwurf_resume_call`로 되세우는 압력이 실측됐다(2026-08-10 incident) — resume은 continuity
 verb이지 placement 우회로가 아니다. 그래서 fresh surface는 `{backend, model, task, cwd?}`로 좁게 한 번 더
-확장된다. 규칙은 좁다: `undefined`와 정확한 `""`만 생략(오늘의 no-`-c` 동작 그대로)이고, 그 외는 **literal**
+확장됐다. 규칙은 좁다: `undefined`와 정확한 `""`만 생략(기존 no-`-c` 동작 그대로)이고, 그 외는 **literal**
 절대경로다 — trim도 realpath도 project-name resolution도 store/peers/record 조회도 없다. caller가 유일한
 cwd 출처다. 분류는 resume과 **공유하는 `classify-tmux-cwd.ts` leaf**가 지고(4개 reason 문자열 동일; measured
 tmux 3.6a 사실도 그 leaf에 있다), `-c`는 fresh 자신의 argv builder가 resume과 대칭인 token 위치(`-t` 뒤,

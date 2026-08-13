@@ -99,7 +99,7 @@ tool schema를 로드하지 않는다 — 호스트가 tool 정의를 거부하�
 receipt의 cwd는 **요청 echo**이지 pane 관측이 아니다. GLG가 **기존 살아 있는** target-repo
 citizen의 맥락을 요구한 경우에만 그 exact id로 `entwurf_v2`를 보낸다.
 
-### `fresh <backend> [model] <task>` / “새 형제 열어줘”
+### `fresh <backend> [model] <task> [--cwd <absolute-path>]` / “새 형제 열어줘”
 
 1. backend가 생략되면 문맥상 명확한 경우에만 선택한다. 불명확하면 `pi`와
    `claude-code` 중 무엇을 열지 한 번만 묻는다.
@@ -117,8 +117,8 @@ citizen의 맥락을 요구한 경우에만 그 exact id로 `entwurf_v2`를 보�
 
 4. task에 secret, token, credential, private payload를 넣지 않는다. model과 task는 같은 사용자
    프로세스가 볼 수 있는 launch argv에 실린다.
-5. `entwurf_fresh_call`을 `{backend, model, task}`(cross-repo면 `cwd` 포함)로 정확히 한 번 호출한다.
-   실패나 callback 지연을 이유로 자동 재시도하지 않는다.
+5. `entwurf_fresh_call`을 `{backend, model, task, cwd?}`로 정확히 한 번 호출한다. 같은 repo면 `cwd`를
+   생략하고, cross-repo면 위 절의 literal 절대경로를 넣는다. 실패나 callback 지연을 이유로 자동 재시도하지 않는다.
 6. receipt의 model은 runtime CLI에 요청한 값만 증명한다. 실제 선택/turn 완료 증거로 읽지 않는다.
 7. 반환값을 **launch receipt**로만 설명한다. window/pane과 nonce는 “창을 열도록
    tmux에 요청했다”는 증거이며 runtime 시작, 첫 turn, callback, task 완료 증거가 아니다.

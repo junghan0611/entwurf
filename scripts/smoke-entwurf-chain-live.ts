@@ -161,6 +161,14 @@ async function main(): Promise<void> {
 		ENTWURF_META_MAILBOX_DIR: mailboxDir,
 		ENTWURF_META_RECEIVERS_DIR: receiversDir,
 	};
+	// The MCP bridge prefers PI_SESSION_ID+PI_AGENT_ID over a meta-sender marker when both
+	// are present. A runner that is itself a pi --entwurf-control session (release-gate,
+	// an agent preparing a cut) would otherwise stamp every Claude hop with the RUNNER's
+	// garden id — hop 1 then fails "B saw A's real garden id" while the payload still
+	// traverses. Strip the carriers so A's SessionStart marker is the only authority.
+	const childEnv: NodeJS.ProcessEnv = { ...process.env, ...worldEnv };
+	delete childEnv.PI_SESSION_ID;
+	delete childEnv.PI_AGENT_ID;
 
 	const nonce = `ENTWURF-CHAIN-${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
 	console.error(`[smoke-entwurf-chain-live] repo:   ${REPO_ROOT}`);
@@ -194,7 +202,7 @@ async function main(): Promise<void> {
 		const c = spawn(
 			"pi",
 			[...REPO_EXTENSION_ARGS, "--entwurf-control", "--provider", acpProvider, "--model", acpModel, "--mode", "rpc"],
-			{ cwd: world, stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, ...worldEnv } },
+			{ cwd: world, stdio: ["pipe", "pipe", "pipe"], env: childEnv },
 		);
 		children.push(c);
 		c.stdout?.on("data", (b: Buffer) => {
@@ -215,7 +223,7 @@ async function main(): Promise<void> {
 		const b = spawn(
 			"pi",
 			[...REPO_EXTENSION_ARGS, "--entwurf-control", "--provider", gptProvider, "--model", gptModel, "--mode", "rpc"],
-			{ cwd: world, stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, ...worldEnv } },
+			{ cwd: world, stdio: ["pipe", "pipe", "pipe"], env: childEnv },
 		);
 		children.push(b);
 		b.stdout?.on("data", (x: Buffer) => {
@@ -265,7 +273,7 @@ async function main(): Promise<void> {
 			cwd: world,
 			encoding: "utf8",
 			timeout: CLAUDE_TURN_TIMEOUT_MS,
-			env: { ...process.env, ...worldEnv },
+			env: childEnv,
 		});
 		const claudeOut = `${claudeRun.stdout ?? ""}\n${claudeRun.stderr ?? ""}`;
 		ok("A's native Claude Code turn ran", claudeRun.status === 0);

@@ -10,9 +10,11 @@
 - [x] **3. durable carrier 정비** — `830226b` push; ROADMAP/AGENTS/NEXT/mux rail 현재화
 - [x] **4. manual issue sweep** — #72 생성 + 오래된 12건 redirect/close
 - [x] **5. #73 cross-repo fresh cwd** — main `ff46502` / feat `0059fe2`; LIVE scratch OK; issue CLOSED
-- [ ] **6. live defect train** ← CURRENT: #60, one contract at a time; #72 measurement · #76 provider-budget
+- [x] **6. 0.14.1 prepare** — version 0.14.1; release-gate MUST 20/0 cut OK (`j2eAVu`); Sol SHIP-AFTER-FIX docs; doctor PASS after install-meta-bridge; release-prep commit (no push)
+- [ ] **7. make/publish 0.14.1** ← CURRENT after prepare commit: exact-SHA CI → preserved candidate → tag
+- [ ] **8. live defect train** ← STEM after release: #60; #72 measurement · #76 provider-budget
 
-현재 좌표: OPEN 4 (#60 #72 #75 #76) · stem **#60** · 여유 slot 1
+현재 좌표: **0.14.1 prepared** · OPEN 4 · next authority = make
 
 # NOW — #60 native-push reply handle
 
@@ -31,6 +33,8 @@
 
 # RECENT
 
+- **2026-08-13:** 0.14.1 documentation prepare second pass in progress; install/upgrade/first-check, external MCP cwd,
+  mux-rail landed tense, skill syntax까지 대조. no version bump.
 - **2026-08-13:** #73 CLOSED on main `ff46502`. optional abs cwd on fresh-call; shared classify-tmux-cwd;
   Sol+Fable+Opus path; LIVE pane path matched scratch. Branch NEXT deleted. #76 opened (OpenRouter refuse).
 - **2026-08-10:** #73 field incident (resume-as-cwd-proxy). #71/#68 closed. manual sweeper on main.
