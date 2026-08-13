@@ -10,11 +10,12 @@
 - [x] **3. durable carrier 정비** — `830226b` push; ROADMAP/AGENTS/NEXT/mux rail 현재화
 - [x] **4. manual issue sweep** — #72 생성 + 오래된 12건 redirect/close
 - [x] **5. #73 cross-repo fresh cwd** — main `ff46502` / feat `0059fe2`; LIVE scratch OK; issue CLOSED
-- [x] **6. 0.14.1 prepare** — version 0.14.1; release-gate MUST 20/0 cut OK (`j2eAVu`); Sol SHIP-AFTER-FIX docs; doctor PASS after install-meta-bridge; release-prep commit (no push)
-- [ ] **7. make/publish 0.14.1** ← CURRENT after prepare commit: exact-SHA CI → preserved candidate → tag
-- [ ] **8. live defect train** ← STEM after release: #60; #72 measurement · #76 provider-budget
+- [x] **6. 0.14.1 prepare** — `6a1df33`; release-gate MUST 20/0 (`j2eAVu`); Sol SHIP-AFTER-FIX
+- [x] **7. make 0.14.1** — tag `v0.14.1`=`6a1df33`; CI run 31677847479 all success; preserved candidate accepted; GH release live
+- [ ] **8. publish 0.14.1** ← CURRENT: npm latest from preserved tgz only
+- [ ] **9. live defect train** ← STEM after publish: #60; #72 · #76
 
-현재 좌표: **0.14.1 prepared** · OPEN 4 · next authority = make
+현재 좌표: **make done · await publish** · OPEN 4
 
 # NOW — #60 native-push reply handle
 
