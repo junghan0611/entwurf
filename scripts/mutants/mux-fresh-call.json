@@ -78,14 +78,58 @@
 			"claim": "FRESHCALL-RECEIPT-WITHOUT-CORRELATION",
 			"title": "the launch receipt grows a sibling garden-id field, making an async correlation look like a synchronous return",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
-			"find": ["\tbackend: FreshCallBackend;\n\tmodel: string;\n\truntimePath: string;\n\tnonce: string;\n}"],
-			"replace": [
-				"\tbackend: FreshCallBackend;\n\tmodel: string;\n\truntimePath: string;\n\tnonce: string;\n\tgardenId?: string;\n}"
-			],
+			"find": ["\truntimePath: string;\n\tnonce: string;\n}"],
+			"replace": ["\truntimePath: string;\n\tnonce: string;\n\tgardenId?: string;\n}"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 120,
 			"signature": "[QK:FRESHCALL-RECEIPT-WITHOUT-CORRELATION]",
 			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CWD-ARGV",
+			"title": "the requested cwd stops reaching tmux, so a cross-repo fresh sibling silently opens in the CALLER's repo and the launch looks successful",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t...(cwd === undefined ? [] : [\"-c\", cwd]),\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CWD-ARGV]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CWD-REFUSED-PREMUTATION",
+			"title": "the pre-mutation cwd classification is ignored, so a relative/'#'/deleted/file path rides on toward tmux instead of refusing by name",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\tif (badCwd) return { ok: false, reason: badCwd };"],
+			"replace": ["\t\tvoid badCwd;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CWD-REFUSED-PREMUTATION]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CWD-RECEIPT-REQUESTED",
+			"title": "production freshCall stops assembling the requested cwd into its receipt, so the operator-visible answer silently loses the one placement fact the caller asked for",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t\t...(cwd === undefined ? {} : { cwd }),\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CWD-RECEIPT-REQUESTED]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-CWD-SURFACE-PARITY",
+			"title": "one surface drops the optional cwd from its schema, so cross-repo fresh works from pi and silently cannot exist from the MCP bridge",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\t\tcwd: z\n\t\t\t.string()\n\t\t\t.optional()\n\t\t\t.describe(\n\t\t\t\t\"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \\\"\\\" to start in this agent's own cwd. Taken exactly as given — no trim, no realpath, no project-name resolution; '#' is refused (tmux format expansion). The receipt echoes what was REQUESTED, never an observation.\",\n\t\t\t),\n"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:FRESHCALL-CWD-SURFACE-PARITY]",
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
 		},
 		{
 			"claim": "FRESHCALL-PI-SURFACE-IDENTITY",

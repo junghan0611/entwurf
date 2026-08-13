@@ -26,7 +26,8 @@
  *                       this read is the receipt.
  *   - entwurf_register_native — explicit/manual fallback binding an ALREADY-RUNNING native
  *                       conversation (antigravity) to a garden id. Never a spawn.
- *   - entwurf_fresh_call — open ONE fresh visible sibling in the operator's own tmux session;
+ *   - entwurf_fresh_call — open ONE fresh visible sibling in the operator's own tmux session,
+ *                       optionally at ONE literal requested cwd (cross-repo fresh, #73);
  *                       returns a LAUNCH receipt only, and the new address arrives later as the
  *                       sender envelope of the sibling's nonce callback.
  *   - entwurf_resume_call — reopen ONE DORMANT pi citizen under its OWN garden id in a visible
@@ -661,8 +662,10 @@ server.tool(
 		"else: it does NOT mean the runtime started, the first turn ran, or the task was delivered. Nothing polls " +
 		"for the callback; if it never arrives the window is visible and can be read directly. For EXISTING " +
 		"citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and " +
-		"is passed to the chosen runtime CLI (`provider/model` for pi; model id/alias for Claude Code); there are no " +
-		"arbitrary command/cwd/env knobs. Do not put secrets in the task — model and task argv are visible to " +
+		"is passed to the chosen runtime CLI (`provider/model` for pi; model id/alias for Claude Code). An optional " +
+		"cwd starts the sibling in ONE literal absolute existing directory (cross-repo fresh) — never pick resume " +
+		"for a dormant record's cwd; resume is continuity-only. Omitted/empty cwd means the caller's own directory. " +
+		"There are no arbitrary command/env knobs. Do not put secrets in the task — model and task argv are visible to " +
 		"same-user processes on this host. Requires that this agent itself runs " +
 		"inside tmux: without a pane anchor there is no session to open a sibling beside.",
 	{
@@ -690,8 +693,14 @@ server.tool(
 			.describe(
 				"What the sibling should do after it calls you back. Plain instructions; no secrets (see the tool description).",
 			),
+		cwd: z
+			.string()
+			.optional()
+			.describe(
+				"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \"\" to start in this agent's own cwd. Taken exactly as given — no trim, no realpath, no project-name resolution; '#' is refused (tmux format expansion). The receipt echoes what was REQUESTED, never an observation.",
+			),
 	},
-	async ({ backend, model, task }) => {
+	async ({ backend, model, task, cwd }) => {
 		let callerGardenId: string | null = null;
 		try {
 			const self = await buildAuthoritativeSelfEnvelope();
@@ -708,7 +717,7 @@ server.tool(
 			callerGardenId = null;
 		}
 		try {
-			const rendered = renderFreshCall(freshCall({ backend, model, task, callerGardenId }));
+			const rendered = renderFreshCall(freshCall({ backend, model, task, cwd, callerGardenId }));
 			return rendered.isError ? textErr(rendered.text) : textOk(rendered.text);
 		} catch (err) {
 			return textErr(`entwurf_fresh_call error: ${err instanceof Error ? err.message : String(err)}`);

@@ -21,9 +21,11 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
 	buildBackendArgs,
+	buildFreshCallArgs,
 	buildFreshCallPrompt,
 	FRESH_CALL_BACKENDS,
 	FRESH_CALL_CALLBACK_TOOL,
+	type FreshCallReceipt,
 	type FreshCallResult,
 	freshCall,
 	isSafeFreshCallModel,
@@ -31,6 +33,7 @@ import {
 	renderFreshCall,
 	TASK_MAX_CHARS,
 } from "../pi-extensions/lib/mux-fresh-call.ts";
+import type { Placement } from "../pi-extensions/lib/mux-placement.ts";
 
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -185,12 +188,129 @@ describe("refusals, before any mutation", () => {
 		"model-invalid",
 		"task-empty",
 		"task-too-long",
+		"cwd-not-absolute",
+		"cwd-format-token",
+		"cwd-missing",
+		"cwd-not-directory",
 		"no-tmux-context",
 	] as const)("refusal renders as a named reason a caller can act on (%s)", (reason) => {
 		const { text, isError } = renderFreshCall({ ok: false, reason });
 		expect(isError).toBe(true);
 		expect(text).toContain(reason);
 		expect(text).toContain("No window was opened");
+	});
+});
+
+describe("optional cwd — cross-repo fresh placement (#73)", () => {
+	const PLACEMENT: Placement = {
+		serverPid: "4242",
+		sessionId: "$0",
+		windowId: "@1",
+		windowIndex: "1",
+		paneId: "%1",
+		panePid: "4243",
+	};
+
+	/** Directory fixtures plus a hermetic executable runtime, because `buildFreshCallArgs`
+	 * proves the runtime is real before any argv exists. */
+	function withCwdFixture<T>(
+		run: (fx: { runtime: string; realDir: string; spaceDir: string; filePath: string; tmp: string }) => T,
+	): T {
+		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-fresh-call-cwd-"));
+		try {
+			const realDir = path.join(tmp, "project");
+			const spaceDir = path.join(tmp, "with space");
+			const filePath = path.join(tmp, "a-file");
+			fs.mkdirSync(realDir);
+			fs.mkdirSync(spaceDir);
+			fs.writeFileSync(filePath, "");
+			const binDir = path.join(tmp, "bin");
+			fs.mkdirSync(binDir);
+			const runtime = path.join(binDir, "pi");
+			fs.writeFileSync(runtime, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+			return run({ runtime, realDir, spaceDir, filePath, tmp });
+		} finally {
+			fs.rmSync(tmp, { recursive: true, force: true });
+		}
+	}
+
+	it("[QK:FRESHCALL-CWD-OMITTED-NO-CARRIER] an omitted cwd emits no -c, and the exact empty string means the SAME omit — the argv keeps the pre-#73 shape and the sibling starts in the caller's own directory", () => {
+		withCwdFixture(({ runtime }) => {
+			const args = buildFreshCallArgs(PLACEMENT, runtime, ["PROMPT"]);
+			expect(args).not.toContain("-c");
+			expect(buildFreshCallArgs(PLACEMENT, runtime, ["PROMPT"], undefined)).toEqual(args);
+		});
+		// "" is an omit, never a classification candidate: with a hermetic runtime on PATH and
+		// no tmux, the refusal must be the leaf's no-tmux-context, not cwd-not-absolute.
+		const result = withPiRuntime((env) =>
+			freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: GID, cwd: "" }, env),
+		);
+		expect(reasonOf(result)).toBe("no-tmux-context");
+	});
+
+	it("[QK:FRESHCALL-CWD-ARGV] a valid absolute directory reaches tmux as exactly one `-c <dir>` at the resume-symmetric token position — after the -t target, before -P -F", () => {
+		withCwdFixture(({ runtime, realDir }) => {
+			const args = buildFreshCallArgs(PLACEMENT, runtime, ["PROMPT"], realDir);
+			const c = args.indexOf("-c");
+			expect(args.slice(0, c)).toEqual(["new-window", "-d", "-a", "-t", "$0:{end}"]);
+			expect(args[c + 1]).toBe(realDir);
+			expect(args[c + 2]).toBe("-P");
+			expect(args.filter((a) => a === "-c")).toHaveLength(1);
+		});
+	});
+
+	it("[QK:FRESHCALL-CWD-REFUSED-PREMUTATION] all four cwd refusals are decided BEFORE any mutation — even with no tmux and no runtime on PATH the named reason is the cwd's, so no window can exist by the time it is answered", () => {
+		withCwdFixture(({ filePath, tmp }) => {
+			const call = (cwd: string): string =>
+				reasonOf(freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: GID, cwd }, {}));
+			expect(call("relative/project")).toBe("cwd-not-absolute");
+			expect(call(path.join(tmp, "#{pane_id}"))).toBe("cwd-format-token");
+			expect(call(path.join(tmp, "deleted-project"))).toBe("cwd-missing");
+			expect(call(filePath)).toBe("cwd-not-directory");
+		});
+	});
+
+	it("a cwd that classification refuses can never be built into argv either — the builder re-checks rather than trusting its caller", () => {
+		withCwdFixture(({ runtime, tmp }) => {
+			expect(() => buildFreshCallArgs(PLACEMENT, runtime, ["PROMPT"], path.join(tmp, "#x"))).toThrow(
+				/cwd-format-token/,
+			);
+		});
+	});
+
+	it("whitespace stays measured-OK through the fresh consumer: a directory with spaces arrives intact, while a lone space is a real UNTRIMMED value refused as not absolute — nothing repairs a path into a different directory", () => {
+		withCwdFixture(({ runtime, spaceDir }) => {
+			const args = buildFreshCallArgs(PLACEMENT, runtime, ["PROMPT"], spaceDir);
+			expect(args[args.indexOf("-c") + 1]).toBe(spaceDir);
+		});
+		expect(reasonOf(freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: GID, cwd: " " }, {}))).toBe(
+			"cwd-not-absolute",
+		);
+	});
+
+	it("[QK:FRESHCALL-CWD-RECEIPT-REQUESTED] the receipt's cwd is the REQUESTED directory only — production freshCall assembles it into the receipt conditionally, and the renderer prints it exactly when the caller supplied one, labeled as a request, never an observed pane path", () => {
+		// The production assembly half. freshCall cannot succeed without a real tmux (this repo
+		// keeps no fake one), so the wiring that carries the requested cwd into the receipt is a
+		// structural contract on the composition body — the renderer below would stay green on a
+		// fixture receipt even if production stopped supplying the field.
+		expect(MODULE_SRC).toContain("...(cwd === undefined ? {} : { cwd }),");
+		const receipt: FreshCallReceipt = {
+			serverPid: "1",
+			sessionId: "$1",
+			windowId: "@1",
+			windowIndex: "2",
+			paneId: "%1",
+			panePid: "3",
+			backend: "pi",
+			model: PI_MODEL,
+			runtimePath: "/usr/bin/pi",
+			nonce: NONCE,
+		};
+		const without = renderFreshCall({ ok: true, receipt });
+		expect(without.text).not.toMatch(/cwd:/);
+		const withCwd = renderFreshCall({ ok: true, receipt: { ...receipt, cwd: "/repos/other-project" } });
+		expect(withCwd.text).toContain("cwd:      /repos/other-project");
+		expect(withCwd.text).toMatch(/requested start directory — not an observation/);
 	});
 });
 
@@ -256,5 +376,12 @@ describe("module boundaries (structural contracts, source-text by design)", () =
 
 	it("fresh-call does not import entwurf delivery — it only names the callback tool in prose the sibling reads", () => {
 		expect(MODULE_SRC).not.toMatch(/from "\.\/entwurf-/);
+	});
+
+	it("[QK:FRESHCALL-CWD-CALLER-ONLY] the caller is the ONLY cwd authority — the module imports no store, peers surface or resume record to find a directory, never reads process.cwd, and classifies through the shared classify-tmux-cwd leaf", () => {
+		expect(MODULE_SRC).not.toMatch(
+			/meta-session|entwurf-peers|mux-resume-call|readAddressableMetaIdentity|process\.cwd/,
+		);
+		expect(MODULE_SRC).toMatch(/from "\.\/classify-tmux-cwd\.ts"/);
 	});
 });

@@ -39,9 +39,12 @@ transcript를 가진 garden citizen이다.
 
 호출된 tool schema가 worktree 문서보다 우선한다. 이 스킬은 현재 S1 계약에 맞는다.
 
-- `entwurf_fresh_call` backend는 정확히 `pi | claude-code`이고 model은 required다.
+- `entwurf_fresh_call` backend는 정확히 `pi | claude-code`이고 model은 required다. `cwd`는
+  선택 입력 하나: literal 절대경로(존재하는 디렉터리, `#`·trim·realpath 없음), 생략·`""`면
+  caller cwd에서 시작한다. cross-repo fresh 절 참조.
 - 기본 정책은 Pi=`openai-codex/gpt-5.6-terra`, Claude Code=`claude-sonnet-5`다.
 - GLG가 “entwurf 소넷”이라고 하면 Pi + `entwurf/claude-sonnet-5`다.
+- **Provider budget:** sibling launch에 OpenRouter를 쓰지 않는다. 이는 GLG 개인의 embedding/image 전용 제한 rail이다. Claude Code 구독, Pi의 승인된 GPT/Codex·xAI 구독, 또는 direct endpoint로 이미 설정된 회사 API만 쓴다. model label은 billing rail 증거가 아니다. 요청된 model이 현재 OpenRouter로 resolve되면 launch·test turn·login check·probe script를 하지 말고 그 한 사실만 즉시 보고한다. GLG가 이미 승인한 rail의 형제를 요청하면 credential/login을 다시 묻거나 찾지 말고 fresh-call을 바로 한 번 호출한다.
 - `entwurf_v2` intent는 정확히 `fire-and-forget` 하나다. 이 verb는 어떤 rail에서도 프로세스를 열지 않는다.
 - `entwurf_peers`는 사실 조회이며 생성·재개 명령이 아니다.
 - `entwurf_resume_call`은 입력이 **`target` 하나**다. record가 transcript·model·provider·cwd를
@@ -83,6 +86,19 @@ tool schema를 로드하지 않는다 — 호스트가 tool 정의를 거부하�
    있고, resume은 **transcript에 박힌 identity**에서 model을 읽는다. 둘이 갈리면
    transcript가 SSOT다.
 
+### cross-repo fresh / “nixos-config 담당자를 새로 불러 물어봐”
+
+이 말은 **target repo의 새 citizen**을 뜻한다. target repo cwd를 가진 dormant record를 찾아
+`entwurf_resume_call`로 여는 우회는 금지다 — resume은 같은 transcript의 연속성이 GLG에게
+명시적으로 필요할 때만 쓴다.
+
+제품 경로는 `entwurf_fresh_call`의 optional `cwd`다(#73): target repo의 **literal 절대경로**를
+`cwd`로 넣어 fresh citizen을 그 자리에서 연다. 규칙은 좁다 — 존재하는 디렉터리의 절대경로만,
+`#` 금지, trim/realpath/프로젝트명 resolve 없음, 생략·`""`는 caller cwd 시작. 경로는 caller가
+안다: record·peers에서 경로를 캐거나 이름으로 추측하지 않고, 불확실하면 GLG에게 묻는다.
+receipt의 cwd는 **요청 echo**이지 pane 관측이 아니다. GLG가 **기존 살아 있는** target-repo
+citizen의 맥락을 요구한 경우에만 그 exact id로 `entwurf_v2`를 보낸다.
+
 ### `fresh <backend> [model] <task>` / “새 형제 열어줘”
 
 1. backend가 생략되면 문맥상 명확한 경우에만 선택한다. 불명확하면 `pi`와
@@ -92,7 +108,7 @@ tool schema를 로드하지 않는다 — 호스트가 tool 정의를 거부하�
    - “sol/terra/luna” → Pi `openai-codex/gpt-5.6-<tier>`
    - “entwurf 소넷” → Pi `entwurf/claude-sonnet-5`
    - “클로드코드 소넷” → Claude Code `claude-sonnet-5`
-   - 그 밖의 model은 GLG가 말한 canonical id/alias를 그대로 쓴다. provider를 추측하지 않는다.
+   - 그 밖의 model은 GLG가 말한 canonical id/alias를 그대로 쓴다. 다만 model label로 provider를 추측하지 않는다: provider-budget 정책의 승인된 direct route인 것이 이미 알려진 경우에만 launch한다.
 3. task가 생략되면 다음처럼 작고 관측 가능한 기본 task를 쓴다.
 
    ```text
@@ -101,8 +117,8 @@ tool schema를 로드하지 않는다 — 호스트가 tool 정의를 거부하�
 
 4. task에 secret, token, credential, private payload를 넣지 않는다. model과 task는 같은 사용자
    프로세스가 볼 수 있는 launch argv에 실린다.
-5. `entwurf_fresh_call`을 `{backend, model, task}`로 정확히 한 번 호출한다. 실패나 callback 지연을 이유로 자동
-   재시도하지 않는다.
+5. `entwurf_fresh_call`을 `{backend, model, task}`(cross-repo면 `cwd` 포함)로 정확히 한 번 호출한다.
+   실패나 callback 지연을 이유로 자동 재시도하지 않는다.
 6. receipt의 model은 runtime CLI에 요청한 값만 증명한다. 실제 선택/turn 완료 증거로 읽지 않는다.
 7. 반환값을 **launch receipt**로만 설명한다. window/pane과 nonce는 “창을 열도록
    tmux에 요청했다”는 증거이며 runtime 시작, 첫 turn, callback, task 완료 증거가 아니다.
