@@ -25,9 +25,28 @@
  *      caller's own inbound surface. Merging them would claim knowledge this module cannot have.
  *   4. A launch with no callback is a REAL outcome, not an error to retry. No watcher, no poll,
  *      no timeout supervisor. The window is visible; the operator can look.
+ *
+ * ── The optional REQUESTED cwd (issue #73) ──
+ *
+ * A fresh sibling starts wherever the caller happens to be — unless the caller names ONE
+ * literal start directory. That input exists so a cross-repo fresh consultation never has to
+ * ride `entwurf_resume_call` for a dormant record's recorded cwd: resume stays a continuity
+ * verb, and placement pressure stays here. The rules are deliberately narrow:
+ *
+ *   - `undefined` and the exact empty string mean OMIT: no `-c` reaches tmux and the argv is
+ *     byte-identical to the pre-#73 shape. Anything else is taken LITERALLY — no trim, no
+ *     realpath, no project-name resolution, no store/peers/record lookup. The caller is the
+ *     only cwd authority this module knows.
+ *   - the value is classified by the shared `classify-tmux-cwd.ts` leaf BEFORE any mutation
+ *     (same four stable reasons as resume; the measured tmux 3.6a facts live on that leaf).
+ *     This module's hints phrase them as the REQUESTED cwd; resume's say RECORDED.
+ *   - the receipt echoes what was REQUESTED, exactly as `runtimePath` does. It never reports
+ *     `pane_current_path`: proving where the pane actually landed belongs to acceptance, not
+ *     to the launch receipt.
  */
 
 import { randomBytes } from "node:crypto";
+import { classifyTmuxCwd, type TmuxCwdRejectReason } from "./classify-tmux-cwd.ts";
 import {
 	assertLaunchTarget,
 	LaunchPreconditionError,
@@ -142,10 +161,12 @@ export function buildFreshCallPrompt(params: {
 }
 
 /** A launch that was refused, or a placement that could not be established. Every value is a
- * NAMED refusal — this module has no fallback launch. */
+ * NAMED refusal — this module has no fallback launch and no fallback directory. The cwd members
+ * come from the shared classification leaf and their string values are stable contract. */
 export type FreshCallRejectReason =
 	| PlacementRejectReason
 	| LaunchRejectReason
+	| TmuxCwdRejectReason
 	| "caller-identity-unavailable"
 	| "model-empty"
 	| "model-invalid"
@@ -158,6 +179,10 @@ export type FreshCallRejectReason =
 export interface FreshCallReceipt extends WindowHandle {
 	backend: FreshCallBackend;
 	model: string;
+	/** The REQUESTED start directory — present only when the caller supplied one. The same kind
+	 * of fact as `runtimePath`: what tmux was asked for, never an observation of where the pane
+	 * landed. */
+	cwd?: string;
 	runtimePath: string;
 	nonce: string;
 }
@@ -174,20 +199,28 @@ function defaultRandomHex(): string {
 	return randomBytes(12).toString("hex");
 }
 
-/** Launch argv: the leaf's detached-append shape, the runtime, then the backend's dialect. */
+/** Launch argv: the leaf's detached-append shape, optionally `-c` at the resume-symmetric token
+ * position (after `-t`, before `-P -F`), the runtime, then the backend's dialect. An omitted cwd
+ * yields the exact pre-#73 argv — no carrier at all. */
 export function buildFreshCallArgs(
 	placement: Placement,
 	runtimePath: string,
 	backendArgs: readonly string[],
+	cwd?: string,
 ): string[] {
 	assertSelector("session", placement.sessionId);
 	assertLaunchTarget(runtimePath);
+	if (cwd !== undefined) {
+		const bad = classifyTmuxCwd(cwd);
+		if (bad) throw new Error(`mux-fresh-call: refusing to build argv with an unusable cwd (${bad}): ${cwd}`);
+	}
 	return [
 		"new-window",
 		"-d",
 		"-a",
 		"-t",
 		`${placement.sessionId}:{end}`,
+		...(cwd === undefined ? [] : ["-c", cwd]),
 		"-P",
 		"-F",
 		APPEND_FORMAT,
@@ -207,7 +240,7 @@ export function buildFreshCallArgs(
  * against a store, or guesses it: an empty value is a named refusal, not a lookup.
  */
 export function freshCall(
-	params: { backend: FreshCallBackend; model: string; task: string; callerGardenId: string | null },
+	params: { backend: FreshCallBackend; model: string; task: string; cwd?: string; callerGardenId: string | null },
 	env: NodeJS.ProcessEnv = process.env,
 	nonce: string = mintNonce(),
 ): FreshCallResult {
@@ -220,6 +253,14 @@ export function freshCall(
 	const task = params.task.trim();
 	if (task.length === 0) return { ok: false, reason: "task-empty" };
 	if (task.length > TASK_MAX_CHARS) return { ok: false, reason: "task-too-long" };
+	// ONLY `undefined` and the exact empty string mean "no cwd". Everything else is the literal
+	// value — deliberately untrimmed, so a whitespace-mangled path is refused loudly by the
+	// classification below instead of being silently repaired into a different directory.
+	const cwd = params.cwd === undefined || params.cwd === "" ? undefined : params.cwd;
+	if (cwd !== undefined) {
+		const badCwd = classifyTmuxCwd(cwd);
+		if (badCwd) return { ok: false, reason: badCwd };
+	}
 
 	let runtimePath: string;
 	try {
@@ -240,7 +281,10 @@ export function freshCall(
 		callerGardenId: params.callerGardenId,
 		nonce,
 	});
-	const run = runTmux(buildFreshCallArgs(placement, runtimePath, buildBackendArgs(params.backend, prompt, model)), env);
+	const run = runTmux(
+		buildFreshCallArgs(placement, runtimePath, buildBackendArgs(params.backend, prompt, model), cwd),
+		env,
+	);
 	assertTmuxOk("new-window", run);
 
 	let fields: ReturnType<typeof parseWindowFields>;
@@ -265,6 +309,7 @@ export function freshCall(
 			...fields,
 			backend: params.backend,
 			model,
+			...(cwd === undefined ? {} : { cwd }),
 			runtimePath,
 			nonce,
 		},
@@ -280,6 +325,13 @@ const REJECT_HINT: Record<FreshCallRejectReason, string> = {
 	"anchor-mismatch": "tmux answered about a different pane than the one asked about",
 	"caller-identity-unavailable":
 		"this surface has no record-backed garden id for the caller, so the sibling would have no address to call back to",
+	"cwd-not-absolute":
+		"the requested cwd is not an absolute path (the value is taken literally — nothing trims or resolves it)",
+	"cwd-format-token":
+		"the requested cwd contains '#', which tmux expands as a format inside -c — it would silently rewrite the path or run a command",
+	"cwd-missing":
+		"the requested cwd does not exist; tmux would not report this, it would open the window in $HOME and look successful",
+	"cwd-not-directory": "the requested cwd exists but is not a directory",
 	"model-empty": "model is empty after trimming; fresh calls require an explicit model",
 	"model-invalid": `model must be one ${MODEL_MAX_CHARS}-character argv-safe id/alias without whitespace or tmux syntax`,
 	"task-empty": "task is empty after trimming",
@@ -314,6 +366,7 @@ export function renderFreshCall(result: FreshCallResult): { text: string; isErro
 			`[entwurf fresh call →]\n` +
 			`  backend:  ${r.backend} (${r.runtimePath})\n` +
 			`  model:    ${r.model} (requested on the runtime CLI)\n` +
+			(r.cwd === undefined ? "" : `  cwd:      ${r.cwd} (requested start directory — not an observation)\n`) +
 			`  window:   ${r.windowId} (index ${r.windowIndex}) in session ${r.sessionId}\n` +
 			`  pane:     ${r.paneId} pid ${r.panePid}\n` +
 			`  nonce:    ${r.nonce}\n` +

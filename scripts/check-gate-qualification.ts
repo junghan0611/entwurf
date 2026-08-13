@@ -809,7 +809,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"meta-identity": 4,
 		"meta-retire": 3,
 		"mux-boundary": 14,
-		"mux-fresh-call": 15,
+		"mux-fresh-call": 19,
 		"mux-launcher-fence": 7,
 		"mux-parent-artifact": 3,
 		"mux-resume-call": 12,

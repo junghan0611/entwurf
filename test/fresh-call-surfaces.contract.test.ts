@@ -92,7 +92,7 @@ describe("MCP surface — real bridge boot → runtime tools/list", () => {
 		// The pass-through half has no observation point short of a real launch; the
 		// call shape stays a structural assert.
 		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
-		expect(mcpSrc).toMatch(/freshCall\(\{ backend, model, task, callerGardenId \}\)/);
+		expect(mcpSrc).toMatch(/freshCall\(\{ backend, model, task, cwd, callerGardenId \}\)/);
 	});
 
 	it("[QK:FRESHCALL-MODEL-PATTERN-HOST-VALID] every pattern the bridge emits on tools/list compiles under a Rust-regex-family engine — JS acceptance is not host acceptance", () => {
@@ -115,9 +115,9 @@ describe("MCP surface — real bridge boot → runtime tools/list", () => {
 		expect((requireTool(mcpTools, "entwurf_fresh_call").description ?? "").length).toBeGreaterThan(400);
 	});
 
-	it("the runtime schema exposes NO identity or nonce parameter — exactly backend, model, task", () => {
+	it("the runtime schema exposes NO identity or nonce parameter — exactly backend, model, task and the optional cwd", () => {
 		const fresh = requireTool(mcpTools, "entwurf_fresh_call");
-		expect(Object.keys(fresh.inputSchema?.properties ?? {}).sort()).toEqual(["backend", "model", "task"]);
+		expect(Object.keys(fresh.inputSchema?.properties ?? {}).sort()).toEqual(["backend", "cwd", "model", "task"]);
 	});
 
 	it("[QK:FRESHCALL-CLAUDE-SURFACE-IDENTITY] the MCP bridge resolves callerGardenId through the canonical authoritative self envelope — never a caller parameter, never raw env", () => {
@@ -162,7 +162,7 @@ describe("pi surface — real extension registration capture", () => {
 
 	it("[QK:FRESHCALL-PI-SURFACE-IDENTITY] native pi supplies callerGardenId from its own resident closure — no identity/nonce parameter, and env carriers are ignored even when present", async () => {
 		const fresh = requireTool(piTools, "entwurf_fresh_call");
-		expect(Object.keys(fresh.parameters.properties ?? {}).sort()).toEqual(["backend", "model", "task"]);
+		expect(Object.keys(fresh.parameters.properties ?? {}).sort()).toEqual(["backend", "cwd", "model", "task"]);
 		// Behavioral discrimination, mutation-safe by construction: the model is
 		// INVALID, so even a mutant that steals an id from env can never reach tmux —
 		// it would answer model-invalid, while the resident-closure control (null in
@@ -208,6 +208,28 @@ describe("one grammar, two surfaces", () => {
 				expect(desc).toContain(literal);
 			}
 		}
+	});
+
+	it("[QK:FRESHCALL-CWD-SURFACE-PARITY] both surfaces expose the SAME optional cwd — present in each runtime schema, required by neither, same literal-path contract in the description, passed through verbatim to the one composition — so cross-repo fresh cannot become a one-surface customs gap", () => {
+		const mcpFresh = requireTool(mcpTools, "entwurf_fresh_call");
+		const mcpCwd = mcpFresh.inputSchema?.properties?.cwd;
+		expect(mcpCwd, "tools/list carries a cwd property").toBeDefined();
+		expect(mcpCwd?.type).toBe("string");
+		expect(mcpFresh.inputSchema?.required).not.toContain("cwd");
+		const piFresh = requireTool(piTools, "entwurf_fresh_call");
+		const piCwd = piFresh.parameters.properties?.cwd;
+		expect(piCwd, "registerTool carries a cwd property").toBeDefined();
+		expect(piFresh.parameters.required ?? []).not.toContain("cwd");
+		for (const desc of [String(mcpCwd?.description ?? ""), String(piCwd?.description ?? "")]) {
+			expect(desc).toContain("ABSOLUTE");
+			expect(desc).toContain("REQUESTED");
+			expect(desc).toContain("no trim");
+		}
+		// The pass-through halves stay structural asserts, same as the model parameter above.
+		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
+		expect(mcpSrc).toMatch(/freshCall\(\{ backend, model, task, cwd, callerGardenId \}\)/);
+		const piSrc = fs.readFileSync(path.join(REPO_DIR, "pi-extensions/entwurf-control.ts"), "utf8");
+		expect(piSrc).toMatch(/cwd:\s*params\.cwd/);
 	});
 
 	it("both peers surfaces stay facts-only and route creation to entwurf_fresh_call", () => {

@@ -1489,7 +1489,7 @@ const MUX_FRESH_CALL_MODULE = "./lib/mux-fresh-call.ts";
 
 interface MuxFreshCallModule {
 	freshCall(
-		params: { backend: "pi" | "claude-code"; model: string; task: string; callerGardenId: string | null },
+		params: { backend: "pi" | "claude-code"; model: string; task: string; cwd?: string; callerGardenId: string | null },
 		env?: NodeJS.ProcessEnv,
 	): { ok: boolean };
 	renderFreshCall(result: { ok: boolean }): { text: string; isError: boolean };
@@ -1520,8 +1520,10 @@ not exist a moment ago. This returns a LAUNCH receipt (tmux window/pane plus tha
 it does NOT mean the runtime started, the first turn ran, or the task was delivered. Nothing polls for the
 callback; if it never arrives the window is visible and can be read directly. For EXISTING citizens use
 entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the
-chosen runtime CLI (provider/model for pi; model id/alias for Claude Code); there are no arbitrary
-command/cwd/env knobs. Do not put secrets in the task — model and task argv are visible to same-user
+chosen runtime CLI (provider/model for pi; model id/alias for Claude Code). An optional cwd starts the
+sibling in ONE literal absolute existing directory (cross-repo fresh) — never pick resume for a dormant
+record's cwd; resume is continuity-only. Omitted/empty cwd means the caller's own directory. There are no
+arbitrary command/env knobs. Do not put secrets in the task — model and task argv are visible to same-user
 processes on this host.`,
 		parameters: Type.Object({
 			backend: StringEnum(["pi", "claude-code"], {
@@ -1539,10 +1541,16 @@ processes on this host.`,
 				description:
 					"What the sibling should do after it calls you back. Plain instructions; no secrets (see the tool description).",
 			}),
+			cwd: Type.Optional(
+				Type.String({
+					description:
+						"Optional literal ABSOLUTE path of an existing directory to start the sibling in (cross-repo fresh). Omit or pass \"\" to start in this agent's own cwd. Taken exactly as given — no trim, no realpath, no project-name resolution; '#' is refused (tmux format expansion). The receipt echoes what was REQUESTED, never an observation.",
+				}),
+			),
 		}),
 		async execute(
 			_toolCallId: string,
-			params: { backend: "pi" | "claude-code"; model: string; task: string },
+			params: { backend: "pi" | "claude-code"; model: string; task: string; cwd?: string },
 			_signal: AbortSignal | undefined,
 			_onUpdate: unknown,
 			_ctx: ExtensionContext,
@@ -1553,6 +1561,7 @@ processes on this host.`,
 					backend: params.backend,
 					model: params.model,
 					task: params.task,
+					cwd: params.cwd,
 					callerGardenId: residentGardenId,
 				});
 				const rendered = mux.renderFreshCall(result);

@@ -5,7 +5,7 @@
 		{
 			"claim": "MUXRESUME-CWD-MISSING-REFUSED",
 			"title": "a deleted recorded cwd is accepted — tmux then opens the window in $HOME and the wrong-project resume looks successful",
-			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"subject": "pi-extensions/lib/classify-tmux-cwd.ts",
 			"find": ["\t\treturn \"cwd-missing\";"],
 			"replace": ["\t\treturn null;"],
 			"gate": ["bash", "run.sh", "check-mux-resume-call"],
@@ -16,7 +16,7 @@
 		{
 			"claim": "MUXRESUME-CWD-FORMAT-REFUSED",
 			"title": "the '#' refusal stops matching, so tmux format-expands the path it was handed",
-			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"subject": "pi-extensions/lib/classify-tmux-cwd.ts",
 			"find": ["\tif (cwd.includes(\"#\")) return \"cwd-format-token\";"],
 			"replace": ["\tif (cwd.includes(\"\\u0000\")) return \"cwd-format-token\";"],
 			"gate": ["bash", "run.sh", "check-mux-resume-call"],
@@ -27,7 +27,7 @@
 		{
 			"claim": "MUXRESUME-CWD-WHITESPACE-OK",
 			"title": "a quoting fear is added back as a whitespace refusal, which would reject real project directories tmux handles fine",
-			"subject": "pi-extensions/lib/mux-resume-call.ts",
+			"subject": "pi-extensions/lib/classify-tmux-cwd.ts",
 			"find": ["\tif (cwd.includes(\"#\")) return \"cwd-format-token\";"],
 			"replace": ["\tif (cwd.includes(\"#\") || /\\s/.test(cwd)) return \"cwd-format-token\";"],
 			"gate": ["bash", "run.sh", "check-mux-resume-call"],

@@ -4,12 +4,13 @@
  *
  * ── Why this is a module and not a parameter on fresh-call ──
  *
- * `mux-fresh-call` carries a TASK to a runtime it names; the sibling starts wherever the caller
- * happens to be. A resume carries neither: the argv comes from the record (`entwurf-v2-visible-
- * resume` builds it) and the cwd comes from the record too — it is the directory the citizen's
- * own transcript header remembers. Those are different inputs with a different risk, so they get
- * a different module rather than a fourth parameter on a composition whose contract is
- * "identity is an OUTPUT".
+ * `mux-fresh-call` carries a TASK to a runtime it names, and starts the sibling wherever the
+ * caller happens to be unless the caller REQUESTS one literal start directory (#73). A resume
+ * carries neither a task nor a caller choice: the argv comes from the record (`entwurf-v2-
+ * visible-resume` builds it) and the cwd comes from the record too — it is the directory the
+ * citizen's own transcript header remembers, never something the caller picks. Those are
+ * different inputs with a different risk, so they get a different module rather than a fourth
+ * parameter on a composition whose contract is "identity is an OUTPUT".
  *
  *   visible-resume composition → resume-call → placement leaf (unchanged, carrier-free)
  *   resume-call               -X-> garden identity, records, locks, delivery
@@ -20,22 +21,15 @@
  *
  * `mux-placement`'s `buildAppendArgs` deliberately emits no `-c` ("default shell only"), and it
  * stays that way — a resume must not widen the leaf's grammar for the three other callers. So
- * the `-c` shape lives here, with the three refusals MEASURED on tmux 3.6a (2026-08-06, private
- * server):
+ * the `-c` SHAPE lives here, while the classification of the value lives in the shared
+ * `classify-tmux-cwd.ts` leaf (fresh-call hands tmux the same flag, and a twin copy of the
+ * measured rules would rot apart on the next tmux hazard). The measured tmux 3.6a facts —
+ * a nonexistent `-c` silently lands the child in `$HOME`, `#` is format-expanded, whitespace
+ * is safe — are documented on that leaf. `|` is fine too: the cwd never enters the `-F` row
+ * (see `APPEND_FORMAT` below).
  *
- *   1. a NONEXISTENT `-c` is silent. tmux exits 0, opens the window, and the child falls back to
- *      `$HOME`. A resume whose recorded cwd has been deleted would therefore open a visible
- *      window in the wrong project and look successful. Nothing downstream can catch that: the
- *      launch receipt would be perfectly well-formed.
- *   2. `-c` is FORMAT-EXPANDED. `#{pane_id}` inside the value silently rewrote the path
- *      (`<dir>/#{pane_id}` → `<dir>/%0`), and a `#(…)` value was observed running its command.
- *      A path is data; tmux reads it as a format. So `#` is refused outright.
- *   3. whitespace is SAFE — argv is an array and nothing re-splits. A dir named `with space`
- *      arrived intact. So there is no quoting grammar here, and none is owed. `|` is fine too:
- *      the cwd never enters the `-F` row (see `APPEND_FORMAT` below).
- *
- * That is the entire defence: one existence check and one character. No escaping layer, no
- * sanitiser, no symlink policy — a symlinked project dir is a normal thing to work in.
+ * What stays HERE is the phrasing: this module's hints say "recorded cwd", because a resume's
+ * directory comes from the record — fresh-call's say "requested cwd" for the same reasons.
  *
  * ── What the receipt does NOT say ──
  *
@@ -47,8 +41,7 @@
  * to acceptance, not to the product's launch receipt.
  */
 
-import { statSync } from "node:fs";
-import path from "node:path";
+import { classifyTmuxCwd, type TmuxCwdRejectReason } from "./classify-tmux-cwd.ts";
 import {
 	assertLaunchTarget,
 	LaunchPreconditionError,
@@ -74,14 +67,9 @@ import {
 export const RESUME_CALL_RUNTIME = "pi";
 
 /** Why a resume window could not be opened. Every value is a NAMED refusal; this module has no
- * fallback launch and no fallback directory. */
-export type ResumeCallRejectReason =
-	| PlacementRejectReason
-	| LaunchRejectReason
-	| "cwd-not-absolute"
-	| "cwd-format-token"
-	| "cwd-missing"
-	| "cwd-not-directory";
+ * fallback launch and no fallback directory. The cwd members come from the shared classification
+ * leaf and their string values are stable contract. */
+export type ResumeCallRejectReason = PlacementRejectReason | LaunchRejectReason | TmuxCwdRejectReason;
 
 /** Coordinates plus what was handed to tmux. `cwd` is the REQUESTED start directory — the same
  * kind of fact as `runtimePath`, namely what tmux was asked for, not an observation. */
@@ -91,26 +79,6 @@ export interface ResumeCallReceipt extends WindowHandle {
 }
 
 export type ResumeCallResult = { ok: true; receipt: ResumeCallReceipt } | { ok: false; reason: ResumeCallRejectReason };
-
-/**
- * Classify a candidate start directory. Split into three reasons rather than one because the
- * operator's next move differs: an absolute-path bug is a caller defect, a missing directory is
- * a moved/deleted project, and a `#` is a path tmux would rewrite under us.
- */
-export function classifyResumeCwd(cwd: string): ResumeCallRejectReason | null {
-	if (!path.isAbsolute(cwd)) return "cwd-not-absolute";
-	// tmux expands formats inside the `-c` VALUE. `#{…}` rewrote the path silently and `#(…)`
-	// was observed executing; neither is something to escape our way out of.
-	if (cwd.includes("#")) return "cwd-format-token";
-	let st: ReturnType<typeof statSync>;
-	try {
-		st = statSync(cwd);
-	} catch {
-		// tmux would NOT report this — it opens the window and lands the child in $HOME.
-		return "cwd-missing";
-	}
-	return st.isDirectory() ? null : "cwd-not-directory";
-}
 
 /**
  * Launch argv: the leaf's detached-append shape plus `-c`, the runtime, then the caller's flags.
@@ -124,7 +92,7 @@ export function buildResumeCallArgs(
 ): string[] {
 	assertSelector("session", placement.sessionId);
 	assertLaunchTarget(runtimePath);
-	const bad = classifyResumeCwd(cwd);
+	const bad = classifyTmuxCwd(cwd);
 	if (bad) throw new Error(`mux-resume-call: refusing to build argv with an unusable cwd (${bad}): ${cwd}`);
 	return [
 		"new-window",
@@ -154,7 +122,7 @@ export function resumeCall(
 	params: { cwd: string; runtimeArgs: readonly string[] },
 	env: NodeJS.ProcessEnv = process.env,
 ): ResumeCallResult {
-	const badCwd = classifyResumeCwd(params.cwd);
+	const badCwd = classifyTmuxCwd(params.cwd);
 	if (badCwd) return { ok: false, reason: badCwd };
 
 	let runtimePath: string;

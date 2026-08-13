@@ -194,7 +194,7 @@ resolvePiRuntime()                        PATH에서 공식 pi를 절대경로�
 ```
 
 - garden identity를 기다리지 않는다. record store를 읽지 않는다. task를 배달하지 않는다.
-- 이 T1-a leaf composition의 launch shape는 **고정**이다. caller-supplied command/cwd/env/model/window-name carrier가 없다. 제품 surface인 §6-a fresh-call만 한 층 위에서 explicit model을 runtime CLI token으로 붙인다.
+- 이 T1-a leaf composition의 launch shape는 **고정**이다. caller-supplied command/cwd/env/model/window-name carrier가 없다. 제품 surface인 §6-a fresh-call만 한 층 위에서 explicit model을 runtime CLI token으로, optional requested cwd를 자기 argv의 tmux `-c` token으로 붙인다.
 - `-d`를 유지한다. "visible"은 operator 세션 안의 실제 window라는 뜻이지 focus를 빼앗는다는 뜻이 아니다.
 - T1-b의 어려움을 T1-a에 미리 얹지 않는다. 반대로 **visible launch가 됐다고 automatic delegation까지
   됐다고 말하지 않는다.**
@@ -396,9 +396,20 @@ caller가 fresh token N을 민팅
 `{backend, task}`로 bare runtime을 열었고 실제 사용에서 Pi는 퇴역한 `gpt-5.5`, Claude Code는 의도와
 다른 Opus 5를 골랐다. 이것은 runtime 선택을 존중한 것이 아니라 caller의 선택을 버린 것이다. 그래서
 surface는 `{backend, model, task}`로 좁게 확장되고 composition은 shell 없이 runtime별 실측 CLI 방언으로 전달한다:
-Pi는 `--model <provider/model>` 두 argv token, Claude Code는 `--model=<id-or-alias>` 한 token이다. command/cwd/env carrier나 별도
-provider/settings knob는 여전히 없다. Launch receipt의 model은 **무엇을 요청했는지**만 증명하며 runtime이
+Pi는 `--model <provider/model>` 두 argv token, Claude Code는 `--model=<id-or-alias>` 한 token이다. command/env carrier나 별도
+provider/settings knob는 여전히 없다(cwd는 아래 문단의 좁은 별도 입력이다). Launch receipt의 model은 **무엇을 요청했는지**만 증명하며 runtime이
 그 model로 turn을 완료했다는 증거는 callback 뒤 self-report/record 축에서 따로 얻는다.
+
+**Cwd도 explicit launch input이다 (#73, 2026-08-13).** cross-repo fresh 상담이 target repo의 cwd를 얻으려고
+dormant record를 `entwurf_resume_call`로 되세우는 압력이 실측됐다(2026-08-10 incident) — resume은 continuity
+verb이지 placement 우회로가 아니다. 그래서 fresh surface는 `{backend, model, task, cwd?}`로 좁게 한 번 더
+확장된다. 규칙은 좁다: `undefined`와 정확한 `""`만 생략(오늘의 no-`-c` 동작 그대로)이고, 그 외는 **literal**
+절대경로다 — trim도 realpath도 project-name resolution도 store/peers/record 조회도 없다. caller가 유일한
+cwd 출처다. 분류는 resume과 **공유하는 `classify-tmux-cwd.ts` leaf**가 지고(4개 reason 문자열 동일; measured
+tmux 3.6a 사실도 그 leaf에 있다), `-c`는 fresh 자신의 argv builder가 resume과 대칭인 token 위치(`-t` 뒤,
+`-P -F` 앞)에 붙인다 — placement leaf는 여전히 `-c`를 모른다. Launch receipt의 cwd는 model과 같은 종류의
+사실로 **무엇을 요청했는지**만 말하며, pane이 실제 어디 앉았는지는 receipt의 사실이 아니다(acceptance 축).
+resume은 계속 `{target}` 하나다: recorded cwd 일치는 resume을 고를 이유가 아니다.
 
 **이것이 증명하는 것은 "전달 계층이 그 citizen을 안다"이지 "citizen이 자기를 안다"가 아니다.** 아래
 §6-b가 그 구분을 measured incident로 보존한다.
@@ -452,7 +463,7 @@ exact evidence로 인정되는 것은 둘뿐이다.
 - record watcher, timeout/retry, unknown-id discovery
 - unknown/new record birth 또는 liveness를 발견하려는 대기 (S1의 known-id socket observation은 한 번의 bounded startup observation으로 출하됨)
 - generic driver/registry, labels/metadata
-- caller-supplied command/cwd/env/window-name carrier, 또는 model 외 별도 provider/settings carrier
+- caller-supplied command/env/window-name carrier, 또는 model·cwd 외 별도 provider/settings carrier (fresh의 cwd는 §6-a의 좁은 literal 시작 디렉터리 입력이지 generic carrier가 아니고, project-name resolver도 아니다)
 - raw PTY input, capture/history API
 - 모든 tmux session을 관리하는 registry
 - zmx adapter, 설치, self-fetch, fallback
@@ -496,9 +507,10 @@ gate, LIVE smoke, release 배선을 전부 제거했다.
 | tmux placement leaf (`mux-placement.ts`) | caller placement, same-session append, stable handle close | harness launch, identity, delivery |
 | T1-a launch composition (`mux-launch.ts`) | 고정 runtime의 precondition 증명, 같은 session에 window+runtime 한 번의 mutation, 로컬 handle receipt | garden identity, record 조회, task delivery, supervision, 어떤 carrier도 |
 | pi/ACP harness adapter | official runtime/session lifecycle, auth, model, transcript, record birth | 프로젝트의 작업자 선택·backlog |
-| resume-call composition (`mux-resume-call.ts`) | record가 준 cwd에서의 same-session append(`-c`), 그 cwd의 좁은 전제(absolute / 존재하는 디렉터리 / `#` 없음 — tmux가 `-c`를 format-expand하고 없는 경로를 조용히 `$HOME`으로 폴백하기 때문), launch receipt | garden identity, record 조회, lock, delivery, supervision |
-| fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, explicit model CLI token, first-turn framing(callback→task 순서), nonce 민팅, launch receipt | garden identity(표면이 공급), delivery transport, task 분해, supervision |
-| public surfaces (`entwurf-control.ts` · MCP `index.ts`) | fresh의 record-backed caller identity와 `{backend, model, task}` schema, resume의 target-only schema, 양쪽 렌더, resume launch seam 조립 | argv 문법, placement, identity 민팅 |
+| cwd classification leaf (`classify-tmux-cwd.ts`) | `-c` 후보의 분류 하나 — 4개 stable reason(absolute / `#` 없음 / 존재 / 디렉터리; tmux가 `-c`를 format-expand하고 없는 경로를 조용히 `$HOME`으로 폴백하기 때문) | argv, tmux 실행, hint 문구(각 consumer가 자기 표현을 소유), fallback 디렉터리 |
+| resume-call composition (`mux-resume-call.ts`) | record가 준 cwd에서의 same-session append(`-c`) — 분류는 공유 leaf, "recorded cwd" hint 표현, launch receipt | garden identity, record 조회, lock, delivery, supervision |
+| fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, explicit model CLI token, optional **requested** cwd(caller가 유일한 출처; `undefined`/`""`만 생략, literal·no-trim, 같은 leaf로 pre-mutation 분류, resume 대칭 `-c` 위치), first-turn framing(callback→task 순서), nonce 민팅, launch receipt | garden identity(표면이 공급), cwd 추측·resolve, delivery transport, task 분해, supervision |
+| public surfaces (`entwurf-control.ts` · MCP `index.ts`) | fresh의 record-backed caller identity와 `{backend, model, task, cwd?}` schema, resume의 target-only schema, 양쪽 렌더, resume launch seam 조립 | argv 문법, placement, identity 민팅 |
 | project policy (repo 밖) | 누구를·언제·무엇으로 부를지, fan-out 횟수, 실패 후 판단 | transport 내부 구현 |
 
 강제 가능한 import 금지선은 넓은 일반론이 아니라 좁은 몇 줄이다. `entwurf-v2-production.ts`는 이미
@@ -512,8 +524,9 @@ mux-placement                                  -X-> entwurf core
 mux-launch                                     -X-> entwurf core
 mux-placement                                  -X-> mux-launch        (leaf는 혼자 삭제 가능해야 한다)
 mux-launch                                      -> mux-placement
-mux-fresh-call                                  -> mux-launch + mux-placement
-mux-resume-call                                 -> mux-launch + mux-placement
+mux-fresh-call                                  -> mux-launch + mux-placement + classify-tmux-cwd
+mux-resume-call                                 -> mux-launch + mux-placement + classify-tmux-cwd
+classify-tmux-cwd                              -X-> 모든 mux/entwurf 모듈   (공유 분류 leaf; node 표준만 본다)
 entwurf-v2-visible-resume                      -X-> mux-*            (launch는 표면이 주입하는 seam)
 public surfaces                                 -> mux-resume-call + entwurf-v2-visible-resume  (composition root)
 all other shipped production sources           -X-> mux-launch
@@ -551,7 +564,7 @@ composition이고, 각각 source-adjacent gate가 argv 경계를 진다. 출하 
 - mux는 launch/visibility이지 delivery transport가 아니다.
 - tmux handle은 garden address나 liveness fact가 아니다.
 - pane text와 keystroke는 `entwurf_v2` receipt가 아니다.
-- placement/driver가 agent identity, model policy, task routing, quota, orchestration을 소유하지 않는다. fresh-call은 caller가 이미 고른 model 한 값을 CLI에 정확히 전달할 뿐이다.
+- placement/driver가 agent identity, model policy, task routing, quota, orchestration을 소유하지 않는다. fresh-call은 caller가 이미 고른 model 한 값(그리고 선택 시 literal cwd 한 값)을 CLI/argv에 정확히 전달할 뿐이다.
 - background/headless 최적화는 live/visible 실물이 선 뒤의 별도 선택이다.
 - 모든 adapter는 삭제 조건을 가진다. 삭제 조건을 말할 수 없는 기능은 core 밖이다.
 - 모델의 현재 버릇을 보정하는 구조(stall 감시, quota 인식, 자동 재배정, "누가 잘하는가" 기록)를 만들지

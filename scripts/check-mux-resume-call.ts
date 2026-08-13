@@ -8,7 +8,8 @@
  *
  * Every cwd claim below is a MEASURED tmux 3.6a behaviour, not a precaution. They were taken on a
  * private server on 2026-08-06, and each one is a way a resume would look successful while being
- * wrong:
+ * wrong. Since #73 the classification itself lives in the shared `classify-tmux-cwd.ts` leaf
+ * (fresh-call consumes the same rules), so the CWD claims here are asserted against that leaf:
  *
  *   MUXRESUME-CWD-MISSING-REFUSED   a nonexistent `-c` does NOT fail: tmux exits 0, opens the
  *                                   window, and the child lands in $HOME. Nothing downstream can
@@ -31,10 +32,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { classifyTmuxCwd } from "../pi-extensions/lib/classify-tmux-cwd.ts";
 import type { Placement } from "../pi-extensions/lib/mux-placement.ts";
 import {
 	buildResumeCallArgs,
-	classifyResumeCwd,
 	RESUME_CALL_REJECT_HINT,
 	RESUME_CALL_RUNTIME,
 	type ResumeCallRejectReason,
@@ -77,32 +78,32 @@ function main(): void {
 
 	try {
 		// ── cwd classification ────────────────────────────────────────────────────────
-		ok("an existing absolute directory is accepted", classifyResumeCwd(realDir) === null);
+		ok("an existing absolute directory is accepted", classifyTmuxCwd(realDir) === null);
 
 		ok(
 			"[QK:MUXRESUME-CWD-MISSING-REFUSED] a cwd that no longer exists is refused HERE, because tmux would not refuse it — measured: rc=0, the window opens, and the child silently falls back to $HOME, so the resume would land a visible citizen in the wrong project and look successful",
-			classifyResumeCwd(path.join(tmp, "deleted-project")) === "cwd-missing",
+			classifyTmuxCwd(path.join(tmp, "deleted-project")) === "cwd-missing",
 		);
 		ok(
 			"a path that exists but is a FILE is refused as its own cause, not as missing",
-			classifyResumeCwd(filePath) === "cwd-not-directory",
+			classifyTmuxCwd(filePath) === "cwd-not-directory",
 		);
 		ok(
 			"[QK:MUXRESUME-CWD-FORMAT-REFUSED] a cwd containing '#' is refused unrun — measured: tmux FORMAT-EXPANDS the -c value, so `<dir>/#{pane_id}` silently became `<dir>/%0` and a `#(…)` value was observed executing its command; a path is data and tmux reads it as a format",
-			classifyResumeCwd(path.join(tmp, "#{pane_id}")) === "cwd-format-token" &&
-				classifyResumeCwd(path.join(tmp, "#(touch x)")) === "cwd-format-token",
+			classifyTmuxCwd(path.join(tmp, "#{pane_id}")) === "cwd-format-token" &&
+				classifyTmuxCwd(path.join(tmp, "#(touch x)")) === "cwd-format-token",
 		);
 		ok(
 			"the '#' refusal precedes the filesystem question, whose answer would be about a path tmux is not going to use",
-			classifyResumeCwd(path.join(realDir, "#nope")) === "cwd-format-token",
+			classifyTmuxCwd(path.join(realDir, "#nope")) === "cwd-format-token",
 		);
 		ok(
 			"a relative cwd is refused before anything touches the filesystem",
-			classifyResumeCwd("project") === "cwd-not-absolute",
+			classifyTmuxCwd("project") === "cwd-not-absolute",
 		);
 		ok(
 			"[QK:MUXRESUME-CWD-WHITESPACE-OK] a cwd containing whitespace is ACCEPTED — measured: argv is an array, tmux does not re-split it, and the directory arrived intact; inventing a quoting grammar here would refuse real project paths for a danger that was measured not to exist",
-			classifyResumeCwd(spaceDir) === null,
+			classifyTmuxCwd(spaceDir) === null,
 		);
 
 		// ── argv shape ────────────────────────────────────────────────────────────────
