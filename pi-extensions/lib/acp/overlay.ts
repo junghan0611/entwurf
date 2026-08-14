@@ -46,7 +46,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 import type { AcpMcpServer } from "./config.js";
 
@@ -416,7 +416,7 @@ function cortexLinkIfExists(realPath: string, overlayPath: string): void {
  * Returns the isolated HOME/SNOWFLAKE_HOME the spawn env must carry.
  */
 export function ensureCortexDualHomeOverlay(params: CortexOverlayParams): CortexOverlayResult {
-	if (!params.realHome || !params.realHome.startsWith("/")) {
+	if (!params.realHome || !isAbsolute(params.realHome)) {
 		throw new Error(
 			`entwurf: cortex dual-HOME overlay requires an absolute realHome captured by the parent (got ${JSON.stringify(params.realHome)})`,
 		);
