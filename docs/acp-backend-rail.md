@@ -159,10 +159,11 @@ caller-session `_meta`, and cross-machine certification.
 
 A backend can return `newSession` before its declared MCP server is callable. This was
 observed intermittently on the Claude rail and directly on Cortex's private `mcp.json`
-path. Neither `claude-agent-acp` 0.66.0 nor the Cortex landing adds a client-side
+path. Neither `claude-agent-acp` 0.68.0 nor the Cortex landing adds a client-side
 readiness fence, and `mcpServerStatus()` is not called by the common loop.
-(Re-measured at the 0.65.0 → 0.66.0 bump: the goal extension is not a fence,
-and `mcpServerStatus` appears nowhere in the 0.66.0 adapter source.)
+(Re-measured at the 0.66.0 → 0.68.0 bump: AIR typed failures are capability-gated
+and unadvertised by entwurf; goal extension is still not a fence; `mcpServerStatus`
+appears nowhere in the 0.68.0 adapter source.)
 
 ### 11-7-a/b. Instrument and first measurement
 

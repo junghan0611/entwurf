@@ -79,7 +79,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability/native-push reject gates |
-| pi 0.84.1 fence | `pnpm check` + release-gate MUST |
+| pi 0.84.2 fence | `pnpm check` + release-gate MUST |
 
 ### Historical — 0.12.0 cutover close checklist
 
@@ -269,7 +269,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **0.84.1** (`>=0.84.1 <0.85`, next-minor 상한).
+  public export → TS 직접 import(재구현 불필요). floor = **0.84.2** (`>=0.84.2 <0.85`, next-minor 상한).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상
@@ -574,9 +574,10 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     (별도 패키지, coding-agent 의존성 아님)/TUI/Harness factory/Bun 바이너리는 소스+패키지 별자리로
     out-of-surface 확인. npm 실측: 외부 의존성 버전 전부 동일(openai 6.26.0, @anthropic-ai/sdk 0.91.1,
     typebox 1.3.7 등), caret 멤버십 불변({ai, tui, client, protocol, agent-core}+telemetry), coding-agent
-    fileCount 956→968(+86,748B), pi-ai 725→734(Qwen 모듈). **하드 미니멈 판정: floor를 `>=0.84.1 <0.85`로
-    exact devDep과 함께 기계적 이동**(run.sh가 devDep에서 peer 유도, `check-dep-versions`가 오라클,
-    `check-pack-install` 6-row 핀 이동). 새 behavioral gate 불요 — entwurf가 진술하는 계약 변화 없음.
+    fileCount 956→968(+86,748B), pi-ai 725→734(Qwen 모듈). **하드 미니멈 판정: floor를 당시 exact
+    devDep 0.84.1 + next-minor ceiling 0.85로 기계적 이동**(run.sh가 devDep에서 peer 유도,
+    `check-dep-versions`가 오라클, `check-pack-install` 6-row 핀 이동). 새 behavioral gate 불요 —
+    entwurf가 진술하는 계약 변화 없음. (현재 certified floor는 이후 항목의 0.84.2.)
   - **2026-08-08 bump — claude-agent-acp 0.65.0 → 0.66.0 (pi 0.84.1·ACP SDK 1.3.0·claude-agent-sdk
     0.3.220 유지).** **성격: 선언 런타임 의존성 불변의 adapter-code 릴리즈 + 신규 optional extension
     모듈.** 릴리즈 델타 3건 — #960 dev-dep `globals` 17.8→17.9(그들의 dev 트리, 우리 해석 무관),
@@ -600,6 +601,32 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     peer 재실측: claude-agent-sdk 0.3.220 불변이므로 `@anthropic-ai/sdk 0.100.1` peer-pin 유지
     (vitest L2 lane이 lockfile bytes로 결박). pnpm minimumReleaseAge가 어제 릴리즈를 게이트해
     `pnpm-workspace.yaml` exclude 항목이 추가됐다(도구 생성, 커밋에 포함).
+  - **2026-08-16 bump — claude-agent-acp 0.66.0 → 0.68.0 + pi 0.84.1 → 0.84.2 (ACP SDK 1.3.0 유지,
+    claude-agent-sdk 0.3.220 → 0.3.232).** Issue #79 certification. **성격: 이중 런타임 핀 이동 +
+    AIR typed-failure 서버 능력 가산(미광고) + Claude Agent SDK patch 점프.**
+    ⑴ **pi 0.84.2** — patch monorepo cut. installed dist sha256 prefixes (16 hex):
+    `loader.js` `0fd56e37765a0e43`, `sdk.js` `225053853f1a0bee`, `runner.js` `b39d59b8f86693b9`,
+    `agent-session.js` `9f065b4a277857db`, `session-manager.js` `af809d47818a3bf6`,
+    pi-ai `compat.js` `cde63dcc0cd41976`. `assertValidSessionId` + `--session-id` 잔존; session-manager의
+    user-facing 문자열만 `APP_NAME` 치환 — identity mint/동기 반환 표면 불변(mux-launch-rail §6에
+    0.84.2 한 줄 append). `sendMessage`는 `triggerTurn:true` 분기 유지(우리 delivery 경로); `false`
+    수정은 미도달. `defaultTools`는 settings-manager 키로 존재하고 extension tool 보존 fix가 릴리즈
+    노트에 명시 — pack consumer + extension 등록 gate로 잠금. caret 별자리 불변
+    `{agent-core,ai,client,protocol,tui}@^0.84.2` (+telemetry 전이). floor 기계 이동: exact devDep
+    `0.84.2` + peer `>=0.84.2 <0.85` + `check-pack-install` 6-row + baseline docs.
+    ⑵ **claude-agent-acp 0.68.0** — 0.67.0 포함 11 commits. 선언 deps 실측:
+    `@agentclientprotocol/sdk@1.3.0`, `@anthropic-ai/claude-agent-sdk@0.3.232`,
+    `zod ^3.25||^4`. lock peer-resolve: `claude-agent-acp@0.68.0(@anthropic-ai/sdk@0.100.1…)` +
+    `claude-agent-sdk@0.3.232(@anthropic-ai/sdk@0.100.1…)` (vitest L2). cas peers 재실측:
+    `@anthropic-ai/sdk >=0.93.0` 불변 → pin `0.100.1` 유지; MCP `^1.29.0` → L2c 1.29.x; zod `^4`
+    (tree already `4.3.6`). **AIR:** `supportsAirSessionFailures(capabilities)`는 JetBrains
+    `_meta` extension version+capability 광고를 요구; entwurf `clientCapabilities: {}` → false →
+    레거시 `RequestError.internalError` rawDetail 경로 유지. `session-failure-extension.js` 신규
+    모듈은 서버 측 존재하나 미광고 클라이언트에는 미활성. `mcpServerStatus` 0.68.0 dist 부재.
+    plan/Skill `_meta`/model-fallback은 mapper forward-compat. AIR enable은 별도 feature(non-goal).
+    ⑶ **#72 비청구** — typed failure ≠ retained-child mid-tool-loop death. 이 bump로 #72를 닫거나
+    약화하지 않는다.
+    ⑷ pnpm `minimumReleaseAgeExclude`에 0.84.2 / 0.67.0 / 0.68.0 추가.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.

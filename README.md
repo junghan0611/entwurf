@@ -154,7 +154,7 @@ gitignored and may be absent or stale immediately after a checkout or pull.
 ### Pi adapter / ACP plugin lane
 
 To use the `entwurf` provider inside pi, install a compatible pi binary
-separately (`@earendil-works/pi-coding-agent >=0.84.1 <0.85`). Then point pi at
+separately (`@earendil-works/pi-coding-agent >=0.84.2 <0.85`). Then point pi at
 the npm-installed package or development clone:
 
 ```bash

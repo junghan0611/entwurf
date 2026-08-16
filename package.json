@@ -74,23 +74,23 @@
 		"claudeCodeFloor": ">=2.1.217"
 	},
 	"dependencies": {
-		"@agentclientprotocol/claude-agent-acp": "0.66.0",
+		"@agentclientprotocol/claude-agent-acp": "0.68.0",
 		"@agentclientprotocol/sdk": "1.3.0",
 		"@anthropic-ai/sdk": "0.100.1",
 		"@modelcontextprotocol/sdk": "^1.12.1",
 		"zod": "^3.25.0 || ^4.0.0"
 	},
 	"peerDependencies": {
-		"@earendil-works/pi-ai": ">=0.84.1 <0.85",
-		"@earendil-works/pi-coding-agent": ">=0.84.1 <0.85",
-		"@earendil-works/pi-tui": ">=0.84.1 <0.85",
+		"@earendil-works/pi-ai": ">=0.84.2 <0.85",
+		"@earendil-works/pi-coding-agent": ">=0.84.2 <0.85",
+		"@earendil-works/pi-tui": ">=0.84.2 <0.85",
 		"typebox": "*"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.13",
-		"@earendil-works/pi-ai": "0.84.1",
-		"@earendil-works/pi-coding-agent": "0.84.1",
-		"@earendil-works/pi-tui": "0.84.1",
+		"@earendil-works/pi-ai": "0.84.2",
+		"@earendil-works/pi-coding-agent": "0.84.2",
+		"@earendil-works/pi-tui": "0.84.2",
 		"@types/node": "^24.3.0",
 		"husky": "^9.1.7",
 		"rregex": "1.13.1",

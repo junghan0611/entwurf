@@ -16,11 +16,11 @@
  * The pins freeze the current behavior-oracle versions:
  *
  *   @agentclientprotocol/sdk              1.3.0    wire SDK (acp-bridge import source)
- *   @agentclientprotocol/claude-agent-acp 0.66.0   Claude adapter (spawn binary)
+ *   @agentclientprotocol/claude-agent-acp 0.68.0   Claude adapter (spawn binary)
  *   @anthropic-ai/sdk                     0.100.1  peer-resolution pin ONLY
  *
  * The anthropic SDK is NOT an API client / auth surface here: it exists solely to
- * satisfy @anthropic-ai/claude-agent-sdk@0.3.220's `>=0.93.0` peer floor — drop it
+ * satisfy @anthropic-ai/claude-agent-sdk@0.3.232's `>=0.93.0` peer floor — drop it
  * and the tree resolves a stale 0.91.1, an unmet peer that would only surface at
  * the first raw turn. Source-level import / client instantiation stays forbidden
  * (L4). Per-bump measurement history (0.61→0.65 tarball hashes, reachability
@@ -52,7 +52,7 @@ const API_CLIENT_CLASS = `${"Anthropic"}`;
 
 const PINS: Record<string, string> = {
 	"@agentclientprotocol/sdk": "1.3.0",
-	"@agentclientprotocol/claude-agent-acp": "0.66.0",
+	"@agentclientprotocol/claude-agent-acp": "0.68.0",
 	[ANTHROPIC_SDK]: "0.100.1",
 };
 
@@ -91,12 +91,12 @@ describe("L2 — pnpm-lock peer-resolution lock (static: the lockfile bytes are 
 		const lock = read("pnpm-lock.yaml");
 		expect(
 			lock,
-			"claude-agent-acp@0.66.0 must peer-resolve @anthropic-ai/sdk@0.100.1 (peer-pin), not the stale 0.91.1",
-		).toMatch(/@agentclientprotocol\/claude-agent-acp@0\.66\.0\(@anthropic-ai\/sdk@0\.100\.1/);
+			"claude-agent-acp@0.68.0 must peer-resolve @anthropic-ai/sdk@0.100.1 (peer-pin), not the stale 0.91.1",
+		).toMatch(/@agentclientprotocol\/claude-agent-acp@0\.68\.0\(@anthropic-ai\/sdk@0\.100\.1/);
 		expect(
 			lock,
-			"claude-agent-sdk@0.3.220 must peer-resolve @anthropic-ai/sdk@0.100.1 — else its >=0.93.0 peer floor is unmet",
-		).toMatch(/@anthropic-ai\/claude-agent-sdk@0\.3\.220\(@anthropic-ai\/sdk@0\.100\.1/);
+			"claude-agent-sdk@0.3.232 must peer-resolve @anthropic-ai/sdk@0.100.1 — else its >=0.93.0 peer floor is unmet",
+		).toMatch(/@anthropic-ai\/claude-agent-sdk@0\.3\.232\(@anthropic-ai\/sdk@0\.100\.1/);
 	});
 });
 
@@ -112,8 +112,8 @@ describe("L2b — runtime peer-resolution probe (behavioral: the real Node resol
 	it("L2b: claude-agent-sdk context peer-resolves the anthropic SDK", () => {
 		expect(
 			casInfo.version,
-			"@anthropic-ai/claude-agent-sdk must runtime-resolve to 0.3.220 from the adapter context",
-		).toBe("0.3.220");
+			"@anthropic-ai/claude-agent-sdk must runtime-resolve to 0.3.232 from the adapter context",
+		).toBe("0.3.232");
 		const sdkInfo = pkgInfoFromEntry(casRequire.resolve(ANTHROPIC_SDK));
 		expect(
 			sdkInfo.version,
@@ -138,7 +138,7 @@ describe("L2c — adapter-context wire-SDK + MCP-SDK resolves", () => {
 		const mcpInfo = pkgInfoFromEntry(casRequire.resolve("@modelcontextprotocol/sdk/server/index.js"));
 		expect(
 			mcpInfo.version.startsWith("1.29."),
-			`@modelcontextprotocol/sdk must runtime-resolve to 1.29.x from the claude-agent-sdk context (got ${mcpInfo.version}) — claude-agent-sdk 0.3.220 declares a ^1.29.0 peer`,
+			`@modelcontextprotocol/sdk must runtime-resolve to 1.29.x from the claude-agent-sdk context (got ${mcpInfo.version}) — claude-agent-sdk 0.3.232 declares a ^1.29.0 peer`,
 		).toBe(true);
 	});
 });
