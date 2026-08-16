@@ -12,16 +12,17 @@
 - [x] **5. #73 cross-repo fresh cwd** — main `ff46502` / feat `0059fe2`; LIVE scratch OK; issue CLOSED
 - [x] **6. 0.14.1 prepare** — `6a1df33`; release-gate MUST 20/0 (`j2eAVu`); Sol SHIP-AFTER-FIX
 - [x] **7. make 0.14.1** — tag `v0.14.1`=`6a1df33`; CI run 31677847479 all success; preserved candidate accepted; GH release live
-- [ ] **8. publish 0.14.1** ← CURRENT: npm latest from preserved tgz only
-- [ ] **9. live defect train** ← STEM after publish: #60; #72 · #76
+- [x] **8. publish 0.14.1** — npm latest=0.14.1 (2026-08-13)
+- [x] **9. #79 dep certify** — main `ccb1864`: acp 0.68.0 + pi 0.84.2; Sol APPROVE; issue CLOSED
+- [ ] **10. live defect train** ← STEM: #60; #72 · #76
 
-현재 좌표: **make done · await publish** · OPEN 4
+현재 좌표: **#79 landed · defect train** · OPEN 5 (was 6; #79 closed)
 
 # NOW — #60 native-push reply handle
 
 - **Stem:** OPEN은 backlog가 아니라 최대 5개의 현재 실행 계약이다. 알고만 있을 방향은 문서로 옮기고 닫는다.
-- **Open 4:** #60 native-push reply handle · #72 ACP Claude retained-child/tool-loop · #75 workshop field report (non-impl) ·
-  **#76** fresh_call subscription-first / refuse `openrouter/*` sibling models.
+- **Open 5:** #60 native-push reply handle · #72 ACP Claude retained-child/tool-loop · #75 workshop field report (non-impl) ·
+  **#76** fresh_call subscription-first / refuse `openrouter/*` sibling models · **#78** 0.15 portability candidate (non-impl).
 - **Next:** #60에서 native-push 수신 본문에 sender envelope와 `wants_reply:true`를 보존하는 최소 production 경로와
   독립 oracle을 정한다. 자동 답장·polling·watcher를 만들지 않는다.
 - **#76 next slice (separate from #60):** product fail-closed on `openrouter/*` at `entwurf_fresh_call`; subscription canonical ids (`openai-codex/gpt-5.6-sol`, …). Do not mix Done-when with closed #73.
@@ -34,6 +35,8 @@
 
 # RECENT
 
+- **2026-08-16:** #79 CLOSED on main `ccb1864`. claude-agent-acp 0.68.0 + pi 0.84.2 certified;
+  check/full/pack/container + LIVE raw/provider/overlay/reuse green; Sol BLOCK→fix→APPROVE; host pi 0.84.2.
 - **2026-08-13:** 0.14.1 documentation prepare second pass in progress; install/upgrade/first-check, external MCP cwd,
   mux-rail landed tense, skill syntax까지 대조. no version bump.
 - **2026-08-13:** #73 CLOSED on main `ff46502`. optional abs cwd on fresh-call; shared classify-tmux-cwd;
