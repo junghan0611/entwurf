@@ -81,7 +81,7 @@ D8 robustness: partial reason="..."
 | **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. |
 | **Codex app-server-backed TUI** | verified probe | D7; D8 unproven | WebSocket-over-UDS `turn/start` into a live `threadId`; status events expose completion. No managed citizen lane yet. |
 | **Codex embedded TUI** | deferred | D0 partial | No supported receive socket/hook on the measured standalone shape. |
-| **Copilot CLI TUI+server** | verified probe | D7; D8 unproven | Official SDK over hidden `--ui-server`: foreground native id + metadata, two-session addressed idle enqueue, same-session auto-model reply, completion events. Loopback RPC authentication is not established; no managed citizen lane. |
+| **Copilot CLI TUI+server** | verified probe | D7; D8 unproven | Official SDK over hidden `--ui-server`: foreground native id + metadata, two-session addressed idle enqueue, same-session auto-model reply, completion events read back through the official session event-history API. Loopback RPC authentication is not established; no managed citizen lane. Evidence is L4 direct-native on ONE Linux workstation, host-local stdout, not archived. |
 | **ACP Claude / Cortex** | shipped runtime, outside this matrix | — | ACP sessions are children launched by entwurf's pi adapter, not already-running native sessions to wake. |
 
 “Verified probe” means the transport worked in a reproducible raw probe but entwurf
@@ -129,19 +129,51 @@ native citizen or ACP backend. `turn/steer` is active-turn steering, not idle wa
 
 ### Copilot CLI: TUI+server is the positive launch mode
 
-A plain Copilot TUI and shell command hooks do not establish the measured route. CLI
-1.0.80 launched with hidden `--ui-server --port <port>` and joined by first-party
-`@github/copilot-sdk` 1.0.11 did: protocol-v3 ping, foreground session id plus cwd/git
-metadata, exact session resume, idle `enqueue`, same-session model-`auto` reply, and
-`assistant.message`/`turn_end`/`session.idle` completion. A second run created a
-no-turn control session B, targeted A, and proved B received no user/turn/assistant
-event, closing D3 on one Linux workstation.
+**Two things are recorded here and they are not the same thing: what was MEASURED on
+2026-08-19, and what the probe now CONTRACTS to measure.** The measurement below was
+taken with the earlier chronological-slice probe, which scored the events following the
+marker's position in the history. The current probe scores a named turn instead (next
+subsection). No result below has been re-taken under that contract, and none of it is
+retroactively a demonstration of it.
+
+**Measured 2026-08-19 (old chronological-slice probe).** A plain Copilot TUI and shell
+command hooks do not establish the measured route. CLI 1.0.80 launched with hidden
+`--ui-server --port <port>` and joined by first-party `@github/copilot-sdk` 1.0.11 did:
+protocol-v3 ping, foreground session id plus cwd/git metadata, exact session resume, idle
+`enqueue`, same-session model-`auto` reply, and `assistant.message`/`turn_end`/`session.idle`
+completion. A second run created a no-turn control session B, targeted A, and proved B
+received no user/turn/assistant event, closing D3 on one Linux workstation.
 
 The two-session shape also exposed a D8 gap: A visibly replied and persisted
 `assistant.message` + `turn_end`, but the joining SDK client did not receive ephemeral
-`session.idle`, so SDK `sendAndWait()` timed out. Bounded official `getEvents()` reads
-observed the completed target turn without transcript access; that is probe evidence,
-not a product polling/retry design.
+`session.idle`, so SDK `sendAndWait()` timed out. Bounded reads of the official session
+event-history API (`session.getEvents()` / `getMessages()`) then observed the completed
+target turn. Claim that at its real size: it is the SDK's own full event history, not a
+narrower or more privileged view, and equally not TUI, file, or database transcript
+scraping — the probe never reads Copilot's own storage. It is probe evidence, not a
+product polling/retry design.
+
+**Evidence level for everything above: L4 direct-native, ONE Linux workstation, one run.**
+The receipt is host-local probe stdout; it was not archived as a durable artifact, so this
+row is reproducible-by-instruction, not citable to a stored file.
+
+**Current probe contract (not yet run LIVE).** Attribution is now a named chain rather
+than a position in the history: the probe's unique marker body must match exactly one
+`user.message`; that event's `interactionId` must open exactly one `assistant.turn_start`;
+that turn_start must expose a `turnId`; and only `assistant.message` / `assistant.turn_end`
+carrying that `turnId` are scored. Every link is required, and absent-or-ambiguous fails
+the probe closed — there is no positional fallback and no "the turn after ours" rule.
+Note what is deliberately NOT the key: `session.send()` resolves to the SDK's own
+submission handle, a string that appears on no server event and is a different axis from
+`user.message.id`/`interactionId`, so joining on it cannot hold. It is logged as a
+diagnostic only. The next LIVE turn is what would demonstrate this contract; until then
+it is a design, not evidence.
+
+The probe also stays out of the operator's lifecycle, stated precisely: it never deletes
+target session A and issues no `A.disconnect()` of its own. `client.stop()` does tear down
+every tracked session — A included — as a wire `session.destroy`; because A's foreground
+ownership is re-confirmed immediately before teardown, the TUI keeps A as its foreground
+session, so the net effect on A is detach-equivalent, not removal.
 
 This is not yet admissible as a native-push adapter. The flag is hidden from CLI help,
 and the loopback JSON-RPC server did not enforce the SDK connection token in the

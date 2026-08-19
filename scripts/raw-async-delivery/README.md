@@ -14,9 +14,10 @@ Codex is split by launch surface:
   standalone, no cloud**.
 - **Copilot CLI 1.0.80 TUI+server**: official SDK `1.0.11` can resolve the
   foreground native session and enqueue into that exact idle TUI; D7 was
-  demonstrated. The launch flag `--ui-server` is hidden from CLI help and its
-  loopback RPC authentication is not established, so this remains a probe, not
-  a managed lane. Undocumented `~/.copilot/run/ws.*` is still not a rail.
+  demonstrated once (L4 direct-native, one Linux workstation). The launch flag
+  `--ui-server` is hidden from CLI help and its loopback RPC authentication is
+  not established, so this remains a probe, not a managed lane. Undocumented
+  `~/.copilot/run/ws.*` is still not a rail.
 
 ## TL;DR — three reception paths, ranked
 
@@ -277,7 +278,13 @@ copilot --ui-server --port 43817 --model auto
 but hidden from `copilot --help`. Launch mode is therefore part of the capability,
 and this evidence does not apply to an already-running plain `copilot` TUI.
 
-Measured on 2026-08-19 with SDK 1.0.11:
+Measured once on 2026-08-19 with SDK 1.0.11, **using the earlier chronological-slice
+probe** (it scored the events following the marker's position in the history). The probe
+in the tree today scores a named turn instead — see "Current probe contract" below — and
+that contract has NOT been run LIVE, so nothing in this list is retroactively evidence
+for it. Evidence level for the list: **L4 direct-native, ONE Linux workstation, one run**;
+the receipt is host-local probe stdout and was NOT archived as a durable artifact, so what
+follows is reproducible by instruction, not citable to a stored file:
 
 - protocol v3 ping succeeded;
 - foreground session id joined to metadata containing cwd/git root/branch;
@@ -292,9 +299,50 @@ Measured on 2026-08-19 with SDK 1.0.11:
 D0–D7 passed; D8 is unproven. One robustness defect surfaced in the two-session
 shape: the target visibly replied and persisted `assistant.message` + `turn_end`,
 but that joining SDK client did not receive ephemeral `session.idle`, so SDK
-`sendAndWait()` timed out after 60 seconds. The probe uses `send()` plus bounded
-polling through the official `getEvents()` API and reports completion at
-`turn_end`; this is evidence, not a product retry/polling design.
+`sendAndWait()` timed out after 60 seconds. The probe therefore uses `send()` plus
+bounded polling of the official session event-history API (`session.getEvents()` /
+`getMessages()`) and reports completion at `turn_end`. Name that surface at its real
+size: it is the SDK's own full event history — no narrower, no more privileged — and it
+is **not** TUI, file, or database transcript scraping; the probe never reads Copilot's
+storage. This is evidence, not a product retry/polling design.
+
+### Current probe contract — designed, not yet run LIVE
+
+Attribution is the load-bearing part, and it runs off the probe's own marker body:
+
+```text
+unique marker body  →  exactly one user.message
+                    →  its interactionId
+                    →  exactly one assistant.turn_start on that interaction
+                    →  that turn_start's required turnId
+                    →  only assistant.message / assistant.turn_end on that turnId
+```
+
+Every link is required and unambiguous; absent or matched twice, the probe FAILS CLOSED.
+There is no positional fallback and no "the turn after ours" rule, because scoring "the
+newest assistant.message" in a session a human is also typing into is how a probe reports
+someone else's turn as its own delivery.
+
+What is deliberately NOT the key: `session.send()` on the bundled CLI 1.0.80 resolves to a
+`Promise<string>` that is the SDK's own submission handle. The server-side `user.message`
+does not carry that string, and it is a different axis from that event's
+`id`/`interactionId` — a join on it cannot hold, so the probe logs it as a diagnostic and
+never matches on it.
+
+The D3 control cell uses the same sentence it prints: across `onEvent` and `getEvents`, the
+non-target session received no `user.message` and no `assistant.*` event of any kind.
+
+Lifecycle, stated precisely rather than flatteringly: the probe never deletes target
+session A and issues no `A.disconnect()` of its own. `client.stop()` DOES tear down every
+tracked session — A included — as a wire `session.destroy`; because A's foreground
+ownership is re-confirmed immediately before teardown, the TUI keeps A as its foreground
+session, so the net effect on A is detach-equivalent, not removal. The probe deletes only
+the control session it created itself, and reads `client.stop()`'s returned error list so a
+failed teardown cannot exit 0 behind a printed verdict. Reaching past the SDK for a raw
+detach wrapper is out of bounds — it would be a second lifecycle authority.
+
+This contract has not been exercised by a LIVE turn. The next LIVE run is what would
+demonstrate it, and it also confirms the real event key names.
 
 ### Reproduce with the pinned official SDK
 
@@ -360,6 +408,8 @@ boundary.
   socket via `codex app-server --listen unix://PATH`) is the delivery surface.
   threadId comes from the newest rollout's `session_meta.id`.
 - Copilot TUI+server probe: SDK `ping` + `getForegroundSessionId()` +
-  `getSessionMetadata()` identify the currently displayed native session. The
-  TCP port is a runtime endpoint, never an identity axis; no managed liveness
-  join exists until its authentication and stale-endpoint behavior are proved.
+  `getSessionMetadata()` identify the currently displayed native session, and
+  the official session event-history API (`getEvents()` / `getMessages()`) reads
+  a turn back — no transcript file or database is touched. The TCP port is a
+  runtime endpoint, never an identity axis; no managed liveness join exists
+  until its authentication and stale-endpoint behavior are proved.
