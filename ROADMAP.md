@@ -160,6 +160,15 @@ Sonnet에서 flaky라 한 번의 flake가 컷을 막으면 안 된다. 우회/�
 - **driver optionality — deferred, not a current issue.** production은 tmux를 직접 호출하며 generic `DRIVERS`
   seam이나 zmx backend는 없다. 구체적인 두 번째 driver 수요가 생기기 전에는 비교·추상화를 재개하지 않는다.
   quota, system load, 예상 작업량, 과거 담당자 같은 선택 신호도 substrate/driver에 저장하지 않는다.
+- **Copilot CLI native probe — branch `probe/copilot-raw-delivery`, not an OPEN issue.**
+  Codex native는 pi의 공식 GPT provider와 겹쳐 거절됐지만 Copilot은 GitHub 이슈/PR/CI와 model
+  `auto`를 가진 별도 하네스다. 구현을 다른 garden id에 맡기고 Copilot이 checkpoint와 GitHub
+  일을 받는 것은 dispatch 예절이지 substrate role system이 아니다. 비용은 무제한이 아니라
+  AI Credit/monthly entitlement 축으로 정직하게 센다. CLI 1.0.80 hidden `--ui-server` + official
+  SDK 1.0.11이 exact idle TUI enqueue와 completion(D7)을 보였지만, launch flag가 help에 없고
+  loopback RPC auth가 성립하지 않았다. two-session isolation은 A-only wake로 통과했지만 joining
+  client의 ephemeral `session.idle` 누락도 드러났다. permission ownership·supported local boundary
+  전에는 스키마/`fresh_call`/OPEN issue로 승격하지 않는다; `ws.*`는 계속 금지다.
 
 ---
 

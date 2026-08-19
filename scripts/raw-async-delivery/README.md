@@ -1,4 +1,4 @@
-# raw-async-delivery — RAW async message delivery into LIVE Claude Code / agy / Codex sessions
+# raw-async-delivery — RAW async message delivery into LIVE Claude Code / agy / Codex / Copilot sessions
 
 Goal: deliver an async message INTO an already-running **subscription** session,
 free, with no `claude -p` / backend CLI prompt spawn — and in particular wake an
@@ -12,6 +12,11 @@ Codex is split by launch surface:
   auto-attached to a default-path app-server): raw `turn/start` over
   WebSocket-over-UDS wakes the live thread — **demonstrated, no managed
   standalone, no cloud**.
+- **Copilot CLI 1.0.80 TUI+server**: official SDK `1.0.11` can resolve the
+  foreground native session and enqueue into that exact idle TUI; D7 was
+  demonstrated. The launch flag `--ui-server` is hidden from CLI help and its
+  loopback RPC authentication is not established, so this remains a probe, not
+  a managed lane. Undocumented `~/.copilot/run/ws.*` is still not a rail.
 
 ## TL;DR — three reception paths, ranked
 
@@ -82,6 +87,7 @@ do not ship that. Proven: deliver to A's sessionId → A wakes (FileChanged), B'
 - `raw-agy-send.sh <conv_id> …` — agy parity: PUSH into a live Antigravity session (LS gRPC)
 - `raw-codex-ws-turn-start.py <sock> <thread_id> …` — Codex parity (no managed standalone, no cloud): PUSH `turn/start` over WebSocket-over-UDS into a bare `app-server --listen` socket
 - `codex-local-appserver.sh [sock]` — start a bare local app-server so plain `codex` auto-attaches and becomes addressable
+- `copilot-ui-server-probe.mjs` — official-SDK D0 probe by default; `LIVE=1` performs one addressed idle enqueue and prints D0–D8
 
 ### Reproduction drivers
 - `repro-plugin-idle-wake.sh` — single-session smoke.
@@ -244,6 +250,103 @@ send-message-v2` spins a fresh thread, not the live one.
 4. **Unix-socket transport is WebSocket** (tokio-tungstenite), not newline JSON-RPC,
    and requires **no auth token** on the UDS. A plain WS client suffices.
 
+## Copilot CLI raw delivery status (1.0.80) — positive TUI+server probe, not a managed lane
+
+Copilot is a GitHub **harness** (issues, PR, CI, model `auto`, mode `autopilot`,
+remote/delegate), not a second GPT provider next to pi. This makes a native lane
+product-distinct from the declined Codex lane: Copilot can own GitHub work while
+implementation checkpoints arrive from another garden id. That split is operator
+etiquette plus dispatch, not a substrate role system.
+
+The cost premise must stay honest. Copilot reports AI Credits and a monthly
+premium-interaction entitlement; model `auto` chooses a path within that budget.
+The reason to use it is GitHub specialization and auto routing, not an unlimited
+subscription claim. Model `auto` and mode `autopilot` are separate axes.
+
+### Positive transport
+
+The first-party `@github/copilot-sdk` exposes TUI+server coordination:
+`getForegroundSessionId()`, `getSessionMetadata()`, `resumeSession(id)`, and
+session-scoped `send({mode:"enqueue"|"immediate"})`. The native TUI launch mode is:
+
+```bash
+copilot --ui-server --port 43817 --model auto
+```
+
+`--ui-server` is accepted by CLI 1.0.80 and named by the official SDK API docs,
+but hidden from `copilot --help`. Launch mode is therefore part of the capability,
+and this evidence does not apply to an already-running plain `copilot` TUI.
+
+Measured on 2026-08-19 with SDK 1.0.11:
+
+- protocol v3 ping succeeded;
+- foreground session id joined to metadata containing cwd/git root/branch;
+- `resumeSession(id)` + idle `enqueue` woke the visible TUI with zero typing;
+- the unique body appeared as `user.message` with `delivery:"idle"`;
+- model `auto` selected `gpt-5.6-luna` and returned the exact marker;
+- `assistant.message`, `assistant.turn_end`, and (in the one-session run)
+  ephemeral `session.idle` gave completion/reply evidence;
+- a two-session control then targeted A while B received no `user.message`, turn,
+  or assistant event, so D3 passed too.
+
+D0–D7 passed; D8 is unproven. One robustness defect surfaced in the two-session
+shape: the target visibly replied and persisted `assistant.message` + `turn_end`,
+but that joining SDK client did not receive ephemeral `session.idle`, so SDK
+`sendAndWait()` timed out after 60 seconds. The probe uses `send()` plus bounded
+polling through the official `getEvents()` API and reports completion at
+`turn_end`; this is evidence, not a product retry/polling design.
+
+### Reproduce with the pinned official SDK
+
+The SDK is deliberately not an entwurf production dependency while this is only
+a raw probe. Install it in scratch and point the probe at its ESM entry:
+
+```bash
+mkdir -p /tmp/copilot-sdk-probe
+printf '{"private":true,"type":"module"}\n' >/tmp/copilot-sdk-probe/package.json
+pnpm --dir /tmp/copilot-sdk-probe add --ignore-scripts @github/copilot-sdk@1.0.11
+
+# terminal A: visible native session (accept folder trust)
+copilot --ui-server --port 43817 --model auto
+
+# terminal B: D0 only, no model call
+COPILOT_SDK_MODULE=/tmp/copilot-sdk-probe/node_modules/@github/copilot-sdk/dist/index.js \
+  ./copilot-ui-server-probe.mjs
+
+# one paid/subscription turn: addressed idle enqueue through the official SDK
+LIVE=1 COPILOT_SDK_MODULE=/tmp/copilot-sdk-probe/node_modules/@github/copilot-sdk/dist/index.js \
+  ./copilot-ui-server-probe.mjs
+
+# creates a second no-turn control session and proves only the target receives the marker
+LIVE=1 COPILOT_D3_CONTROL=1 \
+  COPILOT_SDK_MODULE=/tmp/copilot-sdk-probe/node_modules/@github/copilot-sdk/dist/index.js \
+  ./copilot-ui-server-probe.mjs
+```
+
+### Admission blockers and negative evidence
+
+- **Transport authentication is not established.** The TUI server bound loopback,
+  but an SDK client without a token connected. Setting `COPILOT_CONNECTION_TOKEN`
+  on the UI server did not enable auth: the unauthenticated client still connected,
+  while a token-bearing client received `AUTHENTICATION_NOT_CONFIGURED`. Do not
+  ship this as a rail until the supported same-user/fail-closed boundary is proved.
+- Shell command-hook `sessionStart` input is `{timestamp,cwd,source,initialPrompt?}`;
+  it does **not** carry `sessionId`. SDK callbacks receive `sessionId` separately in
+  their invocation object. The discarded command-hook probe therefore could not
+  establish D0, and UUID-only process-log scraping did not satisfy D0's cwd/liveness
+  join. Do not revive that path.
+- Hooks have no `FileChanged` / `watchPaths` / `asyncRewake`; the Claude mailbox
+  mechanism cannot be copied.
+- `--acp` is a pi-host child path, not this native TUI citizen path. `--remote` is
+  GitHub web/mobile steering, not a local `entwurf_v2` API. Undocumented
+  `~/.copilot/run/ws.*` remains out of bounds.
+
+Do not add `backend:"copilot"`, `FRESH_CALL_BACKENDS`, a schema change, or an OPEN
+issue from these positive probes. Next evidence is active-turn enqueue/immediate
+behavior, TUI-vs-SDK permission ownership, the missing multi-session `session.idle`,
+endpoint staleness/crash behavior, and a supported authenticated or equivalent local
+boundary.
+
 ## Live SSOT for "is the target session alive?"
 
 - Claude Code: `~/.claude/sessions/<pid>.json` (pid, sessionId, cwd, status). NOT
@@ -256,3 +359,7 @@ send-message-v2` spins a fresh thread, not the live one.
   `$HOME/.codex/app-server-control/app-server-control.sock` (or any owned 0700
   socket via `codex app-server --listen unix://PATH`) is the delivery surface.
   threadId comes from the newest rollout's `session_meta.id`.
+- Copilot TUI+server probe: SDK `ping` + `getForegroundSessionId()` +
+  `getSessionMetadata()` identify the currently displayed native session. The
+  TCP port is a runtime endpoint, never an identity axis; no managed liveness
+  join exists until its authentication and stale-endpoint behavior are proved.
