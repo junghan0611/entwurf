@@ -120,7 +120,7 @@ usage() {
   cat <<'EOF'
 Usage:
   ./run.sh setup [project-dir]        # ONE confident install: pnpm install + install + meta-bridge (if native harness) + v2 install smoke (LIVE substrate = release-gate)
-  ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
+  ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, doctor-pi-provider, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b/G1e/G1f, IN pnpm run check:full): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 and entwurf_resume_call registered/schema + the tools/list surface is EXACTLY the seven shipped garden verbs; tools/list only, no auth/side-effect
   ./run.sh check-entwurf-bridge-pi-free # deterministic gate (0.12.1 A, IN pnpm check): static — bridge index eager value-import closure must carry no @earendil-works/pi-* (type-only + dynamic import excluded); proves the meta-bridge boots pi-free
@@ -4469,6 +4469,23 @@ release_gate() {
   # is gated behind SMOKE_RGG_POSITIVE=1 in the BEHAVIOR lane below.
   run_step "smoke-resident-garden-guard (3c citizen: record birth / record-keyed socket / attach-on-reopen, 0-token)" gate env SMOKE_RGG_POSITIVE=0 bash "$self" smoke-resident-garden-guard
   run_step "check-bridge"                   gate bash "$self" check-bridge
+  # check-bridge booted the launcher THIS CHECKOUT ships; this boots the invocation the operator's
+  # pi provider actually EXECS. Two different strings, and only the second one reaches a live ACP
+  # session. 2026-08-19 measured the gap at full price: `~/.local/bin/entwurf-bridge` had been
+  # relocated onto a pnpm cmd-shim (basedir derived from $0, so not relocatable), it exited 127, the
+  # bundled bridge never booted, and the model had no `mcp__entwurf-bridge__*` tool — while
+  # `command -v` answered yes throughout. #81's probe already settles that in under a second and
+  # doctor-pi-provider consumes it; it was simply never a step, so the verdict first surfaced at
+  # smoke-acp-bundled-mcp-live, sixteen LIVE steps and ~20 minutes of real model spend later.
+  # `run_step`, not `run_live_step`: this doctor is not LIVE-gated and never emits 97, so it has no
+  # prerequisite to decline. It exits 1 for a configured invocation that will not boot and for
+  # state-owned drift; a host that never installed the circuit keeps its existing exit 0 note, and
+  # the bundled smokes below still fail loud there. So this tightens nothing — it only moves an
+  # existing red earlier. cwd is REPO_DIR regardless of `gate` (run_ts cds there), so the scope
+  # judged is this checkout's `.pi/settings.json` shadowing the operator's global: deterministic,
+  # but not in principle the smokes' global-only subject if the two ever diverge.
+  # Position and classifier arm are pinned by [QK:PI-DOCTOR-IS-RELEASE-MUST].
+  run_step "doctor-pi-provider (#81: the operator's CONFIGURED bridge invocation actually boots)" gate bash "$self" doctor-pi-provider
   # D4-c: the v2 dispatch substrate sentinel (5d-5). A SINGLE run (NOT backend-looped — it proves
   # production runEntwurfV2 deps + real pi control-socket RPC + real mailbox enqueue + v2 lock, not
   # per-backend model behavior). Placed right after check-bridge: the MCP/protocol substrate must be

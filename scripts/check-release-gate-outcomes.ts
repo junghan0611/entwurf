@@ -439,6 +439,58 @@ function runSubcommand(sub: string, env: Record<string, string | undefined>): { 
 	);
 }
 
+// ===========================================================================
+// The operator's CONFIGURED bridge invocation is proven BEFORE the cost-bearing LIVE tier
+//
+// `check-bridge` boots the launcher this checkout SHIPS. It cannot speak for the string
+// pi's provider actually execs, and only that second one reaches a live ACP session.
+// 2026-08-19 measured the difference at full price: a relocated `~/.local/bin/entwurf-bridge`
+// symlink into a pnpm cmd-shim (basedir derived from $0, so not relocatable) exited 127, the
+// bundled bridge never booted, and the model had no `mcp__entwurf-bridge__*` tool — while
+// `command -v` answered yes throughout. #81 had already built the leaf that settles this in
+// under a second, and doctor-pi-provider consumes it; it was simply never a step, so the
+// verdict surfaced sixteen LIVE steps later at smoke-acp-bundled-mcp-live.
+// Pinned here because the step is CHEAP and therefore easy to drop again "to speed the gate up":
+// its whole value is the position, so both the position and the classifier arm are asserted.
+// run_step, not run_live_step — this doctor is not LIVE-gated and never emits 97, so a SKIP arm
+// would describe a prerequisite it cannot have.
+// ===========================================================================
+{
+	const runSh = readFileSync(join(REPO_DIR, "run.sh"), "utf8");
+	const gateBody = runSh.slice(runSh.indexOf("release_gate() {"), runSh.indexOf("# 5. Summary"));
+	const verify = readFileSync(join(REPO_DIR, "VERIFY.md"), "utf8");
+	const STEP =
+		'run_step "doctor-pi-provider (#81: the operator\'s CONFIGURED bridge invocation actually boots)" gate bash "$self" doctor-pi-provider';
+	const doctorSteps = gateBody.split("\n").filter((l) => l.includes('"$self" doctor-pi-provider'));
+	const gaps: string[] = [];
+	if (doctorSteps.length !== 1)
+		gaps.push(`release_gate runs doctor-pi-provider ${doctorSteps.length}x (need exactly one MUST step)`);
+	if (doctorSteps.length === 1 && doctorSteps[0]?.trim() !== STEP)
+		gaps.push(`the doctor step is not the exact pinned invocation (got: ${doctorSteps[0]?.trim()})`);
+	if (doctorSteps.length === 1 && doctorSteps[0]?.includes("run_live_step"))
+		gaps.push("the doctor step goes through run_live_step, inventing a SKIP arm for a doctor that never emits 97");
+	// Position is the point: a cheap probe scheduled after the expensive tier proves nothing new.
+	const doctorAt = gateBody.indexOf('"$self" doctor-pi-provider');
+	// Anchored on the step KEYWORD, not the bare name: prose above this step already discusses
+	// smoke-acp-bundled-mcp-live by name, and a needle that a comment can satisfy would drag the
+	// boundary backwards and fail an ordering that is actually fine.
+	const firstLiveAt = gateBody.indexOf('run_live_step "smoke-acp-');
+	if (doctorAt >= 0 && firstLiveAt >= 0 && doctorAt > firstLiveAt)
+		gaps.push("the doctor step runs AFTER the ACP LIVE tier — the fail-fast position that motivates it is gone");
+	if (!verify.includes("doctor-pi-provider"))
+		gaps.push("VERIFY.md does not name doctor-pi-provider in the MUST tier at all");
+	if (!verify.includes("the invocation the operator's pi provider actually EXECS"))
+		gaps.push("VERIFY.md no longer states WHICH invocation this step proves (ships vs execs)");
+	assert.ok(
+		gaps.length === 0,
+		"[QK:PI-DOCTOR-IS-RELEASE-MUST] the operator's configured bridge invocation must be booted as a release-gate " +
+			"MUST exactly once, through run_step (no SKIP arm — this doctor never emits 97), positioned BEFORE the ACP " +
+			"LIVE tier, with VERIFY naming it and keeping 'what this checkout ships' apart from 'what the provider execs' " +
+			"— drop any of those and the #81 127-class defect goes back to costing sixteen LIVE steps to discover. " +
+			`Broken: ${gaps.join("; ")}`,
+	);
+}
+
 console.log(
 	"[check-release-gate-outcomes] ok — STEP OUTCOME protocol: one skip exit code shared by the shell and TS halves " +
 		`(${LIVE_SKIP_EXIT}, clear of the per-tool 0..4 and shell 126+ bands), classifier maps 0→PASS / skip→SKIP / ` +
@@ -448,5 +500,6 @@ console.log(
 		"a run.sh wrapper declining its own prerequisite (including the measured LIVE=1 no-cortex-connection cell); and every " +
 		"LIVE smoke is either wired into release_gate or excluded by a sentence the docs still carry; and the moved " +
 		"check-gate-qualification stays reachable on its owners (absent from the default chain, exactly once in CI, " +
-		"exactly once as a release-gate MUST step) and the CI step qualifies the FULL floor, which runs before it",
+		"exactly once as a release-gate MUST step) and the CI step qualifies the FULL floor, which runs before it; and " +
+		"the operator's CONFIGURED bridge invocation is booted exactly once through run_step, before the ACP LIVE tier",
 );

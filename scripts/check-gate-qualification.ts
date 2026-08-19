@@ -815,7 +815,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"mux-parent-artifact": 3,
 		"mux-resume-call": 12,
 		"probe-ordering": 1,
-		"release-gate": 11,
+		"release-gate": 12,
 		"resume-args": 6,
 		"resume-launch-identity": 6,
 		"self-address": 3,

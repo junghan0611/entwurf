@@ -135,6 +135,19 @@
 			"timeoutSeconds": 180,
 			"signature": "[QK:MUX-LIFECYCLE-IS-RELEASE-MUST]",
 			"signatureSource": "scripts/check-release-gate-outcomes.ts"
+		},
+		{
+			"claim": "PI-DOCTOR-IS-RELEASE-MUST",
+			"title": "the pi-provider boot doctor is quietly dropped from the gate — the operator's CONFIGURED bridge invocation is never booted, so a 127 launcher (the #81 relocated cmd-shim class) stays invisible until smoke-acp-bundled-mcp-live sixteen LIVE steps and real model spend later",
+			"subject": "run.sh",
+			"find": [
+				"  run_step \"doctor-pi-provider (#81: the operator's CONFIGURED bridge invocation actually boots)\" gate bash \"$self\" doctor-pi-provider"
+			],
+			"replace": ["  : # pi doctor quietly dropped — the configured invocation is never booted"],
+			"gate": ["bash", "run.sh", "check-release-gate-outcomes"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:PI-DOCTOR-IS-RELEASE-MUST]",
+			"signatureSource": "scripts/check-release-gate-outcomes.ts"
 		}
 	]
 }
