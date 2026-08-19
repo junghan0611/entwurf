@@ -54,9 +54,34 @@ PSTATE="$XDG_DATA_HOME/entwurf/agy-bridge/permission-state.json"
 mkdir -p "$(dirname "$GLOBAL")" "$(dirname "$LEGACY")" "$SB/bin"
 
 # fake stable bin (on PATH) + fake ss (unused by the deterministic path) — fake agy toggled per case.
-printf '#!/usr/bin/env bash\necho fake-entwurf-bridge\n' > "$SB/bin/entwurf-bridge"
+#
+# #81: the doctor now BOOTS the configured command and requires the entwurf MCP tool surface back,
+# because `command -v` succeeding is not evidence agy gets a bridge — a relocated launcher resolves
+# and still exits 127. So the healthy fake speaks the two frames the probe sends; the dead fake
+# below reproduces the observed relocated-shim failure for the negative cell.
+write_mcp_fake() {   # $1 = path
+  cat > "$1" <<'FAKE'
+#!/usr/bin/env bash
+while IFS= read -r line; do
+  case "$line" in
+    *'"id":1'*) printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"fake-entwurf-bridge","version":"0"}}}' ;;
+    *'"id":2'*) printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"entwurf_v2"},{"name":"entwurf_self"},{"name":"entwurf_peers"},{"name":"entwurf_inbox_read"},{"name":"entwurf_register_native"},{"name":"entwurf_fresh_call"},{"name":"entwurf_resume_call"}]}}' ;;
+  esac
+done
+FAKE
+  chmod +x "$1"
+}
+write_dead_fake() {  # $1 = path — resolves, then dies on exec (the relocated-shim shape)
+  cat > "$1" <<'FAKE'
+#!/usr/bin/env bash
+echo "bash: /nonexistent/../global/v11/deadbeef/node_modules/@junghanacs/entwurf/mcp/entwurf-bridge/start.sh: No such file or directory" >&2
+exit 127
+FAKE
+  chmod +x "$1"
+}
+write_mcp_fake "$SB/bin/entwurf-bridge"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$SB/bin/ss"
-chmod +x "$SB/bin/entwurf-bridge" "$SB/bin/ss"
+chmod +x "$SB/bin/ss"
 export PATH="$SB/bin:$PATH"
 export AGY_MCP_CONFIG="$GLOBAL"
 export AGY_MCP_CONFIG_ALT="$LEGACY"
@@ -95,6 +120,25 @@ want "doctor(no-agy): live tier is an honest SKIP" "printf '%s' \"\$DOC_OUT\" | 
 want "doctor(no-agy): SKIP is not disguised as a pass" "! printf '%s' \"\$DOC_OUT\" | grep -q 'consistent with runtime wiring'"
 want "doctor(installed): state-evidence confirms the managed config still configured" \
   "printf '%s' \"\$DOC_OUT\" | grep -q 'still configures entwurf-bridge'"
+
+# ── B-boot: #81 A/B — a configured command that RESOLVES but does not serve MCP ──
+# The static tier used to print "(resolvable)" and stay green here, which is exactly the state in
+# which agy would have had no entwurf tool at all. Sandbox PATH only — the operator's launcher is
+# never touched. `set -e` is fenced around the drive alone so the assertions still run.
+write_dead_fake "$SB/bin/entwurf-bridge"
+set +e; DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?; set -e
+want "[QK:AGY-DOCTOR-BOOT-NEGATIVE] doctor(cmd resolves, does not boot): FAILS instead of blessing a resolvable name" "[ '$DOC_RC' -ne 0 ]"
+want "doctor(cmd resolves, does not boot): says it does NOT serve MCP" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'resolves but does NOT serve MCP'"
+want "doctor(cmd resolves, does not boot): carries the launcher's own stderr" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'No such file or directory'"
+want "doctor(cmd resolves, does not boot): does not offer to clobber a foreign launcher" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'repair/remove it yourself'"
+write_mcp_fake "$SB/bin/entwurf-bridge"
+DOC_OUT="$(bash "$BRIDGE" doctor)"; DOC_RC=$?
+want "doctor(after repair): the SAME unchanged doctor goes green once the command boots" "[ '$DOC_RC' -eq 0 ]"
+want "doctor(after repair): green names the BOOT evidence, not resolvability" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'resolves AND boots the entwurf MCP surface'"
 
 # ── C: doctor with a fake agy present → live is CONSISTENT (honest, not overclaimed) ──
 fake_agy on

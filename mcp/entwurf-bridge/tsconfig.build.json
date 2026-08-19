@@ -86,6 +86,12 @@
 	// and run_ts refuses them under an installed package rather than emitting 70+
 	// gate leaves into the tarball.
 	//
+	// WHY probe-bridge-command rides this build (#81): doctor-pi-provider IMPORTS it, and that
+	// doctor is one of the three operator commands above — so on an installed host the import
+	// resolves under node_modules where strip-types is refused. Emitting the leaf keeps the
+	// installed doctor's new boot cell alive; a missing twin would kill the doctor before its
+	// first verdict line. Its only imports are node builtins, so it adds ZERO new deps.
+	//
 	// WHY meta-facts rides this build (#65): it is the operator projection external
 	// consumers call INSTEAD of parsing the store, and those consumers live on
 	// INSTALLED hosts — under node_modules, where run_ts needs a compiled twin.
@@ -107,6 +113,7 @@
 		"../../scripts/meta-bridge-store-doctor.ts",
 		"../../scripts/agy-imprint.ts",
 		"../../scripts/doctor-pi-provider.ts",
+		"../../scripts/probe-bridge-command.ts",
 		"../../scripts/new-session-id.ts",
 		"../../scripts/meta-bridge-prune.ts",
 		"../../scripts/meta-bridge-fresh-cut.ts",

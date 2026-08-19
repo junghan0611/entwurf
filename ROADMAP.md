@@ -627,6 +627,33 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     ⑶ **#72 비청구** — typed failure ≠ retained-child mid-tool-loop death. 이 bump로 #72를 닫거나
     약화하지 않는다.
     ⑷ pnpm `minimumReleaseAgeExclude`에 0.84.2 / 0.67.0 / 0.68.0 추가.
+  - **2026-08-19 bump — claude-agent-acp 0.68.0 → 0.70.0 (pi 0.84.2·ACP SDK 1.3.0·claude-agent-sdk
+    0.3.232 유지).** Issue #81 support-contract 인증. **성격: 비활성 minor 2개를 한 인증에 접음 —
+    별자리 이동 없음.** 이전 bump의 논거를 재사용하지 않고 0.69.0/0.70.0 각각을 재측정했다.
+    ⑴ **선언 deps 실측(0.68.0 = 0.69.0 = 0.70.0, 완전 동일)**: `@agentclientprotocol/sdk@1.3.0`,
+    `@anthropic-ai/claude-agent-sdk@0.3.232`, `zod ^3.25||^4`, `engines.node (upstream major 22)`. lock peer-resolve
+    재측정: `claude-agent-acp@0.70.0(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0…)`
+    + `claude-agent-sdk@0.3.232(@anthropic-ai/sdk@0.100.1…)`. anthropic peer pin `0.100.1` 유지,
+    MCP 1.29.0 / zod 4.3.6 유지. **dependency constellation 불변 + Entwurf reachable default
+    behavior 불변**이 이 bump의 주장이다 — upstream 자체는 0.69/0.70에서 기능을 추가했으므로
+    "동작 변경이 없다"고 뭉뚱그리지 않는다. 아래 ⑵⑶이 각 기능의 비도달 근거를 따로 세운다.
+    ⑵ **0.69.0 — AIR `agentFileChangeReport`(opt-in).** `file-change-audit.js:supportsAgentFileChangeReport(caps)`가
+    `caps._meta`의 JetBrains AIR extension version + capability 광고를 요구한다. entwurf는
+    `clientCapabilities: {}` (backend.ts:1228) → `air?.version === AIR_EXTENSION_VERSION`이 false →
+    비활성. #79의 AIR typed-failure와 정확히 같은 gate 구조이므로 default path 비도달.
+    ⑶ **0.70.0 — loaded session의 `providers/list`·`providers/set`·`providers/disable`.**
+    adapter 소스 주석 실측: "Advertised unconditionally; there is no client capability prerequisite
+    for the provider methods" (acp-agent.js:708-710). 즉 **capability gate가 없다** — AIR와 다르다.
+    도달성은 호출 여부로 갈린다: entwurf 소스 전체에서 `providers/*` 및 `logout` 호출이 0건(유일한
+    grep hit은 무관한 CLI argv 픽스처 `check-probe-cli-shim.ts:539`). 이 메서드들은 client가 부르는
+    것이고 우리는 부르지 않으므로 process-wide provider 상태 전이가 일어나지 않는다. **"gate가
+    없으니 안전하다"가 아니라 "호출하지 않으므로 비도달"이 이 칸의 논거다** — 앞으로 우리가
+    provider 전환을 쓰기로 하면 이 판단은 즉시 무효가 된다.
+    ⑷ **#72 비청구**: 이 bump는 retained-child mid-tool-loop death를 닫거나 약화하지 않는다. MCP
+    readiness fence도 여전히 없고(11-7), AIR 채택도 non-goal 그대로다.
+    ⑸ pnpm `minimumReleaseAgeExclude`에 0.69.0 / 0.70.0 추가. 버전 선언 이동: `package.json`
+    dependency, `test/acp-sdk-surface.contract.test.ts` PINS + L2 lock regex, `smoke-acp-raw-turn-live.ts`
+    헤더, `docs/acp-backend-rail.md` 지원 matrix + 11-7.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.

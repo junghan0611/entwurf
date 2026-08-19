@@ -25,6 +25,7 @@
 import { spawn } from "node:child_process";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { EXPECTED_TOOLS } from "./probe-bridge-command.ts";
 
 const REPO_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const START_SH = path.join(REPO_DIR, "mcp", "entwurf-bridge", "start.sh");
@@ -244,6 +245,33 @@ async function main(): Promise<void> {
 		"[QK:BRIDGEBOOT-PUBLIC-SURFACE-EXACT-SET] G1f: the runtime tools/list surface is EXACTLY the seven shipped garden verbs — no missing verb, no undecided extra, no duplicate",
 		publicSurface.length === expectedSurface.length && expectedSurface.every((n, i) => publicSurface[i] === n),
 		`--- want ---\n${expectedSurface.join(",")}\n--- got ---\n${publicSurface.join(",")}`,
+	);
+
+	// G1g (#81) — bind probe-bridge-command's identity constant to the REAL runtime surface. That
+	// probe decides whether a configured launcher is this bridge by comparing tools/list against
+	// EXPECTED_TOOLS, so a verb added or retired without updating the constant would silently make
+	// every doctor red (or, worse, bless a stale build). The constant has exactly one oracle: the
+	// server booting right here. Add or retire a verb → update the constant in the same commit.
+	//
+	// Compared as SORTED ARRAYS, not as sets: set comparison would hide a duplicate on either side —
+	// including one inside the constant itself, a copy-paste that makes the probe's own length report
+	// lie. The length check here catches a runtime duplicate too; G1f ABOVE owns that as its named
+	// subject, so a duplicated verb turns BOTH red. Judging the same fact twice from two artifacts is
+	// the point, not an overlap to trim.
+	//
+	// POSITION IS LOAD-BEARING: this runs AFTER every named assertion. `ok()` exits on the first
+	// failure, so a cell placed earlier swallows the reds below it — when this block sat next to
+	// G1a, planting a defect in the resume-call or public-surface contracts turned THIS cell red
+	// first and gate qualification read WRONG-REASON for two claims that were in fact working.
+	// A gate that hides which contract broke is worse than the one it was added to strengthen.
+	// Keep unnamed/derived checks last; anything carrying a [QK:…] claim comes first.
+	const runtimeNames = tools.map((t) => t?.name).filter((n): n is string => typeof n === "string");
+	const runtimeSorted = [...runtimeNames].sort();
+	const constantSorted = [...EXPECTED_TOOLS].sort();
+	ok(
+		"G1g: probe-bridge-command EXPECTED_TOOLS equals the runtime tools/list exactly (sorted, duplicates included)",
+		runtimeSorted.length === constantSorted.length && runtimeSorted.every((n, i) => n === constantSorted[i]),
+		`--- runtime tools/list (sorted) ---\n${runtimeSorted.join(", ")}\n--- EXPECTED_TOOLS (sorted) ---\n${constantSorted.join(", ")}`,
 	);
 
 	console.log(`\ncheck-entwurf-bridge-boot: ${passed} checks passed`);

@@ -1,0 +1,50 @@
+{
+	"schemaVersion": 1,
+	"lane": "bridge-command-boot",
+	"mutants": [
+		{
+			"claim": "PI-DOCTOR-BOOT-NEGATIVE",
+			"title": "the pi doctor goes back to blessing a command that merely RESOLVES — the exact #81 false success, where a host ran ACP turns with no mcp__entwurf-bridge__* tool while the doctor printed ok",
+			"subject": "scripts/doctor-pi-provider.ts",
+			"find": ["\t\tif (probe.ok) {"],
+			"replace": ["\t\tif (probe.ok || true) {"],
+			"gate": ["bash", "scripts/smoke-pi-provider-state.sh"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PI-DOCTOR-BOOT-NEGATIVE]",
+			"signatureSource": "scripts/smoke-pi-provider-state.sh"
+		},
+		{
+			"claim": "AGY-DOCTOR-BOOT-NEGATIVE",
+			"title": "the agy doctor stops asking whether the configured command boots and reports the old '(resolvable)' green — a registered bridge agy could never actually call",
+			"subject": "scripts/agy-bridge.sh",
+			"find": ["      if command_boots \"$cmd\"; then"],
+			"replace": ["      if true; then"],
+			"gate": ["bash", "scripts/smoke-agy-install-state.sh"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:AGY-DOCTOR-BOOT-NEGATIVE]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "PROBE-REASON-MISSING-VERB",
+			"title": "bridge identity shrinks back to a single tool, so a build missing entwurf_self — the measured #81 session shape — reads as a healthy bridge again",
+			"subject": "scripts/probe-bridge-command.ts",
+			"find": ["\t\t\t\tconst missing = EXPECTED_TOOLS.filter((t) => !served.has(t));"],
+			"replace": ["\t\t\t\tconst missing = [\"entwurf_v2\"].filter((t) => !served.has(t));"],
+			"gate": ["bash", "run.sh", "check-probe-bridge-command"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PROBE-REASON-MISSING-VERB]",
+			"signatureSource": "scripts/check-probe-bridge-command.ts"
+		},
+		{
+			"claim": "PROBE-CLEANUP-ESCALATES",
+			"title": "the probe stops escalating past SIGTERM, so a launcher that traps TERM outlives the doctor that spawned it — the probe leaks the broken process it exists to detect",
+			"subject": "scripts/probe-bridge-command.ts",
+			"find": ["\t\t\t\t\t\tchild.kill(\"SIGKILL\");"],
+			"replace": ["\t\t\t\t\t\tvoid 0;"],
+			"gate": ["bash", "run.sh", "check-probe-bridge-command"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PROBE-CLEANUP-ESCALATES]",
+			"signatureSource": "scripts/check-probe-bridge-command.ts"
+		}
+	]
+}

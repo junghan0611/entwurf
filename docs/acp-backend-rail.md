@@ -85,6 +85,102 @@ turned one long turn into four in 0.13.0. Gates: `check-acp-prompt-lifecycle` (b
 with pi's own classifier as the oracle), `check-probe-ordering` (no production prompt
 cutoff in source).
 
+## Support contract (#81)
+
+What "supported" means here, per declaration class. The classes are kept apart on purpose: one
+undifferentiated "supported" column is what let a Claude PASS read as if it also certified Cortex.
+
+| Surface | Declaration | Class | What a green actually says |
+|---|---|---|---|
+| Entwurf package | `0.14.1` | shipped baseline | the package contract these rows belong to |
+| pi runtime | devDep exact `0.84.2`, peer `>=0.84.2 <0.85` | **exact** oracle + **closed range** | built and certified against 0.84.2; hosts inside the range are accepted, and the ceiling moves only on measurement |
+| ACP wire SDK | `@agentclientprotocol/sdk 1.3.0` | **exact** | the shared wire oracle both adapters speak |
+| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.70.0` | **exact**, bundled | the adapter we ship and certify; resolved before any PATH fallback |
+| Claude Agent SDK | `0.3.232` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
+| Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
+| Claude Code runtime | `>=2.1.217` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
+| Node | `>=24` (`engines.node`) | **floor** | single axis, derived everywhere else |
+| Cortex Code | operator-installed CLI | **on-demand**, external | NOT a pinned dependency. Each LIVE record must name the exact CLI version it measured |
+
+Current Cortex host reading: **`Cortex Code v1.1.52`, observed on the reference host `oracle`
+(2026-08-19)**. This is an OBSERVATION of what happens to be installed, not a pin, not a range, and
+not a direct LIVE certification — no Cortex evidence record is created by writing it down. It is
+recorded here only so the on-demand row names a concrete number instead of an abstraction.
+
+Reading rules that do not bend:
+
+- **Claude PASS never certifies Cortex, and a Cortex SKIP never becomes a PASS.** They are separate
+  evidence axes with separate records; Cortex stays outside the Claude release floor.
+- **Exact** means one measured build. **Range** means a closed accepted interval. **Floor** means a
+  minimum entwurf enforces itself. **On-demand** means the operator supplies the runtime and the
+  evidence names its version — presence of an adapter certifies no external release.
+- A declared pin is not evidence. Package/deterministic gates bind the declarations
+  (`check-dep-versions`, `check-acp-sdk-surface`, the pack/install consumer gates); LIVE gates carry
+  the runtime claim.
+
+### Minimum core value
+
+One provider identity, `entwurf`, with model-id routing to backend adapters. The host pi session is
+already the record-backed socket citizen; the ACP plugin mints no second citizen, socket, or peer
+layer. Backend differences stay behind `adapterSettings` and adapter methods, and the turn sequence
+stays backend-invariant.
+
+Supported: one real model turn; curated routing with authoritative model enforcement; a narrow
+callable tool surface; explicit MCP wiring including the entwurf bridge; session reuse with
+delta-only user history; operator cancellation with bounded cleanup; honest terminal/error mapping.
+
+Not supported, by design: workflow ownership, planner state, a memory DB, transcript hydration,
+credential proxying, or a second harness inside pi.
+
+### Capability posture
+
+`clientCapabilities: {}` is the support posture, not an oversight. Optional upstream features do not
+become reachable merely because an adapter ships them — but they stay out of reach for **two
+different reasons, and collapsing them would hide a real risk**:
+
+- **Capability-gated.** AIR typed session failures, the 0.69.0 AIR file-change report, terminal
+  output widgets and nested subagent transcripts each test a client capability entwurf does not
+  send, so the adapter itself keeps the legacy path.
+- **Advertised but never called.** Some surfaces carry no capability prerequisite at all — 0.70.0's
+  `providers/list` / `providers/set` / `providers/disable` are advertised unconditionally. They are
+  unreachable only because the common loop never invokes them (nor `logout`). Nothing upstream
+  enforces that; it is our own call-site discipline, and it stops holding the moment we use one.
+
+Adopting either class requires a separate observed need plus a complete rendering/lifecycle/evidence
+contract. An optional upstream feature is not a core-value gap.
+
+### Bump / defer rubric
+
+`claude-agent-acp latest` is not a work queue. Certify when at least one holds:
+
+- a turn/session/error path reachable under the default capability posture changes;
+- the Claude Agent SDK, ACP SDK, peer resolution, pi floor, or backend process contract moves;
+- a security, compatibility, or observed runtime defect requires the release;
+- accumulated inactive minors are best folded into the next meaningful certification.
+
+Otherwise record and defer. Every certification separates declared pins, deterministic/package
+evidence, Claude LIVE aggregate evidence, and Cortex direct on-demand evidence (with its CLI
+version). Per-bump measurements live in the ROADMAP **Dep bump(별도 트랙)** ledger.
+
+### Bridge reachability is part of the contract
+
+Explicit entwurf-bridge connectivity inside an ACP turn is core value, so it is measured rather than
+assumed. `command -v` succeeding is not evidence: a launcher can resolve and still fail to exec (a
+relocated package-manager shim deriving its target from `$0` exits 127), which leaves a turn with no
+`mcp__entwurf-bridge__*` tool at all while every ownership check reads green. Both doctors therefore
+boot a configured command and require the exact bridge verb set back, over one shared leaf
+(`./run.sh probe-bridge-command <cmd>` runs it standalone) — but their scopes differ and the
+difference is deliberate:
+
+- **agy** probes every configured candidate command.
+- **pi** probes only when the effective command is the bare stable bin. A legacy managed repo path
+  or an unowned operator override still reports as a note, not a boot verdict: those are states the
+  operator chose, and this repair was scoped to the measured defect rather than widened to every
+  shape the doctor can classify.
+
+entwurf never repairs a launcher it does not own — a foreign one is reported fail-loud with the
+operator's repair named.
+
 ## Shipped adapters
 
 | Seam | Claude | Cortex Code |
@@ -159,11 +255,13 @@ caller-session `_meta`, and cross-machine certification.
 
 A backend can return `newSession` before its declared MCP server is callable. This was
 observed intermittently on the Claude rail and directly on Cortex's private `mcp.json`
-path. Neither `claude-agent-acp` 0.68.0 nor the Cortex landing adds a client-side
+path. Neither `claude-agent-acp` 0.70.0 nor the Cortex landing adds a client-side
 readiness fence, and `mcpServerStatus()` is not called by the common loop.
-(Re-measured at the 0.66.0 → 0.68.0 bump: AIR typed failures are capability-gated
-and unadvertised by entwurf; goal extension is still not a fence; `mcpServerStatus`
-appears nowhere in the 0.68.0 adapter source.)
+(Re-measured at the 0.68.0 → 0.70.0 bump: AIR typed failures and the 0.69.0 AIR
+file-change report are both capability-gated and unadvertised by entwurf; 0.70.0's
+`providers/set` / `providers/disable` are advertised unconditionally by the adapter but
+entwurf calls neither, so no session's provider state is transitioned; goal extension is
+still not a fence. This bump changes no readiness behavior and closes no part of #72.)
 
 ### 11-7-a/b. Instrument and first measurement
 

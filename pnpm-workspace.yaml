@@ -10,4 +10,4 @@ minimumReleaseAgeExclude:
   - '@earendil-works/pi-protocol@0.84.0 || 0.84.1 || 0.84.2'
   - '@earendil-works/pi-telemetry@0.84.0 || 0.84.1 || 0.84.2'
   - '@earendil-works/pi-tui@0.84.0 || 0.84.1 || 0.84.2'
-  - '@agentclientprotocol/claude-agent-acp@0.65.0 || 0.66.0 || 0.67.0 || 0.68.0'
+  - '@agentclientprotocol/claude-agent-acp@0.65.0 || 0.66.0 || 0.67.0 || 0.68.0 || 0.69.0 || 0.70.0'

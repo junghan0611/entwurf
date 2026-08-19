@@ -197,6 +197,7 @@ Usage:
   ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is not yet verified/certified and stays nonzero for this cut (future validation may reopen it). Detection power is held by check-meta-doctor-oracle
   ./run.sh install-agy-bridge         # 봉인 7: agy MCP install adapter — register ONE entwurf-bridge server in the agy mcp_config (adopt file / create / REFUSE symlink), stable bin command, install-state under $XDG_DATA_HOME/entwurf/agy-bridge/
   ./run.sh uninstall-agy-bridge       # 봉인 7: honest inverse of install-agy-bridge from install-state (restore preimage / remove key; refuse if config became a symlink)
+  ./run.sh probe-bridge-command <cmd> [args...]  # #81: BOOT the given bridge command and require the entwurf MCP tool surface back (initialize + tools/list only; no tools/call, no lock, no delivery). exit 0 = it really serves the bridge; 1 = it resolves but does not. The pi/agy doctors use this leaf.
   ./run.sh doctor-agy-bridge          # fail-loud doctor: MCP config + exact permission rule + state + live probe label
   ./run.sh install-agy-statusline     # own the agy statusLine subtree with bare entwurf-agy-statusline; preserve unrelated settings
   ./run.sh uninstall-agy-statusline   # honest inverse from statusline install-state
@@ -2741,6 +2742,9 @@ check_pack() {
     "mcp/entwurf-bridge/dist/scripts/doctor-pi-provider.js"
     "mcp/entwurf-bridge/dist/scripts/new-session-id.js"
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-prune.js"
+    # #81 — the boot probe doctor-pi-provider imports (and `entwurf probe-bridge-command` runs).
+    # Without the twin the installed doctor dies on the import before printing a verdict.
+    "mcp/entwurf-bridge/dist/scripts/probe-bridge-command.js"
     # The generation verb. The hosts that need it are installed hosts on a
     # previous-generation store; without this twin the prescription every
     # v3-only rejection names would be dead exactly where it matters.
@@ -2940,6 +2944,8 @@ _check_pack_install_impl() {
     "mcp/entwurf-bridge/dist/scripts/doctor-pi-provider.js"
     "mcp/entwurf-bridge/dist/scripts/new-session-id.js"
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-prune.js"
+    # #81 — the boot probe the installed doctor imports (see check-pack).
+    "mcp/entwurf-bridge/dist/scripts/probe-bridge-command.js"
     # The generation verb (see check-pack). The installed-command regression below
     # opens a fresh generation on a 0-record sandbox through the real bin.
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-fresh-cut.js"
@@ -5103,12 +5109,33 @@ case "$cmd" in
     # Fail-loud doctor for agy hooks.json imprint wiring.
     (cd "$REPO_DIR" && bash scripts/agy-hooks-bridge.sh doctor "$@")
     ;;
+  check-probe-bridge-command)
+    # #81: contract gate for the boot probe both doctors stake their verdict on — the reason
+    # taxonomy (each value = a different operator repair) plus the one side effect the probe owns,
+    # reaping the child it spawned. Hermetic stubs only; boots no bridge of ours.
+    run_ts scripts/check-probe-bridge-command.ts
+    ;;
+  probe-bridge-command)
+    # #81: does a configured bridge command actually BOOT and serve MCP? `command -v` answering
+    # yes is not that claim — a relocated launcher can resolve and still exit 127, which is how a
+    # host ran with NO bridge in its ACP turns while every doctor printed ok. Sends `initialize` +
+    # `tools/list` ONLY (no tools/call), so it takes no lock, writes no record, delivers nothing.
+    # Both doctors route their boot cell here so one leaf owns the verdict — agy for every configured
+    # candidate, pi only when the effective command is the bare stable bin.
+    shift || true
+    run_ts scripts/probe-bridge-command.ts "$@"
+    ;;
   doctor-pi-provider)
-    # #46 Task 2: read-only fail-loud doctor for the pi provider ownership (entwurfProvider.
-    # mcpServers.entwurf-bridge). Uses config.ts readProviderSettingsFile SSOT for the EFFECTIVE
-    # (project-shadows-user) command — never a re-implemented merge. Reports user/project/effective,
-    # gates on stable-bin resolvability, and distinguishes state-owned drift (FAIL) from an
-    # unowned user override (honest note). No agy/pi process needed — pure settings inspection.
+    # #46 Task 2 + #81: fail-loud doctor for the pi provider ownership (entwurfProvider.
+    # mcpServers.entwurf-bridge). Uses the config.ts SSOT for the EFFECTIVE (project-shadows-user)
+    # entry — per-name merge then ONE normalize, exactly as resolveProviderConfig does; never a
+    # re-implemented merge. Reports user/project/effective and distinguishes state-owned drift
+    # (FAIL) from an unowned user override (honest note).
+    # This doctor no longer merely reads files: when the effective command is the bare stable bin it
+    # BOOTS that command and requires the entwurf verb set back, because `command -v` succeeding was
+    # never evidence that pi gets a bridge. A legacy repo path or an unowned override still reports
+    # as a note rather than a boot verdict. It writes no operator state, but it does exec the
+    # configured command on this host. No agy/pi process is needed.
     run_ts scripts/doctor-pi-provider.ts "$@"
     ;;
   wire-agy-statusline)

@@ -7,9 +7,11 @@
 #              install-state for an honest inverse. The command written is a STABLE bin
 #              (`entwurf-bridge`), NEVER a repo/git-hash path (the oracle dangling lesson).
 #   uninstall  honest inverse from the install-state (restore preimage / remove our key).
-#   doctor     2-tier: STATIC proves both candidate configs (documented + observed) resolve,
-#              parse, and carry a resolvable command; LIVE proves runtime-effectiveness only
-#              when an agy process exists, else an honest SKIP (never a PASS in disguise).
+#   doctor     2-tier: STATIC proves both candidate configs (documented + observed) resolve, parse,
+#              and carry a command that actually BOOTS the entwurf MCP surface (#81 — resolvable
+#              is necessary, not sufficient; it execs the configured command); LIVE proves
+#              runtime-effectiveness only when an agy process exists, else an honest SKIP (never a
+#              PASS in disguise).
 #
 # GLOBAL ROOT (the one file that matters): live agy reads its global MCP config from
 # ~/.gemini/config/mcp_config.json (agy's own builtin doc: mcp_servers.md — "Global Configuration:
@@ -25,6 +27,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$HERE/.." && pwd)"
 CONFIG_PY="$HERE/agy-bridge-config.py"
 
 GLOBAL_CONFIG="${AGY_MCP_CONFIG:-$HOME/.gemini/config/mcp_config.json}"
@@ -60,6 +63,33 @@ command_resolvable() {
     */*) [ -x "$cmd" ] ;;                 # a path → must be an executable file
     *)   command -v "$cmd" >/dev/null 2>&1 ;;  # a bare name → must be on PATH
   esac
+}
+
+# Does COMMAND actually BOOT and serve the entwurf MCP surface? (#81) Resolvability is necessary
+# and NOT sufficient: on the reference host the bare name resolved through a relocated pnpm shim
+# whose $0-derived target was gone, so it exited 127 and agy would have had no entwurf tool — while
+# this doctor printed "(resolvable)" and stayed green. The verdict leaf is shared with the pi
+# doctor via run.sh (the ONE strip-types fence crossing), so both lanes judge boot the same way.
+#
+# Cached per command: the probe spawns a real child, and the doctor asks about the same command
+# for two candidate configs plus the live tier. BOOT_DETAIL carries the last probe's one-line
+# verdict for the caller to print.
+BOOT_PROBED_CMD=""
+BOOT_PROBED_RC=1
+BOOT_PROBED_OUT=""
+BOOT_DETAIL=""
+command_boots() {
+  local cmd="$1" out rc
+  if [ "$cmd" = "$BOOT_PROBED_CMD" ]; then
+    BOOT_DETAIL="$BOOT_PROBED_OUT"
+    return "$BOOT_PROBED_RC"
+  fi
+  set +e
+  out="$("$REPO_DIR/run.sh" probe-bridge-command "$cmd" 2>&1)"
+  rc=$?
+  set -e
+  BOOT_PROBED_CMD="$cmd"; BOOT_PROBED_RC="$rc"; BOOT_PROBED_OUT="$out"; BOOT_DETAIL="$out"
+  return "$rc"
 }
 
 # Prune the agy MCP tool-schema cache for the KNOWN-legacy server keys (LEGACY_CACHE_KEYS). Removes
@@ -187,11 +217,22 @@ doctor_static_one() {
     invalid-json)   log "  $label: INVALID JSON$link_note"; return 1 ;;
     configured\ *)
       local cmd="${status#configured }"
-      if command_resolvable "$cmd"; then
-        log "  $label: configured → '$cmd' (resolvable)$link_note"
+      if ! command_resolvable "$cmd"; then
+        log "  $label: configured → '$cmd' DANGLING (not on PATH / not executable)$link_note"
+        return 1
+      fi
+      if command_boots "$cmd"; then
+        log "  $label: configured → '$cmd' (resolves AND boots the entwurf MCP surface)$link_note"
         return 0
       fi
-      log "  $label: configured → '$cmd' DANGLING (not on PATH / not executable)$link_note"
+      # Resolves but dead. entwurf does NOT repair the launcher here: the name may be owned by a
+      # foreign file we must never clobber (the same adopt/refuse rule install follows). Report the
+      # measured cause and the exact next step instead of a cosmetic pass.
+      log "  $label: configured → '$cmd' resolves but does NOT serve MCP$link_note"
+      log "        $BOOT_DETAIL"
+      log "        Identify the launcher: command -v '$cmd'; readlink -f \"\$(command -v '$cmd')\""
+      log "        If it is entwurf's managed dev link, restore it with ./run.sh expose-dev-bin (it REFUSES a foreign link)."
+      log "        If a foreign launcher owns the name, repair/remove it yourself or put a working one earlier on PATH."
       return 1 ;;
     *) log "  $label: unexpected status '$status'$link_note"; return 1 ;;
   esac
@@ -283,15 +324,16 @@ sys.exit(0 if same and owned else 1)' "$PERMISSION_STATE_FILE" "$SETTINGS_FILE";
 
 do_doctor() {
   log "[agy-bridge doctor]"
-  local hard_fail=0 configured_any=0 resolvable_any=0
+  local hard_fail=0 configured_any=0 bootable_any=0
 
   log "── static (configured candidates)"
   doctor_static_one "global ($GLOBAL_CONFIG)" "$GLOBAL_CONFIG" || hard_fail=1
   doctor_static_one "legacy ($LEGACY_CONFIG)" "$LEGACY_CONFIG" || hard_fail=1
   doctor_permission || hard_fail=1
-  # Did EITHER candidate carry a configured + resolvable entwurf-bridge? Keep this runtime fact
-  # separate from ownership-state failures below: a FOREIGN TARGET makes the doctor red, but it
-  # does not make a visibly configured command disappear.
+  # Did EITHER candidate carry a configured entwurf-bridge that actually BOOTS? Keep this runtime
+  # fact separate from ownership-state failures below: a FOREIGN TARGET makes the doctor red, but it
+  # does not make a visibly configured command disappear. Boot (not mere resolvability) is the fact
+  # the live tier reports on — the probe is cached, so this loop re-costs nothing.
   local c candidate_status candidate_cmd
   for c in "$GLOBAL_CONFIG" "$LEGACY_CONFIG"; do
     candidate_status="$(python3 "$CONFIG_PY" doctor-static "$c")"
@@ -299,7 +341,7 @@ do_doctor() {
       configured\ *)
         configured_any=1
         candidate_cmd="${candidate_status#configured }"
-        command_resolvable "$candidate_cmd" && resolvable_any=1
+        command_resolvable "$candidate_cmd" && command_boots "$candidate_cmd" && bootable_any=1
         ;;
     esac
   done
@@ -373,17 +415,19 @@ do_doctor() {
 
   log "── live (runtime wiring)"
   if command -v pgrep >/dev/null 2>&1 && pgrep -x agy >/dev/null 2>&1; then
-    if [ "$resolvable_any" -eq 1 ]; then
-      # HONEST label (N2): a running agy + a resolvable configured candidate is CONSISTENT with
-      # runtime wiring, but it does NOT prove agy actually read that config — that needs MCP
-      # tool-listing-grade evidence (deferred). Ownership/state failures remain red independently.
+    if [ "$bootable_any" -eq 1 ]; then
+      # HONEST label (N2): a running agy + a configured candidate whose command BOOTS and serves the
+      # entwurf MCP surface is CONSISTENT with runtime wiring. It still does NOT prove agy actually
+      # READ that config — that remains the deferred half. What is no longer deferred (#81) is the
+      # tool-listing evidence itself: the static tier above got it from the command, not from the
+      # mere fact that a name resolved. Ownership/state failures remain red independently.
       if [ "$hard_fail" -eq 0 ]; then
-        log "  live: agy is running AND a configured candidate has a resolvable command — consistent with runtime wiring (config-read NOT proven; MCP-tool-listing evidence deferred)."
+        log "  live: agy is running AND a configured candidate's command boots the entwurf MCP surface — consistent with runtime wiring (agy's own config-read NOT proven)."
       else
-        log "  live: agy is running and a configured candidate resolves, but ownership/state errors above keep this doctor red (config-read NOT proven)."
+        log "  live: agy is running and a configured candidate boots, but ownership/state errors above keep this doctor red (agy's own config-read NOT proven)."
       fi
     else
-      log "  live: agy is running but no resolvable configured candidate — runtime wiring is broken."
+      log "  live: agy is running but no configured candidate whose command boots the entwurf MCP surface — runtime wiring is broken."
       hard_fail=1
     fi
   else
@@ -391,7 +435,7 @@ do_doctor() {
   fi
 
   if [ "$hard_fail" -ne 0 ]; then
-    fail "doctor found a broken candidate (invalid JSON / dangling command / broken live wiring)."
+    fail "doctor found a broken candidate (invalid JSON / dangling command / command that does not serve MCP / broken live wiring)."
   fi
   log "doctor: ok (static candidates clean)."
 }
