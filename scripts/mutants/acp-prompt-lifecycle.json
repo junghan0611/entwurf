@@ -54,8 +54,8 @@
 			"claim": "REUSE-CARRIES-CHILD-DIAGNOSTICS",
 			"title": "the reuse path drops the child's stderr tail again — exactly the live sonnet failure that showed only \"ACP connection closed\"",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["\t\t\tfinishError(err, aborted, session.stderrTail);"],
-			"replace": ["\t\t\tfinishError(err, aborted);"],
+			"find": ["\t\t\tfinishError(err, aborted, session.stderrTail, lifecycle);"],
+			"replace": ["\t\t\tfinishError(err, aborted, undefined, lifecycle);"],
 			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:REUSE-CARRIES-CHILD-DIAGNOSTICS]",
@@ -89,11 +89,33 @@
 			"claim": "RETIRED-TEARDOWN-NOT-ANNOUNCED",
 			"title": "a teardown we performed ourselves is reported as a death — every ordinary turn-scoped turn cries wolf about its own cleanup",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["\t} else if (!session.retiring) {"],
+			"find": ["\t} else if (!session.retiring && !session.reporting) {"],
 			"replace": ["\t} else {"],
 			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:RETIRED-TEARDOWN-NOT-ANNOUNCED]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "EOF-FIRST-CARRIES-CHILD-END",
+			"title": "the failing turn seals the moment the transport closes, without waiting for the child's exit — re-plants the #72 field signature (a bare \"ACP connection closed\" naming neither exit code nor signal)",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tawait settleChildEnd(session.childEnd, CHILD_END_SETTLE_MS);"],
+			"replace": ["\tvoid CHILD_END_SETTLE_MS;"],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:EOF-FIRST-CARRIES-CHILD-END]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "CHILD-END-SILENCE-BOUNDED",
+			"title": "the post-mortem window grows past the bound it contracts for — a turn whose child never reports an end waits on a clock the caller did not choose",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tawait settleChildEnd(session.childEnd, CHILD_END_SETTLE_MS);"],
+			"replace": ["\tawait settleChildEnd(session.childEnd, 2_500);"],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:CHILD-END-SILENCE-BOUNDED]",
 			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
 		}
 	]

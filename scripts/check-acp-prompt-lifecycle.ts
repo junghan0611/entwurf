@@ -172,6 +172,19 @@ function makeHarness(recordDir: string) {
 		settle(stopReason: string) {
 			pending?.resolve({ stopReason });
 		},
+		/**
+		 * The TRANSPORT ends under the pending request — the real SDK's own
+		 * rejection, and the one production actually sees FIRST.
+		 *
+		 * Distinct from `close()` on purpose: the SDK does not route this through
+		 * an explicit close call. Its read loop hits stdout EOF and rejects every
+		 * pending response with `closeSignal.reason ?? new Error("ACP connection
+		 * closed")` — a GENERIC message, because a clean EOF carries no reason.
+		 * That verbatim text is the subject of the cells below.
+		 */
+		transportClosed(reason?: string) {
+			pending?.reject(new Error(reason ?? "ACP connection closed"));
+		},
 		/** the agent streams something mid-turn (proof the turn is progressing) */
 		async progress(text: string) {
 			await notifier?.({ sessionUpdate: "agent_message_chunk", content: { type: "text", text } });
@@ -525,6 +538,187 @@ try {
 	}
 
 	// ----------------------------------------------------------------------
+	// CELL 9 — THE OTHER TEMPORAL ORDER: EOF first, exit one tick later.
+	//
+	// CELLS 4/5 drive the lifecycle-FIRST order: the child's `exit` event fires
+	// while the prompt is still pending, so `notifyChildGone` wins the race and
+	// reports the exit status. Those cells stay — that order remains possible and
+	// must keep working. This cell covers the order the FIELD showed.
+	//
+	// Measured with the production shape (piped stdio, detached, `Readable.toWeb`)
+	// on Linux, the child's stdout EOF landed ~1ms BEFORE node emitted `exit` —
+	// for a clean exit(0) and for SIGKILL alike (numbers preserved in issue #72).
+	//
+	// In that order the SDK's generic rejection settles the turn first,
+	// `awaitAcpPromptTurn`'s `finally` clears `notifyChildGone`, and the exit
+	// status arriving one tick later has nowhere to go. Issue #72's field sample
+	// is exactly that: `ACP connection closed` plus a stderr tail, naming neither
+	// exit code nor signal — while the backend HAD an exit status the whole time.
+	//
+	// The order here is scheduled EXPLICITLY (reject, then `die` on a later tick)
+	// rather than borrowed from a production helper: the claim IS the ordering,
+	// so the oracle must state it, not inherit it from the subject.
+	// ----------------------------------------------------------------------
+	let eofFirstMessage = "";
+	{
+		const h = makeHarness(recordDir);
+		const t1 = startTurn(backend, userCtx("first NONCE-E1"), { sessionId: "life-eof-first" }, h.deps);
+		await delay(20);
+		h.settle("end_turn");
+		await t1.done;
+		assert.equal(sealed(t1.events)[0].type, "done", "turn 1 completes so the session is retained for reuse");
+
+		// Turn 2 is the field shape: a retained child, a completed tool phase, and
+		// then the transport ends before the final answer.
+		const t2 = startTurn(
+			backend,
+			reuseCtx("first NONCE-E1", "second NONCE-E2"),
+			{ sessionId: "life-eof-first" },
+			h.deps,
+		);
+		await delay(30);
+		assert.equal(h.children.length, 1, "turn 2 reused the live child (no respawn)");
+		h.children[0].writeStderr(
+			"(node:501006) [CLAUDE_SDK_CAN_USE_TOOL_SHADOWED] Warning: canUseTool will not be invoked\n",
+		);
+		// EOF first …
+		h.transportClosed();
+		// … and the exit status one tick later, exactly as measured.
+		await delay(1);
+		h.children[0].die(0, null);
+		await t2.done;
+
+		eofFirstMessage = String(sealed(t2.events)[0].error.errorMessage);
+		assert.ok(
+			eofFirstMessage.includes("ACP connection closed"),
+			"the backend's own first words are preserved verbatim, not swapped out for ours — " +
+				`a reader must still be able to match the transport's text. Got: ${JSON.stringify(eofFirstMessage)}`,
+		);
+		assert.ok(
+			eofFirstMessage.includes("exit code 0"),
+			"[QK:EOF-FIRST-CARRIES-CHILD-END] when the transport closes BEFORE node reports the child's exit — the order " +
+				"the field sample exhibited — the sealed error must still name how the child ended. Losing it to that " +
+				"~1ms race is what left issue #72's field sample with no exit code and no signal. " +
+				`Got: ${JSON.stringify(eofFirstMessage)}`,
+		);
+		assert.ok(
+			eofFirstMessage.includes("while the prompt was still in flight"),
+			"the sealed error names the PHASE that died — a closure during bootstrap and one under a live prompt are " +
+				`different failures. Got: ${JSON.stringify(eofFirstMessage)}`,
+		);
+		// NARROW on purpose: this proves the tail collected BEFORE the seal is not
+		// cut short by our own cleanup. It does NOT claim the child's last words —
+		// nothing here waits for the stderr pipe to drain, and node's `exit` can
+		// precede that drain. Draining is a separate lever; see backend.ts.
+		assert.ok(
+			eofFirstMessage.includes("CLAUDE_SDK_CAN_USE_TOOL_SHADOWED"),
+			`the stderr tail collected before the seal rides the sealed error. Got: ${JSON.stringify(eofFirstMessage)}`,
+		);
+		// Cleanup still runs after the seal — settling first DELAYS teardown, it
+		// does not skip it. The signal itself is not the evidence here: the child
+		// is already dead by now, and `teardownChild` correctly declines to signal
+		// a corpse. The connection close is the part that always runs.
+		assert.ok(
+			h.closes.length > 0,
+			"the uncertain connection is still closed after the seal — an error path must never leave it reusable",
+		);
+	}
+
+	// ----------------------------------------------------------------------
+	// CELL 10 — a SIGKILL under the same order is told apart from a clean exit.
+	//
+	// exit(0) and SIGKILL are the two candidate deaths behind #72 — a backend
+	// that chose to shut down (claude-agent-acp's index.js exits 0 when its ACP
+	// connection closes, silently) versus one killed from outside. They are
+	// distinguishable ONLY by this field, which is why CELL 9's claim is not
+	// enough on its own: a report that always said "exit code 0" would satisfy it
+	// while telling the operator nothing.
+	// ----------------------------------------------------------------------
+	{
+		const h = makeHarness(recordDir);
+		const turn = startTurn(backend, userCtx("killed from outside"), { sessionId: "life-eof-kill" }, h.deps);
+		await delay(30);
+		h.children[0].writeStderr("KILLED-STDERR-MARK\n");
+		h.transportClosed();
+		await delay(1);
+		h.children[0].die(null, "SIGKILL");
+		await turn.done;
+
+		const message = String(sealed(turn.events)[0].error.errorMessage);
+		assert.ok(
+			message.includes("signal SIGKILL") && !message.includes("exit code"),
+			"a child killed from outside must read as a SIGNAL, never as a clean exit — a report that always said " +
+				`"exit code 0" would satisfy the previous cell while telling the operator nothing. Got: ${JSON.stringify(message)}`,
+		);
+		assert.ok(
+			message.includes("KILLED-STDERR-MARK"),
+			`the stderr tail rides the signal case too. Got: ${JSON.stringify(message)}`,
+		);
+	}
+
+	// ----------------------------------------------------------------------
+	// CELL 11 — a child that never reports an end says SO, bounded.
+	//
+	// A closed transport does not prove a dead child: the connection can end
+	// while the process lives. The honest report then is that we waited and it
+	// never said — NOT a guessed exit code, and NOT an unbounded wait. Silence
+	// must be reported as silence.
+	// ----------------------------------------------------------------------
+	let noEndMessage = "";
+	{
+		const h = makeHarness(recordDir);
+		const turn = startTurn(backend, userCtx("transport closes, child lives"), { sessionId: "life-eof-noend" }, h.deps);
+		await delay(30);
+		const closedAt = Date.now();
+		h.transportClosed();
+		await turn.done;
+		const waited = Date.now() - closedAt;
+
+		noEndMessage = String(sealed(turn.events)[0].error.errorMessage);
+		assert.ok(
+			noEndMessage.includes("reported no exit status within") &&
+				!noEndMessage.includes("exit code") &&
+				!noEndMessage.includes("signal "),
+			"when the transport closed but the child never reported an end, the turn must SAY so and invent nothing — " +
+				`a guessed exit status would be worse than the bare closure. Got: ${JSON.stringify(noEndMessage)}`,
+		);
+		// The window is BOTH real and bounded. The lower bound is what stops a
+		// mutant from passing by never waiting at all (it would then report silence
+		// for a child that was about to answer); the upper bound is what stops the
+		// wait from growing into the wall clock this gate exists to keep out. The
+		// shipped bound is CHILD_END_SETTLE_MS (500ms) — not imported, since the
+		// gate must not widen the backend's module surface — so the range allows a
+		// loaded host some slack while refusing multi-second drift.
+		assert.ok(
+			waited >= 400 && waited < 1_500,
+			"[QK:CHILD-END-SILENCE-BOUNDED] the post-mortem wait must actually happen AND be bounded — a failing turn may " +
+				`neither skip the window nor hang in it. Waited ${waited}ms`,
+		);
+	}
+
+	// A closure that CARRIES A REASON already explains itself, so it must not be
+	// given the post-mortem window: only the SDK's bare, reason-less text earns
+	// it. Without this, a broadened match would tax unrelated prompt errors with a
+	// delay — and the near-miss below is exactly what a substring test would catch
+	// by mistake.
+	{
+		const h = makeHarness(recordDir);
+		const turn = startTurn(backend, userCtx("closure with a reason"), { sessionId: "life-near-match" }, h.deps);
+		await delay(30);
+		const closedAt = Date.now();
+		h.transportClosed("ACP connection closed by the operator's proxy");
+		await turn.done;
+		const waited = Date.now() - closedAt;
+
+		const message = String(sealed(turn.events)[0].error.errorMessage);
+		assert.ok(
+			!message.includes("[acp] lifecycle:"),
+			`a closure that named its own reason must not be re-diagnosed. Got: ${JSON.stringify(message)}`,
+		);
+		assert.ok(waited < 300, `…and must not pay the post-mortem wait either. Waited ${waited}ms`);
+	}
+
+	// ----------------------------------------------------------------------
 	// CELL 8 — our prompt-phase failure text is not transient, judged by pi.
 	// ----------------------------------------------------------------------
 	assert.equal(
@@ -533,12 +727,28 @@ try {
 		"positive control: pi still classifies the RETIRED 600s cutoff text as transient — that classification is " +
 			"exactly why one wall-clock kill cost four full cold turns",
 	);
-	assert.equal(
-		isRetryableAssistantError({ stopReason: "error", errorMessage: childDeathMessage } as any),
-		false,
-		"[QK:PROMPT-ERROR-NOT-TRANSIENT] pi must NOT classify a prompt-phase lifecycle failure we authored as a " +
-			"transient provider error — a retry here is a cold replay of the whole prompt, not a cheap retry. " +
-			`Judged text: ${JSON.stringify(childDeathMessage)}`,
+	// EVERY prompt-phase failure text this backend authors, judged together by pi's
+	// own classifier. One aggregate assertion rather than three: the claim is the
+	// same for all of them, and the token that names it must appear exactly once.
+	//
+	// The two closure diagnoses are the ones that carry real risk — they are
+	// APPENDED to the SDK's own message, and the first draft said "within 500ms",
+	// which pi read as an HTTP 500 and classified as transient.
+	const authoredFailureTexts = [
+		["mid-prompt child death", childDeathMessage],
+		["EOF-first child end", eofFirstMessage],
+		["no child end within the bound", noEndMessage],
+	] as const;
+	const transientlyWorded = authoredFailureTexts.filter(([, text]) =>
+		isRetryableAssistantError({ stopReason: "error", errorMessage: text } as any),
+	);
+	assert.deepEqual(
+		transientlyWorded.map(([label]) => label),
+		[],
+		"[QK:PROMPT-ERROR-NOT-TRANSIENT] pi must NOT classify any prompt-phase lifecycle failure we authored as a " +
+			"transient provider error — a retry here is a cold replay of the whole prompt, and the tool side effects " +
+			"this turn already produced make that the expensive failure, not the cheap one. Offending texts: " +
+			JSON.stringify(transientlyWorded),
 	);
 } finally {
 	rmSync(TMP_EMIT, { recursive: true, force: true });
@@ -559,7 +769,9 @@ console.log(
 		"session/cancel first and seals cancelled→aborted without signalling a cooperating child; a wedged agent is torn " +
 		"down after the bounded grace and still returns promptly with no new child; a child that dies mid-prompt is " +
 		"reported with its exit status AND stderr tail on BOTH the new and the reuse path; a death BETWEEN turns is " +
-		"announced once by the next turn while a teardown WE performed stays silent; and pi's own " +
-		"isRetryableAssistantError refuses " +
-		"to classify that failure as transient while still matching the retired 600s text",
+		"announced once by the next turn while a teardown WE performed stays silent; the child's end survives the " +
+		"temporal order the field showed too (transport EOF first, exit one tick later, alongside the opposite order), " +
+		"telling a clean exit apart from a signal and reporting silence AS silence within a bounded window; and pi's " +
+		"own isRetryableAssistantError refuses to classify any of those failures as transient while still matching " +
+		"the retired 600s text",
 );

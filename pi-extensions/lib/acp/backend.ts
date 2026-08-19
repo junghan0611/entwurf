@@ -161,6 +161,35 @@ interface AcpBridgeEvent {
 	decision?: "approved" | "cancelled";
 }
 
+/**
+ * A one-shot latch for "the child has ended", created at spawn and settled by
+ * `onChildGone`. `settled` answers the question with no waiting at all; the
+ * promise is only for the bounded post-mortem window (settleChildEnd).
+ */
+interface ChildEndLatch {
+	settled: boolean;
+	promise: Promise<void>;
+	/** Called exactly once by onChildGone; cleared so a second end is a no-op. */
+	settle?: () => void;
+}
+
+function makeChildEndLatch(): ChildEndLatch {
+	let settle!: () => void;
+	const promise = new Promise<void>((resolve) => {
+		settle = resolve;
+	});
+	const latch: ChildEndLatch = {
+		settled: false,
+		promise,
+		settle: () => {
+			latch.settled = true;
+			latch.settle = undefined;
+			settle();
+		},
+	};
+	return latch;
+}
+
 interface BridgeSession {
 	key: string;
 	cwd: string;
@@ -183,8 +212,36 @@ interface BridgeSession {
 	stderrTail: string[];
 	/** How the child ended, once it has — folded into the prompt-phase error. */
 	exit?: { code: number | null; signal: NodeJS.Signals | null };
+	/**
+	 * LATCH for the child's end, readable at ANY time — deliberately not a
+	 * callback.
+	 *
+	 * `notifyChildGone` lives only between the two lines of
+	 * `awaitAcpPromptTurn`'s try/finally, so it can carry the exit status only
+	 * when the child's `exit` event wins the race against the transport — and on
+	 * the shape this backend actually runs, it does not. With piped stdio on
+	 * Linux the child's stdout EOF was measured landing about a millisecond BEFORE
+	 * node emits `exit`, for a clean exit and for SIGKILL alike (issue #72). The
+	 * SDK's generic "ACP connection closed" therefore settles the race first,
+	 * `finally` clears the callback, and the exit status arriving one tick later
+	 * has nowhere to go — which is how #72's field sample reached the operator
+	 * naming neither exit code nor signal. The opposite order stays possible and
+	 * is still handled (notifyChildGone), so both are covered by the gate.
+	 *
+	 * The latch outlives the race: `settled` is the durable fact and `promise`
+	 * lets a failing turn wait a BOUNDED moment for a late end (settleChildEnd).
+	 */
+	childEnd: ChildEndLatch;
 	/** Set while a prompt is in flight so a child death can close it (awaitAcpPromptTurn). */
 	notifyChildGone?: (err: Error) => void;
+	/**
+	 * This TURN owns reporting the child's end, so the next turn must not also
+	 * announce it. Raised at the top of a failure path — BEFORE the bounded
+	 * settle and before any teardown — so an end observed during that window is
+	 * still a natural one (we have not signalled anything yet) but is reported
+	 * exactly once, by the turn that failed on it.
+	 */
+	reporting?: boolean;
 	/**
 	 * We are tearing this child down ON PURPOSE (turn-scoped teardown, config
 	 * drift, error/abort cleanup). Its exit is then expected, not news: without
@@ -229,10 +286,13 @@ function onChildGone(session: BridgeSession, exit?: { code: number | null; signa
 	if (exit) session.exit = exit;
 	if (bridgeSessions.get(session.key) === session) bridgeSessions.delete(session.key);
 	retainedChildren.delete(session.child);
+	// Close the latch FIRST and unconditionally: it is the durable fact, and a
+	// failing turn may already be waiting on it inside its bounded settle window.
+	session.childEnd.settle?.();
 	if (session.notifyChildGone) {
 		// A turn was waiting on this child — it reports the death itself.
 		session.notifyChildGone(childEndedError(session));
-	} else if (!session.retiring) {
+	} else if (!session.retiring && !session.reporting) {
 		// Died BETWEEN turns with no turn to fail and nobody tearing it down, so
 		// nobody has seen it. Without this the next turn would silently open a
 		// fresh child and read as an ordinary cold start, hiding that the backend
@@ -279,6 +339,139 @@ function childEndedError(session: BridgeSession): Error {
 		`entwurf: the ACP backend process ended while the prompt was still in flight (${describeChildEnd(session.exit)}) — ` +
 			"this turn has no answer",
 	);
+}
+
+/**
+ * The BOUNDED post-mortem window a turn that ALREADY failed may wait for the
+ * child's exit status.
+ *
+ * This is NOT a prompt deadline and must never become one: nothing here can end
+ * a running turn. It opens only after the prompt has already settled as a
+ * transport closure, and it closes on the child's own `exit` — which follows the
+ * stdout EOF by about a millisecond, so this is headroom, not a felt wait.
+ */
+const CHILD_END_SETTLE_MS = 500;
+
+/**
+ * The SDK's exact words for "the transport ended under a pending request"
+ * (`@agentclientprotocol/sdk` jsonrpc.js / acp.js:
+ * `closeSignal.reason ?? new Error("ACP connection closed")`).
+ *
+ * Matched EXACTLY, not by substring: this text appears only when the close
+ * carried NO reason — a clean stdout EOF rather than an errored stream — which
+ * is the one failure shape that arrives with no lifecycle facts of its own. A
+ * close that DID carry a reason already explains itself and must not be given a
+ * settle delay, and our own `childEndedError` already names the exit status.
+ * Widening this to a substring test would put that delay on errors that do not
+ * need it.
+ */
+const ACP_CONNECTION_CLOSED_TEXT = "ACP connection closed";
+
+function isAcpConnectionClosure(err: unknown): boolean {
+	const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+	return message.trim() === ACP_CONNECTION_CLOSED_TEXT;
+}
+
+/**
+ * Wait a BOUNDED moment for a child end that the transport already implied.
+ *
+ * Resolves immediately when the latch is already closed (the common case once
+ * the ~1ms gap has passed) and never rejects. The timer is deliberately NOT
+ * unref'd: it is the only thing that ends this wait, so letting the loop drain
+ * past it would leave a failing turn unsealed — the opposite of the honesty this
+ * exists for. It is cleared on both exits, so it holds nothing open.
+ */
+async function settleChildEnd(latch: ChildEndLatch, ms: number): Promise<void> {
+	if (latch.settled) return;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	try {
+		await Promise.race([
+			latch.promise,
+			new Promise<void>((resolve) => {
+				timer = setTimeout(resolve, ms);
+			}),
+		]);
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+}
+
+/**
+ * The lifecycle line appended to a transport-closure failure, so the operator
+ * reads WHICH phase died and HOW the child ended.
+ *
+ * Wording is load-bearing for the same reason `childEndedError`'s is: pi
+ * classifies a failed assistant message against `RETRYABLE_PROVIDER_ERROR_PATTERN`
+ * (@earendil-works/pi-ai `utils/retry`), whose terms include "timed out",
+ * "timeout", "terminated", "connection lost" and "ended without". None of those
+ * may appear here, or a dead child would put a full cold prompt replay back on
+ * the table — with the tool side effects this turn already produced.
+ *
+ * That pattern is a bare substring alternation (`new RegExp(terms.join("|"), "i")`
+ * — NO word boundaries) and its terms enumerate the HTTP statuses "429", "500",
+ * "502", "503", "504" and "524". So the settle bound is deliberately NOT interpolated: rendering
+ * CHILD_END_SETTLE_MS made this line say "within 500ms", which pi read as an
+ * HTTP 500 and classified as transient. Naming the window in prose keeps a later
+ * change of that constant from silently re-arming the replay — do not "improve"
+ * this by putting the number back; the bound belongs in the code and the gate.
+ *
+ * The three endings are kept DISTINCT on purpose (issue #72 Done-when): an
+ * exit code, a signal, and "we waited and it never said" are three different
+ * facts, and collapsing them is what made the original sample unreadable.
+ */
+function childEndLifecycleLine(opts: {
+	/** "pre-prompt" covers a new turn's bootstrap AND a reuse turn's pre-send steps. */
+	phase: "pre-prompt" | "prompt";
+	exit?: { code: number | null; signal: NodeJS.Signals | null };
+	ended: boolean;
+}): string {
+	const where =
+		opts.phase === "prompt"
+			? "the ACP backend connection closed while the prompt was still in flight"
+			: "the ACP backend connection closed before this turn's prompt was sent";
+	const how = opts.ended
+		? `the child ended (${describeChildEnd(opts.exit)})`
+		: "the child reported no exit status within the bounded post-mortem window";
+	return `[acp] lifecycle: ${where} — ${how}; this turn has no answer`;
+}
+
+/**
+ * The failure path's post-mortem: enrich ONLY the transport-closure shape, and
+ * only after waiting a bounded moment for the exit status the close implies.
+ *
+ * Returns `undefined` for every other failure — an abort, a bootstrap throw, or
+ * a child death our own `notifyChildGone` already diagnosed — so no other error
+ * pays a delay and none is double-reported.
+ *
+ * Callers MUST run this BEFORE tearing the child down: our teardown SIGTERMs the
+ * process group, so an exit read after it would be OUR signal recorded as the
+ * child's cause of death.
+ *
+ * The stderr claim is deliberately NARROW. Running before teardown means the tail
+ * already collected is not cut short by our own cleanup, and stderr arriving
+ * during this window still lands in it. It does NOT promise the child's last
+ * words: node's `exit` can precede the stdio drain, and nothing here waits for
+ * the stderr pipe to close. Draining it is a separate lever, not this one.
+ */
+async function diagnoseTransportClosure(opts: {
+	err: unknown;
+	session: BridgeSession | undefined;
+	phase: "pre-prompt" | "prompt";
+	aborted: boolean;
+}): Promise<string | undefined> {
+	if (opts.aborted || !opts.session) return undefined;
+	if (!isAcpConnectionClosure(opts.err)) return undefined;
+	const session = opts.session;
+	// This turn owns the announcement from here on, so the next turn must not
+	// repeat it. Raised BEFORE the wait and before any signal of ours, so an end
+	// observed inside the window is still a natural one.
+	session.reporting = true;
+	await settleChildEnd(session.childEnd, CHILD_END_SETTLE_MS);
+	return childEndLifecycleLine({
+		phase: opts.phase,
+		exit: session.exit,
+		ended: session.childEnd.settled,
+	});
 }
 
 // ---------------------------------------------------------------------------
@@ -728,12 +921,16 @@ export function streamAcpTurn(
 		stream.end();
 	}
 
-	function finishError(err: unknown, aborted: boolean, stderrTail?: string[]): void {
+	function finishError(err: unknown, aborted: boolean, stderrTail?: string[], lifecycle?: string): void {
 		finalizeAcpStreamState(state);
 		state.output.stopReason = aborted ? "aborted" : "error";
 		const base = err instanceof Error ? err.message : String(err);
+		// The FIRST failure stays first and verbatim (it is what the backend
+		// actually said); the lifecycle line is added, never substituted, so a
+		// reader can still match the transport's own text.
+		const diagnosed = lifecycle ? `${base}\n${lifecycle}` : base;
 		const tail = (stderrTail ?? []).join("").trim().slice(-1_000);
-		const full = tail ? `${base}\n--- backend stderr (tail) ---\n${tail}` : base;
+		const full = tail ? `${diagnosed}\n--- backend stderr (tail) ---\n${tail}` : diagnosed;
 		// A-c: a real failure (not an abort) that looks like a context-window
 		// overflow gets an actionable hint appended, so "API Error" stops hiding
 		// the turn-scoped full-transcript-replay cause.
@@ -924,6 +1121,8 @@ export function streamAcpTurn(
 		let child: AcpChildLike | undefined;
 		let session: BridgeSession | undefined;
 		let onAbort: (() => void) | undefined;
+		/** Which phase a failure belongs to — flipped once the prompt is on the wire. */
+		let phase: "pre-prompt" | "prompt" = "pre-prompt";
 		const stderrTail: string[] = [];
 		const sessionKey = resolveSessionKey(opts, cwd);
 		try {
@@ -1012,6 +1211,9 @@ export function streamAcpTurn(
 				// this turn with the session, so a later reuse turn can still report
 				// the child's dying words.
 				stderrTail,
+				// Armed at spawn, before ANY turn can fail on this child — the latch
+				// must already exist when the `exit` listener below can fire.
+				childEnd: makeChildEndLatch(),
 			};
 			const sess = session;
 			spawned.once("exit", (...args: unknown[]) =>
@@ -1102,6 +1304,9 @@ export function streamAcpTurn(
 				signal.removeEventListener("abort", onAbort);
 				onAbort = undefined;
 			}
+			// From here the prompt is on the wire: a transport closure now is a
+			// PROMPT-phase failure, and the catch says so.
+			phase = "prompt";
 			const promptResult = await awaitAcpPromptTurn(session, wireParams, {
 				signal,
 				graceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS,
@@ -1134,6 +1339,13 @@ export function streamAcpTurn(
 				session.busy = false;
 				if (bridgeSessions.get(sessionKey) === session) bridgeSessions.delete(sessionKey);
 			}
+			// ORDER IS THE CONTRACT (#72): natural settle → seal → teardown.
+			// The bounded wait for the child's own exit status runs BEFORE we signal
+			// anything, so what we report is how the child actually ended and not our
+			// own SIGTERM; the tail collected by then is sealed before our cleanup
+			// touches the stderr pipe.
+			const lifecycle = await diagnoseTransportClosure({ err, session, phase, aborted });
+			finishError(err, aborted, session?.stderrTail ?? stderrTail, lifecycle);
 			// error/abort → drop the (uncertain) session and close its child; an
 			// uncertain connection must never be reused (GPT ④).
 			if (child) {
@@ -1142,7 +1354,6 @@ export function streamAcpTurn(
 				session?.connection.close?.(err);
 				teardownChild(child);
 			}
-			finishError(err, aborted, session?.stderrTail ?? stderrTail);
 		} finally {
 			if (signal && onAbort) signal.removeEventListener("abort", onAbort);
 		}
@@ -1150,6 +1361,8 @@ export function streamAcpTurn(
 
 	// --- reuse: send only the latest user delta to the live ACP session
 	async function runReuseTurn(session: BridgeSession, ctxSigs: string[]): Promise<void> {
+		/** Same phase discipline as a new turn — reuse just has no bootstrap to lose. */
+		let phase: "pre-prompt" | "prompt" = "pre-prompt";
 		try {
 			if (signal?.aborted) throw new Error("aborted before prompt");
 
@@ -1171,6 +1384,7 @@ export function streamAcpTurn(
 			// ahead of the wire write; the prompt driver then owns the abort surface.
 			const wireParams = await applyProviderPayloadHook(options, { sessionId: session.acpSessionId, prompt }, model);
 			if (signal?.aborted) throw new Error("aborted during payload hook");
+			phase = "prompt";
 			const promptResult = await awaitAcpPromptTurn(session, wireParams, {
 				signal,
 				graceMs: deps.abortGraceMs ?? ABORT_CANCEL_GRACE_MS,
@@ -1188,16 +1402,22 @@ export function streamAcpTurn(
 			const aborted = Boolean(signal?.aborted);
 			session.activePromptHandler = undefined;
 			session.busy = false;
-			// error/abort on a reused session → drop it and close the child (GPT ④).
 			if (bridgeSessions.get(session.key) === session) bridgeSessions.delete(session.key);
+			// The SAME diagnostics a new turn reports, in the SAME order (#72):
+			// natural settle → seal → teardown. This is the path the field sample
+			// took — a retained child that died after its tool phase — so the
+			// ordering matters most here: teardown first would have overwritten the
+			// child's own exit status with our SIGTERM.
+			const lifecycle = await diagnoseTransportClosure({ err, session, phase, aborted });
+			// Without the session-scoped tail a mid-turn child death on a resident
+			// session surfaced as a bare "ACP connection closed" with nothing to read
+			// it by.
+			finishError(err, aborted, session.stderrTail, lifecycle);
+			// error/abort on a reused session → drop it and close the child (GPT ④).
 			session.retiring = true;
 			retainedChildren.delete(session.child);
 			session.connection.close?.(err);
 			teardownChild(session.child);
-			// The SAME diagnostics a new turn reports. Without the session-scoped
-			// tail a mid-turn child death on a resident session surfaced as a bare
-			// "ACP connection closed" with nothing to read it by.
-			finishError(err, aborted, session.stderrTail);
 		}
 	}
 

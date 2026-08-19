@@ -800,7 +800,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"acp-augment": 10,
 		"acp-cortex": 12,
 		"acp-overlay": 1,
-		"acp-prompt-lifecycle": 8,
+		"acp-prompt-lifecycle": 10,
 		"acp-stop-reason": 6,
 		"acp-stream-hooks": 10,
 		"agy-permission": 6,
