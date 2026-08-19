@@ -44,6 +44,7 @@ const mcpStub = (name: string, names: readonly string[]): string => {
 		`#!/usr/bin/env bash
 while IFS= read -r line; do
   case "$line" in
+    *'"id":1'*) printf '%s\\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"fake-entwurf-bridge","version":"0"}}}' ;;
     *'"id":2'*) printf '%s\\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[${tools}]}}' ;;
   esac
 done
@@ -95,12 +96,28 @@ try {
 		JSON.stringify(rMissing),
 	);
 
+	// ── initialize is a handshake, not a frame we merely write ───────────────
+	const noInitialize = stub(
+		"no-initialize",
+		`#!/usr/bin/env bash
+printf '%s\\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[${EXPECTED_TOOLS.map((n) => `{"name":"${n}"}`).join(",")}]}}'
+while IFS= read -r _line; do :; done
+`,
+	);
+	const rNoInitialize = await probeBridgeCommand({ command: noInitialize, timeoutMs: 700 });
+	ok(
+		"[QK:PROBE-REQUIRES-INITIALIZE] an exact tools/list sent before initialize completes is not a healthy MCP bridge",
+		!rNoInitialize.ok && rNoInitialize.reason === "initialize-failed",
+		JSON.stringify(rNoInitialize),
+	);
+
 	// ── not an MCP server (answers id:2, no tools array) ──────────────────────
 	const notMcp = stub(
 		"not-mcp",
 		`#!/usr/bin/env bash
 while IFS= read -r line; do
   case "$line" in
+    *'"id":1'*) printf '%s\\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"not-mcp","version":"0"}}}' ;;
     *'"id":2'*) printf '%s\\n' '{"jsonrpc":"2.0","id":2,"result":{}}' ;;
   esac
 done

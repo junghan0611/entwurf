@@ -197,7 +197,7 @@ Usage:
   ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is not yet verified/certified and stays nonzero for this cut (future validation may reopen it). Detection power is held by check-meta-doctor-oracle
   ./run.sh install-agy-bridge         # 봉인 7: agy MCP install adapter — register ONE entwurf-bridge server in the agy mcp_config (adopt file / create / REFUSE symlink), stable bin command, install-state under $XDG_DATA_HOME/entwurf/agy-bridge/
   ./run.sh uninstall-agy-bridge       # 봉인 7: honest inverse of install-agy-bridge from install-state (restore preimage / remove key; refuse if config became a symlink)
-  ./run.sh probe-bridge-command <cmd> [args...]  # #81: BOOT the given bridge command and require the entwurf MCP tool surface back (initialize + tools/list only; no tools/call, no lock, no delivery). exit 0 = it really serves the bridge; 1 = it resolves but does not. The pi/agy doctors use this leaf.
+  ./run.sh probe-bridge-command <cmd> [args...]  # #81: BOOT the given bridge invocation and require the entwurf MCP tool surface back. `--invocation-json '{"command":"…","args":[],"env":{}}'` preserves a harness config exactly. It waits for a valid initialize response, then sends initialized + tools/list only (no tools/call, lock, record, or delivery). exit 0 = it serves the bridge; 1 = it does not. The pi/agy doctors use this leaf.
   ./run.sh doctor-agy-bridge          # fail-loud doctor: MCP config + exact permission rule + state + live probe label
   ./run.sh install-agy-statusline     # own the agy statusLine subtree with bare entwurf-agy-statusline; preserve unrelated settings
   ./run.sh uninstall-agy-statusline   # honest inverse from statusline install-state
@@ -5118,10 +5118,11 @@ case "$cmd" in
   probe-bridge-command)
     # #81: does a configured bridge command actually BOOT and serve MCP? `command -v` answering
     # yes is not that claim — a relocated launcher can resolve and still exit 127, which is how a
-    # host ran with NO bridge in its ACP turns while every doctor printed ok. Sends `initialize` +
-    # `tools/list` ONLY (no tools/call), so it takes no lock, writes no record, delivers nothing.
-    # Both doctors route their boot cell here so one leaf owns the verdict — agy for every configured
-    # candidate, pi only when the effective command is the bare stable bin.
+    # host ran with NO bridge in its ACP turns while every doctor printed ok. It waits for the
+    # initialize RESPONSE before it sends notifications/initialized + `tools/list` (no tools/call),
+    # so it takes no lock, writes no record, and delivers nothing. Both doctors route their boot
+    # cell here so one leaf owns the verdict — agy for every configured {command,args,env}, pi for
+    # every effective stdio invocation.
     shift || true
     run_ts scripts/probe-bridge-command.ts "$@"
     ;;
@@ -5131,10 +5132,10 @@ case "$cmd" in
     # entry — per-name merge then ONE normalize, exactly as resolveProviderConfig does; never a
     # re-implemented merge. Reports user/project/effective and distinguishes state-owned drift
     # (FAIL) from an unowned user override (honest note).
-    # This doctor no longer merely reads files: when the effective command is the bare stable bin it
-    # BOOTS that command and requires the entwurf verb set back, because `command -v` succeeding was
-    # never evidence that pi gets a bridge. A legacy repo path or an unowned override still reports
-    # as a note rather than a boot verdict. It writes no operator state, but it does exec the
+    # This doctor no longer merely reads files: it BOOTS every effective stdio invocation and
+    # requires the entwurf verb set back, because `command -v` succeeding was never evidence that
+    # pi gets a bridge. Runtime evidence and ownership are separate: an unowned override is not
+    # repaired, but a dead one is still red. It writes no operator state, but it does exec the
     # configured command on this host. No agy/pi process is needed.
     run_ts scripts/doctor-pi-provider.ts "$@"
     ;;

@@ -17,11 +17,46 @@
 			"claim": "AGY-DOCTOR-BOOT-NEGATIVE",
 			"title": "the agy doctor stops asking whether the configured command boots and reports the old '(resolvable)' green — a registered bridge agy could never actually call",
 			"subject": "scripts/agy-bridge.sh",
-			"find": ["      if command_boots \"$cmd\"; then"],
+			"find": ["      if command_boots \"$invocation\"; then"],
 			"replace": ["      if true; then"],
 			"gate": ["bash", "scripts/smoke-agy-install-state.sh"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:AGY-DOCTOR-BOOT-NEGATIVE]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "PI-DOCTOR-PROBES-OVERRIDE",
+			"title": "the pi doctor skips runtime probing for a non-bare override, so a dead command that shadows the stable bridge returns green as an operator choice",
+			"subject": "scripts/doctor-pi-provider.ts",
+			"find": ["\tif (!resolvable(cmd)) {"],
+			"replace": [
+				"\tif (!isBare) {\n\t\tlog(`  note: skipped runtime for override '${cmd}'`);\n\t} else if (!resolvable(cmd)) {"
+			],
+			"gate": ["bash", "scripts/smoke-pi-provider-state.sh"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:PI-DOCTOR-PROBES-OVERRIDE]",
+			"signatureSource": "scripts/smoke-pi-provider-state.sh"
+		},
+		{
+			"claim": "AGY-DOCTOR-PROBES-ARGS",
+			"title": "the agy invocation parser drops configured args, so the doctor boots command defaults while agy executes a failing argv",
+			"subject": "scripts/agy-bridge-config.py",
+			"find": ["    args = server.get(\"args\", [])"],
+			"replace": ["    args = []"],
+			"gate": ["bash", "scripts/smoke-agy-install-state.sh"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:AGY-DOCTOR-PROBES-ARGS]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "AGY-DOCTOR-PROBES-ENV",
+			"title": "the agy invocation parser drops configured environment, so the doctor boots command defaults while agy executes a failing environment",
+			"subject": "scripts/agy-bridge-config.py",
+			"find": ["    env = server.get(\"env\", {})"],
+			"replace": ["    env = {}"],
+			"gate": ["bash", "scripts/smoke-agy-install-state.sh"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:AGY-DOCTOR-PROBES-ENV]",
 			"signatureSource": "scripts/smoke-agy-install-state.sh"
 		},
 		{
@@ -33,6 +68,17 @@
 			"gate": ["bash", "run.sh", "check-probe-bridge-command"],
 			"timeoutSeconds": 60,
 			"signature": "[QK:PROBE-REASON-MISSING-VERB]",
+			"signatureSource": "scripts/check-probe-bridge-command.ts"
+		},
+		{
+			"claim": "PROBE-REQUIRES-INITIALIZE",
+			"title": "the probe accepts tools/list before the MCP initialize handshake completes — a launcher the harness cannot initialize reads healthy",
+			"subject": "scripts/probe-bridge-command.ts",
+			"find": ["\t\t\t\tif (!initialized) {"],
+			"replace": ["\t\t\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-probe-bridge-command"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PROBE-REQUIRES-INITIALIZE]",
 			"signatureSource": "scripts/check-probe-bridge-command.ts"
 		},
 		{

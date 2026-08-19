@@ -79,6 +79,20 @@ exit 127
 FAKE
   chmod +x "$1"
 }
+write_invocation_sensitive_fake() {  # command alone is healthy; configured argv or env makes it fail
+  cat > "$1" <<'FAKE'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--fail" ]; then echo configured-arg-failure >&2; exit 23; fi
+if [ "${REVIEW_ENV:-}" = "fail" ]; then echo configured-env-failure >&2; exit 24; fi
+while IFS= read -r line; do
+  case "$line" in
+    *'"id":1'*) printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2024-11-05","capabilities":{},"serverInfo":{"name":"fake-entwurf-bridge","version":"0"}}}' ;;
+    *'"id":2'*) printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"entwurf_v2"},{"name":"entwurf_self"},{"name":"entwurf_peers"},{"name":"entwurf_inbox_read"},{"name":"entwurf_register_native"},{"name":"entwurf_fresh_call"},{"name":"entwurf_resume_call"}]}}' ;;
+  esac
+done
+FAKE
+  chmod +x "$1"
+}
 write_mcp_fake "$SB/bin/entwurf-bridge"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$SB/bin/ss"
 chmod +x "$SB/bin/ss"
@@ -129,7 +143,7 @@ write_dead_fake "$SB/bin/entwurf-bridge"
 set +e; DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?; set -e
 want "[QK:AGY-DOCTOR-BOOT-NEGATIVE] doctor(cmd resolves, does not boot): FAILS instead of blessing a resolvable name" "[ '$DOC_RC' -ne 0 ]"
 want "doctor(cmd resolves, does not boot): says it does NOT serve MCP" \
-  "printf '%s' \"\$DOC_OUT\" | grep -q 'resolves but does NOT serve MCP'"
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'does NOT serve MCP with its configured args/env'"
 want "doctor(cmd resolves, does not boot): carries the launcher's own stderr" \
   "printf '%s' \"\$DOC_OUT\" | grep -q 'No such file or directory'"
 want "doctor(cmd resolves, does not boot): does not offer to clobber a foreign launcher" \
@@ -137,8 +151,24 @@ want "doctor(cmd resolves, does not boot): does not offer to clobber a foreign l
 write_mcp_fake "$SB/bin/entwurf-bridge"
 DOC_OUT="$(bash "$BRIDGE" doctor)"; DOC_RC=$?
 want "doctor(after repair): the SAME unchanged doctor goes green once the command boots" "[ '$DOC_RC' -eq 0 ]"
-want "doctor(after repair): green names the BOOT evidence, not resolvability" \
-  "printf '%s' \"\$DOC_OUT\" | grep -q 'resolves AND boots the entwurf MCP surface'"
+want "doctor(after repair): green names the exact invocation BOOT evidence" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'exact configured invocation boots the entwurf MCP surface'"
+
+# The configured invocation is command + args + env, not command alone. Replant each review
+# shape independently: this fake boots with defaults, but agy's configured argv/env make it fail.
+write_invocation_sensitive_fake "$SB/bin/invocation-sensitive"
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["mcpServers"]["entwurf-bridge"]={"command":"invocation-sensitive","args":["--fail"],"env":{"REVIEW_ENV":"ok"}}; json.dump(d,open(sys.argv[1],"w"))' "$GLOBAL"
+set +e; DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?; set -e
+want "[QK:AGY-DOCTOR-PROBES-ARGS] doctor(command healthy, configured argv red): FAILS exact invocation" "[ '$DOC_RC' -ne 0 ]"
+want "doctor(configured argv red): carries the argv-sensitive stderr" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'configured-arg-failure'"
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["mcpServers"]["entwurf-bridge"]={"command":"invocation-sensitive","args":[],"env":{"REVIEW_ENV":"fail"}}; json.dump(d,open(sys.argv[1],"w"))' "$GLOBAL"
+set +e; DOC_OUT="$(bash "$BRIDGE" doctor 2>&1)"; DOC_RC=$?; set -e
+want "[QK:AGY-DOCTOR-PROBES-ENV] doctor(command healthy, configured env red): FAILS exact invocation" "[ '$DOC_RC' -ne 0 ]"
+want "doctor(configured env red): carries the env-sensitive stderr" \
+  "printf '%s' \"\$DOC_OUT\" | grep -q 'configured-env-failure'"
+# Restore the managed shape for the remaining lifecycle cells.
+python3 "$REPO_DIR/scripts/agy-bridge-config.py" install "$GLOBAL" entwurf-bridge "$STATE" >/dev/null
 
 # ── C: doctor with a fake agy present → live is CONSISTENT (honest, not overclaimed) ──
 fake_agy on

@@ -71,24 +71,24 @@ command_resolvable() {
 # this doctor printed "(resolvable)" and stayed green. The verdict leaf is shared with the pi
 # doctor via run.sh (the ONE strip-types fence crossing), so both lanes judge boot the same way.
 #
-# Cached per command: the probe spawns a real child, and the doctor asks about the same command
-# for two candidate configs plus the live tier. BOOT_DETAIL carries the last probe's one-line
-# verdict for the caller to print.
-BOOT_PROBED_CMD=""
+# Cached per exact invocation: the probe spawns a real child, and the doctor asks about the same
+# configured {command,args,env} for two candidate configs plus the live tier. BOOT_DETAIL carries
+# the last probe's one-line verdict for the caller to print.
+BOOT_PROBED_INVOCATION=""
 BOOT_PROBED_RC=1
 BOOT_PROBED_OUT=""
 BOOT_DETAIL=""
 command_boots() {
-  local cmd="$1" out rc
-  if [ "$cmd" = "$BOOT_PROBED_CMD" ]; then
+  local invocation="$1" out rc
+  if [ "$invocation" = "$BOOT_PROBED_INVOCATION" ]; then
     BOOT_DETAIL="$BOOT_PROBED_OUT"
     return "$BOOT_PROBED_RC"
   fi
   set +e
-  out="$("$REPO_DIR/run.sh" probe-bridge-command "$cmd" 2>&1)"
+  out="$("$REPO_DIR/run.sh" probe-bridge-command --invocation-json "$invocation" 2>&1)"
   rc=$?
   set -e
-  BOOT_PROBED_CMD="$cmd"; BOOT_PROBED_RC="$rc"; BOOT_PROBED_OUT="$out"; BOOT_DETAIL="$out"
+  BOOT_PROBED_INVOCATION="$invocation"; BOOT_PROBED_RC="$rc"; BOOT_PROBED_OUT="$out"; BOOT_DETAIL="$out"
   return "$rc"
 }
 
@@ -201,8 +201,8 @@ do_uninstall() {
 }
 
 # Static-check ONE candidate config. Prints a status line; returns 1 on a hard failure
-# (invalid JSON / configured-but-dangling command), 0 otherwise (absent / not-configured /
-# configured+resolvable are not doctor failures — a candidate may legitimately be unused).
+# (invalid JSON / configured invocation that cannot boot), 0 otherwise (absent / not-configured
+# are not doctor failures — a candidate may legitimately be unused).
 doctor_static_one() {
   local label="$1" candidate="$2"
   local link_note=""
@@ -215,20 +215,21 @@ doctor_static_one() {
     absent)         log "  $label: absent$link_note"; return 0 ;;
     not-configured) log "  $label: present but entwurf-bridge NOT configured$link_note"; return 0 ;;
     invalid-json)   log "  $label: INVALID JSON$link_note"; return 1 ;;
+    invalid-entry)  log "  $label: INVALID entwurf-bridge entry (command/args/env)$link_note"; return 1 ;;
     configured\ *)
-      local cmd="${status#configured }"
-      if ! command_resolvable "$cmd"; then
-        log "  $label: configured → '$cmd' DANGLING (not on PATH / not executable)$link_note"
+      local cmd="${status#configured }" invocation
+      if ! invocation="$(python3 "$CONFIG_PY" doctor-invocation "$candidate")"; then
+        log "  $label: configured → '$cmd' but its exact invocation is unreadable$link_note"
         return 1
       fi
-      if command_boots "$cmd"; then
-        log "  $label: configured → '$cmd' (resolves AND boots the entwurf MCP surface)$link_note"
+      if command_boots "$invocation"; then
+        log "  $label: configured → '$cmd' (the exact configured invocation boots the entwurf MCP surface)$link_note"
         return 0
       fi
-      # Resolves but dead. entwurf does NOT repair the launcher here: the name may be owned by a
-      # foreign file we must never clobber (the same adopt/refuse rule install follows). Report the
-      # measured cause and the exact next step instead of a cosmetic pass.
-      log "  $label: configured → '$cmd' resolves but does NOT serve MCP$link_note"
+      # A configured environment may itself carry PATH, so a shell-side `command -v` is not the
+      # runtime's subject. The shared probe executes the exact command + args + env instead.
+      # entwurf does NOT repair a failed launcher here: it may be owned by a foreign file.
+      log "  $label: configured → '$cmd' does NOT serve MCP with its configured args/env$link_note"
       log "        $BOOT_DETAIL"
       log "        Identify the launcher: command -v '$cmd'; readlink -f \"\$(command -v '$cmd')\""
       log "        If it is entwurf's managed dev link, restore it with ./run.sh expose-dev-bin (it REFUSES a foreign link)."
@@ -334,14 +335,19 @@ do_doctor() {
   # fact separate from ownership-state failures below: a FOREIGN TARGET makes the doctor red, but it
   # does not make a visibly configured command disappear. Boot (not mere resolvability) is the fact
   # the live tier reports on — the probe is cached, so this loop re-costs nothing.
-  local c candidate_status candidate_cmd
+  local c candidate_status candidate_cmd candidate_invocation
   for c in "$GLOBAL_CONFIG" "$LEGACY_CONFIG"; do
     candidate_status="$(python3 "$CONFIG_PY" doctor-static "$c")"
     case "$candidate_status" in
       configured\ *)
         configured_any=1
         candidate_cmd="${candidate_status#configured }"
-        command_resolvable "$candidate_cmd" && command_boots "$candidate_cmd" && bootable_any=1
+        if candidate_invocation="$(python3 "$CONFIG_PY" doctor-invocation "$c")"; then
+          command_boots "$candidate_invocation" && bootable_any=1
+        else
+          log "  runtime: configured '$candidate_cmd' has an unreadable exact invocation."
+          hard_fail=1
+        fi
         ;;
     esac
   done

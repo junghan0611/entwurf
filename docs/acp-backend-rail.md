@@ -167,16 +167,16 @@ version). Per-bump measurements live in the ROADMAP **Dep bump(별도 트랙)** 
 Explicit entwurf-bridge connectivity inside an ACP turn is core value, so it is measured rather than
 assumed. `command -v` succeeding is not evidence: a launcher can resolve and still fail to exec (a
 relocated package-manager shim deriving its target from `$0` exits 127), which leaves a turn with no
-`mcp__entwurf-bridge__*` tool at all while every ownership check reads green. Both doctors therefore
-boot a configured command and require the exact bridge verb set back, over one shared leaf
-(`./run.sh probe-bridge-command <cmd>` runs it standalone) — but their scopes differ and the
-difference is deliberate:
+`mcp__entwurf-bridge__*` tool at all while every ownership check reads green. Both doctors therefore boot the exact configured stdio invocation — `command`, `args`, and
+`env` — and require the full bridge verb set back over one shared leaf
+(`./run.sh probe-bridge-command <cmd>` runs a simple command standalone; the agy doctor passes
+its JSON invocation). The probe waits for a valid MCP `initialize` response before it sends
+`notifications/initialized` and `tools/list`; a tools response alone is not boot evidence.
 
-- **agy** probes every configured candidate command.
-- **pi** probes only when the effective command is the bare stable bin. A legacy managed repo path
-  or an unowned operator override still reports as a note, not a boot verdict: those are states the
-  operator chose, and this repair was scoped to the measured defect rather than widened to every
-  shape the doctor can classify.
+- **agy** probes every configured candidate invocation.
+- **pi** probes every effective stdio invocation, including a legacy managed path or unowned
+  override. Runtime truth says whether the command pi will launch works; ownership separately says
+  whether entwurf may repair or normalize it.
 
 entwurf never repairs a launcher it does not own — a foreign one is reported fail-loud with the
 operator's repair named.

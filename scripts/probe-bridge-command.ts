@@ -23,7 +23,8 @@
 //
 // USAGE
 //   library:  const r = await probeBridgeCommand({ command, args });   // doctor-pi-provider.ts
-//   CLI:      node probe-bridge-command.ts <command> [args...]         // ./run.sh probe-bridge-command
+//   CLI:      node probe-bridge-command.ts <command> [args...]
+//             node probe-bridge-command.ts --invocation-json '{"command":"…","args":[],"env":{}}'
 //             exit 0 = booted and served the entwurf tool surface; 1 = did not (reason on stdout).
 import { spawn } from "node:child_process";
 import { basename } from "node:path";
@@ -33,6 +34,7 @@ export type BridgeProbeReason =
 	| "ok"
 	| "spawn-failed" // the command could not be executed at all (ENOENT / EACCES)
 	| "exited-before-tools-list" // it ran and DIED — the relocated-shim 127 class lands here
+	| "initialize-failed" // it did not complete the MCP initialize handshake before tools/list
 	| "timeout" // it stayed up but never answered — a hung/wrong binary
 	| "no-tools-array" // it answered id:2 without result.tools — not an MCP server
 	| "tool-set-mismatch"; // an MCP server, but not THIS bridge (foreign binary, or a stale build)
@@ -82,9 +84,16 @@ export function probeBridgeCommand(opts: BridgeProbeOptions): Promise<BridgeProb
 		// No shell: a bare name goes through the normal PATH lookup the harness itself does,
 		// and an argument can never be reinterpreted as shell syntax.
 		const child = spawn(command, args, { stdio: ["pipe", "pipe", "pipe"], env });
-		let stdout = "";
+		// `write()` reports a synchronous closed pipe by throwing, but a launcher can also exit
+		// between write scheduling and completion. Its asynchronous EPIPE belongs to the close
+		// verdict (with captured stderr), never to an unhandled probe crash.
+		child.stdin.on("error", () => {});
+		let stdoutPending = "";
 		let stderr = "";
 		let settled = false;
+		let initialized = false;
+		let exited: { code: number | null; signal: NodeJS.Signals | null } | undefined;
+		let stderrEnded = false;
 
 		// This probe deliberately runs whatever command the operator configured — including a
 		// foreign or broken one — so it owns closing what it opened. Escalate SIGTERM → SIGKILL
@@ -131,9 +140,10 @@ export function probeBridgeCommand(opts: BridgeProbeOptions): Promise<BridgeProb
 		};
 
 		const timer = setTimeout(() => {
+			const waitingFor = initialized ? "tools/list" : "initialize";
 			done(
 				"timeout",
-				`'${command}' stayed up but never answered tools/list within ${timeoutMs}ms` +
+				`'${command}' stayed up but never answered ${waitingFor} within ${timeoutMs}ms` +
 					(stderr.trim() ? ` — stderr: ${head(stderr)}` : ""),
 			);
 		}, timeoutMs);
@@ -142,34 +152,76 @@ export function probeBridgeCommand(opts: BridgeProbeOptions): Promise<BridgeProb
 			done("spawn-failed", `'${command}' could not be executed: ${String(err)}`);
 		});
 
-		child.on("close", (code, signal) => {
+		// `ChildProcess` close is normally after the stdio pipes close, but under nested shell
+		// capture that ordering has raced on this host. Do not mint a no-stderr diagnosis until the
+		// stderr reader ended: the launcher's own final diagnostic is part of the operator verdict.
+		const reportExited = (): void => {
+			if (!exited || !stderrEnded) return;
 			// Reaching here un-settled means the process died before answering id:2. This is the
 			// cell the relocated pnpm shim lands in (exit 127), and the stderr head is what tells
 			// the operator WHICH launcher hop broke.
 			done(
 				"exited-before-tools-list",
-				`'${command}' exited before answering tools/list (code=${code} signal=${String(signal)})` +
+				`'${command}' exited before answering tools/list (code=${exited.code} signal=${String(exited.signal)})` +
 					(stderr.trim() ? ` — stderr: ${head(stderr)}` : " — no stderr"),
 			);
+		};
+		child.on("close", (code, signal) => {
+			exited = { code, signal };
+			reportExited();
 		});
 
 		child.stderr.on("data", (d) => {
 			stderr += String(d);
 		});
+		child.stderr.on("end", () => {
+			stderrEnded = true;
+			reportExited();
+		});
 		child.stdout.on("data", (d) => {
-			stdout += String(d);
+			const chunk = String(d);
+			stdoutPending += chunk;
 			if (settled) return;
-			// MCP frames are newline-delimited JSON-RPC; look for the id:2 (tools/list) reply.
-			for (const line of stdout.split("\n")) {
+			// MCP frames are newline-delimited JSON-RPC. Consume each complete frame exactly once:
+			// replaying the accumulated id:1 response on a later data event would send a second
+			// tools/list before the first reply and stop being a sequential handshake.
+			const frames = stdoutPending.split("\n");
+			stdoutPending = frames.pop() ?? "";
+			for (const line of frames) {
 				const trimmed = line.trim();
 				if (!trimmed) continue;
-				let msg: { id?: unknown; result?: { tools?: unknown } };
+				let msg: {
+					id?: unknown;
+					error?: unknown;
+					result?: { protocolVersion?: unknown; capabilities?: unknown; serverInfo?: unknown; tools?: unknown };
+				};
 				try {
 					msg = JSON.parse(trimmed);
 				} catch {
 					continue;
 				}
+				if (msg?.id === 1) {
+					const result = msg.result;
+					const valid =
+						msg.error === undefined &&
+						result?.protocolVersion === "2024-11-05" &&
+						typeof result.capabilities === "object" &&
+						result.capabilities !== null &&
+						typeof result.serverInfo === "object" &&
+						result.serverInfo !== null;
+					if (!valid) {
+						done("initialize-failed", `'${command}' returned an invalid MCP initialize response`);
+						return;
+					}
+					initialized = true;
+					sendReadyFrames();
+					continue;
+				}
 				if (msg?.id !== 2) continue;
+				if (!initialized) {
+					done("initialize-failed", `'${command}' answered tools/list before MCP initialize completed`);
+					return;
+				}
 				const tools = msg?.result?.tools;
 				if (!Array.isArray(tools)) {
 					done("no-tools-array", `'${command}' answered tools/list without result.tools — not an MCP server`);
@@ -206,6 +258,10 @@ export function probeBridgeCommand(opts: BridgeProbeOptions): Promise<BridgeProb
 				// that verdict, so swallowing the EPIPE here keeps ONE reason per failure.
 			}
 		};
+		const sendReadyFrames = (): void => {
+			send({ jsonrpc: "2.0", method: "notifications/initialized" });
+			send({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+		};
 		send({
 			jsonrpc: "2.0",
 			id: 1,
@@ -216,8 +272,6 @@ export function probeBridgeCommand(opts: BridgeProbeOptions): Promise<BridgeProb
 				clientInfo: { name: "probe-bridge-command", version: "0" },
 			},
 		});
-		send({ jsonrpc: "2.0", method: "notifications/initialized" });
-		send({ jsonrpc: "2.0", id: 2, method: "tools/list" });
 	});
 }
 
@@ -226,12 +280,44 @@ export function probeBridgeCommand(opts: BridgeProbeOptions): Promise<BridgeProb
 // Match the BASENAME exactly. A suffix test would also fire for `check-probe-bridge-command.ts`,
 // which imports this module — the CLI arm would then hijack that gate's argv and exit 2.
 if (process.argv[1] && /^probe-bridge-command\.(ts|js)$/.test(basename(process.argv[1]))) {
-	const [command, ...args] = process.argv.slice(2);
-	if (!command) {
-		console.error("usage: probe-bridge-command <command> [args...]");
-		process.exit(2);
+	const argv = process.argv.slice(2);
+	let options: BridgeProbeOptions;
+	if (argv[0] === "--invocation-json") {
+		let raw: unknown;
+		try {
+			raw = JSON.parse(argv[1] ?? "");
+		} catch {
+			console.error("probe-bridge-command: --invocation-json must be valid JSON");
+			process.exit(2);
+		}
+		const obj = raw as { command?: unknown; args?: unknown; env?: unknown };
+		if (
+			typeof obj?.command !== "string" ||
+			!obj.command ||
+			!Array.isArray(obj.args) ||
+			!obj.args.every((arg) => typeof arg === "string") ||
+			typeof obj.env !== "object" ||
+			obj.env === null ||
+			Array.isArray(obj.env) ||
+			!Object.values(obj.env).every((value) => typeof value === "string")
+		) {
+			console.error("probe-bridge-command: invocation JSON requires string command, string[] args, string-map env");
+			process.exit(2);
+		}
+		options = {
+			command: obj.command,
+			args: obj.args as string[],
+			env: { ...process.env, ...(obj.env as Record<string, string>) },
+		};
+	} else {
+		const [command, ...args] = argv;
+		if (!command) {
+			console.error("usage: probe-bridge-command <command> [args...]");
+			process.exit(2);
+		}
+		options = { command, args };
 	}
-	const result = await probeBridgeCommand({ command, args });
+	const result = await probeBridgeCommand(options);
 	console.log(`[probe-bridge-command] ${result.reason}: ${result.detail}`);
 	process.exit(result.ok ? 0 : 1);
 }

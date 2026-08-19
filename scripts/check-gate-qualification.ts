@@ -805,7 +805,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"acp-stream-hooks": 10,
 		"agy-permission": 6,
 		"bridge-boot-resume": 3,
-		"bridge-command-boot": 4,
+		"bridge-command-boot": 8,
 		"meta-facts": 4,
 		"meta-identity": 4,
 		"meta-retire": 3,
