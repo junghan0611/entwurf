@@ -70,7 +70,7 @@ none.** A turn ends only on a lifecycle event:
 |---|---|
 | the agent answers | mapped through the terminal set above |
 | the operator aborts | ACP `session/cancel` first — the agent closes its own turn (`cancelled → aborted`); process-group teardown only after a bounded grace, so an abort always returns |
-| the child dies / stdio ends | the turn fails naming the exit status and the session-scoped stderr tail, on both the new and the reuse path |
+| the child dies / stdio ends | the turn fails naming the exit status and the session-scoped stderr tail — or an honest bounded absence when transport EOF wins the race — on both the new and the reuse path |
 
 Elapsed time is not evidence of failure, and a silent turn is not a failed turn: tool
 use, reasoning, and provider queueing all legitimately outrun any number we could pick.

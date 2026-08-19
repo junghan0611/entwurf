@@ -81,7 +81,7 @@ D8 robustness: partial reason="..."
 | **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. |
 | **Codex app-server-backed TUI** | verified probe | D7; D8 unproven | WebSocket-over-UDS `turn/start` into a live `threadId`; status events expose completion. No managed citizen lane yet. |
 | **Codex embedded TUI** | deferred | D0 partial | No supported receive socket/hook on the measured standalone shape. |
-| **Copilot CLI TUI+server** | verified probe | D7; D8 unproven | Official SDK over hidden `--ui-server`: foreground native id + metadata, two-session addressed idle enqueue, same-session auto-model reply, completion events read back through the official session event-history API. Loopback RPC authentication is not established; no managed citizen lane. Evidence is L4 direct-native on ONE Linux workstation, host-local stdout, not archived. |
+| **Copilot CLI TUI+server** | verified probe | D7; D8 unproven | **Old chronological-slice run; the named-turn probe in the tree is unrun.** Official SDK over hidden `--ui-server`: foreground native id + metadata, two-session addressed idle enqueue, same-session auto-model reply, completion events read back through the official session event-history API. Loopback RPC authentication is not established; no managed citizen lane. Evidence is L4 direct-native on ONE Linux workstation, host-local stdout, not archived. |
 | **ACP Claude / Cortex** | shipped runtime, outside this matrix | — | ACP sessions are children launched by entwurf's pi adapter, not already-running native sessions to wake. |
 
 “Verified probe” means the transport worked in a reproducible raw probe but entwurf

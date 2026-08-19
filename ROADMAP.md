@@ -7,23 +7,24 @@
 
 ---
 
-## 현재 — 0.14.0 shipped; visible lifecycle + manual issue sweeper
+## 현재 — 0.14.1 shipped; bridge boot + exact invocation
 
 이 repo는 **entwurf-core(v2 garden-citizen dispatch) + native-harness bridges + pi adapter + ACP plugin**이다.
-`v0.14.0`은 GitHub와 npm `latest`로 게시됐다. Claude mailbox, pi control-socket,
+`v0.14.1`은 GitHub와 npm `latest`로 게시됐다. Claude mailbox, pi control-socket,
 Antigravity native-push가 한 garden-id dispatch 표면으로 출하됐고, ACP plugin은 Claude와 Cortex를 pi host
-안에서 연결한다. 0.14.0은 hidden background resume을 철회하고, visible fresh creation과 same-id pi resume을
-각각 `entwurf_fresh_call` / `entwurf_resume_call`로 분리했다. 검증은 ≤60s core와 frozen-candidate full floor로
-계층화했다.
+안에서 연결한다. 0.14.0은 hidden background resume을 철회하고 visible fresh creation과 same-id pi resume을
+각각 `entwurf_fresh_call` / `entwurf_resume_call`로 분리했으며, 0.14.1은 fresh creation에 literal absolute cwd를
+더했다. 현재 main은 0.14.2를 위해 exact configured bridge invocation과 ACP child-end evidence를 강화했다.
+검증은 ≤60s core와 frozen-candidate full floor로 계층화했다.
 
 **2026-08-01~02 축 전환(GLG 지시).** pi가 공식 provider로 지원하는 Codex/Grok을 위해 native citizen이나
 ACP backend를 중복 구현하지 않는다. #56 Codex native lane은 닫혔고, Codex/Grok 탐구 브랜치는 main 밖에
 격리한다. 거기서 얻은 native/ACP rail 방법론은 필요할 때만 현재 증거로 다시 세운다.
 
-현재 우선순위는 **0.14.0 이후 live defect 정리**다. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
+현재 우선순위는 **0.14.1 이후 live defect 정리**다. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
 계약만 둔다. 방향·철학·관찰 중인 가능성은 이 문서가 지며, 재현 가능한 결손이 되면 그때 증거와 다음 측정을
-갖고 이슈로 승격한다. 현재 제품 결손은 #71 native 설정 소유권, #68 no-transcript resume refusal, #60
-native-push reply handle, #72 ACP Claude 장기 tool-loop 중 connection failure다. 실행 순서는 active NEXT handoff가 진다.
+갖고 이슈로 승격한다. 현재 실행 계약은 #72 ACP retained-child 원인, #76 subscription rail 강제, #78
+platform evidence, #80 public vocabulary, #82 Copilot 승격 판정이다. 실행 순서는 active NEXT handoff가 진다.
 
 Pi는 가장 깊이 붙은 adapter지만 프로젝트의 본질은 여전히 **garden id로 호명 가능한 형제 세션 사이의 얇은
 dispatch substrate**다. provider 연결과 TUI/RPC/session lifecycle은 pi에 맡기고, entwurf는 부르는 법과
@@ -160,16 +161,17 @@ Sonnet에서 flaky라 한 번의 flake가 컷을 막으면 안 된다. 우회/�
 - **driver optionality — deferred, not a current issue.** production은 tmux를 직접 호출하며 generic `DRIVERS`
   seam이나 zmx backend는 없다. 구체적인 두 번째 driver 수요가 생기기 전에는 비교·추상화를 재개하지 않는다.
   quota, system load, 예상 작업량, 과거 담당자 같은 선택 신호도 substrate/driver에 저장하지 않는다.
-- **Copilot CLI native probe — landed as raw-probe evidence, not an OPEN issue.**
+- **Copilot CLI native probe — landed as raw-probe evidence; 승격 판정은 #82가 진다.**
   Codex native는 pi의 공식 GPT provider와 겹쳐 거절됐지만 Copilot은 GitHub 이슈/PR/CI와 model
   `auto`를 가진 별도 하네스다. 구현을 다른 garden id에 맡기고 Copilot이 checkpoint와 GitHub
   일을 받는 것은 dispatch 예절이지 substrate role system이 아니다. 비용은 무제한이 아니라
   AI Credit/monthly entitlement 축으로 정직하게 센다. CLI 1.0.80 hidden `--ui-server` + official
   SDK 1.0.11이 exact idle TUI enqueue와 completion(D7)을 보였지만(L4 direct-native, Linux
-  workstation 한 대·1회, host-local stdout·아카이브 없음), launch flag가 help에 없고
-  loopback RPC auth가 성립하지 않았다. two-session isolation은 A-only wake로 통과했지만 joining
-  client의 ephemeral `session.idle` 누락도 드러났다. permission ownership·supported local boundary
-  전에는 스키마/`fresh_call`/OPEN issue로 승격하지 않는다; `ws.*`는 계속 금지다.
+  workstation 한 대·1회, host-local stdout·아카이브 없음), 이 측정은 현재 named-turn 계약 이전의
+  chronological-slice probe로 얻었다. launch flag가 help에 없고 loopback RPC auth가 성립하지 않았다.
+  two-session isolation은 A-only wake로 통과했지만 joining client의 ephemeral `session.idle` 누락도
+  드러났다. permission ownership·supported local boundary와 #82의 admit 판정 전에는
+  스키마/`fresh_call`로 승격하지 않는다; `ws.*`는 계속 금지다.
 
 ---
 

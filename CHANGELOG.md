@@ -4,6 +4,35 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.14.2 — 2026-08-19
+
+This patch makes bridge availability a property of the exact invocation each harness will run, preserves child-exit facts across ACP transport closure, and records Copilot delivery as probe evidence without admitting a new citizen rail.
+
+### Changed
+
+- **ACTION REQUIRED — the certified runtime floor is now Pi `0.84.2`, with Claude ACP adapter `0.70.0`.** Pi's exact development pin and closed peer range move to `0.84.2` / `>=0.84.2 <0.85`; Claude ACP `0.70.0`, ACP SDK `1.3.0`, and Claude Code `>=2.1.217` are the measured support coordinates. Re-run setup after upgrading so the installed package and stable bridge launcher agree with this release. (#79)
+- **Pi and Antigravity doctors boot the exact configured stdio invocation.** Runtime truth is separate from repair ownership: every effective Pi entry, including an unowned override, is probed without being overwritten; Antigravity preserves its configured `command`, `args`, and `env`. A valid MCP `initialize` response must arrive before `notifications/initialized` and `tools/list`, and the returned surface must equal the seven public Entwurf verbs. Closes #81.
+
+### Added
+
+- **A direct-native Copilot raw probe records one bounded Linux observation without claiming support.** The current probe binds a unique marker body to `user.message.interactionId`, then to one `assistant.turn_start.turnId`, and accepts only assistant events from that turn; missing or ambiguous identity fails closed, the control session rejects any `user.message` or `assistant.*` event, and cleanup is bounded. The earlier 2026-08-19 L4 observation used a chronological slice on one workstation and its stdout was not archived, so it is not evidence that the corrected named-turn contract has run LIVE. Copilot remains outside `MetaIdentity`, backend registries, `entwurf_v2`, native-push, fresh, and resume; admission work is tracked in #82.
+
+### Fixed
+
+- **ACP prompt failures no longer lose child exit facts when transport EOF arrives first.** A one-shot child-end latch gives an already-failed turn a bounded post-mortem settle before Entwurf teardown, preserving the original backend error plus lifecycle phase, exit code, signal, stderr tail, or an honest bounded absence. It adds no running-prompt timeout, replay, watcher, supervisor, or recovery API; #72 remains open for the natural retained-child death cause.
+- **A configured bridge cannot pass because its name resolves, its defaults boot, or it answers `tools/list` before initialization.** Pi and Antigravity reject dead overrides, argument/environment-specific failures, invalid invocation shapes, malformed initialize replies, missing/extra verbs, and foreign or relocated launchers while retaining the rule that Entwurf never clobbers a launcher it does not own.
+- **The bridge probe preserves the launcher's own stderr across fast exit and asynchronous stdin `EPIPE`.** It installs the pipe error guard before the first write, consumes newline JSON-RPC frames once, and waits for process exit plus stderr end before issuing the exit verdict, so a Node stack trace cannot replace the diagnostic the operator needs.
+
+### Verification
+
+- Pre-version main `d0fb8e6a37d401fc5ef660c90c1051db4b0811e8` passed exact-SHA GitHub Actions run [32230953648](https://github.com/junghan0611/entwurf/actions/runs/32230953648): `check`, `install-surface`, and `artifact-consumer` all concluded success. The combined landing candidate also passed focused bridge 11/11, Pi provider 52/52, Antigravity 177/177, qualification **184/184 killed**, and `pnpm run check:full` in 315s before push.
+- The new hermetic `check-probe-bridge-command` lane requires sequential initialization, exact tool equality, stderr preservation, bounded cleanup, and the stdin `EPIPE` guard; its `bridge-command-boot` qualification lane now carries nine claims within the 184-mutant inventory.
+
+### Notes
+
+- Copilot is probe-only in this release. #82 owns authentication, permission, liveness, stale/crash, operator-session cleanup, durable LIVE evidence, and the final admit/reject decision.
+- #76 (subscription-first refusal of `openrouter/*` sibling launches), #78 (macOS/native-Windows portability evidence), #80 (public vocabulary), and the remaining #72 field-cause investigation stay outside this patch.
+
 ## 0.14.1 — 2026-08-13
 
 This patch fills the cross-repository creation gap in the visible mux lifecycle shipped in 0.14.0, so one operator tmux session can form siblings in multiple project roots without borrowing a dormant session as a cwd carrier.
