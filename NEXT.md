@@ -1,4 +1,4 @@
-# NEXT — OPEN 4 live defect train
+# NEXT — 0.14.2 prepare · OPEN 5 live contracts
 
 > NEXT는 disposable boot sector다. 완료 이력은 CHANGELOG/closed issues/git이 지고,
 > 방향은 ROADMAP, 운영 규율은 AGENTS가 진다.
@@ -11,34 +11,27 @@
 - [x] **4. manual issue sweep** — #72 생성 + 오래된 12건 redirect/close
 - [x] **5. #73 cross-repo fresh cwd** — main `ff46502` / feat `0059fe2`; LIVE scratch OK; issue CLOSED
 - [x] **6. 0.14.1 prepare** — `6a1df33`; release-gate MUST 20/0 (`j2eAVu`); Sol SHIP-AFTER-FIX
-- [x] **7. make 0.14.1** — tag `v0.14.1`=`6a1df33`; CI run 31677847479 all success; preserved candidate accepted; GH release live
+- [x] **7. make 0.14.1** — tag `v0.14.1`=`6a1df33`; CI run 31677847479 all success; candidate accepted; GH release live
 - [x] **8. publish 0.14.1** — npm latest=0.14.1 (2026-08-13)
-- [x] **9. #79 dep certify** — main `ccb1864`: acp 0.68.0 + pi 0.84.2; Sol APPROVE; issue CLOSED
-- [ ] **10. live defect train** ← STEM: #60; #72 · #76
+- [x] **9. #79 dependency baseline** — Pi 0.84.2 + Claude ACP 0.68.0 first certify; issue CLOSED
+- [x] **10. #81 ACP support + exact bridge invocation** — Claude ACP 0.70.0; `877f127`/`130b09b` merged at `d0fb8e6`; issue CLOSED
+- [ ] **11. 0.14.2 prepare** ← CURRENT: LIVE acceptance paused on external Codex quota
+- [ ] **12. 0.14.2 make** ← PAUSED: only after prepared commit + exact-SHA CI
 
-현재 좌표: **#79 landed · defect train** · OPEN 5 (was 6; #79 closed)
+현재 좌표: **0.14.2 prepare paused** · deterministic candidate green · Codex quota blocker · OPEN 5
 
-# NOW — #60 native-push reply handle
+# NOW — 0.14.2 quota-blocked release preparation
 
-- **Stem:** OPEN은 backlog가 아니라 최대 5개의 현재 실행 계약이다. 알고만 있을 방향은 문서로 옮기고 닫는다.
-- **Open 5:** #60 native-push reply handle · #72 ACP Claude retained-child/tool-loop · #75 workshop field report (non-impl) ·
-  **#76** fresh_call subscription-first / refuse `openrouter/*` sibling models · **#78** 0.15 portability candidate (non-impl).
-- **Next:** #60에서 native-push 수신 본문에 sender envelope와 `wants_reply:true`를 보존하는 최소 production 경로와
-  독립 oracle을 정한다. 자동 답장·polling·watcher를 만들지 않는다.
-- **#76 next slice (separate from #60):** product fail-closed on `openrouter/*` at `entwurf_fresh_call`; subscription canonical ids (`openai-codex/gpt-5.6-sol`, …). Do not mix Done-when with closed #73.
-- **#72 parallel measurement:** 실전 retained multi-tool failure host/version/task shape/phase/exit/signal/stderr.
-  synthetic 733s PASS를 workload coverage로 올려 읽지 않는다.
-- **Blocker:** 없음.
-- **Read:** issues #60/#72/#76 · native-push leaf · `mux-fresh-call` model reject site for #76.
-- **Do not touch:** 태그/CHANGELOG 재작성, 자동 replay, agy 자동답장 보장, zmx/driver 추상화,
-  collection point/umbrella, project-name resolver, reopening closed #73.
+- **Release scope:** ACP EOF-first child-end evidence, Pi 0.84.2 / Claude ACP 0.70.0 support coordinates, exact MCP `{command,args,env}` + sequential initialize, stdin EPIPE/stderr preservation, Copilot raw-probe evidence without admission.
+- **Candidate:** uncommitted 0.14.2 release records plus the #81 release-gate Pi invocation preflight (`run.sh`, `VERIFY.md`, `check-release-gate-outcomes`, its exact mutant, qualification inventory). Do not commit this tree before LIVE acceptance.
+- **Deterministic evidence:** frozen work surface passed qualification **185/185** and `pnpm run check:full` **311s**; hashes/logs are under `/tmp/entwurf-recovery-0.14.2/`.
+- **Blocker (external):** fresh `openai-codex` turns return `Codex error: The usage limit has been reached` for default chain `gpt-5.4` and mux child `gpt-5.6-terra`. Auth token is valid; source, identity fence, launcher, bundled MCP, and v2-send focused recovery are green.
+- **Next:** when a NEW default `openai-codex/gpt-5.4` turn is actually usable, run default `LIVE=1 ./run.sh smoke-entwurf-chain-live`; green → `smoke-mux-lifecycle-live`; both green → rerun `LIVE=1 ./run.sh release-gate <fresh-scratch> --cut`. Commit `chore(release): prepare v0.14.2` only after MUST green.
+- **Open 5:** #72 ACP retained-child cause · #76 subscription-first / refuse `openrouter/*` · #78 macOS/native-Windows portability · #80 public vocabulary · #82 Copilot admission.
+- **Do not touch:** no quota-avoidance model/default change, Copilot substitute or managed backend before #82 admit, automatic replay/watcher/supervisor, OpenRouter test turn, macOS/Windows support wording without physical evidence.
 
 # RECENT
 
-- **2026-08-16:** #79 CLOSED on main `ccb1864`. claude-agent-acp 0.68.0 + pi 0.84.2 certified;
-  check/full/pack/container + LIVE raw/provider/overlay/reuse green; Sol BLOCK→fix→APPROVE; host pi 0.84.2.
-- **2026-08-13:** 0.14.1 documentation prepare second pass in progress; install/upgrade/first-check, external MCP cwd,
-  mux-rail landed tense, skill syntax까지 대조. no version bump.
-- **2026-08-13:** #73 CLOSED on main `ff46502`. optional abs cwd on fresh-call; shared classify-tmux-cwd;
-  Sol+Fable+Opus path; LIVE pane path matched scratch. Branch NEXT deleted. #76 opened (OpenRouter refuse).
-- **2026-08-10:** #73 field incident (resume-as-cwd-proxy). #71/#68 closed. manual sweeper on main.
+- **2026-08-19:** live release gate first caught a relocated pnpm shim in `~/.local/bin`; host launcher repair restored exact bridge boot, bundled MCP 14/14, and v2-send 15/15. The same incident added a kill-qualified early `doctor-pi-provider` release preflight (release-gate lane 12; total 185 mutants). Remaining chain/mux failures are provider usage-limit responses, not source defects.
+- **2026-08-19:** main `d0fb8e6` combined #81 exact-invocation probing, EPIPE repair, and Copilot raw probe; exact-SHA CI run 32230953648 all success. Combined qualification 184/184 and full floor green before release prep.
+- **2026-08-16:** #72 EOF-first diagnostic repair `df7525f` landed; #60/#75 closed; #79 dependency baseline landed.
