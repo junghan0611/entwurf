@@ -81,6 +81,7 @@ D8 robustness: partial reason="..."
 | **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. |
 | **Codex app-server-backed TUI** | verified probe | D7; D8 unproven | WebSocket-over-UDS `turn/start` into a live `threadId`; status events expose completion. No managed citizen lane yet. |
 | **Codex embedded TUI** | deferred | D0 partial | No supported receive socket/hook on the measured standalone shape. |
+| **Copilot CLI TUI+server** | verified probe | D7; D8 unproven | Official SDK over hidden `--ui-server`: foreground native id + metadata, two-session addressed idle enqueue, same-session auto-model reply, completion events. Loopback RPC authentication is not established; no managed citizen lane. |
 | **ACP Claude / Cortex** | shipped runtime, outside this matrix | — | ACP sessions are children launched by entwurf's pi adapter, not already-running native sessions to wake. |
 
 “Verified probe” means the transport worked in a reproducible raw probe but entwurf
@@ -125,6 +126,30 @@ TUI exposed no equivalent receive route. This remains archived method evidence, 
 shipping commitment: GLG closed the managed native Codex lane on 2026-08-01 because pi
 already supplies the official GPT provider path. Entwurf will not duplicate it as a
 native citizen or ACP backend. `turn/steer` is active-turn steering, not idle wake.
+
+### Copilot CLI: TUI+server is the positive launch mode
+
+A plain Copilot TUI and shell command hooks do not establish the measured route. CLI
+1.0.80 launched with hidden `--ui-server --port <port>` and joined by first-party
+`@github/copilot-sdk` 1.0.11 did: protocol-v3 ping, foreground session id plus cwd/git
+metadata, exact session resume, idle `enqueue`, same-session model-`auto` reply, and
+`assistant.message`/`turn_end`/`session.idle` completion. A second run created a
+no-turn control session B, targeted A, and proved B received no user/turn/assistant
+event, closing D3 on one Linux workstation.
+
+The two-session shape also exposed a D8 gap: A visibly replied and persisted
+`assistant.message` + `turn_end`, but the joining SDK client did not receive ephemeral
+`session.idle`, so SDK `sendAndWait()` timed out. Bounded official `getEvents()` reads
+observed the completed target turn without transcript access; that is probe evidence,
+not a product polling/retry design.
+
+This is not yet admissible as a native-push adapter. The flag is hidden from CLI help,
+and the loopback JSON-RPC server did not enforce the SDK connection token in the
+measured launch: an unauthenticated client connected, while a token-bearing client was
+rejected as `AUTHENTICATION_NOT_CONFIGURED`. The TCP port is only a runtime endpoint,
+never identity authority. Do not add a record backend or dispatch route until
+permission ownership, stale/crash handling, and a supported fail-closed local
+boundary are demonstrated.
 
 ## Recording a new claim
 
