@@ -45,6 +45,17 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:PROBE-CLEANUP-ESCALATES]",
 			"signatureSource": "scripts/check-probe-bridge-command.ts"
+		},
+		{
+			"claim": "PROBE-STDIN-EPIPE-GUARD",
+			"title": "the async EPIPE from a launcher that died on exec goes unlistened again, so the probe dies on an uncaught stream error and the doctor prints a Node stack trace where the LAUNCHER's own stderr belongs — the #81 diagnosis erased in the one cell that needs it",
+			"subject": "scripts/probe-bridge-command.ts",
+			"find": ["\t\tchild.stdin.on(\"error\", () => {});"],
+			"replace": ["\t\tvoid 0;"],
+			"gate": ["bash", "run.sh", "check-probe-bridge-command"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:PROBE-STDIN-EPIPE-GUARD]",
+			"signatureSource": "scripts/check-probe-bridge-command.ts"
 		}
 	]
 }

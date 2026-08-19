@@ -198,12 +198,21 @@ export function probeBridgeCommand(opts: BridgeProbeOptions): Promise<BridgeProb
 			}
 		});
 
+		// A launcher that dies on exec closes stdin under us, and the resulting EPIPE arrives as an
+		// ASYNCHRONOUS 'error' event on the stream — never as a throw from write(). Unlistened, Node
+		// turns that into an uncaught exception, so the probe dies printing its own stack trace
+		// INSTEAD of the launcher's stderr: precisely the diagnosis #81 exists to surface, destroyed
+		// in the one cell that needs it. The window is real, not theoretical — under CPU contention
+		// the child can exec, write its stderr and exit between uv_spawn and our first write, which
+		// is how CI saw a doctor verdict with no launcher stderr in it. The `close` handler owns the
+		// verdict for that child, so this listener stays deliberately silent (one reason per failure).
+		child.stdin.on("error", () => {});
 		const send = (obj: unknown): void => {
 			try {
 				child.stdin.write(`${JSON.stringify(obj)}\n`);
 			} catch {
-				// A launcher that died on exec closes stdin under us; the `close` handler owns
-				// that verdict, so swallowing the EPIPE here keeps ONE reason per failure.
+				// Synchronous throws (a destroyed stream) land here; async EPIPE lands on the
+				// listener above. Both are the same verdict-free silence.
 			}
 		};
 		send({

@@ -11,8 +11,12 @@
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { EXPECTED_TOOLS, probeBridgeCommand } from "./probe-bridge-command.ts";
+
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const PROBE_SRC = readFileSync(join(REPO_ROOT, "scripts", "probe-bridge-command.ts"), "utf8");
 
 let passed = 0;
 // The `[QK:…]` token must land on a FAILURE line (qualification does not count a token printed on
@@ -152,6 +156,26 @@ while true; do sleep 0.05; done
 		"[QK:PROBE-CLEANUP-ESCALATES] a SIGTERM-ignoring child is escalated to SIGKILL, never left orphaned",
 		!alive,
 		`pid ${hungPid} was still alive after the probe returned — the probe leaked the process it spawned`,
+	);
+
+	// ── source pin: the stdin EPIPE guard ─────────────────────────────────────
+	// WHY pinned instead of measured: the failure needs the child to exec, die and close its stdin
+	// read end BETWEEN uv_spawn and the parent's first write. Nothing this gate can write to a stub
+	// controls that ordering — measured on this host, five stub shapes (bad shebang, self-closed
+	// stdin, instant exit, missing file, a directory) produced EPIPE 0/20 each while idle, and only
+	// 12-way CPU contention opened the window (11/60 crashes before the fix, 0/60 after). A cell
+	// that only fires under load is a flaky gate, not a proof, so the property is pinned at the
+	// source. It is load-bearing because the crash it prevents is silent-by-substitution: the probe
+	// dies printing a Node stack trace where the doctor verdict should carry the LAUNCHER's stderr —
+	// the one line that names which hop broke. Ordering matters as much as presence: the listener
+	// must be installed before any write can dispatch.
+	const guard = '\t\tchild.stdin.on("error", () => {});';
+	const guardAt = PROBE_SRC.indexOf(guard);
+	const firstWriteAt = PROBE_SRC.indexOf("child.stdin.write(");
+	ok(
+		"[QK:PROBE-STDIN-EPIPE-GUARD] child.stdin carries an error listener installed before the first write — an async EPIPE from a launcher that died on exec must never replace the verdict with an uncaught exception",
+		guardAt >= 0 && firstWriteAt >= 0 && guardAt < firstWriteAt,
+		`guard index ${guardAt}, first child.stdin.write index ${firstWriteAt} in scripts/probe-bridge-command.ts`,
 	);
 } finally {
 	rmSync(dir, { recursive: true, force: true });
