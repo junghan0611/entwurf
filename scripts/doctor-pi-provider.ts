@@ -26,8 +26,8 @@
 //
 // Exit: 0 ok (incl. honest "never installed / unowned" notes) · 1 hard fail (malformed settings /
 // state-owned-but-drifted / stable bin dangling / stable bin present but does NOT boot).
-import { execSync } from "node:child_process";
-import { existsSync, constants as FS, readFileSync, statSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { accessSync, existsSync, constants as FS, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { normalizeMcpServers, readProviderSettingsFile } from "../pi-extensions/lib/acp/config.ts";
@@ -102,16 +102,16 @@ function describeScope(settings: { mcpServers?: Record<string, unknown> }): stri
 function resolvable(cmd: string): boolean {
 	if (cmd.includes("/")) {
 		try {
-			statSync(cmd);
-			// eslint-disable-next-line no-bitwise
-			return (statSync(cmd).mode & FS.S_IXUSR) !== 0;
+			accessSync(cmd, FS.X_OK);
+			return true;
 		} catch {
 			return false;
 		}
 	}
 	try {
-		// `command -v` is a POSIX sh builtin; use the default /bin/sh (NixOS has no /bin/bash).
-		execSync(`command -v ${cmd}`, { stdio: "ignore" });
+		// `command -v` is a POSIX sh builtin. Pass the configured name as argv, never shell text:
+		// an unowned override is still operator data and must not become a doctor injection surface.
+		execFileSync("sh", ["-c", 'command -v -- "$1" >/dev/null 2>&1', "sh", cmd], { stdio: "ignore" });
 		return true;
 	} catch {
 		return false;
@@ -145,7 +145,6 @@ try {
 	process.exit(1);
 }
 
-const effectiveCmd = effectiveEntry ? effectiveEntry.command : undefined;
 const effectiveDesc =
 	effectiveEntry === undefined
 		? "entwurf-bridge NOT configured"
@@ -188,62 +187,53 @@ if (effectiveEntry === undefined) {
 		`  FAIL: entwurf-bridge is configured as an http/sse server in ${effectiveScope} scope. This bridge is a stdio server — pi would reach something that is not entwurf, and no boot evidence is possible. Restore a stdio entry with ./run.sh setup, or remove the key if the override is deliberate.`,
 	);
 	hardFail = 1;
-} else if (effectiveCmd === BARE) {
-	if (!resolvable(effectiveCmd)) {
-		log(`  FAIL: effective command is '${BARE}' but it does NOT resolve (run ./run.sh expose-dev-bin / npm bin-link).`);
+} else {
+	const cmd = effectiveEntry.command;
+	const isBare = cmd === BARE;
+	const isLegacyManaged = cmd.endsWith("/entwurf/mcp/entwurf-bridge/start.sh");
+
+	// Runtime truth is independent of ownership truth. An unowned override remains the operator's
+	// choice, but it still shadows the stable bridge in production; calling a dead override green
+	// repeats #81 under a different spelling. Probe the exact normalized command + args + env for
+	// EVERY effective stdio entry, then classify who owns that entry separately below.
+	if (!resolvable(cmd)) {
+		log(`  FAIL: effective command '${cmd}' does NOT resolve or is not executable.`);
 		hardFail = 1;
 	} else {
-		// It is on PATH. That is where this doctor used to stop and print ok — and where a host whose
-		// pi sessions had NO bridge at all still read green (#81). The claim is that pi gets an MCP
-		// bridge, so prove it: boot the effective invocation and require the entwurf tool surface back.
-		log(`  effective command '${BARE}' RESOLVES — probing whether it actually boots…`);
-		// Reproduce the CONFIGURED invocation: normalized argv plus the configured env layered over
-		// this process's environment (which is what pi's spawn inherits). Env is part of what a
-		// launcher resolves with, so probing a bare `process.env` could pass where production fails.
+		log(`  effective command '${cmd}' RESOLVES — probing the exact configured invocation…`);
 		const probe = await probeBridgeCommand({
-			command: effectiveEntry.command,
+			command: cmd,
 			args: effectiveEntry.args,
 			env: { ...process.env, ...effectiveEntry.env },
 		});
 		if (probe.ok) {
-			log(`  ok: effective command is the bare stable bin '${BARE}' and it BOOTS — ${probe.detail}`);
+			log(
+				isBare
+					? `  ok: effective command is the bare stable bin '${BARE}' and it BOOTS — ${probe.detail}`
+					: `  runtime: configured override BOOTS — ${probe.detail}`,
+			);
 		} else {
-			log(`  FAIL: effective command '${BARE}' resolves but does NOT serve MCP [${probe.reason}] — ${probe.detail}`);
-			// Remediation is deliberately NOT "re-run setup" for every reason: on the observed host the
-			// name resolved through a FOREIGN launcher (a relocated pnpm shim), which entwurf must not
-			// clobber. Name the repair that matches the reason instead of prescribing a fix-all.
-			log(
-				`         Diagnose which launcher answers the name:  command -v ${BARE}; readlink -f "$(command -v ${BARE})"`,
-			);
-			log(
-				`         If it is OUR managed dev link, restore it with ./run.sh expose-dev-bin (it REFUSES a foreign link rather than overwriting it).`,
-			);
-			log(
-				`         If a FOREIGN launcher owns the name (e.g. a relocated package-manager shim deriving its target from $0), entwurf will not overwrite someone else's file: repair or remove that launcher, or put the launcher that does boot earlier on PATH.`,
-			);
+			log(`  FAIL: effective invocation does NOT serve MCP [${probe.reason}] — ${probe.detail}`);
+			log(`         Diagnose its launcher and configured args/env; entwurf will not overwrite an unowned command.`);
 			hardFail = 1;
 		}
 	}
-} else {
-	// effective is NOT the bare bin. If state says we own it → drift (FAIL). Otherwise classify
-	// the effective command honestly: our OWN legacy repo start.sh (not yet adopted) is NOT a
-	// user override — say so distinctly so "run setup" is the clear next step. A truly foreign
-	// command is an unowned override left as the operator's choice. Neither is a hard fail.
-	// Read the command off the ENTRY (the branch above already established it is a stdio one), so
-	// this classification and the boot probe share one source rather than two narrowings.
-	const cmd = effectiveEntry.command;
-	const isLegacyManaged = cmd.endsWith("/entwurf/mcp/entwurf-bridge/start.sh");
-	if (ownership && ownership !== "user-override") {
-		log(`  FAIL: state owns entwurf-bridge (ownership=${ownership}) but the effective command drifted to '${cmd}'.`);
-		hardFail = 1;
-	} else if (isLegacyManaged) {
-		log(
-			`  note: effective is our LEGACY managed repo path ('${cmd}'), not yet adopted to the bare stable bin. Run ./run.sh setup to normalize (this is the pre-Task-2 '?').`,
-		);
-	} else {
-		log(
-			`  note: entwurf-bridge is an UNOWNED override ('${cmd}') — effective is not the stable bin. Left as the operator's choice (run ./run.sh setup to adopt the bare bin).`,
-		);
+
+	if (!isBare) {
+		// Ownership classification never rounds a broken runtime up to green. It only says who may
+		// repair the non-canonical entry after the independent boot verdict above.
+		if (ownership && ownership !== "user-override") {
+			log(`  FAIL: state owns entwurf-bridge (ownership=${ownership}) but the effective command drifted to '${cmd}'.`);
+			hardFail = 1;
+		} else if (isLegacyManaged) {
+			log(
+				`  note: effective is our LEGACY managed repo path ('${cmd}'), not yet adopted to the bare stable bin. Run ./run.sh setup to normalize.`,
+			);
+		} else {
+			log(
+				`  note: entwurf-bridge is an UNOWNED override ('${cmd}'). Runtime was judged above; run ./run.sh setup only if you choose to adopt the bare stable bin.`,
+			);
+		}
 	}
 }
 

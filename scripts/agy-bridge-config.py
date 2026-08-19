@@ -28,8 +28,12 @@ Subcommands (argv[1]):
       This is NOT tracked for an honest inverse: the legacy entry was wrong and stays gone.
 
   doctor-static <config_path>
-      Print one line describing the candidate for the shell doctor: `absent` / `symlink ->
-      <target>` prefix / `invalid-json` / `not-configured` / `command <cmd>`. Never mutates.
+      Print one line describing the candidate for the shell doctor: `absent` / `invalid-json` /
+      `invalid-entry` / `not-configured` / `configured <cmd>`. Never mutates.
+
+  doctor-invocation <config_path>
+      Print the configured server's exact `{command,args,env}` as compact JSON for the boot probe.
+      Invalid or absent entries fail rather than silently dropping argv/environment.
 
   permission-install <settings_path> <state_path>
       The OTHER half of "agy can call our bridge": registering the server (above) makes the tools
@@ -349,25 +353,51 @@ def cmd_clean_legacy(config_path: str) -> None:
         sys.stdout.write(f"cleaned-kept {config_path}\n")
 
 
-def cmd_doctor_static(config_path: str) -> None:
-    # Report the RESOLVED path's config status in one shell-parseable token line. Symlink
-    # detection/reporting is the shell's job (realpath here just follows any link).
+def _doctor_invocation(config_path: str):
+    """Return the exact stdio invocation agy reads, or a status token.
+
+    Command-only inspection is a false-success surface: configured argv/env can make a launcher
+    fail even while the same command boots with defaults. Display and execution share this parser
+    so they cannot disagree about whether an entry is valid.
+    """
     real = os.path.realpath(config_path)
     if not os.path.exists(real):
-        sys.stdout.write("absent\n")
-        return
+        return "absent", None
     try:
         with open(real, "r", encoding="utf-8") as fh:
             data = json.loads(fh.read() or "{}")
     except (json.JSONDecodeError, OSError):
-        sys.stdout.write("invalid-json\n")
-        return
+        return "invalid-json", None
     server = (data.get("mcpServers") or {}).get(SERVER_KEY) if isinstance(data, dict) else None
-    if not isinstance(server, dict) or not server.get("command"):
-        sys.stdout.write("not-configured\n")
+    if server is None:
+        return "not-configured", None
+    if not isinstance(server, dict):
+        return "invalid-entry", None
+    command = server.get("command")
+    args = server.get("args", [])
+    env = server.get("env", {})
+    if not isinstance(command, str) or not command:
+        return "invalid-entry", None
+    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+        return "invalid-entry", None
+    if not isinstance(env, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
+        return "invalid-entry", None
+    return "configured", {"command": command, "args": args, "env": env}
+
+
+def cmd_doctor_static(config_path: str) -> None:
+    status, invocation = _doctor_invocation(config_path)
+    if status != "configured":
+        sys.stdout.write(f"{status}\n")
         return
-    # "configured <command>" — command is the trailing token(s); shell takes field 2..N.
-    sys.stdout.write(f"configured {server['command']}\n")
+    sys.stdout.write(f"configured {invocation['command']}\n")
+
+
+def cmd_doctor_invocation(config_path: str) -> None:
+    status, invocation = _doctor_invocation(config_path)
+    if status != "configured":
+        _die(4, f"agy-bridge: cannot read configured invocation from {config_path}: {status}")
+    sys.stdout.write(json.dumps(invocation, separators=(",", ":")) + "\n")
 
 
 def cmd_permission_install(settings_path: str, state_path: str) -> None:
@@ -619,6 +649,10 @@ def main(argv: list) -> None:
         if len(argv) != 3:
             _die(5, "usage: agy-bridge-config.py doctor-static <config_path>")
         cmd_doctor_static(argv[2])
+    elif sub == "doctor-invocation":
+        if len(argv) != 3:
+            _die(5, "usage: agy-bridge-config.py doctor-invocation <config_path>")
+        cmd_doctor_invocation(argv[2])
     elif sub == "permission-state-doctor":
         if len(argv) != 3:
             _die(5, "usage: agy-bridge-config.py permission-state-doctor <state_path>")

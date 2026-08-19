@@ -251,13 +251,28 @@ OUT="$(doctor)"; RC=$?
 want "doctor(after repair): the SAME unchanged doctor goes green once the launcher boots" "[ '$RC' -eq 0 ]"
 want "doctor(after repair): green names the exact verb set as the evidence" "printf '%s' \"\$OUT\" | grep -q 'exact entwurf verb set'"
 
-# H-2: project STALE (user bare, project legacy) → effective=project=legacy note (green-runtime-red guard)
+# The review A/B: an unowned/non-bare override shadows the healthy user bridge in production.
+# Ownership remains the operator's, but runtime truth cannot become a green note merely because
+# entwurf will not overwrite it. Keep this QK cell before the healthy legacy override: a mutant
+# that skips all non-bare runtime probes must be attributed to THIS failure, not the later positive.
+write_dead_fake "$SB/bin/dead-override"
 printf '{"entwurfProvider":{"mcpServers":{"entwurf-bridge":{"command":"entwurf-bridge"}}}}\n' > "$GLOBAL"
+python3 -c 'import json,sys; json.dump({"entwurfProvider":{"mcpServers":{"entwurf-bridge":{"command":sys.argv[2],"args":[]}}}}, open(sys.argv[1],"w"))' "$PROJECT" "$SB/bin/dead-override"
+set +e
+OUT="$(doctor 2>&1)"; RC=$?
+set -e
+want "[QK:PI-DOCTOR-PROBES-OVERRIDE] doctor(dead unowned override): FAILS runtime independently of ownership" "[ '$RC' -ne 0 ]"
+want "doctor(dead unowned override): names the exact invocation failure" "printf '%s' \"\$OUT\" | grep -q 'effective invocation does NOT serve MCP'"
+
+# H-2: project legacy override still gets an independent runtime verdict before its ownership note.
+mkdir -p "$(dirname "$LEGACY_CMD")"
+write_mcp_fake "$LEGACY_CMD"
 python3 -c 'import json,sys; json.dump({"entwurfProvider":{"mcpServers":{"entwurf-bridge":{"command":sys.argv[2]}}}}, open(sys.argv[1],"w"))' "$PROJECT" "$LEGACY_CMD"
 OUT="$(doctor)"; RC=$?
-want "doctor(project-stale): exits 0 (honest note, not a crash)" "[ '$RC' -eq 0 ]"
-want "doctor(project-stale): EFFECTIVE is project (shadows user)" "printf '%s' \"\$OUT\" | grep -q 'EFFECTIVE (project)'"
-want "doctor(project-stale): flags legacy managed path (not adopted)" "printf '%s' \"\$OUT\" | grep -q 'LEGACY managed repo path'"
+want "doctor(project-legacy): exits 0 when the exact override boots" "[ '$RC' -eq 0 ]"
+want "doctor(project-legacy): EFFECTIVE is project (shadows user)" "printf '%s' \"\$OUT\" | grep -q 'EFFECTIVE (project)'"
+want "doctor(project-legacy): runtime BOOTS before the ownership note" "printf '%s' \"\$OUT\" | grep -q 'configured override BOOTS'"
+want "doctor(project-legacy): flags legacy managed path (not adopted)" "printf '%s' \"\$OUT\" | grep -q 'LEGACY managed repo path'"
 
 # H-3: state-owned DRIFT → FAIL (state says managed but effective is foreign)
 printf '{"entwurfProvider":{"mcpServers":{"entwurf-bridge":{"command":"/foreign/thing"}}}}\n' > "$GLOBAL"
