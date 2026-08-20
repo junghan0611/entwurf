@@ -286,10 +286,28 @@ stdin에 `sessionId`가 있고, 첫 프롬프트에 태어난다. 도어벨이 �
 `scripts/check-fresh-cut-gate.sh` 의 G 절(archive-destination preflight)이
 **제품 변경 0인 이 브랜치를 빨갛게 만들었다**(CI run 32370770123, 커밋 `8e6ce56`).
 `[측정]` 원인은 픽스처의 시간 창이다 — G는 컷이 찍을 스탬프를 모르니 가능한 초를 미리 점유하는데
-그 띠가 3초였다. 로더가 느린 러너에서 node가 `stamp()`에 늦게 닿아 띠 밖(`…124933`)을 찍었고,
-충돌이 안 일어나 컷이 **정상 성공**했는데 G1이 제품 결함으로 보고했고 G2·G3이 연쇄로 무너졌다.
-띠를 60초로 넓히고, 미스를 **미스로** 보고하도록 고쳤다(G2/G3은 미스일 때 채점하지 않는다).
-심어서 확인했다 — 미스일 때 오해 소지 있는 세 칸 대신 정직한 한 칸이 뜬다. control 166/0 초록.
+그 띠가 3초였다. 느린 러너에서 node가 `stamp()`에 늦게 닿아 띠 밖을 찍었고, 충돌이 안 일어나
+컷이 **정상 성공**했는데 G1이 제품 결함으로 보고했고 G2·G3이 연쇄로 무너졌다. 원문:
+
+```text
+https://github.com/junghan0611/entwurf/actions/runs/32370770123 · job `check` · step `Run pnpm run check:full`
+12:49:32.987Z [check-fresh-cut-gate] G. archive-destination preflight
+12:49:33.147Z   ❌ G1 the cut proceeded into an occupied destination, or refused with the wrong status (rc=0, want 1)
+12:49:33.149Z        archived: /tmp/entwurf-fresh-cut-gate.lMsRhm/store.archive-20260820T124933
+12:49:33.149Z        archived: /tmp/entwurf-fresh-cut-gate.lMsRhm/mailbox.archive-20260820T124933
+12:49:33.150Z   ❌ G2 half-cut generation: the store was archived before the mailbox collision was seen
+12:49:33.150Z   ❌ G3 the refusal never claimed the no-op
+```
+
+`[측정]` flake 판별: run `32371224215`(`91c229e`, **같은 게이트 코드**)는 G1·G2·G3 전부 초록.
+
+수리: 띠를 하나의 base epoch에서 파생해 **연속**으로 만들고(반복마다 `date`를 부르면 초 경계에서
+띠 **중간에 구멍**이 난다), 60초로 넓히고, 미스를 **미스로** 보고하고(G2/G3은 미스일 때 채점 안 함),
+미스면 **한 번 재시도**한다. 재시도가 본질이다 — 넓힌 띠는 여전히 경합이고 *"60초면 충분하다"* 는
+증명할 수 없는 주장이지만, 두 번 연속 미스는 한 번의 제곱이고 행복 경로에서는 발화하지 않아 공짜다.
+`check-gate-qualification`이 이 게이트를 control과 mutant 양쪽에서 돌리므로, 거기서의 미스 한 번은
+빨간 칸 하나가 아니라 **22분 인벤토리 전체**의 비용이다.
+`[측정]` 미스는 빨간 칸 **두 개**를 낸다(G1 miss + G2/G3 not scored). control 166/0 초록.
 `[코드]` #82 레인과 무관하지만 이 브랜치의 CI를 막고 있어서 같이 실었다.
 
 # §6 Verify

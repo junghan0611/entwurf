@@ -1,0 +1,17 @@
+{
+	"schemaVersion": 1,
+	"lane": "fresh-cut",
+	"mutants": [
+		{
+			"claim": "FRESH-CUT-COLLISION-NO-MOVE",
+			"title": "preflighting only the FIRST planned destination lets an occupied second destination through: the cut renames over it and reports a clean generation",
+			"subject": "scripts/meta-bridge-fresh-cut.ts",
+			"find": ["\tconst collisions = plan.filter(({ dest }) => archiveDestOccupied(dest));"],
+			"replace": ["\tconst collisions = plan.slice(0, 1).filter(({ dest }) => archiveDestOccupied(dest));"],
+			"gate": ["bash", "run.sh", "check-fresh-cut-gate"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESH-CUT-COLLISION-NO-MOVE]",
+			"signatureSource": "scripts/check-fresh-cut-gate.sh"
+		}
+	]
+}

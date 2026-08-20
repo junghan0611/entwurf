@@ -47,6 +47,16 @@ case "$REPO" in
     ;;
 esac
 
+# This gate reaches run.sh paths that import `scripts/pi_settings_io.py`, and CPython
+# writes `scripts/__pycache__/*.pyc` next to the source it imports. In a normal clone
+# that file already exists and nothing looks different; inside the gate-qualification
+# SNAPSHOT — which copies TRACKED files only — it is a brand new file, and the harness
+# hashes the whole tree, so the run ends IMPURE with every mutant killed. Measured
+# 2026-08-20: a tracked-only copy gained exactly `scripts/__pycache__/pi_settings_io.
+# cpython-313.pyc` after this gate ran. `smoke-pi-provider-state.sh` and
+# `smoke-meta-install-state.sh` already carry this line for the same reason.
+export PYTHONDONTWRITEBYTECODE=1
+
 SANDBOX="$(mktemp -d -t entwurf-fresh-cut-gate.XXXXXX)"
 trap 'rm -rf "$SANDBOX"' EXIT
 export HOME="$SANDBOX/home"
@@ -973,10 +983,6 @@ fi
 
 # ── G. an archive collision is a NO-OP, never a half-cut ─────────────────────
 echo "[check-fresh-cut-gate] G. archive-destination preflight"
-reset_world prevgen
-mkdir -p "$ENTWURF_META_MAILBOX_DIR/20260305T000000-dddd05"
-printf 'hello\n' > "$ENTWURF_META_MAILBOX_DIR/20260305T000000-dddd05/0001.msg"
-store_before="$(store_bytes)"
 # Occupy the MAILBOX destination — the second move in the plan — so whichever
 # stamp the cut computes, its first move looks free and its second collides.
 # That ordering is the whole point: checking each destination just before its
@@ -991,23 +997,53 @@ store_before="$(store_bytes)"
 # red with no product change is worse than the hole it guards, so the band is now
 # far longer than any plausible interpreter start, and a miss is reported AS a
 # miss rather than as a refusal that never happened.
+#
+# THE BAND MUST BE CONTIGUOUS, which is why every stamp comes off ONE base epoch.
+# Reading the clock again inside the loop looks equivalent and is not: iteration k
+# would occupy `now(k) + k`, so a second boundary crossed mid-loop skips a value and
+# punches a HOLE in the band. A cut landing in that hole finds its destination free,
+# and the hole sits INSIDE the range, so the miss test below would not catch it either.
+#
+# AND WHY A MISS RETRIES ONCE. A wider band is still a race, and "60s is enough"
+# is not a claim this file can prove. What it CAN do is make the race cost
+# nothing: stage the band, and if the cut lands past it, rebuild the band and run
+# the cut again. Two independent misses is the square of one, and the retry costs
+# a second on the happy path because it never fires there. This matters most
+# where the cell is cheapest to overlook — `check-gate-qualification` runs this
+# gate as both control and mutant pass, so a single miss there does not cost one
+# red cell, it costs the whole 22-minute inventory and re-runs it.
 G_BAND_SECONDS=60
-for off in $(seq 0 "$G_BAND_SECONDS"); do
-  mkdir -p "$SANDBOX/mailbox.archive-$(date -d "+$off seconds" +%Y%m%dT%H%M%S)"
-done
-g_band_end="$(date -d "+$G_BAND_SECONDS seconds" +%Y%m%dT%H%M%S)"
-set +e
-out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rcg=$?
-set -e
-g_cut_stamp="$(printf '%s\n' "$out" | sed -n 's|.*/mailbox\.archive-\([0-9T]*\).*|\1|p' | head -1)"
 g_miss=0
-[ "$rcg" != 1 ] && [ -n "$g_cut_stamp" ] && [ "$g_cut_stamp" \> "$g_band_end" ] && g_miss=1
-if [ "$rcg" = 1 ]; then
-  ok "G1 an occupied archive destination REFUSES the cut with the NO-MOVE status (exit 1)"
+for g_attempt in 1 2; do
+  reset_world prevgen
+  mkdir -p "$ENTWURF_META_MAILBOX_DIR/20260305T000000-dddd05"
+  printf 'hello\n' > "$ENTWURF_META_MAILBOX_DIR/20260305T000000-dddd05/0001.msg"
+  store_before="$(store_bytes)"
+  g_band_base="$(date +%s)"
+  for off in $(seq 0 "$G_BAND_SECONDS"); do
+    mkdir -p "$SANDBOX/mailbox.archive-$(date -d "@$((g_band_base + off))" +%Y%m%dT%H%M%S)"
+  done
+  g_band_end="$(date -d "@$((g_band_base + G_BAND_SECONDS))" +%Y%m%dT%H%M%S)"
+  set +e
+  out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rcg=$?
+  set -e
+  g_cut_stamp="$(printf '%s\n' "$out" | sed -n 's|.*/mailbox\.archive-\([0-9T]*\).*|\1|p' | head -1)"
+  g_miss=0
+  [ "$rcg" != 1 ] && [ -n "$g_cut_stamp" ] && [ "$g_cut_stamp" \> "$g_band_end" ] && g_miss=1
+  [ "$g_miss" = 0 ] && break
+  echo "  ..   G fixture missed its band (cut stamped $g_cut_stamp > $g_band_end) — restaging once"
+done
+if [ "$rcg" = 1 ] && [ -n "$(printf '%s\n' "$out" | sed -n 's|^ARCHIVE EXISTS: .*/\(mailbox\.archive-[0-9T]*\)$|\1|p')" ]; then
+  ok "G1 an occupied archive destination REFUSES the cut with the NO-MOVE status (exit 1), naming the MAILBOX destination — the second move in the plan"
+elif [ "$rcg" = 1 ]; then
+  # Refusing for some other reason is not this cell's contract. Without this arm any
+  # unrelated no-move regression that prints the generic "Nothing was moved" line would
+  # keep G1-G3 green while the second-move collision went unproven.
+  bad "G1 the cut refused with NO-MOVE but never named a mailbox.archive-* destination — this is not the second-move collision G claims to prove" "$out"
 elif [ "$g_miss" = 1 ]; then
   bad "G1 FIXTURE MISS, not a product verdict: the cut stamped $g_cut_stamp, past the occupied band ending $g_band_end, so no collision was ever staged. Widen G_BAND_SECONDS; do not read this as the cut ignoring a collision" "$out"
 else
-  bad "G1 the cut proceeded into an occupied destination, or refused with the wrong status (rc=$rcg, want 1)" "$out"
+  bad "G1 the cut proceeded into an occupied destination, or refused with the wrong status (rc=$rcg, want 1) [QK:FRESH-CUT-COLLISION-NO-MOVE]" "$out"
 fi
 # G2/G3 only mean something once a collision was actually staged. On a fixture
 # miss the cut was SUPPOSED to archive and SUPPOSED not to print the no-op line,
@@ -1017,6 +1053,13 @@ fi
 if [ "$g_miss" = 1 ]; then
   bad "G2/G3 not scored — the G fixture missed its band (see G1); this says nothing about the cut"
 else
+  # NOTE for whoever audits kill reasons here: the mutant carried by
+  # `scripts/mutants/fresh-cut.json` plants "preflight only the FIRST destination",
+  # which lets the cut succeed outright and dies at G1. The ORIGINAL defect this
+  # section was written for — checking each destination just before its own rename —
+  # produces exit 1, an `ARCHIVE EXISTS` line and the no-op sentence, so it passes
+  # G1 and G3 and dies HERE, at G2, which carries no [QK:] label of its own. If that
+  # path ever needs qualifying, this is the cell to label.
   if [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ] && [ "$store_before" = "$(store_bytes)" ]; then
     ok "G2 the collision refusal moved NOTHING — the store never left its place (no half-cut generation)"
   else
