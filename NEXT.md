@@ -1,4 +1,4 @@
-# NEXT — 0.14.2 prepare · OPEN 5 live contracts
+# NEXT — 0.14.2 prepared and gate-green · OPEN 5 live contracts
 
 > NEXT는 disposable boot sector다. 완료 이력은 CHANGELOG/closed issues/git이 지고,
 > 방향은 ROADMAP, 운영 규율은 AGENTS가 진다.
@@ -15,20 +15,20 @@
 - [x] **8. publish 0.14.1** — npm latest=0.14.1 (2026-08-13)
 - [x] **9. #79 dependency baseline** — Pi 0.84.2 + Claude ACP 0.68.0 first certify; issue CLOSED
 - [x] **10. #81 ACP support + exact bridge invocation** — Claude ACP 0.70.0; `877f127`/`130b09b` merged at `d0fb8e6`; issue CLOSED
-- [ ] **11. 0.14.2 prepare** ← CURRENT: LIVE acceptance paused on external Codex quota
-- [ ] **12. 0.14.2 make** ← PAUSED: only after prepared commit + exact-SHA CI
+- [x] **11. 0.14.2 prepare** — `347c783`+`5a09f3d`+prep; release-gate MUST 21/0/0, BEHAVIOR 1/0/0, `cut: OK`
+- [ ] **12. 0.14.2 make** ← CURRENT: push prepared HEAD → exact-SHA CI → candidate → tag/release
 
-현재 좌표: **0.14.2 prepare paused** · deterministic candidate green · Codex quota blocker · OPEN 5
+현재 좌표: **0.14.2 prepare 완료** · MUST 21/0/0 `cut: OK` · make 대기 · OPEN 5
 
-# NOW — 0.14.2 quota-blocked release preparation
+# NOW — 0.14.2 make
 
 - **Release scope:** ACP EOF-first child-end evidence, Pi 0.84.2 / Claude ACP 0.70.0 support coordinates, exact MCP `{command,args,env}` + sequential initialize, stdin EPIPE/stderr preservation, Copilot raw-probe evidence without admission.
-- **Candidate:** uncommitted 0.14.2 release records plus the #81 release-gate Pi invocation preflight (`run.sh`, `VERIFY.md`, `check-release-gate-outcomes`, its exact mutant, qualification inventory). Do not commit this tree before LIVE acceptance.
-- **Deterministic evidence:** frozen work surface passed qualification **185/185** and `pnpm run check:full` **311s**; hashes/logs are under `/tmp/entwurf-recovery-0.14.2/`.
-- **Blocker (external):** fresh `openai-codex` turns return `Codex error: The usage limit has been reached` for default chain `gpt-5.4` and mux child `gpt-5.6-terra`. Auth token is valid; source, identity fence, launcher, bundled MCP, and v2-send focused recovery are green.
-- **Next:** when a NEW default `openai-codex/gpt-5.4` turn is actually usable, run default `LIVE=1 ./run.sh smoke-entwurf-chain-live`; green → `smoke-mux-lifecycle-live`; both green → rerun `LIVE=1 ./run.sh release-gate <fresh-scratch> --cut`. Commit `chore(release): prepare v0.14.2` only after MUST green.
+- **Candidate:** prepared HEAD carries the model-cost defaults (`347c783`), the archived-demo notes (`5a09f3d`), and the release-record commit. `package.json` is already `0.14.2`.
+- **Accepted evidence (2026-08-20):** qualification **185/185**, `pnpm run check:full` 207s standalone / 209s in-gate, `LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.14.2.c5VqTP --cut` → **MUST PASS=21 FAIL=0 SKIP=0**, **BEHAVIOR PASS=1 FAIL=0 SKIP=0**, `cut: OK`. Log SHA-256 `27346d86be4a1a96a8ea8cab97687fcce807e4fa4bd6e3d179b91f85dbbcbe53`.
+- **Cost decision (2026-08-20, GLG):** live-spend defaults are `openai-codex/gpt-5.6-luna` and the LIVE gate was re-earned on that default — `smoke-entwurf-chain-live` and `smoke-mux-lifecycle-live` both passed with it, so it is proven rather than assumed. Fixture model strings stay untouched. agy runs free-tier `gemini-3.6-flash`, never Pro. Cortex has no subscription and no free tier on this host, so its LIVE smoke is a permanently ABSENT axis — record the SKIP, never soften it.
+- **Next:** `/entwurf-release make 0.14.2` — push prepared HEAD, require exact-SHA CI (`check`, `install-surface`, `artifact-consumer`), create and accept ONE preserved candidate, then tag `v0.14.2`, stamp, and cut the GitHub release. `publish` is a separate authority boundary after that.
 - **Open 5:** #72 ACP retained-child cause · #76 subscription-first / refuse `openrouter/*` · #78 macOS/native-Windows portability · #80 public vocabulary · #82 Copilot admission.
-- **Do not touch:** no quota-avoidance model/default change, Copilot substitute or managed backend before #82 admit, automatic replay/watcher/supervisor, OpenRouter test turn, macOS/Windows support wording without physical evidence.
+- **Do not touch:** re-running the LIVE gate to "refresh" green (it is accepted), Copilot substitute or managed backend before #82 admit, automatic replay/watcher/supervisor, OpenRouter test turn, macOS/Windows support wording without physical evidence.
 
 # RECENT
 
