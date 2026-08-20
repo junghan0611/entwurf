@@ -7,6 +7,13 @@
 # watchPaths, so there is nothing to arm. A shared doctor would have to be taught to
 # ignore exactly the evidence it exists to demand.
 #
+# WHAT A PASS FROM THIS DOCTOR MEANS, AND WHAT IT DOES NOT. Copilot exposes no plugin
+# load or hook-execution receipt, so this doctor can prove the artifact is correct and
+# REGISTERED, never that Copilot loaded it. A PASS with zero records is therefore
+# consistent with two different worlds — a session not yet spoken to, and a unit Copilot
+# silently never invokes. Only a real first prompt separates them, and that receipt (a
+# record in the store) is what closes admission — not this doctor (cross-review, terra).
+#
 # THE ONE HONEST DIFFERENCE FROM THE CLAUDE DOCTOR. There, a plugin installed with
 # zero meta-records is a SILENT MISS and exits non-zero, because a Claude session
 # mints at session open — so zero records means something ate the hook. A Copilot
@@ -21,7 +28,11 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 MKT_NAME="meta-bridge-copilot-local"
 PLUGIN="entwurf-meta-receive-copilot"
-STALE_CLAUDE_UNIT="entwurf-meta-receive"
+# QUALIFIED ids throughout: `copilot plugin list` prints `plugin@marketplace` (measured
+# 2026-08-21), and a bare name would both accept a same-named plugin from somebody
+# else's marketplace as ours and flag theirs as our stale unit (cross-review, terra).
+QUALIFIED="$PLUGIN@$MKT_NAME"
+STALE_CLAUDE_UNIT="entwurf-meta-receive@meta-bridge-local"
 ASM="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/meta-bridge-copilot/.assembled"
 AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
 SESSIONS_DIR="$AGENT_DIR/meta-sessions"
@@ -101,12 +112,16 @@ fi
 echo "[copilot-bridge-doctor] copilot wiring"
 PLUGIN_LIST="$(copilot plugin list 2>/dev/null)"
 case "$PLUGIN_LIST" in
-  *"$PLUGIN"*) ok "$PLUGIN is installed in Copilot" ;;
-  *) bad "$PLUGIN is NOT installed in Copilot — run ./run.sh install-copilot-bridge" ;;
+  *"$QUALIFIED"*)
+    # WHAT THIS DOES NOT PROVE. Copilot exposes no load/execution receipt, so a listing
+    # says the plugin is REGISTERED, never that Copilot loaded this unit or will invoke
+    # its hook. Only a real first prompt settles that — see the birth-evidence section.
+    ok "$QUALIFIED is registered in Copilot (registration, not proof it is loaded)" ;;
+  *) bad "$QUALIFIED is NOT installed in Copilot — run ./run.sh install-copilot-bridge" ;;
 esac
 case "$PLUGIN_LIST" in
   *"$STALE_CLAUDE_UNIT"*)
-    bad "the Claude unit '$STALE_CLAUDE_UNIT' is still installed in Copilot — it fires on every prompt and exits 1 before node starts (no `args` in Copilot's schema). Re-run the installer without --keep-stale-claude-unit." ;;
+    bad "the Claude unit '$STALE_CLAUDE_UNIT' is still installed in Copilot — it fires on every prompt and exits 1 before node starts (Copilot's schema has no args key). Re-run the installer without --keep-stale-claude-unit." ;;
   *) ok "the Claude unit is not installed in Copilot" ;;
 esac
 
@@ -122,15 +137,31 @@ else
   # opened-but-unspoken session legitimately has no record yet.
   note "no copilot meta-record yet. A Copilot session is born on its FIRST PROMPT, not when"
   note "the window opens — open Copilot, send one prompt, then re-run this doctor."
+  note "NOT-YET is only meaningful BEFORE that first prompt. If a Copilot session has"
+  note "already been prompted on this host and this still says zero, the unit is not"
+  note "being invoked and that IS the failure — Copilot gives no load receipt to tell"
+  note "the two apart from here."
 fi
 
 if [ -f "$HOOK_LOG" ]; then
-  COPILOT_ERRORS="$(grep -c ' ERROR \[copilot\] ' "$HOOK_LOG" 2>/dev/null || echo 0)"
-  if [ "$COPILOT_ERRORS" -gt 0 ]; then
-    bad "$COPILOT_ERRORS ERROR line(s) from this unit in $HOOK_LOG — the hook RAN and did not mint:"
-    grep ' ERROR \[copilot\] ' "$HOOK_LOG" | tail -3 | sed 's/^/        /'
-  else
+  # RECOVERY RULE. The hook log is append-only, so a repaired install would otherwise
+  # stay red forever on errors it has already outgrown (cross-review, terra). What is
+  # red is an ERROR with NO successful mint after it: a failure the unit never recovered
+  # from. An ERROR followed by a create/attach is history, and is reported as such.
+  #
+  # grep -c prints 0 AND exits 1 with no match, so a `|| echo 0` fallback would append a
+  # SECOND line and every numeric test below would die on "0\n0". Keep it to one line.
+  LAST_ERROR_LINE="$(grep -n ' ERROR \[copilot\] ' "$HOOK_LOG" 2>/dev/null | tail -1 | cut -d: -f1)"
+  LAST_OK_LINE="$(grep -n ' INFO \[copilot\] \(create\|attach\) ' "$HOOK_LOG" 2>/dev/null | tail -1 | cut -d: -f1)"
+  TOTAL_ERRORS="$(grep -c ' ERROR \[copilot\] ' "$HOOK_LOG" 2>/dev/null | head -1)"
+  TOTAL_ERRORS="${TOTAL_ERRORS:-0}"
+  if [ -z "$LAST_ERROR_LINE" ]; then
     ok "no copilot ERROR lines in $HOOK_LOG"
+  elif [ -n "$LAST_OK_LINE" ] && [ "$LAST_OK_LINE" -gt "$LAST_ERROR_LINE" ]; then
+    note "$TOTAL_ERRORS historical copilot ERROR line(s) in $HOOK_LOG, all followed by a successful mint (line $LAST_OK_LINE > $LAST_ERROR_LINE) — recovered, not red"
+  else
+    bad "the newest copilot line in $HOOK_LOG is an unrecovered ERROR — the hook RAN and did not mint:"
+    grep ' ERROR \[copilot\] ' "$HOOK_LOG" | tail -3 | sed 's/^/        /'
   fi
 else
   note "no hook log yet at $HOOK_LOG (nothing has fired on this host)"

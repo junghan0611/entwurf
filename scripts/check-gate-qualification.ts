@@ -806,7 +806,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"agy-permission": 6,
 		"bridge-boot-resume": 3,
 		"bridge-command-boot": 9,
-		"copilot-birth": 5,
+		"copilot-birth": 9,
 		"fresh-cut": 1,
 		"meta-facts": 4,
 		"meta-identity": 4,

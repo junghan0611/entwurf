@@ -176,7 +176,7 @@ ok("the second fire attached to the SAME garden id", live[0]?.gardenId === bornG
 // ── 6. birth writes NOTHING a doorbell-less backend cannot back ─────────────
 const storeEntries = readdirSync(store);
 ok(
-	"no mailbox, sender or receiver marker was created — there is no doorbell to back one",
+	"[QK:COPILOT-BIRTH-WRITES-NO-MARKER] no mailbox, sender or receiver marker was created — there is no doorbell to back one",
 	!storeEntries.includes("meta-mailbox") &&
 		!storeEntries.includes("meta-senders") &&
 		!storeEntries.includes("meta-receivers"),
@@ -245,6 +245,94 @@ const shippedLauncher = readFileSync(
 ok(
 	"the committed launcher still carries both placeholders",
 	shippedLauncher.includes('NODE_BIN="__NODE_BIN__"') && shippedLauncher.includes("__HOOK_ENTRY__"),
+);
+
+// ── 11. the install path, driven against a FAKE copilot ─────────────────────
+// The one part of this lane that cannot be exercised for real without touching the
+// operator's Copilot — and the place cross-review named the strongest unguarded
+// defect: an unqualified stale-unit removal that treats a CLI failure as an absence,
+// or that reaches a same-named plugin from somebody else's marketplace.
+const OURS = "entwurf-meta-receive-copilot@meta-bridge-copilot-local";
+const STALE = "entwurf-meta-receive@meta-bridge-local";
+const FOREIGN = "entwurf-meta-receive@someone-elses-marketplace";
+
+interface FakeRun {
+	status: number | null;
+	stdout: string;
+	stderr: string;
+	/** every `copilot …` argv the installer issued, in order */
+	calls: string[];
+	/** the plugin ids the fake still holds when the installer is done */
+	installed: string[];
+}
+function runInstall(opts: { installed: string[]; uninstallFails?: boolean; label: string }): FakeRun {
+	const home = path.join(root, `install-${opts.label}`);
+	const bin = path.join(home, "bin");
+	mkdirSync(bin, { recursive: true });
+	const state = path.join(home, "installed.txt");
+	const log = path.join(home, "calls.log");
+	writeFileSync(state, opts.installed.join("\n") + (opts.installed.length ? "\n" : ""));
+	writeFileSync(log, "");
+	// A fake that ANSWERS like the measured CLI: `plugin list` prints qualified ids,
+	// `plugin uninstall <id>` removes exactly that id.
+	writeFileSync(
+		path.join(bin, "copilot"),
+		[
+			"#!/usr/bin/env bash",
+			`STATE=${JSON.stringify(state)}`,
+			`LOG=${JSON.stringify(log)}`,
+			'echo "$*" >> "$LOG"',
+			'case "$1 $2" in',
+			'  "plugin list") echo "Installed plugins:"; sed "s/^/  • /" "$STATE"; exit 0 ;;',
+			'  "plugin uninstall")',
+			opts.uninstallFails
+				? '    echo "boom" >&2; exit 1 ;;'
+				: '    grep -Fvx "$3" "$STATE" > "$STATE.tmp" || true; mv "$STATE.tmp" "$STATE"; exit 0 ;;',
+			'  "plugin install") echo "$3" >> "$STATE"; exit 0 ;;',
+			'  "plugin marketplace") exit 0 ;;',
+			"esac",
+			"exit 0",
+		].join("\n"),
+	);
+	chmodSync(path.join(bin, "copilot"), 0o755);
+	const res = spawnSync("bash", [path.join(REPO, "scripts", "copilot-bridge-install.sh")], {
+		env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, ENTWURF_COPILOT_ASM: path.join(home, "asm") },
+		encoding: "utf8",
+	});
+	return {
+		status: res.status,
+		stdout: res.stdout ?? "",
+		stderr: res.stderr ?? "",
+		calls: readFileSync(log, "utf8").split("\n").filter(Boolean),
+		installed: readFileSync(state, "utf8").split("\n").filter(Boolean),
+	};
+}
+
+const withStale = runInstall({ installed: [STALE], label: "stale" });
+ok(
+	"[QK:COPILOT-INSTALL-QUALIFIED-STALE] install removes the stale Claude unit by its QUALIFIED id",
+	withStale.calls.includes(`plugin uninstall ${STALE}`),
+);
+ok("install then registers our unit", withStale.installed.includes(OURS) && withStale.status === 0);
+ok("the stale unit is gone afterwards", !withStale.installed.includes(STALE));
+
+const withForeign = runInstall({ installed: [FOREIGN], label: "foreign" });
+ok(
+	"[QK:COPILOT-INSTALL-FOREIGN-UNTOUCHED] a same-named plugin from ANOTHER marketplace is left alone",
+	withForeign.installed.includes(FOREIGN) &&
+		!withForeign.calls.some((c) => c.startsWith(`plugin uninstall ${FOREIGN}`)),
+);
+
+const uninstallBroken = runInstall({ installed: [STALE], uninstallFails: true, label: "cli-error" });
+ok(
+	"[QK:COPILOT-INSTALL-UNINSTALL-FAILURE-IS-FATAL] a FAILING uninstall is not read as an absence — the install refuses",
+	uninstallBroken.status !== 0 && !uninstallBroken.installed.includes(OURS),
+);
+
+const clean = runInstall({ installed: [], label: "clean" });
+ok(
+	"a host with no stale unit installs cleanly and says so",
+	clean.status === 0 && clean.stdout.includes("nothing to remove"),
 );
 
 writeFileSync(path.join(root, "gate.ok"), "");

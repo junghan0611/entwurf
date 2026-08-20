@@ -78,9 +78,12 @@ git에 없다. 그래서 결정적 줄은 아래 §1에 **원문 그대로 박�
 - [x] **1. 첫 측정** — 왜 copilot meta-record가 0건인가 (§1)
 - [x] **2. 크로스리뷰 2회** — 주장 5건 은퇴, 썩은 서술 전수 조사 (§2, §3)
 - [x] **3. 신뢰 규약 수립** — §0
-- [ ] **4. 썩은 서술 정리** ← NEXT SESSION. 펜스 2개는 우선 (§3)
-- [ ] **5. 출생 구현** — 바닥은 닦였다. 설계는 구현팀이 (§4)
-- [ ] **6. 0.14.3 스코프** — 시민 1건이 `entwurf_peers`에 뜬 뒤에 잡는다
+- [~] **4. 썩은 서술 정리** — DELIVERY 매트릭스/펜스/제목, ROADMAP 행은 §7에서 닫혔다.
+  **§3 표의 나머지(README 인벤토리)는 아직 열려 있다.**
+- [x] **5. 출생 구현 — 메커니즘은 착지했다** (§7). 코드·게이트·뮤턴트·설치/닥터 전부 있다.
+- [ ] **6. §6 인수 — 실제 Copilot 세션 1건** ← NEXT. **GLG 승인이 필요한 첫 프롬프트 1턴.**
+  이것 말고는 남은 게 없다. 아래 §7 마지막 문단이 정확히 무엇을 눌러야 하는지 적어 뒀다.
+- [ ] **7. 0.14.3 스코프** — 시민 1건이 `entwurf_peers`에 뜬 뒤에 잡는다
 
 # §1 측정 — Copilot CLI 1.0.80
 
@@ -236,7 +239,11 @@ stdin에 `sessionId`가 있고, 첫 프롬프트에 태어난다. 도어벨이 �
 **없는 것:** `the third backend` / `both native harnesses` 류 카디널리티 잔재는 산문에 없다.
 `probe/copilot-raw-delivery` 잔재도, ACP-Copilot 코드도 없다(브랜치 삭제됨).
 
-# §4 출생 구현 — 다음 세션 구현팀에게
+# §4 출생 구현 — 좌표 (구현은 §7에서 착지했다)
+
+> **2026-08-21 상태:** 아래 좌표는 전부 소비됐고, `[제안]`이던 항목은 §7의 표에서 **결정**됐다.
+> 이 절은 그 결정들이 무엇을 보고 내려졌는지 보여주는 근거로 남긴다 — 지우면 왜 그렇게 정했는지가 사라진다.
+> 다시 읽을 일이 있으면 §7의 결정 표와 짝지어 읽어라.
 
 바닥은 닦였다. **설계 결정은 구현팀이 한다.** 아래는 좌표이지 결정이 아니다.
 줄번호는 전부 `[코드]` — 2026-08-20에 직접 열어 확인했다.
@@ -326,7 +333,9 @@ pycache를 썼다.** post-vs-post 비교는 **양쪽에 공통인 결정론적 �
 
 # §5c 인계 — 이 세션은 여기서 끝난다
 
-`[측정]` 브랜치 `issue-82-copilot-citizen` = `05737c5`, origin에 푸시됨, 워크트리 clean.
+> **2026-08-21 정정:** 아래는 그 세션이 끝난 시점의 사실이다. 현재 브랜치 HEAD와 상태는 **§7**을 봐라.
+
+`[측정]` (2026-08-20 시점) 브랜치 `issue-82-copilot-citizen` = `05737c5`, origin에 푸시됨, 워크트리 clean.
 커밋 6개: `7b3c6d6`(규약) · `4317e89`(구멍 6) · `8e6ce56`(AGENTS) · `91c229e`(구멍 2) ·
 `862211b`(1차 수리) · `05737c5`(qualified 2차 수리).
 `agent-config`: `0627421` · `4b51cd0`.
@@ -340,6 +349,78 @@ exit 0, IMPURE 없음** · `check:full` **334s 초록** · focused gate **166/0*
 `[측정]` 세 형제가 검수했고 세 세션 다 컨텍스트를 다 썼다 —
 grok `20260820T202338-c35998` · terra `20260820T221544-05305c` · glm `20260820T222951-c3b15c`.
 재소환하지 말고 필요하면 새로 열어라. 브리핑은 §0 규약대로 **이 파일과 #82 스레드 원문**을 가리켜라.
+
+# §7 착지 — 2026-08-21 세션 (인계자: claude-opus-5, 코디네이터 교대분)
+
+`[측정]` 커밋 3개, 브랜치 `issue-82-copilot-citizen`, **푸시 안 함**(GLG 결정 사항):
+`e6a1eb6` 레지스트리 · `6768abf` 출생 경로 · `00a36b5` 뮤턴트 + 문서 수리.
+
+**`[측정]` 전임자가 남긴 첫 수(CI 확인)는 초록으로 닫혔다.**
+`05737c5`(run 32381032234) · `9abfd51`(32381105053) · `1da40c9`(32381318987) **셋 다 success.**
+§5b 게이트 레인은 CI에서도 검증됐다.
+
+## 무엇이 실제로 돌아가는가
+
+`[측정]` `./run.sh check-copilot-birth-hook` — **40 assertions ok.**
+게이트가 **진짜 조립기**(`copilot-bridge-install.sh --assemble-only`)를 temp 디렉토리로 돌리고,
+구워진 런처를 **argv 없이** 실행해 stdin에 `{sessionId,cwd}`를 넣는다. 결과는 실제 v3 레코드:
+
+```json
+{"schemaVersion":3,"gardenId":"20260820T235452-f557a4","backend":"copilot",
+ "nativeSessionId":"cop-abc-123","cwd":"/home/junghan/repos/gh/entwurf",
+ "model":null,"transcriptPath":null,...}
+```
+
+`[측정]` `pnpm run check` exit 0 (39s) · `pnpm run check:full` exit 0 · focused:
+`check-meta-manifest-schema` · `check-hook-launch-topology`(58) · `check-install-surface` ·
+`check-capability-bundle-reach`(17) 전부 초록.
+`[측정]` 뮤턴트 5건 — 워크트리에 하나씩 심고 되돌리며 확인, **전부 KILLED**, 각자 자기 `[QK:]` 시그니처에서.
+`check-gate-qualification`은 **안 돌렸다**(22분, §5 바운드).
+
+## 결정된 것 — §4에서 `[제안]`이던 것들이 여기서 결정됐다
+
+| 항목 | 결정 | 이유 |
+|---|---|---|
+| 유닛 분리 | **별도 marketplace root** `pi/meta-bridge-copilot/` | `[코드]` Claude 조립기는 root manifest를 복사하고 플러그인은 **하나만** 복사한다(`meta-bridge-install.sh:172-173`) → 같은 marketplace.json에 두 번째 plugin을 넣으면 조립물에 없는 `source`를 발행하고 그 root가 `claude plugin validate`(:224)로 간다. terra 리뷰가 잡았다 |
+| hooks 형식 | Copilot 네이티브 (`version:1`, camelCase, `exec` 문자열, matcher 없음) | `[측정]` 배열 `exec`는 플러그인 로드 시점에 거절 |
+| 런처 | 전용 `copilot-hook-launch.sh`, **argv 요구 안 함**, node/entry를 install 때 굽는다 | `[측정]` Copilot 훅은 항상 argc=0. Claude 런처의 no-argv 거절이 409건 중 0건의 원인이었다 |
+| 엔트리 | 별도 `meta-bridge-hook-copilot.ts`, **mint만** | 도어벨이 없어 marker/watch가 있을 자리가 없다 |
+| 봉투 | 두 형태 다 읽되 **불일치는 거절** | `[제안: terra]` `sessionId ?? session_id`는 번역 결함을 조용히 삼킨다. `cwd` fallback도 없앴다 |
+| `wakeMode` | `direct-inject` | `[코드]` glm이 끝까지 확인: dispatch가 `mailbox-undeliverable` receipt로 fail-closed. `self-fetch`였다면 같은 거절이 **수신자 탓**으로 뒤집힌다 |
+| `deliveryLevel` | **`D0`** | `[코드]` 자릿수를 파싱하는 소비자 없음(`requireNonEmptyString` 하나). 도어벨이 없어 D2가 못 지나간다 → D0 위는 전부 거짓 주장 |
+| 설치/닥터 | 완전 별도 (`install-copilot-bridge` / `doctor-copilot-bridge`) | Claude 닥터의 빨강 조건(marker·도어벨·live delivery)이 Copilot엔 **없어야 정상** |
+| 닥터 빨강 조건 | "설치됐는데 레코드 0" = **NOT-YET**(빨강 아님) | 첫 프롬프트에 태어나므로 열어만 둔 세션은 레코드가 없는 게 정상. 빨강은 **훅이 돌고 실패한 것** |
+
+## 같이 닫힌 게이트 구멍
+
+`[코드]` `check-entwurf-capabilities.ts`의 드리프트 가드가 리터럴 3개를 돌아서 새 백엔드의 descriptor가
+**비교 없이** 통과했다(§4-4). 이제 `META_BACKENDS`를 돈다. `[측정]` 리터럴로 되돌리는 뮤턴트
+`[QK:CAPABILITY-DRIFT-SCOPE-FROM-CONST]`가 죽는다 — glm이 "수리에 킬프루프가 없다"고 지적해서 넣었다.
+
+## 형제 검토 2회 — 각각 실제로 뭔가를 바꿨다
+
+`[측정]` terra `20260820T234648-e3af26` (openai-codex/gpt-5.6-terra) — **설치 blocker**(marketplace root 분리),
+봉투 불일치 거절, §4 밖 좌표 6곳(package.json files · tsconfig.build.json · run.sh pack 2곳 · verb dispatch),
+무과금 게이트 설계.
+`[측정]` glm `20260820T234717-f2cb92` (zai/glm-5.3) — `mailbox-undeliverable` receipt 이름 확정,
+`deliveryLevel` 소비자 전수(자릿수 파서 없음), 드리프트 가드 뮤턴트 부재 지적, DELIVERY:84 충돌.
+**두 세션 다 살아 있다.** 구현 diff에 대한 2차 검토를 보냈고 답이 오면 §7에 덧붙일 것.
+
+## 남은 단 하나 — §6 인수
+
+**`[미검증]` 실제 Copilot 세션이 레코드를 민팅하는 것은 아직 확인 못 했다.** 메커니즘은 증명됐지만
+합성 봉투다. 진짜 출생에는 첫 프롬프트 1턴이 필요하고 그건 **과금**이다(직전 1턴 = 8.9354 AIC).
+
+**GLG 승인이 나면 순서는 이렇다:**
+
+1. `./run.sh install-copilot-bridge` — 조립 + Copilot에 설치 + **Copilot에 박혀 있는 Claude 유닛 제거**
+   (`--keep-stale-claude-unit`로 옵트아웃). `[미검증]` `copilot plugin marketplace add`/`install` 실행은
+   아직 한 번도 안 해봤다 — `--help`로 verb 존재만 확인했다.
+2. `./run.sh doctor-copilot-bridge` — 여기서는 NOT-YET이 정상이다.
+3. Copilot을 열고 **프롬프트 한 번**. 그게 출생 순간이다(창 여는 건 아무 훅도 안 띄운다).
+4. `./run.sh doctor-copilot-bridge` 다시 → 레코드 1건, 그리고 `entwurf_peers`에 시민이 뜬다.
+
+그 4번이 §6이다. **그 전까지 이 레인은 전부 메커니즘 증명이지 입학이 아니다.**
 
 # §6 Verify
 

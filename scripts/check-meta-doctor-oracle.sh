@@ -500,6 +500,27 @@ mv "$AGENT/meta-bridge-hook.log" "$TMP/hook-log.bak"
 expect_red "hook log absent" "NOT CERTIFIED — no hook log"
 mv "$TMP/hook-log.bak" "$AGENT/meta-bridge-hook.log"
 
+# M9b — a COPILOT line in the shared hook log must not move this doctor AT ALL (#82).
+# The Copilot birth unit appends to the same file, tagged `[copilot]`, and its ERROR
+# lines are frequently CORRECT fail-closed refusals. Worse, their recovery token cannot
+# exist here: `armed watch` is Claude-only, because Copilot has no doorbell. So an
+# untagged grep would redden the Claude doctor forever, for a refusal on another rail,
+# and prescribe a Claude wake failure that never happened. This case is the kill-proof
+# for that separation — it is an expect-GREEN, since the defect it guards makes a
+# HEALTHY host go red.
+cp "$AGENT/meta-bridge-hook.log" "$TMP/hook-log-precopilot.bak"
+{
+  echo "2026-08-21T00:00:02.000Z ERROR [copilot] degraded envelope: cwd missing or not a non-empty string (keys=sessionId)"
+  echo "2026-08-21T00:00:03.000Z INFO [copilot] create record 20260821T000003-aaaaaa.meta.json (event=native(source=new), shape=copilot-native, native=cop-1)"
+} >> "$AGENT/meta-bridge-hook.log"
+run_doctor
+if [ "$DOC_RC" -eq 0 ]; then
+  ok "[QK:HOOK-LOG-RAIL-SCOPED] a copilot ERROR in the shared hook log leaves the CLAUDE doctor green (rails stay separate)"
+else
+  bad "[QK:HOOK-LOG-RAIL-SCOPED] a copilot ERROR in the shared hook log turned the CLAUDE doctor red — the hook-log judgement is not rail-scoped:"$'\n'"$(printf '%s\n' "$DOC_OUT" | grep -E '^  (FAIL|WARN)' | sed 's/^/        /')"
+fi
+cp "$TMP/hook-log-precopilot.bak" "$AGENT/meta-bridge-hook.log"
+
 # M10 — deployed writer bundle missing: staleness becomes unknowable.
 mv "$PLANTED/lib/meta-session.ts" "$TMP/meta-session.bak"
 expect_red "installed writer bundle missing" "deployed writer version is UNKNOWN"

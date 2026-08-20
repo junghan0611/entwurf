@@ -66,6 +66,55 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:CAPABILITY-DRIFT-SCOPE-FROM-CONST]",
 			"signatureSource": "scripts/check-entwurf-capabilities.ts"
+		},
+		{
+			"claim": "COPILOT-INSTALL-QUALIFIED-STALE",
+			"title": "a BARE stale-unit name reaches a same-named plugin from somebody else's marketplace and uninstalls it",
+			"subject": "scripts/copilot-bridge-install.sh",
+			"find": ["STALE_CLAUDE_UNIT=\"entwurf-meta-receive@meta-bridge-local\""],
+			"replace": ["STALE_CLAUDE_UNIT=\"entwurf-meta-receive\""],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-INSTALL-QUALIFIED-STALE]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "COPILOT-INSTALL-UNINSTALL-FAILURE-IS-FATAL",
+			"title": "swallowing a failed stale-unit uninstall installs on top of a unit that is still firing and reports success",
+			"subject": "scripts/copilot-bridge-install.sh",
+			"find": [
+				"      copilot plugin uninstall \"$STALE_CLAUDE_UNIT\" >/dev/null \\",
+				"        || die \"the stale Claude unit '$STALE_CLAUDE_UNIT' is installed in Copilot but could not be removed. It fires on every prompt and exits 1 before node starts, so installing on top of it would leave that noise in place. Fix the Copilot CLI error above, or re-run with --keep-stale-claude-unit to proceed deliberately.\""
+			],
+			"replace": ["      copilot plugin uninstall \"$STALE_CLAUDE_UNIT\" >/dev/null 2>&1 || true"],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-INSTALL-UNINSTALL-FAILURE-IS-FATAL]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "HOOK-LOG-RAIL-SCOPED",
+			"title": "an untagged ERROR grep lets a Copilot fail-closed refusal redden the CLAUDE doctor forever — copilot's recovery token cannot exist on that rail",
+			"subject": "scripts/meta-bridge-hook-log.sh",
+			"find": ["  own=\"$(grep -v ' \\[copilot\\] ' \"$log\" 2>/dev/null || true)\""],
+			"replace": ["  own=\"$(cat \"$log\" 2>/dev/null || true)\""],
+			"gate": ["bash", "run.sh", "check-meta-doctor-oracle"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:HOOK-LOG-RAIL-SCOPED]",
+			"signatureSource": "scripts/check-meta-doctor-oracle.sh"
+		},
+		{
+			"claim": "COPILOT-BIRTH-WRITES-NO-MARKER",
+			"title": "arming a mailbox for a Copilot citizen claims a doorbell that does not exist in the bundle",
+			"subject": "pi-extensions/meta-bridge-hook-copilot.ts",
+			"find": ["\t\tlogLine(\n\t\t\t\"INFO\","],
+			"replace": [
+				"\t\tfs.mkdirSync(path.join(path.dirname(defaultMetaSessionsDir()), \"meta-mailbox\", result.record.gardenId), { recursive: true });\n\t\tlogLine(\n\t\t\t\"INFO\","
+			],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-BIRTH-WRITES-NO-MARKER]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
 		}
 	]
 }

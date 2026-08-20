@@ -66,8 +66,13 @@ if [ ! -f "$HOOK_ENTRY" ]; then
 	exit 1
 fi
 
-# PROVENANCE. Same token the Claude unit stamps, so the payload can tell an
-# authorized launch from a hand-invoked one. It carries no identity.
+# PROVENANCE, stamped but NOT CONSUMED — and that is deliberate, not an omission.
+# The Claude payload reads this token before trusting `process.ppid`, because it keys
+# sender/receiver markers to that pid. The Copilot payload writes NO marker (there is no
+# doorbell for one to vouch for), so it has nothing to gate on it and does not read it.
+# It is stamped anyway so that both units present the SAME launch contract to whatever a
+# later delivery admission needs; a mint that quietly depended on it would be the drift.
+# Do not describe this as a guard on this rail (cross-review, terra, 2026-08-21).
 export ENTWURF_META_HOOK_LAUNCH="hook-launch/v1"
 
 exec "$NODE_BIN" "$HOOK_ENTRY"
