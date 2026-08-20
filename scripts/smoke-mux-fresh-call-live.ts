@@ -43,7 +43,7 @@ import { skipLive } from "./lib/live-skip.ts";
 const LABEL = "smoke-mux-fresh-call-live";
 const CALLBACK_WAIT_MS = 180_000;
 const LIVE_MODEL = {
-	pi: "openai-codex/gpt-5.6-terra",
+	pi: "openai-codex/gpt-5.6-luna",
 	"claude-code": "claude-sonnet-5",
 } as const;
 

@@ -36,7 +36,7 @@
  *
  * LIVE-only (spawns a real pi, opens a real socket) — kept OUT of `pnpm check`; honest skip when
  * LIVE!=1 (a release-gate that hard-fails without auth/model is unrunnable unattended). Model:
- *   ENTWURF_LIVE_TARGET   = "<provider>/<model>"  (default "openai-codex/gpt-5.4")
+ *   ENTWURF_LIVE_TARGET   = "<provider>/<model>"  (default "openai-codex/gpt-5.6-luna")
  *   (or split: ENTWURF_LIVE_PROVIDER + ENTWURF_LIVE_MODEL)
  *   LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live
  *
@@ -101,7 +101,7 @@ function resolveTarget(): { provider: string; model: string } {
 	}
 	return {
 		provider: process.env.ENTWURF_LIVE_PROVIDER?.trim() || "openai-codex",
-		model: process.env.ENTWURF_LIVE_MODEL?.trim() || "gpt-5.4",
+		model: process.env.ENTWURF_LIVE_MODEL?.trim() || "gpt-5.6-luna",
 	};
 }
 

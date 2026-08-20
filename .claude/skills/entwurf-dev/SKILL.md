@@ -17,7 +17,7 @@ transcript를 가진 garden citizen이다.
 
 ```text
 /skill:entwurf-dev status
-/skill:entwurf-dev fresh pi openai-codex/gpt-5.6-terra 오늘 S0 상태를 한 문장으로 말해
+/skill:entwurf-dev fresh pi openai-codex/gpt-5.6-luna 오늘 S0 상태를 한 문장으로 말해
 /skill:entwurf-dev fresh claude-code claude-sonnet-5 README의 visible-first 계약을 읽어
 /skill:entwurf-dev send <garden-id> 지금 상태를 답해줘
 /skill:entwurf-dev resume <garden-id>
@@ -42,7 +42,7 @@ transcript를 가진 garden citizen이다.
 - `entwurf_fresh_call` backend는 정확히 `pi | claude-code`이고 model은 required다. `cwd`는
   선택 입력 하나: literal 절대경로(존재하는 디렉터리, `#`·trim·realpath 없음), 생략·`""`면
   caller cwd에서 시작한다. cross-repo fresh 절 참조.
-- 기본 정책은 Pi=`openai-codex/gpt-5.6-terra`, Claude Code=`claude-sonnet-5`다.
+- 기본 정책은 Pi=`openai-codex/gpt-5.6-luna`, Claude Code=`claude-sonnet-5`다.
 - GLG가 “entwurf 소넷”이라고 하면 Pi + `entwurf/claude-sonnet-5`다.
 - **Provider budget:** sibling launch에 OpenRouter를 쓰지 않는다. 이는 GLG 개인의 embedding/image 전용 제한 rail이다. Claude Code 구독, Pi의 승인된 GPT/Codex·xAI 구독, 또는 direct endpoint로 이미 설정된 회사 API만 쓴다. model label은 billing rail 증거가 아니다. 요청된 model이 현재 OpenRouter로 resolve되면 launch·test turn·login check·probe script를 하지 말고 그 한 사실만 즉시 보고한다. GLG가 이미 승인한 rail의 형제를 요청하면 credential/login을 다시 묻거나 찾지 말고 fresh-call을 바로 한 번 호출한다.
 - `entwurf_v2` intent는 정확히 `fire-and-forget` 하나다. 이 verb는 어떤 rail에서도 프로세스를 열지 않는다.
@@ -104,7 +104,7 @@ citizen의 맥락을 요구한 경우에만 그 exact id로 `entwurf_v2`를 보�
 1. backend가 생략되면 문맥상 명확한 경우에만 선택한다. 불명확하면 `pi`와
    `claude-code` 중 무엇을 열지 한 번만 묻는다.
 2. model이 생략되면 묻지 않고 backend 기본 정책을 적용한다: Pi는
-   `openai-codex/gpt-5.6-terra`, Claude Code는 `claude-sonnet-5`.
+   `openai-codex/gpt-5.6-luna`, Claude Code는 `claude-sonnet-5`.
    - “sol/terra/luna” → Pi `openai-codex/gpt-5.6-<tier>`
    - “entwurf 소넷” → Pi `entwurf/claude-sonnet-5`
    - “클로드코드 소넷” → Claude Code `claude-sonnet-5`
@@ -190,7 +190,7 @@ dormant **pi** citizen을 자기 garden id 그대로 보이는 창에 되세운�
 
 에이전트가 tool call을 맡고 GLG는 창을 본다.
 
-1. visible fresh Pi를 `openai-codex/gpt-5.6-terra`와 기본 task로 연다. GLG가 다른 model을 말했으면 그 값을 쓴다.
+1. visible fresh Pi를 `openai-codex/gpt-5.6-luna`와 기본 task로 연다. GLG가 다른 model을 말했으면 그 값을 쓴다.
 2. exact nonce callback에서 garden id를 얻는다.
 3. 자동으로 다음 메시지를 `wants_reply=true`로 한 번 보낸다.
 

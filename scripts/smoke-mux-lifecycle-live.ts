@@ -108,7 +108,7 @@ const BRIDGE_LAUNCHER = path.join(REPO, "mcp", "entwurf-bridge", "start.sh");
 
 /** The two pi shapes. They differ in exactly one thing that matters here — whether the record
  * carries `provider=entwurf`, which is what makes the resume argv re-inject the bridge (#29). */
-const PI_NATIVE_MODEL = "openai-codex/gpt-5.6-terra";
+const PI_NATIVE_MODEL = "openai-codex/gpt-5.6-luna";
 const PI_ACP_MODEL = "entwurf/claude-sonnet-5";
 const CLAUDE_MODEL = "claude-sonnet-5";
 

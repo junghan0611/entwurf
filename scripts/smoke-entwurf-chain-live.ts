@@ -63,7 +63,7 @@ const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", REPO_ROOT] as const;
 const REAL_CONTROL_DIR = path.join(os.homedir(), ".pi", "entwurf-control");
 const SOCKET_SUFFIX = ".sock";
 
-const GPT_TARGET = process.env.ENTWURF_CHAIN_GPT_TARGET?.trim() || "openai-codex/gpt-5.4";
+const GPT_TARGET = process.env.ENTWURF_CHAIN_GPT_TARGET?.trim() || "openai-codex/gpt-5.6-luna";
 const ACP_TARGET = process.env.ENTWURF_CHAIN_ACP_TARGET?.trim() || "entwurf/claude-sonnet-5";
 const BOOT_TIMEOUT_MS = 45_000;
 const CLAUDE_TURN_TIMEOUT_MS = Number(process.env.ENTWURF_CHAIN_CLAUDE_TIMEOUT_MS) || 240_000;

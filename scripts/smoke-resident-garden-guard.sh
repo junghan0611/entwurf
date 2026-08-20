@@ -70,7 +70,7 @@ fi
 SESSIONS_BASE="$RGG_AGENT_DIR/sessions"
 cleanup() { rm -rf "$RGG_AGENT_DIR"; }
 trap cleanup EXIT
-# Default target stays pi-native (openai-codex/gpt-5.4), but honor the SAME target
+# Default target stays pi-native (openai-codex/gpt-5.6-luna), but honor the SAME target
 # knob as the other live smokes: ENTWURF_LIVE_TARGET="<provider>/<model>". On
 # acp-on-v2 the ACP `entwurf` provider is back, and `./run.sh smoke-acp-rgg-live`
 # drives THIS runner against it (deterministic half) — the citizen logic (record +
@@ -83,7 +83,7 @@ if [ -n "${ENTWURF_LIVE_TARGET:-}" ]; then
 	esac
 else
 	_rgg_provider="${ENTWURF_LIVE_PROVIDER:-openai-codex}"
-	_rgg_model="${ENTWURF_LIVE_MODEL:-gpt-5.4}"
+	_rgg_model="${ENTWURF_LIVE_MODEL:-gpt-5.6-luna}"
 fi
 PROVIDER="${SMOKE_RGG_PROVIDER:-$_rgg_provider}"
 MODEL="${SMOKE_RGG_MODEL:-$_rgg_model}"
