@@ -508,6 +508,9 @@ mv "$TMP/hook-log.bak" "$AGENT/meta-bridge-hook.log"
 # and prescribe a Claude wake failure that never happened. This case is the kill-proof
 # for that separation — it is an expect-GREEN, since the defect it guards makes a
 # HEALTHY host go red.
+# The [QK:] token lives on the `bad` line ONLY: the qualifier requires it exactly
+# once in this file, and its classifier does not count a token printed on an `ok`
+# line — a later assertion must never be able to self-certify a red run.
 cp "$AGENT/meta-bridge-hook.log" "$TMP/hook-log-precopilot.bak"
 {
   echo "2026-08-21T00:00:02.000Z ERROR [copilot] degraded envelope: cwd missing or not a non-empty string (keys=sessionId)"
@@ -515,7 +518,7 @@ cp "$AGENT/meta-bridge-hook.log" "$TMP/hook-log-precopilot.bak"
 } >> "$AGENT/meta-bridge-hook.log"
 run_doctor
 if [ "$DOC_RC" -eq 0 ]; then
-  ok "[QK:HOOK-LOG-RAIL-SCOPED] a copilot ERROR in the shared hook log leaves the CLAUDE doctor green (rails stay separate)"
+  ok "a copilot ERROR in the shared hook log leaves the CLAUDE doctor green (rails stay separate)"
 else
   bad "[QK:HOOK-LOG-RAIL-SCOPED] a copilot ERROR in the shared hook log turned the CLAUDE doctor red — the hook-log judgement is not rail-scoped:"$'\n'"$(printf '%s\n' "$DOC_OUT" | grep -E '^  (FAIL|WARN)' | sed 's/^/        /')"
 fi
