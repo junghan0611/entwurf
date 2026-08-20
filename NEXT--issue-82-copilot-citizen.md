@@ -1,7 +1,11 @@
 # NEXT — #82 Copilot garden id 시민화 (branch lane)
 
-> **이 파일이 이 주제의 유일한 문서다.** `docs/` 아래나 다른 산문에 복제하지 마라.
+> **이 주제의 산문은 이 파일 하나다.** `docs/` 아래나 다른 산문에 복제하지 마라.
 > 구현이 코드로 들어가면 이 파일은 지운다. 머지 전 삭제하는 disposable이다.
+>
+> **다만 이 파일은 색인이지 대체물이 아니다.** 결정적 증거는 아래에 원문 그대로 박아 두었지만,
+> 이슈 스레드와 전체 영수증을 대신하지 않는다. 규약 4가 요약본 브리핑을 금지하는 것은
+> **이 파일에도 적용된다** — 인용할 일이 생기면 여기서 가리키는 원본을 열어라.
 
 레인: **Copilot이 garden id를 가진 가든 시민이 된다.** Claude Code처럼 주소로 부를 수 있어야
 GitHub 쪽을 맡기고 `auto` 모드를 비용 레버로 쓸 수 있다.
@@ -24,9 +28,20 @@ GitHub 쪽을 맡기고 `auto` 모드를 비용 레버로 쓸 수 있다.
 | `[측정]` | 직접 실행/관측함. **영수증 파일명이 같이 적힌다** | 영수증을 열어볼 수 있다 |
 | `[코드]` | 이 리포에서 `file:line`으로 직접 읽음 (확인 날짜 포함) | 그 줄을 열어볼 수 있다 |
 | `[번들]` | 외부 산출물(Copilot 번들 등)에서 직접 읽음 | 경로가 적혀 있다 |
-| `[미검증]` | 물려받았고 **아직 확인 안 함.** 출처를 밝힌다 | **인용 전에 직접 재라** |
+| `[미검증]` | 물려받은 **사실 주장**인데 아직 확인 안 함. 출처를 밝힌다 | **인용 전에 직접 재라** |
+| `[제안]` | 사실이 아니라 **설계 판단**이다. 낸 사람을 밝힌다 | 재는 게 아니라 **채택하거나 다르게 결정한다** |
 
-**태그 없는 단정은 이 문서에 없다.** 태그를 못 붙이겠으면 그건 사실이 아니라 가설이다.
+**§1–§3의 사실 주장에는 태그 없는 단정이 없다.** (레인 서술·RAIL·규약 자체는 사실 주장이 아니라
+운영 문장이라 태그를 안 단다. 그 구분이 이 규약의 적용 범위다.)
+태그를 못 붙이겠으면 그건 사실이 아니라 가설이다.
+
+`[미검증]`과 `[제안]`을 섞지 마라. 미검증 사실은 **재면** 태그가 올라가지만,
+설계 제안은 재서 올라가는 게 아니다 — 채택하거나 기각하는 것이고, 측정으로 기각하려 들면
+제안을 사실로 오해한 것이다.
+
+**영수증 이동성.** 이 레인의 전체 로그는 `~/.local/share/entwurf-salvage/` 에 있고 **호스트 로컬이다.**
+git에 없다. 그래서 결정적 줄은 아래 §1에 **원문 그대로 박아** 두었다 — 그건 커밋 안에 있으니 어디서든 읽힌다.
+**다른 기기에서, 또는 salvage가 지워진 뒤에는 인용 전체를 `[미검증]`으로 강등하고 §1의 박힌 원문만 `[측정]`으로 취급하라.**
 
 ## 규약 2 — 영수증 없는 주장은 *틀린 것*이 아니라 *단서*다
 
@@ -45,6 +60,10 @@ GitHub 쪽을 맡기고 `auto` 모드를 비용 레버로 쓸 수 있다.
 그 문서의 펜스가 형제 셋의 task spec으로 복사됐다. 펜스는 산출물 자체를 금지하는 문장이었다.
 → **브리핑은 NEXT와 이슈 스레드 원문을 가리킨다.** 요약본을 브리핑하지 않는다.
 → 이슈는 **본문만 읽지 않는다.** 스레드를 읽는다. GLG의 목표 진술이 코멘트에 있었다.
+→ **충돌하면 GLG의 코멘트가 이슈 본문을 이긴다.** 이 한 줄이 없으면 스레드를 읽어도 소용없다 —
+  오전 사고는 본문의 Non-goals 펜스가 스레드의 garden-id 목표를 덮은 것이었고,
+  #82 본문에는 그 펜스가 **지금도 그대로 있다**(§3 마지막). 본문이 고쳐지기 전까지
+  **스레드를 본문의 정정으로 읽어라.**
 
 ## 규약 5 — 리뷰어가 구멍을 찾은 건 루프가 도는 것이다
 
@@ -89,13 +108,36 @@ Claude Code 2.1.138의 조용한 `args` 누락을 잡으려고 쓴 가드가 Cop
 | Copilot 네이티브 — `command`(셸 문자열) | ○ | argc=1 | 도착 |
 | Claude Code — `type:"command"`+`command`+`args`, PascalCase | **○** | **argc=0** | **도착** |
 
+원문(`copilot-hookprobe-full.log` — argv 열, 한 턴에서 발화한 순서 그대로):
+
+```text
+FIRED label=copilot:userPromptSubmitted:execStrArgs argc=1 argv=[copilot:userPromptSubmitted:execStrArgs]
+FIRED label=copilot:userPromptSubmitted:shellCommand argc=1 argv=[copilot:userPromptSubmitted:shellCommand]
+FIRED label=<NO-ARGS>                               argc=0 argv=[]      plugin_root=.../probe-claude
+FIRED label=copilot:sessionStart:execStrArgs        argc=1 argv=[copilot:sessionStart:execStrArgs]
+FIRED label=copilot:sessionStart:shellCommand       argc=1 argv=[copilot:sessionStart:shellCommand]
+FIRED label=<NO-ARGS>                               argc=0 argv=[]      plugin_root=.../probe-claude
+FIRED label=copilot:agentStop:execStrArgs           argc=1 argv=[copilot:agentStop:execStrArgs]
+```
+
+원문(`copilot-hookprobe-envelopes.jsonl` — 같은 두 발의 stdin. **argc=0 인데 봉투는 왔다**):
+
+```json
+{"hook_event_name":"UserPromptSubmit","session_id":"4269fad4-d5f5-4281-969f-bbeb211f0d7c","timestamp":"2026-08-20T11:20:29.476Z","cwd":"…/entwurf","prompt":"hi"}
+{"hook_event_name":"SessionStart","session_id":"4269fad4-d5f5-4281-969f-bbeb211f0d7c","timestamp":"2026-08-20T11:20:32.102Z","cwd":"…/entwurf","source":"new","initial_prompt":"hi"}
+```
+
 Claude 폼 프로브가 `{hook_event_name, session_id, cwd, prompt}` 전체를 stdin으로 받았다.
 `[코드]` 우리 launcher는 stdin을 안 읽고 `$# -eq 0`에서 죽는다(`hook-launch.sh:43`)
 — **필요한 정체성은 내내 도착해 있었다.** 고칠 때 선택지가 argv 말고 하나 더 있다.
 
-**`[측정]` `exec`는 string이어야 한다.** 배열은 프롬프트 전, 플러그인 로드 시점에 거절된다:
-`Invalid hooks config … hooks.sessionStart[0].exec: Expected string`
-(`copilot-exec-array-rejection.log`, 2026-08-20T11:32:43.557Z, `Session: 0 AIC used`).
+**`[측정]` `exec`는 string이어야 한다.** 배열은 프롬프트 전, 플러그인 로드 시점에 거절된다.
+원문(`copilot-exec-array-rejection.log`, `Session: 0 AIC used`):
+
+```text
+2026-08-20T11:32:43.557Z [ERROR] Invalid hooks config for plugin "probe-execarray"
+  at ".../probe-execarray/hooks/hooks.json": hooks.sessionStart[0].exec: Expected string
+```
 `[번들]` 스키마에 `args` 키 자체가 없다. 셸/exec 분기 원문:
 `Specify either 'exec' (native executable) or 'bash'/'powershell'/'command' (shell), but not both`.
 `[번들]` 나머지 스키마: `version`(필수, 리터럴 1) · `hooks`(object) · `disableAllHooks`(bool) ·
@@ -136,10 +178,13 @@ TUI를 열면 세션은 등록되지만 훅은 하나도 안 뛴다(등록 11:17
 |---|---|
 | ~~"훅이 한 번도 안 돌았다 / 어휘 불일치가 원인"~~ | `[측정]` Copilot 로그 06:13:53/56 두 줄 |
 | ~~"`args` 하나가 문제"~~ | `[측정]` argv만 떨어짐. **stdin 봉투는 도착** |
-| ~~"`exec: Expected string`"(영수증 없이 인용됨)~~ | `[측정]` 재현·아카이브함 → 이제 사실 |
 | ~~"codex가 시민화 선례"~~ | `[측정]` codex도 레코드 **0건**. 세우는 건 *배달 없는 시민 자리*이지 출생 증거가 아니다 |
 | ~~"`api.schema.json` 15개가 authoritative"~~ | `[번들]` 그 계층은 17개. 15개는 선언형 settings 스키마 |
 | ~~README:382-385 "shell command-hook `sessionStart`는 `sessionId`를 안 싣는다"~~ | `[측정]` 오늘 훅 stdin이 `sessionId`를 싣는다 |
+
+**은퇴가 아니라 승격된 것 — 따로 적는다.** 취소선을 붙이면 문장 자체가 틀린 것처럼 읽힌다.
+`exec: Expected string` 은 **문구가 틀린 게 아니라 영수증 없이 인용된 것**이었다.
+재현해서 아카이브했으므로 `[미검증]` → `[측정]` 으로 올라갔다. 아래 §1에 원문이 박혀 있다.
 
 **프로브 한계 3건 — 표를 과독하지 마라.**
 (a) 비격리: 설치본이 같은 프로세스에서 같이 실패했다(다른 로그에 씀, 표는 오염 안 됨)
@@ -195,7 +240,7 @@ stdin에 `sessionId`가 있고, 첫 프롬프트에 태어난다. 도어벨이 �
 줄번호는 전부 `[코드]` — 2026-08-20에 직접 열어 확인했다.
 
 1. 플러그인 소스는 `pi/meta-bridge/entwurf-meta-receive/`.
-   `[미검증: terra 판단]` Claude 유닛을 고치지 말고 **Copilot 형 유닛을 따로** 두는 쪽을 권한다 —
+   `[제안: terra]` Claude 유닛을 고치지 말고 **Copilot 형 유닛을 따로** 두는 쪽을 권한다 —
    기존 게이트 `check-hook-launch-topology` / `check-meta-manifest-schema`가 Claude exec-form과
    4개 PascalCase 이벤트를 고정하고 있어 섞으면 그 고정이 약해진다.
 2. `pi-extensions/meta-bridge-hook.ts`의 `backend:"claude-code"` 하드코딩은 **3곳**:
@@ -205,8 +250,10 @@ stdin에 `sessionId`가 있고, 첫 프롬프트에 태어난다. 도어벨이 �
    현재 `["claude-code","antigravity"]`)에도 넣지 않는다. codex도 거기 없다.
 3. 레지스트리 4곳: `META_BACKENDS`(`pi-extensions/lib/meta-session.ts:82`) ·
    `META_BACKEND_DESCRIPTORS`(`:111`) · `META_CITIZEN_BACKENDS`(`:213`) · `pi/entwurf-capabilities.json`.
-   `[미검증: terra 제안값]` `wakeMode:"direct-inject"` · `deliveryLevel:"D6"` ·
-   `nativeIdLabel:"sessionId"`. `nativeIdLabel`만 `[측정]` 근거가 있다(네이티브 봉투의 조인 키).
+   `[제안: terra]` `wakeMode:"direct-inject"` · `deliveryLevel:"D6"`.
+   `[측정]` `nativeIdLabel:"sessionId"` — 이것만 근거가 있다(네이티브 봉투의 조인 키).
+   **D6는 특히 제안이다.** 도어벨 없는 백엔드에 배달 좌표를 다는 판단이라 측정이 아니다 —
+   재서 정할 게 아니라 구현팀이 결정할 것이다.
    **`direct-inject`는 어댑터가 있다는 뜻이 아니다** — codex가 정확히 그 상태다.
 4. **같이 닫아야 하는 게이트 구멍.** `scripts/check-entwurf-capabilities.ts:58`이 `META_BACKENDS`가
    아니라 리터럴 `["claude-code","antigravity","codex"]`를 돈다 → 새 백엔드의 descriptor가
