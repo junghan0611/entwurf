@@ -310,6 +310,23 @@ https://github.com/junghan0611/entwurf/actions/runs/32370770123 · job `check` �
 `[측정]` 미스는 빨간 칸 **두 개**를 낸다(G1 miss + G2/G3 not scored). control 166/0 초록.
 `[코드]` #82 레인과 무관하지만 이 브랜치의 CI를 막고 있어서 같이 실었다.
 
+# §5c 인계 — 이 세션은 여기서 끝난다
+
+`[측정]` 브랜치 `issue-82-copilot-citizen` = `05737c5`, origin에 푸시됨, 워크트리 clean.
+커밋 6개: `7b3c6d6`(규약) · `4317e89`(구멍 6) · `8e6ce56`(AGENTS) · `91c229e`(구멍 2) ·
+`862211b`(1차 수리) · `05737c5`(qualified 2차 수리).
+`agent-config`: `0627421` · `4b51cd0`.
+
+**§5b 게이트 레인은 닫혔다.** `[측정]` 동결 후보에서 `check-gate-qualification` **186/186 killed,
+exit 0, IMPURE 없음** · `check:full` **334s 초록** · focused gate **166/0**.
+`FRESH-CUT-COLLISION-NO-MOVE`이 control-pre/post 초록 사이에서 KILLED.
+`05737c5`의 CI는 아직 확인 안 했다 — **다음 사람이 첫 수로 그것만 보면 된다.**
+
+**#82 본 레인(§4 출생 구현)은 아직 한 줄도 안 짰다.** 좌표는 §4에 `file:line`으로 있다.
+`[측정]` 세 형제가 검수했고 세 세션 다 컨텍스트를 다 썼다 —
+grok `20260820T202338-c35998` · terra `20260820T221544-05305c` · glm `20260820T222951-c3b15c`.
+재소환하지 말고 필요하면 새로 열어라. 브리핑은 §0 규약대로 **이 파일과 #82 스레드 원문**을 가리켜라.
+
 # §6 Verify
 
 시민 1건이 `meta-sessions/`에 생기고 `entwurf_peers`에 뜨는 것. 그 전까지는 전부 가설이다.
