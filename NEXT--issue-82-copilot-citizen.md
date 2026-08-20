@@ -310,6 +310,20 @@ https://github.com/junghan0611/entwurf/actions/runs/32370770123 · job `check` �
 `[측정]` 미스는 빨간 칸 **두 개**를 낸다(G1 miss + G2/G3 not scored). control 166/0 초록.
 `[코드]` #82 레인과 무관하지만 이 브랜치의 CI를 막고 있어서 같이 실었다.
 
+**`[측정]` IMPURE의 정체와, 그것을 찾다 내가 한 번 틀린 방법.**
+qualification이 186/186 killed인데 exit 1이었다. 원인은 `scripts/__pycache__/pi_settings_io.cpython-313.pyc` —
+이 게이트가 `run.sh install` → `register-pi-package.py`를 돌리고 CPython이 스냅샷에 바이트코드를 남긴다.
+스냅샷은 **추적 파일만** 복사하므로 거기서만 새 파일이고, `__pycache__/`가 gitignore라 porcelain은 침묵하는데
+manifest는 `.git`/`node_modules`만 빼고 전부 해시한다 → `treeClean=false porcelainClean=true`.
+`smoke-pi-provider-state.sh:41`과 `smoke-meta-install-state.sh:9`가 같은 이유로 이미 가드를 심어뒀다.
+수리는 `check-fresh-cut-gate.sh:58`의 `export PYTHONDONTWRITEBYTECODE=1` 한 줄.
+
+**은퇴한 내 주장:** *"내 레인은 IMPURE의 원인이 아니다 — 게이트 단독도, 변형을 심은 상태도
+`computeTreeManifest` 해시가 동일했다."* **틀렸다.** 두 팔 모두 게이트를 돌렸으니 **두 팔 모두 같은
+pycache를 썼다.** post-vs-post 비교는 **양쪽에 공통인 결정론적 기록자에게 눈이 먼다.**
+하네스가 재는 건 preTree(게이트 실행 **전**) 대 postTree다.
+→ **오염을 찾을 땐 실행 전/후를 비교하라. 두 실행 후를 비교하지 마라.** 측정이 틀린 게 아니라 설계가 틀렸다.
+
 # §5c 인계 — 이 세션은 여기서 끝난다
 
 `[측정]` 브랜치 `issue-82-copilot-citizen` = `05737c5`, origin에 푸시됨, 워크트리 clean.
