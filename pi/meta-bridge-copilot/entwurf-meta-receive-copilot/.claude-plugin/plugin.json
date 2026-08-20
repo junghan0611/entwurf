@@ -1,0 +1,5 @@
+{
+	"name": "entwurf-meta-receive-copilot",
+	"version": "0.1.0",
+	"description": "Garden-native meta-bridge BIRTH for GitHub Copilot CLI (entwurf, #82). Copilot's hook schema has no `args` array and its exec form is a single `exec` string, so this unit is a sibling of entwurf-meta-receive rather than a variant of it. On the first prompt of a Copilot session (measured: sessionStart is deferred to the first prompt, userPromptSubmitted fires just before it) the hook idempotently upserts a meta-record at <pi-agent-dir>/meta-sessions/<garden-id>.meta.json, making the Copilot session a garden citizen addressable by garden id. It mints ONLY: Copilot's bundle has no FileChanged, asyncRewake or watchPaths, so there is no doorbell to arm, no sender/receiver marker and no delivery. Installed via the meta-bridge local marketplace into Copilot; do NOT hand-edit."
+}

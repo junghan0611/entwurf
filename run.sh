@@ -130,6 +130,7 @@ Usage:
   ./run.sh check-meta-session          # deterministic gate (#30 step 2, V3-only): fs store — idempotent decideUpsert/upsertMetaSession + mailbox enqueue/read + receipt state, no API
   ./run.sh check-meta-v3-record        # deterministic gate: the ONE live record schema (v3) — canonical serialize/round-trip/mint, foreign-generation rejections name fresh-cut with the actual version value, strict keyset, no API
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
+  ./run.sh check-copilot-birth-hook   # #82 gate: drives the real Copilot assembler into a temp dir, fires the baked launcher with NO ARGV (the way Copilot's `exec`-string schema forces), and requires a backend:"copilot" v3 record + attach + peer row + zero mailbox/markers. Hermetic; no Copilot, no model turn
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_CITIZEN_BACKENDS + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
   ./run.sh smoke-pi-attach            # deterministic gate (#50 C2 checkpoint + C3 ACP tail): a pi session attaches as a V3 meta-record citizen (backend:"pi"), the gardenId is the RECORD's not pi's session id, the control socket is keyed on it, a re-open ATTACHES to the same address (never a second mint), the BUILT DIST ENTRY driven over MCP stdio lists the citizen + delivers entwurf_v2 to that socket with an RPC ack, and the ACP identity chain lands a send AS the host record (enrichMcpServersWithEnvelope env → bridge sender = host gardenId). mkdtemp-isolated; the live store is never read
@@ -195,6 +196,8 @@ Usage:
   ./run.sh install-meta-bridge        # INTERNAL part of `setup` (native-harness plugin) + doctor recovery path — prefer `setup`; stateful GLOBAL install (plugin + USER MCP + settings keyset, honest uninstall state)
   ./run.sh uninstall-meta-bridge      # 1.0.0 meta-bridge Phase 2: stateful GLOBAL uninstall (restore only keys/items captured in install-state)
   ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is not yet verified/certified and stays nonzero for this cut (future validation may reopen it). Detection power is held by check-meta-doctor-oracle
+  ./run.sh install-copilot-bridge     # #82: GLOBAL install of the Copilot BIRTH plugin into the Copilot CLI (own marketplace root; node+entry baked into the launcher because Copilot's exec form is one string with no argv; NO MCP wiring — this backend has no doorbell and no delivery). Also retires the Claude unit from Copilot, where it exits 1 on every prompt (--keep-stale-claude-unit opts out)
+  ./run.sh doctor-copilot-bridge      # #82: fail-loud surface for that unit. Red = a hook that RAN and failed, or a broken/unbaked artifact. "Installed with zero records" is NOT red and is reported as NOT-YET: a Copilot session is born on its FIRST PROMPT, not when the window opens (measured)
   ./run.sh install-agy-bridge         # 봉인 7: agy MCP install adapter — register ONE entwurf-bridge server in the agy mcp_config (adopt file / create / REFUSE symlink), stable bin command, install-state under $XDG_DATA_HOME/entwurf/agy-bridge/
   ./run.sh uninstall-agy-bridge       # 봉인 7: honest inverse of install-agy-bridge from install-state (restore preimage / remove key; refuse if config became a symlink)
   ./run.sh probe-bridge-command <cmd> [args...]  # #81: BOOT the given bridge invocation and require the entwurf MCP tool surface back. `--invocation-json '{"command":"…","args":[],"env":{}}'` preserves a harness config exactly. It waits for a valid initialize response, then sends initialized + tools/list only (no tools/call, lock, record, or delivery). exit 0 = it serves the bridge; 1 = it does not. The pi/agy doctors use this leaf.
@@ -736,6 +739,18 @@ check_meta_receiver_marker() {
   # UserPromptSubmit cannot mint presence; reader does NOT gate on record existence
   # (recordBacked is the deliverability predicate's fact). Real tmpdir, no API.
   run_ts scripts/check-meta-receiver-marker.ts
+}
+
+check_copilot_birth_hook() {
+  # #82 gate: the Copilot BIRTH path, proven without Copilot. Drives the REAL
+  # assembler (--assemble-only, into a temp dir), then fires the baked launcher the
+  # way Copilot fires it — NO ARGV, envelope on stdin — and requires a v3 record with
+  # backend "copilot", an attach on the second event of the same prompt, no
+  # mailbox/marker of any kind, and a peer row with liveness `unsupported`. Refusals
+  # (disagreeing ids, missing cwd, no id, malformed) must refuse rather than guess.
+  # It proves the MECHANISM, never the admission: §6 acceptance is a record minted by
+  # a real Copilot session, which costs a model turn.
+  run_ts scripts/check-copilot-birth-hook.ts
 }
 
 check_hook_launch_topology() {
@@ -2757,6 +2772,9 @@ check_pack() {
     # strip-types under node_modules). meta-session.js is shared with the store-doctor
     # above; listed here too so the hook axis fails loud if the emit graph drops it.
     "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook.js"
+    # #82 — the Copilot birth entry's compiled closure, for the same node_modules
+    # strip-types refusal that forces the Claude one.
+    "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook-copilot.js"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
@@ -2769,6 +2787,17 @@ check_pack() {
     # It rides a per-FILE entry in the files array (not a whole directory), so one
     # deleted line drops it from the tarball while every other gate stays green.
     "pi/meta-bridge/entwurf-meta-receive/scripts/hook-launch.sh"
+    # #82 — the Copilot BIRTH unit. It is a SECOND marketplace root, not a second
+    # plugin inside the Claude one: the Claude installer assembles one root and copies
+    # one plugin out of it, so a shared marketplace.json would publish a `source` the
+    # assembly does not contain. Same per-FILE listing discipline as the Claude unit.
+    "pi/meta-bridge-copilot/.claude-plugin/marketplace.json"
+    "pi/meta-bridge-copilot/entwurf-meta-receive-copilot/.claude-plugin/plugin.json"
+    "pi/meta-bridge-copilot/entwurf-meta-receive-copilot/hooks/hooks.json"
+    "pi/meta-bridge-copilot/entwurf-meta-receive-copilot/scripts/copilot-hook-launch.sh"
+    "pi-extensions/meta-bridge-hook-copilot.ts"
+    "scripts/copilot-bridge-install.sh"
+    "scripts/copilot-bridge-doctor.sh"
     "pi-extensions/meta-bridge-hook.ts"
     "pi-extensions/lib/meta-session.ts"
     "pi-extensions/lib/session-id.js"
@@ -2954,6 +2983,9 @@ _check_pack_install_impl() {
     # 0.12.5 — node_modules-safe plugin hook + lib (see check-pack). The installed
     # hook regression below runs exactly this compiled JS from under node_modules.
     "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook.js"
+    # #82 — the Copilot birth entry's compiled closure, for the same node_modules
+    # strip-types refusal that forces the Claude one.
+    "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook-copilot.js"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
@@ -2965,6 +2997,17 @@ _check_pack_install_impl() {
     # both callers source. The install smoke below asserts the ASSEMBLED launcher is
     # executable; this asserts the artifact it is assembled FROM actually shipped.
     "pi/meta-bridge/entwurf-meta-receive/scripts/hook-launch.sh"
+    # #82 — the Copilot BIRTH unit. It is a SECOND marketplace root, not a second
+    # plugin inside the Claude one: the Claude installer assembles one root and copies
+    # one plugin out of it, so a shared marketplace.json would publish a `source` the
+    # assembly does not contain. Same per-FILE listing discipline as the Claude unit.
+    "pi/meta-bridge-copilot/.claude-plugin/marketplace.json"
+    "pi/meta-bridge-copilot/entwurf-meta-receive-copilot/.claude-plugin/plugin.json"
+    "pi/meta-bridge-copilot/entwurf-meta-receive-copilot/hooks/hooks.json"
+    "pi/meta-bridge-copilot/entwurf-meta-receive-copilot/scripts/copilot-hook-launch.sh"
+    "pi-extensions/meta-bridge-hook-copilot.ts"
+    "scripts/copilot-bridge-install.sh"
+    "scripts/copilot-bridge-doctor.sh"
     "pi-extensions/meta-bridge-hook.ts"
     "pi-extensions/lib/meta-session.ts"
     "pi-extensions/lib/session-id.js"
@@ -4677,6 +4720,9 @@ case "$cmd" in
   check-hook-launch-topology)
     check_hook_launch_topology
     ;;
+  check-copilot-birth-hook)
+    check_copilot_birth_hook
+    ;;
   check-meta-capability-source)
     check_meta_capability_source
     ;;
@@ -5060,6 +5106,22 @@ case "$cmd" in
     # no-ERROR, and actual SessionStart creation evidence. A plugin present with
     # zero claude-code meta-records is a SILENT MISS -> non-zero exit.
     (cd "$REPO_DIR" && bash scripts/meta-bridge-doctor.sh "$@")
+    ;;
+  install-copilot-bridge)
+    # #82: the Copilot BIRTH install. Deliberately not a mode of install-meta-bridge —
+    # it assembles its OWN marketplace root (the Claude assembler copies one plugin out
+    # of one root, so a shared marketplace.json would publish a missing `source`), it
+    # bakes node+entry into the launcher rather than into the manifest (Copilot's exec
+    # form is a single string with no argv beside it), and it wires NO MCP: a drain tool
+    # for a mailbox nothing rings would advertise delivery this backend does not have.
+    (cd "$REPO_DIR" && bash scripts/copilot-bridge-install.sh "$@")
+    ;;
+  doctor-copilot-bridge)
+    # #82: the fail-loud surface for the Copilot unit. Its red conditions differ from
+    # the Claude doctor's on purpose: a Copilot session mints on its FIRST PROMPT, not
+    # at session open, so "installed with zero records" is reported as NOT-YET rather
+    # than as a silent miss. Red is a hook that RAN and failed.
+    (cd "$REPO_DIR" && bash scripts/copilot-bridge-doctor.sh "$@")
     ;;
   install-agy-bridge)
     # 봉인 7: the agy (Antigravity) MCP install ADAPTER (SEPARATE from the Claude

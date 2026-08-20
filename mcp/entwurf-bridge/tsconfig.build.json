@@ -121,6 +121,7 @@
 		"../../scripts/meta-bridge-prune.ts",
 		"../../scripts/meta-bridge-fresh-cut.ts",
 		"../../scripts/meta-facts.ts",
-		"../../pi-extensions/meta-bridge-hook.ts"
+		"../../pi-extensions/meta-bridge-hook.ts",
+		"../../pi-extensions/meta-bridge-hook-copilot.ts"
 	]
 }

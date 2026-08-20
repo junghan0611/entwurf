@@ -138,6 +138,44 @@ if hooks is not None:
                 f"want command={expected_owner_command!r} args={expected_owner_args!r}"
             )
 
+# --- the Copilot unit's manifests (#82) --------------------------------------
+# The Copilot BIRTH unit is a SECOND marketplace root, not a second plugin inside the
+# Claude one: the Claude installer assembles one root and copies exactly one plugin out
+# of it, so a shared marketplace.json would publish a `source` the assembly does not
+# contain and `claude plugin validate` would run over it. Its hook FORM is pinned by
+# check-copilot-birth-hook (which drives the real assembler); what is pinned HERE is the
+# same closed-schema keyset lesson that produced this gate — a decorative key in a
+# marketplace/plugin manifest is a future rejection on some other host's CLI version.
+MBC = REPO / "pi" / "meta-bridge-copilot"
+PLUGIN_C = "entwurf-meta-receive-copilot"
+
+mkt_c = load(MBC / ".claude-plugin" / "marketplace.json")
+if mkt_c is not None:
+    subset("copilot marketplace root", mkt_c, {"name", "owner", "plugins"})
+    subset("copilot marketplace.owner", mkt_c.get("owner", {}), {"name"})
+    plugins_c = mkt_c.get("plugins")
+    if not isinstance(plugins_c, list) or len(plugins_c) != 1:
+        bad("copilot marketplace.plugins must hold exactly the one birth plugin")
+    else:
+        subset("copilot marketplace.plugins[0]", plugins_c[0], {"name", "source", "description"})
+        if plugins_c[0].get("name") != PLUGIN_C or plugins_c[0].get("source") != f"./{PLUGIN_C}":
+            bad(f"copilot marketplace.plugins[0] must name/source {PLUGIN_C}; got "
+                f"{plugins_c[0].get('name')!r}/{plugins_c[0].get('source')!r}")
+        else:
+            ok("copilot marketplace.plugins[0] names the shipped unit directory")
+
+plug_c = load(MBC / PLUGIN_C / ".claude-plugin" / "plugin.json")
+if plug_c is not None:
+    subset("copilot plugin.json", plug_c, {"name", "version", "description"})
+
+# The two roots must stay DISJOINT. One marketplace name serving both would make an
+# install of either one silently replace the other's registration.
+if mkt is not None and mkt_c is not None:
+    if mkt.get("name") == mkt_c.get("name"):
+        bad(f"both marketplaces are named {mkt.get('name')!r} — installing one would replace the other")
+    else:
+        ok("the Claude and Copilot marketplaces carry distinct names")
+
 # --- desired_mcp() installed-vs-clone dual-mode ------------------------------
 def desired_mcp(repo: str):
     out = subprocess.run(

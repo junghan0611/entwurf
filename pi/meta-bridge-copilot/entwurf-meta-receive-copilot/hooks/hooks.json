@@ -1,0 +1,7 @@
+{
+	"version": 1,
+	"hooks": {
+		"sessionStart": [{ "exec": "__COPILOT_LAUNCHER__" }],
+		"userPromptSubmitted": [{ "exec": "__COPILOT_LAUNCHER__" }]
+	}
+}

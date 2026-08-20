@@ -1,0 +1,11 @@
+{
+	"name": "meta-bridge-copilot-local",
+	"owner": { "name": "junghan0611" },
+	"plugins": [
+		{
+			"name": "entwurf-meta-receive-copilot",
+			"source": "./entwurf-meta-receive-copilot",
+			"description": "First-prompt meta-record birth for GitHub Copilot CLI sessions."
+		}
+	]
+}

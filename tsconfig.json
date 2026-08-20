@@ -45,6 +45,12 @@
 		// emit-capable root program.
 		"test",
 		"pi-extensions/meta-bridge-hook.ts",
+		// meta-bridge-hook-copilot.ts is the #82 Copilot BIRTH entry — the same fence
+		// for the same reason as the Claude entry above: it runs under Node
+		// --experimental-strip-types and imports ./lib/meta-session.ts with an explicit
+		// `.ts` extension, which the emit-capable root config cannot allow. Typechecked
+		// by scripts/tsconfig.json.
+		"pi-extensions/meta-bridge-hook-copilot.ts",
 		// project-trust-handler.ts is a lib→lib VALUE importer (it pulls preflight /
 		// formatPreflightDenial from entwurf-preflight.ts), so it must use an explicit
 		// `.ts` extension to be runnable under the strip-types gate. The emit-capable
