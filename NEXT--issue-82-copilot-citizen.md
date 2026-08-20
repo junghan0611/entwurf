@@ -354,7 +354,7 @@ grok `20260820T202338-c35998` · terra `20260820T221544-05305c` · glm `20260820
 
 `[측정]` 커밋 5개, 브랜치 `issue-82-copilot-citizen`, **푸시 안 함**(GLG 결정 사항):
 `e6a1eb6` 레지스트리 · `6768abf` 출생 경로 · `00a36b5` 뮤턴트 + 문서 수리 ·
-`1f44b05` 리뷰 수정 묶음 · (+ 설치본 분기 폐쇄 커밋).
+`1f44b05` 리뷰 수정 묶음 · `01aafd9` 설치본(JS) 분기 폐쇄.
 **이 5개는 아직 CI를 안 탔다** — 초록으로 확인된 것은 `1da40c9`까지다. 푸시는 GLG 결정.
 
 **`[측정]` 전임자가 남긴 첫 수(CI 확인)는 초록으로 닫혔다.**
@@ -373,7 +373,8 @@ grok `20260820T202338-c35998` · terra `20260820T221544-05305c` · glm `20260820
  "model":null,"transcriptPath":null,...}
 ```
 
-`[측정]` `pnpm run check` exit 0 (39s) · `pnpm run check:full` exit 0 · focused:
+`[측정]` `pnpm run check` exit 0 (39s) · `pnpm run check:full` exit 0 (331s, `01aafd9` 트리) ·
+`check-pack-install` exit 0 (설치본 분기 실발화 포함) · focused:
 `check-meta-manifest-schema` · `check-hook-launch-topology`(58) · `check-install-surface` ·
 `check-capability-bundle-reach`(17) 전부 초록.
 `[측정]` 뮤턴트 5건 — 워크트리에 하나씩 심고 되돌리며 확인, **전부 KILLED**, 각자 자기 `[QK:]` 시그니처에서.
