@@ -352,8 +352,10 @@ grok `20260820T202338-c35998` · terra `20260820T221544-05305c` · glm `20260820
 
 # §7 착지 — 2026-08-21 세션 (인계자: claude-opus-5, 코디네이터 교대분)
 
-`[측정]` 커밋 3개, 브랜치 `issue-82-copilot-citizen`, **푸시 안 함**(GLG 결정 사항):
-`e6a1eb6` 레지스트리 · `6768abf` 출생 경로 · `00a36b5` 뮤턴트 + 문서 수리.
+`[측정]` 커밋 5개, 브랜치 `issue-82-copilot-citizen`, **푸시 안 함**(GLG 결정 사항):
+`e6a1eb6` 레지스트리 · `6768abf` 출생 경로 · `00a36b5` 뮤턴트 + 문서 수리 ·
+`1f44b05` 리뷰 수정 묶음 · (+ 설치본 분기 폐쇄 커밋).
+**이 5개는 아직 CI를 안 탔다** — 초록으로 확인된 것은 `1da40c9`까지다. 푸시는 GLG 결정.
 
 **`[측정]` 전임자가 남긴 첫 수(CI 확인)는 초록으로 닫혔다.**
 `05737c5`(run 32381032234) · `9abfd51`(32381105053) · `1da40c9`(32381318987) **셋 다 success.**
@@ -405,6 +407,41 @@ grok `20260820T202338-c35998` · terra `20260820T221544-05305c` · glm `20260820
 `[측정]` glm `20260820T234717-f2cb92` (zai/glm-5.3) — `mailbox-undeliverable` receipt 이름 확정,
 `deliveryLevel` 소비자 전수(자릿수 파서 없음), 드리프트 가드 뮤턴트 부재 지적, DELIVERY:84 충돌.
 **두 세션 다 살아 있다.** 구현 diff에 대한 2차 검토를 보냈고 답이 오면 §7에 덧붙일 것.
+
+## 2차 검토 — 형제 둘이 구현 diff를 다시 쳤고, 그중 하나는 내가 만든 실제 회귀였다
+
+`[코드]` **회귀 1건(내가 넣은 것):** Copilot 유닛이 Claude 닥터가 판정하는 **같은 훅 로그**에 쓰는데,
+`scripts/meta-bridge-hook-log.sh`가 `' ERROR '`를 **태그 구분 없이** 봤다. copilot의 ERROR는 대개
+**정상적인 fail-closed 거절**이고, 그 회복 토큰(`INFO armed watch`)은 Claude 전용이라 **영원히 회복 불가**다.
+→ 건강한 호스트의 Claude 닥터가 다른 레인의 거절 때문에 영구 빨강이 되고, 처방문은 일어나지도 않은
+Claude 웨이크 실패를 가리켰다. `[측정]` 수리 후 `check-meta-doctor-oracle`에 **expect-GREEN 케이스 M9b**를
+넣었고, 필터를 되돌리는 뮤턴트 `[QK:HOOK-LOG-RAIL-SCOPED]`가 죽는다. (glm)
+
+`[코드]` **설치 파괴성:** 인스톨러가 살아 있는 조립물을 **먼저 지웠다** → 이후 실패하면 설치된 플러그인이
+사라진 런처를 가리킨다. 이제 옆에 staging → swap, 이전 조립물은 swap 성공까지 보존, 실패 시 복원. (terra)
+
+`[코드]` **preflight:** python3 필수 + node major ≥ 24를 **파괴적 단계 이전에** 검사. dev-clone 분기는 raw `.ts`를
+굽기 때문에 낮은 node는 설치가 아니라 **오퍼레이터의 첫 프롬프트에서, Copilot 안에서** 죽는다. (terra)
+
+`[측정]` **stale 제거 방언 실측:** `copilot plugin uninstall --help` = `plugin-name` 또는
+`plugin-name@marketplace-name`, `copilot plugin list`는 한정 id를 출력한다(`entwurf-meta-receive@meta-bridge-local`).
+→ 두 스크립트 전부 한정 id. 남의 동명 플러그인은 건드리지 않고, **실패한 uninstall/list를 "없음"으로 읽지 않는다.** (terra)
+
+`[코드]` **닥터:** ERROR 뒤에 민팅이 있으면 히스토리(빨강 아님)라는 회복 규칙, 그리고
+**"목록에 뜬다 = 등록됐다"이지 "Copilot이 로드했다"가 아니다**를 헤더에 명시. Copilot은 로드 영수증을 안 준다.
+
+`[측정]` **설치본(JS) 분기가 어떤 게이트에서도 실행되지 않던 구멍** — 두 형제가 양쪽에서 같은 곳을 짚었다.
+`check-pack-install`에 설치된 패키지로 `install-copilot-bridge --assemble-only` + **argv 없는 발화 1회**를 넣었다.
+`[측정]` 결과: *"installed Copilot birth unit assembles its compiled branch and mints a citizen from a no-argv launch"*,
+`check-pack-install` exit 0. fake-Copilot CLI 꼬리는 **일부러 안 붙였다** — 벤더 계약이 미측정이라
+우리 가정에 대한 동어반복이 되고, 그 첫 실측은 §6 자체다(양쪽 형제 합의).
+
+`[측정]` **그 게이트가 곧바로 진짜 버그를 잡았다:** `run.sh`의 `$@`가 verb 이름을 그대로 넘겨서
+(`shift` 누락) 인스톨러가 **자기 verb를 unknown argument로 거절**했다. Claude 인스톨러는 인자를 파싱하지 않아
+평생 몰랐을 버그다. 게이트도 스크립트를 직접 부르고 있어서 못 봤고, 지금은 게이트가 `run.sh` verb를 탄다.
+
+`[측정]` 뮤턴트 **10종**, 전부 개별 적용→되돌림으로 KILLED, 각자 자기 `[QK:]` 시그니처에서.
+`check-gate-qualification`은 여전히 **안 돌렸다**(22분, §5 바운드) — 다음 사람이 돌릴 때 레인 카운트는 10이다.
 
 ## 남은 단 하나 — §6 인수
 

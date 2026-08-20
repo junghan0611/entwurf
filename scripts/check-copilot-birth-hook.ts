@@ -64,7 +64,12 @@ const root = mkdtempSync(path.join(tmpdir(), "entwurf-copilot-birth."));
 const asm = path.join(root, "asm");
 
 // ── 1. the real assembler ────────────────────────────────────────────────────
-execFileSync("bash", [path.join(REPO, "scripts", "copilot-bridge-install.sh"), "--assemble-only"], {
+// Through `run.sh`, not straight at the script: the verb dispatch is part of the
+// install surface, and calling the script directly skipped it. check-pack-install
+// caught exactly that — run.sh's `$@` still carried the verb name, so a strict argument
+// parser refused its own verb (2026-08-21). The gate now covers the path an operator
+// actually types.
+execFileSync("bash", [path.join(REPO, "run.sh"), "install-copilot-bridge", "--assemble-only"], {
 	env: { ...process.env, ENTWURF_COPILOT_ASM: asm },
 	stdio: "pipe",
 });
@@ -265,7 +270,12 @@ interface FakeRun {
 	/** the plugin ids the fake still holds when the installer is done */
 	installed: string[];
 }
-function runInstall(opts: { installed: string[]; uninstallFails?: boolean; label: string }): FakeRun {
+function runInstall(opts: {
+	installed: string[];
+	uninstallFails?: boolean;
+	listFails?: boolean;
+	label: string;
+}): FakeRun {
 	const home = path.join(root, `install-${opts.label}`);
 	const bin = path.join(home, "bin");
 	mkdirSync(bin, { recursive: true });
@@ -283,7 +293,9 @@ function runInstall(opts: { installed: string[]; uninstallFails?: boolean; label
 			`LOG=${JSON.stringify(log)}`,
 			'echo "$*" >> "$LOG"',
 			'case "$1 $2" in',
-			'  "plugin list") echo "Installed plugins:"; sed "s/^/  • /" "$STATE"; exit 0 ;;',
+			opts.listFails
+				? '  "plugin list") echo "not authenticated" >&2; exit 1 ;;'
+				: '  "plugin list") echo "Installed plugins:"; sed "s/^/  • /" "$STATE"; exit 0 ;;',
 			'  "plugin uninstall")',
 			opts.uninstallFails
 				? '    echo "boom" >&2; exit 1 ;;'
@@ -295,7 +307,7 @@ function runInstall(opts: { installed: string[]; uninstallFails?: boolean; label
 		].join("\n"),
 	);
 	chmodSync(path.join(bin, "copilot"), 0o755);
-	const res = spawnSync("bash", [path.join(REPO, "scripts", "copilot-bridge-install.sh")], {
+	const res = spawnSync("bash", [path.join(REPO, "run.sh"), "install-copilot-bridge"], {
 		env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, ENTWURF_COPILOT_ASM: path.join(home, "asm") },
 		encoding: "utf8",
 	});
@@ -327,6 +339,12 @@ const uninstallBroken = runInstall({ installed: [STALE], uninstallFails: true, l
 ok(
 	"[QK:COPILOT-INSTALL-UNINSTALL-FAILURE-IS-FATAL] a FAILING uninstall is not read as an absence — the install refuses",
 	uninstallBroken.status !== 0 && !uninstallBroken.installed.includes(OURS),
+);
+
+const listBroken = runInstall({ installed: [STALE], listFails: true, label: "list-error" });
+ok(
+	"[QK:COPILOT-INSTALL-LIST-FAILURE-IS-FATAL] a FAILING plugin list is not read as an empty host — the install refuses",
+	listBroken.status !== 0 && !listBroken.installed.includes(OURS),
 );
 
 const clean = runInstall({ installed: [], label: "clean" });

@@ -187,7 +187,13 @@ if [ "$KEEP_STALE" -eq 0 ]; then
   # that is still firing (cross-review, terra). `copilot plugin list` prints the
   # QUALIFIED id, which is also what distinguishes our unit from a same-named plugin
   # somebody else installed from another marketplace.
-  INSTALLED_LIST="$(copilot plugin list 2>/dev/null || true)"
+  # The LIST failing is not an empty list. `|| true` would hand the "nothing installed"
+  # arm a broken, unauthenticated or permission-denied Copilot CLI and then install on
+  # top of whatever is really there (cross-review, terra). The assignment IS the
+  # condition so `set -e` cannot kill us before we can say why.
+  if ! INSTALLED_LIST="$(copilot plugin list 2>/dev/null)"; then
+    die "'copilot plugin list' failed, so this host's installed plugins are UNKNOWN. An unknown list is not an empty one — the stale Claude unit may still be firing. Fix the Copilot CLI error, or re-run with --keep-stale-claude-unit to skip this check deliberately."
+  fi
   case "$INSTALLED_LIST" in
     *"$STALE_CLAUDE_UNIT"*)
       copilot plugin uninstall "$STALE_CLAUDE_UNIT" >/dev/null \

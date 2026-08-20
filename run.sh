@@ -3437,6 +3437,48 @@ SH
   fi
   rm -rf "$nm_probe"
   echo "[check-pack-install] installed hook is node_modules-safe compiled JS (hooks.json points at .js; runs under node_modules with plain node; raw .ts refused there by the strip-types fence)"
+
+  # --- #82: the Copilot birth unit's INSTALLED-PACKAGE branch ------------------
+  # check-copilot-birth-hook drives the installer from a DEV CLONE, so it only ever
+  # exercises the `.ts` branch. The installed-package branch — compiled
+  # meta-bridge-hook-copilot.js, its rewritten `./lib/meta-session.js` import, the
+  # registry copied to the plugin root — was covered by pack LISTS and by nothing that
+  # RUNS it, which is the shape Hard Rule 11 exists to refuse (cross-review, terra +
+  # glm independently, 2026-08-21).
+  #
+  # `--assemble-only` stops before the Copilot CLI, so this needs no Copilot and no fake
+  # of one. A fake Copilot CLI would only prove our script calls our fake the way we
+  # wrote it — the vendor contract is unmeasured, and the first real execution is the
+  # §6 admission itself. This asserts the CITIZEN, not merely that a node process ran.
+  local cop_asm="$npm_tmp/copilot-asm" cop_store cop_log
+  cop_store="$(mktemp -d)"
+  if ! cop_log=$(HOME="$mb_home" XDG_DATA_HOME="$mb_home/.local/share" ENTWURF_COPILOT_ASM="$cop_asm" PATH="$npmroot/node_modules/.bin:$PATH" "$npm_pkg/run.sh" install-copilot-bridge --assemble-only 2>&1); then
+    fail "[check-pack-install] installed install-copilot-bridge --assemble-only failed:"
+    echo "$cop_log" | tail -20 | sed 's/^/    /' >&2
+    return 1
+  fi
+  local cop_unit="$cop_asm/entwurf-meta-receive-copilot"
+  # Branch SELECTION, pinned: an installed package must assemble the compiled entry and
+  # no raw .ts. Without this the fire below could pass on a layout that silently chose
+  # the dev-clone branch.
+  if [ ! -f "$cop_unit/meta-bridge-hook-copilot.js" ] || [ -f "$cop_unit/meta-bridge-hook-copilot.ts" ]; then
+    fail "[check-pack-install] installed install-copilot-bridge did not select the compiled branch (want meta-bridge-hook-copilot.js, no raw .ts) in $cop_unit"
+    return 1
+  fi
+  local cop_out
+  # Fired the way Copilot fires it: NO ARGV, envelope on stdin.
+  if ! cop_out="$(printf '%s' '{"sessionId":"pack-copilot-probe","cwd":"/tmp","source":"new"}' | env PI_CODING_AGENT_DIR="$cop_store" "$cop_unit/scripts/copilot-hook-launch.sh" 2>&1)"; then
+    fail "[check-pack-install] the installed Copilot launcher failed: $(printf '%s' "$cop_out" | tr '\n' ' ' | cut -c1-200)"
+    return 1
+  fi
+  local cop_records
+  cop_records="$(grep -l '"backend": "copilot"' "$cop_store"/meta-sessions/*.meta.json 2>/dev/null | wc -l | tr -d ' ')"
+  if [ "$cop_records" != "1" ]; then
+    fail "[check-pack-install] the installed Copilot unit did not mint exactly one copilot citizen (found ${cop_records:-0}); log: $(tail -1 "$cop_store/meta-bridge-hook.log" 2>/dev/null)"
+    return 1
+  fi
+  rm -rf "$cop_store"
+  echo "[check-pack-install] installed Copilot birth unit assembles its compiled branch and mints a citizen from a no-argv launch"
   python3 - "$mb_cfg/settings.json" "$mb_home/.claude.json" "$stable_asm" <<'PY'
 import json, sys
 settings = json.load(open(sys.argv[1]))
@@ -5114,6 +5156,7 @@ case "$cmd" in
     # bakes node+entry into the launcher rather than into the manifest (Copilot's exec
     # form is a single string with no argv beside it), and it wires NO MCP: a drain tool
     # for a mailbox nothing rings would advertise delivery this backend does not have.
+    shift || true
     (cd "$REPO_DIR" && bash scripts/copilot-bridge-install.sh "$@")
     ;;
   doctor-copilot-bridge)
@@ -5121,6 +5164,7 @@ case "$cmd" in
     # the Claude doctor's on purpose: a Copilot session mints on its FIRST PROMPT, not
     # at session open, so "installed with zero records" is reported as NOT-YET rather
     # than as a silent miss. Red is a hook that RAN and failed.
+    shift || true
     (cd "$REPO_DIR" && bash scripts/copilot-bridge-doctor.sh "$@")
     ;;
   install-agy-bridge)
