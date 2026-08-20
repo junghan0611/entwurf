@@ -93,7 +93,7 @@ ok(
 );
 const leaves = Object.values(hooks.hooks ?? {}).flat();
 ok(
-	"every hook entry's `exec` is a STRING (an array is rejected at plugin load)",
+	"[QK:COPILOT-BIRTH-EXEC-IS-STRING] every hook entry's `exec` is a STRING (an array is rejected at plugin load)",
 	leaves.every((l) => typeof l.exec === "string"),
 );
 ok(
@@ -152,11 +152,11 @@ const NATIVE_ID = "cop-birth-0001";
 const CWD = "/home/junghan/repos/gh/entwurf";
 
 const first = fire({ sessionId: NATIVE_ID, cwd: CWD, source: "new", timestamp: 1755690000000 }, store);
-ok("a no-argv fire with the NATIVE envelope exits 0", first.status === 0);
+ok("[QK:COPILOT-BIRTH-NO-ARGV-LAUNCH] a no-argv fire with the NATIVE envelope exits 0", first.status === 0);
 ok("the hook emits the neutral response and nothing else", first.stdout.trim() === "{}");
 let live = records(store);
 ok("exactly one record was minted", live.length === 1);
-ok("the record's backend is copilot", live[0]?.backend === "copilot");
+ok("[QK:COPILOT-BIRTH-MINTS-COPILOT] the record's backend is copilot", live[0]?.backend === "copilot");
 ok("the record joins on the native sessionId", live[0]?.nativeSessionId === NATIVE_ID);
 ok("the record carries the envelope's cwd", live[0]?.cwd === CWD);
 // Omitted, never guessed: Copilot's envelope carries neither, and both are nullable.
@@ -199,7 +199,11 @@ function refuses(label: string, envelope: unknown, expectInLog: string): void {
 }
 // The one a naive `sessionId ?? session_id` would swallow: two identities for one
 // session means the envelope is not trustworthy, so neither id may be minted.
-refuses("disagreeing sessionId/session_id", { sessionId: "a-1", session_id: "b-2", cwd: CWD }, "disagree");
+refuses(
+	"[QK:COPILOT-BIRTH-ID-DISAGREEMENT] disagreeing sessionId/session_id",
+	{ sessionId: "a-1", session_id: "b-2", cwd: CWD },
+	"disagree",
+);
 refuses("missing cwd", { sessionId: NATIVE_ID }, "cwd missing");
 refuses("no session id under either key", { cwd: CWD, source: "new" }, "no sessionId/session_id");
 refuses("malformed envelope", "{not json", "envelope parse failed");

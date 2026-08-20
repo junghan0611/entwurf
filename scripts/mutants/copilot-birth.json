@@ -1,0 +1,71 @@
+{
+	"schemaVersion": 1,
+	"lane": "copilot-birth",
+	"mutants": [
+		{
+			"claim": "COPILOT-BIRTH-NO-ARGV-LAUNCH",
+			"title": "reusing the Claude no-argv refusal in the Copilot launcher kills every Copilot birth (this is the exact defect that held copilot at 0 of 409 records)",
+			"subject": "pi/meta-bridge-copilot/entwurf-meta-receive-copilot/scripts/copilot-hook-launch.sh",
+			"find": ["exec \"$NODE_BIN\" \"$HOOK_ENTRY\""],
+			"replace": [
+				"if [ \"$#\" -eq 0 ]; then",
+				"\techo 'entwurf meta-bridge: this hook was launched with NO arguments.' >&2",
+				"\texit 1",
+				"fi",
+				"exec \"$NODE_BIN\" \"$HOOK_ENTRY\""
+			],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-BIRTH-NO-ARGV-LAUNCH]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "COPILOT-BIRTH-MINTS-COPILOT",
+			"title": "minting a Copilot session under the claude-code backend gives it a citizenship it cannot own and hides the Copilot lane's own count",
+			"subject": "pi-extensions/meta-bridge-hook-copilot.ts",
+			"find": ["\t\t\tinput: { backend: \"copilot\", nativeSessionId: envelope.sessionId, cwd: envelope.cwd },"],
+			"replace": ["\t\t\tinput: { backend: \"claude-code\", nativeSessionId: envelope.sessionId, cwd: envelope.cwd },"],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-BIRTH-MINTS-COPILOT]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "COPILOT-BIRTH-ID-DISAGREEMENT",
+			"title": "preferring one id when the two envelope keys disagree mints a citizen no live session can be joined back to",
+			"subject": "pi-extensions/meta-bridge-hook-copilot.ts",
+			"find": [
+				"\tif (native && compat && native !== compat) {",
+				"\t\treturn { refusal: `sessionId and session_id disagree (${native} vs ${compat})` };",
+				"\t}"
+			],
+			"replace": ["\t// disagreement tolerated: the native key simply wins"],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-BIRTH-ID-DISAGREEMENT]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "COPILOT-BIRTH-EXEC-IS-STRING",
+			"title": "declaring the Copilot hook in Claude's array form is rejected at plugin load, before any prompt — the plugin never runs at all",
+			"subject": "pi/meta-bridge-copilot/entwurf-meta-receive-copilot/hooks/hooks.json",
+			"find": ["\t\t\"sessionStart\": [{ \"exec\": \"__COPILOT_LAUNCHER__\" }],"],
+			"replace": ["\t\t\"sessionStart\": [{ \"exec\": [\"__COPILOT_LAUNCHER__\"] }],"],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-BIRTH-EXEC-IS-STRING]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "CAPABILITY-DRIFT-SCOPE-FROM-CONST",
+			"title": "a literal lane list in the capability drift guard lets any new backend's descriptor ship without ever being compared — the hole #82 found and closed",
+			"subject": "scripts/check-entwurf-capabilities.ts",
+			"find": ["const driftScope: readonly MetaBackend[] = META_BACKENDS;"],
+			"replace": ["const driftScope: readonly MetaBackend[] = [\"claude-code\", \"antigravity\", \"codex\"];"],
+			"gate": ["bash", "run.sh", "check-entwurf-capabilities"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CAPABILITY-DRIFT-SCOPE-FROM-CONST]",
+			"signatureSource": "scripts/check-entwurf-capabilities.ts"
+		}
+	]
+}

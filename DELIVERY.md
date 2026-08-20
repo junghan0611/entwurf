@@ -81,7 +81,8 @@ D8 robustness: partial reason="..."
 | **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. |
 | **Codex app-server-backed TUI** | verified probe | D7; D8 unproven | WebSocket-over-UDS `turn/start` into a live `threadId`; status events expose completion. No managed citizen lane yet. |
 | **Codex embedded TUI** | deferred | D0 partial | No supported receive socket/hook on the measured standalone shape. |
-| **Copilot CLI TUI+server** | verified probe | D7; D8 unproven | **Old chronological-slice run; the named-turn probe in the tree is unrun.** Official SDK over hidden `--ui-server`: foreground native id + metadata, two-session addressed idle enqueue, same-session auto-model reply, completion events read back through the official session event-history API. Loopback RPC authentication is not established; no managed citizen lane. Evidence is L4 direct-native on ONE Linux workstation, host-local stdout, not archived. |
+| **Copilot CLI TUI+server** — *withdrawn lane, kept as evidence* | rejected | D7; D8 unproven | **Old chronological-slice run; the named-turn probe in the tree is unrun.** Official SDK over hidden `--ui-server`: foreground native id + metadata, two-session addressed idle enqueue, same-session auto-model reply, completion events read back through the official session event-history API. Loopback RPC authentication is not established; no managed citizen lane. Evidence is L4 direct-native on ONE Linux workstation, host-local stdout, not archived. |
+| **Copilot CLI plugin/hooks** | shipped (birth only) | D0 | Garden BIRTH, no delivery. The `.claude-plugin` hook fires under Copilot and the envelope arrives on stdin; only argv is dropped, because Copilot's schema has no `args` (its exec form is one `exec` string). A dedicated no-argv unit mints a `backend: "copilot"` record on the FIRST PROMPT — `sessionStart` is deferred to it, so opening the TUI fires nothing. No doorbell exists in the bundle (`FileChanged`, `asyncRewake`, `watchPaths` all absent), so there is no receiver to arm and D2 cannot pass: a dispatch to this citizen refuses as `mailbox-undeliverable`. Measured 2026-08-20 on CLI 1.0.80; gate `check-copilot-birth-hook`. |
 | **ACP Claude / Cortex** | shipped runtime, outside this matrix | — | ACP sessions are children launched by entwurf's pi adapter, not already-running native sessions to wake. |
 
 “Verified probe” means the transport worked in a reproducible raw probe but entwurf
@@ -127,7 +128,14 @@ shipping commitment: GLG closed the managed native Codex lane on 2026-08-01 beca
 already supplies the official GPT provider path. Entwurf will not duplicate it as a
 native citizen or ACP backend. `turn/steer` is active-turn steering, not idle wake.
 
-### Copilot CLI: TUI+server is the positive launch mode
+### Copilot CLI: the plugin hook is the citizen rail; TUI+server was rejected
+
+**The positive lane is the plugin hook, not the loopback server.** #82 measured on
+2026-08-20 that Copilot loads and executes the `.claude-plugin` hook and translates the
+Claude envelope onto stdin, which is enough to mint a garden id — and that its bundle
+carries no doorbell, so birth and delivery are separate admissions. The `--ui-server`
+material below is retained as the record of a REJECTED lane and its refusal grounds; it
+is not a candidate.
 
 **Two things are recorded here and they are not the same thing: what was MEASURED on
 2026-08-19, and what the probe now CONTRACTS to measure.** The measurement below was
@@ -179,9 +187,15 @@ This is not yet admissible as a native-push adapter. The flag is hidden from CLI
 and the loopback JSON-RPC server did not enforce the SDK connection token in the
 measured launch: an unauthenticated client connected, while a token-bearing client was
 rejected as `AUTHENTICATION_NOT_CONFIGURED`. The TCP port is only a runtime endpoint,
-never identity authority. Do not add a record backend or dispatch route until
-permission ownership, stale/crash handling, and a supported fail-closed local
-boundary are demonstrated.
+never identity authority.
+
+**This fence is half withdrawn (#82, 2026-08-20).** ~~Do not add a record backend~~ — a
+record backend is the deliverable: it is what mints a garden id, and it arrived through
+the plugin hook rather than through this loopback path. **Do not add a dispatch route**
+still holds, and now for a measured reason rather than caution: the bundle has no
+doorbell, so there is nothing to wake. Permission ownership, stale/crash handling and a
+supported fail-closed local boundary remain undemonstrated for `--ui-server`, which is
+why that path stays rejected.
 
 ## Recording a new claim
 

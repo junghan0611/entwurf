@@ -67,7 +67,7 @@ ok("shipped registry includes the pi backend", reg.backends.pi !== undefined);
 //    automatically in scope.
 const driftScope: readonly MetaBackend[] = META_BACKENDS;
 ok(
-	"drift scope = every shipped backend except pi (pi has no live const to compare)",
+	"[QK:CAPABILITY-DRIFT-SCOPE-FROM-CONST] drift scope = every shipped backend except pi (pi has no live const to compare)",
 	[...driftScope].sort().join(",") ===
 		Object.keys(reg.backends)
 			.filter((b) => b !== "pi")

@@ -48,6 +48,7 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 | **Claude Code** | shipped | SessionStart meta-bridge → garden id + mailbox + trusted marker. Transcript를 가져오지 않는다. | meta-session gates, mailbox/deliverability, `doctor-meta-bridge` |
 | **ACP Claude** | shipped; **outbound callback verified, retained-child failure tracked in #72** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Integrated lifecycle proves callback, visible same-id resume and recall. Synthetic long-turn LIVE passes beyond 733s, but a real retained Sonnet tool-loop failed after four reuse turns with `ACP connection closed` (`20260730T194358-0061d2`), and GLG reports the same user-facing shape on hard workloads. #72 must recover child exit/signal/stderr and classify the workload-shape gap without automatic replay. Earlier intermittent bundled-MCP readiness observations remain separately recorded below. | ACP LIVE smokes + mux lifecycle release-gate MUST + #72 field report |
 | **Codex** | native probe archived; managed lane declined | direct/native delivery evidence는 방법론 기록으로 남지만, pi가 공식 GPT provider를 지원하므로 별도 native citizen/ACP backend를 출하하지 않는다. 일반 external MCP host로 명시 배선하는 것은 별개다. | DELIVERY.md raw probe / closed #56 |
+| **Copilot CLI** | birth shipped (#82); delivery 미승인 | plugin hook이 첫 프롬프트에서 `backend:"copilot"` meta-record를 민팅해 garden id를 준다 — Claude Code처럼 주소로 부를 수 있는 시민. `args` 키가 없는 Copilot 스키마 때문에 Claude 유닛을 재사용할 수 없어 no-argv 유닛을 따로 둔다. 번들에 도어벨(`FileChanged`/`asyncRewake`/`watchPaths`)이 없어 배달 어댑터·`fresh_call`은 별개 승인이며, `--ui-server`/`ws.*`는 계속 거절이다. | `check-copilot-birth-hook`, `doctor-copilot-bridge`, DELIVERY.md 매트릭스 |
 | **Antigravity (`agy`)** | shipped | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push; managed MCP/permission, statusline, hook adapters. | agy deterministic gates + doctors + 2026-07-13 live round trip |
 | **Cortex / governed ACP** | **landed (0.13.0)** — hvkiefer's PR #40 adapter transplanted with the CP0-audit revisions (dual-HOME overlay, mcp.json projection, per-turn set-model, 4-row curation) | current D1–D10 contract is `docs/acp-backend-rail.md` “Cortex Code audit”; deterministic gate `check-acp-cortex` + mutant lane `acp-cortex`; CP2 live smoke `smoke-acp-cortex-live` stays outside the claude-only release floor | PR #40 / #48 / `docs/acp-backend-rail.md` |
 | **Gemini CLI** | deprecated path | replaced by Antigravity direction for current Google individual tiers. | README migration note |
@@ -161,7 +162,9 @@ Sonnet에서 flaky라 한 번의 flake가 컷을 막으면 안 된다. 우회/�
 - **driver optionality — deferred, not a current issue.** production은 tmux를 직접 호출하며 generic `DRIVERS`
   seam이나 zmx backend는 없다. 구체적인 두 번째 driver 수요가 생기기 전에는 비교·추상화를 재개하지 않는다.
   quota, system load, 예상 작업량, 과거 담당자 같은 선택 신호도 substrate/driver에 저장하지 않는다.
-- **Copilot CLI native probe — landed as raw-probe evidence; 승격 판정은 #82가 진다.**
+- **Copilot CLI — 시민권(출생)은 #82에서 착지했고, 배달은 아직 승인 전이다.**
+  `META_BACKENDS`에 `copilot`이 들어갔고 plugin hook이 첫 프롬프트에서 레코드를 민팅한다(D0).
+  아래 `--ui-server` 서술은 **거절된 레인의 기록**이지 후보가 아니다.
   Codex native는 pi의 공식 GPT provider와 겹쳐 거절됐지만 Copilot은 GitHub 이슈/PR/CI와 model
   `auto`를 가진 별도 하네스다. 구현을 다른 garden id에 맡기고 Copilot이 checkpoint와 GitHub
   일을 받는 것은 dispatch 예절이지 substrate role system이 아니다. 비용은 무제한이 아니라
