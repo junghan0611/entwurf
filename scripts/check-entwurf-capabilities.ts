@@ -21,7 +21,9 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
 	META_BACKEND_DESCRIPTORS,
+	META_BACKENDS,
 	META_CITIZEN_BACKENDS,
+	type MetaBackend,
 	MetaRecordError,
 	metaCapabilitiesFilePath,
 	parseMetaCapabilityRegistry,
@@ -50,12 +52,29 @@ ok(
 );
 ok("shipped registry includes the pi backend", reg.backends.pi !== undefined);
 
-// 2. drift guard — the JSON must agree field-for-field with the const for the
-//    three backends it still describes. 3D-3 already cut the live consumer over
-//    to the registry, so this is no longer a pre-cut-over guard: the const now
-//    exists ONLY as this reference, and the assertion is what keeps the live
-//    source from silently diverging from the shape it was cut over from.
-for (const backend of ["claude-code", "antigravity", "codex"] as const) {
+// 2. drift guard — the JSON must agree field-for-field with the const for every
+//    backend the const describes. 3D-3 already cut the live consumer over to the
+//    registry, so this is no longer a pre-cut-over guard: the const now exists
+//    ONLY as this reference, and the assertion is what keeps the live source from
+//    silently diverging from the shape it was cut over from.
+//
+//    IT MUST ITERATE `META_BACKENDS`, NEVER A LITERAL (#82, 2026-08-20). This loop
+//    used to spell out `["claude-code", "antigravity", "codex"]`, so a backend added
+//    to the const AND to the shipped JSON was compared against nothing: the coverage
+//    cell above passed (the keysets still matched) and the drift cell never looked at
+//    it. A green gate that does not read the row it is supposed to guard is worse than
+//    an absent one. Driving it from the const is what makes the next backend
+//    automatically in scope.
+const driftScope: readonly MetaBackend[] = META_BACKENDS;
+ok(
+	"drift scope = every shipped backend except pi (pi has no live const to compare)",
+	[...driftScope].sort().join(",") ===
+		Object.keys(reg.backends)
+			.filter((b) => b !== "pi")
+			.sort()
+			.join(","),
+);
+for (const backend of driftScope) {
 	const live = META_BACKEND_DESCRIPTORS[backend];
 	const cap = reg.backends[backend];
 	ok(

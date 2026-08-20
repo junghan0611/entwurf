@@ -4,6 +4,7 @@
 		"claude-code": { "wakeMode": "self-fetch", "deliveryLevel": "D6", "nativeIdLabel": "sessionId" },
 		"antigravity": { "wakeMode": "direct-inject", "deliveryLevel": "D6", "nativeIdLabel": "conversationId" },
 		"codex": { "wakeMode": "direct-inject", "deliveryLevel": "D6", "nativeIdLabel": "threadId" },
+		"copilot": { "wakeMode": "direct-inject", "deliveryLevel": "D0", "nativeIdLabel": "sessionId" },
 		"pi": { "wakeMode": "direct-inject", "deliveryLevel": "D6", "nativeIdLabel": "sessionId" }
 	}
 }

@@ -79,7 +79,7 @@ export class MetaRecordError extends Error {
  * difference is the whole reason for a thin adapter). Discriminator field on
  * every record.
  */
-export const META_BACKENDS = ["claude-code", "antigravity", "codex"] as const;
+export const META_BACKENDS = ["claude-code", "antigravity", "codex", "copilot"] as const;
 export type MetaBackend = (typeof META_BACKENDS)[number];
 
 /**
@@ -126,6 +126,28 @@ export const META_BACKEND_DESCRIPTORS: Record<MetaBackend, MetaBackendDescriptor
 		wakeMode: "direct-inject",
 		deliveryLevel: "D6",
 		nativeIdLabel: "threadId",
+	},
+	// BIRTH-ONLY citizen (#82). Copilot CLI 1.0.80 runs our plugin hook and hands the
+	// hook a session envelope, so a record can be minted and the session gets a garden
+	// address. Nothing above that is claimable: the shipped bundle has no `FileChanged`,
+	// no `asyncRewake` and no `watchPaths`, so there is NO doorbell to arm and no
+	// self-fetch drain to copy (measured 2026-08-20, #82). Hence:
+	//   wakeMode  direct-inject — NOT a capability claim. It is the codex bucket: "not a
+	//             drainable mailbox". A `self-fetch` label here would advertise the exact
+	//             mailbox drain this backend cannot perform; `direct-inject` routes a
+	//             dispatch into the fail-closed refusal that names the missing rail
+	//             (entwurf-deliverability.ts:130) instead. Copilot is NOT a
+	//             `nativePushSupported` backend and has no native-push adapter — the same
+	//             state codex is in today.
+	//   D0        identity only. D2 (receiver armed) cannot pass without a doorbell, so
+	//             every level above D0 would be a false claim. Delivery is a SEPARATE
+	//             admission; this lane is birth.
+	//   sessionId the native join key measured on the Copilot hook envelope.
+	copilot: {
+		backend: "copilot",
+		wakeMode: "direct-inject",
+		deliveryLevel: "D0",
+		nativeIdLabel: "sessionId",
 	},
 };
 
@@ -210,7 +232,7 @@ function isoNow(now: Date): string {
 export const META_SCHEMA_VERSION_V3 = 3 as const;
 
 /** Every backend admitted by the one V3 record-citizen schema. */
-export const META_CITIZEN_BACKENDS = ["claude-code", "antigravity", "codex", "pi"] as const;
+export const META_CITIZEN_BACKENDS = ["claude-code", "antigravity", "codex", "copilot", "pi"] as const;
 export type MetaCitizenBackend = (typeof META_CITIZEN_BACKENDS)[number];
 
 /**
