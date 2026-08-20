@@ -977,30 +977,56 @@ reset_world prevgen
 mkdir -p "$ENTWURF_META_MAILBOX_DIR/20260305T000000-dddd05"
 printf 'hello\n' > "$ENTWURF_META_MAILBOX_DIR/20260305T000000-dddd05/0001.msg"
 store_before="$(store_bytes)"
-# Occupy the MAILBOX destination — the second move in the plan — for this second
-# and the next two, so whichever stamp the cut computes, its first move looks free
-# and its second collides. That ordering is the whole point: checking each
-# destination just before its own rename archived the store, then refused.
-for off in 0 1 2; do
+# Occupy the MAILBOX destination — the second move in the plan — so whichever
+# stamp the cut computes, its first move looks free and its second collides.
+# That ordering is the whole point: checking each destination just before its
+# own rename archived the store, then refused.
+#
+# WHY THE BAND IS WIDE. `stamp()` takes no injection point, so the only way to
+# occupy the destination the cut will pick is to occupy every second it could
+# pick. The band used to be three seconds, which held on a dev box and lost on a
+# loaded runner: on 2026-08-20 (CI run 32370770123) node reached `stamp()` after
+# the band had passed, no collision happened, the cut correctly succeeded — and
+# G1/G2/G3 all reported a product defect that did not exist. A gate that can go
+# red with no product change is worse than the hole it guards, so the band is now
+# far longer than any plausible interpreter start, and a miss is reported AS a
+# miss rather than as a refusal that never happened.
+G_BAND_SECONDS=60
+for off in $(seq 0 "$G_BAND_SECONDS"); do
   mkdir -p "$SANDBOX/mailbox.archive-$(date -d "+$off seconds" +%Y%m%dT%H%M%S)"
 done
+g_band_end="$(date -d "+$G_BAND_SECONDS seconds" +%Y%m%dT%H%M%S)"
 set +e
 out="$(node --experimental-strip-types "${FRESH_CUT[@]}" 2>&1)"; rcg=$?
 set -e
+g_cut_stamp="$(printf '%s\n' "$out" | sed -n 's|.*/mailbox\.archive-\([0-9T]*\).*|\1|p' | head -1)"
+g_miss=0
+[ "$rcg" != 1 ] && [ -n "$g_cut_stamp" ] && [ "$g_cut_stamp" \> "$g_band_end" ] && g_miss=1
 if [ "$rcg" = 1 ]; then
   ok "G1 an occupied archive destination REFUSES the cut with the NO-MOVE status (exit 1)"
+elif [ "$g_miss" = 1 ]; then
+  bad "G1 FIXTURE MISS, not a product verdict: the cut stamped $g_cut_stamp, past the occupied band ending $g_band_end, so no collision was ever staged. Widen G_BAND_SECONDS; do not read this as the cut ignoring a collision" "$out"
 else
   bad "G1 the cut proceeded into an occupied destination, or refused with the wrong status (rc=$rcg, want 1)" "$out"
 fi
-if [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ] && [ "$store_before" = "$(store_bytes)" ]; then
-  ok "G2 the collision refusal moved NOTHING — the store never left its place (no half-cut generation)"
+# G2/G3 only mean something once a collision was actually staged. On a fixture
+# miss the cut was SUPPOSED to archive and SUPPOSED not to print the no-op line,
+# so scoring them would turn one missed fixture into three red cells that read
+# like a product defect — the exact cascade that sent a reader hunting a bug in
+# the cut on 2026-08-20.
+if [ "$g_miss" = 1 ]; then
+  bad "G2/G3 not scored — the G fixture missed its band (see G1); this says nothing about the cut"
 else
-  bad "G2 half-cut generation: the store was archived before the mailbox collision was seen"
+  if [ -z "$(find "$SANDBOX" -maxdepth 1 -type d -name 'store.archive-*')" ] && [ "$store_before" = "$(store_bytes)" ]; then
+    ok "G2 the collision refusal moved NOTHING — the store never left its place (no half-cut generation)"
+  else
+    bad "G2 half-cut generation: the store was archived before the mailbox collision was seen"
+  fi
+  case "$out" in
+    *"Nothing was moved"*) ok "G3 the refusal states its own no-op guarantee" ;;
+    *) bad "G3 the refusal never claimed the no-op" "$out" ;;
+  esac
 fi
-case "$out" in
-  *"Nothing was moved"*) ok "G3 the refusal states its own no-op guarantee" ;;
-  *) bad "G3 the refusal never claimed the no-op" "$out" ;;
-esac
 
 # ── H. the MARKER-LESS live surface: native-push conversations ───────────────
 # A socket+marker walk is not the whole world. `entwurf_register_native` proves an
