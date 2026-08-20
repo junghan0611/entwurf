@@ -227,9 +227,11 @@ session's** permission state … swaps in unrestricted path and URL managers"*.
 stdin에 `sessionId`가 있고, 첫 프롬프트에 태어난다. 도어벨이 없어 D2/D4가 해당 없다. 시민은 0.
 → 빠진 행: *"Copilot CLI plugin/hooks — not a citizen; birth on first prompt; no doorbell."*
 
-**`[미검증]` 리포 밖:** #82 이슈 **본문**의 Non-goals에 `No Copilot entry in META_BACKENDS`가
-사본으로 살아 있다. 코멘트 `5354998074`가 철회를 기록했지만 본문은 그대로다.
-**본문만 읽는 다음 사람이 또 걸린다.** 본문 수정은 GLG 판단.
+**`[측정]` 리포 밖 — 닫혔다.** #82 이슈 **본문**의 Non-goals에 살아 있던
+`No Copilot entry in META_BACKENDS`를 2026-08-20에 정정했다(코멘트 `5356078607`).
+지우지 않고 **취소선 + 철회 이유**로 남겼다 — 지우면 리포는 깔끔해지고 교훈은 안 보인다.
+본문 맨 위에 헤더를 달아 GLG 코멘트를 가리키고, **충돌하면 스레드가 이긴다**를 본문 안에 박았다.
+반만 철회다: `FRESH_CALL_BACKENDS` 금지는 **아직 참**(시민이 아니라 형제를 여는 별개 질문).
 
 **없는 것:** `the third backend` / `both native harnesses` 류 카디널리티 잔재는 산문에 없다.
 `probe/copilot-raw-delivery` 잔재도, ACP-Copilot 코드도 없다(브랜치 삭제됨).

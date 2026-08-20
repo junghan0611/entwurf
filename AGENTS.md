@@ -111,6 +111,7 @@ A `--entwurf-control` pi session is a citizen for the same reason a native bridg
 - A new issue brings the best available observation plus an executable next measurement. Recovering a missing signature may be the first acceptance; an idea with neither evidence nor a next measurement is not an issue.
 - No collection points, umbrella trackers, or fallout buckets. Merge issues only when they share one cause and one acceptance.
 - Sweep manually after a release and before opening an issue. Solved work closes at its durable SHA; it does not wait for the next release.
+- **An issue body is a snapshot; the thread is the live contract.** A body written before GLG stated what the work is *for* will disagree with the thread, and a reader who opens only the body inherits the stale half — including its fences, which is how a fence once forbade the very deliverable the lane existed to produce (#82, 2026-08-20). When they disagree the thread wins. Whoever notices owes the body an edit that strikes the withdrawn clause and says why it was there; deleting it silently makes the queue tidy and the lesson invisible.
 
 ## Verification
 
@@ -206,6 +207,7 @@ An overgrowth is built from locally correct steps; what fails is the absence of 
 - **Unrelated meta-infra never rides a capability lane.** The source-adjacent gate/mutant that proves a capability's contract belongs in the same change as that capability — the removal/repair rule above is untouched. What stays out of a feature commit candidate is unrelated verification machinery: scheduling rework, selectors, caches, receipts, floor restructuring. That pain is recorded and handled in its own subtraction lane later.
 - **Stop signal — evidence outgrowing the product.** When verification/meta-tool changes grow larger than the capability change they serve, stop and report to GLG. This is an operator-judgment trigger, deliberately not a mechanized ratio gate.
 - **Claim only what the evidence carries.** "The full floor was green once on the declared candidate" is strong enough; a stronger sentence mints proof obligations, and those obligations mint subsystems.
+- **A claim that crosses sessions carries its evidence state.** Measured here (name the receipt), read at `file:line`, read from an external artifact (name the path), inherited and unchecked (name the source) — and design proposals in a box of their own, since a proposal is adopted or decided differently, never measured. This repo is where siblings from many models each get a few turns, so a bare sentence costs the next one its turn re-deriving the ground, and leaves it only "believe or refute" when the honest move is "that carries no receipt, so I measured it." Retire claims, not people. Receipts in host-local paths do not travel: paste the decisive lines into the artifact that crosses.
 - **Risk classes are not equal.** Data loss, identity authority, false delivery success, install destruction, and secrets get fail-closed strength. Doc tense, future possibility, and total environment-byte binding get repaired when seen — they do not justify new gate machinery.
 
 ## Next and References
