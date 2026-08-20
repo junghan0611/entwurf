@@ -2,6 +2,8 @@
 
 > **Archived pre-0.12 evidence.** These scripts still describe the retired v1 `entwurf` / `entwurf_resume` / `entwurf_send` demo flow. They are kept for historical comparison and will be replaced by a v2-native retake in a post-0.12 follow-up; do not treat them as the current 0.12 runnable recipe.
 
+> **Model ids here are archived, not recommended (2026-08-20).** The `entwurf/gpt-5.4` rows below record what these GIFs actually ran on. They are stale twice over: `entwurf/gpt-5.4` is no longer a curated `entwurf` ACP id at all — that provider serves only the `claude-*` and `cortex-*` rows in `pi-extensions/lib/acp/models.ts` — and the live-spend default has since moved to `openai-codex/gpt-5.6-luna` under a cheaper plan. Read them as a record of the recording, never as a default to copy; the current defaults live in `VERIFY.md` and `NEXT.md`.
+
 Two recorded GIF scripts live here. Both use `asciinema` for capture and
 `agg` for cast → GIF conversion. Both share the same gitignore policy
 (`*.cast` global, `demo/*.gif`, `demo/*.log` — only the `.sh` and this

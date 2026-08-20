@@ -7,6 +7,17 @@
 #   2. Entwurf surface — spawn a sibling via the entwurf tool and receive its
 #      reply in the same pane (cross-model, mode=sync).
 #
+# ARCHIVED pre-0.12 evidence — NOT a runnable recipe. Scene 2 drives the retired
+# v1 `entwurf` verb, which the 0.12 cutover removed. Kept for historical
+# comparison only. See demo/README.md.
+#
+# MODEL NOTE (2026-08-20). The model ids below are the ARCHIVED values these
+# recordings actually used — they are kept as the historical record, not as a
+# recommendation. Two things are stale about them: `entwurf/gpt-5.4` is no
+# longer a curated `entwurf` ACP id at all (that provider serves only the
+# claude-* and cortex-* rows in pi-extensions/lib/acp/models.ts), and GLG's
+# live-spend default moved to `openai-codex/gpt-5.6-luna` on a Plus plan. Do
+# NOT copy these ids into a live harness default — see VERIFY.md and NEXT.md.
 # Layout (tmux, 220x50):
 #   pane 0 (single) — driven pi (claude-sonnet-5) — receives both prompts.
 #
@@ -32,7 +43,7 @@ DRIVER_LOG="$OUTDIR/baseline-debug.log"
 # Driven pi runs the bridge surface and answers both prompts.
 DRIVER_MODEL=${DRIVER_MODEL:-entwurf/claude-sonnet-5}   # pias
 # Sibling spawned via entwurf in scene 2 — different backend for contrast.
-SIBLING_MODEL=${SIBLING_MODEL:-entwurf/gpt-5.4}            # piat
+SIBLING_MODEL=${SIBLING_MODEL:-entwurf/gpt-5.4}            # piat — ARCHIVED id, see MODEL NOTE above
 SIBLING_CWD=${SIBLING_CWD:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 
 # Pacing in seconds.

@@ -7,6 +7,14 @@
 # See demo/README.md. Scene 3's delivery proof was recovered as a deterministic gate
 # (scripts/check-bridge-delivery.ts); the v2-native retake is a post-0.12 follow-up.
 #
+#
+# MODEL NOTE (2026-08-20). The model ids below are the ARCHIVED values these
+# recordings actually used — they are kept as the historical record, not as a
+# recommendation. Two things are stale about them: `entwurf/gpt-5.4` is no
+# longer a curated `entwurf` ACP id at all (that provider serves only the
+# claude-* and cortex-* rows in pi-extensions/lib/acp/models.ts), and GLG's
+# live-spend default moved to `openai-codex/gpt-5.6-luna` on a Plus plan. Do
+# NOT copy these ids into a live harness default — see VERIFY.md and NEXT.md.
 # Layout (tmux, 220x50):
 #   pane 0 (top)    — peer pi (codex, gpt-5.4)       — idle, waits for greeting
 #   pane 1 (bottom) — sender pi (claude-sonnet-5)  — driven by send-keys
@@ -37,7 +45,7 @@ PEER_LOG="$OUTDIR/peer-debug.log"
 SENDER_LOG="$OUTDIR/sender-debug.log"
 
 # Models match the user's piat / pias aliases.
-PEER_MODEL=${PEER_MODEL:-entwurf/gpt-5.4}        # piat
+PEER_MODEL=${PEER_MODEL:-entwurf/gpt-5.4}        # piat — ARCHIVED id, see MODEL NOTE above
 SENDER_MODEL=${SENDER_MODEL:-entwurf/claude-sonnet-5}  # pias
 
 # Pacing in seconds. Tuned from real runs: each scene's actual agent work
