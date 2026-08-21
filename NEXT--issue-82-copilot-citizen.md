@@ -8,43 +8,106 @@
 레인: **Copilot이 garden id를 가진 가든 시민이 된다.** 근거는 GLG가 #82에 직접 쓴
 코멘트 `5352330620` (2026-08-20T06:37:33Z) — GitHub 쪽을 맡기고 `auto`를 비용 레버로 쓴다.
 
+2026-08-21 GLG가 레인의 종착점을 다시 세웠다: **"entwurf를 클로드코드에서 가능한 것과
+같은 수준으로 끌어올린다."** 출생은 끝났고, 남은 것은 **손(MCP)** 과 **알림**이다.
+
 ---
 
 # RAIL — 현재 좌표
 
 - [x] **1. 측정 · 신뢰 규약** — Copilot 1.0.80 번들/훅 실측, 증거 태그 규약 수립
-- [x] **2. 출생 구현** — 레지스트리 · 훅 유닛 · 설치/닥터 · 게이트. 코드로 들어갔다
+- [x] **2. 출생 구현** — 레지스트리 · 훅 유닛 · 설치/닥터 · 게이트
 - [x] **3. §6 인수** — 실제 Copilot 세션이 시민이 됐고 footer에 자기 id를 찍는다
-- [ ] **4. 설치면 재현·역방향** ← CURRENT: statusLine 설정이 손으로 쓰여 있고 state가 없다
-- [ ] **5. 배달(delivery)** ← PAUSED: 번들에 도어벨이 없다. 출생과 별개 입학이다
+- [x] **4. 설치면 재현·역방향** — `91986c2`. install/uninstall/doctor + 15-check smoke
+- [ ] **5. MCP 손 (outbound)** ← CURRENT: Copilot 안에서 `entwurf_*`를 부를 수 있게 한다
+- [ ] **6. 알림 (`agentStop`)** — 턴 끝에 "편지 왔다"를 알린다. **측정부터**
+- [ ] **7. 등급 정정** — `DELIVERY.md`의 D0과 capability registry가 오늘의 사실과 다르다
+- [ ] **8. 유휴 깨우기 (D4)** — **우리 몫이 아니다.** 번들에 메커니즘이 없다(아래 펜스)
 
-현재 좌표: 3 완료 → 4 진행 중(형제 둘) → 5 보류
+현재 좌표: 4 완료 → **5 진행 대기** → 6·7 → 8은 벤더 대기
+
+## 파리티 표 — "클로드코드 수준"이 정확히 무엇인가
+
+`[코드]` 등급의 정본은 `pi/entwurf-capabilities.json`이다. Copilot만 `D0`, 나머지 넷은 `D6`.
+
+| 축 | Claude Code | Copilot 오늘 | 우리가 할 수 있나 |
+|---|---|---|---|
+| 출생 (garden id) | ✓ | ✓ `20260821T091514-fb50b4` | 끝 |
+| statusbar에 garden id | ✓ | ✓ `91986c2` | 끝 |
+| `entwurf_*` 도구를 **부를 수 있음** | ✓ `~/.claude/settings.json` mcpServers | ✗ **`~/.copilot/mcp-config.json` 부재** | **가능 — RAIL 5** |
+| 턴 끝 "편지 왔다" 알림 | ✓ `FileChanged`(`doorbell.sh`) | ✗ | **미측정 — RAIL 6** |
+| 유휴 세션 깨우기 (D4) | ✓ `asyncRewake` | ✗ | **불가 — 번들에 없음** |
+| `fresh_call` 대상 | ✓ `FRESH_CALL_BACKENDS` | ✗ | 8 이후 |
+
+핵심: **`D0 → D6`의 거리는 하나가 아니라 셋이고, 셋 중 둘은 오늘 우리 손에 있다.**
 
 # NOW
 
-- **Current.** 출생은 끝났다. 남은 건 **설치면**이다. `~/.copilot/settings.json`의
-  `statusLine` 항목을 2026-08-21에 **사람이 손으로** 넣었고 state 파일이 없다 →
-  **재현 불가, 역방향 불가.** agy가 같은 모양을 이미 풀어놨다.
-- **Next.**
-  1. Copilot `statusLine` config adapter + 최초 1회 preimage.
-     regular 파일은 **adopt**(지금 손으로 쓴 값이 첫 시험이다), symlink/corrupt는 REFUSE,
-     무관한 footer 토글은 보존. 선례 `scripts/agy-statusline-config.py:89-127`, `:137-163`.
-  2. `install` / `uninstall` / `doctor-copilot-statusline` **독립 verb**.
-     plugin lifecycle과 개인 settings preimage는 생애가 다르므로 bridge 인스톨러에 섞지 않는다.
-     **Copilot엔 지금 uninstaller가 아예 없다**(`run.sh:5167-5183`).
-  3. hermetic install→doctor→inverse smoke. Copilot 실행 0회, 모델 턴 0회.
-     선례 `scripts/smoke-agy-statusline-state.sh` (adoption `:87-100`, drift `:121-143`,
-     inverse `:147-155`, symlink `:157-178`).
-  4. statusline 닥터 빨강 정책 — **우리 state가 있을 때만** drift/symlink/`showCustom:false`/
-     bin 미해결이 RED. state가 없으면 "not ours" note. 남의 개인 설정을 실패라 부르지 않는다.
-     선례 `scripts/agy-statusline-bridge.sh:87-145`.
-  5. **배포 의무를 절차에 박기** — 아래 RECENT의 사고가 그 이유다.
-     거절문 오진(`pi-extensions/lib/meta-session.ts:959-961`)도 같이 고친다.
-- **Blocker.** 없음. 4-1~4-4는 terra(`20260821T082232-68d7bb`), 4-5는 grok(`20260821T075408-01031a`)
-  가 진행 중이며 **파일이 겹치지 않게** 나눠져 있다(아래 Do not touch).
+- **Current — 개인 설정을 진실하게 만든 뒤 설치한다.**
+  `[측정]` 지금 `~/.copilot/settings.json`의 `statusLine` 블록은 2026-08-21 09:11에
+  **사람이 손으로** 넣은 것이고 install-state는 없다(`doctor-copilot-statusline` →
+  *"state: absent (no settings ownership recorded)"* — 닥터는 정직하다).
+  `[코드]` `install()`은 preimage를 **현재 디스크**에서 뜬다 →
+  **지금 그대로 설치하면 preimage가 거짓말을 한다.**
+  `[측정]` 진짜 pre-lane 상태는 GLG가 2026-08-21 06:52:53에 직접 붙여넣은 원문이다:
+  **`statusLine` 키 없음, `footer.showCustom: true`는 원래 있었음.**
+  → 손으로 넣은 `statusLine` 블록만 제거하고 `./run.sh install-copilot-statusline`을 돌린다.
+  그러면 preimage가 "statusLine 없었음 / showCustom 켜져 있었음"으로 참이 되고
+  `uninstall`이 GLG의 원래 설정을 정확히 복원한다. **GLG 개인 설정 변경이므로 승인 사안.**
+
+- **Next 1 — RAIL 5, MCP 손.**
+  `[번들]` Copilot이 읽는 자리는 `~/.copilot/mcp-config.json`이다. 근거 둘:
+  `--mcp-config` 도움말 *"augments config from ~/.copilot/mcp-config.json for this session"*,
+  그리고 설정 이름 목록 `WMi = ["config.json","config","mcp-config","lsp-config",
+  "permissions-config","copilot-instructions.md","mcp-oauth-config","hooks"]` (`app.js`).
+  `[측정]` 이 호스트에 그 파일은 **없고** `~/.copilot/servers/`도 비어 있다.
+  `[코드]` **선례가 이미 리포에 있다** — `run.sh:206` `install-agy-bridge`:
+  *"agy MCP install adapter — register ONE entwurf-bridge server in the agy mcp_config
+  (adopt file / create / REFUSE symlink), stable bin command, install-state under
+  `$XDG_DATA_HOME/entwurf/agy-bridge/`"*. 구현은 `scripts/agy-bridge-config.py` +
+  `scripts/agy-bridge.sh`. 방금 `agy-statusline-*` → `copilot-statusline-*` 포팅을 한 것과
+  **정확히 같은 모양**이다: adopt / create / REFUSE-symlink / preimage / 정직한 닥터.
+  - 새 verb 3종 + smoke: `install|uninstall|doctor-copilot-mcp`, `smoke-copilot-mcp-state`
+  - 서버 이름은 **하나**, bin은 stable, state는 `$XDG_DATA_HOME/entwurf/copilot-mcp/`
+  - 검증 leaf는 이미 있다 — `run.sh probe-bridge-command` (초기화 후 tools/list만, 호출 없음)
+  - **이것이 닫히면** GLG가 Copilot 안에서 `entwurf_peers` / `entwurf_v2` /
+    `entwurf_inbox_read`를 부를 수 있다. 즉 **Copilot이 형제를 보고 말을 건다.**
+
+- **Next 2 — RAIL 6, 알림. 구현 전에 측정.**
+  `[번들]` Copilot `HookType` enum(`schemas/api.schema.json`)에
+  **`agentStop`이 있다** — 17종: `preToolUse` `preMcpToolCall` `postToolUse`
+  `postToolUseFailure` `userPromptSubmitted` `userPromptTransformed` `sessionStart`
+  `sessionEnd` `postResult` `prePRDescription` `errorOccurred` **`agentStop`**
+  `subagentStart` `subagentStop` `preCompact` `permissionRequest` `notification`.
+  `[측정]` 어제 관측한 발화 순서에 `agentStop`이 실제로 들어 있었다
+  (`userPromptSubmitted` → `sessionStart` → `agentStop`).
+  `[코드]` 우리 유닛은 지금 둘만 선언한다 —
+  `pi/meta-bridge-copilot/entwurf-meta-receive-copilot/hooks/hooks.json`:
+  `sessionStart`, `userPromptSubmitted`. 플러그인 hooks.json이 HookType 이름을 그대로 쓰므로
+  `agentStop` 추가는 **문법적으로 가능해 보인다** — 그러나 이것은 `[제안]`이지 측정이 아니다.
+  - 재야 할 것 셋: ① `agentStop`이 **플러그인 선언 훅으로도** 발화하는가
+    ② 그 봉투에 `session_id`가 실리는가 ③ stdout/exit가 오퍼레이터에게 **보이는가**
+    (Claude는 Stop-hook feedback으로 보인다. Copilot이 무엇을 보여주는지는 모른다)
+  - 셋 다 초록이면 Copilot은 **"편지 왔다"까지 도달한다.** 유휴 깨우기(D4)는 아니다 —
+    턴이 끝나야 발화하므로 GLG가 뭐라도 쳐야 한다. **그 차이를 문서에 정직하게 쓴다.**
+
+- **Next 3 — RAIL 7, 등급 정정.** 아래 "지금 거짓인 문장" 절.
+
+- **Blocker.** 없음. 형제 전원 퇴근. 워크트리 clean, 브랜치 `issue-82-copilot-citizen` = `79a77ea`, **푸시 안 함**.
 - **Read.** 이 파일 → #82 스레드 **전문**(본문은 2026-08-19 스냅샷이고 스스로 그렇게 말한다;
-  본문과 스레드가 어긋나면 **스레드가 이긴다**) → agy statusline 3종 원본.
+  본문과 스레드가 어긋나면 **스레드가 이긴다**) → `scripts/agy-bridge-config.py` + `scripts/agy-bridge.sh`.
 - **Do not touch.** 아래 전용 절.
+
+# 지금 거짓인 문장 — RAIL 7이 고칠 것
+
+문서가 오늘의 측정보다 뒤에 있다. 고치기 전에는 인용하지 마라.
+
+| 위치 | 지금 쓰여 있는 것 | 오늘의 사실 |
+|---|---|---|
+| `DELIVERY.md:85` | *"**LIVE birth unproven** … No record has yet been minted by a real Copilot session"* | `[측정]` 2026-08-21 09:15 실제 Copilot 세션이 `20260821T091514-fb50b4`를 발행했다. **입증됨** |
+| `DELIVERY.md:85` | *"No doorbell exists in the bundle (`FileChanged`, `asyncRewake`, `watchPaths` all absent)"* | 그 셋은 여전히 없다 ✓. 그러나 이 문장이 **`agentStop`의 존재를 가린다.** 없는 것은 **유휴 깨우기**이지 훅 전부가 아니다 |
+| `pi/entwurf-capabilities.json` | `copilot: { wakeMode: "direct-inject", deliveryLevel: "D0" }` | `direct-inject`는 **주입할 통로가 없는데** 그렇게 적혀 있다. RAIL 5·6의 결과에 따라 등급과 wakeMode를 같이 정한다 |
+| `run.sh:201` · `scripts/copilot-bridge-install.sh:174` | *"NO MCP wiring — this backend has no doorbell and no delivery"* | 배달이 없는 것과 **MCP 손이 없는 것은 다른 사실이다.** RAIL 5가 닫히면 앞 절반만 참이 된다 |
 
 # 증거 규약
 
@@ -66,10 +129,11 @@
 
 게이트가 덮는 사실은 게이트가 정본이므로 여기서 뺐다. 아래는 **게이트가 없고 펜스를 지탱하는** 것들이다.
 
-**`[번들]` 도어벨이 없다.** claude-code의 `self-fetch`를 성립시키는 셋
+**`[번들]` 유휴 깨우기가 없다.** claude-code의 D4를 성립시키는 셋
 (`FileChanged` + `asyncRewake` + `watchPaths`)이 Copilot 1.0.80 번들에 **없다**.
 그 문자열들은 `TerminalCwdChangedAction`/`WorkspaceFileChangedData`이지 훅 이름이 아니다.
-→ **Copilot은 `self-fetch`가 될 수 없다.** RAIL 5가 보류인 이유이자 배달 어댑터 금지의 근거.
+→ **Copilot은 잠든 채로 깨어날 수 없다.** RAIL 8이 벤더 대기인 이유이자 배달 어댑터 금지의 근거.
+**이 펜스의 범위는 D4까지다** — `agentStop`(턴 끝 알림)은 이 문장이 부정하는 대상이 아니다(RAIL 6).
 
 **`[측정]` `sessionStart`는 첫 프롬프트에 지연 발화한다.** TUI를 열면 세션은 등록되지만 훅은 0발이다
 (등록 11:17:19.920Z, 3분 유휴, 훅 줄 0, `Session: 0 AIC used`). 첫 프롬프트에서
@@ -85,6 +149,12 @@ stdout 한 줄이 슬롯에 들어가며 **exit 0이어야 한다**. nonzero면 
 **`[번들]` `exec`는 string이어야 하고 `args` 키가 없다.** 배열 `exec`는 프롬프트 전 플러그인
 로드 시점에 거절된다. 그래서 Copilot 훅은 **항상 argc=0**이고, 전용 런처는 argv를 요구하지 않는다.
 
+**`[번들]` MCP 설정 자리는 `~/.copilot/mcp-config.json`이다.** `--mcp-config` 도움말이
+*"augments config from ~/.copilot/mcp-config.json for this session"*이라 말하고,
+설정 이름 목록 `WMi`에 `mcp-config`가 `config.json`·`permissions-config`·`hooks`와 나란히 있다.
+`preMcpToolCall` 훅 타입이 따로 있는 것도 MCP가 1급 표면이라는 방증이다.
+→ RAIL 5의 좌표.
+
 # 은퇴한 주장 — 되살리지 마라
 
 사람이 아니라 주장을 적는다. 오른쪽이 은퇴시킨 영수증이다.
@@ -97,16 +167,22 @@ stdout 한 줄이 슬롯에 들어가며 **exit 0이어야 한다**. nonzero면 
 | ~~"`api.schema.json` 17개가 선언형 훅 어휘"~~ | `[번들]` 계층이 다르다. 선언형 settings 스키마는 15개 |
 | ~~"레코드의 `model`을 statusline 봉투로 채울 수 있다"~~ | `[코드]` 훅 봉투에 model이 없다(`meta-bridge-hook-copilot.ts:100-169`). statusline 봉투는 **다른 봉투**다. `null`이 정직하다 |
 | ~~"오늘 사고는 게이트 구멍이다"~~ | `[측정]` `doctor-meta-bridge`가 원인과 처방을 정확히 말하고 있었다. 빈 곳은 **절차**였다 |
+| ~~"Copilot에는 도어벨이 아예 없다"~~ | `[번들]` 없는 것은 **유휴 깨우기**(`FileChanged`/`asyncRewake`/`watchPaths`)다. `HookType`에 `agentStop`·`postResult`·`notification`이 있고 `agentStop`은 발화가 관측됐다. 범위를 D4로 좁혀 다시 쓴다 |
 
 # Do not touch
 
 - **ACP 재개** — `copilot --acp`, `copilotAdapter`, `AcpBackendAdapter`. 폐기됨.
   `[코드]` `ROADMAP.md:21`이 중복 구현 금지를 명문화했고 `#56`이 그 이유로 CLOSED.
 - **`--ui-server` / loopback / `~/.copilot/run/ws.*`** — 거절 유지.
-- **배달 어댑터 · watcher · `FRESH_CALL_BACKENDS` 항목** — 도어벨이 없다. 출생과 배달을 한 입학으로 묶지 마라.
+- **배달 어댑터 · watcher · `FRESH_CALL_BACKENDS` 항목** — 유휴 깨우기가 없다.
+  출생과 배달을 한 입학으로 묶지 마라. **RAIL 5(MCP 손)는 여기 해당하지 않는다** —
+  그건 Copilot이 *나가서* 부르는 손이지, 우리가 *들어가서* 깨우는 통로가 아니다.
 - **형제 레일 파일 편집** — `scripts/meta-bridge-statusline.sh`(Claude 닥터가 그 출력을 판정한다,
-  `scripts/meta-bridge-doctor.sh:566`) · `scripts/agy-statusline*.sh` · `scripts/agy-statusline-config.py`.
-  읽고 베끼되 고치지 마라. **2026-08-21에 형제 레일이 실제로 한 번 멈췄다.**
+  `scripts/meta-bridge-doctor.sh:566`) · `scripts/agy-statusline*.sh` · `scripts/agy-statusline-config.py` ·
+  `scripts/agy-bridge-config.py` · `scripts/agy-bridge.sh`.
+  **읽고 베끼되 고치지 마라.** 2026-08-21에 형제 레일이 실제로 한 번 멈췄다.
+- **`META_BACKENDS`를 건드린 뒤 형제 재배포를 건너뛰기** — 그것이 그 사고였다.
+  `AGENTS.md` Hard Rule 7과 `VERIFY.md` setup 절이 이제 그렇게 말한다(`79a77ea`).
 - **`[QK:]` 뮤턴트를 statusline에 붙이기** — `[측정]` `smoke-agy-statusline-state.sh`에 QK 0개.
   형제에 없는 걸 Copilot에만 붙이면 특별 취급이다.
 - **`check-gate-qualification`을 개발 루프에서 돌리기** — 22분. CI가 push마다 돈다.
@@ -114,12 +190,6 @@ stdout 한 줄이 슬롯에 들어가며 **exit 0이어야 한다**. nonzero면 
 - **Copilot LIVE 모델 턴 추가** — GLG 승인 사안.
 - **`scripts/raw-async-delivery/copilot-ui-server-probe.mjs` 삭제·실행** — 보존만.
 - **CHANGELOG 수정** — 발행 기록이다.
-
-## 지금 나뉜 파일 경계 (형제 둘 동시 작업 중)
-
-- **terra** — 신규 `scripts/copilot-statusline-*` · `run.sh` · `package.json`
-- **grok** — `pi-extensions/lib/meta-session.ts`(메시지 문자열) · `AGENTS.md`/`VERIFY.md`/`DELIVERY.md`
-- 상대 파일을 건드려야 하면 **코디네이터에게 먼저 묻는다.**
 
 # RECENT — 2026-08-21
 
@@ -135,16 +205,15 @@ copilot 레코드를 인증 못 했고, Claude 훅은 쓰기 전에 store **전�
 자기 레코드까지 거절했다. 파괴는 없다(쓰기 거절만). 파급은 **한 레일** —
 pi(`00:21:09`)·copilot(`00:19:46`)은 계속 썼고 claude-code만 `00:10:31`에서 멈췄다.
 `./run.sh install-meta-bridge` 재배포로 수리, `00:27:22` 정상 복귀 확인, 양쪽 닥터 PASS.
+거절문이 주던 틀린 처방(*"fresh-cut 하라"* → 멀쩡한 418건을 아카이브할 뻔했다)은
+`79a77ea`가 고쳤고, `check-meta-session`이 unknown-backend 이웃으로 그것을 박았다.
 
-두 가지를 남긴다:
-1. **거절문이 틀린 처방을 준다.** *"fresh-cut 하라"* 는 레코드가 썩었을 때의 처방인데,
-   여기서는 레코드가 멀쩡하고 **읽는 쪽이 낡았다.** 따랐으면 멀쩡한 418건을 아카이브했다.
-2. **오라클은 이미 답을 갖고 있었고 아무도 안 물었다.** `doctor-meta-bridge`가
-   `deployed writer STALE … Run ./run.sh install-meta-bridge`라고 정확히 말한다.
-   → 빈 곳은 게이트가 아니라 **절차**다. RAIL 4-5가 그것이다.
+**`[측정]` 착지한 커밋** — `4651d99`(게이트 `[QK:]` 시그니처 수리) · `0aed67d`(footer 드라이버) ·
+`91986c2`(statusline 설치면 · 15-check smoke) · `79a77ea`(stale reader 거절문 · 게이트 · 문서).
+앞 둘은 푸시됨. **뒤 둘은 로컬**.
 
-**`[측정]` 착지한 커밋** — `4651d99`(게이트 `[QK:]` 시그니처 수리, CI run 32421631735을 죽였던 것) ·
-`0aed67d`(footer 드라이버). 푸시됨.
+**`[측정]` 게이트** — `pnpm run check` 44s exit 0 · `smoke-copilot-statusline-state` 15 checks ·
+`check-meta-session` 25 assertions · `check-copilot-statusline` 22 assertions. 전부 초록.
 
 # LEDGER
 
@@ -156,5 +225,9 @@ pi(`00:21:09`)·copilot(`00:19:46`)은 계속 썼고 claude-code만 `00:10:31`�
   `scripts/copilot-bridge-install.sh` · `scripts/copilot-bridge-doctor.sh` ·
   `scripts/check-copilot-birth-hook.ts` · `scripts/check-copilot-statusline.ts` ·
   `scripts/mutants/copilot-birth.json`.
+- 설치면(RAIL 4)의 정본: `scripts/copilot-statusline-bridge.sh` ·
+  `scripts/copilot-statusline-config.py` · `scripts/smoke-copilot-statusline-state.sh`.
+- RAIL 5가 베낄 선례: `scripts/agy-bridge-config.py` · `scripts/agy-bridge.sh` · `run.sh:206`.
+- 백엔드 등급의 정본: `pi/entwurf-capabilities.json` (게이트 `check-entwurf-capabilities`).
 - 이 레인의 전체 로그는 `~/.local/share/entwurf-salvage/`에 있고 **호스트 로컬**이다. git에 없다.
   다른 기기에서는 그 인용을 `[미검증]`으로 강등하고, 이 파일에 박힌 원문만 `[측정]`으로 취급하라.
