@@ -225,9 +225,9 @@ ok "non-root 'npm install -g' succeeded into the writable isolated prefix $npm_c
 PKG="$npm_config_prefix/lib/node_modules/@junghanacs/entwurf"
 [ -d "$PKG" ] || die "installed package not at $PKG"
 
-# ── 3. the five bins, resolved THROUGH the global PATH shim ──────────────────
+# ── 3. the six bins, resolved THROUGH the global PATH shim ───────────────────
 echo "[global bins via PATH shim]"
-for b in entwurf entwurf-bridge entwurf-statusline entwurf-agy-statusline entwurf-agy-imprint; do
+for b in entwurf entwurf-bridge entwurf-statusline entwurf-agy-statusline entwurf-agy-imprint entwurf-copilot-statusline; do
   RESOLVED="$(command -v "$b" || true)"
   if [ -z "$RESOLVED" ]; then bad "bin '$b' is not on PATH after a global install"
   elif [ "$RESOLVED" != "$npm_config_prefix/bin/$b" ]; then bad "bin '$b' resolved to $RESOLVED, not the global shim $npm_config_prefix/bin/$b"

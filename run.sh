@@ -131,6 +131,7 @@ Usage:
   ./run.sh check-meta-v3-record        # deterministic gate: the ONE live record schema (v3) — canonical serialize/round-trip/mint, foreign-generation rejections name fresh-cut with the actual version value, strict keyset, no API
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-copilot-birth-hook   # #82 gate: drives the real Copilot assembler into a temp dir, fires the baked launcher with NO ARGV (the way Copilot's `exec`-string schema forces), and requires a backend:"copilot" v3 record + attach + peer row + zero mailbox/markers. Hermetic; no Copilot, no model turn
+  ./run.sh check-copilot-statusline   # #82 Copilot custom-footer renderer. session_id → ready/?/gid + rail `cop`; exit 0. IN pnpm check. No Copilot, no model turn
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_CITIZEN_BACKENDS + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
   ./run.sh smoke-pi-attach            # deterministic gate (#50 C2 checkpoint + C3 ACP tail): a pi session attaches as a V3 meta-record citizen (backend:"pi"), the gardenId is the RECORD's not pi's session id, the control socket is keyed on it, a re-open ATTACHES to the same address (never a second mint), the BUILT DIST ENTRY driven over MCP stdio lists the citizen + delivers entwurf_v2 to that socket with an RPC ack, and the ACP identity chain lands a send AS the host record (enrichMcpServersWithEnvelope env → bridge sender = host gardenId). mkdtemp-isolated; the live store is never read
@@ -751,6 +752,12 @@ check_copilot_birth_hook() {
   # It proves the MECHANISM, never the admission: §6 acceptance is a record minted by
   # a real Copilot session, which costs a model turn.
   run_ts scripts/check-copilot-birth-hook.ts
+}
+
+check_copilot_statusline() {
+  # #82 Copilot custom-footer renderer. Drives scripts/copilot-statusline.sh with
+  # session_id on stdin in an isolated store. ready / ? / exact gid; exit 0.
+  run_ts scripts/check-copilot-statusline.ts
 }
 
 check_hook_launch_topology() {
@@ -3267,6 +3274,11 @@ _check_pack_install_impl() {
     ls -l "$npmroot/node_modules/.bin" 2>/dev/null | sed 's/^/    /' >&2 || true
     return 1
   fi
+  if [ ! -x "$npmroot/node_modules/.bin/entwurf-copilot-statusline" ]; then
+    fail "[check-pack-install] npm-managed neutral install missing package bin entwurf-copilot-statusline"
+    ls -l "$npmroot/node_modules/.bin" 2>/dev/null | sed 's/^/    /' >&2 || true
+    return 1
+  fi
   wire_log=$(HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" "$npm_pkg/run.sh" install "$npmproj" 2>&1) || {
     fail "[check-pack-install] npm-managed run.sh install failed (preflight rejected hoisted deps?):"
     echo "$wire_log" | tail -15 | sed 's/^/    /' >&2
@@ -4764,6 +4776,9 @@ case "$cmd" in
     ;;
   check-copilot-birth-hook)
     check_copilot_birth_hook
+    ;;
+  check-copilot-statusline)
+    check_copilot_statusline
     ;;
   check-meta-capability-source)
     check_meta_capability_source
