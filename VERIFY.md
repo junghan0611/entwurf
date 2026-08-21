@@ -146,7 +146,7 @@ git clone https://github.com/junghan0611/entwurf /path/to/entwurf && cd $_
 # re-run the SAME command any time to repair a broken install
 ```
 
-Expected tail: `DONE: entwurf setup (pi adapter + detected native bridges + v2 install smoke) green.` On a host with `claude`, verify `./run.sh doctor-meta-bridge`. On a host with `agy`, verify all three: `doctor-agy-bridge`, `doctor-agy-statusline`, and `doctor-agy-hooks`. Setup keeps optional-harness failures non-fatal so pi/Claude hosts are not bricked; the doctors are the fail-loud acceptance surface.
+Expected tail: `DONE: entwurf setup (pi adapter + detected native bridges + v2 install smoke) green.` On a host with `claude`, verify `./run.sh doctor-meta-bridge`. On a host with `agy`, verify all three: `doctor-agy-bridge`, `doctor-agy-statusline`, and `doctor-agy-hooks`. After adding a backend to `META_BACKENDS`, re-run the sibling install then the doctor — a green checkout with a stale deployed plugin is a silent write-stop on that rail. Setup keeps optional-harness failures non-fatal so pi/Claude hosts are not bricked; the doctors are the fail-loud acceptance surface.
 
 The wiring / meta-bridge / smoke steps are internal building blocks of `setup` (`install_local_package`, `scripts/meta-bridge-install.sh`, `validate_entwurf_bridge`) — call `setup`, never the parts. Consumers who `npm install @junghanacs/entwurf` get the obvious npm surface; that path is not the developer concern here.
 

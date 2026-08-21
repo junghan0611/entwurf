@@ -74,10 +74,12 @@ export class MetaRecordError extends Error {
 // ---------------------------------------------------------------------------
 
 /**
- * The three native meta-bridge backends, declared from the start so the
- * per-backend adapter seam is forced (a different native layout each — that
- * difference is the whole reason for a thin adapter). Discriminator field on
- * every record.
+ * Native meta-bridge backends. Discriminator on every record. Adding a member
+ * is a sibling-reader redeploy (`./run.sh install-meta-bridge` and the matching
+ * sibling install), not a store archive: writers certify the whole active store
+ * against THIS set, so a deployed plugin still carrying the old set refuses
+ * every write, including its own. `./run.sh doctor-meta-bridge` already flags a
+ * stale deployed writer — run it after the change.
  */
 export const META_BACKENDS = ["claude-code", "antigravity", "codex", "copilot"] as const;
 export type MetaBackend = (typeof META_BACKENDS)[number];
@@ -162,9 +164,9 @@ export function requireNonEmptyString(value: unknown, field: string): string {
 	return value;
 }
 
-/** Validate the 3-backend NATIVE bridge axis (sender/receiver markers, capability
+/** Validate the native-bridge backend axis (sender/receiver markers, capability
  * drift guard). Not a record-schema validator: identity records take
- * `requireCitizenBackend` (which admits `pi`). Markers stay native-3 because the
+ * `requireCitizenBackend` (which admits `pi`). Markers stay on this set because the
  * pi adapter carries its record-established garden id into children via env rather
  * than using the native-hook pid marker rail. */
 export function requireBackend(value: unknown): MetaBackend {
@@ -950,15 +952,18 @@ export function certifyActiveStoreDir(dir: string): ActiveStoreCertification & {
 
 /**
  * The refusal an uncertifiable ACTIVE store earns, in the words both the runtime
- * writers and the install doctor use. One prescription, both invocation forms —
- * every defect kind (previous generation, corruption, drift, duplicate, symlink)
- * is answered by archiving the generation, so there is nothing to branch on.
+ * writers and the install doctor use. Rotten records (previous generation,
+ * corruption, drift, duplicate, symlink) are answered by archiving. An
+ * unknown-backend defect is a stale reader, not a rotten store — the listed
+ * defect says so; this headline tells the operator to distinguish. No branch:
+ * both sentences always print.
  */
 export function activeStoreRefusal(cert: ActiveStoreCertification & { dir: string }, shown = 3): string {
 	const headline =
 		`meta-record store ${cert.dir} holds ${cert.defects.length} entry/entries this generation cannot certify — ` +
 		`refusing to write (the active store is v3-only and carries no cross-generation continuity). ` +
-		`Archive the generation and open a fresh one with ${FRESH_CUT_PRESCRIPTION}.`;
+		`Archive the generation and open a fresh one with ${FRESH_CUT_PRESCRIPTION}. ` +
+		`If a listed defect says "backend" must be one of this reader's known set, the reader is stale — redeploy the sibling unit (the matching doctor names the install verb); do not archive those records.`;
 	// `shown = 0` is for a caller that ALREADY printed every cause per entry (the
 	// store-doctor): repeating them here doubles the wall on a large previous
 	// generation, which is exactly the aggregation lesson F8 taught. The count and

@@ -168,6 +168,38 @@ check("upsertMetaSession: creates the store dir if absent; leaves no .tmp residu
 	}
 });
 
+check("upsertMetaSession: unknown-backend neighbour refuses as a stale reader, not a fresh-cut", () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-session-stale-reader-"));
+	try {
+		const gid = "20260101T000000-0a1b2c";
+		fs.writeFileSync(
+			path.join(dir, `${gid}.meta.json`),
+			`${JSON.stringify({
+				schemaVersion: 3,
+				gardenId: gid,
+				backend: "gemini",
+				nativeSessionId: "n-unknown-backend",
+				cwd: "/synthetic",
+				model: null,
+				transcriptPath: null,
+				createdAt: T0.toISOString(),
+				recordUpdatedAt: T0.toISOString(),
+			})}\n`,
+		);
+		assert.throws(
+			() => upsertMetaSession({ dir, input: claudeInput(), now: T1 }),
+			(err: unknown) =>
+				err instanceof MetaRecordError &&
+				err.message.includes('"backend" must be one of') &&
+				err.message.includes("the reader is stale") &&
+				err.message.includes("do not archive those records"),
+			"unknown-backend store must name a stale reader, not only a fresh-cut",
+		);
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
+	}
+});
+
 // ---------------------------------------------------------------- exclusive CREATE publish (#66 fail-closed)
 check("publishExclusiveIdentity: absent final publishes, round-trips, no tmp residue", () => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "meta-session-excl-"));
