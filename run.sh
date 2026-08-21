@@ -187,6 +187,7 @@ Usage:
   ./run.sh check-probe-ordering        # §11-7 ordering-probe deterministic gate: raw-client SAMENESS pinned to backend.ts (sequence/args/timeouts/permission policy — the probe may never measure a lookalike), phase attribution incl. set-model, probe-mode fixture wire markers (delay honored, probeRunId REQUIRED, smoke-acp-mcp-live legacy compat), event-log door integrity (reserved keys refused at write; unknown marker name, broken sort axis, or a payload the classifier cannot judge on is MALFORMED, never a quiet event), and the §11-7 paired-verdict truth table (P0/I0 outside the space, phase-qualified D, B promotion ladder, C, A two-delay rule). Offline/deterministic; one product claim (no production prompt cutoff) is replant-qualified via scripts/mutants/probe-ordering.json, while the other assertions are direct [CHECK:*] contracts
   ./run.sh check-probe-cli-shim        # §11-7-c B-name-snapshot PRODUCER gate: the CLI shim driven as a REAL process against fake CLIs (no API, no cost). Proves what a defect would buy — FABRICATED evidence (a malformed init is never reported as an empty name set; the boot report carries the true target path+sha256 the classifier verifies against the roster), a DESTROYED turn (byte transparency across mid-UTF8/CRLF/oversized/unterminated framing, exit-code fidelity, signal re-raise, inbound signal forwarding, stderr passthrough, stdout backpressure), and LEAKED operator state (exact-allowlist env scrub, no argv/env/prompt body in the log). Offline/deterministic; 20 direct [CHECK:*] contracts, deliberately no longer replant-qualified after #70 subtraction
   ./run.sh smoke-agy-statusline-state # agy ambient garden-id statusLine install/doctor/inverse regression. Offline/deterministic
+  ./run.sh smoke-copilot-statusline-state # Copilot custom-footer install/doctor/inverse regression. Offline/deterministic
   ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression. Offline/deterministic
   ./run.sh smoke-user-scope-citizen   # 0.12.6 install-boundary: pi packages[] registration SSOT (register-pi-package.py) — idempotent + preserves unrelated + normalizes stale + remove symmetry + fails loud. Offline/hermetic (deps: bash+python3)
   ./run.sh smoke-meta-prune           # 1.0.0 meta-bridge Phase 4: listing-only store janitor regression gate — classify keep/orphan/stale/ambiguous, delete nothing. Offline/deterministic (deps: bash+node)
@@ -199,6 +200,9 @@ Usage:
   ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is not yet verified/certified and stays nonzero for this cut (future validation may reopen it). Detection power is held by check-meta-doctor-oracle
   ./run.sh install-copilot-bridge     # #82: GLOBAL install of the Copilot BIRTH plugin into the Copilot CLI (own marketplace root; node+entry baked into the launcher because Copilot's exec form is one string with no argv; NO MCP wiring — this backend has no doorbell and no delivery). Also retires the Claude unit from Copilot, where it exits 1 on every prompt (--keep-stale-claude-unit opts out)
   ./run.sh doctor-copilot-bridge      # #82: fail-loud surface for that unit. Red = a hook that RAN and failed, or a broken/unbaked artifact. "Installed with zero records" is NOT red and is reported as NOT-YET: a Copilot session is born on its FIRST PROMPT, not when the window opens (measured)
+  ./run.sh install-copilot-statusline # own Copilot statusLine + footer.showCustom with an install-state preimage
+  ./run.sh uninstall-copilot-statusline # honest inverse of install-copilot-statusline
+  ./run.sh doctor-copilot-statusline  # static ownership/config/bin doctor; never claims a render receipt
   ./run.sh install-agy-bridge         # 봉인 7: agy MCP install adapter — register ONE entwurf-bridge server in the agy mcp_config (adopt file / create / REFUSE symlink), stable bin command, install-state under $XDG_DATA_HOME/entwurf/agy-bridge/
   ./run.sh uninstall-agy-bridge       # 봉인 7: honest inverse of install-agy-bridge from install-state (restore preimage / remove key; refuse if config became a symlink)
   ./run.sh probe-bridge-command <cmd> [args...]  # #81: BOOT the given bridge invocation and require the entwurf MCP tool surface back. `--invocation-json '{"command":"…","args":[],"env":{}}'` preserves a harness config exactly. It waits for a valid initialize response, then sends initialized + tools/list only (no tools/call, lock, record, or delivery). exit 0 = it serves the bridge; 1 = it does not. The pi/agy doctors use this leaf.
@@ -5181,6 +5185,18 @@ case "$cmd" in
     # than as a silent miss. Red is a hook that RAN and failed.
     shift || true
     (cd "$REPO_DIR" && bash scripts/copilot-bridge-doctor.sh "$@")
+    ;;
+  install-copilot-statusline)
+    (cd "$REPO_DIR" && bash scripts/copilot-statusline-bridge.sh install "$@")
+    ;;
+  uninstall-copilot-statusline)
+    (cd "$REPO_DIR" && bash scripts/copilot-statusline-bridge.sh uninstall "$@")
+    ;;
+  doctor-copilot-statusline)
+    (cd "$REPO_DIR" && bash scripts/copilot-statusline-bridge.sh doctor "$@")
+    ;;
+  smoke-copilot-statusline-state)
+    (cd "$REPO_DIR" && bash scripts/smoke-copilot-statusline-state.sh)
     ;;
   install-agy-bridge)
     # 봉인 7: the agy (Antigravity) MCP install ADAPTER (SEPARATE from the Claude
