@@ -19,12 +19,14 @@
 - [x] **2. 출생 구현** — 레지스트리 · 훅 유닛 · 설치/닥터 · 게이트
 - [x] **3. §6 인수** — 실제 Copilot 세션이 시민이 됐고 footer에 자기 id를 찍는다
 - [x] **4. 설치면 재현·역방향** — `91986c2`. install/uninstall/doctor + 15-check smoke
-- [ ] **5. MCP 손 (outbound)** ← CURRENT: Copilot 안에서 `entwurf_*`를 부를 수 있게 한다
-- [ ] **6. 알림 (`agentStop`)** — 턴 끝에 "편지 왔다"를 알린다. **측정부터**
+- [ ] **4b. adopt 멱등성** — 우리 것과 똑같이 생긴 **수동** 설정을 adopt할 때 preimage를 뭘로 잡나
+- [ ] **5. MCP 손 (outbound)** ← **CURRENT.** 계약 확정됨, 바로 구현 가능
+- [ ] **6. 알림 (`agentStop`)** — 봉투·출력 계약 확정됨. **LIVE 1턴만 남음(GLG 승인)**
 - [ ] **7. 등급 정정** — `DELIVERY.md`의 D0과 capability registry가 오늘의 사실과 다르다
 - [ ] **8. 유휴 깨우기 (D4)** — **우리 몫이 아니다.** 번들에 메커니즘이 없다(아래 펜스)
 
-현재 좌표: 4 완료 → **5 진행 대기** → 6·7 → 8은 벤더 대기
+현재 좌표: **5 착수 가능** (막는 것 없음) · 4b는 5와 같은 config 어댑터 계열이라 같이 잡는다 ·
+6은 GLG의 LIVE 1턴 승인 대기 · 7은 5·6 결과를 받아 마지막에 · 8은 벤더 대기
 
 ## 파리티 표 — "클로드코드 수준"이 정확히 무엇인가
 
@@ -43,17 +45,36 @@
 
 # NOW
 
-- **Current — 개인 설정을 진실하게 만든 뒤 설치한다.**
-  `[측정]` 지금 `~/.copilot/settings.json`의 `statusLine` 블록은 2026-08-21 09:11에
-  **사람이 손으로** 넣은 것이고 install-state는 없다(`doctor-copilot-statusline` →
-  *"state: absent (no settings ownership recorded)"* — 닥터는 정직하다).
-  `[코드]` `install()`은 preimage를 **현재 디스크**에서 뜬다 →
-  **지금 그대로 설치하면 preimage가 거짓말을 한다.**
-  `[측정]` 진짜 pre-lane 상태는 GLG가 2026-08-21 06:52:53에 직접 붙여넣은 원문이다:
-  **`statusLine` 키 없음, `footer.showCustom: true`는 원래 있었음.**
-  → 손으로 넣은 `statusLine` 블록만 제거하고 `./run.sh install-copilot-statusline`을 돌린다.
-  그러면 preimage가 "statusLine 없었음 / showCustom 켜져 있었음"으로 참이 되고
-  `uninstall`이 GLG의 원래 설정을 정확히 복원한다. **GLG 개인 설정 변경이므로 승인 사안.**
+- **Current — RAIL 5를 구현한다. 막는 것이 없다.**
+  계약은 아래 "Next 1"에 `[번들]`로 다 박혀 있고, 베낄 선례
+  (`scripts/agy-bridge-config.py` + `scripts/agy-bridge.sh`, `run.sh:206`)도 리포 안에 있다.
+  **첫 파일:** `scripts/copilot-mcp-config.py` (agy config 어댑터 포팅) →
+  `scripts/copilot-mcp-bridge.sh` (install/uninstall/doctor) → `run.sh` verb 4종 →
+  `scripts/smoke-copilot-mcp-state.sh`. 형제 레일 파일은 **읽고 베끼되 고치지 않는다.**
+
+- **Current-B — 4b, adopt 멱등성. 같은 어댑터 계열이니 5와 함께 설계한다.**
+  `[제안]` GLG 결정(2026-08-21): **"상태라인 커스텀은 멱등성 있게 우리가 해준다."**
+  즉 오퍼레이터가 손으로 지우고 설치하는 절차는 답이 아니고, **어댑터가 스스로 참인
+  preimage에 도달**해야 한다.
+  `[측정]` 지금 `~/.copilot/settings.json`의 `statusLine`은 09:11에 사람이 손으로 넣었고
+  install-state는 없다(`doctor-copilot-statusline` → *"state: absent"* — 닥터는 정직하다).
+  `[코드]` `install()`은 preimage를 **현재 디스크**에서 뜬다(`:105-110`) →
+  그대로 설치하면 preimage가 `statusLine:{command:"entwurf-copilot-statusline"}`으로 기록되는데,
+  `[측정]` **진짜 pre-lane 상태는 `statusLine` 키 없음**이다 — GLG가 2026-08-21 06:52:53에
+  직접 붙여넣은 원문이 영수증이고, 거기엔 `enabledPlugins`/`footer` 15키만 있고
+  **`footer.showCustom: true`는 원래 있었다.**
+  - `[측정]` smoke가 이미 덮는 자리: *"matching manual Copilot config is adopted and restored
+    unchanged"* + *"reinstall keeps the first preimage for inverse"*. 뼈대는 있다.
+  - **결정할 것 하나:** 값이 **우리 것과 정확히 일치하는** 수동 설정을 adopt할 때
+    preimage를 (a) 현재 값 그대로 두나 (b) **"없었음"으로 잡나**.
+    `[제안]` (b)가 옳다 — 그 값이 디스크에 있는 유일한 이유가 이 레인이라면, 되돌릴 자리는
+    "우리가 쓴 값"이 아니라 "우리 이전"이다. **다만 어떻게 구별하느냐가 설계 문제다:**
+    어댑터는 그 블록을 누가 넣었는지 모른다.
+  - `[제안]` 후보 셋 — ① 우리 bin 이름과 정확히 일치하면 "우리 소유로 간주하고 preimage는 없음"
+    ② `--adopt-as-absent` 같은 명시 플래그(오퍼레이터가 사실을 말함)
+    ③ 형제(agy) 어댑터가 이미 어떻게 하는지 따르고 벗어나지 않음.
+    **③을 먼저 읽고 결정하라** — 특별 취급을 만들지 않는 것이 이 레인의 규칙이다.
+  - 결정되면 smoke에 셀 하나가 추가된다. **GLG 개인 설정을 손으로 고치는 절차는 답이 아니다.**
 
 - **Next 1 — RAIL 5, MCP 손. 계약이 확정됐다.**
   `[번들]` 유저 파일은 `~/.copilot/mcp-config.json`이고 **래퍼는 항상 `mcpServers`** 다 —
