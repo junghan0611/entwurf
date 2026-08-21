@@ -20,13 +20,14 @@
 - [x] **3. §6 인수** — 실제 Copilot 세션이 시민이 됐고 footer에 자기 id를 찍는다
 - [x] **4. 설치면 재현·역방향** — `91986c2`. install/uninstall/doctor + 15-check smoke
 - [ ] **4b. adopt 멱등성** — 우리 것과 똑같이 생긴 **수동** 설정을 adopt할 때 preimage를 뭘로 잡나
-- [ ] **5. MCP 손 (outbound)** ← **CURRENT.** 계약 확정됨, 바로 구현 가능
+- [x] **5. MCP 손 (outbound)** — `f1f26ce`. **LIVE 인수 통과** (아래 RECENT)
+- [ ] **5b. sender identity** ← **CURRENT.** 읽기는 열렸고 **보내기가 막혀 있다**
 - [ ] **6. 알림 (`agentStop`)** — 봉투·출력 계약 확정됨. **LIVE 1턴만 남음(GLG 승인)**
 - [ ] **7. 등급 정정** — `DELIVERY.md`의 D0과 capability registry가 오늘의 사실과 다르다
 - [ ] **8. 유휴 깨우기 (D4)** — **우리 몫이 아니다.** 번들에 메커니즘이 없다(아래 펜스)
 
-현재 좌표: **5 착수 가능** (막는 것 없음) · 4b는 5와 같은 config 어댑터 계열이라 같이 잡는다 ·
-6은 GLG의 LIVE 1턴 승인 대기 · 7은 5·6 결과를 받아 마지막에 · 8은 벤더 대기
+현재 좌표: 5 완료 → **5b 진행**(sol에게 인계) · 4b는 형제 셋을 따라 (a)로 결론(RECENT) ·
+6은 GLG의 LIVE 1턴 승인 대기 · 7은 5b·6 결과를 받아 마지막에 · 8은 벤더 대기
 
 ## 파리티 표 — "클로드코드 수준"이 정확히 무엇인가
 
@@ -45,36 +46,52 @@
 
 # NOW
 
-- **Current — RAIL 5를 구현한다. 막는 것이 없다.**
-  계약은 아래 "Next 1"에 `[번들]`로 다 박혀 있고, 베낄 선례
-  (`scripts/agy-bridge-config.py` + `scripts/agy-bridge.sh`, `run.sh:206`)도 리포 안에 있다.
-  **첫 파일:** `scripts/copilot-mcp-config.py` (agy config 어댑터 포팅) →
-  `scripts/copilot-mcp-bridge.sh` (install/uninstall/doctor) → `run.sh` verb 4종 →
-  `scripts/smoke-copilot-mcp-state.sh`. 형제 레일 파일은 **읽고 베끼되 고치지 않는다.**
+- **Current — RAIL 5b. 읽기는 열렸고 보내기가 막혀 있다.**
+  `[측정]` Copilot이 `entwurf_peers`를 실제로 호출해 명단을 읽었다. `entwurf_v2`/`entwurf_self`는
+  거절된다 — **그리고 그것은 설계된 동작이다.**
 
-- **Current-B — 4b, adopt 멱등성. 같은 어댑터 계열이니 5와 함께 설계한다.**
-  `[제안]` GLG 결정(2026-08-21): **"상태라인 커스텀은 멱등성 있게 우리가 해준다."**
-  즉 오퍼레이터가 손으로 지우고 설치하는 절차는 답이 아니고, **어댑터가 스스로 참인
-  preimage에 도달**해야 한다.
-  `[측정]` 지금 `~/.copilot/settings.json`의 `statusLine`은 09:11에 사람이 손으로 넣었고
-  install-state는 없다(`doctor-copilot-statusline` → *"state: absent"* — 닥터는 정직하다).
-  `[코드]` `install()`은 preimage를 **현재 디스크**에서 뜬다(`:105-110`) →
-  그대로 설치하면 preimage가 `statusLine:{command:"entwurf-copilot-statusline"}`으로 기록되는데,
-  `[측정]` **진짜 pre-lane 상태는 `statusLine` 키 없음**이다 — GLG가 2026-08-21 06:52:53에
-  직접 붙여넣은 원문이 영수증이고, 거기엔 `enabledPlugins`/`footer` 15키만 있고
-  **`footer.showCustom: true`는 원래 있었다.**
-  - `[측정]` smoke가 이미 덮는 자리: *"matching manual Copilot config is adopted and restored
-    unchanged"* + *"reinstall keeps the first preimage for inverse"*. 뼈대는 있다.
-  - **결정할 것 하나:** 값이 **우리 것과 정확히 일치하는** 수동 설정을 adopt할 때
-    preimage를 (a) 현재 값 그대로 두나 (b) **"없었음"으로 잡나**.
-    `[제안]` (b)가 옳다 — 그 값이 디스크에 있는 유일한 이유가 이 레인이라면, 되돌릴 자리는
-    "우리가 쓴 값"이 아니라 "우리 이전"이다. **다만 어떻게 구별하느냐가 설계 문제다:**
-    어댑터는 그 블록을 누가 넣었는지 모른다.
-  - `[제안]` 후보 셋 — ① 우리 bin 이름과 정확히 일치하면 "우리 소유로 간주하고 preimage는 없음"
-    ② `--adopt-as-absent` 같은 명시 플래그(오퍼레이터가 사실을 말함)
-    ③ 형제(agy) 어댑터가 이미 어떻게 하는지 따르고 벗어나지 않음.
-    **③을 먼저 읽고 결정하라** — 특별 취급을 만들지 않는 것이 이 레인의 규칙이다.
-  - 결정되면 smoke에 셀 하나가 추가된다. **GLG 개인 설정을 손으로 고치는 절차는 답이 아니다.**
+  **먼저 읽어라: `docs/external-mcp-host.md:9-10`.** 오늘 이 레인이 세 턴을 태워 재도출한 내용이
+  거기 이미 쓰여 있었다:
+  > *plain external MCP host*: no garden meta-record / sender marker. It can call the read
+  > surfaces (`entwurf_peers`, `entwurf_inbox_read`), but `entwurf_v2` sends are **refused by
+  > default** (#50 C4). / *garden-native native session*: a trusted lifecycle hook minted a
+  > garden id and sender marker — `SessionStart` for Claude Code, `PreInvocation` for agy.
+
+  **Copilot은 지금 첫 칸에 있다.** `[측정]` 그 문서는 copilot을 한 번도 언급하지 않는다(grep 0건).
+  `[제안]` 실패한 것은 문서의 내용이 아니라 **도달 가능성**이다 — `AGENTS.md`도 이 파일도 그것을
+  가리키지 않았다. **GLG 판단 대기: 지울 것인가, 가리키게 할 것인가.** 지우면 external vs
+  garden-native 의미론과 익명 해치가 적힌 유일한 자리가 사라진다.
+
+  **근인은 양쪽이 다 비어 있는 것이다.**
+  - **쓰는 쪽** — `[코드]` `pi-extensions/meta-bridge-hook-copilot.ts:12-17`이 sender marker를
+    의도적으로 안 쓴다. 그런데 그 근거가 *"도어벨이 없으니 receiver marker가 보증할 것이 없다"* 이고,
+    **그 논리가 sender marker에 그대로 적용됐다.** 둘은 다른 것이다:
+    `[코드]` `pi-extensions/lib/meta-sender-identity.ts:4-7` — sender marker가 요구하는 것은
+    *"hook writes a marker keyed by ITS parent pid; the child looks it up under its own parent.
+    **That shared ancestor is the join key**"* 뿐이다. **도어벨과 무관하다.**
+  - **읽는 쪽** — `[코드]` `meta-sender-identity.ts:50`
+    `META_SENDER_BACKENDS = ["claude-code", "antigravity"]`. copilot 없음.
+    지금은 쓰는 쪽이 없으니 거짓은 아니지만, **둘 다 열어야 뚫린다.**
+
+  **아직 안 잰 전제 하나 — 이것이 첫 수다.**
+  `[코드]` `meta-sender-identity.ts:9` — *"Measured 2026-07-13 on **both backends**:
+  hook.ppid == bridge.ppid == the native host pid"*. claude와 agy다.
+  **Copilot에서는 한 번도 안 쟀다.** Copilot 훅은 `exec` 문자열로 뜨고 MCP 서버는 rust `rmcp`
+  클라이언트가 띄운다. 둘의 부모가 같은 Copilot 프로세스인지가 join의 **유일한** 근거인데
+  미측정이다. **이것이 거짓이면 marker를 써도 안 붙는다. 짓기 전에 재라.**
+
+  **선택지 둘 — 오늘의 `replyable`은 둘 다 false로 같다.**
+
+  | | `entwurf_v2` | 신원 | replyable | 드는 것 |
+  |---|---|---|---|---|
+  | **A. 해치** `ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1` | 열림 | 익명 `external-mcp` | false | mcp-config `env` 한 키. **새 코드 0줄** |
+  | **B. sender marker** | 열림 | **garden id** | false (RAIL 6까지) | 훅 + `META_SENDER_BACKENDS` + 게이트 |
+
+  `[코드]` **marker를 붙여도 replyable은 안 열린다** — `mcp/entwurf-bridge/src/index.ts:255-272`:
+  `nativePushSupported(copilot)`가 false라 **self-fetch 도메인**으로 떨어지고,
+  `readMetaReceiverMarker`를 요구하는데 Copilot은 (도어벨이 없어 정당하게) 안 쓴다 → `replyable:false`.
+  → **sender marker는 "누가 보냈나"를 주지 "답장할 수 있나"를 주지 않는다.** 왕복은 RAIL 6이 있어야 한다.
+  차이는 받는 형제가 *누가 보냈는지 아느냐* 하나다. 그 차이가 값어치가 있는지는 `[제안]` 영역이다.
 
 - **Next 1 — RAIL 5, MCP 손. 계약이 확정됐다.**
   `[번들]` 유저 파일은 `~/.copilot/mcp-config.json`이고 **래퍼는 항상 `mcpServers`** 다 —
@@ -267,6 +284,37 @@ pi(`00:21:09`)·copilot(`00:19:46`)은 계속 썼고 claude-code만 `00:10:31`�
 
 **`[측정]` 게이트** — `pnpm run check` 44s exit 0 · `smoke-copilot-statusline-state` 15 checks ·
 `check-meta-session` 25 assertions · `check-copilot-statusline` 22 assertions. 전부 초록.
+
+## RECENT 추가 — 2026-08-21 오후
+
+**`[측정]` RAIL 5 LIVE 인수 통과.** 사슬 전체:
+`probe-bridge-command entwurf-bridge` → 7 tools · `install-copilot-mcp` → `created-new`,
+`configExistedBefore:false`, `preimage:null` · `copilot mcp get` → *Status: Enabled · Type: local ·
+Tools: * (all) · Source: User* · Copilot 로그 → `Service initialized as client`,
+`Implementation { name:"entwurf-bridge", version:"0.1.0" }` · **모델 턴** →
+`● entwurf_peers (MCP: entwurf-bridge)` 32행 중 copilot 5행. 별도로 세어 5건 일치 확인.
+
+**`[측정]` headless `-p`도 시민을 낳는다.** `-p` 3회가 각각 레코드를 발행했다
+(`115045-f687b4` / `114954-1fbf28` / `114910-b78b0e`, cwd=이 리포). 출생 훅은 headless에서도 발화한다.
+
+**`[측정]` Copilot은 MCP보다 스킬을 먼저 고른다.** 첫 LIVE 턴이 `entwurf-peek` **스킬**로 새서
+shell 권한에서 죽었다(2.21 AIC 소모). MCP로 보내려면 도구를 이름으로 못박고
+(`entwurf-bridge(entwurf_peers)`) `--deny-tool='shell'`을 걸어야 한다. 오늘 LIVE 총 3턴 7.83 AIC.
+
+**`[측정]` 4b 결론 — 형제 셋이 이미 (a)다.** `agy-bridge-config.py:279` ·
+`agy-statusline-config.py:118` · `copilot-statusline-config.py:105-110` 전부 preimage를
+**디스크의 현재 값**에서 뜬다. 우리 것과 같아도 그대로. NEXT 후보 ③(특별 취급 금지)이 이 레인의
+규칙이므로 **(a)를 따른다.** (b) "없었음"은 Copilot에만 생기는 새 의미라 만들지 않는다.
+grok이 `file:line`으로 확인했고 MCP 어댑터도 같은 (a)로 심었다.
+
+**`[측정]` 오늘 낡은 미러가 셋이었다.** ① 배포된 Claude 플러그인 `META_BACKENDS`(아침 사고,
+`doctor-meta-bridge`가 잡음) ② 조립본 `.assembled`(같은 닥터) ③ **`entwurf-peek.py:1097`
+`META_CITIZEN_BACKENDS`** — copilot 없음, 오늘 copilot 레코드 6건이 통째로 "store defects"로
+빠진다. `entwurf_peers`는 정상 인식하므로 **두 도구가 서로 다른 세상을 보여준다.**
+③의 정본은 `agent-config/skills/entwurf-peek/scripts/entwurf-peek.py`이고 배포본 3개와 바이트 동일.
+**GLG 지시로 agent-config에서 따로 수선한다 — 이 레인은 건드리지 않는다.**
+남는 교훈: ③은 **다른 리포에 살아서 entwurf의 어떤 게이트도 닿지 못한다.** 절차 구멍이 아니라
+**소유권 이음매가 문서화 안 된 것**이고, entwurf `AGENTS.md`는 entwurf-peek을 아예 모른다(grep 0건).
 
 # LEDGER
 
