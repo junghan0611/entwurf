@@ -55,41 +55,55 @@
   그러면 preimage가 "statusLine 없었음 / showCustom 켜져 있었음"으로 참이 되고
   `uninstall`이 GLG의 원래 설정을 정확히 복원한다. **GLG 개인 설정 변경이므로 승인 사안.**
 
-- **Next 1 — RAIL 5, MCP 손.**
-  `[번들]` Copilot이 읽는 자리는 `~/.copilot/mcp-config.json`이다. 근거 둘:
-  `--mcp-config` 도움말 *"augments config from ~/.copilot/mcp-config.json for this session"*,
-  그리고 설정 이름 목록 `WMi = ["config.json","config","mcp-config","lsp-config",
-  "permissions-config","copilot-instructions.md","mcp-oauth-config","hooks"]` (`app.js`).
-  `[측정]` 이 호스트에 그 파일은 **없고** `~/.copilot/servers/`도 비어 있다.
-  `[코드]` **선례가 이미 리포에 있다** — `run.sh:206` `install-agy-bridge`:
-  *"agy MCP install adapter — register ONE entwurf-bridge server in the agy mcp_config
-  (adopt file / create / REFUSE symlink), stable bin command, install-state under
-  `$XDG_DATA_HOME/entwurf/agy-bridge/`"*. 구현은 `scripts/agy-bridge-config.py` +
-  `scripts/agy-bridge.sh`. 방금 `agy-statusline-*` → `copilot-statusline-*` 포팅을 한 것과
-  **정확히 같은 모양**이다: adopt / create / REFUSE-symlink / preimage / 정직한 닥터.
-  - 새 verb 3종 + smoke: `install|uninstall|doctor-copilot-mcp`, `smoke-copilot-mcp-state`
-  - 서버 이름은 **하나**, bin은 stable, state는 `$XDG_DATA_HOME/entwurf/copilot-mcp/`
-  - 검증 leaf는 이미 있다 — `run.sh probe-bridge-command` (초기화 후 tools/list만, 호출 없음)
-  - **이것이 닫히면** GLG가 Copilot 안에서 `entwurf_peers` / `entwurf_v2` /
-    `entwurf_inbox_read`를 부를 수 있다. 즉 **Copilot이 형제를 보고 말을 건다.**
+- **Next 1 — RAIL 5, MCP 손. 계약이 확정됐다.**
+  `[번들]` 유저 파일은 `~/.copilot/mcp-config.json`이고 **래퍼는 항상 `mcpServers`** 다 —
+  writer가 `JSON.stringify({...t, mcpServers: t.mcpServers ?? {}})`로 직렬화한다(`app.js` `Ud.write`).
+  `[번들]` stdio 한 개의 shape는 **CLI `copilot mcp add`가 쓰는 것**이 정본이다:
+  `{ type: "local", command, args, tools, env?, timeout? }`. `command`만 필수.
+  - **`type`은 `"local"`이지 `"stdio"`가 아니다.** `schemas/api.schema.json`의
+    `McpServerConfigStdio`에는 `type` 필드가 아예 없다(`additionalProperties:false`) — 그건
+    **API wire**이지 파일 writer가 아니다. 세 계층(파일 writer / API wire / SDK `types.d.ts`)이
+    서로 다르니 **파일에 쓸 때는 CLI writer만 따라라.**
+  - `[번들]` 원격만 `type:"http"|"sse"` + `url`. stdio는 `command`로 판별한다.
+  - `[번들]` VS Code식 `servers` 키는 **제거됐다**(`"incomplete support for .vscode/mcp.json has been removed"`).
+  - `[번들]` `mcp-oauth-config`는 **원격 HTTP OAuth 토큰 스토어**다. stdio add 경로는 읽지 않는다. **건드리지 마라.**
+  - `[번들]` 스코프 5종: user(`~/.copilot/mcp-config.json`) · workspace(`.mcp.json` / `.github/mcp.json`) ·
+    plugin · builtin · session(`--additional-mcp-config`).
+    `[측정]` session flag는 `copilot mcp list`에 **안 보인다** → 설치 계약이 아니다. **유저 파일을 쓴다.**
+  - `[번들]` 기동은 세션 로드 시점이다 — 턴 진입에서 `ensureLoadedForTurn()` →
+    `waitForMcpToLoadIfRequired()`가 로드를 기다린다. 첫 도구 호출 lazy가 아니다.
+  - **`[모름]` `command`의 `$HOME`/`~` 확장 여부.** statusLine.command는 벤더가 명시하지만
+    MCP 쪽엔 그 문장이 없다. **statusLine과 같다고 가정하지 마라** —
+    bin은 절대경로이거나 `PATH`에서 풀리는 bare 이름으로 써서 이 미지수를 아예 피한다.
+  - 선례 그대로 포팅: `scripts/agy-bridge-config.py` + `scripts/agy-bridge.sh` (`run.sh:206`).
+    adopt / create / **REFUSE symlink** / preimage 1회 / 정직한 닥터.
+    verb 3종 + smoke: `install|uninstall|doctor-copilot-mcp`, `smoke-copilot-mcp-state`.
+    검증 leaf는 이미 있다 — `run.sh probe-bridge-command`.
 
-- **Next 2 — RAIL 6, 알림. 구현 전에 측정.**
-  `[번들]` Copilot `HookType` enum(`schemas/api.schema.json`)에
-  **`agentStop`이 있다** — 17종: `preToolUse` `preMcpToolCall` `postToolUse`
-  `postToolUseFailure` `userPromptSubmitted` `userPromptTransformed` `sessionStart`
-  `sessionEnd` `postResult` `prePRDescription` `errorOccurred` **`agentStop`**
-  `subagentStart` `subagentStop` `preCompact` `permissionRequest` `notification`.
-  `[측정]` 어제 관측한 발화 순서에 `agentStop`이 실제로 들어 있었다
-  (`userPromptSubmitted` → `sessionStart` → `agentStop`).
-  `[코드]` 우리 유닛은 지금 둘만 선언한다 —
-  `pi/meta-bridge-copilot/entwurf-meta-receive-copilot/hooks/hooks.json`:
-  `sessionStart`, `userPromptSubmitted`. 플러그인 hooks.json이 HookType 이름을 그대로 쓰므로
-  `agentStop` 추가는 **문법적으로 가능해 보인다** — 그러나 이것은 `[제안]`이지 측정이 아니다.
-  - 재야 할 것 셋: ① `agentStop`이 **플러그인 선언 훅으로도** 발화하는가
-    ② 그 봉투에 `session_id`가 실리는가 ③ stdout/exit가 오퍼레이터에게 **보이는가**
-    (Claude는 Stop-hook feedback으로 보인다. Copilot이 무엇을 보여주는지는 모른다)
-  - 셋 다 초록이면 Copilot은 **"편지 왔다"까지 도달한다.** 유휴 깨우기(D4)는 아니다 —
-    턴이 끝나야 발화하므로 GLG가 뭐라도 쳐야 한다. **그 차이를 문서에 정직하게 쓴다.**
+- **Next 2 — RAIL 6, 알림. 봉투는 쟀고, 한 가지가 남았다.**
+  `[번들]` 런타임 호출은 이것이다(`app.js` ~2580231):
+  `nativeHookProcessor.event("agentStop", {transcriptPath, stopReason:"end_turn", stop_hook_active}, agentId ?? sessionId)`
+  이고 `event(e,n,r)`가 `{...n, sessionId: r}`로 병합한다. **봉투에 `sessionId`는 있다.**
+  - **`cwd`가 없다.** `[코드]` 출생 파서 `readBirthEnvelope`
+    (`pi-extensions/meta-bridge-hook-copilot.ts:100-169`)는 `sessionId`/`session_id` **+ `cwd`** 를 요구한다.
+    → **출생 파서를 재사용하면 `cwd missing`으로 거절된다. 알림은 별 봉투다.**
+  - `[번들]` 출력 계약은 `{ decision?: "block", reason?: string }`이고, block이면 `reason`이
+    **follow-up 유저 메시지로 enqueue**된다(`sessionPlanAgentStopJson` → `enqueueUserMessage`).
+    Claude식 오퍼레이터 피드백 패널이 **아니다.**
+  - **이것이 파리티의 핵심이다.** enqueue는 오퍼레이터의 눈이 아니라 **모델의 컨텍스트**에 들어간다.
+    즉 RAIL 6은 "GLG가 편지를 본다"가 아니라 **"모델이 편지 왔다는 말을 듣는다"** 이고,
+    그 모델이 손(RAIL 5의 `entwurf_inbox_read`)을 갖고 있으면 **스스로 꺼내 읽는다.**
+    → **RAIL 5와 6은 합쳐져야 self-fetch가 된다. 하나씩으로는 아무것도 아니다.**
+    이것이 claude-code의 D6 루프와 같은 모양이며, 다른 점은 **유휴 깨우기가 없다는 것 하나뿐**이다.
+  - **`[모름]` 남은 하나 — native가 선언형 `hooks.json`의 `agentStop` 키를 받는가.**
+    `[번들]` `app.js`에 `"hooks.json"` 문자열이 **0회**다. JS는 플러그인 디렉터리만
+    native로 넘기고(`getNativePluginHookInputs` → `h.hookSessionReplacePlugins`),
+    훅 이름 파서는 **native 안에** 있다. 그래서 JS를 아무리 읽어도 답이 안 나온다.
+    `[측정]` 우리 유닛의 `sessionStart`/`userPromptSubmitted`는 이미 발화했고 그 키는
+    HookType camelCase다. `[번들]` 런타임이 선언 훅을 도는 `event()` 파이프는 `userPromptSubmitted`와
+    **동일**하다. → 가능성은 크지만 **`[제안]`이지 측정이 아니다. LIVE Copilot 턴 1회가 필요하고 GLG 승인 사안이다.**
+  - `[번들]` `notification` 훅은 **우리 자리가 아니다.** `SessionHooks`에 `onNotification`이 없고
+    `this.event("notification"` 호출이 0회다. 알림 축은 `agentStop`이다.
 
 - **Next 3 — RAIL 7, 등급 정정.** 아래 "지금 거짓인 문장" 절.
 
@@ -155,6 +169,22 @@ stdout 한 줄이 슬롯에 들어가며 **exit 0이어야 한다**. nonzero면 
 `preMcpToolCall` 훅 타입이 따로 있는 것도 MCP가 1급 표면이라는 방증이다.
 → RAIL 5의 좌표.
 
+**`[번들]` MCP 파일 계약은 세 계층이 어긋난다.** 파일 writer(`Ud.write` + `copilot mcp add`)는
+`{mcpServers:{name:{type:"local",command,args,tools,env?,timeout?}}}`를 쓰고,
+API wire 스키마(`McpServerConfigStdio`)엔 `type` 필드가 아예 없으며,
+SDK `types.d.ts`는 `type?: "local"|"stdio"`에 `workingDirectory`(스키마의 `cwd`와 이름이 다름)를 쓴다.
+→ **파일에 쓸 때 따라야 할 것은 CLI writer 하나다.** 나머지 둘을 근거로 쓰면 틀린다.
+
+**`[번들]` `agentStop`의 출력은 오퍼레이터가 아니라 모델에게 간다.** 계약은
+`{decision?:"block", reason?:string}`이고 block이면 `reason`이 follow-up 유저 메시지로
+enqueue된다. Claude의 Stop-hook feedback 패널 같은 것은 이 번들에서 찾지 못했다.
+→ **알림 설계를 "GLG가 본다"로 짜지 마라.** 받는 쪽은 모델이고, 그래서 RAIL 5의 손이 함께 있어야 한다.
+
+**`[번들]` 선언형 훅 이름 집합은 JS에 없다.** `app.js`에 `"hooks.json"` 문자열이 0회다.
+JS는 플러그인 디렉터리만 native로 넘긴다(`getNativePluginHookInputs` → `h.hookSessionReplacePlugins`).
+→ **app.js를 더 읽어도 `agentStop` 수용 여부는 안 나온다.** 남은 길은 LIVE 1회뿐이다.
+어제 은퇴한 *"api.schema.json 17개 = 선언형 어휘"* 와 같은 함정이니 계층을 적어라.
+
 # 은퇴한 주장 — 되살리지 마라
 
 사람이 아니라 주장을 적는다. 오른쪽이 은퇴시킨 영수증이다.
@@ -167,6 +197,8 @@ stdout 한 줄이 슬롯에 들어가며 **exit 0이어야 한다**. nonzero면 
 | ~~"`api.schema.json` 17개가 선언형 훅 어휘"~~ | `[번들]` 계층이 다르다. 선언형 settings 스키마는 15개 |
 | ~~"레코드의 `model`을 statusline 봉투로 채울 수 있다"~~ | `[코드]` 훅 봉투에 model이 없다(`meta-bridge-hook-copilot.ts:100-169`). statusline 봉투는 **다른 봉투**다. `null`이 정직하다 |
 | ~~"오늘 사고는 게이트 구멍이다"~~ | `[측정]` `doctor-meta-bridge`가 원인과 처방을 정확히 말하고 있었다. 빈 곳은 **절차**였다 |
+| ~~"MCP 파일 최상위 키가 `servers`일 수 있다(VS Code식)"~~ | `[번들]` writer가 항상 `mcpServers` 래퍼를 붙인다(`Ud.write`). `.vscode/mcp.json` 지원은 제거됐다 |
+| ~~"stdio 엔트리 `type`은 `\"stdio\"`"~~ | `[번들]` 파일에 쓰는 값은 `"local"`이다. `"stdio"`는 CLI transport 선택지이고, API wire 스키마엔 `type` 필드가 없다 |
 | ~~"Copilot에는 도어벨이 아예 없다"~~ | `[번들]` 없는 것은 **유휴 깨우기**(`FileChanged`/`asyncRewake`/`watchPaths`)다. `HookType`에 `agentStop`·`postResult`·`notification`이 있고 `agentStop`은 발화가 관측됐다. 범위를 D4로 좁혀 다시 쓴다 |
 
 # Do not touch
