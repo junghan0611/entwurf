@@ -214,6 +214,7 @@ An overgrowth is built from locally correct steps; what fails is the absence of 
 
 - [NEXT.md](./NEXT.md) — current priority and exact next move; branch work uses disposable `NEXT--<branch>.md`.
 - [ROADMAP.md](./ROADMAP.md) — forward direction and deferred lanes.
+- [docs/adding-a-harness.md](./docs/adding-a-harness.md) — **first entry point for putting a NEW harness in the garden.** The order the eight steps are actually walked in (lane choice, vendor measurement, backend registration, birth, statusline, MCP hand, sender identity, receive, grade), what each owes before the next may start, and which of the other docs owns each slice. It routes; it grants nothing — Hard Rule 7 remains the authority on the meta-record store contract its registration step touches, and the gates and doctors it names remain the truth.
 - [docs/acp-backend-rail.md](./docs/acp-backend-rail.md) — ACP adapter contract and current entry conditions.
 - [DELIVERY.md](./DELIVERY.md) — delivery capability/evidence coordinates.
 - [VERIFY.md](./VERIFY.md) / [BASELINE.md](./BASELINE.md) — verification protocol and recorded evidence.

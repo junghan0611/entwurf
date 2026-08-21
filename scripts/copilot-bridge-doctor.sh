@@ -3,9 +3,14 @@
 #
 # WHY IT IS NOT `doctor-meta-bridge --copilot`. The Claude doctor's red conditions are
 # sender marker, receiver marker, armed doorbell and live delivery. A Copilot citizen
-# must have NONE of those: the shipped bundle carries no FileChanged, asyncRewake or
-# watchPaths, so there is nothing to arm. A shared doctor would have to be taught to
-# ignore exactly the evidence it exists to demand.
+# has the FIRST of those and must have none of the rest: the shipped bundle carries no
+# FileChanged, asyncRewake or watchPaths, so there is nothing to arm and nothing to
+# deliver. A shared doctor would have to be taught to demand one of its four and ignore
+# the other three, which is a branch, not a shared surface.
+#
+# (Until #82 RAIL 5b it had none of the four, and this comment said so. The sender
+# marker joined because who-sent needs a shared parent, not a doorbell — the two facts
+# had been merged under one absence.)
 #
 # WHAT A PASS FROM THIS DOCTOR MEANS, AND WHAT IT DOES NOT. Copilot exposes no plugin
 # load or hook-execution receipt, so this doctor can prove the artifact is correct and
@@ -151,9 +156,17 @@ if [ -f "$HOOK_LOG" ]; then
   #
   # grep -c prints 0 AND exits 1 with no match, so a `|| echo 0` fallback would append a
   # SECOND line and every numeric test below would die on "0\n0". Keep it to one line.
-  LAST_ERROR_LINE="$(grep -n ' ERROR \[copilot\] ' "$HOOK_LOG" 2>/dev/null | tail -1 | cut -d: -f1)"
+  #
+  # MINT ERRORS ONLY. Since #82 RAIL 5b this unit also writes a SENDER marker, and a
+  # failed marker write is an ERROR that lands AFTER the successful mint line — so the
+  # order rule above would read it as "no successful mint after the error" and print a
+  # sentence that is simply false (the record IS there). The two failures are separated
+  # here rather than downgraded in the payload, because a marker write that keeps
+  # breaking must stay loud somewhere; it just is not a birth failure.
+  MINT_ERRORS=' ERROR \[copilot\] (?!sender-marker-)'
+  LAST_ERROR_LINE="$(grep -nP "$MINT_ERRORS" "$HOOK_LOG" 2>/dev/null | tail -1 | cut -d: -f1)"
   LAST_OK_LINE="$(grep -n ' INFO \[copilot\] \(create\|attach\) ' "$HOOK_LOG" 2>/dev/null | tail -1 | cut -d: -f1)"
-  TOTAL_ERRORS="$(grep -c ' ERROR \[copilot\] ' "$HOOK_LOG" 2>/dev/null | head -1)"
+  TOTAL_ERRORS="$(grep -cP "$MINT_ERRORS" "$HOOK_LOG" 2>/dev/null | head -1)"
   TOTAL_ERRORS="${TOTAL_ERRORS:-0}"
   if [ -z "$LAST_ERROR_LINE" ]; then
     ok "no copilot ERROR lines in $HOOK_LOG"
@@ -161,7 +174,27 @@ if [ -f "$HOOK_LOG" ]; then
     note "$TOTAL_ERRORS historical copilot ERROR line(s) in $HOOK_LOG, all followed by a successful mint (line $LAST_OK_LINE > $LAST_ERROR_LINE) — recovered, not red"
   else
     bad "the newest copilot line in $HOOK_LOG is an unrecovered ERROR — the hook RAN and did not mint:"
-    grep ' ERROR \[copilot\] ' "$HOOK_LOG" | tail -3 | sed 's/^/        /'
+    grep -P "$MINT_ERRORS" "$HOOK_LOG" | tail -3 | sed 's/^/        /'
+  fi
+
+  # WHO-SENT, judged on its own axis. Both outcomes leave a citizen that EXISTS and can
+  # be addressed by others; what is missing is only its ability to send under its own
+  # garden id. So a REFUSAL is a note (fail-closed by design — a session opened before
+  # the current install reaches the payload without launch provenance and correctly
+  # claims no owner), while a failed WRITE is red (we tried and the store would not take
+  # it, and nothing downstream will say why).
+  MARKER_FAILED="$(grep -c ' ERROR \[copilot\] sender-marker-failed ' "$HOOK_LOG" 2>/dev/null | head -1)"
+  MARKER_REFUSED="$(grep -c ' WARN \[copilot\] sender-marker-refused ' "$HOOK_LOG" 2>/dev/null | head -1)"
+  MARKER_OK="$(grep -c ' INFO \[copilot\] sender marker ' "$HOOK_LOG" 2>/dev/null | head -1)"
+  if [ "${MARKER_FAILED:-0}" -gt 0 ]; then
+    bad "${MARKER_FAILED} sender-marker WRITE failure(s) in $HOOK_LOG — those citizens exist but cannot send under their own garden id:"
+    grep ' ERROR \[copilot\] sender-marker-failed ' "$HOOK_LOG" | tail -3 | sed 's/^/        /'
+  elif [ "${MARKER_REFUSED:-0}" -gt 0 ]; then
+    note "${MARKER_REFUSED} sender-marker refusal(s) and ${MARKER_OK:-0} armed — a refusal is fail-closed, not a fault. A session that predates this install reaches the hook without launch provenance; RESTART it to arm who-sent"
+  elif [ "${MARKER_OK:-0}" -gt 0 ]; then
+    ok "${MARKER_OK} sender marker(s) armed — these citizens send under their own garden id"
+  else
+    note "no sender-marker lines yet in $HOOK_LOG (nothing has fired since who-sent landed)"
   fi
 else
   note "no hook log yet at $HOOK_LOG (nothing has fired on this host)"

@@ -24,12 +24,14 @@
 # an install half-finished. That fails LOUD rather than exec'ing a path named after
 # a placeholder.
 #
-# WHY IT STILL `exec`s. Same reason as the Claude launcher: `exec` replaces this
-# process image, so the payload keeps THIS pid. Copilot's citizen writes no owner
-# marker (there is no doorbell to arm, so no receiver to key), so the pid is not
-# load-bearing for identity here — but keeping the topology identical means the two
-# units cannot drift into two different process shapes, and a later delivery
-# admission does not have to re-derive it.
+# WHY IT `exec`s, AND WHY THAT IS NOW LOAD-BEARING. Same reason as the Claude
+# launcher: `exec` replaces this process image, so the payload keeps THIS pid and its
+# parent is the Copilot host itself. Until #82 RAIL 5b nothing depended on that — the
+# payload wrote no marker at all — and this comment said so. It no longer holds: the
+# payload now writes a SENDER marker keyed to `process.ppid`, which is only the Copilot
+# host because of this `exec`. A wrapper reintroduced here would key the marker to the
+# wrapper, and every message from this citizen would be attributed to a pid that never
+# sent one. Do not replace `exec` with a call.
 #
 # The payload is found by SELF-LOCATION (this script's own directory), not by a
 # second baked path: the installer copies the entry to the plugin root exactly as it
@@ -66,13 +68,17 @@ if [ ! -f "$HOOK_ENTRY" ]; then
 	exit 1
 fi
 
-# PROVENANCE, stamped but NOT CONSUMED — and that is deliberate, not an omission.
-# The Claude payload reads this token before trusting `process.ppid`, because it keys
-# sender/receiver markers to that pid. The Copilot payload writes NO marker (there is no
-# doorbell for one to vouch for), so it has nothing to gate on it and does not read it.
-# It is stamped anyway so that both units present the SAME launch contract to whatever a
-# later delivery admission needs; a mint that quietly depended on it would be the drift.
-# Do not describe this as a guard on this rail (cross-review, terra, 2026-08-21).
+# PROVENANCE, STAMPED AND — SINCE #82 RAIL 5b — CONSUMED.
+# Both payloads read this token before trusting `process.ppid`, because both key a
+# SENDER marker to that pid. It was previously stamped here unread, purely to keep the
+# two units' launch contracts identical; that spare capacity is what let the sender rail
+# open without touching this launcher.
+# The token is the answer to one specific case: a session still holding an OLD cached
+# hook command reaches a NEW payload through a path we did not stamp, where the parent
+# may be a wrapper rather than the host. No token means the payload does not know what
+# its parent is, so it claims no owner and logs `sender-marker-refused` instead.
+# The Copilot payload still writes no RECEIVER marker — this backend has no doorbell for
+# one to vouch for, and that remains true.
 export ENTWURF_META_HOOK_LAUNCH="hook-launch/v1"
 
 exec "$NODE_BIN" "$HOOK_ENTRY"

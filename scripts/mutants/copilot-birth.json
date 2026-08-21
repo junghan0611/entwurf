@@ -104,8 +104,8 @@
 			"signatureSource": "scripts/check-meta-doctor-oracle.sh"
 		},
 		{
-			"claim": "COPILOT-BIRTH-WRITES-NO-MARKER",
-			"title": "arming a mailbox for a Copilot citizen claims a doorbell that does not exist in the bundle",
+			"claim": "COPILOT-BIRTH-HAS-NO-RECEIVER-STATE",
+			"title": "arming a mailbox for a Copilot citizen claims a doorbell that does not exist in the bundle. Scope is the RECEIVER half only: the claim was narrowed when the same unit began writing a SENDER marker, which needs a shared parent rather than a doorbell (#82 RAIL 5b)",
 			"subject": "pi-extensions/meta-bridge-hook-copilot.ts",
 			"find": ["\t\tlogLine(\n\t\t\t\"INFO\","],
 			"replace": [
@@ -113,7 +113,31 @@
 			],
 			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
 			"timeoutSeconds": 300,
-			"signature": "[QK:COPILOT-BIRTH-WRITES-NO-MARKER]",
+			"signature": "[QK:COPILOT-BIRTH-HAS-NO-RECEIVER-STATE]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "COPILOT-BIRTH-WRITES-SENDER-MARKER",
+			"title": "dropping the sender-marker write leaves the reader open and the writer closed — the citizen calls entwurf_v2, the bridge holds its owner pid, finds no marker, and the send is refused as anonymous with nothing in any log naming the cause (the #46 defect, re-planted on the copilot rail)",
+			"subject": "pi-extensions/meta-bridge-hook-copilot.ts",
+			"find": ["\t\twriteCopilotSenderMarker(result.record.gardenId, envelope);"],
+			"replace": ["\t\t// sender marker skipped"],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-BIRTH-WRITES-SENDER-MARKER]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "COPILOT-SENDER-READER-OPEN",
+			"title": "closing the reader half leaves the writer talking to nobody — the hook writes a copilot marker, the bridge never looks in that directory, and the citizen's sends are refused as anonymous (the #46 shape, which is why writer and reader open in one change)",
+			"subject": "pi-extensions/lib/meta-sender-identity.ts",
+			"find": [
+				"export const META_SENDER_BACKENDS: readonly MetaBackend[] = [\"claude-code\", \"antigravity\", \"copilot\"];"
+			],
+			"replace": ["export const META_SENDER_BACKENDS: readonly MetaBackend[] = [\"claude-code\", \"antigravity\"];"],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-SENDER-READER-OPEN]",
 			"signatureSource": "scripts/check-copilot-birth-hook.ts"
 		},
 		{

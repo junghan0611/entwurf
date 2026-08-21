@@ -41,14 +41,16 @@ import {
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
+	rmSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-
 import { resolveFactList } from "../pi-extensions/lib/entwurf-facts.ts";
-import { listAllMetaIdentitiesDir } from "../pi-extensions/lib/meta-session.ts";
+import { nativePushSupported } from "../pi-extensions/lib/entwurf-v2-contract.ts";
+import { META_SENDER_BACKENDS, resolveTrustedMetaSenderIdentity } from "../pi-extensions/lib/meta-sender-identity.ts";
+import { listAllMetaIdentitiesDir, processStartKey } from "../pi-extensions/lib/meta-session.ts";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PLUGIN = "entwurf-meta-receive-copilot";
@@ -133,10 +135,20 @@ interface Fired {
 	stdout: string;
 	stderr: string;
 }
+/** The child's env: this gate's own, with the store relocated and every DIRECT store
+ * override removed. `PI_CODING_AGENT_DIR` only isolates what derives from it, so an
+ * operator shell that pins `ENTWURF_META_SENDERS_DIR` (or the sessions equivalent) would
+ * send the very artifacts asserted on below into the real store and read a stale one back. */
+function isolatedEnv(storeDir: string): NodeJS.ProcessEnv {
+	const env: NodeJS.ProcessEnv = { ...process.env, PI_CODING_AGENT_DIR: storeDir };
+	delete env.ENTWURF_META_SENDERS_DIR;
+	delete env.ENTWURF_META_SESSIONS_DIR;
+	return env;
+}
 function fire(envelope: unknown, storeDir: string): Fired {
 	const res = spawnSync(launcher, [], {
 		input: typeof envelope === "string" ? envelope : JSON.stringify(envelope),
-		env: { ...process.env, PI_CODING_AGENT_DIR: storeDir },
+		env: isolatedEnv(storeDir),
 		encoding: "utf8",
 	});
 	return { status: res.status, stdout: res.stdout ?? "", stderr: res.stderr ?? "" };
@@ -178,13 +190,137 @@ live = records(store);
 ok("the store still holds exactly one record", live.length === 1);
 ok("the second fire attached to the SAME garden id", live[0]?.gardenId === bornGardenId);
 
-// ── 6. birth writes NOTHING a doorbell-less backend cannot back ─────────────
+// ── 6. WHO-SENT is armed; RECEIVER state is not ─────────────────────────────
+// The two halves used to be one assertion ("no marker of any kind"), and that
+// conflation is the defect #82 RAIL 5b closed: the doorbell's absence is a fact about
+// the RECEIVER rail only. A sender marker needs a shared parent, not a doorbell, so
+// this backend can say who sent a message while still being unable to receive one.
+//
+// The join this gate performs is the SAME one production performs, which is why the
+// oracle is independent of the writer: `fire()` spawns the launcher as this process's
+// child and the launcher `exec`s the payload, so the payload's parent IS this gate.
+// The gate therefore knows the answer (`process.pid`) before reading the file.
+const sendersDir = path.join(store, "meta-senders");
+const markerFile = path.join(sendersDir, "copilot", `${process.pid}.json`);
+ok(
+	"[QK:COPILOT-BIRTH-WRITES-SENDER-MARKER] a sender marker was written under THIS process's pid — the parent the bridge child would look itself up by",
+	existsSync(markerFile),
+);
+const marker = JSON.parse(readFileSync(markerFile, "utf8")) as {
+	backend?: string;
+	gardenId?: string;
+	nativeSessionId?: string;
+	cwd?: string;
+	ownerPid?: number;
+	ownerStartKey?: string;
+};
+ok("the marker names the citizen that was just minted, not a second one", marker.gardenId === bornGardenId);
+ok(
+	"the marker agrees with the record on backend and native id — a drift on either makes it a stale hint",
+	marker.backend === "copilot" && marker.nativeSessionId === NATIVE_ID,
+);
+ok("the marker's ownerPid IS the gate's own pid", marker.ownerPid === process.pid);
+// The pid-reuse guard: a marker keyed to a pid alone would be inherited by whatever
+// process the OS hands that number to next.
+ok(
+	"the marker carries the owner's start-key, so a reused pid cannot inherit this citizen",
+	typeof marker.ownerStartKey === "string" && marker.ownerStartKey === processStartKey(process.pid),
+);
+
+// The READ half. A marker nobody looks for is invisible, and that asymmetry — writer
+// open, reader closed — is exactly how #46 made an agy citizen send as an anonymous
+// external host. So the resolver is run for real, not inspected.
+ok(
+	"[QK:COPILOT-SENDER-READER-OPEN] copilot is one of the backends the resolver scans — a marker nobody looks for is invisible",
+	META_SENDER_BACKENDS.includes("copilot"),
+);
+// The resolver reads the RECORD store through this process's own env (the marker is only
+// a hint; the record is the authority), while the marker root is a parameter. So the
+// record half is pointed at the temp store for the duration of the call and put back —
+// same isolation the agy sender gate uses, and `isolatedEnv` keeps it out of every child.
+function withSessionsDir<T>(dir: string, fn: () => T): T {
+	const prev = process.env.ENTWURF_META_SESSIONS_DIR;
+	process.env.ENTWURF_META_SESSIONS_DIR = dir;
+	try {
+		return fn();
+	} finally {
+		if (prev === undefined) delete process.env.ENTWURF_META_SESSIONS_DIR;
+		else process.env.ENTWURF_META_SESSIONS_DIR = prev;
+	}
+}
+const trusted = withSessionsDir(path.join(store, "meta-sessions"), () =>
+	resolveTrustedMetaSenderIdentity({ ownerPids: [process.pid], sendersDir }),
+);
+ok(
+	"the bridge resolver joins that marker to exactly ONE identity — the citizen born above",
+	trusted?.identity.gardenId === bornGardenId && trusted?.identity.backend === "copilot",
+);
+
+// The record store is the authority; the marker is only a hint it must agree with.
+// Run in its OWN store so the live one above keeps its record for §7.
+{
+	const orphanStore = path.join(root, "orphan-marker");
+	mkdirSync(orphanStore, { recursive: true });
+	fire({ sessionId: "cop-orphan-0001", cwd: CWD, source: "new" }, orphanStore);
+	const orphanSenders = path.join(orphanStore, "meta-senders");
+	ok(
+		"precondition: that store has its own marker too",
+		existsSync(path.join(orphanSenders, "copilot", `${process.pid}.json`)),
+	);
+	for (const f of readdirSync(path.join(orphanStore, "meta-sessions"))) {
+		rmSync(path.join(orphanStore, "meta-sessions", f));
+	}
+	ok(
+		"a marker whose record is gone resolves to NOBODY — a hint is not an identity",
+		withSessionsDir(path.join(orphanStore, "meta-sessions"), () =>
+			resolveTrustedMetaSenderIdentity({ ownerPids: [process.pid], sendersDir: orphanSenders }),
+		) === null,
+	);
+}
+
+// FAIL-CLOSED on provenance. Reaching the payload WITHOUT the launcher means we do not
+// know what our parent is — an already-open session holding an older cached command is
+// the real case. Birth still happens (a record needs no parent); only who-sent is
+// withheld, and the log says which of the two refusals it was.
+{
+	const noTokenStore = path.join(root, "no-provenance");
+	mkdirSync(noTokenStore, { recursive: true });
+	const entryRel = /^HOOK_ENTRY="\$PLUGIN_ROOT\/(.*)"$/m.exec(launcherText)?.[1] ?? "";
+	ok("the launcher's baked hook entry is readable from its text", entryRel.length > 0);
+	const bare = isolatedEnv(noTokenStore);
+	delete bare.ENTWURF_META_HOOK_LAUNCH;
+	const res = spawnSync(bakedNode, [path.join(path.dirname(launcher), "..", entryRel)], {
+		input: JSON.stringify({ sessionId: "cop-noprov-0001", cwd: CWD, source: "new" }),
+		env: bare,
+		encoding: "utf8",
+	});
+	ok("an unstamped launch still exits 0 — best-effort, never breaks the turn", res.status === 0);
+	ok("an unstamped launch still MINTS the citizen", records(noTokenStore).length === 1);
+	ok(
+		"an unstamped launch writes NO sender marker — an unknown parent is not an owner",
+		!readdirSync(noTokenStore).includes("meta-senders"),
+	);
+	ok(
+		"and it says so in the log the doctor reads",
+		hookLog(noTokenStore).includes("sender-marker-refused") && hookLog(noTokenStore).includes("provenance missing"),
+	);
+}
+
+// The half the doorbell's absence really does govern. Unchanged, and it must stay that
+// way: a receiver marker here would claim a watch nothing can ring, and a mailbox would
+// claim a drain nothing can wake.
 const storeEntries = readdirSync(store);
 ok(
-	"[QK:COPILOT-BIRTH-WRITES-NO-MARKER] no mailbox, sender or receiver marker was created — there is no doorbell to back one",
-	!storeEntries.includes("meta-mailbox") &&
-		!storeEntries.includes("meta-senders") &&
-		!storeEntries.includes("meta-receivers"),
+	"[QK:COPILOT-BIRTH-HAS-NO-RECEIVER-STATE] no mailbox and no receiver marker was created — there is no doorbell to back either",
+	!storeEntries.includes("meta-mailbox") && !storeEntries.includes("meta-receivers"),
+);
+// Identity is not replyability. This citizen can now say who it is; it still cannot be
+// replied to, because the reply rail is picked from nativePushSupported at the bridge
+// and copilot lands in self-fetch, where `replyable` comes from a receiver marker it
+// correctly does not write.
+ok(
+	"copilot is NOT native-push, so a sender marker buys who-sent and never replyable",
+	nativePushSupported("copilot") === false,
 );
 
 // ── 7. the citizen is a PEER, and an honest one ─────────────────────────────

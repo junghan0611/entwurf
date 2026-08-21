@@ -48,8 +48,16 @@ import {
 } from "./meta-session.ts";
 import { type NativePushAdapter, resolveNativePushAdapter } from "./native-push/adapter.ts";
 
-/** Every native backend that mints a garden-id from its own hook and writes a sender marker. */
-export const META_SENDER_BACKENDS: readonly MetaBackend[] = ["claude-code", "antigravity"];
+/** Every native backend that mints a garden-id from its own hook and writes a sender marker.
+ *
+ * WRITER AND READER OPEN TOGETHER OR NOT AT ALL. A backend listed here whose hook writes no
+ * marker costs one wasted directory read; a backend whose hook writes a marker but is absent
+ * here is INVISIBLE — the bridge holds the owner pid, never looks in that directory, and the
+ * citizen's sends are refused as anonymous for a reason nothing in the log names. That was
+ * exactly the #46 defect on agy, and copilot joined the list only once its own hook wrote one
+ * (#82 RAIL 5b). Membership says a marker may EXIST, never that a reply can land: the reply
+ * rail is chosen from `nativePushSupported` at the bridge, not from this list. */
+export const META_SENDER_BACKENDS: readonly MetaBackend[] = ["claude-code", "antigravity", "copilot"];
 
 /** A marker that passed BOTH guards, together with the record that vouches for it. */
 export interface TrustedMetaSender {

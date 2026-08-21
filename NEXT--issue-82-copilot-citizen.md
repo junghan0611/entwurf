@@ -21,13 +21,23 @@
 - [x] **4. 설치면 재현·역방향** — `91986c2`. install/uninstall/doctor + 15-check smoke
 - [ ] **4b. adopt 멱등성** — 우리 것과 똑같이 생긴 **수동** 설정을 adopt할 때 preimage를 뭘로 잡나
 - [x] **5. MCP 손 (outbound)** — `f1f26ce`. **LIVE 인수 통과** (아래 RECENT)
-- [ ] **5b. sender identity** ← **CURRENT.** 읽기는 열렸고 **보내기가 막혀 있다**
+- [x] **5b. sender identity** — **LIVE 인수 통과.** PM+GLM 리뷰 green. 커밋 안 됨(워크트리)
 - [ ] **6. 알림 (`agentStop`)** — 봉투·출력 계약 확정됨. **LIVE 1턴만 남음(GLG 승인)**
 - [ ] **7. 등급 정정** — `DELIVERY.md`의 D0과 capability registry가 오늘의 사실과 다르다
 - [ ] **8. 유휴 깨우기 (D4)** — **우리 몫이 아니다.** 번들에 메커니즘이 없다(아래 펜스)
 
-현재 좌표: 5 완료 → **5b 진행**(sol에게 인계) · 4b는 형제 셋을 따라 (a)로 결론(RECENT) ·
+현재 좌표: **5b 닫힘(LIVE 인수·리뷰 green), 워크트리에 있고 미커밋** · 4b는 형제 셋을 따라 (a)로 결론(RECENT) ·
 6은 GLG의 LIVE 1턴 승인 대기 · 7은 5b·6 결과를 받아 마지막에 · 8은 벤더 대기
+
+**5b는 "구현 완료"가 아니라 "인수 완료, 미커밋"이다.** `[측정]` 실제 Copilot 세션의 outbound
+`entwurf_v2`가 `origin: meta-session` · 자기 garden id `20260821T135744-86bdce` ·
+`agentId meta-session/copilot` · `replyable: false`로 도착했다 — **who-sent 보존과 replyable 경계가
+한 영수증에서 같이 입증됐다.** `doctor-copilot-bridge` PASS(8 records · 0 ERROR · **3 sender marker armed**),
+marker↔record가 backend/gardenId/nativeSessionId 일치(ownerPid 746979, startKey `linux:46488356`).
+게이트 쪽은 `check-copilot-birth-hook` 62 assertions · `pnpm run check` 41s exit 0 · 뮤턴트 3개 각자
+시그니처에서 KILLED.
+`check:full`과 `check-gate-qualification`은 **여전히 안 돌렸다**(전자는 frozen candidate에서 1회,
+후자는 22분·CI 몫). **커밋·푸시 안 함.**
 
 ## 파리티 표 — "클로드코드 수준"이 정확히 무엇인가
 
@@ -37,7 +47,8 @@
 |---|---|---|---|
 | 출생 (garden id) | ✓ | ✓ `20260821T091514-fb50b4` | 끝 |
 | statusbar에 garden id | ✓ | ✓ `91986c2` | 끝 |
-| `entwurf_*` 도구를 **부를 수 있음** | ✓ `~/.claude/settings.json` mcpServers | ✗ **`~/.copilot/mcp-config.json` 부재** | **가능 — RAIL 5** |
+| `entwurf_*` 도구를 **부를 수 있음** | ✓ `~/.claude/settings.json` mcpServers | ✓ `f1f26ce` `~/.copilot/mcp-config.json` | 끝 — RAIL 5 |
+| 보낼 때 **자기 garden id로** 보임 | ✓ sender marker | ✓ `20260821T135744-86bdce` LIVE 인수 | 끝 — RAIL 5b |
 | 턴 끝 "편지 왔다" 알림 | ✓ `FileChanged`(`doorbell.sh`) | ✗ | **미측정 — RAIL 6** |
 | 유휴 세션 깨우기 (D4) | ✓ `asyncRewake` | ✗ | **불가 — 번들에 없음** |
 | `fresh_call` 대상 | ✓ `FRESH_CALL_BACKENDS` | ✗ | 8 이후 |
@@ -46,52 +57,49 @@
 
 # NOW
 
-- **Current — RAIL 5b. 읽기는 열렸고 보내기가 막혀 있다.**
-  `[측정]` Copilot이 `entwurf_peers`를 실제로 호출해 명단을 읽었다. `entwurf_v2`/`entwurf_self`는
-  거절된다 — **그리고 그것은 설계된 동작이다.**
+- **Current — RAIL 5b는 LIVE 인수까지 끝났다. 리뷰 green. 커밋 안 됨.**
+  `[측정]` 실제 Copilot 세션이 `entwurf_v2`로 보냈고 봉투가 `origin: meta-session` ·
+  garden id `20260821T135744-86bdce` · `replyable: false`로 도착했다. `doctor-copilot-bridge` PASS
+  (8 records · 0 ERROR · **3 sender marker armed**).
+  `[측정]` `check-copilot-birth-hook` 62 assertions ok · `pnpm run check` 41s exit 0 ·
+  `check-agy-sender-identity` 38 · `check-meta-session` 25 · `check-meta-receiver-marker` 51 ·
+  `check-entwurf-capabilities` 17 · `check-meta-doctor-oracle` PASS.
 
-  **먼저 읽어라: `docs/external-mcp-host.md:9-10`.** 오늘 이 레인이 세 턴을 태워 재도출한 내용이
-  거기 이미 쓰여 있었다:
-  > *plain external MCP host*: no garden meta-record / sender marker. It can call the read
-  > surfaces (`entwurf_peers`, `entwurf_inbox_read`), but `entwurf_v2` sends are **refused by
-  > default** (#50 C4). / *garden-native native session*: a trusted lifecycle hook minted a
-  > garden id and sender marker — `SessionStart` for Claude Code, `PreInvocation` for agy.
+  **무엇이 열렸나.** 쓰는 쪽과 읽는 쪽을 같이 열었다 — 하나만 열면 둘 다 안 열린 것과 같다.
+  - `[코드]` `meta-bridge-hook-copilot.ts` — mint 성공 뒤 `writeMetaSenderMarker`. owner pid는
+    launcher가 이미 찍고 있던 `ENTWURF_META_HOOK_LAUNCH` 토큰 + `isPlausibleOwnerPid`로 판정한다.
+    실패 정책은 이 훅의 best-effort+log 계약 그대로이고 세 갈래가 각각 다른 토큰을 남긴다:
+    `sender marker <pid> -> <gid>` / `sender-marker-refused`(WARN) / `sender-marker-failed`(ERROR).
+  - `[코드]` `meta-sender-identity.ts:60` — `META_SENDER_BACKENDS`에 `copilot`.
+  - `[코드]` launcher는 **한 줄도 안 고쳤다.** 토큰 export와 `exec`가 이미 있었다 —
+    다만 그 `exec`가 이제 load-bearing이 되어(부모가 곧 Copilot 호스트) 주석을 고쳤다.
 
-  **Copilot은 지금 첫 칸에 있다.** `[측정]` 그 문서는 copilot을 한 번도 언급하지 않는다(grep 0건).
-  `[제안]` 실패한 것은 문서의 내용이 아니라 **도달 가능성**이다 — `AGENTS.md`도 이 파일도 그것을
-  가리키지 않았다. **GLG 판단 대기: 지울 것인가, 가리키게 할 것인가.** 지우면 external vs
-  garden-native 의미론과 익명 해치가 적힌 유일한 자리가 사라진다.
+  **`replyable`은 그대로 false다.** `[코드]` `mcp/entwurf-bridge/src/index.ts:255`가
+  `nativePushSupported(copilot)=false`로 self-fetch 도메인을 고르고 receiver marker를 요구하는데
+  Copilot은 (도어벨이 없어 정당하게) 안 쓴다. **sender marker가 준 것은 "누가 보냈나" 하나뿐이다.**
+  게이트가 그 문장을 직접 박고 있다.
 
-  **근인은 양쪽이 다 비어 있는 것이다.**
-  - **쓰는 쪽** — `[코드]` `pi-extensions/meta-bridge-hook-copilot.ts:12-17`이 sender marker를
-    의도적으로 안 쓴다. 그런데 그 근거가 *"도어벨이 없으니 receiver marker가 보증할 것이 없다"* 이고,
-    **그 논리가 sender marker에 그대로 적용됐다.** 둘은 다른 것이다:
-    `[코드]` `pi-extensions/lib/meta-sender-identity.ts:4-7` — sender marker가 요구하는 것은
-    *"hook writes a marker keyed by ITS parent pid; the child looks it up under its own parent.
-    **That shared ancestor is the join key**"* 뿐이다. **도어벨과 무관하다.**
-  - **읽는 쪽** — `[코드]` `meta-sender-identity.ts:50`
-    `META_SENDER_BACKENDS = ["claude-code", "antigravity"]`. copilot 없음.
-    지금은 쓰는 쪽이 없으니 거짓은 아니지만, **둘 다 열어야 뚫린다.**
+  **선택지 A(익명 해치)는 채택 안 됐다.** B로 갔고, 해치는 기본값으로 켜지 않았다.
 
-  **아직 안 잰 전제 하나 — 이것이 첫 수다.**
-  `[코드]` `meta-sender-identity.ts:9` — *"Measured 2026-07-13 on **both backends**:
-  hook.ppid == bridge.ppid == the native host pid"*. claude와 agy다.
-  **Copilot에서는 한 번도 안 쟀다.** Copilot 훅은 `exec` 문자열로 뜨고 MCP 서버는 rust `rmcp`
-  클라이언트가 띄운다. 둘의 부모가 같은 Copilot 프로세스인지가 join의 **유일한** 근거인데
-  미측정이다. **이것이 거짓이면 marker를 써도 안 붙는다. 짓기 전에 재라.**
+  **부모 join — 이제 production에서도 성립한다.**
+  `[측정]` 먼저 probe 범위에서 확인됐고(temp `sessionEnd` exec hook + rust-`rmcp` stdio MCP child:
+  `hook_ppid=676909` / `mcp_ppid=676909`, start-key 동일 `45825795`), 그 다음
+  `[측정]` **production 경로가 세 지점에서 같은 pid로 닫혔다**:
+  `ps`상 Copilot native 바이너리 `746979` · 그 아래 도는 entwurf MCP child `747038`의 **ppid `746979`** ·
+  marker `ownerPid 746979` / `ownerStartKey linux:46488356`(= `/proc/746979/stat`).
+  즉 **훅이 쓴 owner == 살아 있는 Copilot 호스트 == MCP child의 부모**이고, 그 위로 자기 id를 실은
+  inbound 봉투가 도착했다. 훅 소스 주석도 이 bounded 사실로 갱신했다(코드 0줄).
 
-  **선택지 둘 — 오늘의 `replyable`은 둘 다 false로 같다.**
+  **부수적으로 고친 것 — 내 변경이 만든 오진 하나.** `[측정]` marker 실패는 ERROR이고 mint 성공
+  **뒤에** 찍히므로, 닥터의 회복 규칙("성공 mint가 뒤에 없는 ERROR가 red")이 그것을 출생 실패로
+  읽고 *"the hook RAN and did not mint"* 라는 **거짓 문장**을 출력했다. `copilot-bridge-doctor.sh`가
+  이제 mint 축과 marker 축을 따로 판정한다: 실패=red(문장 정확), 거절=note(fail-closed), 무장=ok.
+  합성 로그 4종으로 확인했다.
 
-  | | `entwurf_v2` | 신원 | replyable | 드는 것 |
-  |---|---|---|---|---|
-  | **A. 해치** `ENTWURF_BRIDGE_ALLOW_ANONYMOUS_SENDER=1` | 열림 | 익명 `external-mcp` | false | mcp-config `env` 한 키. **새 코드 0줄** |
-  | **B. sender marker** | 열림 | **garden id** | false (RAIL 6까지) | 훅 + `META_SENDER_BACKENDS` + 게이트 |
-
-  `[코드]` **marker를 붙여도 replyable은 안 열린다** — `mcp/entwurf-bridge/src/index.ts:255-272`:
-  `nativePushSupported(copilot)`가 false라 **self-fetch 도메인**으로 떨어지고,
-  `readMetaReceiverMarker`를 요구하는데 Copilot은 (도어벨이 없어 정당하게) 안 쓴다 → `replyable:false`.
-  → **sender marker는 "누가 보냈나"를 주지 "답장할 수 있나"를 주지 않는다.** 왕복은 RAIL 6이 있어야 한다.
-  차이는 받는 형제가 *누가 보냈는지 아느냐* 하나다. 그 차이가 값어치가 있는지는 `[제안]` 영역이다.
+  **남은 일.** frozen candidate에서 `check:full` 1회 → GLG가 commit/push 결정.
+  `check-gate-qualification`(22분)은 CI 몫이나, 뮤턴트 **3개**(`HAS-NO-RECEIVER-STATE` ·
+  `WRITES-SENDER-MARKER` · `SENDER-READER-OPEN`)는 손으로 control→mutant→restore 해서
+  **각자 시그니처에서 KILLED** 확인했다.
 
 - **Next 1 — RAIL 5, MCP 손. 계약이 확정됐다.**
   `[번들]` 유저 파일은 `~/.copilot/mcp-config.json`이고 **래퍼는 항상 `mcpServers`** 다 —
@@ -238,6 +246,8 @@ JS는 플러그인 디렉터리만 native로 넘긴다(`getNativePluginHookInput
 | ~~"MCP 파일 최상위 키가 `servers`일 수 있다(VS Code식)"~~ | `[번들]` writer가 항상 `mcpServers` 래퍼를 붙인다(`Ud.write`). `.vscode/mcp.json` 지원은 제거됐다 |
 | ~~"stdio 엔트리 `type`은 `\"stdio\"`"~~ | `[번들]` 파일에 쓰는 값은 `"local"`이다. `"stdio"`는 CLI transport 선택지이고, API wire 스키마엔 `type` 필드가 없다 |
 | ~~"Copilot에는 도어벨이 아예 없다"~~ | `[번들]` 없는 것은 **유휴 깨우기**(`FileChanged`/`asyncRewake`/`watchPaths`)다. `HookType`에 `agentStop`·`postResult`·`notification`이 있고 `agentStop`은 발화가 관측됐다. 범위를 D4로 좁혀 다시 쓴다 |
+| ~~"Copilot 훅은 어떤 marker도 쓰지 않는다 — 도어벨이 없으니까"~~ | `[코드]` 도어벨 부재는 **receiver marker에만** 걸리는 근거다. sender marker가 요구하는 것은 공유 부모 하나뿐(`meta-sender-identity.ts:4-7`). 한 문장이 두 사실을 덮고 있었고, RAIL 5b가 갈랐다 |
+| ~~"`check-copilot-birth-hook`은 marker가 하나도 없음을 요구한다"~~ | `[측정]` `[QK:COPILOT-BIRTH-WRITES-NO-MARKER]`는 은퇴했다. 지금은 `[QK:COPILOT-BIRTH-HAS-NO-RECEIVER-STATE]`(mailbox/receiver 부재)와 `[QK:COPILOT-BIRTH-WRITES-SENDER-MARKER]`(sender 존재+record join) 둘이다 |
 
 # Do not touch
 
