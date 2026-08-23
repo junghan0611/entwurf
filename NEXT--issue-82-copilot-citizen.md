@@ -11,11 +11,10 @@
 - [x] **4. Evidence/docs checkpoint** — `9dc03c0` (extension LIVE receipt + raw reproducer + 문서 정정)
 - [x] **5. Inbound receive implementation** — receiver extension + installer/doctor + gate 29셀 + mutants 13 + amendment (doctor clean-log 셀·hermetic 체인 합류) — `9b4e248`로 로컬 커밋됨
 - [x] **6. Operator LIVE acceptance** — **수용됨 2026-08-23**. garden `20260823T181316-d9f6ba`에서 enqueue→doorbell→drain→read-receipt 사슬 완결 (영수증은 아래 LIVE RECEIPT)
-- [ ] **7. Final amendment bundle** ← CURRENT: managed launcher `entwurf copilot`, capability cache invalidation, doctor native-process discovery, permission/launch docs, D6/D7-partial 등급 정착
-- [ ] **8. Grade landing + push** — 독립 review → amendment → qualification 1회 → frozen `check:full` 1회 → GLG가 commit/push 결정
+- [x] **7. Final amendment bundle** — managed launcher `entwurf copilot`, registry no-cache reread, doctor argv discovery, permission/launch docs, D6/D7-partial — product SHA `31ebea0`
+- [x] **8. Grade landing + push** — 독립 review PASS → amendment → qualification 230/230 → frozen `check:full` 370s exit0 → commit/push `31ebea02ed0cb63cf866e28dd1b50ff419684926` + exact-SHA CI SUCCESS + GLG managed-launch LIVE
 
-현재 좌표: 1–6 완료(구현 커밋 + 관리 LIVE 수용) → **7 final amendment bundle** → 8 등급 안착/push.
-Hidden `--ui-server`는 여전히 다시 열지 않는다.
+현재 좌표: 1–8 브랜치 완료. CURRENT는 **다음 세션 — main landing + SemVer release**. Hidden `--ui-server` / `fresh_call` 확장 / D3·D8 재개 금지.
 
 # LIVE RECEIPT — 관리 수용, 2026-08-23 (호스트 측정, 두 세션에서 독립 확인)
 
@@ -33,27 +32,37 @@ garden `20260823T181316-d9f6ba` / native `20fe30c8-b2bc-4600-91a0-8a409131be51` 
 
 판정: managed receive **D6 PASS**(동일 record/native/gid 사슬 위에서 모델이 응답), **D7 PARTIAL**(별도 garden reply + read receipt는 관측, completion taxonomy 전체·장기 운영은 아님), evidence **L4**(한 호스트·한 왕복). **D3**(관리형 두 번째 세션 격리)는 과거 B 관측의 결정적 로그가 scratch cleanup 전에 보존되지 않아 **pending**. **D8 unproven**. `replyable:true`는 armed marker가 있을 때의 사실이지 backend 상수가 아니다.
 
+# LIVE RECEIPT — final GLG managed launch, 2026-08-23
+
+garden `20260823T225651-65945c` / native `51d64392-8f36-4bb0-ac12-f3db6653947c`. GLG가 보이는 터미널에서 `entwurf copilot` 실행.
+
+| 축 | 값 |
+|---|---|
+| product SHA | `31ebea02ed0cb63cf866e28dd1b50ff419684926` |
+| CI | https://github.com/junghan0611/entwurf/actions/runs/32642653573 SUCCESS |
+| reinstall | post-doctor PASS, `libSha256=40510dc3e5fcdd07ceaf49c3c62ed8378eed9e311e329d615a018b47fc2eaa87` |
+| arm | receiver log `13:56:54.640Z` owner=3284114 host=3284032 |
+| enqueue | `meta-mailbox → enqueued` `13:57:33.341Z` |
+| doorbell / rang | `13:57:33.343Z` → `13:57:33.420Z` |
+| lastReadAt | `13:57:40.709Z` |
+| reply | `13:58:02.805Z` same gid, `agentId=meta-session/copilot`, `origin=meta-session`, `replyable=true` |
+
+이 사슬이 managed launcher→birth→arm→addressed send→doorbell→inbox read→receipt→reply를 닫는다. D3/D8은 열지 않는다.
+
 # NOW
 
-- **Current — RAIL 7 final amendment bundle.** RAIL 5 구현 커밋(`9b4e248`) 위에서 관리 LIVE 수용이 끝났고
-  (위 LIVE RECEIPT), 이 번들이 그 수용이 드러낸 결함과 남은 제품면을 닫는다. 범위는 다섯 가지뿐이다:
-  1. **managed launcher `entwurf copilot`** — `scripts/copilot-launch.sh` + `run.sh` dispatch. 현재
-     터미널에서 벤더 실행체로 `exec`하며 EXTENSIONS 토큰과 기본 프로필을 invocation-local로만 얹는다.
-     tmux/fresh-call 아니고 citizen을 만들지 않는다 — birth 권위는 여전히 첫 프롬프트다.
-  2. **capability cache invalidation** — `pi-extensions/lib/meta-session.ts`의 registry memo가
-     process lifetime singleton이라, 살아 있는 dispatcher가 등급 변경을 영원히 못 본다. 구현은
-     **무효화 기법이 아니라 뺄셈이다**: singleton을 없애고 매 load마다 다시 읽는다(캐시 없음).
-     restart 안내로 덮지 않는다.
-  3. **doctor native-process discovery** — `scripts/copilot-receive-bridge.sh`의 `pgrep -x copilot`은
-     **구조적으로 빈 결과**다(아래 측정). 이 레인의 유일한 invisible-failure 탐지기가 false-negative였다.
-  4. **permission/launch docs** — plain `copilot`과 managed `entwurf copilot`의 분리, 주입되는 기본값과
-     override 목록, 호출 자체가 명시 동의라는 문장.
-  5. **grade/receipt 정착** — D6 / D7-partial / L4를 registry와 문서 5축에 안착.
-- **Grade fence.** D6은 위 호스트 사슬 **더하기** 상속된 reply 봉투의 결합 판정이다. 로컬
-  enqueue→doorbell→read 사슬만으로 reply를 증명했다고 쓰지 않는다. D7은 reply/read는 관측됐으나
-  completion taxonomy와 장기 운영이 아니라서 partial이다. D3 pending, D8 unproven, L4 한 호스트·한 왕복.
-- **Fence.** push 금지, commit은 GLG의 별도 grant 전까지 금지. 새 Copilot LIVE/model turn 금지.
-  독립 review 전에 qualification/`check:full` 금지 — inner loop는 영향받은 focused gate만.
+- **Current — next session: main landing + SemVer release.** 브랜치 제품 SHA는
+  `31ebea02ed0cb63cf866e28dd1b50ff419684926`. 이 파일은 merge 직전 삭제하고, 그 삭제가
+  landing candidate에 들어간다. #82는 durable **main** SHA에서만 닫는다.
+- **Next session order (only):**
+  1. issue thread / branch final check
+  2. 이 파일(`NEXT--issue-82-copilot-citizen.md`)을 merge 직전 삭제하고 그 삭제를 landing candidate에 포함
+  3. main landing + exact-SHA CI
+  4. #82를 durable main SHA에서 close
+  5. `entwurf-release` skill의 land → prepare → make → publish 경계로 다음 SemVer.
+     각 mode는 별도 GLG grant. 이번 턴에 tag/publish 없음.
+- **Grade fence (unchanged).** managed D6 PASS / D7 partial / L4. D3 pending, D8 unproven.
+  D3/D8/LIVE 재개 금지. hidden `--ui-server`, `FRESH_CALL_BACKENDS` 확장, host reinstall 반복 금지.
 
 ## 이 번들이 닫는 결함 — 측정 (2026-08-23, oracle)
 
@@ -109,6 +118,15 @@ garden `20260823T181316-d9f6ba` / native `20fe30c8-b2bc-4600-91a0-8a409131be51` 
   #82 이후 별도 레인.
 
 # RECENT
+
+## RAIL 7–8 landing — 2026-08-23, product SHA `31ebea0`
+
+- `[커밋]` `31ebea02ed0cb63cf866e28dd1b50ff419684926` `feat(copilot): land managed launch and D6 receive grade` (20 files, +1570/−164). branch `issue-82-copilot-citizen`.
+- `[CI]` exact SHA https://github.com/junghan0611/entwurf/actions/runs/32642653573 SUCCESS. check 22m3s (`check:full` + qualification), artifact-consumer, install-surface.
+- `[로컬]` qualification 230/230 KILLED; frozen `check:full` 370s exit0. index-preflight / clean-log WRONG-REASON은 수리 고고학이지 수용 헤드라인이 아니다.
+- `[호스트]` CI 뒤 `install-copilot-receive` 1회. pre STALE `95cc51d49dba` → post PASS `40510dc3e5fc`. 다른 installer/orphan 미접촉.
+- `[LIVE]` 위 final GLG managed-launch receipt. thread: https://github.com/junghan0611/entwurf/issues/82#issuecomment-5386397337
+- `[다음]` main landing + SemVer. 이 NEXT는 merge 직전 삭제.
 
 ## 독립 검수 + amendment — 2026-08-23, D0 커밋으로 조임
 
