@@ -132,6 +132,7 @@ Usage:
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-copilot-birth-hook   # #82 gate: drives the real Copilot assembler into a temp dir, fires the baked launcher with NO ARGV (the way Copilot's `exec`-string schema forces), and requires a backend:"copilot" v3 record + attach + peer row + a SENDER marker the resolver joins back to that record, and still zero mailbox/receiver marker (who-sent needs a shared parent; a receiver needs a doorbell this backend has not got). Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-receive-arm  # #82 RAIL 5 gate: the REAL receiver installer + the REAL extension.mjs forked with a stubbed SDK. Arms only after birth, marker owned by the WATCHER pid, self-fetch dispatch answer, doorbell carries the garden id and NOT the body, id-drift/foreign-parent refusals. Hermetic; no Copilot, no model turn
+  ./run.sh check-copilot-launch       # #82 RAIL 7 gate: the MANAGED launch `entwurf copilot`, driven through its public address against a FAKE VENDOR on a sandbox PATH. Receiver precondition refusals, EXTENSIONS token + operator token preservation, injected defaults before the `--` terminator, byte-identical argv, the 11 explicit permission/surface policy overrides that suppress `--yolo`, exec (not fork) pid identity, exit passthrough, recursion refusal. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-statusline   # #82 Copilot custom-footer renderer. session_id → ready/?/gid + rail `cop`; exit 0. IN pnpm check. No Copilot, no model turn
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_CITIZEN_BACKENDS + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
@@ -200,6 +201,7 @@ Usage:
   ./run.sh install-meta-bridge        # INTERNAL part of `setup` (native-harness plugin) + doctor recovery path — prefer `setup`; stateful GLOBAL install (plugin + USER MCP + settings keyset, honest uninstall state)
   ./run.sh uninstall-meta-bridge      # 1.0.0 meta-bridge Phase 2: stateful GLOBAL uninstall (restore only keys/items captured in install-state)
   ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is not yet verified/certified and stays nonzero for this cut (future validation may reopen it). Detection power is held by check-meta-doctor-oracle
+  ./run.sh copilot [args...]          # #82 RAIL 7: the MANAGED Copilot launch. exec()s the vendor CLI in THIS terminal (cwd/pid/exit preserved) with COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS set for that one invocation — entwurf owns no part of your shell and writes nothing to it, but it owns the process it is about to become. Without that flag Copilot skips the extension scan SILENTLY. Refuses to launch unless the receiver unit is actually installed. Injects `--model auto` when no --model was given and `--yolo` when no explicit permission/surface policy flag was given, both BEFORE any `--`; every argument you pass is forwarded byte-identical. RUNNING THIS IS YOUR CONSENT to that profile — use plain `copilot` for stock vendor behaviour. Not tmux, not fresh-call, mints no citizen (birth is still the first prompt)
   ./run.sh install-copilot-bridge     # #82: GLOBAL install of the Copilot BIRTH plugin (own marketplace root; node+entry baked into the no-argv exec string). MCP wiring and the RECEIVER extension are separate install surfaces (install-copilot-mcp, install-copilot-receive). Also retires the stale Claude unit (--keep-stale-claude-unit opts out)
   ./run.sh doctor-copilot-bridge      # #82: fail-loud surface for that unit. Red = a hook that RAN and failed, or a broken/unbaked artifact. "Installed with zero records" is NOT red and is reported as NOT-YET: a Copilot session is born on its FIRST PROMPT, not when the window opens (measured)
   ./run.sh install-copilot-statusline # own Copilot statusLine + footer.showCustom with an install-state preimage
@@ -208,7 +210,7 @@ Usage:
   ./run.sh install-copilot-mcp        # #82 RAIL 5: register ONE entwurf-bridge server in ~/.copilot/mcp-config.json (adopt / create / REFUSE symlink), type:local, install-state under $XDG_DATA_HOME/entwurf/copilot-mcp/
   ./run.sh uninstall-copilot-mcp      # honest inverse of install-copilot-mcp from install-state
   ./run.sh doctor-copilot-mcp         # static ownership/config/boot doctor; RED only when install-state exists
-  ./run.sh install-copilot-receive    # #82 RAIL 5: install the RECEIVER extension (user scope ~/.copilot/extensions/entwurf-receive). Owns the artifact and CHECKS the launch flag; it cannot set it. Arms per session after birth
+  ./run.sh install-copilot-receive    # #82 RAIL 5: install the RECEIVER extension (user scope ~/.copilot/extensions/entwurf-receive). Owns the artifact and CHECKS the launch flag; it never sets one (a launch does — see `./run.sh copilot`). Arms per session after birth
   ./run.sh uninstall-copilot-receive  # honest inverse from install-state; never removes a unit it did not install
   ./run.sh doctor-copilot-receive     # artifact + digest, COPILOT_CLI_ENABLED_FEATURE_FLAGS on the LIVE copilot processes (the silent failure), live receiver markers via the production reader, receiver log. RED only when install-state exists
   ./run.sh install-agy-bridge         # 봉인 7: agy MCP install adapter — register ONE entwurf-bridge server in the agy mcp_config (adopt file / create / REFUSE symlink), stable bin command, install-state under $XDG_DATA_HOME/entwurf/agy-bridge/
@@ -770,6 +772,14 @@ check_copilot_statusline() {
   # #82 Copilot custom-footer renderer. Drives scripts/copilot-statusline.sh with
   # session_id on stdin in an isolated store. ready / ? / exact gid; exit 0.
   run_ts scripts/check-copilot-statusline.ts
+}
+
+check_copilot_launch() {
+  # #82 RAIL 7. The subject is a process REPLACEMENT, so the oracle is a fake vendor
+  # executable on a sandboxed PATH that reports the argv/env/pid/cwd it was handed —
+  # never a reading of the launcher's source. HOME/XDG/PATH are all redirected, so the
+  # install-state, the extensions root and the resolved binary are the fixture's.
+  run_ts scripts/check-copilot-launch.ts
 }
 
 check_copilot_receive_arm() {
@@ -3726,6 +3736,60 @@ JS
     return 1
   fi
 
+  # #82 RAIL 7 — the managed launch, from the INSTALLED package. Hard Rule 11: a green
+  # clone is not a green tarball. `entwurf copilot` is a bash leaf, so its risk here is
+  # not the strip-types fence but PACKAGING — `scripts/copilot-launch.sh` has to be in
+  # the tarball and reachable from the installed `run.sh`, and a file-list assertion
+  # cannot tell a shipped script from a shipped script that resolves its siblings wrongly
+  # once it lives under node_modules. So the cell RUNS it, against a fake vendor on a
+  # sandbox PATH and a fake receiver install-state, and reads what the vendor was handed.
+  local cop_launch_home="$npm_tmp/cop-launch-home" cop_launch_xdg="$npm_tmp/cop-launch-xdg" cop_launch_bin="$npm_tmp/cop-launch-bin"
+  local cop_unit_dir="$cop_launch_home/.copilot/extensions/entwurf-receive"
+  local cop_state_dir="$cop_launch_xdg/entwurf/copilot-receive"
+  mkdir -p "$cop_unit_dir" "$cop_state_dir" "$cop_launch_bin"
+  printf '// fixture\n' > "$cop_unit_dir/extension.mjs"
+  printf '{"schemaVersion":1,"unit":"entwurf-receive","path":"%s"}\n' "$cop_unit_dir" > "$cop_state_dir/install-state.json"
+  # The stand-in is installed under the REAL name on a sandbox PATH: the launcher resolves
+  # `copilot` and nothing else, so there is no env switch here to prove the wrong contract with.
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'echo "FLAG=[${COPILOT_CLI_ENABLED_FEATURE_FLAGS-<unset>}]"\n'
+    printf 'for a in "$@"; do printf "ARG<%%s>\\n" "$a"; done\n'
+  } > "$cop_launch_bin/copilot"
+  chmod +x "$cop_launch_bin/copilot"
+  # `env -u` for BOTH carriers, not just a reassignment: an operator running this gate with
+  # their own COPILOT_CLI_ENABLED_FEATURE_FLAGS exported would otherwise inherit those tokens
+  # into the oracle below and read a FALSE RED, and an inherited launch sentinel would trip
+  # the recursion fence before the vendor was ever reached. The cell must measure the
+  # installed launcher, not the shell that happened to start it.
+  if ! op_out=$(env -u COPILOT_CLI_ENABLED_FEATURE_FLAGS -u ENTWURF_COPILOT_LAUNCH_ACTIVE \
+      HOME="$cop_launch_home" XDG_DATA_HOME="$cop_launch_xdg" PATH="$cop_launch_bin:$PATH" \
+      "$installed_entwurf" copilot -p hi 2>&1); then
+    fail "[check-pack-install] installed 'entwurf copilot' FAILED to reach the vendor:"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  # Assert MEANING: the scan flag this whole surface exists to set, the managed defaults,
+  # and the operator's own argument, all arriving at the vendor from the installed tree.
+  if ! printf '%s' "$op_out" | grep -q 'FLAG=\[EXTENSIONS\]'; then
+    fail "[check-pack-install] installed 'entwurf copilot' did not hand the vendor COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS:"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  for want in 'ARG<-p>' 'ARG<hi>' 'ARG<--model>' 'ARG<auto>' 'ARG<--yolo>'; do
+    if ! printf '%s' "$op_out" | grep -qF "$want"; then
+      fail "[check-pack-install] installed 'entwurf copilot' did not forward the managed argv (missing $want):"
+      echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+      return 1
+    fi
+  done
+  if printf '%s' "$op_out" | grep -qF 'ARG<copilot>'; then
+    fail "[check-pack-install] installed 'entwurf copilot' leaked the dispatcher verb into the vendor's argv:"
+    echo "$op_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] installed 'entwurf copilot' reached the vendor with the scan flag and the managed argv"
+
   # The generation verb must reach its verdict from under node_modules. On the
   # sandbox 0-record agent dir it archives nothing and opens a fresh generation.
   # The exit code alone can't tell a verdict from a fence crash, so read the line.
@@ -4813,6 +4877,9 @@ case "$cmd" in
   check-copilot-statusline)
     check_copilot_statusline
     ;;
+  check-copilot-launch)
+    check_copilot_launch
+    ;;
   check-copilot-receive-arm)
     check_copilot_receive_arm
     ;;
@@ -5242,9 +5309,25 @@ case "$cmd" in
   smoke-copilot-mcp-state)
     (cd "$REPO_DIR" && bash scripts/smoke-copilot-mcp-state.sh)
     ;;
+  copilot)
+    # #82 RAIL 7: the managed launch. `exec` and NO subshell/cd on purpose — the vendor
+    # must inherit this terminal exactly: the caller's cwd, this pid, this tty, and its own
+    # exit status. The sibling install/doctor verbs wrap themselves in `(cd "$REPO_DIR" && …)`
+    # because they operate on the repo; this one operates on the operator's session, and a
+    # subshell would make run.sh a parent that outlives nothing and owns nothing.
+    #
+    # `shift` is load-bearing here, not cosmetic: this dispatcher keeps the verb in "$@"
+    # and each branch drops it for itself. The neighbouring install/doctor verbs get away
+    # without one because their bridge scripts take a leading subcommand and ignore the
+    # trailing noise; this branch forwards straight into the VENDOR's argv, where a stray
+    # "copilot" would arrive as a prompt argument.
+    shift || true
+    exec bash "$REPO_DIR/scripts/copilot-launch.sh" "$@"
+    ;;
   install-copilot-receive)
     # #82 RAIL 5: install the RECEIVER extension into the Copilot USER extensions dir.
-    # Artifact ownership only — it cannot set the operator's launch flag, and it arms
+    # Artifact ownership only — it sets no launch flag (`run.sh copilot` owns one
+    # invocation's environment; this owns the unit on disk), and it arms
     # nothing by itself: a session arms after birth, on a CLI launched with
     # COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS.
     (cd "$REPO_DIR" && bash scripts/copilot-receive-bridge.sh install "$@")

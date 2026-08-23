@@ -285,11 +285,17 @@ Only what the vendor actually ships. This is the step where imagination is most 
     convenience artifact survives into the product, that is the smell to look for.
   - **Keep experimental availability visible — and check it where it is decided.** Copilot
     scans extensions only when `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` is present;
-    without it the scan is silently skipped. entwurf cannot set that flag (it belongs to the
-    operator's own launch), so ownership here means DETECTION: `doctor-copilot-receive` reads
-    `/proc/<pid>/environ` of the live CLI processes and goes red when the receiver is
-    installed and a running session could never arm. A vendor silence you cannot remove is a
-    doctor's job, not a reason to promise the capability anyway. The flag's durability across
+    without it the scan is silently skipped. No installer can set that flag — it belongs to
+    the launch, not to anything on disk — so ownership here splits in two. **A launch you own
+    can set it:** `entwurf copilot` execs the vendor CLI with the flag for that one
+    invocation and refuses if the receiver it is promising is not installed. **Every other
+    launch you can only DETECT:** `doctor-copilot-receive` identifies the live CLI processes
+    from their argv — the vendor entry they were exec'd with, never their command name, which
+    the shim's own `exec` makes unusable — reads `/proc/<pid>/environ`, and goes red when the
+    receiver is installed and a running session could never arm. Take both halves: a managed
+    launch is not a substitute for the doctor, because operators start sessions their own way,
+    and a vendor silence you cannot remove is a doctor's job rather than a reason to promise
+    the capability anyway. The flag's durability across
     releases stays an open risk, not a reason to erase the demonstrated transport.
   - Note where notification actually goes. `[번들]` Copilot's separate `agentStop` output
     contract is `{decision?:"block", reason?:string}` and a blocked reason becomes a follow-up
@@ -308,15 +314,20 @@ Only after acceptance, and both places move together.
 - (c) A grade is a claim about evidence, so it moves when the evidence moves — not when the
   code lands. Two failure shapes to avoid: a registry that promises a `wakeMode` with no
   channel behind it, and a matrix row still describing a lane that has since been walked.
-  `[측정]` Copilot has now walked all of steps 1–7 as a branch product: the receiver is
-  installed, record-bound, liveness-guarded and on the mailbox rail, and the hermetic gate
-  is green. Its registry grade is still `D0`. That is not an oversight — it is the rule
-  working. A grade is a claim about EVIDENCE, and the evidence that moves receive off D0 is
-  a managed LIVE wake on a real Copilot session, which no green gate can stand in for. The
-  route is fail-closed while it waits (no armed marker → `mailbox-undeliverable`), so an
-  understated grade costs a caller nothing while an overstated one would promise a wake
-  nobody has watched. Grade the product, not the prototype, and keep the raw probe's own
-  D-levels recorded separately in `DELIVERY.md` rather than hiding either fact.
+  `[측정]` Copilot is the worked example of that rule running in BOTH directions. It walked
+  all of steps 1–7 as a branch product — receiver installed, record-bound, liveness-guarded,
+  on the mailbox rail, hermetic gate green — and its registry grade stayed `D0` through all
+  of it, because no green gate is a wake. The grade moved only when the evidence did: on
+  2026-08-23 a managed LIVE acceptance ran on garden `20260823T181316-d9f6ba` (CLI 1.0.80)
+  and left a joined→armed→doorbell→rang receive log, a mailbox stamped
+  `lastEnqueuedAt 09:23:41.235Z` / `lastReadAt 09:23:56.480Z`, and a model reply on the same
+  record/native/gid chain. That — not the landing of the code — is what made it `D6`.
+  The same discipline caps it: D7 stays PARTIAL (reply and read receipt observed; completion
+  taxonomy and long-haul operation not), D3 is PENDING because its decisive log was lost to a
+  scratch cleanup before anyone copied it out, and D8 is unproven. Grade the product, not the
+  prototype, and keep the raw probe's own D-levels recorded separately in `DELIVERY.md`
+  rather than hiding either fact. If you take one habit from this row, take the boring one:
+  **move the receipt out of scratch before you close the terminal.**
 
 ---
 

@@ -12,8 +12,8 @@
  *   1. RECORD functions + types (mint / serialize / parse / certifyActiveStore /
  *      decideUpsert), the backend-agnostic authority. Pure beyond an injected
  *      `now`; backend capability (wakeMode/deliveryLevel) comes from the packaged
- *      registry via a cached fs read (loadMetaCapabilityRegistry) — see that seam
- *      below.
+ *      registry, re-read on every load (loadMetaCapabilityRegistry holds NO cache, so a
+ *      grade moved on disk is visible to a long-lived process) — see that seam below.
  *   2. The thin FS-BOUND STORE (step 3): `upsertMetaSession` wraps the pure core
  *      (readdir → `certifyActiveStore` → `decideUpsert` → atomic write) with the real
  *      filesystem. It lives in this module (not a sibling `*-store.ts`) on purpose:
@@ -142,13 +142,23 @@ export const META_BACKEND_DESCRIPTORS: Record<MetaBackend, MetaBackendDescriptor
 	//             absence was never a claim about the vendor's other surfaces, and the
 	//             extension rail is the one it missed. Copilot is still NOT a
 	//             `nativePushSupported` backend and has no native-push adapter.
-	//   D0        the PRODUCT grade, and it stays here until a managed LIVE acceptance
-	//             exists. The route is fail-closed on both ends — with no armed receiver
-	//             marker every dispatch is refused `mailbox-undeliverable` — so an
-	//             understated level costs a caller nothing, while an overstated one would
-	//             promise a wake nobody has watched happen. The raw transport probe's D7
-	//             path (2026-08-23) is evidence about the MECHANISM, not about this
-	//             managed lane; grade the product, not the prototype.
+	//   D6        the PRODUCT grade, earned by the managed LIVE acceptance of 2026-08-23
+	//             (garden 20260823T181316-d9f6ba, native 20fe30c8-b2bc-4600-91a0-8a409131be51,
+	//             CLI 1.0.80): the receive log joins that native id and arms that garden id,
+	//             the mailbox state stamps lastEnqueuedAt 09:23:41.235Z and lastReadAt
+	//             09:23:56.480Z, and the model answered on the SAME record/native/gid chain.
+	//             This is still the PRODUCT grade and not the raw probe's: the earlier
+	//             transport probe was evidence about the mechanism, and it did not move this
+	//             number — a managed round trip did.
+	//             D7 is PARTIAL, deliberately: the reply and the read receipt were observed,
+	//             but the completion taxonomy as a whole and any long-haul operation were
+	//             not, and the reply envelope itself reaches this comment as an INHERITED
+	//             fact (it was not re-read from a transcript when this was written). D8 is
+	//             unproven and D3 (managed second-session isolation) is pending — its
+	//             decisive log was lost to a scratch cleanup before it could be preserved.
+	//             The route stays fail-closed on both ends: with no armed receiver marker
+	//             every dispatch is still refused `mailbox-undeliverable`, so replyability
+	//             is a fact about a live marker and never a constant of this backend.
 	//   sessionId the native join key, measured to be ONE id across all three surfaces:
 	//             the hook envelope, `record.nativeSessionId`, and the SDK's
 	//             `session.sessionId` (record 20260823T112003-9d069a ==
@@ -157,7 +167,7 @@ export const META_BACKEND_DESCRIPTORS: Record<MetaBackend, MetaBackendDescriptor
 	copilot: {
 		backend: "copilot",
 		wakeMode: "self-fetch",
-		deliveryLevel: "D0",
+		deliveryLevel: "D6",
 		nativeIdLabel: "sessionId",
 	},
 };
@@ -688,19 +698,30 @@ export function metaCapabilitiesFilePath(): string {
 // the rest of `delivery{}`, so today the registry is the sole home.
 // ---------------------------------------------------------------------------
 
-/** Memoized packaged registry; the file is immutable at runtime, so caching is honest (not stateful lying). */
-let cachedMetaCapabilities: MetaCapabilityRegistry | null = null;
-
 /**
- * Load + memoize the packaged capability registry — the live source of backend
- * honesty metadata as of 3D-3. A missing/corrupt file throws (the registry is a
- * packaged invariant; check-pack guarantees its presence).
+ * Load the packaged capability registry — the live source of backend honesty metadata
+ * as of 3D-3. A missing/corrupt file throws (the registry is a packaged invariant;
+ * check-pack guarantees its presence).
+ *
+ * NO CACHE, deliberately. This used to memoize into a process-lifetime singleton on the
+ * argument that "the file is immutable at runtime". That argument was false for the one
+ * process that matters: the entwurf-bridge MCP child lives as long as its harness
+ * session, so a grade or wakeMode moved by an install/upgrade was invisible to every
+ * already-running dispatcher until the operator restarted it — and nothing anywhere
+ * said so. The symptom is a citizen answering with last week's capability, which is the
+ * silent-wrong-answer class this repo refuses; "restart your session" is an instruction
+ * to work around a defect, not a fix for it (#82 RAIL 7).
+ *
+ * The subtraction is the whole repair, and it is deliberately not an invalidation
+ * scheme. Stat-based invalidation (mtime+size) cannot see an atomic same-size,
+ * same-timestamp replacement, so it would trade a certain staleness bug for an
+ * intermittent one; content hashing would have to read the file anyway. The registry is
+ * a few hundred bytes and both production callers — the v2 decider and production
+ * deliverability — reach it once per dispatch, not in a loop, so reading it there is
+ * cheaper than being wrong.
  */
 export function loadMetaCapabilityRegistry(): MetaCapabilityRegistry {
-	if (cachedMetaCapabilities === null) {
-		cachedMetaCapabilities = parseMetaCapabilityRegistry(fs.readFileSync(metaCapabilitiesFilePath(), "utf8"));
-	}
-	return cachedMetaCapabilities;
+	return parseMetaCapabilityRegistry(fs.readFileSync(metaCapabilitiesFilePath(), "utf8"));
 }
 
 /**

@@ -190,7 +190,57 @@ entwurf install-agy-hooks
 entwurf doctor-agy-bridge
 entwurf doctor-agy-statusline
 entwurf doctor-agy-hooks
+
+# GitHub Copilot CLI — four independent surfaces, four independent failure modes
+entwurf install-copilot-bridge      # birth: garden id + who-sent, on the first prompt
+entwurf install-copilot-mcp         # the entwurf tool hand (entwurf_inbox_read lives here)
+entwurf install-copilot-receive     # the receiver extension: doorbell + receiver marker
+entwurf install-copilot-statusline  # optional: garden id in the footer
+entwurf doctor-copilot-bridge
+entwurf doctor-copilot-receive
 ```
+
+#### Launching Copilot as a garden citizen — `entwurf copilot`
+
+Copilot only scans for extensions when its CLI is started with
+`COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS`, and when that flag is absent it skips the
+scan **silently** — no error, no log line, no receiver. entwurf does not own your shell
+and writes nothing to your rc files, so it owns one invocation instead:
+
+```bash
+entwurf copilot                 # managed launch, in this terminal
+entwurf copilot -p "…" --model gpt-5.4
+copilot                         # the plain vendor CLI, untouched
+```
+
+`entwurf copilot` execs the vendor CLI in your current terminal — same cwd, same pid,
+same exit status, no tmux window and no new citizen (a Copilot session is still born on
+its first prompt). Before it launches it verifies that the receiver unit it is about to
+promise is actually installed, and refuses with `entwurf install-copilot-receive` if it
+is not, rather than starting a session that can never be delivered to.
+
+**Running it is your consent to its profile.** For that one invocation it adds:
+
+| Injected | When |
+|---|---|
+| `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` | always — your other feature-flag tokens are preserved, in order, deduplicated |
+| `--model auto` | only when you passed no `--model` |
+| `--yolo` | only when you passed no explicit permission or surface policy flag |
+
+The escape hatch is simply to state your own policy: any of `--yolo`, `--allow-all`,
+`--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`, `--allow-tool`,
+`--deny-tool`, `--allow-url`, `--deny-url`, `--available-tools` or `--excluded-tools`
+suppresses the injected `--yolo`. The narrowing flags are in that list on purpose — adding
+`--yolo` beside your `--allow-url=…` would silently widen exactly what you were
+restricting. `--allow-all-mcp-server-instructions` (prompt content, not authorization) and
+`--autopilot` (a mode) are deliberately not policy flags. Everything you pass is forwarded
+byte-identically, injected defaults land before any `--` terminator, and nothing after the
+terminator is read as policy. Nothing is written to disk; run plain `copilot` and none of
+this applies.
+
+Why `--yolo` is the default: the managed lane exists so a sibling can wake an idle session,
+and draining the mailbox with `entwurf_inbox_read` costs two interactive approvals under
+the default permission prompts — which an idle, unattended session is not there to answer.
 
 Claude Code uses the supported floor `>=2.1.217`; older versions silently discard the
 exec-hook `args`, so install and doctor fail loud rather than falling back. After any

@@ -35,10 +35,19 @@
 
 import assert from "node:assert/strict";
 import { type ChildProcess, execFileSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
 	mailboxConversationalDeliverable,
 	receiverMarkerMatchesIdentity,
@@ -495,6 +504,31 @@ ok(
 	doctor().includes("the deployed writer matches this checkout's compiled writer"),
 );
 {
+	// THE ORIGINAL DEFECT OF THIS LANE, made a permanent cell: a HEALTHY INFO-only log
+	// once killed the doctor mid-section — `set -euo pipefail` turned a no-match grep
+	// (exit 1) into the assignment's status and -e ended the script before any verdict.
+	// The failure shape is "no final line and a non-zero exit", which a substring
+	// assertion cannot see: only the doctor's own PASS verdict as the LAST line plus
+	// exit 0 can. Refused WARN lines are present here on purpose (the drift/foreign-parent
+	// cells earlier in this gate wrote them) — they must stay notes, not red.
+	//
+	// FIRST among the doctor cells, and that position is load-bearing. This defect kills the
+	// doctor before ANY verdict prints, so every later cell that reads a verdict line —
+	// stale-writer, the flag cells, unreadable-environ, scanner-failure — fails too when it
+	// is re-planted. Whichever of them runs first is the one the mutant is attributed to, and
+	// qualification then reports WRONG-REASON for a claim that was perfectly true. Measured:
+	// it did exactly that once the scanner-failure cell was added above it (bg02, 229/230).
+	// A cell that shares a failure mode with later cells must run before them.
+	const clean = spawnSync("bash", [path.join(REPO, "run.sh"), "doctor-copilot-receive"], {
+		env: { ...installEnv, ENTWURF_COPILOT_RECEIVE_PIDS: "" },
+		encoding: "utf8",
+	});
+	ok(
+		"[QK:COPILOT-RECEIVE-DOCTOR-PASSES-CLEAN-LOG] a healthy log ends in the doctor's own PASS verdict and exit 0 — no silent mid-script death",
+		clean.status === 0 && clean.stdout.trimEnd().endsWith("[copilot-receive-doctor] PASS"),
+	);
+}
+{
 	// Exactly the failure this lane hit while it was being built: the unit kept a copy of
 	// a writer that predated the `extension-join` provenance, every arm threw inside the
 	// extension, and the only symptom was a citizen that never became deliverable.
@@ -514,37 +548,162 @@ ok(
 	writeFileSync(deployed, good);
 }
 {
-	// The flag branch, on REAL processes: one launched with the scan flag and one without,
-	// judged from their own /proc environment.
-	const withFlag = spawn("sleep", ["30"], { env: { ...process.env, COPILOT_CLI_ENABLED_FEATURE_FLAGS: "EXTENSIONS" } });
-	const withoutFlag = spawn("sleep", ["30"], { env: { ...process.env, COPILOT_CLI_ENABLED_FEATURE_FLAGS: "" } });
-	running.push(withFlag, withoutFlag);
-	await sleep(200);
-	const armedOut = doctor({ ENTWURF_COPILOT_RECEIVE_PIDS: String(withFlag.pid) });
-	ok("a CLI carrying the scan flag is reported as such", armedOut.includes("carry COPILOT_CLI_ENABLED_FEATURE_FLAGS"));
-	const barefootOut = doctor({ ENTWURF_COPILOT_RECEIVE_PIDS: String(withoutFlag.pid) });
-	ok(
-		"[QK:COPILOT-RECEIVE-DOCTOR-SEES-MISSING-FLAG] a CLI launched WITHOUT the scan flag is red — that session can never arm, and Copilot says nothing about it",
-		barefootOut.includes("lack COPILOT_CLI_ENABLED_FEATURE_FLAGS") && barefootOut.includes("FAIL"),
-	);
-	withFlag.kill("SIGKILL");
-	withoutFlag.kill("SIGKILL");
+	// The flag branch, on REAL processes read through their own /proc entries.
+	//
+	// The fixtures are VENDOR-SHAPED, and that shape is the point. This block used to
+	// spawn `sleep 30`, which was enough while discovery was `pgrep -x copilot` — a
+	// predicate that, measured on the reference host, matched NOTHING EVER: `copilot` is
+	// a shim whose branches all end `exec node …/@github/copilot/npm-loader.js`, and
+	// `exec` replaces the image, so no live CLI can carry that comm. A `sleep` fixture
+	// could not have caught it, because a `sleep` is not shaped like the thing that was
+	// being missed. So the fixture now IS the vendor layout: node, exec'd with a
+	// `@github/copilot/npm-loader.js` entry, exactly as a real launch arrives.
+	//
+	// Note what is NOT asserted anywhere here: a comm value. On the reference host 44
+	// live processes reported comm `MainThread` — the entwurf bridge child, 42 stub
+	// extension children, and anything else nodejs-slim 24 started — while other node
+	// builds report `node`. Pinning the native signature to a comm string would be a
+	// cell that is green today and silently false after a node bump.
+	const vendorDir = path.join(root, "vendor", "node_modules", "@github", "copilot");
+	mkdirSync(vendorDir, { recursive: true });
+	const loader = path.join(vendorDir, "npm-loader.js");
+	writeFileSync(loader, "setTimeout(() => {}, 60_000);\n");
+	// The lookalike: our own unit's child, launched the way the vendor launches one —
+	// the SDK is injected FROM the copilot package, so the child's argv carries a
+	// `@github/copilot/**.js` element too. That is deliberate: it makes the child
+	// positively identifiable as vendor-adjacent, so the only thing keeping it out of the
+	// session count is the extension-entry exclusion itself. A fixture that failed the
+	// identity test for some other reason would let that exclusion rot untested.
+	const sdkEntry = path.join(vendorDir, "copilot-sdk", "index.js");
+	mkdirSync(path.dirname(sdkEntry), { recursive: true });
+	writeFileSync(sdkEntry, "\n");
+	const lookalikeDir = path.join(root, "vendor", "extensions", "entwurf-receive");
+	mkdirSync(lookalikeDir, { recursive: true });
+	const lookalikeEntry = path.join(lookalikeDir, "extension.mjs");
+	writeFileSync(lookalikeEntry, "setTimeout(() => {}, 60_000);\n");
+
+	const withFlag = spawn(process.execPath, [loader], {
+		env: { ...process.env, COPILOT_CLI_ENABLED_FEATURE_FLAGS: "EXTENSIONS" },
+		stdio: "ignore",
+	});
+	const withoutFlag = spawn(process.execPath, [loader], {
+		env: { ...process.env, COPILOT_CLI_ENABLED_FEATURE_FLAGS: "" },
+		stdio: "ignore",
+	});
+	const extensionChild = spawn(process.execPath, ["--import", pathToFileURL(sdkEntry).href, lookalikeEntry], {
+		env: { ...process.env, COPILOT_EXTENSION_PARENT_PID: String(withFlag.pid ?? 1) },
+		stdio: "ignore",
+	});
+	running.push(withFlag, withoutFlag, extensionChild);
+	// Reap in a finally, not at the end of the file: an assertion failure below must not
+	// be able to leave these three behind as ppid=1 orphans holding a temp tree open.
+	try {
+		await sleep(200);
+
+		const armedOut = doctor({ ENTWURF_COPILOT_RECEIVE_PIDS: String(withFlag.pid) });
+
+		// The identity claim, stated against the predicate that used to be here: this
+		// process IS a native CLI and its comm is NOT `copilot`, so anything keying on the
+		// command name would report the benign "no live copilot" note instead of a verdict.
+		// "Found it" and "reported its flag" are ONE assertion on purpose — split in two,
+		// a discovery regression would trip the unlabelled half first and a mutant would
+		// come back WRONG-REASON instead of killed at this claim.
+		const comm = readFileSync(`/proc/${withFlag.pid}/comm`, "utf8").trim();
+		ok(
+			`[QK:COPILOT-RECEIVE-DOCTOR-FINDS-EXECED-NATIVE] an exec'd vendor entry is found by argv identity, not by command name (comm here is "${comm}", never "copilot")`,
+			comm !== "copilot" && armedOut.includes("carry COPILOT_CLI_ENABLED_FEATURE_FLAGS"),
+		);
+
+		const barefootOut = doctor({ ENTWURF_COPILOT_RECEIVE_PIDS: String(withoutFlag.pid) });
+		ok(
+			"[QK:COPILOT-RECEIVE-DOCTOR-SEES-MISSING-FLAG] a CLI launched WITHOUT the scan flag is red — that session can never arm, and Copilot says nothing about it",
+			barefootOut.includes("lack COPILOT_CLI_ENABLED_FEATURE_FLAGS") && barefootOut.includes("FAIL"),
+		);
+
+		// The exclusion, in the direction that matters: an extension child is unflagged
+		// (its parent's flag does not propagate as ours), so a discovery that counted it
+		// would go RED and blame the operator for a session that does not exist.
+		const lookalikeOut = doctor({ ENTWURF_COPILOT_RECEIVE_PIDS: String(extensionChild.pid) });
+		ok(
+			"[QK:COPILOT-RECEIVE-DOCTOR-EXCLUDES-EXTENSION-CHILD] our own extension child is not a Copilot session — it is excluded, not counted and not blamed",
+			lookalikeOut.includes("no live GitHub Copilot CLI process") &&
+				!lookalikeOut.includes("lack COPILOT_CLI_ENABLED_FEATURE_FLAGS"),
+		);
+	} finally {
+		withFlag.kill("SIGKILL");
+		withoutFlag.kill("SIGKILL");
+		extensionChild.kill("SIGKILL");
+	}
 }
 {
-	// THE ORIGINAL DEFECT OF THIS LANE, made a permanent cell: a HEALTHY INFO-only log
-	// once killed the doctor mid-section — `set -euo pipefail` turned a no-match grep
-	// (exit 1) into the assignment's status and -e ended the script before any verdict.
-	// The failure shape is "no final line and a non-zero exit", which a substring
-	// assertion cannot see: only the doctor's own PASS verdict as the LAST line plus
-	// exit 0 can. Refused WARN lines are present here on purpose (the drift/foreign-parent
-	// cells above wrote them) — they must stay notes, not red.
-	const clean = spawnSync("bash", [path.join(REPO, "run.sh"), "doctor-copilot-receive"], {
-		env: { ...installEnv, ENTWURF_COPILOT_RECEIVE_PIDS: "" },
-		encoding: "utf8",
-	});
+	// AN IDENTIFIED CLI WHOSE ENVIRONMENT WE CANNOT READ IS UNKNOWN, AND UNKNOWN IS RED.
+	// Identity has already succeeded for such a process — it IS a Copilot CLI — and the one
+	// thing this whole section exists to decide about it is unanswerable. Reporting that as
+	// a note let the doctor end in PASS while a session that can never arm was running.
+	//
+	// The fixture makes the environment REALLY unreadable rather than simulating it: the
+	// child calls prctl(PR_SET_DUMPABLE, 0) on itself, which reparents its /proc entries to
+	// root, and it carries a vendor-shaped argv so production identity still matches it.
+	// The cell asserts the unreadability FIRST — a fixture that quietly stayed readable
+	// would make the rest of this vacuous.
+	const nonDumpable = path.join(root, "nondumpable.py");
+	writeFileSync(
+		nonDumpable,
+		[
+			"import ctypes, sys, time",
+			"assert ctypes.CDLL('libc.so.6').prctl(4, 0, 0, 0, 0) == 0",
+			"sys.stderr.write('ready\\n'); sys.stderr.flush()",
+			"time.sleep(60)",
+		].join("\n") + "\n",
+	);
+	const opaque = spawn(
+		"python3",
+		[nonDumpable, path.join(root, "node_modules", "@github", "copilot", "npm-loader.js")],
+		{
+			stdio: "ignore",
+		},
+	);
+	running.push(opaque);
+	try {
+		await sleep(400);
+		let environReadable = true;
+		try {
+			readFileSync(`/proc/${opaque.pid}/environ`);
+		} catch {
+			environReadable = false;
+		}
+		const out = doctor({ ENTWURF_COPILOT_RECEIVE_PIDS: String(opaque.pid) });
+		ok(
+			"[QK:COPILOT-RECEIVE-DOCTOR-UNREADABLE-ENVIRON-IS-RED] an identified CLI whose environment cannot be read is UNKNOWN, and the doctor ends RED rather than passing with a note",
+			!environReadable && out.includes("is UNKNOWN and is NOT assumed armed") && out.includes("FAIL"),
+		);
+	} finally {
+		opaque.kill("SIGKILL");
+	}
+}
+{
+	// THE SCANNER'S OWN FAILURE IS THIS DOCTOR'S VERDICT, NOT ITS DEATH. Under
+	// `set -euo pipefail`, `x="$(python3 …)"` hands the interpreter's status to the
+	// assignment and `-e` ends the script there — no verdict line, no exit-0/exit-1
+	// distinction an operator can act on. Exactly the shape of the clean-log grep defect
+	// this lane already stepped on.
+	//
+	// The oracle is a `python3` earlier on PATH that DELEGATES every other invocation to the
+	// real interpreter and fails only the stdin form the scanner uses, so nothing else in the
+	// doctor changes behaviour and the failure is attributable to the scanner alone.
+	const pyBin = path.join(root, "py-bin");
+	mkdirSync(pyBin, { recursive: true });
+	const realPython = execFileSync("bash", ["-c", "command -v python3"], { encoding: "utf8" }).trim();
+	writeFileSync(
+		path.join(pyBin, "python3"),
+		`#!/usr/bin/env bash\nfor a in "$@"; do [ "$a" = "-" ] && exit 3; done\nexec ${JSON.stringify(realPython)} "$@"\n`,
+	);
+	chmodSync(path.join(pyBin, "python3"), 0o755);
+	const out = doctor({ PATH: `${pyBin}:${process.env.PATH ?? ""}` });
 	ok(
-		"[QK:COPILOT-RECEIVE-DOCTOR-PASSES-CLEAN-LOG] a healthy log ends in the doctor's own PASS verdict and exit 0 — no silent mid-script death",
-		clean.status === 0 && clean.stdout.trimEnd().endsWith("[copilot-receive-doctor] PASS"),
+		"[QK:COPILOT-RECEIVE-DOCTOR-OWNS-SCANNER-FAILURE] a scanner that exits non-zero produces the doctor's OWN red verdict, not a silent mid-section death",
+		out.includes("the /proc scan for live Copilot CLIs FAILED") &&
+			out.trimEnd().endsWith("[copilot-receive-doctor] FAIL"),
 	);
 }
 

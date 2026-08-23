@@ -82,7 +82,7 @@ D8 robustness: partial reason="..."
 | **Codex app-server-backed TUI** | verified probe | D7; D8 unproven | WebSocket-over-UDS `turn/start` into a live `threadId`; status events expose completion. No managed citizen lane yet. |
 | **Codex embedded TUI** | deferred | D0 partial | No supported receive socket/hook on the measured standalone shape. |
 | **Copilot CLI first-party extension** | raw transport probe; superseded by the managed unit | D7 path observed; D3 control receipt incomplete; D8 unproven | CLI-spawned extension over stdio JSON-RPC; `joinSession()` + documented `fs.watch` → `session.send({mode:"enqueue"})`. Idle wake, exact-marker reply, and completion passed on 2026-08-23 (CLI 1.0.80, L4, one Linux host). Two-process isolation was observed but its decisive B log was not preserved. Kept as the transport receipt the managed lane was built on; the shipped unit differs deliberately — it announces the inbox instead of injecting the body. |
-| **Copilot CLI garden citizen** | branch candidate; send + receive implemented | receive D0 until a managed LIVE receipt | Birth, garden id, MCP hand and record-backed sender identity are accepted; the RECEIVER landed on the same branch as an installed first-party extension that binds to the V3 record, writes a receiver marker owned by the WATCHER pid, and rings a doorbell the model drains with `entwurf_inbox_read`. `wakeMode` is now `self-fetch`, so dispatch reaches the mailbox rail: armed → delivered, unarmed/stale → the honest `mailbox-undeliverable` refusal. The GRADE stays D0 because no managed LIVE acceptance has run — the hermetic gate (`check-copilot-receive-arm`) proves the mechanism, not the wake. Needs `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` at launch; `doctor-copilot-receive` reads the live CLI environments because its absence is otherwise silent. |
+| **Copilot CLI garden citizen** | branch candidate; send + receive accepted on one host | D6; D7 partial; D3 pending; D8 unproven | Birth, garden id, MCP hand and record-backed sender identity are accepted; the RECEIVER is an installed first-party extension that binds to the V3 record, writes a receiver marker owned by the WATCHER pid, and rings a doorbell the model drains with `entwurf_inbox_read`. `wakeMode` is `self-fetch`, so dispatch reaches the mailbox rail: armed → delivered, unarmed/stale → the honest `mailbox-undeliverable` refusal. **D6 is the managed LIVE acceptance of 2026-08-23** — garden `20260823T181316-d9f6ba`, native `20fe30c8-b2bc-4600-91a0-8a409131be51`, CLI 1.0.80: receive log `joined`→`armed`→`doorbell fresh=1`→`rang`, mailbox `lastEnqueuedAt 09:23:41.235Z` / `lastReadAt 09:23:56.480Z`, and a model reply on the same record/native/gid chain. D7 is PARTIAL: the reply and read receipt were observed, the completion taxonomy and long-haul operation were not, and the reply envelope reaches this table as an inherited fact rather than a re-read transcript. D3 (managed second-session isolation) is PENDING — it was observed once and its decisive log was lost to a scratch cleanup. Evidence level L4: one host, one round trip. Launch with `entwurf copilot`, which sets `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` for that one invocation; `doctor-copilot-receive` reads the live CLI environments because a session launched without it is silently inert. |
 | **Copilot CLI TUI+server** — *withdrawn lane, kept as evidence* | rejected | D7; D8 unproven | Older official-SDK probe over hidden `--ui-server`; idle enqueue worked, but loopback RPC authentication was not established. The bundled extension supersedes this candidate without reviving it. |
 | **ACP Claude / Cortex** | shipped runtime, outside this matrix | — | ACP sessions are children launched by entwurf's pi adapter, not already-running native sessions to wake. |
 
@@ -165,16 +165,23 @@ transport and gave it the obligations a product owes (#82 RAIL 5):
   read, and the vendor's bootstrap already exits that child when the CLI goes.
 - **Dispatch.** `wakeMode: self-fetch` puts Copilot on the existing mailbox rail. Armed
   and matching → enqueue + doorbell; anything else → `mailbox-undeliverable`.
-- **The flag.** entwurf cannot set `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` in the
-  operator's shell, so `doctor-copilot-receive` reads the live CLI environments instead:
-  a session launched without it can never arm, and Copilot itself reports nothing.
+- **The flag.** entwurf still does not own the operator's shell and writes nothing to it,
+  but it owns ONE invocation: `entwurf copilot` execs the vendor CLI in the caller's own
+  terminal with `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` set for that process only,
+  and refuses to launch at all unless the receiver unit it is promising is really
+  installed. `doctor-copilot-receive` still reads the live CLI environments, because a
+  session started any other way without the flag is silently inert. Plain `copilot` is
+  untouched; running the managed form IS the consent to its profile (EXTENSIONS,
+  `--model auto` when no model was given, `--yolo` when no explicit permission or surface
+  policy flag was given).
 
-What is still owed is EVIDENCE, not code. The grade stays receive-D0 until a managed
-LIVE acceptance on a real Copilot session: the hermetic gate drives the real installer
-and the real extension against a stubbed SDK, which proves everything on entwurf's side
-of the fork and nothing about the vendor turn on the other side of it. D3 isolation, the
-active-turn case, `/clear` re-arm and flag durability across releases remain open there
-too.
+The managed lane has now been accepted LIVE (2026-08-23, receipts in the matrix row
+above), which is what moved receive from D0 to D6. What remains owed is still EVIDENCE,
+not code: D3 isolation lost its decisive log to a scratch cleanup and is pending, and the
+active-turn case, `/clear` re-arm and flag durability across vendor releases are
+unmeasured. The hermetic gate drives the real installer and the real extension against a
+stubbed SDK — it proves everything on entwurf's side of the fork and nothing about the
+vendor turn on the other side of it, so a green gate is still not a wake.
 
 The hidden `--ui-server` probe remains retired evidence, not a fallback. It found a real
 idle-enqueue capability through an unauthenticated loopback door; the extension finds the

@@ -398,8 +398,12 @@ IS now real (`wakeMode: self-fetch` plus a record-bound receiver marker, #82 RAI
 and it arrived through the managed unit with its own installer, doctor, gate and
 mutants — not by widening anything in this directory. `FRESH_CALL_BACKENDS` is still
 untouched: launching a Copilot sibling is a different capability from waking one.
-The registry's receive grade also stays D0 until a managed LIVE wake is observed; this
-probe's receipt is about the mechanism, not about the shipped lane.
+The registry's receive grade moved off D0 later, and NOT because of this probe: a managed
+LIVE wake was observed on 2026-08-23 (garden `20260823T181316-d9f6ba`, CLI 1.0.80,
+doorbell→`lastReadAt` 09:23:41.235Z→09:23:56.480Z) and that is what makes the shipped lane
+D6, with D7 partial and D3 pending. This probe's receipt remains what it always was —
+evidence about the MECHANISM, not about the shipped lane. Keep the two apart when citing
+either.
 
 ### Retired: the hidden `--ui-server` probe (kept for the lesson)
 

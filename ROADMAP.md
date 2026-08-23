@@ -162,15 +162,17 @@ Sonnet에서 flaky라 한 번의 flake가 컷을 막으면 안 된다. 우회/�
 - **driver optionality — deferred, not a current issue.** production은 tmux를 직접 호출하며 generic `DRIVERS`
   seam이나 zmx backend는 없다. 구체적인 두 번째 driver 수요가 생기기 전에는 비교·추상화를 재개하지 않는다.
   quota, system load, 예상 작업량, 과거 담당자 같은 선택 신호도 substrate/driver에 저장하지 않는다.
-- **Copilot CLI — garden birth와 outbound identity는 LIVE, receive transport는 raw LIVE.**
+- **Copilot CLI — garden birth, outbound identity, managed receive 모두 LIVE.**
   #82 branch에서 실제 Copilot CLI 1.0.80 세션이 첫 프롬프트에 V3 record를 민팅했고, 자기
   garden id로 outbound `entwurf_v2`를 보내 `origin:meta-session`을 보존했다. Managed receive는
-  아직 D0/`replyable:false`지만, 2026-08-23 bundled first-party extension이 stdio JSON-RPC의
-  `session.send({mode:"enqueue"})`로 idle native session을 깨우고 exact marker reply와 completion을
-  보였다(L4, Linux 한 대). Transport objection은 닫혔고 남은 것은 experimental `EXTENSIONS`
-  flag ownership, installed-extension provenance, record-backed pid/start-key liveness, stale/crash
-  refusal, dispatch, 그리고 D3 isolation 재영수증이다. 이 admission 전에는 registry grade나
-  `fresh_call`을 올리지 않는다. Hidden `--ui-server`는 loopback auth가 성립하지 않아 거절된
+  2026-08-23 관리 LIVE 수용으로 **D6**에 올랐다: garden `20260823T181316-d9f6ba`에서
+  enqueue(`09:23:41.235Z`)→doorbell→drain→read-receipt(`09:23:56.480Z`) 사슬이 완결되고 모델이
+  같은 record/native/gid 위에서 답했다(L4, Linux 한 대). `replyable:true`는 armed receiver marker가
+  있을 때의 사실이지 backend 상수가 아니다 — 무장 전/후에는 여전히 `mailbox-undeliverable`로 거절한다.
+  남은 것은 **D7 partial**(reply·read는 관측, completion taxonomy와 장기 운영은 아님),
+  **D3 pending**(두 번째 세션 격리는 관측됐으나 결정적 로그 미보존), **D8 unproven**, 그리고 experimental
+  `EXTENSIONS` flag 내구성이다. `fresh_call`은 여전히 올리지 않는다 — 형제를 *깨우는* 능력과
+  *띄우는* 능력은 별개다. Hidden `--ui-server`는 loopback auth가 성립하지 않아 거절된
   역사이며, bundled extension이 대체했을 뿐 다시 후보가 아니다. `ws.*`도 계속 금지다.
   Copilot은 GitHub 이슈/PR/CI와 model `auto`를 가진 별도 하네스이며, 그 역할은 dispatch 예절이지
   substrate role system이 아니다. 비용도 무제한이 아니라 AI Credit/monthly entitlement로 센다.

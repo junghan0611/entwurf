@@ -59,10 +59,10 @@
 			"title": "a copilot row that still says direct-inject routes every dispatch into the fail-closed refusal — the armed receiver exists and no reply can ever reach it",
 			"subject": "pi/entwurf-capabilities.json",
 			"find": [
-				"\t\t\"copilot\": { \"wakeMode\": \"self-fetch\", \"deliveryLevel\": \"D0\", \"nativeIdLabel\": \"sessionId\" },"
+				"\t\t\"copilot\": { \"wakeMode\": \"self-fetch\", \"deliveryLevel\": \"D6\", \"nativeIdLabel\": \"sessionId\" },"
 			],
 			"replace": [
-				"\t\t\"copilot\": { \"wakeMode\": \"direct-inject\", \"deliveryLevel\": \"D0\", \"nativeIdLabel\": \"sessionId\" },"
+				"\t\t\"copilot\": { \"wakeMode\": \"direct-inject\", \"deliveryLevel\": \"D6\", \"nativeIdLabel\": \"sessionId\" },"
 			],
 			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
 			"timeoutSeconds": 300,
@@ -169,9 +169,9 @@
 			"title": "downgrading a CLI launched without the scan flag to a note leaves the vendor's own silence unchallenged — the receiver is installed, nothing arms, and no surface anywhere says why",
 			"subject": "scripts/copilot-receive-bridge.sh",
 			"find": [
-				"\t\t\t\tbad \"$armed_missing live copilot process(es) lack $FLAG_ENV=$FLAG_VALUE while the receiver is installed — relaunch them with the flag, or uninstall the receiver so nothing promises a doorbell\""
+				"\t\t\t\tbad \"$armed_missing live Copilot CLI process(es) lack $FLAG_ENV=$FLAG_VALUE while the receiver is installed (pids: $missing_pids) — relaunch them with 'entwurf copilot', or uninstall the receiver so nothing promises a doorbell\""
 			],
-			"replace": ["\t\t\t\tnote \"$armed_missing live copilot process(es) lack $FLAG_ENV=$FLAG_VALUE\""],
+			"replace": ["\t\t\t\tnote \"$armed_missing live Copilot CLI process(es) lack $FLAG_ENV=$FLAG_VALUE\""],
 			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:COPILOT-RECEIVE-DOCTOR-SEES-MISSING-FLAG]",
@@ -190,6 +190,58 @@
 			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:COPILOT-RECEIVE-DOCTOR-PASSES-CLEAN-LOG]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-DOCTOR-FINDS-EXECED-NATIVE",
+			"title": "identifying the CLI by command name finds nothing at all — the vendor shim execs node, so the surviving process never carries the name `copilot`, and the detector built to break a vendor silence reports the benign 'no live copilot' note forever",
+			"subject": "scripts/copilot-receive-bridge.sh",
+			"find": [
+				"\tis_native = any(\"/@github/copilot/\" in a and a.endswith(\".js\") for a in argv)",
+				"\tif not is_native and os.path.basename(argv[0]) == \"copilot\":",
+				"\t\tis_native = True"
+			],
+			"replace": ["\tis_native = os.path.basename(argv[0]) == \"copilot\""],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-DOCTOR-FINDS-EXECED-NATIVE]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-DOCTOR-EXCLUDES-EXTENSION-CHILD",
+			"title": "counting our own extension children as Copilot sessions makes the doctor blame the operator for sessions that do not exist — every armed receiver would report itself as a CLI launched without the scan flag",
+			"subject": "scripts/copilot-receive-bridge.sh",
+			"find": ["\tif any(a.endswith(\"extension.mjs\") for a in argv):", "\t\tcontinue"],
+			"replace": ["\t# an extension child is close enough to a session"],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-DOCTOR-EXCLUDES-EXTENSION-CHILD]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-DOCTOR-UNREADABLE-ENVIRON-IS-RED",
+			"title": "downgrading an identified CLI whose environment cannot be read to a note lets the doctor end in PASS while a session that can never arm is running — identity already succeeded, so 'unknown' here is the exact question the section exists to answer",
+			"subject": "scripts/copilot-receive-bridge.sh",
+			"find": [
+				"\t\t\t\tbad \"$unreadable live Copilot CLI process(es) have an unreadable environment (pids: $unreadable_pids) — their $FLAG_ENV state is UNKNOWN and is NOT assumed armed. Re-run this doctor as the user that owns those sessions.\""
+			],
+			"replace": [
+				"\t\t\t\tnote \"$unreadable live Copilot CLI process(es) have an unreadable environment (pids: $unreadable_pids) — their $FLAG_ENV state is UNKNOWN and is NOT assumed armed. Re-run this doctor as the user that owns those sessions.\""
+			],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-DOCTOR-UNREADABLE-ENVIRON-IS-RED]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-DOCTOR-OWNS-SCANNER-FAILURE",
+			"title": "letting the scanner's exit status reach the assignment under `set -e` kills the doctor mid-section: no verdict line is printed at all, so the operator cannot tell a healthy host from a broken doctor — the same silent-death shape this lane already fixed once in the log grep",
+			"subject": "scripts/copilot-receive-bridge.sh",
+			"find": ["PY\n)\" || scan_rc=$?"],
+			"replace": ["PY\n)\""],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-DOCTOR-OWNS-SCANNER-FAILURE]",
 			"signatureSource": "scripts/check-copilot-receive-arm.ts"
 		}
 	]

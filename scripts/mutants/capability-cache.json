@@ -1,0 +1,64 @@
+{
+	"schemaVersion": 1,
+	"lane": "capability-cache",
+	"mutants": [
+		{
+			"claim": "CAPABILITY-REGISTRY-REREAD-SEES-REPLACEMENT",
+			"title": "memoizing the capability registry into a process-lifetime singleton makes every already-running dispatcher answer out of the registry it booted with — an install that moves a grade or wakeMode is invisible until the operator restarts, and nothing says so",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": [
+				"export function loadMetaCapabilityRegistry(): MetaCapabilityRegistry {",
+				"\treturn parseMetaCapabilityRegistry(fs.readFileSync(metaCapabilitiesFilePath(), \"utf8\"));",
+				"}"
+			],
+			"replace": [
+				"let cachedMetaCapabilities: MetaCapabilityRegistry | null = null;",
+				"export function loadMetaCapabilityRegistry(): MetaCapabilityRegistry {",
+				"\tif (cachedMetaCapabilities === null) {",
+				"\t\tcachedMetaCapabilities = parseMetaCapabilityRegistry(fs.readFileSync(metaCapabilitiesFilePath(), \"utf8\"));",
+				"\t}",
+				"\treturn cachedMetaCapabilities;",
+				"}"
+			],
+			"gate": ["bash", "run.sh", "check-meta-capability-source"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CAPABILITY-REGISTRY-REREAD-SEES-REPLACEMENT]",
+			"signatureSource": "scripts/check-meta-capability-source.ts"
+		},
+		{
+			"claim": "CAPABILITY-REGISTRY-MISSING-STILL-THROWS",
+			"title": "answering a missing registry with a built-in default turns a broken install into a citizen that silently claims capabilities nobody shipped",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\treturn parseMetaCapabilityRegistry(fs.readFileSync(metaCapabilitiesFilePath(), \"utf8\"));"],
+			"replace": [
+				"\tconst registryPath = metaCapabilitiesFilePath();",
+				"\tif (!fs.existsSync(registryPath)) {",
+				"\t\treturn { schemaVersion: CAPABILITY_SCHEMA_VERSION, backends: {} } as unknown as MetaCapabilityRegistry;",
+				"\t}",
+				"\treturn parseMetaCapabilityRegistry(fs.readFileSync(registryPath, \"utf8\"));"
+			],
+			"gate": ["bash", "run.sh", "check-meta-capability-source"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CAPABILITY-REGISTRY-MISSING-STILL-THROWS]",
+			"signatureSource": "scripts/check-meta-capability-source.ts"
+		},
+		{
+			"claim": "CAPABILITY-REGISTRY-CORRUPT-STILL-THROWS",
+			"title": "swallowing a parse failure and returning a fallback lets a half-written or hand-edited registry read as a valid one, so the strict parser stops being load-bearing",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": ["\treturn parseMetaCapabilityRegistry(fs.readFileSync(metaCapabilitiesFilePath(), \"utf8\"));"],
+			"replace": [
+				"\tconst rawRegistry = fs.readFileSync(metaCapabilitiesFilePath(), \"utf8\");",
+				"\ttry {",
+				"\t\treturn parseMetaCapabilityRegistry(rawRegistry);",
+				"\t} catch {",
+				"\t\treturn { schemaVersion: CAPABILITY_SCHEMA_VERSION, backends: {} } as unknown as MetaCapabilityRegistry;",
+				"\t}"
+			],
+			"gate": ["bash", "run.sh", "check-meta-capability-source"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:CAPABILITY-REGISTRY-CORRUPT-STILL-THROWS]",
+			"signatureSource": "scripts/check-meta-capability-source.ts"
+		}
+	]
+}

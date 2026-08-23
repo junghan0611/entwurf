@@ -1,0 +1,165 @@
+{
+	"schemaVersion": 1,
+	"lane": "copilot-launch",
+	"mutants": [
+		{
+			"claim": "COPILOT-LAUNCH-REQUIRES-RECEIVER",
+			"title": "launching with the scan flag while no receiver unit is installed promises a doorbell nothing can ring — the session looks managed and is permanently undeliverable, with no error anywhere",
+			"subject": "scripts/copilot-launch.sh",
+			"find": [
+				"[ -f \"$STATE_FILE\" ] \\",
+				"\t|| fail \"no receiver install-state at $STATE_FILE.",
+				"  '$VENDOR_CMD' launched with $FLAG_ENV=$FLAG_VALUE would scan for an extension that is",
+				"  not there, and the session would never become deliverable. Run: $REPAIR\""
+			],
+			"replace": [
+				"if [ ! -f \"$STATE_FILE\" ]; then",
+				"\tmkdir -p \"$STATE_DIR\"",
+				"\tprintf '{\"schemaVersion\":1,\"unit\":\"%s\",\"path\":\"%s\"}\\n' \"$UNIT\" \"$DEST\" > \"$STATE_FILE\"",
+				"fi"
+			],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-REQUIRES-RECEIVER]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
+		},
+		{
+			"claim": "COPILOT-LAUNCH-REFUSES-PATH-MISMATCH",
+			"title": "accepting an install-state that names a different extensions root lets the CLI scan a directory nobody installed into, while every artifact check stays green",
+			"subject": "scripts/copilot-launch.sh",
+			"find": [
+				"[ \"$claimed_path\" = \"$DEST\" ] \\",
+				"\t|| fail \"receiver install-state points at '$claimed_path' but this environment scans '$DEST'.",
+				"  The CLI would read a different extensions root than the one that was installed",
+				"  (COPILOT_EXTENSIONS_DIR / HOME differ from install time). Run: $REPAIR\""
+			],
+			"replace": ["# whichever root the state names is close enough"],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-REFUSES-PATH-MISMATCH]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
+		},
+		{
+			"claim": "COPILOT-LAUNCH-SETS-EXTENSIONS-TOKEN",
+			"title": "not guaranteeing the EXTENSIONS token makes the managed launch identical to a plain one — Copilot skips the extension scan silently and the whole surface is decoration",
+			"subject": "scripts/copilot-launch.sh",
+			"find": ["[ \"$seen_extensions\" -eq 1 ] || flags_out=\"${flags_out:+$flags_out,}$FLAG_VALUE\""],
+			"replace": ["# assume the operator already set it"],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-SETS-EXTENSIONS-TOKEN]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
+		},
+		{
+			"claim": "COPILOT-LAUNCH-PRESERVES-OPERATOR-TOKENS",
+			"title": "overwriting the feature-flag variable instead of extending it silently disables every other vendor feature flag the operator had enabled",
+			"subject": "scripts/copilot-launch.sh",
+			"find": ["export \"$FLAG_ENV=$flags_out\""],
+			"replace": ["export \"$FLAG_ENV=$FLAG_VALUE\""],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-PRESERVES-OPERATOR-TOKENS]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
+		},
+		{
+			"claim": "COPILOT-LAUNCH-DEFAULTS-BEFORE-TERMINATOR",
+			"title": "appending the injected defaults after the argv terminator turns them from options into positional data the vendor reads as prompt text, so the managed profile silently stops applying",
+			"subject": "scripts/copilot-launch.sh",
+			"find": [
+				"final_args=()",
+				"for (( i = 0; i < scan_end; i++ )); do final_args+=(\"${args[$i]}\"); done",
+				"if [ \"${#injected[@]}\" -gt 0 ]; then final_args+=(\"${injected[@]}\"); fi",
+				"for (( i = scan_end; i < ${#args[@]}; i++ )); do final_args+=(\"${args[$i]}\"); done"
+			],
+			"replace": [
+				"final_args=(\"${args[@]}\")",
+				"if [ \"${#injected[@]}\" -gt 0 ]; then final_args+=(\"${injected[@]}\"); fi"
+			],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-DEFAULTS-BEFORE-TERMINATOR]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
+		},
+		{
+			"claim": "COPILOT-LAUNCH-NO-DEFAULT-OVER-EXPLICIT-POLICY",
+			"title": "treating only the broadening flags as explicit policy means an operator who NARROWS permissions (--allow-url, --deny-tool, --excluded-tools) still gets --yolo appended — the managed default silently widens exactly what they were restricting",
+			"subject": "scripts/copilot-launch.sh",
+			"find": ["\t--allow-url", "\t--deny-url", "\t--available-tools", "\t--excluded-tools"],
+			"replace": ["\t# narrowing flags are not policy"],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-NO-DEFAULT-OVER-EXPLICIT-POLICY]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
+		},
+		{
+			"claim": "COPILOT-LAUNCH-PREFIX-IS-NOT-POLICY",
+			"title": "matching policy flags by prefix instead of exactly makes --allow-all-mcp-server-instructions read as --allow-all, so a prompt-content flag suppresses the managed permission default",
+			"subject": "scripts/copilot-launch.sh",
+			"find": ["\t\tif [ \"$head\" = \"$ov\" ]; then"],
+			"replace": ["\t\tif case \"$head\" in \"$ov\"*) true ;; *) false ;; esac; then"],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-PREFIX-IS-NOT-POLICY]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
+		},
+		{
+			"claim": "COPILOT-LAUNCH-KEEPS-OPERATOR-MODEL",
+			"title": "injecting the default model regardless of what the operator asked for silently overrides an explicit --model",
+			"subject": "scripts/copilot-launch.sh",
+			"find": ["\t\thas_model=1"],
+			"replace": ["\t\thas_model=0"],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-KEEPS-OPERATOR-MODEL]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
+		},
+		{
+			"claim": "COPILOT-LAUNCH-EXECS-NOT-FORKS",
+			"title": "running the vendor as a child instead of exec'ing it leaves an entwurf shell sitting between the operator's terminal and the CLI, owning a pid and a signal path that belong to the vendor",
+			"subject": "scripts/copilot-launch.sh",
+			"find": ["exec \"$copilot_bin\" \"${final_args[@]}\""],
+			"replace": ["\"$copilot_bin\" \"${final_args[@]}\""],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-EXECS-NOT-FORKS]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
+		},
+		{
+			"claim": "COPILOT-LAUNCH-REFUSES-RECURSION",
+			"title": "dropping the sentinel lets a PATH entry that calls back into the managed launch spin forever; the operator sees a hung terminal, not an error",
+			"subject": "scripts/copilot-launch.sh",
+			"find": ["if [ -n \"${ENTWURF_COPILOT_LAUNCH_ACTIVE:-}\" ]; then"],
+			"replace": ["if false; then"],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-REFUSES-RECURSION]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
+		},
+		{
+			"claim": "COPILOT-LAUNCH-REFUSES-ABSENT-VENDOR",
+			"title": "not checking that the vendor resolved turns a missing CLI into an opaque exec failure instead of the one sentence that says what is missing",
+			"subject": "scripts/copilot-launch.sh",
+			"find": [
+				"[ -n \"$copilot_bin\" ] \\",
+				"\t|| fail \"no '$VENDOR_CMD' executable found on PATH.",
+				"  The managed launch runs the GitHub Copilot CLI; install it, or put it on PATH.\""
+			],
+			"replace": ["# an empty resolution will surface itself at exec time"],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-REFUSES-ABSENT-VENDOR]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
+		},
+		{
+			"claim": "COPILOT-LAUNCH-KEEPS-CALLER-CWD",
+			"title": "dispatching the managed launch through the repo-scoped subshell every neighbouring verb uses would start the vendor in the entwurf checkout instead of the operator's own directory",
+			"subject": "run.sh",
+			"find": ["    shift || true", "    exec bash \"$REPO_DIR/scripts/copilot-launch.sh\" \"$@\""],
+			"replace": ["    shift || true", "    (cd \"$REPO_DIR\" && bash scripts/copilot-launch.sh \"$@\")"],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-KEEPS-CALLER-CWD]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
+		}
+	]
+}

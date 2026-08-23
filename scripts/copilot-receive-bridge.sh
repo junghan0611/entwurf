@@ -15,11 +15,11 @@
 #
 # WHAT IT OWNS, AND WHAT IT CANNOT. It owns the artifact (its own directory, recorded
 # in an install-state file, removed only from that record) and it CHECKS the launch
-# flag. It cannot set that flag: `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` is read
-# from the environment of the operator's own `copilot` launch, and entwurf does not own
-# the operator's shell. Without it Copilot never scans for extensions and never says so —
-# which is exactly why the doctor reads the live CLI processes instead of trusting a
-# green artifact.
+# flag. It cannot set that flag from here: `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS`
+# is read from the environment of the `copilot` launch itself, and an installer is not a
+# launch. The managed launch `run.sh copilot` sets it for one invocation; a session started
+# any other way without it never scans for extensions and never says so — which is exactly
+# why the doctor reads the live CLI processes instead of trusting a green artifact.
 #
 # COMPILED JS ONLY. The extension is executed by the CLI's own Node, whose version and
 # type-stripping support are not ours to assume, so the install copies the tsc-emitted
@@ -234,39 +234,140 @@ do_doctor() {
 	# extensions and prints nothing at all, so a perfectly installed unit stays inert
 	# with no symptom anywhere. Reading the live processes' own environment is the only
 	# place that silence becomes visible. Linux /proc only; elsewhere it is a note.
+	#
+	# WHY NOT `pgrep -x copilot` (what this used to do). It matched nothing, ever, and
+	# reported that as the benign "no live copilot" note — so the detector built to break
+	# a silence was itself silent. Measured 2026-08-23: `type -P copilot` is a pnpm shim,
+	# a POSIX shell script whose every branch ends `exec node …/@github/copilot/
+	# npm-loader.js "$@"`. `exec` REPLACES the process image, so the thing that survives
+	# is node and the comm can never read `copilot`.
+	#
+	# AND `comm` IS NOT THE FIX EITHER. On the same host `ps -eo comm=` showed 44
+	# processes named `MainThread` — that is just what nodejs-slim 24 calls its main
+	# thread, shared by the entwurf MCP bridge child and by 42 stub extension children a
+	# gate had left behind; other node builds report plain `node`. A cell asserting
+	# "comm == MainThread means native Copilot" would be green today and quietly false
+	# after a node bump, so comm is used NOWHERE below, as predicate or as claim.
+	#
+	# WHAT IDENTIFIES A NATIVE CLI is its argv: the vendor entry `@github/copilot/*.js`
+	# it was exec'd with, or an argv[0] the operator invoked as `copilot`. What must be
+	# EXCLUDED is the vendor's own extension children — they are node processes launched
+	# from OUR unit and carry `COPILOT_EXTENSION_PARENT_PID`; counting one as a session
+	# would report a receiver as its own missing session.
 	if [ ! -d /proc ]; then
 		note "no /proc on this platform — cannot read the live CLI environments"
 	else
-		local pids="" p armed_ok=0 armed_missing=0
-		# WHICH PROCESSES. Normally every live `copilot`. `ENTWURF_COPILOT_RECEIVE_PIDS`
-		# (set, even to empty) supplies the set instead — it exists so the gate can hand
-		# this branch REAL processes it launched with and without the flag, and read their
-		# real `/proc/<pid>/environ`. Without that seam the only oracle for the
-		# invisible-failure detector would be whatever happened to be running on the host,
-		# which is not an oracle at all.
+		local pid_seam="" scan_json
+		# WHICH PROCESSES ARE CANDIDATES. Normally every pid under /proc.
+		# `ENTWURF_COPILOT_RECEIVE_PIDS` (set, even to empty) narrows the candidate set so
+		# the gate can hand this branch REAL processes it launched and read their real
+		# `/proc/<pid>/{cmdline,environ}`. It narrows candidates ONLY — the identity and
+		# flag predicates below are the same production code either way, so the seam can
+		# never certify a process the real scan would have rejected.
 		if [ -n "${ENTWURF_COPILOT_RECEIVE_PIDS+x}" ]; then
-			pids="$ENTWURF_COPILOT_RECEIVE_PIDS"
-		else
-			pids="$(pgrep -x copilot 2>/dev/null || true)"
+			pid_seam="$ENTWURF_COPILOT_RECEIVE_PIDS"
 		fi
-		if [ -z "$pids" ]; then
-			note "no live 'copilot' process — start one with $FLAG_ENV=$FLAG_VALUE to arm a receiver"
+		# OWNED FAILURE. Under `set -euo pipefail` a bare `x="$(python3 …)"` hands the
+		# interpreter's exit status to the assignment, and `-e` ends the script THERE — before
+		# any verdict line, so the operator sees a doctor that stopped mid-section and cannot
+		# tell "fine" from "crashed". Same shape as the clean-log grep defect this lane already
+		# stepped on once. The status is captured instead, and a broken scan becomes a verdict.
+		local scan_rc=0
+		scan_json="$(ENTWURF_PID_SEAM="${pid_seam}" ENTWURF_PID_SEAM_SET="${ENTWURF_COPILOT_RECEIVE_PIDS+1}" FLAG_ENV="$FLAG_ENV" FLAG_VALUE="$FLAG_VALUE" python3 - <<'PY'
+import os, pathlib
+
+flag_env = os.environ["FLAG_ENV"]
+flag_value = os.environ["FLAG_VALUE"]
+
+if os.environ.get("ENTWURF_PID_SEAM_SET"):
+	candidates = [p for p in os.environ["ENTWURF_PID_SEAM"].split() if p.isdigit()]
+else:
+	candidates = [p.name for p in pathlib.Path("/proc").iterdir() if p.name.isdigit()]
+
+def read_nul(pid, what):
+	try:
+		return pathlib.Path(f"/proc/{pid}/{what}").read_bytes().split(b"\0")
+	except OSError:
+		return None
+
+armed_ok, armed_missing, unreadable = 0, 0, 0
+missing_pids, unreadable_pids = [], []
+
+for pid in candidates:
+	argv = read_nul(pid, "cmdline")
+	# No cmdline at all is a kernel thread or a process that exited mid-scan; neither is
+	# a Copilot session and neither is evidence of anything.
+	if not argv:
+		continue
+	argv = [a.decode("utf-8", "replace") for a in argv if a != b""]
+	if not argv:
+		continue
+
+	# EXCLUDE the vendor's extension children first, before any positive match: they are
+	# node processes whose argv names an `extension.mjs`. That entry name is the vendor's
+	# REQUIRED one — it is what the CLI scans for — so argv alone is load-bearing here and
+	# no second signal is read. (The bootstrap also hands these children a
+	# COPILOT_EXTENSION_PARENT_PID, but this predicate does not consult it; do not describe
+	# an exclusion the code does not perform.)
+	if any(a.endswith("extension.mjs") for a in argv):
+		continue
+
+	# The positive identity. `@github/copilot/<entry>.js` is the vendor package entry the
+	# launcher execs; an argv[0] basename of `copilot` covers an install that ships a
+	# real binary under that name instead of a node shim.
+	is_native = any("/@github/copilot/" in a and a.endswith(".js") for a in argv)
+	if not is_native and os.path.basename(argv[0]) == "copilot":
+		is_native = True
+	if not is_native:
+		continue
+
+	env = read_nul(pid, "environ")
+	if env is None:
+		# FAIL-CLOSED: we identified a native CLI but cannot read its environment, so its
+		# flag state is unknown. That is reported, never rounded to armed.
+		unreadable += 1
+		unreadable_pids.append(pid)
+		continue
+	env_map = {}
+	for item in env:
+		if b"=" in item:
+			k, _, v = item.partition(b"=")
+			env_map[k.decode("utf-8", "replace")] = v.decode("utf-8", "replace")
+	# An absent flag and a flag without the token are the same failure: no scan happened.
+	tokens = [t.strip() for t in (env_map.get(flag_env) or "").split(",")]
+	if flag_value in tokens:
+		armed_ok += 1
+	else:
+		armed_missing += 1
+		missing_pids.append(pid)
+
+print(f"{armed_ok} {armed_missing} {unreadable}")
+print(" ".join(missing_pids))
+print(" ".join(unreadable_pids))
+PY
+)" || scan_rc=$?
+		local counts armed_ok armed_missing unreadable missing_pids unreadable_pids
+		counts="$(printf '%s\n' "$scan_json" | sed -n '1p')"
+		missing_pids="$(printf '%s\n' "$scan_json" | sed -n '2p')"
+		unreadable_pids="$(printf '%s\n' "$scan_json" | sed -n '3p')"
+		armed_ok="$(printf '%s' "$counts" | awk '{print $1}')"
+		armed_missing="$(printf '%s' "$counts" | awk '{print $2}')"
+		unreadable="$(printf '%s' "$counts" | awk '{print $3}')"
+		if [ "$scan_rc" -ne 0 ] || [ -z "$armed_ok" ]; then
+			bad "the /proc scan for live Copilot CLIs FAILED (exit $scan_rc) — the flag axis is UNKNOWN, so an inert session cannot be ruled out. This is a broken doctor, not a clean host."
+		elif [ "$armed_ok" -eq 0 ] && [ "$armed_missing" -eq 0 ] && [ "$unreadable" -eq 0 ]; then
+			note "no live GitHub Copilot CLI process — start one with 'entwurf copilot' (or $FLAG_ENV=$FLAG_VALUE copilot) to arm a receiver"
 		else
-			for p in $pids; do
-				if [ -r "/proc/$p/environ" ]; then
-					if tr '\0' '\n' < "/proc/$p/environ" 2>/dev/null | grep -q "^$FLAG_ENV=.*$FLAG_VALUE"; then
-						armed_ok=$((armed_ok + 1))
-					else
-						armed_missing=$((armed_missing + 1))
-						note "pid $p was launched WITHOUT $FLAG_ENV=$FLAG_VALUE — that session can never arm a receiver"
-					fi
-				else
-					note "pid $p environment is unreadable — flag state unknown for that session"
-				fi
-			done
-			[ "$armed_ok" -gt 0 ] && ok "$armed_ok live copilot process(es) carry $FLAG_ENV=$FLAG_VALUE"
+			[ "$armed_ok" -gt 0 ] && ok "$armed_ok live Copilot CLI process(es) carry $FLAG_ENV=$FLAG_VALUE"
+			if [ "$unreadable" -gt 0 ]; then
+				# RED, not a note. These ARE Copilot CLIs — identity already succeeded — and the one
+				# thing this section exists to decide about them is unknown. A note would let the
+				# doctor end in PASS while a session that can never arm is running, which is the
+				# exact false-success the section was written to break.
+				bad "$unreadable live Copilot CLI process(es) have an unreadable environment (pids: $unreadable_pids) — their $FLAG_ENV state is UNKNOWN and is NOT assumed armed. Re-run this doctor as the user that owns those sessions."
+			fi
 			if [ "$armed_missing" -gt 0 ]; then
-				bad "$armed_missing live copilot process(es) lack $FLAG_ENV=$FLAG_VALUE while the receiver is installed — relaunch them with the flag, or uninstall the receiver so nothing promises a doorbell"
+				bad "$armed_missing live Copilot CLI process(es) lack $FLAG_ENV=$FLAG_VALUE while the receiver is installed (pids: $missing_pids) — relaunch them with 'entwurf copilot', or uninstall the receiver so nothing promises a doorbell"
 			fi
 		fi
 	fi
