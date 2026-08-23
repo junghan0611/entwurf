@@ -10,7 +10,8 @@
 # `LEVEL [copilot]`. Those lines must be invisible here, for a reason stronger than
 # tidiness: a copilot ERROR is often a CORRECT fail-closed refusal (a degraded envelope
 # the unit refused to mint from), and its recovery token can never appear — `armed
-# watch` is a Claude-only line, because Copilot has no doorbell to arm. Counting them
+# watch` is the Claude hook rail's token. Copilot's measured extension transport has a
+# different, not-yet-admitted lifecycle and writes no token this doctor owns. Counting them
 # would make the CLAUDE doctor permanently red for a refusal on a different rail, with
 # a prescription pointing at a Claude wake failure that never happened (cross-review,
 # glm, 2026-08-21). Copilot's own recovery rule lives in copilot-bridge-doctor.sh.

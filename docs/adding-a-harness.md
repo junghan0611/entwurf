@@ -48,7 +48,8 @@ measurements first, from the vendor's own artifacts and processes.
 1. **Hook vocabulary and firing time.** Which events exist, and *when* they fire.
 2. **Launch form and envelope.** How a hook command is declared, and what arrives on stdin.
 3. **Config writer.** Which file the vendor's own CLI writes, and in what shape.
-4. **Statusline / receive surfaces.** What the vendor offers for display and for waking.
+4. **Statusline / receive surfaces.** What the vendor offers for display and for waking,
+   including bundled SDKs, extension APIs, and the feature gates that make them load.
 5. **Parent process topology.** Whether the hook process and the MCP child share one
    ancestor — the join key step 6 depends on.
 
@@ -64,6 +65,13 @@ measurements first, from the vendor's own artifacts and processes.
     the other two produce a config the vendor silently ignores.
   - **A lifecycle event's NAME does not tell you when it fires.** Measure the firing, not the
     documentation, or a design assuming birth-at-open renders a citizen that does not exist.
+  - **One familiar doorbell's absence does not prove the harness cannot wake.** Search the
+    vendor's bundled SDK, extension bootstrap, and examples before declaring D4 impossible.
+    `[측정]` Copilot CLI 1.0.80 has none of Claude's `FileChanged` / `asyncRewake` /
+    `watchPaths`, yet its bundled first-party extension SDK documents `fs.watch` followed by
+    `session.send()`. With `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS`, that route woke an
+    idle native session and returned an exact marker on 2026-08-23. The decisive receipt and
+    reproduction live in `scripts/raw-async-delivery/README.md`.
 
 **The oracle is the vendor artifact or the vendor process — never our own assembler.**
 A gate that drives our installer proves our installer; only the vendor proves the vendor.
@@ -231,26 +239,40 @@ Only what the vendor actually ships. This is the step where imagination is most 
 - (a) Source: whatever real surface the measurement in step 1 found. For Claude Code that is
   a per-session mailbox armed by a receiver marker, with `FileChanged` as the doorbell and
   `asyncRewake` for the idle wake. For Antigravity it is native-push through the adapter and
-  a live probe — **no mailbox and no receiver marker at all.**
-- (b) Acceptance is a live receipt on the real harness, never an inference.
+  a live probe — **no mailbox and no receiver marker at all.** For Copilot CLI 1.0.80 the
+  positive receive surface is its bundled first-party extension SDK: the CLI forks the
+  extension, speaks JSON-RPC over the child's stdio, `joinSession()` binds the foreground
+  native session, and the documented `fs.watch` → `session.send({mode:"enqueue"})` pattern
+  supplies the idle wake. This is not the rejected hidden `--ui-server` loopback route.
+- (b) Acceptance is a live receipt on the real harness, never an inference. `[측정]` On
+  2026-08-23 an extension-armed idle Copilot session woke with zero typing, received a unique
+  marker, replied with that marker in the same native session, and returned to `session.idle`.
+  Evidence is L4 on one Linux workstation. A second armed process was observed to remain
+  untouched, but its decisive log was not preserved before scratch cleanup; D3 isolation
+  therefore remains an admission rerun. The travelling receipt is in
+  `scripts/raw-async-delivery/README.md`.
 - (c) The rules that keep this step honest:
   - **Never infer a receiver from a sender.** They are separate markers with separate
-    meanings, and a receiver marker written where nothing can ring it claims a doorbell that
-    does not exist.
-  - **Do not invent a watcher, a delivery adapter, or a polling supervisor** for a harness
-    whose bundle has no wake mechanism. `entwurf_v2` starts no process; a citizen that
-    cannot be woken refuses honestly instead.
-  - Name the boundary precisely rather than broadly. `[번들]` Copilot CLI 1.0.80 has no
-    `FileChanged`, no `asyncRewake` and no `watchPaths`, so it has **no idle wake** — but it
-    does have an `agentStop` hook, and "no idle wake" must not be written as "no hooks at
-    all". `[미검증]` Whether a declarative Copilot unit is accepted for `agentStop` has not
-    been measured on this branch; the vendor's JS never names the declarative hook set, so
-    only a live turn can answer it.
-  - Note where the notification actually goes. `[번들]` Copilot's `agentStop` output
-    contract is `{decision?:"block", reason?:string}` and a blocked reason is enqueued as a
-    **follow-up user message** — it reaches the model's context, not an operator panel. A
-    notification design written as "the operator sees the letter" would be aimed at the
-    wrong reader; combined with the hand from step 5, the model fetches its own mail.
+    meanings. Copilot outbound identity was accepted before its receive transport was found;
+    neither fact grants the other.
+  - **Use a vendor-owned wake mechanism; do not invent an external watcher, delivery adapter,
+    or polling supervisor.** A watcher *inside* the vendor's documented extension lifecycle
+    is different from an entwurf sidecar pretending to own that lifecycle. `entwurf_v2`
+    still starts no process.
+  - **Transport proof is not product admission.** The Copilot extension receipt removes the
+    transport objection, but the shipped backend remains `replyable:false` until entwurf owns
+    extension installation and the feature flag, joins the armed receiver to the V3 record,
+    rejects stale/crashed receivers, routes dispatch, and proves those contracts with its own
+    gates and LIVE acceptance. A raw `ready.json` is discovery evidence, not production
+    liveness authority.
+  - **Keep experimental availability visible.** Copilot scans extensions only when
+    `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` is present; without it the scan is silently
+    skipped. The flag's durability across releases is an admission risk, not a reason to erase
+    the demonstrated transport.
+  - Note where notification actually goes. `[번들]` Copilot's separate `agentStop` output
+    contract is `{decision?:"block", reason?:string}` and a blocked reason becomes a follow-up
+    user message. That turn-boundary hook is not the idle-wake transport above and must not be
+    used as its substitute.
 
 ---
 
@@ -264,9 +286,12 @@ Only after acceptance, and both places move together.
 - (c) A grade is a claim about evidence, so it moves when the evidence moves — not when the
   code lands. Two failure shapes to avoid: a registry that promises a `wakeMode` with no
   channel behind it, and a matrix row still describing a lane that has since been walked.
-  `[미검증]` As of this branch, Copilot has walked steps 1–6 and has **not** walked 7 or 8;
-  its current registry and matrix values are therefore behind the code and are being
-  corrected in their own step, not here.
+  `[측정]` Copilot has walked steps 1–6 as a branch product and step 7 as a raw LIVE
+  transport probe. Those are deliberately different states: the extension route reached D7
+  with D8 unproven on one host, while the managed Copilot citizen remains receive-D0 and
+  `replyable:false` until admission closes the lifecycle, liveness, dispatch, and verification
+  obligations above. Grade the product, not the prototype; record the probe separately in
+  `DELIVERY.md` rather than hiding either fact.
 
 ---
 

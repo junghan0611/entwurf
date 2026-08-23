@@ -11,15 +11,15 @@
 #      in the assembly, and `claude plugin validate` runs over that root before any
 #      user config is touched. Two marketplace roots, two assemblies (cross-review,
 #      terra, 2026-08-20).
-#   2. The Claude doctor requires sender/receiver markers, a doorbell and live
-#      delivery. A Copilot citizen must have NONE of those — its bundle has no
-#      FileChanged/asyncRewake/watchPaths. Sharing a doctor would mean teaching it to
-#      ignore exactly the evidence it exists to demand.
+#   2. The Claude doctor certifies Claude's own receiver marker and
+#      FileChanged/asyncRewake doorbell. Copilot does not use that mechanism: its
+#      first-party extension transport is a separate, still-unadmitted lifecycle.
+#      Sharing a doctor would make one rail certify evidence owned by another.
 #
-# WHAT THIS INSTALLS. One plugin, whose whole job is to mint a meta-record on the
-# first prompt of a Copilot session. No MCP wiring: `entwurf_inbox_read` is the
-# receiver half of a delivery rail this backend does not have, and wiring a drain
-# tool for a mailbox nothing rings would advertise delivery that cannot happen.
+# WHAT THIS INSTALLS. One plugin whose current managed job is to mint a meta-record
+# on the first prompt of a Copilot session. MCP wiring has its own installer. The
+# 2026-08-23 extension idle-wake receipt does not make this birth installer own a
+# receiver marker, feature flag, or dispatch route; those remain admission work.
 #
 # Platform: Linux only, same fence as the Claude installer.
 set -euo pipefail
@@ -171,7 +171,7 @@ fi
 trap - EXIT
 [ -n "$PREV" ] && rm -rf "$PREV"
 
-echo "[copilot-bridge-install] assembled $ASM (node + entry baked into the launcher; no MCP wiring by design)"
+echo "[copilot-bridge-install] assembled $ASM (birth plugin only; MCP and receive are separate surfaces)"
 
 if [ "$ASSEMBLE_ONLY" -eq 1 ]; then
   echo "[copilot-bridge-install] --assemble-only: stopping before the Copilot CLI is touched"

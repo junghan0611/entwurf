@@ -10,11 +10,12 @@
  *        -> gardenId                    the session's garden address
  *     -> writeMetaSenderMarker(ppid)    who-sent join for this host's MCP children
  *
- * No receiver marker, no mailbox arm, no watchPaths — and THAT half is the measured
- * shape of this backend (2026-08-20, Copilot CLI 1.0.80): the shipped bundle has no
- * `FileChanged`, no `asyncRewake` and no `watchPaths`, so there is no doorbell to
- * ring and nothing for a receiver marker to vouch for. A receiver marker written
- * here would claim a doorbell that cannot exist.
+ * No receiver marker, no mailbox arm, no watchPaths. That remains this BIRTH unit's
+ * product contract, not a global claim that Copilot cannot wake. On 2026-08-23 the
+ * bundled first-party extension surface demonstrated idle wake through stdio JSON-RPC
+ * and `session.send()`, but its lifecycle/liveness/dispatch admission has not landed.
+ * A receiver marker written HERE would therefore claim a managed product receipt this
+ * birth payload neither owns nor proves.
  *
  * THE SENDER MARKER IS A DIFFERENT FACT, AND THIS UNIT USED TO CONFLATE THEM. Until
  * #82 RAIL 5b this file wrote no marker of EITHER kind, and gave the doorbell's

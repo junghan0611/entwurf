@@ -77,8 +77,9 @@ fi
 # hook command reaches a NEW payload through a path we did not stamp, where the parent
 # may be a wrapper rather than the host. No token means the payload does not know what
 # its parent is, so it claims no owner and logs `sender-marker-refused` instead.
-# The Copilot payload still writes no RECEIVER marker — this backend has no doorbell for
-# one to vouch for, and that remains true.
+# The birth payload still writes no RECEIVER marker. A first-party extension transport
+# has raw LIVE evidence, but no managed receiver lifecycle or dispatch route is admitted
+# yet; birth must not mint the missing product receipt by implication.
 export ENTWURF_META_HOOK_LAUNCH="hook-launch/v1"
 
 exec "$NODE_BIN" "$HOOK_ENTRY"

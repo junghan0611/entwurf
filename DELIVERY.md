@@ -81,8 +81,9 @@ D8 robustness: partial reason="..."
 | **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. |
 | **Codex app-server-backed TUI** | verified probe | D7; D8 unproven | WebSocket-over-UDS `turn/start` into a live `threadId`; status events expose completion. No managed citizen lane yet. |
 | **Codex embedded TUI** | deferred | D0 partial | No supported receive socket/hook on the measured standalone shape. |
-| **Copilot CLI TUI+server** — *withdrawn lane, kept as evidence* | rejected | D7; D8 unproven | **Old chronological-slice run; the named-turn probe in the tree is unrun.** Official SDK over hidden `--ui-server`: foreground native id + metadata, two-session addressed idle enqueue, same-session auto-model reply, completion events read back through the official session event-history API. Loopback RPC authentication is not established; no managed citizen lane. Evidence is L4 direct-native on ONE Linux workstation, host-local stdout, not archived. |
-| **Copilot CLI plugin/hooks** | implemented; **LIVE birth unproven** | D0 | Garden BIRTH, no delivery. The `.claude-plugin` hook fires under Copilot and the envelope arrives on stdin; only argv is dropped, because Copilot's schema has no `args` (its exec form is one `exec` string). A dedicated no-argv unit mints a `backend: "copilot"` record on the FIRST PROMPT — `sessionStart` is deferred to it, so opening the TUI fires nothing. No doorbell exists in the bundle (`FileChanged`, `asyncRewake`, `watchPaths` all absent), so there is no receiver to arm and D2 cannot pass: a dispatch to this citizen refuses as `mailbox-undeliverable`. Measured 2026-08-20 on CLI 1.0.80. `check-copilot-birth-hook` mints a real record by firing the shipped launcher with a synthetic envelope — that is MECHANISM evidence. **No record has yet been minted by a real Copilot session**; that costs one billed first prompt and is GLG's call. |
+| **Copilot CLI first-party extension** | verified raw transport; not admitted | D7 path observed; D3 control receipt incomplete; D8 unproven | CLI-spawned extension over stdio JSON-RPC; `joinSession()` + documented `fs.watch` → `session.send({mode:"enqueue"})`. Idle wake, exact-marker reply, and completion passed on 2026-08-23 (CLI 1.0.80, L4, one Linux host). Two-process isolation was observed but its decisive B log was not preserved, so admission must rerun D3. Requires experimental `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS`; managed lifecycle/liveness/dispatch are not implemented. |
+| **Copilot CLI garden citizen** | branch candidate; outbound only | receive D0 | Real native birth, visible garden id, MCP hand, and record-backed outbound sender identity are accepted on branch `issue-82-copilot-citizen`. No managed receiver marker or dispatch route exists yet, so `replyable:false` and `mailbox-undeliverable` remain correct product behavior despite the positive raw transport. |
+| **Copilot CLI TUI+server** — *withdrawn lane, kept as evidence* | rejected | D7; D8 unproven | Older official-SDK probe over hidden `--ui-server`; idle enqueue worked, but loopback RPC authentication was not established. The bundled extension supersedes this candidate without reviving it. |
 | **ACP Claude / Cortex** | shipped runtime, outside this matrix | — | ACP sessions are children launched by entwurf's pi adapter, not already-running native sessions to wake. |
 
 “Verified probe” means the transport worked in a reproducible raw probe but entwurf
@@ -128,74 +129,38 @@ shipping commitment: GLG closed the managed native Codex lane on 2026-08-01 beca
 already supplies the official GPT provider path. Entwurf will not duplicate it as a
 native citizen or ACP backend. `turn/steer` is active-turn steering, not idle wake.
 
-### Copilot CLI: the plugin hook is the citizen rail; TUI+server was rejected
+### Copilot CLI: one citizen, two accepted facts, one pending admission
 
-**The positive lane is the plugin hook, not the loopback server.** #82 measured on
-2026-08-20 that Copilot loads and executes the `.claude-plugin` hook and translates the
-Claude envelope onto stdin, which is enough to mint a garden id — and that its bundle
-carries no doorbell, so birth and delivery are separate admissions. The `--ui-server`
-material below is retained as the record of a REJECTED lane and its refusal grounds; it
-is not a candidate.
+The branch product already owns the native citizen's birth, garden id, statusline, MCP
+hand, and outbound sender identity. A real Copilot CLI 1.0.80 session minted a V3 record
+and sent under that record-backed garden id on 2026-08-21. This proves who sends; it does
+not by itself prove that a reply can land.
 
-**Two things are recorded here and they are not the same thing: what was MEASURED on
-2026-08-19, and what the probe now CONTRACTS to measure.** The measurement below was
-taken with the earlier chronological-slice probe, which scored the events following the
-marker's position in the history. The current probe scores a named turn instead (next
-subsection). No result below has been re-taken under that contract, and none of it is
-retroactively a demonstration of it.
+The missing receive transport was found and measured on 2026-08-23. Copilot's platform
+package bundles its first-party extension SDK and bootstrap. With
+`COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS`, the CLI forks an installed extension and
+speaks JSON-RPC over the child's stdio; `joinSession()` binds the foreground session, and
+the vendor-documented `fs.watch` → `session.send({mode:"enqueue"})` pattern wakes it.
+An idle, never-typed-into session received a unique marker and returned it, then emitted
+`session.idle`. A second armed process was observed to remain untouched, but its decisive
+B log was not preserved before scratch cleanup, so D3 isolation remains an admission
+rerun rather than a durable acceptance. This is L4 direct-native evidence on one Linux
+workstation. The travelling receipt and reproduction are in
+[`scripts/raw-async-delivery/README.md`](./scripts/raw-async-delivery/README.md).
 
-**Measured 2026-08-19 (old chronological-slice probe).** A plain Copilot TUI and shell
-command hooks do not establish the measured route. CLI 1.0.80 launched with hidden
-`--ui-server --port <port>` and joined by first-party `@github/copilot-sdk` 1.0.11 did:
-protocol-v3 ping, foreground session id plus cwd/git metadata, exact session resume, idle
-`enqueue`, same-session model-`auto` reply, and `assistant.message`/`turn_end`/`session.idle`
-completion. A second run created a no-turn control session B, targeted A, and proved B
-received no user/turn/assistant event, closing D3 on one Linux workstation.
+This extension rail has no network listener, so the rejected `--ui-server` loopback
+transport's authentication blocker does not apply. That does **not** close every trust
+or product obligation: entwurf must still own installed-extension provenance and the
+experimental feature flag, join the armed receiver to the V3 record, certify pid +
+start-key liveness, reject stale/crashed markers, choose the dispatch rail, and prove
+active-turn, re-arm, ordering, and failure behavior. Until those contracts land, the
+product remains receive-D0, `replyable:false`, and honestly rejects inbound dispatch.
 
-The two-session shape also exposed a D8 gap: A visibly replied and persisted
-`assistant.message` + `turn_end`, but the joining SDK client did not receive ephemeral
-`session.idle`, so SDK `sendAndWait()` timed out. Bounded reads of the official session
-event-history API (`session.getEvents()` / `getMessages()`) then observed the completed
-target turn. Claim that at its real size: it is the SDK's own full event history, not a
-narrower or more privileged view, and equally not TUI, file, or database transcript
-scraping — the probe never reads Copilot's own storage. It is probe evidence, not a
-product polling/retry design.
-
-**Evidence level for everything above: L4 direct-native, ONE Linux workstation, one run.**
-The receipt is host-local probe stdout; it was not archived as a durable artifact, so this
-row is reproducible-by-instruction, not citable to a stored file.
-
-**Current probe contract (not yet run LIVE).** Attribution is now a named chain rather
-than a position in the history: the probe's unique marker body must match exactly one
-`user.message`; that event's `interactionId` must open exactly one `assistant.turn_start`;
-that turn_start must expose a `turnId`; and only `assistant.message` / `assistant.turn_end`
-carrying that `turnId` are scored. Every link is required, and absent-or-ambiguous fails
-the probe closed — there is no positional fallback and no "the turn after ours" rule.
-Note what is deliberately NOT the key: `session.send()` resolves to the SDK's own
-submission handle, a string that appears on no server event and is a different axis from
-`user.message.id`/`interactionId`, so joining on it cannot hold. It is logged as a
-diagnostic only. The next LIVE turn is what would demonstrate this contract; until then
-it is a design, not evidence.
-
-The probe also stays out of the operator's lifecycle, stated precisely: it never deletes
-target session A and issues no `A.disconnect()` of its own. `client.stop()` does tear down
-every tracked session — A included — as a wire `session.destroy`; because A's foreground
-ownership is re-confirmed immediately before teardown, the TUI keeps A as its foreground
-session, so the net effect on A is detach-equivalent, not removal.
-
-This is not yet admissible as a native-push adapter. The flag is hidden from CLI help,
-and the loopback JSON-RPC server did not enforce the SDK connection token in the
-measured launch: an unauthenticated client connected, while a token-bearing client was
-rejected as `AUTHENTICATION_NOT_CONFIGURED`. The TCP port is only a runtime endpoint,
-never identity authority.
-
-**This fence is half withdrawn (#82, 2026-08-20).** ~~Do not add a record backend~~ — a
-record backend is the deliverable: it is what mints a garden id, and it arrived through
-the plugin hook rather than through this loopback path. **Do not add a dispatch route**
-still holds, and now for a measured reason rather than caution: the bundle has no
-doorbell, so there is nothing to wake. Permission ownership, stale/crash handling and a
-supported fail-closed local boundary remain undemonstrated for `--ui-server`, which is
-why that path stays rejected.
+The hidden `--ui-server` probe remains retired evidence, not a fallback. It found a real
+idle-enqueue capability through an unauthenticated loopback door; the extension finds the
+same class of capability through the CLI-owned stdio lifecycle. Absence of Claude's
+`FileChanged` / `asyncRewake` / `watchPaths` therefore means only that Claude's hook
+mechanism cannot be copied — it never proved Copilot had no vendor wake surface.
 
 ## Recording a new claim
 

@@ -12,11 +12,17 @@ Codex is split by launch surface:
   auto-attached to a default-path app-server): raw `turn/start` over
   WebSocket-over-UDS wakes the live thread — **demonstrated, no managed
   standalone, no cloud**.
-- **Copilot CLI 1.0.80 TUI+server**: official SDK `1.0.11` can resolve the
-  foreground native session and enqueue into that exact idle TUI; D7 was
-  demonstrated once (L4 direct-native, one Linux workstation). The launch flag
-  `--ui-server` is hidden from CLI help and its loopback RPC authentication is
-  not established, so this remains a probe, not a managed lane. Undocumented
+
+Copilot is no longer blocked on transport — it has one bundled extension door:
+
+- **Copilot CLI 1.0.80 extension**: the CLI forks a first-party extension and
+  speaks JSON-RPC over that child's **stdio**, so `fs.watch` -> `session.send()`
+  wakes the idle TUI with **no network listener or token-authentication axis**. Idle wake
+  and exact-marker attribution were demonstrated; addressed isolation was observed but its
+  decisive control log was not preserved (2026-08-23, one Linux workstation). It needs the experimental
+  `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` flag at launch. The older
+  hidden `--ui-server` loopback probe is retired — it found the capability
+  through a door that could not pass admission. Undocumented
   `~/.copilot/run/ws.*` is still not a rail.
 
 ## TL;DR — three reception paths, ranked
@@ -88,7 +94,9 @@ do not ship that. Proven: deliver to A's sessionId → A wakes (FileChanged), B'
 - `raw-agy-send.sh <conv_id> …` — agy parity: PUSH into a live Antigravity session (LS gRPC)
 - `raw-codex-ws-turn-start.py <sock> <thread_id> …` — Codex parity (no managed standalone, no cloud): PUSH `turn/start` over WebSocket-over-UDS into a bare `app-server --listen` socket
 - `codex-local-appserver.sh [sock]` — start a bare local app-server so plain `codex` auto-attaches and becomes addressable
-- `copilot-ui-server-probe.mjs` — official-SDK D0 probe by default; `LIVE=1` performs one addressed idle enqueue and prints D0–D8
+- `copilot-enqueue-addressed.sh <session_id> …` — Copilot raw sender: write `.msg` + poke one session's signal; refuses a missing marker, but deliberately does not claim production stale-receiver safety
+- `copilot-extension-receive/extension.mjs` — Copilot reception unit: a first-party CLI extension that arms the per-session mailbox and calls `session.send()` (stdio JSON-RPC; no port, no token)
+- `copilot-ui-server-probe.mjs` — RETIRED rail, kept as history; the hidden `--ui-server` loopback path whose authentication could not be established
 
 ### Reproduction drivers
 - `repro-plugin-idle-wake.sh` — single-session smoke.
@@ -251,7 +259,7 @@ send-message-v2` spins a fresh thread, not the live one.
 4. **Unix-socket transport is WebSocket** (tokio-tungstenite), not newline JSON-RPC,
    and requires **no auth token** on the UDS. A plain WS client suffices.
 
-## Copilot CLI raw delivery status (1.0.80) — positive TUI+server probe, not a managed lane
+## Copilot CLI delivery status (1.0.80) — idle wake DEMONSTRATED on the extension rail
 
 Copilot is a GitHub **harness** (issues, PR, CI, model `auto`, mode `autopilot`,
 remote/delegate), not a second GPT provider next to pi. This makes a native lane
@@ -264,136 +272,147 @@ premium-interaction entitlement; model `auto` chooses a path within that budget.
 The reason to use it is GitHub specialization and auto routing, not an unlimited
 subscription claim. Model `auto` and mode `autopilot` are separate axes.
 
-### Positive transport
+### The rail: a first-party CLI extension, stdio only
 
-The first-party `@github/copilot-sdk` exposes TUI+server coordination:
-`getForegroundSessionId()`, `getSessionMetadata()`, `resumeSession(id)`, and
-session-scoped `send({mode:"enqueue"|"immediate"})`. The native TUI launch mode is:
+`copilot-extension-receive/extension.mjs` + `copilot-enqueue-addressed.sh`.
 
-```bash
-copilot --ui-server --port 43817 --model auto
+The CLI forks an extension as its own child and speaks JSON-RPC over that
+child's stdio. `joinSession()` attaches it to the foreground session; from
+there `session.send({mode:"enqueue"})` injects a user message. So the whole
+delivery path is:
+
+```
+external file write  ->  fs.watch in the extension  ->  session.send()  ->  the idle session takes a turn
 ```
 
-`--ui-server` is accepted by CLI 1.0.80 and named by the official SDK API docs,
-but hidden from `copilot --help`. Launch mode is therefore part of the capability,
-and this evidence does not apply to an already-running plain `copilot` TUI.
+`fs.watch` -> `session.send()` is not a mechanism found by inspection: the
+bundled SDK documents it (`copilot-sdk/docs/examples.md`, "Detecting when the
+plan file is created or edited"). The SDK also ships *inside* the CLI package
+(`<platform-pkg>/copilot-sdk/`) and is injected into extension children by
+`preloads/extension_bootstrap.mjs`, so nothing has to be installed and the SDK
+version cannot drift from the CLI.
 
-Measured once on 2026-08-19 with SDK 1.0.11, **using the earlier chronological-slice
-probe** (it scored the events following the marker's position in the history). The probe
-in the tree today scores a named turn instead — see "Current probe contract" below — and
-that contract has NOT been run LIVE, so nothing in this list is retroactively evidence
-for it. Evidence level for the list: **L4 direct-native, ONE Linux workstation, one run**;
-the receipt is host-local probe stdout and was NOT archived as a durable artifact, so what
-follows is reproducible by instruction, not citable to a stored file:
+**This is why the rail clears the network-boundary bar the old one could not.**
+The `--ui-server` probe was refused because its loopback RPC authentication was
+not established. An extension has no port, token, or listener, so that network
+authentication axis does not exist. Product admission must instead certify the
+installed extension's provenance and the CLI-owned parent/child lifecycle; the
+fork is the transport boundary, not proof that every permission, liveness, and
+integrity obligation is already closed.
 
-- protocol v3 ping succeeded;
-- foreground session id joined to metadata containing cwd/git root/branch;
-- `resumeSession(id)` + idle `enqueue` woke the visible TUI with zero typing;
-- the unique body appeared as `user.message` with `delivery:"idle"`;
-- model `auto` selected `gpt-5.6-luna` and returned the exact marker;
-- `assistant.message`, `assistant.turn_end`, and (in the one-session run)
-  ephemeral `session.idle` gave completion/reply evidence;
-- a two-session control then targeted A while B received no `user.message`, turn,
-  or assistant event, so D3 passed too.
+### Launch contract
 
-D0–D7 passed; D8 is unproven. One robustness defect surfaced in the two-session
-shape: the target visibly replied and persisted `assistant.message` + `turn_end`,
-but that joining SDK client did not receive ephemeral `session.idle`, so SDK
-`sendAndWait()` timed out after 60 seconds. The probe therefore uses `send()` plus
-bounded polling of the official session event-history API (`session.getEvents()` /
-`getMessages()`) and reports completion at `turn_end`. Name that surface at its real
-size: it is the SDK's own full event history — no narrower, no more privileged — and it
-is **not** TUI, file, or database transcript scraping; the probe never reads Copilot's
-storage. This is evidence, not a product retry/polling design.
+Extensions sit behind an experimental feature flag. Without it the CLI never
+scans for extensions and the receiver is inert **with no error at all** —
+budget for that when a receiver appears not to arm:
 
-### Current probe contract — designed, not yet run LIVE
+```bash
+COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS copilot --model auto
+```
 
-Attribution is the load-bearing part, and it runs off the probe's own marker body:
+`--experimental` is NOT required (measured: a session launched with the env var
+alone armed its receiver). Discovery scopes are `user`
+(`~/.copilot/extensions/`), `plugin`, `session`, and — interactive mode only —
+`project` (`.github/extensions/`). Prompt mode (`-p`) drops `project` unless
+`GITHUB_COPILOT_PROMPT_MODE_EXTENSIONS=true`. The `plugin` scope matters most
+here: the existing entwurf Copilot plugin is the candidate install scope for
+this receiver, so product design need not start from a per-repository
+`.github/extensions/` directory.
+
+### Reproduce
+
+```bash
+mkdir -p /tmp/cop-lab/.github/extensions/entwurf-mailbox
+cp copilot-extension-receive/extension.mjs /tmp/cop-lab/.github/extensions/entwurf-mailbox/
+
+# terminal A: a visible session that arms its own receiver
+cd /tmp/cop-lab
+export COPILOT_MAILBOX_ROOT=/tmp/cop-lab/mbx COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS
+copilot --model auto --allow-all-tools     # accept folder trust
+
+# terminal B: find the armed receiver, then wake it with zero typing
+ls /tmp/cop-lab/mbx/*/ready.json
+COPILOT_MAILBOX_ROOT=/tmp/cop-lab/mbx \
+  ./copilot-enqueue-addressed.sh <session_id> "Reply with exactly PING and nothing else."
+```
+
+### Measured — 2026-08-23, CLI 1.0.80, model `auto`, one Linux workstation (oracle, arm64)
+
+Evidence level **L4 direct-native, one host**. The receiver log lines that still
+travel are pasted here. Scratch was cleaned before the second-session control and
+second-turn lines were copied, so those two observations are explicitly downgraded
+below rather than being laundered into durable receipts:
 
 ```text
-unique marker body  →  exactly one user.message
-                    →  its interactionId
-                    →  exactly one assistant.turn_start on that interaction
-                    →  that turn_start's required turnId
-                    →  only assistant.message / assistant.turn_end on that turnId
+02:19:33.996 ARMED sessionId=4fc16d8d-473d-4258-a1fd-f99d3cb375e9
+02:20:03.388 DELIVER (signal) 1787451603.msg bytes=96
+02:20:03.422 SENT 1787451603.msg
+02:20:06.141 EVENT user.message  {"content":"...Reply with exactly ENTWURF-WAKE-1787451603..."}
+02:20:06.492 EVENT assistant.turn_start {"turnId":"0"}
+02:20:09.935 EVENT assistant.message {"turnId":"0","content":"ENTWURF-WAKE-1787451603"}
+02:20:10.024 EVENT session.idle {}
 ```
 
-Every link is required and unambiguous; absent or matched twice, the probe FAILS CLOSED.
-There is no positional fallback and no "the turn after ours" rule, because scoring "the
-newest assistant.message" in a session a human is also typing into is how a probe reports
-someone else's turn as its own delivery.
+- **Idle wake: PASS.** The session had never been typed into — an empty timeline,
+  already past any turn boundary. An external file write started a turn. ~2.7 s
+  poke -> `user.message`, ~6.5 s poke -> reply. The visible TUI showed the prompt
+  and the answer.
+- **Attribution: PASS.** A unique per-run marker went in and came back exactly,
+  on one `assistant.turn_start`/`assistant.message` pair.
+- **Addressed routing: reported, receipt not preserved.** The measuring Opus
+  reported that a second armed process B stayed at one `ARMED` line across two
+  deliveries to A, with no `user.message` or `assistant.*` event. The decisive B
+  line and A's second delivery were not copied before scratch cleanup, so this is
+  a lead for the admission rerun, not durable D3 acceptance.
+- **Continuity: one turn demonstrated.** The pasted chain shows one joined
+  session taking the marker turn and replying; no `-p` process was spawned. A
+  second same-session turn was reported but its lines were not preserved, so no
+  stronger repeatability claim crosses from this checkpoint.
 
-What is deliberately NOT the key: `session.send()` on the bundled CLI 1.0.80 resolves to a
-`Promise<string>` that is the SDK's own submission handle. The server-side `user.message`
-does not carry that string, and it is a different axis from that event's
-`id`/`interactionId` — a join on it cannot hold, so the probe logs it as a diagnostic and
-never matches on it.
+### Not proven — do not describe these as working
 
-The D3 control cell uses the same sentence it prints: across `onEvent` and `getEvents`, the
-non-target session received no `user.message` and no `assistant.*` event of any kind.
+- **Active-turn delivery.** Every measured send landed on an idle session.
+  `mode:"enqueue"` vs `"immediate"` against a busy turn is untested.
+- **Multi-session inside ONE CLI process.** A and B were separate `copilot`
+  processes. Whether a *background* session inside one process (sidebar tabs)
+  can be woken while another holds the foreground is untested, and
+  `joinSession()` attaching to "the foreground session" is the reason to doubt it.
+- **`/clear` and foreground replacement.** The docs say extensions reload there;
+  re-arming was not measured. `[문서]`, not `[측정]`.
+- **Flag durability.** `EXTENSIONS` is an experimental flag with
+  `experimental`/`staff-or-experimental` availability. It can move or be
+  withdrawn between CLI releases; re-verify on upgrade. A flagged surface is an
+  admission question for a managed lane even when the transport is sound.
+- **Permission ownership, crash and ordering behavior, delivery under load.**
 
-Lifecycle, stated precisely rather than flatteringly: the probe never deletes target
-session A and issues no `A.disconnect()` of its own. `client.stop()` DOES tear down every
-tracked session — A included — as a wire `session.destroy`; because A's foreground
-ownership is re-confirmed immediately before teardown, the TUI keeps A as its foreground
-session, so the net effect on A is detach-equivalent, not removal. The probe deletes only
-the control session it created itself, and reads `client.stop()`'s returned error list so a
-failed teardown cannot exit 0 behind a printed verdict. Reaching past the SDK for a raw
-detach wrapper is out of bounds — it would be a second lifecycle authority.
+Do not add `backend:"copilot"` receive capability, a `FRESH_CALL_BACKENDS` entry,
+a schema change, or an OPEN issue from this. What changed is that the transport
+objection that closed the receive lane is gone; whether entwurf admits the lane
+is a separate decision with its own evidence bar.
 
-This contract has not been exercised by a LIVE turn. The next LIVE run is what would
-demonstrate it, and it also confirms the real event key names.
+### Retired: the hidden `--ui-server` probe (kept for the lesson)
 
-### Reproduce with the pinned official SDK
+The 2026-08-19 probe reached the TUI through `copilot --ui-server --port 43817`
+and the separately-installed SDK, and it did demonstrate an idle enqueue. It was
+refused admission because the launch flag is hidden from `copilot --help` and its
+loopback RPC authentication could not be established: an unauthenticated client
+connected, while setting `COPILOT_CONNECTION_TOKEN` on the server made a
+token-bearing client fail with `AUTHENTICATION_NOT_CONFIGURED`.
 
-The SDK is deliberately not an entwurf production dependency while this is only
-a raw probe. Install it in scratch and point the probe at its ESM entry:
+The lesson is not "that probe was wrong". It found a real capability through the
+wrong door, and then the door — not the capability — was what failed admission.
+The bundled extension door was in the same package the whole time: the SDK that
+this probe installed from npm also ships inside the CLI, with an `extension.mjs` contract and
+docs beside it. `copilot-ui-server-probe.mjs` remains in this tree as that history.
+Do not revive `--ui-server` as a rail; use the extension.
 
-```bash
-mkdir -p /tmp/copilot-sdk-probe
-printf '{"private":true,"type":"module"}\n' >/tmp/copilot-sdk-probe/package.json
-pnpm --dir /tmp/copilot-sdk-probe add --ignore-scripts @github/copilot-sdk@1.0.11
-
-# terminal A: visible native session (accept folder trust)
-copilot --ui-server --port 43817 --model auto
-
-# terminal B: D0 only, no model call
-COPILOT_SDK_MODULE=/tmp/copilot-sdk-probe/node_modules/@github/copilot-sdk/dist/index.js \
-  ./copilot-ui-server-probe.mjs
-
-# one paid/subscription turn: addressed idle enqueue through the official SDK
-LIVE=1 COPILOT_SDK_MODULE=/tmp/copilot-sdk-probe/node_modules/@github/copilot-sdk/dist/index.js \
-  ./copilot-ui-server-probe.mjs
-
-# creates a second no-turn control session and proves only the target receives the marker
-LIVE=1 COPILOT_D3_CONTROL=1 \
-  COPILOT_SDK_MODULE=/tmp/copilot-sdk-probe/node_modules/@github/copilot-sdk/dist/index.js \
-  ./copilot-ui-server-probe.mjs
-```
-
-### Admission blockers and negative evidence
-
-- **Transport authentication is not established.** The TUI server bound loopback,
-  but an SDK client without a token connected. Setting `COPILOT_CONNECTION_TOKEN`
-  on the UI server did not enable auth: the unauthenticated client still connected,
-  while a token-bearing client received `AUTHENTICATION_NOT_CONFIGURED`. Do not
-  ship this as a rail until the supported same-user/fail-closed boundary is proved.
-- Shell command-hook `sessionStart` input is `{timestamp,cwd,source,initialPrompt?}`;
-  it does **not** carry `sessionId`. SDK callbacks receive `sessionId` separately in
-  their invocation object. The discarded command-hook probe therefore could not
-  establish D0, and UUID-only process-log scraping did not satisfy D0's cwd/liveness
-  join. Do not revive that path.
-- Hooks have no `FileChanged` / `watchPaths` / `asyncRewake`; the Claude mailbox
-  mechanism cannot be copied.
-- `--acp` is a pi-host child path, not this native TUI citizen path. `--remote` is
-  GitHub web/mobile steering, not a local `entwurf_v2` API. Undocumented
-  `~/.copilot/run/ws.*` remains out of bounds.
-
-Do not add `backend:"copilot"`, `FRESH_CALL_BACKENDS`, a schema change, or an OPEN
-issue from these positive probes. Next evidence is active-turn enqueue/immediate
-behavior, TUI-vs-SDK permission ownership, the missing multi-session `session.idle`,
-endpoint staleness/crash behavior, and a supported authenticated or equivalent local
-boundary.
+Also still true, and still out of bounds: hooks have no `FileChanged` /
+`watchPaths` / `asyncRewake`, so the Claude mailbox hook mechanism cannot be
+copied; the shell command-hook `sessionStart` input carries no `sessionId`
+(the receiver publishes its own `ready.json` instead of scraping for one);
+`--acp` is a pi-host child path and `--remote` is GitHub web/mobile steering,
+neither of which is a local `entwurf_v2` API; and undocumented
+`~/.copilot/run/ws.*` is not a rail.
 
 ## Live SSOT for "is the target session alive?"
 
@@ -407,9 +426,15 @@ boundary.
   `$HOME/.codex/app-server-control/app-server-control.sock` (or any owned 0700
   socket via `codex app-server --listen unix://PATH`) is the delivery surface.
   threadId comes from the newest rollout's `session_meta.id`.
-- Copilot TUI+server probe: SDK `ping` + `getForegroundSessionId()` +
-  `getSessionMetadata()` identify the currently displayed native session, and
-  the official session event-history API (`getEvents()` / `getMessages()`) reads
-  a turn back — no transcript file or database is touched. The TCP port is a
-  runtime endpoint, never an identity axis; no managed liveness join exists
-  until its authentication and stale-endpoint behavior are proved.
+- Copilot raw probe: `<COPILOT_MAILBOX_ROOT>/<session_id>/ready.json`, written by
+  the receiver extension about itself (sessionId, pid, cwd, armedAt). `[번들]`
+  `preloads/extension_bootstrap.mjs` monitors the CLI parent, but this is a
+  discovery marker for the experiment, **not a production liveness SSOT**: the
+  current sender checks only that the file exists, so a crashed extension can
+  leave stale state and produce a false enqueue receipt. Product admission must
+  bind the receiver to the V3 record and certify pid + start-key ownership before
+  dispatch. Parent monitoring does not clean the marker by itself. Nothing
+  scrapes `~/.copilot/session-store.db` or the session-state dirs, and the shell
+  command-hook `sessionStart` input is NOT
+  a source — it carries no `sessionId`. The retired `--ui-server` TCP port was
+  never an identity axis.
