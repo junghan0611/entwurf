@@ -239,18 +239,35 @@ Only what the vendor actually ships. This is the step where imagination is most 
 - (a) Source: whatever real surface the measurement in step 1 found. For Claude Code that is
   a per-session mailbox armed by a receiver marker, with `FileChanged` as the doorbell and
   `asyncRewake` for the idle wake. For Antigravity it is native-push through the adapter and
-  a live probe — **no mailbox and no receiver marker at all.** For Copilot CLI 1.0.80 the
-  positive receive surface is its bundled first-party extension SDK: the CLI forks the
-  extension, speaks JSON-RPC over the child's stdio, `joinSession()` binds the foreground
-  native session, and the documented `fs.watch` → `session.send({mode:"enqueue"})` pattern
-  supplies the idle wake. This is not the rejected hidden `--ui-server` loopback route.
+  a live probe — **no mailbox and no receiver marker at all.** For Copilot CLI 1.0.80 it is
+  the bundled first-party extension SDK: the CLI forks the extension, speaks JSON-RPC over
+  the child's stdio, `joinSession()` binds the foreground native session, and the documented
+  `fs.watch` → `session.send({mode:"enqueue"})` pattern supplies the idle wake. This is not
+  the rejected hidden `--ui-server` loopback route.
+  - **Who holds the watch decides who owns the marker.** Claude's CLI arms its own watch, so
+    the marker names the CLI pid. Copilot's watch lives in a forked child, so the marker
+    names the EXTENSION pid and carries `ownerKind: "copilot-extension"` with
+    `armProvenance: "extension-join"`. Get this backwards and a crashed receiver stays
+    "armed" for as long as the host process lives — the citizen reads deliverable with
+    nothing watching its mailbox. Ask: which process would stop existing if the doorbell
+    stopped working? That one owns the marker.
+  - **A second process means a second install surface.** Copilot's receiver is not part of
+    the birth plugin: `run.sh install-copilot-receive` owns its own artifact, install-state,
+    doctor and inverse. Four Copilot surfaces (birth, statusline, MCP, receive), four
+    installers, four failure modes.
 - (b) Acceptance is a live receipt on the real harness, never an inference. `[측정]` On
   2026-08-23 an extension-armed idle Copilot session woke with zero typing, received a unique
   marker, replied with that marker in the same native session, and returned to `session.idle`.
   Evidence is L4 on one Linux workstation. A second armed process was observed to remain
   untouched, but its decisive log was not preserved before scratch cleanup; D3 isolation
-  therefore remains an admission rerun. The travelling receipt is in
+  therefore remains a rerun. The travelling receipt is in
   `scripts/raw-async-delivery/README.md`.
+  - A hermetic gate is the OTHER half, and it is not a substitute. `check-copilot-receive-arm`
+    forks the shipped `extension.mjs` with the SDK specifier resolved by a loader hook — the
+    vendor's own mechanism — so everything on entwurf's side of the fork (which id it binds,
+    which pid owns the marker, what the doorbell says, when it refuses) is proved without a
+    model turn. What it cannot prove is that a real turn starts on the other side. Keep the
+    two receipts separate, and never let the green one stand in for the missing one.
 - (c) The rules that keep this step honest:
   - **Never infer a receiver from a sender.** They are separate markers with separate
     meanings. Copilot outbound identity was accepted before its receive transport was found;
@@ -259,16 +276,21 @@ Only what the vendor actually ships. This is the step where imagination is most 
     or polling supervisor.** A watcher *inside* the vendor's documented extension lifecycle
     is different from an entwurf sidecar pretending to own that lifecycle. `entwurf_v2`
     still starts no process.
-  - **Transport proof is not product admission.** The Copilot extension receipt removes the
-    transport objection, but the shipped backend remains `replyable:false` until entwurf owns
-    extension installation and the feature flag, joins the armed receiver to the V3 record,
-    rejects stale/crashed receivers, routes dispatch, and proves those contracts with its own
-    gates and LIVE acceptance. A raw `ready.json` is discovery evidence, not production
-    liveness authority.
-  - **Keep experimental availability visible.** Copilot scans extensions only when
-    `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` is present; without it the scan is silently
-    skipped. The flag's durability across releases is an admission risk, not a reason to erase
-    the demonstrated transport.
+  - **Transport proof is not product admission.** The Copilot extension receipt removed the
+    transport objection; admission was the separate work of owning installation and the
+    feature flag, joining the armed receiver to the V3 record, refusing stale/crashed/drifted
+    receivers, and routing dispatch. That landed in RAIL 5 — and the raw probe's `ready.json`
+    did NOT: a file the receiver writes about itself is discovery evidence, so the product
+    replaced it with a record-bound marker whose owner pid is verifiable. When a probe's
+    convenience artifact survives into the product, that is the smell to look for.
+  - **Keep experimental availability visible — and check it where it is decided.** Copilot
+    scans extensions only when `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` is present;
+    without it the scan is silently skipped. entwurf cannot set that flag (it belongs to the
+    operator's own launch), so ownership here means DETECTION: `doctor-copilot-receive` reads
+    `/proc/<pid>/environ` of the live CLI processes and goes red when the receiver is
+    installed and a running session could never arm. A vendor silence you cannot remove is a
+    doctor's job, not a reason to promise the capability anyway. The flag's durability across
+    releases stays an open risk, not a reason to erase the demonstrated transport.
   - Note where notification actually goes. `[번들]` Copilot's separate `agentStop` output
     contract is `{decision?:"block", reason?:string}` and a blocked reason becomes a follow-up
     user message. That turn-boundary hook is not the idle-wake transport above and must not be
@@ -286,12 +308,15 @@ Only after acceptance, and both places move together.
 - (c) A grade is a claim about evidence, so it moves when the evidence moves — not when the
   code lands. Two failure shapes to avoid: a registry that promises a `wakeMode` with no
   channel behind it, and a matrix row still describing a lane that has since been walked.
-  `[측정]` Copilot has walked steps 1–6 as a branch product and step 7 as a raw LIVE
-  transport probe. Those are deliberately different states: the extension route reached D7
-  with D8 unproven on one host, while the managed Copilot citizen remains receive-D0 and
-  `replyable:false` until admission closes the lifecycle, liveness, dispatch, and verification
-  obligations above. Grade the product, not the prototype; record the probe separately in
-  `DELIVERY.md` rather than hiding either fact.
+  `[측정]` Copilot has now walked all of steps 1–7 as a branch product: the receiver is
+  installed, record-bound, liveness-guarded and on the mailbox rail, and the hermetic gate
+  is green. Its registry grade is still `D0`. That is not an oversight — it is the rule
+  working. A grade is a claim about EVIDENCE, and the evidence that moves receive off D0 is
+  a managed LIVE wake on a real Copilot session, which no green gate can stand in for. The
+  route is fail-closed while it waits (no armed marker → `mailbox-undeliverable`), so an
+  understated grade costs a caller nothing while an overstated one would promise a wake
+  nobody has watched. Grade the product, not the prototype, and keep the raw probe's own
+  D-levels recorded separately in `DELIVERY.md` rather than hiding either fact.
 
 ---
 

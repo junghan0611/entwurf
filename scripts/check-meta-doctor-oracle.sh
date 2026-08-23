@@ -503,9 +503,11 @@ mv "$TMP/hook-log.bak" "$AGENT/meta-bridge-hook.log"
 # M9b — a COPILOT line in the shared hook log must not move this doctor AT ALL (#82).
 # The Copilot birth unit appends to the same file, tagged `[copilot]`, and its ERROR
 # lines are frequently CORRECT fail-closed refusals. Worse, their recovery token cannot
-# exist here: `armed watch` is Claude-only, because Copilot has no doorbell. So an
-# untagged grep would redden the Claude doctor forever, for a refusal on another rail,
-# and prescribe a Claude wake failure that never happened. This case is the kill-proof
+# exist here: `armed watch` is written by CLAUDE's arm. Copilot does have a doorbell
+# since RAIL 5, but a different process arms it (the forked extension) into a different
+# log (`meta-bridge-receive-copilot.log`), so this file still never carries a Copilot
+# recovery line. An untagged grep would redden the Claude doctor forever, for a refusal
+# on another rail, and prescribe a Claude wake failure that never happened. This case is the kill-proof
 # for that separation — it is an expect-GREEN, since the defect it guards makes a
 # HEALTHY host go red.
 # The [QK:] token lives on the `bad` line ONLY: the qualifier requires it exactly

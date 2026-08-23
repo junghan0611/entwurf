@@ -104,8 +104,8 @@
 			"signatureSource": "scripts/check-meta-doctor-oracle.sh"
 		},
 		{
-			"claim": "COPILOT-BIRTH-HAS-NO-RECEIVER-STATE",
-			"title": "arming a mailbox for a Copilot citizen claims a doorbell that does not exist in the bundle. Scope is the RECEIVER half only: the claim was narrowed when the same unit began writing a SENDER marker, which needs a shared parent rather than a doorbell (#82 RAIL 5b)",
+			"claim": "COPILOT-BIRTH-DOES-NOT-ARM-RECEIVER",
+			"title": "arming a mailbox from the BIRTH hook claims a watch this process does not hold. Copilot now has a doorbell (#82 RAIL 5), which is exactly why the writer matters: the extension owns the watch, so a marker minted here would name the host pid as a watcher and keep a wired-to-nothing citizen deliverable for as long as the TUI stayed open",
 			"subject": "pi-extensions/meta-bridge-hook-copilot.ts",
 			"find": ["\t\tlogLine(\n\t\t\t\"INFO\","],
 			"replace": [
@@ -113,7 +113,7 @@
 			],
 			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
 			"timeoutSeconds": 300,
-			"signature": "[QK:COPILOT-BIRTH-HAS-NO-RECEIVER-STATE]",
+			"signature": "[QK:COPILOT-BIRTH-DOES-NOT-ARM-RECEIVER]",
 			"signatureSource": "scripts/check-copilot-birth-hook.ts"
 		},
 		{

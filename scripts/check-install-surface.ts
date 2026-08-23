@@ -236,7 +236,7 @@ const operatorCmds = [...targets].filter(([cmd, ts]) => !isDevGate(cmd) && ts.le
 	// themselves: a mutation whose target is a literal $HOME/~ config path is operating on
 	// the operator's own bridge, whatever the rest of the file does. Reads ($HOME/.current-device,
 	// probing whether a real bundle exists) stay legal — they cannot uninstall anything.
-	const LIVE_ROOTS = String.raw`(?:\$HOME|\$\{HOME\}|~)/\.(?:claude|gemini|pi|config/pi|local/share/(?:claude|entwurf))`;
+	const LIVE_ROOTS = String.raw`(?:\$HOME|\$\{HOME\}|~)/\.(?:claude|copilot|gemini|pi|config/pi|local/share/(?:claude|entwurf))`;
 	const MUTATORS = String.raw`rm\s+-\w+|rm|mv|cp|install|mkdir\s+-p|mkdir|touch|tee|ln\s+-s\w*|truncate`;
 
 	// A mutating run.sh drive is shell code, not prose. `bad "… re-run ./run.sh install-meta-bridge"`

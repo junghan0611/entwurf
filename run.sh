@@ -131,6 +131,7 @@ Usage:
   ./run.sh check-meta-v3-record        # deterministic gate: the ONE live record schema (v3) — canonical serialize/round-trip/mint, foreign-generation rejections name fresh-cut with the actual version value, strict keyset, no API
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-copilot-birth-hook   # #82 gate: drives the real Copilot assembler into a temp dir, fires the baked launcher with NO ARGV (the way Copilot's `exec`-string schema forces), and requires a backend:"copilot" v3 record + attach + peer row + a SENDER marker the resolver joins back to that record, and still zero mailbox/receiver marker (who-sent needs a shared parent; a receiver needs a doorbell this backend has not got). Hermetic; no Copilot, no model turn
+  ./run.sh check-copilot-receive-arm  # #82 RAIL 5 gate: the REAL receiver installer + the REAL extension.mjs forked with a stubbed SDK. Arms only after birth, marker owned by the WATCHER pid, self-fetch dispatch answer, doorbell carries the garden id and NOT the body, id-drift/foreign-parent refusals. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-statusline   # #82 Copilot custom-footer renderer. session_id → ready/?/gid + rail `cop`; exit 0. IN pnpm check. No Copilot, no model turn
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_CITIZEN_BACKENDS + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
@@ -199,7 +200,7 @@ Usage:
   ./run.sh install-meta-bridge        # INTERNAL part of `setup` (native-harness plugin) + doctor recovery path — prefer `setup`; stateful GLOBAL install (plugin + USER MCP + settings keyset, honest uninstall state)
   ./run.sh uninstall-meta-bridge      # 1.0.0 meta-bridge Phase 2: stateful GLOBAL uninstall (restore only keys/items captured in install-state)
   ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is not yet verified/certified and stays nonzero for this cut (future validation may reopen it). Detection power is held by check-meta-doctor-oracle
-  ./run.sh install-copilot-bridge     # #82: GLOBAL install of the Copilot BIRTH plugin (own marketplace root; node+entry baked into the no-argv exec string). MCP wiring is a separate install surface; inbound receive remains unadmitted even though a first-party extension transport has raw LIVE evidence. Also retires the stale Claude unit (--keep-stale-claude-unit opts out)
+  ./run.sh install-copilot-bridge     # #82: GLOBAL install of the Copilot BIRTH plugin (own marketplace root; node+entry baked into the no-argv exec string). MCP wiring and the RECEIVER extension are separate install surfaces (install-copilot-mcp, install-copilot-receive). Also retires the stale Claude unit (--keep-stale-claude-unit opts out)
   ./run.sh doctor-copilot-bridge      # #82: fail-loud surface for that unit. Red = a hook that RAN and failed, or a broken/unbaked artifact. "Installed with zero records" is NOT red and is reported as NOT-YET: a Copilot session is born on its FIRST PROMPT, not when the window opens (measured)
   ./run.sh install-copilot-statusline # own Copilot statusLine + footer.showCustom with an install-state preimage
   ./run.sh uninstall-copilot-statusline # honest inverse of install-copilot-statusline
@@ -207,6 +208,9 @@ Usage:
   ./run.sh install-copilot-mcp        # #82 RAIL 5: register ONE entwurf-bridge server in ~/.copilot/mcp-config.json (adopt / create / REFUSE symlink), type:local, install-state under $XDG_DATA_HOME/entwurf/copilot-mcp/
   ./run.sh uninstall-copilot-mcp      # honest inverse of install-copilot-mcp from install-state
   ./run.sh doctor-copilot-mcp         # static ownership/config/boot doctor; RED only when install-state exists
+  ./run.sh install-copilot-receive    # #82 RAIL 5: install the RECEIVER extension (user scope ~/.copilot/extensions/entwurf-receive). Owns the artifact and CHECKS the launch flag; it cannot set it. Arms per session after birth
+  ./run.sh uninstall-copilot-receive  # honest inverse from install-state; never removes a unit it did not install
+  ./run.sh doctor-copilot-receive     # artifact + digest, COPILOT_CLI_ENABLED_FEATURE_FLAGS on the LIVE copilot processes (the silent failure), live receiver markers via the production reader, receiver log. RED only when install-state exists
   ./run.sh install-agy-bridge         # 봉인 7: agy MCP install adapter — register ONE entwurf-bridge server in the agy mcp_config (adopt file / create / REFUSE symlink), stable bin command, install-state under $XDG_DATA_HOME/entwurf/agy-bridge/
   ./run.sh uninstall-agy-bridge       # 봉인 7: honest inverse of install-agy-bridge from install-state (restore preimage / remove key; refuse if config became a symlink)
   ./run.sh probe-bridge-command <cmd> [args...]  # #81: BOOT the given bridge invocation and require the entwurf MCP tool surface back. `--invocation-json '{"command":"…","args":[],"env":{}}'` preserves a harness config exactly. It waits for a valid initialize response, then sends initialized + tools/list only (no tools/call, lock, record, or delivery). exit 0 = it serves the bridge; 1 = it does not. The pi/agy doctors use this leaf.
@@ -766,6 +770,15 @@ check_copilot_statusline() {
   # #82 Copilot custom-footer renderer. Drives scripts/copilot-statusline.sh with
   # session_id on stdin in an isolated store. ready / ? / exact gid; exit 0.
   run_ts scripts/check-copilot-statusline.ts
+}
+
+check_copilot_receive_arm() {
+  # #82 RAIL 5 gate: drives the REAL receiver installer into a temp extensions dir, then
+  # forks the REAL extension.mjs with the SDK specifier resolved by a loader hook (the
+  # vendor's own mechanism). Binds arm-after-birth, watcher-owned marker, the self-fetch
+  # dispatch answer, a doorbell that carries the id and not the body, and every refusal.
+  # Needs the compiled bridge closure; hermetic otherwise (no Copilot, no model turn).
+  run_ts scripts/check-copilot-receive-arm.ts
 }
 
 check_hook_launch_topology() {
@@ -2813,6 +2826,12 @@ check_pack() {
     "pi-extensions/meta-bridge-hook-copilot.ts"
     "scripts/copilot-bridge-install.sh"
     "scripts/copilot-bridge-doctor.sh"
+    # #82 RAIL 5 — the Copilot RECEIVER. A vendor EXTENSION (forked child, stdio
+    # JSON-RPC), not a plugin, so it ships as its own unit and installs into the user
+    # extensions dir. `extension.mjs` is the vendor's required entry NAME: a rename in
+    # the tarball is not a degraded path, it is a unit Copilot never discovers.
+    "pi/copilot-receive/entwurf-receive/extension.mjs"
+    "scripts/copilot-receive-bridge.sh"
     "pi-extensions/meta-bridge-hook.ts"
     "pi-extensions/lib/meta-session.ts"
     "pi-extensions/lib/session-id.js"
@@ -3023,6 +3042,12 @@ _check_pack_install_impl() {
     "pi-extensions/meta-bridge-hook-copilot.ts"
     "scripts/copilot-bridge-install.sh"
     "scripts/copilot-bridge-doctor.sh"
+    # #82 RAIL 5 — the Copilot RECEIVER. A vendor EXTENSION (forked child, stdio
+    # JSON-RPC), not a plugin, so it ships as its own unit and installs into the user
+    # extensions dir. `extension.mjs` is the vendor's required entry NAME: a rename in
+    # the tarball is not a degraded path, it is a unit Copilot never discovers.
+    "pi/copilot-receive/entwurf-receive/extension.mjs"
+    "scripts/copilot-receive-bridge.sh"
     "pi-extensions/meta-bridge-hook.ts"
     "pi-extensions/lib/meta-session.ts"
     "pi-extensions/lib/session-id.js"
@@ -4788,6 +4813,9 @@ case "$cmd" in
   check-copilot-statusline)
     check_copilot_statusline
     ;;
+  check-copilot-receive-arm)
+    check_copilot_receive_arm
+    ;;
   check-meta-capability-source)
     check_meta_capability_source
     ;;
@@ -5213,6 +5241,19 @@ case "$cmd" in
     ;;
   smoke-copilot-mcp-state)
     (cd "$REPO_DIR" && bash scripts/smoke-copilot-mcp-state.sh)
+    ;;
+  install-copilot-receive)
+    # #82 RAIL 5: install the RECEIVER extension into the Copilot USER extensions dir.
+    # Artifact ownership only — it cannot set the operator's launch flag, and it arms
+    # nothing by itself: a session arms after birth, on a CLI launched with
+    # COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS.
+    (cd "$REPO_DIR" && bash scripts/copilot-receive-bridge.sh install "$@")
+    ;;
+  uninstall-copilot-receive)
+    (cd "$REPO_DIR" && bash scripts/copilot-receive-bridge.sh uninstall "$@")
+    ;;
+  doctor-copilot-receive)
+    (cd "$REPO_DIR" && bash scripts/copilot-receive-bridge.sh doctor "$@")
     ;;
   install-agy-bridge)
     # 봉인 7: the agy (Antigravity) MCP install ADAPTER (SEPARATE from the Claude

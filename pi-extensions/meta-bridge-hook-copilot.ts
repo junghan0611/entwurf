@@ -10,12 +10,13 @@
  *        -> gardenId                    the session's garden address
  *     -> writeMetaSenderMarker(ppid)    who-sent join for this host's MCP children
  *
- * No receiver marker, no mailbox arm, no watchPaths. That remains this BIRTH unit's
- * product contract, not a global claim that Copilot cannot wake. On 2026-08-23 the
- * bundled first-party extension surface demonstrated idle wake through stdio JSON-RPC
- * and `session.send()`, but its lifecycle/liveness/dispatch admission has not landed.
- * A receiver marker written HERE would therefore claim a managed product receipt this
- * birth payload neither owns nor proves.
+ * No receiver marker, no mailbox arm, no watchPaths — and that is still the contract now
+ * that Copilot HAS a doorbell (#82 RAIL 5). The reason changed, the rule did not. A
+ * receiver marker is a claim that a LIVE process holds a watch, and the process that holds
+ * Copilot's watch is the forked extension (`pi/copilot-receive/`), not this hook. Minted
+ * here it would name the Copilot host pid as the owner of a watch that pid does not hold,
+ * and the citizen would read deliverable, wired to nothing, for as long as the TUI stayed
+ * open. Arming belongs to the watcher; birth belongs here.
  *
  * THE SENDER MARKER IS A DIFFERENT FACT, AND THIS UNIT USED TO CONFLATE THEM. Until
  * #82 RAIL 5b this file wrote no marker of EITHER kind, and gave the doorbell's
@@ -35,8 +36,10 @@
  * IT DOES NOT MAKE THIS CITIZEN REPLYABLE, and must never be described as if it did.
  * `mcp/entwurf-bridge/src/index.ts` picks the reply rail from `nativePushSupported`;
  * copilot is not native-push, so it lands in the self-fetch domain, where `replyable`
- * comes from a RECEIVER marker this backend correctly does not write. `replyable:
- * false` with a real garden identity is the honest answer here, not a gap to close.
+ * comes from a RECEIVER marker written by the extension when it joins the session. A
+ * citizen that is born but whose receiver has not armed is `replyable: false` with a real
+ * garden identity — the honest answer, and it becomes true on its own once the extension
+ * binds. What this file must never do is anticipate that answer.
  *
  * WHY A SECOND ENTRY FILE. `meta-bridge-hook.ts` hardcodes `backend: "claude-code"`
  * at mint and then does the marker/watch work above, and two gates pin that unit to

@@ -13,7 +13,8 @@ Codex is split by launch surface:
   WebSocket-over-UDS wakes the live thread — **demonstrated, no managed
   standalone, no cloud**.
 
-Copilot is no longer blocked on transport — it has one bundled extension door:
+Copilot is no longer blocked on transport, and the probe below is no longer the
+product — it is the receipt the product was built on:
 
 - **Copilot CLI 1.0.80 extension**: the CLI forks a first-party extension and
   speaks JSON-RPC over that child's **stdio**, so `fs.watch` -> `session.send()`
@@ -24,6 +25,13 @@ Copilot is no longer blocked on transport — it has one bundled extension door:
   hidden `--ui-server` loopback probe is retired — it found the capability
   through a door that could not pass admission. Undocumented
   `~/.copilot/run/ws.*` is still not a rail.
+- **The MANAGED receiver now lives at `pi/copilot-receive/entwurf-receive/`** and is
+  installed with `run.sh install-copilot-receive` (#82 RAIL 5). Read it before reusing
+  anything here, because it deliberately differs on three points: it binds to the V3
+  record instead of publishing its own `ready.json`; its receiver marker is owned by the
+  extension pid, so a crash retires it; and it **announces** the inbox rather than
+  sending the body, leaving the drain (and the read-receipt) to `entwurf_inbox_read`.
+  The files below stay as the measurement — do not develop the product in them.
 
 ## TL;DR — three reception paths, ranked
 
@@ -385,10 +393,13 @@ below rather than being laundered into durable receipts:
   admission question for a managed lane even when the transport is sound.
 - **Permission ownership, crash and ordering behavior, delivery under load.**
 
-Do not add `backend:"copilot"` receive capability, a `FRESH_CALL_BACKENDS` entry,
-a schema change, or an OPEN issue from this. What changed is that the transport
-objection that closed the receive lane is gone; whether entwurf admits the lane
-is a separate decision with its own evidence bar.
+That fence has since been walked, not deleted: `backend:"copilot"` receive capability
+IS now real (`wakeMode: self-fetch` plus a record-bound receiver marker, #82 RAIL 5),
+and it arrived through the managed unit with its own installer, doctor, gate and
+mutants — not by widening anything in this directory. `FRESH_CALL_BACKENDS` is still
+untouched: launching a Copilot sibling is a different capability from waking one.
+The registry's receive grade also stays D0 until a managed LIVE wake is observed; this
+probe's receipt is about the mechanism, not about the shipped lane.
 
 ### Retired: the hidden `--ui-server` probe (kept for the lesson)
 
@@ -430,10 +441,13 @@ neither of which is a local `entwurf_v2` API; and undocumented
   the receiver extension about itself (sessionId, pid, cwd, armedAt). `[번들]`
   `preloads/extension_bootstrap.mjs` monitors the CLI parent, but this is a
   discovery marker for the experiment, **not a production liveness SSOT**: the
-  current sender checks only that the file exists, so a crashed extension can
-  leave stale state and produce a false enqueue receipt. Product admission must
-  bind the receiver to the V3 record and certify pid + start-key ownership before
-  dispatch. Parent monitoring does not clean the marker by itself. Nothing
+  probe sender checks only that the file exists, so a crashed extension can
+  leave stale state and produce a false enqueue receipt.
+- Copilot PRODUCT: `<pi-agent-dir>/meta-receivers/<gardenId>.json`, written by the
+  managed extension and keyed by the garden id a sender actually targets. Liveness is
+  pid + start-key on the EXTENSION child, so a crashed receiver reads as inactive at the
+  next read — that is what `ready.json` could not do. Parent monitoring never cleaned the
+  probe's marker by itself; the product does not depend on cleanup at all. Nothing
   scrapes `~/.copilot/session-store.db` or the session-state dirs, and the shell
   command-hook `sessionStart` input is NOT
   a source — it carries no `sessionId`. The retired `--ui-server` TCP port was

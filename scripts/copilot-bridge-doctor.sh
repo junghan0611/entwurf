@@ -2,11 +2,12 @@
 # copilot-bridge-doctor.sh — the FAIL-LOUD surface for the Copilot birth plugin (#82).
 #
 # WHY IT IS NOT `doctor-meta-bridge --copilot`. The Claude doctor's red conditions
-# certify Claude's receiver marker and FileChanged/asyncRewake hook rail. Copilot has
-# the sender marker but does not use that receive mechanism. Its first-party extension
-# transport now has raw LIVE evidence, yet no managed receiver lifecycle or dispatch
-# route is admitted, so this BIRTH doctor must certify neither. A shared doctor would
-# make one rail pass on evidence owned by another, which is a branch, not a shared surface.
+# certify Claude's receiver marker and FileChanged/asyncRewake hook rail. Copilot has a
+# receiver too since #82 RAIL 5, but it is a different mechanism owned by a different
+# process (a forked extension) and certified by its own doctor,
+# `doctor-copilot-receive`. This BIRTH doctor certifies birth and who-sent. A shared
+# doctor would make one rail pass on evidence owned by another, which is a branch, not a
+# shared surface.
 #
 # (Until #82 RAIL 5b it had none of the four, and this comment said so. The sender
 # marker joined because who-sent needs a shared parent, not a doorbell — the two facts

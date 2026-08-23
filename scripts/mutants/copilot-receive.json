@@ -1,0 +1,196 @@
+{
+	"schemaVersion": 1,
+	"lane": "copilot-receive",
+	"mutants": [
+		{
+			"claim": "COPILOT-RECEIVE-VENDOR-ENTRY-NAME",
+			"title": "installing the receiver under any other file name produces a unit Copilot never discovers — the vendor scans subdirectories for `extension.mjs` and says nothing when it finds none",
+			"subject": "scripts/copilot-receive-bridge.sh",
+			"find": ["\tcp \"$SRC/extension.mjs\" \"$stage/extension.mjs\""],
+			"replace": ["\tcp \"$SRC/extension.mjs\" \"$stage/index.mjs\""],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-VENDOR-ENTRY-NAME]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-INSTALL-REFUSES-FOREIGN",
+			"title": "overwriting an unclaimed unit of the same name deletes somebody else's extension and installs ours in its place",
+			"subject": "scripts/copilot-receive-bridge.sh",
+			"find": [
+				"\tif [ -e \"$DEST\" ] && [ ! -f \"$STATE_FILE\" ]; then",
+				"\t\tfail \"$DEST already exists and no entwurf install-state claims it. Refusing to overwrite an extension this installer did not put there.\"",
+				"\tfi"
+			],
+			"replace": ["\t# an unclaimed unit is assumed to be ours"],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-INSTALL-REFUSES-FOREIGN]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-ARMS-AFTER-BIRTH",
+			"title": "arming only at join leaves every ordinary session unarmed forever: a Copilot citizen is born on its FIRST PROMPT, which is always after the extension has already joined",
+			"subject": "pi/copilot-receive/entwurf-receive/extension.mjs",
+			"find": [
+				"for (const type of [\"user.message\", \"assistant.turn_start\", \"assistant.message\", \"session.idle\"]) {",
+				"\tsession.on(type, () => armOnce(type));",
+				"}"
+			],
+			"replace": ["// one shot at join, no retry"],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-ARMS-AFTER-BIRTH]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-OWNER-IS-WATCHER",
+			"title": "naming the CLI as the marker's owner keeps a crashed extension 'armed' for as long as the TUI stays open — the citizen reads deliverable while nothing is watching its mailbox",
+			"subject": "pi/copilot-receive/entwurf-receive/extension.mjs",
+			"find": ["\t\t\townerPid: process.pid,"],
+			"replace": ["\t\t\townerPid: hostPid,"],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-OWNER-IS-WATCHER]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-WAKE-MODE-SELF-FETCH",
+			"title": "a copilot row that still says direct-inject routes every dispatch into the fail-closed refusal — the armed receiver exists and no reply can ever reach it",
+			"subject": "pi/entwurf-capabilities.json",
+			"find": [
+				"\t\t\"copilot\": { \"wakeMode\": \"self-fetch\", \"deliveryLevel\": \"D0\", \"nativeIdLabel\": \"sessionId\" },"
+			],
+			"replace": [
+				"\t\t\"copilot\": { \"wakeMode\": \"direct-inject\", \"deliveryLevel\": \"D0\", \"nativeIdLabel\": \"sessionId\" },"
+			],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-WAKE-MODE-SELF-FETCH]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-DOORBELL-NOT-BODY",
+			"title": "putting the message body in the doorbell turns a self-fetch announcement into an injection: untrusted content lands in the model's context with no read receipt, and `wakeMode: self-fetch` becomes a false label",
+			"subject": "pi/copilot-receive/entwurf-receive/extension.mjs",
+			"find": [
+				"\t\t\t\t\t`[entwurf inbox] ${unread} unread mailbox ${plural} available for garden ${armed.gardenId}. ` +"
+			],
+			"replace": [
+				"\t\t\t\t\t(await import(\"node:fs\")).readFileSync(path.join(armed.mailbox, `${fresh[0]}.delivered`), \"utf8\") +",
+				"\t\t\t\t\t`[entwurf inbox] ${unread} unread mailbox ${plural} available for garden ${armed.gardenId}. ` +"
+			],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-DOORBELL-NOT-BODY]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-NO-STALE-RERING",
+			"title": "ringing on any signal change re-announces a backlog the model already declined to read — every unrelated poke wakes an idle session for nothing",
+			"subject": "pi/copilot-receive/entwurf-receive/extension.mjs",
+			"find": ["\t\t\tif (fresh.length === 0) return;"],
+			"replace": ["\t\t\t// ring on every poke, fresh body or not"],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-NO-STALE-RERING]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-REFUSES-ID-DRIFT",
+			"title": "arming when the SDK session id disagrees with the marker's native id tells a sender that a reply lands in a session that will never see it",
+			"subject": "pi/copilot-receive/entwurf-receive/extension.mjs",
+			"find": [
+				"\tif (marker.nativeSessionId !== sessionId) {",
+				"\t\treturn {",
+				"\t\t\tidentity: null,",
+				"\t\t\treason: `id-drift marker=${marker.nativeSessionId} sdk=${sessionId}`,",
+				"\t\t};",
+				"\t}"
+			],
+			"replace": ["\t// a drifted id is tolerated: the marker wins"],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-REFUSES-ID-DRIFT]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-REFUSES-FOREIGN-PARENT",
+			"title": "trusting a parent-pid carrier that disagrees with the real parent lets a reparented or hand-run extension arm under somebody else's citizen",
+			"subject": "pi/copilot-receive/entwurf-receive/extension.mjs",
+			"find": [
+				"\tif (Number.isSafeInteger(declared) && declared > 0 && declared !== actual) {",
+				"\t\tlogLine(\"WARN\", `arm-refused: COPILOT_EXTENSION_PARENT_PID=${declared} disagrees with ppid ${actual}`);",
+				"\t\treturn null;",
+				"\t}"
+			],
+			"replace": ["\t// a disagreeing carrier is tolerated"],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-REFUSES-FOREIGN-PARENT]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-DEAD-EXTENSION-REFUSED",
+			"title": "dropping the receiver marker's liveness guard makes a dead watcher's marker read as an ACTIVE receiver — replies to a closed Copilot session are enqueued into a void and reported as delivered",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": [
+				"\t\t// as an ACTIVE RECEIVER and pull the mailbox rail into delivering to a void.",
+				"\t\tif (!isPlausibleOwnerPid(marker.ownerPid)) return null;",
+				"\t\tif (opts.verifyOwner !== false) {",
+				"\t\t\tconst liveKey = processStartKey(marker.ownerPid);",
+				"\t\t\tif (!liveKey || liveKey !== marker.ownerStartKey) return null;",
+				"\t\t}"
+			],
+			"replace": [
+				"\t\t// as an ACTIVE RECEIVER and pull the mailbox rail into delivering to a void.",
+				"\t\tif (!isPlausibleOwnerPid(marker.ownerPid)) return null;"
+			],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-DEAD-EXTENSION-REFUSED]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-DOCTOR-CATCHES-STALE-WRITER",
+			"title": "reporting a stale deployed writer as ordinary state hides the one failure that has no other symptom: the arm throws inside the extension and the citizen simply never becomes deliverable",
+			"subject": "scripts/copilot-receive-bridge.sh",
+			"find": [
+				"\t\t\t\tbad \"the deployed writer is STALE: unit has ${dep:0:12}, this checkout builds ${cur:0:12}. An arm can fail on a contract the deployed copy does not know, and the only symptom is a session that never becomes deliverable. Re-run ./run.sh install-copilot-receive\""
+			],
+			"replace": ["\t\t\t\tnote \"the deployed writer differs from this checkout's (${dep:0:12} vs ${cur:0:12})\""],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-DOCTOR-CATCHES-STALE-WRITER]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-DOCTOR-SEES-MISSING-FLAG",
+			"title": "downgrading a CLI launched without the scan flag to a note leaves the vendor's own silence unchallenged — the receiver is installed, nothing arms, and no surface anywhere says why",
+			"subject": "scripts/copilot-receive-bridge.sh",
+			"find": [
+				"\t\t\t\tbad \"$armed_missing live copilot process(es) lack $FLAG_ENV=$FLAG_VALUE while the receiver is installed — relaunch them with the flag, or uninstall the receiver so nothing promises a doorbell\""
+			],
+			"replace": ["\t\t\t\tnote \"$armed_missing live copilot process(es) lack $FLAG_ENV=$FLAG_VALUE\""],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-DOCTOR-SEES-MISSING-FLAG]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-DOCTOR-PASSES-CLEAN-LOG",
+			"title": "a doctor that dies mid-script on a healthy host prints no verdict at all — under `set -euo pipefail` an unguarded no-match grep (exit 1) ends the run before the PASS line, so the operator cannot tell 'fine' from 'crashed' and the silent death returns with the first zero-count log",
+			"subject": "scripts/copilot-receive-bridge.sh",
+			"find": [
+				"\t\ttotal_err=\"$({ grep -c ' ERROR \\[copilot-receive\\] ' \"$RECEIVE_LOG\" 2>/dev/null || [ \"$?\" -eq 1 ]; } | head -1)\""
+			],
+			"replace": [
+				"\t\ttotal_err=\"$(grep -c ' ERROR \\[copilot-receive\\] ' \"$RECEIVE_LOG\" 2>/dev/null | head -1)\""
+			],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-DOCTOR-PASSES-CLEAN-LOG]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		}
+	]
+}

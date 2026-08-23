@@ -163,10 +163,33 @@ ok(
 
 // ── armProvenance constraint ────────────────────────────────────────────────
 ok(
-	"arm provenances are exactly the arm-capable events",
+	"arm provenances are exactly the arm-capable events, across every backend that arms one",
 	JSON.stringify([...META_RECEIVER_ARM_PROVENANCES].sort()) ===
-		JSON.stringify(["cwd-changed", "file-changed", "session-start"]),
+		JSON.stringify(["cwd-changed", "extension-join", "file-changed", "session-start"]),
 );
+// The Copilot arm is not a hook event, and the marker schema carries that difference
+// rather than flattening it: a different provenance AND a different ownerKind, because
+// the process that holds Copilot's watch is the forked extension, not the CLI. A reader
+// that sees `copilot-extension` is looking at a watcher it can verify by pid; one that
+// saw `claude-code-cli` there would be verifying the wrong process (#82 RAIL 5).
+{
+	const copilotGarden = "20260823T120000-dddddd";
+	writeMetaReceiverMarker({
+		gardenId: copilotGarden,
+		backend: "copilot",
+		nativeSessionId: "cop-native-1",
+		ownerPid: process.pid,
+		ownerKind: "copilot-extension",
+		armProvenance: "extension-join",
+		receiversDir: DIR,
+	});
+	const cop = readMetaReceiverMarker({ gardenId: copilotGarden, receiversDir: DIR });
+	ok(
+		"a Copilot extension arm round-trips with its own provenance and owner kind",
+		cop?.backend === "copilot" && cop?.armProvenance === "extension-join" && cop?.ownerKind === "copilot-extension",
+	);
+	ok("and it is subject to the SAME liveness rule as every other marker", cop?.ownerPid === process.pid);
+}
 let upsRejected = false;
 try {
 	writeMetaReceiverMarker({

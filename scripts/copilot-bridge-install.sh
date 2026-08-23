@@ -12,14 +12,15 @@
 #      user config is touched. Two marketplace roots, two assemblies (cross-review,
 #      terra, 2026-08-20).
 #   2. The Claude doctor certifies Claude's own receiver marker and
-#      FileChanged/asyncRewake doorbell. Copilot does not use that mechanism: its
-#      first-party extension transport is a separate, still-unadmitted lifecycle.
-#      Sharing a doctor would make one rail certify evidence owned by another.
+#      FileChanged/asyncRewake doorbell. Copilot's receiver is a forked first-party
+#      extension with its own installer and its own doctor. Sharing a doctor would
+#      make one rail certify evidence owned by another.
 #
-# WHAT THIS INSTALLS. One plugin whose current managed job is to mint a meta-record
-# on the first prompt of a Copilot session. MCP wiring has its own installer. The
-# 2026-08-23 extension idle-wake receipt does not make this birth installer own a
-# receiver marker, feature flag, or dispatch route; those remain admission work.
+# WHAT THIS INSTALLS. One plugin whose managed job is to mint a meta-record on the
+# first prompt of a Copilot session and name that citizen as this host's sender. MCP
+# wiring has its own installer, and so does the RECEIVER: the doorbell is a forked
+# first-party extension, installed by `run.sh install-copilot-receive`, which also owns
+# the launch-flag check. Four surfaces, four installers, four failure modes.
 #
 # Platform: Linux only, same fence as the Claude installer.
 set -euo pipefail

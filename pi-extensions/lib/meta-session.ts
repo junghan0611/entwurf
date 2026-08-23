@@ -129,25 +129,34 @@ export const META_BACKEND_DESCRIPTORS: Record<MetaBackend, MetaBackendDescriptor
 		deliveryLevel: "D6",
 		nativeIdLabel: "threadId",
 	},
-	// BIRTH-ONLY citizen (#82). Copilot CLI 1.0.80 runs our plugin hook and hands the
-	// hook a session envelope, so a record can be minted and the session gets a garden
-	// address. Nothing above that is claimable: the shipped bundle has no `FileChanged`,
-	// no `asyncRewake` and no `watchPaths`, so there is NO doorbell to arm and no
-	// self-fetch drain to copy (measured 2026-08-20, #82). Hence:
-	//   wakeMode  direct-inject — NOT a capability claim. It is the codex bucket: "not a
-	//             drainable mailbox". A `self-fetch` label here would advertise the exact
-	//             mailbox drain this backend cannot perform; `direct-inject` routes a
-	//             dispatch into the fail-closed refusal that names the missing rail
-	//             (entwurf-deliverability.ts:130) instead. Copilot is NOT a
-	//             `nativePushSupported` backend and has no native-push adapter — the same
-	//             state codex is in today.
-	//   D0        identity only. D2 (receiver armed) cannot pass without a doorbell, so
-	//             every level above D0 would be a false claim. Delivery is a SEPARATE
-	//             admission; this lane is birth.
-	//   sessionId the native join key measured on the Copilot hook envelope.
+	// SELF-FETCH citizen since #82 RAIL 5. Copilot CLI 1.0.80 runs our plugin hook (birth,
+	// garden address, who-sent) AND forks our first-party extension, whose `joinSession()`
+	// holds an `fs.watch` on the garden mailbox signal and can `session.send()` a doorbell
+	// into an idle session. That is the same shape Claude's mailbox has, reached through a
+	// different vendor surface. Hence:
+	//   wakeMode  self-fetch — the doorbell announces, the model drains its own inbox with
+	//             `entwurf_inbox_read`, and THAT read is the receipt. The extension never
+	//             injects the body, so this label promises exactly what happens. It was
+	//             `direct-inject` while no doorbell existed (measured 2026-08-20: no
+	//             `FileChanged`, `asyncRewake` or `watchPaths` in the bundle) — that
+	//             absence was never a claim about the vendor's other surfaces, and the
+	//             extension rail is the one it missed. Copilot is still NOT a
+	//             `nativePushSupported` backend and has no native-push adapter.
+	//   D0        the PRODUCT grade, and it stays here until a managed LIVE acceptance
+	//             exists. The route is fail-closed on both ends — with no armed receiver
+	//             marker every dispatch is refused `mailbox-undeliverable` — so an
+	//             understated level costs a caller nothing, while an overstated one would
+	//             promise a wake nobody has watched happen. The raw transport probe's D7
+	//             path (2026-08-23) is evidence about the MECHANISM, not about this
+	//             managed lane; grade the product, not the prototype.
+	//   sessionId the native join key, measured to be ONE id across all three surfaces:
+	//             the hook envelope, `record.nativeSessionId`, and the SDK's
+	//             `session.sessionId` (record 20260823T112003-9d069a ==
+	//             `ARMED sessionId=4fc16d8d-473d-4258-a1fd-f99d3cb375e9`, CLI 1.0.80).
+	//             That agreement is what lets the extension bind its arm to the record.
 	copilot: {
 		backend: "copilot",
-		wakeMode: "direct-inject",
+		wakeMode: "self-fetch",
 		deliveryLevel: "D0",
 		nativeIdLabel: "sessionId",
 	},
@@ -1635,12 +1644,28 @@ export function readMetaSenderMarker(opts: ReadMetaSenderMarkerOptions): MetaSen
 // ── meta-receiver presence marker (SE-2 active-receiver signal) ──────────────
 
 /**
- * The arm-capable hook events. Only these can emit watchPaths (and therefore arm
- * the idle-wake), so only these write a receiver presence marker. UserPromptSubmit
- * is deliberately absent: it can backfill the record but cannot re-arm the watch, so
- * it must NOT mint or refresh an "active receiver" claim it cannot back.
+ * The arm-capable events, across every backend that can arm an idle wake.
+ *
+ * CLAUDE (`session-start`, `cwd-changed`, `file-changed`): only these hook events can
+ * emit watchPaths (and therefore arm the idle-wake), so only these write a receiver
+ * presence marker. UserPromptSubmit is deliberately absent: it can backfill the record
+ * but cannot re-arm the watch, so it must NOT mint or refresh an "active receiver"
+ * claim it cannot back.
+ *
+ * COPILOT (`extension-join`): the same rule, one backend over. Copilot's arm is not a
+ * hook at all — the CLI forks a first-party extension and the extension's own
+ * `joinSession()` is what puts a live `fs.watch` on the garden mailbox signal and gives
+ * it a `session.send()` channel to ring. The membership test is unchanged and is about
+ * capability, not event vocabulary: this provenance is admitted because the process that
+ * writes it holds the watch and can start a turn on an idle session. A Copilot hook event
+ * has neither, which is why the birth hook still arms nothing (#82 RAIL 5).
  */
-export const META_RECEIVER_ARM_PROVENANCES = ["session-start", "cwd-changed", "file-changed"] as const;
+export const META_RECEIVER_ARM_PROVENANCES = [
+	"session-start",
+	"cwd-changed",
+	"file-changed",
+	"extension-join",
+] as const;
 export type MetaReceiverArmProvenance = (typeof META_RECEIVER_ARM_PROVENANCES)[number];
 
 function requireArmProvenance(value: unknown): MetaReceiverArmProvenance {

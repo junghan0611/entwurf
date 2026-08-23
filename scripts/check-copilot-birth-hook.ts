@@ -306,20 +306,24 @@ ok(
 	);
 }
 
-// The half the doorbell's absence really does govern. Unchanged, and it must stay that
-// way: a receiver marker here would claim a watch nothing can ring, and a mailbox would
-// claim a drain nothing can wake.
+// BIRTH DOES NOT ARM, and that is still true now that Copilot HAS a doorbell (#82 RAIL
+// 5). What changed is the reason, not the assertion. It used to hold because no wake
+// surface existed anywhere in the bundle; it holds today because the surface that exists
+// belongs to a DIFFERENT PROCESS — the forked extension, which owns the watch and can
+// therefore honestly claim to hold one. A marker written from this hook would name the
+// Copilot host pid as the owner of a watch that pid does not hold, and the citizen would
+// read as deliverable for as long as the TUI stayed open, wired to nothing.
 const storeEntries = readdirSync(store);
 ok(
-	"[QK:COPILOT-BIRTH-HAS-NO-RECEIVER-STATE] no mailbox and no receiver marker was created — there is no doorbell to back either",
+	"[QK:COPILOT-BIRTH-DOES-NOT-ARM-RECEIVER] the birth hook creates no mailbox and no receiver marker — arming belongs to the process that holds the watch",
 	!storeEntries.includes("meta-mailbox") && !storeEntries.includes("meta-receivers"),
 );
-// Identity is not replyability. This citizen can now say who it is; it still cannot be
-// replied to, because the reply rail is picked from nativePushSupported at the bridge
-// and copilot lands in self-fetch, where `replyable` comes from a receiver marker it
-// correctly does not write.
+// Identity is not replyability. This citizen can say who it is the moment it is born;
+// whether a reply LANDS is answered one rail over, by the receiver marker the extension
+// writes when it joins. The reply rail itself is picked from nativePushSupported at the
+// bridge, and copilot lands in self-fetch either way.
 ok(
-	"copilot is NOT native-push, so a sender marker buys who-sent and never replyable",
+	"copilot is NOT native-push — a sender marker buys who-sent, and replyability comes from the receiver marker instead",
 	nativePushSupported("copilot") === false,
 );
 

@@ -81,8 +81,8 @@ D8 robustness: partial reason="..."
 | **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. |
 | **Codex app-server-backed TUI** | verified probe | D7; D8 unproven | WebSocket-over-UDS `turn/start` into a live `threadId`; status events expose completion. No managed citizen lane yet. |
 | **Codex embedded TUI** | deferred | D0 partial | No supported receive socket/hook on the measured standalone shape. |
-| **Copilot CLI first-party extension** | verified raw transport; not admitted | D7 path observed; D3 control receipt incomplete; D8 unproven | CLI-spawned extension over stdio JSON-RPC; `joinSession()` + documented `fs.watch` → `session.send({mode:"enqueue"})`. Idle wake, exact-marker reply, and completion passed on 2026-08-23 (CLI 1.0.80, L4, one Linux host). Two-process isolation was observed but its decisive B log was not preserved, so admission must rerun D3. Requires experimental `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS`; managed lifecycle/liveness/dispatch are not implemented. |
-| **Copilot CLI garden citizen** | branch candidate; outbound only | receive D0 | Real native birth, visible garden id, MCP hand, and record-backed outbound sender identity are accepted on branch `issue-82-copilot-citizen`. No managed receiver marker or dispatch route exists yet, so `replyable:false` and `mailbox-undeliverable` remain correct product behavior despite the positive raw transport. |
+| **Copilot CLI first-party extension** | raw transport probe; superseded by the managed unit | D7 path observed; D3 control receipt incomplete; D8 unproven | CLI-spawned extension over stdio JSON-RPC; `joinSession()` + documented `fs.watch` → `session.send({mode:"enqueue"})`. Idle wake, exact-marker reply, and completion passed on 2026-08-23 (CLI 1.0.80, L4, one Linux host). Two-process isolation was observed but its decisive B log was not preserved. Kept as the transport receipt the managed lane was built on; the shipped unit differs deliberately — it announces the inbox instead of injecting the body. |
+| **Copilot CLI garden citizen** | branch candidate; send + receive implemented | receive D0 until a managed LIVE receipt | Birth, garden id, MCP hand and record-backed sender identity are accepted; the RECEIVER landed on the same branch as an installed first-party extension that binds to the V3 record, writes a receiver marker owned by the WATCHER pid, and rings a doorbell the model drains with `entwurf_inbox_read`. `wakeMode` is now `self-fetch`, so dispatch reaches the mailbox rail: armed → delivered, unarmed/stale → the honest `mailbox-undeliverable` refusal. The GRADE stays D0 because no managed LIVE acceptance has run — the hermetic gate (`check-copilot-receive-arm`) proves the mechanism, not the wake. Needs `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` at launch; `doctor-copilot-receive` reads the live CLI environments because its absence is otherwise silent. |
 | **Copilot CLI TUI+server** — *withdrawn lane, kept as evidence* | rejected | D7; D8 unproven | Older official-SDK probe over hidden `--ui-server`; idle enqueue worked, but loopback RPC authentication was not established. The bundled extension supersedes this candidate without reviving it. |
 | **ACP Claude / Cortex** | shipped runtime, outside this matrix | — | ACP sessions are children launched by entwurf's pi adapter, not already-running native sessions to wake. |
 
@@ -129,12 +129,14 @@ shipping commitment: GLG closed the managed native Codex lane on 2026-08-01 beca
 already supplies the official GPT provider path. Entwurf will not duplicate it as a
 native citizen or ACP backend. `turn/steer` is active-turn steering, not idle wake.
 
-### Copilot CLI: one citizen, two accepted facts, one pending admission
+### Copilot CLI: one citizen, two rails, one pending receipt
 
-The branch product already owns the native citizen's birth, garden id, statusline, MCP
-hand, and outbound sender identity. A real Copilot CLI 1.0.80 session minted a V3 record
-and sent under that record-backed garden id on 2026-08-21. This proves who sends; it does
-not by itself prove that a reply can land.
+The branch product owns the native citizen's birth, garden id, statusline, MCP hand,
+outbound sender identity — and, since RAIL 5, the receiver. A real Copilot CLI 1.0.80
+session minted a V3 record and sent under that record-backed garden id on 2026-08-21.
+That proved who SENDS. Whether a reply LANDS is a different fact on a different process,
+and the paragraphs below are the two halves of it: where the transport came from, and
+what the managed lane had to add before it could be dispatched to.
 
 The missing receive transport was found and measured on 2026-08-23. Copilot's platform
 package bundles its first-party extension SDK and bootstrap. With
@@ -149,12 +151,30 @@ workstation. The travelling receipt and reproduction are in
 [`scripts/raw-async-delivery/README.md`](./scripts/raw-async-delivery/README.md).
 
 This extension rail has no network listener, so the rejected `--ui-server` loopback
-transport's authentication blocker does not apply. That does **not** close every trust
-or product obligation: entwurf must still own installed-extension provenance and the
-experimental feature flag, join the armed receiver to the V3 record, certify pid +
-start-key liveness, reject stale/crashed markers, choose the dispatch rail, and prove
-active-turn, re-arm, ordering, and failure behavior. Until those contracts land, the
-product remains receive-D0, `replyable:false`, and honestly rejects inbound dispatch.
+transport's authentication blocker does not apply. The managed lane then took that
+transport and gave it the obligations a product owes (#82 RAIL 5):
+
+- **Artifact.** `run.sh install-copilot-receive` installs the receiver into the user
+  extensions directory from an install-state file it owns, refuses a unit it did not
+  put there, and removes only what that state names.
+- **Identity.** The extension arms only when the CLI pid's sender marker, the V3 record
+  and the SDK's `session.sessionId` all agree; a drifted id or a parent-pid carrier that
+  disagrees with the real parent is a refusal, logged, never a best guess.
+- **Liveness.** The marker's owner is the EXTENSION child — the process that actually
+  holds the watch — so a crashed receiver stops being deliverable at the next start-key
+  read, and the vendor's bootstrap already exits that child when the CLI goes.
+- **Dispatch.** `wakeMode: self-fetch` puts Copilot on the existing mailbox rail. Armed
+  and matching → enqueue + doorbell; anything else → `mailbox-undeliverable`.
+- **The flag.** entwurf cannot set `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` in the
+  operator's shell, so `doctor-copilot-receive` reads the live CLI environments instead:
+  a session launched without it can never arm, and Copilot itself reports nothing.
+
+What is still owed is EVIDENCE, not code. The grade stays receive-D0 until a managed
+LIVE acceptance on a real Copilot session: the hermetic gate drives the real installer
+and the real extension against a stubbed SDK, which proves everything on entwurf's side
+of the fork and nothing about the vendor turn on the other side of it. D3 isolation, the
+active-turn case, `/clear` re-arm and flag durability across releases remain open there
+too.
 
 The hidden `--ui-server` probe remains retired evidence, not a fallback. It found a real
 idle-enqueue capability through an unauthenticated loopback door; the extension finds the
