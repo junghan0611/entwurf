@@ -12,7 +12,10 @@ is the thing to repair.
 
 **Vocabulary.** *Harness* = the vendor product (Claude Code, Antigravity, Copilot CLI,
 Codex, pi). *Backend* = the identifier that harness carries inside entwurf. *Citizen* =
-a session of that harness that owns a V3 meta-record and therefore a garden id.
+a session of that harness that owns a V3 meta-record and therefore a garden id. *Managed*
+describes entwurf ownership of a concrete invocation/install/config surface; it is not an
+admission grade. *Supported* means the end-to-end native-harness contract in this document has
+been accepted.
 
 ---
 
@@ -25,7 +28,7 @@ Before anything else, decide which of the two you are doing. They share almost n
 | The session | already running, opened by the operator | a child entwurf's pi adapter launches |
 | Owns its auth/transcript | yes — entwurf never touches them | yes — inside an isolated overlay |
 | What entwurf adds | a meta-record, a garden id, and whatever rails the vendor actually supports | a provider/model route and a turn loop |
-| Where the contract lives | **this document**, steps 1–8 | [`acp-backend-rail.md`](./acp-backend-rail.md) |
+| Where the contract lives | **this document**, steps 1–9 | [`acp-backend-rail.md`](./acp-backend-rail.md) |
 
 - (a) Source: native lane → `pi-extensions/lib/meta-session.ts` + a per-backend hook unit
   under `pi/`. ACP lane → `pi-extensions/lib/acp/` and `pi-extensions/acp-provider.ts`.
@@ -33,10 +36,14 @@ Before anything else, decide which of the two you are doing. They share almost n
 - (c) Skip this choice and you build an ACP adapter for a harness the operator already has
   open (duplicating a session it owns), or a citizen lane for a process nobody launched.
 
-**Opening a NEW sibling or reopening a dormant one is neither lane.** That is lifecycle,
-it lands after onboarding, and it has its own contract in
-[`mux-launch-rail.md`](./mux-launch-rail.md). Do not fold `entwurf_fresh_call` /
-`entwurf_resume_call` support into an onboarding change.
+**Opening a NEW sibling or reopening a dormant one is neither implementation lane.** That is
+lifecycle and it has its own contract in [`mux-launch-rail.md`](./mux-launch-rail.md); do not put
+tmux placement or launch code inside a birth/receive adapter. But separation is not deferral:
+a native harness is not DONE until step 9 proves the required visible lifecycle parity. If the
+vendor cannot support the required top-level birth, identity, receive and visible-fresh contract
+without invented authority, do not admit it and leave a permanently partial harness behind.
+Same-id resume remains capability-specific because it requires record-authoritative transcript
+reopening; visible fresh is the required common creation surface.
 
 ---
 
@@ -134,10 +141,37 @@ A trusted lifecycle event of the harness turns a session into a record.
 
 ---
 
-## 4. Statusline
+## 3.5 Citizen scope — one visible host, not every session it creates
 
-Optional, and honest either way: if the harness has a status surface, the citizen shows its
-own garden id there; if it does not, say `unsupported` and move on.
+A harness process may create several internal sessions or agents. That does not make each one a
+garden citizen. Before writing the birth hook, identify a **vendor-authoritative top-level
+predicate** and allowlist only the operator-visible host. Every other mode must refuse and log;
+absence or ambiguity is an admission blocker, not a reason to infer from cwd, process age, or the
+latest session id.
+
+- (a) Source: the vendor's actual lifecycle context plus its parent/internal-agent creation path.
+  Read both. An event named `session_start` proves nothing about scope.
+- (b) Acceptance: a real top-level session births exactly one record while one real internal agent
+  births no record, sender marker, or receiver marker. Internal agents may borrow the host's tools
+  and act under the host garden id; they must never acquire a second garden address.
+- (c) Worked warning: OMP v18.0.0 creates subagents in-process, but each subagent rebinds inherited
+  extension paths to its own session API and emits its own `session_start`. “Same OS pid” therefore
+  does **not** prevent record minting. Its measured candidate discriminator is extension
+  `mode === "tui"` for the visible host versus default `"print"` + `hasUI:false` for task agents;
+  that runtime distinction still needs a LIVE receipt and must be remeasured at vendor upgrades.
+  If it flips, stop and reassess rather than growing a pile of heuristic predicates.
+
+---
+
+## 4. Statusline / visible identity
+
+For native-harness support declarations made under this contract, a dedicated statusline adapter
+is optional; **visible identity is not**. If the harness has a status/footer surface, the citizen
+shows its own garden id there. If it does not, prove an equivalent persistent operator-visible
+identity surface owned by that runtime. If neither exists, do not declare that harness supported —
+an address visible only by scraping records is not lifecycle parity. Historical/probe registry rows
+that predate this rule are preserved evidence coordinates, not proof that those backends already
+satisfy this support contract.
 
 - (a) Source: a renderer plus a config writer that owns exactly its own keys. Reference:
   `scripts/copilot-statusline.sh`, `scripts/copilot-statusline-config.py`,
@@ -180,6 +214,18 @@ Registration puts `entwurf_*` in the harness's hands. That is *all* it does.
   record: **registration is tools, not identity.** Sending is step 6. `[측정]` A Copilot
   session with the hand installed called `entwurf_peers` and read the roster, while
   `entwurf_v2` refused — designed behavior, not a defect.
+  - **Imported config is borrowed, not owned.** If a harness already translates another tool's
+    MCP config, do not create a second writer merely to copy it. But discovery is not readiness:
+    prove the effective source, precedence/shadowing, live connection, expected tools and the
+    harness's actual public tool-name dialect. A best-effort importer that silently skips a bad
+    server is useful interoperability, not an entwurf doctor.
+  - **Callback tool names are harness dialect.** Derive and measure the name the harness exposes;
+    never copy a sibling's spelling. OMP v18.0.0, for example, lowercases and replaces every
+    `[^a-z_]+` run with `_`, collapses underscore runs, then trims edge underscores; source
+    inspection therefore computes terminal `entwurf_v2` as `mcp__entwurf_bridge_entwurf_v`
+    rather than Claude Code's `mcp__entwurf-bridge__entwurf_v2`. Digits in the middle become an
+    underscore rather than simply disappearing. The live OMP tool list remains the acceptance
+    oracle.
 
   That document also holds the anonymous hatch and the PATH/env boundary. Bookmark it; a
   lane that could not find it burned three sessions re-deriving what it already said.
@@ -218,6 +264,14 @@ The bridge is a child process. It must be able to name the citizen that owns it.
     recovery rule is "an error with no successful mint after it" will read that as a birth
     failure and print a sentence that is false. Judge mint errors and marker errors on
     separate axes.
+  - **Sanitize inherited identity carriers in every new or amended native managed launch.** The
+    MCP bridge reads a complete `PI_SESSION_ID` + `PI_AGENT_ID` pair before it tries a native
+    sender marker. A non-pi harness started from a pi citizen's bash can therefore inherit and
+    impersonate the parent pi garden id unless its launcher removes both variables before exec.
+    This is a shared external-host boundary, not an OMP-specific patch: #82's remaining Copilot
+    fresh work and every later native admission must clear foreign identity carriers, then let
+    that harness's own trusted birth marker establish identity. Existing launchers have not yet
+    been certified against this newly recovered failure mode.
 - (c) Two confusions this step exists to prevent:
   - **who-sent ≠ replyable.** They are different facts on different rails. A sender marker
     proves identity; whether a reply can *land* is answered by the receive rail of step 7 —
@@ -331,6 +385,34 @@ Only after acceptance, and both places move together.
 
 ---
 
+## 9. Visible lifecycle parity — onboarding is not finished at birth
+
+The adapter work above and the lifecycle implementation remain separate modules, but product
+admission joins their evidence. Starting with native-harness admissions made under this #82
+contract, a backend may be declared **supported** only when it can be opened as one visible fresh
+sibling through `entwurf_fresh_call` with the same operator contract as every other supported fresh
+backend. This rule does not delete historical records or retroactively reinterpret preserved
+registry grades: a pre-contract backend that has not walked this step remains legacy/probe evidence
+and must not be described as supported until it is re-evaluated here.
+
+1. one fixed managed runtime path — never an arbitrary command or raw tmux workaround;
+2. an explicit model and an explicit permission policy in the vendor's measured argv dialect;
+3. a pre-mutation, fail-closed preflight for the birth, MCP hand and receive capability the fresh
+   prompt needs;
+4. a garden id shown on the harness's own persistent visible identity surface;
+5. callback as the first action, using that harness's measured tool name;
+6. exact nonce correlation from the callback sender envelope, with launch and callback receipts
+   kept separate;
+7. one real visible LIVE receipt through callback and addressed receive.
+
+If one of these cannot be implemented from vendor-owned surfaces, the outcome is **do not admit
+that harness**, not “citizen but you cannot open/call it.” Same-id resume is a separate optional
+capability: add it only when a record can authoritatively recover the vendor's transcript/model/cwd
+without guessing. Internal subagents stay inside the top-level citizen throughout lifecycle work;
+do not connect a vendor's internal hub/team protocol to entwurf merely to expose its private hops.
+
+---
+
 ## The five documents this one points at
 
 | Document | Owns | Reached from |
@@ -339,7 +421,7 @@ Only after acceptance, and both places move together.
 | [`fresh-cut-policy.md`](./fresh-cut-policy.md) | recovery when a record generation is genuinely unreadable | step 2 — and only after redeploy has been ruled out |
 | [`external-mcp-host.md`](./external-mcp-host.md) | per-harness bridge registration, external vs garden-native semantics, the anonymous hatch, the PATH/env boundary | steps 5 and 6, as required detail |
 | [`setup-clean-host.md`](./setup-clean-host.md) | operator reproduction of the whole install on a fresh host | after any step that adds an installer or doctor |
-| [`mux-launch-rail.md`](./mux-launch-rail.md) | opening a fresh sibling and reopening a dormant one | after onboarding — a separate lifecycle, not part of it |
+| [`mux-launch-rail.md`](./mux-launch-rail.md) | opening a fresh sibling and reopening a dormant one | step 9 — separate implementation, required admission evidence |
 
 Verification protocol and evidence levels stay in [`../VERIFY.md`](../VERIFY.md); recorded
 host evidence in [`../BASELINE.md`](../BASELINE.md); the invariants every step above must

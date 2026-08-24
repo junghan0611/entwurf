@@ -21,6 +21,19 @@ Prerequisites on the host running the external MCP client:
 
 > **PATH boundary.** MCP servers are often launched by GUI/editor daemons and may not inherit the interactive shell's PATH. No `entwurf_v2` rail launches a process, so this does not affect delivery — but `entwurf_fresh_call` and `entwurf_resume_call` do open a fixed runtime. If that runtime works in your terminal but an external-host call fails with `spawn pi ENOENT` or `spawn claude ENOENT`, pass a full PATH in the MCP server `env`, set `ENTWURF_BRIDGE_ENV_FILE` to a small shell file that exports PATH, or point the host at a wrapper that can find the runtime. `start.sh` sources only the explicit `ENTWURF_BRIDGE_ENV_FILE`; it never reads personal dotfiles automatically.
 
+> **Identity-carrier boundary.** A complete `PI_SESSION_ID` + `PI_AGENT_ID` pair wins before a
+> native sender marker in the bridge's authoritative-self resolution. Those variables are correct
+> inside the pi process that planted them from record birth; they are foreign identity in another
+> native harness. Starting that harness from a pi citizen's bash can otherwise make the new host —
+> and any internal agents borrowing its MCP manager — speak under the parent pi garden id. Every
+> managed native launcher therefore removes both variables before exec and lets the launched
+> harness establish its own identity through its trusted birth marker. Clearing only one is not a
+> repair: an incomplete pair merely changes the failure wording, while retaining either carrier
+> invites future partial-reader drift. An unmanaged launch that inherits them is unsupported. A
+> native-harness admission made under this contract must add a doctor cell that names this
+> contamination rather than silently preferring the marker; no shipped cross-harness doctor claims
+> that coverage yet.
+
 Example env file:
 
 ```bash

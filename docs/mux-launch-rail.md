@@ -7,6 +7,10 @@
 > `entwurf_fresh_call`과 `entwurf_resume_call`은 native pi와 MCP bridge 양쪽에 등록된다. resume의 record
 > authority·lock·same-gid socket observation은 mux가 아니라 `entwurf-v2-visible-resume.ts`가 소유한다.
 > delivery(`entwurf_v2`)는 여전히 launch를 import하지 않으며 그 동작도 이전과 동일하다.
+> Onboarding adapter와 lifecycle 구현의 module/lane 소유선은 계속 분리된다. 다만
+> [`adding-a-harness.md`](./adding-a-harness.md) step 9는 #82 이후 새 native harness를
+> supported라고 부르기 전에 이 문서의 visible-fresh evidence까지 요구한다 — admission
+> acceptance가 둘의 영수증을 모으는 것이지 어느 모듈이 다른 모듈을 import하는 것이 아니다.
 > **§6이 서술한 형태의 T1-b(사전 주입 token → identity lookup)는 CLOSED다** — 미구현인 채로 §6-a의
 > callback correlation에 의해 superseded됐고, 새 증거와 GLG 재승인 없이 다시 열지 않는다.
 > 정확한 다음 행동은 active NEXT handoff가 진다.

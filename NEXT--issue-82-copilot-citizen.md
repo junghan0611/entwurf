@@ -13,8 +13,54 @@
 - [x] **6. Operator LIVE acceptance** — **수용됨 2026-08-23**. garden `20260823T181316-d9f6ba`에서 enqueue→doorbell→drain→read-receipt 사슬 완결 (영수증은 아래 LIVE RECEIPT)
 - [x] **7. Final amendment bundle** — managed launcher `entwurf copilot`, registry no-cache reread, doctor argv discovery, permission/launch docs, D6/D7-partial — product SHA `31ebea0`
 - [x] **8. Grade landing + push** — 독립 review PASS → amendment → qualification 230/230 → frozen `check:full` 370s exit0 → commit/push `31ebea02ed0cb63cf866e28dd1b50ff419684926` + exact-SHA CI SUCCESS + GLG managed-launch LIVE
+- [ ] **9. Copilot visible fresh parity** — managed `entwurf copilot` + inherited PI identity env 소독 + explicit model/permission + birth/MCP/receiver preflight + exact-nonce callback LIVE. 합격 기준은 RAIL 10이 문서화한 `docs/adding-a-harness.md` step 9의 7개 조항이며, 이것이 비면 landing 금지
+- [ ] **10. Universal harness support contract + OMP coordinate (docs-only)** — lifecycle parity·host-only citizenship·foreign-config reuse·identity-env 경계를 고정하고 OMP measured/pending 좌표를 보존. 이 계약은 RAIL 9를 구속하지만 OMP 제품 구현·installer·gate·admission을 이번 #82에 추가하지 않음
+- [ ] **11. Subtraction review + landing** — branch 전체 과잉/중복 판독 + `DELIVERY.md`의 모든 `managed` 용례를 invocation/config ownership 뜻으로 재판독 → 필요한 qualification → frozen `check:full` → main exact-SHA CI → durable main SHA에서 #82 close → mode별 SemVer
 
-현재 좌표: 1–8 브랜치 완료. CURRENT는 **다음 세션 — main landing + SemVer release**. Hidden `--ui-server` / `fresh_call` 확장 / D3·D8 재개 금지.
+현재 좌표: 1–8의 Copilot native delivery는 완료됐지만, GLG의 **2026-08-24 이 세션 직접 결정**으로
+#82의 목적은 Copilot을 visible fresh까지 대칭 수준으로 마무리하고, 그 과정에서 다음 harness가 흔들리지
+않을 보편 support contract를 남기는 것으로 확정됐다. `issuecomment-5386449092`는 대칭 원칙의 출처지만
+그 코멘트의 "별도 후속 이슈" 배치 조항은 이 직접 결정으로 대체됐다. CURRENT는 **RAIL 9 — Copilot
+visible fresh parity**이며, 이미 GREEN인 RAIL 10 docs-only candidate가 합격 기준을 선행 정의한다. OMP는
+이번 #82에서 규칙과 measured/pending 좌표만 남기고, main landing·release·#82 close 뒤 **다음 이슈**에서
+제품 지원을 논의한다. Hidden `--ui-server` / D3·D8 재개는 계속 금지다.
+
+# NEW HARNESS CONTRACT / OMP COORDINATE — 2026-08-24
+
+## 외부 계약 — 지원한다고 부르기 위한 최소치
+
+- **핵심 대칭:** visible top-level birth, visible garden id, trusted sender identity, inbound receive,
+  explicit model/permission의 visible fresh, exact callback correlation. 이 중 하나를 벤더의 권위 있는
+  surface로 만들 수 없으면 그 harness를 admit하지 않는다.
+- **host 하나만 citizen:** 내부 subagent/session은 별도 record·sender·receiver를 절대 얻지 않는다.
+  내부 홉의 MCP 호출은 host 한 garden id의 손으로 귀속된다. top-level을 fail-closed로 구분할 벤더
+  사실이 없으면 admit하지 않는다.
+- **설정 발견 ≠ 지원:** vendor가 이미 읽는 foreign MCP config는 복제·소유하지 않지만, effective
+  source·shadowing·connection·expected tool·실제 tool-name dialect를 doctor와 LIVE로 증명한다.
+- **managed launch:** inherited `PI_SESSION_ID`/`PI_AGENT_ID`를 제거하고 explicit model/permission 및
+  capability preflight를 소유한다. raw vendor launch를 supported fresh로 포장하지 않는다.
+- **stop rule:** 새 watcher/orchestrator나 vendor 내부 team↔entwurf bridge를 만들지 않는다. 판별 조건을
+  업그레이드마다 덧대야 하거나 evidence가 product보다 커지면 멈추고 GLG에게 보고한다.
+
+## OMP facts / pending
+
+- `[측정]` oracle의 `omp`는 v18.0.0 단일 aarch64 binary이고 source checkout은 tag v18.0.0
+  (`4142f881`)이다. 같은 version 문자열은 확인했지만 설치 binary와 checkout의 동일 build는 미증명.
+- `[읽음]` OMP subagent는 parent의 extension path를 자기 session API에 재bind하고 자기
+  `session_start`를 emit한다(`task/executor.ts:3075-3133,3305`). 따라서 "같은 OS pid니까 별도
+  citizen이 될 수 없다"는 과거 판정은 폐기한다. naive birth는 subagent마다 record를 mint할 수 있다.
+- `[읽음]` visible TUI는 extension context `mode:"tui"`; subagent는 default `"print"` +
+  `hasUI:false`다. birth는 `mode === "tui"` allowlist에서만 열고 나머지는 refuse-and-log한다.
+  이 판별의 실제 top-level/subagent LIVE 관측은 pending이다.
+- `[읽음]` OMP는 Claude MCP config를 priority 3으로 번역하고 subagent는 parent MCP manager를 borrow한다.
+  config writer는 0줄로 재사용 가능하지만 readiness proof는 0줄이 아니다. sanitizer 계산상 callback tool은
+  `mcp__entwurf_bridge_entwurf_v`이며 실제 live tool 목록 관측은 pending이다.
+- `[읽음]` OMP extension `ctx.ui.setStatus`는 `FooterComponent`의 extension status line으로 이어지므로
+  garden id 표시는 가능하다; real TUI render receipt는 pending이다.
+- `[읽음]` bridge는 meta marker보다 `PI_SESSION_ID`/`PI_AGENT_ID` carrier를 먼저 믿는다. pi bash에서
+  OMP를 직접 열면 부모 pi identity를 참칭할 수 있으므로 managed native launch의 env 소독이 선결이다.
+- `[pending]` fresh prompt 위치와 `--model` 공백/등호 dialect, live callback tool 이름, TUI/subagent mode,
+  birth→footer→sender→receive 사슬, receive rail 선택, record-authoritative resume 가능성.
 
 # LIVE RECEIPT — 관리 수용, 2026-08-23 (호스트 측정, 두 세션에서 독립 확인)
 
@@ -51,18 +97,22 @@ garden `20260823T225651-65945c` / native `51d64392-8f36-4bb0-ac12-f3db6653947c`.
 
 # NOW
 
-- **Current — next session: main landing + SemVer release.** 브랜치 제품 SHA는
-  `31ebea02ed0cb63cf866e28dd1b50ff419684926`. 이 파일은 merge 직전 삭제하고, 그 삭제가
-  landing candidate에 들어간다. #82는 durable **main** SHA에서만 닫는다.
-- **Next session order (only):**
-  1. issue thread / branch final check
-  2. 이 파일(`NEXT--issue-82-copilot-citizen.md`)을 merge 직전 삭제하고 그 삭제를 landing candidate에 포함
-  3. main landing + exact-SHA CI
-  4. #82를 durable main SHA에서 close
-  5. `entwurf-release` skill의 land → prepare → make → publish 경계로 다음 SemVer.
-     각 mode는 별도 GLG grant. 이번 턴에 tag/publish 없음.
-- **Grade fence (unchanged).** managed D6 PASS / D7 partial / L4. D3 pending, D8 unproven.
-  D3/D8/LIVE 재개 금지. hidden `--ui-server`, `FRESH_CALL_BACKENDS` 확장, host reinstall 반복 금지.
+- **Current — RAIL 9: Copilot visible fresh parity.** Copilot product SHA
+  `31ebea02ed0cb63cf866e28dd1b50ff419684926`와 기존 CI/LIVE는 RAIL 1–8 영수증이지 branch
+  landing 승인이 아니다. RAIL 10의 docs-only contract draft는 Opus 검수 GREEN이며, 그 step 9의
+  7개 조항이 RAIL 9 acceptance를 구속한다.
+- **Order (only):**
+  1. GREEN인 RAIL 10 문서 후보를 RAIL 9의 acceptance contract로 유지한다. OMP는 measured/pending
+     candidate만 보존하며 제품 코드·installer·gate·LIVE를 이 branch에 추가하지 않는다.
+  2. RAIL 9 Copilot managed visible fresh 구현 → affected focused gate/mutant → exact callback LIVE.
+  3. 독립 subtraction review 한 번 → amendment bundle → `DELIVERY.md`의 모든 `managed` 용례 재판독 →
+     필요한 qualification → frozen `check:full`.
+  4. main landing + exact-SHA CI; 이 파일은 merge 직전 현재 좌표를 main `NEXT.md`로 승격하며 삭제.
+  5. #82를 durable **main** SHA에서 close한 뒤 `entwurf-release` land → prepare → make → publish;
+     각 mode/version은 별도 GLG grant. 그 뒤 OMP 지원은 다음 이슈에서 이 contract와 좌표로 시작한다.
+- **Grade fence (unchanged).** 기존 Copilot receive는 D6 PASS / D7 partial / L4. D3 pending, D8 unproven이며
+  그것들을 재개하지 않는다. Hidden `--ui-server`, ACP 재개, host reinstall 반복도 금지다. 이번 #82의
+  남은 제품 일은 Copilot fresh 하나뿐이다.
 
 ## 이 번들이 닫는 결함 — 측정 (2026-08-23, oracle)
 
@@ -103,7 +153,8 @@ garden `20260823T225651-65945c` / native `51d64392-8f36-4bb0-ac12-f3db6653947c`.
    `~/.pi/agent/meta-receivers/<gid>.json`, birth 축은 `./run.sh doctor-copilot-bridge`.
 8. **honest rollback**: `./run.sh uninstall-copilot-receive`(상태 파일이 가진 것만 제거).
    이미 armed 세션은 extension exit까지 marker 유지 — start-key가 회수한다.
-9. **금지**: hidden `--ui-server`, `~/.copilot/run/ws.*`, ACP 경유 시도, `FRESH_CALL_BACKENDS`/fresh-call 확장.
+9. **이 과거 receive 수용 절차의 금지**: hidden `--ui-server`, `~/.copilot/run/ws.*`, ACP 경유 시도.
+   `FRESH_CALL_BACKENDS` 확장은 이제 CURRENT RAIL 9만 소유하며 이 재현 절차에 끼워 넣지 않는다.
 
 ## 남은 observation 축 (자동화가 못 증명하는 것 — 판정에 넣지 않는다)
 
@@ -126,7 +177,9 @@ garden `20260823T225651-65945c` / native `51d64392-8f36-4bb0-ac12-f3db6653947c`.
 - `[로컬]` qualification 230/230 KILLED; frozen `check:full` 370s exit0. index-preflight / clean-log WRONG-REASON은 수리 고고학이지 수용 헤드라인이 아니다.
 - `[호스트]` CI 뒤 `install-copilot-receive` 1회. pre STALE `95cc51d49dba` → post PASS `40510dc3e5fc`. 다른 installer/orphan 미접촉.
 - `[LIVE]` 위 final GLG managed-launch receipt. thread: https://github.com/junghan0611/entwurf/issues/82#issuecomment-5386397337
-- `[다음]` main landing + SemVer. 이 NEXT는 merge 직전 삭제.
+- `[당시 다음]` main landing + SemVer였으나, 2026-08-24 GLG의 직접 결정으로 Copilot fresh +
+  universal harness contract 정리 뒤로 미뤄졌다. OMP 제품 지원은 #82 close 뒤 다음 이슈다. 이 NEXT는
+  최종 merge 직전 삭제.
 
 ## 독립 검수 + amendment — 2026-08-23, D0 커밋으로 조임
 
