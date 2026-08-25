@@ -4,6 +4,85 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.15.0 — 2026-08-25
+
+This release admits Copilot CLI as a full self-fetch garden citizen — birth, an owned
+MCP hand, record-backed sender identity, an installed first-party receive extension, and
+a visible-fresh launch path — closing #82, and fixes the fresh-launch YOLO regression the
+admission work exposed.
+
+### Added
+
+- **Copilot CLI is a self-fetch garden citizen.** `birthCopilotCitizen` upserts
+  `(backend:"copilot", nativeSessionId)` into the shared V3 record store, gives the
+  session a garden id, an owned `entwurf` MCP hand, a footer statusline slot showing that
+  id, and record-backed sender identity on every dispatched message. The receive rail is
+  an installed first-party extension (`run.sh install-copilot-receive`) that binds to the
+  V3 record, arms a watcher, and rings a doorbell the model drains with
+  `entwurf_inbox_read`; `wakeMode` is `self-fetch`, so dispatch reaches the mailbox rail —
+  armed sessions get `delivered`, unarmed or stale sessions get the honest
+  `mailbox-undeliverable` refusal. Launch is exclusively through the owned invocation
+  `entwurf copilot`, which sets `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` for that one
+  process; a session started any other way is silently inert by design, and
+  `doctor-copilot-receive` reads the live CLI environment to catch that class. (#82)
+- **Fresh Copilot siblings are admitted through the same preflight contract as birth.**
+  `copilot-fresh-preflight.ts` decides birth, MCP hand, receiver, and visible footer
+  BEFORE the tmux mutation, so a missing capability is a named refusal instead of a dead
+  window. `entwurf_fresh_call` takes one explicit model in Copilot's measured CLI dialect
+  (`--model <name>` beside `--interactive <prompt>`) and opens through `entwurf`'s own
+  managed invocation, never the bare vendor binary. (#82)
+- **Visible-fresh and D6 receive are LIVE-accepted on one host.** 2026-08-23 D6 receive
+  acceptance (garden `20260823T181316-d9f6ba`, CLI 1.0.80): `joined → armed → doorbell →
+  rang`, mailbox enqueue/read timestamps, and a model reply on the same
+  record/native/garden-id chain. 2026-08-25 visible-fresh acceptance: launch window `@89`,
+  nonce `mux-fresh-call-690529ae99f99faa2252aefb`, exact-callback garden
+  `20260825T085721-f68be0`, one `entwurf_v2` mailbox enqueue plus a same-garden reply, and
+  an operator-observed footer garden id on a healthy multi-turn window. Both rows are
+  evidence level L4 (one host) and stay unmerged; visible fresh is operator-metered and is
+  not a release-gate MUST.
+
+### Fixed
+
+- **Fresh Copilot siblings now default to `--yolo`, matching the profile a human gets
+  from `entwurf copilot`.** `mux-fresh-call.ts` previously passed a callback-only
+  `--allow-tool=entwurf-bridge(entwurf_v2)` grant, which caused `copilot-launch.sh`'s
+  explicit-policy scan to suppress its own `--yolo` injection — every task-tool call then
+  stopped on a confirmation prompt the new sibling could not answer, making it practically
+  unusable. GLG operator LIVE on 2026-08-25 confirmed the missing `YOLO` footer and the
+  per-task-tool stalls; the fix restores the default without adding a permission
+  parameter to the fresh-call API or changing the manual `entwurf copilot` override
+  behavior. (#82 follow-up)
+- **Pi runtime pin moves to `0.84.3`.** Certified development pin and closed peer range
+  are now `0.84.3` / `>=0.84.3 <0.85`. `compat.ts` stayed byte-identical at the previous
+  bump but `loader.ts` did not, so the diff was read and judged reachable before moving
+  the ceiling; the argument is not reused across bumps and each future ceiling move is
+  judged on its own diff.
+
+### Verification
+
+- **`pnpm run check:full`** — PASS, exit 0, 406s standalone on the prepared HEAD.
+- **`LIVE=1 ./run.sh release-gate <scratch> --cut`** — **MUST PASS=21 FAIL=0 SKIP=0,
+  BEHAVIOR PASS=1 FAIL=0 SKIP=0, `cut: OK`.** `check-gate-qualification` inside the gate
+  killed **252/252** mutants across 30 lanes. Log:
+  `/tmp/entwurf-release-gate-0.15.0.run2.fB2LLP/release-gate.log` (SHA-256
+  `9a00a22e8b4ca715ad0b955b51c99a2bacc385bf0c225180026948a4618e5ff6`).
+- A first attempt on the same prepared HEAD (scratch `.../entwurf-release-gate-0.15.0.7yUIFH`)
+  hit one MUST FAIL in `smoke-mux-lifecycle-live`'s cleanup launcher-integrity self-fence:
+  all 78 lifecycle assertions passed, but the Claude Code launcher symlink changed target
+  and content mid-run (`2.1.243`→`2.1.245`) because auto-update was still on the default
+  channel. GLG pinned `autoUpdatesChannel: stable` before the rerun above; this was an
+  environment race during the LIVE run, not a defect in the 0.15.0 candidate.
+
+### Notes
+
+- Copilot's D7 grade is PARTIAL: reply and read receipts are observed; completion
+  taxonomy and long-haul operation are not. D3 (second-session isolation of an owned
+  invocation) is PENDING — observed once, but the decisive log was lost to scratch
+  cleanup before it could be preserved; re-measurement is tracked outside this release.
+- #76 (subscription-first refusal of `openrouter/*` sibling launches), #78
+  (macOS/native-Windows portability evidence), #80 (public vocabulary), #83, #84, #85, and
+  the remaining #72 field-cause investigation stay outside this release.
+
 ## 0.14.2 — 2026-08-20
 
 This patch makes bridge availability a property of the exact invocation each harness will run, preserves child-exit facts across ACP transport closure, and records Copilot delivery as probe evidence without admitting a new citizen rail.
