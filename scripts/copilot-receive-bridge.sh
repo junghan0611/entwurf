@@ -290,8 +290,8 @@ def read_nul(pid, what):
 	except OSError:
 		return None
 
-armed_ok, armed_missing, unreadable = 0, 0, 0
-missing_pids, unreadable_pids = [], []
+armed_ok, armed_missing, unreadable, contaminated = 0, 0, 0, 0
+missing_pids, unreadable_pids, contaminated_pids = [], [], []
 
 for pid in candidates:
 	argv = read_nul(pid, "cmdline")
@@ -333,6 +333,16 @@ for pid in candidates:
 		if b"=" in item:
 			k, _, v = item.partition(b"=")
 			env_map[k.decode("utf-8", "replace")] = v.decode("utf-8", "replace")
+	# FOREIGN IDENTITY CARRIERS. The MCP bridge believes a complete PI_SESSION_ID +
+	# PI_AGENT_ID pair before it looks for a native sender marker, so a Copilot CLI that
+	# inherited them from a pi citizen's bash speaks under the PARENT's garden id. The
+	# marker would still be there and correct — which is exactly why this is reported
+	# instead of being silently out-voted by it. A managed launch unsets both before exec;
+	# seeing them here means this session was NOT started that way.
+	if "PI_SESSION_ID" in env_map or "PI_AGENT_ID" in env_map:
+		contaminated += 1
+		contaminated_pids.append(pid)
+
 	# An absent flag and a flag without the token are the same failure: no scan happened.
 	tokens = [t.strip() for t in (env_map.get(flag_env) or "").split(",")]
 	if flag_value in tokens:
@@ -341,18 +351,21 @@ for pid in candidates:
 		armed_missing += 1
 		missing_pids.append(pid)
 
-print(f"{armed_ok} {armed_missing} {unreadable}")
+print(f"{armed_ok} {armed_missing} {unreadable} {contaminated}")
 print(" ".join(missing_pids))
 print(" ".join(unreadable_pids))
+print(" ".join(contaminated_pids))
 PY
 )" || scan_rc=$?
-		local counts armed_ok armed_missing unreadable missing_pids unreadable_pids
+		local counts armed_ok armed_missing unreadable contaminated missing_pids unreadable_pids contaminated_pids
 		counts="$(printf '%s\n' "$scan_json" | sed -n '1p')"
 		missing_pids="$(printf '%s\n' "$scan_json" | sed -n '2p')"
 		unreadable_pids="$(printf '%s\n' "$scan_json" | sed -n '3p')"
+		contaminated_pids="$(printf '%s\n' "$scan_json" | sed -n '4p')"
 		armed_ok="$(printf '%s' "$counts" | awk '{print $1}')"
 		armed_missing="$(printf '%s' "$counts" | awk '{print $2}')"
 		unreadable="$(printf '%s' "$counts" | awk '{print $3}')"
+		contaminated="$(printf '%s' "$counts" | awk '{print $4}')"
 		if [ "$scan_rc" -ne 0 ] || [ -z "$armed_ok" ]; then
 			bad "the /proc scan for live Copilot CLIs FAILED (exit $scan_rc) — the flag axis is UNKNOWN, so an inert session cannot be ruled out. This is a broken doctor, not a clean host."
 		elif [ "$armed_ok" -eq 0 ] && [ "$armed_missing" -eq 0 ] && [ "$unreadable" -eq 0 ]; then
@@ -368,6 +381,13 @@ PY
 			fi
 			if [ "$armed_missing" -gt 0 ]; then
 				bad "$armed_missing live Copilot CLI process(es) lack $FLAG_ENV=$FLAG_VALUE while the receiver is installed (pids: $missing_pids) — relaunch them with 'entwurf copilot', or uninstall the receiver so nothing promises a doorbell"
+			fi
+			if [ "$contaminated" -gt 0 ]; then
+				# RED, and it is a DIFFERENT failure from the flag axis: such a session can be
+				# perfectly armed and still send under somebody else's garden id, because the
+				# bridge prefers a complete PI carrier pair over the native marker. Naming it is
+				# the whole point — a doctor that silently trusted the marker would hide it.
+				bad "$contaminated live Copilot CLI process(es) inherited PI_SESSION_ID/PI_AGENT_ID (pids: $contaminated_pids) — they can speak under the PARENT pi citizen's garden id even with a correct native marker. Relaunch them with 'entwurf copilot', which unsets both before exec; a raw 'copilot' started from a pi citizen's shell is unsupported."
 			fi
 		fi
 	fi

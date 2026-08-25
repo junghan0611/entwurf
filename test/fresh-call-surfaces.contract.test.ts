@@ -28,6 +28,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { RRegex } from "rregex";
 import { beforeAll, describe, expect, it } from "vitest";
+import { FRESH_CALL_BACKENDS } from "../pi-extensions/lib/mux-fresh-call.ts";
 import {
 	type BridgeTool,
 	bootBridgeAndListTools,
@@ -120,6 +121,22 @@ describe("MCP surface — real bridge boot → runtime tools/list", () => {
 		expect(Object.keys(fresh.inputSchema?.properties ?? {}).sort()).toEqual(["backend", "cwd", "model", "task"]);
 	});
 
+	it("[QK:FRESHCALL-BACKEND-SET-SURFACE-PARITY] the MCP surface enum equals the composition's fixed set — a backend added to the module but not to the bridge is unreachable from every external host", () => {
+		const expected = [...FRESH_CALL_BACKENDS].sort();
+		const mcpEnum = (
+			requireTool(mcpTools, "entwurf_fresh_call").inputSchema?.properties?.backend as { enum?: string[] } | undefined
+		)?.enum;
+		expect([...(mcpEnum ?? [])].sort()).toEqual(expected);
+	});
+
+	it("[QK:FRESHCALL-BACKEND-SET-SURFACE-PARITY-PI] the native pi surface enum equals the same fixed set — a backend missing only here is a capability no in-process pi session can name", () => {
+		const expected = [...FRESH_CALL_BACKENDS].sort();
+		const piEnum = (
+			requireTool(piTools, "entwurf_fresh_call").parameters.properties?.backend as { enum?: string[] } | undefined
+		)?.enum;
+		expect([...(piEnum ?? [])].sort()).toEqual(expected);
+	});
+
 	it("[QK:FRESHCALL-CLAUDE-SURFACE-IDENTITY] the MCP bridge resolves callerGardenId through the canonical authoritative self envelope — never a caller parameter, never raw env", () => {
 		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
 		const freshBlock = (mcpSrc.split('"entwurf_fresh_call",')[1] ?? "").split(
@@ -129,7 +146,7 @@ describe("MCP surface — real bridge boot → runtime tools/list", () => {
 			/const self = await buildAuthoritativeSelfEnvelope\(\);\s*callerGardenId = self\.envelope\.sessionId;/,
 		);
 		expect(freshBlock).not.toMatch(/process\.env\.PI_SESSION_ID/);
-		expect(freshBlock).toMatch(/backend:\s*z\s*\n?\s*\.enum\(\["pi", "claude-code"\]\)/);
+		expect(freshBlock).toMatch(/backend:\s*z\s*\n?\s*\.enum\(\["pi", "claude-code", "copilot"\]\)/);
 		expect(freshBlock).not.toMatch(/callerGardenId:\s*z\./);
 		expect(freshBlock).not.toMatch(/nonce:\s*z\./);
 	});

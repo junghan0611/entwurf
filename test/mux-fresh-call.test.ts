@@ -23,8 +23,10 @@ import {
 	buildBackendArgs,
 	buildFreshCallArgs,
 	buildFreshCallPrompt,
+	COPILOT_CALLBACK_PERMISSION,
 	FRESH_CALL_BACKENDS,
 	FRESH_CALL_CALLBACK_TOOL,
+	FRESH_CALL_RUNTIME,
 	type FreshCallReceipt,
 	type FreshCallResult,
 	freshCall,
@@ -42,6 +44,7 @@ const NONCE = "mux-fresh-call-deadbeefdeadbeefdeadbeef";
 const TASK = "summarise docs/mux-launch-rail.md";
 const PI_MODEL = "entwurf/claude-sonnet-5";
 const CLAUDE_MODEL = "claude-sonnet-5";
+const COPILOT_MODEL = "gpt-5.6-terra";
 
 const read = (rel: string): string => fs.readFileSync(path.join(REPO_DIR, rel), "utf8");
 const MODULE_SRC = read("pi-extensions/lib/mux-fresh-call.ts");
@@ -92,12 +95,56 @@ describe("argv dialects", () => {
 		expect(clArgs[2]).toBe(`--model=${CLAUDE_MODEL}`);
 	});
 
-	it("neither backend passes a shell string, a window name, a cwd or an env carrier", () => {
-		for (const a of [...piArgs, ...clArgs]) expect(a).not.toMatch(/^-(n|c|e|b)$/);
+	const cpArgs = buildBackendArgs("copilot", "PROMPT", COPILOT_MODEL);
+
+	it("[QK:FRESHCALL-COPILOT-MANAGED-RUNTIME] copilot opens through entwurf's OWN managed invocation — runtime `entwurf`, verb `copilot` as the first forwarded token — never the bare vendor CLI, which would start without the EXTENSIONS flag and skip the extension scan SILENTLY", () => {
+		expect(FRESH_CALL_RUNTIME.copilot).toBe("entwurf");
+		expect(cpArgs[0]).toBe("copilot");
 	});
 
-	it("the two backends are the whole fixed set", () => {
-		expect([...FRESH_CALL_BACKENDS].sort()).toEqual(["claude-code", "pi"]);
+	it("[QK:FRESHCALL-COPILOT-ARGV-INTERACTIVE] the prompt rides --interactive, never -p/--prompt — `-p` runs the prompt and EXITS, closing the window on a sibling that is supposed to stay open and be delivered to", () => {
+		expect(cpArgs[1]).toBe("--interactive");
+		expect(cpArgs[2]).toBe("PROMPT");
+		expect(cpArgs).not.toContain("-p");
+		expect(cpArgs).not.toContain("--prompt");
+	});
+
+	it("[QK:FRESHCALL-COPILOT-MODEL-ARGV] Copilot receives the caller's explicit model as the measured `--model`, value token pair instead of falling back to the launcher's injected `--model auto`", () => {
+		const m = cpArgs.indexOf("--model");
+		expect(m).toBeGreaterThan(0);
+		expect(cpArgs[m + 1]).toBe(COPILOT_MODEL);
+	});
+
+	it("[QK:FRESHCALL-COPILOT-PERMISSION-DIALECT] permission is ONE `--allow-tool=` token in Copilot's `<server>(<tool>)` grammar — the space form is variadic and would eat the next argument, and the MODEL-facing tool name is not a permission pattern", () => {
+		expect(cpArgs).toContain(`--allow-tool=${COPILOT_CALLBACK_PERMISSION}`);
+		expect(COPILOT_CALLBACK_PERMISSION).toBe("entwurf-bridge(entwurf_v2)");
+		expect(cpArgs).not.toContain("--allow-tool");
+		expect(cpArgs).not.toContain(`--allow-tool=${FRESH_CALL_CALLBACK_TOOL.copilot}`);
+	});
+
+	it("[QK:FRESHCALL-COPILOT-EXPLICIT-POLICY] naming a permission at all is what keeps the managed launcher from injecting `--yolo`, so a fresh sibling gets the one permission its callback needs rather than all of them", () => {
+		// The launcher injects a default only when the operator stated NO policy, and its scan
+		// compares the token head. This is the assertion that the head it will see is a policy
+		// override, spelled exactly as scripts/copilot-launch.sh lists it.
+		const heads = cpArgs.map((a) => a.split("=")[0]);
+		expect(heads).toContain("--allow-tool");
+		expect(cpArgs).not.toContain("--yolo");
+	});
+
+	it("[QK:FRESHCALL-COPILOT-CALLBACK-TOOL] the Copilot callback tool is the MEASURED `<server>-<tool>` composition, not Claude Code's `mcp__server__tool` spelling — a copied dialect costs the whole first turn", () => {
+		expect(FRESH_CALL_CALLBACK_TOOL.copilot).toBe("entwurf-bridge-entwurf_v2");
+		expect(FRESH_CALL_CALLBACK_TOOL.copilot).not.toBe(FRESH_CALL_CALLBACK_TOOL["claude-code"]);
+		expect(buildFreshCallPrompt({ backend: "copilot", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
+			"entwurf-bridge-entwurf_v2",
+		);
+	});
+
+	it("no backend passes a shell string, a window name, a cwd or an env carrier", () => {
+		for (const a of [...piArgs, ...clArgs, ...cpArgs]) expect(a).not.toMatch(/^-(n|c|e|b)$/);
+	});
+
+	it("the three backends are the whole fixed set", () => {
+		expect([...FRESH_CALL_BACKENDS].sort()).toEqual(["claude-code", "copilot", "pi"]);
 	});
 });
 
@@ -193,11 +240,95 @@ describe("refusals, before any mutation", () => {
 		"cwd-missing",
 		"cwd-not-directory",
 		"no-tmux-context",
+		"copilot-birth-unit-missing",
+		"copilot-mcp-hand-missing",
+		"copilot-receive-unit-missing",
+		"copilot-visible-identity-missing",
 	] as const)("refusal renders as a named reason a caller can act on (%s)", (reason) => {
 		const { text, isError } = renderFreshCall({ ok: false, reason });
 		expect(isError).toBe(true);
 		expect(text).toContain(reason);
 		expect(text).toContain("No window was opened");
+	});
+});
+
+describe("copilot capability preflight, decided before any window exists (step 9 clause 3)", () => {
+	/**
+	 * A host with an executable `entwurf` on PATH and a sandbox HOME/XDG, and deliberately NO
+	 * tmux. That combination is the whole argument: if the answer is a capability reason rather
+	 * than `no-tmux-context`, the decision provably happened before placement — and placement is
+	 * the last thing that runs before the single mutation.
+	 */
+	function withCopilotHost<T>(run: (fx: { env: NodeJS.ProcessEnv; birthHooks: string }) => T): T {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-fresh-copilot-"));
+		try {
+			const home = path.join(root, "home");
+			const xdg = path.join(root, "xdg");
+			const bin = path.join(root, "bin");
+			fs.mkdirSync(bin, { recursive: true });
+			fs.writeFileSync(path.join(bin, "entwurf"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+			fs.writeFileSync(path.join(bin, "entwurf-copilot-statusline"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+
+			const write = (file: string, value: unknown): void => {
+				fs.mkdirSync(path.dirname(file), { recursive: true });
+				fs.writeFileSync(file, JSON.stringify(value));
+			};
+			const birthHooks = path.join(
+				xdg,
+				"entwurf/meta-bridge-copilot/.assembled/entwurf-meta-receive-copilot/hooks/hooks.json",
+			);
+			write(birthHooks, { hooks: {} });
+			const mcpConfig = path.join(home, ".copilot/mcp-config.json");
+			write(mcpConfig, { mcpServers: { "entwurf-bridge": {} } });
+			write(path.join(xdg, "entwurf/copilot-mcp/install-state.json"), {
+				managedConfigPath: mcpConfig,
+				serverKey: "entwurf-bridge",
+			});
+			const receiveUnit = path.join(home, ".copilot/extensions/entwurf-receive");
+			fs.mkdirSync(receiveUnit, { recursive: true });
+			fs.writeFileSync(path.join(receiveUnit, "extension.mjs"), "");
+			write(path.join(xdg, "entwurf/copilot-receive/install-state.json"), {
+				unit: "entwurf-receive",
+				path: receiveUnit,
+			});
+			write(path.join(home, ".copilot/settings.json"), {
+				statusLine: { command: "entwurf-copilot-statusline" },
+				footer: { showCustom: true },
+			});
+			return run({ env: { HOME: home, XDG_DATA_HOME: xdg, PATH: bin }, birthHooks });
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	}
+
+	const call = (env: NodeJS.ProcessEnv): FreshCallResult =>
+		freshCall({ backend: "copilot", model: COPILOT_MODEL, task: TASK, callerGardenId: GID }, env);
+
+	it("[QK:FRESHCALL-COPILOT-PREFLIGHT-PREMUTATION] a missing Copilot capability is answered BEFORE placement — with no tmux at all the reason is still the capability's, so no window can exist by the time the caller reads it", () => {
+		withCopilotHost((fx) => {
+			fs.rmSync(fx.birthHooks);
+			expect(reasonOf(call(fx.env))).toBe("copilot-birth-unit-missing");
+		});
+	});
+
+	it("a complete Copilot host is NOT refused by the preflight — it proceeds to the tmux question, which is the leaf's own no-tmux-context here", () => {
+		withCopilotHost((fx) => {
+			expect(reasonOf(call(fx.env))).toBe("no-tmux-context");
+		});
+	});
+
+	it("[QK:FRESHCALL-COPILOT-PREFLIGHT-AFTER-RUNTIME] a host with no `entwurf` on PATH hears runtime-unresolved, not a capability reason — telling an operator to install a Copilot unit when they have no entwurf at all sends them to the wrong repair", () => {
+		withCopilotHost((fx) => {
+			fs.rmSync(fx.birthHooks);
+			expect(reasonOf(call({ ...fx.env, PATH: "/nonexistent-path-for-this-cell" }))).toBe("runtime-unresolved");
+		});
+	});
+
+	it("the preflight is COPILOT-only: a pi launch on the same bare host is never refused for a Copilot unit", () => {
+		const outside = withPiRuntime((env) =>
+			freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: GID }, env),
+		);
+		expect(reasonOf(outside)).toBe("no-tmux-context");
 	});
 });
 

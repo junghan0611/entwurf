@@ -48,6 +48,11 @@
 import { randomBytes } from "node:crypto";
 import { classifyTmuxCwd, type TmuxCwdRejectReason } from "./classify-tmux-cwd.ts";
 import {
+	COPILOT_PREFLIGHT_HINT,
+	type CopilotPreflightRejectReason,
+	copilotFreshPreflight,
+} from "./copilot-fresh-preflight.ts";
+import {
 	assertLaunchTarget,
 	LaunchPreconditionError,
 	type LaunchRejectReason,
@@ -66,28 +71,59 @@ import {
 	type WindowHandle,
 } from "./mux-placement.ts";
 
-/** The two backends this rail can open. Fixed set, not a profile — a third one is a decision,
- * not a config entry. */
-export const FRESH_CALL_BACKENDS = ["pi", "claude-code"] as const;
+/** The backends this rail can open. Fixed set, not a profile — a further one is a decision,
+ * not a config entry. `copilot` was added by #82 RAIL 9 under the step 9 admission contract. */
+export const FRESH_CALL_BACKENDS = ["pi", "claude-code", "copilot"] as const;
 export type FreshCallBackend = (typeof FRESH_CALL_BACKENDS)[number];
 
-/** The fixed runtime each backend resolves on PATH. Same reason `mux-launch` uses PATH rather
+/**
+ * The fixed runtime each backend resolves on PATH. Same reason `mux-launch` uses PATH rather
  * than a compiled-in location: the official binary is whatever the operator's environment gives
- * when they type the name. */
+ * when they type the name.
+ *
+ * `copilot` resolves `entwurf`, NOT the vendor CLI, and that is the contract rather than a
+ * convenience. Step 9 clause 1 requires ONE fixed MANAGED runtime path, and a bare `copilot`
+ * is not one: it would start without the `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` token
+ * whose absence skips the extension scan SILENTLY, so the sibling would look launched and could
+ * never be delivered to. `entwurf copilot` is the accepted managed invocation that owns that
+ * flag, its recursion fence and its receiver precondition; fresh call reaches Copilot only
+ * through it. The cost is named: a Copilot fresh call needs a current `entwurf` on PATH, the
+ * way a pi fresh call needs `pi`.
+ */
 export const FRESH_CALL_RUNTIME: Record<FreshCallBackend, string> = {
 	pi: "pi",
 	"claude-code": "claude",
+	copilot: "entwurf",
 };
 
 /**
  * The callback tool NAME differs per backend and that is not cosmetic: native pi exposes the
- * capability directly (`entwurf_v2`), while a Claude Code session reaches it through the MCP
- * bridge under its namespaced name. Naming the wrong one costs the whole first turn.
+ * capability directly (`entwurf_v2`), while an MCP-hosted session reaches it under whatever
+ * name that harness composes. Naming the wrong one costs the whole first turn.
+ *
+ * `[측정]` Copilot CLI 1.0.80 composes `<mcpServerName>-<mcpToolName>` — NOT Claude Code's
+ * `mcp__<server>__<tool>`. Read from two independent sessions' own event logs
+ * (`~/.copilot/session-state/<id>/events.jsonl`): `assistant.message.toolRequests[].name` and
+ * `tool.execution_start.toolName` both carry `entwurf-bridge-entwurf_v2`, with
+ * `mcpServerName`/`mcpToolName` beside them as the parts. Derive-and-measure, never copy a
+ * sibling's spelling (`docs/adding-a-harness.md` step 5).
  */
 export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
 	pi: "entwurf_v2",
 	"claude-code": "mcp__entwurf-bridge__entwurf_v2",
+	copilot: "entwurf-bridge-entwurf_v2",
 };
+
+/**
+ * `[측정]` Copilot's PERMISSION grammar is a second, different dialect for the same tool, and
+ * the two must not be confused. `copilot help permissions` (1.0.80): `--allow-tool` takes
+ * `kind(argument)`, where the MCP kind is `<mcp-server-name>(tool-name?)` — the server name as
+ * configured and the tool name as registered with that server. So the token the model calls
+ * (`entwurf-bridge-entwurf_v2`) is NOT the token that grants it. Writing the model-facing name
+ * here would produce a launch that looks permitted and then stops on a confirmation prompt the
+ * operator has to answer before the callback can happen.
+ */
+export const COPILOT_CALLBACK_PERMISSION = "entwurf-bridge(entwurf_v2)";
 
 /** Mirrors the `entwurf_v2` message bound. This is an INTERFACE cap for symmetry with the
  * delivery surface, not a claim that a task of this size was measured through tmux. An argv
@@ -112,12 +148,40 @@ export function isSafeFreshCallModel(model: string): boolean {
  *                 Flag-first submitted no message; Pi rejects the equals form for `--model`.
  *   claude-code — prompt, then `--allowedTools=` and `--model=` as ONE token each. The space form
  *                 for allowedTools is variadic and eats the prompt as an option value.
+ *   copilot     — the managed VERB first, then the prompt as the value of `-i/--interactive`,
+ *                 `--model`, value as two tokens, and the permission as ONE `--allow-tool=`
+ *                 token. Measured from `copilot --help` / `copilot help permissions` (1.0.80).
  *
- * Both failures looked identical from outside: window open, record and socket minted, no turn.
+ * Both pi/claude failures looked identical from outside: window open, record and socket minted,
+ * no turn.
  *
- * The equals form is NOT a permission guarantee — on the measured host the tool was already
- * permitted, so the option's effect was unobservable. What was observed is that it does no harm
- * to the argv. Permission stays a documented host precondition.
+ * For pi and claude-code the equals form is NOT a permission guarantee — on the measured host
+ * the tool was already permitted, so the option's effect was unobservable. What was observed is
+ * that it does no harm to the argv. Permission stays a documented host precondition there.
+ *
+ * Copilot is the backend where permission IS carried explicitly (step 9 clause 2), and three of
+ * its argv facts are load-bearing:
+ *
+ *   - `copilot` is argv[0] of the RUNTIME `entwurf`, i.e. the managed verb — see
+ *     `FRESH_CALL_RUNTIME`. Everything after it is forwarded byte-identical by
+ *     `scripts/copilot-launch.sh`.
+ *   - the prompt rides `--interactive`, never `-p/--prompt`: `-p` runs the prompt and EXITS,
+ *     which would close the window on a sibling that is supposed to stay open and be delivered
+ *     to. `--interactive <prompt>` is non-variadic, so the space form is safe here.
+ *   - `--allow-tool[=tools...]` IS variadic, so the equals form is mandatory — the same trap
+ *     that ate Claude Code's prompt. Naming it also makes the launcher's `--yolo` injection
+ *     stand down (it injects only when the operator stated no policy), so a fresh sibling gets
+ *     exactly the one permission its callback needs instead of all of them.
+ *
+ * That last point has a CONSEQUENCE the operator should hear from this comment rather than
+ * discover in a window: the grant covers the CALLBACK and nothing else. Copilot prompts for
+ * confirmation on tools it was not granted, so a fresh sibling reliably names itself and may
+ * then stop at the first tool its TASK needs. That is the same boundary claude-code fresh has
+ * always had — permission is a documented host precondition, not something a launch widens —
+ * and it is the deliberate direction: an agent-opened sibling must not silently receive every
+ * permission on the operator's machine. `entwurf copilot` typed by a human still gets the
+ * managed `--yolo` profile, because a human typed it. If fresh siblings should carry a wider
+ * policy, that is an operator decision to make explicitly, not a default to drift into.
  */
 export function buildBackendArgs(backend: FreshCallBackend, prompt: string, model: string): string[] {
 	switch (backend) {
@@ -125,6 +189,8 @@ export function buildBackendArgs(backend: FreshCallBackend, prompt: string, mode
 			return [prompt, "--entwurf-control", "--model", model];
 		case "claude-code":
 			return [prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL["claude-code"]}`, `--model=${model}`];
+		case "copilot":
+			return ["copilot", "--interactive", prompt, "--model", model, `--allow-tool=${COPILOT_CALLBACK_PERMISSION}`];
 	}
 }
 
@@ -167,6 +233,7 @@ export type FreshCallRejectReason =
 	| PlacementRejectReason
 	| LaunchRejectReason
 	| TmuxCwdRejectReason
+	| CopilotPreflightRejectReason
 	| "caller-identity-unavailable"
 	| "model-empty"
 	| "model-invalid"
@@ -270,6 +337,17 @@ export function freshCall(
 		throw err;
 	}
 
+	// Backend capability, still PRE-MUTATION (step 9 clause 3). It runs AFTER the runtime is
+	// proven, because "entwurf is not on PATH" is the more fundamental answer — telling an
+	// operator to run `entwurf install-copilot-bridge` when they have no `entwurf` at all sends
+	// them to the wrong repair. It runs BEFORE placement for the reason this whole ordering
+	// exists: a refusal here cannot leave a window behind, while the launcher's own equivalent
+	// check (receiver only, manual `entwurf copilot`) necessarily runs after one is open.
+	if (params.backend === "copilot") {
+		const missing = copilotFreshPreflight(env);
+		if (missing) return { ok: false, reason: missing };
+	}
+
 	const inspected = inspectPlacement(env);
 	if (!inspected.ok) return { ok: false, reason: inspected.reason };
 	const placement = inspected.placement;
@@ -319,6 +397,9 @@ export function freshCall(
 /** Why each refusal happened, in the caller's terms. A reason a caller cannot act on is a reason
  * they will guess about. */
 const REJECT_HINT: Record<FreshCallRejectReason, string> = {
+	// The Copilot capability reasons keep their repair text on the leaf that decides them, so
+	// the sentence an operator reads cannot drift away from the predicate that produced it.
+	...COPILOT_PREFLIGHT_HINT,
 	"no-tmux-context": "this agent is not running inside tmux, so there is no session to open a sibling beside",
 	"anchor-malformed": "TMUX_PANE is not a native pane id",
 	"anchor-unresolved": "tmux resolved no pane for this agent's anchor",

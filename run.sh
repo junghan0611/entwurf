@@ -1152,7 +1152,10 @@ check_mux_fresh_call() {
   # could not see: real bridge boot → tools/list schema/description, Rust-regex-family pattern
   # validity on every emitted pattern (the #62 escape), and the schema riding the actual
   # anthropic-messages request body. No fake tmux: the real-window axis is smoke-mux-fresh-call-live.
-  run_vitest test/mux-fresh-call.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts
+  # copilot-fresh-preflight rides here rather than in its own gate: it exists only as
+  # freshCall's pre-mutation branch (#82 RAIL 9), and splitting it would let the two halves
+  # of one refusal be certified in different runs.
+  run_vitest test/mux-fresh-call.test.ts test/copilot-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts
 }
 
 smoke_mux_fresh_call_live() {

@@ -590,11 +590,22 @@ ok(
 		env: { ...process.env, COPILOT_CLI_ENABLED_FEATURE_FLAGS: "" },
 		stdio: "ignore",
 	});
+	// Armed AND contaminated: the two axes must not absorb each other. A session can
+	// carry the scan flag and still speak under a parent pi garden id.
+	const contaminated = spawn(process.execPath, [loader], {
+		env: {
+			...process.env,
+			COPILOT_CLI_ENABLED_FEATURE_FLAGS: "EXTENSIONS",
+			PI_SESSION_ID: "0199aaaa-bbbb-7ccc-8ddd-eeeeffff0000",
+			PI_AGENT_ID: "pi-agent-fixture",
+		},
+		stdio: "ignore",
+	});
 	const extensionChild = spawn(process.execPath, ["--import", pathToFileURL(sdkEntry).href, lookalikeEntry], {
 		env: { ...process.env, COPILOT_EXTENSION_PARENT_PID: String(withFlag.pid ?? 1) },
 		stdio: "ignore",
 	});
-	running.push(withFlag, withoutFlag, extensionChild);
+	running.push(withFlag, withoutFlag, extensionChild, contaminated);
 	// Reap in a finally, not at the end of the file: an assertion failure below must not
 	// be able to leave these three behind as ppid=1 orphans holding a temp tree open.
 	try {
@@ -629,10 +640,17 @@ ok(
 			lookalikeOut.includes("no live GitHub Copilot CLI process") &&
 				!lookalikeOut.includes("lack COPILOT_CLI_ENABLED_FEATURE_FLAGS"),
 		);
+
+		const contaminatedOut = doctor({ ENTWURF_COPILOT_RECEIVE_PIDS: String(contaminated.pid) });
+		ok(
+			"[QK:COPILOT-RECEIVE-DOCTOR-PI-CARRIER-IS-RED] an identified CLI that inherited PI_SESSION_ID/PI_AGENT_ID is RED on its own axis — it can be perfectly armed and still speak under the parent pi garden id, so the flag verdict must not absorb it",
+			contaminatedOut.includes("inherited PI_SESSION_ID/PI_AGENT_ID") && contaminatedOut.includes("FAIL"),
+		);
 	} finally {
 		withFlag.kill("SIGKILL");
 		withoutFlag.kill("SIGKILL");
 		extensionChild.kill("SIGKILL");
+		contaminated.kill("SIGKILL");
 	}
 }
 {

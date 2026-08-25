@@ -557,7 +557,9 @@ async function main(): Promise<void> {
 			return sender;
 		}
 
-		/** One private tmux server per CELL, plus the client env that anchors into it. */
+		/** One private tmux server per CELL, plus the client env that anchors into it.
+		 * Intentional: pi + claude-code only. Copilot clause-7 LIVE is operator-metered
+		 * and is not a release MUST — do not widen this type (VERIFY.md). */
 		function startPrivateServer(
 			cell: string,
 			backend: "pi" | "claude-code",

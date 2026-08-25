@@ -655,14 +655,16 @@ server.tool(
 // against that answer would call home to a garden id nobody holds.
 server.tool(
 	"entwurf_fresh_call",
-	"Open ONE fresh visible sibling in the operator's own tmux session and hand it a first task. Two fixed " +
-		"backends only: pi, claude-code. The sibling's FIRST action is a callback to you carrying a nonce, and the " +
+	"Open ONE fresh visible sibling in the operator's own tmux session and hand it a first task. Three fixed " +
+		"backends only: pi, claude-code, copilot. The sibling's FIRST action is a callback to you carrying a nonce, and the " +
 		"sender envelope of that callback is its garden id — that is how you learn the address of something that " +
 		"did not exist a moment ago. This returns a LAUNCH receipt (tmux window/pane plus that nonce) and nothing " +
 		"else: it does NOT mean the runtime started, the first turn ran, or the task was delivered. Nothing polls " +
 		"for the callback; if it never arrives the window is visible and can be read directly. For EXISTING " +
 		"citizens use entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and " +
-		"is passed to the chosen runtime CLI (`provider/model` for pi; model id/alias for Claude Code). An optional " +
+		"is passed to the chosen runtime CLI (`provider/model` for pi; model id/alias for Claude Code; a model name " +
+		"or `auto` for copilot). A copilot launch goes through entwurf's own managed invocation and is refused " +
+		"BEFORE any window opens if this host lacks the Copilot birth, MCP, receiver or visible-footer units. An optional " +
 		"cwd starts the sibling in ONE literal absolute existing directory (cross-repo fresh) — never pick resume " +
 		"for a dormant record's cwd; resume is continuity-only. Omitted/empty cwd means the caller's own directory. " +
 		"There are no arbitrary command/env knobs. Do not put secrets in the task — model and task argv are visible to " +
@@ -670,8 +672,8 @@ server.tool(
 		"inside tmux: without a pane anchor there is no session to open a sibling beside.",
 	{
 		backend: z
-			.enum(["pi", "claude-code"])
-			.describe("Which fixed runtime to open. Only these two; there is no arbitrary command."),
+			.enum(["pi", "claude-code", "copilot"])
+			.describe("Which fixed runtime to open. Only these three; there is no arbitrary command."),
 		model: z
 			.string()
 			.min(1)
@@ -685,7 +687,9 @@ server.tool(
 			// as an unused suppression while the escape goes back to being fixable.
 			// biome-ignore lint/complexity/noUselessEscapeInRegex: emitted to a Rust regex validator, see above
 			.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\[\]-]*$/)
-			.describe("Required runtime model: canonical provider/model for pi, or a Claude Code model id/alias."),
+			.describe(
+				"Required runtime model: canonical provider/model for pi, a Claude Code model id/alias, or a Copilot model name (or auto).",
+			),
 		task: z
 			.string()
 			.min(1)

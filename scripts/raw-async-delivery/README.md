@@ -396,8 +396,10 @@ below rather than being laundered into durable receipts:
 That fence has since been walked, not deleted: `backend:"copilot"` receive capability
 IS now real (`wakeMode: self-fetch` plus a record-bound receiver marker, #82 RAIL 5),
 and it arrived through the managed unit with its own installer, doctor, gate and
-mutants — not by widening anything in this directory. `FRESH_CALL_BACKENDS` is still
-untouched: launching a Copilot sibling is a different capability from waking one.
+mutants — not by widening anything in this directory. `FRESH_CALL_BACKENDS` now
+includes `copilot` (#82 RAIL 9); that launch path lives in `mux-fresh-call`, not here.
+This probe still does not open a sibling. Waking an already-running Copilot and
+opening a new one remain different capabilities.
 The registry's receive grade moved off D0 later, and NOT because of this probe: a managed
 LIVE wake was observed on 2026-08-23 (garden `20260823T181316-d9f6ba`, CLI 1.0.80,
 doorbell→`lastReadAt` 09:23:41.235Z→09:23:56.480Z) and that is what makes the shipped lane

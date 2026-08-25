@@ -74,15 +74,21 @@ D8 robustness: partial reason="..."
 
 ## Current matrix
 
+**Vocabulary.** *Owned* in this file names entwurf ownership of a concrete invocation,
+installer, or config writer. Historical receipts may say *managed* for that same ownership
+axis; neither word is an admission grade or a synonym of *supported*. A pre-contract probe
+can be owned without being supported; a supported harness still has to walk
+[`docs/adding-a-harness.md`](./docs/adding-a-harness.md) step 9.
+
 | Harness / surface | Product status | Capability | Transport and boundary |
 |---|---|---|---|
 | **pi native Entwurf** | shipped | D7; D8 partial | Record-addressed Unix control socket. A record-less socket is diagnostic only and never dispatched. |
 | **Claude Code interactive `>=2.1.217`** | shipped; Linux certified | D6; D7/D8 partial | Per-session mailbox + exec-form `FileChanged`/`asyncRewake`. B2 proved idle wake and same-session continuity on one NixOS host. |
 | **Antigravity / agy** | shipped | D6; D7 partial | Record-backed native-push through LS gRPC `agentapi send-message`; no mailbox or receiver marker. |
-| **Codex app-server-backed TUI** | verified probe | D7; D8 unproven | WebSocket-over-UDS `turn/start` into a live `threadId`; status events expose completion. No managed citizen lane yet. |
+| **Codex app-server-backed TUI** | verified probe | D7; D8 unproven | WebSocket-over-UDS `turn/start` into a live `threadId`; status events expose completion. No owned native-citizen install/invocation lane. |
 | **Codex embedded TUI** | deferred | D0 partial | No supported receive socket/hook on the measured standalone shape. |
-| **Copilot CLI first-party extension** | raw transport probe; superseded by the managed unit | D7 path observed; D3 control receipt incomplete; D8 unproven | CLI-spawned extension over stdio JSON-RPC; `joinSession()` + documented `fs.watch` → `session.send({mode:"enqueue"})`. Idle wake, exact-marker reply, and completion passed on 2026-08-23 (CLI 1.0.80, L4, one Linux host). Two-process isolation was observed but its decisive B log was not preserved. Kept as the transport receipt the managed lane was built on; the shipped unit differs deliberately — it announces the inbox instead of injecting the body. |
-| **Copilot CLI garden citizen** | branch candidate; send + receive accepted on one host | D6; D7 partial; D3 pending; D8 unproven | Birth, garden id, MCP hand and record-backed sender identity are accepted; the RECEIVER is an installed first-party extension that binds to the V3 record, writes a receiver marker owned by the WATCHER pid, and rings a doorbell the model drains with `entwurf_inbox_read`. `wakeMode` is `self-fetch`, so dispatch reaches the mailbox rail: armed → delivered, unarmed/stale → the honest `mailbox-undeliverable` refusal. **D6 is the managed LIVE acceptance of 2026-08-23** — garden `20260823T181316-d9f6ba`, native `20fe30c8-b2bc-4600-91a0-8a409131be51`, CLI 1.0.80: receive log `joined`→`armed`→`doorbell fresh=1`→`rang`, mailbox `lastEnqueuedAt 09:23:41.235Z` / `lastReadAt 09:23:56.480Z`, and a model reply on the same record/native/gid chain. D7 is PARTIAL: the reply and read receipt were observed, the completion taxonomy and long-haul operation were not, and the reply envelope reaches this table as an inherited fact rather than a re-read transcript. D3 (managed second-session isolation) is PENDING — it was observed once and its decisive log was lost to a scratch cleanup. Evidence level L4: one host, one round trip. Launch with `entwurf copilot`, which sets `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` for that one invocation; `doctor-copilot-receive` reads the live CLI environments because a session launched without it is silently inert. |
+| **Copilot CLI first-party extension** | raw transport probe; superseded by the owned product unit | D7 path observed; D3 control receipt incomplete; D8 unproven | CLI-spawned extension over stdio JSON-RPC; `joinSession()` + documented `fs.watch` → `session.send({mode:"enqueue"})`. Idle wake, exact-marker reply, and completion passed on 2026-08-23 (CLI 1.0.80, L4, one Linux host). Two-process isolation was observed but its decisive B log was not preserved. Kept as the transport receipt the owned receive unit was built on; the shipped unit differs deliberately — it announces the inbox instead of injecting the body. |
+| **Copilot CLI garden citizen** | branch candidate; send + receive + visible fresh accepted on one host | D6; D7 partial; D3 pending; D8 unproven | Birth, garden id, MCP hand and record-backed sender identity are accepted; the RECEIVER is an installed first-party extension that binds to the V3 record, writes a receiver marker owned by the WATCHER pid, and rings a doorbell the model drains with `entwurf_inbox_read`. `wakeMode` is `self-fetch`, so dispatch reaches the mailbox rail: armed → delivered, unarmed/stale → the honest `mailbox-undeliverable` refusal. **D6 is the owned-invocation LIVE acceptance of 2026-08-23** — garden `20260823T181316-d9f6ba`, native `20fe30c8-b2bc-4600-91a0-8a409131be51`, CLI 1.0.80: receive log `joined`→`armed`→`doorbell fresh=1`→`rang`, mailbox `lastEnqueuedAt 09:23:41.235Z` / `lastReadAt 09:23:56.480Z`, and a model reply on the same record/native/gid chain. **Visible fresh (step 9 clause 7) is a separate LIVE, 2026-08-25** — launch window `@89`/`%89` nonce `mux-fresh-call-690529ae99f99faa2252aefb`; exact-callback garden `20260825T085721-f68be0`; one `entwurf_v2` → `meta-mailbox → enqueued`; same garden `lastReadAt 2026-08-24T23:57:47.784Z` plus same-gid reply; GLG saw footer garden id and a healthy multi-turn window. Those rows stay unmerged. D7 is PARTIAL: reply and read receipt were observed, the completion taxonomy and long-haul operation were not. D3 (second-session isolation of an owned invocation) is PENDING — observed once, decisive log lost to scratch cleanup. Evidence level L4: one host. Launch through the owned invocation `entwurf copilot`, which sets `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` for that one process; `doctor-copilot-receive` reads live CLI environments because a session launched without it is silently inert. Visible fresh is operator-metered and is not a release-gate MUST. |
 | **Copilot CLI TUI+server** — *withdrawn lane, kept as evidence* | rejected | D7; D8 unproven | Older official-SDK probe over hidden `--ui-server`; idle enqueue worked, but loopback RPC authentication was not established. The bundled extension supersedes this candidate without reviving it. |
 | **ACP Claude / Cortex** | shipped runtime, outside this matrix | — | ACP sessions are children launched by entwurf's pi adapter, not already-running native sessions to wake. |
 
@@ -114,7 +120,7 @@ directly through the native adapter, with one bounded re-probe retry. Replyabili
 `record-backed identity ∧ probe-alive`; mailbox state does not exist on this rail, and no
 rail has resume authority since the visible-first cut.
 
-The managed bridge, statusline, and hook installers own separate configuration atoms.
+The owned bridge, statusline, and hook installers own separate configuration atoms.
 Same-pid concurrent model invocation by multiple conversations is not claimed because
 the pid/start-key sender marker would be last-writer-wins. Current operator checks are
 in [BASELINE.md](./BASELINE.md); deterministic ownership and sender gates run in
@@ -125,7 +131,7 @@ in [BASELINE.md](./BASELINE.md); deterministic ownership and sender gates run in
 Do not describe “Codex” as one delivery shape. The measured app-server-backed TUI can
 accept `turn/start` for a live thread and report completion; the standalone embedded
 TUI exposed no equivalent receive route. This remains archived method evidence, not a
-shipping commitment: GLG closed the managed native Codex lane on 2026-08-01 because pi
+shipping commitment: GLG declined to own a native Codex invocation/install lane on 2026-08-01 because pi
 already supplies the official GPT provider path. Entwurf will not duplicate it as a
 native citizen or ACP backend. `turn/steer` is active-turn steering, not idle wake.
 
@@ -136,7 +142,7 @@ outbound sender identity — and, since RAIL 5, the receiver. A real Copilot CLI
 session minted a V3 record and sent under that record-backed garden id on 2026-08-21.
 That proved who SENDS. Whether a reply LANDS is a different fact on a different process,
 and the paragraphs below are the two halves of it: where the transport came from, and
-what the managed lane had to add before it could be dispatched to.
+what the owned product unit had to add before it could be dispatched to.
 
 The missing receive transport was found and measured on 2026-08-23. Copilot's platform
 package bundles its first-party extension SDK and bootstrap. With
@@ -151,7 +157,7 @@ workstation. The travelling receipt and reproduction are in
 [`scripts/raw-async-delivery/README.md`](./scripts/raw-async-delivery/README.md).
 
 This extension rail has no network listener, so the rejected `--ui-server` loopback
-transport's authentication blocker does not apply. The managed lane then took that
+transport's authentication blocker does not apply. The owned product unit then took that
 transport and gave it the obligations a product owes (#82 RAIL 5):
 
 - **Artifact.** `run.sh install-copilot-receive` installs the receiver into the user
@@ -171,12 +177,13 @@ transport and gave it the obligations a product owes (#82 RAIL 5):
   and refuses to launch at all unless the receiver unit it is promising is really
   installed. `doctor-copilot-receive` still reads the live CLI environments, because a
   session started any other way without the flag is silently inert. Plain `copilot` is
-  untouched; running the managed form IS the consent to its profile (EXTENSIONS,
+  untouched; running the owned invocation IS the consent to its profile (EXTENSIONS,
   `--model auto` when no model was given, `--yolo` when no explicit permission or surface
   policy flag was given).
 
-The managed lane has now been accepted LIVE (2026-08-23, receipts in the matrix row
-above), which is what moved receive from D0 to D6. What remains owed is still EVIDENCE,
+The owned receive invocation has now been accepted LIVE (2026-08-23, receipts in the matrix row
+above), which is what moved receive from D0 to D6. Visible fresh is a later, separate LIVE
+(2026-08-25, same row) and does not reopen D3 or D8. What remains owed is still EVIDENCE,
 not code: D3 isolation lost its decisive log to a scratch cleanup and is pending, and the
 active-turn case, `/clear` re-arm and flag durability across vendor releases are
 unmeasured. The hermetic gate drives the real installer and the real extension against a

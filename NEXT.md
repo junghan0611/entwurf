@@ -1,87 +1,96 @@
-# NEXT — #82는 Copilot **garden id 시민화**다. ACP가 아니다.
+# NEXT — #82 Copilot garden citizen: branch landing → main close
 
 > NEXT는 disposable boot sector다. 완료 이력은 CHANGELOG/closed issues/git이 지고,
-> 방향은 ROADMAP, 운영 규율은 AGENTS가 진다.
-
-## 이 문서를 여는 사람이 먼저 읽을 것
-
-2026-08-20에 이 레인을 한 번 잘못 겨눴다. Copilot을 세 번째 **ACP 백엔드**로 입학시키는
-브랜치를 5커밋까지 만들었고, GLG 판단으로 전부 삭제했다. 되풀이하지 않도록 이유를 남긴다.
-
-- **목표는 garden id다.** GLG가 #82에 직접 적었다(2026-08-20 15:37 KST):
-  *"코파일럿 가든ID 지원되야 한다. 그러면 깃허브 쪽 담당하고 auto-mode를 잘쓰면 비용 절감하면서 협력 가능하다."*
-- **ACP 백엔드는 그걸 주지 못한다.** `copilot --acp`는 호스트 **pi 시민**이 자식을 스폰해 한 턴을 도는 것이다.
-  garden id는 pi의 것이고 **Copilot 형제는 생기지 않는다.** 다른 제품이다.
-- **pi는 이미 Copilot을 지원한다.** provider `github-copilot`, 모델 28개. ROADMAP이 2026-08-01에 못박았다 —
-  *pi가 공식 provider로 지원하는 것을 native/ACP로 중복 구현하지 않는다.* #56 Codex 레인을 그 이유로 닫았다.
-  ACP 어댑터는 그 규칙을 정면으로 어긴 중복이었다.
-- 이 작업은 **Copilot CLI의 능력을 품는 것**이다. 모델 레일이 아니라, 자기 세션·GitHub 연계·auto-mode를 가진
-  하네스를 시민으로 들이는 것.
+> 방향은 ROADMAP, 운영 규율은 AGENTS가 진다. #82의 durable chronology는 이슈 스레드다.
 
 # RAIL — 현재 좌표
 
 - [x] **1. 0.14.2 발행** — tag `v0.14.2`=`f7ac2d7`, npm `latest=0.14.2`, `repair=0.12.8-repair.1` 보존
-- [x] **2. #82 축 오조준 → 폐기** — ACP 브랜치 5커밋 삭제. 패치는 `~/.local/share/entwurf-salvage/`에 보존
-- [ ] **3. Copilot 시민화 첫 측정** ← CURRENT: 설치된 플러그인이 왜 시민을 못 만드는가
-- [ ] **4. 0.14.3 스코프 확정** — **지금 잡지 마라.** 3의 시민 1건 측정이 축을 정한다
-- [ ] **5. 별건으로 닫을 것** — cortex 게이트 슬라이스 수리 **하나뿐**. 카디널리티 감사는 CARRIED에 둔다(이슈 X)
+- [x] **2. #82 Copilot 시민화 구현 완료 (branch)** — birth/MCP hand/sender/receive D6/visible fresh/admission contract. 33 커밋 + 29-file 최종 번들, 독립 최종 리뷰 0 Blocker PASS + docs amendment
+- [ ] **3. branch landing** ← CURRENT: Terra 리뷰 PASS(0 Blocker/1 doc Defect, amendment 닫힘) →
+  qualification 1회 + frozen `check:full` 1회 + atomic commit + push + exact-SHA CI 3 job success
+- [ ] **4. main landing + #82 close** ← PAUSED: coordinator가 GLG에게 publish 경계 확인 후. durable **main** SHA에서 증거 댓글 + close. 미리 닫지 않는다
+- [ ] **5. 0.15.0 release/publish** ← PAUSED: GLG가 target을 **0.15.0**으로 고정. 실행은 mode별
+  grant (`entwurf-release` 스킬). npm publish는 mode/version/candidate/dist-tag grant 없이 절대 금지
 
-현재 좌표: **main clean(`f7ac2d7`) · #82 재조준 완료 · 3 시작 대기** · OPEN 7
+현재 좌표: 2 완료 → **3 floor 진행**(Terra PASS, candidate frozen) → 4·5 보류. OMP 제품 지원은 #82 close 뒤 **다음 이슈**.
 
-# NOW — 왜 copilot meta-record가 0인가
+# NOW
 
-- **측정된 출발점:** meta-record 406건 = claude-code 311 · pi 90 · antigravity 5 · **copilot 0**.
-  `~/.copilot/config.json`에 `entwurf-meta-receive`가 `enabled:true`로 **2026-08-19부터** 등록돼 있는데
-  시민을 한 번도 못 만들었다. 설치는 됐고 작동은 안 한다.
-- **Next (측정만, 어댑터 금지):**
-  (1) Copilot의 훅 이벤트 어휘가 Claude Code의 것과 같은가. 플러그인은 `SessionStart` / `CwdChanged` /
-  `UserPromptSubmit` / `FileChanged(asyncRewake)`를 선언한다 — Copilot이 이 이름들을 발화하는가.
-  근거는 번들에 있다: `~/.cache/copilot/pkg/linux-arm64/1.0.80/schemas/api.schema.json`(341 메서드,
-  `hooks.invoke`·`plugins.*`·`sessions.*` 포함), `copilot-sdk/docs/extensions.md`.
-  (2) 훅이 돈다면 왜 레코드가 안 써지는가. 안 돈다면 Copilot의 등가 표면은 무엇인가.
-  (3) `pi/entwurf-capabilities.json`에 copilot 백엔드 자체가 없다(claude-code/agy/codex/pi만). 이게 원인인지 결과인지.
-- **Verify:** 시민 1건이 `meta-sessions/`에 생기고 `entwurf_peers`에 뜨는 것. 그 전까지는 전부 가설이다.
-- **Blocker (permission):** LIVE Copilot 모델 턴 금지. 안 돌아오는 AI credit이다. 승인 사안.
-- **Do not touch:**
-  - **ACP 방향 재개** — `copilot --acp`, `copilotAdapter`, `AcpBackendAdapter`. 폐기됐다.
-  - **`--ui-server` / loopback / `~/.copilot/run/ws.*`** — 거절 유지. 341 메서드 전부 `experimental`,
-    `connect`의 토큰이 **optional**, `session.permissions.setAllowAll`이 문서상 attach-mode 클라이언트가
-    **운영자 세션의 권한을 뒤집는** 용도다. 이 거절은 옳다. 다시 열지 마라.
-  - **qualification 레인 필터 신설** — `check-gate-qualification.ts` 헤더가 이미 닫았다:
-    *"No tiers … if the set ever outgrows its budget, re-open the fast/full split from the design record
-    instead of silently skipping mutants."* 22분은 그 층의 가격이고, 개발 루프에서 그 층을 돌린 게 잘못이다.
-    30–60초 루프는 이미 있다 — `pnpm run check`(39s) + 건드린 주제의 focused gate(0.3–5s).
+- **Current:** #82 landing operator 세션(Fable `20260825T090547-ee05f3`)이 RAIL 3을 실행.
+  candidate = HEAD `b56a6d0` + 30-entry 번들(RAIL 9 구현+amendment, RAIL 10 admission contract,
+  RAIL 11 subtraction+양 리뷰 amendment, NEXT 승격/삭제). 이전 379s `check:full`은 이 번들 전
+  바닥이라 증거가 아니다. Terra 리뷰(gid `20260825T092341-a43c43`)는 **0 Blocker / 1 doc Defect**
+  PASS — README bin 개수(five→six, `entwurf-copilot-statusline` 추가)를 amendment로 닫음.
+- **Next:** (1) frozen candidate에서 standalone `check-gate-qualification`(29 lanes 251 mutants) →
+  (2) frozen `pnpm run check:full` — 둘 다 green일 때만 → (3) commit skill로 atomic commit →
+  (4) GLG가 이 창에 직접 push 승인 → ordinary push → agenda stamp → (5) pushed SHA의 ci.yml
+  `check`/`install-surface`/`artifact-consumer` 3 job 전부 success 확인.
+  red면 진단·수리 후 **새** frozen candidate에서 다시. false green 금지.
+- **Blocker:** none (환경) — floor 도는 동안 worktree/index 편집 금지(NEXT 포함).
+- **Read:** `DELIVERY.md` Copilot matrix row(수용 영수증 SSOT) · `docs/adding-a-harness.md` step 9
+  worked example · issue #82 스레드.
+- **Do not touch:** hidden `--ui-server`/`ws.*` · D3/D8 재개 · Copilot LIVE를 pi/claude release
+  MUST에 넣기 · OMP 제품 구현/installer/gate · force/no-verify push · qualification 레인 필터 신설.
+
+# GRADE FENCE — #82 close 뒤에도 유효
+
+- receive **D6 PASS** / **D7 partial**(reply·read 관측, completion taxonomy·장기 운영 아님) /
+  evidence **L4**(one host). visible fresh는 별도 LIVE(2026-08-25), operator-metered, release MUST 아님.
+- **D3 pending** — 두 번째 무장 세션 격리는 관측됐으나 결정적 로그가 scratch cleanup 전에 미보존.
+  재측정 절차는 DELIVERY.md가 가리키는 설치/독터 체인 + 형제 `entwurf_v2` 배달; **로그를 cleanup 전에
+  옮겨라**(지난번 영수증이 그렇게 사라졌다). B 세션 birth ≈프리미엄 1턴 — GLG 승인 사안.
+- 미측정 관측 축(판정 밖): active-turn 배달, `/clear`/foreground 교체 후 재무장, `EXTENSIONS` flag
+  내구성(CLI 업그레이드마다), duplicate/ordering under load.
+- **게이트 자식 누수(별도 레인):** `check-copilot-receive-arm`이 fork한 stub extension 자식이 `ppid=1`
+  고아로 남는다(2026-08-23 측정 42개 + `/tmp/entwurf-copilot-receive.*` 60개; 격리는 지켜져 host 오염
+  아님). #82 밖에서 닫는다.
+
+# OMP 좌표 — 다음 이슈의 씨앗 (측정/보류만, 제품 없음)
+
+- `[측정]` oracle `omp` v18.0.0 단일 aarch64 binary; checkout tag v18.0.0(`4142f881`) — 동일 build 미증명.
+- `[읽음]` OMP subagent는 parent extension path를 자기 session API에 재bind하고 자기 `session_start`를
+  emit(`task/executor.ts:3075-3133,3305`) → naive birth는 subagent마다 record를 민팅할 수 있다.
+  birth는 extension context `mode === "tui"` allowlist에서만; subagent는 `"print"`+`hasUI:false`.
+- `[읽음]` Claude MCP config를 priority 3으로 번역, subagent는 parent MCP manager를 borrow.
+  sanitizer 계산상 callback tool은 `mcp__entwurf_bridge_entwurf_v` — live tool 목록 관측 pending.
+- `[읽음]` `ctx.ui.setStatus` → FooterComponent extension status line — garden id 표시 가능, render receipt pending.
+- `[읽음]` bridge는 `PI_SESSION_ID`/`PI_AGENT_ID` carrier를 marker보다 먼저 믿음 → managed launch의
+  env 소독 선결(Copilot과 동일 계약; `docs/external-mcp-host.md` identity-carrier boundary).
+- `[pending]` fresh prompt 위치·`--model` dialect·live callback tool 이름·TUI/subagent 판별 LIVE·
+  birth→footer→sender→receive 사슬·receive rail·record-authoritative resume.
 
 # CARRIED — 이 레인 밖에서 닫을 것
 
-- **cortex 게이트 슬라이스 수리.** `check-acp-carrier-augment.ts`가 cortex 선언부터 **EOF까지** 잘라 정규식을
-  걸어서, 뒤에 오는 동일 본문이 cortex의 pin을 대신 만족시켰다 — 결함을 심어도 **게이트가 초록(SURVIVED)**.
-  수리는 측정으로 확인됐다(심음 → exit 1 + QK 서명 → KILLED, 복원 → control 초록).
-  패치: `~/.local/share/entwurf-salvage/0005-fix-gate-close-the-cortex-carrier-pin-at-the-next-ad.patch`.
-  **main에 별 커밋으로 먼저 닫는다.** Copilot이 기각돼도 구멍은 닫혀 있어야 한다.
-  단 `acp-cortex.json`의 `CORTEX-PROVIDER-SIX-ROW-SURFACE` → `ACP-PROVIDER-EXACT-ADAPTER-UNION` 개명은
-  **같이 가져오지 않는다.** Copilot이 ACP가 아니면 여섯 행은 cortex 레인에서 여전히 참이다.
-- **카디널리티 감사.** 백엔드 개수를 인코딩한 서술 **12개 문장 / 6개 파일 + claim id 1개**
-  (`CORTEX-CURATED-FOUR-ROWS`가 SIX-ROW 개명의 생존자). 그중 **게이트가 지키는 것은 0개**.
-  런타임 결합은 3점인데 서술은 12개 — *코드는 확장 가능한데 코드에 대한 이야기가 확장 불가능하다.*
-  **이슈로 열지 마라. CARRIED에 둔 채로 둔다.** 그리고 이것을 "계속 고쳤는데 아직도"의 *정체*라고
-  단정했던 것은 내 오독이다 — GLG 원문은 이 브랜치 **전체가 이 모양인 것**(cortex 파일이 딸려오고,
-  ACP 공유물을 건드리고, 고쳐도 같은 꼴)을 가리킨다. 카디널리티는 그 증상의 **한 메커니즘**이지 병명이 아니다.
-  **포획기를 만들지 마라** — "이 문장이 백엔드 개수를 주장한다"를 잡는 린터나 뮤턴트 레인. 게이트가 서술 12개를
-  안 지키는 건 구멍이 아니라 그 12개가 게이트 클레임이 아니기 때문이다. 전부 클레임으로 올리면 검증이 제품보다
-  커진다(AGENTS stop signal). 이미 있는 재료로 족하다: 슬라이스는 다음 어댑터에서 닫기 · claim id에 센서스를
-  넣지 않기 · AGENTS stale-prose sweep · 주석이 아니라 `CARRIER_LESS_BACKENDS` 멤버십이 SSOT.
-- **`copilot --acp` 핸드셰이크는 측정으로 남긴다.** `protocolVersion 1`, `agentInfo{Copilot, 1.0.80}`,
-  `loadSession:true`, `sessionCapabilities{close,list}`, `authMethods[copilot-login]`. 모델 턴 0회로 얻었다.
-  레인이 아니라 사실이다. 언젠가 "pi 턴의 모델로 Copilot"이 필요해지면 그때 꺼낸다.
-- **OPEN 7:** #72 ACP retained-child(사인 기록됨, 원인 미상) · #76 subscription-first kill-switch ·
-  #78 portability · #80 vocabulary · #82 Copilot garden id · #83 close 대기 · #84 model-lock ledger.
+- **cortex 게이트 슬라이스 수리 — 아직 미착지.** `check-acp-carrier-augment.ts`가 cortex 선언부터 EOF까지
+  잘라 정규식을 걸어 결함을 심어도 SURVIVED. 수리 패치
+  `~/.local/share/entwurf-salvage/0005-fix-gate-close-the-cortex-carrier-pin-at-the-next-ad.patch`
+  (측정 확인됨: 심음→KILLED, 복원→control 초록). **main에 별 커밋으로 닫는다.**
+  `CORTEX-PROVIDER-SIX-ROW-SURFACE` 개명은 같이 가져오지 않는다.
+- **카디널리티 감사 — record-only.** 백엔드 개수를 인코딩한 서술 12문장/6파일, 게이트가 지키는 것 0.
+  이슈로 열지 않는다. 포획기(린터/뮤턴트 레인)를 만들지 않는다. 슬라이스는 다음 어댑터에서 닫고,
+  claim id에 센서스를 넣지 않고, stale-prose sweep과 `CARRIER_LESS_BACKENDS` 멤버십이 SSOT.
+- **`copilot --acp` 핸드셰이크는 측정으로만 남긴다.** `protocolVersion 1`, `agentInfo{Copilot,1.0.80}`,
+  `loadSession:true`, `authMethods[copilot-login]`. 레인이 아니라 사실이다.
+- **OPEN 8:** #72 ACP retained-child · #76 subscription-first kill-switch · #78 portability ·
+  #80 vocabulary · #82(이 레인, close 대기) · #83 close 대기 · #84 model-lock ledger ·
+  #85 mcp/tsconfig noEmit fence. AGENTS cap은 5 — #82/#83 close 뒤 sweep이 소관.
 
 # RECENT
 
-- **2026-08-20:** #82 축을 잘못 겨눴다가 되돌렸다. 원인은 이슈 **본문만 읽고 스레드를 안 읽은 것** —
-  GLG의 목표 진술이 코멘트에 두 시간 먼저 있었다. 그 위에 쓴 admission 문서가 `META_BACKENDS` 진입을
-  하드 펜스로 금지해 **산출물 자체를 막았고**, 그 펜스가 형제 셋의 task spec으로 복사됐다.
-- **2026-08-20:** 0.14.2 발행. 수락본=발행본 sha256 `09492ea6…3464`, CI run 32342695972 전부 success.
-- **2026-08-20:** #83 판정 — model lock은 정상, 전환은 재시작으로 착지, 연속성은
-  `buildAcpPrompt(ctx,"new")`가 pi Context 전체를 새 ACP 자식에 넘겨서 성립. 잔여는 #84.
+- **2026-08-25:** #82 RAIL 9 clause 7 visible-fresh LIVE 수용(window `@89`, nonce
+  `mux-fresh-call-690529ae99f99faa2252aefb`, callback garden `20260825T085721-f68be0`) + RAIL 10
+  admission contract(docs) + RAIL 11 subtraction. Fable 독립 최종 리뷰 **0 Blocker / 3 doc Defect**
+  PASS(amendment는 coordinator 적용), Terra 품질 리뷰(gid `20260825T092341-a43c43`) **0 Blocker /
+  1 doc Defect** PASS(README six-bins amendment). Luna review는 GLG가 취소.
+- **2026-08-23:** receive **D6** LIVE 수용 + RAIL 7–8 landing `31ebea0` push, exact-SHA CI SUCCESS,
+  GLG managed-launch LIVE. 영수증 SSOT는 DELIVERY.md matrix row와 #82 스레드.
+- **2026-08-20:** #82 축 오조준(ACP 백엔드) → 폐기 후 garden-id 시민화로 재조준. 교훈은 AGENTS.md
+  issue-queue 절(본문 아닌 스레드가 계약)에 영구 기록.
+
+# DURABLE LINKS
+
+- #82 LIVE sender checkpoint: https://github.com/junghan0611/entwurf/issues/82#issuecomment-5365420577
+- #82 pushed CI-green checkpoint: https://github.com/junghan0611/entwurf/issues/82#issuecomment-5365828064
+- #82 RAIL 7–8 landing: https://github.com/junghan0611/entwurf/issues/82#issuecomment-5386397337
+- New-harness admission: `docs/adding-a-harness.md` step 9

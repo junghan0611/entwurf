@@ -160,6 +160,28 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:COPILOT-LAUNCH-KEEPS-CALLER-CWD]",
 			"signatureSource": "scripts/check-copilot-launch.ts"
+		},
+		{
+			"claim": "COPILOT-LAUNCH-STRIPS-PI-IDENTITY",
+			"title": "the managed launch forwards inherited PI_SESSION_ID/PI_AGENT_ID — the Copilot session and every child it spawns then speak under the PARENT pi citizen's garden id, with a perfectly correct native marker sitting unused beside it",
+			"subject": "scripts/copilot-launch.sh",
+			"find": ["unset PI_SESSION_ID PI_AGENT_ID\n"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-STRIPS-PI-IDENTITY]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
+		},
+		{
+			"claim": "COPILOT-LAUNCH-STRIPS-BOTH-CARRIERS",
+			"title": "only one half of the identity pair is cleared — the failure merely changes wording while a carrier stays behind for the next partial reader to believe",
+			"subject": "scripts/copilot-launch.sh",
+			"find": ["unset PI_SESSION_ID PI_AGENT_ID"],
+			"replace": ["unset PI_SESSION_ID"],
+			"gate": ["bash", "run.sh", "check-copilot-launch"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-LAUNCH-STRIPS-BOTH-CARRIERS]",
+			"signatureSource": "scripts/check-copilot-launch.ts"
 		}
 	]
 }

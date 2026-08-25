@@ -396,20 +396,65 @@ registry grades: a pre-contract backend that has not walked this step remains le
 and must not be described as supported until it is re-evaluated here.
 
 1. one fixed managed runtime path — never an arbitrary command or raw tmux workaround;
-2. an explicit model and an explicit permission policy in the vendor's measured argv dialect;
-3. a pre-mutation, fail-closed preflight for the birth, MCP hand and receive capability the fresh
-   prompt needs;
-4. a garden id shown on the harness's own persistent visible identity surface;
+2. an explicit model and an explicit permission policy in the vendor's measured argv dialect.
+   The policy has a **width**, not just a spelling: say whether the grant is callback-only or
+   task-wide. A callback-only sibling will reliably name itself and may then stop at the first
+   tool its TASK needs — that prompt is the policy working, not a launch defect. Widening it
+   is an operator decision, never a default that drifts in;
+3. a pre-mutation, fail-closed preflight for the **four** static capabilities the fresh prompt
+   needs — birth, MCP hand, receive, and visible identity — decided before the tmux mutation
+   so a missing unit is a named refusal, not a dead window plus a launch receipt. Receive must
+   use the same env seam the managed launcher will scan (a unit that exists in a different
+   extensions root is not ready);
+4. a garden id shown on the harness's own persistent visible identity surface. The fact is the
+   **effective configuration** the vendor will read, not entwurf's ownership receipt, and not a
+   LIVE render: those are three different proofs. A receipt may contradict; its absence alone
+   does not;
 5. callback as the first action, using that harness's measured tool name;
 6. exact nonce correlation from the callback sender envelope, with launch and callback receipts
    kept separate;
 7. one real visible LIVE receipt through callback and addressed receive.
+
+A backend the composition can open must appear as the same fixed set on every public surface
+that offers `entwurf_fresh_call` — native pi, the MCP bridge, and the operator skill. A backend
+added to the module but not to a surface is unreachable there; one added to a surface but not
+the module is a schema that admits a value the composition cannot open.
 
 If one of these cannot be implemented from vendor-owned surfaces, the outcome is **do not admit
 that harness**, not “citizen but you cannot open/call it.” Same-id resume is a separate optional
 capability: add it only when a record can authoritatively recover the vendor's transcript/model/cwd
 without guessing. Internal subagents stay inside the top-level citizen throughout lifecycle work;
 do not connect a vendor's internal hub/team protocol to entwurf merely to expose its private hops.
+
+### Worked example — Copilot CLI 1.0.80, the first admission under this contract (#82 RAIL 9)
+
+Read this for the SHAPE of the evidence, not to copy its strings; every one of them is a measured
+vendor fact with an expiry date at the next CLI upgrade.
+
+| clause | what it turned out to be | where the fact came from |
+|---|---|---|
+| 1 managed runtime | runtime is `entwurf`, first forwarded token `copilot` — never the bare vendor, which starts without `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` and skips the extension scan SILENTLY | `mux-fresh-call.ts` `FRESH_CALL_RUNTIME`, `scripts/copilot-launch.sh` |
+| 2 model + permission | `--interactive <prompt>` (NOT `-p`, which runs the turn and exits), `--model`, value as two tokens, and permission as ONE `--allow-tool=` token — the space form is variadic | `copilot --help`, `copilot help permissions` |
+| 3 preflight | birth + MCP hand + receiver + visible footer, all decided before the tmux mutation | `pi-extensions/lib/copilot-fresh-preflight.ts` |
+| 4 visible identity | the custom footer: `statusLine.command` + `footer.showCustom` in the settings the vendor reads, with the command resolvable | `scripts/copilot-statusline-*` |
+| 5 callback name | `entwurf-bridge-entwurf_v2` — `<mcpServerName>-<mcpToolName>`, NOT Claude Code's `mcp__server__tool` | two sessions' own `~/.copilot/session-state/<id>/events.jsonl` |
+| 6 correlation | unchanged: the nonce callback's sender envelope | `mux-launch-rail.md` §6-a |
+| 7 LIVE | one visible window, one callback, one addressed receive | 2026-08-25: launch `@89`/`%89` nonce `mux-fresh-call-690529ae99f99faa2252aefb`; callback garden `20260825T085721-f68be0`; mailbox enqueue; `lastReadAt 2026-08-24T23:57:47.784Z`; same-gid reply; GLG footer visible. Rows stay unmerged. Operator-metered; not a release MUST |
+
+Three lessons generalise past Copilot:
+
+- **A harness can speak two dialects for one tool.** Copilot's model-facing name
+  (`entwurf-bridge-entwurf_v2`) and its permission pattern (`entwurf-bridge(entwurf_v2)`) are
+  different strings for the same capability. Measure the one each argv position actually wants;
+  a single "the tool is called X" note will be wrong in one of the two places.
+- **Clause 3's "pre-mutation" is load-bearing, not stylistic.** The managed launcher already
+  refused on a missing receiver — but it runs inside the window that was just opened, so its
+  refusal produces a dead window plus a launch receipt. A capability check the fresh lane can
+  trust has to be decidable one layer above the mutation.
+- **A capability's ownership receipt is not the capability.** The acceptance host had a correct,
+  resolvable footer configuration and NO statusline install-state. Gating clause 4 on the receipt
+  would have refused a working visible identity; the effective configuration is the fact, and the
+  receipt is only checked for what it can still contradict.
 
 ---
 

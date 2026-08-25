@@ -26,6 +26,15 @@
 # Reading an option's VALUE as a policy token suppresses an injected default; reading
 # it as a model suppresses `--model auto`. Every error direction is "inject less",
 # never "widen the operator's permissions behind their back".
+#
+# PRECONDITION SCOPE, deliberately unchanged by #82 RAIL 9. This launcher guards the
+# RECEIVER and nothing else, because that is the promise the EXTENSIONS flag makes. The
+# fresh-call lane needs more than that (birth, MCP hand, receiver AND visible footer), but
+# those belong to `pi-extensions/lib/copilot-fresh-preflight.ts`, which decides them BEFORE
+# tmux opens a window. A refusal here necessarily happens inside a window that already
+# exists, so widening this list would only turn a clean pre-mutation refusal into a dead
+# window plus a launch receipt for a sibling that never was. The manual `entwurf copilot`
+# contract stays receive-only.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -206,5 +215,22 @@ fi
 
 export "$FLAG_ENV=$flags_out"
 export ENTWURF_COPILOT_LAUNCH_ACTIVE=1
+
+# --- foreign identity carriers, removed before exec ------------------------
+# The MCP bridge trusts a COMPLETE `PI_SESSION_ID` + `PI_AGENT_ID` pair ahead of a native
+# sender marker when it resolves who is speaking. Inside the pi process that planted them
+# from record birth that is correct. In another harness they are somebody else's identity:
+# start Copilot from a pi citizen's bash and this session — plus every MCP child and
+# extension child that inherits from it — can speak under the PARENT pi garden id, and the
+# delivery layer will stamp envelopes with an address this session does not hold.
+#
+# Both go, together. Clearing one only changes the wording of the failure while leaving a
+# carrier for a future partial reader to pick up, so an incomplete pair is not a repair.
+# Nothing is substituted: identity for this session comes from its OWN trusted birth marker
+# on its first prompt, which is exactly where the record authority already lives.
+#
+# `unset` is unconditional on purpose. Branching on "was it set?" would only add a way to
+# be wrong; unsetting an absent variable is a no-op in every shell this runs on.
+unset PI_SESSION_ID PI_AGENT_ID
 
 exec "$copilot_bin" "${final_args[@]}"

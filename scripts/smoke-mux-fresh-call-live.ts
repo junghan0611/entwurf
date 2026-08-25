@@ -213,6 +213,8 @@ async function main(): Promise<void> {
 		// onboarding instead of exercising the configured runtime. Separate servers preserve
 		// those backend-native environments without adding an env carrier to the product.
 		const nonces = new Map<string, string>();
+		// Intentional: pi + claude-code only. Copilot clause-7 LIVE is operator-metered
+		// and is not a release MUST — do not add `copilot` to this loop (VERIFY.md).
 		for (const backend of ["pi", "claude-code"] as const) {
 			const socket = path.join(root, `${backend}.sock`);
 			privateSockets.add(socket);

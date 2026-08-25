@@ -48,7 +48,7 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 | **Claude Code** | shipped | SessionStart meta-bridge → garden id + mailbox + trusted marker. Transcript를 가져오지 않는다. | meta-session gates, mailbox/deliverability, `doctor-meta-bridge` |
 | **ACP Claude** | shipped; **outbound callback verified, retained-child failure tracked in #72** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Integrated lifecycle proves callback, visible same-id resume and recall. Synthetic long-turn LIVE passes beyond 733s, but a real retained Sonnet tool-loop failed after four reuse turns with `ACP connection closed` (`20260730T194358-0061d2`), and GLG reports the same user-facing shape on hard workloads. #72 must recover child exit/signal/stderr and classify the workload-shape gap without automatic replay. Earlier intermittent bundled-MCP readiness observations remain separately recorded below. | ACP LIVE smokes + mux lifecycle release-gate MUST + #72 field report |
 | **Codex** | native probe archived; managed lane declined | direct/native delivery evidence는 방법론 기록으로 남지만, pi가 공식 GPT provider를 지원하므로 별도 native citizen/ACP backend를 출하하지 않는다. 일반 external MCP host로 명시 배선하는 것은 별개다. | DELIVERY.md raw probe / closed #56 |
-| **Copilot CLI** | 출생 구현 착지, **LIVE 미증명**; 배달 미승인 | plugin hook이 첫 프롬프트에서 `backend:"copilot"` meta-record를 민팅해 garden id를 준다 — Claude Code처럼 주소로 부를 수 있는 시민. `args` 키가 없는 Copilot 스키마 때문에 Claude 유닛을 재사용할 수 없어 no-argv 유닛을 따로 둔다. 번들에 도어벨(`FileChanged`/`asyncRewake`/`watchPaths`)이 없어 배달 어댑터·`fresh_call`은 별개 승인이며, `--ui-server`/`ws.*`는 계속 거절이다. | `check-copilot-birth-hook`(합성 봉투 = 메커니즘 증명), `doctor-copilot-bridge`. **실제 Copilot 세션이 민팅한 레코드는 아직 없다** — 첫 프롬프트 1턴은 과금이고 GLG 결정 사항이다 |
+| **Copilot CLI** | branch: birth + receive D6 + visible fresh clause 7 accepted on one host | 첫 프롬프트에 `backend:"copilot"` V3 record. receive는 포크된 first-party extension + mailbox rail. visible fresh는 `entwurf_fresh_call {backend:"copilot"}` → owned `entwurf copilot` invocation, 4축 preflight, exact-nonce callback. `--ui-server`/`ws.*`는 거절. D3 pending / D8 unproven. Copilot visible-fresh LIVE는 operator-metered이며 release MUST가 아니다. | DELIVERY.md matrix row (LIVE receipts 2026-08-23 / 2026-08-25) + issue #82 thread |
 | **Antigravity (`agy`)** | shipped | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push; managed MCP/permission, statusline, hook adapters. | agy deterministic gates + doctors + 2026-07-13 live round trip |
 | **Cortex / governed ACP** | **landed (0.13.0)** — hvkiefer's PR #40 adapter transplanted with the CP0-audit revisions (dual-HOME overlay, mcp.json projection, per-turn set-model, 4-row curation) | current D1–D10 contract is `docs/acp-backend-rail.md` “Cortex Code audit”; deterministic gate `check-acp-cortex` + mutant lane `acp-cortex`; CP2 live smoke `smoke-acp-cortex-live` stays outside the claude-only release floor | PR #40 / #48 / `docs/acp-backend-rail.md` |
 | **Gemini CLI** | deprecated path | replaced by Antigravity direction for current Google individual tiers. | README migration note |
@@ -162,20 +162,21 @@ Sonnet에서 flaky라 한 번의 flake가 컷을 막으면 안 된다. 우회/�
 - **driver optionality — deferred, not a current issue.** production은 tmux를 직접 호출하며 generic `DRIVERS`
   seam이나 zmx backend는 없다. 구체적인 두 번째 driver 수요가 생기기 전에는 비교·추상화를 재개하지 않는다.
   quota, system load, 예상 작업량, 과거 담당자 같은 선택 신호도 substrate/driver에 저장하지 않는다.
-- **Copilot CLI — garden birth, outbound identity, managed receive 모두 LIVE.**
+- **Copilot CLI — garden birth, outbound identity, owned receive, visible fresh 모두 한 호스트 LIVE.**
   #82 branch에서 실제 Copilot CLI 1.0.80 세션이 첫 프롬프트에 V3 record를 민팅했고, 자기
-  garden id로 outbound `entwurf_v2`를 보내 `origin:meta-session`을 보존했다. Managed receive는
-  2026-08-23 관리 LIVE 수용으로 **D6**에 올랐다: garden `20260823T181316-d9f6ba`에서
+  garden id로 outbound `entwurf_v2`를 보내 `origin:meta-session`을 보존했다. Owned receive는
+  2026-08-23 LIVE 수용으로 **D6**에 올랐다: garden `20260823T181316-d9f6ba`에서
   enqueue(`09:23:41.235Z`)→doorbell→drain→read-receipt(`09:23:56.480Z`) 사슬이 완결되고 모델이
-  같은 record/native/gid 위에서 답했다(L4, Linux 한 대). `replyable:true`는 armed receiver marker가
-  있을 때의 사실이지 backend 상수가 아니다 — 무장 전/후에는 여전히 `mailbox-undeliverable`로 거절한다.
-  남은 것은 **D7 partial**(reply·read는 관측, completion taxonomy와 장기 운영은 아님),
-  **D3 pending**(두 번째 세션 격리는 관측됐으나 결정적 로그 미보존), **D8 unproven**, 그리고 experimental
-  `EXTENSIONS` flag 내구성이다. `fresh_call`은 여전히 올리지 않는다 — 형제를 *깨우는* 능력과
-  *띄우는* 능력은 별개다. Hidden `--ui-server`는 loopback auth가 성립하지 않아 거절된
-  역사이며, bundled extension이 대체했을 뿐 다시 후보가 아니다. `ws.*`도 계속 금지다.
+  같은 record/native/gid 위에서 답했다(L4, Linux 한 대). Visible fresh (step 9 clause 7)는
+  **별도 LIVE, 2026-08-25**: launch `@89`/`%89` nonce `mux-fresh-call-690529ae99f99faa2252aefb`,
+  callback garden `20260825T085721-f68be0`, mailbox enqueue, `lastReadAt 2026-08-24T23:57:47.784Z`,
+  same-gid reply, GLG footer visible. 그 행들은 합치지 않는다. `replyable:true`는 armed receiver
+  marker가 있을 때의 사실이지 backend 상수가 아니다. 남은 것은 **D7 partial**, **D3 pending**,
+  **D8 unproven**, experimental `EXTENSIONS` flag 내구성이다. D3/D8을 재개하지 않는다.
+  Hidden `--ui-server`는 거절된 역사이며 다시 후보가 아니다. `ws.*`도 계속 금지다.
+  Copilot visible-fresh LIVE는 operator-metered이며 기존 pi/claude release MUST에 넣지 않는다.
   Copilot은 GitHub 이슈/PR/CI와 model `auto`를 가진 별도 하네스이며, 그 역할은 dispatch 예절이지
-  substrate role system이 아니다. 비용도 무제한이 아니라 AI Credit/monthly entitlement로 센다.
+  substrate role system이 아니다.
 
 ---
 

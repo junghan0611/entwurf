@@ -517,6 +517,7 @@ gate, LIVE smoke, release 배선을 전부 제거했다.
 | cwd classification leaf (`classify-tmux-cwd.ts`) | `-c` 후보의 분류 하나 — 4개 stable reason(absolute / `#` 없음 / 존재 / 디렉터리; tmux가 `-c`를 format-expand하고 없는 경로를 조용히 `$HOME`으로 폴백하기 때문) | argv, tmux 실행, hint 문구(각 consumer가 자기 표현을 소유), fallback 디렉터리 |
 | resume-call composition (`mux-resume-call.ts`) | record가 준 cwd에서의 same-session append(`-c`) — 분류는 공유 leaf, "recorded cwd" hint 표현, launch receipt | garden identity, record 조회, lock, delivery, supervision |
 | fresh-call composition (`mux-fresh-call.ts`) | backend별 fixed runtime + argv dialect, explicit model CLI token, optional **requested** cwd(caller가 유일한 출처; `undefined`/`""`만 생략, literal·no-trim, 같은 leaf로 pre-mutation 분류, resume 대칭 `-c` 위치), first-turn framing(callback→task 순서), nonce 민팅, launch receipt | garden identity(표면이 공급), cwd 추측·resolve, delivery transport, task 분해, supervision |
+| copilot capability preflight leaf (`copilot-fresh-preflight.ts`) | Copilot fresh **한 건**에 대한 pre-mutation 판정 — birth·MCP hand·receiver·visible footer 네 축의 **설치/설정 사실**과 축마다 하나인 named reason + repair 문구 | runtime 사실(벤더 spawn·live process·연결 여부는 doctor와 LIVE 소유), mutation, 다른 backend, generic doctor로의 성장 |
 | public surfaces (`entwurf-control.ts` · MCP `index.ts`) | fresh의 record-backed caller identity와 `{backend, model, task, cwd?}` schema, resume의 target-only schema, 양쪽 렌더, resume launch seam 조립 | argv 문법, placement, identity 민팅 |
 | project policy (repo 밖) | 누구를·언제·무엇으로 부를지, fan-out 횟수, 실패 후 판단 | transport 내부 구현 |
 
@@ -531,9 +532,10 @@ mux-placement                                  -X-> entwurf core
 mux-launch                                     -X-> entwurf core
 mux-placement                                  -X-> mux-launch        (leaf는 혼자 삭제 가능해야 한다)
 mux-launch                                      -> mux-placement
-mux-fresh-call                                  -> mux-launch + mux-placement + classify-tmux-cwd
+mux-fresh-call                                  -> mux-launch + mux-placement + classify-tmux-cwd + copilot-fresh-preflight
 mux-resume-call                                 -> mux-launch + mux-placement + classify-tmux-cwd
 classify-tmux-cwd                              -X-> 모든 mux/entwurf 모듈   (공유 분류 leaf; node 표준만 본다)
+copilot-fresh-preflight                        -X-> 모든 mux/entwurf 모듈   (좁은 backend leaf; node 표준만 본다)
 entwurf-v2-visible-resume                      -X-> mux-*            (launch는 표면이 주입하는 seam)
 public surfaces                                 -> mux-resume-call + entwurf-v2-visible-resume  (composition root)
 all other shipped production sources           -X-> mux-launch

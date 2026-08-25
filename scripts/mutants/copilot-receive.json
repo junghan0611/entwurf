@@ -243,6 +243,21 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:COPILOT-RECEIVE-DOCTOR-OWNS-SCANNER-FAILURE]",
 			"signatureSource": "scripts/check-copilot-receive-arm.ts"
+		},
+		{
+			"claim": "COPILOT-RECEIVE-DOCTOR-PI-CARRIER-IS-RED",
+			"title": "downgrading inherited PI_SESSION_ID/PI_AGENT_ID to a note lets an armed Copilot speak under the parent pi garden id while the doctor still ends PASS — the flag axis cannot absorb this",
+			"subject": "scripts/copilot-receive-bridge.sh",
+			"find": [
+				"\t\t\t\tbad \"$contaminated live Copilot CLI process(es) inherited PI_SESSION_ID/PI_AGENT_ID (pids: $contaminated_pids) — they can speak under the PARENT pi citizen's garden id even with a correct native marker. Relaunch them with 'entwurf copilot', which unsets both before exec; a raw 'copilot' started from a pi citizen's shell is unsupported.\""
+			],
+			"replace": [
+				"\t\t\t\tnote \"$contaminated live Copilot CLI process(es) inherited PI_SESSION_ID/PI_AGENT_ID (pids: $contaminated_pids)\""
+			],
+			"gate": ["bash", "run.sh", "check-copilot-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-RECEIVE-DOCTOR-PI-CARRIER-IS-RED]",
+			"signatureSource": "scripts/check-copilot-receive-arm.ts"
 		}
 	]
 }

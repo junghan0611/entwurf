@@ -54,6 +54,12 @@ try {
 echo "CWD=$PWD"
 echo "PID=$$"
 echo "FLAG=[\${COPILOT_CLI_ENABLED_FEATURE_FLAGS-<unset>}]"
+# The identity carriers, reported with the SET/UNSET distinction intact: the bridge's
+# authoritative-self resolution needs a COMPLETE pair, so "present but empty" and "absent"
+# are different facts and an empty-string report would hide one of them.
+echo "PISESSION=[\${PI_SESSION_ID-<unset>}]"
+echo "PIAGENT=[\${PI_AGENT_ID-<unset>}]"
+echo "KEEP=\${ENTWURF_FIXTURE_KEEP-0}"
 for a in "$@"; do printf 'ARG<%s>\\n' "$a"; done
 exit "\${FAKE_COPILOT_EXIT:-0}"
 `,
@@ -72,6 +78,8 @@ exit "\${FAKE_COPILOT_EXIT:-0}"
 		flag: string;
 		cwd: string;
 		pid: string;
+		piSession: string;
+		piAgent: string;
 	}
 	// A PATH with no `copilot` anywhere on it — built by dropping every real PATH entry that
 	// actually holds one, rather than by emptying PATH (the launcher still needs python3,
@@ -106,9 +114,14 @@ exit "\${FAKE_COPILOT_EXIT:-0}"
 			status: r.status,
 			out,
 			args: argv,
-			flag: /^FLAG=\[([\s\S]*)\]$/m.exec(out)?.[1] ?? "<no-launch>",
+			// Line-anchored, NOT `[\s\S]*`: with more reported lines below, a greedy
+			// any-character match runs past this line's `]` and captures everything up to the
+			// LAST bracketed line in the report.
+			flag: /^FLAG=\[(.*)\]$/m.exec(out)?.[1] ?? "<no-launch>",
 			cwd: /^CWD=(.*)$/m.exec(out)?.[1] ?? "",
 			pid: /^PID=(.*)$/m.exec(out)?.[1] ?? "",
+			piSession: /^PISESSION=\[(.*)\]$/m.exec(out)?.[1] ?? "<no-launch>",
+			piAgent: /^PIAGENT=\[(.*)\]$/m.exec(out)?.[1] ?? "<no-launch>",
 		};
 	}
 
@@ -330,6 +343,49 @@ exit "\${FAKE_COPILOT_EXIT:-0}"
 		ok(
 			"[QK:COPILOT-LAUNCH-REFUSES-ABSENT-VENDOR] a missing vendor executable is named as missing, not silently skipped",
 			r.status !== 0 && r.out.includes("executable found on PATH"),
+		);
+	}
+	// ── foreign identity carriers ──────────────────────────────────────────────
+	// The bridge's authoritative-self resolution believes a COMPLETE PI_SESSION_ID +
+	// PI_AGENT_ID pair before it looks for a native sender marker. Inherited from a pi
+	// citizen's bash, they make this Copilot session — and every MCP/extension child that
+	// inherits from it — speak under the PARENT pi garden id, with a perfectly correct
+	// marker sitting right there. So the launch must strip them, and the vendor's own
+	// report of its environment is the only honest oracle for that.
+	// The two cells below split the pair ON PURPOSE, one carrier each, and the split is what
+	// makes their two defects tell themselves apart. A cell asserting both halves would fail
+	// under EITHER defect, so the half-cleared launcher would be caught by whichever cell ran
+	// first and the report would name the wrong claim — red for a true reason it did not test.
+	const bothIn = { PI_SESSION_ID: "0199aaaa-bbbb-7ccc-8ddd-eeeeffff0000", PI_AGENT_ID: "pi-agent-fixture" };
+	{
+		const r = launch([], bothIn);
+		ok(
+			`[QK:COPILOT-LAUNCH-STRIPS-PI-IDENTITY] a managed launch entered with inherited PI identity carriers hands the vendor no PI_SESSION_ID (got "${r.piSession}")`,
+			r.flag !== "<no-launch>" && r.piSession === "<unset>",
+		);
+	}
+	{
+		// The AGENT half, asserted both when the pair arrived whole and when only the agent id
+		// did. Clearing one is not a repair: an incomplete pair merely changes the wording of
+		// the failure while leaving a carrier for a future partial reader to believe.
+		const both = launch([], bothIn);
+		const onlyAgent = launch([], { PI_AGENT_ID: "pi-agent-fixture" });
+		ok(
+			`[QK:COPILOT-LAUNCH-STRIPS-BOTH-CARRIERS] PI_AGENT_ID does not survive either, whole pair or alone — a half-cleared pair is not a repair (got "${both.piAgent}" / "${onlyAgent.piAgent}")`,
+			both.piAgent === "<unset>" && onlyAgent.piAgent === "<unset>",
+		);
+	}
+	{
+		// The strip is identity-only. A launch that also swallowed the operator's own
+		// environment would be a different, quieter defect, so the flag and argv axes are
+		// re-asserted in the SAME run that carries the carriers in.
+		const r = launch(["--model", "gpt-5.6-terra"], { PI_SESSION_ID: "x", PI_AGENT_ID: "y", ENTWURF_FIXTURE_KEEP: "1" });
+		ok(
+			"the strip touches ONLY the two identity carriers — the scan flag, the operator's argv and unrelated environment all survive it",
+			r.flag === "EXTENSIONS" &&
+				r.args.includes("--model") &&
+				r.args.includes("gpt-5.6-terra") &&
+				r.out.includes("KEEP=1"),
 		);
 	}
 

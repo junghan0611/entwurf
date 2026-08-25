@@ -147,7 +147,7 @@
 			"title": "native pi drops the required model field from fresh-call while the composition still expects one",
 			"subject": "pi-extensions/entwurf-control.ts",
 			"find": [
-				"\t\t\tmodel: Type.String({\n\t\t\t\tminLength: 1,\n\t\t\t\tmaxLength: 200,\n\t\t\t\tpattern: \"^[A-Za-z0-9][A-Za-z0-9._/:\\\\[\\\\]-]*$\",\n\t\t\t\tdescription: \"Required runtime model: canonical provider/model for pi, or a Claude Code model id/alias.\",\n\t\t\t}),\n"
+				"\t\t\tmodel: Type.String({\n\t\t\t\tminLength: 1,\n\t\t\t\tmaxLength: 200,\n\t\t\t\tpattern: \"^[A-Za-z0-9][A-Za-z0-9._/:\\\\[\\\\]-]*$\",\n\t\t\t\tdescription:\n\t\t\t\t\t\"Required runtime model: canonical provider/model for pi, a Claude Code model id/alias, or a Copilot model name (or auto).\",\n\t\t\t}),\n"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -173,7 +173,7 @@
 			"title": "MCP drops the required model field from fresh-call while the composition still expects one",
 			"subject": "mcp/entwurf-bridge/src/index.ts",
 			"find": [
-				"\t\tmodel: z\n\t\t\t.string()\n\t\t\t.min(1)\n\t\t\t.max(200)\n\t\t\t// The `\\[` below is USELESS TO JS AND LOAD-BEARING TO THE HOST. zod emits this source\n\t\t\t// text verbatim as the JSON Schema `pattern`, and the host's tool-schema validator is a\n\t\t\t// Rust regex engine that rejects an unescaped `[` inside a character class as \"unclosed\n\t\t\t// character class\" — a 400 on tools/list that stops EVERY Claude session from opening\n\t\t\t// (7-M-fix). Biome's safe fix removes it; do not accept that fix. The suppression must\n\t\t\t// stay on the line DIRECTLY above the expression, or it attaches to nothing and reads\n\t\t\t// as an unused suppression while the escape goes back to being fixable.\n\t\t\t// biome-ignore lint/complexity/noUselessEscapeInRegex: emitted to a Rust regex validator, see above\n\t\t\t.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$/)\n\t\t\t.describe(\"Required runtime model: canonical provider/model for pi, or a Claude Code model id/alias.\"),\n"
+				"\t\tmodel: z\n\t\t\t.string()\n\t\t\t.min(1)\n\t\t\t.max(200)\n\t\t\t// The `\\[` below is USELESS TO JS AND LOAD-BEARING TO THE HOST. zod emits this source\n\t\t\t// text verbatim as the JSON Schema `pattern`, and the host's tool-schema validator is a\n\t\t\t// Rust regex engine that rejects an unescaped `[` inside a character class as \"unclosed\n\t\t\t// character class\" — a 400 on tools/list that stops EVERY Claude session from opening\n\t\t\t// (7-M-fix). Biome's safe fix removes it; do not accept that fix. The suppression must\n\t\t\t// stay on the line DIRECTLY above the expression, or it attaches to nothing and reads\n\t\t\t// as an unused suppression while the escape goes back to being fixable.\n\t\t\t// biome-ignore lint/complexity/noUselessEscapeInRegex: emitted to a Rust regex validator, see above\n\t\t\t.regex(/^[A-Za-z0-9][A-Za-z0-9._/:\\[\\]-]*$/)\n\t\t\t.describe(\n\t\t\t\t\"Required runtime model: canonical provider/model for pi, a Claude Code model id/alias, or a Copilot model name (or auto).\",\n\t\t\t),\n"
 			],
 			"replace": [""],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
@@ -224,6 +224,228 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:VITEST-FAILED-TITLE-ATTRIBUTION]",
 			"signatureSource": "scripts/check-gate-qualification.ts"
+		},
+		{
+			"claim": "FRESHCALL-COPILOT-MANAGED-RUNTIME",
+			"title": "fresh call opens the BARE vendor instead of entwurf's managed invocation — the window opens, the EXTENSIONS scan is skipped silently, and the sibling can never be delivered to",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\tcopilot: \"entwurf\","],
+			"replace": ["\tcopilot: \"copilot\","],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-COPILOT-MANAGED-RUNTIME]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-COPILOT-ARGV-INTERACTIVE",
+			"title": "the Copilot prompt rides -p instead of --interactive — the turn runs and the CLI EXITS, closing the window on a sibling that was supposed to stay open",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": [
+				"\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--model\", model, `--allow-tool=${COPILOT_CALLBACK_PERMISSION}`];"
+			],
+			"replace": [
+				"\t\t\treturn [\"copilot\", \"-p\", prompt, \"--model\", model, `--allow-tool=${COPILOT_CALLBACK_PERMISSION}`];"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-COPILOT-ARGV-INTERACTIVE]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-COPILOT-MODEL-ARGV",
+			"title": "the Copilot argv drops the explicit model — the managed launcher then injects `--model auto` and the caller's model choice is silently discarded",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": [
+				"\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--model\", model, `--allow-tool=${COPILOT_CALLBACK_PERMISSION}`];"
+			],
+			"replace": [
+				"\t\t\treturn [\"copilot\", \"--interactive\", prompt, `--allow-tool=${COPILOT_CALLBACK_PERMISSION}`];"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-COPILOT-MODEL-ARGV]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-COPILOT-PERMISSION-DIALECT",
+			"title": "the permission token is spelled with the MODEL-facing tool name — Copilot's --allow-tool grammar is `server(tool)`, so the pattern matches nothing and the callback stops on a confirmation prompt nobody is there to answer",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["export const COPILOT_CALLBACK_PERMISSION = \"entwurf-bridge(entwurf_v2)\";"],
+			"replace": ["export const COPILOT_CALLBACK_PERMISSION = \"entwurf-bridge-entwurf_v2\";"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-COPILOT-PERMISSION-DIALECT]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-COPILOT-CALLBACK-TOOL",
+			"title": "the Copilot callback names Claude Code's `mcp__server__tool` spelling — a dialect copied instead of measured, and the whole first turn is spent looking for a tool that is not there",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\tcopilot: \"entwurf-bridge-entwurf_v2\","],
+			"replace": ["\tcopilot: \"mcp__entwurf-bridge__entwurf_v2\","],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-COPILOT-CALLBACK-TOOL]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-COPILOT-PREFLIGHT-PREMUTATION",
+			"title": "the capability preflight is removed — a host missing the birth, MCP, receiver or footer unit gets a real window and a launch receipt for a sibling that can never call home",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": [
+				"\tif (params.backend === \"copilot\") {\n\t\tconst missing = copilotFreshPreflight(env);\n\t\tif (missing) return { ok: false, reason: missing };\n\t}\n"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-COPILOT-PREFLIGHT-PREMUTATION]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-COPILOT-PREFLIGHT-AFTER-RUNTIME",
+			"title": "the preflight runs before the runtime is proven — an operator with no entwurf at all is told to install a Copilot unit, which is the wrong repair",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\tlet runtimePath: string;"],
+			"replace": [
+				"\tif (params.backend === \"copilot\") {\n\t\tconst early = copilotFreshPreflight(env);\n\t\tif (early) return { ok: false, reason: early };\n\t}\n\tlet runtimePath: string;"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-COPILOT-PREFLIGHT-AFTER-RUNTIME]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-BACKEND-SET-SURFACE-PARITY",
+			"title": "a backend the composition can open is missing from the MCP surface enum — the capability exists and no external host can reach it",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\t\t.enum([\"pi\", \"claude-code\", \"copilot\"])"],
+			"replace": ["\t\t\t.enum([\"pi\", \"claude-code\"])"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-BACKEND-SET-SURFACE-PARITY]",
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
+		},
+		{
+			"claim": "COPILOT-PREFLIGHT-VISIBLE-IDENTITY-EFFECTIVE",
+			"title": "the visible-identity axis gates on entwurf's ownership RECEIPT instead of the settings Copilot actually reads — a host with a correct, resolvable footer and no install-state is refused for a working identity surface (measured: that is the acceptance host)",
+			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
+			"find": ["\tif (state === null) return false; // absent state is not drift — see the doc comment above"],
+			"replace": ["\tif (state === null) return true;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:COPILOT-PREFLIGHT-VISIBLE-IDENTITY-EFFECTIVE]",
+			"signatureSource": "test/copilot-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "COPILOT-PREFLIGHT-VISIBLE-IDENTITY-REQUIRED",
+			"title": "the visible-identity axis is dropped entirely — a Copilot citizen is admitted whose garden id can only be found by scraping records, which step 4 refuses to call lifecycle parity",
+			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
+			"find": ["\tif (visibleIdentityMissing(env, data)) return \"copilot-visible-identity-missing\";"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:COPILOT-PREFLIGHT-VISIBLE-IDENTITY-REQUIRED]",
+			"signatureSource": "test/copilot-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "COPILOT-PREFLIGHT-MCP-CONFIG-DRIFT",
+			"title": "the MCP axis trusts the install-state alone — a config that lost the server key still reads as installed, and the first turn calls a tool that is not registered",
+			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
+			"find": [
+				"\tif (!Object.hasOwn(servers as Record<string, unknown>, MCP_SERVER_KEY)) return \"copilot-mcp-hand-missing\";"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:COPILOT-PREFLIGHT-MCP-CONFIG-DRIFT]",
+			"signatureSource": "test/copilot-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "COPILOT-PREFLIGHT-BIRTH-AXIS",
+			"title": "the birth axis is satisfied by the directory alone — an assembly root with no hooks.json passes as a hook unit, so a host that cannot mint a record reads as ready",
+			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
+			"find": ["\tif (!isDir(birthUnit) || !existsSync(path.join(birthUnit, \"hooks\", \"hooks.json\"))) {"],
+			"replace": ["\tif (!isDir(birthUnit)) {"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:COPILOT-PREFLIGHT-BIRTH-AXIS]",
+			"signatureSource": "test/copilot-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "COPILOT-PREFLIGHT-RECEIVE-PATH-MISMATCH",
+			"title": "the receive axis ignores the launcher's DEST equality — a unit in a different extensions root than this env will scan still preflights green, then entwurf copilot refuses inside the new window",
+			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
+			"find": [
+				"\tconst dest = receiveDest(env);\n\tif (dest === null || recvPath !== dest) return \"copilot-receive-unit-missing\";\n"
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:COPILOT-PREFLIGHT-RECEIVE-PATH-MISMATCH]",
+			"signatureSource": "test/copilot-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "COPILOT-PREFLIGHT-RECEIVE-AXIS",
+			"title": "the receive axis is satisfied by the directory alone — a leftover folder with no extension.mjs passes as our unit, so a host that cannot arm still reads as ready",
+			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
+			"find": [
+				"\tif (!isDir(recvPath) || !existsSync(path.join(recvPath, \"extension.mjs\"))) return \"copilot-receive-unit-missing\";"
+			],
+			"replace": ["\tif (!isDir(recvPath)) return \"copilot-receive-unit-missing\";"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:COPILOT-PREFLIGHT-RECEIVE-AXIS]",
+			"signatureSource": "test/copilot-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "COPILOT-PREFLIGHT-COMPLETE-HOST-PASSES",
+			"title": "a correctly wired host is still refused — the preflight becomes a permanent closed door wearing a check's clothes",
+			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
+			"find": [
+				"\tif (visibleIdentityMissing(env, data)) return \"copilot-visible-identity-missing\";\n\n\treturn null;"
+			],
+			"replace": [
+				"\tif (visibleIdentityMissing(env, data)) return \"copilot-visible-identity-missing\";\n\n\treturn \"copilot-birth-unit-missing\";"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:COPILOT-PREFLIGHT-COMPLETE-HOST-PASSES]",
+			"signatureSource": "test/copilot-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "COPILOT-PREFLIGHT-STATUSLINE-STATE-DRIFT",
+			"title": "an install-state that manages a different settings file is accepted — two files then disagree about who owns the footer and the preflight pretends they do not",
+			"subject": "pi-extensions/lib/copilot-fresh-preflight.ts",
+			"find": ["\treturn path.resolve(managed) !== path.resolve(settingsPath);"],
+			"replace": ["\treturn false;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:COPILOT-PREFLIGHT-STATUSLINE-STATE-DRIFT]",
+			"signatureSource": "test/copilot-fresh-preflight.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-COPILOT-EXPLICIT-POLICY",
+			"title": "the Copilot argv states no permission at all — the managed launcher then injects --yolo and a fresh sibling silently receives every permission on the host",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": [
+				"\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--model\", model, `--allow-tool=${COPILOT_CALLBACK_PERMISSION}`];"
+			],
+			"replace": ["\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--model\", model];"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-COPILOT-EXPLICIT-POLICY]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-BACKEND-SET-SURFACE-PARITY-PI",
+			"title": "a backend the composition can open is missing from the native pi surface enum — an in-process pi session cannot name a capability the module already opens",
+			"subject": "pi-extensions/entwurf-control.ts",
+			"find": ["\t\t\tbackend: StringEnum([\"pi\", \"claude-code\", \"copilot\"], {"],
+			"replace": ["\t\t\tbackend: StringEnum([\"pi\", \"claude-code\"], {"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:FRESHCALL-BACKEND-SET-SURFACE-PARITY-PI]",
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
 		}
 	]
 }
