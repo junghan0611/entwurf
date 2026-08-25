@@ -7,26 +7,30 @@
 
 - [x] **1. 0.14.2 발행** — tag `v0.14.2`=`f7ac2d7`, npm `latest=0.14.2`, `repair=0.12.8-repair.1` 보존
 - [x] **2. #82 Copilot 시민화 구현 완료 (branch)** — birth/MCP hand/sender/receive D6/visible fresh/admission contract. 33 커밋 + 29-file 최종 번들, 독립 최종 리뷰 0 Blocker PASS + docs amendment
-- [ ] **3. branch landing** ← CURRENT: Terra 리뷰 PASS(0 Blocker/1 doc Defect, amendment 닫힘) →
-  qualification 1회 + frozen `check:full` 1회 + atomic commit + push + exact-SHA CI 3 job success
-- [ ] **4. main landing + #82 close** ← PAUSED: coordinator가 GLG에게 publish 경계 확인 후. durable **main** SHA에서 증거 댓글 + close. 미리 닫지 않는다
-- [ ] **5. 0.15.0 release/publish** ← PAUSED: GLG가 target을 **0.15.0**으로 고정. 실행은 mode별
-  grant (`entwurf-release` 스킬). npm publish는 mode/version/candidate/dist-tag grant 없이 절대 금지
+- [x] **3. branch landing** — Terra PASS 후 qualification 251/251 + frozen `check:full` 365s →
+  commit `dbb1a8f` + push + exact-SHA CI 3 job success (run 32799965190)
+- [x] **4. main landing + #82 close** — main fast-forward `dbb1a8f` + exact-SHA CI success
+  (run 32801526041) → 증거 댓글(issuecomment-5404442081) → **#82 CLOSED** 2026-08-25T02:53:03Z
+- [ ] **5. pre-0.15.0 번들: `--yolo` blocker + pi 0.84.3 pin bump** ← CURRENT: 두 반쪽 구현 완료
+  (--yolo는 Terra 리뷰 0/0/0 PASS 기수령; 0.84.3은 Terra impact review 판정을 재측정해 적용),
+  결합 diff의 독립 리뷰 → amendment → qualification + frozen `check:full` → commit/push 대기
+- [ ] **6. 0.15.0 release/publish** ← PAUSED: blocker 닫힌 뒤 `entwurf-release` mode별 grant.
+  npm publish는 mode/version/candidate/dist-tag grant 없이 절대 금지
 
-현재 좌표: 2 완료 → **3 floor 진행**(Terra PASS, candidate frozen) → 4·5 보류. OMP 제품 지원은 #82 close 뒤 **다음 이슈**.
+현재 좌표: 4 완료(main=`dbb1a8f`, #82 CLOSED) → **5 진행** → 6 보류. OMP 제품 지원은 다음 이슈.
 
 # NOW
 
-- **Current:** #82 landing operator 세션(Fable `20260825T090547-ee05f3`)이 RAIL 3을 실행.
-  candidate = HEAD `b56a6d0` + 30-entry 번들(RAIL 9 구현+amendment, RAIL 10 admission contract,
-  RAIL 11 subtraction+양 리뷰 amendment, NEXT 승격/삭제). 이전 379s `check:full`은 이 번들 전
-  바닥이라 증거가 아니다. Terra 리뷰(gid `20260825T092341-a43c43`)는 **0 Blocker / 1 doc Defect**
-  PASS — README bin 개수(five→six, `entwurf-copilot-statusline` 추가)를 amendment로 닫음.
-- **Next:** (1) frozen candidate에서 standalone `check-gate-qualification`(29 lanes 251 mutants) →
-  (2) frozen `pnpm run check:full` — 둘 다 green일 때만 → (3) commit skill로 atomic commit →
-  (4) GLG가 이 창에 직접 push 승인 → ordinary push → agenda stamp → (5) pushed SHA의 ci.yml
-  `check`/`install-surface`/`artifact-consumer` 3 job 전부 success 확인.
-  red면 진단·수리 후 **새** frozen candidate에서 다시. false green 금지.
+- **Current — post-close release blocker.** GLG의 2026-08-25 operator LIVE(직접 관측): fresh
+  Copilot footer에 `YOLO` 없음, task 도구마다 확인 프롬프트가 떠서 형제가 실질 불능. 원인은
+  `mux-fresh-call.ts`가 callback-only `--allow-tool=entwurf-bridge(entwurf_v2)`를 넘겨
+  `scripts/copilot-launch.sh`의 explicit-policy 스캔이 자기 `--yolo` 주입을 정지시킨 것.
+  **GLG 명시 결정: Copilot fresh 기본은 `--yolo`** (사람이 친 `entwurf copilot`과 같은 프로파일).
+- **Next:** (1) 독립 리뷰(이 수정 번들) → 필요 시 amendment 하나 → (2) frozen candidate에서
+  qualification(29 lanes 251 mutants) + frozen `check:full` → (3) commit → GLG 창내 push 승인 →
+  push + exact-SHA CI. red면 진단·수리 후 새 frozen candidate. false green 금지.
+- **Do not touch (이 blocker 레인):** fresh-call API에 permission 파라미터 추가 금지 ·
+  수동 `entwurf copilot`의 override 동작 변경 금지 · model-facing callback dialect claim 유지.
 - **Blocker:** none (환경) — floor 도는 동안 worktree/index 편집 금지(NEXT 포함).
 - **Read:** `DELIVERY.md` Copilot matrix row(수용 영수증 SSOT) · `docs/adding-a-harness.md` step 9
   worked example · issue #82 스레드.

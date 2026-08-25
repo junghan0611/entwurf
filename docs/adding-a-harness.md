@@ -398,9 +398,12 @@ and must not be described as supported until it is re-evaluated here.
 1. one fixed managed runtime path — never an arbitrary command or raw tmux workaround;
 2. an explicit model and an explicit permission policy in the vendor's measured argv dialect.
    The policy has a **width**, not just a spelling: say whether the grant is callback-only or
-   task-wide. A callback-only sibling will reliably name itself and may then stop at the first
-   tool its TASK needs — that prompt is the policy working, not a launch defect. Widening it
-   is an operator decision, never a default that drifts in;
+   task-wide, and carry the chosen width as an explicit argv token rather than relying on a
+   launcher's injected default. A callback-only sibling will reliably name itself and may then
+   stop at the first tool its TASK needs — that prompt is that policy working, not a launch
+   defect — while a task-wide grant hands an agent-opened sibling every permission the managed
+   profile carries. Either width is a decision the OPERATOR makes explicitly, never a default
+   that drifts in;
 3. a pre-mutation, fail-closed preflight for the **four** static capabilities the fresh prompt
    needs — birth, MCP hand, receive, and visible identity — decided before the tmux mutation
    so a missing unit is a named refusal, not a dead window plus a launch receipt. Receive must
@@ -434,7 +437,7 @@ vendor fact with an expiry date at the next CLI upgrade.
 | clause | what it turned out to be | where the fact came from |
 |---|---|---|
 | 1 managed runtime | runtime is `entwurf`, first forwarded token `copilot` — never the bare vendor, which starts without `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` and skips the extension scan SILENTLY | `mux-fresh-call.ts` `FRESH_CALL_RUNTIME`, `scripts/copilot-launch.sh` |
-| 2 model + permission | `--interactive <prompt>` (NOT `-p`, which runs the turn and exits), `--model`, value as two tokens, and permission as ONE `--allow-tool=` token — the space form is variadic | `copilot --help`, `copilot help permissions` |
+| 2 model + permission | `--interactive <prompt>` (NOT `-p`, which runs the turn and exits), `--model`, value as two tokens, and the explicit `--yolo` policy token. The width is a GLG decision (2026-08-25): the first cut's callback-only `--allow-tool=entwurf-bridge(entwurf_v2)` grant was measured LIVE to stop the sibling on a confirmation prompt at every task tool, so fresh now carries the same task-wide profile as a human-typed `entwurf copilot`. The measured grammar stays on record: `--allow-tool` takes `<server>(<tool>)` and is variadic, so its equals form is mandatory | `copilot --help`, `copilot help permissions`, GLG operator LIVE 2026-08-25 |
 | 3 preflight | birth + MCP hand + receiver + visible footer, all decided before the tmux mutation | `pi-extensions/lib/copilot-fresh-preflight.ts` |
 | 4 visible identity | the custom footer: `statusLine.command` + `footer.showCustom` in the settings the vendor reads, with the command resolvable | `scripts/copilot-statusline-*` |
 | 5 callback name | `entwurf-bridge-entwurf_v2` — `<mcpServerName>-<mcpToolName>`, NOT Claude Code's `mcp__server__tool` | two sessions' own `~/.copilot/session-state/<id>/events.jsonl` |

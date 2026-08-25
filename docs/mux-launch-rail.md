@@ -271,11 +271,14 @@ session 디렉터리 스캔이 symlink를 허용하게 된 것(identity minting�
 — 이 판정은 0.84.1에서도 재측정 없이 그대로 선다.
 0.84.2 재확인(2026-08-16, #79): `session-manager.ts`의 유의미 델타는 user-facing `APP_NAME` 표시 문구뿐
 이고 identity mint / `--session-id` / 동기 id 반환 표면은 불변 — 조건 1은 0.84.2에서도 불성립.
+0.84.3 재확인(2026-08-25): upstream v0.84.2..v0.84.3의 `session-manager.ts` 델타는 branch_summary
+`fromId` 북키핑 한 건(분기 전 leaf를 기록)뿐이고 identity mint / `--session-id` / 동기 id 반환
+표면은 불변 — 조건 1은 0.84.3에서도 불성립.
 역사 표본(0.83.0/0.84.0)은 덮어쓰지 않는다.
 
 ### 읽은 근거
 
-`<pi>` = 설치된 `@earendil-works/pi-coding-agent@0.84.0`(이 절의 표본을 뜬 install; 현 certified floor는 0.84.2 — 위 0.84.2 재확인 문단 참조) 패키지 루트(pnpm global store).
+`<pi>` = 설치된 `@earendil-works/pi-coding-agent@0.84.0`(이 절의 표본을 뜬 install; 현 certified floor는 0.84.3 — 위 0.84.3 재확인 문단 참조) 패키지 루트(pnpm global store).
 아래 표에서 출처가 `(0.83.0)`으로 적힌 행은 **앵커 시점의 역사적 표본**이고, 그 행의 사실이 0.84.0에서도
 성립하는지는 위 재실측 문단이 따로 진다. 접두사 없는
 경로는 이 repo 기준이다.

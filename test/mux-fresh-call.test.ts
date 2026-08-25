@@ -23,7 +23,6 @@ import {
 	buildBackendArgs,
 	buildFreshCallArgs,
 	buildFreshCallPrompt,
-	COPILOT_CALLBACK_PERMISSION,
 	FRESH_CALL_BACKENDS,
 	FRESH_CALL_CALLBACK_TOOL,
 	FRESH_CALL_RUNTIME,
@@ -115,20 +114,20 @@ describe("argv dialects", () => {
 		expect(cpArgs[m + 1]).toBe(COPILOT_MODEL);
 	});
 
-	it("[QK:FRESHCALL-COPILOT-PERMISSION-DIALECT] permission is ONE `--allow-tool=` token in Copilot's `<server>(<tool>)` grammar — the space form is variadic and would eat the next argument, and the MODEL-facing tool name is not a permission pattern", () => {
-		expect(cpArgs).toContain(`--allow-tool=${COPILOT_CALLBACK_PERMISSION}`);
-		expect(COPILOT_CALLBACK_PERMISSION).toBe("entwurf-bridge(entwurf_v2)");
-		expect(cpArgs).not.toContain("--allow-tool");
-		expect(cpArgs).not.toContain(`--allow-tool=${FRESH_CALL_CALLBACK_TOOL.copilot}`);
+	it("[QK:FRESHCALL-COPILOT-YOLO-POLICY] the policy token is the explicit `--yolo` — GLG's 2026-08-25 operator decision after the callback-only `--allow-tool` grant left the fresh sibling stopping on a confirmation prompt at every task tool. A narrowed grant here recreates that measured regression", () => {
+		expect(cpArgs).toContain("--yolo");
+		// The regression shape, pinned negatively: no --allow-tool token in ANY spelling, and in
+		// particular not the callback-only grant the first cut shipped.
+		const heads = cpArgs.map((a) => a.split("=")[0]);
+		expect(heads).not.toContain("--allow-tool");
+		expect(cpArgs).not.toContain("--allow-tool=entwurf-bridge(entwurf_v2)");
 	});
 
-	it("[QK:FRESHCALL-COPILOT-EXPLICIT-POLICY] naming a permission at all is what keeps the managed launcher from injecting `--yolo`, so a fresh sibling gets the one permission its callback needs rather than all of them", () => {
-		// The launcher injects a default only when the operator stated NO policy, and its scan
-		// compares the token head. This is the assertion that the head it will see is a policy
-		// override, spelled exactly as scripts/copilot-launch.sh lists it.
+	it("[QK:FRESHCALL-COPILOT-EXPLICIT-POLICY] the policy is STATED by the composition, not left to the launcher's injection — step 9 clause 2 requires explicit model/permission, and `--yolo` is a head scripts/copilot-launch.sh recognises as an operator-stated policy", () => {
+		// The launcher injects its own --yolo only when the argv names NO policy; carrying the
+		// token here keeps the fresh contract explicit instead of invisibly borrowing a default.
 		const heads = cpArgs.map((a) => a.split("=")[0]);
-		expect(heads).toContain("--allow-tool");
-		expect(cpArgs).not.toContain("--yolo");
+		expect(heads).toContain("--yolo");
 	});
 
 	it("[QK:FRESHCALL-COPILOT-CALLBACK-TOOL] the Copilot callback tool is the MEASURED `<server>-<tool>` composition, not Claude Code's `mcp__server__tool` spelling — a copied dialect costs the whole first turn", () => {

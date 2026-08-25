@@ -81,7 +81,7 @@ ACP는 중심이 아니라 v2 core 위에 provider/model로 들어오는 **plugi
 | v2 live Antigravity → native-push direct injection | native-push adapter/register/decider gates + `smoke-agy-native-push-live` |
 | agy automatic citizen birth + sender/reply identity | hooks/statusline/install/sender gates + three doctors + fresh live round trip |
 | v2 honest reject (false-delivered/`.msg` garbage 0) | matrix-live C3 + deliverability/native-push reject gates |
-| pi 0.84.2 fence | `pnpm check` + release-gate MUST |
+| pi 0.84.3 fence | `pnpm check` + release-gate MUST |
 
 ### Historical — 0.12.0 cutover close checklist
 
@@ -286,7 +286,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
 ## 검증 원장 (measured, 재탐색 불필요)
 
 - **pi 0.80 public export:** `hasProjectTrustInputs`/`ProjectTrustStore`/`getAgentDir`/`VERSION` 모두 index
-  public export → TS 직접 import(재구현 불필요). floor = **0.84.2** (`>=0.84.2 <0.85`, next-minor 상한).
+  public export → TS 직접 import(재구현 불필요). floor = **0.84.3** (`>=0.84.3 <0.85`, next-minor 상한).
 - **pi trust(0.79.1+):** `pi -p`는 trust에서 안 멈춤(비대화 미결정→`false` degraded). `--approve`(`-a`)=
   project 파일 로드, `--no-approve`(`-na`)=무시·degraded. `ProjectTrustStore.get`은 nearest-ancestor
   walk-up(조상 cwd 결정을 자식이 상속). `AGENTS.md`/`CLAUDE.md`는 0.79.1에서 trust input에서 제거(항상
@@ -594,7 +594,7 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     fileCount 956→968(+86,748B), pi-ai 725→734(Qwen 모듈). **하드 미니멈 판정: floor를 당시 exact
     devDep 0.84.1 + next-minor ceiling 0.85로 기계적 이동**(run.sh가 devDep에서 peer 유도,
     `check-dep-versions`가 오라클, `check-pack-install` 6-row 핀 이동). 새 behavioral gate 불요 —
-    entwurf가 진술하는 계약 변화 없음. (현재 certified floor는 이후 항목의 0.84.2.)
+    entwurf가 진술하는 계약 변화 없음. (현재 certified floor는 이후 항목의 0.84.3.)
   - **2026-08-08 bump — claude-agent-acp 0.65.0 → 0.66.0 (pi 0.84.1·ACP SDK 1.3.0·claude-agent-sdk
     0.3.220 유지).** **성격: 선언 런타임 의존성 불변의 adapter-code 릴리즈 + 신규 optional extension
     모듈.** 릴리즈 델타 3건 — #960 dev-dep `globals` 17.8→17.9(그들의 dev 트리, 우리 해석 무관),
@@ -630,7 +630,9 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     수정은 미도달. `defaultTools`는 settings-manager 키로 존재하고 extension tool 보존 fix가 릴리즈
     노트에 명시 — pack consumer + extension 등록 gate로 잠금. caret 별자리 불변
     `{agent-core,ai,client,protocol,tui}@^0.84.2` (+telemetry 전이). floor 기계 이동: exact devDep
-    `0.84.2` + peer `>=0.84.2 <0.85` + `check-pack-install` 6-row + baseline docs.
+    `0.84.2` + peer 하한 0.84.2·상한 next-minor + `check-pack-install` 6-row + baseline docs.
+    (당시 표기를 range 선언 패턴에서 뺐다 — `check-dep-versions`는 baseline doc의 range 선언 전부를
+    현재 핀과 대조하므로, ledger 역사 줄은 그 패턴을 그대로 실으면 다음 bump에서 거짓 red가 된다.)
     ⑵ **claude-agent-acp 0.68.0** — 0.67.0 포함 11 commits. 선언 deps 실측:
     `@agentclientprotocol/sdk@1.3.0`, `@anthropic-ai/claude-agent-sdk@0.3.232`,
     `zod ^3.25||^4`. lock peer-resolve: `claude-agent-acp@0.68.0(@anthropic-ai/sdk@0.100.1…)` +
@@ -671,6 +673,31 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     ⑸ pnpm `minimumReleaseAgeExclude`에 0.69.0 / 0.70.0 추가. 버전 선언 이동: `package.json`
     dependency, `test/acp-sdk-surface.contract.test.ts` PINS + L2 lock regex, `smoke-acp-raw-turn-live.ts`
     헤더, `docs/acp-backend-rail.md` 지원 matrix + 11-7.
+  - **2026-08-25 bump — pi 0.84.2 → 0.84.3 (claude-agent-acp 0.70.0·ACP SDK 1.3.0·claude-agent-sdk
+    0.3.232 유지).** 0.15.0 전 GLG 지정 dependency checkpoint. **성격: patch monorepo cut —
+    별자리만 이동, 새 제품/게이트 설계 없음.** upstream tags `v0.84.2=914cf147` → `v0.84.3=4e58f324`
+    (checkout `/tmp/pi-v0843-impact-review-703071`; Terra 리뷰 `20260825T122349-bb39ac` 판정을 이
+    세션이 해시로 재측정).
+    ⑴ **`packages/ai/src/compat.ts` 양 tag sha256 `c1212487…` 바이트 동일.** `loader.ts`는
+    `288a8842…`→`1cf00caa…`로 움직였고 디프를 직접 판독했다: Bun 한정이던 virtualModules를
+    SEA/bundled-node 이진으로 일반화 + extension factory 등록의 transactional화(loading 중 등록을
+    buffering 후 commit/discard, 실패 시 API 비활성 throw). alias map 불변, entwurf extension의
+    도달 계약(등록→session_start 활성)은 보존으로 판정 — 성공 로드 경로에서 commit이 즉시 불린다.
+    ⑵ `session-manager.ts` 델타는 branch_summary `fromId` 북키핑 한 건(분기 전 leaf 기록) —
+    identity mint / `--session-id` / 동기 id 반환 표면 불변 (mux rail §6 재확인 문단에 .3 추가).
+    ⑶ GoogleThinkingLevel rename: repo import 0건 (Terra 실측 상속; grep 재확인).
+    ⑷ 기계 이동: devDep exact `0.84.3` + peer 하한 0.84.3·상한 next-minor, pnpm-lock 7-패키지 별자리
+    (agent-core/ai/client/coding-agent/protocol/telemetry/tui) 0.84.3 정렬,
+    `minimumReleaseAgeExclude` 7종에 0.84.3, `check-pack-install` 직접 핀·leak 단언·주석,
+    게이트 소유 baseline 문서 5곳(`check-dep-versions` BASELINE_DOCS = AGENTS.md·README.md·
+    ROADMAP.md·docs/setup-clean-host.md·demo/README.md). `docs/acp-backend-rail.md`도 갱신했으나
+    이는 게이트 입력이 아닌 live 지원 프로스다. 게이트 신설 없음 — `check-dep-versions`/runtime
+    range 게이트의 도출이 그대로 authority.
+    ⑸ 독립 리뷰가 이 bump와 무관하게 잠복해 있던 false-green을 찾았다: `check-pack-install`의
+    pin-leak matcher가 무경계 substring(`grep -v '@0\.84\.x'`)이라 `@0.84.30` lookalike를
+    통과시켰다. 경계 있는 matcher(`@0\.84\.3(_|$)`, pnpm .pnpm 표기 실측)로 수리하고 합성
+    lookalike 자기시험 셀 `[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED]` + `pack-install` mutant lane
+    1종(무경계 복원)으로 kill-proof를 세웠다.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.

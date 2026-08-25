@@ -240,12 +240,8 @@
 			"claim": "FRESHCALL-COPILOT-ARGV-INTERACTIVE",
 			"title": "the Copilot prompt rides -p instead of --interactive — the turn runs and the CLI EXITS, closing the window on a sibling that was supposed to stay open",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
-			"find": [
-				"\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--model\", model, `--allow-tool=${COPILOT_CALLBACK_PERMISSION}`];"
-			],
-			"replace": [
-				"\t\t\treturn [\"copilot\", \"-p\", prompt, \"--model\", model, `--allow-tool=${COPILOT_CALLBACK_PERMISSION}`];"
-			],
+			"find": ["\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--model\", model, \"--yolo\"];"],
+			"replace": ["\t\t\treturn [\"copilot\", \"-p\", prompt, \"--model\", model, \"--yolo\"];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCALL-COPILOT-ARGV-INTERACTIVE]",
@@ -255,26 +251,24 @@
 			"claim": "FRESHCALL-COPILOT-MODEL-ARGV",
 			"title": "the Copilot argv drops the explicit model — the managed launcher then injects `--model auto` and the caller's model choice is silently discarded",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
-			"find": [
-				"\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--model\", model, `--allow-tool=${COPILOT_CALLBACK_PERMISSION}`];"
-			],
-			"replace": [
-				"\t\t\treturn [\"copilot\", \"--interactive\", prompt, `--allow-tool=${COPILOT_CALLBACK_PERMISSION}`];"
-			],
+			"find": ["\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--model\", model, \"--yolo\"];"],
+			"replace": ["\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--yolo\"];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:FRESHCALL-COPILOT-MODEL-ARGV]",
 			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
-			"claim": "FRESHCALL-COPILOT-PERMISSION-DIALECT",
-			"title": "the permission token is spelled with the MODEL-facing tool name — Copilot's --allow-tool grammar is `server(tool)`, so the pattern matches nothing and the callback stops on a confirmation prompt nobody is there to answer",
+			"claim": "FRESHCALL-COPILOT-YOLO-POLICY",
+			"title": "the policy token narrows back to the callback-only --allow-tool grant — the exact regression GLG measured on 2026-08-25: no YOLO in the footer, a confirmation prompt at every task tool, an impractical sibling",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
-			"find": ["export const COPILOT_CALLBACK_PERMISSION = \"entwurf-bridge(entwurf_v2)\";"],
-			"replace": ["export const COPILOT_CALLBACK_PERMISSION = \"entwurf-bridge-entwurf_v2\";"],
+			"find": ["\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--model\", model, \"--yolo\"];"],
+			"replace": [
+				"\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--model\", model, \"--allow-tool=entwurf-bridge(entwurf_v2)\"];"
+			],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,
-			"signature": "[QK:FRESHCALL-COPILOT-PERMISSION-DIALECT]",
+			"signature": "[QK:FRESHCALL-COPILOT-YOLO-POLICY]",
 			"signatureSource": "test/mux-fresh-call.test.ts"
 		},
 		{
@@ -425,11 +419,9 @@
 		},
 		{
 			"claim": "FRESHCALL-COPILOT-EXPLICIT-POLICY",
-			"title": "the Copilot argv states no permission at all — the managed launcher then injects --yolo and a fresh sibling silently receives every permission on the host",
+			"title": "the composition stops stating its policy and silently leans on the launcher to inject --yolo — the effective profile survives but the fresh contract loses its explicit permission statement",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
-			"find": [
-				"\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--model\", model, `--allow-tool=${COPILOT_CALLBACK_PERMISSION}`];"
-			],
+			"find": ["\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--model\", model, \"--yolo\"];"],
 			"replace": ["\t\t\treturn [\"copilot\", \"--interactive\", prompt, \"--model\", model];"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 180,

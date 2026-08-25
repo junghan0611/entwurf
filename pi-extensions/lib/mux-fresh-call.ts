@@ -114,17 +114,6 @@ export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
 	copilot: "entwurf-bridge-entwurf_v2",
 };
 
-/**
- * `[측정]` Copilot's PERMISSION grammar is a second, different dialect for the same tool, and
- * the two must not be confused. `copilot help permissions` (1.0.80): `--allow-tool` takes
- * `kind(argument)`, where the MCP kind is `<mcp-server-name>(tool-name?)` — the server name as
- * configured and the tool name as registered with that server. So the token the model calls
- * (`entwurf-bridge-entwurf_v2`) is NOT the token that grants it. Writing the model-facing name
- * here would produce a launch that looks permitted and then stops on a confirmation prompt the
- * operator has to answer before the callback can happen.
- */
-export const COPILOT_CALLBACK_PERMISSION = "entwurf-bridge(entwurf_v2)";
-
 /** Mirrors the `entwurf_v2` message bound. This is an INTERFACE cap for symmetry with the
  * delivery surface, not a claim that a task of this size was measured through tmux. An argv
  * that the OS refuses is a launch failure and fails loud — it never reads as a delivered task. */
@@ -149,8 +138,8 @@ export function isSafeFreshCallModel(model: string): boolean {
  *   claude-code — prompt, then `--allowedTools=` and `--model=` as ONE token each. The space form
  *                 for allowedTools is variadic and eats the prompt as an option value.
  *   copilot     — the managed VERB first, then the prompt as the value of `-i/--interactive`,
- *                 `--model`, value as two tokens, and the permission as ONE `--allow-tool=`
- *                 token. Measured from `copilot --help` / `copilot help permissions` (1.0.80).
+ *                 `--model`, value as two tokens, and the policy as the explicit `--yolo`
+ *                 token. Measured from `copilot --help` (1.0.80).
  *
  * Both pi/claude failures looked identical from outside: window open, record and socket minted,
  * no turn.
@@ -159,7 +148,7 @@ export function isSafeFreshCallModel(model: string): boolean {
  * the tool was already permitted, so the option's effect was unobservable. What was observed is
  * that it does no harm to the argv. Permission stays a documented host precondition there.
  *
- * Copilot is the backend where permission IS carried explicitly (step 9 clause 2), and three of
+ * Copilot is the backend where the policy IS carried explicitly (step 9 clause 2), and three of
  * its argv facts are load-bearing:
  *
  *   - `copilot` is argv[0] of the RUNTIME `entwurf`, i.e. the managed verb — see
@@ -168,20 +157,21 @@ export function isSafeFreshCallModel(model: string): boolean {
  *   - the prompt rides `--interactive`, never `-p/--prompt`: `-p` runs the prompt and EXITS,
  *     which would close the window on a sibling that is supposed to stay open and be delivered
  *     to. `--interactive <prompt>` is non-variadic, so the space form is safe here.
- *   - `--allow-tool[=tools...]` IS variadic, so the equals form is mandatory — the same trap
- *     that ate Claude Code's prompt. Naming it also makes the launcher's `--yolo` injection
- *     stand down (it injects only when the operator stated no policy), so a fresh sibling gets
- *     exactly the one permission its callback needs instead of all of them.
+ *   - the policy token is `--yolo`, STATED HERE rather than left to the launcher: the launcher
+ *     injects `--yolo` only when the argv names no policy, and step 9 clause 2 requires the
+ *     fresh composition to state its model and permission policy explicitly, never to rely
+ *     invisibly on someone else's default.
  *
- * That last point has a CONSEQUENCE the operator should hear from this comment rather than
- * discover in a window: the grant covers the CALLBACK and nothing else. Copilot prompts for
- * confirmation on tools it was not granted, so a fresh sibling reliably names itself and may
- * then stop at the first tool its TASK needs. That is the same boundary claude-code fresh has
- * always had — permission is a documented host precondition, not something a launch widens —
- * and it is the deliberate direction: an agent-opened sibling must not silently receive every
- * permission on the operator's machine. `entwurf copilot` typed by a human still gets the
- * managed `--yolo` profile, because a human typed it. If fresh siblings should carry a wider
- * policy, that is an operator decision to make explicitly, not a default to drift into.
+ * `--yolo` is a GLG operator decision, not a drifted default. The first cut passed a
+ * callback-only `--allow-tool=entwurf-bridge(entwurf_v2)` grant, and GLG's 2026-08-25 operator
+ * LIVE measured the consequence: the fresh sibling's footer showed no `YOLO`, and every tool
+ * its task needed stopped on a confirmation prompt, which made the sibling impractical to work
+ * with. GLG then set the policy explicitly: a fresh Copilot sibling carries the same managed
+ * `--yolo` profile a human-typed `entwurf copilot` gets. (Copilot 1.0.80 help: `--yolo` = all
+ * tools + all paths + all URLs.) The permission GRAMMAR lesson from that first cut — Copilot's
+ * `--allow-tool` takes `<mcp-server-name>(tool-name?)`, a different dialect from the
+ * model-facing tool name — stays recorded in `docs/adding-a-harness.md` step 9's worked
+ * example; it is a measured vendor fact even though this argv no longer uses it.
  */
 export function buildBackendArgs(backend: FreshCallBackend, prompt: string, model: string): string[] {
 	switch (backend) {
@@ -190,7 +180,7 @@ export function buildBackendArgs(backend: FreshCallBackend, prompt: string, mode
 		case "claude-code":
 			return [prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL["claude-code"]}`, `--model=${model}`];
 		case "copilot":
-			return ["copilot", "--interactive", prompt, "--model", model, `--allow-tool=${COPILOT_CALLBACK_PERMISSION}`];
+			return ["copilot", "--interactive", prompt, "--model", model, "--yolo"];
 	}
 }
 

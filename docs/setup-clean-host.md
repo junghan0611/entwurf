@@ -11,7 +11,7 @@ only on Linux because its strict live-owner join uses `/proc`.
 | Node | **`>=24.0.0`** | package and bridge runtime |
 | npm | bundled with Node | package installation |
 | entwurf | `@junghanacs/entwurf` | all lanes |
-| pi | optional, `@earendil-works/pi-coding-agent >=0.84.2 <0.85` | ACP provider, control sockets |
+| pi | optional, `@earendil-works/pi-coding-agent >=0.84.3 <0.85` | ACP provider, control sockets |
 | Claude Code | optional, **`>=2.1.217`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | Antigravity `agy` | optional, operator-installed and authenticated | native-push citizen |
 | Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
@@ -56,7 +56,7 @@ lists the seven garden tools; it does not prove a backend model turn or native h
 Install the exact release floor, then wire the project:
 
 ```bash
-npm install -g @earendil-works/pi-coding-agent@0.84.2
+npm install -g @earendil-works/pi-coding-agent@0.84.3
 pi --version
 
 cd ~/entwurf-smoke
@@ -64,7 +64,7 @@ entwurf install .
 pi -e "$(npm root -g)/@junghanacs/entwurf" --list-models entwurf
 ```
 
-The supported range is `>=0.84.2 <0.85`. It is a hard minimum: installing this
+The supported range is `>=0.84.3 <0.85`. It is a hard minimum: installing this
 release onto a 0.83.x pi host upgrades the runtime rather than keeping the older
 minor. A host using only the external MCP bridge can skip pi until it needs a
 control socket; no delivery rail launches a pi process.
