@@ -16,7 +16,8 @@
 #   - CREATE-NEW → uninstall removes the file it created.
 #   - SETUP INTEGRATION: the wire-agy-statusline wrapper — agy absent → honest skip + NO state;
 #     agy present + regular → idempotent install + state; agy present + symlink/corrupt →
-#     NON-FATAL WARN + continue (exit 0, reason-specific, no clobber, no state).
+#     reason-specific WARN + leaf EXIT NONZERO (#86 C6/C7: the aggregate records a named
+#     component FAIL and keeps later components alive), no clobber, no state.
 #   - checkout stays byte-identical (nothing written under $REPO).
 # Offline + deterministic (deps: bash + python3).
 set -euo pipefail
@@ -201,7 +202,7 @@ want "create-new: state removed" "[ ! -f '$STATE' ]"
 bash "$BRIDGE" uninstall >/dev/null 2>&1
 ok "idempotent: uninstall with no state exits 0 (nothing to undo)"
 
-# ── I: setup integration — wire-agy-statusline (detection-gated, NON-FATAL) ──
+# ── I: setup integration — wire-agy-statusline (detection-gated, truthful) ──
 rm -f "$SET" "$STATE"
 printf '#!/usr/bin/env bash\necho fake-agy\n' > "$SB/bin/agy"; chmod +x "$SB/bin/agy"
 
@@ -222,21 +223,23 @@ set +e; OUT="$(AGY_BIN="$SB/bin/agy" bash "$REPO_DIR/run.sh" wire-agy-statusline
 want "wire(agy+regular, re-run): idempotent exit 0" "[ '$RC' -eq 0 ]"
 bash "$BRIDGE" uninstall >/dev/null; rm -f "$SET"
 
-# I-3: agy PRESENT + SYMLINK settings → NON-FATAL WARN + continue (exit 0), no clobber, no state
+# I-3: agy PRESENT + SYMLINK settings → reason-specific WARN + EXIT NONZERO (detected component
+# FAIL — the aggregate keeps later components alive), no clobber, no state
 printf '{"model":"x"}\n' > "$SB/real_wire_set.json"
 ln -s "$SB/real_wire_set.json" "$SET"
 set +e; OUT="$(AGY_BIN="$SB/bin/agy" bash "$REPO_DIR/run.sh" wire-agy-statusline 2>&1)"; RC=$?; set -e
-want "wire(agy+symlink): exits 0 (NON-FATAL — setup not bricked)" "[ '$RC' -eq 0 ]"
+want "wire(agy+symlink): exits nonzero (detected agy + refused settings = component FAIL, not cosmetic green)" "[ '$RC' -ne 0 ]"
 want "wire(agy+symlink): reason-specific WARN names the symlink" "printf '%s' \"\$OUT\" | grep -qi 'symlink'"
 want "wire(agy+symlink): linked SSOT NOT clobbered" \
   "python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if \"statusLine\" not in d else 1)' '$SB/real_wire_set.json'"
 want "wire(agy+symlink): NO state written" "[ ! -f '$STATE' ]"
 rm -f "$SET"
 
-# I-4: agy PRESENT + CORRUPT settings (invalid JSON) → NON-FATAL WARN + continue
+# I-4: agy PRESENT + CORRUPT settings (invalid JSON) → reason-specific WARN + EXIT NONZERO,
+# corrupt-specific
 printf 'not json{{{' > "$SET"
 set +e; OUT="$(AGY_BIN="$SB/bin/agy" bash "$REPO_DIR/run.sh" wire-agy-statusline 2>&1)"; RC=$?; set -e
-want "wire(agy+corrupt): exits 0 (NON-FATAL)" "[ '$RC' -eq 0 ]"
+want "wire(agy+corrupt): exits nonzero (detected agy + corrupt settings = component FAIL)" "[ '$RC' -ne 0 ]"
 want "wire(agy+corrupt): reason-specific WARN flags invalid JSON" "printf '%s' \"\$OUT\" | grep -qi 'invalid JSON'"
 want "wire(agy+corrupt): NO state written" "[ ! -f '$STATE' ]"
 rm -f "$SET" "$SB/bin/agy"

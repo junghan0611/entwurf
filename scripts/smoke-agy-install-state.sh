@@ -20,12 +20,14 @@
 #   - CREATE-NEW → uninstall removes the file it created.
 #   - SETUP INTEGRATION (막힘 ①): the `wire_agy_bridge` wrapper folded into `./run.sh setup` —
 #     agy absent → honest skip + NO state; agy present + regular → idempotent install + state;
-#     agy present + symlink/corrupt → NON-FATAL WARN + continue (exit 0, reason-specific, no
-#     clobber, no state). Driven via the hidden `wire-agy-bridge` subcommand with AGY_BIN pinned.
+#     agy present + symlink/corrupt → reason-specific WARN + leaf EXIT NONZERO (#86 C6/C7:
+#     named component FAIL, aggregate keeps later components alive; no clobber, no state).
+#     Driven via the hidden `wire-agy-bridge` subcommand with AGY_BIN pinned.
 #   - DEV BIN (막힘 ②): the managed `entwurf-bridge` symlink dev-bin.sh exposes so the agy
 #     config's BARE command resolves in a dev checkout — ownership-checked link (REFUSE a
 #     foreign bin, never a blind ln -sf), state + honest inverse (remove only OUR link), and
-#     the NON-FATAL setup wrapper (foreign → WARN + continue). Isolated bin dir + fake target.
+#     the truthful setup wrapper (foreign → WARN + rc=3, every unit still attempted — #86 C10).
+#     Isolated bin dir + fake target.
 #   - ⓪ discipline day-one: the checkout stays byte-identical (nothing written under $REPO).
 # Offline + deterministic (deps: bash + python3).
 set -euo pipefail
@@ -377,13 +379,16 @@ want "cache-prune(symlink): symlinked legacy cache left intact (not clobbered)" 
   "[ -L '$CACHE/pi-tools-bridge' ] && [ -d '$SB/foreign-cache' ]"
 bash "$BRIDGE" uninstall >/dev/null; rm -f "$CACHE/pi-tools-bridge" "$GLOBAL" "$STATE"
 
-# ── I: setup integration — wire_agy_bridge (막힘 ①: detection-gated, NON-FATAL) ─────
+# ── I: setup integration — wire_agy_bridge (막힘 ①: detection-gated, truthful) ─────
 # The setup wrapper folded into `./run.sh setup`. Driven here via the hidden `wire-agy-bridge`
 # subcommand with AGY_BIN pinned (a fake agy / a nonexistent path) so detection is hermetic
-# regardless of the CI/dev host's real agy. Locks: agy absent → honest skip + NO state; agy
-# present + regular → idempotent install + state; agy present + symlink/corrupt → NON-FATAL
-# WARN + continue (exit 0 — an optional harness must never brick a pi/Claude setup), reason-
-# specific, no clobber, no state. Clean slate here (H left no config/state).
+# regardless of the CI/dev host's real agy. Locks (#86 C6/C7): agy absent → honest skip + NO
+# state + exit 0; agy present + regular → idempotent install + state + exit 0; agy present +
+# symlink/corrupt → reason-specific WARN, no clobber, no state, and EXIT NONZERO — the leaf
+# reports a detected-incomplete integration truthfully, and the aggregate setup records the
+# named component FAIL while keeping the remaining components alive. The old NON-FATAL exit-0
+# posture was the false-green shape this contract retires. Clean slate here (H left no
+# config/state).
 rm -f "$GLOBAL" "$LEGACY" "$STATE"
 printf '#!/usr/bin/env bash\necho fake-agy\n' > "$SB/bin/agy"; chmod +x "$SB/bin/agy"
 
@@ -408,11 +413,12 @@ want "wire(agy+regular, re-run): config still valid + entwurf-bridge present" \
 want "wire(agy+regular, re-run): unrelated server still preserved" "grep -q '\"other\"' '$GLOBAL'"
 bash "$BRIDGE" uninstall >/dev/null; rm -f "$GLOBAL"
 
-# I-3: agy PRESENT + SYMLINK config → NON-FATAL WARN + continue (exit 0), no clobber, no state
+# I-3: agy PRESENT + SYMLINK config → reason-specific WARN + EXIT NONZERO (component FAIL),
+# no clobber, no state
 printf '{"mcpServers":{}}\n' > "$SB/real_wire_cfg.json"
 ln -s "$SB/real_wire_cfg.json" "$GLOBAL"
 set +e; OUT="$(AGY_BIN="$SB/bin/agy" bash "$REPO_DIR/run.sh" wire-agy-bridge 2>&1)"; RC=$?; set -e
-want "wire(agy+symlink): exits 0 (NON-FATAL — setup not bricked)" "[ '$RC' -eq 0 ]"
+want "wire(agy+symlink): exits nonzero (detected agy + refused config = component FAIL, not cosmetic green) [QK:SETUP-AGY-COSMETIC-RETURN]" "[ '$RC' -ne 0 ]"
 want "wire(agy+symlink): reason-specific WARN names the symlink/SSOT" \
   "printf '%s' \"\$OUT\" | grep -qi 'symlink'"
 want "wire(agy+symlink): linked SSOT NOT clobbered" \
@@ -420,10 +426,11 @@ want "wire(agy+symlink): linked SSOT NOT clobbered" \
 want "wire(agy+symlink): NO state written" "[ ! -f '$STATE' ]"
 rm -f "$GLOBAL"
 
-# I-4: agy PRESENT + CORRUPT config (invalid JSON) → NON-FATAL WARN + continue, corrupt-specific
+# I-4: agy PRESENT + CORRUPT config (invalid JSON) → reason-specific WARN + EXIT NONZERO,
+# corrupt-specific
 printf 'this is not json{{{' > "$GLOBAL"
 set +e; OUT="$(AGY_BIN="$SB/bin/agy" bash "$REPO_DIR/run.sh" wire-agy-bridge 2>&1)"; RC=$?; set -e
-want "wire(agy+corrupt): exits 0 (NON-FATAL)" "[ '$RC' -eq 0 ]"
+want "wire(agy+corrupt): exits nonzero (detected agy + corrupt config = component FAIL)" "[ '$RC' -ne 0 ]"
 want "wire(agy+corrupt): reason-specific WARN flags invalid JSON (not a silent skip)" \
   "printf '%s' \"\$OUT\" | grep -qi 'invalid JSON'"
 want "wire(agy+corrupt): NO state written" "[ ! -f '$STATE' ]"
@@ -435,7 +442,8 @@ rm -f "$GLOBAL" "$SB/bin/agy"
 # command Copilot fresh resolves (`entwurf` → this checkout's run.sh-equivalent target), including
 # a real argv-preserving invocation through PATH. J-1 onward keeps the older entwurf-bridge
 # ownership regression byte-for-byte: REFUSE foreign, state + honest inverse, remove only OUR
-# link, NON-FATAL setup wrapper, and legacy-state migration. Isolated: sandbox bin/targets/XDG.
+# link, the truthful setup wrapper (rc=3 propagated), and legacy-state migration. Isolated:
+# sandbox bin/targets/XDG.
 DEVBIN="$REPO_DIR/scripts/dev-bin.sh"
 DBIN_DIR="$SB/devbin"
 DLINK="$DBIN_DIR/entwurf-bridge"
@@ -515,12 +523,20 @@ if bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1; then die "dev-bin: expo
 ok "dev-bin expose: refused a foreign bin (nonzero exit)"
 want "dev-bin expose: foreign bin NOT clobbered" "[ \"\$(cat '$DLINK')\" = 'FOREIGN NPM BIN' ]"
 want "dev-bin expose: no state written on foreign refuse" "[ ! -f '$DSTATE' ]"
-# The setup wrapper exposes/certifies the CORE operator first, then turns this later helper-bin
-# refusal into a WARN. A helper conflict must not erase the operator command the source lane needs.
+# The setup wrapper exposes/certifies the CORE operator, and dev-bin attempts EVERY unit
+# independently (#86 C10): a foreign helper no longer aborts the loop or hides behind a WARN —
+# the wrapper propagates rc=3, the summary reports attempted/ok/refused truthfully, later units
+# are still attempted, and the aggregate setup records a named bins FAIL. A helper conflict must
+# still not erase the operator command the source lane needs.
 set +e; OUT="$(PATH="$DBIN_DIR:$PATH" bash "$REPO_DIR/run.sh" expose-dev-bin 2>&1)"; RC=$?; set -e
-want "dev-bin wrapper(helper foreign): source operator remains certified" \
-  "[ '$RC' -eq 0 ] && [ \"\$(readlink '$OLINK')\" = '$SB/fake-entwurf.sh' ]"
+want "dev-bin wrapper(helper foreign): rc=3 with the source operator still certified" \
+  "[ '$RC' -eq 3 ] && [ \"\$(readlink '$OLINK')\" = '$SB/fake-entwurf.sh' ]"
 want "dev-bin wrapper(helper foreign): WARNs about a foreign bin (not ours)" "printf '%s' \"\$OUT\" | grep -qi 'not ours'"
+want "dev-bin wrapper(helper foreign): later units were still attempted (loop did not stop at the refusal) [QK:DEV-BIN-ATTEMPTS-ALL]" \
+  "[ -L '$DBIN_DIR/entwurf-agy-statusline' ] && [ -L '$DBIN_DIR/entwurf-copilot-statusline' ]"
+want "dev-bin wrapper(helper foreign): truthful attempted/refused summary names the refused unit" \
+  "printf '%s' \"\$OUT\" | grep -q 'refused=1: entwurf-bridge'"
+bash "$DEVBIN" remove >/dev/null 2>&1   # clear the attempted helper links/states for the cells below
 rm -f "$DLINK"
 
 # J-4: remove is honest-inverse — removes ONLY our link, refuses a link that became foreign
@@ -911,15 +927,16 @@ want "permission: a symlinked settings.json is left untouched (someone else's SS
   "! has_rule '$SB/foreign-settings.json'"
 want "permission: no permission state is written for a refused symlink" "[ ! -e '$PSTATE' ]"
 
-# …and the SAME failure, seen from setup: NON-FATAL, reason-specific, never silent.
+# …and the SAME failure, seen from setup: reason-specific, never silent, and truthful (#86
+# C6/C7): a detected agy whose grant cannot be written is a component FAIL, so the wrapper
+# exits NONZERO and the aggregate setup records it while later components stay attempted.
 # Detection must be hermetic here exactly as it is in section I: re-mint the fake agy (I tore it
 # down at its end) and pin AGY_BIN at it. Unpinned, the wrapper falls back to the host's PATH —
-# it finds a real agy on a dev box and degrades honestly, but on a CI runner with no agy it takes
-# the skip branch and exits 0 with no WARN. The exit-0 assertion below passes either way; only the
-# NOT-GRANTED one can tell a degrade from a skip, which is the whole point of this pair.
+# on a CI runner with no agy it would take the skip branch (exit 0, no WARN) and only the
+# NOT-GRANTED assertion could tell a degrade from a skip.
 printf '#!/usr/bin/env bash\necho fake-agy\n' > "$SB/bin/agy"; chmod +x "$SB/bin/agy"
 set +e; OUT="$(AGY_BIN="$SB/bin/agy" bash "$REPO_DIR/run.sh" wire-agy-bridge 2>&1)"; RC=$?; set -e
-want "permission(setup): the wrapper keeps setup alive (exit 0) despite the failed grant" "[ '$RC' -eq 0 ]"
+want "permission(setup): the wrapper exits nonzero on the failed grant (detected FAIL, not cosmetic green)" "[ '$RC' -ne 0 ]"
 want "permission(setup): the wrapper says the bridge is REGISTERED but NOT GRANTED (no silent pass)" \
   "printf '%s' \"\$OUT\" | grep -q 'NOT GRANTED'"
 rm -f "$SETTINGS" "$PSTATE" "$STATE" "$GLOBAL" "$SB/bin/agy"

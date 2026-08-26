@@ -156,13 +156,19 @@ cd ~/repos/gh/entwurf
 ./run.sh check-bridge
 ```
 
-The full source setup requires Node 24, pnpm, Python 3, and a compatible `pi` command
-(`>=0.84.3 <0.85`) already on PATH. `setup` runs the frozen dependency install, wires the project
-plus detected Claude/agy harnesses, exposes stable commands under `~/.local/bin`, and checks the
-bridge. That exposure includes `entwurf` → this checkout's `run.sh`, so managed Copilot fresh does
-not depend on an unrelated global npm/pnpm installation. It does **not** install Copilot's four
-native units; install those explicitly below. Package consumers receive the operator command from
-package bin linking and use `entwurf install`, not the source-only `setup` path.
+The full source setup requires Node 24, pnpm, and Python 3 on PATH. Harnesses are
+optional-by-presence: `setup` runs the frozen dependency install, then composes what the operator
+already installed — a compatible `pi` (`>=0.84.3 <0.85`), Claude Code, and agy each get their
+wiring completed when detected, an absent harness is an explicit zero-state SKIP, and a detected
+harness that cannot be completed (including a below-floor `pi`) is a named FAIL that makes setup
+exit nonzero. `setup` never installs a harness binary or touches a credential store. It also
+exposes stable commands under `~/.local/bin`, including `entwurf` → this checkout's `run.sh`, so
+managed Copilot fresh does not depend on an unrelated global npm/pnpm installation. It does
+**not** install Copilot's four native units; install those explicitly below. Package consumers
+run the same `entwurf setup <project>` through their npm-provided bin: installed mode is decided
+by name first, skips the source-only pnpm bootstrap entirely, and reports the stable commands as
+already provided by npm bin linking; `entwurf install` remains the narrower pi-wiring repair
+leaf.
 
 A development clone runs the bridge source through Node's strip-types path;
 an npm-installed package runs the prebuilt JS under `mcp/entwurf-bridge/dist/`
@@ -191,9 +197,9 @@ injection; the meta-record mints the garden address (see [Garden launcher](#gard
 versions may silently miss the provider/extension surface, so treat the pi floor
 as release-critical for the ACP/plugin lane. A host that only uses
 `entwurf-bridge` from Claude Code / Copilot / Codex / Antigravity does not need pi at all for
-delivery: no `entwurf_v2` rail launches a pi process. That external-only shape uses its explicit
-installers; the full source `setup` command above intentionally includes the pi adapter and requires
-pi on PATH.
+delivery: no `entwurf_v2` rail launches a pi process. That external-only shape works with the same
+`setup` command: pi is optional-by-presence there, so a pi-less host simply gets an explicit pi
+SKIP while the detected harnesses are composed.
 
 ### Native harness install and doctors
 

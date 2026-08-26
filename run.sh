@@ -119,7 +119,7 @@ run_vitest() {
 usage() {
   cat <<'EOF'
 Usage:
-  ./run.sh setup [project-dir]        # ONE confident source install: pnpm install + stable dev bins (incl. entwurf) + detected native bridges + v2 install smoke
+  ./run.sh setup [project-dir]        # ONE presence-driven composition (#86): mode-first (source bootstrap only on a checkout), then per-component PASS/SKIP/FAIL for pi (presence+floor)/claude/agy + stable dev bins + v2 install smoke; absent harness = zero-state SKIP, detected-incomplete = named FAIL + nonzero exit. Never installs a harness or touches credentials
   ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, doctor-pi-provider, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b/G1e/G1f, IN pnpm run check:full): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 and entwurf_resume_call registered/schema + the tools/list surface is EXACTLY the seven shipped garden verbs; tools/list only, no auth/side-effect
@@ -181,7 +181,8 @@ Usage:
   ./run.sh smoke-meta-honesty         # 1.0.0 meta-bridge: honesty regression gate (#30 blockers) — doorbell counts ALL msgs honestly + hook logs failures as ERROR (best-effort, no scream). Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-meta-install-state   # 1.0.0 meta-bridge Phase 2: stateful install/uninstall + store-doctor regression gate. Offline/deterministic (deps: bash+node+python3)
   ./run.sh check-meta-doctor-oracle   # 0.12.8 (#51): detection power of the release ORACLE — healthy fixture must reach `doctor: PASS`, then 21 planted defects (retired shell form, partial hand-patch, launcher bypass/repoint/provenance loss, malformed exec args, owner type drift, extra leaf/group, doorbell asyncRewake/path/timeout, no live bridge, stale receiver, ambiguous/missing cache, missing hook log/writer, failing CLI probes) must each turn it FAIL naming their own cause, plus a positive case pinning that a long-writing CLI is NOT a false negative. Offline/deterministic (deps: bash+node+python3)
-  ./run.sh smoke-agy-install-state    # agy MCP + exact permission ownership regression: isolated HOME+XDG, adopt/state/inverse, symlink refuse, setup degrade. Offline/deterministic
+  ./run.sh smoke-agy-install-state    # agy MCP + exact permission ownership regression: isolated HOME+XDG, adopt/state/inverse, symlink refuse, truthful setup outcomes. Offline/deterministic
+  ./run.sh smoke-setup-verdict        # #86 C1 aggregate setup verdict fixture: all-absent SKIP/green, pi presence+floor, detected-FAIL nonzero, installed-mode named branch, credential store untouched. Offline/deterministic
   ./run.sh check-agy-permission-matrix # AGY permission CONTRACT SPACE as a literal table (55 cells): parser-state × operation × settings × ownership × precedence with stated exclusion rules; expectations are hand-written literals, never read from the SUT. Offline/deterministic (deps: python3)
   ./run.sh smoke-entwurf-chain-live    # LIVE cross-harness delivery chain: native Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox terminus, proving sender identity/replyable at every hop and a real read receipt at the end. Prerequisites (claude on PATH, pi credentials per backend) report protocol SKIP, never a pass
   ./run.sh check-release-gate-outcomes  # release-gate STEP OUTCOME protocol (P1): one skip exit code shared by the shell + TS halves, classifier never rounds a skip up to a pass, `--cut` refuses a MUST SKIP while a bare diagnostic stays exit 0, no LIVE smoke keeps the old exit-0 skip shape, and both real skip surfaces are INVOKED and observed to propagate the code
@@ -233,9 +234,8 @@ Usage:
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-pack-pin-matcher     # pure self-test of check-pack-install's pin-leak matcher against synthetic .pnpm lookalikes (version boundary: @0.84.30 must leak, @0.84.3 bare/peer-hash must pass); snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm run check:full): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
-  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (0.82.x) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES)
+  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (pins derived from the package.json devDep; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent `entwurf setup` row + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
-  ./run.sh sync-auth                  # copy ~/.pi/agent/auth.json anthropic OAuth credentials to entwurf alias
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
   ./run.sh remove [project-dir]       # remove entwurf entries from project .pi/settings.json (project scope only; global user-scope citizen left intact)
   ./run.sh remove-user-scope          # explicit GLOBAL inverse of install's user-scope citizen: drop entwurf from ~/.pi/agent/settings.json packages[] (affects ALL cwds — shared entry, not per-project)
@@ -268,44 +268,12 @@ print(os.path.abspath(os.path.expanduser(sys.argv[1])))
 PY
 }
 
-sync_auth() {
-  local auth_path="$HOME/.pi/agent/auth.json"
-  python3 - "$auth_path" "$PROVIDER_ID" <<'PY'
-import json, os, sys
-from pathlib import Path
-
-auth_path = Path(sys.argv[1]).expanduser()
-provider_id = sys.argv[2]
-auth_path.parent.mkdir(parents=True, exist_ok=True)
-
-if auth_path.exists():
-    data = json.loads(auth_path.read_text())
-    if not isinstance(data, dict):
-        raise SystemExit("auth.json is not an object")
-else:
-    data = {}
-
-anthropic = data.get("anthropic")
-if not isinstance(anthropic, dict):
-    print("sync-auth: skipped (no anthropic OAuth credentials in ~/.pi/agent/auth.json)")
-    raise SystemExit(0)
-
-before = json.dumps(data.get(provider_id), sort_keys=True)
-after = json.dumps(anthropic, sort_keys=True)
-if before == after:
-    print(f"sync-auth: already synced ({provider_id})")
-    raise SystemExit(0)
-
-data[provider_id] = anthropic
-backup = auth_path.with_suffix(auth_path.suffix + ".bak")
-if auth_path.exists():
-    backup.write_text(auth_path.read_text())
-auth_path.write_text(json.dumps(data, indent=2) + "\n")
-print(f"sync-auth: wrote {provider_id} alias to {auth_path}")
-if backup.exists():
-    print(f"sync-auth: backup -> {backup}")
-PY
-}
+# The old `sync_auth` credential mutation is GONE (#86 A5): setup composes what
+# the operator already installed and NEVER reads, copies, aliases or backs up a
+# harness credential store — the `entwurf` alias it wrote had no in-repo reader
+# (the ACP provider passes pi's auth check with the no-auth sentinel), and the
+# `auth.json.bak` it left is documented manual-operator-cleanup ONLY. Do not
+# reintroduce credential copying as a convenience helper in any install path.
 
 # Repo dependency integrity is a HARD requirement for install — NOT gated on
 # backend (Claude/ACP) auth. A cloned-but-not-installed or a moved/renamed repo
@@ -514,6 +482,14 @@ PY
 }
 
 install_local_package() {
+  # Named interpreter prerequisite BEFORE any preflight/write (#86 E5): the
+  # packages[]/provider writers below are python3-backed and `entwurf install`
+  # dispatches here directly, so a python3-less host gets this verdict instead
+  # of an accidental mid-write failure.
+  command -v python3 >/dev/null 2>&1 || {
+    echo "[install] entwurf install requires python3 on PATH (settings writers are python3-backed); nothing was written." >&2
+    exit 1
+  }
   local project_dir agent_dir
   project_dir=$(normalize_project_dir "$1")
   agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
@@ -3144,9 +3120,9 @@ _check_pack_install_impl() {
   # to our pnpm-workspace.yaml; --ignore-scripts blocks the husky
   # prepare hook (and any future install scripts) from running inside
   # the consumer project. Peer deps are pinned to the CURRENT pi release
-  # baseline (0.82.x — the pins below are what check-dep-versions binds to
-  # the package.json devDep) so the smoke matches the same shape an external
-  # pi user would have after `pi install`.
+  # baseline (the package.json devDep pin — the pins below are what
+  # check-dep-versions binds to that devDep) so the smoke matches the same
+  # shape an external pi user would have after `pi install`.
   local tmp npm_tmp
   tmp=$(mktemp -d -t entwurf-install-smoke.XXXXXX)
   # Separate tree for the npm-managed regression below: npm install must NOT be
@@ -3413,6 +3389,71 @@ sys.exit(0 if any(isinstance(s,str) and s.endswith('/node_modules/@junghanacs/en
     return 1
   fi
   echo "[check-pack-install] user-scope citizen regression pass (npm consumer: --entwurf-control loads from a foreign cwd)"
+
+  # Installed-package aggregate `setup` row (#86 C1, review blocker 2026-08-26):
+  # the composed public command itself, driven through the consumer bin from the
+  # SAME installed candidate, on a FRESH sandbox home with every harness absent.
+  # This is the first living consumer of package-installed `entwurf setup`:
+  # mode=installed decided by name before anything else, NO pnpm bootstrap inside
+  # node_modules, pi/claude/agy explicit zero-state SKIPs, stable bins PASS as
+  # npm-provided, core bridge boundary PASS, computed green, zero harness/auth
+  # writes. Harness probes are pinned absent via the PI_BIN/CLAUDE_BIN/AGY_BIN
+  # seams so the gate host's real harnesses never leak in.
+  local setup_home="$npm_tmp/setuphome" setup_proj="$npm_tmp/setupproj" setup_out setup_rc setup_auth
+  mkdir -p "$setup_home/.pi/agent" "$setup_proj"
+  setup_auth="$setup_home/.pi/agent/auth.json"
+  printf '{\n  "anthropic": {\n    "type": "oauth",\n    "access": "consumer-oauth-token"\n  }\n}\n' > "$setup_auth"
+  local setup_auth_before
+  setup_auth_before="$(sha256sum "$setup_auth" | cut -d' ' -f1)"
+  set +e
+  setup_out=$(HOME="$setup_home" XDG_DATA_HOME="$setup_home/.local/share" XDG_STATE_HOME="$setup_home/.local/state" \
+    XDG_CACHE_HOME="$setup_home/.cache" XDG_CONFIG_HOME="$setup_home/.config" PI_CODING_AGENT_DIR="$setup_home/.pi/agent" \
+    PI_BIN="$npm_tmp/definitely-absent" CLAUDE_BIN="$npm_tmp/definitely-absent" AGY_BIN="$npm_tmp/definitely-absent" \
+    "$npmroot/node_modules/.bin/entwurf" setup "$setup_proj" 2>&1)
+  setup_rc=$?
+  set -e
+  if [ "$setup_rc" -ne 0 ]; then
+    fail "[check-pack-install] installed all-absent setup exited $setup_rc — core must stay green with every harness absent, and an installed package must never re-enter the source pnpm bootstrap:"
+    echo "$setup_out" | tail -25 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! head -n 1 <<<"$setup_out" | grep -q "mode: installed package"; then
+    fail "[check-pack-install] installed setup did not name its mode FIRST:"
+    echo "$setup_out" | head -5 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if grep -Eqi "pnpm install|Lockfile is up to date|Progress: resolved" <<<"$setup_out"; then
+    fail "[check-pack-install] installed setup reached the source pnpm bootstrap inside node_modules:"
+    echo "$setup_out" | grep -Ei "pnpm|Lockfile|Progress" | sed 's/^/    /' >&2
+    return 1
+  fi
+  local skip_probe
+  for skip_probe in "pi: SKIP" "claude: SKIP" "agy: SKIP"; do
+    if ! grep -q "$skip_probe" <<<"$setup_out"; then
+      fail "[check-pack-install] installed all-absent setup missing explicit zero-state '$skip_probe':"
+      echo "$setup_out" | tail -25 | sed 's/^/    /' >&2
+      return 1
+    fi
+  done
+  if ! grep -q "bins: PASS — provided by npm bin linking" <<<"$setup_out"; then
+    fail "[check-pack-install] installed setup must report stable bins PASS as npm-provided (capability present, not absent):"
+    echo "$setup_out" | tail -25 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! grep -q "core: PASS" <<<"$setup_out" || ! grep -q "result: green (computed from the component outcomes above)" <<<"$setup_out"; then
+    fail "[check-pack-install] installed setup core/computed-green missing:"
+    echo "$setup_out" | tail -25 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if [ -e "$setup_proj/.pi" ] || [ -e "$setup_home/.pi/agent/settings.json" ] || [ -e "$setup_home/.gemini" ]; then
+    fail "[check-pack-install] installed all-absent setup wrote harness state (must be zero-write)"
+    return 1
+  fi
+  if [ "$(sha256sum "$setup_auth" | cut -d' ' -f1)" != "$setup_auth_before" ] || [ -e "$setup_auth.bak" ]; then
+    fail "[check-pack-install] installed setup touched the credential store (byte drift or .bak)"
+    return 1
+  fi
+  echo "[check-pack-install] installed all-absent setup pass (mode-first, no bootstrap, 3x SKIP, bins npm-provided, core PASS, computed green, zero writes)"
 
   # Installed meta-bridge ownership regression (0.12.5): package upgrades must not
   # bake versioned pnpm-store paths into Claude settings. MCP already uses the
@@ -4226,24 +4267,107 @@ check_bridge() {
 }
 
 
-# setup_all — full entwurf v2 install.
+# ── setup verdict engine (#86 C1) ────────────────────────────────────────────
+# setup composes harnesses the operator ALREADY installed. Per component the
+# verdict is PASS (detected + completed), SKIP (truly absent — zero state
+# written), or FAIL (detected but incomplete/below-floor/refused). The final
+# summary and exit status are COMPUTED from these outcomes: core survival never
+# relabels a detected harness failure as green, and a FAIL owns a nonzero setup
+# result while every valid earlier write stays installed (re-running setup is
+# the documented repair action).
+SETUP_RESULTS=()
+setup_result() {  # $1=component $2=PASS|SKIP|FAIL $3=detail
+  SETUP_RESULTS+=("$1|$2|$3")
+  case "$2" in
+    PASS) ok "$1: PASS — $3" ;;
+    SKIP) log "$1: SKIP — $3" ;;
+    *)    fail "$1: FAIL — $3" ;;
+  esac
+}
+
+# Installed-vs-source is decided by PACKAGE LOCATION — the same `*/node_modules/*`
+# seam run_ts and the bridge launcher already branch on — never by which of
+# pnpm/pi happens to be missing (an accidental failure is not a mode gate).
+setup_mode() {
+  case "$REPO_DIR" in
+    */node_modules/*) echo installed ;;
+    *) echo source ;;
+  esac
+}
+
+# Supported pi range, derived at runtime from the package.json devDependencies
+# pin (the SSOT check-dep-versions binds: peer range == `>=<pin> <0.<minor+1>`).
+# Never retyped here as a second literal.
+pi_supported_range() {
+  node -e '
+    const pkg = require(process.argv[1]);
+    const pin = pkg.devDependencies?.["@earendil-works/pi-coding-agent"];
+    if (!/^0\.\d+\.\d+$/.test(pin ?? "")) { console.error(`unparseable pi pin: ${pin}`); process.exit(1); }
+    const [, min] = pin.split(".").map(Number);
+    console.log(`>=${pin} <0.${min + 1}`);
+  ' "$REPO_DIR/package.json"
+}
+
+pi_version_in_range() {  # $1=detected version  $2=range ">=a.b.c <x.y"; exit 0 in-range
+  node -e '
+    const [ver, range] = process.argv.slice(1);
+    const m = range.match(/^>=(\d+)\.(\d+)\.(\d+) <(\d+)\.(\d+)$/);
+    const v = ver.match(/^(\d+)\.(\d+)\.(\d+)$/);
+    if (!m || !v) process.exit(2);
+    const [maj, min, pat] = v.slice(1).map(Number);
+    const lo = m.slice(1, 4).map(Number);
+    const hi = m.slice(4, 6).map(Number);
+    const geFloor = maj > lo[0] || (maj === lo[0] && (min > lo[1] || (min === lo[1] && pat >= lo[2])));
+    const ltCeil = maj < hi[0] || (maj === hi[0] && min < hi[1]);
+    process.exit(geFloor && ltCeil ? 0 : 1);
+  ' "$1" "$2"
+}
+
+# setup_all — one-command presence-driven composition (#86).
 #
-# Installs the v2 dispatch substrate + MCP entwurf-bridge into a target project
-# and verifies the installed bridge boundary. ACP/v1 backend interview gates are
-# deliberately not part of setup on v2-only; the heavier live v2 substrate proof
-# is release-gate's job.
+# Entwurf installs itself only: this command completes the integration of each
+# harness the operator already installed and NEVER installs a harness binary,
+# subscription, credential or login — `pi` has no privileged exception. It
+# verifies the installed bridge boundary; ACP/v1 backend interview gates are
+# deliberately not part of setup on v2-only (the heavier live v2 substrate
+# proof is release-gate's job). Copilot's four native units remain explicit
+# installs until their birth inverse exists (#86 C3).
 #
 # An external harness that consumes entwurf (e.g. agent-config as a
 # pi package + skills set) may still have its own install/setup for its
 # own concerns; those are outside the scope of this script.
 setup_all() {
+  # MODE FIRST (#86 C1): the installed-vs-source branch is a NAMED decision
+  # ahead of every prerequisite check and write, so an installed consumer is
+  # never mode-gated by an accidental missing `pnpm`/`pi`.
+  local mode
+  mode=$(setup_mode)
+  case "$mode" in
+    installed)
+      echo "[setup] mode: installed package — composition only (no source bootstrap; setup never runs npm/pnpm inside node_modules)" ;;
+    *)
+      echo "[setup] mode: source checkout — repo dev bootstrap, then the same composition semantics" ;;
+  esac
+
+  # Named interpreter prerequisite, decided BEFORE any write (#86 C1/E5):
+  # setup's project-path normalization and every pi/agy wiring writer are
+  # python3-backed today. `entwurf --help` / `entwurf check-bridge` stay
+  # python3-free; only the commands that invoke those writers declare it.
+  command -v python3 >/dev/null 2>&1 || {
+    echo "[setup] entwurf setup requires python3 on PATH (project-path normalization + wiring writers)." >&2
+    echo "[setup] Install python3, or use python3-free surfaces (--help, check-bridge)." >&2
+    exit 1
+  }
+  require_cmd node
+
   local project_dir
   project_dir=$(normalize_project_dir "$1")
 
-  require_cmd pnpm
-  require_cmd python3
-  require_cmd pi
-  require_cmd node
+  if [ "$mode" = "source" ]; then
+    # Source-only dev fixtures: the pinned repo dependencies are build/test
+    # fixtures, never a product promise that consumers receive them (#86 A4).
+    require_cmd pnpm
+  fi
 
   # Node 24+ is the SINGLE supported axis (GLG, 2026-07-21). The floor is not
   # derived from a feature gate: type-stripping alone would only demand 23.6.
@@ -4264,82 +4388,162 @@ setup_all() {
   echo "[setup] scope:   entwurf v2 package + detected native-harness bridges + pi adapter"
   echo "[setup] verification: v2 install smoke (entwurf-bridge; LIVE substrate = release-gate)"
 
-  # Store gate FIRST — ahead of pnpm install, sync_auth (which creates and
-  # rewrites ~/.pi/agent/auth.json) and every settings writer below. On an
-  # existing development host this is the only step standing between a `git pull`
-  # and a V3-only activation over a store the live schema cannot read; putting
-  # it inside install_local_package would already be one auth.json write too
-  # late. The store-doctor imports repo-local libs and node builtins only, so it
-  # runs before dependencies exist.
+  # Store gate FIRST — ahead of the source bootstrap and every settings writer
+  # below. On an existing development host this is the only step standing
+  # between a `git pull` and a V3-only activation over a store the live schema
+  # cannot read; putting it inside install_local_package would already be one
+  # write too late. The store-doctor imports repo-local libs and node builtins
+  # only, so it runs before dependencies exist.
   preflight_v3_store setup
 
-  (cd "$REPO_DIR" && pnpm install --frozen-lockfile)
-  sync_auth
-  install_local_package "$project_dir"
+  SETUP_RESULTS=()
 
-  # Single confident install command (GLG 2026-06-23): setup ALSO wires the
-  # native-harness meta-bridge, so a relocate/clone needs ONE command — not the
-  # install + install-meta-bridge two-pronged split that froze the Claude
-  # statusLine on the old path (the 2026-06-23 relocation gap). Detection-gated:
-  # a pi-only host with no native harness skips it cleanly (rail “Shipped adapters” — "있으면 설정,
-  # 없으면 담아준다"); meta-bridge-install.sh is itself idempotent.
-  if command -v claude >/dev/null 2>&1; then
-    section "meta-bridge install (native harness detected: Claude Code)"
-    (cd "$REPO_DIR" && bash scripts/meta-bridge-install.sh)
+  if [ "$mode" = "source" ]; then
+    # Source bootstrap is the ONLY install-mode difference (#86): the pinned
+    # repo dev dependencies are fixtures this checkout builds/tests with. A
+    # broken bootstrap is a broken checkout — crash, don't degrade.
+    (cd "$REPO_DIR" && pnpm install --frozen-lockfile)
+  fi
+
+  # ── pi (presence + floor, #86 C1/C9) ── pi is OPTIONAL-BY-PRESENCE: absent is
+  # an explicit zero-state SKIP (setup never installs pi and writes no Pi
+  # wiring), below-floor/unreadable is detected-incomplete FAIL — never a SKIP,
+  # so a stale pi is told the truth instead of being silently skipped. PI_BIN
+  # pins the probe for the hermetic smoke (same seam as AGY_BIN); production
+  # leaves it unset.
+  local pi_bin="${PI_BIN:-pi}" pi_range pi_ver
+  if ! command -v "$pi_bin" >/dev/null 2>&1; then
+    setup_result pi SKIP "pi not on PATH — zero Pi wiring written (the operator installs pi; setup never does)"
   else
-    echo "[setup] no native harness (claude) on PATH — skipping meta-bridge wiring (pi-only host)"
+    pi_range=$(pi_supported_range)
+    # Bounded capture: a resolvable pi whose --version crashes or prints garbage
+    # must land in the computed FAIL verdict below, never abort setup via set -e
+    # before the summary (review defect, 2026-08-26).
+    pi_ver="$("$pi_bin" --version 2>/dev/null | head -n 1 | tr -d '[:space:]')" || pi_ver=""
+    if ! pi_version_in_range "${pi_ver:-0}" "$pi_range"; then
+      setup_result pi FAIL "detected pi ${pi_ver:-<unreadable version>} is outside the supported range $pi_range — Pi wiring not written; align pi, then re-run setup"
+    elif (install_local_package "$project_dir"); then
+      setup_result pi PASS "project + user-scope wiring complete (pi $pi_ver in $pi_range) — verify: ./run.sh doctor-pi-provider"
+    else
+      setup_result pi FAIL "pi wiring did not complete (see above) — repair, then re-run setup"
+    fi
   fi
 
-  # Expose entwurf's STABLE bins on PATH for this DEV checkout (막힘 ②) BEFORE wiring agy. This
-  # includes the operator command `entwurf` that Copilot fresh resolves as its managed runtime,
-  # plus the bare bridge/statusline/imprint names native-harness configs record. An npm consumer
-  # receives the same commands from package bin linking. The core operator is fail-loud; only a
-  # later optional helper-bin conflict is left in place with a harness-doctor-owned warning.
-  expose_dev_bin
+  # ── claude (meta-bridge) ── single confident install command (GLG 2026-06-23):
+  # setup ALSO wires the native-harness meta-bridge so a relocate/clone needs ONE
+  # command. Detection-gated ("있으면 설정, 없으면 담아준다");
+  # meta-bridge-install.sh is idempotent and enforces the Claude floor + its own
+  # named prerequisites itself, so a below-floor or refused host lands here as a
+  # detected FAIL, never a cosmetic green. CLAUDE_BIN pins the probe for the
+  # hermetic smoke; production leaves it unset.
+  local claude_bin="${CLAUDE_BIN:-claude}"
+  if ! command -v "$claude_bin" >/dev/null 2>&1; then
+    setup_result claude SKIP "claude not on PATH — zero meta-bridge wiring written"
+  else
+    section "meta-bridge install (native harness detected: Claude Code)"
+    if (cd "$REPO_DIR" && bash scripts/meta-bridge-install.sh); then
+      setup_result claude PASS "meta-bridge wired — verify: ./run.sh doctor-meta-bridge"
+    else
+      setup_result claude FAIL "detected Claude Code, but the meta-bridge integration did not complete (see above) — repair, then re-run setup"
+    fi
+  fi
 
-  # Fold agy (Antigravity) MCP bridge wiring into setup (막힘 ①, GLG 2026-07-04: install
-  # ownership moves to entwurf). Same detection-gated, idempotent, NON-FATAL posture as the
-  # meta-bridge block above — agy is an OPTIONAL harness, so a refused/corrupt agy config warns
-  # but never bricks a pi/Claude setup. The hard gate stays doctor-agy-bridge.
-  wire_agy_bridge
+  # ── stable command exposure ── source mode exposes entwurf's STABLE bins on
+  # PATH for this DEV checkout (막힘 ②) BEFORE wiring agy: the operator command
+  # `entwurf` that Copilot fresh resolves as its managed runtime, plus the bare
+  # bridge/statusline/imprint names native-harness configs record. An installed
+  # consumer already has the same commands from npm bin linking — nothing to
+  # expose there. The core operator stays fail-loud; helper units are attempted
+  # independently and a refused helper is a named FAIL, not a cosmetic green.
+  local bins_rc
+  if [ "$mode" = "installed" ]; then
+    # PASS, not SKIP (review, 2026-08-26): the capability IS present — npm bin
+    # linking provides the same stable commands the source lane must expose.
+    # SKIP stays reserved for a truly absent capability with zero state.
+    setup_result bins PASS "provided by npm bin linking (installed package needs no source exposure)"
+  else
+    bins_rc=0; expose_dev_bin || bins_rc=$?
+    if [ "$bins_rc" -eq 0 ]; then
+      setup_result bins PASS "source operator + helper bins exposed and certified (PATH winner: this checkout)"
+    elif [ "$bins_rc" -eq 3 ]; then
+      setup_result bins FAIL "foreign helper bin(s) refused (named above; every unit was attempted) — repair them, then re-run setup"
+    else
+      setup_result bins FAIL "source operator command not certified (see above) — repair PATH/link, then re-run setup"
+    fi
+  fi
 
-  # Fold agy statusLine wiring into setup (#46 Task 1: own the ambient status area so it shows
-  # driver + garden id, the claude meta-bridge symmetry). Same detection-gated NON-FATAL posture
-  # — an explicit install-agy-statusline is fail-loud, but the setup wrapper WARNs + continues.
-  wire_agy_statusline
+  # ── agy (Antigravity) ── detection-gated (막힘 ①, GLG 2026-07-04: install
+  # ownership moves to entwurf); AGY_BIN pins the probe for the hermetic smoke.
+  # agy absent is one zero-state SKIP. agy PRESENT runs all three leaves
+  # (bridge / statusLine / PreInvocation imprint) independently; a refused or
+  # corrupt config is a named component FAIL that keeps the rest of setup alive
+  # but owns a nonzero final result — the old WARN-then-green posture is retired
+  # (#86 C6/C7). Hard per-leaf verdicts stay with the doctor commands.
+  local agy_rc
+  if ! command -v "${AGY_BIN:-agy}" >/dev/null 2>&1; then
+    setup_result agy SKIP "agy not on PATH — zero agy wiring written"
+  else
+    agy_rc=0; wire_agy_bridge || agy_rc=$?
+    if [ "$agy_rc" -eq 0 ]; then
+      setup_result agy-bridge PASS "MCP bridge wired — verify: ./run.sh doctor-agy-bridge"
+    else
+      setup_result agy-bridge FAIL "detected agy, but the MCP bridge integration did not complete (reason above) — repair, then re-run setup"
+    fi
+    agy_rc=0; wire_agy_statusline || agy_rc=$?
+    if [ "$agy_rc" -eq 0 ]; then
+      setup_result agy-statusline PASS "statusLine wired — verify: ./run.sh doctor-agy-statusline"
+    else
+      setup_result agy-statusline FAIL "detected agy, but the statusLine integration did not complete (reason above) — repair, then re-run setup"
+    fi
+    agy_rc=0; wire_agy_hooks || agy_rc=$?
+    if [ "$agy_rc" -eq 0 ]; then
+      setup_result agy-hooks PASS "birth imprint wired — verify: ./run.sh doctor-agy-hooks"
+    else
+      setup_result agy-hooks FAIL "detected agy, but the birth-imprint integration did not complete (reason above) — repair, then re-run setup"
+    fi
+  fi
 
-  # Fold agy PreInvocation birth imprint wiring into setup (#46 close criterion: manual register 0).
-  # The hook runs the thin `entwurf-agy-imprint` bin and returns {"injectSteps":[]} so agy's loop
-  # survives while the meta-record is created/attached by conversationId.
-  wire_agy_hooks
-
-  # Deterministic preflight lives in `pnpm run check:full`; live substrate acceptance lives
-  # in `LIVE=1 ./run.sh release-gate <scratch> --cut`. Setup is the install path, so it
-  # verifies the installed MCP bridge boundary only and does NOT run the legacy
-  # ACP/v1 session-messaging/sentinel gates.
+  # ── core bridge boundary ── deterministic preflight lives in `pnpm run
+  # check:full`; live substrate acceptance lives in `LIVE=1 ./run.sh
+  # release-gate <scratch> --cut`. Setup is the install path, so it verifies the
+  # installed MCP bridge boundary only and does NOT run the legacy ACP/v1
+  # session-messaging/sentinel gates.
   section "v2 install smoke: entwurf-bridge (direct MCP protocol)"
-  validate_entwurf_bridge
+  if (validate_entwurf_bridge); then
+    setup_result core PASS "installed bridge boots and lists the exact v2 tool set"
+  else
+    setup_result core FAIL "installed bridge boundary did not validate (see above)"
+  fi
 
+  # ── computed summary (#86 C7/C8) ── the final verdict is DERIVED from the
+  # component outcomes above, never printed independently of them. A detected
+  # integration FAIL owns a nonzero exit while valid components stay installed;
+  # re-running the same setup is the documented repair action (idempotent).
+  section "setup summary (computed from component outcomes)"
+  local entry rest s_name s_verdict s_fails=""
+  for entry in "${SETUP_RESULTS[@]}"; do
+    s_name="${entry%%|*}"; rest="${entry#*|}"; s_verdict="${rest%%|*}"
+    printf '  %-14s %-4s %s\n' "$s_name" "$s_verdict" "${rest#*|}"
+    if [ "$s_verdict" = "FAIL" ]; then s_fails="$s_fails $s_name"; fi
+  done
   echo ""
-  echo "DONE: entwurf setup (pi adapter + detected native bridges + v2 install smoke) green."
-  if command -v claude >/dev/null 2>&1; then
-    echo "Verify Claude wiring with: ./run.sh doctor-meta-bridge"
+  if [ -n "$s_fails" ]; then
+    echo "DONE: entwurf setup — result: NON-GREEN (FAIL:$s_fails). Valid components above remain installed; repair the named ones and re-run setup."
+    return 1
   fi
-  if command -v agy >/dev/null 2>&1; then
-    echo "Verify agy wiring with:    ./run.sh doctor-agy-bridge"
-    echo "                           ./run.sh doctor-agy-statusline"
-    echo "                           ./run.sh doctor-agy-hooks"
-  fi
+  echo "DONE: entwurf setup — result: green (computed from the component outcomes above)."
   echo "Run 'LIVE=1 ./run.sh release-gate <scratch> --cut' for live substrate acceptance (--cut refuses any MUST SKIP)."
 }
 
-# wire_agy_bridge — detection-gated, NON-FATAL agy (Antigravity) MCP bridge wiring, folded into
+# wire_agy_bridge — detection-gated agy (Antigravity) MCP bridge wiring, folded into
 # setup so a relocate/clone needs ONE idempotent command (막힘 ①). Mirrors the meta-bridge
 # block: agy on PATH → idempotent install-agy-bridge; no agy → honest skip, NO state ("있으면
-# 설정, 없으면 담아준다"). NON-FATAL by contract: agy is an OPTIONAL harness, so a refused/corrupt
-# agy config must NOT brick a pi/Claude setup — the hard gate is doctor-agy-bridge (issue #45:
-# the '?' surfaces in doctor, not by killing setup). WARNs are reason-specific so a transitional
-# symlink (someone else's SSOT) and a corrupt config (invalid JSON) are never conflated.
+# 설정, 없으면 담아준다"). A refused/corrupt agy config still never bricks the rest of setup —
+# later components are attempted — but it RETURNS 1 so the aggregate verdict records a named
+# component FAIL and setup exits non-green (#86 C6/C7: the old WARN-then-exit-0 posture was the
+# false-success shape). The hard per-leaf gate stays doctor-agy-bridge (issue #45). WARNs are
+# reason-specific so a transitional symlink (someone else's SSOT) and a corrupt config
+# (invalid JSON) are never conflated.
 wire_agy_bridge() {
   # Detection = the agy binary on PATH. AGY_BIN pins the target (default `agy`) so the
   # hermetic smoke can point at a fake agy or a definitely-absent path without depending on
@@ -4360,7 +4564,8 @@ wire_agy_bridge() {
     echo "[setup] agy bridge wired (idempotent). Verify with: ./run.sh doctor-agy-bridge"
     return 0
   fi
-  # NON-FATAL: keep setup alive, surface the reason honestly (never a silent pass).
+  # Keep setup alive for the remaining components, surface the reason honestly, and return 1
+  # so the aggregate verdict records this component as FAIL (never a silent pass).
   # ORDER MATTERS: the permission failures carry the same words as the mcp_config ones ("refused
   # (symlink)", "invalid JSON") and MUST be matched first — otherwise a settings.json problem gets
   # reported as an mcp_config problem and sends the operator to repair the wrong file.
@@ -4389,14 +4594,14 @@ wire_agy_bridge() {
       echo "[setup]       Bridge NOT wired; verify with ./run.sh doctor-agy-bridge. setup continues." >&2
       ;;
   esac
-  return 0
+  return 1
 }
 
-# wire_agy_statusline — detection-gated, NON-FATAL agy statusLine wiring, folded into setup (#46
+# wire_agy_statusline — detection-gated agy statusLine wiring, folded into setup (#46
 # Task 1). Mirrors wire_agy_bridge: agy on PATH → idempotent install-agy-statusline; no agy →
-# honest skip, NO state. NON-FATAL by contract (agy is OPTIONAL — a refused/corrupt settings must
-# not brick a pi/Claude setup); the hard gate is doctor-agy-statusline. The renderer is the
-# stable bin entwurf-agy-statusline, exposed by expose_dev_bin above.
+# honest skip, NO state; a refused/corrupt settings keeps the rest of setup alive but returns 1
+# for a named component FAIL (#86 C6/C7). The hard gate is doctor-agy-statusline. The renderer
+# is the stable bin entwurf-agy-statusline, exposed by expose_dev_bin above.
 wire_agy_statusline() {
   if ! command -v "${AGY_BIN:-agy}" >/dev/null 2>&1; then
     echo "[setup] no agy on PATH — skipping agy statusLine wiring (no state; this host runs no Antigravity)"
@@ -4429,12 +4634,13 @@ wire_agy_statusline() {
       echo "[setup]       statusLine NOT wired; verify with ./run.sh doctor-agy-statusline. setup continues." >&2
       ;;
   esac
-  return 0
+  return 1
 }
 
-# wire_agy_hooks — detection-gated, NON-FATAL agy PreInvocation imprint wiring. Same setup posture
-# as the MCP/statusLine adapters, but this one is the birth writer that turns statusLine '?' into a
-# garden id after the first invocation.
+# wire_agy_hooks — detection-gated agy PreInvocation imprint wiring. Same setup posture
+# as the MCP/statusLine adapters (skip on absence, named FAIL on detected incompleteness), but
+# this one is the birth writer that turns statusLine '?' into a garden id after the first
+# invocation.
 wire_agy_hooks() {
   if ! command -v "${AGY_BIN:-agy}" >/dev/null 2>&1; then
     echo "[setup] no agy on PATH — skipping agy hooks wiring (no state; this host runs no Antigravity)"
@@ -4465,7 +4671,7 @@ wire_agy_hooks() {
       echo "[setup]       Birth imprint NOT wired; verify with ./run.sh doctor-agy-hooks. setup continues." >&2
       ;;
   esac
-  return 0
+  return 1
 }
 
 # expose_dev_bin — make the package's stable commands resolve for a DEV checkout (막힘 ②).
@@ -4474,8 +4680,10 @@ wire_agy_hooks() {
 # honest inverse. The set starts with `entwurf` → run.sh: Copilot fresh deliberately launches the
 # managed `entwurf copilot`, never the raw vendor. That operator command is CORE and is certified
 # after exposure by dev-bin.sh's own target authority: our symlink, our target, and the exact PATH
-# winner. A foreign/off-PATH/shadowed operator therefore fails setup. Later helper-bin conflicts
-# keep the older NON-FATAL posture — their harness-specific doctors own the hard verdict.
+# winner. A foreign/off-PATH/shadowed operator therefore fails setup (return 1). Helper units are
+# attempted INDEPENDENTLY by dev-bin.sh (#86 C10) and any refusal propagates as return 3 — the
+# aggregate verdict records it as a named FAIL instead of the old WARN-then-green; the refused
+# names are already printed truthfully by dev-bin's attempted/ok/refused summary.
 expose_dev_bin() {
   section "dev bins: expose stable package commands on PATH (dev checkout)"
   local rc
@@ -4490,13 +4698,12 @@ expose_dev_bin() {
 
   [ "$rc" -eq 0 ] && return 0
   if [ "$rc" -eq 3 ]; then
-    echo "[setup] WARN: a helper dev-bin path is already someone else's bin (not ours) — left as-is." >&2
-    echo "[setup]       The source operator is certified; repair the helper and re-run setup before using its harness." >&2
+    echo "[setup] dev-bin: foreign helper bin path(s) refused, never clobbered — the refused names are in the summary above." >&2
+    echo "[setup]       Every unit was attempted independently; the source operator itself is certified." >&2
   else
-    echo "[setup] WARN: helper dev-bin exposure did not complete (rc=$rc; see above)." >&2
-    echo "[setup]       The source operator is certified; harness-specific doctors keep the hard verdict." >&2
+    echo "[setup] dev-bin: helper exposure did not complete (rc=$rc; see above)." >&2
   fi
-  return 0
+  return "$rc"
 }
 
 # release-gate — the single command that, when GREEN, is sufficient to cut
@@ -5190,6 +5397,16 @@ case "$cmd" in
     # Offline + deterministic (deps: bash+python3).
     (cd "$REPO_DIR" && bash scripts/smoke-agy-install-state.sh)
     ;;
+  smoke-setup-verdict)
+    # #86 C1 aggregate setup verdict fixture — the first automated consumer of
+    # `entwurf setup` itself: all-absent SKIP/green, pi below-floor detected FAIL
+    # (never SKIP), pi-present wiring PASS, agy detected+corrupt named FAIL with
+    # NON-GREEN nonzero exit, installed-mode named branch before the bootstrap,
+    # and the credential store byte-identical in every cell. Sandboxed HOME/XDG/
+    # agent/dev-bin roots; presence pinned via PI_BIN/CLAUDE_BIN/AGY_BIN.
+    # Offline + deterministic (deps: bash+node+python3+pnpm).
+    (cd "$REPO_DIR" && bash scripts/smoke-setup-verdict.sh)
+    ;;
   check-agy-permission-matrix)
     # The agy permission engine's CONTRACT SPACE as a literal table (55 cells + stated
     # exclusions R2/R4-R7): parser-state × operation × settings × ownership × precedence.
@@ -5246,8 +5463,8 @@ case "$cmd" in
     # own the statusLine subtree WHOLE (preserve unrelated keys) + state (stable command, prior
     # subtree as preimage), doctor static-clean/live-SKIP (+live-consistent with a fake agy) /
     # drift-FAIL / dangling-command-FAIL / not-ours note, honest-inverse uninstall, symlink +
-    # dangling-symlink refuse, create-new inverse, the NON-FATAL wire wrapper, and checkout
-    # impurity 0. Offline + deterministic (deps: bash+python3).
+    # dangling-symlink refuse, create-new inverse, the truthful wire wrapper (detected refusal
+    # → nonzero, #86 C6/C7), and checkout impurity 0. Offline + deterministic (deps: bash+python3).
     (cd "$REPO_DIR" && bash scripts/smoke-agy-statusline-state.sh)
     ;;
   smoke-agy-hooks-state)
@@ -5409,11 +5626,12 @@ case "$cmd" in
     (cd "$REPO_DIR" && bash scripts/agy-bridge.sh doctor "$@")
     ;;
   wire-agy-bridge)
-    # 막힘 ①: the detection-gated, NON-FATAL setup wrapper around install-agy-bridge (agy on
-    # PATH → idempotent install; no agy → honest skip, no state). HIDDEN/internal — setup calls
-    # this; it is exposed as a subcommand only so smoke-agy-install-state can drive it
-    # deterministically. The hard gate stays doctor-agy-bridge (issue #45: the '?' is a doctor
-    # signal, not a setup-killer).
+    # 막힘 ①: the detection-gated, truthful setup wrapper around install-agy-bridge (agy on
+    # PATH → idempotent install; no agy → honest skip, no state; detected refusal/corrupt →
+    # reason-specific WARN + nonzero so the aggregate records a named component FAIL while later
+    # components stay attempted, #86 C6/C7). HIDDEN/internal — setup calls this; it is exposed
+    # as a subcommand only so smoke-agy-install-state can drive it deterministically. The hard
+    # per-leaf gate stays doctor-agy-bridge (issue #45).
     wire_agy_bridge
     ;;
   install-agy-statusline)
@@ -5481,9 +5699,10 @@ case "$cmd" in
     run_ts scripts/doctor-pi-provider.ts "$@"
     ;;
   wire-agy-statusline)
-    # #46 Task 1: the detection-gated, NON-FATAL setup wrapper around install-agy-statusline.
-    # HIDDEN/internal — setup calls this; exposed so smoke-agy-statusline-state can drive it
-    # deterministically. The hard gate stays doctor-agy-statusline.
+    # #46 Task 1: the detection-gated, truthful setup wrapper around install-agy-statusline
+    # (detected refusal/corrupt → WARN + nonzero, named component FAIL in the aggregate, #86
+    # C6/C7). HIDDEN/internal — setup calls this; exposed so smoke-agy-statusline-state can
+    # drive it deterministically. The hard per-leaf gate stays doctor-agy-statusline.
     wire_agy_statusline
     ;;
   wire-agy-hooks)
@@ -5493,8 +5712,9 @@ case "$cmd" in
   expose-dev-bin)
     # 막힘 ②: expose the stable package commands on PATH for a DEV checkout, including the
     # `entwurf` operator command Copilot fresh resolves. HIDDEN/internal — setup requires the
-    # core operator certification while later helper conflicts remain non-fatal; exposed here so
-    # the install smoke can drive ownership/refusal.
+    # core operator certification and attempts every helper unit independently; a foreign helper
+    # propagates rc=3 as a named bins FAIL (#86 C10). Exposed here so the install smoke can
+    # drive ownership/refusal.
     # The exposure logic lives in scripts/dev-bin.sh.
     expose_dev_bin
     ;;
@@ -5656,9 +5876,6 @@ case "$cmd" in
     # then consumes it. Dev-clone-only (hard rule 10): the script itself REFUSES
     # from under node_modules rather than re-packing the installed copy.
     (cd "$REPO_DIR" && bash scripts/check-install-container.sh "$@")
-    ;;
-  sync-auth)
-    sync_auth
     ;;
   install)
     install_local_package "$TARGET_PROJECT_DIR"

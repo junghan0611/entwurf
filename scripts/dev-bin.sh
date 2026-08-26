@@ -28,7 +28,9 @@
 # name on a later expose is re-reported (drift visibility).
 #
 #   expose [name]   create/refresh managed link(s) (idempotent; REFUSE foreign → exit 3).
-#                   no name = all managed bins.
+#                   no name = all managed bins, each attempted INDEPENDENTLY (#86 C1): one
+#                   foreign refusal no longer aborts the loop, the trailing summary reports
+#                   attempted/ok/refused truthfully, and any refusal still exits 3.
 #   remove [name]   honest inverse from state (remove only OUR link; REFUSE if it became foreign).
 #                   no name = all managed bins.
 #   verify <name>   require OUR symlink → target and that exact link as the PATH winner.
@@ -143,7 +145,9 @@ PY
   fi
 }
 
-expose_one() {  # $1 = name
+expose_one() {  # $1 = name; a foreign link RETURNS 3 (no exit) so the no-arg
+                # composition can attempt every unit independently (#86 C1) —
+                # a broken checkout (missing/unknown target) still fails loud.
   local name="$1" target link sf detect
   target="$(bin_target "$name")" || fail "unknown managed bin: $name"
   link="$BIN_DIR/$name"; sf="$(state_file_for "$name")"
@@ -153,7 +157,7 @@ expose_one() {  # $1 = name
   [ -x "$target" ] || fail "target is not an executable file: $target (is this a dev checkout?)"
   if ! link_is_ours "$link" "$target" "$sf"; then
     warn "[dev-bin] REFUSE ($name): $link exists and is NOT ours (a foreign file/symlink — e.g. a real npm consumer bin). Not clobbering someone else's SSOT."
-    exit 3
+    return 3
   fi
   detect="created-new"; [ -L "$link" ] && detect="refresh-ours"
   mkdir -p "$BIN_DIR"
@@ -204,7 +208,24 @@ remove_one() {  # $1 = name
 
 do_expose() {  # $1 = optional bin name
   migrate_legacy
-  if [ -n "${1:-}" ]; then expose_one "$1"; else for b in $MANAGED_BINS; do expose_one "$b"; done; fi
+  if [ -n "${1:-}" ]; then expose_one "$1"; return $?; fi
+  # No-arg = the setup composition. Attempt EVERY unit independently (#86 C1):
+  # the old loop stopped at the first foreign refusal while the caller's warning
+  # claimed only that one bin was left as-is — units after it were never
+  # attempted. Now each refusal is recorded, later units still run, and the
+  # summary line reports attempted/ok/refused so no caller can claim less than
+  # what happened. Any refusal keeps the loop's exit 3 contract.
+  local attempted=0 exposed=0 refused="" rc b
+  for b in $MANAGED_BINS; do
+    attempted=$((attempted + 1))
+    rc=0; expose_one "$b" || rc=$?
+    if [ "$rc" -eq 0 ]; then exposed=$((exposed + 1)); else refused="$refused $b"; fi
+  done
+  if [ -n "$refused" ]; then
+    warn "[dev-bin expose] summary: attempted=$attempted ok=$exposed refused=$((attempted - exposed)):$refused (every unit was attempted independently)"
+    return 3
+  fi
+  log "[dev-bin expose] summary: attempted=$attempted ok=$exposed refused=0"
 }
 do_remove() {  # $1 = optional bin name
   if [ -n "${1:-}" ]; then remove_one "$1"; else for b in $MANAGED_BINS; do remove_one "$b"; done; fi

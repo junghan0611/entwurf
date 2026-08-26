@@ -394,11 +394,19 @@ esac
 # Static order: the gate precedes the first writer in each entrypoint, and the
 # preflight never runs the cut on the operator's behalf.
 gate_ln=$(grep -n 'preflight_v3_store setup' "$REPO/run.sh" | head -1 | cut -d: -f1) || true
-auth_ln=$(awk '/^setup_all\(\)/,/^}/{ if ($0 ~ /^  sync_auth$/) { print NR; exit } }' "$REPO/run.sh")
-if [ -n "$gate_ln" ] && [ -n "$auth_ln" ] && [ "$gate_ln" -lt "$auth_ln" ]; then
-  ok "D4 setup_all calls the gate before sync_auth (line $gate_ln < $auth_ln)"
+boot_ln=$(awk '/^setup_all\(\)/,/^}/{ if ($0 ~ /pnpm install --frozen-lockfile/) { print NR; exit } }' "$REPO/run.sh")
+if [ -n "$gate_ln" ] && [ -n "$boot_ln" ] && [ "$gate_ln" -lt "$boot_ln" ]; then
+  ok "D4 setup_all calls the gate before the source bootstrap (line $gate_ln < $boot_ln)"
 else
-  bad "D4 setup_all's gate is missing or sits after sync_auth (gate=$gate_ln sync_auth=$auth_ln)"
+  bad "D4 setup_all's gate is missing or sits after the source bootstrap (gate=$gate_ln bootstrap=$boot_ln)"
+fi
+# #86 A5 credential tripwire: the retired sync_auth mutation (OAuth alias copy +
+# auth.json.bak) must never resurrect as an invocable surface in run.sh. Comments
+# documenting the removal are allowed; a function definition or call is not.
+if awk '!/^[[:space:]]*#/' "$REPO/run.sh" | grep -q 'sync_auth'; then
+  bad "D4b the retired sync_auth credential mutation reappeared as code in run.sh"
+else
+  ok "D4b no sync_auth credential surface remains in run.sh (comments only)"
 fi
 
 ilp_gate=$(awk '/^install_local_package\(\)/,/^}/{ if ($0 ~ /preflight_v3_store install/) { print NR; exit } }' "$REPO/run.sh")

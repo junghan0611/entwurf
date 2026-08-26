@@ -134,12 +134,13 @@ The goal is not merely "invoke Claude Code." We want:
 
 **One install command to remember: `./run.sh setup <project>`.** It is idempotent — re-run the exact same command whenever anything looks wrong. There is no second install surface to juggle: from a clone `setup` runs the whole floor in order.
 
-1. `pnpm install` — installs the pinned development dependencies and builds the bridge; a compatible `pi` command must already be on PATH
-2. project wiring → `<project>/.pi/settings.json` `entwurfProvider.mcpServers.entwurf-bridge`
+1. `pnpm install` — installs the pinned development dependencies and builds the bridge (source-checkout bootstrap only; an installed package never runs npm/pnpm inside `node_modules`)
+2. pi wiring → `<project>/.pi/settings.json` + user-scope registration — only when a `pi` inside the supported range (`>=0.84.3 <0.85`) is on PATH; absent pi is an explicit zero-state SKIP, a below-floor pi is a detected FAIL
 3. Claude meta-bridge global plugin — only when `claude` is on PATH; otherwise skipped cleanly
-4. source stable-bin exposure — including certified `entwurf` → this checkout's `run.sh`, the managed runtime Copilot fresh resolves
+4. source stable-bin exposure — including certified `entwurf` → this checkout's `run.sh`, the managed runtime Copilot fresh resolves; helper units are attempted independently and a foreign helper is a named FAIL
 5. agy bridge + exact permission + statusline + `PreInvocation` hook — only when `agy` is on PATH; each adapter is idempotent and independently doctorable
 6. `entwurf-bridge` install smoke (`validate_entwurf_bridge`)
+7. computed summary — per-component PASS/SKIP/FAIL; any detected-integration FAIL makes the whole command exit nonzero while valid components stay installed
 
 ```bash
 git clone https://github.com/junghan0611/entwurf /path/to/entwurf && cd $_
@@ -147,7 +148,7 @@ git clone https://github.com/junghan0611/entwurf /path/to/entwurf && cd $_
 # re-run the SAME command any time to repair a broken install
 ```
 
-Expected tail: `DONE: entwurf setup (pi adapter + detected native bridges + v2 install smoke) green.` On a host with `claude`, verify `./run.sh doctor-meta-bridge`. On a host with `agy`, verify all three: `doctor-agy-bridge`, `doctor-agy-statusline`, and `doctor-agy-hooks`. After adding a backend to `META_BACKENDS`, re-run the sibling install then the doctor — a green checkout with a stale deployed plugin is a silent write-stop on that rail. After the core source operator is certified, setup keeps optional native-harness wiring failures non-fatal so an unrelated helper conflict does not brick the pi path; each harness doctor remains its fail-loud acceptance surface.
+Expected tail on a fully green host: `DONE: entwurf setup — result: green (computed from the component outcomes above).` The summary above it lists every component as PASS/SKIP/FAIL; a detected harness that could not be completed is named FAIL and the command exits nonzero (`result: NON-GREEN (FAIL: …)`) while every valid component stays installed — re-running the same `setup` is the repair action. On a host with `claude`, verify `./run.sh doctor-meta-bridge`. On a host with `agy`, verify all three: `doctor-agy-bridge`, `doctor-agy-statusline`, and `doctor-agy-hooks`. After adding a backend to `META_BACKENDS`, re-run the sibling install then the doctor — a green checkout with a stale deployed plugin is a silent write-stop on that rail. Each harness doctor remains the fail-loud per-leaf acceptance surface.
 
 The wiring / meta-bridge / smoke steps are internal building blocks of `setup` (`install_local_package`, `scripts/meta-bridge-install.sh`, `validate_entwurf_bridge`) — call `setup`, never the parts. Consumers who `npm install @junghanacs/entwurf` get the obvious npm surface; that path is not the developer concern here.
 
@@ -174,7 +175,7 @@ addressable sends require `--entwurf-control` (measured 2026-07-24: the same
 one-shot with that flag returns its own gid and delivers `entwurf_v2` to a peer
 mailbox with `origin=pi-session`, `replyable=true`).
 
-`setup` requires Node 24, pnpm, Python 3, and compatible pi on PATH, then runs `pnpm install` + project/user-scope install + detected Claude wiring + source stable-bin exposure + detected agy wiring + the v2 install smoke. A green setup certifies that the source-owned `entwurf` symlink targets this checkout and wins PATH resolution; later helper-bin conflicts remain WARNs whose harness-specific doctors own the hard verdict. Setup does not install Copilot's four native units and does **not** replace any native-harness doctor. The full aggregate live floor is still `LIVE=1 ./run.sh release-gate <scratch> --cut` — without `--cut` it is a diagnostic pass, not acceptance — with agy's conversation-id-gated round trip verified separately.
+`setup` requires Node 24 and Python 3 (pnpm only on a source checkout — the dependency bootstrap is source-only, and installed mode needs no pnpm); harnesses including pi are optional-by-presence (absent → explicit zero-state SKIP, detected incomplete/below-floor → named FAIL + nonzero result). On a source checkout it runs the frozen `pnpm install` + presence-gated pi project/user wiring + detected Claude wiring + source stable-bin exposure + detected agy wiring + the v2 install smoke. A green setup certifies that the source-owned `entwurf` symlink targets this checkout and wins PATH resolution; helper units are attempted independently and a foreign helper is a named bins FAIL (nonzero), with harness-specific doctors keeping the per-leaf verdict. Setup does not install Copilot's four native units and does **not** replace any native-harness doctor. The full aggregate live floor is still `LIVE=1 ./run.sh release-gate <scratch> --cut` — without `--cut` it is a diagnostic pass, not acceptance — with agy's conversation-id-gated round trip verified separately.
 
 ### 1.4 Cross-install / cross-backend parity (optional, high-value)
 

@@ -1,0 +1,107 @@
+{
+	"schemaVersion": 1,
+	"lane": "setup-verdict",
+	"mutants": [
+		{
+			"claim": "SETUP-FALSE-GREEN",
+			"title": "aggregate setup prints its computed NON-GREEN summary but exits 0 again, resurrecting the retired whole-host false success in the only surface an operator reads",
+			"subject": "run.sh",
+			"find": [
+				"    echo \"DONE: entwurf setup — result: NON-GREEN (FAIL:$s_fails). Valid components above remain installed; repair the named ones and re-run setup.\"\n    return 1"
+			],
+			"replace": [
+				"    echo \"DONE: entwurf setup — result: NON-GREEN (FAIL:$s_fails). Valid components above remain installed; repair the named ones and re-run setup.\"\n    return 0"
+			],
+			"gate": ["bash", "scripts/check-setup-qualification.sh"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:SETUP-FALSE-GREEN]",
+			"signatureSource": "scripts/check-setup-qualification.sh"
+		},
+		{
+			"claim": "SETUP-PI-FLOOR-SKIP",
+			"title": "a resolvable pi below the supported floor is relabeled zero-state SKIP, so a stale-harness host reads green instead of being told its detected integration is incomplete",
+			"subject": "run.sh",
+			"find": [
+				"      setup_result pi FAIL \"detected pi ${pi_ver:-<unreadable version>} is outside the supported range $pi_range — Pi wiring not written; align pi, then re-run setup\""
+			],
+			"replace": [
+				"      setup_result pi SKIP \"detected pi ${pi_ver:-<unreadable version>} is outside the supported range $pi_range — Pi wiring not written; align pi, then re-run setup\""
+			],
+			"gate": ["bash", "scripts/check-setup-qualification.sh"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:SETUP-PI-FLOOR-SKIP]",
+			"signatureSource": "scripts/check-setup-qualification.sh"
+		},
+		{
+			"claim": "SETUP-INSTALLED-NO-BOOTSTRAP",
+			"title": "installed-package setup re-enters the source pnpm bootstrap inside node_modules, so the mode-first contract collapses and a neutral npm consumer's setup dies or mutates the installed tree",
+			"subject": "run.sh",
+			"find": [
+				"  if [ \"$mode\" = \"source\" ]; then\n    # Source bootstrap is the ONLY install-mode difference (#86): the pinned"
+			],
+			"replace": [
+				"  if [ -n \"$mode\" ]; then\n    # Source bootstrap is the ONLY install-mode difference (#86): the pinned"
+			],
+			"gate": ["bash", "scripts/check-setup-qualification.sh"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:SETUP-INSTALLED-NO-BOOTSTRAP]",
+			"signatureSource": "scripts/check-setup-qualification.sh"
+		},
+		{
+			"claim": "SETUP-CREDENTIAL-FREE",
+			"title": "a credential-store write (auth.json backup) resurrects inside aggregate setup, re-violating the corrected installation rule that setup never reads, copies, aliases or backs up harness credentials",
+			"subject": "run.sh",
+			"find": ["  SETUP_RESULTS=()\n\n  if [ \"$mode\" = \"source\" ]; then"],
+			"replace": [
+				"  SETUP_RESULTS=()\n  local _auth=\"${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}/auth.json\"\n  if [ -f \"$_auth\" ]; then cp \"$_auth\" \"$_auth.bak\"; fi\n\n  if [ \"$mode\" = \"source\" ]; then"
+			],
+			"gate": ["bash", "scripts/check-setup-qualification.sh"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:SETUP-CREDENTIAL-FREE]",
+			"signatureSource": "scripts/check-setup-qualification.sh"
+		},
+		{
+			"claim": "DEV-BIN-ATTEMPTS-ALL",
+			"title": "the no-arg dev-bin expose loop aborts at the first foreign refusal again, so units after it are never attempted while the caller's summary implies they ran",
+			"subject": "scripts/dev-bin.sh",
+			"find": [
+				"    rc=0; expose_one \"$b\" || rc=$?\n    if [ \"$rc\" -eq 0 ]; then exposed=$((exposed + 1)); else refused=\"$refused $b\"; fi"
+			],
+			"replace": [
+				"    rc=0; expose_one \"$b\" || rc=$?\n    if [ \"$rc\" -eq 0 ]; then exposed=$((exposed + 1)); else warn \"[dev-bin] REFUSE aborts the loop\"; exit 3; fi"
+			],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:DEV-BIN-ATTEMPTS-ALL]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "SETUP-INSTALLED-NO-PNPM",
+			"title": "installed setup regains an unconditional pnpm requirement, so a neutral npm consumer without pnpm is refused by an accidental Missing-command instead of composing — the mode decision stops being independent of the source toolchain",
+			"subject": "run.sh",
+			"find": [
+				"  if [ \"$mode\" = \"source\" ]; then\n    # Source-only dev fixtures: the pinned repo dependencies are build/test\n    # fixtures, never a product promise that consumers receive them (#86 A4).\n    require_cmd pnpm\n  fi"
+			],
+			"replace": ["  require_cmd pnpm"],
+			"gate": ["bash", "scripts/check-setup-qualification.sh"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:SETUP-INSTALLED-NO-PNPM]",
+			"signatureSource": "scripts/check-setup-qualification.sh"
+		},
+		{
+			"claim": "SETUP-AGY-COSMETIC-RETURN",
+			"title": "wire_agy_bridge's failed-install path returns 0 again, restoring the WARN-then-success mechanism that let a detected-but-refused agy integration read as a green setup",
+			"subject": "run.sh",
+			"find": [
+				"      echo \"[setup]       Bridge NOT wired; verify with ./run.sh doctor-agy-bridge. setup continues.\" >&2\n      ;;\n  esac\n  return 1\n}"
+			],
+			"replace": [
+				"      echo \"[setup]       Bridge NOT wired; verify with ./run.sh doctor-agy-bridge. setup continues.\" >&2\n      ;;\n  esac\n  return 0\n}"
+			],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 600,
+			"signature": "[QK:SETUP-AGY-COSMETIC-RETURN]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		}
+	]
+}

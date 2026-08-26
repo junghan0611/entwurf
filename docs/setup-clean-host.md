@@ -10,8 +10,9 @@ only on Linux because its strict live-owner join uses `/proc`.
 |---|---|---|
 | Node | **`>=24.0.0`** | package and bridge runtime |
 | npm/pnpm | npm is bundled with Node; pnpm is required for source setup | package or source installation |
+| Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy wiring writers |
 | entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
-| pi | optional generally; **required on PATH for full source `setup`**, `>=0.84.3 <0.85` | ACP provider, control sockets |
+| pi | optional-by-presence, `>=0.84.3 <0.85` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
 | Claude Code | optional, **`>=2.1.217`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional, operator-installed and authenticated | self-fetch citizen and visible fresh |
 | Antigravity `agy` | optional, operator-installed and authenticated | native-push citizen |
@@ -58,7 +59,9 @@ all may be absent on an Entwurf-only host. A source checkout's pinned Pi develop
 for building and testing this repo, not a transitive product installation promise.
 
 Maintainers using a source checkout do not install a second global entwurf package. Full source
-setup currently requires Node 24, pnpm, Python 3, and compatible pi already on PATH:
+setup currently requires Node 24, pnpm, and Python 3 on PATH; every harness — including pi — is
+optional-by-presence (absent → explicit SKIP, detected but below the supported floor → named FAIL
+with a nonzero setup result):
 
 ```bash
 git clone https://github.com/junghan0611/entwurf ~/repos/gh/entwurf
@@ -67,8 +70,10 @@ cd ~/repos/gh/entwurf
 ```
 
 This owns `~/.local/bin/entwurf` as a symlink to that checkout's `run.sh` and fails if the
-link is foreign, outside PATH, or shadowed by another command. It detects and wires Claude/agy;
-Copilot's four native units remain explicit installs in §4.
+link is foreign, outside PATH, or shadowed by another command. It detects and wires pi/Claude/agy
+by presence and prints a computed per-component PASS/SKIP/FAIL summary — a detected harness that
+cannot be completed makes setup exit nonzero. Copilot's four native units remain explicit
+installs in §4.
 
 ## 2. Optional pi adapter / ACP plugin
 
@@ -216,9 +221,11 @@ entwurf install-meta-bridge
 ./run.sh setup ~/entwurf-smoke
 ```
 
-The package-installed `entwurf setup` is not a consumer command: `setup` runs a frozen pnpm
-install inside its repository and belongs to a source checkout. The complete quiescence, archive,
-and exit-code contract is [fresh-cut-policy.md](./fresh-cut-policy.md).
+The package-installed `entwurf setup` is the same consumer command in installed mode: it names
+that mode first, never runs npm/pnpm inside `node_modules` (the frozen pnpm bootstrap is
+source-checkout-only), and composes the detected harnesses with the same per-component
+PASS/SKIP/FAIL summary. The complete quiescence, archive, and exit-code contract is
+[fresh-cut-policy.md](./fresh-cut-policy.md).
 
 ## 8. Release acceptance versus host acceptance
 

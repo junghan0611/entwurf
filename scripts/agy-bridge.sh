@@ -154,8 +154,10 @@ do_install() {
 # FAIL LOUD on an explicit install. A grant we could not write is a HALF-installed bridge: the
 # server is registered, every call prompts, and reporting "installed" over that is the exact shape
 # this repo exists to remove (a layer saying yes while the surface says no). The tolerance lives one
-# level up, where it belongs: setup's wire_agy_bridge catches this nonzero and degrades to a
-# reason-specific WARN, because agy is optional and must never brick a pi/Claude host.
+# level up, where it belongs: setup's wire_agy_bridge catches this nonzero, prints the
+# reason-specific WARN, and returns 1 so the aggregate records a named component FAIL while later
+# setup components still run (#86 C6/C7) — agy is optional, so the rest of the host is never
+# bricked, but the final setup result is nonzero, never green.
 install_permission() {
   local out rc
   set +e
