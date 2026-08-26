@@ -807,7 +807,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"bridge-boot-resume": 3,
 		"bridge-command-boot": 9,
 		"capability-cache": 3,
-		"copilot-birth": 12,
+		"copilot-birth": 15,
 		"copilot-launch": 14,
 		"copilot-receive": 18,
 		"fresh-cut": 1,

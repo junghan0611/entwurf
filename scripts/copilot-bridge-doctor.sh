@@ -40,14 +40,26 @@ PLUGIN="entwurf-meta-receive-copilot"
 QUALIFIED="$PLUGIN@$MKT_NAME"
 STALE_CLAUDE_UNIT="entwurf-meta-receive@meta-bridge-local"
 ASM="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/meta-bridge-copilot/.assembled"
+STATE_FILE="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/copilot-bridge/install-state.json"
 AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
 SESSIONS_DIR="$AGENT_DIR/meta-sessions"
 HOOK_LOG="$AGENT_DIR/meta-bridge-hook.log"
 
+# RUNTIME truth and OWNERSHIP truth are separate axes (#86 C3a, same discipline as
+# doctor-pi-package): a visibly working registration does not prove entwurf owns it,
+# and a broken ownership record does not erase working runtime configuration. Either
+# required axis red makes the final verdict red.
 fail=0
-ok()   { echo "  ok    $*"; }
-bad()  { echo "  FAIL  $*"; fail=1; }
-note() { echo "  note  $*"; }
+own_fail=0
+ok()    { echo "  ok    $*"; }
+bad()   { echo "  FAIL  $*"; fail=1; }
+badown(){ echo "  FAIL  $*"; own_fail=1; }
+note()  { echo "  note  $*"; }
+
+# Shared with the installer and the inverse: one structural oracle, one state
+# validator, one exact list-row grammar — three surfaces, zero drifting copies.
+# shellcheck source=copilot-bridge-oracle.sh
+. "$HERE/copilot-bridge-oracle.sh"
 
 echo "[copilot-bridge-doctor] toolchain"
 command -v copilot >/dev/null 2>&1 && ok "copilot CLI on PATH" || bad "copilot CLI missing from PATH"
@@ -116,20 +128,77 @@ else
 fi
 
 echo "[copilot-bridge-doctor] copilot wiring"
-PLUGIN_LIST="$(copilot plugin list 2>/dev/null)"
-case "$PLUGIN_LIST" in
-  *"$QUALIFIED"*)
-    # WHAT THIS DOES NOT PROVE. Copilot exposes no load/execution receipt, so a listing
-    # says the plugin is REGISTERED, never that Copilot loaded this unit or will invoke
-    # its hook. Only a real first prompt settles that — see the birth-evidence section.
-    ok "$QUALIFIED is registered in Copilot (registration, not proof it is loaded)" ;;
-  *) bad "$QUALIFIED is NOT installed in Copilot — run ./run.sh install-copilot-bridge" ;;
-esac
-case "$PLUGIN_LIST" in
-  *"$STALE_CLAUDE_UNIT"*)
-    bad "the Claude unit '$STALE_CLAUDE_UNIT' is still installed in Copilot — it fires on every prompt and exits 1 before node starts (Copilot's schema has no args key). Re-run the installer without --keep-stale-claude-unit." ;;
-  *) ok "the Claude unit is not installed in Copilot" ;;
-esac
+# A failing list is UNKNOWN, never an absence (#86 C3a): reporting "not installed" off
+# a broken/unauthenticated CLI would send the operator to reinstall over a host whose
+# real contents nobody read.
+QUALIFIED_REGISTERED=0
+LISTED_VERSION=""
+if ! PLUGIN_LIST="$(copilot plugin list 2>/dev/null)"; then
+  bad "'copilot plugin list' failed — this host's installed plugins are UNKNOWN (not empty); fix the Copilot CLI error and re-run"
+  PLUGIN_LIST=""
+else
+  # EXACT row read with its version captured: a substring read would accept a longer id
+  # that merely contains ours, and a malformed/ambiguous listing is something nobody
+  # may act on. WHAT A MATCH DOES NOT PROVE: Copilot exposes no load/execution receipt,
+  # so a listing says the plugin is REGISTERED, never that Copilot loaded this unit or
+  # will invoke its hook. Only a real first prompt settles that — see birth evidence.
+  if LISTED_ROW="$(copilot_exact_row_version "$PLUGIN_LIST" "$QUALIFIED" 2>&1)"; then
+    if [ "$LISTED_ROW" = "absent" ]; then
+      bad "$QUALIFIED is NOT installed in Copilot — run ./run.sh install-copilot-bridge"
+    else
+      QUALIFIED_REGISTERED=1
+      LISTED_VERSION="${LISTED_ROW#one }"
+      ok "$QUALIFIED (v$LISTED_VERSION) is registered in Copilot (registration, not proof it is loaded)"
+    fi
+  else
+    bad "the plugin listing for $QUALIFIED is malformed or ambiguous: $LISTED_ROW"
+  fi
+  case "$PLUGIN_LIST" in
+    *"$STALE_CLAUDE_UNIT"*)
+      bad "the Claude unit '$STALE_CLAUDE_UNIT' is still installed in Copilot — it fires on every prompt and exits 1 before node starts (Copilot's schema has no args key). Re-run the installer without --keep-stale-claude-unit." ;;
+    *) ok "the Claude unit is not installed in Copilot" ;;
+  esac
+fi
+
+echo "[copilot-bridge-doctor] ownership (package-owned state; separate axis from runtime)"
+if ! MKT_LIST="$(copilot plugin marketplace list 2>/dev/null)"; then
+  badown "'copilot plugin marketplace list' failed — this host's marketplaces are UNKNOWN (not empty); fix the Copilot CLI error and re-run"
+  MKT_LIST=""
+else
+  MKT_LINE="$(printf '%s\n' "$MKT_LIST" | grep -F " $MKT_NAME (" | head -1 || true)"
+  if [ -n "$MKT_LINE" ]; then
+    MKT_PATH="$(printf '%s\n' "$MKT_LINE" | sed -n 's/.*(Local: \(.*\))$/\1/p')"
+    if [ -n "$MKT_PATH" ] && [ "$MKT_PATH" = "$ASM" ]; then
+      ok "marketplace $MKT_NAME is registered at this package's assembly path"
+    else
+      badown "marketplace '$MKT_NAME' is registered at '${MKT_PATH:-<non-local source>}', not at $ASM — ownership drift; that registration is not provably ours"
+    fi
+  else
+    note "marketplace $MKT_NAME is not registered (consistent with an uninstalled or partially installed host)"
+  fi
+fi
+if [ -L "$STATE_FILE" ]; then
+  badown "ownership state $STATE_FILE is a symlink — not a trustworthy record"
+elif [ -f "$STATE_FILE" ]; then
+  # The SAME fail-closed validator the installer and the inverse use (exact keyset,
+  # exact types, constants + effective-ASM binding, no flag coercion).
+  if STATE_VERDICT="$(copilot_state_read "$STATE_FILE" "$QUALIFIED" "$MKT_NAME" "$ASM" 2>&1)"; then
+    ok "ownership state present and bound to this installation (ownedMarketplace/ownedAssembly/pluginVersion: $STATE_VERDICT)"
+    # version drift (final amendment): the vendor lists an exact row at a version the
+    # ownership record did not install — the inverse would refuse, so the doctor names
+    # it now instead of letting the operator discover it there.
+    STATE_PLUGIN_VERSION="$(printf '%s' "$STATE_VERDICT" | cut -d' ' -f3)"
+    if [ -n "$LISTED_VERSION" ] && [ "$LISTED_VERSION" != "$STATE_PLUGIN_VERSION" ]; then
+      badown "version drift — $QUALIFIED is listed at v$LISTED_VERSION but the ownership state recorded v$STATE_PLUGIN_VERSION; repair: './run.sh install-copilot-bridge' re-binds ownership"
+    fi
+  else
+    badown "ownership state is corrupt or names a different installation: $STATE_VERDICT — inspect $STATE_FILE"
+  fi
+elif [ "$QUALIFIED_REGISTERED" -eq 1 ]; then
+  badown "LEGACY no-state installation: $QUALIFIED is registered but no ownership state exists — repair: './run.sh install-copilot-bridge' (same-host adoption binds the state)"
+else
+  note "no ownership state (nothing this package records as installed here)"
+fi
 
 echo "[copilot-bridge-doctor] birth evidence"
 COPILOT_RECORDS=0
@@ -202,8 +271,15 @@ else
 fi
 
 echo
-if [ "$fail" -ne 0 ]; then
+# The two axes are reported separately and either red is a red verdict (#86 C3a):
+# runtime coverage does not prove ownership, and broken ownership does not erase
+# visibly working runtime configuration.
+if [ "$fail" -ne 0 ] || [ "$own_fail" -ne 0 ]; then
+  [ "$fail" -ne 0 ] && echo "[copilot-bridge-doctor] runtime axis: FAIL" || echo "[copilot-bridge-doctor] runtime axis: PASS"
+  [ "$own_fail" -ne 0 ] && echo "[copilot-bridge-doctor] ownership axis: FAIL" || echo "[copilot-bridge-doctor] ownership axis: PASS"
   echo "[copilot-bridge-doctor] FAIL"
   exit 1
 fi
+echo "[copilot-bridge-doctor] runtime axis: PASS"
+echo "[copilot-bridge-doctor] ownership axis: PASS"
 echo "[copilot-bridge-doctor] PASS"

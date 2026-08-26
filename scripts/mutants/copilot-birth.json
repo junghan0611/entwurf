@@ -150,6 +150,47 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:COPILOT-INSTALL-LIST-FAILURE-IS-FATAL]",
 			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "COPILOT-BIRTH-INVERSE-NO-STATE",
+			"title": "the inverse runs as a blind best-effort remove with NO ownership state, deleting vendor registrations this package cannot prove it owns",
+			"subject": "scripts/copilot-bridge-uninstall.sh",
+			"find": [
+				"[ -f \"$STATE_FILE\" ] || die \"no ownership state at $STATE_FILE — nothing this package provably owns to remove. A legacy no-state installation is adopted by './run.sh install-copilot-bridge' first, then removed.\""
+			],
+			"replace": [
+				"[ -f \"$STATE_FILE\" ] || { copilot plugin uninstall \"$QUALIFIED\" >/dev/null 2>&1 || true; copilot plugin marketplace remove \"$MKT_NAME\" >/dev/null 2>&1 || true; rm -rf \"$ASM\"; exit 0; }"
+			],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-BIRTH-INVERSE-NO-STATE]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "COPILOT-BIRTH-INVERSE-FOREIGN",
+			"title": "the inverse removes a marketplace that carries our name but is registered at ANOTHER path — someone else's registration deleted by our uninstall",
+			"subject": "scripts/copilot-bridge-uninstall.sh",
+			"find": [
+				"  if [ -z \"$MKT_PATH\" ] || [ \"$MKT_PATH\" != \"$ASM\" ]; then\n    die \"a marketplace named '$MKT_NAME' is registered at '${MKT_PATH:-<non-local source>}', not at the recorded assembly ($ASM). That registration is not provably ours — refusing with zero vendor/filesystem writes; inspect 'copilot plugin marketplace list' manually.\"\n  fi"
+			],
+			"replace": ["  :"],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-BIRTH-INVERSE-FOREIGN]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "COPILOT-BIRTH-NO-FALSE-ABSENCE",
+			"title": "the inverse reads a FAILING `copilot plugin list` as an empty host and reports a clean removal over a host whose real contents nobody read",
+			"subject": "scripts/copilot-bridge-uninstall.sh",
+			"find": [
+				"if ! INSTALLED_LIST=\"$(copilot plugin list 2>/dev/null)\"; then\n  die \"'copilot plugin list' failed, so this host's installed plugins are UNKNOWN — refusing with zero writes. Fix the Copilot CLI error and re-run.\"\nfi"
+			],
+			"replace": ["INSTALLED_LIST=\"$(copilot plugin list 2>/dev/null)\" || INSTALLED_LIST=\"\""],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-BIRTH-NO-FALSE-ABSENCE]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
 		}
 	]
 }

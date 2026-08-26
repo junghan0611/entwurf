@@ -42,6 +42,7 @@ import {
 	readdirSync,
 	readFileSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -400,64 +401,137 @@ ok(
 const OURS = "entwurf-meta-receive-copilot@meta-bridge-copilot-local";
 const STALE = "entwurf-meta-receive@meta-bridge-local";
 const FOREIGN = "entwurf-meta-receive@someone-elses-marketplace";
+const MKT = "meta-bridge-copilot-local";
+const SHIPPED_VERSION = (
+	JSON.parse(
+		readFileSync(path.join(REPO, "pi", "meta-bridge-copilot", PLUGIN, ".claude-plugin", "plugin.json"), "utf8"),
+	) as {
+		version: string;
+	}
+).version;
 
+interface FakeHost {
+	home: string;
+	env: NodeJS.ProcessEnv;
+	asm: string;
+	/** package ownership state file inside the sandboxed XDG root */
+	stateFile: string;
+	log: string;
+	pluginState: string;
+	mktState: string;
+}
+interface FakeOpts {
+	installed?: string[];
+	/** registered marketplaces as [name, localPath] rows */
+	marketplaces?: Array<[string, string]>;
+	uninstallFails?: boolean;
+	listFails?: boolean;
+	mktListFails?: boolean;
+	mktRemoveFails?: boolean;
+}
 interface FakeRun {
 	status: number | null;
 	stdout: string;
 	stderr: string;
-	/** every `copilot …` argv the installer issued, in order */
+	/** every `copilot …` argv the driven surface issued, in order */
 	calls: string[];
-	/** the plugin ids the fake still holds when the installer is done */
+	/** the plugin ids the fake still holds when the surface is done */
 	installed: string[];
+	/** the marketplace rows the fake still holds */
+	marketplaces: string[];
 }
-function runInstall(opts: {
-	installed: string[];
-	uninstallFails?: boolean;
-	listFails?: boolean;
-	label: string;
-}): FakeRun {
-	const home = path.join(root, `install-${opts.label}`);
+/** A fake that ANSWERS like the MEASURED CLI (copilot 1.0.80, 2026-08-27): `plugin
+ * list` prints qualified ids with a `(vX)` suffix, `plugin marketplace list` prints a
+ * registered local marketplace as `<name> (Local: <abs path>)`, `plugin uninstall <id>`
+ * removes exactly that id — and `--force` anywhere is refused loudly, because the real
+ * `marketplace remove --force` uninstalls that marketplace's plugins as a side effect
+ * and no entwurf surface may reach for it. Marketplace subverbs are modeled SEPARATELY
+ * (the old generic `exit 0` arm could not kill an inverse that removed a foreign
+ * marketplace). */
+function makeFakeHost(label: string, opts: FakeOpts): FakeHost {
+	const home = path.join(root, `fake-${label}`);
 	const bin = path.join(home, "bin");
 	mkdirSync(bin, { recursive: true });
-	const state = path.join(home, "installed.txt");
+	const xdg = path.join(home, "xdg");
+	mkdirSync(xdg, { recursive: true });
+	const pluginState = path.join(home, "installed.txt");
+	const mktState = path.join(home, "marketplaces.txt");
 	const log = path.join(home, "calls.log");
-	writeFileSync(state, opts.installed.join("\n") + (opts.installed.length ? "\n" : ""));
+	const installed = opts.installed ?? [];
+	const marketplaces = opts.marketplaces ?? [];
+	writeFileSync(pluginState, installed.join("\n") + (installed.length ? "\n" : ""));
+	writeFileSync(mktState, marketplaces.map(([n, p]) => `${n}\t${p}`).join("\n") + (marketplaces.length ? "\n" : ""));
 	writeFileSync(log, "");
-	// A fake that ANSWERS like the measured CLI: `plugin list` prints qualified ids,
-	// `plugin uninstall <id>` removes exactly that id.
 	writeFileSync(
 		path.join(bin, "copilot"),
 		[
 			"#!/usr/bin/env bash",
-			`STATE=${JSON.stringify(state)}`,
+			`STATE=${JSON.stringify(pluginState)}`,
+			`MKTS=${JSON.stringify(mktState)}`,
 			`LOG=${JSON.stringify(log)}`,
+			`VER=${JSON.stringify(SHIPPED_VERSION)}`,
 			'echo "$*" >> "$LOG"',
+			'for a in "$@"; do [ "$a" = "--force" ] && { echo "fake copilot: --force is forbidden here" >&2; exit 99; }; done',
+			'case "$1 $2 $3" in',
+			opts.mktListFails
+				? '  "plugin marketplace list") echo "not authenticated" >&2; exit 1 ;;'
+				: [
+						'  "plugin marketplace list")',
+						'    echo "Included with GitHub Copilot:"',
+						'    while IFS=$\'\\t\' read -r n p; do [ -n "$n" ] && echo "  • $n (Local: $p)"; done < "$MKTS"',
+						"    exit 0 ;;",
+					].join("\n"),
+			'  "plugin marketplace add") printf "%s\\t%s\\n" ' + JSON.stringify(MKT) + ' "$4" >> "$MKTS"; exit 0 ;;',
+			opts.mktRemoveFails
+				? '  "plugin marketplace remove") echo "mkt boom" >&2; exit 1 ;;'
+				: '  "plugin marketplace remove") awk -F"\\t" -v n="$4" \'$1 != n\' "$MKTS" > "$MKTS.tmp"; mv "$MKTS.tmp" "$MKTS"; exit 0 ;;',
+			"esac",
 			'case "$1 $2" in',
 			opts.listFails
 				? '  "plugin list") echo "not authenticated" >&2; exit 1 ;;'
-				: '  "plugin list") echo "Installed plugins:"; sed "s/^/  • /" "$STATE"; exit 0 ;;',
+				: '  "plugin list") echo "Installed plugins:"; sed "s/^/  • /;s/$/ (v$VER)/" "$STATE"; exit 0 ;;',
 			'  "plugin uninstall")',
 			opts.uninstallFails
 				? '    echo "boom" >&2; exit 1 ;;'
-				: '    grep -Fvx "$3" "$STATE" > "$STATE.tmp" || true; mv "$STATE.tmp" "$STATE"; exit 0 ;;',
+				: '    grep -Fvx "$3" "$STATE" > "$STATE.tmp"; mv "$STATE.tmp" "$STATE"; exit 0 ;;',
 			'  "plugin install") echo "$3" >> "$STATE"; exit 0 ;;',
-			'  "plugin marketplace") exit 0 ;;',
 			"esac",
 			"exit 0",
 		].join("\n"),
 	);
 	chmodSync(path.join(bin, "copilot"), 0o755);
-	const res = spawnSync("bash", [path.join(REPO, "run.sh"), "install-copilot-bridge"], {
-		env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, ENTWURF_COPILOT_ASM: path.join(home, "asm") },
-		encoding: "utf8",
-	});
+	return {
+		home,
+		asm: path.join(home, "asm"),
+		stateFile: path.join(xdg, "entwurf", "copilot-bridge", "install-state.json"),
+		log,
+		pluginState,
+		mktState,
+		env: {
+			...process.env,
+			PATH: `${bin}:${process.env.PATH}`,
+			XDG_DATA_HOME: xdg,
+			// The doctor reads the record store and hook log from the agent dir; keep the
+			// gate hermetic rather than letting it read the operator's real host state.
+			PI_CODING_AGENT_DIR: path.join(home, "agent"),
+			ENTWURF_COPILOT_ASM: path.join(home, "asm"),
+		},
+	};
+}
+function runVerb(host: FakeHost, verb: string): FakeRun {
+	const res = spawnSync("bash", [path.join(REPO, "run.sh"), verb], { env: host.env, encoding: "utf8" });
 	return {
 		status: res.status,
 		stdout: res.stdout ?? "",
 		stderr: res.stderr ?? "",
-		calls: readFileSync(log, "utf8").split("\n").filter(Boolean),
-		installed: readFileSync(state, "utf8").split("\n").filter(Boolean),
+		calls: readFileSync(host.log, "utf8").split("\n").filter(Boolean),
+		installed: readFileSync(host.pluginState, "utf8").split("\n").filter(Boolean),
+		marketplaces: readFileSync(host.mktState, "utf8").split("\n").filter(Boolean),
 	};
+}
+function runInstall(opts: FakeOpts & { label: string }): FakeRun & { host: FakeHost } {
+	const host = makeFakeHost(`install-${opts.label}`, opts);
+	return { ...runVerb(host, "install-copilot-bridge"), host };
 }
 
 const withStale = runInstall({ installed: [STALE], label: "stale" });
@@ -492,6 +566,477 @@ ok(
 	"a host with no stale unit installs cleanly and says so",
 	clean.status === 0 && clean.stdout.includes("nothing to remove"),
 );
+
+// ── 12. install ownership state (#86 C3a) ───────────────────────────────────
+// The birth unit gets the same discipline the other three Copilot units have: a
+// package-owned install-state written after the assembly publish and before any
+// vendor mutation, adoption that is explicit and narrow, and vendor-list failures
+// that read as UNKNOWN, never as absence.
+ok(
+	"a fresh install writes the ownership state with the exact schema",
+	(() => {
+		if (!existsSync(clean.host.stateFile)) return false;
+		const s = JSON.parse(readFileSync(clean.host.stateFile, "utf8")) as Record<string, unknown>;
+		return (
+			s.schemaVersion === 1 &&
+			s.qualifiedId === OURS &&
+			s.marketplaceName === MKT &&
+			s.assemblyPath === clean.host.asm &&
+			s.pluginVersion === SHIPPED_VERSION &&
+			s.ownedMarketplace === true &&
+			s.ownedAssembly === true &&
+			typeof s.installedAt === "string"
+		);
+	})(),
+);
+ok(
+	"the vendor sequence ran loud and in the bounded order (add before install, no blind uninstall)",
+	clean.calls.some((c) => c.startsWith("plugin marketplace add ")) &&
+		clean.calls.indexOf(`plugin install ${OURS}`) >
+			clean.calls.findIndex((c) => c.startsWith("plugin marketplace add ")),
+);
+
+const mktListBroken = runInstall({ installed: [], mktListFails: true, label: "mkt-list-error" });
+ok(
+	"a FAILING marketplace list is not read as an empty host — the install refuses with zero writes",
+	mktListBroken.status !== 0 && !mktListBroken.installed.includes(OURS) && !existsSync(mktListBroken.host.stateFile),
+);
+
+// Reinstall over an existing state: the old blind `|| true` pair is gone, so a failing
+// vendor step is an honest partial failure with the state retained for the rerun. The
+// first install on each host is clean by construction (nothing to uninstall/remove), so
+// the failure mode only fires on the RE-install, which is the path the blind pair hid.
+{
+	const host = makeFakeHost("reinstall-uninstall-broken", { uninstallFails: true });
+	const first = runVerb(host, "install-copilot-bridge");
+	ok("precondition: the first install on the uninstall-broken host is green", first.status === 0);
+	const second = runVerb(host, "install-copilot-bridge");
+	ok(
+		"a reinstall whose exact-id uninstall FAILS stops loud with the state retained for repair",
+		second.status !== 0 && existsSync(host.stateFile) && second.installed.includes(OURS),
+	);
+}
+{
+	const host = makeFakeHost("reinstall-mkt-remove-broken", { mktRemoveFails: true });
+	const first = runVerb(host, "install-copilot-bridge");
+	ok("precondition: the first install on the remove-broken host is green", first.status === 0);
+	const second = runVerb(host, "install-copilot-bridge");
+	ok(
+		"a reinstall whose marketplace remove FAILS stops loud (never retried with --force) with the state retained",
+		second.status !== 0 && existsSync(host.stateFile) && !second.calls.some((c) => c.includes("--force")),
+	);
+}
+{
+	// No state + marketplace pre-registered at our path + no valid assembly → the
+	// legacy-marketplace adoption clause refuses before any write.
+	const host = makeFakeHost("mkt-no-assembly", {
+		marketplaces: [[MKT, path.join(root, "fake-mkt-no-assembly", "asm")]],
+	});
+	const refuse = runVerb(host, "install-copilot-bridge");
+	ok(
+		"a no-state marketplace registration over an INVALID assembly refuses with zero writes",
+		refuse.status !== 0 && !existsSync(host.stateFile) && !existsSync(host.asm),
+	);
+}
+
+// Legacy adoption, both shapes, driven through the honest route: install once, then
+// strip the state and run again.
+{
+	const adopt = runInstall({ installed: [], label: "adopt" });
+	ok("precondition: the adoption host installed green", adopt.status === 0 && existsSync(adopt.host.stateFile));
+	rmSync(adopt.host.stateFile);
+	const second = runVerb(adopt.host, "install-copilot-bridge");
+	ok(
+		"a legacy no-state installation with the exact QUALIFIED, our marketplace path and a valid assembly is ADOPTED and reported",
+		second.status === 0 &&
+			second.stdout.includes("adopting the legacy no-state installation") &&
+			existsSync(adopt.host.stateFile),
+	);
+	// Now break the assembly and strip the state again: adoption must refuse, and the
+	// refusal is zero-write (no state minted, the broken assembly untouched).
+	rmSync(adopt.host.stateFile);
+	rmSync(path.join(adopt.host.asm, PLUGIN, "hooks", "hooks.json"));
+	const invalid = runVerb(adopt.host, "install-copilot-bridge");
+	ok(
+		"a legacy no-state installation whose assembly FAILS the structural oracle refuses with zero writes",
+		invalid.status !== 0 &&
+			!existsSync(adopt.host.stateFile) &&
+			!existsSync(path.join(adopt.host.asm, PLUGIN, "hooks", "hooks.json")),
+	);
+}
+
+// ── 13. the package-owned INVERSE (#86 C3a) ─────────────────────────────────
+{
+	const host = makeFakeHost("inverse-no-state", {
+		installed: [OURS],
+		marketplaces: [[MKT, path.join(root, "fake-inverse-no-state", "asm")]],
+	});
+	const res = runVerb(host, "uninstall-copilot-bridge");
+	ok(
+		"[QK:COPILOT-BIRTH-INVERSE-NO-STATE] with NO ownership state the inverse refuses and mutates NOTHING — a blind best-effort remove is exactly the defect",
+		res.status !== 0 &&
+			res.installed.includes(OURS) &&
+			res.marketplaces.length === 1 &&
+			!res.calls.some((c) => c.startsWith("plugin uninstall") || c.startsWith("plugin marketplace remove")),
+	);
+	ok("the no-state refusal names the adoption repair", (res.stderr ?? "").includes("install-copilot-bridge"));
+}
+{
+	const host = makeFakeHost("inverse-corrupt", { installed: [OURS] });
+	mkdirSync(path.dirname(host.stateFile), { recursive: true });
+	writeFileSync(host.stateFile, "{not json");
+	const res = runVerb(host, "uninstall-copilot-bridge");
+	ok(
+		"a CORRUPT state refuses with zero vendor mutation and the state retained for inspection",
+		res.status !== 0 && res.installed.includes(OURS) && existsSync(host.stateFile) && res.calls.length === 0,
+	);
+}
+{
+	const host = makeFakeHost("inverse-drift", { installed: [OURS] });
+	mkdirSync(path.dirname(host.stateFile), { recursive: true });
+	writeFileSync(
+		host.stateFile,
+		JSON.stringify({
+			schemaVersion: 1,
+			qualifiedId: OURS,
+			marketplaceName: MKT,
+			assemblyPath: "/somewhere/else/.assembled",
+			pluginVersion: SHIPPED_VERSION,
+			ownedMarketplace: true,
+			ownedAssembly: true,
+			installedAt: "2026-08-27T00:00:00Z",
+		}),
+	);
+	const res = runVerb(host, "uninstall-copilot-bridge");
+	ok(
+		"a state whose assemblyPath DRIFTED from this host's effective assembly refuses with zero vendor mutation",
+		res.status !== 0 && res.installed.includes(OURS) && res.calls.length === 0,
+	);
+}
+function writeBoundState(host: FakeHost): void {
+	mkdirSync(path.dirname(host.stateFile), { recursive: true });
+	writeFileSync(
+		host.stateFile,
+		JSON.stringify({
+			schemaVersion: 1,
+			qualifiedId: OURS,
+			marketplaceName: MKT,
+			assemblyPath: host.asm,
+			pluginVersion: SHIPPED_VERSION,
+			ownedMarketplace: true,
+			ownedAssembly: true,
+			installedAt: "2026-08-27T00:00:00Z",
+		}),
+	);
+}
+{
+	const host = makeFakeHost("inverse-foreign-mkt", {
+		installed: [OURS],
+		marketplaces: [[MKT, "/somebody/elses/marketplace-root"]],
+	});
+	writeBoundState(host);
+	const res = runVerb(host, "uninstall-copilot-bridge");
+	ok(
+		"[QK:COPILOT-BIRTH-INVERSE-FOREIGN] a marketplace with OUR name at ANOTHER path refuses BEFORE the plugin uninstall — zero vendor writes, everything preserved (that qualified id could be THAT marketplace's plugin)",
+		res.status !== 0 &&
+			res.installed.includes(OURS) &&
+			!res.calls.includes(`plugin uninstall ${OURS}`) &&
+			res.marketplaces.some((row) => row.includes("/somebody/elses/marketplace-root")) &&
+			!res.calls.some((c) => c.startsWith("plugin marketplace remove")) &&
+			existsSync(host.stateFile),
+	);
+}
+{
+	// ownedMarketplace=false while OUR marketplace IS registered at the recorded path:
+	// completing the inverse would delete the backing assembly/state under a
+	// registration it must preserve — so the whole operation refuses up front.
+	const host = makeFakeHost("inverse-unowned-mkt", { installed: [OURS] });
+	mkdirSync(path.dirname(host.stateFile), { recursive: true });
+	writeFileSync(host.mktState, `${MKT}\t${host.asm}\n`);
+	mkdirSync(path.join(host.asm, PLUGIN), { recursive: true });
+	writeFileSync(
+		host.stateFile,
+		JSON.stringify({
+			schemaVersion: 1,
+			qualifiedId: OURS,
+			marketplaceName: MKT,
+			assemblyPath: host.asm,
+			pluginVersion: SHIPPED_VERSION,
+			ownedMarketplace: false,
+			ownedAssembly: true,
+			installedAt: "2026-08-27T00:00:00Z",
+		}),
+	);
+	const res = runVerb(host, "uninstall-copilot-bridge");
+	ok(
+		"a REGISTERED marketplace the state does not own refuses the WHOLE inverse before any vendor write — no dangling registration over removed backing",
+		res.status !== 0 &&
+			res.installed.includes(OURS) &&
+			!res.calls.includes(`plugin uninstall ${OURS}`) &&
+			res.marketplaces.length === 1 &&
+			existsSync(path.join(host.asm, PLUGIN)) &&
+			existsSync(host.stateFile),
+	);
+}
+{
+	// State schema is fail-closed EXACTLY: representative missing-key, wrong-typed
+	// bool, and unknown-key states each refuse with zero vendor mutation.
+	const badStates: Array<[string, Record<string, unknown>]> = [
+		[
+			"missing-key",
+			{
+				schemaVersion: 1,
+				qualifiedId: OURS,
+				marketplaceName: MKT,
+				assemblyPath: "PLACEHOLDER",
+				pluginVersion: SHIPPED_VERSION,
+				ownedMarketplace: true,
+				ownedAssembly: true,
+			},
+		],
+		[
+			"wrong-bool",
+			{
+				schemaVersion: 1,
+				qualifiedId: OURS,
+				marketplaceName: MKT,
+				assemblyPath: "PLACEHOLDER",
+				pluginVersion: SHIPPED_VERSION,
+				ownedMarketplace: "true",
+				ownedAssembly: true,
+				installedAt: "2026-08-27T00:00:00Z",
+			},
+		],
+		[
+			"unknown-key",
+			{
+				schemaVersion: 1,
+				qualifiedId: OURS,
+				marketplaceName: MKT,
+				assemblyPath: "PLACEHOLDER",
+				pluginVersion: SHIPPED_VERSION,
+				ownedMarketplace: true,
+				ownedAssembly: true,
+				installedAt: "2026-08-27T00:00:00Z",
+				extra: 1,
+			},
+		],
+	];
+	for (const [label, state] of badStates) {
+		const host = makeFakeHost(`inverse-state-${label}`, { installed: [OURS] });
+		mkdirSync(path.dirname(host.stateFile), { recursive: true });
+		state.assemblyPath = host.asm;
+		writeFileSync(host.stateFile, JSON.stringify(state));
+		const res = runVerb(host, "uninstall-copilot-bridge");
+		ok(
+			`a ${label} ownership state refuses fail-closed with zero vendor mutation (flags are never coerced)`,
+			res.status !== 0 && res.installed.includes(OURS) && res.calls.length === 0 && existsSync(host.stateFile),
+		);
+	}
+}
+{
+	// EXACT-row adversary: a longer qualified id that CONTAINS ours authorizes nothing —
+	// not the inverse's uninstall branch, not install adoption, not the doctor's
+	// registration read.
+	const ADVERSARY = `${OURS}-extra`;
+	const invHost = makeFakeHost("adversary-inverse", { installed: [ADVERSARY] });
+	writeBoundState(invHost);
+	const inv = runVerb(invHost, "uninstall-copilot-bridge");
+	ok(
+		"inverse: a longer row containing our qualified id is NOT our plugin — named already-absent, adversary survives, no uninstall argv",
+		inv.status === 0 &&
+			inv.stdout.includes("already absent") &&
+			inv.installed.includes(ADVERSARY) &&
+			!inv.calls.some((c) => c.startsWith("plugin uninstall")),
+	);
+	const adoptHost = makeFakeHost("adversary-adopt", { installed: [ADVERSARY] });
+	const adopt = runVerb(adoptHost, "install-copilot-bridge");
+	ok(
+		"install: the adversary row does not trigger the adoption branch — the host reads as fresh and the adversary survives",
+		adopt.status === 0 && !adopt.stdout.includes("adopting") && adopt.installed.includes(ADVERSARY),
+	);
+	const docHost = makeFakeHost("adversary-doctor", { installed: [ADVERSARY] });
+	const doc = runVerb(docHost, "doctor-copilot-bridge");
+	ok(
+		"doctor: the adversary row does not read as our registration",
+		doc.status !== 0 && doc.stdout.includes("NOT installed"),
+	);
+}
+{
+	// ASM delete-safety representative: a symlinked recorded assembly refuses the whole
+	// inverse before any vendor write.
+	const host = makeFakeHost("inverse-asm-symlink", { installed: [OURS] });
+	const realDir = path.join(host.home, "real-asm");
+	mkdirSync(realDir, { recursive: true });
+	rmSync(host.asm, { recursive: true, force: true });
+	symlinkSync(realDir, host.asm);
+	writeBoundState(host);
+	const res = runVerb(host, "uninstall-copilot-bridge");
+	ok(
+		"a SYMLINKED recorded assembly refuses the whole inverse before any vendor write (read-only lists are the only argv)",
+		res.status !== 0 &&
+			res.installed.includes(OURS) &&
+			res.calls.every((c) => c === "plugin list" || c === "plugin marketplace list") &&
+			existsSync(realDir) &&
+			existsSync(host.stateFile),
+	);
+}
+{
+	// --assemble-only is gate-only and must never rebuild the LIVE assembly: no
+	// override (or the default path) refuses before any assembly mutation.
+	const host = makeFakeHost("assemble-only-default", {});
+	const env = { ...host.env };
+	delete env.ENTWURF_COPILOT_ASM;
+	const res = spawnSync("bash", [path.join(REPO, "run.sh"), "install-copilot-bridge", "--assemble-only"], {
+		env,
+		encoding: "utf8",
+	});
+	const liveAsm = path.join(env.XDG_DATA_HOME as string, "entwurf", "meta-bridge-copilot", ".assembled");
+	ok(
+		"--assemble-only without an explicit temp ENTWURF_COPILOT_ASM refuses BEFORE any assembly mutation",
+		res.status !== 0 && (res.stderr ?? "").includes("ENTWURF_COPILOT_ASM") && !existsSync(liveAsm),
+	);
+}
+{
+	const host = makeFakeHost("inverse-happy", { installed: [OURS, FOREIGN] });
+	// A real assembly to remove: the honest route again — this is the same host shape a
+	// clean install leaves behind, minus the vendor rows the fake seeds directly.
+	writeBoundState(host);
+	mkdirSync(path.join(host.asm, PLUGIN), { recursive: true });
+	writeFileSync(host.mktState, `${MKT}\t${host.asm}\n`);
+	const res = runVerb(host, "uninstall-copilot-bridge");
+	ok(
+		"the full inverse removes the exact plugin, the exact marketplace, the recorded assembly, then the state LAST",
+		res.status === 0 &&
+			!res.installed.includes(OURS) &&
+			res.marketplaces.length === 0 &&
+			!existsSync(host.asm) &&
+			!existsSync(host.stateFile),
+	);
+	ok(
+		"the inverse used only EXACT qualified/marketplace argv — never a bare id, never --force",
+		res.calls.includes(`plugin uninstall ${OURS}`) &&
+			res.calls.includes(`plugin marketplace remove ${MKT}`) &&
+			!res.calls.includes(`plugin uninstall ${PLUGIN}`) &&
+			!res.calls.some((c) => c.includes("--force")),
+	);
+	ok("a same-named FOREIGN plugin survives the inverse untouched", res.installed.includes(FOREIGN));
+}
+{
+	const host = makeFakeHost("inverse-retry", { installed: [], marketplaces: [] });
+	writeBoundState(host);
+	const res = runVerb(host, "uninstall-copilot-bridge");
+	ok(
+		"a RETRY over already-absent vendor resources names each absence and still clears the state (rerun-repair)",
+		res.status === 0 && res.stdout.includes("already absent") && !existsSync(host.stateFile),
+	);
+}
+{
+	const host = makeFakeHost("inverse-list-broken", { installed: [OURS], listFails: true });
+	writeBoundState(host);
+	const res = runVerb(host, "uninstall-copilot-bridge");
+	ok(
+		"[QK:COPILOT-BIRTH-NO-FALSE-ABSENCE] a FAILING plugin list is UNKNOWN, not an empty host — the inverse refuses with the state retained and no mutation",
+		res.status !== 0 &&
+			(res.stderr ?? "").includes("UNKNOWN") &&
+			existsSync(host.stateFile) &&
+			!res.calls.some((c) => c.startsWith("plugin uninstall") || c.startsWith("plugin marketplace remove")),
+	);
+}
+
+{
+	// Version drift (final amendment): the vendor lists our exact id at a version the
+	// state did not record — the inverse must refuse fail-closed with everything
+	// preserved, and the doctor must name it.
+	const invHost = makeFakeHost("inverse-version-drift", { installed: [OURS] });
+	mkdirSync(path.dirname(invHost.stateFile), { recursive: true });
+	mkdirSync(path.join(invHost.asm, PLUGIN), { recursive: true });
+	writeFileSync(invHost.mktState, `${MKT}\t${invHost.asm}\n`);
+	writeFileSync(
+		invHost.stateFile,
+		JSON.stringify({
+			schemaVersion: 1,
+			qualifiedId: OURS,
+			marketplaceName: MKT,
+			assemblyPath: invHost.asm,
+			pluginVersion: "0.0.9-drift",
+			ownedMarketplace: true,
+			ownedAssembly: true,
+			installedAt: "2026-08-27T00:00:00Z",
+		}),
+	);
+	const inv = runVerb(invHost, "uninstall-copilot-bridge");
+	ok(
+		"inverse: an exact row at a version the state did not record is VERSION-DRIFT — fail-closed, no vendor mutation, plugin/marketplace/assembly/state all preserved",
+		inv.status !== 0 &&
+			(inv.stderr ?? "").includes("version-drift") &&
+			inv.installed.includes(OURS) &&
+			inv.marketplaces.length === 1 &&
+			existsSync(path.join(invHost.asm, PLUGIN)) &&
+			existsSync(invHost.stateFile) &&
+			!inv.calls.some((c) => c.startsWith("plugin uninstall") || c.startsWith("plugin marketplace remove")),
+	);
+	const docHost = makeFakeHost("doctor-version-drift", { installed: [OURS] });
+	const doctorAsm = path.join(docHost.env.XDG_DATA_HOME as string, "entwurf", "meta-bridge-copilot", ".assembled");
+	mkdirSync(path.dirname(docHost.stateFile), { recursive: true });
+	writeFileSync(docHost.mktState, `${MKT}\t${doctorAsm}\n`);
+	writeFileSync(
+		docHost.stateFile,
+		JSON.stringify({
+			schemaVersion: 1,
+			qualifiedId: OURS,
+			marketplaceName: MKT,
+			assemblyPath: doctorAsm,
+			pluginVersion: "0.0.9-drift",
+			ownedMarketplace: true,
+			ownedAssembly: true,
+			installedAt: "2026-08-27T00:00:00Z",
+		}),
+	);
+	const doc = runVerb(docHost, "doctor-copilot-bridge");
+	ok(
+		"doctor: the same drift is a named RED (`version drift`)",
+		doc.status !== 0 && doc.stdout.includes("version drift"),
+	);
+}
+
+// ── 14. the doctor's ownership axis (#86 C3a) ───────────────────────────────
+{
+	const host = makeFakeHost("doctor-list-broken", { installed: [], listFails: true });
+	const res = runVerb(host, "doctor-copilot-bridge");
+	ok(
+		"the doctor reads a FAILING plugin list as UNKNOWN (red), never as an empty host",
+		res.status !== 0 && res.stdout.includes("UNKNOWN"),
+	);
+}
+{
+	const host = makeFakeHost("doctor-ownership-drift", {
+		installed: [OURS],
+		marketplaces: [[MKT, "/somebody/elses/marketplace-root"]],
+	});
+	// The doctor derives its assembly path from XDG (no ENTWURF_COPILOT_ASM seam), so
+	// bind the state to that derived path — the drift under test is the MARKETPLACE's.
+	const doctorAsm = path.join(host.env.XDG_DATA_HOME as string, "entwurf", "meta-bridge-copilot", ".assembled");
+	mkdirSync(path.dirname(host.stateFile), { recursive: true });
+	writeFileSync(
+		host.stateFile,
+		JSON.stringify({
+			schemaVersion: 1,
+			qualifiedId: OURS,
+			marketplaceName: MKT,
+			assemblyPath: doctorAsm,
+			pluginVersion: SHIPPED_VERSION,
+			ownedMarketplace: true,
+			ownedAssembly: true,
+			installedAt: "2026-08-27T00:00:00Z",
+		}),
+	);
+	const res = runVerb(host, "doctor-copilot-bridge");
+	ok(
+		"the doctor FAILs a marketplace registered under our name at another path (ownership drift) and prints the axes separately",
+		res.status !== 0 && res.stdout.includes("ownership drift") && res.stdout.includes("ownership axis: FAIL"),
+	);
+}
 
 writeFileSync(path.join(root, "gate.ok"), "");
 console.log(`[check-copilot-birth-hook] ${passed} assertions ok`);

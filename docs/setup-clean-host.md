@@ -275,9 +275,7 @@ entwurf uninstall-meta-bridge
 entwurf uninstall-copilot-statusline
 entwurf uninstall-copilot-receive
 entwurf uninstall-copilot-mcp
-# Birth currently has no package wrapper inverse; remove only the qualified unit/marketplace:
-copilot plugin uninstall entwurf-meta-receive-copilot@meta-bridge-copilot-local
-copilot plugin marketplace remove meta-bridge-copilot-local
+entwurf uninstall-copilot-bridge
 entwurf uninstall-agy-hooks
 entwurf uninstall-agy-statusline
 entwurf uninstall-agy-bridge
@@ -288,8 +286,13 @@ npm uninstall -g @junghanacs/entwurf
 ```
 
 The package `uninstall-*`/`remove` surfaces preserve unrelated native-harness configuration.
-Copilot birth is the explicit exception above: its installer predates a package-owned inverse,
-so cleanup uses the qualified vendor identities rather than a bare plugin name that could match
-somebody else's unit. The assembled source under `$XDG_DATA_HOME/entwurf/meta-bridge-copilot`
-remains inert after marketplace removal; deleting that preserved artifact is a separate operator
-choice, not something this guide guesses at.
+Copilot birth now has a package-owned inverse: `uninstall-copilot-bridge` removes exactly what
+its install-state (`$XDG_DATA_HOME/entwurf/copilot-bridge/install-state.json`) records — the
+qualified plugin, the local marketplace registration when it is owned and still at the recorded
+path, and the recorded assembly — never with `--force`, never a bare plugin name that could
+match somebody else's unit, and never the stale Claude unit. The complete ownership preflight
+runs read-only before the first vendor write, so a marketplace under our name at another path,
+a registration the state does not own, or a failing vendor list (UNKNOWN, never absence)
+refuses the whole inverse with zero writes; the state is deleted last, so a partial failure
+keeps a rerun-repair authority.
+A legacy no-state installation is adopted by re-running `install-copilot-bridge` first.

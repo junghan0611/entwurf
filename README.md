@@ -237,7 +237,7 @@ entwurf doctor-agy-statusline
 entwurf doctor-agy-hooks
 
 # GitHub Copilot CLI — four independent surfaces, four independent failure modes
-entwurf install-copilot-bridge      # birth: garden id + who-sent, on the first prompt
+entwurf install-copilot-bridge      # birth: garden id + who-sent, on the first prompt (owns an install-state; inverse: uninstall-copilot-bridge)
 entwurf install-copilot-mcp         # the entwurf tool hand (entwurf_inbox_read lives here)
 entwurf install-copilot-receive     # the receiver extension: doorbell + receiver marker
 entwurf install-copilot-statusline  # optional for a manual citizen; required for supported fresh

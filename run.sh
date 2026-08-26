@@ -204,7 +204,8 @@ Usage:
   ./run.sh doctor-meta-bridge         # THE RELEASE ORACLE (#51, Linux-certified repair axis). exit 0 = every required layer was MEASURED on this Linux host: toolchain + state + plugin/MCP + resolved-artifact launch-form classification (all 3 owner hooks + doorbell static contract) + synthetic owner join + store scan + hook errors + SessionStart evidence + REQUIRED live MCP↔marker join + writer-version parity. Missing live evidence is NOT CERTIFIED (open a Claude session and re-run), never a pass; Darwin is not yet verified/certified and stays nonzero for this cut (future validation may reopen it). Detection power is held by check-meta-doctor-oracle
   ./run.sh copilot [args...]          # #82 RAIL 7: the MANAGED Copilot launch. exec()s the vendor CLI in THIS terminal (cwd/pid/exit preserved) with COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS set for that one invocation — entwurf owns no part of your shell and writes nothing to it, but it owns the process it is about to become. Without that flag Copilot skips the extension scan SILENTLY. Refuses to launch unless the receiver unit is actually installed. Injects `--model auto` when no --model was given and `--yolo` when no explicit permission/surface policy flag was given, both BEFORE any `--`; every argument you pass is forwarded byte-identical. RUNNING THIS IS YOUR CONSENT to that profile — use plain `copilot` for stock vendor behaviour. Not tmux, not fresh-call, mints no citizen (birth is still the first prompt)
   ./run.sh install-copilot-bridge     # #82: GLOBAL install of the Copilot BIRTH plugin (own marketplace root; node+entry baked into the no-argv exec string). MCP wiring and the RECEIVER extension are separate install surfaces (install-copilot-mcp, install-copilot-receive). Also retires the stale Claude unit (--keep-stale-claude-unit opts out)
-  ./run.sh doctor-copilot-bridge      # #82: fail-loud surface for that unit. Red = a hook that RAN and failed, or a broken/unbaked artifact. "Installed with zero records" is NOT red and is reported as NOT-YET: a Copilot session is born on its FIRST PROMPT, not when the window opens (measured)
+  ./run.sh uninstall-copilot-bridge   # #86 C3a: honest inverse of install-copilot-bridge from the package-owned install-state (exact qualified id + exact marketplace name/path + recorded assembly only; state deleted LAST; a failing vendor list is UNKNOWN and refuses; never --force, never the stale Claude unit)
+  ./run.sh doctor-copilot-bridge      # #82/#86: fail-loud surface for that unit — runtime axis (red = a hook that RAN and failed, or a broken/unbaked artifact; "installed with zero records" is NOT red and is reported as NOT-YET: a Copilot session is born on its FIRST PROMPT, not when the window opens, measured) + ownership axis (install-state shape/binding, marketplace path drift, UNKNOWN vendor lists; legacy no-state install = named non-green, repair = install-copilot-bridge adoption). Either axis red = red
   ./run.sh install-copilot-statusline # own Copilot statusLine + footer.showCustom with an install-state preimage
   ./run.sh uninstall-copilot-statusline # honest inverse of install-copilot-statusline
   ./run.sh doctor-copilot-statusline  # static ownership/config/bin doctor; never claims a render receipt
@@ -2920,6 +2921,8 @@ check_pack() {
     "pi/meta-bridge-copilot/entwurf-meta-receive-copilot/scripts/copilot-hook-launch.sh"
     "pi-extensions/meta-bridge-hook-copilot.ts"
     "scripts/copilot-bridge-install.sh"
+    "scripts/copilot-bridge-uninstall.sh"
+    "scripts/copilot-bridge-oracle.sh"
     "scripts/copilot-bridge-doctor.sh"
     # #82 RAIL 5 — the Copilot RECEIVER. A vendor EXTENSION (forked child, stdio
     # JSON-RPC), not a plugin, so it ships as its own unit and installs into the user
@@ -3170,6 +3173,8 @@ _check_pack_install_impl() {
     "pi/meta-bridge-copilot/entwurf-meta-receive-copilot/scripts/copilot-hook-launch.sh"
     "pi-extensions/meta-bridge-hook-copilot.ts"
     "scripts/copilot-bridge-install.sh"
+    "scripts/copilot-bridge-uninstall.sh"
+    "scripts/copilot-bridge-oracle.sh"
     "scripts/copilot-bridge-doctor.sh"
     # #82 RAIL 5 — the Copilot RECEIVER. A vendor EXTENSION (forked child, stdio
     # JSON-RPC), not a plugin, so it ships as its own unit and installs into the user
@@ -5728,6 +5733,15 @@ case "$cmd" in
     # for a mailbox nothing rings would advertise delivery this backend does not have.
     shift || true
     (cd "$REPO_DIR" && bash scripts/copilot-bridge-install.sh "$@")
+    ;;
+  uninstall-copilot-bridge)
+    # #86 C3a: the package-owned inverse of install-copilot-bridge. The ownership state
+    # is the sole removal authority (exact qualified id, exact marketplace name+path,
+    # recorded assembly only); a failing vendor list is UNKNOWN and refuses; state is
+    # deleted LAST so any partial failure keeps a rerun-repair authority. Never touches
+    # the stale Claude unit and never uses --force.
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/copilot-bridge-uninstall.sh "$@")
     ;;
   doctor-copilot-bridge)
     # #82: the fail-loud surface for the Copilot unit. Its red conditions differ from
