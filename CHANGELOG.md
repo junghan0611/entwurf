@@ -14,7 +14,8 @@ All notable changes to this project will be documented here. Format follows [Kee
   global package happened to mask the defect. The repair leaves the managed
   `entwurf copilot` boundary and every fresh/preflight/delivery contract unchanged. Source setup
   now fails loud when that operator path is foreign, outside PATH, or shadowed by another command;
-  later optional helper-bin conflicts remain warnings owned by their harness doctors. (#82)
+  later optional helper-bin conflicts remain warnings owned by their harness doctors. Discovered
+  while rechecking #82; the installation contract and repair are owned by #86.
 
 ## 0.15.0 — 2026-08-25
 

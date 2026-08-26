@@ -52,8 +52,13 @@ npx entwurf check-bridge
 `check-bridge` is auth-free. It proves the installed prebuilt MCP server boots and
 lists the seven garden tools; it does not prove a backend model turn or native hook.
 
+Neither npm form installs a harness runtime. `pi`, Claude Code, Copilot CLI, agy, Cortex and their
+authentication remain operator-owned optional prerequisites for the integrations that use them;
+all may be absent on an Entwurf-only host. A source checkout's pinned Pi development packages are
+for building and testing this repo, not a transitive product installation promise.
+
 Maintainers using a source checkout do not install a second global entwurf package. Full source
-setup requires Node 24, pnpm, Python 3, and compatible pi already on PATH:
+setup currently requires Node 24, pnpm, Python 3, and compatible pi already on PATH:
 
 ```bash
 git clone https://github.com/junghan0611/entwurf ~/repos/gh/entwurf

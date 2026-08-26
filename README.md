@@ -94,9 +94,13 @@ The package exposes six bins:
 
 The bridge/renderers/hook use stable bin names so package upgrades do not bake versioned package-store paths into native-harness settings.
 
-The bridge does not provide backend credentials, tokens, or subscription access,
-and does not bypass any backend auth. Whatever the operator's local `claude` /
-`copilot` / `codex` / `agy` / pi runtime already trusts is what entwurf can use.
+Installing Entwurf installs **Entwurf only**: its package bytes, six bins, bridge, and
+integration artifacts. It does not install `pi`, Claude Code, Copilot CLI, Codex, agy, Cortex,
+or any other harness runtime. Those are operator choices and may all be absent. The bridge also
+does not provide credentials, tokens, subscription access, or an auth bypass; whatever an
+operator-installed harness already trusts is what Entwurf can use. `setup` is composition, not
+recruitment: it may wire a harness that is present, but never downloads one to make a matrix cell
+look complete.
 
 ### From npm — user/global install
 
