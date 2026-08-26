@@ -6,15 +6,17 @@
 
 - [x] **1. Incident + source operator checkpoint** — ThinkPad exposed missing `entwurf`; Oracle's masking global checkout link was removed; `e08d937` adds owned `entwurf -> checkout/run.sh` with focused source/install gates.
 - [x] **2. Contract + living-harness audit** — GLG fixed “Entwurf installs itself only”; Terra, Fable and an independent citizen re-audited credentials, ownership, setup consumers and platform evidence. The issue body/thread owns the full matrix and errata.
-- [x] **3. C1 setup kernel / all-absent truth — IMPLEMENTED (worktree, uncommitted)** ← CURRENT: one product+gate candidate landed by Fable `20260826T184719-89ff44` (2026-08-26); three independent review rounds + Grok READY applied, focused gates green, 7 lane mutants qualified. `check-gate-qualification` 261/261 GREEN (2026-08-26). Next: frozen `check:full` once, then C1 commit under GLG's grant (push stays GLG's).
-- [ ] **4. C2 Pi install-scope ownership** — presence-gated `.pi`/user state, explicit multi-root takeover, moved/deleted root and inverse refusal.
+- [x] **3. C1 setup kernel / all-absent truth — CLOSED**: one product+gate candidate landed by Fable `20260826T184719-89ff44` (2026-08-26); three independent review rounds + Grok READY applied, focused gates green, 7 lane mutants qualified, `check-gate-qualification` 261/261 GREEN, frozen `check:full` GREEN. Committed as `32d161c` under GLG's grant (push stays GLG's).
+- [ ] **4. C2 Pi install-scope ownership** ← CURRENT — presence-gated `.pi`/user state, explicit multi-root takeover, moved/deleted root and inverse refusal. Implemented + final amendment landed; Grok final `READY / Blocker 0 / Defect 0 / Observation 2`; focused suite GREEN + 3/3 mutant re-kills on the freeze-v3 candidate. Current gate: qualification once → frozen `check:full` once → C2 commit (coordinator grant; push stays GLG's).
 - [ ] **5. C3 Copilot inverse → composition + platform consumers** — birth inverse first, then four-unit setup; consume each slice on Linux/macOS/native Windows under the stop rule.
 
-현재 좌표: C1 구현 완료(미커밋) → review 3 rounds + Grok READY 완료 → qualification 261/261 GREEN → **frozen full 1회** → C1 commit(GLG grant, push 없음) → C2
+현재 좌표: C2 구현+final amendment 완료(미커밋, freeze v3) → Grok final READY → focused 8/8 GREEN + 3/3 mutant re-kill → **qualification 1회 → frozen full 1회** → C2 commit(코디네이터 grant, push 없음) → C3
 
-# NOW — C1 implemented; reviewer starts here
+# NOW — C2 final machine proof; current candidate is the C2 freeze-v3 worktree
 
-## C1 delivered shape (all in the uncommitted worktree)
+The C2 candidate (9 modified + 1 new over `32d161c`) is the current subject; its rules, evidence and receipts live in the `C2 Pi ownership` section below. What remains is machine proof only: `check-gate-qualification` once → frozen `check:full` once → C2 commit. The C1 material below this line is durable delivered history (committed as `32d161c`), kept for review cross-reference — not the current candidate.
+
+## C1 delivered shape (durable history; committed as `32d161c`)
 
 - `run.sh`: mode-first named branch (`setup_mode` on the `*/node_modules/*` seam, printed as the FIRST setup line, before every prerequisite); `sync_auth` function + `sync-auth` dispatch/usage surface REMOVED (comment documents the removal; legacy alias/`.bak` residue stays manual-only); setup-level + `install_local_package`-level named python3 verdicts before writes; pi presence+floor cell (`pi_supported_range` derived from the package.json devDep pin, `PI_BIN`/`CLAUDE_BIN` hermetic probe seams, absent=SKIP zero-wiring, below-floor=detected FAIL); per-component verdict engine `SETUP_RESULTS`/`setup_result` with computed summary replacing the unconditional `DONE ... green`; any FAIL → exit 1 with valid components preserved; `wire_agy_*` return 1 on detected failure; `expose_dev_bin` propagates rc 3 truthfully.
 - `scripts/dev-bin.sh`: no-arg expose attempts every unit independently, prints `attempted/ok/refused=N: <names>` summary, exit 3 on any refusal; named expose stays fail-loud. Both `source-install` mutant claims intact and re-measured KILLED.
@@ -119,9 +121,27 @@ Run affected focused gates only: `smoke-agy-install-state`, `smoke-meta-install-
 
 # LATER — do not pull forward
 
-## C2 Pi ownership
+## C2 Pi ownership — LOCKED RULES (Grok-reviewed, coordinator grant 2026-08-26)
 
-Preserve L1a/L1b while replacing silent last-writer-wins user registration with explicit reported takeover. Pin package root, stable command root, project/user writes, moved/deleted-root verdict and honest inverse; never delete another root's entry.
+Preserve L1a/L1b while replacing silent last-writer-wins user registration with explicit reported takeover. Project scope stays state-less current behavior; ownership semantics are USER scope only.
+
+- **live other owner** → normal install/setup/remove is a ZERO-WRITE REFUSE that names `takeover-user-scope`.
+- **recorded owner packageRoot MISSING** → normal install/setup still REFUSE + doctor verdict `missing-owner`; `remove-user-scope` may perform a REPORTED `orphan cleanup` ONLY when package entry + package state + provider installerRoot all align on that same missing owner — any other root/mismatch refuses. No `--force` anywhere.
+- **the only writer that plants a new root over another owner is the operator-explicit `takeover-user-scope`** (old→new replace, both roots reported).
+- user package state: `$XDG_DATA_HOME/entwurf/pi-package/install-state.json` (packageRoot + managedSettingsPath). Same-root legacy-no-state exact entry → byte/mtime no-op ADOPTION; other/ambiguous no-state entries → refuse. Provider user state gains `installerRoot`; same-owner-only inverse; legacy(v1) provider state adoption is INSTALL-only and its inverse is fail-closed (adopt via same-root setup/install first).
+- **ATOMIC (amendment)**: every user-scope install/remove/takeover completes BOTH read-only ownership preflights before either writer runs — a refusal on one half leaves the other byte-identical. Takeover over a provider user-override = SPLIT verdict (package moved; override preserved, unowned; stale provider state cleared — no false both-owned). Takeover removes the recorded old owner's EXACT entry only (absent/ambiguous → zero-write refuse). Orphan alignment REQUIRES the provider state to exist with installerRoot == the missing packageRoot. `doctor-pi-package` also FAILs a packageRoot↔installerRoot coupling mismatch (ownership coupling only).
+- **BINDING + EXACT INVERSE (final amendment)**: package AND provider install-state `managedSettingsPath` binds to the ACTUAL user settings path exactly; a mismatched, corrupt or symlinked managed target is a zero-write refusal BEFORE either preflight goes green (provider remove preflight checks everything its writer would — binding, symlink, settings/provider parseability). The owned AND orphan package inverse removes ONLY the recorded owner's exact `packages[]` entry (absolute exact or settings-relative exact resolve); 0 or 2+ exact entries refuse with zero writes — never the broad entwurf-shape matcher. `doctor-pi-package` FAILs a package or provider managed-path mismatch; an ABSENT provider state stays a non-verdict (user-override/unowned is legitimate).
+- forbidden: silent/automatic replacement, second matcher, new matrix framework, C3/Copilot, credentials, platform/Windows work, new hidden run.sh dispatches for verification convenience.
+
+### C2 implementation evidence (worktree candidate, uncommitted; measured 2026-08-26)
+
+- Candidate: 9 modified + 1 new (`scripts/mutants/pi-package-ownership.json`); production = register-pi-package.py (user state + adoption/refusal/takeover/orphan/doctor), register-pi-provider.py (installerRoot + same-owner inverse), run.sh (`takeover-user-scope` + `doctor-pi-package` dispatch/usage, owner-bound register/remove_user_scope_citizen with the 3-way aligned orphan precondition).
+- Gates: `smoke-user-scope-citizen` extended with literal ownership cells 16–25 + atomic/coupling cells 26–31 + subordinate checks 27b/31b (subchecks of 27 remove-atomicity and 31 doctor-coupling, per coordinator ruling — not new matrix cells) + cell-14/26 snapshot-honesty skips (dep-unresolvable checkout → named skip, not FAIL; the QK cells stay snapshot-safe direct-SSOT); `check-pack-install` L1b two-root row (second root refused naming takeover → explicit takeover moves entry + provider installerRoot old→new → old root's inverse refuses); `smoke-pi-provider-state` · `check-install-preflight` · `check-install-surface` · `smoke-setup-verdict` · typecheck · lint in the focused set.
+- Mutants: lane `pi-package-ownership` = exactly 3 (SILENT-TAKEOVER / FOREIGN-INVERSE-REMOVE / MISSING-OWNER-AUTO-TAKEOVER), runner lane count added; find strings + QK signatures re-measured exact-once against the post-amendment sources.
+- Review round 1 (Grok, NOT READY → amendment APPLIED): atomic two-writer preflights, provider legacy-inverse fail-closed, takeover override split verdict + stale-state clear, doctor ownership coupling, exact-entry takeover removal, provider-state-required orphan alignment, stale 'normalized' prose sweep. No new hidden dispatches.
+- Review round 2 (Grok final, `NOT READY / Blocker 0 / Defect 2 / Observation 3` → final amendment APPLIED, landed by the outgoing implementer + successor-verified from source): Defect 1 cell26 verdict inversion → both-absent-only OK (state OR entry leak = BAD); Defect 2 broad `remove()` inverse → exact recorded-owner entry only; coordinator-promoted provider preflight completeness → managedSettingsPath binding fail-closed across package/provider preflight/write/doctor + provider remove symlink/parse checks; subchecks 27b/31b. `c2-candidate-freeze-v2.sha256` is STALE (3 code/gate files edited after it).
+- Focused receipts (2026-08-26, freeze-v3 candidate): smoke-user-scope-citizen PASS · smoke-pi-provider-state 52 PASS · check-install-preflight PASS · check-install-surface PASS · smoke-setup-verdict 51 PASS · check-pack-install PASS (L1b rows incl.) · typecheck PASS · lint PASS (pre-existing infos) · 3/3 mutants reason-clean re-killed (own token on first FAIL line) + restore control green.
+- Grok final: `READY / Blocker 0 / Defect 0 / Observation 2` (Obs 1 → this NEXT current-state correction; Obs 2 provider-state-absent non-verdict = accepted contract, no change). NOT yet run: qualification once → frozen `check:full` once → C2 commit. Push stays GLG's.
 
 ## C3 Copilot lifecycle then composition
 

@@ -1,0 +1,49 @@
+{
+	"schemaVersion": 1,
+	"lane": "pi-package-ownership",
+	"mutants": [
+		{
+			"claim": "SILENT-TAKEOVER",
+			"title": "a normal user-scope install silently replaces another LIVE root's registration, resurrecting the last-writer-wins takeover the #86 C2 ownership contract retires (only the operator-explicit takeover-user-scope may move the shared entry)",
+			"subject": "scripts/register-pi-package.py",
+			"find": [
+				"        if os.path.isdir(owner):\n            _refuse(6, \"register-pi-package: the user-scope entwurf registration is owned by another LIVE root: \"\n                       f\"{owner}. Normal install/setup never replaces another owner — zero settings bytes written. \"\n                       f\"Run './run.sh takeover-user-scope' from {repo_dir} to explicitly move the shared entry.\")"
+			],
+			"replace": [
+				"        if os.path.isdir(owner):\n            return register_user(settings_path, repo_dir_arg, state_path, True)"
+			],
+			"gate": ["bash", "run.sh", "smoke-user-scope-citizen"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SILENT-TAKEOVER]",
+			"signatureSource": "scripts/smoke-user-scope-citizen.sh"
+		},
+		{
+			"claim": "FOREIGN-INVERSE-REMOVE",
+			"title": "an old root's inverse removes the CURRENT live owner's user-scope registration, so one stale checkout's remove-user-scope deletes the shared entry every other project depends on",
+			"subject": "scripts/register-pi-package.py",
+			"find": [
+				"        if os.path.isdir(owner):\n            _refuse(6, \"register-pi-package: the user-scope registration is owned by another LIVE root: \"\n                       f\"{owner}. This root's inverse must not remove someone else's registration — zero settings \"\n                       \"bytes written. Run remove from that root, or take the entry over first.\")"
+			],
+			"replace": [
+				"        if os.path.isdir(owner):\n            n, kept = remove(settings_path, owner)\n            state_path.unlink()\n            print(f\"remove: removed {n} entries (foreign owner ignored)\")\n            return 0"
+			],
+			"gate": ["bash", "run.sh", "smoke-user-scope-citizen"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:FOREIGN-INVERSE-REMOVE]",
+			"signatureSource": "scripts/smoke-user-scope-citizen.sh"
+		},
+		{
+			"claim": "MISSING-OWNER-AUTO-TAKEOVER",
+			"title": "a normal install auto-claims a MISSING owner's registration, turning every moved or deleted checkout into a silent ownership transfer instead of the named missing-owner verdict plus explicit takeover/orphan path",
+			"subject": "scripts/register-pi-package.py",
+			"find": [
+				"        _refuse(6, \"register-pi-package: the user-scope entwurf registration is owned by a MISSING root: \"\n                   f\"{owner} (doctor verdict: missing-owner). Normal install/setup still refuses — zero settings \"\n                   \"bytes written. Use './run.sh takeover-user-scope' to claim it explicitly, or \"\n                   \"'./run.sh remove-user-scope' for the aligned orphan cleanup.\")"
+			],
+			"replace": ["        return register_user(settings_path, repo_dir_arg, state_path, True)"],
+			"gate": ["bash", "run.sh", "smoke-user-scope-citizen"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:MISSING-OWNER-AUTO-TAKEOVER]",
+			"signatureSource": "scripts/smoke-user-scope-citizen.sh"
+		}
+	]
+}

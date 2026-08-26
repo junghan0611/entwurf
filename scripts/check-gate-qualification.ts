@@ -819,6 +819,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"mux-launcher-fence": 7,
 		"mux-parent-artifact": 3,
 		"pack-install": 1,
+		"pi-package-ownership": 3,
 		"mux-resume-call": 12,
 		"probe-ordering": 1,
 		"release-gate": 12,

@@ -170,6 +170,22 @@ by name first, skips the source-only pnpm bootstrap entirely, and reports the st
 already provided by npm bin linking; `entwurf install` remains the narrower pi-wiring repair
 leaf.
 
+The pi user-scope registration is ONE shared entry with a recorded owner (#86 C2): installing
+from a second checkout or npm root does not silently steal it — normal `install`/`setup` refuse
+(zero settings writes, live or missing owner alike), `entwurf takeover-user-scope` is the
+operator-explicit move (old→new reported), `entwurf doctor-pi-package` names the ownership
+verdict (including `missing-owner` for a moved/deleted root), and `entwurf remove-user-scope`
+is same-owner-only with a reported orphan cleanup when entry, package state and provider
+installerRoot all name the same missing root. User-scope operations are atomic across the
+package and provider halves (read-only preflights first — a refusal on one side writes nothing
+on the other); a takeover over an operator's provider override reports a split verdict (package
+moved, override preserved unowned) and a legacy unattributed provider state must be adopted by
+a same-root `setup`/`install` before it can be removed. Both halves' install-states also record
+exactly WHICH settings file they manage (`managedSettingsPath`): an operation targeting a
+different, symlinked or unparseable file is a zero-write refusal before either half goes green,
+and the owned/orphan inverse removes only the recorded owner's exact `packages[]` entry —
+0 or 2+ exact entries refuse, so an npm spec or another `.../entwurf` path is never collateral.
+
 A development clone runs the bridge source through Node's strip-types path;
 an npm-installed package runs the prebuilt JS under `mcp/entwurf-bridge/dist/`
 because Node refuses to strip `.ts` files under `node_modules`. The dev launcher's

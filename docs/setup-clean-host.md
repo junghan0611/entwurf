@@ -75,6 +75,32 @@ by presence and prints a computed per-component PASS/SKIP/FAIL summary — a det
 cannot be completed makes setup exit nonzero. Copilot's four native units remain explicit
 installs in §4.
 
+### 1.1 User-scope ownership (one shared registration, one recorded owner)
+
+The GLOBAL pi user-scope registration (`~/.pi/agent/settings.json` `packages[]` plus the
+`entwurfProvider.mcpServers.entwurf-bridge` key) is ONE shared entry across every install root, and
+it carries a recorded owner: `packageRoot` in `$XDG_DATA_HOME/entwurf/pi-package/install-state.json`
+and `installerRoot` in the provider install-state. Normal `install`/`setup` from a different root —
+whether the recorded owner is live or missing — refuses with zero settings bytes written; the only
+writer that moves the shared entry is the operator-explicit `entwurf takeover-user-scope`
+(old→new reported). Every user-scope operation is ATOMIC across the two halves: both ownership
+preflights run read-only first, so a refusal on either side leaves the other byte-identical. A
+takeover over an operator's own provider override is a SPLIT verdict — the package owner moves,
+the override is preserved and stays unowned (its stale ownership state is cleared), never a false
+"both owned". A LEGACY provider state (no `installerRoot`) accepts no inverse: run `setup`/`install`
+from the owning root first (named adoption), then remove. Both install-states also bind the exact
+settings file they manage (`managedSettingsPath`): pointing an operation at a different, symlinked
+or unparseable file refuses with zero writes before either half proceeds, and the owned/orphan
+inverse removes only the recorded owner's exact `packages[]` entry (0 or 2+ exact entries refuse).
+`entwurf doctor-pi-package` names the package-side verdict including the
+packageRoot↔installerRoot coupling mismatch and a package/provider managed-path mismatch.
+
+| Root shape | Package root written | Stable commands from | Project write | User write | Takeover trigger | Inverse | Stale/moved verdict |
+|---|---|---|---|---|---|---|---|
+| source checkout | the checkout dir | `dev-bin` symlinks (`setup`) | `<project>/.pi/settings.json` | shared entry + owner state | `takeover-user-scope` from the new checkout | `remove` (project) / `remove-user-scope` (global, same-owner-only) | `doctor-pi-package` → `missing-owner`; normal install still refuses |
+| global npm (`npm i -g`) | the global `node_modules/@junghanacs/entwurf` | npm bin linking | same | same shared entry | same explicit action | same; a LIVE foreign owner always refuses | same |
+| project-local npm | that project's `node_modules/@junghanacs/entwurf` | `node_modules/.bin` | same | same shared entry | same explicit action | same | same; a deleted root becomes the aligned `remove-user-scope` orphan cleanup (entry + package state + provider installerRoot must all name that missing root) |
+
 ## 2. Optional pi adapter / ACP plugin
 
 Install the exact release floor, then wire the project:

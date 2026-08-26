@@ -193,7 +193,7 @@ Usage:
   ./run.sh smoke-copilot-statusline-state # Copilot custom-footer install/doctor/inverse regression. Offline/deterministic
   ./run.sh smoke-copilot-mcp-state       # Copilot MCP install/doctor/inverse regression. Offline/deterministic
   ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression. Offline/deterministic
-  ./run.sh smoke-user-scope-citizen   # 0.12.6 install-boundary: pi packages[] registration SSOT (register-pi-package.py) — idempotent + preserves unrelated + normalizes stale + remove symmetry + fails loud. Offline/hermetic (deps: bash+python3)
+  ./run.sh smoke-user-scope-citizen   # 0.12.6 install-boundary: pi packages[] registration SSOT (register-pi-package.py) — idempotent + preserves unrelated + remove symmetry + fails loud, and the #86 C2 explicit ownership cells (project scope still normalizes ITS OWN stale entries; user scope refuses other owners and only takeover-user-scope moves the shared entry). Offline/hermetic (deps: bash+python3)
   ./run.sh smoke-meta-prune           # 1.0.0 meta-bridge Phase 4: listing-only store janitor regression gate — classify keep/orphan/stale/ambiguous, delete nothing. Offline/deterministic (deps: bash+node)
   ./run.sh smoke-meta-keyset-guard    # 0.10.0 meta-bridge: keyset-owner guard regression — check-keyset-overlap + managed-keys SSOT (disjoint passes, collisions fail). Offline/hermetic (deps: bash+python3)
   ./run.sh check-meta-manifest-schema # 0.12.2 meta-bridge: CLI-version-INDEPENDENT static guard — plugin manifests pinned to the minimal keyset that validates on the lowest supported Claude (closed-schema regression that broke 0.12.1 install on floor) + desired_mcp installed-vs-clone dual-mode. Offline (deps: python3)
@@ -238,7 +238,9 @@ Usage:
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
   ./run.sh remove [project-dir]       # remove entwurf entries from project .pi/settings.json (project scope only; global user-scope citizen left intact)
-  ./run.sh remove-user-scope          # explicit GLOBAL inverse of install's user-scope citizen: drop entwurf from ~/.pi/agent/settings.json packages[] (affects ALL cwds — shared entry, not per-project)
+  ./run.sh remove-user-scope          # explicit GLOBAL inverse of install's user-scope citizen: drop entwurf from ~/.pi/agent/settings.json packages[] (affects ALL cwds — shared entry, not per-project). #86 C2: same-owner-only — a LIVE foreign owner refuses; a MISSING owner is removed only when package entry + package state + provider installerRoot all align (reported orphan cleanup)
+  ./run.sh takeover-user-scope        # #86 C2: operator-EXPLICIT ownership move of the shared user-scope registration to THIS root (old→new reported, packages[] entry + provider installerRoot together). The only writer over another owner — normal install/setup/remove refuse instead. No --force exists
+  ./run.sh doctor-pi-package          # #86 C2: package-side user-scope ownership verdict — unregistered / owned / owned-by-other(live) / legacy-no-state / mismatch / missing-owner (nonzero on defect verdicts). Provider runtime verdicts stay with doctor-pi-provider
 
 Notes:
   - project-dir defaults to current directory
@@ -529,19 +531,79 @@ install_local_package() {
 # launchers and the npm consumer's "installs → just works" both need the entry
 # in ~/.pi/agent/settings.json's packages[]. This is the wiring that dropped when
 # `pi install` was removed from setup (2026-07-03: `--entwurf-control` unknown in
-# a foreign cwd). Idempotent: absent → append, present → no-op; a stale entwurf
-# entry at a different path is normalized to REPO_DIR. Every other package and key
-# in the operator's user settings is preserved untouched.
+# a foreign cwd). Idempotent for THIS root: absent → append + owner state, present
+# same-root → no-op. #86 C2 retires the silent normalization of other roots'
+# entries: a different owner (live or missing) is a zero-write refusal that names
+# takeover-user-scope. Every other package and key is preserved untouched.
+_pi_package_state() { echo "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/pi-package/install-state.json"; }
+_pi_provider_state() { echo "${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/pi-provider/install-state.json"; }
+
 register_user_scope_citizen() {
   local agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
   # Shared idempotent implementation (also driven by smoke-user-scope-citizen).
-  python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR"
+  # #86 C2: user scope carries a recorded OWNER (packageRoot in the pi-package
+  # install-state). Another owner — live or missing — makes this a zero-write
+  # ownership refusal (exit 6) that propagates: install fails, setup records the
+  # pi component FAIL. The only writer over another owner is takeover-user-scope.
+  #
+  # ATOMIC (#86 C2 amendment): BOTH ownership halves are decided READ-ONLY before
+  # either writer runs — a provider-side refusal must leave the package side
+  # byte-identical (and vice versa), never a half-installed user scope.
+  python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR" \
+    --scope user --state "$(_pi_package_state)" --preflight >/dev/null
+  python3 "$REPO_DIR/scripts/register-pi-provider.py" install "$agent_dir/settings.json" "$REPO_DIR" \
+    --scope user --state "$(_pi_provider_state)" --preflight >/dev/null
+  python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR" \
+    --scope user --state "$(_pi_package_state)"
   # #46 Task 2: own entwurfProvider.mcpServers.entwurf-bridge as the bare stable bin at USER scope
   # (GLOBAL/durable →파급s to every cwd), so its inverse needs an install-state honest inverse
   # under $XDG_DATA_HOME/entwurf/pi-provider/ (Task 0/1 discipline). project scope is checkout-
   # local and covered by `run.sh remove` (no state) — deliberate, reasoned asymmetry.
-  local pp_state="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/pi-provider/install-state.json"
-  python3 "$REPO_DIR/scripts/register-pi-provider.py" install "$agent_dir/settings.json" "$REPO_DIR" --scope user --state "$pp_state"
+  # #86 C2: the provider state records installerRoot, so the same foreign-owner refusal
+  # holds here — and the package refusal above fires FIRST, before any provider write.
+  python3 "$REPO_DIR/scripts/register-pi-provider.py" install "$agent_dir/settings.json" "$REPO_DIR" --scope user --state "$(_pi_provider_state)"
+}
+
+# takeover-user-scope — the operator-explicit ownership move (#86 C2). The ONLY
+# writer that replaces another root's user-scope registration: normal install/
+# setup/remove refuse instead. Reports old→new for both the packages[] entry
+# (packageRoot) and the provider key (installerRoot). No --force variant exists.
+takeover_user_scope() {
+  local agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}" pp_out
+  command -v python3 >/dev/null 2>&1 || { echo "[takeover] requires python3 on PATH; nothing was written." >&2; exit 1; }
+  section "takeover-user-scope: move the shared user-scope registration to this root"
+  # ATOMIC (#86 C2 amendment): both halves decided READ-ONLY first — an exact-entry
+  # mismatch on the package side or a refusal on the provider side leaves the other
+  # half byte-identical.
+  python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR" \
+    --scope user --state "$(_pi_package_state)" --takeover --preflight >/dev/null
+  python3 "$REPO_DIR/scripts/register-pi-provider.py" install "$agent_dir/settings.json" "$REPO_DIR" \
+    --scope user --state "$(_pi_provider_state)" --takeover --preflight >/dev/null
+  python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR" \
+    --scope user --state "$(_pi_package_state)" --takeover
+  pp_out=$(python3 "$REPO_DIR/scripts/register-pi-provider.py" install "$agent_dir/settings.json" "$REPO_DIR" \
+    --scope user --state "$(_pi_provider_state)" --takeover)
+  printf '%s\n' "$pp_out"
+  # Split verdict (#86 C2 amendment): a user-override provider key is preserved and
+  # stays UNOWNED — say exactly which half moved instead of a false "both owned".
+  if printf '%s' "$pp_out" | grep -q 'provider override preserved'; then
+    ok "takeover-user-scope: package owner moved to this root ($REPO_DIR); provider key preserved as the operator's override (unowned — doctor-pi-provider reports it as such)"
+  else
+    ok "takeover-user-scope: this root now owns the user-scope registration ($REPO_DIR)"
+  fi
+}
+
+# doctor-pi-package — package-side ownership verdict only (#86 C2): unregistered /
+# owned / owned-by-other(live) / legacy-no-state / mismatch / missing-owner.
+# Deliberately NOT mixed into doctor-pi-provider (provider runtime verdicts stay there).
+doctor_pi_package() {
+  local agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+  command -v python3 >/dev/null 2>&1 || { echo "[doctor-pi-package] requires python3 on PATH." >&2; exit 1; }
+  # #86 C2 amendment: the provider state rides along for the OWNERSHIP coupling
+  # verdict only (installerRoot vs packageRoot mismatch = FAIL); provider RUNTIME
+  # verdicts stay with doctor-pi-provider.
+  python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR" \
+    --scope user --state "$(_pi_package_state)" --provider-state "$(_pi_provider_state)" --doctor
 }
 
 # The honest inverse of register_user_scope_citizen: drop entwurf from the GLOBAL
@@ -557,11 +619,54 @@ register_user_scope_citizen() {
 # reported rather than deleted — install never writes that form (#53 B).
 remove_user_scope_citizen() {
   local agent_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
-  python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR" --remove
+  local pkg_state pp_state orphan_args=()
+  pkg_state="$(_pi_package_state)"; pp_state="$(_pi_provider_state)"
+  # #86 C2 aligned orphan path: --orphan-cleanup is passed ONLY when the package
+  # entry, the package state's packageRoot and the provider state's installerRoot
+  # all name the SAME root and that root is MISSING on disk. Any live foreign
+  # owner, or any mismatch between the three, refuses inside the SSOTs instead.
+  if python3 - "$agent_dir/settings.json" "$pkg_state" "$pp_state" <<'PY'
+import json, os, sys
+settings_path, pkg_state_path, pp_state_path = sys.argv[1:4]
+def load(p):
+    try:
+        with open(p) as fh: return json.load(fh)
+    except (OSError, json.JSONDecodeError): return None
+pkg = load(pkg_state_path)
+if not isinstance(pkg, dict) or not isinstance(pkg.get("packageRoot"), str): sys.exit(1)
+owner = pkg["packageRoot"]
+if os.path.isdir(owner): sys.exit(1)                      # live owner: never orphan
+# Alignment REQUIRES the provider state to exist AND to be bound to the same
+# missing root (#86 C2 amendment): an absent, legacy (no installerRoot) or
+# elsewhere-bound provider state is NOT alignment — both sides refuse instead.
+pp = load(pp_state_path)
+if not isinstance(pp, dict): sys.exit(1)
+if pp.get("installerRoot") != owner: sys.exit(1)
+settings = load(settings_path)
+pkgs = settings.get("packages") if isinstance(settings, dict) else None
+if not isinstance(pkgs, list): sys.exit(1)
+def src(x): return x.get("source") if isinstance(x, dict) else x
+if not any(isinstance(src(x), str) and src(x).rstrip("/") == owner for x in pkgs): sys.exit(1)
+sys.exit(0)
+PY
+  then
+    orphan_args=(--orphan-cleanup)
+    log "remove-user-scope: package entry + package state + provider installerRoot align on a MISSING owner — reported orphan cleanup"
+  fi
+  # ATOMIC (#86 C2 amendment): both removal halves are decided READ-ONLY first, so
+  # a provider-side refusal (live-other, legacy, mismatch) leaves the package
+  # entry/state byte-identical instead of a half-removed user scope.
+  python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR" \
+    --scope user --state "$pkg_state" --remove ${orphan_args[@]+"${orphan_args[@]}"} --preflight >/dev/null
+  python3 "$REPO_DIR/scripts/register-pi-provider.py" remove "$agent_dir/settings.json" "$REPO_DIR" \
+    --scope user --state "$pp_state" ${orphan_args[@]+"${orphan_args[@]}"} --preflight >/dev/null
+  python3 "$REPO_DIR/scripts/register-pi-package.py" "$agent_dir/settings.json" "$REPO_DIR" \
+    --scope user --state "$pkg_state" --remove ${orphan_args[@]+"${orphan_args[@]}"}
   # #46 Task 2: honest inverse of the user-scope entwurfProvider ownership — the install-state
   # drives it (absent/managed-* → remove OUR key; a user-override we never owned is untouched).
-  local pp_state="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/pi-provider/install-state.json"
-  python3 "$REPO_DIR/scripts/register-pi-provider.py" remove "$agent_dir/settings.json" "$REPO_DIR" --scope user --state "$pp_state"
+  # #86 C2: installerRoot makes this same-owner-only; the aligned orphan flag rides along.
+  python3 "$REPO_DIR/scripts/register-pi-provider.py" remove "$agent_dir/settings.json" "$REPO_DIR" \
+    --scope user --state "$pp_state" ${orphan_args[@]+"${orphan_args[@]}"}
 }
 
 # The ~/.pi/agent/entwurf-targets.json symlink machinery (ensure_agent_dir_symlinks
@@ -3390,6 +3495,87 @@ sys.exit(0 if any(isinstance(s,str) and s.endswith('/node_modules/@junghanacs/en
   fi
   echo "[check-pack-install] user-scope citizen regression pass (npm consumer: --entwurf-control loads from a foreign cwd)"
 
+  # Two-root ownership row (#86 C2, L1b extension): a SECOND npm root under the
+  # SAME consumer HOME must not silently steal the user-scope registration the
+  # first root owns — normal install refuses (naming takeover-user-scope) and the
+  # operator-explicit takeover is what moves the shared entry, old→new reported.
+  local npmroot2="$npm_tmp/npmroot2" npmproj2="$npm_tmp/npmproj2" npm2_log two_root_out two_root_rc npm2_pkg
+  mkdir -p "$npmroot2" "$npmproj2"
+  npm2_log=$(cd "$npmroot2" && npm install "$tgz_path" --no-audit --no-fund 2>&1) || {
+    fail "[check-pack-install] second npm root install failed:"
+    echo "$npm2_log" | tail -10 | sed 's/^/    /' >&2
+    return 1
+  }
+  npm2_pkg="$npmroot2/node_modules/@junghanacs/entwurf"
+  set +e
+  two_root_out=$(HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" "$npm2_pkg/run.sh" install "$npmproj2" 2>&1)
+  two_root_rc=$?
+  set -e
+  if [ "$two_root_rc" -eq 0 ] || ! grep -q "takeover-user-scope" <<<"$two_root_out"; then
+    fail "[check-pack-install] a second npm root's normal install must REFUSE the owned user-scope registration and name takeover-user-scope (rc=$two_root_rc):"
+    echo "$two_root_out" | tail -10 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! python3 -c "
+import json,sys
+p=json.load(open('$npm_user_settings')).get('packages',[])
+srcs=[(x if isinstance(x,str) else x.get('source')) for x in p]
+ok_a=any(isinstance(s,str) and s.rstrip('/')== '$npm_pkg' for s in srcs)
+bad_b=any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in srcs)
+sys.exit(0 if ok_a and not bad_b else 1)
+"; then
+    fail "[check-pack-install] the refused second-root install still altered the user-scope packages[] entry:"
+    sed 's/^/    /' "$npm_user_settings" >&2
+    return 1
+  fi
+  set +e
+  two_root_out=$(HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" "$npm2_pkg/run.sh" takeover-user-scope 2>&1)
+  two_root_rc=$?
+  set -e
+  if [ "$two_root_rc" -ne 0 ] || ! grep -q "takeover: user-scope entwurf registration moved" <<<"$two_root_out"; then
+    fail "[check-pack-install] explicit takeover-user-scope from the second root failed (rc=$two_root_rc):"
+    echo "$two_root_out" | tail -10 | sed 's/^/    /' >&2
+    return 1
+  fi
+  if ! python3 -c "
+import json,sys
+p=json.load(open('$npm_user_settings')).get('packages',[])
+srcs=[(x if isinstance(x,str) else x.get('source')) for x in p]
+ok_b=any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in srcs)
+bad_a=any(isinstance(s,str) and s.rstrip('/')== '$npm_pkg' for s in srcs)
+sys.exit(0 if ok_b and not bad_a else 1)
+"; then
+    fail "[check-pack-install] takeover did not move the user-scope entry old→new:"
+    sed 's/^/    /' "$npm_user_settings" >&2
+    return 1
+  fi
+  # #86 C2 amendment: BOTH ownership halves moved — the provider installerRoot must
+  # now name the new root, and the OLD root's inverse must refuse (live foreign owner).
+  if ! python3 -c "
+import json,sys
+st=json.load(open('$npmhome/.local/share/entwurf/pi-provider/install-state.json'))
+sys.exit(0 if st.get('installerRoot','').rstrip('/')== '$npm2_pkg' else 1)
+"; then
+    fail "[check-pack-install] takeover did not rebind the provider installerRoot to the new root:"
+    sed 's/^/    /' "$npmhome/.local/share/entwurf/pi-provider/install-state.json" >&2
+    return 1
+  fi
+  set +e
+  two_root_out=$(HOME="$npmhome" XDG_DATA_HOME="$npmhome/.local/share" XDG_STATE_HOME="$npmhome/.local/state" XDG_CACHE_HOME="$npmhome/.cache" "$npm_pkg/run.sh" remove-user-scope 2>&1)
+  two_root_rc=$?
+  set -e
+  if [ "$two_root_rc" -eq 0 ] || ! python3 -c "
+import json,sys
+p=json.load(open('$npm_user_settings')).get('packages',[])
+srcs=[(x if isinstance(x,str) else x.get('source')) for x in p]
+sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in srcs) else 1)
+"; then
+    fail "[check-pack-install] the OLD root's remove-user-scope must refuse after takeover (rc=$two_root_rc) and leave the new owner's entry intact:"
+    echo "$two_root_out" | tail -8 | sed 's/^/    /' >&2
+    return 1
+  fi
+  echo "[check-pack-install] two-root ownership row pass (second root: normal install refused naming takeover-user-scope; explicit takeover moved entry + provider installerRoot old->new; old root's inverse refused)"
+
   # Installed-package aggregate `setup` row (#86 C1, review blocker 2026-08-26):
   # the composed public command itself, driven through the consumer bin from the
   # SAME installed candidate, on a FRESH sandbox home with every harness absent.
@@ -5494,8 +5680,10 @@ case "$cmd" in
     # 0.12.6 install-boundary gate: register-pi-package.py is the shared
     # packages[] SSOT for project/user install and remove; user scope makes
     # --entwurf-control load from any cwd. Idempotent, preserves unrelated
-    # packages/keys, normalizes stale entries, remove is symmetric, and corrupt
-    # settings fail loud. The tripwire the 2026-07-03 `pi install` removal lacked.
+    # packages/keys, remove is symmetric, corrupt settings fail loud; project
+    # scope normalizes ITS OWN stale entries while user scope carries the #86 C2
+    # explicit ownership contract (other owners refuse; takeover-user-scope moves).
+    # The tripwire the 2026-07-03 `pi install` removal lacked.
     (cd "$REPO_DIR" && bash scripts/smoke-user-scope-citizen.sh)
     ;;
   smoke-claude-native-resume-live)
@@ -5885,6 +6073,17 @@ case "$cmd" in
     ;;
   remove-user-scope)
     remove_user_scope_citizen
+    ;;
+  takeover-user-scope)
+    # #86 C2: operator-explicit ownership move — the ONLY writer allowed to replace
+    # another root's user-scope registration (normal install/setup/remove refuse).
+    takeover_user_scope
+    ;;
+  doctor-pi-package)
+    # #86 C2: package-side ownership verdict (unregistered/owned/owned-by-other/
+    # legacy-no-state/mismatch/missing-owner). Provider runtime stays with
+    # doctor-pi-provider — the two doctors are deliberately not mixed.
+    doctor_pi_package
     ;;
   -h|--help|help|"")
     usage
