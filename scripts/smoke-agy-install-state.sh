@@ -430,21 +430,57 @@ want "wire(agy+corrupt): NO state written" "[ ! -f '$STATE' ]"
 rm -f "$GLOBAL" "$SB/bin/agy"
 
 # ── J: dev bin exposure — dev-bin.sh (막힘 ②: managed stable-bin symlinks) ─────────
-# dev-bin.sh now manages MULTIPLE bins (entwurf-bridge + entwurf-agy-statusline), each with its
-# OWN <name>.install-state.json. J drives the entwurf-bridge bin by NAME so these locks stay
-# byte-for-byte the pre-multi-bin regression (무회귀 판정): ownership-checked link (REFUSE
-# foreign, never a blind ln -sf), state + honest inverse, remove only OUR link, NON-FATAL setup
-# wrapper on a foreign bin. J-5 adds the new legacy-state migration. Isolated: a sandbox bin dir
-# + fake executable targets + the sandbox XDG state.
+# dev-bin.sh manages multiple package commands, each with its OWN <name>.install-state.json.
+# J-0 drives the NO-ARG setup composition and proves the source checkout supplies the operator
+# command Copilot fresh resolves (`entwurf` → this checkout's run.sh-equivalent target), including
+# a real argv-preserving invocation through PATH. J-1 onward keeps the older entwurf-bridge
+# ownership regression byte-for-byte: REFUSE foreign, state + honest inverse, remove only OUR
+# link, NON-FATAL setup wrapper, and legacy-state migration. Isolated: sandbox bin/targets/XDG.
 DEVBIN="$REPO_DIR/scripts/dev-bin.sh"
 DBIN_DIR="$SB/devbin"
 DLINK="$DBIN_DIR/entwurf-bridge"
 DSTATE="$XDG_DATA_HOME/entwurf/dev-bin/entwurf-bridge.install-state.json"   # bin-scoped state
+OLINK="$DBIN_DIR/entwurf"
+OSTATE="$XDG_DATA_HOME/entwurf/dev-bin/entwurf.install-state.json"
 printf '#!/usr/bin/env bash\necho fake-bridge\n' > "$SB/fake-start.sh"; chmod +x "$SB/fake-start.sh"
 printf '#!/usr/bin/env bash\necho fake-status\n' > "$SB/fake-status.sh"; chmod +x "$SB/fake-status.sh"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$@" > "${ENTWURF_OPERATOR_ARGV_LOG:?}"\n' > "$SB/fake-entwurf.sh"; chmod +x "$SB/fake-entwurf.sh"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$SB/fake-aux.sh"; chmod +x "$SB/fake-aux.sh"
 export ENTWURF_DEV_BIN_DIR="$DBIN_DIR"
+export ENTWURF_OPERATOR_TARGET="$SB/fake-entwurf.sh"
 export ENTWURF_BRIDGE_TARGET="$SB/fake-start.sh"
-export ENTWURF_AGY_STATUSLINE_TARGET="$SB/fake-status.sh"   # for the no-arg setup wrapper (two bins)
+export ENTWURF_AGY_STATUSLINE_TARGET="$SB/fake-status.sh"
+export ENTWURF_AGY_IMPRINT_TARGET="$SB/fake-aux.sh"
+export ENTWURF_COPILOT_STATUSLINE_TARGET="$SB/fake-aux.sh"
+
+# J-0: the setup wrapper calls no-arg expose. This is the cross-contract cell the #82 regression
+# lacked: an npm consumer gets `entwurf` from package bin linking, and source setup must expose the
+# same operator command without a second global package install.
+set +e; OUT="$(PATH="$DBIN_DIR:$PATH" bash "$REPO_DIR/run.sh" expose-dev-bin 2>&1)"; RC=$?; set -e
+want "source setup exposes the managed Copilot runtime on PATH [QK:SOURCE-OPERATOR-BIN]" \
+  "[ '$RC' -eq 0 ] && [ -L '$OLINK' ] && [ \"\$(readlink '$OLINK')\" = '$SB/fake-entwurf.sh' ] && [ -f '$OSTATE' ]"
+want "source operator bin resolves through the sandbox PATH" \
+  "PATH='$DBIN_DIR':\"\$PATH\" command -v entwurf | grep -Fx '$OLINK' >/dev/null"
+OPERATOR_ARGV="$SB/operator.argv"
+ENTWURF_OPERATOR_ARGV_LOG="$OPERATOR_ARGV" "$OLINK" copilot --model auto
+want "source operator bin reaches its target with argv byte-for-byte" \
+  "python3 -c 'import sys; sys.exit(0 if open(sys.argv[1]).read().splitlines() == [\"copilot\",\"--model\",\"auto\"] else 1)' '$OPERATOR_ARGV'"
+bash "$DEVBIN" remove >/dev/null 2>&1
+want "source operator inverse removes its link and state" "[ ! -e '$OLINK' ] && [ ! -f '$OSTATE' ]"
+bash "$DEVBIN" remove entwurf >/dev/null 2>&1
+ok "source operator inverse is idempotent"
+printf 'FOREIGN OPERATOR\n' > "$OLINK"
+if bash "$DEVBIN" expose entwurf >/dev/null 2>&1; then die "dev-bin: entwurf expose should REFUSE a foreign operator bin"; fi
+want "source operator expose leaves a foreign bin untouched" "[ \"\$(cat '$OLINK')\" = 'FOREIGN OPERATOR' ]"
+set +e; OUT="$(PATH="$DBIN_DIR:$PATH" bash "$REPO_DIR/run.sh" expose-dev-bin 2>&1)"; RC=$?; set -e
+want "source setup fails loud when it cannot own its operator command [QK:SOURCE-OPERATOR-FAILS-LOUD]" \
+  "[ '$RC' -ne 0 ] && printf '%s' \"\$OUT\" | grep -q 'source command is not the PATH winner owned by this checkout'"
+rm -f "$OLINK"
+bash "$DEVBIN" expose entwurf >/dev/null 2>&1
+set +e; OUT="$(PATH="$PATH" bash "$REPO_DIR/run.sh" expose-dev-bin 2>&1)"; RC=$?; set -e
+want "source setup fails for the operator-certification reason when its managed bin directory is outside PATH" \
+  "[ '$RC' -ne 0 ] && printf '%s' \"\$OUT\" | grep -q 'source command is not the PATH winner owned by this checkout'"
+bash "$DEVBIN" remove >/dev/null 2>&1
 
 # J-1: expose the entwurf-bridge bin BY NAME → creates the managed symlink + state (created-new)
 bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1
@@ -479,11 +515,12 @@ if bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1; then die "dev-bin: expo
 ok "dev-bin expose: refused a foreign bin (nonzero exit)"
 want "dev-bin expose: foreign bin NOT clobbered" "[ \"\$(cat '$DLINK')\" = 'FOREIGN NPM BIN' ]"
 want "dev-bin expose: no state written on foreign refuse" "[ ! -f '$DSTATE' ]"
-# the NON-FATAL setup wrapper (no-arg → all bins) turns that refuse into a WARN + continue. The
-# foreign entwurf-bridge is the FIRST managed bin, so the wrapper stops there (statusline unreached).
-set +e; OUT="$(bash "$REPO_DIR/run.sh" expose-dev-bin 2>&1)"; RC=$?; set -e
-want "dev-bin wrapper(foreign): setup wrapper exits 0 (NON-FATAL)" "[ '$RC' -eq 0 ]"
-want "dev-bin wrapper(foreign): WARNs about a foreign bin (not ours)" "printf '%s' \"\$OUT\" | grep -qi 'not ours'"
+# The setup wrapper exposes/certifies the CORE operator first, then turns this later helper-bin
+# refusal into a WARN. A helper conflict must not erase the operator command the source lane needs.
+set +e; OUT="$(PATH="$DBIN_DIR:$PATH" bash "$REPO_DIR/run.sh" expose-dev-bin 2>&1)"; RC=$?; set -e
+want "dev-bin wrapper(helper foreign): source operator remains certified" \
+  "[ '$RC' -eq 0 ] && [ \"\$(readlink '$OLINK')\" = '$SB/fake-entwurf.sh' ]"
+want "dev-bin wrapper(helper foreign): WARNs about a foreign bin (not ours)" "printf '%s' \"\$OUT\" | grep -qi 'not ours'"
 rm -f "$DLINK"
 
 # J-4: remove is honest-inverse — removes ONLY our link, refuses a link that became foreign
@@ -523,7 +560,9 @@ printf '{"linkPath":"%s/something-else","target":"x"}\n' "$DBIN_DIR" > "$LEGACY"
 if bash "$DEVBIN" expose entwurf-bridge >/dev/null 2>&1; then die "dev-bin migrate: foreign legacy should REFUSE"; fi
 ok "dev-bin migrate: foreign legacy refused (linkPath basename != entwurf-bridge)"
 rm -f "$LEGACY" "$DLINK" "$DSTATE"
-unset ENTWURF_DEV_BIN_DIR ENTWURF_BRIDGE_TARGET ENTWURF_AGY_STATUSLINE_TARGET
+bash "$DEVBIN" remove >/dev/null 2>&1
+unset ENTWURF_DEV_BIN_DIR ENTWURF_OPERATOR_TARGET ENTWURF_BRIDGE_TARGET ENTWURF_AGY_STATUSLINE_TARGET
+unset ENTWURF_AGY_IMPRINT_TARGET ENTWURF_COPILOT_STATUSLINE_TARGET
 
 # ── K: permission grant — the OTHER half of a usable bridge ───────────────────
 # Registering the server only makes the tools REACHABLE. agy defaults every `mcp` action to Ask, so

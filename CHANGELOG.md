@@ -4,6 +4,18 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Fixed
+
+- **Source setup now exposes the `entwurf` operator command required by Copilot fresh.**
+  `./run.sh setup` manages `~/.local/bin/entwurf` as an ownership-checked symlink to the
+  current checkout's `run.sh`, with per-bin state and an honest inverse. npm consumers already
+  received this command through package bin linking; the missing source half caused
+  `entwurf_fresh_call {backend:"copilot"}` to reject `runtime-unresolved` unless an unrelated
+  global package happened to mask the defect. The repair leaves the managed
+  `entwurf copilot` boundary and every fresh/preflight/delivery contract unchanged. Source setup
+  now fails loud when that operator path is foreign, outside PATH, or shadowed by another command;
+  later optional helper-bin conflicts remain warnings owned by their harness doctors. (#82)
+
 ## 0.15.0 — 2026-08-25
 
 This release admits Copilot CLI as a full self-fetch garden citizen — birth, an owned

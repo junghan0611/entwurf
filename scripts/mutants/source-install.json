@@ -1,0 +1,32 @@
+{
+	"schemaVersion": 1,
+	"lane": "source-install",
+	"mutants": [
+		{
+			"claim": "SOURCE-OPERATOR-BIN",
+			"title": "source setup again omits the entwurf operator command, so Copilot fresh rejects runtime-unresolved unless an unrelated global package happens to mask the defect",
+			"subject": "scripts/dev-bin.sh",
+			"find": [
+				"MANAGED_BINS=\"entwurf entwurf-bridge entwurf-agy-statusline entwurf-agy-imprint entwurf-copilot-statusline\""
+			],
+			"replace": [
+				"MANAGED_BINS=\"entwurf-bridge entwurf-agy-statusline entwurf-agy-imprint entwurf-copilot-statusline\""
+			],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SOURCE-OPERATOR-BIN]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "SOURCE-OPERATOR-FAILS-LOUD",
+			"title": "source setup reports green after the managed operator command is foreign, shadowed, or outside PATH, recreating the runtime-unresolved incident behind a cosmetic success",
+			"subject": "run.sh",
+			"find": ["  if ! bash \"$REPO_DIR/scripts/dev-bin.sh\" verify entwurf; then\n    return 1\n  fi"],
+			"replace": ["  if ! bash \"$REPO_DIR/scripts/dev-bin.sh\" verify entwurf; then\n    return 0\n  fi"],
+			"gate": ["bash", "run.sh", "smoke-agy-install-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:SOURCE-OPERATOR-FAILS-LOUD]",
+			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		}
+	]
+}

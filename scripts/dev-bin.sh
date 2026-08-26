@@ -7,8 +7,9 @@
 # each recorded in its OWN checkout-OUTSIDE install-state (<name>.install-state.json) for an
 # honest inverse.
 #
-# Managed bins (both are BARE names that configs record — no repo/checkout path is EVER written
-# into any config; this only makes the bare name RESOLVE in a dev checkout):
+# Managed bins (all are BARE names — no repo/checkout path is EVER written into a harness
+# config; this only makes each package command RESOLVE in a dev checkout):
+#   entwurf                 -> run.sh                          (operator command / managed Copilot runtime)
 #   entwurf-bridge          -> mcp/entwurf-bridge/start.sh    (agy mcp_config command)
 #   entwurf-agy-statusline  -> scripts/agy-statusline.sh      (agy settings.statusLine command)
 #   entwurf-agy-imprint     -> scripts/agy-imprint.sh         (agy PreInvocation birth hook)
@@ -30,9 +31,11 @@
 #                   no name = all managed bins.
 #   remove [name]   honest inverse from state (remove only OUR link; REFUSE if it became foreign).
 #                   no name = all managed bins.
+#   verify <name>   require OUR symlink → target and that exact link as the PATH winner.
 #
 # Overridable for the isolated smoke:
-#   ENTWURF_DEV_BIN_DIR            link location (default: ~/.local/bin — where agy itself lives)
+#   ENTWURF_DEV_BIN_DIR           link location (default: ~/.local/bin — where agy itself lives)
+#   ENTWURF_OPERATOR_TARGET       entwurf target (default: $REPO/run.sh)
 #   ENTWURF_BRIDGE_TARGET         entwurf-bridge target (default: $REPO/mcp/entwurf-bridge/start.sh)
 #   ENTWURF_AGY_STATUSLINE_TARGET entwurf-agy-statusline target (default: $REPO/scripts/agy-statusline.sh)
 #   ENTWURF_AGY_IMPRINT_TARGET    entwurf-agy-imprint target (default: $REPO/scripts/agy-imprint.sh)
@@ -47,7 +50,7 @@ BIN_DIR="${ENTWURF_DEV_BIN_DIR:-$HOME/.local/bin}"
 STATE_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/entwurf/dev-bin"
 LEGACY_STATE="$STATE_DIR/install-state.json"   # pre-multi-bin single state == entwurf-bridge
 
-MANAGED_BINS="entwurf-bridge entwurf-agy-statusline entwurf-agy-imprint entwurf-copilot-statusline"
+MANAGED_BINS="entwurf entwurf-bridge entwurf-agy-statusline entwurf-agy-imprint entwurf-copilot-statusline"
 
 log()  { printf '%s\n' "$*"; }
 warn() { printf '%s\n' "$*" >&2; }
@@ -55,6 +58,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
 bin_target() {  # $1 = name → prints target path (env-overridable for smoke)
   case "$1" in
+    entwurf)                echo "${ENTWURF_OPERATOR_TARGET:-$REPO_DIR/run.sh}" ;;
     entwurf-bridge)         echo "${ENTWURF_BRIDGE_TARGET:-$REPO_DIR/mcp/entwurf-bridge/start.sh}" ;;
     entwurf-agy-statusline) echo "${ENTWURF_AGY_STATUSLINE_TARGET:-$REPO_DIR/scripts/agy-statusline.sh}" ;;
     entwurf-agy-imprint)    echo "${ENTWURF_AGY_IMPRINT_TARGET:-$REPO_DIR/scripts/agy-imprint.sh}" ;;
@@ -161,6 +165,21 @@ expose_one() {  # $1 = name
   fi
 }
 
+verify_one() {  # $1 = name
+  local name="$1" target link resolved
+  target="$(bin_target "$name")" || fail "unknown managed bin: $name"
+  link="$BIN_DIR/$name"
+  resolved="$(command -v "$name" 2>/dev/null || true)"
+  if [ ! -L "$link" ] || [ "$(readlink "$link" 2>/dev/null || true)" != "$target" ] || [ "$resolved" != "$link" ]; then
+    warn "[dev-bin] FAIL ($name): source command is not the PATH winner owned by this checkout."
+    warn "  expected: $link -> $target"
+    warn "  resolved: ${resolved:-<none>}"
+    warn "  fix: remove a foreign/shadowing bin or put $BIN_DIR on PATH, then re-run setup."
+    return 1
+  fi
+  log "[dev-bin verify] $name → $target (PATH winner: $link)"
+}
+
 remove_one() {  # $1 = name
   local name="$1" target link sf recorded
   target="$(bin_target "$name")" || fail "unknown managed bin: $name"
@@ -194,5 +213,6 @@ do_remove() {  # $1 = optional bin name
 case "${1:-}" in
   expose) shift; do_expose "${1:-}" ;;
   remove) shift; do_remove "${1:-}" ;;
-  *) echo "usage: dev-bin.sh <expose|remove> [bin-name]" >&2; exit 2 ;;
+  verify) shift; [ -n "${1:-}" ] || fail "verify requires one managed bin name"; verify_one "$1" ;;
+  *) echo "usage: dev-bin.sh <expose|remove> [bin-name] | verify <bin-name>" >&2; exit 2 ;;
 esac

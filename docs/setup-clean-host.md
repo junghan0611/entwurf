@@ -9,10 +9,11 @@ only on Linux because its strict live-owner join uses `/proc`.
 | Component | Requirement | Needed for |
 |---|---|---|
 | Node | **`>=24.0.0`** | package and bridge runtime |
-| npm | bundled with Node | package installation |
-| entwurf | `@junghanacs/entwurf` | all lanes |
-| pi | optional, `@earendil-works/pi-coding-agent >=0.84.3 <0.85` | ACP provider, control sockets |
+| npm/pnpm | npm is bundled with Node; pnpm is required for source setup | package or source installation |
+| entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
+| pi | optional generally; **required on PATH for full source `setup`**, `>=0.84.3 <0.85` | ACP provider, control sockets |
 | Claude Code | optional, **`>=2.1.217`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
+| GitHub Copilot CLI | optional, operator-installed and authenticated | self-fetch citizen and visible fresh |
 | Antigravity `agy` | optional, operator-installed and authenticated | native-push citizen |
 | Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
 
@@ -50,6 +51,19 @@ npx entwurf check-bridge
 
 `check-bridge` is auth-free. It proves the installed prebuilt MCP server boots and
 lists the seven garden tools; it does not prove a backend model turn or native hook.
+
+Maintainers using a source checkout do not install a second global entwurf package. Full source
+setup requires Node 24, pnpm, Python 3, and compatible pi already on PATH:
+
+```bash
+git clone https://github.com/junghan0611/entwurf ~/repos/gh/entwurf
+cd ~/repos/gh/entwurf
+./run.sh setup /path/to/consumer-project
+```
+
+This owns `~/.local/bin/entwurf` as a symlink to that checkout's `run.sh` and fails if the
+link is foreign, outside PATH, or shadowed by another command. It detects and wires Claude/agy;
+Copilot's four native units remain explicit installs in §4.
 
 ## 2. Optional pi adapter / ACP plugin
 
@@ -109,7 +123,30 @@ New macOS wiring is refused because the live join is not instrumented there. Dar
 uninstall remains available for cleaning an older managed install; this is an evidence
 boundary, not a permanent impossibility claim.
 
-## 4. Optional Antigravity native citizen
+## 4. Optional GitHub Copilot CLI native citizen
+
+Copilot has four independently owned surfaces. Install and certify all four for supported visible
+fresh; a manual citizen may omit the footer, but fresh refuses before opening a window when any
+required surface is absent.
+
+```bash
+entwurf install-copilot-bridge
+entwurf install-copilot-mcp
+entwurf install-copilot-receive
+entwurf install-copilot-statusline
+
+entwurf doctor-copilot-bridge
+entwurf doctor-copilot-mcp
+entwurf doctor-copilot-receive
+entwurf doctor-copilot-statusline
+```
+
+Launch the supported invocation with `entwurf copilot`, not bare `copilot`. It enables extension
+scanning for that process, checks the receiver, removes inherited pi identity carriers, and owns
+the model/permission defaults. Birth occurs on the first prompt. `entwurf_fresh_call` uses this
+same managed invocation and requires the birth, MCP, receiver, and visible-identity preflight.
+
+## 5. Optional Antigravity native citizen
 
 Install the three independently owned surfaces:
 
@@ -134,7 +171,7 @@ Real native-push acceptance needs an already-running conversation:
 LIVE=1 AGY_CONVERSATION_ID=<id> entwurf smoke-agy-native-push-live
 ```
 
-## 5. Optional ACP backend turns
+## 6. Optional ACP backend turns
 
 Claude uses the operator's existing local Claude authentication:
 
@@ -153,25 +190,32 @@ LIVE=1 ENTWURF_ACP_CORTEX_CONNECTION=<conn> \
 The aggregate release gate is Claude-backed and does not run Cortex automatically.
 Its silence is not a Cortex PASS.
 
-## 6. Upgrade and repair
+## 7. Upgrade and repair
 
 After upgrading the package, rerun the managed installers for every native harness
 in use and restart their existing processes. Native plugin caches are not live-reload
 safe across launch-contract changes.
 
 If install or doctor reports an unreadable/old active citizen generation, do not edit
-records by hand:
+records by hand. Close pi, Claude, Copilot, and agy sessions first, run
+`entwurf meta-bridge-fresh-cut`, and read its exit status before any install. Then choose the
+installation mode you actually own:
 
 ```bash
-# close pi, Claude, and agy sessions first
-entwurf meta-bridge-fresh-cut
-entwurf setup ~/entwurf-smoke
+# npm package consumer
+entwurf install ~/entwurf-smoke
+entwurf install-meta-bridge
+# rerun the four install-copilot-* commands when Copilot is in use
+
+# source maintainer — from the checkout
+./run.sh setup ~/entwurf-smoke
 ```
 
-Read the cut's exit status before chaining setup. The complete quiescence, archive,
+The package-installed `entwurf setup` is not a consumer command: `setup` runs a frozen pnpm
+install inside its repository and belongs to a source checkout. The complete quiescence, archive,
 and exit-code contract is [fresh-cut-policy.md](./fresh-cut-policy.md).
 
-## 7. Release acceptance versus host acceptance
+## 8. Release acceptance versus host acceptance
 
 - `entwurf check-bridge`: installed MCP bytes boot; no backend auth.
 - `pnpm check` / `pnpm run check:full`: tiered source deterministic floors (everyday
@@ -190,12 +234,24 @@ Run only the surfaces this host owns:
 
 ```bash
 entwurf uninstall-meta-bridge
+entwurf uninstall-copilot-statusline
+entwurf uninstall-copilot-receive
+entwurf uninstall-copilot-mcp
+# Birth currently has no package wrapper inverse; remove only the qualified unit/marketplace:
+copilot plugin uninstall entwurf-meta-receive-copilot@meta-bridge-copilot-local
+copilot plugin marketplace remove meta-bridge-copilot-local
 entwurf uninstall-agy-hooks
 entwurf uninstall-agy-statusline
 entwurf uninstall-agy-bridge
-entwurf uninstall ~/entwurf-smoke
+entwurf remove ~/entwurf-smoke
+# only when no other project uses the shared user-scope pi registration:
+entwurf remove-user-scope
 npm uninstall -g @junghanacs/entwurf
 ```
 
-Each managed surface has an honest inverse and preserves unrelated native-harness
-configuration.
+The package `uninstall-*`/`remove` surfaces preserve unrelated native-harness configuration.
+Copilot birth is the explicit exception above: its installer predates a package-owned inverse,
+so cleanup uses the qualified vendor identities rather than a bare plugin name that could match
+somebody else's unit. The assembled source under `$XDG_DATA_HOME/entwurf/meta-bridge-copilot`
+remains inert after marketplace removal; deleting that preserved artifact is a separate operator
+choice, not something this guide guesses at.

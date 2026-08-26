@@ -119,7 +119,7 @@ run_vitest() {
 usage() {
   cat <<'EOF'
 Usage:
-  ./run.sh setup [project-dir]        # ONE confident install: pnpm install + install + meta-bridge (if native harness) + v2 install smoke (LIVE substrate = release-gate)
+  ./run.sh setup [project-dir]        # ONE confident source install: pnpm install + stable dev bins (incl. entwurf) + detected native bridges + v2 install smoke
   ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, doctor-pi-provider, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b/G1e/G1f, IN pnpm run check:full): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 and entwurf_resume_call registered/schema + the tools/list surface is EXACTLY the seven shipped garden verbs; tools/list only, no auth/side-effect
@@ -4290,10 +4290,11 @@ setup_all() {
     echo "[setup] no native harness (claude) on PATH — skipping meta-bridge wiring (pi-only host)"
   fi
 
-  # Expose entwurf's STABLE bins on PATH for this DEV checkout (막힘 ②) BEFORE wiring agy: the
-  # agy mcp_config, settings.statusLine, and hooks.json record the bare names `entwurf-bridge` /
-  # `entwurf-agy-statusline` / `entwurf-agy-imprint`, so they must resolve for the agy doctors
-  # to pass. NON-FATAL — a foreign bin already on PATH is left as-is.
+  # Expose entwurf's STABLE bins on PATH for this DEV checkout (막힘 ②) BEFORE wiring agy. This
+  # includes the operator command `entwurf` that Copilot fresh resolves as its managed runtime,
+  # plus the bare bridge/statusline/imprint names native-harness configs record. An npm consumer
+  # receives the same commands from package bin linking. The core operator is fail-loud; only a
+  # later optional helper-bin conflict is left in place with a harness-doctor-owned warning.
   expose_dev_bin
 
   # Fold agy (Antigravity) MCP bridge wiring into setup (막힘 ①, GLG 2026-07-04: install
@@ -4467,25 +4468,33 @@ wire_agy_hooks() {
   return 0
 }
 
-# expose_dev_bin — make the `entwurf-bridge` STABLE bin resolve for a DEV checkout (막힘 ②).
-# setup IS the dev install command (consumers get the bin from npm bin-linking), so setup owns a
-# managed ~/.local/bin/entwurf-bridge symlink into this checkout via scripts/dev-bin.sh, recorded
-# for an honest inverse (remove-dev-bin). NON-FATAL like wire_agy_bridge: a foreign bin already on
-# PATH (a real npm install) is REFUSED not clobbered, and a BIN_DIR off PATH only WARNs — neither
-# bricks setup. The hard gate stays doctor-agy-bridge (a missing/dangling bin FAILs there).
+# expose_dev_bin — make the package's stable commands resolve for a DEV checkout (막힘 ②).
+# setup IS the dev install command (consumers get these names from npm bin-linking), so setup owns
+# managed ~/.local/bin symlinks into this checkout via scripts/dev-bin.sh, each recorded for an
+# honest inverse. The set starts with `entwurf` → run.sh: Copilot fresh deliberately launches the
+# managed `entwurf copilot`, never the raw vendor. That operator command is CORE and is certified
+# after exposure by dev-bin.sh's own target authority: our symlink, our target, and the exact PATH
+# winner. A foreign/off-PATH/shadowed operator therefore fails setup. Later helper-bin conflicts
+# keep the older NON-FATAL posture — their harness-specific doctors own the hard verdict.
 expose_dev_bin() {
-  section "dev bin: expose entwurf-bridge on PATH (dev checkout)"
+  section "dev bins: expose stable package commands on PATH (dev checkout)"
   local rc
   set +e
   bash "$REPO_DIR/scripts/dev-bin.sh" expose
   rc=$?
   set -e
+
+  if ! bash "$REPO_DIR/scripts/dev-bin.sh" verify entwurf; then
+    return 1
+  fi
+
   [ "$rc" -eq 0 ] && return 0
   if [ "$rc" -eq 3 ]; then
-    echo "[setup] WARN: entwurf-bridge is already on PATH as someone else's bin (not ours) — left as-is." >&2
-    echo "[setup]       If that is a stale/foreign bin, remove it and re-run setup. setup continues." >&2
+    echo "[setup] WARN: a helper dev-bin path is already someone else's bin (not ours) — left as-is." >&2
+    echo "[setup]       The source operator is certified; repair the helper and re-run setup before using its harness." >&2
   else
-    echo "[setup] WARN: dev bin exposure did not complete (rc=$rc; see above). setup continues." >&2
+    echo "[setup] WARN: helper dev-bin exposure did not complete (rc=$rc; see above)." >&2
+    echo "[setup]       The source operator is certified; harness-specific doctors keep the hard verdict." >&2
   fi
   return 0
 }
@@ -5482,14 +5491,15 @@ case "$cmd" in
     wire_agy_hooks
     ;;
   expose-dev-bin)
-    # 막힘 ②: expose the entwurf-bridge STABLE bin on PATH for a DEV checkout (a managed symlink
-    # into this checkout, recorded for an honest inverse). HIDDEN/internal — setup calls the
-    # NON-FATAL expose_dev_bin wrapper; exposed here so smoke-agy-install-state can drive the
-    # foreign-refuse WARN path. The exposure logic lives in scripts/dev-bin.sh.
+    # 막힘 ②: expose the stable package commands on PATH for a DEV checkout, including the
+    # `entwurf` operator command Copilot fresh resolves. HIDDEN/internal — setup requires the
+    # core operator certification while later helper conflicts remain non-fatal; exposed here so
+    # the install smoke can drive ownership/refusal.
+    # The exposure logic lives in scripts/dev-bin.sh.
     expose_dev_bin
     ;;
   remove-dev-bin)
-    # 막힘 ②: honest inverse of expose-dev-bin — remove ONLY our managed link + state (REFUSE if
+    # 막힘 ②: honest inverse of expose-dev-bin — remove ONLY our managed links + states (REFUSE if
     # it became foreign). The raw script (no wrapper) so an operator sees a loud failure.
     shift || true
     (cd "$REPO_DIR" && bash scripts/dev-bin.sh remove "$@")
