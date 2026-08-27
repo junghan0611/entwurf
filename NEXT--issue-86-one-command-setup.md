@@ -7,14 +7,19 @@
 - [x] **1. Incident + source operator checkpoint** — ThinkPad exposed missing `entwurf`; Oracle's masking global checkout link was removed; `e08d937` adds owned `entwurf -> checkout/run.sh` with focused source/install gates.
 - [x] **2. Contract + living-harness audit** — GLG fixed “Entwurf installs itself only”; Terra, Fable and an independent citizen re-audited credentials, ownership, setup consumers and platform evidence. The issue body/thread owns the full matrix and errata.
 - [x] **3. C1 setup kernel / all-absent truth — CLOSED**: one product+gate candidate landed by Fable `20260826T184719-89ff44` (2026-08-26); three independent review rounds + Grok READY applied, focused gates green, 7 lane mutants qualified, `check-gate-qualification` 261/261 GREEN, frozen `check:full` GREEN. Committed as `32d161c` under GLG's grant (push stays GLG's).
-- [x] **4. C2 Pi install-scope ownership — CLOSED**: committed as `096a5cd` under the coordinator grant (push stays GLG's). Grok final `READY / Blocker 0 / Defect 0 / Observation 2`; focused 8/8 GREEN + 3/3 mutant re-kills; qualification 264/264 GREEN; frozen `check:full` 414s GREEN. Ledger: the first qualification run was RED solely on snapshot IMPURE — the new lane's repeated smoke runs planted an ignored `scripts/__pycache__/*.pyc` inside the snapshot (treeClean=false, porcelainClean=true, 264/264 still killed); containment was one Grok-approved line (`export PYTHONDONTWRITEBYTECODE=1` in `smoke-user-scope-citizen.sh`), after which qualification and full ran GREEN on the repaired frozen candidate.
-- [ ] **5. C3 Copilot inverse → composition + platform consumers** ← CURRENT (C3a) — birth inverse first, then four-unit setup; consume each slice on Linux/macOS/native Windows under the stop rule. Decided (coordinator, 2026-08-27): C3a birth state/inverse and C3b composition are SEPARATE commits — C3b is forbidden until C3a is GREEN/committed; the platform package-consumer tail is its own later sub-slice; composition presence is presence-only (no invented Copilot version floor).
+- [ ] **4. C2 corrective + C3a birth ownership — MACHINE-GREEN, accepted commit/B review pending** ← CURRENT: B's seven confirmed findings are closed; independent C2 and C3a reviews both returned GO. Qualification **274/274 KILLED**; the NEXT-aligned candidate passed `check:full` in 461s. Local commit and B's final review are the only remaining steps in this checkpoint.
+- [ ] **5. C3b composition → platform consumers** ← PAUSED: C3b opens only after the accepted local commit and B's final independent review. Then compose Copilot birth→MCP→receiver→footer; afterward run the macOS consumer and native-Windows obstruction matrix under the recorded stop rule.
 
-현재 좌표: C2 CLOSED(096a5cd) → **C3a Copilot birth state/inverse 구현** (vendor read-only measurement + Grok design review 완료, coordinator exact grant 하) → focused → 독립 리뷰 → qualification 1회 → frozen full 1회 → C3a commit → C3b
+현재 좌표: **C2+C3a machine-green candidate** → local accepted commit → issue #86 checkpoint + B final review → C3b → platform tail. Push/release는 GLG 별도 승인 전 금지.
 
-# NOW — C3a Copilot birth ownership state + inverse
+# NOW — accepted commit and B final review
 
-Current subject: give the Copilot BIRTH unit the same ownership discipline the other three units already have — a package-owned install-state, an explicit inverse (`uninstall-copilot-bridge`), and a doctor ownership axis — per the locked rules below. C3b (aggregate setup composition) and the platform tail stay forbidden until their own grants. The C1/C2 material below is durable delivered history (`32d161c`, `096a5cd`), kept for review cross-reference — not the current candidate.
+- **Current:** B's C2/C3a findings are closed on the combined candidate. Independent reviews: C2 citizen `20260827T083143-b2148e` GO; C3a citizen `20260827T085714-763495` GO. Qualification: 274/274 KILLED, `/tmp/agent-glm-qualification.log` sha256 `2a07719bace99a2c723788d4d362f40d665fe12242fb69e7783a6fbddabb0657`. NEXT-aligned full: 461s exit 0, `/tmp/agent-glm-checkfull-next.log` sha256 `b6bcfee82e7c4891d391a2ff4703ffc097ff1f7da78e5ae07fc3f652009ac942`.
+- **Next:** (1) commit the C2+C3a corrective bundle locally → (2) post the exact SHA/evidence to issue #86 → (3) hand the commit to B for final independent review.
+- **Blocker:** none.
+- **Do not touch:** C3b, platform work, credentials, delivery/ACP/mux, push/release until the accepted commit and B review close.
+
+**Landed behavior awaiting commit:** user-scope Pi ownership uses one exact-owner classifier across install/takeover/inverse/doctor and one typed `installerRoot` classifier across provider writers/doctor; Copilot birth uses one marketplace/plugin-row oracle, duplicate/malformed refusal, whitespace-safe version transport and one doctor assembly oracle. Lane inventories are `pi-package-ownership=6`, `copilot-birth=19`.
 
 ## C3a locked rules (Grok design review REVISE applied; coordinator exact grant 2026-08-27)
 
@@ -90,10 +95,10 @@ Current subject: give the Copilot BIRTH unit the same ownership discipline the o
 
 ## Current state
 
-- Branch: `issue-86-one-command-setup`; local HEAD `c2907ef`, remote `e08d937` (push is GLG's decision).
-- Worktree on handoff: C1 product+gate candidate is UNCOMMITTED across 9 modified + 2 new files (see delivered shape above; `git status` is the authority).
-- Qualification: 261/261 GREEN (2026-08-26); full: frozen 1회 run follows the approved prose correction. `smoke-setup-verdict` is now the first automated consumer of aggregate `entwurf setup` (fixture-level); the L1/L2/U3 living-layer setup rows remain LATER work.
-- Living layers: L1a pinned-Pi pnpm project consumer; L1b Pi-absent npm project install root whose loader assertion uses L1a's Pi; L2 checkout-invisible global candidate; U3 pi-managed registry smoke. Matrix + correction are linked below.
+- Branch: `issue-86-one-command-setup`; HEAD `47a5ae3`; remote remains `e08d937` (no push).
+- Worktree: combined C2 corrective + C3a corrective bundle across 13 modified files; qualification subjects/gates are machine-green at 274/274.
+- Machine proof: qualification 274/274; NEXT-aligned `check:full` 461s exit 0. The accepted local commit is next.
+- After the local commit, B performs the final independent review. C3b and platform rows remain closed until that verdict.
 
 ## C1 — original slice plan (implemented above; kept for review cross-check)
 

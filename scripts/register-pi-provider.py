@@ -31,7 +31,12 @@ Scope asymmetry (봉인계약 4·6, REASONED — not the unfounded asymmetry dev
 USER-SCOPE OWNER BINDING (#86 C2): the user install-state additionally records
 `installerRoot` (the repo/package root that installed the key), so an old root's
 inverse can no longer delete the CURRENT stable provider key. Schema stays
-version 1 — installerRoot is an optional field; a state without it is LEGACY:
+version 1 — installerRoot is an optional field, judged by ONE typed classifier
+(pi_settings_io.classify_installer_root, shared with the doctor-pi-package
+coupling): absent/null is LEGACY, a non-empty string is the owner, and every
+OTHER type (empty string, number, bool, object, array) is CORRUPT — install and
+remove both refuse it (exit 4) before any write, because a state MORE
+unattributed than legacy must never be treated MORE leniently than legacy:
   - install, legacy state          → safe ADOPTION: proceed and rewrite the state
                                      with installerRoot = this root (named on stdout);
   - install, installerRoot ≠ root  → REFUSE (exit 6), zero settings write, unless
@@ -56,7 +61,7 @@ Subcommands:
   install <settings_path> <repo_dir> --scope <user|project> [--state <state_path>] [--takeover] [--preflight]
   remove  <settings_path> <repo_dir> --scope <user|project> [--state <state_path>] [--orphan-cleanup] [--preflight]
 
-Exit codes: 0 ok · 2 no-state · 3 refuse-symlink · 4 invalid-json · 5 usage · 6 ownership-refusal.
+Exit codes: 0 ok · 2 no-state · 3 refuse-symlink · 4 invalid-json/corrupt-state · 5 usage · 6 ownership-refusal.
 """
 
 import json
@@ -71,7 +76,7 @@ import sys
 # holds this directory when the script is run by path (how run.sh and the gates invoke
 # it); the explicit insert keeps the import true under any other invocation form.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from pi_settings_io import detect_indent, dumps, unchanged  # noqa: E402
+from pi_settings_io import classify_installer_root, detect_indent, dumps, unchanged  # noqa: E402
 
 SERVER_KEY = "entwurf-bridge"
 BARE_COMMAND = "entwurf-bridge"
@@ -214,7 +219,7 @@ def cmd_install(settings_path: str, repo_dir: str, scope: str, state_path: str, 
     # installerRoot names another root refuses the whole install — zero settings
     # bytes — unless the operator-explicit takeover replaces it.
     prior_state = _load_state_file(state_path) if scope == "user" else None
-    prior_root = prior_state.get("installerRoot") if isinstance(prior_state, dict) else None
+    prior_kind, prior_root = ("legacy", None)
     if scope == "user" and isinstance(prior_state, dict):
         # State↔target binding (#86 C2 final amendment): the state names WHICH
         # settings file it manages; an operation targeting a different file is an
@@ -225,7 +230,16 @@ def cmd_install(settings_path: str, repo_dir: str, scope: str, state_path: str, 
         if os.path.abspath(prior_managed) != os.path.abspath(settings_path):
             _die(6, f"register-pi-provider: install-state {state_path} manages {prior_managed}, but this "
                     f"operation targets {settings_path} — ownership record and target disagree; zero settings bytes written.")
-    if scope == "user" and isinstance(prior_root, str) and prior_root != repo_dir and not takeover:
+        # One typed installerRoot verdict (#86 C2 corrective amendment, B blocker 3):
+        # a wrong-TYPE value used to fall between the isinstance(str) arm and the
+        # is-None legacy arm and proceed unattributed — now it is CORRUPT, refused
+        # before any settings or state write.
+        prior_kind, prior_root = classify_installer_root(prior_state)
+        if prior_kind == "corrupt":
+            _die(4, f"register-pi-provider: install-state {state_path} has a CORRUPT installerRoot — expected "
+                    "a non-empty string (owner) or null/absent (legacy). Refusing to install over an "
+                    "unattributed state; repair or remove the state file first — zero settings bytes written.")
+    if scope == "user" and prior_kind == "owner" and prior_root != repo_dir and not takeover:
         _die(6, f"register-pi-provider: the user-scope {SERVER_KEY} key is owned by another root: {prior_root}. "
                 "Normal install never replaces another owner — zero settings bytes written. "
                 "Use './run.sh takeover-user-scope' to move it explicitly.")
@@ -287,13 +301,13 @@ def cmd_install(settings_path: str, repo_dir: str, scope: str, state_path: str, 
 
     if scope == "user":
         if state_path:
-            if prior_state is not None and prior_root is None:
+            if prior_state is not None and prior_kind == "legacy":
                 # LEGACY v1 state (pre-#86 C2, no installerRoot): safe adoption — the
                 # rewrite below binds it to this root, and the adoption is named.
                 sys.stdout.write(
                     f"install: adopted legacy provider install-state (no installerRoot recorded) — now bound to {repo_dir}\n"
                 )
-            if takeover and isinstance(prior_root, str) and prior_root != repo_dir:
+            if takeover and prior_kind == "owner" and prior_root != repo_dir:
                 sys.stdout.write(
                     f"takeover: user-scope {SERVER_KEY} provider ownership moved {prior_root} -> {repo_dir}\n"
                 )
@@ -324,9 +338,15 @@ def cmd_remove(settings_path: str, repo_dir: str, scope: str, state_path: str, o
             return
         state = _load(state_path)
         # Same-owner-only inverse (#86 C2): a state bound to another root must not
-        # let that OTHER root's stale inverse delete the CURRENT stable key.
-        installer_root = state.get("installerRoot")
-        if isinstance(installer_root, str) and installer_root != repo_dir:
+        # let that OTHER root's stale inverse delete the CURRENT stable key. The
+        # typed classifier (B blocker 3) closes the wrong-TYPE gap: corrupt refuses
+        # BEFORE the foreign/legacy arms, so no value can fall between them.
+        installer_kind, installer_root = classify_installer_root(state)
+        if installer_kind == "corrupt":
+            _die(4, f"register-pi-provider: install-state {state_path} has a CORRUPT installerRoot — expected "
+                    "a non-empty string (owner) or null/absent (legacy). Refusing to remove on an unattributed "
+                    "state; repair or remove the state file first — zero settings bytes written.")
+        if installer_kind == "owner" and installer_root != repo_dir:
             if os.path.isdir(installer_root):
                 _die(6, f"register-pi-provider: the user-scope {SERVER_KEY} key is owned by another LIVE root: "
                         f"{installer_root}. This root's inverse must not remove it — zero settings bytes written.")
@@ -338,7 +358,7 @@ def cmd_remove(settings_path: str, repo_dir: str, scope: str, state_path: str, o
                 sys.stdout.write(
                     f"remove: orphan cleanup — proceeding for the MISSING owner {installer_root}\n"
                 )
-        elif installer_root is None:
+        elif installer_kind == "legacy":
             # LEGACY v1 state (no installerRoot): fail-closed (#86 C2 amendment). An
             # unattributed state must not let ANY root's inverse — least of all an old
             # checkout's — delete the current stable key. Adoption is install-only:

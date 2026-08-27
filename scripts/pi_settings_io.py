@@ -63,3 +63,25 @@ def unchanged(before: dict, after: dict) -> bool:
     writers mutate in place, so they parse the raw text twice rather than aliasing it.
     """
     return before == after
+
+
+def classify_installer_root(state: dict) -> "tuple[str, str | None]":
+    """ONE typed verdict for a user-scope install-state's `installerRoot` (#86 C2).
+
+    Shared by register-pi-provider install/remove and the doctor-pi-package ownership
+    coupling, because two per-site checks (`isinstance(str)` in one arm, `is None` in
+    another) let every OTHER type — a number, an empty string, a bool, an object, an
+    array — fall between them and proceed unattributed. A state MORE unattributed than
+    legacy must never be treated MORE leniently than legacy.
+
+      ("legacy", None)   key absent, or an explicit null — the pre-#86 shape; each
+                         caller names its own adoption/refusal contract for it.
+      ("owner", root)    a non-empty string — the recorded owner root.
+      ("corrupt", None)  everything else — fail-closed before any write.
+    """
+    if "installerRoot" not in state or state["installerRoot"] is None:
+        return "legacy", None
+    root = state["installerRoot"]
+    if isinstance(root, str) and root:
+        return "owner", root
+    return "corrupt", None

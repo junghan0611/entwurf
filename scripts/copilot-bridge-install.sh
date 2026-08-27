@@ -106,6 +106,12 @@ fi
 # evidence and the doctor can join on it.
 PLUGIN_VERSION="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['version'])" "$SRC/$PLUGIN/.claude-plugin/plugin.json")" \
   || die "could not read the shipped plugin version from $SRC/$PLUGIN/.claude-plugin/plugin.json"
+# C3a amendment (B defect 4): the version rides space-separated state facts and exact
+# list rows, so a shipped version carrying whitespace/control (or nothing at all)
+# would truncate into a fabricated value downstream. Refuse it at the source.
+case "$PLUGIN_VERSION" in
+  ""|*[![:graph:]]*) die "shipped plugin version ${PLUGIN_VERSION:-<empty>} is empty or carries whitespace/control characters — it must be one printable token (it travels through space-separated fact transports and exact list rows)." ;;
+esac
 
 # Atomic state writer: regular file, temp+rename, exact schema. `ownedMarketplace`
 # flips false→true around the marketplace add so a partial failure leaves an honest
@@ -164,15 +170,18 @@ if [ "$ASSEMBLE_ONLY" -eq 0 ]; then
     QUALIFIED_LISTED=1
     echo "[copilot-bridge-install] $QUALIFIED currently listed at ${LISTED_ROW#one } (shipped: v$PLUGIN_VERSION) — bounded upgrade via loud exact uninstall"
   fi
-  # Measured list shape (copilot 1.0.80, 2026-08-27): a registered local marketplace
-  # prints `<name> (Local: <abs path>)`. The exact name is anchored; the path is what
-  # ownership joins on.
-  MKT_LINE="$(printf '%s\n' "$MKT_LIST" | grep -F " $MKT_NAME (" | head -1 || true)"
-  if [ -n "$MKT_LINE" ]; then
+  # ONE marketplace-row grammar (C3a amendment, B defects 1+2): the shared oracle
+  # parses the measured `<name> (Local: <abs path>)` form, refuses a non-Local or
+  # garbled row, and refuses DUPLICATE same-named rows instead of silently taking the
+  # first — a second marketplace with our name could otherwise steer every path check
+  # at the wrong target. The exact registered path is what ownership joins on.
+  MKT_ROW="$(copilot_marketplace_local_path "$MKT_LIST" "$MKT_NAME")" \
+    || die "the 'copilot plugin marketplace list' rows for '$MKT_NAME' are malformed, non-Local, or duplicated (see above) — refusing before any write."
+  if [ "$MKT_ROW" != "absent" ]; then
     MKT_PREREGISTERED=1
-    MKT_PATH="$(printf '%s\n' "$MKT_LINE" | sed -n 's/.*(Local: \(.*\))$/\1/p')"
-    if [ -z "$MKT_PATH" ] || [ "$MKT_PATH" != "$ASM" ]; then
-      die "a marketplace named '$MKT_NAME' is registered at '${MKT_PATH:-<non-local source>}', not at this install's assembly ($ASM). That registration is not provably ours — zero writes. Inspect with 'copilot plugin marketplace list' and remove it manually if it is stale."
+    MKT_PATH="${MKT_ROW#one }"
+    if [ "$MKT_PATH" != "$ASM" ]; then
+      die "a marketplace named '$MKT_NAME' is registered at '$MKT_PATH', not at this install's assembly ($ASM). That registration is not provably ours — zero writes. Inspect with 'copilot plugin marketplace list' and remove it manually if it is stale."
     fi
   fi
 

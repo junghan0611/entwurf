@@ -33,6 +33,49 @@
 			"signatureSource": "scripts/smoke-user-scope-citizen.sh"
 		},
 		{
+			"claim": "BROAD-INSTALL-COLLAPSE",
+			"title": "a same-owner user-scope install routes through the broad project-scope register() collapse, so a second entwurf-shaped root in the GLOBAL packages[] is silently deleted as collateral of an ordinary install — the exact transition B reproduced against 096a5cd (#86 C2 corrective amendment, blocker 1)",
+			"subject": "scripts/register-pi-package.py",
+			"find": [
+				"            _require_user_owner_entry(settings_path, owner)\n            if preflight:\n                print(\"preflight: install ok (this root owns one unambiguous registration)\")\n                return 0\n            print(f\"install: entwurf package already registered (no-op) -> {repo_dir}\")\n            return 0"
+			],
+			"replace": [
+				"            if preflight:\n                print(\"preflight: install ok (this root owns one unambiguous registration)\")\n                return 0\n            register(settings_path, repo_dir_arg)\n            print(f\"install: entwurf package already registered (no-op) -> {repo_dir}\")\n            return 0"
+			],
+			"gate": ["bash", "run.sh", "smoke-user-scope-citizen"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:BROAD-INSTALL-COLLAPSE]",
+			"signatureSource": "scripts/smoke-user-scope-citizen.sh"
+		},
+		{
+			"claim": "BROAD-DOCTOR-GREEN",
+			"title": "doctor-pi-package judges the recorded owner through the broad entwurf-shape matcher, so a store whose exact owner entry is GONE but which still holds some other entwurf-shaped root reads owned/exit-0 while the inverse refuses the very same state — contradictory verdicts on one store (#86 C2 corrective amendment, blocker 2)",
+			"subject": "scripts/register-pi-package.py",
+			"find": [
+				"    owner_exact, owner_extra = _classify_user_owner_entries(settings_path, owner)\n    if len(owner_exact) != 1 or owner_extra:\n        print(f\"doctor-pi-package: mismatch — owner state records {owner} but the settings hold \"\n              f\"{len(owner_exact)} exact entr{'y' if len(owner_exact) == 1 else 'ies'} and \"\n              f\"{len(owner_extra)} additional entwurf-shaped entr{'y' if len(owner_extra) == 1 else 'ies'} \"\n              \"(expected exactly one exact entry and no other entwurf-shaped root)\")\n        return 1"
+			],
+			"replace": [
+				"    owner_matches = _entwurf_matches(packages, owner, settings_dir)\n    if not owner_matches:\n        print(f\"doctor-pi-package: mismatch — owner state records {owner} but no packages[] entry names it\")\n        return 1"
+			],
+			"gate": ["bash", "run.sh", "smoke-user-scope-citizen"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:BROAD-DOCTOR-GREEN]",
+			"signatureSource": "scripts/smoke-user-scope-citizen.sh"
+		},
+		{
+			"claim": "PROVIDER-ROOT-TYPE-FAIL-OPEN",
+			"title": "the typed installerRoot classifier reports a wrong-TYPE value (number, empty string, bool, object, array) as LEGACY instead of CORRUPT, so provider install adopts and rebinds an unattributed state, remove proceeds on it, and the doctor coupling stays silent — the fall-through B reproduced against 096a5cd (#86 C2 corrective amendment, blocker 3)",
+			"subject": "scripts/pi_settings_io.py",
+			"find": ["    if isinstance(root, str) and root:\n        return \"owner\", root\n    return \"corrupt\", None"],
+			"replace": [
+				"    if isinstance(root, str) and root:\n        return \"owner\", root\n    return \"legacy\", None"
+			],
+			"gate": ["bash", "run.sh", "smoke-user-scope-citizen"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:PROVIDER-ROOT-TYPE-FAIL-OPEN]",
+			"signatureSource": "scripts/smoke-user-scope-citizen.sh"
+		},
+		{
 			"claim": "MISSING-OWNER-AUTO-TAKEOVER",
 			"title": "a normal install auto-claims a MISSING owner's registration, turning every moved or deleted checkout into a silent ownership transfer instead of the named missing-owner verdict plus explicit takeover/orphan path",
 			"subject": "scripts/register-pi-package.py",

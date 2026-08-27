@@ -58,12 +58,17 @@ fi
 #     another path, and an inverse that had already uninstalled the plugin would have
 #     removed someone else's unit before discovering that.
 MKT_PRESENT=0
-MKT_LINE="$(printf '%s\n' "$MKT_LIST" | grep -F " $MKT_NAME (" | head -1 || true)"
-if [ -n "$MKT_LINE" ]; then
+# ONE marketplace-row grammar (C3a amendment, B defects 1+2): the shared oracle
+# refuses malformed/non-Local rows and DUPLICATE same-named rows instead of silently
+# acting on the first — an inverse steered at the wrong same-named marketplace would
+# remove a registration it cannot attribute.
+MKT_ROW="$(copilot_marketplace_local_path "$MKT_LIST" "$MKT_NAME")" \
+  || die "the 'copilot plugin marketplace list' rows for '$MKT_NAME' are malformed, non-Local, or duplicated (see above) — refusing with zero vendor/filesystem writes."
+if [ "$MKT_ROW" != "absent" ]; then
   MKT_PRESENT=1
-  MKT_PATH="$(printf '%s\n' "$MKT_LINE" | sed -n 's/.*(Local: \(.*\))$/\1/p')"
-  if [ -z "$MKT_PATH" ] || [ "$MKT_PATH" != "$ASM" ]; then
-    die "a marketplace named '$MKT_NAME' is registered at '${MKT_PATH:-<non-local source>}', not at the recorded assembly ($ASM). That registration is not provably ours — refusing with zero vendor/filesystem writes; inspect 'copilot plugin marketplace list' manually."
+  MKT_PATH="${MKT_ROW#one }"
+  if [ "$MKT_PATH" != "$ASM" ]; then
+    die "a marketplace named '$MKT_NAME' is registered at '$MKT_PATH', not at the recorded assembly ($ASM). That registration is not provably ours — refusing with zero vendor/filesystem writes; inspect 'copilot plugin marketplace list' manually."
   fi
   if [ "$OWNED_MKT" != "true" ]; then
     die "marketplace '$MKT_NAME' is registered at our recorded path, but the ownership state does not record marketplace ownership. Completing this inverse would leave a registered marketplace pointing at removed backing — refusing with zero vendor/filesystem writes (plugin, marketplace, assembly and state all preserved). Resolve the marketplace registration manually, or re-run './run.sh install-copilot-bridge' to re-bind ownership."

@@ -66,65 +66,16 @@ command -v copilot >/dev/null 2>&1 && ok "copilot CLI on PATH" || bad "copilot C
 command -v node >/dev/null 2>&1 && ok "node on PATH" || bad "node missing from PATH"
 
 echo "[copilot-bridge-doctor] assembled artifact"
-if [ -d "$ASM/$PLUGIN" ]; then
-  ok "assembly present at $ASM"
+# The SAME structural oracle the installer's adoption preflight and the inverse use
+# (C3a amendment, B defect 1): launcher presence/bake, live baked node and hook
+# entry, capability registry at the plugin root, and the native baked hooks.json form
+# are all ONE parser in copilot-bridge-oracle.sh — the doctor keeps no second copy
+# that could drift from what install/adopt actually accepts. The oracle prints its
+# first failing reason, which is surfaced verbatim.
+if ORACLE_REASON="$(copilot_assembly_valid "$ASM" "$PLUGIN" 2>&1)"; then
+  ok "assembly at $ASM passes the shared structural oracle (baked launcher, live node + hook entry, capability registry, native hooks.json)"
 else
-  bad "assembly missing at $ASM — run ./run.sh install-copilot-bridge"
-fi
-
-LAUNCHER="$ASM/$PLUGIN/scripts/copilot-hook-launch.sh"
-HOOKS="$ASM/$PLUGIN/hooks/hooks.json"
-if [ -x "$LAUNCHER" ]; then
-  ok "launcher present and executable"
-  # The exec form names the launcher as THE executable — a lost +x bit is ENOEXEC at
-  # first prompt, not a degraded path.
-  if grep -q "__NODE_BIN__\|__HOOK_ENTRY__" "$LAUNCHER"; then
-    bad "launcher still carries an installer placeholder (bake did not run)"
-  else
-    ok "launcher is baked (no placeholders)"
-    BAKED_NODE="$(sed -n 's/^NODE_BIN="\(.*\)"$/\1/p' "$LAUNCHER" | head -1)"
-    [ -x "$BAKED_NODE" ] && ok "baked node exists: $BAKED_NODE" \
-      || bad "baked node is missing or not executable: ${BAKED_NODE:-(unparsed)} — node moved (NixOS store churn?); reinstall"
-    BAKED_ENTRY="$(sed -n 's|^HOOK_ENTRY="\$PLUGIN_ROOT/\(.*\)"$|\1|p' "$LAUNCHER" | head -1)"
-    [ -n "$BAKED_ENTRY" ] && [ -f "$ASM/$PLUGIN/$BAKED_ENTRY" ] && ok "hook entry present: $BAKED_ENTRY" \
-      || bad "hook entry missing beside the launcher: ${BAKED_ENTRY:-(unparsed)}"
-  fi
-else
-  bad "launcher missing or not executable: $LAUNCHER"
-fi
-
-[ -f "$ASM/$PLUGIN/entwurf-capabilities.json" ] \
-  && ok "capability registry travels at the plugin root (every mint reads it)" \
-  || bad "capability registry missing at the plugin root — every mint would throw"
-
-if [ -f "$HOOKS" ]; then
-  HOOKS_PATH="$HOOKS" ASM_LAUNCHER="$LAUNCHER" python3 - <<'PY'
-import json, os, sys
-from pathlib import Path
-hooks = json.loads(Path(os.environ["HOOKS_PATH"]).read_text(encoding="utf-8"))
-launcher = os.environ["ASM_LAUNCHER"]
-problems = []
-if hooks.get("version") != 1:
-    problems.append("hooks.json root `version` must be the literal 1 (Copilot rejects the plugin otherwise)")
-events = hooks.get("hooks") or {}
-if set(events) != {"sessionStart", "userPromptSubmitted"}:
-    problems.append(f"hook events drifted: {sorted(events)} — want exactly ['sessionStart', 'userPromptSubmitted']")
-for name, entries in events.items():
-    for i, entry in enumerate(entries if isinstance(entries, list) else []):
-        exec_value = entry.get("exec")
-        if not isinstance(exec_value, str):
-            problems.append(f"hooks.{name}[{i}].exec must be a STRING (an array is rejected at plugin load)")
-        elif exec_value != launcher:
-            problems.append(f"hooks.{name}[{i}].exec does not point at the assembled launcher: {exec_value}")
-        if "args" in entry:
-            problems.append(f"hooks.{name}[{i}] carries `args`, which Copilot's schema has no key for")
-for p in problems:
-    print(f"  FAIL  {p}")
-sys.exit(1 if problems else 0)
-PY
-  [ $? -eq 0 ] && ok "hooks.json is the Copilot native form, baked at the assembled launcher" || fail=1
-else
-  bad "hooks.json missing: $HOOKS"
+  bad "assembly fails the shared structural oracle: ${ORACLE_REASON:-no reason printed} — run ./run.sh install-copilot-bridge"
 fi
 
 echo "[copilot-bridge-doctor] copilot wiring"
@@ -165,16 +116,22 @@ if ! MKT_LIST="$(copilot plugin marketplace list 2>/dev/null)"; then
   badown "'copilot plugin marketplace list' failed — this host's marketplaces are UNKNOWN (not empty); fix the Copilot CLI error and re-run"
   MKT_LIST=""
 else
-  MKT_LINE="$(printf '%s\n' "$MKT_LIST" | grep -F " $MKT_NAME (" | head -1 || true)"
-  if [ -n "$MKT_LINE" ]; then
-    MKT_PATH="$(printf '%s\n' "$MKT_LINE" | sed -n 's/.*(Local: \(.*\))$/\1/p')"
-    if [ -n "$MKT_PATH" ] && [ "$MKT_PATH" = "$ASM" ]; then
-      ok "marketplace $MKT_NAME is registered at this package's assembly path"
+  # The SAME marketplace-row grammar install/inverse refuse on (C3a amendment, B
+  # defects 1+2): a malformed, non-Local, or DUPLICATE same-named listing is a red
+  # ownership fact here, never "the first row".
+  if MKT_ROW="$(copilot_marketplace_local_path "$MKT_LIST" "$MKT_NAME" 2>&1)"; then
+    if [ "$MKT_ROW" = "absent" ]; then
+      note "marketplace $MKT_NAME is not registered (consistent with an uninstalled or partially installed host)"
     else
-      badown "marketplace '$MKT_NAME' is registered at '${MKT_PATH:-<non-local source>}', not at $ASM — ownership drift; that registration is not provably ours"
+      MKT_PATH="${MKT_ROW#one }"
+      if [ "$MKT_PATH" = "$ASM" ]; then
+        ok "marketplace $MKT_NAME is registered at this package's assembly path"
+      else
+        badown "marketplace '$MKT_NAME' is registered at '$MKT_PATH', not at $ASM — ownership drift; that registration is not provably ours"
+      fi
     fi
   else
-    note "marketplace $MKT_NAME is not registered (consistent with an uninstalled or partially installed host)"
+    badown "the marketplace listing for '$MKT_NAME' is malformed, non-Local, or duplicated: $MKT_ROW"
   fi
 fi
 if [ -L "$STATE_FILE" ]; then

@@ -424,6 +424,8 @@ interface FakeOpts {
 	installed?: string[];
 	/** registered marketplaces as [name, localPath] rows */
 	marketplaces?: Array<[string, string]>;
+	/** verbatim `plugin list` body override — for malformed/garbled listing cells */
+	pluginListRaw?: string;
 	uninstallFails?: boolean;
 	listFails?: boolean;
 	mktListFails?: boolean;
@@ -456,9 +458,11 @@ function makeFakeHost(label: string, opts: FakeOpts): FakeHost {
 	mkdirSync(xdg, { recursive: true });
 	const pluginState = path.join(home, "installed.txt");
 	const mktState = path.join(home, "marketplaces.txt");
+	const rawList = path.join(home, "rawlist.txt");
 	const log = path.join(home, "calls.log");
 	const installed = opts.installed ?? [];
 	const marketplaces = opts.marketplaces ?? [];
+	if (opts.pluginListRaw !== undefined) writeFileSync(rawList, `${opts.pluginListRaw}\n`);
 	writeFileSync(pluginState, installed.join("\n") + (installed.length ? "\n" : ""));
 	writeFileSync(mktState, marketplaces.map(([n, p]) => `${n}\t${p}`).join("\n") + (marketplaces.length ? "\n" : ""));
 	writeFileSync(log, "");
@@ -489,7 +493,9 @@ function makeFakeHost(label: string, opts: FakeOpts): FakeHost {
 			'case "$1 $2" in',
 			opts.listFails
 				? '  "plugin list") echo "not authenticated" >&2; exit 1 ;;'
-				: '  "plugin list") echo "Installed plugins:"; sed "s/^/  • /;s/$/ (v$VER)/" "$STATE"; exit 0 ;;',
+				: opts.pluginListRaw !== undefined
+					? `  "plugin list") echo "Installed plugins:"; cat ${JSON.stringify(rawList)}; exit 0 ;;`
+					: '  "plugin list") echo "Installed plugins:"; sed "s/^/  • /;s/$/ (v$VER)/" "$STATE"; exit 0 ;;',
 			'  "plugin uninstall")',
 			opts.uninstallFails
 				? '    echo "boom" >&2; exit 1 ;;'
@@ -997,6 +1003,132 @@ function writeBoundState(host: FakeHost): void {
 	ok(
 		"doctor: the same drift is a named RED (`version drift`)",
 		doc.status !== 0 && doc.stdout.includes("version drift"),
+	);
+}
+
+// ── 13b. C3a corrective amendment (B review defects, 2026-08-27) ─────────────
+{
+	// B defect 2: TWO marketplace rows with our exact name. The retired grep|head -1
+	// grammar silently took the FIRST — here deliberately the one at OUR assembly, so
+	// the old parser would proceed. Every surface must refuse the ambiguity instead.
+	const invHost = makeFakeHost("inverse-dup-mkt", { installed: [OURS] });
+	writeFileSync(invHost.mktState, `${MKT}\t${invHost.asm}\n${MKT}\t/somebody/elses/dup-root\n`);
+	writeBoundState(invHost);
+	const inv = runVerb(invHost, "uninstall-copilot-bridge");
+	ok(
+		"[QK:COPILOT-MKT-DUPLICATE-REFUSED] inverse: duplicate same-named marketplace rows are ambiguity — the whole inverse refuses before any vendor write, never 'the first row'",
+		inv.status !== 0 &&
+			(inv.stderr ?? "").includes("multiple marketplace rows") &&
+			inv.installed.includes(OURS) &&
+			inv.marketplaces.length === 2 &&
+			!inv.calls.some((c) => c.startsWith("plugin uninstall") || c.startsWith("plugin marketplace remove")) &&
+			existsSync(invHost.stateFile),
+	);
+	const instHost = makeFakeHost("install-dup-mkt", {});
+	writeFileSync(instHost.mktState, `${MKT}\t${instHost.asm}\n${MKT}\t/somebody/elses/dup-root\n`);
+	const inst = runVerb(instHost, "install-copilot-bridge");
+	ok(
+		"install: the same duplicate marketplace listing refuses before any write (no state, no assembly)",
+		inst.status !== 0 && !existsSync(instHost.stateFile) && !existsSync(instHost.asm),
+	);
+	const docHost = makeFakeHost("doctor-dup-mkt", { installed: [OURS] });
+	writeFileSync(docHost.mktState, `${MKT}\t/first/root\n${MKT}\t/second/root\n`);
+	const doc = runVerb(docHost, "doctor-copilot-bridge");
+	ok(
+		"doctor: duplicate same-named marketplace rows are a RED ownership fact",
+		doc.status !== 0 && doc.stdout.includes("duplicated") && doc.stdout.includes("ownership axis: FAIL"),
+	);
+}
+{
+	// B defect 3: a TRUNCATED exact row (`(v0.1` — no closing paren) used to slip the
+	// startswith/endswith pair and round to ABSENT; absence licenses the inverse to
+	// continue as retry-safe. Malformed must be malformed on every surface.
+	const raw = `  • ${OURS} (v0.1`;
+	const invHost = makeFakeHost("inverse-truncated-row", { pluginListRaw: raw });
+	writeBoundState(invHost);
+	mkdirSync(path.join(invHost.asm, PLUGIN), { recursive: true });
+	writeFileSync(invHost.mktState, `${MKT}\t${invHost.asm}\n`);
+	const inv = runVerb(invHost, "uninstall-copilot-bridge");
+	ok(
+		"[QK:COPILOT-MALFORMED-ROW-NOT-ABSENT] inverse: a truncated exact row is MALFORMED — refuse with zero vendor mutation, never 'already absent'",
+		inv.status !== 0 &&
+			(inv.stderr ?? "").includes("malformed") &&
+			!inv.stdout.includes("already absent") &&
+			!inv.calls.some((c) => c.startsWith("plugin uninstall") || c.startsWith("plugin marketplace remove")) &&
+			existsSync(path.join(invHost.asm, PLUGIN)) &&
+			existsSync(invHost.stateFile),
+	);
+	const instHost = makeFakeHost("install-truncated-row", { pluginListRaw: raw });
+	const inst = runVerb(instHost, "install-copilot-bridge");
+	ok(
+		"install: the same truncated row refuses before any write (no state minted)",
+		inst.status !== 0 && (inst.stderr ?? "").includes("malformed") && !existsSync(instHost.stateFile),
+	);
+}
+{
+	// B defect 4: a pluginVersion carrying whitespace would be truncated by the
+	// space-separated fact transport (`cut -d' ' -f3`) into a FABRICATED version and a
+	// misleading downstream reason. The shared state validator refuses it as corrupt.
+	const wsState = (asmPath: string): string =>
+		JSON.stringify({
+			schemaVersion: 1,
+			qualifiedId: OURS,
+			marketplaceName: MKT,
+			assemblyPath: asmPath,
+			pluginVersion: `${SHIPPED_VERSION} extra`,
+			ownedMarketplace: true,
+			ownedAssembly: true,
+			installedAt: "2026-08-27T00:00:00Z",
+		});
+	const invHost = makeFakeHost("inverse-ws-version", { installed: [OURS] });
+	mkdirSync(path.dirname(invHost.stateFile), { recursive: true });
+	writeFileSync(invHost.stateFile, wsState(invHost.asm));
+	const inv = runVerb(invHost, "uninstall-copilot-bridge");
+	ok(
+		"[QK:COPILOT-STATE-VERSION-WHITESPACE] inverse: a whitespace-carrying pluginVersion is a CORRUPT state named for its transport reason — zero vendor mutation, never a fabricated version verdict",
+		inv.status !== 0 &&
+			(inv.stderr ?? "").includes("whitespace") &&
+			!(inv.stderr ?? "").includes("version-drift") &&
+			inv.installed.includes(OURS) &&
+			inv.calls.length === 0 &&
+			existsSync(invHost.stateFile),
+	);
+	const docHost = makeFakeHost("doctor-ws-version", { installed: [OURS] });
+	const doctorAsm = path.join(docHost.env.XDG_DATA_HOME as string, "entwurf", "meta-bridge-copilot", ".assembled");
+	mkdirSync(path.dirname(docHost.stateFile), { recursive: true });
+	writeFileSync(docHost.mktState, `${MKT}\t${doctorAsm}\n`);
+	writeFileSync(docHost.stateFile, wsState(doctorAsm));
+	const doc = runVerb(docHost, "doctor-copilot-bridge");
+	ok(
+		"doctor: the same whitespace version is a corrupt-state RED, not a fabricated 'version drift'",
+		doc.status !== 0 && doc.stdout.includes("whitespace") && !doc.stdout.includes("version drift"),
+	);
+}
+{
+	// The doctor's structural verdict IS the shared oracle (B defect 1's doctor half):
+	// a host the real installer just set up reads green THROUGH the oracle, and one
+	// broken oracle fact turns the same host red with the oracle's own reason. The
+	// install here runs WITHOUT the ENTWURF_COPILOT_ASM seam so the assembly lands at
+	// the XDG-derived path the doctor actually reads.
+	const host = makeFakeHost("doctor-oracle", {});
+	const envNoSeam = { ...host.env };
+	delete envNoSeam.ENTWURF_COPILOT_ASM;
+	const inst = spawnSync("bash", [path.join(REPO, "run.sh"), "install-copilot-bridge"], {
+		env: envNoSeam,
+		encoding: "utf8",
+	});
+	ok("precondition: a full install at the doctor's own XDG assembly path is green", inst.status === 0);
+	const doctorAsm = path.join(host.env.XDG_DATA_HOME as string, "entwurf", "meta-bridge-copilot", ".assembled");
+	const green = runVerb(host, "doctor-copilot-bridge");
+	ok(
+		"doctor: the freshly installed host is GREEN through the shared structural oracle",
+		green.status === 0 && green.stdout.includes("shared structural oracle"),
+	);
+	rmSync(path.join(doctorAsm, PLUGIN, "hooks", "hooks.json"));
+	const red = runVerb(host, "doctor-copilot-bridge");
+	ok(
+		"[QK:COPILOT-DOCTOR-ORACLE-CONSUMED] doctor: one broken oracle fact turns the same host RED with the oracle's reason",
+		red.status !== 0 && red.stdout.includes("structural oracle") && red.stdout.includes("hooks.json"),
 	);
 }
 

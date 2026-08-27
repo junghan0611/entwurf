@@ -171,12 +171,60 @@
 			"title": "the inverse removes a marketplace that carries our name but is registered at ANOTHER path — someone else's registration deleted by our uninstall",
 			"subject": "scripts/copilot-bridge-uninstall.sh",
 			"find": [
-				"  if [ -z \"$MKT_PATH\" ] || [ \"$MKT_PATH\" != \"$ASM\" ]; then\n    die \"a marketplace named '$MKT_NAME' is registered at '${MKT_PATH:-<non-local source>}', not at the recorded assembly ($ASM). That registration is not provably ours — refusing with zero vendor/filesystem writes; inspect 'copilot plugin marketplace list' manually.\"\n  fi"
+				"  if [ \"$MKT_PATH\" != \"$ASM\" ]; then\n    die \"a marketplace named '$MKT_NAME' is registered at '$MKT_PATH', not at the recorded assembly ($ASM). That registration is not provably ours — refusing with zero vendor/filesystem writes; inspect 'copilot plugin marketplace list' manually.\"\n  fi"
 			],
 			"replace": ["  :"],
 			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:COPILOT-BIRTH-INVERSE-FOREIGN]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "COPILOT-MKT-DUPLICATE-REFUSED",
+			"title": "the marketplace-row parser silently returns the FIRST of several same-named rows instead of refusing the ambiguity — the retired grep|head -1 behavior, re-planted: a second marketplace with our name steers every path check at whichever row happens to print first (#86 C3a corrective amendment, B defect 2)",
+			"subject": "scripts/copilot-bridge-oracle.sh",
+			"find": [
+				"if len(paths) > 1:\n    print(f\"multiple marketplace rows named {name}: paths {paths} — duplicates are ambiguity nobody may act on\", file=sys.stderr)\n    sys.exit(1)\nprint(f\"one {paths[0]}\" if paths else \"absent\")"
+			],
+			"replace": ["print(f\"one {paths[0]}\" if paths else \"absent\")"],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-MKT-DUPLICATE-REFUSED]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "COPILOT-MALFORMED-ROW-NOT-ABSENT",
+			"title": "a truncated/garbled exact plugin row falls through the parser and rounds to ABSENT, which the inverse reads as retry-safe absence and continues past — the exact fall-through B reproduced (`(v0.1` with no closing paren) against 47a5ae3 (#86 C3a corrective amendment, B defect 3)",
+			"subject": "scripts/copilot-bridge-oracle.sh",
+			"find": [
+				"    if not (rest.startswith(\"(v\") and rest.endswith(\")\")):\n        print(f\"malformed exact row for {qualified}: {row!r} does not parse as '<qualified> (v<version>)'\", file=sys.stderr)\n        sys.exit(1)"
+			],
+			"replace": ["    if not (rest.startswith(\"(v\") and rest.endswith(\")\")):\n        continue"],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-MALFORMED-ROW-NOT-ABSENT]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "COPILOT-STATE-VERSION-WHITESPACE",
+			"title": "the state validator accepts a pluginVersion carrying whitespace, so the space-separated fact transport (`cut -d' ' -f3`) truncates it into a FABRICATED version and consumers act on a value the state never recorded (#86 C3a corrective amendment, B defect 4)",
+			"subject": "scripts/copilot-bridge-oracle.sh",
+			"find": ["if any(ord(c) < 0x21 or ord(c) == 0x7f for c in state[\"pluginVersion\"]):"],
+			"replace": ["if False and state[\"pluginVersion\"]:"],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-STATE-VERSION-WHITESPACE]",
+			"signatureSource": "scripts/check-copilot-birth-hook.ts"
+		},
+		{
+			"claim": "COPILOT-DOCTOR-ORACLE-CONSUMED",
+			"title": "the doctor's structural verdict stops consulting the shared oracle and reads every assembly as green, so a unit install/adopt would refuse (broken hooks.json, unbaked launcher) doctors as healthy — the second-parser drift B flagged, taken to its end state (#86 C3a corrective amendment, B defect 1)",
+			"subject": "scripts/copilot-bridge-doctor.sh",
+			"find": ["if ORACLE_REASON=\"$(copilot_assembly_valid \"$ASM\" \"$PLUGIN\" 2>&1)\"; then"],
+			"replace": ["if ORACLE_REASON=\"\"; then"],
+			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:COPILOT-DOCTOR-ORACLE-CONSUMED]",
 			"signatureSource": "scripts/check-copilot-birth-hook.ts"
 		},
 		{

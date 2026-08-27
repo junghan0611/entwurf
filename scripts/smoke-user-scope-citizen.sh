@@ -370,6 +370,9 @@ fi
 # state mismatch refusal · ATOMIC two-writer refusals for install/remove/takeover
 # (cells 26–29: the refusing half leaves the other half byte-identical) ·
 # provider-absent orphan refusal (30) · doctor ownership-coupling mismatch (31) ·
+# exact-owner classifier vs a second entwurf-shaped root: install/inverse/takeover
+# refuse + doctor red (32–33, B blockers 1–2) · typed installerRoot corrupt
+# fail-closed across install/remove/doctor (34, B blocker 3) ·
 # look-alike + settings-relative + project-local preservation (cells 3/8/11 above
 # keep owning those three). EXCLUDED by design: C3/Copilot, credentials,
 # platform/Windows, provider RUNTIME verdicts (doctor-pi-provider owns those).
@@ -642,6 +645,100 @@ set -e
 if [ "$RC31B" -ne 0 ] && printf '%s' "$OUT31B" | grep -q 'managedSettingsPath mismatch'; then
   ok "31b doctor-pi-package FAILs on a package managedSettingsPath mismatch"
 else bad "31b doctor package managed-path mismatch verdict wrong (rc=$RC31B): $OUT31B"; fi
+
+# ── 32–34. #86 C2 corrective amendment (B review blockers, 2026-08-27): the ONE
+# exact-owner classifier across install/takeover/inverse/doctor, and the ONE typed
+# provider installerRoot verdict. Each cell replants a transition B reproduced
+# OUTSIDE the original C2 gate space.
+# 32. B blocker 1: recorded owner A, packages [A, another-entwurf-shaped root B].
+#     A's NORMAL install must refuse with zero writes — never route through the
+#     broad register() collapse that silently deletes B's entry.
+c2_reset c32
+python3 "$REG" "$OS" "$US_ROOT_A" --scope user --state "$OST" >/dev/null
+python3 - "$OS" "$US_ROOT_B" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1])); d["packages"].append(sys.argv[2])
+open(sys.argv[1],"w").write(json.dumps(d,indent=2)+"\n")
+PY
+SHA32="$(sha256sum "$OS" | cut -d' ' -f1)"
+set +e; OUT32="$(python3 "$REG" "$OS" "$US_ROOT_A" --scope user --state "$OST" 2>&1)"; RC32=$?; set -e
+L32="32 owner A + another entwurf-shaped root: A's NORMAL install refuses zero-write, B's entry survives [QK:BROAD-INSTALL-COLLAPSE]"
+if [ "$RC32" -ne 0 ] && [ "$SHA32" = "$(sha256sum "$OS" | cut -d' ' -f1)" ] \
+   && python3 -c "
+import json;p=json.load(open('$OS'))['packages']
+assert '$US_ROOT_B' in p and '$US_ROOT_A' in p, p" 2>/dev/null; then
+  ok "$L32"
+else bad "$L32 — violated (rc=$RC32): $OUT32 / $(cat "$OS")"; fi
+# 32b. the SAME ambiguous store refuses the owned inverse (one classifier, not a
+#      broad-install/exact-inverse double standard) …
+set +e; OUT32B="$(python3 "$REG" "$OS" "$US_ROOT_A" --scope user --state "$OST" --remove 2>&1)"; RC32B=$?; set -e
+if [ "$RC32B" -ne 0 ] && [ "$SHA32" = "$(sha256sum "$OS" | cut -d' ' -f1)" ] && [ -f "$OST" ]; then
+  ok "32b the ambiguous store refuses the owned inverse too (zero writes, state kept)"
+else bad "32b owned inverse proceeded over an ambiguous store (rc=$RC32B): $OUT32B"; fi
+# 32c. … and refuses the explicit takeover: takeover licenses moving THE exact
+#      entry, never collateral deletion of an unattributed second root.
+set +e; OUT32C="$(python3 "$REG" "$OS" "$US_ROOT_B" --scope user --state "$OST" --takeover 2>&1)"; RC32C=$?; set -e
+if [ "$RC32C" -ne 0 ] && [ "$SHA32" = "$(sha256sum "$OS" | cut -d' ' -f1)" ] \
+   && [ "$(python3 -c "import json;print(json.load(open('$OST'))['packageRoot'])")" = "$US_ROOT_A" ]; then
+  ok "32c even explicit takeover refuses the ambiguous store (no collateral license)"
+else bad "32c takeover proceeded over an ambiguous store (rc=$RC32C): $OUT32C"; fi
+
+# 33. B blocker 2: owner state records A, A's exact entry is GONE and only another
+#     entwurf-shaped root remains → the doctor must be RED naming the mismatch,
+#     never "owned" through the broad shape matcher (while the inverse refuses the
+#     very same state — contradictory verdicts on one store).
+c2_reset c33
+python3 "$REG" "$OS" "$US_ROOT_A" --scope user --state "$OST" >/dev/null
+python3 - "$OS" "$US_ROOT_A" "$US_ROOT_B" <<'PY'
+import json,sys
+d=json.load(open(sys.argv[1]))
+d["packages"]=[sys.argv[3] if x==sys.argv[2] else x for x in d["packages"]]
+open(sys.argv[1],"w").write(json.dumps(d,indent=2)+"\n")
+PY
+set +e; OUT33="$(python3 "$REG" "$OS" "$US_ROOT_A" --scope user --state "$OST" --doctor)"; RC33=$?; set -e
+L33="33 doctor: owner A recorded, only another entwurf-shaped root present → RED mismatch, never owned [QK:BROAD-DOCTOR-GREEN]"
+if [ "$RC33" -ne 0 ] && printf '%s' "$OUT33" | grep -q 'mismatch' \
+   && ! printf '%s' "$OUT33" | grep -q 'doctor-pi-package: owned '; then
+  ok "$L33"
+else bad "$L33 — violated (rc=$RC33): $OUT33"; fi
+
+# 34. B blocker 3: a wrong-TYPE provider installerRoot (number / empty string /
+#     bool / object / array) is CORRUPT and fail-closed for install AND remove —
+#     zero settings writes, state never rebound — instead of falling between the
+#     isinstance(str) arm and the is-None legacy arm and proceeding unattributed.
+AG34="$TMP/own/agent34"; XD34="$TMP/own/xdg34"; mkdir -p "$AG34" "$XD34/entwurf/pi-provider"
+PPST34="$XD34/entwurf/pi-provider/install-state.json"
+QK34='[QK:PROVIDER-ROOT-TYPE-FAIL-OPEN]'
+fail34=0
+for bad_root in '7' '""' 'true' '{}' '[]'; do
+  printf '{"entwurfProvider":{"mcpServers":{"entwurf-bridge":{"command":"entwurf-bridge"}}}}\n' > "$AG34/settings.json"
+  printf '{"schemaVersion":1,"managedSettingsPath":"%s","ownership":"managed-current","command":"entwurf-bridge","installerRoot":%s}\n' \
+    "$AG34/settings.json" "$bad_root" > "$PPST34"
+  SHA34="$(sha256sum "$AG34/settings.json" | cut -d' ' -f1)"
+  ST34="$(sha256sum "$PPST34" | cut -d' ' -f1)"
+  set +e
+  python3 "$PROV" install "$AG34/settings.json" "$US_ROOT_A" --scope user --state "$PPST34" >/dev/null 2>&1; RCI=$?
+  python3 "$PROV" remove  "$AG34/settings.json" "$US_ROOT_A" --scope user --state "$PPST34" >/dev/null 2>&1; RCR=$?
+  set -e
+  if [ "$RCI" -eq 0 ] || [ "$RCR" -eq 0 ] \
+     || [ "$SHA34" != "$(sha256sum "$AG34/settings.json" | cut -d' ' -f1)" ] \
+     || [ "$ST34" != "$(sha256sum "$PPST34" | cut -d' ' -f1)" ]; then
+    bad "34 installerRoot=$bad_root not fail-closed (install rc=$RCI, remove rc=$RCR) $QK34"; fail34=1
+  fi
+done
+if [ "$fail34" -eq 0 ]; then
+  ok "34 wrong-type provider installerRoot (number/empty-string/bool/object/array) is CORRUPT: install+remove refuse, zero writes, state never rebound $QK34"
+fi
+# 34b. the doctor coupling asks the SAME typed classifier: package owner A + a
+#      wrong-type provider installerRoot → FAIL naming CORRUPT, never silence.
+c2_reset c34b
+python3 "$REG" "$OS" "$US_ROOT_A" --scope user --state "$OST" >/dev/null
+printf '{"schemaVersion":1,"managedSettingsPath":"%s","ownership":"managed-current","command":"entwurf-bridge","installerRoot":7}\n' \
+  "$OS" > "$PPST34"
+set +e; OUT34B="$(python3 "$REG" "$OS" "$US_ROOT_A" --scope user --state "$OST" --doctor --provider-state "$PPST34")"; RC34B=$?; set -e
+if [ "$RC34B" -ne 0 ] && printf '%s' "$OUT34B" | grep -q 'CORRUPT'; then
+  ok "34b doctor coupling FAILs on a wrong-type provider installerRoot (named CORRUPT) $QK34"
+else bad "34b doctor stayed green/silent over a corrupt installerRoot (rc=$RC34B): $OUT34B $QK34"; fi
 
 # 15. WIRING: both writers of this one file must share the serializer, not copy it.
 #     A duplicated indent-detector is how the provider writer stayed open after the

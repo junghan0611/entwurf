@@ -54,9 +54,17 @@ implementation — mirrors the meta-bridge-state.py split.
 USER-SCOPE OWNERSHIP (#86 C2). `--scope user --state <path>` puts the GLOBAL
 packages[] entry under a recorded owner (`packageRoot` in
 $XDG_DATA_HOME/entwurf/pi-package/install-state.json) and retires the silent
-last-writer-wins normalization for that scope:
-  - fresh (no state, no entwurf entry)     → register + write owner state;
-  - same root (state.packageRoot == root)  → today's idempotent normalize/no-op;
+last-writer-wins normalization for that scope. Once an owner is recorded, EVERY
+recorded-owner operation (install / takeover / inverse / doctor, preflight and
+writer alike) judges the settings through ONE bounded exact-owner classifier:
+the owner must hold exactly ONE exact entry (the resolved absolute path, or a
+settings-relative path resolving exactly there) and there must be NO additional
+entwurf-shaped root. A missing, duplicated, or extra root is a named zero-write
+refusal (exit 6) — user scope never routes through the broad project-scope
+`register()` collapse, which would delete another root's entry as collateral:
+  - fresh (no state, no entwurf entry)     → append exact entry + write owner state;
+  - same root (state.packageRoot == root)  → classifier holds → no-op (bytes/mtime
+                                              stable); classifier violated → refuse;
   - legacy no-state, sole entry EXACTLY this root (absolute or settings-relative)
                                             → ADOPTION: state written, settings
                                               bytes/mtime untouched;
@@ -65,13 +73,19 @@ last-writer-wins normalization for that scope:
     zero write, naming `takeover-user-scope`; a missing owner additionally shows as
     the doctor verdict `missing-owner`;
   - the ONLY writer that replaces another owner is the operator-explicit
-    `--takeover` (run.sh takeover-user-scope): old→new replace, both roots reported.
-Remove under user scope is same-owner-only: a live foreign owner refuses; a MISSING
-owner is removable only through run.sh's aligned orphan path (`--orphan-cleanup`,
-passed after package entry + package state + provider installerRoot all agree on
-that same missing root). No --force flag exists. `--doctor` reports
-unregistered / owned / legacy-no-state / mismatch / foreign-owner(live) /
-missing-owner without writing. PROJECT scope keeps the state-less behavior above.
+    `--takeover` (run.sh takeover-user-scope): the recorded owner's EXACT entry is
+    replaced in place (old→new, both roots reported). Takeover licenses moving THE
+    registration, never collateral deletion — an ambiguous store refuses. With no
+    recorded owner it claims a SINGLE legacy entwurf-shaped entry; two or more are
+    ambiguous and refuse.
+Remove under user scope is same-owner-only and exact-entry-only: a live foreign
+owner refuses; a MISSING owner is removable only through run.sh's aligned orphan
+path (`--orphan-cleanup`, passed after package entry + package state + provider
+installerRoot all agree on that same missing root). No --force flag exists.
+`--doctor` reports unregistered / owned / legacy-no-state / mismatch /
+foreign-owner(live) / missing-owner without writing; its owner judgment asks the
+SAME exact classifier, so a store the inverse would refuse can never read green.
+PROJECT scope keeps the state-less behavior above.
 
 `--preflight` (user scope) runs the SAME ownership decision READ-ONLY: identical
 exit codes, zero writes — run.sh completes both the package and provider
@@ -100,7 +114,7 @@ from pathlib import Path
 # script is run by path, which is how run.sh and every gate invoke it; the explicit
 # insert keeps the import true under any other invocation form.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from pi_settings_io import detect_indent, dumps  # noqa: E402
+from pi_settings_io import classify_installer_root, detect_indent, dumps  # noqa: E402
 
 # A leading `<scheme>:` means the string is a package SPEC (npm:, git:, https:),
 # never a filesystem path — so it is never resolved against the settings dir.
@@ -389,45 +403,84 @@ def _check_settings_binding(state: dict, settings_path: Path, state_path: Path) 
                    "Inspect with './run.sh doctor-pi-package'.")
 
 
-def _remove_exact_owner_entry(settings_path: Path, owner: str) -> int:
-    """Remove the recorded owner's EXACT packages[] entry — never through the broad
-    entwurf-shape matcher (an npm spec or another `.../entwurf` path must survive).
-    Exactly ONE exact entry is required; 0 or 2+ is an ownership/settings mismatch
-    and refuses with zero writes. Returns how many OTHER entwurf-shaped entries
-    were left in place (reported by the caller)."""
-    exact = _exact_root_entries(settings_path, owner)
-    if len(exact) != 1:
+def _classify_user_owner_entries(settings_path: Path, owner: str) -> tuple[list, list]:
+    """THE bounded exact-owner classifier (#86 C2 corrective amendment, B blockers 1+2).
+
+    Returns (exact, extra) for the recorded user-scope owner:
+      exact  packages[] STRING entries naming `owner` EXACTLY — the resolved absolute
+             path, or a settings-relative path resolving exactly there. Deliberately
+             narrower than is_entwurf_source: an owner operation must never reach an
+             npm spec or an unrelated `.../entwurf` path merely because the broad
+             matcher would.
+      extra  every OTHER entwurf-shaped entry (any shape) — with a recorded owner,
+             a second Entwurf-shaped root is AMBIGUITY, never collateral that
+             install/takeover/inverse may collapse or that the doctor may bless.
+
+    Every recorded-owner judgment (install, takeover, inverse, doctor, preflight and
+    writer alike) asks THIS function, so the verdicts cannot drift apart the way the
+    broad-install/exact-inverse split did.
+    """
+    data = _load(settings_path) if settings_path.exists() else {}
+    packages = _packages(settings_path, data)
+    settings_dir = _settings_dir(settings_path)
+    exact = [
+        p for p in packages
+        if isinstance(p, str) and (p.rstrip("/") == owner or is_settings_relative_self(p, settings_dir, owner))
+    ]
+    shaped = _entwurf_matches(packages, owner, settings_dir)
+    extra = [item for item in shaped if item not in exact]
+    return exact, extra
+
+
+def _require_user_owner_entry(settings_path: Path, owner: str) -> object:
+    """The refusing form of the classifier: exactly one exact entry, no extra
+    entwurf-shaped root — anything else is a named zero-write refusal (exit 6).
+    Returns the single exact entry."""
+    exact, extra = _classify_user_owner_entries(settings_path, owner)
+    if len(exact) != 1 or extra:
         _refuse(6, f"register-pi-package: the recorded owner {owner} has {len(exact)} exact packages[] "
-                   "entries (expected exactly one) — the ownership record and the settings disagree; "
-                   "zero settings bytes written. Inspect with './run.sh doctor-pi-package'.")
+                   f"entr{'y' if len(exact) == 1 else 'ies'} (expected exactly one) and {len(extra)} additional "
+                   f"entwurf-shaped entr{'y' if len(extra) == 1 else 'ies'} (expected none) — the ownership "
+                   "record and the settings are ambiguous; zero settings bytes written. "
+                   "Inspect with './run.sh doctor-pi-package'.")
+    return exact[0]
+
+
+def _replace_packages_entry(settings_path: Path, old_item: object, replacement: str) -> None:
+    """Swap ONE packages[] entry in place (first occurrence), preserving order,
+    every other entry, and the file's own indent unit."""
+    original_text = _read_text(settings_path)
+    data = _load(settings_path)
+    packages = _packages(settings_path, data)
+    swapped = False
+    out = []
+    for item in packages:
+        if not swapped and item == old_item:
+            out.append(replacement)
+            swapped = True
+        else:
+            out.append(item)
+    data["packages"] = out
+    _write(settings_path, data, original_text)
+
+
+def _remove_exact_owner_entry(settings_path: Path, owner: str) -> None:
+    """Remove the recorded owner's single classified exact entry — never through the
+    broad entwurf-shape matcher. An ambiguous store already refused upstream in
+    _require_user_owner_entry."""
+    exact = _require_user_owner_entry(settings_path, owner)
     original_text = _read_text(settings_path)
     data = _load(settings_path)
     packages = _packages(settings_path, data)
     removed = False
     kept_pkgs = []
     for item in packages:
-        if not removed and item == exact[0]:
+        if not removed and item == exact:
             removed = True
             continue
         kept_pkgs.append(item)
     data["packages"] = kept_pkgs
     _write(settings_path, data, original_text)
-    others = _entwurf_matches(kept_pkgs, owner, _settings_dir(settings_path))
-    return len(others)
-
-
-def _exact_root_entries(settings_path: Path, root: str) -> list:
-    """packages[] STRING entries that name `root` EXACTLY — the resolved absolute
-    path, or a settings-relative path resolving exactly there. Deliberately
-    narrower than is_entwurf_source: takeover removal must never reach an npm
-    spec or an unrelated `.../entwurf` path merely because the matcher would."""
-    data = _load(settings_path) if settings_path.exists() else {}
-    packages = _packages(settings_path, data)
-    settings_dir = _settings_dir(settings_path)
-    return [
-        p for p in packages
-        if isinstance(p, str) and (p.rstrip("/") == root or is_settings_relative_self(p, settings_dir, root))
-    ]
 
 
 def register_user(settings_path: Path, repo_dir_arg: str, state_path: Path, takeover: bool,
@@ -438,51 +491,19 @@ def register_user(settings_path: Path, repo_dir_arg: str, state_path: Path, take
     if state is not None:
         _check_settings_binding(state, settings_path, state_path)
 
-    if takeover:
-        # Operator-explicit takeover: the ONE writer allowed to move the single
-        # shared user-scope entry from another owner onto this root. Old and new
-        # are both reported; normal install/setup never reaches this path.
-        old_root = state.get("packageRoot") if state else None
-        if old_root and old_root != repo_dir:
-            # The old owner's entry is dropped by its RECORDED root and only as an
-            # EXACT entry (absolute, or settings-relative resolving exactly there)
-            # — never through the broad entwurf-shape matcher, which could reach an
-            # npm spec or another `.../entwurf` path that is not the recorded owner.
-            exact = _exact_root_entries(settings_path, old_root)
-            if len(exact) != 1:
-                _refuse(6, "register-pi-package: takeover refused — the recorded owner "
-                           f"{old_root} has {len(exact)} exact packages[] entr{'y' if len(exact) == 1 else 'ies'} "
-                           "(expected exactly one). The settings no longer match the ownership record; "
-                           "inspect with './run.sh doctor-pi-package' — zero settings bytes written.")
-            if preflight:
-                print(f"preflight: takeover would move {old_root} -> {repo_dir}")
-                return 0
-            original_text = _read_text(settings_path)
-            data = _load(settings_path)
-            data["packages"] = [p for p in _packages(settings_path, data) if p != exact[0]]
-            _write(settings_path, data, original_text)
-        elif preflight:
-            print(f"preflight: takeover would claim {repo_dir} (no other recorded owner)")
-            return 0
-        result = register(settings_path, repo_dir_arg)
-        _write_state(state_path, repo_dir, settings_path)
-        if old_root and old_root != repo_dir:
-            print(f"takeover: user-scope entwurf registration moved {old_root} -> {repo_dir} ({result})")
-        else:
-            print(f"takeover: user-scope entwurf registration now {repo_dir} ({result}; no other owner was recorded)")
-        return 0
-
-    if state is not None:
+    if state is not None and not takeover:
         owner = state["packageRoot"]
         if owner == repo_dir:
+            # Same-owner install NEVER routes through the broad register() collapse
+            # (#86 C2 corrective amendment, B blocker 1): with a recorded owner, the
+            # store either already holds exactly one exact entry with no other
+            # entwurf-shaped root — a no-op — or it is ambiguous and refuses. Another
+            # root's entry is never collateral a normal install may delete.
+            _require_user_owner_entry(settings_path, owner)
             if preflight:
-                print("preflight: install ok (this root owns the registration)")
+                print("preflight: install ok (this root owns one unambiguous registration)")
                 return 0
-            result = register(settings_path, repo_dir_arg)
-            if result == "noop":
-                print(f"install: entwurf package already registered (no-op) -> {repo_dir}")
-            else:
-                print(f"install: registered entwurf package -> {settings_path} (owner: this root)")
+            print(f"install: entwurf package already registered (no-op) -> {repo_dir}")
             return 0
         if os.path.isdir(owner):
             _refuse(6, "register-pi-package: the user-scope entwurf registration is owned by another LIVE root: "
@@ -493,15 +514,49 @@ def register_user(settings_path: Path, repo_dir_arg: str, state_path: Path, take
                    "bytes written. Use './run.sh takeover-user-scope' to claim it explicitly, or "
                    "'./run.sh remove-user-scope' for the aligned orphan cleanup.")
 
-    # no state
+    if state is not None:
+        # Operator-explicit takeover with a recorded owner: the ONE writer allowed to
+        # move the shared user-scope entry between roots. It moves the old owner's
+        # EXACT classified entry in place — takeover licenses moving THE registration,
+        # never collateral deletion, so an ambiguous store refuses here too.
+        old_root = state["packageRoot"]
+        if old_root == repo_dir:
+            _require_user_owner_entry(settings_path, old_root)
+            if preflight:
+                print("preflight: takeover ok (already this root; one unambiguous registration)")
+                return 0
+            _write_state(state_path, repo_dir, settings_path)
+            print(f"takeover: user-scope entwurf registration remains {repo_dir} (already this root)")
+            return 0
+        old_entry = _require_user_owner_entry(settings_path, old_root)
+        if preflight:
+            print(f"preflight: takeover would move {old_root} -> {repo_dir}")
+            return 0
+        _replace_packages_entry(settings_path, old_entry, repo_dir)
+        _write_state(state_path, repo_dir, settings_path)
+        print(f"takeover: user-scope entwurf registration moved {old_root} -> {repo_dir} (exact owner entry only)")
+        return 0
+
+    # ── no recorded owner (no state) ──
     if not _has_entwurf_entries(settings_path, repo_dir):
         if preflight:
-            print("preflight: install ok (fresh registration)")
+            print("preflight: takeover would claim {} (fresh; no other owner recorded)".format(repo_dir)
+                  if takeover else "preflight: install ok (fresh registration)")
             return 0
-        result = register(settings_path, repo_dir_arg)
+        # Fresh registration appends the exact entry directly — the broad register()
+        # collapse has nothing to normalize here and user scope never invokes it.
+        original_text = _read_text(settings_path)
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        data = _load(settings_path)
+        packages = _packages(settings_path, data)
+        data["packages"] = packages + [repo_dir]
+        _write(settings_path, data, original_text)
         _write_state(state_path, repo_dir, settings_path)
-        print(f"install: registered entwurf package -> {settings_path}")
-        print(f"install: package source -> {repo_dir} (owner state written)")
+        if takeover:
+            print(f"takeover: user-scope entwurf registration now {repo_dir} (fresh; no other owner was recorded)")
+        else:
+            print(f"install: registered entwurf package -> {settings_path}")
+            print(f"install: package source -> {repo_dir} (owner state written)")
         return 0
     if _sole_exact_self_entry(settings_path, repo_dir):
         # Legacy no-state entry that EXACTLY names this root: adopt by writing the
@@ -512,6 +567,28 @@ def register_user(settings_path: Path, repo_dir_arg: str, state_path: Path, take
         _write_state(state_path, repo_dir, settings_path)
         print(f"install: adopted legacy user-scope registration for {repo_dir} (owner state written; settings untouched)")
         return 0
+    if takeover:
+        # Explicit claim of an ownerless legacy store: unambiguous only when a SINGLE
+        # entwurf-shaped entry exists — that entry IS the registration the operator
+        # asked to take over, and it is replaced in place. Two or more shapes cannot
+        # be attributed and refuse; collapsing them would be collateral deletion.
+        data = _load(settings_path) if settings_path.exists() else {}
+        packages = _packages(settings_path, data)
+        shaped = _entwurf_matches(packages, repo_dir, _settings_dir(settings_path))
+        if len(shaped) == 1:
+            old = source_of(shaped[0])
+            if preflight:
+                print(f"preflight: takeover would claim the legacy entry {old!r} -> {repo_dir}")
+                return 0
+            _replace_packages_entry(settings_path, shaped[0], repo_dir)
+            _write_state(state_path, repo_dir, settings_path)
+            print(f"takeover: claimed the legacy user-scope registration {old!r} -> {repo_dir} "
+                  "(single ownerless entry; no other root touched)")
+            return 0
+        _refuse(6, f"register-pi-package: takeover refused — {len(shaped)} legacy entwurf-shaped packages[] "
+                   "entries exist with NO recorded owner; the claim is ambiguous and collapsing them would "
+                   "delete entries this root cannot attribute. Zero settings bytes written — resolve the "
+                   "store by hand (see './run.sh doctor-pi-package'), then retry.")
     _refuse(6, "register-pi-package: legacy user-scope entwurf entr(y/ies) exist with NO recorded owner and do not "
                f"exactly name this root ({repo_dir}). Refusing to normalize them silently — zero settings bytes "
                "written. Use './run.sh takeover-user-scope' to claim the registration explicitly.")
@@ -530,23 +607,17 @@ def remove_user(settings_path: Path, repo_dir_arg: str, state_path: Path, orphan
     if state is not None:
         owner = state["packageRoot"]
         if owner == repo_dir:
-            # Exact-entry inverse (#86 C2 final amendment): the owned removal drops
-            # ONLY the recorded owner's exact entry — 0 or 2+ exact entries is an
-            # ownership mismatch, checked identically by preflight and writer.
-            exact = _exact_root_entries(settings_path, owner)
-            if len(exact) != 1:
-                _refuse(6, f"register-pi-package: the recorded owner {owner} has {len(exact)} exact packages[] "
-                           "entries (expected exactly one) — the ownership record and the settings disagree; "
-                           "zero settings bytes written. Inspect with './run.sh doctor-pi-package'.")
+            # Exact-entry inverse (#86 C2): the owned removal drops ONLY the recorded
+            # owner's classified exact entry. A missing/duplicated exact entry OR any
+            # additional entwurf-shaped root is ambiguity the classifier refuses,
+            # checked identically by preflight and writer.
+            _require_user_owner_entry(settings_path, owner)
             if preflight:
-                print("preflight: remove ok (this root owns the registration; exact entry present)")
+                print("preflight: remove ok (this root owns one unambiguous registration)")
                 return 0
-            others = _remove_exact_owner_entry(settings_path, owner)
+            _remove_exact_owner_entry(settings_path, owner)
             state_path.unlink()
             print(f"remove: removed the owner's exact packages[] entry from {settings_path} (owner state cleared)")
-            if others:
-                print(f"remove: kept {others} other entwurf-shaped entr{'y' if others == 1 else 'ies'} "
-                      "(npm spec / other path — not this owner's exact entry)")
             return 0
         if os.path.isdir(owner):
             _refuse(6, "register-pi-package: the user-scope registration is owned by another LIVE root: "
@@ -555,19 +626,14 @@ def remove_user(settings_path: Path, repo_dir_arg: str, state_path: Path, orphan
         if orphan:
             # run.sh's aligned orphan path: entry + package state + provider
             # installerRoot all named this same MISSING root before the flag was
-            # passed. Exact-entry only, same rule as the owned inverse.
-            exact = _exact_root_entries(settings_path, owner)
-            if len(exact) != 1:
-                _refuse(6, f"register-pi-package: orphan cleanup refused — the MISSING owner {owner} has "
-                           f"{len(exact)} exact packages[] entries (expected exactly one); zero settings bytes written.")
+            # passed. Same exact classifier as the owned inverse.
+            _require_user_owner_entry(settings_path, owner)
             if preflight:
-                print(f"preflight: orphan cleanup would remove the MISSING owner {owner} (exact entry present)")
+                print(f"preflight: orphan cleanup would remove the MISSING owner {owner} (one unambiguous entry)")
                 return 0
-            others = _remove_exact_owner_entry(settings_path, owner)
+            _remove_exact_owner_entry(settings_path, owner)
             state_path.unlink()
             print(f"remove: orphan cleanup — removed the exact entry for the MISSING owner {owner} (state cleared)")
-            if others:
-                print(f"remove: kept {others} other entwurf-shaped entr{'y' if others == 1 else 'ies'} untouched")
             return 0
         _refuse(6, "register-pi-package: the recorded owner root is MISSING: "
                    f"{owner}. Refusing to remove without the aligned orphan path — run './run.sh remove-user-scope' "
@@ -625,14 +691,26 @@ def doctor_user(settings_path: Path, repo_dir_arg: str, state_path: Path,
             pp = json.loads(provider_state_path.read_text())
         except json.JSONDecodeError:
             pp = None
-        installer_root = pp.get("installerRoot") if isinstance(pp, dict) else None
-        if isinstance(installer_root, str) and installer_root != state["packageRoot"]:
-            print(f"doctor-pi-package: FAIL coupling mismatch — provider installerRoot {installer_root} "
-                  f"!= packageRoot {state['packageRoot']} (the two halves of the user-scope ownership disagree)")
+        if not isinstance(pp, dict):
+            print("doctor-pi-package: FAIL provider install-state is not readable as a JSON object — "
+                  "the ownership coupling cannot be judged from an unattributed state")
             coupling_fail = True
-        elif installer_root is None and pp is not None:
-            print("doctor-pi-package: note — provider install-state is LEGACY (no installerRoot); "
-                  "a same-root install/setup adopts it")
+        else:
+            # One typed installerRoot verdict (#86 C2 corrective amendment, B blocker 3):
+            # the SAME classifier the provider writers refuse on, so a wrong-TYPE value
+            # can never read green here while install/remove fail closed on it.
+            installer_kind, installer_root = classify_installer_root(pp)
+            if installer_kind == "corrupt":
+                print("doctor-pi-package: FAIL provider installerRoot is CORRUPT — expected a non-empty string "
+                      "(owner) or null/absent (legacy); a wrong-typed value is unattributed and fail-closed")
+                coupling_fail = True
+            elif installer_kind == "owner" and installer_root != state["packageRoot"]:
+                print(f"doctor-pi-package: FAIL coupling mismatch — provider installerRoot {installer_root} "
+                      f"!= packageRoot {state['packageRoot']} (the two halves of the user-scope ownership disagree)")
+                coupling_fail = True
+            elif installer_kind == "legacy":
+                print("doctor-pi-package: note — provider install-state is LEGACY (no installerRoot); "
+                      "a same-root install/setup adopts it")
         pp_managed = pp.get("managedSettingsPath") if isinstance(pp, dict) else None
         if isinstance(pp_managed, str) and os.path.abspath(pp_managed) != os.path.abspath(str(settings_path)):
             print(f"doctor-pi-package: FAIL provider managedSettingsPath mismatch — the provider state manages "
@@ -652,9 +730,16 @@ def doctor_user(settings_path: Path, repo_dir_arg: str, state_path: Path,
         return 1
     owner = state["packageRoot"]
     owner_live = os.path.isdir(owner)
-    owner_matches = _entwurf_matches(packages, owner, settings_dir)
-    if not owner_matches:
-        print(f"doctor-pi-package: mismatch — owner state records {owner} but no packages[] entry names it")
+    # The SAME exact-owner classifier the writers refuse on (#86 C2 corrective
+    # amendment, B blocker 2): a store the inverse would refuse — owner's exact
+    # entry missing/duplicated, or an extra entwurf-shaped root beside it — must
+    # read RED here, never "owned" through the broad shape matcher.
+    owner_exact, owner_extra = _classify_user_owner_entries(settings_path, owner)
+    if len(owner_exact) != 1 or owner_extra:
+        print(f"doctor-pi-package: mismatch — owner state records {owner} but the settings hold "
+              f"{len(owner_exact)} exact entr{'y' if len(owner_exact) == 1 else 'ies'} and "
+              f"{len(owner_extra)} additional entwurf-shaped entr{'y' if len(owner_extra) == 1 else 'ies'} "
+              "(expected exactly one exact entry and no other entwurf-shaped root)")
         return 1
     if not owner_live:
         print(f"doctor-pi-package: missing-owner — recorded owner root {owner} does not exist; "

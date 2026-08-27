@@ -16,8 +16,13 @@
 #   drift or effective-ASM mismatch is rc 1 with the reason on stderr. Flags are never
 #   coerced: a missing or non-boolean owned* refuses instead of defaulting to false.
 #
-# Deliberately BOUNDED: structure, one state schema, one list-row grammar. Registration,
-# records, and hook-log truth stay with the doctor's own axes.
+# copilot_marketplace_local_path <mkt-list-text> <mkt-name>
+#   The one exact marketplace-row grammar (see its own header below): absent /
+#   exactly-one Local path / malformed-non-Local-or-duplicate refusal.
+#
+# Deliberately BOUNDED: structure, one state schema, one plugin list-row grammar, one
+# marketplace list-row grammar. Registration, records, and hook-log truth stay with
+# the doctor's own axes.
 copilot_state_read() {
 	local state_file="$1" qualified="$2" mkt="$3" asm="$4"
 	STATE_FILE_ENV="$state_file" QUALIFIED_ENV="$qualified" MKT_ENV="$mkt" ASM_ENV="$asm" python3 - <<'PY'
@@ -41,6 +46,14 @@ for key in ("qualifiedId", "marketplaceName", "assemblyPath", "pluginVersion", "
     if not isinstance(state[key], str) or not state[key]:
         print(f"state {key} must be a nonempty string, got {state[key]!r}", file=sys.stderr)
         sys.exit(1)
+if any(ord(c) < 0x21 or ord(c) == 0x7f for c in state["pluginVersion"]):
+    # C3a amendment (B defect 4): these facts travel space-separated and consumers
+    # cut field 3, so a version carrying whitespace/control would silently truncate
+    # into a FABRICATED value (and a fabricated drift reason downstream). Refuse the
+    # state instead of shipping an ambiguous transport.
+    print(f"state pluginVersion contains whitespace/control characters: {state['pluginVersion']!r} — "
+          "the space-separated fact transport would truncate it into a fabricated version", file=sys.stderr)
+    sys.exit(1)
 for key in ("ownedMarketplace", "ownedAssembly"):
     if not isinstance(state[key], bool):
         print(f"state {key} must be a boolean, got {state[key]!r} — flags are never coerced", file=sys.stderr)
@@ -77,19 +90,77 @@ for raw in os.environ["LIST_TEXT_ENV"].splitlines():
     for glyph in ("•", "◆", "-"):
         if row.startswith(glyph):
             row = row[len(glyph):].strip()
-    if row == qualified or (row.startswith(f"{qualified} ") and not row.startswith(f"{qualified} (v")):
-        print(f"malformed exact row for {qualified}: {row!r} does not parse as '(v<version>)'", file=sys.stderr)
+    # C3a amendment (B defect 3): the claim test is the exact QUALIFIED as the row's
+    # first whitespace-delimited token. Every claiming row must then parse as the one
+    # measured form `<qualified> (v<nonempty>)` IN FULL — a truncated/garbled tail
+    # (e.g. `(v0.1` with no closing paren) used to fall through the old
+    # startswith/endswith pair and round to ABSENT, which the inverse reads as
+    # retry-safe absence. Malformed is malformed; nothing rounds to absent.
+    parts = row.split(None, 1)
+    if not parts or parts[0] != qualified:
+        continue  # foreign row, including longer ids that merely contain ours
+    rest = parts[1] if len(parts) == 2 else ""
+    if not (rest.startswith("(v") and rest.endswith(")")):
+        print(f"malformed exact row for {qualified}: {row!r} does not parse as '<qualified> (v<version>)'", file=sys.stderr)
         sys.exit(1)
-    if row.startswith(f"{qualified} (v") and row.endswith(")"):
-        version = row[len(f"{qualified} (v"):-1]
-        if not version:
-            print(f"malformed exact row for {qualified}: empty version in {row!r}", file=sys.stderr)
-            sys.exit(1)
-        versions.append(version)
+    version = rest[2:-1]
+    if not version:
+        print(f"malformed exact row for {qualified}: empty version in {row!r}", file=sys.stderr)
+        sys.exit(1)
+    if any(ord(c) < 0x21 or ord(c) == 0x7f for c in version):
+        # Same transport rule as the state validator: the parsed version rides
+        # space-separated verdicts (`one <version>`), so an embedded whitespace or
+        # control character is ambiguity, not a version.
+        print(f"malformed exact row for {qualified}: version {version!r} carries whitespace/control characters", file=sys.stderr)
+        sys.exit(1)
+    versions.append(version)
 if len(versions) > 1:
     print(f"multiple exact rows for {qualified}: versions {versions} — nobody may act on an ambiguous listing", file=sys.stderr)
     sys.exit(1)
 print(f"one {versions[0]}" if versions else "absent")
+PY
+}
+
+# copilot_marketplace_local_path <mkt-list-text> <mkt-name>
+#   The ONE exact marketplace-row grammar (C3a amendment, B defects 1+2) — installer,
+#   inverse and doctor all read the `plugin marketplace list` output through THIS
+#   parser instead of three copy-pasted `grep|head -1` pipelines that silently took
+#   the first of several same-named rows. rc 0 prints `absent` or `one <local abs
+#   path>`; rc 1 with the reason on stderr when a row claims the exact name but does
+#   not parse as the measured `<name> (Local: <path>)` form (a non-Local source is
+#   not provably ours), or when MULTIPLE rows claim the name (duplicates are
+#   ambiguity nobody may act on — never "the first one"). Rows whose first token
+#   merely contains the name remain foreign and are ignored. Path-vs-assembly drift
+#   stays with the callers: this parser reports the exact registered path, and each
+#   surface names its own refusal when that path is not its assembly.
+copilot_marketplace_local_path() {
+	local list_text="$1" mkt_name="$2"
+	LIST_TEXT_ENV="$list_text" MKT_NAME_ENV="$mkt_name" python3 - <<'PY'
+import os, sys
+name = os.environ["MKT_NAME_ENV"]
+paths = []
+for raw in os.environ["LIST_TEXT_ENV"].splitlines():
+    row = raw.strip()
+    for glyph in ("•", "◆", "-"):
+        if row.startswith(glyph):
+            row = row[len(glyph):].strip()
+    parts = row.split(None, 1)
+    if not parts or parts[0] != name:
+        continue  # foreign row, including longer names that merely contain ours
+    rest = parts[1] if len(parts) == 2 else ""
+    if not (rest.startswith("(Local: ") and rest.endswith(")")):
+        print(f"malformed marketplace row for {name}: {row!r} does not parse as '<name> (Local: <path>)' — "
+              "a non-Local or garbled registration is not provably ours", file=sys.stderr)
+        sys.exit(1)
+    path = rest[len("(Local: "):-1]
+    if not path:
+        print(f"malformed marketplace row for {name}: empty Local path in {row!r}", file=sys.stderr)
+        sys.exit(1)
+    paths.append(path)
+if len(paths) > 1:
+    print(f"multiple marketplace rows named {name}: paths {paths} — duplicates are ambiguity nobody may act on", file=sys.stderr)
+    sys.exit(1)
+print(f"one {paths[0]}" if paths else "absent")
 PY
 }
 
