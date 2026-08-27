@@ -526,6 +526,26 @@ else
 fi
 cp "$TMP/hook-log-precopilot.bak" "$AGENT/meta-bridge-hook.log"
 
+# M9c — an OMP line in the shared hook log must not move this doctor either (#87). The
+# omp birth unit is an in-process EXTENSION, and its scope fence writes a line for every
+# task subagent it refuses, so this file now carries a second rail's routine traffic. Its
+# ERROR lines are mint/marker faults on that rail and its recovery token is
+# `create`/`attach`, never `armed watch` — so counting them here would redden the CLAUDE
+# doctor for a fault it does not own and cannot prescribe a fix for. Same expect-GREEN
+# shape as M9b: the defect this guards makes a HEALTHY host go red.
+cp "$AGENT/meta-bridge-hook.log" "$TMP/hook-log-preomp.bak"
+{
+  echo "2026-08-27T00:00:02.000Z ERROR [omp] upsert failed (edge=session_start, native=01a042da-537a-7770-a275-7b8162eecca4): store refused"
+  echo "2026-08-27T00:00:03.000Z INFO [omp] scope-refused edge=session_start mode=print: not the visible tui host, no record minted"
+} >> "$AGENT/meta-bridge-hook.log"
+run_doctor
+if [ "$DOC_RC" -eq 0 ]; then
+  ok "an omp ERROR in the shared hook log leaves the CLAUDE doctor green (rails stay separate)"
+else
+  bad "[QK:HOOK-LOG-OMP-RAIL-SCOPED] an omp ERROR in the shared hook log turned the CLAUDE doctor red — the hook-log judgement does not scope out the omp rail:"$'\n'"$(printf '%s\n' "$DOC_OUT" | grep -E '^  (FAIL|WARN)' | sed 's/^/        /')"
+fi
+cp "$TMP/hook-log-preomp.bak" "$AGENT/meta-bridge-hook.log"
+
 # M10 — deployed writer bundle missing: staleness becomes unknowable.
 mv "$PLANTED/lib/meta-session.ts" "$TMP/meta-session.bak"
 expect_red "installed writer bundle missing" "deployed writer version is UNKNOWN"

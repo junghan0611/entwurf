@@ -57,7 +57,7 @@ import { type NativePushAdapter, resolveNativePushAdapter } from "./native-push/
  * exactly the #46 defect on agy, and copilot joined the list only once its own hook wrote one
  * (#82 RAIL 5b). Membership says a marker may EXIST, never that a reply can land: the reply
  * rail is chosen from `nativePushSupported` at the bridge, not from this list. */
-export const META_SENDER_BACKENDS: readonly MetaBackend[] = ["claude-code", "antigravity", "copilot"];
+export const META_SENDER_BACKENDS: readonly MetaBackend[] = ["claude-code", "antigravity", "copilot", "omp"];
 
 /** A marker that passed BOTH guards, together with the record that vouches for it. */
 export interface TrustedMetaSender {

@@ -31,6 +31,7 @@
 		"../pi-extensions/model-lock.ts",
 		"../pi-extensions/meta-bridge-hook.ts",
 		"../pi-extensions/meta-bridge-hook-copilot.ts",
+		"../pi-extensions/meta-bridge-omp.ts",
 		"../mcp/entwurf-bridge/src/resume-mode.ts"
 	]
 }

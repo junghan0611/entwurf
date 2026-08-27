@@ -1,0 +1,7 @@
+{
+	"name": "entwurf-meta-omp",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "entwurf OMP birth extension: mints the visible tui host as a garden citizen, refuses every other mode."
+}

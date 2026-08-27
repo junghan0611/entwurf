@@ -94,10 +94,10 @@
 		},
 		{
 			"claim": "HOOK-LOG-RAIL-SCOPED",
-			"title": "an untagged ERROR grep lets a Copilot fail-closed refusal redden the CLAUDE doctor forever — copilot's recovery token cannot exist on that rail",
+			"title": "dropping the copilot tag from the shared-hook-log filter lets a Copilot fail-closed refusal redden the CLAUDE doctor forever \u2014 copilot's recovery token cannot exist on that rail",
 			"subject": "scripts/meta-bridge-hook-log.sh",
-			"find": ["  own=\"$(grep -v ' \\[copilot\\] ' \"$log\" 2>/dev/null || true)\""],
-			"replace": ["  own=\"$(cat \"$log\" 2>/dev/null || true)\""],
+			"find": ["  own=\"$(grep -v -e ' \\[copilot\\] ' -e ' \\[omp\\] ' \"$log\" 2>/dev/null || true)\""],
+			"replace": ["  own=\"$(grep -v ' \\[omp\\] ' \"$log\" 2>/dev/null || true)\""],
 			"gate": ["bash", "run.sh", "check-meta-doctor-oracle"],
 			"timeoutSeconds": 600,
 			"signature": "[QK:HOOK-LOG-RAIL-SCOPED]",

@@ -51,6 +51,12 @@
 		// `.ts` extension, which the emit-capable root config cannot allow. Typechecked
 		// by scripts/tsconfig.json.
 		"pi-extensions/meta-bridge-hook-copilot.ts",
+		// meta-bridge-omp.ts is the #87 OMP BIRTH entry. Same fence, one layer of reason
+		// deeper: it is loaded by OMP's own in-process extension runner (a Bun runtime), and
+		// the installer places it beside a copied `./lib/meta-session.ts`, so the explicit
+		// `.ts` extension is what the vendor loader resolves at runtime. The emit-capable
+		// root config cannot allow that extension. Typechecked by scripts/tsconfig.json.
+		"pi-extensions/meta-bridge-omp.ts",
 		// project-trust-handler.ts is a lib→lib VALUE importer (it pulls preflight /
 		// formatPreflightDenial from entwurf-preflight.ts), so it must use an explicit
 		// `.ts` extension to be runnable under the strip-types gate. The emit-capable

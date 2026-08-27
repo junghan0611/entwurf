@@ -15,10 +15,18 @@
 # would make the CLAUDE doctor permanently red for a refusal on a different rail, with
 # a prescription pointing at a Claude wake failure that never happened (cross-review,
 # glm, 2026-08-21). Copilot's own recovery rule lives in copilot-bridge-doctor.sh.
+#
+# The OMP birth unit (#87) joins the same file tagged `LEVEL [omp]`, and the rule extends
+# for the same reason plus a sharper one: omp's own scope fence writes a line for EVERY
+# task subagent it refuses (`INFO [omp] scope-refused`), which is the designed answer, and
+# its failures are mint/marker faults on a rail whose recovery token — `create`/`attach` —
+# is not `armed watch` either. omp's recovery rule lives in omp-bridge-doctor.sh. Excluding
+# a backend here is never a way to quiet a red: it is how each doctor keeps judging only
+# the evidence it owns.
 meta_bridge_hook_log_status() {
   local log="$1"
   local own
-  own="$(grep -v ' \[copilot\] ' "$log" 2>/dev/null || true)"
+  own="$(grep -v -e ' \[copilot\] ' -e ' \[omp\] ' "$log" 2>/dev/null || true)"
   if ! printf '%s\n' "$own" | grep -q ' ERROR '; then
     echo "no-error"
     return 0

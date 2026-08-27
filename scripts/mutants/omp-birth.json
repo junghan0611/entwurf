@@ -1,0 +1,109 @@
+{
+	"schemaVersion": 1,
+	"lane": "omp-birth",
+	"mutants": [
+		{
+			"claim": "OMP-BIRTH-TUI-MINTS",
+			"title": "a birth unit whose host predicate is not the vendor's tui mode mints nothing for the operator's own session — the visible sibling never becomes a citizen",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["const HOST_MODE = \"tui\";"],
+			"replace": ["const HOST_MODE = \"print\";"],
+			"gate": ["bash", "run.sh", "check-omp-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BIRTH-TUI-MINTS]",
+			"signatureSource": "scripts/check-omp-birth-hook.ts"
+		},
+		{
+			"claim": "OMP-BIRTH-SCOPE-FENCE",
+			"title": "a fence that admits `print` gives every task subagent its own garden id — each visible omp session would mint a citizen per internal agent, which is the exact thing #87 exists to prevent",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\tif (ctx.mode !== HOST_MODE) {"],
+			"replace": ["\tif (ctx.mode !== HOST_MODE && ctx.mode !== \"print\") {"],
+			"gate": ["bash", "run.sh", "check-omp-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BIRTH-SCOPE-FENCE]",
+			"signatureSource": "scripts/check-omp-birth-hook.ts"
+		},
+		{
+			"claim": "OMP-BIRTH-BINDS-BOTH-EDGES",
+			"title": "binding only session_start leaves every post-/new, forked and in-TUI-resumed session unminted while its status line still shows the previous citizen's id (the switch edge is where those re-fire, audit C2)",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": [
+				"\tpi.on(\"session_switch\", (event, ctx) =>",
+				"\t\tonBirthEdge(`session_switch(${asNonEmptyString(event?.reason) || \"unlabeled\"})`, ctx),",
+				"\t);"
+			],
+			"replace": ["\t// session_switch left unbound"],
+			"gate": ["bash", "run.sh", "check-omp-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BIRTH-BINDS-BOTH-EDGES]",
+			"signatureSource": "scripts/check-omp-birth-hook.ts"
+		},
+		{
+			"claim": "OMP-BIRTH-SHOWS-GARDEN-ID",
+			"title": "a citizen whose garden id never reaches the vendor's own status surface has an address visible only by scraping records — not lifecycle parity (adding-a-harness.md step 4)",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\t\tshowGardenId(ctx, result.record.gardenId);"],
+			"replace": ["\t\t// visible identity dropped"],
+			"gate": ["bash", "run.sh", "check-omp-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BIRTH-SHOWS-GARDEN-ID]",
+			"signatureSource": "scripts/check-omp-birth-hook.ts"
+		},
+		{
+			"claim": "OMP-SENDER-MARKER-OWN-PID",
+			"title": "keying the marker to process.ppid copies the exec'd backends' parent join into a runtime that has no launcher — the marker names the shell that started omp, and no bridge child ever looks there",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\tconst ownerPid = process.pid;"],
+			"replace": ["\tconst ownerPid = process.ppid;"],
+			"gate": ["bash", "run.sh", "check-omp-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-SENDER-MARKER-OWN-PID]",
+			"signatureSource": "scripts/check-omp-birth-hook.ts"
+		},
+		{
+			"claim": "OMP-SENDER-READER-OPEN",
+			"title": "a backend whose hook writes a marker but is absent from the reader list is INVISIBLE — the bridge holds the owner pid, never looks in that directory, and every send is refused as anonymous for a reason nothing logs (the #46 defect)",
+			"subject": "pi-extensions/lib/meta-sender-identity.ts",
+			"find": [
+				"export const META_SENDER_BACKENDS: readonly MetaBackend[] = [\"claude-code\", \"antigravity\", \"copilot\", \"omp\"];"
+			],
+			"replace": [
+				"export const META_SENDER_BACKENDS: readonly MetaBackend[] = [\"claude-code\", \"antigravity\", \"copilot\"];"
+			],
+			"gate": ["bash", "run.sh", "check-omp-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-SENDER-READER-OPEN]",
+			"signatureSource": "scripts/check-omp-birth-hook.ts"
+		},
+		{
+			"claim": "OMP-BIRTH-DOES-NOT-ARM-RECEIVER",
+			"title": "birth creating receiver state claims a live process holds a watch nothing holds — the citizen reads deliverable, wired to nothing, for as long as the TUI stays open",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\t\twriteOmpSenderMarker(result.record.gardenId, envelope);"],
+			"replace": [
+				"\t\twriteOmpSenderMarker(result.record.gardenId, envelope);",
+				"\t\tfs.mkdirSync(path.join(path.dirname(defaultMetaSessionsDir()), \"meta-receivers\"), { recursive: true });"
+			],
+			"gate": ["bash", "run.sh", "check-omp-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BIRTH-DOES-NOT-ARM-RECEIVER]",
+			"signatureSource": "scripts/check-omp-birth-hook.ts"
+		},
+		{
+			"claim": "OMP-BIRTH-CWD-DISAGREEMENT",
+			"title": "preferring one cwd when the two vendor-authoritative sources disagree mints a record keyed to a directory the session is not in — a guess exactly where the disagreement was the interesting fact",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": [
+				"\tif (ctxCwd && managerCwd && ctxCwd !== managerCwd) {",
+				"\t\treturn { refusal: `ctx.cwd and sessionManager.getCwd() disagree (${ctxCwd} vs ${managerCwd})` };",
+				"\t}"
+			],
+			"replace": ["\t// disagreement tolerated: ctx.cwd simply wins"],
+			"gate": ["bash", "run.sh", "check-omp-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BIRTH-CWD-DISAGREEMENT]",
+			"signatureSource": "scripts/check-omp-birth-hook.ts"
+		}
+	]
+}

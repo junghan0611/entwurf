@@ -131,6 +131,7 @@ Usage:
   ./run.sh check-meta-v3-record        # deterministic gate: the ONE live record schema (v3) — canonical serialize/round-trip/mint, foreign-generation rejections name fresh-cut with the actual version value, strict keyset, no API
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-copilot-birth-hook   # #82 gate: drives the real Copilot assembler into a temp dir, fires the baked launcher with NO ARGV (the way Copilot's `exec`-string schema forces), and requires a backend:"copilot" v3 record + attach + peer row + a SENDER marker the resolver joins back to that record, and still zero mailbox/receiver marker (who-sent needs a shared parent; a receiver needs a doorbell this backend has not got). Hermetic; no Copilot, no model turn
+  ./run.sh check-omp-birth-hook       # #87 gate: drives the real OMP assembler into a temp dir, imports the ASSEMBLED index.ts into a MOCK omp host and fires session_start/session_switch. tui mints one backend:"omp" record + a sender marker keyed to the host's OWN pid (the one-process join) + the garden id on the status line; print/rpc/json mint NOTHING (hasUI is true on the rpc rows, as in the vendor); switch attaches on the same native id and mints the replacement on a new one; still zero mailbox/receiver marker. Hermetic; no omp, no model turn
   ./run.sh check-copilot-receive-arm  # #82 RAIL 5 gate: the REAL receiver installer + the REAL extension.mjs forked with a stubbed SDK. Arms only after birth, marker owned by the WATCHER pid, self-fetch dispatch answer, doorbell carries the garden id and NOT the body, id-drift/foreign-parent refusals. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-launch       # #82 RAIL 7 gate: the MANAGED launch `entwurf copilot`, driven through its public address against a FAKE VENDOR on a sandbox PATH. Receiver precondition refusals, EXTENSIONS token + operator token preservation, injected defaults before the `--` terminator, byte-identical argv, the 11 explicit permission/surface policy overrides that suppress `--yolo`, exec (not fork) pid identity, exit passthrough, recursion refusal. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-statusline   # #82 Copilot custom-footer renderer. session_id → ready/?/gid + rail `cop`; exit 0. IN pnpm check. No Copilot, no model turn
@@ -192,6 +193,7 @@ Usage:
   ./run.sh smoke-agy-statusline-state # agy ambient garden-id statusLine install/doctor/inverse regression. Offline/deterministic
   ./run.sh smoke-copilot-statusline-state # Copilot custom-footer install/doctor/inverse regression. Offline/deterministic
   ./run.sh smoke-copilot-mcp-state       # Copilot MCP install/doctor/inverse regression. Offline/deterministic
+  ./run.sh smoke-omp-bridge-state        # OMP birth-extension install/doctor/inverse regression: placement, stale-writer detection, honest inverse, foreign/symlink refusal, ambiguous-agent-dir refusal (ledger M6). Offline/deterministic
   ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression. Offline/deterministic
   ./run.sh smoke-user-scope-citizen   # 0.12.6 install-boundary: pi packages[] registration SSOT (register-pi-package.py) — idempotent + preserves unrelated + remove symmetry + fails loud, and the #86 C2 explicit ownership cells (project scope still normalizes ITS OWN stale entries; user scope refuses other owners and only takeover-user-scope moves the shared entry). Offline/hermetic (deps: bash+python3)
   ./run.sh smoke-meta-prune           # 1.0.0 meta-bridge Phase 4: listing-only store janitor regression gate — classify keep/orphan/stale/ambiguous, delete nothing. Offline/deterministic (deps: bash+node)
@@ -212,6 +214,9 @@ Usage:
   ./run.sh install-copilot-mcp        # #82 RAIL 5: register ONE entwurf-bridge server in ~/.copilot/mcp-config.json (adopt / create / REFUSE symlink), type:local, install-state under $XDG_DATA_HOME/entwurf/copilot-mcp/
   ./run.sh uninstall-copilot-mcp      # honest inverse of install-copilot-mcp from install-state
   ./run.sh doctor-copilot-mcp         # static ownership/config/boot doctor; RED only when install-state exists
+  ./run.sh install-omp-bridge         # #87: install the OMP BIRTH extension into <omp agent dir>/extensions/entwurf-meta-omp (index.ts|js + lib + capability registry). No launcher and no bake — an omp hook is an in-process extension. Refuses when an inherited PI_CODING_AGENT_DIR/PI_CONFIG_DIR/PI_PROFILE makes the target agent dir ambiguous (ledger M6)
+  ./run.sh uninstall-omp-bridge       # honest inverse from install-state (exact unit dir + recorded entry; no-state host REFUSES; state deleted LAST). Records already minted are preserved
+  ./run.sh doctor-omp-bridge          # #87: runtime axis (importable unit, writer/registry parity, mint vs sender-marker errors on SEPARATE axes, scope-fence receipts, live omp processes carrying inherited PI_SESSION_ID/PI_AGENT_ID) + ownership axis. Zero records = NOT-YET, never red
   ./run.sh install-copilot-receive    # #82 RAIL 5: install the RECEIVER extension (user scope ~/.copilot/extensions/entwurf-receive). Owns the artifact and CHECKS the launch flag; it never sets one (a launch does — see `./run.sh copilot`). Arms per session after birth
   ./run.sh uninstall-copilot-receive  # honest inverse from install-state; never removes a unit it did not install
   ./run.sh doctor-copilot-receive     # artifact + digest, COPILOT_CLI_ENABLED_FEATURE_FLAGS on the LIVE copilot processes (the silent failure), live receiver markers via the production reader, receiver log. RED only when install-state exists
@@ -5454,6 +5459,18 @@ case "$cmd" in
   check-copilot-birth-hook)
     check_copilot_birth_hook
     ;;
+  check-omp-birth-hook)
+    # #87 gate: the OMP BIRTH path without omp. Drives the real assembler into a temp dir,
+    # then imports the ASSEMBLED index.ts into a mock omp host (mock ExtensionAPI + mock
+    # ExtensionContext) and fires the two birth edges. Requires: a backend:"omp" v3 record
+    # only under mode "tui"; NOTHING under print/rpc/json (a task subagent is not a citizen,
+    # and hasUI is deliberately true on the rpc rows because it is true in the vendor too);
+    # session_switch attaching on the same native id and minting the replacement on a new
+    # one; a sender marker keyed to the HOST process's OWN pid (never its parent — the
+    # one-process join) that the production resolver joins back to the record; the garden id
+    # on the status line; and still zero mailbox/receiver marker. Hermetic; no omp, no model turn
+    run_ts scripts/check-omp-birth-hook.ts
+    ;;
   check-copilot-statusline)
     check_copilot_statusline
     ;;
@@ -5909,6 +5926,33 @@ case "$cmd" in
     ;;
   smoke-copilot-mcp-state)
     (cd "$REPO_DIR" && bash scripts/smoke-copilot-mcp-state.sh)
+    ;;
+  smoke-omp-bridge-state)
+    (cd "$REPO_DIR" && bash scripts/smoke-omp-bridge-state.sh)
+    ;;
+  install-omp-bridge)
+    # #87: the OMP BIRTH install. Not a mode of the Claude or Copilot installer, and for a
+    # structural reason rather than a stylistic one: an omp "hook" IS an in-process
+    # extension, so there is no launcher to bake a node path into and no hook manifest to
+    # declare events in — the vendor imports the module itself. What this owns is one
+    # directory under the omp agent dir; the MCP hand is install-omp-mcp.
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/omp-bridge-install.sh "$@")
+    ;;
+  uninstall-omp-bridge)
+    # The package-owned inverse: the ownership state is the sole removal authority (exact
+    # unit dir, recorded entry name, recorded assembly), a no-state host REFUSES instead of
+    # cleaning up what it cannot prove is ours, and the state is deleted LAST.
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/omp-bridge-uninstall.sh "$@")
+    ;;
+  doctor-omp-bridge)
+    # #87: the fail-loud surface for the OMP unit. Red is a unit omp cannot import, a STALE
+    # deployed writer, an unrecovered mint ERROR, a failed sender-marker write, or a live omp
+    # process carrying inherited PI_SESSION_ID/PI_AGENT_ID. "Installed with zero records" is
+    # NOT-YET, not red.
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/omp-bridge-doctor.sh "$@")
     ;;
   copilot)
     # #82 RAIL 7: the managed launch. `exec` and NO subshell/cd on purpose — the vendor
