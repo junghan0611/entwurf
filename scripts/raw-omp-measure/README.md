@@ -1,9 +1,15 @@
 # raw-omp-measure — OMP v18.0.0 vendor measurement (issue #87)
 
 Lane: `docs/adding-a-harness.md` step 1 (five measurements) + §3.5 LIVE discriminator +
-one added axis, **pi-rail overlap** (GLG, 2026-08-27). Measurement only — no
-implementation, no minting, no second Claude-MCP writer. The oracle is the vendor
-artifact or the vendor process, never our assembler.
+one added axis, **pi-rail overlap** (GLG, 2026-08-27). The oracle is the vendor artifact
+or the vendor process, never our assembler.
+
+This file was written as a MEASUREMENT-ONLY ledger and stayed one through the audit,
+review, cross-review and first LIVE run. Bundle A of the implementation lane
+(2026-08-27) then closed the slots that could only be closed by writing something —
+the native MCP entry and the installed birth unit. Those receipts are tagged
+**[LIVE …, implementation lane]** so the two phases stay legible: everything without
+that tag was taken before any omp config write or record mint.
 
 Evidence-state vocabulary used below: **[source]** = read at `file:line` in the vendor
 checkout; **[host]** = measured on this host (oracle) with the receipt named;
@@ -81,9 +87,11 @@ Source-layer claims were independently re-verified by a second model:
   `packages/coding-agent/src/mcp/config-writer.ts`, targets project `.omp/mcp.json` /
   user `~/.omp/agent/mcp.json` (profile-aware). General settings: `omp config` CLI →
   `~/.omp/agent/config.yml`.
-- **[host]** `~/.omp/agent/config.yml` exists (modelRoles.default
+- **[host, pre-implementation]** `~/.omp/agent/config.yml` exists (modelRoles.default
   `openai-codex/gpt-5.6-terra:high`, statusLine.separator ascii, plan.enabled). **No
-  omp-native mcp.json exists anywhere on this host.**
+  omp-native mcp.json existed anywhere on this host** at measurement time — that absence
+  is what made the Claude import the effective source below. Bundle A's writer created
+  `~/.omp/agent/mcp.json`; `config.yml` remains untouched by entwurf.
 - **[source]** Import layer (borrowed, not owned): translates Claude Code
   (`~/.claude.json`, `~/.claude/mcp.json`, project `.claude/.mcp.json`/`.claude/mcp.json`),
   Codex, Gemini, OpenCode, Cursor, Windsurf, VS Code (`docs/mcp-config.md` "Imported tool
@@ -105,7 +113,27 @@ Source-layer claims were independently re-verified by a second model:
   needed: user-level `disabledServers` denylist (highest precedence) and
   `mcp.enableProjectConfig` (`docs/mcp-config.md:84-93`, `:426-441`, `:521`); the vendor
   itself never mutates another tool's config (`:441`).
-- **[LIVE — deferred]** native-entry shadowing receipt (omp-native `entwurf-bridge` in `~/.omp/agent/mcp.json`) not taken this run — no omp config writes. O2 (`disabledServers` × equivalence) also deferred to the implementation lane.
+- **[LIVE 2026-08-27, implementation lane — SHADOWING CLOSED]** after `./run.sh install-omp-mcp`
+  wrote the native entry (pinned key `entwurf-bridge`, env `external-mcp/omp`), a fresh omp/18.0.0
+  TUI's own `/mcp list` pane reports the source as the NATIVE file and lists the server ONCE:
+  `Configured MCP Servers` / `User level (~/.omp/agent/mcp.json):` / `entwurf-bridge ● connected [stdio]`.
+  The earlier reading on this same host was `Claude Code (~/.claude.json): entwurf-bridge ● connected`
+  (above) — the attribution FLIPPED and the import does not appear beside it. The spawned bridge
+  child confirms it from the other side: `/proc/541648/environ` carries
+  `ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/omp` (it carried `…/claude-code` before), with
+  ppid `541617` = the omp pid. Same-key first-wins, measured, with the vendor as the oracle.
+- **[LIVE 2026-08-27, implementation lane — O2 CLOSED]** `disabledServers: ["entwurf-bridge"]`
+  added to `~/.omp/agent/mcp.json`, fresh TUI, `/mcp list`:
+  `User level (~/.omp/agent/mcp.json): entwurf-bridge ○ not connected [stdio]` and **no Claude Code
+  section at all** — and no MCP child was spawned (`pgrep -P <omp pid>` empty). Denylisting the
+  shared name suppresses the native entry AND starves the import, exactly as cross-review (3d)
+  predicted from source: it is never the hide-the-import tool. The config was restored afterwards;
+  the shipped writer REFUSES to install under such a denylist and `doctor-omp-mcp` is red while one
+  exists.
+- **[LIVE 2026-08-27, implementation lane — inverse]** `./run.sh uninstall-omp-mcp` removed the file
+  it had created (`created-new` → absent, not an empty `$schema` stub) and `doctor-omp-mcp` then
+  reports `the CLAUDE IMPORT is currently the only source` — the honest pre-#87 state, named rather
+  than silent. Reinstalling returns the verdict to `native-wins`.
 - **[source, cross-review (3)]** Shadowing contract (external review Defect-1, accepted
   amended): the future native writer must pin the **same server key** as the imported
   entry — the literal `mcpServers` map key `entwurf-bridge` — gate-pinned. Same-key
@@ -134,6 +162,11 @@ Source-layer claims were independently re-verified by a second model:
   The built-in statusLine's segments are a closed enum with **no custom-text/command
   segment** (`status-line/segments.ts:731-757`) — no Copilot-style `statusLine.command`
   route exists. Step-4 visible identity must ride `setStatus`.
+- **[LIVE 2026-08-27, implementation lane]** `ctx.ui.setStatus("entwurf", "🪛 <gid> omp")` renders:
+  the TUI's bottom line read `🪛 20260827T211548-68ca9d omp` while idle, and switched to
+  `🪛 20260827T211716-487002 omp` after `/new`. Default `statusLine.showHookStatus` was in
+  force (untouched operator config). Note the call site is `ctx.ui.setStatus` on the EVENT context
+  (`docs/hooks.md` "Status line behavior"), not a method on the `pi` API object.
 - **[source]** Wake surfaces: `pi.sendUserMessage(content, {deliverAs})` — **"idle
   starts a turn"** (`types.ts:1418`); `pi.sendMessage(..., {triggerTurn, deliverAs})`
   (`types.ts:1412`); contained `ctx.setInterval`/`setTimeout` for background watches;
@@ -161,6 +194,12 @@ Source-layer claims were independently re-verified by a second model:
   `479624 479023 479023 omp --cwd /tmp -e …/probe-extension.ts`
   `479695 479624 479695 node …/mcp/entwurf-bridge/src/index.ts` (own SID = setsid; ppid = omp).
   Join: probe pid == omp pid == bridge ppid.
+- **[LIVE 2026-08-27, implementation lane — the step-6 join in production]** with the shipped unit:
+  `541617 omp` (ppid 185520 = tmux server) and `541648 node …/entwurf-bridge/src/index.ts` with
+  ppid `541617`, own SID. The sender marker the extension wrote is
+  `~/.pi/agent/meta-senders/omp/541617.json` →
+  `{"backend":"omp","gardenId":"20260827T211548-68ca9d","ownerPid":541617,"ownerStartKey":"linux:100960160"}`.
+  Marker owner pid == omp pid == bridge child's ppid: the one-process join, measured end to end.
 
 ## §3.5 — Host-vs-subagent discriminator
 
@@ -189,6 +228,20 @@ Source-layer claims were independently re-verified by a second model:
   host `10:53:21.125Z` `{"event":"session_start","mode":"tui","hasUI":true,"sessionId":"01a042da-537a-7770-a275-7b8162eecca4","sessionFile":"…/-tmp/2026-08-27T10-53-19-610Z_01a042da-537a-7770-a275-7b8162eecca4.jsonl"}`
   subagent `10:55:47.906Z` `{"event":"session_start","mode":"print","hasUI":false,"sessionId":"01a042dc-9540-7643-b3ef-99d223b459a9","sessionFile":"…/-tmp/2026-08-27T10-53-19-610Z_01a042da-537a-7770-a275-7b8162eecca4/Greeting.jsonl"}`
   Record store `~/.pi/agent/meta-sessions` regular files: **519 before, 519 after**.
+- **[LIVE 2026-08-27, implementation lane — PRODUCTION UNIT]** the same discriminator re-measured
+  with the SHIPPED birth extension installed (`~/.omp/agent/extensions/entwurf-meta-omp/index.ts`)
+  rather than the `-e` probe. One real TUI, one real task subagent (`GreetingResponder`, 8.5s),
+  record store **521 before, 521 after** that subagent.
+  `<pi-agent-dir>/meta-bridge-hook.log`:
+  `12:15:48.130Z INFO [omp] create record 20260827T211548-68ca9d.meta.json (edge=session_start, native=01a04325-d3ef-70c5-9392-7ac59a19c72e)`
+  then `12:16:37.100Z INFO [omp] scope-refused edge=session_start mode=print: not the visible tui host, no record minted`.
+  One host record, one refusal, zero subagent citizens — and no receiver marker or mailbox for
+  either.
+- **[LIVE 2026-08-27, implementation lane — re-birth edge]** `/new` in that same TUI fired
+  `create record 20260827T211716-487002.meta.json (edge=session_switch(new), native=01a04327-2f41-722f-a24a-be5efb5de6cf)`
+  and re-pointed the sender marker under the same host pid. The switch edge is a real birth edge
+  (audit C2), not a theoretical one: a unit bound to `session_start` alone would have left this
+  session unminted with the previous citizen's id still on its status line.
 - **[source, cross-review (4)]** ACP sessions skip on-disk MCP discovery
   (`main.ts:446`) but client-supplied MCP still connects
   (`acp-agent.ts:2608-2669`) — `enableMCP:false` is NOT a second fence; the tui guard
@@ -261,3 +314,11 @@ against the real API — the file is measurement scaffolding, not product.
 
 Do NOT: install anything, write any omp config, register a backend, mint a record,
 send via `entwurf_v2`, or demonstrate idle-wake (step 7, separate lane).
+
+**That fence belonged to the measurement branch and has been spent.** Bundle A of the
+implementation lane (GLG grant, 2026-08-27) installed the birth unit and the native MCP
+entry on this host under its own acceptance, and the receipts it took are the
+`[LIVE …, implementation lane]` rows above. Idle-wake (step 7) is still out of bounds and
+still has no unit. To re-take any of those rows, the procedure is now
+`./run.sh install-omp-bridge && ./run.sh install-omp-mcp`, a real TUI, and the two
+doctors — not this probe.

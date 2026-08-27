@@ -109,6 +109,15 @@ The backend id must exist before any record carrying it can be written or read.
   > source + gates → build → **redeploy every shared-reader sibling, then run its doctor** →
   > only then let the new backend mint its first record.
 
+  **A running MCP bridge child is a shared reader that no redeploy can reach.** It holds the
+  old backend list in memory and re-reads the capability registry from disk on each call, so
+  the strict coverage guard fires and every `entwurf_v2` send from that process is refused
+  until its owning session restarts. `[측정]` 2026-08-27, adding `omp`: four live bridge
+  children on one host all refused with `capability registry must cover exactly … (got …,
+  omp, pi)` while a freshly spawned bridge was green. That is the designed stale-reader
+  refusal doing its job, not a defect — but plan the restart, and do not read the refusal as
+  a rotten generation.
+
   **An unknown-backend refusal is a stale deployed reader — redeploy it.** It is *not* a
   rotten generation, and the fresh-cut verb is the wrong tool there: it would archive healthy
   records. Only a genuinely unreadable generation goes to

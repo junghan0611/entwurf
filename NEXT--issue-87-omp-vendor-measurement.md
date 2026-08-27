@@ -15,9 +15,9 @@
   **20 CONFIRMED / 6 CORRECTED / 0 UNRESOLVED**. Fence verdict: `mode==="tui"` sound and
   alone (`hasUI` rejected — true under rpc/rpc-ui/ACP). Corrections folded into the
   ledger, marked `audited`; probe fixed against the real v18 session-manager API.
-- [ ] **3. Close docs + commit + review** ← CURRENT: Fable closes the branch docs and
-  commits; GLG comments the plan on #87 and requests external review (B봇). No
-  implementation until that review passes.
+- [x] **3. Close docs + commit + review** — plan of record on #87
+  (comment 5436873780), B-bot review 7/7 with Defect-1 accepted-amended, cross-review
+  closed in both directions.
 - [x] **4. LIVE measurement** — grok on a real omp/18.0.0 TUI (2026-08-27, commit
   `7493826`). **§3.5 discriminator HELD** (host tui vs subagent print, same pid, store
   519=519); dialect oracle satisfied (`mcp__entwurf_bridge_entwurf_v` + 6 live); O1 key
@@ -26,20 +26,34 @@
 - [x] **5. Grant decision** — **GRANTED by GLG 2026-08-27 (this session).** Implementer:
   Opus (claude-code). Reviewer: terra (openai-codex, called per bundle). Coordinator:
   Fable (checkpoint routing only). Order/estimate: #89.
-- [ ] **6. Implementation bundle A** ← CURRENT: step 2 registration (+ redeploy
-  choreography + doctors) then steps 3–6 as one surface (omp extension: birth +
-  tui-only fence + setStatus identity + sender marker; installer with preimage/inverse/
-  doctor; omp-native mcp writer with pinned key `entwurf-bridge`, env
-  `external-mcp/omp`; §6 strip in any managed launch). Focused gates + mutants per
-  AGENTS verification scheduling. STOP before full floor: terra review, one amendment
-  bundle, then full floor once on the frozen candidate.
-- [ ] **7. Bundle B: receive (step 7)** — PAUSED until A lands reviewed.
-- [ ] **8. Bundle C: visible fresh (step 9) + grade (step 8)** — PAUSED.
+- [x] **6. Implementation bundle A — CODE COMPLETE, awaiting terra review.** Opus
+  (claude-code), oracle, 2026-08-27. Commits `bb26e07` (step 2 registration),
+  `852c7b7` (steps 3+3.5+4+6: the omp extension, installer, doctor, sender marker),
+  `ba89f63` (step 5: the omp-native MCP writer). Local only — never pushed.
+  Focused gates green: `check-omp-birth-hook` (72), `smoke-omp-bridge-state` (26),
+  `smoke-omp-mcp-state` (28), `check-meta-session`, `check-entwurf-capabilities`,
+  `check-meta-doctor-oracle`, `check-agy-sender-identity`, `check-meta-facts`,
+  `check-entwurf-facts`, `check-capability-bundle-reach`, `check-install-surface`,
+  `check-entwurf-bridge-boot`, `pnpm typecheck`, `pnpm lint`. 8 exact-once mutants in
+  `scripts/mutants/omp-birth.json` (+ the stale `HOOK-LOG-RAIL-SCOPED` mutant refreshed).
+  LIVE on oracle: garden `20260827T211548-68ca9d` born at TUI open, `/mcp list` source
+  flipped to `~/.omp/agent/mcp.json`, bridge child env `external-mcp/omp`, one real task
+  subagent minted NOTHING (521=521), `/new` minted the replacement via `session_switch`,
+  O2 denylist starved both entries. All folded into the ledger.
+  **NOT run by design (AGENTS verification scheduling): `pnpm run check:full` and
+  `check-gate-qualification` — they belong on the frozen candidate AFTER the review.**
+- [ ] **7. terra review of bundle A** ← CURRENT. Then ONE amendment bundle, then
+  `check-gate-qualification` + `pnpm run check:full` once on the frozen candidate.
+- [ ] **8. Bundle B: receive (step 7)** — PAUSED until A lands reviewed.
+- [ ] **9. Bundle C: visible fresh (step 9) + grade (step 8)** — PAUSED. The
+  `DELIVERY.md` matrix row and the registry grade move together THERE, not in A: omp
+  ships as `D0` / `direct-inject` until a receive rail earns more.
 
 # NOW
 
 - **Stem:** OMP 세션 하나 = 형제 하나. 그 안의 서브에이전트는 절대 citizen이 아니다.
-  재는 것은 GLG 검수 홉 수. 이 브랜치는 측정 영수증만 만든다 — 구현 0바이트.
+  재는 것은 GLG 검수 홉 수. (측정 전용 시기는 끝났다 — bundle A가 GLG grant 아래에서
+  구현·설치·LIVE를 끝냈고, 그 영수증은 ledger의 `[LIVE …, implementation lane]` 행이다.)
 - **Design stance (GLG, 2026-08-27) — OMP is an independent harness.** The Claude-config
   import is never a support surface; model the operator who never used Claude Code. Tool
   hand = the native-harness MCP rail (step 5): an omp-native writer →
@@ -64,10 +78,42 @@
   are the receipt.
 - **Blocker:** none. omp/18.0.0 lives at `~/.local/bin/omp` on oracle; source checkout
   `~/repos/3rd/oh-my-pi` at v18.0.0.
-- **Do not touch:** implementation of steps 2–9 · minting any record/marker · a second
-  Claude-MCP writer · omp config writes · idle-wake demos (step 7) · #78 · main.
+- **Do not touch (post-bundle-A):** bundle B (receive / step 7) and bundle C (visible
+  fresh / grade) until terra's review of A closes · a second Claude-MCP writer ·
+  idle-wake demos · `DELIVERY.md` / registry grade movement (that is step 8, bundle C) ·
+  `~/.omp/agent/config.yml` (entwurf owns no operator SSOT there) · #78 · main · push.
+- **Full floor is deliberately NOT run yet.** AGENTS verification scheduling:
+  implement → focused gates → independent review → one amendment bundle →
+  `check-gate-qualification` (a gate/mutant changed, so it is owed) →
+  `pnpm run check:full` ONCE on the frozen candidate → commit. Running it before the
+  review would pay for it twice.
 
 # RECENT
+
+- **2026-08-27 oracle (Opus, bundle A):** implementation landed in three commits
+  (`bb26e07`, `852c7b7`, `ba89f63`), local only. What the LIVE run settled that source
+  could not: the `/mcp list` source attribution FLIPS to `~/.omp/agent/mcp.json` once the
+  native entry exists (shadowing closed), the bridge child's env label becomes
+  `external-mcp/omp`, a real task subagent leaves the store at 521=521 with one
+  `scope-refused mode=print` line, `/new` mints the replacement through `session_switch`,
+  and a `disabledServers` denylist leaves `○ not connected` with NO Claude section at all
+  (O2 closed — it starves both, exactly as cross-review (3d) said). Two brief notes for
+  the reviewer: (a) the brief said visible identity rides `pi.setStatus`, and the
+  measured call site is `ctx.ui.setStatus(key, text)` on the EVENT context
+  (`types.ts:285` inside `ExtensionUIContext`, `docs/hooks.md` "Status line behavior") —
+  same surface, corrected coordinate; (b) bundle A creates NO managed launch surface, so
+  §6 sanitization has nothing to strip yet — the doctor takes the DETECT half (a live omp
+  carrying `PI_SESSION_ID`/`PI_AGENT_ID` is red on its own axis) and the strip half is
+  owed by the step-9 managed launch in bundle C.
+- **2026-08-27 oracle (Opus, A1 side-finding):** adding a backend id invalidates every
+  ALREADY-RUNNING `entwurf-bridge` child on the host until its owning session restarts —
+  the process holds the old `META_CITIZEN_BACKENDS` in memory and re-reads the capability
+  registry from disk, so the strict coverage guard fires (`capability registry must cover
+  exactly … (got …, omp, pi)`). Measured on this session's own bridge (pid 506167) while
+  a fresh bridge booted clean (`check-entwurf-bridge-boot` green). This is the designed
+  stale-reader refusal, but `adding-a-harness.md` step 2(c) writes its remedy for on-disk
+  artifacts only; a live MCP child cannot be redeployed in place. Worth a sentence in
+  that step.
 
 - **2026-08-27 oracle (B-bot review × grok cross-review):** external review (sonnet) on
   #87 (comment 5437071116): 7/7 facts held, Blocker 0, Defect 1 — **accepted amended**:
