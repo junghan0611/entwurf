@@ -18,12 +18,13 @@
 - [ ] **3. Close docs + commit + review** ← CURRENT: Fable closes the branch docs and
   commits; GLG comments the plan on #87 and requests external review (B봇). No
   implementation until that review passes.
-- [ ] **4. LIVE measurement** — post-review, implementation-team phase (GLG-approved
-  rails 2026-08-27: sol · terra · glm · grok; Fable 쿼터는 실무에 쓰지 않는다). Walk
-  the ledger's "LIVE procedure"; paste decisive lines into `[LIVE — pending]` slots.
-  One tiny model turn total (the §3.5 subagent spawn).
-- [ ] **5. §3.5 verdict + grant** — host `{mode:"tui"}` vs subagent `{mode:"print"}`
-  receipt in hand → report. Grant decision (implementation, steps 2–9) is GLG's.
+- [x] **4. LIVE measurement** — grok on a real omp/18.0.0 TUI (2026-08-27, commit
+  `7493826`). **§3.5 discriminator HELD** (host tui vs subagent print, same pid, store
+  519=519); dialect oracle satisfied (`mcp__entwurf_bridge_entwurf_v` + 6 live); O1 key
+  = plain `entwurf-bridge`; PI_* absent under clean launch; borrowed claude-code label
+  captured live. Shadowing receipt + O2 deferred to the implementation lane.
+- [ ] **5. Grant decision** ← CURRENT: GLG decides the implementation lane (steps 2–9).
+  Order/estimate on record in #89; measurement evidence complete in the ledger.
 
 # NOW
 
