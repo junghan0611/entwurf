@@ -356,3 +356,59 @@ Minimal valid stdio entry (`config/mcp-schema.json` `$defs/stdioServer`, `mcp/ty
 `cli/config-cli.ts:4-5`, `handleSet` `:363-378`: `parseAndSetValue` then `await settings.flush()`.
 `Settings.#configPath` = `path.join(this.#agentDir, MAIN_CONFIG_FILENAMES[0])` (`settings.ts:401`) with `MAIN_CONFIG_FILENAMES = ["config.yml", "config.yaml"]` (`utils/src/dirs.ts:26`).
 `flush` → `#saveNow` → `#writeYamlAtomically` to that path. **Yes: `omp config set` writes `~/.omp/agent/config.yml`.**
+
+# Cross-review of external review (2026-08-27)
+
+Reviewer: B-bot (sonnet) on issue #87 comment. Oracle: same v18.0.0 checkout. This section only; original ledger unchanged.
+
+## (1) CORRECTION-1 — `:531` is test-only vs production TUI caller — OVERSTATED (B-bot); original "test-only" STANDS
+
+B-bot: `interactive-mode.ts:4468` calls `initializeHookRunner` in production, so `:531` is not test-only; predicate still holds because that caller is a TUI surface.
+
+Walk of the full caller chain:
+
+- `extension-ui-controller.ts:531` lives in `initializeHookRunner` (`:393`). Always passes `"tui"` (`:531`); `_hasUI` is unused.
+- In-repo `.initializeHookRunner(` call sites (whole `packages/`):
+  - `interactive-mode.ts:4468` — **method body**, not a caller. Public delegate `InteractiveMode.initializeHookRunner` → controller.
+  - `test/repro-issue-1020-ctx-shutdown.test.ts:46` — **only actual call**, on the controller, from a unit test.
+- Production TUI boot does **not** go through `:531`. It goes `interactive-mode.ts:1238` `initHooksAndCustomTools()` → controller `:100` → initialize `:302` + `session_start` `:309-311`.
+- Grep for `ctx.initializeHookRunner` / `mode.initializeHookRunner` / `session.initializeHookRunner`: **zero hits**.
+
+B-bot mistook a **definition** (`:4467-4468`) for a production call. Fable's spot-check was right.
+
+Public-API nuance (does not revive B-bot's claim):
+- `InteractiveMode` is a package export (`src/index.ts:35` `export * from "./modes"` → `modes/index.ts:9` `export * from "./interactive-mode"`; `package.json` `"./modes"` / `"./modes/*"`).
+- `InteractiveModeContext.initializeHookRunner` is on the interface (`modes/types.ts:244`).
+- `ExtensionUiController` is reachable via `"./modes/controllers/*"`.
+- An out-of-repo SDK consumer *could* call `:531`. That path still hardcodes `mode: "tui"`. It is not the operator `omp` TUI. Predicate soundness holds.
+
+Final: in-repo operator path, `:531` is test-only. Keep the original A1 note.
+
+## (2) CORRECTION-2 — digit eaten by sanitize, not cap — CONFIRMED
+
+Matches E1. `sanitizeMCPToolNamePart` (`mcp/tool-bridge.ts:351-357`) charset is `[a-z_]`; `2` in `entwurf_v2` → `_` → trim → `entwurf_v`. Length of `mcp__entwurf_bridge_entwurf_v` is 29, under the 64-char cap (`:365-366`, `:396`). Cap never fires.
+
+## (3) DEFECT-1 — native shadows import iff same server key — CONFIRMED (with denylist amendment)
+
+Location: `capability/mcp.ts:72-92` `isSameMCPConnection` (stdio: command/args/**env**/cwd `deepEquals`); `key: server => server.name` `:98`; `equivalent: isSameMCPConnection` `:99`. Dedupe: `capability/index.ts:183-210`.
+
+**(a) Two paths, ordered.** For each item:
+1. If suppressed: claim `key` into `seen`, skip (never survives, never `equivalent`-shadows) (`:191-196`).
+2. If `key` already in `seen` → `_shadowed = true`, not pushed to `deduped` (`:203-207`). **`equivalent` is not consulted.**
+3. Else `aliasSeen = equivalent(existing, item)` only when `!keySeen` (`:205`). Same connection, different name → later name dropped; one connection under the first name.
+
+`loadAllMCPConfigs` consumes **`result.items` only** (`mcp/config.ts:137-140`) = `deduped`. Shadowed entries are silent (no warning in the dedupe loop).
+
+**(b) Same name, different env (planned case).** Native `ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/omp` vs imported `…=external-mcp/claude-code`: `equivalent` would be **false**, but it never runs because `keySeen` is true. First-wins-by-key **fully suppresses** the import. Not both loaded, not replaced, no warning. Native provider priority 100 before Claude 80 (`discovery/builtin.ts:42` vs `claude.ts:35`), so the native entry is first.
+
+**(c) Claude import key.** `discovery/claude.ts:88-92`: `Object.entries(mcpServers).map(([name, config]) => ({ name, … }))`. Plain `mcpServers` object key. No prefix. Host `~/.claude.json` `mcpServers.entwurf-bridge` → `name: "entwurf-bridge"`.
+
+**(d) `disabledServers`.** `suppressServer` (`mcp/config.ts:123-127`) is `disabledServers.has(server.name)`. Both native and imported share `name === "entwurf-bridge"`, so **both are suppressed**. Suppressed items still claim the key (`index.ts:163-165`, `:191-196`) → nothing else named `entwurf-bridge` survives. Denylisting `entwurf-bridge` to hide the Claude import would also hide the native writer entry. That is a different operator action from shadowing.
+
+**Acceptance sentence:** "native writer uses the same server key as the imported entry, gate-pinned" is **necessary and sufficient for shadowing**. Amend: pin the literal key `entwurf-bridge` (the `mcpServers` map key); env may differ (that is the label swap); do **not** treat `disabledServers: ["entwurf-bridge"]` as the hide-import mechanism when a native entry exists — it would kill both.
+
+## (4) ACP `enableMCP:false` as a free second fence — CONFIRMED restatement, OVERSTATED as a fence
+
+A4 stands. `createAcpSessionFactory` comment + flag (`main.ts:407-412`, `:446`): `enableMCP: false` so `createAgentSession` skips on-disk `.mcp.json` discovery (else host tools shadow client servers, issue #1234).
+
+Not a fence against **all** MCP. ACP MCP is owned by the client: `session/new.mcpServers` → `#configureMcpServers` (`acp-agent.ts:2608-2669`) builds a fresh `MCPManager` and `connectServers` on whatever the client sent (`:2649-2659`). If an ACP client passes an `entwurf-bridge` stdio/http server, those tools **do** surface (`refreshMCPTools`). Disk-import is skipped; client-supplied MCP is not. "Bridge tools never appear in ACP even if the tui fence loosened" is overstated — they appear iff the ACP client hands them over.

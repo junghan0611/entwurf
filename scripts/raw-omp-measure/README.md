@@ -105,6 +105,15 @@ Source-layer claims were independently re-verified by a second model:
 - **[LIVE — pending, stance receipt]** with an omp-native `entwurf-bridge` entry present,
   the effective source is the native entry, not the import (`/mcp list` output or omp
   log line naming the winning source; bridge child env shows the native entry's label).
+- **[source, cross-review (3)]** Shadowing contract (external review Defect-1, accepted
+  amended): the future native writer must pin the **same server key** as the imported
+  entry — the literal `mcpServers` map key `entwurf-bridge` — gate-pinned. Same-key
+  first-wins fully suppresses the import even when env differs
+  (`capability/index.ts:203-207`; `equivalent` is never consulted on a key hit), which
+  is exactly the label swap this stance wants. Never use
+  `disabledServers: ["entwurf-bridge"]` to hide the import while a native entry exists —
+  suppression is by name and kills **both** (`mcp/config.ts:123-127`,
+  `capability/index.ts:191-196`).
 - **[source, audited I1/F1/F4]** Writer shape and precedence in code: user file
   `~/.omp/agent/mcp.json` = `{ $schema, mcpServers: { <name>: { command, args?, env? } } }`
   (`mcp/config-writer.ts:111-143`, `config/mcp-schema.json`); discovery priority
@@ -176,6 +185,10 @@ Source-layer claims were independently re-verified by a second model:
   `{mode:"tui", hasUI:true}`, one real subagent line `{mode:"print", hasUI:false}`, same
   `pid`, different session files. Plus: no entwurf record/marker minted anywhere (no omp
   birth unit exists; record-store count identical before/after).
+- **[source, cross-review (4)]** ACP sessions skip on-disk MCP discovery
+  (`main.ts:446`) but client-supplied MCP still connects
+  (`acp-agent.ts:2608-2669`) — `enableMCP:false` is NOT a second fence; the tui guard
+  and the bridge's default send refusal remain the fences.
 - Stop rule (issue #87): if the discriminator flips at any vendor upgrade, stop —
   do not pile heuristics.
 

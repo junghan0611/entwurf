@@ -39,7 +39,10 @@
   vendor lifecycle unit: birth + §3.5 discriminator + visible identity + receive.
   Acceptance criterion for ALL later implementation: existing rail patterns with
   measured facts substituted; the only new predicate anywhere is the §3.5
-  discriminator, which the doctrine itself mandates.
+  discriminator, which the doctrine itself mandates. Shadowing addendum (review
+  Defect-1, accepted): the native writer pins the literal server key
+  `entwurf-bridge` (same-key first-wins is the whole mechanism; env may differ;
+  `disabledServers` on that name would kill both entries — never the hide-import tool).
 - **Roles (GLG, 2026-08-27):** Fable = rail design only. Implementation AND LIVE
   legwork = sibling on sol/terra/glm/grok rails. Coordination stays with GLG.
 - **pi-rail overlap (GLG worry, promoted to axis M6):** omp is a pi fork and reads
@@ -55,6 +58,14 @@
 
 # RECENT
 
+- **2026-08-27 oracle (B-bot review × grok cross-review):** external review (sonnet) on
+  #87 (comment 5437071116): 7/7 facts held, Blocker 0, Defect 1 — **accepted amended**:
+  shadowing works only via the byte-identical server key (pin literal `entwurf-bridge`;
+  env may differ; `disabledServers` kills both). Cross-review corrected two reviewer
+  claims with receipts (`source-audit.md` "Cross-review" section): `:531` test-only
+  STANDS (a method definition was mistaken for a production caller; production TUI boot
+  is `:302`), and ACP `enableMCP:false` is NOT a fence (client-supplied MCP still
+  connects, `acp-agent.ts:2608-2669`). Ledger and stance updated.
 - **2026-08-27 oracle (grok audit):** all Fable source claims re-verified against
   `~/repos/3rd/oh-my-pi` @ v18.0.0. Design-touching corrections: (1) `hasUI` is NOT a
   host predicate — rpc/rpc-ui/ACP see `hasUI:true` (`runner.ts:879-881`); `mode==="tui"`
