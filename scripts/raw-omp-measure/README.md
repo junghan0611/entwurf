@@ -49,8 +49,12 @@ Source-layer claims were independently re-verified by a second model:
   `session_before_switch`/`session_switch` (reasons `"new"`/`"fork"`/`"resume"`,
   `agent-session.ts:6910-8074`), **not** as `session_start` — a birth hook must treat
   `session_switch` as a re-birth edge. The `:531` initialize site is test-only.
-- **[LIVE — pending]** probe JSONL showing host session_start at TUI open (no model turn)
-  and the relative firing order of agent_start/turn_start.
+- **[LIVE 2026-08-27, observation]** on `/exit`, a `session_shutdown` with a `"print"`
+  context fired before the tui one (same run) — shutdown events arrive from non-tui
+  contexts too. No fence impact (shutdown is not a birth edge), but a future unit must
+  not treat `session_shutdown` as host-scoped.
+- **[LIVE 2026-08-27]** `/tmp/omp-probe-live.jsonl`. Host `session_start` at TUI open with **no model turn** (`2026-08-27T10:53:21.125Z`); `agent_start`/`turn_start` only after the typed prompt (`10:55:41.414Z` / `10:55:41.466Z`):
+  `{"event":"session_start","pid":479624,"mode":"tui","hasUI":true,"cwd":"/tmp","sessionId":"01a042da-537a-7770-a275-7b8162eecca4","sessionFile":"/home/junghan/.omp/agent/sessions/-tmp/2026-08-27T10-53-19-610Z_01a042da-537a-7770-a275-7b8162eecca4.jsonl"}`
 
 ## M2 — Launch form and envelope
 
@@ -69,7 +73,7 @@ Source-layer claims were independently re-verified by a second model:
   subagent against a fresh per-session API (`sdk.ts:2000-2028`, `loader.ts:362-443`);
   CLI `-e` paths flow into subagents via `session.extensionPaths` →
   `structured-subagent.ts:442` unless `restrictToolNames`.
-- **[LIVE — pending]** probe line proving `pid == omp host pid` for the extension.
+- **[LIVE 2026-08-27]** `/tmp/omp-probe-live.jsonl` `pid:479624` equals `ps` omp pid `479624` (ppid `479023` = tmux-server bash). Extension is in-process.
 
 ## M3 — Config writer
 
@@ -92,8 +96,7 @@ Source-layer claims were independently re-verified by a second model:
   finding:** an omp session riding the import would hand the bridge Claude Code's
   external id — wrong provenance for an omp citizen. This is evidence for the issue's
   fence (imported config is borrowed), not a request to clone a second Claude writer.
-- **[LIVE — pending]** effective-source proof: live omp process with the bridge
-  connected via import, `/proc/<bridge-pid>/environ` showing the inherited external id.
+- **[LIVE 2026-08-27]** TUI `/mcp list` pane (O1 key): `Claude Code (~/.claude.json):` / `entwurf-bridge ● connected`. Bridge child `479695` ppid `479624`; `/proc/479695/environ` has `ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code`. Server key string is the plain `mcpServers` name **`entwurf-bridge`**.
 - **Design stance (GLG, 2026-08-27):** treat OMP as an independent harness — model the
   operator who never used Claude Code. The Claude import path is never a support
   surface. The future MCP hand is an omp-native writer targeting `~/.omp/agent/mcp.json`
@@ -102,9 +105,7 @@ Source-layer claims were independently re-verified by a second model:
   needed: user-level `disabledServers` denylist (highest precedence) and
   `mcp.enableProjectConfig` (`docs/mcp-config.md:84-93`, `:426-441`, `:521`); the vendor
   itself never mutates another tool's config (`:441`).
-- **[LIVE — pending, stance receipt]** with an omp-native `entwurf-bridge` entry present,
-  the effective source is the native entry, not the import (`/mcp list` output or omp
-  log line naming the winning source; bridge child env shows the native entry's label).
+- **[LIVE — deferred]** native-entry shadowing receipt (omp-native `entwurf-bridge` in `~/.omp/agent/mcp.json`) not taken this run — no omp config writes. O2 (`disabledServers` × equivalence) also deferred to the implementation lane.
 - **[source, cross-review (3)]** Shadowing contract (external review Defect-1, accepted
   amended): the future native writer must pin the **same server key** as the imported
   entry — the literal `mcpServers` map key `entwurf-bridge` — gate-pinned. Same-key
@@ -155,8 +156,11 @@ Source-layer claims were independently re-verified by a second model:
   (`transports/stdio.ts:577-581`) — full parent env inherited, entry env merged on top,
   **no omp-injected session/agent id**; setsid does not reparent (ppid stays omp pid);
   teardown signals the process group then SIGKILLs after grace (`stdio.ts:474-494`).
-- **[LIVE — pending]** `ps -o pid,ppid,args` tree of a live session: omp pid, bridge
-  child ppid, probe pid line from the same run.
+- **[LIVE 2026-08-27]** same run (`ps -o pid,ppid,sid,args`):
+  `479023 185520 479023 -bash` (tmux server child)
+  `479624 479023 479023 omp --cwd /tmp -e …/probe-extension.ts`
+  `479695 479624 479695 node …/mcp/entwurf-bridge/src/index.ts` (own SID = setsid; ppid = omp).
+  Join: probe pid == omp pid == bridge ppid.
 
 ## §3.5 — Host-vs-subagent discriminator
 
@@ -181,10 +185,10 @@ Source-layer claims were independently re-verified by a second model:
   Bundled task agents do **not** set `restrictToolNames` (it is a spawn option:
   plan-mode/security/compress, `structured-subagent.ts:386`) — default subagents DO load
   extensions, so the discriminator is load-bearing, and it is `mode` **alone**.
-- **[LIVE — pending, decisive]** one probe JSONL from one real session: host line
-  `{mode:"tui", hasUI:true}`, one real subagent line `{mode:"print", hasUI:false}`, same
-  `pid`, different session files. Plus: no entwurf record/marker minted anywhere (no omp
-  birth unit exists; record-store count identical before/after).
+- **[LIVE 2026-08-27, decisive]** `/tmp/omp-probe-live.jsonl`. Discriminator **held**, same pid `479624`, different session ids/files:
+  host `10:53:21.125Z` `{"event":"session_start","mode":"tui","hasUI":true,"sessionId":"01a042da-537a-7770-a275-7b8162eecca4","sessionFile":"…/-tmp/2026-08-27T10-53-19-610Z_01a042da-537a-7770-a275-7b8162eecca4.jsonl"}`
+  subagent `10:55:47.906Z` `{"event":"session_start","mode":"print","hasUI":false,"sessionId":"01a042dc-9540-7643-b3ef-99d223b459a9","sessionFile":"…/-tmp/2026-08-27T10-53-19-610Z_01a042da-537a-7770-a275-7b8162eecca4/Greeting.jsonl"}`
+  Record store `~/.pi/agent/meta-sessions` regular files: **519 before, 519 after**.
 - **[source, cross-review (4)]** ACP sessions skip on-disk MCP discovery
   (`main.ts:446`) but client-supplied MCP still connects
   (`acp-agent.ts:2608-2669`) — `enableMCP:false` is NOT a second fence; the tui guard
@@ -206,8 +210,9 @@ Source-layer claims were independently re-verified by a second model:
   string** — `tools.approval.<minted name>` (`tools/approval.ts:110`, `mcp__`
   special-case `:261`); MCP tools default `approval: "write"` (`tool-bridge.ts:490`).
   **No second Copilot-style permission dialect.**
-- **[LIVE — pending]** probe `tool_dump_t10`/`t25` lines listing the actual
-  `mcp__entwurf_bridge_*` names the model sees.
+- **[LIVE 2026-08-27]** `/tmp/omp-probe-live.jsonl` host `tool_dump_t25` (`10:53:46.128Z`, `mode:"tui"`, `toolCount:28`):
+  `["mcp__entwurf_bridge_entwurf_fresh_call","mcp__entwurf_bridge_entwurf_inbox_read","mcp__entwurf_bridge_entwurf_peers","mcp__entwurf_bridge_entwurf_register_native","mcp__entwurf_bridge_entwurf_resume_call","mcp__entwurf_bridge_entwurf_self","mcp__entwurf_bridge_entwurf_v"]`
+  Subagent dump (`mode:"print"`, `toolCount:26`) lists the **same seven names** (extensions inherited). Matches source computation; digit in `entwurf_v2` is eaten.
 
 ## M6 — pi-rail overlap (added axis, GLG 2026-08-27)
 
@@ -233,11 +238,7 @@ must never steer each other through shared knobs.
 - **[source, audited G3]** Identity-adjacent inventory also includes
   `PI_CODING_AGENT_SESSION_DIR` (`cli/args.ts:156`); the full PI_* read inventory
   (40+ non-identity vars included) is in the audit G3 table.
-- **[LIVE — pending]** from one live session: `/proc/<omp-pid>/environ` and
-  `/proc/<bridge-pid>/environ` grep for `PI_SESSION_ID|PI_AGENT_ID|PI_CODING_AGENT_DIR`
-  (expect: absent under a clean tmux launch); confirmation that no entwurf pi extension
-  under `~/.pi/` was loaded (probe log has no such path; `omp` log shows the loaded
-  extension list).
+- **[LIVE 2026-08-27]** clean tmux window (preflight `env | grep PI_SESSION_ID|PI_AGENT_ID` → `CLEAN_NO_PI_IDENTITY`). `/proc/479624/environ` and `/proc/479695/environ` grep `PI_SESSION_ID|PI_AGENT_ID|PI_CODING_AGENT_DIR`: **all absent**. Probe path is only the `-e` file (`…/scripts/raw-omp-measure/probe-extension.ts`); no `~/.pi/` extension path in the JSONL. (Bridge still carries borrowed `ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code` — M3, not a PI_* carrier.)
 
 ## LIVE procedure (for the implementer sibling)
 
