@@ -7,24 +7,23 @@
 
 ---
 
-## 현재 — 0.14.1 shipped; bridge boot + exact invocation
+## 현재 — 0.15.0 shipped; #86 Linux setup honesty preparing 0.15.1
 
 이 repo는 **entwurf-core(v2 garden-citizen dispatch) + native-harness bridges + pi adapter + ACP plugin**이다.
-`v0.14.1`은 GitHub와 npm `latest`로 게시됐다. Claude mailbox, pi control-socket,
-Antigravity native-push가 한 garden-id dispatch 표면으로 출하됐고, ACP plugin은 Claude와 Cortex를 pi host
+`v0.15.0`은 GitHub와 npm `latest`로 게시됐다 (`repair=0.12.8-repair.1` 보존). Claude mailbox, pi control-socket,
+Antigravity native-push, Copilot self-fetch가 한 garden-id dispatch 표면으로 출하됐고, ACP plugin은 Claude와 Cortex를 pi host
 안에서 연결한다. 0.14.0은 hidden background resume을 철회하고 visible fresh creation과 same-id pi resume을
 각각 `entwurf_fresh_call` / `entwurf_resume_call`로 분리했으며, 0.14.1은 fresh creation에 literal absolute cwd를
-더했다. 현재 main은 0.14.2를 위해 exact configured bridge invocation과 ACP child-end evidence를 강화했다.
-검증은 ≤60s core와 frozen-candidate full floor로 계층화했다.
+더했고, 0.14.2는 exact configured bridge invocation과 ACP child-end evidence를 강화했다. 0.15.0은 Copilot을
+시민으로 들였다. 검증은 ≤60s core와 frozen-candidate full floor로 계층화했다.
 
 **2026-08-01~02 축 전환(GLG 지시).** pi가 공식 provider로 지원하는 Codex/Grok을 위해 native citizen이나
 ACP backend를 중복 구현하지 않는다. #56 Codex native lane은 닫혔고, Codex/Grok 탐구 브랜치는 main 밖에
 격리한다. 거기서 얻은 native/ACP rail 방법론은 필요할 때만 현재 증거로 다시 세운다.
 
-현재 우선순위는 **0.14.1 이후 live defect 정리**다. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
-계약만 둔다. 방향·철학·관찰 중인 가능성은 이 문서가 지며, 재현 가능한 결손이 되면 그때 증거와 다음 측정을
-갖고 이슈로 승격한다. 현재 실행 계약은 #72 ACP retained-child 원인, #76 subscription rail 강제, #78
-platform evidence, #80 public vocabulary, #82 Copilot 승격 판정이다. 실행 순서는 active NEXT handoff가 진다.
+현재 우선순위는 **#86 Linux one-command setup honesty → 0.15.1**, 그 다음 #78 portability다. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
+계약만 둔다 (현재는 초과 — 이 컷이 sweep하지 않는다). 방향·철학·관찰 중인 가능성은 이 문서가 지며, 재현 가능한 결손이 되면 그때 증거와 다음 측정을
+갖고 이슈로 승격한다. 현재 실행 계약은 #86 Linux setup floor, #78 platform evidence, #72 ACP retained-child 원인, #76 subscription rail 강제, #80 public vocabulary다. #82는 CLOSED. 실행 순서는 active NEXT handoff가 진다.
 
 Pi는 가장 깊이 붙은 adapter지만 프로젝트의 본질은 여전히 **garden id로 호명 가능한 형제 세션 사이의 얇은
 dispatch substrate**다. provider 연결과 TUI/RPC/session lifecycle은 pi에 맡기고, entwurf는 부르는 법과
@@ -48,7 +47,7 @@ v1 entwurf verbs(`entwurf`/`entwurf_resume`/`entwurf_send`)는 끝났고 사라�
 | **Claude Code** | shipped | SessionStart meta-bridge → garden id + mailbox + trusted marker. Transcript를 가져오지 않는다. | meta-session gates, mailbox/deliverability, `doctor-meta-bridge` |
 | **ACP Claude** | shipped; **outbound callback verified, retained-child failure tracked in #72** | Claude-first ACP plugin backend under local operator auth; socket-citizen rail. Integrated lifecycle proves callback, visible same-id resume and recall. Synthetic long-turn LIVE passes beyond 733s, but a real retained Sonnet tool-loop failed after four reuse turns with `ACP connection closed` (`20260730T194358-0061d2`), and GLG reports the same user-facing shape on hard workloads. #72 must recover child exit/signal/stderr and classify the workload-shape gap without automatic replay. Earlier intermittent bundled-MCP readiness observations remain separately recorded below. | ACP LIVE smokes + mux lifecycle release-gate MUST + #72 field report |
 | **Codex** | native probe archived; managed lane declined | direct/native delivery evidence는 방법론 기록으로 남지만, pi가 공식 GPT provider를 지원하므로 별도 native citizen/ACP backend를 출하하지 않는다. 일반 external MCP host로 명시 배선하는 것은 별개다. | DELIVERY.md raw probe / closed #56 |
-| **Copilot CLI** | branch: birth + receive D6 + visible fresh clause 7 accepted on one host | 첫 프롬프트에 `backend:"copilot"` V3 record. receive는 포크된 first-party extension + mailbox rail. visible fresh는 `entwurf_fresh_call {backend:"copilot"}` → owned `entwurf copilot` invocation, 4축 preflight, exact-nonce callback. `--ui-server`/`ws.*`는 거절. D3 pending / D8 unproven. Copilot visible-fresh LIVE는 operator-metered이며 release MUST가 아니다. | DELIVERY.md matrix row (LIVE receipts 2026-08-23 / 2026-08-25) + issue #82 thread |
+| **Copilot CLI** | shipped (0.15.0); D3 pending / D8 unproven | 첫 프롬프트에 `backend:"copilot"` V3 record. receive는 포크된 first-party extension + mailbox rail. visible fresh는 `entwurf_fresh_call {backend:"copilot"}` → owned `entwurf copilot` invocation, 4축 preflight, exact-nonce callback. `--ui-server`/`ws.*`는 거절. D3 pending / D8 unproven. Copilot visible-fresh LIVE는 operator-metered이며 release MUST가 아니다. | DELIVERY.md matrix row (LIVE receipts 2026-08-23 / 2026-08-25) + issue #82 thread |
 | **Antigravity (`agy`)** | shipped | `PreInvocation` auto-birth + record-backed sender + native LS gRPC push; managed MCP/permission, statusline, hook adapters. | agy deterministic gates + doctors + 2026-07-13 live round trip |
 | **Cortex / governed ACP** | **landed (0.13.0)** — hvkiefer's PR #40 adapter transplanted with the CP0-audit revisions (dual-HOME overlay, mcp.json projection, per-turn set-model, 4-row curation) | current D1–D10 contract is `docs/acp-backend-rail.md` “Cortex Code audit”; deterministic gate `check-acp-cortex` + mutant lane `acp-cortex`; CP2 live smoke `smoke-acp-cortex-live` stays outside the claude-only release floor | PR #40 / #48 / `docs/acp-backend-rail.md` |
 | **Gemini CLI** | deprecated path | replaced by Antigravity direction for current Google individual tiers. | README migration note |
