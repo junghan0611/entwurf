@@ -156,10 +156,12 @@ latest session id.
   and act under the host garden id; they must never acquire a second garden address.
 - (c) Worked warning: OMP v18.0.0 creates subagents in-process, but each subagent rebinds inherited
   extension paths to its own session API and emits its own `session_start`. “Same OS pid” therefore
-  does **not** prevent record minting. Its measured candidate discriminator is extension
-  `mode === "tui"` for the visible host versus default `"print"` + `hasUI:false` for task agents;
-  that runtime distinction still needs a LIVE receipt and must be remeasured at vendor upgrades.
-  If it flips, stop and reassess rather than growing a pile of heuristic predicates.
+  does **not** prevent record minting. Its measured discriminator is extension `mode === "tui"`
+  for the visible host — and `mode` **alone**: `hasUI` is not a fence, because rpc/rpc-ui/ACP
+  contexts also report `hasUI:true` while task agents run `"print"` (source-audited 2026-08-27,
+  `scripts/raw-omp-measure/source-audit.md` A1–A4). The runtime distinction still needs a LIVE
+  receipt and must be remeasured at vendor upgrades. If it flips, stop and reassess rather than
+  growing a pile of heuristic predicates.
 
 ---
 
