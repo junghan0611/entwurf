@@ -25,5 +25,15 @@
 		"noEmit": true,
 		"rootDir": ".."
 	},
+	// Override the root `exclude` (which lists "mcp"): without this, the
+	// inherited exclusion resolves to <repo>/mcp and filters out everything
+	// `include` adds under mcp/, so entwurf-bridge/src/index.ts — the bridge
+	// boot entry, and the only tracked .ts in no `tsc --noEmit` program — was
+	// silently NOT typechecked (issue #85; the same gap scripts/tsconfig.json
+	// already had to close in Phase 3b). The 26 pi-extensions/lib files this
+	// program did see arrived through the import graph, which `exclude` does
+	// not filter; nothing imports the entry, so nothing rescued it.
+	// Re-list the root's other exclusions, minus "mcp".
+	"exclude": ["../node_modules", "../scripts", "../plugins"],
 	"include": ["./entwurf-bridge/src/**/*.ts", "../pi-extensions/lib/**/*.ts"]
 }
