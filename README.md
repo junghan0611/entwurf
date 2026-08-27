@@ -78,10 +78,13 @@ A few words that look unusual for a coding tool.
 
 ## Install
 
-`entwurf` is a neutral npm package first. Install the package with `npm` (or
-`pnpm`/`yarn`) and then wire the harness you want to use. Pi is still the
-adapter that hosts the ACP plugin and live control-socket surface, but the base
-install is **not** `pi install npm:...` anymore.
+`entwurf` is a neutral npm package first. Get the package, then run **`entwurf setup
+<project>`** — one command, the same front door from an npm global install, an npm
+project-local install, or a source checkout. It composes every harness it finds on the
+host and reports each one PASS / SKIP / FAIL. You are not meant to assemble the parts by
+hand; the per-harness installers further down are the repair surface for when one unit
+needs to be redone alone. Pi is still the adapter that hosts the ACP plugin and live
+control-socket surface, but the base install is **not** `pi install npm:...` anymore.
 
 The package exposes six bins:
 
@@ -107,15 +110,12 @@ look complete.
 ```bash
 npm install -g @junghanacs/entwurf
 
-# wire a target project for the pi adapter / ACP plugin lane
-cd /path/to/your-project
-entwurf install .
+entwurf setup /path/to/your-project
 entwurf check-bridge
 ```
 
-This writes `.pi/settings.json` in the target project with the absolute path to
-the installed `entwurf-bridge` launcher. (The old `~/.pi/agent/` target-registry
-link is gone — #50 C3; nothing reads it.) The global install is the easiest path when
+`setup` wires the target project for the pi adapter / ACP plugin lane and composes
+whatever native harnesses are present. The global install is the easiest path when
 Claude Code's USER-scope MCP registration should work from every cwd.
 
 ### From npm — project-local install
@@ -124,27 +124,25 @@ Claude Code's USER-scope MCP registration should work from every cwd.
 cd /path/to/your-project
 npm install --save-dev @junghanacs/entwurf
 
-npx entwurf install .
+npx entwurf setup .
 npx entwurf check-bridge
 ```
 
-For an npm upgrade, rerun the install command in the same scope (use
+For an npm upgrade, rerun `setup` in the same scope (use
 `@junghanacs/entwurf@latest` when you want the registry's stable line explicitly),
 then make the first check from that same scope: `entwurf check-bridge` for a global
 install or `npx entwurf check-bridge` for a project-local install. Native-harness
-installers and process restarts remain a separate post-upgrade step below.
+repair and process restarts remain a separate post-upgrade step below.
 
-For manual MCP registration from a project-local install, point the host at:
+`entwurf install <project>` is the narrower repair leaf: it writes only
+`.pi/settings.json` in the target project, with the absolute path to the installed
+`entwurf-bridge` launcher, and composes no harness. Reach for it when the pi wiring
+alone needs redoing. (The old `~/.pi/agent/` target-registry link is gone — #50 C3;
+nothing reads it.)
 
-```text
-/path/to/your-project/node_modules/.bin/entwurf-bridge
-```
-
-or at the package launcher directly:
-
-```text
-/path/to/your-project/node_modules/@junghanacs/entwurf/mcp/entwurf-bridge/start.sh
-```
+To register the bridge in an MCP host by hand from a project-local install, point it at
+`node_modules/.bin/entwurf-bridge` — see
+[External MCP registration](#external-mcp-registration).
 
 ### From source — development clone
 
@@ -164,29 +162,19 @@ and a detected harness that cannot be completed (including a below-floor `pi`) i
 that makes setup exit nonzero. `setup` never installs a harness binary or touches a credential
 store. It also exposes stable commands under `~/.local/bin`, including `entwurf` → this
 checkout's `run.sh`, so managed Copilot fresh does not depend on an unrelated global npm/pnpm
-installation. A detected `copilot` composes all four native units (birth → MCP → receiver →
-visible footer) independently; the explicit `install-copilot-*` surfaces below remain the
-per-unit repair and inverse path. Package consumers
+installation. A detected `copilot` composes all four of its native units (birth → MCP →
+receiver → visible footer) in one go. Package consumers
 run the same `entwurf setup <project>` through their npm-provided bin: installed mode is decided
 by name first, skips the source-only pnpm bootstrap entirely, and reports the stable commands as
-already provided by npm bin linking; `entwurf install` remains the narrower pi-wiring repair
-leaf.
+already provided by npm bin linking.
 
 The pi user-scope registration is ONE shared entry with a recorded owner (#86 C2): installing
 from a second checkout or npm root does not silently steal it — normal `install`/`setup` refuse
-(zero settings writes, live or missing owner alike), `entwurf takeover-user-scope` is the
-operator-explicit move (old→new reported), `entwurf doctor-pi-package` names the ownership
-verdict (including `missing-owner` for a moved/deleted root), and `entwurf remove-user-scope`
-is same-owner-only with a reported orphan cleanup when entry, package state and provider
-installerRoot all name the same missing root. User-scope operations are atomic across the
-package and provider halves (read-only preflights first — a refusal on one side writes nothing
-on the other); a takeover over an operator's provider override reports a split verdict (package
-moved, override preserved unowned) and a legacy unattributed provider state must be adopted by
-a same-root `setup`/`install` before it can be removed. Both halves' install-states also record
-exactly WHICH settings file they manage (`managedSettingsPath`): an operation targeting a
-different, symlinked or unparseable file is a zero-write refusal before either half goes green,
-and the owned/orphan inverse removes only the recorded owner's exact `packages[]` entry —
-0 or 2+ exact entries refuse, so an npm spec or another `.../entwurf` path is never collateral.
+with zero settings bytes written, `entwurf takeover-user-scope` is the operator-explicit move,
+`entwurf doctor-pi-package` names the ownership verdict, and `entwurf remove-user-scope` is
+same-owner-only. The full contract — atomicity across the package and provider halves, the
+split verdict over an operator's own override, legacy adoption, and the `managedSettingsPath`
+binding — is [docs/setup-clean-host.md §1.1](./docs/setup-clean-host.md#11-user-scope-ownership-one-shared-registration-one-recorded-owner).
 
 A development clone runs the bridge source through Node's strip-types path;
 an npm-installed package runs the prebuilt JS under `mcp/entwurf-bridge/dist/`
@@ -219,36 +207,20 @@ delivery: no `entwurf_v2` rail launches a pi process. That external-only shape w
 `setup` command: pi is optional-by-presence there, so a pi-less host simply gets an explicit pi
 SKIP while the detected harnesses are composed.
 
-### Native harness install and doctors
+### Native harness repair and doctors
 
 A plain MCP registration exposes the bridge tools; a **garden-native** session also
-needs entwurf's lifecycle hook and identity marker. Use the managed installers rather
-than editing native-harness state by hand:
+needs entwurf's lifecycle hook and identity marker. `setup` already composes all of that
+for every harness it detects — you do not paste this list to install. It is the repair
+surface: each unit has its own installer, its own doctor with a named refusal, and its
+own inverse, so a single broken unit can be redone without touching the rest.
 
-```bash
-# Claude Code (Linux-certified axis)
-entwurf install-meta-bridge
-entwurf doctor-meta-bridge
+- **Claude Code** (Linux-certified axis) — `install-meta-bridge`, `doctor-meta-bridge`.
+- **Antigravity / agy** — `install-agy-bridge`, `install-agy-statusline`, `install-agy-hooks`, each with a matching `doctor-agy-*`.
+- **GitHub Copilot CLI** — four independent units, four independent failure modes: `install-copilot-bridge` (birth: garden id + who-sent, on the first prompt), `install-copilot-mcp` (the entwurf tool hand, where `entwurf_inbox_read` lives), `install-copilot-receive` (the receiver extension: doorbell + receiver marker), `install-copilot-statusline` (optional for a manual citizen, required for supported fresh) — each with a matching `doctor-copilot-*` and `uninstall-copilot-*`.
 
-# Antigravity / agy
-entwurf install-agy-bridge
-entwurf install-agy-statusline
-entwurf install-agy-hooks
-entwurf doctor-agy-bridge
-entwurf doctor-agy-statusline
-entwurf doctor-agy-hooks
-
-# GitHub Copilot CLI — four independent surfaces, four independent failure modes
-# (`setup` composes all four when `copilot` is on PATH; these remain the per-unit repair/inverse surfaces)
-entwurf install-copilot-bridge      # birth: garden id + who-sent, on the first prompt (owns an install-state; inverse: uninstall-copilot-bridge)
-entwurf install-copilot-mcp         # the entwurf tool hand (entwurf_inbox_read lives here)
-entwurf install-copilot-receive     # the receiver extension: doorbell + receiver marker
-entwurf install-copilot-statusline  # optional for a manual citizen; required for supported fresh
-entwurf doctor-copilot-bridge
-entwurf doctor-copilot-mcp
-entwurf doctor-copilot-receive
-entwurf doctor-copilot-statusline
-```
+Run them as `entwurf <command>`. Which unit a doctor's refusal names, and the clean-host
+walk-through for each harness, live in [docs/setup-clean-host.md](./docs/setup-clean-host.md).
 
 #### Launching Copilot as a garden citizen — `entwurf copilot`
 
@@ -294,8 +266,10 @@ the default permission prompts — which an idle, unattended session is not ther
 
 Claude Code uses the supported floor `>=2.1.217`; older versions silently discard the
 exec-hook `args`, so install and doctor fail loud rather than falling back. After any
-upgrade, rerun every owned installer for the native harness you use (all four for Copilot) and
-restart its existing processes. A claimed Claude host is certified only when a **new** session using the
+upgrade, rerun `entwurf setup <project>` — it re-composes every detected harness, all four
+Copilot units included — and restart its existing processes; reach for a single
+`install-*` only when one unit needs repair on its own. A claimed Claude host is certified
+only when a **new** session using the
 installed artifact makes `doctor-meta-bridge` exit 0 with the live owner join.
 
 Linux is the only currently certified Claude meta-bridge axis. New macOS wiring is
