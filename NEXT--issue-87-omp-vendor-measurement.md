@@ -23,8 +23,18 @@
   519=519); dialect oracle satisfied (`mcp__entwurf_bridge_entwurf_v` + 6 live); O1 key
   = plain `entwurf-bridge`; PI_* absent under clean launch; borrowed claude-code label
   captured live. Shadowing receipt + O2 deferred to the implementation lane.
-- [ ] **5. Grant decision** ← CURRENT: GLG decides the implementation lane (steps 2–9).
-  Order/estimate on record in #89; measurement evidence complete in the ledger.
+- [x] **5. Grant decision** — **GRANTED by GLG 2026-08-27 (this session).** Implementer:
+  Opus (claude-code). Reviewer: terra (openai-codex, called per bundle). Coordinator:
+  Fable (checkpoint routing only). Order/estimate: #89.
+- [ ] **6. Implementation bundle A** ← CURRENT: step 2 registration (+ redeploy
+  choreography + doctors) then steps 3–6 as one surface (omp extension: birth +
+  tui-only fence + setStatus identity + sender marker; installer with preimage/inverse/
+  doctor; omp-native mcp writer with pinned key `entwurf-bridge`, env
+  `external-mcp/omp`; §6 strip in any managed launch). Focused gates + mutants per
+  AGENTS verification scheduling. STOP before full floor: terra review, one amendment
+  bundle, then full floor once on the frozen candidate.
+- [ ] **7. Bundle B: receive (step 7)** — PAUSED until A lands reviewed.
+- [ ] **8. Bundle C: visible fresh (step 9) + grade (step 8)** — PAUSED.
 
 # NOW
 
