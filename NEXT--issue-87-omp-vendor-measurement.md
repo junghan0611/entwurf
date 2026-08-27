@@ -26,7 +26,7 @@
 - [x] **5. Grant decision** — **GRANTED by GLG 2026-08-27 (this session).** Implementer:
   Opus (claude-code). Reviewer: terra (openai-codex, called per bundle). Coordinator:
   Fable (checkpoint routing only). Order/estimate: #89.
-- [x] **6. Implementation bundle A — CODE COMPLETE, awaiting terra review.** Opus
+- [x] **6. Implementation bundle A — CODE COMPLETE, REVIEWED, NOT ACCEPTED** (item 7). Opus
   (claude-code), oracle, 2026-08-27. Commits `bb26e07` (step 2 registration),
   `852c7b7` (steps 3+3.5+4+6: the omp extension, installer, doctor, sender marker),
   `ba89f63` (step 5: the omp-native MCP writer). Local only — never pushed.
@@ -42,10 +42,44 @@
   O2 denylist starved both entries. All folded into the ledger.
   **NOT run by design (AGENTS verification scheduling): `pnpm run check:full` and
   `check-gate-qualification` — they belong on the frozen candidate AFTER the review.**
-- [ ] **7. terra review of bundle A** ← CURRENT. Then ONE amendment bundle, then
-  `check-gate-qualification` + `pnpm run check:full` once on the frozen candidate.
-- [ ] **8. Bundle B: receive (step 7)** — PAUSED until A lands reviewed.
-- [ ] **9. Bundle C: visible fresh (step 9) + grade (step 8)** — PAUSED. The
+- [x] **7. Independent review of bundle A** — `openai-codex/gpt-5.6-sol` (that session is
+  now full; a replacement carries no memory of it — brief the next one off the report,
+  not off recollection). Report: `.agent-reports/issue-87-bundleA-review-sol.md`.
+  **Verdict: NEEDS DESIGN TURN — Blocker 5 · Defect 2 · Observation 0** (D1 regraded up
+  by the reviewer itself). Bundle A is NOT accepted. Status record on #87:
+  comment 5439731471.
+- [x] **8. B1 design turn** — closed on paper, NOT built. Option **B**: one shared pure
+  resolver returns the FOUR-root bundle (sessions · mailbox · senders · receivers),
+  honors the four `ENTWURF_META_*` overrides, and never consults `PI_CODING_AGENT_DIR`
+  for backend `omp`. Extension passes explicit dirs in code (in-process — no launch env
+  can reach it); the provenance-labeled bridge child applies the same policy and scrubs
+  the foreign var in that child only. Managed entry env stays provenance-only; no
+  absolute path is baked. Rejected: root-in-record (circular locator), pid-keyed root
+  marker (new authority carrier), option A (would reject ordinary `omp --profile` —
+  measured: `setProfile` exports the var, `oh-my-pi packages/utils/src/dirs.ts:452-473`),
+  option C (class fix; moves defaults every backend uses — later subtraction lane).
+  Two coordinator proposals were CORRECTED here: the bundle is four roots not two
+  (mailbox × receivers cross-split = false deliverability, and bundle B lands on it),
+  and "PI_CODING_AGENT_DIR disagreement ⇒ doctor RED" is WRONG (normal under profiles).
+- [ ] **9. Amendment bundle (ONE)** ← CURRENT, awaiting GLG's confirmation of option B.
+  Scope: B1 (shared four-root resolver + child-side scrub + provenance-only entry env +
+  doctor comparison) + B2 (installer adopt/destroy) + B3 (birth doctor's uncertified
+  grep claim) + B4 (MCP doctor `native-wins` on an invalid entry) + D1 (confine the MCP
+  target to `<resolved omp agent dir>/mcp.json`; fix the retarget orphan) + D2 (Hard
+  Rule 12 root inventory in the new gates) + D3 (the receiver mutant that is killed for
+  the wrong reason). Gate: EXTEND `check-omp-birth-hook` with
+  `[QK:OMP-META-ROOT-JOINT-BINDING]` (two cells: poison PI with no override; all four
+  `ENTWURF_META_*` set to distinct sandbox paths) + one exact-once mutant restoring the
+  legacy var fallback inside the shared policy. Do not mint a second gate.
+- [ ] **10. Re-review, then floor** — after the amendment: `check-gate-qualification` +
+  `pnpm run check:full` ONCE on the frozen candidate. Independent re-verification is
+  OWED: the reviewer ran only `pnpm typecheck && pnpm lint` plus two sandboxed doctor
+  reproductions, so `check-omp-birth-hook` (reported 72 green), the other focused gates,
+  the smokes, the mutants and every bundle-A LIVE receipt remain the implementer's
+  reported receipts only.
+- [ ] **11. Bundle B: receive (step 7)** — PAUSED until A lands reviewed. Its mailbox
+  and receiver roots MUST come from the same four-root bundle item 8 defines.
+- [ ] **12. Bundle C: visible fresh (step 9) + grade (step 8)** — PAUSED. The
   `DELIVERY.md` matrix row and the registry grade move together THERE, not in A: omp
   ships as `D0` / `direct-inject` until a receive rail earns more.
 
@@ -68,16 +102,21 @@
   Defect-1, accepted): the native writer pins the literal server key
   `entwurf-bridge` (same-key first-wins is the whole mechanism; env may differ;
   `disabledServers` on that name would kill both entries — never the hide-import tool).
-- **Roles (GLG, 2026-08-27):** Fable = rail design only. Implementation AND LIVE
-  legwork = sibling on sol/terra/glm/grok rails. Coordination stays with GLG.
+- **Roles (GLG, 2026-08-27):** rail design + coordination = the Claude Code session on
+  oracle (Fable, then Opus after a model switch). Implementation = a claude-code Opus
+  sibling (that session is CLOSED — reopen fresh for the amendment; brief it off the
+  review report and this rail, not off recollection). Review = `openai-codex/gpt-5.6-sol`
+  (that session filled up; a replacement inherits nothing). LIVE legwork rails approved
+  by GLG: sol · terra · glm · grok. GLG owns commit gating, push and merge.
 - **pi-rail overlap (GLG worry, promoted to axis M6):** omp is a pi fork and reads
   `PI_CONFIG_DIR`/`PI_CODING_AGENT_DIR`/`PI_PROFILE` (`oh-my-pi
   packages/utils/src/dirs.ts:4-5`) — the same knobs entwurf's pi rail and Hard Rule 12
   sandboxing use. omp does NOT mint `PI_SESSION_ID` itself (absent from
   coding-agent src); the danger is inheritance passthrough (§6). LIVE environ greps
   are the receipt.
-- **Blocker:** none. omp/18.0.0 lives at `~/.local/bin/omp` on oracle; source checkout
-  `~/repos/3rd/oh-my-pi` at v18.0.0.
+- **Blocker:** none technical — the lane is PARKED by GLG's decision (2026-08-27 night),
+  awaiting confirmation of option B before the amendment bundle opens. omp/18.0.0 lives
+  at `~/.local/bin/omp` on oracle; source checkout `~/repos/3rd/oh-my-pi` at v18.0.0.
 - **Do not touch (post-bundle-A):** bundle B (receive / step 7) and bundle C (visible
   fresh / grade) until terra's review of A closes · a second Claude-MCP writer ·
   idle-wake demos · `DELIVERY.md` / registry grade movement (that is step 8, bundle C) ·
