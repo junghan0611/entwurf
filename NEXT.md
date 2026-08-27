@@ -1,36 +1,40 @@
-# NEXT — #86 Linux install honesty → 0.15.1
+# NEXT — OMP as one garden sibling (실무 잠수함)
 
 > NEXT는 disposable boot sector다. 완료 이력은 CHANGELOG/closed issues/git이 지고,
-> 방향은 ROADMAP, 운영 규율은 AGENTS가 진다. #86의 durable chronology는 이슈 스레드다.
+> 방향은 ROADMAP, 운영 규율은 AGENTS가 진다. 새 하네스 입학 경로는
+> [docs/adding-a-harness.md](./docs/adding-a-harness.md)다.
 
 # RAIL — 현재 좌표
 
-- [x] **1. 0.15.0 발행** — tag `v0.15.0`, npm `latest=0.15.0`, `repair=0.12.8-repair.1` 보존. #82 CLOSED.
-- [x] **2. #86 구현 main 착지** — fast-forward `1a07972`, exact-SHA CI 3/3 (run 33039848738)
-- [x] **3. ThinkPad source setup** — `./run.sh setup` 11/11 PASS, `~/.local/bin/entwurf` → 이 checkout
-- [x] **4. prepare P4** — `pnpm run check:full` 252s exit 0 on the 0.15.1 versioned tree
-- [ ] **5. prepare P5 LIVE** ← CURRENT after the docs-align commit: `LIVE=1 ./run.sh release-gate <scratch> --cut`
-- [ ] **6. prepare commit** — `CHANGELOG.md` + `package.json` only (`chore(release): prepare v0.15.1`). No push.
-- [ ] **7. make 0.15.1** ← needs explicit `/entwurf-release make 0.15.1`
-- [ ] **8. publish 0.15.1 latest** ← needs explicit publish grant + candidate path + dist-tag
-- [ ] **9. #86 close** ← GLG. This cut is the Linux install floor, not the issue close itself.
+- [x] **1. 0.15.1 Linux setup honesty** — tag `v0.15.1`=`0335eac`, npm `latest=0.15.1`, `repair=0.12.8-repair.1` 보존. #86 close.
+- [ ] **2. OMP vendor measurement** ← CURRENT: `docs/adding-a-harness.md` step 1. 구현 없음. ThinkPad에 omp는 이미 설치·기본 설정 검수됨 (agent-config).
+- [ ] **3. Host-only birth fence** ← PAUSED: step 2 영수증 뒤. 보이는 OMP 세션 하나만 citizen. 서브에이전트는 garden id를 받으면 안 된다.
+- [ ] **4. MCP hand → sender → receive → visible fresh** ← PAUSED: 입학 문서 5–9. 반쪽 지원으로 열지 않는다.
+- [ ] **5. #78 portability** ← PAUSED: 0.15.1 Linux 설치 바닥은 깔렸다. macOS/native-Windows는 이 레인이 아니다.
 
-현재 좌표: 4 완료 → **5 진행** → 6 prepare commit → 7–9 별도 grant. macOS/native-Windows는 #78.
+현재 좌표: 1 완료 → **2 진행** → 3–4는 측정 영수증 + GLG 레인 grant 뒤. 5는 별도.
 
 # NOW
 
-- **Current — prepare 0.15.1.** Version and changelog body are already in the worktree (`package.json` 0.15.1). Terra pass 1 (gid `20260827T144051-dda234`): Blocker 0; NEXT/ROADMAP/ACP support-contract version were stale — those are this docs-align commit, not the prepare commit.
-- **Next:** P5 LIVE gate from fresh scratch, write MUST/BEHAVIOR into CHANGELOG Verification, then the prepare commit. Red LIVE is a stop, not a skip.
-- **Do not:** make/publish without a named grant · fold NEXT/ROADMAP/docs into the prepare commit · claim macOS/Windows support · close #86 without GLG.
+- **Stem:** OMP 세션 하나를 형제로 불러, 코딩 실무를 그 안에서 잠수함처럼 돌리고 돌아오게 한다. 재는 것은 토큰이 아니라 **GLG 검수 홉 수**.
+- **Next:** (1) 이 호스트의 실물 omp에서 step 1 다섯 측정 — hook 어휘·발화 시점, launch form/envelope, config writer, statusline/receive, parent topology. 각 측정에 artifact path 또는 영수증. (2) step 3.5 후보 discriminator(`mode === "tui"` vs `"print"`+`hasUI:false`)를 LIVE로 재측정. (3) 구현은 GLG가 레인을 열기 전까지 금지.
+- **Blocker:** none (환경) — omp는 설치되어 있다. 없는 것은 측정 영수증과 레인 grant.
+- **Read:** `docs/adding-a-harness.md` §0 레인 선택, §1 측정, §3.5 citizen scope, §5 MCP dialect (OMP는 `mcp__entwurf_bridge_entwurf_v`로 계산됨 — live tool list가 수용 오라클), §6 inherited `PI_SESSION_ID`/`PI_AGENT_ID` 소독. `docs/external-mcp-host.md`.
+- **Do not touch:** 서브에이전트를 citizen으로 민팅 · Claude MCP를 그대로 복제하는 두 번째 writer · 어설픈 부분 지원으로 입학 · 구현을 이 NEXT만으로 시작 · cap 초과 상태에서 OMP 이슈를 새로 열기 · #78을 이 레인에 섞기.
 
-# CARRIED — 이 레인 밖에서 닫을 것
+# RECENT
 
-- **#78 portability.** Linux install floor is the evidence #78 waits on. No macOS CI and no Windows front-door rewrite in 0.15.1.
-- **cortex 게이트 슬라이스 수리 — 아직 미착지.** salvage patch exists; main에 별 커밋. 이 컷에 넣지 않는다.
-- **OPEN:** #72 ACP retained-child, #76 subscription-first, #78 portability, #80 vocabulary, #83/#84/#85, #86 (this floor, close after publish). Cap 5 is currently exceeded; this cut does not sweep. #82 is CLOSED.
+- **2026-08-27:** 0.15.1 published. `latest=0.15.1`, candidate sha256 `035f252a50caf7865c714b66cb30ed9c437b003c5f0002cec6175ee11a5d6efa` = registry shasum `18dbff7870a89191d21d362215049bdfc9bee98e`. CI run 33046461030 3/3. ThinkPad source setup 11/11. Terra pass 2 Blocker 0 / Defect 0 on `4a23af1`.
+- **2026-08-24 journal:** OMP는 Claude MCP를 가져온다. 그게 편해서가 아니라 위험해서 경계를 세운다. 형제 = omp 세션 하나. 그 안의 에이전트는 형제가 아니다.
+
+# CARRIED
+
+- **#78** macOS/native-Windows — 0.15.1이 Linux 설치 바닥. 구현은 #78 grant.
+- **cortex 게이트 슬라이스** — salvage patch, 별 커밋. OMP 레인에 넣지 않는다.
+- **OPEN:** #72 #76 #78 #80 #83 #84 #85. Cap 5 초과. 이 컷이 sweep하지 않는다. #82/#86 CLOSED. OMP는 이슈가 아니라 이 NEXT가 현재 계약이다.
 
 # DURABLE LINKS
 
+- 입학 경로: `docs/adding-a-harness.md`
+- 0.15.1: https://github.com/junghan0611/entwurf/releases/tag/v0.15.1
 - #86: https://github.com/junghan0611/entwurf/issues/86
-- Landing CI: https://github.com/junghan0611/entwurf/actions/runs/33039848738
-- Prepare skill: `.claude/skills/entwurf-release/SKILL.md`

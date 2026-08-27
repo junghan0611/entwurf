@@ -7,10 +7,10 @@
 
 ---
 
-## 현재 — 0.15.0 shipped; #86 Linux setup honesty preparing 0.15.1
+## 현재 — 0.15.1 shipped; OMP vendor measurement (실무 잠수함)
 
 이 repo는 **entwurf-core(v2 garden-citizen dispatch) + native-harness bridges + pi adapter + ACP plugin**이다.
-`v0.15.0`은 GitHub와 npm `latest`로 게시됐다 (`repair=0.12.8-repair.1` 보존). Claude mailbox, pi control-socket,
+`v0.15.1`은 GitHub와 npm `latest`로 게시됐다 (`repair=0.12.8-repair.1` 보존). 0.15.0은 Copilot을 시민으로 들였고, 0.15.1은 Linux one-command setup honesty(#86)다. Claude mailbox, pi control-socket,
 Antigravity native-push, Copilot self-fetch가 한 garden-id dispatch 표면으로 출하됐고, ACP plugin은 Claude와 Cortex를 pi host
 안에서 연결한다. 0.14.0은 hidden background resume을 철회하고 visible fresh creation과 same-id pi resume을
 각각 `entwurf_fresh_call` / `entwurf_resume_call`로 분리했으며, 0.14.1은 fresh creation에 literal absolute cwd를
@@ -21,9 +21,9 @@ Antigravity native-push, Copilot self-fetch가 한 garden-id dispatch 표면으�
 ACP backend를 중복 구현하지 않는다. #56 Codex native lane은 닫혔고, Codex/Grok 탐구 브랜치는 main 밖에
 격리한다. 거기서 얻은 native/ACP rail 방법론은 필요할 때만 현재 증거로 다시 세운다.
 
-현재 우선순위는 **#86 Linux one-command setup honesty → 0.15.1**, 그 다음 #78 portability다. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
+현재 우선순위는 **OMP를 보이는 세션 하나로서만 재는 것** (`docs/adding-a-harness.md` step 1; 서브에이전트는 citizen이 아니다), 그 다음 #78 portability다. 구현 레인은 GLG grant 전 금지. GitHub OPEN은 backlog가 아니라 최대 5개의 실행 가능한
 계약만 둔다 (현재는 초과 — 이 컷이 sweep하지 않는다). 방향·철학·관찰 중인 가능성은 이 문서가 지며, 재현 가능한 결손이 되면 그때 증거와 다음 측정을
-갖고 이슈로 승격한다. 현재 실행 계약은 #86 Linux setup floor, #78 platform evidence, #72 ACP retained-child 원인, #76 subscription rail 강제, #80 public vocabulary다. #82는 CLOSED. 실행 순서는 active NEXT handoff가 진다.
+갖고 이슈로 승격한다. 현재 실행 계약은 OMP 측정(이슈 아님, NEXT가 계약), #78 platform evidence, #72 ACP retained-child 원인, #76 subscription rail 강제, #80 public vocabulary다. #82/#86은 CLOSED. 실행 순서는 active NEXT handoff가 진다.
 
 Pi는 가장 깊이 붙은 adapter지만 프로젝트의 본질은 여전히 **garden id로 호명 가능한 형제 세션 사이의 얇은
 dispatch substrate**다. provider 연결과 TUI/RPC/session lifecycle은 pi에 맡기고, entwurf는 부르는 법과
