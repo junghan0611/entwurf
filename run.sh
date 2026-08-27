@@ -217,6 +217,10 @@ Usage:
   ./run.sh install-omp-bridge         # #87: install the OMP BIRTH extension into <omp agent dir>/extensions/entwurf-meta-omp (index.ts|js + lib + capability registry). No launcher and no bake — an omp hook is an in-process extension. Refuses when an inherited PI_CODING_AGENT_DIR/PI_CONFIG_DIR/PI_PROFILE makes the target agent dir ambiguous (ledger M6)
   ./run.sh uninstall-omp-bridge       # honest inverse from install-state (exact unit dir + recorded entry; no-state host REFUSES; state deleted LAST). Records already minted are preserved
   ./run.sh doctor-omp-bridge          # #87: runtime axis (importable unit, writer/registry parity, mint vs sender-marker errors on SEPARATE axes, scope-fence receipts, live omp processes carrying inherited PI_SESSION_ID/PI_AGENT_ID) + ownership axis. Zero records = NOT-YET, never red
+  ./run.sh install-omp-mcp            # #87 step 5: write ONE omp-native entwurf-bridge server into <omp agent dir>/mcp.json with env ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/omp. The server key is a PINNED LITERAL, byte-identical to the Claude import's — same-key first-wins at native=100 > claude=80 is what SHADOWS the import (never disabledServers, which kills both). Adopt / create / REFUSE symlink, preimage recorded
+  ./run.sh uninstall-omp-mcp          # honest inverse from install-state (restores the preimage, or removes a file we created); the Claude import becomes effective again
+  ./run.sh doctor-omp-mcp             # ownership + config + boot doctor, plus the EFFECTIVE-source read (native-wins / import-wins / both-suppressed) — a configuration read, never a runtime receipt. RED on foreign provenance or a disabledServers denylist even with no install-state
+  ./run.sh smoke-omp-mcp-state        # OMP MCP install/doctor/inverse regression incl. shadowing and the denylist refusal. Offline/deterministic
   ./run.sh install-copilot-receive    # #82 RAIL 5: install the RECEIVER extension (user scope ~/.copilot/extensions/entwurf-receive). Owns the artifact and CHECKS the launch flag; it never sets one (a launch does — see `./run.sh copilot`). Arms per session after birth
   ./run.sh uninstall-copilot-receive  # honest inverse from install-state; never removes a unit it did not install
   ./run.sh doctor-copilot-receive     # artifact + digest, COPILOT_CLI_ENABLED_FEATURE_FLAGS on the LIVE copilot processes (the silent failure), live receiver markers via the production reader, receiver log. RED only when install-state exists
@@ -5929,6 +5933,18 @@ case "$cmd" in
     ;;
   smoke-omp-bridge-state)
     (cd "$REPO_DIR" && bash scripts/smoke-omp-bridge-state.sh)
+    ;;
+  install-omp-mcp)
+    (cd "$REPO_DIR" && bash scripts/omp-mcp-bridge.sh install "$@")
+    ;;
+  uninstall-omp-mcp)
+    (cd "$REPO_DIR" && bash scripts/omp-mcp-bridge.sh uninstall "$@")
+    ;;
+  doctor-omp-mcp)
+    (cd "$REPO_DIR" && bash scripts/omp-mcp-bridge.sh doctor "$@")
+    ;;
+  smoke-omp-mcp-state)
+    (cd "$REPO_DIR" && bash scripts/smoke-omp-mcp-state.sh)
     ;;
   install-omp-bridge)
     # #87: the OMP BIRTH install. Not a mode of the Claude or Copilot installer, and for a
