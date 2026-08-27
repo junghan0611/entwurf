@@ -40,6 +40,12 @@ Prerequisites on the host running the external MCP client:
 > and still speak under the parent's garden id, so the flag verdict must not absorb it. The other
 > native launchers have NOT been certified against this failure mode; do not read Copilot's cells
 > as coverage for them.
+>
+> **OMP has the DETECT half only** (#87 bundle A). entwurf owns no omp launch yet, so there is
+> nothing to strip at exec; `doctor-omp-bridge` instead reads `/proc/<pid>/environ` for every live
+> `omp` process and goes RED on its own axis when one carries either carrier. The strip half is owed
+> by the managed launch that step 9 will add — until then an omp started from a pi citizen's bash is
+> unsupported, exactly as this boundary says.
 
 Example env file:
 
@@ -142,6 +148,68 @@ The three adapters deliberately own different atoms:
 Unrelated servers, permissions, settings, and hooks are preserved; every adapter has a state-backed honest inverse and refuses symlink-owned SSOTs. The installer never grants broad `command(*)`, `unsandboxed(*)`, or other YOLO policy — those remain operator decisions.
 
 The **global** MCP config live agy reads is `~/.gemini/config/mcp_config.json`. `~/.gemini/antigravity-cli/mcp_config.json` is not the global MCP root; the bridge installer one-way cleans only a stale entwurf-owned entry there. After the first model invocation, the imprint hook binds the native `conversationId` to a garden id, the statusline shows `🪛 <garden-id> agy`, and sends from that MCP child carry `agentId=meta-session/antigravity` with `replyable:true` only when the record exists and the live native-push probe succeeds.
+
+#### OMP (`omp`, oh-my-pi)
+
+Use the managed install surface rather than editing omp's files by hand:
+
+```bash
+entwurf install-omp-bridge     # the BIRTH extension (a garden id per visible TUI session)
+entwurf install-omp-mcp        # the MCP hand (this section)
+
+entwurf doctor-omp-bridge
+entwurf doctor-omp-mcp
+```
+
+`install-omp-mcp` writes ONE server into omp's own user MCP file,
+`<omp agent dir>/mcp.json` (`~/.omp/agent/mcp.json`, profile-aware), in omp's own writer
+shape — `{command, args?, env?}` with `type` omitted, since stdio is the default:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/can1357/oh-my-pi/main/packages/coding-agent/src/config/mcp-schema.json",
+  "mcpServers": {
+    "entwurf-bridge": {
+      "command": "bash",
+      "args": ["/absolute/path/to/entwurf/mcp/entwurf-bridge/start.sh"],
+      "env": { "ENTWURF_BRIDGE_EXTERNAL_AGENT_ID": "external-mcp/omp" }
+    }
+  }
+}
+```
+
+**The server key is a pinned literal, and that is the whole point.** omp translates Claude
+Code's `~/.claude.json` as an import provider, so a host that ever used Claude Code already
+has an `entwurf-bridge` — carrying `external-mcp/claude-code`. An omp session riding that
+import introduces itself to the bridge under Claude Code's name. Writing the native entry
+under the byte-identical key shadows it: native provider priority 100 beats claude 80,
+dedupe is first-wins on the server NAME, and on a key hit the equivalence check is never
+consulted, so an entry whose env deliberately differs still suppresses the import outright
+— not both-loaded, not merged, no warning. A different key would load BOTH.
+`[측정]` 2026-08-27, omp/18.0.0: the vendor's own `/mcp list` pane flipped from
+`Claude Code (~/.claude.json): entwurf-bridge ● connected` to
+`User level (~/.omp/agent/mcp.json): entwurf-bridge ● connected [stdio]`, and the spawned
+bridge child's environ flipped with it.
+
+**`disabledServers` is never the way to hide the import.** Suppression is by name and a
+suppressed item still claims the dedupe key, so denylisting `entwurf-bridge` kills the
+native entry and the import together. `[측정]` with that denylist the pane shows
+`entwurf-bridge ○ not connected` and no Claude Code section at all, and no MCP child is
+spawned. The installer refuses to write into a config that denylists its own key, and
+`doctor-omp-mcp` is red while one exists.
+
+**The tool names are omp's dialect, not Claude's.** omp mints `mcp__<server>_<tool>` after
+lowercasing and replacing every `[^a-z_]+` run with `_`, collapsing runs and trimming edges,
+so `entwurf_v2` surfaces as `mcp__entwurf_bridge_entwurf_v` — the trailing digit is eaten by
+the charset, not by the length cap. The live tool list is the acceptance oracle; a live
+session mounts all seven.
+
+Registration is tools, not identity: sending needs the birth extension
+(`install-omp-bridge`), whose sender marker is keyed to the omp host's OWN pid — omp runs
+its extensions in-process, so the marker's owner, the host, and the MCP child's parent are
+one pid rather than the two-process join Claude and Copilot have. An omp session is a
+citizen only in the operator-visible TUI; task subagents borrow its tools under its garden
+id and never receive a second address.
 
 #### External-host skills and commands
 

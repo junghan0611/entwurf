@@ -185,6 +185,39 @@ scanning for that process, checks the receiver, removes inherited pi identity ca
 the model/permission defaults. Birth occurs on the first prompt. `entwurf_fresh_call` uses this
 same managed invocation and requires the birth, MCP, receiver, and visible-identity preflight.
 
+## 4b. Optional OMP (`omp`) native citizen — birth and tool hand only
+
+Two independently owned surfaces, and a boundary that is part of the instructions rather
+than a footnote: OMP is NOT a supported harness yet. Bundle A of #87 landed birth, visible
+identity, who-sent and the MCP hand; receive and visible fresh have no unit, so
+`entwurf_fresh_call` cannot open an omp sibling and a reply cannot land on one. What works
+is: an omp TUI you opened yourself becomes an addressable citizen with its own garden id,
+and it can call the `entwurf_*` read surfaces and send under its own name.
+
+```bash
+entwurf install-omp-bridge     # the birth extension, into <omp agent dir>/extensions/
+entwurf install-omp-mcp        # the omp-native entwurf-bridge server
+
+entwurf doctor-omp-bridge
+entwurf doctor-omp-mcp
+```
+
+`setup` does not compose these yet — that lands with the admission work, not here.
+
+Both installers resolve the omp agent directory the way omp itself does, and REFUSE rather
+than guess when an inherited `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR` or `PI_PROFILE` makes it
+ambiguous: omp is a pi fork and reads pi's env vocabulary, so those names no longer say which
+harness they address. Pass `ENTWURF_OMP_AGENT_DIR` if you genuinely mean a non-default one.
+
+Birth happens when the TUI OPENS (not on the first prompt, unlike Copilot), and the garden id
+appears on omp's status line as `🪛 <garden-id> omp`. `/new`, fork and in-TUI resume mint the
+replacement session's own record. Task subagents of that session are refused by design — they
+borrow the host's tools under the host's garden id and never get a second address.
+
+The MCP entry deliberately uses the same server key as any Claude Code import so that it
+SHADOWS it; see [`external-mcp-host.md`](./external-mcp-host.md) for why that key is pinned and
+why `disabledServers` is never the way to hide an import.
+
 ## 5. Optional Antigravity native citizen
 
 Install the three independently owned surfaces:

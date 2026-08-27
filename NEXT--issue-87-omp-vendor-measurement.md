@@ -82,6 +82,13 @@
   fresh / grade) until terra's review of A closes · a second Claude-MCP writer ·
   idle-wake demos · `DELIVERY.md` / registry grade movement (that is step 8, bundle C) ·
   `~/.omp/agent/config.yml` (entwurf owns no operator SSOT there) · #78 · main · push.
+- **Owed by bundle C, deliberately NOT done in A (they are admission claims, not
+  ownership):** a README per-harness bullet, the `run.sh setup` composition row, the
+  `DELIVERY.md` matrix row, and the registry grade. A README/setup entry now would read
+  as "supported" while receive and visible fresh have no unit. `docs/setup-clean-host.md`
+  and `docs/external-mcp-host.md` DID get omp sections in A — those two own installers
+  and per-harness registration, and both say in their own words that omp is not yet
+  supported.
 - **Full floor is deliberately NOT run yet.** AGENTS verification scheduling:
   implement → focused gates → independent review → one amendment bundle →
   `check-gate-qualification` (a gate/mutant changed, so it is owed) →
