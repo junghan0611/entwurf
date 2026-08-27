@@ -119,7 +119,7 @@ run_vitest() {
 usage() {
   cat <<'EOF'
 Usage:
-  ./run.sh setup [project-dir]        # ONE presence-driven composition (#86): mode-first (source bootstrap only on a checkout), then per-component PASS/SKIP/FAIL for pi (presence+floor)/claude/agy + stable dev bins + v2 install smoke; absent harness = zero-state SKIP, detected-incomplete = named FAIL + nonzero exit. Never installs a harness or touches credentials
+  ./run.sh setup [project-dir]        # ONE presence-driven composition (#86): mode-first (source bootstrap only on a checkout), then per-component PASS/SKIP/FAIL for pi (presence+floor)/claude/agy/copilot (all four units: birth→MCP→receiver→footer, independently) + stable dev bins + v2 install smoke; absent harness = zero-state SKIP, detected-incomplete = named FAIL + nonzero exit. Never installs a harness or touches credentials
   ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, doctor-pi-provider, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b/G1e/G1f, IN pnpm run check:full): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 and entwurf_resume_call registered/schema + the tools/list surface is EXACTLY the seven shipped garden verbs; tools/list only, no auth/side-effect
@@ -182,7 +182,7 @@ Usage:
   ./run.sh smoke-meta-install-state   # 1.0.0 meta-bridge Phase 2: stateful install/uninstall + store-doctor regression gate. Offline/deterministic (deps: bash+node+python3)
   ./run.sh check-meta-doctor-oracle   # 0.12.8 (#51): detection power of the release ORACLE — healthy fixture must reach `doctor: PASS`, then 21 planted defects (retired shell form, partial hand-patch, launcher bypass/repoint/provenance loss, malformed exec args, owner type drift, extra leaf/group, doorbell asyncRewake/path/timeout, no live bridge, stale receiver, ambiguous/missing cache, missing hook log/writer, failing CLI probes) must each turn it FAIL naming their own cause, plus a positive case pinning that a long-writing CLI is NOT a false negative. Offline/deterministic (deps: bash+node+python3)
   ./run.sh smoke-agy-install-state    # agy MCP + exact permission ownership regression: isolated HOME+XDG, adopt/state/inverse, symlink refuse, truthful setup outcomes. Offline/deterministic
-  ./run.sh smoke-setup-verdict        # #86 C1 aggregate setup verdict fixture: all-absent SKIP/green, pi presence+floor, detected-FAIL nonzero, installed-mode named branch, credential store untouched. Offline/deterministic
+  ./run.sh smoke-setup-verdict        # #86 C1+C3b aggregate setup verdict fixture: all-absent SKIP/green, pi presence+floor, detected-FAIL nonzero, copilot four-unit composition (present=independent PASS/FAIL rows, absent=zero-state SKIP), installed-mode named branch, credential store untouched. Offline/deterministic
   ./run.sh check-agy-permission-matrix # AGY permission CONTRACT SPACE as a literal table (55 cells): parser-state × operation × settings × ownership × precedence with stated exclusion rules; expectations are hand-written literals, never read from the SUT. Offline/deterministic (deps: python3)
   ./run.sh smoke-entwurf-chain-live    # LIVE cross-harness delivery chain: native Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox terminus, proving sender identity/replyable at every hop and a real read receipt at the end. Prerequisites (claude on PATH, pi credentials per backend) report protocol SKIP, never a pass
   ./run.sh check-release-gate-outcomes  # release-gate STEP OUTCOME protocol (P1): one skip exit code shared by the shell + TS halves, classifier never rounds a skip up to a pass, `--cut` refuses a MUST SKIP while a bare diagnostic stays exit 0, no LIVE smoke keeps the old exit-0 skip shape, and both real skip surfaces are INVOKED and observed to propagate the code
@@ -235,7 +235,7 @@ Usage:
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-pack-pin-matcher     # pure self-test of check-pack-install's pin-leak matcher against synthetic .pnpm lookalikes (version boundary: @0.84.30 must leak, @0.84.3 bare/peer-hash must pass); snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm run check:full): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
-  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (pins derived from the package.json devDep; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent `entwurf setup` row + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES)
+  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (pins derived from the package.json devDep; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
   ./run.sh remove [project-dir]       # remove entwurf entries from project .pi/settings.json (project scope only; global user-scope citizen left intact)
@@ -3588,8 +3588,8 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
   # mode=installed decided by name before anything else, NO pnpm bootstrap inside
   # node_modules, pi/claude/agy explicit zero-state SKIPs, stable bins PASS as
   # npm-provided, core bridge boundary PASS, computed green, zero harness/auth
-  # writes. Harness probes are pinned absent via the PI_BIN/CLAUDE_BIN/AGY_BIN
-  # seams so the gate host's real harnesses never leak in.
+  # writes. Harness probes are pinned absent via the PI_BIN/CLAUDE_BIN/AGY_BIN/
+  # COPILOT_BIN seams so the gate host's real harnesses never leak in.
   local setup_home="$npm_tmp/setuphome" setup_proj="$npm_tmp/setupproj" setup_out setup_rc setup_auth
   mkdir -p "$setup_home/.pi/agent" "$setup_proj"
   setup_auth="$setup_home/.pi/agent/auth.json"
@@ -3600,6 +3600,7 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
   setup_out=$(HOME="$setup_home" XDG_DATA_HOME="$setup_home/.local/share" XDG_STATE_HOME="$setup_home/.local/state" \
     XDG_CACHE_HOME="$setup_home/.cache" XDG_CONFIG_HOME="$setup_home/.config" PI_CODING_AGENT_DIR="$setup_home/.pi/agent" \
     PI_BIN="$npm_tmp/definitely-absent" CLAUDE_BIN="$npm_tmp/definitely-absent" AGY_BIN="$npm_tmp/definitely-absent" \
+    COPILOT_BIN="$npm_tmp/definitely-absent" \
     "$npmroot/node_modules/.bin/entwurf" setup "$setup_proj" 2>&1)
   setup_rc=$?
   set -e
@@ -3619,7 +3620,7 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
     return 1
   fi
   local skip_probe
-  for skip_probe in "pi: SKIP" "claude: SKIP" "agy: SKIP"; do
+  for skip_probe in "pi: SKIP" "claude: SKIP" "agy: SKIP" "copilot: SKIP"; do
     if ! grep -q "$skip_probe" <<<"$setup_out"; then
       fail "[check-pack-install] installed all-absent setup missing explicit zero-state '$skip_probe':"
       echo "$setup_out" | tail -25 | sed 's/^/    /' >&2
@@ -3636,7 +3637,7 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
     echo "$setup_out" | tail -25 | sed 's/^/    /' >&2
     return 1
   fi
-  if [ -e "$setup_proj/.pi" ] || [ -e "$setup_home/.pi/agent/settings.json" ] || [ -e "$setup_home/.gemini" ]; then
+  if [ -e "$setup_proj/.pi" ] || [ -e "$setup_home/.pi/agent/settings.json" ] || [ -e "$setup_home/.gemini" ] || [ -e "$setup_home/.copilot" ]; then
     fail "[check-pack-install] installed all-absent setup wrote harness state (must be zero-write)"
     return 1
   fi
@@ -3644,7 +3645,84 @@ sys.exit(0 if any(isinstance(s,str) and s.rstrip('/')== '$npm2_pkg' for s in src
     fail "[check-pack-install] installed setup touched the credential store (byte drift or .bak)"
     return 1
   fi
-  echo "[check-pack-install] installed all-absent setup pass (mode-first, no bootstrap, 3x SKIP, bins npm-provided, core PASS, computed green, zero writes)"
+  echo "[check-pack-install] installed all-absent setup pass (mode-first, no bootstrap, 4x SKIP, bins npm-provided, core PASS, computed green, zero writes)"
+
+  # Installed copilot-present aggregate `setup` row (#86 C3b): the SAME consumer
+  # bin on a fresh sandbox home, with the shared fake vendor
+  # (scripts/fake-copilot-vendor.sh) on PATH. The presence-driven composition
+  # must run all FOUR Copilot units from the installed package: birth assembles
+  # the COMPILED hook (no raw .ts under node_modules) and drives the real
+  # marketplace-add→plugin-install sequence, MCP + receiver + footer land their
+  # configs/units in the sandbox, each unit keeps its package-owned
+  # install-state (its inverse authority), and the verdict is computed green.
+  local cop_setup_home="$npm_tmp/copsetuphome" cop_setup_proj="$npm_tmp/copsetupproj" cop_fake="$npm_tmp/fake-copilot-vendor"
+  mkdir -p "$cop_setup_home/.pi/agent" "$cop_setup_proj"
+  printf '{\n  "anthropic": {\n    "type": "oauth",\n    "access": "consumer-oauth-token"\n  }\n}\n' > "$cop_setup_home/.pi/agent/auth.json"
+  local cop_auth_before
+  cop_auth_before="$(sha256sum "$cop_setup_home/.pi/agent/auth.json" | cut -d' ' -f1)"
+  # EXECUTED, never sourced: this impl holds a `trap … RETURN`, and bash fires a
+  # RETURN trap when a sourced script finishes — a `. factory` here deleted the
+  # whole npm sandbox mid-gate (measured 2026-08-27, C3b review).
+  bash "$REPO_DIR/scripts/fake-copilot-vendor.sh" "$cop_fake" "$npm_pkg/pi/meta-bridge-copilot/entwurf-meta-receive-copilot/.claude-plugin/plugin.json" || {
+    fail "[check-pack-install] could not build the fake copilot vendor from the PACKED plugin.json (is pi/meta-bridge-copilot missing from the tarball?)"
+    return 1
+  }
+  set +e
+  setup_out=$(HOME="$cop_setup_home" XDG_DATA_HOME="$cop_setup_home/.local/share" XDG_STATE_HOME="$cop_setup_home/.local/state" \
+    XDG_CACHE_HOME="$cop_setup_home/.cache" XDG_CONFIG_HOME="$cop_setup_home/.config" PI_CODING_AGENT_DIR="$cop_setup_home/.pi/agent" \
+    PI_BIN="$npm_tmp/definitely-absent" CLAUDE_BIN="$npm_tmp/definitely-absent" AGY_BIN="$npm_tmp/definitely-absent" \
+    COPILOT_BIN="$cop_fake/copilot" PATH="$cop_fake:$npmroot/node_modules/.bin:$PATH" \
+    "$npmroot/node_modules/.bin/entwurf" setup "$cop_setup_proj" 2>&1)
+  setup_rc=$?
+  set -e
+  if [ "$setup_rc" -ne 0 ]; then
+    fail "[check-pack-install] installed copilot-present setup exited $setup_rc — the four-unit composition must be green against the fake vendor:"
+    echo "$setup_out" | tail -30 | sed 's/^/    /' >&2
+    return 1
+  fi
+  local cop_row
+  for cop_row in "copilot-birth: PASS" "copilot-mcp: PASS" "copilot-receive: PASS" "copilot-statusline: PASS"; do
+    if ! grep -q "$cop_row" <<<"$setup_out"; then
+      fail "[check-pack-install] installed copilot-present setup missing unit verdict '$cop_row':"
+      echo "$setup_out" | tail -30 | sed 's/^/    /' >&2
+      return 1
+    fi
+  done
+  if ! grep -q "result: green (computed from the component outcomes above)" <<<"$setup_out"; then
+    fail "[check-pack-install] installed copilot-present setup did not compute green:"
+    echo "$setup_out" | tail -10 | sed 's/^/    /' >&2
+    return 1
+  fi
+  local cop_setup_asm="$cop_setup_home/.local/share/entwurf/meta-bridge-copilot/.assembled/entwurf-meta-receive-copilot"
+  if [ ! -f "$cop_setup_asm/meta-bridge-hook-copilot.js" ] || [ -f "$cop_setup_asm/meta-bridge-hook-copilot.ts" ]; then
+    fail "[check-pack-install] installed copilot-present setup did not assemble the compiled birth hook (want meta-bridge-hook-copilot.js, no raw .ts) in $cop_setup_asm"
+    return 1
+  fi
+  if ! grep -q "^plugin marketplace add " "$cop_fake/calls.log" || ! grep -q "^plugin install entwurf-meta-receive-copilot@meta-bridge-copilot-local$" "$cop_fake/calls.log"; then
+    fail "[check-pack-install] installed copilot-present setup did not drive the vendor sequence (marketplace add + plugin install) — calls:"
+    sed 's/^/    /' "$cop_fake/calls.log" >&2
+    return 1
+  fi
+  if [ ! -f "$cop_setup_home/.copilot/extensions/entwurf-receive/extension.mjs" ] || [ ! -f "$cop_setup_home/.copilot/extensions/entwurf-receive/lib/meta-session.js" ]; then
+    fail "[check-pack-install] installed copilot-present setup did not deploy the receiver unit from the shipped dist closure"
+    return 1
+  fi
+  if ! grep -q "entwurf-bridge" "$cop_setup_home/.copilot/mcp-config.json" || ! grep -q "entwurf-copilot-statusline" "$cop_setup_home/.copilot/settings.json"; then
+    fail "[check-pack-install] installed copilot-present setup did not land the MCP config / footer settings in the sandbox home"
+    return 1
+  fi
+  local cop_state
+  for cop_state in copilot-bridge copilot-mcp copilot-receive copilot-statusline; do
+    if [ ! -f "$cop_setup_home/.local/share/entwurf/$cop_state/install-state.json" ]; then
+      fail "[check-pack-install] installed copilot-present setup left no package-owned install-state for $cop_state (its inverse authority)"
+      return 1
+    fi
+  done
+  if [ "$(sha256sum "$cop_setup_home/.pi/agent/auth.json" | cut -d' ' -f1)" != "$cop_auth_before" ] || [ -e "$cop_setup_home/.pi/agent/auth.json.bak" ]; then
+    fail "[check-pack-install] installed copilot-present setup touched the credential store (byte drift or .bak)"
+    return 1
+  fi
+  echo "[check-pack-install] installed copilot-present setup pass (four units PASS with install-states, compiled birth hook, vendor sequence driven, computed green, credentials untouched)"
 
   # Installed meta-bridge ownership regression (0.12.5): package upgrades must not
   # bake versioned pnpm-store paths into Claude settings. MCP already uses the
@@ -4521,8 +4599,10 @@ pi_version_in_range() {  # $1=detected version  $2=range ">=a.b.c <x.y"; exit 0 
 # subscription, credential or login — `pi` has no privileged exception. It
 # verifies the installed bridge boundary; ACP/v1 backend interview gates are
 # deliberately not part of setup on v2-only (the heavier live v2 substrate
-# proof is release-gate's job). Copilot's four native units remain explicit
-# installs until their birth inverse exists (#86 C3).
+# proof is release-gate's job). Copilot's four native units (birth / MCP /
+# receiver / visible footer) compose presence-driven since the birth inverse
+# landed (#86 C3a→C3b); the explicit install-copilot-* / uninstall-copilot-*
+# surfaces remain the operator-selected repair and inverse path.
 #
 # An external harness that consumes entwurf (e.g. agent-config as a
 # pi package + skills set) may still have its own install/setup for its
@@ -4691,6 +4771,61 @@ setup_all() {
       setup_result agy-hooks PASS "birth imprint wired — verify: ./run.sh doctor-agy-hooks"
     else
       setup_result agy-hooks FAIL "detected agy, but the birth-imprint integration did not complete (reason above) — repair, then re-run setup"
+    fi
+  fi
+
+  # ── copilot (GitHub Copilot CLI) ── presence-driven composition (#86 C3b):
+  # the operator's copilot on PATH is the ONLY trigger; absent is one zero-state
+  # SKIP (setup never installs a harness). Present runs all FOUR units the
+  # fresh-call preflight requires — birth → MCP → receiver → visible footer —
+  # INDEPENDENTLY: a failed unit is a named component FAIL that keeps the other
+  # units and the rest of setup alive but owns a nonzero final result. Every
+  # unit is an operator-selectable install with a package-owned inverse (#86
+  # C3a closed the birth inverse), so setup composes only lifecycles it can
+  # also undo. COPILOT_BIN pins the PROBE for the hermetic gates (same seam
+  # spirit as PI_BIN/CLAUDE_BIN/AGY_BIN); the unit scripts address the vendor
+  # as `copilot` on PATH, so production leaves it unset and the two agree.
+  local copilot_rc
+  if ! command -v "${COPILOT_BIN:-copilot}" >/dev/null 2>&1; then
+    setup_result copilot SKIP "copilot not on PATH — zero Copilot wiring written"
+  else
+    section "copilot units (native harness detected: GitHub Copilot CLI)"
+    copilot_rc=0; (cd "$REPO_DIR" && bash scripts/copilot-bridge-install.sh) || copilot_rc=$?
+    if [ "$copilot_rc" -eq 0 ]; then
+      setup_result copilot-birth PASS "birth plugin installed — verify: ./run.sh doctor-copilot-bridge"
+    else
+      setup_result copilot-birth FAIL "detected copilot, but the birth plugin install did not complete (see above) — repair, then re-run setup"
+    fi
+    copilot_rc=0; (cd "$REPO_DIR" && bash scripts/copilot-mcp-bridge.sh install) || copilot_rc=$?
+    if [ "$copilot_rc" -eq 0 ]; then
+      setup_result copilot-mcp PASS "MCP server registered — verify: ./run.sh doctor-copilot-mcp"
+    else
+      setup_result copilot-mcp FAIL "detected copilot, but the MCP registration did not complete (see above) — repair, then re-run setup"
+    fi
+    # The receiver deploys the COMPILED dist closure on every install shape
+    # (Copilot's extension runtime cannot strip-types). The tarball ships dist;
+    # a source checkout may not have built it yet, and those bytes are
+    # entwurf's OWN artifact (Hard Rule 17: the source bootstrap supplies
+    # entwurf's own bytes), so the source lane builds it here once when absent.
+    copilot_rc=0
+    if [ "$mode" = "source" ] && [ ! -f "$REPO_DIR/mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js" ]; then
+      (cd "$REPO_DIR" && pnpm run build-bridge) || copilot_rc=$?
+    fi
+    if [ "$copilot_rc" -ne 0 ]; then
+      setup_result copilot-receive FAIL "detected copilot, but the receiver's compiled dist closure failed to build (see above) — repair, then re-run setup"
+    else
+      copilot_rc=0; (cd "$REPO_DIR" && bash scripts/copilot-receive-bridge.sh install) || copilot_rc=$?
+      if [ "$copilot_rc" -eq 0 ]; then
+        setup_result copilot-receive PASS "receiver extension installed — verify: ./run.sh doctor-copilot-receive"
+      else
+        setup_result copilot-receive FAIL "detected copilot, but the receiver extension install did not complete (see above) — repair, then re-run setup"
+      fi
+    fi
+    copilot_rc=0; (cd "$REPO_DIR" && bash scripts/copilot-statusline-bridge.sh install) || copilot_rc=$?
+    if [ "$copilot_rc" -eq 0 ]; then
+      setup_result copilot-statusline PASS "visible footer wired — verify: ./run.sh doctor-copilot-statusline"
+    else
+      setup_result copilot-statusline FAIL "detected copilot, but the visible-footer integration did not complete (see above) — repair, then re-run setup"
     fi
   fi
 

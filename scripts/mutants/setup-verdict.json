@@ -89,6 +89,47 @@
 			"signatureSource": "scripts/check-setup-qualification.sh"
 		},
 		{
+			"claim": "SETUP-COPILOT-ABSENT-SKIP",
+			"title": "the copilot presence gate collapses to always-detected, so an absent-copilot host loses its zero-state SKIP and setup composes (and writes) Copilot units nobody asked for",
+			"subject": "run.sh",
+			"find": [
+				"  if ! command -v \"${COPILOT_BIN:-copilot}\" >/dev/null 2>&1; then\n    setup_result copilot SKIP \"copilot not on PATH — zero Copilot wiring written\""
+			],
+			"replace": [
+				"  if false; then\n    setup_result copilot SKIP \"copilot not on PATH — zero Copilot wiring written\""
+			],
+			"gate": ["bash", "scripts/check-setup-qualification.sh"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:SETUP-COPILOT-ABSENT-SKIP]",
+			"signatureSource": "scripts/check-setup-qualification.sh"
+		},
+		{
+			"claim": "SETUP-COPILOT-INDEPENDENT",
+			"title": "a failed Copilot birth aborts the whole composition, so the MCP/receiver/footer units are silently never attempted while the operator reads only the first failure",
+			"subject": "run.sh",
+			"find": [
+				"      setup_result copilot-birth FAIL \"detected copilot, but the birth plugin install did not complete (see above) — repair, then re-run setup\"\n    fi"
+			],
+			"replace": [
+				"      setup_result copilot-birth FAIL \"detected copilot, but the birth plugin install did not complete (see above) — repair, then re-run setup\"\n      return 1\n    fi"
+			],
+			"gate": ["bash", "scripts/check-setup-qualification.sh"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:SETUP-COPILOT-INDEPENDENT]",
+			"signatureSource": "scripts/check-setup-qualification.sh"
+		},
+		{
+			"claim": "SETUP-COPILOT-COSMETIC-PASS",
+			"title": "the birth unit's failure capture is swallowed, so a refused vendor preflight reads as copilot-birth PASS and a broken detected integration reports a green composition",
+			"subject": "run.sh",
+			"find": ["    copilot_rc=0; (cd \"$REPO_DIR\" && bash scripts/copilot-bridge-install.sh) || copilot_rc=$?"],
+			"replace": ["    copilot_rc=0; (cd \"$REPO_DIR\" && bash scripts/copilot-bridge-install.sh) || true"],
+			"gate": ["bash", "scripts/check-setup-qualification.sh"],
+			"timeoutSeconds": 120,
+			"signature": "[QK:SETUP-COPILOT-COSMETIC-PASS]",
+			"signatureSource": "scripts/check-setup-qualification.sh"
+		},
+		{
 			"claim": "SETUP-AGY-COSMETIC-RETURN",
 			"title": "wire_agy_bridge's failed-install path returns 0 again, restoring the WARN-then-success mechanism that let a detected-but-refused agy integration read as a green setup",
 			"subject": "run.sh",

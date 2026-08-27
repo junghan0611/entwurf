@@ -139,8 +139,9 @@ The goal is not merely "invoke Claude Code." We want:
 3. Claude meta-bridge global plugin — only when `claude` is on PATH; otherwise skipped cleanly
 4. source stable-bin exposure — including certified `entwurf` → this checkout's `run.sh`, the managed runtime Copilot fresh resolves; helper units are attempted independently and a foreign helper is a named FAIL
 5. agy bridge + exact permission + statusline + `PreInvocation` hook — only when `agy` is on PATH; each adapter is idempotent and independently doctorable
-6. `entwurf-bridge` install smoke (`validate_entwurf_bridge`)
-7. computed summary — per-component PASS/SKIP/FAIL; any detected-integration FAIL makes the whole command exit nonzero while valid components stay installed
+6. Copilot four-unit composition (birth → MCP → receiver → visible footer) — only when `copilot` is on PATH (#86 C3b); the units run independently, each keeps its package-owned install-state and inverse, and a failed unit is a named component FAIL. The explicit `install-copilot-*`/`uninstall-copilot-*` surfaces remain the per-unit repair and inverse path
+7. `entwurf-bridge` install smoke (`validate_entwurf_bridge`)
+8. computed summary — per-component PASS/SKIP/FAIL; any detected-integration FAIL makes the whole command exit nonzero while valid components stay installed
 
 ```bash
 git clone https://github.com/junghan0611/entwurf /path/to/entwurf && cd $_
@@ -175,7 +176,7 @@ addressable sends require `--entwurf-control` (measured 2026-07-24: the same
 one-shot with that flag returns its own gid and delivers `entwurf_v2` to a peer
 mailbox with `origin=pi-session`, `replyable=true`).
 
-`setup` requires Node 24 and Python 3 (pnpm only on a source checkout — the dependency bootstrap is source-only, and installed mode needs no pnpm); harnesses including pi are optional-by-presence (absent → explicit zero-state SKIP, detected incomplete/below-floor → named FAIL + nonzero result). On a source checkout it runs the frozen `pnpm install` + presence-gated pi project/user wiring + detected Claude wiring + source stable-bin exposure + detected agy wiring + the v2 install smoke. A green setup certifies that the source-owned `entwurf` symlink targets this checkout and wins PATH resolution; helper units are attempted independently and a foreign helper is a named bins FAIL (nonzero), with harness-specific doctors keeping the per-leaf verdict. Setup does not install Copilot's four native units and does **not** replace any native-harness doctor. The full aggregate live floor is still `LIVE=1 ./run.sh release-gate <scratch> --cut` — without `--cut` it is a diagnostic pass, not acceptance — with agy's conversation-id-gated round trip verified separately.
+`setup` requires Node 24 and Python 3 (pnpm only on a source checkout — the dependency bootstrap is source-only, and installed mode needs no pnpm); harnesses including pi are optional-by-presence (absent → explicit zero-state SKIP, detected incomplete/below-floor → named FAIL + nonzero result). On a source checkout it runs the frozen `pnpm install` + presence-gated pi project/user wiring + detected Claude wiring + source stable-bin exposure + detected agy wiring + detected Copilot four-unit composition + the v2 install smoke. A green setup certifies that the source-owned `entwurf` symlink targets this checkout and wins PATH resolution; helper units are attempted independently and a foreign helper is a named bins FAIL (nonzero), with harness-specific doctors keeping the per-leaf verdict. A detected `copilot` composes all four native units (birth → MCP → receiver → visible footer) with independent per-unit verdicts (#86 C3b); setup does **not** replace any native-harness doctor. The full aggregate live floor is still `LIVE=1 ./run.sh release-gate <scratch> --cut` — without `--cut` it is a diagnostic pass, not acceptance — with agy's conversation-id-gated round trip verified separately.
 
 ### 1.4 Cross-install / cross-backend parity (optional, high-value)
 

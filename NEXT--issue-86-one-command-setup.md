@@ -7,19 +7,32 @@
 - [x] **1. Incident + source operator checkpoint** — ThinkPad exposed missing `entwurf`; Oracle's masking global checkout link was removed; `e08d937` adds owned `entwurf -> checkout/run.sh` with focused source/install gates.
 - [x] **2. Contract + living-harness audit** — GLG fixed “Entwurf installs itself only”; Terra, Fable and an independent citizen re-audited credentials, ownership, setup consumers and platform evidence. The issue body/thread owns the full matrix and errata.
 - [x] **3. C1 setup kernel / all-absent truth — CLOSED**: one product+gate candidate landed by Fable `20260826T184719-89ff44` (2026-08-26); three independent review rounds + Grok READY applied, focused gates green, 7 lane mutants qualified, `check-gate-qualification` 261/261 GREEN, frozen `check:full` GREEN. Committed as `32d161c` under GLG's grant (push stays GLG's).
-- [ ] **4. C2 corrective + C3a birth ownership — MACHINE-GREEN, accepted commit/B review pending** ← CURRENT: B's seven confirmed findings are closed; independent C2 and C3a reviews both returned GO. Qualification **274/274 KILLED**; the NEXT-aligned candidate passed `check:full` in 461s. Local commit and B's final review are the only remaining steps in this checkpoint.
-- [ ] **5. C3b composition → platform consumers** ← PAUSED: C3b opens only after the accepted local commit and B's final independent review. Then compose Copilot birth→MCP→receiver→footer; afterward run the macOS consumer and native-Windows obstruction matrix under the recorded stop rule.
+- [x] **4. C2 corrective + C3a birth ownership — CLOSED at `93575f0`**: B final review GO ([comment 5433159224](https://github.com/junghan0611/entwurf/issues/86#issuecomment-5433159224)); qualification 274/274 + frozen `check:full` receipts in the issue checkpoint.
+- [ ] **5. C3b presence-driven composition — CANDIDATE MACHINE-GREEN, GLG commit decision pending** ← CURRENT: setup composes Copilot birth→MCP→receiver→footer when `copilot` is on PATH (sole fresh implementer under GLG's 2026-08-27 grant; self-review per that grant, no sibling reviewer). Qualification **277/277 KILLED**; frozen `check:full` receipt below.
+- [ ] **6. Platform consumers** ← PAUSED: after the C3b commit closes, run the macOS consumer and native-Windows obstruction matrix under the recorded stop rule.
 
-현재 좌표: **C2+C3a machine-green candidate** → local accepted commit → issue #86 checkpoint + B final review → C3b → platform tail. Push/release는 GLG 별도 승인 전 금지.
+현재 좌표: **C3b machine-green candidate** → GLG commit decision → issue #86 checkpoint → platform tail. Push/release는 GLG 별도 승인 전 금지.
 
-# NOW — accepted commit and B final review
+# NOW — C3b candidate awaiting GLG commit decision
 
-- **Current:** B's C2/C3a findings are closed on the combined candidate. Independent reviews: C2 citizen `20260827T083143-b2148e` GO; C3a citizen `20260827T085714-763495` GO. Qualification: 274/274 KILLED, `/tmp/agent-glm-qualification.log` sha256 `2a07719bace99a2c723788d4d362f40d665fe12242fb69e7783a6fbddabb0657`. NEXT-aligned full: 461s exit 0, `/tmp/agent-glm-checkfull-next.log` sha256 `b6bcfee82e7c4891d391a2ff4703ffc097ff1f7da78e5ae07fc3f652009ac942`.
-- **Next:** (1) commit the C2+C3a corrective bundle locally → (2) post the exact SHA/evidence to issue #86 → (3) hand the commit to B for final independent review.
+- **Current:** the C3b composition candidate is implemented and machine-green (8 modified + 1 new file, uncommitted on top of `93575f0`). Qualification: **277/277 KILLED**, exit 0, origin HEAD + work-surface hash identical before/after; log `/tmp/agent-fable-c3b-qualification.log`, sha256 `b20bead53d2637997c6873f82e9be4392f7c2d4e79339b5bd3217d268a4ce4fd`. Frozen `check:full`: receipt recorded in the issue #86 C3b checkpoint comment (run follows this NEXT alignment).
+- **Next:** (1) GLG decides the C3b commit → (2) post the exact SHA/evidence to issue #86 through the coordinator → (3) open the platform tail.
 - **Blocker:** none.
-- **Do not touch:** C3b, platform work, credentials, delivery/ACP/mux, push/release until the accepted commit and B review close.
+- **Do not touch:** platform work, credentials, delivery/ACP/mux behavior, push/release.
 
-**Landed behavior awaiting commit:** user-scope Pi ownership uses one exact-owner classifier across install/takeover/inverse/doctor and one typed `installerRoot` classifier across provider writers/doctor; Copilot birth uses one marketplace/plugin-row oracle, duplicate/malformed refusal, whitespace-safe version transport and one doctor assembly oracle. Lane inventories are `pi-package-ownership=6`, `copilot-birth=19`.
+## C3b delivered shape (candidate, uncommitted)
+
+- **run.sh `setup_all` copilot cell** (after agy, before core): `${COPILOT_BIN:-copilot}` presence probe (probe-only seam, same spirit as PI_BIN/CLAUDE_BIN/AGY_BIN; unit scripts keep addressing bare `copilot` on PATH). Absent = one zero-state `copilot SKIP`. Present = birth → MCP → receiver → visible footer, each an INDEPENDENT `copilot-*` PASS/FAIL row; any FAIL owns the nonzero computed summary while the rest of setup continues. Receiver's source-mode dist ensure: `pnpm run build-bridge` once when the compiled libs are absent (installed mode ships dist; Hard Rule 17 — dist is entwurf's own bytes). Explicit `install-copilot-*`/`uninstall-copilot-*` stay the per-unit repair/inverse surfaces.
+- **`scripts/fake-copilot-vendor.sh` (NEW, EXECUTED never sourced):** one shared stateful fake-vendor factory (measured copilot 1.0.80 answer shapes, mirroring check-copilot-birth-hook.ts's TS fake; `--force` refused). Consumers: smoke S-6 + the pack-install copilot-present row. **RETURN-trap lesson (measured 2026-08-27):** bash fires `trap … RETURN` when a `source`d script finishes — sourcing this factory inside `_check_pack_install_impl` fired its temp-root cleanup trap and deleted the whole npm sandbox mid-gate. Fix = child-process execution; tombstone comments at the factory head and the pack row.
+- **`smoke-setup-verdict` 51→75 checks:** S-1 gains copilot SKIP + `.copilot` zero-write; NEW S-6 four-unit PASS composition (vendor add→install sequence from calls.log, 4 package-owned install-states, receiver deployed from dist, MCP/footer configs landed, auth untouched); NEW S-7 failing-vendor birth = named FAIL, other three units still attempted, `NON-GREEN (FAIL: copilot-birth)`, core still attempted.
+- **`check-setup-qualification` 8→11 checks:** fake installed tree gains the copilot unit scripts + `pi/` trees + stub dist libs (copied/digested, never executed); `run_setup` 5th arg pins COPILOT_BIN (default absent); Cell A carries `[QK:SETUP-COPILOT-ABSENT-SKIP]`; NEW Cell D (two-line failing vendor) carries `[QK:SETUP-COPILOT-INDEPENDENT]` + `[QK:SETUP-COPILOT-COSMETIC-PASS]` + control.
+- **Mutants:** `setup-verdict` lane 7→10 (`SETUP-COPILOT-ABSENT-SKIP` / `-INDEPENDENT` / `-COSMETIC-PASS`), `EXPECTED_LANE_MUTANTS` moved together; 3/3 manually applied → gate red with OWN token on the first FAIL line → restored, control green.
+- **`check-pack-install`:** all-absent row pins COPILOT_BIN + asserts 4× SKIP + `.copilot` zero-write; NEW installed copilot-present aggregate consumer row — the packed consumer bin composes all four units against the shared fake vendor (compiled birth hook `.js`-no-`.ts` in the sandbox assembly, vendor sequence driven, 4 install-states, MCP/footer configs, credentials byte-identical).
+- **Docs moved with behavior:** README (setup composes detected copilot; explicit surfaces = repair/inverse), VERIFY (§ floor list 6→8 steps + setup summary sentence), setup-clean-host (prereq table, §1, §4, §7), run.sh usage lines (setup / smoke-setup-verdict / check-pack-install).
+
+## C3b receipts (measured 2026-08-27, oracle)
+
+`check-setup-qualification` control 11 PASS · 3/3 new mutants KILLED own-token-first + restore green · `smoke-setup-verdict` 75 PASS · `check-pack-install` rc=0 (both setup rows incl. the new copilot-present row) · `check-fresh-cut-gate` 167 PASS · `check-install-surface` PASS · `check-install-preflight` PASS · `smoke-copilot-statusline-state` PASS · `smoke-copilot-mcp-state` PASS · `check-dep-versions` PASS · `check-node-floor-coherence` PASS · `pnpm typecheck` PASS · `pnpm lint` PASS (pre-existing warnings/infos only) · `pnpm check` 53s exit 0 · qualification **277/277 KILLED** (log sha256 above).
 
 ## C3a locked rules (Grok design review REVISE applied; coordinator exact grant 2026-08-27)
 
@@ -95,10 +108,9 @@
 
 ## Current state
 
-- Branch: `issue-86-one-command-setup`; HEAD `47a5ae3`; remote remains `e08d937` (no push).
-- Worktree: combined C2 corrective + C3a corrective bundle across 13 modified files; qualification subjects/gates are machine-green at 274/274.
-- Machine proof: qualification 274/274; NEXT-aligned `check:full` 461s exit 0. The accepted local commit is next.
-- After the local commit, B performs the final independent review. C3b and platform rows remain closed until that verdict.
+- Branch: `issue-86-one-command-setup`; HEAD `93575f0` (C2+C3a accepted, B GO); remote remains `e08d937` (no push).
+- Worktree: C3b composition candidate — 8 modified (`run.sh`, `smoke-setup-verdict.sh`, `check-setup-qualification.sh`, `mutants/setup-verdict.json`, `check-gate-qualification.ts`, `README.md`, `VERIFY.md`, `docs/setup-clean-host.md`) + 1 new (`scripts/fake-copilot-vendor.sh`).
+- Machine proof: qualification 277/277; frozen `check:full` runs once on this NEXT-aligned candidate (receipt in the issue checkpoint). GLG's commit decision is next; push stays GLG's.
 
 ## C1 — original slice plan (implemented above; kept for review cross-check)
 
@@ -162,9 +174,9 @@ Preserve L1a/L1b while replacing silent last-writer-wins user registration with 
 - Focused receipts (2026-08-26, freeze-v3 candidate): smoke-user-scope-citizen PASS · smoke-pi-provider-state 52 PASS · check-install-preflight PASS · check-install-surface PASS · smoke-setup-verdict 51 PASS · check-pack-install PASS (L1b rows incl.) · typecheck PASS · lint PASS (pre-existing infos) · 3/3 mutants reason-clean re-killed (own token on first FAIL line) + restore control green.
 - Grok final: `READY / Blocker 0 / Defect 0 / Observation 2` (Obs 1 → this NEXT current-state correction; Obs 2 provider-state-absent non-verdict = accepted contract, no change). NOT yet run: qualification once → frozen `check:full` once → C2 commit. Push stays GLG's.
 
-## C3 Copilot lifecycle then composition
+## C3 Copilot lifecycle then composition (CLOSED — C3a at `93575f0`, C3b in the current candidate)
 
-Add `uninstall-copilot-bridge` with qualified `plugin@marketplace`, package-owned state and foreign refusal. Prove install/doctor/inverse symmetry **before or in the same slice** that composes birth + MCP + receiver + footer. Setup never auto-installs a birth whose inverse does not exist.
+Add `uninstall-copilot-bridge` with qualified `plugin@marketplace`, package-owned state and foreign refusal. Prove install/doctor/inverse symmetry **before or in the same slice** that composes birth + MCP + receiver + footer. Setup never auto-installs a birth whose inverse does not exist. — Both halves held: the inverse landed in C3a before any composition, and the C3b composition (rail item 5) composes only the four units whose inverses exist.
 
 # STOP / DO NOT TOUCH
 

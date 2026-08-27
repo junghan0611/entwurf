@@ -158,13 +158,15 @@ cd ~/repos/gh/entwurf
 
 The full source setup requires Node 24, pnpm, and Python 3 on PATH. Harnesses are
 optional-by-presence: `setup` runs the frozen dependency install, then composes what the operator
-already installed — a compatible `pi` (`>=0.84.3 <0.85`), Claude Code, and agy each get their
-wiring completed when detected, an absent harness is an explicit zero-state SKIP, and a detected
-harness that cannot be completed (including a below-floor `pi`) is a named FAIL that makes setup
-exit nonzero. `setup` never installs a harness binary or touches a credential store. It also
-exposes stable commands under `~/.local/bin`, including `entwurf` → this checkout's `run.sh`, so
-managed Copilot fresh does not depend on an unrelated global npm/pnpm installation. It does
-**not** install Copilot's four native units; install those explicitly below. Package consumers
+already installed — a compatible `pi` (`>=0.84.3 <0.85`), Claude Code, agy, and the Copilot CLI
+each get their wiring completed when detected, an absent harness is an explicit zero-state SKIP,
+and a detected harness that cannot be completed (including a below-floor `pi`) is a named FAIL
+that makes setup exit nonzero. `setup` never installs a harness binary or touches a credential
+store. It also exposes stable commands under `~/.local/bin`, including `entwurf` → this
+checkout's `run.sh`, so managed Copilot fresh does not depend on an unrelated global npm/pnpm
+installation. A detected `copilot` composes all four native units (birth → MCP → receiver →
+visible footer) independently; the explicit `install-copilot-*` surfaces below remain the
+per-unit repair and inverse path. Package consumers
 run the same `entwurf setup <project>` through their npm-provided bin: installed mode is decided
 by name first, skips the source-only pnpm bootstrap entirely, and reports the stable commands as
 already provided by npm bin linking; `entwurf install` remains the narrower pi-wiring repair
@@ -237,6 +239,7 @@ entwurf doctor-agy-statusline
 entwurf doctor-agy-hooks
 
 # GitHub Copilot CLI — four independent surfaces, four independent failure modes
+# (`setup` composes all four when `copilot` is on PATH; these remain the per-unit repair/inverse surfaces)
 entwurf install-copilot-bridge      # birth: garden id + who-sent, on the first prompt (owns an install-state; inverse: uninstall-copilot-bridge)
 entwurf install-copilot-mcp         # the entwurf tool hand (entwurf_inbox_read lives here)
 entwurf install-copilot-receive     # the receiver extension: doorbell + receiver marker

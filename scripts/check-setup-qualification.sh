@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # check-setup-qualification.sh — snapshot-safe mutation-attribution oracle for the
-# five aggregate-setup verdict claims (#86 C1). Invoked DIRECTLY by the mutant
+# aggregate-setup verdict claims (#86 C1 five + C3b three). Invoked DIRECTLY by the mutant
 # manifests (`bash scripts/check-setup-qualification.sh`); deliberately NOT a
 # run.sh subcommand and NOT in any check tier. This file proves ONLY that each
 # mutant dies at its own claim token inside the tracked-files qualification
@@ -33,6 +33,21 @@ cp "$REPO_DIR/package.json" "$PKG/package.json"
 printf '%s\n' 'console.log("stub-store-doctor: precondition stub for the setup-qualification oracle — empty sandbox store, verdict clean by construction");' \
   > "$PKG/mcp/entwurf-bridge/dist/scripts/meta-bridge-store-doctor.js"
 
+# Copilot composition surface (#86 C3b, Cell D): the three writer units and the
+# birth installer's pre-vendor path are real tracked files; only the compiled
+# dist closure is stubbed (the receive installer copies and digests those bytes,
+# it never executes them — same not-a-product-twin discipline as the store stub).
+mkdir -p "$PKG/scripts" "$PKG/mcp/entwurf-bridge/dist/pi-extensions/lib" "$PKG/pi-extensions/lib"
+for _f in copilot-bridge-install.sh copilot-bridge-oracle.sh copilot-mcp-bridge.sh copilot-mcp-config.py \
+  copilot-receive-bridge.sh copilot-statusline-bridge.sh copilot-statusline-config.py; do
+  cp "$REPO_DIR/scripts/$_f" "$PKG/scripts/$_f"
+done
+cp -r "$REPO_DIR/pi" "$PKG/pi"
+cp "$REPO_DIR/pi-extensions/lib/session-id.js" "$PKG/pi-extensions/lib/session-id.js"
+printf '%s\n' '// dist stub: copied+digested by the receive installer, never executed here' \
+  > "$PKG/mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
+cp "$PKG/pi-extensions/lib/session-id.js" "$PKG/mcp/entwurf-bridge/dist/pi-extensions/lib/session-id.js"
+
 # Fake pnpm: resolvable (so an unconditional require_cmd would pass), but any
 # INVOCATION writes a marker and exits uniquely — the bootstrap tripwire.
 MARKER="$SB/pnpm-invoked.marker"
@@ -41,12 +56,12 @@ printf '#!/usr/bin/env bash\necho invoked > "%s"\nexit 97\n' "$MARKER" > "$SB/bi
 chmod +x "$SB/bin/pnpm"
 
 ABSENT="$SB/definitely-absent"
-run_setup() { # $1=HOME-root $2=project $3=PATH $4=PI_BIN → OUT/RC
+run_setup() { # $1=HOME-root $2=project $3=PATH $4=PI_BIN $5=COPILOT_BIN(optional, default absent) → OUT/RC
   mkdir -p "$1/.pi/agent" "$2"
   set +e
   # ONE physical line by contract: check-install-surface S5c is a line-scoped static tripwire,
   # so the sandbox env assignments must ride the same line as the run.sh drive they guard.
-  OUT="$(HOME="$1" XDG_DATA_HOME="$1/.local/share" XDG_STATE_HOME="$1/.local/state" XDG_CACHE_HOME="$1/.cache" XDG_CONFIG_HOME="$1/.config" PI_CODING_AGENT_DIR="$1/.pi/agent" PATH="$3" PI_BIN="$4" CLAUDE_BIN="$ABSENT" AGY_BIN="$ABSENT" bash "$PKG/run.sh" setup "$2" 2>&1)"
+  OUT="$(HOME="$1" XDG_DATA_HOME="$1/.local/share" XDG_STATE_HOME="$1/.local/state" XDG_CACHE_HOME="$1/.cache" XDG_CONFIG_HOME="$1/.config" PI_CODING_AGENT_DIR="$1/.pi/agent" PATH="$3" PI_BIN="$4" CLAUDE_BIN="$ABSENT" AGY_BIN="$ABSENT" COPILOT_BIN="${5:-$ABSENT}" bash "$PKG/run.sh" setup "$2" 2>&1)"
   RC=$?
   set -e
 }
@@ -62,6 +77,8 @@ want "A: the deliberate core FAIL owns setup exit 1 (computed, never cosmetic gr
   "[ '$RC' -eq 1 ]"
 want "A: no auth.json.bak and credential bytes identical [QK:SETUP-CREDENTIAL-FREE]" \
   "[ ! -e '$HOME_A/.pi/agent/auth.json.bak' ] && [ \"\$(sha256sum '$HOME_A/.pi/agent/auth.json' | cut -d' ' -f1)\" = '$AUTH_SHA' ]"
+want "A: an absent copilot is one zero-state SKIP — no unit composed, no .copilot written [QK:SETUP-COPILOT-ABSENT-SKIP]" \
+  "printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP' && [ ! -e '$HOME_A/.copilot' ]"
 want "A control: mode named first, pi/claude/agy SKIP, bins PASS, core FAIL, NON-GREEN summary" \
   "printf '%s' \"\$OUT\" | head -n 1 | grep -q 'mode: installed package' && printf '%s' \"\$OUT\" | grep -q 'pi: SKIP' && printf '%s' \"\$OUT\" | grep -q 'claude: SKIP' && printf '%s' \"\$OUT\" | grep -q 'agy: SKIP' && printf '%s' \"\$OUT\" | grep -q 'bins: PASS' && printf '%s' \"\$OUT\" | grep -q 'core: FAIL' && printf '%s' \"\$OUT\" | grep -q 'NON-GREEN'"
 
@@ -88,6 +105,22 @@ want "C scrub proof: pnpm absent, needed tools present on the scrubbed PATH" \
 run_setup "$SB/home-c" "$SB/proj-c" "$SCRUBBED" "$ABSENT"
 want "C: installed setup needs no pnpm to decide/compose — summary reached, no Missing-command refusal [QK:SETUP-INSTALLED-NO-PNPM]" \
   "printf '%s' \"\$OUT\" | grep -q 'setup summary (computed from component outcomes)' && ! printf '%s' \"\$OUT\" | grep -q 'Missing command: pnpm'"
+
+# ── Cell D: copilot PRESENT, vendor lists failing — independence + no cosmetic PASS ──
+# A two-line always-failing vendor is enough here: the birth installer dies at its
+# read-only `plugin list` preflight (UNKNOWN, never absence), while the three writer
+# units never touch the vendor and land in the sandbox. Behavior evidence for the
+# full success composition lives in smoke-setup-verdict S-6 / check-pack-install.
+BROKEN="$SB/broken-vendor"; mkdir -p "$BROKEN"
+printf '#!/usr/bin/env bash\necho "not authenticated" >&2\nexit 1\n' > "$BROKEN/copilot"
+chmod +x "$BROKEN/copilot"
+run_setup "$SB/home-d" "$SB/proj-d" "$BROKEN:$SB/bin:$PATH" "$ABSENT" "$BROKEN/copilot"
+want "D: a failed birth leaves the other three units attempted with their own rows [QK:SETUP-COPILOT-INDEPENDENT]" \
+  "printf '%s' \"\$OUT\" | grep -q 'copilot-mcp: PASS' && printf '%s' \"\$OUT\" | grep -q 'copilot-receive: PASS' && printf '%s' \"\$OUT\" | grep -q 'copilot-statusline: PASS'"
+want "D: the failing-vendor birth is a named FAIL, never a cosmetic PASS [QK:SETUP-COPILOT-COSMETIC-PASS]" \
+  "printf '%s' \"\$OUT\" | grep -q 'copilot-birth: FAIL' && ! printf '%s' \"\$OUT\" | grep -q 'copilot-birth: PASS'"
+want "D control: detected copilot never reads SKIP, and the summary names copilot-birth NON-GREEN" \
+  "! printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP' && printf '%s' \"\$OUT\" | grep -q 'NON-GREEN' && printf '%s' \"\$OUT\" | grep -q 'copilot-birth'"
 
 echo ""
 echo "check-setup-qualification: $PASS checks passed (mutation-attribution oracle only — behavior evidence lives in smoke-setup-verdict and check-pack-install)"

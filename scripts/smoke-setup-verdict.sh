@@ -64,7 +64,7 @@ mkdir -p "$HOME" "$PI_CODING_AGENT_DIR" "$SB/bin" "$SB/harness"
 # Presence pins: default every harness to a definitely-absent path; each cell
 # re-pins what it needs. Production leaves these unset.
 ABSENT="$SB/harness/definitely-absent"
-export PI_BIN="$ABSENT" CLAUDE_BIN="$ABSENT" AGY_BIN="$ABSENT"
+export PI_BIN="$ABSENT" CLAUDE_BIN="$ABSENT" AGY_BIN="$ABSENT" COPILOT_BIN="$ABSENT"
 
 PASS=0
 ok()   { PASS=$((PASS + 1)); printf '  ok    %s\n' "$*"; }
@@ -97,6 +97,7 @@ want "S-1: mode is a named source-checkout branch, printed first" \
 want "S-1: pi absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | grep -q 'pi: SKIP'"
 want "S-1: claude absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | grep -q 'claude: SKIP'"
 want "S-1: agy absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | grep -q 'agy: SKIP'"
+want "S-1: copilot absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP'"
 want "S-1: core bridge boundary validated (PASS)" "printf '%s' \"\$OUT\" | grep -q 'core: PASS'"
 want "S-1: final verdict is computed, not unconditional" \
   "printf '%s' \"\$OUT\" | grep -q 'result: green (computed from the component outcomes above)'"
@@ -105,6 +106,7 @@ want "S-1: the retired unconditional green line is gone" \
 want "S-1: zero Pi wiring written for an absent pi" "[ ! -e '$PROJ1/.pi' ]"
 want "S-1: no user-scope pi settings were created" "[ ! -e '$PI_CODING_AGENT_DIR/settings.json' ]"
 want "S-1: no agy config was created" "[ ! -e '$HOME/.gemini' ]"
+want "S-1: no Copilot config/units were created" "[ ! -e '$HOME/.copilot' ]"
 want_auth_untouched "S-1"
 
 # ── S-2: pi resolvable but BELOW floor → detected FAIL, never SKIP, no writes ──
@@ -180,6 +182,65 @@ want "S-4: the corrupt config was preserved, not clobbered" \
   "[ \"\$(cat '$HOME/.gemini/config/mcp_config.json')\" = 'this is not json{{{' ]"
 want_auth_untouched "S-4"
 rm -rf "$HOME/.gemini" "$SB/harness/agy"
+
+# ── S-6: copilot PRESENT → all FOUR units compose independently as PASS (#86 C3b) ──
+# The fake vendor is the shared factory (scripts/fake-copilot-vendor.sh, the
+# same measured answer shapes check-copilot-birth-hook.ts bakes), so the birth
+# installer's real preflight/list/add/install sequence runs end to end against
+# it. The three writer units (MCP/receiver/footer) never touch the vendor; they
+# land in the sandbox HOME/XDG.
+echo "[smoke-setup-verdict] S-6 copilot present — four-unit composition"
+PROJ6="$SB/proj6"; mkdir -p "$PROJ6"
+FAKE_COP="$SB/harness/copilot-fake"
+bash "$REPO_DIR/scripts/fake-copilot-vendor.sh" "$FAKE_COP" "$REPO_DIR/pi/meta-bridge-copilot/entwurf-meta-receive-copilot/.claude-plugin/plugin.json"
+seed_auth
+set +e; OUT="$(COPILOT_BIN="$FAKE_COP/copilot" PATH="$FAKE_COP:$PATH" bash "$REPO_DIR/run.sh" setup "$PROJ6" 2>&1)"; RC=$?; set -e
+want "S-6: copilot-present setup exits 0 (four units + core all green)" "[ '$RC' -eq 0 ]"
+want "S-6: birth unit composed as PASS" "printf '%s' \"\$OUT\" | grep -q 'copilot-birth: PASS'"
+want "S-6: MCP unit composed as PASS" "printf '%s' \"\$OUT\" | grep -q 'copilot-mcp: PASS'"
+want "S-6: receiver unit composed as PASS" "printf '%s' \"\$OUT\" | grep -q 'copilot-receive: PASS'"
+want "S-6: visible-footer unit composed as PASS" "printf '%s' \"\$OUT\" | grep -q 'copilot-statusline: PASS'"
+want "S-6: computed summary is green" \
+  "printf '%s' \"\$OUT\" | grep -q 'result: green (computed from the component outcomes above)'"
+want "S-6: the birth install drove the real vendor sequence (marketplace add before plugin install)" \
+  "grep -q '^plugin marketplace add ' '$FAKE_COP/calls.log' && grep -q '^plugin install entwurf-meta-receive-copilot@meta-bridge-copilot-local$' '$FAKE_COP/calls.log'"
+want "S-6: all four package-owned install-states exist (each unit keeps its inverse authority)" \
+  "[ -f '$XDG_DATA_HOME/entwurf/copilot-bridge/install-state.json' ] && [ -f '$XDG_DATA_HOME/entwurf/copilot-mcp/install-state.json' ] && [ -f '$XDG_DATA_HOME/entwurf/copilot-receive/install-state.json' ] && [ -f '$XDG_DATA_HOME/entwurf/copilot-statusline/install-state.json' ]"
+want "S-6: the receiver unit was deployed from the compiled dist closure" \
+  "[ -f '$HOME/.copilot/extensions/entwurf-receive/extension.mjs' ] && [ -f '$HOME/.copilot/extensions/entwurf-receive/lib/meta-session.js' ]"
+want "S-6: MCP config and footer settings landed in the sandbox HOME" \
+  "grep -q 'entwurf-bridge' '$HOME/.copilot/mcp-config.json' && grep -q 'entwurf-copilot-statusline' '$HOME/.copilot/settings.json'"
+want_auth_untouched "S-6"
+# Reset the composed Copilot state so the next cell decides on a clean host.
+rm -rf "$HOME/.copilot" "$XDG_DATA_HOME/entwurf/copilot-bridge" "$XDG_DATA_HOME/entwurf/copilot-mcp" \
+  "$XDG_DATA_HOME/entwurf/copilot-receive" "$XDG_DATA_HOME/entwurf/copilot-statusline" \
+  "$XDG_DATA_HOME/entwurf/meta-bridge-copilot"
+
+# ── S-7: copilot present but vendor lists FAIL → birth is a NAMED FAIL, the other ──
+# three units are still attempted (independent outcomes), and the aggregate is
+# NON-GREEN + nonzero. A failing `plugin list` is UNKNOWN, never absence (#86
+# C3a), so the composition must not relabel it SKIP or cosmetic PASS.
+echo "[smoke-setup-verdict] S-7 copilot present, vendor list failing"
+PROJ7="$SB/proj7"; mkdir -p "$PROJ7"
+BROKEN_COP="$SB/harness/copilot-broken"; mkdir -p "$BROKEN_COP"
+printf '#!/usr/bin/env bash\necho "not authenticated" >&2\nexit 1\n' > "$BROKEN_COP/copilot"
+chmod +x "$BROKEN_COP/copilot"
+seed_auth
+set +e; OUT="$(COPILOT_BIN="$BROKEN_COP/copilot" PATH="$BROKEN_COP:$PATH" bash "$REPO_DIR/run.sh" setup "$PROJ7" 2>&1)"; RC=$?; set -e
+want "S-7: the failing-vendor birth is a NAMED component FAIL, never SKIP or PASS" \
+  "printf '%s' \"\$OUT\" | grep -q 'copilot-birth: FAIL' && ! printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP'"
+want "S-7: the other three units were still attempted independently" \
+  "printf '%s' \"\$OUT\" | grep -q 'copilot-mcp: PASS' && printf '%s' \"\$OUT\" | grep -q 'copilot-receive: PASS' && printf '%s' \"\$OUT\" | grep -q 'copilot-statusline: PASS'"
+want "S-7: the detected birth failure owns a nonzero setup exit" "[ '$RC' -ne 0 ]"
+want "S-7: summary is NON-GREEN naming copilot-birth" \
+  "printf '%s' \"\$OUT\" | grep -q 'NON-GREEN (FAIL: copilot-birth)'"
+want "S-7: later components were still attempted (core bridge smoke ran)" \
+  "printf '%s' \"\$OUT\" | grep -q 'core: PASS'"
+want "S-7: the refused birth wrote no vendor ownership state" \
+  "[ ! -e '$XDG_DATA_HOME/entwurf/copilot-bridge/install-state.json' ]"
+want_auth_untouched "S-7"
+rm -rf "$HOME/.copilot" "$XDG_DATA_HOME/entwurf/copilot-mcp" "$XDG_DATA_HOME/entwurf/copilot-receive" \
+  "$XDG_DATA_HOME/entwurf/copilot-statusline"
 
 # ── S-5: installed mode is a NAMED first verdict, never the source bootstrap ──
 # A bare copy of run.sh under a fake node_modules root pins the mode seam

@@ -10,11 +10,11 @@ only on Linux because its strict live-owner join uses `/proc`.
 |---|---|---|
 | Node | **`>=24.0.0`** | package and bridge runtime |
 | npm/pnpm | npm is bundled with Node; pnpm is required for source setup | package or source installation |
-| Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy wiring writers |
+| Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy/Copilot wiring writers |
 | entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
 | pi | optional-by-presence, `>=0.84.3 <0.85` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
 | Claude Code | optional, **`>=2.1.217`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
-| GitHub Copilot CLI | optional, operator-installed and authenticated | self-fetch citizen and visible fresh |
+| GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | Antigravity `agy` | optional, operator-installed and authenticated | native-push citizen |
 | Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
 
@@ -70,10 +70,12 @@ cd ~/repos/gh/entwurf
 ```
 
 This owns `~/.local/bin/entwurf` as a symlink to that checkout's `run.sh` and fails if the
-link is foreign, outside PATH, or shadowed by another command. It detects and wires pi/Claude/agy
-by presence and prints a computed per-component PASS/SKIP/FAIL summary — a detected harness that
-cannot be completed makes setup exit nonzero. Copilot's four native units remain explicit
-installs in §4.
+link is foreign, outside PATH, or shadowed by another command. It detects and wires
+pi/Claude/agy/Copilot by presence and prints a computed per-component PASS/SKIP/FAIL summary — a
+detected harness that cannot be completed makes setup exit nonzero. A detected `copilot`
+composes all four native units (birth → MCP → receiver → visible footer) with independent
+per-unit verdicts (#86 C3b); §4 keeps the explicit per-unit install/doctor/inverse surfaces for
+repair.
 
 ### 1.1 User-scope ownership (one shared registration, one recorded owner)
 
@@ -161,9 +163,10 @@ boundary, not a permanent impossibility claim.
 
 ## 4. Optional GitHub Copilot CLI native citizen
 
-Copilot has four independently owned surfaces. Install and certify all four for supported visible
-fresh; a manual citizen may omit the footer, but fresh refuses before opening a window when any
-required surface is absent.
+Copilot has four independently owned surfaces. `setup` composes all four when `copilot` is on
+PATH (#86 C3b); the commands below are the per-unit repair, doctor, and inverse surfaces. All
+four must be green for supported visible fresh; a manual citizen may omit the footer, but fresh
+refuses before opening a window when any required surface is absent.
 
 ```bash
 entwurf install-copilot-bridge
@@ -241,7 +244,7 @@ installation mode you actually own:
 # npm package consumer
 entwurf install ~/entwurf-smoke
 entwurf install-meta-bridge
-# rerun the four install-copilot-* commands when Copilot is in use
+# `entwurf setup` re-composes the four Copilot units when `copilot` is on PATH
 
 # source maintainer — from the checkout
 ./run.sh setup ~/entwurf-smoke
