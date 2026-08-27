@@ -81,7 +81,7 @@ export class MetaRecordError extends Error {
  * every write, including its own. `./run.sh doctor-meta-bridge` already flags a
  * stale deployed writer — run it after the change.
  */
-export const META_BACKENDS = ["claude-code", "antigravity", "codex", "copilot"] as const;
+export const META_BACKENDS = ["claude-code", "antigravity", "codex", "copilot", "omp"] as const;
 export type MetaBackend = (typeof META_BACKENDS)[number];
 
 /**
@@ -170,6 +170,34 @@ export const META_BACKEND_DESCRIPTORS: Record<MetaBackend, MetaBackendDescriptor
 		deliveryLevel: "D6",
 		nativeIdLabel: "sessionId",
 	},
+	// BIRTH-ONLY citizen (#87, oh-my-pi v18.0.0). An omp "hook" is an in-process
+	// EXTENSION (`--hook` aliases `--extension`), so the birth unit runs inside the omp
+	// process itself and mints on the vendor's own `session_start` / `session_switch`
+	// edges. Everything above birth is a separate admission, exactly as it was for
+	// copilot:
+	//   direct-inject NOT a capability claim — the "not a drainable mailbox" bucket.
+	//             omp DOES own a documented wake surface (`pi.sendUserMessage`, "idle
+	//             starts a turn", `extensibility/extensions/types.ts:1418`), but nothing
+	//             is installed that holds a watch, so labelling this `self-fetch` would
+	//             advertise a mailbox drain no process can perform. `direct-inject` on a
+	//             backend outside NATIVE_PUSH_BACKENDS routes every dispatch into the
+	//             fail-closed refusal that names the missing rail
+	//             (`entwurf-deliverability.ts`), which is the honest answer until the
+	//             receive lane lands.
+	//   D0        identity only. D2 (receiver armed) has nothing to arm yet, so any level
+	//             above D0 would be a false claim.
+	//   sessionId the native join key: `ReadonlySessionManager.getSessionId()`
+	//             (`session-manager.ts:1946-1948`), a UUIDv7 minted at
+	//             `mintSessionId()` `:95-97` — NOT the transcript filename, which is
+	//             `<iso>_<uuidv7>.jsonl` (`:1134-1137`). Measured LIVE 2026-08-27:
+	//             host `01a042da-537a-7770-a275-7b8162eecca4`
+	//             (`scripts/raw-omp-measure/README.md` M1).
+	omp: {
+		backend: "omp",
+		wakeMode: "direct-inject",
+		deliveryLevel: "D0",
+		nativeIdLabel: "sessionId",
+	},
 };
 
 // ---------------------------------------------------------------------------
@@ -253,7 +281,7 @@ function isoNow(now: Date): string {
 export const META_SCHEMA_VERSION_V3 = 3 as const;
 
 /** Every backend admitted by the one V3 record-citizen schema. */
-export const META_CITIZEN_BACKENDS = ["claude-code", "antigravity", "codex", "copilot", "pi"] as const;
+export const META_CITIZEN_BACKENDS = ["claude-code", "antigravity", "codex", "copilot", "omp", "pi"] as const;
 export type MetaCitizenBackend = (typeof META_CITIZEN_BACKENDS)[number];
 
 /**
