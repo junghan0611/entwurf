@@ -4,18 +4,75 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.15.1 — 2026-08-27
+
+This patch is the Linux install-honesty floor for #86: Entwurf installs itself only,
+`setup` composes harnesses the operator already chose, and a detected integration that
+cannot be completed makes the command non-green. It is not a new garden capability.
+macOS and native-Windows implementation move to #78; this cut makes no cross-platform
+support claim.
+
+### Changed
+
+- **`setup` is presence-driven composition, not recruitment.** Mode is a named
+  source-versus-installed branch before any prerequisite check or write. Each detected
+  harness (pi, Claude Code, Copilot, agy) is completed independently; absence is
+  zero-state SKIP; below-floor or incomplete is named FAIL and a nonzero exit. The old
+  unconditional `DONE ... green` is gone — the summary is computed from component
+  outcomes. Pi is optional-by-presence with the package-derived floor `>=0.84.3 <0.85`.
+  A detected Copilot composes all four native units (birth → MCP → receiver → visible
+  footer). Installed-package setup never runs npm/pnpm inside `node_modules`. (#86)
+- **The shared Pi user-scope registration has a recorded owner.** Silent
+  last-writer-wins normalization is retired. A second root's install/setup/remove refuses
+  with zero settings writes and names `takeover-user-scope`; only that explicit operator
+  verb moves the entry (old→new reported). The inverse removes only the recorded owner's
+  exact entry. (#86 C2)
+- **Setup no longer mutates credential stores.** The unconditional `sync_auth` path that
+  copied the Anthropic OAuth object to an `entwurf` alias is removed. Hosts that already
+  ran the legacy path keep the alias and `auth.json.bak` as a documented manual cleanup,
+  not an automated one. (#86 A5)
+
+### Added
+
+- **Copilot birth has a package-owned inverse.** `uninstall-copilot-bridge` uses the
+  qualified `plugin@marketplace` identity, runs a read-only ownership/safety preflight
+  before any vendor write, and refuses to remove an unproven foreign unit. Installer,
+  inverse, and doctor share one structural oracle. (#86 C3a)
+- **Packed-consumer and all-absent setup rows are first-class fixtures.**
+  `smoke-setup-verdict` and the installed `entwurf setup` path inside `check-pack-install`
+  prove absence, independence, false-success refusal, and the named installed-versus-source
+  branch without a model turn. That npm-consumer harness is the Linux install evidence
+  #78 waits on. (#86)
+
 ### Fixed
 
-- **Source setup now exposes the `entwurf` operator command required by Copilot fresh.**
+- **Source setup now exposes the `entwurf` operator command Copilot fresh requires.**
   `./run.sh setup` manages `~/.local/bin/entwurf` as an ownership-checked symlink to the
-  current checkout's `run.sh`, with per-bin state and an honest inverse. npm consumers already
-  received this command through package bin linking; the missing source half caused
+  current checkout's `run.sh`, with per-bin state and an honest inverse. npm consumers
+  already received this command through package bin linking; the missing source half caused
   `entwurf_fresh_call {backend:"copilot"}` to reject `runtime-unresolved` unless an unrelated
-  global package happened to mask the defect. The repair leaves the managed
-  `entwurf copilot` boundary and every fresh/preflight/delivery contract unchanged. Source setup
-  now fails loud when that operator path is foreign, outside PATH, or shadowed by another command;
-  later optional helper-bin conflicts remain warnings owned by their harness doctors. Discovered
-  while rechecking #82; the installation contract and repair are owned by #86.
+  global package happened to mask the defect. Source setup now fails loud when that
+  operator path is foreign, outside PATH, or shadowed; helper units are attempted
+  independently and a foreign helper is a named FAIL, never a warning followed by cosmetic
+  success. The managed `entwurf copilot` boundary and every fresh/preflight/delivery
+  contract are unchanged. Discovered while rechecking #82. (#86)
+
+### Verification
+
+- **`pnpm run check:full`** — PASS, exit 0, 252s standalone / 247s inside the gate
+  on the 0.15.1 versioned tree (HEAD `4a23af1` + uncommitted changelog/version).
+- **`LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.15.1.hAAn7U --cut`** —
+  **MUST PASS=21 FAIL=0 SKIP=0, BEHAVIOR PASS=1 FAIL=0 SKIP=0, `cut: OK`.**
+  `check-gate-qualification` inside the gate killed **277/277** mutants across 33
+  lanes. Log: `/tmp/entwurf-release-gate-0.15.1.hAAn7U/release-gate.log`
+  (SHA-256 `aa1364922301e685c650670dd6556a3c27feacdf1481d850d8e2ef56ef5cb23e`).
+
+### Notes
+
+- #78 owns macOS and native-Windows implementation. WSL remains Linux evidence.
+- Native-harness doctors stay the per-leaf live-certification surface. Setup writes
+  artifacts; a new session is still required before `doctor-meta-bridge` / Copilot receive
+  can go green on a host that already had processes open.
 
 ## 0.15.0 — 2026-08-25
 
