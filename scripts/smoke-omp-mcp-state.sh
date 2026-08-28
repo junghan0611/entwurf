@@ -37,6 +37,14 @@ export ENTWURF_OMP_MCP_ARGS='[]'
 CONFIG="$ENTWURF_OMP_AGENT_DIR/mcp.json"
 STATE="$XDG_DATA_HOME/entwurf/omp-mcp/install-state.json"
 mkdir -p "$ENTWURF_OMP_AGENT_DIR" "$SB/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR"
+# Sandbox-only operator setting. The MCP-install cells expect doctor green; the
+# default (file/key absent → tools.xdev true) is a RUNTIME red once the native
+# hand is configured, and is exercised as its own cell below. Never the host's
+# real ~/.omp/agent/config.yml — HOME and ENTWURF_OMP_AGENT_DIR are sandboxed.
+cat > "$ENTWURF_OMP_AGENT_DIR/config.yml" <<'CFG'
+tools:
+  xdev: false
+CFG
 
 # A fake bridge that answers initialize + tools/list, so the doctor's boot probe has a
 # real command to drive without spawning the actual bridge.
@@ -88,6 +96,8 @@ OUT="$("$RUN" doctor-omp-mcp 2>&1)" || die "doctor red right after a clean insta
 ok "doctor is green right after install"
 printf '%s\n' "$OUT" | grep -q "native-wins" || die "doctor did not report the native entry as the effective source"
 ok "doctor reports the EFFECTIVE source as the native entry"
+printf '%s\n' "$OUT" | grep -q "tools.xdev is false" || die "doctor did not report tools.xdev false on the runtime axis"
+ok "xdev false is ok on the runtime axis (MCP tools stay top-level)"
 
 # ── 2. shadowing: a Claude import of the same name is suppressed, not removed ───
 mkdir -p "$HOME"
@@ -230,6 +240,81 @@ if printf '%s\n' "$OUT" | grep -q "native-wins"; then
 fi
 ok "a malformed entry under our key is RED on the runtime axis with zero install-state, and is never native-wins"
 rm -f "$CONFIG"
+
+# ── 8e. tools.xdev tool-surface — RUNTIME axis, never ownership (Hard Rule 13)
+# The native hand is re-installed so redness is about the tool surface, not a
+# missing mcp.json. Every write is inside the sandbox agent dir.
+"$RUN" install-omp-mcp >/dev/null || die "reinstall failed before the tool-surface cells"
+cat > "$ENTWURF_OMP_AGENT_DIR/config.yml" <<'CFG'
+tools:
+  xdev: false
+CFG
+OUT="$("$RUN" doctor-omp-mcp 2>&1)" || die "doctor red with tools.xdev false"
+printf '%s\n' "$OUT" | grep -q "tools.xdev is false" || die "doctor did not name tools.xdev false"
+ok "xdev false is ok (required operator setting)"
+
+cat > "$ENTWURF_OMP_AGENT_DIR/config.yml" <<'CFG'
+tools:
+  xdev: true
+  xdevInlineDevices:
+    - mcp__entwurf_bridge_*
+CFG
+OUT="$("$RUN" doctor-omp-mcp 2>&1)" || die "doctor red with a covering xdevInlineDevices glob"
+printf '%s\n' "$OUT" | grep -q "xdevInlineDevices glob covering mcp__entwurf_bridge_" || die "doctor did not note the covering glob"
+if printf '%s\n' "$OUT" | grep -q "doctor found a broken OMP MCP configuration"; then
+	die "covering glob should be ok-with-note, not red"
+fi
+ok "xdev on with a covering glob is ok-with-note"
+
+cat > "$ENTWURF_OMP_AGENT_DIR/config.yml" <<'CFG'
+tools:
+  xdev: true
+CFG
+if OUT="$("$RUN" doctor-omp-mcp 2>&1)"; then
+	die "doctor stayed green with tools.xdev true and no covering glob"
+fi
+printf '%s\n' "$OUT" | grep -q "no xdevInlineDevices glob covering" || die "doctor went red without naming the uncovered xdev surface"
+printf '%s\n' "$OUT" | grep -q "runtime axis" || die "uncovered xdev was not reported on the runtime axis"
+ok "xdev on with no covering glob is RED on the runtime axis"
+
+cat > "$ENTWURF_OMP_AGENT_DIR/config.yml" <<'CFG'
+tools:
+  xdev: true
+  xdevInlineDevices:
+    - mcp__context_mode_*
+CFG
+if OUT="$("$RUN" doctor-omp-mcp 2>&1)"; then
+	die "doctor stayed green with a glob that does not cover our server"
+fi
+printf '%s\n' "$OUT" | grep -q "no xdevInlineDevices glob covering" || die "a non-covering glob was not treated as uncovered"
+ok "a glob that does not cover mcp__entwurf_bridge_* is RED"
+
+cat > "$ENTWURF_OMP_AGENT_DIR/config.yml" <<'CFG'
+modelRoles:
+  default: sandbox-only
+CFG
+if OUT="$("$RUN" doctor-omp-mcp 2>&1)"; then
+	die "doctor stayed green when tools.xdev was unset"
+fi
+printf '%s\n' "$OUT" | grep -q "tools.xdev is UNSET" || die "doctor did not name the absent key"
+printf '%s\n' "$OUT" | grep -q "vendor default applies" || die "absent key was not reported as the vendor default"
+ok "absent key applies the vendor default and is RED; the file is named, not invented"
+
+rm -f "$ENTWURF_OMP_AGENT_DIR/config.yml"
+if OUT="$("$RUN" doctor-omp-mcp 2>&1)"; then
+	die "doctor stayed green when config.yml was absent (vendor default)"
+fi
+printf '%s\n' "$OUT" | grep -q "FILE ABSENT" || die "doctor did not say the file is absent"
+printf '%s\n' "$OUT" | grep -q "vendor default applies" || die "absent file was not reported as the vendor default"
+want "doctor did not write config.yml while reporting the absent default" "[ ! -e '$ENTWURF_OMP_AGENT_DIR/config.yml' ]"
+ok "absent file applies the vendor default and is RED; doctor writes nothing"
+
+# restore the required setting so later cells (none) and uninstall stay honest
+cat > "$ENTWURF_OMP_AGENT_DIR/config.yml" <<'CFG'
+tools:
+  xdev: false
+CFG
+"$RUN" uninstall-omp-mcp >/dev/null || die "uninstall failed after the tool-surface cells"
 
 # ── 9. nothing resolved through the double-duty PI knob ───────────────────
 want "the poisoned PI_CODING_AGENT_DIR tree was never created" "[ ! -e '$PI_POISON' ]"

@@ -232,6 +232,55 @@ do_doctor() {
 			fi ;;
 	esac
 
+	# ── tool-surface (tools.xdev) — RUNTIME axis, never ownership (Hard Rule 13)
+	# The MCP hand can be installed and still not be callable: omp's vendor default
+	# (tools.xdev: true, empty xdevInlineDevices) mounts MCP tools as xd:// devices
+	# and drops them from the top-level toolset. Absent file or absent key means
+	# that default applies; say so rather than reporting on a file that is not there.
+	# RED only when the native hand is the effective source (native-wins) AND the
+	# surface is uncovered/unreadable — ownership state is a separate question.
+	local surface surface_rc surface_verdict surface_file surface_xdev native_hand=0
+	case "$verdict" in
+		native-wins) native_hand=1 ;;
+	esac
+	set +e
+	surface="$(python3 "$HERE/omp-tool-surface.py" "$AGENT_DIR" 2>&1)"
+	surface_rc=$?
+	set -e
+	if [ "$surface_rc" -ne 0 ]; then
+		log "  tool-surface: reader failed (rc=$surface_rc): $surface"
+		[ "$native_hand" -eq 1 ] && hard_fail=1
+	else
+		surface_verdict="$(printf '%s\n' "$surface" | sed -n 's/^verdict //p' | tail -1)"
+		surface_file="$(printf '%s\n' "$surface" | sed -n 's/^file //p' | tail -1)"
+		surface_xdev="$(printf '%s\n' "$surface" | sed -n 's/^xdev //p' | tail -1)"
+		case "$surface_verdict" in
+			xdev-off)
+				log "  tool-surface: tools.xdev is false — MCP tools stay top-level (the required operator setting)" ;;
+			xdev-on-covered)
+				log "  tool-surface: note: tools.xdev is on with an xdevInlineDevices glob covering mcp__entwurf_bridge_* — schemas are inlined but tools stay behind xd:// (write to execute). Prefer tools.xdev: false" ;;
+			xdev-on-uncovered)
+				if [ "$native_hand" -eq 1 ]; then
+					if [ "$surface_file" = "absent" ]; then
+						log "  tool-surface: FILE ABSENT — vendor default applies (tools.xdev: true, no inline allowlist). MCP tools mount as xd:// and drop from the top-level toolset, so the configured native hand is not reliably callable (runtime axis; ownership is a separate question)"
+					elif [ "$surface_xdev" = "default-true" ]; then
+						log "  tool-surface: tools.xdev is UNSET in $surface_file — vendor default applies (true). MCP tools mount as xd:// and drop from the top-level toolset, so the configured native hand is not reliably callable (runtime axis; ownership is a separate question)"
+					else
+						log "  tool-surface: tools.xdev is on with no xdevInlineDevices glob covering mcp__entwurf_bridge_* — MCP tools mount as xd:// and drop from the top-level toolset; a plain-language send was measured to list then falsely claim delivery (runtime axis; ownership is a separate question)"
+					fi
+					hard_fail=1
+				else
+					log "  tool-surface: note: vendor default tools.xdev:true would wrap MCP tools as xd://. Not red: no native hand is configured"
+				fi ;;
+			unreadable)
+				log "  tool-surface: $surface_file is UNREADABLE — cannot determine tools.xdev (runtime axis)"
+				[ "$native_hand" -eq 1 ] && hard_fail=1 ;;
+			*)
+				log "  tool-surface: unexpected verdict '$surface_verdict'"
+				[ "$native_hand" -eq 1 ] && hard_fail=1 ;;
+		esac
+	fi
+
 	if [ -f "$STATE_FILE" ]; then
 		local managed expected managed_status
 		expected="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$CONFIG")"
