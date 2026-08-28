@@ -71,6 +71,7 @@ import { listEntwurfFacts } from "../../../pi-extensions/lib/entwurf-fact-provid
 import { renderEntwurfPeers } from "../../../pi-extensions/lib/entwurf-peers-render.ts";
 import { computeSelfAddressability, type MetaDeliveryDomain } from "../../../pi-extensions/lib/entwurf-self-address.ts";
 import { nativePushSupported } from "../../../pi-extensions/lib/entwurf-v2-contract.ts";
+import { resolveMailboxWakeModeCapability } from "../../../pi-extensions/lib/entwurf-v2-decider.ts";
 import { runAndRenderEntwurfV2FromSurface } from "../../../pi-extensions/lib/entwurf-v2-surface.ts";
 import {
 	makeVisibleResumeDeps,
@@ -263,11 +264,17 @@ async function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): Prom
 	const { marker, identity } = trusted;
 
 	// Identity is trusted — but `replyable` is a SEPARATE fact, and WHICH fact depends on the
-	// rail a reply would ride (보정①). The domain comes from nativePushSupported(backend), not
-	// from wakeMode: `direct-inject` also covers codex/pi, which have no native-push adapter.
-	//   self-fetch (claude-code): can this citizen's own inbox wake? → the receiver presence
-	//     marker (readMetaReceiverMarker folds a dead/reused owner to null, so a match means a
-	//     live, ARMED receiver — the sender marker proves identity, never an armed watch).
+	// rail a reply would ride (보정①). THREE values, not a native-push-or-self-fetch binary:
+	//   native-push ← nativePushSupported(backend). NOT wakeMode: `direct-inject` also covers
+	//     codex/pi, which have no native-push adapter.
+	//   self-fetch  ← resolveMailboxWakeModeCapability (the decider's mailbox seam — one owner
+	//     with dispatch). A new hardcoded backend list would drift the moment the registry
+	//     admits another self-fetch citizen.
+	//   none        ← neither. omp today: no mailbox drain, no native-push adapter. Rendering
+	//     this as self-fetch printed a mailboxPath nothing drains.
+	//   self-fetch (claude-code/copilot): can this citizen's own inbox wake? → the receiver
+	//     presence marker (readMetaReceiverMarker folds a dead/reused owner to null, so a match
+	//     means a live, ARMED receiver — the sender marker proves identity, never an armed watch).
 	//   native-push (antigravity): there is no inbox and no watch. A reply is injected into a
 	//     live app-server conversation, so only an adapter probe can answer. Composing the
 	//     receiver atom here would demand `watchArmed` from a backend that never arms one, and
@@ -276,7 +283,11 @@ async function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): Prom
 	// survive; degrading to null would erase the sender) — only with replyable:false.
 	// The rail, named ONCE and reused for both the predicate and the caller's rendering —
 	// so entwurf_self can never re-derive it differently from what decided `replyable`.
-	const metaDeliveryDomain: MetaDeliveryDomain = nativePushSupported(identity.backend) ? "native-push" : "self-fetch";
+	const metaDeliveryDomain: MetaDeliveryDomain = nativePushSupported(identity.backend)
+		? "native-push"
+		: resolveMailboxWakeModeCapability(identity)
+			? "self-fetch"
+			: "none";
 	const facts =
 		metaDeliveryDomain === "native-push"
 			? {
@@ -285,17 +296,23 @@ async function buildTrustedMetaSenderEnvelope(cwd: string = process.cwd()): Prom
 					recordBacked: true,
 					probeAlive: await probeNativeSenderAlive(identity),
 				}
-			: (() => {
-					const receiver = readMetaReceiverMarker({ gardenId: identity.gardenId });
-					const active = receiverMarkerMatchesIdentity(receiver, identity);
-					return {
+			: metaDeliveryDomain === "self-fetch"
+				? (() => {
+						const receiver = readMetaReceiverMarker({ gardenId: identity.gardenId });
+						const active = receiverMarkerMatchesIdentity(receiver, identity);
+						return {
+							origin: "meta-session" as const,
+							metaDeliveryDomain,
+							recordBacked: true,
+							ownerAlive: active,
+							watchArmed: active,
+						};
+					})()
+				: {
 						origin: "meta-session" as const,
 						metaDeliveryDomain,
 						recordBacked: true,
-						ownerAlive: active,
-						watchArmed: active,
 					};
-				})();
 	const self = computeSelfAddressability(facts);
 
 	return {
@@ -519,6 +536,8 @@ server.tool(
 					lines.push(
 						"mailbox:    none — native-push has no inbox; a reply direct-injects only while the adapter probe is alive",
 					);
+				} else if (rail === "none") {
+					lines.push("mailbox:    none — no inbound rail (no mailbox, no native-push adapter)");
 				} else {
 					// Fail-closed, matching computeSelfAddressability's own unsupplied-domain row:
 					// with no rail we cannot say how a reply would travel, so we claim no transport.

@@ -54,6 +54,40 @@
 			"timeoutSeconds": 60,
 			"signature": "[QK:SELFADDR-RAIL-FACT-LEAK]",
 			"signatureSource": "scripts/check-entwurf-self-address.ts"
+		},
+		{
+			"claim": "SELFADDR-NO-FALLBACK-SELF-FETCH",
+			"title": "buildTrustedMetaSenderEnvelope falls every non-native-push backend back to self-fetch (omp renders a mailboxPath nothing drains)",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": [
+				"\tconst metaDeliveryDomain: MetaDeliveryDomain = nativePushSupported(identity.backend)",
+				"\t\t? \"native-push\"",
+				"\t\t: resolveMailboxWakeModeCapability(identity)",
+				"\t\t\t? \"self-fetch\"",
+				"\t\t\t: \"none\";"
+			],
+			"replace": [
+				"\tconst metaDeliveryDomain: MetaDeliveryDomain = nativePushSupported(identity.backend) ? \"native-push\" : \"self-fetch\";"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-self-address"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:SELFADDR-NO-FALLBACK-SELF-FETCH]",
+			"signatureSource": "scripts/check-entwurf-self-address.ts"
+		},
+		{
+			"claim": "SELFADDR-MAILBOX-WAKE-SEAM",
+			"title": "self-fetch derivation uses a today-correct backend-name list instead of resolveMailboxWakeModeCapability — drifts when the registry admits another self-fetch backend",
+			"subject": "mcp/entwurf-bridge/src/index.ts",
+			"find": ["\t\t: resolveMailboxWakeModeCapability(identity)", "\t\t\t? \"self-fetch\"", "\t\t\t: \"none\";"],
+			"replace": [
+				"\t\t: identity.backend === \"claude-code\" || identity.backend === \"copilot\"",
+				"\t\t\t? \"self-fetch\"",
+				"\t\t\t: \"none\";"
+			],
+			"gate": ["bash", "run.sh", "check-entwurf-self-address"],
+			"timeoutSeconds": 60,
+			"signature": "[QK:SELFADDR-MAILBOX-WAKE-SEAM]",
+			"signatureSource": "scripts/check-entwurf-self-address.ts"
 		}
 	]
 }

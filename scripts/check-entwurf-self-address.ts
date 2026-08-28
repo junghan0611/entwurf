@@ -155,6 +155,26 @@ function row(facts: SelfAddressabilityFacts): { replyable: boolean; socketState:
 	);
 }
 
+// meta-session / NONE rail: no inbound transport at all. Mailbox facts and a live probe
+// cannot buy replyability — there is nothing to land on. Distinct from the unsupplied
+// (undefined) domain row below, which stays fail-closed for a caller that forgot the axis.
+{
+	const noneFacts: SelfAddressabilityFacts = {
+		origin: "meta-session",
+		metaDeliveryDomain: "none",
+		recordBacked: true,
+		ownerAlive: true,
+		watchArmed: true,
+		probeAlive: true,
+	};
+	const noneRail = computeSelfAddressability(noneFacts);
+	ok("meta/none + all facts true → NOT replyable", noneRail.replyable === false);
+	ok(
+		"meta/none names the missing inbound rail (mailbox/probe facts cannot rescue it)",
+		noneRail.reason.includes("no inbound rail"),
+	);
+}
+
 // meta-session with NO rail declared: we cannot say how a reply would travel, so we do not
 // claim it would arrive. The domain is derived from nativePushSupported(backend) — a caller
 // that forgets it gets a refusal, not an optimistic guess.
@@ -244,6 +264,17 @@ ok(
 ok(
 	"buildStrictPiSenderEnvelope existsSync-probes the canonical socket via the shared grammar (controlSocketPathIn(ENTWURF_DIR, …))",
 	/existsSync\s*\(/.test(piBody) && /controlSocketPathIn\s*\(\s*ENTWURF_DIR\s*,/.test(piBody),
+);
+
+const metaBuilder = functionBody("buildTrustedMetaSenderEnvelope");
+// FIRST of the two derivation claims so a binary-fallback mutant dies here, not at the seam pin.
+ok(
+	"buildTrustedMetaSenderEnvelope does not fall back every non-native-push backend to self-fetch [QK:SELFADDR-NO-FALLBACK-SELF-FETCH]",
+	!/\?\s*"native-push"\s*:\s*"self-fetch"/.test(metaBuilder),
+);
+ok(
+	"buildTrustedMetaSenderEnvelope derives self-fetch through resolveMailboxWakeModeCapability(identity), not a backend-name list [QK:SELFADDR-MAILBOX-WAKE-SEAM]",
+	/resolveMailboxWakeModeCapability\s*\(\s*identity\s*\)/.test(metaBuilder),
 );
 
 const selfRegion = toolRegion("entwurf_self");

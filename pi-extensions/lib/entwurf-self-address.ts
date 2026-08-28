@@ -33,10 +33,13 @@
  *  - external-mcp: never replyable — no authoritative reply address.
  *
  * `origin` stays sender-carrier PROVENANCE, never the citizen identity authority and never a rail.
- * Which rail a meta citizen's reply rides is a SECOND axis — `metaDeliveryDomain`, derived
- * by the caller from `nativePushSupported(backend)`, not from `wakeMode` (direct-inject also
- * covers codex/pi, which have no native-push adapter). Fail-closed: an unsupplied domain is
- * not replyable.
+ * Which rail a meta citizen's reply rides is a SECOND axis — `metaDeliveryDomain`.
+ * The caller derives it as three values, never as a native-push-or-self-fetch binary:
+ *   native-push  ← `nativePushSupported(backend)` (the adapter list; NOT wakeMode —
+ *                  `direct-inject` also covers codex/pi, which have no native-push adapter)
+ *   self-fetch   ← `resolveMailboxWakeModeCapability` (the decider's own mailbox seam)
+ *   none         ← neither (omp today: no mailbox drain, no native-push adapter)
+ * Fail-closed: an unsupplied domain is not replyable.
  */
 
 import { computeMetaReceiverActive, nativePushDeliverable } from "./entwurf-deliverability.ts";
@@ -44,7 +47,7 @@ import { computeMetaReceiverActive, nativePushDeliverable } from "./entwurf-deli
 export type SelfOrigin = "pi-session" | "meta-session" | "external-mcp";
 
 /** Which delivery rail carries a reply back to a meta citizen (the second axis, never `origin`). */
-export type MetaDeliveryDomain = "self-fetch" | "native-push";
+export type MetaDeliveryDomain = "self-fetch" | "native-push" | "none";
 
 /**
  * pi control-socket reachability for a reply addressed back to this session.
@@ -108,9 +111,11 @@ export function computeSelfAddressability(facts: SelfAddressabilityFacts): SelfA
 			};
 		}
 		case "meta-session": {
-			// TWO rails, pinned apart (보정①). Each branch composes the predicate that OWNS its
+			// THREE rails, pinned apart (보정①). Each branch composes the predicate that OWNS its
 			// axis — the mailbox receiver atom and the native-push predicate share nothing, so a
-			// mailbox liveness fact can never leak into a backend that has no mailbox.
+			// mailbox liveness fact can never leak into a backend that has no mailbox. `none` is
+			// the remainder: no inbound rail at all (not an unsupplied domain — that stays the
+			// default fail-closed row).
 			switch (facts.metaDeliveryDomain) {
 				case "native-push": {
 					const push = nativePushDeliverable({ recordBacked: facts.recordBacked, probeAlive: facts.probeAlive });
@@ -136,6 +141,12 @@ export function computeSelfAddressability(facts: SelfAddressabilityFacts): SelfA
 						reason: recv.active ? `meta receiver active (${recv.reason})` : `meta receiver inactive — ${recv.reason}`,
 					};
 				}
+				case "none":
+					return {
+						replyable: false,
+						socketState: "none",
+						reason: "no inbound rail — this backend has no mailbox and no native-push adapter",
+					};
 				default:
 					return {
 						replyable: false,
