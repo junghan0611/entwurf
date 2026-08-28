@@ -204,6 +204,59 @@ so `entwurf_v2` surfaces as `mcp__entwurf_bridge_entwurf_v` — the trailing dig
 the charset, not by the length cap. The live tool list is the acceptance oracle; a live
 session mounts all seven.
 
+**And the NAME is not the invocation. Under omp's default settings an MCP tool is not a
+function the model calls — it is a virtual file it writes to.** `tools.xdev` (boolean,
+**default on**) mounts "discoverable" tools as `xd://<tool>` devices and DROPS them from the
+top-level toolset; the model then reads `xd://<tool>` for the schema and *writes* the JSON
+argument object to `xd://<tool>` to execute it. `tools.xdevDocs` (**default `builtins`**)
+keeps built-in docs inline while MCP and extension schemas stay off-prompt until read. That
+default costs a real capability. `[측정]` 2026-08-28, omp/18.0.0: with the defaults, a plain
+"send this message to garden id X" produced a `write` to `xd://…entwurf_peers` (a LISTING)
+and then the sentence "보냈습니다" — no `entwurf_v2` call, nothing enqueued, `lastEnqueuedAt`
+unchanged. Discovery and delivery share one verb (`write`) and neither schema was in the
+prompt. The vendor has hit the same shape in its own toolset: its changelog records
+`web_search` becoming unreachable under `tools.xdev: true` because the mount dropped it from
+top-level (`Tool web_search not found`, upstream #5973), fixed by pinning it via
+`XDEV_KEEP_TOP_LEVEL` — a pin no MCP tool has.
+
+`read xd://` reports exactly what the default hides. `[측정]` on a host with only this
+bridge registered, **11 devices**: omp's own `ast_edit`, `debug`, `lsp`, `browser`, plus all
+seven `entwurf_*`. So the default does not merely wrap entwurf — it wraps omp's own LSP and
+debugger too.
+
+**Set this on any omp host that is meant to work as a citizen:**
+
+```yaml
+# ~/.omp/agent/config.yml
+tools:
+  xdev: false      # every enabled tool top-level — MCP is MCP again
+```
+
+Nothing is disabled by that: the setting's own text is *"Disable to expose every enabled tool
+top-level"*, and it moves tools rather than removing them. `[측정]` with `xdev: false` the
+same plain-language request produced a first-try `mcp__entwurf_bridge_entwurf_v` function
+call carrying a correct `intent`, the marker landed in the target mailbox, `read xd://`
+answered `xd:// is not mounted in this session.`, and `lsp` / `debug` / `browser` /
+`ast_edit` were all present top-level. The cost is prompt size: the system prompt's
+non-message tokens went 18,707 → 21,834 (+3,127, +17%) on that host.
+
+Two boundaries worth carrying:
+
+- **`xd://` resolution devices survive the switch.** omp's plan mode and every staged-action
+  finalization write to `xd://propose` / `xd://resolve` / `xd://reject`, and its plan prompt
+  names them unconditionally — so "turn xdev off" looks like it should break planning. It
+  does not: the write dispatcher matches the resolution devices BEFORE the mount check.
+  `[측정]` with `xdev: false`, plan mode reached `write xd://propose` and the approval dialog
+  normally.
+- **The narrow alternative keeps the wrapper.** `tools.xdevInlineDevices:
+  ["mcp__entwurf_bridge_*"]` inlines only our schemas (+1,013 tokens instead of +3,127) and
+  also fixed the send in the same measurement — but the 11 devices stay off top-level, `lsp`
+  included, and the listing/delivery verb stays shared. Prefer it only on a host carrying so many MCP servers
+  that the full top-level toolset is the larger problem.
+
+All of the above is measured against omp 18.0.0 and is a setting, not a contract: re-measure
+at a vendor upgrade.
+
 Registration is tools, not identity: sending needs the birth extension
 (`install-omp-bridge`), whose sender marker is keyed to the omp host's OWN pid — omp runs
 its extensions in-process, so the marker's owner, the host, and the MCP child's parent are

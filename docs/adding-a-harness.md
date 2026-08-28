@@ -299,6 +299,15 @@ Registration puts `entwurf_*` in the harness's hands. That is *all* it does.
     rather than Claude Code's `mcp__entwurf-bridge__entwurf_v2`. Digits in the middle become an
     underscore rather than simply disappearing. The live OMP tool list remains the acceptance
     oracle.
+  - **And the name is not the INVOCATION.** A harness may not expose MCP tools as callable
+    functions at all, so the spelling can be right while the calling convention is something
+    else entirely — a token-saving default is the usual reason. `[측정]` omp 18.0.0 mounts MCP
+    tools as `xd://<tool>` virtual devices (`tools.xdev`, default on) that are READ for the
+    schema and WRITTEN to for execution, and its `tools.xdevDocs` default keeps those schemas
+    out of the prompt entirely; under that default a plain-language send listed peers and then
+    falsely reported delivery, with nothing enqueued (#87). Measure the invocation form, name
+    the setting that governs it, and put the required value in the operator doc. A tool surface
+    that is only correct under a non-default setting is not admitted by its name.
 
   That document also holds the anonymous hatch and the PATH/env boundary. Bookmark it; a
   lane that could not find it burned three sessions re-deriving what it already said.

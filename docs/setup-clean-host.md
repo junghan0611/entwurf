@@ -229,6 +229,25 @@ directory, and the omp extension and `doctor-omp-bridge` do not share one — th
 then report on a directory the extension never writes to. A refused value mints nothing and
 turns the doctor's runtime axis red.
 
+**One vendor setting is required, and the default is wrong for a citizen.** omp's
+`tools.xdev` (default ON) mounts MCP tools as `xd://<tool>` devices and removes them from the
+model's top-level toolset, so `entwurf_v2` is reached by WRITING JSON to a virtual file rather
+than by calling a tool — and with `tools.xdevDocs` at its `builtins` default its schema is not
+in the prompt at all. On that default a plain "send this to garden id X" was measured to list
+peers and then CLAIM the send without ever dispatching. Put this in `~/.omp/agent/config.yml`
+and restart the session:
+
+```yaml
+tools:
+  xdev: false
+```
+
+It disables nothing — it exposes every enabled tool top-level, omp's own `lsp`, `debug`,
+`browser` and `ast_edit` included, which the default was hiding as well. Plan mode and staged
+`xd://resolve` / `xd://propose` finalization keep working. The rationale, the numbers and the
+narrower `tools.xdevInlineDevices` alternative are in
+[`external-mcp-host.md`](./external-mcp-host.md).
+
 Birth happens when the TUI OPENS (not on the first prompt, unlike Copilot), and the garden id
 appears on omp's status line as `🪛 <garden-id> omp`. `/new`, fork and in-TUI resume mint the
 replacement session's own record. Task subagents of that session are refused by design — they
