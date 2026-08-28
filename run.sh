@@ -185,6 +185,7 @@ Usage:
   ./run.sh smoke-agy-install-state    # agy MCP + exact permission ownership regression: isolated HOME+XDG, adopt/state/inverse, symlink refuse, truthful setup outcomes. Offline/deterministic
   ./run.sh smoke-setup-verdict        # #86 C1+C3b aggregate setup verdict fixture: all-absent SKIP/green, pi presence+floor, detected-FAIL nonzero, copilot four-unit composition (present=independent PASS/FAIL rows, absent=zero-state SKIP), installed-mode named branch, credential store untouched. Offline/deterministic
   ./run.sh check-agy-permission-matrix # AGY permission CONTRACT SPACE as a literal table (55 cells): parser-state × operation × settings × ownership × precedence with stated exclusion rules; expectations are hand-written literals, never read from the SUT. Offline/deterministic (deps: python3)
+  ./run.sh smoke-omp-receive-live      # #87 bundle B acceptance: another harness wakes an ALREADY-OPEN omp citizen, which reads its inbox and answers in the same session. Decides its own outcome from the capability registry — omp without a drainable mailbox is a protocol SKIP (no receiver unit exists to arm), which an unattended release-gate reports and `--cut` reads as RED; a registry that claims a receive rail with no acceptance body here is a FAIL
   ./run.sh smoke-entwurf-chain-live    # LIVE cross-harness delivery chain: native Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox terminus, proving sender identity/replyable at every hop and a real read receipt at the end. Prerequisites (claude on PATH, pi credentials per backend) report protocol SKIP, never a pass
   ./run.sh check-release-gate-outcomes  # release-gate STEP OUTCOME protocol (P1): one skip exit code shared by the shell + TS halves, classifier never rounds a skip up to a pass, `--cut` refuses a MUST SKIP while a bare diagnostic stays exit 0, no LIVE smoke keeps the old exit-0 skip shape, and both real skip surfaces are INVOKED and observed to propagate the code
   ./run.sh check-gate-qualification    # kill-proof qualification (the gate-of-gates): runner self-test (classifier truth table + synthetic negatives incl. wrong-reason/hang/control-red/impurity) + committed mutant manifests (scripts/mutants/*.json) run in an isolated snapshot repo under control→mutant→restore→control; the real checkout is never written. Evidence = claim IDs + killed mutant IDs, never assertion counts
@@ -5410,6 +5411,11 @@ release_gate() {
   run_live_step "smoke-claude-native-resume-live (native Claude Code resume + meta-bridge neutrality)" gate bash "$self" smoke-claude-native-resume-live
   run_live_step "smoke-entwurf-chain-live (P3: Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox, identity + receipt)" gate bash "$self" smoke-entwurf-chain-live
   run_live_step "smoke-mux-lifecycle-live (mux public-harness lifecycle: fresh -> send -> dormant -> same-id visible resume -> recall)" gate bash "$self" smoke-mux-lifecycle-live
+  # #87 bundle B: MUST, and today an honest SKIP. omp is admitted as an OUTBOUND-only
+  # citizen, so the garden is one-way for it — this step is what stops a cut from
+  # shipping that asymmetry silently. It reads the registry, so it turns itself into a
+  # real demand the moment bundle B moves omp's wakeMode.
+  run_live_step "smoke-omp-receive-live (#87 bundle B: other harness -> open omp citizen, addressed receive + roundtrip)" gate bash "$self" smoke-omp-receive-live
 
   # 4. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
   #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never
@@ -5690,6 +5696,12 @@ case "$cmd" in
     ;;
   smoke-acp-bundled-mcp-live)
     smoke_acp_bundled_mcp_live
+    ;;
+  smoke-omp-receive-live)
+    # #87 bundle B — the acceptance that makes omp's one-way garden executable.
+    # Reads the capability registry and reports its own PASS/SKIP/FAIL; see the
+    # header of the script for the three branches.
+    (cd "$REPO_DIR" && bash scripts/smoke-omp-receive-live.sh)
     ;;
   smoke-entwurf-chain-live)
     # P3 — the cross-harness delivery CHAIN on real authenticated rails:

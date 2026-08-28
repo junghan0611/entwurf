@@ -826,7 +826,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"release-gate": 12,
 		"resume-args": 6,
 		"resume-launch-identity": 6,
-		"self-address": 3,
+		"self-address": 5,
 		"setup-verdict": 10,
 		"source-install": 2,
 		"v2-surface": 7,

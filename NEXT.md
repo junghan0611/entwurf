@@ -20,7 +20,8 @@
 - **되는 것 (측정, 2026-08-28 oracle):** OMP TUI가 열리면 citizen 하나를 mint하고, 상태줄에 garden id를 보이고, 자기 이름으로 `entwurf_v2` outbound를 보낸다. task subagent는 `mode=print`로 scope-refused되어 아무것도 mint하지 않는다. 벤더 `/mcp list`가 native 우선을 확인한다.
 - **안 되는 것 (설계된 경계):** 다른 harness → OMP 답장. receiver marker도 mailbox arm도 없고 watch를 쥔 프로세스가 없다(`pi-extensions/meta-bridge-omp.ts:17`). dispatch는 `mailbox-undeliverable`로 fail-closed. OMP는 `entwurf_fresh_call`로 열 수 없다. registry는 `D0`, 이는 정확한 표기다.
 - **운영자 필수 설정:** `~/.omp/agent/config.yml`에 `tools: xdev: false`. 기본값(`tools.xdev: true` + `xdevDocs: builtins`)에서는 MCP 도구가 `xd://` 가상 device로 감싸이고 스키마가 프롬프트에 없어, 자연어 발신이 **거짓 성공 보고**로 끝난다(측정). 근거·숫자는 `docs/external-mcp-host.md` OMP 절.
-- **Next:** GLG가 land 방식(merge/PR)과 0.16.0 cut 여부를 정한다. Bundle B는 별도 grant.
+- **컷은 이제 코드가 막는다:** `smoke-omp-receive-live`가 release-gate MUST 스텝으로 배선됐다. capability registry를 읽어 omp가 drainable mailbox를 갖지 않는 동안 protocol SKIP(exit 97)을 반환하므로, 무인 `release-gate`는 그것을 보고하고 **`--cut`은 빨강**이다. 하드코딩된 실패가 아니다 — Bundle B가 `wakeMode`를 옮기는 순간 이 스텝은 스스로 실제 왕복 영수증을 요구하기 시작하고, 등급만 옮기고 몸통이 없으면 FAIL한다.
+- **Next:** GLG가 land 방식(merge/PR)을 정한다. 0.16.0 cut은 Bundle B 전까지 위 게이트가 막는다 — 되돌리려면 `run_live_step` → `run_behavior_step` 한 단어. Bundle B는 별도 grant.
 - **Boundary:** Bundle A가 사는 것은 **OMP → others outbound**뿐이다. 대칭(others → OMP)은 Bundle B이며 아직 없다; supported-harness/grade 선언으로 앞당기지 않는다.
 - **Read:** #87 thread · `docs/setup-clean-host.md` §4b · `docs/external-mcp-host.md` OMP row · `docs/adding-a-harness.md` steps 3, 3.5, 5, 6, 7.
 - **Do not touch:** Bundle B receive · Bundle C fresh/grade · README/setup support admission · DELIVERY/registry grade.
@@ -42,7 +43,7 @@
 - **L2 CHANGELOG:** `## Unreleased`가 비어 있고 v0.15.1 이후 커밋이 쌓여 있다. cut을 하면 `tag-release`가 채운다.
 - **L3 doctor가 모르는 설정:** `doctor-omp-mcp`는 `tools.xdev`를 보지 않는다. 설정이 기본값이면 doctor는 green인데 모델은 도구를 제대로 못 부른다. doctor 셀 하나로 넣을지, Bundle C의 preflight 능력으로 올릴지 결정 필요.
 - **L4 표기 다듬기:** `entwurf_self`가 omp 시민에게 `metaDeliveryDomain: "self-fetch"` + `mailboxPath`를 렌더한다. `replyable:false`와 decider는 정직하므로 동작 결함은 아니지만, 드레인하는 프로세스가 없는 경로를 보여준다.
-- **L5 주소 지정 공백 → #90으로 승격:** `entwurf_peers`에서 claude-code 시민은 `model=(unknown)`(측정: 0/353). 원인 가설은 "벤더는 문자열 `model`을 주는데 우리 리더가 `{id}`/`model_id`만 받는다"이나, 그 근거로 쓴 `~/repos/3rd/claudecode`는 **한때 공개됐던 소스 스냅샷이지 설치된 제품이 아니다** — step 1이 금지하는 오라클이므로 상속·미검증으로 강등. 살아 있는 제품에서 SessionStart 봉투를 실제로 캡처해야 결정된다.
+- **L5 claude 시민의 model 필드 — 답 나옴, 고치는 일만 남음 (#90 CLOSED):** 설치된 Claude Code **2.1.245**에서 우리 훅 stdin을 캡처한 결과, interactive `SessionStart` 봉투는 `model`을 **문자열**로 보낸다(`claude-opus-5[1m]`). print 모드(`claude -p`)는 아예 안 보낸다. 우리 리더(`meta-bridge-hook.ts:184-191`)가 객체 `.id`/`model_id`만 받아 그 문자열을 버리므로 claude-code 레코드는 0/353이다. 남은 일: 리더를 문자열 수용으로 넓히고 birth-hook fixture로 고정하되 **print 모드의 부재도 같이 고정**한다. 벤더 버전이 오르면 캡처를 다시 떠야 답이 유지된다. 별도 grant.
 - **L8 OMP child가 bridge 권한을 물려받는다 (측정, GLG 세션 2026-08-28):** OMP task child의 `entwurf_self`는 **부모의 garden id**를 반환한다(두 번째 주소 없음 — §3.5 요구사항 충족, 게이트가 증명하는 그대로). 그러나 그 빌린 신원으로 `entwurf_v2`와 `entwurf_fresh_call`을 호출할 수 있다. §3.5(b)가 도구 차용을 의도적으로 허용하므로 깨진 불변식은 아니고, 열린 질문은 **내부 agent가 dispatch·형제 생성 권한을 가져도 되는가**이며 이는 OMP 한정이 아니라 가든 전역이다. 값싼 울타리 후보 측정: omp 18.0.0에 subagent의 MCP 접근을 막는 `mcp.*` 키는 없으나 `task.enableLsp`(기본 false)가 **subagent별 개별 도구 차단 기제가 존재함**을 증명한다. 자체 tool set을 든 custom agent 정의는 미검증 단서.
 - **L6 벤더 드리프트:** 측정은 omp 18.0.0 기준. 세션 중 18.0.9까지 올라갔다. `mode === "tui"` 판별자와 `xd://` 동작은 업그레이드 시 재측정 대상.
 - **L7 ROADMAP:** "현재" 절이 아직 측정 단계로 적혀 있다.
@@ -55,7 +56,7 @@
 # DURABLE LINKS
 
 - #87: https://github.com/junghan0611/entwurf/issues/87
-- #90 (claude-code model 필드, 별도 레인): https://github.com/junghan0611/entwurf/issues/90
+- #90 (claude-code model 필드, CLOSED — 측정 완료, 리더 수정만 남음): https://github.com/junghan0611/entwurf/issues/90
 - Admission path: `docs/adding-a-harness.md`
 - OMP operator boundary: `docs/setup-clean-host.md` §4b
 - OMP tool-surface dialect: `docs/external-mcp-host.md` OMP row
