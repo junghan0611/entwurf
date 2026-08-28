@@ -59,6 +59,10 @@ measurements first, from the vendor's own artifacts and processes.
    including bundled SDKs, extension APIs, and the feature gates that make them load.
 5. **Parent process topology.** Whether the hook process and the MCP child share one
    ancestor — the join key step 6 depends on.
+6. **The environment vocabulary it inherits.** Which variable names the vendor reads, and
+   whether any of them is a name *entwurf already owns*. A harness that is a FORK of another
+   one keeps its parent's spelling, so a single variable ends up with two owners and two
+   meanings, and the collision is invisible until a record lands in the wrong store.
 
 - (a) Source: the vendor's shipped bundle, its `--help`, its own CLI writer, and a live
   process tree. Not our assembler, and not a schema file that turns out to describe a
@@ -82,6 +86,13 @@ measurements first, from the vendor's own artifacts and processes.
 
 **The oracle is the vendor artifact or the vendor process — never our own assembler.**
 A gate that drives our installer proves our installer; only the vendor proves the vendor.
+
+**And never the resolver under test.** When two halves of a backend are supposed to agree by
+sharing one function, `halfA === halfB === sharedResolver()` proves nothing: a wrong answer in
+the shared function balances that equation perfectly. The expected value has to be an
+independent literal the test derives itself. `[측정]` #87's four-root binding was first
+proposed with the production resolver as its own oracle; the mutant that reinstates the defect
+survives that shape semantically green, so both halves are compared against test-built paths.
 
 ---
 
@@ -141,12 +152,42 @@ A trusted lifecycle event of the harness turns a session into a record.
     asserts a record (`check-copilot-birth-hook`; no vendor binary, no model turn);
   - **real native admission** — an actual session of the harness mints a record. Only the
     second proves the vendor fires our unit at all.
-- (c) Skip the split and a green gate reads as a live harness. Two things belong in the
-  payload, not in prose:
+- (c) Skip the split and a green gate reads as a live harness. Four things belong in the
+  payload and its doctor, not in prose:
   - **Refuse a degraded envelope; never guess a field.** A record minted from a guessed id
     is a citizen no live session can be joined back to.
   - **Say when birth happens.** `[측정]` A Copilot citizen is born when it is first spoken
     to, not when its window opens.
+  - **When step 1(6) found a shared variable, give the backend an explicit root policy —
+    all of it, as one bundle.** Do not change the shared defaults every other backend uses;
+    add a per-backend resolver, and let BOTH halves (the in-process/hook payload and its MCP
+    child) read that one leaf so their agreement is by construction. The bundle is
+    indivisible: sessions, mailbox, senders and receivers move together, because splitting
+    mailbox from receivers is FALSE DELIVERABILITY — dispatch trusts an armed receiver marker
+    in one root and enqueues into the mailbox of the other while the real watcher drains the
+    first. An in-process extension cannot be repaired at exec, so its half must pass explicit
+    directories in code; a child process may scrub the foreign variable in ITSELF, never in
+    the host, where it is the vendor's own meaning. `[측정]` OMP is a pi fork that reads
+    `PI_CODING_AGENT_DIR`, and `setProfile` exports it for every named profile — so a plain
+    `omp --profile work` was enough to split the store (#87 B1).
+  - **Every input to that policy must be unambiguous ACROSS PROCESSES, so fail closed on the
+    ones that are not.** The halves do not share a working directory — one runs wherever the
+    operator launched the harness, the doctor runs wherever its own dispatcher `cd`s to — so
+    resolving a relative override quietly makes cwd a garden-root authority and the two halves
+    address different stores while both look correct. Accept absolute and `~`-rooted values,
+    refuse the rest BY NAME, and let both halves take the refusal from the same leaf. Then
+    check that the refusal is still legible: a policy that also silences its own diagnostic
+    log is worse than the split it prevents. `[측정]` one `ENTWURF_META_SESSIONS_DIR=relative-records`
+    resolved to two different stores, and the doctor would have reported NOT-YET off the empty
+    one (#87 A2).
+  - **Select a per-backend policy on the EXACT label its writer emits.** A courtesy `trim()`
+    (or a case-fold) makes a drifted value foreign to the doctor and ours to the runtime, so
+    an entry the doctor calls red still mutates that process. Writer, doctor and consumer must
+    compare the same literal. `[측정]` #87 A3.
+  - **A doctor may not claim admission from a text match.** "This host has a citizen" is a
+    claim on the record-authority axis, and the writer earns it by certifying the whole active
+    store. Ask through the same certified surface. `[측정]` A `grep '"backend": "omp"'` printed
+    PASS for a file containing nothing but `{ "backend": "omp" }` (#87 B3).
 
 ---
 
@@ -198,6 +239,13 @@ satisfy this support contract.
   - **The preimage is the current value on disk**, even when that value is byte-identical to
     what we would write. Every rail does it this way; inventing a "there was nothing here
     before" case for one backend is the special-casing this document exists to prevent.
+  - **A shape is never a proof of ownership.** Ownership STATE is the only licence for a
+    destructive step. A structural oracle answers "is this a complete unit", not "is this
+    ours": it compares no bytes, rejects no extra files, and establishes no provenance. Adopt
+    on that answer and the installer moves a stranger's artifact aside, publishes over it and
+    deletes the preimage — and the inverse then removes the path on the same unproven claim.
+    A no-state artifact at our path REFUSES. `[측정]` #87 B2, where the destroyed candidate
+    was any hand-made extension carrying four expected filenames.
 
 ---
 
@@ -230,6 +278,20 @@ Registration puts `entwurf_*` in the harness's hands. That is *all* it does.
     prove the effective source, precedence/shadowing, live connection, expected tools and the
     harness's actual public tool-name dialect. A best-effort importer that silently skips a bad
     server is useful interoperability, not an entwurf doctor.
+  - **Confine the writer to the target it owns, and let one state own one target.** The
+    product target is computed from the vendor's own resolution — `<resolved agent dir>/<the
+    vendor's file>` — never taken from a free-form path variable. An explicit env seam lowers
+    the odds of an accident; it grants no ownership, and an "X-only" writer that accepts an
+    arbitrary path can be aimed at another harness's config. Sandbox at the layer the vendor
+    resolves from instead. And when the target moves (a profile switch), REFUSE: overwriting
+    the single ownership state strands the previous target's managed entry with no inverse.
+    `[측정]` #87 D1.
+  - **Runtime truth and ownership truth are separate axes, in the doctor's code as well as in
+    its prose** (Hard Rule 13). A malformed entry under our key is broken for the vendor
+    whether or not we installed anything there — and it still claims the dedupe slot, so it
+    suppresses the import too. Coupling redness to the presence of install-state turns exactly
+    that state into a PASS. `[측정]` #87 B4: `mcpServers.entwurf-bridge = null` printed
+    `native-wins` and exited 0.
   - **Callback tool names are harness dialect.** Derive and measure the name the harness exposes;
     never copy a sibling's spelling. OMP v18.0.0, for example, lowercases and replaces every
     `[^a-z_]+` run with `_`, collapses underscore runs, then trims edge underscores; source

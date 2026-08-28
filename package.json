@@ -62,6 +62,7 @@
 		"pi/meta-bridge-copilot/entwurf-meta-receive-copilot/hooks/hooks.json",
 		"pi/meta-bridge-copilot/entwurf-meta-receive-copilot/scripts/copilot-hook-launch.sh",
 		"pi/copilot-receive/entwurf-receive/extension.mjs",
+		"pi/meta-bridge-omp/entwurf-meta-omp/package.json",
 		"pi/skill-plugin-example/",
 		"run.sh",
 		"AGENTS.md",

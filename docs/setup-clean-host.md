@@ -209,6 +209,26 @@ than guess when an inherited `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR` or `PI_PROFI
 ambiguous: omp is a pi fork and reads pi's env vocabulary, so those names no longer say which
 harness they address. Pass `ENTWURF_OMP_AGENT_DIR` if you genuinely mean a non-default one.
 
+Two things the installers deliberately will NOT do. They never adopt an artifact already
+sitting at their path without entwurf's own ownership state — a directory that merely looks
+like our unit could be yours, and adopting it would overwrite it with no way back — so a
+no-state path is a named refusal you resolve by hand. And the MCP writer's target is exactly
+`<resolved omp agent dir>/mcp.json`; there is no path override, so it can never be aimed at
+another tool's config.
+
+**Where an omp citizen's garden artifacts live.** Under `$HOME/.pi/agent/meta-*`, the same
+garden every other citizen uses — and that stays true under `omp --profile work`. omp is a pi
+fork, so the vendor exports `PI_CODING_AGENT_DIR` for every named profile; for entwurf that
+name means pi's persistence root, so honouring it here would put an omp session's record in a
+different store (or in a pi sandbox). For backend omp it is read as the VENDOR's agent dir
+only, and never as a garden root. Its presence on a live omp is normal and is not a fault.
+The four `ENTWURF_META_*` variables remain the way to relocate the garden roots, and for
+backend omp each one must be **absolute or `~`-rooted** (`~` or `~/…`). A relative value is
+refused by name rather than resolved: it would resolve against each process's own working
+directory, and the omp extension and `doctor-omp-bridge` do not share one — the doctor would
+then report on a directory the extension never writes to. A refused value mints nothing and
+turns the doctor's runtime axis red.
+
 Birth happens when the TUI OPENS (not on the first prompt, unlike Copilot), and the garden id
 appears on omp's status line as `🪛 <garden-id> omp`. `/new`, fork and in-TUI resume mint the
 replacement session's own record. Task subagents of that session are refused by design — they

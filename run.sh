@@ -131,7 +131,7 @@ Usage:
   ./run.sh check-meta-v3-record        # deterministic gate: the ONE live record schema (v3) — canonical serialize/round-trip/mint, foreign-generation rejections name fresh-cut with the actual version value, strict keyset, no API
   ./run.sh check-mailbox-receipt-state # deterministic gate (0.11 Stage 0 step 3B): mailbox receipt state schema + store (stamp→persist→read-back) in a temp mailbox, strict keyset, no API
   ./run.sh check-copilot-birth-hook   # #82 gate: drives the real Copilot assembler into a temp dir, fires the baked launcher with NO ARGV (the way Copilot's `exec`-string schema forces), and requires a backend:"copilot" v3 record + attach + peer row + a SENDER marker the resolver joins back to that record, and still zero mailbox/receiver marker (who-sent needs a shared parent; a receiver needs a doorbell this backend has not got). Hermetic; no Copilot, no model turn
-  ./run.sh check-omp-birth-hook       # #87 gate: drives the real OMP assembler into a temp dir, imports the ASSEMBLED index.ts into a MOCK omp host and fires session_start/session_switch. tui mints one backend:"omp" record + a sender marker keyed to the host's OWN pid (the one-process join) + the garden id on the status line; print/rpc/json mint NOTHING (hasUI is true on the rpc rows, as in the vendor); switch attaches on the same native id and mints the replacement on a new one; still zero mailbox/receiver marker. Hermetic; no omp, no model turn
+  ./run.sh check-omp-birth-hook       # #87 gate: drives the real OMP assembler into a temp dir, imports the ASSEMBLED index.ts into a MOCK omp host and fires session_start/session_switch. tui mints one backend:"omp" record + a sender marker keyed to the host's OWN pid (the one-process join) + the garden id on the status line; print/rpc/json mint NOTHING (hasUI is true on the rpc rows, as in the vendor); switch attaches on the same native id and mints the replacement on a new one; the CERTIFIED receiver reader still finds no marker. Also the four-root joint binding: extension and omp-labeled bridge child resolve the same sessions/mailbox/senders/receivers bundle against test-built literals (never the production resolver as its own oracle), under a poisoned PI_CODING_AGENT_DIR and under four distinct ENTWURF_META_* overrides; the override grammar is absolute-or-~ and both halves plus the doctor refuse anything else by name; and a drifted provenance label selects no root policy at all. Hermetic; no omp, no model turn
   ./run.sh check-copilot-receive-arm  # #82 RAIL 5 gate: the REAL receiver installer + the REAL extension.mjs forked with a stubbed SDK. Arms only after birth, marker owned by the WATCHER pid, self-fetch dispatch answer, doorbell carries the garden id and NOT the body, id-drift/foreign-parent refusals. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-launch       # #82 RAIL 7 gate: the MANAGED launch `entwurf copilot`, driven through its public address against a FAKE VENDOR on a sandbox PATH. Receiver precondition refusals, EXTENSIONS token + operator token preservation, injected defaults before the `--` terminator, byte-identical argv, the 11 explicit permission/surface policy overrides that suppress `--yolo`, exec (not fork) pid identity, exit passthrough, recursion refusal. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-statusline   # #82 Copilot custom-footer renderer. session_id → ready/?/gid + rail `cop`; exit 0. IN pnpm check. No Copilot, no model turn
@@ -193,7 +193,7 @@ Usage:
   ./run.sh smoke-agy-statusline-state # agy ambient garden-id statusLine install/doctor/inverse regression. Offline/deterministic
   ./run.sh smoke-copilot-statusline-state # Copilot custom-footer install/doctor/inverse regression. Offline/deterministic
   ./run.sh smoke-copilot-mcp-state       # Copilot MCP install/doctor/inverse regression. Offline/deterministic
-  ./run.sh smoke-omp-bridge-state        # OMP birth-extension install/doctor/inverse regression: placement, stale-writer detection, honest inverse, foreign/symlink refusal, ambiguous-agent-dir refusal (ledger M6). Offline/deterministic
+  ./run.sh smoke-omp-bridge-state        # OMP birth-extension install/doctor/inverse regression: placement, stale-writer detection, honest inverse, no-state refusal (structurally VALID as well as foreign), symlink refusal, ambiguous-agent-dir refusal (ledger M6), and a poisoned PI_CODING_AGENT_DIR that attracts no artifact. Fully sandboxed HOME/PI/XDG. Offline/deterministic
   ./run.sh smoke-agy-hooks-state      # agy PreInvocation birth/sender hook install/doctor/inverse + direct stdin→meta-record regression. Offline/deterministic
   ./run.sh smoke-user-scope-citizen   # 0.12.6 install-boundary: pi packages[] registration SSOT (register-pi-package.py) — idempotent + preserves unrelated + remove symmetry + fails loud, and the #86 C2 explicit ownership cells (project scope still normalizes ITS OWN stale entries; user scope refuses other owners and only takeover-user-scope moves the shared entry). Offline/hermetic (deps: bash+python3)
   ./run.sh smoke-meta-prune           # 1.0.0 meta-bridge Phase 4: listing-only store janitor regression gate — classify keep/orphan/stale/ambiguous, delete nothing. Offline/deterministic (deps: bash+node)
@@ -214,13 +214,13 @@ Usage:
   ./run.sh install-copilot-mcp        # #82 RAIL 5: register ONE entwurf-bridge server in ~/.copilot/mcp-config.json (adopt / create / REFUSE symlink), type:local, install-state under $XDG_DATA_HOME/entwurf/copilot-mcp/
   ./run.sh uninstall-copilot-mcp      # honest inverse of install-copilot-mcp from install-state
   ./run.sh doctor-copilot-mcp         # static ownership/config/boot doctor; RED only when install-state exists
-  ./run.sh install-omp-bridge         # #87: install the OMP BIRTH extension into <omp agent dir>/extensions/entwurf-meta-omp (index.ts|js + lib + capability registry). No launcher and no bake — an omp hook is an in-process extension. Refuses when an inherited PI_CODING_AGENT_DIR/PI_CONFIG_DIR/PI_PROFILE makes the target agent dir ambiguous (ledger M6)
+  ./run.sh install-omp-bridge         # #87: install the OMP BIRTH extension into <omp agent dir>/extensions/entwurf-meta-omp (index.ts|js + lib + capability registry). No launcher and no bake — an omp hook is an in-process extension. Refuses when an inherited PI_CODING_AGENT_DIR/PI_CONFIG_DIR/PI_PROFILE makes the target agent dir ambiguous (ledger M6), and refuses ANY pre-existing artifact at the unit path that entwurf holds no ownership state for — a shape is not a proof of ownership
   ./run.sh uninstall-omp-bridge       # honest inverse from install-state (exact unit dir + recorded entry; no-state host REFUSES; state deleted LAST). Records already minted are preserved
-  ./run.sh doctor-omp-bridge          # #87: runtime axis (importable unit, writer/registry parity, mint vs sender-marker errors on SEPARATE axes, scope-fence receipts, live omp processes carrying inherited PI_SESSION_ID/PI_AGENT_ID) + ownership axis. Zero records = NOT-YET, never red
+  ./run.sh doctor-omp-bridge          # #87: runtime axis (importable unit, writer/registry parity, mint vs sender-marker errors on SEPARATE axes, scope-fence receipts, a root-grammar preflight that goes RED on a relative ENTWURF_META_* override instead of reporting on some other directory, CERTIFIED omp record count via meta-facts under the omp root policy — never a text grep, live omp processes carrying inherited PI_SESSION_ID/PI_AGENT_ID) + ownership axis. PI_CODING_AGENT_DIR is the vendor's own agent dir here and is reported as ignored, never as contamination. Zero records = NOT-YET, never red
   ./run.sh install-omp-mcp            # #87 step 5: write ONE omp-native entwurf-bridge server into <omp agent dir>/mcp.json with env ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/omp. The server key is a PINNED LITERAL, byte-identical to the Claude import's — same-key first-wins at native=100 > claude=80 is what SHADOWS the import (never disabledServers, which kills both). Adopt / create / REFUSE symlink, preimage recorded
   ./run.sh uninstall-omp-mcp          # honest inverse from install-state (restores the preimage, or removes a file we created); the Claude import becomes effective again
-  ./run.sh doctor-omp-mcp             # ownership + config + boot doctor, plus the EFFECTIVE-source read (native-wins / import-wins / both-suppressed) — a configuration read, never a runtime receipt. RED on foreign provenance or a disabledServers denylist even with no install-state
-  ./run.sh smoke-omp-mcp-state        # OMP MCP install/doctor/inverse regression incl. shadowing and the denylist refusal. Offline/deterministic
+  ./run.sh doctor-omp-mcp             # ownership + config + boot doctor, plus the EFFECTIVE-source read (native-wins / native-invalid / import-wins / both-suppressed) — a configuration read, never a runtime receipt. Runtime validity and ownership are SEPARATE axes: foreign provenance, a disabledServers denylist, and a malformed entry under our key are each RED even with no install-state
+  ./run.sh smoke-omp-mcp-state        # OMP MCP install/doctor/inverse regression incl. shadowing, the denylist refusal, target confinement + retarget refusal, and a malformed entry going RED with zero install-state. Fully sandboxed HOME/PI/XDG. Offline/deterministic
   ./run.sh install-copilot-receive    # #82 RAIL 5: install the RECEIVER extension (user scope ~/.copilot/extensions/entwurf-receive). Owns the artifact and CHECKS the launch flag; it never sets one (a launch does — see `./run.sh copilot`). Arms per session after birth
   ./run.sh uninstall-copilot-receive  # honest inverse from install-state; never removes a unit it did not install
   ./run.sh doctor-copilot-receive     # artifact + digest, COPILOT_CLI_ENABLED_FEATURE_FLAGS on the LIVE copilot processes (the silent failure), live receiver markers via the production reader, receiver log. RED only when install-state exists
@@ -244,7 +244,7 @@ Usage:
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
   ./run.sh check-pack-pin-matcher     # pure self-test of check-pack-install's pin-leak matcher against synthetic .pnpm lookalikes (version boundary: @0.84.30 must leak, @0.84.3 bare/peer-hash must pass); snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm run check:full): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
-  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (pins derived from the package.json devDep; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES)
+  ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (pins derived from the package.json devDep; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
   ./run.sh install [project-dir]      # INTERNAL part of `setup` (project .pi/settings.json wiring) + npm-consumer entry — prefer `setup`, don't call directly for dev
   ./run.sh remove [project-dir]       # remove entwurf entries from project .pi/settings.json (project scope only; global user-scope citizen left intact)
@@ -2908,6 +2908,13 @@ check_pack() {
     # #82 — the Copilot birth entry's compiled closure, for the same node_modules
     # strip-types refusal that forces the Claude one.
     "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook-copilot.js"
+    # #87 — the OMP birth entry's compiled closure. install-omp-bridge SELECTS this path
+    # under node_modules, and docs/setup-clean-host.md tells operators to run that installer,
+    # so its absence is not a degraded path: the installed installer dies at its own artifact
+    # check before assembling anything. The unit skeleton's package.json below is the other
+    # half — the installer copies it, and `pi/` ships per-FILE.
+    "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-omp.js"
+    "pi/meta-bridge-omp/entwurf-meta-omp/package.json"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
@@ -3161,6 +3168,13 @@ _check_pack_install_impl() {
     # #82 — the Copilot birth entry's compiled closure, for the same node_modules
     # strip-types refusal that forces the Claude one.
     "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook-copilot.js"
+    # #87 — the OMP birth entry's compiled closure. install-omp-bridge SELECTS this path
+    # under node_modules, and docs/setup-clean-host.md tells operators to run that installer,
+    # so its absence is not a degraded path: the installed installer dies at its own artifact
+    # check before assembling anything. The unit skeleton's package.json below is the other
+    # half — the installer copies it, and `pi/` ships per-FILE.
+    "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-omp.js"
+    "pi/meta-bridge-omp/entwurf-meta-omp/package.json"
     "mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
     "scripts/postinstall-chmod.cjs"
     "pi/entwurf-capabilities.json"
@@ -3891,6 +3905,76 @@ SH
   fi
   rm -rf "$cop_store"
   echo "[check-pack-install] installed Copilot birth unit assembles its compiled branch and mints a citizen from a no-argv launch"
+
+  # --- #87: the OMP birth unit's INSTALLED-PACKAGE branch ---------------------
+  # Same shape and same reason as the Copilot cell above, and it is here because the gap it
+  # closes was REAL, not theoretical: the compiled entry this installer selects under
+  # node_modules was in no emit include and no artifact list, so `entwurf install-omp-bridge`
+  # — which docs/setup-clean-host.md tells operators to run — died at its own artifact check
+  # on every installed host while every gate stayed green (Terra amendment review, #87 A1).
+  # The list entries above make that artifact's ABSENCE loud; this RUNS it, which is the half
+  # Hard Rule 11 says a list can never stand in for.
+  #
+  # No omp binary is faked into doing anything: the installer only asks whether one is on
+  # PATH (entwurf never installs a harness), and the unit is a module the vendor imports, not
+  # a process we launch — so the exercise imports the placed artifact the way omp does.
+  local omp_agent="$npm_tmp/omp-agent" omp_home="$npm_tmp/omp-home" omp_bin="$npm_tmp/omp-bin" omp_log
+  mkdir -p "$omp_agent" "$omp_home" "$omp_bin"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$omp_bin/omp"
+  chmod +x "$omp_bin/omp"
+  if ! omp_log=$(HOME="$omp_home" XDG_DATA_HOME="$omp_home/.local/share" ENTWURF_OMP_AGENT_DIR="$omp_agent" PATH="$omp_bin:$npmroot/node_modules/.bin:$PATH" "$npm_pkg/run.sh" install-omp-bridge 2>&1); then
+    fail "[check-pack-install] installed install-omp-bridge failed:"
+    echo "$omp_log" | tail -20 | sed 's/^/    /' >&2
+    return 1
+  fi
+  local omp_unit="$omp_agent/extensions/entwurf-meta-omp"
+  # Branch SELECTION, pinned exactly as the Copilot cell pins its own: an installed package
+  # must place the compiled entry and NO raw .ts, or the fire below could pass on a layout
+  # that silently chose the dev-clone branch.
+  if [ ! -f "$omp_unit/index.js" ] || [ -f "$omp_unit/index.ts" ]; then
+    fail "[check-pack-install] installed install-omp-bridge did not select the compiled branch (want index.js, no raw .ts) in $omp_unit"
+    ls -l "$omp_unit" 2>/dev/null | sed 's/^/    /' >&2 || true
+    return 1
+  fi
+  if [ ! -f "$omp_unit/lib/meta-session.js" ] || [ ! -f "$omp_unit/entwurf-capabilities.json" ] || [ ! -f "$omp_unit/package.json" ]; then
+    fail "[check-pack-install] installed omp unit is incomplete (want lib/meta-session.js + entwurf-capabilities.json + package.json) in $omp_unit"
+    return 1
+  fi
+  # Fired the way omp fires it: import the module, call the exported factory with a mock
+  # ExtensionAPI, and hand the tui host context to the birth edge.
+  local omp_fire
+  if ! omp_fire=$(OMP_UNIT="$omp_unit" HOME="$omp_home" node --input-type=module <<'JS' 2>&1
+const mod = await import(process.env.OMP_UNIT + "/index.js");
+const handlers = [];
+(mod.default ?? mod)({ on: (event, handler) => { if (event === "session_start") handlers.push(handler); } });
+const ctx = {
+  mode: "tui",
+  cwd: "/tmp",
+  ui: { setStatus: () => {} },
+  sessionManager: { getSessionId: () => "pack-omp-probe", getCwd: () => "/tmp", getSessionFile: () => null },
+};
+for (const handler of handlers) await handler({ type: "session_start" }, ctx);
+process.stdout.write("fired " + handlers.length + "\n");
+JS
+  ); then
+    fail "[check-pack-install] the installed omp unit failed to import/run from its placed location: $(printf '%s' "$omp_fire" | tr '\n' ' ' | cut -c1-300)"
+    return 1
+  fi
+  # Counted through the OWNER's certified projection, not a grep — and through the INSTALLED
+  # bin, so this also proves dist/scripts/meta-facts.js is reachable from a consumer. `env -u
+  # PI_CODING_AGENT_DIR` is the omp root policy: for backend omp that variable is the vendor's
+  # own agent dir and never a garden root (#87 B1).
+  local omp_citizens
+  omp_citizens=$(env -u PI_CODING_AGENT_DIR HOME="$omp_home" "$npm_pkg/run.sh" meta-facts 2>&1 | python3 -c '
+import json, sys
+facts = json.load(sys.stdin)
+print(sum(1 for c in (facts.get("citizens") or []) if c.get("backend") == "omp"))
+' 2>/dev/null) || omp_citizens=""
+  if [ "$omp_citizens" != "1" ]; then
+    fail "[check-pack-install] the installed omp unit did not mint exactly one CERTIFIED omp citizen (found ${omp_citizens:-<unreadable>}); log: $(tail -1 "$omp_home/.pi/agent/meta-bridge-hook.log" 2>/dev/null)"
+    return 1
+  fi
+  echo "[check-pack-install] installed OMP birth unit places its compiled branch and mints a certified citizen from a tui birth edge"
   python3 - "$mb_cfg/settings.json" "$mb_home/.claude.json" "$stable_asm" <<'PY'
 import json, sys
 settings = json.load(open(sys.argv[1]))

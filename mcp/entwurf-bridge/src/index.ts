@@ -83,6 +83,7 @@ import {
 	resolveTrustedMetaSenderIdentity,
 } from "../../../pi-extensions/lib/meta-sender-identity.ts";
 import {
+	applyOmpBridgeChildRootPolicy,
 	defaultMetaMailboxDir,
 	defaultMetaSessionsDir,
 	makeStoreRecordReader,
@@ -95,6 +96,29 @@ import { RESUME_CALL_REJECT_HINT, resumeCall } from "../../../pi-extensions/lib/
 import { registerNativeConversation } from "../../../pi-extensions/lib/native-push/register.ts";
 
 const HOME = os.homedir();
+
+// ============================================================================
+// OMP root policy — FIRST, before any lazy default-root consumer (#87 B1).
+//
+// This runs at module load for one reason: every meta-root consumer below resolves its
+// directory lazily inside a tool handler, and the whole point of the policy is that none
+// of them may ever see the foreign value. It is a no-op for every other child — it fires
+// only when this process carries the exact `external-mcp/omp` provenance label its managed
+// entry writes, and then it removes `PI_CODING_AGENT_DIR` from THIS process alone (the omp
+// HOST keeps it: there the variable is the vendor's own agent dir) and pins the four
+// entwurf-owned meta roots to the shared leaf's answer. See `applyOmpBridgeChildRootPolicy`.
+// ============================================================================
+try {
+	applyOmpBridgeChildRootPolicy(process.env, HOME);
+} catch (err) {
+	// FAIL CLOSED, LOUDLY. The policy refuses an ambiguous garden root (a relative
+	// `ENTWURF_META_*` override, #87 A2), and a bridge child that cannot say which store it
+	// is addressing must not boot with a guess — the extension half received the identical
+	// refusal, so proceeding here is exactly the split the policy exists to prevent.
+	console.error(`[entwurf-bridge] fatal: ${err instanceof Error ? err.message : String(err)}`);
+	process.exit(1);
+}
+
 // Directory SOURCE is this adapter's own policy — the bridge honours an explicit
 // ENTWURF_DIR override the pi side does not. The path GRAMMAR is the shared leaf.
 const ENTWURF_DIR = process.env.ENTWURF_DIR ?? defaultControlSocketDir(HOME);

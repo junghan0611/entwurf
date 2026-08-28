@@ -115,10 +115,25 @@ def checked_state(state_path: str) -> dict:
 
 
 def prior_state(state_path: str, config_path: str) -> dict | None:
+    """The ownership state for THIS target, or a refusal.
+
+    A state that names a DIFFERENT config is not "no state" (#87 D1). Treating it as
+    absent captured a fresh preimage and overwrote the single state file, stranding the
+    previous profile's managed entry with no inverse left to remove it. There is one
+    state and one target: changing the target is uninstall-then-install, in that order.
+    """
     if not os.path.exists(state_path):
         return None
     state = checked_state(state_path)
-    return state if state["managedConfigPath"] == os.path.abspath(config_path) else None
+    if state["managedConfigPath"] != os.path.abspath(config_path):
+        die(
+            3,
+            f"omp-mcp: install-state {state_path} already manages {state['managedConfigPath']}, "
+            f"but this host now reads {os.path.abspath(config_path)}. One state owns one target: "
+            "overwriting it would strand the first entry with no inverse. Run uninstall-omp-mcp with "
+            "the ORIGINAL omp agent dir / profile selected, then install here.",
+        )
+    return state
 
 
 def disabled_names(data: dict) -> list:
@@ -214,6 +229,33 @@ def uninstall(state_path: str) -> None:
     sys.stdout.write(f"uninstalled {config_path}\n")
 
 
+def native_entry_state(servers: dict) -> str:
+    """`absent` | `invalid` | `present` — STRUCTURAL validity of the entry under our key.
+
+    Deliberately says nothing about ownership, about which command it names, or about
+    provenance: those are other axes with other verdicts. This one answers only "would omp
+    be able to load this at all", which is what makes an invalid entry red without an
+    install-state (#87 B4).
+    """
+    if not isinstance(servers, dict) or SERVER_KEY not in servers:
+        return "absent"
+    server = servers.get(SERVER_KEY)
+    if not isinstance(server, dict):
+        return "invalid"
+    if server.get("type") not in (None, "stdio"):
+        return "invalid"
+    command = server.get("command")
+    if not isinstance(command, str) or not command:
+        return "invalid"
+    args = server.get("args", [])
+    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+        return "invalid"
+    env = server.get("env", {})
+    if not isinstance(env, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
+        return "invalid"
+    return "present"
+
+
 def _doctor_invocation(config_path: str, command: str):
     if os.path.islink(config_path):
         return "symlink", None
@@ -225,26 +267,20 @@ def _doctor_invocation(config_path: str, command: str):
         return "invalid-json", None
     if SERVER_KEY in disabled_names(data):
         return "self-disabled", None
-    servers = data.get("mcpServers")
-    if not isinstance(servers, dict) or SERVER_KEY not in servers:
+    servers = data.get("mcpServers") if isinstance(data.get("mcpServers"), dict) else {}
+    # STRUCTURE first, through the one shared predicate — so "is this loadable at all" has
+    # a single answer here and in doctor-shadow, and cannot drift into two.
+    state = native_entry_state(servers)
+    if state == "absent":
         return "not-ours", None
-    server = servers.get(SERVER_KEY)
-    if not isinstance(server, dict):
+    if state == "invalid":
         return "invalid-entry", None
-    found = server.get("command")
+    server = servers[SERVER_KEY]
+    found = server["command"]
     args = server.get("args", [])
     env = server.get("env", {})
-    # `type` may be absent (stdio default) but never something else.
-    if server.get("type") not in (None, "stdio"):
-        return "invalid-entry", None
-    if not isinstance(found, str) or not found:
-        return "invalid-entry", None
     if found != command:
         return "not-ours", None
-    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
-        return "invalid-entry", None
-    if not isinstance(env, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
-        return "invalid-entry", None
     # The provenance label is the reason this entry exists. An entry that boots but
     # introduces the session as some other harness is not our entry.
     if env.get(ENV_KEY) != EXTERNAL_AGENT_ID:
@@ -275,12 +311,18 @@ def doctor_shadow(config_path: str, *import_paths: str) -> None:
     the live oracle, and it is taken once as a LIVE receipt rather than re-derived here.
 
     Prints one line per fact, then a verdict line:
-      native <present|absent>
+      native <present|invalid|absent>
       import <path> <key-present|key-absent|unreadable>
       disabled <yes|no>
-      verdict <native-wins|import-wins|both-suppressed|no-entry>
+      verdict <native-wins|native-invalid|import-wins|both-suppressed|no-entry>
+
+    RUNTIME VALIDITY AND OWNERSHIP ARE SEPARATE AXES (Hard Rule 13, #87 B4). "The key is
+    present" is not "the entry works": a null / non-object / malformed value under our key
+    still claims the dedupe slot, so the import is suppressed AND nothing loads. Reporting
+    that as `native-wins` turned a broken effective source into a PASS whenever no
+    ownership state happened to exist. An invalid entry gets its own verdict, and it is red
+    on the runtime axis whether or not entwurf owns anything here.
     """
-    native_present = _doctor_invocation(config_path, "")[0] not in ("file-absent", "not-ours", "invalid-json", "symlink")
     data = {}
     if os.path.exists(config_path) and not os.path.islink(config_path):
         try:
@@ -288,8 +330,8 @@ def doctor_shadow(config_path: str, *import_paths: str) -> None:
         except SystemExit:
             data = {}
     servers = data.get("mcpServers") if isinstance(data.get("mcpServers"), dict) else {}
-    native_present = SERVER_KEY in servers
-    sys.stdout.write(f"native {'present' if native_present else 'absent'}\n")
+    native_state = native_entry_state(servers)
+    sys.stdout.write(f"native {native_state}\n")
 
     import_hit = False
     for path in import_paths:
@@ -311,7 +353,11 @@ def doctor_shadow(config_path: str, *import_paths: str) -> None:
 
     if disabled:
         verdict = "both-suppressed"
-    elif native_present:
+    elif native_state == "invalid":
+        # It still claims the dedupe key, so the import is suppressed too — but nothing
+        # loads. Never `native-wins`.
+        verdict = "native-invalid"
+    elif native_state == "present":
         verdict = "native-wins"
     elif import_hit:
         verdict = "import-wins"

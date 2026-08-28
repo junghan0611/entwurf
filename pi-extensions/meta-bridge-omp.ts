@@ -7,6 +7,7 @@
  *
  *   session_start | session_switch   (omp in-process extension events)
  *     -> mode === "tui" ?            the §3.5 discriminator — the ONE new predicate in this lane
+ *        -> roots()                  the shared OMP four-root policy, resolved in code
  *        -> upsertMetaSession(omp)   idempotent create/attach the record
  *           -> gardenId              the session's garden address
  *        -> writeMetaSenderMarker(process.pid)   who-sent join for this host's MCP children
@@ -62,7 +63,8 @@
  *
  * FAILURE POLICY, inherited from the Claude and Copilot units: BEST-EFFORT + LOG. Never
  * throw into the operator's TUI, never block a turn. On any error append a level-tagged
- * line to `<pi-agent-dir>/meta-bridge-hook.log` — the same file the other native units
+ * line to `<omp garden root>/meta-bridge-hook.log` (see `roots()` — the OMP root policy,
+ * NOT `PI_CODING_AGENT_DIR`) — the same file the other native units
  * append to, tagged `[omp]` so one grep still covers the host and each doctor stays
  * rail-scoped (`scripts/meta-bridge-hook-log.sh`). The fail-loud surface is
  * `./run.sh doctor-omp-bridge`, which reads that log.
@@ -77,8 +79,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
-	defaultMetaSessionsDir,
 	isPlausibleOwnerPid,
+	type MetaRootBundle,
+	ompMetaRootBase,
+	ompMetaRoots,
 	upsertMetaSession,
 	writeMetaSenderMarker,
 } from "./lib/meta-session.ts";
@@ -98,6 +102,45 @@ const STATUS_KEY = "entwurf";
 
 /** The backend id this unit mints under. Registered in `META_BACKENDS` (#87 A1). */
 const BACKEND = "omp" as const;
+
+/**
+ * WHERE THIS UNIT WRITES — the shared OMP four-root policy, resolved in CODE (#87 B1).
+ *
+ * `PI_CODING_AGENT_DIR` means "pi's persistence root" to entwurf and "my agent dir" to
+ * the OMP vendor, and `setProfile` exports it for every named profile
+ * (`oh-my-pi` v18.0.0 `packages/utils/src/dirs.ts:452-473`). A unit that let the shared
+ * default resolve its roots would send an `omp --profile work` session's record and marker
+ * into a different garden store — into a pi sandbox, if that is where the value came from.
+ *
+ * IT HAS TO BE CODE HERE, and that is the structural half of the fix. This extension runs
+ * IN-PROCESS inside the omp host, so there is no exec for a launcher to sanitise: nothing
+ * outside this file can repair the environment before the first write. The bridge CHILD
+ * half of the same policy lives in `applyOmpBridgeChildRootPolicy`, and both read the same
+ * pure leaf so their agreement is by construction rather than by coincidence.
+ *
+ * Resolved per call rather than once at module load: the factory is re-executed per
+ * session (including inside subagents), and a cached root would outlive the context that
+ * justified it.
+ */
+function roots(): MetaRootBundle {
+	return ompMetaRoots();
+}
+
+/**
+ * Where the diagnostic log goes — and it must resolve even when the ROOT POLICY REFUSED
+ * this environment (a relative `ENTWURF_META_*` override, #87 A2). That refusal is exactly
+ * the moment an operator needs a line to read, so it must never be the moment logging
+ * disappears. A hook log is a diagnostic, not a garden artifact, so falling back to the
+ * policy's own unambiguous base is honest: it never consults the refused override, and it
+ * never consults `PI_CODING_AGENT_DIR`.
+ */
+function hookLogFile(): string {
+	try {
+		return path.join(path.dirname(roots().sessionsDir), "meta-bridge-hook.log");
+	} catch {
+		return path.join(ompMetaRootBase(), "meta-bridge-hook.log");
+	}
+}
 
 // ---------------------------------------------------------------------------
 // Vendor surface, typed NARROWLY and locally.
@@ -152,7 +195,7 @@ type LogLevel = "INFO" | "WARN" | "ERROR";
  * same LEVEL vocabulary as the Claude and Copilot units, tagged `[omp]`. */
 function logLine(level: LogLevel, message: string): void {
 	try {
-		const file = path.join(path.dirname(defaultMetaSessionsDir()), "meta-bridge-hook.log");
+		const file = hookLogFile();
 		fs.mkdirSync(path.dirname(file), { recursive: true });
 		fs.appendFileSync(file, `${new Date().toISOString()} ${level} [omp] ${message}\n`);
 	} catch {
@@ -289,6 +332,7 @@ function writeOmpSenderMarker(gardenId: string, envelope: OmpBirthEnvelope): voi
 			nativeSessionId: envelope.nativeSessionId,
 			cwd: envelope.cwd,
 			ownerPid,
+			sendersDir: roots().sendersDir,
 		});
 		logLine("INFO", `sender marker ${ownerPid} -> ${gardenId}`);
 	} catch (err) {
@@ -351,6 +395,7 @@ export function onBirthEdge(edge: string, ctx: OmpExtensionContext): void {
 				cwd: envelope.cwd,
 				transcriptPath: envelope.transcriptPath,
 			},
+			dir: roots().sessionsDir,
 		});
 		logLine(
 			"INFO",

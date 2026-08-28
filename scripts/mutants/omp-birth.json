@@ -78,12 +78,26 @@
 		},
 		{
 			"claim": "OMP-BIRTH-DOES-NOT-ARM-RECEIVER",
-			"title": "birth creating receiver state claims a live process holds a watch nothing holds — the citizen reads deliverable, wired to nothing, for as long as the TUI stays open",
+			"title": "birth arming a receiver claims a live process holds a watch that nothing holds — the citizen reads DELIVERABLE, wired to nothing, for as long as the TUI stays open. This plants a REAL record-bound marker the certified reader accepts (an empty meta-receivers/ directory arms nothing and would be killed for the wrong reason)",
 			"subject": "pi-extensions/meta-bridge-omp.ts",
 			"find": ["\t\twriteOmpSenderMarker(result.record.gardenId, envelope);"],
 			"replace": [
 				"\t\twriteOmpSenderMarker(result.record.gardenId, envelope);",
-				"\t\tfs.mkdirSync(path.join(path.dirname(defaultMetaSessionsDir()), \"meta-receivers\"), { recursive: true });"
+				"\t\tconst receiversDir = roots().receiversDir;",
+				"\t\tfs.mkdirSync(receiversDir, { recursive: true });",
+				"\t\tfs.writeFileSync(",
+				"\t\t\tpath.join(receiversDir, `${result.record.gardenId}.json`),",
+				"\t\t\t`${JSON.stringify({",
+				"\t\t\t\tgardenId: result.record.gardenId,",
+				"\t\t\t\tbackend: BACKEND,",
+				"\t\t\t\tnativeSessionId: envelope.nativeSessionId,",
+				"\t\t\t\townerPid: process.pid,",
+				"\t\t\t\townerStartKey: \"planted-by-mutant\",",
+				"\t\t\t\townerKind: \"omp-tui\",",
+				"\t\t\t\tarmProvenance: \"session-start\",",
+				"\t\t\t\tupdatedAt: new Date().toISOString(),",
+				"\t\t\t})}\\n`,",
+				"\t\t);"
 			],
 			"gate": ["bash", "run.sh", "check-omp-birth-hook"],
 			"timeoutSeconds": 300,
@@ -103,6 +117,43 @@
 			"gate": ["bash", "run.sh", "check-omp-birth-hook"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:OMP-BIRTH-CWD-DISAGREEMENT]",
+			"signatureSource": "scripts/check-omp-birth-hook.ts"
+		},
+		{
+			"claim": "OMP-META-ROOT-JOINT-BINDING",
+			"title": "restoring the legacy PI_CODING_AGENT_DIR fallback inside the SHARED omp root base splits the garden store on an ordinary `omp --profile work`: the birth extension mints its record and sender marker under the vendor's profile agent dir — a pi sandbox, if that is where the value came from — and the omp-labeled bridge child pins its four roots to the same wrong bundle. Mutating the shared base replants the defect in BOTH consumers at once, which is why the subject is the common policy rather than either call site",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": [
+				"\t// NEVER `piAgentDir()` here: for backend omp that variable is the VENDOR's agent dir.",
+				"\treturn path.join(home, \".pi\", \"agent\");"
+			],
+			"replace": [
+				"\treturn env.PI_CODING_AGENT_DIR",
+				"\t\t? path.resolve(expandTildeIn(env.PI_CODING_AGENT_DIR, home))",
+				"\t\t: path.join(home, \".pi\", \"agent\");"
+			],
+			"gate": ["bash", "run.sh", "check-omp-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-META-ROOT-JOINT-BINDING]",
+			"signatureSource": "scripts/check-omp-birth-hook.ts"
+		},
+		{
+			"claim": "OMP-META-ROOT-ABSOLUTE-ONLY",
+			"title": "resolving a relative ENTWURF_META_* override instead of refusing it makes each process's working directory a garden-root authority: the omp extension resolves it against wherever the operator launched omp while the doctor resolves it against the repository (run_ts cd's there), so the doctor reports NOT-YET off an empty directory while the extension's real store holds records. Both halves read this one leaf, so removing the fail-closed branch splits them at the same instant",
+			"subject": "pi-extensions/lib/meta-session.ts",
+			"find": [
+				"\t\tif (override === \"~\" || override.startsWith(\"~/\")) return path.resolve(expandTildeIn(override, home));",
+				"\t\tif (path.isAbsolute(override)) return path.resolve(override);",
+				"\t\tthrow new MetaRootPolicyError(",
+				"\t\t\t`omp meta-root policy refuses ${key}=${JSON.stringify(override)}: a garden root must be absolute or ~-rooted ` +",
+				"\t\t\t\t\"(`~` or `~/…`). A relative value would resolve against each process's own working directory, and the omp \" +",
+				"\t\t\t\t\"extension and its doctor do not share one — set an absolute path, or unset it to use the default under HOME.\",",
+				"\t\t);"
+			],
+			"replace": ["\t\treturn path.resolve(expandTildeIn(override, home));"],
+			"gate": ["bash", "run.sh", "check-omp-birth-hook"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-META-ROOT-ABSOLUTE-ONLY]",
 			"signatureSource": "scripts/check-omp-birth-hook.ts"
 		}
 	]

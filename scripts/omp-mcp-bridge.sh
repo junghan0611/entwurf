@@ -21,7 +21,14 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 . "$HERE/omp-bridge-oracle.sh"
 
 AGENT_DIR="$(omp_agent_dir)" || fail "the omp agent directory this host reads is ambiguous (see above) — refusing to write a config file omp may never read."
-CONFIG="${ENTWURF_OMP_MCP_CONFIG:-$AGENT_DIR/mcp.json}"
+# THE TARGET IS NOT CONFIGURABLE (#87 D1). It is exactly `<resolved omp agent dir>/mcp.json`
+# and nothing else. The retired `ENTWURF_OMP_MCP_CONFIG` took an arbitrary path with no
+# descendant check, so the "omp-only" writer could be aimed at ~/.claude.json, ~/.pi/... or
+# any regular file — an explicit env seam lowers the odds of an accident but grants no
+# ownership, and cross-harness non-disturbance is this lane's whole point. Sandboxing is
+# still available where it belongs: `ENTWURF_OMP_AGENT_DIR` moves the AGENT DIR, and the
+# target follows it by construction.
+CONFIG="$AGENT_DIR/mcp.json"
 
 # The invocation, split exactly the way the Claude installer splits it (meta-bridge-install.sh
 # `desired_mcp`): an installed package wires the STABLE `entwurf-bridge` bin shim (baking a
@@ -167,8 +174,12 @@ do_doctor() {
 				log "  config: REFUSED symlink (someone else's SSOT)"
 				[ "$installed" -eq 1 ] && hard_fail=1 ;;
 			invalid-json|invalid-entry)
-				log "  config: $status"
-				[ "$installed" -eq 1 ] && hard_fail=1 ;;
+				# RUNTIME truth, independent of OWNERSHIP truth (Hard Rule 13, #87 B4). An
+				# unreadable file or a malformed entry under our key is broken for omp
+				# whether or not entwurf installed anything here — and the entry still
+				# claims the dedupe slot, so the import is suppressed too. Red either way.
+				log "  config: $status — the effective omp-native configuration is BROKEN (runtime axis; ownership state is a separate question)"
+				hard_fail=1 ;;
 			file-absent|not-ours)
 				if [ "$installed" -eq 1 ]; then
 					log "  config: $status (owned state present — this is drift)"
@@ -196,6 +207,12 @@ do_doctor() {
 	case "$verdict" in
 		native-wins)
 			log "  effective: the NATIVE entry wins by vendor precedence (native=100 > claude=80, first-wins on the shared key). Any Claude import of the same name is fully suppressed — not both-loaded, not merged, no warning" ;;
+		native-invalid)
+			# The worst of both: nothing loads, AND the import is still suppressed because a
+			# malformed value under the key keeps claiming the dedupe slot. Never reported
+			# as native-wins, and never softened by the absence of install-state.
+			log "  effective: NOTHING — the entry under the native key is malformed, so omp loads no entwurf-bridge, and it still suppresses any Claude import by claiming the key. Repair or remove that entry (run install-omp-mcp to write a valid one)"
+			hard_fail=1 ;;
 		import-wins)
 			if [ "$installed" -eq 1 ]; then
 				log "  effective: the CLAUDE IMPORT would win — our native entry is missing while ownership state exists. This is the borrowed-provenance state (#87): omp sessions introduce themselves as claude-code"

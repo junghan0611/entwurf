@@ -101,17 +101,85 @@ if [ -n "$UNIT_DIR" ]; then
   rm -f /tmp/omp-doctor-oracle.$$
 fi
 
+# ── WHERE THE GARDEN ROOTS ARE, under the SAME policy production uses (#87 B1) ──
+# NOT `PI_CODING_AGENT_DIR ?? ~/.pi/agent`. For backend omp that variable is the VENDOR's
+# agent dir — `setProfile` exports it for every named profile (`oh-my-pi` v18.0.0
+# `utils/src/dirs.ts:452-473`) — so reading it here would point this doctor at a different
+# store than the one the extension and the bridge child actually write to. The OMP policy
+# is: the four `ENTWURF_META_*` overrides, else `<HOME>/.pi/agent/<surface>`, never PI.
+#
+# We do not re-implement that policy in bash. We reach it the same way the OMP bridge child
+# does — drop the foreign variable, then let entwurf's own default resolver answer — and we
+# ask the OWNER for the answer: `meta-facts` (#65) is the read-only projection of the
+# CERTIFIED store, so it reports both the store directory it resolved and the records that
+# passed certification. One call, two facts, no second parser.
+#
+# PI presence itself is NOT a fault and is never reported as one: under `omp --profile work`
+# the vendor sets it deliberately. It is simply not a garden-root input.
+# PREFLIGHT THE SAME GRAMMAR THE POLICY ENFORCES, BEFORE ASKING ANYTHING (#87 A2). The
+# overrides are absolute or `~`/`~/…` only. A relative value would resolve against each
+# process's own working directory, and this doctor does NOT share one with the extension —
+# `run_ts` cd's to the repository. Asking `meta-facts` first would therefore answer from an
+# unrelated empty directory and print NOT-YET (or PASS) about a store that is not the one
+# the extension writes to. A refused environment is RUNTIME RED here, never laundered.
+ROOT_POLICY_REFUSAL=""
+for var in ENTWURF_META_SESSIONS_DIR ENTWURF_META_MAILBOX_DIR ENTWURF_META_SENDERS_DIR ENTWURF_META_RECEIVERS_DIR; do
+  val="${!var:-}"
+  [ -n "$val" ] || continue
+  case "$val" in
+    /*|"~"|"~/"*) ;;
+    *) ROOT_POLICY_REFUSAL="${ROOT_POLICY_REFUSAL:+$ROOT_POLICY_REFUSAL, }$var=$val" ;;
+  esac
+done
+
+FACTS_RC=0
+FACTS_JSON=""
+STORE=""
+OMP_RECORDS=0
+STORE_DEFECTS=0
+if [ -n "$ROOT_POLICY_REFUSAL" ]; then
+  bad "the omp meta-root policy REFUSES this environment: $ROOT_POLICY_REFUSAL — a garden root must be absolute or ~-rooted. The extension receives the same refusal and mints nothing; no store can be named here, so this is RED rather than a NOT-YET verdict about some other directory"
+else
+  FACTS_JSON="$(env -u PI_CODING_AGENT_DIR "$REPO/run.sh" meta-facts 2>&1)" || FACTS_RC=$?
+fi
+if [ -z "$ROOT_POLICY_REFUSAL" ] && [ "$FACTS_RC" -eq 0 ]; then
+  FACTS_LINE="$(printf '%s' "$FACTS_JSON" | python3 -c '
+import json, sys
+facts = json.load(sys.stdin)
+citizens = facts.get("citizens") or []
+omp = [c for c in citizens if c.get("backend") == "omp"]
+print(facts.get("storeDir", ""), len(omp), len(facts.get("defects") or []))
+' 2>/dev/null)" || FACTS_LINE=""
+  if [ -n "$FACTS_LINE" ]; then
+    STORE="${FACTS_LINE%% *}"
+    REST="${FACTS_LINE#* }"
+    OMP_RECORDS="${REST%% *}"
+    STORE_DEFECTS="${REST##* }"
+  fi
+fi
+
+if [ -n "$ROOT_POLICY_REFUSAL" ]; then
+  AGENT=""
+  HOOK_LOG=""
+elif [ -z "$STORE" ]; then
+  bad "the certified record store could not be read (meta-facts rc=$FACTS_RC) — no honest statement about omp citizens can be made on this host:"
+  printf '%s\n' "$FACTS_JSON" | tail -3 | sed 's/^/        /'
+  AGENT=""
+  HOOK_LOG=""
+else
+  AGENT="$(dirname "$STORE")"
+  HOOK_LOG="$AGENT/meta-bridge-hook.log"
+  ok "omp garden roots resolve to $AGENT (ENTWURF_META_* overrides, else \$HOME/.pi/agent — PI_CODING_AGENT_DIR is vendor-owned here and ignored)"
+fi
+
 # ── what the unit DID, read off the shared hook log ──────────────────────────
 # Mint errors and marker errors are judged on SEPARATE axes, and that separation is not
 # stylistic: a failed marker write lands AFTER the successful mint line, so a doctor that
 # folded them together would read "the hook ran and did not mint" about a session whose
 # record is right there (`adding-a-harness.md` step 6, measured on Copilot).
-AGENT="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
-AGENT="${AGENT/#\~/$HOME}"
-HOOK_LOG="$AGENT/meta-bridge-hook.log"
 echo
-echo "[what the extension did — $HOOK_LOG]"
-if [ -f "$HOOK_LOG" ]; then
+echo "[what the extension did — ${HOOK_LOG:-<unresolved>}]"
+if [ -n "$HOOK_LOG" ] && [ -f "$HOOK_LOG" ]; then
   MINT_ERRORS=' ERROR \[omp\] (?!sender-marker-)'
   LAST_ERROR_LINE="$(grep -nP "$MINT_ERRORS" "$HOOK_LOG" 2>/dev/null | tail -1 | cut -d: -f1)"
   LAST_OK_LINE="$(grep -n ' INFO \[omp\] \(create\|attach\) ' "$HOOK_LOG" 2>/dev/null | tail -1 | cut -d: -f1)"
@@ -148,20 +216,27 @@ if [ -f "$HOOK_LOG" ]; then
   if [ "${STATUS_ISSUES:-0}" -gt 0 ]; then
     note "${STATUS_ISSUES} visible-identity warning(s) — the garden id did not render on the status line for those sessions (statusLine.showHookStatus is default true; check the operator's config.yml)"
   fi
-else
+elif [ -n "$HOOK_LOG" ]; then
   note "no hook log yet at $HOOK_LOG (nothing has fired on this host)"
 fi
 
-# ── the records themselves ───────────────────────────────────────────────────
-STORE="$AGENT/meta-sessions"
-OMP_RECORDS=0
-if [ -d "$STORE" ]; then
-  OMP_RECORDS="$(grep -l '"backend": "omp"' "$STORE"/*.meta.json 2>/dev/null | wc -l | tr -d ' ')"
-fi
-if [ "${OMP_RECORDS:-0}" -gt 0 ]; then
-  ok "$OMP_RECORDS omp meta-record(s) landed (garden citizen proven on this host)"
-else
-  note "NOT-YET: zero omp meta-records. An omp TUI session is born when it OPENS (session_start fires after first paint, before the first prompt) — open one and re-run this doctor"
+# ── the records themselves, read through the CERTIFIED surface ───────────────
+# NEVER a text grep (#87 B3). "This host has an omp garden citizen" is a claim on the
+# record-authority axis, and the production writer earns it by certifying the WHOLE active
+# store before writing — regular non-symlink files, live V3 schema, filename↔body
+# agreement, unique nativeSessionId (`meta-session.ts` certifyActiveStore). A grep for the
+# text `"backend": "omp"` matched a file containing nothing else and printed PASS. A doctor
+# that claims admission must not weaken the contract the writer holds, so the count above
+# comes from `meta-facts`' certified citizen list.
+if [ -n "$STORE" ]; then
+  if [ "${STORE_DEFECTS:-0}" -gt 0 ]; then
+    note "$STORE_DEFECTS uncertifiable entr(ies) in $STORE are excluded from this count — run ./run.sh doctor-meta-bridge, which owns that axis"
+  fi
+  if [ "${OMP_RECORDS:-0}" -gt 0 ]; then
+    ok "$OMP_RECORDS CERTIFIED omp meta-record(s) in $STORE (garden citizen proven on this host)"
+  else
+    note "NOT-YET: zero certified omp meta-records. An omp TUI session is born when it OPENS (session_start fires after first paint, before the first prompt) — open one and re-run this doctor"
+  fi
 fi
 
 # ── §6 identity-carrier contamination, DETECTED (never silently preferred) ───
@@ -210,7 +285,7 @@ elif [ -f "$STATE_FILE" ]; then
   fi
 else
   if [ -n "$UNIT_DIR" ] && [ -d "$UNIT_DIR" ]; then
-    own_bad "a unit is installed at $UNIT_DIR but entwurf holds NO ownership state for it — the inverse would refuse. Re-run ./run.sh install-omp-bridge to adopt it"
+    own_bad "a unit is installed at $UNIT_DIR but entwurf holds NO ownership state for it — neither the installer nor the inverse will touch it (#87 B2: a shape is not a proof of ownership). Inspect it; if it is a stale copy of ours, remove it by hand and re-run ./run.sh install-omp-bridge"
   else
     note "no ownership state and no installed unit — zero state, which is a SKIP rather than a fault"
   fi

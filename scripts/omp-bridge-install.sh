@@ -123,10 +123,10 @@ PY
 }
 
 # ── 0. ownership preflight (READ-ONLY) ───────────────────────────────────────
-# Every destructive step below is licensed HERE. A no-state host adopts an existing unit
-# directory ONLY when it passes the same structural oracle the doctor uses; anything else
-# that already exists and cannot be proven ours refuses with zero writes. A SYMLINK at the
-# unit path is always a refusal: writing through it would mutate somebody else's tree.
+# Every destructive step below is licensed HERE, and the only licence is ownership STATE.
+# Anything that already exists at our path and cannot be proven ours refuses with zero
+# writes — a structural shape is not a proof of ownership (#87 B2). A SYMLINK at the unit
+# path is always a refusal too: writing through it would mutate somebody else's tree.
 if [ "$ASSEMBLE_ONLY" -eq 0 ]; then
   if [ -L "$STATE_FILE" ]; then
     die "ownership state $STATE_FILE is a symlink — refusing to trust or overwrite it."
@@ -139,11 +139,15 @@ if [ "$ASSEMBLE_ONLY" -eq 0 ]; then
       || die "ownership state $STATE_FILE is corrupt or names a different installation (see above) — refusing with zero writes."
     echo "[omp-bridge-install] ownership state matches this installation (reinstall/repair)"
   elif [ -e "$UNIT_DIR" ]; then
-    if [ -d "$UNIT_DIR" ] && omp_assembly_valid "$(dirname "$UNIT_DIR")" "$UNIT"; then
-      echo "[omp-bridge-install] adopting the legacy no-state unit at $UNIT_DIR (structural oracle green)"
-    else
-      die "$UNIT_DIR already exists, carries no ownership state, and does not pass the structural oracle (see above). Refusing with zero writes — inspect it, and remove it by hand if it is stale."
-    fi
+    # NO SHAPE-BASED ADOPTION (#87 B2). A structural oracle answers "is this a complete
+    # unit", never "is this OURS": it compares no bytes, rejects no extra files and
+    # establishes no provenance. Adopting on that answer meant moving a stranger's
+    # directory aside, publishing over it and DELETING the preimage — and the inverse
+    # then `rm -rf`s the path on the same unproven claim. A foreign or hand-made
+    # extension with these filenames, or our own unit plus operator files beside it, was
+    # destroyed unrecoverably. Ownership state is the only proof of ownership, so a
+    # no-state path refuses with zero writes.
+    die "$UNIT_DIR already exists and entwurf holds NO ownership state for it. A directory that merely LOOKS like our unit is not proof that it is ours — adopting it would overwrite it and delete the preimage with no inverse. Refusing with zero writes: inspect it, and if it is stale remove it by hand, then re-run."
   fi
 fi
 

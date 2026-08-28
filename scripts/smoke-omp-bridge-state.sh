@@ -22,10 +22,22 @@ want() { eval "$2" && ok "$1" || die "$1"; }
 REPO_BEFORE="$(cd "$REPO_DIR" && git status --porcelain)"
 SB="$(mktemp -d)"
 trap 'rm -rf "$SB"' EXIT
+# HARD RULE 12, in full. Not HOME + XDG_DATA_HOME alone: an inherited XDG_CONFIG_HOME or a
+# PI_CODING_AGENT_DIR from the operator's shell would leave a writable real root reachable
+# from inside this smoke. PI is set to a POISON path on purpose — after #87 B1 no OMP garden
+# artifact may resolve through it, and the last check in this file asserts that tree stayed
+# empty. (`ENTWURF_OMP_AGENT_DIR` still wins for the VENDOR agent dir, which is what keeps
+# the installer from refusing on the ambiguity below.)
 export HOME="$SB/home"
 export XDG_DATA_HOME="$SB/xdg"
+export XDG_CONFIG_HOME="$SB/xdg-config"
+export XDG_STATE_HOME="$SB/xdg-state"
+export XDG_CACHE_HOME="$SB/xdg-cache"
+export XDG_RUNTIME_DIR="$SB/xdg-runtime"
+PI_POISON="$SB/pi-poison-agent"
+export PI_CODING_AGENT_DIR="$PI_POISON"
 export ENTWURF_OMP_AGENT_DIR="$SB/home/.omp/agent"
-mkdir -p "$ENTWURF_OMP_AGENT_DIR" "$SB/bin"
+mkdir -p "$ENTWURF_OMP_AGENT_DIR" "$SB/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR"
 # The installer requires the vendor on PATH — entwurf never installs a harness, so an
 # absent omp is a refusal rather than a silent no-op. A fake binary is enough: nothing in
 # this lane executes it (the unit is a module omp imports, not a process we launch).
@@ -64,6 +76,10 @@ ok "a drifted copy of the writer is reported as STALE, with the redeploy prescri
 "$RUN" doctor-omp-bridge >/dev/null || die "reinstall did not repair the stale writer"
 ok "reinstall repairs it"
 
+# A byte-valid copy of our OWN unit, kept for the no-state cell below: it passes every
+# structural check there is, which is exactly why a shape must not license adoption.
+cp -r "$UNIT_DIR" "$SB/valid-unit"
+
 # ── 4. the inverse is honest ─────────────────────────────────────────────────
 "$RUN" uninstall-omp-bridge >/dev/null || die "uninstall failed"
 want "the unit is gone" "[ ! -e '$UNIT_DIR' ]"
@@ -78,7 +94,24 @@ if "$RUN" uninstall-omp-bridge >/dev/null 2>&1; then
 fi
 ok "a second uninstall REFUSES — a no-state host is unproven ownership, not an empty one"
 
-# ── 5. a foreign unit at our path is refused, never written through ──────────
+# ── 5. NOTHING at our path is adopted without ownership STATE (#87 B2) ───────
+# The structurally VALID case first, because it is the one that used to pass: the old
+# installer ran a shape oracle, called green "ours", moved the directory aside, published
+# over it and DELETED the preimage — and the inverse then rm -rf'd the path on the same
+# unproven claim. A hand-copied unit, or ours plus operator files beside it, was destroyed
+# with no way back. A shape is not a proof of ownership.
+cp -r "$SB/valid-unit" "$UNIT_DIR"
+printf 'operator note\n' > "$UNIT_DIR/NOTES.md"
+if "$RUN" install-omp-bridge >/dev/null 2>&1; then
+  die "install ADOPTED a structurally valid no-state unit — a shape is not ownership"
+fi
+want "the stranger's file beside it survives the refusal" "[ -f '$UNIT_DIR/NOTES.md' ]"
+want "the unit's own entry is untouched" "[ -f '$UNIT_DIR/index.ts' ]"
+want "no ownership state was invented by the refusal" "[ ! -e '$STATE' ]"
+ok "a structurally VALID no-state unit is refused with zero writes — ownership state is the only licence"
+rm -rf "$UNIT_DIR"
+
+# ── 5b. a foreign unit at our path is refused, never written through ─────────
 mkdir -p "$UNIT_DIR"
 printf 'someone else\n' > "$UNIT_DIR/index.ts"
 if "$RUN" install-omp-bridge >/dev/null 2>&1; then
@@ -102,13 +135,17 @@ rm -f "$UNIT_DIR"
 # omp is a pi fork and reads pi's env vocabulary, so an inherited PI_* knob does not say
 # WHICH harness it is addressing. Installing into a directory chosen by that guess is how
 # an operator ends up with a unit no live omp reads.
+# Each variable is tested ALONE — the sandbox exports a poisoned PI_CODING_AGENT_DIR
+# globally, and leaving it set would make every row below refuse on that one branch and
+# prove nothing about the others.
 for var in PI_CODING_AGENT_DIR PI_CONFIG_DIR; do
-  if env -u ENTWURF_OMP_AGENT_DIR "$var=$SB/ambiguous" "$RUN" install-omp-bridge >/dev/null 2>&1; then
+  if env -u ENTWURF_OMP_AGENT_DIR -u PI_CODING_AGENT_DIR -u PI_CONFIG_DIR "$var=$SB/ambiguous" \
+     "$RUN" install-omp-bridge >/dev/null 2>&1; then
     die "install guessed an agent dir while $var was set"
   fi
   ok "$var set (with no explicit override) REFUSES rather than guessing which harness it addresses"
 done
-if env -u ENTWURF_OMP_AGENT_DIR PI_PROFILE=work "$RUN" install-omp-bridge >/dev/null 2>&1; then
+if env -u ENTWURF_OMP_AGENT_DIR -u PI_CODING_AGENT_DIR PI_PROFILE=work "$RUN" install-omp-bridge >/dev/null 2>&1; then
   die "install guessed an agent dir from PI_PROFILE alone"
 fi
 ok "PI_PROFILE without OMP_PROFILE REFUSES — pi and omp both read it"
@@ -119,7 +156,13 @@ if ENTWURF_OMP_ASM="$ASM" "$RUN" install-omp-bridge --assemble-only >/dev/null 2
 fi
 ok "--assemble-only refuses the live assembly path (it writes no ownership state)"
 
-# ── 8. the repo itself was never written ────────────────────────────────────
+# ── 8. nothing resolved through the double-duty PI knob ─────────────────────
+# The whole run had PI_CODING_AGENT_DIR pointing at a poison path. After #87 B1 that
+# variable is the VENDOR's agent dir for backend omp and is never a garden root, so a
+# single artifact under it would mean some surface still derives its roots from it.
+want "the poisoned PI_CODING_AGENT_DIR tree was never created" "[ ! -e '$PI_POISON' ]"
+
+# ── 9. the repo itself was never written ────────────────────────────────────
 REPO_AFTER="$(cd "$REPO_DIR" && git status --porcelain)"
 [ "$REPO_BEFORE" = "$REPO_AFTER" ] || die "the smoke mutated the repo working tree"
 ok "the checkout is byte-identical to before the smoke"

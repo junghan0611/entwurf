@@ -132,9 +132,11 @@
 			"title": "closing the reader half leaves the writer talking to nobody — the hook writes a copilot marker, the bridge never looks in that directory, and the citizen's sends are refused as anonymous (the #46 shape, which is why writer and reader open in one change)",
 			"subject": "pi-extensions/lib/meta-sender-identity.ts",
 			"find": [
-				"export const META_SENDER_BACKENDS: readonly MetaBackend[] = [\"claude-code\", \"antigravity\", \"copilot\"];"
+				"export const META_SENDER_BACKENDS: readonly MetaBackend[] = [\"claude-code\", \"antigravity\", \"copilot\", \"omp\"];"
 			],
-			"replace": ["export const META_SENDER_BACKENDS: readonly MetaBackend[] = [\"claude-code\", \"antigravity\"];"],
+			"replace": [
+				"export const META_SENDER_BACKENDS: readonly MetaBackend[] = [\"claude-code\", \"antigravity\", \"omp\"];"
+			],
 			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:COPILOT-SENDER-READER-OPEN]",

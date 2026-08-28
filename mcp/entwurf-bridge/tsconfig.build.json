@@ -114,6 +114,15 @@
 	// the marker-less native-push quiesce row) are lib leaves the bridge graph already
 	// tolerates — the adapter is a 봉인-3 leaf (node builtins + type-only contract), and
 	// register_native already pulls both into this emit.
+	// WHY meta-bridge-omp rides THIS build (#87): `install-omp-bridge` explicitly SELECTS
+	// `dist/pi-extensions/meta-bridge-omp.js` when REPO_DIR is under node_modules — the same
+	// strip-types fence the Claude and Copilot birth entries cross — and
+	// `docs/setup-clean-host.md` tells operators to run that installer. Without the twin the
+	// installed installer dies at its own artifact check before assembling anything, so the
+	// advertised installed consumer surface never reaches compiled JS (Hard Rule 11). Its
+	// only repo import is meta-session.ts, ALREADY emitted for the store-doctor, so this adds
+	// ONE leaf JS and ZERO new deps. It is an omp-loaded extension module, never in
+	// index.ts's boot closure, so check-entwurf-bridge-pi-free is unaffected.
 	"include": [
 		"./src/index.ts",
 		"../../protocol.js",
@@ -126,6 +135,7 @@
 		"../../scripts/meta-bridge-fresh-cut.ts",
 		"../../scripts/meta-facts.ts",
 		"../../pi-extensions/meta-bridge-hook.ts",
-		"../../pi-extensions/meta-bridge-hook-copilot.ts"
+		"../../pi-extensions/meta-bridge-hook-copilot.ts",
+		"../../pi-extensions/meta-bridge-omp.ts"
 	]
 }

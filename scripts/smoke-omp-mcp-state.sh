@@ -18,14 +18,25 @@ want() { eval "$2" && ok "$1" || die "$1"; }
 REPO_BEFORE="$(cd "$REPO_DIR" && git status --porcelain)"
 SB="$(mktemp -d)"
 trap 'rm -rf "$SB"' EXIT
+# HARD RULE 12, in full — see the same block in smoke-omp-bridge-state.sh. PI is poisoned
+# on purpose and asserted empty at the end: after #87 B1 no OMP surface derives a garden
+# root from it. The MCP TARGET is no longer configurable (#87 D1), so the only sandbox seam
+# left is the vendor agent dir — which is the correct one, since the target is
+# `<agent dir>/mcp.json` by construction.
 export HOME="$SB/home"
 export XDG_DATA_HOME="$SB/xdg"
+export XDG_CONFIG_HOME="$SB/xdg-config"
+export XDG_STATE_HOME="$SB/xdg-state"
+export XDG_CACHE_HOME="$SB/xdg-cache"
+export XDG_RUNTIME_DIR="$SB/xdg-runtime"
+PI_POISON="$SB/pi-poison-agent"
+export PI_CODING_AGENT_DIR="$PI_POISON"
 export ENTWURF_OMP_AGENT_DIR="$SB/home/.omp/agent"
 export ENTWURF_OMP_MCP_COMMAND="entwurf-bridge"
 export ENTWURF_OMP_MCP_ARGS='[]'
 CONFIG="$ENTWURF_OMP_AGENT_DIR/mcp.json"
 STATE="$XDG_DATA_HOME/entwurf/omp-mcp/install-state.json"
-mkdir -p "$ENTWURF_OMP_AGENT_DIR" "$SB/bin"
+mkdir -p "$ENTWURF_OMP_AGENT_DIR" "$SB/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR"
 
 # A fake bridge that answers initialize + tools/list, so the doctor's boot probe has a
 # real command to drive without spawning the actual bridge.
@@ -170,12 +181,60 @@ ok "a SYMLINKED config is refused (someone else's SSOT)"
 rm -f "$CONFIG"
 
 # ── 8. an ambiguous agent dir refuses instead of guessing (ledger M6) ──────
-if env -u ENTWURF_OMP_AGENT_DIR -u ENTWURF_OMP_MCP_CONFIG PI_CODING_AGENT_DIR="$SB/ambiguous" "$RUN" install-omp-mcp >/dev/null 2>&1; then
+if env -u ENTWURF_OMP_AGENT_DIR PI_CODING_AGENT_DIR="$SB/ambiguous" "$RUN" install-omp-mcp >/dev/null 2>&1; then
 	die "install guessed an agent dir while PI_CODING_AGENT_DIR was set"
 fi
 ok "an inherited PI_CODING_AGENT_DIR REFUSES rather than writing a config omp may never read"
 
-# ── 9. the repo itself was never written ──────────────────────────────────
+# ── 8b. the target is CONFINED to the resolved agent dir (#87 D1) ──────────
+# There is no path override any more. The writer's target is `<agent dir>/mcp.json` and
+# nothing else, so an operator file elsewhere cannot be aimed at: the retired
+# `ENTWURF_OMP_MCP_CONFIG` accepted an arbitrary path with no descendant check, which made
+# the "omp-only" writer able to rewrite ~/.claude.json or ~/.pi/... An explicit env seam
+# lowers the odds of an accident; it grants no ownership.
+env ENTWURF_OMP_MCP_CONFIG="$SB/hijack.json" "$RUN" install-omp-mcp >/dev/null 2>&1 || true
+want "the retired override wrote NOTHING at its arbitrary path" "[ ! -e '$SB/hijack.json' ]"
+want "the entry went to the agent-dir target instead" "[ -f '$CONFIG' ]"
+ok "the target follows the resolved agent dir; no env seam can aim the writer elsewhere"
+"$RUN" uninstall-omp-mcp >/dev/null || die "uninstall failed after the confinement cell"
+
+# ── 8c. one state owns ONE target: a retarget REFUSES (#87 D1) ────────────
+# Changing OMP_PROFILE / the agent dir used to capture a new preimage and overwrite the one
+# state file, stranding the first profile's managed entry with no inverse.
+"$RUN" install-omp-mcp >/dev/null || die "install failed before the retarget cell"
+STATE_BEFORE="$(cat "$STATE")"
+mkdir -p "$SB/home/.omp/profiles/other/agent"
+if env ENTWURF_OMP_AGENT_DIR="$SB/home/.omp/profiles/other/agent" "$RUN" install-omp-mcp >/dev/null 2>&1; then
+	die "install retargeted to a second config while state named the first"
+fi
+want "the first target's state is byte-identical after the refusal" "[ \"\$(cat '$STATE')\" = \"\$STATE_BEFORE\" ]"
+want "no config was written at the second target" "[ ! -e '$SB/home/.omp/profiles/other/agent/mcp.json' ]"
+ok "a retarget REFUSES instead of orphaning the first managed entry"
+"$RUN" uninstall-omp-mcp >/dev/null || die "uninstall failed after the retarget cell"
+
+# ── 8d. an INVALID entry is runtime-red with NO ownership state (#87 B4) ───
+# Runtime truth and ownership truth are separate axes (Hard Rule 13). A malformed value
+# under our key still claims the dedupe slot — so the Claude import is suppressed AND
+# nothing loads — and the doctor used to print `native-wins` + exit 0 for exactly that,
+# because redness had been coupled to the presence of install-state.
+python3 - "$CONFIG" <<'PY2'
+import json, sys
+json.dump({"mcpServers": {"entwurf-bridge": None}}, open(sys.argv[1], "w"), indent=2)
+PY2
+if OUT="$("$RUN" doctor-omp-mcp 2>&1)"; then
+	die "doctor exited 0 for a malformed native entry with no ownership state"
+fi
+printf '%s\n' "$OUT" | grep -q "native-invalid" || die "doctor did not name the entry as native-invalid"
+if printf '%s\n' "$OUT" | grep -q "native-wins"; then
+	die "doctor still called a malformed entry native-wins"
+fi
+ok "a malformed entry under our key is RED on the runtime axis with zero install-state, and is never native-wins"
+rm -f "$CONFIG"
+
+# ── 9. nothing resolved through the double-duty PI knob ───────────────────
+want "the poisoned PI_CODING_AGENT_DIR tree was never created" "[ ! -e '$PI_POISON' ]"
+
+# ── 10. the repo itself was never written ─────────────────────────────────
 REPO_AFTER="$(cd "$REPO_DIR" && git status --porcelain)"
 [ "$REPO_BEFORE" = "$REPO_AFTER" ] || die "the smoke mutated the repo working tree"
 ok "the checkout is byte-identical to before the smoke"

@@ -1262,10 +1262,14 @@ export function decideUpsert(
 // stays strip-types clean (see module header for why this is not a sibling file).
 // ---------------------------------------------------------------------------
 
-function expandTilde(p: string): string {
-	if (p === "~") return os.homedir();
-	if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
+function expandTildeIn(p: string, home: string): string {
+	if (p === "~") return home;
+	if (p.startsWith("~/")) return path.join(home, p.slice(2));
 	return p;
+}
+
+function expandTilde(p: string): string {
+	return expandTildeIn(p, os.homedir());
 }
 
 /**
@@ -1346,6 +1350,164 @@ export function defaultMetaSendersDir(): string {
 export function defaultMetaReceiversDir(): string {
 	if (process.env.ENTWURF_META_RECEIVERS_DIR) return path.resolve(expandTilde(process.env.ENTWURF_META_RECEIVERS_DIR));
 	return path.join(piAgentDir(), "meta-receivers");
+}
+
+// ---------------------------------------------------------------------------
+// OMP meta-root policy (#87 B1) — ADDITIVE, and only for backend `omp`.
+//
+// THE COLLISION THIS CLOSES. `PI_CODING_AGENT_DIR` has two owners. To entwurf it
+// means "pi's persistence root", and `piAgentDir()` above derives all four garden
+// roots from it. To the OMP vendor it means "my agent dir": `setProfile` exports it
+// in-process for every named profile (`oh-my-pi` v18.0.0 `packages/utils/src/dirs.ts:452-473`,
+// reached from `cli.ts:342-360`), so a plain `omp --profile work` sets it. An OMP
+// birth that resolved its roots through `piAgentDir()` would therefore mint its record
+// and marker into a DIFFERENT garden store — and if the value came from a pi sandbox,
+// into that sandbox. Record-authority violation (Hard Rules 2 and 7), reachable on an
+// ordinary vendor workflow rather than an exotic one.
+//
+// WHY A BUNDLE OF FOUR AND NOT TWO. Splitting mailbox from receivers is the dangerous
+// cell: dispatch can trust an armed receiver marker in one root and enqueue into the
+// mailbox of the other while the real watcher drains the first — FALSE DELIVERABILITY.
+// So the four move together or not at all. Birth (bundle A) writes only sessions and
+// senders; receive (bundle B) consumes mailbox and receivers from this same object.
+//
+// WHAT IT DELIBERATELY DOES NOT DO. It does not change `piAgentDir()` or any
+// `defaultMeta*Dir()` — every existing backend keeps byte-identical behaviour, and pi's
+// own sandboxing still relocates through `PI_CODING_AGENT_DIR`. It honours the four
+// entwurf-owned `ENTWURF_META_*_DIR` overrides INDEPENDENTLY, so Hard Rule 12 sandboxing
+// stays usable. It bakes no absolute path into any record, marker, install-state or MCP
+// entry, and it introduces no new authority carrier: the roots are computed, never stored.
+// ---------------------------------------------------------------------------
+
+/** The four Entwurf-owned meta roots, resolved as ONE indivisible bundle. */
+export interface MetaRootBundle {
+	sessionsDir: string;
+	mailboxDir: string;
+	sendersDir: string;
+	receiversDir: string;
+}
+
+/** The env shape these pure resolvers read. `process.env` satisfies it. */
+export type MetaRootEnv = Record<string, string | undefined>;
+
+/**
+ * The exact provenance label the omp-native MCP entry carries
+ * (`scripts/omp-mcp-config.py` `EXTERNAL_AGENT_ID`). It is what lets a bridge CHILD know
+ * it is an OMP child — the same string both sides pin, never re-spelled.
+ */
+export const OMP_BRIDGE_PROVENANCE_LABEL = "external-mcp/omp";
+
+/** `HOME` as the process that owns this env sees it; `os.homedir()` returns exactly this
+ * on POSIX when HOME is set, so a real process and a composed child env agree. */
+function metaRootHome(env: MetaRootEnv): string {
+	const home = env.HOME;
+	return home !== undefined && home.length > 0 ? home : os.homedir();
+}
+
+/**
+ * THE shared OMP root policy — one pure function, two consumers (the in-process birth
+ * extension and the OMP-labeled bridge child). Agreement is by CONSTRUCTION, not by two
+ * places computing the same thing: both read this leaf, and both see the same HOME and the
+ * same four overrides because the vendor composes the child env as parent + entry env
+ * (`oh-my-pi` `packages/coding-agent/src/mcp/transports/stdio.ts:575-607`) and that entry
+ * env is provenance-only.
+ */
+export class MetaRootPolicyError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = "MetaRootPolicyError";
+	}
+}
+
+/**
+ * The unambiguous base the OMP bundle hangs off when no override is set. Separate from
+ * {@link ompMetaRoots} because it must NEVER throw: the hook log is a diagnostic, and a
+ * policy refusal still has to be visible somewhere.
+ */
+export function ompMetaRootBase(env: MetaRootEnv = process.env, home: string = metaRootHome(env)): string {
+	// NEVER `piAgentDir()` here: for backend omp that variable is the VENDOR's agent dir.
+	return path.join(home, ".pi", "agent");
+}
+
+/**
+ * THE OVERRIDE GRAMMAR IS NARROW ON PURPOSE: absolute, or `~` / `~/…`. Anything else —
+ * a relative path, or `~user` — is a NAMED REFUSAL, not a resolution.
+ *
+ * Why fail closed rather than resolve: this bundle has to mean the same thing in two
+ * processes that do not share a working directory. `path.resolve` on a relative value
+ * silently makes CWD an authority, and the OMP extension's cwd is whatever the operator
+ * launched omp from while the doctor's is the repository (`run_ts` cd's there). `[측정]`
+ * the same `ENTWURF_META_SESSIONS_DIR=relative-records` resolved to two different stores
+ * that way, so the doctor could report NOT-YET off an empty directory while the extension's
+ * real store held records (#87 A2, Terra review). Refusing is what keeps cwd from becoming
+ * a garden-root carrier. `~` is allowed because it expands from HOME, which both halves
+ * share by construction.
+ *
+ * The refusal is shared: extension and OMP-labeled bridge child both reach it through this
+ * one leaf, so neither can proceed on a value the other would read differently.
+ */
+export function ompMetaRoots(env: MetaRootEnv = process.env, home: string = metaRootHome(env)): MetaRootBundle {
+	const base = ompMetaRootBase(env, home);
+	const surface = (key: string, leaf: string): string => {
+		const override = env[key];
+		if (override === undefined || override === "") return path.join(base, leaf);
+		if (override === "~" || override.startsWith("~/")) return path.resolve(expandTildeIn(override, home));
+		if (path.isAbsolute(override)) return path.resolve(override);
+		throw new MetaRootPolicyError(
+			`omp meta-root policy refuses ${key}=${JSON.stringify(override)}: a garden root must be absolute or ~-rooted ` +
+				"(`~` or `~/…`). A relative value would resolve against each process's own working directory, and the omp " +
+				"extension and its doctor do not share one — set an absolute path, or unset it to use the default under HOME.",
+		);
+	};
+	return {
+		sessionsDir: surface("ENTWURF_META_SESSIONS_DIR", "meta-sessions"),
+		mailboxDir: surface("ENTWURF_META_MAILBOX_DIR", "meta-mailbox"),
+		sendersDir: surface("ENTWURF_META_SENDERS_DIR", "meta-senders"),
+		receiversDir: surface("ENTWURF_META_RECEIVERS_DIR", "meta-receivers"),
+	};
+}
+
+/**
+ * The bridge CHILD half of the same policy, applied to that child's own environment.
+ *
+ * A bridge child selects this by the exact provenance label its managed entry carries —
+ * no probing, no guessing, and no effect on any other harness's child. It then does two
+ * things, in this order and before any lazy default-root consumer has run:
+ *
+ *   1. removes the foreign `PI_CODING_AGENT_DIR` from THIS PROCESS only. The OMP HOST
+ *      keeps it — there it is the vendor's own agent dir and deleting it would rewrite
+ *      vendor path semantics — but the child has no vendor lookup left to do.
+ *   2. pins the four `ENTWURF_META_*_DIR` overrides to this leaf's answer, so every
+ *      `defaultMeta*Dir()` consumer in the bridge reads the OMP bundle literally rather
+ *      than recomputing something that merely happens to match. Idempotent: an override
+ *      the operator already set was honoured by the leaf and is written back unchanged.
+ *
+ * These four are entwurf's OWN documented override vocabulary, set in our own process —
+ * not a new carrier, not a record field, not a marker.
+ *
+ * The in-process birth extension cannot use this and must not try: it runs INSIDE the omp
+ * host, so mutating that process's env is exactly the thing forbidden above. It passes
+ * explicit directories from {@link ompMetaRoots} instead.
+ */
+export function applyOmpBridgeChildRootPolicy(
+	env: MetaRootEnv = process.env,
+	home?: string,
+): { applied: boolean; roots: MetaRootBundle | null } {
+	// EXACT equality on the RAW label (#87 A3). Trimming was a courtesy that let a
+	// whitespace-drifted entry — one `doctor-omp-mcp` and the writer both call foreign —
+	// still select OMP root mutation in its child. The writer emits the literal and the
+	// doctor compares the literal; this compares the literal too, so all three agree on
+	// what "our entry" means.
+	if (env.ENTWURF_BRIDGE_EXTERNAL_AGENT_ID !== OMP_BRIDGE_PROVENANCE_LABEL) {
+		return { applied: false, roots: null };
+	}
+	const roots = ompMetaRoots(env, home ?? metaRootHome(env));
+	delete env.PI_CODING_AGENT_DIR;
+	env.ENTWURF_META_SESSIONS_DIR = roots.sessionsDir;
+	env.ENTWURF_META_MAILBOX_DIR = roots.mailboxDir;
+	env.ENTWURF_META_SENDERS_DIR = roots.sendersDir;
+	env.ENTWURF_META_RECEIVERS_DIR = roots.receiversDir;
+	return { applied: true, roots };
 }
 
 /**
