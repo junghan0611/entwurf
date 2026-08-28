@@ -7,28 +7,44 @@
 # RAIL — 현재 좌표
 
 - [x] **1. OMP measurement·audit·LIVE + Bundle A admission hardening** — backend registration, TUI-only birth, visible status, native MCP hand, sender identity, four-root/package/doctor hardening 완료.
-- [ ] **2. GLG operator deploy + real outbound acceptance** ← CURRENT: Bundle A는 branch에 commit됨; push/merge/deploy는 GLG 결정 대기.
-- [ ] **3. Bundle B: addressed receive / roundtrip** ← PAUSED: 다른 harness → 이미 열린 OMP wake·receive는 Bundle A 범위 밖.
-- [ ] **4. Bundle C: visible fresh + grade** ← PAUSED: `entwurf_fresh_call`로 OMP를 열고 LIVE 영수증 뒤에만 DELIVERY/registry grade 이동.
+- [x] **2. Operator deploy + real outbound acceptance** — 2026-08-28 oracle: 재설치·shared reader 재배포·doctor 4종 green, `check:full` exit 0, outbound LIVE 4건(그중 1건은 GLG가 직접 연 세션). `tools.xdev` 방언 발견과 문서화 포함.
+- [ ] **3. Bundle A land + 0.16.0 준비** ← CURRENT: branch push 완료; main land 방식과 cut 여부는 GLG 결정. 남은 정리는 아래 LEDGER.
+- [ ] **4. Bundle B: addressed receive / roundtrip** ← PAUSED: **대칭은 여기서 생긴다.** 다른 harness → 이미 열린 OMP wake·receive는 Bundle A 범위 밖이고 코드가 0줄이다.
+- [ ] **5. Bundle C: visible fresh + grade** ← PAUSED: `entwurf_fresh_call`로 OMP를 열고 LIVE 영수증 뒤에만 DELIVERY/registry grade 이동.
 
-현재 좌표: 1 완료 → **2 GLG deploy·outbound LIVE 대기** → 3–4 보류.
+현재 좌표: 1–2 완료 → **3 land·cut 결정** → 4–5 보류.
 
 # NOW
 
 - **Stem:** OMP TUI 하나를 독립 형제로 세우되, 그 안의 서브에이전트에는 garden id를 주지 않는다.
-- **Current:** Bundle A가 branch에 commit되었다. push/merge/deploy는 이 commit에서 실행하지 않으며 #87은 Bundle B/C 때문에 열린 채다.
-- **Next — GLG 결정 뒤 3단 사다리:**
-  1. shared reader를 rebuild/redeploy하고 `install-omp-bridge` 및 native MCP install을 검증한 뒤, 열린 OMP를 restart한다.
-  2. 실제 OMP TUI 하나가 citizen 하나를 mint하고 실제 task subagent는 zero citizen임을 LIVE로 증명한다.
-  3. 그 OMP citizen이 `entwurf_v2`로 이미 존재하는 다른-harness citizen에게 outbound message를 보내는 LIVE receipt를 남긴다.
-- **Boundary:** Bundle A가 사는 것은 **OMP → others outbound**뿐이다. others → OMP addressed receive/reply와 fresh OMP는 아직 없다; supported-harness/grade 선언으로 앞당기지 않는다.
-- **Read:** #87 thread · `docs/setup-clean-host.md` §4b · `docs/external-mcp-host.md` OMP row · `docs/adding-a-harness.md` steps 3, 3.5, 5, 6.
-- **Do not touch:** Bundle B receive · Bundle C fresh/grade · README/setup support admission · DELIVERY/registry grade · push/deploy/install/restart without GLG.
+- **되는 것 (측정, 2026-08-28 oracle):** OMP TUI가 열리면 citizen 하나를 mint하고, 상태줄에 garden id를 보이고, 자기 이름으로 `entwurf_v2` outbound를 보낸다. task subagent는 `mode=print`로 scope-refused되어 아무것도 mint하지 않는다. 벤더 `/mcp list`가 native 우선을 확인한다.
+- **안 되는 것 (설계된 경계):** 다른 harness → OMP 답장. receiver marker도 mailbox arm도 없고 watch를 쥔 프로세스가 없다(`pi-extensions/meta-bridge-omp.ts:17`). dispatch는 `mailbox-undeliverable`로 fail-closed. OMP는 `entwurf_fresh_call`로 열 수 없다. registry는 `D0`, 이는 정확한 표기다.
+- **운영자 필수 설정:** `~/.omp/agent/config.yml`에 `tools: xdev: false`. 기본값(`tools.xdev: true` + `xdevDocs: builtins`)에서는 MCP 도구가 `xd://` 가상 device로 감싸이고 스키마가 프롬프트에 없어, 자연어 발신이 **거짓 성공 보고**로 끝난다(측정). 근거·숫자는 `docs/external-mcp-host.md` OMP 절.
+- **Next:** GLG가 land 방식(merge/PR)과 0.16.0 cut 여부를 정한다. Bundle B는 별도 grant.
+- **Boundary:** Bundle A가 사는 것은 **OMP → others outbound**뿐이다. 대칭(others → OMP)은 Bundle B이며 아직 없다; supported-harness/grade 선언으로 앞당기지 않는다.
+- **Read:** #87 thread · `docs/setup-clean-host.md` §4b · `docs/external-mcp-host.md` OMP row · `docs/adding-a-harness.md` steps 3, 3.5, 5, 6, 7.
+- **Do not touch:** Bundle B receive · Bundle C fresh/grade · README/setup support admission · DELIVERY/registry grade.
 
 # RECENT
 
-- **2026-08-28:** #87 Bundle A source, package and doctor hardening reviewed independently; qualification and final deterministic floor were green on the final candidate. Branch commit is local-only; external #87 receipt holds durable review evidence.
-- **2026-08-27:** OMP vendor measurement and real TUI/subagent observations closed the Bundle A admission basis. The per-harness docs retain installer/doctor boundaries; OMP is not yet a supported fresh/receive harness.
+- **2026-08-28 (오후):** oracle에서 Bundle A를 실제로 설치·배포·수용. stale writer 두 축(omp 확장, Claude shared reader)을 doctor가 잡아 재배포. LIVE outbound 4건, subagent zero-mint, inbound fail-closed 모두 재현. OMP `tools.xdev` 기본값이 MCP 도구를 `xd://`로 감싸 거짓 발신 보고를 만든다는 것을 벤더 바이너리·트랜스크립트로 측정하고 3개 문서에 반영.
+- **2026-08-28 (오전):** #87 Bundle A source, package and doctor hardening reviewed independently; qualification and final deterministic floor were green on the final candidate.
+- **2026-08-27:** OMP vendor measurement and real TUI/subagent observations closed the Bundle A admission basis.
+
+# CARRIED
+
+- **#78** macOS/native-Windows portability — separate grant; do not mix into #87.
+- **#72 #76** bugs and cortex gate slice — separate lanes.
+
+# LEDGER — land 전에 정할 것
+
+- **L1 게이트 편입:** `smoke-omp-bridge-state` / `smoke-omp-mcp-state`가 `check:full`·`release-gate`·`setup` 어디에도 없다(측정: package.json 스크립트 전체에서 0회). `check-omp-birth-hook`만 `scripts/mutants/omp-birth.json`을 통해 `check-gate-qualification`에서 돈다. Copilot 대응물은 `check:hermetic`에 있다 — 비대칭.
+- **L2 CHANGELOG:** `## Unreleased`가 비어 있고 v0.15.1 이후 커밋이 쌓여 있다. cut을 하면 `tag-release`가 채운다.
+- **L3 doctor가 모르는 설정:** `doctor-omp-mcp`는 `tools.xdev`를 보지 않는다. 설정이 기본값이면 doctor는 green인데 모델은 도구를 제대로 못 부른다. doctor 셀 하나로 넣을지, Bundle C의 preflight 능력으로 올릴지 결정 필요.
+- **L4 표기 다듬기:** `entwurf_self`가 omp 시민에게 `metaDeliveryDomain: "self-fetch"` + `mailboxPath`를 렌더한다. `replyable:false`와 decider는 정직하므로 동작 결함은 아니지만, 드레인하는 프로세스가 없는 경로를 보여준다.
+- **L5 주소 지정 공백:** `entwurf_peers`에서 claude-code 시민은 `model=(unknown)`이라 "오푸스 형제한테"를 사실면으로 해결할 수 없다(2026-08-28 실사용에서 걸림).
+- **L6 벤더 드리프트:** 측정은 omp 18.0.0 기준. 세션 중 18.0.9까지 올라갔다. `mode === "tui"` 판별자와 `xd://` 동작은 업그레이드 시 재측정 대상.
+- **L7 ROADMAP:** "현재" 절이 아직 측정 단계로 적혀 있다.
 
 # CARRIED
 
@@ -40,3 +56,4 @@
 - #87: https://github.com/junghan0611/entwurf/issues/87
 - Admission path: `docs/adding-a-harness.md`
 - OMP operator boundary: `docs/setup-clean-host.md` §4b
+- OMP tool-surface dialect: `docs/external-mcp-host.md` OMP row
