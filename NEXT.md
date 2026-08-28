@@ -42,7 +42,8 @@
 - **L2 CHANGELOG:** `## Unreleased`가 비어 있고 v0.15.1 이후 커밋이 쌓여 있다. cut을 하면 `tag-release`가 채운다.
 - **L3 doctor가 모르는 설정:** `doctor-omp-mcp`는 `tools.xdev`를 보지 않는다. 설정이 기본값이면 doctor는 green인데 모델은 도구를 제대로 못 부른다. doctor 셀 하나로 넣을지, Bundle C의 preflight 능력으로 올릴지 결정 필요.
 - **L4 표기 다듬기:** `entwurf_self`가 omp 시민에게 `metaDeliveryDomain: "self-fetch"` + `mailboxPath`를 렌더한다. `replyable:false`와 decider는 정직하므로 동작 결함은 아니지만, 드레인하는 프로세스가 없는 경로를 보여준다.
-- **L5 주소 지정 공백:** `entwurf_peers`에서 claude-code 시민은 `model=(unknown)`이라 "오푸스 형제한테"를 사실면으로 해결할 수 없다(2026-08-28 실사용에서 걸림).
+- **L5 주소 지정 공백 → #90으로 승격:** `entwurf_peers`에서 claude-code 시민은 `model=(unknown)`(측정: 0/353). 원인 가설은 "벤더는 문자열 `model`을 주는데 우리 리더가 `{id}`/`model_id`만 받는다"이나, 그 근거로 쓴 `~/repos/3rd/claudecode`는 **한때 공개됐던 소스 스냅샷이지 설치된 제품이 아니다** — step 1이 금지하는 오라클이므로 상속·미검증으로 강등. 살아 있는 제품에서 SessionStart 봉투를 실제로 캡처해야 결정된다.
+- **L8 OMP child가 bridge 권한을 물려받는다 (측정, GLG 세션 2026-08-28):** OMP task child의 `entwurf_self`는 **부모의 garden id**를 반환한다(두 번째 주소 없음 — §3.5 요구사항 충족, 게이트가 증명하는 그대로). 그러나 그 빌린 신원으로 `entwurf_v2`와 `entwurf_fresh_call`을 호출할 수 있다. §3.5(b)가 도구 차용을 의도적으로 허용하므로 깨진 불변식은 아니고, 열린 질문은 **내부 agent가 dispatch·형제 생성 권한을 가져도 되는가**이며 이는 OMP 한정이 아니라 가든 전역이다. 값싼 울타리 후보 측정: omp 18.0.0에 subagent의 MCP 접근을 막는 `mcp.*` 키는 없으나 `task.enableLsp`(기본 false)가 **subagent별 개별 도구 차단 기제가 존재함**을 증명한다. 자체 tool set을 든 custom agent 정의는 미검증 단서.
 - **L6 벤더 드리프트:** 측정은 omp 18.0.0 기준. 세션 중 18.0.9까지 올라갔다. `mode === "tui"` 판별자와 `xd://` 동작은 업그레이드 시 재측정 대상.
 - **L7 ROADMAP:** "현재" 절이 아직 측정 단계로 적혀 있다.
 
@@ -54,6 +55,7 @@
 # DURABLE LINKS
 
 - #87: https://github.com/junghan0611/entwurf/issues/87
+- #90 (claude-code model 필드, 별도 레인): https://github.com/junghan0611/entwurf/issues/90
 - Admission path: `docs/adding-a-harness.md`
 - OMP operator boundary: `docs/setup-clean-host.md` §4b
 - OMP tool-surface dialect: `docs/external-mcp-host.md` OMP row
