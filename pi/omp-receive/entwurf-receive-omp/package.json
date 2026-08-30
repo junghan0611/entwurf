@@ -1,0 +1,7 @@
+{
+	"name": "entwurf-receive-omp",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "entwurf OMP receiver extension: arms a mailbox watch for the visible tui host's citizen and rings an announce-only doorbell."
+}

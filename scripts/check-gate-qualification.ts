@@ -822,6 +822,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"pi-package-ownership": 6,
 		"mux-resume-call": 12,
 		"omp-birth": 10,
+		"omp-receive": 11,
 		"probe-ordering": 1,
 		"release-gate": 12,
 		"resume-args": 6,

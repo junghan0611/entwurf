@@ -185,22 +185,36 @@ scanning for that process, checks the receiver, removes inherited pi identity ca
 the model/permission defaults. Birth occurs on the first prompt. `entwurf_fresh_call` uses this
 same managed invocation and requires the birth, MCP, receiver, and visible-identity preflight.
 
-## 4b. Optional OMP (`omp`) native citizen — birth and tool hand only
+## 4b. Optional OMP (`omp`) native citizen — two-way, but not yet supported
 
-Two independently owned surfaces, and a boundary that is part of the instructions rather
-than a footnote: OMP is NOT a supported harness yet. Bundle A of #87 landed birth, visible
-identity, who-sent and the MCP hand; receive and visible fresh have no unit, so
-`entwurf_fresh_call` cannot open an omp sibling and a reply cannot land on one. What works
-is: an omp TUI you opened yourself becomes an addressable citizen with its own garden id,
-and it can call the `entwurf_*` read surfaces and send under its own name.
+Three independently owned surfaces, and a boundary that is part of the instructions rather
+than a footnote: OMP is NOT a supported harness yet. Birth, visible identity, who-sent, the
+MCP hand and now RECEIVE are landed, so an omp TUI you opened yourself is a two-way
+citizen — it sends under its own garden id and a reply lands on it. What is still missing
+is **visible fresh**: `entwurf_fresh_call` cannot open an omp sibling, and under
+`docs/adding-a-harness.md` step 9 a backend may be called *supported* only when it can.
+So: open omp yourself, and it becomes addressable.
 
 ```bash
 entwurf install-omp-bridge     # the birth extension, into <omp agent dir>/extensions/
 entwurf install-omp-mcp        # the omp-native entwurf-bridge server
+entwurf install-omp-receive    # the receiver extension: mailbox watch + doorbell
 
 entwurf doctor-omp-bridge
 entwurf doctor-omp-mcp
+entwurf doctor-omp-receive
 ```
+
+Order matters only in one direction: the receiver JOINS the citizen birth mints, and
+announces a tool the MCP hand provides. Install it without them and it will log
+`arm-deferred`, give up after ~20s, and `doctor-omp-receive` will name the missing sibling
+as a note rather than a fault.
+
+**The receiver arms per session, and only for the visible TUI host.** Opening omp arms it;
+`/new` re-arms it for the replacement citizen and retires the previous one; closing omp
+retires it. A task subagent arms nothing. While nothing is armed, dispatch to that garden
+id is the honest `mailbox-undeliverable` refusal — an unarmed receiver is a legible state,
+not a broken one.
 
 `setup` does not compose these yet — that lands with the admission work, not here.
 

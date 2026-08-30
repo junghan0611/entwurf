@@ -218,6 +218,10 @@ Usage:
   ./run.sh install-omp-bridge         # #87: install the OMP BIRTH extension into <omp agent dir>/extensions/entwurf-meta-omp (index.ts|js + lib + capability registry). No launcher and no bake — an omp hook is an in-process extension. Refuses when an inherited PI_CODING_AGENT_DIR/PI_CONFIG_DIR/PI_PROFILE makes the target agent dir ambiguous (ledger M6), and refuses ANY pre-existing artifact at the unit path that entwurf holds no ownership state for — a shape is not a proof of ownership
   ./run.sh uninstall-omp-bridge       # honest inverse from install-state (exact unit dir + recorded entry; no-state host REFUSES; state deleted LAST). Records already minted are preserved
   ./run.sh doctor-omp-bridge          # #87: runtime axis (importable unit, writer/registry parity, mint vs sender-marker errors on SEPARATE axes, scope-fence receipts, a root-grammar preflight that goes RED on a relative ENTWURF_META_* override instead of reporting on some other directory, CERTIFIED omp record count via meta-facts under the omp root policy — never a text grep, live omp processes carrying inherited PI_SESSION_ID/PI_AGENT_ID) + ownership axis. PI_CODING_AGENT_DIR is the vendor's own agent dir here and is reported as ignored, never as contamination. Zero records = NOT-YET, never red
+  ./run.sh install-omp-receive        # #87 bundle B: install the OMP RECEIVER extension into <omp agent dir>/extensions/entwurf-receive-omp. Own unit, own install-state, own doctor, own inverse. It joins the citizen BIRTH minted in the same process (sender marker for this pid + V3 record + the vendor's current session id, all three or refuse), holds an fs.watch on that citizen's mailbox signal, and rings an ANNOUNCE-ONLY doorbell via pi.sendUserMessage. It never assumes it loads after birth: extension handlers run in directory-name order and a before-sorting unit was MEASURED to see no marker, so the arm retries on a bounded ctx.setInterval cancelled with ctx.clearTimer (the vendor exposes no clearInterval)
+  ./run.sh uninstall-omp-receive      # honest inverse from install-state; records and sender identity untouched. A session that ALREADY armed keeps its marker until its process exits
+  ./run.sh doctor-omp-receive         # runtime axis (importable unit, writer parity, arm failures and doorbell failures on SEPARATE axes, who is armed RIGHT NOW through the production marker reader) + ownership axis. Zero armed receivers = NOT-YET, never red. Reports a marker for exactly what a marker proves — a live owner reached the arm emit — and never upgrades that into "a wake will happen"
+  ./run.sh omp-receive-facts          # read-only JSON projection of the omp receive rail: every receiver marker through readMetaReceiverMarker in BOTH readings (live / as-written) plus mailbox counts. The shared oracle so no consumer answers "is a doorbell held?" from a filename
   ./run.sh install-omp-mcp            # #87 step 5: write ONE omp-native entwurf-bridge server into <omp agent dir>/mcp.json with env ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/omp. The server key is a PINNED LITERAL, byte-identical to the Claude import's — same-key first-wins at native=100 > claude=80 is what SHADOWS the import (never disabledServers, which kills both). Adopt / create / REFUSE symlink, preimage recorded
   ./run.sh uninstall-omp-mcp          # honest inverse from install-state (restores the preimage, or removes a file we created); the Claude import becomes effective again
   ./run.sh doctor-omp-mcp             # ownership + config + boot doctor, plus the EFFECTIVE-source read (native-wins / native-invalid / import-wins / both-suppressed) — a configuration read, never a runtime receipt. Runtime validity and ownership are SEPARATE axes: foreign provenance, a disabledServers denylist, and a malformed entry under our key are each RED even with no install-state. tools.xdev is a RUNTIME cell: absent file/key applies the vendor default (true, no inline allowlist) and is RED while the native hand is the effective source; xdev false is ok; a covering xdevInlineDevices glob is ok-with-note
@@ -2901,6 +2905,9 @@ check_pack() {
     # #65 — the owner-normalized store projection consumers call INSTEAD of
     # parsing the store; installed hosts are exactly where those consumers live.
     "mcp/entwurf-bridge/dist/scripts/meta-facts.js"
+    # #87 Bundle B — omp-receive-doctor drives this operator projection through
+    # run.sh, so installed node_modules must have the compiled twin too.
+    "mcp/entwurf-bridge/dist/scripts/omp-receive-facts.js"
     # 0.12.5 — the node_modules-safe plugin hook + its lib. install-meta-bridge copies
     # these compiled JS into the assembled plugin when installed (raw .ts can't
     # strip-types under node_modules). meta-session.js is shared with the store-doctor
@@ -3163,6 +3170,8 @@ _check_pack_install_impl() {
     "mcp/entwurf-bridge/dist/scripts/meta-bridge-fresh-cut.js"
     # #65 — the owner-normalized store projection (see check-pack).
     "mcp/entwurf-bridge/dist/scripts/meta-facts.js"
+    # #87 Bundle B — omp-receive-doctor reaches this through the installed dispatcher.
+    "mcp/entwurf-bridge/dist/scripts/omp-receive-facts.js"
     # 0.12.5 — node_modules-safe plugin hook + lib (see check-pack). The installed
     # hook regression below runs exactly this compiled JS from under node_modules.
     "mcp/entwurf-bridge/dist/pi-extensions/meta-bridge-hook.js"
@@ -5701,7 +5710,7 @@ case "$cmd" in
     # #87 bundle B — the acceptance that makes omp's one-way garden executable.
     # Reads the capability registry and reports its own PASS/SKIP/FAIL; see the
     # header of the script for the three branches.
-    (cd "$REPO_DIR" && bash scripts/smoke-omp-receive-live.sh)
+    run_ts scripts/smoke-omp-receive-live.ts
     ;;
   smoke-entwurf-chain-live)
     # P3 — the cross-harness delivery CHAIN on real authenticated rails:
@@ -6065,6 +6074,63 @@ case "$cmd" in
     # NOT-YET, not red.
     shift || true
     (cd "$REPO_DIR" && bash scripts/omp-bridge-doctor.sh "$@")
+    ;;
+  install-omp-receive)
+    # #87 bundle B: install the OMP RECEIVER extension into
+    # <omp agent dir>/extensions/entwurf-receive-omp. Its own unit, install-state, doctor and
+    # inverse — birth says who sends, this says a reply can land, and neither grants the other.
+    # Same ownership discipline as the birth installer: no adoption of an artifact entwurf holds
+    # no state for, no writing through a symlink, refusal when the agent dir is ambiguous.
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/omp-receive-install.sh "$@")
+    ;;
+  uninstall-omp-receive)
+    # honest inverse from install-state (exact unit dir + recorded entry; no-state host REFUSES;
+    # state deleted LAST). Records, sender identity and any ALREADY-armed live session are
+    # untouched — an omp TUI that armed before this ran stays addressable until it exits.
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/omp-receive-uninstall.sh "$@")
+    ;;
+  doctor-omp-receive)
+    # #87 bundle B: runtime axis (importable unit, writer parity, arm vs doorbell failures on
+    # SEPARATE axes, and WHO IS ARMED right now read through the PRODUCTION marker reader via
+    # omp-receive-facts — never a filename) + ownership axis. Zero armed receivers is NOT-YET.
+    # It reports a marker for exactly what a marker proves: a live owner reached the arm emit.
+    # It never claims the vendor's watch is still registered — see the header.
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/omp-receive-doctor.sh "$@")
+    ;;
+  smoke-omp-receive-state)
+    # #87 bundle B: OMP RECEIVER install/doctor/inverse regression — placement, stale-writer
+    # detection, honest inverse, no-state refusal (structurally VALID as well as foreign),
+    # symlink refusal, ambiguous-agent-dir refusal, a poisoned PI_CODING_AGENT_DIR that
+    # attracts no artifact, plus the two this surface owns: installing a doorbell ARMS
+    # NOTHING, and a host with no birth unit is a green doctor with a NAMED dependency note
+    # rather than a red one. Fully sandboxed HOME/PI/XDG. Offline/deterministic
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/smoke-omp-receive-state.sh "$@")
+    ;;
+  check-omp-receive-arm)
+    # #87 bundle B gate: drives the REAL receive assembler into a temp dir, imports the
+    # ASSEMBLED index.ts into a MOCK omp host and proves everything on entwurf's side of the
+    # vendor boundary — the tui-only scope fence, deferral before birth and the BOUNDED retry
+    # that arms once the sender marker appears, the refusal to start a timer this build cannot
+    # cancel, the refusal to arm when the wake surface is missing, id-drift refusal, the /new
+    # unarm that the start-key guard structurally cannot catch, no-watch-no-marker ordering,
+    # an announce-only doorbell that never carries the body, a vanished signal giving the
+    # marker back, and an identity-guarded teardown. Hermetic; no omp, no model turn. What it
+    # deliberately cannot prove — that the vendor really wakes an idle host — is
+    # smoke-omp-receive-live's job, and neither receipt substitutes for the other
+    shift || true
+    run_ts scripts/check-omp-receive-arm.ts "$@"
+    ;;
+  omp-receive-facts)
+    # #87 bundle B: read-only JSON projection of the omp receive rail — every receiver marker
+    # read through readMetaReceiverMarker in BOTH readings (live / as-written), plus the mailbox
+    # counts behind each. The shared oracle for doctor-omp-receive, the state smoke and the LIVE
+    # acceptance, so none of them answers "is a doorbell held?" from a filename.
+    shift || true
+    run_ts scripts/omp-receive-facts.ts "$@"
     ;;
   copilot)
     # #82 RAIL 7: the managed launch. `exec` and NO subshell/cd on purpose — the vendor

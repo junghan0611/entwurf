@@ -32,6 +32,7 @@
 		"../pi-extensions/meta-bridge-hook.ts",
 		"../pi-extensions/meta-bridge-hook-copilot.ts",
 		"../pi-extensions/meta-bridge-omp.ts",
+		"../pi-extensions/meta-bridge-receive-omp.ts",
 		"../mcp/entwurf-bridge/src/resume-mode.ts"
 	]
 }

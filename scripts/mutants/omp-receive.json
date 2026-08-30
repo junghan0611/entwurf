@@ -1,0 +1,135 @@
+{
+	"schemaVersion": 1,
+	"lane": "omp-receive",
+	"mutants": [
+		{
+			"claim": "OMP-RECEIVE-SCOPE-FENCE",
+			"title": "a receiver that arms on any mode publishes the HOST citizen's doorbell from inside a task subagent — two watchers on one mailbox, and a marker whose owner is not the session it names",
+			"subject": "pi-extensions/meta-bridge-receive-omp.ts",
+			"find": ["\t\tif (ctx.mode !== HOST_MODE) {"],
+			"replace": ["\t\tif (false && ctx.mode !== HOST_MODE) {"],
+			"gate": ["bash", "run.sh", "check-omp-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-RECEIVE-SCOPE-FENCE]",
+			"signatureSource": "scripts/check-omp-receive-arm.ts"
+		},
+		{
+			"claim": "OMP-RECEIVE-NEW-RETIRES-OLD",
+			"title": "skipping the unarm on a birth edge leaves the PREVIOUS citizen armed after `/new` — same pid, same start key, so the marker reads live forever and dispatch enqueues into a mailbox nobody watches. The one false-deliverability cell the start-key guard structurally cannot catch",
+			"subject": "pi-extensions/meta-bridge-receive-omp.ts",
+			"find": ["\t\tthis.unarm(`edge=${edge}`);"],
+			"replace": ["\t\tif (!this.armed) this.unarm(`edge=${edge}`);"],
+			"gate": ["bash", "run.sh", "check-omp-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-RECEIVE-NEW-RETIRES-OLD]",
+			"signatureSource": "scripts/check-omp-receive-arm.ts"
+		},
+		{
+			"claim": "OMP-RECEIVE-NO-WATCH-NO-MARKER",
+			"title": "writing the marker BEFORE the watch advertises a doorbell nobody is listening at — the fail-closed rule inverted, and invisible until a reply silently rots",
+			"subject": "pi-extensions/meta-bridge-receive-omp.ts",
+			"find": ["\t\t\twatcher = fs.watch(signal, () => this.ring(\"signal\"));"],
+			"replace": [
+				"\t\t\twriteMetaReceiverMarker({\n\t\t\t\tgardenId,\n\t\t\t\tbackend: BACKEND,\n\t\t\t\tnativeSessionId,\n\t\t\t\townerPid: this.deps.pid,\n\t\t\t\townerKind: \"omp-host\",\n\t\t\t\tarmProvenance: \"session-start\",\n\t\t\t\treceiversDir: bundle.receiversDir,\n\t\t\t});\n\t\t\twatcher = fs.watch(signal, () => this.ring(\"signal\"));"
+			],
+			"gate": ["bash", "run.sh", "check-omp-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-RECEIVE-NO-WATCH-NO-MARKER]",
+			"signatureSource": "scripts/check-omp-receive-arm.ts"
+		},
+		{
+			"claim": "OMP-RECEIVE-ANNOUNCE-NEVER-PUSHES",
+			"title": "carrying the mailbox body into the doorbell turns every message into a prompt injection — the body is untrusted by construction, and the announce-only contract is the only thing keeping it out of the model's turn",
+			"subject": "pi-extensions/meta-bridge-receive-omp.ts",
+			"find": [
+				"\t\t\t\t\t`[entwurf inbox] ${unread} unread mailbox ${plural} available for garden ${armed.gardenId}. ` +"
+			],
+			"replace": [
+				"\t\t\t\t\t`[entwurf inbox] ${unread} unread mailbox ${plural} for garden ${armed.gardenId}: ${fs.readFileSync(path.join(armed.mailbox, `${fresh[0]}.delivered`), \"utf8\")} ` +"
+			],
+			"gate": ["bash", "run.sh", "check-omp-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-RECEIVE-ANNOUNCE-NEVER-PUSHES]",
+			"signatureSource": "scripts/check-omp-receive-arm.ts"
+		},
+		{
+			"claim": "OMP-RECEIVE-NO-UNCANCELLABLE-TIMER",
+			"title": "starting the arm retry on a build with no `ctx.clearTimer` leaves a 500ms poll running inside the operator's TUI for the life of the session, with nothing able to stop it — the exact silent no-op measured when `clearInterval` was called through `?.`",
+			"subject": "pi-extensions/meta-bridge-receive-omp.ts",
+			"find": ["\t\tif (typeof ctx.setInterval !== \"function\" || typeof ctx.clearTimer !== \"function\") {"],
+			"replace": ["\t\tif (typeof ctx.setInterval !== \"function\") {"],
+			"gate": ["bash", "run.sh", "check-omp-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-RECEIVE-NO-UNCANCELLABLE-TIMER]",
+			"signatureSource": "scripts/check-omp-receive-arm.ts"
+		},
+		{
+			"claim": "OMP-RECEIVE-REFUSES-WITHOUT-WAKE",
+			"title": "arming without the vendor's send surface advertises a citizen as addressable while nothing can ever wake it — a marker that promises a wake this process cannot perform",
+			"subject": "pi-extensions/meta-bridge-receive-omp.ts",
+			"find": ["\t\tif (!this.canRing()) {"],
+			"replace": ["\t\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-omp-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-RECEIVE-REFUSES-WITHOUT-WAKE]",
+			"signatureSource": "scripts/check-omp-receive-arm.ts"
+		},
+		{
+			"claim": "OMP-RECEIVE-RETRY-ARMS",
+			"title": "an arm that never retries leaves every session where this unit loaded before birth permanently unaddressable — and directory-name collation decides which of the two runs first, so the defect is invisible on the host that happened to sort favourably",
+			"subject": "pi-extensions/meta-bridge-receive-omp.ts",
+			"find": ["\t\tthis.startRetry(edge, ctx);"],
+			"replace": ["\t\tif (false) this.startRetry(edge, ctx);"],
+			"gate": ["bash", "run.sh", "check-omp-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-RECEIVE-RETRY-ARMS]",
+			"signatureSource": "scripts/check-omp-receive-arm.ts"
+		},
+		{
+			"claim": "OMP-RECEIVE-BIND-LEAKS-NO-LISTENERS",
+			"title": "registering the exit guard at BIND time adds one process listener per session — subagents included — so a host that spawns enough of them prints MaxListenersExceededWarning into the operator's TUI",
+			"subject": "pi-extensions/meta-bridge-receive-omp.ts",
+			"find": ["\tconst receiver = new OmpReceiver(pi, deps);"],
+			"replace": [
+				"\tconst receiver = new OmpReceiver(pi, deps);\n\tprocess.on(\"exit\", () => receiver.unarm(\"process-exit\"));"
+			],
+			"gate": ["bash", "run.sh", "check-omp-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-RECEIVE-BIND-LEAKS-NO-LISTENERS]",
+			"signatureSource": "scripts/check-omp-receive-arm.ts"
+		},
+		{
+			"claim": "OMP-RECEIVE-UNARM-IS-IDENTITY-GUARDED",
+			"title": "an unguarded teardown deletes a replacement receiver's marker for the same citizen — the live doorbell disappears because a dying instance tidied up after someone else",
+			"subject": "pi-extensions/meta-bridge-receive-omp.ts",
+			"find": ["\t\t\tif (mine && mine.ownerPid === this.deps.pid && mine.gardenId === armed.gardenId) {"],
+			"replace": ["\t\t\tif (mine) {"],
+			"gate": ["bash", "run.sh", "check-omp-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-RECEIVE-UNARM-IS-IDENTITY-GUARDED]",
+			"signatureSource": "scripts/check-omp-receive-arm.ts"
+		},
+		{
+			"claim": "OMP-RECEIVE-ID-DRIFT-REFUSED",
+			"title": "trusting a STALE sender marker arms the doorbell off an id the vendor has already moved past — the record check does not cover it, because the record can agree with the vendor while the marker does not",
+			"subject": "pi-extensions/meta-bridge-receive-omp.ts",
+			"find": ["\tif (marker.nativeSessionId !== nativeSessionId) {"],
+			"replace": ["\tif (false) {"],
+			"gate": ["bash", "run.sh", "check-omp-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-RECEIVE-ID-DRIFT-REFUSED]",
+			"signatureSource": "scripts/check-omp-receive-arm.ts"
+		},
+		{
+			"claim": "OMP-RECEIVE-EDGE-CANCELS-OLD-RETRY",
+			"title": "skipping the stored cancel closure on a birth edge and nulling only the handle ledger leaves the FIRST context's 500ms poll running in the operator's TUI with nothing left able to stop it, and starts a second beside it — one orphan per birth edge that arrives while birth is still slow. The uncancellable-timer failure the arm path refuses to create, reintroduced on the cancel path",
+			"subject": "pi-extensions/meta-bridge-receive-omp.ts",
+			"find": ["\t\tthis.cancelRetry();\n\t\tthis.unarm(`edge=${edge}`);"],
+			"replace": ["\t\tthis.retryHandle = null;\n\t\tthis.retryCancel = null;\n\t\tthis.unarm(`edge=${edge}`);"],
+			"gate": ["bash", "run.sh", "check-omp-receive-arm"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-RECEIVE-EDGE-CANCELS-OLD-RETRY]",
+			"signatureSource": "scripts/check-omp-receive-arm.ts"
+		}
+	]
+}

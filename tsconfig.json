@@ -57,6 +57,7 @@
 		// `.ts` extension is what the vendor loader resolves at runtime. The emit-capable
 		// root config cannot allow that extension. Typechecked by scripts/tsconfig.json.
 		"pi-extensions/meta-bridge-omp.ts",
+		"pi-extensions/meta-bridge-receive-omp.ts",
 		// project-trust-handler.ts is a lib→lib VALUE importer (it pulls preflight /
 		// formatPreflightDenial from entwurf-preflight.ts), so it must use an explicit
 		// `.ts` extension to be runnable under the strip-types gate. The emit-capable

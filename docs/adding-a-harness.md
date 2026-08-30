@@ -433,6 +433,33 @@ Only what the vendor actually ships. This is the step where imagination is most 
     and a vendor silence you cannot remove is a doctor's job rather than a reason to promise
     the capability anyway. The flag's durability across
     releases stays an open risk, not a reason to erase the demonstrated transport.
+  - **A watch INSIDE the long-lived host is a different marker than a watch in a child,
+    and the difference is one specific cell.** `[측정]` OMP's extension runs in the
+    operator's own TUI process, so its receiver marker names that process — which means
+    pid + start-key can prove the HOST is alive and can never prove the WATCH still works,
+    and it cannot see the citizen change underneath a living process at all. `/new` mints a
+    replacement citizen on the SAME pid with the SAME start key, so a receiver that did not
+    explicitly unarm would leave the previous garden id reading deliverable forever while
+    dispatch enqueued into a mailbox nobody watches. Nothing upstream can catch it: from
+    outside, the process really is alive. Ask, for any in-process watch: *what changes
+    underneath this marker without the process dying?* Each answer is a cell you must
+    unarm by hand (here: `/new`, a watcher error, our own close, and a mailbox archived out
+    from under a live inode). What remains — a wedged event loop — is the residual this
+    rail INHERITS from Claude's, and the honest move is to say so in the same words the
+    Claude unit already uses, not to claim it closed.
+  - **The vendor's call sites are measurements, not details, and they are not consistent
+    with each other.** `[측정]` on omp 18.0.0 `setStatus` is on the event `ctx.ui` while
+    `sendUserMessage` is on the FACTORY `pi` object; and the repeating timer's canceller is
+    `ctx.clearTimer` with no `ctx.clearInterval` at all — so `ctx.clearInterval?.(handle)`
+    is a silent no-op that leaves an uncancellable poll running inside the operator's TUI.
+    Probe the canceller BY NAME and refuse to start a timer you cannot stop.
+  - **An acceptance must not require the model to disobey your own doorbell.** `[측정]` an
+    acceptance that asked the model to echo a nonce from a mailbox body failed: the model
+    drained the inbox, recorded the receipt, and declined the instruction because the
+    doorbell had told it the body was untrusted. It was right. Accept the READ — the thing
+    the self-fetch contract actually promises — and join it to the session through the
+    vendor's own transcript, since `entwurf_inbox_read` takes a caller-supplied garden id
+    and `lastReadAt` alone cannot say WHO read it.
   - Note where notification actually goes. `[번들]` Copilot's separate `agentStop` output
     contract is `{decision?:"block", reason?:string}` and a blocked reason becomes a follow-up
     user message. That turn-boundary hook is not the idle-wake transport above and must not be

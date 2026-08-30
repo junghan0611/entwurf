@@ -293,6 +293,102 @@ must never steer each other through shared knobs.
   (40+ non-identity vars included) is in the audit G3 table.
 - **[LIVE 2026-08-27]** clean tmux window (preflight `env | grep PI_SESSION_ID|PI_AGENT_ID` → `CLEAN_NO_PI_IDENTITY`). `/proc/479624/environ` and `/proc/479695/environ` grep `PI_SESSION_ID|PI_AGENT_ID|PI_CODING_AGENT_DIR`: **all absent**. Probe path is only the `-e` file (`…/scripts/raw-omp-measure/probe-extension.ts`); no `~/.pi/` extension path in the JSONL. (Bridge still carries borrowed `ENTWURF_BRIDGE_EXTERNAL_AGENT_ID=external-mcp/claude-code` — M3, not a PI_* carrier.)
 
+## M7 — Receive surface (step 7), MEASURED 2026-08-30
+
+Probe: `probe-receive-surface.ts`, loaded with `omp -e`. Host: oracle, `omp/18.0.0`
+(the binary reports "New version 18.0.11 is available", so this host had NOT drifted).
+Scratch logs were `/tmp/omp-receive-probe-run{1,2}.jsonl` and `/tmp/omp-order-probe.jsonl`;
+they are gone with the host's `/tmp`, which is exactly why the decisive lines are pasted
+BELOW rather than pointed at. A receipt parked in a host-local path is unreadable to the
+next reviewer. **The vendor source
+checkout named in `source-audit.md` is NOT present on this host**, so every row below is a
+LIVE receipt from the running binary rather than a source read — which is why this section
+exists at all.
+
+- **[LIVE] `sendUserMessage` is on the FACTORY object, not the event ctx.**
+  `typeof pi.sendUserMessage === "function"`, `typeof pi.sendMessage === "function"`;
+  `typeof ctx.sendUserMessage === "undefined"`. This is the exact INVERSE of `setStatus`,
+  which lives on `ctx.ui` (M4). Two vendor surfaces, opposite placements, and neither is
+  guessable — the call site is a measurement, not a detail.
+- **[LIVE] the idle wake is real.** `pi.sendUserMessage(text, {deliverAs:"user"})` called
+  at +12.005s on an idle `mode:"tui"` session with zero typing:
+  `agent_start` +31ms, `turn_start` +64ms, `turn_end` +2.45s, and the model answered the
+  probe token in the transcript. Returns `undefined` — not a promise, so there is nothing
+  to await and no rejection to swallow. This closes the `[LIVE — pending]` slot M4 left open.
+- **[LIVE] `ctx.setInterval` fires while idle, and its canceller is `ctx.clearTimer`.**
+  58 ticks over 29s on a fully idle session with no model turn. **There is NO
+  `ctx.clearInterval`**: run 1 called it through `?.`, got a SILENT no-op, and the timer
+  ran 29s past its stop condition inside the TUI. Run 2 probed the canceller BY NAME and
+  `ctx.clearTimer(handle)` stopped it at exactly 3 ticks. `ctxKeys` also carries `isIdle`,
+  `hasPendingMessages`, `getAsyncJobSnapshot`, `abort`, `shutdown`, `invokeTool`.
+- **[LIVE] two extensions in one process both work.** The installed birth unit and the
+  `-e` probe ran in the same pid: the birth unit minted a record, wrote its sender marker
+  and rendered `🪛 <gid> omp` on the status line while the probe logged its own events.
+- **[LIVE] handler order follows DIRECTORY-NAME COLLATION, and the failure it creates is
+  real.** A temporary discovered unit `aa-order-probe` (sorting before `entwurf-meta-omp`)
+  ran its `session_start` handler at `04:46:57.310Z` with `markerPresentAtHandler:false`;
+  the birth unit wrote its record at `.330Z` and its marker at `.331Z` — **20ms later**.
+  `entwurf-receive-omp` sorts AFTER `entwurf-meta-omp`, so a receiver that assumed birth
+  had already run would arm on the first try **by accident**, and go green on every host
+  until a rename or a vendor scan-order change. That is why the shipped receiver defers on
+  a bounded `ctx.setInterval` instead. The probe unit was removed in the same session.
+  The three decisive lines, from `/tmp/omp-order-probe.jsonl` and the shared hook log:
+
+  ```text
+  04:46:57.310Z {"edge":"session_start","unit":"aa-order-probe","pid":3135409,"mode":"tui","markerPresentAtHandler":false}
+  04:46:57.330Z INFO [omp] create record 20260830T134657-f4fbff.meta.json (edge=session_start, native=01a050fd-…)
+  04:46:57.331Z INFO [omp] sender marker 3135409 -> 20260830T134657-f4fbff
+  ```
+- **[LIVE] event-based retry cannot substitute for the timer.** Confirmed against M1: the
+  host `session_start` fires with no model turn, while `agent_start`/`turn_start` require
+  a typed prompt. A Copilot-style retry on turn edges would leave a freshly opened IDLE
+  session unaddressable until the operator typed — the one state bundle B exists to wake.
+- **[LIVE] the D6 roundtrip, in the four lines that carry it.** Automated acceptance
+  (`smoke-omp-receive-live`, 11 assertions, exit 0), garden `20260830T142524-ab505f`:
+
+  ```text
+  meta-mailbox state.json  lastEnqueuedAt 2026-08-30T05:25:25.135Z / lastReadAt 05:25:28.859Z
+  receive log              doorbell (signal) garden=20260830T142524-ab505f fresh=1 unread=1  →  rang … unread=1
+  session transcript       {"type":"toolCall","name":"mcp__entwurf_bridge_entwurf_inbox_read",
+                            "arguments":{"gardenId":"20260830T142524-ab505f"}}
+  session transcript       role:"toolResult" toolName:"mcp__entwurf_bridge_entwurf_inbox_read"
+                            text: "[entwurf inbox read ⟵]  garden: 20260830T142524-ab505f … receipt: lastReadAt=…"
+  ```
+
+  The toolCall is the join that matters: `entwurf_inbox_read` takes a CALLER-SUPPLIED
+  garden id, so `lastReadAt` alone proves a read happened, not that THIS session performed
+  it. An earlier manual run had the same shape with a real authoritative sender — a
+  claude-code citizen to omp `20260830T135551-d9b5d4`, `entwurf_v2 meta-mailbox → enqueued`,
+  and the model answering in the same session.
+- **[LIVE] D3 addressed isolation — the cell the Copilot row still lists as PENDING.** Two
+  omp citizens armed at once (`20260830T141425-597e5e` pid 3154765,
+  `20260830T141428-f8abe4` pid 3154835); one addressed enqueue:
+
+  ```text
+  05:14:39.604Z INFO [omp-receive] pid=3154765 doorbell (signal) garden=20260830T141425-597e5e fresh=1 unread=1
+  05:14:39.606Z INFO [omp-receive] pid=3154765 rang garden=20260830T141425-597e5e unread=1
+  (no line for pid 3154835 anywhere in the log)
+  target   state.json  lastEnqueuedAt 05:14:39.599Z / lastReadAt 05:14:43.019Z
+  sibling  state.json  ABSENT — mailbox directory empty
+  sibling  transcript  FILE DOES NOT EXIST (omp persists lazily; it never took a turn)
+  ```
+- **[LIVE] the `/new` unarm, both directions.** Same pid 3140978:
+
+  ```text
+  04:57:21.319Z INFO [omp-receive] unarmed garden=20260830T135551-d9b5d4 (edge=session_switch(new))
+  04:57:21.320Z INFO [omp-receive] armed   garden=20260830T135721-af8973 … edge=session_switch(new)
+  ```
+
+  and dispatch to the retired id then answered
+  `entwurf_v2 rejected: mailbox-undeliverable (observed liveness: unsupported)` — the unarm
+  is load-bearing, not tidiness.
+- **[LIVE, and it changed an acceptance] the model refuses imperatives inside a mailbox
+  body — correctly.** An early draft of `smoke-omp-receive-live` asked the model to echo a
+  nonce; it drained the inbox, recorded the receipt, and answered *"Its acceptance
+  instruction was unverified, so no token was sent."* It was obeying OUR OWN doorbell,
+  which marks bodies untrusted. The acceptance now asserts the read (and the body arriving
+  in the drained result), never the model's compliance with an untrusted instruction.
+
 ## LIVE procedure (for the implementer sibling)
 
 The probe is `scripts/raw-omp-measure/probe-extension.ts` (repo path). Adjust it freely

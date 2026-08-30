@@ -170,22 +170,46 @@ export const META_BACKEND_DESCRIPTORS: Record<MetaBackend, MetaBackendDescriptor
 		deliveryLevel: "D6",
 		nativeIdLabel: "sessionId",
 	},
-	// BIRTH-ONLY citizen (#87, oh-my-pi v18.0.0). An omp "hook" is an in-process
-	// EXTENSION (`--hook` aliases `--extension`), so the birth unit runs inside the omp
-	// process itself and mints on the vendor's own `session_start` / `session_switch`
-	// edges. Everything above birth is a separate admission, exactly as it was for
-	// copilot:
-	//   direct-inject NOT a capability claim — the "not a drainable mailbox" bucket.
-	//             omp DOES own a documented wake surface (`pi.sendUserMessage`, "idle
-	//             starts a turn", `extensibility/extensions/types.ts:1418`), but nothing
-	//             is installed that holds a watch, so labelling this `self-fetch` would
-	//             advertise a mailbox drain no process can perform. `direct-inject` on a
-	//             backend outside NATIVE_PUSH_BACKENDS routes every dispatch into the
-	//             fail-closed refusal that names the missing rail
-	//             (`entwurf-deliverability.ts`), which is the honest answer until the
-	//             receive lane lands.
-	//   D0        identity only. D2 (receiver armed) has nothing to arm yet, so any level
-	//             above D0 would be a false claim.
+	// SELF-FETCH citizen since #87 bundle B (oh-my-pi v18.0.0). An omp "hook" is an
+	// in-process EXTENSION (`--hook` aliases `--extension`), so BOTH units run inside the
+	// omp host: the birth unit mints on `session_start`/`session_switch`, and the receiver
+	// unit arms a mailbox watch in the same process and rings the doorbell.
+	//   self-fetch  The doorbell announces and the model drains its own inbox with
+	//             `entwurf_inbox_read` — that read is the receipt, and the notice never
+	//             carries the body. `[LIVE 2026-08-30, oracle, omp 18.0.0]` the vendor's
+	//             own wake surface was measured rather than inherited:
+	//             `pi.sendUserMessage(text,{deliverAs:"user"})` (on the FACTORY object, not
+	//             the event ctx) called on an IDLE tui session with zero typing started a
+	//             real turn — `agent_start` +31ms, `turn_start` +64ms, `turn_end` +2.45s,
+	//             model reply in the transcript. It was `direct-inject` while no process
+	//             held a watch; that label was the honest "not a drainable mailbox" bucket,
+	//             and it stopped being true when the receiver unit landed.
+	//             Replyability is still a fact about a LIVE marker, never a constant of this
+	//             backend: with no armed receiver every dispatch is refused
+	//             `mailbox-undeliverable`, which is exactly what an omp host with the birth
+	//             unit and no receiver unit still gets.
+	//   D6        the PRODUCT grade, earned by the LIVE roundtrip of 2026-08-30 on oracle
+	//             (omp 18.0.0). The code landing was NOT the evidence — this number moved
+	//             when the receipt did (`adding-a-harness.md` step 8(c)):
+	//             garden `20260830T140819-116f6a`, `lastEnqueuedAt 05:08:20.555Z` /
+	//             `lastReadAt 05:08:23.958Z`, doorbell rung on an idle session with zero
+	//             typing, and the citizen's OWN transcript carrying
+	//             `mcp__entwurf_bridge_entwurf_inbox_read` for its own garden id — the join
+	//             that makes the drain a fact about THAT session rather than about the clock.
+	//             D3 is PROVEN here rather than pending: with two live omp citizens armed
+	//             (pids 3154765 / 3154835) a single addressed enqueue rang exactly one
+	//             doorbell, and the sibling persisted no transcript and kept an empty
+	//             mailbox. That is the cell the Copilot row still lists as PENDING.
+	//             D7 is PARTIAL, deliberately: `lastReadAt` is observable without scraping,
+	//             but the reply itself is only visible in the transcript, and no completion
+	//             taxonomy or long-haul operation was measured.
+	//             D8 is PARTIAL: fresh-only ring (dedupe), `/new` unarm, watch-error unarm,
+	//             vanished-signal unarm and the identity-guarded teardown are implemented and
+	//             pinned hermetically by `check-omp-receive-arm`; ordering under load, loop
+	//             guards and crash recovery are not measured.
+	//             Replyability stays a fact about a LIVE marker: with no armed receiver every
+	//             dispatch is still refused `mailbox-undeliverable` — re-proved on the same
+	//             day against a garden id whose session had just been replaced by `/new`.
 	//   sessionId the native join key: `ReadonlySessionManager.getSessionId()`
 	//             (`session-manager.ts:1946-1948`), a UUIDv7 minted at
 	//             `mintSessionId()` `:95-97` — NOT the transcript filename, which is
@@ -194,8 +218,8 @@ export const META_BACKEND_DESCRIPTORS: Record<MetaBackend, MetaBackendDescriptor
 	//             (`scripts/raw-omp-measure/README.md` M1).
 	omp: {
 		backend: "omp",
-		wakeMode: "direct-inject",
-		deliveryLevel: "D0",
+		wakeMode: "self-fetch",
+		deliveryLevel: "D6",
 		nativeIdLabel: "sessionId",
 	},
 };

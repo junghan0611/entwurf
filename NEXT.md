@@ -8,26 +8,26 @@
 
 - [x] **1. OMP measurement·audit·LIVE + Bundle A admission hardening** — backend registration, TUI-only birth, visible status, native MCP hand, sender identity, four-root/package/doctor hardening 완료.
 - [x] **2. Operator deploy + real outbound acceptance** — 2026-08-28 oracle: 재설치·shared reader 재배포·doctor 4종 green, `check:full` exit 0, outbound LIVE 4건(그중 1건은 GLG가 직접 연 세션). `tools.xdev` 방언 발견과 문서화 포함.
-- [ ] **3. Bundle A land + 0.16.0 준비** ← CURRENT: branch push 완료; main land 방식과 cut 여부는 GLG 결정. 남은 정리는 아래 LEDGER.
-- [ ] **4. Bundle B: addressed receive / roundtrip** ← PAUSED: **대칭은 여기서 생긴다.** 다른 harness → 이미 열린 OMP wake·receive는 Bundle A 범위 밖이고 코드가 0줄이다.
-- [ ] **5. Bundle C: visible fresh + grade** ← PAUSED: `entwurf_fresh_call`로 OMP를 열고 LIVE 영수증 뒤에만 DELIVERY/registry grade 이동.
+- [x] **3. Bundle B: addressed receive / roundtrip** — **대칭이 생겼다.** receiver 확장, bounded arm defer, `/new`·watch-error·vanished-signal·overlapping-edge fail-closed, install/uninstall/doctor, `check-omp-receive-arm` + `scripts/mutants/omp-receive.json`(11 mutants, 전부 정확한 이유로 kill), `smoke-omp-receive-state`, `smoke-omp-receive-live`. registry `self-fetch`/`D6`, DELIVERY 행 신설. 단언 개수는 게이트가 세는 것이지 증거가 아니므로 여기 박지 않는다 — 영수증은 `raw-omp-measure/README.md` §M7 이다.
+- [ ] **4. Bundle A+B land + 0.16.0 준비** ← CURRENT: 구현은 닫혔고 독립 검수 amendment까지 반영된 **candidate**다(아직 uncommitted). 남은 것은 전체 qualification·full floor를 개봉자가 frozen candidate에서 1회 돌리는 것, 그리고 GLG의 land 방식·cut 결정.
+- [ ] **5. Bundle C: visible fresh + supported declaration** ← PAUSED: `entwurf_fresh_call`로 OMP를 열고, 그 뒤에만 README/`setup`의 supported 선언이 움직인다. **grade(registry+DELIVERY)는 step 8이라 B가 이미 옮겼다** — C가 아니다.
 
-현재 좌표: 1–2 완료 → **3 land·cut 결정** → 4–5 보류.
+현재 좌표: 1–3 완료(3은 검수 amendment 반영 candidate) → **4 qualification·full floor·land 결정** → 5 보류.
 
 # NOW
 
 - **Stem:** OMP TUI 하나를 독립 형제로 세우되, 그 안의 서브에이전트에는 garden id를 주지 않는다.
-- **되는 것 (측정, 2026-08-28 oracle):** OMP TUI가 열리면 citizen 하나를 mint하고, 상태줄에 garden id를 보이고, 자기 이름으로 `entwurf_v2` outbound를 보낸다. task subagent는 `mode=print`로 scope-refused되어 아무것도 mint하지 않는다. 벤더 `/mcp list`가 native 우선을 확인한다.
-- **안 되는 것 (설계된 경계):** 다른 harness → OMP 답장. receiver marker도 mailbox arm도 없고 watch를 쥔 프로세스가 없다(`pi-extensions/meta-bridge-omp.ts:17`). dispatch는 `mailbox-undeliverable`로 fail-closed. OMP는 `entwurf_fresh_call`로 열 수 없다. registry는 `D0`, 이는 정확한 표기다.
-- **운영자 필수 설정:** `~/.omp/agent/config.yml`에 `tools: xdev: false`. 기본값(`tools.xdev: true` + `xdevDocs: builtins`)에서는 MCP 도구가 `xd://` 가상 device로 감싸이고 스키마가 프롬프트에 없어, 자연어 발신이 **거짓 성공 보고**로 끝난다(측정). 근거·숫자는 `docs/external-mcp-host.md` OMP 절.
-- **컷은 이제 코드가 막는다:** `smoke-omp-receive-live`가 release-gate MUST 스텝으로 배선됐다. capability registry를 읽어 omp가 drainable mailbox를 갖지 않는 동안 protocol SKIP(exit 97)을 반환하므로, 무인 `release-gate`는 그것을 보고하고 **`--cut`은 빨강**이다. 하드코딩된 실패가 아니다 — Bundle B가 `wakeMode`를 옮기는 순간 이 스텝은 스스로 실제 왕복 영수증을 요구하기 시작하고, 등급만 옮기고 몸통이 없으면 FAIL한다.
-- **Next:** GLG가 land 방식(merge/PR)을 정한다. 0.16.0 cut은 Bundle B 전까지 위 게이트가 막는다 — 되돌리려면 `run_live_step` → `run_behavior_step` 한 단어. Bundle B는 별도 grant.
-- **Boundary:** Bundle A가 사는 것은 **OMP → others outbound**뿐이다. 대칭(others → OMP)은 Bundle B이며 아직 없다; supported-harness/grade 선언으로 앞당기지 않는다.
-- **Read:** #87 thread · `docs/setup-clean-host.md` §4b · `docs/external-mcp-host.md` OMP row · `docs/adding-a-harness.md` steps 3, 3.5, 5, 6, 7.
-- **Do not touch:** Bundle B receive · Bundle C fresh/grade · README/setup support admission · DELIVERY/registry grade.
+- **이제 되는 것 (측정, 2026-08-30 oracle, omp 18.0.0):** OMP TUI가 열리면 citizen 하나를 mint하고, 상태줄에 garden id를 보이고, 자기 이름으로 보내고, **다른 harness의 메시지를 받는다.** idle 세션이 타이핑 0회로 깨어나 `entwurf_inbox_read`로 스스로 드레인하고 같은 native 세션에서 답한다. `/new`는 옛 시민의 doorbell을 회수하고 새 시민에게 arm한다. task subagent는 여전히 아무것도 mint·arm하지 않는다.
+- **아직 안 되는 것 (남은 경계):** `entwurf_fresh_call`로 OMP를 열 수 없다. step 9가 supported 선언을 그 능력에 묶으므로 **OMP는 아직 supported harness가 아니다.** 이건 Bundle C다.
+- **운영자 필수 설정 (변함없음):** `~/.omp/agent/config.yml`에 `tools: xdev: false`. 기본값에서는 doorbell이 모델이 부를 수 없는 도구를 알리게 된다. LIVE 스모크가 이걸 선행 조건으로 검사한다.
+- **컷 게이트는 이제 실제 왕복을 요구한다:** `smoke-omp-receive-live`가 registry를 읽고 `self-fetch`를 보면 더 이상 SKIP하지 않는다 — `LIVE=1`에서 실제 tmux omp TUI를 띄우고 11개 단언을 요구한다. 하드코딩된 통과가 아니다.
+- **Next:** 개봉자가 frozen candidate에서 전체 qualification·full floor를 1회 돌린다. 그 다음 GLG가 land 방식(merge/PR)과 cut을 정한다.
+- **Read:** #87 thread · `scripts/raw-omp-measure/README.md` §M7 (수용의 근거가 된 5셀 측정) · `docs/setup-clean-host.md` §4b · `docs/adding-a-harness.md` step 7.
+- **Do not touch:** Bundle C fresh/mux/README/setup supported 선언 · L8(내부 agent 권한, 가든 전역) · #72/#76/#78.
 
 # RECENT
 
+- **2026-08-30:** Bundle B candidate. GLM 독립 검수 결과 architecture blocker 0 / Defect 3, 그 amendment까지 반영했다 — 가장 무거운 것은 `onEdge`의 `cancelRetry()`가 ctx 없이 불려 **핸들만 버리고 벤더 타이머는 계속 돌던** 결함이다(겹치는 birth edge마다 고아 타이머 하나). 인자를 필수로 바꾸고 겹침 셀과 exact-once mutant로 고정했다. D5 5셀 LIVE probe가 벤더 wake 표면을 처음으로 실측했다 — `pi.sendUserMessage`는 factory에 있고(ctx 아님), idle에서 턴을 시작하며(+31ms), `ctx.setInterval`은 idle에서 돌고 취소는 `ctx.clearTimer`뿐이다(`clearInterval` 없음 → `?.` 호출은 조용한 no-op). 확장 핸들러 순서가 디렉터리명 collation을 따르고, birth보다 먼저 도는 유닛은 sender marker를 못 본다는 것도 실측(20ms). D3 격리는 살아있는 omp 시민 2개로 증명 — Copilot 행이 아직 PENDING으로 두고 있는 셀이다.
 - **2026-08-28 (오후):** oracle에서 Bundle A를 실제로 설치·배포·수용. stale writer 두 축(omp 확장, Claude shared reader)을 doctor가 잡아 재배포. LIVE outbound 4건, subagent zero-mint, inbound fail-closed 모두 재현. OMP `tools.xdev` 기본값이 MCP 도구를 `xd://`로 감싸 거짓 발신 보고를 만든다는 것을 벤더 바이너리·트랜스크립트로 측정하고 3개 문서에 반영.
 - **2026-08-28 (오전):** #87 Bundle A source, package and doctor hardening reviewed independently; qualification and final deterministic floor were green on the final candidate.
 - **2026-08-27:** OMP vendor measurement and real TUI/subagent observations closed the Bundle A admission basis.
@@ -39,19 +39,15 @@
 
 # LEDGER — land 전에 정할 것
 
-- **L1 게이트 편입:** `smoke-omp-bridge-state` / `smoke-omp-mcp-state`가 `check:full`·`release-gate`·`setup` 어디에도 없다(측정: package.json 스크립트 전체에서 0회). `check-omp-birth-hook`만 `scripts/mutants/omp-birth.json`을 통해 `check-gate-qualification`에서 돈다. Copilot 대응물은 `check:hermetic`에 있다 — 비대칭.
+- **B에서 닫힌 것:** L1(두 state smoke가 `check:hermetic`에 편입, 이제 receive 짝까지 셋), L3(doctor가 `tools.xdev`를 읽고 LIVE 스모크도 선행 검사), L4(`entwurf_self`의 mailbox 렌더가 이제 참이다 — 드레인하는 프로세스가 실제로 있다).
+- **B가 일부러 닫지 않은 것 (정직하게 기록):** event loop wedge 셀. marker는 "살아있는 소유자가 arm을 시도했다"까지만 뜻하며 watch 등록 ack이 아니다 — Claude 레일이 `meta-bridge-hook.ts:279-280`에서 같은 문장으로 이미 인정한 잔여 위험이고, OMP는 새로 만드는 게 아니라 물려받는다. 닫으려면 marker heartbeat + 리더 쪽 max-age가 필요하고 그건 claude·copilot 레일을 동시에 움직이므로 별도 이슈감이다.
+- **런타임 extension reload/disable 셀은 미측정**이다. doctor 노트로만 남아 있다.
+
 - **L2 CHANGELOG:** `## Unreleased`가 비어 있고 v0.15.1 이후 커밋이 쌓여 있다. cut을 하면 `tag-release`가 채운다.
-- **L3 doctor가 모르는 설정:** `doctor-omp-mcp`는 `tools.xdev`를 보지 않는다. 설정이 기본값이면 doctor는 green인데 모델은 도구를 제대로 못 부른다. doctor 셀 하나로 넣을지, Bundle C의 preflight 능력으로 올릴지 결정 필요.
-- **L4 표기 다듬기:** `entwurf_self`가 omp 시민에게 `metaDeliveryDomain: "self-fetch"` + `mailboxPath`를 렌더한다. `replyable:false`와 decider는 정직하므로 동작 결함은 아니지만, 드레인하는 프로세스가 없는 경로를 보여준다.
 - **L5 claude 시민의 model 필드 — 답 나옴, 고치는 일만 남음 (#90 CLOSED):** 설치된 Claude Code **2.1.245**에서 우리 훅 stdin을 캡처한 결과, interactive `SessionStart` 봉투는 `model`을 **문자열**로 보낸다(`claude-opus-5[1m]`). print 모드(`claude -p`)는 아예 안 보낸다. 우리 리더(`meta-bridge-hook.ts:184-191`)가 객체 `.id`/`model_id`만 받아 그 문자열을 버리므로 claude-code 레코드는 0/353이다. 남은 일: 리더를 문자열 수용으로 넓히고 birth-hook fixture로 고정하되 **print 모드의 부재도 같이 고정**한다. 벤더 버전이 오르면 캡처를 다시 떠야 답이 유지된다. 별도 grant.
 - **L8 OMP child가 bridge 권한을 물려받는다 (측정, GLG 세션 2026-08-28):** OMP task child의 `entwurf_self`는 **부모의 garden id**를 반환한다(두 번째 주소 없음 — §3.5 요구사항 충족, 게이트가 증명하는 그대로). 그러나 그 빌린 신원으로 `entwurf_v2`와 `entwurf_fresh_call`을 호출할 수 있다. §3.5(b)가 도구 차용을 의도적으로 허용하므로 깨진 불변식은 아니고, 열린 질문은 **내부 agent가 dispatch·형제 생성 권한을 가져도 되는가**이며 이는 OMP 한정이 아니라 가든 전역이다. 값싼 울타리 후보 측정: omp 18.0.0에 subagent의 MCP 접근을 막는 `mcp.*` 키는 없으나 `task.enableLsp`(기본 false)가 **subagent별 개별 도구 차단 기제가 존재함**을 증명한다. 자체 tool set을 든 custom agent 정의는 미검증 단서.
-- **L6 벤더 드리프트:** 측정은 omp 18.0.0 기준. 세션 중 18.0.9까지 올라갔다. `mode === "tui"` 판별자와 `xd://` 동작은 업그레이드 시 재측정 대상.
+- **L6 벤더 드리프트:** 이 호스트는 아직 **omp 18.0.0**이다(2026-08-30 측정: `omp --version`). 벤더는 **18.0.11**을 알린다(TUI 배너). `mode === "tui"` 판별자, `xd://` 동작, 그리고 이제 §M7의 다섯 셀(호출 자리·idle wake·`clearTimer`·핸들러 순서)이 업그레이드 시 재측정 대상이다.
 - **L7 ROADMAP:** "현재" 절이 아직 측정 단계로 적혀 있다.
-
-# CARRIED
-
-- **#78** macOS/native-Windows portability — separate grant; do not mix into #87.
-- **#72 #76** bugs and cortex gate slice — separate lanes.
 
 # DURABLE LINKS
 
