@@ -41,11 +41,21 @@ Prerequisites on the host running the external MCP client:
 > native launchers have NOT been certified against this failure mode; do not read Copilot's cells
 > as coverage for them.
 >
-> **OMP has the DETECT half only** (#87 bundle A). entwurf owns no omp launch yet, so there is
-> nothing to strip at exec; `doctor-omp-bridge` instead reads `/proc/<pid>/environ` for every live
-> `omp` process and goes RED on its own axis when one carries either carrier. The strip half is owed
-> by the managed launch that step 9 will add — until then an omp started from a pi citizen's bash is
-> unsupported, exactly as this boundary says.
+> **OMP has both halves, and the strip one is not an omp launcher** (#87 Bundle C). entwurf still
+> owns no managed omp invocation — the bare vendor runtime IS this harness's clause 1 answer, and
+> nothing here argues for a wrapper. The strip sits one level up instead, at the shared launch seam
+> every `entwurf_fresh_call` backend passes through: `SCRUBBED_INHERITED_ENV` empties
+> `PI_SESSION_ID` and `PI_AGENT_ID` on the `new-window` argv itself
+> (`pi-extensions/lib/mux-fresh-call.ts:402`), for all four backends rather than only the one whose
+> measurement surfaced it, because the leak is a property of tmux and not of a vendor. `-e VAR=`
+> sets the variable empty rather than unsetting it — tmux has no per-window unset — and every
+> carrier reader trims and tests truthiness, so empty and absent are the same answer by
+> construction. Pinned by `[QK:FRESHCALL-IDENTITY-SCRUB]` in the `check-mux-fresh-call` vitest lane,
+> inside `check:full`. The DETECT half is unchanged and still load-bearing, because a seam covers
+> only the launches that pass through it: `doctor-omp-bridge` reads `/proc/<pid>/environ` for every
+> live `omp` process and goes RED on its own axis when one carries either carrier. An omp the
+> operator started from a pi citizen's bash never touched the seam and is still unsupported, exactly
+> as this boundary says.
 
 Example env file:
 
