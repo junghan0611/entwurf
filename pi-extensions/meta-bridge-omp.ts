@@ -1029,6 +1029,40 @@ function bootstrapFor(ctx: OmpExtensionContext): OmpBootstrapHandle | null {
  * nothing here re-derives the vendor's event spelling; the string only tells the log which
  * edge did it.
  */
+/**
+ * EVERY LATER BIRTH EDGE ENDS A NONFINAL BOOTSTRAP — NO ID COMPARISON, AND THIS FUNCTION IS
+ * THE ONLY PLACE THAT RULE IS SPELLED.
+ *
+ * The frozen candidate invalidated only when the native id CHANGED, and `[source]` the vendor
+ * emits `session_switch(reason:"resume")` unconditionally on the reload/same-file path —
+ * `switchingToDifferentSession` is computed at `session/agent-session.ts:7986-7988` but never
+ * gates the emit at `:8071-8078`, and `agent.replaceMessages(...)` swaps the transcript
+ * immediately after it. So a same-id switch is a real epoch change wearing the old id, and a
+ * bootstrap that survived it could release the caller's task into a conversation the caller
+ * never opened. The id is not the epoch; the edge is (#87 Terra review, Defect 1).
+ *
+ * IT IS CALLED BEFORE THE ENVELOPE, WHICH IS THE O-D1r REPAIR. Ending the epoch used to live
+ * inside `startOmpBootstrap`, so it was reachable only by an edge that got all the way there —
+ * and `onBirthEdge` has two earlier exits, a refused envelope and a throwing upsert. A
+ * same-id `session_switch` that took either exit left the previous epoch alive while passing
+ * both fences in `ompBootstrapCtxAccepts`, so a released bootstrap could still deliver at the
+ * next `turn_end`. A bail is a WORSE edge than a healthy one, never a reason to keep an old
+ * epoch: whatever else failed, this host just told us the session moved.
+ *
+ * `nativeSessionId` is null exactly when the caller does not have one yet — the pre-envelope
+ * position. The id is diagnostic here and never a condition, which is why not having it costs
+ * a log word rather than the rule.
+ */
+function endBootstrapEpochOnLaterEdge(edge: string, nativeSessionId: string | null): void {
+	if (!bootstrapConsumed || activeBootstrap === null) return;
+	const native =
+		nativeSessionId === null
+			? "unknown/pre-envelope"
+			: `${nativeSessionId}, same-id=${activeBootstrap.sessionId === nativeSessionId}`;
+	activeBootstrap.handle.invalidate(`birth edge ${edge} ended the bootstrap epoch (native=${native})`);
+	activeBootstrap = null;
+}
+
 export function startOmpBootstrap(opts: {
 	pi: OmpExtensionApi;
 	/** The BIRTH context — the creator whose timers this bootstrap's poll will belong to. */
@@ -1040,25 +1074,11 @@ export function startOmpBootstrap(opts: {
 	const { pi, ctx, envelope, edge } = opts;
 	const log = opts.log ?? logLine;
 	if (bootstrapConsumed) {
-		// EVERY LATER BIRTH EDGE ENDS A NONFINAL BOOTSTRAP — NO ID COMPARISON, AND THAT IS THE
-		// WHOLE OF DEFECT 1 (#87 Terra review). The frozen candidate invalidated only when the
-		// native id CHANGED, and `[source]` the vendor emits `session_switch(reason:"resume")`
-		// unconditionally on the reload/same-file path — `switchingToDifferentSession` is
-		// computed at `session/agent-session.ts:7983` but never gates the emit at `:8071-8078`,
-		// and `agent.replaceMessages(...)` swaps the transcript immediately after it. So a
-		// same-id switch is a real epoch change wearing the old id, and a bootstrap that
-		// survived it could release the caller's task into a conversation the caller never
-		// opened. The id is not the epoch; the edge is.
-		//
-		// The previous different-id branch is absorbed here rather than kept beside this one:
-		// two conditions for one rule is where the next drift would live.
-		if (activeBootstrap !== null) {
-			const sameId = activeBootstrap.sessionId === envelope.nativeSessionId;
-			activeBootstrap.handle.invalidate(
-				`birth edge ${edge} ended the bootstrap epoch (native=${envelope.nativeSessionId}, same-id=${sameId})`,
-			);
-			activeBootstrap = null;
-		}
+		// The SAME rule, through the same owner. On the wired path `onBirthEdge` already ran it
+		// before the envelope, so this is a no-op; it is here because a caller that drives this
+		// function directly — the contract gate does — must reach the rule too, and because a
+		// rule spelled twice is where the next drift would live.
+		endBootstrapEpochOnLaterEdge(edge, envelope.nativeSessionId);
 		// The latch is NEVER rearmed from here. `getFlag` reads a per-process map that is not
 		// consumed by reading, so without this the very next edge would arm the same payload again.
 		return;
@@ -1115,6 +1135,12 @@ export function onBirthEdge(edge: string, ctx: OmpExtensionContext, pi?: OmpExte
 		logLine("INFO", `scope-refused edge=${edge} mode=${String(ctx.mode)}: not the visible tui host, no record minted`);
 		return;
 	}
+
+	// THE EPOCH ENDS HERE, BEFORE ANYTHING THAT CAN BAIL. Past the mode fence this host has
+	// told us the session moved, and that fact does not depend on the envelope being readable
+	// or the record being writable — the two exits below. Placing it after either one made the
+	// rule conditional on this edge succeeding, which is the narrow window O-D1r named.
+	endBootstrapEpochOnLaterEdge(edge, null);
 
 	const envelope = readBirthEnvelope(ctx);
 	if ("refusal" in envelope) {

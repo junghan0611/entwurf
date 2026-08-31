@@ -261,10 +261,12 @@
 		},
 		{
 			"claim": "OMP-BOOTSTRAP-SAME-ID-SWITCH-INVALIDATES",
-			"title": "the epoch guard put back on the native id, exactly as the frozen Bundle C candidate had it. The vendor emits session_switch(reason:\"resume\") on the same-file reload path WITHOUT changing the native id and replaces the transcript right after (agent-session.ts:7983 computes switchingToDifferentSession, :8071-8078 emits regardless), so a bootstrap that is waiting, callback-sent or released survives a real epoch change wearing the old id and can still release the caller's task into a conversation the caller never opened. Every different-id case — /new, fork, a resume to another file — keeps passing, which is why one review had to read the vendor rather than the tests",
+			"title": "the native-id comparison put back INSIDE the one function that owns the epoch rule, exactly as the frozen Bundle C candidate had it. The vendor emits session_switch(reason:\"resume\") on the same-file reload path WITHOUT changing the native id and replaces the transcript right after (agent-session.ts:7986-7988 computes switchingToDifferentSession, :8071-8078 emits regardless), so an id-conditional rule lets a waiting, callback-sent or released bootstrap survive a real epoch change wearing the old id. Note what does NOT catch this: on the wired onBirthEdge path the pre-envelope call passes no id at all and still ends the epoch, so the defence in depth added for O-D1r masks the mutation there — it is the direct-drive cell, which reaches the rule with a real id the way a healthy edge does, that kills it",
 			"subject": "pi-extensions/meta-bridge-omp.ts",
-			"find": ["\t\tif (activeBootstrap !== null) {"],
-			"replace": ["\t\tif (activeBootstrap !== null && activeBootstrap.sessionId !== envelope.nativeSessionId) {"],
+			"find": ["\tif (!bootstrapConsumed || activeBootstrap === null) return;\n"],
+			"replace": [
+				"\tif (!bootstrapConsumed || activeBootstrap === null) return;\n\tif (nativeSessionId !== null && activeBootstrap.sessionId === nativeSessionId) return;\n"
+			],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:OMP-BOOTSTRAP-SAME-ID-SWITCH-INVALIDATES]",
@@ -281,6 +283,17 @@
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:OMP-BOOTSTRAP-REFUSES-UNCANCELLABLE-TIMER]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-EPOCH-ENDS-BEFORE-ENVELOPE",
+			"title": "the epoch-ending call moved back behind the envelope, which is the pre-O-D1r shape. onBirthEdge has two early exits before it ever reaches startOmpBootstrap — a refused envelope and a throwing upsert — so ending the epoch only from inside startOmpBootstrap makes the rule conditional on the LATER edge succeeding. A same-id session_switch that takes either exit then leaves a released bootstrap alive, and it still passes both fences in ompBootstrapCtxAccepts, so the previous caller's task lands at the next turn_end of a session the caller never opened. Every healthy edge is unaffected, which is why a review found this by reading the bail paths rather than by running anything",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\tendBootstrapEpochOnLaterEdge(edge, null);\n\n\tconst envelope = readBirthEnvelope(ctx);"],
+			"replace": ["\tconst envelope = readBirthEnvelope(ctx);"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-EPOCH-ENDS-BEFORE-ENVELOPE]",
 			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
 		}
 	]

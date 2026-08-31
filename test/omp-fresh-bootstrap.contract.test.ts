@@ -17,6 +17,9 @@
  * `smoke-omp-fresh-live`, one real window and two real model turns.
  */
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
 	buildOmpBootstrapPayload,
@@ -35,6 +38,7 @@ import entwurfMetaOmp, {
 	OMP_BOOTSTRAP_TASK_MAX_CHARS,
 	ompBootstrapCtxAccepts,
 	ompCallbackToolReady,
+	onBirthEdge,
 	resetOmpBootstrapForTest,
 	startOmpBootstrap,
 	OMP_BOOTSTRAP_FLAG as UNIT_FLAG,
@@ -603,6 +607,13 @@ function birthFixture() {
 		tools,
 		active,
 		live,
+		/** The REAL `onBirthEdge` with this fixture's `pi` — the wired path, INCLUDING its two
+		 * early exits. `birth` below skips it because a healthy edge writes a record and a
+		 * marker, which is `check-omp-birth-hook`'s subject; this one exists precisely to drive
+		 * an edge that never gets that far. */
+		birthEdge(edge: string, rawCtx: { mode: unknown; cwd: unknown }) {
+			onBirthEdge(edge, rawCtx, pi);
+		},
 		/** One birth edge, with the ctx the vendor would carry. */
 		birth(edge: string, nativeSessionId = NATIVE, gap: TimerGap = "none") {
 			startOmpBootstrap({
@@ -690,6 +701,37 @@ describe("defect 1 — a birth edge ends the epoch, and the native id is not the
 		fx.ready();
 		fx.tick();
 		expect(fx.sent).toEqual([]);
+	});
+
+	it("[QK:OMP-BOOTSTRAP-EPOCH-ENDS-BEFORE-ENVELOPE] a later birth edge that BAILS still ends the epoch — `onBirthEdge` exits early on a refused envelope and on a throwing upsert, and a bail is a WORSE edge than a healthy one, never a reason to keep the previous caller's task alive (#87 O-D1r)", () => {
+		const fx = birthFixture();
+		fx.ready();
+		fx.birth("session_start");
+		fx.emit("tool_call", call());
+		fx.emit("tool_result", result());
+		// released: the callback provably succeeded and the task is armed for the next turn_end.
+
+		// A store of its own, so "no record was minted" is a fact this cell can read rather
+		// than a claim it has to trust. The hook log resolves under the same root.
+		const store = fs.mkdtempSync(path.join(os.tmpdir(), "omp-epoch-"));
+		const sessionsDir = path.join(store, "meta-sessions");
+		const previous = process.env.ENTWURF_META_SESSIONS_DIR;
+		process.env.ENTWURF_META_SESSIONS_DIR = sessionsDir;
+		try {
+			// Past the mode fence — this IS the visible host — but with no `sessionManager` the
+			// envelope is refused, so onBirthEdge returns before it ever reaches upsertMetaSession.
+			fx.birthEdge("session_switch(resume)", { mode: "tui", cwd: "/tmp" });
+		} finally {
+			if (previous === undefined) delete process.env.ENTWURF_META_SESSIONS_DIR;
+			else process.env.ENTWURF_META_SESSIONS_DIR = previous;
+		}
+
+		fx.emit("turn_end", {});
+		// One message ever left: the callback-only prompt. The task died with the epoch.
+		expect(fx.sent).toHaveLength(1);
+		// And the bail really was a bail — no record store came into existence.
+		expect(fs.existsSync(sessionsDir)).toBe(false);
+		fs.rmSync(store, { recursive: true, force: true });
 	});
 });
 
