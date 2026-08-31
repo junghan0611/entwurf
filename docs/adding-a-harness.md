@@ -17,6 +17,44 @@ describes entwurf ownership of a concrete invocation/install/config surface; it 
 admission grade. *Supported* means the end-to-end native-harness contract in this document has
 been accepted.
 
+## The shipped map — five backends, one gauge
+
+Steps 1–9 below are one fixed gauge, and five backends now ride it. Every new harness feels like
+a special case while you are inside it; read this table first so the VARIETY is expected rather
+than alarming. Cells summarize facts whose receipts live in `DELIVERY.md`'s matrix and in this
+document's worked examples — do not re-derive them, reopen them there.
+
+| backend | lineage | receive rail — how a message lands | callback spelling (one tool, per-harness dialect) | fresh launch (step 9) |
+|---|---|---|---|---|
+| `pi` | the host adapter itself | control socket: record-keyed UDS; a send steers or follows up the live turn | `entwurf_v2` (native tool) | positional prompt + `--entwurf-control --model` |
+| `claude-code` | independent vendor | self-fetch mailbox: exec-form `FileChanged` doorbell + `asyncRewake`; the model drains with `entwurf_inbox_read` | `mcp__entwurf-bridge__entwurf_v2` | positional prompt + `--allowedTools=…` + `--model=` |
+| `copilot` | independent vendor | self-fetch mailbox: the watch lives in a FORKED first-party extension child; the receiver marker names the extension pid | `entwurf-bridge-entwurf_v2` — plus a SECOND permission dialect, `entwurf-bridge(entwurf_v2)` | managed verb `entwurf copilot`, `--interactive … --model … --yolo` |
+| `agy` | independent vendor | native-push: record + probe-alive gRPC `send-message`; no mailbox, no receiver marker | n/a — push rail | not openable; the declared pre-#82 legacy exception |
+| `omp` | **a pi fork** — inherits pi's env vocabulary (step 1(6)) | self-fetch mailbox: Claude's SHAPE, but the watch runs IN-PROCESS in the operator's TUI; announce-only doorbell via the vendor's own `sendUserMessage` | `mcp__entwurf_bridge_entwurf_v` — the sanitizer eats the digit | bare `omp`, NO positional prompt: the two-stage `--entwurf-bootstrap` payload |
+
+(Codex has a verified delivery probe and a deliberate decision against a native lane — pi already
+supplies the official GPT route. It is a row in `DELIVERY.md`, not a sixth gauge.)
+
+Two facts this table exists to make obvious:
+
+- **Lineage does not choose the rail.** omp is pi underneath and rides Claude's mailbox shape,
+  because the rail is chosen by the harness's MEASURED wake surface (step 1), never by its
+  ancestry. What ancestry does instead is concentrate the danger: the shared env vocabulary is
+  exactly where a fork silently splits a store (step 1(6), step 3; `[측정]` #87 B1).
+- **One tool, three spellings — and that is the smallest of the differences.** Every column
+  varies per harness, every cell was measured, and the next harness will disagree with all five
+  rows somewhere. The gauge holds because the STEPS are fixed while their ANSWERS are not.
+
+**Why the doorbell is worth this much work** (GLG doctrine, 2026-08-31). Every row keeps its own
+runtime, auth and transcript; entwurf refuses prompt reconstruction, transcript hydration and
+harness emulation (Hard Rule 9), so the only way to reach a sibling is the doorbell its own
+vendor actually ships — and the table above is the price of that refusal, paid five times over.
+The price is the point. A creation surface that made every harness cheap to open and drive would
+produce disposable workers wearing five logos. The bridge being hard — measured dialects,
+explicit doorbells, honest rejects — is what makes the thing on the other side a peer whose
+cooperation means something: you do not command it, you ring, and it answers as itself. The
+gauge is narrow so that what rides it is a citizen.
+
 ---
 
 ## 0. Which lane — onboarding is two different jobs
