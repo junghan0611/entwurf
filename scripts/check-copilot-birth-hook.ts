@@ -495,7 +495,7 @@ function makeFakeHost(label: string, opts: FakeOpts): FakeHost {
 				? '  "plugin list") echo "not authenticated" >&2; exit 1 ;;'
 				: opts.pluginListRaw !== undefined
 					? `  "plugin list") echo "Installed plugins:"; cat ${JSON.stringify(rawList)}; exit 0 ;;`
-					: '  "plugin list") echo "Installed plugins:"; sed "s/^/  • /;s/$/ (v$VER)/" "$STATE"; exit 0 ;;',
+					: '  "plugin list") echo "Live Plugins (loaded from a local marketplace directory, never copied):"; sed "s/^/  • /;s/$/ (v$VER) (enabled)/" "$STATE"; exit 0 ;;',
 			'  "plugin uninstall")',
 			opts.uninstallFails
 				? '    echo "boom" >&2; exit 1 ;;'
@@ -1063,6 +1063,33 @@ function writeBoundState(host: FakeHost): void {
 	ok(
 		"install: the same truncated row refuses before any write (no state minted)",
 		inst.status !== 0 && (inst.stderr ?? "").includes("malformed") && !existsSync(instHost.stateFile),
+	);
+}
+{
+	// Copilot CLI 1.0.81 (measured 2026-08-31) appends its own state token after the
+	// version and an indented `from <path>` continuation line. The grammar admits that
+	// ONE optional `(enabled)`/`(disabled)` token — reading it as part of the version
+	// made every surface refuse a perfectly healthy host. Anything else in the tail
+	// stays malformed, so the admission cannot widen into "ignore whatever follows".
+	const liveRaw = `Live Plugins (loaded from a local marketplace directory, never copied):\n  • ${OURS} (v${SHIPPED_VERSION}) (enabled)\n      from /home/nobody/.assembled`;
+	const docHost = makeFakeHost("doctor-state-token-row", { installed: [OURS], pluginListRaw: liveRaw });
+	writeBoundState(docHost);
+	writeFileSync(docHost.mktState, `${MKT}\t${docHost.asm}\n`);
+	mkdirSync(path.join(docHost.asm, PLUGIN), { recursive: true });
+	const doc = runVerb(docHost, "doctor-copilot-bridge");
+	ok(
+		"[QK:COPILOT-ROW-STATE-TOKEN-ADMITTED] a `(vX) (enabled)` row plus its `from` continuation line parses as the installed version — no malformed refusal on a healthy 1.0.81 host",
+		doc.stdout.includes(`${OURS} (v${SHIPPED_VERSION}) is registered in Copilot`) &&
+			!doc.stdout.includes("malformed") &&
+			!(doc.stderr ?? "").includes("malformed"),
+	);
+	const foreignHost = makeFakeHost("install-foreign-tail-row", {
+		pluginListRaw: `  • ${OURS} (v${SHIPPED_VERSION}) (whatever)`,
+	});
+	const foreign = runVerb(foreignHost, "install-copilot-bridge");
+	ok(
+		"an UNKNOWN trailing token is still malformed — the admission is exactly the two measured state words",
+		foreign.status !== 0 && (foreign.stderr ?? "").includes("malformed") && !existsSync(foreignHost.stateFile),
 	);
 }
 {

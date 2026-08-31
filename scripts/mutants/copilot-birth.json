@@ -196,12 +196,10 @@
 		},
 		{
 			"claim": "COPILOT-MALFORMED-ROW-NOT-ABSENT",
-			"title": "a truncated/garbled exact plugin row falls through the parser and rounds to ABSENT, which the inverse reads as retry-safe absence and continues past — the exact fall-through B reproduced (`(v0.1` with no closing paren) against 47a5ae3 (#86 C3a corrective amendment, B defect 3)",
+			"title": "a truncated/garbled exact plugin row falls through the parser and rounds to ABSENT, which the inverse reads as retry-safe absence and continues past — the exact fall-through B reproduced (`(v0.1` with no closing paren) against 47a5ae3 (#86 C3a corrective amendment, B defect 3). The parse became a regex when the 1.0.81 state token was admitted; the fall-through must stay closed on either spelling.",
 			"subject": "scripts/copilot-bridge-oracle.sh",
-			"find": [
-				"    if not (rest.startswith(\"(v\") and rest.endswith(\")\")):\n        print(f\"malformed exact row for {qualified}: {row!r} does not parse as '<qualified> (v<version>)'\", file=sys.stderr)\n        sys.exit(1)"
-			],
-			"replace": ["    if not (rest.startswith(\"(v\") and rest.endswith(\")\")):\n        continue"],
+			"find": ["    match = ROW_TAIL.fullmatch(rest)\n    if match is None:"],
+			"replace": ["    match = ROW_TAIL.fullmatch(rest)\n    if match is None:\n        continue\n    if False:"],
 			"gate": ["bash", "run.sh", "check-copilot-birth-hook"],
 			"timeoutSeconds": 300,
 			"signature": "[QK:COPILOT-MALFORMED-ROW-NOT-ABSENT]",

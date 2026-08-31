@@ -4,7 +4,9 @@
 # cannot drift: smoke-setup-verdict's copilot-present cell and check-pack-install's
 # installed copilot-present consumer row. The answer shapes are the MEASURED CLI's
 # (copilot 1.0.80, 2026-08-27) — the same shapes check-copilot-birth-hook.ts bakes
-# into its own TS fake: `plugin list` prints qualified ids with a `(vX)` suffix,
+# into its own TS fake: `plugin list` prints qualified ids with a `(vX)` suffix
+# followed by the vendor's `(enabled)` state token and an indented `from <path>`
+# continuation line (measured on copilot 1.0.81, 2026-08-31),
 # `plugin marketplace list` prints `<name> (Local: <abs path>)`, and `--force`
 # anywhere is refused loudly (the real `marketplace remove --force` uninstalls that
 # marketplace's plugins as a side effect; no entwurf surface may reach for it).
@@ -51,7 +53,7 @@ case "\$1 \$2 \$3" in
   "plugin marketplace remove") awk -F"\t" -v n="\$4" '\$1 != n' "\$MKTS" > "\$MKTS.tmp"; mv "\$MKTS.tmp" "\$MKTS"; exit 0 ;;
 esac
 case "\$1 \$2" in
-  "plugin list") echo "Installed plugins:"; sed "s/^/  • /;s/\$/ (v\$VER)/" "\$STATE"; exit 0 ;;
+  "plugin list") echo "Live Plugins (loaded from a local marketplace directory, never copied):"; while read -r id; do [ -n "\$id" ] && { echo "  • \$id (v\$VER) (enabled)"; echo "      from $dir"; }; done < "\$STATE"; exit 0 ;;
   "plugin uninstall") grep -Fvx "\$3" "\$STATE" > "\$STATE.tmp"; mv "\$STATE.tmp" "\$STATE"; exit 0 ;;
   "plugin install") echo "\$3" >> "\$STATE"; exit 0 ;;
 esac

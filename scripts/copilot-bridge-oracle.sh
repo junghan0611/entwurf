@@ -77,13 +77,20 @@ PY
 #   QUALIFIED is absent, present exactly once with a parsed nonempty version, or in a
 #   shape nobody may act on. rc 0 prints `absent` or `one <version>`; rc 1 with the
 #   reason on stderr for a MALFORMED exact row (claims our qualified id but does not
-#   parse as `<qualified> (v<nonempty>)`) or MULTIPLE exact rows. Longer tokens that
-#   merely contain the qualified id remain foreign and are ignored, same as above.
+#   parse as `<qualified> (v<nonempty>)`, optionally followed by the vendor's own
+#   `(enabled)`/`(disabled)` state token — measured on Copilot CLI 1.0.81) or MULTIPLE
+#   exact rows. Longer tokens that merely contain the qualified id remain foreign and
+#   are ignored, same as above.
 copilot_exact_row_version() {
 	local list_text="$1" qualified="$2"
 	LIST_TEXT_ENV="$list_text" QUALIFIED_ENV="$qualified" python3 - <<'PY'
-import os, sys
+import os, re, sys
 qualified = os.environ["QUALIFIED_ENV"]
+# The measured row tail. Copilot CLI 1.0.81 appends its own state token after the
+# version (`... (v0.1.0) (enabled)`), so the grammar carries that OPTIONAL trailing
+# `(enabled)`/`(disabled)` explicitly instead of reading it as a garbled version.
+# Anything else in the tail is still malformed.
+ROW_TAIL = re.compile(r"\(v(?P<version>[^()]*)\)(?:[ \t]+\((?:enabled|disabled)\))?\Z")
 versions = []
 for raw in os.environ["LIST_TEXT_ENV"].splitlines():
     row = raw.strip()
@@ -100,10 +107,11 @@ for raw in os.environ["LIST_TEXT_ENV"].splitlines():
     if not parts or parts[0] != qualified:
         continue  # foreign row, including longer ids that merely contain ours
     rest = parts[1] if len(parts) == 2 else ""
-    if not (rest.startswith("(v") and rest.endswith(")")):
-        print(f"malformed exact row for {qualified}: {row!r} does not parse as '<qualified> (v<version>)'", file=sys.stderr)
+    match = ROW_TAIL.fullmatch(rest)
+    if match is None:
+        print(f"malformed exact row for {qualified}: {row!r} does not parse as '<qualified> (v<version>)' with an optional '(enabled)'/'(disabled)' state token", file=sys.stderr)
         sys.exit(1)
-    version = rest[2:-1]
+    version = match.group("version")
     if not version:
         print(f"malformed exact row for {qualified}: empty version in {row!r}", file=sys.stderr)
         sys.exit(1)
