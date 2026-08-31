@@ -13,7 +13,7 @@ Legacy package: [`@junghanacs/pi-shell-acp`](https://www.npmjs.com/package/@jung
 > **Repository shape.** This repo is **entwurf-core (v2 dispatch) + native-harness bridges + a pi adapter + an ACP plugin**. Pi is one supported harness adapter — important because it supplies control sockets and hosts the ACP plugin today — but it is not the project subject. Claude Code and GitHub Copilot CLI are shipped as mailbox-backed self-fetch meta-sessions; Antigravity (`agy`) is shipped as a native-push citizen with automatic `PreInvocation` birth, ambient garden-id status, and a managed MCP/permission install surface. OMP (`omp`) is a self-fetch citizen on the same rail as Claude and Copilot, opened by `entwurf_fresh_call` and accepted under the step 9 visible-fresh contract on 2026-08-30 — its first turn is a two-stage in-process bootstrap rather than an argv prompt, because the vendor connects its MCP tools in the background after the session starts. Codex has a launch-mode-specific verified delivery probe documented in [DELIVERY.md](./DELIVERY.md), but no managed native-citizen install lane yet. The ACP plugin ships two backends through one adapter rail: Claude (the reference) and Snowflake Cortex Code (landed in 0.13.0 under the measured contract in [docs/acp-backend-rail.md](./docs/acp-backend-rail.md#cortex-code-audit-d1d10)).
 
 ```text
-Claude Code / Copilot / Codex / agy / pi
+Claude Code / Copilot / Codex / agy / omp / pi
   → garden id
     → entwurf_v2
       → control-socket | meta-mailbox | native-push
@@ -59,10 +59,11 @@ native Antigravity / agy
   ↔ entwurf_v2 native-push
 ```
 
-Claude's `install-meta-bridge`, Copilot's four `install-copilot-*` surfaces, and agy's
-`install-agy-{bridge,statusline,hooks}` are distinct because their lifecycle and delivery
-transports are genuinely different. Codex remains verified probe evidence, not a shipped managed
-native-citizen lane; see [DELIVERY.md](./DELIVERY.md).
+Claude's `install-meta-bridge`, Copilot's four `install-copilot-*` surfaces, agy's
+`install-agy-{bridge,statusline,hooks}` and OMP's three `install-omp-{bridge,mcp,receive}` units
+(each with its own `doctor-omp-*`) are distinct because their lifecycle and delivery transports are
+genuinely different. Codex remains verified probe evidence, not a shipped managed native-citizen
+lane; see [DELIVERY.md](./DELIVERY.md).
 
 > **Direction.** Inverse of [`pi-acp`](https://github.com/svkozak/pi-acp). `pi-acp` lets external ACP clients talk *to* pi; `entwurf` lets garden citizens talk across harness boundaries — with pi as one adapter, not the center.
 
@@ -71,9 +72,9 @@ native-citizen lane; see [DELIVERY.md](./DELIVERY.md).
 A few words that look unusual for a coding tool.
 
 - **Entwurf** (기투, projection-of-self) — sibling sessions with their own runtime boundary. Not "delegate," not "worker," not "sub-agent." Opening a visible sibling (`entwurf_fresh_call`), live peer messaging (`entwurf_v2`) and reopening a dormant one (`entwurf_resume_call`) are first-class; the hidden background resume that preceded the last of those was withdrawn under the visible-first rule.
-- **Garden / garden id** — the garden is the shared address space where independent harness sessions become citizens without losing their own runtime or transcript. A garden id is the stable address of one such citizen (for pi, a garden-native session id like `YYYYMMDDTHHMMSS-<6hex>`; for native harnesses, a meta-session id minted from an authoritative lifecycle hook — Claude `SessionStart`, Copilot's first-prompt birth hook, agy `PreInvocation`). It is not a worker name and not proof that pi owns the session. The same-looking id may name a live control socket, a dormant pi record, a mailbox-backed native session, or a native-push conversation, so callers discover facts with `entwurf_peers` and deliver with `entwurf_v2` instead of choosing a transport by hand.
+- **Garden / garden id** — the garden is the shared address space where independent harness sessions become citizens without losing their own runtime or transcript. A garden id is the stable address of one such citizen (for pi, a garden-native session id like `YYYYMMDDTHHMMSS-<6hex>`; for native harnesses, a meta-session id minted from an authoritative lifecycle hook — Claude `SessionStart`, Copilot's first-prompt birth hook, agy `PreInvocation`, and for OMP an in-process extension bound to both session edges that mints only the visible `mode === "tui"` host). It is not a worker name and not proof that pi owns the session. The same-looking id may name a live control socket, a dormant pi record, a mailbox-backed native session, or a native-push conversation, so callers discover facts with `entwurf_peers` and deliver with `entwurf_v2` instead of choosing a transport by hand.
 - **Engraving** — optional short operator text delivered through each backend's native identity carrier. Not a giant hidden prompt, not a tool catalog.
-- **MCP** — in this repo, MCP is just the transport by which ACP-backed sessions receive pi capabilities that native pi exposes directly as extensions. It is not a general MCP platform. Explicit `entwurfProvider.mcpServers` only; no ambient `~/.mcp.json` scanning, no automatic retrieval. The same `entwurf-bridge` entry can also be wired into another host's MCP catalog (Claude Code, Copilot, Codex, Antigravity, …) when the operator chooses. `entwurf_self` returns an authoritative pi-session or trusted meta-session identity envelope; `entwurf_v2` requires an authoritative sender by default (#50 C4) — a plain external MCP host with no identity lane is refused unless the operator explicitly wires the documented anonymous hatch, and even then it is never replyable.
+- **MCP** — in this repo, MCP is just the transport by which ACP-backed sessions receive pi capabilities that native pi exposes directly as extensions. It is not a general MCP platform. Explicit `entwurfProvider.mcpServers` only; no ambient `~/.mcp.json` scanning, no automatic retrieval. The same `entwurf-bridge` entry can also be wired into another host's MCP catalog (Claude Code, Copilot, Codex, Antigravity, OMP, …) when the operator chooses. `entwurf_self` returns an authoritative pi-session or trusted meta-session identity envelope; `entwurf_v2` requires an authoritative sender by default (#50 C4) — a plain external MCP host with no identity lane is refused unless the operator explicitly wires the documented anonymous hatch, and even then it is never replyable.
 - **Session persistence** — re-attaches pi to the same remote ACP session. Does not hydrate backend transcripts into pi history.
 
 ## Install
@@ -98,7 +99,7 @@ The package exposes six bins:
 The bridge/renderers/hook use stable bin names so package upgrades do not bake versioned package-store paths into native-harness settings.
 
 Installing Entwurf installs **Entwurf only**: its package bytes, six bins, bridge, and
-integration artifacts. It does not install `pi`, Claude Code, Copilot CLI, Codex, agy, Cortex,
+integration artifacts. It does not install `pi`, Claude Code, Copilot CLI, Codex, agy, omp, Cortex,
 or any other harness runtime. Those are operator choices and may all be absent. The bridge also
 does not provide credentials, tokens, subscription access, or an auth bypass; whatever an
 operator-installed harness already trusts is what Entwurf can use. `setup` is composition, not
@@ -202,8 +203,9 @@ For daily operator sessions, launch pi with `--entwurf-control` — no id
 injection; the meta-record mints the garden address (see [Garden launcher](#garden-launcher)). Older pi
 versions may silently miss the provider/extension surface, so treat the pi floor
 as release-critical for the ACP/plugin lane. A host that only uses
-`entwurf-bridge` from Claude Code / Copilot / Codex / Antigravity does not need pi at all for
-delivery: no `entwurf_v2` rail launches a pi process. That external-only shape works with the same
+`entwurf-bridge` from Claude Code / Copilot / Codex / Antigravity / OMP does not need pi at all for
+delivery: no `entwurf_v2` rail launches a pi process. OMP is a pi fork, but it is its own binary and
+resolves its own agent directory, so that lineage does not reintroduce a `pi` requirement either. That external-only shape works with the same
 `setup` command: pi is optional-by-presence there, so a pi-less host simply gets an explicit pi
 SKIP while the detected harnesses are composed.
 
@@ -387,7 +389,7 @@ Reference shape lives in [`pi/settings.reference.json`](./pi/settings.reference.
 ### External MCP registration
 
 `entwurf-bridge` can also be registered in a separate MCP-aware harness (Claude Code,
-Copilot CLI, Codex CLI, Antigravity). Two shapes exist and they are not interchangeable:
+Copilot CLI, Codex CLI, Antigravity, OMP). Two shapes exist and they are not interchangeable:
 
 - **plain external MCP host** — no garden meta-record or sender marker. It can read the
   surfaces, but `entwurf_v2` is **refused by default**: there is no authoritative sender.
@@ -399,7 +401,10 @@ claude mcp add --scope user entwurf-bridge entwurf-bridge
 ```
 
 Per-harness registration (Claude Code `~/.mcp.json`, Codex `~/.codex/config.toml`, the
-managed `install-agy-*` surfaces), the PATH/env boundary for GUI-launched MCP servers, the
+managed `install-agy-*` surfaces, and OMP's managed `install-omp-mcp` into `<omp agent dir>/mcp.json`
+— whose pinned server key is what shadows a borrowed Claude import, see
+[docs/external-mcp-host.md](./docs/external-mcp-host.md) §OMP), the PATH/env boundary for
+GUI-launched MCP servers, the
 anonymous-sender hatch, and the full external/meta-session semantics are in
 [docs/external-mcp-host.md](./docs/external-mcp-host.md).
 For the maintained multi-harness setup and skill/command packaging details, see `agent-config`. See also the MCP entry in [Concept primer](#concept-primer), the sender envelope contract in [AGENTS.md](./AGENTS.md), and [Custom skills](#custom-skills) for the in-pi ACP skill surface.
@@ -522,9 +527,9 @@ In ACP-backed and external native-harness sessions, `entwurf-bridge` exposes sev
 | dead / indeterminate native-push conversation | fire-and-forget | **reject** (`native-push-target-dead` / `native-push-probe-indeterminate`) |
 | record-less control socket (no meta-record) | any | **reject** (`record-less-socket` — pre-probe; diagnostic state, #50 C4) |
 
-**`entwurf_v2` is the canonical surface for garden-id delivery.** When you have a garden id and want to reach whoever it names — message, reply, or hand-off — `entwurf_v2` is the one surface that reads whether the target is live pi, dormant pi, mailbox-backed Claude Code or Copilot, or native-push Antigravity and routes correctly; *when unsure which transport, use `entwurf_v2`*. This prevents callers from guessing a rail from the shape of an id.
+**`entwurf_v2` is the canonical surface for garden-id delivery.** When you have a garden id and want to reach whoever it names — message, reply, or hand-off — `entwurf_v2` is the one surface that reads whether the target is live pi, dormant pi, mailbox-backed Claude Code, Copilot or OMP, or native-push Antigravity and routes correctly; *when unsure which transport, use `entwurf_v2`*. This prevents callers from guessing a rail from the shape of an id.
 
-What v2 provides is a **deterministic dispatch substrate** that moves the "which transport?" decision out of the fallible caller/model and into the decider, with transport-appropriate locking and an honest reject (no `✓ delivered`, no `.msg` garbage) when a target cannot receive. It still does **not** mint siblings, and it does not relaunch one either: every row above either reaches a citizen that is already running or refuses. Reopening a dormant pi citizen is `entwurf_resume_call`, a separate lifecycle verb that never routes through this decider. Fresh creation is the separate `entwurf_fresh_call` verb. It opens one fixed Pi, Claude Code, or Copilot runtime visibly in the caller's tmux session with a required explicit model passed in that runtime's measured CLI dialect and one optional literal absolute `cwd`; omitted or `""` means the caller's cwd. Copilot opens through `entwurf copilot`, never the bare vendor. It returns only a synchronous launch receipt and lets the sibling report its new address asynchronously through the sender envelope of a nonce callback. Use this cwd input for a new cross-repository sibling; do not resume a dormant citizen as a cwd substitute. The meta-mailbox row requires an **active** self-fetch receiver; native-push requires a record-backed, probe-alive native conversation and never borrows mailbox state. The [mux launch lane](./docs/mux-launch-rail.md) owns placement, fixed-runtime launch, and the two narrow compositions above it (fresh-call and resume-call placement); delivery does not import launch, and mux is not a delivery transport.
+What v2 provides is a **deterministic dispatch substrate** that moves the "which transport?" decision out of the fallible caller/model and into the decider, with transport-appropriate locking and an honest reject (no `✓ delivered`, no `.msg` garbage) when a target cannot receive. It still does **not** mint siblings, and it does not relaunch one either: every row above either reaches a citizen that is already running or refuses. Reopening a dormant pi citizen is `entwurf_resume_call`, a separate lifecycle verb that never routes through this decider. Fresh creation is the separate `entwurf_fresh_call` verb. It opens one fixed Pi, Claude Code, Copilot or OMP runtime visibly in the caller's tmux session with a required explicit model passed in that runtime's measured CLI dialect and one optional literal absolute `cwd`; omitted or `""` means the caller's cwd. Copilot opens through `entwurf copilot`, never the bare vendor; OMP is the opposite — the bare `omp` runtime with no positional prompt at all, because that vendor connects its MCP tools after the session has started, so the task rides a two-stage `--entwurf-bootstrap` payload the installed birth extension releases once the callback tool has actually answered. It returns only a synchronous launch receipt and lets the sibling report its new address asynchronously through the sender envelope of a nonce callback. Use this cwd input for a new cross-repository sibling; do not resume a dormant citizen as a cwd substitute. The meta-mailbox row requires an **active** self-fetch receiver; native-push requires a record-backed, probe-alive native conversation and never borrows mailbox state. The [mux launch lane](./docs/mux-launch-rail.md) owns placement, fixed-runtime launch, and the two narrow compositions above it (fresh-call and resume-call placement); delivery does not import launch, and mux is not a delivery transport.
 
 A live pi target is *reached* over its control socket, but the socket is dispatch-internal transport, never identity (#50 C4). A control socket that no meta-record claims — a pre-record-era resident, an unreadable store, or a stale/planted file — is refused for **every** intent as `record-less-socket`, and the reject names the fix (restart the resident so `session_start` births its record, or quiesce and run the fresh-cut). `entwurf_peers` reports the same state as an aggregated `record-less-socket` diagnostic rather than a peer row.
 
