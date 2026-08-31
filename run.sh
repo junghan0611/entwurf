@@ -3333,8 +3333,15 @@ _check_pack_install_impl() {
   # {pi-agent-core, pi-ai, pi-tui} at 0.83.0 to {pi-agent-core, pi-ai, pi-client,
   # pi-protocol, pi-tui}, so pi-client and pi-protocol are pinned here for the
   # first time. Unpinned they would float exactly like pi-agent-core did in the
-  # 2026-07-21 incident above. (pi-telemetry arrives transitively, not as a
-  # direct caret; the leak assertion below covers it and every other pi package.)
+  # 2026-07-21 incident above. pi-telemetry joined the explicit pin list on
+  # 2026-08-31: it arrives transitively (pi-agent-core and pi-ai both carry
+  # `^0.84.3` carets on it), and upstream's 0.84.4 patch publish (2026-08-28
+  # 22:04Z) floated that caret in this lockfile-less temp install, turning CI
+  # red through the leak assertion below. The bump itself stays a separate
+  # hard-cut lane (#87 thread / NEXT "Do not touch: Pi 0.84.4") — pinning the
+  # drift shut is how the verified 0.84.3 runtime stays OURS to hold. The leak
+  # assertion below still covers every other pi package, including any package
+  # a future pi bump adds to the closure.
   echo "[check-pack-install] pnpm add into $tmp (with 0.84.x peers + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
@@ -3345,6 +3352,7 @@ _check_pack_install_impl() {
     "@earendil-works/pi-agent-core@0.84.3" \
     "@earendil-works/pi-client@0.84.3" \
     "@earendil-works/pi-protocol@0.84.3" \
+    "@earendil-works/pi-telemetry@0.84.3" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
