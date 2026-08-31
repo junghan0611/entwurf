@@ -12,7 +12,8 @@
 - [x] **4. Bundle A+B land** — `a809ee7 feat(omp): receive addressed native messages` (26 paths). 체크포인트 commit; push·cut 없음.
 - [x] **5. Bundle C: visible fresh + admission release-stop** — 구현이 한 candidate로 동결되고 independent review까지 끝났다(2026-08-30, architecture blocker 0 / **Defect 3** / observation 1). `entwurf_fresh_call`이 네 번째 backend로 omp를 연다. clause 7 LIVE(`smoke-omp-fresh-live`, release-gate MUST)는 **green** — 2026-08-30, 21 assertions, omp 18.0.0 / `openai-codex/gpt-5.6-sol`, callback sender garden `20260830T192913-df52b9`. 영수증 정본은 DELIVERY.md의 OMP 행이고, 그 근거로 DELIVERY/README의 라벨은 이미 이동해 있다. **한 호스트·한 모델·한 번의 수용이다** — multi-host도, multi-model도, 한 프로세스 안의 반복 fresh도 주장하지 않는다. review amendment 한 번들(Defect 1–3)은 2026-08-31에 `5bb1d50`으로 반영됐다 — same-id `session_switch` epoch 무효화, creator 소유 `ctx.setTimeout`/`ctx.clearTimer` readiness 타이머(취소 불가 빌드는 arm 거부), 산문 정렬, 뮤턴트 21→23. closure review 잔여 O-D1r은 defect 등급으로 승격되어 `153f9f4`에서 닫혔고(뮤턴트 23→24), 첫 standalone qualification이 `fd5e462`에서 manifest 부채를 측정으로 정산했다 — `check-gate-qualification` 324/324 KILLED, `check:full` exit 0 (430s).
 - [x] **6. 0.16.0 cut** — 태그·릴리즈 완료.
-- [ ] **7. 0.16.0이 남긴 원커맨드 구멍 메우기** ← CURRENT: **v0.16.0은 OMP를 admit했지만 `setup`은 OMP를 합성하지 않았다.** GLG의 thinkpad(설치 안 된 호스트)에서 `entwurf setup`이 green을 찍는데 OMP는 확장도 mcp.json도 status line garden id도 없었다 — 유닛 게이트는 유닛만 묻고, admission 게이트는 registry↔fresh만 물어서, "유닛이 있다 → 원커맨드가 거기 닿는다" 간선을 아무 게이트도 소유하지 않았다. 이번 세션에서 (a) `setup_all`에 omp 4유닛(birth→MCP→`tools.xdev` 설정→receiver) presence-driven 합성, (b) 설정값 writer `install-omp-config`/`uninstall-omp-config` 신설(정확히 자기가 넣은 줄만 소유, 운영자의 명시적 `xdev: true`는 덮지 않고 이름 불러 거부), (c) `smoke-setup-verdict` S-8(스텁 벤더로 실제 합성 구동 + install-state 4종 + agent dir 산출물 + `xdev-off` 유효 판독 + 2회차 멱등) 및 S-1의 `OMP_BIN` absent 핀, (d) `docs/adding-a-harness.md` **step 10**(온보딩은 setup이 합성해야 끝난다)까지 닫았다. 남은 것: 버전 범프·CHANGELOG 승격은 `entwurf-release` prepare 몫(GLG 승인).
+- [ ] **8. #72 + 0.16.1 컷** ← NEXT SESSION: 아래 `#72` 절이 이번에 회수한 서명이다. 그 위에서 진단→수리→0.16.1.
+- [x] **7. 0.16.0이 남긴 원커맨드 구멍 메우기** — 닫혔다(`4076498`, `c3d5b2a`), pi floor 0.84.4까지 함께(`5c1bda5`). 원래 본문: **v0.16.0은 OMP를 admit했지만 `setup`은 OMP를 합성하지 않았다.** GLG의 thinkpad(설치 안 된 호스트)에서 `entwurf setup`이 green을 찍는데 OMP는 확장도 mcp.json도 status line garden id도 없었다 — 유닛 게이트는 유닛만 묻고, admission 게이트는 registry↔fresh만 물어서, "유닛이 있다 → 원커맨드가 거기 닿는다" 간선을 아무 게이트도 소유하지 않았다. 이번 세션에서 (a) `setup_all`에 omp 4유닛(birth→MCP→`tools.xdev` 설정→receiver) presence-driven 합성, (b) 설정값 writer `install-omp-config`/`uninstall-omp-config` 신설(정확히 자기가 넣은 줄만 소유, 운영자의 명시적 `xdev: true`는 덮지 않고 이름 불러 거부), (c) `smoke-setup-verdict` S-8(스텁 벤더로 실제 합성 구동 + install-state 4종 + agent dir 산출물 + `xdev-off` 유효 판독 + 2회차 멱등) 및 S-1의 `OMP_BIN` absent 핀, (d) `docs/adding-a-harness.md` **step 10**(온보딩은 setup이 합성해야 끝난다)까지 닫았다. 남은 것: 버전 범프·CHANGELOG 승격은 `entwurf-release` prepare 몫(GLG 승인).
 
 <details><summary>6의 원래 본문 (릴리즈 준비 기록)</summary>
 
@@ -21,6 +22,68 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 </details>
 
 현재 좌표: 1–6 완료(구현·review·amendment·clause 7 LIVE green·closure review·qualification·full floor·0.16.0 cut) → **7. 원커맨드 구멍 메우기** ← 여기. 코드·게이트·문서는 워킹트리에 있고 `check:full` exit 0(251s)이다. commit·push·범프는 GLG 몫.
+
+# #72 — ACP Claude child가 tool-loop 중간에 죽는다 (다음 세션의 실제 작업)
+
+**이슈:** https://github.com/junghan0611/entwurf/issues/72 (open, `bug`/`field report`).
+이슈 본문의 첫 수용 조건은 "수리 전에 서명을 회수하라"이고, **그 서명이 아래에 있다.**
+
+**증거 등급:** 아래 인용문은 GLG의 Termux 스크린샷 3장에서 읽은 것이다(external artifact).
+정본 경로 — `~/screenshot/Screenshot_20260831_205336_Termux.jpg`,
+`~/screenshot/Screenshot_20260831_211334_Termux.jpg`,
+`~/screenshot/Screenshot_20260831_212616_Termux.jpg`.
+로그 파일이나 트랜스크립트에서 다시 읽은 것이 아니므로, 다음 세션의 첫 일은 **같은 서명을
+호스트의 로그에서 재확인**하는 것이다(스크린샷은 화면이지 receipt가 아니다).
+
+**한 세션에서 3회 (2026-08-31, oracle 호스트, `~/nixos-config`, model `claude-opus-5`):**
+20:53 / 21:13 / 21:26. 매번 오류 문구가 바이트 단위로 같다:
+
+```
+Error: ACP connection closed
+[acp] lifecycle: the ACP backend connection closed while the prompt was
+still in flight — the child ended (exit code 0); this turn has no answer
+--- backend stderr (tail) ---
+[session/query] sessionId=<uuid> resume=none apiType=native baseUrl=native
+(node:<pid>) [CLAUDE_SDK_CAN_USE_TOOL_SHADOWED] Warning: canUseTool will
+not be invoked: permissionMode 'bypassPermissions' auto-approves every
+tool call (except explicit deny rules) before the callback is consulted.
+To gate every tool call, use a PreToolUse hook instead.
+```
+
+이 서명이 이슈 본문의 추측 몇 개를 이미 정리한다:
+
+- **child는 exit code 0이다.** 크래시도 시그널도 아니고 정상 종료다. "긴 턴이 타임아웃"
+  가설과 다르다 — 죽는 게 아니라 **끝난다**.
+- **retained-reuse가 아니다.** 세 샘플의 `sessionId`가 전부 다르고(`a190b806-91a3-4d74-a760-668ae60d57f2`,
+  `c798f097-9b28-432d-af2c-e9f73ef023ce`, `b40bce08-3556-42fa-b358-76b09212632f`) 전부 `resume=none`이다.
+  이슈 본문은 "retained session의 4번째 reuse turn"을 적고 있는데, 이 세 샘플은 그 조건이 아니다.
+  **같은 실패 모드인지 다른 것인지가 첫 갈림길이다.**
+- **실패 지점이 일정하다.** 세 번 다 `[tool:start] Terminal` 직후, 답이 오기 전.
+- **stderr tail의 유일한 신호가 `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`다.** 다른 오류 줄이 없다.
+
+**GLG의 가설 (2026-09-01):** `~/.pi/agent/claude-config-overlay/settings.json:1-5`의
+
+```json
+{ "permissions": { "defaultMode": "bypassPermissions" } }
+```
+
+이 설정이 영향을 준다. ACP Claude는 오버레이 환경으로 가므로, **오버레이 경로와 일반
+경로를 구분해서 안정성을 제공해야 한다.** 간단히 해결될 수도 있다.
+
+**주의 — 이 가설은 아직 사실이 아니다.** 경고문이 stderr tail에 있다는 것은
+`bypassPermissions`가 `canUseTool` 콜백을 무력화한다는 SDK의 안내일 뿐이고, 그 경고가
+곧 child 종료의 원인이라는 연결은 아직 아무도 측정하지 않았다. 그 경고는 정상 동작하는
+턴에도 찍힐 수 있다 — **경고가 찍힌 성공 턴이 존재하는지부터가 첫 측정이다.** 존재한다면
+경고는 배경이고 원인은 다른 곳이다.
+
+**이슈 본문이 미리 그은 수리 경계 (그대로 유효):** 절대 prompt timeout 금지, in-flight 턴
+blind replay 금지(비멱등 tool 부작용), watcher/supervisor/hidden retry/transcript
+hydration/새 pi recovery API 금지, closed-connection 폐기와 model immutability는
+fail-loud 유지, 공통 ACP backend를 건드리면 live connection이 있을 때 Cortex 재측정.
+
+**0.16.1:** #72 수리 + 이미 랜딩된 세 커밋(`4076498`, `c3d5b2a`, `5c1bda5`)을 묶어서 컷한다.
+CHANGELOG `## Unreleased`에 setup/OMP·copilot 항목은 이미 있고, pi floor 항목과 #72 항목이
+아직 없다. 버전 범프·섹션 승격은 `entwurf-release` **prepare** 몫이고 모드마다 GLG 승인이다.
 
 # NOW
 
@@ -35,7 +98,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 - **컷 게이트는 이제 실제 왕복을 요구한다:** `smoke-omp-receive-live`가 registry를 읽고 `self-fetch`를 보면 더 이상 SKIP하지 않는다 — `LIVE=1`에서 실제 tmux omp TUI를 띄우고 11개 단언을 요구한다. 하드코딩된 통과가 아니다.
 - **Next:** (1) `entwurf-release prepare 0.16.0` — CHANGELOG 승격·버전·lockfile·`check:full`·LIVE `--cut`까지, 모드별 GLG 승인 하에 (교통 매트릭스 육안 수용의 영수증은 2026-08-31 cross-harness 왕복으로 DELIVERY OMP 행에 남았다), (2) **cross-harness leg의 deterministic 반쪽 배선** — post-contract 시민 backend마다 cross-harness LIVE step이 wired거나 선언된 metered 예외인지 `check-harness-admission-parity` 옆에 검사 (규칙은 `docs/adding-a-harness.md` release stop에 2026-08-31로 박혀 있고, 게이트가 없는 동안은 prose다 — 별도 grant), (3) land 방식·cut 결정 — GLG 몫. 배경: 옛 v1 상호호출 matrix는 d7783d4에서 gate를 떠나 fbcbdbc에서 삭제됐고 v2 follow-up이 하네스-쌍 축으로 돌아오지 않았다(GLM 조사, 2026-08-31 #87 스레드 예정).
 - **Read:** #87 thread · `scripts/raw-omp-measure/README.md` §M7 (수용의 근거가 된 5셀 측정) · `docs/setup-clean-host.md` §4b · `docs/adding-a-harness.md` step 7.
-- **Do not touch:** `mux-launch.ts`/`mux-placement.ts`(import fence) · omp용 managed launcher shell(근거 없음) · registry `supported` 필드(새 authority 금지) · #72/#76/#78 · Pi 0.84.4 · #87/#89 close.
+- **Do not touch:** `mux-launch.ts`/`mux-placement.ts`(import fence) · omp용 managed launcher shell(근거 없음) · registry `supported` 필드(새 authority 금지) · #72/#76/#78 · #87/#89 close. (Pi 0.84.4는 2026-09-01에 해제되어 랜딩됐다 — `5c1bda5`.)
 
 # RECENT
 
