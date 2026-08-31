@@ -23,6 +23,61 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 현재 좌표: 1–6 완료(구현·review·amendment·clause 7 LIVE green·closure review·qualification·full floor·0.16.0 cut) → **7. 원커맨드 구멍 메우기** ← 여기. 코드·게이트·문서는 워킹트리에 있고 `check:full` exit 0(251s)이다. commit·push·범프는 GLG 몫.
 
+# oracle에서 열리는 형제에게 (2026-09-01, GLG가 이 자리를 여기로 옮긴다)
+
+너는 **사고가 실제로 나는 호스트**에 서 있다. thinkpad는 507 ACP 턴에서 0건, oracle은 360에서
+8건(4 mid-turn + 4 between-turn)이다. 재현을 시도할 수 있는 유일한 자리라는 뜻이고, 동시에
+**남의 운영 호스트를 실험대로 쓰는 자리**라는 뜻이기도 하다. 무장·설정 변경은 GLG 결정이다.
+
+**먼저 읽을 것 (요약이 아니라 소스로):**
+
+1. `scripts/raw-acp-child-exit-measure/README.md` — 이 판의 정본. 서명의 파일·레코드 번호,
+   소스가 지지하지 않는 판독 3개, 반례로 폐기된 후보 4개, 두 호스트 인구 표, exit(0)의 세 문,
+   그리고 측정 가능한 형태로 적힌 열린 질문 하나. **untracked다** (repo 관례상 `raw-omp-measure`와
+   같은 형식). 커밋 여부는 GLG 몫.
+2. `https://github.com/junghan0611/entwurf/issues/72` — 본문의 수리 경계와, 2026-09-01에
+   달린 진단 코멘트(위 README의 공개판). 본문과 스레드가 어긋나면 **스레드가 이긴다.**
+3. 이 파일의 아래 `#72` 절 — 최초 핸드오프. **그 안의 세 판독은 이미 폐기됐다**(README §"Three
+   readings"). 역사로 읽고, 사실로 쓰지 마라.
+
+**지금까지 확정된 것 한 줄:** child는 죽는 게 아니라 **스스로 정상 종료(exit 0)** 한다. 크래시도
+시그널 킬도 아니고, reason 없는 깨끗한 stdout EOF라 child가 먼저 갔고 pi가 닫은 게 아니다.
+`claude-agent-acp` `dist/index.js:81-95`에 exit 0으로 나가는 문이 셋뿐이다 — `connection.closed`
+/ SIGTERM / SIGINT → `dispose()` → `process.exit(0)`.
+
+**남은 질문 하나:** 셋 중 어느 문인가. 지금 아티팩트로는 도출되지 않고, **시그널 전달 여부로
+밖에서 구분된다.**
+
+**대기 중인 결정 두 개 (GLG 몫, 네가 먼저 하지 마라):**
+
+- (A) **stderr-only 프로브 무장.** launch 때 ACP child의 main module에 붙여 시그널 이름/exit
+  경로를 entwurf가 이미 잡아 보여주는 stderr tail에 찍는다. #72의 "Done when"을 그대로
+  만족하고 금지 목록(timeout·blind replay·watcher·supervisor·hidden retry·transcript
+  hydration·새 pi recovery API)을 건드리지 않는다. **launch seam 변경이므로 GLG 승인 필수**이고,
+  자체 gate cell + 정확한 이유로 죽는 mutant를 함께 내야 값이 있다.
+- (B) **"작업 종류" 축 측정.** GLG의 관측(2026-09-01): "이 노트북에서도 날 텐데 ACP Claude를
+  적게 써서 안 보인 것 같다." 턴 수로는 성립하지 않는다 — 적게 쓴 쪽이 oracle이다(opus-5
+  44턴 중 4건 vs thinkpad 340턴 중 0건). 그러나 **턴 수가 아니라 작업의 종류**(장시간·다중도구·
+  컨테이너/docker 왕복이 많은 무거운 턴의 비율)라면 성립할 수 있고, **그 축은 아직 아무도 안
+  셌다.** `acp-turn-population.py`가 이미 턴당 tool start와 child 나이를 뽑으므로 확장이 싸다.
+
+**하지 말 것:** 커밋·푸시(GLG가 명시할 때만) · `entwurf-release prepare` 시작(#72 처분이
+정해지기 전) · oracle의 벤더/오버레이 설정 임의 변경(재현 조건이 곧 증거다) · 폐기된 후보 4개
+재측정(반례가 README에 있다) · 2026-07-30의 `prompt timed out after 600000ms` 실패를 이것과
+같은 것으로 묶기(다른 실패이고 이미 은퇴했다).
+
+**0.16.1:** 커밋 5개가 이미 랜딩돼 있다 — `4076498`(copilot 1.0.81 행 문법), `c3d5b2a`(setup이
+OMP를 합성), `5c1bda5`(pi floor 0.84.4), `fe44477`(#72 핸드오프), 그리고 이 메시지의 커밋.
+CHANGELOG `## Unreleased`에 setup/OMP·copilot 항목은 있고 **pi floor 항목과 #72 항목이 없다.**
+버전 범프·섹션 승격은 `entwurf-release` **prepare** 몫이며 모드마다 GLG 승인이다.
+
+**게이트 자세:** HEAD에서 `pnpm run check:full` exit 0, `./run.sh check-gate-qualification`
+328/328 KILLED. 새 주장은 자기 gate cell과 mutant를 데려와야 한다. 산문은 진실이 아니다.
+
+**형제 하나가 thinkpad에 살아 있다:** garden `20260901T062537-c3a343` (claude-code/opus,
+`~/repos/gh/entwurf`). 위 아티팩트를 만든 당사자다. 필요하면 `entwurf_v2`로 부를 수 있지만,
+역할 분담은 GLG가 정한다 — 네가 임의로 일을 넘기지 마라.
+
 # #72 — ACP Claude child가 tool-loop 중간에 죽는다 (다음 세션의 실제 작업)
 
 **이슈:** https://github.com/junghan0611/entwurf/issues/72 (open, `bug`/`field report`).
