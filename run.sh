@@ -252,7 +252,7 @@ Usage:
   ./run.sh check-dep-versions         # local deterministic check that the pi pin agrees across package.json (devDeps + peer range), run.sh (peer-install pins), and the baseline docs (AGENTS/README/ROADMAP/setup-clean-host/demo)
   ./run.sh check-node-floor-coherence # binds the Node floor (24+, single axis) across engines.node, run.sh setup preflight, meta-bridge install/doctor judgment logic, clean-host docs, the bridge launcher header, and the CI runner node-version — engines.node is the SSOT, everything else is derived; sweeps tracked contract text for an unregistered declaration
   ./run.sh check-pack                 # publish gate (dry-run): npm pack --dry-run + tarball invariants (runtime-critical present, dev residue absent)
-  ./run.sh check-pack-pin-matcher     # pure self-test of check-pack-install's pin-leak matcher against synthetic .pnpm lookalikes (version boundary: @0.84.30 must leak, @0.84.3 bare/peer-hash must pass); snapshot-safe qualification oracle, also run first inside check-pack-install
+  ./run.sh check-pack-pin-matcher     # pure self-test of check-pack-install's pin-leak matcher against synthetic .pnpm lookalikes (version boundary: @0.84.40 must leak, @0.84.4 bare/peer-hash must pass); snapshot-safe qualification oracle, also run first inside check-pack-install
   ./run.sh check-fresh-cut-gate       # SOURCE cell of the generation-boundary proof (IN pnpm run check:full): drives real install/setup/fresh-cut in a sandbox; certification refusal is pre-write, quiescence is fail-closed, archives preserve bytes, and the #54 exit matrix distinguishes complete / no-move / usage / incomplete transition / complete-with-cleanup-residue. No model/network/cost
   ./run.sh check-pack-install         # heavy publish gate (prepublishOnly): actual npm pack + tar -tf + fresh-temp install smoke with the pinned pi peers (pins derived from the package.json devDep; check-dep-versions binds them) + the npm-installed bridge BOOTS (tools/list) and DELIVERS (tools/call entwurf_v2 → .msg lands) + the installed all-absent and copilot-present (four-unit fake-vendor) `entwurf setup` rows + the INSTALLED generation lifecycle on a seeded previous-generation host (REFUSE before activation writes / zero Claude invocations → installed fresh-cut archives + opens empty → install-meta-bridge PASSES) + the INSTALLED-PACKAGE branch of the Copilot and OMP birth installers actually RUN (compiled entry selected, no raw .ts, and a real birth edge mints a citizen — the half a required-artifact list can never stand in for)
   ./run.sh check-install-container    # 0.12.8 (#51 C): Linux artifact-CONSUMER gate — one candidate .tgz handed read-only to a checkout-invisible node:<engines-major>-bookworm cell. Default packs once to temp; ENTWURF_CANDIDATE_TGZ=/absolute/preserved.tgz consumes those exact bytes with no re-pack and prints canonical path+sha256 for release. Non-root global PATH install, frozen package, MCP tools/list, fake-Claude install-meta-bridge, path+sha256 fence, strict doctor, and the GENERATION host-state matrix (clean / v3-only store bytes unchanged / previous-generation REFUSE→fresh-cut→retry PASS) seeded inline. Docker missing = honest SKIP; ENTWURF_REQUIRE_DOCKER=1 makes that RED (required CI)
@@ -1827,13 +1827,13 @@ assert.equal(peerTui, piAi,
 // floor tracks the devDep pin so a consumer can't install against a pi lacking
 // the public trust exports the bridge imports at the pinned minor, AND an upper
 // bound at the next minor stops a fresh install from silently pulling a future
-// pi (past the declared ceiling — 0.85+ at the current 0.84.3 pin) whose
+// pi (past the declared ceiling — 0.85+ at the current 0.84.4 pin) whose
 // internal export surface has drifted from the one we typecheck against.
 // pi moves its public surface every minor (the 0.79→0.80 getModels→provider-
 // factory churn is exactly this), so an open `>=` floor is exactly how the next
 // installer re-acquires the drift. The floor is also the HARD MINIMUM a consumer
-// install resolves: at `>=0.84.3` an existing 0.83.x host is upgraded, not kept.
-// Expected shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.84.3 <0.85`).
+// install resolves: at `>=0.84.4` an existing 0.84.3 host is upgraded, not kept.
+// Expected shape: `>=<devDep> <0.<minor+1>` (e.g. `>=0.84.4 <0.85`).
 const [piMaj, piMin] = piAi.split('.').map(Number);
 assert.equal(piMaj, 0,
   `pi pin major must stay 0 for the next-minor ceiling rule (got ${piAi}); revisit check-dep-versions when pi reaches 1.x`);
@@ -3069,15 +3069,15 @@ check_pack() {
 # The pin-leak filter for the install tree's .pnpm listing, shared by the real scan and its
 # self-test below. The version BOUNDARY is load-bearing: a pnpm .pnpm entry is
 # `<name>@<version>` followed by either `_<peer-hash>` or end-of-name (measured pnpm 11.20.0
-# on this tree), so an unbounded substring match would bless a lookalike such as `@0.84.30`
+# on this tree), so an unbounded substring match would bless a lookalike such as `@0.84.40`
 # while announcing the pinned floor — a false-green oracle (found by independent review,
 # 2026-08-25).
 pack_install_leaked_pi() {
-  grep '^@earendil-works+pi-' | grep -Ev '@0\.84\.3(_|$)' || true
+  grep '^@earendil-works+pi-' | grep -Ev '@0\.84\.4(_|$)' || true
 }
 
 # Matcher self-test on SYNTHETIC lookalikes: a healthy install tree cannot exercise the
-# false-green shape (it contains no 0.84.30), so the oracle is proven against a fixture
+# false-green shape (it contains no 0.84.40), so the oracle is proven against a fixture
 # listing. Expected: the two lookalikes leak, the pinned version passes bare and with a
 # peer-hash suffix. Exposed as its own snapshot-safe subcommand because the heavy
 # check-pack-install cannot run inside the qualification snapshot (no install environment),
@@ -3086,13 +3086,13 @@ pack_install_leaked_pi() {
 check_pack_pin_matcher() {
   local matcher_probe
   matcher_probe=$(printf '%s\n' \
-    '@earendil-works+pi-ai@0.84.3' \
-    '@earendil-works+pi-ai@0.84.3_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
-    '@earendil-works+pi-ai@0.84.30' \
-    '@earendil-works+pi-agent-core@0.84.2' | pack_install_leaked_pi)
-  if [ "$matcher_probe" != '@earendil-works+pi-ai@0.84.30
-@earendil-works+pi-agent-core@0.84.2' ]; then
-    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the 0.84.30/0.84.2 lookalikes and pass 0.84.3 bare or with a peer-hash — got: ${matcher_probe:-<nothing leaked>}"
+    '@earendil-works+pi-ai@0.84.4' \
+    '@earendil-works+pi-ai@0.84.4_@modelcontextprotocol+sdk@1.29.0_zod@4.3.6' \
+    '@earendil-works+pi-ai@0.84.40' \
+    '@earendil-works+pi-agent-core@0.84.3' | pack_install_leaked_pi)
+  if [ "$matcher_probe" != '@earendil-works+pi-ai@0.84.40
+@earendil-works+pi-agent-core@0.84.3' ]; then
+    fail "[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED] the pin-leak matcher must flag the 0.84.40/0.84.3 lookalikes and pass 0.84.4 bare or with a peer-hash — got: ${matcher_probe:-<nothing leaked>}"
     return 1
   fi
   echo "[check-pack-pin-matcher] ok — the pin-leak matcher is version-bounded (lookalikes leak, pinned version passes bare and with a peer-hash)"
@@ -3322,7 +3322,7 @@ _check_pack_install_impl() {
   printf '%s\n' '{ "name": "entwurf-install-smoke", "version": "0.0.0", "private": true }' > "$tmp/package.json"
 
   # pi-agent-core is pinned even though we never import it: pi-coding-agent depends
-  # on it by CARET (`^0.84.3`), so with no lockfile in this fresh temp project it
+  # on it by CARET (`^0.84.x`), so with no lockfile in this fresh temp project it
   # floats to whatever pi published last — and that newer core then drags a NESTED
   # pi-ai of its own. Measured 2026-07-21: pinning only the three we import left
   # pi-agent-core@0.80.10 + pi-ai@0.80.10 in the tree while the gate still announced
@@ -3337,24 +3337,24 @@ _check_pack_install_impl() {
   # first time. Unpinned they would float exactly like pi-agent-core did in the
   # 2026-07-21 incident above. pi-telemetry joined the explicit pin list on
   # 2026-08-31: it arrives transitively (pi-agent-core and pi-ai both carry
-  # `^0.84.3` carets on it), and upstream's 0.84.4 patch publish (2026-08-28
+  # `^0.84.x` carets on it), and upstream's 0.84.4 patch publish (2026-08-28
   # 22:04Z) floated that caret in this lockfile-less temp install, turning CI
-  # red through the leak assertion below. The bump itself stays a separate
-  # hard-cut lane (#87 thread / NEXT "Do not touch: Pi 0.84.4") — pinning the
-  # drift shut is how the verified 0.84.3 runtime stays OURS to hold. The leak
+  # red through the leak assertion below. That explicit pin is what held the
+  # line until the bump lane ran; the verified floor is 0.84.4 as of
+  # 2026-09-01, and the pin moved WITH it rather than being retired. The leak
   # assertion below still covers every other pi package, including any package
   # a future pi bump adds to the closure.
   echo "[check-pack-install] pnpm add into $tmp (with 0.84.x peers + typebox)"
   local install_log
   install_log=$(cd "$tmp" && pnpm add \
     "$tgz_path" \
-    "@earendil-works/pi-ai@0.84.3" \
-    "@earendil-works/pi-coding-agent@0.84.3" \
-    "@earendil-works/pi-tui@0.84.3" \
-    "@earendil-works/pi-agent-core@0.84.3" \
-    "@earendil-works/pi-client@0.84.3" \
-    "@earendil-works/pi-protocol@0.84.3" \
-    "@earendil-works/pi-telemetry@0.84.3" \
+    "@earendil-works/pi-ai@0.84.4" \
+    "@earendil-works/pi-coding-agent@0.84.4" \
+    "@earendil-works/pi-tui@0.84.4" \
+    "@earendil-works/pi-agent-core@0.84.4" \
+    "@earendil-works/pi-client@0.84.4" \
+    "@earendil-works/pi-protocol@0.84.4" \
+    "@earendil-works/pi-telemetry@0.84.4" \
     "typebox@latest" \
     --ignore-workspace --ignore-scripts 2>&1) || {
     fail "[check-pack-install] pnpm add failed:"
@@ -3364,17 +3364,17 @@ _check_pack_install_impl() {
 
   # A pin is a wish until the resolved tree is read back. Assert it: EVERY
   # @earendil-works pi package present — direct or transitive, top level or nested —
-  # must be the pinned 0.84.3. Anything else means an unpinned caret floated and the
+  # must be the pinned 0.84.4. Anything else means an unpinned caret floated and the
   # rest of this gate would be exercising a runtime nobody verified, while still
-  # printing "pinned pi 0.84.3". Fail loud instead of proving the wrong floor.
+  # printing "pinned pi 0.84.4". Fail loud instead of proving the wrong floor.
   local leaked_pi
   leaked_pi=$(ls "$tmp/node_modules/.pnpm" 2>/dev/null | pack_install_leaked_pi)
   if [ -n "$leaked_pi" ]; then
-    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.84.3):"
+    fail "[check-pack-install] UNVERIFIED pi runtime resolved into the install tree (expected only 0.84.4):"
     printf '%s\n' "$leaked_pi" | sed 's/^/    /' >&2
     return 1
   fi
-  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works pi package is 0.84.3"
+  echo "[check-pack-install] pi runtime tree pin verified: every @earendil-works pi package is 0.84.4"
 
   # Resolve the installed package.json and confirm pi.extensions
   # arrived intact. If pi.extensions is empty or missing, the

@@ -12,7 +12,7 @@ only on Linux because its strict live-owner join uses `/proc`.
 | npm/pnpm | npm is bundled with Node; pnpm is required for source setup | package or source installation |
 | Python 3 | required by `setup`/`install` (project-path normalization + settings writers); `--help`/`check-bridge` stay Python-free | pi/Claude/agy/Copilot wiring writers |
 | entwurf | global/project-local `@junghanacs/entwurf`, or a source checkout | operator command and garden capability |
-| pi | optional-by-presence, `>=0.84.3 <0.85` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
+| pi | optional-by-presence, `>=0.84.4 <0.85` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
 | Claude Code | optional, **`>=2.1.217`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
 | OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
@@ -110,7 +110,7 @@ packageRoot↔installerRoot coupling mismatch and a package/provider managed-pat
 Install the exact release floor, then wire the project:
 
 ```bash
-npm install -g @earendil-works/pi-coding-agent@0.84.3
+npm install -g @earendil-works/pi-coding-agent@0.84.4
 pi --version
 
 cd ~/entwurf-smoke
@@ -118,7 +118,7 @@ entwurf install .
 pi -e "$(npm root -g)/@junghanacs/entwurf" --list-models entwurf
 ```
 
-The supported range is `>=0.84.3 <0.85`. It is a hard minimum: installing this
+The supported range is `>=0.84.4 <0.85`. It is a hard minimum: installing this
 release onto a 0.83.x pi host upgrades the runtime rather than keeping the older
 minor. A host using only the external MCP bridge can skip pi until it needs a
 control socket; no delivery rail launches a pi process.
