@@ -56,14 +56,9 @@ def strip_comment(raw: str) -> str:
     return raw.rstrip()
 
 
-def parse_flow_seq(text: str) -> list[object] | None:
-    body = text.strip()
-    if not (body.startswith("[") and body.endswith("]")):
-        return None
-    inner = body[1:-1].strip()
-    if inner == "":
-        return []
-    items: list[object] = []
+def split_flow_items(inner: str) -> list[str] | None:
+    """Split a flow collection's body on its TOP-LEVEL commas (quote/nest aware)."""
+    items: list[str] = []
     buf: list[str] = []
     in_single = False
     in_double = False
@@ -83,14 +78,57 @@ def parse_flow_seq(text: str) -> list[object] | None:
             elif char in "]}":
                 depth -= 1
             elif char == "," and depth == 0:
-                items.append(parse_scalar("".join(buf).strip()))
+                items.append("".join(buf).strip())
                 buf = []
                 continue
         buf.append(char)
     if in_single or in_double or depth != 0:
         return None
-    items.append(parse_scalar("".join(buf).strip()))
+    items.append("".join(buf).strip())
     return items
+
+
+def parse_flow_seq(text: str) -> list[object] | None:
+    body = text.strip()
+    if not (body.startswith("[") and body.endswith("]")):
+        return None
+    inner = body[1:-1].strip()
+    if inner == "":
+        return []
+    parts = split_flow_items(inner)
+    if parts is None:
+        return None
+    return [parse_scalar(part) for part in parts]
+
+
+def parse_flow_map(text: str) -> dict[str, object] | None:
+    """The flow-mapping form the VENDOR itself writes.
+
+    omp's own settings writer emits `modelRoles:` followed by an indented `{}`
+    (measured on omp 18.0.0, an untouched operator config). The block-only reader
+    read that line as a malformed mapping and returned None for the WHOLE file, so
+    a perfectly ordinary vendor config classified as `unreadable` and the MCP
+    doctor went RED for a reason that had nothing to do with tools.xdev.
+    """
+    body = text.strip()
+    if not (body.startswith("{") and body.endswith("}")):
+        return None
+    inner = body[1:-1].strip()
+    if inner == "":
+        return {}
+    parts = split_flow_items(inner)
+    if parts is None:
+        return None
+    mapping: dict[str, object] = {}
+    for part in parts:
+        if part == "":
+            return None
+        pair = split_key_value(part)
+        if pair is None:
+            return None
+        key, raw = pair
+        mapping[key] = parse_scalar(raw)
+    return mapping
 
 
 def parse_scalar(raw: str) -> object:
@@ -102,6 +140,9 @@ def parse_scalar(raw: str) -> object:
     if text.startswith("[") and text.endswith("]"):
         parsed = parse_flow_seq(text)
         return parsed if parsed is not None else text
+    if text.startswith("{") and text.endswith("}"):
+        parsed_map = parse_flow_map(text)
+        return parsed_map if parsed_map is not None else text
     folded = text.casefold()
     if folded in TRUE_WORDS:
         return True
@@ -137,6 +178,16 @@ def parse_block(lines: list[tuple[int, str]], start: int, indent: int) -> tuple[
     first_indent, first_text = lines[start]
     if first_indent <= indent:
         return {}, start
+    if first_text.startswith("{") or first_text.startswith("["):
+        # `key:` on one line, a flow collection indented under it on the next — the
+        # shape the vendor's own writer produces for an empty map (`modelRoles:\n  {}`).
+        flow = parse_flow_map(first_text) if first_text.startswith("{") else parse_flow_seq(first_text)
+        if flow is None:
+            return None, start
+        index = start + 1
+        if index < len(lines) and lines[index][0] >= first_indent:
+            return None, start  # a flow collection is the WHOLE block or nothing
+        return flow, index
     if first_text.startswith("- "):
         items: list[object] = []
         index = start

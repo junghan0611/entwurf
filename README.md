@@ -60,8 +60,8 @@ native Antigravity / agy
 ```
 
 Claude's `install-meta-bridge`, Copilot's four `install-copilot-*` surfaces, agy's
-`install-agy-{bridge,statusline,hooks}` and OMP's three `install-omp-{bridge,mcp,receive}` units
-(each with its own `doctor-omp-*`) are distinct because their lifecycle and delivery transports are
+`install-agy-{bridge,statusline,hooks}` and OMP's four `install-omp-{bridge,mcp,config,receive}`
+units are distinct because their lifecycle and delivery transports are
 genuinely different. Codex remains verified probe evidence, not a shipped managed native-citizen
 lane; see [DELIVERY.md](./DELIVERY.md).
 
@@ -213,17 +213,14 @@ SKIP while the detected harnesses are composed.
 
 A plain MCP registration exposes the bridge tools; a **garden-native** session also
 needs entwurf's lifecycle hook and identity marker. `setup` already composes all of that
-for every harness it detects — you do not paste this list to install. OMP is the one
-exception and it is deliberate: its units are operator-selectable installs that `setup`
-does not compose, so the three `install-omp-*` commands below are how an omp host gets
-wired. Otherwise this is the repair surface: each unit has its own installer, its own
-doctor with a named refusal, and its own inverse, so a single broken unit can be redone
-without touching the rest.
+for every harness it detects — you do not paste this list to install. This is the repair
+surface: each unit has its own installer, its own doctor with a named refusal, and its own
+inverse, so a single broken unit can be redone without touching the rest.
 
 - **Claude Code** (Linux-certified axis) — `install-meta-bridge`, `doctor-meta-bridge`.
 - **Antigravity / agy** — `install-agy-bridge`, `install-agy-statusline`, `install-agy-hooks`, each with a matching `doctor-agy-*`.
 - **GitHub Copilot CLI** — four independent units, four independent failure modes: `install-copilot-bridge` (birth: garden id + who-sent, on the first prompt), `install-copilot-mcp` (the entwurf tool hand, where `entwurf_inbox_read` lives), `install-copilot-receive` (the receiver extension: doorbell + receiver marker), `install-copilot-statusline` (optional for a manual citizen, required for supported fresh) — each with a matching `doctor-copilot-*` and `uninstall-copilot-*`.
-- **OMP (`omp`)** — three units, all in-process extensions rather than launchers: `install-omp-bridge` (birth: the `mode === "tui"` visible host, its garden id on the status line, and who-sent), `install-omp-mcp` (the omp-native `entwurf-bridge` entry), `install-omp-receive` (the receiver extension: mailbox watch + announce-only doorbell) — each with a matching `doctor-omp-*` and `uninstall-omp-*`. One OPERATOR setting sits beside them and is not ours to write: `tools: xdev: false` in the omp agent config, without which the vendor mounts MCP tools as `xd://` devices the model cannot call.
+- **OMP (`omp`)** — four units, in-process extensions rather than launchers: `install-omp-bridge` (birth: the `mode === "tui"` visible host, its garden id on the status line, and who-sent), `install-omp-mcp` (the omp-native `entwurf-bridge` entry), `install-omp-config` (the one operator setting `tools: xdev: false`, without which the vendor mounts MCP tools as `xd://` devices the model cannot call), `install-omp-receive` (the receiver extension: mailbox watch + announce-only doorbell) — each with a matching `uninstall-omp-*`, and a `doctor-omp-*` for all but the setting, whose runtime axis `doctor-omp-mcp` owns. The setting writer owns exactly the lines it adds and refuses an explicit operator `tools: xdev: true` by name rather than overwriting it.
 
 Run them as `entwurf <command>`. Which unit a doctor's refusal names, and the clean-host
 walk-through for each harness, live in [docs/setup-clean-host.md](./docs/setup-clean-host.md).

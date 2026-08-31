@@ -155,6 +155,16 @@ function pythonXdev(agentDir: string): "false" | "true" | "unreadable" {
 		["a top-level xdev outside tools", "xdev: false\ntools:\n  approvalMode: yolo\n"],
 		["tab indentation (not YAML for the vendor)", "tools:\n\txdev: false\n"],
 		["broken flow scalar", "tools: [oops\n"],
+		// The shape the VENDOR's own settings writer produces: `key:` on one line with an
+		// indented flow collection under it. The python leaf's block-only reader returned
+		// None for the WHOLE file here, so an untouched operator config classified as
+		// `unreadable` and doctor-omp-mcp went RED for a reason unrelated to tools.xdev
+		// (measured on a real host, omp 18.0.0). Agreement alone could never catch it —
+		// both halves collapse `unreadable` and `true` into "not false" — so the direct
+		// assertion below is the one that holds the reader to the vendor's own output.
+		["the vendor's own writer output (empty flow map sibling)", "modelRoles: \n  {}\ntools: \n  xdev: false\n"],
+		["a populated flow map sibling", "modelRoles: \n  {default: xai/grok}\ntools: \n  xdev: false\n"],
+		["a flow sequence sibling", "disabledProviders: \n  [openrouter, google]\ntools: \n  xdev: false\n"],
 	];
 	const root = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-omp-xdev-"));
 	try {
@@ -171,6 +181,23 @@ function pythonXdev(agentDir: string): "false" | "true" | "unreadable" {
 			ok(
 				`[QK:OMP-PREFLIGHT-XDEV-ORACLE] tools.xdev agrees with the shipped python leaf — ${label} (python=${python}, ts=${String(ts)})`,
 				pythonSaysFalse === (ts === false),
+			);
+		}
+		// Agreement is not enough on the vendor's own shapes: two readers that BOTH fail
+		// closed agree perfectly and still leave the doctor red on a healthy host. These
+		// name the answer instead of comparing the halves.
+		for (const [label, yaml] of CONFIGS) {
+			if (
+				!label.startsWith("the vendor's own writer output") &&
+				!label.startsWith("a populated flow map") &&
+				!label.startsWith("a flow sequence")
+			)
+				continue;
+			const dir = fs.mkdtempSync(path.join(root, "vendor-"));
+			fs.writeFileSync(path.join(dir, "config.yml"), yaml as string);
+			ok(
+				`[QK:OMP-XDEV-VENDOR-SHAPE-READABLE] the python leaf READS tools.xdev on ${label} — a flow collection elsewhere in the file is not an unreadable config`,
+				pythonXdev(dir) === "false",
 			);
 		}
 	} finally {

@@ -143,6 +143,41 @@
 			"timeoutSeconds": 600,
 			"signature": "[QK:SETUP-AGY-COSMETIC-RETURN]",
 			"signatureSource": "scripts/smoke-agy-install-state.sh"
+		},
+		{
+			"claim": "SETUP-OMP-ABSENT-SKIP",
+			"title": "an absent omp is composed anyway instead of taking the zero-state SKIP branch, so setup writes omp units onto a host that never installed omp",
+			"subject": "run.sh",
+			"find": [
+				"  if ! command -v \"${OMP_BIN:-omp}\" >/dev/null 2>&1; then\n    setup_result omp SKIP \"omp not on PATH — zero OMP wiring written\""
+			],
+			"replace": ["  if false; then\n    setup_result omp SKIP \"omp not on PATH — zero OMP wiring written\""],
+			"gate": ["bash", "scripts/check-setup-qualification.sh"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SETUP-OMP-ABSENT-SKIP]",
+			"signatureSource": "scripts/check-setup-qualification.sh"
+		},
+		{
+			"claim": "SETUP-OMP-INDEPENDENT",
+			"title": "the omp units stop being composed at all — the exact v0.16.0 shape: every installer exists, setup never reaches them, and the summary still computes green",
+			"subject": "run.sh",
+			"find": ["    omp_rc=0; (cd \"$REPO_DIR\" && bash scripts/omp-bridge-install.sh) || omp_rc=$?"],
+			"replace": ["    omp_rc=0"],
+			"gate": ["bash", "scripts/check-setup-qualification.sh"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SETUP-OMP-INDEPENDENT]",
+			"signatureSource": "scripts/check-setup-qualification.sh"
+		},
+		{
+			"claim": "SETUP-OMP-CONFIG-NO-OVERWRITE",
+			"title": "the tools.xdev writer overwrites an EXPLICIT operator `xdev: true` instead of refusing it by name, so entwurf silently reverses a decision the operator wrote down",
+			"subject": "scripts/omp-config-xdev.py",
+			"find": ["        if existing is not None:"],
+			"replace": ["        if False:"],
+			"gate": ["bash", "scripts/check-setup-qualification.sh"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:SETUP-OMP-CONFIG-NO-OVERWRITE]",
+			"signatureSource": "scripts/check-setup-qualification.sh"
 		}
 	]
 }

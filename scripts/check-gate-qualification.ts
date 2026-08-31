@@ -829,7 +829,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"resume-args": 6,
 		"resume-launch-identity": 6,
 		"self-address": 5,
-		"setup-verdict": 10,
+		"setup-verdict": 13,
 		"source-install": 2,
 		"v2-surface": 7,
 		"v2-visible-resume": 17,

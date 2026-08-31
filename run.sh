@@ -119,7 +119,7 @@ run_vitest() {
 usage() {
   cat <<'EOF'
 Usage:
-  ./run.sh setup [project-dir]        # ONE presence-driven composition (#86): mode-first (source bootstrap only on a checkout), then per-component PASS/SKIP/FAIL for pi (presence+floor)/claude/agy/copilot (all four units: birth→MCP→receiver→footer, independently) + stable dev bins + v2 install smoke; absent harness = zero-state SKIP, detected-incomplete = named FAIL + nonzero exit. Never installs a harness or touches credentials
+  ./run.sh setup [project-dir]        # ONE presence-driven composition (#86): mode-first (source bootstrap only on a checkout), then per-component PASS/SKIP/FAIL for pi (presence+floor)/claude/agy/copilot (all four units: birth→MCP→receiver→footer, independently)/omp (four units: birth→MCP→tools.xdev setting→receiver, independently) + stable dev bins + v2 install smoke; absent harness = zero-state SKIP, detected-incomplete = named FAIL + nonzero exit. Never installs a harness or touches credentials
   ./run.sh release-gate [project-dir] [--cut] [--allow-skip-gemini]  # SINGLE release gate: full static (pnpm run check:full) + the v2-native live gates (v2 matrix-live, check-bridge, doctor-pi-provider, RGG) + the ACP plugin acceptance floor (12 LIVE smokes: socket-citizen/raw-turn/overlay/provider/session-reuse/carrier-augment/memory-containment/rgg/mcp/skill/bundled-mcp/v2-send) + the one surviving axis the aggregate used to omit silently (claude-native-resume; Cortex stays a documented on-demand direct call) + the cross-harness delivery chain (smoke-entwurf-chain-live). TWO-TIER summary: MUST (release-blocking, owns the exit code — "green" applies here) + BEHAVIOR (advisory, non-blocking: RGG positives model-in-loop turn). STEP OUTCOME protocol: every step is INVOKED and reports its own PASS / SKIP (exit 97, a prerequisite it does not have) / FAIL — a skip is never counted as a pass. Without --cut this is the unattended diagnostic (SKIPs reported, exit 0). WITH --cut it is read as release acceptance and ANY MUST SKIP is red, which is what makes "a CUT needs LIVE=1, SKIP=0" executable instead of prose. --allow-skip-gemini accepted-but-ignored (back-compat). final cut authorization is GLG's.
   ./run.sh check-bridge               # entwurf-bridge direct MCP smoke + protocol/negative-path test.sh (live substrate = v2 live smokes)
   ./run.sh check-entwurf-bridge-boot # deterministic gate (5d-5-pre, G1a/G1b/G1e/G1f, IN pnpm run check:full): boot start.sh under strip-types + assert v2 fence graph loads + entwurf_v2 and entwurf_resume_call registered/schema + the tools/list surface is EXACTLY the seven shipped garden verbs; tools/list only, no auth/side-effect
@@ -218,6 +218,8 @@ Usage:
   ./run.sh install-copilot-mcp        # #82 RAIL 5: register ONE entwurf-bridge server in ~/.copilot/mcp-config.json (adopt / create / REFUSE symlink), type:local, install-state under $XDG_DATA_HOME/entwurf/copilot-mcp/
   ./run.sh uninstall-copilot-mcp      # honest inverse of install-copilot-mcp from install-state
   ./run.sh doctor-copilot-mcp         # static ownership/config/boot doctor; RED only when install-state exists
+  ./run.sh install-omp-config         # #87 follow-on: write the ONE operator setting omp's tool hand requires — `tools.xdev: false` in <omp agent dir>/config.yml. Owns exactly the line(s) it adds (recorded in install-state), refuses a symlinked config, refuses a config it cannot parse, and refuses an EXPLICIT operator `xdev: true` by name rather than overwriting a decision. Without it the vendor default wraps every MCP tool behind `xd://` and the doorbell announces a tool the model cannot call
+  ./run.sh uninstall-omp-config       # honest inverse from install-state: takes back exactly the recorded line(s), removes the file only when entwurf created it, REFUSES when the config changed since install
   ./run.sh install-omp-bridge         # #87: install the OMP BIRTH extension into <omp agent dir>/extensions/entwurf-meta-omp (index.ts|js + lib + capability registry). No launcher and no bake — an omp hook is an in-process extension. Refuses when an inherited PI_CODING_AGENT_DIR/PI_CONFIG_DIR/PI_PROFILE makes the target agent dir ambiguous (ledger M6), and refuses ANY pre-existing artifact at the unit path that entwurf holds no ownership state for — a shape is not a proof of ownership
   ./run.sh uninstall-omp-bridge       # honest inverse from install-state (exact unit dir + recorded entry; no-state host REFUSES; state deleted LAST). Records already minted are preserved
   ./run.sh doctor-omp-bridge          # #87: runtime axis (importable unit, writer/registry parity, mint vs sender-marker errors on SEPARATE axes, scope-fence receipts, a root-grammar preflight that goes RED on a relative ENTWURF_META_* override instead of reporting on some other directory, CERTIFIED omp record count via meta-facts under the omp root policy — never a text grep, live omp processes carrying inherited PI_SESSION_ID/PI_AGENT_ID) + ownership axis. PI_CODING_AGENT_DIR is the vendor's own agent dir here and is reported as ignored, never as contamination. Zero records = NOT-YET, never red
@@ -4983,6 +4985,52 @@ setup_all() {
     fi
   fi
 
+  # ── omp (oh-my-pi) ── presence-driven composition, same shape as copilot. OMP
+  # was admitted as a garden citizen in v0.16.0 with installers, doctors and
+  # inverses for every unit — but it was never composed HERE, so the one-command
+  # surface left the fifth backend to a hand-run verb list and the operator setting
+  # to a documentation step. That gap is what `docs/adding-a-harness.md` step 10
+  # now closes for every future harness: an onboarding is not finished until setup
+  # composes it. Four units, each independent: birth (who the citizen is) → MCP
+  # hand (what it can call) → the tools.xdev operator setting (whether those calls
+  # are REACHABLE) → receiver (whether a reply can land). OMP_BIN pins the PROBE
+  # for hermetic gates; the unit scripts address `omp` on PATH.
+  local omp_rc
+  if ! command -v "${OMP_BIN:-omp}" >/dev/null 2>&1; then
+    setup_result omp SKIP "omp not on PATH — zero OMP wiring written"
+  else
+    section "omp units (native harness detected: oh-my-pi)"
+    omp_rc=0; (cd "$REPO_DIR" && bash scripts/omp-bridge-install.sh) || omp_rc=$?
+    if [ "$omp_rc" -eq 0 ]; then
+      setup_result omp-birth PASS "birth extension installed — verify: ./run.sh doctor-omp-bridge"
+    else
+      setup_result omp-birth FAIL "detected omp, but the birth extension install did not complete (see above) — repair, then re-run setup"
+    fi
+    omp_rc=0; (cd "$REPO_DIR" && bash scripts/omp-mcp-bridge.sh install) || omp_rc=$?
+    if [ "$omp_rc" -eq 0 ]; then
+      setup_result omp-mcp PASS "MCP server registered — verify: ./run.sh doctor-omp-mcp"
+    else
+      setup_result omp-mcp FAIL "detected omp, but the MCP registration did not complete (see above) — repair, then re-run setup"
+    fi
+    # The operator setting is a component of its own because its FAIL is a real
+    # disagreement, not a broken install: an explicit `tools.xdev: true` is the
+    # operator's decision and the writer refuses it by name. Naming that as a
+    # component FAIL puts the choice in front of the operator instead of silently
+    # shipping a citizen whose tools nobody can call.
+    omp_rc=0; (cd "$REPO_DIR" && bash scripts/omp-config-xdev.sh install) || omp_rc=$?
+    if [ "$omp_rc" -eq 0 ]; then
+      setup_result omp-config PASS "tools.xdev: false written — verify: ./run.sh doctor-omp-mcp"
+    else
+      setup_result omp-config FAIL "detected omp, but the tools.xdev operator setting did not land (see above) — resolve it, then re-run setup"
+    fi
+    omp_rc=0; (cd "$REPO_DIR" && bash scripts/omp-receive-install.sh) || omp_rc=$?
+    if [ "$omp_rc" -eq 0 ]; then
+      setup_result omp-receive PASS "receiver extension installed — verify: ./run.sh doctor-omp-receive"
+    else
+      setup_result omp-receive FAIL "detected omp, but the receiver extension install did not complete (see above) — repair, then re-run setup"
+    fi
+  fi
+
   # ── core bridge boundary ── deterministic preflight lives in `pnpm run
   # check:full`; live substrate acceptance lives in `LIVE=1 ./run.sh
   # release-gate <scratch> --cut`. Setup is the install path, so it verifies the
@@ -5003,7 +5051,7 @@ setup_all() {
   local entry rest s_name s_verdict s_fails=""
   for entry in "${SETUP_RESULTS[@]}"; do
     s_name="${entry%%|*}"; rest="${entry#*|}"; s_verdict="${rest%%|*}"
-    printf '  %-14s %-4s %s\n' "$s_name" "$s_verdict" "${rest#*|}"
+    printf '  %-18s %-4s %s\n' "$s_name" "$s_verdict" "${rest#*|}"
     if [ "$s_verdict" = "FAIL" ]; then s_fails="$s_fails $s_name"; fi
   done
   echo ""
@@ -6120,6 +6168,20 @@ case "$cmd" in
     ;;
   smoke-omp-mcp-state)
     (cd "$REPO_DIR" && bash scripts/smoke-omp-mcp-state.sh)
+    ;;
+  install-omp-config)
+    # #87 follow-on: the ONE operator setting omp's tool hand requires (`tools.xdev: false`).
+    # A separate unit from install-omp-mcp because it answers a different question — the MCP
+    # hand registers the server, this decides whether the registered tools are REACHABLE. It
+    # owns exactly the line it adds and refuses an explicit operator `xdev: true` by name.
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/omp-config-xdev.sh install "$@")
+    ;;
+  uninstall-omp-config)
+    # honest inverse from install-state: takes back exactly the recorded line(s), removes the
+    # file only when entwurf created it, and REFUSES when the config changed since install.
+    shift || true
+    (cd "$REPO_DIR" && bash scripts/omp-config-xdev.sh uninstall "$@")
     ;;
   install-omp-bridge)
     # #87: the OMP BIRTH install. Not a mode of the Claude or Copilot installer, and for a

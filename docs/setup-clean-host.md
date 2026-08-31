@@ -15,7 +15,7 @@ only on Linux because its strict live-owner join uses `/proc`.
 | pi | optional-by-presence, `>=0.84.3 <0.85` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
 | Claude Code | optional, **`>=2.1.217`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
-| OMP (`omp`) | optional, operator-installed; three units (birth/MCP/receiver) plus `tools: xdev: false` in the agent config | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
+| OMP (`omp`) | optional-by-presence, operator-installed — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/`tools.xdev` setting/receiver) | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
 | Antigravity `agy` | optional, operator-installed and authenticated | native-push citizen |
 | Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
 
@@ -72,11 +72,12 @@ cd ~/repos/gh/entwurf
 
 This owns `~/.local/bin/entwurf` as a symlink to that checkout's `run.sh` and fails if the
 link is foreign, outside PATH, or shadowed by another command. It detects and wires
-pi/Claude/agy/Copilot by presence and prints a computed per-component PASS/SKIP/FAIL summary — a
+pi/Claude/agy/Copilot/OMP by presence and prints a computed per-component PASS/SKIP/FAIL summary — a
 detected harness that cannot be completed makes setup exit nonzero. A detected `copilot`
 composes all four native units (birth → MCP → receiver → visible footer) with independent
-per-unit verdicts (#86 C3b); §4 keeps the explicit per-unit install/doctor/inverse surfaces for
-repair.
+per-unit verdicts (#86 C3b), and a detected `omp` composes its own four (birth → MCP →
+`tools.xdev` setting → receiver) the same way; §4 and §4b keep the explicit per-unit
+install/doctor/inverse surfaces for repair.
 
 ### 1.1 User-scope ownership (one shared registration, one recorded owner)
 
@@ -213,15 +214,25 @@ sibling launched onto a default-config host would start, look healthy, and be un
 the callback tool at all. A refusal there names `omp-callback-tool-uncallable` and opens
 nothing.
 
+`setup` composes all four omp units when `omp` is on PATH, and the setting is one of them —
+`entwurf setup` writes `tools: xdev: false` itself. The verbs below are the REPAIR path, not
+the install:
+
 ```bash
 entwurf install-omp-bridge     # the birth extension, into <omp agent dir>/extensions/
 entwurf install-omp-mcp        # the omp-native entwurf-bridge server
+entwurf install-omp-config     # the operator setting: tools.xdev: false
 entwurf install-omp-receive    # the receiver extension: mailbox watch + doorbell
 
 entwurf doctor-omp-bridge
-entwurf doctor-omp-mcp
+entwurf doctor-omp-mcp         # also owns the tools.xdev runtime axis
 entwurf doctor-omp-receive
 ```
+
+The setting writer owns exactly the lines it adds and records them, so `uninstall-omp-config`
+takes back its own bytes and nothing else. It refuses a symlinked config, a config it cannot
+parse, and — deliberately — an EXPLICIT `tools: xdev: true`: that is your decision, not drift,
+so setup names it as a component FAIL for you to resolve instead of overwriting it.
 
 Order matters only in one direction: the receiver JOINS the citizen birth mints, and
 announces a tool the MCP hand provides. Install it without them and it will log
@@ -234,8 +245,11 @@ retires it. A task subagent arms nothing. While nothing is armed, dispatch to th
 id is the honest `mailbox-undeliverable` refusal — an unarmed receiver is a legible state,
 not a broken one.
 
-The admission work has landed and `setup` still does not compose these: the three omp
-units stay operator-selectable installs, so run them yourself on an omp host.
+`[측정]` This section used to end by saying `setup` did not compose these and the verbs had to
+be run by hand. That is what v0.16.0 actually shipped, and on an operator host it printed a
+green `setup` summary with OMP entirely absent — no extension, no MCP entry, no visible garden
+id. The composition landed afterwards; `docs/adding-a-harness.md` step 10 is the rule that
+keeps the next harness from repeating it.
 
 Both installers resolve the omp agent directory the way omp itself does, and REFUSE rather
 than guess when an inherited `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR` or `PI_PROFILE` makes it

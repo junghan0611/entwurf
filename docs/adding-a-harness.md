@@ -758,6 +758,57 @@ the window opens, the record mints, and every deterministic gate stays green.
 
 ---
 
+## 10. One command — an onboarding is not finished until `setup` composes it
+
+Every unit above is an operator-selectable verb with its own install-state, doctor and inverse.
+That is the right decomposition and it is not the deliverable. The deliverable is that a fresh
+host reaches the same place by running `entwurf setup` once. A harness whose units exist but are
+not composed there is not installed — it is installable, which is a different claim and a much
+weaker one.
+
+`[측정]` OMP is the worked example, and it is the expensive kind. v0.16.0 shipped OMP as a D6
+citizen with birth, MCP hand and receiver installers, four doctors, four inverses, a LIVE fresh
+receipt and a cross-harness leg — and `setup_all` had no `omp` branch at all. On an operator host
+running the released package, `entwurf setup` printed **green** while OMP had nothing installed:
+no extension, no `mcp.json` entry, no visible garden id. Every gate agreed, because every gate
+asked about the units and none asked whether the one-command surface reached them. The same host
+also had no `tools.xdev: false`, since that was a documented hand-edit in `setup-clean-host.md`
+rather than a writer — so even a hand-run verb list left the citizen holding tools the model
+could not call.
+
+So the step is: **add the harness to `setup_all` in `run.sh`, presence-driven, one named
+component per unit, and pin its probe in the aggregate gate.** Concretely:
+
+1. **Presence is the only trigger.** The vendor binary on PATH composes; absent is exactly one
+   zero-state SKIP row. Setup never installs a harness, a subscription or a credential.
+2. **One component row per unit, decided independently.** A failed unit is a named FAIL that
+   keeps the other units and the rest of setup alive and owns a nonzero final exit. Never a WARN,
+   never a cosmetic PASS, never a SKIP that stands for "detected but broken".
+3. **Compose only lifecycles you can also undo.** A unit belongs in `setup` once its
+   package-owned inverse exists — otherwise the one command writes state the operator cannot
+   take back.
+4. **Operator SETTINGS are units too, not documentation.** If the harness needs a value in a
+   vendor config for entwurf's tools to be reachable, it needs a writer that owns exactly the
+   lines it adds, refuses a config it cannot parse, refuses to write through a symlink, and
+   refuses to overwrite an explicit contrary operator value **by name** — a disagreement between
+   two authorities is a FAIL the operator resolves, never a silent overwrite.
+   `scripts/omp-config-xdev.py` is the reference shape.
+5. **Pin the probe seam and add an aggregate cell.** `smoke-setup-verdict` defaults every
+   harness probe to a definitely-absent path (`PI_BIN` / `CLAUDE_BIN` / `AGY_BIN` /
+   `COPILOT_BIN` / `OMP_BIN`), so a new harness owes both an absent row in S-1 and a
+   present-harness cell that drives the real composition against a stub vendor and asserts every
+   install-state, the artifacts in the sandbox agent dir, and idempotence on a second run.
+   Without the pin, the developer's own host leaks into the fixture.
+6. **Then update [`setup-clean-host.md`](./setup-clean-host.md)** so the hand-run verb list
+   becomes what it should be — a repair path, not the install.
+
+The general shape, once more: two closed loops with nothing between them. The unit gates held
+unit ≡ doctor ≡ inverse, the admission gates held registry ≡ citizens ≡ fresh set, and no gate
+owned the edge from *the units exist* to *the one command reaches them*. Ask which gate owns that
+edge before the cut, not after an operator's clean host comes up green and empty.
+
+---
+
 ## The five documents this one points at
 
 | Document | Owns | Reached from |
@@ -765,7 +816,7 @@ the window opens, the record mints, and every deterministic gate stays green.
 | [`acp-backend-rail.md`](./acp-backend-rail.md) | the ACP adapter lane end to end | step 0, the other side of the fork |
 | [`fresh-cut-policy.md`](./fresh-cut-policy.md) | recovery when a record generation is genuinely unreadable | step 2 — and only after redeploy has been ruled out |
 | [`external-mcp-host.md`](./external-mcp-host.md) | per-harness bridge registration, external vs garden-native semantics, the anonymous hatch, the PATH/env boundary | steps 5 and 6, as required detail |
-| [`setup-clean-host.md`](./setup-clean-host.md) | operator reproduction of the whole install on a fresh host | after any step that adds an installer or doctor |
+| [`setup-clean-host.md`](./setup-clean-host.md) | operator reproduction of the whole install on a fresh host | after any step that adds an installer or doctor — and step 10, which decides what stays a hand-run verb |
 | [`mux-launch-rail.md`](./mux-launch-rail.md) | opening a fresh sibling and reopening a dormant one | step 9 — separate implementation, required admission evidence |
 
 Verification protocol and evidence levels stay in [`../VERIFY.md`](../VERIFY.md); recorded

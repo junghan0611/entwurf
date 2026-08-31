@@ -7,13 +7,15 @@
 # gate. This fixture drives the REAL `run.sh setup` end to end in a sandbox and
 # pins exactly the #86 C1 acceptance cells:
 #
-#   S-1 all-harness-absent  → core PASS, pi/claude/agy SKIP, computed green,
+#   S-1 all-harness-absent  → core PASS, pi/claude/agy/copilot/omp SKIP, computed green,
 #                             zero harness writes, credential store untouched
 #   S-2 pi below floor      → detected FAIL (never SKIP), nonzero, no Pi wiring
 #   S-3 pi at floor         → presence completes project+user wiring, green,
 #                             credential store still byte-identical
 #   S-4 agy detected+corrupt→ named component FAIL + NON-GREEN + nonzero exit,
 #                             core and later components still attempted
+#   S-8 omp present         → the four omp units compose (birth/MCP/tools.xdev
+#                             setting/receiver), states exist, second run idempotent
 #   S-5 installed mode      → the installed-vs-source branch is a NAMED verdict
 #                             printed before anything else, and never reaches
 #                             the source pnpm bootstrap
@@ -25,7 +27,8 @@
 # below-floor and false-green shapes as living end-to-end evidence.
 #
 # Deterministic: no model, no network, no cost. Presence probes are pinned via
-# PI_BIN / CLAUDE_BIN / AGY_BIN (the same hermetic seam smoke-agy-install-state
+# PI_BIN / CLAUDE_BIN / AGY_BIN / COPILOT_BIN / OMP_BIN (the same hermetic seam
+# smoke-agy-install-state
 # uses), and every write root is sandboxed: HOME, XDG roots, the pi agent dir,
 # and the dev-bin dir. The source bootstrap (`pnpm install --frozen-lockfile`)
 # runs against the ALREADY-INSTALLED checkout, which is a verified no-op under a
@@ -64,7 +67,7 @@ mkdir -p "$HOME" "$PI_CODING_AGENT_DIR" "$SB/bin" "$SB/harness"
 # Presence pins: default every harness to a definitely-absent path; each cell
 # re-pins what it needs. Production leaves these unset.
 ABSENT="$SB/harness/definitely-absent"
-export PI_BIN="$ABSENT" CLAUDE_BIN="$ABSENT" AGY_BIN="$ABSENT" COPILOT_BIN="$ABSENT"
+export PI_BIN="$ABSENT" CLAUDE_BIN="$ABSENT" AGY_BIN="$ABSENT" COPILOT_BIN="$ABSENT" OMP_BIN="$ABSENT"
 
 PASS=0
 ok()   { PASS=$((PASS + 1)); printf '  ok    %s\n' "$*"; }
@@ -98,6 +101,7 @@ want "S-1: pi absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | gr
 want "S-1: claude absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | grep -q 'claude: SKIP'"
 want "S-1: agy absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | grep -q 'agy: SKIP'"
 want "S-1: copilot absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP'"
+want "S-1: omp absent is an explicit zero-state SKIP" "printf '%s' \"\$OUT\" | grep -q 'omp: SKIP'"
 want "S-1: core bridge boundary validated (PASS)" "printf '%s' \"\$OUT\" | grep -q 'core: PASS'"
 want "S-1: final verdict is computed, not unconditional" \
   "printf '%s' \"\$OUT\" | grep -q 'result: green (computed from the component outcomes above)'"
@@ -107,6 +111,7 @@ want "S-1: zero Pi wiring written for an absent pi" "[ ! -e '$PROJ1/.pi' ]"
 want "S-1: no user-scope pi settings were created" "[ ! -e '$PI_CODING_AGENT_DIR/settings.json' ]"
 want "S-1: no agy config was created" "[ ! -e '$HOME/.gemini' ]"
 want "S-1: no Copilot config/units were created" "[ ! -e '$HOME/.copilot' ]"
+want "S-1: no OMP config/units were created" "[ ! -e '$HOME/.omp' ]"
 want_auth_untouched "S-1"
 
 # ── S-2: pi resolvable but BELOW floor → detected FAIL, never SKIP, no writes ──
@@ -241,6 +246,46 @@ want "S-7: the refused birth wrote no vendor ownership state" \
 want_auth_untouched "S-7"
 rm -rf "$HOME/.copilot" "$XDG_DATA_HOME/entwurf/copilot-mcp" "$XDG_DATA_HOME/entwurf/copilot-receive" \
   "$XDG_DATA_HOME/entwurf/copilot-statusline"
+
+# ── S-8: omp present → the FOUR omp units compose, including the operator setting ──
+# OMP shipped in v0.16.0 with installers, doctors and inverses for every unit, but
+# `setup` did not compose it — the fifth backend was a hand-run verb list and the
+# `tools.xdev` setting was a documentation step, so a one-command host came up with
+# an omp citizen whose MCP tools the model could not call. This cell is the standing
+# consumer of that composition. The omp unit scripts touch NO vendor process: they
+# only probe `omp` on PATH and write into the agent dir, so a stub binary is a
+# faithful presence pin and every write lands in the sandbox HOME.
+echo "[smoke-setup-verdict] S-8 omp present — four-unit composition"
+PROJ8="$SB/proj8"; mkdir -p "$PROJ8"
+FAKE_OMP="$SB/harness/omp-fake"; mkdir -p "$FAKE_OMP"
+printf '#!/usr/bin/env bash\necho "omp/18.0.0"\n' > "$FAKE_OMP/omp"
+chmod +x "$FAKE_OMP/omp"
+seed_auth
+# This sandbox exports PI_CODING_AGENT_DIR, which omp reads too — the oracle refuses
+# that ambiguity by design (ledger M6), so the cell names the agent dir explicitly, the
+# same seam a real operator on a pi-rail host would use.
+OMP_AGENT="$HOME/.omp/agent"
+set +e; OUT="$(OMP_BIN="$FAKE_OMP/omp" ENTWURF_OMP_AGENT_DIR="$OMP_AGENT" PATH="$FAKE_OMP:$PATH" bash "$REPO_DIR/run.sh" setup "$PROJ8" 2>&1)"; RC=$?; set -e
+want "S-8: omp-present setup exits 0 (four units + core all green)" "[ '$RC' -eq 0 ]"
+want "S-8: birth unit composed as PASS" "printf '%s' \"\$OUT\" | grep -q 'omp-birth: PASS'"
+want "S-8: MCP unit composed as PASS" "printf '%s' \"\$OUT\" | grep -q 'omp-mcp: PASS'"
+want "S-8: the tools.xdev operator setting composed as PASS" "printf '%s' \"\$OUT\" | grep -q 'omp-config: PASS'"
+want "S-8: receiver unit composed as PASS" "printf '%s' \"\$OUT\" | grep -q 'omp-receive: PASS'"
+want "S-8: computed summary is green" \
+  "printf '%s' \"\$OUT\" | grep -q 'result: green (computed from the component outcomes above)'"
+want "S-8: all four package-owned install-states exist (each unit keeps its inverse authority)" \
+  "[ -f '$XDG_DATA_HOME/entwurf/omp-bridge/install-state.json' ] && [ -f '$XDG_DATA_HOME/entwurf/omp-mcp/install-state.json' ] && [ -f '$XDG_DATA_HOME/entwurf/omp-config/install-state.json' ] && [ -f '$XDG_DATA_HOME/entwurf/omp-receive/install-state.json' ]"
+want "S-8: both extension units landed in the sandbox omp agent dir" \
+  "[ -d '$HOME/.omp/agent/extensions/entwurf-meta-omp' ] && [ -d '$HOME/.omp/agent/extensions/entwurf-receive-omp' ]"
+want "S-8: the MCP hand wrote the pinned key and the setting reached the config the vendor reads" \
+  "grep -q 'entwurf-bridge' '$HOME/.omp/agent/mcp.json' && [ \"\$(python3 '$REPO_DIR/scripts/omp-tool-surface.py' '$HOME/.omp/agent' | awk '/^verdict /{print \$2}')\" = 'xdev-off' ]"
+want "S-8: setup is idempotent — a second run over the composed host is still green" \
+  "OMP_BIN='$FAKE_OMP/omp' ENTWURF_OMP_AGENT_DIR='$HOME/.omp/agent' PATH='$FAKE_OMP:$PATH' bash '$REPO_DIR/run.sh' setup '$PROJ8' 2>&1 | grep -q 'result: green (computed from the component outcomes above)'"
+want_auth_untouched "S-8"
+# Reset the composed OMP state so the next cell decides on a clean host.
+rm -rf "$HOME/.omp" "$XDG_DATA_HOME/entwurf/omp-bridge" "$XDG_DATA_HOME/entwurf/omp-mcp" \
+  "$XDG_DATA_HOME/entwurf/omp-config" "$XDG_DATA_HOME/entwurf/omp-receive" \
+  "$XDG_DATA_HOME/entwurf/meta-bridge-omp" "$XDG_DATA_HOME/entwurf/omp-receive"
 
 # ── S-5: installed mode is a NAMED first verdict, never the source bootstrap ──
 # A bare copy of run.sh under a fake node_modules root pins the mode seam

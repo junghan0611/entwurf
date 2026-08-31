@@ -42,11 +42,23 @@ for _f in copilot-bridge-install.sh copilot-bridge-oracle.sh copilot-mcp-bridge.
   copilot-receive-bridge.sh copilot-statusline-bridge.sh copilot-statusline-config.py; do
   cp "$REPO_DIR/scripts/$_f" "$PKG/scripts/$_f"
 done
+# OMP composition surface (Cells E/F): same discipline — every omp unit script is a real
+# tracked file here, because the claims are about what the composition actually reaches.
+for _f in omp-bridge-install.sh omp-bridge-oracle.sh omp-mcp-bridge.sh omp-mcp-config.py \
+  omp-tool-surface.py omp-config-xdev.sh omp-config-xdev.py omp-receive-install.sh; do
+  cp "$REPO_DIR/scripts/$_f" "$PKG/scripts/$_f"
+done
 cp -r "$REPO_DIR/pi" "$PKG/pi"
 cp "$REPO_DIR/pi-extensions/lib/session-id.js" "$PKG/pi-extensions/lib/session-id.js"
 printf '%s\n' '// dist stub: copied+digested by the receive installer, never executed here' \
   > "$PKG/mcp/entwurf-bridge/dist/pi-extensions/lib/meta-session.js"
 cp "$PKG/pi-extensions/lib/session-id.js" "$PKG/mcp/entwurf-bridge/dist/pi-extensions/lib/session-id.js"
+# The omp units select the same compiled closure in installed mode. Same stub discipline:
+# the installers copy and digest these bytes, they never execute them here.
+for _e in meta-bridge-omp.js meta-bridge-receive-omp.js; do
+  printf '%s\n' '// dist stub: copied+digested by the omp installers, never executed here' \
+    > "$PKG/mcp/entwurf-bridge/dist/pi-extensions/$_e"
+done
 
 # Fake pnpm: resolvable (so an unconditional require_cmd would pass), but any
 # INVOCATION writes a marker and exits uniquely — the bootstrap tripwire.
@@ -56,12 +68,12 @@ printf '#!/usr/bin/env bash\necho invoked > "%s"\nexit 97\n' "$MARKER" > "$SB/bi
 chmod +x "$SB/bin/pnpm"
 
 ABSENT="$SB/definitely-absent"
-run_setup() { # $1=HOME-root $2=project $3=PATH $4=PI_BIN $5=COPILOT_BIN(optional, default absent) → OUT/RC
+run_setup() { # $1=HOME-root $2=project $3=PATH $4=PI_BIN $5=COPILOT_BIN(opt) $6=OMP_BIN(opt) → OUT/RC
   mkdir -p "$1/.pi/agent" "$2"
   set +e
   # ONE physical line by contract: check-install-surface S5c is a line-scoped static tripwire,
   # so the sandbox env assignments must ride the same line as the run.sh drive they guard.
-  OUT="$(HOME="$1" XDG_DATA_HOME="$1/.local/share" XDG_STATE_HOME="$1/.local/state" XDG_CACHE_HOME="$1/.cache" XDG_CONFIG_HOME="$1/.config" PI_CODING_AGENT_DIR="$1/.pi/agent" PATH="$3" PI_BIN="$4" CLAUDE_BIN="$ABSENT" AGY_BIN="$ABSENT" COPILOT_BIN="${5:-$ABSENT}" bash "$PKG/run.sh" setup "$2" 2>&1)"
+  OUT="$(HOME="$1" XDG_DATA_HOME="$1/.local/share" XDG_STATE_HOME="$1/.local/state" XDG_CACHE_HOME="$1/.cache" XDG_CONFIG_HOME="$1/.config" PI_CODING_AGENT_DIR="$1/.pi/agent" PATH="$3" PI_BIN="$4" CLAUDE_BIN="$ABSENT" AGY_BIN="$ABSENT" COPILOT_BIN="${5:-$ABSENT}" OMP_BIN="${6:-$ABSENT}" ENTWURF_OMP_AGENT_DIR="$1/.omp/agent" bash "$PKG/run.sh" setup "$2" 2>&1)"
   RC=$?
   set -e
 }
@@ -79,6 +91,8 @@ want "A: no auth.json.bak and credential bytes identical [QK:SETUP-CREDENTIAL-FR
   "[ ! -e '$HOME_A/.pi/agent/auth.json.bak' ] && [ \"\$(sha256sum '$HOME_A/.pi/agent/auth.json' | cut -d' ' -f1)\" = '$AUTH_SHA' ]"
 want "A: an absent copilot is one zero-state SKIP — no unit composed, no .copilot written [QK:SETUP-COPILOT-ABSENT-SKIP]" \
   "printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP' && [ ! -e '$HOME_A/.copilot' ]"
+want "A: an absent omp is one zero-state SKIP — no unit composed, no .omp written [QK:SETUP-OMP-ABSENT-SKIP]" \
+  "printf '%s' \"\$OUT\" | grep -q 'omp: SKIP' && [ ! -e '$HOME_A/.omp' ]"
 want "A control: mode named first, pi/claude/agy SKIP, bins PASS, core FAIL, NON-GREEN summary" \
   "printf '%s' \"\$OUT\" | head -n 1 | grep -q 'mode: installed package' && printf '%s' \"\$OUT\" | grep -q 'pi: SKIP' && printf '%s' \"\$OUT\" | grep -q 'claude: SKIP' && printf '%s' \"\$OUT\" | grep -q 'agy: SKIP' && printf '%s' \"\$OUT\" | grep -q 'bins: PASS' && printf '%s' \"\$OUT\" | grep -q 'core: FAIL' && printf '%s' \"\$OUT\" | grep -q 'NON-GREEN'"
 
@@ -121,6 +135,30 @@ want "D: the failing-vendor birth is a named FAIL, never a cosmetic PASS [QK:SET
   "printf '%s' \"\$OUT\" | grep -q 'copilot-birth: FAIL' && ! printf '%s' \"\$OUT\" | grep -q 'copilot-birth: PASS'"
 want "D control: detected copilot never reads SKIP, and the summary names copilot-birth NON-GREEN" \
   "! printf '%s' \"\$OUT\" | grep -q 'copilot: SKIP' && printf '%s' \"\$OUT\" | grep -q 'NON-GREEN' && printf '%s' \"\$OUT\" | grep -q 'copilot-birth'"
+
+# ── Cell E: omp PRESENT — the four units compose, and the SETTING is a real writer ──
+# The omp unit scripts never spawn the vendor (they probe `omp` on PATH and write into the
+# agent dir), so a stub binary is a faithful presence pin. Two claims live here: the
+# composition reaches omp at all, and the tools.xdev writer refuses an EXPLICIT operator
+# `true` by name rather than overwriting a decision it disagrees with.
+STUB_OMP="$SB/stub-omp"; mkdir -p "$STUB_OMP"
+printf '#!/usr/bin/env bash\necho "omp/18.0.0"\n' > "$STUB_OMP/omp"
+chmod +x "$STUB_OMP/omp"
+run_setup "$SB/home-e" "$SB/proj-e" "$STUB_OMP:$SB/bin:$PATH" "$ABSENT" "" "$STUB_OMP/omp"
+# One assertion on purpose: the four PASS rows AND the artifacts behind them. Split in two,
+# the row half alone passes a composition that reports PASS without running the unit.
+want "E: a detected omp composes all four units — own rows, each backed by its ARTIFACT rather than an exit code [QK:SETUP-OMP-INDEPENDENT]" \
+  "printf '%s' \"\$OUT\" | grep -q 'omp-birth: PASS' && printf '%s' \"\$OUT\" | grep -q 'omp-mcp: PASS' && printf '%s' \"\$OUT\" | grep -q 'omp-config: PASS' && printf '%s' \"\$OUT\" | grep -q 'omp-receive: PASS' && ! printf '%s' \"\$OUT\" | grep -q 'omp: SKIP' && [ -d '$SB/home-e/.omp/agent/extensions/entwurf-meta-omp' ] && [ -d '$SB/home-e/.omp/agent/extensions/entwurf-receive-omp' ] && [ -f '$SB/home-e/.omp/agent/mcp.json' ]"
+want "E control: the setting reached the config the vendor reads (effective xdev-off)" \
+  "[ \"\$(python3 '$PKG/scripts/omp-tool-surface.py' '$SB/home-e/.omp/agent' | awk '/^verdict /{print \$2}')\" = 'xdev-off' ]"
+# Now the disagreement branch: an operator who wrote xdev: true explicitly owns that value.
+mkdir -p "$SB/home-f/.omp/agent"
+printf 'tools: \n  xdev: true\n' > "$SB/home-f/.omp/agent/config.yml"
+run_setup "$SB/home-f" "$SB/proj-f" "$STUB_OMP:$SB/bin:$PATH" "$ABSENT" "" "$STUB_OMP/omp"
+want "F: an EXPLICIT operator tools.xdev:true is refused by name, never overwritten [QK:SETUP-OMP-CONFIG-NO-OVERWRITE]" \
+  "printf '%s' \"\$OUT\" | grep -q 'omp-config: FAIL' && grep -q 'xdev: true' '$SB/home-f/.omp/agent/config.yml' && ! grep -q 'xdev: false' '$SB/home-f/.omp/agent/config.yml'"
+want "F control: the disagreement is a component FAIL that leaves the other omp units composed" \
+  "printf '%s' \"\$OUT\" | grep -q 'omp-birth: PASS' && printf '%s' \"\$OUT\" | grep -q 'omp-receive: PASS' && printf '%s' \"\$OUT\" | grep -q 'NON-GREEN'"
 
 echo ""
 echo "check-setup-qualification: $PASS checks passed (mutation-attribution oracle only — behavior evidence lives in smoke-setup-verdict and check-pack-install)"

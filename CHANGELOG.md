@@ -4,6 +4,52 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Added
+
+- **`setup` composes OMP — the fifth backend is now in the one command.** v0.16.0 admitted OMP
+  as a D6 citizen with installers, doctors and inverses for every unit, but `setup_all` had no
+  `omp` branch: on an operator host the released package printed a **green** setup summary while
+  OMP had nothing installed — no extension, no `mcp.json` entry, no garden id on the status line.
+  Presence-driven now, same shape as Copilot: `omp` on PATH composes four independent named
+  components (birth → MCP hand → the `tools.xdev` operator setting → receiver), absent is one
+  zero-state SKIP, and a detected-but-incomplete unit is a named FAIL owning a nonzero exit.
+  Gate: `smoke-setup-verdict` S-8 drives the real composition against a stub vendor and asserts
+  every install-state, both extension units in the sandbox agent dir, the effective `xdev-off`
+  reading, and idempotence on a second run; S-1 pins `OMP_BIN` absent and requires the SKIP row.
+- **`install-omp-config` / `uninstall-omp-config` — the operator setting is a unit, not a
+  documentation step.** `tools: xdev: false` was a hand-edit in `docs/setup-clean-host.md`, so a
+  host that skipped it registered every entwurf tool behind the vendor's `xd://` wrapper and the
+  doorbell announced a tool the model could not call. The writer owns exactly the lines it adds
+  (recorded in its install-state), refuses a symlinked config, refuses a config it cannot parse,
+  and refuses an EXPLICIT operator `tools: xdev: true` **by name** rather than overwriting a
+  decision — setup surfaces that as a component FAIL for the operator to resolve. The inverse
+  takes back only the recorded lines and refuses when the file changed since install.
+- **`docs/adding-a-harness.md` step 10 — an onboarding is not finished until `setup` composes
+  it.** The rule the OMP gap forced, with the five conditions a new harness owes (presence-only
+  trigger, one independent component row per unit, compose only what an inverse can undo,
+  operator settings are units with a refusing writer, pin the probe seam and add an aggregate
+  cell) and the shape to watch for: two closed parity loops with no gate owning the edge between
+  them.
+
+### Fixed
+
+- **A vendor-written `config.yml` no longer reads as `unreadable`.** omp's own settings writer
+  emits `modelRoles:` followed by an indented `{}`, and `scripts/omp-tool-surface.py`'s
+  block-only reader returned None for the WHOLE file on that shape — so an untouched operator
+  config classified as unreadable and `doctor-omp-mcp` went RED for a reason unrelated to
+  `tools.xdev` (measured on a real host, omp 18.0.0). The reader now parses flow collections in
+  value position and as a whole child block. `check-omp-fresh-preflight` gains the vendor shapes
+  plus `[QK:OMP-XDEV-VENDOR-SHAPE-READABLE]` direct assertions — agreement between the two
+  readers could never catch this, since both collapse `unreadable` and `true` into "not false".
+- **The Copilot plugin-row grammar admits the vendor's state token.** Copilot CLI 1.0.81 prints
+  `<qualified> (v0.1.0) (enabled)` plus an indented `from <path>` continuation line;
+  `copilot_exact_row_version` read the version as `0.1.0) (enabled`, called the row malformed,
+  and refused the birth install on a host whose plugin was installed and enabled — `entwurf
+  setup` reported `copilot-birth: FAIL`. The grammar now admits exactly one optional
+  `(enabled)`/`(disabled)` token; any other trailing token is still malformed. The fake vendors
+  in `scripts/fake-copilot-vendor.sh` and `check-copilot-birth-hook.ts` emit the 1.0.81 shape,
+  with `[QK:COPILOT-ROW-STATE-TOKEN-ADMITTED]` holding both directions.
+
 ## 0.16.0 - 2026-08-31
 
 This release admits **OMP (`omp`) as the fifth garden backend** and closes the admission
