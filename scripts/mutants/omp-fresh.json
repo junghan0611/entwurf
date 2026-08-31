@@ -125,7 +125,7 @@
 			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
 		},
 		{
-			"claim": "FRESHCALL-OMP-NO-POSITIONAL-PROMPT",
+			"claim": "FRESHCALL-OMP-ARGV-BOOTSTRAP-FLAG",
 			"title": "the positional first-turn prompt put back on the omp argv beside the bootstrap flag — the exact shape the first Bundle C candidate shipped. `[LIVE 2026-08-30]` it opens a window whose turn starts ~830ms BEFORE the callback tool exists, and the sibling answers the literal text `ACK` with zero tool calls. It parses, it launches, and the caller times out at 240s: the failure is invisible to anything that only checks that argv is well-formed",
 			"subject": "pi-extensions/lib/mux-fresh-call.ts",
 			"find": [
@@ -175,18 +175,18 @@
 			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
 		},
 		{
-			"claim": "OMP-BOOTSTRAP-EXACT-SUCCESS",
+			"claim": "OMP-BOOTSTRAP-ISERROR-EXACT-FALSE",
 			"title": "the success predicate loosened from `isError === false` to `isError === true` being the only failure, so a result whose isError is ABSENT or non-boolean releases the caller's task. The happy path is unchanged and every LIVE run still passes; what changes is that a malformed or partial result now counts as a callback that succeeded",
 			"subject": "pi-extensions/meta-bridge-omp.ts",
 			"find": ["\t\t\tif (event?.isError !== false) {"],
 			"replace": ["\t\t\tif (event?.isError === true) {"],
 			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
 			"timeoutSeconds": 300,
-			"signature": "[QK:OMP-BOOTSTRAP-ERROR-RESULT-NO-TASK]",
+			"signature": "[QK:OMP-BOOTSTRAP-ISERROR-EXACT-FALSE]",
 			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
 		},
 		{
-			"claim": "OMP-BOOTSTRAP-CLOSED-PAYLOAD",
+			"claim": "OMP-BOOTSTRAP-NO-ARBITRARY-CARRIER",
 			"title": "the decoder's unknown-key refusal removed, so the one flag a caller can put arbitrary bytes into starts silently ignoring whatever it does not recognise. Every valid payload still decodes identically, so no behavioural test moves — but `what the launcher meant` and `what the unit acts on` have stopped being the same closed set, which is the property that keeps this from becoming a general carrier",
 			"subject": "pi-extensions/meta-bridge-omp.ts",
 			"find": ["\t\tif (!BOOTSTRAP_KEYS.has(key)) return { ok: false, reason: \"payload-unknown-key\" };"],
@@ -199,7 +199,7 @@
 			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
 		},
 		{
-			"claim": "OMP-BOOTSTRAP-TASK-AT-TURN-END",
+			"claim": "OMP-BOOTSTRAP-RESULT-ARMS-ONLY",
 			"title": "the task sent from inside the tool_result handler again, instead of at the turn_end boundary. `[LIVE 2026-08-30]` this is the exact shape that failed: the hook log showed armed/ready/callback-observed/released, the release predicate was provably correct, and the task still never appeared in the session — because that handler runs while the callback turn is streaming. Every static contract about correlation and readiness stays green while the product delivers nothing",
 			"subject": "pi-extensions/meta-bridge-omp.ts",
 			"find": [

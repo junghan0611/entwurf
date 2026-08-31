@@ -121,7 +121,7 @@ function pythonXdev(agentDir: string): "false" | "true" | "unreadable" {
 		// An empty override is not an override: both halves must fall through to the default
 		// rather than resolving the empty string into the process cwd.
 		ok(
-			"[QK:OMP-PREFLIGHT-AGENT-DIR-ORACLE] an empty ENTWURF_OMP_AGENT_DIR falls through in both halves instead of resolving to cwd",
+			"[QK:OMP-PREFLIGHT-AGENT-DIR-EMPTY-ENV] an empty ENTWURF_OMP_AGENT_DIR falls through in both halves instead of resolving to cwd",
 			shellAgentDir({ HOME: home, ENTWURF_OMP_AGENT_DIR: "" }) ===
 				ompAgentDir({ HOME: home, ENTWURF_OMP_AGENT_DIR: "" }),
 		);

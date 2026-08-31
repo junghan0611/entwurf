@@ -30,7 +30,7 @@
 			"subject": "pi-extensions/meta-bridge-omp.ts",
 			"find": [
 				"\tpi.on(\"session_switch\", (event, ctx) =>",
-				"\t\tonBirthEdge(`session_switch(${asNonEmptyString(event?.reason) || \"unlabeled\"})`, ctx),",
+				"\t\tonBirthEdge(`session_switch(${asNonEmptyString(event?.reason) || \"unlabeled\"})`, ctx, pi),",
 				"\t);"
 			],
 			"replace": ["\t// session_switch left unbound"],

@@ -395,7 +395,7 @@ describe("stage two: the task is released by an exact successful tool RESULT, or
 		expect(fx.sent).toHaveLength(1);
 	});
 
-	it("a result whose isError is missing or non-boolean is NOT a success — the predicate is `=== false`, not falsy, and the turn_end that follows still finds nothing armed", () => {
+	it("[QK:OMP-BOOTSTRAP-ISERROR-EXACT-FALSE] a result whose isError is missing or non-boolean is NOT a success — the predicate is `=== false`, not falsy, and the turn_end that follows still finds nothing armed", () => {
 		const fx = readyFixture();
 		fx.handle.onToolCall(call());
 		fx.handle.onToolResult({ ...call(), isError: undefined });
