@@ -4,6 +4,220 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+This release admits **OMP (`omp`) as the fifth garden backend** and closes the admission
+contract that let a citizen ship without the legs that make it reachable. Bundles A, B and C
+are one arc — birth and identity, addressed receive, visible fresh — and the durable half is
+the general rule they forced: from OMP onward, the FIRST release of a harness admitted under
+the #82 contract owes its clause 7 visible-fresh receipt as a release-gate MUST step, its
+citizen↔fresh parity edge inside `pnpm run check:full`, and two cross-harness dispatch
+receipts. Every OMP LIVE claim below is one Linux host, one model, one accepted run; that
+limit is stated once in Notes and is not softened anywhere above it. (#87)
+
+### Added
+
+- **OMP is an addressable garden citizen.** `omp` enters the backend registry (`wakeMode`
+  `self-fetch`, `deliveryLevel` `D6`, `nativeIdLabel` `sessionId`) and
+  `pi-extensions/meta-bridge-omp.ts` mints it: an omp hook IS an in-process extension, so
+  birth, the scope fence, the status line and the sender marker are one module. Both birth
+  edges are bound — `session_switch` is where `/new`, fork and in-TUI resume re-fire — and
+  every mode but `mode === "tui"` is refused before any write. The fence is the vendor's own
+  mode and nothing else: `hasUI` is true under rpc/rpc-ui/ACP, so a fence built on it would
+  admit exactly the sessions this refuses. A task subagent mints nothing. The step-6 join is
+  one process, so the marker is keyed to `process.pid`, never `process.ppid`. Gates:
+  `check-omp-birth-hook`, `smoke-omp-bridge-state`, `scripts/mutants/omp-birth.json`. (#87)
+- **An omp-native MCP hand that shadows the borrowed Claude import.** The writer targets omp's
+  own `<omp agent dir>/mcp.json` in the vendor's own writer shape, and the server key is a
+  PINNED LITERAL `entwurf-bridge` — that pin is the entire mechanism. On a host that ever used
+  Claude Code, omp already imports an `entwurf-bridge` server labeled
+  `external-mcp/claude-code`; native provider priority beats the import and dedupe is
+  first-wins on the key with `equivalent()` never consulted, so a byte-identical key suppresses
+  the import while a different key would load BOTH and one of them would keep introducing an
+  omp session as Claude Code. `disabledServers` is never the hide-import tool — suppression is
+  by name and a suppressed item still claims the key — so the writer refuses to install under a
+  denylist of its own key and the doctor is red while one exists. `doctor-omp-mcp` adds an
+  EFFECTIVE-source read (native-wins / import-wins / both-suppressed / no-entry) and labels it
+  what it is: a configuration read of vendor precedence, never a runtime receipt. Gate:
+  `smoke-omp-mcp-state`. (#87)
+- **OMP receives addressed messages — the garden is no longer one-way for it.**
+  `pi-extensions/meta-bridge-receive-omp.ts` joins the citizen in the SAME process, holds an
+  `fs.watch` on its mailbox signal, and rings an announce-only doorbell through the vendor's
+  `pi.sendUserMessage` — measured to live on the factory object rather than the event ctx, and
+  measured to start a turn on an idle host with zero typing. The model drains with
+  `entwurf_inbox_read`, and that read is the receipt. The `/new` unarm is rail-specific: the
+  watch lives inside the operator's TUI, where pid plus start-key cannot see a citizen change
+  underneath a living process, so the old garden id is explicitly unarmed and the replacement
+  armed. Bounded arm defer, watch-error, vanished-signal and overlapping-edge paths are all
+  fail-closed. Install, uninstall and doctor surfaces ship with it, plus
+  `check-omp-receive-arm` with `scripts/mutants/omp-receive.json`, `smoke-omp-receive-state`
+  and `smoke-omp-receive-live`. (#87)
+- **`entwurf_fresh_call` opens omp on all three public surfaces.** A five-axis pre-mutation
+  preflight decides the launch before the tmux window exists, so a missing prerequisite is a
+  named refusal instead of a dead window; the fifth axis is omp-specific (`tools.xdev !==
+  true`). There is NO positional prompt. The fixed registered flag `--entwurf-bootstrap`
+  carries a closed `{v,target,nonce,task}` grammar — an unknown key is a refusal — and the
+  installed birth extension runs a two-stage bootstrap: bounded readiness polling over both
+  public tool snapshots, a callback-ONLY prompt, then the task released only by the exact
+  successful `tool_result` (stored `toolCallId`, tool name, target, nonce and
+  `isError === false` all matching) and delivered at that same session's next `turn_end`. That
+  shape is a measurement, not a preference: the positional candidate opened its window, minted
+  its citizen, received the framing byte-identical, and answered the literal text `ACK` with
+  zero tool calls — the vendor's interactive UI defers MCP discovery while the positional
+  `initialMessage` prompts straight after `mode.init()`, so the turn began roughly 830ms before
+  the tool it was told to call existed. (#87)
+- **`check-harness-admission-parity` — the missing edge between two closed loops.** Every
+  backend in `META_CITIZEN_BACKENDS` must appear in `FRESH_CALL_BACKENDS` or be a declared
+  pre-#82 legacy admission whose exception a reader can find in `DELIVERY.md`. Registry↔citizens
+  and surfaces↔fresh-set each already had a guard, but no file imported both constants, which is
+  how omp could pass the entire floor as a D6 citizen that `entwurf_fresh_call` cannot open. The
+  gate went red on `Unaccounted: omp` the moment it was added and green when Bundle C closed it.
+  It runs inside `check:contracts`, and therefore inside `pnpm run check:full`. (#87)
+- **Two OMP LIVE steps in the release-gate MUST tier.** `smoke-omp-fresh-live` is clause 7's
+  worked instance. `smoke-omp-receive-live` reads the capability registry and decides its own
+  outcome — no drainable mailbox is a protocol SKIP, which `--cut` reads as red; a registry
+  claiming a receive rail with no acceptance body here is a FAIL. Neither is a hardcoded pass,
+  and the receive step was wired while omp was still outbound-only, so the one-way boundary
+  stopped being prose a cut could pass over in silence. (#87)
+- **`docs/adding-a-harness.md` gains the shipped map and the release stop.** A comparative table
+  of the five admitted backends — lineage, receive rail, callback dialect, fresh launch form —
+  sits at the top so the variety is expected rather than re-derived at each admission. It pins
+  two lessons: lineage does not choose the rail (omp is pi underneath and rides Claude's mailbox
+  shape, because the rail follows the measured wake surface; what ancestry does instead is
+  concentrate the danger, since a shared env vocabulary is exactly where a fork splits a store),
+  and the doorbell doctrine — a hard bridge of measured dialects, explicit doorbells and honest
+  rejects is what makes the thing on the other side a peer rather than a disposable worker. The
+  release stop then states both executable halves of the admission rule plus the cross-harness
+  leg. (#87)
+
+### Changed
+
+- **`setup` is the install story on all three entry shapes.** npm global, npm project-local and
+  source clone now lead with `entwurf setup <project>`; `entwurf install <project>` is stated as
+  the narrower pi-wiring repair leaf that composes no harness. The 14-line native-harness paste
+  that read as the install recipe is now "repair and doctors" — one paragraph plus the command
+  names, with every per-unit installer, doctor and inverse retained, because a single broken unit
+  must still be redoable alone. The user-scope ownership matrix and the manual MCP registration
+  paths moved to the documents that already own them. Stale live claim corrected: after an
+  upgrade the operator was told to rerun every owned installer; `setup` re-composes them.
+  `package.json` gains the `copilot` keyword, shipped since 0.15.0 but unlisted. (#86)
+- **OMP meta roots resolve as one indivisible bundle, never through `piAgentDir()`.** omp is a pi
+  fork and inherits pi's env vocabulary, so `PI_CODING_AGENT_DIR` means "pi's persistence root"
+  to entwurf and "my agent dir" to the vendor — a plain `omp --profile work` sets it. One pure
+  resolver leaf now serves both consumers, the in-process birth extension and the omp-labeled
+  bridge child, so agreement is by construction rather than two places computing the same thing.
+  A relative override fails closed instead of letting cwd become an authority: measured, the same
+  relative value resolved to two different stores because the extension's cwd is wherever the
+  operator launched omp while the doctor's is the repository. Installers refuse rather than guess
+  under an inherited `PI_CODING_AGENT_DIR` / `PI_CONFIG_DIR` / `PI_PROFILE`. (#87)
+- **`PI_SESSION_ID` and `PI_AGENT_ID` are scrubbed at the launch seam for every backend.**
+  Measured on the operator host: a tmux server env carrying `PI_SESSION_ID` was inherited
+  verbatim by a new pane, so a sibling's bridge child could phone home under another citizen's
+  identity. The scrub is at the seam, not per backend. (#87)
+- **The deterministic floor composes the omp gates.** `check:hermetic` gains
+  `smoke-omp-bridge-state`, `smoke-omp-mcp-state`, `smoke-omp-receive-state`,
+  `check-omp-receive-arm` and `check-omp-fresh-preflight`; `check:contracts` gains
+  `check-harness-admission-parity`. Both tiers still exclude the separately scheduled
+  `check-gate-qualification`, and `setup` still does not compose omp. (#87)
+- **`docs/adding-a-harness.md` step 5 now says to measure the invocation FORM, not only the tool
+  name.** omp mounts MCP tools as `xd://` virtual devices by default (`tools.xdev`), so a correct
+  tool NAME is still not a callable function: the model must read the device for a schema that
+  `tools.xdevDocs` keeps off-prompt, then write JSON to the same path to execute. Measured on omp
+  18.0.0, a plain send under that default listed peers and then reported delivery with nothing
+  enqueued, and the mount also hid omp's own lsp, debug, browser and ast_edit — 11 devices in
+  all. `tools.xdev: false` restores every enabled tool top-level and leaves plan mode's
+  `xd://propose` finalization intact. (#87)
+
+### Fixed
+
+- **The bridge boot entry was in no typecheck program.** `mcp/tsconfig.json` extended the root
+  config without re-declaring `exclude`, so the inherited `"mcp"` resolved to `<repo>/mcp` and
+  filtered out everything its own `include` added; `mcp/entwurf-bridge/src/index.ts` — the
+  785-line bridge boot entry — was the only tracked `.ts` in the repo in no `tsc --noEmit`
+  program at all, and nothing imports it, so nothing rescued it through the import graph. Orphan
+  census 1 line before, 0 after; the mcp program's repo-file count moved 27 → 54, all product
+  sources. The emit path is untouched, so there is no product runtime change.
+- **`entwurf_self` stopped rendering a mailbox nothing drains.** `metaDeliveryDomain` was derived
+  as native-push or self-fetch, so an omp citizen was handed a `mailboxPath` with no drainer. It
+  now has three values: `nativePushSupported` → native-push, else the decider's mailbox seam →
+  self-fetch, else none. Dispatch and `wakeMode` are untouched. (#87)
+- **`doctor-omp-mcp` reads `tools.xdev` on the runtime axis.** An absent file or key applies the
+  vendor default (xdev on, empty inline allowlist) and is RED while the native hand is the
+  effective source; `xdev: false` is ok and a covering `xdevInlineDevices` glob is
+  ok-with-note. Ownership stays a separate question, and the smoke never touches the host
+  `config.yml`. (#87)
+- **The bootstrap epoch now ends before the birth edge can bail.** Epoch termination depended on
+  reaching `startOmpBootstrap`, so a later birth edge that bailed early — a refused envelope or a
+  throwing upsert — skipped the invalidation, and on a same-id resume both handler fences still
+  passed, leaving the earlier defect shape alive in a narrow window. One rule, one owner:
+  `endBootstrapEpochOnLaterEdge` runs right after the mode fence, before the envelope is read,
+  and the consumed branch delegates to the same helper. Zero new state, zero new exports. (#87)
+- **The omp-fresh qualification manifests were settled by measurement.** The first standalone
+  qualification run on the Bundle C bytes caught what static exactness could not: four mutants
+  whose claim and signature named different cells, one QK token minted twice in its gate source,
+  twelve find hunks left stale by the bundle's own refactor and the amendment's rewiring, and one
+  kill-site guess that died at an anonymous cell. Every repair was adjudicated by
+  apply/gate/revert measurement rather than by guess, and kill sites the floor disputed were
+  moved to where the kill actually lands. Separately, two mutants had been added to the
+  self-address lane without extending `EXPECTED_LANE_MUTANTS` — exactly the drift that assertion
+  exists to catch; the declared contract now says 5. (#87)
+- **Two packaging omissions in the omp units.** `pi/meta-bridge-omp/entwurf-meta-omp/package.json`
+  and `pi/omp-receive/entwurf-receive-omp/package.json` were absent from `files[]`, so
+  `install-omp-receive` died in the installed package while passing from a checkout. (#87)
+- **`check-pack-install` pins the transitive `@earendil-works/pi-telemetry` to 0.84.3.** Upstream
+  published the 0.84.4 family on 2026-08-28; `pi-agent-core@0.84.3` and `pi-ai@0.84.3` both carry
+  a `^0.84.3` caret on it, so the lockfile-less fresh-temp install floated to 0.84.4 and the leak
+  assertion failed closed in the `install-surface` CI job. The pin keeps the verified 0.84.3
+  constellation ours to hold; the leak assertion still guards every other pi package and any
+  future closure growth. The 0.84.4 bump itself remains a separate hard-cut lane.
+
+### Verification
+
+Each receipt carries its own scope; none of them is transferable to another commit or host.
+
+- **`./run.sh check-gate-qualification`** — **324/324 KILLED, NOT KILLED 0**, standalone on the
+  Bundle C candidate (`fd5e462`), independently re-verified by a second model on the gate
+  predicate plus a full-lane rescan and a 3/3 sample re-kill.
+- **`pnpm run check:full`** — exit 0 in 430s on that same candidate, after the `build-bridge`
+  refresh the stale-dist tripwire demanded.
+- **Clause 7 LIVE** — `smoke-omp-fresh-live` green 2026-08-30, 21 assertions, oracle / omp 18.0.0
+  / `openai-codex/gpt-5.6-sol`. The sibling's garden `20260830T192913-df52b9` came from the
+  CALLBACK's sender envelope and never from the launch receipt; exactly one new citizen;
+  `lastEnqueuedAt 10:29:19.179Z` / `lastReadAt 10:29:24.673Z`, with the drain visible in that
+  session's own transcript for its own garden id. It took two runs: the first went red on
+  stage-two delivery alone, which is the argument for making it a MUST.
+- **Receive acceptance (D6)** — 2026-08-30, oracle, omp 18.0.0: garden `20260830T140819-116f6a`,
+  `lastEnqueuedAt 05:08:20.555Z` / `lastReadAt 05:08:23.958Z`. D3 isolation is PROVEN, not
+  pending: with two live armed omp citizens, one addressed enqueue rang exactly one doorbell
+  while the sibling persisted no transcript and kept an empty mailbox.
+- **Cross-harness leg** — 2026-08-31, the first bidirectional live-turn roundtrip on the committed
+  bytes: a claude-code citizen opened a fresh omp sibling through the public surface (callback
+  sender garden `20260831T124226-eac41a`), dispatched an addressed `entwurf_v2` into it, and the
+  omp citizen's own live turn drained the doorbell and replied into the claude mailbox.
+- **`LIVE=1 ./run.sh release-gate <scratch> --cut`** — owed at prepare P5 on the versioned tree.
+  Replace this line with the actual `MUST PASS=n FAIL=0 SKIP=0` and `BEHAVIOR PASS=n FAIL=n`,
+  the scratch/log paths and the log SHA-256.
+
+### Notes
+
+- **Evidence limit.** Every OMP LIVE claim above is one Linux host (oracle, ARM), one model, one
+  accepted run. Multi-host, multi-model and repeated fresh calls inside one process are not
+  claimed and are not evidenced here.
+- **Operator prerequisite.** `tools: xdev: false` in `~/.omp/agent/config.yml`. Under the vendor
+  default the doorbell would name a tool the model cannot call, so both the fresh preflight and
+  the LIVE smokes check it as a precondition. `setup` does not compose omp.
+- Measured against **omp 18.0.0** while the vendor announces 18.0.11. The `mode === "tui"`
+  discriminator, the `xd://` behaviour and the five measurement cells recorded in
+  `scripts/raw-omp-measure/README.md` §M7 are re-measurement targets on upgrade.
+- Copilot's operator-metered clause 7 exception is preserved, not reopened. The release stop
+  applies from OMP onward, forward-only.
+- The cross-harness leg's deterministic half — every post-contract citizen backend having a wired
+  cross-harness LIVE step or a declared metered exception — is an owed follow-up. Until that gate
+  lands the rule is prose, and `docs/adding-a-harness.md` says so in place.
+- Pi `0.84.4` remains a separate hard-cut lane.
+- #90 is measured but unfixed: installed Claude Code sends `model` as a STRING on the interactive
+  `SessionStart` envelope and omits it entirely in print mode, while the reader accepts only the
+  object shape, so claude-code records carry no model. Widening the reader and pinning both shapes
+  in a fixture is a separate lane.
+
 ## 0.15.1 — 2026-08-27
 
 This patch is the Linux install-honesty floor for #86: Entwurf installs itself only,
