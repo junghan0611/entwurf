@@ -136,6 +136,8 @@ Usage:
   ./run.sh check-copilot-launch       # #82 RAIL 7 gate: the MANAGED launch `entwurf copilot`, driven through its public address against a FAKE VENDOR on a sandbox PATH. Receiver precondition refusals, EXTENSIONS token + operator token preservation, injected defaults before the `--` terminator, byte-identical argv, the 11 explicit permission/surface policy overrides that suppress `--yolo`, exec (not fork) pid identity, exit passthrough, recursion refusal. Hermetic; no Copilot, no model turn
   ./run.sh check-copilot-statusline   # #82 Copilot custom-footer renderer. session_id → ready/?/gid + rail `cop`; exit 0. IN pnpm check. No Copilot, no model turn
   ./run.sh check-entwurf-capabilities  # deterministic gate (0.11 Stage 0 step 3C): backend capability registry (pi/entwurf-capabilities.json) — coverage==META_CITIZEN_BACKENDS + agrees with live META_BACKEND_DESCRIPTORS + strict keyset, no API
+  ./run.sh check-omp-fresh-preflight   # #87 C: the OMP fresh preflight reproduces omp_agent_dir and the tools.xdev read in TS (it runs from two emit depths and cannot call a sibling script). This drives the SHIPPED shell/python leaves over the same inputs — refusals included — and requires the TS half to agree, so the reproduction cannot silently drift from the installer's own oracle
+  ./run.sh check-harness-admission-parity  # #87 C: the EDGE the two closed parity loops never had. Every citizen backend is fresh-openable or a declared pre-#82 legacy admission whose exception a reader finds in DELIVERY.md — so a post-contract harness that mints records but cannot be opened by entwurf_fresh_call blocks the release package instead of only carrying an `unsupported` note (docs/adding-a-harness.md step 9)
   ./run.sh check-capability-bundle-reach # deterministic gate (IN pnpm check): re-ask EVERY shipped copy of meta-session (source + bridge bundle emit) whether metaCapabilitiesFilePath() reaches the registry — the artifact-depth check the source-path gates cannot make; needs a built dist, missing dist FAILS
   ./run.sh smoke-pi-attach            # deterministic gate (#50 C2 checkpoint + C3 ACP tail): a pi session attaches as a V3 meta-record citizen (backend:"pi"), the gardenId is the RECORD's not pi's session id, the control socket is keyed on it, a re-open ATTACHES to the same address (never a second mint), the BUILT DIST ENTRY driven over MCP stdio lists the citizen + delivers entwurf_v2 to that socket with an RPC ack, and the ACP identity chain lands a send AS the host record (enrichMcpServersWithEnvelope env → bridge sender = host gardenId). mkdtemp-isolated; the live store is never read
   ./run.sh check-bridge-delivery      # deterministic gate (IN pnpm run check:full): demo scene 3 recovered — seed strict meta-sender + armed receiver citizens in an isolated temp world, scrub ambient pi/sender carriers, drive the BUILT DIST ENTRY over MCP stdio through a real tools/call entwurf_v2, assert the .msg landed under the seeded sender + doorbell poked. DELIVERS through the artifact, not from source. ENTWURF_DELIVERY_SUBJECT=<launcher> replays the same scene against another consumer artifact (check-pack-install passes the npm-installed bin). No model/network/cost; stale or missing dist FAILS
@@ -185,6 +187,7 @@ Usage:
   ./run.sh smoke-agy-install-state    # agy MCP + exact permission ownership regression: isolated HOME+XDG, adopt/state/inverse, symlink refuse, truthful setup outcomes. Offline/deterministic
   ./run.sh smoke-setup-verdict        # #86 C1+C3b aggregate setup verdict fixture: all-absent SKIP/green, pi presence+floor, detected-FAIL nonzero, copilot four-unit composition (present=independent PASS/FAIL rows, absent=zero-state SKIP), installed-mode named branch, credential store untouched. Offline/deterministic
   ./run.sh check-agy-permission-matrix # AGY permission CONTRACT SPACE as a literal table (55 cells): parser-state × operation × settings × ownership × precedence with stated exclusion rules; expectations are hand-written literals, never read from the SUT. Offline/deterministic (deps: python3)
+  ./run.sh smoke-omp-fresh-live        # #87 bundle C acceptance, RELEASE MUST: omp opened as ONE visible fresh sibling through the PUBLIC entwurf_fresh_call surface (never raw tmux), exact nonce callback -> garden id from the SENDER ENVELOPE -> record/backend identity -> addressed receive -> lastReadAt -> the drain visible in that same native session's own transcript. Needs LIVE=1 and spends real model turns. Self-deciding: omp outside FRESH_CALL_BACKENDS or without a mailbox rail is a protocol SKIP, which --cut reads as RED
   ./run.sh smoke-omp-receive-live      # #87 bundle B acceptance: another harness wakes an ALREADY-OPEN omp citizen, which reads its inbox and answers in the same session. Decides its own outcome from the capability registry — omp without a drainable mailbox is a protocol SKIP (no receiver unit exists to arm), which an unattended release-gate reports and `--cut` reads as RED; a registry that claims a receive rail with no acceptance body here is a FAIL
   ./run.sh smoke-entwurf-chain-live    # LIVE cross-harness delivery chain: native Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox terminus, proving sender identity/replyable at every hop and a real read receipt at the end. Prerequisites (claude on PATH, pi credentials per backend) report protocol SKIP, never a pass
   ./run.sh check-release-gate-outcomes  # release-gate STEP OUTCOME protocol (P1): one skip exit code shared by the shell + TS halves, classifier never rounds a skip up to a pass, `--cut` refuses a MUST SKIP while a bare diagnostic stays exit 0, no LIVE smoke keeps the old exit-0 skip shape, and both real skip surfaces are INVOKED and observed to propagate the code
@@ -788,6 +791,42 @@ check_entwurf_capabilities() {
   run_ts scripts/check-entwurf-capabilities.ts
 }
 
+smoke_omp_fresh_live() {
+  # #87 Bundle C acceptance, RELEASE MUST. Opens omp as ONE visible fresh sibling through
+  # the PUBLIC entwurf_fresh_call surface in a private tmux server, correlates the exact
+  # nonce callback to a garden id from the SENDER ENVELOPE, then delivers an addressed
+  # message the sibling drains in that same native session. Decides its own outcome: omp
+  # absent from FRESH_CALL_BACKENDS or without a mailbox rail is a protocol SKIP, LIVE!=1
+  # is a protocol SKIP, and once the composition offers the backend every missing
+  # prerequisite is a FAIL. Writes into the REAL meta roots — the extensions run inside the
+  # launched omp process and no env carrier on the fresh argv could fence them.
+  run_ts scripts/smoke-omp-fresh-live.ts
+}
+
+check_omp_fresh_preflight() {
+  # #87 Bundle C. The OMP fresh preflight REPRODUCES two resolvers that already exist
+  # in this repo in another language — omp_agent_dir (scripts/omp-bridge-oracle.sh) and
+  # the tools.xdev half of scripts/omp-tool-surface.py — because the preflight runs from
+  # two different emit depths and cannot resolve a sibling script by relative path. A
+  # reproduction nothing compares is a divergence with a date on it, so this drives the
+  # SHIPPED shell and python leaves and requires the TS half to agree, refusals included.
+  # Never asks the resolver under test to confirm itself. Fixtures only; never reads ~/.omp.
+  run_ts scripts/check-omp-fresh-preflight.ts
+}
+
+check_harness_admission_parity() {
+  # #87 Bundle C. The EDGE between two parity loops that were each closed and had
+  # nothing between them: check-entwurf-capabilities held registry ==
+  # META_CITIZEN_BACKENDS, the fresh-call surfaces contract held surfaces ==
+  # FRESH_CALL_BACKENDS, and no file read both constants. So a harness could be a
+  # full D6 citizen that entwurf_fresh_call cannot open, with every gate green and
+  # only prose saying it was not supported — which is how an `unsupported` label
+  # started reading as a partial-release permit. Asserts every citizen backend is
+  # either fresh-openable or a DECLARED pre-#82 legacy admission whose exception a
+  # reader can find in DELIVERY.md, both directions, no third state. Pure parse.
+  run_ts scripts/check-harness-admission-parity.ts
+}
+
 check_capability_bundle_reach() {
   # The gate check-entwurf-capabilities structurally cannot be. That gate imports
   # metaCapabilitiesFilePath() from ../pi-extensions/lib/ — the one location where
@@ -1252,7 +1291,11 @@ check_mux_fresh_call() {
   # copilot-fresh-preflight rides here rather than in its own gate: it exists only as
   # freshCall's pre-mutation branch (#82 RAIL 9), and splitting it would let the two halves
   # of one refusal be certified in different runs.
-  run_vitest test/mux-fresh-call.test.ts test/copilot-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts
+  # omp-fresh-bootstrap.contract rides here for the same reason and one more: it is the ONLY
+  # place the launcher's payload and the installed birth extension's decoder are read together.
+  # They ship in different directories and cannot import each other (#87 Bundle C), so this
+  # lane is what keeps a deliberate duplication from becoming drift.
+  run_vitest test/mux-fresh-call.test.ts test/copilot-fresh-preflight.test.ts test/fresh-call-surfaces.contract.test.ts test/fresh-call-provider.contract.test.ts test/omp-fresh-bootstrap.contract.test.ts
 }
 
 smoke_mux_fresh_call_live() {
@@ -5425,6 +5468,16 @@ release_gate() {
   # shipping that asymmetry silently. It reads the registry, so it turns itself into a
   # real demand the moment bundle B moves omp's wakeMode.
   run_live_step "smoke-omp-receive-live (#87 bundle B: other harness -> open omp citizen, addressed receive + roundtrip)" gate bash "$self" smoke-omp-receive-live
+  # #87 bundle C: the step 9 clause 7 receipt, wired as a MUST rather than left to an
+  # operator's memory. A schema is not a product — omp's bootstrap-payload submission
+  # PARSES correctly, and parsing is exactly what pi got right while submitting no message
+  # at all, so a release whose fresh_call(omp) opens a window that never runs its turn
+  # would pass every deterministic gate here. That is not hypothetical for this backend:
+  # the retired positional candidate parsed perfectly and still answered `ACK` with zero
+  # tool calls, because the turn began before the callback tool existed. New contract,
+  # applied from omp onward; it does not retroactively redesign Copilot's operator-metered
+  # exclusion.
+  run_live_step "smoke-omp-fresh-live (#87 bundle C: entwurf_fresh_call opens omp, exact nonce callback, addressed receive)" gate bash "$self" smoke-omp-fresh-live
 
   # 4. BEHAVIOR lane (advisory, non-blocking). Model-in-loop gates that probe
   #     whether the model AUTONOMOUSLY drives the MCP entwurf surface. These never
@@ -5537,6 +5590,15 @@ case "$cmd" in
     ;;
   check-entwurf-capabilities)
     check_entwurf_capabilities
+    ;;
+  check-harness-admission-parity)
+    check_harness_admission_parity
+    ;;
+  check-omp-fresh-preflight)
+    check_omp_fresh_preflight
+    ;;
+  smoke-omp-fresh-live)
+    smoke_omp_fresh_live
     ;;
   check-capability-bundle-reach)
     check_capability_bundle_reach

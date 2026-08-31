@@ -114,7 +114,19 @@ import { pathToFileURL } from "node:url";
 const spec = JSON.parse(process.argv[2]);
 const mod = await import(pathToFileURL(spec.entry).href);
 const handlers = new Map();
-const pi = { on: (event, handler) => { const list = handlers.get(event) ?? []; list.push(handler); handlers.set(event, list); } };
+const flags = [];
+const sent = [];
+// The mock vendor API. \`getFlag\` answers undefined unless the scenario names a payload —
+// which is the manual-omp shape, and the shape every birth cell here uses: a bootstrap must
+// never arm, never poll and never send for a session the launcher did not open.
+const pi = {
+	on: (event, handler) => { const list = handlers.get(event) ?? []; list.push(handler); handlers.set(event, list); },
+	registerFlag: (name, options) => { flags.push([name, options?.type]); },
+	getFlag: name => (spec.bootstrapFlag && name === "entwurf-bootstrap" ? spec.bootstrapFlag : undefined),
+	getAllTools: () => spec.tools ?? [],
+	getActiveTools: () => (spec.tools ?? []).map(t => t.name),
+	sendUserMessage: (content, options) => { sent.push([content, options?.deliverAs ?? null]); },
+};
 (mod.default ?? mod)(pi);
 const statuses = [];
 for (const edge of spec.edges) {
@@ -133,7 +145,7 @@ for (const edge of spec.edges) {
 		await handler({ type: edge.event, reason: edge.reason }, ctx);
 	}
 }
-const result = JSON.stringify({ pid: process.pid, boundEvents: [...handlers.keys()].sort(), statuses });
+const result = JSON.stringify({ pid: process.pid, boundEvents: [...handlers.keys()].sort(), statuses, flags, sent });
 process.stdout.write(result + "\\n");
 if (spec.resultFile) {
 	const { writeFileSync, renameSync } = await import("node:fs");
@@ -152,6 +164,11 @@ interface HostResult {
 	pid: number;
 	boundEvents: string[];
 	statuses: Array<[string, string]>;
+	/** `[name, type]` for every flag the factory registered, in registration order. */
+	flags: Array<[string, string]>;
+	/** `[content, deliverAs]` for every `sendUserMessage` the unit made. A birth-only
+	 * scenario must leave this EMPTY: no flag means no bootstrap means no model turn. */
+	sent: Array<[string, string | null]>;
 	status: number | null;
 	stderr: string;
 }
@@ -219,7 +236,7 @@ function runHost(env: NodeJS.ProcessEnv, edges: Edge[]): HostResult {
 	);
 	const parsed = res.stdout?.trim()
 		? (JSON.parse(res.stdout.trim().split("\n").pop() as string) as Omit<HostResult, "status" | "stderr">)
-		: { pid: 0, boundEvents: [], statuses: [] };
+		: { pid: 0, boundEvents: [], statuses: [], flags: [], sent: [] };
 	return { ...parsed, status: res.status, stderr: res.stderr ?? "" };
 }
 
@@ -529,9 +546,29 @@ ok("the mock host exited 0 — best-effort, never breaks the operator's turn", b
 // resume re-fire as session_switch, NOT session_start (`agent-session.ts:6910-8074`, audit
 // C2). A unit bound to session_start alone leaves every post-`/new` session unminted while
 // its status line still shows the previous citizen's id.
+// Three more edges joined them in #87 Bundle C. The fresh bootstrap releases the caller's task
+// only after it has SEEN the exact callback tool succeed — `tool_call`/`tool_result` are the
+// only public surface that says so (`extensions/types.ts:1271-1278`) — and it DELIVERS that
+// task at the next `turn_end`, because `[LIVE 2026-08-30]` a send from inside the tool_result
+// handler never reached the session at all. All three are bound unconditionally because the
+// flag's VALUE is not readable at factory time (see the factory's own note), so this assertion
+// is also the record that a manual omp session pays those null checks, deliberately.
 ok(
-	"[QK:OMP-BIRTH-BINDS-BOTH-EDGES] the factory binds exactly the two birth edges: session_start AND session_switch",
-	JSON.stringify(born.boundEvents) === JSON.stringify(["session_start", "session_switch"]),
+	"[QK:OMP-BIRTH-BINDS-BOTH-EDGES] the factory binds exactly the two birth edges, the two bootstrap tool edges and the turn_end boundary the task is delivered on",
+	JSON.stringify(born.boundEvents) ===
+		JSON.stringify(["session_start", "session_switch", "tool_call", "tool_result", "turn_end"]),
+);
+ok(
+	"[QK:OMP-BIRTH-REGISTERS-BOOTSTRAP-FLAG] the factory registers the one-purpose string flag BEFORE argv is reparsed — a flag registered later is never filled (`main.ts:1799-1810`)",
+	JSON.stringify(born.flags) === JSON.stringify([["entwurf-bootstrap", "string"]]),
+);
+// THE MANUAL HOST IS THE COMMON CASE AND IT MUST NOTICE NOTHING. Every scenario in this gate
+// is a birth without a bootstrap flag — an operator's own `omp`. A unit that started a turn
+// here would be typing into the operator's session uninvited, which is a strictly worse
+// failure than never bootstrapping at all.
+ok(
+	"[QK:OMP-BIRTH-NO-FLAG-NO-TURN] a birth with no --entwurf-bootstrap flag sends NOTHING — no callback prompt, no task, no model turn",
+	born.sent.length === 0,
 );
 let live = records(store);
 ok("[QK:OMP-BIRTH-TUI-MINTS] a tui session_start minted exactly one record", live.length === 1);

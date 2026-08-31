@@ -137,6 +137,26 @@ describe("MCP surface — real bridge boot → runtime tools/list", () => {
 		expect([...(piEnum ?? [])].sort()).toEqual(expected);
 	});
 
+	/**
+	 * The THIRD surface. `docs/adding-a-harness.md` step 9 names all three together — "native pi,
+	 * the MCP bridge, and the operator skill" — but only the two schema surfaces were ever
+	 * observed, so the skill's backend list was free to drift and did not even have a gate to
+	 * drift against. A skill that offers three backends is not a cosmetic staleness: it is the
+	 * document the operator reads to decide what can be opened, so a missing backend is
+	 * unreachable in practice exactly the way a missing enum value is unreachable in schema.
+	 *
+	 * Source text is the only observation point here — a skill is prose consumed by a model, with
+	 * no runtime to interrogate — so the assertion is deliberately anchored on the one line that
+	 * states the contract rather than on any mention of a backend name anywhere in the file.
+	 */
+	it("[QK:FRESHCALL-BACKEND-SET-SURFACE-PARITY-SKILL] the operator skill offers the same fixed set — step 9 requires the same backends on all THREE public surfaces, and this one had no gate at all", () => {
+		const skill = fs.readFileSync(path.join(REPO_DIR, ".claude/skills/entwurf-dev/SKILL.md"), "utf8");
+		const line = skill.split(/\r?\n/).find((l) => l.includes("entwurf_fresh_call") && l.includes("backend"));
+		expect(line, "the skill states its fresh-call backend contract on one line").toBeDefined();
+		const offered = [...((line as string).match(/`([a-z-]+(?: \| [a-z-]+)+)`/)?.[1]?.split(" | ") ?? [])].sort();
+		expect(offered).toEqual([...FRESH_CALL_BACKENDS].sort());
+	});
+
 	it("[QK:FRESHCALL-CLAUDE-SURFACE-IDENTITY] the MCP bridge resolves callerGardenId through the canonical authoritative self envelope — never a caller parameter, never raw env", () => {
 		const mcpSrc = fs.readFileSync(path.join(REPO_DIR, "mcp/entwurf-bridge/src/index.ts"), "utf8");
 		const freshBlock = (mcpSrc.split('"entwurf_fresh_call",')[1] ?? "").split(
@@ -146,7 +166,12 @@ describe("MCP surface — real bridge boot → runtime tools/list", () => {
 			/const self = await buildAuthoritativeSelfEnvelope\(\);\s*callerGardenId = self\.envelope\.sessionId;/,
 		);
 		expect(freshBlock).not.toMatch(/process\.env\.PI_SESSION_ID/);
-		expect(freshBlock).toMatch(/backend:\s*z\s*\n?\s*\.enum\(\["pi", "claude-code", "copilot"\]\)/);
+		// Derived from the composition's own set rather than retyped: this assertion exists to
+		// prove the identity plumbing around the enum, not to be a second hand-maintained list.
+		const enumLiteral = FRESH_CALL_BACKENDS.map((b) => `"${b}"`)
+			.join(", ")
+			.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		expect(freshBlock).toMatch(new RegExp(`backend:\\s*z\\s*\\n?\\s*\\.enum\\(\\[${enumLiteral}\\]\\)`));
 		expect(freshBlock).not.toMatch(/callerGardenId:\s*z\./);
 		expect(freshBlock).not.toMatch(/nonce:\s*z\./);
 	});

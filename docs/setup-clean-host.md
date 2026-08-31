@@ -15,6 +15,7 @@ only on Linux because its strict live-owner join uses `/proc`.
 | pi | optional-by-presence, `>=0.84.3 <0.85` — absent is an explicit setup SKIP, below-floor is a named FAIL | ACP provider, control sockets |
 | Claude Code | optional, **`>=2.1.217`** — the exec-form hook floor | Claude ACP auth/runtime and mailbox-backed native citizen |
 | GitHub Copilot CLI | optional-by-presence, operator-installed and authenticated — absent is an explicit setup SKIP; detected composes all four units (birth/MCP/receiver/footer) | self-fetch citizen and visible fresh |
+| OMP (`omp`) | optional, operator-installed; three units (birth/MCP/receiver) plus `tools: xdev: false` in the agent config | self-fetch citizen and visible fresh (accepted on one host — see §4b) |
 | Antigravity `agy` | optional, operator-installed and authenticated | native-push citizen |
 | Cortex Code | optional, operator-installed and authenticated | Cortex ACP backend |
 
@@ -185,15 +186,32 @@ scanning for that process, checks the receiver, removes inherited pi identity ca
 the model/permission defaults. Birth occurs on the first prompt. `entwurf_fresh_call` uses this
 same managed invocation and requires the birth, MCP, receiver, and visible-identity preflight.
 
-## 4b. Optional OMP (`omp`) native citizen — two-way, but not yet supported
+## 4b. Optional OMP (`omp`) native citizen — accepted on one host
 
 Three independently owned surfaces, and a boundary that is part of the instructions rather
-than a footnote: OMP is NOT a supported harness yet. Birth, visible identity, who-sent, the
-MCP hand and now RECEIVE are landed, so an omp TUI you opened yourself is a two-way
-citizen — it sends under its own garden id and a reply lands on it. What is still missing
-is **visible fresh**: `entwurf_fresh_call` cannot open an omp sibling, and under
-`docs/adding-a-harness.md` step 9 a backend may be called *supported* only when it can.
-So: open omp yourself, and it becomes addressable.
+than a footnote. Birth, visible identity, who-sent, the MCP hand and RECEIVE are landed, and
+`entwurf_fresh_call` opens an omp sibling on all three public surfaces. The clause 7 LIVE
+receipt has been taken: `smoke-omp-fresh-live` went green on 2026-08-30 (omp 18.0.0, one
+model, one accepted run), which is what `docs/adding-a-harness.md` step 9 asks for and why
+that smoke is wired as a release-gate MUST — the label was never allowed to move ahead of the
+evidence, and it moved only once the evidence existed. Read the receipt itself in DELIVERY.md's
+OMP row; what it does NOT establish is multi-host, multi-model, or repeated fresh calls in one
+process. Open omp yourself and it is a two-way citizen either way — it sends under its own
+garden id and a reply lands on it.
+
+The first turn of a fresh omp sibling is a TWO-STAGE BOOTSTRAP, not a positional prompt: the
+launcher carries `{v,target,nonce,task}` on the fixed registered flag `--entwurf-bootstrap`,
+and the installed birth extension waits until the callback tool is actually callable, sends a
+callback-only prompt, and delivers the operator's task only after that exact call succeeds.
+That is a measured correction — the interactive host defers MCP discovery, so a positional
+first turn began before the tool it named existed.
+
+**One operator setting is load-bearing for fresh, not just for receive.** `tools: xdev: false`
+in the omp agent config is checked by the fresh preflight BEFORE any window opens, because the
+vendor default mounts MCP tools as `xd://` devices whose schemas never reach the prompt: a
+sibling launched onto a default-config host would start, look healthy, and be unable to call
+the callback tool at all. A refusal there names `omp-callback-tool-uncallable` and opens
+nothing.
 
 ```bash
 entwurf install-omp-bridge     # the birth extension, into <omp agent dir>/extensions/

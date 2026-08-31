@@ -1,0 +1,287 @@
+{
+	"schemaVersion": 1,
+	"lane": "omp-fresh",
+	"mutants": [
+		{
+			"claim": "ADMISSION-FRESH-PARITY",
+			"title": "a post-#82 harness admitted as a full D6 citizen while entwurf_fresh_call cannot open it — the exact state the Bundle A+B candidate shipped in, where every gate was green and only prose said the backend was unsupported. This is the defect the whole gate exists for: without it, an `unsupported` note reads as a partial-release permit",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["export const FRESH_CALL_BACKENDS = [\"pi\", \"claude-code\", \"copilot\", \"omp\"] as const;"],
+			"replace": ["export const FRESH_CALL_BACKENDS = [\"pi\", \"claude-code\", \"copilot\"] as const;"],
+			"gate": ["bash", "run.sh", "check-harness-admission-parity"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ADMISSION-FRESH-PARITY]",
+			"signatureSource": "scripts/check-harness-admission-parity.ts"
+		},
+		{
+			"claim": "ADMISSION-LEGACY-DOCUMENTED",
+			"title": "a pre-#82 exception that only the gate believes in — the matrix sentence removed while the gate literal stays, so an operator reading DELIVERY.md finds a shipped citizen with no statement that it was never evaluated under step 9. The exclusion half of check-release-gate-outcomes cell 7, replanted on the admission axis",
+			"subject": "DELIVERY.md",
+			"find": [
+				" Admitted before the #82 step 9 contract and not re-evaluated under it, so it is legacy citizen evidence, not a step-9 supported harness: `entwurf_fresh_call` cannot open an agy sibling, and nothing here should be read as claiming visible lifecycle parity."
+			],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-harness-admission-parity"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:ADMISSION-LEGACY-DOCUMENTED]",
+			"signatureSource": "scripts/check-harness-admission-parity.ts"
+		},
+		{
+			"claim": "FRESHCALL-OMP-EXPLICIT-POLICY",
+			"title": "the permission width dropped from the omp argv. NOTHING OBSERVABLE FAILS: omp 18.0.0's schema default for tools.approvalMode is ALREADY yolo, so the sibling still boots and a LIVE acceptance still passes — the argv has simply started depending on a vendor default and on whatever the operator's config happens to say. This is the drift step 9 clause 2 forbids, and it is invisible to every test that only watches behaviour",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": [
+				"\t\t\treturn [`--${OMP_BOOTSTRAP_FLAG}`, composition.bootstrapPayload, \"--model\", model, \"--approval-mode\", \"yolo\"];"
+			],
+			"replace": ["\t\t\treturn [`--${OMP_BOOTSTRAP_FLAG}`, composition.bootstrapPayload, \"--model\", model];"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:FRESHCALL-OMP-EXPLICIT-POLICY]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-OMP-CALLBACK-TOOL-DIALECT",
+			"title": "the callback tool name spelled the way a reader expects instead of the way omp mints it — `entwurf_v2` keeps its digit, which omp's sanitizer charset [a-z_] eats. The sibling is told to call a tool that does not exist in its session, so the whole first turn is spent and no address ever comes back. A launch receipt still prints",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\tomp: \"mcp__entwurf_bridge_entwurf_v\","],
+			"replace": ["\tomp: \"mcp__entwurf_bridge_entwurf_v2\","],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:FRESHCALL-OMP-CALLBACK-TOOL-DIALECT]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-OMP-XDEV-FAIL-CLOSED",
+			"title": "the callback-callable axis inverted from `must prove false` to `refuse only on explicit true`. The vendor default IS true, so a host that never set tools.xdev preflights green and the fresh call opens a window whose model cannot see the callback tool's schema at all — a sibling that can never name itself, with a successful launch receipt in the caller's hand",
+			"subject": "pi-extensions/lib/omp-fresh-preflight.ts",
+			"find": [
+				"\tif (readOmpConfigFlag(agentDir, \"tools\", \"xdev\") !== false) return \"omp-callback-tool-uncallable\";"
+			],
+			"replace": [
+				"\tif (readOmpConfigFlag(agentDir, \"tools\", \"xdev\") === true) return \"omp-callback-tool-uncallable\";"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:FRESHCALL-OMP-XDEV-FAIL-CLOSED]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-OMP-AGENT-DIR-REFUSES-PI-KNOB",
+			"title": "an inherited PI_CODING_AGENT_DIR taken as a lookup instead of a refusal. omp is a pi fork sharing that name, so the preflight would check units under entwurf's own pi sandbox and report green about a directory no live omp reads — the ledger M6 collision, resolved by guessing",
+			"subject": "pi-extensions/lib/omp-fresh-preflight.ts",
+			"find": [
+				"\tif (typeof env.PI_CODING_AGENT_DIR === \"string\" && env.PI_CODING_AGENT_DIR.length > 0) return null;"
+			],
+			"replace": [
+				"\tif (typeof env.PI_CODING_AGENT_DIR === \"string\" && env.PI_CODING_AGENT_DIR.length > 0)\n\t\treturn path.resolve(env.PI_CODING_AGENT_DIR);"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:FRESHCALL-OMP-AGENT-DIR-REFUSES-PI-KNOB]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "OMP-PREFLIGHT-XDEV-ORACLE",
+			"title": "the reproduced config reader drifting from the shipped python leaf — a key matched at ANY depth inside the section, so `tools.nested.xdev: false` reads as `tools.xdev: false`. This is the real defect the agreement gate caught on its first run: a fail-OPEN misread that preflights green off a config which never set the flag",
+			"subject": "pi-extensions/lib/omp-fresh-preflight.ts",
+			"find": ["\t\tif (indent !== childIndent) continue; // a grandchild, or a mis-indented line: not our key"],
+			"replace": ["\t\tif (false && indent !== childIndent) continue;"],
+			"gate": ["bash", "run.sh", "check-omp-fresh-preflight"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-PREFLIGHT-XDEV-ORACLE]",
+			"signatureSource": "scripts/check-omp-fresh-preflight.ts"
+		},
+		{
+			"claim": "OMP-PREFLIGHT-AGENT-DIR-ORACLE",
+			"title": "the reproduced agent-dir resolver diverging from the installer's own shell oracle on the profile axis — OMP_PROFILE honoured without its name grammar, so a profile the shell refuses resolves here and the two halves of the omp lane address different stores while both look correct",
+			"subject": "pi-extensions/lib/omp-fresh-preflight.ts",
+			"find": ["\t\tif (!PROFILE_NAME_RE.test(ompProfile)) return null;"],
+			"replace": ["\t\tif (false && !PROFILE_NAME_RE.test(ompProfile)) return null;"],
+			"gate": ["bash", "run.sh", "check-omp-fresh-preflight"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-PREFLIGHT-AGENT-DIR-ORACLE]",
+			"signatureSource": "scripts/check-omp-fresh-preflight.ts"
+		},
+		{
+			"claim": "FRESHCALL-IDENTITY-SCRUB",
+			"title": "the inherited pi identity carrier left unscrubbed at the launch seam. A tmux server started from a shell that exported PI_SESSION_ID hands that value to every window it opens (measured), and the sibling's own MCP child reads the stale pair as its authoritative identity — so a fresh citizen calls home as someone else, confidently",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": ["\t\t...SCRUBBED_INHERITED_ENV.flatMap((assignment) => [\"-e\", assignment]),"],
+			"replace": [""],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:FRESHCALL-IDENTITY-SCRUB]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-BACKEND-SET-SURFACE-PARITY-SKILL",
+			"title": "a backend added to the composition and both schema surfaces but not to the operator skill — the third public surface step 9 names, and the one that had no gate at all. The skill is what an operator reads to decide what can be opened, so a stale list makes the backend unreachable in practice exactly the way a missing enum value makes it unreachable in schema",
+			"subject": ".claude/skills/entwurf-dev/SKILL.md",
+			"find": ["backend는 정확히 `pi | claude-code | copilot | omp`이고"],
+			"replace": ["backend는 정확히 `pi | claude-code | copilot`이고"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:FRESHCALL-BACKEND-SET-SURFACE-PARITY-SKILL]",
+			"signatureSource": "test/fresh-call-surfaces.contract.test.ts"
+		},
+		{
+			"claim": "FRESHCALL-OMP-NO-POSITIONAL-PROMPT",
+			"title": "the positional first-turn prompt put back on the omp argv beside the bootstrap flag — the exact shape the first Bundle C candidate shipped. `[LIVE 2026-08-30]` it opens a window whose turn starts ~830ms BEFORE the callback tool exists, and the sibling answers the literal text `ACK` with zero tool calls. It parses, it launches, and the caller times out at 240s: the failure is invisible to anything that only checks that argv is well-formed",
+			"subject": "pi-extensions/lib/mux-fresh-call.ts",
+			"find": [
+				"\t\t\treturn [`--${OMP_BOOTSTRAP_FLAG}`, composition.bootstrapPayload, \"--model\", model, \"--approval-mode\", \"yolo\"];"
+			],
+			"replace": [
+				"\t\t\treturn [composition.prompt, `--${OMP_BOOTSTRAP_FLAG}`, composition.bootstrapPayload, \"--model\", model, \"--approval-mode\", \"yolo\"];"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:FRESHCALL-OMP-ARGV-BOOTSTRAP-FLAG]",
+			"signatureSource": "test/mux-fresh-call.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-FLAG-AGREES",
+			"title": "the installed unit renamed its registered flag while the launcher keeps sending the old one. The unit still loads, still mints, still shows the garden id — and every fresh call at omp silently becomes a manual session that sits there with no task, because `getFlag` answers only for flags THIS extension registered. Two halves that ship in different directories and cannot import each other is exactly where a constant drifts",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["export const OMP_BOOTSTRAP_FLAG = \"entwurf-bootstrap\";"],
+			"replace": ["export const OMP_BOOTSTRAP_FLAG = \"entwurf-fresh-bootstrap\";"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-FLAG-AGREES]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-READY-NEEDS-BOTH",
+			"title": "readiness decided from the tool REGISTRY alone, dropping the enabled-tools half. A tool can be registered and not enabled, and a prompt can only call an enabled one — so this sends the callback-only prompt into a window where the model still cannot make the call, which is the same 830ms race the positional prompt lost, moved one layer inward",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\treturn registered && active.includes(OMP_BOOTSTRAP_CALLBACK_TOOL);"],
+			"replace": ["\treturn registered;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-READY-NEEDS-BOTH]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-CALLBACK-ONLY",
+			"title": "the task folded back into the stage-one prompt, so the sibling is asked to call back AND to work in one message. This is the prompt the failed LIVE actually ran, minus the missing tool: a competing goal beside the callback is what the two-stage split exists to remove, and nothing about argv or readiness would notice it coming back",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\t\t\tsend(buildOmpCallbackOnlyPrompt({ target: payload.target, nonce: payload.nonce }));"],
+			"replace": [
+				"\t\t\tsend(`${buildOmpCallbackOnlyPrompt({ target: payload.target, nonce: payload.nonce })}\\n\\n${payload.task}`);"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-CALLBACK-ONLY]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-EXACT-SUCCESS",
+			"title": "the success predicate loosened from `isError === false` to `isError === true` being the only failure, so a result whose isError is ABSENT or non-boolean releases the caller's task. The happy path is unchanged and every LIVE run still passes; what changes is that a malformed or partial result now counts as a callback that succeeded",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\t\t\tif (event?.isError !== false) {"],
+			"replace": ["\t\t\tif (event?.isError === true) {"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-ERROR-RESULT-NO-TASK]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-CLOSED-PAYLOAD",
+			"title": "the decoder's unknown-key refusal removed, so the one flag a caller can put arbitrary bytes into starts silently ignoring whatever it does not recognise. Every valid payload still decodes identically, so no behavioural test moves — but `what the launcher meant` and `what the unit acts on` have stopped being the same closed set, which is the property that keeps this from becoming a general carrier",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\t\tif (!BOOTSTRAP_KEYS.has(key)) return { ok: false, reason: \"payload-unknown-key\" };"],
+			"replace": [
+				"\t\tif (!BOOTSTRAP_KEYS.has(key) && key.startsWith(\"__\")) return { ok: false, reason: \"payload-unknown-key\" };"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-NO-ARBITRARY-CARRIER]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-TASK-AT-TURN-END",
+			"title": "the task sent from inside the tool_result handler again, instead of at the turn_end boundary. `[LIVE 2026-08-30]` this is the exact shape that failed: the hook log showed armed/ready/callback-observed/released, the release predicate was provably correct, and the task still never appeared in the session — because that handler runs while the callback turn is streaming. Every static contract about correlation and readiness stays green while the product delivers nothing",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": [
+				"\t\t\tlog(\"INFO\", `bootstrap-released nonce=${payload.nonce} toolCallId=${callId}: task armed for the next turn_end`);"
+			],
+			"replace": [
+				"\t\t\tlog(\"INFO\", `bootstrap-released nonce=${payload.nonce} toolCallId=${callId}: task armed for the next turn_end`);\n\t\t\tphase = \"task-sent\";\n\t\t\tsend(payload.task);"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-RESULT-ARMS-ONLY]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-NO-EXPLICIT-DELIVERY",
+			"title": "an explicit delivery option put back on the send. `[source]` omitted `deliverAs` starts a turn when idle and steers while streaming; an EXPLICIT one queues without starting a turn in either state (`oh-my-pi v18.0.0 session/agent-session.ts:6511-6513`). `[LIVE 2026-08-30]` the queued form was measured to never become a message at all, three seconds before the Bundle B doorbell's omitted-option send landed and started a turn in the SAME session. Nothing about argv, readiness or correlation notices this",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\t\t\tpi.sendUserMessage(content);"],
+			"replace": ["\t\t\tpi.sendUserMessage(content, { deliverAs: \"followUp\" });"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-NO-EXPLICIT-DELIVERY]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-ONE-TASK",
+			"title": "the turn_end guard widened to admit an already-spent bootstrap, so every later turn of the session re-delivers the caller's task. The first turn is identical and a LIVE acceptance that only checks `the task arrived` still passes; what changes is that a sibling working for ten turns receives its opening instruction ten times",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\t\t\tif (phase !== \"released\") return;"],
+			"replace": ["\t\t\tif (phase !== \"released\" && phase !== \"task-sent\") return;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-ONE-TASK]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-RELEASED-IS-INVALIDATABLE",
+			"title": "`released` made un-invalidatable, so a bootstrap whose session is replaced by `/new`, a fork or a resume BETWEEN the callback result and the next turn_end still fires its task — into a session the caller never opened and cannot address. The window between those two events is small and the failure is invisible until the operator's own next session receives someone else's instruction",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": [
+				"\t\t\t// `released` is invalidatable ON PURPOSE: between the callback result and the next\n\t\t\t// turn_end the session can be replaced by `/new`, a fork or a resume, and the\n\t\t\t// caller's task must die with the session it was addressed to.\n\t\t\tif (isFinal()) return;"
+			],
+			"replace": ["\t\t\tif (phase === \"released\" || isFinal()) return;"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-RELEASED-IS-INVALIDATABLE]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-SESSION-FENCE",
+			"title": "the native session id dropped from the event fence, leaving only `mode === \"tui\"`. Tool and turn events carry no session id of their own, so after a `/new` the previous caller's bootstrap would start accepting the REPLACEMENT session's tool results and deliver its task there. The happy path — one launch, one session, no switch — is completely unaffected",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\treturn typeof id === \"string\" && id === boundSessionId;"],
+			"replace": ["\tvoid boundSessionId;\n\treturn typeof id === \"string\";"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-SESSION-FENCE]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-SAME-ID-SWITCH-INVALIDATES",
+			"title": "the epoch guard put back on the native id, exactly as the frozen Bundle C candidate had it. The vendor emits session_switch(reason:\"resume\") on the same-file reload path WITHOUT changing the native id and replaces the transcript right after (agent-session.ts:7983 computes switchingToDifferentSession, :8071-8078 emits regardless), so a bootstrap that is waiting, callback-sent or released survives a real epoch change wearing the old id and can still release the caller's task into a conversation the caller never opened. Every different-id case — /new, fork, a resume to another file — keeps passing, which is why one review had to read the vendor rather than the tests",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\t\tif (activeBootstrap !== null) {"],
+			"replace": ["\t\tif (activeBootstrap !== null && activeBootstrap.sessionId !== envelope.nativeSessionId) {"],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-SAME-ID-SWITCH-INVALIDATES]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		},
+		{
+			"claim": "OMP-BOOTSTRAP-REFUSES-UNCANCELLABLE-TIMER",
+			"title": "a silent global-timer fallback restored under the creator-owned seam. A vendor build with no ctx.setTimeout/ctx.clearTimer would arm anyway on a raw setTimeout that belongs to no session registry and that clearTimer cannot reach — a 100ms poll running inside the operator's TUI for the life of the process, surviving the disposal of the session that scheduled it. It is invisible to every behavioural test on a COMPLETE vendor context, because on v18.0.0 the fallback is never taken",
+			"subject": "pi-extensions/meta-bridge-omp.ts",
+			"find": ["\tconst timers = creatorOwnedTimers(ctx);\n"],
+			"replace": [
+				"\tconst timers: OmpBootstrapTimers | null =\n\t\tcreatorOwnedTimers(ctx) ??\n\t\t({\n\t\t\tset: (fn: () => void, ms: number) => setTimeout(fn, ms),\n\t\t\tclear: (handle: unknown) => {\n\t\t\t\tclearTimeout(handle as ReturnType<typeof setTimeout>);\n\t\t\t},\n\t\t\tnow: () => Date.now(),\n\t\t} satisfies OmpBootstrapTimers);\n"
+			],
+			"gate": ["bash", "run.sh", "check-mux-fresh-call"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-BOOTSTRAP-REFUSES-UNCANCELLABLE-TIMER]",
+			"signatureSource": "test/omp-fresh-bootstrap.contract.test.ts"
+		}
+	]
+}

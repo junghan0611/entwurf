@@ -1490,7 +1490,7 @@ const MUX_FRESH_CALL_MODULE = "./lib/mux-fresh-call.ts";
 interface MuxFreshCallModule {
 	freshCall(
 		params: {
-			backend: "pi" | "claude-code" | "copilot";
+			backend: "pi" | "claude-code" | "copilot" | "omp";
 			model: string;
 			task: string;
 			cwd?: string;
@@ -1519,23 +1519,26 @@ function registerFreshCallTool(pi: ExtensionAPI): void {
 	registerTool({
 		name: "entwurf_fresh_call",
 		label: "Open Fresh Sibling",
-		description: `Open ONE fresh visible sibling in the operator's own tmux session and hand it a first task. Three fixed
-backends only: pi, claude-code, copilot. The sibling's FIRST action is a callback to you carrying a nonce, and the
+		description: `Open ONE fresh visible sibling in the operator's own tmux session and hand it a first task. Four fixed
+backends only: pi, claude-code, copilot, omp. The sibling's FIRST action is a callback to you carrying a nonce, and the
 sender envelope of that callback is its garden id — that is how you learn the address of something that did
 not exist a moment ago. This returns a LAUNCH receipt (tmux window/pane plus that nonce) and nothing else:
 it does NOT mean the runtime started, the first turn ran, or the task was delivered. Nothing polls for the
 callback; if it never arrives the window is visible and can be read directly. For EXISTING citizens use
 entwurf_v2 — this tool only creates, and entwurf_peers only reports. Model is REQUIRED and passed to the
-chosen runtime CLI (provider/model for pi; model id/alias for Claude Code; a Copilot model name or auto).
-A copilot launch goes through entwurf's own managed invocation and is refused BEFORE any window opens if
-this host lacks the Copilot birth, MCP, receiver or visible-footer units. An optional cwd starts the
+chosen runtime CLI (provider/model for pi; model id/alias for Claude Code; a Copilot model name or auto; a
+fuzzy model pattern for omp). A copilot launch goes through entwurf's own managed invocation and is refused
+BEFORE any window opens if this host lacks the Copilot birth, MCP, receiver or visible-footer units; an omp
+launch is refused the same way if this host lacks the OMP birth, MCP, receiver or visible-status units, or if
+omp's tools.xdev is not false (the vendor default hides MCP tool schemas from the prompt, so the sibling
+could not call you back at all). An optional cwd starts the
 sibling in ONE literal absolute existing directory (cross-repo fresh) — never pick resume for a dormant
 record's cwd; resume is continuity-only. Omitted/empty cwd means the caller's own directory. There are no
 arbitrary command/env knobs. Do not put secrets in the task — model and task argv are visible to same-user
 processes on this host.`,
 		parameters: Type.Object({
-			backend: StringEnum(["pi", "claude-code", "copilot"], {
-				description: "Which fixed runtime to open. Only these three; there is no arbitrary command.",
+			backend: StringEnum(["pi", "claude-code", "copilot", "omp"], {
+				description: "Which fixed runtime to open. Only these four; there is no arbitrary command.",
 			}),
 			model: Type.String({
 				minLength: 1,
@@ -1559,7 +1562,7 @@ processes on this host.`,
 		}),
 		async execute(
 			_toolCallId: string,
-			params: { backend: "pi" | "claude-code" | "copilot"; model: string; task: string; cwd?: string },
+			params: { backend: "pi" | "claude-code" | "copilot" | "omp"; model: string; task: string; cwd?: string },
 			_signal: AbortSignal | undefined,
 			_onUpdate: unknown,
 			_ctx: ExtensionContext,

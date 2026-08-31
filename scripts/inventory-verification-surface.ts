@@ -90,7 +90,7 @@ const H_FS = /from\s+["']node:fs["']|require\(["']node:fs["']\)/;
 // "process.env.LIVE"; it spawns no live turn of its own. So the predicate runs on the
 // CODE-ONLY projection (comments and inert literals blanked, shell expansions kept)
 // and matches a variable READ or an assignment, never prose.
-const H_LIVE = /process\.env\.LIVE\b|\$\{LIVE[:}\-]|\$LIVE\b|(?:^|\n)\s*(?:export\s+)?LIVE=1\b/;
+const H_LIVE = /process\.env\.LIVE\b|\$\{LIVE[:}-]|\$LIVE\b|(?:^|\n)\s*(?:export\s+)?LIVE=1\b/;
 
 /**
  * Blank what cannot gate execution, so H_LIVE reads code and not prose.

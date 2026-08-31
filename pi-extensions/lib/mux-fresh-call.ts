@@ -70,10 +70,14 @@ import {
 	runTmux,
 	type WindowHandle,
 } from "./mux-placement.ts";
+import { OMP_PREFLIGHT_HINT, type OmpPreflightRejectReason, ompFreshPreflight } from "./omp-fresh-preflight.ts";
 
 /** The backends this rail can open. Fixed set, not a profile — a further one is a decision,
- * not a config entry. `copilot` was added by #82 RAIL 9 under the step 9 admission contract. */
-export const FRESH_CALL_BACKENDS = ["pi", "claude-code", "copilot"] as const;
+ * not a config entry. `copilot` was added by #82 RAIL 9 under the step 9 admission contract, and
+ * `omp` by #87 Bundle C under the same one. The set is joined to the citizen backends by
+ * `check-harness-admission-parity`: a harness that mints records but is missing HERE is not an
+ * unwired convenience, it is a release blocker. */
+export const FRESH_CALL_BACKENDS = ["pi", "claude-code", "copilot", "omp"] as const;
 export type FreshCallBackend = (typeof FRESH_CALL_BACKENDS)[number];
 
 /**
@@ -89,11 +93,20 @@ export type FreshCallBackend = (typeof FRESH_CALL_BACKENDS)[number];
  * flag, its recursion fence and its receiver precondition; fresh call reaches Copilot only
  * through it. The cost is named: a Copilot fresh call needs a current `entwurf` on PATH, the
  * way a pi fresh call needs `pi`.
+ *
+ * `omp` resolves the BARE vendor, and that difference is a measured one rather than an
+ * inconsistency. Copilot needs a managed wrapper because the bare CLI starts without
+ * `COPILOT_CLI_ENABLED_FEATURE_FLAGS=EXTENSIONS` and skips its extension scan silently — there
+ * is a flag only a launcher can carry. omp has no such flag: it always scans its extensions
+ * directory, and the one thing it needs beyond that (`tools.xdev: false`) lives in the operator
+ * config, which is a PREFLIGHT fact and not something a launcher could supply. Inventing an
+ * `entwurf omp` verb here would add a managed surface with nothing to manage.
  */
 export const FRESH_CALL_RUNTIME: Record<FreshCallBackend, string> = {
 	pi: "pi",
 	"claude-code": "claude",
 	copilot: "entwurf",
+	omp: "omp",
 };
 
 /**
@@ -107,11 +120,21 @@ export const FRESH_CALL_RUNTIME: Record<FreshCallBackend, string> = {
  * `tool.execution_start.toolName` both carry `entwurf-bridge-entwurf_v2`, with
  * `mcpServerName`/`mcpToolName` beside them as the parts. Derive-and-measure, never copy a
  * sibling's spelling (`docs/adding-a-harness.md` step 5).
+ *
+ * `[측정]` omp 18.0.0 is the sharpest case for that rule: it mints
+ * `mcp__${sanitizedServerName}_${normalizedToolName}` with a sanitizer whose charset is
+ * `[a-z_]` (`mcp/tool-bridge.ts:351-357`, `:396`), so the DIGIT IN `entwurf_v2` IS EATEN and the
+ * hyphen in the server key becomes an underscore — the model-facing name is
+ * `mcp__entwurf_bridge_entwurf_v`, not `..._entwurf_v2` and not Claude's double-underscore form.
+ * Confirmed against a live tool dump of all seven bridge tools and a real session transcript
+ * (`scripts/raw-omp-measure/README.md` "Tool-name dialect"). Unlike Copilot there is no second
+ * permission dialect: omp's approval layer consults the same minted string (`source-audit.md`).
  */
 export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
 	pi: "entwurf_v2",
 	"claude-code": "mcp__entwurf-bridge__entwurf_v2",
 	copilot: "entwurf-bridge-entwurf_v2",
+	omp: "mcp__entwurf_bridge_entwurf_v",
 };
 
 /** Mirrors the `entwurf_v2` message bound. This is an INTERFACE cap for symmetry with the
@@ -119,7 +142,7 @@ export const FRESH_CALL_CALLBACK_TOOL: Record<FreshCallBackend, string> = {
  * that the OS refuses is a launch failure and fails loud — it never reads as a delivered task. */
 export const TASK_MAX_CHARS = 16000;
 export const MODEL_MAX_CHARS = 200;
-const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/:\[\]-]*$/;
+const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/:[\]-]*$/;
 
 /** A model is an explicit launch input, not ambient process state. The grammar admits canonical
  * pi provider/model ids, Claude model ids/aliases, and bracketed context variants, while refusing
@@ -140,6 +163,11 @@ export function isSafeFreshCallModel(model: string): boolean {
  *   copilot     — the managed VERB first, then the prompt as the value of `-i/--interactive`,
  *                 `--model`, value as two tokens, and the policy as the explicit `--yolo`
  *                 token. Measured from `copilot --help` (1.0.80).
+ *   omp         — NO positional prompt at all. The task rides `--entwurf-bootstrap`, a fixed
+ *                 flag the installed birth extension registers, then `--model`, value as two
+ *                 tokens, then the policy as `--approval-mode`, `yolo`. `-p/--print` remains
+ *                 the flag this argv must never carry — it processes a prompt and EXITS,
+ *                 closing the window on a sibling that has to stay open to be delivered to.
  *
  * Both pi/claude failures looked identical from outside: window open, record and socket minted,
  * no turn.
@@ -172,16 +200,106 @@ export function isSafeFreshCallModel(model: string): boolean {
  * `--allow-tool` takes `<mcp-server-name>(tool-name?)`, a different dialect from the
  * model-facing tool name — stays recorded in `docs/adding-a-harness.md` step 9's worked
  * example; it is a measured vendor fact even though this argv no longer uses it.
+ *
+ * OMP'S POLICY TOKEN IS THE ONE MOST EASILY ARGUED AWAY, SO READ THIS BEFORE DELETING IT.
+ * `[측정]` omp 18.0.0's schema default for `tools.approvalMode` IS ALREADY `yolo`
+ * (vendor doc `omp://approval-mode.md`; `omp config get tools.approvalMode` → `yolo` on the
+ * acceptance host). So dropping `--approval-mode yolo` changes NOTHING observable: the callback
+ * still fires, the LIVE smoke still passes, and the argv silently starts depending on a vendor
+ * default and on whatever the operator's config happens to say. That is exactly the drift step 9
+ * clause 2 forbids — "carry the chosen width as an explicit argv token rather than relying on a
+ * launcher's injected default" — and the reason the width is stated here even though the host
+ * would have granted it anyway. The width itself (task-wide, not callback-only) is a GLG
+ * operator decision of 2026-08-30, taken with the Copilot measurement in hand: a callback-only
+ * sibling names itself and then stops at the first tool its TASK needs. omp offers no argv
+ * grammar for a narrower grant at all — `tools.approval.<tool>` is a config axis, not a flag —
+ * so the honest choice was between `write` and `yolo`, and `yolo` matches what a human-typed
+ * `omp` gets on this host. `--approval-mode` takes both the space and equals form (measured);
+ * the space form is used for symmetry with `--model`.
+ *
+ * WHY OMP ALONE CARRIES NO PROMPT, AND WHY THAT IS A MEASUREMENT RATHER THAN A PREFERENCE.
+ * `[LIVE 2026-08-30]` the first public fresh call at omp DID pass the full framing as a bare
+ * positional. The window opened, the record minted (garden `20260830T181342-452167`), the
+ * prompt arrived byte-identical as a user message at `09:13:42.413Z` — and the model answered
+ * the literal text `ACK` with ZERO tool calls, because the callback tool did not exist yet.
+ * `[source]` the interactive UI defers MCP discovery and only refreshes the tool list once
+ * `discoverAndConnect()` settles (`sdk.ts:1847-1855`, `:1881-1905`), while the positional
+ * `initialMessage` prompts immediately after `await mode.init()` (`main.ts:540-565`,
+ * `595-610`). `[측정]` a `/tmp` observer on the same runtime: `turn_start` at +654ms with the
+ * entwurf tools ABSENT, callback tool present only at +1484ms — the turn began ~830ms before
+ * the tool it was told to call existed. No argv can close that gap, because the gap is a race
+ * inside the host. So the composition hands omp a PAYLOAD instead of a turn, and the
+ * in-process birth extension — which can see when the tool becomes callable — owns the first
+ * two messages (`pi-extensions/meta-bridge-omp.ts`, "THE TWO-STAGE FRESH BOOTSTRAP").
+ *
+ * The flag is fixed and one-purpose ON PURPOSE. `[측정 2026-08-30]` a normal discovered
+ * extension that registers a flag receives the operator's argv value byte-identical — quotes,
+ * `$VAR`, backticks and a semicolon all survived a 137-byte JSON payload — because extensions
+ * load before argv classification and the reparse writes the registered map
+ * (`main.ts:1799-1810`, `cli/extension-flags.ts:36-43`). An env carrier or a temp file would
+ * have needed its own quoting, its own lifetime and its own refusal rules; argv already owns
+ * all three. This is deliberately NOT a general `--flag value` passthrough — an arbitrary
+ * carrier would hand callers the launch-shaping power this rail exists to refuse.
  */
-export function buildBackendArgs(backend: FreshCallBackend, prompt: string, model: string): string[] {
+export function buildBackendArgs(
+	backend: FreshCallBackend,
+	composition: FreshCallComposition,
+	model: string,
+): string[] {
 	switch (backend) {
 		case "pi":
-			return [prompt, "--entwurf-control", "--model", model];
+			return [composition.prompt, "--entwurf-control", "--model", model];
 		case "claude-code":
-			return [prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL["claude-code"]}`, `--model=${model}`];
+			return [composition.prompt, `--allowedTools=${FRESH_CALL_CALLBACK_TOOL["claude-code"]}`, `--model=${model}`];
 		case "copilot":
-			return ["copilot", "--interactive", prompt, "--model", model, "--yolo"];
+			return ["copilot", "--interactive", composition.prompt, "--model", model, "--yolo"];
+		case "omp":
+			return [`--${OMP_BOOTSTRAP_FLAG}`, composition.bootstrapPayload, "--model", model, "--approval-mode", "yolo"];
 	}
+}
+
+/**
+ * What a launch has to say, in the two shapes the four backends need. Three of them are
+ * handed a first-turn PROMPT; omp is handed a bootstrap PAYLOAD its own installed extension
+ * unpacks. Both are always built, because building one is cheap and a backend switch must
+ * never be able to reach a field that was not composed.
+ */
+export interface FreshCallComposition {
+	prompt: string;
+	bootstrapPayload: string;
+}
+
+/**
+ * The omp bootstrap flag, spelled WITHOUT dashes — the vendor's flag map is keyed by bare
+ * name (`extensions/loader.ts:221-228`) and this composition adds the `--` itself.
+ *
+ * Held equal to the installed extension's own constant by
+ * `test/omp-fresh-bootstrap.contract.test.ts`. The two copies exist because the extension
+ * ships INSIDE the omp agent dir carrying only its own small closure and cannot import this
+ * module; the gate is what keeps the duplication from becoming drift.
+ */
+export const OMP_BOOTSTRAP_FLAG = "entwurf-bootstrap";
+
+/** Payload grammar version, matched exactly by the decoder. A bump means a stale installed
+ * unit, which is the one thing `doctor-omp-bridge` exists to say out loud. */
+export const OMP_BOOTSTRAP_VERSION = 1;
+
+/**
+ * The whole of what a fresh omp sibling is launched with.
+ *
+ * THREE FIELDS, CLOSED. The decoder refuses an unknown key, so this object is the entire
+ * contract: who to call back, the nonce that proves it is this call, and the task that is
+ * released only after that callback succeeds. There is no command here, no path, no env name
+ * and no model — the model is already an explicit argv token, and a second copy of it inside
+ * a payload would be a second place for it to disagree with the launch.
+ */
+export function buildOmpBootstrapPayload(params: { callerGardenId: string; nonce: string; task: string }): string {
+	return JSON.stringify({
+		v: OMP_BOOTSTRAP_VERSION,
+		target: params.callerGardenId,
+		nonce: params.nonce,
+		task: params.task,
+	});
 }
 
 /**
@@ -224,6 +342,7 @@ export type FreshCallRejectReason =
 	| LaunchRejectReason
 	| TmuxCwdRejectReason
 	| CopilotPreflightRejectReason
+	| OmpPreflightRejectReason
 	| "caller-identity-unavailable"
 	| "model-empty"
 	| "model-invalid"
@@ -256,9 +375,35 @@ function defaultRandomHex(): string {
 	return randomBytes(12).toString("hex");
 }
 
-/** Launch argv: the leaf's detached-append shape, optionally `-c` at the resume-symmetric token
- * position (after `-t`, before `-P -F`), the runtime, then the backend's dialect. An omitted cwd
- * yields the exact pre-#73 argv — no carrier at all. */
+/**
+ * The pi identity carrier, scrubbed at the launch seam for EVERY backend (#87 Bundle C).
+ *
+ * `[측정]` 2026-08-30, private tmux server: a `new-window` pane inherits the tmux SERVER's
+ * environment, not the caller's. A server started from a shell that exported `PI_SESSION_ID`
+ * hands that value to every window it will ever open — the control run printed
+ * `SID=[leaked-uuid]` in a pane the caller never touched. Nothing about the fresh call creates
+ * that leak and nothing about it notices: the sibling's own MCP child would read the STALE pair
+ * as its authoritative identity and call home as a citizen it is not (`mcp/entwurf-bridge/
+ * src/index.ts:692-698` keeps the measured incident — a fresh cell answering with the uuidv7 it
+ * found in the environment, confidently and wrong).
+ *
+ * `-e VAR=` sets the variable EMPTY rather than unsetting it, which tmux has no per-window form
+ * for. That is sufficient and not a compromise: every reader of the carrier trims and tests
+ * truthiness (`index.ts:212-217`), so empty and absent are the same answer by construction.
+ *
+ * It is applied to all four backends because the leak is a property of tmux, not of a vendor. A
+ * scrub only on the backend whose measurement surfaced it would encode the claim that the other
+ * three are immune, which is false. It costs the legitimate case nothing: a carrier is only ever
+ * authoritative when the process that owns it exported it ITSELF, and a fresh `pi` sibling does
+ * exactly that after this argv has run. This is a fixed two-variable seam and deliberately NOT a
+ * general env carrier — an arbitrary `-e` passthrough would hand callers the environment-shaping
+ * power this rail exists to refuse.
+ */
+const SCRUBBED_INHERITED_ENV = ["PI_SESSION_ID=", "PI_AGENT_ID="] as const;
+
+/** Launch argv: the leaf's detached-append shape, the identity scrub, optionally `-c` at the
+ * resume-symmetric token position (after `-t`, before `-P -F`), the runtime, then the backend's
+ * dialect. An omitted cwd adds no `-c` carrier at all. */
 export function buildFreshCallArgs(
 	placement: Placement,
 	runtimePath: string,
@@ -275,6 +420,7 @@ export function buildFreshCallArgs(
 		"new-window",
 		"-d",
 		"-a",
+		...SCRUBBED_INHERITED_ENV.flatMap((assignment) => ["-e", assignment]),
 		"-t",
 		`${placement.sessionId}:{end}`,
 		...(cwd === undefined ? [] : ["-c", cwd]),
@@ -337,20 +483,27 @@ export function freshCall(
 		const missing = copilotFreshPreflight(env);
 		if (missing) return { ok: false, reason: missing };
 	}
+	if (params.backend === "omp") {
+		const missing = ompFreshPreflight(env);
+		if (missing) return { ok: false, reason: missing };
+	}
 
 	const inspected = inspectPlacement(env);
 	if (!inspected.ok) return { ok: false, reason: inspected.reason };
 	const placement = inspected.placement;
 	requireSameContext("freshCall", placement, env);
 
-	const prompt = buildFreshCallPrompt({
-		backend: params.backend,
-		task,
-		callerGardenId: params.callerGardenId,
-		nonce,
-	});
+	const composition: FreshCallComposition = {
+		prompt: buildFreshCallPrompt({
+			backend: params.backend,
+			task,
+			callerGardenId: params.callerGardenId,
+			nonce,
+		}),
+		bootstrapPayload: buildOmpBootstrapPayload({ callerGardenId: params.callerGardenId, nonce, task }),
+	};
 	const run = runTmux(
-		buildFreshCallArgs(placement, runtimePath, buildBackendArgs(params.backend, prompt, model), cwd),
+		buildFreshCallArgs(placement, runtimePath, buildBackendArgs(params.backend, composition, model), cwd),
 		env,
 	);
 	assertTmuxOk("new-window", run);
@@ -390,6 +543,7 @@ const REJECT_HINT: Record<FreshCallRejectReason, string> = {
 	// The Copilot capability reasons keep their repair text on the leaf that decides them, so
 	// the sentence an operator reads cannot drift away from the predicate that produced it.
 	...COPILOT_PREFLIGHT_HINT,
+	...OMP_PREFLIGHT_HINT,
 	"no-tmux-context": "this agent is not running inside tmux, so there is no session to open a sibling beside",
 	"anchor-malformed": "TMUX_PANE is not a native pane id",
 	"anchor-unresolved": "tmux resolved no pane for this agent's anchor",

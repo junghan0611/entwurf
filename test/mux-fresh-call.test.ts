@@ -23,6 +23,7 @@ import {
 	buildBackendArgs,
 	buildFreshCallArgs,
 	buildFreshCallPrompt,
+	buildOmpBootstrapPayload,
 	FRESH_CALL_BACKENDS,
 	FRESH_CALL_CALLBACK_TOOL,
 	FRESH_CALL_RUNTIME,
@@ -31,6 +32,8 @@ import {
 	freshCall,
 	isSafeFreshCallModel,
 	MODEL_MAX_CHARS,
+	OMP_BOOTSTRAP_FLAG,
+	OMP_BOOTSTRAP_VERSION,
 	renderFreshCall,
 	TASK_MAX_CHARS,
 } from "../pi-extensions/lib/mux-fresh-call.ts";
@@ -44,6 +47,7 @@ const TASK = "summarise docs/mux-launch-rail.md";
 const PI_MODEL = "entwurf/claude-sonnet-5";
 const CLAUDE_MODEL = "claude-sonnet-5";
 const COPILOT_MODEL = "gpt-5.6-terra";
+const OMP_MODEL = "openai-codex/gpt-5.6-terra";
 
 const read = (rel: string): string => fs.readFileSync(path.join(REPO_DIR, rel), "utf8");
 const MODULE_SRC = read("pi-extensions/lib/mux-fresh-call.ts");
@@ -66,8 +70,11 @@ function withPiRuntime<T>(run: (env: NodeJS.ProcessEnv) => T): T {
 }
 
 describe("argv dialects", () => {
-	const piArgs = buildBackendArgs("pi", "PROMPT", PI_MODEL);
-	const clArgs = buildBackendArgs("claude-code", "PROMPT", CLAUDE_MODEL);
+	/** The two shapes a launch composes. Three backends read `prompt`; omp reads the payload
+	 * its own installed extension unpacks, and reads NOTHING else. */
+	const COMPOSITION = { prompt: "PROMPT", bootstrapPayload: "PAYLOAD" } as const;
+	const piArgs = buildBackendArgs("pi", COMPOSITION, PI_MODEL);
+	const clArgs = buildBackendArgs("claude-code", COMPOSITION, CLAUDE_MODEL);
 
 	it("[QK:FRESHCALL-PI-ARGV-PROMPT-FIRST] pi argv is the prompt FIRST, then --entwurf-control — the flag-first order was measured to open a window whose turn never ran", () => {
 		expect(piArgs[0]).toBe("PROMPT");
@@ -94,7 +101,7 @@ describe("argv dialects", () => {
 		expect(clArgs[2]).toBe(`--model=${CLAUDE_MODEL}`);
 	});
 
-	const cpArgs = buildBackendArgs("copilot", "PROMPT", COPILOT_MODEL);
+	const cpArgs = buildBackendArgs("copilot", COMPOSITION, COPILOT_MODEL);
 
 	it("[QK:FRESHCALL-COPILOT-MANAGED-RUNTIME] copilot opens through entwurf's OWN managed invocation — runtime `entwurf`, verb `copilot` as the first forwarded token — never the bare vendor CLI, which would start without the EXTENSIONS flag and skip the extension scan SILENTLY", () => {
 		expect(FRESH_CALL_RUNTIME.copilot).toBe("entwurf");
@@ -142,8 +149,56 @@ describe("argv dialects", () => {
 		for (const a of [...piArgs, ...clArgs, ...cpArgs]) expect(a).not.toMatch(/^-(n|c|e|b)$/);
 	});
 
-	it("the three backends are the whole fixed set", () => {
-		expect([...FRESH_CALL_BACKENDS].sort()).toEqual(["claude-code", "copilot", "pi"]);
+	const ompArgs = buildBackendArgs("omp", COMPOSITION, OMP_MODEL);
+
+	it("[QK:FRESHCALL-OMP-BARE-RUNTIME] omp opens the BARE vendor — unlike copilot there is no launcher-only flag to manage, so inventing a managed verb would add a surface with nothing behind it", () => {
+		expect(FRESH_CALL_RUNTIME.omp).toBe("omp");
+		expect(ompArgs[0]).toBe(`--${OMP_BOOTSTRAP_FLAG}`);
+	});
+
+	it("[QK:FRESHCALL-OMP-ARGV-BOOTSTRAP-FLAG] omp carries the task on the fixed `--entwurf-bootstrap` flag and NO positional prompt — a positional prompt was measured on 2026-08-30 to start the turn ~830ms before the callback tool existed, and the sibling answered `ACK` with zero tool calls", () => {
+		expect(ompArgs).toEqual([`--${OMP_BOOTSTRAP_FLAG}`, "PAYLOAD", "--model", OMP_MODEL, "--approval-mode", "yolo"]);
+		// The positional slot is the regression, pinned negatively: argv[0] is a flag, and the
+		// first-turn framing three other backends pass appears nowhere in this argv.
+		expect(ompArgs[0]?.startsWith("--")).toBe(true);
+		expect(ompArgs).not.toContain("PROMPT");
+		expect(ompArgs).not.toContain("-p");
+		expect(ompArgs).not.toContain("--print");
+	});
+
+	it("[QK:FRESHCALL-OMP-FLAG-IS-ONE-PURPOSE] the bootstrap flag is a single fixed name with a single value — never an env carrier, a command, or an arbitrary caller-shaped passthrough", () => {
+		expect(OMP_BOOTSTRAP_FLAG).toBe("entwurf-bootstrap");
+		// Exactly one occurrence, and its value is the payload rather than anything a caller
+		// could aim somewhere else.
+		expect(ompArgs.filter((a) => a.startsWith(`--${OMP_BOOTSTRAP_FLAG}`))).toHaveLength(1);
+		const at = ompArgs.indexOf(`--${OMP_BOOTSTRAP_FLAG}`);
+		expect(ompArgs[at + 1]).toBe("PAYLOAD");
+		for (const a of ompArgs) expect(a).not.toMatch(/^-(e|c|n|b)$/);
+	});
+
+	it("[QK:FRESHCALL-OMP-PAYLOAD-SHAPE] the payload is the closed {v,target,nonce,task} object and carries no model, path, command or env name", () => {
+		const raw = buildOmpBootstrapPayload({ callerGardenId: GID, nonce: NONCE, task: TASK });
+		expect(JSON.parse(raw)).toEqual({ v: OMP_BOOTSTRAP_VERSION, target: GID, nonce: NONCE, task: TASK });
+		expect(Object.keys(JSON.parse(raw)).sort()).toEqual(["nonce", "target", "task", "v"]);
+	});
+
+	it("[QK:FRESHCALL-OMP-EXPLICIT-POLICY] the permission width is an explicit argv token even though omp's schema default is ALREADY yolo — a default that grants the same thing is exactly the drift step 9 clause 2 forbids, and nothing observable would fail if this token were dropped", () => {
+		const policyAt = ompArgs.indexOf("--approval-mode");
+		expect(policyAt).toBeGreaterThan(0);
+		expect(ompArgs[policyAt + 1]).toBe("yolo");
+	});
+
+	it("[QK:FRESHCALL-OMP-CALLBACK-TOOL-DIALECT] omp's model-facing callback name drops the DIGIT from entwurf_v2 and underscores the server key — a sibling's spelling copied here costs the whole first turn", () => {
+		expect(FRESH_CALL_CALLBACK_TOOL.omp).toBe("mcp__entwurf_bridge_entwurf_v");
+		expect(FRESH_CALL_CALLBACK_TOOL.omp).not.toContain("entwurf_v2");
+		expect(FRESH_CALL_CALLBACK_TOOL.omp).not.toBe(FRESH_CALL_CALLBACK_TOOL["claude-code"]);
+		expect(buildFreshCallPrompt({ backend: "omp", task: TASK, callerGardenId: GID, nonce: NONCE })).toContain(
+			"mcp__entwurf_bridge_entwurf_v",
+		);
+	});
+
+	it("the four backends are the whole fixed set", () => {
+		expect([...FRESH_CALL_BACKENDS].sort()).toEqual(["claude-code", "copilot", "omp", "pi"]);
 	});
 });
 
@@ -243,6 +298,12 @@ describe("refusals, before any mutation", () => {
 		"copilot-mcp-hand-missing",
 		"copilot-receive-unit-missing",
 		"copilot-visible-identity-missing",
+		"omp-agent-dir-ambiguous",
+		"omp-birth-unit-missing",
+		"omp-mcp-hand-missing",
+		"omp-receive-unit-missing",
+		"omp-visible-identity-missing",
+		"omp-callback-tool-uncallable",
 	] as const)("refusal renders as a named reason a caller can act on (%s)", (reason) => {
 		const { text, isError } = renderFreshCall({ ok: false, reason });
 		expect(isError).toBe(true);
@@ -331,6 +392,120 @@ describe("copilot capability preflight, decided before any window exists (step 9
 	});
 });
 
+describe("omp capability preflight, decided before any window exists (step 9 clauses 3-5)", () => {
+	/**
+	 * Same argument as the Copilot fixture above: an executable `omp` on PATH, a sandbox HOME,
+	 * and deliberately NO tmux. A capability reason rather than `no-tmux-context` proves the
+	 * decision happened before placement, which is the last thing to run before the mutation.
+	 *
+	 * The fixture writes the config as YAML text rather than through a serializer on purpose —
+	 * the thing under test is a reader of the operator's hand-edited file, and a serializer would
+	 * only ever produce the one shape the reader already handles.
+	 */
+	function withOmpHost<T>(
+		run: (fx: { env: NodeJS.ProcessEnv; agentDir: string; writeConfig: (yaml: string) => void }) => T,
+	): T {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), "entwurf-fresh-omp-"));
+		try {
+			const home = path.join(root, "home");
+			const bin = path.join(root, "bin");
+			fs.mkdirSync(bin, { recursive: true });
+			fs.writeFileSync(path.join(bin, "omp"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+
+			const agentDir = path.join(home, ".omp", "agent");
+			const extensions = path.join(agentDir, "extensions");
+			fs.mkdirSync(path.join(extensions, "entwurf-meta-omp"), { recursive: true });
+			fs.mkdirSync(path.join(extensions, "entwurf-receive-omp"), { recursive: true });
+			fs.writeFileSync(
+				path.join(agentDir, "mcp.json"),
+				JSON.stringify({ mcpServers: { "entwurf-bridge": { command: "bash" } } }),
+			);
+			const writeConfig = (yaml: string): void => fs.writeFileSync(path.join(agentDir, "config.yml"), yaml);
+			writeConfig("tools:\n  xdev: false\n");
+			return run({ env: { HOME: home, PATH: bin }, agentDir, writeConfig });
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	}
+
+	const call = (env: NodeJS.ProcessEnv): FreshCallResult =>
+		freshCall({ backend: "omp", model: OMP_MODEL, task: TASK, callerGardenId: GID }, env);
+
+	it("a complete omp host is NOT refused by the preflight — it proceeds to the tmux question, which is the leaf's own no-tmux-context here", () => {
+		withOmpHost((fx) => {
+			expect(reasonOf(call(fx.env))).toBe("no-tmux-context");
+		});
+	});
+
+	it("[QK:FRESHCALL-OMP-PREFLIGHT-PREMUTATION] a missing OMP capability is answered BEFORE placement — with no tmux at all the reason is still the capability's, so no window can exist by the time the caller reads it", () => {
+		withOmpHost((fx) => {
+			fs.rmSync(path.join(fx.agentDir, "extensions", "entwurf-meta-omp"), { recursive: true });
+			expect(reasonOf(call(fx.env))).toBe("omp-birth-unit-missing");
+		});
+	});
+
+	it("each of the four installed-unit axes refuses under its OWN name — an operator sent to the wrong installer is worse served than one told nothing", () => {
+		withOmpHost((fx) => {
+			fs.rmSync(path.join(fx.agentDir, "mcp.json"));
+			expect(reasonOf(call(fx.env))).toBe("omp-mcp-hand-missing");
+		});
+		withOmpHost((fx) => {
+			fs.rmSync(path.join(fx.agentDir, "extensions", "entwurf-receive-omp"), { recursive: true });
+			expect(reasonOf(call(fx.env))).toBe("omp-receive-unit-missing");
+		});
+		withOmpHost((fx) => {
+			fs.writeFileSync(path.join(fx.agentDir, "mcp.json"), JSON.stringify({ mcpServers: { other: {} } }));
+			expect(reasonOf(call(fx.env))).toBe("omp-mcp-hand-missing");
+		});
+	});
+
+	it("[QK:FRESHCALL-OMP-XDEV-FAIL-CLOSED] the callback axis demands POSITIVE proof of `tools.xdev: false` — the vendor default is true and true is the broken state, so an absent file, an absent key and an unparseable config all refuse rather than assuming the host is fine", () => {
+		for (const config of [null, "", "tools:\n  approvalMode: yolo\n", "tools:\n  xdev: true\n", "tools: [oops\n"]) {
+			withOmpHost((fx) => {
+				if (config === null) fs.rmSync(path.join(fx.agentDir, "config.yml"));
+				else fx.writeConfig(config);
+				expect(reasonOf(call(fx.env)), `config ${JSON.stringify(config)}`).toBe("omp-callback-tool-uncallable");
+			});
+		}
+	});
+
+	it("[QK:FRESHCALL-OMP-VISIBLE-IDENTITY-DEFAULT-TRUE] visible identity fails the OTHER way — showHookStatus defaults to TRUE, so only an explicit false refuses, and an absent key is a working status line rather than a missing one", () => {
+		withOmpHost((fx) => {
+			fx.writeConfig("tools:\n  xdev: false\nstatusLine:\n  showHookStatus: false\n");
+			expect(reasonOf(call(fx.env))).toBe("omp-visible-identity-missing");
+		});
+		withOmpHost((fx) => {
+			fx.writeConfig("tools:\n  xdev: false\nstatusLine:\n  separator: ascii\n");
+			expect(reasonOf(call(fx.env))).toBe("no-tmux-context");
+		});
+	});
+
+	it("[QK:FRESHCALL-OMP-AGENT-DIR-REFUSES-PI-KNOB] an inherited pi-shaped env knob is a REFUSAL, never a lookup — omp is a pi fork sharing those names, so a value in the environment does not say which harness it addresses and guessing would preflight a directory no live omp reads", () => {
+		withOmpHost((fx) => {
+			for (const knob of ["PI_CODING_AGENT_DIR", "PI_CONFIG_DIR"]) {
+				expect(reasonOf(call({ ...fx.env, [knob]: "/some/where" })), knob).toBe("omp-agent-dir-ambiguous");
+			}
+			// PI_PROFILE alone is ambiguous; OMP_PROFILE beside it resolves the question.
+			expect(reasonOf(call({ ...fx.env, PI_PROFILE: "work" }))).toBe("omp-agent-dir-ambiguous");
+			expect(reasonOf(call({ ...fx.env, PI_PROFILE: "work", OMP_PROFILE: "work" }))).toBe("omp-birth-unit-missing");
+		});
+	});
+
+	it("[QK:FRESHCALL-OMP-PREFLIGHT-AFTER-RUNTIME] a host with no `omp` on PATH hears runtime-unresolved, not a capability reason", () => {
+		withOmpHost((fx) => {
+			fs.rmSync(path.join(fx.agentDir, "extensions", "entwurf-meta-omp"), { recursive: true });
+			expect(reasonOf(call({ ...fx.env, PATH: "/nonexistent-path-for-this-cell" }))).toBe("runtime-unresolved");
+		});
+	});
+
+	it("the preflight is OMP-only: a pi launch on the same bare host is never refused for an OMP unit", () => {
+		const outside = withPiRuntime((env) =>
+			freshCall({ backend: "pi", model: PI_MODEL, task: TASK, callerGardenId: GID }, env),
+		);
+		expect(reasonOf(outside)).toBe("no-tmux-context");
+	});
+});
+
 describe("optional cwd — cross-repo fresh placement (#73)", () => {
 	const PLACEMENT: Placement = {
 		serverPid: "4242",
@@ -364,6 +539,27 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 		}
 	}
 
+	it("[QK:FRESHCALL-IDENTITY-SCRUB] every launch scrubs the inherited pi identity carrier at the seam, for EVERY backend — a tmux server started from a shell that exported PI_SESSION_ID hands that value to every window it opens, and the sibling's own MCP child would read the stale pair as its authoritative identity", () => {
+		withCwdFixture(({ runtime }) => {
+			for (const backend of FRESH_CALL_BACKENDS) {
+				const args = buildFreshCallArgs(
+					PLACEMENT,
+					runtime,
+					buildBackendArgs(backend, { prompt: "PROMPT", bootstrapPayload: "PAYLOAD" }, "m"),
+				);
+				for (const carrier of ["PI_SESSION_ID=", "PI_AGENT_ID="]) {
+					const at = args.indexOf(carrier);
+					expect(at, `${backend} scrubs ${carrier}`).toBeGreaterThan(0);
+					expect(args[at - 1]).toBe("-e");
+					// Before the -t target, so the assignment applies to the window being created.
+					expect(at).toBeLessThan(args.indexOf("-t"));
+				}
+				// A fixed two-variable seam, never a general carrier: no other -e reaches tmux.
+				expect(args.filter((a) => a === "-e")).toHaveLength(2);
+			}
+		});
+	});
+
 	it("[QK:FRESHCALL-CWD-OMITTED-NO-CARRIER] an omitted cwd emits no -c, and the exact empty string means the SAME omit — the argv keeps the pre-#73 shape and the sibling starts in the caller's own directory", () => {
 		withCwdFixture(({ runtime }) => {
 			const args = buildFreshCallArgs(PLACEMENT, runtime, ["PROMPT"]);
@@ -382,7 +578,17 @@ describe("optional cwd — cross-repo fresh placement (#73)", () => {
 		withCwdFixture(({ runtime, realDir }) => {
 			const args = buildFreshCallArgs(PLACEMENT, runtime, ["PROMPT"], realDir);
 			const c = args.indexOf("-c");
-			expect(args.slice(0, c)).toEqual(["new-window", "-d", "-a", "-t", "$0:{end}"]);
+			expect(args.slice(0, c)).toEqual([
+				"new-window",
+				"-d",
+				"-a",
+				"-e",
+				"PI_SESSION_ID=",
+				"-e",
+				"PI_AGENT_ID=",
+				"-t",
+				"$0:{end}",
+			]);
 			expect(args[c + 1]).toBe(realDir);
 			expect(args[c + 2]).toBe("-P");
 			expect(args.filter((a) => a === "-c")).toHaveLength(1);

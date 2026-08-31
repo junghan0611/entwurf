@@ -39,7 +39,7 @@ transcript를 가진 garden citizen이다.
 
 호출된 tool schema가 worktree 문서보다 우선한다. 이 스킬은 현재 S1 계약에 맞는다.
 
-- `entwurf_fresh_call` backend는 정확히 `pi | claude-code | copilot`이고 model은 required다. `cwd`는
+- `entwurf_fresh_call` backend는 정확히 `pi | claude-code | copilot | omp`이고 model은 required다. `cwd`는
   선택 입력 하나: literal 절대경로(존재하는 디렉터리, `#`·trim·realpath 없음), 생략·`""`면
   caller cwd에서 시작한다. cross-repo fresh 절 참조.
 - 기본 정책은 Pi=`openai-codex/gpt-5.6-luna`, Claude Code=`claude-sonnet-5`다.
@@ -102,9 +102,11 @@ citizen의 맥락을 요구한 경우에만 그 exact id로 `entwurf_v2`를 보�
 ### `fresh <backend> [model] <task> [--cwd <absolute-path>]` / “새 형제 열어줘”
 
 1. backend가 생략되면 문맥상 명확한 경우에만 선택한다. 불명확하면 `pi` /
-   `claude-code` / `copilot` 중 무엇을 열지 한 번만 묻는다.
+   `claude-code` / `copilot` / `omp` 중 무엇을 열지 한 번만 묻는다.
 2. model이 생략되면 묻지 않고 backend 기본 정책을 적용한다: Pi는
-   `openai-codex/gpt-5.6-luna`, Claude Code는 `claude-sonnet-5`, Copilot는 `auto`.
+   `openai-codex/gpt-5.6-luna`, Claude Code는 `claude-sonnet-5`, Copilot는 `auto`,
+   omp는 `openai-codex/gpt-5.6-sol` — 2026-08-30 two-stage bootstrap callback이 실제로
+   측정된 모델이고, `smoke-omp-fresh-live`의 기본값과 같은 값이다.
    - “sol/terra/luna” → Pi `openai-codex/gpt-5.6-<tier>`
    - “entwurf 소넷” → Pi `entwurf/claude-sonnet-5`
    - “클로드코드 소넷” → Claude Code `claude-sonnet-5`
