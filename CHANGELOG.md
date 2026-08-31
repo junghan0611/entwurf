@@ -4,6 +4,8 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.16.0 - 2026-08-31
+
 This release admits **OMP (`omp`) as the fifth garden backend** and closes the admission
 contract that let a citizen ship without the legs that make it reachable. Bundles A, B and C
 are one arc — birth and identity, addressed receive, visible fresh — and the durable half is
@@ -168,6 +170,12 @@ limit is stated once in Notes and is not softened anywhere above it. (#87)
   assertion failed closed in the `install-surface` CI job. The pin keeps the verified 0.84.3
   constellation ours to hold; the leak assertion still guards every other pi package and any
   future closure growth. The 0.84.4 bump itself remains a separate hard-cut lane.
+- **The omp doctor treated Bundle C's empty tmux scrub as inherited identity.** `tmux -e NAME=`
+  writes `PI_SESSION_ID=` / `PI_AGENT_ID=` present-but-empty; authoritative readers trim and
+  require truthy values, so empty and absent are the same answer. The doctor was presence-testing
+  those names, which turned `check:full` red whenever a visible fresh omp citizen was alive.
+  It now flags only a nonblank value, and the hermetic smoke hands it fixture pids rather than
+  the host `pgrep`. (#87)
 
 ### Verification
 
@@ -192,9 +200,16 @@ Each receipt carries its own scope; none of them is transferable to another comm
   bytes: a claude-code citizen opened a fresh omp sibling through the public surface (callback
   sender garden `20260831T124226-eac41a`), dispatched an addressed `entwurf_v2` into it, and the
   omp citizen's own live turn drained the doorbell and replied into the claude mailbox.
-- **`LIVE=1 ./run.sh release-gate <scratch> --cut`** — owed at prepare P5 on the versioned tree.
-  Replace this line with the actual `MUST PASS=n FAIL=0 SKIP=0` and `BEHAVIOR PASS=n FAIL=n`,
-  the scratch/log paths and the log SHA-256.
+- **`LIVE=1 ./run.sh release-gate <scratch> --cut`** — **MUST PASS=23 FAIL=0 SKIP=0,
+  BEHAVIOR PASS=1 FAIL=0 SKIP=0, `cut: OK`.** `check-gate-qualification` inside the gate
+  killed **325/325** mutants across 36 lanes. Log:
+  `/tmp/entwurf-release-gate-0.16.0.run2.DfMtRj/release-gate.log` (SHA-256
+  `2df4f6d4bddd563431ca41d2a43074f2cb6ccf9926ec6e8c7323de1a6ddf8192`).
+  A first attempt on the same versioned tree (scratch `.../entwurf-release-gate-0.16.0.AyHcIJ`)
+  hit one MUST FAIL in `smoke-entwurf-v2-matrix-live` C1b: the hidden-store resident did not
+  birth a record inside the 30s boot window. The same smoke rerun standalone passed 17 checks
+  in 4.9s; the rerun cut above is the acceptance. `pnpm run check:full` on the versioned tree
+  was exit 0 in 432s before P5.
 
 ### Notes
 
