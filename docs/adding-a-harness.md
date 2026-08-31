@@ -611,6 +611,21 @@ rule are both executable rather than remembered:
   a release-gate MUST step, because a schema is not a product. `smoke-omp-fresh-live` is the worked
   instance. This applies from OMP onward; it does not retroactively redesign the operator-metered
   exclusion Copilot's visible fresh was accepted under.
+- **LIVE, the cross-harness leg (GLG directive, 2026-08-31):** clause 7 proves the new harness
+  against the bridge caller; it does not prove one live model turn CROSSING harnesses in either
+  direction. And the fixed delivery chain does not grow at admission — `[측정]`
+  `smoke-entwurf-chain-live` still walks the three hops it was born with (`429d5c3`, 2026-07-31);
+  neither #82 nor #87 touched it, and the v1 mutual-call matrices (`session-messaging-smoke.sh`,
+  `sentinel-runner.sh`) left the release gate at `d7783d4` and were deleted at `fbcbdbc` with a
+  v2 follow-up that never returned on the harness-PAIR axis. So the first release of a newly
+  admitted harness also owes TWO cross-harness dispatch receipts: an existing citizen's live turn
+  delivered into the new citizen, and the new citizen's live turn delivered into an existing one,
+  each on the rail the registry claims for that direction. The chain stays fixed and the leg is
+  per-admission, so the aggregate's standing cost does not grow (the Cortex exclusion lesson,
+  `run.sh` release-gate notes). The deterministic half — every post-contract citizen backend has
+  a wired cross-harness LIVE step or a declared metered exception a reader can find — belongs
+  beside `check-harness-admission-parity` and is an owed follow-up (see NEXT): until that gate
+  lands, this bullet is prose, and the block below says exactly what prose is worth without one.
 
 **An `unsupported` note is not a partial-release permit.** `[측정]` #87 is where that was learned at
 full price: the Bundle A+B candidate carried a fully honest sentence in the delivery matrix —

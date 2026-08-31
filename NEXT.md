@@ -23,7 +23,7 @@
 - **새 일반 규칙 (C가 만든 것):** 새 하네스는 branch에서 partial evidence가 가능하지만, release package는 step 9까지 닫혀야 한다. unsupported 표기는 partial-release 허가가 아니다. deterministic 반쪽은 `check-harness-admission-parity`(check:full), LIVE 반쪽은 첫 release의 clause 7 MUST step. Copilot의 기존 operator-metered exclusion은 소급 재설계하지 않는다.
 - **운영자 필수 설정 (변함없음):** `~/.omp/agent/config.yml`에 `tools: xdev: false`. 기본값에서는 doorbell이 모델이 부를 수 없는 도구를 알리게 된다. LIVE 스모크가 이걸 선행 조건으로 검사한다.
 - **컷 게이트는 이제 실제 왕복을 요구한다:** `smoke-omp-receive-live`가 registry를 읽고 `self-fetch`를 보면 더 이상 SKIP하지 않는다 — `LIVE=1`에서 실제 tmux omp TUI를 띄우고 11개 단언을 요구한다. 하드코딩된 통과가 아니다.
-- **Next:** (1) 짧은 independent closure review(b) — 커밋된 amendment 델타 중심, (2) standalone qualification 1회 + deterministic full floor 1회(게이트/뮤턴트가 바뀌었으므로 아직 안 돌렸다), (3) land 방식·cut 결정 — GLG 몫.
+- **Next:** (1) GLG 최종 인터뷰 — 교통 매트릭스 육안 수용 (창 @222의 live omp 시민이 재료), (2) **cross-harness leg의 deterministic 반쪽 배선** — post-contract 시민 backend마다 cross-harness LIVE step이 wired거나 선언된 metered 예외인지 `check-harness-admission-parity` 옆에 검사 (규칙은 `docs/adding-a-harness.md` release stop에 2026-08-31로 박혀 있고, 게이트가 없는 동안은 prose다 — 별도 grant), (3) land 방식·cut 결정 — GLG 몫. 배경: 옛 v1 상호호출 matrix는 d7783d4에서 gate를 떠나 fbcbdbc에서 삭제됐고 v2 follow-up이 하네스-쌍 축으로 돌아오지 않았다(GLM 조사, 2026-08-31 #87 스레드 예정).
 - **Read:** #87 thread · `scripts/raw-omp-measure/README.md` §M7 (수용의 근거가 된 5셀 측정) · `docs/setup-clean-host.md` §4b · `docs/adding-a-harness.md` step 7.
 - **Do not touch:** `mux-launch.ts`/`mux-placement.ts`(import fence) · omp용 managed launcher shell(근거 없음) · registry `supported` 필드(새 authority 금지) · #72/#76/#78 · Pi 0.84.4 · #87/#89 close.
 

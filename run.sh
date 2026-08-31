@@ -5463,10 +5463,10 @@ release_gate() {
   run_live_step "smoke-claude-native-resume-live (native Claude Code resume + meta-bridge neutrality)" gate bash "$self" smoke-claude-native-resume-live
   run_live_step "smoke-entwurf-chain-live (P3: Claude Code -> pi GPT -> pi ACP Sonnet -> mailbox, identity + receipt)" gate bash "$self" smoke-entwurf-chain-live
   run_live_step "smoke-mux-lifecycle-live (mux public-harness lifecycle: fresh -> send -> dormant -> same-id visible resume -> recall)" gate bash "$self" smoke-mux-lifecycle-live
-  # #87 bundle B: MUST, and today an honest SKIP. omp is admitted as an OUTBOUND-only
-  # citizen, so the garden is one-way for it — this step is what stops a cut from
-  # shipping that asymmetry silently. It reads the registry, so it turns itself into a
-  # real demand the moment bundle B moves omp's wakeMode.
+  # #87 bundle B: MUST, and since bundle B moved omp's wakeMode to self-fetch this is a
+  # REAL demand under LIVE=1, not a standing SKIP — it reads the registry, so an honest
+  # SKIP now only ever names a missing prerequisite, and a registry claiming a receive
+  # rail with no acceptance body here is a FAIL.
   run_live_step "smoke-omp-receive-live (#87 bundle B: other harness -> open omp citizen, addressed receive + roundtrip)" gate bash "$self" smoke-omp-receive-live
   # #87 bundle C: the step 9 clause 7 receipt, wired as a MUST rather than left to an
   # operator's memory. A schema is not a product — omp's bootstrap-payload submission
