@@ -799,8 +799,9 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 	const EXPECTED_LANE_MUTANTS: Record<string, number> = {
 		"acp-augment": 10,
 		"acp-cortex": 12,
+		"acp-launch-namespace": 2,
 		"acp-overlay": 1,
-		"acp-prompt-lifecycle": 10,
+		"acp-prompt-lifecycle": 15,
 		"acp-stop-reason": 6,
 		"acp-stream-hooks": 10,
 		"agy-permission": 6,

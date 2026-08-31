@@ -31,7 +31,45 @@ All notable changes to this project will be documented here. Format follows [Kee
   cell) and the shape to watch for: two closed parity loops with no gate owning the edge between
   them.
 
+### Changed
+
+- **pi floor moved to 0.84.4.** devDependency exact pin, the three peer ranges (`>=0.84.4 <0.85`),
+  the `check-pack-install` runtime pins, the pin-leak matcher's version boundary with its synthetic
+  fixture, and the pnpm lockfile all move together — the floor is one fact with several spellings,
+  and a partial bump is how they drift apart.
+
 ### Fixed
+
+- **#72 — the ACP Claude child is no longer selected by the host janitor that was killing it, and
+  a caught signal survives the vendor erasing it.** The child was not crashing: it was being **SIGTERMed from outside**. A
+  janitor installed on the operator's host for a *different* harness (openclaw's acpx, upstream
+  PR #245) selects the vendor process name `claude-agent-acp` by **argv substring** and kills
+  anything older than 900s. entwurf **retains** its child across turns, so that child's age is the
+  age of the SESSION, not of a turn — every session past 15 minutes was shot at every 5 minutes.
+  The vendor's own handler then turned the signal into `dispose(); process.exit(0)`, so the death
+  reached entwurf as exit code 0 with no signal, indistinguishable from a clean shutdown. That is
+  why three diagnosis passes retired four candidate causes and still missed it. Measured: **12 of
+  12** anomalous terminations across two boots correlate with a reap, pid- and timestamp-locked —
+  including the sample that opened the issue (2026-07-30) and the original field report
+  (2026-08-16); receipts in `scripts/raw-acp-child-exit-measure/`. Two changes, both inside the
+  issue's repair fence (no timeout, no replay, no watcher/supervisor/hidden retry): (a) the default
+  launch is now an **entwurf-owned launcher** (`pi-extensions/lib/acp/claude-acp-launch.js`) that
+  imports the vendor **in-process** — same process, so there is no child to restart and it cannot
+  become a supervisor — carrying a name no vendor-name scanner matches, consuming no argv (the
+  vendor's own `argv.slice(1)` self-reinvocation still works), standing down if it would otherwise
+  be the only signal listener (an observer that suppressed default termination would make the
+  process signal-immune), and dying nonzero without retry if the import fails; (b) a caught
+  SIGTERM/SIGINT is recorded as a **typed lifecycle fact** on its own line
+  (`launch observed SIGTERM before child exit (sender not attributed)`) via an exact full-line
+  control frame that is consumed out of the vendor stderr tail — the tail stays vendor evidence,
+  the observation is entwurf's, and sender attribution is explicitly NOT claimed (that needs the
+  host journal). `CLAUDE_AGENT_ACP_COMMAND` stays verbatim: an operator who names their own command
+  owns the result. **Known trade:** after the name split a host janitor can no longer collect
+  entwurf's children even when they genuinely leak, so entwurf now owns that cleanup story. Gates:
+  new `check-acp-launch-namespace` (2 mutants) plus `check-acp-prompt-lifecycle` CELLs 12–13,
+  where 13 is the negative sibling holding that vendor prose mentioning `SIGTERM` can never forge
+  the observation (3 mutants). The primary repair still belongs to the janitor's owner — a cleaner
+  should scope by a positive marker it owns, not by a name anyone may share.
 
 - **A vendor-written `config.yml` no longer reads as `unreadable`.** omp's own settings writer
   emits `modelRoles:` followed by an indented `{}`, and `scripts/omp-tool-surface.py`'s

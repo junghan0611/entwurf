@@ -77,6 +77,7 @@ function deferred<T>(): Deferred<T> {
 function makeFakeChild() {
 	const exitListeners: Array<(...args: unknown[]) => void> = [];
 	const stderrListeners: Array<(chunk: Buffer) => void> = [];
+	const stderrCloseListeners: Array<() => void> = [];
 	const kills: Array<NodeJS.Signals | number | undefined> = [];
 	const pipe = () => ({ destroy() {}, unref() {} });
 	const child = {
@@ -89,6 +90,9 @@ function makeFakeChild() {
 		stderr: {
 			on(_event: "data", listener: (chunk: Buffer) => void) {
 				stderrListeners.push(listener);
+			},
+			once(_event: "close", listener: () => void) {
+				stderrCloseListeners.push(listener);
 			},
 			destroy() {},
 			unref() {},
@@ -105,10 +109,11 @@ function makeFakeChild() {
 		writeStderr(text: string) {
 			for (const listener of [...stderrListeners]) listener(Buffer.from(text));
 		},
-		/** driver: the backend process ends. */
+		/** driver: the backend process ends. Its stderr pipe closes with it. */
 		die(code: number | null, signal: NodeJS.Signals | null = null) {
 			child.exitCode = code;
 			child.signalCode = signal;
+			for (const listener of stderrCloseListeners.splice(0)) listener();
 			for (const listener of exitListeners.splice(0)) listener(code, signal);
 		},
 	};
@@ -657,6 +662,141 @@ try {
 	}
 
 	// ----------------------------------------------------------------------
+	// CELL 12 — a signal the LAUNCHER caught survives the vendor erasing it.
+	//
+	// #72's whole difficulty: the vendor turns SIGTERM into `dispose(); exit(0)`,
+	// so an external kill and a clean vendor shutdown reach us as the SAME facts
+	// (code 0, signal null). CELL 10 can only separate a signal that was NOT
+	// caught. `claude-acp-launch.js` records the catch before the vendor erases
+	// it; this cell holds that the record reaches the operator, on its own line,
+	// and that the tail stays vendor-only.
+	// ----------------------------------------------------------------------
+	{
+		const h = makeHarness(recordDir);
+		const turn = startTurn(backend, userCtx("reaped from outside"), { sessionId: "life-eof-launchsig" }, h.deps);
+		await delay(30);
+		h.children[0].writeStderr("VENDOR-TAIL-MARK\n");
+		h.children[0].writeStderr("ENTWURF_ACP_LAUNCH_SIGNAL=SIGTERM\n");
+		h.transportClosed();
+		await delay(1);
+		h.children[0].die(0, null);
+		await turn.done;
+
+		const message = String(sealed(turn.events)[0].error.errorMessage);
+		assert.ok(
+			message.includes("launch observed SIGTERM before child exit"),
+			"[QK:LAUNCH-SIGNAL-EVIDENCE-STRUCTURED] a caught SIGTERM must reach the operator even though the vendor " +
+				`normalized it to exit 0 — otherwise an external kill is indistinguishable from a clean close. Got: ${JSON.stringify(message)}`,
+		);
+		assert.ok(
+			message.includes("sender not attributed"),
+			"the observation must NOT claim who sent the signal — attribution needs the host journal, which this " +
+				`process cannot read. Got: ${JSON.stringify(message)}`,
+		);
+		assert.ok(
+			message.includes("exit code 0") && message.includes("VENDOR-TAIL-MARK"),
+			`the exit fact and the vendor tail both survive alongside the observation. Got: ${JSON.stringify(message)}`,
+		);
+		assert.ok(
+			!message.includes("ENTWURF_ACP_LAUNCH_SIGNAL="),
+			"[QK:LAUNCH-FRAME-NOT-IN-TAIL] the raw control frame must be CONSUMED, not echoed into the vendor tail — " +
+				`the tail is vendor evidence and the observation is ours, and #72 was made of confusing the two. Got: ${JSON.stringify(message)}`,
+		);
+	}
+
+	// ----------------------------------------------------------------------
+	// CELL 13 — NEGATIVE SIBLING: vendor prose can never manufacture the fact.
+	//
+	// The oracle for CELL 12's exactness. Vendor stderr is free text and it does
+	// mention signals; if a loose test (`includes("SIGTERM")`, or a prefix match
+	// without the enum) fed the observation, entwurf would report an entwurf-owned
+	// fact it never observed — a worse failure than reporting nothing, because it
+	// would be trusted. Both a near-miss frame and prose must produce NOTHING.
+	// ----------------------------------------------------------------------
+	{
+		const h = makeHarness(recordDir);
+		const turn = startTurn(backend, userCtx("vendor mentions a signal"), { sessionId: "life-eof-nosig" }, h.deps);
+		await delay(30);
+		h.children[0].writeStderr("shutting down after SIGTERM; ENTWURF_ACP_LAUNCH_SIGNAL=SIGQUIT\n");
+		h.children[0].writeStderr("  ENTWURF_ACP_LAUNCH_SIGNAL=SIGTERM (quoted in prose, not a frame)\n");
+		h.transportClosed();
+		await delay(1);
+		h.children[0].die(0, null);
+		await turn.done;
+
+		const message = String(sealed(turn.events)[0].error.errorMessage);
+		assert.ok(
+			!message.includes("launch observed"),
+			"[QK:LAUNCH-SIGNAL-EXACT-FRAME-ONLY] neither vendor prose containing 'SIGTERM', an unknown signal value, nor " +
+				"an indented near-miss may produce a launch observation — the frame is an exact full line with a fixed " +
+				`enum, and anything looser lets vendor text forge our own evidence. Got: ${JSON.stringify(message)}`,
+		);
+		assert.ok(
+			message.includes("SIGQUIT") && message.includes("quoted in prose"),
+			`text that is not our frame stays in the vendor tail verbatim. Got: ${JSON.stringify(message)}`,
+		);
+	}
+
+	// ----------------------------------------------------------------------
+	// CELL 14 — the child's LAST words survive having no trailing newline.
+	//
+	// Filtering our control frame out of the tail means reading stderr by LINE,
+	// and a process dying mid-write does not finish its line. That fragment is
+	// exactly the dying words the tail exists for, so holding it in a line buffer
+	// forever would trade #72's diagnosis for a worse blindness. The stream's
+	// close must flush it VERBATIM.
+	// ----------------------------------------------------------------------
+	{
+		const h = makeHarness(recordDir);
+		const turn = startTurn(backend, userCtx("dies mid-write"), { sessionId: "life-eof-nonl" }, h.deps);
+		await delay(30);
+		h.children[0].writeStderr("FATAL dying words with no newline");
+		h.transportClosed();
+		await delay(1);
+		h.children[0].die(0, null);
+		await turn.done;
+
+		const message = String(sealed(turn.events)[0].error.errorMessage);
+		assert.ok(
+			message.includes("FATAL dying words with no newline"),
+			"[QK:STDERR-TAIL-FLUSHES-PARTIAL-LINE] a child that dies mid-write leaves its last line unterminated, and " +
+				"that fragment IS the dying words the tail exists for — line-buffering to strip our own frame must not " +
+				`swallow it. Got: ${JSON.stringify(message)}`,
+		);
+	}
+
+	// ----------------------------------------------------------------------
+	// CELL 15 — a frame split across two reads is still recognised exactly.
+	//
+	// Pipe chunk boundaries fall wherever the kernel put them, so the frame can
+	// arrive in pieces. This is the reason the filter buffers by line at all;
+	// without a cell for it, an implementation that matched per-CHUNK would pass
+	// every other test here and then miss the real signal in the field.
+	// ----------------------------------------------------------------------
+	{
+		const h = makeHarness(recordDir);
+		const turn = startTurn(backend, userCtx("frame arrives split"), { sessionId: "life-eof-split" }, h.deps);
+		await delay(30);
+		h.children[0].writeStderr("ENTWURF_ACP_LAUNCH_SI");
+		h.children[0].writeStderr("GNAL=SIGTERM\n");
+		h.transportClosed();
+		await delay(1);
+		h.children[0].die(0, null);
+		await turn.done;
+
+		const message = String(sealed(turn.events)[0].error.errorMessage);
+		assert.ok(
+			message.includes("launch observed SIGTERM before child exit"),
+			"[QK:LAUNCH-FRAME-SPANS-CHUNKS] the frame must be recognised across a chunk boundary — the kernel, not the " +
+				`writer, decides where a read ends. Got: ${JSON.stringify(message)}`,
+		);
+		assert.ok(
+			!message.includes("ENTWURF_ACP_LAUNCH_SI"),
+			`neither half of a split frame may leak into the vendor tail. Got: ${JSON.stringify(message)}`,
+		);
+	}
+
+	// ----------------------------------------------------------------------
 	// CELL 11 — a child that never reports an end says SO, bounded.
 	//
 	// A closed transport does not prove a dead child: the connection can end
@@ -771,7 +911,10 @@ console.log(
 		"reported with its exit status AND stderr tail on BOTH the new and the reuse path; a death BETWEEN turns is " +
 		"announced once by the next turn while a teardown WE performed stays silent; the child's end survives the " +
 		"temporal order the field showed too (transport EOF first, exit one tick later, alongside the opposite order), " +
-		"telling a clean exit apart from a signal and reporting silence AS silence within a bounded window; and pi's " +
+		"telling a clean exit apart from a signal and reporting silence AS silence within a bounded window; a signal the " +
+		"LAUNCHER caught survives the vendor normalizing it to exit 0 and is reported on its own line without claiming " +
+		"who sent it, while its raw control frame is consumed out of the vendor tail and vendor prose mentioning a " +
+		"signal can never forge that observation; and pi's " +
 		"own isRetryableAssistantError refuses to classify any of those failures as transient while still matching " +
 		"the retired 600s text",
 );

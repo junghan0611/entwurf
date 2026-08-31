@@ -1,0 +1,34 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-launch-namespace",
+	"mutants": [
+		{
+			"claim": "CLAUDE-LAUNCH-IS-NAMESPACED",
+			"title": "the default launch names the vendor bin directly again — the child re-enters the process-name space a janitor for another harness scans by substring, which is the whole of #72",
+			"subject": "pi-extensions/lib/acp/backend-adapter.ts",
+			"find": ["\tconst launcher = fileURLToPath(new URL(\"./claude-acp-launch.js\", import.meta.url));"],
+			"replace": ["\tconst launcher = require.resolve(\"@agentclientprotocol/claude-agent-acp/dist/index.js\");"],
+			"gate": ["bash", "run.sh", "check-acp-launch-namespace"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:CLAUDE-LAUNCH-IS-NAMESPACED]",
+			"signatureSource": "scripts/check-acp-launch-namespace.ts"
+		},
+		{
+			"claim": "CLAUDE-LAUNCH-IS-TRANSPARENT",
+			"title": "the launcher consumes an argv slot of its own — the vendor's argv.slice(1) self-reinvocation and its own flags stop working behind a name split that still looks correct",
+			"subject": "pi-extensions/lib/acp/claude-acp-launch.js",
+			"find": ["\tawait import(pathToFileURL(join(dirname(pkgJsonPath), binPath)).href);"],
+			"replace": [
+				"\tif (process.argv.includes(\"--version\")) {",
+				"\t\tconsole.log(\"entwurf launcher\");",
+				"\t\tprocess.exit(0);",
+				"\t}",
+				"\tawait import(pathToFileURL(join(dirname(pkgJsonPath), binPath)).href);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-launch-namespace"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:CLAUDE-LAUNCH-IS-TRANSPARENT]",
+			"signatureSource": "scripts/check-acp-launch-namespace.ts"
+		}
+	]
+}

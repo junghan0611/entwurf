@@ -54,8 +54,8 @@
 			"claim": "REUSE-CARRIES-CHILD-DIAGNOSTICS",
 			"title": "the reuse path drops the child's stderr tail again — exactly the live sonnet failure that showed only \"ACP connection closed\"",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["\t\t\tfinishError(err, aborted, session.stderrTail, lifecycle);"],
-			"replace": ["\t\t\tfinishError(err, aborted, undefined, lifecycle);"],
+			"find": ["\t\t\tfinishError(err, aborted, session.stderrTail, lifecycle, session.launchObservation);"],
+			"replace": ["\t\t\tfinishError(err, aborted, undefined, lifecycle, session.launchObservation);"],
 			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:REUSE-CARRIES-CHILD-DIAGNOSTICS]",
@@ -116,6 +116,71 @@
 			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
 			"timeoutSeconds": 180,
 			"signature": "[QK:CHILD-END-SILENCE-BOUNDED]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "LAUNCH-SIGNAL-EVIDENCE-STRUCTURED",
+			"title": "the caught-signal observation is dropped from the report — an externally killed child again reads as a clean vendor exit, the exact ambiguity #72 cost three diagnosis passes",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tconst diagnosed = observed ? `${withLifecycle}\\n${observed}` : withLifecycle;"],
+			"replace": ["\t\tconst diagnosed = withLifecycle;"],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:LAUNCH-SIGNAL-EVIDENCE-STRUCTURED]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "LAUNCH-FRAME-NOT-IN-TAIL",
+			"title": "the launcher's control frame is echoed into the vendor stderr tail — entwurf's own fact is laundered back into vendor evidence",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tspawned.stderr.on(\"data\", (c: Buffer) => consumeStderr.write(c.toString()));"],
+			"replace": [
+				"\t\t\tspawned.stderr.on(\"data\", (c: Buffer) => {",
+				"\t\t\t\tconsumeStderr.write(c.toString());",
+				"\t\t\t\tstderrTail.push(c.toString());",
+				"\t\t\t});"
+			],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:LAUNCH-FRAME-NOT-IN-TAIL]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "LAUNCH-SIGNAL-EXACT-FRAME-ONLY",
+			"title": "the frame is matched by prefix without its fixed enum — vendor prose can forge an entwurf-owned observation",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\t\tif (",
+				"\t\t\t\t\tline.startsWith(LAUNCH_SIGNAL_FRAME_PREFIX) &&",
+				"\t\t\t\t\tLAUNCH_SIGNAL_FRAME_VALUES.has(line.slice(LAUNCH_SIGNAL_FRAME_PREFIX.length))",
+				"\t\t\t\t) {"
+			],
+			"replace": ["\t\t\t\tif (line.includes(LAUNCH_SIGNAL_FRAME_PREFIX)) {"],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:LAUNCH-SIGNAL-EXACT-FRAME-ONLY]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "STDERR-TAIL-FLUSHES-PARTIAL-LINE",
+			"title": "the line buffer never flushes its unterminated remainder — a child that dies mid-write loses the dying words the stderr tail exists to carry",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\tspawned.stderr.once?.(\"close\", () => consumeStderr.flush());"],
+			"replace": ["\t\t\tvoid consumeStderr;"],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:STDERR-TAIL-FLUSHES-PARTIAL-LINE]",
+			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
+		},
+		{
+			"claim": "LAUNCH-FRAME-SPANS-CHUNKS",
+			"title": "the frame is matched per read instead of per line — a frame split across a chunk boundary is missed, and the external kill goes unreported exactly as it did in the field",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\theld += chunk;"],
+			"replace": ["\t\t\theld = chunk;"],
+			"gate": ["bash", "run.sh", "check-acp-prompt-lifecycle"],
+			"timeoutSeconds": 180,
+			"signature": "[QK:LAUNCH-FRAME-SPANS-CHUNKS]",
 			"signatureSource": "scripts/check-acp-prompt-lifecycle.ts"
 		}
 	]

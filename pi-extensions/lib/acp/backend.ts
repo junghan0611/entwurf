@@ -119,7 +119,13 @@ export interface AcpChildLike {
 	signalCode: NodeJS.Signals | null;
 	stdin: { destroy(): void; unref?(): void };
 	stdout: { destroy(): void; unref?(): void };
-	stderr: { on(event: "data", listener: (chunk: Buffer) => void): void; destroy(): void; unref?(): void };
+	stderr: {
+		on(event: "data", listener: (chunk: Buffer) => void): void;
+		/** Optional: absent on minimal fakes; the flush is best-effort, never load-bearing for liveness. */
+		once?(event: "close", listener: () => void): void;
+		destroy(): void;
+		unref?(): void;
+	};
 	kill(signal?: NodeJS.Signals | number): boolean;
 	unref(): void;
 	once(event: "exit" | "error", listener: (...args: unknown[]) => void): void;
@@ -210,6 +216,11 @@ interface BridgeSession {
 	 * nothing to diagnose it by (observed 2026-07-30 on a live sonnet reuse turn).
 	 */
 	stderrTail: string[];
+	/**
+	 * SESSION-scoped like `stderrTail`, and for the same reason: the launcher's
+	 * frame can arrive on a turn later than the one that spawned the child.
+	 */
+	launchObservation: AcpLaunchObservation;
 	/** How the child ended, once it has — folded into the prompt-phase error. */
 	exit?: { code: number | null; signal: NodeJS.Signals | null };
 	/**
@@ -366,6 +377,85 @@ const CHILD_END_SETTLE_MS = 500;
  * need it.
  */
 const ACP_CONNECTION_CLOSED_TEXT = "ACP connection closed";
+
+/**
+ * The launcher's control frame — see `claude-acp-launch.js`.
+ *
+ * Matched as an EXACT FULL LINE and nothing else. The vendor writes prose that
+ * mentions signals; a substring test would let vendor text manufacture an
+ * entwurf observation, which is precisely the confusion #72 cost three
+ * diagnosis passes. Our own frame is a fixed enum, so exact-line matching is
+ * sufficient AND necessary.
+ */
+const LAUNCH_SIGNAL_FRAME_PREFIX = "ENTWURF_ACP_LAUNCH_SIGNAL=";
+const LAUNCH_SIGNAL_FRAME_VALUES: ReadonlySet<string> = new Set(["SIGTERM", "SIGINT"]);
+
+/** A mutable, session-scoped record of a terminating signal the LAUNCHER caught. */
+export type AcpLaunchObservation = { signal?: "SIGTERM" | "SIGINT" };
+
+/**
+ * Split a stderr chunk stream into lines, consuming our own frames and passing
+ * everything else through to the tail untouched.
+ *
+ * Line-buffered because a chunk boundary can fall inside a frame; the trailing
+ * partial line is held, not emitted, so a frame split across two reads is still
+ * recognised exactly.
+ */
+function makeLaunchFrameFilter(observation: AcpLaunchObservation, onText: (text: string) => void) {
+	let held = "";
+	return {
+		write(chunk: string): void {
+			held += chunk;
+			let nl = held.indexOf("\n");
+			let passed = "";
+			while (nl !== -1) {
+				const line = held.slice(0, nl);
+				if (
+					line.startsWith(LAUNCH_SIGNAL_FRAME_PREFIX) &&
+					LAUNCH_SIGNAL_FRAME_VALUES.has(line.slice(LAUNCH_SIGNAL_FRAME_PREFIX.length))
+				) {
+					// FIRST caught signal wins: a later one is our own teardown racing
+					// the external kill, and reporting that would bury the cause.
+					observation.signal ??= line.slice(LAUNCH_SIGNAL_FRAME_PREFIX.length) as "SIGTERM" | "SIGINT";
+				} else {
+					passed += `${line}\n`;
+				}
+				held = held.slice(nl + 1);
+				nl = held.indexOf("\n");
+			}
+			if (passed) onText(passed);
+		},
+		/**
+		 * The child's LAST words may arrive without a trailing newline — a process
+		 * dying mid-write is exactly when that happens, and it is exactly when the
+		 * tail matters most. Line buffering would otherwise hold that fragment
+		 * forever, so the stream's close flushes it VERBATIM.
+		 *
+		 * No frame check here, deliberately: the launcher writes its frame with a
+		 * single `writeSync` including the newline, well under PIPE_BUF, so a
+		 * complete frame can never be the un-terminated remainder. Anything left
+		 * without a newline is vendor text by construction.
+		 */
+		flush(): void {
+			if (!held) return;
+			onText(held);
+			held = "";
+		},
+	};
+}
+
+/**
+ * What the operator is told about a caught signal — and what they are NOT told.
+ *
+ * Absence is reported as "not observed", never as "no signal": the launcher can
+ * only see what reached it, and an override launch (`CLAUDE_AGENT_ACP_COMMAND`)
+ * has no launcher at all. Attribution of the SENDER is not claimed here either —
+ * that needs the host's journal, which this process cannot read.
+ */
+function launchSignalLine(observation: AcpLaunchObservation | undefined): string | undefined {
+	if (!observation?.signal) return undefined;
+	return `[acp] launch observed ${observation.signal} before child exit (sender not attributed)`;
+}
 
 function isAcpConnectionClosure(err: unknown): boolean {
 	const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
@@ -921,14 +1011,24 @@ export function streamAcpTurn(
 		stream.end();
 	}
 
-	function finishError(err: unknown, aborted: boolean, stderrTail?: string[], lifecycle?: string): void {
+	function finishError(
+		err: unknown,
+		aborted: boolean,
+		stderrTail?: string[],
+		lifecycle?: string,
+		launchObservation?: AcpLaunchObservation,
+	): void {
 		finalizeAcpStreamState(state);
 		state.output.stopReason = aborted ? "aborted" : "error";
 		const base = err instanceof Error ? err.message : String(err);
 		// The FIRST failure stays first and verbatim (it is what the backend
 		// actually said); the lifecycle line is added, never substituted, so a
 		// reader can still match the transport's own text.
-		const diagnosed = lifecycle ? `${base}\n${lifecycle}` : base;
+		const withLifecycle = lifecycle ? `${base}\n${lifecycle}` : base;
+		// Its OWN line, above the vendor tail: an entwurf-owned observation must not
+		// have to be recovered by reading vendor prose.
+		const observed = launchSignalLine(launchObservation);
+		const diagnosed = observed ? `${withLifecycle}\n${observed}` : withLifecycle;
 		const tail = (stderrTail ?? []).join("").trim().slice(-1_000);
 		const full = tail ? `${diagnosed}\n--- backend stderr (tail) ---\n${tail}` : diagnosed;
 		// A-c: a real failure (not an abort) that looks like a context-window
@@ -1124,6 +1224,8 @@ export function streamAcpTurn(
 		/** Which phase a failure belongs to — flipped once the prompt is on the wire. */
 		let phase: "pre-prompt" | "prompt" = "pre-prompt";
 		const stderrTail: string[] = [];
+		// Session-scoped alongside the tail — see the field's note on the session type.
+		const launchObservation: AcpLaunchObservation = {};
 		const sessionKey = resolveSessionKey(opts, cwd);
 		try {
 			if (signal?.aborted) throw new Error("aborted before launch");
@@ -1156,10 +1258,18 @@ export function streamAcpTurn(
 			const spawned = child;
 
 			// Drain stderr (an unconsumed pipe can backpressure-deadlock a long turn).
-			spawned.stderr.on("data", (c: Buffer) => {
-				stderrTail.push(c.toString());
+			// The launcher's own control frames are consumed here and kept OUT of the
+			// tail: the tail is vendor evidence, the observation is an entwurf fact,
+			// and mixing the two is the overloading #72 was made of.
+			const consumeStderr = makeLaunchFrameFilter(launchObservation, (text) => {
+				stderrTail.push(text);
 				if (stderrTail.length > 50) stderrTail.shift();
 			});
+			spawned.stderr.on("data", (c: Buffer) => consumeStderr.write(c.toString()));
+			// `close` rather than `end`: it covers the destroy path our own teardown
+			// takes, and on the EOF-first death it lands inside the post-mortem
+			// settle window, so the flushed fragment is in the tail before we seal.
+			spawned.stderr.once?.("close", () => consumeStderr.flush());
 
 			// Abort during BOOTSTRAP (spawn → initialize → newSession → set-model):
 			// there is no prompt turn for the agent to cancel yet, so the child is
@@ -1211,6 +1321,8 @@ export function streamAcpTurn(
 				// this turn with the session, so a later reuse turn can still report
 				// the child's dying words.
 				stderrTail,
+				// SAME object the frame filter writes into, for the same reason.
+				launchObservation,
 				// Armed at spawn, before ANY turn can fail on this child — the latch
 				// must already exist when the `exit` listener below can fire.
 				childEnd: makeChildEndLatch(),
@@ -1345,7 +1457,13 @@ export function streamAcpTurn(
 			// own SIGTERM; the tail collected by then is sealed before our cleanup
 			// touches the stderr pipe.
 			const lifecycle = await diagnoseTransportClosure({ err, session, phase, aborted });
-			finishError(err, aborted, session?.stderrTail ?? stderrTail, lifecycle);
+			finishError(
+				err,
+				aborted,
+				session?.stderrTail ?? stderrTail,
+				lifecycle,
+				session?.launchObservation ?? launchObservation,
+			);
 			// error/abort → drop the (uncertain) session and close its child; an
 			// uncertain connection must never be reused (GPT ④).
 			if (child) {
@@ -1412,7 +1530,7 @@ export function streamAcpTurn(
 			// Without the session-scoped tail a mid-turn child death on a resident
 			// session surfaced as a bare "ACP connection closed" with nothing to read
 			// it by.
-			finishError(err, aborted, session.stderrTail, lifecycle);
+			finishError(err, aborted, session.stderrTail, lifecycle, session.launchObservation);
 			// error/abort on a reused session → drop it and close the child (GPT ④).
 			session.retiring = true;
 			retainedChildren.delete(session.child);

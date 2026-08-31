@@ -18,10 +18,9 @@
 // Fence: imported by the root program with `.js` suffixes, same as the sibling
 // lib/acp modules — no new strip-types fence.
 
-import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import type { AcpConnectionLike } from "./acp-client.js";
 import { enrichMcpServersWithEnvelope, type ResolvedAcpConfig } from "./config.js";
@@ -202,17 +201,28 @@ export interface AcpBackendAdapter {
 
 const SUPPORTED_CLAUDE_IDS: ReadonlySet<string> = new Set(SUPPORTED_ANTHROPIC_MODEL_IDS);
 
-/** Resolve the claude-agent-acp launch — package bin (resolve), env override for debug.
- *  This is the single source for the claude launch spec; backend.ts holds no private copy. */
+/**
+ * Resolve the claude launch — an ENTWURF-OWNED launcher, or the env override for debug.
+ * This is the single source for the claude launch spec; backend.ts holds no private copy.
+ *
+ * The default no longer names the vendor bin directly. `claude-acp-launch.js`
+ * imports it in-process; that file's header carries the reason (#72: a janitor
+ * for another harness selects `claude-agent-acp` by argv substring and SIGTERMs
+ * it by age, and the vendor's own handler erases the signal into exit 0).
+ *
+ * `CLAUDE_AGENT_ACP_COMMAND` is an EXPLICIT operator override and is deliberately
+ * NOT routed through the launcher: an operator who names their own command owns
+ * the result, including the loss of the name split and the signal observation.
+ */
 function resolveClaudeLaunch(): AcpLaunchSpec {
 	const override = process.env.CLAUDE_AGENT_ACP_COMMAND?.trim();
 	if (override) return { command: "bash", args: ["-lc", override] };
+	// Resolved here (not inside the launcher's own directory lookup) so a missing
+	// vendor package still fails at launch resolution, where it always failed.
 	const require = createRequire(import.meta.url);
-	const pkgJsonPath = require.resolve("@agentclientprotocol/claude-agent-acp/package.json");
-	const pkgJson = JSON.parse(readFileSync(pkgJsonPath, "utf8")) as { bin?: string | Record<string, string> };
-	const binPath = typeof pkgJson.bin === "string" ? pkgJson.bin : pkgJson.bin?.["claude-agent-acp"];
-	if (!binPath) throw new Error("@agentclientprotocol/claude-agent-acp resolved but exposes no bin entry");
-	return { command: process.execPath, args: [join(dirname(pkgJsonPath), binPath)] };
+	require.resolve("@agentclientprotocol/claude-agent-acp/package.json");
+	const launcher = fileURLToPath(new URL("./claude-acp-launch.js", import.meta.url));
+	return { command: process.execPath, args: [launcher] };
 }
 
 export const claudeAdapter: AcpBackendAdapter = {

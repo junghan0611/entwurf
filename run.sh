@@ -2731,6 +2731,17 @@ check_acp_prompt_lifecycle() {
   run_ts scripts/check-acp-prompt-lifecycle.ts
 }
 
+check_acp_launch_namespace() {
+  # #72: the Claude ACP child must launch under a name entwurf OWNS. A janitor
+  # installed on the host for ANOTHER harness selects the vendor process name
+  # `claude-agent-acp` by argv substring and SIGTERMs it by age; entwurf retains
+  # its child across turns, so its age is the session's. This gate holds the
+  # name split, holds the launcher transparent (the vendor still answers
+  # --version through it), and keeps an explicit operator override verbatim.
+  section "ACP launch namespace (#72 — no vendor process name in our argv)"
+  run_ts scripts/check-acp-launch-namespace.ts
+}
+
 check_acp_stream_hooks() {
   # Deterministic gate for the pi 0.84 streamSimple hook contract on the ACP rail
   # (#63; upstream pi-mono #7372 → doc-only #7576). before_provider_request
@@ -6514,6 +6525,9 @@ case "$cmd" in
     ;;
   check-acp-prompt-lifecycle)
     check_acp_prompt_lifecycle
+    ;;
+  check-acp-launch-namespace)
+    check_acp_launch_namespace
     ;;
   check-acp-stream-hooks)
     check_acp_stream_hooks
