@@ -155,6 +155,19 @@
 			"timeoutSeconds": 300,
 			"signature": "[QK:OMP-META-ROOT-ABSOLUTE-ONLY]",
 			"signatureSource": "scripts/check-omp-birth-hook.ts"
+		},
+		{
+			"claim": "OMP-DOCTOR-CARRIER-TRIMS",
+			"title": "treating an empty or whitespace-only PI carrier as an inherited identity makes Bundle C's deliberate tmux `-e NAME=` scrub fail the deterministic floor whenever a visible fresh omp citizen is alive",
+			"subject": "scripts/omp-bridge-doctor.sh",
+			"find": [
+				"    if tr '\\0' '\\n' < \"$ENVIRON\" 2>/dev/null | grep -qE '^(PI_SESSION_ID|PI_AGENT_ID)=.*[^[:space:]]'; then"
+			],
+			"replace": ["    if tr '\\0' '\\n' < \"$ENVIRON\" 2>/dev/null | grep -qE '^(PI_SESSION_ID|PI_AGENT_ID)='; then"],
+			"gate": ["bash", "run.sh", "smoke-omp-bridge-state"],
+			"timeoutSeconds": 300,
+			"signature": "[QK:OMP-DOCTOR-CARRIER-TRIMS]",
+			"signatureSource": "scripts/smoke-omp-bridge-state.sh"
 		}
 	]
 }

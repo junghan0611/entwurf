@@ -244,24 +244,36 @@ fi
 # PI_SESSION_ID + PI_AGENT_ID pair WINS over a native sender marker in the bridge's
 # authoritative-self resolution, so an omp session started from a pi citizen's bash — and
 # every internal agent borrowing its MCP manager — would speak under the parent pi garden
-# id. Bundle A ships no managed omp launch to strip them at exec, so the only honest half
-# available here is detection, and it goes red on its own axis rather than being absorbed
-# into any other verdict.
+# id. Bundle C's managed fresh launch has no per-window unset form in tmux, so it writes
+# both names EMPTY instead. That is an honest scrub: authoritative readers trim and require
+# truthy values, so an empty or whitespace-only value is nonauthoritative just like absence.
+# This doctor detects only an actual nonblank carrier and reports it on its own axis rather
+# than absorbing it into any other verdict.
 echo
 echo "[inherited pi identity carriers on live omp processes]"
 if [ -d /proc ]; then
   CONTAMINATED=""
-  for pid in $(pgrep -x omp 2>/dev/null); do
+  # Candidate set. Production scans every `omp` pid. `ENTWURF_OMP_CARRIER_PIDS` (set, even
+  # to empty) narrows it so a hermetic smoke can hand this branch REAL processes it launched
+  # and read their real `/proc/<pid>/environ`. It narrows candidates ONLY — the nonblank
+  # predicate below is the same production code either way.
+  if [ -n "${ENTWURF_OMP_CARRIER_PIDS+x}" ]; then
+    CARRIER_CANDIDATES="$ENTWURF_OMP_CARRIER_PIDS"
+  else
+    CARRIER_CANDIDATES="$(pgrep -x omp 2>/dev/null || true)"
+  fi
+  for pid in $CARRIER_CANDIDATES; do
+    case "$pid" in *[!0-9]*) continue ;; esac
     ENVIRON="/proc/$pid/environ"
     [ -r "$ENVIRON" ] || continue
-    if tr '\0' '\n' < "$ENVIRON" 2>/dev/null | grep -qE '^(PI_SESSION_ID|PI_AGENT_ID)='; then
+    if tr '\0' '\n' < "$ENVIRON" 2>/dev/null | grep -qE '^(PI_SESSION_ID|PI_AGENT_ID)=.*[^[:space:]]'; then
       CONTAMINATED="$CONTAMINATED $pid"
     fi
   done
   if [ -n "$CONTAMINATED" ]; then
-    bad "live omp process(es)$CONTAMINATED carry PI_SESSION_ID/PI_AGENT_ID inherited from a pi citizen's shell. Their MCP children would speak under the PARENT pi garden id, not their own — close them and relaunch omp from a shell without those variables"
+    bad "live omp process(es)$CONTAMINATED carry a non-empty PI_SESSION_ID/PI_AGENT_ID inherited from a pi citizen's shell. Their MCP children would speak under the PARENT pi garden id, not their own — close them and relaunch omp from a shell without those variables"
   else
-    ok "no live omp process carries PI_SESSION_ID/PI_AGENT_ID (omp mints neither itself — the danger is pure inheritance passthrough, ledger M6)"
+    ok "no live omp process carries a non-empty PI_SESSION_ID/PI_AGENT_ID (empty carrier values are the managed tmux scrub and are nonauthoritative; omp mints neither itself — the danger is pure inheritance passthrough, ledger M6)"
   fi
 else
   note "/proc is unavailable, so live omp environments could not be read on this platform"

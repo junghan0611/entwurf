@@ -18,10 +18,28 @@ pass=0
 ok() { printf '  ok    %s\n' "$1"; pass=$((pass + 1)); }
 die() { printf 'FAIL: %s\n' "$1" >&2; exit 1; }
 want() { eval "$2" && ok "$1" || die "$1"; }
+wait_carrier() {
+  local pid="$1" key="$2" i=0
+  while [ "$i" -lt 50 ]; do
+    if kill -0 "$pid" 2>/dev/null && [ -r "/proc/$pid/environ" ]; then
+      if tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | grep -q "^${key}"; then
+        return 0
+      fi
+    fi
+    sleep 0.05
+    i=$((i + 1))
+  done
+  die "carrier fixture pid $pid never showed ${key}"
+}
 
 REPO_BEFORE="$(cd "$REPO_DIR" && git status --porcelain)"
 SB="$(mktemp -d)"
-trap 'rm -rf "$SB"' EXIT
+CARRIER_PID=""
+cleanup() {
+  if [ -n "$CARRIER_PID" ]; then kill "$CARRIER_PID" 2>/dev/null || true; wait "$CARRIER_PID" 2>/dev/null || true; fi
+  rm -rf "$SB"
+}
+trap cleanup EXIT
 # HARD RULE 12, in full. Not HOME + XDG_DATA_HOME alone: an inherited XDG_CONFIG_HOME or a
 # PI_CODING_AGENT_DIR from the operator's shell would leave a writable real root reachable
 # from inside this smoke. PI is set to a POISON path on purpose — after #87 B1 no OMP garden
@@ -39,12 +57,15 @@ export PI_CODING_AGENT_DIR="$PI_POISON"
 export ENTWURF_OMP_AGENT_DIR="$SB/home/.omp/agent"
 mkdir -p "$ENTWURF_OMP_AGENT_DIR" "$SB/bin" "$XDG_CONFIG_HOME" "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR"
 # The installer requires the vendor on PATH — entwurf never installs a harness, so an
-# absent omp is a refusal rather than a silent no-op. A fake binary is enough: nothing in
-# this lane executes it (the unit is a module omp imports, not a process we launch).
-printf '#!/usr/bin/env bash\nexit 0\n' > "$SB/bin/omp"
-chmod +x "$SB/bin/omp"
+# absent omp is a refusal rather than a silent no-op. This fixture also runs two bounded
+# fake omp processes to prove the doctor's carrier distinction without a vendor process.
+ln -s "$(command -v bash)" "$SB/bin/omp"
 export PATH="$SB/bin:$PATH"
 
+# Narrow the doctor's live-process scan to this smoke's fixtures. Unset would let
+# `pgrep -x omp` see the operator host, and a presence-only mutant would then fail
+# the first doctor call for the wrong reason.
+export ENTWURF_OMP_CARRIER_PIDS=""
 UNIT_DIR="$ENTWURF_OMP_AGENT_DIR/extensions/entwurf-meta-omp"
 STATE="$XDG_DATA_HOME/entwurf/omp-bridge/install-state.json"
 ASM="$XDG_DATA_HOME/entwurf/meta-bridge-omp/.assembled"
@@ -59,6 +80,36 @@ want "the state records the unit dir it placed" "grep -q '\"unitDir\"' '$STATE' 
 want "config.yml was NOT created or touched — this unit owns no operator SSOT" "[ ! -e '$ENTWURF_OMP_AGENT_DIR/config.yml' ]"
 "$RUN" doctor-omp-bridge >/dev/null || die "doctor red right after a clean install"
 ok "doctor is green right after install"
+
+# `tmux -e NAME=` preserves the variable with an empty value. The bridge trims before
+# deciding whether a pi carrier is authoritative, so this doctor must do the same rather
+# than turn Bundle C's deliberate scrub into a red floor. The positive cell keeps actual
+# nonblank inheritance on its own fail-loud axis.
+PI_SESSION_ID=" " PI_AGENT_ID=$'\t' "$SB/bin/omp" -c 'while :; do sleep 60; done' &
+CARRIER_PID=$!
+wait_carrier "$CARRIER_PID" "PI_SESSION_ID="
+if OUT="$(ENTWURF_OMP_CARRIER_PIDS="$CARRIER_PID" "$RUN" doctor-omp-bridge 2>&1)"; then
+  ok "blank or whitespace-only PI carriers on a live omp process are nonauthoritative, matching the bridge reader and managed tmux scrub"
+else
+  printf '%s\n' "$OUT" >&2
+  die "[QK:OMP-DOCTOR-CARRIER-TRIMS] blank or whitespace-only PI carriers made the doctor red"
+fi
+kill "$CARRIER_PID"
+wait "$CARRIER_PID" 2>/dev/null || true
+CARRIER_PID=""
+
+PI_SESSION_ID="foreign-garden" PI_AGENT_ID="pi-agent-fixture" "$SB/bin/omp" -c 'while :; do sleep 60; done' &
+CARRIER_PID=$!
+wait_carrier "$CARRIER_PID" "PI_SESSION_ID=foreign-garden"
+if OUT="$(ENTWURF_OMP_CARRIER_PIDS="$CARRIER_PID" "$RUN" doctor-omp-bridge 2>&1)"; then
+  printf '%s\n' "$OUT" >&2
+  die "doctor accepted the live omp fixture with nonblank inherited PI carriers"
+fi
+printf '%s\n' "$OUT" | grep -q "live omp process(es).* $CARRIER_PID" || die "doctor red without naming the nonblank-carrier fixture"
+ok "a nonblank inherited PI carrier on a live omp process remains red"
+kill "$CARRIER_PID"
+wait "$CARRIER_PID" 2>/dev/null || true
+CARRIER_PID=""
 
 # ── 2. reinstall is idempotent ───────────────────────────────────────────────
 "$RUN" install-omp-bridge >/dev/null || die "reinstall over our own state failed"
