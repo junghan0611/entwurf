@@ -234,7 +234,8 @@ retires it. A task subagent arms nothing. While nothing is armed, dispatch to th
 id is the honest `mailbox-undeliverable` refusal — an unarmed receiver is a legible state,
 not a broken one.
 
-`setup` does not compose these yet — that lands with the admission work, not here.
+The admission work has landed and `setup` still does not compose these: the three omp
+units stay operator-selectable installs, so run them yourself on an omp host.
 
 Both installers resolve the omp agent directory the way omp itself does, and REFUSE rather
 than guess when an inherited `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR` or `PI_PROFILE` makes it

@@ -406,8 +406,10 @@ The bridge is a child process. It must be able to name the citizen that owns it.
     impersonate the parent pi garden id unless its launcher removes both variables before exec.
     This is a shared external-host boundary, not an OMP-specific patch: #82's remaining Copilot
     fresh work and every later native admission must clear foreign identity carriers, then let
-    that harness's own trusted birth marker establish identity. Existing launchers have not yet
-    been certified against this newly recovered failure mode.
+    that harness's own trusted birth marker establish identity. Bundle C answered it at the
+    seam rather than per launcher: `PI_SESSION_ID` and `PI_AGENT_ID` are scrubbed for EVERY
+    backend before exec (`5bb1d50`), so a new launcher inherits the clearing instead of owing
+    its own certification.
 - (c) Two confusions this step exists to prevent:
   - **who-sent ≠ replyable.** They are different facts on different rails. A sender marker
     proves identity; whether a reply can *land* is answered by the receive rail of step 7 —
