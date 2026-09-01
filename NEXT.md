@@ -12,7 +12,7 @@
 - [x] **4. Bundle A+B land** — `a809ee7 feat(omp): receive addressed native messages` (26 paths). 체크포인트 commit; push·cut 없음.
 - [x] **5. Bundle C: visible fresh + admission release-stop** — 구현이 한 candidate로 동결되고 independent review까지 끝났다(2026-08-30, architecture blocker 0 / **Defect 3** / observation 1). `entwurf_fresh_call`이 네 번째 backend로 omp를 연다. clause 7 LIVE(`smoke-omp-fresh-live`, release-gate MUST)는 **green** — 2026-08-30, 21 assertions, omp 18.0.0 / `openai-codex/gpt-5.6-sol`, callback sender garden `20260830T192913-df52b9`. 영수증 정본은 DELIVERY.md의 OMP 행이고, 그 근거로 DELIVERY/README의 라벨은 이미 이동해 있다. **한 호스트·한 모델·한 번의 수용이다** — multi-host도, multi-model도, 한 프로세스 안의 반복 fresh도 주장하지 않는다. review amendment 한 번들(Defect 1–3)은 2026-08-31에 `5bb1d50`으로 반영됐다 — same-id `session_switch` epoch 무효화, creator 소유 `ctx.setTimeout`/`ctx.clearTimer` readiness 타이머(취소 불가 빌드는 arm 거부), 산문 정렬, 뮤턴트 21→23. closure review 잔여 O-D1r은 defect 등급으로 승격되어 `153f9f4`에서 닫혔고(뮤턴트 23→24), 첫 standalone qualification이 `fd5e462`에서 manifest 부채를 측정으로 정산했다 — `check-gate-qualification` 324/324 KILLED, `check:full` exit 0 (430s).
 - [x] **6. 0.16.0 cut** — 태그·릴리즈 완료.
-- [ ] **8. #72 + 0.16.1 컷** ← NEXT SESSION: 아래 `#72` 절이 이번에 회수한 서명이다. 그 위에서 진단→수리→0.16.1.
+- [x] **8. #72 진단·수리** — 원인은 entwurf가 아니었다. oracle에 다른 하네스(openclaw acpx, PR #245)용으로 손설치된 `acp-zombie-reaper.service`가 벤더 프로세스 이름 `claude-agent-acp`를 **argv 부분문자열**로 골라 900초 넘은 것을 SIGTERM한다. entwurf는 child를 턴 사이에 **retain**하므로 그 나이는 세션의 나이다 — 15분 넘은 세션은 5분마다 저격당했다. 벤더 핸들러가 그 시그널을 `dispose(); exit(0)`으로 지워서 exit 0/무시그널로 도착했고, 그래서 세 번의 진단이 후보 4개를 폐기하고도 놓쳤다. 두 boot에 걸쳐 **12/12** 대응(pid+시각 이중 잠금, 이슈를 연 2026-07-30 샘플과 2026-08-16 원조 필드 리포트 포함). 수리는 `ca52fdd` — 울타리 안에서 (a) vendor를 **같은 프로세스로 import**하는 entwurf 소유 launcher(재시작할 child가 없으므로 supervisor가 될 수 없다), (b) exact full-line 프레임으로 실린 typed signal observation. 게이트 `check-acp-launch-namespace` 신설 + CELL 12–15, mutant 8개 전수 KILLED, live receipt는 `scripts/raw-acp-child-exit-measure/README.md`.
 - [x] **7. 0.16.0이 남긴 원커맨드 구멍 메우기** — 닫혔다(`4076498`, `c3d5b2a`), pi floor 0.84.4까지 함께(`5c1bda5`). 원래 본문: **v0.16.0은 OMP를 admit했지만 `setup`은 OMP를 합성하지 않았다.** GLG의 thinkpad(설치 안 된 호스트)에서 `entwurf setup`이 green을 찍는데 OMP는 확장도 mcp.json도 status line garden id도 없었다 — 유닛 게이트는 유닛만 묻고, admission 게이트는 registry↔fresh만 물어서, "유닛이 있다 → 원커맨드가 거기 닿는다" 간선을 아무 게이트도 소유하지 않았다. 이번 세션에서 (a) `setup_all`에 omp 4유닛(birth→MCP→`tools.xdev` 설정→receiver) presence-driven 합성, (b) 설정값 writer `install-omp-config`/`uninstall-omp-config` 신설(정확히 자기가 넣은 줄만 소유, 운영자의 명시적 `xdev: true`는 덮지 않고 이름 불러 거부), (c) `smoke-setup-verdict` S-8(스텁 벤더로 실제 합성 구동 + install-state 4종 + agent dir 산출물 + `xdev-off` 유효 판독 + 2회차 멱등) 및 S-1의 `OMP_BIN` absent 핀, (d) `docs/adding-a-harness.md` **step 10**(온보딩은 setup이 합성해야 끝난다)까지 닫았다. 남은 것: 버전 범프·CHANGELOG 승격은 `entwurf-release` prepare 몫(GLG 승인).
 
 <details><summary>6의 원래 본문 (릴리즈 준비 기록)</summary>
@@ -21,124 +21,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 </details>
 
-현재 좌표: 1–6 완료(구현·review·amendment·clause 7 LIVE green·closure review·qualification·full floor·0.16.0 cut) → **7. 원커맨드 구멍 메우기** ← 여기. 코드·게이트·문서는 워킹트리에 있고 `check:full` exit 0(251s)이다. commit·push·범프는 GLG 몫.
-
-# oracle에서 열리는 형제에게 (2026-09-01, GLG가 이 자리를 여기로 옮긴다)
-
-너는 **사고가 실제로 나는 호스트**에 서 있다. thinkpad는 507 ACP 턴에서 0건, oracle은 360에서
-8건(4 mid-turn + 4 between-turn)이다. 재현을 시도할 수 있는 유일한 자리라는 뜻이고, 동시에
-**남의 운영 호스트를 실험대로 쓰는 자리**라는 뜻이기도 하다. 무장·설정 변경은 GLG 결정이다.
-
-**먼저 읽을 것 (요약이 아니라 소스로):**
-
-1. `scripts/raw-acp-child-exit-measure/README.md` — 이 판의 정본. 서명의 파일·레코드 번호,
-   소스가 지지하지 않는 판독 3개, 반례로 폐기된 후보 4개, 두 호스트 인구 표, exit(0)의 세 문,
-   그리고 측정 가능한 형태로 적힌 열린 질문 하나. **untracked다** (repo 관례상 `raw-omp-measure`와
-   같은 형식). 커밋 여부는 GLG 몫.
-2. `https://github.com/junghan0611/entwurf/issues/72` — 본문의 수리 경계와, 2026-09-01에
-   달린 진단 코멘트(위 README의 공개판). 본문과 스레드가 어긋나면 **스레드가 이긴다.**
-3. 이 파일의 아래 `#72` 절 — 최초 핸드오프. **그 안의 세 판독은 이미 폐기됐다**(README §"Three
-   readings"). 역사로 읽고, 사실로 쓰지 마라.
-
-**지금까지 확정된 것 한 줄:** child는 죽는 게 아니라 **스스로 정상 종료(exit 0)** 한다. 크래시도
-시그널 킬도 아니고, reason 없는 깨끗한 stdout EOF라 child가 먼저 갔고 pi가 닫은 게 아니다.
-`claude-agent-acp` `dist/index.js:81-95`에 exit 0으로 나가는 문이 셋뿐이다 — `connection.closed`
-/ SIGTERM / SIGINT → `dispose()` → `process.exit(0)`.
-
-**남은 질문 하나:** 셋 중 어느 문인가. 지금 아티팩트로는 도출되지 않고, **시그널 전달 여부로
-밖에서 구분된다.**
-
-**대기 중인 결정 두 개 (GLG 몫, 네가 먼저 하지 마라):**
-
-- (A) **stderr-only 프로브 무장.** launch 때 ACP child의 main module에 붙여 시그널 이름/exit
-  경로를 entwurf가 이미 잡아 보여주는 stderr tail에 찍는다. #72의 "Done when"을 그대로
-  만족하고 금지 목록(timeout·blind replay·watcher·supervisor·hidden retry·transcript
-  hydration·새 pi recovery API)을 건드리지 않는다. **launch seam 변경이므로 GLG 승인 필수**이고,
-  자체 gate cell + 정확한 이유로 죽는 mutant를 함께 내야 값이 있다.
-- (B) **"작업 종류" 축 측정.** GLG의 관측(2026-09-01): "이 노트북에서도 날 텐데 ACP Claude를
-  적게 써서 안 보인 것 같다." 턴 수로는 성립하지 않는다 — 적게 쓴 쪽이 oracle이다(opus-5
-  44턴 중 4건 vs thinkpad 340턴 중 0건). 그러나 **턴 수가 아니라 작업의 종류**(장시간·다중도구·
-  컨테이너/docker 왕복이 많은 무거운 턴의 비율)라면 성립할 수 있고, **그 축은 아직 아무도 안
-  셌다.** `acp-turn-population.py`가 이미 턴당 tool start와 child 나이를 뽑으므로 확장이 싸다.
-
-**하지 말 것:** 커밋·푸시(GLG가 명시할 때만) · `entwurf-release prepare` 시작(#72 처분이
-정해지기 전) · oracle의 벤더/오버레이 설정 임의 변경(재현 조건이 곧 증거다) · 폐기된 후보 4개
-재측정(반례가 README에 있다) · 2026-07-30의 `prompt timed out after 600000ms` 실패를 이것과
-같은 것으로 묶기(다른 실패이고 이미 은퇴했다).
-
-**0.16.1:** 커밋 5개가 이미 랜딩돼 있다 — `4076498`(copilot 1.0.81 행 문법), `c3d5b2a`(setup이
-OMP를 합성), `5c1bda5`(pi floor 0.84.4), `fe44477`(#72 핸드오프), 그리고 이 메시지의 커밋.
-CHANGELOG `## Unreleased`에 setup/OMP·copilot 항목은 있고 **pi floor 항목과 #72 항목이 없다.**
-버전 범프·섹션 승격은 `entwurf-release` **prepare** 몫이며 모드마다 GLG 승인이다.
-
-**게이트 자세:** HEAD에서 `pnpm run check:full` exit 0, `./run.sh check-gate-qualification`
-328/328 KILLED. 새 주장은 자기 gate cell과 mutant를 데려와야 한다. 산문은 진실이 아니다.
-
-**형제 하나가 thinkpad에 살아 있다:** garden `20260901T062537-c3a343` (claude-code/opus,
-`~/repos/gh/entwurf`). 위 아티팩트를 만든 당사자다. 필요하면 `entwurf_v2`로 부를 수 있지만,
-역할 분담은 GLG가 정한다 — 네가 임의로 일을 넘기지 마라.
-
-# #72 — ACP Claude child가 tool-loop 중간에 죽는다 (다음 세션의 실제 작업)
-
-**이슈:** https://github.com/junghan0611/entwurf/issues/72 (open, `bug`/`field report`).
-이슈 본문의 첫 수용 조건은 "수리 전에 서명을 회수하라"이고, **그 서명이 아래에 있다.**
-
-**증거 등급:** 아래 인용문은 GLG의 Termux 스크린샷 3장에서 읽은 것이다(external artifact).
-정본 경로 — `~/screenshot/Screenshot_20260831_205336_Termux.jpg`,
-`~/screenshot/Screenshot_20260831_211334_Termux.jpg`,
-`~/screenshot/Screenshot_20260831_212616_Termux.jpg`.
-로그 파일이나 트랜스크립트에서 다시 읽은 것이 아니므로, 다음 세션의 첫 일은 **같은 서명을
-호스트의 로그에서 재확인**하는 것이다(스크린샷은 화면이지 receipt가 아니다).
-
-**한 세션에서 3회 (2026-08-31, oracle 호스트, `~/nixos-config`, model `claude-opus-5`):**
-20:53 / 21:13 / 21:26. 매번 오류 문구가 바이트 단위로 같다:
-
-```
-Error: ACP connection closed
-[acp] lifecycle: the ACP backend connection closed while the prompt was
-still in flight — the child ended (exit code 0); this turn has no answer
---- backend stderr (tail) ---
-[session/query] sessionId=<uuid> resume=none apiType=native baseUrl=native
-(node:<pid>) [CLAUDE_SDK_CAN_USE_TOOL_SHADOWED] Warning: canUseTool will
-not be invoked: permissionMode 'bypassPermissions' auto-approves every
-tool call (except explicit deny rules) before the callback is consulted.
-To gate every tool call, use a PreToolUse hook instead.
-```
-
-이 서명이 이슈 본문의 추측 몇 개를 이미 정리한다:
-
-- **child는 exit code 0이다.** 크래시도 시그널도 아니고 정상 종료다. "긴 턴이 타임아웃"
-  가설과 다르다 — 죽는 게 아니라 **끝난다**.
-- **retained-reuse가 아니다.** 세 샘플의 `sessionId`가 전부 다르고(`a190b806-91a3-4d74-a760-668ae60d57f2`,
-  `c798f097-9b28-432d-af2c-e9f73ef023ce`, `b40bce08-3556-42fa-b358-76b09212632f`) 전부 `resume=none`이다.
-  이슈 본문은 "retained session의 4번째 reuse turn"을 적고 있는데, 이 세 샘플은 그 조건이 아니다.
-  **같은 실패 모드인지 다른 것인지가 첫 갈림길이다.**
-- **실패 지점이 일정하다.** 세 번 다 `[tool:start] Terminal` 직후, 답이 오기 전.
-- **stderr tail의 유일한 신호가 `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`다.** 다른 오류 줄이 없다.
-
-**GLG의 가설 (2026-09-01):** `~/.pi/agent/claude-config-overlay/settings.json:1-5`의
-
-```json
-{ "permissions": { "defaultMode": "bypassPermissions" } }
-```
-
-이 설정이 영향을 준다. ACP Claude는 오버레이 환경으로 가므로, **오버레이 경로와 일반
-경로를 구분해서 안정성을 제공해야 한다.** 간단히 해결될 수도 있다.
-
-**주의 — 이 가설은 아직 사실이 아니다.** 경고문이 stderr tail에 있다는 것은
-`bypassPermissions`가 `canUseTool` 콜백을 무력화한다는 SDK의 안내일 뿐이고, 그 경고가
-곧 child 종료의 원인이라는 연결은 아직 아무도 측정하지 않았다. 그 경고는 정상 동작하는
-턴에도 찍힐 수 있다 — **경고가 찍힌 성공 턴이 존재하는지부터가 첫 측정이다.** 존재한다면
-경고는 배경이고 원인은 다른 곳이다.
-
-**이슈 본문이 미리 그은 수리 경계 (그대로 유효):** 절대 prompt timeout 금지, in-flight 턴
-blind replay 금지(비멱등 tool 부작용), watcher/supervisor/hidden retry/transcript
-hydration/새 pi recovery API 금지, closed-connection 폐기와 model immutability는
-fail-loud 유지, 공통 ACP backend를 건드리면 live connection이 있을 때 Cortex 재측정.
-
-**0.16.1:** #72 수리 + 이미 랜딩된 세 커밋(`4076498`, `c3d5b2a`, `5c1bda5`)을 묶어서 컷한다.
-CHANGELOG `## Unreleased`에 setup/OMP·copilot 항목은 이미 있고, pi floor 항목과 #72 항목이
-아직 없다. 버전 범프·섹션 승격은 `entwurf-release` **prepare** 몫이고 모드마다 GLG 승인이다.
+현재 좌표: 1–8 완료(구현·review·clause 7 LIVE·qualification·0.16.0 컷·원커맨드 구멍·#72 진단과 수리) → **0.16.1 prepare 완료, make 대기** ← 여기. 커밋은 `ca52fdd`(#72 수리)까지 랜딩됐고 push·tag는 GLG 몫이다.
 
 # NOW
 
@@ -151,11 +34,13 @@ CHANGELOG `## Unreleased`에 setup/OMP·copilot 항목은 이미 있고, pi floo
 - **`config.yml` 리더 결함 하나 (측정, 2026-08-31 thinkpad):** 벤더 자신의 settings writer가 쓰는 `modelRoles:` + 들여쓴 `{}` 형태를 `scripts/omp-tool-surface.py`가 파일 전체 `unreadable`로 읽어 `doctor-omp-mcp`가 `tools.xdev`와 무관한 이유로 RED였다. flow collection을 값 자리와 자식 블록 자리 양쪽에서 파싱하도록 고쳤다. TS 리더(`readOmpConfigFlag`)는 원래 정상이었으므로 fresh preflight는 영향이 없었다 — 두 리더의 **합치**만 보는 셀은 이 결함을 영원히 통과시킨다(둘 다 unreadable/true를 "not false"로 접기 때문). 그래서 `[QK:OMP-XDEV-VENDOR-SHAPE-READABLE]` 직접 단언을 넣었다.
 - **Copilot 1.0.81 행 문법 (측정, 같은 호스트):** `copilot plugin list`가 `(v0.1.0) (enabled)` + 들여쓴 `from <path>`를 찍게 바뀌어 버전이 `0.1.0) (enabled`로 읽혔고, 멀쩡히 설치·enabled인 호스트에서 `setup`이 `copilot-birth: FAIL`을 냈다. 상태 토큰 하나만 정확히 허용하도록 문법을 넓혔다.
 - **컷 게이트는 이제 실제 왕복을 요구한다:** `smoke-omp-receive-live`가 registry를 읽고 `self-fetch`를 보면 더 이상 SKIP하지 않는다 — `LIVE=1`에서 실제 tmux omp TUI를 띄우고 11개 단언을 요구한다. 하드코딩된 통과가 아니다.
-- **Next:** (1) `entwurf-release prepare 0.16.0` — CHANGELOG 승격·버전·lockfile·`check:full`·LIVE `--cut`까지, 모드별 GLG 승인 하에 (교통 매트릭스 육안 수용의 영수증은 2026-08-31 cross-harness 왕복으로 DELIVERY OMP 행에 남았다), (2) **cross-harness leg의 deterministic 반쪽 배선** — post-contract 시민 backend마다 cross-harness LIVE step이 wired거나 선언된 metered 예외인지 `check-harness-admission-parity` 옆에 검사 (규칙은 `docs/adding-a-harness.md` release stop에 2026-08-31로 박혀 있고, 게이트가 없는 동안은 prose다 — 별도 grant), (3) land 방식·cut 결정 — GLG 몫. 배경: 옛 v1 상호호출 matrix는 d7783d4에서 gate를 떠나 fbcbdbc에서 삭제됐고 v2 follow-up이 하네스-쌍 축으로 돌아오지 않았다(GLM 조사, 2026-08-31 #87 스레드 예정).
+- **Next:** (1) **0.16.1 make** — prepare는 끝났다(CHANGELOG 승격·`0.16.1`·lockfile 무변경). `LIVE=1 ./run.sh release-gate <scratch> --cut`의 실측 MUST/BEHAVIOR 수치를 릴리즈 절에 적고, 그 다음이 `entwurf-release make 0.16.1`(push·tag·GitHub release — 모드별 GLG 승인). (2) **cross-harness leg의 deterministic 반쪽 배선** — post-contract 시민 backend마다 cross-harness LIVE step이 wired거나 선언된 metered 예외인지 `check-harness-admission-parity` 옆에 검사(규칙은 `docs/adding-a-harness.md` release stop에 박혀 있고, 게이트가 없는 동안은 prose다 — 별도 grant). (3) **#72 후속 둘** — between-turns 공지(`backend.ts`의 `previous … ended between turns`)에 `launchObservation`을 싣기(턴 사이에 외부 TERM이 오면 지금은 exit 0만 보인다, 한 줄 수리), 그리고 **reaper 수리는 openclaw 레인** — 청소기가 자기 것만 죽이도록 positive own-marker(`/proc/<pid>/environ` 또는 자기 pid registry)로 좁히는 게 primary이고, 우리 launcher는 defense-in-depth다. 이름 분리의 대가도 기록됐다: 이제 호스트 청소기는 entwurf의 **진짜** leak도 못 본다 — 그 cleanup은 entwurf가 소유한다.
 - **Read:** #87 thread · `scripts/raw-omp-measure/README.md` §M7 (수용의 근거가 된 5셀 측정) · `docs/setup-clean-host.md` §4b · `docs/adding-a-harness.md` step 7.
-- **Do not touch:** `mux-launch.ts`/`mux-placement.ts`(import fence) · omp용 managed launcher shell(근거 없음) · registry `supported` 필드(새 authority 금지) · #72/#76/#78 · #87/#89 close. (Pi 0.84.4는 2026-09-01에 해제되어 랜딩됐다 — `5c1bda5`.)
+- **Do not touch:** `mux-launch.ts`/`mux-placement.ts`(import fence) · omp용 managed launcher shell(근거 없음) · registry `supported` 필드(새 authority 금지) · #76/#78 · #87/#89 close. (Pi 0.84.4는 2026-09-01에 해제되어 랜딩됐다 — `5c1bda5`.)
 
 # RECENT
+
+- **2026-09-01 (#72 닫힘, oracle):** 여덟 달 서 있던 "ACP Claude child가 tool-loop 중간에 죽는다"가 **entwurf 결함이 아니었음**이 측정으로 닫혔다. 아무도 열지 않았던 아티팩트 하나 — 호스트 자신의 systemd user journal — 가 답이었고, 연결 고리는 처음부터 서명 안에 있었다: `(node:<pid>)`는 node `emitWarning`이 찍는 그 프로세스 자신의 pid다. 세 번의 진단이 주범으로 지목했다가 반례로 폐기한 그 경고 줄이, 내내 범인의 pid를 달고 있었다. 형제 둘이 붙어 각각 내 결론을 한 번씩 깼다 — GPT-5.6-terra는 "막을 수 없고 감별만 가능하다"를 launch shim으로 반증했고(시그널을 막는 게 아니라 **이름 매칭에서 빠지는** 층), Claude Fable 5는 프레임 필터가 개행 없는 마지막 말을 삼키는 회귀를 확정하고 live receipt를 만들었다. 이슈 코멘트 3건(진단·pid addendum·독립 검토)과 영수증 디렉터리가 남았다.
 
 - **2026-08-31 (릴리즈 준비):** closure review 잔여가 닫히고(`153f9f4`) 첫 standalone qualification이 Bundle C 바이트 위에서 manifest 부채 네 갈래를 측정으로 정산했다(`fd5e462` — 324/324 KILLED, `check:full` exit 0 430s). cross-harness leg는 규칙과 첫 영수증을 함께 얻었고(`07349bd`, claude-code ↔ omp 양방향 live turn), 다섯 backend 비교표가 admission 문서 머리에 섰다(`7828bbc`). 업스트림 0.84.4 공개로 `check-pack-install`의 lockfile 없는 임시 설치가 pi-telemetry를 띄워 CI가 붉어졌고 transitive 핀으로 닫았다(`19ad90c`). CHANGELOG `## Unreleased`는 구현 범위 `v0.15.1..19ad90c` 30커밋 전수로 채워졌고, 릴리즈-정합 산문 정리가 뒤따랐다.
 - **2026-08-30 (Bundle C candidate):** visible fresh가 붙었고, 그와 함께 **GLG가 찾은 release 구멍이 exit code가 되었다.** 원인은 닫힌 parity loop 두 개 사이에 간선이 없었던 것 — registry↔citizens와 surfaces↔fresh set을 각각 지키는 게이트는 있었지만 두 상수를 함께 import하는 파일이 0개였고, 그래서 omp는 D6 시민이면서 fresh 불가인 채로 모든 게이트를 green으로 통과했다. `check-harness-admission-parity`가 그 간선이다(추가 직후 `Unaccounted: omp`로 실제 RED, C 완성 뒤 green). agreement 게이트(`check-omp-fresh-preflight`)는 첫 실행에서 내 config reader의 fail-OPEN 오독(`tools.nested.xdev`를 `tools.xdev`로 읽음)을 잡았다. tmux env 누수도 실측 — server env의 `PI_SESSION_ID`가 새 pane에 그대로 상속되어(`SID=[leaked-uuid]`) 형제의 bridge child가 남의 신원으로 집에 전화할 수 있었고, launch seam에서 scrub한다. B의 packaging 누락 1건도 함께 고쳤다(`pi/omp-receive/entwurf-receive-omp/package.json`이 `files[]`에 없어 installed package에서 `install-omp-receive`가 죽었다).
@@ -167,7 +52,7 @@ CHANGELOG `## Unreleased`에 setup/OMP·copilot 항목은 이미 있고, pi floo
 # CARRIED
 
 - **#78** macOS/native-Windows portability — separate grant; do not mix into #87.
-- **#72 #76** bugs and cortex gate slice — separate lanes.
+- **#76** cortex gate slice — separate lane. (#72 is closed: `ca52fdd`.)
 
 # LEDGER — land 전에 정할 것
 
@@ -182,6 +67,8 @@ CHANGELOG `## Unreleased`에 setup/OMP·copilot 항목은 이미 있고, pi floo
 - **L7 ROADMAP:** "현재" 절이 아직 측정 단계로 적혀 있다.
 
 # DURABLE LINKS
+
+- #72 (ACP child가 외부 SIGTERM으로 죽던 건 — 원인 닫힘, 수리 랜딩): https://github.com/junghan0611/entwurf/issues/72
 
 - #87: https://github.com/junghan0611/entwurf/issues/87
 - #90 (claude-code model 필드, CLOSED — 측정 완료, 리더 수정만 남음): https://github.com/junghan0611/entwurf/issues/90

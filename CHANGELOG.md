@@ -4,6 +4,35 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.16.1 - 2026-09-01
+
+### Verification
+
+Each receipt carries its own scope; none of them is transferable to another commit or host.
+
+- **`pnpm run check:full`** — PASS, exit 0, **454s** inside the gate, on the 0.16.1
+  versioned tree (HEAD `2e7ceb4` + the uncommitted changelog/version edits).
+- **`./run.sh check-gate-qualification`** — **335/335 KILLED, NOT KILLED 0**, as the
+  release-gate MUST step. The first run of this cut reported **334/335**: the single
+  miss was `PACK-INSTALL-PIN-MATCHER-BOUNDED` reading `MUTANT-STALE` because `5c1bda5`
+  moved `run.sh`'s pin matcher to the 0.84.4 floor and left that mutant's anchor on
+  0.84.3, so it matched 0× and the gate had silently stopped asking its question.
+  Repaired in `2e7ceb4` and re-run green. A rotted anchor is recorded here rather than
+  quietly fixed, because "N killed" only means something when N is the whole set.
+- **`LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.16.1.m0LUjr --cut`** —
+  **MUST: PASS=23 FAIL=0 SKIP=0**, **BEHAVIOR: PASS=1 FAIL=0 SKIP=0**. Log at
+  `/tmp/entwurf-release-gate-0.16.1.m0LUjr/release-gate.log`. `smoke-mux-lifecycle-live`
+  failed the first run on a pi-native nonce callback that never arrived inside its 300s
+  window (the codex rail was measured healthy at the time: 5h 23%, weekly 77%), and
+  passed on re-run — recorded because a LIVE step that needed a retry is not the same
+  evidence as one that passed first time.
+- **#72 launch/observation receipts** — the launcher's two field claims are not
+  unit-provable, so they were measured on the host that produced the failure:
+  `/proc/<pid>/cmdline` carries no vendor name, the janitor's own Phase 1 selector run
+  against the real `ps` row with its age threshold forced to 0 selects nothing, and a
+  real SIGTERM still ends at exit 0 with the frame on stderr. Commands and output in
+  `scripts/raw-acp-child-exit-measure/README.md`.
+
 ### Added
 
 - **`setup` composes OMP — the fifth backend is now in the one command.** v0.16.0 admitted OMP
@@ -65,7 +94,19 @@ All notable changes to this project will be documented here. Format follows [Kee
   the observation is entwurf's, and sender attribution is explicitly NOT claimed (that needs the
   host journal). `CLAUDE_AGENT_ACP_COMMAND` stays verbatim: an operator who names their own command
   owns the result. **Known trade:** after the name split a host janitor can no longer collect
-  entwurf's children even when they genuinely leak, so entwurf now owns that cleanup story. Gates:
+  entwurf's children even when they genuinely leak, so entwurf now owns that cleanup story.
+  **Read the order right: the cause was the host's janitor, and its owner has retired it**
+  (`nixos-config e283d92`, 2026-09-01 — `acp-zombie-reaper.timer` disabled). Measured there:
+  PR #245 is CLOSED, not merged; that deployment runs `acp.enabled=false` with no ACP agent;
+  acpx is not even installed in the running image (`/app/node_modules/acpx` absent, its `.bin`
+  entries dangling symlinks); and every reap since the 2026-06-10 ACP removal was a single-process
+  misfire matching our pid table. So the change here is **not what stops the symptom** — the
+  retirement is. It is defense-in-depth against the class, and that class is wider than this
+  issue: the selector reads the WHOLE `ps` line, so on a harness that puts the prompt in argv, a
+  session merely *discussing* `claude-agent-acp` matched. Measured 2026-09-01 with zero ACP
+  processes alive, the script's own counter read `alive_acp=3` — three ordinary agent sessions,
+  one of them the session investigating it. A launcher whose name we own survives the next such
+  janitor too. Gates:
   new `check-acp-launch-namespace` (2 mutants) plus `check-acp-prompt-lifecycle` CELLs 12–13,
   where 13 is the negative sibling holding that vendor prose mentioning `SIGTERM` can never forge
   the observation (3 mutants). The primary repair still belongs to the janitor's owner — a cleaner
