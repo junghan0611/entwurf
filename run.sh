@@ -2700,6 +2700,24 @@ check_acp_event_mapper() {
   run_ts scripts/check-acp-event-mapper.ts
 }
 
+check_acp_usage_accounting() {
+  # Deterministic gate for the ACP USAGE ACCOUNTING contract (#93). A long-lived
+  # Claude ACP session's dashboard read 10-18x high on three live ledgers,
+  # because the per-turn token partition was dropped at the type boundary while
+  # the backend's RUNNING SESSION TOTAL was assigned to a per-turn cost field pi
+  # then summed. Drives streamAcpTurn against a fake ACP child + connection whose
+  # turns are scripted (usage_update notification + PromptResponse.usage) for
+  # five cells: the four-way token partition reaches the pi message; per-turn
+  # costs are adjacent diffs of the running total and sum back to it across a
+  # reused session; a turn with no cost notification attributes $0 and HOLDS the
+  # baseline; a decreasing total rebaselines, attributes $0 and tells the
+  # operator; totalTokens stays CONTEXT OCCUPANCY (asserted through pi's own
+  # calculateContextTokens) and carries forward; and cortex — no measured
+  # extractor — keeps its pre-#93 output untouched.
+  section "ACP usage accounting (turn partition + adjacent-diff cost)"
+  run_ts scripts/check-acp-usage-accounting.ts
+}
+
 check_acp_stop_reason() {
   # Deterministic gate for the ACP stop-reason contract. Drives every member of
   # the closed ACP terminal set (end_turn / max_tokens / max_turn_requests /
@@ -6519,6 +6537,9 @@ case "$cmd" in
     ;;
   check-acp-event-mapper)
     check_acp_event_mapper
+    ;;
+  check-acp-usage-accounting)
+    check_acp_usage_accounting
     ;;
   check-acp-stop-reason)
     check_acp_stop_reason

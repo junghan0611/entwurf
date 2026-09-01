@@ -144,9 +144,11 @@
 			"claim": "ACPHOOK-ONRESPONSE-NEVER-CALLED",
 			"title": "someone 'completes' the hook contract by fabricating an HTTP 200 response on turn success — exactly the false evidence the exemption exists to forbid",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["\tfunction finishSuccess(promptResult: { stopReason?: string }): void {"],
+			"find": [
+				"\tfunction finishSuccess(adapter: AcpBackendAdapter, session: BridgeSession, promptResult: AcpPromptResponse): void {"
+			],
 			"replace": [
-				"\tfunction finishSuccess(promptResult: { stopReason?: string }): void {",
+				"\tfunction finishSuccess(adapter: AcpBackendAdapter, session: BridgeSession, promptResult: AcpPromptResponse): void {",
 				"\t\tvoid options?.onResponse?.({ status: 200, headers: {} }, model);"
 			],
 			"gate": ["bash", "run.sh", "check-acp-stream-hooks"],

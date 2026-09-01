@@ -22,7 +22,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
-import type { AcpConnectionLike } from "./acp-client.js";
+import type { AcpConnectionLike, AcpPromptResponse } from "./acp-client.js";
 import { enrichMcpServersWithEnvelope, type ResolvedAcpConfig } from "./config.js";
 import { loadEngraving } from "./engraving.js";
 import {
@@ -131,6 +131,39 @@ export interface AcpAdapterSettingsParams {
 	projectPath: string;
 }
 
+/**
+ * ONE turn's usage, as a backend that has MEASURED its own semantics reports it.
+ *
+ * Four TURN-DELTA token counts and nothing else. Deliberately NOT carried here:
+ *
+ *   - a cost. ACP's `PromptResponse` has no cost field at all (read at
+ *     @agentclientprotocol/sdk `schema/types.gen.d.ts`, `PromptResponse` =
+ *     stopReason + usage? + _meta; `Usage` = the token counts + _meta). Claude
+ *     reports a SESSION-CUMULATIVE ESTIMATED cost on a different wire entirely
+ *     — the `usage_update` notification (read at claude-agent-acp
+ *     `dist/acp-agent.js:2673-2689`, `cost.amount = message.total_cost_usd`).
+ *     ESTIMATED is the vendor's own word, not a hedge of ours: claude-agent-sdk
+ *     `sdk.d.ts:4538` documents `total_cost_usd` as a "Cumulative estimated
+ *     cost" and "An estimate, not a billing statement".
+ *     Declaring a `cumulativeCostUsd` field here would be a carrier that does
+ *     not exist; the cost axis is sealed from the observed notification against
+ *     the BridgeSession baseline instead (backend.ts).
+ *   - `totalTokens`. pi reads that field as CONTEXT OCCUPANCY, not as a turn
+ *     total (`calculateContextTokens(usage) = usage.totalTokens || input +
+ *     output + cacheRead + cacheWrite`, read at pi-coding-agent
+ *     `dist/core/compaction/compaction.js:86-88`), and it drives the context
+ *     gauge and auto-compaction. Occupancy arrives on `usage_update.used`;
+ *     writing this turn's partition sum there would collapse both.
+ */
+export interface AcpTurnEvidence {
+	tokens: {
+		input: number;
+		output: number;
+		cacheRead: number;
+		cacheWrite: number;
+	};
+}
+
 // ---------------------------------------------------------------------------
 // The adapter interface
 // ---------------------------------------------------------------------------
@@ -193,6 +226,30 @@ export interface AcpBackendAdapter {
 	 *  sorted-stable primitive map (JSON.stringify determinism — no nested objects /
 	 *  non-deterministic order). `backend` + `nativeModelId` are added by backend.ts. */
 	configSignatureFields(adapterSettings: unknown): Record<string, unknown>;
+
+	/** Extract THIS turn's usage from this backend's own ACP prompt response.
+	 *
+	 *  Two distinct absences, and the difference is load-bearing:
+	 *
+	 *    METHOD ABSENT    this backend has no MEASURED usage semantics. Permanent,
+	 *                     static, and unforgeable — the backend simply does not
+	 *                     implement it (cortex). backend.ts then seals NOTHING:
+	 *                     no token projection, no cost baseline, no diff. That is
+	 *                     what keeps this lane's accounting out of a backend whose
+	 *                     `usage` meaning nobody has measured.
+	 *    RETURNS undefined  this backend HAS the semantics, but THIS response
+	 *                     carried no usage. Transient. The cost baseline is HELD
+	 *                     (not zeroed, not rebased) so the amount lands in the next
+	 *                     adjacent diff and the session total stays exact.
+	 *
+	 *  A capability FLAG would have collapsed those two axes into one boolean and
+	 *  could drift from the actual behaviour (declared ≠ actual — the failure mode
+	 *  assertExcludeToolsHonored already exists to stop). Method presence plus the
+	 *  return value cannot desync.
+	 *
+	 *  STATELESS by contract: extract only. The adjacent-turn diff needs session
+	 *  state, and session state lives in BridgeSession — never in an adapter. */
+	extractTurnUsage?(response: AcpPromptResponse): AcpTurnEvidence | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -296,6 +353,36 @@ export const claudeAdapter: AcpBackendAdapter = {
 		// (which backend.ts adds). A future backend reads its own stable id off
 		// `_adapterSettings` here.
 		return {};
+	},
+
+	/**
+	 * MEASURED (2026-09-01, #93): for claude-agent-acp, `PromptResponse.usage` is a
+	 * TURN DELTA, not the session total its own field comments claim.
+	 * `session.accumulatedUsage` is reset to four zeros when a turn is ACTIVATED
+	 * (read at `dist/acp-agent.js:1347-1352`) and `sessionUsage(session)` reads
+	 * exactly those accumulators back out (read at `:2680-2691`). That measurement
+	 * is what this method asserts on this backend's behalf — and precisely why the
+	 * common turn loop must not read the field itself: upstream's own type says
+	 * "across all turns/session" per field while the outer comment says "for this
+	 * turn", so the shape alone settles nothing.
+	 *
+	 * The four counts are DISJOINT (Anthropic bills cache reads and cache creation
+	 * separately from `input_tokens`), so pi's four usage fields take them
+	 * one-to-one with no arithmetic here.
+	 */
+	extractTurnUsage(response) {
+		const usage = response?.usage;
+		// No usage on THIS response — transient. The caller HOLDS its baseline.
+		if (!usage || typeof usage !== "object") return undefined;
+		const count = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+		return {
+			tokens: {
+				input: count(usage.inputTokens),
+				output: count(usage.outputTokens),
+				cacheRead: count(usage.cachedReadTokens),
+				cacheWrite: count(usage.cachedWriteTokens),
+			},
+		};
 	},
 };
 
@@ -456,6 +543,15 @@ export const cortexAdapter: AcpBackendAdapter = {
 		const settings = adapterSettings as CortexAdapterSettings | undefined;
 		return { cortexConnection: settings?.cortexConnection ?? null };
 	},
+
+	// NO extractTurnUsage — a DELIBERATE, permanent absence, not an omission to be
+	// filled in later by symmetry with claude. Nobody has measured what cortex's
+	// ACP `usage` (and its usage_update cost, if it sends one) MEAN: whether the
+	// token counts are a turn delta or a session total, and against which price
+	// table. Until that measurement exists, the honest report is no report:
+	// backend.ts seals nothing for a backend without this method, so cortex's
+	// emitted usage is byte-identical to what it was before #93. Implementing this
+	// with a guess would mint exactly the silent misaccounting #93 exists to end.
 };
 
 const ADAPTERS: readonly AcpBackendAdapter[] = [claudeAdapter, cortexAdapter];

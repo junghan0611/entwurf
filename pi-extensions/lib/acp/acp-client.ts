@@ -17,14 +17,41 @@
 // smokes both drive ONE adapter — the SDK method-name mapping lives here only,
 // and the backend's orchestration + the gate fakes stay untouched.
 
-import { AGENT_METHODS, CLIENT_METHODS, client, type Stream } from "@agentclientprotocol/sdk";
+import {
+	type Usage as AcpWireUsage,
+	AGENT_METHODS,
+	CLIENT_METHODS,
+	client,
+	type Stream,
+} from "@agentclientprotocol/sdk";
 import type { AcpTextBlock } from "./context.js";
+
+/**
+ * What `session/prompt` answers with — entwurf's own narrow view of the SDK's
+ * `PromptResponse`.
+ *
+ * `stopReason` stays `string | undefined` DELIBERATELY, not the SDK's closed
+ * `StopReason` union: backend.ts's verdict mapping owes an honest answer for an
+ * unknown or absent reason (it seals those as errors), and typing the field as
+ * the closed union would make that branch look unreachable.
+ *
+ * `usage` reuses the SDK's own `Usage` type rather than a hand-copy, so a field
+ * rename upstream is a typecheck failure here instead of a silent zero. It is
+ * marked `@experimental` upstream and its per-field comments say "across all
+ * turns/session" while the outer one says "for this turn" — that contradiction
+ * is why NO common code interprets this shape. Only a backend adapter that has
+ * MEASURED its backend's semantics reads it (AcpBackendAdapter.extractTurnUsage).
+ */
+export type AcpPromptResponse = {
+	stopReason?: string;
+	usage?: AcpWireUsage | null;
+};
 
 /** The subset of the ACP agent connection the backend drives (real or fake). */
 export interface AcpConnectionLike {
 	initialize(params: unknown): Promise<unknown>;
 	newSession(params: unknown): Promise<{ sessionId?: string }>;
-	prompt(params: { sessionId: string; prompt: AcpTextBlock[] }): Promise<{ stopReason?: string }>;
+	prompt(params: { sessionId: string; prompt: AcpTextBlock[] }): Promise<AcpPromptResponse>;
 	setSessionConfigOption?(params: unknown): Promise<unknown>;
 	/**
 	 * ACP `session/cancel` — the PROTOCOL way to end an in-flight prompt turn.
@@ -84,8 +111,7 @@ export function connectAcpClient(stream: Stream, handlers: AcpClientHandlers): A
 		initialize: (params) => agent.request(AGENT_METHODS.initialize, params as never),
 		newSession: (params) =>
 			agent.request(AGENT_METHODS.session_new, params as never) as Promise<{ sessionId?: string }>,
-		prompt: (params) =>
-			agent.request(AGENT_METHODS.session_prompt, params as never) as Promise<{ stopReason?: string }>,
+		prompt: (params) => agent.request(AGENT_METHODS.session_prompt, params as never) as Promise<AcpPromptResponse>,
 		setSessionConfigOption: (params) => agent.request(AGENT_METHODS.session_set_config_option, params as never),
 		cancel: (params) => {
 			// Notification, not a request: nothing resolves it, and the connection

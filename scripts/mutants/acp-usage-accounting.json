@@ -1,0 +1,126 @@
+{
+	"schemaVersion": 1,
+	"lane": "acp-usage-accounting",
+	"mutants": [
+		{
+			"claim": "ACP-CLAUDE-TURN-USAGE-PRESERVED",
+			"title": "the turn's four-way token partition is dropped again — re-plants the exact live defect (every ACP assistant message reporting input/output/cacheRead/cacheWrite as 0)",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\tif (evidence) {",
+				"\t\t\tstate.output.usage.input = evidence.tokens.input;",
+				"\t\t\tstate.output.usage.output = evidence.tokens.output;",
+				"\t\t\tstate.output.usage.cacheRead = evidence.tokens.cacheRead;",
+				"\t\t\tstate.output.usage.cacheWrite = evidence.tokens.cacheWrite;",
+				"\t\t}"
+			],
+			"replace": ["\t\tvoid evidence;"],
+			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:ACP-CLAUDE-TURN-USAGE-PRESERVED]",
+			"signatureSource": "scripts/check-acp-usage-accounting.ts"
+		},
+		{
+			"claim": "ACP-CONTEXT-OCCUPANCY-PRESERVED",
+			"title": "the seal writes THIS TURN's token partition into totalTokens instead of the session's context occupancy — pi's auto-compaction takes that value at face value (it falls back only on error or exactly 0), so the status-line percentage collapses and a long session reads as nearly empty until it overflows",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\tif (typeof session.contextOccupancyTokens === \"number\") {",
+				"\t\t\tstate.output.usage.totalTokens = session.contextOccupancyTokens;",
+				"\t\t}"
+			],
+			"replace": [
+				"\t\tif (evidence) {",
+				"\t\t\tstate.output.usage.totalTokens =",
+				"\t\t\t\tevidence.tokens.input + evidence.tokens.output + evidence.tokens.cacheRead + evidence.tokens.cacheWrite;",
+				"\t\t}"
+			],
+			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:ACP-CONTEXT-OCCUPANCY-PRESERVED]",
+			"signatureSource": "scripts/check-acp-usage-accounting.ts"
+		},
+		{
+			"claim": "ACP-CONTEXT-OCCUPANCY-CARRIED",
+			"title": "the seal stops carrying the session's last known context occupancy — a turn whose usage_update never arrived now emits a token partition with a zero totalTokens, so pi falls through to that partition and reads a long session as nearly empty",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\tif (typeof occupancy === \"number\") session.contextOccupancyTokens = occupancy;",
+				"\t\tif (typeof session.contextOccupancyTokens === \"number\") {",
+				"\t\t\tstate.output.usage.totalTokens = session.contextOccupancyTokens;",
+				"\t\t}"
+			],
+			"replace": ["\t\tif (typeof occupancy === \"number\") session.contextOccupancyTokens = occupancy;"],
+			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:ACP-CONTEXT-OCCUPANCY-CARRIED]",
+			"signatureSource": "scripts/check-acp-usage-accounting.ts"
+		},
+		{
+			"claim": "ACP-TURN-COST-SUM-MATCHES-SDK",
+			"title": "the backend's RUNNING SESSION TOTAL is assigned to the turn cost again instead of the adjacent diff — the arithmetic that displayed a $24.261 session as $444.370",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tsession.sdkCumulativeCostUsd = observed;", "\t\tstate.output.usage.cost.total = diff;"],
+			"replace": ["\t\tsession.sdkCumulativeCostUsd = observed;", "\t\tstate.output.usage.cost.total = observed;"],
+			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:ACP-TURN-COST-SUM-MATCHES-SDK]",
+			"signatureSource": "scripts/check-acp-usage-accounting.ts"
+		},
+		{
+			"claim": "ACP-COST-BASELINE-HELD-WHEN-MISSING",
+			"title": "a turn with no cost notification zeroes the baseline instead of holding it — the next diff then re-attributes every dollar the session had already spent",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\tstate.output.usage.cost.total = 0;",
+				"\t\t\treturn;",
+				"\t\t}",
+				"\t\tconst diff = observed - (session.sdkCumulativeCostUsd ?? 0);"
+			],
+			"replace": [
+				"\t\t\tsession.sdkCumulativeCostUsd = 0;",
+				"\t\t\tstate.output.usage.cost.total = 0;",
+				"\t\t\treturn;",
+				"\t\t}",
+				"\t\tconst diff = observed - (session.sdkCumulativeCostUsd ?? 0);"
+			],
+			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:ACP-COST-BASELINE-HELD-WHEN-MISSING]",
+			"signatureSource": "scripts/check-acp-usage-accounting.ts"
+		},
+		{
+			"claim": "ACP-COST-RESET-NOT-SILENT",
+			"title": "a running total that goes backwards is absorbed silently — the turn reports a negative cost, nobody is told, and the only observation that could settle what a conversation reset does to the total is destroyed",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tif (diff < 0) {"],
+			"replace": ["\t\tif (diff < -1_000_000) {"],
+			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:ACP-COST-RESET-NOT-SILENT]",
+			"signatureSource": "scripts/check-acp-usage-accounting.ts"
+		},
+		{
+			"claim": "ACP-CORTEX-USAGE-UNTOUCHED",
+			"title": "the seal stops being gated on the adapter having a MEASURED extractor — claude's accounting semantics are projected onto a backend nobody measured, minting the same unmeasured accounting this lane exists to end",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\tconst extract = adapter.extractTurnUsage;",
+				"\t\tif (!extract) return;",
+				"",
+				"\t\t// --- token axis -----------------------------------------------------",
+				"\t\tconst evidence = extract.call(adapter, promptResult);"
+			],
+			"replace": [
+				"\t\tconst extract = adapter.extractTurnUsage;",
+				"",
+				"\t\t// --- token axis -----------------------------------------------------",
+				"\t\tconst evidence = extract ? extract.call(adapter, promptResult) : undefined;"
+			],
+			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:ACP-CORTEX-USAGE-UNTOUCHED]",
+			"signatureSource": "scripts/check-acp-usage-accounting.ts"
+		}
+	]
+}

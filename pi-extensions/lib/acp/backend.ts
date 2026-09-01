@@ -46,7 +46,12 @@ import { Readable, Writable } from "node:stream";
 import { ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 import type { Api, AssistantMessage, Context, Model, SimpleStreamOptions } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
-import { type AcpClientHandlers, type AcpConnectionLike, connectAcpClient } from "./acp-client.js";
+import {
+	type AcpClientHandlers,
+	type AcpConnectionLike,
+	type AcpPromptResponse,
+	connectAcpClient,
+} from "./acp-client.js";
 import { prependNewPromptAugment } from "./augment.js";
 import { type AcpBackendAdapter, resolveAcpBackendAdapter } from "./backend-adapter.js";
 import {
@@ -245,6 +250,38 @@ interface BridgeSession {
 	childEnd: ChildEndLatch;
 	/** Set while a prompt is in flight so a child death can close it (awaitAcpPromptTurn). */
 	notifyChildGone?: (err: Error) => void;
+	/**
+	 * The SDK's last-observed SESSION-CUMULATIVE cost, in USD — the baseline the
+	 * NEXT turn's cost is differenced against — authoritative for this rail in
+	 * the sense that the backend's own estimate outranks any local recompute,
+	 * not in the sense of a billing statement (#93).
+	 *
+	 * BRIDGE-SESSION SCOPED, and that scope is the invariant. It must track the
+	 * live child, because the cumulative it measures is that child's own running
+	 * total and restarts at zero with a new one: a rebuilt session (config-signature
+	 * drift) gets a fresh object and therefore a fresh baseline, which is exactly
+	 * right. Hoisting this to the pi session would keep a dead child's total as the
+	 * baseline and make the next real turn's diff enormous or negative.
+	 *
+	 * `undefined` = no cumulative observed yet, which is NOT the same as 0: a turn
+	 * that reports no cost must HOLD this value, not zero it, or the amount it
+	 * carried would be double-counted by the next diff.
+	 */
+	sdkCumulativeCostUsd?: number;
+	/**
+	 * The last observed context OCCUPANCY (`usage_update.used`), carried forward
+	 * across a turn whose notification never arrived (#93).
+	 *
+	 * Without this, such a turn emits four non-zero turn-partition fields and a zero
+	 * `totalTokens`, and pi's `calculateContextTokens` (read at pi-coding-agent
+	 * `dist/core/compaction/compaction.js:86-88`) falls through to the partition
+	 * sum — so the context gauge would drop from the real occupancy to one turn's
+	 * delta, and auto-compaction would read the session as nearly empty. Before
+	 * this lane those turns reported ALL-ZERO usage and pi skipped them entirely,
+	 * so the gauge simply held; carrying the last measurement forward preserves
+	 * that behaviour honestly. Assigned, never summed.
+	 */
+	contextOccupancyTokens?: number;
 	/**
 	 * This TURN owns reporting the child's end, so the next turn must not also
 	 * announce it. Raised at the top of a failure path — BEFORE the bounded
@@ -610,7 +647,7 @@ async function awaitAcpPromptTurn(
 	session: BridgeSession,
 	promptArgs: { sessionId: string; prompt: AcpTextBlock[] },
 	opts: { signal?: AbortSignal; graceMs: number },
-): Promise<{ stopReason?: string }> {
+): Promise<AcpPromptResponse> {
 	let rejectLifecycle: ((err: Error) => void) | undefined;
 	const lifecycle = new Promise<never>((_, reject) => {
 		rejectLifecycle = reject;
@@ -984,12 +1021,115 @@ export function streamAcpTurn(
 	}
 
 	/**
+	 * Seal this turn's ACCOUNTING — the #93 authority boundary.
+	 *
+	 * Runs ONLY for a backend whose adapter implements `extractTurnUsage`. Method
+	 * absence means that backend's usage semantics were never measured, so nothing
+	 * is sealed and its emitted usage is whatever the common mapper produced —
+	 * unchanged, not guessed at.
+	 *
+	 * Two INDEPENDENT axes, because they arrive on different wires:
+	 *
+	 *   tokens  the turn partition, from the adapter's reading of PromptResponse.
+	 *   cost    an ADJACENT DIFF of the backend's own running session total, which
+	 *           arrives on `usage_update` and is captured raw by the mapper.
+	 *
+	 * The diff is what makes the session sum reproduce the backend's own running
+	 * total exactly — with no residue, which is what the gate measures. Read that
+	 * exactness for what it is: agreement with the BACKEND'S CUMULATIVE ESTIMATE,
+	 * never with an Anthropic invoice. The vendor calls `total_cost_usd` a
+	 * "Cumulative estimated cost" and "An estimate, not a billing statement"
+	 * (claude-agent-sdk `sdk.d.ts:4538`), and entwurf has measured no live
+	 * comparison against a bill.
+	 *
+	 * We prefer that estimate anyway for a STRUCTURAL reason, not because it is
+	 * more precise in general: it is computed UPSTREAM of a lossy flattening we
+	 * cannot undo. The observed cache-writes are entirely 1h, ACP carries no 1h
+	 * field, and pi prices a write with no `cacheWrite1h` at the 5m rate
+	 * (`models.js:538-543`) — a local recompute measured $1.66 low on one live
+	 * ledger. Nothing here calls calculateCost: any price table we could apply
+	 * runs DOWNSTREAM of that flattening, so it would be a second, wronger
+	 * source.
+	 */
+	function sealTurnUsage(adapter: AcpBackendAdapter, session: BridgeSession, promptResult: AcpPromptResponse): void {
+		const extract = adapter.extractTurnUsage;
+		if (!extract) return;
+
+		// --- token axis -----------------------------------------------------
+		const evidence = extract.call(adapter, promptResult);
+		if (evidence) {
+			state.output.usage.input = evidence.tokens.input;
+			state.output.usage.output = evidence.tokens.output;
+			state.output.usage.cacheRead = evidence.tokens.cacheRead;
+			state.output.usage.cacheWrite = evidence.tokens.cacheWrite;
+		}
+
+		// --- context occupancy (NOT a turn total — see the field's note) -----
+		// Refresh from THIS turn's notification when there was one, then assign the
+		// session's value UNCONDITIONALLY. The assignment is not conditional on the
+		// notification having been missing: on this path the seal — not the mapper —
+		// is the authority for what pi reads as occupancy, and when a fresh value did
+		// arrive the two agree by construction.
+		//
+		// Why the field must be right rather than merely non-zero: pi's auto-compaction
+		// takes `calculateContextTokens(message.usage)` at face value and falls back to
+		// its own estimate ONLY when the message errored or that value is exactly 0
+		// (read at pi-coding-agent `dist/core/agent-session.js:1696-1697`). A turn
+		// partition written here would be non-zero and therefore never corrected — the
+		// session would read as nearly empty all the way to an overflow.
+		const occupancy = state.observedContextOccupancyTokens;
+		if (typeof occupancy === "number") session.contextOccupancyTokens = occupancy;
+		if (typeof session.contextOccupancyTokens === "number") {
+			state.output.usage.totalTokens = session.contextOccupancyTokens;
+		}
+
+		// --- cost axis ------------------------------------------------------
+		// ALWAYS assigned on this path, including the 0 cases: the mapper may have
+		// written the running cumulative into this field, and leaving it would put a
+		// session total on a dashboard that sums per-turn costs — the whole defect.
+		const observed = state.observedSessionCostUsd;
+		if (typeof observed !== "number") {
+			// No cumulative arrived this turn. HOLD the baseline: this turn's real
+			// amount is still inside the backend's running total and the next
+			// adjacent diff absorbs it. Attributed to the wrong turn, exact in the
+			// session sum. Zeroing the baseline here would double-count it instead.
+			state.output.usage.cost.total = 0;
+			return;
+		}
+		const diff = observed - (session.sdkCumulativeCostUsd ?? 0);
+		if (diff < 0) {
+			// The backend's running total went BACKWARDS. The known way that can
+			// happen is a `conversation_reset` inside a live query (read at
+			// claude-agent-acp `dist/acp-agent.js:3349-3356`), whose effect on
+			// `total_cost_usd` is an SDK-internal value we cannot see from here.
+			// Rebaseline and attribute 0 — but SAY SO. Silently absorbing it would
+			// hide the one observation that can settle what a reset does to the
+			// total, which is precisely the "no silent misaccounting" this lane owes.
+			const detail = `${(session.sdkCumulativeCostUsd ?? 0).toFixed(6)} → ${observed.toFixed(6)} USD`;
+			session.sdkCumulativeCostUsd = observed;
+			state.output.usage.cost.total = 0;
+			// Kept under the notice fragment cap (80) so the two numbers survive
+			// verbatim — a truncated diagnostic is not evidence.
+			pushAcpLifecycleNotice(state, `cost baseline reset (${detail}) — this turn attributed $0`);
+			console.error(
+				`entwurf: ACP backend reported a DECREASING session cost (${detail}). Rebaselined; this turn is ` +
+					`attributed $0. A conversation reset inside the live session is the known cause — the session total ` +
+					`from here on is measured against the new baseline.`,
+			);
+			return;
+		}
+		session.sdkCumulativeCostUsd = observed;
+		state.output.usage.cost.total = diff;
+	}
+
+	/**
 	 * Seal the turn from the ACP prompt result. "Success" here means the RPC
 	 * returned, not that the turn ended well — a returned `refusal` /
 	 * `max_turn_requests` / unknown / absent reason is sealed as an error event,
 	 * never a `done`. `rawStopReason` carries the wire value out either way.
 	 */
-	function finishSuccess(promptResult: { stopReason?: string }): void {
+	function finishSuccess(adapter: AcpBackendAdapter, session: BridgeSession, promptResult: AcpPromptResponse): void {
+		sealTurnUsage(adapter, session, promptResult);
 		finalizeAcpStreamState(state);
 		const verdict = mapPromptStopReason(promptResult?.stopReason);
 		if (verdict.rawStopReason !== undefined) state.output.rawStopReason = verdict.rawStopReason;
@@ -1200,7 +1340,7 @@ export function streamAcpTurn(
 		inFlightKeys.add(sessionKey);
 		try {
 			if (decision.path === "reuse" && existing) {
-				await runReuseTurn(existing, ctxSigs);
+				await runReuseTurn(existing, ctxSigs, adapter);
 			} else {
 				await runNewTurn(params, ctxSigs, engraving, config, adapter, nativeModelId);
 			}
@@ -1426,18 +1566,42 @@ export function streamAcpTurn(
 
 			session.activePromptHandler = undefined;
 			session.busy = false;
-			finishSuccess(promptResult);
 
 			// Retain ONLY a long-lived process-scoped session that survived the turn
 			// alive and un-aborted. A turn-scoped one-shot (and any aborted/dead
 			// turn) tears down so its stdio handle cannot pin pi's exit (S2c hang).
-			if (params.lifecyclePolicy === "process-scoped" && !signal?.aborted && session.alive) {
+			const retain = params.lifecyclePolicy === "process-scoped" && !signal?.aborted && session.alive;
+
+			// DISCOVERABILITY BEFORE THE SEAL. `finishSuccess` ends the stream, and
+			// ending the stream is what releases the caller — which may start the next
+			// turn on that event. A completed process-scoped session that is not yet in
+			// the map would send that turn down the NEW path: a second child, and with
+			// it a FRESH cost baseline, so a long session's accounting would silently
+			// reset at a turn boundary (#93).
+			//
+			// Two things make that window empty today — nothing here awaits, and the
+			// turn's in-flight claim is not released until after this returns — but both
+			// are invariants of surrounding code rather than of this ordering, and
+			// neither is visible from this line. Registering first makes the guarantee
+			// local: the session is discoverable before anything can act on the seal,
+			// whatever the code around it later does.
+			if (retain) {
 				bridgeSessions.set(sessionKey, session);
 				retainedChildren.add(spawned);
 				registerGlobalCleanup();
 				// unref so the retained stdio cannot pin pi's exit at resident
 				// shutdown — reuse is unaffected (unref ≠ destroy). GPT amber.
 				unrefRetainedChild(spawned);
+			}
+
+			finishSuccess(adapter, session, promptResult);
+
+			if (retain) {
+				// AFTER the seal, deliberately: persisting is bookkeeping about a turn
+				// that already answered, so a failed record write must not convert an
+				// answered turn into an error turn. If it throws, the catch below still
+				// un-registers this session and tears its child down — the same cleanup
+				// a sealing exception gets.
 				persistRecord(session, deps);
 			} else {
 				session.retiring = true;
@@ -1478,7 +1642,7 @@ export function streamAcpTurn(
 	}
 
 	// --- reuse: send only the latest user delta to the live ACP session
-	async function runReuseTurn(session: BridgeSession, ctxSigs: string[]): Promise<void> {
+	async function runReuseTurn(session: BridgeSession, ctxSigs: string[], adapter: AcpBackendAdapter): Promise<void> {
 		/** Same phase discipline as a new turn — reuse just has no bootstrap to lose. */
 		let phase: "pre-prompt" | "prompt" = "pre-prompt";
 		try {
@@ -1514,7 +1678,7 @@ export function streamAcpTurn(
 			// prefix-compat check sees the full prior history (GPT ④: store the
 			// ctxSigs from the START of this call, only after the turn succeeds).
 			session.contextMessageSignatures = ctxSigs;
-			finishSuccess(promptResult);
+			finishSuccess(adapter, session, promptResult);
 			persistRecord(session, deps);
 		} catch (err) {
 			const aborted = Boolean(signal?.aborted);

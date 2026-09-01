@@ -49,6 +49,22 @@ export type AcpPiStreamState = {
 	/** When false, tool/permission notices are suppressed (kept terse for smokes). */
 	showToolNotifications?: boolean;
 	observedTools?: Map<string, ObservedToolState>;
+	/**
+	 * RAW, UNINTERPRETED observations from this turn's `usage_update` notifications
+	 * — carried beside the pi message, never folded into it here.
+	 *
+	 * The mapper is COMMON layer and deliberately assigns no meaning to either
+	 * number: what `cost.amount` is CUMULATIVE OVER, and whether that even holds
+	 * for a non-claude backend, is a per-backend measurement. backend.ts seals them
+	 * only for a backend whose adapter implements `extractTurnUsage` (#93).
+	 *
+	 * Last write wins, never a sum: both are session-level running values, and one
+	 * turn can legitimately see several (claude emits one per `result` message,
+	 * including a sub-agent's own — read at claude-agent-acp
+	 * `dist/acp-agent.js:2673-2689`), each carrying a LARGER running total.
+	 */
+	observedSessionCostUsd?: number;
+	observedContextOccupancyTokens?: number;
 };
 
 /** A zeroed pi Usage block. */
@@ -328,13 +344,34 @@ export function applyAcpSessionUpdate(
 			break;
 		}
 		case "usage_update": {
-			// S2c maps COARSE ACP usage only: `used` is occupancy-shaped and does
-			// not split cleanly into pi's input/output/cache fields, so we fill
-			// totalTokens + cost.total and leave the rest zero. Richer accounting
-			// is a later lane (S2e/PR-polish).
-			if (typeof update.used === "number") state.output.usage.totalTokens = update.used;
+			// `used` is OCCUPANCY-shaped — the backend's post-turn context size, not
+			// this turn's token partition (claude computes it as the last assistant
+			// message's input+output+cacheRead+cacheWrite, which is the standing
+			// context, and its own comment says so: read at claude-agent-acp
+			// `dist/acp-agent.js:2694-2704`). pi reads `usage.totalTokens` as exactly
+			// that occupancy (`calculateContextTokens(usage) = usage.totalTokens ||
+			// input + output + cacheRead + cacheWrite`, read at pi-coding-agent
+			// `dist/core/compaction/compaction.js:86-88`), so the assignment below is
+			// the honest mapping and #93's turn partition goes to the four fields
+			// instead — never here.
+			if (typeof update.used === "number") {
+				state.output.usage.totalTokens = update.used;
+				state.observedContextOccupancyTokens = update.used;
+			}
+			// `cost.amount` is a running SESSION total on the claude backend, so
+			// assigning it to a TURN field is wrong wherever an adapter has measured
+			// that (#93: pi sums per-message cost, which inflated a long session
+			// 10-18x). It stays here for a backend whose adapter has NOT measured its
+			// semantics — for those, this coarse assignment is the pre-#93 behaviour
+			// and changing it would be an unmeasured claim. backend.ts OVERWRITES
+			// this field authoritatively (from the baseline diff) for every turn of a
+			// backend that HAS an extractTurnUsage, so the cumulative can never reach
+			// an operator's dashboard as a turn cost on that path.
 			const cost = update.cost as { amount?: unknown } | undefined;
-			if (typeof cost?.amount === "number") state.output.usage.cost.total = cost.amount;
+			if (typeof cost?.amount === "number") {
+				state.output.usage.cost.total = cost.amount;
+				state.observedSessionCostUsd = cost.amount;
+			}
 			break;
 		}
 		default:
