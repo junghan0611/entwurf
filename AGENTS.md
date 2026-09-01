@@ -104,7 +104,9 @@ A `--entwurf-control` pi session is a citizen for the same reason a native bridg
 
 ## Issue queue — a manual sweeper, not a backlog
 
-- OPEN issues are live contracts only, capped at five. A sixth means something closes first; the cap does not bend.
+- **Two caps, and the inner one is what disciplines the work.** OPEN issues are capped at **ten** in total; of those, **implementation issues — the ones that will go out on a branch — are capped at five**. A sixth implementation issue means one closes first; that inner cap does not bend.
+- **What sits outside the implementation five:** research issues, and issues GLG keeps open to look at. These are not slots to be earned or swept — a research lane may stay open across releases, and a north-star issue other repos read may never close. They still count toward the ten, so the queue cannot grow without limit.
+- Classify by destination, not by size: if closing it produces a diff, it is an implementation issue. If closing it produces a decision, a document, or nothing, it is not.
 - A slot is earned by a current defect or executable contract, not by importance, age, or possible future value.
 - Direction, philosophy, frozen invariants and observations without a current action live in `ROADMAP.md`, durable docs, or closed history.
 - Nothing stays open "in case." If a closed problem recurs, it returns as a new issue carrying the new evidence.
