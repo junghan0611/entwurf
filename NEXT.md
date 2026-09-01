@@ -21,16 +21,21 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 </details>
 
-- [ ] **9. ACP Claude를 메인 레일로 — 내구성 리서치(#92)와 계기판 수리(#93)** ← CURRENT: #93의 1h cache-write blocker를 (i) carrier 운반 / (ii) SDK 누적 차분 중 어느 길로 풀지 GLG가 정한다. 그 결정 전에는 브랜치를 파지 않는다.
+- [ ] **9. ACP Claude를 메인 레일로 — 내구성 리서치(#92)와 계기판 수리(#93)** ← CURRENT: **#93 좌표 확정, 브랜치 준비 완료.** 다음 팀이 어댑터 seam(`normalizeTurnUsage`) → (ii) SDK 누적 차분 → 2파일 수정 → 게이트 신설 순서로 간다.
 
-현재 좌표: 1–8 완료 → **9 진행 중(#93 경로 결정 대기)** ← 여기 · **0.16.1 make는 열린 채 PAUSED** (오늘 요청 없었음). 커밋은 `ca52fdd`(#72 수리)까지 랜딩됐고 push·tag는 GLG 몫이다.
+현재 좌표: 1–8 완료 → **9 진행 중(#93 착수 가능)** ← 여기 · **0.16.1 make는 열린 채 PAUSED** (오늘 요청 없었음). 커밋은 `ca52fdd`(#72 수리)까지 랜딩됐고 push·tag는 GLG 몫이다.
 
 # NOW — ACP 계기판 수리 (#93)
 
 - **Stem:** entwurf ACP Claude가 GLG의 메인 레일이 될 수 있게, **운용자가 자기 세션 상태를 믿을 수 있는 숫자로 볼 수 있게 한다.** 토큰 효율은 이미 네이티브와 구분되지 않는다는 게 측정으로 닫혔다(#92) — 남은 것은 계기판이다.
 - **지금 서 있는 자리:** #93이 열려 있고 **좌표 검토까지 끝났다.** 브랜치는 아직 안 팠다. GLG 순서가 "이슈 → 좌표 합의 → 브랜치"다.
 - **Blocker (측정됨, 2026-09-01):** ACP 캐시 쓰기가 **전량 1h TTL**이다(coordinator 454,690 tok / auditor 317,671 tok, 5m 0건). 분해값은 Claude CLI transcript에 `usage.cache_creation.ephemeral_1h_input_tokens`로 실재하는데 `claude-agent-acp`가 평면 `cachedWriteTokens`로 소거한다(`acp-agent.js:2634-2638, 5250-5261`). pi는 평면을 1.25×, 1h를 2× input으로 매기므로(`models.js:527-545`) **항상 과소계상**한다 → acceptance (b)가 현재 2파일 설계로 exact 통과 불가.
-- **Next:** (1) **경로 결정** — (i) upstream/`_meta`로 1h·5m split 운반 vs **(ii) `BridgeSession`에 SDK 누적 baseline을 두고 인접 턴 차분으로 authoritative turn cost를 만든다.** (ii)를 권한다: SDK 누적치는 이미 1h 단가로 정확하고, 무캐시 대조는 캐시 토큰을 input 단가로 치환하므로 1h/5m 구분이 애초에 필요 없다 — 이미 나간 footer가 (ii)만으로 완전히 작동한다. (2) 결정 후 브랜치, `backend.ts`/`event-mapper.ts` 2파일. (3) 게이트 신설 `check-acp-usage-accounting` — 현 `check-acp-event-mapper`는 `usage_update`만 주입해서 PromptResponse→`finishSuccess`→`calculateCost` 경로를 **전혀 안 지난다**(`check-acp-event-mapper.ts:159-164`).
+- **Next — 브랜치 파고 바로 시작할 수 있다. 순서가 정해져 있다:**
+  1. **어댑터 seam 신설** (`backend-adapter.ts`). 현 `AcpBackendAdapter` 10개 메서드에 usage를 다루는 자리가 **없다**(측정 확인, `:138-194`). `normalizeTurnUsage(raw): AcpTurnUsage | undefined`를 열고 claude만 구현, **cortex는 `undefined` 반환**(= "측정 안 됨", 0이 아님) → 공통 루프가 cortex를 건드리지 않는다. sol의 Cortex 오염 경고가 이 타입 하나로 닫힌다.
+  2. **경로는 (ii)로 간다** — `BridgeSession`에 SDK 누적 baseline을 두고 **인접 턴 차분**으로 authoritative turn cost. (i)(upstream carrier)로 뒤집으려면 carrier가 실재한다는 영수증을 가져와야 한다. (ii)를 기본값으로 두는 이유: SDK 누적치는 이미 1h 단가로 정확하고, 무캐시 대조는 캐시 토큰을 input 단가로 치환하므로 **1h/5m 구분이 애초에 필요 없다** — 이미 나간 footer(`c65aae2`)가 (ii)만으로 완전히 작동한다.
+  3. **`backend.ts:613/992`** 반환 타입에 `usage?` + `finishSuccess`에서 pi Usage 대입 후 `calculateCost` 1회. **`event-mapper.ts:337`** 누적-cost의 턴 필드 대입 제거(세션 레벨로 옮기되 **대입만**).
+  4. **게이트 신설 `check-acp-usage-accounting`** — 현 `check-acp-event-mapper`는 `usage_update`만 주입해서 PromptResponse→`finishSuccess`→`calculateCost`를 **전혀 안 지난다**(`check-acp-event-mapper.ts:159-164`). claim 셋은 #93 본문에 지목돼 있다.
+- **브랜치 규약:** 브랜치 작업은 `NEXT--<branch>.md`를 쓰고 main NEXT에 섞지 않는다. 머지 전 그 파일을 지운다.
 - **주의 — 공통 루프를 그냥 고치면 Cortex가 깨진다:** `backend.ts`/`event-mapper.ts`는 공통이고 ACP SDK의 `usage`는 experimental에 의미가 자기모순이다("this turn" vs "across all turns/session", `types.gen.d.ts:3017-3076`). Claude adapter가 정규화하고 공통 `finishSuccess`는 결과만 seal한다. **Cortex는 별도 측정 전까지 제외.**
 - **이미 나간 것:** agent-config `c65aae2` — footer가 `$1.417 ($7.958) ×5.6`을 보인다. codex·zai·네이티브 pi에서 지금 작동하고, ACP는 #93 이후 자동으로 살아난다. 폭이 좁으면 배수→무캐시 순으로 떨구고 실제 금액은 절대 안 버린다.
 - **Read:** #93 본문(경로 (i)/(ii)와 게이트 좌표) · #92 §1·§3·§6 · sol 검토 코멘트.
