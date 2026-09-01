@@ -21,9 +21,23 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 </details>
 
-현재 좌표: 1–8 완료(구현·review·clause 7 LIVE·qualification·0.16.0 컷·원커맨드 구멍·#72 진단과 수리) → **0.16.1 prepare 완료, make 대기** ← 여기. 커밋은 `ca52fdd`(#72 수리)까지 랜딩됐고 push·tag는 GLG 몫이다.
+- [ ] **9. ACP Claude를 메인 레일로 — 내구성 리서치(#92)와 계기판 수리(#93)** ← CURRENT: #93의 1h cache-write blocker를 (i) carrier 운반 / (ii) SDK 누적 차분 중 어느 길로 풀지 GLG가 정한다. 그 결정 전에는 브랜치를 파지 않는다.
 
-# NOW
+현재 좌표: 1–8 완료 → **9 진행 중(#93 경로 결정 대기)** ← 여기 · **0.16.1 make는 열린 채 PAUSED** (오늘 요청 없었음). 커밋은 `ca52fdd`(#72 수리)까지 랜딩됐고 push·tag는 GLG 몫이다.
+
+# NOW — ACP 계기판 수리 (#93)
+
+- **Stem:** entwurf ACP Claude가 GLG의 메인 레일이 될 수 있게, **운용자가 자기 세션 상태를 믿을 수 있는 숫자로 볼 수 있게 한다.** 토큰 효율은 이미 네이티브와 구분되지 않는다는 게 측정으로 닫혔다(#92) — 남은 것은 계기판이다.
+- **지금 서 있는 자리:** #93이 열려 있고 **좌표 검토까지 끝났다.** 브랜치는 아직 안 팠다. GLG 순서가 "이슈 → 좌표 합의 → 브랜치"다.
+- **Blocker (측정됨, 2026-09-01):** ACP 캐시 쓰기가 **전량 1h TTL**이다(coordinator 454,690 tok / auditor 317,671 tok, 5m 0건). 분해값은 Claude CLI transcript에 `usage.cache_creation.ephemeral_1h_input_tokens`로 실재하는데 `claude-agent-acp`가 평면 `cachedWriteTokens`로 소거한다(`acp-agent.js:2634-2638, 5250-5261`). pi는 평면을 1.25×, 1h를 2× input으로 매기므로(`models.js:527-545`) **항상 과소계상**한다 → acceptance (b)가 현재 2파일 설계로 exact 통과 불가.
+- **Next:** (1) **경로 결정** — (i) upstream/`_meta`로 1h·5m split 운반 vs **(ii) `BridgeSession`에 SDK 누적 baseline을 두고 인접 턴 차분으로 authoritative turn cost를 만든다.** (ii)를 권한다: SDK 누적치는 이미 1h 단가로 정확하고, 무캐시 대조는 캐시 토큰을 input 단가로 치환하므로 1h/5m 구분이 애초에 필요 없다 — 이미 나간 footer가 (ii)만으로 완전히 작동한다. (2) 결정 후 브랜치, `backend.ts`/`event-mapper.ts` 2파일. (3) 게이트 신설 `check-acp-usage-accounting` — 현 `check-acp-event-mapper`는 `usage_update`만 주입해서 PromptResponse→`finishSuccess`→`calculateCost` 경로를 **전혀 안 지난다**(`check-acp-event-mapper.ts:159-164`).
+- **주의 — 공통 루프를 그냥 고치면 Cortex가 깨진다:** `backend.ts`/`event-mapper.ts`는 공통이고 ACP SDK의 `usage`는 experimental에 의미가 자기모순이다("this turn" vs "across all turns/session", `types.gen.d.ts:3017-3076`). Claude adapter가 정규화하고 공통 `finishSuccess`는 결과만 seal한다. **Cortex는 별도 측정 전까지 제외.**
+- **이미 나간 것:** agent-config `c65aae2` — footer가 `$1.417 ($7.958) ×5.6`을 보인다. codex·zai·네이티브 pi에서 지금 작동하고, ACP는 #93 이후 자동으로 살아난다. 폭이 좁으면 배수→무캐시 순으로 떨구고 실제 금액은 절대 안 버린다.
+- **Read:** #93 본문(경로 (i)/(ii)와 게이트 좌표) · #92 §1·§3·§6 · sol 검토 코멘트.
+- **Do not touch:** #92를 구현 이슈로 취급하지 말 것(리서치 레인) · `mux-launch.ts`/`mux-placement.ts` import fence · #76/#78 · 0.16.1 make를 이 레인에 섞지 말 것.
+
+<details><summary>OMP 레인의 직전 NOW (0.16.1 make 대기 — 열린 채 보류)</summary>
+
 
 - **Stem:** OMP TUI 하나를 독립 형제로 세우되, 그 안의 서브에이전트에는 garden id를 주지 않는다.
 - **이제 되는 것 (측정, 2026-08-30 oracle, omp 18.0.0):** OMP TUI가 열리면 citizen 하나를 mint하고, 상태줄에 garden id를 보이고, 자기 이름으로 보내고, **다른 harness의 메시지를 받는다.** idle 세션이 타이핑 0회로 깨어나 `entwurf_inbox_read`로 스스로 드레인하고 같은 native 세션에서 답한다. `/new`는 옛 시민의 doorbell을 회수하고 새 시민에게 arm한다. task subagent는 여전히 아무것도 mint·arm하지 않는다.
@@ -38,7 +52,12 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 - **Read:** #87 thread · `scripts/raw-omp-measure/README.md` §M7 (수용의 근거가 된 5셀 측정) · `docs/setup-clean-host.md` §4b · `docs/adding-a-harness.md` step 7.
 - **Do not touch:** `mux-launch.ts`/`mux-placement.ts`(import fence) · omp용 managed launcher shell(근거 없음) · registry `supported` 필드(새 authority 금지) · #76/#78 · #87/#89 close. (Pi 0.84.4는 2026-09-01에 해제되어 랜딩됐다 — `5c1bda5`.)
 
+
+</details>
+
 # RECENT
+
+- **2026-09-01 (ACP 메인 레일 판정, oracle):** GLG의 질문 "ACP로 클로드를 쓰면 손해 보나"가 세 번 재정의되며 깊어졌고, 마지막 형태는 **"400–500k 깊이에서 턴이 견고하게 유지되는가"**였다. 세 감사자(glm-5.3 · gpt-5.6-sol · kimi-k3)가 붙어 **근거 여섯 개를 회수**했다 — 그중 넷이 내 것이다. 남은 판정: 정상 reuse 구간에서 ACP와 네이티브는 **구분되지 않고**(같은 리포 통제 비교), 깊이 내구성은 **양 레일 모두 확보**돼 있으며(API 에러 턴 NATIVE 0.05% vs ACP 0.00%), 주 변수는 레일이 아니라 **사용 연속성**이다. 라이브 코디네이터가 관측 최대치 `415,541`을 돌파해(→ 475k+, resets 0) "그 값은 #72의 외부 janitor가 끊은 지점"이라는 의심을 반증했다. 같은 시각 네이티브 코더는 574k에서 리셋 0으로 돌았다 — "append-only는 ACP의 구조적 이점"이라는 프레이밍은 그 앞에서 계속 약하다. 가장 값진 것은 결론이 아니라 **공유 맹점**이었다: "compact 마커 양 레일 전수 0개"는 네이티브 **1,796파일 중 3파일**만 보고 쓴 것이었고, 두 세션이 그걸 함께 통과시켰다. 제3 감사자를 부른 이유가 정확히 그것이다. 이슈 큐 규율도 이 세션에서 두 상한(총 10 / 구현 5)으로 갈렸다.
 
 - **2026-09-01 (#72 닫힘, oracle):** 여덟 달 서 있던 "ACP Claude child가 tool-loop 중간에 죽는다"가 **entwurf 결함이 아니었음**이 측정으로 닫혔다. 아무도 열지 않았던 아티팩트 하나 — 호스트 자신의 systemd user journal — 가 답이었고, 연결 고리는 처음부터 서명 안에 있었다: `(node:<pid>)`는 node `emitWarning`이 찍는 그 프로세스 자신의 pid다. 세 번의 진단이 주범으로 지목했다가 반례로 폐기한 그 경고 줄이, 내내 범인의 pid를 달고 있었다. 형제 둘이 붙어 각각 내 결론을 한 번씩 깼다 — GPT-5.6-terra는 "막을 수 없고 감별만 가능하다"를 launch shim으로 반증했고(시그널을 막는 게 아니라 **이름 매칭에서 빠지는** 층), Claude Fable 5는 프레임 필터가 개행 없는 마지막 말을 삼키는 회귀를 확정하고 live receipt를 만들었다. 이슈 코멘트 3건(진단·pid addendum·독립 검토)과 영수증 디렉터리가 남았다.
 
@@ -53,6 +72,8 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 - **#78** macOS/native-Windows portability — separate grant; do not mix into #87.
 - **#76** cortex gate slice — separate lane. (#72 is closed: `ca52fdd`.)
+- **#92** ACP 깊은-컨텍스트 내구성 — **리서치 레인**. 열린 acceptance는 500k 돌파 관측이고, 그건 코드가 아니라 그냥 쓰면 채워진다.
+- **0.16.1 make** — prepare는 끝났고 make는 GLG 승인 대기. 오늘 요청 없었다.
 
 # LEDGER — land 전에 정할 것
 
