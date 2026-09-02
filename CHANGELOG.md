@@ -16,7 +16,7 @@ Each receipt carries its own scope; none of them is transferable to another comm
   20:14:51 → 21:04:41 KST. Frozen log: `/tmp/entwurf-0.17.0-evidence/ACCEPTED-cut-release-gate.log`.
   This run carried `pnpm run check:full` and `./run.sh check-gate-qualification`
   (**346/346 KILLED**) as MUST steps. **It is not the 0.17.0 acceptance SHA:** `9479750`
-  changed source after it, so a new `--cut` on the final HEAD is required before tag.
+  changed source after it.
   `CHANGELOG.md` is in `package.json` `files` and `check:full → check:package → check-pack`
   enumerates it (`npm pack --dry-run`, required/forbidden names — not a cardinality lock).
   `NEXT.md` is not in `files`. Working-tree cleanliness at cut start was an operator
@@ -53,7 +53,22 @@ Each receipt carries its own scope; none of them is transferable to another comm
   cost the first cut its 52 minutes; VERIFY.md and AGENTS.md now name the strip.
 - **Qualification lane size.** On the `0379764` cut the total was **335 → 346**, eleven new claims
   in `scripts/mutants/acp-usage-accounting.json` (absent on the 0.16.1 base). `9479750` adds a
-  twelfth, `ACP-REBILL-MAIN-LOOP-SCOPE`. The post-D1 kill count is not yet a receipt.
+  twelfth, `ACP-REBILL-MAIN-LOOP-SCOPE`. Standalone `./run.sh check-gate-qualification` on
+  `fee89d3` is **347/347 KILLED** (36m19s, log `/home/junghan/.pi/background/1788355846036-bg03.log`).
+  That is a qualification receipt, not a `--cut` receipt.
+- **Three recuts on the D1 tree, all `cut: BLOCKED`.** Each ran
+  `env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID LIVE=1 ./run.sh release-gate <scratch> --cut`.
+  All three: MUST PASS=22 FAIL=1 SKIP=0, BEHAVIOR PASS=1. None of the FAILs is D1.
+  1. `/tmp/entwurf-cut-0.17.0.WdTkH7` — `smoke-entwurf-v2-matrix-live` C1b: second
+     `pi --entwurf-control` wrote no hidden-store record in 30s, stderr empty. Isolated re-run:
+     17/17 PASS.
+  2. `/tmp/entwurf-cut2-0.17.0.XQcOuR` — `smoke-mux-lifecycle-live` pi-native nonce
+     `mux-fresh-call-4bd6391e9783fb24fb1ee74a` never arrived in 300s (claude-code cell passed;
+     v2-matrix passed this run). Same shape as the 0.16.1 mux-lifecycle retry.
+  3. `/tmp/entwurf-cut3-0.17.0.sfZ8WC` — C1b 30s again. Isolated re-run: 17/17 PASS.
+     mux-lifecycle PASS this run.
+  GLG 2026-09-03: no fourth cut. Make proceeds with this gap named here, not rounded up to
+  `cut: OK`.
 - **`smoke-acp-raw-turn-live`** — PASS on the moved pin, quoted from the accepted `--cut` run's own
   output rather than from a session message: launch source
   `package:@agentclientprotocol/claude-agent-acp` (not PATH fallback), `protocolVersion=1`, model

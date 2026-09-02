@@ -26,16 +26,16 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   실제로 랜딩한 것은 그 기각의 실행이다. #92는 리서치 레인에 그대로 남는다. #93은 닫힘.
   독립 리뷰 D1(재청구 하한의 스코프 혼합)은 `9479750`에서 닫혔다.
 
-현재 좌표: 1–9 완료 · **0.16.1 make는 열린 채 PAUSED** · 0.17.0은 D1 수리됨, 재컷 두 번 모두 LIVE 플레일로 BLOCKED.
+현재 좌표: 1–9 완료 · **0.16.1 make는 열린 채 PAUSED** · 0.17.0은 D1 닫힘, 재컷 세 번 BLOCKED, GLG가 네 번째 컷을 금하고 make를 승인.
 푸시·태그는 `entwurf-release make 0.17.0` 몫이다 (CalVer `tag-release`가 아님).
 
-# NOW — D1 닫힘, 재컷 두 번 BLOCKED, 세 번째 컷은 아침
+# NOW — 문서 정직화 뒤 make
 
 - **Stem:** entwurf ACP Claude가 GLG의 메인 레일이 되게 한다. 토큰 효율은 #92가 이미 닫았고,
   남은 것이 계기판이었다. 그 계기판을 **ACP 레일 자신이** 고쳤다.
-- **지금 서 있는 자리:** `main` HEAD `fee89d3`, origin 대비 9 ahead. 푸시 안 됨, 태그 안 달림.
-  `0fc9b76` → `21d6420` → `4d6fe4c` → prepare `0379764` → receipts `db46ae4` → D1 `9479750` →
-  docs `01ef26d` → lane-count `5ed2dd9` → terra 산문 `fee89d3`.
+- **지금 서 있는 자리:** `main` HEAD `ef68c79` 위 문서 커밋 예정, origin 대비 10+ ahead.
+  푸시 안 됨, 태그 안 달림. D1 `9479750` → docs `01ef26d` → lane-count `5ed2dd9` → terra 산문
+  `fee89d3` → night handoff `ef68c79`.
 - **랜딩한 계약:** pi의 네 `Usage` 필드는 **0으로 둔다** — ACP의 유일한 토큰 반송자는 턴 왕복
   합계이고 그 넷은 한 요청의 프롬프트 모양이다. 턴 회계 총계는 `usage.acp`로 가며 numerator는
   회계등급 `_meta.quota.model_usage` 행 합(main-loop 전용 `PromptResponse.usage`보다 우선).
@@ -44,14 +44,12 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 - **검증 상태.** standalone qualification on `fee89d3`: **347/347 KILLED** (36m19s),
   `ACP-REBILL-MAIN-LOOP-SCOPE` included. Log: `/home/junghan/.pi/background/1788355846036-bg03.log`.
   Historical `0379764` cut remains green (346/346) and remains voided as acceptance.
-  Two recuts on `fee89d3`, both `env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID`,
-  both MUST PASS=22 FAIL=1 SKIP=0, `cut: BLOCKED`. Neither is D1.
-  1. `/tmp/entwurf-cut-0.17.0.WdTkH7` — `smoke-entwurf-v2-matrix-live` C1b: second
-     `pi --entwurf-control` wrote no hidden-store record in 30s, stderr empty. Isolated
-     re-run of that smoke: **17/17 PASS** (C1b included).
-  2. `/tmp/entwurf-cut2-0.17.0.XQcOuR` — `smoke-mux-lifecycle-live` pi-native nonce
-     `mux-fresh-call-4bd6391e9783fb24fb1ee74a` never arrived in 300s. claude-code cell
-     passed; v2-matrix passed this run. Same shape as the 0.16.1 mux-lifecycle retry.
+  Three recuts on the D1 tree, all MUST PASS=22 FAIL=1 SKIP=0, `cut: BLOCKED`. None is D1.
+  1. `/tmp/entwurf-cut-0.17.0.WdTkH7` — C1b 30s. Isolated 17/17.
+  2. `/tmp/entwurf-cut2-0.17.0.XQcOuR` — mux-lifecycle pi-native nonce 300s.
+  3. `/tmp/entwurf-cut3-0.17.0.sfZ8WC` — C1b 30s again. Isolated 17/17. mux-lifecycle PASS.
+  GLG 2026-09-03: no fourth cut. The missing green `--cut` on this HEAD is named in CHANGELOG,
+  not rounded up.
 - **첫 `--cut`은 빨간불이었고(MUST FAIL=5) 다섯 개 전부 실행 환경이었다.** 게이트를 살아있는
   ACP 시민 세션 안에서 돌린 탓이다 — `CLAUDE_CONFIG_DIR`가 `hooks: {}`인 오버레이를 가리켜
   Claude 자식이 훅 없이 태어나고, `PI_SESSION_ID`가 fresh-call 콜백 주소를 가로챈다.
@@ -60,12 +58,9 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 - **리뷰 수정:** `4d6fe4c` — 감소 통지가 벤더의 단어 `/clear` 대신 "conversation reset"을
   원인으로 불렀다. 침묵된 미스를 영수증 없는 "194k"로 적었다(측정값은 195,177).
   `9479750` — 재청구 하한이 main-context occupancy와 wide `cacheWrite`를 한 식에 넣던 스코프 혼합.
-- **Next (아침, 세 번째 `--cut`):**
-  1. 트리 그대로 `fee89d3` (또는 이 NEXT 커밋 위). `cd <scratch> && env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID LIVE=1 ./run.sh release-gate <scratch> --cut`.
-     MUST FAIL=0 SKIP=0이 아니면 자르지 마라. 실패하면 전체 컷을 다시 — 단독 스모크 초록을 집계에 붙이지 마라.
-  2. 초록이면 CHANGELOG Verification에 이 SHA·두 플레일·347/347을 적은 뒤 `entwurf-release make 0.17.0`.
-     푸시 → exact-SHA CI 3잡 → 후보 수용 → 태그. CalVer `tag-release`가 아니다.
-  3. **#93은 닫힘.**
+- **Next:** `entwurf-release make 0.17.0` — 푸시 → exact-SHA CI 3잡 → 후보 수용 → 태그 → GitHub 릴리즈.
+  VERIFY §3 criterion 3의 초록 `--cut`은 이 HEAD에 없다. GLG가 네 번째 컷을 금하고 make를 승인했다.
+  **#93은 닫힘.**
 - **남은 한계는 전부 #96:** per-request carrier 부재 · pi-native cache-stats 통합 · 턴 중간
   점화식 파손 · usage 미보고 턴 · 재시작 첫 턴 침묵(#92의 4.5× 절벽 턴).
 - **Read:** #93 스레드의 2026-09-02 코멘트(본문보다 이것이 이긴다) · ROADMAP `Dep bump` 레인의
