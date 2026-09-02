@@ -176,6 +176,25 @@ function readTurnAccounting(promptResult: AcpPromptResponse): AcpTurnAccounting 
 	};
 }
 
+/**
+ * The MAIN AGENT LOOP's token totals (`PromptResponse.usage` ==
+ * `quota.token_count`). Same four fields as `readTurnAccounting`, different
+ * scope: this excludes Task subagents, sidechains, and internal calls such
+ * as compaction. The cache-miss bound's recurrence is a MAIN-LOOP identity
+ * — occupancy is main-context occupancy — so its IO terms come from here,
+ * never from the wide rows. Reporting still uses `readTurnAccounting`.
+ */
+function readMainLoopAccounting(promptResult: AcpPromptResponse): AcpTurnAccounting | undefined {
+	const wire = promptResult?.usage;
+	if (!wire) return undefined;
+	return {
+		input: finiteOrZero(wire.inputTokens),
+		output: finiteOrZero(wire.outputTokens),
+		cacheRead: finiteOrZero(wire.cachedReadTokens),
+		cacheWrite: finiteOrZero(wire.cachedWriteTokens),
+	};
+}
+
 /** 191,971 → "192k". Keeps the notice inside the 80-char fragment cap. */
 function formatTokenCount(tokens: number): string {
 	return tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : String(Math.round(tokens));
@@ -355,7 +374,8 @@ interface BridgeSession {
 	 */
 	contextOccupancyTokens?: number;
 	/**
-	 * The PREVIOUS turn's `Σinput + Σoutput` and the wall-clock ms at which that
+	 * The PREVIOUS turn's MAIN-LOOP `Σinput + Σoutput` (`PromptResponse.usage`,
+	 * never the wide `model_usage` sum) and the wall-clock ms at which that
 	 * turn SEALED. The idle gap is then measured from that seal to THIS turn's
 	 * START (`turnStartedAtMs`), never to its seal, so a turn's own duration can
 	 * never inflate the gap it reports. Together with `contextOccupancyTokens`,
@@ -1188,6 +1208,7 @@ export function streamAcpTurn(
 		// pi-coding-agent `dist/core/session-manager.js:768-777` appendMessage,
 		// `:98` parseSessionEntries), so a key pi does not know survives a resume.
 		const aggregate = readTurnAccounting(promptResult);
+		const mainLoop = readMainLoopAccounting(promptResult);
 		if (aggregate) {
 			(state.output.usage as unknown as { acp?: AcpTurnAccounting }).acp = aggregate;
 		}
@@ -1274,10 +1295,11 @@ export function streamAcpTurn(
 		// that familiar token threshold alone and claims no part of the cost half:
 		// this bound is a token interval, and pricing it locally is the very
 		// downstream reprice the cost axis above refuses.
-		// The re-billed size can never exceed what this turn actually WROTE: a
-		// re-billed prefix is paid for as cache creation. Clamping to
-		// `aggregate.cacheWrite` is what keeps the notice a statement about money
-		// that changed hands rather than about the recurrence holding.
+		// The re-billed size can never exceed what this turn's MAIN LOOP actually
+		// WROTE: a re-billed prefix is paid for as cache creation. Clamping to
+		// `mainLoop.cacheWrite` (not the wide aggregate) is what keeps the notice
+		// a statement about money that changed hands on the prefix rather than
+		// about the recurrence holding, or about an internal compaction write.
 		//
 		// Without it a context SHRINK reads as a giant miss. Worked counterexample
 		// (gpt-5.6-sol, 2026-09-02): prior occupancy 200,000, prior IO 1,000, this
@@ -1290,18 +1312,28 @@ export function streamAcpTurn(
 		// Both prior marks are read from ONE turn and written from ONE turn. Mixing
 		// an older occupancy with a newer IO sum puts two turns in one equation and
 		// can skew the bound HIGH, so the update below is all-or-nothing.
+		//
+		// The same all-or-nothing applies to SCOPE. Occupancy is main-context;
+		// the recurrence is a main-loop identity. `aggregate.cacheWrite` is the
+		// WIDE accounting figure (Task subagents, sidechains, internal compaction).
+		// A large unrelated wide write shrinks `max(0, occupancy − cacheWrite)`
+		// (less is subtracted) AND raises the `min(…, cacheWrite)` ceiling — both
+		// paths push the bound UP, so a warm main prefix can announce a miss and
+		// attach this turn's all-inclusive dollar figure to it. The IO terms
+		// therefore come from `mainLoop`, never from `aggregate`.
 		const derivable =
-			aggregate !== undefined &&
+			mainLoop !== undefined &&
 			typeof occupancy === "number" &&
 			typeof priorOccupancy === "number" &&
 			typeof priorIoSum === "number";
+		const cacheWriteForBound = mainLoop !== undefined ? mainLoop.cacheWrite : 0;
 		const rawBound = derivable
-			? (priorOccupancy as number) - (priorIoSum as number) - Math.max(0, (occupancy as number) - aggregate.cacheWrite)
+			? (priorOccupancy as number) - (priorIoSum as number) - Math.max(0, (occupancy as number) - cacheWriteForBound)
 			: undefined;
-		const missLowerBound = rawBound === undefined ? undefined : Math.min(rawBound, aggregate?.cacheWrite ?? 0);
+		const missLowerBound = rawBound === undefined ? undefined : Math.min(rawBound, cacheWriteForBound);
 
-		if (aggregate && typeof occupancy === "number") {
-			session.priorTurnInputOutputSum = aggregate.input + aggregate.output;
+		if (mainLoop && typeof occupancy === "number") {
+			session.priorTurnInputOutputSum = mainLoop.input + mainLoop.output;
 			session.priorTurnSealedAtMs = Date.now();
 		}
 

@@ -602,6 +602,104 @@ try {
 	}
 
 	// ----------------------------------------------------------------------
+	// CELL 1f — the bound's IO terms are MAIN-LOOP, never the wide accounting rows.
+	//
+	// Occupancy (`usage_update.used`) is MAIN-CONTEXT occupancy. The recurrence
+	// identity that produces the bound is a property of the MAIN AGENT LOOP's
+	// cache breakpoints. `_meta.quota.model_usage` is a WIDER scope: the vendor
+	// states those rows also count Task subagents, sidechains, and INTERNAL
+	// CALLS SUCH AS COMPACTION (read at claude-agent-acp 0.73.0
+	// `dist/acp-agent.js:5728-5748`). Mixing the two scopes inflates the bound
+	// through both remaining terms that mention cacheWrite:
+	//   max(0, occupancy − cacheWrite) shrinks as wide cacheWrite grows, so
+	//   less is subtracted; min(rawBound, cacheWrite) rises with it.
+	// Either path can push a WARM main prefix over the notice floor and attach
+	// this turn's all-inclusive dollar figure to a miss that did not happen
+	// on the prefix — the same class of false dollar assertion #93 exists to end.
+	//
+	// Constructed, not a live ledger. Turn 1 is a warm main context. Turn 2's
+	// MAIN LOOP writes 1,000 tokens of cache; the wide rows write 180,000
+	// because an internal/compaction call is included. Mixing those would
+	// announce "cache miss ≥174k" (200,000 − 1,000 − max(0, 205,000 − 180,000)
+	// = 174,000). The main-loop bound is negative, so nothing is said.
+	// `usage.acp` remains the WIDE totals — this cell does not walk back CELL 1e.
+	// ----------------------------------------------------------------------
+	{
+		const h = makeHarness(recordDir, [
+			{
+				usage: {
+					inputTokens: 500,
+					outputTokens: 500,
+					cachedReadTokens: 0,
+					cachedWriteTokens: 2_000,
+					totalTokens: 3_000,
+				},
+				cumulativeCostUsd: 1,
+				occupancyTokens: 200_000,
+			},
+			{
+				usage: {
+					inputTokens: 100,
+					outputTokens: 400,
+					cachedReadTokens: 0,
+					cachedWriteTokens: 1_000,
+					totalTokens: 1_500,
+				},
+				modelUsage: [
+					{
+						model: "claude-sonnet-5",
+						token_count: {
+							inputTokens: 100,
+							outputTokens: 400,
+							cachedInputTokens: 0,
+							cachedWriteTokens: 1_000,
+						},
+					},
+					{
+						model: "claude-haiku-5",
+						token_count: {
+							inputTokens: 8,
+							outputTokens: 1_324,
+							cachedInputTokens: 0,
+							cachedWriteTokens: 179_000,
+						},
+					},
+				],
+				cumulativeCostUsd: 5,
+				occupancyTokens: 205_000,
+			},
+		]);
+		const textOf = (m: AssistantMessage): string => m.content.map((c) => (c.type === "text" ? c.text : "")).join("");
+		await collect(
+			backend.streamAcpTurn(claude, userCtx("warm prefix NONCE"), { sessionId: "usage-S" }, h.deps) as Stream,
+		);
+		const mixed = sealedMessage(
+			await collect(
+				backend.streamAcpTurn(
+					claude,
+					reuseCtx("warm prefix NONCE", "compaction sidecar NONCE"),
+					{ sessionId: "usage-S" },
+					h.deps,
+				) as Stream,
+			),
+		);
+		assert.ok(
+			!/cache miss/.test(textOf(mixed)),
+			"[QK:ACP-REBILL-MAIN-LOOP-SCOPE] a warm main prefix that wrote 1,000 tokens of cache cannot announce a " +
+				"174k miss because an internal/compaction call wrote 179,000 more on the WIDE rows. Occupancy and the " +
+				"recurrence are main-loop; mixing them with wide cacheWrite inflates the bound through both remaining " +
+				"terms and attaches this turn's dollar figure to a miss that did not happen on the prefix. " +
+				`Got: ${JSON.stringify(textOf(mixed))}`,
+		);
+		assert.deepEqual(
+			(mixed.usage as unknown as { acp?: unknown }).acp,
+			{ input: 108, output: 1_724, cacheRead: 0, cacheWrite: 180_000 },
+			"…and usage.acp must still be the WIDE totals (CELL 1e). Narrowing the bound must not silently fall back " +
+				`the reporting numerator. Got: ${JSON.stringify((mixed.usage as unknown as { acp?: unknown }).acp)}`,
+		);
+	}
+
+	// ----------------------------------------------------------------------
 	// CELL 2 — two turns' costs SUM to the backend's session total.
 	//
 	// The series is cumulative and monotone, exactly as the live ledgers were.
@@ -965,7 +1063,7 @@ console.log(
 		"ACCOUNTING-GRADE `_meta.quota.model_usage` rows (summed) in preference to the main-loop-only " +
 		"`PromptResponse.usage`, so the numerator's scope matches the all-inclusive cost denominator; a re-billed " +
 		"prefix is REPORTED with a size that is a PROVEN LOWER BOUND (191,971 against the ledger's true 195,177) and " +
-		"the turn's own SDK cost; " +
+		"the turn's own SDK cost, computed from MAIN-LOOP usage so a wide compaction write cannot inflate it; " +
 		"per-turn costs are ADJACENT DIFFS of the backend's running session total and sum back to it across " +
 		"a reused session; a turn with no cost notification attributes $0 while HOLDING the baseline so the session sum " +
 		"reproduces the backend's own cumulative ESTIMATE exactly (agreement with that carrier, never with a bill); a DECREASING total rebaselines, attributes $0 and says so to the operator with both numbers; " +

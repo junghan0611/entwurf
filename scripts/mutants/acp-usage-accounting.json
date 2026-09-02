@@ -134,7 +134,7 @@
 			"title": "the re-billed-prefix bound drops its ΣcacheWrite term, so a full prefix rewrite after an idle gap no longer clears the notice floor — the operator runs on a cache-effect badge while having already paid to rewrite the whole prefix",
 			"subject": "pi-extensions/lib/acp/backend.ts",
 			"find": [
-				"\t\t\t? (priorOccupancy as number) - (priorIoSum as number) - Math.max(0, (occupancy as number) - aggregate.cacheWrite)"
+				"\t\t\t? (priorOccupancy as number) - (priorIoSum as number) - Math.max(0, (occupancy as number) - cacheWriteForBound)"
 			],
 			"replace": ["\t\t\t? (priorOccupancy as number) - (priorIoSum as number) - Math.max(0, occupancy as number)"],
 			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
@@ -147,7 +147,7 @@
 			"title": "the re-billed claim loses its physical cap, so a context shrink (organic compaction) announces a six-figure cache miss over a turn that wrote a thousand tokens — a fact the operator has no way to disbelieve",
 			"subject": "pi-extensions/lib/acp/backend.ts",
 			"find": [
-				"\t\tconst missLowerBound = rawBound === undefined ? undefined : Math.min(rawBound, aggregate?.cacheWrite ?? 0);"
+				"\t\tconst missLowerBound = rawBound === undefined ? undefined : Math.min(rawBound, cacheWriteForBound);"
 			],
 			"replace": ["\t\tconst missLowerBound = rawBound;"],
 			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
@@ -164,6 +164,17 @@
 			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
 			"timeoutSeconds": 240,
 			"signature": "[QK:ACP-ACCOUNTING-PREFERS-WIDEST]",
+			"signatureSource": "scripts/check-acp-usage-accounting.ts"
+		},
+		{
+			"claim": "ACP-REBILL-MAIN-LOOP-SCOPE",
+			"title": "the re-billed bound takes cacheWrite from the WIDE accounting rows instead of the main loop, so a warm main prefix announces a six-figure miss (and this turn's dollar figure) because an internal/compaction call wrote extra cache — mixing occupancy's scope with model_usage's",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\tconst cacheWriteForBound = mainLoop !== undefined ? mainLoop.cacheWrite : 0;"],
+			"replace": ["\t\tconst cacheWriteForBound = aggregate !== undefined ? aggregate.cacheWrite : 0;"],
+			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:ACP-REBILL-MAIN-LOOP-SCOPE]",
 			"signatureSource": "scripts/check-acp-usage-accounting.ts"
 		}
 	]
