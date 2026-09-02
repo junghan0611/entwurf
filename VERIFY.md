@@ -165,8 +165,15 @@ cd "$REPO_DIR" && ./run.sh setup "$PROJECT_DIR"
 
 ### 1.2 Live acceptance (optional)
 
+Put `PWD` in scratch so session artifacts do not land in the repo. LIVE gates inherit
+the caller's environment: a pi or ACP session exports `PI_SESSION_ID` / `PI_AGENT_ID` /
+`CLAUDE_CONFIG_DIR` into every child, which masquerades as the smoke's identity or
+strips Claude hooks (`hooks: {}` overlay). Strip those carriers:
+
 ```bash
-LIVE=1 ./run.sh release-gate /path/to/consumer-project --cut
+cd /path/to/scratch
+env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID \
+  LIVE=1 /path/to/entwurf/run.sh release-gate /path/to/scratch --cut
 pi --provider entwurf --model claude-sonnet-5 -p "reply with ok only"   # one-turn smoke
 ```
 

@@ -12,12 +12,16 @@ Each receipt carries its own scope; none of them is transferable to another comm
 
 - **`LIVE=1 ./run.sh release-gate <scratch> --cut`** — **MUST PASS=23 FAIL=0 SKIP=0**,
   BEHAVIOR PASS=1 FAIL=0 SKIP=0, exit 0, `cut: OK`. Run on commit `0379764`, tracked tree
-  `cb1a3dc69b521909f0fe6f956e5c0fa36e885d5955f91271dd8e63d30cd918fb`, dirty 0, 2026-09-02
-  20:14:51 → 21:04:41 KST. This is the acceptance floor of VERIFY.md §3.3, and it carries
-  `pnpm run check:full` and `./run.sh check-gate-qualification` (**346/346 KILLED, NOT KILLED 0**)
-  inside it as MUST steps, so those two are receipts of this same run rather than of an earlier
-  standalone one. The only bytes written after it are this Verification block and the NEXT.md
-  coordinates — no gate reads either file, which is why that scope can be stated instead of hidden.
+  `cb1a3dc69b521909f0fe6f956e5c0fa36e885d5955f91271dd8e63d30cd918fb`, 2026-09-02
+  20:14:51 → 21:04:41 KST. Frozen log: `/tmp/entwurf-0.17.0-evidence/ACCEPTED-cut-release-gate.log`.
+  This run carried `pnpm run check:full` and `./run.sh check-gate-qualification`
+  (**346/346 KILLED**) as MUST steps. **It is not the 0.17.0 acceptance SHA:** `9479750`
+  changed source after it, so a new `--cut` on the final HEAD is required before tag.
+  The bytes written after that run were this Verification block and NEXT.md.
+  `CHANGELOG.md` is in `package.json` `files` and `check:full → check:package → check-pack`
+  enumerates it (`npm pack --dry-run`, 436 files in that tarball) — a packaged artifact,
+  not a behavioral input. `NEXT.md` is not in `files`. Working-tree cleanliness at cut
+  start was an operator observation, not a line in the gate log.
 - **Four reds along the way, all real, none smoothed.** A formatter rejection of the new mutant
   manifest; a doc-floor gate catching the ROADMAP ledger entry quoting the ADAPTER's
   `engines.node ">=22"` as though it were entwurf's own; a qualification run that aborted RED on its
@@ -46,14 +50,11 @@ Each receipt carries its own scope; none of them is transferable to another comm
   mailbox and saw nothing. That smoke's own source anticipates this exact disguise
   (`scripts/smoke-omp-fresh-live.ts:186`, "the failure would masquerade as a silent sibling").
   Re-run with `env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID`, all five turned green and
-  nothing else changed. **VERIFY.md tells the operator to put `PWD` in scratch; it does not yet say
-  to strip the identity and config carriers, and that gap is what cost this cut its first 52
-  minutes.**
-- **Qualification lane size.** The total moved **335 → 346**, and all eleven of those claims are new
-  in this release: `scripts/mutants/acp-usage-accounting.json` does not exist on the 0.16.1 base at
-  all. (Within the branch the manifest grew 7 → 11; the last one, `ACP-ACCOUNTING-PREFERS-WIDEST`,
-  covers a branch that had no deterministic coverage before this cut.) Nothing in this lane guarded
-  the previous release.
+  nothing else changed. That gap — VERIFY.md named `PWD` in scratch but not the carriers — is what
+  cost the first cut its 52 minutes; VERIFY.md and AGENTS.md now name the strip.
+- **Qualification lane size.** On the `0379764` cut the total was **335 → 346**, eleven new claims
+  in `scripts/mutants/acp-usage-accounting.json` (absent on the 0.16.1 base). `9479750` adds a
+  twelfth, `ACP-REBILL-MAIN-LOOP-SCOPE`. The post-D1 kill count is not yet a receipt.
 - **`smoke-acp-raw-turn-live`** — PASS on the moved pin, quoted from the accepted `--cut` run's own
   output rather than from a session message: launch source
   `package:@agentclientprotocol/claude-agent-acp` (not PATH fallback), `protocolVersion=1`, model
@@ -61,9 +62,10 @@ Each receipt carries its own scope; none of them is transferable to another comm
   track's own named lock, not a substitute for it. An earlier standalone run of the same smoke
   reported 58,189 bytes and another 58,178; the byte count is per-run and is not a fixed
   fingerprint, which is precisely why the number cited here is the one the gate printed.
-- **Recurrence corpus measurement** — the re-billed bound's in-turn identity was re-measured across
-  every ACP overlay transcript, not the single ledger it had been resting on: 2,398 of 2,410
-  adjacent pairs hold (99.50%) over 30+ sessions, 2026-05 → 2026-09.
+- **Recurrence corpus measurement** — cited from the in-source comment at
+  `pi-extensions/lib/acp/backend.ts` (`priorTurnInputOutputSum`): 2,398 of 2,410 adjacent pairs
+  (99.50%), 2026-05 → 2026-09. The raw pair inventory is not in the frozen receipts; treat it as
+  an operator observation recorded in source, not as a cut receipt.
 
 ### Changed
 
@@ -105,6 +107,13 @@ Each receipt carries its own scope; none of them is transferable to another comm
   material re-billed prefix is reported as a PROVEN LOWER BOUND rather than silently hidden.
   Turn cost remains the adjacent difference of the SDK's cumulative estimate, never a local
   reprice. A backend with no measured semantics (cortex) is still sealed not at all.
+- **The re-billed-prefix bound no longer mixes main-context occupancy with wide accounting IO.**
+  `readTurnAccounting` prefers `_meta.quota.model_usage`, whose rows also count Task subagents,
+  sidechains, and internal compaction. Feeding that `cacheWrite` into a bound whose occupancy is
+  main-context inflates the lower bound through both remaining terms, so a warm main prefix can
+  announce a miss and attach this turn's dollar figure to it. The bound and its stored prior now
+  read `PromptResponse.usage` (main loop) only; `usage.acp` stays the wide totals. Deterministic
+  receipt: `scripts/check-acp-usage-accounting.ts` CELL 1f.
 - **A backwards session total no longer asserts a cause it has not measured.** The operator
   diagnostic for a decreasing cumulative cost previously named a conversation reset as "the
   known cause". The adapter's `conversation_reset` handler only switches to a fresh

@@ -21,41 +21,45 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 </details>
 
-- [x] **9. ACP Claude를 메인 레일로 — 계기판 수리(#93)** — 브랜치 `fix/acp-usage-accounting-93`에 구현 완료.
+- [x] **9. ACP Claude를 메인 레일로 — 계기판 수리(#93)** — main에 랜딩됨 (`4d6fe4c` 및 선행 3커밋).
   본문 설계(`extractTurnUsage?` seam → 네 필드에 4분할 투영)는 2026-09-02 측정으로 **기각**됐고,
-  실제로 랜딩한 것은 그 기각의 실행이다. #92는 리서치 레인에 그대로 남는다.
+  실제로 랜딩한 것은 그 기각의 실행이다. #92는 리서치 레인에 그대로 남는다. #93은 닫힘.
+  독립 리뷰 D1(재청구 하한의 스코프 혼합)은 `9479750`에서 닫혔다.
 
-현재 좌표: 1–9 완료(9는 브랜치 위) · **0.16.1 make는 열린 채 PAUSED** · 0.17.0은 컷 대기.
-push·tag·release-gate는 GLG 몫이다.
+현재 좌표: 1–9 완료 · **0.16.1 make는 열린 채 PAUSED** · 0.17.0은 D1 이후 **재컷** 대기.
+푸시·태그는 `entwurf-release make 0.17.0` 몫이다 (CalVer `tag-release`가 아님).
 
-# NOW — #93 랜딩됨, 0.17.0 컷 대기
+# NOW — #93 랜딩됨, D1 수리됨, 0.17.0 재컷 대기
 
 - **Stem:** entwurf ACP Claude가 GLG의 메인 레일이 되게 한다. 토큰 효율은 #92가 이미 닫았고,
   남은 것이 계기판이었다. 그 계기판을 **ACP 레일 자신이** 고쳤다.
-- **지금 서 있는 자리:** 브랜치 `fix/acp-usage-accounting-93`에 커밋 **4개**(회계 보존 →
-  핀 이동 → 회계 수리 → 릴리즈 준비). main에 머지 안 했고 태그 안 달았고 푸시 안 했다.
+- **지금 서 있는 자리:** `main`, origin 대비 local-ahead. 구현은 이미 main 위에 있고
+  (`0fc9b76` → `21d6420` → `4d6fe4c` → prepare `0379764` → receipts `db46ae4` → D1 `9479750`).
+  푸시 안 됨, 태그 안 달림.
 - **랜딩한 계약:** pi의 네 `Usage` 필드는 **0으로 둔다** — ACP의 유일한 토큰 반송자는 턴 왕복
   합계이고 그 넷은 한 요청의 프롬프트 모양이다. 턴 회계 총계는 `usage.acp`로 가며 numerator는
   회계등급 `_meta.quota.model_usage` 행 합(main-loop 전용 `PromptResponse.usage`보다 우선).
-  턴 비용은 SDK 누적 추정치의 인접 차분. 재청구 프리픽스는 증명된 하한으로 공지된다.
-- **검증 상태 — 릴리즈 수용 바닥이 초록이다.** `LIVE=1 ./run.sh release-gate <scratch> --cut`
-  **MUST PASS=23 FAIL=0 SKIP=0**, BEHAVIOR PASS=1, exit 0, `cut: OK`. 커밋 `0379764`,
-  tracked tree `cb1a3dc69b52…`, dirty 0, 20:14:51 → 21:04:41 KST. `check:full`과
-  `check-gate-qualification`(**346/346 KILLED**)은 그 안의 MUST 스텝으로 들어 있다.
-  총계 335 → 346이고 11개 전부 이번 릴리즈 신설이다.
+  턴 비용은 SDK 누적 추정치의 인접 차분. 재청구 프리픽스는 증명된 하한으로 공지되며, 그 하한의
+  IO 항은 main-loop `PromptResponse.usage`다 (wide `model_usage`와 스코프를 섞지 않음 — `9479750`).
+- **검증 상태 — `0379764` 컷은 초록이었고, D1이 그 수용을 무효로 만들었다.** 그 런은
+  `LIVE=1 ./run.sh release-gate <scratch> --cut` MUST PASS=23 FAIL=0 SKIP=0, BEHAVIOR PASS=1,
+  exit 0, `cut: OK`, tree `cb1a3dc69b52…`, 20:14:51 → 21:04:41 KST, 그 안의 qualification
+  **346/346 KILLED**. 로그는 `/tmp/entwurf-0.17.0-evidence/`. `9479750`이 소스를 바꿨으므로
+  최종 HEAD에서 재컷이 남았다. 새 kill count는 아직 영수증이 아니다.
 - **첫 `--cut`은 빨간불이었고(MUST FAIL=5) 다섯 개 전부 실행 환경이었다.** 게이트를 살아있는
   ACP 시민 세션 안에서 돌린 탓이다 — `CLAUDE_CONFIG_DIR`가 `hooks: {}`인 오버레이를 가리켜
   Claude 자식이 훅 없이 태어나고, `PI_SESSION_ID`가 fresh-call 콜백 주소를 가로챈다.
   `env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID`로 다시 돌리자 다섯 개가 초록.
-  **VERIFY.md는 `PWD`만 스크래치로 두라 하고 반송자를 지우라는 말이 없다 — 그 구멍은 남아 있다.**
-- **리뷰 수정 1번들(`4d6fe4c`에 접어 넣음):** 감소 통지가 벤더의 단어 `/clear` 대신
-  "conversation reset"을 원인으로 불렀다 — 그건 비용을 건드리지 않는다고 우리가 증명한 이벤트다.
-  그리고 침묵된 미스를 영수증 없는 "194k"로 적었다(측정값은 195,177).
-- **Next — GLG 결정이 필요한 것 셋:**
-  1. **`LIVE=1 ./run.sh release-gate <scratch> --cut`** — 릴리즈 수락 바닥이고 아직 안 돌았다.
-     pi·codex·Claude Code 레일에 실제 모델 턴을 쓴다(VERIFY.md:45-49, :59). 비용 승인이 필요하다.
-  2. **main 머지 + 0.17.0 태그** — `tag-release` 몫. CHANGELOG 항목은 이미 써 있다.
-  3. **#93 닫기** — 클로징 코멘트 초안은 준비됐다. 본문 Acceptance 1이 기각된 설계임을 명시한다.
+  VERIFY.md §1.2와 AGENTS.md가 이제 그 반송자 제거를 적는다.
+- **리뷰 수정:** `4d6fe4c` — 감소 통지가 벤더의 단어 `/clear` 대신 "conversation reset"을
+  원인으로 불렀다. 침묵된 미스를 영수증 없는 "194k"로 적었다(측정값은 195,177).
+  `9479750` — 재청구 하한이 main-context occupancy와 wide `cacheWrite`를 한 식에 넣던 스코프 혼합.
+- **Next:**
+  1. **재컷** — `cd <scratch> && env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID LIVE=1 ./run.sh release-gate <scratch> --cut`.
+     `.ts`를 고쳤으면 먼저 `pnpm run build-bridge`.
+  2. **`entwurf-release make 0.17.0`** — 푸시 → exact-SHA CI 3잡(`check`·`install-surface`·`artifact-consumer`) → 후보 수용 → 태그 → GitHub 릴리즈.
+     이 리포의 릴리즈 도구는 CalVer `tag-release`가 아니라 SemVer `.claude/skills/entwurf-release`의 4모드다.
+  3. **#93은 닫힘.** 본문 Acceptance 1이 기각된 설계임을 스레드가 이긴다.
 - **남은 한계는 전부 #96:** per-request carrier 부재 · pi-native cache-stats 통합 · 턴 중간
   점화식 파손 · usage 미보고 턴 · 재시작 첫 턴 침묵(#92의 4.5× 절벽 턴).
 - **Read:** #93 스레드의 2026-09-02 코멘트(본문보다 이것이 이긴다) · ROADMAP `Dep bump` 레인의
