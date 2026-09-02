@@ -4,7 +4,8 @@
 // 10-18x, measured on three independent live ledgers (oracle 18x / oracle 10.5x
 // / thinkpad 14.4x, #93). Two defects produced that one number:
 //
-//   1. `PromptResponse.usage` — the ONLY per-turn token partition on the wire —
+//   1. `PromptResponse.usage` — the only per-turn token carrier on the wire, and
+//      a ROUND-TRIP AGGREGATE rather than a per-request partition —
 //      was erased at the type boundary, so every ACP assistant message reported
 //      input/output/cacheRead/cacheWrite as 0. The cache-efficiency badge the
 //      operator wanted could not be computed at all: its inputs were zeroes.
@@ -15,15 +16,17 @@
 //
 // The contract now:
 //
-//   tokens    come from the adapter's measured reading of PromptResponse and are
-//             projected onto pi's four turn fields.
+//   tokens    are NOT written at all. ACP's only carrier is a per-turn round-trip
+//             AGGREGATE and pi's four fields mean ONE REQUEST's prompt shape;
+//             projecting one onto the other fired a false overflow (#93, measured
+//             2026-09-02). Silence until the wire carries a per-request partition.
 //   cost      is an ADJACENT DIFF of the backend's own running total, held on the
 //             BridgeSession. A missing total HOLDS the baseline (the amount lands
 //             in the next diff — misattributed by turn, exact by session). A
 //             DECREASING total rebaselines, attributes $0, and SAYS SO.
 //   totalTokens is CONTEXT OCCUPANCY, not a turn total, and is never overwritten
-//             with the turn partition — pi reads that field as the context gauge.
-//   a backend with no measured semantics (no extractTurnUsage) is sealed NOT AT
+//             with the turn aggregate — pi reads that field as the context gauge.
+//   a backend with no measured semantics (no sealsTurnAccounting) is sealed NOT AT
 //             ALL: cortex's emitted usage must be byte-identical to pre-#93.
 //
 // ORACLES, each independent of the subject:
@@ -33,9 +36,9 @@
 //   - the context gauge: pi's REAL `calculateContextTokens`, imported from
 //     @earendil-works/pi-coding-agent — the function that actually drives the
 //     footer percentage and auto-compaction, not our restatement of it.
-//   - the token partition: four DISTINCT synthetic values (including a non-zero
-//     cachedReadTokens, which the live defect could never produce) asserted on the
-//     emitted pi message. A real cache hit stays a LIVE receipt, deliberately.
+//   - the overflow verdict: pi's REAL `isContextOverflow`, imported from
+//     @earendil-works/pi-ai — the function that actually compacted the live
+//     session — driven by the incident's own numbers to scale.
 //
 // backend.ts imports its siblings with `.js` suffixes (the root/jiti runtime
 // convention), so — like check-acp-prompt-lifecycle — we tsc-emit the project and
@@ -48,6 +51,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Api, AssistantMessage, AssistantMessageEvent, Context, Message, Model } from "@earendil-works/pi-ai";
+import { isContextOverflow } from "@earendil-works/pi-ai";
 import { calculateContextTokens } from "@earendil-works/pi-coding-agent";
 
 const claude = { id: "claude-sonnet-5" } as unknown as Model<Api>;
@@ -64,9 +68,29 @@ interface WireUsage {
 	cachedWriteTokens?: number;
 }
 
+/**
+ * One `_meta.quota.token_count` row. The field NAMES deliberately differ from
+ * `PromptResponse.usage`: cache reads are `cachedInputTokens` here because the
+ * shape is shared with codex-acp, and `cachedWriteTokens` is Claude's extra
+ * sibling (read at claude-agent-acp 0.73.0 `dist/acp-agent.js:5750-5765`).
+ * Reading a quota row with the `usage` field names silently yields zeros, so the
+ * fixture below spells the vendor's names out rather than reusing `WireUsage`.
+ */
+interface QuotaTokenCount {
+	totalTokens?: number;
+	inputTokens?: number;
+	cachedInputTokens?: number;
+	cachedWriteTokens?: number;
+	outputTokens?: number;
+}
+
 /** What ONE turn of the fake backend reports. */
 interface TurnScript {
 	usage?: WireUsage;
+	/** `_meta.quota.model_usage` — the vendor's ACCOUNTING-grade per-model totals,
+	 *  which also count Task subagents, sidechains and internal calls such as
+	 *  compaction. Present from claude-agent-acp 0.71.0 (`turnQuotaMeta`). */
+	modelUsage?: Array<{ model: string; token_count: QuotaTokenCount }>;
 	/** the backend's RUNNING SESSION TOTAL at the end of this turn, in USD */
 	cumulativeCostUsd?: number;
 	/** post-turn context occupancy (`usage_update.used`) */
@@ -113,8 +137,8 @@ function makeFakeChild() {
  *
  * Each `prompt` call consumes the next TurnScript: it first pushes that turn's
  * `usage_update` notification (the wire the running cost total actually arrives
- * on — read at claude-agent-acp `dist/acp-agent.js:2673-2689`), then answers the
- * prompt with that turn's `PromptResponse.usage` (the wire the token partition
+ * on — read at claude-agent-acp 0.73.0 `dist/acp-agent.js:2918-2933`), then answers the
+ * prompt with that turn's `PromptResponse.usage` (the wire the turn aggregate
  * arrives on). Both orderings are the real one: the notification precedes the
  * response, because the SDK emits it from the `result` message that ENDS the turn.
  */
@@ -143,7 +167,11 @@ function makeHarness(recordDir: string, scripts: TurnScript[]) {
 				notify = true;
 			}
 			if (notify) await handlers.sessionUpdate({ update, sessionId });
-			return { stopReason: "end_turn", ...(script.usage ? { usage: script.usage } : {}) };
+			return {
+				stopReason: "end_turn",
+				...(script.usage ? { usage: script.usage } : {}),
+				...(script.modelUsage ? { _meta: { quota: { model_usage: script.modelUsage } } } : {}),
+			};
 		},
 		cancel: () => {},
 		close: () => {},
@@ -256,30 +284,46 @@ try {
 	const backend = (await import(pathToFileURL(resolve(TMP_EMIT, "pi-extensions/lib/acp/backend.js")).href)) as any;
 
 	// ----------------------------------------------------------------------
-	// CELL 1 — the turn's token partition reaches the pi message.
+	// CELL 1 — the turn aggregate never reaches pi's per-request fields.
 	//
-	// This is the defect's own shape: the four fields were 0 on EVERY live ACP
-	// message across three ledgers, because the response carrying them was typed
-	// as `{ stopReason?: string }`. Four distinct values (so a mutant cannot pass
-	// by cross-wiring two fields) and a NON-ZERO cachedReadTokens (Acceptance 1's
-	// deterministic half; the real cache hit stays a LIVE receipt).
+	// This is the incident's shape: the four ACP totals belong on `usage.acp`, not
+	// on pi's request-shaped fields. Four distinct non-zero values keep a mutant
+	// from passing by cross-wiring fields; the incident-scale aggregate stays a
+	// deterministic receipt, while the live ledger remains a separate receipt.
 	// ----------------------------------------------------------------------
 	{
+		// The 2026-09-02 incident, to scale: ACP reported the turn's ROUND-TRIP
+		// AGGREGATE (cacheRead 4,185,084 over 21 requests) while the context that
+		// turn actually occupied was 223,516 on a 1,000,000 window.
 		const h = makeHarness(recordDir, [
 			{
 				usage: {
-					inputTokens: 111,
-					outputTokens: 222,
-					cachedReadTokens: 333,
-					cachedWriteTokens: 444,
-					totalTokens: 1110,
+					inputTokens: 42,
+					outputTokens: 17_676,
+					cachedReadTokens: 4_185_084,
+					cachedWriteTokens: 221_084,
+					totalTokens: 4_423_886,
 				},
 				cumulativeCostUsd: 1.5,
-				occupancyTokens: 200_000,
+				occupancyTokens: 223_516,
 			},
 		]);
 		const msg = sealedMessage(
 			await collect(backend.streamAcpTurn(claude, userCtx("turn one"), { sessionId: "usage-A" }, h.deps) as Stream),
+		);
+
+		// pi's REAL overflow detector — the function that actually fired on the live
+		// session — is the oracle for this claim, not our restatement of its
+		// arithmetic, and it is asserted FIRST so that a re-projected aggregate is
+		// caught BY THIS CLAIM rather than incidentally by the field comparison
+		// below. It reads `input + cacheRead` RAW and never consults totalTokens, so
+		// an honest totalTokens cannot rescue a projected aggregate.
+		assert.equal(
+			isContextOverflow(msg, 1_000_000),
+			false,
+			"[QK:ACP-TURN-AGGREGATE-NOT-PROJECTED] pi's own isContextOverflow must not fire on a turn whose context " +
+				"occupied 223,516 of a 1,000,000 window. With the aggregate projected it read 42 + 4,185,084 and " +
+				`compacted the session — the defect this cell exists to keep dead. Got usage: ${JSON.stringify(msg.usage)}`,
 		);
 
 		assert.deepEqual(
@@ -289,26 +333,271 @@ try {
 				cacheRead: msg.usage.cacheRead,
 				cacheWrite: msg.usage.cacheWrite,
 			},
-			{ input: 111, output: 222, cacheRead: 333, cacheWrite: 444 },
-			"[QK:ACP-CLAUDE-TURN-USAGE-PRESERVED] the ACP prompt response carries this turn's four-way token partition " +
-				"and it must reach the pi message. Dropping it is the #93 defect itself: every live ACP assistant message " +
-				"reported all four as 0, which zeroed the cache-efficiency badge's inputs and made the comparison the " +
-				`operator asked for uncomputable. Got: ${JSON.stringify(msg.usage)}`,
-		);
-		assert.ok(
-			msg.usage.cacheRead > 0,
-			"a non-zero cacheRead must survive to the pi message — the deterministic half of Acceptance 1",
+			{ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+			"ACP's only token carrier is the SUM over this turn's API round " +
+				"trips; pi's four fields mean ONE REQUEST's prompt shape. Projecting the aggregate onto them is what " +
+				"compacted a live 223k session on a 1M window, invented two phantom cache misses and silenced the one " +
+				`real 195,177-token miss. No honest per-request value exists on this wire, so all four stay 0. Got: ${JSON.stringify(msg.usage)}`,
 		);
 
 		// pi's OWN reader of this message decides the context gauge and auto-compaction.
 		assert.equal(
 			calculateContextTokens(msg.usage),
-			200_000,
+			223_516,
 			"[QK:ACP-CONTEXT-OCCUPANCY-PRESERVED] `totalTokens` is what pi reads as CONTEXT OCCUPANCY " +
 				"(calculateContextTokens returns it whenever it is non-zero), and the backend reports occupancy on " +
-				"usage_update.used — 200000 here. Overwriting it with this turn's partition (1110) would collapse the " +
-				"status-line context percentage to a per-turn delta and leave auto-compaction reading a nearly-empty " +
-				`session. Got: ${calculateContextTokens(msg.usage)}`,
+				"usage_update.used — 223516 here. Overwriting it with this turn's aggregate (4423886) would send the " +
+				"status-line percentage and auto-compaction reading past the window on a session that fits inside it. " +
+				`Got: ${calculateContextTokens(msg.usage)}`,
+		);
+	}
+
+	// ----------------------------------------------------------------------
+	// CELL 1b — the turn's ACCOUNTING aggregate rides its own key.
+	//
+	// pi's four fields stay 0 (CELL 1); the vendor's four numbers must still reach
+	// the operator, on a key no pi reader mistakes for a per-request shape.
+	// ----------------------------------------------------------------------
+	{
+		const h = makeHarness(recordDir, [
+			{
+				usage: {
+					inputTokens: 42,
+					outputTokens: 17_676,
+					cachedReadTokens: 4_185_084,
+					cachedWriteTokens: 221_084,
+					totalTokens: 4_423_886,
+				},
+				cumulativeCostUsd: 1.5,
+				occupancyTokens: 223_516,
+			},
+		]);
+		const msg = sealedMessage(
+			await collect(backend.streamAcpTurn(claude, userCtx("turn one"), { sessionId: "usage-A2" }, h.deps) as Stream),
+		);
+		assert.deepEqual(
+			(msg.usage as unknown as { acp?: unknown }).acp,
+			{ input: 42, output: 17_676, cacheRead: 4_185_084, cacheWrite: 221_084 },
+			"[QK:ACP-TURN-ACCOUNTING-ATTACHED] the vendor's four turn totals must reach the message VERBATIM on their own " +
+				"key. Dropping them is the silence #93 refused: a session runs for hours on a cache-effect badge while a " +
+				"full prefix rewrite has already been paid for, and nothing says so. " +
+				`Got: ${JSON.stringify((msg.usage as unknown as { acp?: unknown }).acp)}`,
+		);
+	}
+
+	// ----------------------------------------------------------------------
+	// CELL 1e — the ACCOUNTING-GRADE numerator is PREFERRED over the main-loop one.
+	//
+	// Two token carriers arrive on the same response and they measure DIFFERENT
+	// scopes. `PromptResponse.usage` (== `_meta.quota.token_count`) is the MAIN
+	// AGENT LOOP only. `_meta.quota.model_usage` comes from `result.modelUsage` and
+	// also counts Task subagents, sidechains and INTERNAL CALLS SUCH AS COMPACTION;
+	// the vendor states its rows "can total more than `token_count`" and are "the
+	// fuller picture, not a decomposition of it" (read at claude-agent-acp 0.73.0
+	// `dist/acp-agent.js:5732-5738`).
+	//
+	// The wide one is required, not merely nicer, because the DENOMINATOR already
+	// has that scope: turn cost is the adjacent diff of the backend's running total,
+	// which includes those internal calls. Pairing a main-loop numerator with an
+	// all-inclusive denominator understates the cache-effect badge EXACTLY when
+	// compaction ran — and compaction is a live path again (#94). A silent fallback
+	// to the narrow carrier is therefore a misaccounting, not a degraded reading.
+	//
+	// The fixture drives BOTH carriers at once with deliberately different numbers,
+	// so a fallback cannot pass for a preference, and it supplies TWO rows whose sum
+	// matches neither row alone — so dropping the row summation fails here too.
+	// Row field names are the vendor's (`cachedInputTokens`), which is also why
+	// reading a quota row with the `usage` names would surface as zeros right here.
+	// ----------------------------------------------------------------------
+	{
+		const h = makeHarness(recordDir, [
+			{
+				// main-loop only — what a fallback would report
+				usage: {
+					inputTokens: 42,
+					outputTokens: 17_676,
+					cachedReadTokens: 4_185_084,
+					cachedWriteTokens: 221_084,
+					totalTokens: 4_423_886,
+				},
+				// accounting-grade — main loop PLUS an internal/compaction call
+				modelUsage: [
+					{
+						model: "claude-sonnet-5",
+						token_count: {
+							inputTokens: 42,
+							outputTokens: 17_676,
+							cachedInputTokens: 4_185_084,
+							cachedWriteTokens: 221_084,
+						},
+					},
+					{
+						model: "claude-haiku-5",
+						token_count: {
+							inputTokens: 8,
+							outputTokens: 1_324,
+							cachedInputTokens: 96_000,
+							cachedWriteTokens: 12_000,
+						},
+					},
+				],
+				cumulativeCostUsd: 1.5,
+				occupancyTokens: 223_516,
+			},
+		]);
+		const msg = sealedMessage(
+			await collect(backend.streamAcpTurn(claude, userCtx("turn one"), { sessionId: "usage-A5" }, h.deps) as Stream),
+		);
+		assert.deepEqual(
+			(msg.usage as unknown as { acp?: unknown }).acp,
+			{ input: 50, output: 19_000, cacheRead: 4_281_084, cacheWrite: 233_084 },
+			"[QK:ACP-ACCOUNTING-PREFERS-WIDEST] the accounting-grade `_meta.quota.model_usage` rows must be SUMMED and " +
+				"preferred over the main-loop `PromptResponse.usage`. Falling back to the narrow carrier while turn cost " +
+				"stays an all-inclusive diff understates the cache-effect badge exactly when compaction or a subagent ran — " +
+				"a silent misaccounting of the same class #93 exists to end. The main-loop-only answer would be " +
+				`{input:42,output:17676,cacheRead:4185084,cacheWrite:221084}. Got: ${JSON.stringify((msg.usage as unknown as { acp?: unknown }).acp)}`,
+		);
+	}
+
+	// ----------------------------------------------------------------------
+	// CELL 1c — a re-billed prefix is REPORTED, and its size is a proven bound.
+	//
+	// Both turns are the 2026-09-01 incident's own aggregates as entwurf saw them.
+	// Turn A ends at occupancy 195,627; turn B is the one after the 401-minute idle
+	// gap. Two ledger numbers describe that first request and they are NOT the same
+	// quantity: it WROTE 195,814 (cache creation) and it MISSED 195,177 (the cache
+	// read it would have got had the prefix survived — the identity break). They
+	// differ because the prompt grew a little between the two turns. The bound:
+	//   195,627 − (4 + 1,220) − max(0, 223,516 − 221,084) = 191,971
+	// is compared against the MISS, 195,177 — so the
+	// bound is BELOW the truth, which is what makes it a bound and not a guess.
+	// ----------------------------------------------------------------------
+	{
+		const h = makeHarness(recordDir, [
+			{
+				usage: {
+					inputTokens: 4,
+					outputTokens: 1_220,
+					cachedReadTokens: 387_477,
+					cachedWriteTokens: 2_085,
+					totalTokens: 390_786,
+				},
+				cumulativeCostUsd: 10,
+				occupancyTokens: 195_627,
+			},
+			{
+				usage: {
+					inputTokens: 42,
+					outputTokens: 17_676,
+					cachedReadTokens: 4_185_084,
+					cachedWriteTokens: 221_084,
+					totalTokens: 4_423_886,
+				},
+				cumulativeCostUsd: 14.745,
+				occupancyTokens: 223_516,
+			},
+		]);
+		const warm = sealedMessage(
+			await collect(backend.streamAcpTurn(claude, userCtx("warm NONCE"), { sessionId: "usage-M" }, h.deps) as Stream),
+		);
+		const afterGap = sealedMessage(
+			await collect(
+				backend.streamAcpTurn(
+					claude,
+					reuseCtx("warm NONCE", "after gap NONCE"),
+					{ sessionId: "usage-M" },
+					h.deps,
+				) as Stream,
+			),
+		);
+		assert.equal(h.children.length, 1, "both turns ran on ONE reused child — the prior-turn facts must survive it");
+
+		const textOf = (m: AssistantMessage): string => m.content.map((c) => (c.type === "text" ? c.text : "")).join("");
+
+		assert.ok(
+			!/cache miss/.test(textOf(warm)),
+			"the FIRST turn has no previous occupancy to compare against, so it must say nothing. A notice here would " +
+				`mean the bound fires on an unknown, which is a guess. Got: ${JSON.stringify(textOf(warm))}`,
+		);
+		assert.match(
+			textOf(afterGap),
+			/cache miss ≥192k re-billed/,
+			"[QK:ACP-CACHE-REBILL-REPORTED] a re-billed prefix must be SAID. Silence is not a modest reading, it is a " +
+				"false one — this turn's first request wrote 195,814 tokens of cache after a 401-minute idle gap, missing " +
+				"a 195,177-token read it would otherwise have had, and the operator saw nothing. The bound (191,971) " +
+				`rounds to 192k and sits below that miss, which is what makes it a bound. Got: ${JSON.stringify(textOf(afterGap))}`,
+		);
+		// $4.745 renders as $4.74, and the reason is worth stating so a future reader
+		// does not "fix" it: `toFixed(2)` rounds the Number it receives, while the
+		// adjacent subtraction is 4.744999999999999 rather than decimal 4.745.
+		// Money is shown to the cent; a sub-cent tail is not worth a wider field, and
+		// no number the backend never reported is invented either way.
+		assert.ok(
+			/this turn \$4\.74/.test(textOf(afterGap)),
+			"the notice must quote what the turn cost, taken from the SDK's own adjacent diff (14.745 − 10 = 4.745) and " +
+				`never from a local repricing. Got: ${JSON.stringify(textOf(afterGap))}`,
+		);
+		// The idle clause needs a real gap; a same-process gate cannot age the clock,
+		// so its absence here is correct and the 401m form stays a LIVE observation.
+		assert.ok(
+			!/0m idle/.test(textOf(afterGap)),
+			`a sub-minute gap must not be announced as idle. Got: ${JSON.stringify(textOf(afterGap))}`,
+		);
+	}
+
+	// ----------------------------------------------------------------------
+	// CELL 1d — NEGATIVE CONTROLS for the re-billed claim.
+	//
+	// The bound is arithmetic over four numbers; these are the inputs that would
+	// make it lie. Each one is reachable on this rail, not a thought experiment.
+	// ----------------------------------------------------------------------
+	{
+		// (i) A context SHRINK — organic compaction inside the child. Occupancy
+		// collapses while almost nothing is written. The raw bound reads 180,000;
+		// the clamp answers 1,000, which is under the floor, so NOTHING is said.
+		// (counterexample from gpt-5.6-sol, 2026-09-02)
+		const h = makeHarness(recordDir, [
+			{
+				usage: {
+					inputTokens: 500,
+					outputTokens: 500,
+					cachedReadTokens: 0,
+					cachedWriteTokens: 2_000,
+					totalTokens: 3_000,
+				},
+				cumulativeCostUsd: 1,
+				occupancyTokens: 200_000,
+			},
+			{
+				usage: {
+					inputTokens: 100,
+					outputTokens: 400,
+					cachedReadTokens: 0,
+					cachedWriteTokens: 1_000,
+					totalTokens: 1_500,
+				},
+				cumulativeCostUsd: 2,
+				occupancyTokens: 20_000,
+			},
+		]);
+		const textOf = (m: AssistantMessage): string => m.content.map((c) => (c.type === "text" ? c.text : "")).join("");
+		await collect(backend.streamAcpTurn(claude, userCtx("big NONCE"), { sessionId: "usage-N" }, h.deps) as Stream);
+		const shrunk = sealedMessage(
+			await collect(
+				backend.streamAcpTurn(
+					claude,
+					reuseCtx("big NONCE", "shrunk NONCE"),
+					{ sessionId: "usage-N" },
+					h.deps,
+				) as Stream,
+			),
+		);
+		assert.ok(
+			!/cache miss/.test(textOf(shrunk)),
+			"[QK:ACP-REBILL-NEVER-EXCEEDS-WRITE] a turn that WROTE 1,000 tokens cannot have re-billed 180,000. The raw " +
+				"telescoped bound says 200,000 − 1,000 − 19,000 = 180,000 because occupancy collapsed, but a re-billed " +
+				"prefix is paid for as cache creation, so the claim is capped by this turn's own cacheWrite. Without " +
+				`that cap an organic compaction announces a six-figure miss that never happened. Got: ${JSON.stringify(textOf(shrunk))}`,
 		);
 	}
 
@@ -361,18 +650,19 @@ try {
 	// ----------------------------------------------------------------------
 	// CELL 3 — a turn with NO cost notification holds the baseline.
 	//
-	// Measured upstream: only ONE of the four usage_update emitters carries a cost
-	// (read at claude-agent-acp `dist/acp-agent.js:2678`; compact_boundary,
-	// mid-stream delta and rate_limit_event carry none), and a live thinkpad
-	// ledger shows such turns really occur. The honest handling is to HOLD the
-	// baseline so the amount lands in the NEXT diff: misattributed by turn, exact
-	// by session. Rebaselining to 0 there would double-count the whole prefix.
+	// Measured upstream: the result-path `usage_update` carries cost (read at
+	// claude-agent-acp 0.73.0 `dist/acp-agent.js:2913-2924`), while other
+	// `usage_update` paths can carry `used` without cost (for example the
+	// rate-limit path at `:3661-3671`). A live thinkpad ledger shows such turns
+	// really occur. The honest handling is to HOLD the baseline so the amount lands
+	// in the NEXT diff: misattributed by turn, exact by session. Rebaselining to 0
+	// there would double-count the whole prefix.
 	//
 	// The same turn also proves the OCCUPANCY carry-forward: with no notification
 	// there is no fresh `used`, and before this lane such a message was all-zero
-	// and pi skipped it. Now it carries a real token partition, so a zero
-	// totalTokens would make pi fall through to that partition and the gauge would
-	// dip to one turn's delta.
+	// and pi skipped it. Now it carries accounting on `usage.acp` while pi's four
+	// fields remain zero, so a zero totalTokens would leave no direct occupancy for
+	// the gauge to use.
 	// ----------------------------------------------------------------------
 	{
 		const C1 = 1.5;
@@ -442,12 +732,12 @@ try {
 	// ----------------------------------------------------------------------
 	// CELL 4 — a DECREASING session total is never silently absorbed.
 	//
-	// The backend can switch conversations inside one live query
-	// (`conversation_reset`, read at claude-agent-acp `dist/acp-agent.js:3349`),
-	// and whether that resets `total_cost_usd` is an SDK-internal value we cannot
-	// observe from here. So the diff can go negative in a session we are still
-	// holding. Absorbing it quietly would both misreport the turn and destroy the
-	// only observation that could settle the open question.
+	// `conversation_reset` switches the session to a fresh transcript (read at
+	// claude-agent-acp 0.73.0 `dist/acp-agent.js:3675-3682`), but whether that
+	// changes `total_cost_usd` is an SDK-internal value we cannot observe here.
+	// A diff can therefore go negative in a session we are still holding.
+	// Absorbing it quietly would both misreport the turn and destroy the only
+	// observation that could settle the open question.
 	// ----------------------------------------------------------------------
 	{
 		const h = makeHarness(recordDir, [
@@ -555,8 +845,8 @@ try {
 				totalTokens: msg.usage.totalTokens,
 			},
 			{ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 9.0, totalTokens: 140_000 },
-			"[QK:ACP-CORTEX-USAGE-UNTOUCHED] the sealing must be gated on the ADAPTER having a measured extractor, not " +
-				"on the common turn loop. A backend that implements no extractor keeps its pre-#93 output exactly — " +
+			"[QK:ACP-CORTEX-USAGE-UNTOUCHED] the sealing must be gated on the ADAPTER declaring measured semantics, not " +
+				"on the common turn loop. A backend that declares nothing keeps its pre-#93 output exactly — " +
 				"projecting claude's measured semantics onto it would mint, in a second backend, the same unmeasured " +
 				`accounting this lane exists to end. Got: ${JSON.stringify(msg.usage)}`,
 		);
@@ -669,12 +959,18 @@ function round6(value: number): number {
 }
 
 console.log(
-	"[check-acp-usage-accounting] ok — a Claude ACP turn's four-way token partition reaches the pi message (cacheRead " +
-		"non-zero); per-turn costs are ADJACENT DIFFS of the backend's running session total and sum back to it across " +
+	"[check-acp-usage-accounting] ok — a Claude ACP turn's ROUND-TRIP AGGREGATE is never projected onto pi's four " +
+		"per-request usage fields, so pi's own isContextOverflow does not fire on a session that fits its window; " +
+		"the vendor's four turn totals still reach the operator VERBATIM on their own `usage.acp` key, taken from the " +
+		"ACCOUNTING-GRADE `_meta.quota.model_usage` rows (summed) in preference to the main-loop-only " +
+		"`PromptResponse.usage`, so the numerator's scope matches the all-inclusive cost denominator; a re-billed " +
+		"prefix is REPORTED with a size that is a PROVEN LOWER BOUND (191,971 against the ledger's true 195,177) and " +
+		"the turn's own SDK cost; " +
+		"per-turn costs are ADJACENT DIFFS of the backend's running session total and sum back to it across " +
 		"a reused session; a turn with no cost notification attributes $0 while HOLDING the baseline so the session sum " +
 		"reproduces the backend's own cumulative ESTIMATE exactly (agreement with that carrier, never with a bill); a DECREASING total rebaselines, attributes $0 and says so to the operator with both numbers; " +
 		"totalTokens stays CONTEXT OCCUPANCY (verified through pi's own calculateContextTokens) and is carried forward " +
-		"when a turn reports none; a backend with no measured extractor — cortex — is sealed not at all; and a next turn " +
+		"when a turn reports none; a backend that declares no measured semantics — cortex — is sealed not at all; and a next turn " +
 		"started from INSIDE the previous turn's terminal event still reuses the one session, so the cost baseline " +
 		"survives the turn boundary",
 );

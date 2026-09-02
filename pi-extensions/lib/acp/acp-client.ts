@@ -39,12 +39,39 @@ import type { AcpTextBlock } from "./context.js";
  * rename upstream is a typecheck failure here instead of a silent zero. It is
  * marked `@experimental` upstream and its per-field comments say "across all
  * turns/session" while the outer one says "for this turn" — that contradiction
- * is why NO common code interprets this shape. Only a backend adapter that has
- * MEASURED its backend's semantics reads it (AcpBackendAdapter.extractTurnUsage).
+ * is why NO common code interprets this shape — and #93 then measured that the
+ * counts are a per-turn ROUND-TRIP AGGREGATE, which is not what any of pi's four
+ * `Usage` fields mean. It is read in exactly ONE place, `sealTurnUsage`, which
+ * relays it verbatim onto `usage.acp` (an accounting key, never a per-request
+ * shape) and never onto those four. A field rename upstream fails the typecheck
+ * here rather than silently zeroing the operator's cache-effect badge.
  */
+/** One `_meta.quota.token_count` row (claude-agent-acp 0.73.0
+ *  `dist/acp-agent.js:5750-5765`). `cachedInputTokens` is cache READS — the name
+ *  differs from `usage.cachedReadTokens` because the shape is shared with
+ *  codex-acp; `cachedWriteTokens` is Claude's extra sibling. */
+export type AcpQuotaTokenCount = {
+	totalTokens?: number | null;
+	inputTokens?: number | null;
+	cachedInputTokens?: number | null;
+	cachedWriteTokens?: number | null;
+	outputTokens?: number | null;
+};
+
 export type AcpPromptResponse = {
 	stopReason?: string;
 	usage?: AcpWireUsage | null;
+	/** Vendor-private, version-pinned. `_meta` is a standard ACP extension slot
+	 *  whose values a client may not assume, and `quota` is NOT in
+	 *  claude-agent-acp's exported types — it is produced by the private
+	 *  `turnQuotaMeta()` (read at 0.73.0 `dist/acp-agent.js:5738-5748`). Read
+	 *  defensively, never structurally required, and re-measure on a pin move. */
+	_meta?: {
+		quota?: {
+			token_count?: AcpQuotaTokenCount | null;
+			model_usage?: ReadonlyArray<{ model?: string; token_count?: AcpQuotaTokenCount | null }> | null;
+		} | null;
+	} | null;
 };
 
 /** The subset of the ACP agent connection the backend drives (real or fake). */

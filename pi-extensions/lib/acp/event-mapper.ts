@@ -56,12 +56,12 @@ export type AcpPiStreamState = {
 	 * The mapper is COMMON layer and deliberately assigns no meaning to either
 	 * number: what `cost.amount` is CUMULATIVE OVER, and whether that even holds
 	 * for a non-claude backend, is a per-backend measurement. backend.ts seals them
-	 * only for a backend whose adapter implements `extractTurnUsage` (#93).
+	 * only for a backend whose adapter declares `sealsTurnAccounting` (#93).
 	 *
-	 * Last write wins, never a sum: both are session-level running values, and one
-	 * turn can legitimately see several (claude emits one per `result` message,
-	 * including a sub-agent's own — read at claude-agent-acp
-	 * `dist/acp-agent.js:2673-2689`), each carrying a LARGER running total.
+	 * Last write wins, never a sum: both are latest session-level observations, and
+	 * one turn can legitimately see several (claude emits one per `result` message,
+	 * including a sub-agent's own — read at claude-agent-acp 0.73.0
+	 * `dist/acp-agent.js:2918-2933`), each carrying that result's current values.
 	 */
 	observedSessionCostUsd?: number;
 	observedContextOccupancyTokens?: number;
@@ -345,15 +345,15 @@ export function applyAcpSessionUpdate(
 		}
 		case "usage_update": {
 			// `used` is OCCUPANCY-shaped — the backend's post-turn context size, not
-			// this turn's token partition (claude computes it as the last assistant
-			// message's input+output+cacheRead+cacheWrite, which is the standing
-			// context, and its own comment says so: read at claude-agent-acp
-			// `dist/acp-agent.js:2694-2704`). pi reads `usage.totalTokens` as exactly
-			// that occupancy (`calculateContextTokens(usage) = usage.totalTokens ||
-			// input + output + cacheRead + cacheWrite`, read at pi-coding-agent
-			// `dist/core/compaction/compaction.js:86-88`), so the assignment below is
-			// the honest mapping and #93's turn partition goes to the four fields
-			// instead — never here.
+			// the prompt response's turn aggregate. Claude sends `lastAssistantTotalUsage`
+			// as `used` (read at claude-agent-acp 0.73.0
+			// `dist/acp-agent.js:3290-3297`), after constructing that scalar from the
+			// latest assistant snapshot (`:3273-3289`). pi reads `usage.totalTokens` as
+			// exactly that occupancy (`calculateContextTokens(usage) = usage.totalTokens
+			// || input + output + cacheRead + cacheWrite`, read at pi-coding-agent
+			// `dist/core/compaction/compaction.js:86-88`). The assignment below is the
+			// raw observation; backend.ts seals the measured occupancy and relays the
+			// turn aggregate separately on `usage.acp`, never onto pi's four fields.
 			if (typeof update.used === "number") {
 				state.output.usage.totalTokens = update.used;
 				state.observedContextOccupancyTokens = update.used;
@@ -365,7 +365,7 @@ export function applyAcpSessionUpdate(
 			// semantics — for those, this coarse assignment is the pre-#93 behaviour
 			// and changing it would be an unmeasured claim. backend.ts OVERWRITES
 			// this field authoritatively (from the baseline diff) for every turn of a
-			// backend that HAS an extractTurnUsage, so the cumulative can never reach
+			// backend that HAS sealsTurnAccounting, so the cumulative can never reach
 			// an operator's dashboard as a turn cost on that path.
 			const cost = update.cost as { amount?: unknown } | undefined;
 			if (typeof cost?.amount === "number") {

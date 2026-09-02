@@ -3,26 +3,28 @@
 	"lane": "acp-usage-accounting",
 	"mutants": [
 		{
-			"claim": "ACP-CLAUDE-TURN-USAGE-PRESERVED",
-			"title": "the turn's four-way token partition is dropped again — re-plants the exact live defect (every ACP assistant message reporting input/output/cacheRead/cacheWrite as 0)",
+			"claim": "ACP-TURN-AGGREGATE-NOT-PROJECTED",
+			"title": "the turn's ROUND-TRIP AGGREGATE is projected back onto pi's four per-request usage fields — re-plants the exact 2026-09-02 defect: pi's own isContextOverflow then read 42 + 4,185,084 against a 1,000,000 window and compacted a live session whose context was 223,516",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": [
-				"\t\tif (evidence) {",
-				"\t\t\tstate.output.usage.input = evidence.tokens.input;",
-				"\t\t\tstate.output.usage.output = evidence.tokens.output;",
-				"\t\t\tstate.output.usage.cacheRead = evidence.tokens.cacheRead;",
-				"\t\t\tstate.output.usage.cacheWrite = evidence.tokens.cacheWrite;",
+			"find": ["\t\tsealTurnUsage(adapter, session, promptResult);"],
+			"replace": [
+				"\t\tsealTurnUsage(adapter, session, promptResult);",
+				"\t\tconst reprojected = promptResult?.usage;",
+				"\t\tif (adapter.sealsTurnAccounting && reprojected) {",
+				"\t\t\tstate.output.usage.input = reprojected.inputTokens ?? 0;",
+				"\t\t\tstate.output.usage.output = reprojected.outputTokens ?? 0;",
+				"\t\t\tstate.output.usage.cacheRead = reprojected.cachedReadTokens ?? 0;",
+				"\t\t\tstate.output.usage.cacheWrite = reprojected.cachedWriteTokens ?? 0;",
 				"\t\t}"
 			],
-			"replace": ["\t\tvoid evidence;"],
 			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
 			"timeoutSeconds": 240,
-			"signature": "[QK:ACP-CLAUDE-TURN-USAGE-PRESERVED]",
+			"signature": "[QK:ACP-TURN-AGGREGATE-NOT-PROJECTED]",
 			"signatureSource": "scripts/check-acp-usage-accounting.ts"
 		},
 		{
 			"claim": "ACP-CONTEXT-OCCUPANCY-PRESERVED",
-			"title": "the seal writes THIS TURN's token partition into totalTokens instead of the session's context occupancy — pi's auto-compaction takes that value at face value (it falls back only on error or exactly 0), so the status-line percentage collapses and a long session reads as nearly empty until it overflows",
+			"title": "the seal stops writing the session's context occupancy into totalTokens — pi's calculateContextTokens then falls through to summing the four (all zero) usage fields, so the status-line percentage and auto-compaction read a long session as empty",
 			"subject": "pi-extensions/lib/acp/backend.ts",
 			"find": [
 				"\t\tif (typeof session.contextOccupancyTokens === \"number\") {",
@@ -30,9 +32,8 @@
 				"\t\t}"
 			],
 			"replace": [
-				"\t\tif (evidence) {",
-				"\t\t\tstate.output.usage.totalTokens =",
-				"\t\t\t\tevidence.tokens.input + evidence.tokens.output + evidence.tokens.cacheRead + evidence.tokens.cacheWrite;",
+				"\t\tif (typeof session.contextOccupancyTokens === \"number\") {",
+				"\t\t\tstate.output.usage.totalTokens = 0;",
 				"\t\t}"
 			],
 			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
@@ -60,8 +61,16 @@
 			"claim": "ACP-TURN-COST-SUM-MATCHES-SDK",
 			"title": "the backend's RUNNING SESSION TOTAL is assigned to the turn cost again instead of the adjacent diff — the arithmetic that displayed a $24.261 session as $444.370",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": ["\t\tsession.sdkCumulativeCostUsd = observed;", "\t\tstate.output.usage.cost.total = diff;"],
-			"replace": ["\t\tsession.sdkCumulativeCostUsd = observed;", "\t\tstate.output.usage.cost.total = observed;"],
+			"find": [
+				"\t\t\t\tsession.sdkCumulativeCostUsd = observed;",
+				"\t\t\t\tstate.output.usage.cost.total = diff;",
+				"\t\t\t\tturnCostUsd = diff;"
+			],
+			"replace": [
+				"\t\t\t\tsession.sdkCumulativeCostUsd = observed;",
+				"\t\t\t\tstate.output.usage.cost.total = observed;",
+				"\t\t\t\tturnCostUsd = diff;"
+			],
 			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
 			"timeoutSeconds": 240,
 			"signature": "[QK:ACP-TURN-COST-SUM-MATCHES-SDK]",
@@ -73,16 +82,14 @@
 			"subject": "pi-extensions/lib/acp/backend.ts",
 			"find": [
 				"\t\t\tstate.output.usage.cost.total = 0;",
-				"\t\t\treturn;",
-				"\t\t}",
-				"\t\tconst diff = observed - (session.sdkCumulativeCostUsd ?? 0);"
+				"\t\t} else {",
+				"\t\t\tconst diff = observed - (session.sdkCumulativeCostUsd ?? 0);"
 			],
 			"replace": [
 				"\t\t\tsession.sdkCumulativeCostUsd = 0;",
 				"\t\t\tstate.output.usage.cost.total = 0;",
-				"\t\t\treturn;",
-				"\t\t}",
-				"\t\tconst diff = observed - (session.sdkCumulativeCostUsd ?? 0);"
+				"\t\t} else {",
+				"\t\t\tconst diff = observed - (session.sdkCumulativeCostUsd ?? 0);"
 			],
 			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
 			"timeoutSeconds": 240,
@@ -102,24 +109,61 @@
 		},
 		{
 			"claim": "ACP-CORTEX-USAGE-UNTOUCHED",
-			"title": "the seal stops being gated on the adapter having a MEASURED extractor — claude's accounting semantics are projected onto a backend nobody measured, minting the same unmeasured accounting this lane exists to end",
+			"title": "the seal stops being gated on the adapter DECLARING measured semantics — claude's accounting is sealed onto a backend nobody measured, minting the same unmeasured accounting this lane exists to end",
 			"subject": "pi-extensions/lib/acp/backend.ts",
-			"find": [
-				"\t\tconst extract = adapter.extractTurnUsage;",
-				"\t\tif (!extract) return;",
-				"",
-				"\t\t// --- token axis -----------------------------------------------------",
-				"\t\tconst evidence = extract.call(adapter, promptResult);"
-			],
-			"replace": [
-				"\t\tconst extract = adapter.extractTurnUsage;",
-				"",
-				"\t\t// --- token axis -----------------------------------------------------",
-				"\t\tconst evidence = extract ? extract.call(adapter, promptResult) : undefined;"
-			],
+			"find": ["\t\tif (!adapter.sealsTurnAccounting) return;"],
+			"replace": ["\t\tvoid adapter.sealsTurnAccounting;"],
 			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
 			"timeoutSeconds": 240,
 			"signature": "[QK:ACP-CORTEX-USAGE-UNTOUCHED]",
+			"signatureSource": "scripts/check-acp-usage-accounting.ts"
+		},
+		{
+			"claim": "ACP-TURN-ACCOUNTING-ATTACHED",
+			"title": "the vendor's four turn totals stop riding their own key — pi's four fields are 0 and nothing else carries the numbers, so the cache-effect badge has no inputs and a paid-for prefix rewrite reaches the operator as silence",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\t\t\t(state.output.usage as unknown as { acp?: AcpTurnAccounting }).acp = aggregate;"],
+			"replace": ["\t\t\tvoid aggregate;"],
+			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:ACP-TURN-ACCOUNTING-ATTACHED]",
+			"signatureSource": "scripts/check-acp-usage-accounting.ts"
+		},
+		{
+			"claim": "ACP-CACHE-REBILL-REPORTED",
+			"title": "the re-billed-prefix bound drops its ΣcacheWrite term, so a full prefix rewrite after an idle gap no longer clears the notice floor — the operator runs on a cache-effect badge while having already paid to rewrite the whole prefix",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\t\t? (priorOccupancy as number) - (priorIoSum as number) - Math.max(0, (occupancy as number) - aggregate.cacheWrite)"
+			],
+			"replace": ["\t\t\t? (priorOccupancy as number) - (priorIoSum as number) - Math.max(0, occupancy as number)"],
+			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:ACP-CACHE-REBILL-REPORTED]",
+			"signatureSource": "scripts/check-acp-usage-accounting.ts"
+		},
+		{
+			"claim": "ACP-REBILL-NEVER-EXCEEDS-WRITE",
+			"title": "the re-billed claim loses its physical cap, so a context shrink (organic compaction) announces a six-figure cache miss over a turn that wrote a thousand tokens — a fact the operator has no way to disbelieve",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": [
+				"\t\tconst missLowerBound = rawBound === undefined ? undefined : Math.min(rawBound, aggregate?.cacheWrite ?? 0);"
+			],
+			"replace": ["\t\tconst missLowerBound = rawBound;"],
+			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:ACP-REBILL-NEVER-EXCEEDS-WRITE]",
+			"signatureSource": "scripts/check-acp-usage-accounting.ts"
+		},
+		{
+			"claim": "ACP-ACCOUNTING-PREFERS-WIDEST",
+			"title": "the accounting-grade model_usage rows stop being preferred, so the turn silently reports MAIN-LOOP-ONLY tokens against an all-inclusive cost denominator — the cache-effect badge understates itself exactly when compaction or a subagent ran, and nothing says so",
+			"subject": "pi-extensions/lib/acp/backend.ts",
+			"find": ["\tif (Array.isArray(rows) && rows.length > 0) {"],
+			"replace": ["\tif (Array.isArray(rows) && rows.length > 99) {"],
+			"gate": ["bash", "run.sh", "check-acp-usage-accounting"],
+			"timeoutSeconds": 240,
+			"signature": "[QK:ACP-ACCOUNTING-PREFERS-WIDEST]",
 			"signatureSource": "scripts/check-acp-usage-accounting.ts"
 		}
 	]

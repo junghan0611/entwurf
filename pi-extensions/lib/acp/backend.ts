@@ -109,6 +109,78 @@ const SET_MODEL_TIMEOUT_MS = 30_000;
 // to process-group teardown, so an abort always returns promptly.
 const ABORT_CANCEL_GRACE_MS = 5_000;
 
+/** Tokens below which a re-billed prefix is breakpoint granularity, not news.
+ *  This matches pi's token threshold for a native cache-miss notice, which also
+ *  considers a separate $0.10 cost threshold (read at pi-coding-agent
+ *  `dist/modes/interactive/interactive-mode.js:3130`). */
+const CACHE_MISS_NOTICE_FLOOR_TOKENS = 20_000;
+
+/** ONE turn's ACCOUNTING totals: the SUM over that turn's API round trips, as
+ *  ACP reports them. Carried on `usage.acp`, never on pi's four `Usage` fields —
+ *  those mean one REQUEST's prompt shape to readers that would misread a sum
+ *  (see `sealTurnUsage`). This is the vendor's own arithmetic, relayed. */
+interface AcpTurnAccounting {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+}
+
+function finiteOrZero(value: unknown): number {
+	return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+/**
+ * ONE turn's ACCOUNTING totals, preferring the widest scope the backend offers.
+ *
+ * `_meta.quota.model_usage` comes from `result.modelUsage` and the vendor calls it
+ * "the accounting-grade figure per the SDK" — it also counts Task subagents,
+ * sidechains, and INTERNAL CALLS SUCH AS COMPACTION, so its rows "can total more
+ * than `token_count`" and are "the fuller picture, not a decomposition of it"
+ * (read at claude-agent-acp 0.73.0 `dist/acp-agent.js:5728-5748`). The narrower
+ * `PromptResponse.usage` (== `quota.token_count`) is the MAIN AGENT LOOP only.
+ *
+ * The wider one is the right numerator because the denominator already has that
+ * scope: `usage.cost.total` is the diff of the backend's running total, which
+ * includes those internal calls. Pairing a main-loop token sum with an
+ * all-inclusive cost understates the cache-effect badge exactly when compaction
+ * ran — and compaction is a live path again (#94). Rows are summed because a
+ * session may in principle report more than one model; with GLG's single-model
+ * rule there is exactly one.
+ *
+ * Falls back to `usage` when the sidecar is absent: `_meta` is a standard ACP
+ * extension slot whose contents a client may not assume, and `quota` is not in
+ * claude-agent-acp's exported types (#96 carries the re-measure-on-bump duty).
+ */
+function readTurnAccounting(promptResult: AcpPromptResponse): AcpTurnAccounting | undefined {
+	const rows = promptResult?._meta?.quota?.model_usage;
+	if (Array.isArray(rows) && rows.length > 0) {
+		const total = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+		for (const row of rows) {
+			const t = row?.token_count;
+			if (!t) continue;
+			total.input += finiteOrZero(t.inputTokens);
+			total.output += finiteOrZero(t.outputTokens);
+			total.cacheRead += finiteOrZero(t.cachedInputTokens);
+			total.cacheWrite += finiteOrZero(t.cachedWriteTokens);
+		}
+		return total;
+	}
+	const wire = promptResult?.usage;
+	if (!wire) return undefined;
+	return {
+		input: finiteOrZero(wire.inputTokens),
+		output: finiteOrZero(wire.outputTokens),
+		cacheRead: finiteOrZero(wire.cachedReadTokens),
+		cacheWrite: finiteOrZero(wire.cachedWriteTokens),
+	};
+}
+
+/** 191,971 → "192k". Keeps the notice inside the 80-char fragment cap. */
+function formatTokenCount(tokens: number): string {
+	return tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : String(Math.round(tokens));
+}
+
 type StdioChild = ChildProcessByStdio<Writable, Readable, Readable>;
 
 // ---------------------------------------------------------------------------
@@ -272,16 +344,49 @@ interface BridgeSession {
 	 * The last observed context OCCUPANCY (`usage_update.used`), carried forward
 	 * across a turn whose notification never arrived (#93).
 	 *
-	 * Without this, such a turn emits four non-zero turn-partition fields and a zero
-	 * `totalTokens`, and pi's `calculateContextTokens` (read at pi-coding-agent
-	 * `dist/core/compaction/compaction.js:86-88`) falls through to the partition
-	 * sum — so the context gauge would drop from the real occupancy to one turn's
-	 * delta, and auto-compaction would read the session as nearly empty. Before
-	 * this lane those turns reported ALL-ZERO usage and pi skipped them entirely,
-	 * so the gauge simply held; carrying the last measurement forward preserves
-	 * that behaviour honestly. Assigned, never summed.
+	 * Without this, such a turn carries accounting at `usage.acp` but has zero
+	 * `totalTokens` and zero pi-native usage fields. pi's
+	 * `calculateContextTokens` (read at pi-coding-agent
+	 * `dist/core/compaction/compaction.js:86-88`) then returns 0, making
+	 * auto-compaction replace the vendor observation with its local estimate
+	 * (read at pi-coding-agent `dist/core/agent-session.js:1696-1699`). Carrying
+	 * the last measurement preserves the last known occupancy. Assigned, never
+	 * summed.
 	 */
 	contextOccupancyTokens?: number;
+	/**
+	 * The PREVIOUS turn's `Σinput + Σoutput` and the wall-clock ms at which that
+	 * turn SEALED. The idle gap is then measured from that seal to THIS turn's
+	 * START (`turnStartedAtMs`), never to its seal, so a turn's own duration can
+	 * never inflate the gap it reports. Together with `contextOccupancyTokens`,
+	 * they are the whole input to the cache-miss bound in `sealTurnUsage` — no
+	 * per-round-trip collection.
+	 *
+	 * Why these two and nothing else: within one turn Claude Code's cache
+	 * breakpoints make `cacheRead_i = cacheRead_(i-1) + cacheWrite_(i-1)`
+	 * (re-measured 2026-09-02 across the WHOLE ACP overlay corpus, not one ledger:
+	 * 2,398 of 2,410 adjacent pairs hold — 99.50% — over 30+ session transcripts
+	 * under `~/.pi/agent/claude-config-overlay/projects` spanning 2026-05 to
+	 * 2026-09. On the incident ledger alone it is 101 of 102, and that single break
+	 * IS the miss: cacheRead 0 against a predicted 195,177 at 2026-09-01T21:15:09Z.
+	 * Of the 12 corpus-wide breaks, 10 fall BELOW prediction — each one a real miss
+	 * or partial re-read — and the 2 that exceed it do so by 4,357 and 3,283 tokens,
+	 * both far under the notice floor, so neither could lift a quiet turn over the
+	 * threshold on its own). Telescoping that identity gives
+	 *
+	 *     cacheRead_first = used_end − ΣcacheWrite − (input_last + output_last)
+	 *
+	 * and the same identity on the previous turn gives what THIS turn's first
+	 * request would have read had the cache still been warm:
+	 *
+	 *     expected = used_prev − (input_last' + output_last')
+	 *
+	 * Only the LAST request's input+output is unknown at turn scope, and it is
+	 * bounded by the turn's own sums — so both quantities come out as PROVEN
+	 * INTERVALS, never estimates. Assigned, never summed.
+	 */
+	priorTurnInputOutputSum?: number;
+	priorTurnSealedAtMs?: number;
 	/**
 	 * This TURN owns reporting the child's end, so the next turn must not also
 	 * announce it. Raised at the top of a failure path — BEFORE the bounded
@@ -717,9 +822,12 @@ export type AcpStopVerdict = {
 /**
  * ACP prompt stopReason → pi verdict.
  *
- * The ACP terminal set is closed (`@agentclientprotocol/sdk` 1.3.0
- * `schema/types.gen`): end_turn | max_tokens | max_turn_requests | refusal |
- * cancelled. Only three of those are successful or benign ends. The previous
+ * The ACP terminal set is closed (`@agentclientprotocol/sdk` 1.4.0
+ * `dist/schema/types.gen.d.ts:3001`): end_turn | max_tokens | max_turn_requests |
+ * refusal | cancelled — no `| string` arm. 1.4.0 also ships an OPEN union at
+ * `dist/v2/schema/types.gen.d.ts:3607`, but that is behind the `./experimental/v2`
+ * export and entwurf imports the bare specifier, which resolves to the closed v1
+ * surface. Only three of those are successful or benign ends. The previous
  * implementation returned a bare StopReason with `default: "stop"`, which turned
  * `refusal`, `max_turn_requests`, any future member, AND a missing reason into a
  * clean successful turn — pi then rendered a silently truncated answer as if the
@@ -994,6 +1102,14 @@ export function streamAcpTurn(
 	deps: AcpTurnDeps,
 ): ReturnType<typeof createAssistantMessageEventStream> {
 	const stream = createAssistantMessageEventStream();
+	// When THIS turn began. The idle gap that expires a prompt cache is the time
+	// between turns, so it must be measured to a turn's START — measuring to its
+	// seal would fold this turn's own duration into the gap and call a 58-minute
+	// pause plus a 4-minute turn "62m idle", which crosses the 1h TTL in the
+	// report while nothing crossed it in fact. pi's native detector uses message
+	// timestamps for the same reason (read at pi-coding-agent
+	// `dist/core/cache-stats.js:14-37`, `idleMs`).
+	const turnStartedAtMs = Date.now();
 	const state: AcpPiStreamState = createAcpStreamState(stream, {
 		api: "entwurf",
 		provider: "entwurf",
@@ -1023,14 +1139,14 @@ export function streamAcpTurn(
 	/**
 	 * Seal this turn's ACCOUNTING — the #93 authority boundary.
 	 *
-	 * Runs ONLY for a backend whose adapter implements `extractTurnUsage`. Method
+	 * Runs ONLY for a backend whose adapter declares `sealsTurnAccounting`. Flag
 	 * absence means that backend's usage semantics were never measured, so nothing
 	 * is sealed and its emitted usage is whatever the common mapper produced —
 	 * unchanged, not guessed at.
 	 *
 	 * Two INDEPENDENT axes, because they arrive on different wires:
 	 *
-	 *   tokens  the turn partition, from the adapter's reading of PromptResponse.
+	 *   tokens  the turn aggregate, relayed from PromptResponse on `usage.acp`.
 	 *   cost    an ADJACENT DIFF of the backend's own running session total, which
 	 *           arrives on `usage_update` and is captured raw by the mapper.
 	 *
@@ -1039,30 +1155,73 @@ export function streamAcpTurn(
 	 * exactness for what it is: agreement with the BACKEND'S CUMULATIVE ESTIMATE,
 	 * never with an Anthropic invoice. The vendor calls `total_cost_usd` a
 	 * "Cumulative estimated cost" and "An estimate, not a billing statement"
-	 * (claude-agent-sdk `sdk.d.ts:4538`), and entwurf has measured no live
+	 * (claude-agent-sdk `sdk.d.ts:4884`), and entwurf has measured no live
 	 * comparison against a bill.
 	 *
 	 * We prefer that estimate anyway for a STRUCTURAL reason, not because it is
 	 * more precise in general: it is computed UPSTREAM of a lossy flattening we
 	 * cannot undo. The observed cache-writes are entirely 1h, ACP carries no 1h
-	 * field, and pi prices a write with no `cacheWrite1h` at the 5m rate
-	 * (`models.js:538-543`) — a local recompute measured $1.66 low on one live
+	 * field, and pi prices a write with no `cacheWrite1h` at the 5m rate (read at
+	 * pi-coding-agent `dist/bundle/chunks/bedrock-converse-stream.js`,
+	 * `calculateCost`) — a local recompute measured $1.66 low on one live
 	 * ledger. Nothing here calls calculateCost: any price table we could apply
 	 * runs DOWNSTREAM of that flattening, so it would be a second, wronger
 	 * source.
 	 */
 	function sealTurnUsage(adapter: AcpBackendAdapter, session: BridgeSession, promptResult: AcpPromptResponse): void {
-		const extract = adapter.extractTurnUsage;
-		if (!extract) return;
+		if (!adapter.sealsTurnAccounting) return;
 
-		// --- token axis -----------------------------------------------------
-		const evidence = extract.call(adapter, promptResult);
-		if (evidence) {
-			state.output.usage.input = evidence.tokens.input;
-			state.output.usage.output = evidence.tokens.output;
-			state.output.usage.cacheRead = evidence.tokens.cacheRead;
-			state.output.usage.cacheWrite = evidence.tokens.cacheWrite;
+		// --- the turn's ACCOUNTING aggregate, verbatim ------------------------
+		// ACP reports one number set per turn and it is the SUM OVER THAT TURN'S API
+		// ROUND TRIPS. It is carried on its OWN key, never on pi's four, because
+		// those four mean ONE REQUEST's prompt shape to two readers that never go
+		// through `calculateContextTokens` and so cannot be rescued by an honest
+		// `totalTokens` (isContextOverflow, read at pi-ai
+		// `dist/utils/overflow.js:132-145`; cache-stats.detectMiss, read at
+		// pi-coding-agent `dist/core/cache-stats.js:14-37`). Projecting the
+		// aggregate onto them compacted a live 223,516-token session on a 1,000,000
+		// window (measured 2026-09-01).
+		//
+		// Nothing is computed here: these are the vendor's own four numbers, put
+		// somewhere they cannot be mistaken for a per-request reading. pi stores an
+		// assistant message as JSON and reads it back the same way (read at
+		// pi-coding-agent `dist/core/session-manager.js:768-777` appendMessage,
+		// `:98` parseSessionEntries), so a key pi does not know survives a resume.
+		const aggregate = readTurnAccounting(promptResult);
+		if (aggregate) {
+			(state.output.usage as unknown as { acp?: AcpTurnAccounting }).acp = aggregate;
 		}
+
+		// --- token axis: DELIBERATELY UNWRITTEN ------------------------------
+		// The four token fields stay at their zero initialisation. ACP's only token
+		// carrier is `PromptResponse.usage`, and that is the SUM OVER THIS TURN'S
+		// API ROUND TRIPS — measured 2026-09-02 on one 21-round-trip turn whose
+		// overlay rows summed to exactly the four numbers ACP reported
+		// (cacheRead 4,185,084) while the context it occupied was 223,516.
+		//
+		// pi reads these four as ONE REQUEST's prompt shape, in two places that do
+		// NOT go through `calculateContextTokens` and so cannot be rescued by the
+		// honest `totalTokens` written below:
+		//
+		//   isContextOverflow  `input + cacheRead > contextWindow` (read at pi-ai
+		//                      `dist/utils/overflow.js:132-145`). The aggregate made
+		//                      that true at 223k of a 1M window and compacted a live
+		//                      session — the defect this seal now refuses to feed.
+		//   detectMiss         `input + cacheRead + cacheWrite` vs the previous
+		//                      request (read at pi-coding-agent
+		//                      `dist/core/cache-stats.js:14-37`). Under the aggregate
+		//                      it invented two phantom misses and SILENCED the real
+		//                      195,177-token one after a 401-minute idle gap.
+		//
+		// Writing zeros is not a placeholder for a better number we could compute:
+		// the per-request partition is genuinely absent from the wire. The vendor
+		// builds it in `lastAssistantUsage` and sends only its scalar sum (read at
+		// claude-agent-acp 0.73.0 `dist/acp-agent.js:3273-3297`) — #96.
+		//
+		// But silence is NOT the resting state. A cache miss the operator never sees
+		// is a false reading, not a modest one: a session can run for hours believing
+		// its badge while a full prefix rewrite has already been paid for. So the
+		// aggregate rides its own key above, and the bound below reports the rewrite.
 
 		// --- context occupancy (NOT a turn total — see the field's note) -----
 		// Refresh from THIS turn's notification when there was one, then assign the
@@ -1075,12 +1234,75 @@ export function streamAcpTurn(
 		// takes `calculateContextTokens(message.usage)` at face value and falls back to
 		// its own estimate ONLY when the message errored or that value is exactly 0
 		// (read at pi-coding-agent `dist/core/agent-session.js:1696-1697`). A turn
-		// partition written here would be non-zero and therefore never corrected — the
+		// aggregate written here would be non-zero and therefore never corrected — the
 		// session would read as nearly empty all the way to an overflow.
+		const priorOccupancy = session.contextOccupancyTokens;
+		const priorIoSum = session.priorTurnInputOutputSum;
+		const priorSealedAtMs = session.priorTurnSealedAtMs;
+
 		const occupancy = state.observedContextOccupancyTokens;
 		if (typeof occupancy === "number") session.contextOccupancyTokens = occupancy;
 		if (typeof session.contextOccupancyTokens === "number") {
 			state.output.usage.totalTokens = session.contextOccupancyTokens;
+		}
+
+		// --- cache-miss bound (the rewrite the operator must not miss) -------
+		// Both quantities below are PROVEN INTERVALS derived from numbers already in
+		// hand, not estimates. See `priorTurnInputOutputSum` for the identity and its
+		// telescoping. Only the LAST request's input+output is unknown at turn scope,
+		// and each turn's own sums bound it:
+		//
+		//   cacheRead_first ≤ used_end − ΣcacheWrite                     (upper)
+		//   expected        ≥ used_prev − (Σinput' + Σoutput')           (lower)
+		//   miss            ≥ expected_lower − cacheRead_first_upper
+		//
+		// The interval is proven only while the within-turn recurrence holds, and that
+		// recurrence is an OBSERVED property of Claude Code's breakpoint placement
+		// (measured 2026-09-02 corpus-wide: 2,398 of 2,410 adjacent pairs, 99.50%; see
+		// `priorTurnInputOutputSum` for the full count and the break characterisation),
+		// not a guarantee. If it breaks mid-turn — a 1h TTL expiring
+		// between round trips, or the child compacting itself — `used_end − ΣcacheWrite`
+		// goes negative and the `max(0, …)` below assumes cacheRead_first = 0. The
+		// notice is still TRUE (a rewrite did happen) but its N is then a floor of a
+		// weaker kind, not a telescoped bound. #96 carries that limit.
+		//
+		// A negative or small bound proves nothing was re-billed beyond breakpoint
+		// granularity, so nothing is said. The floor is the TOKEN half of pi's own
+		// native cache-miss display policy, which suppresses a notice only when the
+		// miss is under 20,000 tokens AND under $0.10 (read at pi-coding-agent
+		// `dist/modes/interactive/interactive-mode.js:3130`). The ACP rail borrows
+		// that familiar token threshold alone and claims no part of the cost half:
+		// this bound is a token interval, and pricing it locally is the very
+		// downstream reprice the cost axis above refuses.
+		// The re-billed size can never exceed what this turn actually WROTE: a
+		// re-billed prefix is paid for as cache creation. Clamping to
+		// `aggregate.cacheWrite` is what keeps the notice a statement about money
+		// that changed hands rather than about the recurrence holding.
+		//
+		// Without it a context SHRINK reads as a giant miss. Worked counterexample
+		// (gpt-5.6-sol, 2026-09-02): prior occupancy 200,000, prior IO 1,000, this
+		// turn occupancy 20,000 with cacheWrite 1,000 — organic compaction, nothing
+		// re-billed — yields 200,000 − 1,000 − 19,000 = 180,000 and would announce
+		// "cache miss ≥180k" over a turn that wrote 1,000 tokens. The clamp answers
+		// 1,000, which is under the floor, so nothing is said. On the real incident
+		// the clamp does not bind: 191,971 ≤ cacheWrite 221,084.
+		//
+		// Both prior marks are read from ONE turn and written from ONE turn. Mixing
+		// an older occupancy with a newer IO sum puts two turns in one equation and
+		// can skew the bound HIGH, so the update below is all-or-nothing.
+		const derivable =
+			aggregate !== undefined &&
+			typeof occupancy === "number" &&
+			typeof priorOccupancy === "number" &&
+			typeof priorIoSum === "number";
+		const rawBound = derivable
+			? (priorOccupancy as number) - (priorIoSum as number) - Math.max(0, (occupancy as number) - aggregate.cacheWrite)
+			: undefined;
+		const missLowerBound = rawBound === undefined ? undefined : Math.min(rawBound, aggregate?.cacheWrite ?? 0);
+
+		if (aggregate && typeof occupancy === "number") {
+			session.priorTurnInputOutputSum = aggregate.input + aggregate.output;
+			session.priorTurnSealedAtMs = Date.now();
 		}
 
 		// --- cost axis ------------------------------------------------------
@@ -1088,38 +1310,62 @@ export function streamAcpTurn(
 		// written the running cumulative into this field, and leaving it would put a
 		// session total on a dashboard that sums per-turn costs — the whole defect.
 		const observed = state.observedSessionCostUsd;
+		let turnCostUsd: number | undefined;
 		if (typeof observed !== "number") {
 			// No cumulative arrived this turn. HOLD the baseline: this turn's real
 			// amount is still inside the backend's running total and the next
 			// adjacent diff absorbs it. Attributed to the wrong turn, exact in the
 			// session sum. Zeroing the baseline here would double-count it instead.
 			state.output.usage.cost.total = 0;
-			return;
+		} else {
+			const diff = observed - (session.sdkCumulativeCostUsd ?? 0);
+			if (diff < 0) {
+				// The backend's running total went BACKWARDS. TWO receipts, and the gap
+				// between them is exactly why the notice below names a MECHANISM and
+				// never a cause: claude-agent-acp's `conversation_reset` handler only
+				// switches the SDK to a fresh conversation and touches no cost at all
+				// (read at 0.73.0 `dist/acp-agent.js:3675-3682`), while claude-agent-sdk
+				// separately documents that "a mid-session /clear resets the running
+				// total" (read at 0.3.257 `sdk.d.ts:4884`). A reset therefore PLAUSIBLY
+				// explains a backwards total, but nothing here has MEASURED that it did,
+				// and asserting the cause would be the same unmeasured claim this lane
+				// exists to end.
+				// Rebaseline and attribute 0 — but SAY SO. Silently absorbing it would
+				// hide the one observation that can settle what a reset does to the
+				// total, which is precisely the "no silent misaccounting" this lane owes.
+				const detail = `${(session.sdkCumulativeCostUsd ?? 0).toFixed(6)} → ${observed.toFixed(6)} USD`;
+				session.sdkCumulativeCostUsd = observed;
+				state.output.usage.cost.total = 0;
+				// Kept under the notice fragment cap (80) so the two numbers survive
+				// verbatim — a truncated diagnostic is not evidence.
+				pushAcpLifecycleNotice(state, `cost baseline reset (${detail}) — this turn attributed $0`);
+				console.error(
+					`entwurf: ACP backend reported a DECREASING session cost (${detail}). Rebaselined; this turn is ` +
+						`attributed $0. The cause is NOT measured here. The one documented mechanism is a mid-session ` +
+						`/clear, which claude-agent-sdk (sdk.d.ts:4884) says resets the running total; the adapter's ` +
+						`conversation_reset event is NOT it — that handler switches conversation and touches no cost. ` +
+						`The session total from here on is measured against the new baseline.`,
+				);
+			} else {
+				session.sdkCumulativeCostUsd = observed;
+				state.output.usage.cost.total = diff;
+				turnCostUsd = diff;
+			}
 		}
-		const diff = observed - (session.sdkCumulativeCostUsd ?? 0);
-		if (diff < 0) {
-			// The backend's running total went BACKWARDS. The known way that can
-			// happen is a `conversation_reset` inside a live query (read at
-			// claude-agent-acp `dist/acp-agent.js:3349-3356`), whose effect on
-			// `total_cost_usd` is an SDK-internal value we cannot see from here.
-			// Rebaseline and attribute 0 — but SAY SO. Silently absorbing it would
-			// hide the one observation that can settle what a reset does to the
-			// total, which is precisely the "no silent misaccounting" this lane owes.
-			const detail = `${(session.sdkCumulativeCostUsd ?? 0).toFixed(6)} → ${observed.toFixed(6)} USD`;
-			session.sdkCumulativeCostUsd = observed;
-			state.output.usage.cost.total = 0;
-			// Kept under the notice fragment cap (80) so the two numbers survive
-			// verbatim — a truncated diagnostic is not evidence.
-			pushAcpLifecycleNotice(state, `cost baseline reset (${detail}) — this turn attributed $0`);
-			console.error(
-				`entwurf: ACP backend reported a DECREASING session cost (${detail}). Rebaselined; this turn is ` +
-					`attributed $0. A conversation reset inside the live session is the known cause — the session total ` +
-					`from here on is measured against the new baseline.`,
-			);
-			return;
+
+		// --- report the rewrite ----------------------------------------------
+		// Said LAST so it can quote what this turn actually cost. The cost is the
+		// SDK's own adjacent diff, never a local repricing.
+		if (typeof missLowerBound === "number" && missLowerBound >= CACHE_MISS_NOTICE_FLOOR_TOKENS) {
+			// Only when there is an idle gap worth naming. A sub-minute one explains
+			// nothing and "after 0m idle" reads as noise, so the clause is dropped —
+			// the re-billed size and the cost still stand on their own.
+			const idleMinutes =
+				typeof priorSealedAtMs === "number" ? Math.round((turnStartedAtMs - priorSealedAtMs) / 60_000) : 0;
+			const idle = idleMinutes >= 1 ? ` after ${idleMinutes}m idle` : "";
+			const paid = typeof turnCostUsd === "number" ? ` — this turn $${turnCostUsd.toFixed(2)}` : "";
+			pushAcpLifecycleNotice(state, `cache miss ≥${formatTokenCount(missLowerBound)} re-billed${idle}${paid}`);
 		}
-		session.sdkCumulativeCostUsd = observed;
-		state.output.usage.cost.total = diff;
 	}
 
 	/**

@@ -804,7 +804,7 @@ console.log(`\n[gate-qualification] self-test: ${passed} checks passed`);
 		"acp-prompt-lifecycle": 15,
 		"acp-stop-reason": 6,
 		"acp-stream-hooks": 10,
-		"acp-usage-accounting": 7,
+		"acp-usage-accounting": 11,
 		"agy-permission": 6,
 		"bridge-boot-resume": 3,
 		"bridge-command-boot": 9,
