@@ -78,6 +78,16 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", REPO_ROOT] as const;
 
 // Staged timeouts (automation): short and per-stage so a stall is attributable.
+//
+// MEASURED 2026-09-03 on the release host, this exact spawn shape (`pi --no-extensions -e <repo>
+// --entwurf-control --provider openai-codex --model gpt-5.6-luna --mode rpc`, child store on
+// ENTWURF_META_SESSIONS_DIR, second boot started ~40ms after the first is reaped): boot → V3
+// record is **1008–1212ms over 80 consecutive boots**, first and second boot indistinguishable;
+// under 4× CPU oversubscription it stretches to 5.1–5.4s. So 30s is ~25× the measured cost and
+// this bound is NOT the thing that fails. Two of the three blocked 0.17.0 `--cut` runs timed out
+// here anyway with an EMPTY stderr and no record in ANY store — a resident that died or never
+// arrived, not a slow one. Raising the bound would only make that wait longer, so it stays; what
+// was missing is the observation below, which says WHICH of the two it was.
 const BOOT_TIMEOUT_MS = 30_000; // pi --entwurf-control socket appears
 const POLL_MS = 100;
 
@@ -88,6 +98,43 @@ function ok(label: string, cond: boolean): void {
 	if (!cond) throw new Error(`SMOKE FAIL: ${label}`);
 	console.log(`  ok    ${label}`);
 	passed++;
+}
+
+/** What a spawned resident DID while the smoke waited on it — the fact a bare boot timeout
+ * throws away. Each resident owns its own stderr here: a single shared tail cannot say which
+ * of the two children spoke, and the C1b post-mortem is exactly that question. */
+interface ResidentWatch {
+	label: string;
+	pid: number | undefined;
+	startedAt: number;
+	exit: string | null;
+	stderr: string;
+}
+
+function watchResident(child: ChildProcess, label: string): ResidentWatch {
+	const watch: ResidentWatch = { label, pid: child.pid, startedAt: Date.now(), exit: null, stderr: "" };
+	child.once("exit", (code, signal) => {
+		watch.exit = `code=${code} signal=${signal} at +${Date.now() - watch.startedAt}ms`;
+	});
+	child.stderr?.on("data", (b: Buffer) => {
+		watch.stderr = (watch.stderr + b.toString()).slice(-2000);
+	});
+	return watch;
+}
+
+/** Read at FAILURE time, before the `finally` reaps anything: a resident that is still alive
+ * having birthed nothing is a different defect from one that exited silently, and "no pid" is a
+ * third (the spawn itself never took). */
+function describeResident(watch: ResidentWatch): string {
+	const waited = `${Date.now() - watch.startedAt}ms after spawn`;
+	if (watch.pid === undefined) return `never acquired a pid — the spawn did not take (${waited})`;
+	if (watch.exit) return `pid=${watch.pid} EXITED ${watch.exit} — it was gone before the wait ended`;
+	try {
+		process.kill(watch.pid, 0);
+		return `pid=${watch.pid} still ALIVE ${waited} and had birthed no record`;
+	} catch {
+		return `pid=${watch.pid} is GONE with no exit event seen (reaped elsewhere), ${waited}`;
+	}
 }
 
 function resolveTarget(): { provider: string; model: string } {
@@ -153,7 +200,7 @@ async function main(): Promise<void> {
 	let resident: ChildProcess | null = null;
 	let residentGid = "";
 	let c1bGid = "";
-	let stderrTail = "";
+	const residents: ResidentWatch[] = [];
 	let succeeded = false;
 
 	const prodDeps = (sender: SenderEnvelope) =>
@@ -182,9 +229,7 @@ async function main(): Promise<void> {
 				[...REPO_EXTENSION_ARGS, "--entwurf-control", "--provider", provider, "--model", model, "--mode", "rpc"],
 				{ cwd: tmp, stdio: ["pipe", "ignore", "pipe"], detached: false },
 			);
-			resident.stderr?.on("data", (b: Buffer) => {
-				stderrTail = (stderrTail + b.toString()).slice(-2000);
-			});
+			residents.push(watchResident(resident, "C1"));
 
 			const bornGid = await waitForPiRecord(sessionsDir, BOOT_TIMEOUT_MS);
 			ok("C1 the resident BIRTHED its own V3 backend:pi record (the address authority)", bornGid !== null);
@@ -241,9 +286,7 @@ async function main(): Promise<void> {
 					env: { ...process.env, ENTWURF_META_SESSIONS_DIR: hiddenStore },
 				},
 			);
-			resident.stderr?.on("data", (b: Buffer) => {
-				stderrTail = (stderrTail + b.toString()).slice(-2000);
-			});
+			residents.push(watchResident(resident, "C1b"));
 
 			const bornGid = await waitForPiRecord(hiddenStore, BOOT_TIMEOUT_MS);
 			ok("C1b the resident birthed its record into the HIDDEN store", bornGid !== null);
@@ -358,7 +401,16 @@ async function main(): Promise<void> {
 	} catch (err) {
 		console.error("\n[smoke-entwurf-v2-matrix-live] FAILED — diagnostic artifacts:");
 		for (const [k, v] of Object.entries(artifacts)) console.error(`  ${k} = ${v}`);
-		if (stderrTail) console.error(`  pi stderr (tail):\n${stderrTail.replace(/^/gm, "    ")}`);
+		// Probed HERE, not in `finally`: the reaper runs after this block, so this is the last
+		// moment the residents' real state can still be read. An empty stderr is itself evidence
+		// and is printed as "(empty)" rather than skipped — silence that is never stated reads as
+		// a missing diagnostic instead of the observation it is.
+		for (const watch of residents) {
+			console.error(`  resident ${watch.label}: ${describeResident(watch)}`);
+			console.error(
+				`  resident ${watch.label} stderr: ${watch.stderr ? `\n${watch.stderr.replace(/^/gm, "    ")}` : "(empty)"}`,
+			);
+		}
 		throw err;
 	} finally {
 		if (resident) {

@@ -213,6 +213,46 @@ function pidIsAlive(pid: number): boolean {
 	}
 }
 
+/**
+ * What the launched window actually shows, read at the moment a nonce callback never arrived.
+ *
+ * The launch receipt says so itself — "if it never comes, the window is visible and can be read
+ * directly" — but on a headless release-gate run nobody is there to look, and the window is torn
+ * down in teardown seconds later. So the harness looks for the operator: is the pane process even
+ * alive, and what is painted in it. That separates the three states a bare timeout collapses into
+ * one — the runtime never started (or died), it started and is sitting on an error or a prompt, or
+ * it is running fine and the model simply did not call the callback tool. A pi-native callback
+ * timeout with no window evidence is what blocked the second 0.17.0 `--cut` (and, in the same
+ * shape, a 0.16.1 run), leaving nothing to tell those three apart afterwards.
+ *
+ * Diagnostics must never become the failure: every step is best-effort, and a tmux that cannot
+ * answer is reported as its own line rather than thrown.
+ */
+function paneForensics(label: string, socket: string, env: NodeJS.ProcessEnv, coords: Coordinates): string {
+	const lines: string[] = [`--- ${label} window forensics (the callback never came) ---`];
+	try {
+		lines.push(`pane ${coords.paneId} pid ${coords.panePid}: ${pidIsAlive(Number(coords.panePid)) ? "ALIVE" : "GONE"}`);
+	} catch (err) {
+		lines.push(`pane pid liveness unreadable: ${err instanceof Error ? err.message : String(err)}`);
+	}
+	const panes = tmux(
+		socket,
+		["list-panes", "-a", "-F", "#{pane_id} #{pane_pid} #{pane_dead} #{pane_current_command}"],
+		env,
+	);
+	lines.push(
+		panes.status === 0 ? `list-panes:\n${panes.stdout || "(none)"}` : `list-panes failed (status ${panes.status})`,
+	);
+	const captured = tmux(socket, ["capture-pane", "-p", "-t", coords.paneId], env);
+	if (captured.status === 0) {
+		const tail = captured.stdout.split("\n").slice(-40).join("\n");
+		lines.push(`capture-pane (last 40 lines):\n${tail || "(the pane painted nothing)"}`);
+	} else {
+		lines.push(`capture-pane failed (status ${captured.status}) — the window is already gone`);
+	}
+	return lines.join("\n");
+}
+
 async function waitForPidsGone(pids: ReadonlySet<number>, timeoutMs = 10_000): Promise<boolean> {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
@@ -704,7 +744,9 @@ async function main(): Promise<void> {
 			ok(
 				`${cell}: the nonce came back and its SENDER ENVELOPE carries a garden id — correlation without asking the sibling`,
 				gid !== null && GARDEN_ID.test(gid),
-				`--- launch receipt ---\n${launch.text}`,
+				gid === null
+					? `--- launch receipt ---\n${launch.text}\n${paneForensics(cell, srv.socket, srv.env, coords)}`
+					: `--- launch receipt ---\n${launch.text}`,
 			);
 			const citizen = gid as string;
 			siblingGids.add(citizen);
@@ -936,7 +978,9 @@ async function main(): Promise<void> {
 			ok(
 				"claude-code: the nonce came back and its SENDER ENVELOPE carries a garden id",
 				ccGid !== null && GARDEN_ID.test(ccGid),
-				`--- launch receipt ---\n${ccLaunch.text}`,
+				ccGid === null
+					? `--- launch receipt ---\n${ccLaunch.text}\n${paneForensics("claude-code", cc.socket, cc.env, ccCoords)}`
+					: `--- launch receipt ---\n${ccLaunch.text}`,
 			);
 			const ccCitizen = ccGid as string;
 			siblingGids.add(ccCitizen);

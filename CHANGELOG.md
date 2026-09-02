@@ -4,6 +4,53 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+### Fixed
+
+- **The two LIVE smokes that blocked all three 0.17.0 `--cut` runs now say WHICH failure they
+  hit.** Both reds were bounded waits that expired and then threw away the one fact that separates
+  a child that died from a child that was merely slow, so three blocked cuts produced no evidence
+  anyone could act on. Measured on the release host BEFORE either file was touched, in the smoke's
+  exact spawn shape (`pi --no-extensions -e <repo> --entwurf-control --provider openai-codex
+  --model gpt-5.6-luna --mode rpc`, child store on `ENTWURF_META_SESSIONS_DIR`, second boot started
+  ~40ms after the first is reaped): boot → V3 record is **1008–1212ms across 80 consecutive boots**,
+  with first and second boot indistinguishable, and **5.1–5.4s** under 4× CPU oversubscription.
+  `smoke-entwurf-v2-matrix-live`'s `BOOT_TIMEOUT_MS` is 30s — ~25× the measured cost — so the C1b
+  timeout is not a tight bound and **the bound is left at 30s**: raising it would only wait longer
+  on a resident that was already gone. The blocked runs' own logs say the rest — cut3 birthed three
+  healthy `pi --entwurf-control` residents at 06:57:05, :11 and :15 (`smoke-resident-garden-guard`
+  twice, then matrix C1) and only the fourth never arrived, and matrix-live is the gate's FIRST LIVE
+  step, so neither host load nor a previous smoke's residue accounts for it.
+  - `smoke-entwurf-v2-matrix-live` now watches each resident: pid, exit code/signal and how many ms
+    in it happened, a signal-0 liveness probe taken at failure time (in the catch, before the
+    reaper runs), and a **per-child** stderr tail. The single shared buffer could not say whether
+    C1 or C1b spoke, which is precisely what the C1b post-mortem needed to know. An empty tail now
+    prints as `(empty)` rather than being skipped: silence that is never stated reads as a missing
+    diagnostic instead of the observation it is.
+  - `smoke-mux-lifecycle-live` now attaches window forensics when a nonce callback never comes —
+    pane-pid liveness, `list-panes`, and the last 40 lines of `capture-pane` — for both the
+    pi-native and claude-code cells. The launch receipt already tells a human "the window is
+    visible and can be read directly"; on a headless gate run nobody is there and the window is
+    torn down seconds later. The three states a bare timeout collapses into one (the runtime never
+    started, it started and is sitting on an error, or it is healthy and the model never called the
+    callback tool) are now separable after the fact. Every step is best-effort so a diagnostic can
+    never become the failure.
+  Neither change touches a product rail. The cause of the C1b silence is still open — 80 consecutive
+  boots did not reproduce it — and the next aggregate run is what will name it.
+
+### Verification
+
+- `pnpm run check:toolchain` (biome + `tsc` ×3) — green.
+- **The new matrix-live diagnostic exercised on a real failure path**, at 0 model tokens, by
+  pointing the smoke at a bogus provider: `resident C1: pid=… EXITED code=1 signal=null at +1057ms
+  — it was gone before the wait ended`, with that child's own stderr (`Unknown provider`) beneath
+  it. The old code waited the remaining 29s and never recorded that the child had died at +1s.
+- `LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live` — **17/17 PASS** against the real
+  `openai-codex/gpt-5.6-luna` target.
+- `LIVE=1 ./run.sh smoke-mux-lifecycle-live` — **81 checks passed, exit 0** (real model turns on
+  both pi cells and the claude-code cell).
+- No aggregate `--cut` was run for this change, and no version was bumped: this is the repair, not
+  the release.
+
 ## 0.17.0 - 2026-09-02
 
 ### Verification
