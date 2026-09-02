@@ -92,7 +92,7 @@ undifferentiated "supported" column is what let a Claude PASS read as if it also
 
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
-| Entwurf package | `0.16.1` | shipped baseline | the package contract these rows belong to |
+| Entwurf package | `0.17.0` | shipped baseline | the package contract these rows belong to |
 | pi runtime | devDep exact `0.84.4`, peer `>=0.84.4 <0.85` | **exact** oracle + **closed range** | built and certified against 0.84.4; hosts inside the range are accepted, and the ceiling moves only on measurement |
 | ACP wire SDK | `@agentclientprotocol/sdk 1.4.0` | **exact** | the shared wire oracle both adapters speak |
 | Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.73.0` | **exact**, bundled | the adapter we ship and certify; resolved before any PATH fallback |

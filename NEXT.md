@@ -21,25 +21,43 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 </details>
 
-- [ ] **9. ACP Claude를 메인 레일로 — 내구성 리서치(#92)와 계기판 수리(#93)** ← CURRENT: **#93 구현 착수.** `extractTurnUsage?` seam → (ii) BridgeSession SDK 누적 차분 → turn usage/cost seal → E2E gate 순으로 간다.
+- [x] **9. ACP Claude를 메인 레일로 — 계기판 수리(#93)** — 브랜치 `fix/acp-usage-accounting-93`에 구현 완료.
+  본문 설계(`extractTurnUsage?` seam → 네 필드에 4분할 투영)는 2026-09-02 측정으로 **기각**됐고,
+  실제로 랜딩한 것은 그 기각의 실행이다. #92는 리서치 레인에 그대로 남는다.
 
-현재 좌표: 1–8 완료 → **9 진행 중(#93 구현)** ← 여기 · **0.16.1 make는 열린 채 PAUSED** (오늘 요청 없었음). #92의 400–500k acceptance는 `521,575` / resets 0으로 닫혔고, 1h 갭·재시작 재구축·compaction 뒤 품질은 리서치 레인에 남는다. 커밋은 `ca52fdd`(#72 수리)까지 랜딩됐고 push·tag는 GLG 몫이다.
+현재 좌표: 1–9 완료(9는 브랜치 위) · **0.16.1 make는 열린 채 PAUSED** · 0.17.0은 컷 대기.
+push·tag·release-gate는 GLG 몫이다.
 
-# NOW — ACP 계기판 수리 (#93)
+# NOW — #93 랜딩됨, 0.17.0 컷 대기
 
-- **Stem:** entwurf ACP Claude가 GLG의 메인 레일이 될 수 있게, **운용자가 자기 세션 상태를 믿을 수 있는 숫자로 볼 수 있게 한다.** 토큰 효율은 이미 네이티브와 구분되지 않는다는 게 측정으로 닫혔다(#92) — 남은 것은 계기판이다.
-- **지금 서 있는 자리:** #93이 열려 있고 **좌표 검토까지 끝났다.** 브랜치는 아직 안 팠다. GLG 순서가 "이슈 → 좌표 합의 → 브랜치"다.
-- **Blocker (측정됨, 2026-09-01):** ACP 캐시 쓰기가 **전량 1h TTL**이다(coordinator 454,690 tok / auditor 317,671 tok, 5m 0건). 분해값은 Claude CLI transcript에 `usage.cache_creation.ephemeral_1h_input_tokens`로 실재하는데 `claude-agent-acp`가 평면 `cachedWriteTokens`로 소거한다(`acp-agent.js:2634-2638, 5250-5261`). pi는 평면을 1.25×, 1h를 2× input으로 매기므로(`models.js:527-545`) **항상 과소계상**한다 → acceptance (b)가 현재 2파일 설계로 exact 통과 불가.
-- **Next — 브랜치 파고 바로 시작할 수 있다. 순서가 정해져 있다:**
-  1. **어댑터 seam 신설** (`backend-adapter.ts`). 현 `AcpBackendAdapter` 10개 메서드에 usage를 다루는 자리가 **없다**(측정 확인, `:138-194`). `extractTurnUsage?(response: PromptResponse): AcpTurnEvidence | undefined`를 열고 Claude만 구현한다. **메서드 부재**는 Cortex의 영구 미지원이고, 구현된 Claude 메서드의 **`undefined` 반환**만 이번 turn의 usage 미도착이다. 어댑터는 추출만 하며 차분하지 않는다 → 공통 루프가 Cortex를 건드리지 않고, carry-forward 두 축도 보존한다.
-  2. **경로는 (ii)로 간다** — `BridgeSession`에 SDK 누적 baseline을 두고 **인접 턴 차분**으로 authoritative turn cost. (i)(upstream carrier)로 뒤집으려면 carrier가 실재한다는 영수증을 가져와야 한다. (ii)를 기본값으로 두는 이유: SDK 누적치는 이미 1h 단가로 정확하고, 무캐시 대조는 캐시 토큰을 input 단가로 치환하므로 **1h/5m 구분이 애초에 필요 없다** — 이미 나간 footer(`c65aae2`)가 (ii)만으로 완전히 작동한다.
-  3. **`backend.ts:613/992`** 반환 타입에 Claude가 추출한 turn usage evidence를 싣고, `finishSuccess`가 4분할 token usage를 seal한다. **정확한 turn `cost.total`은 `BridgeSession`에 고정한 SDK 누적 baseline의 인접 차분**으로만 만든다. `totalTokens`는 turn 델타가 아니라 상태줄·auto-compaction이 쓰는 context occupancy이므로, `BridgeSession`의 마지막 `usage_update.used`를 Claude turn에 carry-forward한다. **`event-mapper.ts:337`**는 누적 cost를 turn 필드에 대입하지 않고 BridgeSession 쪽 세션 값만 갱신한다. `conversation_reset`으로 차분이 음수면 rebaseline·0 귀속·운용자 가시 알림으로 조용한 오계상을 막는다.
-  4. **게이트 신설 `check-acp-usage-accounting`** — 현 `check-acp-event-mapper`는 `usage_update`만 주입해서 PromptResponse→`finishSuccess`→`calculateCost`를 **전혀 안 지난다**(`check-acp-event-mapper.ts:159-164`). claim 셋은 #93 본문에 지목돼 있다.
-- **브랜치 규약:** 브랜치 작업은 `NEXT--<branch>.md`를 쓰고 main NEXT에 섞지 않는다. 머지 전 그 파일을 지운다.
-- **주의 — 공통 루프를 그냥 고치면 Cortex가 깨진다:** `backend.ts`/`event-mapper.ts`는 공통이고 ACP SDK의 `usage`는 experimental에 의미가 자기모순이다("this turn" vs "across all turns/session", `types.gen.d.ts:3017-3076`). Claude adapter가 `PromptResponse`에서 evidence를 추출하고 공통 `finishSuccess`는 이미 정규화된 evidence만 seal한다. **Cortex는 별도 측정 전까지 extractor 자체가 없다.**
-- **이미 나간 것:** agent-config `c65aae2` — footer가 `$1.417 ($7.958) ×5.6`을 보인다. codex·zai·네이티브 pi에서 지금 작동하고, ACP는 #93 이후 자동으로 살아난다. 폭이 좁으면 배수→무캐시 순으로 떨구고 실제 금액은 절대 안 버린다.
-- **Read:** #93 본문(경로 (i)/(ii)와 게이트 좌표) · #92 §1·§3·§6 · sol 검토 코멘트.
-- **Do not touch:** #92를 구현 이슈로 취급하지 말 것(리서치 레인) · `mux-launch.ts`/`mux-placement.ts` import fence · #76/#78 · 0.16.1 make를 이 레인에 섞지 말 것.
+- **Stem:** entwurf ACP Claude가 GLG의 메인 레일이 되게 한다. 토큰 효율은 #92가 이미 닫았고,
+  남은 것이 계기판이었다. 그 계기판을 **ACP 레일 자신이** 고쳤다.
+- **지금 서 있는 자리:** 브랜치 `fix/acp-usage-accounting-93`에 커밋 **4개**(회계 보존 →
+  핀 이동 → 회계 수리 → 릴리즈 준비). main에 머지 안 했고 태그 안 달았고 푸시 안 했다.
+- **랜딩한 계약:** pi의 네 `Usage` 필드는 **0으로 둔다** — ACP의 유일한 토큰 반송자는 턴 왕복
+  합계이고 그 넷은 한 요청의 프롬프트 모양이다. 턴 회계 총계는 `usage.acp`로 가며 numerator는
+  회계등급 `_meta.quota.model_usage` 행 합(main-loop 전용 `PromptResponse.usage`보다 우선).
+  턴 비용은 SDK 누적 추정치의 인접 차분. 재청구 프리픽스는 증명된 하한으로 공지된다.
+- **검증 상태 (frozen candidate에서 실측, tracked tree `4273654f5362…`):**
+  `pnpm run check:full` PASS(422s, exit 0) · `check-gate-qualification` **346/346 KILLED**
+  (work-surface 해시 전후 동일, 총계 335 → 346이고 11개 전부 이번 릴리즈 신설) ·
+  `LIVE=1 ./run.sh smoke-acp-raw-turn-live` PASS(0.73.0 핀 — 이 영수증만은 승계본이고
+  아티팩트를 재확인하지 못했다).
+- **리뷰 수정 1번들(`4d6fe4c`에 접어 넣음):** 감소 통지가 벤더의 단어 `/clear` 대신
+  "conversation reset"을 원인으로 불렀다 — 그건 비용을 건드리지 않는다고 우리가 증명한 이벤트다.
+  그리고 침묵된 미스를 영수증 없는 "194k"로 적었다(측정값은 195,177).
+- **Next — GLG 결정이 필요한 것 셋:**
+  1. **`LIVE=1 ./run.sh release-gate <scratch> --cut`** — 릴리즈 수락 바닥이고 아직 안 돌았다.
+     pi·codex·Claude Code 레일에 실제 모델 턴을 쓴다(VERIFY.md:45-49, :59). 비용 승인이 필요하다.
+  2. **main 머지 + 0.17.0 태그** — `tag-release` 몫. CHANGELOG 항목은 이미 써 있다.
+  3. **#93 닫기** — 클로징 코멘트 초안은 준비됐다. 본문 Acceptance 1이 기각된 설계임을 명시한다.
+- **남은 한계는 전부 #96:** per-request carrier 부재 · pi-native cache-stats 통합 · 턴 중간
+  점화식 파손 · usage 미보고 턴 · 재시작 첫 턴 침묵(#92의 4.5× 절벽 턴).
+- **Read:** #93 스레드의 2026-09-02 코멘트(본문보다 이것이 이긴다) · ROADMAP `Dep bump` 레인의
+  2026-09-02 항목 · `docs/acp-backend-rail.md` §11-7.
+- **Do not touch:** #92를 구현 이슈로 취급하지 말 것 · `mux-launch.ts`/`mux-placement.ts` import
+  fence · #76/#78 · 0.16.1 make를 이 레인에 섞지 말 것 · pi의 네 필드에 무언가를 다시 쓰는 설계
+  (GLG가 닫았다 — carrier는 #96).
 
 <details><summary>OMP 레인의 직전 NOW (0.16.1 make 대기 — 열린 채 보류)</summary>
 

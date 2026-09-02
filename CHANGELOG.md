@@ -4,6 +4,95 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.17.0 - 2026-09-02
+
+### Verification
+
+Each receipt carries its own scope; none of them is transferable to another commit or host.
+
+- **`pnpm run check:full`** — PASS, exit 0, **422s**, and **`./run.sh check-gate-qualification`** —
+  **346/346 KILLED, NOT KILLED 0**, with the run certifying `work-surface content hash identical
+  before/after`. Both ran on ONE candidate, and that is checkable rather than asserted: the tracked
+  tree hashed `4273654f53629a1f282893fef6c46aa52ceaaaebefd595e9be367b3de3942356` before the
+  qualification and again after the floor. The only bytes written afterwards are this Verification
+  block and the NEXT.md coordinates — no gate reads either file, which is why that scope can be
+  stated instead of hidden.
+- **Four reds along the way, all real, none smoothed.** A formatter rejection of the new mutant
+  manifest; a doc-floor gate catching the ROADMAP ledger entry quoting the ADAPTER's
+  `engines.node ">=22"` as though it were entwurf's own; a qualification run that aborted RED on its
+  own self-fence because the worktree was edited mid-run — kept in the record because a
+  qualification predating the final bytes is not a receipt, and the fence is what says so; and
+  `check-bridge-delivery` failing "artifact is not stale" after the review amendment edited three
+  `.ts` files without rebuilding the MCP bridge. That last one is why the tree hash above is quoted
+  twice: `mcp/entwurf-bridge/dist/` is gitignored, so the rebuild moved no candidate byte, and the
+  two receipts really do cover the same tree. None of the four would have been caught by typecheck
+  plus the focused gate.
+- **Qualification lane size.** The total moved **335 → 346**, and all eleven of those claims are new
+  in this release: `scripts/mutants/acp-usage-accounting.json` does not exist on the 0.16.1 base at
+  all. (Within the branch the manifest grew 7 → 11; the last one, `ACP-ACCOUNTING-PREFERS-WIDEST`,
+  covers a branch that had no deterministic coverage before this cut.) Nothing in this lane guarded
+  the previous release.
+- **`LIVE=1 ./run.sh smoke-acp-raw-turn-live`** — PASS at 2026-09-02 17:01 KST on the moved pin.
+  Launch source `package:@agentclientprotocol/claude-agent-acp` (not PATH fallback),
+  `protocolVersion=1`, model `claude-sonnet-5`, `stopReason=end_turn`, 58,189 bytes NDJSON, exit 0.
+  This is the dep-bump track's own named lock, not a substitute for it.
+- **Recurrence corpus measurement** — the re-billed bound's in-turn identity was re-measured across
+  every ACP overlay transcript, not the single ledger it had been resting on: 2,398 of 2,410
+  adjacent pairs hold (99.50%) over 30+ sessions, 2026-05 → 2026-09.
+- **NOT run for this entry:** `LIVE=1 ./run.sh release-gate <scratch> --cut`. The release acceptance
+  floor is unmet until it is, and it spends real model turns across three rails.
+
+### Changed
+
+- **ACTION REQUIRED — ACP accounting consumers must read `usage.acp`.** Claude ACP
+  `PromptResponse.usage` is the sum across a turn's API round trips, not one request's
+  prompt shape. The turn's accounting totals now travel at
+  `usage.acp.{input,output,cacheRead,cacheWrite}`; pi's four request-shaped fields remain
+  zero, while `usage.totalTokens` remains the vendor's context-occupancy reading. Consumers
+  that display ACP token/cache accounting must read the new key — `agent-config`'s
+  `pi-extensions/glg-footer.ts` does so at `47b9b95`. The numerator is taken from the
+  vendor's ACCOUNTING-GRADE `_meta.quota.model_usage` rows (summed) in preference to the
+  main-loop-only `PromptResponse.usage`, because the cost denominator is an adjacent diff of
+  the backend's running total and already has that wider scope. Deterministic receipts:
+  `scripts/check-acp-usage-accounting.ts` CELLs 1/1b drive pi's real overflow and context
+  readers with the incident-scale 4,185,084 cache-read aggregate on a 223,516-token context,
+  and CELL 1e drives both token carriers at once so a silent fallback to the narrow one
+  cannot pass for a preference.
+- **ACTION REQUIRED — the certified Claude ACP dependency coordinates move together, and
+  this release REQUIRES them.** The bundled Claude adapter is
+  `@agentclientprotocol/claude-agent-acp` **0.70.0 → 0.73.0**, its wire SDK is
+  `@agentclientprotocol/sdk` **1.3.0 → 1.4.0**, and the resolved transitive
+  `@anthropic-ai/claude-agent-sdk` is **0.3.232 → 0.3.257**. This is not a refresh riding
+  along with the fix: `_meta.quota.model_usage` does not exist before adapter 0.71.0 (added
+  by upstream `fad4d10`, "report per-model token usage on prompt responses"), so the
+  accounting above has no accounting-grade numerator without this bump. Three adapter minors
+  are folded into one certification; the per-bump measurement — declared-dependency deltas
+  per tag, the zod floor narrowing at 0.71.0, lock peer-resolution, the reachable/unreachable
+  split of the new surface, and the re-measured MCP readiness boundary — is recorded in the
+  ROADMAP "Dep bump(별도 트랙)" ledger. Re-run the ACP support gates on any locally
+  overridden adapter command before treating that command as covered by these coordinates.
+
+### Fixed
+
+- **Claude ACP no longer presents a turn aggregate as one request to pi.** That projection
+  caused pi's raw overflow reader to compact a live 223,516-token session under a
+  1,000,000-token window, invented two phantom cache misses, and silenced the one real miss
+  after a 401-minute idle gap. The aggregate is retained as accounting evidence, context
+  occupancy remains separate and is carried forward across a turn that reports none, and a
+  material re-billed prefix is reported as a PROVEN LOWER BOUND rather than silently hidden.
+  Turn cost remains the adjacent difference of the SDK's cumulative estimate, never a local
+  reprice. A backend with no measured semantics (cortex) is still sealed not at all.
+- **A backwards session total no longer asserts a cause it has not measured.** The operator
+  diagnostic for a decreasing cumulative cost previously named a conversation reset as "the
+  known cause". The adapter's `conversation_reset` handler only switches to a fresh
+  conversation and touches no cost (0.73.0 `dist/acp-agent.js:3675-3682`); the documented
+  mechanism lives in claude-agent-sdk instead, which states that a mid-session `/clear`
+  resets the running total (`sdk.d.ts:4884`). The notice now reports the observation, names
+  `/clear` in the vendor's own word rather than paraphrasing it into a different noun, states
+  explicitly that the adapter's `conversation_reset` event is NOT that mechanism, and says plainly
+  that the cause is not measured here. Naming the disproven event as the documented cause was the
+  release's own thesis being violated inside its own diagnostic; it was caught in review.
+
 ## 0.16.1 - 2026-09-01
 
 ### Verification
