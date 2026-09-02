@@ -54,7 +54,7 @@ import { fileURLToPath } from "node:url";
 import { upsertMetaSession, writeMetaReceiverMarker } from "../pi-extensions/lib/meta-session.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
 import { skipLive } from "./lib/live-skip.ts";
-import { waitForPiRecord } from "./lib/pi-record-discovery.ts";
+import { PI_BOOT_TIMEOUT_MS, waitForPiRecord } from "./lib/pi-record-discovery.ts";
 
 const ACP_PROVIDER = "entwurf";
 const ACP_MODEL = process.env.ENTWURF_ACP_CORTEX_MODEL?.trim() || "cortex-claude-sonnet-5";
@@ -66,7 +66,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 // Load ONLY this checkout's extensions so the resident registers THIS acp-provider.ts.
 const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", REPO_ROOT] as const;
 
-const BOOT_TIMEOUT_MS = 30_000;
+const BOOT_TIMEOUT_MS = PI_BOOT_TIMEOUT_MS; // shared: pi lock-stale window + boot (see pi-record-discovery)
 // The cortex CLI self-extracts on first launch and its newSession alone is
 // ~2.5 s; keep the generous default of the sibling smoke.
 const TURN_TIMEOUT_MS = Number(process.env.ENTWURF_ACP_CORTEX_TIMEOUT_MS) || 300_000;

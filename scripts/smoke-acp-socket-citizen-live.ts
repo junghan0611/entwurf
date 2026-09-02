@@ -32,7 +32,7 @@ import { fetchControlSocketRuntimeInfo, formatRuntimeModel } from "../pi-extensi
 import { scanSocketProbes } from "../pi-extensions/lib/socket-discovery.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
 import { skipLive } from "./lib/live-skip.ts";
-import { waitForPiRecord } from "./lib/pi-record-discovery.ts";
+import { PI_BOOT_TIMEOUT_MS, waitForPiRecord } from "./lib/pi-record-discovery.ts";
 
 const ACP_PROVIDER = "entwurf";
 const ACP_MODEL = process.env.ENTWURF_S1_MODEL?.trim() || "claude-opus-5";
@@ -43,7 +43,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 // Load ONLY this checkout's extensions so the resident registers THIS acp-provider.ts.
 const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", REPO_ROOT] as const;
 
-const BOOT_TIMEOUT_MS = 30_000;
+const BOOT_TIMEOUT_MS = PI_BOOT_TIMEOUT_MS; // shared: pi lock-stale window + boot (see pi-record-discovery)
 const POLL_MS = 100;
 
 let passed = 0;

@@ -65,7 +65,7 @@ import {
 } from "../pi-extensions/lib/meta-session.ts";
 import { terminateChild } from "./lib/acp-child-cleanup.ts";
 import { skipLive } from "./lib/live-skip.ts";
-import { waitForPiRecord } from "./lib/pi-record-discovery.ts";
+import { describePiLockResidue, PI_BOOT_TIMEOUT_MS, waitForPiRecord } from "./lib/pi-record-discovery.ts";
 
 // pi's control socket lives at the canonical dir keyed by the RECORD's garden id (#50 C4: the
 // record is the sole address authority — never a transcript/session id; :196 below proves it),
@@ -79,16 +79,13 @@ const REPO_EXTENSION_ARGS = ["--no-extensions", "-e", REPO_ROOT] as const;
 
 // Staged timeouts (automation): short and per-stage so a stall is attributable.
 //
-// MEASURED 2026-09-03 on the release host, this exact spawn shape (`pi --no-extensions -e <repo>
-// --entwurf-control --provider openai-codex --model gpt-5.6-luna --mode rpc`, child store on
-// ENTWURF_META_SESSIONS_DIR, second boot started ~40ms after the first is reaped): boot → V3
-// record is **1008–1212ms over 80 consecutive boots**, first and second boot indistinguishable;
-// under 4× CPU oversubscription it stretches to 5.1–5.4s. So 30s is ~25× the measured cost and
-// this bound is NOT the thing that fails. Two of the three blocked 0.17.0 `--cut` runs timed out
-// here anyway with an EMPTY stderr and no record in ANY store — a resident that died or never
-// arrived, not a slow one. Raising the bound would only make that wait longer, so it stays; what
-// was missing is the observation below, which says WHICH of the two it was.
-const BOOT_TIMEOUT_MS = 30_000; // pi --entwurf-control socket appears
+// The boot bound is SHARED and carries its own receipt (see `PI_BOOT_TIMEOUT_MS` in
+// pi-record-discovery). Short version, because this smoke is where it was found: this cell used to
+// wait 30_000ms, which is EXACTLY pi's `proper-lockfile` stale window, and C1's own SIGTERM can
+// orphan that lock — so C1b's resident spent the whole wait queueing behind it and birthed its
+// record at a measured 30_148ms, 148ms after the smoke had stopped looking. That is what blocked
+// two of the three 0.17.0 `--cut` runs.
+const BOOT_TIMEOUT_MS = PI_BOOT_TIMEOUT_MS; // pi --entwurf-control record + socket appear
 const POLL_MS = 100;
 
 let passed = 0;
@@ -405,6 +402,7 @@ async function main(): Promise<void> {
 		// moment the residents' real state can still be read. An empty stderr is itself evidence
 		// and is printed as "(empty)" rather than skipped — silence that is never stated reads as
 		// a missing diagnostic instead of the observation it is.
+		console.error(`  pi locks held right now: ${describePiLockResidue()}`);
 		for (const watch of residents) {
 			console.error(`  resident ${watch.label}: ${describeResident(watch)}`);
 			console.error(

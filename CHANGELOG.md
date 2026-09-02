@@ -6,48 +6,67 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ### Fixed
 
-- **The two LIVE smokes that blocked all three 0.17.0 `--cut` runs now say WHICH failure they
-  hit.** Both reds were bounded waits that expired and then threw away the one fact that separates
-  a child that died from a child that was merely slow, so three blocked cuts produced no evidence
-  anyone could act on. Measured on the release host BEFORE either file was touched, in the smoke's
-  exact spawn shape (`pi --no-extensions -e <repo> --entwurf-control --provider openai-codex
-  --model gpt-5.6-luna --mode rpc`, child store on `ENTWURF_META_SESSIONS_DIR`, second boot started
-  ~40ms after the first is reaped): boot → V3 record is **1008–1212ms across 80 consecutive boots**,
-  with first and second boot indistinguishable, and **5.1–5.4s** under 4× CPU oversubscription.
-  `smoke-entwurf-v2-matrix-live`'s `BOOT_TIMEOUT_MS` is 30s — ~25× the measured cost — so the C1b
-  timeout is not a tight bound and **the bound is left at 30s**: raising it would only wait longer
-  on a resident that was already gone. The blocked runs' own logs say the rest — cut3 birthed three
-  healthy `pi --entwurf-control` residents at 06:57:05, :11 and :15 (`smoke-resident-garden-guard`
-  twice, then matrix C1) and only the fourth never arrived, and matrix-live is the gate's FIRST LIVE
-  step, so neither host load nor a previous smoke's residue accounts for it.
-  - `smoke-entwurf-v2-matrix-live` now watches each resident: pid, exit code/signal and how many ms
-    in it happened, a signal-0 liveness probe taken at failure time (in the catch, before the
-    reaper runs), and a **per-child** stderr tail. The single shared buffer could not say whether
-    C1 or C1b spoke, which is precisely what the C1b post-mortem needed to know. An empty tail now
-    prints as `(empty)` rather than being skipped: silence that is never stated reads as a missing
-    diagnostic instead of the observation it is.
-  - `smoke-mux-lifecycle-live` now attaches window forensics when a nonce callback never comes —
-    pane-pid liveness, `list-panes`, and the last 40 lines of `capture-pane` — for both the
-    pi-native and claude-code cells. The launch receipt already tells a human "the window is
-    visible and can be read directly"; on a headless gate run nobody is there and the window is
-    torn down seconds later. The three states a bare timeout collapses into one (the runtime never
-    started, it started and is sitting on an error, or it is healthy and the model never called the
-    callback tool) are now separable after the fact. Every step is best-effort so a diagnostic can
-    never become the failure.
-  Neither change touches a product rail. The cause of the C1b silence is still open — 80 consecutive
-  boots did not reproduce it — and the next aggregate run is what will name it.
+- **The C1b red that blocked two of the three 0.17.0 `--cut` runs: a LIVE smoke was waiting exactly
+  as long as pi's lock-stale window, and losing by 148ms.** The cause is measured end to end, and
+  none of it is a product regression:
+  1. pi guards `auth.json` AND `models-store.json` with `proper-lockfile` and reads through that
+     lock on every boot (`dist/core/auth-storage.js`), retrying a held lock for `staleMs = 30_000`
+     before taking it over.
+  2. `terminateChild`'s SIGTERM ends a resident before `proper-lockfile`'s release ever runs, so a
+     kill that lands inside the lock window orphans the lock directory. Sweeping 24 kill offsets
+     across a boot reproduced it once, at +375ms.
+  3. With `~/.pi/agent/models-store.json.lock` orphaned, the next boot → V3 record measured
+     **30_148ms** — and **1_114ms** immediately afterwards, once the stale takeover had cleared it.
+  4. `smoke-entwurf-v2-matrix-live`'s `BOOT_TIMEOUT_MS` was `30_000`: it stopped looking 148ms
+     before C1b's record landed. Hence the exact signature the blocked cuts left — empty stderr, no
+     record in any store, and (confirmed in both runs from the host's own process-audit trail) a
+     child that was alive for the entire 30s and was killed by the smoke at +30s.
+  The control was in the same three runs: `smoke-entwurf-chain-live` does the same two-resident
+  dance with `BOOT_TIMEOUT_MS = 45_000` and passed 3/3 while matrix-live failed 2/3.
+  - **The bound is now shared and carries its receipt.** `PI_BOOT_TIMEOUT_MS = 45_000` lives in
+    `scripts/lib/pi-record-discovery.ts` next to the measurements above, and the five smokes that
+    sat on the 30s cliff (`smoke-entwurf-v2-matrix-live`, `smoke-acp-socket-citizen-live`,
+    `smoke-acp-bundled-mcp-live`, `smoke-acp-v2-send-live`, `smoke-acp-cortex-live`) now derive
+    from it. 30s was the single worst value available: it expires *inside* the takeover.
+    `smoke-resident-garden-guard` already used 90s and needed no change.
+  - **A boot overrun now names the lock.** `describePiLockResidue()` reports which pi locks are held
+    at failure time — read-only, because a live holder and an orphan look identical from outside and
+    only pi's own stale protocol may arbitrate them.
+- **Both blocked smokes now say WHICH failure they hit**, which is what made the cause findable.
+  `smoke-entwurf-v2-matrix-live` watches each resident (pid, exit code/signal and how many ms in, a
+  signal-0 liveness probe taken in the catch before the reaper runs, and a **per-child** stderr tail
+  — the old single shared buffer could not say whether C1 or C1b spoke; an empty tail now prints as
+  `(empty)` rather than being skipped). `smoke-mux-lifecycle-live` attaches window forensics when a
+  nonce callback never comes — pane-pid liveness, `list-panes`, and the last 40 lines of
+  `capture-pane`, for both cells. Its launch receipt already tells a human "the window is visible
+  and can be read directly"; on a headless gate nobody is there and the window is torn down seconds
+  later. Every diagnostic step is best-effort so it can never become the failure.
+
+  The mux pi-native nonce timeout (the second blocked cut) is NOT this bug and stays open: 300s is
+  ten times the stale window, and the codex rail was healthy in that same run (`chain-live` and
+  `smoke-omp-fresh-live` both passed on it). The forensics above are what the next occurrence will
+  answer with.
 
 ### Verification
 
 - `pnpm run check:toolchain` (biome + `tsc` ×3) — green.
+- **The repair measured against the exact failing condition.** With `models-store.json.lock`
+  planted as an orphan, `LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live` is **17/17 PASS in 34s** —
+  the stale wait absorbed. The same condition measured 30_148ms to birth, i.e. red under the old
+  30_000 bound.
+- **Boot cost, undisturbed**: 1008–1212ms across 80 consecutive boots in the smokes' spawn shape
+  (5.1–5.4s under 4× CPU oversubscription). The bound is not sized for boot cost; it is sized to
+  clear pi's stale window.
 - **The new matrix-live diagnostic exercised on a real failure path**, at 0 model tokens, by
   pointing the smoke at a bogus provider: `resident C1: pid=… EXITED code=1 signal=null at +1057ms
-  — it was gone before the wait ended`, with that child's own stderr (`Unknown provider`) beneath
-  it. The old code waited the remaining 29s and never recorded that the child had died at +1s.
-- `LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live` — **17/17 PASS** against the real
-  `openai-codex/gpt-5.6-luna` target.
+  — it was gone before the wait ended`, with that child's own stderr beneath it.
+- `LIVE=1 ./run.sh smoke-entwurf-v2-matrix-live` — **17/17 PASS** on the real
+  `openai-codex/gpt-5.6-luna` target (undisturbed run).
 - `LIVE=1 ./run.sh smoke-mux-lifecycle-live` — **81 checks passed, exit 0** (real model turns on
   both pi cells and the claude-code cell).
+- 15 iterations of the gate's own C1b neighbourhood (`smoke-resident-garden-guard` → `check-bridge`
+  → `doctor-pi-provider` → `smoke-entwurf-v2-matrix-live`) reproduced nothing — recorded because it
+  is what ruled out host load and prior-smoke residue and sent the search to pi's lock.
 - No aggregate `--cut` was run for this change, and no version was bumped: this is the repair, not
   the release.
 
