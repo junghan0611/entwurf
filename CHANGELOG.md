@@ -17,11 +17,10 @@ Each receipt carries its own scope; none of them is transferable to another comm
   This run carried `pnpm run check:full` and `./run.sh check-gate-qualification`
   (**346/346 KILLED**) as MUST steps. **It is not the 0.17.0 acceptance SHA:** `9479750`
   changed source after it, so a new `--cut` on the final HEAD is required before tag.
-  The bytes written after that run were this Verification block and NEXT.md.
   `CHANGELOG.md` is in `package.json` `files` and `check:full → check:package → check-pack`
-  enumerates it (`npm pack --dry-run`, 436 files in that tarball) — a packaged artifact,
-  not a behavioral input. `NEXT.md` is not in `files`. Working-tree cleanliness at cut
-  start was an operator observation, not a line in the gate log.
+  enumerates it (`npm pack --dry-run`, required/forbidden names — not a cardinality lock).
+  `NEXT.md` is not in `files`. Working-tree cleanliness at cut start was an operator
+  observation, not a line in the gate log.
 - **Four reds along the way, all real, none smoothed.** A formatter rejection of the new mutant
   manifest; a doc-floor gate catching the ROADMAP ledger entry quoting the ADAPTER's
   `engines.node ">=22"` as though it were entwurf's own; a qualification run that aborted RED on its
@@ -113,7 +112,7 @@ Each receipt carries its own scope; none of them is transferable to another comm
   main-context inflates the lower bound through both remaining terms, so a warm main prefix can
   announce a miss and attach this turn's dollar figure to it. The bound and its stored prior now
   read `PromptResponse.usage` (main loop) only; `usage.acp` stays the wide totals. Deterministic
-  receipt: `scripts/check-acp-usage-accounting.ts` CELL 1f.
+  oracle: `scripts/check-acp-usage-accounting.ts` CELL 1f.
 - **A backwards session total no longer asserts a cause it has not measured.** The operator
   diagnostic for a decreasing cumulative cost previously named a conversation reset as "the
   known cause". The adapter's `conversation_reset` handler only switches to a fresh
