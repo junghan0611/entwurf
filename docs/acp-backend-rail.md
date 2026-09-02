@@ -92,11 +92,11 @@ undifferentiated "supported" column is what let a Claude PASS read as if it also
 
 | Surface | Declaration | Class | What a green actually says |
 |---|---|---|---|
-| Entwurf package | `0.15.1` | shipped baseline | the package contract these rows belong to |
-| pi runtime | devDep exact `0.84.3`, peer `>=0.84.3 <0.85` | **exact** oracle + **closed range** | built and certified against 0.84.3; hosts inside the range are accepted, and the ceiling moves only on measurement |
-| ACP wire SDK | `@agentclientprotocol/sdk 1.3.0` | **exact** | the shared wire oracle both adapters speak |
-| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.70.0` | **exact**, bundled | the adapter we ship and certify; resolved before any PATH fallback |
-| Claude Agent SDK | `0.3.232` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
+| Entwurf package | `0.16.1` | shipped baseline | the package contract these rows belong to |
+| pi runtime | devDep exact `0.84.4`, peer `>=0.84.4 <0.85` | **exact** oracle + **closed range** | built and certified against 0.84.4; hosts inside the range are accepted, and the ceiling moves only on measurement |
+| ACP wire SDK | `@agentclientprotocol/sdk 1.4.0` | **exact** | the shared wire oracle both adapters speak |
+| Claude ACP adapter | `@agentclientprotocol/claude-agent-acp 0.73.0` | **exact**, bundled | the adapter we ship and certify; resolved before any PATH fallback |
+| Claude Agent SDK | `0.3.257` (transitive) | **exact** oracle | the runtime risk surface behind the adapter |
 | Anthropic SDK | `0.100.1` | **exact**, peer-resolution only | satisfies the Agent SDK peer floor (0.93.0+); never an API client here (gate L4) |
 | Claude Code runtime | `>=2.1.217` (`entwurf.claudeCodeFloor`) | **floor** | below it, hook args are silently dropped; entwurf enforces this itself |
 | Node | `>=24` (`engines.node`) | **floor** | single axis, derived everywhere else |
@@ -141,8 +141,10 @@ different reasons, and collapsing them would hide a real risk**:
 - **Capability-gated.** AIR typed session failures, the 0.69.0 AIR file-change report, terminal
   output widgets and nested subagent transcripts each test a client capability entwurf does not
   send, so the adapter itself keeps the legacy path.
-- **Advertised but never called.** Some surfaces carry no capability prerequisite at all — 0.70.0's
-  `providers/list` / `providers/set` / `providers/disable` are advertised unconditionally. They are
+- **Advertised but never called.** Some surfaces carry no capability prerequisite at all — the
+  `providers/list` / `providers/set` / `providers/disable` trio added in 0.70.0 is advertised
+  unconditionally, and 0.71.0–0.73.0 add native subagents, async tasks, message-specific session
+  forks, AI-generated session titles and permission-mode kinds on the same footing. They are
   unreachable only because the common loop never invokes them (nor `logout`). Nothing upstream
   enforces that; it is our own call-site discipline, and it stops holding the moment we use one.
 
@@ -255,13 +257,22 @@ caller-session `_meta`, and cross-machine certification.
 
 A backend can return `newSession` before its declared MCP server is callable. This was
 observed intermittently on the Claude rail and directly on Cortex's private `mcp.json`
-path. Neither `claude-agent-acp` 0.70.0 nor the Cortex landing adds a client-side
-readiness fence, and `mcpServerStatus()` is not called by the common loop.
-(Re-measured at the 0.68.0 → 0.70.0 bump: AIR typed failures and the 0.69.0 AIR
-file-change report are both capability-gated and unadvertised by entwurf; 0.70.0's
-`providers/set` / `providers/disable` are advertised unconditionally by the adapter but
-entwurf calls neither, so no session's provider state is transitioned; goal extension is
-still not a fence. This bump changes no readiness behavior and closes no part of #72.)
+path. Neither `claude-agent-acp` 0.73.0 nor the Cortex landing adds a client-side
+readiness fence over a session's declared MCP servers, and entwurf's common loop
+calls `mcpServerStatus()` nowhere.
+(Re-measured at the 0.70.0 → 0.73.0 bump, not inherited from the previous one.
+`mcpServerStatus` call sites in `src/acp-agent.ts` went 0 → 2, new in 0.71.0 via
+`0cbbaf3` (MCP OAuth, LLM-25012) — so the ADAPTER now calls it where it previously
+did not. Both sites were read at `v0.73.0 src/acp-agent.ts:1618` and `:1711`: each is
+gated behind `supportsMcpOAuth(query)`, and the polling one waits only on a server
+that already reported `needs-auth`, never on every declared server before
+`newSession` returns. That is an auth handshake, not a readiness fence, so the
+boundary below is unchanged. The other reachable-surface findings also re-measured:
+AIR typed failures and the AIR file-change report stay capability-gated and
+unadvertised by entwurf; `providers/set` / `providers/disable` stay advertised
+unconditionally and uncalled; native subagents, async tasks, session forks, session
+titles, permission-mode kinds and clear-context planning are all new-but-uncalled.
+This bump changes no readiness behavior and closes no part of #72.)
 
 ### 11-7-a/b. Instrument and first measurement
 

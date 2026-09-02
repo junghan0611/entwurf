@@ -2,8 +2,14 @@
 //
 // WHAT THIS EXISTS TO STOP. `mapPromptStopReason` used to be a bare
 // `switch` returning a StopReason with `default: return "stop"`. The ACP terminal
-// set is closed — `@agentclientprotocol/sdk` 1.3.0 `schema/types.gen` declares
-// `end_turn | max_tokens | max_turn_requests | refusal | cancelled` — so that
+// set is closed — `@agentclientprotocol/sdk` 1.4.0 `dist/schema/types.gen.d.ts:3001`
+// declares `end_turn | max_tokens | max_turn_requests | refusal | cancelled`, with
+// no `| string` arm. Re-measured at the 1.3.0 → 1.4.0 bump rather than inherited,
+// because 1.4.0 also ships a SECOND, OPEN union at `dist/v2/schema/types.gen.d.ts:3607`
+// (`… | "cancelled" | string`). That one is reachable only through the
+// `./experimental/v2` export; entwurf imports the BARE specifier, which the package
+// `exports` map sends to `./dist/acp.js` — the closed v1 surface. The claim holds
+// only while that import stays bare, so a move to the v2 export retires it — so that
 // default silently collapsed THREE distinct non-success outcomes into a clean
 // successful turn:
 //

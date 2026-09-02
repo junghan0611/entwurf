@@ -82,8 +82,8 @@
 		"claudeCodeFloor": ">=2.1.217"
 	},
 	"dependencies": {
-		"@agentclientprotocol/claude-agent-acp": "0.70.0",
-		"@agentclientprotocol/sdk": "1.3.0",
+		"@agentclientprotocol/claude-agent-acp": "0.73.0",
+		"@agentclientprotocol/sdk": "1.4.0",
 		"@anthropic-ai/sdk": "0.100.1",
 		"@modelcontextprotocol/sdk": "^1.12.1",
 		"zod": "^3.25.0 || ^4.0.0"

@@ -697,6 +697,53 @@ v2 필드 `parentGardenId`/`isEntwurf`는 **stray key로 거부된다** — 되�
     통과시켰다. 경계 있는 matcher(`@0\.84\.3(_|$)`, pnpm .pnpm 표기 실측)로 수리하고 합성
     lookalike 자기시험 셀 `[QK:PACK-INSTALL-PIN-MATCHER-BOUNDED]` + `pack-install` mutant lane
     1종(무경계 복원)으로 kill-proof를 세웠다.
+  - **2026-09-02 bump — claude-agent-acp 0.70.0 → 0.73.0 + ACP SDK 1.3.0 → 1.4.0 + claude-agent-sdk
+    0.3.232 → 0.3.257 (pi 0.84.4 유지).** Issue #93 accounting 수리의 **전제**다 — refresh가 아니다.
+    **성격: adapter-code 릴리즈 3개 minor를 한 인증에 접음.** upstream tags `v0.70.0..v0.73.0`
+    16 commits, `src` 46 files `+19,504/−7,290` (checkout `~/repos/3rd/claude-agent-acp`).
+    이전 bump의 논거를 재사용하지 않고 0.71.0/0.72.0/0.73.0을 각각 재측정했다.
+    ⑴ **선언 deps 실측(tag별로 다르다)**: 0.70.0 = `sdk 1.3.0`·`claude-agent-sdk 0.3.232`·
+    `zod "^3.25.0 || ^4.0.0"` → 0.71.0 = `1.3.0`·`0.3.238`·`zod "^4.0.0"` → 0.72.0 = `1.4.0`·`0.3.252`·
+    `^4.0.0` → 0.73.0 = `1.4.0`·`0.3.257`·`^4.0.0`. `engines.node (upstream major 22)` 전 구간 불변.
+    **zod 하한이 0.71.0에서 좁혀졌다**(`7c66108`, v4 directory import 실패 회피) — 우리 lock은
+    `zod@4.3.6`으로 이미 그 안에 있어 이동 없음. lock peer-resolve 재측정:
+    `claude-agent-acp@0.73.0(@anthropic-ai/sdk@0.100.1(zod@4.3.6))(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))`
+    (`pnpm-lock.yaml:1506`) + `claude-agent-sdk@0.3.257(@anthropic-ai/sdk@0.100.1…)` (`:1543`).
+    anthropic peer pin `0.100.1` 유지 — `>=0.93.0` floor 불변이라 기계적 상향을 취하지 않는다.
+    ⑵ **adapter 16 commits 중 도달하는 변경은 정확히 하나다(SDK 축은 ⑸에서 따로 판정):
+    `fad4d10` "report per-model token usage on prompt responses"
+    (#1037, 0.71.0).** 이것이 `_meta.quota.model_usage` = `turnQuotaMeta()`를 낳았다. 실측:
+    `git grep -c turnQuotaMeta -- src`가 v0.70.0에서 **0 hits**, v0.71.0/v0.72.0/v0.73.0에서 2 hits.
+    #93의 `readTurnAccounting()`이 소비하는 numerator가 곧 이것이므로, **핀 이동 없이는 그 수리의
+    주 경로가 죽는다** — 커밋 순서가 핀 → accounting이어야 하는 이유.
+    ⑶ **도달하지 않는 신규 표면(호출 0건, 광고만)**: native subagents + async tasks (#1017),
+    message-specific session forks (#1046), AI 생성 session title (#984), permission mode kinds (#1025),
+    Claude modes / clear-context planning (#1004), per-model effort settings (#1065).
+    `providers/*` trio와 같은 등급 — call-site 규율로만 unreachable이다.
+    ⑷ **readiness 재측정(§11-7 갱신).** `mcpServerStatus` 호출이 `src/acp-agent.ts`에서 v0.70.0 0건 →
+    v0.73.0 2건으로 **새로 생겼다**(`0cbbaf3`, MCP OAuth/LLM-25012). 두 site를 직접 판독
+    (`v0.73.0 src/acp-agent.ts:1618`, `:1711`): 둘 다 `supportsMcpOAuth(query)` 뒤에 있고, polling 쪽은
+    이미 `needs-auth`를 보고한 서버 하나만 기다린다 — `newSession` 전에 선언된 전체 MCP를 막는
+    fence가 아니다. **결론은 유지되지만 근거는 새로 측정한 것이고, entwurf 쪽 호출은 여전히 0건**
+    (`pi-extensions/`·`mcp/`·`scripts/` 실측). #72는 여전히 닫히지 않는다.
+    ⑸ **ACP SDK 1.3.0 → 1.4.0의 도달 판정(별도 축).** 1.4.0은 스키마 표면을 **둘** 싣는다:
+    `dist/schema/types.gen.d.ts:3001`의 `StopReason`은 여전히 닫힌 5-리터럴이고,
+    `dist/v2/schema/types.gen.d.ts:3607`은 `… | "cancelled" | string`으로 **열려 있다**.
+    후자는 package `exports`의 `./experimental/v2`로만 닿고, entwurf는 bare specifier를 import해
+    `./dist/acp.js`(v1)로 해석된다(실측). 따라서 `mapAcpStopReason`의 "터미널 집합은 닫혀 있다"는
+    주장은 1.4.0에서도 유지되지만 **그 근거가 바뀌었다** — 이제 bare import가 유지되는 동안에만
+    참이다. `backend.ts`와 `check-acp-stop-reason.ts` 주석에 그 조건을 명시했다.
+    ⑹ **트랙이 지정한 잠금 2종 실행.** `check-acp-sdk-surface`(vitest 7/7 PASS: PINS·L2 lock
+    peer-resolve·L2b/L2c runtime probe가 1.4.0/0.73.0/0.3.257로 이동) + **`LIVE=1 ./run.sh
+    smoke-acp-raw-turn-live` 2026-09-02 17:01 KST 실행 → PASS**
+    (launch source = `package:@agentclientprotocol/claude-agent-acp`, PATH fallback 아님;
+    model `claude-sonnet-5`, `protocolVersion=1`, `stopReason=end_turn`, NDJSON 58,189 bytes 캡처,
+    EXIT=0). `check-dep-versions`도 green(pi 0.84.4 coherent).
+    ⑺ 기계 이동: `package.json` 두 dependency, `pnpm-workspace.yaml`
+    `minimumReleaseAgeExclude`에 0.71.0/0.72.0/0.73.0 + claude-agent-sdk 0.3.257 9종(플랫폼 optional
+    포함), `pnpm-lock.yaml`, `test/acp-sdk-surface.contract.test.ts` PINS + L2 lock regex + L2b/L2c
+    runtime probe, `docs/acp-backend-rail.md` 지원 matrix + §11-7, `scripts/smoke-acp-raw-turn-live.ts`
+    헤더. 게이트 신설 없음 — `check-acp-sdk-surface`/`check-dep-versions`의 도출이 그대로 authority.
 - **Standing focus — Mitsein over MCP:** plain external(non-replyable) vs garden-native meta-session
   (replyable by garden id) 구분이 agent 발화에 정직히 반영되는가. native Claude meta-session이
   external-mcp로 퇴행하거나 `wants_reply=true`를 비대칭 거절하면 버그.
