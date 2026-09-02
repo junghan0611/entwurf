@@ -38,11 +38,16 @@ push·tag·release-gate는 GLG 몫이다.
   합계이고 그 넷은 한 요청의 프롬프트 모양이다. 턴 회계 총계는 `usage.acp`로 가며 numerator는
   회계등급 `_meta.quota.model_usage` 행 합(main-loop 전용 `PromptResponse.usage`보다 우선).
   턴 비용은 SDK 누적 추정치의 인접 차분. 재청구 프리픽스는 증명된 하한으로 공지된다.
-- **검증 상태 (frozen candidate에서 실측, tracked tree `4273654f5362…`):**
-  `pnpm run check:full` PASS(422s, exit 0) · `check-gate-qualification` **346/346 KILLED**
-  (work-surface 해시 전후 동일, 총계 335 → 346이고 11개 전부 이번 릴리즈 신설) ·
-  `LIVE=1 ./run.sh smoke-acp-raw-turn-live` PASS(0.73.0 핀 — 이 영수증만은 승계본이고
-  아티팩트를 재확인하지 못했다).
+- **검증 상태 — 릴리즈 수용 바닥이 초록이다.** `LIVE=1 ./run.sh release-gate <scratch> --cut`
+  **MUST PASS=23 FAIL=0 SKIP=0**, BEHAVIOR PASS=1, exit 0, `cut: OK`. 커밋 `0379764`,
+  tracked tree `cb1a3dc69b52…`, dirty 0, 20:14:51 → 21:04:41 KST. `check:full`과
+  `check-gate-qualification`(**346/346 KILLED**)은 그 안의 MUST 스텝으로 들어 있다.
+  총계 335 → 346이고 11개 전부 이번 릴리즈 신설이다.
+- **첫 `--cut`은 빨간불이었고(MUST FAIL=5) 다섯 개 전부 실행 환경이었다.** 게이트를 살아있는
+  ACP 시민 세션 안에서 돌린 탓이다 — `CLAUDE_CONFIG_DIR`가 `hooks: {}`인 오버레이를 가리켜
+  Claude 자식이 훅 없이 태어나고, `PI_SESSION_ID`가 fresh-call 콜백 주소를 가로챈다.
+  `env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID`로 다시 돌리자 다섯 개가 초록.
+  **VERIFY.md는 `PWD`만 스크래치로 두라 하고 반송자를 지우라는 말이 없다 — 그 구멍은 남아 있다.**
 - **리뷰 수정 1번들(`4d6fe4c`에 접어 넣음):** 감소 통지가 벤더의 단어 `/clear` 대신
   "conversation reset"을 원인으로 불렀다 — 그건 비용을 건드리지 않는다고 우리가 증명한 이벤트다.
   그리고 침묵된 미스를 영수증 없는 "194k"로 적었다(측정값은 195,177).

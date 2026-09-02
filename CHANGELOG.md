@@ -10,13 +10,14 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 Each receipt carries its own scope; none of them is transferable to another commit or host.
 
-- **`pnpm run check:full`** — PASS, exit 0, **422s**, and **`./run.sh check-gate-qualification`** —
-  **346/346 KILLED, NOT KILLED 0**, with the run certifying `work-surface content hash identical
-  before/after`. Both ran on ONE candidate, and that is checkable rather than asserted: the tracked
-  tree hashed `4273654f53629a1f282893fef6c46aa52ceaaaebefd595e9be367b3de3942356` before the
-  qualification and again after the floor. The only bytes written afterwards are this Verification
-  block and the NEXT.md coordinates — no gate reads either file, which is why that scope can be
-  stated instead of hidden.
+- **`LIVE=1 ./run.sh release-gate <scratch> --cut`** — **MUST PASS=23 FAIL=0 SKIP=0**,
+  BEHAVIOR PASS=1 FAIL=0 SKIP=0, exit 0, `cut: OK`. Run on commit `0379764`, tracked tree
+  `cb1a3dc69b521909f0fe6f956e5c0fa36e885d5955f91271dd8e63d30cd918fb`, dirty 0, 2026-09-02
+  20:14:51 → 21:04:41 KST. This is the acceptance floor of VERIFY.md §3.3, and it carries
+  `pnpm run check:full` and `./run.sh check-gate-qualification` (**346/346 KILLED, NOT KILLED 0**)
+  inside it as MUST steps, so those two are receipts of this same run rather than of an earlier
+  standalone one. The only bytes written after it are this Verification block and the NEXT.md
+  coordinates — no gate reads either file, which is why that scope can be stated instead of hidden.
 - **Four reds along the way, all real, none smoothed.** A formatter rejection of the new mutant
   manifest; a doc-floor gate catching the ROADMAP ledger entry quoting the ADAPTER's
   `engines.node ">=22"` as though it were entwurf's own; a qualification run that aborted RED on its
@@ -27,20 +28,42 @@ Each receipt carries its own scope; none of them is transferable to another comm
   twice: `mcp/entwurf-bridge/dist/` is gitignored, so the rebuild moved no candidate byte, and the
   two receipts really do cover the same tree. None of the four would have been caught by typecheck
   plus the focused gate.
+- **The first `--cut` attempt was RED — MUST PASS=18 FAIL=5 SKIP=0 — and every one of the five was
+  the operator's own environment, not this release.** Recorded because the failure wore a
+  convincing disguise: it read as a broken host. `static` was the stale bridge artifact above,
+  re-created when a `git checkout`/`merge` bumped every tracked `.ts` mtime past the built `dist`.
+  The other four came from running the gate **inside a live entwurf ACP Claude session**, which
+  exports two carriers into every child it spawns. `CLAUDE_CONFIG_DIR` points at the ACP overlay,
+  whose `settings.json` is `hooks: {}` by design — so the Claude Code children the live smokes
+  launch are born with no entwurf SessionStart hook and mint no meta-record, failing
+  `smoke-claude-native-resume-live`, `smoke-entwurf-chain-live` and `smoke-mux-lifecycle-live` on
+  citizen birth. The same variable made `doctor-meta-bridge` report `installed: absent` and
+  `claude mcp list` deny `entwurf-bridge`; with it unset the doctor reads
+  `installed: v3 (229fef123589)` matching source and assembled exactly. `PI_SESSION_ID` did the
+  analogous damage on the omp axis: `smoke-omp-fresh-live` reported a 240s nonce-callback timeout,
+  but the sibling was alive — it was born at 19:58:21 KST and called back at 19:58:28 to the
+  AMBIENT caller id rather than the caller the smoke had minted, so the smoke watched the right
+  mailbox and saw nothing. That smoke's own source anticipates this exact disguise
+  (`scripts/smoke-omp-fresh-live.ts:186`, "the failure would masquerade as a silent sibling").
+  Re-run with `env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID`, all five turned green and
+  nothing else changed. **VERIFY.md tells the operator to put `PWD` in scratch; it does not yet say
+  to strip the identity and config carriers, and that gap is what cost this cut its first 52
+  minutes.**
 - **Qualification lane size.** The total moved **335 → 346**, and all eleven of those claims are new
   in this release: `scripts/mutants/acp-usage-accounting.json` does not exist on the 0.16.1 base at
   all. (Within the branch the manifest grew 7 → 11; the last one, `ACP-ACCOUNTING-PREFERS-WIDEST`,
   covers a branch that had no deterministic coverage before this cut.) Nothing in this lane guarded
   the previous release.
-- **`LIVE=1 ./run.sh smoke-acp-raw-turn-live`** — PASS at 2026-09-02 17:01 KST on the moved pin.
-  Launch source `package:@agentclientprotocol/claude-agent-acp` (not PATH fallback),
-  `protocolVersion=1`, model `claude-sonnet-5`, `stopReason=end_turn`, 58,189 bytes NDJSON, exit 0.
-  This is the dep-bump track's own named lock, not a substitute for it.
+- **`smoke-acp-raw-turn-live`** — PASS on the moved pin, quoted from the accepted `--cut` run's own
+  output rather than from a session message: launch source
+  `package:@agentclientprotocol/claude-agent-acp` (not PATH fallback), `protocolVersion=1`, model
+  `claude-sonnet-5`, `stopReason=end_turn`, reply `"OK"`, 62,998 bytes NDJSON. This is the dep-bump
+  track's own named lock, not a substitute for it. An earlier standalone run of the same smoke
+  reported 58,189 bytes and another 58,178; the byte count is per-run and is not a fixed
+  fingerprint, which is precisely why the number cited here is the one the gate printed.
 - **Recurrence corpus measurement** — the re-billed bound's in-turn identity was re-measured across
   every ACP overlay transcript, not the single ledger it had been resting on: 2,398 of 2,410
   adjacent pairs hold (99.50%) over 30+ sessions, 2026-05 → 2026-09.
-- **NOT run for this entry:** `LIVE=1 ./run.sh release-gate <scratch> --cut`. The release acceptance
-  floor is unmet until it is, and it spends real model turns across three rails.
 
 ### Changed
 
