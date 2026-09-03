@@ -4,6 +4,8 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.17.1 - 2026-09-03
+
 ### Fixed
 
 - **The C1b red that blocked two of the three 0.17.0 `--cut` runs: a LIVE smoke was waiting exactly
@@ -67,8 +69,17 @@ All notable changes to this project will be documented here. Format follows [Kee
 - 15 iterations of the gate's own C1b neighbourhood (`smoke-resident-garden-guard` → `check-bridge`
   → `doctor-pi-provider` → `smoke-entwurf-v2-matrix-live`) reproduced nothing — recorded because it
   is what ruled out host load and prior-smoke residue and sent the search to pi's lock.
-- No aggregate `--cut` was run for this change, and no version was bumped: this is the repair, not
-  the release.
+- **`LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.17.1.hb5Q5j --cut`** — **MUST
+  PASS=23 FAIL=0 SKIP=0**, **BEHAVIOR PASS=1 FAIL=0 SKIP=0**, exit 0, `cut: OK`. Run on `665191d`,
+  2026-09-03 09:46:37 → 10:35:42 KST, with `env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u
+  PI_AGENT_ID`. Log: `/tmp/entwurf-release-gate-0.17.1.hb5Q5j/release-gate.log`. This carried
+  `pnpm run check:full` (451s) and `./run.sh check-gate-qualification` (**347/347 KILLED**) as MUST
+  steps. **This is the green `--cut` 0.17.0 never got**: both cells that blocked it — C1b in
+  `smoke-entwurf-v2-matrix-live` and the pi-native nonce in `smoke-mux-lifecycle-live` — passed
+  here, on the same host, in one run.
+- **Exact-SHA CI on `665191d`** — `check` (34m20s, carrying `check:full` and
+  `check-gate-qualification`), `install-surface`, `artifact-consumer`, all `success`.
+  Run: https://github.com/junghan0611/entwurf/actions/runs/33697821117
 
 ## 0.17.0 - 2026-09-02
 

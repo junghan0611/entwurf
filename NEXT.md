@@ -26,48 +26,52 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   실제로 랜딩한 것은 그 기각의 실행이다. #92는 리서치 레인에 그대로 남는다. #93은 닫힘.
   독립 리뷰 D1(재청구 하한의 스코프 혼합)은 `9479750`에서 닫혔다.
 
-현재 좌표: 1–9 완료 · **0.16.1 make는 열린 채 PAUSED** · 0.17.0은 D1 닫힘, 재컷 세 번 BLOCKED, GLG가 네 번째 컷을 금하고 make를 승인.
-푸시·태그는 `entwurf-release make 0.17.0` 몫이다 (CalVer `tag-release`가 아님).
+- [x] **10. 0.17.0 cut** — 태그·GitHub 릴리즈 완료(`v0.17.0` @ `934acb9`). npm에는 올라가지 않았다.
+      세 번의 재컷이 `cut: BLOCKED`로 끝났고 GLG가 네 번째를 금했다 — 그 구멍은 CHANGELOG 0.17.0
+      Verification에 이름으로 적혀 있고, 반올림하지 않았다.
 
-# NOW — 문서 정직화 뒤 make
+현재 좌표: 1–10 완료 · **0.16.1 make는 열린 채 PAUSED** · **0.17.1 레인 진행 중**(C1b 원인 닫힘).
+푸시·태그는 `entwurf-release` 4모드 몫이다 (CalVer `tag-release`가 아님).
 
-- **Stem:** entwurf ACP Claude가 GLG의 메인 레일이 되게 한다. 토큰 효율은 #92가 이미 닫았고,
-  남은 것이 계기판이었다. 그 계기판을 **ACP 레일 자신이** 고쳤다.
-- **지금 서 있는 자리:** `main` HEAD `ef68c79` 위 문서 커밋 예정, origin 대비 10+ ahead.
-  푸시 안 됨, 태그 안 달림. D1 `9479750` → docs `01ef26d` → lane-count `5ed2dd9` → terra 산문
-  `fee89d3` → night handoff `ef68c79`.
-- **랜딩한 계약:** pi의 네 `Usage` 필드는 **0으로 둔다** — ACP의 유일한 토큰 반송자는 턴 왕복
-  합계이고 그 넷은 한 요청의 프롬프트 모양이다. 턴 회계 총계는 `usage.acp`로 가며 numerator는
-  회계등급 `_meta.quota.model_usage` 행 합(main-loop 전용 `PromptResponse.usage`보다 우선).
-  턴 비용은 SDK 누적 추정치의 인접 차분. 재청구 프리픽스는 증명된 하한으로 공지되며, 그 하한의
-  IO 항은 main-loop `PromptResponse.usage`다 (wide `model_usage`와 스코프를 섞지 않음 — `9479750`).
-- **검증 상태.** standalone qualification on `fee89d3`: **347/347 KILLED** (36m19s),
-  `ACP-REBILL-MAIN-LOOP-SCOPE` included. Log: `/home/junghan/.pi/background/1788355846036-bg03.log`.
-  Historical `0379764` cut remains green (346/346) and remains voided as acceptance.
-  Three recuts on the D1 tree, all MUST PASS=22 FAIL=1 SKIP=0, `cut: BLOCKED`. None is D1.
-  1. `/tmp/entwurf-cut-0.17.0.WdTkH7` — C1b 30s. Isolated 17/17.
-  2. `/tmp/entwurf-cut2-0.17.0.XQcOuR` — mux-lifecycle pi-native nonce 300s.
-  3. `/tmp/entwurf-cut3-0.17.0.sfZ8WC` — C1b 30s again. Isolated 17/17. mux-lifecycle PASS.
-  GLG 2026-09-03: no fourth cut. The missing green `--cut` on this HEAD is named in CHANGELOG,
-  not rounded up.
-- **첫 `--cut`은 빨간불이었고(MUST FAIL=5) 다섯 개 전부 실행 환경이었다.** 게이트를 살아있는
-  ACP 시민 세션 안에서 돌린 탓이다 — `CLAUDE_CONFIG_DIR`가 `hooks: {}`인 오버레이를 가리켜
-  Claude 자식이 훅 없이 태어나고, `PI_SESSION_ID`가 fresh-call 콜백 주소를 가로챈다.
-  `env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID`로 다시 돌리자 다섯 개가 초록.
-  VERIFY.md §1.2와 AGENTS.md가 이제 그 반송자 제거를 적는다.
-- **리뷰 수정:** `4d6fe4c` — 감소 통지가 벤더의 단어 `/clear` 대신 "conversation reset"을
-  원인으로 불렀다. 침묵된 미스를 영수증 없는 "194k"로 적었다(측정값은 195,177).
-  `9479750` — 재청구 하한이 main-context occupancy와 wide `cacheWrite`를 한 식에 넣던 스코프 혼합.
-- **Next:** `entwurf-release make 0.17.0` — 푸시 → exact-SHA CI 3잡 → 후보 수용 → 태그 → GitHub 릴리즈.
-  VERIFY §3 criterion 3의 초록 `--cut`은 이 HEAD에 없다. GLG가 네 번째 컷을 금하고 make를 승인했다.
-  **#93은 닫힘.**
-- **남은 한계는 전부 #96:** per-request carrier 부재 · pi-native cache-stats 통합 · 턴 중간
-  점화식 파손 · usage 미보고 턴 · 재시작 첫 턴 침묵(#92의 4.5× 절벽 턴).
-- **Read:** #93 스레드의 2026-09-02 코멘트(본문보다 이것이 이긴다) · ROADMAP `Dep bump` 레인의
-  2026-09-02 항목 · `docs/acp-backend-rail.md` §11-7.
-- **Do not touch:** #92를 구현 이슈로 취급하지 말 것 · `mux-launch.ts`/`mux-placement.ts` import
-  fence · #76/#78 · 0.16.1 make를 이 레인에 섞지 말 것 · pi의 네 필드에 무언가를 다시 쓰는 설계
-  (GLG가 닫았다 — carrier는 #96).
+# NOW — 0.17.1: C1b 원인을 닫고 npm까지
+
+- **Stem:** 0.17.0은 태그까지 갔지만 세 번의 재컷이 `cut: BLOCKED`였고 npm에 오르지 않았다.
+  0.17.1은 그 BLOCKED의 원인을 **측정으로 닫고** 처음으로 0.17선을 레지스트리에 올린다.
+- **지금 서 있는 자리:** `main` = `665191d`, origin과 동일, exact-SHA CI 3잡 초록
+  (run 33697821117 — `check` 34m20s, `install-surface`, `artifact-consumer`).
+  릴리즈 범위는 두 커밋이다: `a3563bc`(진단) → `665191d`(원인 수리).
+- **닫힌 원인 (C1b).** 스모크가 pi의 락 stale 창과 **정확히 같은 값**을 기다리다 148ms 차이로
+  졌다. pi는 `auth.json`/`models-store.json`을 `proper-lockfile`로 잠그고 모든 boot이 그 락을
+  거쳐 읽는다(`dist/core/auth-storage.js`, `staleMs = 30_000`). `terminateChild`의 SIGTERM은
+  release가 돌기 전에 프로세스를 끝내므로 그 창에 들어간 kill이 락을 고아로 남긴다(kill 오프셋
+  24개를 훑어 +375ms에서 재현). 고아 락 상태의 boot→record는 **30,148ms**, 인수 직후 같은 조건은
+  **1,114ms**. `BOOT_TIMEOUT_MS = 30_000`은 레코드가 태어나기 148ms 전에 보기를 그만둔다.
+  두 실패 컷 모두 호스트 audit 로그가 "자식은 30초 내내 살아 있었다"를 확증한다.
+  통제군은 같은 세 런 안에 있었다 — `smoke-entwurf-chain-live`는 같은 2-레지던트 구조에
+  `45_000`이고 3/3 PASS였다.
+- **수리.** `PI_BOOT_TIMEOUT_MS = 45_000`이 측정 영수증과 함께
+  `scripts/lib/pi-record-discovery.ts`에 있고, 30초 절벽에 앉아 있던 다섯 스모크가 전부 거기서
+  파생한다. `describePiLockResidue()`는 실패 시점의 pi 락을 이름으로 찍되 **읽기만** 한다 —
+  고아와 산 홀더는 바깥에서 구별되지 않고, 중재는 pi 자신의 stale 프로토콜 몫이다.
+  제품 레일(birth/mux-launch)은 건드리지 않았다. 스모크 bound가 수리였다.
+- **정정 하나 (기록으로 남긴다).** 조사 중간 보고는 "30→45는 실측으로 반증됐다"고 썼다. idle
+  boot 1.1s만 보고 여유 25배로 읽은 것인데, 실패는 느린 boot이 아니라 30초짜리 락 대기였고
+  bound가 하필 그 창과 같은 값이었다. 반증된 것은 "부하로 느려진다"이지 bound 자체가 아니었다.
+- **아직 열린 것:** mux pi-native nonce 300s는 **이 버그가 아니다**(창의 10배이고, 같은 런에서
+  코덱스 레일은 chain-live·omp-fresh로 건강했다). 이번에 들어간 pane forensics —
+  pane pid 생존 · `list-panes` · `capture-pane` 마지막 40줄 — 이 다음 발생 때 답한다.
+- **초록 컷 (0.17.0이 세 번 못 받은 것).** `LIVE=1 ./run.sh release-gate
+  /tmp/entwurf-release-gate-0.17.1.hb5Q5j --cut` — **MUST PASS=23 FAIL=0 SKIP=0**, BEHAVIOR PASS=1,
+  exit 0, `cut: OK`. 2026-09-03 09:46:37 → 10:35:42 KST, `665191d` 위. qualification 347/347 KILLED,
+  `check:full` 451s. **막았던 두 셀이 같은 런에서 함께 통과했다** — matrix-live C1b, mux-lifecycle
+  pi-native nonce.
+- **Next:** `entwurf-release make 0.17.1` → `publish 0.17.1 <candidate.tgz> latest`.
+  npm에 0.17.0은 없으므로 이 publish가 0.17선의 첫 `latest`다.
+- **Read:** CHANGELOG `## 0.17.1` Verification(재현 조건과 수치) · `scripts/lib/pi-record-discovery.ts`
+  의 `PI_BOOT_TIMEOUT_MS` 주석 · CHANGELOG 0.17.0의 세 BLOCKED 컷 기록(그 자리에 그대로 둔다).
+- **Do not touch:** 0.17.0 태그(`v0.17.0` @ `934acb9`) · CHANGELOG 0.17.0 절 · 제품 레일을 이
+  레인에 섞는 것 · `mux-launch.ts`/`mux-placement.ts` import fence · 0.16.1 make를 이 레인에
+  섞는 것 · #92를 구현 이슈로 취급하는 것.
 
 <details><summary>OMP 레인의 직전 NOW (0.16.1 make 대기 — 열린 채 보류)</summary>
 
