@@ -4,6 +4,127 @@ All notable changes to this project will be documented here. Format follows [Kee
 
 ## Unreleased
 
+## 0.17.2 - 2026-09-03
+
+### Added
+
+- **An arriving letter is now visible to the operator, not just to the model (#98).** A sibling's
+  mail landed, was read, and left one line on the receiving screen — `Stop hook feedback` — with no
+  sender, no count, no garden id. Three surfaces changed, each measured in the
+  `scripts/raw-async-delivery/` lab before any product edit:
+  - **The doorbell says what it is.** The shipped `FileChanged` hook declares
+    `rewakeSummary: "entwurf inbox: sibling mail arrived"` and
+    `rewakeMessage: "entwurf mailbox notice:"`. The model no longer wakes to
+    `Stop hook blocking error from command "FileChanged"` — mail arriving was being named an error.
+    Both fields are `@internal` in the vendor and unsanitized, so `check-hook-launch-topology` lints
+    them (declared, no newline, not whitespace-only, length bound, no `[` in the prefix that would
+    double the doorbell's own `[entwurf inbox]`) and `smoke-meta-async-drift` carries both as
+    markers — a silent `@internal` removal is a future this repo cannot measure live.
+  - **The status line carries an unread badge.** `✉N` counts exactly what `entwurf_inbox_read`
+    would hand back (`*.msg` + `*.msg.delivered`, `.read` excluded — the same union as
+    `readMetaInbox`). No badge at zero. **`✉?` when the count could not be TAKEN** (no python3,
+    unusable garden id, unreadable directory): a measurement failure must not look like an empty
+    inbox.
+  - **A send names the file it enqueued.** `entwurf_v2 meta-mailbox → enqueued (2026-…-113443.msg)`.
+    `enqueueMetaMessage` already returned `messagePath`; the mailbox hand was flattening it to
+    `{success:true}`. Deliberately not a read stamp: at enqueue time `lastReadAt` belongs to the
+    PREVIOUS message, and surfacing it would read as "my message was read".
+
+### Fixed
+
+- **A dead-socket send that falls back to the mailbox now names its file too (#98).** A
+  control-socket delivery whose socket was gone re-resolves to the mailbox and writes a `.msg`
+  exactly like the primary rail, but the sender's line said only `fallback-sent` — the one mailbox
+  delivery with no per-message identifier. The receipt is carried through `SendDrive` →
+  `ControlSocketSendResult` → `ExecutedOutcome` → surface. A socket-to-socket retry writes no file
+  and carries none; a `rejected` enqueue carries none; a dep that omits it degrades to the bare
+  outcome rather than printing `undefined`.
+- **entwurf no longer owns the compaction switch (#94).** `autoCompactEnabled` and
+  `env.DISABLE_AUTOCOMPACT` moved from `MANAGED_SETTINGS_SCALARS` to `RETIRED_SETTINGS_SCALARS`,
+  the path `skipDangerousModePermissionPrompt` already walked. Retirement moves **ownership, not
+  state**: `relinquish_retired_scalar()` restores the install-state snapshot only when the current
+  value still equals the last managed one, so retirement alone turns compaction on for nobody —
+  turning it on is a separate operator act, and entwurf writing that value again would undo the
+  return. The doctor now stays green for an operator who turned compaction back on.
+  - **A correction that belongs in the record:** `env.DISABLE_AUTOCOMPACT` was a **no-op** at Claude
+    Code 2.1.259 — the only key that actually suppressed compaction was `autoCompactEnabled`. The
+    conclusion is unchanged; the reason narrows to one key.
+  - The lineage is also corrected. 0.5.0 *did* ship a pi-side compaction guard in real code;
+    `378c682` (v2 subtraction) deleted it and `623a4ea` later cleared the docs that outlived it by
+    seven days. The "zero code backing" in that commit message was a grep result at that moment, not
+    a claim that the guard never existed.
+
+### Changed
+
+- **Three shipped comments stopped repeating two claims this release retired.** `doorbell.sh`,
+  `raw-async-delivery/README.md` and `smoke-meta-async-drift.sh` said that `asyncRewake` ignores
+  `rewakeMessage` and that stdout is dropped. Measured against three vendor binaries (2.1.236 /
+  2.1.258 / 2.1.259), both are false: `rewakeMessage` *replaces* the prefix, and the body is
+  `stderr || stdout`. The marker strings were correct while their stated reasons were dead — a
+  sentinel nobody could act on. The lab README now carries the receipts under
+  `## Inherited facts corrected`, and the watcher documents what it observes rather than which
+  backends it expects.
+- `lastDeliveredAt` is documented as a **reserved slot nobody stamps**, in five comments and four
+  test cells that had been pinning it green as `=== null` while 933 files carried a `.delivered`
+  suffix. The per-message facts are the suffixes (`.msg` → `.delivered` → `.read`); `state.json`
+  holds only the garden's last enqueue/read. Removing the field is a separate migration (its reader
+  is doubly strict and 182 v1 files are on disk), tracked apart from this release.
+
+### Upgrade note
+
+**Run `entwurf setup` once after upgrading — every rail, not just Claude.** Two separate debts:
+
+- The Claude plugin's hook template gained `rewakeSummary` and `rewakeMessage`, so until
+  `install-meta-bridge` runs, `doctor-meta-bridge` reports
+  `installed manifest DIFFERS … Re-run install-meta-bridge`.
+- **This release changed `lib/meta-session.ts`, and four install paths deploy that file** —
+  `install-meta-bridge` (Claude), `install-omp-bridge` and `install-omp-receive` (OMP),
+  `install-copilot-bridge` (Copilot). Every one of them that is installed on the host now carries a
+  STALE writer until it is re-installed, and its own doctor says so by name. Re-installing only the
+  Claude rail leaves the others stale — measured on oracle during this cut, where it blocked
+  `smoke-omp-receive-live` and turned the first `--cut` run red.
+
+`entwurf setup` is presence-driven and re-synthesizes exactly the units this host has, which is why
+it is the upgrade command rather than any single `install-*`. An already-open Claude Code session
+keeps the old manifest until it restarts.
+
+0.17.1 was tagged and released on GitHub but **not published to npm**; it is superseded by this
+version.
+
+### Verification
+
+All of the following ran on oracle (Linux, Claude Code 2.1.259, node 24.18.1, pi 0.84.4, omp 18.0.0).
+
+- **`pnpm run check:full` — exit 0** (432s on the prepared tree; 437s on the pre-version HEAD).
+- **`LIVE=1 ./run.sh release-gate /tmp/entwurf-release-gate-0.17.2b.WW12BK --cut` — `cut: OK`,
+  exit 0.** **MUST PASS=23 FAIL=0 SKIP=0**, **BEHAVIOR PASS=1 FAIL=0 SKIP=0**. Run 20:39→21:26 KST
+  with `env -u CLAUDE_CONFIG_DIR -u PI_SESSION_ID -u PI_AGENT_ID`. Log:
+  `/tmp/entwurf-release-gate-0.17.2b.WW12BK/release-gate.log`. It carried `check:full` (429s) and
+  `check-gate-qualification` (**347/347 KILLED**) as MUST steps.
+- **The first `--cut` attempt was RED, and that is the receipt for the upgrade note above.**
+  `smoke-omp-receive-live` failed with `STALE writer: source=634d5b96ed50 installed=229fef123589`
+  on `~/.omp/agent/extensions/entwurf-receive-omp/lib/meta-session.ts` — MUST PASS=22 FAIL=1,
+  `cut: BLOCKED`. Both OMP extensions on the host still carried the pre-release writer because only
+  the Claude rail had been re-installed. `install-omp-bridge` + `install-omp-receive` moved both to
+  `634d5b96ed50`, `doctor-omp-bridge` and `doctor-omp-receive` went PASS, and the re-run was green.
+  Nothing in the product changed between the two runs.
+- **#94 measured on a live host.** After one `install-meta-bridge`, the install-state ledger no
+  longer carries `autoCompactEnabled` or `env.DISABLE_AUTOCOMPACT`, and `~/.claude/settings.json`
+  was **byte-identical** to its pre-install backup — the return does not rewrite the value it
+  returns. `doctor-meta-bridge` went FAIL→PASS, `smoke-meta-install-state` PASS,
+  `check-meta-doctor-oracle` PASS including the two new cells (`an operator who turned compaction
+  back ON is not drift`, `install-state still owns a retired scalar → FAIL naming its own cause`).
+- **#98 B measured across the whole suffix lifecycle** in an isolated mailbox root: no badge at 0,
+  `✉1` on `.msg`, `✉2` after `.msg.delivered`, unchanged by a `.read` file, back to no badge when
+  all are read, and `✉?` on an unreadable directory.
+- **`smoke-meta-async-drift` ends `pass=12 fail=0 drift=1`, exit 1** — the drift is
+  `codex 0.147.0` outside the `0.144.x` pin and **pre-dates this release**. Both markers this
+  release added (`rewakeMessage`, `rewakeSummary`) are present. The pin bump is deliberately not in
+  this lane.
+- **Exact-SHA CI on the pre-version HEAD `4124e42`** — `check`, `install-surface`,
+  `artifact-consumer` all `success`.
+  Run: https://github.com/junghan0611/entwurf/actions/runs/33742448634
+
 ## 0.17.1 - 2026-09-03
 
 ### Fixed
