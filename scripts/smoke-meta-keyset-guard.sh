@@ -31,7 +31,10 @@ d=json.load(sys.stdin)
 s=d['settings']
 assert 'statusLine' in s['map-entry'], 'statusLine missing from SSOT map-entry'
 assert 'permissions.allow' in s['array-items'] and 'permissions.deny' in s['array-items'], 'permissions missing'
-assert 'verbose' in s['scalar'] and 'autoCompactEnabled' in s['scalar'], 'scalar policy missing'
+assert 'verbose' in s['scalar'] and 'awaySummaryEnabled' in s['scalar'], 'scalar policy missing'
+# #94: the compaction keys are RETIRED, so managed-keys must NOT claim them.
+assert 'autoCompactEnabled' not in s['scalar'], 'retired compaction scalar still claimed as managed'
+assert 'env.DISABLE_AUTOCOMPACT' not in s['scalar'], 'retired compaction env scalar still claimed as managed'
 assert any(k.startswith('enabledPlugins.') for k in s['map-entry']), 'plugin ref missing'
 assert d['claudeRoot']['map-entry'] == ['mcpServers.entwurf-bridge'], 'MCP key missing'
 " && ok "managed-keys SSOT is valid JSON with the expected owned keys" \

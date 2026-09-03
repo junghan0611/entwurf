@@ -631,6 +631,79 @@ else
 fi
 unset FAKE_MCP_TAIL
 
+# M14 — a MANAGED SETTINGS SCALAR drifted. Added with #94, which retired the two
+# compaction keys and so deleted two of this doctor's drift cells. Until now the
+# mutation set planted only hook/cache/receiver/MCP/delivery defects: not one cell
+# asked whether the managed-scalar sweep still detects anything at all. That made
+# "retiring these two costs no detection power" an unprovable claim — the gate
+# could not have noticed if the whole sweep had gone silent. `verbose` stands in
+# for the ten scalars that remain owned; it is the cheapest of them and carries no
+# policy weight of its own.
+python3 - "$CLAUDE_CONFIG_DIR/settings.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+d["verbose"] = True
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+expect_red "a managed settings scalar (verbose) drifted" "settings verbose missing/drifted at verbose"
+python3 - "$CLAUDE_CONFIG_DIR/settings.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+d["verbose"] = False
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+
+# M15 (negative) — the same sweep must NOT claim a RETIRED key. Planted here is the
+# EXACT state oracle sat in on 2026-09-02, the one that opened #94: Claude Code had
+# put `autoCompactEnabled` back to true while entwurf's `env.DISABLE_AUTOCOMPACT`
+# stayed "1". Under the old code that drift is what turned the doctor red; under #94
+# both keys are the operator's and it must be green.
+#
+# Two things this cell will not do. It does not plant entwurf's own former desired
+# value (`false`), which is green under BOTH codes and so could not tell "retired"
+# apart from "still checked, message reworded". And it does not REMOVE the env key
+# to make the state tidier: leaving "1" in place is the stronger claim, because a
+# retired key must be ignored while still carrying the value we used to force, not
+# merely once the operator has finished cleaning up after us.
+cp "$CLAUDE_CONFIG_DIR/settings.json" "$TMP/settings-m15.bak"
+python3 - "$CLAUDE_CONFIG_DIR/settings.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+d["autoCompactEnabled"] = True
+d.setdefault("env", {})["DISABLE_AUTOCOMPACT"] = "1"
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+run_doctor
+if [ "$DOC_RC" -eq 0 ]; then
+  ok "an operator who turned compaction back ON is not drift (retired keys leave the doctor green)"
+else
+  bad "compaction re-enabled by the operator still reddens the doctor (the keys are not really retired):"$'\n'"$(printf '%s\n' "$DOC_OUT" | grep -E '^  FAIL' | sed 's/^/        /')"
+fi
+cp "$TMP/settings-m15.bak" "$CLAUDE_CONFIG_DIR/settings.json"
+
+# M16 — the ONE nudge a retired key still owes. `check()` refuses while the ledger
+# still carries ownership entwurf has not yet relinquished, which is the state an
+# upgraded host is in between `git pull` and `install-meta-bridge`. No other
+# mutation reaches that branch, so without this cell the whole retirement path
+# could stop refusing and every gate would stay green.
+cp "$CLAUDE_CONFIG_DIR/entwurf.install-state.json" "$TMP/state-m16.bak"
+python3 - "$CLAUDE_CONFIG_DIR/entwurf.install-state.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p, encoding="utf-8"))
+d["files"]["settings"]["keys"]["autoCompactEnabled"] = {
+    "kind": "scalar",
+    "path": ["autoCompactEnabled"],
+    "original": {"existed": False, "value": None},
+}
+json.dump(d, open(p, "w", encoding="utf-8"), indent=2)
+PY
+expect_red "install-state still owns a retired scalar (upgrade not yet relinquished)" "install-state still owns retired scalar autoCompactEnabled"
+cp "$TMP/state-m16.bak" "$CLAUDE_CONFIG_DIR/entwurf.install-state.json"
+
 # --- 5. the control must still hold after every restore ----------------------
 echo "[control] re-run after all mutations were reverted"
 run_doctor

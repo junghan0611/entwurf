@@ -317,6 +317,69 @@ def structural_cells():
         assert (broken, settings) == before
 
 cell("", "retired/managed sets stay disjoint and a corrupt key ledger fails closed", structural_cells)
+
+def compaction_cells():
+    # #94 — the two compaction keys join the retired set. They exercise two axes
+    # the skipDangerous cells above never touch: a NESTED path and a STRING
+    # scalar. Both matter, because relinquish compares `type(value) is
+    # type(last_managed_value)` and walks the path through get_nested.
+    for name, path, last in [
+        ("autoCompactEnabled", ["autoCompactEnabled"], False),
+        ("env.DISABLE_AUTOCOMPACT", ["env", "DISABLE_AUTOCOMPACT"], "1"),
+    ]:
+        def build(current=MISSING, old=MISSING):
+            settings = {}
+            if current is not MISSING:
+                node = settings
+                for key in path[:-1]:
+                    node = node.setdefault(key, {})
+                node[path[-1]] = current
+            keys = {} if old is MISSING else {name: copy.deepcopy(old)}
+            return {"files": {"settings": {"keys": keys}}}, settings
+
+        def led(existed, value):
+            return {"kind": "scalar", "path": path, "original": {"existed": existed, "value": value}}
+
+        def call(current=MISSING, old=MISSING):
+            state, settings = build(current, old)
+            m.relinquish_retired_scalar(state, settings, name, path, last)
+            return state, settings
+
+        # (a) still carrying what entwurf last managed, with provenance -> the
+        #     pre-entwurf snapshot is restored, and the entry is consumed.
+        state, settings = call(last, led(True, last))
+        assert m.get_nested(settings, path) == (True, last), (name, settings)
+        assert name not in state["files"]["settings"]["keys"], name
+        # (a') the same, where the operator had NOTHING before entwurf: restoring
+        #      the snapshot must DELETE the key rather than leave our value.
+        state, settings = call(last, led(False, None))
+        assert m.get_nested(settings, path)[0] is False, (name, settings)
+        # (b) the operator has since changed it -> already theirs, untouched.
+        other = True if last is False else "0"
+        state, settings = call(other, led(True, last))
+        assert m.get_nested(settings, path) == (True, other), (name, settings)
+        assert name not in state["files"]["settings"]["keys"], name
+        # (c) no ledger entry at all (fresh install) -> untouched, and a fresh
+        #     install never creates one because the key is not managed any more.
+        for current in [last, other, MISSING]:
+            state, settings = call(current)
+            expected = (False, None) if current is MISSING else (True, current)
+            assert m.get_nested(settings, path) == expected, (name, current, settings)
+        # Type strictness, where a lookalike EXISTS. For the bool axis that is `0`
+        # (`0 == False` is True while `type(0) is not bool`) — NOT `1`, which is
+        # simply unequal to False and would pass the cell without the type guard
+        # ever being consulted. The string axis has no lookalike at all: no
+        # non-str value equals `"1"`, so equality alone already refuses and there
+        # is nothing for a type check to add. Asserted only where it can fail.
+        if last is False:
+            state, settings = call(0, led(True, last))
+            assert m.get_nested(settings, path) == (True, 0), (name, settings)
+
+cell(
+    "",
+    "#94 compaction keys relinquish across nested/string axes: restore, delete, operator-changed, fresh, type-strict",
+    compaction_cells,
+)
 sys.exit(failed)
 PY
 then ok "#71 retirement leaf: provenance, bool strictness, malformed refusal, one-shot convergence"
@@ -339,10 +402,12 @@ assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
 s=json.load(open(path))
 assert s['files']['settings']['keys']['enabledPlugins.entwurf-meta-receive@meta-bridge-local']['original']['value'] is False
 assert s['files']['settings']['keys']['cleanupPeriodDays']['original']['value'] == 30
-assert s['files']['settings']['keys']['env.DISABLE_AUTOCOMPACT']['original']['value'] == '0'
 assert s['files']['settings']['keys']['statusLine']['original']['value']['command'] == '/old/user/statusline.sh'
 assert s['files']['settings']['keys']['promptSuggestionEnabled']['original']['value'] is True
-assert s['files']['settings']['keys']['autoCompactEnabled']['original']['existed'] is False
+# #94 case (c) — a FRESH install never captures a retired key, so entwurf holds no
+# ownership evidence for compaction and uninstall can never restore a suppression.
+assert 'autoCompactEnabled' not in s['files']['settings']['keys']
+assert 'env.DISABLE_AUTOCOMPACT' not in s['files']['settings']['keys']
 assert 'skipDangerousModePermissionPrompt' not in s['files']['settings']['keys']
 assert s['files']['claudeRoot']['keys']['mcpServers.entwurf-bridge']['original']['value']['command'] == 'old'
 PY
@@ -360,6 +425,21 @@ state['files']['settings']['keys']['skipDangerousModePermissionPrompt']={
   'kind':'scalar', 'path':['skipDangerousModePermissionPrompt'],
   'original':{'existed':True, 'value':False}
 }
+# #94 — the same upgrade shape for the two compaction keys, planted at DRIVE level
+# so apply() itself is the subject, not the leaf. Two branches that the unit cells
+# cannot reach through the real ledger: a NESTED path whose original must come
+# back, and a key whose original never existed and must therefore be DELETED
+# rather than left carrying entwurf's value.
+settings['autoCompactEnabled']=False
+state['files']['settings']['keys']['autoCompactEnabled']={
+  'kind':'scalar', 'path':['autoCompactEnabled'],
+  'original':{'existed':False, 'value':None}
+}
+settings.setdefault('env',{})['DISABLE_AUTOCOMPACT']='1'
+state['files']['settings']['keys']['env.DISABLE_AUTOCOMPACT']={
+  'kind':'scalar', 'path':['env','DISABLE_AUTOCOMPACT'],
+  'original':{'existed':True, 'value':'0'}
+}
 json.dump(settings, open(sp,'w'), indent=2); open(sp,'a').write('\n')
 json.dump(state, open(stp,'w'), indent=2); open(stp,'a').write('\n')
 PY
@@ -373,14 +453,26 @@ assert settings['enabledPlugins']['entwurf-meta-receive@meta-bridge-local'] is T
 assert settings['enabledPlugins']['keep@user'] is True
 assert settings['extraKnownMarketplaces']['meta-bridge-local']['source']['path'] == os.environ['ASM']
 assert settings['cleanupPeriodDays'] == 365
-assert settings['env']['DISABLE_AUTOCOMPACT'] == '1'
+# #94 - retired: apply neither writes nor rewrites it. The fixture's operator
+# value ('0') survives untouched, and the scalar is never introduced at all.
+assert settings['env']['DISABLE_AUTOCOMPACT'] == '0'
+assert 'autoCompactEnabled' not in settings
 assert settings['env']['KEEP_ME'] == 'yes'
 assert settings['statusLine']['command'] == os.environ['REPO'] + '/scripts/meta-bridge-statusline.sh'
-for key in ['promptSuggestionEnabled','awaySummaryEnabled','autoMemoryEnabled','verbose','autoCompactEnabled','showTurnDuration','terminalProgressBarEnabled','useAutoModeDuringPlan','enableWorkflows','workflowKeywordTriggerEnabled']:
+for key in ['promptSuggestionEnabled','awaySummaryEnabled','autoMemoryEnabled','verbose','showTurnDuration','terminalProgressBarEnabled','useAutoModeDuringPlan','enableWorkflows','workflowKeywordTriggerEnabled']:
     assert settings[key] is False, key
 assert settings['skipDangerousModePermissionPrompt'] is False
+# #94 drive-level relinquishment, both branches:
+#   nested path  -> the operator's pre-entwurf '0' is back, and the env map that
+#                   carries it survives with the neighbour key untouched.
+#   absent original -> the key is REMOVED, not left holding entwurf's False.
+assert settings['env']['DISABLE_AUTOCOMPACT'] == '0'
+assert settings['env']['KEEP_ME'] == 'yes'
+assert 'autoCompactEnabled' not in settings
 state=json.load(open(cfg + '/entwurf.install-state.json'))
 assert 'skipDangerousModePermissionPrompt' not in state['files']['settings']['keys']
+assert 'autoCompactEnabled' not in state['files']['settings']['keys']
+assert 'env.DISABLE_AUTOCOMPACT' not in state['files']['settings']['keys']
 for item in ['Bash','Read','Write','Edit','Grep','Glob','WebFetch','WebSearch','Skill','mcp__entwurf-bridge__*']:
     assert item in settings['permissions']['allow'], item
 assert settings['permissions']['allow'].count('Read') == 1
@@ -455,7 +547,6 @@ import json, os
 s=json.load(open(os.environ['CLAUDE_CONFIG_DIR'] + '/entwurf.install-state.json'))
 assert s['files']['settings']['keys']['enabledPlugins.entwurf-meta-receive@meta-bridge-local']['original']['value'] is False
 assert s['files']['settings']['keys']['cleanupPeriodDays']['original']['value'] == 30
-assert s['files']['settings']['keys']['env.DISABLE_AUTOCOMPACT']['original']['value'] == '0'
 assert s['files']['settings']['keys']['statusLine']['original']['value']['command'] == '/old/user/statusline.sh'
 assert s['files']['settings']['keys']['promptSuggestionEnabled']['original']['value'] is True
 PY
@@ -479,13 +570,18 @@ root=json.load(open(os.environ['HOME'] + '/.claude.json'))
 assert settings['cleanupPeriodDays'] == 30
 assert settings['enabledPlugins']['entwurf-meta-receive@meta-bridge-local'] is False
 assert 'meta-bridge-local' not in settings.get('extraKnownMarketplaces', {})
+# #94 - still the operator's '0'. NOT restored by uninstall (we never owned it):
+# never written in the first place.
 assert settings['env']['DISABLE_AUTOCOMPACT'] == '0'
 assert settings['env']['KEEP_ME'] == 'yes'
 assert settings['statusLine']['command'] == '/old/user/statusline.sh'
 assert settings['promptSuggestionEnabled'] is True
 assert settings['skipDangerousModePermissionPrompt'] is False
 assert settings['showTurnDuration'] is True
-for key in ['awaySummaryEnabled','autoMemoryEnabled','verbose','autoCompactEnabled','terminalProgressBarEnabled','useAutoModeDuringPlan','enableWorkflows','workflowKeywordTriggerEnabled']:
+# One list, one meaning: these are the keys UNINSTALL removed. `autoCompactEnabled`
+# is not among them post-#94 — that entwurf never introduced it is a different
+# claim, pinned on the post-install assertion above.
+for key in ['awaySummaryEnabled','autoMemoryEnabled','verbose','terminalProgressBarEnabled','useAutoModeDuringPlan','enableWorkflows','workflowKeywordTriggerEnabled']:
     assert key not in settings, key
 allow=settings['permissions']['allow']
 deny=settings['permissions']['deny']
@@ -667,7 +763,8 @@ s=json.load(open(os.environ['CLAUDE_CONFIG_DIR'] + '/entwurf.install-state.json'
 assert s['files']['settings']['keys']['enabledPlugins.entwurf-meta-receive@meta-bridge-local']['original']['existed'] is False
 assert s['files']['settings']['keys']['extraKnownMarketplaces.meta-bridge-local']['original']['existed'] is False
 assert s['files']['claudeRoot']['keys']['mcpServers.entwurf-bridge']['original']['existed'] is False
-assert s['files']['settings']['keys']['env.DISABLE_AUTOCOMPACT']['original']['existed'] is True
+# #94 - retired: prepare captures no ownership evidence for it any more.
+assert 'env.DISABLE_AUTOCOMPACT' not in s['files']['settings']['keys']
 PY
 then ok "legacy exact plugin/marketplace/MCP migrate as pi-owned absent, policy keys remain user-owned"; else bad "legacy migration state check failed"; fi
 py uninstall >/dev/null

@@ -123,6 +123,25 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   사이에 만료될 때 bound가 약한 floor가 된다는 한계뿐이다(`backend.ts:1286-1288`). 계약은 산문이 아니라
   `scripts/mutants/acp-usage-accounting.json` 12뮤턴트가 지킨다. **agent-config 쪽 두 줄은 아직 고아다** —
   기본 pi 푸터로 복귀 금지, 캐리어 착지 시 `nocache` 가드 필요. 항구적 자리는 `glg-footer.ts` 헤더 주석.
+- **컴팩션 소유권 반환 — #94 구현 완료, 커밋 대기.** `autoCompactEnabled` / `env.DISABLE_AUTOCOMPACT`가
+  `MANAGED_SETTINGS_SCALARS` → `RETIRED_SETTINGS_SCALARS`로 이동했다(삭제가 아니다 — 삭제하면 기존
+  원장 엔트리가 고아가 되어 `uninstall()`이 오퍼레이터가 켜둔 컴팩션을 다시 끈다). thinkpad에서 실제
+  마이그레이션 완료: 원장에서 두 키 소멸, settings 값은 불변(`false` / `"1"`). 게이트는
+  `smoke-meta-install-state`(드라이브 셀 + 중첩경로/문자열 축 단위 셀), `smoke-meta-keyset-guard`(음성
+  단언), `check-meta-doctor-oracle` M14/M15/M16이 진다. **열린 것:**
+  (a) **컴팩션을 실제로 켜는 것은 GLG의 별개 행위다** — retirement은 소유권만 옮기고 두 호스트 모두
+  값은 OFF로 남는다 — **2026-09-03에 GLG가 그 별개 행위를 실행했다**: 두 키를 `~/.claude/settings.json`에서
+  제거(`env` 블록은 그 키뿐이라 통째로 사라짐) → `install-meta-bridge` exit 0에도 다시 쓰이지 않음,
+  `doctor-meta-bridge` PASS. 이제 벤더 기본값(`autoCompactEnabled:!0` = true)이라 컴팩션 ON이다.
+  **정정 하나(measured, Claude Code 2.1.259 바이너리):** `env.DISABLE_AUTOCOMPACT`는 이 버전에서 **no-op**였다 —
+  벤더가 읽는 이름은 밑줄이 있는 `DISABLE_AUTO_COMPACT`/`DISABLE_COMPACT`이고 우리가 쓰던 이름은 0회 등장한다.
+  실제로 억제하던 것은 `autoCompactEnabled: false` 하나뿐이었다. 이슈 본문·두 크로스리뷰가 그 env를 유효한
+  장치로 다룬 부분은 틀렸고, 결론(둘 다 반환)은 안 바뀐다. 옛 버전이 읽었는지는 미측정.
+  (b) **E: `overlay.ts:29-33`의 `hooks:{}` LIVE 측정 1회** — 주석의 컴팩션 사유가
+  `settingSources: []` 아래에서 stale일 가능성이 높다(코드·파일은 남기고 주석만 정리). (c) **doctor가
+  retired NOTE를 화면에 못 보여준다** — `meta-bridge-doctor.sh:121`이 `2>&1 >/dev/null`로 stdout을
+  버려서, 은퇴 키에 대해 사람이 볼 수 있는 유일한 문장이 어디에도 안 뜬다. 고치면 오라클 needle이
+  움직이므로 별건.
 - **0.16.1 make** — prepare는 끝났고 make는 GLG 승인 대기. 오늘 요청 없었다.
 
 # LEDGER — land 전에 정할 것

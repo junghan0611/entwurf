@@ -66,16 +66,24 @@ LEGACY_PERMISSION_ALLOW = ["mcp__pi-tools-bridge__*"]
 
 # Claude Code single-driver policy scalars owned by entwurf for the native
 # meta-bridge install. These are not theming/personal hooks; they close background
-# autonomy/suggestion/compaction surfaces so Claude Code behaves like the same
-# single forged screwdriver that entwurf already enforces for ACP backends.
+# autonomy/suggestion surfaces so Claude Code behaves like the same single forged
+# screwdriver that entwurf already enforces for ACP backends.
+#
+# COMPACTION IS NOT ONE OF THEM (#94). entwurf neither enables nor disables it on
+# any rail, and the ACP side reached that state first: 0.5.0 really did carry a
+# pi-side compaction surface in CODE (`session_before_compact` cancelling by
+# default, `assertLegacyCompactionKnobUnset`, `smoke-compaction-policy`), the v2
+# subtraction removed it (`378c682`, 2026-06-16), and `623a4ea` (06-23) then
+# removed the documentation that had outlived the code by a week. As of #94 the
+# native rail stops owning `autoCompactEnabled` / `env.DISABLE_AUTOCOMPACT` too.
+# Backend-native context management is allowed; we add no guard and only measure.
+# Both keys live in RETIRED_SETTINGS_SCALARS below.
 MANAGED_SETTINGS_SCALARS: list[tuple[str, list[str], Any]] = [
     ("cleanupPeriodDays", ["cleanupPeriodDays"], 365),
-    ("env.DISABLE_AUTOCOMPACT", ["env", "DISABLE_AUTOCOMPACT"], "1"),
     ("promptSuggestionEnabled", ["promptSuggestionEnabled"], False),
     ("awaySummaryEnabled", ["awaySummaryEnabled"], False),
     ("autoMemoryEnabled", ["autoMemoryEnabled"], False),
     ("verbose", ["verbose"], False),
-    ("autoCompactEnabled", ["autoCompactEnabled"], False),
     ("showTurnDuration", ["showTurnDuration"], False),
     ("terminalProgressBarEnabled", ["terminalProgressBarEnabled"], False),
     ("useAutoModeDuringPlan", ["useAutoModeDuringPlan"], False),
@@ -89,6 +97,14 @@ MANAGED_SETTINGS_SCALARS: list[tuple[str, list[str], Any]] = [
 # exactly once, then uninstall can no longer restore over the operator's choice.
 RETIRED_SETTINGS_SCALARS: list[tuple[str, list[str], Any]] = [
     ("skipDangerousModePermissionPrompt", ["skipDangerousModePermissionPrompt"], True),
+    # #94 — compaction returns to the operator. RETIRED, never deleted outright:
+    # a deleted entry would be ORPHANED in an existing install-state, and
+    # uninstall() walks every ledger entry through restore_entry(), so it would
+    # put the suppression back over an operator who had since enabled compaction.
+    # Only this list's relinquish path pops the entry so uninstall can no longer
+    # reach it.
+    ("env.DISABLE_AUTOCOMPACT", ["env", "DISABLE_AUTOCOMPACT"], "1"),
+    ("autoCompactEnabled", ["autoCompactEnabled"], False),
 ]
 
 _managed_scalar_names = {name for name, _path, _desired in MANAGED_SETTINGS_SCALARS}
@@ -607,7 +623,9 @@ def check(repo: Path, asm: Path) -> None:
         if existed and type(value) is type(last_managed_value) and value == last_managed_value:
             print(
                 f"NOTE: settings {name}={json.dumps(last_managed_value)} is operator-owned; "
-                f"entwurf no longer suppresses or restores this warning choice"
+                f"entwurf no longer sets or restores this value. It still carries the value "
+                f"entwurf last managed, which is not drift and is not a defect — a retired "
+                f"key has no desired value to drift from."
             )
 
     checks = [
