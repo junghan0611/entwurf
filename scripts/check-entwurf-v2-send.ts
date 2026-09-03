@@ -213,6 +213,9 @@ async function main(): Promise<void> {
 			fallbackSend: { result: { success: true } },
 		});
 		ok("dead → re-resolve(control) success → fallback-sent", result.outcome === "fallback-sent");
+		// A socket retry hands the body to a live receiver and writes no file: no receipt to
+		// invent (#98 R is a per-FILE identifier, not a per-delivery one).
+		ok("dead → socket retry carries NO messagePath (no file exists)", result.messagePath === undefined);
 		ok("dead → deadFallback called exactly once", trace.deadFallbackCalls === 1);
 		ok("dead → re-resolve used the alt socket", trace.socketSends[1]?.socketPath === "/fake/ctl/alt.sock");
 		ok("dead → release ×1", trace.releases.length === 1);
@@ -277,9 +280,16 @@ async function main(): Promise<void> {
 		const sent = await run({
 			firstSend: { throwCode: "ECONNREFUSED" },
 			deadFallback: { kind: "execute", plan: MAILBOX_PLAN },
-			fallbackSend: { result: { success: true } },
+			fallbackSend: { result: { success: true, messagePath: "/fake/mb/gid/2026-fallback.msg" } },
 		});
 		ok("dead → re-resolve(mailbox) enqueue → fallback-sent", sent.result.outcome === "fallback-sent");
+		// #98 R, fallback leg: this enqueue wrote a file, so the sender gets its name — the
+		// same per-message receipt the primary mailbox rail hands back. Dropping it here was
+		// the one mailbox delivery with no identifier.
+		ok(
+			"dead → mailbox fallback carries the #98 R messagePath",
+			sent.result.messagePath === "/fake/mb/gid/2026-fallback.msg",
+		);
 		ok("dead → mailbox helper called once", sent.trace.mailboxSends.length === 1);
 		ok("dead → mailbox reached only via resolver, release ×1", sent.trace.releases.length === 1);
 
@@ -289,6 +299,8 @@ async function main(): Promise<void> {
 			fallbackSend: { result: { success: false } },
 		});
 		ok("dead → mailbox enqueue success:false → rejected", refused.result.outcome === "rejected");
+		// No file was written, so there is nothing to name — never echo a dep's stray path.
+		ok("dead → rejected enqueue carries NO messagePath", refused.result.messagePath === undefined);
 	}
 
 	// ── 9: single-release across every outcome (release at most once) ─────────

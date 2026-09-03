@@ -108,6 +108,14 @@ export interface ControlSocketSendResult {
 	 * 5d runner carries this verbatim so the surface can tell "in-band refusal" from
 	 * "no live route" — the N3 carry-over the hand boundary used to drop. */
 	rejectReason?: string;
+	/** #98 R, fallback leg: the `.msg` a dead-socket re-resolve enqueued. Present ONLY
+	 * when the fallback actually routed to the mailbox and the enqueue succeeded — a
+	 * control-socket retry hands the body to a live receiver and writes no file, so it
+	 * leaves this undefined rather than inventing one. Same rule as `RpcSendResult`: the
+	 * ENQUEUED path and nothing about reading. Without it a `fallback-sent` is the one
+	 * mailbox delivery whose sender gets no per-message identifier — the same letter the
+	 * primary mailbox rail names. */
+	messagePath?: string;
 }
 
 // A drive step's verdict: the terminal outcome, plus the original error to RETHROW on
@@ -117,6 +125,8 @@ interface SendDrive {
 	outcome: SendFinalOutcome;
 	error?: unknown;
 	rejectReason?: string;
+	/** #98 R receipt from the mailbox fallback leg (see `ControlSocketSendResult`). */
+	messagePath?: string;
 }
 
 /**
@@ -149,7 +159,7 @@ export async function executeControlSocketSend(
 		drive = { outcome: "failed", error: err };
 	}
 	finalizeRelease(policy, deps, held, drive);
-	return { outcome: drive.outcome, rejectReason: drive.rejectReason };
+	return { outcome: drive.outcome, rejectReason: drive.rejectReason, messagePath: drive.messagePath };
 }
 
 /** Drive the 1차 send and route a connect failure through the F3 split. */
@@ -218,7 +228,10 @@ async function driveDeadFallback(
 			// hand never reaches for the mailbox on its own; only the resolver routes here.
 			try {
 				const r = await deps.sendViaMailbox(rePlan, lock);
-				return { outcome: r.success ? "fallback-sent" : "rejected" };
+				// #98 R: this leg writes a `.msg` exactly like the primary mailbox rail, so it
+				// owes the sender the same per-message receipt. Carried only on success — a
+				// `rejected` enqueue wrote no file to name.
+				return r.success ? { outcome: "fallback-sent", messagePath: r.messagePath } : { outcome: "rejected" };
 			} catch (err) {
 				return { outcome: "failed", error: err };
 			}

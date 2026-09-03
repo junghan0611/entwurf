@@ -61,7 +61,8 @@ export interface DispatchExecutorDeps {
 }
 
 /** The per-transport success outcome, discriminated by transport so the surface renders
- * each without guessing. `control-socket` carries the optional N3 `rejectReason`;
+ * each without guessing. `control-socket` carries the optional N3 `rejectReason` and,
+ * when a dead-socket re-resolve fell back to the mailbox, that leg's #98 R `messagePath`;
  * `meta-mailbox` is always `success:true` (enqueue has no in-band refuse — a failure is
  * a throw, handled as `execution-failed`) and carries the #98 R send receipt: the path of
  * the `.msg` the enqueue actually wrote. OPTIONAL because a fake/legacy `sendMailbox` dep
@@ -69,7 +70,7 @@ export interface DispatchExecutorDeps {
  * and it is the ONLY enqueue-side datum carried (never a read timestamp; see
  * `RpcSendResult`). */
 export type ExecutedOutcome =
-	| { transport: "control-socket"; outcome: SendFinalOutcome; rejectReason?: string }
+	| { transport: "control-socket"; outcome: SendFinalOutcome; rejectReason?: string; messagePath?: string }
 	| { transport: "meta-mailbox"; success: true; messagePath?: string }
 	// native-push carries `retried` so the surface can note the 1-shot re-probe retry fired.
 	| { transport: "native-push"; success: true; retried: boolean };
@@ -122,7 +123,12 @@ export async function executeDispatch(
 					kind: "executed",
 					receipt,
 					transport,
-					outcome: { transport: "control-socket", outcome: r.outcome, rejectReason: r.rejectReason },
+					outcome: {
+						transport: "control-socket",
+						outcome: r.outcome,
+						rejectReason: r.rejectReason,
+						messagePath: r.messagePath,
+					},
 				};
 			} catch (err) {
 				// N1: a delivered/refused send whose release then threw — lock dirty, do NOT retry.

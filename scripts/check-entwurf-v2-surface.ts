@@ -361,6 +361,46 @@ async function main(): Promise<void> {
 			cr.isError && cr.text.includes("dormant-fire-forget-unsupported"),
 		);
 
+		// control-socket fallback-sent that re-resolved to the MAILBOX: same file, same
+		// receipt. Before this the fallback leg was the one mailbox delivery whose sender
+		// line carried no per-message identifier.
+		const fallback: EntwurfV2RunResult = {
+			kind: "executed",
+			receipt: { ...SUCCESS_RECEIPT, transport: "control-socket" },
+			transport: "control-socket",
+			outcome: {
+				transport: "control-socket",
+				outcome: "fallback-sent",
+				messagePath: "/home/x/.pi/agent/meta-mailbox/20260903T134455-e55e87/2026-09-03T09-58-02-114Z-ab12cd.msg",
+			},
+		};
+		const fb = renderEntwurfV2Result(fallback);
+		ok("2: fallback-sent is a delivery (not an error)", !fb.isError && fb.text.includes("fallback-sent"));
+		ok(
+			"2: fallback-sent names the enqueued FILE (#98 R, fallback leg)",
+			fb.text.includes("2026-09-03T09-58-02-114Z-ab12cd.msg"),
+		);
+		ok(
+			"2: fallback-sent prints the basename, not the whole path",
+			!fb.text.includes("/home/x/") && !fb.text.includes("meta-mailbox/20260903T134455-e55e87"),
+		);
+		ok(
+			"2: fallback-sent carries NO read stamp (same ban as the primary rail)",
+			!/lastReadAt|lastDeliveredAt/i.test(fb.text),
+		);
+		// A socket-to-socket retry writes no file. No receipt, and no "(enqueued undefined)".
+		const fallbackSocket: EntwurfV2RunResult = {
+			kind: "executed",
+			receipt: { ...SUCCESS_RECEIPT, transport: "control-socket" },
+			transport: "control-socket",
+			outcome: { transport: "control-socket", outcome: "fallback-sent" },
+		};
+		const fbs = renderEntwurfV2Result(fallbackSocket);
+		ok(
+			"2: socket-retry fallback-sent degrades to the bare outcome (no file to name)",
+			fbs.text === "entwurf_v2 control-socket → fallback-sent" && !fbs.isError,
+		);
+
 		// The two spawn-bg render cells (lock-retained / socket-alive) were deleted with the
 		// transport itself. Nothing renders them anymore, and `EntwurfV2Transport` no longer
 		// admits the literal — a cell kept here would only prove the type is still wrong.

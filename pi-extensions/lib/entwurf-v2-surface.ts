@@ -145,8 +145,13 @@ export function renderEntwurfV2Result(result: EntwurfV2RunResult): EntwurfV2Surf
 			if (o.transport === "control-socket") {
 				const delivered = o.outcome === "sent" || o.outcome === "fallback-sent";
 				const reason = o.rejectReason ? ` (reason: ${o.rejectReason})` : "";
+				// #98 R, fallback leg: a dead socket that re-resolved to the mailbox wrote a
+				// `.msg` — name it, exactly as the primary mailbox rail does. Absent on a
+				// socket-to-socket retry (no file) and on every non-mailbox outcome, so the
+				// line degrades to the bare outcome rather than printing "undefined".
+				const enqueued = o.messagePath ? ` (enqueued ${basename(o.messagePath)})` : "";
 				return {
-					text: `entwurf_v2 control-socket → ${o.outcome}${reason}`,
+					text: `entwurf_v2 control-socket → ${o.outcome}${reason}${enqueued}`,
 					isError: !delivered,
 				};
 			}
