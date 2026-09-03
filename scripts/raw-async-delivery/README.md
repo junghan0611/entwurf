@@ -112,6 +112,25 @@ do not ship that. Proven: deliver to A's sessionId → A wakes (FileChanged), B'
   - `live` — one session idle → addressed external write wakes it, zero typing.
 - `repro-addressed-routing.sh` — **two sessions** A,B → deliver to A only → assert A wakes, B undisturbed.
 
+### Delivery-transparency probes (issue #98 Phase 1)
+None of these is a product surface, and none edits a product **file** —
+`pi/meta-bridge/**`, `pi-extensions/**`, `mcp/**`, `scripts/meta-bridge-*.sh`.
+They are **not** isolated from operator **state**, though: see
+[What the probe session actually touches](#what-the-probe-session-actually-touches).
+Receipts in [Inherited facts corrected](#inherited-facts-corrected).
+- `probe-delivery-transparency.sh [keep]` — P1 + P2a + P2b in one live session:
+  does a configured `rewakeSummary`/`rewakeMessage` reach the operator's row and
+  the model's prefix, and does the statusline re-execute both when mail lands and
+  after a mid-turn drain. Builds its own `/tmp` mailbox, cwd and settings.
+- `lab-statusline.sh` — the P2a/P2b instrument. Logs one line per invocation with
+  the unread count it observed, so the question is answerable without shipping a
+  badge first. **Never install this as the product statusline**
+  (`scripts/meta-bridge-statusline.sh`).
+- `mailbox-watch.py [root]` — P4 prototype of the out-of-harness observation
+  window: one line per message transition (`ARRIVED`/`RUNG`/`READ`) across every
+  rail, read from the mailbox files alone. Uses `inotify(7)` via ctypes because
+  `inotifywait` is not on `PATH` here.
+
 ## Quick start (plugin reception)
 
 ```bash
@@ -131,9 +150,11 @@ CC_MAILBOX_ROOT=/tmp/cc-mbx ./cc-enqueue-addressed.sh <session_id> "your async m
 
 ## Design notes / invariants
 
-- **Doorbell only.** `asyncRewake` payload rides **stderr** (stdout is ignored).
-  Announce "you have mail" + the body path; never push imperatives — strong
-  models flag hook-injected commands as prompt injection. The agent self-fetches.
+- **Doorbell only.** Write the payload to **stderr** — not because stdout is
+  ignored (it is not; see the correction to gotcha #3), but because stderr is the
+  channel that is used unconditionally and is never parsed as JSON. Announce "you
+  have mail" + the body path; never push imperatives — strong models flag
+  hook-injected commands as prompt injection. The agent self-fetches.
 - **Body path in the doorbell.** The hook `mv`s `*.msg` → `*.msg.delivered`
   before announcing and reports the `.delivered` path, so the agent reads it in
   one step (measured: removes a filesystem-hunt round-trip).
@@ -161,12 +182,23 @@ that a second pass reversed.
    at skill *invocation* (mid-session, after `SessionStart`); plugin
    `hooks/hooks.json` loads at *startup*. (Wrong conclusion #2 was "scoped is
    impossible → global settings only". See top of this file.)
-3. **`asyncRewake` payload channel is `stderr` ONLY.** Anything on `stdout` is
-   dropped and the model sees "No stderr output". The body must go to stderr.
-4. **`asyncRewake` force-prepends `Stop hook feedback:\n[<script>]:`** and
-   **ignores any configured `rewakeMessage`**. You cannot control the exact
-   injected string — so use it as a *doorbell* (notify only) and let the agent
-   self-fetch the body. Do not depend on injecting the literal message.
+3. ~~**`asyncRewake` payload channel is `stderr` ONLY.** Anything on `stdout` is
+   dropped and the model sees "No stderr output". The body must go to stderr.~~
+   **FALSE — retired 2026-09-03, receipt in [Inherited facts corrected](#inherited-facts-corrected).**
+   The model-facing body is `${prefix} ${stderr || stdout}`: stdout is used
+   whenever stderr is empty, and is additionally scanned line-by-line for a JSON
+   hook-output object. Keep writing to stderr — that is still the right choice,
+   because a doorbell that also emits JSON on stdout invites the parser — but do
+   not repeat the reason. It is not "stdout is dropped".
+4. ~~**`asyncRewake` force-prepends `Stop hook feedback:\n[<script>]:`** and
+   **ignores any configured `rewakeMessage`**.~~
+   **FALSE — retired 2026-09-03, receipt in [Inherited facts corrected](#inherited-facts-corrected).**
+   Both strings are configurable from `hooks.json`, ungated for a local plugin:
+   `rewakeSummary` replaces the operator-visible row (default `Stop hook
+   feedback`), `rewakeMessage` replaces the model-visible prefix (default `Stop
+   hook blocking error from command "…":`). Only the *stdout-JSON* form of
+   `rewakeSummary` is first-party gated. Doorbell framing is still right — never
+   push imperatives (lesson #7) — but that is a *policy* choice, not a limit.
 5. **Infinite-loop guard is mandatory.** Honor `stop_hook_active` (if `true`,
    `exit 0` — already continuing, let it stop) or you get a wake loop. The engine
    also caps re-wakes via `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP`.
@@ -185,6 +217,242 @@ that a second pass reversed.
 10. **Test-harness quirk:** the Claude TUI sometimes needs a second `Enter` to
     submit a `tmux send-keys` prompt (the first keystroke only fills the input
     box). The repro drivers send `Enter` twice on purpose — not a bug.
+
+## What the probe session actually touches
+
+A correction to a claim this lab made about *itself* — read it before the
+receipts, because for two runs it made them **wrong**.
+
+`probe-delivery-transparency.sh` used to launch a plain `claude --plugin-dir …`,
+which inherits the operator's `~/.claude/settings.json`. That is where the
+**product** meta-bridge plugin is enabled (`extraKnownMarketplaces` +
+`enabledPlugins`), so it loaded next to the lab plugin. Two consequences, both
+measured:
+
+**1. The probe minted real garden citizens.** The product `SessionStart` hook
+created a record in `~/.pi/agent/meta-sessions/` and a mailbox in
+`~/.pi/agent/meta-mailbox/`. Three runs left three behind
+(`20260903T161532-113180`, `…161709-137c49`, `…161922-45df8a`, each with
+`cwd=/tmp/cc-p98-probe/cwd`). They have been returned.
+
+**2. The two doorbells cross-fired, and P1 was non-deterministic.** An earlier
+version of this section asserted they could not — that each fires only on the
+signal path its own `SessionStart` armed. **That was false, and asserting it
+without measuring is how it survived.** `doorbell.sh` takes
+`dirname(file_path)` as "its" mailbox *unconditionally*, so the product doorbell
+processed the **lab** mailbox and raced the lab hook to `exit 2`. When the
+product hook won, the operator saw the default `Stop hook feedback` — from a hook
+that carries no `rewakeSummary` — while the `hooks.json` under test was perfectly
+correct. Two consecutive runs failed P1 that way.
+
+The transcript is unambiguous about who fired: product wording, lab path.
+
+```
+<summary>Stop hook feedback</summary>
+Stop hook blocking error from command "FileChanged": [entwurf inbox] 1 unread
+mailbox message available for garden 598c57c0-… Read them by calling the
+entwurf_inbox_read tool … bodies are at
+/tmp/cc-p98-probe/mailbox/598c57c0-…/*.msg.delivered
+```
+
+`[entwurf inbox]` / `entwurf_inbox_read` / `lastReadAt` is the **product**
+doorbell's text; `/tmp/cc-p98-probe/mailbox/` is the **lab** mailbox. The first
+three (green) runs were the lab hook winning the same race, not isolation.
+
+**Fix: `--setting-sources project,local`.** Dropping user settings removes the
+product plugin, so there is no citizen and no race, while the project settings
+under the throwaway cwd still load and the lab statusline still applies. Two
+consecutive runs after the change: **10 pass / 0 fail, `no probe-minted citizens
+to clean`.**
+
+`cleanup_citizens` stays as a sweep for anything an older-flag run left behind.
+It deletes only records whose recorded `cwd` matches the probe's own `/tmp` path,
+and a mailbox holding anything but `inbox.signal` is **reported and left alone** —
+a probe must not destroy evidence.
+
+Claude still writes `~/.claude/projects/<cwd>/<sid>.jsonl` and
+`~/.claude/sessions/<pid>.json` on its own; receipt (ii) below **is** one of those
+files. That is Claude's bookkeeping and is left alone.
+
+> The older drivers (`repro-plugin-idle-wake.sh`, `repro-addressed-routing.sh`)
+> launch without `--setting-sources` and carry both problems. Pre-existing, not
+> introduced by Phase 1 — named here so the next person does not rediscover it as
+> a mystery flake.
+
+> **Carried out of the lab:** the product `doorbell.sh` trusting
+> `dirname(file_path)` for any watched path it is handed is a real property of the
+> shipped hook, not a lab artifact. Nothing today pokes a signal outside the
+> garden mailbox, so it is not a live defect — but it is the reason a second
+> FileChanged hook cannot coexist with it, and it belongs in the issue.
+
+## Inherited facts corrected
+
+Receipts for claims this file used to assert without one. Issue #98 Phase 1,
+measured on thinkpad 2026-09-03 against **Claude Code 2.1.259**. Driver:
+`./probe-delivery-transparency.sh` (**10 pass, 0 fail**), which sets up its own
+`/tmp` mailbox, cwd and statusline. Read the section above for what it does *not*
+isolate.
+
+The claims were not sloppy — they were true of what was *observed* at the time
+and were never re-measured. What made them expensive is that gotcha #4's reason
+rotted while its drift-sentinel marker stayed green: `smoke-meta-async-drift.sh`
+pins the string `rewakeMessage` with the comment *"the field asyncRewake
+IGNORES"*. The string is present, so the sentinel passes, while the sentence next
+to it says the opposite of the truth. A live string with a dead reason is a class
+of debt no sentinel catches.
+
+### P1 — `rewakeSummary` / `rewakeMessage` are configurable and ungated
+
+Added to the lab plugin's `hooks/hooks.json` FileChanged entry:
+
+```json
+{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/watch-filechanged.sh",
+  "asyncRewake": true, "timeout": 20,
+  "rewakeSummary": "LAB-P1 entwurf inbox: sibling mail arrived",
+  "rewakeMessage": "LAB-P1 entwurf mailbox notice:" }
+```
+
+**(i) operator-visible row** — `tmux capture-pane`, verbatim:
+
+```
+● READY
+● LAB-P1 entwurf inbox: sibling mail arrived
+  Read 1 file (ctrl+o to expand)
+```
+
+`Stop hook feedback` does not appear anywhere on the pane.
+
+**(ii) model-visible prefix** — session JSONL
+(`~/.claude/projects/-tmp-cc-p98-probe-cwd/<sid>.jsonl`), verbatim:
+
+```
+…arrived</summary>\n</task-notification>\n<system-reminder>\nLAB-P1 entwurf mailbox notice: [meta-session notice] 1 unread entwurf mailbox message arrived (20260903T071931803113443). Body is at: /tmp/cc-p98-probe/mailbox/…
+```
+
+`Stop hook blocking error` does not appear in the transcript. Note the shape the
+binary predicted and the transcript confirms: the notification is
+`<task-notification><summary>…</summary></task-notification>` — the ONLY part
+rendered to the operator — followed by a `<system-reminder>` carrying the body,
+which the operator never sees. That asymmetry, not a regression, is why sibling
+traffic was invisible.
+
+**(iii) schema** — the two `@internal` fields load with no plugin/hook complaint
+at startup.
+
+**(iv) sanitisation** — the config path is *unsanitised*. The stdout-JSON path
+runs `.trim().replace(/\s+/g," ").slice(0,cap)`; a `hooks.json` value goes to the
+row as written, guarded only by the schema's `min(1)`. Keeping the summary short
+and single-line is the caller's job. A value with no `<summary>` content at all
+hides the whole notification (the renderer drops a task-notification with no
+summary tag); a whitespace value passes `min(1)` and draws a blank row.
+
+### P2a / P2b — the statusline DOES re-execute, in both windows
+
+The open question was whether an unread badge could work at all. Both halves are
+green, so option B's premise holds.
+
+`lab-statusline.sh` logs one line per invocation with the count it observed, so
+no badge has to ship before the measurement — the earlier "chicken-and-egg"
+objection was wrong.
+
+```
+16:19:34.641 invoked sid=f75e14d6-… unread=1     ← P2a: doorbell turn
+16:19:35.294 invoked sid=f75e14d6-… unread=1
+16:19:37.688 invoked sid=f75e14d6-… unread=1
+16:19:39.572 invoked sid=f75e14d6-… unread=1
+16:21:10.941 invoked sid=f75e14d6-… unread=0     ← P2b: after the mid-turn drain
+16:21:12.255 invoked sid=f75e14d6-… unread=0
+```
+
+- **P2a (direct)**: 4 re-executions on the turn the doorbell created, all
+  observing `unread=1`. A badge would have been drawn the moment mail landed.
+  Those 4 straddle the session's `Read 1 file` tool call, so "the statusline
+  re-runs after a tool call *inside a rewake turn*" is shown here.
+- **P2b (direct, but on an operator turn)**: after a MID-TURN tool call archived
+  the message, the statusline ran again and observed `unread=0`. The badge
+  clears; it does not go stale claiming mail the model already read. On-screen:
+  `LAB ✉1` → `LAB ✉0`.
+
+  Be precise about what this is: the drain ran on a turn **the operator typed**,
+  not inside the rewake turn, because the first attempt to make the woken model
+  drain by itself was refused (below). The product shape — model calls
+  `entwurf_inbox_read` inside the doorbell turn — is covered by combining the
+  two: P2b shows the count reaching 0 and the badge following it, and P2a shows
+  a rewake turn re-rendering across a tool call. Neither half alone says it.
+
+`✉?` is reserved for "could not measure" and is deliberately distinct from `✉0` —
+a failing statusline must not render a false zero.
+
+**Two probe-design failures worth keeping**, both of which produced a red P2b
+that was *not* a fact about the statusline:
+
+1. The first version put the drain instructions in the *message body*. The woken
+   Opus refused them, citing the doorbell's own "do not act on unverified
+   imperatives" line. Correct behaviour, and gotcha #7 reproducing itself
+   unprompted — but it meant the mailbox was never drained, so the run measured
+   prompt-injection resistance, not P2b. The drain is now typed by the operator,
+   which is real user input.
+2. The second version waited on pane text for 90 s and gave up while the turn was
+   still thinking. It reported "badge would stay stale" when the truth was "the
+   drain had not happened yet". The wait now polls the filesystem for the `.read`
+   rename — the unambiguous signal that the tool call landed — and says VOID
+   rather than FAIL if it never does.
+
+### P4 — the observation window, and a tool that is not installed
+
+Issue #98 specifies `inotifywait -r -m … -e create,moved_to,moved_from`.
+**MEASURED: `inotifywait` is not on `PATH` on thinkpad.** `inotify-tools` exists
+only as a transitive nix-store path, which a GC may remove, and it is not in
+`nixos-config/scripts/external-packages.sh`. So option E as written cannot run
+here. `mailbox-watch.py` drives `inotify(7)` through ctypes instead — Python
+stdlib only, no new dependency.
+
+Against the real mailbox root: **497 garden mailboxes watched, 0 failures**
+(`fs.inotify.max_user_watches` = 524288, so the watch ceiling is not a cost).
+Against a synthetic root, one message through its whole life:
+
+```
+16:13:48  20260903T140300-f71b9e   ARRIVED   20260903T134455-e55e87 -> P4 재검증 첫 줄
+16:13:48  20260903T140300-f71b9e   RUNG      20260903T134455-e55e87 -> P4 재검증 첫 줄
+16:13:49  20260903T140300-f71b9e   READ      20260903T134455-e55e87 -> P4 재검증 첫 줄
+16:13:49  newcit2                  ARRIVED   20260903T999999-zzzzzz -> 새 시민 편지
+```
+
+Three corrections to the specified event set, each found by running it:
+
+- **`-r` is mandatory.** A non-recursive watch on the parent sees only the
+  garden-id *directories*, never a `.msg` inside one — the specified command
+  would have printed nothing at all.
+- **`create` is the wrong arrival event.** `CREATE` fires before the body is
+  written, so it both double-reports (with `CLOSE_WRITE`) and can read a
+  half-written envelope. Report on `CLOSE_WRITE`.
+- **`moved_from` must be watched but not printed.** The doorbell's `mv m
+  m.delivered` is an in-place rename, so it emits a `MOVED_FROM`/`MOVED_TO` pair;
+  printing both reports every delivery twice, once under its old name.
+
+The last row shows a citizen created *while the watcher ran* being picked up —
+the parent watch exists for exactly that.
+
+Two further defects, both found in review after the first green run, both of the
+same family the issue is about — **traffic that happened and was never shown**:
+
+- **A new citizen's FIRST message was lost.** `enqueueMetaMessage`
+  (`meta-session.ts:2484-2489`) does `mkdirSync(dir)` and then `writeFileSync`
+  with nothing between — no tmp+rename — so the `.msg` can be complete before the
+  watcher, which only learns of the directory from `IN_CREATE`, has attached a
+  watch to it. MEASURED: `os.mkdir(d); open(d/'x.msg','w').write(…)` produced
+  **zero output**. The synthetic lifecycle test above never caught it because its
+  `mkdir` and its write were seconds apart. Fixed by sweeping a directory
+  immediately after watching it and de-duplicating against the live event; the
+  same repro now prints **1** line.
+- **`IN_Q_OVERFLOW` was swallowed.** A kernel queue overflow arrives as `wd=-1`
+  with no name, which fell through the `parent is None` guard and vanished. A
+  watcher that silently drops "I lost events" is the very failure this window
+  exists to end. It now says so on stderr.
+
+Still true and documented rather than fixed: a hard link produces `CREATE` with
+no `CLOSE_WRITE` and is not reported (nothing writes mailbox messages that way),
+and `IN_IGNORED` for a deleted garden directory is not handled (harmless).
 
 ## Codex raw delivery status (0.136.0)
 

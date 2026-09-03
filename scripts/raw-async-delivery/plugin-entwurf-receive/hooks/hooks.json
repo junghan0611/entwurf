@@ -19,7 +19,9 @@
 						"type": "command",
 						"command": "${CLAUDE_PLUGIN_ROOT}/scripts/watch-filechanged.sh",
 						"asyncRewake": true,
-						"timeout": 20
+						"timeout": 20,
+						"rewakeSummary": "LAB-P1 entwurf inbox: sibling mail arrived",
+						"rewakeMessage": "LAB-P1 entwurf mailbox notice:"
 					}
 				]
 			}
