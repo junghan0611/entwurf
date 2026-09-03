@@ -11,13 +11,13 @@
 # need session_id, the changed-path dirname IS the per-session mailbox.
 #
 # CORRECTED 2026-09-03 (#98 Phase 1): this used to add "so this hook reads ONLY its
-# own session's mailbox — no cross-session leakage". That is an operational premise,
-# not a property of this script. The script trusts `file_path` and never checks the
-# dirname against the session it belongs to. Measured: with the product meta-bridge
-# plugin loaded alongside this one, the PRODUCT doorbell processed THIS lab mailbox
-# and raced this hook to `exit 2` — three green runs were this hook winning the race,
-# not isolation. Isolation comes from `--setting-sources project,local`, not from the
-# dirname. See README.md "What the probe session actually touches".
+# own session's mailbox — no cross-session leakage". The dirname provides no such
+# isolation: this script trusts `file_path` and never checks it against the session.
+# Measured — with the product plugin loaded from user settings, the PRODUCT doorbell
+# processed THIS lab mailbox and raced this hook to `exit 2`. The probe now avoids
+# that ONE coexistence by dropping user settings (`--setting-sources project,local`);
+# any other FileChanged hook in project or local scope would cross-fire the same way.
+# Receipt: README.md "What the probe session actually touches".
 #
 # DOORBELL ONLY: announce "you have mail" + the body path on stderr. Not because
 # stdout is ignored — it is not; the body is `stderr || stdout` (same receipt).

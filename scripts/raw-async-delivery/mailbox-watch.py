@@ -16,42 +16,25 @@ WHY THIS EXISTS
     prints.
 
 SCOPE -- read this before believing the output is complete
-    This is NOT an all-rails window, and an earlier version of this docstring said
-    it was ("every rail (pi / codex / agy / Claude Code)", "EVERY sibling's
-    traffic"). Corrected 2026-09-03: THREE of the four rails it named do not use
-    this directory at all.
+    This watches ONE directory tree (the given root, `~/.pi/agent/meta-mailbox`
+    by default) and prints a line only when a message file's suffix actually
+    changes there. That is the whole of what it observes.
 
-      - pi              control-socket rail. LIVENESS_DOMAIN_BACKENDS == ["pi"]
-                        (pi-extensions/lib/entwurf-v2-contract.ts:116), so a live
-                        pi citizen is dispatched over its socket and NOTHING is
-                        written here.
-      - antigravity     native-push rail (NATIVE_PUSH_BACKENDS, same file:132).
-                        Direct injection into the live conversation; it has no
-                        mailbox.
-      - codex           no adapter on this host -- mailbox-undeliverable, so a
-                        send is REJECTED rather than queued.
-      - claude-code,    self-fetch backends. THESE are what this window shows.
-        copilot, omp
+    So it sees a delivery only when the dispatcher chose the META-MAILBOX plan
+    and that plan wrote a file. A send that went over a control socket, a send
+    that was injected straight into a live conversation, and a send that was
+    REJECTED as undeliverable all leave nothing here -- there is no file to
+    change. Silence in this window therefore means "no mailbox-rail file
+    activity under this root", never "no traffic on the garden".
 
-    So: silence here means "no mailbox-rail traffic", never "no sibling traffic".
-    A pi-to-pi conversation is completely invisible to this watcher.
-
-WHY NOT inotifywait
-    Issue #98 (v3, option E) specifies
-    `inotifywait -r -m meta-mailbox -e create,moved_to,moved_from`.
-    MEASURED on thinkpad 2026-09-03: `inotifywait` is NOT on PATH. inotify-tools
-    exists only as a transitive nix-store path, which a GC may remove, so
-    hard-coding it would be a fragile dependency. Adding it to
-    nixos-config/scripts/external-packages.sh is a change outside this repo.
-    This file therefore drives inotify(7) directly through ctypes -- Python
-    stdlib only, no new dependency -- and measures the same events.
-
-RECURSION
-    `inotifywait` without -r would have watched ONLY the parent's own entries
-    (the garden-id directories) and never seen a `.msg` inside them. This watcher
-    adds a watch per garden-id directory AND keeps one on the parent so that a
-    directory created later (a new citizen) is picked up while running.
-"""
+    An earlier version of this docstring claimed the opposite ("every rail
+    (pi / codex / agy / Claude Code)", "EVERY sibling's traffic"), corrected
+    2026-09-03. It is deliberately NOT replaced with a per-backend table: which
+    backend takes which plan is the dispatcher's to say, it moves when a backend
+    is admitted, and a copy of it here would be the next sentence to rot. The
+    authoritative routing lives in pi-extensions/lib/entwurf-v2-decider.ts and
+    the domain sets it reads from entwurf-v2-contract.ts. Read those, not this.
+    """
 
 from __future__ import annotations
 

@@ -53,9 +53,10 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 - **Next:** `entwurf-release` 4모드 — `land`(exact-SHA CI) → `prepare 0.17.2` → `make`(LIVE
   release-gate `--cut`, 0.17.1이 초록 컷을 받은 절차 그대로) → `publish`.
   **push·make·publish는 각각 GLG의 명시 승인 후에만.** 커밋 요청이 푸시를 함의하지 않는다.
-- **알려진 잡음:** `smoke-meta-async-drift`의 `drift=1`은 codex 0.148이 핀 `0.144`를 벗어난 것으로
-  **사전 존재**다(#98 이전부터). 핀 범프를 이 레인에 섞지 않는다 — 컷 게이트가 이걸 MUST로 취급하면
-  그 사실을 GLG에게 보고하고 멈춘다.
+- **알려진 잡음 — 정확히 말할 것:** `smoke-meta-async-drift`는 `pass=12 fail=0 drift=1`로 끝나고
+  **exit 1**이다(`***** DRIFT DETECTED *****`). "pass"라고만 쓰면 거짓이다. 원인은 codex 0.148이 핀
+  `0.144`를 벗어난 것으로 **#98 이전부터 사전 존재**한다. 핀 범프를 이 레인에 섞지 않는다 — 컷 게이트가
+  이 스크립트를 MUST로 잡으면 그 사실을 GLG에게 보고하고 멈춘다.
 - **Read:** CHANGELOG `## 0.17.1` Verification · CARRIED의 #94·#98 항목 · `entwurf-release` 스킬.
 - **Do not touch:** 0.17.0/0.17.1 태그와 그 CHANGELOG 절 · `mux-launch.ts`/`mux-placement.ts`
   import fence · 0.16.1 make를 이 레인에 섞는 것 · 랩 파일 내용(커밋만 했다) ·
@@ -154,25 +155,15 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   사이에 만료될 때 bound가 약한 floor가 된다는 한계뿐이다(`backend.ts:1286-1288`). 계약은 산문이 아니라
   `scripts/mutants/acp-usage-accounting.json` 12뮤턴트가 지킨다. **agent-config 쪽 두 줄은 아직 고아다** —
   기본 pi 푸터로 복귀 금지, 캐리어 착지 시 `nocache` 가드 필요. 항구적 자리는 `glg-footer.ts` 헤더 주석.
-- **컴팩션 소유권 반환 — #94, 커밋 `3bb0f9e`+`2f53a97` (푸시 전). 0.17.2에 실린다.** `autoCompactEnabled` / `env.DISABLE_AUTOCOMPACT`가
-  `MANAGED_SETTINGS_SCALARS` → `RETIRED_SETTINGS_SCALARS`로 이동했다(삭제가 아니다 — 삭제하면 기존
-  원장 엔트리가 고아가 되어 `uninstall()`이 오퍼레이터가 켜둔 컴팩션을 다시 끈다). thinkpad에서 실제
-  마이그레이션 완료: 원장에서 두 키 소멸, settings 값은 불변(`false` / `"1"`). 게이트는
-  `smoke-meta-install-state`(드라이브 셀 + 중첩경로/문자열 축 단위 셀), `smoke-meta-keyset-guard`(음성
-  단언), `check-meta-doctor-oracle` M14/M15/M16이 진다. **열린 것:**
-  (a) **컴팩션을 실제로 켜는 것은 GLG의 별개 행위다** — retirement은 소유권만 옮기고 두 호스트 모두
-  값은 OFF로 남는다 — **2026-09-03에 GLG가 그 별개 행위를 실행했다**: 두 키를 `~/.claude/settings.json`에서
-  제거(`env` 블록은 그 키뿐이라 통째로 사라짐) → `install-meta-bridge` exit 0에도 다시 쓰이지 않음,
-  `doctor-meta-bridge` PASS. 이제 벤더 기본값(`autoCompactEnabled:!0` = true)이라 컴팩션 ON이다.
-  **정정 하나(measured, Claude Code 2.1.259 바이너리):** `env.DISABLE_AUTOCOMPACT`는 이 버전에서 **no-op**였다 —
-  벤더가 읽는 이름은 밑줄이 있는 `DISABLE_AUTO_COMPACT`/`DISABLE_COMPACT`이고 우리가 쓰던 이름은 0회 등장한다.
-  실제로 억제하던 것은 `autoCompactEnabled: false` 하나뿐이었다. 이슈 본문·두 크로스리뷰가 그 env를 유효한
-  장치로 다룬 부분은 틀렸고, 결론(둘 다 반환)은 안 바뀐다. 옛 버전이 읽었는지는 미측정.
-  (b) **E: `overlay.ts:29-33`의 `hooks:{}` LIVE 측정 1회** — 주석의 컴팩션 사유가
-  `settingSources: []` 아래에서 stale일 가능성이 높다(코드·파일은 남기고 주석만 정리). (c) **doctor가
-  retired NOTE를 화면에 못 보여준다** — `meta-bridge-doctor.sh:121`이 `2>&1 >/dev/null`로 stdout을
-  버려서, 은퇴 키에 대해 사람이 볼 수 있는 유일한 문장이 어디에도 안 뜬다. 고치면 오라클 needle이
-  움직이므로 별건.
+- **컴팩션 소유권 반환 — #94, 커밋 `3bb0f9e`+`2f53a97` (푸시 전). 0.17.2에 실린다.**
+  `autoCompactEnabled` / `env.DISABLE_AUTOCOMPACT`가 managed → retired로 옮겨졌다. 무엇을 왜는
+  이슈 #94와 두 커밋이 진다.
+  **prepare가 CHANGELOG로 올릴 것:** `env.DISABLE_AUTOCOMPACT`는 Claude 2.1.259에서 **no-op였다**
+  (벤더가 읽는 이름은 밑줄 있는 `DISABLE_AUTO_COMPACT`/`DISABLE_COMPACT`, 우리 이름은 0회 등장).
+  실제로 억제하던 것은 `autoCompactEnabled: false` 하나뿐이었다. 측정과 계보는 이슈 #94 §정정.
+  **열린 후속 둘:** (a) `overlay.ts:29-33`의 `hooks:{}` LIVE 관측 1회 — 주석의 컴팩션 사유가
+  `settingSources: []` 아래에서 stale일 가능성. (b) doctor가 retired NOTE를 화면에 못 보여준다
+  (`meta-bridge-doctor.sh:121`이 stdout을 버린다) — 고치면 오라클 needle이 움직이므로 별건.
 - **#98 딜리버리 투명성 — 커밋 `6306f93`(Phase 1 랩) + `c10b904`(Phase 2 제품), 푸시 전. 0.17.2에 실린다.**
   형제 우편이 도착하고 읽혔는데 사람 화면에는 `Stop hook feedback` 한 줄만 뜨던 것을 닫았다.
   무엇이 왜 들어갔는지는 두 커밋 메시지와 이슈 #98이 진다 — 여기서 되풀이하지 않는다.
@@ -181,9 +172,12 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   ./run.sh install-meta-bridge`로 빨개진다. 열린 Claude 세션은 옛 manifest를 캐시하므로 재시작
   전까지 옛 화면이다. oracle이 첫 대상.
   **열린 후속 둘:** (a) control-socket이 죽어 mailbox로 re-resolve된 `fallback-sent` 경로가
-  `messagePath`를 버린다(`entwurf-v2-send.ts:212,221`) — 발신자에겐 같은 우편인데 파일명이 없다.
+  `messagePath`를 버린다 — `entwurf-v2-send.ts:221`, `sendViaMailbox`의 반환에서 `success`만 읽는
+  자리다. 발신자에겐 같은 우편인데 파일명이 없다. (같은 모양의 `:212`는 control-socket 재전송이라
+  애초에 이름 붙일 파일이 없다 — 거기는 결함이 아니다.)
   (b) P4 관측창(`mailbox-watch.py`)의 제품 승격 여부는 GLG 결정 — `scripts/`로 옮겨 `run.sh`에
   넣거나, 랩에 둔 채 수동 실행.
+
   **별건 둘:** `lastDeliveredAt` 필드 제거는 마이그레이션이고(리더가 이중으로 엄격 + 매 도장마다
   재파싱, 온디스크 v1 180여 개), `stampMailboxReceipt`의 2-writer lost-update는 오늘 이미 있는 경합이다.
 - **0.16.1 make** — prepare는 끝났고 make는 GLG 승인 대기. 오늘 요청 없었다.

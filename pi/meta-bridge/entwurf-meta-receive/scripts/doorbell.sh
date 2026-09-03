@@ -10,35 +10,16 @@
 # hook takes its DIRECTORY as the mailbox to process. No node needed here; the
 # dirname is the mailbox.
 #
-# Two statements, deliberately kept apart (#98, corrected 2026-09-03 — they used to
-# be one sentence claiming this hook "touches ONLY its own mailbox"):
-#   - OPERATIONAL PREMISE: under a normal install, the only path this session's
-#     SessionStart armed a watch on is its own <meta-mailbox>/<garden-id>/inbox.signal,
-#     so the only file_path that arrives is that one, and a sender who pokes one
-#     garden id wakes only that session. That premise holds today.
-#   - IMPLEMENTATION LIMIT: this script does NOT verify it. It trusts `file_path`
-#     unconditionally and derives "its own mailbox" from that string alone — it never
-#     compares the dirname against the garden id it belongs to. MEASURED: when a lab
-#     session loaded a second FileChanged hook next to this one, this doorbell
-#     processed the LAB mailbox and raced the lab hook to `exit 2`
-#     (scripts/raw-async-delivery/README.md, "What the probe session actually
-#     touches"). Nothing pokes a signal outside the garden mailbox today, so this is
-#     not a live defect — but it is why a second FileChanged hook cannot coexist with
-#     this one, and why the premise above must not be written as a guarantee.
-#
-# DOORBELL ONLY: announce "you have mail" + the body path on stderr. NEVER push
-# imperatives; strong models flag hook-injected commands as prompt injection. The agent
-# self-fetches the body with its own trusted tool, and that inbox-read is the real D7
-# receipt.
-#
-# WHY STDERR (corrected 2026-09-03, #98 Phase 1 — the old reason here was FALSE).
-# It is NOT that "stdout is dropped". Measured on Claude 2.1.236/2.1.258/2.1.259: the
-# model-facing body is `${prefix} ${stderr || stdout}` — stdout IS used whenever stderr
-# is empty, and is additionally scanned line-by-line for a JSON hook-output object.
-# stderr is still the right channel, for a different reason: it is used unconditionally
-# and is never parsed as JSON, so a doorbell that wrote its notice on stdout would be
-# offering it to that parser. Receipts: scripts/raw-async-delivery/README.md
-# "Inherited facts corrected".
+# Two statements, deliberately kept apart (#98, 2026-09-03 — they used to be one
+# sentence claiming this hook "touches ONLY its own mailbox"):
+#   - PREMISE: under a normal install the only watch this session armed is its own
+#     <garden-id>/inbox.signal, so that is the only file_path that arrives.
+#   - LIMIT: this script does not verify it. It trusts `file_path` and never compares
+#     the dirname against its garden id. Measured — a second FileChanged hook in the
+#     same session made this doorbell process the OTHER mailbox and race it to exit 2,
+#     which is why a second such hook cannot coexist with this one.
+#   Receipt: scripts/raw-async-delivery/README.md, "What the probe session actually
+#   touches". Not a live defect: nothing pokes a signal outside the garden mailbox.
 #
 # RUNTIME DEPS: bash + python3 (the FileChanged stdin JSON is parsed with python3
 # below — robust against escaping, unlike sed/grep). The meta-bridge doctor must
