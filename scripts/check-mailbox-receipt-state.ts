@@ -120,6 +120,12 @@ try {
 		now: new Date("2026-03-01T12:05:00.000Z"),
 	});
 	ok("stamp lastReadAt: state.json created on first stamp", fs.existsSync(mailboxReceiptStatePath(mailboxDir, GID)));
+	// The two `lastDeliveredAt === null` pins below are FIELD-ISOLATION pins, not a
+	// "waiting for the doorbell" state. #98 5a: no writer stamps lastDeliveredAt at all —
+	// the shipped doorbell.sh does not touch state.json — so this null is the field's
+	// permanent value. state.json holds garden-wide last-activity; the per-message receipts
+	// are the file suffixes (`.msg` → `.msg.delivered` → `.msg.delivered.read`). Removing
+	// the field is a migration over existing on-disk v1 states (#98 5b), not a comment fix.
 	ok(
 		"stamp lastReadAt: only lastReadAt set, others null (읽음이 남는다)",
 		afterRead.lastReadAt === "2026-03-01T12:05:00.000Z" &&

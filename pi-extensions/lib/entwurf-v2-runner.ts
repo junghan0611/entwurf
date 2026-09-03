@@ -63,10 +63,14 @@ export interface DispatchExecutorDeps {
 /** The per-transport success outcome, discriminated by transport so the surface renders
  * each without guessing. `control-socket` carries the optional N3 `rejectReason`;
  * `meta-mailbox` is always `success:true` (enqueue has no in-band refuse — a failure is
- * a throw, handled as `execution-failed`). */
+ * a throw, handled as `execution-failed`) and carries the #98 R send receipt: the path of
+ * the `.msg` the enqueue actually wrote. OPTIONAL because a fake/legacy `sendMailbox` dep
+ * may omit it — a missing receipt must degrade the rendered line, never fail the delivery,
+ * and it is the ONLY enqueue-side datum carried (never a read timestamp; see
+ * `RpcSendResult`). */
 export type ExecutedOutcome =
 	| { transport: "control-socket"; outcome: SendFinalOutcome; rejectReason?: string }
-	| { transport: "meta-mailbox"; success: true }
+	| { transport: "meta-mailbox"; success: true; messagePath?: string }
 	// native-push carries `retried` so the surface can note the 1-shot re-probe retry fired.
 	| { transport: "native-push"; success: true; retried: boolean };
 
@@ -150,7 +154,14 @@ export async function executeDispatch(
 						"entwurf-v2-runner: meta-mailbox send returned success:false (contract violation; a mailbox has no in-band reject).",
 					);
 				}
-				return { kind: "executed", receipt, transport, outcome: { transport: "meta-mailbox", success: true } };
+				return {
+					kind: "executed",
+					receipt,
+					transport,
+					// #98 R: carry the enqueue receipt verbatim. `undefined` stays `undefined` —
+					// the runner never substitutes a guessed path for a missing one.
+					outcome: { transport: "meta-mailbox", success: true, messagePath: r.messagePath },
+				};
 			} catch (err) {
 				return { kind: "execution-failed", receipt, transport, error: errorMessage(err), retrySafe: false };
 			}

@@ -455,8 +455,16 @@ check("readMetaInbox: drains a fresh .msg, returns the body, stamps lastReadAt (
 		assert.equal(read.readAt, T1.toISOString(), "readAt returned");
 		const st = readMailboxReceiptState({ gardenId: fx.gardenId, mailboxDir: fx.mailboxDir });
 		assert.equal(st.lastReadAt, T1.toISOString(), "lastReadAt stamped in mailbox state = the honest read receipt");
-		// #5 honesty: lastDeliveredAt is the doorbell's to stamp; readMetaInbox must NOT invent it.
-		assert.equal(st.lastDeliveredAt, null, "lastDeliveredAt left null (read does not record a delivery time)");
+		// #5 honesty: readMetaInbox must NOT invent a delivery time. #98 5a corrects the old
+		// reason next to this pin ("the doorbell's to stamp"): the shipped doorbell.sh writes
+		// nothing to state.json, so lastDeliveredAt is a RESERVED SLOT no writer fills — this
+		// null is permanent, not "not yet". The per-message delivery fact is the `.delivered`
+		// file suffix; state.json only ever holds garden-wide last-activity.
+		assert.equal(
+			st.lastDeliveredAt,
+			null,
+			"lastDeliveredAt left null (nobody stamps it; the .delivered suffix is the per-message receipt)",
+		);
 	} finally {
 		fx.cleanup();
 	}

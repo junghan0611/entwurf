@@ -365,16 +365,48 @@ async function main(): Promise<void> {
 		// transport itself. Nothing renders them anymore, and `EntwurfV2Transport` no longer
 		// admits the literal — a cell kept here would only prove the type is still wrong.
 
-		// meta-mailbox → enqueued
+		// meta-mailbox → enqueued, carrying the #98 R send receipt (the enqueued FILE).
 		const mailbox: EntwurfV2RunResult = {
+			kind: "executed",
+			receipt: { ...SUCCESS_RECEIPT, transport: "meta-mailbox" },
+			transport: "meta-mailbox",
+			outcome: {
+				transport: "meta-mailbox",
+				success: true,
+				messagePath: "/home/x/.pi/agent/meta-mailbox/20260903T134455-e55e87/2026-09-03T07-19-31-803Z-113443.msg",
+			},
+		};
+		const mb = renderEntwurfV2Result(mailbox);
+		ok("2: meta-mailbox → not error + enqueued", !mb.isError && mb.text.includes("enqueued"));
+		ok(
+			"2: meta-mailbox names the enqueued message FILE (#98 R send receipt)",
+			mb.text.includes("2026-09-03T07-19-31-803Z-113443.msg"),
+		);
+		// The basename alone — printing the whole path would put the operator's home and the
+		// target garden id (which the caller just typed) into every send line.
+		ok(
+			"2: meta-mailbox prints the basename, not the whole path",
+			!mb.text.includes("/home/x/") && !mb.text.includes("meta-mailbox/20260903T134455-e55e87"),
+		);
+		// The assertion #98 asks for BY NAME: an enqueue receipt must never carry a read
+		// stamp. At enqueue time `lastReadAt` is the PREVIOUS message's read, so surfacing it
+		// would read as "my message was read" — the misreading that opened the issue.
+		ok(
+			"2: meta-mailbox carries NO read stamp (lastReadAt is forbidden on a send receipt)",
+			!/lastReadAt|lastDeliveredAt|\bread\b/i.test(mb.text),
+		);
+		// A dep that hands back no receipt must degrade to the old literal — never
+		// "enqueued (undefined)". The delivery happened either way.
+		const mailboxNoReceipt: EntwurfV2RunResult = {
 			kind: "executed",
 			receipt: { ...SUCCESS_RECEIPT, transport: "meta-mailbox" },
 			transport: "meta-mailbox",
 			outcome: { transport: "meta-mailbox", success: true },
 		};
+		const mbn = renderEntwurfV2Result(mailboxNoReceipt);
 		ok(
-			"2: meta-mailbox → not error + enqueued",
-			!renderEntwurfV2Result(mailbox).isError && renderEntwurfV2Result(mailbox).text.includes("enqueued"),
+			"2: meta-mailbox with no receipt degrades to the bare literal (never 'undefined')",
+			!mbn.isError && mbn.text === "entwurf_v2 meta-mailbox → enqueued",
 		);
 
 		// native-push → delivered (no retry)

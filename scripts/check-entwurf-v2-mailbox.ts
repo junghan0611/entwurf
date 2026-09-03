@@ -158,6 +158,32 @@ function recordingEnqueue(): {
 	ok("6: successful enqueue → {success:true}", res.success === true && res.error === undefined);
 }
 
+// ── 6b. #98 R: the enqueue result's messagePath is the SEND receipt ──────────
+// Reported VERBATIM from the enqueue result, never re-derived from the plan — a
+// re-derived path could disagree with the file that was actually written.
+{
+	const enq = recordingEnqueue();
+	const res = executeMetaMailboxSend(mailboxPlan(), SENDER, { enqueue: enq.fn });
+	ok("6b: result carries the enqueue's messagePath verbatim", res.messagePath === `/fake/mailbox/${GID}/m.msg`);
+}
+{
+	// The path is taken from the RESULT, not from `plan.mailboxDir` + gardenId: an enqueue
+	// that lands somewhere else (env override, tilde expansion, a resolved symlink) must be
+	// reported where it actually landed.
+	const res = executeMetaMailboxSend(mailboxPlan(), SENDER, {
+		enqueue: (opts) => ({
+			gardenId: opts.gardenId,
+			recordPath: "/elsewhere/rec.json",
+			messagePath: "/elsewhere/queued-here.msg",
+			signalPath: "/elsewhere/inbox.signal",
+		}),
+	});
+	ok(
+		"6b: a messagePath outside the plan's mailboxDir is still reported as-is",
+		res.messagePath === "/elsewhere/queued-here.msg",
+	);
+}
+
 // ── 7. production adapter: ignores lock entirely (poison LockClaim) ───────────
 {
 	const enq = recordingEnqueue();
@@ -222,6 +248,13 @@ function recordingEnqueue(): {
 	const code = src.replace(/\/\*[\s\S]*?\*\//g, "");
 	for (const forbidden of ["releaseLock", "inspectSocket", "probeSocket", "resolveDispatch", "resolveTarget"]) {
 		ok(`9: lib code has no '${forbidden}' (no release / no routing seam)`, !code.includes(forbidden));
+	}
+	// #98 R, the negative half stated as an assertion: a SEND receipt may never carry a
+	// read/delivery stamp. At enqueue time `lastReadAt` holds the PREVIOUS message's read,
+	// so carrying it here would let a sender read "my message was read" off a stamp that
+	// says nothing of the kind. The per-message read receipt is the `.read` suffix.
+	for (const forbidden of ["lastReadAt", "lastDeliveredAt", "readAt"]) {
+		ok(`9: lib code never carries '${forbidden}' into the send receipt`, !code.includes(forbidden));
 	}
 }
 

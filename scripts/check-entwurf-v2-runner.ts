@@ -212,6 +212,24 @@ async function main(): Promise<void> {
 			"4: executed{meta-mailbox, success}",
 			res.kind === "executed" && res.outcome.transport === "meta-mailbox" && res.outcome.success === true,
 		);
+		// #98 R: a dep that reports no path leaves the outcome's receipt undefined. The
+		// runner must not invent one — a guessed path is worse than no path.
+		ok(
+			"4: no enqueue receipt from the dep → messagePath stays undefined (never invented)",
+			res.kind === "executed" && res.outcome.transport === "meta-mailbox" && res.outcome.messagePath === undefined,
+		);
+	}
+
+	// ── 4a: #98 R — the mailbox enqueue receipt is carried through verbatim ───
+	{
+		const { deps } = makeDeps({ mailbox: { result: { success: true, messagePath: "/fake/mailbox/g/2026.msg" } } });
+		const res = await executeDispatch(executeDecision(MAILBOX_PLAN, null), deps);
+		ok(
+			"4a: executed{meta-mailbox} carries the dep's messagePath verbatim",
+			res.kind === "executed" &&
+				res.outcome.transport === "meta-mailbox" &&
+				res.outcome.messagePath === "/fake/mailbox/g/2026.msg",
+		);
 	}
 
 	// ── 4b: native-push execute → sendNativePush(plan, null), lock-free (봉인 4) ──

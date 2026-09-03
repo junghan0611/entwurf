@@ -11,10 +11,19 @@
 # this hook touches ONLY its own mailbox — a sender that pokes one garden id's
 # signal wakes only that session. No node needed here; the dirname is the mailbox.
 #
-# DOORBELL ONLY: announce "you have mail" + the body path on stderr (the sole
-# asyncRewake payload channel — stdout is dropped). NEVER push imperatives; strong
-# models flag hook-injected commands as prompt injection. The agent self-fetches
-# the body with its own trusted tool, and that inbox-read is the real D7 receipt.
+# DOORBELL ONLY: announce "you have mail" + the body path on stderr. NEVER push
+# imperatives; strong models flag hook-injected commands as prompt injection. The agent
+# self-fetches the body with its own trusted tool, and that inbox-read is the real D7
+# receipt.
+#
+# WHY STDERR (corrected 2026-09-03, #98 Phase 1 — the old reason here was FALSE).
+# It is NOT that "stdout is dropped". Measured on Claude 2.1.236/2.1.258/2.1.259: the
+# model-facing body is `${prefix} ${stderr || stdout}` — stdout IS used whenever stderr
+# is empty, and is additionally scanned line-by-line for a JSON hook-output object.
+# stderr is still the right channel, for a different reason: it is used unconditionally
+# and is never parsed as JSON, so a doorbell that wrote its notice on stdout would be
+# offering it to that parser. Receipts: scripts/raw-async-delivery/README.md
+# "Inherited facts corrected".
 #
 # RUNTIME DEPS: bash + python3 (the FileChanged stdin JSON is parsed with python3
 # below — robust against escaping, unlike sed/grep). The meta-bridge doctor must

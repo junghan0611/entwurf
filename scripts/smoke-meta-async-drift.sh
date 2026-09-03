@@ -70,7 +70,19 @@ MARKERS=(
   flushPendingAsyncRewakeHooks    # engine turn-boundary flush (edge-bound delivery)
   CLAUDE_CODE_STOP_HOOK_BLOCK_CAP # native re-wake cap
   FileChanged                     # idle-wake event
-  rewakeMessage                   # the field asyncRewake IGNORES (doorbell-only proof)
+  # rewakeMessage/rewakeSummary — CORRECTED 2026-09-03 (#98 Phase 1). The comment here used
+  # to read "the field asyncRewake IGNORES (doorbell-only proof)". That was FALSE, and it is
+  # the reason nobody tried the field for months: measured on 2.1.236/2.1.258/2.1.259, BOTH
+  # are read from a local plugin's hooks.json with no first-party gate. `rewakeMessage`
+  # REPLACES the model-facing `Stop hook blocking error from command "…":` prefix;
+  # `rewakeSummary` REPLACES the operator-visible row (default `Stop hook feedback`). Only
+  # the stdout-JSON form of rewakeSummary is first-party gated. The marker string was right
+  # while the reason next to it was dead — which is why these two are pinned HERE: the
+  # product doorbell now DEPENDS on both (pi/meta-bridge/.../hooks/hooks.json), the fields
+  # are @internal, and if either disappears the surface silently reverts to
+  # `Stop hook feedback` + "blocking error" with no other gate to notice.
+  rewakeMessage                   # model-facing prefix replacement (product depends on it)
+  rewakeSummary                   # operator-facing row replacement (product depends on it)
   hookSpecificOutput              # the watchPaths emit envelope
   CwdChanged                      # the 2nd of the 3 watch-arming events
 )

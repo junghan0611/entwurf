@@ -52,10 +52,20 @@ export type MetaMailboxPlan = Extract<ExecutionPlan, { transport: "meta-mailbox"
 export type SendFinalOutcome = "sent" | "fallback-sent" | "rejected" | "failed";
 
 /** What a single RPC / mailbox enqueue reports. `success:false` is an in-band reject
- * (the receiver answered and refused) — distinct from a thrown connect error. */
+ * (the receiver answered and refused) — distinct from a thrown connect error.
+ *
+ * `messagePath` is the SEND-side receipt (#98 R) and is OPTIONAL because only the
+ * mailbox rail has one: an enqueue writes a file, so there is a per-message artifact
+ * to name. A control-socket RPC hands the body to a live receiver and produces no
+ * file, so it leaves this undefined rather than inventing one. It carries the ENQUEUED
+ * path and NOTHING about reading: `lastReadAt` at enqueue time is the PREVIOUS
+ * message's read stamp, so surfacing it here would read as "my message was read" —
+ * the exact misreading #98 opened on. The per-message read receipt is the `.read`
+ * suffix on this very file, never a state.json slot. */
 export interface RpcSendResult {
 	success: boolean;
 	error?: string;
+	messagePath?: string;
 }
 
 /** The same-lock one-shot re-resolve result (5c-2b implements the resolver; 5c-2a

@@ -2532,9 +2532,17 @@ export interface ReadMetaInboxResult {
  * Drain a garden citizen's mailbox: read every unread message (a fresh `.msg`
  * read before its doorbell, or a doorbell-rung `.msg.delivered`), archive each to
  * `*.read` so a re-read never double-returns, and — only if at least one message
- * was read — stamp `lastReadAt` (NOT `lastDeliveredAt`: the doorbell owns
- * delivery-time, see the stamp-site note below). An empty inbox mutates nothing:
- * reading nothing is not a receipt.
+ * was read — stamp `lastReadAt`. `lastDeliveredAt` stays untouched (see the
+ * stamp-site note below). An empty inbox mutates nothing: reading nothing is not
+ * a receipt.
+ *
+ * WHERE THE PER-MESSAGE TRUTH LIVES (#98 5a, corrected 2026-09-03). The FILE SUFFIX
+ * is the per-message receipt: `.msg` = enqueued, `.msg.delivered` = the doorbell
+ * rang for it, `.msg.delivered.read` = this function handed it to the reader.
+ * `state.json` is NOT that — its three slots are GARDEN-WIDE and overwritten, so
+ * `lastReadAt` says "this citizen last read something at T", never "message X was
+ * read". A sender that quotes `lastReadAt` back as the fate of the letter it just
+ * queued is quoting the PREVIOUS letter's read. That misreading is what opened #98.
  */
 export function readMetaInbox(opts: ReadMetaInboxOptions): ReadMetaInboxResult {
 	const now = opts.now ?? new Date();
@@ -2560,10 +2568,18 @@ export function readMetaInbox(opts: ReadMetaInboxOptions): ReadMetaInboxResult {
 		return { gardenId: citizen.gardenId, messages, readAt: null, recordPath: recordFile };
 	}
 
-	// 3D-4 the cut: the read receipt lives SOLELY in the mailbox state store now.
-	// Stamp lastReadAt — the one receipt this layer stamps honestly (it KNOWS the body
-	// reached the reader). lastDeliveredAt is the doorbell's to own; stamping it here
-	// would report read-time as delivery-time, so it is left as the doorbell left it.
+	// 3D-4 the cut: the garden-wide read receipt lives SOLELY in the mailbox state store
+	// now. Stamp lastReadAt — the one slot this layer stamps honestly (it KNOWS a body
+	// reached the reader at this instant). lastDeliveredAt is left alone, and #98 5a
+	// corrects WHY: the old comment said "the doorbell owns it", but the shipped
+	// doorbell.sh (54 lines) writes NOTHING to state.json — measured, zero state writes.
+	// So `lastDeliveredAt` is a RESERVED SLOT nobody stamps, permanently null on all
+	// ~180 on-disk states, while 900+ files carry a `.delivered` suffix. Stamping it
+	// here would still be wrong (it would report read-time as delivery-time), so it
+	// stays null — but do not read "the doorbell will fill it in" into that. The
+	// per-message delivery fact is the `.delivered` SUFFIX. The field is left in place
+	// deliberately: removing it is a migration (the parser rejects unknown keys AND a
+	// bumped schemaVersion, and every stamp re-parses first), tracked as #98 5b.
 	// The state stamp returns the updated state, whose lastReadAt IS the D7 read-receipt.
 	// Inside the messages.length>0 branch by construction — an empty inbox already
 	// early-returned (no .read archive, state untouched), so "read nothing" is no
@@ -2603,6 +2619,15 @@ export const MAILBOX_RECEIPT_SCHEMA_VERSION = 1 as const;
  * The per-citizen mailbox receipt state. Holds exactly the three delivery
  * timestamps that move out of `record.delivery` (wakeMode/deliveryLevel are
  * capability, deliberately absent). Body is SSOT; the on-disk path is derived.
+ *
+ * SCOPE (#98 5a): these are GARDEN-WIDE "last activity" slots, single-valued and
+ * overwritten — NOT per-message receipts. Per message, the receipt is the file
+ * suffix in the same directory (`.msg` → `.msg.delivered` → `.msg.delivered.read`).
+ * `lastEnqueuedAt`/`lastReadAt` are stamped by `enqueueMetaMessage`/`readMetaInbox`.
+ * `lastDeliveredAt` is stamped by NOBODY: the doorbell does not write state.json, so
+ * it is a reserved slot that is null everywhere. Kept rather than removed because the
+ * parser is doubly strict (exact schemaVersion + no unknown keys) and every stamp
+ * re-parses, so dropping it is a migration over the existing on-disk v1 files (#98 5b).
  */
 export interface MailboxReceiptState {
 	schemaVersion: typeof MAILBOX_RECEIPT_SCHEMA_VERSION;

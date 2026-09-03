@@ -468,11 +468,18 @@ if diff:
 # template equality above, not from a loose per-field test. It says the wake wiring is
 # DECLARED as shipped; it does NOT say exit-2 → wake holds at runtime (#51 B2).
 bell = leaf("FileChanged")
+# The two rewake strings are REPORTED, not optional: this line's whole job is to say what
+# the wake wiring DECLARES, and since #98 the declaration includes what the operator and the
+# model actually see when a letter lands. Omitting them would report a contract the manifest
+# no longer fully states — the exact class of half-truth #98 exists to remove. They are safe
+# to index: the exact-template equality above already ran, so a manifest missing either field
+# never reaches here.
 doorbell = (
     f"ok FileChanged doorbell matches the shipped static contract exactly "
     f"(command={bell['command']}, args={bell['args']}, asyncRewake={bell['asyncRewake']}, "
-    f"timeout={bell['timeout']}); runtime exit-2 wake was observed at Claude 2.1.217 (#51 B2) but "
-    "is not re-proven by this static read"
+    f"timeout={bell['timeout']}, rewakeSummary={bell['rewakeSummary']!r}, "
+    f"rewakeMessage={bell['rewakeMessage']!r}); runtime exit-2 wake was observed at Claude "
+    "2.1.217 (#51 B2) but is not re-proven by this static read"
 )
 
 # Resolve the argv EXACTLY the way Claude does for an exec form: substitute the
@@ -563,7 +570,15 @@ PY
     bad "statusline bin not on PATH: $EXPECTED_STATUSLINE"
   fi
   SAMPLE_STATUSLINE_OUT="$(printf '%s' '{"session_id":"doctor-no-record","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-sonnet-5"},"context_window":{"context_window_size":200000,"used_percentage":1,"current_usage":{"input_tokens":1}}}' | "$EXPECTED_STATUSLINE" 2>/dev/null || true)"
-  if [ "$(printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | wc -l | tr -d ' ')" = "2" ] && printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '1p' | grep -q 'tmp' && printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '2p' | grep -q '🪛' && printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '2p' | grep -q ' cc | s'; then ok "statusline synthetic execution emits two rows (work context + identity)"; else bad "statusline synthetic execution failed or omitted two-row work/identity marker"; fi
+  # The identity row may carry the #98 B unread badge between `cc` and the model letter:
+  # ` ✉N` when mail is waiting, nothing when the mailbox is empty, ` ✉?` when the count
+  # could not be taken. All three are healthy renders, so the shape test admits any of them.
+  if [ "$(printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | wc -l | tr -d ' ')" = "2" ] && printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '1p' | grep -q 'tmp' && printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '2p' | grep -q '🪛' && printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '2p' | grep -qE ' cc( ✉([0-9]+|\?))? \| s'; then ok "statusline synthetic execution emits two rows (work context + identity)"; else bad "statusline synthetic execution failed or omitted two-row work/identity marker"; fi
+  # The synthetic feeds a session_id with no meta-record, so the garden id does not
+  # resolve and there is no mailbox to count. `✉?` is the required answer: a statusline
+  # that drew nothing there would be claiming "no mail" about a mailbox it never opened —
+  # the exact silence #98 was opened to remove.
+  if printf '%s\n' "$SAMPLE_STATUSLINE_OUT" | sed -n '2p' | grep -q '✉?'; then ok "statusline badge distinguishes 'could not count' (✉?) from zero on the no-record synthetic"; else bad "statusline badge omitted ✉? for the no-record synthetic (a false zero would be indistinguishable from an empty mailbox)"; fi
 else
   bad "cannot validate statusline without python3"
 fi

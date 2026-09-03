@@ -10,7 +10,11 @@
  *    (enqueue/read no longer touch the record — invariant ⑤);
  *  - enqueue stamps state.lastEnqueuedAt, read stamps state.lastReadAt, and the
  *    enqueue receipt survives the read (field isolation on the state store);
- *  - lastDeliveredAt is never invented by read (doorbell owns delivery-time);
+ *  - lastDeliveredAt is never invented by read. #98 5a corrects why: NOBODY stamps it —
+ *    the shipped doorbell.sh writes nothing to state.json — so it is a reserved slot that
+ *    is null on every citizen. The per-message receipts are the file SUFFIXES
+ *    (`.msg` → `.msg.delivered` → `.msg.delivered.read`); state.json carries only the
+ *    garden-wide last enqueue/read. Removing the field is a migration, not this gate (#98 5b);
  *  - an empty inbox is a no-op on BOTH the record (untouched) and the state
  *    (state.json never created) — invariant ⑥;
  *  - a state-store drift makes the read throw fail-loud (partial failure surfaces).
@@ -95,7 +99,10 @@ try {
 	const stateAfterRead = readMailboxReceiptState({ gardenId: gidA, mailboxDir });
 	ok("read: state.lastReadAt stamped", stateAfterRead.lastReadAt === RD_ISO);
 	ok("read: enqueue receipt SURVIVES the read (field isolation)", stateAfterRead.lastEnqueuedAt === ENQ_ISO);
-	ok("read: lastDeliveredAt never invented by read (doorbell owns it)", stateAfterRead.lastDeliveredAt === null);
+	ok(
+		"read: lastDeliveredAt never invented by read (reserved slot, no writer — see header)",
+		stateAfterRead.lastDeliveredAt === null,
+	);
 
 	// --- empty inbox: no-op on BOTH record and state --------------------------
 	const gidB = seed("n-state-b");

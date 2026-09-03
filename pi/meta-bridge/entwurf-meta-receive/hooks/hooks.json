@@ -45,7 +45,9 @@
 						"command": "${CLAUDE_PLUGIN_ROOT}/scripts/hook-launch.sh",
 						"args": ["${CLAUDE_PLUGIN_ROOT}/scripts/doorbell.sh"],
 						"asyncRewake": true,
-						"timeout": 20
+						"timeout": 20,
+						"rewakeSummary": "entwurf inbox: sibling mail arrived",
+						"rewakeMessage": "entwurf mailbox notice:"
 					}
 				]
 			}

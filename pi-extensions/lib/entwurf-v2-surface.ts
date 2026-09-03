@@ -19,6 +19,7 @@
  *     surface never needs to name the `EntwurfV2RunResult` union (it only sees `{text,isError}`).
  */
 
+import { basename } from "node:path";
 import type { SenderEnvelope } from "./entwurf-control-rpc.ts";
 import type { DispatchInput, EntwurfV2Mode } from "./entwurf-v2-decider.ts";
 import { makeProductionEntwurfV2Deps, type ProductionEntwurfV2Opts } from "./entwurf-v2-production.ts";
@@ -156,8 +157,17 @@ export function renderEntwurfV2Result(result: EntwurfV2RunResult): EntwurfV2Surf
 					isError: false,
 				};
 			}
-			// meta-mailbox
-			return { text: "entwurf_v2 meta-mailbox → enqueued", isError: false };
+			// meta-mailbox. #98 R: name the FILE that was enqueued, so the sender's transcript
+			// carries a per-message identifier instead of a bare literal. Only the basename —
+			// the directory is `<meta-mailbox>/<target garden id>/`, which the caller already
+			// typed. Deliberately NOT a read stamp: at enqueue time `lastReadAt` belongs to the
+			// PREVIOUS message, so printing it would claim a read that has not happened.
+			// A dep that omits the receipt falls back to the old literal rather than printing
+			// "undefined" — the delivery still happened.
+			return {
+				text: `entwurf_v2 meta-mailbox → enqueued${o.messagePath ? ` (${basename(o.messagePath)})` : ""}`,
+				isError: false,
+			};
 		}
 		case "execution-failed": {
 			if (result.releaseFailed && result.finalizedOutcome) {

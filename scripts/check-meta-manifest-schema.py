@@ -114,7 +114,25 @@ if hooks is not None:
                 # argv. The marketplace/plugin manifests below stay minimal: the closed-
                 # schema lesson that produced this gate was about a DECORATIVE key
                 # (`description`), and that lesson is untouched.
-                subset(f"hooks.{event}[{j}].hooks[{k}]", h, {"type", "command", "args", "asyncRewake", "timeout"})
+                #
+                # rewakeSummary/rewakeMessage (#98, 2026-09-03) join the same category:
+                # load-bearing, not decorative. They are the ONLY way the doorbell names
+                # itself — without `rewakeSummary` the operator's row is the engine default
+                # `Stop hook feedback` (no sender, no count, no garden id), and without
+                # `rewakeMessage` the model wakes to `Stop hook blocking error from command
+                # "FileChanged":`, i.e. an arriving letter announced as an error. Both were
+                # measured to load from a local plugin's hooks.json with no first-party gate
+                # on Claude 2.1.236/2.1.258/2.1.259, and `claude plugin validate` accepts
+                # them (install-meta-bridge runs it). On a host old enough not to know them,
+                # the #51 measurement above applies unchanged: the key is accepted and the
+                # value silently dropped, so the surface degrades to today's default rather
+                # than failing the install. Their VALUES are linted (single line, non-blank,
+                # length) by check-hook-launch-topology; this gate pins only the keyset.
+                subset(
+                    f"hooks.{event}[{j}].hooks[{k}]",
+                    h,
+                    {"type", "command", "args", "asyncRewake", "timeout", "rewakeSummary", "rewakeMessage"},
+                )
 
     # Every hook launches through the shipped launcher in EXEC form: `command` is
     # hook-launch.sh and the baked argv travels in `args`. No shell is on the path, so

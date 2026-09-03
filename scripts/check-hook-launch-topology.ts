@@ -58,7 +58,20 @@ const PLUGIN_SRC = path.join(REPO_DIR, "pi", "meta-bridge", "entwurf-meta-receiv
 const LAUNCHER = path.join(PLUGIN_SRC, "scripts", "hook-launch.sh");
 const PLACEHOLDER = "${CLAUDE_PLUGIN_ROOT}";
 
-type Leaf = { type?: string; command?: string; args?: string[]; asyncRewake?: boolean; timeout?: number };
+type Leaf = {
+	type?: string;
+	command?: string;
+	args?: string[];
+	asyncRewake?: boolean;
+	timeout?: number;
+	rewakeSummary?: string;
+	rewakeMessage?: string;
+};
+
+/** #98 A/A″ length ceiling for the two rewake strings. The operator row is ONE line in a
+ * terminal status area; the model prefix is glued in front of the doorbell's stderr. There
+ * is no engine cap on the config path (see the lint block below), so this is ours. */
+const REWAKE_MAX_LEN = 80;
 const manifest = JSON.parse(readFileSync(path.join(PLUGIN_SRC, "hooks", "hooks.json"), "utf8")) as {
 	hooks: Record<string, Array<{ matcher?: string; hooks: Leaf[] }>>;
 };
@@ -97,6 +110,62 @@ for (const event of OWNER_EVENTS) {
 	// bound so a future edit cannot quietly drop the wake path.
 	ok("FileChanged: asyncRewake stays declared", bell.asyncRewake === true);
 	ok("FileChanged: timeout stays declared", typeof bell.timeout === "number" && bell.timeout > 0);
+}
+
+// ── 1b. #98 A/A″: the two rewake strings, and the lint the engine does NOT do ─
+// WHY A LINT AT ALL. Measured on Claude 2.1.236/2.1.258/2.1.259 (#98 Phase 1): the
+// stdout-JSON form of `rewakeSummary` is sanitised by the engine
+// (`.trim().replace(/\s+/g," ").slice(0,cap)`), but the hooks.json CONFIG form is not —
+// it reaches the operator's row verbatim, guarded only by the schema's `min(1)`. Two
+// concrete failures that guard cannot see:
+//   - a value containing a newline breaks the one-row status area;
+//   - a whitespace-only value passes `min(1)` and draws a BLANK row, which is worse than
+//     the default `Stop hook feedback` because it looks like nothing arrived.
+// (A third, `<summary>` missing entirely → the whole notification is hidden, is covered
+// by asserting the field is present and non-empty at all.)
+{
+	const bell = leafOf("FileChanged");
+	// A″ — the model-facing prefix. It REPLACES `Stop hook blocking error from command "…":`,
+	// so without it every arriving letter is named an error in the transcript.
+	ok(
+		"FileChanged: rewakeMessage is declared (model wakes to mail, not to a 'blocking error')",
+		typeof bell.rewakeMessage === "string",
+	);
+	// A — the operator-facing row. Static by nature: the renderer draws this ONE string, so
+	// it cannot carry the unread count (the statusline badge does that half).
+	ok(
+		"FileChanged: rewakeSummary is declared (operator row is not 'Stop hook feedback')",
+		typeof bell.rewakeSummary === "string",
+	);
+	for (const field of ["rewakeSummary", "rewakeMessage"] as const) {
+		const value = bell[field];
+		ok(
+			`FileChanged: ${field} is a single line (a newline would break the one-row status area)`,
+			typeof value === "string" && !/[\r\n]/.test(value),
+		);
+		ok(
+			`FileChanged: ${field} is not whitespace-only (min(1) passes a blank row; we must not)`,
+			typeof value === "string" && value.trim().length > 0,
+		);
+		ok(
+			`FileChanged: ${field} is <= ${REWAKE_MAX_LEN} chars (unsanitised config path, no engine cap)`,
+			typeof value === "string" && value.length <= REWAKE_MAX_LEN,
+		);
+	}
+	// Prefix hygiene (#98 (b)): the model body is `rewakeMessage + " " + stderr`, and the
+	// doorbell's stderr ALREADY opens with `[entwurf inbox]`. A bracketed prefix here would
+	// render `[entwurf …] [entwurf inbox] …` — one tag per line, and the stderr owns it.
+	ok(
+		"FileChanged: rewakeMessage carries no bracket tag (doorbell stderr already opens with [entwurf inbox])",
+		typeof bell.rewakeMessage === "string" && !bell.rewakeMessage.includes("["),
+	);
+	// The doorbell's own opening tag, read from the shipped script rather than assumed —
+	// if someone changes the stderr tag, the no-duplicate-prefix rule above must be re-read.
+	const doorbellSrc = readFileSync(path.join(PLUGIN_SRC, "scripts", "doorbell.sh"), "utf8");
+	ok(
+		"doorbell stderr still opens with the [entwurf inbox] tag the prefix rule assumes",
+		doorbellSrc.includes('echo "[entwurf inbox]'),
+	);
 }
 
 // ── 2. no shell-form regression anywhere in the shipped manifest ─────────────

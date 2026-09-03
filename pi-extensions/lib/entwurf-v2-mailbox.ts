@@ -50,6 +50,13 @@ export interface MetaMailboxSendDeps {
  * legacy mailbox path used). `plan.wantsReply` is threaded into the body — v2 carries the
  * caller's intent, a DELIBERATE divergence from the legacy hard-coded `false`. An enqueue
  * throw PROPAGATES; it is never converted to `{success:false}`.
+ *
+ * #98 R — the SEND receipt: `enqueueMetaMessage` already returns the exact `.msg` path it
+ * wrote ("Returns the paths so a sender can show exactly what was queued"), and this body
+ * used to flatten it to `{success:true}`. It now carries that ONE field through. Nothing
+ * else from the enqueue result crosses: no timestamps, and specifically no `lastReadAt` —
+ * see the `RpcSendResult` note. The path is reported verbatim from the enqueue result, not
+ * re-derived from the plan, so it can never disagree with the file that was actually written.
  */
 export function executeMetaMailboxSend(
 	plan: MetaMailboxPlan,
@@ -57,13 +64,13 @@ export function executeMetaMailboxSend(
 	deps: MetaMailboxSendDeps,
 ): RpcSendResult {
 	const body = sender ? formatMetaMailboxBody(sender, plan.message, plan.wantsReply) : plan.message;
-	deps.enqueue({
+	const enqueued = deps.enqueue({
 		gardenId: plan.targetGardenId,
 		body,
 		sessionsDir: plan.sessionsDir,
 		mailboxDir: plan.mailboxDir,
 	});
-	return { success: true };
+	return { success: true, messagePath: enqueued.messagePath };
 }
 
 /**

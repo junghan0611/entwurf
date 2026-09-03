@@ -803,17 +803,79 @@ valid_record "20260606T000001-bbbbbb" "native-b" > "$STORE/20260606T000001-bbbbb
 STATUS_INPUT_MATCH='{"session_id":"native-a","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-sonnet-5"},"context_window":{"context_window_size":200000,"used_percentage":2,"current_usage":{"input_tokens":10}}}'
 STATUS_INPUT_MISS='{"session_id":"native-missing","workspace":{"current_dir":"/tmp"},"model":{"id":"claude-opus-5"}}'
 STATUS_INPUT_READY='{"workspace":{"current_dir":"/tmp"},"model":{"id":"claude-haiku-4-5"}}'
-STATUS_OUT_MATCH="$(printf '%s' "$STATUS_INPUT_MATCH" | ENTWURF_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+# Pin the mailbox root on EVERY statusline render below, not just the badge cells: the
+# #98 B badge reads it, so an unpinned call would let the operator's real ~/.pi mailbox
+# decide whether these rows carry an envelope.
+MBX="$TMP/mbx"; mkdir -p "$MBX/20260606T000000-aaaaaa"
+STATUS_OUT_MATCH="$(printf '%s' "$STATUS_INPUT_MATCH" | ENTWURF_META_SESSIONS_DIR="$STORE" ENTWURF_META_MAILBOX_DIR="$MBX" "$REPO/scripts/meta-bridge-statusline.sh")"
 if [ "$(printf '%s\n' "$STATUS_OUT_MATCH" | wc -l | tr -d ' ')" = "2" ]; then ok "statusline renders exactly two rows"; else bad "statusline should render two rows: $STATUS_OUT_MATCH"; fi
 if printf '%s\n' "$STATUS_OUT_MATCH" | sed -n '1p' | grep -q 'tmp' && printf '%s\n' "$STATUS_OUT_MATCH" | sed -n '2p' | grep -q '🪛 20260606T000000-aaaaaa cc | s'; then ok "statusline keeps row-1 work context and maps native session_id to row-2 garden-id"; else bad "statusline did not show expected two-row content for native-a: $STATUS_OUT_MATCH"; fi
-STATUS_OUT_MISS="$(printf '%s' "$STATUS_INPUT_MISS" | ENTWURF_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+STATUS_OUT_MISS="$(printf '%s' "$STATUS_INPUT_MISS" | ENTWURF_META_SESSIONS_DIR="$STORE" ENTWURF_META_MAILBOX_DIR="$MBX" "$REPO/scripts/meta-bridge-statusline.sh")"
 if printf '%s' "$STATUS_OUT_MISS" | grep -q '🪛 ? cc'; then ok "statusline no-record fallback is ?"; else bad "statusline no-record fallback wrong: $STATUS_OUT_MISS"; fi
-STATUS_OUT_READY="$(printf '%s' "$STATUS_INPUT_READY" | ENTWURF_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+STATUS_OUT_READY="$(printf '%s' "$STATUS_INPUT_READY" | ENTWURF_META_SESSIONS_DIR="$STORE" ENTWURF_META_MAILBOX_DIR="$MBX" "$REPO/scripts/meta-bridge-statusline.sh")"
 if printf '%s' "$STATUS_OUT_READY" | grep -q '🪛 ready cc'; then ok "statusline no-session_id fallback is ready"; else bad "statusline ready fallback wrong: $STATUS_OUT_READY"; fi
 cp "$STORE/20260606T000000-aaaaaa.meta.json" "$STORE/20260606T000003-dddddd.meta.json"
-STATUS_OUT_DUP="$(printf '%s' "$STATUS_INPUT_MATCH" | ENTWURF_META_SESSIONS_DIR="$STORE" "$REPO/scripts/meta-bridge-statusline.sh")"
+STATUS_OUT_DUP="$(printf '%s' "$STATUS_INPUT_MATCH" | ENTWURF_META_SESSIONS_DIR="$STORE" ENTWURF_META_MAILBOX_DIR="$MBX" "$REPO/scripts/meta-bridge-statusline.sh")"
 if printf '%s' "$STATUS_OUT_DUP" | grep -q '🪛 ! cc'; then ok "statusline duplicate nativeSessionId fallback is !"; else bad "statusline duplicate fallback wrong: $STATUS_OUT_DUP"; fi
 rm "$STORE/20260606T000003-dddddd.meta.json"
+
+# --- #98 B: the unread badge -------------------------------------------------
+# Three states that must LOOK different: N letters, none, and "could not count".
+# The last one is the whole reason the badge exists — an unread letter that the
+# operator never saw is exactly the failure #98 opened on, and a statusline that
+# renders a confident 0 when its read failed reproduces it one layer down.
+badge_line() { printf '%s' "$1" | ENTWURF_META_SESSIONS_DIR="$STORE" ENTWURF_META_MAILBOX_DIR="$MBX" "$REPO/scripts/meta-bridge-statusline.sh" | sed -n '2p'; }
+
+# empty mailbox -> NO badge. Silence is the quiet common case; the badge is for mail.
+B_EMPTY="$(badge_line "$STATUS_INPUT_MATCH")"
+if ! printf '%s' "$B_EMPTY" | grep -q '✉'; then ok "badge: empty mailbox draws no envelope"; else bad "badge: empty mailbox drew one: $B_EMPTY"; fi
+
+# The counted set is EXACTLY readMetaInbox's unread union: *.msg + *.msg.delivered.
+# The three decoys below must all be excluded: a .read (already drained — a badge that
+# counted it would never clear), the signal file, and state.json.
+: > "$MBX/20260606T000000-aaaaaa/one.msg"
+: > "$MBX/20260606T000000-aaaaaa/two.msg.delivered"
+: > "$MBX/20260606T000000-aaaaaa/three.msg.delivered.read"
+: > "$MBX/20260606T000000-aaaaaa/inbox.signal"
+: > "$MBX/20260606T000000-aaaaaa/state.json"
+B_TWO="$(badge_line "$STATUS_INPUT_MATCH")"
+if printf '%s' "$B_TWO" | grep -q '✉2'; then ok "badge: .msg + .msg.delivered counted, .read/signal/state excluded (✉2)"; else bad "badge: expected ✉2, got: $B_TWO"; fi
+
+# The drain clears it on the NEXT render — the property acceptance criterion 4 names.
+mv "$MBX/20260606T000000-aaaaaa/one.msg" "$MBX/20260606T000000-aaaaaa/one.msg.read"
+mv "$MBX/20260606T000000-aaaaaa/two.msg.delivered" "$MBX/20260606T000000-aaaaaa/two.msg.delivered.read"
+B_DRAINED="$(badge_line "$STATUS_INPUT_MATCH")"
+if ! printf '%s' "$B_DRAINED" | grep -q '✉'; then ok "badge: clears after the read archives both bodies to .read"; else bad "badge: stayed after drain: $B_DRAINED"; fi
+
+# Could-not-count #1: no garden id resolved, so there is no mailbox to look in. The
+# statusline must NOT quietly claim zero for a session it could not place.
+B_NOGARDEN="$(badge_line "$STATUS_INPUT_MISS")"
+if printf '%s' "$B_NOGARDEN" | grep -q '✉?'; then ok "badge: unresolved garden id renders ✉? (never a false zero)"; else bad "badge: unresolved garden id should be ✉?, got: $B_NOGARDEN"; fi
+
+# Could-not-count #2: the mailbox dir exists but cannot be read. Same rule.
+chmod 000 "$MBX/20260606T000000-aaaaaa"
+B_UNREADABLE="$(badge_line "$STATUS_INPUT_MATCH")"
+chmod 755 "$MBX/20260606T000000-aaaaaa"
+if printf '%s' "$B_UNREADABLE" | grep -q '✉?'; then ok "badge: unreadable mailbox renders ✉? (measurement failure, not zero)"; else bad "badge: unreadable mailbox should be ✉?, got: $B_UNREADABLE"; fi
+
+# Could-not-count #3: no python3 at all. That degrade path predates the badge and used
+# to print a bare `🪛 ? cc`; without the ✉? it would read as "counted, none".
+# The stand-in PATH carries `cat` and nothing else: the script reads its stdin with `cat`
+# BEFORE it tests for python3, so a truly empty PATH would kill it under `set -e` and the
+# cell would pass for the wrong reason.
+mkdir -p "$TMP/emptybin"
+ln -sf "$(command -v cat)" "$TMP/emptybin/cat"
+if [ -n "$(command -v python3 2>/dev/null)" ] && PATH="$TMP/emptybin" command -v python3 >/dev/null 2>&1; then bad "no-python3 fixture is not actually python3-less"; else ok "no-python3 fixture really hides python3"; fi
+# `$BASH` (an absolute path) rather than the name `bash`, so the interpreter is reachable
+# without putting a second binary on the stand-in PATH the fixture is trying to empty.
+B_NOPY="$(printf '%s' "$STATUS_INPUT_MATCH" | PATH="$TMP/emptybin" ENTWURF_META_SESSIONS_DIR="$STORE" ENTWURF_META_MAILBOX_DIR="$MBX" "$BASH" "$REPO/scripts/meta-bridge-statusline.sh" | sed -n '2p')"
+if printf '%s' "$B_NOPY" | grep -q '✉?'; then ok "badge: python3-less degrade line still says ✉? (not a silent zero)"; else bad "badge: python3-less degrade should carry ✉?, got: $B_NOPY"; fi
+
+# A garden id that never renders a real mailbox: the pre-record "ready" state. Nothing
+# has been addressed to this session yet, so an empty badge is TRUE, not a guess.
+B_READY="$(badge_line "$STATUS_INPUT_READY")"
+if ! printf '%s' "$B_READY" | grep -q '✉'; then ok "badge: pre-record 'ready' draws no envelope (nothing addressed yet)"; else bad "badge: ready state drew an envelope: $B_READY"; fi
+rm -rf "$MBX"
 
 if node --experimental-strip-types "$STORE_DOCTOR" "$STORE" >/dev/null; then ok "store doctor accepts valid records"; else bad "store doctor rejected valid records"; fi
 cp "$STORE/20260606T000000-aaaaaa.meta.json" "$STORE/20260606T000002-cccccc.meta.json"

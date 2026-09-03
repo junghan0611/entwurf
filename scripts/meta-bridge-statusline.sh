@@ -7,6 +7,11 @@
 # garden id is looked up by scanning meta-record BODIES via the native Claude
 # `session_id`. No cache, no filename authority, no DB.
 #
+# It also draws the #98 B unread badge: `✉N` when the garden's mailbox holds N
+# messages the read tool would still return, nothing when it holds none, and `✉?` when
+# the count could NOT be taken. That third state is the point — a statusline that silently
+# renders 0 on a broken read would say "no mail" about a mailbox it never looked in.
+#
 # Runtime dependency: python3 (already gated by install-meta-bridge/doctor).
 set -euo pipefail
 
@@ -18,7 +23,9 @@ input=$(cat)
 # wrote. doctor/smoke are the fail-LOUD surfaces; this surface stays silent.
 if ! command -v python3 >/dev/null 2>&1; then
   device="$(cat "$HOME/.current-device" 2>/dev/null || echo UNKNOWN)"
-  printf '%s ?\n🪛 ? cc' "$device"
+  # ✉? not a missing badge: with no python3 the unread count was not TAKEN. Drawing
+  # nothing here would be indistinguishable from "no mail" (#98 B).
+  printf '%s ?\n🪛 ? cc ✉?' "$device"
   exit 0
 fi
 STATUSLINE_INPUT="$input" python3 - <<'PY' || true
@@ -166,6 +173,60 @@ def garden_lookup(native_session_id: str) -> str:
     return "?"
 
 
+def meta_mailbox_dir() -> Path:
+    """Mirror of `defaultMetaMailboxDir()` in meta-session.ts, including the env
+    precedence. Kept as a mirror rather than a shell-out: the statusline runs on every
+    render (measured 4-10 times per doorbell rewake turn, #98 Phase 1 P2a), so it must not
+    spawn a node process to count files."""
+    override = os.environ.get("ENTWURF_META_MAILBOX_DIR")
+    if override:
+        return Path(override).expanduser().resolve()
+    agent = os.environ.get("PI_CODING_AGENT_DIR")
+    if agent:
+        return Path(agent).expanduser().resolve() / "meta-mailbox"
+    return Path.home() / ".pi" / "agent" / "meta-mailbox"
+
+
+def unread_badge(garden: str) -> str:
+    """`✉N` / `""` / `✉?` — the #98 B badge.
+
+    The counted set is EXACTLY what `entwurf_inbox_read` would return: `*.msg` (arrived,
+    doorbell has not rung yet) PLUS `*.msg.delivered` (doorbell rang, model has not read).
+    `readMetaInbox` uses that same union (meta-session.ts), and `.read` is excluded by
+    both — so the badge clears on the read, on the statusline's next execution.
+
+    Counting only `.msg.delivered` would under-report a letter that landed between two
+    doorbells; counting `.read` too would never clear.
+
+    Three distinct returns, deliberately:
+      - `""`     the mailbox was read and is empty. Silence is the quiet common case.
+      - `✉N`  N letters the read tool will hand back.
+      - `✉?`  the count could not be taken (unusable garden id, unreadable dir).
+                 NEVER collapsed into `""` — a false zero is the failure this whole issue
+                 is about.
+
+    A garden id that is `?`/`!`/`ready` means the lookup itself did not land, so there is
+    no mailbox to count and no claim to make: `✉?`, not silence.
+    """
+    if not garden or garden in ("?", "!"):
+        return "✉?"
+    if garden == "ready":
+        # No session_id yet (a fresh render before the hook minted a record). Nothing has
+        # been addressed to this session, so an empty badge is TRUE, not a guess.
+        return ""
+    if "/" in garden or garden.startswith("."):
+        return "✉?"
+    try:
+        box = meta_mailbox_dir() / garden
+        if not box.is_dir():
+            # A citizen with no mailbox dir has received nothing. Honest empty.
+            return ""
+        n = sum(1 for f in box.iterdir() if f.name.endswith(".msg") or f.name.endswith(".msg.delivered"))
+    except Exception:
+        return "✉?"
+    return f"✉{n}" if n > 0 else ""
+
+
 def main() -> None:
     data = load_input()
     raw_cwd = dig(data, "workspace", "current_dir") or data.get("cwd") or "?"
@@ -183,7 +244,9 @@ def main() -> None:
         f"{CYAN_BOLD}{cwd_tail}{RESET}"
         f"{DIM}{git_branch(str(raw_cwd))}{RESET}"
     )
-    line2 = f"{DIM}🪛 {garden} cc | {model}{vterm}{context_info(data)}{RESET}"
+    badge = unread_badge(garden)
+    badge_text = f" {badge}" if badge else ""
+    line2 = f"{DIM}🪛 {garden} cc{badge_text} | {model}{vterm}{context_info(data)}{RESET}"
     sys.stdout.write(f"{line1}\n{line2}")
 
 
