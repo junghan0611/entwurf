@@ -45,7 +45,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 - **이 레인이 싣는 것:**
   - #94 — `autoCompactEnabled` / `env.DISABLE_AUTOCOMPACT`가 managed → retired로 이동
     (`3bb0f9e`, `2f53a97`). CHANGELOG에는 옛 env 키가 2.1.259에서 **no-op였다**는 정정도 함께 간다.
-  - #98 — Phase 1 랩 영수증(`6306f93`), Phase 2 제품. 자세한 것은 CARRIED의 #98 항목.
+  - #98 — Phase 1 랩 영수증(`6306f93`), Phase 2 제품(`c10b904`). 자세한 것은 CARRIED의 #98 항목.
 - **Upgrade note (CHANGELOG에 반드시 들어갈 것):** pull 뒤 **`install-meta-bridge` 1회**.
   플러그인 템플릿에 `rewakeSummary`/`rewakeMessage`가 생겨서, 안 하면 doctor가
   `installed manifest DIFFERS … Re-run ./run.sh install-meta-bridge`로 빨개진다. 열린 Claude 세션은
@@ -63,7 +63,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 <details><summary>0.17.1의 원래 NOW (C1b 원인 닫힘 — 태그·GH 릴리즈 완료, npm 미발행)</summary>
 
-# NOW — 0.17.1: C1b 원인을 닫고 npm까지
+## Archived NOW — 0.17.1: C1b 원인을 닫고 npm까지
 
 - **Stem:** 0.17.0은 태그까지 갔지만 세 번의 재컷이 `cut: BLOCKED`였고 npm에 오르지 않았다.
   0.17.1은 그 BLOCKED의 원인을 **측정으로 닫고** 처음으로 0.17선을 레지스트리에 올린다.
@@ -154,7 +154,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   사이에 만료될 때 bound가 약한 floor가 된다는 한계뿐이다(`backend.ts:1286-1288`). 계약은 산문이 아니라
   `scripts/mutants/acp-usage-accounting.json` 12뮤턴트가 지킨다. **agent-config 쪽 두 줄은 아직 고아다** —
   기본 pi 푸터로 복귀 금지, 캐리어 착지 시 `nocache` 가드 필요. 항구적 자리는 `glg-footer.ts` 헤더 주석.
-- **컴팩션 소유권 반환 — #94 구현 완료, 커밋 대기.** `autoCompactEnabled` / `env.DISABLE_AUTOCOMPACT`가
+- **컴팩션 소유권 반환 — #94, 커밋 `3bb0f9e`+`2f53a97` (푸시 전). 0.17.2에 실린다.** `autoCompactEnabled` / `env.DISABLE_AUTOCOMPACT`가
   `MANAGED_SETTINGS_SCALARS` → `RETIRED_SETTINGS_SCALARS`로 이동했다(삭제가 아니다 — 삭제하면 기존
   원장 엔트리가 고아가 되어 `uninstall()`이 오퍼레이터가 켜둔 컴팩션을 다시 끈다). thinkpad에서 실제
   마이그레이션 완료: 원장에서 두 키 소멸, settings 값은 불변(`false` / `"1"`). 게이트는
@@ -173,26 +173,19 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
   retired NOTE를 화면에 못 보여준다** — `meta-bridge-doctor.sh:121`이 `2>&1 >/dev/null`로 stdout을
   버려서, 은퇴 키에 대해 사람이 볼 수 있는 유일한 문장이 어디에도 안 뜬다. 고치면 오라클 needle이
   움직이므로 별건.
-- **#98 딜리버리 투명성 — Phase 1 랩 `6306f93`, Phase 2 제품 이 커밋 (2026-09-03). 0.17.2에 실린다.** 형제 우편이 도착하고 읽혔는데
-  사람 화면에는 `Stop hook feedback` 한 줄만 뜨던 것을 닫았다. 워킹트리에 제품 19파일(+456/-39),
-  `/tmp/p98-phase2.diff` sha256 `0abf9c1e60b7abae6a2b043be1c9b32dbd39575258d4e1dae9465dc2c4923a44`.
-  들어간 것: R(mailbox 결과에 enqueue된 `.msg` 파일명 — 이미 반환되던 `messagePath`를 5칸 배관, `lastReadAt`은
-  단언으로 금지) · A/A″(hooks.json FileChanged에 `rewakeSummary`/`rewakeMessage` + 값 lint 셀) ·
-  B(statusline 미읽음 배지 `✉N` / 무표시 / `✉?`) · 문서 부채 2건(`doorbell.sh`의 "stdout is dropped",
-  드리프트 마커의 "the field asyncRewake IGNORES" — 둘 다 거짓이었다) · D6/D7 5a 주석 정정.
-  게이트: `check:full` exit 0 (273s), `doctor-meta-bridge` PASS, 드리프트 마커 10/10.
-  라이브: `entwurf inbox: sibling mail arrived` 행 + 모델 접두사 `entwurf mailbox notice:`,
-  `Stop hook blocking error` 0건. 배지는 도어벨 없이 편지만 놓은 국면에서 `✉1` 등장 → 읽은 뒤 0.4초 만에 소멸.
-  **배포 절차(중요):** 플러그인 템플릿에 두 필드가 생겼으므로 pull 뒤 **`install-meta-bridge` 1회**가 필요하다.
-  안 하면 모든 호스트의 doctor가 `installed manifest DIFFERS … Re-run ./run.sh install-meta-bridge`로 빨개진다.
-  oracle이 첫 대상. **이미 열려 있던 Claude 세션은 옛 manifest를 캐시하므로 재시작 전까지 옛 화면이다.**
-  랩 Phase 1은 `6306f93`으로 먼저 커밋됐다 — 제품 `doorbell.sh` 주석이 랩 README의 영수증을 가리키므로
-  순서가 있다. **후속 둘:** (a) control-socket이 죽어 mailbox로 re-resolve된 `fallback-sent` 경로는
+- **#98 딜리버리 투명성 — 커밋 `6306f93`(Phase 1 랩) + `c10b904`(Phase 2 제품), 푸시 전. 0.17.2에 실린다.**
+  형제 우편이 도착하고 읽혔는데 사람 화면에는 `Stop hook feedback` 한 줄만 뜨던 것을 닫았다.
+  무엇이 왜 들어갔는지는 두 커밋 메시지와 이슈 #98이 진다 — 여기서 되풀이하지 않는다.
+  **Upgrade note (CHANGELOG 필수):** pull 뒤 **`install-meta-bridge` 1회**. 플러그인 템플릿에
+  `rewakeSummary`/`rewakeMessage`가 생겨서, 안 하면 doctor가 `installed manifest DIFFERS … Re-run
+  ./run.sh install-meta-bridge`로 빨개진다. 열린 Claude 세션은 옛 manifest를 캐시하므로 재시작
+  전까지 옛 화면이다. oracle이 첫 대상.
+  **열린 후속 둘:** (a) control-socket이 죽어 mailbox로 re-resolve된 `fallback-sent` 경로가
   `messagePath`를 버린다(`entwurf-v2-send.ts:212,221`) — 발신자에겐 같은 우편인데 파일명이 없다.
-  (b) E 관측창(`mailbox-watch.py`) 배선은 GLG 결정 — `scripts/`로 옮겨 `run.sh`에 넣거나, 랩에 둔 채 수동
-  실행. 랩 파일 커밋이 먼저다. **별건 둘:** `lastDeliveredAt` 필드 제거는 마이그레이션이고(리더가 이중으로
-  엄격 + 매 도장마다 재파싱, 온디스크 v1 180여 개), `stampMailboxReceipt`의 2-writer lost-update는
-  오늘 이미 있는 경합이다.
+  (b) P4 관측창(`mailbox-watch.py`)의 제품 승격 여부는 GLG 결정 — `scripts/`로 옮겨 `run.sh`에
+  넣거나, 랩에 둔 채 수동 실행.
+  **별건 둘:** `lastDeliveredAt` 필드 제거는 마이그레이션이고(리더가 이중으로 엄격 + 매 도장마다
+  재파싱, 온디스크 v1 180여 개), `stampMailboxReceipt`의 2-writer lost-update는 오늘 이미 있는 경합이다.
 - **0.16.1 make** — prepare는 끝났고 make는 GLG 승인 대기. 오늘 요청 없었다.
 
 # LEDGER — land 전에 정할 것
@@ -213,7 +206,7 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 - #87: https://github.com/junghan0611/entwurf/issues/87
 - #90 (claude-code model 필드, CLOSED — 측정 완료, 리더 수정만 남음): https://github.com/junghan0611/entwurf/issues/90
-- #98 (딜리버리 투명성 — Phase 1 랩 영수증 + Phase 2 제품, 둘 다 커밋 대기): https://github.com/junghan0611/entwurf/issues/98
+- #98 (딜리버리 투명성 — `6306f93` 랩 영수증 + `c10b904` 제품, 푸시 전): https://github.com/junghan0611/entwurf/issues/98
 - Admission path: `docs/adding-a-harness.md`
 - OMP operator boundary: `docs/setup-clean-host.md` §4b
 - OMP tool-surface dialect: `docs/external-mcp-host.md` OMP row

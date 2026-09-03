@@ -3,7 +3,7 @@
 observation window.
 
 WHY THIS EXISTS
-    Every rail (pi / codex / agy / Claude Code) drops the SAME artifact into
+    Mail delivered through the META-MAILBOX rail drops the SAME artifact into
     ~/.pi/agent/meta-mailbox/<garden-id>/: a `<stamp>.msg` whose body carries a
     human-shaped envelope (from / session / at / wants reply). The doorbell then
     renames it `.msg.delivered`, and `entwurf_inbox_read` archives it
@@ -11,8 +11,30 @@ WHY THIS EXISTS
     `state.json` only ever holds a garden-wide "last activity" slot, which is why
     it cannot serve as a per-message receipt.
 
-    So a single watcher on that directory renders EVERY sibling's traffic in one
-    place, with zero changes to any delivery contract. That is what this prints.
+    So a single watcher on that directory renders every mailbox-rail message in
+    one place, with zero changes to any delivery contract. That is what this
+    prints.
+
+SCOPE -- read this before believing the output is complete
+    This is NOT an all-rails window, and an earlier version of this docstring said
+    it was ("every rail (pi / codex / agy / Claude Code)", "EVERY sibling's
+    traffic"). Corrected 2026-09-03: THREE of the four rails it named do not use
+    this directory at all.
+
+      - pi              control-socket rail. LIVENESS_DOMAIN_BACKENDS == ["pi"]
+                        (pi-extensions/lib/entwurf-v2-contract.ts:116), so a live
+                        pi citizen is dispatched over its socket and NOTHING is
+                        written here.
+      - antigravity     native-push rail (NATIVE_PUSH_BACKENDS, same file:132).
+                        Direct injection into the live conversation; it has no
+                        mailbox.
+      - codex           no adapter on this host -- mailbox-undeliverable, so a
+                        send is REJECTED rather than queued.
+      - claude-code,    self-fetch backends. THESE are what this window shows.
+        copilot, omp
+
+    So: silence here means "no mailbox-rail traffic", never "no sibling traffic".
+    A pi-to-pi conversation is completely invisible to this watcher.
 
 WHY NOT inotifywait
     Issue #98 (v3, option E) specifies

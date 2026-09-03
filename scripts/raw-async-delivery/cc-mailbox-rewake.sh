@@ -5,8 +5,12 @@
 #       on exit 2, continues THAT SAME session/model (same session_id, same
 #       transcript) — proven: the wake is an in-process continuation, NOT a new
 #       `claude -p` spawn. No credit draw beyond the running subscription turn.
-# PATTERN: DOORBELL — announce "you have mail" on stderr (the ONLY payload
-#          channel for asyncRewake; stdout is ignored). Do NOT push imperatives;
+# PATTERN: DOORBELL — announce "you have mail" on stderr. Not because stdout is
+#          ignored (it is NOT — corrected 2026-09-03, #98 Phase 1: the model body is
+#          `${prefix} ${stderr || stdout}` and stdout is additionally scanned for a
+#          JSON hook-output object; receipts in README.md "Inherited facts
+#          corrected"). stderr is the right channel because it is used
+#          unconditionally and is never parsed as JSON. Do NOT push imperatives;
 #          strong models (opus) refuse hook-injected commands as prompt injection.
 #          The agent self-fetches the body with its own trusted mailbox tool.
 # GUARD: respect stop_hook_active (+ engine cap CLAUDE_CODE_STOP_HOOK_BLOCK_CAP).

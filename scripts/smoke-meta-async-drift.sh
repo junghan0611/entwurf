@@ -6,13 +6,24 @@
 #
 # WHY THIS EXISTS
 #   The whole Claude async-delivery path rides on UNDOCUMENTED Claude Code behavior:
-#   `asyncRewake` force-prepends `Stop hook feedback:` and ignores `rewakeMessage`;
-#   the payload channel is stderr-only; `watchPaths` can arm from only 3 hook events
-#   (SessionStart / CwdChanged / FileChanged). Half the Gotchas in
-#   scripts/raw-async-delivery/README.md are reverse-engineered. Claude ships ~weekly.
-#   So the path can break SILENTLY on any upgrade. This gate makes it SCREAM instead —
-#   direct lineage of the 0.8.x fail-fast tool-surface gates ("don't let a surface
-#   break quietly, make the gate cry out").
+#   `asyncRewake` names the operator row and the model prefix from `rewakeSummary` /
+#   `rewakeMessage` (both read from a local plugin's hooks.json, both @internal, and
+#   the product doorbell now DEPENDS on both); the doorbell writes its notice on
+#   stderr; `watchPaths` can arm from only 3 hook events (SessionStart / CwdChanged /
+#   FileChanged). Half the Gotchas in scripts/raw-async-delivery/README.md are
+#   reverse-engineered. Claude ships ~weekly. So the path can break SILENTLY on any
+#   upgrade. This gate makes it SCREAM instead — direct lineage of the 0.8.x fail-fast
+#   tool-surface gates ("don't let a surface break quietly, make the gate cry out").
+#
+#   THIS PARAGRAPH USED TO BE WRONG, AND THAT IS THE POINT (#98, corrected
+#   2026-09-03). It said `asyncRewake` "force-prepends `Stop hook feedback:` and
+#   ignores `rewakeMessage`", and that the payload channel was "stderr-only". Both are
+#   FALSE — measured on 2.1.236/2.1.258/2.1.259: `rewakeMessage` REPLACES the model
+#   prefix, `rewakeSummary` REPLACES the operator row, and the model body is
+#   `stderr || stdout`. The marker strings below stayed green the whole time, because
+#   a marker pins a STRING and cannot see the sentence next to it rot. Nobody tried
+#   the two fields for months on the strength of this header. Receipts:
+#   scripts/raw-async-delivery/README.md "Inherited facts corrected".
 #
 # TWO TIERS (mirrors smoke-compaction-policy: deterministic default + LIVE=1 add-on)
 #   DETERMINISTIC (default; free, offline, CI/pre-commit safe):

@@ -6,10 +6,25 @@
 # with a doorbell notice. Free: a file write + continuation of an already-running
 # subscription session (no `claude -p` spawn).
 #
-# ADDRESSED by GARDEN ID: the changed path arrives on stdin as `file_path`; its
-# directory IS this session's garden mailbox (<meta-mailbox>/<garden-id>/). So
-# this hook touches ONLY its own mailbox — a sender that pokes one garden id's
-# signal wakes only that session. No node needed here; the dirname is the mailbox.
+# ADDRESSED by GARDEN ID: the changed path arrives on stdin as `file_path` and this
+# hook takes its DIRECTORY as the mailbox to process. No node needed here; the
+# dirname is the mailbox.
+#
+# Two statements, deliberately kept apart (#98, corrected 2026-09-03 — they used to
+# be one sentence claiming this hook "touches ONLY its own mailbox"):
+#   - OPERATIONAL PREMISE: under a normal install, the only path this session's
+#     SessionStart armed a watch on is its own <meta-mailbox>/<garden-id>/inbox.signal,
+#     so the only file_path that arrives is that one, and a sender who pokes one
+#     garden id wakes only that session. That premise holds today.
+#   - IMPLEMENTATION LIMIT: this script does NOT verify it. It trusts `file_path`
+#     unconditionally and derives "its own mailbox" from that string alone — it never
+#     compares the dirname against the garden id it belongs to. MEASURED: when a lab
+#     session loaded a second FileChanged hook next to this one, this doorbell
+#     processed the LAB mailbox and raced the lab hook to `exit 2`
+#     (scripts/raw-async-delivery/README.md, "What the probe session actually
+#     touches"). Nothing pokes a signal outside the garden mailbox today, so this is
+#     not a live defect — but it is why a second FileChanged hook cannot coexist with
+#     this one, and why the premise above must not be written as a guarantee.
 #
 # DOORBELL ONLY: announce "you have mail" + the body path on stderr. NEVER push
 # imperatives; strong models flag hook-injected commands as prompt injection. The agent

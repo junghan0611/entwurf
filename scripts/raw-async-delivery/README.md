@@ -127,9 +127,12 @@ Receipts in [Inherited facts corrected](#inherited-facts-corrected).
   badge first. **Never install this as the product statusline**
   (`scripts/meta-bridge-statusline.sh`).
 - `mailbox-watch.py [root]` — P4 prototype of the out-of-harness observation
-  window: one line per message transition (`ARRIVED`/`RUNG`/`READ`) across every
-  rail, read from the mailbox files alone. Uses `inotify(7)` via ctypes because
-  `inotifywait` is not on `PATH` here.
+  window: one line per message transition (`ARRIVED`/`RUNG`/`READ`), read from the
+  mailbox files alone. Uses `inotify(7)` via ctypes because `inotifywait` is not on
+  `PATH` here. **Mailbox-rail only** — self-fetch backends (claude-code / copilot /
+  omp). pi goes over its control socket and antigravity over native-push, so
+  neither writes here; silence is not "no sibling traffic". See the script's SCOPE
+  block.
 
 ## Quick start (plugin reception)
 
