@@ -23,7 +23,8 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 - [x] **9. ACP Claude를 메인 레일로 — 계기판 수리(#93)** — main에 랜딩됨 (`4d6fe4c` 및 선행 3커밋).
   본문 설계(`extractTurnUsage?` seam → 네 필드에 4분할 투영)는 2026-09-02 측정으로 **기각**됐고,
-  실제로 랜딩한 것은 그 기각의 실행이다. #92는 리서치 레인에 그대로 남는다. #93은 닫힘.
+  실제로 랜딩한 것은 그 기각의 실행이다. #93·#92·#96 모두 닫혔다 — #92는 2026-09-03 두 번째
+  호스트 재현으로, #96은 캐리어 없이 선 대체 계측으로. 이월된 관측은 CARRIED에 있다.
   독립 리뷰 D1(재청구 하한의 스코프 혼합)은 `9479750`에서 닫혔다.
 
 - [x] **10. 0.17.0 cut** — 태그·GitHub 릴리즈 완료(`v0.17.0` @ `934acb9`). npm에는 올라가지 않았다.
@@ -109,7 +110,19 @@ CHANGELOG `## Unreleased`가 구현 범위 `v0.15.1..19ad90c` **30커밋** 전�
 
 - **#78** macOS/native-Windows portability — separate grant; do not mix into #87.
 - **#76** cortex gate slice — separate lane. (#72 is closed: `ca52fdd`.)
-- **#92** ACP 깊은-컨텍스트 내구성 — **리서치 레인**. 400–500k acceptance는 `521,575` / resets 0으로 닫혔다. 열린 관측은 1h+ 갭, pi 재시작 재구축, organic compaction 뒤 의미·품질, 500k–1M이다.
+- **ACP 깊은-컨텍스트 내구성 — #92 CLOSED (2026-09-03), 관측만 이월.** thinkpad 코퍼스 1,022파일 전수로
+  (a)가 두 번째 호스트에서 재현되고(peak `585,001`, 500k 초과 5세션 중 4개가 resets 0) 마지막까지 열려
+  있던 (e) 갭 노출이 닫혔다 — ACP도 TTL 재작성을 지불하며 그 비율은 같은 호스트 네이티브와 구별되지
+  않는다(1–2h 75% vs 85.6%, 2h+ 100% vs 80%). 구조적 우위는 warm(<5분) 구간뿐이고 거기서 29배
+  (0.01% vs 0.29%). 깊은 ACP 리셋 29건 중 22건이 60분+ 유휴 직후, 7건은 아니며 그 7건은 전부
+  2026-06-14 이전이다(원인 미측정). **열린 관측:** (f) pi 재시작 재구축 · (g) organic compaction 뒤
+  의미·품질(recall probe) · `SessionModelLockedError` 미재현 · 585k–1M · 위 7건의 원인.
+- **ACP 계측 — #96 CLOSED (2026-09-03), 캐리어 없이 대체 계측으로.** 업스트림 0.73.0도 왕복별 4분할을
+  버린다(measured: `dist/acp-agent.js:3279-3284` 계산 → `:3286-3297` 스칼라만 emit, `_claude/usage` 없음).
+  0.17.0이 `usage.acp` + `cache miss ≥Nk re-billed` 공지로 그 신호를 자체 확보했고, 남은 것은 TTL이 왕복
+  사이에 만료될 때 bound가 약한 floor가 된다는 한계뿐이다(`backend.ts:1286-1288`). 계약은 산문이 아니라
+  `scripts/mutants/acp-usage-accounting.json` 12뮤턴트가 지킨다. **agent-config 쪽 두 줄은 아직 고아다** —
+  기본 pi 푸터로 복귀 금지, 캐리어 착지 시 `nocache` 가드 필요. 항구적 자리는 `glg-footer.ts` 헤더 주석.
 - **0.16.1 make** — prepare는 끝났고 make는 GLG 승인 대기. 오늘 요청 없었다.
 
 # LEDGER — land 전에 정할 것
