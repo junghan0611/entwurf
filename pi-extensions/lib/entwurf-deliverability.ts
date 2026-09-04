@@ -113,7 +113,7 @@ export function receiverMarkerMatchesIdentity(
 // A receiver marker proves "a LIVE process once armed a watch for this garden".
 // It does NOT prove "that process is serving this garden RIGHT NOW". One native
 // process can hold markers for several gardens and drain exactly one of them:
-// Claude Code's session switch (the TUI resume picker and `/clear`) fires a second
+// Claude Code's session switch (an in-session `/resume` or `/clear`) fires a second
 // SessionStart inside the SAME pid under a NEW native session id, so the first
 // garden's marker keeps naming a live owner forever while the doorbell it advertises
 // is gone. Measured on oracle 2026-09-04 (#101): one pid held both markers, a

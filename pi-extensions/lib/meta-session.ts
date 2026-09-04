@@ -2027,11 +2027,11 @@ export interface RemoveMetaReceiverMarkerOptions {
 /**
  * Retire a receiver presence marker THIS owner pid wrote (#101 결함 A).
  *
- * A native process that switches sessions in place — Claude Code's resume picker and
- * `/clear` both fire a second SessionStart inside the same pid under a new native
- * session id — leaves the previous garden's marker behind, naming a live owner whose
- * watch is gone. Measured on oracle 2026-09-04: one pid (143742) held two gardens'
- * markers four seconds apart, and mail sent to the retired one sat unread.
+ * A native process that switches sessions in place — an in-session `/resume` or `/clear`
+ * fires a second SessionStart inside the same pid under a new native session id — leaves
+ * the previous garden's marker behind, naming a live owner whose watch is gone. Measured
+ * on oracle 2026-09-04: one pid (143742) held two gardens' markers four seconds apart, and
+ * mail sent to the retired one sat unread.
  *
  * ONLY THE MARKER. The meta-record stays: records are identity, and deleting one
  * outside `meta-bridge-fresh-cut` would fight store certification (Hard Rule 7/8).

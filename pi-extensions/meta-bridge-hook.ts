@@ -29,14 +29,18 @@
  * re-arm the idle watch — the record's address is restored, the wake is not.
  *
  * SESSION SWITCH (#101). One Claude process serves one session at a time, but it can
- * change which: the resume picker fires SessionStart for a placeholder id and then again
- * for the id the operator picked, four seconds apart under the same pid, and `/clear` has
- * the same shape. The garden it stopped serving keeps a receiver marker naming a LIVE
- * owner, so a sender reads an armed doorbell nobody holds. This hook therefore reads the
- * sender marker BEFORE overwriting it and retires the previous garden's receiver marker
+ * change which. Measured on oracle 2026-09-04 (raw lab S1-S6, Claude Code 2.1.260): a bare
+ * `claude` mints a NEW session (`source=startup`), and an in-session `/resume` or `/clear`
+ * then fires a SECOND SessionStart under the SAME pid for a DIFFERENT native id
+ * (`source=resume` / `source=clear`). The first garden is left behind — in the #101 field
+ * case its transcript was never written at all — while its receiver marker still names a
+ * LIVE owner, so a sender reads an armed doorbell nobody holds. This hook therefore reads
+ * the sender marker BEFORE overwriting it and retires the previous garden's receiver marker
  * (marker only — records are identity and are never deleted here; and only a marker this
- * pid owns). The envelope's `source` is logged beside it and decides nothing: the switch
- * is settled by what is on disk, which holds on every host and vendor version.
+ * pid owns). Compaction (`source=compact`) re-fires SessionStart for the SAME native id, so
+ * the same rule retires nothing there — measured, not assumed. The envelope's `source` is
+ * logged beside all of it and decides nothing: the switch is settled by what is on disk,
+ * which holds on every host and vendor version.
  *
  * LAUNCH: never invoked directly by Claude. `hooks.json` declares the EXEC form
  * (`command` = `<plugin-root>/scripts/hook-launch.sh`, `args` = [node, this file]),
@@ -264,11 +268,12 @@ function main(): void {
 	const ownerPid = resolveMetaHookOwnerPid();
 	if (ownerPid !== null) {
 		// SESSION SWITCH RETIREMENT (#101 결함 A). One Claude process serves ONE session at a
-		// time, but it can switch which: the resume picker fires a SessionStart for a
-		// placeholder native id and then a second one for the id the operator actually picked,
-		// four seconds apart under the same pid (measured on oracle, meta-bridge-hook.log
-		// 2026-09-04 09:31:35 → 09:31:39); `/clear` has the same shape. Whatever it was serving
-		// before is no longer being drained, so the marker advertising its doorbell has to go.
+		// time, but it can switch which: an in-session `/resume` or `/clear` fires a second
+		// SessionStart under the same pid for a different native id, leaving the session the
+		// process started with behind (measured on oracle, meta-bridge-hook.log 2026-09-04
+		// 13:13:04 `source=startup` → 13:13:37 `source=resume`; the field case at 09:31:35 →
+		// 09:31:39 is the same shape). Whatever it was serving before is no longer being
+		// drained, so the marker advertising its doorbell has to go.
 		//
 		// The evidence is the sender marker as it stands RIGHT NOW — pid → the garden this
 		// process serves — which is why this reads it BEFORE the write below overwrites it with

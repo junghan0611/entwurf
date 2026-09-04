@@ -5,13 +5,17 @@
  * the reason it did not: every claude-side cell the suite had asked about ONE session
  * per process, so "one owner pid, two gardens" had no cell anywhere.
  *
- * WHAT A SESSION SWITCH IS. Opening `claude` and picking a conversation from the resume
- * picker fires SessionStart TWICE inside one pid — once for the placeholder id the TUI
- * starts with, once for the id the operator actually picked. `/clear` has the same
- * shape. Measured on oracle 2026-09-04 (`~/.pi/agent/meta-bridge-hook.log`): pid 143742,
+ * WHAT A SESSION SWITCH IS. Opening `claude` mints a new session, and an in-session
+ * `/resume` (or `/clear`) then fires a SECOND SessionStart inside that one pid, for a
+ * DIFFERENT native id — the session the process started with is left behind. Measured on
+ * oracle 2026-09-04 (`~/.pi/agent/meta-bridge-hook.log`): the field case at pid 143742,
  * 09:31:35 create `…-ac7a1a`, 09:31:39 attach `…-e09b66`, both arming a receiver marker
- * under that one pid. The first garden's transcript was never written; a message
- * enqueued to it at 09:33 was still an undelivered `.msg` an hour later.
+ * under that one pid — the first garden's transcript was never written and a message
+ * enqueued to it at 09:33 was still an undelivered `.msg` an hour later; then reproduced
+ * deliberately at 13:13:04 → 13:13:37 (raw lab S4, `source=startup` → `source=resume`).
+ * `claude --resume`, with or without the picker, does NOT do this: it fires exactly one
+ * SessionStart carrying the real id (raw lab S2/S3), and compaction re-fires SessionStart
+ * for the SAME id (S6), which this rule leaves alone.
  *
  * WHAT IT PROVES, and each cell is a different half:
  *

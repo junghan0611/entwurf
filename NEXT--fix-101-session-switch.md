@@ -22,7 +22,13 @@
       `transcript`(exists|absent|unobserved). 사실이지 verb가 아니다.
 - [x] **E. 게이트 + 뮤턴트** — `check-meta-hook-session-switch` (24 assertions, `check:hermetic`
       등록) + `scripts/mutants/meta-hook-session-switch.json` (11 claim).
-- [ ] **F. raw lab** — `scripts/raw-claude-session-switch/README.md`는 **설계만**. 실행은 GLG 승인.
+- [x] **F. raw lab 실행** — GLG 승인 후 oracle에서 S1–S6 전부 돌렸다(Claude Code 2.1.260, haiku).
+      영수증은 `scripts/raw-claude-session-switch/README.md`에 훅 로그 **verbatim**으로 있다.
+      **상속된 문장 하나가 반증됐다:** resume picker는 SessionStart를 **한 번만** 쏜다(S2/S3).
+      두 번 쏘는 모양은 맨 `claude` 기동(진짜 새 세션) + 세션 안 `/resume`·`/clear`다(S4/S5).
+      수리는 그대로 유효하다(어느 쪽이든 한 pid가 가든을 갈아탄다) — 산문만 4곳 고쳤다.
+      compaction(S6a 수동·S6b 자동)은 **같은 native id**로 SessionStart를 다시 쏴 같은 가든에
+      attach하므로 은퇴가 일어나지 않는다. 세 반증 조건 모두 판정 완료(README 상단).
 
 # 스코프 결정 하나 (다음 레인의 출발점)
 
@@ -52,11 +58,10 @@ claude가 없던 그 은퇴를 갖고 있다 — 이번 claude 은퇴와 **같�
 
 # 다음 한 걸음
 
-1. **GLG 결정 대기:** commit은 되어 있고 push는 없다. 이 레인은 배포(`entwurf setup` /
-   `install-meta-bridge`)를 하지 않았다 — 설치본은 아직 옛 훅이므로 이 호스트의 실제 훅
-   동작은 재설치 후에야 바뀐다. 재설치는 운영자 면 변경이라 GLG 몫이다.
-2. **F 실행 여부** — 설계문의 6개 셀은 실제 Claude 세션을 열어야 한다. 승인되면 훅 로그만
-   읽으면 되고, 이미 배포된 호스트라면 평소 사용만으로 S2/S5 영수증이 저절로 쌓인다.
+1. **크로스 리뷰 대기 (GLG가 pi copilot sol에게 맡긴다).** 리뷰 중에는 브랜치를 움직이지
+   않는다 — 리뷰어가 읽는 SHA가 고정돼야 한다. 지적은 이 레인이 닫는다.
+2. **push 없음.** 배포는 끝났다(`entwurf setup` green, `doctor-meta-bridge: PASS`, 2026-09-04).
+   설치본 훅은 이제 브랜치 코드다. 그 이전에 열린 세션들은 다음 SessionStart까지 옛 거동이다.
 3. **#99로 넘길 재료 하나:** 이 레인은 "주장된 셀만 재증명하던" qualification에 claude 훅
    lane을 처음으로 만들었다(11 claim). #99의 결정(전수 qualification을 언제 돌릴지)은 이제
    사례 하나를 손에 들고 있다.
